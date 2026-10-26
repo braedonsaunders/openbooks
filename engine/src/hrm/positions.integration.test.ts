@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import {
   DB,
   gateOf,
@@ -28,10 +24,7 @@ import {
   writePositionFunding,
 } from "./positions.ts";
 import { getPositionAsOf, getVacancyAsOf, listPositionOptions } from "./positions-read.ts";
-import {
-  createChangeRequestDraft,
-  submitChangeRequest,
-} from "./change-requests.ts";
+import { createChangeRequestDraft, submitChangeRequest } from "./change-requests.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
 // Gate releases and post_document run through the installed engine
@@ -53,12 +46,28 @@ installEngineSeams();
  * that must NOT exist.
  */
 
-
 const POSITIONS_SPEC = {
   users: [
-    { key: "managerId", name: "HRM Position Manager", handle: "hrm_position_manager", permissions: ["hrm.position.read", "hrm.position.manage"] },
-    { key: "submitterId", name: "HRM Submitter", handle: "hrm_author", permissions: ["hrm.employment.read", "hrm.employment.manage"], link: true },
-    { key: "approverId", name: "HRM Approver", handle: "hrm_decider", permissions: ["hrm.employment.read", "hrm.employment.approve"], link: true },
+    {
+      key: "managerId",
+      name: "HRM Position Manager",
+      handle: "hrm_position_manager",
+      permissions: ["hrm.position.read", "hrm.position.manage"],
+    },
+    {
+      key: "submitterId",
+      name: "HRM Submitter",
+      handle: "hrm_author",
+      permissions: ["hrm.employment.read", "hrm.employment.manage"],
+      link: true,
+    },
+    {
+      key: "approverId",
+      name: "HRM Approver",
+      handle: "hrm_decider",
+      permissions: ["hrm.employment.read", "hrm.employment.approve"],
+      link: true,
+    },
   ],
 } as const;
 
@@ -81,9 +90,14 @@ async function seedAssignment(
     departmentId?: string | null;
   } = {},
 ): Promise<string> {
-  const slotId = (await db.execute<{ id: string }>(sql`
+  const slotId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, ${key}) returning id`, "objects"))[0]!.id;
+    values (${orgId}, ${employmentId}, ${key}) returning id`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, position_id, version_no,
@@ -96,443 +110,537 @@ async function seedAssignment(
 }
 
 async function positionChangeKinds(orgId: string, positionId: string): Promise<string[]> {
-  const rows = await db.execute<{ change_kind: string }>(sql`
+  const rows = await db.execute<{ change_kind: string }>(
+    sql`
     select change_kind from position_changes
-     where org_id = ${orgId} and position_id = ${positionId} order by revision`, "objects");
+     where org_id = ${orgId} and position_id = ${positionId} order by revision`,
+    "objects",
+  );
   return rows.map((row) => row.change_kind);
 }
 
+test(
+  "positions happy path: create, revise, fund, and vacancy with storage proofs",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupHarness(POSITIONS_SPEC),
+      async (h) => {
+        const orgId = h.org.orgId;
+        const deptId = await mkDepartment(orgId, "Engineering");
+        const created = await createPosition({
+          orgId,
+          actorId: h.managerId,
+          positionCode: "ENG-1042",
+          title: "Engineer",
+          departmentId: deptId,
+          employerSubsidiaryId: h.org.subsidiaryId,
+          plannedFte: "1.0000",
+          status: "open",
+          effectiveFrom: "2026-07-01",
+          reason: "open the establishment",
+        });
+        assert.equal(created.revision, 1);
+        assert.equal(created.version.status, "open");
+        assert.deepEqual(await positionChangeKinds(orgId, created.id), ["created"]);
 
-test("positions happy path: create, revise, fund, and vacancy with storage proofs", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const deptId = await mkDepartment(orgId, "Engineering");
-    const created = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      departmentId: deptId,
-      employerSubsidiaryId: h.org.subsidiaryId,
-      plannedFte: "1.0000",
-      status: "open",
-      effectiveFrom: "2026-07-01",
-      reason: "open the establishment",
-    });
-    assert.equal(created.revision, 1);
-    assert.equal(created.version.status, "open");
-    assert.deepEqual(await positionChangeKinds(orgId, created.id), ["created"]);
-
-    const revised = await revisePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: created.id,
-      plannedFte: "2.0000",
-      reason: "double the establishment",
-    });
-    assert.equal(revised.revision, 2);
-    assert.equal(revised.version.plannedFte, "2.0000");
-    assert.deepEqual(await positionChangeKinds(orgId, created.id), ["created", "revised"]);
-    // The closure names the exact retired version with its before-image.
-    const closures = (await db.execute<{ closed: unknown }>(sql`
+        const revised = await revisePosition({
+          orgId,
+          actorId: h.managerId,
+          positionId: created.id,
+          plannedFte: "2.0000",
+          reason: "double the establishment",
+        });
+        assert.equal(revised.revision, 2);
+        assert.equal(revised.version.plannedFte, "2.0000");
+        assert.deepEqual(await positionChangeKinds(orgId, created.id), ["created", "revised"]);
+        // The closure names the exact retired version with its before-image.
+        const closures = (
+          await db.execute<{ closed: unknown }>(
+            sql`
       select closed_versions as closed from position_changes
-       where org_id = ${orgId} and position_id = ${created.id} and revision = 2`, "objects"))[0]!.closed as Array<{
-      table: string;
-      version_no: number;
-      before: { planned_fte: number | string };
-    }>;
-    assert.equal(closures.length, 1);
-    assert.equal(closures[0]!.table, "position_versions");
-    assert.equal(closures[0]!.version_no, 1);
-    // The before-image is to_jsonb(row) verbatim (the closure guard compares
-    // it byte for byte), so numeric arrives as a JSON number: value, not scale.
-    assert.equal(Number(closures[0]!.before.planned_fte), 1);
+       where org_id = ${orgId} and position_id = ${created.id} and revision = 2`,
+            "objects",
+          )
+        )[0]!.closed as Array<{
+          table: string;
+          version_no: number;
+          before: { planned_fte: number | string };
+        }>;
+        assert.equal(closures.length, 1);
+        assert.equal(closures[0]!.table, "position_versions");
+        assert.equal(closures[0]!.version_no, 1);
+        // The before-image is to_jsonb(row) verbatim (the closure guard compares
+        // it byte for byte), so numeric arrives as a JSON number: value, not scale.
+        assert.equal(Number(closures[0]!.before.planned_fte), 1);
 
-    const funded = await writePositionFunding({
-      orgId,
-      actorId: h.managerId,
-      positionId: created.id,
-      periodId: h.org.periodId,
-      fundedFte: "2.0000",
-      reason: "fund the doubled establishment",
-    });
-    assert.equal(funded.funding.fundedFte, "2.0000");
-    assert.equal(funded.preflight, null);
-    assert.deepEqual(await positionChangeKinds(orgId, created.id), ["created", "revised", "funded"]);
+        const funded = await writePositionFunding({
+          orgId,
+          actorId: h.managerId,
+          positionId: created.id,
+          periodId: h.org.periodId,
+          fundedFte: "2.0000",
+          reason: "fund the doubled establishment",
+        });
+        assert.equal(funded.funding.fundedFte, "2.0000");
+        assert.equal(funded.preflight, null);
+        assert.deepEqual(await positionChangeKinds(orgId, created.id), [
+          "created",
+          "revised",
+          "funded",
+        ]);
 
-    const vacancy = await getVacancyAsOf({
-      orgId,
-      actorId: h.managerId,
-      effectiveDate: "2026-07-15",
-      knownAt: nowIso(),
-    });
-    assert.equal(vacancy.totals.positions, 1);
-    assert.equal(vacancy.totals.plannedFte, "2.0000");
-    assert.equal(vacancy.totals.fundedFte, "2.0000");
-    assert.equal(vacancy.totals.filledFte, "0.0000");
-    assert.equal(vacancy.totals.vacantFte, "2.0000");
-    assert.equal(vacancy.totals.unfundedFilledFte, "0.0000");
-    assert.equal(vacancy.byDepartment.length, 1);
-    assert.equal(vacancy.byDepartment[0]!.departmentName, "Engineering");
-    assert.equal(vacancy.positions[0]!.vacancy.refusal, null);
-    assert.deepEqual(vacancy.positions[0]!.holders, []);
-  });
-});
+        const vacancy = await getVacancyAsOf({
+          orgId,
+          actorId: h.managerId,
+          effectiveDate: "2026-07-15",
+          knownAt: nowIso(),
+        });
+        assert.equal(vacancy.totals.positions, 1);
+        assert.equal(vacancy.totals.plannedFte, "2.0000");
+        assert.equal(vacancy.totals.fundedFte, "2.0000");
+        assert.equal(vacancy.totals.filledFte, "0.0000");
+        assert.equal(vacancy.totals.vacantFte, "2.0000");
+        assert.equal(vacancy.totals.unfundedFilledFte, "0.0000");
+        assert.equal(vacancy.byDepartment.length, 1);
+        assert.equal(vacancy.byDepartment[0]!.departmentName, "Engineering");
+        assert.equal(vacancy.positions[0]!.vacancy.refusal, null);
+        assert.deepEqual(vacancy.positions[0]!.holders, []);
+      },
+    );
+  },
+);
 
 test("duplicate position codes are refused with nothing written", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      effectiveFrom: "2026-07-01",
-      reason: "first",
-    });
-    const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from positions where org_id = ${orgId}`, "objects"))[0]!.n;
-    let code = "";
-    try {
+  await withHarness(
+    () => setupHarness(POSITIONS_SPEC),
+    async (h) => {
+      const orgId = h.org.orgId;
       await createPosition({
         orgId,
         actorId: h.managerId,
         positionCode: "ENG-1042",
-        title: "Engineer II",
+        title: "Engineer",
         employerSubsidiaryId: h.org.subsidiaryId,
         effectiveFrom: "2026-07-01",
-        reason: "second",
+        reason: "first",
       });
-    } catch (error) {
-      code = codeOf(error);
-    }
-    assert.equal(code, "BAD_STATE");
-    const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from positions where org_id = ${orgId}`, "objects"))[0]!.n;
-    assert.equal(after, before);
-  });
+      const before = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from positions where org_id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      let code = "";
+      try {
+        await createPosition({
+          orgId,
+          actorId: h.managerId,
+          positionCode: "ENG-1042",
+          title: "Engineer II",
+          employerSubsidiaryId: h.org.subsidiaryId,
+          effectiveFrom: "2026-07-01",
+          reason: "second",
+        });
+      } catch (error) {
+        code = codeOf(error);
+      }
+      assert.equal(code, "BAD_STATE");
+      const after = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from positions where org_id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(after, before);
+    },
+  );
 });
 
 test("revise refusals: no-op, direct close, and terminal closed", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const created = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      status: "open",
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    const noop = await revisePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: created.id,
-      reason: "nothing",
-    }).then(
-      () => "APPLIED",
-      (error) => codeOf(error),
-    );
-    assert.equal(noop, "BAD_STATE");
-    const direct = await revisePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: created.id,
-      status: "closed",
-      reason: "shortcut",
-    }).then(
-      () => "APPLIED",
-      (error) => codeOf(error),
-    );
-    assert.equal(direct, "BAD_STATE");
-    // Illegal transition: planned cannot fill without opening.
-    const planned = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1043",
-      title: "Analyst",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      status: "planned",
-      effectiveFrom: "2026-07-01",
-      reason: "plan",
-    });
-    const leap = await revisePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: planned.id,
-      status: "filled",
-      reason: "leap",
-    }).then(
-      () => "APPLIED",
-      (error) => codeOf(error),
-    );
-    assert.equal(leap, "BAD_STATE");
-
-    const closed = await closePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: created.id,
-      effectiveDate: "2026-07-15",
-      reason: "retire",
-    });
-    assert.equal(closed.version.status, "closed");
-    const resurrect = await revisePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: created.id,
-      status: "open",
-      reason: "resurrect",
-    }).then(
-      () => "APPLIED",
-      (error) => codeOf(error),
-    );
-    assert.equal(resurrect, "BAD_STATE");
-    const reclose = await closePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: created.id,
-      effectiveDate: "2026-07-16",
-      reason: "again",
-    }).then(
-      () => "APPLIED",
-      (error) => codeOf(error),
-    );
-    assert.equal(reclose, "BAD_STATE");
-  });
-});
-
-test("close is refused while a live primary assignment names the position", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const position = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      status: "open",
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
-    await seedAssignment(orgId, employmentId, "primary", {
-      positionId: position.id,
-      isPrimary: true,
-      fte: "1.0000",
-    });
-    let message = "";
-    try {
-      await closePosition({
+  await withHarness(
+    () => setupHarness(POSITIONS_SPEC),
+    async (h) => {
+      const orgId = h.org.orgId;
+      const created = await createPosition({
         orgId,
         actorId: h.managerId,
-        positionId: position.id,
-        effectiveDate: "2026-07-15",
-        reason: "retire",
+        positionCode: "ENG-1042",
+        title: "Engineer",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        status: "open",
+        effectiveFrom: "2026-07-01",
+        reason: "open",
       });
-    } catch (error) {
-      assert.equal(codeOf(error), "REFUSED");
-      message = (error as Error).message;
-    }
-    assert.match(message, /ENG-1042/);
-    assert.match(message, new RegExp(employmentId));
-    assert.match(message, /position_assignment/);
-    // Zero partial effects: no closed version, no closed event, revision still 1.
-    const live = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from position_versions
-       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`, "objects"))[0]!.n;
-    assert.equal(live, 1);
-    assert.deepEqual(await positionChangeKinds(orgId, position.id), ["created"]);
-
-    // A non-primary holder does not block the close.
-    const backfill = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1043",
-      title: "Analyst",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      status: "open",
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    const { employmentId: second } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
-    await seedAssignment(orgId, second, "extra", { positionId: backfill.id, isPrimary: false });
-    const closed = await closePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: backfill.id,
-      effectiveDate: "2026-07-15",
-      reason: "retire",
-    });
-    assert.equal(closed.version.status, "closed");
-  });
-});
-
-test("funding preflights are reported, committed, and evidenced", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const position = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      plannedFte: "1.0000",
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    const over = await writePositionFunding({
-      orgId,
-      actorId: h.managerId,
-      positionId: position.id,
-      periodId: h.org.periodId,
-      fundedFte: "1.5000",
-      reason: "over-fund",
-    });
-    assert.equal(over.preflight?.code, "OVER_FUNDED");
-    assert.match(over.preflight!.message, /ENG-1042/);
-    const stored = (await db.execute<{ funded_fte: string }>(sql`
-      select funded_fte::text as funded_fte from position_funding
-       where org_id = ${orgId} and position_id = ${position.id}`, "objects"))[0]!.funded_fte;
-    assert.equal(stored, "1.5000");
-    const under = await writePositionFunding({
-      orgId,
-      actorId: h.managerId,
-      positionId: position.id,
-      periodId: h.org.periodId,
-      fundedFte: "0.5000",
-      reason: "under-fund",
-    });
-    assert.equal(under.preflight?.code, "UNDER_FUNDED");
-    // The rewrite is evidenced with the prior row, not a silent second plan.
-    const snapshots = await db.execute<{ prior_snapshot: unknown }>(sql`
-      select prior_snapshot from position_changes
-       where org_id = ${orgId} and position_id = ${position.id} and change_kind = 'funded'
-       order by revision`, "objects");
-    assert.equal(snapshots.length, 2);
-    assert.equal((snapshots[0]!.prior_snapshot as { prior: unknown }).prior, null);
-    assert.equal(
-      ((snapshots[1]!.prior_snapshot as { prior: { fundedFte: string } }).prior).fundedFte,
-      "1.5000",
-    );
-  });
-});
-
-test("funding refuses half-written cost plans and foreign periods", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const position = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    const half = await writePositionFunding({
-      orgId,
-      actorId: h.managerId,
-      positionId: position.id,
-      periodId: h.org.periodId,
-      fundedFte: "1.0000",
-      amount: "90000.0000",
-      reason: "half plan",
-    }).then(
-      () => "APPLIED",
-      (error) => codeOf(error),
-    );
-    assert.equal(half, "INVALID_INPUT");
-    const foreign = await createScratchOrg();
-    try {
-      const crossed = await writePositionFunding({
+      const noop = await revisePosition({
         orgId,
         actorId: h.managerId,
-        positionId: position.id,
-        periodId: foreign.periodId,
-        fundedFte: "1.0000",
-        reason: "cross",
+        positionId: created.id,
+        reason: "nothing",
       }).then(
         () => "APPLIED",
         (error) => codeOf(error),
       );
-      assert.equal(crossed, "INVALID_INPUT");
-    } finally {
-      await dropScratchOrg(foreign.orgId);
-    }
-    const rows = (await db.execute<{ n: number }>(sql`
+      assert.equal(noop, "BAD_STATE");
+      const direct = await revisePosition({
+        orgId,
+        actorId: h.managerId,
+        positionId: created.id,
+        status: "closed",
+        reason: "shortcut",
+      }).then(
+        () => "APPLIED",
+        (error) => codeOf(error),
+      );
+      assert.equal(direct, "BAD_STATE");
+      // Illegal transition: planned cannot fill without opening.
+      const planned = await createPosition({
+        orgId,
+        actorId: h.managerId,
+        positionCode: "ENG-1043",
+        title: "Analyst",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        status: "planned",
+        effectiveFrom: "2026-07-01",
+        reason: "plan",
+      });
+      const leap = await revisePosition({
+        orgId,
+        actorId: h.managerId,
+        positionId: planned.id,
+        status: "filled",
+        reason: "leap",
+      }).then(
+        () => "APPLIED",
+        (error) => codeOf(error),
+      );
+      assert.equal(leap, "BAD_STATE");
+
+      const closed = await closePosition({
+        orgId,
+        actorId: h.managerId,
+        positionId: created.id,
+        effectiveDate: "2026-07-15",
+        reason: "retire",
+      });
+      assert.equal(closed.version.status, "closed");
+      const resurrect = await revisePosition({
+        orgId,
+        actorId: h.managerId,
+        positionId: created.id,
+        status: "open",
+        reason: "resurrect",
+      }).then(
+        () => "APPLIED",
+        (error) => codeOf(error),
+      );
+      assert.equal(resurrect, "BAD_STATE");
+      const reclose = await closePosition({
+        orgId,
+        actorId: h.managerId,
+        positionId: created.id,
+        effectiveDate: "2026-07-16",
+        reason: "again",
+      }).then(
+        () => "APPLIED",
+        (error) => codeOf(error),
+      );
+      assert.equal(reclose, "BAD_STATE");
+    },
+  );
+});
+
+test(
+  "close is refused while a live primary assignment names the position",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupHarness(POSITIONS_SPEC),
+      async (h) => {
+        const orgId = h.org.orgId;
+        const position = await createPosition({
+          orgId,
+          actorId: h.managerId,
+          positionCode: "ENG-1042",
+          title: "Engineer",
+          employerSubsidiaryId: h.org.subsidiaryId,
+          status: "open",
+          effectiveFrom: "2026-07-01",
+          reason: "open",
+        });
+        const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, {
+          from: "2026-07-01",
+          displayName: "Position Holder",
+        });
+        await seedAssignment(orgId, employmentId, "primary", {
+          positionId: position.id,
+          isPrimary: true,
+          fte: "1.0000",
+        });
+        let message = "";
+        try {
+          await closePosition({
+            orgId,
+            actorId: h.managerId,
+            positionId: position.id,
+            effectiveDate: "2026-07-15",
+            reason: "retire",
+          });
+        } catch (error) {
+          assert.equal(codeOf(error), "REFUSED");
+          message = (error as Error).message;
+        }
+        assert.match(message, /ENG-1042/);
+        assert.match(message, new RegExp(employmentId));
+        assert.match(message, /position_assignment/);
+        // Zero partial effects: no closed version, no closed event, revision still 1.
+        const live = (
+          await db.execute<{ n: number }>(
+            sql`
+      select count(*)::int as n from position_versions
+       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(live, 1);
+        assert.deepEqual(await positionChangeKinds(orgId, position.id), ["created"]);
+
+        // A non-primary holder does not block the close.
+        const backfill = await createPosition({
+          orgId,
+          actorId: h.managerId,
+          positionCode: "ENG-1043",
+          title: "Analyst",
+          employerSubsidiaryId: h.org.subsidiaryId,
+          status: "open",
+          effectiveFrom: "2026-07-01",
+          reason: "open",
+        });
+        const { employmentId: second } = await seedEmployment(orgId, h.org.subsidiaryId, {
+          from: "2026-07-01",
+          displayName: "Position Holder",
+        });
+        await seedAssignment(orgId, second, "extra", { positionId: backfill.id, isPrimary: false });
+        const closed = await closePosition({
+          orgId,
+          actorId: h.managerId,
+          positionId: backfill.id,
+          effectiveDate: "2026-07-15",
+          reason: "retire",
+        });
+        assert.equal(closed.version.status, "closed");
+      },
+    );
+  },
+);
+
+test("funding preflights are reported, committed, and evidenced", { skip: !DB }, async () => {
+  await withHarness(
+    () => setupHarness(POSITIONS_SPEC),
+    async (h) => {
+      const orgId = h.org.orgId;
+      const position = await createPosition({
+        orgId,
+        actorId: h.managerId,
+        positionCode: "ENG-1042",
+        title: "Engineer",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        plannedFte: "1.0000",
+        effectiveFrom: "2026-07-01",
+        reason: "open",
+      });
+      const over = await writePositionFunding({
+        orgId,
+        actorId: h.managerId,
+        positionId: position.id,
+        periodId: h.org.periodId,
+        fundedFte: "1.5000",
+        reason: "over-fund",
+      });
+      assert.equal(over.preflight?.code, "OVER_FUNDED");
+      assert.match(over.preflight!.message, /ENG-1042/);
+      const stored = (
+        await db.execute<{ funded_fte: string }>(
+          sql`
+      select funded_fte::text as funded_fte from position_funding
+       where org_id = ${orgId} and position_id = ${position.id}`,
+          "objects",
+        )
+      )[0]!.funded_fte;
+      assert.equal(stored, "1.5000");
+      const under = await writePositionFunding({
+        orgId,
+        actorId: h.managerId,
+        positionId: position.id,
+        periodId: h.org.periodId,
+        fundedFte: "0.5000",
+        reason: "under-fund",
+      });
+      assert.equal(under.preflight?.code, "UNDER_FUNDED");
+      // The rewrite is evidenced with the prior row, not a silent second plan.
+      const snapshots = await db.execute<{ prior_snapshot: unknown }>(
+        sql`
+      select prior_snapshot from position_changes
+       where org_id = ${orgId} and position_id = ${position.id} and change_kind = 'funded'
+       order by revision`,
+        "objects",
+      );
+      assert.equal(snapshots.length, 2);
+      assert.equal((snapshots[0]!.prior_snapshot as { prior: unknown }).prior, null);
+      assert.equal(
+        (snapshots[1]!.prior_snapshot as { prior: { fundedFte: string } }).prior.fundedFte,
+        "1.5000",
+      );
+    },
+  );
+});
+
+test("funding refuses half-written cost plans and foreign periods", { skip: !DB }, async () => {
+  await withHarness(
+    () => setupHarness(POSITIONS_SPEC),
+    async (h) => {
+      const orgId = h.org.orgId;
+      const position = await createPosition({
+        orgId,
+        actorId: h.managerId,
+        positionCode: "ENG-1042",
+        title: "Engineer",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        effectiveFrom: "2026-07-01",
+        reason: "open",
+      });
+      const half = await writePositionFunding({
+        orgId,
+        actorId: h.managerId,
+        positionId: position.id,
+        periodId: h.org.periodId,
+        fundedFte: "1.0000",
+        amount: "90000.0000",
+        reason: "half plan",
+      }).then(
+        () => "APPLIED",
+        (error) => codeOf(error),
+      );
+      assert.equal(half, "INVALID_INPUT");
+      const foreign = await createScratchOrg();
+      try {
+        const crossed = await writePositionFunding({
+          orgId,
+          actorId: h.managerId,
+          positionId: position.id,
+          periodId: foreign.periodId,
+          fundedFte: "1.0000",
+          reason: "cross",
+        }).then(
+          () => "APPLIED",
+          (error) => codeOf(error),
+        );
+        assert.equal(crossed, "INVALID_INPUT");
+      } finally {
+        await dropScratchOrg(foreign.orgId);
+      }
+      const rows = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from position_funding
-       where org_id = ${orgId} and position_id = ${position.id}`, "objects"))[0]!.n;
-    assert.equal(rows, 0);
-  });
+       where org_id = ${orgId} and position_id = ${position.id}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(rows, 0);
+    },
+  );
 });
 
 test("concurrent revises leave no partial effects", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const position = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    // Two writers race on the same aggregate. Whatever the interleaving —
-    // one wins and the other rolls back, or the second re-reads and wins
-    // cleanly after — the ledger must show exactly one row per applied
-    // revision: no orphaned successor, no unwitnessed bump.
-    const attempts = await Promise.all([
-      revisePosition({
+  await withHarness(
+    () => setupHarness(POSITIONS_SPEC),
+    async (h) => {
+      const orgId = h.org.orgId;
+      const position = await createPosition({
         orgId,
         actorId: h.managerId,
-        positionId: position.id,
-        plannedFte: "2.0000",
-        reason: "first writer",
-      }).then(
-        (value) => ({ ok: true as const, revision: value.revision }),
-        (error) => ({ ok: false as const, code: codeOf(error) }),
-      ),
-      revisePosition({
-        orgId,
-        actorId: h.managerId,
-        positionId: position.id,
-        plannedFte: "3.0000",
-        reason: "second writer",
-      }).then(
-        (value) => ({ ok: true as const, revision: value.revision }),
-        (error) => ({ ok: false as const, code: codeOf(error) }),
-      ),
-    ]);
-    const winners = attempts.filter((attempt) => attempt.ok);
-    assert.ok(winners.length >= 1, "at least one writer applies");
-    for (const attempt of attempts) {
-      if (!attempt.ok) {
-        assert.ok(
-          attempt.code === "REFUSED" || attempt.code === "STALE_REVISION",
-          `a losing writer refuses loudly, never silently (got ${attempt.code})`,
-        );
+        positionCode: "ENG-1042",
+        title: "Engineer",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        effectiveFrom: "2026-07-01",
+        reason: "open",
+      });
+      // Two writers race on the same aggregate. Whatever the interleaving —
+      // one wins and the other rolls back, or the second re-reads and wins
+      // cleanly after — the ledger must show exactly one row per applied
+      // revision: no orphaned successor, no unwitnessed bump.
+      const attempts = await Promise.all([
+        revisePosition({
+          orgId,
+          actorId: h.managerId,
+          positionId: position.id,
+          plannedFte: "2.0000",
+          reason: "first writer",
+        }).then(
+          (value) => ({ ok: true as const, revision: value.revision }),
+          (error) => ({ ok: false as const, code: codeOf(error) }),
+        ),
+        revisePosition({
+          orgId,
+          actorId: h.managerId,
+          positionId: position.id,
+          plannedFte: "3.0000",
+          reason: "second writer",
+        }).then(
+          (value) => ({ ok: true as const, revision: value.revision }),
+          (error) => ({ ok: false as const, code: codeOf(error) }),
+        ),
+      ]);
+      const winners = attempts.filter((attempt) => attempt.ok);
+      assert.ok(winners.length >= 1, "at least one writer applies");
+      for (const attempt of attempts) {
+        if (!attempt.ok) {
+          assert.ok(
+            attempt.code === "REFUSED" || attempt.code === "STALE_REVISION",
+            `a losing writer refuses loudly, never silently (got ${attempt.code})`,
+          );
+        }
       }
-    }
-    const revision = (await db.execute<{ revision: number }>(sql`
-      select revision from positions where org_id = ${orgId} and id = ${position.id}`, "objects"))[0]!.revision;
-    assert.equal(revision, 1 + winners.length);
-    const revised = (await db.execute<{ n: number }>(sql`
+      const revision = (
+        await db.execute<{ revision: number }>(
+          sql`
+      select revision from positions where org_id = ${orgId} and id = ${position.id}`,
+          "objects",
+        )
+      )[0]!.revision;
+      assert.equal(revision, 1 + winners.length);
+      const revised = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from position_changes
-       where org_id = ${orgId} and position_id = ${position.id} and change_kind = 'revised'`, "objects"))[0]!.n;
-    assert.equal(revised, winners.length, "one revised event per applied revision");
-    const totalVersions = (await db.execute<{ n: number }>(sql`
+       where org_id = ${orgId} and position_id = ${position.id} and change_kind = 'revised'`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(revised, winners.length, "one revised event per applied revision");
+      const totalVersions = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from position_versions
-       where org_id = ${orgId} and position_id = ${position.id}`, "objects"))[0]!.n;
-    assert.equal(totalVersions, revision, "no orphaned successor version survives a lost race");
-    const live = (await db.execute<{ n: number }>(sql`
+       where org_id = ${orgId} and position_id = ${position.id}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(totalVersions, revision, "no orphaned successor version survives a lost race");
+      const live = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from position_versions
-       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`, "objects"))[0]!.n;
-    assert.equal(live, 1);
-  });
+       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(live, 1);
+    },
+  );
 });
 
 test("a second organization sees nothing of the first (RLS)", { skip: !DB }, async () => {
@@ -572,239 +680,318 @@ test("a second organization sees nothing of the first (RLS)", { skip: !DB }, asy
   }
 });
 
-test("position as-of reads authorize the resolved version's employer scope", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const subsidiaryB = randomUUID();
-    await db.execute(sql`
+test(
+  "position as-of reads authorize the resolved version's employer scope",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupHarness(POSITIONS_SPEC),
+      async (h) => {
+        const orgId = h.org.orgId;
+        const subsidiaryB = randomUUID();
+        await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${subsidiaryB}, ${orgId}, ${h.org.subsidiaryId}, 'Historical B', 'USD', 'US')
     `);
-    const position = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "HIST-ENTITY",
-      title: "Historical A role",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      effectiveFrom: "2026-07-01",
-      reason: "open in A",
-    });
-    const beforeChange = (await db.execute<{ knownAt: string }>(sql`
+        const position = await createPosition({
+          orgId,
+          actorId: h.managerId,
+          positionCode: "HIST-ENTITY",
+          title: "Historical A role",
+          employerSubsidiaryId: h.org.subsidiaryId,
+          effectiveFrom: "2026-07-01",
+          reason: "open in A",
+        });
+        const beforeChange = (
+          await db.execute<{ knownAt: string }>(
+            sql`
       select to_char(recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "knownAt"
         from position_versions where org_id = ${orgId} and position_id = ${position.id}
-    `, "objects"))[0]!.knownAt;
-    await revisePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: position.id,
-      employerSubsidiaryId: subsidiaryB,
-      title: "Current B role",
-      reason: "rehome the establishment to B",
-    });
+    `,
+            "objects",
+          )
+        )[0]!.knownAt;
+        await revisePosition({
+          orgId,
+          actorId: h.managerId,
+          positionId: position.id,
+          employerSubsidiaryId: subsidiaryB,
+          title: "Current B role",
+          reason: "rehome the establishment to B",
+        });
 
-    const readerA = await createScratchUser(orgId, "A position reader", "position_a_reader");
-    const readerB = await createScratchUser(orgId, "B position reader", "position_b_reader");
-    await grantPermissions(orgId, readerA, ["hrm.position.read"]);
-    await grantPermissions(orgId, readerB, ["hrm.position.read"]);
-    for (const [roleKey, subsidiaryId] of [["position_a_reader", h.org.subsidiaryId], ["position_b_reader", subsidiaryB]] as const) {
-      await db.execute(sql`
+        const readerA = await createScratchUser(orgId, "A position reader", "position_a_reader");
+        const readerB = await createScratchUser(orgId, "B position reader", "position_b_reader");
+        await grantPermissions(orgId, readerA, ["hrm.position.read"]);
+        await grantPermissions(orgId, readerB, ["hrm.position.read"]);
+        for (const [roleKey, subsidiaryId] of [
+          ["position_a_reader", h.org.subsidiaryId],
+          ["position_b_reader", subsidiaryB],
+        ] as const) {
+          await db.execute(sql`
         update app_roles
            set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subsidiaryId] })}::jsonb
          where org_id = ${orgId} and key = ${roleKey}
       `);
-    }
+        }
 
-    const query = { orgId, positionId: position.id, effectiveDate: "2026-07-15", knownAt: beforeChange };
-    await assert.rejects(
-      getPositionAsOf({ ...query, actorId: readerB }),
-      (error: unknown) => error instanceof HrmPositionError && error.code === "NOT_FOUND",
-      "the current B reader cannot receive the historical A version or its funding",
+        const query = {
+          orgId,
+          positionId: position.id,
+          effectiveDate: "2026-07-15",
+          knownAt: beforeChange,
+        };
+        await assert.rejects(
+          getPositionAsOf({ ...query, actorId: readerB }),
+          (error: unknown) => error instanceof HrmPositionError && error.code === "NOT_FOUND",
+          "the current B reader cannot receive the historical A version or its funding",
+        );
+        const historicalA = await getPositionAsOf({ ...query, actorId: readerA });
+        assert.equal(
+          historicalA.version.title,
+          "Historical A role",
+          "A can read the historical version resolved in its scope",
+        );
+        const currentB = await getPositionAsOf({
+          ...query,
+          actorId: readerB,
+          knownAt: new Date(Date.now() + 1000).toISOString(),
+        });
+        assert.equal(
+          currentB.version.title,
+          "Current B role",
+          "B retains access to the current version in its scope",
+        );
+      },
     );
-    const historicalA = await getPositionAsOf({ ...query, actorId: readerA });
-    assert.equal(historicalA.version.title, "Historical A role", "A can read the historical version resolved in its scope");
-    const currentB = await getPositionAsOf({
-      ...query,
-      actorId: readerB,
-      knownAt: new Date(Date.now() + 1000).toISOString(),
-    });
-    assert.equal(currentB.version.title, "Current B role", "B retains access to the current version in its scope");
-  });
-});
+  },
+);
 
 test("position option pages scope before applying their limit", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    const subsidiaryB = randomUUID();
-    await db.execute(sql`
+  await withHarness(
+    () => setupHarness(POSITIONS_SPEC),
+    async (h) => {
+      const orgId = h.org.orgId;
+      const subsidiaryB = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${subsidiaryB}, ${orgId}, ${h.org.subsidiaryId}, 'Other entity', 'USD', 'US')
     `);
-    await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "A-HIDDEN",
-      title: "Hidden entity role",
-      employerSubsidiaryId: subsidiaryB,
-      effectiveFrom: "2026-07-01",
-      reason: "open in B",
-    });
-    const visible = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "Z-VISIBLE",
-      title: "Visible entity role",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      effectiveFrom: "2026-07-01",
-      reason: "open in A",
-    });
-    const reader = await createScratchUser(orgId, "A position reader", "position_a_reader");
-    await grantPermissions(orgId, reader, ["hrm.position.read"]);
-    await db.execute(sql`
+      await createPosition({
+        orgId,
+        actorId: h.managerId,
+        positionCode: "A-HIDDEN",
+        title: "Hidden entity role",
+        employerSubsidiaryId: subsidiaryB,
+        effectiveFrom: "2026-07-01",
+        reason: "open in B",
+      });
+      const visible = await createPosition({
+        orgId,
+        actorId: h.managerId,
+        positionCode: "Z-VISIBLE",
+        title: "Visible entity role",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        effectiveFrom: "2026-07-01",
+        reason: "open in A",
+      });
+      const reader = await createScratchUser(orgId, "A position reader", "position_a_reader");
+      await grantPermissions(orgId, reader, ["hrm.position.read"]);
+      await db.execute(sql`
       update app_roles
          set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [h.org.subsidiaryId] })}::jsonb
        where org_id = ${orgId} and key = 'position_a_reader'
     `);
 
-    const options = await listPositionOptions({ orgId, actorId: reader, limit: 1 });
-    assert.deepEqual(options.map((row) => row.positionId), [visible.id]);
-  });
+      const options = await listPositionOptions({ orgId, actorId: reader, limit: 1 });
+      assert.deepEqual(
+        options.map((row) => row.positionId),
+        [visible.id],
+      );
+    },
+  );
 });
 
-test("position_assignment rides the change-request path with warnings in both ledgers", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    await seedFlow(orgId, h.approverId);
-    const deptId = await mkDepartment(orgId, "Engineering");
-    const position = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      departmentId: deptId,
-      employerSubsidiaryId: h.org.subsidiaryId,
-      plannedFte: "1.0000",
-      status: "open",
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
-    await seedAssignment(orgId, employmentId, "primary", {
-      isPrimary: true,
-      fte: "1.0000",
-      jobTitle: "Senior Engineer",
-    });
+test(
+  "position_assignment rides the change-request path with warnings in both ledgers",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupHarness(POSITIONS_SPEC),
+      async (h) => {
+        const orgId = h.org.orgId;
+        await seedFlow(orgId, h.approverId);
+        const deptId = await mkDepartment(orgId, "Engineering");
+        const position = await createPosition({
+          orgId,
+          actorId: h.managerId,
+          positionCode: "ENG-1042",
+          title: "Engineer",
+          departmentId: deptId,
+          employerSubsidiaryId: h.org.subsidiaryId,
+          plannedFte: "1.0000",
+          status: "open",
+          effectiveFrom: "2026-07-01",
+          reason: "open",
+        });
+        const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, {
+          from: "2026-07-01",
+          displayName: "Position Holder",
+        });
+        await seedAssignment(orgId, employmentId, "primary", {
+          isPrimary: true,
+          fte: "1.0000",
+          jobTitle: "Senior Engineer",
+        });
 
-    const draft = await createChangeRequestDraft({
-      orgId,
-      actorId: h.submitterId,
-      employmentId,
-      payload: { kind: "position_assignment", assignmentKey: "primary", positionId: position.id },
-    });
-    const submitted = await submitChangeRequest({
-      orgId,
-      actorId: h.submitterId,
-      requestId: draft.id,
-      reason: "staff the establishment",
-    });
-    assert.equal(submitted.status, "pending_approval");
-    const gate = await gateOf(draft.id);
-    const decided = await decideGate({ gateId: gate.id, decision: "approved", userId: h.approverId });
-    assert.equal(decided.ok, true);
+        const draft = await createChangeRequestDraft({
+          orgId,
+          actorId: h.submitterId,
+          employmentId,
+          payload: {
+            kind: "position_assignment",
+            assignmentKey: "primary",
+            positionId: position.id,
+          },
+        });
+        const submitted = await submitChangeRequest({
+          orgId,
+          actorId: h.submitterId,
+          requestId: draft.id,
+          reason: "staff the establishment",
+        });
+        assert.equal(submitted.status, "pending_approval");
+        const gate = await gateOf(draft.id);
+        const decided = await decideGate({
+          gateId: gate.id,
+          decision: "approved",
+          userId: h.approverId,
+        });
+        assert.equal(decided.ok, true);
 
-    const versions = await db.execute<{ position_id: string | null; version_no: number }>(sql`
+        const versions = await db.execute<{ position_id: string | null; version_no: number }>(
+          sql`
       select position_id::text as position_id, version_no
         from employment_assignment_versions
        where org_id = ${orgId} and employment_id = ${employmentId}
-       order by version_no`, "objects");
-    assert.deepEqual(
-      versions.map((v) => v.version_no),
-      [1, 2],
-    );
-    assert.equal(versions[1]!.position_id, position.id);
-    // Employment evidence is assignment_superseded with the warnings.
-    const employmentEvents = await db.execute<{ change_kind: string; prior_snapshot: unknown }>(sql`
+       order by version_no`,
+          "objects",
+        );
+        assert.deepEqual(
+          versions.map((v) => v.version_no),
+          [1, 2],
+        );
+        assert.equal(versions[1]!.position_id, position.id);
+        // Employment evidence is assignment_superseded with the warnings.
+        const employmentEvents = await db.execute<{ change_kind: string; prior_snapshot: unknown }>(
+          sql`
       select change_kind, prior_snapshot from employment_changes
-       where org_id = ${orgId} and employment_id = ${employmentId} order by revision`, "objects");
-    const applied = employmentEvents[employmentEvents.length - 1]!;
-    assert.equal(applied.change_kind, "assignment_superseded");
-    const warnings = (applied.prior_snapshot as { positionWarnings: string[] }).positionWarnings;
-    assert.ok(warnings.length >= 1, "title disagreement warns");
-    assert.match(warnings[0]!, /keeps its own title/);
-    // Position evidence carries the same warnings plus the holder.
-    const positionEvents = await db.execute<{ change_kind: string; prior_snapshot: unknown }>(sql`
+       where org_id = ${orgId} and employment_id = ${employmentId} order by revision`,
+          "objects",
+        );
+        const applied = employmentEvents[employmentEvents.length - 1]!;
+        assert.equal(applied.change_kind, "assignment_superseded");
+        const warnings = (applied.prior_snapshot as { positionWarnings: string[] })
+          .positionWarnings;
+        assert.ok(warnings.length >= 1, "title disagreement warns");
+        assert.match(warnings[0]!, /keeps its own title/);
+        // Position evidence carries the same warnings plus the holder.
+        const positionEvents = await db.execute<{ change_kind: string; prior_snapshot: unknown }>(
+          sql`
       select change_kind, prior_snapshot from position_changes
-       where org_id = ${orgId} and position_id = ${position.id} order by revision`, "objects");
-    const assigned = positionEvents[positionEvents.length - 1]!;
-    assert.equal(assigned.change_kind, "assigned");
-    assert.equal((assigned.prior_snapshot as { employmentId: string }).employmentId, employmentId);
-    assert.deepEqual(
-      (assigned.prior_snapshot as { disagreementWarnings: string[] }).disagreementWarnings,
-      warnings,
-    );
+       where org_id = ${orgId} and position_id = ${position.id} order by revision`,
+          "objects",
+        );
+        const assigned = positionEvents[positionEvents.length - 1]!;
+        assert.equal(assigned.change_kind, "assigned");
+        assert.equal(
+          (assigned.prior_snapshot as { employmentId: string }).employmentId,
+          employmentId,
+        );
+        assert.deepEqual(
+          (assigned.prior_snapshot as { disagreementWarnings: string[] }).disagreementWarnings,
+          warnings,
+        );
 
-    const detail = await getPositionAsOf({
-      orgId,
-      actorId: h.managerId,
-      positionId: position.id,
-      effectiveDate: "2026-07-15",
-      knownAt: nowIso(),
-    });
-    assert.equal(detail.holders.length, 1);
-    assert.equal(detail.holders[0]!.employmentId, employmentId);
-    assert.equal(detail.holders[0]!.workerName, "Position Holder");
-    assert.equal(detail.vacancy.filledFte, "1.0000");
-    assert.equal(detail.vacancy.vacantFte, "0.0000");
-    assert.ok(detail.disagreementWarnings.length >= 1);
-  });
-});
+        const detail = await getPositionAsOf({
+          orgId,
+          actorId: h.managerId,
+          positionId: position.id,
+          effectiveDate: "2026-07-15",
+          knownAt: nowIso(),
+        });
+        assert.equal(detail.holders.length, 1);
+        assert.equal(detail.holders[0]!.employmentId, employmentId);
+        assert.equal(detail.holders[0]!.workerName, "Position Holder");
+        assert.equal(detail.vacancy.filledFte, "1.0000");
+        assert.equal(detail.vacancy.vacantFte, "0.0000");
+        assert.ok(detail.disagreementWarnings.length >= 1);
+      },
+    );
+  },
+);
 
 test("unassignment clears the link and evidences both sides", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
-    const orgId = h.org.orgId;
-    await seedFlow(orgId, h.approverId);
-    const position = await createPosition({
-      orgId,
-      actorId: h.managerId,
-      positionCode: "ENG-1042",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
-    await seedAssignment(orgId, employmentId, "primary", { positionId: position.id, isPrimary: true });
+  await withHarness(
+    () => setupHarness(POSITIONS_SPEC),
+    async (h) => {
+      const orgId = h.org.orgId;
+      await seedFlow(orgId, h.approverId);
+      const position = await createPosition({
+        orgId,
+        actorId: h.managerId,
+        positionCode: "ENG-1042",
+        title: "Engineer",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        effectiveFrom: "2026-07-01",
+        reason: "open",
+      });
+      const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, {
+        from: "2026-07-01",
+        displayName: "Position Holder",
+      });
+      await seedAssignment(orgId, employmentId, "primary", {
+        positionId: position.id,
+        isPrimary: true,
+      });
 
-    const draft = await createChangeRequestDraft({
-      orgId,
-      actorId: h.submitterId,
-      employmentId,
-      payload: { kind: "position_assignment", assignmentKey: "primary", positionId: null },
-    });
-    await submitChangeRequest({
-      orgId,
-      actorId: h.submitterId,
-      requestId: draft.id,
-      reason: "vacate the establishment",
-    });
-    const gate = await gateOf(draft.id);
-    await decideGate({ gateId: gate.id, decision: "approved", userId: h.approverId });
+      const draft = await createChangeRequestDraft({
+        orgId,
+        actorId: h.submitterId,
+        employmentId,
+        payload: { kind: "position_assignment", assignmentKey: "primary", positionId: null },
+      });
+      await submitChangeRequest({
+        orgId,
+        actorId: h.submitterId,
+        requestId: draft.id,
+        reason: "vacate the establishment",
+      });
+      const gate = await gateOf(draft.id);
+      await decideGate({ gateId: gate.id, decision: "approved", userId: h.approverId });
 
-    const latest = (await db.execute<{ position_id: string | null }>(sql`
+      const latest = (
+        await db.execute<{ position_id: string | null }>(
+          sql`
       select position_id::text as position_id from employment_assignment_versions
        where org_id = ${orgId} and employment_id = ${employmentId}
-       order by version_no desc limit 1`, "objects"))[0]!.position_id;
-    assert.equal(latest, null);
-    const kinds = await positionChangeKinds(orgId, position.id);
-    assert.deepEqual(kinds, ["created", "unassigned"]);
+       order by version_no desc limit 1`,
+          "objects",
+        )
+      )[0]!.position_id;
+      assert.equal(latest, null);
+      const kinds = await positionChangeKinds(orgId, position.id);
+      assert.deepEqual(kinds, ["created", "unassigned"]);
 
-    // The vacated establishment now closes without refusal.
-    const closed = await closePosition({
-      orgId,
-      actorId: h.managerId,
-      positionId: position.id,
-      effectiveDate: "2026-07-15",
-      reason: "retire",
-    });
-    assert.equal(closed.version.status, "closed");
-  });
+      // The vacated establishment now closes without refusal.
+      const closed = await closePosition({
+        orgId,
+        actorId: h.managerId,
+        positionId: position.id,
+        effectiveDate: "2026-07-15",
+        reason: "retire",
+      });
+      assert.equal(closed.version.status, "closed");
+    },
+  );
 });

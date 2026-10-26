@@ -1,13 +1,34 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const fixedAssetsDepreciation: DocArticle = {
-  slug: 'fixed-assets-depreciation',
-  title: 'Fixed Assets and Depreciation Evidence',
-  category: 'accounting',
+  slug: "fixed-assets-depreciation",
+  title: "Fixed Assets and Depreciation Evidence",
+  category: "accounting",
   order: 4,
-  summary: 'Configure asset books, depreciate exactly, capitalize purchases and construction in progress, and keep compound assets, maintenance and insurance in one register.',
-  updated: '2026-10-11',
-  keywords: ['fixed assets', 'depreciation', 'manual depreciation', 'units of production', 'usage', 'evidence', 'asset book', 'onboarding', 'mid-life', 'opening accumulated', 'component', 'compound asset', 'asset proposal', 'capitalization rule', 'construction in progress', 'CIP', 'maintenance', 'insurance', 'roll-forward'],
+  summary:
+    "Configure asset books, depreciate exactly, capitalize purchases and construction in progress, and keep compound assets, maintenance and insurance in one register.",
+  updated: "2026-10-11",
+  keywords: [
+    "fixed assets",
+    "depreciation",
+    "manual depreciation",
+    "units of production",
+    "usage",
+    "evidence",
+    "asset book",
+    "onboarding",
+    "mid-life",
+    "opening accumulated",
+    "component",
+    "compound asset",
+    "asset proposal",
+    "capitalization rule",
+    "construction in progress",
+    "CIP",
+    "maintenance",
+    "insurance",
+    "roll-forward",
+  ],
   body: `# Fixed Assets and Depreciation Evidence
 
 The fixed-asset register separates the asset record, each accounting book's
@@ -245,4 +266,4 @@ by book (opening, additions, transfers and partial disposals, disposals,
 construction capitalized, depreciation, remeasurement and closing), the
 depreciation forecast of unposted schedule lines, pending proposals, maintenance
 due, insured value against net book value, and construction-in-progress costs.`,
-}
+};

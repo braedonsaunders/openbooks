@@ -1,14 +1,25 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
-import { createPlanVersion, publishPlanVersion } from '@openbooks/engine/billing/advanced-subscriptions'
-import { createSaasFeature, savePlanVersionEntitlements } from '@openbooks/engine/testing/billing/entitlements'
-import type { ApplicationContext } from './context'
-import { ApplicationError } from './errors'
-const { getV1Entitlements } = await import('./entitlements')
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
+import {
+  createPlanVersion,
+  publishPlanVersion,
+} from "@openbooks/engine/billing/advanced-subscriptions";
+import {
+  createSaasFeature,
+  savePlanVersionEntitlements,
+} from "@openbooks/engine/testing/billing/entitlements";
+import type { ApplicationContext } from "./context";
+import { ApplicationError } from "./errors";
+const { getV1Entitlements } = await import("./entitlements");
 
 /**
  * Public entitlement reads refuse unknown customers by name: the miss
@@ -24,15 +35,21 @@ function context(
 ): ApplicationContext {
   return {
     authz: {
-      user: { orgId } as ApplicationContext['authz']['user'],
+      user: { orgId } as ApplicationContext["authz"]["user"],
       permissions: new Set(permissions),
       allowedSubsidiaryIds: allowedSubsidiaryIds === null ? null : new Set(allowedSubsidiaryIds),
     },
-    source: 'api', requestId: randomUUID(), apiKeyId: null,
-  }
+    source: "api",
+    requestId: randomUUID(),
+    apiKeyId: null,
+  };
 }
 
-async function seedCustomerWithGrant(org: ScratchOrg, actor: string, customerId: string): Promise<string> {
+async function seedCustomerWithGrant(
+  org: ScratchOrg,
+  actor: string,
+  customerId: string,
+): Promise<string> {
   const orgId = org.orgId;
   const planId = randomUUID();
   await db.execute(sql`
@@ -42,21 +59,34 @@ async function seedCustomerWithGrant(org: ScratchOrg, actor: string, customerId:
     values (${planId}, ${orgId}, 'SaaS Plan', '0', 'CAD', 'monthly', 1,
             ${org.accounts.revenue}, true, ${actor})
   `);
-  const versionId = await createPlanVersion(orgId, actor, {
-    planId,
-    effectiveFrom: '2026-05-01',
-    components: [
-      {
-        componentKey: 'platform', name: 'Platform fee', quantity: '1', unitPrice: '100.00',
-        incomeAccountId: org.accounts.revenue,
-      },
-    ],
-  }, null);
-  await createSaasFeature(orgId, actor, { key: 'seats_included', name: 'Seats', type: 'quantity', unit: 'seats' });
+  const versionId = await createPlanVersion(
+    orgId,
+    actor,
+    {
+      planId,
+      effectiveFrom: "2026-05-01",
+      components: [
+        {
+          componentKey: "platform",
+          name: "Platform fee",
+          quantity: "1",
+          unitPrice: "100.00",
+          incomeAccountId: org.accounts.revenue,
+        },
+      ],
+    },
+    null,
+  );
+  await createSaasFeature(orgId, actor, {
+    key: "seats_included",
+    name: "Seats",
+    type: "quantity",
+    unit: "seats",
+  });
   await savePlanVersionEntitlements(orgId, actor, {
     planVersionId: versionId,
-    effectiveFrom: '2026-05-01',
-    rows: [{ featureKey: 'seats_included', limit: '100', overagePolicy: 'block' }],
+    effectiveFrom: "2026-05-01",
+    rows: [{ featureKey: "seats_included", limit: "100", overagePolicy: "block" }],
   });
   await publishPlanVersion(orgId, actor, versionId, null);
   const subscriptionId = randomUUID();
@@ -70,52 +100,66 @@ async function seedCustomerWithGrant(org: ScratchOrg, actor: string, customerId:
 }
 
 async function seedOrg(): Promise<{ org: ScratchOrg; actor: string }> {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  const actor = await withBypassContext(() => (createScratchUser(org.orgId, 'Entitlement Owner', 'entitlement_owner')));
-  await withBypassContext(() => db.execute(sql`update users set is_super_admin = true where id = ${actor} and org_id = ${org.orgId}`));
-  await withBypassContext(() => db.execute(sql`
+  const org = await withBypassContext(() => createScratchOrg());
+  const actor = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Entitlement Owner", "entitlement_owner"),
+  );
+  await withBypassContext(() =>
+    db.execute(
+      sql`update users set is_super_admin = true where id = ${actor} and org_id = ${org.orgId}`,
+    ),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs
        set settings = settings || '{"features":{"subscriptionBilling":true,"advancedSubscriptions":true,"usageBilling":true,"apiAccess":true}}'::jsonb
      where id = ${org.orgId}
-  `));
+  `),
+  );
   return { org, actor };
 }
 
-test('an unknown customer name refuses with its remedy', async () => {
+test("an unknown customer name refuses with its remedy", async () => {
   const { org } = await seedOrg();
   const orgId = org.orgId;
   try {
     await withOrgContext(orgId, async () => {
       await assert.rejects(
-        getV1Entitlements(context(orgId, ['ar.read']), { customer: 'Nobody Here' }),
-        (error: unknown) => error instanceof ApplicationError
-          && error.code === 'not_found'
-          && error.status === 404
-          && error.message === 'No customer is named Nobody Here in this organization.'
-          && typeof error.details?.remedy === 'string',
+        getV1Entitlements(context(orgId, ["ar.read"]), { customer: "Nobody Here" }),
+        (error: unknown) =>
+          error instanceof ApplicationError &&
+          error.code === "not_found" &&
+          error.status === 404 &&
+          error.message === "No customer is named Nobody Here in this organization." &&
+          typeof error.details?.remedy === "string",
       );
     });
-  } finally { await dropScratchOrg(orgId); }
+  } finally {
+    await dropScratchOrg(orgId);
+  }
 });
 
-test('an unknown customer id refuses with its remedy', async () => {
+test("an unknown customer id refuses with its remedy", async () => {
   const { org } = await seedOrg();
   const orgId = org.orgId;
   const missing = randomUUID();
   try {
     await withOrgContext(orgId, async () => {
       await assert.rejects(
-        getV1Entitlements(context(orgId, ['ar.read']), { customer: missing }),
-        (error: unknown) => error instanceof ApplicationError
-          && error.code === 'not_found'
-          && error.status === 404
-          && error.message === `No customer has id ${missing} in this organization.`,
+        getV1Entitlements(context(orgId, ["ar.read"]), { customer: missing }),
+        (error: unknown) =>
+          error instanceof ApplicationError &&
+          error.code === "not_found" &&
+          error.status === 404 &&
+          error.message === `No customer has id ${missing} in this organization.`,
       );
     });
-  } finally { await dropScratchOrg(orgId); }
+  } finally {
+    await dropScratchOrg(orgId);
+  }
 });
 
-test('a customer outside the caller subsidiary scope is hidden from entitlement lookup', async () => {
+test("a customer outside the caller subsidiary scope is hidden from entitlement lookup", async () => {
   const { org } = await seedOrg();
   const orgId = org.orgId;
   try {
@@ -125,85 +169,111 @@ test('a customer outside the caller subsidiary scope is hidden from entitlement 
          where org_id = ${orgId} and id = ${org.customerId}
       `);
       await assert.rejects(
-        getV1Entitlements(context(orgId, ['ar.read'], new Set()), { customer: org.customerId }),
-        (error: unknown) => error instanceof ApplicationError
-          && error.code === 'not_found'
-          && error.status === 404,
+        getV1Entitlements(context(orgId, ["ar.read"], new Set()), { customer: org.customerId }),
+        (error: unknown) =>
+          error instanceof ApplicationError && error.code === "not_found" && error.status === 404,
       );
     });
-  } finally { await dropScratchOrg(orgId); }
+  } finally {
+    await dropScratchOrg(orgId);
+  }
 });
 
-test('a usage check requires billing permission before resolving its customer', async () => {
+test("a usage check requires billing permission before resolving its customer", async () => {
   const { org } = await seedOrg();
   const orgId = org.orgId;
   try {
     await withOrgContext(orgId, async () => {
       await assert.rejects(
-        getV1Entitlements(context(orgId, ['ar.read']), {
-          customer: 'Secret Customer Name', feature: 'metered_feature', used: '1',
+        getV1Entitlements(context(orgId, ["ar.read"]), {
+          customer: "Secret Customer Name",
+          feature: "metered_feature",
+          used: "1",
         }),
-        (error: unknown) => error instanceof ApplicationError
-          && error.code === 'forbidden'
-          && error.status === 403,
+        (error: unknown) =>
+          error instanceof ApplicationError && error.code === "forbidden" && error.status === 403,
       );
     });
-  } finally { await dropScratchOrg(orgId); }
+  } finally {
+    await dropScratchOrg(orgId);
+  }
 });
 
-test('an unknown external reference refuses with its remedy', async () => {
+test("an unknown external reference refuses with its remedy", async () => {
   const { org } = await seedOrg();
   const orgId = org.orgId;
   try {
     await withOrgContext(orgId, async () => {
       await assert.rejects(
-        getV1Entitlements(context(orgId, ['ar.read']), { externalRef: 'stripe:cus_missing' }),
-        (error: unknown) => error instanceof ApplicationError
-          && error.code === 'not_found'
-          && error.status === 404
-          && error.message === 'No customer is linked to external reference stripe:cus_missing.',
+        getV1Entitlements(context(orgId, ["ar.read"]), { externalRef: "stripe:cus_missing" }),
+        (error: unknown) =>
+          error instanceof ApplicationError &&
+          error.code === "not_found" &&
+          error.status === 404 &&
+          error.message === "No customer is linked to external reference stripe:cus_missing.",
       );
       await assert.rejects(
-        getV1Entitlements(context(orgId, ['ar.read']), { externalRef: 'no-separator' }),
-        (error: unknown) => error instanceof ApplicationError
-          && error.code === 'invalid_input'
-          && error.status === 422,
+        getV1Entitlements(context(orgId, ["ar.read"]), { externalRef: "no-separator" }),
+        (error: unknown) =>
+          error instanceof ApplicationError &&
+          error.code === "invalid_input" &&
+          error.status === 422,
       );
     });
-  } finally { await dropScratchOrg(orgId); }
+  } finally {
+    await dropScratchOrg(orgId);
+  }
 });
 
-test('a customer name resolves to its effective entitlements', async () => {
+test("a customer name resolves to its effective entitlements", async () => {
   const { org, actor } = await seedOrg();
   const orgId = org.orgId;
   const customerId = org.customerId;
   try {
     await withOrgContext(orgId, async () => {
-      const name = (await db.execute<{ display_name: string }>(sql`
-        select display_name from parties where org_id = ${orgId} and id = ${customerId}`, 'objects'))[0]!.display_name;
+      const name = (
+        await db.execute<{ display_name: string }>(
+          sql`
+        select display_name from parties where org_id = ${orgId} and id = ${customerId}`,
+          "objects",
+        )
+      )[0]!.display_name;
       await seedCustomerWithGrant(org, actor, customerId);
-      const result = await getV1Entitlements(context(orgId, ['ar.read']), { customer: name, at: '2026-07-01' });
+      const result = await getV1Entitlements(context(orgId, ["ar.read"]), {
+        customer: name,
+        at: "2026-07-01",
+      });
       assert.equal(result.customer.id, customerId);
       assert.equal(result.subscriptions.length, 1);
-      assert.equal(result.subscriptions[0]?.features.find((f) => f.featureKey === 'seats_included')?.limit, '100');
+      assert.equal(
+        result.subscriptions[0]?.features.find((f) => f.featureKey === "seats_included")?.limit,
+        "100",
+      );
       assert.equal(result.check, null);
     });
-  } finally { await dropScratchOrg(orgId); }
+  } finally {
+    await dropScratchOrg(orgId);
+  }
 });
 
-test('a usage check refuses over the block limit with the limit attached', async () => {
+test("a usage check refuses over the block limit with the limit attached", async () => {
   const { org, actor } = await seedOrg();
   const orgId = org.orgId;
   const customerId = org.customerId;
   try {
     await withOrgContext(orgId, async () => {
       await seedCustomerWithGrant(org, actor, customerId);
-      const result = await getV1Entitlements(context(orgId, ['ar.read', 'usage.bill']), {
-        customer: customerId, at: '2026-07-01', feature: 'seats_included', used: '130',
+      const result = await getV1Entitlements(context(orgId, ["ar.read", "usage.bill"]), {
+        customer: customerId,
+        at: "2026-07-01",
+        feature: "seats_included",
+        used: "130",
       });
       assert.equal(result.check?.allowed, false);
-      assert.equal(result.check?.limit, '100');
-      assert.equal(result.check?.overage, '30');
+      assert.equal(result.check?.limit, "100");
+      assert.equal(result.check?.overage, "30");
     });
-  } finally { await dropScratchOrg(orgId); }
+  } finally {
+    await dropScratchOrg(orgId);
+  }
 });

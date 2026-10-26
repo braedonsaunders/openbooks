@@ -1,27 +1,27 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
 import {
   ref,
   textBlock,
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { budgetScenarioOptions, budgetVsActualView } from '../../../../lib/budget-report'
-import { orgInfo } from '../../../../lib/data'
+} from "@braedonsaunders/appkit-viewspec";
+import { budgetScenarioOptions, budgetVsActualView } from "../../../../lib/budget-report";
+import { orgInfo } from "../../../../lib/data";
 import {
   baseCurrencyNotice,
   hasBaseCurrency,
   type BaseCurrencyNotice,
-} from '../../../../lib/reports/base-currency'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { resolvePeriod } from '../../../../lib/periods'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadBudgetDimensionOptions } from '../../../../lib/budgets'
-import { statementReportSpec } from '@/lib/reports/statement-report-spec'
+} from "../../../../lib/reports/base-currency";
+import { parseReportQuery } from "../../../../lib/report-filters";
+import { resolvePeriod } from "../../../../lib/periods";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadBudgetDimensionOptions } from "../../../../lib/budgets";
+import { statementReportSpec } from "@/lib/reports/statement-report-spec";
 
 /**
  * The budget-vs-actual statement, split into a loader and a spec.
@@ -39,113 +39,113 @@ import { statementReportSpec } from '@/lib/reports/statement-report-spec'
  */
 
 export interface BudgetReportData {
-  title: string
-  backHref: string
-  backLabel: string
+  title: string;
+  backHref: string;
+  backLabel: string;
   scenarioFilter: {
-    paramKey: string
-    label: string
-    value: string
-    options: { value: string; label: string }[]
-  }
-  hasScenarios: boolean
-  noScenarios: boolean
-  showSections: boolean
-  hideSections: boolean
-  canManage: boolean
-  manageHref: string
-  manageLabel: string
-  dimensions: unknown
-  exportParams: Record<string, string | undefined>
-  company: string
-  periodPhrase: string
-  emptyNote: string
-  wide: boolean
-  hasView: boolean
-  view: unknown
-  currency: string | undefined
+    paramKey: string;
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  };
+  hasScenarios: boolean;
+  noScenarios: boolean;
+  showSections: boolean;
+  hideSections: boolean;
+  canManage: boolean;
+  manageHref: string;
+  manageLabel: string;
+  dimensions: unknown;
+  exportParams: Record<string, string | undefined>;
+  company: string;
+  periodPhrase: string;
+  emptyNote: string;
+  wide: boolean;
+  hasView: boolean;
+  view: unknown;
+  currency: string | undefined;
   /**
    * Set exactly when the org has no base currency: the page renders the
    * named refusal (with the Company settings link) instead of numbers —
    * the boundary swallows thrown messages, so the refusal is data.
    */
-  baseCurrencyNotice: BaseCurrencyNotice | null
-  baseCurrencyReady: boolean
-  drill: unknown
+  baseCurrencyNotice: BaseCurrencyNotice | null;
+  baseCurrencyReady: boolean;
+  drill: unknown;
 }
 
 export async function loadBudgetReport(
   sp: Record<string, string | undefined>,
 ): Promise<BudgetReportData> {
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const tb = await getTranslations('budgets')
-  const authz = await requirePermission('reports.read')
-  await requireFeatureEnabled(authz.user.orgId, 'budgets')
-  const q = parseReportQuery(sp)
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const tb = await getTranslations("budgets");
+  const authz = await requirePermission("reports.read");
+  await requireFeatureEnabled(authz.user.orgId, "budgets");
+  const q = parseReportQuery(sp);
   // The same period machinery as every other statement: the resolved window
   // bounds the actuals (and the budget periods), so a year-to-date view no
   // longer leaks future-dated lines the P&L never shows.
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
   // The base currency gates every money figure below: refuse before the
   // scenario and view queries run, never after them, and never by throwing.
-  const org = await orgInfo(authz.user.orgId)
+  const org = await orgInfo(authz.user.orgId);
   if (!org || !hasBaseCurrency(org.base_currency)) {
     return {
-      title: t('budget.title'),
-      backHref: '/reports',
-      backLabel: t('hub.title'),
-      scenarioFilter: { paramKey: 'scenario', label: t('budget.scenario'), value: '', options: [] },
+      title: t("budget.title"),
+      backHref: "/reports",
+      backLabel: t("hub.title"),
+      scenarioFilter: { paramKey: "scenario", label: t("budget.scenario"), value: "", options: [] },
       hasScenarios: false,
       noScenarios: false,
       showSections: false,
       hideSections: true,
       canManage: false,
-      manageHref: '/budgets',
-      manageLabel: t('budget.manage'),
+      manageHref: "/budgets",
+      manageLabel: t("budget.manage"),
       dimensions: null,
       exportParams: sp,
-      company: '',
-      periodPhrase: '',
-      emptyNote: '',
+      company: "",
+      periodPhrase: "",
+      emptyNote: "",
       wide: false,
       hasView: false,
       view: null,
       currency: undefined,
       baseCurrencyNotice: baseCurrencyNotice({
-        title: t('baseCurrency.title'),
-        description: t('baseCurrency.description'),
-        actionLabel: t('baseCurrency.action'),
+        title: t("baseCurrency.title"),
+        description: t("baseCurrency.description"),
+        actionLabel: t("baseCurrency.action"),
       }),
       baseCurrencyReady: false,
       drill: null,
-    }
+    };
   }
   const [scenarios, dimensions] = await Promise.all([
     budgetScenarioOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
     loadBudgetDimensionOptions(authz.user.orgId),
-  ])
+  ]);
 
   // With no scenarios there is nothing to compare against, so the loader
   // stops before the view query — the same shape as the native early return.
   const scenarioId =
     scenarios.length === 0
-      ? ''
+      ? ""
       : sp.scenario && scenarios.some((s) => s.id === sp.scenario)
         ? sp.scenario
-        : scenarios[0]!.id
+        : scenarios[0]!.id;
   const labels = {
-    actual: t('budget.actual'),
-    budget: t('budget.budget'),
-    variance: t('budget.variance'),
-    variancePct: t('budget.variancePct'),
-    revenue: t('pnl.revenue'),
-    costOfGoodsSold: t('pnl.costOfGoodsSold'),
-    grossProfit: t('pnl.grossProfit'),
-    expenses: t('pnl.expenses'),
-    netIncome: t('pnl.netIncome'),
-    totalOf: (section: string) => t('statement.sectionTotal', { section }),
-  }
+    actual: t("budget.actual"),
+    budget: t("budget.budget"),
+    variance: t("budget.variance"),
+    variancePct: t("budget.variancePct"),
+    revenue: t("pnl.revenue"),
+    costOfGoodsSold: t("pnl.costOfGoodsSold"),
+    grossProfit: t("pnl.grossProfit"),
+    expenses: t("pnl.expenses"),
+    netIncome: t("pnl.netIncome"),
+    totalOf: (section: string) => t("statement.sectionTotal", { section }),
+  };
   const view =
     scenarios.length === 0
       ? null
@@ -156,20 +156,20 @@ export async function loadBudgetReport(
           q.dims,
           authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds],
           { from: period.from, to: period.to },
-        )
+        );
 
-  const scenarioName = scenarios.find((scenario) => scenario.id === scenarioId)?.name
+  const scenarioName = scenarios.find((scenario) => scenario.id === scenarioId)?.name;
   return {
-    title: t('budget.title'),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
+    title: t("budget.title"),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
     scenarioFilter: {
-      paramKey: 'scenario',
-      label: t('budget.scenario'),
+      paramKey: "scenario",
+      label: t("budget.scenario"),
       value: scenarioId,
       options: scenarios.map((scenario) => ({
         value: scenario.id,
-        label: t('budget.scenarioOption', {
+        label: t("budget.scenarioOption", {
           name: scenario.name,
           year: scenario.fiscalYear,
           status: tb(`status.${scenario.status}`),
@@ -180,9 +180,9 @@ export async function loadBudgetReport(
     noScenarios: scenarios.length === 0,
     showSections: scenarios.length > 0 && Boolean(view),
     hideSections: scenarios.length > 0 && !view,
-    canManage: can(authz, 'budgets.read'),
-    manageHref: '/budgets',
-    manageLabel: t('budget.manage'),
+    canManage: can(authz, "budgets.read"),
+    manageHref: "/budgets",
+    manageLabel: t("budget.manage"),
     dimensions,
     exportParams: { ...sp, scenario: scenarioId },
     company: org.name,
@@ -191,99 +191,99 @@ export async function loadBudgetReport(
     // so the reader can see which actuals the variance compares.
     periodPhrase:
       scenarios.length === 0
-        ? t('budget.description')
-        : `${scenarioName ?? ''} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
-    emptyNote: t('budget.noScenarios'),
+        ? t("budget.description")
+        : `${scenarioName ?? ""} · ${t("pnl.dateRange", civilDateParams({ from: period.from, to: period.to }, locale))}`,
+    emptyNote: t("budget.noScenarios"),
     wide: (view?.columns.length ?? 0) > 4,
     hasView: Boolean(view),
     view,
     currency: org.base_currency,
     baseCurrencyNotice: null,
     baseCurrencyReady: true,
-    drill: { dims: q.dims, basis: 'accrual', budgetScenarioId: scenarioId },
-  }
+    drill: { dims: q.dims, basis: "accrual", budgetScenarioId: scenarioId },
+  };
 }
 
-const f = ref<BudgetReportData>()
+const f = ref<BudgetReportData>();
 
 export function budgetReportSpec(data: BudgetReportData): PageSpec {
   const manage = widget(
-    'link-button',
-    { href: data.manageHref, label: data.manageLabel, variant: 'outline', size: 'sm' },
-    f('canManage'),
-  )
+    "link-button",
+    { href: data.manageHref, label: data.manageLabel, variant: "outline", size: "sm" },
+    f("canManage"),
+  );
   // `primaryFilter` binds a field, not a literal — the loader assembles the
   // picker and the spec names where it lives.
   return statementReportSpec({
-    route: '/reports/budget',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    route: "/reports/budget",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
     actionsBefore: [manage],
-    exportMenu: { kind: 'budget', params: data.exportParams },
+    exportMenu: { kind: "budget", params: data.exportParams },
     filters: [
       {
         controls: { period: false },
-        options: { when: f('noScenarios') },
+        options: { when: f("noScenarios") },
         actions: [manage],
       },
       {
         controls: { period: true, dimensions: true, sections: true },
         options: {
-          primaryFilter: f('scenarioFilter'),
-          dimensions: f('dimensions'),
-          when: f('showSections'),
+          primaryFilter: f("scenarioFilter"),
+          dimensions: f("dimensions"),
+          when: f("showSections"),
         },
       },
       {
         controls: { period: true, dimensions: true },
         options: {
-          primaryFilter: f('scenarioFilter'),
-          dimensions: f('dimensions'),
-          when: f('hideSections'),
+          primaryFilter: f("scenarioFilter"),
+          dimensions: f("dimensions"),
+          when: f("hideSections"),
         },
       },
     ],
     bodyBeforePaper: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.baseCurrencyNotice?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.baseCurrencyNotice?.title ?? "",
           description: data.baseCurrencyNotice?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
-            href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
-            label: data.baseCurrencyNotice?.actionLabel ?? '',
+            href: data.baseCurrencyNotice?.actionHref ?? "/admin/setup/company",
+            label: data.baseCurrencyNotice?.actionLabel ?? "",
           },
         }),
-        when: f('baseCurrencyNotice'),
+        when: f("baseCurrencyNotice"),
       },
     ],
     showPaper: !data.baseCurrencyNotice,
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
-      wide: f('wide'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
+      wide: f("wide"),
     },
     blocks: [
       {
-        ...widgetBlock('statement-matrix', {
+        ...widgetBlock("statement-matrix", {
           view: data.view,
           currency: data.currency,
           drill: data.drill,
         }),
-        when: f('hasView'),
+        when: f("hasView"),
       },
       {
-        ...textBlock(f('emptyNote'), {
-          className: 'py-8 text-center text-slate-400 italic',
+        ...textBlock(f("emptyNote"), {
+          className: "py-8 text-center text-slate-400 italic",
         }),
-        when: f('noScenarios'),
+        when: f("noScenarios"),
       },
       {
-        ...textBlock(f('emptyNote'), {
-          className: 'py-8 text-center text-slate-400 italic',
+        ...textBlock(f("emptyNote"), {
+          className: "py-8 text-center text-slate-400 italic",
         }),
-        when: f('hideSections'),
+        when: f("hideSections"),
       },
     ],
-  })
+  });
 }

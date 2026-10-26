@@ -71,7 +71,10 @@ test("backup file base name: slugged, stamped, header-safe", () => {
     backupFileBaseName("Acme Holdings, Inc.", new Date(Date.UTC(2026, 6, 24, 10, 15, 0))),
     "acme-holdings-inc-backup-20260724-101500",
   );
-  assert.equal(backupFileBaseName("!!!", new Date(Date.UTC(2026, 0, 2, 3, 4, 5))), "org-backup-20260102-030405");
+  assert.equal(
+    backupFileBaseName("!!!", new Date(Date.UTC(2026, 0, 2, 3, 4, 5))),
+    "org-backup-20260102-030405",
+  );
 });
 
 test("auditBackupEvent fails closed when the audit-log write fails", async (t) => {
@@ -95,7 +98,8 @@ test("auditBackupEvent fails closed when the audit-log write fails", async (t) =
 test("auditBackupEvent resolves and issues its evidence insert on success", async (t) => {
   let inserts = 0;
   t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     inserts += 1;
     return inMode({ rows: [] });
   });

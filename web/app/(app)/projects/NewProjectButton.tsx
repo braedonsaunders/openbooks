@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import { UnsavedCreateButton } from '@/components/unsaved-create-button'
+import { useTranslations } from "next-intl";
+import { UnsavedCreateButton } from "@/components/unsaved-create-button";
 
 /**
  * Unsaved-create: opens a URL-controlled unsaved drawer (`?projectNew=1`).
@@ -9,13 +9,13 @@ import { UnsavedCreateButton } from '@/components/unsaved-create-button'
  * explicit Save (one idempotent POST to /api/projects).
  */
 export function NewProjectButton({ label }: { label?: string } = {}) {
-  const t = useTranslations('projects')
+  const t = useTranslations("projects");
   return (
     <UnsavedCreateButton
       base="/projects"
       param="projectNew"
-      clear={['project']}
-      label={label ?? t('list.newButton')}
+      clear={["project"]}
+      label={label ?? t("list.newButton")}
     />
-  )
+  );
 }

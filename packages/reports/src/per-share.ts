@@ -8,17 +8,18 @@
  * trailing zeros trimmed. Display only: the stored value stays exact.
  */
 
-export const PER_SHARE_FRACTION_DIGITS = 4
-const MAX_STORED_FRACTION_DIGITS = 10
+export const PER_SHARE_FRACTION_DIGITS = 4;
+const MAX_STORED_FRACTION_DIGITS = 10;
 
-const DECIMAL = /^-?\d+(\.\d+)?$/
+const DECIMAL = /^-?\d+(\.\d+)?$/;
 
 /** The fraction digits a per-share value reads with (minimum and maximum alike). */
 export function perShareFractionDigits(value: string): number {
-  if (!DECIMAL.test(value)) return PER_SHARE_FRACTION_DIGITS
-  const [whole = '0', fraction = ''] = value.replace(/^-/, '').split('.')
-  const kept = fraction.slice(0, PER_SHARE_FRACTION_DIGITS)
-  const roundsToZero = /^0+$/.test(whole) && !/[1-9]/.test(kept) && (fraction[PER_SHARE_FRACTION_DIGITS] ?? '0') < '5'
-  if (!roundsToZero || !/[1-9]/.test(fraction)) return PER_SHARE_FRACTION_DIGITS
-  return Math.min(MAX_STORED_FRACTION_DIGITS, fraction.replace(/0+$/, '').length)
+  if (!DECIMAL.test(value)) return PER_SHARE_FRACTION_DIGITS;
+  const [whole = "0", fraction = ""] = value.replace(/^-/, "").split(".");
+  const kept = fraction.slice(0, PER_SHARE_FRACTION_DIGITS);
+  const roundsToZero =
+    /^0+$/.test(whole) && !/[1-9]/.test(kept) && (fraction[PER_SHARE_FRACTION_DIGITS] ?? "0") < "5";
+  if (!roundsToZero || !/[1-9]/.test(fraction)) return PER_SHARE_FRACTION_DIGITS;
+  return Math.min(MAX_STORED_FRACTION_DIGITS, fraction.replace(/0+$/, "").length);
 }

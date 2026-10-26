@@ -1,4 +1,4 @@
-import { defineRoute } from '@/lib/api/route';
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { listFeedPostings, resolveFeedOrg } from "@openbooks/engine/hrm/recruiting/postings";
 import { recruitingErrorResponse } from "../../../hrm/recruiting/_lib";
@@ -18,28 +18,31 @@ function escXml(value: string): string {
 }
 
 export const GET = defineRoute({
-  public: 'token',
+  public: "token",
   handler: async ({ request: req, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { token: string });
     const { token } = await params;
     try {
-        const orgId = await resolveFeedOrg(decodeURIComponent(token));
-        const postings = await listFeedPostings(orgId);
-        const format = new URL(req.url).searchParams.get("format");
-        if (format === "xml") {
-          const items = postings
-            .map(
-              (posting) =>
-                `  <job><id>${escXml(posting.postingId)}</id><requisition>${escXml(posting.requisitionNumber)}</requisition><title>${escXml(posting.title)}</title><employmentKind>${escXml(posting.employmentKind ?? "")}</employmentKind><description>${escXml(posting.description ?? "")}</description><published>${escXml(posting.publishedAt ?? "")}</published></job>`,
-            )
-            .join("\n");
-          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<jobs>\n${items}\n</jobs>`, {
+      const orgId = await resolveFeedOrg(decodeURIComponent(token));
+      const postings = await listFeedPostings(orgId);
+      const format = new URL(req.url).searchParams.get("format");
+      if (format === "xml") {
+        const items = postings
+          .map(
+            (posting) =>
+              `  <job><id>${escXml(posting.postingId)}</id><requisition>${escXml(posting.requisitionNumber)}</requisition><title>${escXml(posting.title)}</title><employmentKind>${escXml(posting.employmentKind ?? "")}</employmentKind><description>${escXml(posting.description ?? "")}</description><published>${escXml(posting.publishedAt ?? "")}</published></job>`,
+          )
+          .join("\n");
+        return new NextResponse(
+          `<?xml version="1.0" encoding="UTF-8"?>\n<jobs>\n${items}\n</jobs>`,
+          {
             headers: { "content-type": "application/xml; charset=utf-8" },
-          });
-        }
-        return NextResponse.json({ jobs: postings });
-      } catch (e) {
-        return recruitingErrorResponse(e);
+          },
+        );
       }
+      return NextResponse.json({ jobs: postings });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
   },
 });

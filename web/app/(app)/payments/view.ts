@@ -1,9 +1,16 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { mergeHref, pickString } from '../../../lib/list-params'
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { mergeHref, pickString } from "../../../lib/list-params";
 
 /**
  * Money out — vendor payments with open-item application, and EFT payment
@@ -20,86 +27,86 @@ import { mergeHref, pickString } from '../../../lib/list-params'
  */
 
 export interface PaymentsData {
-  title: string
-  description: string
-  newPaymentLabel: string
-  newRunLabel: string
-  newRunHref: string
-  onPayments: boolean
-  onRuns: boolean
+  title: string;
+  description: string;
+  newPaymentLabel: string;
+  newRunLabel: string;
+  newRunHref: string;
+  onPayments: boolean;
+  onRuns: boolean;
   /** Header New button: the payments tab AND the creation right. The drawer
    *  (?paymentNew=1) reads the same canCreate through its slot, so the button
    *  is never offered without the drawer it opens. */
-  showNewPayment: boolean
-  view: 'payments' | 'runs'
-  tabLabels: { payments: string; runs: string }
-  currentParams: Record<string, string | string[] | undefined>
+  showNewPayment: boolean;
+  view: "payments" | "runs";
+  tabLabels: { payments: string; runs: string };
+  currentParams: Record<string, string | string[] | undefined>;
 }
 
 export async function loadPayments(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PaymentsData> {
-  const authz = await requirePermission('ap.pay')
-  const t = await getTranslations('payments')
-  const view = pickString(sp.view) === 'runs' ? 'runs' : 'payments'
+  const authz = await requirePermission("ap.pay");
+  const t = await getTranslations("payments");
+  const view = pickString(sp.view) === "runs" ? "runs" : "payments";
 
   return {
-    title: t('page.title'),
-    description: t('page.description'),
-    newPaymentLabel: t('page.newPayment'),
-    newRunLabel: t('page.newRun'),
-    newRunHref: mergeHref('/payments', sp, { view: 'runs', newRun: '1', run: undefined }),
-    onPayments: view === 'payments',
-    onRuns: view === 'runs',
-    showNewPayment: view === 'payments' && can(authz, 'ap.pay'),
+    title: t("page.title"),
+    description: t("page.description"),
+    newPaymentLabel: t("page.newPayment"),
+    newRunLabel: t("page.newRun"),
+    newRunHref: mergeHref("/payments", sp, { view: "runs", newRun: "1", run: undefined }),
+    onPayments: view === "payments",
+    onRuns: view === "runs",
+    showNewPayment: view === "payments" && can(authz, "ap.pay"),
     view,
-    tabLabels: { payments: t('page.tabs.payments'), runs: t('page.tabs.runs') },
+    tabLabels: { payments: t("page.tabs.payments"), runs: t("page.tabs.runs") },
     currentParams: sp,
-  }
+  };
 }
 
-const f = ref<PaymentsData>()
+const f = ref<PaymentsData>();
 
 export function paymentsSpec(data: PaymentsData): PageSpec {
   return page({
-    route: '/payments',
-    layout: 'list',
+    route: "/payments",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
           widget(
-            'new-payment',
-            { kind: 'vendor_payment', basePath: '/payments', label: data.newPaymentLabel },
-            f('showNewPayment'),
+            "new-payment",
+            { kind: "vendor_payment", basePath: "/payments", label: data.newPaymentLabel },
+            f("showNewPayment"),
           ),
           widget(
-            'new-payment-run',
+            "new-payment-run",
             { href: data.newRunHref, label: data.newRunLabel },
-            f('onRuns'),
+            f("onRuns"),
           ),
         ],
       }),
-      widgetBlock('payments-view-tabs', { view: data.view, labels: data.tabLabels }),
+      widgetBlock("payments-view-tabs", { view: data.view, labels: data.tabLabels }),
     ],
     body: [
       {
-        ...widgetBlock('payments-section', {
+        ...widgetBlock("payments-section", {
           sp: data.currentParams,
-          basePath: '/payments',
-          kind: 'vendor_payment',
+          basePath: "/payments",
+          kind: "vendor_payment",
         }),
-        when: f('onPayments'),
+        when: f("onPayments"),
       },
       {
-        ...widgetBlock('payment-runs-section', {
+        ...widgetBlock("payment-runs-section", {
           sp: data.currentParams,
-          basePath: '/payments',
-          direction: 'outbound',
+          basePath: "/payments",
+          direction: "outbound",
         }),
-        when: f('onRuns'),
+        when: f("onRuns"),
       },
     ],
-  })
+  });
 }

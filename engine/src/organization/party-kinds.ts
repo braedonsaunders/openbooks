@@ -11,7 +11,10 @@ export function isNaturalPersonPartyKind(kind: unknown): kind is "person" | "emp
 }
 
 export function naturalPersonPartyKindFilter(column: SQL): SQL {
-  return sql`${column} in (${sql.join(NATURAL_PERSON_KINDS.map((kind) => sql`${kind}`), sql`, `)})`;
+  return sql`${column} in (${sql.join(
+    NATURAL_PERSON_KINDS.map((kind) => sql`${kind}`),
+    sql`, `,
+  )})`;
 }
 
 export const EMPLOYEE_PERSON_REFUSAL =
@@ -19,12 +22,12 @@ export const EMPLOYEE_PERSON_REFUSAL =
 
 export class EmployeePartyKindError extends Error {
   readonly status = 422;
-  readonly code = 'employee-person-required';
-  readonly field = 'kind';
+  readonly code = "employee-person-required";
+  readonly field = "kind";
   readonly remedy = EMPLOYEE_PERSON_REFUSAL;
 
   constructor() {
     super(EMPLOYEE_PERSON_REFUSAL);
-    this.name = 'EmployeePartyKindError';
+    this.name = "EmployeePartyKindError";
   }
 }

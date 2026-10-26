@@ -2,11 +2,25 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Button, Card, CardContent, UrlDrawer, Input, Popover, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  UrlDrawer,
+  Input,
+  Popover,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from "@openbooks/ui";
 import { Empty, Field, Read, RecordTabs, Status } from "./workspace-ui";
 import type { LeaseRow, PropertyRow, SaveAction, UnitRow } from "./types";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { confirmDialog } from '@/lib/confirm'
+import { InteractiveTableRow } from "@/components/interactive-table-row";
+import { confirmDialog } from "@/lib/confirm";
 
 export function UnitRecordDrawer({
   unit,
@@ -41,7 +55,7 @@ export function UnitRecordDrawer({
   const [prevUnit, setPrevUnit] = useState(unit);
   if (prevUnit !== unit) {
     setPrevUnit(unit);
-    if (mode === 'view') setForm(unitForm(unit ?? {}));
+    if (mode === "view") setForm(unitForm(unit ?? {}));
   }
   if (!unit) return null;
   const reset = () => {
@@ -60,9 +74,7 @@ export function UnitRecordDrawer({
     });
     if (result) setMode("view");
   };
-  const activeLease = leases.some((lease) =>
-    ["active", "notice"].includes(lease.status),
-  );
+  const activeLease = leases.some((lease) => ["active", "notice"].includes(lease.status));
   const setAvailability = async (status: "vacant" | "offline") => {
     const result = await onSave({
       unitId: unit.id,
@@ -131,11 +143,21 @@ export function UnitRecordDrawer({
               }
             >
               {form.status === "offline" ? (
-                <Button variant="ghost" className="h-8 w-full justify-start rounded px-2 text-xs" disabled={busy} onClick={() => setAvailability("vacant")}>
+                <Button
+                  variant="ghost"
+                  className="h-8 w-full justify-start rounded px-2 text-xs"
+                  disabled={busy}
+                  onClick={() => setAvailability("vacant")}
+                >
                   Return to service
                 </Button>
               ) : (
-                <Button variant="ghost" className="h-8 w-full justify-start rounded px-2 text-xs" disabled={busy || activeLease} onClick={() => setAvailability("offline")}>
+                <Button
+                  variant="ghost"
+                  className="h-8 w-full justify-start rounded px-2 text-xs"
+                  disabled={busy || activeLease}
+                  onClick={() => setAvailability("offline")}
+                >
                   {activeLease ? "End lease before taking offline" : "Take unit offline"}
                 </Button>
               )}
@@ -144,7 +166,12 @@ export function UnitRecordDrawer({
                 className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
                 disabled={busy}
                 onClick={async () => {
-                  if (!(await confirmDialog(`Delete unit ${unit.code}? Only units without lease history can be deleted.`))) return
+                  if (
+                    !(await confirmDialog(
+                      `Delete unit ${unit.code}? Only units without lease history can be deleted.`,
+                    ))
+                  )
+                    return;
                   void onDelete();
                 }}
               >
@@ -159,22 +186,48 @@ export function UnitRecordDrawer({
         mode === "edit" ? (
           <div className="grid gap-4 p-1 sm:grid-cols-2">
             <Field label="Unit code">
-              <Input className="font-mono" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+              <Input
+                className="font-mono"
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+              />
             </Field>
             <Field label="Display name">
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
             </Field>
             <Field label="Unit type">
-              <Input value={form.unitType} onChange={(e) => setForm({ ...form, unitType: e.target.value })} />
+              <Input
+                value={form.unitType}
+                onChange={(e) => setForm({ ...form, unitType: e.target.value })}
+              />
             </Field>
             <Field label="Rentable area">
-              <Input type="number" min="0" value={form.rentableArea} onChange={(e) => setForm({ ...form, rentableArea: e.target.value })} />
+              <Input
+                type="number"
+                min="0"
+                value={form.rentableArea}
+                onChange={(e) => setForm({ ...form, rentableArea: e.target.value })}
+              />
             </Field>
             <Field label="Bedrooms">
-              <Input type="number" min="0" step="1" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} />
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={form.bedrooms}
+                onChange={(e) => setForm({ ...form, bedrooms: e.target.value })}
+              />
             </Field>
-            <Field label="Occupancy status" hint="Status changes when a lease is activated or terminated.">
-              <div className="pt-2"><Status value={form.status} /></div>
+            <Field
+              label="Occupancy status"
+              hint="Status changes when a lease is activated or terminated."
+            >
+              <div className="pt-2">
+                <Status value={form.status} />
+              </div>
             </Field>
           </div>
         ) : (
@@ -194,10 +247,14 @@ export function UnitRecordDrawer({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">Unit leases</h3>
-              <p className="text-xs text-slate-500">Lease history and current occupancy for this unit.</p>
+              <p className="text-xs text-slate-500">
+                Lease history and current occupancy for this unit.
+              </p>
             </div>
             {permissions.manage && !activeLease && property?.status === "active" ? (
-              <Button size="sm" onClick={onAddLease}>New lease</Button>
+              <Button size="sm" onClick={onAddLease}>
+                New lease
+              </Button>
             ) : null}
           </div>
           {leases.length ? (
@@ -227,14 +284,21 @@ export function UnitRecordDrawer({
                   >
                     <TableCell className="font-medium text-teal-700">{lease.leaseNumber}</TableCell>
                     <TableCell>{lease.tenantName}</TableCell>
-                    <TableCell>{lease.startsOn} – {lease.endsOn || "Open"}</TableCell>
-                    <TableCell><Status value={lease.status} /></TableCell>
+                    <TableCell>
+                      {lease.startsOn} – {lease.endsOn || "Open"}
+                    </TableCell>
+                    <TableCell>
+                      <Status value={lease.status} />
+                    </TableCell>
                   </InteractiveTableRow>
                 ))}
               </TableBody>
             </Table>
           ) : (
-            <Empty title="No unit leases" detail="Create a lease to assign this unit to a tenant." />
+            <Empty
+              title="No unit leases"
+              detail="Create a lease to assign this unit to a tenant."
+            />
           )}
         </div>
       ) : null}

@@ -61,11 +61,7 @@ import type { Rate } from "../money/brands.ts";
 export type OverheadRateMethod = "simple" | "weighted" | "stepped";
 export type OverheadCompositeMethod = "sum" | "weighted" | "cascading";
 export type OverheadRateFormat =
-  "per_hour"
-  | "percent_labor"
-  | "percent_cost"
-  | "per_fte"
-  | "per_unit";
+  "per_hour" | "percent_labor" | "percent_cost" | "per_fte" | "per_unit";
 
 /** Internal rate precision: exact to ledger decimals. */
 export const OVERHEAD_RATE_INTERNAL_DECIMALS = 4;
@@ -130,11 +126,7 @@ export interface OverheadPublishBlocker {
 export class UnsupportedOverheadRateError extends Error {
   readonly blockers: OverheadPublishBlocker[];
   constructor(blockers: OverheadPublishBlocker[]) {
-    super(
-      `overhead rates cannot publish: ${blockers
-        .map((b) => b.reason)
-        .join("; ")}`,
-    );
+    super(`overhead rates cannot publish: ${blockers.map((b) => b.reason).join("; ")}`);
     this.name = "UnsupportedOverheadRateError";
     this.blockers = blockers;
   }
@@ -254,7 +246,9 @@ export function compareOverheadDecimals(a: string | number, b: string | number):
 export function deriveOverheadCategoryDeptRates(
   input: OverheadCategoryDeptInput,
 ): Record<string, Rate> {
-  const deptIds = [...new Set([...Object.keys(input.expenseByDept), ...Object.keys(input.baseByDept)])].sort();
+  const deptIds = [
+    ...new Set([...Object.keys(input.expenseByDept), ...Object.keys(input.baseByDept)]),
+  ].sort();
   const out: Record<string, Rate> = {};
   if (input.allocationMethod === "stepped" && (input.allocationTiers?.length ?? 0) > 0) {
     const tiers = [...(input.allocationTiers ?? [])].sort((a, b) =>
@@ -267,8 +261,10 @@ export function deriveOverheadCategoryDeptRates(
       for (let i = tiers.length - 1; i >= 0; i -= 1) {
         const tier = tiers[i];
         if (!tier) continue;
-        const min = tier.min === undefined || tier.min === null || tier.min === "" ? "0" : String(tier.min);
-        const max = tier.max === undefined || tier.max === null || tier.max === "" ? null : String(tier.max);
+        const min =
+          tier.min === undefined || tier.min === null || tier.min === "" ? "0" : String(tier.min);
+        const max =
+          tier.max === undefined || tier.max === null || tier.max === "" ? null : String(tier.max);
         if (compareOverheadDecimals(base, min) < 0) continue;
         if (max !== null && compareOverheadDecimals(base, max) > 0) continue;
         if (compareOverheadDecimals(String(tier.rate ?? 0), "0") <= 0) continue;
@@ -294,8 +290,14 @@ export function deriveOverheadCategoryDeptRates(
   for (const deptId of deptIds) {
     if (input.allocationMethod === "weighted") {
       const weight = quantizeOverheadMoney(input.allocationWeights?.[deptId] ?? 1);
-      if (cmp(weight, "0") < 0) throw new OverheadCalculationError(`Category "${input.id}" has a negative department weight. Correct the allocation weights before retrying.`);
-      if (cmp(weight, "0") === 0) { out[deptId] = ZERO_4 as Rate; continue; }
+      if (cmp(weight, "0") < 0)
+        throw new OverheadCalculationError(
+          `Category "${input.id}" has a negative department weight. Correct the allocation weights before retrying.`,
+        );
+      if (cmp(weight, "0") === 0) {
+        out[deptId] = ZERO_4 as Rate;
+        continue;
+      }
     }
     const base = quantizeOverheadMoney(input.baseByDept[deptId] ?? "0");
     out[deptId] = (
@@ -322,25 +324,19 @@ export function deriveOverheadOverallRate(
       ...Object.keys(input.expenseByDept),
       ...Object.keys(input.baseByDept),
     ])) {
-      const weight = toUnits(
-        quantizeOverheadMoney(input.allocationWeights?.[id] ?? 1),
-      );
+      const weight = toUnits(quantizeOverheadMoney(input.allocationWeights?.[id] ?? 1));
       if (weight < 0n)
         throw new OverheadCalculationError(
           `Category "${input.id}" has a negative department weight. Correct the allocation weights before retrying.`,
         );
       numerator += toUnits(input.expenseByDept[id] ?? ZERO_4) * weight;
-      denominator +=
-        toUnits(quantizeOverheadMoney(input.baseByDept[id] ?? ZERO_4)) * weight;
+      denominator += toUnits(quantizeOverheadMoney(input.baseByDept[id] ?? ZERO_4)) * weight;
     }
     return (
-      denominator > 0n
-        ? fromUnits(roundDiv(numerator * 10_000n, denominator))
-        : ZERO_4
+      denominator > 0n ? fromUnits(roundDiv(numerator * 10_000n, denominator)) : ZERO_4
     ) as Rate;
   }
-  for (const value of Object.values(input.expenseByDept))
-    expense = add(expense, value);
+  for (const value of Object.values(input.expenseByDept)) expense = add(expense, value);
   for (const value of Object.values(input.baseByDept))
     base = add(base, quantizeOverheadMoney(value));
   return deriveOverheadCategoryDeptRates({
@@ -395,17 +391,16 @@ export function deriveOverheadDisplayRate(input: {
 }): string | null {
   if (input.rateFormat === "per_hour") return input.rawRate;
   if (input.rateFormat === "per_fte") {
-    if (input.annualFteHours === undefined || input.annualFteHours === null || String(input.annualFteHours).trim() === "")
+    if (
+      input.annualFteHours === undefined ||
+      input.annualFteHours === null ||
+      String(input.annualFteHours).trim() === ""
+    )
       throw new OverheadCalculationError(
         "Cannot calculate Currency/FTE: no annual FTE hours were resolved — record annual hours on the employees' labor cost rates or weekly hours on their work schedules.",
         "perFteNoHours",
       );
-    return fromUnits(
-      roundDiv(
-        toUnits(input.rawRate) * toUnits(input.annualFteHours),
-        10_000n,
-      ),
-    );
+    return fromUnits(roundDiv(toUnits(input.rawRate) * toUnits(input.annualFteHours), 10_000n));
   }
   const denominator =
     input.rateFormat === "percent_labor"
@@ -415,12 +410,7 @@ export function deriveOverheadDisplayRate(input: {
         : input.units;
   if (denominator === undefined || cmp(denominator, "0") <= 0) return null;
   const multiplier = input.rateFormat === "per_unit" ? 1n : 100n;
-  return fromUnits(
-    roundDiv(
-      toUnits(input.expense) * 10_000n * multiplier,
-      toUnits(denominator),
-    ),
-  );
+  return fromUnits(roundDiv(toUnits(input.expense) * 10_000n * multiplier, toUnits(denominator)));
 }
 
 /**
@@ -444,7 +434,9 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
       byFormat.set(c.rateFormat, list);
     }
     if (byFormat.size > 1) {
-      const parts = [...byFormat.entries()].map(([format, names]) => `${format} (${names.join(", ")})`);
+      const parts = [...byFormat.entries()].map(
+        ([format, names]) => `${format} (${names.join(", ")})`,
+      );
       throw new OverheadCalculationError(
         `Cannot blend rate formats in one ${input.compositeMethod} composite: ${parts.join("; ")} — ` +
           `give every included category the same rate format, or exclude the odd ones from the composite.`,
@@ -467,7 +459,11 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
       return fromUnits(roundDiv(weightedUnits, toUnits(expenseTotal))) as Rate;
     }
     case "cascading": {
-      if (input.baseLaborRate === undefined || input.baseLaborRate === null || String(input.baseLaborRate).trim() === "")
+      if (
+        input.baseLaborRate === undefined ||
+        input.baseLaborRate === null ||
+        String(input.baseLaborRate).trim() === ""
+      )
         throw new OverheadCalculationError(
           "The cascading composite needs a labor rate but the period has no costed labor and the profile sets no base labor rate — approve costed time for the period or set a base labor rate on the True Cost profile.",
           "cascadingNoLabor",
@@ -565,8 +561,16 @@ export function zeroOverStandardReplacements(
     if (compareOverheadDecimals(rate.ratePerHour, "0") !== 0) continue;
     if (seen.has(rate.departmentId)) continue;
     const nonZero = touchedStandards
-      .filter((row) => row.departmentId === rate.departmentId && compareOverheadDecimals(row.ratePerHour, "0") !== 0)
-      .sort((a, b) => Number(b.inEffectAtStart) - Number(a.inEffectAtStart) || (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0));
+      .filter(
+        (row) =>
+          row.departmentId === rate.departmentId &&
+          compareOverheadDecimals(row.ratePerHour, "0") !== 0,
+      )
+      .sort(
+        (a, b) =>
+          Number(b.inEffectAtStart) - Number(a.inEffectAtStart) ||
+          (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0),
+      );
     const replaced = nonZero[0];
     if (!replaced) continue;
     seen.add(rate.departmentId);

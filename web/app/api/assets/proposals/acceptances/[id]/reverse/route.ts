@@ -20,13 +20,15 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body: input }) => {
     const { id: acceptanceId } = await params;
     try {
-      return NextResponse.json(await reverseAssetProposalAcceptance(gate.user.orgId, {
-        acceptanceId,
-        date: input.date,
-        reason: input.reason,
-        actorId: gate.user.id,
-        allowedSubsidiaryIds: scopeOf(gate),
-      }));
+      return NextResponse.json(
+        await reverseAssetProposalAcceptance(gate.user.orgId, {
+          acceptanceId,
+          date: input.date,
+          reason: input.reason,
+          actorId: gate.user.id,
+          allowedSubsidiaryIds: scopeOf(gate),
+        }),
+      );
     } catch (error) {
       // The mirror journal can meet the kernel's own posting refusals.
       return apiErrorResponse(error, { safeStatus: 422 });

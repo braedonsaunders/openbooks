@@ -13,13 +13,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PayrollError } from "../error.ts";
-import {
-  certificateDeclarationProblem,
-} from "../certificates.ts";
-import type {
-  PayrollStatutoryComputeContext,
-  PushStatutoryFn,
-} from "../statutory-context.ts";
+import { certificateDeclarationProblem } from "../certificates.ts";
+import type { PayrollStatutoryComputeContext, PushStatutoryFn } from "../statutory-context.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "../statutory-context.ts";
 import {
   registerPayrollWithholding,
@@ -33,7 +28,10 @@ test("the SG pack exists and is an installable SGD calendar-year pack", () => {
   assert.equal(SG_PAYROLL_PACK.installable, true);
   assert.equal(SG_PAYROLL_PACK.statutoryCurrency, "SGD");
   assert.deepEqual(SG_PAYROLL_PACK.taxYear, {
-    basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year",
+    basis: "calendar",
+    startMonth: 1,
+    startDay: 1,
+    namedBy: "opening_year",
   });
   assert.equal(SG_PAYROLL_PACK.statutoryEngineLabel, "CPF");
   assert.equal(SG_PAYROLL_PACK.remittanceVendorSettingsKey, null);
@@ -46,12 +44,21 @@ test("the SG pack exists and is an installable SGD calendar-year pack", () => {
 
 test("the SG pack declares CPF and SDL slots — and NO income-tax slot", () => {
   const slots = SG_PAYROLL_PACK.statutorySlots;
-  assert.deepEqual(slots.map((slot) => slot.key), ["cpf", "sdl"]);
+  assert.deepEqual(
+    slots.map((slot) => slot.key),
+    ["cpf", "sdl"],
+  );
   const [cpf, sdl] = slots;
-  assert.deepEqual(cpf!.components.map((c) => c.systemKey), ["cpf_ee", "cpf_er"]);
+  assert.deepEqual(
+    cpf!.components.map((c) => c.systemKey),
+    ["cpf_ee", "cpf_er"],
+  );
   assert.equal(cpf!.components[0]!.kind, "deduction");
   assert.equal(cpf!.components[1]!.kind, "employer_contribution");
-  assert.deepEqual(sdl!.components.map((c) => c.systemKey), ["sdl"]);
+  assert.deepEqual(
+    sdl!.components.map((c) => c.systemKey),
+    ["sdl"],
+  );
   // CPF prices on OW and SDL on monthly total wages: no pre-tax deduction
   // enters either formula, so every line is earnings-assessed and the
   // protection fixpoint never re-derives one.
@@ -166,8 +173,12 @@ function stubContext(overrides: Partial<PayrollStatutoryComputeContext> = {}): {
     pushed.push({ systemKey, kind, amount, sequence });
   };
   const ctx: PayrollStatutoryComputeContext = {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     tx: {} as never,
     orgId: "org",
     documentId: "doc",
@@ -204,16 +215,18 @@ function stubContext(overrides: Partial<PayrollStatutoryComputeContext> = {}): {
     ...overrides,
     // SG declares no pre-tax treatments: derived from the final legs (an
     // explicit override wins), so a leg override cannot drift from its base.
-    reducedBases: overrides.reducedBases ?? reduceTaxBases(
-      [],
-      {
-        income: overrides.income ?? "4500.00",
-        nonPeriodic: overrides.nonPeriodic ?? "0",
-        pensionable: overrides.pensionable ?? "4500.00",
-        insurable: overrides.insurable ?? "4500.00",
-      },
-      SG_PAYROLL_PACK.deductionTreatments,
-    ),
+    reducedBases:
+      overrides.reducedBases ??
+      reduceTaxBases(
+        [],
+        {
+          income: overrides.income ?? "4500.00",
+          nonPeriodic: overrides.nonPeriodic ?? "0",
+          pensionable: overrides.pensionable ?? "4500.00",
+          insurable: overrides.insurable ?? "4500.00",
+        },
+        SG_PAYROLL_PACK.deductionTreatments,
+      ),
   };
   return { ctx, pushed };
 }
@@ -232,14 +245,15 @@ test("computeStatutory prices a 2026 OW month end to end (the adapter path)", as
   // template-literal union that a pushed line's widened `kind` cannot satisfy.
   const declared = new Map<string, number>(
     SG_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
-      slot.components.map((c) => [`${c.systemKey}|${c.kind}`, c.sequence] as const)),
+      slot.components.map((c) => [`${c.systemKey}|${c.kind}`, c.sequence] as const),
+    ),
   );
-  assert.deepEqual(
-    pushed.map((line) => line.systemKey).sort(),
-    ["cpf_ee", "cpf_er", "sdl"],
-  );
+  assert.deepEqual(pushed.map((line) => line.systemKey).sort(), ["cpf_ee", "cpf_er", "sdl"]);
   for (const line of pushed) {
-    assert.ok(declared.has(`${line.systemKey}|${line.kind}`), `${line.systemKey}/${line.kind} declared`);
+    assert.ok(
+      declared.has(`${line.systemKey}|${line.kind}`),
+      `${line.systemKey}/${line.kind} declared`,
+    );
     assert.equal(line.sequence, declared.get(`${line.systemKey}|${line.kind}`));
   }
   assert.equal(pushed.find((line) => line.systemKey === "cpf_ee")?.amount, "900.0000");
@@ -271,13 +285,22 @@ test("a foreign employee's bonus still enters SDL while CPF stays inapplicable",
   assert.equal(factors["CPF_EE"], undefined);
   assert.equal(factors["CPF_ER"], undefined);
   assert.equal(factors["SDL"], "7.5000");
-  assert.deepEqual(pushed.map(({ systemKey }) => systemKey), ["sdl"]);
+  assert.deepEqual(
+    pushed.map(({ systemKey }) => systemKey),
+    ["sdl"],
+  );
 });
 
 test("computeStatutory refuses without the certificate and prices published PR and senior tables", async () => {
   const { ctx: noCert } = stubContext({ certificateFor: () => null });
-  await assert.rejects(() => SG_PAYROLL_PACK.computeStatutory(noCert), /without the sg_cpf_status certificate/);
-  for (const [status, band] of [["spr_1st_year", "le55"], ["citizen", "b60_65"]] as const) {
+  await assert.rejects(
+    () => SG_PAYROLL_PACK.computeStatutory(noCert),
+    /without the sg_cpf_status certificate/,
+  );
+  for (const [status, band] of [
+    ["spr_1st_year", "le55"],
+    ["citizen", "b60_65"],
+  ] as const) {
     const { ctx } = stubContext({
       certificateFor: () => ({
         certificate: SG_PAYROLL_PACK.certificates().certificates[0]!,
@@ -297,7 +320,10 @@ test("computeStatutory refuses AW, non-monthly periods, wrong years and wrong re
   const { ctx: weekly } = stubContext({ periodsPerYear: 52 });
   await assert.rejects(() => SG_PAYROLL_PACK.computeStatutory(weekly), /only 12 monthly periods/);
   const { ctx: wrongYear } = stubContext({ taxYear: 2027 });
-  await assert.rejects(() => SG_PAYROLL_PACK.computeStatutory(wrongYear), /no transcribed CPF tables/);
+  await assert.rejects(
+    () => SG_PAYROLL_PACK.computeStatutory(wrongYear),
+    /no transcribed CPF tables/,
+  );
   const { ctx: wrongRegion } = stubContext({ region: "MY" });
   await assert.rejects(() => SG_PAYROLL_PACK.computeStatutory(wrongRegion), /not supported/);
 });

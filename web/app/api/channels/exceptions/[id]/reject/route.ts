@@ -26,7 +26,8 @@ export const POST = defineRoute({
       await rejectExceptionSuggestion(gate.user.orgId, gate.user.id, id, body.reason);
       return NextResponse.json({ ok: true });
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_order_unknown") return notFound("record");
+      if (error instanceof CommerceError && error.code === "channel_order_unknown")
+        return notFound("record");
       throw error;
     }
   },

@@ -1,4 +1,4 @@
-import type { AccessLevel, FileViewer } from '@openbooks/engine/records/file-cabinet-access'
+import type { AccessLevel, FileViewer } from "@openbooks/engine/records/file-cabinet-access";
 
 /**
  * The File Cabinet reader as the Documents page sees it: '*' admins get
@@ -10,11 +10,16 @@ import type { AccessLevel, FileViewer } from '@openbooks/engine/records/file-cab
  * so this stays free of the request-scoped authorization module.
  */
 export function documentsPageViewer(reader: {
-  userId: string
-  isAdmin: boolean
-  canManage: boolean
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  userId: string;
+  isAdmin: boolean;
+  canManage: boolean;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): FileViewer {
-  const baseline: AccessLevel = reader.canManage ? 'manager' : 'viewer'
-  return { userId: reader.userId, isAdmin: reader.isAdmin, baseline, allowedSubsidiaryIds: reader.allowedSubsidiaryIds }
+  const baseline: AccessLevel = reader.canManage ? "manager" : "viewer";
+  return {
+    userId: reader.userId,
+    isAdmin: reader.isAdmin,
+    baseline,
+    allowedSubsidiaryIds: reader.allowedSubsidiaryIds,
+  };
 }

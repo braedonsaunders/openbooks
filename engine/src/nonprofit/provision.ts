@@ -4,7 +4,13 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { fundFeatureOff, NonprofitError } from "./errors.ts";
 import type { BudgetaryControl, FundKind } from "./funds.ts";
 
-const FUND_KINDS: readonly FundKind[] = ["operating", "restricted", "endowment", "plant", "board_designated"];
+const FUND_KINDS: readonly FundKind[] = [
+  "operating",
+  "restricted",
+  "endowment",
+  "plant",
+  "board_designated",
+];
 const CONTROL_MODES: readonly BudgetaryControl[] = ["off", "advisory", "hard"];
 
 export interface FundClassification {
@@ -60,7 +66,13 @@ interface FundRow extends Record<string, unknown> {
   budgetaryControl: BudgetaryControl;
 }
 
-function refusal(message: string, code: string, remedy: string, status: 409 | 422 = 422, field?: string): NonprofitError {
+function refusal(
+  message: string,
+  code: string,
+  remedy: string,
+  status: 409 | 422 = 422,
+  field?: string,
+): NonprofitError {
   return new NonprofitError({ message, code, remedy, status, ...(field ? { field } : {}) });
 }
 
@@ -71,7 +83,10 @@ function classificationFor(
   return Object.hasOwn(classifications, code) ? classifications[code] : undefined;
 }
 
-function validateClassification(code: string, value: FundClassification | undefined): FundClassification {
+function validateClassification(
+  code: string,
+  value: FundClassification | undefined,
+): FundClassification {
   if (
     !value ||
     !FUND_KINDS.includes(value.kind) ||
@@ -126,7 +141,8 @@ export async function provisionFundAccounting(
       on conflict (org_id, key) do nothing
     `);
 
-    const segmentResult = await db.execute<SegmentRow>(sql`
+    const segmentResult = await db.execute<SegmentRow>(
+      sql`
       select id, source_kind as "sourceKind", is_hierarchical as "isHierarchical",
              allow_account_requirement as "allowAccountRequirement",
              is_balancing as "isBalancing", default_value_id as "defaultValueId",
@@ -134,7 +150,9 @@ export async function provisionFundAccounting(
         from segment_definitions
        where org_id = ${input.orgId} and key = 'fund'
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const segment = segmentResult[0];
     if (!segment) {
       throw refusal(
@@ -154,18 +172,23 @@ export async function provisionFundAccounting(
       );
     }
 
-    const valuesResult = await db.execute<SegmentValueRow>(sql`
+    const valuesResult = await db.execute<SegmentValueRow>(
+      sql`
       select id, code, name, is_active as "isActive"
         from segment_values
        where org_id = ${input.orgId} and segment_id = ${segment.id}
        order by code, id
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const existingValues = valuesResult;
-    const existingCodes = new Set(existingValues.flatMap((value) => value.code ? [value.code] : []));
+    const existingCodes = new Set(
+      existingValues.flatMap((value) => (value.code ? [value.code] : [])),
+    );
     const unclassified = existingValues
       .filter((value) => !value.code || !Object.hasOwn(input.classifications, value.code))
-      .map((value) => value.code ? `"${value.code}"` : `"${value.name}" (missing code)`);
+      .map((value) => (value.code ? `"${value.code}"` : `"${value.name}" (missing code)`));
     if (unclassified.length > 0) {
       throw refusal(
         `The existing fund segment has unclassified values: ${unclassified.join(", ")}.`,
@@ -201,13 +224,15 @@ export async function provisionFundAccounting(
         "classifications",
       );
     }
-    for (const value of existingValues) validateClassification(value.code!, classificationFor(input.classifications, value.code!));
+    for (const value of existingValues)
+      validateClassification(value.code!, classificationFor(input.classifications, value.code!));
 
     let defaultValue = existingValues.find((value) => value.code === input.defaultFund.code);
     if (!defaultValue) {
       // The unique segment-code index makes this retry-safe; on a concurrent
       // code collision the row is re-read and its identity is verified below.
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into segment_values
           (org_id, segment_id, code, name, is_active, created_by, updated_by)
         values (
@@ -217,7 +242,9 @@ export async function provisionFundAccounting(
         -- Concurrent default-fund creation reuses and verifies the same segment value below.
         on conflict do nothing
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (inserted[0]?.id) {
         defaultValue = {
           id: inserted[0].id,
@@ -226,13 +253,16 @@ export async function provisionFundAccounting(
           isActive: true,
         };
       } else {
-        const existing = await db.execute<SegmentValueRow>(sql`
+        const existing = await db.execute<SegmentValueRow>(
+          sql`
           select id, code, name, is_active as "isActive"
             from segment_values
            where org_id = ${input.orgId} and segment_id = ${segment.id}
              and code is not null and lower(code) = lower(${input.defaultFund.code})
            for update
-        `, "objects");
+        `,
+          "objects",
+        );
         defaultValue = existing[0];
       }
     }
@@ -255,13 +285,19 @@ export async function provisionFundAccounting(
       );
     }
 
-    const values = [...existingValues.filter((value) => value.id !== defaultValue!.id), defaultValue];
-    const existingFundsResult = await db.execute<FundRow>(sql`
+    const values = [
+      ...existingValues.filter((value) => value.id !== defaultValue!.id),
+      defaultValue,
+    ];
+    const existingFundsResult = await db.execute<FundRow>(
+      sql`
       select id, kind, restriction_class as "restrictionClass",
              budgetary_control as "budgetaryControl"
         from funds where org_id = ${input.orgId}
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const existingFunds = new Map(existingFundsResult.map((fund) => [fund.id, fund]));
 
     for (const value of values) {
@@ -294,7 +330,8 @@ export async function provisionFundAccounting(
 
       // A concurrent idempotent provision may win this insert. Its row is
       // re-read below and must match the classification supplied here.
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into funds
           (id, org_id, kind, restriction_class, budgetary_control, created_by, updated_by)
         values (
@@ -304,16 +341,23 @@ export async function provisionFundAccounting(
         -- Concurrent fund provisioning verifies the surviving classification below rather than overwriting it.
         on conflict (org_id, id) do nothing
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (inserted.length === 1) continue;
-      const observed = await db.execute<FundRow>(sql`
+      const observed = await db.execute<FundRow>(
+        sql`
         select id, kind, restriction_class as "restrictionClass",
                budgetary_control as "budgetaryControl"
           from funds where org_id = ${input.orgId} and id = ${value.id}
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = observed[0];
       if (
-        !row || row.kind !== desired.kind || row.restrictionClass !== desired.restrictionClass ||
+        !row ||
+        row.kind !== desired.kind ||
+        row.restrictionClass !== desired.restrictionClass ||
         row.budgetaryControl !== desired.budgetaryControl
       ) {
         throw refusal(
@@ -334,13 +378,17 @@ export async function provisionFundAccounting(
       );
     }
     const segmentNeedsUpdate =
-      !segment.isHierarchical || !segment.allowAccountRequirement || !segment.isBalancing ||
-      segment.defaultValueId !== defaultValue.id || segment.featureKey !== "fundAccounting";
+      !segment.isHierarchical ||
+      !segment.allowAccountRequirement ||
+      !segment.isBalancing ||
+      segment.defaultValueId !== defaultValue.id ||
+      segment.featureKey !== "fundAccounting";
     if (!segment.isBalancing) {
       // Posted entries keep the balancing policy they were posted under, so a
       // fund segment can only start balancing while its posted history
       // already balances by entity and fund.
-      const unbalanced = await db.execute<{ count: number }>(sql`
+      const unbalanced = await db.execute<{ count: number }>(
+        sql`
         select count(distinct unbalanced.entry_id)::int as count
           from (
             select e.id as entry_id
@@ -350,7 +398,9 @@ export async function provisionFundAccounting(
              group by e.id, l.subsidiary_id, l.extra_dims->>'fund'
             having sum(l.amount) <> 0
           ) unbalanced
-      `, "objects");
+      `,
+        "objects",
+      );
       const count = unbalanced[0]?.count ?? 0;
       if (count > 0) {
         throw refusal(
@@ -362,7 +412,8 @@ export async function provisionFundAccounting(
       }
     }
     if (segmentNeedsUpdate) {
-      const updated = await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(
+        sql`
         update segment_definitions
            set is_hierarchical = true,
                allow_account_requirement = true,
@@ -373,7 +424,9 @@ export async function provisionFundAccounting(
                updated_by = ${input.actorId ?? null}
          where org_id = ${input.orgId} and id = ${segment.id}
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (updated.length !== 1 || updated[0]?.id !== segment.id) {
         throw refusal(
           "The fund segment settings were not saved.",
@@ -384,7 +437,8 @@ export async function provisionFundAccounting(
       }
     }
 
-    const imbalanceRows = await db.execute<HistoricalFundImbalance>(sql`
+    const imbalanceRows = await db.execute<HistoricalFundImbalance>(
+      sql`
       with unbalanced as (
         select e.id as entry_id, l.extra_dims->>'fund' as fund_id
           from journal_entries e
@@ -401,8 +455,11 @@ export async function provisionFundAccounting(
        where f.org_id = ${input.orgId}
        group by f.id, sv.code, sv.name
        order by sv.code, f.id
-    `, "objects");
-    const totalImbalances = await db.execute<{ count: number; unassigned: number }>(sql`
+    `,
+      "objects",
+    );
+    const totalImbalances = await db.execute<{ count: number; unassigned: number }>(
+      sql`
       with unbalanced as (
         select e.id as entry_id, l.extra_dims->>'fund' as fund_id
           from journal_entries e
@@ -414,7 +471,9 @@ export async function provisionFundAccounting(
       select count(distinct entry_id)::int as count,
              count(distinct entry_id) filter (where fund_id is null)::int as unassigned
         from unbalanced
-    `, "objects");
+    `,
+      "objects",
+    );
 
     return {
       segmentId: segment.id,

@@ -1,21 +1,21 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { yearEndFiling } from '@openbooks/engine/payroll/filing-registry'
-import { PayrollPackError } from '@openbooks/engine/payroll/packs'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { yearEndFiling } from "@openbooks/engine/payroll/filing-registry";
+import { PayrollPackError } from "@openbooks/engine/payroll/packs";
 import { PayrollError } from "@openbooks/engine/payroll/error";
-import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
-import { rendererUnavailableResponse } from '../../../../../lib/api/pdf-renderer'
-import { payrollYearRefusal } from '../../../../../lib/payroll-year'
-import { pdfResponse, safeName } from '../../../../../lib/export'
-import { payrollSlipFacsimile } from '../../../../../lib/payroll-slip-facsimile'
-import { renderTaxFormFacsimilePdf } from '../../../../../lib/tax-form-facsimile'
-import { orgBranding } from '../../../../../lib/report-pdf'
-import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../subsidiary-scope'
+import { orgYearEndFilings } from "@openbooks/engine/payroll/yearend";
+import { rendererUnavailableResponse } from "../../../../../lib/api/pdf-renderer";
+import { payrollYearRefusal } from "../../../../../lib/payroll-year";
+import { pdfResponse, safeName } from "../../../../../lib/export";
+import { payrollSlipFacsimile } from "../../../../../lib/payroll-slip-facsimile";
+import { renderTaxFormFacsimilePdf } from "../../../../../lib/tax-form-facsimile";
+import { orgBranding } from "../../../../../lib/report-pdf";
+import { guardPayrollFilingData, guardPayrollFilingRowIds } from "../../subsidiary-scope";
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * GET ?country=&filing=&year=&row=[&format=pdf] — ONE population row of a
@@ -30,59 +30,67 @@ export const dynamic = 'force-dynamic'
  * words, an unknown country/filing pair is a 404 naming what IS declared.
  */
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-  const url = new URL(req.url)
-  const yearRaw = url.searchParams.get('year')
-  const yearRefusal = payrollYearRefusal(yearRaw)
-  if (yearRefusal !== null) {
-    return NextResponse.json({ error: yearRefusal }, { status: 422 })
-  }
-  const year = Number(yearRaw)
-  const row = url.searchParams.get('row') ?? ''
-  if (!row) return NextResponse.json({ error: 'row is required' }, { status: 422 })
-  const country = url.searchParams.get('country') ?? ''
-  const filingKey = url.searchParams.get('filing') ?? ''
-  const section = (await orgYearEndFilings(gate.user.orgId, year))
-    .find((candidate) => candidate.country === country && candidate.key === filingKey)
-  if (section) {
-    const populationDenied = await guardPayrollFilingData(gate, country, filingKey, section.data, year)
-    if (populationDenied) return populationDenied
-  }
-  const denied = await guardPayrollFilingRowIds(gate, country, filingKey, [row], year)
-  if (denied) return denied
-  try {
-    const filing = yearEndFiling(
-      country,
-      filingKey,
-    )
-    if (!filing.slip) {
-      return NextResponse.json(
-        { error: `the ${filing.label} filing declares no slip render` },
-        { status: 422 },
-      )
+    const url = new URL(req.url);
+    const yearRaw = url.searchParams.get("year");
+    const yearRefusal = payrollYearRefusal(yearRaw);
+    if (yearRefusal !== null) {
+      return NextResponse.json({ error: yearRefusal }, { status: 422 });
     }
-    const slip = await filing.slip.build(gate.user.orgId, year, row)
-    const branding = await orgBranding()
-    if ((url.searchParams.get('format') ?? 'json') === 'pdf') {
-      const { result, layout } = payrollSlipFacsimile(slip, year, branding.baseCurrency)
-      return pdfResponse(
-        await renderTaxFormFacsimilePdf(
-          result,
-          { orgName: branding.orgName, primaryColor: branding.primaryColor },
-          layout,
-        ),
-        `${safeName(slip.formCode)}-${year}-${safeName(row)}-${await businessToday(gate.user.orgId)}`,
-      )
+    const year = Number(yearRaw);
+    const row = url.searchParams.get("row") ?? "";
+    if (!row) return NextResponse.json({ error: "row is required" }, { status: 422 });
+    const country = url.searchParams.get("country") ?? "";
+    const filingKey = url.searchParams.get("filing") ?? "";
+    const section = (await orgYearEndFilings(gate.user.orgId, year)).find(
+      (candidate) => candidate.country === country && candidate.key === filingKey,
+    );
+    if (section) {
+      const populationDenied = await guardPayrollFilingData(
+        gate,
+        country,
+        filingKey,
+        section.data,
+        year,
+      );
+      if (populationDenied) return populationDenied;
     }
-    return NextResponse.json({ slip, orgName: branding.orgName, currency: branding.baseCurrency })
-  } catch (e) {
-    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    const rendererRefusal = rendererUnavailableResponse(e)
-    if (rendererRefusal) return rendererRefusal
-    throw e
-  }
+    const denied = await guardPayrollFilingRowIds(gate, country, filingKey, [row], year);
+    if (denied) return denied;
+    try {
+      const filing = yearEndFiling(country, filingKey);
+      if (!filing.slip) {
+        return NextResponse.json(
+          { error: `the ${filing.label} filing declares no slip render` },
+          { status: 422 },
+        );
+      }
+      const slip = await filing.slip.build(gate.user.orgId, year, row);
+      const branding = await orgBranding();
+      if ((url.searchParams.get("format") ?? "json") === "pdf") {
+        const { result, layout } = payrollSlipFacsimile(slip, year, branding.baseCurrency);
+        return pdfResponse(
+          await renderTaxFormFacsimilePdf(
+            result,
+            { orgName: branding.orgName, primaryColor: branding.primaryColor },
+            layout,
+          ),
+          `${safeName(slip.formCode)}-${year}-${safeName(row)}-${await businessToday(gate.user.orgId)}`,
+        );
+      }
+      return NextResponse.json({
+        slip,
+        orgName: branding.orgName,
+        currency: branding.baseCurrency,
+      });
+    } catch (e) {
+      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 });
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 });
+      const rendererRefusal = rendererUnavailableResponse(e);
+      if (rendererRefusal) return rendererRefusal;
+      throw e;
+    }
   },
-})
+});

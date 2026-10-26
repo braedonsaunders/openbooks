@@ -24,7 +24,8 @@ const hooks = registerHooks({
 });
 
 const { listOrderClause } = (await import("./sources.ts")) as typeof import("./sources.ts");
-const { entityListSource, entityOrderClause } = (await import("./entity-sources.ts")) as typeof import("./entity-sources.ts");
+const { entityListSource, entityOrderClause } =
+  (await import("./entity-sources.ts")) as typeof import("./entity-sources.ts");
 hooks.deregister();
 
 const dialect = new PgDialect();

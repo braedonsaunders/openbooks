@@ -39,7 +39,11 @@ async function createUsdSubsidiary(org: ScratchOrg): Promise<string> {
   return id;
 }
 
-async function makeTaxCode(orgId: string, code: string, accounts: ScratchOrg["accounts"]): Promise<string> {
+async function makeTaxCode(
+  orgId: string,
+  code: string,
+  accounts: ScratchOrg["accounts"],
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into tax_codes
@@ -52,7 +56,16 @@ async function makeTaxCode(orgId: string, code: string, accounts: ScratchOrg["ac
 /** Seed one approved taxable document under an explicit subsidiary. */
 async function seedEntityDocument(
   org: ScratchOrg,
-  opts: { subsidiaryId: string; kind: DocKind; number: string; taxCodeId: string; amount: string; taxAmount: string; currency: string; date?: string },
+  opts: {
+    subsidiaryId: string;
+    kind: DocKind;
+    number: string;
+    taxCodeId: string;
+    amount: string;
+    taxAmount: string;
+    currency: string;
+    date?: string;
+  },
 ): Promise<void> {
   const documentId = randomUUID();
   const lineId = randomUUID();
@@ -83,7 +96,9 @@ async function seedEntityDocument(
               ${opts.taxAmount}, '0.0000', 'standard', false, false, 2,
               ${sales ? org.accounts.taxOutput : null}, ${sales ? null : org.accounts.taxInput},
               null, false)`);
-    await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+    await tx.execute(
+      sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+    );
   });
   await postDocument(documentId, {
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
@@ -114,12 +129,22 @@ async function seedTwoEntityOrg(): Promise<{ org: ScratchOrg; usSub: string; for
   const cadCode = await makeTaxCode(org.orgId, "CAD-TAX", org.accounts);
   const usCode = await makeTaxCode(org.orgId, "US-TAX", org.accounts);
   await seedEntityDocument(org, {
-    subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-CAD",
-    taxCodeId: cadCode, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
+    subsidiaryId: org.subsidiaryId,
+    kind: "customer_invoice",
+    number: "INV-CAD",
+    taxCodeId: cadCode,
+    amount: "200.0000",
+    taxAmount: "20.0000",
+    currency: "CAD",
   });
   await seedEntityDocument(org, {
-    subsidiaryId: usSub, kind: "customer_invoice", number: "INV-USD",
-    taxCodeId: usCode, amount: "1000.0000", taxAmount: "100.0000", currency: "USD",
+    subsidiaryId: usSub,
+    kind: "customer_invoice",
+    number: "INV-USD",
+    taxCodeId: usCode,
+    amount: "1000.0000",
+    taxAmount: "100.0000",
+    currency: "USD",
   });
   const formCode = "ENTITY-MIX";
   await makeEntityForm(org.orgId, formCode, [
@@ -134,32 +159,50 @@ async function seedTwoEntityOrg(): Promise<{ org: ScratchOrg; usSub: string; for
 const boxesOf = (result: { boxes: { lineCode: string; value: string }[] }) =>
   new Map(result.boxes.map((box) => [box.lineCode, box.value]));
 
-test("an entity-scoped return sums only that entity in its functional currency", { skip: !DB }, async () => {
-  const { org, usSub, formCode } = await seedTwoEntityOrg();
-  try {
-    const cad = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-      filingEntity: { subsidiaryIds: [org.subsidiaryId] },
-    });
-    assert.equal(cad.functionalCurrency, "CAD");
-    assert.deepEqual(cad.subsidiaryIds, [org.subsidiaryId]);
-    assert.equal(cad.translation, null);
-    const cadBoxes = boxesOf(cad);
-    // Root invoice only: 200 base, 20 collected (sign-flipped positive).
-    assert.equal(cadBoxes.get("BASE"), "200.0000");
-    assert.equal(cadBoxes.get("TAX"), "20.0000");
+test(
+  "an entity-scoped return sums only that entity in its functional currency",
+  { skip: !DB },
+  async () => {
+    const { org, usSub, formCode } = await seedTwoEntityOrg();
+    try {
+      const cad = await computeTaxReturn(
+        org.orgId,
+        formCode,
+        org.date,
+        org.date,
+        {},
+        {
+          filingEntity: { subsidiaryIds: [org.subsidiaryId] },
+        },
+      );
+      assert.equal(cad.functionalCurrency, "CAD");
+      assert.deepEqual(cad.subsidiaryIds, [org.subsidiaryId]);
+      assert.equal(cad.translation, null);
+      const cadBoxes = boxesOf(cad);
+      // Root invoice only: 200 base, 20 collected (sign-flipped positive).
+      assert.equal(cadBoxes.get("BASE"), "200.0000");
+      assert.equal(cadBoxes.get("TAX"), "20.0000");
 
-    const usd = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-      filingEntity: { subsidiaryIds: [usSub] },
-    });
-    assert.equal(usd.functionalCurrency, "USD");
-    const usdBoxes = boxesOf(usd);
-    // USD-subsidiary invoice only, in USD functional (header rate 1:1).
-    assert.equal(usdBoxes.get("BASE"), "1000.0000");
-    assert.equal(usdBoxes.get("TAX"), "100.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const usd = await computeTaxReturn(
+        org.orgId,
+        formCode,
+        org.date,
+        org.date,
+        {},
+        {
+          filingEntity: { subsidiaryIds: [usSub] },
+        },
+      );
+      assert.equal(usd.functionalCurrency, "USD");
+      const usdBoxes = boxesOf(usd);
+      // USD-subsidiary invoice only, in USD functional (header rate 1:1).
+      assert.equal(usdBoxes.get("BASE"), "1000.0000");
+      assert.equal(usdBoxes.get("TAX"), "100.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("an unscoped multi-currency return fails closed without a policy", { skip: !DB }, async () => {
   const { org, formCode } = await seedTwoEntityOrg();
@@ -177,60 +220,87 @@ test("an unscoped multi-currency return fails closed without a policy", { skip: 
   }
 });
 
-test("a translated view converts per entity at the declared policy rate with evidence", { skip: !DB }, async () => {
-  const { org, usSub, formCode } = await seedTwoEntityOrg();
-  try {
-    await db.execute(sql`
+test(
+  "a translated view converts per entity at the declared policy rate with evidence",
+  { skip: !DB },
+  async () => {
+    const { org, usSub, formCode } = await seedTwoEntityOrg();
+    try {
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId}, 'USD', 'CAD', '2026-07-01', 'spot', '1.3500000000', 'manual')`);
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-      translation: { presentationCurrency: "CAD" },
-    });
-    assert.equal(result.functionalCurrency, "CAD");
-    const values = boxesOf(result);
-    // CAD 200 + USD 1000×1.35; CAD 20 + USD 100×1.35.
-    assert.equal(values.get("BASE"), "1550.0000");
-    assert.equal(values.get("TAX"), "155.0000");
-    assert.ok(result.translation);
-    assert.equal(result.translation.presentationCurrency, "CAD");
-    assert.equal(result.translation.rateType, "spot");
-    assert.equal(result.translation.rateDate, org.date);
-    assert.equal(result.translation.entities.length, 2);
-    const bySub = new Map(result.translation.entities.map((e) => [e.subsidiaryId, e]));
-    assert.equal(bySub.get(org.subsidiaryId)?.currency, "CAD");
-    assert.equal(bySub.get(org.subsidiaryId)?.fxRate, "1");
-    assert.equal(bySub.get(usSub)?.currency, "USD");
-    assert.equal(bySub.get(usSub)?.fxRate, "1.3500000000");
-    assert.equal(bySub.get(usSub)?.rateAsOf, "2026-07-01");
-    // Per-entity evidence boxes stay in functional currency.
-    const usEvidence = new Map(bySub.get(usSub)!.boxes.map((b) => [b.lineCode, b.value]));
-    assert.equal(usEvidence.get("BASE"), "1000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(
+        org.orgId,
+        formCode,
+        org.date,
+        org.date,
+        {},
+        {
+          translation: { presentationCurrency: "CAD" },
+        },
+      );
+      assert.equal(result.functionalCurrency, "CAD");
+      const values = boxesOf(result);
+      // CAD 200 + USD 1000×1.35; CAD 20 + USD 100×1.35.
+      assert.equal(values.get("BASE"), "1550.0000");
+      assert.equal(values.get("TAX"), "155.0000");
+      assert.ok(result.translation);
+      assert.equal(result.translation.presentationCurrency, "CAD");
+      assert.equal(result.translation.rateType, "spot");
+      assert.equal(result.translation.rateDate, org.date);
+      assert.equal(result.translation.entities.length, 2);
+      const bySub = new Map(result.translation.entities.map((e) => [e.subsidiaryId, e]));
+      assert.equal(bySub.get(org.subsidiaryId)?.currency, "CAD");
+      assert.equal(bySub.get(org.subsidiaryId)?.fxRate, "1");
+      assert.equal(bySub.get(usSub)?.currency, "USD");
+      assert.equal(bySub.get(usSub)?.fxRate, "1.3500000000");
+      assert.equal(bySub.get(usSub)?.rateAsOf, "2026-07-01");
+      // Per-entity evidence boxes stay in functional currency.
+      const usEvidence = new Map(bySub.get(usSub)!.boxes.map((b) => [b.lineCode, b.value]));
+      assert.equal(usEvidence.get("BASE"), "1000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a translated view fails closed when an entity has no rate coverage", { skip: !DB }, async () => {
-  const { org, formCode } = await seedTwoEntityOrg();
-  try {
-    await assert.rejects(
-      computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-        translation: { presentationCurrency: "CAD" },
-      }),
-      (e: unknown) => e instanceof TaxReturnError && /cannot translate USD→CAD/.test(e.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a translated view fails closed when an entity has no rate coverage",
+  { skip: !DB },
+  async () => {
+    const { org, formCode } = await seedTwoEntityOrg();
+    try {
+      await assert.rejects(
+        computeTaxReturn(
+          org.orgId,
+          formCode,
+          org.date,
+          org.date,
+          {},
+          {
+            translation: { presentationCurrency: "CAD" },
+          },
+        ),
+        (e: unknown) => e instanceof TaxReturnError && /cannot translate USD→CAD/.test(e.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a single-currency org stays byte-identical with no policy", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const code = await makeTaxCode(org.orgId, "CAD-ONLY", org.accounts);
     await seedEntityDocument(org, {
-      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-1",
-      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
+      subsidiaryId: org.subsidiaryId,
+      kind: "customer_invoice",
+      number: "INV-1",
+      taxCodeId: code,
+      amount: "200.0000",
+      taxAmount: "20.0000",
+      currency: "CAD",
     });
     const formCode = "SINGLE-CCY";
     await makeEntityForm(org.orgId, formCode, [
@@ -249,42 +319,68 @@ test("a single-currency org stays byte-identical with no policy", { skip: !DB },
   }
 });
 
-test("a pinned registration travels on the return; a foreign one fails closed", { skip: !DB }, async () => {
-  const { org, formCode } = await seedTwoEntityOrg();
-  try {
-    const jurisdictionId = randomUUID();
-    await db.execute(sql`
+test(
+  "a pinned registration travels on the return; a foreign one fails closed",
+  { skip: !DB },
+  async () => {
+    const { org, formCode } = await seedTwoEntityOrg();
+    try {
+      const jurisdictionId = randomUUID();
+      await db.execute(sql`
       insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
       values (${jurisdictionId}, ${org.orgId}, 'PIN', 'Pinned jurisdiction', 'CA', 'country', 'gst')`);
-    const registrationId = randomUUID();
-    await db.execute(sql`
+      const registrationId = randomUUID();
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
       values (${registrationId}, ${org.orgId}, ${jurisdictionId}, '111222333 RT0001', 'quarterly', ${formCode}, true)`);
-    const pinned = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-      filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId },
-    });
-    assert.equal(pinned.registrationNumber, "111222333 RT0001");
-    assert.equal(pinned.registrationId, registrationId);
+      const pinned = await computeTaxReturn(
+        org.orgId,
+        formCode,
+        org.date,
+        org.date,
+        {},
+        {
+          filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId },
+        },
+      );
+      assert.equal(pinned.registrationNumber, "111222333 RT0001");
+      assert.equal(pinned.registrationId, registrationId);
 
-    await assert.rejects(
-      computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-        filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: randomUUID() },
-      }),
-      (e: unknown) => e instanceof TaxReturnError && /was not found in this organization/.test(e.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        computeTaxReturn(
+          org.orgId,
+          formCode,
+          org.date,
+          org.date,
+          {},
+          {
+            filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: randomUUID() },
+          },
+        ),
+        (e: unknown) =>
+          e instanceof TaxReturnError && /was not found in this organization/.test(e.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("an unknown or elimination subsidiary fails closed", { skip: !DB }, async () => {
   const { org, formCode } = await seedTwoEntityOrg();
   try {
     await assert.rejects(
-      computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-        filingEntity: { subsidiaryIds: [randomUUID()] },
-      }),
+      computeTaxReturn(
+        org.orgId,
+        formCode,
+        org.date,
+        org.date,
+        {},
+        {
+          filingEntity: { subsidiaryIds: [randomUUID()] },
+        },
+      ),
       (e: unknown) => e instanceof TaxReturnError && /outside this organization/.test(e.message),
     );
     const elimId = randomUUID();
@@ -292,9 +388,16 @@ test("an unknown or elimination subsidiary fails closed", { skip: !DB }, async (
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${elimId}, ${org.orgId}, ${org.subsidiaryId}, 'Elim', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
     await assert.rejects(
-      computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-        filingEntity: { subsidiaryIds: [elimId] },
-      }),
+      computeTaxReturn(
+        org.orgId,
+        formCode,
+        org.date,
+        org.date,
+        {},
+        {
+          filingEntity: { subsidiaryIds: [elimId] },
+        },
+      ),
       (e: unknown) => e instanceof TaxReturnError && /elimination/.test(e.message),
     );
   } finally {
@@ -302,32 +405,41 @@ test("an unknown or elimination subsidiary fails closed", { skip: !DB }, async (
   }
 });
 
-test("an unscoped return with activity in one currency reports that currency", { skip: !DB }, async () => {
-  // Posture pin: a single active currency takes the activity's currency, not
-  // the org base. A USD-only return in a CAD-base org reporting "CAD" would
-  // silently re-denominate every box.
-  const org = await createScratchOrg();
-  try {
-    const usSub = await createUsdSubsidiary(org);
-    const usCode = await makeTaxCode(org.orgId, "USD-ONLY", org.accounts);
-    await seedEntityDocument(org, {
-      subsidiaryId: usSub, kind: "customer_invoice", number: "INV-USD-ONLY",
-      taxCodeId: usCode, amount: "1000.0000", taxAmount: "100.0000", currency: "USD",
-    });
-    const formCode = "ONE-CCY";
-    await makeEntityForm(org.orgId, formCode, [
-      { lineCode: "BASE", taxCodeId: usCode, basis: "taxable_base", sign: 1, sequence: 10 },
-      { lineCode: "TAX", taxCodeId: usCode, basis: "tax_collected", sign: -1, sequence: 20 },
-    ]);
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
-    assert.equal(result.functionalCurrency, "USD");
-    const values = boxesOf(result);
-    assert.equal(values.get("BASE"), "1000.0000");
-    assert.equal(values.get("TAX"), "100.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an unscoped return with activity in one currency reports that currency",
+  { skip: !DB },
+  async () => {
+    // Posture pin: a single active currency takes the activity's currency, not
+    // the org base. A USD-only return in a CAD-base org reporting "CAD" would
+    // silently re-denominate every box.
+    const org = await createScratchOrg();
+    try {
+      const usSub = await createUsdSubsidiary(org);
+      const usCode = await makeTaxCode(org.orgId, "USD-ONLY", org.accounts);
+      await seedEntityDocument(org, {
+        subsidiaryId: usSub,
+        kind: "customer_invoice",
+        number: "INV-USD-ONLY",
+        taxCodeId: usCode,
+        amount: "1000.0000",
+        taxAmount: "100.0000",
+        currency: "USD",
+      });
+      const formCode = "ONE-CCY";
+      await makeEntityForm(org.orgId, formCode, [
+        { lineCode: "BASE", taxCodeId: usCode, basis: "taxable_base", sign: 1, sequence: 10 },
+        { lineCode: "TAX", taxCodeId: usCode, basis: "tax_collected", sign: -1, sequence: 20 },
+      ]);
+      const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+      assert.equal(result.functionalCurrency, "USD");
+      const values = boxesOf(result);
+      assert.equal(values.get("BASE"), "1000.0000");
+      assert.equal(values.get("TAX"), "100.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("pre-stamping legacy documents attribute to the in-scope root", { skip: !DB }, async () => {
   // The kernel stamps every document it posts; a posted NULL-subsidiary
@@ -338,8 +450,13 @@ test("pre-stamping legacy documents attribute to the in-scope root", { skip: !DB
   try {
     const code = await makeTaxCode(org.orgId, "LEGACY-BASE", org.accounts);
     await seedEntityDocument(org, {
-      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-ROOT",
-      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
+      subsidiaryId: org.subsidiaryId,
+      kind: "customer_invoice",
+      number: "INV-ROOT",
+      taxCodeId: code,
+      amount: "200.0000",
+      taxAmount: "20.0000",
+      currency: "CAD",
     });
     const legacyId = randomUUID();
     const legacyLineId = randomUUID();
@@ -396,9 +513,16 @@ test("pre-stamping legacy documents attribute to the in-scope root", { skip: !DB
     await makeEntityForm(org.orgId, formCode, [
       { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
     ]);
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-      filingEntity: { subsidiaryIds: [org.subsidiaryId] },
-    });
+    const result = await computeTaxReturn(
+      org.orgId,
+      formCode,
+      org.date,
+      org.date,
+      {},
+      {
+        filingEntity: { subsidiaryIds: [org.subsidiaryId] },
+      },
+    );
     // Root invoice 200 + legacy 300: the null-subsidiary arm attributes
     // unattributable history to the in-scope root.
     assert.equal(boxesOf(result).get("BASE"), "500.0000");
@@ -408,72 +532,94 @@ test("pre-stamping legacy documents attribute to the in-scope root", { skip: !DB
   }
 });
 
-test("a registration effective on the window end clamps the return to its first day", { skip: !DB }, async () => {
-  // Calendar-match pin: an obligation matches when periodStart <= to. The
-  // August monthly period opens exactly on `to` (2026-08-01) and the
-  // registration is effective that day, so the return clamps to [08-01,
-  // 08-01] and the July invoice stays out. A strict `<` misses the only
-  // obligation, the window stays wide, and July activity lands in an
-  // August-effective return.
-  const org = await createScratchOrg();
-  try {
-    const code = await makeTaxCode(org.orgId, "CLAMP-BASE", org.accounts);
-    await seedEntityDocument(org, {
-      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-JUL",
-      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
-    });
-    const formCode = "CLAMP-WIN";
-    await makeEntityForm(org.orgId, formCode, [
-      { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
-    ]);
-    const jurisdictionId = randomUUID();
-    await db.execute(sql`
+test(
+  "a registration effective on the window end clamps the return to its first day",
+  { skip: !DB },
+  async () => {
+    // Calendar-match pin: an obligation matches when periodStart <= to. The
+    // August monthly period opens exactly on `to` (2026-08-01) and the
+    // registration is effective that day, so the return clamps to [08-01,
+    // 08-01] and the July invoice stays out. A strict `<` misses the only
+    // obligation, the window stays wide, and July activity lands in an
+    // August-effective return.
+    const org = await createScratchOrg();
+    try {
+      const code = await makeTaxCode(org.orgId, "CLAMP-BASE", org.accounts);
+      await seedEntityDocument(org, {
+        subsidiaryId: org.subsidiaryId,
+        kind: "customer_invoice",
+        number: "INV-JUL",
+        taxCodeId: code,
+        amount: "200.0000",
+        taxAmount: "20.0000",
+        currency: "CAD",
+      });
+      const formCode = "CLAMP-WIN";
+      await makeEntityForm(org.orgId, formCode, [
+        { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
+      ]);
+      const jurisdictionId = randomUUID();
+      await db.execute(sql`
       insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
       values (${jurisdictionId}, ${org.orgId}, 'CLAMP', 'Clamp jurisdiction', 'CA', 'country', 'gst')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active, effective_from)
       values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, 'CLAMP 1', 'monthly', ${formCode}, true, '2026-08-01')`);
-    const result = await computeTaxReturn(org.orgId, formCode, "2026-07-15", "2026-08-01");
-    assert.equal(result.from, "2026-08-01");
-    assert.equal(result.to, "2026-08-01");
-    assert.equal(boxesOf(result).get("BASE"), "0.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, formCode, "2026-07-15", "2026-08-01");
+      assert.equal(result.from, "2026-08-01");
+      assert.equal(result.to, "2026-08-01");
+      assert.equal(boxesOf(result).get("BASE"), "0.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a pinned registration clamps to its own window, never a sibling's", { skip: !DB }, async () => {
-  // One form, two registrations splitting July: A covers Jul 1–15, B covers
-  // Jul 16–31, with activity in each half. The clamp used to match the FIRST
-  // obligation by form alone, so pinning B clamped to A's Jul 1–15 window,
-  // B resolved to from Jul 16 > to Jul 15, and the return falsely refused
-  // "nothing reportable" although B holds Jul 16–31 activity.
-  const org = await createScratchOrg();
-  try {
-    const code = await makeTaxCode(org.orgId, "SPLIT-BASE", org.accounts);
-    await seedEntityDocument(org, {
-      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-EARLY",
-      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
-      date: "2026-07-05",
-    });
-    await seedEntityDocument(org, {
-      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-LATE",
-      taxCodeId: code, amount: "300.0000", taxAmount: "30.0000", currency: "CAD",
-      date: "2026-07-20",
-    });
-    const formCode = "SPLIT-WIN";
-    await makeEntityForm(org.orgId, formCode, [
-      { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
-      { lineCode: "TAX", taxCodeId: code, basis: "tax_collected", sign: -1, sequence: 20 },
-    ]);
-    const jurisdictionId = randomUUID();
-    await db.execute(sql`
+test(
+  "a pinned registration clamps to its own window, never a sibling's",
+  { skip: !DB },
+  async () => {
+    // One form, two registrations splitting July: A covers Jul 1–15, B covers
+    // Jul 16–31, with activity in each half. The clamp used to match the FIRST
+    // obligation by form alone, so pinning B clamped to A's Jul 1–15 window,
+    // B resolved to from Jul 16 > to Jul 15, and the return falsely refused
+    // "nothing reportable" although B holds Jul 16–31 activity.
+    const org = await createScratchOrg();
+    try {
+      const code = await makeTaxCode(org.orgId, "SPLIT-BASE", org.accounts);
+      await seedEntityDocument(org, {
+        subsidiaryId: org.subsidiaryId,
+        kind: "customer_invoice",
+        number: "INV-EARLY",
+        taxCodeId: code,
+        amount: "200.0000",
+        taxAmount: "20.0000",
+        currency: "CAD",
+        date: "2026-07-05",
+      });
+      await seedEntityDocument(org, {
+        subsidiaryId: org.subsidiaryId,
+        kind: "customer_invoice",
+        number: "INV-LATE",
+        taxCodeId: code,
+        amount: "300.0000",
+        taxAmount: "30.0000",
+        currency: "CAD",
+        date: "2026-07-20",
+      });
+      const formCode = "SPLIT-WIN";
+      await makeEntityForm(org.orgId, formCode, [
+        { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
+        { lineCode: "TAX", taxCodeId: code, basis: "tax_collected", sign: -1, sequence: 20 },
+      ]);
+      const jurisdictionId = randomUUID();
+      await db.execute(sql`
       insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
       values (${jurisdictionId}, ${org.orgId}, 'SPLIT', 'Split jurisdiction', 'CA', 'country', 'gst')`);
-    const regA = randomUUID();
-    const regB = randomUUID();
-    await db.execute(sql`
+      const regA = randomUUID();
+      const regB = randomUUID();
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code,
          is_active, effective_from, effective_to)
@@ -482,72 +628,103 @@ test("a pinned registration clamps to its own window, never a sibling's", { skip
              (${regB}, ${org.orgId}, ${jurisdictionId}, 'BBBB222222 RT0001', 'monthly', ${formCode},
               true, '2026-07-16', '2026-07-31')`);
 
-    const late = await computeTaxReturn(org.orgId, formCode, "2026-07-01", "2026-07-31", {}, {
-      filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regB },
-    });
-    assert.equal(late.from, "2026-07-16");
-    assert.equal(late.to, "2026-07-31");
-    assert.equal(late.registrationId, regB);
-    assert.equal(boxesOf(late).get("BASE"), "300.0000");
-    assert.equal(boxesOf(late).get("TAX"), "30.0000");
+      const late = await computeTaxReturn(
+        org.orgId,
+        formCode,
+        "2026-07-01",
+        "2026-07-31",
+        {},
+        {
+          filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regB },
+        },
+      );
+      assert.equal(late.from, "2026-07-16");
+      assert.equal(late.to, "2026-07-31");
+      assert.equal(late.registrationId, regB);
+      assert.equal(boxesOf(late).get("BASE"), "300.0000");
+      assert.equal(boxesOf(late).get("TAX"), "30.0000");
 
-    const early = await computeTaxReturn(org.orgId, formCode, "2026-07-01", "2026-07-31", {}, {
-      filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regA },
-    });
-    assert.equal(early.from, "2026-07-01");
-    assert.equal(early.to, "2026-07-15");
-    assert.equal(early.registrationId, regA);
-    assert.equal(boxesOf(early).get("BASE"), "200.0000");
-    assert.equal(boxesOf(early).get("TAX"), "20.0000");
+      const early = await computeTaxReturn(
+        org.orgId,
+        formCode,
+        "2026-07-01",
+        "2026-07-31",
+        {},
+        {
+          filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regA },
+        },
+      );
+      assert.equal(early.from, "2026-07-01");
+      assert.equal(early.to, "2026-07-15");
+      assert.equal(early.registrationId, regA);
+      assert.equal(boxesOf(early).get("BASE"), "200.0000");
+      assert.equal(boxesOf(early).get("TAX"), "20.0000");
 
-    // Unpinned with two same-form registrations active in the period, the
-    // return refuses by name instead of arbitrarily clamping to one — and the
-    // refusal names BOTH registrations so the operator can pin one.
-    await assert.rejects(
-      computeTaxReturn(org.orgId, formCode, "2026-07-01", "2026-07-31"),
-      (e: unknown) =>
-        e instanceof TaxReturnError &&
-        new RegExp(`has 2 registrations active in this period — choose one`).test(e.message) &&
-        e.message.includes("AAAA111111 RT0001") &&
-        e.message.includes("BBBB222222 RT0001"),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Unpinned with two same-form registrations active in the period, the
+      // return refuses by name instead of arbitrarily clamping to one — and the
+      // refusal names BOTH registrations so the operator can pin one.
+      await assert.rejects(
+        computeTaxReturn(org.orgId, formCode, "2026-07-01", "2026-07-31"),
+        (e: unknown) =>
+          e instanceof TaxReturnError &&
+          new RegExp(`has 2 registrations active in this period — choose one`).test(e.message) &&
+          e.message.includes("AAAA111111 RT0001") &&
+          e.message.includes("BBBB222222 RT0001"),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a registration-only pin keeps the org-wide return with the pinned number", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const code = await makeTaxCode(org.orgId, "CAD-PIN", org.accounts);
-    await seedEntityDocument(org, {
-      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-PIN",
-      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
-    });
-    const formCode = "REG-ONLY";
-    await makeEntityForm(org.orgId, formCode, [
-      { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
-      { lineCode: "TAX", taxCodeId: code, basis: "tax_collected", sign: -1, sequence: 20 },
-    ]);
-    const jurisdictionId = randomUUID();
-    await db.execute(sql`
+test(
+  "a registration-only pin keeps the org-wide return with the pinned number",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const code = await makeTaxCode(org.orgId, "CAD-PIN", org.accounts);
+      await seedEntityDocument(org, {
+        subsidiaryId: org.subsidiaryId,
+        kind: "customer_invoice",
+        number: "INV-PIN",
+        taxCodeId: code,
+        amount: "200.0000",
+        taxAmount: "20.0000",
+        currency: "CAD",
+      });
+      const formCode = "REG-ONLY";
+      await makeEntityForm(org.orgId, formCode, [
+        { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
+        { lineCode: "TAX", taxCodeId: code, basis: "tax_collected", sign: -1, sequence: 20 },
+      ]);
+      const jurisdictionId = randomUUID();
+      await db.execute(sql`
       insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
       values (${jurisdictionId}, ${org.orgId}, 'PINONLY', 'Pin-only jurisdiction', 'CA', 'country', 'gst')`);
-    const registrationId = randomUUID();
-    await db.execute(sql`
+      const registrationId = randomUUID();
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
       values (${registrationId}, ${org.orgId}, ${jurisdictionId}, '999888777 RT0001', 'quarterly', ${formCode}, true)`);
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
-      filingEntity: { subsidiaryIds: [], registrationId },
-    });
-    const values = boxesOf(result);
-    assert.equal(values.get("BASE"), "200.0000");
-    assert.equal(values.get("TAX"), "20.0000");
-    assert.equal(result.registrationNumber, "999888777 RT0001");
-    assert.equal(result.registrationId, registrationId);
-    assert.equal(result.functionalCurrency, "CAD");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(
+        org.orgId,
+        formCode,
+        org.date,
+        org.date,
+        {},
+        {
+          filingEntity: { subsidiaryIds: [], registrationId },
+        },
+      );
+      const values = boxesOf(result);
+      assert.equal(values.get("BASE"), "200.0000");
+      assert.equal(values.get("TAX"), "20.0000");
+      assert.equal(result.registrationNumber, "999888777 RT0001");
+      assert.equal(result.registrationId, registrationId);
+      assert.equal(result.functionalCurrency, "CAD");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

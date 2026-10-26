@@ -24,14 +24,17 @@ async function employeeCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from parties p
       ${employeeBaseJoins(true, TODAY, null)}
       where ${employeeWhere(
         { ...defaultListView("employee"), filters: viewFilters as never },
         { filters: adhocFilters, hrmEnabled: true },
         orgId,
         null,
-      )}`, "objects");
+      )}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -44,87 +47,115 @@ async function employeeCountWithoutJoins(
   adhocFilters: Record<string, string> = {},
   hrmEnabled?: boolean,
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from parties p
       where ${employeeWhere(
         { ...defaultListView("employee"), filters: viewFilters as never },
         { filters: adhocFilters, hrmEnabled },
         orgId,
         null,
-      )}`, "objects");
+      )}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test("malformed employee-directory filters match nothing instead of throwing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    assert.ok((await employeeCount(org.orgId)) >= 0, "baseline counts without throwing");
-    assert.equal(
-      await employeeCount(org.orgId, [], { department: "not-a-uuid" }),
-      0,
-      "malformed department quick filter matches nothing",
-    );
-    assert.equal(
-      await employeeCount(org.orgId, [], { employer: "not-a-uuid" }),
-      0,
-      "malformed employer quick filter matches nothing",
-    );
-    assert.equal(
-      await employeeCount(org.orgId, [], { employment_status: "tenured" }),
-      0,
-      "unknown employment status matches nothing",
-    );
-    assert.equal(
-      await employeeCount(org.orgId, [{ key: "department", operator: "eq", value: "not-a-uuid" }]),
-      0,
-      "malformed saved-view department filter matches nothing",
-    );
-    assert.equal(
-      await employeeCount(org.orgId, [{ key: "employer", operator: "eq", value: "not-a-uuid" }]),
-      0,
-      "malformed saved-view employer filter matches nothing",
-    );
-    assert.equal(
-      await employeeCount(
-        org.orgId,
-        [{ key: "department", operator: "eq", value: "00000000-0000-4000-8000-000000000000" }],
-      ),
-      0,
-      "well-formed unknown department stays empty without throwing",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-
-test("directory filters without the joins fail closed to nothing instead of a SQL error", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    assert.ok((await employeeCountWithoutJoins(org.orgId)) >= 0, "no filter, no joins: the base list still counts");
-    // The caller said nothing: undefined must read as off.
-    // Annotated: an array of differing object literals infers a UNION whose
-    // members carry optional-undefined siblings, and `undefined` is not
-    // assignable to a Record<string, string> index signature.
-    const unstated: Record<string, string>[] = [
-      { department: "unassigned" },
-      { employment_status: "active" },
-      { employer: org.orgId },
-    ];
-    for (const adhoc of unstated) {
-      assert.equal(await employeeCountWithoutJoins(org.orgId, [], adhoc), 0, `${JSON.stringify(adhoc)} matches nothing without the joins`);
+test(
+  "malformed employee-directory filters match nothing instead of throwing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      assert.ok((await employeeCount(org.orgId)) >= 0, "baseline counts without throwing");
+      assert.equal(
+        await employeeCount(org.orgId, [], { department: "not-a-uuid" }),
+        0,
+        "malformed department quick filter matches nothing",
+      );
+      assert.equal(
+        await employeeCount(org.orgId, [], { employer: "not-a-uuid" }),
+        0,
+        "malformed employer quick filter matches nothing",
+      );
+      assert.equal(
+        await employeeCount(org.orgId, [], { employment_status: "tenured" }),
+        0,
+        "unknown employment status matches nothing",
+      );
+      assert.equal(
+        await employeeCount(org.orgId, [
+          { key: "department", operator: "eq", value: "not-a-uuid" },
+        ]),
+        0,
+        "malformed saved-view department filter matches nothing",
+      );
+      assert.equal(
+        await employeeCount(org.orgId, [{ key: "employer", operator: "eq", value: "not-a-uuid" }]),
+        0,
+        "malformed saved-view employer filter matches nothing",
+      );
+      assert.equal(
+        await employeeCount(org.orgId, [
+          { key: "department", operator: "eq", value: "00000000-0000-4000-8000-000000000000" },
+        ]),
+        0,
+        "well-formed unknown department stays empty without throwing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    // The caller said off: same answer, by the same predicate.
-    assert.equal(
-      await employeeCountWithoutJoins(org.orgId, [{ key: "department", operator: "eq", value: "unassigned" }], {}, false),
-      0,
-      "a stale saved-view filter with HRM off matches nothing",
-    );
-    assert.equal(
-      await employeeCountWithoutJoins(org.orgId, [], { employment_status: "no_employment" }, false),
-      0,
-      "an HRM-off quick filter matches nothing",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
+
+test(
+  "directory filters without the joins fail closed to nothing instead of a SQL error",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      assert.ok(
+        (await employeeCountWithoutJoins(org.orgId)) >= 0,
+        "no filter, no joins: the base list still counts",
+      );
+      // The caller said nothing: undefined must read as off.
+      // Annotated: an array of differing object literals infers a UNION whose
+      // members carry optional-undefined siblings, and `undefined` is not
+      // assignable to a Record<string, string> index signature.
+      const unstated: Record<string, string>[] = [
+        { department: "unassigned" },
+        { employment_status: "active" },
+        { employer: org.orgId },
+      ];
+      for (const adhoc of unstated) {
+        assert.equal(
+          await employeeCountWithoutJoins(org.orgId, [], adhoc),
+          0,
+          `${JSON.stringify(adhoc)} matches nothing without the joins`,
+        );
+      }
+      // The caller said off: same answer, by the same predicate.
+      assert.equal(
+        await employeeCountWithoutJoins(
+          org.orgId,
+          [{ key: "department", operator: "eq", value: "unassigned" }],
+          {},
+          false,
+        ),
+        0,
+        "a stale saved-view filter with HRM off matches nothing",
+      );
+      assert.equal(
+        await employeeCountWithoutJoins(
+          org.orgId,
+          [],
+          { employment_status: "no_employment" },
+          false,
+        ),
+        0,
+        "an HRM-off quick filter matches nothing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

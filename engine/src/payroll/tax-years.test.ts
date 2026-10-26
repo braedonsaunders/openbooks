@@ -75,8 +75,14 @@ test("an unloaded year is named, with the year, the pack and the support remedy"
   assert.equal(problem?.kind, "missing");
   assert.match(problem!.message, new RegExp(`${beyond} statutory tables are not loaded for CA`));
   assert.match(problem!.message, /not yet supported by the CA pack; contact support/);
-  assert.ok(!problem!.message.includes("payroll-new-tax-year"), `refusal must not name the scaffold script:\n${problem!.message}`);
-  assert.ok(!problem!.message.includes("engine/src/"), `refusal must not name a source path:\n${problem!.message}`);
+  assert.ok(
+    !problem!.message.includes("payroll-new-tax-year"),
+    `refusal must not name the scaffold script:\n${problem!.message}`,
+  );
+  assert.ok(
+    !problem!.message.includes("engine/src/"),
+    `refusal must not name a source path:\n${problem!.message}`,
+  );
   assert.equal(payrollTaxYearProblem("CA", 2026), null);
   assert.throws(() => assertPayrollTaxYearSupported("US", beyond), /not loaded for US/);
 });
@@ -93,19 +99,34 @@ test("an unsupported year tells the operator what is published, with no develope
   assert.match(operator, /2025/);
   assert.match(operator, /2026/);
   assert.match(operator, /No action in the product/);
-  assert.ok(!operator.includes("payroll-new-tax-year"), `operator text must not name the scaffold script:\n${operator}`);
+  assert.ok(
+    !operator.includes("payroll-new-tax-year"),
+    `operator text must not name the scaffold script:\n${operator}`,
+  );
   assert.ok(
     !operator.includes(payrollTaxYearSupport("ES").ratesModule),
     `operator text must not name the rates module:\n${operator}`,
   );
-  assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
-  assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
+  assert.ok(
+    !/scaffold/i.test(operator),
+    `operator text must not prescribe scaffolding:\n${operator}`,
+  );
+  assert.ok(
+    !/transcribe/i.test(operator),
+    `operator text must not prescribe transcription:\n${operator}`,
+  );
   // The thrown refusal carries the same operator remedy — engine throws
   // reach operators, so no source path or scaffold script may appear there
   // either. The developer remedy lives in the code comment, not the string.
   assert.match(problem!.message, /not yet supported by the ES pack; contact support/);
-  assert.ok(!problem!.message.includes("payroll-new-tax-year"), `refusal must not name the scaffold script:\n${problem!.message}`);
-  assert.ok(!problem!.message.includes("engine/src/"), `refusal must not name a source path:\n${problem!.message}`);
+  assert.ok(
+    !problem!.message.includes("payroll-new-tax-year"),
+    `refusal must not name the scaffold script:\n${problem!.message}`,
+  );
+  assert.ok(
+    !problem!.message.includes("engine/src/"),
+    `refusal must not name a source path:\n${problem!.message}`,
+  );
 });
 
 test("a draft year tells the operator it is not available, with no developer remedy", () => {
@@ -118,20 +139,35 @@ test("a draft year tells the operator it is not available, with no developer rem
   assert.match(operator, /2026/);
   assert.match(operator, /2027/);
   assert.match(operator, /No action in the product/);
-  assert.ok(!operator.includes("payroll-new-tax-year"), `operator text must not name the scaffold script:\n${operator}`);
+  assert.ok(
+    !operator.includes("payroll-new-tax-year"),
+    `operator text must not name the scaffold script:\n${operator}`,
+  );
   assert.ok(
     !operator.includes(payrollTaxYearSupport("AU").ratesModule),
     `operator text must not name the rates module:\n${operator}`,
   );
-  assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
-  assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
+  assert.ok(
+    !/scaffold/i.test(operator),
+    `operator text must not prescribe scaffolding:\n${operator}`,
+  );
+  assert.ok(
+    !/transcribe/i.test(operator),
+    `operator text must not prescribe transcription:\n${operator}`,
+  );
   // The thrown refusal carries the same operator remedy — engine throws
   // reach operators, so no source path or scaffold script may appear there
   // either. The developer remedy lives in the code comment, not the string.
   assert.match(problem!.message, /scaffolded but not filled in/);
   assert.match(problem!.message, /not yet supported by the AU pack; contact support/);
-  assert.ok(!problem!.message.includes("payroll-new-tax-year"), `refusal must not name the scaffold script:\n${problem!.message}`);
-  assert.ok(!problem!.message.includes("engine/src/"), `refusal must not name a source path:\n${problem!.message}`);
+  assert.ok(
+    !problem!.message.includes("payroll-new-tax-year"),
+    `refusal must not name the scaffold script:\n${problem!.message}`,
+  );
+  assert.ok(
+    !problem!.message.includes("engine/src/"),
+    `refusal must not name a source path:\n${problem!.message}`,
+  );
 });
 
 test("the setup check reports an unpublished year in operator text", () => {
@@ -151,13 +187,19 @@ test("the setup check reports an unpublished year in operator text", () => {
   assert.match(detail, /2025/);
   assert.match(detail, /2026/);
   assert.match(detail, /No action in the product/);
-  assert.ok(!detail.includes("payroll-new-tax-year"), `setup detail must not name the scaffold script:\n${detail}`);
+  assert.ok(
+    !detail.includes("payroll-new-tax-year"),
+    `setup detail must not name the scaffold script:\n${detail}`,
+  );
   assert.ok(
     !detail.includes(payrollTaxYearSupport("ES").ratesModule),
     `setup detail must not name the rates module:\n${detail}`,
   );
   assert.ok(!/scaffold/i.test(detail), `setup detail must not prescribe scaffolding:\n${detail}`);
-  assert.ok(!/transcribe/i.test(detail), `setup detail must not prescribe transcription:\n${detail}`);
+  assert.ok(
+    !/transcribe/i.test(detail),
+    `setup detail must not prescribe transcription:\n${detail}`,
+  );
   // And a loaded year stays a passing check naming the pack and the year.
   const okCheck = setupTaxYearCheck("ES", "2026-06-15", "/admin/setup/payroll");
   assert.equal(okCheck.ok, true);
@@ -184,9 +226,15 @@ test("the setup check returns a blocker for a country with no pack", () => {
   // Year-free: with no pack there is no year arithmetic, so no year may be
   // named (and the calendar-year guess is wrong for fiscal jurisdictions).
   assert.ok(!/(19|20)\d{2}/.test(detail), `undeclared setup detail must name no year:\n${detail}`);
-  assert.ok(!detail.includes("payroll-new-tax-year"), `setup detail must not name the scaffold script:\n${detail}`);
+  assert.ok(
+    !detail.includes("payroll-new-tax-year"),
+    `setup detail must not name the scaffold script:\n${detail}`,
+  );
   assert.ok(!/scaffold/i.test(detail), `setup detail must not prescribe scaffolding:\n${detail}`);
-  assert.ok(!/transcribe/i.test(detail), `setup detail must not prescribe transcription:\n${detail}`);
+  assert.ok(
+    !/transcribe/i.test(detail),
+    `setup detail must not prescribe transcription:\n${detail}`,
+  );
 });
 
 test("a country with no pack tells the operator there is nothing to load", () => {
@@ -199,9 +247,18 @@ test("a country with no pack tells the operator there is nothing to load", () =>
   assert.match(operator, /2025/);
   assert.match(operator, /no payroll pack/i);
   assert.match(operator, /No action in the product/);
-  assert.ok(!operator.includes("payroll-new-tax-year"), `operator text must not name the scaffold script:\n${operator}`);
-  assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
-  assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
+  assert.ok(
+    !operator.includes("payroll-new-tax-year"),
+    `operator text must not name the scaffold script:\n${operator}`,
+  );
+  assert.ok(
+    !/scaffold/i.test(operator),
+    `operator text must not prescribe scaffolding:\n${operator}`,
+  );
+  assert.ok(
+    !/transcribe/i.test(operator),
+    `operator text must not prescribe transcription:\n${operator}`,
+  );
 });
 
 test("a region with its own tables can lag the country's, and says so", () => {
@@ -212,10 +269,36 @@ test("a region with its own tables can lag the country's, and says so", () => {
   const support: PayrollTaxYearSupport = {
     country,
     editions: [
-      { year: 2026, label: "national 2026", effectiveFrom: "2026-01-01", citation: "n/a", status: "published" },
-      { year: 2027, label: "national 2027", effectiveFrom: "2027-01-01", citation: "n/a", status: "published" },
-      { year: 2026, label: "regional 2026", effectiveFrom: "2026-01-01", citation: "n/a", status: "published", region: "R1" },
-      { year: 2027, label: "regional 2027", effectiveFrom: "2027-01-01", citation: "n/a", status: "draft", region: "R1" },
+      {
+        year: 2026,
+        label: "national 2026",
+        effectiveFrom: "2026-01-01",
+        citation: "n/a",
+        status: "published",
+      },
+      {
+        year: 2027,
+        label: "national 2027",
+        effectiveFrom: "2027-01-01",
+        citation: "n/a",
+        status: "published",
+      },
+      {
+        year: 2026,
+        label: "regional 2026",
+        effectiveFrom: "2026-01-01",
+        citation: "n/a",
+        status: "published",
+        region: "R1",
+      },
+      {
+        year: 2027,
+        label: "regional 2027",
+        effectiveFrom: "2027-01-01",
+        citation: "n/a",
+        status: "draft",
+        region: "R1",
+      },
     ],
     regionsWithOwnTables: ["R1"],
     ratesModule: "nowhere",
@@ -297,9 +380,9 @@ function currentYearGaps(
     const current = currentYearFor(entry.country);
     if (!entry.supported.includes(current)) {
       gaps.push(
-        `${entry.country} does not support the current tax year ${current} — supported: `
-        + `[${entry.supported.join(", ")}], draft: [${entry.draft.join(", ")}] `
-        + `(see ${entry.ratesModule})`,
+        `${entry.country} does not support the current tax year ${current} — supported: ` +
+          `[${entry.supported.join(", ")}], draft: [${entry.draft.join(", ")}] ` +
+          `(see ${entry.ratesModule})`,
       );
     }
   }
@@ -330,7 +413,8 @@ test("the instrument fails a pack pinned to a past year, naming it and its years
     const today = formatInZone(now(), "UTC");
     assert.equal(today, PINNED_TODAY);
     const coverage = payrollTaxYearCoverage().map((entry) =>
-      entry.country === "IT" ? { ...entry, supported: [2025], draft: [] } : entry);
+      entry.country === "IT" ? { ...entry, supported: [2025], draft: [] } : entry,
+    );
     // The year in the message comes from the pinned clock, not a literal:
     // move the pin and this still names whatever year the pin sits in (and
     // goes red if the pin ever lands inside 2025, where the pin stops
@@ -339,8 +423,8 @@ test("the instrument fails a pack pinned to a past year, naming it and its years
     assert.deepEqual(
       currentYearGaps(coverage, (country) => payrollTaxYearForDate(country, today).taxYear),
       [
-        `IT does not support the current tax year ${itYear} — supported: [2025], `
-        + "draft: [] (see engine/src/payroll/it/rates.ts)",
+        `IT does not support the current tax year ${itYear} — supported: [2025], ` +
+          "draft: [] (see engine/src/payroll/it/rates.ts)",
       ],
     );
   });
@@ -434,7 +518,10 @@ test(
       const blocker = readiness.items.find((item) => item.code === "statutory.taxYear");
       assert.ok(blocker, `a ${unloaded} run must be blocked before it calculates`);
       assert.equal(blocker!.severity, "blocker");
-      assert.match(blocker!.detail ?? "", new RegExp(`${unloaded} statutory tables are not loaded for CA`));
+      assert.match(
+        blocker!.detail ?? "",
+        new RegExp(`${unloaded} statutory tables are not loaded for CA`),
+      );
       assert.match(blocker!.href ?? "", /admin\/setup\/payroll/);
     } finally {
       await dropScratchOrgReporting(run.orgId);
@@ -442,22 +529,19 @@ test(
   },
 );
 
-test(
-  "a run in a loaded year raises no statutory-table blocker",
-  { skip: !DB },
-  async () => {
-    const run = await seedRunForYear(2026);
-    try {
-      const readiness = await payRunReadiness(run.orgId, run.documentId);
-      assert.deepEqual(
-        readiness.items.filter((item) => item.code === "statutory.taxYear"), [],
-        "2026 is loaded — the new check must not add noise to a normal payroll",
-      );
-    } finally {
-      await dropScratchOrgReporting(run.orgId);
-    }
-  },
-);
+test("a run in a loaded year raises no statutory-table blocker", { skip: !DB }, async () => {
+  const run = await seedRunForYear(2026);
+  try {
+    const readiness = await payRunReadiness(run.orgId, run.documentId);
+    assert.deepEqual(
+      readiness.items.filter((item) => item.code === "statutory.taxYear"),
+      [],
+      "2026 is loaded — the new check must not add noise to a normal payroll",
+    );
+  } finally {
+    await dropScratchOrgReporting(run.orgId);
+  }
+});
 
 test(
   "the setup surface reports the current year's coverage per installed pack",
@@ -533,9 +617,16 @@ test(
       // A loaded year populates with no refusal — except filings that declare
       // one instead of populating (US 940; DE's unbuilt ELSTER elsewhere).
       const loaded = await orgYearEndFilings(org.orgId, 2026);
-      assert.match(loaded.find((s) => s.country === "US" && s.key === "940")?.populationRefusal ?? "", /does not prepare Form 940/);
+      assert.match(
+        loaded.find((s) => s.country === "US" && s.key === "940")?.populationRefusal ?? "",
+        /does not prepare Form 940/,
+      );
       for (const section of loaded) {
-        if ((section.country !== "CA" && section.country !== "US") || (section.country === "US" && section.key === "940")) continue;
+        if (
+          (section.country !== "CA" && section.country !== "US") ||
+          (section.country === "US" && section.key === "940")
+        )
+          continue;
         assert.equal(section.populationRefusal, null, `${section.country} ${section.key}`);
       }
     } finally {

@@ -12,9 +12,11 @@ export const GET = defineRoute({
     if (provider !== null && !PROVIDERS.has(provider)) {
       return Response.json({ error: "unknown billing provider" }, { status: 400 });
     }
-    return Response.json(await listBillingImportRuns(
-      authz.user.orgId,
-      (provider ?? undefined) as BillingHistoryProvider | undefined,
-    ));
+    return Response.json(
+      await listBillingImportRuns(
+        authz.user.orgId,
+        (provider ?? undefined) as BillingHistoryProvider | undefined,
+      ),
+    );
   },
 });

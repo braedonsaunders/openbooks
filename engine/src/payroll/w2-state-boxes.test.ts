@@ -35,9 +35,14 @@ const slip = (overrides: Partial<W2Slip> = {}): W2Slip => ({
   ...overrides,
 });
 
-const localsOf = (byState: Record<string, W2LocalLine[]>) => ({ province }: { province: string }) =>
-  byState[province] ?? [];
-const stateIdOf = (ids: Record<string, string>) => ({ province }: { province: string }) => ids[province] ?? null;
+const localsOf =
+  (byState: Record<string, W2LocalLine[]>) =>
+  ({ province }: { province: string }) =>
+    byState[province] ?? [];
+const stateIdOf =
+  (ids: Record<string, string>) =>
+  ({ province }: { province: string }) =>
+    ids[province] ?? null;
 
 test("two withholding states stay two entries, with their own wages and tax", () => {
   const lines = buildW2StateLines(
@@ -49,7 +54,10 @@ test("two withholding states stay two entries, with their own wages and tax", ()
     stateIdOf({ AZ: "AZ-001", CA: "CA-002" }),
   );
   assert.equal(lines.length, 2);
-  assert.deepEqual(lines.map((line) => line.state), ["AZ", "CA"]);
+  assert.deepEqual(
+    lines.map((line) => line.state),
+    ["AZ", "CA"],
+  );
   assert.equal(lines[0]!.box16StateWages, "20000.0000");
   assert.equal(lines[0]!.box17StateIncomeTax, "512.0000");
   assert.equal(lines[0]!.employerStateId, "AZ-001");
@@ -66,14 +74,23 @@ test("a state with stubs but no state or local withholding gets no entry", () =>
     localsOf({}),
     stateIdOf({}),
   );
-  assert.deepEqual(lines.map((line) => line.state), ["AZ"]);
+  assert.deepEqual(
+    lines.map((line) => line.state),
+    ["AZ"],
+  );
 });
 
 test("a locality-only state is kept, with a null state ID where no SUI account is on file", () => {
   const lines = buildW2StateLines(
     [{ province: "OH", wages: "2000.0000", stateTax: "0" }],
     localsOf({
-      OH: [{ locality: "School district 4401 income tax", box18LocalWages: "2000.0000", box19LocalIncomeTax: "20.0000" }],
+      OH: [
+        {
+          locality: "School district 4401 income tax",
+          box18LocalWages: "2000.0000",
+          box19LocalIncomeTax: "20.0000",
+        },
+      ],
     }),
     stateIdOf({}),
   );
@@ -89,15 +106,26 @@ test("known locality wage splits remain attached to their own W-2 box 18 lines",
     [{ province: "MI", wages: "1000.0000", stateTax: "0" }],
     localsOf({
       MI: [
-        { locality: "City A income tax", box18LocalWages: "600.0000", box19LocalIncomeTax: "6.0000" },
-        { locality: "City B income tax", box18LocalWages: "400.0000", box19LocalIncomeTax: "4.0000" },
+        {
+          locality: "City A income tax",
+          box18LocalWages: "600.0000",
+          box19LocalIncomeTax: "6.0000",
+        },
+        {
+          locality: "City B income tax",
+          box18LocalWages: "400.0000",
+          box19LocalIncomeTax: "4.0000",
+        },
       ],
     }),
     stateIdOf({}),
   );
   assert.deepEqual(
     lines[0]!.localLines.map((line) => [line.locality, line.box18LocalWages]),
-    [["City A income tax", "600.0000"], ["City B income tax", "400.0000"]],
+    [
+      ["City A income tax", "600.0000"],
+      ["City B income tax", "400.0000"],
+    ],
   );
 });
 
@@ -121,15 +149,24 @@ test("a group with no work-state code earns no state entry", () => {
 
 test("state boxes print 15/16/17 and omit zero wages and zero tax", () => {
   const boxes = w2StateBoxes("AZ", "AZ-001", "20000.0000", "512.0000", []);
-  assert.deepEqual(boxes.map((box) => box.code), ["15", "16", "17"]);
+  assert.deepEqual(
+    boxes.map((box) => box.code),
+    ["15", "16", "17"],
+  );
   assert.equal(boxes[0]!.value, "AZ-001");
   assert.match(boxes[0]!.label, /AZ/);
 
   const emptyTax = w2StateBoxes("AZ", "AZ-001", "20000.0000", "0", []);
-  assert.deepEqual(emptyTax.map((box) => box.code), ["15", "16"]);
+  assert.deepEqual(
+    emptyTax.map((box) => box.code),
+    ["15", "16"],
+  );
 
   const emptyWages = w2StateBoxes("AZ", "AZ-001", "0", "512.0000", []);
-  assert.deepEqual(emptyWages.map((box) => box.code), ["15", "17"]);
+  assert.deepEqual(
+    emptyWages.map((box) => box.code),
+    ["15", "17"],
+  );
 });
 
 test("a missing state ID names the state with Unassigned, never an invented number", () => {
@@ -141,40 +178,63 @@ test("a missing state ID names the state with Unassigned, never an invented numb
 
 test("local lines print 18/19/20 per locality and omit zero local wages", () => {
   const boxes = w2StateBoxes("NY", "NY-009", "24000.0000", "1100.0000", [
-    { locality: "New York City resident income tax", box18LocalWages: "24000.0000", box19LocalIncomeTax: "730.0000" },
+    {
+      locality: "New York City resident income tax",
+      box18LocalWages: "24000.0000",
+      box19LocalIncomeTax: "730.0000",
+    },
   ]);
-  assert.deepEqual(boxes.map((box) => box.code), ["15", "16", "17", "18", "19", "20"]);
+  assert.deepEqual(
+    boxes.map((box) => box.code),
+    ["15", "16", "17", "18", "19", "20"],
+  );
   assert.equal(boxes[5]!.value, "New York City resident income tax");
 
   const zeroWages = w2StateBoxes("NY", "NY-009", "24000.0000", "1100.0000", [
-    { locality: "New York City resident income tax", box18LocalWages: "0", box19LocalIncomeTax: "730.0000" },
+    {
+      locality: "New York City resident income tax",
+      box18LocalWages: "0",
+      box19LocalIncomeTax: "730.0000",
+    },
   ]);
-  assert.deepEqual(zeroWages.map((box) => box.code), ["15", "16", "17", "19", "20"]);
+  assert.deepEqual(
+    zeroWages.map((box) => box.code),
+    ["15", "16", "17", "19", "20"],
+  );
 });
 
 test("an opening carry-in lands in the federal boxes and never invents state lines", () => {
   const before = slip({
     stateLines: [
       {
-        state: "AZ", employerStateId: "AZ-001",
-        box16StateWages: "20000.0000", box17StateIncomeTax: "512.0000", localLines: [],
+        state: "AZ",
+        employerStateId: "AZ-001",
+        box16StateWages: "20000.0000",
+        box17StateIncomeTax: "512.0000",
+        localLines: [],
       },
     ],
   });
   const after = openingYtdIntoW2Slip(before, {
-    pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
-    eiYtd: "0", qpipYtd: "0", taxableYtd: "12000.5000", taxYtd: "1500.2500", ficaWithheldYtd: "0",
+    pensionableYtd: "0",
+    insurableYtd: "0",
+    cppYtd: "0",
+    cpp2Ytd: "0",
+    eiYtd: "0",
+    qpipYtd: "0",
+    taxableYtd: "12000.5000",
+    taxYtd: "1500.2500",
+    ficaWithheldYtd: "0",
     programBasesYtd: {},
   });
   assert.equal(after.box1Wages, "60000.5000");
   assert.deepEqual(after.stateLines, before.stateLines);
 });
 
-
 test("W-2 locality wages use canonical exact money while preserving zero and correcting amounts", () => {
-  for (const amount of ['1000', '1000.0', '1000.0000']) {
-    assert.equal(requireW2LocalWages(amount, 'Worker', 'NJ', 'City'), '1000.0000');
+  for (const amount of ["1000", "1000.0", "1000.0000"]) {
+    assert.equal(requireW2LocalWages(amount, "Worker", "NJ", "City"), "1000.0000");
   }
-  assert.equal(requireW2LocalWages('0', 'Worker', 'NJ', 'City'), '0.0000');
-  assert.equal(requireW2LocalWages('-125.125', 'Worker', 'NJ', 'City'), '-125.1250');
+  assert.equal(requireW2LocalWages("0", "Worker", "NJ", "City"), "0.0000");
+  assert.equal(requireW2LocalWages("-125.125", "Worker", "NJ", "City"), "-125.1250");
 });

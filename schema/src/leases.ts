@@ -1,12 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  index,
-  pgTable,
-  text,
-  uuid
-} from "drizzle-orm/pg-core";
+import { check, date, index, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
@@ -34,7 +27,9 @@ export const inventoryWritedowns = pgTable(
     itemId: uuid("item_id").notNull(),
     stockLocationId: uuid("stock_location_id").notNull(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
-    kind: text("kind", { enum: ["writedown", "reversal"] }).notNull().default("writedown"),
+    kind: text("kind", { enum: ["writedown", "reversal"] })
+      .notNull()
+      .default("writedown"),
     date: date("date").notNull(),
     /** On-hand quantity at measurement (unchanged by the remeasurement). */
     quantity: money("quantity").notNull(),

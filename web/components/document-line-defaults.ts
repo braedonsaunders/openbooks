@@ -9,35 +9,35 @@
  */
 
 export interface DefaultsLine {
-  clientKey: string
-  lineId: string
-  itemId: string
-  accountId: string
-  taxProfileId: string
+  clientKey: string;
+  lineId: string;
+  itemId: string;
+  accountId: string;
+  taxProfileId: string;
 }
 
 /** Server-resolved defaults for one item. */
 export interface ResolvedLineDefault {
-  itemId: string
-  accountId: string | null
-  taxCodeId: string | null
+  itemId: string;
+  accountId: string | null;
+  taxCodeId: string | null;
 }
 
 /** What the drawer last applied to a line, so later changes can tell an
  *  untouched default from an operator's choice. */
 export interface AppliedLineDefault {
-  itemId: string
-  accountId: string
-  taxProfileId: string
+  itemId: string;
+  accountId: string;
+  taxProfileId: string;
 }
 
 export interface LineDefaultsContext {
   /** Accounts the line picker offers; a default outside it is not applied. */
-  accountIds: ReadonlySet<string>
+  accountIds: ReadonlySet<string>;
   /** Tax profile values the picker offers (`code:<id>` / `group:<id>`). */
-  taxProfileValues: ReadonlySet<string>
+  taxProfileValues: ReadonlySet<string>;
   /** False when the kind has no tax or tax resolves automatically. */
-  applyTax: boolean
+  applyTax: boolean;
 }
 
 /**
@@ -49,17 +49,17 @@ export function itemChangeRequests(
   seen: ReadonlyMap<string, string>,
   rows: readonly DefaultsLine[],
 ): { requests: { clientKey: string; itemId: string }[]; seen: Map<string, string> } {
-  const next = new Map<string, string>()
-  const requests: { clientKey: string; itemId: string }[] = []
+  const next = new Map<string, string>();
+  const requests: { clientKey: string; itemId: string }[] = [];
   for (const row of rows) {
-    const before = seen.get(row.clientKey)
-    next.set(row.clientKey, row.itemId)
-    if (!row.itemId) continue
-    if (before === undefined ? row.lineId === '' : before !== row.itemId) {
-      requests.push({ clientKey: row.clientKey, itemId: row.itemId })
+    const before = seen.get(row.clientKey);
+    next.set(row.clientKey, row.itemId);
+    if (!row.itemId) continue;
+    if (before === undefined ? row.lineId === "" : before !== row.itemId) {
+      requests.push({ clientKey: row.clientKey, itemId: row.itemId });
     }
   }
-  return { requests, seen: next }
+  return { requests, seen: next };
 }
 
 /**
@@ -74,17 +74,23 @@ export function applyLineDefault<R extends DefaultsLine>(
   previous: AppliedLineDefault | undefined,
   ctx: LineDefaultsContext,
 ): { row: R; applied: AppliedLineDefault } {
-  const follows = (value: string, applied: string | undefined) => value === '' || (applied !== undefined && value === applied)
-  const account = resolved.accountId && ctx.accountIds.has(resolved.accountId) ? resolved.accountId : ''
-  const taxValue = resolved.taxCodeId ? `code:${resolved.taxCodeId}` : ''
-  const tax = taxValue && ctx.taxProfileValues.has(taxValue) ? taxValue : ''
-  const next = { ...row }
-  if (follows(row.accountId, previous?.accountId)) next.accountId = account
-  if (ctx.applyTax && follows(row.taxProfileId, previous?.taxProfileId)) next.taxProfileId = tax
+  const follows = (value: string, applied: string | undefined) =>
+    value === "" || (applied !== undefined && value === applied);
+  const account =
+    resolved.accountId && ctx.accountIds.has(resolved.accountId) ? resolved.accountId : "";
+  const taxValue = resolved.taxCodeId ? `code:${resolved.taxCodeId}` : "";
+  const tax = taxValue && ctx.taxProfileValues.has(taxValue) ? taxValue : "";
+  const next = { ...row };
+  if (follows(row.accountId, previous?.accountId)) next.accountId = account;
+  if (ctx.applyTax && follows(row.taxProfileId, previous?.taxProfileId)) next.taxProfileId = tax;
   return {
     row: next,
-    applied: { itemId: resolved.itemId, accountId: next.accountId, taxProfileId: next.taxProfileId },
-  }
+    applied: {
+      itemId: resolved.itemId,
+      accountId: next.accountId,
+      taxProfileId: next.taxProfileId,
+    },
+  };
 }
 
 /**
@@ -94,15 +100,15 @@ export function applyLineDefault<R extends DefaultsLine>(
  * kept.
  */
 export function followTermsDueDate(input: {
-  dueDate: string
-  overridden: boolean
-  lastDerived: string | null
-  derived: string | null
+  dueDate: string;
+  overridden: boolean;
+  lastDerived: string | null;
+  derived: string | null;
 }): string {
-  const { dueDate, overridden, lastDerived, derived } = input
-  const following = !overridden || (lastDerived !== null && dueDate === lastDerived)
-  if (!following) return dueDate
-  if (derived !== null) return derived
+  const { dueDate, overridden, lastDerived, derived } = input;
+  const following = !overridden || (lastDerived !== null && dueDate === lastDerived);
+  if (!following) return dueDate;
+  if (derived !== null) return derived;
   // The new party has no terms: drop only a due date the old terms implied.
-  return lastDerived !== null && dueDate === lastDerived ? '' : dueDate
+  return lastDerived !== null && dueDate === lastDerived ? "" : dueDate;
 }

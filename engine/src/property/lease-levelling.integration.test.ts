@@ -4,16 +4,23 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
-import { PropertyManagementError, levelLeaseRentStraightLine, runDuePropertyBilling } from "./management.ts";
+import {
+  PropertyManagementError,
+  levelLeaseRentStraightLine,
+  runDuePropertyBilling,
+} from "./management.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(amount), 0) as bal from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`, "objects"));
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
@@ -64,122 +71,190 @@ async function seedLease(org: ScratchOrg, slAccountId: string): Promise<string> 
   return leaseId;
 }
 
-test("escalating rent levels to straight-line income and the accrual posts once", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // A dedicated straight-line rent asset account.
-    const slAccountId = randomUUID();
-    await db.execute(sql`
+test(
+  "escalating rent levels to straight-line income and the accrual posts once",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // A dedicated straight-line rent asset account.
+      const slAccountId = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable,
                             required_dimensions, custom, subsidiary_include_children)
       values (${slAccountId}, ${org.orgId}, '1160', 'Straight-Line Rent Receivable', 'asset_current_other',
               false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    const leaseId = await seedLease(org, slAccountId);
+      const leaseId = await seedLease(org, slAccountId);
 
-    // Year one complete (period ends 2026-06-30; asOf inside the open month).
-    const results = await levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,
-      asOf: "2026-07-15",
-      onlyLeaseId: leaseId,
-    });
-    assert.equal(results.length, 1);
-    const r = results[0]!;
-    assert.equal(r.billedToDate, "10000.0000");
-    assert.equal(r.straightLineToDate, "12000.0000"); // 60,000 / 5 — levelled
-    assert.equal(r.targetAccrual, "2000.0000");
-    assert.equal(r.delta, "2000.0000");
-    assert.ok(r.entryId);
+      // Year one complete (period ends 2026-06-30; asOf inside the open month).
+      const results = await levelLeaseRentStraightLine(org.orgId, null, {
+        allowedSubsidiaryIds: null,
+        asOf: "2026-07-15",
+        onlyLeaseId: leaseId,
+      });
+      assert.equal(results.length, 1);
+      const r = results[0]!;
+      assert.equal(r.billedToDate, "10000.0000");
+      assert.equal(r.straightLineToDate, "12000.0000"); // 60,000 / 5 — levelled
+      assert.equal(r.targetAccrual, "2000.0000");
+      assert.equal(r.delta, "2000.0000");
+      assert.ok(r.entryId);
 
-    // The GL carries the accrual: DR SL receivable 2,000 / CR rent income 2,000.
-    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
-    assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
+      // The GL carries the accrual: DR SL receivable 2,000 / CR rent income 2,000.
+      assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+      assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
 
-    // Idempotent: a rerun as of the same date posts nothing further.
-    const rerun = await levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,
-      asOf: "2026-07-15",
-      onlyLeaseId: leaseId,
-    });
-    assert.equal(rerun[0]!.delta, "0.0000");
-    assert.equal(rerun[0]!.entryId, null);
-    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Idempotent: a rerun as of the same date posts nothing further.
+      const rerun = await levelLeaseRentStraightLine(org.orgId, null, {
+        allowedSubsidiaryIds: null,
+        asOf: "2026-07-15",
+        onlyLeaseId: leaseId,
+      });
+      assert.equal(rerun[0]!.delta, "0.0000");
+      assert.equal(rerun[0]!.entryId, null);
+      assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("concurrent levelling runs serialize on the lease and post one accrual", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const slAccountId = randomUUID();
-    await db.execute(sql`
+test(
+  "concurrent levelling runs serialize on the lease and post one accrual",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const slAccountId = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable,
                             required_dimensions, custom, subsidiary_include_children)
       values (${slAccountId}, ${org.orgId}, '1161', 'Concurrent Straight-Line Rent Receivable', 'asset_current_other',
               false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    const leaseId = await seedLease(org, slAccountId);
+      const leaseId = await seedLease(org, slAccountId);
 
-    const runs = await Promise.all([
-      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
-      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
-    ]);
-    const results = runs.map((run) => run[0]!);
-    assert.deepEqual(results.map((result) => result.delta).sort(), ["0.0000", "2000.0000"]);
-    assert.equal(results.filter((result) => result.entryId !== null).length, 1);
+      const runs = await Promise.all([
+        levelLeaseRentStraightLine(org.orgId, null, {
+          allowedSubsidiaryIds: null,
+          asOf: "2026-07-15",
+          onlyLeaseId: leaseId,
+        }),
+        levelLeaseRentStraightLine(org.orgId, null, {
+          allowedSubsidiaryIds: null,
+          asOf: "2026-07-15",
+          onlyLeaseId: leaseId,
+        }),
+      ]);
+      const results = runs.map((run) => run[0]!);
+      assert.deepEqual(results.map((result) => result.delta).sort(), ["0.0000", "2000.0000"]);
+      assert.equal(results.filter((result) => result.entryId !== null).length, 1);
 
-    const entries = await db.execute<{ count: number }>(sql`
+      const entries = await db.execute<{ count: number }>(
+        sql`
       select count(*)::int as count
         from journal_entries
        where org_id = ${org.orgId}
          and origin = 'lease'
-         and custom->'propertyManagement'->>'levellingLeaseId' = ${leaseId}`, "objects");
-    assert.equal(entries[0]!.count, 1, "concurrent runs must create one levelling entry");
-    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
-    assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+         and custom->'propertyManagement'->>'levellingLeaseId' = ${leaseId}`,
+        "objects",
+      );
+      assert.equal(entries[0]!.count, 1, "concurrent runs must create one levelling entry");
+      assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+      assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-for (const policy of ["account", "location", "inactive subsidiary", "inactive book", "non-posting book", "foreign currency"] as const) {
+for (const policy of [
+  "account",
+  "location",
+  "inactive subsidiary",
+  "inactive book",
+  "non-posting book",
+  "foreign currency",
+] as const) {
   test(`rent levelling refuses ${policy} before posting an accrual`, { skip: !DB }, async () => {
     const org = await createScratchOrg();
     try {
-      const slAccountId = randomUUID(), branchId = randomUUID();
+      const slAccountId = randomUUID(),
+        branchId = randomUUID();
       await db.execute(sql`insert into accounts
         (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
         values(${slAccountId},${org.orgId},'1160','Straight-line rent','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
         values(${branchId},${org.orgId},${org.subsidiaryId},'Levelling branch','CAD','CA')`);
-      const leaseId = await seedLease(org,slAccountId);
-      if (policy === "account") await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
+      const leaseId = await seedLease(org, slAccountId);
+      if (policy === "account")
+        await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
         where org_id=${org.orgId} and id=${slAccountId}`);
       if (policy === "location") {
-        await db.execute(sql`update managed_properties set location_id=${org.locationId} where org_id=${org.orgId}`);
+        await db.execute(
+          sql`update managed_properties set location_id=${org.locationId} where org_id=${org.orgId}`,
+        );
         await db.execute(sql`update locations set subsidiary_id=${branchId},subsidiary_include_children=false
           where org_id=${org.orgId} and id=${org.locationId}`);
       }
       if (policy === "inactive subsidiary") {
-        await db.execute(sql`update managed_properties set subsidiary_id=${branchId} where org_id=${org.orgId}`);
-        await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${branchId}`);
+        await db.execute(
+          sql`update managed_properties set subsidiary_id=${branchId} where org_id=${org.orgId}`,
+        );
+        await db.execute(
+          sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${branchId}`,
+        );
       }
-      if (policy === "inactive book") await db.execute(sql`update accounting_books set is_active=false
+      if (policy === "inactive book")
+        await db.execute(sql`update accounting_books set is_active=false
         where org_id=${org.orgId} and id=${org.bookId}`);
-      if (policy === "non-posting book") await db.execute(sql`update accounting_books set posts_gl=false
+      if (policy === "non-posting book")
+        await db.execute(sql`update accounting_books set posts_gl=false
         where org_id=${org.orgId} and id=${org.bookId}`);
-      if (policy === "foreign currency") await db.execute(sql`update managed_properties set currency='USD' where org_id=${org.orgId}`);
-      const run = () => levelLeaseRentStraightLine(org.orgId,null,{ allowedSubsidiaryIds: null, asOf:org.date,onlyLeaseId:leaseId});
-      await assert.rejects(run(), policy === "account" || policy === "location" ? /restricted to another subsidiary/
-        : policy === "inactive subsidiary" ? /inactive/ : policy === "foreign currency" ? /functional currency/ : /active primary posting book/);
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n,0);
+      if (policy === "foreign currency")
+        await db.execute(
+          sql`update managed_properties set currency='USD' where org_id=${org.orgId}`,
+        );
+      const run = () =>
+        levelLeaseRentStraightLine(org.orgId, null, {
+          allowedSubsidiaryIds: null,
+          asOf: org.date,
+          onlyLeaseId: leaseId,
+        });
+      await assert.rejects(
+        run(),
+        policy === "account" || policy === "location"
+          ? /restricted to another subsidiary/
+          : policy === "inactive subsidiary"
+            ? /inactive/
+            : policy === "foreign currency"
+              ? /functional currency/
+              : /active primary posting book/,
+      );
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n,
+        0,
+      );
       await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${slAccountId}`);
       await db.execute(sql`update locations set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${org.locationId}`);
-      await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`);
-      await db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
+      await db.execute(
+        sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`,
+      );
+      await db.execute(
+        sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`,
+      );
       await db.execute(sql`update managed_properties set currency='CAD' where org_id=${org.orgId}`);
-      assert.equal((await run())[0]!.delta,"2000.0000");
-      assert.equal((await run())[0]!.delta,"0.0000");
-    } finally { await dropScratchOrg(org.orgId); }
+      assert.equal((await run())[0]!.delta, "2000.0000");
+      assert.equal((await run())[0]!.delta, "0.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   });
 }
 
@@ -201,12 +276,22 @@ test("rent levelling refuses a GL-closed target period before posting", { skip: 
     // storage error from the close fence; it must fail closed as a domain
     // error with nothing written.
     await assert.rejects(
-      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: org.date, onlyLeaseId: leaseId }),
-      (error: unknown) => error instanceof PropertyManagementError
-        && /GL period covering .* is closed/.test(error.message),
+      levelLeaseRentStraightLine(org.orgId, null, {
+        allowedSubsidiaryIds: null,
+        asOf: org.date,
+        onlyLeaseId: leaseId,
+      }),
+      (error: unknown) =>
+        error instanceof PropertyManagementError &&
+        /GL period covering .* is closed/.test(error.message),
     );
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n,
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n,
       0,
       "no levelling entry reached the closed period",
     );
@@ -215,42 +300,68 @@ test("rent levelling refuses a GL-closed target period before posting", { skip: 
   }
 });
 
-test("rent levelling rechecks contractual amounts after waiting for a lease edit", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const writer = await pool.connect();
-  let pending: Promise<PromiseSettledResult<Awaited<ReturnType<typeof levelLeaseRentStraightLine>>>> | undefined;
-  try {
-    const leaseId = await seedLease(org,org.accounts.ar);
-    await writer.query("begin");
-    await writer.query("select set_config('app.bypass_rls','on',true)");
-    await writer.query("select id from property_leases where org_id=$1 and id=$2 for update",[org.orgId,leaseId]);
-    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-    pending = levelLeaseRentStraightLine(org.orgId,null,{ allowedSubsidiaryIds: null, asOf:org.date,onlyLeaseId:leaseId})
-      .then((value) => ({status:"fulfilled",value}),(reason: unknown) => ({status:"rejected",reason}));
-    let blocked = false;
-    for (let attempt=0;attempt<400;attempt++) {
-      const count = (await pool.query<{ n: number }>(
-        "select count(*)::int as n from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))",[pid])).rows[0]!.n;
-      if (count) { blocked=true; break; }
-      await new Promise((resolve) => setTimeout(resolve,10));
+test(
+  "rent levelling rechecks contractual amounts after waiting for a lease edit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const writer = await pool.connect();
+    let pending:
+      | Promise<PromiseSettledResult<Awaited<ReturnType<typeof levelLeaseRentStraightLine>>>>
+      | undefined;
+    try {
+      const leaseId = await seedLease(org, org.accounts.ar);
+      await writer.query("begin");
+      await writer.query("select set_config('app.bypass_rls','on',true)");
+      await writer.query("select id from property_leases where org_id=$1 and id=$2 for update", [
+        org.orgId,
+        leaseId,
+      ]);
+      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
+      pending = levelLeaseRentStraightLine(org.orgId, null, {
+        allowedSubsidiaryIds: null,
+        asOf: org.date,
+        onlyLeaseId: leaseId,
+      }).then(
+        (value) => ({ status: "fulfilled", value }),
+        (reason: unknown) => ({ status: "rejected", reason }),
+      );
+      let blocked = false;
+      for (let attempt = 0; attempt < 400; attempt++) {
+        const count = (
+          await pool.query<{ n: number }>(
+            "select count(*)::int as n from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))",
+            [pid],
+          )
+        ).rows[0]!.n;
+        if (count) {
+          blocked = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.ok(blocked, "levelling must wait for the lease edit");
+      await writer.query(
+        "update lease_charges set amount=20000 where org_id=$1 and lease_id=$2 and effective_from='2025-07-01'",
+        [org.orgId, leaseId],
+      );
+      await writer.query("commit");
+      const result = await pending;
+      assert.equal(result.status, "fulfilled");
+      if (result.status !== "fulfilled") assert.fail("updated lease must level successfully");
+      assert.equal(result.value[0]!.billedToDate, "20000.0000");
+      assert.equal(result.value[0]!.straightLineToDate, "14000.0000");
+      assert.equal(result.value[0]!.delta, "-6000.0000");
+      assert.equal(await glBalance(org.orgId, org.accounts.ar), toUnits("-6000"));
+    } finally {
+      await writer.query("rollback");
+      writer.release();
+      await pending;
+      await dropScratchOrg(org.orgId);
     }
-    assert.ok(blocked,"levelling must wait for the lease edit");
-    await writer.query("update lease_charges set amount=20000 where org_id=$1 and lease_id=$2 and effective_from='2025-07-01'",[org.orgId,leaseId]);
-    await writer.query("commit");
-    const result = await pending;
-    assert.equal(result.status,"fulfilled");
-    if (result.status !== "fulfilled") assert.fail("updated lease must level successfully");
-    assert.equal(result.value[0]!.billedToDate,"20000.0000");
-    assert.equal(result.value[0]!.straightLineToDate,"14000.0000");
-    assert.equal(result.value[0]!.delta,"-6000.0000");
-    assert.equal(await glBalance(org.orgId,org.accounts.ar),toUnits("-6000"));
-  } finally {
-    await writer.query("rollback");
-    writer.release();
-    await pending;
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 /**
  * B-PRP-002: the production scheduler run is the trigger that levels
@@ -259,26 +370,30 @@ test("rent levelling rechecks contractual amounts after waiting for a lease edit
  * posted in production. The rerun must be idempotent through the same
  * entry-count the scheduler reports.
  */
-test("the production scheduler run levels an escalating lease idempotently", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const slAccountId = randomUUID();
-    await db.execute(sql`
+test(
+  "the production scheduler run levels an escalating lease idempotently",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const slAccountId = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable,
                             required_dimensions, custom, subsidiary_include_children)
       values (${slAccountId}, ${org.orgId}, '1162', 'Scheduler Straight-Line Rent Receivable', 'asset_current_other',
               false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    await seedLease(org, slAccountId);
+      await seedLease(org, slAccountId);
 
-    const first = await runDuePropertyBilling("2026-07-15");
-    assert.equal(first.levelled, 1, "the scheduler run posts the year-one accrual");
-    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
-    assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
+      const first = await runDuePropertyBilling("2026-07-15");
+      assert.equal(first.levelled, 1, "the scheduler run posts the year-one accrual");
+      assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+      assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
 
-    const second = await runDuePropertyBilling("2026-07-15");
-    assert.equal(second.levelled, 0, "rerunning the scheduler posts nothing further");
-    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const second = await runDuePropertyBilling("2026-07-15");
+      assert.equal(second.levelled, 0, "rerunning the scheduler posts nothing further");
+      assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

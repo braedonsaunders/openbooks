@@ -1,17 +1,8 @@
 import { allocateByRelativeSSP } from "./recognition.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import {
-  add,
-  neg,
-  sum,
-  cmp,
-  mulPercent,
-  fromUnits,
-  toUnits,
-} from "../money/money.ts";
+import { add, neg, sum, cmp, mulPercent, fromUnits, toUnits } from "../money/money.ts";
 
-export type RevenueModificationTreatment =
-  "separate" | "prospective" | "catch_up";
+export type RevenueModificationTreatment = "separate" | "prospective" | "catch_up";
 export function modificationMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null || exact.replace(/^-/, "").split(".")[0]!.length > 15)
@@ -35,14 +26,10 @@ export function measureRevenueModificationGroup(input: {
   remainingDistinct: boolean;
   additionsAtStandalonePrice: boolean;
 }) {
-  const delta = modificationMoney(
-    input.considerationChange,
-    "Consideration change",
-  );
+  const delta = modificationMoney(input.considerationChange, "Consideration change");
   if (!["separate", "prospective", "catch_up"].includes(input.treatment))
     throw new Error("select the modification accounting treatment");
-  if (!input.promises.length)
-    throw new Error("describe the promises after modification");
+  if (!input.promises.length) throw new Error("describe the promises after modification");
   const old = new Map(input.existing.map((row) => [row.id, row]));
   if (old.size !== input.existing.length)
     throw new Error("an obligation appears twice in the modification group");
@@ -54,26 +41,18 @@ export function measureRevenueModificationGroup(input: {
       throw new Error("progress must be between 0 and 100 percent");
     if (promise.existingId) {
       if (!old.has(promise.existingId) || seen.has(promise.existingId))
-        throw new Error(
-          "each retained obligation must belong to this group and appear once",
-        );
+        throw new Error("each retained obligation must belong to this group and appear once");
       seen.add(promise.existingId);
     }
   }
   const priorPrice = sum(
-    input.existing.map((row) =>
-      modificationMoney(row.allocated, "Allocated price"),
-    ),
+    input.existing.map((row) => modificationMoney(row.allocated, "Allocated price")),
   );
   const priorRecognized = sum(
-    input.existing.map((row) =>
-      modificationMoney(row.recognized, "Recognized revenue"),
-    ),
+    input.existing.map((row) => modificationMoney(row.recognized, "Recognized revenue")),
   );
   const credits = sum(
-    input.existing.map((row) =>
-      modificationMoney(row.netCredits, "Deferred credits"),
-    ),
+    input.existing.map((row) => modificationMoney(row.netCredits, "Deferred credits")),
   );
   if (input.treatment === "separate") {
     if (
@@ -116,17 +95,11 @@ export function measureRevenueModificationGroup(input: {
     input.promises.map((p) => ({ ssp: p.ssp })),
   );
   const promises = input.promises.map((promise, i) => {
-    const earned = promise.existingId
-      ? old.get(promise.existingId)!.recognized
-      : "0.0000";
+    const earned = promise.existingId ? old.get(promise.existingId)!.recognized : "0.0000";
     const allocated =
-      input.treatment === "prospective"
-        ? add(earned, allocations[i]!)
-        : allocations[i]!;
+      input.treatment === "prospective" ? add(earned, allocations[i]!) : allocations[i]!;
     const target =
-      input.treatment === "catch_up"
-        ? mulPercent(allocated, promise.percentComplete, 4)
-        : earned;
+      input.treatment === "catch_up" ? mulPercent(allocated, promise.percentComplete, 4) : earned;
     return {
       allocated,
       priorRecognized: earned,
@@ -146,9 +119,6 @@ export function measureRevenueModificationGroup(input: {
     pool,
     promises,
     retired,
-    newTotal: sum([
-      ...promises.map((p) => p.allocated),
-      ...retired.map((r) => r.allocated),
-    ]),
+    newTotal: sum([...promises.map((p) => p.allocated), ...retired.map((r) => r.allocated)]),
   };
 }

@@ -34,13 +34,14 @@ export async function findSupplyEvidenceConflicts(
   orgId: string,
 ): Promise<SupplyEvidenceConflict[]> {
   const rows = await runner.execute<{
-      documentId: string;
-      documentNumber: string;
-      kind: string;
-      documentDate: string;
-      countries: string[];
-      signals: { kind: string; country: string }[];
-    }>(sql`
+    documentId: string;
+    documentNumber: string;
+    kind: string;
+    documentDate: string;
+    countries: string[];
+    signals: { kind: string; country: string }[];
+  }>(
+    sql`
       with conflicted as (
         select e.document_id
           from document_supply_evidence e
@@ -71,7 +72,9 @@ export async function findSupplyEvidenceConflicts(
         from documents d
         join conflicted c on c.document_id = d.id
        where d.org_id = ${orgId}
-       order by d.document_date, d.document_number`, "objects");
+       order by d.document_date, d.document_number`,
+    "objects",
+  );
   return rows.map((row) => ({
     documentId: row.documentId,
     documentNumber: row.documentNumber,
@@ -124,21 +127,27 @@ export async function computeDistanceTurnover(
   today = new Date().toISOString().slice(0, 10),
 ): Promise<DistanceTurnover> {
   if (!Number.isInteger(year) || year < 2000 || year > 9999) {
-    throw new CrossBorderTaxError("assess the distance-sales threshold for a four-digit calendar year");
+    throw new CrossBorderTaxError(
+      "assess the distance-sales threshold for a four-digit calendar year",
+    );
   }
   const windowEnd = today < `${year}-12-31` && today >= `${year}-01-01` ? today : `${year}-12-31`;
-  const registrations = await runner.execute<{ subsidiaryId: string | null }>(sql`
+  const registrations = await runner.execute<{ subsidiaryId: string | null }>(
+    sql`
     select subsidiary_id as "subsidiaryId"
       from tax_oss_registrations
      where org_id = ${orgId} and scheme = 'union' and is_active
-  `, "objects");
+  `,
+    "objects",
+  );
   if (registrations.length !== 1) {
     throw new CrossBorderTaxError(
       "configure exactly one active Union OSS registration in Tax setup before assessing the distance-sales threshold",
     );
   }
   const subsidiaryId = registrations[0]!.subsidiaryId;
-  const rows = await runner.execute<{ currency: string; base: string }>(sql`
+  const rows = await runner.execute<{ currency: string; base: string }>(
+    sql`
       select d.currency as currency,
              sum(case when d.kind = 'customer_credit' then -component.taxable_amount
                       else component.taxable_amount end)::text as base
@@ -154,7 +163,9 @@ export async function computeDistanceTurnover(
          and d.document_date between ${`${year}-01-01`}::date and ${windowEnd}::date
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
          and component.calculation_type = 'standard'
-       group by d.currency`, "objects");
+       group by d.currency`,
+    "objects",
+  );
   const translated: DistanceTurnoverTranslation[] = [];
   const uncovered: string[] = [];
   let total = "0.0000";
@@ -163,7 +174,13 @@ export async function computeDistanceTurnover(
       total = add(total, row.base);
       continue;
     }
-    const evidence = await lookupSpotRateWithEvidence(runner, orgId, row.currency, "EUR", windowEnd);
+    const evidence = await lookupSpotRateWithEvidence(
+      runner,
+      orgId,
+      row.currency,
+      "EUR",
+      windowEnd,
+    );
     if (evidence.rate === null) {
       uncovered.push(row.currency);
       continue;

@@ -7,7 +7,13 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assembleRl1Slip, openingYtdIntoRl1Aggregates, rl1YearCaps, RL1_UNSUPPORTED_BOXES, type Rl1SlipAggregates } from "./canada/quebec/rl1.ts";
+import {
+  assembleRl1Slip,
+  openingYtdIntoRl1Aggregates,
+  rl1YearCaps,
+  RL1_UNSUPPORTED_BOXES,
+  type Rl1SlipAggregates,
+} from "./canada/quebec/rl1.ts";
 import type { OpeningYearEndYtd } from "./yearend.ts";
 import {
   RL1_XML_DOWNLOAD_REFUSAL,
@@ -110,9 +116,17 @@ test("the boxes the data cannot populate are published, not implied", () => {
 });
 
 const opening = (overrides: Partial<OpeningYearEndYtd> = {}): OpeningYearEndYtd => ({
-  pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
-  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ficaWithheldYtd: "0",
-  programBasesYtd: {}, ...overrides,
+  pensionableYtd: "0",
+  insurableYtd: "0",
+  cppYtd: "0",
+  cpp2Ytd: "0",
+  eiYtd: "0",
+  qpipYtd: "0",
+  taxableYtd: "0",
+  taxYtd: "0",
+  ficaWithheldYtd: "0",
+  programBasesYtd: {},
+  ...overrides,
 });
 
 test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () => {
@@ -122,9 +136,14 @@ test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () =
   const carried = openingYtdIntoRl1Aggregates(
     aggregates(),
     opening({
-      taxableYtd: "21000.50", cppYtd: "700.00", cpp2Ytd: "120.00",
-      eiYtd: "210.75", qpipYtd: "33.25", pensionableYtd: "22000.00",
-      insurableYtd: "11000.25", taxYtd: "3150.75",
+      taxableYtd: "21000.50",
+      cppYtd: "700.00",
+      cpp2Ytd: "120.00",
+      eiYtd: "210.75",
+      qpipYtd: "33.25",
+      pensionableYtd: "22000.00",
+      insurableYtd: "11000.25",
+      taxYtd: "3150.75",
     }),
   );
   assert.equal(carried.taxableIncome, "73000.5000");
@@ -142,9 +161,14 @@ test("RL-1 carry-in leaves box E alone: no opening source exists", () => {
   const carried = openingYtdIntoRl1Aggregates(
     aggregates(),
     opening({
-      taxableYtd: "100.00", taxYtd: "20.00", pensionableYtd: "100.00",
-      insurableYtd: "80.00", cppYtd: "5.00", cpp2Ytd: "2.00",
-      eiYtd: "3.00", qpipYtd: "1.00",
+      taxableYtd: "100.00",
+      taxYtd: "20.00",
+      pensionableYtd: "100.00",
+      insurableYtd: "80.00",
+      cppYtd: "5.00",
+      cpp2Ytd: "2.00",
+      eiYtd: "3.00",
+      qpipYtd: "1.00",
     }),
   );
   // Unchanged in value, normalized to the 4dp every other carried box reads.
@@ -156,9 +180,7 @@ test("RL-1 carry-in folds pre-adoption union dues into box F", () => {
   // to the stubs; with none carried, the stubs pass through add() to 4dp.
   const untouched = openingYtdIntoRl1Aggregates(aggregates(), opening({}));
   assert.equal(untouched.unionDues, "520.0000");
-  const carried = openingYtdIntoRl1Aggregates(
-    aggregates(), opening({ unionDuesYtd: "100.00" }),
-  );
+  const carried = openingYtdIntoRl1Aggregates(aggregates(), opening({ unionDuesYtd: "100.00" }));
   assert.equal(carried.unionDues, "620.0000");
 });
 
@@ -208,28 +230,34 @@ test("RL-1 carry-in is capped with the stubs, not after them", () => {
 });
 
 test("transmitter validation: a complete configuration passes", () => {
-  assert.deepEqual(rl1TransmitterProblems({
-    transmitterNumber: "NP123456",
-    certificationNumber: "RQ-26-01-123",
-    identificationNumber: "1234567890",
-    fileSequence: 1,
-    name: "Example Employer Inc.",
-    contactName: "Pat Payroll",
-    contactEmail: "pat@example.com",
-    contactPhone: "514-555-0100",
-    slipRangeStart: "10145875",
-    slipRangeEnd: "10146174",
-  }), []);
+  assert.deepEqual(
+    rl1TransmitterProblems({
+      transmitterNumber: "NP123456",
+      certificationNumber: "RQ-26-01-123",
+      identificationNumber: "1234567890",
+      fileSequence: 1,
+      name: "Example Employer Inc.",
+      contactName: "Pat Payroll",
+      contactEmail: "pat@example.com",
+      contactPhone: "514-555-0100",
+      slipRangeStart: "10145875",
+      slipRangeEnd: "10146174",
+    }),
+    [],
+  );
 });
 
 test("transmitter validation: every malformed field is named", () => {
   const problems = rl1TransmitterProblems({
-    transmitterNumber: "123456",        // missing NP prefix
-    certificationNumber: " ",           // blank
-    identificationNumber: "12345",      // not 10 digits
-    fileSequence: 0,                    // out of range
-    name: "", contactName: "", contactEmail: "", contactPhone: "",
-    slipRangeStart: "10145875",         // start without a valid end
+    transmitterNumber: "123456", // missing NP prefix
+    certificationNumber: " ", // blank
+    identificationNumber: "12345", // not 10 digits
+    fileSequence: 0, // out of range
+    name: "",
+    contactName: "",
+    contactEmail: "",
+    contactPhone: "",
+    slipRangeStart: "10145875", // start without a valid end
     slipRangeEnd: "999",
   });
   assert.ok(problems.some((p) => p.includes("transmitterNumber")));
@@ -246,7 +274,10 @@ test("transmitter validation: an inverted slip-number series is refused", () => 
     certificationNumber: "RQ-26-01-123",
     identificationNumber: "1234567890",
     fileSequence: 2,
-    name: "X", contactName: "X", contactEmail: "x@x", contactPhone: "5145550100",
+    name: "X",
+    contactName: "X",
+    contactEmail: "x@x",
+    contactPhone: "5145550100",
     slipRangeStart: "10146174",
     slipRangeEnd: "10145875",
   });

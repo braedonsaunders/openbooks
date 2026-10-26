@@ -5,7 +5,12 @@ import { after, afterEach, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
 import { observeFixtureOwnerSocket } from "./fixture-owner-transport.mjs";
 
-const RECEIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", ".local", "fixture-lifecycle-receipt.txt");
+const RECEIPT_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  ".local",
+  "fixture-lifecycle-receipt.txt",
+);
 
 // The receipt is the only evidence CI has that every lease was released.
 // process.stdout is a pipe here, so writes are asynchronous and an
@@ -57,7 +62,9 @@ async function runOwner() {
               closeError = String(error);
             }
             const metrics = getScratchOrgLifecycleMetrics();
-            response = closeError ? { ok: false, error: closeError, metrics } : { ok: true, metrics };
+            response = closeError
+              ? { ok: false, error: closeError, metrics }
+              : { ok: true, metrics };
             const receipt = publishReceipt(metrics);
             socket.end(`${JSON.stringify(response)}\n`);
             // Exit only after the stream write is acknowledged.
@@ -94,11 +101,8 @@ if (process.argv.includes("--owner")) {
   // producing a silent partial file run. The timer is cleared in the final
   // hook below, after the owner lease and receipt protocol closes.
   const workerKeepAlive = setInterval(() => {}, 1_000);
-  const {
-    closeScratchOrgPool,
-    getScratchOrgLifecycleMetrics,
-    releaseOutstandingScratchOrgLeases,
-  } = await import("@openbooks/engine/testing/fixtures");
+  const { closeScratchOrgPool, getScratchOrgLifecycleMetrics, releaseOutstandingScratchOrgLeases } =
+    await import("@openbooks/engine/testing/fixtures");
   // Legacy integration tests often lease a scratch org without an explicit
   // drop call. Preserve a small file-scoped working set (some suites build a
   // shared fixture in a module-level harness), but drain it once the fixed

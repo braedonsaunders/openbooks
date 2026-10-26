@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import {
-  NON_TRANSACTABLE_ISO_CODES,
-  SUPPORTED_CURRENCIES,
-} from "./currencies.ts";
+import { NON_TRANSACTABLE_ISO_CODES, SUPPORTED_CURRENCIES } from "./currencies.ts";
 
-const vendored = JSON.parse(
-  readFileSync(new URL("./iso-4217.json", import.meta.url), "utf8"),
-) as {
+const vendored = JSON.parse(readFileSync(new URL("./iso-4217.json", import.meta.url), "utf8")) as {
   source: string;
   retrieved: string;
   entries: { code: string; numeric: string; name: string; minorUnits: number | null }[];

@@ -14,7 +14,9 @@ export function isTableSubjectId(subjectId: string): boolean {
 }
 
 /** Apply shared roles and status options plus UUID checks to table-backed flow reads. */
-export function defineTableSubjectAdapter(definition: TableSubjectAdapterDefinition): FlowSubjectAdapter {
+export function defineTableSubjectAdapter(
+  definition: TableSubjectAdapterDefinition,
+): FlowSubjectAdapter {
   const statuses = definition.profile.statuses.map((status) => ({ ...status }));
   const fields = definition.profile.fields.map((field) =>
     field.key === "status" && field.type === "enum" && !field.options

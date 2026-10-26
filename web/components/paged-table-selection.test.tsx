@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ReactElement } from "react";
 import type { PagedColumn, PagedSelection } from "./paged-table";
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -185,7 +185,10 @@ test("paged-table: select-all covers the filtered set across pages", async () =>
   });
   // No search: every row id, even the two past the first page.
   assert.equal(seen.length, 1);
-  assert.deepEqual(seen[0], ROWS.map((row) => row.id));
+  assert.deepEqual(
+    seen[0],
+    ROWS.map((row) => row.id),
+  );
   await act(async () => {
     root.unmount();
   });
@@ -197,7 +200,9 @@ test("paged-table: select-all after a search covers only the matching rows", asy
     selectedIds: [],
     onToggleAll: (ids) => void seen.push(ids),
   });
-  const search = document.querySelector('input[type="text"], input:not([type])') as HTMLInputElement | null;
+  const search = document.querySelector(
+    'input[type="text"], input:not([type])',
+  ) as HTMLInputElement | null;
   assert.ok(search, "the searchable table must render a search box");
   await act(async () => {
     const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -205,9 +210,8 @@ test("paged-table: select-all after a search covers only the matching rows", asy
       "value",
     )?.set;
     nativeSetter?.call(search, "Asset 1");
-    const DomEvent = (
-      window as unknown as { Event: new (type: string, init?: EventInit) => Event }
-    ).Event;
+    const DomEvent = (window as unknown as { Event: new (type: string, init?: EventInit) => Event })
+      .Event;
     search.dispatchEvent(new DomEvent("input", { bubbles: true }));
   });
   // "Asset 1" matches Asset 1, 10, 11, 12.

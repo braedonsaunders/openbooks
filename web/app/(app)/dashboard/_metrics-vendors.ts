@@ -1,16 +1,16 @@
-import 'server-only'
-import { getTranslations } from 'next-intl/server'
-import { cmp } from '@openbooks/engine/money'
-import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
-import { vendorData } from '@/lib/analytics/vendor-data'
-import { spendVelocityData } from '@/lib/analytics/spend-velocity-data'
-import { reportExpenseAccess } from '@/lib/expense-access'
-import { MissingExchangeRateError } from '@/lib/fx-presentation'
-import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
-import { concentrationBand, type ConcentrationBand } from '@/lib/analytics/vendor-concentration'
-import { englishCatalogMessage, type CatalogMessageFn } from '@/lib/analytics/catalog-strings'
-import { reportPeriodLabel } from '../../../lib/format'
-import { resolveLocale } from '../../../lib/locale'
+import "server-only";
+import { getTranslations } from "next-intl/server";
+import { cmp } from "@openbooks/engine/money";
+import type { DashboardWidgetContext, WidgetValue } from "./_metrics-context";
+import { vendorData } from "@/lib/analytics/vendor-data";
+import { spendVelocityData } from "@/lib/analytics/spend-velocity-data";
+import { reportExpenseAccess } from "@/lib/expense-access";
+import { MissingExchangeRateError } from "@/lib/fx-presentation";
+import { ReportCurrencyBasisError } from "@/lib/reports/currency-basis";
+import { concentrationBand, type ConcentrationBand } from "@/lib/analytics/vendor-concentration";
+import { englishCatalogMessage, type CatalogMessageFn } from "@/lib/analytics/catalog-strings";
+import { reportPeriodLabel } from "../../../lib/format";
+import { resolveLocale } from "../../../lib/locale";
 
 /**
  * Dashboard widget readers for supplier concentration, payment performance and spend velocity (Vendor Performance, Spend Velocity).
@@ -25,39 +25,43 @@ import { resolveLocale } from '../../../lib/locale'
  * reason instead of a fabricated zero.
  */
 export type VendorWidgetMetrics = {
-  concentrationHhi: WidgetValue<number>
-  concentrationTop5Share: WidgetValue<number>
-  concentrationBand: ConcentrationBand | null
-  vendorOnTimeRate: WidgetValue<number>
+  concentrationHhi: WidgetValue<number>;
+  concentrationTop5Share: WidgetValue<number>;
+  concentrationBand: ConcentrationBand | null;
+  vendorOnTimeRate: WidgetValue<number>;
   /** The organization's own on-time good mark (percentage points). */
-  vendorOnTimeGoodRate: number
-  vendorAvgDaysToPay: WidgetValue<number>
-  vendorLateSpend: WidgetValue<string>
-  vendorUnratedCount: WidgetValue<number>
-  spendOpenAlerts: WidgetValue<number>
-  spendSavingsPotential: WidgetValue<string>
-  vendorPeriodLabel: string | null
-}
+  vendorOnTimeGoodRate: number;
+  vendorAvgDaysToPay: WidgetValue<number>;
+  vendorLateSpend: WidgetValue<string>;
+  vendorUnratedCount: WidgetValue<number>;
+  spendOpenAlerts: WidgetValue<number>;
+  spendSavingsPotential: WidgetValue<string>;
+  vendorPeriodLabel: string | null;
+};
 
 export const EMPTY_VENDOR_WIDGET_METRICS: VendorWidgetMetrics = {
-  concentrationHhi: { available: false, reason: '' },
-  concentrationTop5Share: { available: false, reason: '' },
+  concentrationHhi: { available: false, reason: "" },
+  concentrationTop5Share: { available: false, reason: "" },
   concentrationBand: null,
-  vendorOnTimeRate: { available: false, reason: '' },
+  vendorOnTimeRate: { available: false, reason: "" },
   vendorOnTimeGoodRate: 0,
-  vendorAvgDaysToPay: { available: false, reason: '' },
-  vendorLateSpend: { available: false, reason: '' },
-  vendorUnratedCount: { available: false, reason: '' },
-  spendOpenAlerts: { available: false, reason: '' },
-  spendSavingsPotential: { available: false, reason: '' },
+  vendorAvgDaysToPay: { available: false, reason: "" },
+  vendorLateSpend: { available: false, reason: "" },
+  vendorUnratedCount: { available: false, reason: "" },
+  spendOpenAlerts: { available: false, reason: "" },
+  spendSavingsPotential: { available: false, reason: "" },
   vendorPeriodLabel: null,
-}
+};
 
-const unavailable = (reason: string): { available: false; reason: string } => ({ available: false, reason })
+const unavailable = (reason: string): { available: false; reason: string } => ({
+  available: false,
+  reason,
+});
 
 function currencyRefusal(error: unknown): string {
-  if (error instanceof MissingExchangeRateError || error instanceof ReportCurrencyBasisError) return error.message
-  throw error
+  if (error instanceof MissingExchangeRateError || error instanceof ReportCurrencyBasisError)
+    return error.message;
+  throw error;
 }
 
 /**
@@ -76,15 +80,15 @@ async function analyticsReason(): Promise<CatalogMessageFn> {
   // client-component guard, server callers get the missing request config
   // or the absent Next request storage.
   const SCOPE_REFUSAL =
-    /client component|server component|getRequestConfig|requestAsyncStorage|async local storage|app router|request scope|request context/i
+    /client component|server component|getRequestConfig|requestAsyncStorage|async local storage|app router|request scope|request context/i;
   try {
-    const t = await getTranslations('analytics')
-    return (key, values) => t(key, values as Record<string, string | number>)
+    const t = await getTranslations("analytics");
+    return (key, values) => t(key, values as Record<string, string | number>);
   } catch (e) {
     if (e instanceof Error && SCOPE_REFUSAL.test(e.message)) {
-      return englishCatalogMessage
+      return englishCatalogMessage;
     }
-    throw e
+    throw e;
   }
 }
 
@@ -93,108 +97,122 @@ export async function loadVendorWidgetMetrics(
   need: (...fields: (keyof VendorWidgetMetrics)[]) => boolean,
 ): Promise<Partial<VendorWidgetMetrics>> {
   const wantsVendor = need(
-    'concentrationHhi',
-    'concentrationTop5Share',
-    'concentrationBand',
-    'vendorOnTimeRate',
-    'vendorOnTimeGoodRate',
-    'vendorAvgDaysToPay',
-    'vendorLateSpend',
-    'vendorUnratedCount',
-    'vendorPeriodLabel',
-  )
-  const wantsSpend = need('spendOpenAlerts', 'spendSavingsPotential')
-  if (!wantsVendor && !wantsSpend) return {}
-  const out: Partial<VendorWidgetMetrics> = {}
-  const period = await ctx.period()
+    "concentrationHhi",
+    "concentrationTop5Share",
+    "concentrationBand",
+    "vendorOnTimeRate",
+    "vendorOnTimeGoodRate",
+    "vendorAvgDaysToPay",
+    "vendorLateSpend",
+    "vendorUnratedCount",
+    "vendorPeriodLabel",
+  );
+  const wantsSpend = need("spendOpenAlerts", "spendSavingsPotential");
+  if (!wantsVendor && !wantsSpend) return {};
+  const out: Partial<VendorWidgetMetrics> = {};
+  const period = await ctx.period();
   // The window reads in the viewer's locale; the resolved label stays a stable key.
-  const shown = { ...period, label: reportPeriodLabel(period, await resolveLocale()) }
-  const window = { from: period.from, to: period.to, label: shown.label }
+  const shown = { ...period, label: reportPeriodLabel(period, await resolveLocale()) };
+  const window = { from: period.from, to: period.to, label: shown.label };
   if (wantsVendor) {
     // The dashboard's own loader: same scope, same window, same figures.
-    const result = await vendorData(window, ctx.orgId, ctx.allowedSubsidiaryIds)
-      .then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
+    const result = await vendorData(window, ctx.orgId, ctx.allowedSubsidiaryIds).then(
+      (data) => ({ ok: true as const, data }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
     if (!result.ok) {
-      const refused = unavailable(currencyRefusal(result.error))
-      if (need('concentrationHhi')) out.concentrationHhi = refused
-      if (need('concentrationTop5Share')) out.concentrationTop5Share = refused
-      if (need('concentrationBand')) out.concentrationBand = null
-      if (need('vendorOnTimeRate')) out.vendorOnTimeRate = refused
-      if (need('vendorAvgDaysToPay')) out.vendorAvgDaysToPay = refused
-      if (need('vendorLateSpend')) out.vendorLateSpend = refused
-      if (need('vendorUnratedCount')) out.vendorUnratedCount = refused
-      if (need('vendorPeriodLabel')) out.vendorPeriodLabel = period.label
+      const refused = unavailable(currencyRefusal(result.error));
+      if (need("concentrationHhi")) out.concentrationHhi = refused;
+      if (need("concentrationTop5Share")) out.concentrationTop5Share = refused;
+      if (need("concentrationBand")) out.concentrationBand = null;
+      if (need("vendorOnTimeRate")) out.vendorOnTimeRate = refused;
+      if (need("vendorAvgDaysToPay")) out.vendorAvgDaysToPay = refused;
+      if (need("vendorLateSpend")) out.vendorLateSpend = refused;
+      if (need("vendorUnratedCount")) out.vendorUnratedCount = refused;
+      if (need("vendorPeriodLabel")) out.vendorPeriodLabel = period.label;
     } else {
-      const data = result.data
-      out.vendorPeriodLabel = data.period.label
+      const data = result.data;
+      out.vendorPeriodLabel = data.period.label;
       // Concentration of nothing is not diversification: with no vendor spend
       // the tile stays unavailable by name instead of reading green.
-      if (cmp(data.totals.spend, '0') <= 0) {
-        const t = await analyticsReason()
-        const noSpend = t('vendor.empty.noSpend')
-        out.concentrationHhi = unavailable(noSpend)
-        out.concentrationTop5Share = unavailable(noSpend)
-        out.concentrationBand = null
+      if (cmp(data.totals.spend, "0") <= 0) {
+        const t = await analyticsReason();
+        const noSpend = t("vendor.empty.noSpend");
+        out.concentrationHhi = unavailable(noSpend);
+        out.concentrationTop5Share = unavailable(noSpend);
+        out.concentrationBand = null;
       } else {
-        out.concentrationHhi = { available: true, value: data.totals.hhiScaled }
-        out.concentrationTop5Share = { available: true, value: data.totals.top5SharePct }
+        out.concentrationHhi = { available: true, value: data.totals.hhiScaled };
+        out.concentrationTop5Share = { available: true, value: data.totals.top5SharePct };
         out.concentrationBand = concentrationBand(
           data.totals.hhiScaled,
           data.config.hhiWarning,
           data.config.hhiCritical,
-        )
+        );
       }
-      if (need('vendorOnTimeRate', 'vendorOnTimeGoodRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount')) {
-        const t = await analyticsReason()
-        const noHistory = t('vendor.payment.noHistory')
-        out.vendorOnTimeGoodRate = data.config.onTimeGoodRate
+      if (
+        need(
+          "vendorOnTimeRate",
+          "vendorOnTimeGoodRate",
+          "vendorAvgDaysToPay",
+          "vendorLateSpend",
+          "vendorUnratedCount",
+        )
+      ) {
+        const t = await analyticsReason();
+        const noHistory = t("vendor.payment.noHistory");
+        out.vendorOnTimeGoodRate = data.config.onTimeGoodRate;
         out.vendorOnTimeRate =
-          data.totals.onTimePct === null ? unavailable(noHistory) : { available: true, value: data.totals.onTimePct }
+          data.totals.onTimePct === null
+            ? unavailable(noHistory)
+            : { available: true, value: data.totals.onTimePct };
         out.vendorAvgDaysToPay =
-          data.totals.avgDaysToPay === null ? unavailable(noHistory) : { available: true, value: data.totals.avgDaysToPay }
-        out.vendorLateSpend = { available: true, value: data.totals.lateSpend }
+          data.totals.avgDaysToPay === null
+            ? unavailable(noHistory)
+            : { available: true, value: data.totals.avgDaysToPay };
+        out.vendorLateSpend = { available: true, value: data.totals.lateSpend };
         out.vendorUnratedCount = {
           available: true,
-          value: data.rows.filter((row) => row.quadrant === 'unrated').length,
-        }
+          value: data.rows.filter((row) => row.quadrant === "unrated").length,
+        };
       }
     }
   }
   if (wantsSpend) {
     // The dashboard's own loader: same scope, same window, same figures.
-    const result = await spendVelocityData(
-      ctx.orgId,
-      window,
-      ctx.allowedSubsidiaryIds,
-      undefined,
-      { expenseAccess: await reportExpenseAccess(ctx.authz) },
-    ).then((data) => ({ ok: true as const, data }), (error: unknown) => ({ ok: false as const, error }))
+    const result = await spendVelocityData(ctx.orgId, window, ctx.allowedSubsidiaryIds, undefined, {
+      expenseAccess: await reportExpenseAccess(ctx.authz),
+    }).then(
+      (data) => ({ ok: true as const, data }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
     if (!result.ok) {
-      const refused = unavailable(currencyRefusal(result.error))
-      if (need('spendSavingsPotential')) out.spendSavingsPotential = refused
-      if (need('spendOpenAlerts')) out.spendOpenAlerts = refused
-      if (need('vendorPeriodLabel')) out.vendorPeriodLabel = period.label
+      const refused = unavailable(currencyRefusal(result.error));
+      if (need("spendSavingsPotential")) out.spendSavingsPotential = refused;
+      if (need("spendOpenAlerts")) out.spendOpenAlerts = refused;
+      if (need("vendorPeriodLabel")) out.vendorPeriodLabel = period.label;
     } else {
-      const data = result.data
-      if (need('vendorPeriodLabel')) out.vendorPeriodLabel = data.period.label
-      if (need('spendSavingsPotential')) {
+      const data = result.data;
+      if (need("vendorPeriodLabel")) out.vendorPeriodLabel = data.period.label;
+      if (need("spendSavingsPotential")) {
         // An unknown savings figure refuses by name instead of reading $0.
-        out.spendSavingsPotential = data.summary.savingsPotential === null
-          ? unavailable((await analyticsReason())('spendVelocity.insights.annualizedUnknown'))
-          : { available: true, value: data.summary.savingsPotential }
+        out.spendSavingsPotential =
+          data.summary.savingsPotential === null
+            ? unavailable((await analyticsReason())("spendVelocity.insights.annualizedUnknown"))
+            : { available: true, value: data.summary.savingsPotential };
       }
-      if (need('spendOpenAlerts')) {
+      if (need("spendOpenAlerts")) {
         // The open-alert count depends on the full detector set: with the
         // fragmentation size cap unconfigured the count would silently exclude
         // a whole detector class, so it stays unavailable by name instead.
         if (data.fragmentation.summary.configured) {
-          out.spendOpenAlerts = { available: true, value: data.summary.totalAlerts }
+          out.spendOpenAlerts = { available: true, value: data.summary.totalAlerts };
         } else {
-          const t = await analyticsReason()
-          out.spendOpenAlerts = unavailable(t('spendVelocity.insights.fragmentationUnconfigured'))
+          const t = await analyticsReason();
+          out.spendOpenAlerts = unavailable(t("spendVelocity.insights.fragmentationUnconfigured"));
         }
       }
     }
   }
-  return out
+  return out;
 }

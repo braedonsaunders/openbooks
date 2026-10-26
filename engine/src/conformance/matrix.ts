@@ -118,7 +118,8 @@ export function validateCorpus(cases: readonly ConformanceCase[] = CONFORMANCE_C
     if (kase.facts.length === 0) problems.push(`${kase.id}: a case must state its facts`);
 
     if (kase.support === "not-implemented") {
-      if (!kase.gap?.trim()) problems.push(`${kase.id}: a declared gap must describe what is missing`);
+      if (!kase.gap?.trim())
+        problems.push(`${kase.id}: a declared gap must describe what is missing`);
       if (kase.run) problems.push(`${kase.id}: a declared gap must not have a run function`);
     } else {
       if (!kase.run) problems.push(`${kase.id}: an implemented case must have a run function`);
@@ -133,7 +134,8 @@ export function validateCorpus(cases: readonly ConformanceCase[] = CONFORMANCE_C
     }
 
     const hasExpectation =
-      (kase.expected.entries?.length ?? 0) > 0 || Object.keys(kase.expected.values ?? {}).length > 0;
+      (kase.expected.entries?.length ?? 0) > 0 ||
+      Object.keys(kase.expected.values ?? {}).length > 0;
     if (!hasExpectation) {
       problems.push(`${kase.id}: a case must state an expected outcome, including a declared gap`);
     }

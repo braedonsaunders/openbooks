@@ -1,14 +1,14 @@
-import { getOwnStep } from '@openbooks/engine/hrm/processes'
-import { requirePermission } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
-import { OwnChecklistDrawer } from './OwnChecklistDrawer'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadMeChecklistsPage, meChecklistsSpec, meChecklistsTitle } from './view'
+import { getOwnStep } from "@openbooks/engine/hrm/processes";
+import { requirePermission } from "../../../../lib/authz";
+import { isUuid } from "../../../../lib/list-params";
+import { OwnChecklistDrawer } from "./OwnChecklistDrawer";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadMeChecklistsPage, meChecklistsSpec, meChecklistsTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await meChecklistsTitle() }
+  return { title: await meChecklistsTitle() };
 }
 
 /**
@@ -19,12 +19,20 @@ export async function generateMetadata() {
 export default async function MeChecklistsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadMeChecklistsPage()
-  const selected=isUuid(sp.step ?? '') ? sp.step : null
-  const authz=selected ? await requirePermission('hrm.self.read') : null
-  const step=selected && authz ? await getOwnStep({orgId:authz.user.orgId,actorId:authz.user.id,stepId:selected}) : null
-  return <><ModuleView spec={meChecklistsSpec(data)} data={data} searchParams={sp} trusted />{step ? <OwnChecklistDrawer step={step}/> : null}</>
+  const sp = await searchParams;
+  const data = await loadMeChecklistsPage();
+  const selected = isUuid(sp.step ?? "") ? sp.step : null;
+  const authz = selected ? await requirePermission("hrm.self.read") : null;
+  const step =
+    selected && authz
+      ? await getOwnStep({ orgId: authz.user.orgId, actorId: authz.user.id, stepId: selected })
+      : null;
+  return (
+    <>
+      <ModuleView spec={meChecklistsSpec(data)} data={data} searchParams={sp} trusted />
+      {step ? <OwnChecklistDrawer step={step} /> : null}
+    </>
+  );
 }

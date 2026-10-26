@@ -4,5 +4,5 @@
  * precision through AVG; renderers apply locale and currency display scales.
  */
 export function averageSql(expression: string): string {
-  return `AVG(${expression})`
+  return `AVG(${expression})`;
 }

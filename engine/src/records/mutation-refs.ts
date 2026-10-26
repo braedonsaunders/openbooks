@@ -25,10 +25,7 @@ const NATIVE_DIM_TABLES: Record<string, string> = {
   classId: "classes",
 };
 
-const DATE_FIELDS: ReadonlySet<string> = new Set([
-  "dueDate",
-  "expectedPayDate",
-]);
+const DATE_FIELDS: ReadonlySet<string> = new Set(["dueDate", "expectedPayDate"]);
 
 const REFERENCE_OWNER_TABLES: ReadonlySet<string> = new Set(
   CUSTOM_FIELD_REFERENCE_TABLES as readonly string[],
@@ -64,17 +61,19 @@ async function loadDocumentReferenceDefs(
     key: string;
     label: string;
     referenceTable: string;
-  }>(sql`
+  }>(
+    sql`
     select key, label, config ->> 'referenceTable' as "referenceTable"
       from custom_field_defs
      where org_id = ${orgId} and target_table = 'documents'
        and (target_kind is null or target_kind = ${docKind})
        and field_type = 'reference'
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.filter(
     (row) =>
-      typeof row.referenceTable === "string" &&
-      REFERENCE_OWNER_TABLES.has(row.referenceTable),
+      typeof row.referenceTable === "string" && REFERENCE_OWNER_TABLES.has(row.referenceTable),
   );
 }
 
@@ -166,9 +165,14 @@ export async function assertDocumentMutationRefsOwned(
   for (const [table, refs] of wanted) {
     const ids = [...new Set(refs.map((r) => r.value))];
     const owned = new Set(
-      (await db.execute<{ id: string }>(sql`
+      (
+        await db.execute<{ id: string }>(
+          sql`
           select id from ${sql.raw(`"${table}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects")).map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`,
+          "objects",
+        )
+      ).map((r) => r.id),
     );
     for (const ref of refs) {
       if (!owned.has(ref.value)) throw new DocumentMutationReferenceError(ref.field);

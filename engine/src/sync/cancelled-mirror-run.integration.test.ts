@@ -25,11 +25,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { runSync } from "./sync.ts";
-import type {
-  MigrationSource,
-  NativeChanges,
-  SourceEntity,
-} from "./source.ts";
+import type { MigrationSource, NativeChanges, SourceEntity } from "./source.ts";
 import type { NativeDocument } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -97,20 +93,22 @@ class CancelledInvoiceSource implements MigrationSource {
       controlAccountId: null,
       subtotal: "100",
       total: "100",
-      lines: [{
-        accountId: this.o.accounts.revenue,
-        itemId: null,
-        quantity: "1",
-        unitPrice: "100",
-        amount: "100",
-        taxAmount: "0",
-        taxOverridden: false,
-        taxCodeId: null,
-        departmentId: null,
-        projectId: null,
-        description: "cancelled-mirror probe",
-        lineNumber: 1,
-      }],
+      lines: [
+        {
+          accountId: this.o.accounts.revenue,
+          itemId: null,
+          quantity: "1",
+          unitPrice: "100",
+          amount: "100",
+          taxAmount: "0",
+          taxOverridden: false,
+          taxCodeId: null,
+          departmentId: null,
+          projectId: null,
+          description: "cancelled-mirror probe",
+          lineNumber: 1,
+        },
+      ],
     };
   }
 
@@ -186,9 +184,12 @@ test(
       "a converged cancellation is handled work, not an unbuildable failure",
     );
 
-    const [doc] = await db.execute<{ status: string; open_balance: string | null }>(sql`
+    const [doc] = await db.execute<{ status: string; open_balance: string | null }>(
+      sql`
       select status, open_balance::text as open_balance from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`, "objects");
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`,
+      "objects",
+    );
     assert.equal(doc?.status, "voided", "the mirror voids the cancelled invoice");
     assert.ok(
       doc?.open_balance === null || doc?.open_balance === "0.0000" || doc?.open_balance === "0",
@@ -225,9 +226,12 @@ test(
     });
     assert.deepEqual(run.autoResolvedDeletions, ["TST-1"]);
     assert.deepEqual(run.deletedAtSource, []);
-    const [doc] = await db.execute<{ status: string }>(sql`
+    const [doc] = await db.execute<{ status: string }>(
+      sql`
       select status from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`, "objects");
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`,
+      "objects",
+    );
     assert.equal(doc?.status, "voided");
   },
 );
@@ -268,17 +272,26 @@ test(
     const [run] = await db.execute<{
       status: string;
       stats: { autoResolvedDeletions: string[]; deletedAtSource: string[]; skipped: string[] };
-    }>(sql`
+    }>(
+      sql`
       select status, stats from sync_runs
        where org_id = ${o.orgId} and connection_id = ${connectionId}
-       order by started_at desc limit 1`, "objects");
+       order by started_at desc limit 1`,
+      "objects",
+    );
     assert.equal(run?.status, "failed");
     assert.deepEqual(run?.stats.autoResolvedDeletions, []);
     assert.deepEqual(run?.stats.deletedAtSource, ["TST-1"]);
-    assert.match(run?.stats.skipped.join("\n") ?? "", /source deletion TST-1.*connector ownership.*check the document's source and connector configuration/);
-    const [doc] = await db.execute<{ status: string; open_balance: string }>(sql`
+    assert.match(
+      run?.stats.skipped.join("\n") ?? "",
+      /source deletion TST-1.*connector ownership.*check the document's source and connector configuration/,
+    );
+    const [doc] = await db.execute<{ status: string; open_balance: string }>(
+      sql`
       select status, open_balance::text from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`, "objects");
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`,
+      "objects",
+    );
     assert.equal(doc?.status, "posted");
     assert.equal(doc?.open_balance, "100.0000");
   },
@@ -325,31 +338,76 @@ test(
   },
 );
 
-test("a present nonposting source record cannot trigger full-sweep reversal of admitted history", { skip: !DB }, async () => {
-  const o = await ctx();
-  const connectionId = await newConnection(o.orgId);
-  const source = new CancelledInvoiceSource(o);
-  const first = await runSync(source, "nonposting-source", {
-    kind: "full_migration", orgId: o.orgId, connectionId, since: null, loadEntitiesFirst: false,
-  });
-  assert.equal(first.docsNew, 1);
-  const before = await db.execute(sql`select id,status,posted_entry_id,open_balance::text from documents
-    where org_id=${o.orgId} and custom->>'qboId'='TST-1'`, "objects");
-  const entriesBefore = await db.execute(sql`select id,status,reverses_entry_id from journal_entries
-    where org_id=${o.orgId} order by id`, "objects");
-  Object.defineProperty(source, "nativeChanges", { value: async (): Promise<NativeChanges> => ({
-    documents: [], applications: [], deletedRefs: [], unbuildable: [], sourcePresence: [{ ref: "TST-1", posting: false }],
-    syncedThrough: new Date("2026-07-20T00:00:00Z"),
-  }) });
-  await assert.rejects(() => runSync(source, "nonposting-source", {
-    kind: "full_migration", orgId: o.orgId, connectionId, since: null, loadEntitiesFirst: false,
-  }), /nonposting but has admitted posted history/);
-  assert.deepEqual(await db.execute(sql`select id,status,posted_entry_id,open_balance::text from documents
-    where org_id=${o.orgId} and custom->>'qboId'='TST-1'`, "objects"), before);
-  assert.deepEqual(await db.execute(sql`select id,status,reverses_entry_id from journal_entries
-    where org_id=${o.orgId} order by id`, "objects"), entriesBefore);
-  const connection = (await db.execute<{ cursor: Date; status: string }>(sql`select cursor,status from connections
-    where id=${connectionId} and org_id=${o.orgId}`, "objects"))[0]!;
-  assert.equal(new Date(connection.cursor).toISOString(), first.syncedThrough);
-  assert.equal(connection.status, "error");
-});
+test(
+  "a present nonposting source record cannot trigger full-sweep reversal of admitted history",
+  { skip: !DB },
+  async () => {
+    const o = await ctx();
+    const connectionId = await newConnection(o.orgId);
+    const source = new CancelledInvoiceSource(o);
+    const first = await runSync(source, "nonposting-source", {
+      kind: "full_migration",
+      orgId: o.orgId,
+      connectionId,
+      since: null,
+      loadEntitiesFirst: false,
+    });
+    assert.equal(first.docsNew, 1);
+    const before = await db.execute(
+      sql`select id,status,posted_entry_id,open_balance::text from documents
+    where org_id=${o.orgId} and custom->>'qboId'='TST-1'`,
+      "objects",
+    );
+    const entriesBefore = await db.execute(
+      sql`select id,status,reverses_entry_id from journal_entries
+    where org_id=${o.orgId} order by id`,
+      "objects",
+    );
+    Object.defineProperty(source, "nativeChanges", {
+      value: async (): Promise<NativeChanges> => ({
+        documents: [],
+        applications: [],
+        deletedRefs: [],
+        unbuildable: [],
+        sourcePresence: [{ ref: "TST-1", posting: false }],
+        syncedThrough: new Date("2026-07-20T00:00:00Z"),
+      }),
+    });
+    await assert.rejects(
+      () =>
+        runSync(source, "nonposting-source", {
+          kind: "full_migration",
+          orgId: o.orgId,
+          connectionId,
+          since: null,
+          loadEntitiesFirst: false,
+        }),
+      /nonposting but has admitted posted history/,
+    );
+    assert.deepEqual(
+      await db.execute(
+        sql`select id,status,posted_entry_id,open_balance::text from documents
+    where org_id=${o.orgId} and custom->>'qboId'='TST-1'`,
+        "objects",
+      ),
+      before,
+    );
+    assert.deepEqual(
+      await db.execute(
+        sql`select id,status,reverses_entry_id from journal_entries
+    where org_id=${o.orgId} order by id`,
+        "objects",
+      ),
+      entriesBefore,
+    );
+    const connection = (
+      await db.execute<{ cursor: Date; status: string }>(
+        sql`select cursor,status from connections
+    where id=${connectionId} and org_id=${o.orgId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(new Date(connection.cursor).toISOString(), first.syncedThrough);
+    assert.equal(connection.status, "error");
+  },
+);

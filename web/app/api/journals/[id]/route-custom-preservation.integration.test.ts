@@ -60,11 +60,14 @@ registerHooks({
 const patchRouteUrl = "./route.ts?journal-custom-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 
-
-function patchRequest(id: string, body: unknown): { req: Request; ctx: { params: Promise<{ id: string }> } } {
+function patchRequest(
+  id: string,
+  body: unknown,
+): { req: Request; ctx: { params: Promise<{ id: string }> } } {
   return {
     req: new Request(`http://localhost/api/journals/${id}`, {
       method: "PATCH",
@@ -77,38 +80,39 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
 
 async function revisionToken(orgId: string, documentId: string): Promise<string> {
   return await withOrgContext(orgId, async () => {
-    const row = (await db.execute<{ updatedAt: string }>(sql`
+    const row = await db.execute<{ updatedAt: string }>(
+      sql`
       select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
         from documents where id = ${documentId} and org_id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     return row[0]!.updatedAt;
   });
 }
 
-test(
-  "journals PATCH preserves omitted required header custom fields on a partial edit",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      // seedFlowActors seeds app_roles outside any bypass of its own; scope
-      // the call (and every seed write below) explicitly now that importing
-      // the route module has replaced the ambient test bypass process-wide.
-      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-      routeState.authz = {
-        user: { roles: [], orgId: org.orgId, id: adminId },
-        permissions: new Set(),
-        allowedSubsidiaryIds: null,
-      };
-      const documentId = randomUUID();
-      await withBypassContext(async () => {
-        await db.execute(sql`
+test("journals PATCH preserves omitted required header custom fields on a partial edit", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    // seedFlowActors seeds app_roles outside any bypass of its own; scope
+    // the call (and every seed write below) explicitly now that importing
+    // the route module has replaced the ambient test bypass process-wide.
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    const documentId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`
           insert into custom_field_defs
             (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
           values
             (${randomUUID()}, ${org.orgId}, 'documents', 'journal', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${adminId}, ${adminId}),
             (${randomUUID()}, ${org.orgId}, 'documents', 'journal', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${adminId}, ${adminId})
         `);
-        await db.execute(sql`
+      await db.execute(sql`
           insert into documents
             (id, org_id, kind, document_number, subsidiary_id, document_date,
              currency, fx_rate, status, subtotal, tax_total, total, custom,
@@ -119,24 +123,35 @@ test(
             '{"required_code":"R-1"}'::jsonb, ${adminId}, ${adminId}
           )
         `);
-      });
-      const token = await revisionToken(org.orgId, documentId);
-      const attempt = patchRequest(documentId, {
-        expectedUpdatedAt: token,
-        custom: { optional_note: "updated" },
-        lines: [{ accountId: org.accounts.cogs, amount: "100" }, { accountId: org.accounts.bank, amount: "-100" }],
-      });
-      // The handler reads through the ambient scope, which the route import
-      // above left RLS-enforced: establish the caller's tenant explicitly.
-      const saved = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
-      assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
-      const stored = await withOrgContext(org.orgId, async () => (await db.execute<{ custom: Record<string, unknown> }>(sql`
+    });
+    const token = await revisionToken(org.orgId, documentId);
+    const attempt = patchRequest(documentId, {
+      expectedUpdatedAt: token,
+      custom: { optional_note: "updated" },
+      lines: [
+        { accountId: org.accounts.cogs, amount: "100" },
+        { accountId: org.accounts.bank, amount: "-100" },
+      ],
+    });
+    // The handler reads through the ambient scope, which the route import
+    // above left RLS-enforced: establish the caller's tenant explicitly.
+    const saved = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
+    const stored = await withOrgContext(
+      org.orgId,
+      async () =>
+        (
+          await db.execute<{ custom: Record<string, unknown> }>(
+            sql`
         select custom from documents where id = ${documentId} and org_id = ${org.orgId}
-      `, "objects"))[0]?.custom);
-      assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `,
+            "objects",
+          )
+        )[0]?.custom,
+    );
+    assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

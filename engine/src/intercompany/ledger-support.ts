@@ -18,7 +18,9 @@ import { IntercompanyError } from "./errors.ts";
 export async function intercompanyPostingBook(runner: SqlExecutor, orgId: string): Promise<string> {
   const bookId = await activePostingPrimaryBookId(orgId, runner);
   if (!bookId) {
-    throw new IntercompanyError("there is no active primary accounting book; set one in Setup → Accounting → Accounting books");
+    throw new IntercompanyError(
+      "there is no active primary accounting book; set one in Setup → Accounting → Accounting books",
+    );
   }
   return bookId;
 }
@@ -31,7 +33,9 @@ export async function intercompanyPostingPeriod(
 ): Promise<string> {
   const period = await resolveCoveringPeriod(runner, orgId, date, subsidiaryId);
   if (!period) {
-    throw new IntercompanyError(`no accounting period covers ${date}; open the period from Accounting → Periods or choose a date inside an existing period`);
+    throw new IntercompanyError(
+      `no accounting period covers ${date}; open the period from Accounting → Periods or choose a date inside an existing period`,
+    );
   }
   return period.id;
 }
@@ -39,7 +43,13 @@ export async function intercompanyPostingPeriod(
 /** Refuse, naming the module and entity, when any affected entity's period is closed. */
 export async function assertIntercompanyPeriodOpen(
   runner: SqlExecutor,
-  input: { orgId: string; periodId: string; bookId: string; subsidiaryIds: string[]; modules: CloseModule[] },
+  input: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryIds: string[];
+    modules: CloseModule[];
+  },
 ): Promise<void> {
   try {
     await assertPeriodModulesOpen(runner, input);
@@ -52,7 +62,13 @@ export async function assertIntercompanyPeriodOpen(
 /** Check the effective posting period of every entity affected by a transaction. */
 export async function assertIntercompanyPeriodsOpen(
   runner: SqlExecutor,
-  input: { orgId: string; date: string; bookId: string; subsidiaryIds: string[]; modules: CloseModule[] },
+  input: {
+    orgId: string;
+    date: string;
+    bookId: string;
+    subsidiaryIds: string[];
+    modules: CloseModule[];
+  },
 ): Promise<void> {
   for (const subsidiaryId of [...new Set(input.subsidiaryIds)].sort()) {
     const periodId = await intercompanyPostingPeriod(runner, input.orgId, input.date, subsidiaryId);
@@ -128,24 +144,49 @@ export async function postMirrorReversal(
     closeModules: CloseModule[];
   },
 ): Promise<string> {
-  const original = (await runner.execute<{ book_id: string; subsidiary_id: string; status: string; origin: string }>(sql`
+  const original = (
+    await runner.execute<{
+      book_id: string;
+      subsidiary_id: string;
+      status: string;
+      origin: string;
+    }>(
+      sql`
     select book_id, subsidiary_id, status, origin from journal_entries
      where org_id = ${input.orgId} and id = ${input.entryId}
-     for update`, "objects"))[0];
+     for update`,
+      "objects",
+    )
+  )[0];
   if (!original) throw new IntercompanyError("the entry to reverse no longer exists", 409);
-  if (original.status !== "posted") throw new IntercompanyError("only a posted entry can be reversed", 409);
+  if (original.status !== "posted")
+    throw new IntercompanyError("only a posted entry can be reversed", 409);
   const lines = await runner.execute<{
-    id: string; line_number: number; account_id: string; subsidiary_id: string; amount: string;
-    currency: string; txn_amount: string; fx_rate: string; party_id: string | null;
-    department_id: string | null; project_id: string | null; location_id: string | null; class_id: string | null;
-    due_date: string | null; is_open_item: boolean;
-  }>(sql`
+    id: string;
+    line_number: number;
+    account_id: string;
+    subsidiary_id: string;
+    amount: string;
+    currency: string;
+    txn_amount: string;
+    fx_rate: string;
+    party_id: string | null;
+    department_id: string | null;
+    project_id: string | null;
+    location_id: string | null;
+    class_id: string | null;
+    due_date: string | null;
+    is_open_item: boolean;
+  }>(
+    sql`
     select id, line_number, account_id, subsidiary_id, amount::text as amount, currency,
            txn_amount::text as txn_amount, fx_rate::text as fx_rate, party_id, department_id,
            project_id, location_id, class_id, due_date::text as due_date, is_open_item
       from journal_lines
      where org_id = ${input.orgId} and entry_id = ${input.entryId}
-     order by line_number`, "objects");
+     order by line_number`,
+    "objects",
+  );
   let posted: PostEntryResult;
   try {
     posted = await postEntry(runner, {
@@ -185,7 +226,11 @@ export async function postMirrorReversal(
   } catch (error) {
     intercompanyPostingRefusal(error);
   }
-  await markEntryReversed(runner, { orgId: input.orgId, entryId: input.entryId, actorId: input.actorId });
+  await markEntryReversed(runner, {
+    orgId: input.orgId,
+    entryId: input.entryId,
+    actorId: input.actorId,
+  });
   const mirrorByNumber = new Map(posted.lines.map((line) => [line.lineNumber, line.id]));
   // Undo the settlements this entry made, then settle each of its own open
   // items against its mirror at the same values.

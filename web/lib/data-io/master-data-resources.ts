@@ -1,25 +1,36 @@
-import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
-import { importRowError } from './row-error'
-import { matchSelectOption, selectRefusal } from './select-options'
-import partiesEn from '../../messages/en/parties.json'
-import partiesDe from '../../messages/de/parties.json'
-import partiesEs from '../../messages/es/parties.json'
-import partiesFr from '../../messages/fr/parties.json'
-import partiesJa from '../../messages/ja/parties.json'
-import partiesPtBr from '../../messages/pt-BR/parties.json'
-import partiesZh from '../../messages/zh/parties.json'
+import {
+  readExportWindow,
+  transferId,
+  transferWhere,
+  transferOrder,
+  transferLimit,
+  finishExportPage,
+} from "./export-page";
+import { importRowError } from "./row-error";
+import { matchSelectOption, selectRefusal } from "./select-options";
+import partiesEn from "../../messages/en/parties.json";
+import partiesDe from "../../messages/de/parties.json";
+import partiesEs from "../../messages/es/parties.json";
+import partiesFr from "../../messages/fr/parties.json";
+import partiesJa from "../../messages/ja/parties.json";
+import partiesPtBr from "../../messages/pt-BR/parties.json";
+import partiesZh from "../../messages/zh/parties.json";
 /** Master-data (accounts, items, parties) import/export resources. */
 
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
-import { normalizeMoney } from '@openbooks/engine/money/money'
-import { canonicalDecimal } from '../exact-decimal'
-import { ensurePartyRoleRow } from '../party-roles'
-import { PARTY_KINDS, isNaturalPersonPartyKind, EMPLOYEE_PERSON_REFUSAL } from '@openbooks/engine/organization/party-kinds'
-import { assetBankHygieneWarning } from '../accounts-hygiene'
-import { toSnake } from '../setup/registry'
-import { coerceBoolean } from '../setup/coerce'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { canonicalDecimal } from "../exact-decimal";
+import { ensurePartyRoleRow } from "../party-roles";
+import {
+  PARTY_KINDS,
+  isNaturalPersonPartyKind,
+  EMPLOYEE_PERSON_REFUSAL,
+} from "@openbooks/engine/organization/party-kinds";
+import { assetBankHygieneWarning } from "../accounts-hygiene";
+import { toSnake } from "../setup/registry";
+import { coerceBoolean } from "../setup/coerce";
 import {
   hiddenCustomFieldRefusal,
   loadFieldDefs,
@@ -27,8 +38,8 @@ import {
   validateCustomValues,
   visibleCustomFieldDefs,
   type CustomFieldDef,
-} from '../custom-fields'
-import type { CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
+} from "../custom-fields";
+import type { CustomFieldViewer } from "@openbooks/engine/records/custom-fields";
 import {
   exportCell,
   orgFeatureEnabled,
@@ -37,7 +48,7 @@ import {
   type DataResource,
   type ReadCtx,
   type WriteCtx,
-} from './resource-core'
+} from "./resource-core";
 import {
   type CellValue,
   type ImportMode,
@@ -45,50 +56,72 @@ import {
   type ResourceField,
   type ResourceRefTarget,
   type WriteOutcome,
-} from './types'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
+} from "./types";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 // --- Master-data resources ----------------------------------------------------
 
 interface MasterCol {
-  key: string
-  column: string
-  kind: ResourceField['kind']
-  required?: boolean
-  options?: { value: string; label: string }[]
-  ref?: ResourceRefTarget
-  lockedOnEdit?: boolean
+  key: string;
+  column: string;
+  kind: ResourceField["kind"];
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  ref?: ResourceRefTarget;
+  lockedOnEdit?: boolean;
   /**
    * Virtual columns have no stored column: they are import affordances over
    * related rows. They are excluded from the export SELECT, filled from a
    * batched lookup on read, and applied through native commands on write —
    * never bound as a column value.
    */
-  virtual?: boolean
+  virtual?: boolean;
 }
 
 interface MasterEntity {
-  key: string
-  table: string
-  iconKey: string
-  naturalKey: string
+  key: string;
+  table: string;
+  iconKey: string;
+  naturalKey: string;
   /** custom_field_defs target table (for the `custom` jsonb extension). */
-  customTarget: string
-  readPermission: string
-  writePermission: string
-  cols: MasterCol[]
+  customTarget: string;
+  readPermission: string;
+  writePermission: string;
+  cols: MasterCol[];
 }
 
 const ACCOUNT_TYPE_OPTS = [
-  'asset_bank', 'asset_receivable', 'asset_current_other', 'asset_fixed', 'asset_other',
-  'liability_payable', 'liability_card', 'liability_current_other', 'liability_long_term',
-  'equity', 'income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred',
-].map((v) => ({ value: v, label: v }))
+  "asset_bank",
+  "asset_receivable",
+  "asset_current_other",
+  "asset_fixed",
+  "asset_other",
+  "liability_payable",
+  "liability_card",
+  "liability_current_other",
+  "liability_long_term",
+  "equity",
+  "income",
+  "income_other",
+  "cogs",
+  "expense",
+  "expense_other",
+  "expense_deferred",
+].map((v) => ({ value: v, label: v }));
 
 const ITEM_KIND_OPTS = [
-  'service', 'non_inventory', 'inventory', 'assembly', 'kit', 'other_charge', 'equipment_charge', 'labor', 'absence', 'discount',
-].map((v) => ({ value: v, label: v }))
+  "service",
+  "non_inventory",
+  "inventory",
+  "assembly",
+  "kit",
+  "other_charge",
+  "equipment_charge",
+  "labor",
+  "absence",
+  "discount",
+].map((v) => ({ value: v, label: v }));
 
-export const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+export const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /**
  * The stored party vocabulary. Labels are the drawer's own kind words, read
@@ -98,185 +131,220 @@ export const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
  * employee) store as-is, the way the hand form writes them, and the writer
  * below backs each with its native role row.
  */
-const PARTY_KIND_VALUES = PARTY_KINDS
+const PARTY_KIND_VALUES = PARTY_KINDS;
 const PARTY_KIND_LABEL_KEYS: Record<(typeof PARTY_KIND_VALUES)[number], string> = {
-  company: 'kindCompany',
-  person: 'kindPerson',
-  customer: 'kindCustomer',
-  vendor: 'kindVendor',
-  employee: 'kindEmployee',
-}
-function catalogKindLabel(catalog: unknown, value: (typeof PARTY_KIND_VALUES)[number]): string | null {
-  const drawer = (catalog as { drawer?: Record<string, unknown> } | null)?.drawer
-  const label = drawer?.[PARTY_KIND_LABEL_KEYS[value]]
-  return typeof label === 'string' && label.trim() !== '' ? label : null
+  company: "kindCompany",
+  person: "kindPerson",
+  customer: "kindCustomer",
+  vendor: "kindVendor",
+  employee: "kindEmployee",
+};
+function catalogKindLabel(
+  catalog: unknown,
+  value: (typeof PARTY_KIND_VALUES)[number],
+): string | null {
+  const drawer = (catalog as { drawer?: Record<string, unknown> } | null)?.drawer;
+  const label = drawer?.[PARTY_KIND_LABEL_KEYS[value]];
+  return typeof label === "string" && label.trim() !== "" ? label : null;
 }
 const PARTY_KIND_OPTIONS = PARTY_KIND_VALUES.map((value) => ({
   value,
   label: catalogKindLabel(partiesEn, value) ?? value,
-}))
+}));
 /** Localized kind labels alias their canonical value; English rides the options above. */
 const PARTY_KIND_ALIASES: { value: string; label: string }[] = [
-  partiesDe, partiesEs, partiesFr, partiesJa, partiesPtBr, partiesZh,
+  partiesDe,
+  partiesEs,
+  partiesFr,
+  partiesJa,
+  partiesPtBr,
+  partiesZh,
 ].flatMap((catalog) =>
   PARTY_KIND_VALUES.flatMap((value) => {
-    const label = catalogKindLabel(catalog, value)
-    return label && label !== catalogKindLabel(partiesEn, value) ? [{ value, label }] : []
+    const label = catalogKindLabel(catalog, value);
+    return label && label !== catalogKindLabel(partiesEn, value) ? [{ value, label }] : [];
   }),
-)
+);
 
 /** Native party roles addressable as import columns. The kind column names at most one. */
 const PARTY_ROLE_FLAGS = [
-  { key: 'isCustomer', role: 'customer' },
-  { key: 'isVendor', role: 'vendor' },
-  { key: 'isEmployee', role: 'employee' },
-] as const
+  { key: "isCustomer", role: "customer" },
+  { key: "isVendor", role: "vendor" },
+  { key: "isEmployee", role: "employee" },
+] as const;
 
-const ITEM_EQUIPMENT_KINDS = new Set(['equipment_charge'])
+const ITEM_EQUIPMENT_KINDS = new Set(["equipment_charge"]);
 
 export const MASTER_ENTITIES: MasterEntity[] = [
   {
-    key: 'accounts',
-    table: 'accounts',
-    iconKey: 'landmark',
-    naturalKey: 'number',
-    customTarget: 'accounts',
-    readPermission: 'gl.read',
-    writePermission: 'admin.setup.manage',
+    key: "accounts",
+    table: "accounts",
+    iconKey: "landmark",
+    naturalKey: "number",
+    customTarget: "accounts",
+    readPermission: "gl.read",
+    writePermission: "admin.setup.manage",
     cols: [
-      { key: 'number', column: 'number', kind: 'text', required: true, lockedOnEdit: true },
-      { key: 'name', column: 'name', kind: 'text', required: true },
-      { key: 'type', column: 'type', kind: 'select', required: true, options: ACCOUNT_TYPE_OPTS },
-      { key: 'description', column: 'description', kind: 'text' },
-      { key: 'parentNumber', column: 'parent_id', kind: 'reference', ref: { resource: 'accounts', by: 'number' } },
-      { key: 'isSummary', column: 'is_summary', kind: 'boolean' },
-      { key: 'reconcilable', column: 'reconcilable', kind: 'boolean' },
-      { key: 'currencyRestriction', column: 'currency_restriction', kind: 'text' },
-      { key: 'isActive', column: 'is_active', kind: 'boolean' },
+      { key: "number", column: "number", kind: "text", required: true, lockedOnEdit: true },
+      { key: "name", column: "name", kind: "text", required: true },
+      { key: "type", column: "type", kind: "select", required: true, options: ACCOUNT_TYPE_OPTS },
+      { key: "description", column: "description", kind: "text" },
+      {
+        key: "parentNumber",
+        column: "parent_id",
+        kind: "reference",
+        ref: { resource: "accounts", by: "number" },
+      },
+      { key: "isSummary", column: "is_summary", kind: "boolean" },
+      { key: "reconcilable", column: "reconcilable", kind: "boolean" },
+      { key: "currencyRestriction", column: "currency_restriction", kind: "text" },
+      { key: "isActive", column: "is_active", kind: "boolean" },
     ],
   },
   {
-    key: 'items',
-    table: 'items',
-    iconKey: 'package',
-    naturalKey: 'code',
-    customTarget: 'items',
-    readPermission: 'items.read',
-    writePermission: 'items.manage',
+    key: "items",
+    table: "items",
+    iconKey: "package",
+    naturalKey: "code",
+    customTarget: "items",
+    readPermission: "items.read",
+    writePermission: "items.manage",
     cols: [
-      { key: 'code', column: 'code', kind: 'text', lockedOnEdit: true },
-      { key: 'name', column: 'name', kind: 'text', required: true },
-      { key: 'kind', column: 'kind', kind: 'select', required: true, options: ITEM_KIND_OPTS },
-      { key: 'category', column: 'category', kind: 'text' },
-      { key: 'incomeAccount', column: 'income_account_id', kind: 'reference', ref: { resource: 'accounts', by: 'number' } },
-      { key: 'expenseAccount', column: 'expense_account_id', kind: 'reference', ref: { resource: 'accounts', by: 'number' } },
-      { key: 'defaultRate', column: 'default_rate', kind: 'currency' },
-      { key: 'unit', column: 'unit', kind: 'text' },
-      { key: 'taxCode', column: 'tax_code_id', kind: 'reference', ref: { resource: 'tax-codes', by: 'code' } },
-      { key: 'showOnTimesheet', column: 'show_on_timesheet', kind: 'boolean' },
-      { key: 'isActive', column: 'is_active', kind: 'boolean' },
+      { key: "code", column: "code", kind: "text", lockedOnEdit: true },
+      { key: "name", column: "name", kind: "text", required: true },
+      { key: "kind", column: "kind", kind: "select", required: true, options: ITEM_KIND_OPTS },
+      { key: "category", column: "category", kind: "text" },
+      {
+        key: "incomeAccount",
+        column: "income_account_id",
+        kind: "reference",
+        ref: { resource: "accounts", by: "number" },
+      },
+      {
+        key: "expenseAccount",
+        column: "expense_account_id",
+        kind: "reference",
+        ref: { resource: "accounts", by: "number" },
+      },
+      { key: "defaultRate", column: "default_rate", kind: "currency" },
+      { key: "unit", column: "unit", kind: "text" },
+      {
+        key: "taxCode",
+        column: "tax_code_id",
+        kind: "reference",
+        ref: { resource: "tax-codes", by: "code" },
+      },
+      { key: "showOnTimesheet", column: "show_on_timesheet", kind: "boolean" },
+      { key: "isActive", column: "is_active", kind: "boolean" },
     ],
   },
   {
-    key: 'parties',
-    table: 'parties',
-    iconKey: 'users',
-    naturalKey: 'shortCode',
-    customTarget: 'parties',
-    readPermission: 'parties.read',
-    writePermission: 'parties.manage',
+    key: "parties",
+    table: "parties",
+    iconKey: "users",
+    naturalKey: "shortCode",
+    customTarget: "parties",
+    readPermission: "parties.read",
+    writePermission: "parties.manage",
     cols: [
-      { key: 'shortCode', column: 'short_code', kind: 'text', lockedOnEdit: true },
-      { key: 'displayName', column: 'display_name', kind: 'text', required: true },
+      { key: "shortCode", column: "short_code", kind: "text", lockedOnEdit: true },
+      { key: "displayName", column: "display_name", kind: "text", required: true },
       // parties.kind carries the role-denormalized values the product stores
       // (customer/vendor/employee) that export emits — the importer must
       // accept the vocabulary export produces, or no exported parties file
       // re-imports. Labels are the drawer's own kind words (see
       // PARTY_KIND_OPTIONS): the file may name what the operator sees.
-      { key: 'kind', column: 'kind', kind: 'select', required: true, options: PARTY_KIND_OPTIONS },
+      { key: "kind", column: "kind", kind: "select", required: true, options: PARTY_KIND_OPTIONS },
       // A party is a company or a person; ROLES make it a customer, vendor,
       // and/or employee. The kind column names at most one role, so these
       // flags carry the rest: each true flag ensures its native role row
       // through the same command the writers use, idempotent on re-import.
       // A false or blank flag leaves the role alone — imports never strip a
       // role; the drawer does that.
-      { key: 'isCustomer', column: 'is_customer', kind: 'boolean', virtual: true },
-      { key: 'isVendor', column: 'is_vendor', kind: 'boolean', virtual: true },
-      { key: 'isEmployee', column: 'is_employee', kind: 'boolean', virtual: true },
-      { key: 'legalName', column: 'legal_name', kind: 'text' },
-      { key: 'email', column: 'email', kind: 'text' },
-      { key: 'phone', column: 'phone', kind: 'text' },
-      { key: 'website', column: 'website', kind: 'text' },
-      { key: 'isActive', column: 'is_active', kind: 'boolean' },
+      { key: "isCustomer", column: "is_customer", kind: "boolean", virtual: true },
+      { key: "isVendor", column: "is_vendor", kind: "boolean", virtual: true },
+      { key: "isEmployee", column: "is_employee", kind: "boolean", virtual: true },
+      { key: "legalName", column: "legal_name", kind: "text" },
+      { key: "email", column: "email", kind: "text" },
+      { key: "phone", column: "phone", kind: "text" },
+      { key: "website", column: "website", kind: "text" },
+      { key: "isActive", column: "is_active", kind: "boolean" },
     ],
   },
-]
+];
 
-export const MASTER_BY_KEY = new Map(MASTER_ENTITIES.map((m) => [m.key, m]))
+export const MASTER_BY_KEY = new Map(MASTER_ENTITIES.map((m) => [m.key, m]));
 
 async function masterFields(
   m: MasterEntity,
   orgId: string,
   viewer: CustomFieldViewer,
 ): Promise<ResourceField[]> {
-  const timeTrackingOn = m.key !== 'items' || (await orgFeatureEnabled(orgId, 'timeTracking'))
-  const inventoryOn = m.key !== 'items' || (await orgFeatureEnabled(orgId, 'inventory'))
-  const equipmentOn = m.key !== 'items' || (await orgFeatureEnabled(orgId, 'equipment'))
-  const multiCurrencyOn = m.key !== 'accounts' || (await orgFeatureEnabled(orgId, 'multiCurrency'))
+  const timeTrackingOn = m.key !== "items" || (await orgFeatureEnabled(orgId, "timeTracking"));
+  const inventoryOn = m.key !== "items" || (await orgFeatureEnabled(orgId, "inventory"));
+  const equipmentOn = m.key !== "items" || (await orgFeatureEnabled(orgId, "equipment"));
+  const multiCurrencyOn = m.key !== "accounts" || (await orgFeatureEnabled(orgId, "multiCurrency"));
   const core: ResourceField[] = m.cols
-    .filter((c) => timeTrackingOn || c.key !== 'showOnTimesheet')
-    .filter((c) => multiCurrencyOn || c.key !== 'currencyRestriction')
+    .filter((c) => timeTrackingOn || c.key !== "showOnTimesheet")
+    .filter((c) => multiCurrencyOn || c.key !== "currencyRestriction")
     .map((c) => ({
       key: c.key,
       label: c.key,
       kind: c.kind,
       required: c.required,
-      options: c.key === 'kind' && !inventoryOn
-        ? c.options?.filter((o) => !INVENTORY_ITEM_KINDS.has(o.value) && (equipmentOn || !ITEM_EQUIPMENT_KINDS.has(o.value)))
-        : c.key === 'kind' && !equipmentOn
-          ? c.options?.filter((o) => !ITEM_EQUIPMENT_KINDS.has(o.value))
-          : c.options,
+      options:
+        c.key === "kind" && !inventoryOn
+          ? c.options?.filter(
+              (o) =>
+                !INVENTORY_ITEM_KINDS.has(o.value) &&
+                (equipmentOn || !ITEM_EQUIPMENT_KINDS.has(o.value)),
+            )
+          : c.key === "kind" && !equipmentOn
+            ? c.options?.filter((o) => !ITEM_EQUIPMENT_KINDS.has(o.value))
+            : c.options,
       ref: c.ref,
-    }))
-  const defs = await loadFieldDefs(m.customTarget)
-  const custom: ResourceField[] = visibleCustomFieldDefs(defs, viewer).map((d) => customFieldToResource(d))
-  return [...core, ...custom]
+    }));
+  const defs = await loadFieldDefs(m.customTarget);
+  const custom: ResourceField[] = visibleCustomFieldDefs(defs, viewer).map((d) =>
+    customFieldToResource(d),
+  );
+  return [...core, ...custom];
 }
 
 function customFieldToResource(d: CustomFieldDef): ResourceField {
-  const kindMap: Record<CustomFieldDef['fieldType'], ResourceField['kind']> = {
-    text: 'text',
-    long_text: 'long_text',
-    number: 'number',
-    currency: 'currency',
-    date: 'date',
-    boolean: 'boolean',
-    select: 'select',
-    multi_select: 'multiselect',
-    reference: 'reference',
-  }
+  const kindMap: Record<CustomFieldDef["fieldType"], ResourceField["kind"]> = {
+    text: "text",
+    long_text: "long_text",
+    number: "number",
+    currency: "currency",
+    date: "date",
+    boolean: "boolean",
+    select: "select",
+    multi_select: "multiselect",
+    reference: "reference",
+  };
   return {
     key: d.key,
     label: d.label,
     kind: kindMap[d.fieldType],
     required: d.isRequired,
     options: d.config.options?.map((o) => ({ value: o, label: o })),
-    ref: d.config.referenceTable ? { resource: d.config.referenceTable, by: 'id' } : undefined,
+    ref: d.config.referenceTable ? { resource: d.config.referenceTable, by: "id" } : undefined,
     custom: true,
-  }
+  };
 }
 
 export function masterDescriptor(m: MasterEntity): ResourceDescriptor {
   return {
     key: m.key,
     label: m.key,
-    group: 'Master data',
+    group: "Master data",
     iconKey: m.iconKey,
     readPermission: m.readPermission,
     writePermission: m.writePermission,
     supportsImport: true,
     naturalKey: m.naturalKey,
-  }
+  };
 }
 
 /**
@@ -291,17 +359,20 @@ async function resolveMasterRefId(
   human: unknown,
   orgId: string,
 ): Promise<string | null> {
-  const id = await resolver.resolveId(target, human)
-  if (!id) return null
+  const id = await resolver.resolveId(target, human);
+  if (!id) return null;
 
-  const value = String(human ?? '').trim()
-  if (target.resource !== 'accounts' || !isUuid(value)) return id
+  const value = String(human ?? "").trim();
+  if (target.resource !== "accounts" || !isUuid(value)) return id;
 
-  const owned = await db.execute<{ id: string }>(sql`
+  const owned = await db.execute<{ id: string }>(
+    sql`
     select id from accounts
      where id = ${id} and org_id = ${orgId}
-     limit 1`, 'objects')
-  return owned[0]?.id ?? null
+     limit 1`,
+    "objects",
+  );
+  return owned[0]?.id ?? null;
 }
 
 /**
@@ -314,17 +385,20 @@ async function exportMasterCell(
   resolver: RefResolver,
   orgId: string,
 ): Promise<CellValue> {
-  if (field.kind === 'reference' && field.ref?.resource === 'accounts') {
-    const id = String(value ?? '').trim()
+  if (field.kind === "reference" && field.ref?.resource === "accounts") {
+    const id = String(value ?? "").trim();
     if (isUuid(id)) {
-      const owned = await db.execute<{ label: string | null }>(sql`
+      const owned = await db.execute<{ label: string | null }>(
+        sql`
         select number as label from accounts
          where id = ${id} and org_id = ${orgId}
-         limit 1`, 'objects')
-      return owned[0]?.label ?? id
+         limit 1`,
+        "objects",
+      );
+      return owned[0]?.label ?? id;
     }
   }
-  return exportCell(field, value, resolver)
+  return exportCell(field, value, resolver);
 }
 
 /**
@@ -336,24 +410,24 @@ async function exportMasterCell(
  */
 async function persistMasterMutation(
   table: string,
-  action: 'insert' | 'update',
+  action: "insert" | "update",
   ctx: WriteCtx,
   before: Record<string, unknown> | null,
   mutate: (tx: SqlExecutor) => Promise<{ rowId: string; after: Record<string, unknown> | null }>,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.execute(sql`savepoint master_import_row`)
+    await tx.execute(sql`savepoint master_import_row`);
     try {
-      const { rowId, after } = await mutate(tx)
-      if (!rowId) throw new Error('master-data mutation did not return an id')
-      await auditRow(tx, table, rowId, action, ctx, before, after)
-      await tx.execute(sql`release savepoint master_import_row`)
+      const { rowId, after } = await mutate(tx);
+      if (!rowId) throw new Error("master-data mutation did not return an id");
+      await auditRow(tx, table, rowId, action, ctx, before, after);
+      await tx.execute(sql`release savepoint master_import_row`);
     } catch (error) {
-      await tx.execute(sql`rollback to savepoint master_import_row`)
-      await tx.execute(sql`release savepoint master_import_row`)
-      throw error
+      await tx.execute(sql`rollback to savepoint master_import_row`);
+      await tx.execute(sql`release savepoint master_import_row`);
+      throw error;
     }
-  })
+  });
 }
 
 export function masterResource(
@@ -365,81 +439,92 @@ export function masterResource(
     descriptor: masterDescriptor(m),
     fields: () => masterFields(m, orgId, viewer),
     async columns() {
-      return (await masterFields(m, orgId, viewer)).map((f) => ({ key: f.key, label: f.label }))
+      return (await masterFields(m, orgId, viewer)).map((f) => ({ key: f.key, label: f.label }));
     },
     async read(readCtx?: ReadCtx) {
-      const effectiveViewer = readCtx?.customFieldViewer ?? viewer
-      const fields = await masterFields(m, orgId, effectiveViewer)
-      const resolver = new RefResolver(orgId)
-      const exportCols = m.cols.filter((c) => fields.some((f) => f.key === c.key))
-      const storedCols = exportCols.filter((c) => !c.virtual)
-      const virtualCols = exportCols.filter((c) => c.virtual)
-      const coreCols = storedCols.map((c) => sql.raw(c.column))
+      const effectiveViewer = readCtx?.customFieldViewer ?? viewer;
+      const fields = await masterFields(m, orgId, effectiveViewer);
+      const resolver = new RefResolver(orgId);
+      const exportCols = m.cols.filter((c) => fields.some((f) => f.key === c.key));
+      const storedCols = exportCols.filter((c) => !c.virtual);
+      const virtualCols = exportCols.filter((c) => c.virtual);
+      const coreCols = storedCols.map((c) => sql.raw(c.column));
       // Subsidiary scope is enforced HERE, by row identity: the registry used
       // to read org-wide and post-filter on display labels, so two parties
       // sharing a name across legal entities leaked each other's full rows
       // into a scoped export. Items carry no subsidiary stamp and stay
       // org-wide; accounts and parties filter on their own subsidiary_id.
       const scopeFilter =
-        m.key === 'items'
+        m.key === "items"
           ? sql``
-          : subsidiaryReadFilterWithUnassigned(sql`subsidiary_id`, readCtx?.allowedSubsidiaryIds)
-      const result = (await readExportWindow(db, sql`
+          : subsidiaryReadFilterWithUnassigned(sql`subsidiary_id`, readCtx?.allowedSubsidiaryIds);
+      const result = (await readExportWindow(
+        db,
+        sql`
         select ${sql.join(coreCols, sql`, `)}, custom${transferId(readCtx, sql`id`)}${virtualCols.length ? sql`, id as "__partyId"` : sql``}
           from ${sql.raw(m.table)}
          where org_id = ${orgId}${scopeFilter}${transferWhere(readCtx, sql`id`)}
-         order by ${transferOrder(readCtx, sql`id`, sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0]!.column))}
-         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, unknown>[] }
+         order by ${transferOrder(readCtx, sql`id`, sql.raw(m.naturalKey === "shortCode" ? "display_name" : m.cols[0]!.column))}
+         limit ${transferLimit(readCtx)}`,
+        readCtx,
+      )) as { rows: Record<string, unknown>[] };
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      finishExportPage(result.rows, masterDescriptor(m).label, readCtx)
+      finishExportPage(result.rows, masterDescriptor(m).label, readCtx);
       // Virtual columns resolve from related rows in one batched lookup per
       // export — never a query per row. Active role rows only, matching the
       // badges the party lists render, so an exported file re-imports the
       // same roles it left with.
-      let roleMembership = new Set<string>()
-      if (m.key === 'parties' && virtualCols.length > 0) {
+      let roleMembership = new Set<string>();
+      if (m.key === "parties" && virtualCols.length > 0) {
         const partyIds = [
           ...new Set(
             result.rows
               .map((r) => r.__partyId)
-              .filter((v): v is string => typeof v === 'string' && v !== ''),
+              .filter((v): v is string => typeof v === "string" && v !== ""),
           ),
-        ]
+        ];
         if (partyIds.length > 0) {
-          const idList = sql.join(partyIds.map((id) => sql`${id}`), sql`, `)
-          const membership = await db.execute<{ party_id: string; role: string }>(sql`
+          const idList = sql.join(
+            partyIds.map((id) => sql`${id}`),
+            sql`, `,
+          );
+          const membership = await db.execute<{ party_id: string; role: string }>(
+            sql`
             select party_id, 'customer' as role from customer_roles where org_id = ${orgId} and is_active and party_id in (${idList})
             union all
             select party_id, 'vendor' as role from vendor_roles where org_id = ${orgId} and is_active and party_id in (${idList})
             union all
-            select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active and party_id in (${idList})`, 'objects')
-          roleMembership = new Set(membership.map((r) => `${r.party_id}:${r.role}`))
+            select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active and party_id in (${idList})`,
+            "objects",
+          );
+          roleMembership = new Set(membership.map((r) => `${r.party_id}:${r.role}`));
         }
       }
-      const customDefs = fields.filter((f) => f.custom)
-      const out: Record<string, CellValue>[] = []
+      const customDefs = fields.filter((f) => f.custom);
+      const out: Record<string, CellValue>[] = [];
       for (const raw of result.rows) {
-        const row: Record<string, CellValue> = {}
+        const row: Record<string, CellValue> = {};
         for (const c of storedCols) {
-          const f = fields.find((x) => x.key === c.key)!
-          row[c.key] = await exportMasterCell(f, raw[c.column], resolver, orgId)
+          const f = fields.find((x) => x.key === c.key)!;
+          row[c.key] = await exportMasterCell(f, raw[c.column], resolver, orgId);
         }
         for (const flag of PARTY_ROLE_FLAGS) {
-          if (!virtualCols.some((c) => c.key === flag.key)) continue
-          const partyId = typeof raw.__partyId === 'string' ? raw.__partyId : ''
-          row[flag.key] = roleMembership.has(`${partyId}:${flag.role}`)
+          if (!virtualCols.some((c) => c.key === flag.key)) continue;
+          const partyId = typeof raw.__partyId === "string" ? raw.__partyId : "";
+          row[flag.key] = roleMembership.has(`${partyId}:${flag.role}`);
         }
-        const custom = (raw.custom ?? {}) as Record<string, unknown>
-        for (const f of customDefs) row[f.key] = await exportMasterCell(f, custom[f.key], resolver, orgId)
-        out.push(row)
+        const custom = (raw.custom ?? {}) as Record<string, unknown>;
+        for (const f of customDefs)
+          row[f.key] = await exportMasterCell(f, custom[f.key], resolver, orgId);
+        out.push(row);
       }
-      return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: out }
+      return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: out };
     },
     async write(rows, mode, ctx) {
-      return writeMaster(m, rows, mode, ctx)
+      return writeMaster(m, rows, mode, ctx);
     },
-  }
+  };
 }
 
 /**
@@ -449,11 +534,15 @@ export function masterResource(
  * collision, and registered in `taken` so one file never mints a dup.
  */
 function nextPartyShortCode(displayName: string, taken: Set<string>): string {
-  const base = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 20) || 'PARTY'
-  let code = base
-  for (let n = 2; taken.has(code); n++) code = `${base}-${n}`
-  taken.add(code)
-  return code
+  const base =
+    displayName
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "")
+      .slice(0, 20) || "PARTY";
+  let code = base;
+  for (let n = 2; taken.has(code); n++) code = `${base}-${n}`;
+  taken.add(code);
+  return code;
 }
 
 async function writeMaster(
@@ -462,178 +551,212 @@ async function writeMaster(
   mode: ImportMode,
   ctx: WriteCtx,
 ): Promise<WriteOutcome> {
-  const resolver = new RefResolver(ctx.orgId)
-  const defs = await loadFieldDefs(m.customTarget)
-  const viewer = ctx.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER
-  const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+  const resolver = new RefResolver(ctx.orgId);
+  const defs = await loadFieldDefs(m.customTarget);
+  const viewer = ctx.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER;
+  const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] };
   // Earlier validated natural-key rows supply preview identity and partial values.
-  const previewRows = new Map<string, Record<string, unknown>>()
-  const resolvedKeys: (string | null)[] = rows.map(() => null)
-  const nkColumn = m.cols.find((c) => c.key === m.naturalKey)?.column ?? toSnake(m.naturalKey)
-  const timeTrackingOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'timeTracking'))
-  const inventoryOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'inventory'))
-  const equipmentOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'equipment'))
-  const multiCurrencyOn = m.key !== 'accounts' || (await orgFeatureEnabled(ctx.orgId, 'multiCurrency'))
+  const previewRows = new Map<string, Record<string, unknown>>();
+  const resolvedKeys: (string | null)[] = rows.map(() => null);
+  const nkColumn = m.cols.find((c) => c.key === m.naturalKey)?.column ?? toSnake(m.naturalKey);
+  const timeTrackingOn = m.key !== "items" || (await orgFeatureEnabled(ctx.orgId, "timeTracking"));
+  const inventoryOn = m.key !== "items" || (await orgFeatureEnabled(ctx.orgId, "inventory"));
+  const equipmentOn = m.key !== "items" || (await orgFeatureEnabled(ctx.orgId, "equipment"));
+  const multiCurrencyOn =
+    m.key !== "accounts" || (await orgFeatureEnabled(ctx.orgId, "multiCurrency"));
   // Codeless parties resolve against the codes already taken in this org
   // (plus codes minted earlier in this file), so a synthesized shortCode is
   // unique on insert and stable on re-import. One narrow query per import —
   // never a query per row beyond the name-match below.
-  const needsPartyCodes = !ctx.recordKeys && m.key === 'parties' &&
-    rows.some((r) => String(r[m.naturalKey] ?? '').trim() === '')
+  const needsPartyCodes =
+    !ctx.recordKeys &&
+    m.key === "parties" &&
+    rows.some((r) => String(r[m.naturalKey] ?? "").trim() === "");
   const takenPartyCodes = needsPartyCodes
-    ? new Set(((await db.execute<{ short_code: string | null }>(sql`
-        select short_code from parties where org_id = ${ctx.orgId}`, 'objects')).map((r) => String(r.short_code ?? '').trim()).filter((s) => s !== '')))
-    : new Set<string>()
+    ? new Set(
+        (
+          await db.execute<{ short_code: string | null }>(
+            sql`
+        select short_code from parties where org_id = ${ctx.orgId}`,
+            "objects",
+          )
+        )
+          .map((r) => String(r.short_code ?? "").trim())
+          .filter((s) => s !== ""),
+      )
+    : new Set<string>();
   // Bank-typed hygiene needs to know which accounts already back real bank
   // activity. One set per import — never a query per row.
-  const statementAccountIds = m.key === 'accounts'
-    ? new Set(
-      (await db.execute<{ id: string }>(sql`
-        select distinct account_id as id from bank_statements where org_id = ${ctx.orgId}${ctx.recordKeys ? sql` and account_id in (select id from accounts where org_id=${ctx.orgId} and number in (${sql.join(rows.map((row) => sql`${String(row[m.naturalKey] ?? '').trim()}`), sql`, `)}))` : sql``}`, 'objects')).map((r) => r.id),
-    )
-    : new Set<string>()
+  const statementAccountIds =
+    m.key === "accounts"
+      ? new Set(
+          (
+            await db.execute<{ id: string }>(
+              sql`
+        select distinct account_id as id from bank_statements where org_id = ${ctx.orgId}${
+          ctx.recordKeys
+            ? sql` and account_id in (select id from accounts where org_id=${ctx.orgId} and number in (${sql.join(
+                rows.map((row) => sql`${String(row[m.naturalKey] ?? "").trim()}`),
+                sql`, `,
+              )}))`
+            : sql``
+        }`,
+              "objects",
+            )
+          ).map((r) => r.id),
+        )
+      : new Set<string>();
 
   const availablePartyCode = async (displayName: string) => {
-    let code = nextPartyShortCode(displayName, takenPartyCodes)
+    let code = nextPartyShortCode(displayName, takenPartyCodes);
     if (ctx.recordKeys) {
-      while ((await db.execute(sql`select id from parties where org_id=${ctx.orgId} and short_code=${code} limit 1`, 'objects')).length) code = nextPartyShortCode(displayName, takenPartyCodes)
+      while (
+        (
+          await db.execute(
+            sql`select id from parties where org_id=${ctx.orgId} and short_code=${code} limit 1`,
+            "objects",
+          )
+        ).length
+      )
+        code = nextPartyShortCode(displayName, takenPartyCodes);
     }
-    return code
-  }
+    return code;
+  };
   for (let i = 0; i < rows.length; i++) {
-    const rowNo = i + 1
-    const src = rows[i]!
+    const rowNo = i + 1;
+    const src = rows[i]!;
     try {
       // Coerce core columns.
-      const setCols: { column: string; value: unknown }[] = []
-      let err: string | null = null
+      const setCols: { column: string; value: unknown }[] = [];
+      let err: string | null = null;
       for (const c of m.cols) {
-        if (c.key === 'showOnTimesheet' && !timeTrackingOn) {
+        if (c.key === "showOnTimesheet" && !timeTrackingOn) {
           if (src.showOnTimesheet !== undefined) {
-            err = 'showOnTimesheet is not available'
-            break
+            err = "showOnTimesheet is not available";
+            break;
           }
-          continue
+          continue;
         }
-        if (c.key === 'currencyRestriction' && !multiCurrencyOn) {
+        if (c.key === "currencyRestriction" && !multiCurrencyOn) {
           if (src.currencyRestriction !== undefined) {
-            err = 'currencyRestriction is not available'
-            break
+            err = "currencyRestriction is not available";
+            break;
           }
-          continue
+          continue;
         }
-        const raw = src[c.key]
-        const present = raw !== undefined && raw !== null && raw !== ''
-        if (c.required && !present && c.kind !== 'boolean') {
-          err = `${c.key} is required`
-          break
+        const raw = src[c.key];
+        const present = raw !== undefined && raw !== null && raw !== "";
+        if (c.required && !present && c.kind !== "boolean") {
+          err = `${c.key} is required`;
+          break;
         }
-        if (!present) continue
+        if (!present) continue;
         if (c.virtual) {
           // Virtual columns never bind: party role flags collect below and
           // are ensured through the native role command with the row write.
-          continue
+          continue;
         }
-        if (c.kind === 'boolean') {
-          setCols.push({ column: c.column, value: coerceBoolean(raw) })
-          continue
+        if (c.kind === "boolean") {
+          setCols.push({ column: c.column, value: coerceBoolean(raw) });
+          continue;
         }
-        if (c.kind === 'reference' && c.ref) {
-          const id = await resolveMasterRefId(resolver, c.ref, raw, ctx.orgId)
+        if (c.kind === "reference" && c.ref) {
+          const id = await resolveMasterRefId(resolver, c.ref, raw, ctx.orgId);
           if (!id) {
-            err = `${c.key}: "${String(raw)}" not found`
-            break
+            err = `${c.key}: "${String(raw)}" not found`;
+            break;
           }
-          setCols.push({ column: c.column, value: id })
-          continue
+          setCols.push({ column: c.column, value: id });
+          continue;
         }
-        if (c.kind === 'select' && c.options) {
+        if (c.kind === "select" && c.options) {
           // Operators write what the product shows: canonical values and
           // displayed labels, in any capitalization — and, for the party
           // kind, in any shipped locale. The stored value is the canonical
           // one, so downstream kind gates keep working. A refusal lists the
           // accepted values with the field named.
-          const matchable = m.key === 'parties' && c.key === 'kind'
-            ? [...c.options, ...PARTY_KIND_ALIASES]
-            : c.options
-          const matched = matchSelectOption(matchable, raw)
+          const matchable =
+            m.key === "parties" && c.key === "kind"
+              ? [...c.options, ...PARTY_KIND_ALIASES]
+              : c.options;
+          const matched = matchSelectOption(matchable, raw);
           if (matched === null) {
-            err = selectRefusal(c.key, raw, c.options)
-            break
+            err = selectRefusal(c.key, raw, c.options);
+            break;
           }
-          setCols.push({ column: c.column, value: matched })
-          continue
+          setCols.push({ column: c.column, value: matched });
+          continue;
         }
-        if (c.kind === 'number' || c.kind === 'currency' || c.kind === 'percent') {
+        if (c.kind === "number" || c.kind === "currency" || c.kind === "percent") {
           // Exact-decimal boundary, matching the interactive/API writers
           // (exactMoney): Number() accepts hex, exponents, and over-scale
           // fractions that PostgreSQL then silently rounds into numeric(19,4)
           // ('12.345678' stores as 12.3457), so the canonical text form is
           // validated and stored instead of the raw input.
-          const exact = canonicalDecimal(raw, 4)
-          let normalized: string | null = null
+          const exact = canonicalDecimal(raw, 4);
+          let normalized: string | null = null;
           if (exact !== null) {
             try {
-              normalized = normalizeMoney(exact)
+              normalized = normalizeMoney(exact);
             } catch {
-              normalized = null
+              normalized = null;
             }
           }
           if (normalized === null) {
-            err = `${c.key} must be an exact decimal with at most 4 decimal places`
-            break
+            err = `${c.key} must be an exact decimal with at most 4 decimal places`;
+            break;
           }
-          setCols.push({ column: c.column, value: normalized })
-          continue
+          setCols.push({ column: c.column, value: normalized });
+          continue;
         }
         // Every other present cell (text, validated selects) binds as-is.
-        setCols.push({ column: c.column, value: raw })
+        setCols.push({ column: c.column, value: raw });
       }
       if (err) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: err })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: err });
+        continue;
       }
 
       // Custom fields → validated `custom` jsonb. Reference fields resolve
       // through the org-scoped resolver first: custom values are schemaless
       // jsonb with no FK, so a raw foreign UUID would otherwise persist blind
       // (the shape check below only verifies UUID syntax, never ownership).
-      const customInput: Record<string, unknown> = {}
+      const customInput: Record<string, unknown> = {};
       for (const d of defs) {
         // Native clear semantics: a blank is omitted and validateCustomValues
         // leaves the stored value alone — it must never resolve to not-found.
-        if (src[d.key] === undefined || src[d.key] === null || src[d.key] === '') continue
-        if (d.fieldType === 'reference' && d.config.referenceTable) {
+        if (src[d.key] === undefined || src[d.key] === null || src[d.key] === "") continue;
+        if (d.fieldType === "reference" && d.config.referenceTable) {
           const id = await resolver.resolveId(
-            { resource: d.config.referenceTable, by: 'id' },
+            { resource: d.config.referenceTable, by: "id" },
             src[d.key],
-          )
+          );
           if (!id) {
-            err = `${d.key}: "${String(src[d.key])}" not found`
-            break
+            err = `${d.key}: "${String(src[d.key])}" not found`;
+            break;
           }
-          customInput[d.key] = id
+          customInput[d.key] = id;
         } else {
-          customInput[d.key] = src[d.key]
+          customInput[d.key] = src[d.key];
         }
       }
       if (err) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: err })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: err });
+        continue;
       }
       // Party role flags (virtual columns): each true flag ensures its
       // native role row with the row write, through the same command the
       // interactive writers use. False or blank leaves the role alone —
       // imports add roles, never strip them, so re-imports stay idempotent.
-      const pendingRoles: ('customer' | 'vendor' | 'employee')[] = []
-      if (m.key === 'parties') {
+      const pendingRoles: ("customer" | "vendor" | "employee")[] = [];
+      if (m.key === "parties") {
         for (const flag of PARTY_ROLE_FLAGS) {
-          if (coerceBoolean(src[flag.key])) pendingRoles.push(flag.role)
+          if (coerceBoolean(src[flag.key])) pendingRoles.push(flag.role);
         }
       }
-      let nkVal = String(src[m.naturalKey] ?? '').trim()
+      let nkVal = String(src[m.naturalKey] ?? "").trim();
       // A master row without its natural key has no identity: it can never
       // match on re-import, so every import would duplicate it. Refuse it in
       // every mode with the key named — except a parties shortCode, which the
@@ -641,196 +764,218 @@ async function writeMaster(
       // export emits empty. A blank code resolves instead: adopt the code of
       // the uniquely name-matched party, or synthesize a stable one, so an
       // exported file re-imports losslessly.
-      let codeFill: string | null = null
-      let adoptedParty: { row: Record<string, unknown> } | null = null
-      let identityLabel: string | null = null
-      if (!nkVal && m.key === 'parties') {
-        const displayName = String(src.displayName ?? '').trim()
-        const matches = displayName ? (await db.execute<Record<string, unknown>>(sql`
+      let codeFill: string | null = null;
+      let adoptedParty: { row: Record<string, unknown> } | null = null;
+      let identityLabel: string | null = null;
+      if (!nkVal && m.key === "parties") {
+        const displayName = String(src.displayName ?? "").trim();
+        const matches = displayName
+          ? await db.execute<Record<string, unknown>>(
+              sql`
           select * from parties
-           where org_id = ${ctx.orgId} and display_name = ${displayName} limit 2`, 'objects')) : []
+           where org_id = ${ctx.orgId} and display_name = ${displayName} limit 2`,
+              "objects",
+            )
+          : [];
         if (matches.length > 1) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `multiple parties named "${displayName}": supply shortCode to disambiguate` })
-          continue
+          outcome.failed++;
+          outcome.errors.push({
+            row: rowNo,
+            message: `multiple parties named "${displayName}": supply shortCode to disambiguate`,
+          });
+          continue;
         }
-        const matched = matches[0]
-        const matchedCode = String(matched?.short_code ?? '').trim()
-        if (matched && matchedCode !== '' && typeof matched.id === 'string') {
-          nkVal = matchedCode
-          adoptedParty = { row: matched }
-        } else if (matched && typeof matched.id === 'string') {
-          codeFill = await availablePartyCode(displayName)
-          nkVal = codeFill
-          adoptedParty = { row: matched }
-          identityLabel = `displayName="${displayName}"`
+        const matched = matches[0];
+        const matchedCode = String(matched?.short_code ?? "").trim();
+        if (matched && matchedCode !== "" && typeof matched.id === "string") {
+          nkVal = matchedCode;
+          adoptedParty = { row: matched };
+        } else if (matched && typeof matched.id === "string") {
+          codeFill = await availablePartyCode(displayName);
+          nkVal = codeFill;
+          adoptedParty = { row: matched };
+          identityLabel = `displayName="${displayName}"`;
         } else {
-          codeFill = await availablePartyCode(displayName)
-          nkVal = codeFill
+          codeFill = await availablePartyCode(displayName);
+          nkVal = codeFill;
         }
       }
       if (!nkVal) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: `${m.naturalKey} is required` })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: `${m.naturalKey} is required` });
+        continue;
       }
       // A codeless row that adopted a generated code still needs it stored:
       // inserts carry it as a column, updates fill the empty stored key
       // (the update below never rewrites a populated natural key).
-      if (codeFill && !adoptedParty) setCols.push({ column: 'short_code', value: codeFill })
-      const adoptedRow = adoptedParty?.row
-      let existingId: string | null =
-        typeof adoptedRow?.id === 'string' ? adoptedRow.id : null
+      if (codeFill && !adoptedParty) setCols.push({ column: "short_code", value: codeFill });
+      const adoptedRow = adoptedParty?.row;
+      let existingId: string | null = typeof adoptedRow?.id === "string" ? adoptedRow.id : null;
       let existingCustom: Record<string, unknown> =
-        (adoptedRow?.custom as Record<string, unknown> | undefined) ?? {}
+        (adoptedRow?.custom as Record<string, unknown> | undefined) ?? {};
       let storedKind: string | undefined =
-        typeof adoptedRow?.kind === 'string' ? adoptedRow.kind : undefined
-      let storedAccount: { type?: string; name?: string; reconcilable?: boolean; is_summary?: boolean } | undefined
+        typeof adoptedRow?.kind === "string" ? adoptedRow.kind : undefined;
+      let storedAccount:
+        { type?: string; name?: string; reconcilable?: boolean; is_summary?: boolean } | undefined;
       // The full stored row doubles as the update's audit before-image.
-      let beforeRow: Record<string, unknown> | null = adoptedRow ?? null
+      let beforeRow: Record<string, unknown> | null = adoptedRow ?? null;
       if (nkVal && !adoptedParty) {
-        const found = await db.execute<Record<string, unknown>>(sql`
+        const found = await db.execute<Record<string, unknown>>(
+          sql`
           select * from ${sql.raw(m.table)}
-           where ${sql.raw(nkColumn)} = ${nkVal} and org_id = ${ctx.orgId} limit 1`, 'objects')
-        beforeRow = (found[0] ?? null) as Record<string, unknown> | null
-        existingId = typeof beforeRow?.id === 'string' ? beforeRow.id : null
-        existingCustom = (beforeRow?.custom as Record<string, unknown> | undefined) ?? {}
-        storedKind = typeof beforeRow?.kind === 'string' ? beforeRow.kind : undefined
-        if (m.key === 'accounts' && beforeRow) {
+           where ${sql.raw(nkColumn)} = ${nkVal} and org_id = ${ctx.orgId} limit 1`,
+          "objects",
+        );
+        beforeRow = (found[0] ?? null) as Record<string, unknown> | null;
+        existingId = typeof beforeRow?.id === "string" ? beforeRow.id : null;
+        existingCustom = (beforeRow?.custom as Record<string, unknown> | undefined) ?? {};
+        storedKind = typeof beforeRow?.kind === "string" ? beforeRow.kind : undefined;
+        if (m.key === "accounts" && beforeRow) {
           storedAccount = {
             type: beforeRow.type as string | undefined,
             name: beforeRow.name as string | undefined,
             reconcilable: beforeRow.reconcilable as boolean | undefined,
             is_summary: beforeRow.is_summary as boolean | undefined,
-          }
+          };
         }
       }
-      const previewRow = ctx.dryRun ? previewRows.get(nkVal) : undefined
-      resolvedKeys[i] = nkVal
+      const previewRow = ctx.dryRun ? previewRows.get(nkVal) : undefined;
+      resolvedKeys[i] = nkVal;
       if (previewRow) {
-        existingCustom = (previewRow.custom as Record<string, unknown> | undefined) ?? {}
-        storedKind = typeof previewRow.kind === 'string' ? previewRow.kind : undefined
-        if (m.key === 'accounts') storedAccount = previewRow
+        existingCustom = (previewRow.custom as Record<string, unknown> | undefined) ?? {};
+        storedKind = typeof previewRow.kind === "string" ? previewRow.kind : undefined;
+        if (m.key === "accounts") storedAccount = previewRow;
       }
-      const exists = existingId !== null || previewRow !== undefined
+      const exists = existingId !== null || previewRow !== undefined;
 
       const hiddenCustom = hiddenCustomFieldRefusal(
         defs,
         viewer,
         customInput,
         exists ? existingCustom : null,
-      )
+      );
       if (hiddenCustom) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: hiddenCustom.message })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: hiddenCustom.message });
+        continue;
       }
 
       // Updates are partial: required custom fields omitted from the import
       // row are satisfied by the existing stored values. Supplied fields still
       // override them, while inserts validate against the empty stored bag.
-      const cv = validateCustomValues(defs, { ...existingCustom, ...customInput })
+      const cv = validateCustomValues(defs, { ...existingCustom, ...customInput });
       if (!cv.ok) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: Object.values(cv.errors).join('; ') })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: Object.values(cv.errors).join("; ") });
+        continue;
       }
 
       // Inventory kinds (inventory / assembly / kit) are Inventory configuration.
       // Turning that switch off must refuse a new write; the stored kind stays.
-      if (m.key === 'items' && !inventoryOn) {
-        const kindCol = setCols.find((c) => c.column === 'kind')
+      if (m.key === "items" && !inventoryOn) {
+        const kindCol = setCols.find((c) => c.column === "kind");
         if (kindCol) {
-          const nextKind = String(kindCol.value)
+          const nextKind = String(kindCol.value);
           if (
             (INVENTORY_ITEM_KINDS.has(nextKind) && nextKind !== storedKind) ||
-            (storedKind !== undefined && INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind)
+            (storedKind !== undefined &&
+              INVENTORY_ITEM_KINDS.has(storedKind) &&
+              nextKind !== storedKind)
           ) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: 'kind is not available' })
-            continue
+            outcome.failed++;
+            outcome.errors.push({ row: rowNo, message: "kind is not available" });
+            continue;
           }
           if (INVENTORY_ITEM_KINDS.has(nextKind) && nextKind === storedKind) {
-            setCols.splice(setCols.indexOf(kindCol), 1)
+            setCols.splice(setCols.indexOf(kindCol), 1);
           }
         }
       }
 
       // Equipment-charge kind is Equipment configuration.
       // Turning that switch off must refuse a new write; the stored kind stays.
-      if (m.key === 'items' && !equipmentOn) {
-        const kindCol = setCols.find((c) => c.column === 'kind')
+      if (m.key === "items" && !equipmentOn) {
+        const kindCol = setCols.find((c) => c.column === "kind");
         if (kindCol) {
-          const nextKind = String(kindCol.value)
+          const nextKind = String(kindCol.value);
           if (
             (ITEM_EQUIPMENT_KINDS.has(nextKind) && nextKind !== storedKind) ||
-            (storedKind !== undefined && ITEM_EQUIPMENT_KINDS.has(storedKind) && nextKind !== storedKind)
+            (storedKind !== undefined &&
+              ITEM_EQUIPMENT_KINDS.has(storedKind) &&
+              nextKind !== storedKind)
           ) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: 'kind is not available' })
-            continue
+            outcome.failed++;
+            outcome.errors.push({ row: rowNo, message: "kind is not available" });
+            continue;
           }
           if (ITEM_EQUIPMENT_KINDS.has(nextKind) && nextKind === storedKind) {
-            setCols.splice(setCols.indexOf(kindCol), 1)
+            setCols.splice(setCols.indexOf(kindCol), 1);
           }
         }
       }
 
-      if (exists && mode === 'insert') {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: identityLabel
-          ? `already exists (${identityLabel})`
-          : `already exists (${m.naturalKey}=${nkVal})` })
-        continue
+      if (exists && mode === "insert") {
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message: identityLabel
+            ? `already exists (${identityLabel})`
+            : `already exists (${m.naturalKey}=${nkVal})`,
+        });
+        continue;
       }
 
-      if (m.key === 'parties' && pendingRoles.includes('employee')) {
-        const kind = setCols.find((column) => column.column === 'kind')?.value ?? storedKind
+      if (m.key === "parties" && pendingRoles.includes("employee")) {
+        const kind = setCols.find((column) => column.column === "kind")?.value ?? storedKind;
         if (!isNaturalPersonPartyKind(kind)) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: EMPLOYEE_PERSON_REFUSAL })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: EMPLOYEE_PERSON_REFUSAL });
+          continue;
         }
       }
 
-      const mergedCustom = { ...existingCustom, ...cv.cleaned }
+      const mergedCustom = { ...existingCustom, ...cv.cleaned };
       if (exists) {
         if (!ctx.dryRun) {
-          if (existingId === null) throw new Error('imported master row has no persisted identity')
+          if (existingId === null) throw new Error("imported master row has no persisted identity");
           const parts = setCols
             .filter((c) => c.column !== nkColumn) // don't rewrite the natural key
-            .map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+            .map((c) => sql`${sql.raw(c.column)} = ${c.value}`);
           // ...unless the key itself was just synthesized for a codeless
           // row: filling an empty stored key gives the row its identity
           // for the next re-import.
-          if (codeFill && String(adoptedRow?.short_code ?? '').trim() === '') {
-            parts.push(sql`short_code = ${codeFill}`)
+          if (codeFill && String(adoptedRow?.short_code ?? "").trim() === "") {
+            parts.push(sql`short_code = ${codeFill}`);
           }
-          parts.push(sql`custom = ${JSON.stringify(mergedCustom)}::jsonb`)
-          parts.push(sql`updated_by = ${ctx.actorId}`)
-          parts.push(sql`updated_at = now()`)
-          await persistMasterMutation(m.table, 'update', ctx, beforeRow, async (tx) => {
-            const written = await tx.execute<Record<string, unknown>>(sql`
+          parts.push(sql`custom = ${JSON.stringify(mergedCustom)}::jsonb`);
+          parts.push(sql`updated_by = ${ctx.actorId}`);
+          parts.push(sql`updated_at = now()`);
+          await persistMasterMutation(m.table, "update", ctx, beforeRow, async (tx) => {
+            const written = await tx.execute<Record<string, unknown>>(
+              sql`
               update ${sql.raw(m.table)} set ${sql.join(parts, sql`, `)}
                where id = ${existingId} and org_id = ${ctx.orgId}
-               returning *`, 'objects')
-            const after = written[0] ?? null
-            if (!after) throw new Error('master-data mutation did not return a row')
+               returning *`,
+              "objects",
+            );
+            const after = written[0] ?? null;
+            if (!after) throw new Error("master-data mutation did not return a row");
             // A role-kind kind names its role row — keep the claim
             // backed in the same row transaction (see ensurePartyRoleRow).
             // Effective values — the row's cells over the stored row — so a
             // partial update re-checks the kind as it will stand. Import
             // role flags ride the same guarantee.
-            if (m.key === 'parties') {
-              const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
-              const roleActive = cell('is_active') ?? after.is_active ?? true
+            if (m.key === "parties") {
+              const cell = (column: string): unknown =>
+                setCols.find((c) => c.column === column)?.value;
+              const roleActive = cell("is_active") ?? after.is_active ?? true;
               await ensurePartyRoleRow(tx, {
                 orgId: ctx.orgId,
                 partyId: existingId,
-                kind: cell('kind') ?? after.kind,
+                kind: cell("kind") ?? after.kind,
                 isActive: roleActive,
                 actorId: ctx.actorId,
-              })
+              });
               for (const role of pendingRoles) {
                 await ensurePartyRoleRow(tx, {
                   orgId: ctx.orgId,
@@ -838,46 +983,50 @@ async function writeMaster(
                   kind: role,
                   isActive: roleActive,
                   actorId: ctx.actorId,
-                })
+                });
               }
             }
-            return { rowId: existingId, after }
-          })
+            return { rowId: existingId, after };
+          });
         }
-        outcome.updated++
+        outcome.updated++;
       } else {
         if (!ctx.dryRun) {
           const cols = [
             ...setCols,
-            { column: 'org_id', value: ctx.orgId },
-            { column: 'created_by', value: ctx.actorId },
-            { column: 'updated_by', value: ctx.actorId },
-          ]
-          const names = sql.raw([...cols.map((c) => c.column), 'custom'].join(', '))
+            { column: "org_id", value: ctx.orgId },
+            { column: "created_by", value: ctx.actorId },
+            { column: "updated_by", value: ctx.actorId },
+          ];
+          const names = sql.raw([...cols.map((c) => c.column), "custom"].join(", "));
           const values = sql.join(
             [...cols.map((c) => sql`${c.value}`), sql`${JSON.stringify(mergedCustom)}::jsonb`],
             sql`, `,
-          )
-          await persistMasterMutation(m.table, 'insert', ctx, null, async (tx) => {
-            const ins = await tx.execute<Record<string, unknown>>(sql`
-              insert into ${sql.raw(m.table)} (${names}) values (${values}) returning *`, 'objects')
-            const after = ins[0] ?? null
-            if (!after || typeof after.id !== 'string') {
-              throw new Error('master-data mutation did not return a row')
+          );
+          await persistMasterMutation(m.table, "insert", ctx, null, async (tx) => {
+            const ins = await tx.execute<Record<string, unknown>>(
+              sql`
+              insert into ${sql.raw(m.table)} (${names}) values (${values}) returning *`,
+              "objects",
+            );
+            const after = ins[0] ?? null;
+            if (!after || typeof after.id !== "string") {
+              throw new Error("master-data mutation did not return a row");
             }
             // A role-kind kind names its role row — keep the claim
             // backed in the same row transaction (see ensurePartyRoleRow).
             // Import role flags ride the same guarantee.
-            if (m.key === 'parties') {
-              const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
-              const roleActive = cell('is_active') ?? after.is_active ?? true
+            if (m.key === "parties") {
+              const cell = (column: string): unknown =>
+                setCols.find((c) => c.column === column)?.value;
+              const roleActive = cell("is_active") ?? after.is_active ?? true;
               await ensurePartyRoleRow(tx, {
                 orgId: ctx.orgId,
                 partyId: after.id,
-                kind: cell('kind') ?? after.kind,
+                kind: cell("kind") ?? after.kind,
                 isActive: roleActive,
                 actorId: ctx.actorId,
-              })
+              });
               for (const role of pendingRoles) {
                 await ensurePartyRoleRow(tx, {
                   orgId: ctx.orgId,
@@ -885,51 +1034,56 @@ async function writeMaster(
                   kind: role,
                   isActive: roleActive,
                   actorId: ctx.actorId,
-                })
+                });
               }
             }
-            return { rowId: after.id, after }
-          })
+            return { rowId: after.id, after };
+          });
         }
-        outcome.created++
+        outcome.created++;
       }
-      if (ctx.dryRun) previewRows.set(nkVal, {
-        ...beforeRow, ...previewRow,
-        ...Object.fromEntries(setCols.filter(c => c.column !== nkColumn).map(c => [c.column, c.value])),
-        [nkColumn]: nkVal, custom: mergedCustom,
-      })
+      if (ctx.dryRun)
+        previewRows.set(nkVal, {
+          ...beforeRow,
+          ...previewRow,
+          ...Object.fromEntries(
+            setCols.filter((c) => c.column !== nkColumn).map((c) => [c.column, c.value]),
+          ),
+          [nkColumn]: nkVal,
+          custom: mergedCustom,
+        });
 
       // Bank-typed hygiene: warn on uncorroborated asset_bank in preview and
       // commit alike. Effective values — the row's cells over the stored row —
       // so a partial update re-checks the account as it will stand.
-      if (m.key === 'accounts') {
-        const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
+      if (m.key === "accounts") {
+        const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value;
         const warning = assetBankHygieneWarning({
-          type: String(cell('type') ?? storedAccount?.type ?? ''),
-          name: String(cell('name') ?? storedAccount?.name ?? ''),
-          reconcilable: Boolean(cell('reconcilable') ?? storedAccount?.reconcilable ?? false),
-          isSummary: Boolean(cell('is_summary') ?? storedAccount?.is_summary ?? false),
+          type: String(cell("type") ?? storedAccount?.type ?? ""),
+          name: String(cell("name") ?? storedAccount?.name ?? ""),
+          reconcilable: Boolean(cell("reconcilable") ?? storedAccount?.reconcilable ?? false),
+          isSummary: Boolean(cell("is_summary") ?? storedAccount?.is_summary ?? false),
           hasStatements: existingId ? statementAccountIds.has(existingId) : false,
-        })
+        });
         if (warning) {
-          if (!outcome.warnings) outcome.warnings = []
-          outcome.warnings.push({ row: rowNo, message: warning.message, field: 'type' })
+          if (!outcome.warnings) outcome.warnings = [];
+          outcome.warnings.push({ row: rowNo, message: warning.message, field: "type" });
         }
       }
     } catch (e) {
-      outcome.failed++
-      outcome.errors.push({ row: rowNo, message: importRowError(e) })
+      outcome.failed++;
+      outcome.errors.push({ row: rowNo, message: importRowError(e) });
     }
   }
-  await ctx.recordKeys?.(resolvedKeys)
-  return outcome
+  await ctx.recordKeys?.(resolvedKeys);
+  return outcome;
 }
 
 async function auditRow(
   executor: SqlExecutor,
   table: string,
   rowId: string,
-  action: 'insert' | 'update',
+  action: "insert" | "update",
   ctx: WriteCtx,
   before: Record<string, unknown> | null,
   after: Record<string, unknown> | null,
@@ -937,5 +1091,5 @@ async function auditRow(
   await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${ctx.orgId}, ${table}, ${rowId}, ${action},
-            ${JSON.stringify({ source: 'import', before, after })}::jsonb, ${ctx.actorId})`)
+            ${JSON.stringify({ source: "import", before, after })}::jsonb, ${ctx.actorId})`);
 }

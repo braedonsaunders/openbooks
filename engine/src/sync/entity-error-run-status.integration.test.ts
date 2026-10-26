@@ -85,10 +85,13 @@ class EntityErrorSource implements MigrationSource {
 }
 
 async function runStatus(orgId: string, connectionId: string) {
-  const rows = await db.execute<{ status: string; error: string | null }>(sql`
+  const rows = await db.execute<{ status: string; error: string | null }>(
+    sql`
     select status, error_message as error from sync_runs
      where org_id = ${orgId} and connection_id = ${connectionId}
-     order by started_at desc limit 1`, "objects");
+     order by started_at desc limit 1`,
+    "objects",
+  );
   return rows[0]!;
 }
 

@@ -28,10 +28,7 @@
  * exist. An employee with no such declaration on file is refused, never
  * guessed.
  */
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 
 const SG_CPF_STATUS: PayrollCertificate = {
   key: "sg_cpf_status",
@@ -40,14 +37,14 @@ const SG_CPF_STATUS: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "CPF Board, CPF Contribution Rate Table from 1 January 2026, Table 1 (status and age-band rows); "
-    + "CPF Board, Who should receive CPF contributions (employer must know SC/SPR status; "
-    + "foreigners exempt); IRAS, Reporting Employee Earnings (IR8A, App 8A/8B) (employer reports, "
-    + "does not withhold); IRAS, Tax Clearance for Foreign & SPR Employees (IR21)",
+    "CPF Board, CPF Contribution Rate Table from 1 January 2026, Table 1 (status and age-band rows); " +
+    "CPF Board, Who should receive CPF contributions (employer must know SC/SPR status; " +
+    "foreigners exempt); IRAS, Reporting Employee Earnings (IR8A, App 8A/8B) (employer reports, " +
+    "does not withhold); IRAS, Tax Clearance for Foreign & SPR Employees (IR21)",
   summary:
-    "Recorded at onboarding and whenever the employee's status changes. It carries the two facts "
-    + "the CPF rate table prices on — CPF status and age band — because no IRAS or CPF Board form "
-    + "varies a monthly withholding that does not exist.",
+    "Recorded at onboarding and whenever the employee's status changes. It carries the two facts " +
+    "the CPF rate table prices on — CPF status and age band — because no IRAS or CPF Board form " +
+    "varies a monthly withholding that does not exist.",
   storage: "certificate_rows",
   fields: [
     {
@@ -63,20 +60,23 @@ const SG_CPF_STATUS: PayrollCertificate = {
         {
           value: "spr_3rd_year",
           label: "Singapore Permanent Resident, 3rd year onwards",
-          help: "Table 1 applies (\"for Singapore Citizens or Singapore Permanent Residents (3rd year "
-            + "onwards)\"). The 2026 engine computes this status at full rates.",
+          help:
+            'Table 1 applies ("for Singapore Citizens or Singapore Permanent Residents (3rd year ' +
+            'onwards)"). The 2026 engine computes this status at full rates.',
         },
         {
           value: "spr_1st_year",
           label: "Singapore Permanent Resident, 1st year",
-          help: "Graduated employer/employee rates (Table 2); select the distinct full-employer option only "
-            + "when CPF Board approved the joint application (Table 4).",
+          help:
+            "Graduated employer/employee rates (Table 2); select the distinct full-employer option only " +
+            "when CPF Board approved the joint application (Table 4).",
         },
         {
           value: "spr_2nd_year",
           label: "Singapore Permanent Resident, 2nd year",
-          help: "Graduated employer/employee rates (Table 3); select the distinct full-employer option only "
-            + "when CPF Board approved the joint application (Table 5).",
+          help:
+            "Graduated employer/employee rates (Table 3); select the distinct full-employer option only " +
+            "when CPF Board approved the joint application (Table 5).",
         },
         {
           value: "spr_1st_year_full_employer",
@@ -91,16 +91,18 @@ const SG_CPF_STATUS: PayrollCertificate = {
         {
           value: "foreigner",
           label: "Neither citizen nor PR",
-          help: "No CPF is payable (\"Persons who are not Singapore Citizens or Singapore Permanent "
-            + "Residents\" are exempt); SDL still prices. A MOM foreign-worker levy may apply on top — "
-            + "declare the work-permit type below so the engine can route it: Work Permit holders refuse "
-            + "by name (levy schedule not transcribed), other passes price SDL-only.",
+          help:
+            'No CPF is payable ("Persons who are not Singapore Citizens or Singapore Permanent ' +
+            'Residents" are exempt); SDL still prices. A MOM foreign-worker levy may apply on top — ' +
+            "declare the work-permit type below so the engine can route it: Work Permit holders refuse " +
+            "by name (levy schedule not transcribed), other passes price SDL-only.",
         },
       ],
       required: true,
-      help: "The employee's CPF status, which selects the contribution-rate table. Citizens and 3rd-year "
-        + "SPRs price under Table 1; 1st/2nd-year SPRs price under the graduated Tables 2–5; foreigners "
-        + "pay no CPF. Nothing is assumed when this is unanswered.",
+      help:
+        "The employee's CPF status, which selects the contribution-rate table. Citizens and 3rd-year " +
+        "SPRs price under Table 1; 1st/2nd-year SPRs price under the graduated Tables 2–5; foreigners " +
+        "pay no CPF. Nothing is assumed when this is unanswered.",
     },
     {
       key: "permit_type",
@@ -110,8 +112,9 @@ const SG_CPF_STATUS: PayrollCertificate = {
         {
           value: "work_permit",
           label: "Work Permit",
-          help: "Holder attracts the MOM foreign-worker levy, whose sector/tier schedule is not "
-            + "transcribed: the run refuses by name so the levy is arranged, never silently unpaid.",
+          help:
+            "Holder attracts the MOM foreign-worker levy, whose sector/tier schedule is not " +
+            "transcribed: the run refuses by name so the levy is arranged, never silently unpaid.",
         },
         {
           value: "s_pass",
@@ -126,14 +129,16 @@ const SG_CPF_STATUS: PayrollCertificate = {
         {
           value: "other",
           label: "Other / unknown pass",
-          help: "The levy position cannot be determined from this answer: SDL prices and the stub "
-            + "trace carries the uncomputed-levy marker until the pass is identified.",
+          help:
+            "The levy position cannot be determined from this answer: SDL prices and the stub " +
+            "trace carries the uncomputed-levy marker until the pass is identified.",
         },
       ],
-      help: "The foreign employee's MOM work-pass type, which routes the foreign-worker levy: Work "
-        + "Permit holders refuse by name, S Pass and Employment Pass holders price SDL-only, anything "
-        + "else prices SDL with the levy marked uncomputed on the stub trace. Leave unanswered only for "
-        + "citizens and PRs.",
+      help:
+        "The foreign employee's MOM work-pass type, which routes the foreign-worker levy: Work " +
+        "Permit holders refuse by name, S Pass and Employment Pass holders price SDL-only, anything " +
+        "else prices SDL with the levy marked uncomputed on the stub trace. Leave unanswered only for " +
+        "citizens and PRs.",
     },
     {
       key: "age_band",
@@ -143,37 +148,43 @@ const SG_CPF_STATUS: PayrollCertificate = {
         {
           value: "le55",
           label: "55 & below",
-          help: "Table 1 row: 37% total / 20% employee on OW above $750 (max $2,960 / $1,600). "
-            + "The 2026 engine computes this band.",
+          help:
+            "Table 1 row: 37% total / 20% employee on OW above $750 (max $2,960 / $1,600). " +
+            "The 2026 engine computes this band.",
         },
         {
           value: "b55_60",
           label: "Above 55 – 60",
-          help: "Table 1 row: 34% total / 18% employee (max $2,720 / $1,440). Refused by name — "
-            + "not transcribed.",
+          help:
+            "Table 1 row: 34% total / 18% employee (max $2,720 / $1,440). Refused by name — " +
+            "not transcribed.",
         },
         {
           value: "b60_65",
           label: "Above 60 – 65",
-          help: "Table 1 row: 25% total / 12.5% employee (max $2,000 / $1,000). Refused by name — "
-            + "not transcribed.",
+          help:
+            "Table 1 row: 25% total / 12.5% employee (max $2,000 / $1,000). Refused by name — " +
+            "not transcribed.",
         },
         {
           value: "b65_70",
           label: "Above 65 – 70",
-          help: "Table 1 row: 16.5% total / 7.5% employee (max $1,320 / $600). Refused by name — "
-            + "not transcribed.",
+          help:
+            "Table 1 row: 16.5% total / 7.5% employee (max $1,320 / $600). Refused by name — " +
+            "not transcribed.",
         },
         {
           value: "gt70",
           label: "Above 70",
-          help: "Table 1 row: 12.5% total / 5% employee (max $1,000 / $400). Refused by name — "
-            + "not transcribed.",
+          help:
+            "Table 1 row: 12.5% total / 5% employee (max $1,000 / $400). Refused by name — " +
+            "not transcribed.",
         },
       ],
       required: true,
-      help: "The employee's Table 1 age band for the calendar month. Only \"55 & below\" computes in "
-        + "2026; every other band is refused by name.",
+      help:
+        'The employee\'s Table 1 age band for the calendar month. Only "55 & below" computes in ' +
+        "2026; every other band is refused by name.",
     },
   ],
 };

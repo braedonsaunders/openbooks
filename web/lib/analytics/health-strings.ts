@@ -13,10 +13,8 @@ import type { AnalyticsFindingKey, CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 import { RATIO_IDS } from "./ratio-ids";
 
-
 export type PnlLineKey =
-  | "revenue" | "cogs" | "grossProfit" | "opex"
-  | "operatingIncome" | "otherExpense" | "netIncome";
+  "revenue" | "cogs" | "grossProfit" | "opex" | "operatingIncome" | "otherExpense" | "netIncome";
 
 export type MarginStageKey = PnlLineKey | "excludeOtherIncome" | "otherIncome";
 
@@ -115,10 +113,14 @@ export function healthStrings(t: CatalogMessageFn, locale: string): HealthString
     effectiveTaxRate: (rate) => t("financialHealth.ratioNotes.effectiveTaxRate", { rate }),
     statutoryTaxRate: (rate) => t("financialHealth.ratioNotes.statutoryTaxRate", { rate }),
     percent: (fraction) =>
-      new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(fraction as unknown as number),
+      new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(
+        fraction as unknown as number,
+      ),
     monthLabel: catalogMonthLabel(t),
     displaySegmentName: (id, name) =>
-      id === "unassigned" && name === "Unassigned" ? t("financialHealth.labels.unassignedSegment") : name,
+      id === "unassigned" && name === "Unassigned"
+        ? t("financialHealth.labels.unassignedSegment")
+        : name,
     pnlLine: (key) => t(`financialHealth.pnl.${key}`),
     // The waterfall historically abbreviated COGS; the catalog carries the
     // reviewed long form everywhere, so every language reads a real word.
@@ -153,7 +155,6 @@ export function healthStrings(t: CatalogMessageFn, locale: string): HealthString
     }),
   };
 }
-
 
 export interface RatioDefText {
   label: string;

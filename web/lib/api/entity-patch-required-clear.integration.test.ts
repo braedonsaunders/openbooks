@@ -10,9 +10,8 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // integration-test conventions (hand-built resolved type + fields).
 const { updateRecord } = await import("./writers.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -29,8 +28,22 @@ const resolved: ResolvedApiType = {
 };
 
 const fields: ApiField[] = [
-  { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
-  { name: "name", type: "string", required: true, writable: true, description: null, custom: false },
+  {
+    name: "kind",
+    type: "string",
+    required: true,
+    writable: true,
+    description: null,
+    custom: false,
+  },
+  {
+    name: "name",
+    type: "string",
+    required: true,
+    writable: true,
+    description: null,
+    custom: false,
+  },
 ];
 
 test(
@@ -53,13 +66,22 @@ test(
     };
     const itemId = randomUUID();
     try {
-      await withBypass(() => db.execute(sql`
+      await withBypass(() =>
+        db.execute(sql`
         insert into items (id, org_id, kind, name, created_by, updated_by)
         values (${itemId}, ${org.orgId}, 'service', 'Required clear item', ${actorId}, ${actorId})
-      `));
+      `),
+      );
 
       const result = await withOrgContext(org.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, { name: null }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { name: null },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(result.status, 422);
       const body = result.body as { fieldErrors?: { field: string }[] };
@@ -75,7 +97,14 @@ test(
 
       // Partial PATCH omitting required fields still succeeds.
       const partial = await withOrgContext(org.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, { kind: "service" }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { kind: "service" },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(partial.status, 200);
     } finally {

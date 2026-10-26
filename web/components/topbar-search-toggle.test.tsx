@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // in topbar nav mode the header search is hidden below lg with
 // no trigger, so global search is unreachable on mobile. A toggle button
 // must exist below lg and open the search.
 await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard" });
 
-stubModules({ navigation: { pathname: '/dashboard' }, intl: false, authz: false, features: false });
+stubModules({ navigation: { pathname: "/dashboard" }, intl: false, authz: false, features: false });
 
 const React = await import("react");
 Object.assign(globalThis, { React });
@@ -34,7 +34,9 @@ function mount() {
       });
     },
     async unmount() {
-      await act(async () => { root.unmount(); });
+      await act(async () => {
+        root.unmount();
+      });
       host.remove();
     },
   };
@@ -53,7 +55,11 @@ test("topbar search toggle is mobile-only and opens the search", async (t) => {
     "toggle must hide on desktop (the inline search owns lg+)",
   );
   assert.equal(toggle.getAttribute("aria-expanded"), "false");
-  assert.equal(ui.host.querySelector('input[aria-label="Search"]'), null, "search input stays hidden until opened");
+  assert.equal(
+    ui.host.querySelector('input[aria-label="Search"]'),
+    null,
+    "search input stays hidden until opened",
+  );
 
   await act(async () => {
     toggle.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

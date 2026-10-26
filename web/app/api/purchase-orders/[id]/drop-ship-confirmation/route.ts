@@ -10,20 +10,34 @@ export const POST = defineRoute({
   permission: "items.post",
   feature: "dropShipping",
   params: z.object({ id: uuidString() }),
-  body: z.object({
-    confirmationDate: z.string().date().optional(),
-    lines: z.array(z.object({ purchaseOrderLineId: uuidString(), quantity: z.string().min(1).max(50) }).strict()).min(1),
-  }).strict(),
+  body: z
+    .object({
+      confirmationDate: z.string().date().optional(),
+      lines: z
+        .array(
+          z
+            .object({ purchaseOrderLineId: uuidString(), quantity: z.string().min(1).max(50) })
+            .strict(),
+        )
+        .min(1),
+    })
+    .strict(),
   handler: async ({ request, authz, params, body }) => {
     const scope = await dropShipRecordScope(authz.user.orgId, params.id, "purchase_order");
     if (!scope || guardSubsidiaryScope(authz, scope.subsidiaryId)) return notFound("record");
     const key = request.headers.get("Idempotency-Key")?.trim() ?? "";
-    const context = applicationContextFromSession(authz, "api", request.headers.get("x-request-id") ?? key);
-    return created(await confirmDropShip(context, {
-      purchaseOrderId: params.id,
-      confirmationDate: body.confirmationDate,
-      idempotencyKey: key,
-      lines: body.lines,
-    }));
+    const context = applicationContextFromSession(
+      authz,
+      "api",
+      request.headers.get("x-request-id") ?? key,
+    );
+    return created(
+      await confirmDropShip(context, {
+        purchaseOrderId: params.id,
+        confirmationDate: body.confirmationDate,
+        idempotencyKey: key,
+        lines: body.lines,
+      }),
+    );
   },
 });

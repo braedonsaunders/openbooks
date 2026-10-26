@@ -1,7 +1,7 @@
 // source-pin-contract: dashboard registry agreement — the widget, render-case, permission and metric-field registries name the same widget set and every widget's copy key exists in English; sets read from the four registry sources, never hand-listed.
-import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import test from "node:test";
 
 /**
  * The home-dashboard registry cannot drift.
@@ -24,62 +24,71 @@ import test from 'node:test'
  * importing would drag the dashboard's client graph into a plain node test.
  */
 
-const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8')
+const read = (file: string) => readFileSync(new URL(file, import.meta.url), "utf8");
 
 /** Top-level quoted keys of the object literal opened right after `anchor`. */
 function literalKeys(source: string, anchor: string): string[] {
-  const start = source.indexOf(anchor)
-  assert.ok(start >= 0, `declaration not found: ${anchor}`)
-  const open = source.indexOf('{', start)
-  const keys: string[] = []
-  let depth = 0
+  const start = source.indexOf(anchor);
+  assert.ok(start >= 0, `declaration not found: ${anchor}`);
+  const open = source.indexOf("{", start);
+  const keys: string[] = [];
+  let depth = 0;
   for (let i = open; i < source.length; i++) {
-    const c = source[i]!
-    if (c === '"' || c === "'" || c === '`') {
-      const quote = c
-      const from = i
-      i++
+    const c = source[i]!;
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      const from = i;
+      i++;
       while (i < source.length && source[i] !== quote) {
-        if (source[i] === '\\') i++
-        i++
+        if (source[i] === "\\") i++;
+        i++;
       }
-      if (depth === 1 && /^\s*:/.test(source.slice(i + 1))) keys.push(source.slice(from + 1, i))
-      continue
+      if (depth === 1 && /^\s*:/.test(source.slice(i + 1))) keys.push(source.slice(from + 1, i));
+      continue;
     }
-    if (c === '/' && source[i + 1] === '/') {
-      while (i < source.length && source[i] !== '\n') i++
-      continue
+    if (c === "/" && source[i + 1] === "/") {
+      while (i < source.length && source[i] !== "\n") i++;
+      continue;
     }
-    if (c === '/' && source[i + 1] === '*') {
-      i = source.indexOf('*/', i) + 1
-      continue
+    if (c === "/" && source[i + 1] === "*") {
+      i = source.indexOf("*/", i) + 1;
+      continue;
     }
-    if (c === '{' || c === '(' || c === '[') { depth++; continue }
-    if (c === '}' || c === ')' || c === ']') { depth--; if (depth === 0) break; continue }
+    if (c === "{" || c === "(" || c === "[") {
+      depth++;
+      continue;
+    }
+    if (c === "}" || c === ")" || c === "]") {
+      depth--;
+      if (depth === 0) break;
+      continue;
+    }
     if (depth === 1 && /[A-Za-z_$]/.test(c)) {
-      const word = /^[A-Za-z0-9_$]+/.exec(source.slice(i))![0]
-      if (/^\s*:/.test(source.slice(i + word.length))) keys.push(word)
-      i += word.length - 1
+      const word = /^[A-Za-z0-9_$]+/.exec(source.slice(i))![0];
+      if (/^\s*:/.test(source.slice(i + word.length))) keys.push(word);
+      i += word.length - 1;
     }
   }
-  return keys
+  return keys;
 }
 
-const registry = read('./_widget-registry.ts')
-const views = read('./_widget-views.tsx')
-const access = read('./_widget-access.ts')
-const metrics = read('./_metrics.ts')
+const registry = read("./_widget-registry.ts");
+const views = read("./_widget-views.tsx");
+const access = read("./_widget-access.ts");
+const metrics = read("./_metrics.ts");
 
-const widgetIds = literalKeys(registry, 'export const WIDGETS')
-const permissionIds = literalKeys(access, 'const WIDGET_PERMISSIONS')
-const metricFieldIds = literalKeys(metrics, 'const WIDGET_METRIC_FIELDS')
+const widgetIds = literalKeys(registry, "export const WIDGETS");
+const permissionIds = literalKeys(access, "const WIDGET_PERMISSIONS");
+const metricFieldIds = literalKeys(metrics, "const WIDGET_METRIC_FIELDS");
 // Widgets extracted from an Analytics dashboard render in that dashboard's
 // own widget module (_widget-views-<domain>.tsx), which WidgetCard delegates
 // to — their cases count exactly like WidgetCard's own.
-const domainViews = readdirSync(new URL('.', import.meta.url))
+const domainViews = readdirSync(new URL(".", import.meta.url))
   .filter((name) => /^_widget-views-[a-z]+\.tsx$/.test(name))
-  .map((name) => read(`./${name}`))
-const renderCases = [views, ...domainViews].flatMap((source) => [...source.matchAll(/^\s*case (['"])([^'"]+)\1/gm)].map((m) => m[2]!))
+  .map((name) => read(`./${name}`));
+const renderCases = [views, ...domainViews].flatMap((source) =>
+  [...source.matchAll(/^\s*case (['"])([^'"]+)\1/gm)].map((m) => m[2]!),
+);
 
 /**
  * Tiles the grid renders itself instead of through `WidgetCard`.
@@ -89,62 +98,64 @@ const renderCases = [views, ...domainViews].flatMap((source) => [...source.match
  * ever holds more than one entry, that is a second render path growing —
  * prefer a metrics-driven card instead.
  */
-const SLOT_RENDERED = ['personal-actions']
+const SLOT_RENDERED = ["personal-actions"];
 
-test('every widget has an explicit permission entry (no silent fallthrough)', () => {
-  const missing = widgetIds.filter((id) => !permissionIds.includes(id))
-  const orphan = permissionIds.filter((id) => !widgetIds.includes(id))
+test("every widget has an explicit permission entry (no silent fallthrough)", () => {
+  const missing = widgetIds.filter((id) => !permissionIds.includes(id));
+  const orphan = permissionIds.filter((id) => !widgetIds.includes(id));
   assert.deepEqual(
     { missing, orphan },
     { missing: [], orphan: [] },
-    'a WIDGETS id with no WIDGET_PERMISSIONS entry renders for everyone; ' +
-      'a permission entry naming no widget guards nothing',
-  )
-})
+    "a WIDGETS id with no WIDGET_PERMISSIONS entry renders for everyone; " +
+      "a permission entry naming no widget guards nothing",
+  );
+});
 
-test('every widget declares the metric fields it renders (no silent zeroes)', () => {
-  const missing = widgetIds.filter((id) => !metricFieldIds.includes(id))
-  const orphan = metricFieldIds.filter((id) => !widgetIds.includes(id))
+test("every widget declares the metric fields it renders (no silent zeroes)", () => {
+  const missing = widgetIds.filter((id) => !metricFieldIds.includes(id));
+  const orphan = metricFieldIds.filter((id) => !widgetIds.includes(id));
   assert.deepEqual(
     { missing, orphan },
     { missing: [], orphan: [] },
-    'a widget missing from WIDGET_METRIC_FIELDS receives zeroed metrics — ' +
-      'a KPI rendering 0 that reads as a fact',
-  )
-})
+    "a widget missing from WIDGET_METRIC_FIELDS receives zeroed metrics — " +
+      "a KPI rendering 0 that reads as a fact",
+  );
+});
 
-test('every widget has a render case or a named slot path (no unknown shell)', () => {
+test("every widget has a render case or a named slot path (no unknown shell)", () => {
   const unrendered = widgetIds.filter(
     (id) => !renderCases.includes(id) && !SLOT_RENDERED.includes(id),
-  )
-  const deadCases = renderCases.filter((id) => !widgetIds.includes(id))
-  const straySlots = SLOT_RENDERED.filter((id) => !widgetIds.includes(id))
+  );
+  const deadCases = renderCases.filter((id) => !widgetIds.includes(id));
+  const straySlots = SLOT_RENDERED.filter((id) => !widgetIds.includes(id));
   assert.deepEqual(
     { unrendered, deadCases, straySlots },
     { unrendered: [], deadCases: [], straySlots: [] },
-    'a widget with no WidgetCard case renders the unknown-widget shell; ' +
-      'a case naming no widget is dead code',
-  )
-})
+    "a widget with no WidgetCard case renders the unknown-widget shell; " +
+      "a case naming no widget is dead code",
+  );
+});
 
-test('every widget names dashboard-catalog copy that exists in English', () => {
-  const en = JSON.parse(read('../../../messages/en/dashboard.json')) as unknown
-  const flat = new Map<string, string>()
+test("every widget names dashboard-catalog copy that exists in English", () => {
+  const en = JSON.parse(read("../../../messages/en/dashboard.json")) as unknown;
+  const flat = new Map<string, string>();
   const walk = (node: unknown, path: string[]) => {
-    if (node === null || typeof node !== 'object' || Array.isArray(node)) return
+    if (node === null || typeof node !== "object" || Array.isArray(node)) return;
     for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-      if (typeof value === 'string') flat.set([...path, key].join('.'), value)
-      else walk(value, [...path, key])
+      if (typeof value === "string") flat.set([...path, key].join("."), value);
+      else walk(value, [...path, key]);
     }
-  }
-  walk(en, [])
-  const labelKeys = [...registry.matchAll(/labelKey: (['"])([^'"]+)\1/g)].map((m) => m[2]!)
-  const descriptionKeys = [...registry.matchAll(/descriptionKey: (['"])([^'"]+)\1/g)].map((m) => m[2]!)
+  };
+  walk(en, []);
+  const labelKeys = [...registry.matchAll(/labelKey: (['"])([^'"]+)\1/g)].map((m) => m[2]!);
+  const descriptionKeys = [...registry.matchAll(/descriptionKey: (['"])([^'"]+)\1/g)].map(
+    (m) => m[2]!,
+  );
   // dashboard.quickActions.title is namespaced outside widgets.* — resolve
   // through the catalog the same way the component does.
   const missing = [...labelKeys, ...descriptionKeys].filter((key) => {
-    const [ns, ...rest] = key.split('.')
-    return !flat.has(ns === 'dashboard' ? rest.join('.') : key)
-  })
-  assert.deepEqual(missing, [], 'widget copy keys must exist in messages/en/dashboard.json')
-})
+    const [ns, ...rest] = key.split(".");
+    return !flat.has(ns === "dashboard" ? rest.join(".") : key);
+  });
+  assert.deepEqual(missing, [], "widget copy keys must exist in messages/en/dashboard.json");
+});

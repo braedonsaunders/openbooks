@@ -11,7 +11,13 @@ import { manufacturingFeatureEnabled } from "@openbooks/engine/manufacturing/gat
 import { postManufacturingEntry } from "@openbooks/engine/testing/manufacturing/journal";
 import { runMrp } from "@openbooks/engine/manufacturing/mrp";
 import { featureGateLockKey } from "@openbooks/engine/organization/org-feature-lock";
-import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  seedApprovalFlow,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 import { createWorkOperator } from "@openbooks/engine/testing/manufacturing";
 import { runRecordFlows } from "@openbooks/engine/flows/module";
 import { waitForLockWaiter } from "@openbooks/engine/testing/lock-wait";
@@ -19,7 +25,13 @@ import { JOURNAL_ENTRY_TABLE } from "@/lib/customization/entity-list-query/journ
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const evidence = { workOrderNumber: "WO-200", bomRevision: "BOM-1", routingVersion: "RT-1" };
-const routeState: { gate: { user: { id: string; orgId: string }; permissions: Set<string>; allowedSubsidiaryIds: null } | null } = { gate: null };
+const routeState: {
+  gate: {
+    user: { id: string; orgId: string };
+    permissions: Set<string>;
+    allowedSubsidiaryIds: null;
+  } | null;
+} = { gate: null };
 Object.assign(globalThis, { __manufacturingFeatureOff: routeState });
 const authzStub = `export async function guardPermission(){return globalThis.__manufacturingFeatureOff.gate}
 export async function requirePermission(){return globalThis.__manufacturingFeatureOff.gate}
@@ -28,190 +40,485 @@ export function guardSubsidiaryScope(){return null}
 export async function guardRootSubsidiaryScope(){return false}
 export function guardUnrestrictedScope(){return null}
 export async function getAuthz(){return globalThis.__manufacturingFeatureOff.gate}`;
-registerHooks({ resolve(specifier, context, next) {
-  const parent = context.parentURL ?? "";
-  const routeCaller = ["/api/admin/setup/", "/api/manufacturing/", "/lib/api/route.ts", "/lib/feature-gates.ts", "/admin/setup/manufacturing/view.ts"]
-    .some((path) => parent.includes(path));
-  if (routeCaller && (specifier.endsWith("/lib/authz") || (parent.includes("/lib/feature-gates.ts") && specifier === "./authz"))) {
-    return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(authzStub)}` };
-  }
-  return next(specifier, context);
-} });
+registerHooks({
+  resolve(specifier, context, next) {
+    const parent = context.parentURL ?? "";
+    const routeCaller = [
+      "/api/admin/setup/",
+      "/api/manufacturing/",
+      "/lib/api/route.ts",
+      "/lib/feature-gates.ts",
+      "/admin/setup/manufacturing/view.ts",
+    ].some((path) => parent.includes(path));
+    if (
+      routeCaller &&
+      (specifier.endsWith("/lib/authz") ||
+        (parent.includes("/lib/feature-gates.ts") && specifier === "./authz"))
+    ) {
+      return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(authzStub)}` };
+    }
+    return next(specifier, context);
+  },
+});
 const { POST: setupPost } = await import("../../api/admin/setup/[entity]/route");
 const { POST: manufacturingPost } = await import("../../api/manufacturing/work-centers/route");
 const { POST: workOrderPost } = await import("../../api/manufacturing/work-orders/route");
-const { POST: issueWorkOrderPost } = await import("../../api/manufacturing/work-orders/[id]/issue/route");
-const { POST: completeWorkOrderPost } = await import("../../api/manufacturing/work-orders/[id]/complete/route");
+const { POST: issueWorkOrderPost } =
+  await import("../../api/manufacturing/work-orders/[id]/issue/route");
+const { POST: completeWorkOrderPost } =
+  await import("../../api/manufacturing/work-orders/[id]/complete/route");
 const { POST: mrpRunPost } = await import("../../api/manufacturing/mrp/runs/route");
 const { loadManufacturingSetup } = await import("../admin/setup/manufacturing/view");
 
 async function features(orgId: string, state: Record<string, boolean>) {
-  await withBypassContext(async () => assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(state)}::jsonb) where id=${orgId} returning id`, "objects")).length, 1));
+  await withBypassContext(async () =>
+    assert.equal(
+      (
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(state)}::jsonb) where id=${orgId} returning id`,
+          "objects",
+        )
+      ).length,
+      1,
+    ),
+  );
 }
-function postingInput(org: ScratchOrg, actorId: string, currency: string) { return { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, actorId, currency, periodId: org.periodId, date: org.date, entryNumber: `MFG-${randomUUID()}`, memo: "Production cost", lines: [{ accountId: org.accounts.invAsset, amount: "10.00" }, { accountId: org.accounts.cogs, amount: "-10.00" }], custom: evidence }; }
-async function post(org: ScratchOrg, actorId: string) { return withBypassContext(() => db.transaction((tx) => postManufacturingEntry(tx, postingInput(org, actorId, "CAD")))); }
-async function snapshot(orgId: string, id: string) { return withBypassContext(async () => ({ entry: (await db.execute(sql`select * from journal_entries where org_id=${orgId} and id=${id}`, "objects"))[0], lines: await db.execute(sql`select * from journal_lines where org_id=${orgId} and entry_id=${id} order by line_number`, "objects") })); }
-async function listed(orgId: string, id: string) { return withBypassContext(async () => (await db.execute(sql`select e.id from ${sql.raw(JOURNAL_ENTRY_TABLE)} e where e.org_id=${orgId} and e.id=${id}`, "objects")).map((row) => row.id)); }
-async function refuses(posting: Promise<unknown>) { await assert.rejects(posting, (error: unknown) => error instanceof ManufacturingFeatureDisabledError && /manufacturing/i.test(error.message) && error.message.includes("Turn it on in Company Settings → Features")); }
+function postingInput(org: ScratchOrg, actorId: string, currency: string) {
+  return {
+    orgId: org.orgId,
+    bookId: org.bookId,
+    subsidiaryId: org.subsidiaryId,
+    actorId,
+    currency,
+    periodId: org.periodId,
+    date: org.date,
+    entryNumber: `MFG-${randomUUID()}`,
+    memo: "Production cost",
+    lines: [
+      { accountId: org.accounts.invAsset, amount: "10.00" },
+      { accountId: org.accounts.cogs, amount: "-10.00" },
+    ],
+    custom: evidence,
+  };
+}
+async function post(org: ScratchOrg, actorId: string) {
+  return withBypassContext(() =>
+    db.transaction((tx) => postManufacturingEntry(tx, postingInput(org, actorId, "CAD"))),
+  );
+}
+async function snapshot(orgId: string, id: string) {
+  return withBypassContext(async () => ({
+    entry: (
+      await db.execute(
+        sql`select * from journal_entries where org_id=${orgId} and id=${id}`,
+        "objects",
+      )
+    )[0],
+    lines: await db.execute(
+      sql`select * from journal_lines where org_id=${orgId} and entry_id=${id} order by line_number`,
+      "objects",
+    ),
+  }));
+}
+async function listed(orgId: string, id: string) {
+  return withBypassContext(async () =>
+    (
+      await db.execute(
+        sql`select e.id from ${sql.raw(JOURNAL_ENTRY_TABLE)} e where e.org_id=${orgId} and e.id=${id}`,
+        "objects",
+      )
+    ).map((row) => row.id),
+  );
+}
+async function refuses(posting: Promise<unknown>) {
+  await assert.rejects(
+    posting,
+    (error: unknown) =>
+      error instanceof ManufacturingFeatureDisabledError &&
+      /manufacturing/i.test(error.message) &&
+      error.message.includes("Turn it on in Company Settings → Features"),
+  );
+}
 function setupWrite(entity: string, body: Record<string, unknown>) {
-  return setupPost(new Request(`http://audit.local/api/admin/setup/${entity}`, {
-    method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify(body),
-  }), { params: Promise.resolve({ entity }) });
+  return setupPost(
+    new Request(`http://audit.local/api/admin/setup/${entity}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ entity }) },
+  );
 }
 function manufacturingWrite(_orgId: string) {
-  return manufacturingPost(new Request("http://audit.local/api/manufacturing/work-centers", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
-  }), { params: Promise.resolve({}) });
+  return manufacturingPost(
+    new Request("http://audit.local/api/manufacturing/work-centers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }),
+    { params: Promise.resolve({}) },
+  );
 }
 function workOrderWrite() {
-  return workOrderPost(new Request("http://audit.local/api/manufacturing/work-orders", {
-    method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify({}),
-  }), { params: Promise.resolve({}) });
+  return workOrderPost(
+    new Request("http://audit.local/api/manufacturing/work-orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify({}),
+    }),
+    { params: Promise.resolve({}) },
+  );
 }
 function issueWorkOrderWrite(id: string) {
-  return issueWorkOrderPost(new Request(`http://audit.local/api/manufacturing/work-orders/${id}/issue`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lines: [{ materialId: randomUUID(), quantity: "1" }] }),
-  }), { params: Promise.resolve({ id }) });
+  return issueWorkOrderPost(
+    new Request(`http://audit.local/api/manufacturing/work-orders/${id}/issue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines: [{ materialId: randomUUID(), quantity: "1" }] }),
+    }),
+    { params: Promise.resolve({ id }) },
+  );
 }
 function completeWorkOrderWrite(id: string) {
-  return completeWorkOrderPost(new Request(`http://audit.local/api/manufacturing/work-orders/${id}/complete`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantity: "1" }),
-  }), { params: Promise.resolve({ id }) });
+  return completeWorkOrderPost(
+    new Request(`http://audit.local/api/manufacturing/work-orders/${id}/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quantity: "1" }),
+    }),
+    { params: Promise.resolve({ id }) },
+  );
 }
 
-test("manufacturing is off by default, parent-fenced, and preserves posted history", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    // The direct MRP run below locks native command authority, so the shop
-    // lead carries the planning grants; every refusal below stays
-    // feature-based (the feature is off), never authority-based.
-    const actorId = await withBypassContext(() => createWorkOperator(org.orgId, "Shop lead", ["manufacturing.manage", "items.read"])); assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false); await refuses(post(org, actorId));
-    await features(org.orgId, { manufacturing: true, inventory: false, manufacturingMrp: true });
-    assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false);
-    assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturingMrp")), false);
-    await refuses(post(org, actorId));
-    const refusedCount = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`, "objects"))[0]!.n);
-    assert.equal(refusedCount, 0);
-    await features(org.orgId, { manufacturing: true, inventory: true, warehousing: true, manufacturingMrp: false });
-    routeState.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["admin.setup.manage", "items.post", "manufacturing.manage"]), allowedSubsidiaryIds: null };
-    const mrpOff = await mrpRunPost(new Request("http://audit.local/api/manufacturing/mrp/runs", {
-      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
-      body: JSON.stringify({ subsidiaryId: org.subsidiaryId }),
-    }), { params: Promise.resolve({}) });
-    assert.equal(mrpOff.status, 404);
-    assert.doesNotMatch(await mrpOff.clone().text(), /manufacturing/i);
-    await features(org.orgId, { manufacturingMrp: true });
-    const policy = await withBypassContext(async () => db.execute(sql`insert into mfg_item_policies
+test(
+  "manufacturing is off by default, parent-fenced, and preserves posted history",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      // The direct MRP run below locks native command authority, so the shop
+      // lead carries the planning grants; every refusal below stays
+      // feature-based (the feature is off), never authority-based.
+      const actorId = await withBypassContext(() =>
+        createWorkOperator(org.orgId, "Shop lead", ["manufacturing.manage", "items.read"]),
+      );
+      assert.equal(
+        await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")),
+        false,
+      );
+      await refuses(post(org, actorId));
+      await features(org.orgId, { manufacturing: true, inventory: false, manufacturingMrp: true });
+      assert.equal(
+        await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")),
+        false,
+      );
+      assert.equal(
+        await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturingMrp")),
+        false,
+      );
+      await refuses(post(org, actorId));
+      const refusedCount = await withBypassContext(
+        async () =>
+          (
+            await db.execute(
+              sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`,
+              "objects",
+            )
+          )[0]!.n,
+      );
+      assert.equal(refusedCount, 0);
+      await features(org.orgId, {
+        manufacturing: true,
+        inventory: true,
+        warehousing: true,
+        manufacturingMrp: false,
+      });
+      routeState.gate = {
+        user: { orgId: org.orgId, id: actorId },
+        permissions: new Set(["admin.setup.manage", "items.post", "manufacturing.manage"]),
+        allowedSubsidiaryIds: null,
+      };
+      const mrpOff = await mrpRunPost(
+        new Request("http://audit.local/api/manufacturing/mrp/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+          body: JSON.stringify({ subsidiaryId: org.subsidiaryId }),
+        }),
+        { params: Promise.resolve({}) },
+      );
+      assert.equal(mrpOff.status, 404);
+      assert.doesNotMatch(await mrpOff.clone().text(), /manufacturing/i);
+      await features(org.orgId, { manufacturingMrp: true });
+      const policy = await withBypassContext(async () =>
+        db.execute(
+          sql`insert into mfg_item_policies
       (org_id,item_id,supply_method,lead_time_days,safety_stock_qty,minimum_qty,order_multiple_qty,scrap_pct_planned,created_by,updated_by)
-      values (${org.orgId},${org.items.assembly},'buy',7,'0','1000','1','0',${actorId},${actorId}) returning id`, "objects"));
-    assert.equal(policy.length, 1);
-    const mrpRun = await withOrgTransaction(org.orgId, () => runMrp(db, org.orgId, actorId, { subsidiaryId: org.subsidiaryId, horizonDays: 30, capacityCheck: false }));
-    const mrpBefore = await withBypassContext(async () => ({
-      run: (await db.execute(sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`, "objects"))[0],
-      suggestions: await db.execute(sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`, "objects"),
-    }));
-    assert.equal(mrpBefore.suggestions.length, 1);
-    await features(org.orgId, { manufacturingMrp: false });
-    const childOff = await mrpRunPost(new Request("http://audit.local/api/manufacturing/mrp/runs", {
-      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
-      body: JSON.stringify({ subsidiaryId: org.subsidiaryId }),
-    }), { params: Promise.resolve({}) });
-    assert.equal(childOff.status, 404);
-    assert.doesNotMatch(await childOff.clone().text(), /manufacturing/i);
-    const scrap = await setupWrite("mfg-scrap-reasons", { code: "NORMAL", name: "Normal trim loss", classification: "normal", isActive: true });
-    assert.equal(scrap.status, 200, await scrap.clone().text());
-    const scrapId = String((await scrap.json()).id);
-    const first = await post(org, actorId); const original = await snapshot(org.orgId, first);
-    assert.deepEqual(await listed(org.orgId, first), [first]);
-    await features(org.orgId, { manufacturing: false });
-    await features(org.orgId, { manufacturingMrp: true });
-    assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturingMrp")), false);
-    await refuses(post(org, actorId));
-    const fencedSetup = await setupWrite("mfg-scrap-reasons", { code: "OFF", name: "Unavailable reason", classification: "normal", isActive: true });
-    assert.equal(fencedSetup.status, 404);
-    const fencedManufacturing = await manufacturingWrite(org.orgId);
-    const unavailable = await fencedManufacturing.json();
-    assert.equal(fencedManufacturing.status, 404);
-    assert.doesNotMatch(JSON.stringify(unavailable), /manufacturing/i);
-    const fencedWorkOrder = await workOrderWrite();
-    assert.equal(fencedWorkOrder.status, 404);
-    assert.doesNotMatch(await fencedWorkOrder.clone().text(), /manufacturing/i);
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "work_order", assignees: [{ type: "user", userId: actorId }], mode: "any",
-    });
-    const workOrderId = randomUUID();
-    await withBypassContext(async () => {
-      const seeded = await db.execute(sql`insert into mfg_work_orders
+      values (${org.orgId},${org.items.assembly},'buy',7,'0','1000','1','0',${actorId},${actorId}) returning id`,
+          "objects",
+        ),
+      );
+      assert.equal(policy.length, 1);
+      const mrpRun = await withOrgTransaction(org.orgId, () =>
+        runMrp(db, org.orgId, actorId, {
+          subsidiaryId: org.subsidiaryId,
+          horizonDays: 30,
+          capacityCheck: false,
+        }),
+      );
+      const mrpBefore = await withBypassContext(async () => ({
+        run: (
+          await db.execute(
+            sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`,
+            "objects",
+          )
+        )[0],
+        suggestions: await db.execute(
+          sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`,
+          "objects",
+        ),
+      }));
+      assert.equal(mrpBefore.suggestions.length, 1);
+      await features(org.orgId, { manufacturingMrp: false });
+      const childOff = await mrpRunPost(
+        new Request("http://audit.local/api/manufacturing/mrp/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+          body: JSON.stringify({ subsidiaryId: org.subsidiaryId }),
+        }),
+        { params: Promise.resolve({}) },
+      );
+      assert.equal(childOff.status, 404);
+      assert.doesNotMatch(await childOff.clone().text(), /manufacturing/i);
+      const scrap = await setupWrite("mfg-scrap-reasons", {
+        code: "NORMAL",
+        name: "Normal trim loss",
+        classification: "normal",
+        isActive: true,
+      });
+      assert.equal(scrap.status, 200, await scrap.clone().text());
+      const scrapId = String((await scrap.json()).id);
+      const first = await post(org, actorId);
+      const original = await snapshot(org.orgId, first);
+      assert.deepEqual(await listed(org.orgId, first), [first]);
+      await features(org.orgId, { manufacturing: false });
+      await features(org.orgId, { manufacturingMrp: true });
+      assert.equal(
+        await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturingMrp")),
+        false,
+      );
+      await refuses(post(org, actorId));
+      const fencedSetup = await setupWrite("mfg-scrap-reasons", {
+        code: "OFF",
+        name: "Unavailable reason",
+        classification: "normal",
+        isActive: true,
+      });
+      assert.equal(fencedSetup.status, 404);
+      const fencedManufacturing = await manufacturingWrite(org.orgId);
+      const unavailable = await fencedManufacturing.json();
+      assert.equal(fencedManufacturing.status, 404);
+      assert.doesNotMatch(JSON.stringify(unavailable), /manufacturing/i);
+      const fencedWorkOrder = await workOrderWrite();
+      assert.equal(fencedWorkOrder.status, 404);
+      assert.doesNotMatch(await fencedWorkOrder.clone().text(), /manufacturing/i);
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "work_order",
+        assignees: [{ type: "user", userId: actorId }],
+        mode: "any",
+      });
+      const workOrderId = randomUUID();
+      await withBypassContext(async () => {
+        const seeded = await db.execute(
+          sql`insert into mfg_work_orders
         (id, org_id, number, produced_item_id, quantity_ordered, unit, status, source, subsidiary_id, created_by, updated_by)
-        values (${workOrderId}, ${org.orgId}, ${`WO-OFF-${workOrderId.slice(0, 8)}`}, ${org.items.assembly}, '1', 'ea', 'draft', 'manual', ${org.subsidiaryId}, ${actorId}, ${actorId}) returning id`, "objects");
-      assert.equal(seeded.length, 1);
-    });
-    const fencedIssue = await issueWorkOrderWrite(workOrderId);
-    assert.equal(fencedIssue.status, 404);
-    assert.doesNotMatch(await fencedIssue.clone().text(), /manufacturing/i);
-    const fencedCompletion = await completeWorkOrderWrite(workOrderId);
-    assert.equal(fencedCompletion.status, 404);
-    assert.doesNotMatch(await fencedCompletion.clone().text(), /manufacturing/i);
-    const offFlow = await withOrgTransaction(org.orgId, () => runRecordFlows(
-      { kind: "on_submit" }, "work_order", workOrderId, { orgId: org.orgId, userId: actorId },
-    ));
-    assert.equal(offFlow.runs.length, 0, "disabled manufacturing subjects do not dispatch Flows");
-    await assert.rejects(loadManufacturingSetup(), (error: unknown) => error instanceof Error && /NEXT_REDIRECT/.test(error.message));
-    const preservedScrap = await withBypassContext(async () => db.execute(sql`select id from mfg_scrap_reasons where org_id=${org.orgId} and id=${scrapId}`, "objects"));
-    assert.equal(preservedScrap.length, 1);
-    assert.deepEqual(await snapshot(org.orgId, first), original);
-    assert.deepEqual(await listed(org.orgId, first), [first]);
-    const mrpDuringOff = await withBypassContext(async () => ({
-      run: (await db.execute(sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`, "objects"))[0],
-      suggestions: await db.execute(sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`, "objects"),
-    }));
-    assert.deepEqual(mrpDuringOff, mrpBefore);
-    await features(org.orgId, { manufacturing: true, manufacturingMrp: true });
-    assert.deepEqual(await snapshot(org.orgId, first), original);
-    const mrpAfter = await withBypassContext(async () => ({
-      run: (await db.execute(sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`, "objects"))[0],
-      suggestions: await db.execute(sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`, "objects"),
-    }));
-    assert.deepEqual(mrpAfter, mrpBefore);
-    assert.equal((await setupWrite("mfg-scrap-reasons", { code: "RETURNED", name: "Available after re-enable", classification: "normal", isActive: true })).status, 200);
-    const second = await post(org, actorId);
-    assert.notEqual(second, first);
-    assert.deepEqual(await listed(org.orgId, second), [second]);
-  } finally { await dropScratchOrg(org.orgId); }
-});
+        values (${workOrderId}, ${org.orgId}, ${`WO-OFF-${workOrderId.slice(0, 8)}`}, ${org.items.assembly}, '1', 'ea', 'draft', 'manual', ${org.subsidiaryId}, ${actorId}, ${actorId}) returning id`,
+          "objects",
+        );
+        assert.equal(seeded.length, 1);
+      });
+      const fencedIssue = await issueWorkOrderWrite(workOrderId);
+      assert.equal(fencedIssue.status, 404);
+      assert.doesNotMatch(await fencedIssue.clone().text(), /manufacturing/i);
+      const fencedCompletion = await completeWorkOrderWrite(workOrderId);
+      assert.equal(fencedCompletion.status, 404);
+      assert.doesNotMatch(await fencedCompletion.clone().text(), /manufacturing/i);
+      const offFlow = await withOrgTransaction(org.orgId, () =>
+        runRecordFlows({ kind: "on_submit" }, "work_order", workOrderId, {
+          orgId: org.orgId,
+          userId: actorId,
+        }),
+      );
+      assert.equal(offFlow.runs.length, 0, "disabled manufacturing subjects do not dispatch Flows");
+      await assert.rejects(
+        loadManufacturingSetup(),
+        (error: unknown) => error instanceof Error && /NEXT_REDIRECT/.test(error.message),
+      );
+      const preservedScrap = await withBypassContext(async () =>
+        db.execute(
+          sql`select id from mfg_scrap_reasons where org_id=${org.orgId} and id=${scrapId}`,
+          "objects",
+        ),
+      );
+      assert.equal(preservedScrap.length, 1);
+      assert.deepEqual(await snapshot(org.orgId, first), original);
+      assert.deepEqual(await listed(org.orgId, first), [first]);
+      const mrpDuringOff = await withBypassContext(async () => ({
+        run: (
+          await db.execute(
+            sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`,
+            "objects",
+          )
+        )[0],
+        suggestions: await db.execute(
+          sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`,
+          "objects",
+        ),
+      }));
+      assert.deepEqual(mrpDuringOff, mrpBefore);
+      await features(org.orgId, { manufacturing: true, manufacturingMrp: true });
+      assert.deepEqual(await snapshot(org.orgId, first), original);
+      const mrpAfter = await withBypassContext(async () => ({
+        run: (
+          await db.execute(
+            sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`,
+            "objects",
+          )
+        )[0],
+        suggestions: await db.execute(
+          sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`,
+          "objects",
+        ),
+      }));
+      assert.deepEqual(mrpAfter, mrpBefore);
+      assert.equal(
+        (
+          await setupWrite("mfg-scrap-reasons", {
+            code: "RETURNED",
+            name: "Available after re-enable",
+            classification: "normal",
+            isActive: true,
+          })
+        ).status,
+        200,
+      );
+      const second = await post(org, actorId);
+      assert.notEqual(second, first);
+      assert.deepEqual(await listed(org.orgId, second), [second]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-const postingDisableOrderings = [{ ordering: "poster-first", expectedEntries: 1 }, { ordering: "disable-first", expectedEntries: 0 }] as const;
+const postingDisableOrderings = [
+  { ordering: "poster-first", expectedEntries: 1 },
+  { ordering: "disable-first", expectedEntries: 0 },
+] as const;
 async function disableOn(writer: pg.Client, orgId: string) {
-  await writer.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [featureGateLockKey(orgId)]);
-  assert.equal((await writer.query("select id from orgs where id=$1 for update", [orgId])).rowCount, 1);
-  assert.equal((await writer.query(`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":false}'::jsonb) where id=$1 returning id`, [orgId])).rowCount, 1);
+  await writer.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+    featureGateLockKey(orgId),
+  ]);
+  assert.equal(
+    (await writer.query("select id from orgs where id=$1 for update", [orgId])).rowCount,
+    1,
+  );
+  assert.equal(
+    (
+      await writer.query(
+        `update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":false}'::jsonb) where id=$1 returning id`,
+        [orgId],
+      )
+    ).rowCount,
+    1,
+  );
 }
 
-test("manufacturing feature row lock orders posting against disable", { skip: !DB }, async () => { for (const { ordering, expectedEntries } of postingDisableOrderings) {
-    const org = await withBypassContext(() => createScratchOrg()), admin = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL }), poster = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
+test("manufacturing feature row lock orders posting against disable", { skip: !DB }, async () => {
+  for (const { ordering, expectedEntries } of postingDisableOrderings) {
+    const org = await withBypassContext(() => createScratchOrg()),
+      admin = new pg.Client({
+        connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+      }),
+      poster = new pg.Client({
+        connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+      });
     let pendingPost: Promise<string> | undefined, pendingDisable: Promise<void> | undefined;
     try {
-      const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin")); const currency = await withBypassContext(async () => (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${org.orgId}`, "objects"))[0]!.base_currency);
-      const input = postingInput(org, actorId, currency); await features(org.orgId, { manufacturing: true, inventory: true }); await admin.connect(); await poster.connect();
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Shop lead", "admin"),
+      );
+      const currency = await withBypassContext(
+        async () =>
+          (
+            await db.execute<{ base_currency: string }>(
+              sql`select base_currency from orgs where id=${org.orgId}`,
+              "objects",
+            )
+          )[0]!.base_currency,
+      );
+      const input = postingInput(org, actorId, currency);
+      await features(org.orgId, { manufacturing: true, inventory: true });
+      await admin.connect();
+      await poster.connect();
       const posterDb = drizzle({ client: poster });
       if (ordering === "poster-first") {
-        await poster.query("begin"); const firstEntry = await postManufacturingEntry(posterDb, input); await admin.query("begin");
-        pendingDisable = disableOn(admin, org.orgId); void pendingDisable.catch(() => undefined);
-        await waitForLockWaiter(poster, { label: "the manufacturing feature disable" }); await poster.query("commit"); await pendingDisable; await admin.query("commit");
-        assert.deepEqual(await withBypassContext(async () => db.execute(sql`select status from journal_entries where org_id=${org.orgId} and id=${firstEntry}`, "objects")), [{ status: "posted" }]);
-        await refuses(withBypassContext(() => db.transaction((tx) => postManufacturingEntry(tx, input))));
+        await poster.query("begin");
+        const firstEntry = await postManufacturingEntry(posterDb, input);
+        await admin.query("begin");
+        pendingDisable = disableOn(admin, org.orgId);
+        void pendingDisable.catch(() => undefined);
+        await waitForLockWaiter(poster, { label: "the manufacturing feature disable" });
+        await poster.query("commit");
+        await pendingDisable;
+        await admin.query("commit");
+        assert.deepEqual(
+          await withBypassContext(async () =>
+            db.execute(
+              sql`select status from journal_entries where org_id=${org.orgId} and id=${firstEntry}`,
+              "objects",
+            ),
+          ),
+          [{ status: "posted" }],
+        );
+        await refuses(
+          withBypassContext(() => db.transaction((tx) => postManufacturingEntry(tx, input))),
+        );
       } else {
-        await admin.query("begin"); await disableOn(admin, org.orgId); await poster.query("begin");
-        pendingPost = postManufacturingEntry(posterDb, input); void pendingPost.catch(() => undefined);
-        await waitForLockWaiter(admin, { label: "the manufacturing post" }); await admin.query("commit"); await refuses(pendingPost!); await poster.query("rollback");
+        await admin.query("begin");
+        await disableOn(admin, org.orgId);
+        await poster.query("begin");
+        pendingPost = postManufacturingEntry(posterDb, input);
+        void pendingPost.catch(() => undefined);
+        await waitForLockWaiter(admin, { label: "the manufacturing post" });
+        await admin.query("commit");
+        await refuses(pendingPost!);
+        await poster.query("rollback");
       }
-      assert.equal(await withBypassContext(async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`, "objects"))[0]!.n), expectedEntries);
+      assert.equal(
+        await withBypassContext(
+          async () =>
+            (
+              await db.execute<{ n: number }>(
+                sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`,
+                "objects",
+              )
+            )[0]!.n,
+        ),
+        expectedEntries,
+      );
     } finally {
-      const first = ordering === "poster-first" ? poster : admin, second = ordering === "poster-first" ? admin : poster;
-      await first.query("rollback").catch(() => undefined); await second.query("rollback").catch(() => undefined);
-      await Promise.allSettled([pendingPost, pendingDisable].filter((pending): pending is NonNullable<typeof pending> => pending !== undefined));
-      await poster.end().catch(() => undefined); await admin.end().catch(() => undefined); await dropScratchOrg(org.orgId);
+      const first = ordering === "poster-first" ? poster : admin,
+        second = ordering === "poster-first" ? admin : poster;
+      await first.query("rollback").catch(() => undefined);
+      await second.query("rollback").catch(() => undefined);
+      await Promise.allSettled(
+        [pendingPost, pendingDisable].filter(
+          (pending): pending is NonNullable<typeof pending> => pending !== undefined,
+        ),
+      );
+      await poster.end().catch(() => undefined);
+      await admin.end().catch(() => undefined);
+      await dropScratchOrg(org.orgId);
     }
   }
 });

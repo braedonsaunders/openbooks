@@ -170,7 +170,8 @@ async function assertBulkColumns(): Promise<void> {
     WHERE c.column_name IS NULL`);
   if (rows.rows.length > 0) {
     throw new Error(
-      `perf-1m seeder: bulk-path columns missing (schema drift): ${JSON.stringify(rows.rows)}`);
+      `perf-1m seeder: bulk-path columns missing (schema drift): ${JSON.stringify(rows.rows)}`,
+    );
   }
 }
 
@@ -250,7 +251,8 @@ async function main(): Promise<void> {
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
       values (${scheduleId}, ${orgId}, 'Perf Monthly', 'monthly', 12, '2023-07-31')`);
     const remittanceVendors = [vendorIds[0]!, vendorIds[1]!];
-    const componentIds: { id: string; name: string; remittance: boolean; vendor: string | null }[] = [];
+    const componentIds: { id: string; name: string; remittance: boolean; vendor: string | null }[] =
+      [];
     const defs: [string, string, string, boolean][] = [
       ["SALARY", "Base salary", "earning", false],
       ["BONUS", "Performance bonus", "earning", false],
@@ -268,7 +270,11 @@ async function main(): Promise<void> {
       // the bill's lines against EVERY line resolving to the marker party in
       // the window — a shared vendor would pull STATETAX lines into the group
       // and the bill would never reconcile.
-      const vendor = !remit ? null : code === "FUTA" ? remittanceVendors[1]! : remittanceVendors[0]!;
+      const vendor = !remit
+        ? null
+        : code === "FUTA"
+          ? remittanceVendors[1]!
+          : remittanceVendors[0]!;
       await db.execute(sql`
         insert into pay_components (id, org_id, code, name, kind, remittance_party_id, liability_account_id,
                                     expense_account_id)
@@ -286,9 +292,19 @@ async function main(): Promise<void> {
     const books = await db.execute<{ id: string }>(sql`
       select id from accounting_books where org_id = ${orgId} and is_active order by created_at limit 1`);
     const bookId = books.rows[0]?.id ?? world.bookId;
-    return { customerIds, vendorIds, employeeIds, scheduleId, componentIds, remittanceVendors, bookId };
+    return {
+      customerIds,
+      vendorIds,
+      employeeIds,
+      scheduleId,
+      componentIds,
+      remittanceVendors,
+      bookId,
+    };
   });
-  log(`masters ready (${extra.customerIds.length} customers, ${extra.vendorIds.length} vendors, 40 employees)`);
+  log(
+    `masters ready (${extra.customerIds.length} customers, ${extra.vendorIds.length} vendors, 40 employees)`,
+  );
 
   const rng = Rng.fromSeed(seed);
   let totalLines = 0;
@@ -299,8 +315,10 @@ async function main(): Promise<void> {
     const { prefix } = monthOf(m);
     const periodId = world.periods[m]!.id;
     const monthRng = rng.stream(`m-${prefix}`);
-    const pickCustomer = (i: number): string => extra.customerIds[(i * 7 + m * 13) % extra.customerIds.length]!;
-    const pickVendor = (i: number): string => extra.vendorIds[(i * 11 + m * 5) % extra.vendorIds.length]!;
+    const pickCustomer = (i: number): string =>
+      extra.customerIds[(i * 7 + m * 13) % extra.customerIds.length]!;
+    const pickVendor = (i: number): string =>
+      extra.vendorIds[(i * 11 + m * 5) % extra.vendorIds.length]!;
 
     interface Doc {
       id: string;
@@ -312,21 +330,41 @@ async function main(): Promise<void> {
       entryId: string;
       arLineId: string;
     }
-    const entries: { id: string; number: string; date: string; origin: "document" | "manual" }[] = [];
+    const entries: { id: string; number: string; date: string; origin: "document" | "manual" }[] =
+      [];
     const lines: BulkLine[] = [];
     const docs: Doc[] = [];
     const apps: {
-      id: string; from: string; to: string; amount: string; date: string;
+      id: string;
+      from: string;
+      to: string;
+      amount: string;
+      date: string;
     }[] = [];
 
-    const addEntry = (tag: string, seq: number, date: string, origin: "document" | "manual"): string => {
+    const addEntry = (
+      tag: string,
+      seq: number,
+      date: string,
+      origin: "document" | "manual",
+    ): string => {
       const id = randomUUID();
-      entries.push({ id, number: `P1M-E-${prefix}-${tag}-${String(seq).padStart(5, "0")}`, date, origin });
+      entries.push({
+        id,
+        number: `P1M-E-${prefix}-${tag}-${String(seq).padStart(5, "0")}`,
+        date,
+        origin,
+      });
       return id;
     };
     const addLine = (
-      entryId: string, lineNumber: number, accountId: string, partyId: string | null,
-      amount: string, openItem: boolean, memo: string,
+      entryId: string,
+      lineNumber: number,
+      accountId: string,
+      partyId: string | null,
+      amount: string,
+      openItem: boolean,
+      memo: string,
     ): string => {
       const id = randomUUID();
       lines.push({ id, entryId, lineNumber, accountId, partyId, amount, openItem, memo });
@@ -354,21 +392,47 @@ async function main(): Promise<void> {
       addLine(entryId, 4, world.accounts.revenueConsulting!, null, `-${r3}`, false, "consulting");
       const docId = randomUUID();
       docs.push({
-        id: docId, kind: "customer_invoice", number: `P1M-I-${prefix}-${String(i).padStart(5, "0")}`,
-        partyId, date, total, entryId, arLineId,
+        id: docId,
+        kind: "customer_invoice",
+        number: `P1M-I-${prefix}-${String(i).padStart(5, "0")}`,
+        partyId,
+        date,
+        total,
+        entryId,
+        arLineId,
       });
       if (i % 100 < CUSTOMER_PAY_PCT) {
         const payDay = Math.min(28, day + 3 + Math.floor(monthRng.next() * 12));
         const payDate = `${prefix}-${pad2(payDay)}`;
         const payEntryId = addEntry("R", i, payDate, "document");
-        const payLineId = addLine(payEntryId, 1, world.accounts.ar!, partyId, `-${total}`, true, "receipt");
+        const payLineId = addLine(
+          payEntryId,
+          1,
+          world.accounts.ar!,
+          partyId,
+          `-${total}`,
+          true,
+          "receipt",
+        );
         addLine(payEntryId, 2, world.accounts.bank!, null, total, false, "bank");
         const payDocId = randomUUID();
         docs.push({
-          id: payDocId, kind: "customer_payment", number: `P1M-R-${prefix}-${String(i).padStart(5, "0")}`,
-          partyId, date: payDate, total, entryId: payEntryId, arLineId: payLineId,
+          id: payDocId,
+          kind: "customer_payment",
+          number: `P1M-R-${prefix}-${String(i).padStart(5, "0")}`,
+          partyId,
+          date: payDate,
+          total,
+          entryId: payEntryId,
+          arLineId: payLineId,
         });
-        apps.push({ id: randomUUID(), from: payLineId, to: arLineId, amount: total, date: payDate });
+        apps.push({
+          id: randomUUID(),
+          from: payLineId,
+          to: arLineId,
+          amount: total,
+          date: payDate,
+        });
       }
     }
     // Bills: AP + two expense splits (90% paid).
@@ -376,30 +440,75 @@ async function main(): Promise<void> {
       const day = 1 + Math.floor(monthRng.next() * 28);
       const date = `${prefix}-${pad2(day)}`;
       const totalCents = 10000 + Math.floor(Math.pow(monthRng.next(), 2) * 1990000);
-      const [e1, e2] = [cents(Math.round(totalCents * 0.6)), cents(totalCents - Math.round(totalCents * 0.6))];
+      const [e1, e2] = [
+        cents(Math.round(totalCents * 0.6)),
+        cents(totalCents - Math.round(totalCents * 0.6)),
+      ];
       const total = cents(totalCents);
       const partyId = pickVendor(i);
       const entryId = addEntry("B", i, date, "document");
-      const apLineId = addLine(entryId, 1, world.accounts.ap!, partyId, `-${total}`, true, "payable");
+      const apLineId = addLine(
+        entryId,
+        1,
+        world.accounts.ap!,
+        partyId,
+        `-${total}`,
+        true,
+        "payable",
+      );
       addLine(entryId, 2, world.accounts.materials!, null, e1, false, "materials");
-      addLine(entryId, 3, i % 2 === 0 ? world.accounts.office! : world.accounts.professionalFees!, null, e2, false, "expense");
+      addLine(
+        entryId,
+        3,
+        i % 2 === 0 ? world.accounts.office! : world.accounts.professionalFees!,
+        null,
+        e2,
+        false,
+        "expense",
+      );
       const docId = randomUUID();
       docs.push({
-        id: docId, kind: "vendor_bill", number: `P1M-B-${prefix}-${String(i).padStart(5, "0")}`,
-        partyId, date, total, entryId, arLineId: apLineId,
+        id: docId,
+        kind: "vendor_bill",
+        number: `P1M-B-${prefix}-${String(i).padStart(5, "0")}`,
+        partyId,
+        date,
+        total,
+        entryId,
+        arLineId: apLineId,
       });
       if (i % 100 < VENDOR_PAY_PCT) {
         const payDay = Math.min(28, day + 3 + Math.floor(monthRng.next() * 12));
         const payDate = `${prefix}-${pad2(payDay)}`;
         const payEntryId = addEntry("P", i, payDate, "document");
-        const payLineId = addLine(payEntryId, 1, world.accounts.ap!, partyId, total, true, "payment");
+        const payLineId = addLine(
+          payEntryId,
+          1,
+          world.accounts.ap!,
+          partyId,
+          total,
+          true,
+          "payment",
+        );
         addLine(payEntryId, 2, world.accounts.bank!, null, `-${total}`, false, "bank");
         const payDocId = randomUUID();
         docs.push({
-          id: payDocId, kind: "vendor_payment", number: `P1M-P-${prefix}-${String(i).padStart(5, "0")}`,
-          partyId, date: payDate, total, entryId: payEntryId, arLineId: payLineId,
+          id: payDocId,
+          kind: "vendor_payment",
+          number: `P1M-P-${prefix}-${String(i).padStart(5, "0")}`,
+          partyId,
+          date: payDate,
+          total,
+          entryId: payEntryId,
+          arLineId: payLineId,
         });
-        apps.push({ id: randomUUID(), from: payLineId, to: apLineId, amount: total, date: payDate });
+        apps.push({
+          id: randomUUID(),
+          from: payLineId,
+          to: apLineId,
+          amount: total,
+          date: payDate,
+        });
       }
     }
     // Monthly payroll journal (plain entry, no document): 6 lines.
@@ -412,9 +521,25 @@ async function main(): Promise<void> {
       const entryId = addEntry("W", 0, `${prefix}-28`, "manual");
       addLine(entryId, 1, world.accounts.payroll!, null, cents(wages), false, "wages");
       addLine(entryId, 2, world.accounts.benefits!, null, cents(benefits), false, "benefits");
-      addLine(entryId, 3, world.accounts.payrollTaxExpense!, null, cents(tax), false, "payroll tax");
+      addLine(
+        entryId,
+        3,
+        world.accounts.payrollTaxExpense!,
+        null,
+        cents(tax),
+        false,
+        "payroll tax",
+      );
       addLine(entryId, 4, world.accounts.bank!, null, cents(-bank), false, "net pay");
-      addLine(entryId, 5, world.accounts.laborClearing!, null, cents(-(wages + benefits + tax - bank)), false, "accrual");
+      addLine(
+        entryId,
+        5,
+        world.accounts.laborClearing!,
+        null,
+        cents(-(wages + benefits + tax - bank)),
+        false,
+        "accrual",
+      );
     }
 
     // One transaction per month on a single pooled client (drizzle pins the
@@ -422,7 +547,9 @@ async function main(): Promise<void> {
     // the pool). Deferred constraints let entries, lines, documents, the
     // posted flip, and applications commit in kernel order.
     const phase = (label: string, from: number) => {
-      process.stderr.write(`[perf-1m] month ${prefix} ${label}: ${((Date.now() - from) / 1000).toFixed(1)}s\n`);
+      process.stderr.write(
+        `[perf-1m] month ${prefix} ${label}: ${((Date.now() - from) / 1000).toFixed(1)}s\n`,
+      );
     };
     let mark = Date.now();
     // withBypass (the timeout-free maintenance transaction) rather than
@@ -470,7 +597,8 @@ async function main(): Promise<void> {
             })),
           );
         }
-        phase("entries+lines", mark); mark = Date.now();
+        phase("entries+lines", mark);
+        mark = Date.now();
         for (let s = 0; s < docs.length; s += 1500) {
           await tx.insert(schema.documents).values(
             docs.slice(s, s + 1500).map((d) => ({
@@ -496,11 +624,13 @@ async function main(): Promise<void> {
             })),
           );
         }
-        phase("docs", mark); mark = Date.now();
+        phase("docs", mark);
+        mark = Date.now();
         await tx.execute(sql`
           update journal_entries set status = 'posted'
            where org_id = ${orgId} and period_id = ${periodId} and status = 'draft'`);
-        phase("post-flip", mark); mark = Date.now();
+        phase("post-flip", mark);
+        mark = Date.now();
         for (let s = 0; s < apps.length; s += 2000) {
           await tx.insert(schema.applications).values(
             apps.slice(s, s + 2000).map((a) => ({
@@ -527,10 +657,14 @@ async function main(): Promise<void> {
     });
     totalLines += lines.length;
     if (m % 6 === 5 || m === months - 1) {
-      log(`month ${prefix}: ${lines.length} lines (${((Date.now() - monthStarted) / 1000).toFixed(1)}s, total ${totalLines})`);
+      log(
+        `month ${prefix}: ${lines.length} lines (${((Date.now() - monthStarted) / 1000).toFixed(1)}s, total ${totalLines})`,
+      );
     }
   }
-  log(`ledger bulk done: ${totalLines} journal_lines in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  log(
+    `ledger bulk done: ${totalLines} journal_lines in ${((Date.now() - started) / 1000).toFixed(1)}s`,
+  );
 
   // -- Payroll runs/stubs/lines (24 monthly runs x 40 employees) --------------
   // The org-scoped maintenance boundary is needed for the same timeout reason
@@ -564,9 +698,24 @@ async function main(): Promise<void> {
             ["earning", extra.componentIds[0]!.id, "Base salary", cents(salaryCents)],
             ["deduction", extra.componentIds[2]!.id, "Federal withholding", cents(-fedCents)],
             ["deduction", extra.componentIds[3]!.id, "State withholding", cents(-stateCents)],
-            ["deduction", extra.componentIds[4]!.id, "Benefits contribution", cents(-Math.round(salaryCents * 0.04))],
-            ["employer_contribution", extra.componentIds[6]!.id, "401k match", cents(employerCents)],
-            ["employer_contribution", extra.componentIds[7]!.id, "FUTA share", cents(Math.round(salaryCents * 0.02))],
+            [
+              "deduction",
+              extra.componentIds[4]!.id,
+              "Benefits contribution",
+              cents(-Math.round(salaryCents * 0.04)),
+            ],
+            [
+              "employer_contribution",
+              extra.componentIds[6]!.id,
+              "401k match",
+              cents(employerCents),
+            ],
+            [
+              "employer_contribution",
+              extra.componentIds[7]!.id,
+              "FUTA share",
+              cents(Math.round(salaryCents * 0.02)),
+            ],
           ];
           let seq = 0;
           for (const [kind, compId, desc, amount] of stubLines) {
@@ -613,7 +762,9 @@ async function main(): Promise<void> {
            where l.org_id = ${orgId} and l.component_id = ${comp.id}
              and s.pay_date >= ${`${prefix}-01`} and s.pay_date < ${`${prefix}-01`}::date + interval '1 month'`);
         const signedTotal = sum.rows[0]!.total;
-        const billTotal = spec.exact ? signedTotal : cents(Math.round(Number(signedTotal) * 100) + 10000);
+        const billTotal = spec.exact
+          ? signedTotal
+          : cents(Math.round(Number(signedTotal) * 100) + 10000);
         const billId = randomUUID();
         await tx.execute(sql`
           insert into documents (id, org_id, kind, document_number, document_date, currency,
@@ -689,7 +840,10 @@ async function main(): Promise<void> {
           const item = itemIds[Math.floor(pair / binIds.length)]!;
           const bin = binIds[pair % binIds.length]!;
           const expected = Math.floor(invRng.next() * 500);
-          const counted = invRng.next() < 0.1 ? null : String(Math.max(0, expected + Math.floor(invRng.next() * 11) - 5));
+          const counted =
+            invRng.next() < 0.1
+              ? null
+              : String(Math.max(0, expected + Math.floor(invRng.next() * 11) - 5));
           batch.push({ item, bin, expected: String(expected), counted });
         }
         for (let b = 0; b < batch.length; b += 250) {
@@ -726,7 +880,13 @@ async function main(): Promise<void> {
                 ${world.accounts.bank!}, ${row.total}, 'USD')`);
     }
     // recognition_rules (methods across the enum).
-    const methods = ["point_in_time", "straight_line_even", "straight_line_daily", "percent_complete", "milestone"];
+    const methods = [
+      "point_in_time",
+      "straight_line_even",
+      "straight_line_daily",
+      "percent_complete",
+      "milestone",
+    ];
     for (let i = 0; i < 20; i++) {
       await db.execute(sql`
         insert into recognition_rules (id, org_id, code, name, method)
@@ -827,10 +987,14 @@ async function main(): Promise<void> {
           values (${randomUUID()}, ${orgId}, ${row.id}, 'USD', '2024-01-01', ${baseLevelId})`);
       }
     }
-    log(`extras done${baseLevelId ? "" : " (price_levels absent on this source; price schedules skipped)"}`);
+    log(
+      `extras done${baseLevelId ? "" : " (price_levels absent on this source; price schedules skipped)"}`,
+    );
   });
 
-  log(`seed complete: ${totalLines} journal_lines in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  log(
+    `seed complete: ${totalLines} journal_lines in ${((Date.now() - started) / 1000).toFixed(1)}s`,
+  );
   console.log(JSON.stringify({ orgIds: [orgId] }));
 }
 

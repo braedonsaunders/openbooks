@@ -1,8 +1,16 @@
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
-import { seedPayrollVendorRole } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
+import { seedPayrollVendorRole } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -46,15 +54,23 @@ test(
         values (${rqVendorId}, ${org.orgId}, 'company', 'Revenu Québec', true, '{}'::jsonb)`);
       await seedPayrollVendorRole(org.orgId, rqVendorId, actorId);
       await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
+        slotAccounts: {
+          CA: {
+            cpp: craPayable,
+            ei: craPayable,
+            qpip: craPayable,
+            income_tax: craPayable,
+            vacation: vacationPayable,
+          },
+        },
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
 
-            wagesTo: "expense",
-            craRemittancePartyId: org.vendorId,
-            rqRemittancePartyId: rqVendorId,
-          });
+        wagesTo: "expense",
+        craRemittancePartyId: org.vendorId,
+        rqRemittancePartyId: rqVendorId,
+      });
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
       await db.execute(sql`
@@ -74,20 +90,38 @@ test(
       await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, qcPayable);
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Jean Tremblay');
+      await seedPayrollPerson(org.orgId, employeeId, "Jean Tremblay");
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '5000', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "5000",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
-      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'QC', payBasis: 'hourly', federalClaimCode: 1,
-        wcbExempt: true, wcbExemptReason: 'qpip fixture: workers-compensation coverage out of scope',
-      }, { percentFloor: '0', method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "QC",
+          payBasis: "hourly",
+          federalClaimCode: 1,
+          wcbExempt: true,
+          wcbExemptReason: "qpip fixture: workers-compensation coverage out of scope",
+        },
+        { percentFloor: "0", method: "accrue" },
+      );
 
       const employerQpip: string[] = [];
       for (const [start, end, days] of [
@@ -96,26 +130,46 @@ test(
       ] as const) {
         for (const workedOn of days) {
           await seedPayrollTime(org.orgId, employeeId, actorId, {
-            workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-            costingBasis: 'actual',
+            workedOn: workedOn,
+            hours: 20,
+            status: "approved",
+            isBillable: false,
+            billingStatus: "unbilled",
+            costingBasis: "actual",
           });
         }
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: start, periodEnd: end,
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: start,
+          periodEnd: end,
         });
-        const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const result = await calculatePayRun({
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
+        });
         assert.deepEqual(result.errors, []);
-        const factors = (await db.execute<{ factors: unknown }>(sql`
+        const factors = (
+          await db.execute<{ factors: unknown }>(
+            sql`
           select factors from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-        `, "objects"))[0]!.factors as Record<string, string>;
+        `,
+            "objects",
+          )
+        )[0]!.factors as Record<string, string>;
         employerQpip.push(factors.QPIP_ER!);
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       }
 
       assert.equal(employerQpip[0], "620.0600", "first period takes the whole annual maximum");
-      assert.equal(employerQpip[1], "0.0000", "second period accrues nothing once the maximum is reached");
+      assert.equal(
+        employerQpip[1],
+        "0.0000",
+        "second period accrues nothing once the maximum is reached",
+      );
       assert.equal(
         add(employerQpip[0]!, employerQpip[1]!),
         "620.0600",

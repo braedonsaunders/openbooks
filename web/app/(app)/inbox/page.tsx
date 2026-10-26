@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadApprovals, approvalsSpec } from './view'
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadApprovals, approvalsSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Approval hub — three searchParam-driven tabs over the Flows engine
@@ -13,17 +13,13 @@ export const dynamic = 'force-dynamic'
  *   • all       — org-wide pending items (flows.manage / admin only).
  */
 
-
-
-
-
 export default async function Approvals({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadApprovals(sp)
-  if (!data) return null
-  return <ModuleView spec={approvalsSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadApprovals(sp);
+  if (!data) return null;
+  return <ModuleView spec={approvalsSpec(data)} data={data} searchParams={sp} trusted />;
 }

@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * The signature capture half of the public signing page. Deliberately
@@ -12,69 +12,77 @@ import { readApiErrorMessage } from '@/lib/api-error'
  * evidence record.
  */
 export function SignDocumentForm(props: {
-  token: string
-  signerStatus: string
-  acknowledgmentOnly: boolean
+  token: string;
+  signerStatus: string;
+  acknowledgmentOnly: boolean;
 }) {
-  const [name, setName] = useState('')
-  const [reason, setReason] = useState('')
-  const [declining, setDeclining] = useState(false)
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>(
-    props.signerStatus === 'signed' ? 'done' : 'idle',
-  )
-  const [doneAction, setDoneAction] = useState<'signed' | 'declined' | 'acknowledged'>(
-    props.acknowledgmentOnly ? 'acknowledged' : 'signed',
-  )
-  const [error, setError] = useState('')
-  const router = useRouter()
+  const [name, setName] = useState("");
+  const [reason, setReason] = useState("");
+  const [declining, setDeclining] = useState(false);
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">(
+    props.signerStatus === "signed" ? "done" : "idle",
+  );
+  const [doneAction, setDoneAction] = useState<"signed" | "declined" | "acknowledged">(
+    props.acknowledgmentOnly ? "acknowledged" : "signed",
+  );
+  const [error, setError] = useState("");
+  const router = useRouter();
 
   async function call(action: { action: string; name?: string; reason?: string }) {
-    setState('busy')
-    setError('')
+    setState("busy");
+    setError("");
     const res = await fetch(`/api/documents/sign/${props.token}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(action),
-    })
+    });
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback.
     if (!res.ok) {
-      setError(await readApiErrorMessage(res, 'This action failed — the message above explains why.'))
-      setState('error')
-      return
+      setError(
+        await readApiErrorMessage(res, "This action failed — the message above explains why."),
+      );
+      setState("error");
+      return;
     }
     // The wire action ('sign'/'acknowledge'/'decline') is not the rendered
     // outcome: casting it through left the thank-you box empty on exactly
     // the success paths that needed it. Map explicitly.
     setDoneAction(
-      action.action === 'decline' ? 'declined' : action.action === 'acknowledge' ? 'acknowledged' : 'signed',
-    )
-    setState('done')
+      action.action === "decline"
+        ? "declined"
+        : action.action === "acknowledge"
+          ? "acknowledged"
+          : "signed",
+    );
+    setState("done");
     // The document status and signer timeline above are server-rendered from
     // pre-sign data: refresh them so Status, timeline and thank-you agree
     // immediately instead of waiting for a manual reload. Client state is
     // preserved, so the confirmation stays while the server parts update.
-    router.refresh()
+    router.refresh();
   }
 
-  if (state === 'done') {
+  if (state === "done") {
     return (
       <div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-center dark:border-teal-800 dark:bg-teal-950/40">
         <p className="text-sm font-medium text-teal-800 dark:text-teal-200">
-          {doneAction === 'signed' && 'Thank you — your signature is recorded.'}
-          {doneAction === 'acknowledged' && 'Thank you — your acknowledgment is recorded.'}
-          {doneAction === 'declined' && 'Your decline is recorded — HR will follow up.'}
+          {doneAction === "signed" && "Thank you — your signature is recorded."}
+          {doneAction === "acknowledged" && "Thank you — your acknowledgment is recorded."}
+          {doneAction === "declined" && "Your decline is recorded — HR will follow up."}
         </p>
       </div>
-    )
+    );
   }
 
-  if (props.signerStatus === 'declined') {
+  if (props.signerStatus === "declined") {
     return (
       <div className="rounded-lg border border-slate-200 p-4 text-center dark:border-slate-700">
-        <p className="text-sm text-slate-600 dark:text-slate-300">This link recorded a decline — ask HR to re-issue the document.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          This link recorded a decline — ask HR to re-issue the document.
+        </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -86,16 +94,19 @@ export function SignDocumentForm(props: {
           </p>
           <button
             type="button"
-            onClick={() => call({ action: 'acknowledge' })}
-            disabled={state === 'busy'}
+            onClick={() => call({ action: "acknowledge" })}
+            disabled={state === "busy"}
             className="w-full rounded-md bg-teal-600 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
           >
-            {state === 'busy' ? 'Recording…' : 'Acknowledge'}
+            {state === "busy" ? "Recording…" : "Acknowledge"}
           </button>
         </>
       ) : declining ? (
         <>
-          <label className="mb-2 block text-sm font-medium text-slate-900 dark:text-slate-100" htmlFor="decline-reason">
+          <label
+            className="mb-2 block text-sm font-medium text-slate-900 dark:text-slate-100"
+            htmlFor="decline-reason"
+          >
             Why are you declining? HR reads this to re-issue correctly.
           </label>
           <textarea
@@ -108,11 +119,11 @@ export function SignDocumentForm(props: {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              onClick={() => call({ action: 'decline', reason: reason.trim() })}
-              disabled={state === 'busy' || !reason.trim()}
+              onClick={() => call({ action: "decline", reason: reason.trim() })}
+              disabled={state === "busy" || !reason.trim()}
               className="flex-1 rounded-md bg-rose-600 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
             >
-              {state === 'busy' ? 'Recording…' : 'Decline'}
+              {state === "busy" ? "Recording…" : "Decline"}
             </button>
             <button
               type="button"
@@ -125,7 +136,9 @@ export function SignDocumentForm(props: {
         </>
       ) : (
         <>
-          <p className="mb-2 text-sm font-medium text-slate-900 dark:text-slate-100">Type your name to sign</p>
+          <p className="mb-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+            Type your name to sign
+          </p>
           <input
             aria-label="Your name"
             placeholder="Your name"
@@ -135,11 +148,11 @@ export function SignDocumentForm(props: {
           />
           <button
             type="button"
-            onClick={() => call({ action: 'sign', name: name.trim() })}
-            disabled={state === 'busy' || !name.trim()}
+            onClick={() => call({ action: "sign", name: name.trim() })}
+            disabled={state === "busy" || !name.trim()}
             className="mt-3 w-full rounded-md bg-teal-600 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
           >
-            {state === 'busy' ? 'Signing…' : 'Sign document'}
+            {state === "busy" ? "Signing…" : "Sign document"}
           </button>
           <button
             type="button"
@@ -150,7 +163,7 @@ export function SignDocumentForm(props: {
           </button>
         </>
       )}
-      {state === 'error' && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+      {state === "error" && <p className="mt-2 text-sm text-rose-600">{error}</p>}
     </div>
-  )
+  );
 }

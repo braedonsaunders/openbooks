@@ -16,7 +16,8 @@ export async function completedGateDecisionPolicy(
   },
 ): Promise<{ allowsSelfApproval: boolean; context: unknown } | null> {
   if (!input.approvalRunId) return null;
-  const gates = await executor.execute<{ context: unknown; node_id: string }>(sql`
+  const gates = await executor.execute<{ context: unknown; node_id: string }>(
+    sql`
     select r.context,g.node_id from flow_runs r join flow_gates g
       on g.org_id=r.org_id and g.run_id=r.id and g.flow_id=r.flow_id
       and g.subject_id=r.subject_id and g.subject_kind=r.subject_kind
@@ -35,7 +36,9 @@ export async function completedGateDecisionPolicy(
         and pending.subject_kind=r.subject_kind and pending.subject_id=r.subject_id
         and pending.status in ('pending','escalated'))
     for share of r,g
-  `, "objects");
+  `,
+    "objects",
+  );
   if (gates.length === 0) return null;
   return {
     allowsSelfApproval: gates.some((gate) =>
@@ -49,8 +52,5 @@ export async function completedGateAllowsSelfApproval(
   executor: SqlExecutor,
   input: Parameters<typeof completedGateDecisionPolicy>[1],
 ): Promise<boolean> {
-  return (
-    (await completedGateDecisionPolicy(executor, input))?.allowsSelfApproval ===
-    true
-  );
+  return (await completedGateDecisionPolicy(executor, input))?.allowsSelfApproval === true;
 }

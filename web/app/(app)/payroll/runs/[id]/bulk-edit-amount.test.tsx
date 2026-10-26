@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import { bootJsdomEnvironment } from "../../../../../testing/jsdom-env";
 
 // The bulk-edit amount used a naive two-decimal regex with Apply
 // silently disabled — a decimal-comma operator met a dead button with no
@@ -10,33 +10,37 @@ import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
 // under jsdom and drives the amount paths.
 // The shared picker dispatches its change through the global Event, so the
 // test realm uses jsdom's own Event constructor.
-await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/runs/doc-1', matchMediaMatches: false, event: 'jsdom' })
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../../messages/en')).default
-const { BulkEditDrawer } = await import('./RunWizard')
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/payroll/runs/doc-1",
+  matchMediaMatches: false,
+  event: "jsdom",
+});
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../../messages/en")).default;
+const { BulkEditDrawer } = await import("./RunWizard");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const components = [
-  { id: 'comp-bonus', name: 'Bonus', kind: 'earning' },
-  { id: 'comp-tax', name: 'Extra tax', kind: 'deduction' },
-] as unknown as Parameters<typeof BulkEditDrawer>[0]['components']
+  { id: "comp-bonus", name: "Bonus", kind: "earning" },
+  { id: "comp-tax", name: "Extra tax", kind: "deduction" },
+] as unknown as Parameters<typeof BulkEditDrawer>[0]["components"];
 
 async function mount(t: TestContext, applied: Record<string, unknown>[]): Promise<void> {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const child of [...document.body.children]) child.remove()
-  })
+      rootHandle.unmount();
+    });
+    host.remove();
+    for (const child of [...document.body.children]) child.remove();
+  });
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -46,71 +50,75 @@ async function mount(t: TestContext, applied: Record<string, unknown>[]): Promis
           busy={false}
           onClose={() => {}}
           onApply={async (body) => {
-            applied.push(body)
+            applied.push(body);
           }}
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 function amountInput(): HTMLInputElement {
-  const input = document.querySelector('input[aria-label="Amount"]') as HTMLInputElement | null
-  assert.ok(input, 'the amount field must render')
-  return input
+  const input = document.querySelector('input[aria-label="Amount"]') as HTMLInputElement | null;
+  assert.ok(input, "the amount field must render");
+  return input;
 }
 
 function applyButton(): HTMLButtonElement {
-  const button = [...document.querySelectorAll('button')].find((b) =>
-    (b.textContent ?? '').includes('Apply to'),
-  ) as HTMLButtonElement | undefined
-  assert.ok(button, 'the Apply button must render')
-  return button
+  const button = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Apply to"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(button, "the Apply button must render");
+  return button;
 }
 
 async function typeAmount(value: string): Promise<void> {
-  const input = amountInput()
+  const input = amountInput();
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-    setter?.call(input, value)
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-    await tick()
-  })
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+    await tick();
+  });
 }
 
 async function click(button: HTMLButtonElement): Promise<void> {
   await act(async () => {
-    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
 }
 
-test('a decimal comma names the dotted rewrite and keeps Apply disabled', async (t) => {
-  await mount(t, [])
-  await typeAmount('12,34')
+test("a decimal comma names the dotted rewrite and keeps Apply disabled", async (t) => {
+  await mount(t, []);
+  await typeAmount("12,34");
   assert.match(
-    document.body.textContent ?? '',
+    document.body.textContent ?? "",
     /must use "\." as the decimal point — write "12,34" as "12\.34"/,
-    'the refusal must name the remedy, not a dead button',
-  )
-  assert.ok(applyButton().disabled, 'Apply must stay disabled on an unreadable amount')
-})
+    "the refusal must name the remedy, not a dead button",
+  );
+  assert.ok(applyButton().disabled, "Apply must stay disabled on an unreadable amount");
+});
 
-test('a server-valid four-decimal amount enables Apply and posts it', async (t) => {
-  const applied: Record<string, unknown>[] = []
-  await mount(t, applied)
-  const trigger = document.querySelector('button[aria-label="Component"]') as HTMLButtonElement | null
-  assert.ok(trigger, 'the component picker must render')
-  await click(trigger)
-  const option = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes('Bonus')) as HTMLButtonElement | undefined
-  assert.ok(option, 'the Bonus option must be offered by the picker')
-  await click(option)
-  await typeAmount('1234.5678')
-  assert.ok(!applyButton().disabled, 'a four-decimal amount the server reads must enable Apply')
-  await click(applyButton())
-  assert.equal(applied.length, 1)
-  assert.equal(applied[0]!['amount'], '1234.5678')
-})
+test("a server-valid four-decimal amount enables Apply and posts it", async (t) => {
+  const applied: Record<string, unknown>[] = [];
+  await mount(t, applied);
+  const trigger = document.querySelector(
+    'button[aria-label="Component"]',
+  ) as HTMLButtonElement | null;
+  assert.ok(trigger, "the component picker must render");
+  await click(trigger);
+  const option = [...document.querySelectorAll('[role="option"]')].find((o) =>
+    o.textContent?.includes("Bonus"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(option, "the Bonus option must be offered by the picker");
+  await click(option);
+  await typeAmount("1234.5678");
+  assert.ok(!applyButton().disabled, "a four-decimal amount the server reads must enable Apply");
+  await click(applyButton());
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0]!["amount"], "1234.5678");
+});

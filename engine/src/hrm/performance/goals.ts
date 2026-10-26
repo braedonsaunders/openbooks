@@ -2,7 +2,11 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { loadApprovalPerson, loadManagedEmploymentIds, requireHrmPerformanceOnEmployment } from "../authorization.ts";
+import {
+  loadApprovalPerson,
+  loadManagedEmploymentIds,
+  requireHrmPerformanceOnEmployment,
+} from "../authorization.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
@@ -35,7 +39,10 @@ export type GoalStatus = "active" | "achieved" | "missed" | "cancelled";
 const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY)) || !(await lockAndCheckOrgFeature(exec,orgId,'hrmPerformance'))) {
+  if (
+    !(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY)) ||
+    !(await lockAndCheckOrgFeature(exec, orgId, "hrmPerformance"))
+  ) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before setting goals",
@@ -86,7 +93,9 @@ function toGoalDTO(row: StoredGoal): GoalDTO {
 }
 
 async function loadGoal(exec: SqlExecutor, orgId: string, goalId: string): Promise<StoredGoal> {
-  const row = (await exec.execute<StoredGoal>(sql`
+  const row = (
+    await exec.execute<StoredGoal>(
+      sql`
     select g.id,
            g.employment_id as "employmentId",
            g.title, g.description,
@@ -100,7 +109,10 @@ async function loadGoal(exec: SqlExecutor, orgId: string, goalId: string): Promi
       join worker_employments e
         on e.org_id = g.org_id and e.id = g.employment_id
      where g.org_id = ${orgId} and g.id = ${goalId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -122,10 +134,15 @@ async function requireGoalAuthority(
   employmentId: string,
 ): Promise<{ workerPartyId: string }> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
-  const subject = (await exec.execute<{ workerPartyId: string }>(sql`
+  const subject = (
+    await exec.execute<{ workerPartyId: string }>(
+      sql`
     select worker_party_id as "workerPartyId" from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!subject) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -133,7 +150,13 @@ async function requireGoalAuthority(
     );
   }
   if (person.partyId !== null && person.partyId === subject.workerPartyId) return subject;
-  await requireHrmPerformanceOnEmployment(exec, orgId, actorId, employmentId, "hrm.performance.manage");
+  await requireHrmPerformanceOnEmployment(
+    exec,
+    orgId,
+    actorId,
+    employmentId,
+    "hrm.performance.manage",
+  );
   return subject;
 }
 
@@ -154,8 +177,14 @@ export async function createGoal(args: {
   if (typeof args.title !== "string" || args.title.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "title must be a non-blank string");
   }
-  const dueOn = args.dueOn == null ? null : mathRefusal("INVALID_INPUT", () => parseCivilDay(args.dueOn as string, "due date"));
-  const weight = args.weight == null || String(args.weight).trim().length === 0 ? null : String(args.weight).trim();
+  const dueOn =
+    args.dueOn == null
+      ? null
+      : mathRefusal("INVALID_INPUT", () => parseCivilDay(args.dueOn as string, "due date"));
+  const weight =
+    args.weight == null || String(args.weight).trim().length === 0
+      ? null
+      : String(args.weight).trim();
   if (weight !== null && canonicalNonNegativeDecimal(weight, Infinity) === null) {
     throw new HrmPerformanceError(
       "INVALID_INPUT",
@@ -167,9 +196,14 @@ export async function createGoal(args: {
     await assertPerformanceFeature(db, orgId);
     await requireGoalAuthority(db, orgId, actorId, employmentId);
     if (cycleId !== null) {
-      const cycle = (await db.execute<{ id: string; appliesTo: unknown }>(sql`
+      const cycle = (
+        await db.execute<{ id: string; appliesTo: unknown }>(
+          sql`
         select id, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!cycle) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
@@ -180,12 +214,19 @@ export async function createGoal(args: {
       // goal to a cycle scoped to another legal entity (or department)
       // would report the goal in a review run that never evaluates it.
       const scope = mathRefusal("REFUSED", () => parseAppliesScope(cycle.appliesTo));
-      const subject = (await db.execute<{ employerSubsidiaryId: string }>(sql`
+      const subject = (
+        await db.execute<{ employerSubsidiaryId: string }>(
+          sql`
         select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
          where org_id = ${orgId} and id = ${employmentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       const today = await businessToday(orgId);
-      const department = (await db.execute<{ departmentId: string | null }>(sql`
+      const department = (
+        await db.execute<{ departmentId: string | null }>(
+          sql`
         select department_id as "departmentId"
           from employment_assignment_versions
          where org_id = ${orgId}
@@ -196,7 +237,10 @@ export async function createGoal(args: {
            and (effective_to is null or effective_to > ${today}::date)
          order by version_no desc
          limit 1
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (
         !scopeMatchesEmployment(scope, {
           employerSubsidiaryId: subject.employerSubsidiaryId,
@@ -209,7 +253,9 @@ export async function createGoal(args: {
         );
       }
     }
-    const row = (await db.execute<StoredGoal>(sql`
+    const row = (
+      await db.execute<StoredGoal>(
+        sql`
       insert into hrm_goals
         (org_id, employment_id, title, description, due_on, weight, status,
          progress_percent, cycle_id, created_by, updated_by)
@@ -221,7 +267,10 @@ export async function createGoal(args: {
         progress_percent as "progressPercent", cycle_id as "cycleId",
         (select worker_party_id from worker_employments
           where org_id = ${orgId} and id = ${employmentId}) as "workerPartyId"
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     await db.execute(sql`
       insert into hrm_goal_updates (org_id, goal_id, progress_percent, note, actor_user_id)
       values (${orgId}, ${row.id}, 0, 'goal set', ${actorId})
@@ -256,11 +305,14 @@ export async function updateGoalProgress(args: {
         `goal ${goalId} is ${goal.status} — only an active goal takes progress; set a new goal instead`,
       );
     }
-    const moved = (await db.execute<never>(sql`
+    const moved =
+      (
+        await db.execute<never>(sql`
       update hrm_goals
          set progress_percent = ${progress}, updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${goalId} and status = 'active'
-    `)).rowCount ?? 0;
+    `)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -314,12 +366,15 @@ export async function setGoalStatus(args: {
     }
     // Achieving completes the progress; missing and cancelling keep it.
     const progress = args.status === "achieved" ? 100 : goal.progressPercent;
-    const moved = (await db.execute<never>(sql`
+    const moved =
+      (
+        await db.execute<never>(sql`
       update hrm_goals
          set status = ${args.status}, progress_percent = ${progress},
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${goalId} and status = 'active'
-    `)).rowCount ?? 0;
+    `)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -347,10 +402,15 @@ export async function requireGoalReadAuthority(
   employmentId: string,
 ): Promise<void> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
-  const subject = (await exec.execute<{ workerPartyId: string }>(sql`
+  const subject = (
+    await exec.execute<{ workerPartyId: string }>(
+      sql`
     select worker_party_id as "workerPartyId" from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!subject) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -360,7 +420,13 @@ export async function requireGoalReadAuthority(
   if (person.partyId !== null && person.partyId === subject.workerPartyId) return;
   const managed = await loadManagedEmploymentIds(exec, orgId, actorId, await businessToday(orgId));
   if (managed.includes(employmentId)) return;
-  await requireHrmPerformanceOnEmployment(exec, orgId, actorId, employmentId, "hrm.performance.manage");
+  await requireHrmPerformanceOnEmployment(
+    exec,
+    orgId,
+    actorId,
+    employmentId,
+    "hrm.performance.manage",
+  );
 }
 
 /**
@@ -371,7 +437,10 @@ export async function getGoal(args: {
   orgId: string;
   actorId: string;
   goalId: string;
-}): Promise<{ goal: GoalDTO; updates: { progressPercent: number; note: string | null; recordedAt: string }[] }> {
+}): Promise<{
+  goal: GoalDTO;
+  updates: { progressPercent: number; note: string | null; recordedAt: string }[];
+}> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   const goalId = requireUuid(args.goalId, "goalId");
@@ -379,13 +448,20 @@ export async function getGoal(args: {
     await assertPerformanceFeature(db, orgId);
     const goal = await loadGoal(db, orgId, goalId);
     await requireGoalReadAuthority(db, orgId, actorId, goal.employmentId);
-    const updates = await db.execute<{ progressPercent: number; note: string | null; recordedAt: string }>(sql`
+    const updates = await db.execute<{
+      progressPercent: number;
+      note: string | null;
+      recordedAt: string;
+    }>(
+      sql`
       select progress_percent as "progressPercent", note,
              recorded_at as "recordedAt"
         from hrm_goal_updates
        where org_id = ${orgId} and goal_id = ${goalId}
        order by recorded_at
-    `, "objects");
+    `,
+      "objects",
+    );
     return { goal: toGoalDTO(goal), updates };
   });
 }

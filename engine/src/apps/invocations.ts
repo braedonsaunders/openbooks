@@ -166,11 +166,20 @@ export function deriveClaimNamespaceKey(args: {
  * this organization-wide advisory key before locking the apps row, so a
  * status transition and an invocation have one stable ordering.
  */
-export async function lockInstalledAppForInvocation(orgId: string, appId: string, versionId: string | null): Promise<void> {
-  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`);
-  const app = await db.execute<{ status: string; activeVersionId: string | null }>(sql`
+export async function lockInstalledAppForInvocation(
+  orgId: string,
+  appId: string,
+  versionId: string | null,
+): Promise<void> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`,
+  );
+  const app = await db.execute<{ status: string; activeVersionId: string | null }>(
+    sql`
     select status, active_version_id as "activeVersionId"
-      from apps where org_id = ${orgId} and id = ${appId} for update`, "objects");
+      from apps where org_id = ${orgId} and id = ${appId} for update`,
+    "objects",
+  );
   if (app[0]?.status !== "installed" || app[0]?.activeVersionId !== versionId) {
     throw new AppInvocationDisabledError();
   }
@@ -196,13 +205,16 @@ async function readCommittedClaim(
     response: unknown;
     completedAt: Date | null;
     expiresAt: Date | string;
-  }>(sql`
+  }>(
+    sql`
     select id, request_hash as "requestHash", response, completed_at as "completedAt",
            expires_at as "expiresAt"
       from application_idempotency_keys
      where org_id = ${orgId} and actor_id = ${actorId} and source = 'app'
        and operation = ${operation} and idempotency_key = ${idempotencyKey}
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   const row = r[0];
   if (!row) return null;
   // The database clock decides expiry. Reap only a row the database confirms
@@ -210,10 +222,13 @@ async function readCommittedClaim(
   // and a completed response must replay even if the host clock disagrees.
   // The caller holds the per-claim advisory lock, so no concurrent claim can
   // interleave between this delete and the follow-up insert/replay decision.
-  const reaped = await db.execute<{ id: string }>(sql`
+  const reaped = await db.execute<{ id: string }>(
+    sql`
       delete from application_idempotency_keys
        where id = ${row.id} and expires_at <= clock_timestamp()
-       returning id`, "objects");
+       returning id`,
+    "objects",
+  );
   if (reaped.length > 0) {
     return null;
   }
@@ -269,7 +284,11 @@ export async function executeAppInvocation(args: {
   // never share a claim even with byte-identical keys and payloads, while
   // the same invocation retried replays. The raw caller key never reaches
   // storage unqualified.
-  const claimKey = deriveClaimNamespaceKey({ appId: args.appId, versionId: args.versionId, key: args.idempotencyKey });
+  const claimKey = deriveClaimNamespaceKey({
+    appId: args.appId,
+    versionId: args.versionId,
+    key: args.idempotencyKey,
+  });
 
   // One transaction IS the atomic unit; it also serializes concurrent
   // duplicates of the same key via a tenant-scoped advisory try-lock so a
@@ -277,8 +296,11 @@ export async function executeAppInvocation(args: {
   return withOrgTransaction(orgId, async () => {
     await args.authorize();
     const gateName = `${args.operation}|${claimKey}|${actorId}`;
-    const gate = await db.execute<{ acquired: boolean }>(sql`
-      select pg_try_advisory_xact_lock(hashtextextended(${gateName}, 0)) as acquired`, "objects");
+    const gate = await db.execute<{ acquired: boolean }>(
+      sql`
+      select pg_try_advisory_xact_lock(hashtextextended(${gateName}, 0)) as acquired`,
+      "objects",
+    );
     if (!gate[0]?.acquired) throw new AppInvocationInFlightError(args.operation);
 
     const prior = await readCommittedClaim(orgId, actorId, args.operation, claimKey);
@@ -308,14 +330,17 @@ export async function executeAppInvocation(args: {
       assertSameRequest(prior, args.requestHash);
     }
 
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into application_idempotency_keys
         (org_id, actor_id, source, operation, idempotency_key, request_hash, expires_at)
       values (${orgId}, ${actorId}, 'app', ${args.operation}, ${claimKey},
               ${args.requestHash}, now() + interval '30 days')
       -- A retained claim is reused only for identical input; a missing claim is refused below.
       on conflict (org_id, actor_id, source, operation, idempotency_key) do nothing
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     const claimId = inserted[0]?.id ?? prior?.id;
     if (!claimId) {
       // Only reachable under an advisory-key collision with a rival that ran

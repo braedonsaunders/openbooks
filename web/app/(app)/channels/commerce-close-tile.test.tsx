@@ -57,7 +57,9 @@ function check(code: string, count: number) {
 function scriptFetch(payload: unknown) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === "/api/channels/completeness" && (!init?.method || init.method === "GET")) {
       return Response.json(payload);
     }

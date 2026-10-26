@@ -1,4 +1,7 @@
-import { requirePayrollWageRounding, type PayrollWageRounding } from "../projects/payroll-wage-rounding.ts";
+import {
+  requirePayrollWageRounding,
+  type PayrollWageRounding,
+} from "../projects/payroll-wage-rounding.ts";
 /**
  * Calculation support queries: headcount, stored tax certificates, and the FX/pay-rate source.
  *
@@ -54,7 +57,8 @@ export async function employerEmployeeCount(
   orgId: string,
   subsidiaryId: string,
 ): Promise<number> {
-  const result = await tx.execute<{ employee_count: string | number }>(sql`
+  const result = await tx.execute<{ employee_count: string | number }>(
+    sql`
     select count(distinct prof.employee_party_id)::int as employee_count
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
@@ -62,7 +66,9 @@ export async function employerEmployeeCount(
        and prof.is_active
        and p.is_active
        and p.subsidiary_id = ${subsidiaryId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const count = Number(result[0]?.employee_count ?? 0);
   if (!Number.isSafeInteger(count) || count < 0) {
     throw new PayrollError(
@@ -84,18 +90,27 @@ export async function employerEmployeeCount(
  * that replaced it.
  */
 export async function storedTaxCertificates(
-  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, country: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  employeePartyId: string,
+  country: string,
 ): Promise<StoredCertificate[]> {
-  const r = (await tx.execute<{
-      certificate_key: string; region: string | null; sub_region: string | null;
-      answers: Record<string, string> | null;
-      effective_from: string | null; superseded_on: string | null;
-    }>(sql`
+  const r = await tx.execute<{
+    certificate_key: string;
+    region: string | null;
+    sub_region: string | null;
+    answers: Record<string, string> | null;
+    effective_from: string | null;
+    superseded_on: string | null;
+  }>(
+    sql`
     select certificate_key, region, sub_region, answers, effective_from::text as effective_from,
            superseded_on::text as superseded_on
       from employee_tax_certificates
      where org_id = ${orgId} and employee_party_id = ${employeePartyId} and country = ${country}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map((row) => ({
     certificateKey: row.certificate_key,
     region: row.region,
@@ -155,10 +170,16 @@ export async function resolvePayrollFxSource(
   onDate: string,
 ): Promise<PayrollFxSource | null> {
   if (from === to) return null;
-  const result = (await tx.execute<{
-      id: string; from_currency: string; to_currency: string; as_of: string;
-      rate: string; direction: "direct" | "inverse"; resolved_rate: string;
-    }>(sql`
+  const result = await tx.execute<{
+    id: string;
+    from_currency: string;
+    to_currency: string;
+    as_of: string;
+    rate: string;
+    direction: "direct" | "inverse";
+    resolved_rate: string;
+  }>(
+    sql`
     select fx.id, fx.from_currency, fx.to_currency, fx.as_of::text as as_of,
            fx.rate::text as rate,
            case when fx.from_currency = ${from} and fx.to_currency = ${to}
@@ -175,62 +196,96 @@ export async function resolvePayrollFxSource(
                    then 0 else 1 end
      limit 1
      for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
-  return row ? {
-    id: row.id,
-    fromCurrency: row.from_currency,
-    toCurrency: row.to_currency,
-    asOf: row.as_of,
-    rate: row.rate,
-    direction: row.direction,
-    resolvedRate: row.resolved_rate,
-  } : null;
+  return row
+    ? {
+        id: row.id,
+        fromCurrency: row.from_currency,
+        toCurrency: row.to_currency,
+        asOf: row.as_of,
+        rate: row.rate,
+        direction: row.direction,
+        resolvedRate: row.resolved_rate,
+      }
+    : null;
 }
 
 export async function resolvePayRate(
-  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, onDate: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  employeePartyId: string,
+  onDate: string,
   /** Functional currency of the run (the run document's currency). */
   payCurrency: string | null,
-): Promise<({ basis: PayRateBasis; rate: string; annualHours: string; currency: string } & PayrollWageRounding) | null> {
-  const r = (await tx.execute<{
-      id: string; basis: string; rate: string;
-      annual_hours: string; currency: string; payroll_rate_scale: number; payroll_amount_rounding: string;
-    }>(sql`
+): Promise<
+  | ({
+      basis: PayRateBasis;
+      rate: string;
+      annualHours: string;
+      currency: string;
+    } & PayrollWageRounding)
+  | null
+> {
+  const r = await tx.execute<{
+    id: string;
+    basis: string;
+    rate: string;
+    annual_hours: string;
+    currency: string;
+    payroll_rate_scale: number;
+    payroll_amount_rounding: string;
+  }>(
+    sql`
     select * from ${effectivePayRateSql({
       org: sql`${orgId}`,
       employee: sql`${employeePartyId}`,
       onDate: sql`${onDate}`,
       selectList: sql`w.id, w.basis, w.rate, w.annual_hours, w.currency, w.payroll_rate_scale, w.payroll_amount_rounding`,
     })} as rate
-  `, "objects"));
+  `,
+    "objects",
+  );
   const selected = r[0];
   if (!selected) return null;
   // Lock the exact version selected by the shared effective-rate rule. Under
   // the calculation's repeatable-read snapshot a concurrent edit either
   // waits behind this row or raises a serialization failure; it can never
   // produce a stub from one version and fingerprint another.
-  const locked = (await tx.execute<{
-      basis: string; rate: string; annual_hours: string; currency: string; payroll_rate_scale: number; payroll_amount_rounding: string;
-    }>(sql`
+  const locked = await tx.execute<{
+    basis: string;
+    rate: string;
+    annual_hours: string;
+    currency: string;
+    payroll_rate_scale: number;
+    payroll_amount_rounding: string;
+  }>(
+    sql`
     select basis, rate::text as rate, annual_hours::text as annual_hours, currency, payroll_rate_scale, payroll_amount_rounding
       from labor_cost_rates
      where org_id = ${orgId} and id = ${selected.id}
      for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = locked[0];
   if (!row) return null;
   const resolved = {
     ...requirePayrollWageRounding(row.payroll_rate_scale, row.payroll_amount_rounding),
-    basis: requirePayRateBasis(row.basis), rate: row.rate, annualHours: row.annual_hours, currency: row.currency,
+    basis: requirePayRateBasis(row.basis),
+    rate: row.rate,
+    annualHours: row.annual_hours,
+    currency: row.currency,
   };
   if (!payCurrency || !row.currency || row.currency === payCurrency) return resolved;
 
   const fxSource = await resolvePayrollFxSource(tx, orgId, row.currency, payCurrency, onDate);
   if (!fxSource) {
     throw new PayrollError(
-      `no spot rate for the wage ${row.currency}→${payCurrency} on or before ${onDate}`
-      + " — enter one before this employee can be paid",
+      `no spot rate for the wage ${row.currency}→${payCurrency} on or before ${onDate}` +
+        " — enter one before this employee can be paid",
     );
   }
   return {
@@ -243,37 +298,74 @@ export async function resolvePayRate(
 /** Contractual regular hours and worked extra hours for packs declaring this basis. */
 export async function resolveStubStatutoryHours(
   tx: Pick<typeof db, "execute">,
-  input: { orgId: string; employeePartyId: string; payBasis: string | null;
-    periodStart: string; subsidiaryId: string; periodsPerYear: number; lines: readonly Line[] },
+  input: {
+    orgId: string;
+    employeePartyId: string;
+    payBasis: string | null;
+    periodStart: string;
+    subsidiaryId: string;
+    periodsPerYear: number;
+    lines: readonly Line[];
+  },
 ): Promise<{ regular: string | null; extra: string }> {
-  const { orgId, employeePartyId, payBasis, periodStart, subsidiaryId, periodsPerYear: P, lines } = input;
-  const extra = sum(lines
-    .filter((line) => line.kind === "earning"
-      && (line.classification === "overtime" || line.classification === "double_time"))
-    .map((line) => line.hours ?? "0"));
+  const {
+    orgId,
+    employeePartyId,
+    payBasis,
+    periodStart,
+    subsidiaryId,
+    periodsPerYear: P,
+    lines,
+  } = input;
+  const extra = sum(
+    lines
+      .filter(
+        (line) =>
+          line.kind === "earning" &&
+          (line.classification === "overtime" || line.classification === "double_time"),
+      )
+      .map((line) => line.hours ?? "0"),
+  );
   let regular: string | null;
   if (payBasis === "salary") {
-    const schedule = await resolveWorkSchedule(tx, orgId, employeePartyId, periodStart, { subsidiaryId });
+    const schedule = await resolveWorkSchedule(tx, orgId, employeePartyId, periodStart, {
+      subsidiaryId,
+    });
     const weeklyHours = schedule ? scheduledHoursPerWeek(schedule) : null;
     const scheduleHours = weeklyHours === null ? null : mulRatio(weeklyHours, 52n, BigInt(P));
-    const observedHours = sum(lines
-      .filter((line) => line.kind === "earning"
-        && line.classification !== "overtime" && line.classification !== "double_time")
-      .map((line) => line.hours ?? "0"));
+    const observedHours = sum(
+      lines
+        .filter(
+          (line) =>
+            line.kind === "earning" &&
+            line.classification !== "overtime" &&
+            line.classification !== "double_time",
+        )
+        .map((line) => line.hours ?? "0"),
+    );
     regular = scheduleHours ?? (cmp(observedHours, "0") > 0 ? observedHours : null);
   } else {
-    regular = sum(lines
-      .filter((line) => line.kind === "earning"
-        && line.classification !== "overtime" && line.classification !== "double_time")
-      .map((line) => line.hours ?? "0"));
+    regular = sum(
+      lines
+        .filter(
+          (line) =>
+            line.kind === "earning" &&
+            line.classification !== "overtime" &&
+            line.classification !== "double_time",
+        )
+        .map((line) => line.hours ?? "0"),
+    );
   }
   return { regular, extra };
 }
 
 /** Everything one stub computation reads, resolved once per run by the calculation driver. */
 export type StubComputationInput = {
-  orgId: string; actorId: string; documentId: string;
-  run: Record<string, string>; emp: Record<string, string | null>;
+  orgId: string;
+  actorId: string;
+  documentId: string;
+  run: Record<string, string>;
+  emp: Record<string, string | null>;
   /** The run's resolved jurisdiction — one country, entity, currency, year. */
   runContext: PayrollRunContext;
   /** This employee's place in it, already asserted to agree with the run's. */

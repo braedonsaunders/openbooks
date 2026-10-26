@@ -11,11 +11,17 @@ import test from "node:test";
  * reason) or is refused by name — and no interleaving double-bills a period.
  */
 const engineRoot = new URL("../../../../engine/", import.meta.url).href;
-const state: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null } = {
-  orgId: "", actorId: "", allowedSubsidiaryIds: null,
-};
+const state: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null } =
+  {
+    orgId: "",
+    actorId: "",
+    allowedSubsidiaryIds: null,
+  };
 Object.assign(globalThis, { __subscriptionRaceState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.endsWith("/lib/authz"))
@@ -50,75 +56,118 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { db, pool, withBypassContext, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, createScratchUser } =
+  await import("@openbooks/engine/testing/fixtures");
 const { waitForLockWaiter } = await import("@openbooks/engine/testing/lock-wait");
 const { runDueSubscriptions } = await import("@openbooks/engine/billing/subscription-billing");
 const { POST } = await import("./route.ts");
 
 async function fixture(): Promise<{ orgId: string; subscriptionId: string; subsidiaryId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Race Tester", "admin"));
+  const actorId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Race Tester", "admin"),
+  );
   state.orgId = org.orgId;
   state.actorId = actorId;
   state.allowedSubsidiaryIds = null;
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = settings || '{"features":{"subscriptionBilling":true}}'::jsonb
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   // The scratch spine opens only July 2026; September billing needs its period.
-  const calendarId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id::text as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects")))[0]!.id;
+  const calendarId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
+    select fiscal_calendar_id::text as id from accounting_periods where org_id = ${org.orgId} limit 1`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   for (const month of [8, 9, 10]) {
     const startsOn = `2026-${String(month).padStart(2, "0")}-01`;
     const endsOn = new Date(Date.UTC(2026, month, 1) - 86_400_000).toISOString().slice(0, 10);
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${org.orgId}, 2026, ${month},
-              ${startsOn.slice(0, 7)}, ${startsOn}, ${endsOn}, false, ${calendarId})`));
+              ${startsOn.slice(0, 7)}, ${startsOn}, ${endsOn}, false, ${calendarId})`),
+    );
   }
   const planId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subscription_plans
       (id, org_id, name, amount, interval, interval_count, income_account_id, is_active, created_by)
     values (${planId}, ${org.orgId}, 'Race Plan', '100.00', 'monthly', 1,
-            ${org.accounts.revenue}, true, ${actorId})`));
+            ${org.accounts.revenue}, true, ${actorId})`),
+  );
   const subscriptionId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subscriptions
       (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on, auto_post, created_by)
     values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, '1', 'active',
-            '2026-09-01', '2026-09-01', true, ${actorId})`));
+            '2026-09-01', '2026-09-01', true, ${actorId})`),
+  );
   return { orgId: org.orgId, subscriptionId, subsidiaryId: org.subsidiaryId };
 }
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://subs.test/api/subscriptions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://subs.test/api/subscriptions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
-async function guards(orgId: string, subscriptionId: string): Promise<{ startsOn: string; endsOn: string }[]> {
-  return await withBypassContext(() => db.execute<{ startsOn: string; endsOn: string }>(sql`
+async function guards(
+  orgId: string,
+  subscriptionId: string,
+): Promise<{ startsOn: string; endsOn: string }[]> {
+  return await withBypassContext(() =>
+    db.execute<{ startsOn: string; endsOn: string }>(
+      sql`
     select period_starts_on as "startsOn", period_ends_on as "endsOn"
       from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
-     order by period_starts_on`, "objects"));
+     order by period_starts_on`,
+      "objects",
+    ),
+  );
 }
 
 async function cursor(orgId: string, subscriptionId: string): Promise<string> {
-  return (await withBypassContext(() => db.execute<{ nextBillOn: string }>(sql`
-    select next_bill_on as "nextBillOn" from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")))[0]!.nextBillOn;
+  return (
+    await withBypassContext(() =>
+      db.execute<{ nextBillOn: string }>(
+        sql`
+    select next_bill_on as "nextBillOn" from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!.nextBillOn;
 }
 
 async function invoiceCount(orgId: string): Promise<number> {
-  return (await withBypassContext(() => db.execute<{ n: number }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ n: number }>(
+        sql`
     select count(*)::int as n from documents
-     where org_id = ${orgId} and kind = 'customer_invoice' and status <> 'voided'`, "objects")))[0]!.n;
+     where org_id = ${orgId} and kind = 'customer_invoice' and status <> 'voided'`,
+        "objects",
+      ),
+    )
+  )[0]!.n;
 }
 
 test("an edit after the bill validates against fresh billed state, or refuses it", async () => {
@@ -129,33 +178,50 @@ test("an edit after the bill validates against fresh billed state, or refuses it
     assert.equal(await cursor(orgId, subscriptionId), "2026-10-01");
 
     // Rewinding into the just-billed September window refuses by name.
-    const rewind = await post({ action: "updateSubscription", id: subscriptionId, nextBillOn: "2026-09-15" });
+    const rewind = await post({
+      action: "updateSubscription",
+      id: subscriptionId,
+      nextBillOn: "2026-09-15",
+    });
     assert.equal(rewind.status, 422);
-    assert.match(String((await rewind.json() as { error: string }).error), /already-billed service through 2026-10-01/);
+    assert.match(
+      String(((await rewind.json()) as { error: string }).error),
+      /already-billed service through 2026-10-01/,
+    );
     assert.equal(await cursor(orgId, subscriptionId), "2026-10-01");
 
     // A forward skip past the fresh boundary applies with its audit trail.
     const skip = await post({
-      action: "updateSubscription", id: subscriptionId, nextBillOn: "2026-11-01",
-      skipUnbilledService: true, skipReason: "tenant paused October",
+      action: "updateSubscription",
+      id: subscriptionId,
+      nextBillOn: "2026-11-01",
+      skipUnbilledService: true,
+      skipReason: "tenant paused October",
     });
     assert.equal(skip.status, 200);
-    assert.deepEqual((await skip.json() as { skippedWindow: unknown }).skippedWindow, {
-      from: "2026-10-01", to: "2026-11-01",
+    assert.deepEqual(((await skip.json()) as { skippedWindow: unknown }).skippedWindow, {
+      from: "2026-10-01",
+      to: "2026-11-01",
     });
 
     // September was billed exactly once, under exactly one guard.
-    assert.deepEqual(await guards(orgId, subscriptionId), [{ startsOn: "2026-09-01", endsOn: "2026-10-01" }]);
+    assert.deepEqual(await guards(orgId, subscriptionId), [
+      { startsOn: "2026-09-01", endsOn: "2026-10-01" },
+    ]);
     assert.equal(await invoiceCount(orgId), 1);
   } finally {
-    await withBypassContext(() => db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`));
+    await withBypassContext(() =>
+      db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`),
+    );
     await withBypassContext(() => dropScratchOrg(orgId));
   }
 });
 
 test("add subscription rechecks customer scope after a concurrent rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Add race tester", "admin"));
+  const actorId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Add race tester", "admin"),
+  );
   state.orgId = org.orgId;
   state.actorId = actorId;
   state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -164,16 +230,22 @@ test("add subscription rechecks customer scope after a concurrent rehome", async
   const outsideSubsidiaryId = randomUUID();
   const holder = await pool.connect();
   try {
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, is_elimination, is_active, custom)
-      values (${outsideSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', false, true, '{}'::jsonb)`));
-    await withBypassContext(() => db.execute(sql`
-      update parties set subsidiary_id = ${org.subsidiaryId} where id = ${customerId} and org_id = ${org.orgId}`));
-    await withBypassContext(() => db.execute(sql`
+      values (${outsideSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', false, true, '{}'::jsonb)`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
+      update parties set subsidiary_id = ${org.subsidiaryId} where id = ${customerId} and org_id = ${org.orgId}`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into subscription_plans
         (id, org_id, name, amount, interval, interval_count, income_account_id, is_active, created_by)
       values (${planId}, ${org.orgId}, 'Scope Race Plan', '100.00', 'monthly', 1,
-              ${org.accounts.revenue}, true, ${actorId})`));
+              ${org.accounts.revenue}, true, ${actorId})`),
+    );
 
     // The preflight scope read sees subsidiary A. Hold the customer row while
     // the request reaches its in-transaction FOR SHARE, then rehome it to B.
@@ -184,23 +256,44 @@ test("add subscription rechecks customer scope after a concurrent rehome", async
     // billing intent so the request reaches the in-transaction scope recheck
     // this race exercises.
     const adding = post({
-      action: "addSubscription", customerId, planId,
-      startOn: "2026-09-01", firstBillOn: "2026-09-01",
+      action: "addSubscription",
+      customerId,
+      planId,
+      startOn: "2026-09-01",
+      firstBillOn: "2026-09-01",
       catchUp: { mode: "skip" },
     });
     await new Promise((resolve) => setTimeout(resolve, 300));
-    await holder.query("update parties set subsidiary_id = $2 where id = $1", [customerId, outsideSubsidiaryId]);
+    await holder.query("update parties set subsidiary_id = $2 where id = $1", [
+      customerId,
+      outsideSubsidiaryId,
+    ]);
     await holder.query("commit");
 
     const response = await adding;
     assert.equal(response.status, 404);
     assert.equal(((await response.json()) as { error: string }).error, "not_found");
-    const count = (await withBypassContext(() => db.execute<{ count: number }>(sql`
+    const count = (
+      await withBypassContext(() =>
+        db.execute<{ count: number }>(
+          sql`
       select count(*)::int as count from subscriptions
-       where org_id = ${org.orgId} and customer_id = ${customerId}`, "objects")))[0]!.count;
-    assert.equal(count, 0, "the scoped request must not commit a subscription after the customer leaves its scope");
+       where org_id = ${org.orgId} and customer_id = ${customerId}`,
+          "objects",
+        ),
+      )
+    )[0]!.count;
+    assert.equal(
+      count,
+      0,
+      "the scoped request must not commit a subscription after the customer leaves its scope",
+    );
   } finally {
-    try { await holder.query("rollback"); } catch { /* already released */ }
+    try {
+      await holder.query("rollback");
+    } catch {
+      /* already released */
+    }
     holder.release();
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -223,7 +316,9 @@ test("an edit racing a concurrent bill validates under the row lock", async () =
     // the bill can commit while the edit stays parked.
     await holder.query("begin");
     await holder.query("select set_config('app.bypass_rls', 'on', true)");
-    await holder.query("select id from subscriptions where id = $1 for key share", [subscriptionId]);
+    await holder.query("select id from subscriptions where id = $1 for key share", [
+      subscriptionId,
+    ]);
 
     // The edit starts and parks on the held lock — before reading a row on
     // the fixed code (SELECT ... FOR UPDATE first), after validating stale
@@ -231,8 +326,11 @@ test("an edit racing a concurrent bill validates under the row lock", async () =
     // it park; green does not depend on the timing, because the October bill
     // below always commits before the holder releases.
     const edit = post({
-      action: "updateSubscription", id: subscriptionId, nextBillOn: "2026-10-15",
-      skipUnbilledService: true, skipReason: "tenant paused early October",
+      action: "updateSubscription",
+      id: subscriptionId,
+      nextBillOn: "2026-10-15",
+      skipUnbilledService: true,
+      skipReason: "tenant paused early October",
     });
     await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -242,8 +340,15 @@ test("an edit racing a concurrent bill validates under the row lock", async () =
     // validation input the edit must see). The boundary is now Nov 1, which
     // turns the parked Oct 15 skip into a backward move into billed service.
     // Each guard needs its own invoice (one guard per invoice, by constraint).
-    const customerId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select customer_id as "id" from subscriptions where id = ${subscriptionId}`, "objects")))[0]!.id;
+    const customerId = (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
+      select customer_id as "id" from subscriptions where id = ${subscriptionId}`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
     const octoberInvoiceId = randomUUID();
     await writer.query("begin");
     await writer.query("select set_config('app.bypass_rls', 'on', true)");
@@ -269,17 +374,26 @@ test("an edit racing a concurrent bill validates under the row lock", async () =
     await holder.query("rollback");
     const response = await edit;
     assert.equal(response.status, 422);
-    assert.match(String((await response.json() as { error: string }).error), /already-billed service through 2026-11-01/);
+    assert.match(
+      String(((await response.json()) as { error: string }).error),
+      /already-billed service through 2026-11-01/,
+    );
     assert.equal(await cursor(orgId, subscriptionId), "2026-10-01");
     assert.deepEqual(await guards(orgId, subscriptionId), [
       { startsOn: "2026-09-01", endsOn: "2026-10-01" },
       { startsOn: "2026-10-01", endsOn: "2026-11-01" },
     ]);
   } finally {
-    try { await holder.query("rollback"); } catch { /* already released */ }
+    try {
+      await holder.query("rollback");
+    } catch {
+      /* already released */
+    }
     holder.release();
     writer.release();
-    await withBypassContext(() => db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`));
+    await withBypassContext(() =>
+      db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`),
+    );
     await withBypassContext(() => dropScratchOrg(orgId));
   }
 });
@@ -296,19 +410,30 @@ test("a bill-vs-edit race never double-bills: the edit loses against fresh state
     // Pin the scheduler's "today" inside September: the race is about the
     // September window, and an unpinned follow-up would legitimately bill
     // October once the wall clock moves past it.
-    const editFirst = post({ action: "updateSubscription", id: subscriptionId, nextBillOn: "2026-09-15" });
+    const editFirst = post({
+      action: "updateSubscription",
+      id: subscriptionId,
+      nextBillOn: "2026-09-15",
+    });
     const [edit, billed] = await Promise.all([editFirst, runDueSubscriptions("2026-09-15")]);
     assert.equal(edit.status, 422);
-    assert.match(String((await edit.json() as { error: string }).error), /billed service|skips unbilled service/);
+    assert.match(
+      String(((await edit.json()) as { error: string }).error),
+      /billed service|skips unbilled service/,
+    );
     assert.equal((await billed).billed, 1);
-    assert.deepEqual(await guards(orgId, subscriptionId), [{ startsOn: "2026-09-01", endsOn: "2026-10-01" }]);
+    assert.deepEqual(await guards(orgId, subscriptionId), [
+      { startsOn: "2026-09-01", endsOn: "2026-10-01" },
+    ]);
     assert.equal(await invoiceCount(orgId), 1);
     assert.equal(await cursor(orgId, subscriptionId), "2026-10-01");
     const followUp = await runDueSubscriptions("2026-09-15");
     assert.equal(followUp.billed, 0);
     assert.equal(await invoiceCount(orgId), 1, "no overlapping second invoice after the race");
   } finally {
-    await withBypassContext(() => db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`));
+    await withBypassContext(() =>
+      db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`),
+    );
     await withBypassContext(() => dropScratchOrg(orgId));
   }
 });
@@ -318,42 +443,76 @@ test("change and bill-now refuse after a customer rehome while waiting on its ro
     const { orgId, subscriptionId, subsidiaryId } = await fixture();
     const holder = await pool.connect();
     try {
-      const customerId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-        select customer_id as id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")))[0]!.id;
+      const customerId = (
+        await withBypassContext(() =>
+          db.execute<{ id: string }>(
+            sql`
+        select customer_id as id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.id;
       const subsidiaryB = randomUUID();
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-        values (${subsidiaryB}, ${orgId}, ${subsidiaryId}, 'Rehomed Entity', 'CAD', 'CA')`));
-      await withBypassContext(() => db.execute(sql`
-        update parties set subsidiary_id = ${subsidiaryId} where id = ${customerId} and org_id = ${orgId}`));
+        values (${subsidiaryB}, ${orgId}, ${subsidiaryId}, 'Rehomed Entity', 'CAD', 'CA')`),
+      );
+      await withBypassContext(() =>
+        db.execute(sql`
+        update parties set subsidiary_id = ${subsidiaryId} where id = ${customerId} and org_id = ${orgId}`),
+      );
       state.allowedSubsidiaryIds = new Set([subsidiaryId]);
 
       await holder.query("begin");
       await holder.query("select set_config('app.bypass_rls', 'on', true)");
       await holder.query("select id from parties where id = $1 for update", [customerId]);
-      const pending = post(action === "changeSubscription"
-        ? { action, id: subscriptionId, quantity: "2" }
-        : { action, id: subscriptionId });
+      const pending = post(
+        action === "changeSubscription"
+          ? { action, id: subscriptionId, quantity: "2" }
+          : { action, id: subscriptionId },
+      );
 
       await waitForLockWaiter(holder, { label: `the subscription ${action}` });
-      await holder.query("update parties set subsidiary_id = $1 where id = $2 and org_id = $3", [subsidiaryB, customerId, orgId]);
+      await holder.query("update parties set subsidiary_id = $1 where id = $2 and org_id = $3", [
+        subsidiaryB,
+        customerId,
+        orgId,
+      ]);
       await holder.query("commit");
 
       const response = await pending;
-      assert.equal(response.status, 404, `${action}: ${JSON.stringify(await response.clone().json())}`);
+      assert.equal(
+        response.status,
+        404,
+        `${action}: ${JSON.stringify(await response.clone().json())}`,
+      );
       assert.deepEqual(await response.json(), { error: "not_found" });
-      const after = (await withBypassContext(() => db.execute<{ quantity: string; runCount: number; lastInvoiceId: string | null }>(sql`
+      const after = (
+        await withBypassContext(() =>
+          db.execute<{ quantity: string; runCount: number; lastInvoiceId: string | null }>(
+            sql`
         select quantity::text as quantity, run_count as "runCount", last_invoice_id as "lastInvoiceId"
-          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")))[0]!;
+          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!;
       assert.equal(after.quantity, "1.0000", `${action} must not change subscription quantity`);
       assert.equal(after.runCount, 0, `${action} must not book an invoice`);
       assert.equal(after.lastInvoiceId, null);
       assert.equal(await invoiceCount(orgId), 0);
     } finally {
-      try { await holder.query("rollback"); } catch { /* already released */ }
+      try {
+        await holder.query("rollback");
+      } catch {
+        /* already released */
+      }
       holder.release();
       state.allowedSubsidiaryIds = null;
-      await withBypassContext(() => db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`));
+      await withBypassContext(() =>
+        db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`),
+      );
       await withBypassContext(() => dropScratchOrg(orgId));
     }
   }

@@ -39,7 +39,13 @@ const FEATURE_REMEDY = "Enable Sales Channels in Company Settings → Features."
 export const SHOPIFY_OAUTH_COOKIE = "ob_shopify_oauth";
 export const SHOPIFY_OAUTH_TTL_S = 10 * 60;
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
@@ -77,14 +83,20 @@ export interface StartConnectResult {
   oauthNonce: string | null;
 }
 
-export function mintShopifyOauthState(orgId: string, channelId: string): { state: string; nonce: string } {
+export function mintShopifyOauthState(
+  orgId: string,
+  channelId: string,
+): { state: string; nonce: string } {
   const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 18)}`;
   const exp = Math.floor(Date.now() / 1000) + SHOPIFY_OAUTH_TTL_S;
   // Fixed seal scope (not the org): the state returns as an opaque query
   // param, so the org cannot be known before unsealing. The payload's own
   // orgId is validated after decryption, with the cookie nonce and expiry.
   return {
-    state: sealJson({ orgId, channelId, nonce, exp }, { orgId: "system", purpose: "shopify.oauth.state" }),
+    state: sealJson(
+      { orgId, channelId, nonce, exp },
+      { orgId: "system", purpose: "shopify.oauth.state" },
+    ),
     nonce,
   };
 }
@@ -212,7 +224,11 @@ export async function startShopifyConnect(
         oauthNonce: nonce,
       };
     }
-    const probe = new ShopifyClient({ shopDomain: shop, accessToken: token, transport: input.transport });
+    const probe = new ShopifyClient({
+      shopDomain: shop,
+      accessToken: token,
+      transport: input.transport,
+    });
     const identity = await probe.shopIdentity().catch((error: unknown) => {
       throw error instanceof CommerceError
         ? error
@@ -240,8 +256,22 @@ export async function startShopifyConnect(
       webhookSecret: appSecret,
       settings: { pushCatalog },
     });
-    await finishShopifyConnect(orgId, actorId, channel.id, token, webhookCallbackUrl(input.webOrigin, channel.id), input.transport);
-    return { channelId: channel.id, shop, mode: "token" as const, installUrl: null, oauthState: null, oauthNonce: null };
+    await finishShopifyConnect(
+      orgId,
+      actorId,
+      channel.id,
+      token,
+      webhookCallbackUrl(input.webOrigin, channel.id),
+      input.transport,
+    );
+    return {
+      channelId: channel.id,
+      shop,
+      mode: "token" as const,
+      installUrl: null,
+      oauthState: null,
+      oauthNonce: null,
+    };
   }
 }
 
@@ -259,7 +289,12 @@ async function finishShopifyConnect(
   transport?: typeof fetch,
 ): Promise<void> {
   const channel = await loadShopifyChannel(orgId, channelId);
-  const client = new ShopifyClient({ shopDomain: channel.shop, accessToken, transport, apiVersion: channel.settings.apiVersion });
+  const client = new ShopifyClient({
+    shopDomain: channel.shop,
+    accessToken,
+    transport,
+    apiVersion: channel.settings.apiVersion,
+  });
   const shop = await client.shopIdentity();
   if (shop.myshopifyDomain.toLowerCase() !== channel.shop.toLowerCase()) {
     refuse(
@@ -403,15 +438,26 @@ type PostableAccount = {
 
 async function postableAccounts(orgId: string): Promise<PostableAccount[]> {
   return await withOrgContext(orgId, () =>
-      db.execute<PostableAccount>(sql`
+    db.execute<PostableAccount>(
+      sql`
         select id, name, type, currency_restriction as "currencyRestriction", subsidiary_id as "subsidiaryId"
           from accounts
-         where org_id = ${orgId} and is_active and not is_summary`, "objects"),
-    );
+         where org_id = ${orgId} and is_active and not is_summary`,
+      "objects",
+    ),
+  );
 }
 
-function compatible(account: PostableAccount, currency: string, subsidiaryId: string | null): boolean {
-  if (account.currencyRestriction && account.currencyRestriction.toUpperCase() !== currency.toUpperCase()) return false;
+function compatible(
+  account: PostableAccount,
+  currency: string,
+  subsidiaryId: string | null,
+): boolean {
+  if (
+    account.currencyRestriction &&
+    account.currencyRestriction.toUpperCase() !== currency.toUpperCase()
+  )
+    return false;
   if (subsidiaryId && account.subsidiaryId && account.subsidiaryId !== subsidiaryId) return false;
   return true;
 }
@@ -426,16 +472,29 @@ function nameHit(account: PostableAccount, patterns: RegExp[]): boolean {
  * liability accounts by name, nothing invented. Every row the heuristics
  * cannot place returns unmapped for the operator instead of a guess.
  */
-export async function proposeShopifyAccountMaps(orgId: string, channelId: string): Promise<AccountProposal[]> {
+export async function proposeShopifyAccountMaps(
+  orgId: string,
+  channelId: string,
+): Promise<AccountProposal[]> {
   const channel = await loadShopifyChannel(orgId, channelId);
-  const subsidiary = (await withOrgContext(orgId, () =>
-      db.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"),
-    ))[0];
+  const subsidiary = (
+    await withOrgContext(orgId, () =>
+      db.execute<{ subsidiary_id: string | null }>(
+        sql`
+        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`,
+        "objects",
+      ),
+    )
+  )[0];
   const subsidiaryId = subsidiary?.subsidiary_id ?? null;
-  const accounts = (await postableAccounts(orgId)).filter((account) => compatible(account, channel.currency, subsidiaryId));
+  const accounts = (await postableAccounts(orgId)).filter((account) =>
+    compatible(account, channel.currency, subsidiaryId),
+  );
   const proposals: AccountProposal[] = [];
-  const pick = (predicates: ((account: PostableAccount) => boolean)[], note: string): PostableAccount | null => {
+  const pick = (
+    predicates: ((account: PostableAccount) => boolean)[],
+    note: string,
+  ): PostableAccount | null => {
     for (const predicate of predicates) {
       const hit = accounts.find(predicate);
       if (hit) return hit;
@@ -458,7 +517,9 @@ export async function proposeShopifyAccountMaps(orgId: string, channelId: string
       accountId: hit?.id ?? null,
       accountName: hit?.name ?? null,
       confidence: hit ? (nameHit(hit, tokens) ? "high" : "medium") : "unmapped",
-      note: hit ? `Clears ${gateway} tenders to the bank.` : `No clearing account found for ${gateway}; choose where its tenders clear.`,
+      note: hit
+        ? `Clears ${gateway} tenders to the bank.`
+        : `No clearing account found for ${gateway}; choose where its tenders clear.`,
     };
   };
   proposals.push(clearingFor("shopify_payments", [/shopify/i]));
@@ -471,7 +532,10 @@ export async function proposeShopifyAccountMaps(orgId: string, channelId: string
     note: string,
   ): AccountProposal => {
     const hit = pick(
-      [(account) => types.includes(account.type) && nameHit(account, patterns), (account) => nameHit(account, patterns)],
+      [
+        (account) => types.includes(account.type) && nameHit(account, patterns),
+        (account) => nameHit(account, patterns),
+      ],
       role,
     );
     return {
@@ -479,14 +543,37 @@ export async function proposeShopifyAccountMaps(orgId: string, channelId: string
       key: "",
       accountId: hit?.id ?? null,
       accountName: hit?.name ?? null,
-      confidence: hit ? (types.includes(hit.type) && nameHit(hit, patterns) ? "high" : "medium") : "unmapped",
+      confidence: hit
+        ? types.includes(hit.type) && nameHit(hit, patterns)
+          ? "high"
+          : "medium"
+        : "unmapped",
       note: hit ? note : `No account found for ${role}; choose one before posting.`,
     };
   };
-  proposals.push(single("revenue", ["income", "income_other"], [/sales|revenue|merchandise|product sales/i], "Credits order revenue."));
-  proposals.push(single("discount", ["income", "income_other", "expense", "expense_other"], [/discount/i], "Books promotion discounts."));
   proposals.push(
-    single("shipping_income", ["income", "income_other"], [/shipping|delivery|freight/i], "Credits collected shipping."),
+    single(
+      "revenue",
+      ["income", "income_other"],
+      [/sales|revenue|merchandise|product sales/i],
+      "Credits order revenue.",
+    ),
+  );
+  proposals.push(
+    single(
+      "discount",
+      ["income", "income_other", "expense", "expense_other"],
+      [/discount/i],
+      "Books promotion discounts.",
+    ),
+  );
+  proposals.push(
+    single(
+      "shipping_income",
+      ["income", "income_other"],
+      [/shipping|delivery|freight/i],
+      "Credits collected shipping.",
+    ),
   );
   proposals.push(
     single(
@@ -504,9 +591,21 @@ export async function proposeShopifyAccountMaps(orgId: string, channelId: string
       "Owes collected sales tax to the authority.",
     ),
   );
-  proposals.push(single("rounding", ["expense", "expense_other"], [/round/i], "Absorbs tender rounding differences."));
   proposals.push(
-    single("refund_clearing", ["asset_bank", "asset_current_other"], [/refund|clearing/i], "Clears refunds back to tenders."),
+    single(
+      "rounding",
+      ["expense", "expense_other"],
+      [/round/i],
+      "Absorbs tender rounding differences.",
+    ),
+  );
+  proposals.push(
+    single(
+      "refund_clearing",
+      ["asset_bank", "asset_current_other"],
+      [/refund|clearing/i],
+      "Clears refunds back to tenders.",
+    ),
   );
   return proposals;
 }
@@ -528,10 +627,15 @@ export async function acceptShopifyReview(
   input: AcceptReviewInput,
 ): Promise<{ channelId: string; maps: number }> {
   const channel = await loadShopifyChannel(orgId, channelId);
-  const subsidiary = (await withOrgContext(orgId, () =>
-      db.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"),
-    ))[0];
+  const subsidiary = (
+    await withOrgContext(orgId, () =>
+      db.execute<{ subsidiary_id: string | null }>(
+        sql`
+        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`,
+        "objects",
+      ),
+    )
+  )[0];
   const accounts = await postableAccounts(orgId);
   const effectiveFrom = input.effectiveFrom ?? isoDateOf(new Date());
   let maps = 0;
@@ -576,10 +680,19 @@ export async function shopifyReview(orgId: string, channelId: string): Promise<R
     listChannelLocations(orgId, channelId),
   ]);
   return {
-    channel: { id: channel.channelId, name: channel.name, shop: channel.shop, status: channel.status, currency: channel.currency },
+    channel: {
+      id: channel.channelId,
+      name: channel.name,
+      shop: channel.shop,
+      status: channel.status,
+      currency: channel.currency,
+    },
     counts,
     via,
-    locations: { total: locations.length, mapped: locations.filter((entry) => entry.stockLocationId).length },
+    locations: {
+      total: locations.length,
+      mapped: locations.filter((entry) => entry.stockLocationId).length,
+    },
     proposals: await proposeShopifyAccountMaps(orgId, channelId),
     oauthAvailable: shopifyOAuthAvailable(),
   };
@@ -602,16 +715,25 @@ export async function disconnectShopify(
   const channel = await loadShopifyChannel(orgId, channelId);
   let webhookWarning: string | null = null;
   try {
-    const client = new ShopifyClient({ shopDomain: channel.shop, accessToken: channel.accessToken, transport: options.transport, apiVersion: channel.settings.apiVersion });
+    const client = new ShopifyClient({
+      shopDomain: channel.shop,
+      accessToken: channel.accessToken,
+      transport: options.transport,
+      apiVersion: channel.settings.apiVersion,
+    });
     const origin = process.env.OPENBOOKS_APP_URL ?? "";
-    if (origin !== "") await removeShopifySubscriptions(client, webhookCallbackUrl(origin, channelId));
+    if (origin !== "")
+      await removeShopifySubscriptions(client, webhookCallbackUrl(origin, channelId));
   } catch (error) {
     webhookWarning =
       error instanceof Error
         ? `Shopify webhook subscriptions may remain: ${error.message} Remove them in Shopify admin Settings → Notifications.`
         : "Shopify webhook subscriptions may remain. Remove them in Shopify admin Settings → Notifications.";
   }
-  const why = typeof reason === "string" && reason.trim() !== "" ? reason.trim() : "Disconnected by the operator";
+  const why =
+    typeof reason === "string" && reason.trim() !== ""
+      ? reason.trim()
+      : "Disconnected by the operator";
   await disconnectChannel(orgId, actorId, channelId, why);
   return { channelId, webhookWarning };
 }

@@ -35,7 +35,8 @@ export async function upsertBuiltInRolesForOrg(
 ): Promise<void> {
   await runner.transaction(async (tx) => {
     for (const [key, def] of Object.entries(roles)) {
-      const upserted = await tx.execute<{ id: string }>(sql`
+      const upserted = await tx.execute<{ id: string }>(
+        sql`
         insert into app_roles (org_id, key, name, description, is_built_in, permissions)
         values (${orgId}, ${key}, ${def.name}, ${def.description}, true, ${JSON.stringify(def.permissions)})
         on conflict (org_id, key) do update
@@ -44,7 +45,9 @@ export async function upsertBuiltInRolesForOrg(
               updated_at = now()
         where app_roles.is_built_in
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (upserted.length !== 1) {
         throw new Error(
           `built-in role "${key}" for organization ${orgId} was not seeded: ` +
@@ -80,11 +83,14 @@ export async function alignBuiltInAdministratorRole(
   catalogue: readonly string[],
 ): Promise<AdministratorRoleAlignment> {
   return runner.transaction(async (tx) => {
-    const rows = await tx.execute<{ id: string; permissions: unknown }>(sql`
+    const rows = await tx.execute<{ id: string; permissions: unknown }>(
+      sql`
       select id, permissions from app_roles
        where org_id = ${orgId} and key = 'admin' and is_built_in
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const role = rows[0];
     if (!role) return "absent";
     const stored = Array.isArray(role.permissions)
@@ -94,13 +100,18 @@ export async function alignBuiltInAdministratorRole(
     const missing = catalogue.filter((key) => !held.has(key));
     if (missing.length === 0) return "unchanged";
     const next = [...stored, ...missing];
-    const updated = await tx.execute<{ id: string }>(sql`
+    const updated = await tx.execute<{ id: string }>(
+      sql`
       update app_roles set permissions = ${JSON.stringify(next)}::jsonb, updated_at = now()
        where id = ${role.id} and org_id = ${orgId}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new Error(`built-in Administrator role for organization ${orgId} was not aligned to the permission catalogue`);
+      throw new Error(
+        `built-in Administrator role for organization ${orgId} was not aligned to the permission catalogue`,
+      );
     }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

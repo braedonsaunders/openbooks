@@ -34,7 +34,8 @@ function decimalFactorUnits(value: string | number): bigint {
   if (fraction.length > 10 && /[1-9]/.test(fraction.slice(10))) {
     throw new Error(`decimal factor loses precision beyond 10 decimal places: "${value}"`);
   }
-  const units = BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  const units =
+    BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
   return negative ? -units : units;
 }
 
@@ -199,11 +200,15 @@ export function div(a: string, b: string): string {
 }
 
 /** Multiply exact factors and a ratio, rounding once to the requested money quantum. */
-export function mulDecimalFactors(amount: string, factors: readonly (string | number)[], options: {
-  numerator?: bigint;
-  denominator?: bigint;
-  decimalPlaces?: number;
-} = {}): string {
+export function mulDecimalFactors(
+  amount: string,
+  factors: readonly (string | number)[],
+  options: {
+    numerator?: bigint;
+    denominator?: bigint;
+    decimalPlaces?: number;
+  } = {},
+): string {
   const decimalPlaces = options.decimalPlaces ?? 4;
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
     throw new Error("decimalPlaces must be an integer from 0 through 4");
@@ -317,15 +322,8 @@ export function ledgerSideTotals(amounts: readonly string[]): { debits: string; 
  * Quantities and commercial rates legitimately carry more precision than
  * posted money, so callers choose an explicit scale (up to 10 places).
  */
-export function normalizeDecimal(
-  value: string | number,
-  decimalPlaces = 8,
-): string {
-  if (
-    !Number.isInteger(decimalPlaces) ||
-    decimalPlaces < 0 ||
-    decimalPlaces > 10
-  ) {
+export function normalizeDecimal(value: string | number, decimalPlaces = 8): string {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 10) {
     throw new Error("decimalPlaces must be an integer from 0 through 10");
   }
   let raw = String(value).trim();
@@ -353,20 +351,13 @@ export function normalizeDecimal(
   }
   let whole = digits.slice(0, decimalIndex) || "0";
   let fraction = digits.slice(decimalIndex);
-  if (
-    fraction.length > decimalPlaces &&
-    /[1-9]/.test(fraction.slice(decimalPlaces))
-  ) {
-    throw new Error(
-      `decimal loses precision beyond ${decimalPlaces} decimal places: "${value}"`,
-    );
+  if (fraction.length > decimalPlaces && /[1-9]/.test(fraction.slice(decimalPlaces))) {
+    throw new Error(`decimal loses precision beyond ${decimalPlaces} decimal places: "${value}"`);
   }
   whole = whole.replace(/^0+(?=\d)/, "") || "0";
   fraction = fraction.slice(0, decimalPlaces).padEnd(decimalPlaces, "0");
   const isZero = whole === "0" && !/[1-9]/.test(fraction);
-  return `${negative && !isZero ? "-" : ""}${whole}${
-    decimalPlaces > 0 ? `.${fraction}` : ""
-  }`;
+  return `${negative && !isZero ? "-" : ""}${whole}${decimalPlaces > 0 ? `.${fraction}` : ""}`;
 }
 
 /** Round a ledger value to a requested precision without binary floating point. */
@@ -409,7 +400,13 @@ export function allocateLargestRemainder(exactAmounts: string[], decimalPlaces =
   if (outstanding > 0n) {
     dealLargestRemainder(allocated, remainders, outstanding, "first", 1n);
   } else if (outstanding < 0n) {
-    dealLargestRemainder(allocated, remainders.map((remainder) => -remainder), -outstanding, "first", -1n);
+    dealLargestRemainder(
+      allocated,
+      remainders.map((remainder) => -remainder),
+      -outstanding,
+      "first",
+      -1n,
+    );
   }
   return allocated.map((cents) => fromUnits(cents * quantum));
 }
@@ -421,7 +418,8 @@ export function allocateLargestRemainder(exactAmounts: string[], decimalPlaces =
  * to the later index instead; `{ absorber }` books the whole leftover on the
  * one part at that index.
  */
-export type ApportionResidual = "largest_remainder" | "largest_remainder_last" | { absorber: number };
+export type ApportionResidual =
+  "largest_remainder" | "largest_remainder_last" | { absorber: number };
 
 /**
  * Split `total` integer units across non-negative integer `weights` so the
@@ -445,15 +443,28 @@ export function apportion(
   const residual = options.residual ?? "largest_remainder";
   const negativeAt = weights.findIndex((weight) => weight < 0n);
   if (negativeAt >= 0) {
-    throw new Error(`apportion weight ${negativeAt} is negative (${weights[negativeAt]}); weights must be zero or more`);
+    throw new Error(
+      `apportion weight ${negativeAt} is negative (${weights[negativeAt]}); weights must be zero or more`,
+    );
   }
-  if (typeof residual === "object" && !(Number.isInteger(residual.absorber) && residual.absorber >= 0 && residual.absorber < weights.length)) {
-    throw new Error(`apportion absorber ${residual.absorber} is not one of the ${weights.length} parts`);
+  if (
+    typeof residual === "object" &&
+    !(
+      Number.isInteger(residual.absorber) &&
+      residual.absorber >= 0 &&
+      residual.absorber < weights.length
+    )
+  ) {
+    throw new Error(
+      `apportion absorber ${residual.absorber} is not one of the ${weights.length} parts`,
+    );
   }
   if (total === 0n) return weights.map(() => 0n);
   const weightTotal = weights.reduce((acc, weight) => acc + weight, 0n);
   if (weightTotal === 0n) {
-    throw new Error(`cannot apportion ${total} units over ${weights.length} parts whose weights sum to zero`);
+    throw new Error(
+      `cannot apportion ${total} units over ${weights.length} parts whose weights sum to zero`,
+    );
   }
   const negative = total < 0n;
   const magnitude = negative ? -total : total;
@@ -463,7 +474,13 @@ export function apportion(
     parts[residual.absorber]! += leftover;
   } else {
     const remainders = weights.map((weight) => (magnitude * weight) % weightTotal);
-    dealLargestRemainder(parts, remainders, leftover, residual === "largest_remainder" ? "first" : "last", 1n);
+    dealLargestRemainder(
+      parts,
+      remainders,
+      leftover,
+      residual === "largest_remainder" ? "first" : "last",
+      1n,
+    );
   }
   return negative ? parts.map((part) => -part) : parts;
 }
@@ -484,7 +501,13 @@ function dealLargestRemainder(
   const order = remainders
     .map((_, index) => index)
     .sort((a, b) =>
-      remainders[b]! > remainders[a]! ? 1 : remainders[b]! < remainders[a]! ? -1 : ties === "first" ? a - b : b - a,
+      remainders[b]! > remainders[a]!
+        ? 1
+        : remainders[b]! < remainders[a]!
+          ? -1
+          : ties === "first"
+            ? a - b
+            : b - a,
     );
   for (let dealt = 0; BigInt(dealt) < count; dealt++) parts[order[dealt]!]! += step;
 }
@@ -512,7 +535,8 @@ export function mulRate(amount: string, rate: string): string {
   if (fraction.length > 10 && /[1-9]/.test(fraction.slice(10))) {
     throw new Error(`FX rate loses precision beyond 10 decimal places: "${rate}"`);
   }
-  const rateUnits = BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  const rateUnits =
+    BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
   if (rateUnits <= 0n) throw new Error(`FX rate must be greater than zero: "${rate}"`);
 
   const product = toUnits(amount) * rateUnits;
@@ -527,7 +551,8 @@ export function divRate(amount: string, rate: string): string {
   if (fraction.length > 10 && /[1-9]/.test(fraction.slice(10))) {
     throw new Error(`FX rate loses precision beyond 10 decimal places: "${rate}"`);
   }
-  const rateUnits = BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  const rateUnits =
+    BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
   if (rateUnits <= 0n) throw new Error(`FX rate must be greater than zero: "${rate}"`);
   const numerator = toUnits(amount) * RATE_SCALE;
   return fromUnits(roundDiv(numerator, rateUnits));

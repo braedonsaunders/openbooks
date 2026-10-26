@@ -13,7 +13,11 @@
  * leg (see the customer_payment posting rule).
  */
 
-export { fromMinorUnits, THREE_DECIMAL_CURRENCIES, ZERO_DECIMAL_CURRENCIES } from "./minor-units.ts";
+export {
+  fromMinorUnits,
+  THREE_DECIMAL_CURRENCIES,
+  ZERO_DECIMAL_CURRENCIES,
+} from "./minor-units.ts";
 export {
   type AcceptanceProvider,
   PaymentAcceptanceError,
@@ -59,6 +63,10 @@ export {
   onlinePaymentsFeatureEnabled,
   paymentLinkOrgId,
 } from "./acceptance-links.ts";
-export { publicPaymentPage, checkoutSessionLockKey, createCheckoutSession } from "./acceptance-checkout.ts";
+export {
+  publicPaymentPage,
+  checkoutSessionLockKey,
+  createCheckoutSession,
+} from "./acceptance-checkout.ts";
 export { handleProviderWebhook, CLAIMABLE_FROM } from "./acceptance-webhooks.ts";
 export { testAcceptanceConnection, saveAcceptanceConfig } from "./acceptance-config.ts";

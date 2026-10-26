@@ -24,8 +24,24 @@ const ctx = {
   regeneration: false,
 };
 const lines = [
-  { accountId: "bank", amount: "100.0000", subsidiaryId: "sub-1", currency: "USD", txnAmount: "100.0000", fxRate: "1", extraDims: { fund: "general" } },
-  { accountId: "revenue", amount: "-100.0000", subsidiaryId: "sub-1", currency: "USD", txnAmount: "-100.0000", fxRate: "1", extraDims: { fund: "scholarships" } },
+  {
+    accountId: "bank",
+    amount: "100.0000",
+    subsidiaryId: "sub-1",
+    currency: "USD",
+    txnAmount: "100.0000",
+    fxRate: "1",
+    extraDims: { fund: "general" },
+  },
+  {
+    accountId: "revenue",
+    amount: "-100.0000",
+    subsidiaryId: "sub-1",
+    currency: "USD",
+    txnAmount: "-100.0000",
+    fxRate: "1",
+    extraDims: { fund: "scholarships" },
+  },
 ];
 
 function leg(accountId: string, amount: string, fund: string): BalancingLeg {
@@ -51,7 +67,10 @@ test("keyed registration replaces instead of running twice; later providers see 
   let runs = 0;
   const fund = async () => {
     runs += 1;
-    return [leg("due-to-scholarships", "-100.0000", "general"), leg("due-from-general", "100.0000", "scholarships")];
+    return [
+      leg("due-to-scholarships", "-100.0000", "general"),
+      leg("due-from-general", "100.0000", "scholarships"),
+    ];
   };
   registerBalancingLegProvider("fund", fund);
   registerBalancingLegProvider("fund", fund);
@@ -62,18 +81,27 @@ test("keyed registration replaces instead of running twice; later providers see 
   });
   const legs = await collectBalancingLegs(runner, ctx, lines);
   assert.equal(runs, 1);
-  assert.deepEqual(legs.map((l) => [l.accountId, l.amount, l.extraDims.fund]), [
-    ["due-to-scholarships", "-100.0000", "general"],
-    ["due-from-general", "100.0000", "scholarships"],
-  ]);
-  assert.equal(seen, 4, "the second provider sees the two lines plus the first provider's two legs");
+  assert.deepEqual(
+    legs.map((l) => [l.accountId, l.amount, l.extraDims.fund]),
+    [
+      ["due-to-scholarships", "-100.0000", "general"],
+      ["due-from-general", "100.0000", "scholarships"],
+    ],
+  );
+  assert.equal(
+    seen,
+    4,
+    "the second provider sees the two lines plus the first provider's two legs",
+  );
   clearBalancingLegProviders();
 });
 
 test("a provider refusal propagates with its remedy intact", async () => {
   clearBalancingLegProviders();
   registerBalancingLegProvider("fund", async () => {
-    throw new Error("no interfund pair between GENERAL and SCHOLAR; add one under Setup → Nonprofit → Interfund pairs");
+    throw new Error(
+      "no interfund pair between GENERAL and SCHOLAR; add one under Setup → Nonprofit → Interfund pairs",
+    );
   });
   await assert.rejects(collectBalancingLegs(runner, ctx, lines), /add one under Setup/);
   clearBalancingLegProviders();

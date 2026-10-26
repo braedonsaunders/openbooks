@@ -26,10 +26,14 @@ export class WorkerDutyError extends Error {}
  *  name would double-fire, so the second registration names the first. */
 export function registerWorkerDuty(duty: WorkerDuty): void {
   if (!duty.key?.trim()) {
-    throw new WorkerDutyError("a worker duty needs a non-blank key — name the scan and register again");
+    throw new WorkerDutyError(
+      "a worker duty needs a non-blank key — name the scan and register again",
+    );
   }
   if (typeof duty.run !== "function") {
-    throw new WorkerDutyError(`worker duty '${duty.key}' has no run function — pass the scan and register again`);
+    throw new WorkerDutyError(
+      `worker duty '${duty.key}' has no run function — pass the scan and register again`,
+    );
   }
   if (duties.has(duty.key)) {
     throw new WorkerDutyError(

@@ -1,4 +1,4 @@
-import 'server-only'
+import "server-only";
 
 /**
  * Generic CRUD for every configuration entity in the Setup registry
@@ -23,9 +23,9 @@ export {
   savePayComponentEarningClassification,
   type SetupActor,
   type SetupWriteResult,
-} from './write-shared'
-export { validateEntityIntegrity } from './write-integrity'
-export { preflightSetupWrite } from './write-preflight'
-export { createSetupRecord } from './write-execute-create'
-export { updateSetupRecord } from './write-execute-update'
-export { deleteSetupRecord } from './write-execute-delete'
+} from "./write-shared";
+export { validateEntityIntegrity } from "./write-integrity";
+export { preflightSetupWrite } from "./write-preflight";
+export { createSetupRecord } from "./write-execute-create";
+export { updateSetupRecord } from "./write-execute-update";
+export { deleteSetupRecord } from "./write-execute-delete";

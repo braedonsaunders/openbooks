@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useCallback, useRef } from 'react'
-import { ActionError, type ActionResult } from '@braedonsaunders/appkit-errors'
-import { useAction, type ExecuteOptions } from '@braedonsaunders/appkit-errors/react'
-import { toast } from 'sonner'
+import { useCallback, useRef } from "react";
+import { ActionError, type ActionResult } from "@braedonsaunders/appkit-errors";
+import { useAction, type ExecuteOptions } from "@braedonsaunders/appkit-errors/react";
+import { toast } from "sonner";
 
 /**
  * The one action-error path for this app. Every drawer, panel and row that
@@ -30,14 +30,23 @@ import { toast } from 'sonner'
  * second, quieter presentation.
  */
 export function useAppAction() {
-  const notifyError = useCallback((message: string) => toast.error(message), [])
-  const notifySuccess = useCallback((message: string) => toast.success(message), [])
-  const { busy, refusal, execute: baseExecute, clearRefusal, setRefusal } = useAction({ notifyError, notifySuccess })
+  const notifyError = useCallback((message: string) => toast.error(message), []);
+  const notifySuccess = useCallback((message: string) => toast.success(message), []);
+  const {
+    busy,
+    refusal,
+    execute: baseExecute,
+    clearRefusal,
+    setRefusal,
+  } = useAction({ notifyError, notifySuccess });
   const execute = useCallback(
-    <T,>(task: () => Promise<ActionResult<T>>, options: ExecuteOptions<T>): Promise<boolean> =>
+    <T>(task: () => Promise<ActionResult<T>>, options: ExecuteOptions<T>): Promise<boolean> =>
       baseExecute(async () => {
-        const result = await task()
-        if (!result.ok && (result.error.serverMessage == null || result.error.serverMessage.trim() === '')) {
+        const result = await task();
+        if (
+          !result.ok &&
+          (result.error.serverMessage == null || result.error.serverMessage.trim() === "")
+        ) {
           return {
             ok: false,
             error: new ActionError({
@@ -49,20 +58,20 @@ export function useAppAction() {
               aborted: result.error.aborted,
               detail: result.error.detail,
             }),
-          }
+          };
         }
-        return result
+        return result;
       }, options),
     [baseExecute],
-  )
+  );
   const refuse = useCallback(
     (serverMessage: string | null | undefined, fallbackMessage: string) => {
-      const error = new ActionError({ kind: 'refused', serverMessage: serverMessage ?? null })
-      setRefusal(error)
-      toast.error(error.displayMessage(fallbackMessage))
+      const error = new ActionError({ kind: "refused", serverMessage: serverMessage ?? null });
+      setRefusal(error);
+      toast.error(error.displayMessage(fallbackMessage));
     },
     [setRefusal],
-  )
+  );
   /**
    * Synchronous re-entry guard for actions with a multi-await preamble
    * before `execute` sets busy (client-script gates, confirm prompts):
@@ -74,21 +83,23 @@ export function useAppAction() {
    * guarded action on the same hook would drop the inner one, so
    * follow-ups ride plain `execute` inside `onOk`.
    */
-  const exclusive = useRef(false)
+  const exclusive = useRef(false);
   const runExclusive = useCallback(
-    <T extends unknown[]>(action: (...args: T) => Promise<void>): ((...args: T) => Promise<boolean>) => {
+    <T extends unknown[]>(
+      action: (...args: T) => Promise<void>,
+    ): ((...args: T) => Promise<boolean>) => {
       return async (...args) => {
-        if (exclusive.current) return false
-        exclusive.current = true
+        if (exclusive.current) return false;
+        exclusive.current = true;
         try {
-          await action(...args)
-          return true
+          await action(...args);
+          return true;
         } finally {
-          exclusive.current = false
+          exclusive.current = false;
         }
-      }
+      };
     },
     [],
-  )
-  return { busy, refusal, execute, clearRefusal, refuse, runExclusive }
+  );
+  return { busy, refusal, execute, clearRefusal, refuse, runExclusive };
 }

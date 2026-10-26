@@ -46,10 +46,14 @@ const { ChargesSection } = await import("./ChargesSection");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -156,7 +160,11 @@ test("a non-JSON 500 on charge post toasts the refusal and releases the button",
 
   const toasts = globalThis.__chargeToasts ?? [];
   const errors = toasts.filter((toast) => toast.kind === "error");
-  assert.equal(errors.length, 1, `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`);
+  assert.equal(
+    errors.length,
+    1,
+    `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`,
+  );
   assert.match(errors[0]?.message ?? "", /Could not post charge/);
   assert.ok(
     !/json|SyntaxError|Unexpected token/i.test(errors[0]?.message ?? ""),

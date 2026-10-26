@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const retainersDrawdownsRecognition: DocArticle = {
-  slug: 'retainers-drawdowns-recognition',
-  title: 'Retainers, Drawdowns, and Recognition',
-  category: 'projects',
+  slug: "retainers-drawdowns-recognition",
+  title: "Retainers, Drawdowns, and Recognition",
+  category: "projects",
   order: 6,
   summary:
-    'How prepaid retainers activate, how weekly drawdowns consume them, and how revenue recognition follows the work.',
-  updated: '2026-09-28',
-  keywords: ['retainer', 'drawdown', 'prepaid', 'recognition', 'hours', 'fees', 'exhaustion'],
-  related: ['busy-season-capacity', 'staffing-board-evidence', 'labor-costing'],
+    "How prepaid retainers activate, how weekly drawdowns consume them, and how revenue recognition follows the work.",
+  updated: "2026-09-28",
+  keywords: ["retainer", "drawdown", "prepaid", "recognition", "hours", "fees", "exhaustion"],
+  related: ["busy-season-capacity", "staffing-board-evidence", "labor-costing"],
   body: `# Retainers, Drawdowns, and Recognition
 
 A retainer is prepaid work: the customer pays up front, in hours or in fees,
@@ -63,4 +63,4 @@ Nothing about a retainer balance is a typed-in number: the total comes from
 the terms, the drawn figure from posted drawdowns, and the difference is
 arithmetic the operator can re-perform from the rows shown.
 `,
-}
+};

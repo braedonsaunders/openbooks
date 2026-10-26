@@ -1,19 +1,21 @@
-import { defineRoute } from '@/lib/api/route';
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { isReportUuidParam } from '../../../../../lib/report-filters'
-import { getAuthz, can } from '../../../../../lib/authz'
-import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../../../../../lib/payroll-confidentiality'
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { isReportUuidParam } from "../../../../../lib/report-filters";
+import { getAuthz, can } from "../../../../../lib/authz";
+import {
+  PAYROLL_RESTRICTED_PARTY_LABEL,
+  collapseRestrictedPayrollLines,
+} from "../../../../../lib/payroll-confidentiality";
 import { notFound } from "@/lib/api/responses";
-import { loadJournalDoc } from '@/lib/journals'
-import { loadFieldDefs } from '@/lib/custom-fields'
-import { customSegmentOptions } from '@/lib/segments'
-import { resolveFormLayout } from '@/lib/customization/resolve'
-import { isFeatureEnabled } from '@/lib/features'
+import { loadJournalDoc } from "@/lib/journals";
+import { loadFieldDefs } from "@/lib/custom-fields";
+import { customSegmentOptions } from "@/lib/segments";
+import { resolveFormLayout } from "@/lib/customization/resolve";
+import { isFeatureEnabled } from "@/lib/features";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Rich read-only detail for one journal entry, used by the reports EntryFlyout
@@ -23,36 +25,37 @@ export const runtime = 'nodejs'
  * enriched with account/party/dimension names.
  */
 export const GET = defineRoute({
-  public: 'session',
+  public: "session",
   handler: async ({ request: req, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
-    const authz = await getAuthz()
-    if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    const journalDrawer = new URL(req.url).searchParams.get('journal') === '1'
-    if (journalDrawer && !can(authz, 'gl.read')) {
-      return NextResponse.json({ error: 'missing permission: gl.read' }, { status: 403 })
+    const authz = await getAuthz();
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const journalDrawer = new URL(req.url).searchParams.get("journal") === "1";
+    if (journalDrawer && !can(authz, "gl.read")) {
+      return NextResponse.json({ error: "missing permission: gl.read" }, { status: 403 });
     }
     // A journal entry's lines are ledger data: reports.read alone never
     // opens them, the same rule as the ledger statements the flyout serves.
-    if (!can(authz, 'gl.read')) {
-        return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
-      }
-    const { id } = await params
-    if (!isReportUuidParam(id)) return notFound("record")
+    if (!can(authz, "gl.read")) {
+      return NextResponse.json({ error: "you do not have access to this data" }, { status: 403 });
+    }
+    const { id } = await params;
+    if (!isReportUuidParam(id)) return notFound("record");
     const subsidiaryFilter = authz.allowedSubsidiaryIds
-        ? authz.allowedSubsidiaryIds.size > 0
-          ? journalDrawer
-            ? sql`and exists (select 1 from journal_lines visible where visible.entry_id = e.id
+      ? authz.allowedSubsidiaryIds.size > 0
+        ? journalDrawer
+          ? sql`and exists (select 1 from journal_lines visible where visible.entry_id = e.id
                 and visible.org_id = e.org_id and visible.subsidiary_id in ${[...authz.allowedSubsidiaryIds]})`
-            : sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
-          : sql`and false`
-        : sql``
+          : sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
+        : sql`and false`
+      : sql``;
     const lineSubsidiaryFilter = authz.allowedSubsidiaryIds
-        ? authz.allowedSubsidiaryIds.size > 0
-          ? sql`and l.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
-          : sql`and false`
-        : sql``
-    const e = (await db.execute<Record<string, unknown>>(sql`
+      ? authz.allowedSubsidiaryIds.size > 0
+        ? sql`and l.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
+        : sql`and false`
+      : sql``;
+    const e = await db.execute<Record<string, unknown>>(
+      sql`
         select e.id, e.entry_number, e.posting_date::text as date, e.memo, e.origin, e.status,
                e.source_document_id, e.subsidiary_id, ${journalDrawer ? sql`e.custom,` : sql``}
                (select book.code from accounting_books book where book.org_id = e.org_id and book.id = e.book_id) as book_code,
@@ -68,10 +71,13 @@ export const GET = defineRoute({
           ) d on true
          where e.id = ${id} and e.org_id = ${authz.user.orgId}
            ${subsidiaryFilter}
-      `, 'objects'))
-    const entry = e[0]
-    if (!entry) return notFound("record")
-    const lines = (await db.execute<Record<string, unknown>>(sql`
+      `,
+      "objects",
+    );
+    const entry = e[0];
+    if (!entry) return notFound("record");
+    const lines = await db.execute<Record<string, unknown>>(
+      sql`
         select l.line_number, l.amount, l.memo, l.is_open_item,
                ${journalDrawer ? sql`case when a.type='equity' and e.status in ('posted','reversed') then l.id end as source_line_id,` : sql``}
                l.subsidiary_id, sub.name as subsidiary,
@@ -97,72 +103,111 @@ export const GET = defineRoute({
          where l.entry_id = ${id} and l.org_id = ${authz.user.orgId}
            ${lineSubsidiaryFilter}
          order by l.line_number
-      `, 'objects'))
-    const canSeePayroll = can(authz, 'payroll.read')
-    const restrictedPayroll = !canSeePayroll && (entry.origin === 'payroll' || entry.doc_kind === 'pay_run')
+      `,
+      "objects",
+    );
+    const canSeePayroll = can(authz, "payroll.read");
+    const restrictedPayroll =
+      !canSeePayroll && (entry.origin === "payroll" || entry.doc_kind === "pay_run");
     type FlyoutLine = Record<string, unknown> & {
-        amount: string
-        entryId: string
-        accountId: string
-        partyId: string | null
-        payrollOrigin: boolean
-      }
+      amount: string;
+      entryId: string;
+      accountId: string;
+      partyId: string | null;
+      payrollOrigin: boolean;
+    };
     const mapped: FlyoutLine[] = lines.map((row) => ({
-        ...row,
-        amount: row.amount as string,
-        entryId: id,
-        // Currency/entity boundaries must survive confidentiality grouping
-        // when the native journal drawer displays functional-currency totals.
-        accountId: `${row.account_id}:${row.subsidiary_id}:${row.functional_currency}`,
-        partyId: (row.party_id ?? null) as string | null,
-        payrollOrigin: entry.doc_kind === 'pay_run' || row.doc_kind === 'pay_run' || row.entry_origin === 'payroll',
-      }))
-    const confidential = canSeePayroll ? mapped : collapseRestrictedPayrollLines(
-        mapped,
-        (first, total) => ({
-          ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, custom: {}, amount: total,
-        }),
-      )
+      ...row,
+      amount: row.amount as string,
+      entryId: id,
+      // Currency/entity boundaries must survive confidentiality grouping
+      // when the native journal drawer displays functional-currency totals.
+      accountId: `${row.account_id}:${row.subsidiary_id}:${row.functional_currency}`,
+      partyId: (row.party_id ?? null) as string | null,
+      payrollOrigin:
+        entry.doc_kind === "pay_run" ||
+        row.doc_kind === "pay_run" ||
+        row.entry_origin === "payroll",
+    }));
+    const confidential = canSeePayroll
+      ? mapped
+      : collapseRestrictedPayrollLines(mapped, (first, total) => ({
+          ...first,
+          party: PAYROLL_RESTRICTED_PARTY_LABEL,
+          party_id: null,
+          memo: null,
+          custom: {},
+          amount: total,
+        }));
     const shaped = confidential.map((row) => {
-        // Strip every collapse input/output key so the response keeps its
-        // original shape: no party ids and no origin markers reach the client.
-        const {
-          party_id: _partyId, doc_kind: _docKind, entry_origin: _entryOrigin,
-          entryId: _entryId, accountId: _accountId, partyId: _partyUuid, payrollOrigin: _payrollOrigin,
-          ...rest
-        } = row
-        return journalDrawer && !canSeePayroll && row.payrollOrigin ? { ...rest, source_line_id: null } : rest
-      })
+      // Strip every collapse input/output key so the response keeps its
+      // original shape: no party ids and no origin markers reach the client.
+      const {
+        party_id: _partyId,
+        doc_kind: _docKind,
+        entry_origin: _entryOrigin,
+        entryId: _entryId,
+        accountId: _accountId,
+        partyId: _partyUuid,
+        payrollOrigin: _payrollOrigin,
+        ...rest
+      } = row;
+      return journalDrawer && !canSeePayroll && row.payrollOrigin
+        ? { ...rest, source_line_id: null }
+        : rest;
+    });
     // Only the current journal document offers document actions. Historical
     // generations and subledger postings remain immutable ledger snapshots.
-    const sourceJournal = journalDrawer && entry.doc_kind === 'journal' && entry.doc_id
-      ? await loadJournalDoc(String(entry.doc_id), authz.user.orgId, authz.allowedSubsidiaryIds)
-      : null
-    const currentJournal = sourceJournal?.doc.entry_id === id ? sourceJournal : null
-    const journalHeader = currentJournal ? {
-      doc: {
-        ...currentJournal.doc,
-        ...(restrictedPayroll ? { party_id: null, party_name: null, custom: {} } : {}),
-      },
-      // The drawer displays the immutable, confidentiality-shaped GL lines.
-      lines: [],
-    } : null
-    const [headerDefs, lineDefs, segments] = journalDrawer ? await Promise.all([
-      loadFieldDefs('documents', 'journal'),
-      loadFieldDefs('document_lines', 'journal'),
-      customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
-    ]) : [[], [], []]
-    const form = journalDrawer ? await resolveFormLayout({
-      orgId: authz.user.orgId, userId: authz.user.id, recordType: 'journal',
-      userRoles: authz.user.roles.map(({ key }) => key), headerDefs, lineDefs,
-      explicitLayoutId: new URL(req.url).searchParams.get('form') ?? undefined,
-    }) : null
+    const sourceJournal =
+      journalDrawer && entry.doc_kind === "journal" && entry.doc_id
+        ? await loadJournalDoc(String(entry.doc_id), authz.user.orgId, authz.allowedSubsidiaryIds)
+        : null;
+    const currentJournal = sourceJournal?.doc.entry_id === id ? sourceJournal : null;
+    const journalHeader = currentJournal
+      ? {
+          doc: {
+            ...currentJournal.doc,
+            ...(restrictedPayroll ? { party_id: null, party_name: null, custom: {} } : {}),
+          },
+          // The drawer displays the immutable, confidentiality-shaped GL lines.
+          lines: [],
+        }
+      : null;
+    const [headerDefs, lineDefs, segments] = journalDrawer
+      ? await Promise.all([
+          loadFieldDefs("documents", "journal"),
+          loadFieldDefs("document_lines", "journal"),
+          customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
+        ])
+      : [[], [], []];
+    const form = journalDrawer
+      ? await resolveFormLayout({
+          orgId: authz.user.orgId,
+          userId: authz.user.id,
+          recordType: "journal",
+          userRoles: authz.user.roles.map(({ key }) => key),
+          headerDefs,
+          lineDefs,
+          explicitLayoutId: new URL(req.url).searchParams.get("form") ?? undefined,
+        })
+      : null;
     return NextResponse.json({
-      entry: restrictedPayroll ? { ...entry, custom: {} } : entry, lines: shaped,
-      ...(journalDrawer ? { sourceJournal: journalHeader, canPost: Boolean(currentJournal) && can(authz, 'gl.post'),
-        canAssessHistoricalTranslation: can(authz, 'close.run') && await isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
-        currentEntryId: !currentJournal ? sourceJournal?.doc.entry_id ?? null : null,
-        headerDefs, lineDefs, segments, layout: form?.layout } : {}),
-    })
+      entry: restrictedPayroll ? { ...entry, custom: {} } : entry,
+      lines: shaped,
+      ...(journalDrawer
+        ? {
+            sourceJournal: journalHeader,
+            canPost: Boolean(currentJournal) && can(authz, "gl.post"),
+            canAssessHistoricalTranslation:
+              can(authz, "close.run") &&
+              (await isFeatureEnabled(authz.user.orgId, "multiCurrency")),
+            currentEntryId: !currentJournal ? (sourceJournal?.doc.entry_id ?? null) : null,
+            headerDefs,
+            lineDefs,
+            segments,
+            layout: form?.layout,
+          }
+        : {}),
+    });
   },
 });

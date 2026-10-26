@@ -10,7 +10,14 @@ type Category = { prefixes: string[]; reason: string };
 
 const EXCLUDED_CATEGORIES: Category[] = [
   {
-    prefixes: ["hrm_", "worker_employment", "employment_", "position", "work_", "payroll_work_location_"],
+    prefixes: [
+      "hrm_",
+      "worker_employment",
+      "employment_",
+      "position",
+      "work_",
+      "payroll_work_location_",
+    ],
     reason:
       "HR, employment and worker records carry PII and compensation-confidential data; governed reporting flows through aggregates, not row detail (0184 rationale style).",
   },
@@ -21,7 +28,9 @@ const EXCLUDED_CATEGORIES: Category[] = [
       "payroll_parallel_",
       "payroll_prior_",
       "payroll_retro_",
-      "payroll_anomaly_", "payroll_roe_", "it_addizionali_",
+      "payroll_anomaly_",
+      "payroll_roe_",
+      "it_addizionali_",
     ],
     reason:
       "filing submissions, ROE filing inputs and addizionali opening carry-ins carry taxpayer and employee PII; parallel, prior, retro, anomaly, ROE and carry-in tables are computation runs, import staging or filing policy, not books of record.",
@@ -101,7 +110,8 @@ const EXCLUDED_CATEGORIES: Category[] = [
       "import_",
       "change_set",
       "script_",
-      "backup_", "storage_cleanup_",
+      "backup_",
+      "storage_cleanup_",
       "data_transfer_",
     ],
     reason: "operational runtimes, outboxes and audit logs, not reporting.",
@@ -181,26 +191,42 @@ const EXCLUDED_CATEGORIES: Category[] = [
 ];
 
 const EXCLUDED_TABLES: Record<string, string> = {
-  fx_revaluation_rate_evidence: "recorded closing rates bind exact close positions with operator source and reason; native close readers own access.",
-  field_ticket_source_certifications: "human-reviewed source identity bindings retain operator attestation and retained-file provenance; native certification readers own access.",
-  historical_translation_contributions: "approved financial source assessments contain protected Cabinet provenance; native authorized source readers own access.",
-  historical_translation_layers: "immutable contribution layers retain protected Cabinet source references; translation reporting consumes approved native evidence rather than generic row access.",
-  payroll_opening_levy_source_authorities: "qualified statutory opening evidence retains protected Cabinet provenance; native payroll source readers enforce access.",
-  payroll_opening_levy_source_allocations: "employee opening levy allocations are compensation-confidential source evidence; native payroll calculations own scoped consumption.",
-  payroll_ca_opening_reporting_authorities: "original Canadian reporting certificates retain protected Cabinet provenance and employee compensation snapshots; native payroll reporting readers enforce scoped access.",
-  payroll_ca_opening_reporting_allocations: "original RP and province reporting slices retain compensation-confidential annual and child history; native payroll reporting owns their scoped consumption.",
+  fx_revaluation_rate_evidence:
+    "recorded closing rates bind exact close positions with operator source and reason; native close readers own access.",
+  field_ticket_source_certifications:
+    "human-reviewed source identity bindings retain operator attestation and retained-file provenance; native certification readers own access.",
+  historical_translation_contributions:
+    "approved financial source assessments contain protected Cabinet provenance; native authorized source readers own access.",
+  historical_translation_layers:
+    "immutable contribution layers retain protected Cabinet source references; translation reporting consumes approved native evidence rather than generic row access.",
+  payroll_opening_levy_source_authorities:
+    "qualified statutory opening evidence retains protected Cabinet provenance; native payroll source readers enforce access.",
+  payroll_opening_levy_source_allocations:
+    "employee opening levy allocations are compensation-confidential source evidence; native payroll calculations own scoped consumption.",
+  payroll_ca_opening_reporting_authorities:
+    "original Canadian reporting certificates retain protected Cabinet provenance and employee compensation snapshots; native payroll reporting readers enforce scoped access.",
+  payroll_ca_opening_reporting_allocations:
+    "original RP and province reporting slices retain compensation-confidential annual and child history; native payroll reporting owns their scoped consumption.",
   number_sequences: "sequence counters for document numbering.",
-  connector_replay_authorizations: "operational authorization evidence for closed-period replay; not a reporting entity.",
-  expense_receipt_captures: "receipt capture runtime: candidate readings before review; confirmed expenses report through documents.",
-  einvoice_documents: "issued e-invoice files retained as legal originals; invoice facts report through documents.",
+  connector_replay_authorizations:
+    "operational authorization evidence for closed-period replay; not a reporting entity.",
+  expense_receipt_captures:
+    "receipt capture runtime: candidate readings before review; confirmed expenses report through documents.",
+  einvoice_documents:
+    "issued e-invoice files retained as legal originals; invoice facts report through documents.",
   employee_tax_certificates: "tax certificate PII.",
   source_deletion_resolutions: "sync conflict-resolution runtime.",
   posting_effects: "posting pipeline internals.",
-  payroll_employer_facts: "employee statutory facts that drive payroll calculations, not a generic reporting surface.",
-  payroll_opening_program_bases: "employee opening YTD bases for statutory wage limits, not a generic reporting surface.",
-  payroll_opening_sui_wages: "employee opening SUI wage bases for statutory wage limits, not a generic reporting surface.",
-  payroll_opening_account_bases: "employee opening wage bases scoped by filing account for statutory wage limits, not a generic reporting surface.",
-  pay_component_earning_classifications: "payroll earning policy inputs are controlled setup data, not a generic reporting surface.",
+  payroll_employer_facts:
+    "employee statutory facts that drive payroll calculations, not a generic reporting surface.",
+  payroll_opening_program_bases:
+    "employee opening YTD bases for statutory wage limits, not a generic reporting surface.",
+  payroll_opening_sui_wages:
+    "employee opening SUI wage bases for statutory wage limits, not a generic reporting surface.",
+  payroll_opening_account_bases:
+    "employee opening wage bases scoped by filing account for statutory wage limits, not a generic reporting surface.",
+  pay_component_earning_classifications:
+    "payroll earning policy inputs are controlled setup data, not a generic reporting surface.",
   project_geofences: "project operations config.",
   recurring_occurrence_documents: "recurring scheduler runtime.",
   reporting_relationships: "reporting graph config.",
@@ -256,8 +282,10 @@ test("every org_id table is governed or reviewed", async () => {
   const allocationIndex = teardownOrder.indexOf("payroll_ca_opening_reporting_allocations");
   const reportingIndex = teardownOrder.indexOf("payroll_ca_opening_reporting_authorities");
   const levyIndex = teardownOrder.indexOf("payroll_opening_levy_source_authorities");
-  assert.ok(allocationIndex >= 0 && reportingIndex > allocationIndex && levyIndex > reportingIndex,
-    "native tenant teardown must remove Canadian reporting slices before their reporting certificate and levy parent");
+  assert.ok(
+    allocationIndex >= 0 && reportingIndex > allocationIndex && levyIndex > reportingIndex,
+    "native tenant teardown must remove Canadian reporting slices before their reporting certificate and levy parent",
+  );
   assert.deepEqual(
     [uncovered, cloneable, TENANT_TABLE_POLICIES.pay_component_earning_classifications],
     [[], true, "clone:catalog-uuid-rebase"],
@@ -269,7 +297,9 @@ test("the coverage derivation is not vacuous", async () => {
   // A probe table with org_id that is neither governed nor excluded must
   // fail the derivation: if the probe passes, the query sees nothing.
   const probe = `g12_probe_${Date.now().toString(36)}`;
-  await db.execute(sql.raw(`create table public.${probe} (id uuid primary key, org_id uuid not null)`));
+  await db.execute(
+    sql.raw(`create table public.${probe} (id uuid primary key, org_id uuid not null)`),
+  );
   try {
     assert.ok(
       (await uncoveredTables()).includes(probe),

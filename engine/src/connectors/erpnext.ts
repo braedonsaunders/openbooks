@@ -65,7 +65,9 @@ export class ErpNextClient {
         limit_page_length: String(page),
         order_by: orderBy,
       });
-      const data = await this.req<{ data: T[] }>(`/api/resource/${encodeURIComponent(doctype)}?${qs}`);
+      const data = await this.req<{ data: T[] }>(
+        `/api/resource/${encodeURIComponent(doctype)}?${qs}`,
+      );
       out.push(...data.data);
       if (data.data.length < page) return out;
     }
@@ -82,11 +84,21 @@ export class ErpNextClient {
   async attachmentContent(fileUrl: string): Promise<Buffer> {
     const origin = new URL(this.creds.url);
     const target = new URL(fileUrl, origin);
-    if (target.origin !== origin.origin || target.username || target.password || !/^\/(private\/)?files\//.test(target.pathname)) throw new Error("ERPNext attachment must remain in this connection's file storage");
+    if (
+      target.origin !== origin.origin ||
+      target.username ||
+      target.password ||
+      !/^\/(private\/)?files\//.test(target.pathname)
+    )
+      throw new Error("ERPNext attachment must remain in this connection's file storage");
     const response = await this.transport(target, {
-      headers: { Authorization: `token ${this.creds.apiKey}:${this.creds.apiSecret}` }, redirect: "error",
+      headers: { Authorization: `token ${this.creds.apiKey}:${this.creds.apiSecret}` },
+      redirect: "error",
     });
-    if (!response.ok) throw new Error(`ERPNext attachment HTTP ${response.status}; grant read access to the file and its transaction, then retry`);
+    if (!response.ok)
+      throw new Error(
+        `ERPNext attachment HTTP ${response.status}; grant read access to the file and its transaction, then retry`,
+      );
     return Buffer.from(await response.arrayBuffer());
   }
 

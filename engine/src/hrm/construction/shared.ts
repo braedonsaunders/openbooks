@@ -66,11 +66,16 @@ export async function assertProjectInScope(
   allowed: ReadonlySet<string> | null,
   lock: "none" | "share" = "none",
 ): Promise<void> {
-  const row = (await exec.execute<{ subsidiaryId: string | null }>(sql`
+  const row = (
+    await exec.execute<{ subsidiaryId: string | null }>(
+      sql`
       select subsidiary_id::text as "subsidiaryId" from projects
        where org_id = ${orgId}::uuid and id = ${projectId}::uuid
        ${lock === "share" ? sql`for share` : sql``}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row || (allowed !== null && (!row.subsidiaryId || !allowed.has(row.subsidiaryId)))) {
     throw new HrmConstructionError(
       `Project ${projectId} does not exist in this organization — scope the run to one of its projects.`,
@@ -91,12 +96,20 @@ export async function assertEmploymentInScope(
   allowed: ReadonlySet<string> | null,
   lock = false,
 ): Promise<void> {
-  const row = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+  const row = (
+    await exec.execute<{ employerSubsidiaryId: string | null }>(
+      sql`
       select employer_subsidiary_id::text as "employerSubsidiaryId" from worker_employments
        where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
        ${lock ? sql`for share` : sql``}
-    `, "objects"))[0];
-  if (!row || (allowed !== null && (!row.employerSubsidiaryId || !allowed.has(row.employerSubsidiaryId)))) {
+    `,
+      "objects",
+    )
+  )[0];
+  if (
+    !row ||
+    (allowed !== null && (!row.employerSubsidiaryId || !allowed.has(row.employerSubsidiaryId)))
+  ) {
     throw new HrmConstructionError(
       `Employment ${employmentId} does not exist in this organization — scope the action to one of its employments.`,
     );
@@ -118,17 +131,23 @@ export async function assertScheduleReferenceInScope(
   scheduleId: string,
   allowed: ReadonlySet<string> | null,
 ): Promise<void> {
-  const row = (await exec.execute<{ appliesTo: unknown }>(sql`
+  const row = (
+    await exec.execute<{ appliesTo: unknown }>(
+      sql`
       select applies_to as "appliesTo" from hrm_rate_schedules
        where org_id = ${orgId}::uuid and id = ${scheduleId}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new HrmConstructionError(
       `Rate schedule ${scheduleId} does not exist in this organization — use one of its schedules.`,
     );
   }
   const raw = (row.appliesTo ?? {}) as { employer_subsidiary_id?: unknown; project_ids?: unknown };
-  const employer = typeof raw.employer_subsidiary_id === "string" ? raw.employer_subsidiary_id : null;
+  const employer =
+    typeof raw.employer_subsidiary_id === "string" ? raw.employer_subsidiary_id : null;
   const projects = Array.isArray(raw.project_ids)
     ? raw.project_ids.filter((id): id is string => typeof id === "string")
     : [];
@@ -143,11 +162,16 @@ export async function assertScheduleReferenceInScope(
     );
   }
   for (const projectId of projects) {
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
         select 1 as one from projects
          where org_id = ${orgId}::uuid and id = ${projectId}::uuid
            and subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[])
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmConstructionError(
         `Rate schedule ${scheduleId} does not exist in this organization — use one of its schedules.`,
@@ -157,9 +181,12 @@ export async function assertScheduleReferenceInScope(
 }
 
 export async function loadOrgCountry(exec: SqlExecutor, orgId: string): Promise<string> {
-  const rows = await exec.execute<{ country: string }>(sql`
+  const rows = await exec.execute<{ country: string }>(
+    sql`
       select country from orgs where id = ${orgId}::uuid
-    `, "objects");
+    `,
+    "objects",
+  );
   const country = rows[0]?.country;
   if (!country) {
     throw new HrmConstructionError(

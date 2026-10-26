@@ -32,14 +32,15 @@ export async function financeFindings(
   const missingBudgetPolicy = byKey.get("missing_approved_budget");
   const budgetVariancePolicy = byKey.get("unfavorable_budget_variance");
   if (missingBudgetPolicy?.enabled || budgetVariancePolicy?.enabled) {
-    const scenario = (await db.execute<{
-        id: string;
-        book_id: string;
-        name: string;
-        fiscal_year: number;
-        starts_on: string;
-        ends_on: string;
-      }>(sql`
+    const scenario = await db.execute<{
+      id: string;
+      book_id: string;
+      name: string;
+      fiscal_year: number;
+      starts_on: string;
+      ends_on: string;
+    }>(
+      sql`
       select bs.id, bs.book_id, bs.name, bs.fiscal_year,
              min(p.starts_on) as starts_on, least(${today}::date, max(p.ends_on)) as ends_on
       from budget_scenarios bs
@@ -50,30 +51,33 @@ export async function financeFindings(
        group by bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.updated_at
        order by bs.fiscal_year desc, bs.updated_at desc
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const budget = scenario[0];
     if (!budget && missingBudgetPolicy?.enabled) {
       findings.push({
         agentKey: "finance",
         findingType: "missing_approved_budget",
-      fingerprint: "missing-approved-budget",
-      severity: "info",
-      confidence: "1.0000",
-      materiality: "0.0000",
-      subjectType: "budget",
+        fingerprint: "missing-approved-budget",
+        severity: "info",
+        confidence: "1.0000",
+        materiality: "0.0000",
+        subjectType: "budget",
         summary: { href: "/budgets" },
         evidence: [],
       });
     } else if (budget && budgetVariancePolicy?.enabled) {
       const threshold = effectiveDetectorMateriality(budgetVariancePolicy, agentThreshold);
-      const variances = (await db.execute<{
-          id: string;
-          number: string | null;
-          name: string;
-          type: string;
-          budget: string;
-          actual: string;
-        }>(sql`
+      const variances = await db.execute<{
+        id: string;
+        number: string | null;
+        name: string;
+        type: string;
+        budget: string;
+        actual: string;
+      }>(
+        sql`
       with selected_periods as (
         select p.id
           from accounting_periods p
@@ -107,7 +111,9 @@ export async function financeFindings(
        where a.org_id = ${orgId}
          and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
          and (b.account_id is not null or actual.account_id is not null)
-      `, "objects"));
+      `,
+        "objects",
+      );
       for (const row of variances) {
         const classification = classifyBudgetVariance({
           budget: row.budget,
@@ -120,25 +126,25 @@ export async function financeFindings(
         if (!classification.include) continue;
         findings.push({
           agentKey: "finance",
-        findingType: "unfavorable_budget_variance",
-        fingerprint: `budget-variance:${budget.id}:${row.id}`,
-        severity: classification.severity,
-        confidence: "1.0000",
-        materiality: moneyAbs(classification.variance),
-        subjectType: "account",
-        subjectId: row.id,
-        summary: {
-          accountNumber: row.number,
-          accountName: row.name,
-          accountType: row.type,
-          scenarioId: budget.id,
-          scenarioName: budget.name,
-          fiscalYear: Number(budget.fiscal_year),
-          from: budget.starts_on,
-          to: budget.ends_on,
-          budget: row.budget,
-          actual: row.actual,
-          variance: classification.variance,
+          findingType: "unfavorable_budget_variance",
+          fingerprint: `budget-variance:${budget.id}:${row.id}`,
+          severity: classification.severity,
+          confidence: "1.0000",
+          materiality: moneyAbs(classification.variance),
+          subjectType: "account",
+          subjectId: row.id,
+          summary: {
+            accountNumber: row.number,
+            accountName: row.name,
+            accountType: row.type,
+            scenarioId: budget.id,
+            scenarioName: budget.name,
+            fiscalYear: Number(budget.fiscal_year),
+            from: budget.starts_on,
+            to: budget.ends_on,
+            budget: row.budget,
+            actual: row.actual,
+            variance: classification.variance,
             varianceBps: classification.varianceBps,
             href: `/budgets?budget=${budget.id}`,
           },
@@ -163,19 +169,28 @@ export async function financeFindings(
   const revenuePolicy = byKey.get("period_revenue_decline");
   const marginPolicy = byKey.get("gross_margin_decline");
   if (revenuePolicy?.enabled || marginPolicy?.enabled) {
-    const periods = (await db.execute<{ id: string; label: string; starts_on: string; ends_on: string }>(sql`
+    const periods = await db.execute<{
+      id: string;
+      label: string;
+      starts_on: string;
+      ends_on: string;
+    }>(
+      sql`
     select p.id, ${canonicalPeriodLabelSql("p")} as label, p.starts_on, p.ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${orgId} and fc.is_default and fc.is_active
        and not p.is_adjustment and p.ends_on < ${today}
      order by p.ends_on desc limit 2
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (periods.length === 2) {
       const current = periods[0]!;
       const prior = periods[1]!;
       const metrics = async (period: { id: string }) => {
-      const result = (await db.execute<{ revenue: string; cogs: string; opex: string }>(sql`
+        const result = await db.execute<{ revenue: string; cogs: string; opex: string }>(
+          sql`
         select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0)::text as revenue,
                coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs,
                coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0)::text as opex
@@ -185,26 +200,33 @@ export async function financeFindings(
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.period_id = ${period.id}
            and ${excludePeriodEndJournals(sql`e.origin`)}
-        `, "objects"));
+        `,
+          "objects",
+        );
         return result[0] ?? { revenue: "0", cogs: "0", opex: "0" };
       };
       const [currentMetrics, priorMetrics] = await Promise.all([metrics(current), metrics(prior)]);
-      const revenueThreshold = revenuePolicy?.enabled ? effectiveDetectorMateriality(revenuePolicy, agentThreshold) : agentThreshold;
+      const revenueThreshold = revenuePolicy?.enabled
+        ? effectiveDetectorMateriality(revenuePolicy, agentThreshold)
+        : agentThreshold;
       const performance = classifyPeriodPerformance({
         currentRevenue: currentMetrics.revenue,
         priorRevenue: priorMetrics.revenue,
         currentCogs: currentMetrics.cogs,
         priorCogs: priorMetrics.cogs,
         threshold: revenueThreshold,
-        minimumRevenueDeclineBps: revenuePolicy?.parameters.minimumDeclinePercent !== undefined ? revenuePolicy.parameters.minimumDeclinePercent * 100 : undefined,
+        minimumRevenueDeclineBps:
+          revenuePolicy?.parameters.minimumDeclinePercent !== undefined
+            ? revenuePolicy.parameters.minimumDeclinePercent * 100
+            : undefined,
       });
       const comparison = {
         currentPeriod: current.label,
-      priorPeriod: prior.label,
-      currentRevenue: currentMetrics.revenue,
-      priorRevenue: priorMetrics.revenue,
-      currentCogs: currentMetrics.cogs,
-      priorCogs: priorMetrics.cogs,
+        priorPeriod: prior.label,
+        currentRevenue: currentMetrics.revenue,
+        priorRevenue: priorMetrics.revenue,
+        currentCogs: currentMetrics.cogs,
+        priorCogs: priorMetrics.cogs,
         revenueChangeBps: performance.revenueChangeBps,
         grossMarginDropBps: performance.grossMarginDropBps,
       };
@@ -213,9 +235,16 @@ export async function financeFindings(
           agentKey: "finance",
           findingType: "period_revenue_decline",
           fingerprint: `period-revenue-decline:${current.id}`,
-          severity: performance.revenueChangeBps !== null && performance.revenueChangeBps <= -(revenuePolicy.parameters.criticalDeclinePercent! * 100) ? "critical" : "warning",
+          severity:
+            performance.revenueChangeBps !== null &&
+            performance.revenueChangeBps <=
+              -(revenuePolicy.parameters.criticalDeclinePercent! * 100)
+              ? "critical"
+              : "warning",
           confidence: "1.0000",
-          materiality: moneyAbs(fromUnits(toUnits(priorMetrics.revenue) - toUnits(currentMetrics.revenue))),
+          materiality: moneyAbs(
+            fromUnits(toUnits(priorMetrics.revenue) - toUnits(currentMetrics.revenue)),
+          ),
           subjectType: "accounting_period",
           subjectId: current.id,
           summary: {
@@ -232,15 +261,25 @@ export async function financeFindings(
           ],
         });
       }
-      const marginThreshold = marginPolicy?.enabled ? effectiveDetectorMateriality(marginPolicy, agentThreshold) : agentThreshold;
-      if (marginPolicy?.enabled && performance.grossMarginDropBps !== null && performance.grossMarginDropBps >= marginPolicy.parameters.minimumDropPoints! * 100 && absoluteUnits(currentMetrics.revenue) >= absoluteUnits(marginThreshold)) {
+      const marginThreshold = marginPolicy?.enabled
+        ? effectiveDetectorMateriality(marginPolicy, agentThreshold)
+        : agentThreshold;
+      if (
+        marginPolicy?.enabled &&
+        performance.grossMarginDropBps !== null &&
+        performance.grossMarginDropBps >= marginPolicy.parameters.minimumDropPoints! * 100 &&
+        absoluteUnits(currentMetrics.revenue) >= absoluteUnits(marginThreshold)
+      ) {
         const currentGross = toUnits(currentMetrics.revenue) - toUnits(currentMetrics.cogs);
         const priorGross = toUnits(priorMetrics.revenue) - toUnits(priorMetrics.cogs);
         findings.push({
           agentKey: "finance",
           findingType: "gross_margin_decline",
           fingerprint: `gross-margin-decline:${current.id}`,
-          severity: performance.grossMarginDropBps >= marginPolicy.parameters.criticalDropPoints! * 100 ? "critical" : "warning",
+          severity:
+            performance.grossMarginDropBps >= marginPolicy.parameters.criticalDropPoints! * 100
+              ? "critical"
+              : "warning",
           confidence: "1.0000",
           materiality: fromUnits(priorGross > currentGross ? priorGross - currentGross : 0n),
           subjectType: "accounting_period",

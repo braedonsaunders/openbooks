@@ -1,5 +1,5 @@
-import { Skeleton } from '@openbooks/ui'
-import { SkeletonTransition } from './route-transitions'
+import { Skeleton } from "@openbooks/ui";
+import { SkeletonTransition } from "./route-transitions";
 
 /**
  * In-shell content placeholder. The app shell (sidebar/header) stays mounted
@@ -46,5 +46,5 @@ export function PageSkeleton() {
         </div>
       </div>
     </SkeletonTransition>
-  )
+  );
 }

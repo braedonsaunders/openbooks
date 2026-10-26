@@ -29,7 +29,8 @@ registerHooks({
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
     if (
       specifier.endsWith("/lib/feature-gates") &&
-      (context.parentURL?.includes("/api/time/settings") || context.parentURL?.includes("/lib/api/route"))
+      (context.parentURL?.includes("/api/time/settings") ||
+        context.parentURL?.includes("/lib/api/route"))
     ) {
       return virtual(`
         export async function guardFeaturePermission() {
@@ -47,11 +48,8 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { GET, PUT } = await import("./route.ts");
-
 
 const RULES = {
   roundingIncrement: 15,
@@ -80,10 +78,15 @@ const put = (body: unknown) =>
   );
 
 async function storedRules(orgId: string): Promise<unknown> {
-  const row = (await withBypassContext(() =>
-      db.execute<{ settings: unknown }>(sql`
-        select settings->'fieldTime' as settings from orgs where id = ${orgId}`, "objects"),
-    ))[0];
+  const row = (
+    await withBypassContext(() =>
+      db.execute<{ settings: unknown }>(
+        sql`
+        select settings->'fieldTime' as settings from orgs where id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0];
   return row?.settings ?? null;
 }
 
@@ -117,7 +120,7 @@ test("an unrestricted caller writes them; restricted callers still read them", a
       photoRequired: false,
     });
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await GET(new Request('http://time.test'));
+    const response = await GET(new Request("http://time.test"));
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()) as unknown, {
       settings: {
@@ -146,7 +149,11 @@ test("cleared policy rules refuse without replacing the stored declaration", asy
         const response = await put({ ...RULES, [key]: value });
         assert.equal(response.status, 422, `${key} must remain undeclared`);
         assert.match((await response.json()).error, /Timesheets setup/);
-        assert.deepEqual(await storedRules(org.orgId), RULES, `${key} refusal stores no policy change`);
+        assert.deepEqual(
+          await storedRules(org.orgId),
+          RULES,
+          `${key} refusal stores no policy change`,
+        );
       }
     }
   } finally {

@@ -47,11 +47,20 @@ export function repoRoot() {
 export function discoverSources(root = repoRoot()) {
   return execFileSync(
     "git",
-    ["ls-files", "--cached", "--others", "--exclude-per-directory=.gitignore", "-z",
-      "engine/src/**/*.ts", "engine/src/**/*.tsx",
-      "web/**/*.ts", "web/**/*.tsx",
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-per-directory=.gitignore",
+      "-z",
+      "engine/src/**/*.ts",
+      "engine/src/**/*.tsx",
+      "web/**/*.ts",
+      "web/**/*.tsx",
       "scripts/**/*.mjs",
-      "packages/**/*.ts", "packages/**/*.tsx"],
+      "packages/**/*.ts",
+      "packages/**/*.tsx",
+    ],
     { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   )
     .split("\0")
@@ -199,7 +208,13 @@ export function scanSource(path, content) {
       ) {
         const snippet = arg.getText().replace(/\s+/g, " ").trim().slice(0, 160);
         const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-        findings.push({ path, line: line + 1, fn: enclosingFunctionName(node), kind: "sql.raw value interpolation", arg: snippet });
+        findings.push({
+          path,
+          line: line + 1,
+          fn: enclosingFunctionName(node),
+          kind: "sql.raw value interpolation",
+          arg: snippet,
+        });
       }
     }
     ts.forEachChild(node, visit);
@@ -222,11 +237,15 @@ export function checkTree(findings = scanTree()) {
   );
 }
 
-const invoked = process.argv[1] ? process.argv[1].endsWith("check-sql-raw-interpolation.mjs") : false;
+const invoked = process.argv[1]
+  ? process.argv[1].endsWith("check-sql-raw-interpolation.mjs")
+  : false;
 if (invoked) {
   const findings = scanTree();
   const problems = checkTree(findings);
   for (const problem of problems) console.log(problem);
-  console.log(`checked sql.raw interpolation; violations=${problems.length} (sites=${findings.length})`);
+  console.log(
+    `checked sql.raw interpolation; violations=${problems.length} (sites=${findings.length})`,
+  );
   process.exit(problems.length > 0 ? 1 : 0);
 }

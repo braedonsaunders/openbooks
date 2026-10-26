@@ -11,15 +11,9 @@ import { sql } from "drizzle-orm";
 // silent cross-tenant pointer (custom jsonb has no constraint at all), and a
 // malformed date died as an unhandled storage error.
 const { db, env, withBypass, withOrgContext } = await import("../platform/db.ts");
-const {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} = await import("../testing/fixtures.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("../testing/fixtures.ts");
 const { submitForApproval } = await import("../flows/submit.ts");
-const { createDocumentsFlowAdapter } = await import(
-  "../flows/documents-adapter.ts"
-);
+const { createDocumentsFlowAdapter } = await import("../flows/documents-adapter.ts");
 
 const DB = !!env.OPENBOOKS_DB_URL;
 
@@ -36,22 +30,26 @@ async function seedOrg() {
 }
 
 async function seedReferenceDef(orgId: string, actorId: string) {
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     insert into custom_field_defs
       (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
     values
       (${randomUUID()}, ${orgId}, 'documents', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${actorId}, ${actorId})
-  `));
+  `),
+  );
 }
 
 async function seedScript(orgId: string, setJson: string) {
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     insert into user_scripts
       (id, org_id, name, trigger_point, document_kind, source, timeout_ms, sort_order, is_active)
     values
       (${randomUUID()}, ${orgId}, 'mutation refs probe', 'before_submit', 'journal',
        ${`function main() { return { set: ${setJson} }; }`}, 2000, 100, true)
-  `));
+  `),
+  );
 }
 
 async function clearScripts(orgId: string) {
@@ -61,19 +59,19 @@ async function clearScripts(orgId: string) {
        where script_id in (select id from user_scripts where org_id = ${orgId})
     `),
   );
-  await withBypass(() =>
-    db.execute(sql`delete from user_scripts where org_id = ${orgId}`),
-  );
+  await withBypass(() => db.execute(sql`delete from user_scripts where org_id = ${orgId}`));
 }
 
 async function seedDraft(orgId: string, actorId: string): Promise<string> {
   const id = randomUUID();
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, document_date, currency, status, custom, created_by, updated_by)
     values
       (${id}, ${orgId}, 'journal', ${`MUT-${id.slice(0, 8)}`}, '2026-09-01', 'CAD', 'draft', '{}'::jsonb, ${actorId}, ${actorId})
-  `));
+  `),
+  );
   return id;
 }
 
@@ -115,10 +113,12 @@ test(
 
         // Native dimension pointing at another org's project must veto too.
         const foreignProject = randomUUID();
-        await withBypass(() => db.execute(sql`
+        await withBypass(() =>
+          db.execute(sql`
           insert into projects (id, org_id, name)
           values (${foreignProject}, ${orgB.orgId}, 'Foreign project')
-        `));
+        `),
+        );
         await seedScript(orgA.orgId, JSON.stringify({ projectId: foreignProject }));
         const docId2 = await seedDraft(orgA.orgId, actorId);
         await assert.rejects(
@@ -142,33 +142,29 @@ test(
   },
 );
 
-test(
-  "Flows set_field refuses foreign reference custom values",
-  { skip: !DB },
-  async () => {
-    const { org: orgA, actorId } = await withBypass(seedOrg);
-    const { org: orgB } = await withBypass(seedOrg);
-    try {
-      await withBypass(() => seedReferenceDef(orgA.orgId, actorId));
-      await withOrgContext(orgA.orgId, async () => {
-        const adapter = createDocumentsFlowAdapter("journal");
-        const ctx = { orgId: orgA.orgId, userId: actorId };
-        const docId = await seedDraft(orgA.orgId, actorId);
+test("Flows set_field refuses foreign reference custom values", { skip: !DB }, async () => {
+  const { org: orgA, actorId } = await withBypass(seedOrg);
+  const { org: orgB } = await withBypass(seedOrg);
+  try {
+    await withBypass(() => seedReferenceDef(orgA.orgId, actorId));
+    await withOrgContext(orgA.orgId, async () => {
+      const adapter = createDocumentsFlowAdapter("journal");
+      const ctx = { orgId: orgA.orgId, userId: actorId };
+      const docId = await seedDraft(orgA.orgId, actorId);
 
-        await assert.rejects(
-          adapter.setField(docId, "ref_party", orgB.vendorId, ctx),
-          /not found in this organization/,
-        );
-        assert.deepEqual((await readDoc(docId)).custom, {});
+      await assert.rejects(
+        adapter.setField(docId, "ref_party", orgB.vendorId, ctx),
+        /not found in this organization/,
+      );
+      assert.deepEqual((await readDoc(docId)).custom, {});
 
-        await adapter.setField(docId, "ref_party", orgA.vendorId, ctx);
-        assert.deepEqual((await readDoc(docId)).custom, {
-          ref_party: orgA.vendorId,
-        });
+      await adapter.setField(docId, "ref_party", orgA.vendorId, ctx);
+      assert.deepEqual((await readDoc(docId)).custom, {
+        ref_party: orgA.vendorId,
       });
-    } finally {
-      await withBypass(() => dropScratchOrg(orgA.orgId));
-      await withBypass(() => dropScratchOrg(orgB.orgId));
-    }
-  },
-);
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(orgA.orgId));
+    await withBypass(() => dropScratchOrg(orgB.orgId));
+  }
+});

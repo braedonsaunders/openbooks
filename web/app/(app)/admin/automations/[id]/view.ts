@@ -1,16 +1,16 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { db } from '@openbooks/engine/platform/db'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import { isUuid } from '../../../../../lib/list-params'
-import { listAutomations, listAutomationRuns } from '@openbooks/engine/automations/services'
-import type { BuilderAutomation, BuilderRun } from './AutomationBuilder'
+import { sql } from "drizzle-orm";
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { frame, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { db } from "@openbooks/engine/platform/db";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../../lib/features";
+import { isUuid } from "../../../../../lib/list-params";
+import { listAutomations, listAutomationRuns } from "@openbooks/engine/automations/services";
+import type { BuilderAutomation, BuilderRun } from "./AutomationBuilder";
 
 /**
  * The automation recipe builder page, split into a loader and a spec.
@@ -22,37 +22,37 @@ import type { BuilderAutomation, BuilderRun } from './AutomationBuilder'
  */
 
 export interface AutomationBuilderData {
-  automation: BuilderAutomation
-  runs: BuilderRun[]
+  automation: BuilderAutomation;
+  runs: BuilderRun[];
   scopeOptions: {
-    subsidiaries: { value: string; label: string }[]
-    departments: { value: string; label: string }[]
-    locations: { value: string; label: string }[]
-    positions: { value: string; label: string }[]
-    users: { value: string; label: string; hint: string }[]
-    roles: { value: string; label: string }[]
-    processTemplates: { value: string; label: string; kind: string }[]
-  }
-  canSimulate: boolean
-  canManage: boolean
-  saveFailed: string
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
+    subsidiaries: { value: string; label: string }[];
+    departments: { value: string; label: string }[];
+    locations: { value: string; label: string }[];
+    positions: { value: string; label: string }[];
+    users: { value: string; label: string; hint: string }[];
+    roles: { value: string; label: string }[];
+    processTemplates: { value: string; label: string; kind: string }[];
+  };
+  canSimulate: boolean;
+  canManage: boolean;
+  saveFailed: string;
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
 }
 
 export async function loadAutomationBuilder(id: string): Promise<AutomationBuilderData> {
-  const authz = await requirePermission('automations.read')
-  await requireFeatureEnabled(authz.user.orgId, 'automations')
-  if (!isUuid(id)) notFound()
-  const t = await getTranslations('admin.automations')
-  const automations = await listAutomations(authz.user.orgId, authz.user.id)
-  const automation = automations.find((a) => a.id === id)
-  if (!automation) notFound()
-  const canManage = can(authz, 'automations.manage')
-  const canReadProcessTemplates = can(authz, 'hrm.process.read')
-    && await isFeatureEnabled(authz.user.orgId, 'hrm')
+  const authz = await requirePermission("automations.read");
+  await requireFeatureEnabled(authz.user.orgId, "automations");
+  if (!isUuid(id)) notFound();
+  const t = await getTranslations("admin.automations");
+  const automations = await listAutomations(authz.user.orgId, authz.user.id);
+  const automation = automations.find((a) => a.id === id);
+  if (!automation) notFound();
+  const canManage = can(authz, "automations.manage");
+  const canReadProcessTemplates =
+    can(authz, "hrm.process.read") && (await isFeatureEnabled(authz.user.orgId, "hrm"));
   const [runs, optionRows] = await Promise.all([
     listAutomationRuns(authz.user.orgId, authz.user.id, id),
     canManage
@@ -97,10 +97,17 @@ export async function loadAutomationBuilder(id: string): Promise<AutomationBuild
             : Promise.resolve({ rows: [] as { id: string; name: string; kind: string }[] }),
         ])
       : Promise.resolve(null),
-  ])
-  const [subsidiaries, departments, locations, positions, users, roles, processTemplates] = optionRows ?? [
-    { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] },
-  ]
+  ]);
+  const [subsidiaries, departments, locations, positions, users, roles, processTemplates] =
+    optionRows ?? [
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+    ];
   return {
     automation: {
       id: automation.id,
@@ -111,7 +118,10 @@ export async function loadAutomationBuilder(id: string): Promise<AutomationBuild
       trigger: (automation.trigger ?? {}) as Record<string, unknown>,
       rules: (automation.rules ?? {}) as Record<string, unknown>,
       conditions: (automation.conditions ?? {}) as Record<string, unknown>,
-      actions: (Array.isArray(automation.actions) ? automation.actions : []) as Record<string, unknown>[],
+      actions: (Array.isArray(automation.actions) ? automation.actions : []) as Record<
+        string,
+        unknown
+      >[],
       errorMessage: automation.errorMessage,
     },
     runs: runs.map((r) => ({
@@ -122,34 +132,48 @@ export async function loadAutomationBuilder(id: string): Promise<AutomationBuild
       createdAt: String(r.createdAt),
     })),
     scopeOptions: {
-      subsidiaries: subsidiaries.rows.map((row) => ({ value: String(row.id), label: String(row.name) })),
-      departments: departments.rows.map((row) => ({ value: String(row.id), label: String(row.name) })),
+      subsidiaries: subsidiaries.rows.map((row) => ({
+        value: String(row.id),
+        label: String(row.name),
+      })),
+      departments: departments.rows.map((row) => ({
+        value: String(row.id),
+        label: String(row.name),
+      })),
       locations: locations.rows.map((row) => ({ value: String(row.id), label: String(row.name) })),
       positions: positions.rows.map((row) => ({ value: String(row.id), label: String(row.name) })),
-      users: users.rows.map((row) => ({ value: String(row.id), label: String(row.name), hint: String(row.email) })),
+      users: users.rows.map((row) => ({
+        value: String(row.id),
+        label: String(row.name),
+        hint: String(row.email),
+      })),
       roles: roles.rows.map((row) => ({ value: String(row.key), label: String(row.name) })),
-      processTemplates: processTemplates.rows.map((row) => ({ value: String(row.id), label: String(row.name), kind: String(row.kind) })),
+      processTemplates: processTemplates.rows.map((row) => ({
+        value: String(row.id),
+        label: String(row.name),
+        kind: String(row.kind),
+      })),
     },
-    canSimulate: await isFeatureEnabled(authz.user.orgId, 'automationSimulator'),
+    canSimulate: await isFeatureEnabled(authz.user.orgId, "automationSimulator"),
     // automations.read opens the page; only automations.manage may change the
     // recipe. The builder island renders its mutating controls from this.
     canManage,
-    saveFailed: t('builder.saveFailed'),
+    saveFailed: t("builder.saveFailed"),
     title: automation.name,
-    description: t('builder.description'),
-    backHref: '/admin/automations',
-    backLabel: t('backToList'),
-  }
+    description: t("builder.description"),
+    backHref: "/admin/automations",
+    backLabel: t("backToList"),
+  };
 }
 
 export function automationBuilderSpec(data: AutomationBuilderData): PageSpec {
   return page({
-    route: '/admin/automations/[id]',
-    layout: 'bare',
+    route: "/admin/automations/[id]",
+    layout: "bare",
     header: [],
     body: [
-      frame('padded', [
-        widgetBlock('automation-builder', {
+      frame("padded", [
+        widgetBlock("automation-builder", {
           automation: data.automation,
           runs: data.runs,
           scopeOptions: data.scopeOptions,
@@ -161,5 +185,5 @@ export function automationBuilderSpec(data: AutomationBuilderData): PageSpec {
         }),
       ]),
     ],
-  })
+  });
 }

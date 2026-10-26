@@ -2,13 +2,13 @@
 // pdfkit itself accepts `size`/`layout` keywords, but the renderer needs the
 // raw point dimensions for cursor math (column widths, row wrapping, footers).
 
-import type { PdfPageSetup, PdfPaperSize } from './types'
+import type { PdfPageSetup, PdfPaperSize } from "./types";
 
 /** 1 millimetre in PostScript points (72 pt/in ÷ 25.4 mm/in). */
-const PT_PER_MM = 72 / 25.4
+const PT_PER_MM = 72 / 25.4;
 
 function mmToPt(mm: number): number {
-  return mm * PT_PER_MM
+  return mm * PT_PER_MM;
 }
 
 /** Paper dimensions in points, PORTRAIT (width × height). */
@@ -17,27 +17,27 @@ const PAPER_PORTRAIT_PT: Record<PdfPaperSize, { width: number; height: number }>
   a4: { width: 595.28, height: 841.89 },
   legal: { width: 612, height: 1008 },
   tabloid: { width: 792, height: 1224 },
-  '4x6': { width: 288, height: 432 },
-}
+  "4x6": { width: 288, height: 432 },
+};
 
 export type ResolvedPage = {
-  width: number
-  height: number
-  margin: number
+  width: number;
+  height: number;
+  margin: number;
   /** Content area (after margins). */
-  contentWidth: number
-  contentTop: number
-  contentBottom: number
-  contentLeft: number
-}
+  contentWidth: number;
+  contentTop: number;
+  contentBottom: number;
+  contentLeft: number;
+};
 
 /** Resolve a page setup into concrete point geometry. */
 export function resolvePage(setup: PdfPageSetup): ResolvedPage {
-  const portrait = PAPER_PORTRAIT_PT[setup.paperSize]
-  const landscape = setup.orientation === 'landscape'
-  const width = landscape ? portrait.height : portrait.width
-  const height = landscape ? portrait.width : portrait.height
-  const margin = mmToPt(setup.marginMm)
+  const portrait = PAPER_PORTRAIT_PT[setup.paperSize];
+  const landscape = setup.orientation === "landscape";
+  const width = landscape ? portrait.height : portrait.width;
+  const height = landscape ? portrait.width : portrait.height;
+  const margin = mmToPt(setup.marginMm);
   return {
     width,
     height,
@@ -46,5 +46,5 @@ export function resolvePage(setup: PdfPageSetup): ResolvedPage {
     contentTop: margin,
     contentBottom: height - margin,
     contentLeft: margin,
-  }
+  };
 }

@@ -1,13 +1,13 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { HrmDocumentsError } from '@openbooks/engine/hrm/documents/errors'
-import { listOwnDocuments } from '@openbooks/engine/hrm/documents/documents'
-import { listOwnExports } from '@openbooks/engine/hrm/documents/dsar'
-import { loadOrRefuse, type PageRefusal } from '../load-or-refuse'
-import { meTabs } from './self-service'
-import { getAuthz, type Authz } from '../authz'
-import { requireFeatureEnabled } from '../feature-gates'
+import { getTranslations } from "next-intl/server";
+import { HrmDocumentsError } from "@openbooks/engine/hrm/documents/errors";
+import { listOwnDocuments } from "@openbooks/engine/hrm/documents/documents";
+import { listOwnExports } from "@openbooks/engine/hrm/documents/dsar";
+import { loadOrRefuse, type PageRefusal } from "../load-or-refuse";
+import { meTabs } from "./self-service";
+import { getAuthz, type Authz } from "../authz";
+import { requireFeatureEnabled } from "../feature-gates";
 
 /**
  * Me documents loader: the person's own documents with inline
@@ -19,72 +19,85 @@ import { requireFeatureEnabled } from '../feature-gates'
  */
 
 export interface MeDocumentsAuthz {
-  orgId: string
-  userId: string
-  session: Authz
+  orgId: string;
+  userId: string;
+  session: Authz;
 }
 
 export async function meDocumentsAuthz(): Promise<MeDocumentsAuthz | null> {
-  const gate = await getAuthz()
-  if (!gate) return null
-  await requireFeatureEnabled(gate.user.orgId, 'hrm')
-  await requireFeatureEnabled(gate.user.orgId, 'hrmDocuments')
-  return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
+  const gate = await getAuthz();
+  if (!gate) return null;
+  await requireFeatureEnabled(gate.user.orgId, "hrm");
+  await requireFeatureEnabled(gate.user.orgId, "hrmDocuments");
+  return { orgId: gate.user.orgId, userId: gate.user.id, session: gate };
 }
 
-export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<string, string | undefined>) {
-  const t = await getTranslations('hrm')
-  const tabs = await meTabs(authz.session, '/me/documents')
+export async function loadMeDocumentsHome(
+  authz: MeDocumentsAuthz,
+  sp: Record<string, string | undefined>,
+) {
+  const t = await getTranslations("hrm");
+  const tabs = await meTabs(authz.session, "/me/documents");
   // An unlinked login is a correct refusal with the remedy (the shared
   // loadOrRefuse mechanism, same as the clock): only the no-link REFUSED
   // text converts — every other error still throws out of the loader.
   const outcome = await loadOrRefuse(
-    () => Promise.all([
-      listOwnDocuments({ orgId: authz.orgId, actorId: authz.userId }),
-      listOwnExports({ orgId: authz.orgId, actorId: authz.userId }),
-    ]),
+    () =>
+      Promise.all([
+        listOwnDocuments({ orgId: authz.orgId, actorId: authz.userId }),
+        listOwnExports({ orgId: authz.orgId, actorId: authz.userId }),
+      ]),
     {
       refusals: [
-        { error: HrmDocumentsError, code: 'REFUSED', messageIncludes: 'not linked to a person record' },
+        {
+          error: HrmDocumentsError,
+          code: "REFUSED",
+          messageIncludes: "not linked to a person record",
+        },
       ],
-      title: t('me.refusedTitle'),
+      title: t("me.refusedTitle"),
     },
-  )
+  );
   const [{ documents, partyId }, { exports }] = outcome.ok
     ? outcome.data
-    : [{ documents: [], partyId: '' }, { exports: [] }]
-  const refusal: PageRefusal | null = outcome.ok ? null : outcome.refusal
+    : [{ documents: [], partyId: "" }, { exports: [] }];
+  const refusal: PageRefusal | null = outcome.ok ? null : outcome.refusal;
   const statusLabel = (value: string): string =>
-    t.has(`meDocuments.status.${value}`) ? t(`meDocuments.status.${value}`) : value
+    t.has(`meDocuments.status.${value}`) ? t(`meDocuments.status.${value}`) : value;
   // The stored scope manifest names each omitted document with its reason;
   // surface that evidence on the requester's row so an incomplete export
   // arrives with its explanation, never as a bare status.
   const incompleteDetail = (scope: unknown): string | null => {
-    if (!Array.isArray(scope)) return null
+    if (!Array.isArray(scope)) return null;
     for (const entry of scope) {
-      if (typeof entry !== 'object' || entry === null) continue
+      if (typeof entry !== "object" || entry === null) continue;
       const { module, status, detail } = entry as {
-        module?: unknown
-        status?: unknown
-        detail?: unknown
-      }
-      if (module === 'documents' && status === 'incomplete' && typeof detail === 'string' && detail.length > 0) {
-        return detail
+        module?: unknown;
+        status?: unknown;
+        detail?: unknown;
+      };
+      if (
+        module === "documents" &&
+        status === "incomplete" &&
+        typeof detail === "string" &&
+        detail.length > 0
+      ) {
+        return detail;
       }
     }
-    return null
-  }
+    return null;
+  };
 
   return {
-    title: t('meDocuments.title'),
-    description: t('meDocuments.description'),
+    title: t("meDocuments.title"),
+    description: t("meDocuments.description"),
     tabs,
     partyId,
     canRequestExport: partyId.length > 0,
     columns: {
-      title: t('meDocuments.columns.title'),
-      status: t('meDocuments.columns.status'),
-      sent: t('meDocuments.columns.sent'),
+      title: t("meDocuments.columns.title"),
+      status: t("meDocuments.columns.status"),
+      sent: t("meDocuments.columns.sent"),
     },
     rows: documents.map((doc) => ({
       id: doc.id,
@@ -92,20 +105,20 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
       status: doc.status,
       statusLabel: statusLabel(doc.status),
       sent: doc.sentAt,
-      signable: ['sent', 'viewed', 'partially_signed'].includes(doc.status),
-      acknowledgeable: doc.status !== 'acknowledged' && doc.status !== 'signed',
+      signable: ["sent", "viewed", "partially_signed"].includes(doc.status),
+      acknowledgeable: doc.status !== "acknowledged" && doc.status !== "signed",
     })),
-    empty: t('meDocuments.empty'),
-    signNameLabel: t('meDocuments.signName'),
-    signLabel: t('meDocuments.sign'),
-    acknowledgeLabel: t('meDocuments.acknowledge'),
-    actionFailed: t('meDocuments.actionFailed'),
-    exportsTitle: t('meDocuments.exportsTitle'),
-    exportsEmpty: t('meDocuments.exportsEmpty'),
+    empty: t("meDocuments.empty"),
+    signNameLabel: t("meDocuments.signName"),
+    signLabel: t("meDocuments.sign"),
+    acknowledgeLabel: t("meDocuments.acknowledge"),
+    actionFailed: t("meDocuments.actionFailed"),
+    exportsTitle: t("meDocuments.exportsTitle"),
+    exportsEmpty: t("meDocuments.exportsEmpty"),
     exportColumns: {
-      requested: t('meDocuments.exportsColumns.requested'),
-      status: t('meDocuments.exportsColumns.status'),
-      detail: t('meDocuments.exportsColumns.detail'),
+      requested: t("meDocuments.exportsColumns.requested"),
+      status: t("meDocuments.exportsColumns.status"),
+      detail: t("meDocuments.exportsColumns.detail"),
     },
     exportRows: exports.map((e) => ({
       id: e.id,
@@ -114,15 +127,15 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
       statusLabel: statusLabel(e.status),
       // Incomplete exports are downloadable too — the partial zip is the
       // requester's, and the row keeps showing its incomplete status.
-      downloadable: e.status === 'ready' || e.status === 'incomplete' || e.status === 'delivered',
+      downloadable: e.status === "ready" || e.status === "incomplete" || e.status === "delivered",
       downloadHref: `/api/hrm/data-subject-exports/${e.id}/download`,
       incompleteDetail: incompleteDetail(e.scope),
       error: e.error,
     })),
-    requestExportLabel: t('meDocuments.requestExport'),
-    requestExportDone: t('meDocuments.requestExportDone'),
-    downloadLabel: t('meDocuments.download'),
-    exportOpen: sp.export === '1' && partyId.length > 0,
+    requestExportLabel: t("meDocuments.requestExport"),
+    requestExportDone: t("meDocuments.requestExportDone"),
+    downloadLabel: t("meDocuments.download"),
+    exportOpen: sp.export === "1" && partyId.length > 0,
     refusal,
-  }
+  };
 }

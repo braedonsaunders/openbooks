@@ -52,5 +52,8 @@ test("an S3 rename of a plain name still round-trips", async () => {
   await backend.rename("inbound/statement.ofx", "inbound/processed/statement.ofx");
   const copies = sentCopies(fake);
   assert.equal(copies[0]!.CopySource, `${BUCKET}/${ROOT}/inbound/statement.ofx`);
-  assert.equal((await backend.read("inbound/processed/statement.ofx")).toString("utf8"), "plain-bytes");
+  assert.equal(
+    (await backend.read("inbound/processed/statement.ofx")).toString("utf8"),
+    "plain-bytes",
+  );
 });

@@ -24,15 +24,20 @@ export interface ApplicationToolDefinition {
   featureKey?: string;
   /** Chat-payload tier; absent means "module" (only sent when activated). MCP ignores tiers. */
   tier?: ToolTier;
-  execute: (context: ApplicationContext, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  execute: (
+    context: ApplicationContext,
+    input: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
 }
 
 /** One catalog entry; mutations run once per idempotency key through executeIdempotent. */
-export function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, "execute" | "inputSchema" | "mutationProtection"> & {
-  inputSchema: T;
-  execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
-  authorizeReplay?: (context: ApplicationContext, input: z.infer<T>) => Promise<void>;
-}): ApplicationToolDefinition {
+export function definition<T extends ZodTypeAny>(
+  args: Omit<ApplicationToolDefinition, "execute" | "inputSchema" | "mutationProtection"> & {
+    inputSchema: T;
+    execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
+    authorizeReplay?: (context: ApplicationContext, input: z.infer<T>) => Promise<void>;
+  },
+): ApplicationToolDefinition {
   const { execute, inputSchema, authorizeReplay, ...metadata } = args;
   return {
     ...metadata,

@@ -1,17 +1,17 @@
-export const ONBOARDING_SCHEMA_VERSION = 1
+export const ONBOARDING_SCHEMA_VERSION = 1;
 
-export type OnboardingStatus = 'required' | 'deferred' | 'complete'
+export type OnboardingStatus = "required" | "deferred" | "complete";
 
-type JsonObject = Record<string, unknown>
+type JsonObject = Record<string, unknown>;
 
 function objectValue(value: unknown): JsonObject {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as JsonObject
-    : {}
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonObject)
+    : {};
 }
 
 export function onboardingRecord(settings: unknown): JsonObject {
-  return objectValue(objectValue(settings).onboarding)
+  return objectValue(objectValue(settings).onboarding);
 }
 
 /**
@@ -20,10 +20,10 @@ export function onboardingRecord(settings: unknown): JsonObject {
  * keeping the setup wizard available from Company Settings.
  */
 export function onboardingStatus(settings: unknown): OnboardingStatus {
-  const onboarding = onboardingRecord(settings)
-  if (onboarding.setupComplete === true) return 'complete'
-  if (typeof onboarding.deferredAt === 'string' && onboarding.deferredAt.length > 0) {
-    return 'deferred'
+  const onboarding = onboardingRecord(settings);
+  if (onboarding.setupComplete === true) return "complete";
+  if (typeof onboarding.deferredAt === "string" && onboarding.deferredAt.length > 0) {
+    return "deferred";
   }
-  return 'required'
+  return "required";
 }

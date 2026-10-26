@@ -1,26 +1,12 @@
-'use client'
-import { ApprovalActions } from '@/components/approval-actions'
-import dynamic from 'next/dynamic'
-import Link from 'next/link'
+"use client";
+import { ApprovalActions } from "@/components/approval-actions";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Input,
-  Select,
-  Textarea,
-  UrlDrawer,
-  Badge,
-} from "@openbooks/ui";
-import {
-  Users,
-  Target,
-  Briefcase,
-  TrendingUp,
-  UserRound,
-  Settings2,
-} from "lucide-react";
+import { Button, Input, Select, Textarea, UrlDrawer, Badge } from "@openbooks/ui";
+import { Users, Target, Briefcase, TrendingUp, UserRound, Settings2 } from "lucide-react";
 import { SalesRepPerformance } from "./SalesRepPerformance";
 import { Panel } from "../../analytics/_ui/Panel";
 import { KpiCard } from "../../analytics/_ui/KpiCard";
@@ -35,11 +21,10 @@ import type {
 import { EMPTY_TERRITORY_GEOGRAPHY } from "@openbooks/engine/crm/sales/contracts";
 import type { TerritoryRule } from "@openbooks/engine/crm/sales/contracts";
 import type { TerritoryPreview } from "@openbooks/engine/crm/sales";
-import { DateField } from '@/components/date-field'
-const TerritoryMap = dynamic(
-  () => import("./TerritoryMap").then((m) => m.TerritoryMap),
-  { ssr: false },
-);
+import { DateField } from "@/components/date-field";
+const TerritoryMap = dynamic(() => import("./TerritoryMap").then((m) => m.TerritoryMap), {
+  ssr: false,
+});
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -48,24 +33,16 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     </label>
   );
 }
-export function SalesDrawer({
-  data,
-  closeHref,
-}: {
-  data: SalesWorkspaceData;
-  closeHref: string;
-}) {
-  const t = useTranslations('crm.sales')
-  const router = useRouter()
-  const source = data.selected
+export function SalesDrawer({ data, closeHref }: { data: SalesWorkspaceData; closeHref: string }) {
+  const t = useTranslations("crm.sales");
+  const router = useRouter();
+  const source = data.selected;
   const row = data.creating ? null : data.selected;
   const [name, setName] = useState(source?.name ?? "");
   const [subsidiaryId, setSubsidiary] = useState(
     source?.subsidiary_id ?? data.subsidiaries[0]?.id ?? "",
   );
-  const [employeeId, setEmployee] = useState(
-    source?.employee_id ?? row?.default_employee_id ?? "",
-  );
+  const [employeeId, setEmployee] = useState(source?.employee_id ?? row?.default_employee_id ?? "");
   const [manager, setManager] = useState(source?.manager_employee_id ?? "");
   const [teamId, setTeam] = useState(source?.sales_team_id ?? "");
   const [quotaTarget, setQuotaTarget] = useState<"representative" | "team">(
@@ -75,15 +52,11 @@ export function SalesDrawer({
   const [enabled, setEnabled] = useState(source?.is_sales_rep ?? true);
   const [since, setSince] = useState(source?.sales_rep_since ?? data.periodEnd);
   const [members, setMembers] = useState(source?.members ?? []);
-  const [adding, setAdding] = useState('')
+  const [adding, setAdding] = useState("");
   const [memberDate, setMemberDate] = useState(data.periodEnd);
   const [amount, setAmount] = useState(source?.amount ?? "");
-  const [currency, setCurrency] = useState(
-    source?.currency ?? data.baseCurrency,
-  );
-  const [metric, setMetric] = useState<"closed_won" | "net_invoiced">(
-    row?.metric ?? "closed_won",
-  );
+  const [currency, setCurrency] = useState(source?.currency ?? data.baseCurrency);
+  const [metric, setMetric] = useState<"closed_won" | "net_invoiced">(row?.metric ?? "closed_won");
   const [start, setStart] = useState(source?.period_start ?? data.periodStart);
   const [end, setEnd] = useState(source?.period_end ?? data.periodEnd);
   const [reason, setReason] = useState(source?.reason ?? "");
@@ -94,15 +67,11 @@ export function SalesDrawer({
   const [description, setDescription] = useState(source?.description ?? "");
   const [priority, setPriority] = useState(source?.priority ?? 100);
   const [rules, setRules] = useState<TerritoryRule[]>(row?.rules ?? []);
-  const [matchMode, setMatchMode] = useState<"all" | "any">(
-    row?.match_mode ?? "all",
-  );
+  const [matchMode, setMatchMode] = useState<"all" | "any">(row?.match_mode ?? "all");
   const [geography, setGeography] = useState<TerritoryGeography>(
     row?.geography ?? EMPTY_TERRITORY_GEOGRAPHY,
   );
-  const [effective, setEffective] = useState(
-    source?.effective_from ?? data.periodEnd,
-  );
+  const [effective, setEffective] = useState(source?.effective_from ?? data.periodEnd);
   const [lifecycle, setLifecycle] = useState<"draft" | "active" | "archived">(
     data.page === "territories"
       ? ((row?.lifecycle as "draft" | "active" | "archived") ?? "draft")
@@ -110,11 +79,9 @@ export function SalesDrawer({
   );
   const [isActive, setActive] = useState(source?.is_active ?? true);
   const [preview, setPreview] = useState<TerritoryPreview | null>(null);
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const editable =
-    data.canManage &&
-    (data.page !== "quotas" || !row || row.lifecycle === "draft");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const editable = data.canManage && (data.page !== "quotas" || !row || row.lifecycle === "draft");
   const options = (values: SalesOption[], blank = true) => (
     <>
       {blank ? <option value="">{t("none")}</option> : null}
@@ -125,9 +92,7 @@ export function SalesDrawer({
       ))}
     </>
   );
-  const reps = data.representatives.filter(
-    (e) => e.subsidiary_id === subsidiaryId,
-  );
+  const reps = data.representatives.filter((e) => e.subsidiary_id === subsidiaryId);
   const selectedRep = data.rows.find((e) => e.id === repId);
   function territory(): Extract<SalesCommand, { action: "territory" }> {
     return {
@@ -261,9 +226,7 @@ export function SalesDrawer({
       setBusy(false);
     }
   }
-  function transition(
-    next: "draft" | "pending_approval" | "approved" | "closed",
-  ) {
+  function transition(next: "draft" | "pending_approval" | "approved" | "closed") {
     if (row)
       return perform({
         action: "quota-transition",
@@ -276,15 +239,11 @@ export function SalesDrawer({
   return (
     <UrlDrawer
       open
-      openKey={row?.id ?? 'new'}
+      openKey={row?.id ?? "new"}
       closeHref={closeHref}
       title={row?.name ?? t(`tabs.${data.page}`)}
-      description={t('drawerDescription')}
-      size={
-        data.page === "territories" || data.page === "representatives"
-          ? "2xl"
-          : "xl"
-      }
+      description={t("drawerDescription")}
+      size={data.page === "territories" || data.page === "representatives" ? "2xl" : "xl"}
       footer={
         <div className="flex flex-wrap justify-end gap-2">
           <Link href={closeHref}>
@@ -323,26 +282,16 @@ export function SalesDrawer({
           {row && data.page === "quotas" && data.canManage ? (
             <>
               {row.lifecycle === "draft" ? (
-                <Button
-                  disabled={busy}
-                  onClick={() => transition("pending_approval")}
-                >
+                <Button disabled={busy} onClick={() => transition("pending_approval")}>
                   {t("submitApproval")}
                 </Button>
               ) : null}
-              {row.lifecycle === 'pending_approval' ? (
+              {row.lifecycle === "pending_approval" ? (
                 <>
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => transition("draft")}
-                  >
+                  <Button variant="outline" disabled={busy} onClick={() => transition("draft")}>
                     {t("returnDraft")}
                   </Button>
-                  <ApprovalActions
-                    subjectKind="sales_quota"
-                    subjectId={row.id}
-                  />
+                  <ApprovalActions subjectKind="sales_quota" subjectId={row.id} />
                 </>
               ) : null}
               {row.lifecycle === "approved" ? (
@@ -350,11 +299,7 @@ export function SalesDrawer({
                   <Link href={`/crm/sales/quotas?row=new&revises=${row.id}`}>
                     <Button variant="outline">{t("reviseQuota")}</Button>
                   </Link>
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => transition("closed")}
-                  >
+                  <Button variant="outline" disabled={busy} onClick={() => transition("closed")}>
                     {t("closeQuota")}
                   </Button>
                 </>
@@ -379,11 +324,7 @@ export function SalesDrawer({
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <KpiCard
                   label={t("assignedCustomers")}
-                  value={
-                    row.repSummary.customers === null
-                      ? "—"
-                      : String(row.repSummary.customers)
-                  }
+                  value={row.repSummary.customers === null ? "—" : String(row.repSummary.customers)}
                   icon={Users}
                   accent="teal"
                 />
@@ -412,45 +353,29 @@ export function SalesDrawer({
               </div>
             ) : null}
             {row?.is_sales_rep && row.repTrend ? (
-              <SalesRepPerformance
-                trend={row.repTrend}
-                reportHref={data.reports.evidence}
-              />
+              <SalesRepPerformance trend={row.repTrend} reportHref={data.reports.evidence} />
             ) : null}
             <div className="grid gap-4 lg:grid-cols-2">
               <Panel title={t("repIdentity")} icon={UserRound}>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
                   <dt className="text-slate-500">{t("employeeNumber")}</dt>
-                  <dd className="text-right font-medium">
-                    {row?.employee_number ?? "—"}
-                  </dd>
+                  <dd className="text-right font-medium">{row?.employee_number ?? "—"}</dd>
                   <dt className="text-slate-500">{t("legalEntity")}</dt>
                   <dd className="text-right font-medium">
-                    {data.subsidiaries.find(
-                      (entity) => entity.id === row?.subsidiary_id,
-                    )?.name ?? "—"}
+                    {data.subsidiaries.find((entity) => entity.id === row?.subsidiary_id)?.name ??
+                      "—"}
                   </dd>
                   <dt className="text-slate-500">{t("department")}</dt>
-                  <dd className="text-right font-medium">
-                    {row?.department_name ?? "—"}
-                  </dd>
+                  <dd className="text-right font-medium">{row?.department_name ?? "—"}</dd>
                 </dl>
                 <Link
                   className="mt-4 inline-block text-sm font-medium text-teal-700 dark:text-teal-300"
-                  href={
-                    repId
-                      ? `/entities/employees?party=${repId}`
-                      : "/entities/employees"
-                  }
+                  href={repId ? `/entities/employees?party=${repId}` : "/entities/employees"}
                 >
                   {t("manageEmployee")} →
                 </Link>
               </Panel>
-              <Panel
-                title={t("repSettings")}
-                icon={Settings2}
-                bodyClassName="space-y-4"
-              >
+              <Panel title={t("repSettings")} icon={Settings2} bodyClassName="space-y-4">
                 {!row ? (
                   <Field label={t("employee")}>
                     <Select
@@ -510,17 +435,10 @@ export function SalesDrawer({
             <fieldset disabled={!editable} className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label={t("name")}>
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
+                  <Input value={name} onChange={(e) => setName(e.target.value)} required />
                 </Field>
                 <Field label={t("legalEntity")}>
-                  <Select
-                    value={subsidiaryId}
-                    onChange={(e) => setSubsidiary(e.target.value)}
-                  >
+                  <Select value={subsidiaryId} onChange={(e) => setSubsidiary(e.target.value)}>
                     {options(data.subsidiaries, false)}
                   </Select>
                 </Field>
@@ -528,10 +446,7 @@ export function SalesDrawer({
               {data.page === "teams" ? (
                 <>
                   <Field label={t("manager")}>
-                    <Select
-                      value={manager}
-                      onChange={(e) => setManager(e.target.value)}
-                    >
+                    <Select value={manager} onChange={(e) => setManager(e.target.value)}>
                       {options(reps)}
                     </Select>
                   </Field>
@@ -552,18 +467,13 @@ export function SalesDrawer({
                         className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"
                       >
                         <span>
-                          {data.employees.find((e) => e.id === m.employeeId)
-                            ?.name ?? m.employeeId}{" "}
+                          {data.employees.find((e) => e.id === m.employeeId)?.name ?? m.employeeId}{" "}
                           · {m.validFrom}
                         </span>
                         <Button
                           variant="ghost"
                           onClick={() =>
-                            setMembers(
-                              members.filter(
-                                (v) => v.employeeId !== m.employeeId,
-                              ),
-                            )
+                            setMembers(members.filter((v) => v.employeeId !== m.employeeId))
                           }
                         >
                           {t("remove")}
@@ -576,11 +486,7 @@ export function SalesDrawer({
                         aria-label={t("employee")}
                         onChange={(e) => setAdding(e.target.value)}
                       >
-                        {options(
-                          reps.filter(
-                            (e) => !members.some((m) => m.employeeId === e.id),
-                          ),
-                        )}
+                        {options(reps.filter((e) => !members.some((m) => m.employeeId === e.id)))}
                       </Select>
                       <DateField
                         aria-label={t("effectiveFrom")}
@@ -615,16 +521,12 @@ export function SalesDrawer({
                     <Select
                       value={quotaTarget}
                       onChange={(event) => {
-                        setQuotaTarget(
-                          event.target.value as "representative" | "team",
-                        );
+                        setQuotaTarget(event.target.value as "representative" | "team");
                         setEmployee("");
                         setTeam("");
                       }}
                     >
-                      <option value="representative">
-                        {t("individualRep")}
-                      </option>
+                      <option value="representative">{t("individualRep")}</option>
                       <option value="team">{t("team")}</option>
                     </Select>
                   </Field>
@@ -644,9 +546,7 @@ export function SalesDrawer({
                           }}
                         >
                           {options(
-                            data.representatives.filter(
-                              (rep) => rep.subsidiary_id !== null,
-                            ),
+                            data.representatives.filter((rep) => rep.subsidiary_id !== null),
                           )}
                         </Select>
                       </Field>
@@ -658,31 +558,19 @@ export function SalesDrawer({
                             const id = event.target.value;
                             setTeam(id);
                             setEmployee("");
-                            const entity = data.teams.find(
-                              (team) => team.id === id,
-                            )?.subsidiary_id;
+                            const entity = data.teams.find((team) => team.id === id)?.subsidiary_id;
                             if (entity) setSubsidiary(entity);
                           }}
                         >
-                          {options(
-                            data.teams.filter(
-                              (team) => team.subsidiary_id !== null,
-                            ),
-                          )}
+                          {options(data.teams.filter((team) => team.subsidiary_id !== null))}
                         </Select>
                       </Field>
                     )}
                     <Field label={t("from")}>
-                      <DateField
-                        value={start}
-                        onChange={(value) => setStart(value)}
-                      />
+                      <DateField value={start} onChange={(value) => setStart(value)} />
                     </Field>
                     <Field label={t("to")}>
-                      <DateField
-                        value={end}
-                        onChange={(value) => setEnd(value)}
-                      />
+                      <DateField value={end} onChange={(value) => setEnd(value)} />
                     </Field>
                     <Field label={t("quota")}>
                       <Input
@@ -692,16 +580,9 @@ export function SalesDrawer({
                       />
                     </Field>
                     <Field label={t("currency")}>
-                      <Select
-                        value={currency}
-                        onChange={(e) => setCurrency(e.target.value)}
-                      >
+                      <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
                         {data.currencies
-                          .filter(
-                            (c) =>
-                              data.multiCurrency ||
-                              c.code === data.baseCurrency,
-                          )
+                          .filter((c) => data.multiCurrency || c.code === data.baseCurrency)
                           .map((c) => (
                             <option key={c.code} value={c.code}>
                               {c.code} · {c.name}
@@ -713,19 +594,14 @@ export function SalesDrawer({
                   <Field label={t("metric")}>
                     <Select
                       value={metric}
-                      onChange={(e) =>
-                        setMetric(e.target.value as typeof metric)
-                      }
+                      onChange={(e) => setMetric(e.target.value as typeof metric)}
                     >
                       <option value="closed_won">{t("closed_won")}</option>
                       <option value="net_invoiced">{t("net_invoiced")}</option>
                     </Select>
                   </Field>
                   <Field label={t("parentQuota")}>
-                    <Select
-                      value={parentId}
-                      onChange={(e) => setParent(e.target.value)}
-                    >
+                    <Select value={parentId} onChange={(e) => setParent(e.target.value)}>
                       {options(
                         data.quotaOptions.filter(
                           (q) =>
@@ -738,15 +614,10 @@ export function SalesDrawer({
                     </Select>
                   </Field>
                   <Field label={t("supersedes")}>
-                    <Select
-                      value={supersedesId}
-                      onChange={(e) => setSupersedes(e.target.value)}
-                    >
+                    <Select value={supersedesId} onChange={(e) => setSupersedes(e.target.value)}>
                       {options(
                         data.quotaOptions.filter(
-                          (q) =>
-                            q.lifecycle === "approved" &&
-                            q.subsidiary_id === subsidiaryId,
+                          (q) => q.lifecycle === "approved" && q.subsidiary_id === subsidiaryId,
                         ),
                       )}
                     </Select>
@@ -757,38 +628,22 @@ export function SalesDrawer({
                 <>
                   <div className="grid gap-4 sm:grid-cols-3">
                     <Field label={t("representative")}>
-                      <Select
-                        value={employeeId}
-                        onChange={(e) => setEmployee(e.target.value)}
-                      >
+                      <Select value={employeeId} onChange={(e) => setEmployee(e.target.value)}>
                         {options(reps)}
                       </Select>
                     </Field>
                     <Field label={t("manager")}>
-                      <Select
-                        value={manager}
-                        onChange={(e) => setManager(e.target.value)}
-                      >
+                      <Select value={manager} onChange={(e) => setManager(e.target.value)}>
                         {options(reps)}
                       </Select>
                     </Field>
                     <Field label={t("team")}>
-                      <Select
-                        value={teamId}
-                        onChange={(e) => setTeam(e.target.value)}
-                      >
-                        {options(
-                          data.teams.filter(
-                            (e) => e.subsidiary_id === subsidiaryId,
-                          ),
-                        )}
+                      <Select value={teamId} onChange={(e) => setTeam(e.target.value)}>
+                        {options(data.teams.filter((e) => e.subsidiary_id === subsidiaryId))}
                       </Select>
                     </Field>
                     <Field label={t("effectiveFrom")}>
-                      <DateField
-                        value={effective}
-                        onChange={(value) => setEffective(value)}
-                      />
+                      <DateField value={effective} onChange={(value) => setEffective(value)} />
                     </Field>
                     <Field label={t("priority")}>
                       <Input
@@ -801,9 +656,7 @@ export function SalesDrawer({
                     <Field label={t("status")}>
                       <Select
                         value={lifecycle}
-                        onChange={(e) =>
-                          setLifecycle(e.target.value as typeof lifecycle)
-                        }
+                        onChange={(e) => setLifecycle(e.target.value as typeof lifecycle)}
                       >
                         {["draft", "active", "archived"].map((v) => (
                           <option key={v} value={v}>
@@ -827,19 +680,14 @@ export function SalesDrawer({
                       territories={source ? [source] : []}
                     />
                   ) : (
-                    <Link
-                      className="text-sm text-teal-700"
-                      href="/admin/setup/features"
-                    >
+                    <Link className="text-sm text-teal-700" href="/admin/setup/features">
                       {t("enableMap")}
                     </Link>
                   )}
                   <Field label={t("match")}>
                     <Select
                       value={matchMode}
-                      onChange={(e) =>
-                        setMatchMode(e.target.value as "all" | "any")
-                      }
+                      onChange={(e) => setMatchMode(e.target.value as "all" | "any")}
                     >
                       <option value="all">{t("allRules")}</option>
                       <option value="any">{t("anyRule")}</option>
@@ -847,10 +695,7 @@ export function SalesDrawer({
                   </Field>
                   <div className="space-y-2">
                     {rules.map((rule, i) => (
-                      <div
-                        key={i}
-                        className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2"
-                      >
+                      <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
                         <Select
                           aria-label={t("ruleField")}
                           value={rule.field}
@@ -860,8 +705,7 @@ export function SalesDrawer({
                                 j === i
                                   ? {
                                       ...r,
-                                      field: e.target
-                                        .value as TerritoryRule["field"],
+                                      field: e.target.value as TerritoryRule["field"],
                                     }
                                   : r,
                               ),
@@ -891,8 +735,7 @@ export function SalesDrawer({
                                 j === i
                                   ? {
                                       ...r,
-                                      operator: e.target
-                                        .value as TerritoryRule["operator"],
+                                      operator: e.target.value as TerritoryRule["operator"],
                                       value: e.target.value === "in" ? [] : "",
                                     }
                                   : r,
@@ -900,20 +743,16 @@ export function SalesDrawer({
                             )
                           }
                         >
-                          {["equals", "in", "contains", "gte", "lte"].map(
-                            (v) => (
-                              <option key={v} value={v}>
-                                {t(v)}
-                              </option>
-                            ),
-                          )}
+                          {["equals", "in", "contains", "gte", "lte"].map((v) => (
+                            <option key={v} value={v}>
+                              {t(v)}
+                            </option>
+                          ))}
                         </Select>
                         <Input
                           aria-label={t("ruleValue")}
                           value={
-                            Array.isArray(rule.value)
-                              ? rule.value.join(",")
-                              : String(rule.value)
+                            Array.isArray(rule.value) ? rule.value.join(",") : String(rule.value)
                           }
                           onChange={(e) =>
                             setRules(
@@ -923,9 +762,7 @@ export function SalesDrawer({
                                       ...r,
                                       value:
                                         r.operator === "in"
-                                          ? e.target.value
-                                              .split(",")
-                                              .map((v) => v.trim())
+                                          ? e.target.value.split(",").map((v) => v.trim())
                                           : r.field === "employeeCount"
                                             ? Number(e.target.value)
                                             : e.target.value,
@@ -937,9 +774,7 @@ export function SalesDrawer({
                         />
                         <Button
                           variant="ghost"
-                          onClick={() =>
-                            setRules(rules.filter((_, j) => i !== j))
-                          }
+                          onClick={() => setRules(rules.filter((_, j) => i !== j))}
                         >
                           {t("remove")}
                         </Button>
@@ -948,10 +783,7 @@ export function SalesDrawer({
                     <Button
                       variant="outline"
                       onClick={() =>
-                        setRules([
-                          ...rules,
-                          { field: "country", operator: "equals", value: "" },
-                        ])
+                        setRules([...rules, { field: "country", operator: "equals", value: "" }])
                       }
                     >
                       {t("addRule")}
@@ -970,9 +802,7 @@ export function SalesDrawer({
                           missing: preview.missingLocations,
                         })}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        {t("manualProtected")}
-                      </p>
+                      <p className="text-xs text-slate-500">{t("manualProtected")}</p>
                       {preview.accounts.length > 50 ? (
                         <p className="text-xs text-muted-foreground">
                           {t("previewLimit", {
@@ -986,9 +816,7 @@ export function SalesDrawer({
                           key={a.id}
                           className="flex flex-wrap items-center justify-between gap-2 border-t py-2 text-sm"
                         >
-                          <Link href={`/entities/customers?row=${a.partyId}`}>
-                            {a.name}
-                          </Link>
+                          <Link href={`/entities/customers?row=${a.partyId}`}>{a.name}</Link>
                           <Badge>{t(a.status)}</Badge>
                           {a.status === "missing_location" && a.addressId ? (
                             <LocationVerification
@@ -1017,7 +845,7 @@ export function SalesDrawer({
         ) : null}
       </div>
     </UrlDrawer>
-  )
+  );
 }
 function LocationVerification({
   addressId,
@@ -1086,9 +914,7 @@ function LocationVerification({
         />
       </div>
       <Button
-        disabled={
-          busy || !longitude.trim() || !latitude.trim() || !reason.trim()
-        }
+        disabled={busy || !longitude.trim() || !latitude.trim() || !reason.trim()}
         variant="outline"
         onClick={save}
       >

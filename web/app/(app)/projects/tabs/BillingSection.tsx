@@ -1,86 +1,86 @@
-'use client'
+"use client";
 
-import { useMoney } from '@/components/money-provider'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
-import { useAppAction } from '@/lib/use-app-action'
-import { PagedTable } from '../../../../components/paged-table'
+import { useMoney } from "@/components/money-provider";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { Badge, Button, Card, CardContent, Input, Label, Select } from "@openbooks/ui";
+import { useAppAction } from "@/lib/use-app-action";
+import { PagedTable } from "../../../../components/paged-table";
 import {
   ApplicationsBillingWorkspace,
   type ApplicationIncomeAccount,
-} from '../../construction/ConstructionClient'
-import { DateField } from '@/components/date-field'
+} from "../../construction/ConstructionClient";
+import { DateField } from "@/components/date-field";
 /** The banner's figure on the project's billing basis (see lib/project-available-to-bill). */
 export type AvailableToBillClient =
-  | { basis: 'rates'; amount: string }
-  | { basis: 'contract'; amount: string; contractValue: string; invoicedToDate: string }
-  | { basis: 'contract_unset'; invoicedToDate: string }
+  | { basis: "rates"; amount: string }
+  | { basis: "contract"; amount: string; contractValue: string; invoicedToDate: string }
+  | { basis: "contract_unset"; invoicedToDate: string };
 
 export interface UnbilledClient {
-  revenue: string
-  cost: string
-  hours: number
-  timeEntryCount: number
-  costLineCount: number
-  availableToBill: AvailableToBillClient
+  revenue: string;
+  cost: string;
+  hours: number;
+  timeEntryCount: number;
+  costLineCount: number;
+  availableToBill: AvailableToBillClient;
 }
 
 /** Effective invoicing/backup defaults for this project, resolved through the
  *  project-type ← customer ← project cascade. Seeds the request-billing form. */
 export interface EffectiveInvoicingClient {
-  billingProcedure: 'standard' | 'application_for_payment'
-  allowedBases: string[]
-  defaultBasis: string
-  backupRequired: boolean
-  backupType: string
-  allowedBackupTypes: string[]
-  source: { basis: string; backupRequired: string; backupType: string; template: string }
+  billingProcedure: "standard" | "application_for_payment";
+  allowedBases: string[];
+  defaultBasis: string;
+  backupRequired: boolean;
+  backupType: string;
+  allowedBackupTypes: string[];
+  source: { basis: string; backupRequired: string; backupType: string; template: string };
 }
 
 export interface BillableFieldTicketClient {
-  id: string
-  documentNumber: string
-  documentDate: string
-  periodStart: string
-  periodEnd: string
-  customerSigned: boolean
-  unbilledHours: string
+  id: string;
+  documentNumber: string;
+  documentDate: string;
+  periodStart: string;
+  periodEnd: string;
+  customerSigned: boolean;
+  unbilledHours: string;
 }
 
 export interface BillingRequestClient {
-  id: string
-  requestNumber: string
-  invoiceType: string
-  basis: string
-  drawAmount: string | null
-  startDate: string | null
-  cutoffDate: string | null
-  backupRequired: boolean
-  backupType: string
-  status: string
+  id: string;
+  requestNumber: string;
+  invoiceType: string;
+  basis: string;
+  drawAmount: string | null;
+  startDate: string | null;
+  cutoffDate: string | null;
+  backupRequired: boolean;
+  backupType: string;
+  status: string;
   /** Whether a backup packet is stored for the request's invoice. */
-  hasBackup: boolean
-  invoiceDocumentId: string | null
-  invoiceNumber: string | null
-  invoiceStatus: string | null
-  invoiceTotal: string | null
-  fieldTicketCount: number
+  hasBackup: boolean;
+  invoiceDocumentId: string | null;
+  invoiceNumber: string | null;
+  invoiceStatus: string | null;
+  invoiceTotal: string | null;
+  fieldTicketCount: number;
 }
 
-const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
-  open: 'warning',
-  invoiced: 'success',
-  closed: 'secondary',
-  cancelled: 'outline',
-}
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "warning" | "outline"> = {
+  open: "warning",
+  invoiced: "success",
+  closed: "secondary",
+  cancelled: "outline",
+};
 
-const field = 'space-y-1.5'
+const field = "space-y-1.5";
 
 export function BillingSection({
   projectId,
@@ -94,85 +94,95 @@ export function BillingSection({
   formOpen,
   onFormOpenChange,
 }: {
-  projectId: string
-  unbilled: UnbilledClient
-  requests: BillingRequestClient[]
-  fieldTickets: BillableFieldTicketClient[]
-  invoicing: EffectiveInvoicingClient
-  canManage: boolean
+  projectId: string;
+  unbilled: UnbilledClient;
+  requests: BillingRequestClient[];
+  fieldTickets: BillableFieldTicketClient[];
+  invoicing: EffectiveInvoicingClient;
+  canManage: boolean;
   applicationPermissions: {
-    canRead: boolean
-    canCreate: boolean
-    canApprove: boolean
-    canInvoice: boolean
-  }
-  applicationIncomeAccounts: ApplicationIncomeAccount[]
+    canRead: boolean;
+    canCreate: boolean;
+    canApprove: boolean;
+    canInvoice: boolean;
+  };
+  applicationIncomeAccounts: ApplicationIncomeAccount[];
   /** Request-billing form is opened from the flyout Actions menu. */
-  formOpen: boolean
-  onFormOpenChange: (open: boolean) => void
+  formOpen: boolean;
+  onFormOpenChange: (open: boolean) => void;
 }) {
-  const { money } = useMoney()
-  const t = useTranslations('projects.billing')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
+  const { money } = useMoney();
+  const t = useTranslations("projects.billing");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
   // All three billing actions run on the shared action path: a refusal pins
   // beside the section until the next action (a toast alone never survives
   // attention), and busy always releases through the package's finally — a
   // slow or failed request can never wedge the buttons disabled.
-  const { busy, refusal, execute, refuse } = useAppAction()
+  const { busy, refusal, execute, refuse } = useAppAction();
   // A backup that fails to assemble is pinned to its request row (never a
   // transient toast, never silent): the invoice exists but cannot be
   // issued until the packet exists, and the row carries the remedy.
   // Declared before the applications early-return: hooks run unconditionally.
-  const [backupFailures, setBackupFailures] = useState<Record<string, string>>({})
+  const [backupFailures, setBackupFailures] = useState<Record<string, string>>({});
 
   // Seed the request-billing form from the resolved cascade defaults.
-  const [invoiceType, setInvoiceType] = useState('progress')
-  const [basis, setBasis] = useState(invoicing.defaultBasis)
-  const [drawAmount, setDrawAmount] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [cutoffDate, setCutoffDate] = useState('')
-  const [invoiceDescription, setInvoiceDescription] = useState('')
-  const [customerPo, setCustomerPo] = useState('')
-  const [backupRequired, setBackupRequired] = useState(invoicing.backupRequired)
-  const [backupType, setBackupType] = useState(invoicing.backupType)
-  const [selectedFieldTicketIds, setSelectedFieldTicketIds] = useState<Set<string>>(new Set())
+  const [invoiceType, setInvoiceType] = useState("progress");
+  const [basis, setBasis] = useState(invoicing.defaultBasis);
+  const [drawAmount, setDrawAmount] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [cutoffDate, setCutoffDate] = useState("");
+  const [invoiceDescription, setInvoiceDescription] = useState("");
+  const [customerPo, setCustomerPo] = useState("");
+  const [backupRequired, setBackupRequired] = useState(invoicing.backupRequired);
+  const [backupType, setBackupType] = useState(invoicing.backupType);
+  const [selectedFieldTicketIds, setSelectedFieldTicketIds] = useState<Set<string>>(new Set());
 
   function closeForm() {
-    setInvoiceType('progress')
-    setBasis(invoicing.defaultBasis)
-    setDrawAmount('')
-    setStartDate('')
-    setCutoffDate('')
-    setInvoiceDescription('')
-    setCustomerPo('')
-    setBackupRequired(invoicing.backupRequired)
-    setBackupType(invoicing.backupType)
-    setSelectedFieldTicketIds(new Set())
-    onFormOpenChange(false)
+    setInvoiceType("progress");
+    setBasis(invoicing.defaultBasis);
+    setDrawAmount("");
+    setStartDate("");
+    setCutoffDate("");
+    setInvoiceDescription("");
+    setCustomerPo("");
+    setBackupRequired(invoicing.backupRequired);
+    setBackupType(invoicing.backupType);
+    setSelectedFieldTicketIds(new Set());
+    onFormOpenChange(false);
   }
 
   // The project type constrains which backup formats are offered; fall back to the
   // full catalog if it didn't restrict them. 'none' is handled by the required toggle.
-  const ALL_BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only']
-  const allowed = invoicing.allowedBackupTypes.filter((b) => b !== 'none')
-  const backupTypeOptions = allowed.length ? allowed : ALL_BACKUP_TYPES
+  const ALL_BACKUP_TYPES = [
+    "costed_timesheets",
+    "timesheets_purchases",
+    "purchases",
+    "purchases_shop_time",
+    "quote_only",
+  ];
+  const allowed = invoicing.allowedBackupTypes.filter((b) => b !== "none");
+  const backupTypeOptions = allowed.length ? allowed : ALL_BACKUP_TYPES;
   // Fail closed when setup resolves to no available basis (for example, the
   // type only allows Field Tickets while that subordinate feature is off).
-  const basisOptions = invoicing.allowedBases
+  const basisOptions = invoicing.allowedBases;
 
   function toggleFieldTicket(id: string) {
     setSelectedFieldTicketIds((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
-  if (invoicing.billingProcedure === 'application_for_payment') {
+  if (invoicing.billingProcedure === "application_for_payment") {
     if (!applicationPermissions.canRead) {
-      return <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">{t('applicationsPermissionRequired')}</p>
+      return (
+        <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+          {t("applicationsPermissionRequired")}
+        </p>
+      );
     }
     return (
       <ApplicationsBillingWorkspace
@@ -182,38 +192,38 @@ export function BillingSection({
         canApprove={applicationPermissions.canApprove}
         canInvoice={applicationPermissions.canInvoice}
       />
-    )
+    );
   }
 
   async function submit() {
     await execute(
       () =>
-        fetchAction('/api/billing-requests', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        fetchAction("/api/billing-requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId,
             invoiceType,
             basis,
-            drawAmount: basis === 'draw_amount' ? drawAmount || null : null,
-            startDate: basis === 'date_range' ? startDate || null : null,
-            cutoffDate: basis === 'date_range' ? cutoffDate || null : null,
+            drawAmount: basis === "draw_amount" ? drawAmount || null : null,
+            startDate: basis === "date_range" ? startDate || null : null,
+            cutoffDate: basis === "date_range" ? cutoffDate || null : null,
             invoiceDescription: invoiceDescription || null,
             customerPo: customerPo || null,
             backupRequired,
-            backupType: backupRequired ? backupType : 'none',
-            fieldTicketIds: basis === 'field_ticket' ? [...selectedFieldTicketIds] : [],
+            backupType: backupRequired ? backupType : "none",
+            fieldTicketIds: basis === "field_ticket" ? [...selectedFieldTicketIds] : [],
           }),
         }),
       {
-        fallbackMessage: t('requestFailed'),
-        successMessage: t('requestCreated'),
+        fallbackMessage: t("requestFailed"),
+        successMessage: t("requestCreated"),
         onOk: () => {
-          closeForm()
-          router.refresh()
+          closeForm();
+          router.refresh();
         },
       },
-    )
+    );
   }
 
   async function createInvoice(id: string) {
@@ -222,106 +232,117 @@ export function BillingSection({
     // existing invoice's refusal instead of a second invoice beside it.
     await execute(
       () =>
-        fetchAction<{ documentId?: string; documentNumber?: string; backup?: { status: string; error?: string } }>(
-          `/api/billing-requests/${id}/create-invoice`,
-          { method: 'POST' },
-        ),
+        fetchAction<{
+          documentId?: string;
+          documentNumber?: string;
+          backup?: { status: string; error?: string };
+        }>(`/api/billing-requests/${id}/create-invoice`, { method: "POST" }),
       {
-        fallbackMessage: t('invoiceFailed'),
+        fallbackMessage: t("invoiceFailed"),
         onOk: (data) => {
           // Success trusts the status — but an ok response with no document
           // is a broken contract, not an invoice: refuse visibly through the
           // same pin-and-toast instead of navigating nowhere.
           if (!data.documentId) {
-            refuse(null, t('invoiceFailed'))
-            return
+            refuse(null, t("invoiceFailed"));
+            return;
           }
           // The invoice stands but its required packet is missing: stay on
           // the tab with the failure pinned to the row (which now offers
           // Generate backup) instead of navigating to an unissuable draft.
-          if (data.backup?.status === 'failed') {
-            setBackupFailures((current) => ({ ...current, [id]: data.backup?.error ?? t('backupFailed') }))
-            router.refresh()
-            return
+          if (data.backup?.status === "failed") {
+            setBackupFailures((current) => ({
+              ...current,
+              [id]: data.backup?.error ?? t("backupFailed"),
+            }));
+            router.refresh();
+            return;
           }
-          toast.success(t('invoiceCreated', { number: data.documentNumber ?? '' }))
-          router.push(`/ar/invoices?doc=${data.documentId}&mode=edit`)
+          toast.success(t("invoiceCreated", { number: data.documentNumber ?? "" }));
+          router.push(`/ar/invoices?doc=${data.documentId}&mode=edit`);
         },
       },
-    )
+    );
   }
 
   async function generateBackup(id: string) {
     await execute(
       async () => {
-        const result = await fetchAction(`/api/billing-requests/${id}/backup`, { method: 'POST' })
+        const result = await fetchAction(`/api/billing-requests/${id}/backup`, { method: "POST" });
         // A failed generation pins to the row as well as the section, so
         // the remedy stays beside the request that needs it.
         if (!result.ok) {
-          setBackupFailures((current) => ({ ...current, [id]: result.error.serverMessage || t('backupFailed') }))
+          setBackupFailures((current) => ({
+            ...current,
+            [id]: result.error.serverMessage || t("backupFailed"),
+          }));
         }
-        return result
+        return result;
       },
       {
-        fallbackMessage: t('backupFailed'),
+        fallbackMessage: t("backupFailed"),
         onOk: () => {
           setBackupFailures((current) => {
-            const next = { ...current }
-            delete next[id]
-            return next
-          })
-          toast.success(t('backupGenerated'))
-          router.refresh()
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+          toast.success(t("backupGenerated"));
+          router.refresh();
         },
       },
-    )
+    );
   }
 
   async function cancelRequest(id: string) {
     await execute(
       () =>
         fetchAction(`/api/billing-requests/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'cancel' }),
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "cancel" }),
         }),
       {
-        fallbackMessage: t('requestFailed'),
+        fallbackMessage: t("requestFailed"),
         onOk: () => router.refresh(),
       },
-    )
+    );
   }
 
   const statusLabel = (s: string) => {
     try {
-      return t(`status.${s}`)
+      return t(`status.${s}`);
     } catch {
-      return s
+      return s;
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
-      <ActionAlert error={refusal} fallbackMessage={t('requestFailed')} />
+      <ActionAlert error={refusal} fallbackMessage={t("requestFailed")} />
       {/* Unbilled banner (no inline trigger — Request billing lives in the Actions menu). */}
       <Card>
         <CardContent className="p-4">
           <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            {t('availableToBill')}
+            {t("availableToBill")}
           </div>
-          {unbilled.availableToBill.basis === 'contract_unset' ? (
+          {unbilled.availableToBill.basis === "contract_unset" ? (
             <>
-              <div className="text-base font-medium text-amber-700 dark:text-amber-300">{t('contractUnset')}</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">{t('contractUnsetRemedy')}</div>
+              <div className="text-base font-medium text-amber-700 dark:text-amber-300">
+                {t("contractUnset")}
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {t("contractUnsetRemedy")}
+              </div>
             </>
           ) : (
             <>
               <div className="text-2xl font-semibold tabular-nums text-teal-700 dark:text-teal-300">
                 {money(unbilled.availableToBill.amount)}
               </div>
-              {unbilled.availableToBill.basis === 'contract' ? (
+              {unbilled.availableToBill.basis === "contract" ? (
                 <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('contractRemaining', {
+                  {t("contractRemaining", {
                     contract: money(unbilled.availableToBill.contractValue),
                     invoiced: money(unbilled.availableToBill.invoicedToDate),
                   })}
@@ -330,7 +351,7 @@ export function BillingSection({
             </>
           )}
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            {t('unbilledDetail', {
+            {t("unbilledDetail", {
               entries: unbilled.timeEntryCount,
               hours: unbilled.hours.toFixed(1),
               lines: unbilled.costLineCount,
@@ -344,49 +365,75 @@ export function BillingSection({
         <Card>
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('requestBilling')}</h3>
-              <Button variant="ghost" size="sm" onClick={closeForm} disabled={busy}>{tCommon('actions.cancel')}</Button>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("requestBilling")}
+              </h3>
+              <Button variant="ghost" size="sm" onClick={closeForm} disabled={busy}>
+                {tCommon("actions.cancel")}
+              </Button>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className={field}>
-                <Label>{t('invoiceType')}</Label>
-                <Select value={invoiceType} disabled={busy} onChange={(e) => setInvoiceType(e.target.value)}>
-                  <option value="progress">{t('type.progress')}</option>
-                  <option value="final">{t('type.final')}</option>
+                <Label>{t("invoiceType")}</Label>
+                <Select
+                  value={invoiceType}
+                  disabled={busy}
+                  onChange={(e) => setInvoiceType(e.target.value)}
+                >
+                  <option value="progress">{t("type.progress")}</option>
+                  <option value="final">{t("type.final")}</option>
                 </Select>
               </div>
               <div className={field}>
-                <Label>{t('basis')}</Label>
+                <Label>{t("basis")}</Label>
                 <Select value={basis} disabled={busy} onChange={(e) => setBasis(e.target.value)}>
                   {basisOptions.map((b) => (
-                    <option key={b} value={b}>{t(`basisOpt.${b}`)}</option>
+                    <option key={b} value={b}>
+                      {t(`basisOpt.${b}`)}
+                    </option>
                   ))}
                 </Select>
               </div>
-              {basis === 'draw_amount' ? (
+              {basis === "draw_amount" ? (
                 <div className={field}>
-                  <Label>{t('drawAmount')}</Label>
-                  <Input disabled={busy} inputMode="decimal" className="text-right tabular-nums" value={drawAmount} onChange={(e) => setDrawAmount(e.target.value)} />
+                  <Label>{t("drawAmount")}</Label>
+                  <Input
+                    disabled={busy}
+                    inputMode="decimal"
+                    className="text-right tabular-nums"
+                    value={drawAmount}
+                    onChange={(e) => setDrawAmount(e.target.value)}
+                  />
                 </div>
               ) : null}
-              {basis === 'date_range' ? (
+              {basis === "date_range" ? (
                 <>
                   <div className={field}>
-                    <Label>{t('startDate')}</Label>
-                    <DateField disabled={busy} value={startDate} onChange={(value) => setStartDate(value)} />
+                    <Label>{t("startDate")}</Label>
+                    <DateField
+                      disabled={busy}
+                      value={startDate}
+                      onChange={(value) => setStartDate(value)}
+                    />
                   </div>
                   <div className={field}>
-                    <Label>{t('cutoffDate')}</Label>
-                    <DateField disabled={busy} value={cutoffDate} onChange={(value) => setCutoffDate(value)} />
+                    <Label>{t("cutoffDate")}</Label>
+                    <DateField
+                      disabled={busy}
+                      value={cutoffDate}
+                      onChange={(value) => setCutoffDate(value)}
+                    />
                   </div>
                 </>
               ) : null}
-              {basis === 'field_ticket' ? (
+              {basis === "field_ticket" ? (
                 <div className={`${field} sm:col-span-2 lg:col-span-4`}>
                   <div className="flex items-end justify-between gap-4">
                     <div>
-                      <Label>{t('fieldTickets')}</Label>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{t('fieldTicketHint')}</p>
+                      <Label>{t("fieldTickets")}</Label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {t("fieldTicketHint")}
+                      </p>
                     </div>
                     {fieldTickets.length > 0 ? (
                       <Button
@@ -394,26 +441,31 @@ export function BillingSection({
                         size="sm"
                         variant="ghost"
                         disabled={busy}
-                        onClick={() => setSelectedFieldTicketIds(
-                          selectedFieldTicketIds.size === fieldTickets.length
-                            ? new Set()
-                            : new Set(fieldTickets.map((ticket) => ticket.id)),
-                        )}
+                        onClick={() =>
+                          setSelectedFieldTicketIds(
+                            selectedFieldTicketIds.size === fieldTickets.length
+                              ? new Set()
+                              : new Set(fieldTickets.map((ticket) => ticket.id)),
+                          )
+                        }
                       >
                         {selectedFieldTicketIds.size === fieldTickets.length
-                          ? tCommon('actions.clear')
-                          : t('selectAll')}
+                          ? tCommon("actions.clear")
+                          : t("selectAll")}
                       </Button>
                     ) : null}
                   </div>
                   {fieldTickets.length === 0 ? (
                     <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                      {t('noBillableFieldTickets')}
+                      {t("noBillableFieldTickets")}
                     </div>
                   ) : (
                     <div className="max-h-64 divide-y divide-slate-200 overflow-y-auto rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                       {fieldTickets.map((ticket) => (
-                        <label key={ticket.id} className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-900/60">
+                        <label
+                          key={ticket.id}
+                          className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-900/60"
+                        >
                           <input
                             type="checkbox"
                             checked={selectedFieldTicketIds.has(ticket.id)}
@@ -426,11 +478,12 @@ export function BillingSection({
                               {ticket.documentNumber}
                             </span>
                             <span className="block text-xs text-slate-500 dark:text-slate-400">
-                              {ticket.periodStart} – {ticket.periodEnd} · {Number(ticket.unbilledHours).toFixed(1)}h
+                              {ticket.periodStart} – {ticket.periodEnd} ·{" "}
+                              {Number(ticket.unbilledHours).toFixed(1)}h
                             </span>
                           </span>
-                          <Badge variant={ticket.customerSigned ? 'success' : 'outline'}>
-                            {ticket.customerSigned ? t('customerSigned') : t('customerUnsigned')}
+                          <Badge variant={ticket.customerSigned ? "success" : "outline"}>
+                            {ticket.customerSigned ? t("customerSigned") : t("customerUnsigned")}
                           </Badge>
                         </label>
                       ))}
@@ -439,26 +492,44 @@ export function BillingSection({
                 </div>
               ) : null}
               <div className={`${field} lg:col-span-2`}>
-                <Label>{t('description')}</Label>
-                <Input disabled={busy} value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} />
+                <Label>{t("description")}</Label>
+                <Input
+                  disabled={busy}
+                  value={invoiceDescription}
+                  onChange={(e) => setInvoiceDescription(e.target.value)}
+                />
               </div>
               <div className={field}>
-                <Label>{t('customerPo')}</Label>
-                <Input disabled={busy} value={customerPo} onChange={(e) => setCustomerPo(e.target.value)} />
+                <Label>{t("customerPo")}</Label>
+                <Input
+                  disabled={busy}
+                  value={customerPo}
+                  onChange={(e) => setCustomerPo(e.target.value)}
+                />
               </div>
               <div className={field}>
-                <Label>{t('backupRequired')}</Label>
-                <Select value={backupRequired ? 'yes' : 'no'} disabled={busy} onChange={(e) => setBackupRequired(e.target.value === 'yes')}>
-                  <option value="yes">{tCommon('labels.yes')}</option>
-                  <option value="no">{tCommon('labels.no')}</option>
+                <Label>{t("backupRequired")}</Label>
+                <Select
+                  value={backupRequired ? "yes" : "no"}
+                  disabled={busy}
+                  onChange={(e) => setBackupRequired(e.target.value === "yes")}
+                >
+                  <option value="yes">{tCommon("labels.yes")}</option>
+                  <option value="no">{tCommon("labels.no")}</option>
                 </Select>
               </div>
               {backupRequired ? (
                 <div className={field}>
-                  <Label>{t('backupType')}</Label>
-                  <Select value={backupType} disabled={busy} onChange={(e) => setBackupType(e.target.value)}>
+                  <Label>{t("backupType")}</Label>
+                  <Select
+                    value={backupType}
+                    disabled={busy}
+                    onChange={(e) => setBackupType(e.target.value)}
+                  >
                     {backupTypeOptions.map((bt) => (
-                      <option key={bt} value={bt}>{t(`backup.${bt}`)}</option>
+                      <option key={bt} value={bt}>
+                        {t(`backup.${bt}`)}
+                      </option>
                     ))}
                   </Select>
                 </div>
@@ -466,18 +537,18 @@ export function BillingSection({
             </div>
             {basisOptions.length === 0 ? (
               <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                {t('noAvailableBasis')}
+                {t("noAvailableBasis")}
               </p>
             ) : null}
             <Button
               onClick={submit}
               disabled={
-                busy
-                || !basisOptions.includes(basis)
-                || (basis === 'field_ticket' && selectedFieldTicketIds.size === 0)
+                busy ||
+                !basisOptions.includes(basis) ||
+                (basis === "field_ticket" && selectedFieldTicketIds.size === 0)
               }
             >
-              {busy ? tCommon('actions.saving') : t('createRequest')}
+              {busy ? tCommon("actions.saving") : t("createRequest")}
             </Button>
           </CardContent>
         </Card>
@@ -485,61 +556,127 @@ export function BillingSection({
 
       {/* Requests table */}
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('requests')}</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t("requests")}
+        </h3>
         <PagedTable
           rows={requests}
           rowKey={(r) => r.id}
           searchable
           searchLayout="drawer"
-          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('noRequests')}</p>}
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t("noRequests")}</p>}
           columns={[
-            { key: 'number', header: tCommon('labels.number'), cell: (r) => <span className="font-mono text-[13px] font-semibold">{r.requestNumber}</span>, search: (r) => r.requestNumber },
-            { key: 'type', header: t('invoiceType'), cell: (r) => t(`type.${r.invoiceType}`) },
             {
-              key: 'basis',
-              header: t('basis'),
+              key: "number",
+              header: tCommon("labels.number"),
+              cell: (r) => (
+                <span className="font-mono text-[13px] font-semibold">{r.requestNumber}</span>
+              ),
+              search: (r) => r.requestNumber,
+            },
+            { key: "type", header: t("invoiceType"), cell: (r) => t(`type.${r.invoiceType}`) },
+            {
+              key: "basis",
+              header: t("basis"),
               cell: (r) => (
                 <span className="text-slate-600 dark:text-slate-300">
                   {t(`basisOpt.${r.basis}`)}
-                  {r.basis === 'field_ticket' ? ` · ${t('ticketCount', { count: r.fieldTicketCount })}` : ''}
+                  {r.basis === "field_ticket"
+                    ? ` · ${t("ticketCount", { count: r.fieldTicketCount })}`
+                    : ""}
                 </span>
               ),
             },
-            { key: 'backup', header: t('backupType'), cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.backupRequired ? t(`backup.${r.backupType}`) : '—'}</span> },
-            { key: 'status', header: tCommon('labels.status'), cell: (r) => <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>{statusLabel(r.status)}</Badge> },
             {
-              key: 'invoice', header: t('invoice'),
-              cell: (r) => r.invoiceDocumentId ? (
-                <Link href={`/ar/invoices?doc=${r.invoiceDocumentId}`} className="font-mono text-[13px] text-teal-700 hover:underline dark:text-teal-300">{r.invoiceNumber}</Link>
-              ) : '—',
+              key: "backup",
+              header: t("backupType"),
+              cell: (r) => (
+                <span className="text-slate-600 dark:text-slate-300">
+                  {r.backupRequired ? t(`backup.${r.backupType}`) : "—"}
+                </span>
+              ),
             },
             {
-              key: 'actions', header: tCommon('labels.actions'), align: 'right',
+              key: "status",
+              header: tCommon("labels.status"),
+              cell: (r) => (
+                <Badge variant={STATUS_VARIANT[r.status] ?? "secondary"}>
+                  {statusLabel(r.status)}
+                </Badge>
+              ),
+            },
+            {
+              key: "invoice",
+              header: t("invoice"),
+              cell: (r) =>
+                r.invoiceDocumentId ? (
+                  <Link
+                    href={`/ar/invoices?doc=${r.invoiceDocumentId}`}
+                    className="font-mono text-[13px] text-teal-700 hover:underline dark:text-teal-300"
+                  >
+                    {r.invoiceNumber}
+                  </Link>
+                ) : (
+                  "—"
+                ),
+            },
+            {
+              key: "actions",
+              header: tCommon("labels.actions"),
+              align: "right",
               cell: (r) => (
                 <div className="flex flex-col items-end gap-1">
                   <div className="flex items-center justify-end gap-2">
-                    {r.status === 'open' && (applicationPermissions.canCreate || canManage) ? (
+                    {r.status === "open" && (applicationPermissions.canCreate || canManage) ? (
                       <>
                         {applicationPermissions.canCreate ? (
-                          <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>{t('createInvoice')}</Button>
+                          <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>
+                            {t("createInvoice")}
+                          </Button>
                         ) : null}
                         {canManage ? (
-                          <Button size="sm" variant="ghost" onClick={() => cancelRequest(r.id)} disabled={busy}>{tCommon('actions.cancel')}</Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => cancelRequest(r.id)}
+                            disabled={busy}
+                          >
+                            {tCommon("actions.cancel")}
+                          </Button>
                         ) : null}
                       </>
                     ) : null}
-                    {r.status === 'invoiced' && r.backupRequired && r.hasBackup && applicationPermissions.canRead ? (
-                      <a href={`/api/billing-requests/${r.id}/backup`} target="_blank" rel="noreferrer">
-                        <Button size="sm" variant="outline">{t('downloadBackup')}</Button>
+                    {r.status === "invoiced" &&
+                    r.backupRequired &&
+                    r.hasBackup &&
+                    applicationPermissions.canRead ? (
+                      <a
+                        href={`/api/billing-requests/${r.id}/backup`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button size="sm" variant="outline">
+                          {t("downloadBackup")}
+                        </Button>
                       </a>
                     ) : null}
-                    {r.status === 'invoiced' && r.backupRequired && !r.hasBackup && applicationPermissions.canCreate ? (
-                      <Button size="sm" variant="outline" onClick={() => generateBackup(r.id)} disabled={busy}>{t('generateBackup')}</Button>
+                    {r.status === "invoiced" &&
+                    r.backupRequired &&
+                    !r.hasBackup &&
+                    applicationPermissions.canCreate ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => generateBackup(r.id)}
+                        disabled={busy}
+                      >
+                        {t("generateBackup")}
+                      </Button>
                     ) : null}
                   </div>
                   {backupFailures[r.id] ? (
                     <p className="max-w-64 text-right text-xs text-red-700 dark:text-red-300">
-                      <span className="font-semibold">{t('backupFailed')}: </span>
+                      <span className="font-semibold">{t("backupFailed")}: </span>
                       {backupFailures[r.id]}
                     </p>
                   ) : null}
@@ -550,5 +687,5 @@ export function BillingSection({
         />
       </div>
     </div>
-  )
+  );
 }

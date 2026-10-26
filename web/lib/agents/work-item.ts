@@ -4,7 +4,11 @@ import { db } from "@openbooks/engine/platform/db";
 import { resolveStoredHref } from "@openbooks/engine/navigation/nav-registry";
 import type { ContinuousCloseAgentKey } from "@openbooks/engine/agents/continuous-close-config";
 import type { ContinuousCloseWorkItem } from "../../app/(app)/continuous-close/WorkItemDrawer";
-import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectInScope, workItemSubjectScopePredicate } from "./work-item-subsidiary-scope";
+import {
+  WORK_ITEM_SUBJECT_JOIN,
+  workItemSubjectInScope,
+  workItemSubjectScopePredicate,
+} from "./work-item-subsidiary-scope";
 
 type WorkItemDetailRow = {
   id: string;
@@ -85,7 +89,8 @@ export async function loadWorkItemDetail(
     readable.map((key) => sql`${key}`),
     sql`, `,
   )})`;
-  const detail = await db.execute<WorkItemDetailRow & { subject_subsidiary_id: string | null }>(sql`
+  const detail = await db.execute<WorkItemDetailRow & { subject_subsidiary_id: string | null }>(
+    sql`
     select w.*, f.rating,
            coalesce(subj_acct.subsidiary_id, subj_rec_acct.subsidiary_id, subj_doc.subsidiary_id) as subject_subsidiary_id
       from ai_work_items w
@@ -93,14 +98,23 @@ export async function loadWorkItemDetail(
       ${WORK_ITEM_SUBJECT_JOIN}
      where w.id = ${itemId} and w.org_id = ${orgId} and w.agent_key in ${readableSql}
        ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = detail[0];
-  if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subject_type, row.subject_subsidiary_id)) return null;
-  const evidence = await db.execute<EvidenceRow>(sql`
+  if (
+    !row ||
+    !workItemSubjectInScope(allowedSubsidiaryIds, row.subject_type, row.subject_subsidiary_id)
+  )
+    return null;
+  const evidence = await db.execute<EvidenceRow>(
+    sql`
     select id, kind, source_type, source_id, data
       from ai_work_item_evidence where work_item_id = ${itemId} and org_id = ${orgId}
      order by created_at, id
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     id: row.id,
     agentKey: row.agent_key,

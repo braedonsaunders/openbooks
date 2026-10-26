@@ -11,7 +11,13 @@ import {
   processAllocationRunOutboxRow,
 } from "../allocations/scheduling.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
-import { db, orgContext, type SqlExecutor, withBypassContext, withOrgContext } from "../platform/db.ts";
+import {
+  db,
+  orgContext,
+  type SqlExecutor,
+  withBypassContext,
+  withOrgContext,
+} from "../platform/db.ts";
 import {
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
   parseFlowEmailPayload,
@@ -102,10 +108,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
 export type SchedulerOutboxKind =
-  | SchedulerOutboxScanKind
-  | "approval_escalation"
-  | "flow_email"
-  | "allocation_run";
+  SchedulerOutboxScanKind | "approval_escalation" | "flow_email" | "allocation_run";
 
 const SCAN_REQUEUE_MS = 55_000;
 
@@ -119,10 +122,6 @@ export type OutboxRow = {
   lease_token: string;
   payload: unknown;
 };
-
-
-
-
 
 /**
  * The Redis-side handoff for one durable flow_email row. Deterministic job ids
@@ -174,7 +173,10 @@ export async function deliverFlowEmail(
   // them at send time instead of Redis holding file contents for days. The
   // keys derive from the row's deterministic job id, so a retry overwrites
   // the same blobs instead of orphaning a fresh random generation.
-  const attachments = await storeEmailAttachments(delivery.attachments, { storageKeySeed: jobId, orgId: row.org_id });
+  const attachments = await storeEmailAttachments(delivery.attachments, {
+    storageKeySeed: jobId,
+    orgId: row.org_id,
+  });
   const emailData = {
     orgId: row.org_id,
     to: delivery.to,
@@ -210,11 +212,10 @@ export async function deliverFlowEmail(
     });
     console.warn(
       `[scheduler] flow email enqueue for outbox row ${row.id} threw after queue acceptance ` +
-      `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
+        `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
     );
   }
 }
-
 
 export class SchedulerOutboxLeaseFencedError extends Error {
   constructor(id: string) {
@@ -229,8 +230,6 @@ export class SchedulerOutboxReplayError extends Error {
     this.name = "SchedulerOutboxReplayError";
   }
 }
-
-
 
 function errorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 1000);
@@ -287,7 +286,10 @@ async function insertTerminalFailureEvidence(
               where prior.outbox_row_id=${row.id} and prior.event='replay_authorized'),0)
     returning id
   `);
-  if (recorded.rows.length !== 1) throw new Error("scheduler terminal failure evidence was not stored; retry after restoring audit storage");
+  if (recorded.rows.length !== 1)
+    throw new Error(
+      "scheduler terminal failure evidence was not stored; retry after restoring audit storage",
+    );
 }
 
 /** Insert the singleton scan rows once; later ticks claim and reuse them. */
@@ -314,7 +316,7 @@ export async function ensureScanOutboxRows(): Promise<void> {
  * record the transition. */
 export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<number> {
   const recovered = await db.transaction(async (tx) => {
-    const result = (await tx.execute<{
+    const result = await tx.execute<{
       id: string;
       org_id: string | null;
       kind: SchedulerOutboxKind;
@@ -345,7 +347,7 @@ export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<num
                  (attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
                   and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
                   and terminal_failed_at = ${now}) as "becameTerminal"
-    `));
+    `);
     for (const row of result.rows) {
       if (!row.becameTerminal) continue;
       await insertTerminalFailureEvidence(tx, "crash_recovery_terminal_failure", row, {
@@ -402,29 +404,38 @@ async function ensureScanOrgFailureNotice(
   href: string,
 ): Promise<number> {
   return withOrgContext(orgId, async () => {
-    const recipients = (await db.execute<{ id: string }>(sql`
+    const recipients = (
+      await db.execute<{ id: string }>(sql`
       select distinct u.id::text as id
         from users u
         left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
         left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where u.org_id = ${orgId} and u.is_active
          and (u.is_super_admin or (r.permissions ? 'admin.setup.manage'))
-    `)).rows;
+    `)
+    ).rows;
     let written = 0;
     for (const recipient of recipients) {
-      const existing = (await db.execute<{ one: number }>(sql`
+      const existing = (
+        await db.execute<{ one: number }>(sql`
         select 1 as one from notifications
          where org_id = ${orgId} and user_id = ${recipient.id}::uuid
            and kind = ${kind} and href = ${href} and read_at is null
          limit 1
-      `)).rows[0];
+      `)
+      ).rows[0];
       if (existing) continue;
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = (
+        await db.execute<{ id: string }>(sql`
         insert into notifications (org_id, user_id, kind, title, body, href)
         values (${orgId}, ${recipient.id}::uuid, ${kind}, ${title}, ${body}, ${href})
         returning id
-      `)).rows[0]?.id;
-      if (!inserted) throw new Error("the scan-failure notice was not stored — no row was written; retry the action");
+      `)
+      ).rows[0]?.id;
+      if (!inserted)
+        throw new Error(
+          "the scan-failure notice was not stored — no row was written; retry the action",
+        );
       written += 1;
     }
     return written;
@@ -434,10 +445,12 @@ async function ensureScanOrgFailureNotice(
 /** Resolve a scan's failure notices after a fully clean pass, so a later failure re-fires. */
 async function resolveScanFailureNotices(kind: string): Promise<void> {
   // bypass: scheduler-tick — a clean pass resolves that scan's failure notices in every organization.
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update notifications set read_at = now(), updated_at = now()
      where kind = ${kind} and read_at is null
-  `));
+  `),
+  );
 }
 
 /**
@@ -514,10 +527,17 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
     for (const failure of result.orgErrors) add(failure.orgId, failure.error);
     if (result.skippedPolicies.length > 0) {
       // bypass: scheduler-tick — the unscoped dunning run reports policies from many organizations; this finds each owner.
-      const orgByPolicy = (await withBypassContext(() => db.execute<{ id: string; orgId: string }>(sql`
+      const orgByPolicy = (
+        await withBypassContext(() =>
+          db.execute<{ id: string; orgId: string }>(sql`
         select id, org_id as "orgId" from dunning_policies
-         where id in (${sql.join(result.skippedPolicies.map((p) => sql`${p.policyId}::uuid`), sql`, `)})
-      `))).rows;
+         where id in (${sql.join(
+           result.skippedPolicies.map((p) => sql`${p.policyId}::uuid`),
+           sql`, `,
+         )})
+      `),
+        )
+      ).rows;
       const orgOf = new Map(orgByPolicy.map((r) => [r.id, r.orgId]));
       for (const policy of result.skippedPolicies) {
         add(orgOf.get(policy.policyId) ?? null, `policy "${policy.policyName}": ${policy.reason}`);
@@ -526,20 +546,31 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
     const failedLetters = result.notices.filter((notice) => notice.status === "failed");
     if (failedLetters.length > 0) {
       // bypass: scheduler-tick — the unscoped dunning run reports letters from many organizations; this finds each owner.
-      const orgByDocument = (await withBypassContext(() => db.execute<{ id: string; orgId: string }>(sql`
+      const orgByDocument = (
+        await withBypassContext(() =>
+          db.execute<{ id: string; orgId: string }>(sql`
         select id, org_id as "orgId" from documents
-         where id in (${sql.join(failedLetters.map((n) => sql`${n.documentId}::uuid`), sql`, `)})
-      `))).rows;
+         where id in (${sql.join(
+           failedLetters.map((n) => sql`${n.documentId}::uuid`),
+           sql`, `,
+         )})
+      `),
+        )
+      ).rows;
       const orgOf = new Map(orgByDocument.map((r) => [r.id, r.orgId]));
       for (const notice of failedLetters) {
-        add(orgOf.get(notice.documentId) ?? null, `dunning letter for document ${notice.documentId} failed to stage`);
+        add(
+          orgOf.get(notice.documentId) ?? null,
+          `dunning letter for document ${notice.documentId} failed to stage`,
+        );
       }
     }
     await surfaceScanOrgFailures({
       scan: "dunning",
       noticeKind: DUNNING_SCAN_FAILED_NOTICE_KIND,
       href: COLLECTIONS_HREF,
-      remedy: "Review collection ladders and calendars in Collections; the scan retries automatically.",
+      remedy:
+        "Review collection ladders and calendars in Collections; the scan retries automatically.",
       problems,
       unattributed,
     });
@@ -548,9 +579,16 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "subscription_billing") {
     const { runDueSubscriptions } = await import("../billing/subscription-billing.ts");
     await runDueSubscriptions();
-    const { runRenewalScan } = await import('../billing/renewals.ts');
+    const { runRenewalScan } = await import("../billing/renewals.ts");
     const failures = await runRenewalScan();
-    await surfaceScanOrgFailures({ scan: 'subscription renewal', noticeKind: 'subscription_renewal_scan_failed', href: '/collections', remedy: 'Review the dated renewal policy and its responsible operator in Setup.', problems: new Map(failures.map(f => [f.orgId, [f.error]])), unattributed: [] });
+    await surfaceScanOrgFailures({
+      scan: "subscription renewal",
+      noticeKind: "subscription_renewal_scan_failed",
+      href: "/collections",
+      remedy: "Review the dated renewal policy and its responsible operator in Setup.",
+      problems: new Map(failures.map((f) => [f.orgId, [f.error]])),
+      unattributed: [],
+    });
     return;
   }
   if (row.kind === "autopay_collection") {
@@ -564,17 +602,16 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "autopay collection",
       noticeKind: AUTOPAY_SCAN_FAILED_NOTICE_KIND,
       href: COLLECTIONS_HREF,
-      remedy: "Review payment methods and enrollments in Collections; the scan retries automatically.",
+      remedy:
+        "Review payment methods and enrollments in Collections; the scan retries automatically.",
       problems,
       unattributed: [],
     });
     return;
   }
   if (row.kind === "saas_metrics") {
-    const {
-      recomputeOpenSaasMetrics,
-      saasMetricsScanTargets,
-    } = await import("../billing/metrics/metrics-ledger.ts");
+    const { recomputeOpenSaasMetrics, saasMetricsScanTargets } =
+      await import("../billing/metrics/metrics-ledger.ts");
     const targets = await saasMetricsScanTargets();
     const problems = new Map<string, string[]>();
     for (const orgId of targets.enabledOrgIds) {
@@ -626,7 +663,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "consolidated billing",
       noticeKind: "consolidated_billing_scan_failed",
       href: "/admin/setup/consolidation-groups",
-      remedy: "Review consolidation groups and their pending drafts in Setup → Consolidation groups; the scan retries automatically.",
+      remedy:
+        "Review consolidation groups and their pending drafts in Setup → Consolidation groups; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -643,7 +681,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "Stripe Billing import",
       noticeKind: "stripe_billing_import_scan_failed",
       href: "/admin/setup/payment-providers",
-      remedy: "Review the Stripe connection under Setup → Payment providers; the scan retries automatically.",
+      remedy:
+        "Review the Stripe connection under Setup → Payment providers; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -662,7 +701,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "Billing history import",
       noticeKind: "billing_import_sync_scan_failed",
       href: "/sync/billing-history",
-      remedy: "Review the billing connection on the billing history console; the scan retries automatically.",
+      remedy:
+        "Review the billing connection on the billing history console; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -679,7 +719,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "property billing",
       noticeKind: PROPERTY_BILLING_SCAN_FAILED_NOTICE_KIND,
       href: PROPERTY_MANAGEMENT_HREF,
-      remedy: "Review leases and billing setup in Property Management; the scan retries automatically.",
+      remedy:
+        "Review leases and billing setup in Property Management; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -706,7 +747,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "stored value",
       noticeKind: "stored_value_breakage_scan_failed",
       href: "/stored-value",
-      remedy: "Review stored-value programs and account configuration in Stored value; the scan retries automatically.",
+      remedy:
+        "Review stored-value programs and account configuration in Stored value; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -723,7 +765,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "expense amortization",
       noticeKind: "expense_amortization_scan_failed",
       href: "/accounting/amortization",
-      remedy: "Review the schedules in Accounting → Amortization and run amortization there; the scan retries automatically.",
+      remedy:
+        "Review the schedules in Accounting → Amortization and run amortization there; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -740,7 +783,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "demand forecast",
       noticeKind: "demand_forecast_scan_failed",
       href: "/inventory",
-      remedy: "Review planning policies and stock history in Inventory; the scan retries automatically.",
+      remedy:
+        "Review planning policies and stock history in Inventory; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -757,7 +801,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "tax provider commit",
       noticeKind: "tax_provider_commit_scan_failed",
       href: "/admin/setup/tax-setup",
-      remedy: "Review the tax provider setup and the failed rows in Setup → Taxes; the scan retries automatically.",
+      remedy:
+        "Review the tax provider setup and the failed rows in Setup → Taxes; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -784,7 +829,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "PSP payout pull",
       noticeKind: "psp_payout_pull_scan_failed",
       href: "/admin/setup/payment-providers",
-      remedy: "Review the provider connection and its scheduled-pull toggle under Setup → Payment providers (Shopify channels under Channels); the scan retries automatically.",
+      remedy:
+        "Review the provider connection and its scheduled-pull toggle under Setup → Payment providers (Shopify channels under Channels); the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -806,7 +852,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "tax ID revalidation",
       noticeKind: "tax_id_revalidation_scan_failed",
       href: "/admin/setup/tax-setup",
-      remedy: "Review customer tax IDs and the authority credentials in Setup → Taxes; the scan retries automatically.",
+      remedy:
+        "Review customer tax IDs and the authority credentials in Setup → Taxes; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -823,7 +870,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       scan: "signature reminder",
       noticeKind: "signature_reminder_scan_failed",
       href: "/estimates",
-      remedy: "Review open signature requests on quotes in Estimates; the scan retries automatically.",
+      remedy:
+        "Review open signature requests on quotes in Estimates; the scan retries automatically.",
       problems,
       unattributed: [],
     });
@@ -878,9 +926,10 @@ async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<vo
   // the final failure so a crash between them is impossible — and write the
   // append-only evidence row inside that same transaction:
   // terminalization cannot commit without durable evidence.
-  const tenantFailure = row.org_id === null
-    && (SCHEDULER_OUTBOX_SCAN_KINDS as readonly string[]).includes(row.kind)
-    && error instanceof SchedulerScanOrganizationError;
+  const tenantFailure =
+    row.org_id === null &&
+    (SCHEDULER_OUTBOX_SCAN_KINDS as readonly string[]).includes(row.kind) &&
+    error instanceof SchedulerScanOrganizationError;
   const terminal = !tenantFailure && row.attempt_count >= MAX_SCHEDULER_OUTBOX_ATTEMPTS;
   const marked = await db.transaction(async (tx) => {
     const result = await tx.execute<{ becameTerminal: boolean }>(sql`
@@ -952,7 +1001,7 @@ export async function processDueSchedulerOutbox(
   const passStartedWallMs = Date.now();
   const passClock = () => new Date(now.getTime() + (Date.now() - passStartedWallMs));
   await recoverStaleSchedulerOutbox(now);
-  const due = (await db.execute<{ id: string }>(sql`
+  const due = await db.execute<{ id: string }>(sql`
     select id from scheduler_outbox
      where status in ('pending','failed')
        and terminal_failed_at is null
@@ -960,14 +1009,14 @@ export async function processDueSchedulerOutbox(
        and next_attempt_at <= ${now}
      order by next_attempt_at
      limit ${Math.max(1, Math.min(limit, 200))}
-  `));
+  `);
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
   let fenced = 0;
   for (const candidate of due.rows) {
     const claimedAt = passClock();
-    const claimed = (await db.execute<OutboxRow>(sql`
+    const claimed = await db.execute<OutboxRow>(sql`
       update scheduler_outbox
          set status='running',
              attempt_count=attempt_count+1,
@@ -981,7 +1030,7 @@ export async function processDueSchedulerOutbox(
           and terminal_failed_at is null
           and attempt_count < ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
         returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token, payload
-     `));
+     `);
     const row = claimed.rows[0];
     if (!row) continue;
     processed++;
@@ -1025,21 +1074,8 @@ export async function processDueSchedulerOutbox(
 }
 
 /** Operator visibility after a crash: terminal and retrying failures stay here. */
-export async function listFailedSchedulerOutbox(limit = 100): Promise<Array<{
-  id: string;
-  orgId: string | null;
-  kind: SchedulerOutboxKind;
-  subjectId: string | null;
-  status: string;
-  attemptCount: number;
-  error: string | null;
-  nextAttemptAt: Date | null;
-  finishedAt: Date | null;
-  terminalFailedAt: Date | null;
-  terminalFailedBy: string | null;
-}>> {
-  // bypass: cross-org-by-design — operator visibility over every organization's and the installation's failed outbox rows.
-  const rows = await withBypassContext(() => db.execute<{
+export async function listFailedSchedulerOutbox(limit = 100): Promise<
+  Array<{
     id: string;
     orgId: string | null;
     kind: SchedulerOutboxKind;
@@ -1051,7 +1087,23 @@ export async function listFailedSchedulerOutbox(limit = 100): Promise<Array<{
     finishedAt: Date | null;
     terminalFailedAt: Date | null;
     terminalFailedBy: string | null;
-  }>(sql`
+  }>
+> {
+  // bypass: cross-org-by-design — operator visibility over every organization's and the installation's failed outbox rows.
+  const rows = await withBypassContext(() =>
+    db.execute<{
+      id: string;
+      orgId: string | null;
+      kind: SchedulerOutboxKind;
+      subjectId: string | null;
+      status: string;
+      attemptCount: number;
+      error: string | null;
+      nextAttemptAt: Date | null;
+      finishedAt: Date | null;
+      terminalFailedAt: Date | null;
+      terminalFailedBy: string | null;
+    }>(sql`
     select id, org_id as "orgId", kind, subject_id as "subjectId", status,
            attempt_count as "attemptCount", error, next_attempt_at as "nextAttemptAt",
            finished_at as "finishedAt",
@@ -1060,7 +1112,8 @@ export async function listFailedSchedulerOutbox(limit = 100): Promise<Array<{
      where status='failed'
      order by coalesce(finished_at, updated_at) desc
      limit ${Math.max(1, Math.min(limit, 500))}
-   `));
+   `),
+  );
   return rows.rows;
 }
 
@@ -1081,30 +1134,35 @@ export async function replayTerminalSchedulerOutbox(input: {
     throw new SchedulerOutboxReplayError("replay reason must be between 10 and 1000 characters");
   }
   if (orgContext.getStore()?.txDb) {
-    throw new SchedulerOutboxReplayError("Run scheduler replay outside the current transaction so its authorization and evidence own one atomic command");
+    throw new SchedulerOutboxReplayError(
+      "Run scheduler replay outside the current transaction so its authorization and evidence own one atomic command",
+    );
   }
   const now = input.now ?? new Date();
   // bypass: cross-org-by-design — one replay command handles tenant work and system scans after live actor authorization.
-  await withBypassContext(() => db.transaction(async (tx) => {
-    const actor = await tx.execute<{ is_super_admin: boolean }>(sql`
+  await withBypassContext(() =>
+    db.transaction(async (tx) => {
+      const actor = await tx.execute<{ is_super_admin: boolean }>(sql`
       select is_super_admin from users
        where id=${input.actorId} and org_id=${input.orgId} and is_active
        for share
     `);
-    if (!actor.rows[0]) {
-      throw new SchedulerOutboxReplayError("replay actor is not an active user in the organization");
-    }
-    const selected = await tx.execute<{
-      id: string;
-      org_id: string | null;
-      kind: SchedulerOutboxKind;
-      subject_id: string | null;
-      occurrence_key: string;
-      attempt_count: number;
-      error: string | null;
-      terminal_failed_at: Date | null;
-      terminal_failed_by: string | null;
-    }>(sql`
+      if (!actor.rows[0]) {
+        throw new SchedulerOutboxReplayError(
+          "replay actor is not an active user in the organization",
+        );
+      }
+      const selected = await tx.execute<{
+        id: string;
+        org_id: string | null;
+        kind: SchedulerOutboxKind;
+        subject_id: string | null;
+        occurrence_key: string;
+        attempt_count: number;
+        error: string | null;
+        terminal_failed_at: Date | null;
+        terminal_failed_by: string | null;
+      }>(sql`
       select id, org_id, kind, subject_id, occurrence_key, attempt_count,
              error, terminal_failed_at, terminal_failed_by
         from scheduler_outbox
@@ -1112,44 +1170,59 @@ export async function replayTerminalSchedulerOutbox(input: {
          and terminal_failed_at is not null
        for update
     `);
-    const before = selected.rows[0];
-    if (!before) throw new SchedulerOutboxReplayError("only terminal-failed scheduler outbox rows can be replayed");
-    if (before.org_id === null) {
-      if (!actor.rows[0].is_super_admin) {
-        throw new SchedulerOutboxReplayError("system scheduler replay requires an active platform administrator");
-      }
-    } else {
-      await tx.execute(sql`select id from role_assignments where org_id=${input.orgId} and user_id=${input.actorId} order by id for share`);
-      await tx.execute(sql`select id from app_roles where org_id=${input.orgId} and id in
+      const before = selected.rows[0];
+      if (!before)
+        throw new SchedulerOutboxReplayError(
+          "only terminal-failed scheduler outbox rows can be replayed",
+        );
+      if (before.org_id === null) {
+        if (!actor.rows[0].is_super_admin) {
+          throw new SchedulerOutboxReplayError(
+            "system scheduler replay requires an active platform administrator",
+          );
+        }
+      } else {
+        await tx.execute(
+          sql`select id from role_assignments where org_id=${input.orgId} and user_id=${input.actorId} order by id for share`,
+        );
+        await tx.execute(sql`select id from app_roles where org_id=${input.orgId} and id in
         (select role_id from role_assignments where org_id=${input.orgId} and user_id=${input.actorId}) order by id for share`);
-      await tx.execute(sql`select id from user_permission_overrides where org_id=${input.orgId} and user_id=${input.actorId} order by id for share`);
-      if (!await actorHasPermission(tx, input.orgId, input.actorId, "admin.setup.manage")) {
-        throw new SchedulerOutboxReplayError("scheduler replay requires admin.setup.manage");
+        await tx.execute(
+          sql`select id from user_permission_overrides where org_id=${input.orgId} and user_id=${input.actorId} order by id for share`,
+        );
+        if (!(await actorHasPermission(tx, input.orgId, input.actorId, "admin.setup.manage"))) {
+          throw new SchedulerOutboxReplayError("scheduler replay requires admin.setup.manage");
+        }
       }
-    }
-    const evidence = (await tx.execute<{ failure_generation: number }>(sql`
+      const evidence = (
+        await tx.execute<{ failure_generation: number }>(sql`
       select failure.failure_generation from scheduler_outbox_terminal_audit failure
         join scheduler_outbox outbox_row on outbox_row.id=failure.outbox_row_id
        where failure.outbox_row_id=${input.id} and failure.event <> 'replay_authorized'
          and failure.at=outbox_row.terminal_failed_at and failure.marked_by=outbox_row.terminal_failed_by
        order by failure.failure_generation desc limit 1
-    `)).rows[0];
-    if (!evidence) {
-      throw new SchedulerOutboxReplayError("terminal failure has no durable evidence to replay");
-    }
-    // Evidence first, authorization pin second, reset last — the storage
-    // guard enforces this ordering by refusing the stamp-clearing UPDATE
-    // unless both precede it inside this transaction.
-    await insertSchedulerOutboxReplayAudit(tx, before, { reason, actorId: input.actorId, at: now,
-      failureGeneration: evidence.failure_generation });
-    if (before.org_id === null) {
-      // The native predicate requires both the privileged login and its explicit scope.
-      await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
-    }
-    await tx.execute(sql`
-      select set_config('openbooks.scheduler_outbox_replay_org', ${before.org_id ?? '__system__'}::text, true)
+    `)
+      ).rows[0];
+      if (!evidence) {
+        throw new SchedulerOutboxReplayError("terminal failure has no durable evidence to replay");
+      }
+      // Evidence first, authorization pin second, reset last — the storage
+      // guard enforces this ordering by refusing the stamp-clearing UPDATE
+      // unless both precede it inside this transaction.
+      await insertSchedulerOutboxReplayAudit(tx, before, {
+        reason,
+        actorId: input.actorId,
+        at: now,
+        failureGeneration: evidence.failure_generation,
+      });
+      if (before.org_id === null) {
+        // The native predicate requires both the privileged login and its explicit scope.
+        await tx.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
+      }
+      await tx.execute(sql`
+      select set_config('openbooks.scheduler_outbox_replay_org', ${before.org_id ?? "__system__"}::text, true)
     `);
-    const reset = await tx.execute<never>(sql`
+      const reset = await tx.execute<never>(sql`
       update scheduler_outbox
          set status='pending', attempt_count=0, next_attempt_at=${now},
              locked_at=null, lease_token=null, last_attempt_at=null,
@@ -1158,8 +1231,10 @@ export async function replayTerminalSchedulerOutbox(input: {
        where id=${input.id} and org_id is not distinct from ${before.org_id}::uuid
          and terminal_failed_at is not null
     `);
-    if (reset.rowCount !== 1) throw new SchedulerOutboxReplayError("the terminal row was not replayable");
-  }));
+      if (reset.rowCount !== 1)
+        throw new SchedulerOutboxReplayError("the terminal row was not replayable");
+    }),
+  );
 }
 
 async function insertSchedulerOutboxReplayAudit(
@@ -1201,5 +1276,6 @@ async function insertSchedulerOutboxReplayAudit(
             })}::jsonb, ${fields.failureGeneration})
     returning id
   `);
-  if (recorded.rows.length !== 1) throw new SchedulerOutboxReplayError("scheduler replay authorization evidence was not stored");
+  if (recorded.rows.length !== 1)
+    throw new SchedulerOutboxReplayError("scheduler replay authorization evidence was not stored");
 }

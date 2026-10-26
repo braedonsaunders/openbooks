@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { Drawer } from '@openbooks/ui'
-import { ListOrdered, ArrowUpRight } from 'lucide-react'
-import { ConfigEditor } from '../../analytics/_ui/ConfigEditor'
-import { Panel } from '../../analytics/_ui/Panel'
-import { useDirtyClose } from '../../../../lib/use-dirty-close'
+import { useState } from "react";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Drawer } from "@openbooks/ui";
+import { ListOrdered, ArrowUpRight } from "lucide-react";
+import { ConfigEditor } from "../../analytics/_ui/ConfigEditor";
+import { Panel } from "../../analytics/_ui/Panel";
+import { useDirtyClose } from "../../../../lib/use-dirty-close";
 
 /**
  * AP pay-selection configuration — the rule that decides WHICH bills the
@@ -28,61 +28,79 @@ export function ApSelectionConfigDrawer({
   dpo,
   canEdit,
 }: {
-  onClose: () => void
-  title: string
-  description: string
+  onClose: () => void;
+  title: string;
+  description: string;
   /** Mean days to settle (null = no payment history anywhere). */
-  dpo: number | null
+  dpo: number | null;
   /** Setup permission with unrestricted scope — the drawer only opens behind
    * the gated gear, and the editor must never assume it. */
-  canEdit: boolean
+  canEdit: boolean;
 }) {
-  const t = useTranslations('ap.cockpit.config')
-  const tc = useTranslations('common')
+  const t = useTranslations("ap.cockpit.config");
+  const tc = useTranslations("common");
   // The editor's draft is local state that unmounts with the drawer:
   // guard dismissal with the shared dirty-close flow so unsaved edits
   // ask before they are discarded.
-  const [editorDirty, setEditorDirty] = useState(false)
+  const [editorDirty, setEditorDirty] = useState(false);
   const closeGuard = useDirtyClose({
     dirty: editorDirty,
     onClose,
-    message: tc('feedback.unsavedChanges'),
-    confirmLabel: tc('confirm.discardChanges'),
-  })
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
+  });
   const items: { label: string; value: string; note: string }[] = [
-    { label: t('orderLabel'), value: t('orderValue'), note: t('orderNote') },
-    { label: t('predictionLabel'), value: t('predictionValue'), note: t('predictionNote') },
-    { label: t('overdueLabel'), value: t('overdueValue'), note: t('overdueNote') },
-    { label: t('snapLabel'), value: t('snapValue'), note: t('snapNote') },
-    { label: t('dpoLabel'), value: dpo === null ? '—' : t('dpoValue', { dpo }), note: t('dpoNote') },
-  ]
+    { label: t("orderLabel"), value: t("orderValue"), note: t("orderNote") },
+    { label: t("predictionLabel"), value: t("predictionValue"), note: t("predictionNote") },
+    { label: t("overdueLabel"), value: t("overdueValue"), note: t("overdueNote") },
+    { label: t("snapLabel"), value: t("snapValue"), note: t("snapNote") },
+    {
+      label: t("dpoLabel"),
+      value: dpo === null ? "—" : t("dpoValue", { dpo }),
+      note: t("dpoNote"),
+    },
+  ];
 
   return (
-    <Drawer open onClose={() => void closeGuard.close()} size="lg" title={title} description={description} bodyClassName="overflow-y-auto">
+    <Drawer
+      open
+      onClose={() => void closeGuard.close()}
+      size="lg"
+      title={title}
+      description={description}
+      bodyClassName="overflow-y-auto"
+    >
       <div className="space-y-5">
         <ConfigEditor dashboard="cashflow" canEdit={canEdit} onDirtyChange={setEditorDirty} />
 
-        <Panel title={t('scheduleTitle')} icon={ListOrdered} bodyClassName="p-0">
+        <Panel title={t("scheduleTitle")} icon={ListOrdered} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (
               <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {i.label}
+                  </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-right text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-right text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {i.value}
+                </span>
               </li>
             ))}
           </ul>
         </Panel>
 
         <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-          {t('footerPre')}
-          <Link href={('/banking/cash')} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
-            {t('footerLink')} <ArrowUpRight size={12} />
+          {t("footerPre")}
+          <Link
+            href={"/banking/cash"}
+            className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400"
+          >
+            {t("footerLink")} <ArrowUpRight size={12} />
           </Link>
         </p>
       </div>
     </Drawer>
-  )
+  );
 }

@@ -12,10 +12,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __itemRatesBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
         export async function guardFeaturePermission() {
@@ -28,7 +34,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -37,7 +44,9 @@ async function fixture() {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   return { org };
 }
@@ -55,13 +64,19 @@ const post = (itemId: string, body: unknown) =>
   );
 
 const body = (effectiveFrom: string, billRate: string) => ({
-  effectiveFrom, baseUnit: "hour", pricingPolicy: "capped_ladder",
+  effectiveFrom,
+  baseUnit: "hour",
+  pricingPolicy: "capped_ladder",
   tiers: [{ unitCode: "hour", unitName: "Hour", baseQuantity: "1", costRate: "75", billRate }],
 });
 
 async function profileCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from item_rate_profiles where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from item_rate_profiles where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -70,7 +85,11 @@ test("item rates refuse a non-calendar effective date without writing", async ()
   try {
     const response = await post(org.items.service, body("2026-09-31", "125"));
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(await profileCount(org.orgId), 0);
   } finally {
@@ -83,7 +102,11 @@ test("item rates refuse a bill rate wider than numeric(19,4) without writing", a
   try {
     const response = await post(org.items.service, body("2026-07-01", "99999999999999999999.99"));
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
     assert.equal(await profileCount(org.orgId), 0);
   } finally {

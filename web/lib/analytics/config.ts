@@ -29,7 +29,10 @@ export {
 } from "./config-spec";
 
 /** Effective config for one dashboard: org overrides over defaults. */
-export async function analyticsConfig<D extends AnalyticsDashboard>(orgId: string, dashboard: D): Promise<ConfigValuesOf<D>> {
+export async function analyticsConfig<D extends AnalyticsDashboard>(
+  orgId: string,
+  dashboard: D,
+): Promise<ConfigValuesOf<D>> {
   const [r, presentation] = await Promise.all([
     analyticsQuery<{ cfg: unknown; currency: string | null }>(sql`
       select settings -> 'analytics' -> ${dashboard} as cfg,

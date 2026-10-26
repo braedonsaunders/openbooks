@@ -9,7 +9,6 @@ stubModules({ authz: true });
 // exceeds the 1 MiB house default. The boundary itself stays REAL — mocking
 // parseJsonBody here would make the 413 assertions hollow.
 
-
 const mockSources = new Map<string, string>([
   [
     "mock:feature-gates",
@@ -61,8 +60,6 @@ registerHooks({
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-
-
 
 function draftRequest(bundleBytes: number): Request {
   const body = JSON.stringify({

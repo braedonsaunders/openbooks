@@ -1,10 +1,10 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import { sql } from 'drizzle-orm';
-import { db } from '../platform/db.ts';
-import { buildSchedule, previewDepreciation } from './depreciation.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '../testing/fixtures.ts';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import { buildSchedule, previewDepreciation } from "./depreciation.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
  * The stale-schedule blocker (S3): only periods the builder could still
@@ -15,8 +15,8 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from '../testing/fix
  */
 async function addPeriods(orgId: string, periodId: string, months: number[]): Promise<void> {
   for (const month of months) {
-    const mm = String(month).padStart(2, '0');
-    const end = month === 7 ? '2026-07-31' : month === 8 ? '2026-08-31' : '2026-09-30';
+    const mm = String(month).padStart(2, "0");
+    const end = month === 7 ? "2026-07-31" : month === 8 ? "2026-08-31" : "2026-09-30";
     await db.execute(sql`insert into accounting_periods
       (org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
       values (${orgId}, (select fiscal_calendar_id from accounting_periods where id=${periodId}), 2026, ${month}, ${`2026-${mm}`}, ${`2026-${mm}-01`}, ${end}, false)`);
@@ -44,40 +44,69 @@ async function seedAsset(
   return assetId;
 }
 
-test('periods past the last depreciable month never block Confirm', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await addPeriods(org.orgId, org.periodId, [8, 9]);
-    const assetId = await seedAsset(org.orgId, org.subsidiaryId, org.accounts.invAsset, org.accounts.clearing, org.accounts.adjustment, 'FA-0001', 2, 95);
-    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    const preview = await previewDepreciation(org.orgId, { asOfDate: '2026-08-31' });
-    assert.deepEqual(
-      preview.rows.map((row) => `${row.assetNumber} ${row.periodName} ${row.amount}`),
-      ['FA-0001 P07 FY2026 47.5000', 'FA-0001 P08 FY2026 47.5000'],
-    );
-    assert.deepEqual(preview.staleAssets, []);
-    assert.equal(preview.totalAmount, '95.0000');
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "periods past the last depreciable month never block Confirm",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await addPeriods(org.orgId, org.periodId, [8, 9]);
+      const assetId = await seedAsset(
+        org.orgId,
+        org.subsidiaryId,
+        org.accounts.invAsset,
+        org.accounts.clearing,
+        org.accounts.adjustment,
+        "FA-0001",
+        2,
+        95,
+      );
+      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      const preview = await previewDepreciation(org.orgId, { asOfDate: "2026-08-31" });
+      assert.deepEqual(
+        preview.rows.map((row) => `${row.assetNumber} ${row.periodName} ${row.amount}`),
+        ["FA-0001 P07 FY2026 47.5000", "FA-0001 P08 FY2026 47.5000"],
+      );
+      assert.deepEqual(preview.staleAssets, []);
+      assert.equal(preview.totalAmount, "95.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('a rollover period inside the life flags until the rebuild projects it', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await addPeriods(org.orgId, org.periodId, [8]);
-    const assetId = await seedAsset(org.orgId, org.subsidiaryId, org.accounts.invAsset, org.accounts.clearing, org.accounts.adjustment, 'FA-0002', 3, 300);
-    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    await addPeriods(org.orgId, org.periodId, [9]);
-    const flagged = await previewDepreciation(org.orgId, { asOfDate: '2026-09-30' });
-    assert.deepEqual(flagged.staleAssets.map((asset) => asset.assetNumber), ['FA-0002']);
-    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    const cleared = await previewDepreciation(org.orgId, { asOfDate: '2026-09-30' });
-    assert.deepEqual(cleared.staleAssets, []);
-    assert.equal(cleared.totalAmount, '300.0000');
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a rollover period inside the life flags until the rebuild projects it",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await addPeriods(org.orgId, org.periodId, [8]);
+      const assetId = await seedAsset(
+        org.orgId,
+        org.subsidiaryId,
+        org.accounts.invAsset,
+        org.accounts.clearing,
+        org.accounts.adjustment,
+        "FA-0002",
+        3,
+        300,
+      );
+      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      await addPeriods(org.orgId, org.periodId, [9]);
+      const flagged = await previewDepreciation(org.orgId, { asOfDate: "2026-09-30" });
+      assert.deepEqual(
+        flagged.staleAssets.map((asset) => asset.assetNumber),
+        ["FA-0002"],
+      );
+      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      const cleared = await previewDepreciation(org.orgId, { asOfDate: "2026-09-30" });
+      assert.deepEqual(cleared.staleAssets, []);
+      assert.equal(cleared.totalAmount, "300.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

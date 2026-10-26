@@ -27,26 +27,26 @@
  *
  *   node scripts/check-rls-bypass-predicate.mjs
  */
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { stripSqlComments } from './check-migration-headers.mjs'
-import { releaseSchemaFiles } from './release-schema-sql.mjs'
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { stripSqlComments } from "./check-migration-headers.mjs";
+import { releaseSchemaFiles } from "./release-schema-sql.mjs";
 
-const root = '.'
+const root = ".";
 
 export function migrationOrdinal(basename) {
-  const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(basename)
-  return match ? Number(match[1]) : null
+  const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(basename);
+  return match ? Number(match[1]) : null;
 }
 
 /** The release schema files, baseline first, in apply order. */
-export const RELEASE_SCAN_FILES = releaseSchemaFiles(root).map(({ path }) => path)
+export const RELEASE_SCAN_FILES = releaseSchemaFiles(root).map(({ path }) => path);
 
-const SCAN_FILES = [join(root, 'schema', 'migrations', 'environments.sql'), ...RELEASE_SCAN_FILES]
+const SCAN_FILES = [join(root, "schema", "migrations", "environments.sql"), ...RELEASE_SCAN_FILES];
 
 /** An executable read of the raw bypass GUC (any spacing/cast spelling). */
-export const INLINE_BYPASS_GUC = /current_setting\s*\(\s*'app\.bypass_rls'/
+export const INLINE_BYPASS_GUC = /current_setting\s*\(\s*'app\.bypass_rls'/;
 
 /**
  * Forward migrations whose raw reads live only in policies a later migration
@@ -54,53 +54,53 @@ export const INLINE_BYPASS_GUC = /current_setting\s*\(\s*'app\.bypass_rls'/
  * a later migration, and this map names it together with every policy it must
  * drop: `policies` lists [policy, table] pairs.
  */
-export const INLINE_BYPASS_GUC_SUPERSEDED = new Map()
+export const INLINE_BYPASS_GUC_SUPERSEDED = new Map();
 
 /** The predicate's own definition: the single place the raw GUC is read. */
 const PREDICATE_DEFINITION =
-  /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:"?public"?\.)?"?app_bypass_rls_active"?\s*\(\s*\)[\s\S]*?\bAS\s+(\$[A-Za-z_]*\$)[\s\S]*?\1/gi
+  /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:"?public"?\.)?"?app_bypass_rls_active"?\s*\(\s*\)[\s\S]*?\bAS\s+(\$[A-Za-z_]*\$)[\s\S]*?\1/gi;
 
 /**
  * Blank the predicate's definition, keeping its newlines so reported line
  * numbers still point into the scanned file.
  */
 export function withoutPredicateDefinition(content) {
-  return content.replace(PREDICATE_DEFINITION, (definition) => definition.replace(/[^\n]/g, ' '))
+  return content.replace(PREDICATE_DEFINITION, (definition) => definition.replace(/[^\n]/g, " "));
 }
 
 function executableSql(content) {
-  return stripSqlComments(withoutPredicateDefinition(content))
+  return stripSqlComments(withoutPredicateDefinition(content));
 }
 
 function dropsPolicy(content, policy, table) {
   return new RegExp(
     `drop\\s+policy\\s+(?:if\\s+exists\\s+)?"?${policy}"?\\s+on\\s+(?:only\\s+)?(?:"?public"?\\.)?"?${table}"?\\s*;`,
-    'i',
-  ).test(stripSqlComments(content))
+    "i",
+  ).test(stripSqlComments(content));
 }
 
 /** Why a supersession claim does not hold, or null when the later migration proves it. */
 export function supersessionFailure(basename, claim, files) {
-  const superseder = files.find((file) => file.split('/').pop() === claim.by)
-  if (!superseder) return `${basename}: superseding migration ${claim.by} does not exist`
-  const ordinal = migrationOrdinal(basename)
+  const superseder = files.find((file) => file.split("/").pop() === claim.by);
+  if (!superseder) return `${basename}: superseding migration ${claim.by} does not exist`;
+  const ordinal = migrationOrdinal(basename);
   if (ordinal === null || (migrationOrdinal(claim.by) ?? -1) <= ordinal) {
-    return `${basename}: ${claim.by} is not a later migration`
+    return `${basename}: ${claim.by} is not a later migration`;
   }
-  const content = readFileSync(superseder, 'utf8')
-  const missing = claim.policies.filter(([policy, table]) => !dropsPolicy(content, policy, table))
+  const content = readFileSync(superseder, "utf8");
+  const missing = claim.policies.filter(([policy, table]) => !dropsPolicy(content, policy, table));
   return missing.length
-    ? `${basename}: ${claim.by} does not drop ${missing.map(([policy, table]) => `${policy} on ${table}`).join(', ')}`
-    : null
+    ? `${basename}: ${claim.by} does not drop ${missing.map(([policy, table]) => `${policy} on ${table}`).join(", ")}`
+    : null;
 }
 
 /** Line numbers (1-based) of executable inline-GUC reads in comment-stripped SQL. */
 export function findInlineBypassTrust(content) {
-  const hits = []
-  for (const [index, line] of executableSql(content).split('\n').entries()) {
-    if (INLINE_BYPASS_GUC.test(line)) hits.push(index + 1)
+  const hits = [];
+  for (const [index, line] of executableSql(content).split("\n").entries()) {
+    if (INLINE_BYPASS_GUC.test(line)) hits.push(index + 1);
   }
-  return hits
+  return hits;
 }
 
 /**
@@ -109,59 +109,64 @@ export function findInlineBypassTrust(content) {
  * holds an executable read anywhere, even if no single line does.
  */
 export function hasInlineBypassTrust(content) {
-  return INLINE_BYPASS_GUC.test(executableSql(content))
+  return INLINE_BYPASS_GUC.test(executableSql(content));
 }
 
-export function auditBypassPredicate(files = SCAN_FILES, superseded = INLINE_BYPASS_GUC_SUPERSEDED) {
-  const violations = []
-  const stale = []
-  const unproven = []
-  const seenAllowlisted = new Set()
+export function auditBypassPredicate(
+  files = SCAN_FILES,
+  superseded = INLINE_BYPASS_GUC_SUPERSEDED,
+) {
+  const violations = [];
+  const stale = [];
+  const unproven = [];
+  const seenAllowlisted = new Set();
   for (const file of files) {
-    const basename = file.split('/').pop()
-    const content = readFileSync(file, 'utf8')
-    const hits = findInlineBypassTrust(content)
-    if (hits.length === 0 && !hasInlineBypassTrust(content)) continue
+    const basename = file.split("/").pop();
+    const content = readFileSync(file, "utf8");
+    const hits = findInlineBypassTrust(content);
+    if (hits.length === 0 && !hasInlineBypassTrust(content)) continue;
     if (superseded.has(basename)) {
-      seenAllowlisted.add(basename)
-      const failure = supersessionFailure(basename, superseded.get(basename), files)
-      if (failure) unproven.push(failure)
-      continue
+      seenAllowlisted.add(basename);
+      const failure = supersessionFailure(basename, superseded.get(basename), files);
+      if (failure) unproven.push(failure);
+      continue;
     }
-    violations.push(hits.length > 0 ? `${file}:${hits.join(',')}` : `${file}:multiline`)
+    violations.push(hits.length > 0 ? `${file}:${hits.join(",")}` : `${file}:multiline`);
   }
   for (const basename of superseded.keys()) {
-    if (!seenAllowlisted.has(basename)) stale.push(basename)
+    if (!seenAllowlisted.has(basename)) stale.push(basename);
   }
-  return { violations, stale, unproven, scanned: files.length }
+  return { violations, stale, unproven, scanned: files.length };
 }
 
 function main() {
   if (RELEASE_SCAN_FILES.length === 0) {
-    console.error('no release schema to scan; the active migration baseline is missing')
-    process.exitCode = 1
-    return
+    console.error("no release schema to scan; the active migration baseline is missing");
+    process.exitCode = 1;
+    return;
   }
-  const { violations, stale, unproven, scanned } = auditBypassPredicate()
+  const { violations, stale, unproven, scanned } = auditBypassPredicate();
   console.log(
     `checked RLS bypass predicate; scanned-files=${scanned} violations=${violations.length} stale-supersessions=${stale.length}`,
-  )
+  );
   if (violations.length) {
     console.error(
-      `inline app.bypass_rls trust (call public.app_bypass_rls_active() instead): ${violations.join(' ')}`,
-    )
-    process.exitCode = 1
+      `inline app.bypass_rls trust (call public.app_bypass_rls_active() instead): ${violations.join(" ")}`,
+    );
+    process.exitCode = 1;
   }
   if (unproven.length) {
-    console.error(`unproven bypass-predicate supersession (a later migration must drop the policy): ${unproven.join('; ')}`)
-    process.exitCode = 1
+    console.error(
+      `unproven bypass-predicate supersession (a later migration must drop the policy): ${unproven.join("; ")}`,
+    );
+    process.exitCode = 1;
   }
   if (stale.length) {
-    console.error(`stale bypass-predicate supersession (remove the entry): ${stale.join(', ')}`)
-    process.exitCode = 1
+    console.error(`stale bypass-predicate supersession (remove the entry): ${stale.join(", ")}`);
+    process.exitCode = 1;
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main()
+  main();
 }

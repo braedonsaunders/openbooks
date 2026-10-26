@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import { UnsavedCreateButton } from '@/components/unsaved-create-button'
+import { useTranslations } from "next-intl";
+import { UnsavedCreateButton } from "@/components/unsaved-create-button";
 
 /**
  * Unsaved-create: opens a URL-controlled unsaved drawer (`?entryNew=1`).
@@ -10,14 +10,24 @@ import { UnsavedCreateButton } from '@/components/unsaved-create-button'
  * document number is allocated until that Save commits.
  */
 export function NewJournalButton() {
-  const t = useTranslations('journal.newButton')
+  const t = useTranslations("journal.newButton");
   return (
     <UnsavedCreateButton
       base="/journal"
       param="entryNew"
-      clear={['entry', 'entryDate', 'journalEntry', 'txn', 'reportRecord', 'reportRecordKind', 'accountRegister', 'transactionTab', 'drawerReturn']}
-      label={t('label')}
-      extra={{ mode: 'edit' }}
+      clear={[
+        "entry",
+        "entryDate",
+        "journalEntry",
+        "txn",
+        "reportRecord",
+        "reportRecordKind",
+        "accountRegister",
+        "transactionTab",
+        "drawerReturn",
+      ]}
+      label={t("label")}
+      extra={{ mode: "edit" }}
     />
-  )
+  );
 }

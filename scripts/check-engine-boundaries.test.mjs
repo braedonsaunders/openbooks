@@ -3,7 +3,12 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { analyze, importsOf, stripComments, stronglyConnected } from "./check-engine-boundaries.mjs";
+import {
+  analyze,
+  importsOf,
+  stripComments,
+  stronglyConnected,
+} from "./check-engine-boundaries.mjs";
 
 // A synthetic engine: two low modules, one orchestrator. Acyclic with the
 // "cycles" pin retired: any cycle is refused.
@@ -29,10 +34,14 @@ const MANIFEST = {
 };
 const FILES = {
   "platform/db.ts": "export const db = 1;\n",
-  "records/numbering.ts": 'import { db } from "../platform/db.ts";\nexport const next = () => db;\n',
-  "ledger/posting-example.ts": 'import { db } from "@openbooks/engine/src/platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport async function post() { const { pay } = await import("../payments/payment-example.ts"); return pay(next(), db); }\n',
-  "payments/payment-example.ts": 'import { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
-  "ledger/posting.test.ts": 'import { pay } from "../payments/payment-example.ts";\nimport { x } from "@/lib/anything.ts";\n',
+  "records/numbering.ts":
+    'import { db } from "../platform/db.ts";\nexport const next = () => db;\n',
+  "ledger/posting-example.ts":
+    'import { db } from "@openbooks/engine/src/platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport async function post() { const { pay } = await import("../payments/payment-example.ts"); return pay(next(), db); }\n',
+  "payments/payment-example.ts":
+    'import { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
+  "ledger/posting.test.ts":
+    'import { pay } from "../payments/payment-example.ts";\nimport { x } from "@/lib/anything.ts";\n',
 };
 
 test("a clean acyclic tree passes: every file in a module, every edge declared and used", () => {
@@ -61,12 +70,16 @@ test("a file at engine/src root is refused with the remedy", () => {
 test("an undeclared cross-module import names file, line, both modules and the remedy", () => {
   const root = scaffold(MANIFEST, {
     ...FILES,
-    "records/numbering.ts": 'import { db } from "../platform/db.ts";\n\nimport { pay } from "../payments/payment-example.ts";\nexport const next = () => pay(db, db);\n',
+    "records/numbering.ts":
+      'import { db } from "../platform/db.ts";\n\nimport { pay } from "../payments/payment-example.ts";\nexport const next = () => pay(db, db);\n',
   });
   try {
     const { problems } = analyze(root);
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /^engine\/src\/records\/numbering\.ts:3: module "records" imports "\.\.\/payments\/payment-example\.ts" from module "payments", which it does not declare/);
+    assert.match(
+      problems[0],
+      /^engine\/src\/records\/numbering\.ts:3: module "records" imports "\.\.\/payments\/payment-example\.ts" from module "payments", which it does not declare/,
+    );
     assert.match(problems[0], /modules\.records\.dependsOn/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -80,7 +93,10 @@ test("a declared edge nothing uses is refused, so the manifest cannot grant perm
   try {
     const { problems } = analyze(root);
     assert.deepEqual(problems.length, 1, problems.join("\n"));
-    assert.match(problems[0], /module "records" declares dependsOn "payments" but no non-test file in engine\/src\/records\/ imports it/);
+    assert.match(
+      problems[0],
+      /module "records" declares dependsOn "payments" but no non-test file in engine\/src\/records\/ imports it/,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -91,7 +107,8 @@ test("any cycle is refused, with both modules named and the remedy", () => {
   manifest.modules.payments.dependsOn = ["ledger", "platform"];
   const files = {
     ...FILES,
-    "payments/payment-example.ts": 'import type { post } from "../ledger/posting-example.ts";\nimport { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
+    "payments/payment-example.ts":
+      'import type { post } from "../ledger/posting-example.ts";\nimport { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
   };
   const root = scaffold(manifest, files);
   try {
@@ -131,11 +148,18 @@ test("a directory that is not a declared module is refused", () => {
 });
 
 test("engine code importing the web app is refused; tests may", () => {
-  const root = scaffold(MANIFEST, { ...FILES, "ledger/posting-example.ts": FILES["ledger/posting-example.ts"] + 'import { y } from "@/lib/thing.ts";\n' });
+  const root = scaffold(MANIFEST, {
+    ...FILES,
+    "ledger/posting-example.ts":
+      FILES["ledger/posting-example.ts"] + 'import { y } from "@/lib/thing.ts";\n',
+  });
   try {
     const { problems } = analyze(root);
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /engine\/src\/ledger\/posting-example\.ts:4: engine code must not import the web app/); // source-path: synthetic
+    assert.match(
+      problems[0],
+      /engine\/src\/ledger\/posting-example\.ts:4: engine code must not import the web app/,
+    ); // source-path: synthetic
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -155,7 +179,11 @@ test("importsOf sees static, re-export, type and dynamic imports but not comment
     importsOf("engine/src/x/y.ts", source).map(({ spec, line }) => `${line}:${spec}`),
     ["1:./a.ts", "2:./b.ts", "3:./c.ts", "6:./f.ts"],
   );
-  assert.equal(stripComments(source).split("\n").length, source.split("\n").length, "line numbers survive comment stripping");
+  assert.equal(
+    stripComments(source).split("\n").length,
+    source.split("\n").length,
+    "line numbers survive comment stripping",
+  );
 });
 
 test("stronglyConnected finds cycles and leaves acyclic modules as singletons", () => {
@@ -171,12 +199,21 @@ test("stronglyConnected finds cycles and leaves acyclic modules as singletons", 
 test("named contracts retain module dependencies instead of bypassing the graph", () => {
   const root = scaffold(MANIFEST, {
     ...FILES,
-    "records/numbering.ts": 'import { db } from "../platform/db.ts"; import { pay } from "@openbooks/engine/payments/commands"; export const next = () => pay(db);',
+    "records/numbering.ts":
+      'import { db } from "../platform/db.ts"; import { pay } from "@openbooks/engine/payments/commands"; export const next = () => pay(db);',
   });
   try {
-    writeFileSync(join(root, 'engine/package.json'), JSON.stringify({ exports: { './payments/commands': './src/payments/payment-example.ts' } }));
-    assert.match(analyze(root).problems.join('\n'), /module "records" imports .* from module "payments", which it does not declare/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    writeFileSync(
+      join(root, "engine/package.json"),
+      JSON.stringify({ exports: { "./payments/commands": "./src/payments/payment-example.ts" } }),
+    );
+    assert.match(
+      analyze(root).problems.join("\n"),
+      /module "records" imports .* from module "payments", which it does not declare/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("relative web imports and CommonJS or type-query dependency escapes are refused", () => {
@@ -185,21 +222,50 @@ test("relative web imports and CommonJS or type-query dependency escapes are ref
     'require("../../../web/lib/auth.ts");',
     'type Auth = import("../../../web/lib/auth.ts").Auth;',
   ]) {
-    const root = scaffold(MANIFEST, { ...FILES, 'platform/escape.ts': source });
-    try { assert.match(analyze(root).problems.join('\n'), /engine code must not import the web app/); }
-    finally { rmSync(root, { recursive: true, force: true }); }
+    const root = scaffold(MANIFEST, { ...FILES, "platform/escape.ts": source });
+    try {
+      assert.match(analyze(root).problems.join("\n"), /engine code must not import the web app/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
-  const root = scaffold(MANIFEST, { ...FILES, 'records/escape.ts': 'require("../payments/payment-example.ts");' });
-  try { assert.match(analyze(root).problems.join('\n'), /module "records" imports .* from module "payments", which it does not declare/); }
-  finally { rmSync(root, { recursive: true, force: true }); }
+  const root = scaffold(MANIFEST, {
+    ...FILES,
+    "records/escape.ts": 'require("../payments/payment-example.ts");',
+  });
+  try {
+    assert.match(
+      analyze(root).problems.join("\n"),
+      /module "records" imports .* from module "payments", which it does not declare/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("runtime dependencies belong to the engine package rather than an ambient web install", () => {
-  const root = scaffold(MANIFEST, { ...FILES, 'platform/parse.ts': 'import { z } from "zod"; export const input = z.string();' });
+  const root = scaffold(MANIFEST, {
+    ...FILES,
+    "platform/parse.ts": 'import { z } from "zod"; export const input = z.string();',
+  });
   try {
-    writeFileSync(join(root, 'engine/package.json'), JSON.stringify({ exports: { './platform/db': './src/platform/db.ts' }, dependencies: {} }));
-    assert.match(analyze(root).problems.join('\n'), /dependency "zod" must be declared by engine\/package.json/);
-    writeFileSync(join(root, 'engine/package.json'), JSON.stringify({ dependencies: { zod: '*' } }));
-    assert.deepEqual(analyze(root).problems.filter(problem => problem.includes('dependency "zod"')), []);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    writeFileSync(
+      join(root, "engine/package.json"),
+      JSON.stringify({ exports: { "./platform/db": "./src/platform/db.ts" }, dependencies: {} }),
+    );
+    assert.match(
+      analyze(root).problems.join("\n"),
+      /dependency "zod" must be declared by engine\/package.json/,
+    );
+    writeFileSync(
+      join(root, "engine/package.json"),
+      JSON.stringify({ dependencies: { zod: "*" } }),
+    );
+    assert.deepEqual(
+      analyze(root).problems.filter((problem) => problem.includes('dependency "zod"')),
+      [],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

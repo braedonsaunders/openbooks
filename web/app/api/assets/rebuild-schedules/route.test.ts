@@ -68,9 +68,8 @@ function inspect(query: unknown): { text: string; params: unknown[] } {
   return { text: walk(chunks, true), params };
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksDepreciationRebuildInspect = inspect;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksDepreciationRebuildInspect =
+  inspect;
 
 const mockDb = `
   const state = globalThis[Symbol.for('openbooks.depreciation-rebuild-route-test')]
@@ -150,8 +149,7 @@ const _hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -185,10 +183,7 @@ test("empty selection is refused by name before any rebuild", async () => {
   reset();
   const res = await rebuild({ bookId: BOOK_ID, assetIds: [] });
   assert.equal(res.status, 422);
-  assert.equal(
-    ((await res.json()) as { error: string }).error,
-    "select at least one asset",
-  );
+  assert.equal(((await res.json()) as { error: string }).error, "select at least one asset");
   assert.deepEqual(state.built, []);
 });
 
@@ -198,16 +193,13 @@ test("foreign scope ids are refused, never silently narrowed", async () => {
     assetIds: ["00000000-0000-4000-8000-00000000a099"],
   });
   assert.equal(unknownAsset.status, 422);
-  assert.equal(
-    ((await unknownAsset.json()) as { error: string }).error,
-    "unknown_asset",
-  );
-  const unknownBook = await rebuild({ bookId: "00000000-0000-4000-8000-00000000b099", assetIds: [ASSET_A] });
+  assert.equal(((await unknownAsset.json()) as { error: string }).error, "unknown_asset");
+  const unknownBook = await rebuild({
+    bookId: "00000000-0000-4000-8000-00000000b099",
+    assetIds: [ASSET_A],
+  });
   assert.equal(unknownBook.status, 422);
-  assert.equal(
-    ((await unknownBook.json()) as { error: string }).error,
-    "book_not_found",
-  );
+  assert.equal(((await unknownBook.json()) as { error: string }).error, "book_not_found");
   assert.deepEqual(state.built, []);
 });
 

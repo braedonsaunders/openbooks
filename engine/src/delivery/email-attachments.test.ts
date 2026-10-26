@@ -41,15 +41,24 @@ test("stored attachments carry references, never file bytes", async () => {
 
 test("storing validates before anything is staged", async () => {
   await assert.rejects(
-    storeEmailAttachments([{ filename: "x.pdf", content: "!!!not-base64!!!", contentType: "application/pdf" }], { orgId: "org-1" }),
+    storeEmailAttachments(
+      [{ filename: "x.pdf", content: "!!!not-base64!!!", contentType: "application/pdf" }],
+      { orgId: "org-1" },
+    ),
     /bounded base64/,
   );
   await assert.rejects(
-    storeEmailAttachments([{ filename: "../evil.pdf", content: "eA==", contentType: "application/pdf" }], { orgId: "org-1" }),
+    storeEmailAttachments(
+      [{ filename: "../evil.pdf", content: "eA==", contentType: "application/pdf" }],
+      { orgId: "org-1" },
+    ),
     /invalid filename/,
   );
   await assert.rejects(
-    storeEmailAttachments(Array.from({ length: 11 }, () => payload("x")), { orgId: "org-1" }),
+    storeEmailAttachments(
+      Array.from({ length: 11 }, () => payload("x")),
+      { orgId: "org-1" },
+    ),
     /exceeds the 10-attachment limit/,
   );
   assert.deepEqual(await storeEmailAttachments(undefined, { orgId: "org-1" }), []);
@@ -64,7 +73,9 @@ test("legacy inline payloads still drain exactly once", async () => {
 
 test("an unresolvable reference refuses instead of sending a truncated message", async () => {
   await assert.rejects(
-    loadEmailAttachments("org-1", [{ filename: "x.pdf", contentType: "application/pdf", sealed: "enc:v1:bogus" }]),
+    loadEmailAttachments("org-1", [
+      { filename: "x.pdf", contentType: "application/pdf", sealed: "enc:v1:bogus" },
+    ]),
     /cannot be unsealed/,
   );
   await assert.rejects(

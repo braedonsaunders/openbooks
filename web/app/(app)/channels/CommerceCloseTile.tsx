@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -45,7 +45,11 @@ function drillHref(check: CompletenessCheck): string {
     const items = details[key];
     if (Array.isArray(items)) {
       for (const item of items) {
-        if (typeof item === "object" && item !== null && typeof (item as { remedyHref?: unknown }).remedyHref === "string") {
+        if (
+          typeof item === "object" &&
+          item !== null &&
+          typeof (item as { remedyHref?: unknown }).remedyHref === "string"
+        ) {
           return (item as { remedyHref: string }).remedyHref;
         }
       }
@@ -80,7 +84,12 @@ export function CommerceCloseTile() {
         // The status is checked before the body is parsed: a refusal names
         // its cause and remedy instead of becoming a parse error.
         if (!res.ok) {
-          setLoadError(await readApiErrorMessage(res, t("home.completeness.loadFailed", { status: res.status })));
+          setLoadError(
+            await readApiErrorMessage(
+              res,
+              t("home.completeness.loadFailed", { status: res.status }),
+            ),
+          );
           setLoading(false);
           return;
         }
@@ -129,7 +138,9 @@ export function CommerceCloseTile() {
   // live behind this summary count and open in a drawer, never as a second
   // stacked list. Every check keeps its reason and drill remedy inside.
   const checkTitle = (check: CompletenessCheck) =>
-    tClose.has(`diagnostics.${check.code}.title`) ? tClose(`diagnostics.${check.code}.title`) : check.code;
+    tClose.has(`diagnostics.${check.code}.title`)
+      ? tClose(`diagnostics.${check.code}.title`)
+      : check.code;
   const checkMessage = (check: CompletenessCheck) =>
     tClose.has(`diagnostics.${check.code}.message`)
       ? tClose(`diagnostics.${check.code}.message`, { count: check.count })
@@ -138,7 +149,9 @@ export function CommerceCloseTile() {
     <CockpitPanel title={t("home.completeness.title")} hint={t("home.completeness.hint")}>
       {open.length === 0 ? (
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-slate-600 dark:text-slate-300">{t("home.completeness.clear")}</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {t("home.completeness.clear")}
+          </p>
           <Button size="sm" variant="outline" onClick={() => setReviewOpen(true)}>
             {t("home.review")}
           </Button>
@@ -171,15 +184,25 @@ export function CommerceCloseTile() {
           }
         >
           <div className="mb-2 flex gap-2">
-            <Button size="sm" variant={openOnly ? "outline" : "secondary"} onClick={() => setOpenOnly(false)}>
+            <Button
+              size="sm"
+              variant={openOnly ? "outline" : "secondary"}
+              onClick={() => setOpenOnly(false)}
+            >
               {tCommon("labels.all")} ({checks.length})
             </Button>
-            <Button size="sm" variant={openOnly ? "secondary" : "outline"} onClick={() => setOpenOnly(true)}>
+            <Button
+              size="sm"
+              variant={openOnly ? "secondary" : "outline"}
+              onClick={() => setOpenOnly(true)}
+            >
               {tCommon("status.open")} ({open.length})
             </Button>
           </div>
           {visible.length === 0 ? (
-            <p className="text-sm text-slate-600 dark:text-slate-300">{t("home.completeness.clear")}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {t("home.completeness.clear")}
+            </p>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {visible.map((check) => (

@@ -2,7 +2,13 @@ import { sql } from "drizzle-orm";
 import { AllocationApportionError, apportionTargets } from "../allocations/apportion.ts";
 import type { ApportionResult, AllocationResidualPolicy } from "../allocations/types.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
-import { db, inDbTransaction, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import {
+  db,
+  inDbTransaction,
+  withOrgContext,
+  withOrgTransaction,
+  type SqlExecutor,
+} from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { NonprofitError } from "./errors.ts";
@@ -48,7 +54,9 @@ export type SetFunctionalMappingInput = {
   reason: string;
 };
 
-export function normalizeFunctionalMappingInput(input: SetFunctionalMappingInput): SetFunctionalMappingInput {
+export function normalizeFunctionalMappingInput(
+  input: SetFunctionalMappingInput,
+): SetFunctionalMappingInput {
   return {
     ...input,
     departmentId: input.departmentId?.trim() || null,
@@ -62,14 +70,20 @@ const FUNCTIONAL_FEATURE_REMEDY = "Enable Functional Expenses in Company Setting
 
 export function functionalFeatureOff(): NonprofitError {
   return new NonprofitError({
-    message: "Functional expense reporting is disabled; enable functionalExpenses in Company Settings → Features.",
+    message:
+      "Functional expense reporting is disabled; enable functionalExpenses in Company Settings → Features.",
     status: 422,
     code: "feature_off",
     remedy: FUNCTIONAL_FEATURE_REMEDY,
   });
 }
 
-function mappingRefusal(message: string, code: string, remedy: string, field?: string): NonprofitError {
+function mappingRefusal(
+  message: string,
+  code: string,
+  remedy: string,
+  field?: string,
+): NonprofitError {
   return new NonprofitError({ message, status: 422, code, remedy, ...(field ? { field } : {}) });
 }
 
@@ -79,7 +93,8 @@ function toMapping(row: FunctionalMappingRow): FunctionalMapping {
       message: `Functional mapping ${row.id} has unsupported function ${row.function}.`,
       status: 409,
       code: "functional_mapping_invalid",
-      remedy: "Correct the mapping to Program, Management and General, or Fundraising through setFunctionalMapping.",
+      remedy:
+        "Correct the mapping to Program, Management and General, or Fundraising through setFunctionalMapping.",
     });
   }
   return {
@@ -155,16 +170,27 @@ function validateMappingInput(input: SetFunctionalMappingInput): void {
 
 async function auditMapping(
   runner: SqlExecutor,
-  input: { orgId: string; rowId: string; actorId: string; action: string; before: unknown; after: unknown; reason: string },
+  input: {
+    orgId: string;
+    rowId: string;
+    actorId: string;
+    action: string;
+    before: unknown;
+    after: unknown;
+    reason: string;
+  },
 ): Promise<void> {
-  const recorded = await runner.execute<{ id: string }>(sql`
+  const recorded = await runner.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (
       ${input.orgId}, 'functional_mappings', ${input.rowId}, ${input.action},
       ${JSON.stringify({ before: input.before, after: input.after, reason: input.reason })}::jsonb,
       ${input.actorId}
     ) returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (recorded.length !== 1) {
     throw new NonprofitError({
       message: "The functional mapping change was not recorded in audit history.",
@@ -176,18 +202,23 @@ async function auditMapping(
 }
 
 /** Create an effective-dated mapping while keeping the prior schedule intact. */
-export async function setFunctionalMapping(input: SetFunctionalMappingInput): Promise<FunctionalMapping> {
+export async function setFunctionalMapping(
+  input: SetFunctionalMappingInput,
+): Promise<FunctionalMapping> {
   const normalized = normalizeFunctionalMappingInput(input);
   validateMappingInput(normalized);
   const { departmentId, projectId, effectiveTo, programKey } = normalized;
   const reason = input.reason.trim();
 
-  return withOrgTransaction(input.orgId, () => inDbTransaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, input.orgId, "functionalExpenses"))) {
-      throw functionalFeatureOff();
-    }
+  return withOrgTransaction(input.orgId, () =>
+    inDbTransaction(async (tx) => {
+      if (!(await lockAndCheckOrgFeature(tx, input.orgId, "functionalExpenses"))) {
+        throw functionalFeatureOff();
+      }
 
-    const prior = (await tx.execute<FunctionalMappingRow>(sql`
+      const prior = (
+        await tx.execute<FunctionalMappingRow>(
+          sql`
       select id, org_id, department_id, project_id, function, program_key,
              effective_from::text, effective_to::text, created_at::text, created_by::text
         from functional_mappings
@@ -197,38 +228,47 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
          and effective_to is null
          and effective_from < ${input.effectiveFrom}::date
        for update
-    `, "objects"))[0];
+    `,
+          "objects",
+        )
+      )[0];
 
-    if (prior) {
-      const closed = await tx.execute<FunctionalMappingRow>(sql`
+      if (prior) {
+        const closed = await tx.execute<FunctionalMappingRow>(
+          sql`
         update functional_mappings
            set effective_to = ${input.effectiveFrom}::date - 1,
                updated_at = now(), updated_by = ${input.actorId}
          where org_id = ${input.orgId} and id = ${prior.id} and effective_to is null
         returning id, org_id, department_id, project_id, function, program_key,
                   effective_from::text, effective_to::text, created_at::text, created_by::text
-      `, "objects");
-      const previous = closed[0];
-      if (!previous) {
-        throw new NonprofitError({
-          message: "The previous functional mapping changed before the new mapping could be saved.",
-          status: 409,
-          code: "functional_mapping_stale",
-          remedy: "Reload the functional mapping schedule and retry with a current effective date.",
+      `,
+          "objects",
+        );
+        const previous = closed[0];
+        if (!previous) {
+          throw new NonprofitError({
+            message:
+              "The previous functional mapping changed before the new mapping could be saved.",
+            status: 409,
+            code: "functional_mapping_stale",
+            remedy:
+              "Reload the functional mapping schedule and retry with a current effective date.",
+          });
+        }
+        await auditMapping(tx, {
+          orgId: input.orgId,
+          rowId: prior.id,
+          actorId: input.actorId,
+          action: "update",
+          before: toMapping(prior),
+          after: toMapping(previous),
+          reason,
         });
       }
-      await auditMapping(tx, {
-        orgId: input.orgId,
-        rowId: prior.id,
-        actorId: input.actorId,
-        action: "update",
-        before: toMapping(prior),
-        after: toMapping(previous),
-        reason,
-      });
-    }
 
-    const overlaps = await tx.execute<{ id: string }>(sql`
+      const overlaps = await tx.execute<{ id: string }>(
+        sql`
       select id from functional_mappings
        where org_id = ${input.orgId}
          and department_id is not distinct from ${departmentId}
@@ -236,19 +276,21 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
          and daterange(effective_from, effective_to, '[]') &&
              daterange(${input.effectiveFrom}::date, ${effectiveTo}::date, '[]')
        for update
-    `, "objects");
-    if (overlaps.length > 0) {
-      throw mappingRefusal(
-        "The functional mapping period overlaps an existing mapping for this department or project.",
-        "functional_mapping_period_overlap",
-        "Choose an effective date after the existing mapping ends, or correct the existing schedule with setFunctionalMapping.",
-        "effectiveFrom",
+    `,
+        "objects",
       );
-    }
+      if (overlaps.length > 0) {
+        throw mappingRefusal(
+          "The functional mapping period overlaps an existing mapping for this department or project.",
+          "functional_mapping_period_overlap",
+          "Choose an effective date after the existing mapping ends, or correct the existing schedule with setFunctionalMapping.",
+          "effectiveFrom",
+        );
+      }
 
-    let inserted: { rows: FunctionalMappingRow[] };
-    try {
-      inserted = await tx.execute<FunctionalMappingRow>(sql`
+      let inserted: { rows: FunctionalMappingRow[] };
+      try {
+        inserted = await tx.execute<FunctionalMappingRow>(sql`
         insert into functional_mappings
           (org_id, department_id, project_id, function, program_key, effective_from, effective_to,
            created_by, updated_by)
@@ -259,53 +301,60 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
         returning id, org_id, department_id, project_id, function, program_key,
                   effective_from::text, effective_to::text, created_at::text, created_by::text
       `);
-    } catch (error) {
-      const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
-      const dbError = cause as { code?: unknown; constraint?: unknown };
-      if (dbError.code === "23P01" && typeof dbError.constraint === "string" &&
-          dbError.constraint.startsWith("functional_mappings_")) {
-        throw mappingRefusal(
-          "The functional mapping period overlaps a mapping saved at the same time.",
-          "functional_mapping_period_overlap",
-          "Reload the department or project schedule and choose an effective period with no overlap.",
-          "effectiveFrom",
-        );
+      } catch (error) {
+        const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+        const dbError = cause as { code?: unknown; constraint?: unknown };
+        if (
+          dbError.code === "23P01" &&
+          typeof dbError.constraint === "string" &&
+          dbError.constraint.startsWith("functional_mappings_")
+        ) {
+          throw mappingRefusal(
+            "The functional mapping period overlaps a mapping saved at the same time.",
+            "functional_mapping_period_overlap",
+            "Reload the department or project schedule and choose an effective period with no overlap.",
+            "effectiveFrom",
+          );
+        }
+        throw error;
       }
-      throw error;
-    }
-    const row = inserted.rows[0];
-    if (!row) {
-      throw new NonprofitError({
-        message: "The functional mapping was not saved.",
-        status: 409,
-        code: "functional_mapping_write_missing",
-        remedy: "Retry the mapping change after checking the nonprofit setup record.",
+      const row = inserted.rows[0];
+      if (!row) {
+        throw new NonprofitError({
+          message: "The functional mapping was not saved.",
+          status: 409,
+          code: "functional_mapping_write_missing",
+          remedy: "Retry the mapping change after checking the nonprofit setup record.",
+        });
+      }
+      const saved = toMapping(row);
+      await auditMapping(tx, {
+        orgId: input.orgId,
+        rowId: saved.id,
+        actorId: input.actorId,
+        action: "insert",
+        before: null,
+        after: saved,
+        reason,
       });
-    }
-    const saved = toMapping(row);
-    await auditMapping(tx, {
-      orgId: input.orgId,
-      rowId: saved.id,
-      actorId: input.actorId,
-      action: "insert",
-      before: null,
-      after: saved,
-      reason,
-    });
-    return saved;
-  }));
+      return saved;
+    }),
+  );
 }
 
 export async function listFunctionalMappings(orgId: string): Promise<FunctionalMapping[]> {
   return withOrgContext(orgId, async () => {
     if (!(await orgFeatureEnabled(orgId, "functionalExpenses", db))) throw functionalFeatureOff();
-    const rows = await db.execute<FunctionalMappingRow>(sql`
+    const rows = await db.execute<FunctionalMappingRow>(
+      sql`
       select id, org_id, department_id, project_id, function, program_key,
              effective_from::text, effective_to::text, created_at::text, created_by::text
         from functional_mappings
        where org_id = ${orgId}
        order by coalesce(department_id, project_id), effective_from, id
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toMapping);
   });
 }
@@ -323,10 +372,12 @@ export type FunctionalAssignment = {
 };
 
 function appliesOn(mapping: FunctionalMapping, line: FunctionalLine): boolean {
-  return (mapping.departmentId !== null && mapping.departmentId === line.departmentId ||
-    mapping.projectId !== null && mapping.projectId === line.projectId) &&
+  return (
+    ((mapping.departmentId !== null && mapping.departmentId === line.departmentId) ||
+      (mapping.projectId !== null && mapping.projectId === line.projectId)) &&
     mapping.effectiveFrom <= line.postingDate &&
-    (mapping.effectiveTo === null || mapping.effectiveTo >= line.postingDate);
+    (mapping.effectiveTo === null || mapping.effectiveTo >= line.postingDate)
+  );
 }
 
 /** Resolve an expense line without inventing a default function. */
@@ -335,10 +386,17 @@ export function resolveFunctionalAssignment(
   mappings: readonly FunctionalMapping[],
 ): FunctionalAssignment {
   const candidates = mappings.filter((mapping) => appliesOn(mapping, line));
-  const department = candidates.find((mapping) => mapping.departmentId === line.departmentId && line.departmentId !== null);
-  const project = candidates.find((mapping) => mapping.projectId === line.projectId && line.projectId !== null);
-  if (department && project &&
-      (department.functionKey !== project.functionKey || department.programKey !== project.programKey)) {
+  const department = candidates.find(
+    (mapping) => mapping.departmentId === line.departmentId && line.departmentId !== null,
+  );
+  const project = candidates.find(
+    (mapping) => mapping.projectId === line.projectId && line.projectId !== null,
+  );
+  if (
+    department &&
+    project &&
+    (department.functionKey !== project.functionKey || department.programKey !== project.programKey)
+  ) {
     throw mappingRefusal(
       `Expense account ${line.accountName} has department and project mappings that assign different functions.`,
       "functional_mapping_conflict",
@@ -423,7 +481,9 @@ export function splitSharedCost(input: {
       );
     }
     throw mappingRefusal(
-      error instanceof Error ? error.message : "The allocation driver could not split the shared cost.",
+      error instanceof Error
+        ? error.message
+        : "The allocation driver could not split the shared cost.",
       "functional_allocation_invalid",
       "Correct the published allocation rule and driver weights, then rerun the functional statement.",
     );
@@ -435,7 +495,8 @@ export function splitSharedCost(input: {
         message: "The allocation kernel returned a target that was not in the disclosed driver.",
         status: 409,
         code: "functional_allocation_target_missing",
-        remedy: "Reload the published allocation rule and its driver values before splitting the shared cost.",
+        remedy:
+          "Reload the published allocation rule and its driver values before splitting the shared cost.",
       });
     }
     return { ...target, ...share };

@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Plus } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button, Drawer, Input, Label } from '@openbooks/ui'
-import { UNTITLED_DASHBOARD_NAME } from '../../../../lib/insight-untitled'
-import { refusalMessageFromBody } from '../../../../lib/api-error'
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import { Button, Drawer, Input, Label } from "@openbooks/ui";
+import { UNTITLED_DASHBOARD_NAME } from "../../../../lib/insight-untitled";
+import { refusalMessageFromBody } from "../../../../lib/api-error";
 
 /**
  * Unsaved create: opens a local dialog (name + description, zero writes) and
@@ -15,27 +15,27 @@ import { refusalMessageFromBody } from '../../../../lib/api-error'
  * new board. Cancel/close writes nothing.
  */
 export function NewDashboardButton() {
-  const t = useTranslations('insights.dashboards')
-  const tb = useTranslations('insights.builder')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("insights.dashboards");
+  const tb = useTranslations("insights.builder");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
   // One stable idempotency key per dialog session: a double-clicked Save (or
   // a retried request) resolves to the same dashboard instead of a duplicate.
-  const requestIdRef = useRef<string | null>(null)
+  const requestIdRef = useRef<string | null>(null);
 
   async function save() {
-    setBusy(true)
-    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setBusy(true);
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
     try {
-      const res = await fetch('/api/insights/dashboards', {
-        method: 'POST',
+      const res = await fetch("/api/insights/dashboards", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': requestIdRef.current,
+          "Content-Type": "application/json",
+          "Idempotency-Key": requestIdRef.current,
         },
         body: JSON.stringify({
           // The stored name is the canonical sentinel, never the localized
@@ -44,77 +44,78 @@ export function NewDashboardButton() {
           name: name.trim() || UNTITLED_DASHBOARD_NAME,
           description: description.trim() || null,
         }),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
       if (!res.ok) {
-        const failure = (await res.json().catch(() => null)) as { error?: unknown } | null
+        const failure = (await res.json().catch(() => null)) as { error?: unknown } | null;
         toast.error(
-          refusalMessageFromBody(failure, { fallback: t('createDraftFailed') }) ?? t('createDraftFailed'),
-        )
-        return
+          refusalMessageFromBody(failure, { fallback: t("createDraftFailed") }) ??
+            t("createDraftFailed"),
+        );
+        return;
       }
-      const data = (await res.json()) as { id?: unknown }
-      if (typeof data.id !== 'string' || !data.id) {
-        toast.error(t('createDraftFailed'))
-        return
+      const data = (await res.json()) as { id?: unknown };
+      if (typeof data.id !== "string" || !data.id) {
+        toast.error(t("createDraftFailed"));
+        return;
       }
-      setOpen(false)
-      router.push(`/insights/dashboards/${data.id}`)
-      router.refresh()
+      setOpen(false);
+      router.push(`/insights/dashboards/${data.id}`);
+      router.refresh();
     } catch {
-      toast.error(t('createDraftFailed'))
+      toast.error(t("createDraftFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <>
       <Button onClick={() => setOpen(true)}>
-        <Plus size={15} /> {t('newButton')}
+        <Plus size={15} /> {t("newButton")}
       </Button>
       {open ? (
         <Drawer
           open
           onClose={() => setOpen(false)}
           size="md"
-          title={t('newButton')}
+          title={t("newButton")}
           headerActions={
             <>
               <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>
-                {tCommon('actions.cancel')}
+                {tCommon("actions.cancel")}
               </Button>
               <Button disabled={busy} onClick={save}>
-                {busy ? tCommon('actions.creating') : tCommon('actions.create')}
+                {busy ? tCommon("actions.creating") : tCommon("actions.create")}
               </Button>
             </>
           }
         >
           <div className="space-y-5">
             <div className="space-y-1.5">
-              <Label htmlFor="new-dashboard-name">{tCommon('labels.name')}</Label>
+              <Label htmlFor="new-dashboard-name">{tCommon("labels.name")}</Label>
               <Input
                 id="new-dashboard-name"
                 value={name}
                 disabled={busy}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={tb('namePlaceholder')}
+                placeholder={tb("namePlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-dashboard-description">{tCommon('labels.description')}</Label>
+              <Label htmlFor="new-dashboard-description">{tCommon("labels.description")}</Label>
               <Input
                 id="new-dashboard-description"
                 value={description}
                 disabled={busy}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={tCommon('labels.optional')}
+                placeholder={tCommon("labels.optional")}
               />
             </div>
           </div>
         </Drawer>
       ) : null}
     </>
-  )
+  );
 }

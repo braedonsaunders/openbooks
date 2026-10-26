@@ -1,15 +1,22 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { crmSharedScope, crmOpportunityScope } from '../../../../lib/crm-scope'
-import { can, requirePermission } from '../../../../lib/authz'
-import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { loadActivity } from '../../../../lib/crm'
-import type { ActivityDrawer } from '../ActivityDrawer'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { crmSharedScope, crmOpportunityScope } from "../../../../lib/crm-scope";
+import { can, requirePermission } from "../../../../lib/authz";
+import { customerGroupTabs } from "../../../../components/module-home/group-tabs";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { loadActivity } from "../../../../lib/crm";
+import type { ActivityDrawer } from "../ActivityDrawer";
 
 /**
  * The activity list, split into a loader and a spec.
@@ -28,102 +35,111 @@ import type { ActivityDrawer } from '../ActivityDrawer'
  *    Switching activities reuses the mounted flyout in both renders.
  */
 
-type ActivityDrawerProps = Parameters<typeof ActivityDrawer>[0]
+type ActivityDrawerProps = Parameters<typeof ActivityDrawer>[0];
 
 export interface ActivitiesData {
-  title: string
-  description: string
-  newLabel: string
-  createFailed: string
-  canManage: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  drawer: ActivityDrawerProps | null
-  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
+  title: string;
+  description: string;
+  newLabel: string;
+  createFailed: string;
+  canManage: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  drawer: ActivityDrawerProps | null;
+  tabs: Awaited<ReturnType<typeof customerGroupTabs>>;
 }
 
 export async function loadActivities(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ActivitiesData> {
-  const authz = await requirePermission('crm.activities.read')
-  const manage = can(authz, 'crm.activities.manage')
-  const t = await getTranslations('crm')
-  const openId = pickString(sp.activity)
+  const authz = await requirePermission("crm.activities.read");
+  const manage = can(authz, "crm.activities.manage");
+  const t = await getTranslations("crm");
+  const openId = pickString(sp.activity);
 
-  let drawer: (ActivityDrawerProps & { remountKey: string }) | null = null
+  let drawer: (ActivityDrawerProps & { remountKey: string }) | null = null;
   if (openId && isUuid(openId)) {
     const [open, owners, accounts, opportunities] = await Promise.all([
       loadActivity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
-      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
-      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`, 'objects')),
-      (db.execute(sql`select o.id,o.opportunity_number,o.title from crm_opportunities o where o.org_id=${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)} order by o.created_at desc`, 'objects')),
-    ])
+      db.execute(
+        sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`,
+        "objects",
+      ),
+      db.execute(
+        sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)} order by p.display_name`,
+        "objects",
+      ),
+      db.execute(
+        sql`select o.id,o.opportunity_number,o.title from crm_opportunities o where o.org_id=${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)} order by o.created_at desc`,
+        "objects",
+      ),
+    ]);
     if (open) {
-      const requestedReturn = pickString(sp.drawerReturn)
-      const closeHref = requestedReturn?.startsWith('/crm/activities') ? requestedReturn : '/crm/activities'
+      const requestedReturn = pickString(sp.drawerReturn);
+      const closeHref = requestedReturn?.startsWith("/crm/activities")
+        ? requestedReturn
+        : "/crm/activities";
       drawer = {
         // Same remount contract as the opportunity drawer: local form state
         // must not survive a record switch.
         remountKey: openId,
-        data: open as unknown as ActivityDrawerProps['data'],
-        owners: owners as unknown as ActivityDrawerProps['owners'],
-        accounts: accounts as unknown as ActivityDrawerProps['accounts'],
-        opportunities: opportunities as unknown as ActivityDrawerProps['opportunities'],
+        data: open as unknown as ActivityDrawerProps["data"],
+        owners: owners as unknown as ActivityDrawerProps["owners"],
+        accounts: accounts as unknown as ActivityDrawerProps["accounts"],
+        opportunities: opportunities as unknown as ActivityDrawerProps["opportunities"],
         closeHref,
         canManage: manage,
-      }
+      };
     }
   }
 
   return {
-    title: t('activities.title'),
-    description: t('activities.description'),
-    newLabel: t('activities.new'),
-    createFailed: t('feedback.createFailed'),
+    title: t("activities.title"),
+    description: t("activities.description"),
+    newLabel: t("activities.new"),
+    createFailed: t("feedback.createFailed"),
     canManage: manage,
     currentParams: sp,
-    tabs: await customerGroupTabs(authz, '/crm/activities'),
+    tabs: await customerGroupTabs(authz, "/crm/activities"),
     drawer,
-  }
+  };
 }
 
-const f = ref<ActivitiesData>()
+const f = ref<ActivitiesData>();
 
 export function activitiesSpec(data: ActivitiesData): PageSpec {
   // The native header action and the list empty action are the same
   // CrmNewButton element; the labels ride along as loader-resolved strings.
   const newActivity = {
-    widget: 'crm-new-button',
+    widget: "crm-new-button",
     props: {
-      apiPath: '/api/crm/activities/draft',
-      basePath: '/crm/activities',
-      param: 'activity',
+      apiPath: "/api/crm/activities/draft",
+      basePath: "/crm/activities",
+      param: "activity",
       label: data.newLabel,
       failed: data.createFailed,
     },
-  }
+  };
   return page({
-    route: '/crm/activities',
-    layout: 'list',
+    route: "/crm/activities",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
-          widget(newActivity.widget, newActivity.props, f('canManage')),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget(newActivity.widget, newActivity.props, f("canManage")),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'activity',
+      widgetBlock("entity-list-view", {
+        recordType: "activity",
         sp: data.currentParams,
         emptyAction: data.canManage ? newActivity : null,
-        drawer: data.drawer
-          ? [{ widget: 'activity-drawer', props: { drawer: data.drawer } }]
-          : [],
+        drawer: data.drawer ? [{ widget: "activity-drawer", props: { drawer: data.drawer } }] : [],
       }),
     ],
-  })
+  });
 }

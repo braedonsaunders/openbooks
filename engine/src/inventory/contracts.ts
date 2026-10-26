@@ -32,7 +32,12 @@ export class InventoryOwnershipError extends InventoryError {}
  * collect costs (stock counts) catch it to name their own remedy.
  */
 export class InventoryCostBasisError extends InventoryError {
-  constructor(message: string, readonly itemLabel: string) { super(message); }
+  constructor(
+    message: string,
+    readonly itemLabel: string,
+  ) {
+    super(message);
+  }
 }
 /** A record is absent or outside the actor's organization/subsidiary scope. */
 export class InventoryNotFoundError extends InventoryError {}
@@ -43,7 +48,10 @@ export class InventoryNotFoundError extends InventoryError {}
  * path instead of refusing with the kernel sentence alone.
  */
 export class DownstreamConsumptionError extends InventoryError {
-  constructor(message: string, readonly movementId: string) {
+  constructor(
+    message: string,
+    readonly movementId: string,
+  ) {
     super(message);
     this.name = "DownstreamConsumptionError";
   }
@@ -64,7 +72,12 @@ export class UnitConversionError extends InventoryError {
   readonly status = 422;
   constructor(
     message: string,
-    readonly details: { itemId: string | null; itemName: string | null; unit: string; baseUnit: string },
+    readonly details: {
+      itemId: string | null;
+      itemName: string | null;
+      unit: string;
+      baseUnit: string;
+    },
   ) {
     super(message);
     this.name = "UnitConversionError";
@@ -86,7 +99,11 @@ export class BillLinesUnmatchedError extends InventoryError {
   constructor(
     message: string,
     readonly remedy: string,
-    readonly details: { lineNumber: number; itemCode: string | null; purchaseOrderNumbers: string[] },
+    readonly details: {
+      lineNumber: number;
+      itemCode: string | null;
+      purchaseOrderNumbers: string[];
+    },
   ) {
     super(message);
     this.name = "BillLinesUnmatchedError";

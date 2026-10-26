@@ -8,10 +8,14 @@ import { RECORD_TYPE_BY_KEY } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 import { isUuid } from "../../../../lib/list-params";
 const putBodySchema0 = z.strictObject({
-  recordType: z.string().trim().min(1, "recordType is required").refine(
-    (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
-    "recordType must name a supported record type",
-  ),
+  recordType: z
+    .string()
+    .trim()
+    .min(1, "recordType is required")
+    .refine(
+      (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
+      "recordType must name a supported record type",
+    ),
   viewId: uuidString("viewId must be a valid id").nullable().optional(),
 });
 
@@ -26,8 +30,7 @@ export const PUT = defineRoute({
   public: "session",
   body: putBodySchema0,
   handler: async ({ request: _req, authz, body: routeBody }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
 
     const body = routeBody as {
@@ -35,20 +38,14 @@ export const PUT = defineRoute({
       viewId?: string | null;
     };
     if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
-      return NextResponse.json(
-        { error: "unknown record type" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "unknown record type" }, { status: 400 });
     const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
     if (refused) return refused;
     const viewId = body.viewId ?? null;
     // A malformed id would surface as a Postgres uuid throw and a raw 500;
     // resolve it through the same 404 as an unknown view.
     if (viewId && !isUuid(viewId)) {
-      return NextResponse.json(
-        { error: "list view not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "list view not found" }, { status: 404 });
     }
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
@@ -58,12 +55,15 @@ export const PUT = defineRoute({
     // would report {ok} for a view resolution cannot apply.
     const outcome = await db.transaction(async (tx) => {
       if (viewId) {
-        const owned = await tx.execute<{ isActive: boolean; name: string }>(sql`
+        const owned = await tx.execute<{ isActive: boolean; name: string }>(
+          sql`
         select is_active as "isActive", name from list_views
          where id = ${viewId} and org_id = ${user.orgId} and record_type = ${body.recordType}
            and (scope = 'org' or owner_id = ${user.id})
          for update
-      `, "objects");
+      `,
+          "objects",
+        );
         if (!owned[0]) return { kind: "missing" as const };
         if (!owned[0].isActive) {
           return { kind: "inactive" as const, name: owned[0].name };
@@ -79,10 +79,7 @@ export const PUT = defineRoute({
       return { kind: "ok" as const };
     });
     if (outcome.kind === "missing")
-      return NextResponse.json(
-        { error: "list view not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "list view not found" }, { status: 404 });
     if (outcome.kind === "inactive") {
       return NextResponse.json(
         {
@@ -94,8 +91,7 @@ export const PUT = defineRoute({
     if (outcome.kind === "unwritten") {
       return NextResponse.json(
         {
-          error:
-            "list preference was not saved — retry after confirming the view is still active",
+          error: "list preference was not saved — retry after confirming the view is still active",
         },
         { status: 409 },
       );

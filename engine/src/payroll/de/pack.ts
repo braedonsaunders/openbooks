@@ -1,8 +1,5 @@
 import { lohnsteuerbescheinigungFiling } from "./filings.ts";
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 import type {
   PayrollCountryPack,
   PayrollJurisdiction,
@@ -34,9 +31,9 @@ import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
  */
 
 const DE_YEAR_REFUSAL =
-  "DE payroll pack: only tax year 2026 is transcribed (BMF "
-  + "Programmablaufplan für den Lohnsteuerabzug 2026, BMF-Schreiben vom "
-  + "12.11.2025, plus SVRV 2026).";
+  "DE payroll pack: only tax year 2026 is transcribed (BMF " +
+  "Programmablaufplan für den Lohnsteuerabzug 2026, BMF-Schreiben vom " +
+  "12.11.2025, plus SVRV 2026).";
 
 /** The 16 Bundesländer — every code an employee may legitimately carry. */
 const DE_LAENDER: readonly { code: string; name: string }[] = [
@@ -67,8 +64,9 @@ const DE_REGION_COVERAGE: PayrollRegionCoverage = {
   // — so every Land is supported end to end.
   supported: DE_LAENDER.map((land) => land.code),
   unsupportedReason:
-    "Lohnsteuer withholding for {region} is not implemented by the DE payroll "
-    + "pack. " + DE_YEAR_REFUSAL,
+    "Lohnsteuer withholding for {region} is not implemented by the DE payroll " +
+    "pack. " +
+    DE_YEAR_REFUSAL,
 };
 
 function deJurisdiction(code: string, name: string): PayrollJurisdiction {
@@ -99,10 +97,10 @@ const DE_ELSTAM: PayrollCertificate = {
   purpose: "withholding",
   citation: "EStG §§38b (Steuerklassen), 39a (Freibeträge), 39e (ELStAM)",
   summary:
-    "The Finanzamt-issued electronic wage-tax attributes the employer "
-    + "retrieves for each employee. It sets the Steuerklasse, child-allowance "
-    + "counter, confession key and §39a amounts the Programmablaufplan "
-    + "computes from.",
+    "The Finanzamt-issued electronic wage-tax attributes the employer " +
+    "retrieves for each employee. It sets the Steuerklasse, child-allowance " +
+    "counter, confession key and §39a amounts the Programmablaufplan " +
+    "computes from.",
   storage: "certificate_rows",
   fields: [
     {
@@ -146,11 +144,12 @@ const DE_ELSTAM: PayrollCertificate = {
       // who owes it — roughly 55 EUR a month under-withheld for a Bavarian
       // Catholic on 6,200 EUR, which is an employer liability rather than a
       // rounding difference. The prose was the defect.
-      help: "Confession key from ELStAM (for example rk, ev). REQUIRED for any "
-        + "employee liable to Kirchenlohnsteuer: this pack withholds it at 8% "
-        + "of the Lohnsteuer in Bayern and Baden-Württemberg and 9% elsewhere. "
-        + "Leave empty ONLY for an employee who owes no church tax — an empty "
-        + "key withholds nothing.",
+      help:
+        "Confession key from ELStAM (for example rk, ev). REQUIRED for any " +
+        "employee liable to Kirchenlohnsteuer: this pack withholds it at 8% " +
+        "of the Lohnsteuer in Bayern and Baden-Württemberg and 9% elsewhere. " +
+        "Leave empty ONLY for an employee who owes no church tax — an empty " +
+        "key withholds nothing.",
     },
     {
       key: "freibetrag",
@@ -176,8 +175,9 @@ const DE_ELSTAM: PayrollCertificate = {
       min: "0.001",
       max: "1.000",
       default: "1.000",
-      help: "Faktor for the Steuerklasse IV Faktorverfahren (EStG §39f), three "
-        + "decimals. Only valid with Steuerklasse IV; 1.000 means no Faktorverfahren.",
+      help:
+        "Faktor for the Steuerklasse IV Faktorverfahren (EStG §39f), three " +
+        "decimals. Only valid with Steuerklasse IV; 1.000 means no Faktorverfahren.",
     },
   ],
 };
@@ -198,10 +198,10 @@ const DE_PV_NACHWEIS: PayrollCertificate = {
   purpose: "withholding",
   citation: "§55 Abs. 3 SGB XI (Beitragszuschlag/Abschläge); §58 Abs. 1 SGB XI",
   summary:
-    "The employer's record of the employee's children relevant to the "
-    + "Pflegeversicherung childless surcharge and per-child discounts. "
-    + "Collected from the employee (PUEG Nachweispflicht), not retrieved "
-    + "from ELStAM.",
+    "The employer's record of the employee's children relevant to the " +
+    "Pflegeversicherung childless surcharge and per-child discounts. " +
+    "Collected from the employee (PUEG Nachweispflicht), not retrieved " +
+    "from ELStAM.",
   storage: "certificate_rows",
   fields: [
     {
@@ -209,8 +209,9 @@ const DE_PV_NACHWEIS: PayrollCertificate = {
       label: "Beitragszuschlag für Kinderlose",
       kind: "flag",
       required: true,
-      help: "Set when the employee is 23 or older with no eligible children "
-        + "(§55 Abs. 3 Satz 1 SGB XI): the 0,6-point surcharge applies.",
+      help:
+        "Set when the employee is 23 or older with no eligible children " +
+        "(§55 Abs. 3 Satz 1 SGB XI): the 0,6-point surcharge applies.",
     },
     {
       key: "abschlag_kinder",
@@ -219,8 +220,9 @@ const DE_PV_NACHWEIS: PayrollCertificate = {
       min: "0",
       max: "4",
       required: true,
-      help: "Number of discount children (second to fifth child), 0–4: each "
-        + "lowers the employee PV share by 0,25 points (§55 Abs. 3 SGB XI).",
+      help:
+        "Number of discount children (second to fifth child), 0–4: each " +
+        "lowers the employee PV share by 0,25 points (§55 Abs. 3 SGB XI).",
     },
   ],
 };
@@ -247,10 +249,10 @@ const DE_AUSGLEICH: PayrollCertificate = {
   purpose: "withholding",
   citation: "EStG §42b Abs. 1 (Voraussetzungen und Ausschlüsse des Lohnsteuer-Jahresausgleichs)",
   summary:
-    "The employer's per-year attestation of the three §42b prerequisites "
-    + "for the Lohnsteuer-Jahresausgleich: continuous employment, an "
-    + "unchanged class and workplace, and no statutory exclusion. Settled "
-    + "from the employer's own records, not retrieved from ELStAM.",
+    "The employer's per-year attestation of the three §42b prerequisites " +
+    "for the Lohnsteuer-Jahresausgleich: continuous employment, an " +
+    "unchanged class and workplace, and no statutory exclusion. Settled " +
+    "from the employer's own records, not retrieved from ELStAM.",
   storage: "certificate_rows",
   fields: [
     {
@@ -258,29 +260,32 @@ const DE_AUSGLEICH: PayrollCertificate = {
       label: "Ganzjähriges Dienstverhältnis",
       kind: "flag",
       required: true,
-      help: "Set when the employee stood in the employment relationship continuously "
-        + "through the whole Ausgleichsjahr and is unbeschränkt einkommensteuerpflichtig "
-        + "(§42b Abs. 1 Satz 1 EStG) — settle from the HR entry/exit dates and residence.",
+      help:
+        "Set when the employee stood in the employment relationship continuously " +
+        "through the whole Ausgleichsjahr and is unbeschränkt einkommensteuerpflichtig " +
+        "(§42b Abs. 1 Satz 1 EStG) — settle from the HR entry/exit dates and residence.",
     },
     {
       key: "unveraendert",
       label: "Unveränderte Steuerklasse und Betriebsstätte",
       kind: "flag",
       required: true,
-      help: "Set when the Steuerklasse and the Beschäftigungsland were unchanged all year "
-        + "and never V or VI (§42b Abs. 1 Satz 3 Nr. 2–3 EStG) — settle from the ELStAM "
-        + "retrieval history and the Betriebsstätten record.",
+      help:
+        "Set when the Steuerklasse and the Beschäftigungsland were unchanged all year " +
+        "and never V or VI (§42b Abs. 1 Satz 3 Nr. 2–3 EStG) — settle from the ELStAM " +
+        "retrieval history and the Betriebsstätten record.",
     },
     {
       key: "kein_ausschluss",
       label: "Kein Ausschlussgrund",
       kind: "flag",
       required: true,
-      help: "Set when no §42b exclusion applies: no employee objection, no wage-replacement "
-        + "benefits, no Großbuchstabe U, no mid-year Vorsorgepauschale change, no unwithheld "
-        + "foreign income — and no sonstige Bezüge, Versorgungsbezüge or Altersentlastungsbetrag, "
-        + "which this pack does not transcribe (Abs. 1 Satz 3 Nr. 1, 4, 4a, 5, 5a, 6). Settle "
-        + "from the Lohnkonto, the benefit records and the pay history.",
+      help:
+        "Set when no §42b exclusion applies: no employee objection, no wage-replacement " +
+        "benefits, no Großbuchstabe U, no mid-year Vorsorgepauschale change, no unwithheld " +
+        "foreign income — and no sonstige Bezüge, Versorgungsbezüge or Altersentlastungsbetrag, " +
+        "which this pack does not transcribe (Abs. 1 Satz 3 Nr. 1, 4, 4a, 5, 5a, 6). Settle " +
+        "from the Lohnkonto, the benefit records and the pay history.",
     },
   ],
 };
@@ -308,8 +313,8 @@ function deWithholdingRegion(code: string, name: string): PayrollRegionWithholdi
     subRegions: [],
     subRegionConflictRule: "both",
     citation:
-      "EStG §§38–42f (Lohnsteuer); BMF Programmablaufplan für den "
-      + "Lohnsteuerabzug 2026 (BMF-Schreiben vom 12.11.2025)",
+      "EStG §§38–42f (Lohnsteuer); BMF Programmablaufplan für den " +
+      "Lohnsteuerabzug 2026 (BMF-Schreiben vom 12.11.2025)",
   };
 }
 
@@ -355,7 +360,8 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
     example: "12345678901",
     requiredForPayroll: true,
     neededFor: "ELStAM and the Lohnsteuerbescheinigung",
-    citation: "§ 139b AO: the BZSt assigns an 11-digit Steuerliche Identifikationsnummer (IdNr) for life",
+    citation:
+      "§ 139b AO: the BZSt assigns an 11-digit Steuerliche Identifikationsnummer (IdNr) for life",
     numericEntry: true,
   },
   installable: true,
@@ -392,9 +398,13 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "lohnsteuer",
       components: [
         {
-          code: "LST", name: "Lohnsteuer", systemKey: "lohnsteuer",
-          kind: "deduction", sequence: 110,
-          assessedOn: "taxable_income", remittance: "tax_authority",
+          code: "LST",
+          name: "Lohnsteuer",
+          systemKey: "lohnsteuer",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
         },
       ],
     },
@@ -402,9 +412,13 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "solidaritaetszuschlag",
       components: [
         {
-          code: "SOLI", name: "Solidaritätszuschlag", systemKey: "solidaritaetszuschlag",
-          kind: "deduction", sequence: 115,
-          assessedOn: "taxable_income", remittance: "tax_authority",
+          code: "SOLI",
+          name: "Solidaritätszuschlag",
+          systemKey: "solidaritaetszuschlag",
+          kind: "deduction",
+          sequence: 115,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
         },
       ],
     },
@@ -412,9 +426,13 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "kirchenlohnsteuer",
       components: [
         {
-          code: "KIST", name: "Kirchenlohnsteuer", systemKey: "kirchenlohnsteuer",
-          kind: "deduction", sequence: 117,
-          assessedOn: "taxable_income", remittance: "tax_authority",
+          code: "KIST",
+          name: "Kirchenlohnsteuer",
+          systemKey: "kirchenlohnsteuer",
+          kind: "deduction",
+          sequence: 117,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
         },
       ],
     },
@@ -422,14 +440,22 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "kv",
       components: [
         {
-          code: "KV", name: "Krankenversicherung", systemKey: "kv",
-          kind: "deduction", sequence: 120,
-          assessedOn: "earnings", remittance: "external",
+          code: "KV",
+          name: "Krankenversicherung",
+          systemKey: "kv",
+          kind: "deduction",
+          sequence: 120,
+          assessedOn: "earnings",
+          remittance: "external",
         },
         {
-          code: "KV-ER", name: "Krankenversicherung (Arbeitgeber)", systemKey: "kv",
-          kind: "employer_contribution", sequence: 210,
-          assessedOn: "earnings", remittance: "external",
+          code: "KV-ER",
+          name: "Krankenversicherung (Arbeitgeber)",
+          systemKey: "kv",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "external",
         },
       ],
     },
@@ -437,14 +463,22 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "rv",
       components: [
         {
-          code: "RV", name: "Rentenversicherung", systemKey: "rv",
-          kind: "deduction", sequence: 130,
-          assessedOn: "earnings", remittance: "external",
+          code: "RV",
+          name: "Rentenversicherung",
+          systemKey: "rv",
+          kind: "deduction",
+          sequence: 130,
+          assessedOn: "earnings",
+          remittance: "external",
         },
         {
-          code: "RV-ER", name: "Rentenversicherung (Arbeitgeber)", systemKey: "rv",
-          kind: "employer_contribution", sequence: 215,
-          assessedOn: "earnings", remittance: "external",
+          code: "RV-ER",
+          name: "Rentenversicherung (Arbeitgeber)",
+          systemKey: "rv",
+          kind: "employer_contribution",
+          sequence: 215,
+          assessedOn: "earnings",
+          remittance: "external",
         },
       ],
     },
@@ -452,14 +486,22 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "av",
       components: [
         {
-          code: "AV", name: "Arbeitslosenversicherung", systemKey: "av",
-          kind: "deduction", sequence: 140,
-          assessedOn: "earnings", remittance: "external",
+          code: "AV",
+          name: "Arbeitslosenversicherung",
+          systemKey: "av",
+          kind: "deduction",
+          sequence: 140,
+          assessedOn: "earnings",
+          remittance: "external",
         },
         {
-          code: "AV-ER", name: "Arbeitslosenversicherung (Arbeitgeber)", systemKey: "av",
-          kind: "employer_contribution", sequence: 220,
-          assessedOn: "earnings", remittance: "external",
+          code: "AV-ER",
+          name: "Arbeitslosenversicherung (Arbeitgeber)",
+          systemKey: "av",
+          kind: "employer_contribution",
+          sequence: 220,
+          assessedOn: "earnings",
+          remittance: "external",
         },
       ],
     },
@@ -467,14 +509,22 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "pv",
       components: [
         {
-          code: "PV", name: "Pflegeversicherung", systemKey: "pv",
-          kind: "deduction", sequence: 150,
-          assessedOn: "earnings", remittance: "external",
+          code: "PV",
+          name: "Pflegeversicherung",
+          systemKey: "pv",
+          kind: "deduction",
+          sequence: 150,
+          assessedOn: "earnings",
+          remittance: "external",
         },
         {
-          code: "PV-ER", name: "Pflegeversicherung (Arbeitgeber)", systemKey: "pv",
-          kind: "employer_contribution", sequence: 225,
-          assessedOn: "earnings", remittance: "external",
+          code: "PV-ER",
+          name: "Pflegeversicherung (Arbeitgeber)",
+          systemKey: "pv",
+          kind: "employer_contribution",
+          sequence: 225,
+          assessedOn: "earnings",
+          remittance: "external",
         },
       ],
     },
@@ -482,19 +532,31 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "umlage",
       components: [
         {
-          code: "U1", name: "Umlage U1 (Krankheit)", systemKey: "umlage_u1",
-          kind: "employer_contribution", sequence: 240,
-          assessedOn: "earnings", remittance: "external",
+          code: "U1",
+          name: "Umlage U1 (Krankheit)",
+          systemKey: "umlage_u1",
+          kind: "employer_contribution",
+          sequence: 240,
+          assessedOn: "earnings",
+          remittance: "external",
         },
         {
-          code: "U2", name: "Umlage U2 (Mutterschaft)", systemKey: "umlage_u2",
-          kind: "employer_contribution", sequence: 245,
-          assessedOn: "earnings", remittance: "external",
+          code: "U2",
+          name: "Umlage U2 (Mutterschaft)",
+          systemKey: "umlage_u2",
+          kind: "employer_contribution",
+          sequence: 245,
+          assessedOn: "earnings",
+          remittance: "external",
         },
         {
-          code: "U3", name: "Insolvenzgeldumlage", systemKey: "umlage_u3",
-          kind: "employer_contribution", sequence: 250,
-          assessedOn: "earnings", remittance: "external",
+          code: "U3",
+          name: "Insolvenzgeldumlage",
+          systemKey: "umlage_u3",
+          kind: "employer_contribution",
+          sequence: 250,
+          assessedOn: "earnings",
+          remittance: "external",
         },
       ],
     },
@@ -502,9 +564,13 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
       key: "unfall",
       components: [
         {
-          code: "BG", name: "Berufsgenossenschaft (Unfallversicherung)", systemKey: "unfall",
-          kind: "employer_contribution", sequence: 260,
-          assessedOn: "earnings", remittance: "external",
+          code: "BG",
+          name: "Berufsgenossenschaft (Unfallversicherung)",
+          systemKey: "unfall",
+          kind: "employer_contribution",
+          sequence: 260,
+          assessedOn: "earnings",
+          remittance: "external",
         },
       ],
     },

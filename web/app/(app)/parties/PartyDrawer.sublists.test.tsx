@@ -9,7 +9,10 @@ import { stubModules } from "../../../testing/stub-modules";
 // a non-JSON body threw a parse error first. Both must surface the server's
 // named refusal, and fall back to a status-carrying message otherwise.
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/parties?party=p1", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/parties?party=p1",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
@@ -110,13 +113,16 @@ test("a refused activities load toasts the named refusal", async (t) => {
   });
   const unmount = await mount(<ActivitySublist partyId="p1" canManage={false} />);
   t.after(unmount);
-  assert.deepEqual(globalThis.__partySublistErrors, ["Activities need the CRM grant — ask an admin"]);
+  assert.deepEqual(globalThis.__partySublistErrors, [
+    "Activities need the CRM grant — ask an admin",
+  ]);
 });
 
 test("a non-JSON transactions error toasts the fallback with the status", async (t) => {
   globalThis.__partySublistErrors = [];
   const realFetch = globalThis.fetch;
-  (globalThis as Record<string, unknown>).fetch = async () => new Response("<html>proxy error</html>", { status: 502 });
+  (globalThis as Record<string, unknown>).fetch = async () =>
+    new Response("<html>proxy error</html>", { status: 502 });
   t.after(() => {
     (globalThis as Record<string, unknown>).fetch = realFetch;
   });
@@ -124,7 +130,10 @@ test("a non-JSON transactions error toasts the fallback with the status", async 
   t.after(unmount);
   assert.equal(globalThis.__partySublistErrors.length, 1);
   const message = globalThis.__partySublistErrors[0]!;
-  assert.ok(message.includes("(status 502)"), `the fallback must carry the status, got ${JSON.stringify(message)}`);
+  assert.ok(
+    message.includes("(status 502)"),
+    `the fallback must carry the status, got ${JSON.stringify(message)}`,
+  );
   assert.ok(
     !message.includes("Unexpected token") && !message.includes("JSON"),
     `a parse error must never reach the operator, got ${JSON.stringify(message)}`,
@@ -136,27 +145,71 @@ test("activity and transaction rows are hidden when the selected party's filtere
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const url = String(input);
-    if (url.includes("/p1/activities")) return Response.json({
-      rows: [{ id: "a-1", kind: "task", status: "planned", subject: "Prior party activity", activity_date: "2026-09-01T12:00:00.000Z" }],
-      total: 1, page: 1, perPage: 15, kinds: ["task"], statuses: ["planned"],
-    });
-    if (url.includes("/p1/transactions")) return Response.json({
-      rows: [{ id: "d-1", kind: "customer_invoice", document_number: "INV-PRIOR", reference_number: null, document_date: "2026-09-01", due_date: null, status: "posted", currency: "USD", total: "10.00", open_balance: "10.00", memo: null }],
-      total: 1, page: 1, perPage: 15, kinds: ["customer_invoice"], statuses: ["posted"],
-    });
+    if (url.includes("/p1/activities"))
+      return Response.json({
+        rows: [
+          {
+            id: "a-1",
+            kind: "task",
+            status: "planned",
+            subject: "Prior party activity",
+            activity_date: "2026-09-01T12:00:00.000Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        perPage: 15,
+        kinds: ["task"],
+        statuses: ["planned"],
+      });
+    if (url.includes("/p1/transactions"))
+      return Response.json({
+        rows: [
+          {
+            id: "d-1",
+            kind: "customer_invoice",
+            document_number: "INV-PRIOR",
+            reference_number: null,
+            document_date: "2026-09-01",
+            due_date: null,
+            status: "posted",
+            currency: "USD",
+            total: "10.00",
+            open_balance: "10.00",
+            memo: null,
+          },
+        ],
+        total: 1,
+        page: 1,
+        perPage: 15,
+        kinds: ["customer_invoice"],
+        statuses: ["posted"],
+      });
     return Response.json({ error: "Current party data is unavailable" }, { status: 403 });
   };
-  t.after(() => { globalThis.fetch = realFetch; });
+  t.after(() => {
+    globalThis.fetch = realFetch;
+  });
 
-  const activity = await mountSwitchable((partyId) => <ActivitySublist partyId={partyId} canManage={false} />);
+  const activity = await mountSwitchable((partyId) => (
+    <ActivitySublist partyId={partyId} canManage={false} />
+  ));
   t.after(activity.close);
   assert.ok(activity.text().includes("Prior party activity"));
   await activity.render("p2");
-  assert.ok(!activity.text().includes("Prior party activity"), "old activity rows must not survive a failed request for another party");
+  assert.ok(
+    !activity.text().includes("Prior party activity"),
+    "old activity rows must not survive a failed request for another party",
+  );
 
-  const transactions = await mountSwitchable((partyId) => <TransactionSublist partyId={partyId} role="customer" />);
+  const transactions = await mountSwitchable((partyId) => (
+    <TransactionSublist partyId={partyId} role="customer" />
+  ));
   t.after(transactions.close);
   assert.ok(transactions.text().includes("INV-PRIOR"));
   await transactions.render("p2");
-  assert.ok(!transactions.text().includes("INV-PRIOR"), "old transaction rows must not survive a failed request for another party");
+  assert.ok(
+    !transactions.text().includes("INV-PRIOR"),
+    "old transaction rows must not survive a failed request for another party",
+  );
 });

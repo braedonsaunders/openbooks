@@ -5,7 +5,10 @@ import { fromUnits, toUnits } from "@openbooks/engine/money/money";
 import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
 import { lockScopeRow } from "@openbooks/engine/organization/scope";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
-import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
+import {
+  createPaymentDocument,
+  updateDraftPayment,
+} from "@openbooks/engine/payments/payment-documents";
 import { openItemsForParty } from "@openbooks/engine/payments/payment-queries";
 import { sameCurrencyAllocation } from "@openbooks/engine/payments/settlement-policy";
 import { postPaymentWithApplications } from "@openbooks/engine/payments/payment-posting";
@@ -58,7 +61,9 @@ export async function lookupStoredValueBalance(
   if (!(await isFeatureEnabled(orgId, "storedValue"))) throw notFound("stored value");
   const code = input.code.trim();
   if (!code) throw invalidInput("code is required");
-  const found = await withOrgContext(orgId, () => lookupStoredValueByCode(orgId, code, context.authz.allowedSubsidiaryIds));
+  const found = await withOrgContext(orgId, () =>
+    lookupStoredValueByCode(orgId, code, context.authz.allowedSubsidiaryIds),
+  );
   if (!found) throw notFound("stored value");
   return {
     kind: found.kind,
@@ -109,18 +114,31 @@ export async function redeemStoredValueForInvoice(
     // The secret code never persists here: the org-bound digest identifies
     // the tender, so tendering a different code under the same key hashes
     // differently and fails closed instead of replaying another card.
-    request: { codeHash: hashStoredValueCode(orgId, code), amount: input.amount, invoiceId: input.invoiceId },
+    request: {
+      codeHash: hashStoredValueCode(orgId, code),
+      amount: input.amount,
+      invoiceId: input.invoiceId,
+    },
     // A stored receipt replays only while the actor still sees both sides:
     // losing invoice or account visibility refuses without ever returning
     // the original receipt.
     authorizeReplay: async () => {
       await withOrgContext(orgId, async () => {
-        const again = await resolveStoredValueTender(orgId, code, context.authz.allowedSubsidiaryIds);
+        const again = await resolveStoredValueTender(
+          orgId,
+          code,
+          context.authz.allowedSubsidiaryIds,
+        );
         if (!again) throw notFound("stored value");
-        const replayInvoice = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        const replayInvoice = (
+          await db.execute<{ subsidiaryId: string | null }>(
+            sql`
           select subsidiary_id as "subsidiaryId" from documents
            where id = ${input.invoiceId} and org_id = ${orgId} and kind = 'customer_invoice'
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (!replayInvoice) throw notFound("invoice");
         assertSubsidiaryAccess(context, replayInvoice.subsidiaryId);
       });
@@ -128,33 +146,56 @@ export async function redeemStoredValueForInvoice(
     execute: async () => {
       try {
         return await withOrgTransaction(orgId, async () => {
-          const resolved = await resolveStoredValueTender(orgId, code, context.authz.allowedSubsidiaryIds);
+          const resolved = await resolveStoredValueTender(
+            orgId,
+            code,
+            context.authz.allowedSubsidiaryIds,
+          );
           if (!resolved) throw notFound("stored value");
-          const invoice = (await db.execute<{
-            id: string; status: string; currency: string; partyId: string | null; subsidiaryId: string | null;
-          }>(sql`
+          const invoice = (
+            await db.execute<{
+              id: string;
+              status: string;
+              currency: string;
+              partyId: string | null;
+              subsidiaryId: string | null;
+            }>(
+              sql`
             select id, status, currency, party_id as "partyId", subsidiary_id as "subsidiaryId"
               from documents
              where id = ${input.invoiceId} and org_id = ${orgId} and kind = 'customer_invoice'
              limit 1
-          `, "objects"))[0];
+          `,
+              "objects",
+            )
+          )[0];
           if (!invoice) throw notFound("invoice");
           // Scope before lifecycle: a foreign invoice refuses here, before
           // its status or open balance can leak through a named refusal.
           assertSubsidiaryAccess(context, invoice.subsidiaryId);
           if (invoice.status !== "posted" && invoice.status !== "approved") {
-            throw invalidInput(`invoice is ${invoice.status}; only an open invoice can be paid with stored value`);
+            throw invalidInput(
+              `invoice is ${invoice.status}; only an open invoice can be paid with stored value`,
+            );
           }
           // The receipt applies against the invoice's open AR line, not the
           // document: the settlement kernel allocates per open-item line with
           // rate evidence, so a document reference alone no longer addresses
           // anything. An invoice with no open line is already paid.
           const openLine = invoice.partyId
-            ? (await openItemsForParty(invoice.partyId, "ar", orgId, context.authz.allowedSubsidiaryIds))
-              .find((item) => item.documentId === invoice.id)
+            ? (
+                await openItemsForParty(
+                  invoice.partyId,
+                  "ar",
+                  orgId,
+                  context.authz.allowedSubsidiaryIds,
+                )
+              ).find((item) => item.documentId === invoice.id)
             : undefined;
           if (!openLine) {
-            throw invalidInput("invoice has no open balance; only an unpaid invoice can be paid with stored value");
+            throw invalidInput(
+              "invoice has no open balance; only an unpaid invoice can be paid with stored value",
+            );
           }
           await lockLedgerSetupFence(db, orgId, "shared");
           const created = await createPaymentDocument({
@@ -178,9 +219,17 @@ export async function redeemStoredValueForInvoice(
             orgId,
             { allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
           );
-          const submission = await submitAndReleaseIfUngated("customer_payment", created.id, context.authz.user.id);
+          const submission = await submitAndReleaseIfUngated(
+            "customer_payment",
+            created.id,
+            context.authz.user.id,
+          );
           if (submission.flowError) {
-            throw new ApplicationError("invalid_input", `approval could not be routed: ${submission.flowError}`, 422);
+            throw new ApplicationError(
+              "invalid_input",
+              `approval could not be routed: ${submission.flowError}`,
+              422,
+            );
           }
           if (submission.gated) {
             return {
@@ -192,14 +241,26 @@ export async function redeemStoredValueForInvoice(
               balance: fromUnits(BigInt(resolved.balanceMinor)),
             };
           }
-          const posted = await postPaymentWithApplications(created.id, undefined, context.authz.user.id, context.source);
-          const balance = (await db.execute<{ balance: string }>(sql`
+          const posted = await postPaymentWithApplications(
+            created.id,
+            undefined,
+            context.authz.user.id,
+            context.source,
+          );
+          const balance = (
+            await db.execute<{ balance: string }>(
+              sql`
             select balance_minor::text as balance from stored_value_accounts
-             where id = ${resolved.accountId} and org_id = ${orgId}`, "objects"))[0];
+             where id = ${resolved.accountId} and org_id = ${orgId}`,
+              "objects",
+            )
+          )[0];
           // The receipt carries the posted balance: an unreadable row
           // refuses by name instead of fabricating a zero success.
           if (!balance) {
-            throw invalidInput("The stored-value receipt posted but its balance is no longer readable; have the stored-value entry history reviewed before retrying.");
+            throw invalidInput(
+              "The stored-value receipt posted but its balance is no longer readable; have the stored-value entry history reviewed before retrying.",
+            );
           }
           return {
             status: "posted" as const,

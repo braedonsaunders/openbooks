@@ -25,17 +25,15 @@ registerHooks({
   },
 });
 
-
 const { generateApiKey } = await import("../../../../lib/api-auth");
 const createRoute = await import("./[typeKey]/route.ts");
-const itemRoute = await import("./[typeKey]/[id]/route.ts"); const openApiRoute = await import("../openapi/route.ts");
+const itemRoute = await import("./[typeKey]/[id]/route.ts");
+const openApiRoute = await import("../openapi/route.ts");
 
 async function query<T extends Record<string, unknown>>(
   statement: ReturnType<typeof sql>,
 ): Promise<T[]> {
-  return withBypassContext(
-    async () => (await db.execute<T>(statement, "objects")) as T[],
-  );
+  return withBypassContext(async () => (await db.execute<T>(statement, "objects")) as T[]);
 }
 
 /** Install/uninstall an unconditional insert blocker on the execution audit. */
@@ -115,13 +113,16 @@ async function seedEvidenceOrg(): Promise<EvidenceOrg> {
     // permissions still intersect these grants during authentication.
     for (const userId of [adminUserId, guestUserId]) {
       const generated = generateApiKey();
-      const [row] = await db.execute<{ id: string }>(sql`
+      const [row] = await db.execute<{ id: string }>(
+        sql`
         insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview, scopes, is_active)
         values (${orgId}, ${userId},
                 ${userId === adminUserId ? "evidence admin key" : "roleless guest key"},
                 ${generated.keyPrefix}, ${generated.keyHash}, ${generated.keyPreview},
                 '["api.keys.manage", "parties.read", "parties.manage"]'::jsonb, true)
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (userId === adminUserId) {
         adminKey = generated.plaintext;
         adminKeyId = row!.id;
@@ -176,17 +177,20 @@ const COLLECTION_PATH = "/api/v1/records/parties";
 
 const partyCount = async (orgId: string): Promise<number> => {
   const [row] = await query<{ n: number }>(
-    sql`select count(*)::int as n from parties where org_id = ${orgId}`);
+    sql`select count(*)::int as n from parties where org_id = ${orgId}`,
+  );
   return row!.n;
 };
 const eventCount = async (orgId: string): Promise<number> => {
   const [row] = await query<{ n: number }>(
-    sql`select count(*)::int as n from api_key_events where org_id = ${orgId}`);
+    sql`select count(*)::int as n from api_key_events where org_id = ${orgId}`,
+  );
   return row!.n;
 };
 const claimCount = async (orgId: string): Promise<number> => {
   const [row] = await query<{ n: number }>(
-    sql`select count(*)::int as n from application_idempotency_keys where org_id = ${orgId}`);
+    sql`select count(*)::int as n from application_idempotency_keys where org_id = ${orgId}`,
+  );
   return row!.n;
 };
 
@@ -197,13 +201,18 @@ test("malformed authenticated commands retain execution audit evidence", async (
       createRoute.POST(
         malformedRecordsRequest(COLLECTION_PATH, org.adminKey, "evidence-malformed-01"),
         { params: Promise.resolve({ typeKey: "parties" }) },
-      ));
+      ),
+    );
 
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { error: "invalid request body" });
 
     const events = await query<{
-      key_id: string; method: string; path: string; status_code: number; error: string | null;
+      key_id: string;
+      method: string;
+      path: string;
+      status_code: number;
+      error: string | null;
     }>(sql`
       select key_id, method, path, status_code, error
         from api_key_events where org_id = ${org.orgId} order by id asc`);
@@ -215,18 +224,27 @@ test("malformed authenticated commands retain execution audit evidence", async (
       status_code: 400,
       error: "invalid_input",
     });
-    assert.equal(await partyCount(org.orgId), 0, "malformed input never reaches the application writer");
+    assert.equal(
+      await partyCount(org.orgId),
+      0,
+      "malformed input never reaches the application writer",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
 async function seedParty(orgId: string, displayName: string): Promise<string> {
-  const [party] = await withBypassContext(async () =>
-    await db.execute<{ id: string }>(sql`
+  const [party] = await withBypassContext(
+    async () =>
+      await db.execute<{ id: string }>(
+        sql`
       insert into parties (org_id, kind, display_name, created_by, updated_by)
       values (${orgId}, 'customer', ${displayName}, null, null)
-      returning id`, "objects"));
+      returning id`,
+        "objects",
+      ),
+  );
   assert.ok(party, "the fixture party exists");
   return party.id;
 }
@@ -237,9 +255,14 @@ test("a forced execution-audit failure blocks and rolls back the material create
     await setAuditFailureMode("forced");
 
     const response = await withOrgContext(org.orgId, () =>
-      createRoute.POST(recordsRequest("POST", COLLECTION_PATH, org.adminKey, "evidence-create-01",
-        { kind: "customer", display_name: "Evidence Party" }),
-      { params: Promise.resolve({ typeKey: "parties" }) }));
+      createRoute.POST(
+        recordsRequest("POST", COLLECTION_PATH, org.adminKey, "evidence-create-01", {
+          kind: "customer",
+          display_name: "Evidence Party",
+        }),
+        { params: Promise.resolve({ typeKey: "parties" }) },
+      ),
+    );
 
     // Fail closed: the client never sees success without durable evidence…
     assert.equal(response.status, 500);
@@ -263,9 +286,16 @@ test("a forced execution-audit failure blocks and rolls back the material update
 
     const response = await withOrgContext(org.orgId, () =>
       itemRoute.PATCH(
-        recordsRequest("PATCH", `${COLLECTION_PATH}/${partyId}`, org.adminKey, "evidence-update-01",
-          { display_name: "Renamed During Forced Failure" }),
-        { params: Promise.resolve({ typeKey: "parties", id: partyId }) }));
+        recordsRequest(
+          "PATCH",
+          `${COLLECTION_PATH}/${partyId}`,
+          org.adminKey,
+          "evidence-update-01",
+          { display_name: "Renamed During Forced Failure" },
+        ),
+        { params: Promise.resolve({ typeKey: "parties", id: partyId }) },
+      ),
+    );
 
     assert.equal(response.status, 500);
     const [after] = await query<{ display_name: string }>(sql`
@@ -287,8 +317,15 @@ test("a forced execution-audit failure blocks and rolls back the material delete
 
     const response = await withOrgContext(org.orgId, () =>
       itemRoute.DELETE(
-        recordsRequest("DELETE", `${COLLECTION_PATH}/${partyId}`, org.adminKey, "evidence-delete-01"),
-        { params: Promise.resolve({ typeKey: "parties", id: partyId }) }));
+        recordsRequest(
+          "DELETE",
+          `${COLLECTION_PATH}/${partyId}`,
+          org.adminKey,
+          "evidence-delete-01",
+        ),
+        { params: Promise.resolve({ typeKey: "parties", id: partyId }) },
+      ),
+    );
 
     assert.equal(response.status, 500);
     assert.equal(await partyCount(org.orgId), 1, "the delete rolled back with its audit");
@@ -304,15 +341,25 @@ test("successful create commits exactly one canonical evidence row; replays add 
   const org = await seedEvidenceOrg();
   try {
     const first = await withOrgContext(org.orgId, () =>
-      createRoute.POST(recordsRequest("POST", COLLECTION_PATH, org.adminKey, "evidence-success-01",
-        { kind: "customer", display_name: "Evidence Party" }),
-      { params: Promise.resolve({ typeKey: "parties" }) }));
+      createRoute.POST(
+        recordsRequest("POST", COLLECTION_PATH, org.adminKey, "evidence-success-01", {
+          kind: "customer",
+          display_name: "Evidence Party",
+        }),
+        { params: Promise.resolve({ typeKey: "parties" }) },
+      ),
+    );
     assert.equal(first.status, 201);
     const body = (await first.json()) as { id: string };
 
     const events = await query<{
-      key_id: string; method: string; path: string; status_code: number;
-      duration_ms: number; ip_address: string | null; user_agent: string | null;
+      key_id: string;
+      method: string;
+      path: string;
+      status_code: number;
+      duration_ms: number;
+      ip_address: string | null;
+      user_agent: string | null;
       error: string | null;
     }>(sql`
       select key_id, method, path, status_code, duration_ms, ip_address, user_agent, error
@@ -335,15 +382,29 @@ test("successful create commits exactly one canonical evidence row; replays add 
 
     // Replay of the identical command: correlation retained, no second effect.
     const replay = await withOrgContext(org.orgId, () =>
-      createRoute.POST(recordsRequest("POST", COLLECTION_PATH, org.adminKey, "evidence-success-01",
-        { kind: "customer", display_name: "Evidence Party" }),
-      { params: Promise.resolve({ typeKey: "parties" }) }));
+      createRoute.POST(
+        recordsRequest("POST", COLLECTION_PATH, org.adminKey, "evidence-success-01", {
+          kind: "customer",
+          display_name: "Evidence Party",
+        }),
+        { params: Promise.resolve({ typeKey: "parties" }) },
+      ),
+    );
     assert.equal(replay.status, 201);
     assert.equal(replay.headers.get("idempotency-replayed"), "true");
     const replayBody = (await replay.json()) as { id: string };
     assert.equal(replayBody.id, body.id, "replay returns the stored result");
     assert.equal(await partyCount(org.orgId), 1, "still exactly one effect");
-    assert.equal(await withOrgContext(org.orgId, async () => { await openApiRoute.GET(recordsRequest("GET", "/api/v1/openapi", org.adminKey, "openapi-audit-01")); return eventCount(org.orgId); }), 3, "create, replay, and authenticated OpenAPI read each retain evidence");
+    assert.equal(
+      await withOrgContext(org.orgId, async () => {
+        await openApiRoute.GET(
+          recordsRequest("GET", "/api/v1/openapi", org.adminKey, "openapi-audit-01"),
+        );
+        return eventCount(org.orgId);
+      }),
+      3,
+      "create, replay, and authenticated OpenAPI read each retain evidence",
+    );
   } finally {
     await setAuditFailureMode("allow");
     await dropScratchOrg(org.orgId);
@@ -354,13 +415,21 @@ test("permission denial keeps canonical key/request correlation without touching
   const org = await seedEvidenceOrg();
   try {
     const denied = await withOrgContext(org.orgId, () =>
-      createRoute.POST(recordsRequest("POST", COLLECTION_PATH, org.guestKey, "evidence-denied-01",
-        { kind: "customer", display_name: "Evidence Party" }),
-      { params: Promise.resolve({ typeKey: "parties" }) }));
+      createRoute.POST(
+        recordsRequest("POST", COLLECTION_PATH, org.guestKey, "evidence-denied-01", {
+          kind: "customer",
+          display_name: "Evidence Party",
+        }),
+        { params: Promise.resolve({ typeKey: "parties" }) },
+      ),
+    );
     assert.equal(denied.status, 403);
 
     const events = await query<{
-      status_code: number; ip_address: string | null; user_agent: string | null; error: string | null;
+      status_code: number;
+      ip_address: string | null;
+      user_agent: string | null;
+      error: string | null;
     }>(sql`
       select status_code, ip_address, user_agent, error
         from api_key_events where org_id = ${org.orgId}`);

@@ -1,14 +1,14 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadParallelRun, parallelRunSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadParallelRun, parallelRunSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('payroll')
+  const t = await getTranslations("payroll");
   return {
-    title: t.has('parallelRun.title' as never) ? t('parallelRun.title' as never) : 'Parallel run',
-  }
+    title: t.has("parallelRun.title" as never) ? t("parallelRun.title" as never) : "Parallel run",
+  };
 }
 
 /**
@@ -31,9 +31,9 @@ export async function generateMetadata() {
 export default async function PayrollParallelRunPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadParallelRun()
-  return <ModuleView spec={parallelRunSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadParallelRun();
+  return <ModuleView spec={parallelRunSpec(data)} data={data} searchParams={sp} trusted />;
 }

@@ -20,15 +20,21 @@ export function allocateByRelativeSSP(
     }
     // Keep the unrounded product at scale 12, including sub-money-unit SSPs.
     // Rounding each extended SSP first can erase a valid allocation weight.
-    const weight = o.ssp != null && o.ssp !== ""
-      ? toUnits(o.ssp) * recognitionQuantityUnits(o.quantity ?? "1")
-      : toUnits(o.booked ?? "0") * 100_000_000n;
-    if (weight < 0n) throw new RevenueRecognitionError("Revenue allocation requires non-negative selling prices and weights");
+    const weight =
+      o.ssp != null && o.ssp !== ""
+        ? toUnits(o.ssp) * recognitionQuantityUnits(o.quantity ?? "1")
+        : toUnits(o.booked ?? "0") * 100_000_000n;
+    if (weight < 0n)
+      throw new RevenueRecognitionError(
+        "Revenue allocation requires non-negative selling prices and weights",
+      );
     return weight;
   });
   const totalUnits = toUnits(total);
   if (totalUnits !== 0n && weights.every((weight) => weight === 0n)) {
-    throw new RevenueRecognitionError("Revenue allocation requires a positive selling price weight for a nonzero total");
+    throw new RevenueRecognitionError(
+      "Revenue allocation requires a positive selling price weight for a nonzero total",
+    );
   }
   return apportion(totalUnits, weights).map(fromUnits);
 }
@@ -36,7 +42,9 @@ export function allocateByRelativeSSP(
 function recognitionQuantityUnits(quantity: string): bigint {
   const value = typeof quantity === "string" ? canonicalDecimal(quantity, 8) : null;
   if (value === null || value.startsWith("-") || value.split(".")[0]!.length > 20) {
-    throw new RevenueRecognitionError("Revenue quantity must be a non-negative exact numeric(28,8) decimal");
+    throw new RevenueRecognitionError(
+      "Revenue quantity must be a non-negative exact numeric(28,8) decimal",
+    );
   }
   return BigInt(fixedDecimal(value, 8).replace(".", ""));
 }

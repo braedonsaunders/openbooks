@@ -47,17 +47,22 @@ test(
 
         // The losing replica must not materialize the due occurrence: no run
         // row appears and the schedule stays due for whoever wins the claim.
-        const skipped = (await db.execute<{ runs: number; next_run_at: Date }>(sql`
+        const skipped = await db.execute<{ runs: number; next_run_at: Date }>(
+          sql`
           select count(r.id)::int as runs, s.next_run_at
             from report_schedules s
             left join report_runs r on r.schedule_id = s.id
            where s.id = ${scheduleId}
            group by s.id, s.next_run_at
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(skipped[0]?.runs, 0);
         assert.equal(new Date(skipped[0]!.next_run_at).toISOString(), dueAt.toISOString());
 
-        await replica.query("select pg_advisory_unlock(hashtextextended($1, 0))", [WORKER_TICK_LOCK_KEY]);
+        await replica.query("select pg_advisory_unlock(hashtextextended($1, 0))", [
+          WORKER_TICK_LOCK_KEY,
+        ]);
         released = true;
       } finally {
         replica.release();
@@ -73,25 +78,28 @@ test(
   },
 );
 
-test("the tick claim excludes concurrent entrants and never leaks across errors", { skip: !DB }, async () => {
-  // A nested claimant uses a different pooled session, so it must lose exactly
-  // like a second process would.
-  const nested = await withTickClaim(
-    WORKER_TICK_LOCK_KEY,
-    async () => withTickClaim(WORKER_TICK_LOCK_KEY, async () => "inner"),
-  );
-  assert.equal(nested, null);
+test(
+  "the tick claim excludes concurrent entrants and never leaks across errors",
+  { skip: !DB },
+  async () => {
+    // A nested claimant uses a different pooled session, so it must lose exactly
+    // like a second process would.
+    const nested = await withTickClaim(WORKER_TICK_LOCK_KEY, async () =>
+      withTickClaim(WORKER_TICK_LOCK_KEY, async () => "inner"),
+    );
+    assert.equal(nested, null);
 
-  // A throwing body still releases the lock: the next claimant proceeds.
-  await assert.rejects(
-    withTickClaim(WORKER_TICK_LOCK_KEY, async () => {
-      throw new Error("tick body exploded");
-    }),
-    /tick body exploded/,
-  );
-  const afterError = await withTickClaim(WORKER_TICK_LOCK_KEY, async () => "reacquired");
-  assert.equal(afterError, "reacquired");
-});
+    // A throwing body still releases the lock: the next claimant proceeds.
+    await assert.rejects(
+      withTickClaim(WORKER_TICK_LOCK_KEY, async () => {
+        throw new Error("tick body exploded");
+      }),
+      /tick body exploded/,
+    );
+    const afterError = await withTickClaim(WORKER_TICK_LOCK_KEY, async () => "reacquired");
+    assert.equal(afterError, "reacquired");
+  },
+);
 
 test(
   "a web replica whose tick claim is held elsewhere skips every global scan",
@@ -104,7 +112,9 @@ test(
            set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
          where id = ${org.orgId}
       `);
-      const scriptId = randomUUID(), startedAt = Date.now(), jan1 = Date.UTC(new Date(startedAt).getUTCFullYear(), 0, 1);
+      const scriptId = randomUUID(),
+        startedAt = Date.now(),
+        jan1 = Date.UTC(new Date(startedAt).getUTCFullYear(), 0, 1);
       const dueAt = new Date(jan1 + 120_000); // yearly grid: exactly one tick is due, the next a year out, so no wall-clock boundary can add a second claim mid-test
       await db.execute(sql`
         insert into user_scripts
@@ -113,14 +123,17 @@ test(
                 'function main(ctx) { return "unused"; }', '0 0 1 1 *', ${dueAt}, 2000, true)
       `);
       const occurrenceState = () =>
-        db.execute<{ occurrences: number; nextRunAt: Date | string | null }>(sql`
+        db.execute<{ occurrences: number; nextRunAt: Date | string | null }>(
+          sql`
           select count(r.id)::int as occurrences, s.next_run_at as "nextRunAt"
             from user_scripts s
             left join script_runs r
               on r.script_id = s.id and r.target_kind = 'scheduled_occurrence'
            where s.id = ${scriptId}
            group by s.id, s.next_run_at
-        `, "objects");
+        `,
+          "objects",
+        );
 
       // Another web replica holds the web tick claim on its own connection —
       // the same session-level lock the whole scan set now runs under.
@@ -141,7 +154,9 @@ test(
         assert.equal(skipped[0]?.occurrences, 0);
         assert.equal(new Date(skipped[0]!.nextRunAt!).toISOString(), dueAt.toISOString());
 
-        await replica.query("select pg_advisory_unlock(hashtextextended($1, 0))", [WEB_TICK_LOCK_KEY]);
+        await replica.query("select pg_advisory_unlock(hashtextextended($1, 0))", [
+          WEB_TICK_LOCK_KEY,
+        ]);
         released = true;
       } finally {
         replica.release();
@@ -161,45 +176,41 @@ test(
   },
 );
 
-test(
-  "two worker replicas racing the web tick claim it exactly once",
-  { skip: !DB },
-  async () => {
-    // The full scheduled-work tick moved to the worker process, so N worker
-    // replicas contend for WEB_TICK_LOCK_KEY on every boundary. Overlap the
-    // two runners deterministically: the first holds the claim open on its own
-    // pooled session while the second attempts it, exactly like a second
-    // replica's tick firing mid-pass.
-    let releaseHolder!: () => void;
-    const holderGate = new Promise<void>((resolve) => {
-      releaseHolder = resolve;
-    });
-    let holderRuns = 0;
-    const holder = withTickClaim(WEB_TICK_LOCK_KEY, async () => {
-      holderRuns += 1;
-      await holderGate;
-      return "holder";
-    });
-    while (holderRuns === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
+test("two worker replicas racing the web tick claim it exactly once", { skip: !DB }, async () => {
+  // The full scheduled-work tick moved to the worker process, so N worker
+  // replicas contend for WEB_TICK_LOCK_KEY on every boundary. Overlap the
+  // two runners deterministically: the first holds the claim open on its own
+  // pooled session while the second attempts it, exactly like a second
+  // replica's tick firing mid-pass.
+  let releaseHolder!: () => void;
+  const holderGate = new Promise<void>((resolve) => {
+    releaseHolder = resolve;
+  });
+  let holderRuns = 0;
+  const holder = withTickClaim(WEB_TICK_LOCK_KEY, async () => {
+    holderRuns += 1;
+    await holderGate;
+    return "holder";
+  });
+  while (holderRuns === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 
-    let racerRuns = 0;
-    const racer = await withTickClaim(WEB_TICK_LOCK_KEY, async () => {
-      racerRuns += 1;
-      return "racer";
-    });
+  let racerRuns = 0;
+  const racer = await withTickClaim(WEB_TICK_LOCK_KEY, async () => {
+    racerRuns += 1;
+    return "racer";
+  });
 
-    // The racer must observe the held claim and skip: the tick is not re-run.
-    assert.equal(racer, null);
-    assert.equal(racerRuns, 0);
+  // The racer must observe the held claim and skip: the tick is not re-run.
+  assert.equal(racer, null);
+  assert.equal(racerRuns, 0);
 
-    releaseHolder();
-    assert.equal(await holder, "holder");
-    assert.equal(holderRuns, 1);
+  releaseHolder();
+  assert.equal(await holder, "holder");
+  assert.equal(holderRuns, 1);
 
-    // The claim is released with the session: the next tick proceeds normally.
-    const after = await withTickClaim(WEB_TICK_LOCK_KEY, async () => "next");
-    assert.equal(after, "next");
-  },
-);
+  // The claim is released with the session: the next tick proceeds normally.
+  const after = await withTickClaim(WEB_TICK_LOCK_KEY, async () => "next");
+  assert.equal(after, "next");
+});

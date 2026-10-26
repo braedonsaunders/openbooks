@@ -1,115 +1,156 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Item PATCH validates defaultRate/defaultCost/standaloneSellingPrice to 4dp
 // but never bounds their magnitude, so a pasted 20-digit figure sails through
 // validation and dies in Postgres as a raw numeric(19,4) overflow (HTTP 500)
 // instead of failing closed with a named 422.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __itemPatchMagnitudeState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __itemPatchMagnitudeState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz' ||
-        (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
+    if (
+      specifier === "../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    )
+      return virtual(`
       export async function guardPermission() {
         const s = globalThis.__itemPatchMagnitudeState;
         return { user: { orgId: s.orgId, id: s.actorId, roles: [] }, permissions: new Set(['items.manage']), allowedSubsidiaryIds: null };
       }
       // Catalog writes need unrestricted scope (1cb07bf7b); the scripted actor is unrestricted, so this passes.
       export function guardUnrestrictedScope() { return null; }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PATCH } = await import('./route.ts')
+});
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("./route.ts");
 
 async function fixture() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = await createScratchUser(org.orgId, "Item manager", "item_manager")
-  await grantScratchPermissions(org.orgId, state.actorId, ["items.manage"])
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = await createScratchUser(org.orgId, "Item manager", "item_manager");
+  await grantScratchPermissions(org.orgId, state.actorId, ["items.manage"]);
   await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"revenueRecognition": true}'::jsonb)
-     where id = ${org.orgId}`)
-  const itemId = (await db.execute<{ id: string }>(sql`
+     where id = ${org.orgId}`);
+  const itemId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into items (org_id, kind, name, is_active, default_rate, default_cost)
     values (${org.orgId}, 'service', 'Magnitude Item', true, '100.0000', '40.0000')
-    returning id`, 'objects'))[0]!.id
-  return { org, itemId }
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
+  return { org, itemId };
 }
 
 async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://items.test/api/items/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://items.test/api/items/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function rates(itemId: string) {
-  const rows = await db.execute<{ default_rate: string | null; default_cost: string | null }>(sql`
+  const rows = await db.execute<{ default_rate: string | null; default_cost: string | null }>(
+    sql`
     select default_rate::text as default_rate, default_cost::text as default_cost
-      from items where id = ${itemId}`, 'objects')
-  return rows[0]!
+      from items where id = ${itemId}`,
+    "objects",
+  );
+  return rows[0]!;
 }
 
-for (const field of ['defaultRate', 'defaultCost', 'standaloneSellingPrice'] as const) {
+for (const field of ["defaultRate", "defaultCost", "standaloneSellingPrice"] as const) {
   test(`PATCH refuses a ${field} wider than numeric(19,4) without writing`, async () => {
-    const { org, itemId } = await fixture()
+    const { org, itemId } = await fixture();
     try {
-      const result = await patch(itemId, { [field]: '99999999999999999999' })
-      assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-      assert.deepEqual(await rates(itemId), { default_rate: '100.0000', default_cost: '40.0000' })
+      const result = await patch(itemId, { [field]: "99999999999999999999" });
+      assert.equal(
+        result.status,
+        422,
+        `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+      );
+      assert.deepEqual(await rates(itemId), { default_rate: "100.0000", default_cost: "40.0000" });
     } finally {
-      await dropScratchOrg(org.orgId)
+      await dropScratchOrg(org.orgId);
     }
-  })
+  });
 }
 
-test('PATCH still saves a column-maximum default rate with identical read-back', async () => {
-  const { org, itemId } = await fixture()
+test("PATCH still saves a column-maximum default rate with identical read-back", async () => {
+  const { org, itemId } = await fixture();
   try {
-    const result = await patch(itemId, { defaultRate: '999999999999999.9999' })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.equal((await rates(itemId)).default_rate, '999999999999999.9999')
+    const result = await patch(itemId, { defaultRate: "999999999999999.9999" });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.equal((await rates(itemId)).default_rate, "999999999999999.9999");
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH refuses a foreign reference custom value instead of storing it', async () => {
-  const { org, itemId } = await fixture()
-  const foreign = await createScratchOrg()
+test("PATCH refuses a foreign reference custom value instead of storing it", async () => {
+  const { org, itemId } = await fixture();
+  const foreign = await createScratchOrg();
   try {
     await db.execute(sql`
       insert into custom_field_defs
         (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
       values
         (${randomUUID()}, ${org.orgId}, 'items', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
-    `)
-    const refused = await patch(itemId, { custom: { ref_party: foreign.vendorId } })
-    assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refused.json)}`)
-    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from items where id = ${itemId}`, 'objects'))[0]?.custom
-    assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused references store nothing')
-    const saved = await patch(itemId, { custom: { ref_party: org.vendorId } })
-    assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(saved.json)}`)
+    `);
+    const refused = await patch(itemId, { custom: { ref_party: foreign.vendorId } });
+    assert.equal(
+      refused.status,
+      422,
+      `expected 422, got ${refused.status}: ${JSON.stringify(refused.json)}`,
+    );
+    const stored = (
+      await db.execute<{ custom: Record<string, unknown> }>(
+        sql`select custom from items where id = ${itemId}`,
+        "objects",
+      )
+    )[0]?.custom;
+    assert.equal(
+      (stored as Record<string, unknown> | undefined)?.ref_party,
+      undefined,
+      "refused references store nothing",
+    );
+    const saved = await patch(itemId, { custom: { ref_party: org.vendorId } });
+    assert.equal(
+      saved.status,
+      200,
+      `own-org reference must stay green: ${JSON.stringify(saved.json)}`,
+    );
   } finally {
-    await dropScratchOrg(foreign.orgId)
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(foreign.orgId);
+    await dropScratchOrg(org.orgId);
   }
-})
+});

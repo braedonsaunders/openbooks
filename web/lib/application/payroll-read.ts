@@ -30,7 +30,8 @@ export async function listApplicationPayrollEmployees(
   const limit = clamp(input.limit ?? 50, 1, 200);
   const like = input.query?.trim() ? `%${input.query.trim()}%` : null;
   const asOf = await businessToday(context.authz.user.orgId);
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select prof.id, prof.employee_party_id, p.display_name as employee_name,
            prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
            prof.pay_basis, prof.is_active, prof.stub_delivery, prof.payment_method,
@@ -46,7 +47,9 @@ export async function listApplicationPayrollEmployees(
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
        ${like ? sql` and p.display_name ilike ${like}` : sql``}
      order by p.display_name
-     limit ${limit}`, "objects");
+     limit ${limit}`,
+    "objects",
+  );
   return {
     employees: rows.map((row) => ({
       profileId: row.id,

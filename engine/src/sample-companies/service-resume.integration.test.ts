@@ -50,7 +50,11 @@ async function seedTemplateOrg(): Promise<string> {
   const template = await withBypass(() => createScratchOrg());
   try {
     // Promoted-template registration the sanctioned-source rule reads.
-    await withBypass(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{sampleTemplate}', ${JSON.stringify({ enabled: true, profileId: "general-business", version: 1 })}::jsonb, true) where id = ${template.orgId}`));
+    await withBypass(() =>
+      db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{sampleTemplate}', ${JSON.stringify({ enabled: true, profileId: "general-business", version: 1 })}::jsonb, true) where id = ${template.orgId}`,
+      ),
+    );
     await withBypass(() =>
       db.execute(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
@@ -117,9 +121,20 @@ async function dropFixture(fixture: Fixture): Promise<void> {
   // before the parent delete can trip over it.
   const known = new Set([...fixture.createdOrgIds, fixture.templateOrgId, fixture.memberOrgId]);
   for (let depth = 0; depth < 10; depth += 1) {
-    const strays = (await withBypassContext(async () => await db.execute<{ id: string }>(sql`
+    const strays = (
+      await withBypassContext(
+        async () =>
+          await db.execute<{ id: string }>(
+            sql`
       select id from orgs
-       where sandbox_of in (${sql.join([...known].map((id) => sql`${id}`), sql`, `)})`, "objects")))
+       where sandbox_of in (${sql.join(
+         [...known].map((id) => sql`${id}`),
+         sql`, `,
+       )})`,
+            "objects",
+          ),
+      )
+    )
       .map((row) => row.id)
       .filter((id) => !known.has(id));
     if (strays.length === 0) break;
@@ -145,7 +160,9 @@ function stubTemplate(fixture: Fixture) {
   };
 }
 
-async function sampleOrgsFor(memberUserId: string): Promise<
+async function sampleOrgsFor(
+  memberUserId: string,
+): Promise<
   Array<{ id: string; name: string; envKind: string; stage: string | null; hasAccess: boolean }>
 > {
   return withBypassContext(async () => {
@@ -155,7 +172,8 @@ async function sampleOrgsFor(memberUserId: string): Promise<
       envKind: string;
       stage: string | null;
       hasAccess: boolean;
-    }>(sql`
+    }>(
+      sql`
       select o.id, o.name, o.env_kind as "envKind",
              o.settings->'sampleCompany'->>'provisioningStage' as stage,
              exists (
@@ -168,37 +186,48 @@ async function sampleOrgsFor(memberUserId: string): Promise<
        where o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
          and o.settings->'sampleCompany'->>'industryKey' = ${INDUSTRY}
        order by o.created_at asc
-    `, "objects");
+    `,
+      "objects",
+    );
     return result;
   });
 }
 
 async function orgStage(orgId: string): Promise<string | null> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ stage: string | null }>(sql`
+    const result = await db.execute<{ stage: string | null }>(
+      sql`
       select settings->'sampleCompany'->>'provisioningStage' as stage
-        from orgs where id = ${orgId}`, "objects");
+        from orgs where id = ${orgId}`,
+      "objects",
+    );
     return result[0]?.stage ?? null;
   });
 }
 
 async function maxInvoiceNumber(orgId: string): Promise<number> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ mx: number }>(sql`
+    const result = await db.execute<{ mx: number }>(
+      sql`
       select coalesce(max(substring(document_number from length('INV-') + 1)::int), 0) as mx
         from documents
        where org_id = ${orgId}
          and kind = 'customer_invoice'
-         and starts_with(document_number, 'INV-')`, "objects");
+         and starts_with(document_number, 'INV-')`,
+      "objects",
+    );
     return Number(result[0]?.mx ?? 0);
   });
 }
 
 async function sequenceNext(orgId: string, kind: string): Promise<number | null> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ next_number: number }>(sql`
+    const result = await db.execute<{ next_number: number }>(
+      sql`
       select next_number from number_sequences
-       where org_id = ${orgId} and document_kind = ${kind}`, "objects");
+       where org_id = ${orgId} and document_kind = ${kind}`,
+      "objects",
+    );
     return result[0] ? Number(result[0].next_number) : null;
   });
 }
@@ -237,7 +266,11 @@ test(
       fixture.createdOrgIds.push(partials[0]!.id);
 
       const resumed = await createSampleCompany(fixture.input, stubTemplate(fixture));
-      assert.equal(resumed.orgId, partials[0]!.id, "the retry must resume the partial, not clone again");
+      assert.equal(
+        resumed.orgId,
+        partials[0]!.id,
+        "the retry must resume the partial, not clone again",
+      );
       assert.equal(resumed.created, true);
 
       const after = await sampleOrgsFor(fixture.memberUserId);
@@ -279,7 +312,11 @@ test(
       const partials = await sampleOrgsFor(fixture.memberUserId);
       assert.equal(partials.length, 1);
       assert.equal(partials[0]!.stage, "finalized");
-      assert.equal(partials[0]!.hasAccess, false, "no user may access a company with unreconciled numbering");
+      assert.equal(
+        partials[0]!.hasAccess,
+        false,
+        "no user may access a company with unreconciled numbering",
+      );
       fixture.createdOrgIds.push(partials[0]!.id);
 
       const resumed = await createSampleCompany(fixture.input, stubTemplate(fixture));
@@ -310,7 +347,9 @@ test(
       // Global by profile: other suites (or an earlier run) may own rows
       // here too, so the test records what exists before it acts and only
       // asserts about its own footprint afterwards — never global emptiness.
-      const beforeAttempts = new Set((await templateAttemptOrgs("general-business")).map((row) => row.id));
+      const beforeAttempts = new Set(
+        (await templateAttemptOrgs("general-business")).map((row) => row.id),
+      );
       const beforeSims = new Set((await simProfileOrgs("general-business")).map((row) => row.id));
       await assert.rejects(
         createSampleCompany(fixture.input, {
@@ -341,10 +380,7 @@ test(
         (error: unknown) => {
           // Compensation is proved below independently of the stage message.
           assert.ok(error instanceof SampleCompanyProvisioningError);
-          assert.equal(
-            (error as SampleCompanyProvisioningError).stage,
-            "template",
-          );
+          assert.equal((error as SampleCompanyProvisioningError).stage, "template");
           assert.equal(error.message, sampleCompanyStageMessage("template"));
           assert.match(error.message, /Company readiness is unconfirmed/);
           return true;
@@ -423,10 +459,7 @@ test(
           // the stranded org and the remedy that clears it.
           assert.ok(error instanceof SampleCompanyPreconditionError);
           assert.match(String((error as Error).message), new RegExp(staleId));
-          assert.match(
-            String((error as Error).message),
-            /npm run sim -- reset-org/,
-          );
+          assert.match(String((error as Error).message), /npm run sim -- reset-org/);
           return true;
         },
       );
@@ -436,7 +469,10 @@ test(
       const after = new Set((await simProfileOrgs("general-business")).map((row) => row.id));
       assert.ok(after.has(staleId), "the stuck attempt must still be there");
       for (const id of after) {
-        assert.ok(id === staleId || before.has(id), `unexpected org provisioned beside the stuck attempt: ${id}`);
+        assert.ok(
+          id === staleId || before.has(id),
+          `unexpected org provisioned beside the stuck attempt: ${id}`,
+        );
       }
     } finally {
       await withBypass(() => wipeSimOrg(staleId));
@@ -446,34 +482,46 @@ test(
 
 async function templateAttemptOrgs(profileId: string): Promise<Array<{ id: string }>> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ id: string }>(sql`
+    const result = await db.execute<{ id: string }>(
+      sql`
       select id from orgs
-       where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}`, "objects");
+       where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}`,
+      "objects",
+    );
     return result;
   });
 }
 
 async function simProfileOrgs(profileId: string): Promise<Array<{ id: string }>> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ id: string }>(sql`
-      select id from orgs where settings->>'simProfile' = ${profileId}`, "objects");
+    const result = await db.execute<{ id: string }>(
+      sql`
+      select id from orgs where settings->>'simProfile' = ${profileId}`,
+      "objects",
+    );
     return result;
   });
 }
 
 async function hasTemplateAttemptMarker(orgId: string): Promise<boolean> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ marked: boolean }>(sql`
-      select (settings ? 'sampleTemplateAttempt') as marked from orgs where id = ${orgId}`, "objects");
+    const result = await db.execute<{ marked: boolean }>(
+      sql`
+      select (settings ? 'sampleTemplateAttempt') as marked from orgs where id = ${orgId}`,
+      "objects",
+    );
     return result[0]?.marked ?? false;
   });
 }
 
 async function templateOracleStatus(orgId: string): Promise<string | null> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ status: string | null }>(sql`
+    const result = await db.execute<{ status: string | null }>(
+      sql`
       select settings->'sampleTemplateOracle'->>'status' as status
-        from orgs where id = ${orgId}`, "objects");
+        from orgs where id = ${orgId}`,
+      "objects",
+    );
     return result[0]?.status ?? null;
   });
 }
@@ -580,8 +628,11 @@ test(
       assert.equal(after[0]!.hasAccess, true);
 
       const leftover = await withBypassContext(async () => {
-        const result = await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from orgs where id = ${first.orgId}`, "objects");
+        const result = await db.execute<{ n: number }>(
+          sql`
+          select count(*)::int as n from orgs where id = ${first.orgId}`,
+          "objects",
+        );
         return result[0]!.n;
       });
       assert.equal(leftover, 0, "the interrupted clone must actually be gone");
@@ -619,7 +670,11 @@ test(
       );
 
       const fresh = await createSampleCompany(fixture.input, stubTemplate(fixture));
-      assert.notEqual(fresh.orgId, strandedId, "the unresumable partial must be replaced, not adopted");
+      assert.notEqual(
+        fresh.orgId,
+        strandedId,
+        "the unresumable partial must be replaced, not adopted",
+      );
       fixture.createdOrgIds.push(fresh.orgId);
 
       const after = await sampleOrgsFor(fixture.memberUserId);
@@ -628,8 +683,11 @@ test(
       assert.equal(after[0]!.stage, "ready");
 
       const stranded = await withBypassContext(async () => {
-        const result = await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from orgs where id = ${strandedId}`, "objects");
+        const result = await db.execute<{ n: number }>(
+          sql`
+          select count(*)::int as n from orgs where id = ${strandedId}`,
+          "objects",
+        );
         return result[0]!.n;
       });
       assert.equal(stranded, 0, "the compensated partial must actually be gone");

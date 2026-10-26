@@ -53,7 +53,12 @@ export const customFieldDefs = pgTable(
   },
   (t) => [
     index("custom_field_defs_target").on(t.orgId, t.targetTable, t.targetKind),
-    uniqueIndex("custom_field_defs_scope_key_unique").on(t.orgId, t.targetTable, sql`coalesce(${t.targetKind}, '')`, t.key),
+    uniqueIndex("custom_field_defs_scope_key_unique").on(
+      t.orgId,
+      t.targetTable,
+      sql`coalesce(${t.targetKind}, '')`,
+      t.key,
+    ),
   ],
 );
 
@@ -118,18 +123,8 @@ export const userScripts = pgTable(
     ...auditColumns,
   },
   (t) => [
-    index("user_scripts_trigger").on(
-      t.orgId,
-      t.triggerPoint,
-      t.documentKind,
-      t.isActive,
-    ),
-    index("user_scripts_scheduled").on(
-      t.orgId,
-      t.triggerPoint,
-      t.isActive,
-      t.nextRunAt,
-    ),
+    index("user_scripts_trigger").on(t.orgId, t.triggerPoint, t.documentKind, t.isActive),
+    index("user_scripts_scheduled").on(t.orgId, t.triggerPoint, t.isActive, t.nextRunAt),
     uniqueIndex("user_scripts_endpoint_slug").on(t.orgId, t.endpointSlug),
   ],
 );
@@ -207,7 +202,9 @@ export const users = pgTable(
     uniqueIndex("users_org_email").on(t.orgId, t.email),
     uniqueIndex("users_org_id_id_unique").on(t.orgId, t.id),
     // Login and first-use OIDC linking resolve a global, case-folded identity.
-    index("users_login_email_ci").on(sql`lower(${t.email})`).where(sql`${t.isActive}`),
+    index("users_login_email_ci")
+      .on(sql`lower(${t.email})`)
+      .where(sql`${t.isActive}`),
   ],
 );
 
@@ -314,9 +311,7 @@ export const syncRuns = pgTable(
     status: text("status", { enum: ["running", "ok", "ok_with_errors", "failed"] })
       .notNull()
       .default("running"),
-    startedAt: timestamp("started_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     /** High-water mark this run synced up to (source clock). */
     syncedThrough: timestamp("synced_through", { withTimezone: true }),
@@ -364,6 +359,14 @@ export const auditLog = pgTable(
     index("audit_log_org_at_id").on(t.orgId, t.at.desc(), t.id.desc()),
     // The forward migration stores id/action/actor/at as INCLUDE payload;
     // Drizzle cannot express INCLUDE, so all covered columns are declared here.
-    index("audit_log_org_metadata").on(t.orgId, t.tableName, t.rowId, t.id, t.action, t.actorId, t.at),
+    index("audit_log_org_metadata").on(
+      t.orgId,
+      t.tableName,
+      t.rowId,
+      t.id,
+      t.action,
+      t.actorId,
+      t.at,
+    ),
   ],
 );

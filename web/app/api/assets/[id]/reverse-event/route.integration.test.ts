@@ -15,7 +15,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.asset-reverse-event-route-test')]
@@ -29,10 +29,7 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // defineRoute resolves the gate lazily per request, so the hook stays
     // registered for the life of the file.
-    if (
-      specifier === "@/lib/feature-gates" &&
-      context.parentURL?.includes("/web/lib/api/route")
-    ) {
+    if (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/web/lib/api/route")) {
       return { url: "mock:asset-reverse-event-gates", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -51,7 +48,8 @@ const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db } = await import("@openbooks/engine/platform/db");
 const { buildSchedule, runDepreciation } = await import("@openbooks/engine/assets/depreciation");
 const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/assets/asset-lifecycle");
-const { proposeAssetChange, applyAssetChange } = await import("@openbooks/engine/assets/asset-changes");
+const { proposeAssetChange, applyAssetChange } =
+  await import("@openbooks/engine/assets/asset-changes");
 import type { AssetChangeInput } from "@openbooks/engine/assets/asset-changes";
 const { submitFinancialChange } = await import("@openbooks/engine/flows/financial-changes-adapter");
 const { decideGate } = await import("@openbooks/engine/testing/flows/gates");
@@ -63,7 +61,6 @@ const {
   seedApprovalFlow,
 } = await import("@openbooks/engine/testing/fixtures");
 test.after(() => hooks.deregister());
-
 
 interface Fixture {
   orgId: string;
@@ -104,7 +101,9 @@ async function seedAsset(tag: string): Promise<Fixture> {
  * run that clears it. The scratch org's only period is July 2026; post it so
  * the disposal ties to the schedule.
  */
-async function postHeldDepreciation(fixture: Pick<Fixture, "orgId" | "actorId" | "assetId">): Promise<void> {
+async function postHeldDepreciation(
+  fixture: Pick<Fixture, "orgId" | "actorId" | "assetId">,
+): Promise<void> {
   await runDepreciation(fixture.orgId, "2026-07-31", fixture.actorId, fixture.assetId);
 }
 
@@ -128,17 +127,32 @@ function postRequest(fixture: Fixture, body: unknown): Request {
 }
 
 async function eventFor(orgId: string, entryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`, "objects"))[0]!.id;
+  return (
+    await db.execute<{ id: string }>(
+      sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`,
+      "objects",
+    )
+  )[0]!.id;
 }
 
 async function writeCounts(orgId: string, assetId: string) {
-  return (await db.execute<{ events: number; journals: number }>(sql`
+  return (
+    await db.execute<{ events: number; journals: number }>(
+      sql`
     select (select count(*)::int from asset_events where org_id=${orgId} and asset_id=${assetId}) as events,
-           (select count(*)::int from journal_entries where org_id=${orgId}) as journals`, "objects"))[0]!;
+           (select count(*)::int from journal_entries where org_id=${orgId}) as journals`,
+      "objects",
+    )
+  )[0]!;
 }
 
 async function assetStatus(orgId: string, assetId: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from fixed_assets where org_id=${orgId} and id=${assetId}`, "objects"))[0]!.status;
+  return (
+    await db.execute<{ status: string }>(
+      sql`select status from fixed_assets where org_id=${orgId} and id=${assetId}`,
+      "objects",
+    )
+  )[0]!.status;
 }
 
 test("reverse-event GET names a posted disposal as the reversible candidate", async () => {
@@ -151,10 +165,18 @@ test("reverse-event GET names a posted disposal as the reversible candidate", as
       date: fixture.date,
       writeOff: true,
     });
-    const response = await GET(getRequest(fixture), { params: Promise.resolve({ id: fixture.assetId }) });
+    const response = await GET(getRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
     assert.equal(response.status, 200);
     const data = (await response.json()) as {
-      events: { id: string; kind: string; reversible: boolean; entryNumber: string; blockReason: string | null }[];
+      events: {
+        id: string;
+        kind: string;
+        reversible: boolean;
+        entryNumber: string;
+        blockReason: string | null;
+      }[];
     };
     const sourceEvent = await eventFor(fixture.orgId, disposal.entryId);
     const candidate = data.events.find((e) => e.id === sourceEvent);
@@ -183,10 +205,25 @@ test("reverse-event POST restores a disposed asset and replays exactly once", as
     const eventId = await eventFor(fixture.orgId, disposal.entryId);
     const body = { eventId, date: fixture.date, reason: "Restore asset after mistaken write-off" };
 
-    const first = await POST(postRequest(fixture, body), { params: Promise.resolve({ id: fixture.assetId }) });
-    assert.equal(first.status, 200, `reversal failed: ${JSON.stringify(await first.clone().json().catch(() => null))}`);
+    const first = await POST(postRequest(fixture, body), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(
+      first.status,
+      200,
+      `reversal failed: ${JSON.stringify(
+        await first
+          .clone()
+          .json()
+          .catch(() => null),
+      )}`,
+    );
     const created = (await first.json()) as {
-      assetId: string; sourceEventId: string; reversalEventId: string; reversalEntryId: string; created: boolean;
+      assetId: string;
+      sourceEventId: string;
+      reversalEventId: string;
+      reversalEntryId: string;
+      created: boolean;
     };
     assert.equal(created.assetId, fixture.assetId);
     assert.equal(created.sourceEventId, eventId);
@@ -194,7 +231,9 @@ test("reverse-event POST restores a disposed asset and replays exactly once", as
     assert.equal(await assetStatus(fixture.orgId, fixture.assetId), "in_service");
 
     const counts = await writeCounts(fixture.orgId, fixture.assetId);
-    const replay = await POST(postRequest(fixture, body), { params: Promise.resolve({ id: fixture.assetId }) });
+    const replay = await POST(postRequest(fixture, body), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
     assert.equal(replay.status, 200);
     const repeated = (await replay.json()) as typeof created;
     assert.equal(repeated.created, false);
@@ -218,7 +257,11 @@ test("reverse-event POST reverses an impairment through the record boundary", as
     });
     const eventId = await eventFor(fixture.orgId, impairment.entryId);
     const response = await POST(
-      postRequest(fixture, { eventId, date: fixture.date, reason: "Correct the overstated impairment assessment" }),
+      postRequest(fixture, {
+        eventId,
+        date: fixture.date,
+        reason: "Correct the overstated impairment assessment",
+      }),
       { params: Promise.resolve({ id: fixture.assetId }) },
     );
     assert.equal(response.status, 200);
@@ -249,7 +292,9 @@ test("reverse-event POST refuses short reasons, bad dates, and malformed bodies 
       { eventId, date: "31-08-2026", reason: "Restore asset after mistaken write-off" },
       { eventId, date: "2026-02-30", reason: "Restore asset after mistaken write-off" },
     ]) {
-      const response = await POST(postRequest(fixture, body), { params: Promise.resolve({ id: fixture.assetId }) });
+      const response = await POST(postRequest(fixture, body), {
+        params: Promise.resolve({ id: fixture.assetId }),
+      });
       assert.equal(response.status, 422);
       assert.ok(((await response.json()) as { error?: string }).error);
     }
@@ -285,7 +330,11 @@ test("reverse-event POST refuses a foreign asset event and an out-of-scope subsi
     authed(fixture);
     const before = await writeCounts(fixture.orgId, fixture.assetId);
     const foreign = await POST(
-      postRequest(fixture, { eventId: foreignEvent, date: fixture.date, reason: "Restore asset after mistaken write-off" }),
+      postRequest(fixture, {
+        eventId: foreignEvent,
+        date: fixture.date,
+        reason: "Restore asset after mistaken write-off",
+      }),
       { params: Promise.resolve({ id: fixture.assetId }) },
     );
     assert.equal(foreign.status, 422);
@@ -293,20 +342,32 @@ test("reverse-event POST refuses a foreign asset event and an out-of-scope subsi
     assert.deepEqual(await writeCounts(fixture.orgId, fixture.assetId), before);
 
     authed(fixture, new Set([randomUUID()]));
-    const scoped = await GET(getRequest(fixture), { params: Promise.resolve({ id: fixture.assetId }) });
+    const scoped = await GET(getRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
     assert.equal(scoped.status, 404);
     const scopedPost = await POST(
-      postRequest(fixture, { eventId: foreignEvent, date: fixture.date, reason: "Restore asset after mistaken write-off" }),
+      postRequest(fixture, {
+        eventId: foreignEvent,
+        date: fixture.date,
+        reason: "Restore asset after mistaken write-off",
+      }),
       { params: Promise.resolve({ id: fixture.assetId }) },
     );
     assert.equal(scopedPost.status, 404);
     assert.deepEqual(await writeCounts(fixture.orgId, fixture.assetId), before);
 
     authed(fixture, new Set());
-    const emptyGet = await GET(getRequest(fixture), { params: Promise.resolve({ id: fixture.assetId }) });
+    const emptyGet = await GET(getRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
     assert.equal(emptyGet.status, 404);
     const emptyPost = await POST(
-      postRequest(fixture, { eventId: foreignEvent, date: fixture.date, reason: "Restore asset after mistaken write-off" }),
+      postRequest(fixture, {
+        eventId: foreignEvent,
+        date: fixture.date,
+        reason: "Restore asset after mistaken write-off",
+      }),
       { params: Promise.resolve({ id: fixture.assetId }) },
     );
     assert.equal(emptyPost.status, 404);
@@ -325,17 +386,31 @@ test("reverse-event keeps approved multi-book change events on Accounting events
     const actors = { submitterId: flowActors.submitterId, approver1Id: flowActors.approver1Id };
     // Applying a 12-month-life change rebuilds the full remaining plan, so the
     // calendar must cover the whole horizon, not just the effective month.
-    const calendar = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where org_id=${fixture.orgId} limit 1`, "objects"))[0]!.id;
+    const calendar = (
+      await db.execute<{ id: string }>(
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${fixture.orgId} limit 1`,
+        "objects",
+      )
+    )[0]!.id;
     for (let y = 2026; y <= 2027; y++) {
       for (let m = y === 2026 ? 8 : 1; m <= (y === 2026 ? 12 : 6); m++) {
         const last = new Date(y, m, 0).getDate();
         const mm = String(m).padStart(2, "0");
-        await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,custom) values(${randomUUID()},${fixture.orgId},${calendar},${y},${m},${`${y}-${mm}`},${`${y}-${mm}-01`},${`${y}-${mm}-${last}`},false,'{}'::jsonb)`);
+        await db.execute(
+          sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,custom) values(${randomUUID()},${fixture.orgId},${calendar},${y},${m},${`${y}-${mm}`},${`${y}-${mm}-01`},${`${y}-${mm}-${last}`},false,'{}'::jsonb)`,
+        );
       }
     }
-    const clearing = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fixture.orgId} limit 1`, "objects"))[0]!.id;
-    await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${fixture.orgId},${actors.submitterId},'assets.manage','grant')`);
-    await grantScratchPermissions(fixture.orgId, actors.approver1Id, ['assets.manage']);
+    const clearing = (
+      await db.execute<{ id: string }>(
+        sql`select id from accounts where org_id=${fixture.orgId} limit 1`,
+        "objects",
+      )
+    )[0]!.id;
+    await db.execute(
+      sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${fixture.orgId},${actors.submitterId},'assets.manage','grant')`,
+    );
+    await grantScratchPermissions(fixture.orgId, actors.approver1Id, ["assets.manage"]);
     await seedApprovalFlow(fixture.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -352,25 +427,49 @@ test("reverse-event keeps approved multi-book change events on Accounting events
       proceeds: "600",
       proceedsAccountId: clearing,
     };
-    const changeId = await proposeAssetChange(fixture.orgId, fixture.assetId, actors.submitterId, input);
+    const changeId = await proposeAssetChange(
+      fixture.orgId,
+      fixture.assetId,
+      actors.submitterId,
+      input,
+    );
     await submitFinancialChange(fixture.orgId, changeId, actors.submitterId);
-    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fixture.orgId} and subject_id=${changeId} and status='pending'`, "objects"))[0]!;
+    const gate = (
+      await db.execute<{ id: string }>(
+        sql`select id from flow_gates where org_id=${fixture.orgId} and subject_id=${changeId} and status='pending'`,
+        "objects",
+      )
+    )[0]!;
     await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: "approved" });
     await applyAssetChange(fixture.orgId, changeId, actors.submitterId);
-    const owned = (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${fixture.orgId} and asset_id=${fixture.assetId} and financial_change_id=${changeId} limit 1`, "objects"))[0];
+    const owned = (
+      await db.execute<{ id: string }>(
+        sql`select id from asset_events where org_id=${fixture.orgId} and asset_id=${fixture.assetId} and financial_change_id=${changeId} limit 1`,
+        "objects",
+      )
+    )[0];
     assert.ok(owned, "the approved change must own a lifecycle event");
 
     authed(fixture);
-    const listing = await GET(getRequest(fixture), { params: Promise.resolve({ id: fixture.assetId }) });
+    const listing = await GET(getRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
     assert.equal(listing.status, 200);
-    const listed = ((await listing.json()) as { events: { id: string; reversible: boolean; blockReason: string | null }[] })
-      .events.find((e) => e.id === owned!.id);
+    const listed = (
+      (await listing.json()) as {
+        events: { id: string; reversible: boolean; blockReason: string | null }[];
+      }
+    ).events.find((e) => e.id === owned!.id);
     assert.equal(listed?.reversible, false);
     assert.equal(listed?.blockReason, "accounting_change");
 
     const before = await writeCounts(fixture.orgId, fixture.assetId);
     const refused = await POST(
-      postRequest(fixture, { eventId: owned!.id, date: fixture.date, reason: "Bypass the change reversal workflow" }),
+      postRequest(fixture, {
+        eventId: owned!.id,
+        date: fixture.date,
+        reason: "Bypass the change reversal workflow",
+      }),
       { params: Promise.resolve({ id: fixture.assetId }) },
     );
     assert.equal(refused.status, 422);

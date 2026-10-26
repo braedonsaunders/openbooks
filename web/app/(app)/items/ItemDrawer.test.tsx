@@ -1,14 +1,14 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
-import { stubModules } from '../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
 
-await bootJsdomEnvironment({ url: 'http://localhost/items?item=item-1' })
+await bootJsdomEnvironment({ url: "http://localhost/items?item=item-1" });
 
 stubModules({
   navigation: {
     source:
-      'export function useRouter() { return globalThis.__itemDrawerRouter }' +
+      "export function useRouter() { return globalThis.__itemDrawerRouter }" +
       'export function usePathname() { return "/items" }' +
       'export function useSearchParams() { return new URLSearchParams("item=item-1") }',
   },
@@ -16,30 +16,31 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    'next-intl': 'const t = (key) => key; export function useTranslations() { return t } export function useLocale() { return "en" }',
+    "next-intl":
+      'const t = (key) => key; export function useTranslations() { return t } export function useLocale() { return "en" }',
     sonner:
-      'export const toast = { success(m) { globalThis.__itemDrawerToasts.push(String(m)) }, error(m) { globalThis.__itemDrawerToasts.push(String(m)) } }',
+      "export const toast = { success(m) { globalThis.__itemDrawerToasts.push(String(m)) }, error(m) { globalThis.__itemDrawerToasts.push(String(m)) } }",
   },
-})
+});
 
-const React = await import('react')
+const React = await import("react");
 Object.assign(globalThis, {
   React,
   __itemDrawerToasts: [] as string[],
   __itemDrawerRouter: { push() {}, replace() {}, refresh() {}, back() {} },
-})
-const { act } = await import('react')
-const { createRoot } = await import('react-dom/client')
-const { MoneyProvider } = await import('../../../components/money-provider')
-const { BusinessDateProvider } = await import('../../../components/business-date-provider')
-const { ItemDrawer } = await import('./ItemDrawer.tsx')
-const { defaultFormLayout } = await import('@openbooks/customization')
+});
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { MoneyProvider } = await import("../../../components/money-provider");
+const { BusinessDateProvider } = await import("../../../components/business-date-provider");
+const { ItemDrawer } = await import("./ItemDrawer.tsx");
+const { defaultFormLayout } = await import("@openbooks/customization");
 
 const item = {
-  id: 'item-1',
-  kind: 'service',
-  code: 'SVC-1',
-  name: 'Monthly advisory',
+  id: "item-1",
+  kind: "service",
+  code: "SVC-1",
+  name: "Monthly advisory",
   category: null,
   income_account_id: null,
   expense_account_id: null,
@@ -48,161 +49,303 @@ const item = {
   cost_recovery_account_id: null,
   tax_code_id: null,
   recognition_rule_id: null,
-  default_rate: '1.2345',
-  default_cost: '9.8765',
-  standalone_selling_price: '12.3400',
-  unit: 'hour',
-  description: 'Existing description',
+  default_rate: "1.2345",
+  default_cost: "9.8765",
+  standalone_selling_price: "12.3400",
+  unit: "hour",
+  description: "Existing description",
   show_on_timesheet: false,
   is_active: true,
-  create_plans_on: 'billing',
-  revenue_allocation: 'normal',
+  create_plans_on: "billing",
+  revenue_allocation: "normal",
   custom: {},
   weight: null,
   weight_unit: null,
   dimensions: null,
   hs_code: null,
   country_of_origin: null,
-}
-const payload = { item, incomeAccountName: null, expenseAccountName: null, payrollCostingAccountName: null, taxCodeName: null }
-const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
-let ratesRead = 0, fairValuesRead = 0
+};
+const payload = {
+  item,
+  incomeAccountName: null,
+  expenseAccountName: null,
+  payrollCostingAccountName: null,
+  taxCodeName: null,
+};
+const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
+let ratesRead = 0,
+  fairValuesRead = 0;
 
 async function mountDrawer(t: TestContext, props: Record<string, unknown> = {}) {
-  const priorFetch = globalThis.fetch
-  const requests: Array<{ method: string; body?: Record<string, unknown> }> = []
-  ratesRead = 0
-  fairValuesRead = 0
+  const priorFetch = globalThis.fetch;
+  const requests: Array<{ method: string; body?: Record<string, unknown> }> = [];
+  ratesRead = 0;
+  fairValuesRead = 0;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    const url = String(input)
-    const method = init?.method ?? 'GET'
-    if (url.endsWith('/rates') && method === 'GET') return ++ratesRead === 1 ? new Response('{}', { status: 503 }) : Response.json({ books: [], profile: null, versions: [], timeTypes: [] })
-    if (url.endsWith('/fair-values') && method === 'GET') return ++fairValuesRead === 1 ? new Response('{}', { status: 503 }) : Response.json({ prices: [] })
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (url.endsWith("/rates") && method === "GET")
+      return ++ratesRead === 1
+        ? new Response("{}", { status: 503 })
+        : Response.json({ books: [], profile: null, versions: [], timeTypes: [] });
+    if (url.endsWith("/fair-values") && method === "GET")
+      return ++fairValuesRead === 1
+        ? new Response("{}", { status: 503 })
+        : Response.json({ prices: [] });
     requests.push({
       method,
       ...(init?.body ? { body: JSON.parse(String(init.body)) as Record<string, unknown> } : {}),
-    })
-    return Response.json({ item })
-  }) as typeof fetch
-  t.after(() => { globalThis.fetch = priorFetch })
-  const root = createRoot(document.body)
+    });
+    return Response.json({ item });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = priorFetch;
+  });
+  const root = createRoot(document.body);
   t.after(async () => {
-    await act(async () => root.unmount())
-    for (const node of [...document.body.children]) node.remove()
-  })
+    await act(async () => root.unmount());
+    for (const node of [...document.body.children]) node.remove();
+  });
   await act(async () => {
-    root.render(React.createElement(MoneyProvider as React.ComponentType<{ currency: string }>, { currency: 'USD' }, React.createElement(BusinessDateProvider as React.ComponentType<{ today: string }>, { today: '2026-09-24' }, React.createElement(ItemDrawer, {
-      payload,
-      accounts: [],
-      taxCodes: [],
-      fieldDefs: [],
-      layout: defaultFormLayout('item'),
-      canManage: true,
-      fairValuePrices: true,
-      ...props,
-    }))))
-    await tick()
-  })
-  return requests
+    root.render(
+      React.createElement(
+        MoneyProvider as React.ComponentType<{ currency: string }>,
+        { currency: "USD" },
+        React.createElement(
+          BusinessDateProvider as React.ComponentType<{ today: string }>,
+          { today: "2026-09-24" },
+          React.createElement(ItemDrawer, {
+            payload,
+            accounts: [],
+            taxCodes: [],
+            fieldDefs: [],
+            layout: defaultFormLayout("item"),
+            canManage: true,
+            fairValuePrices: true,
+            ...props,
+          }),
+        ),
+      ),
+    );
+    await tick();
+  });
+  return requests;
 }
 
 async function clickButton(label: string) {
-  const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === label)
-  assert.ok(button, `button ${label} is rendered`)
-  await act(async () => { button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await tick() })
-  return button
+  const button = [...document.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  assert.ok(button, `button ${label} is rendered`);
+  await act(async () => {
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  return button;
 }
 
 async function clickTab(key: string) {
-  const tab = [...document.querySelectorAll('button[aria-pressed]')].find((candidate) => candidate.textContent?.trim() === `drawer.tabs.${key}`)
-  assert.ok(tab, `the ${key} tab is rendered`)
-  await act(async () => { tab.dispatchEvent(new window.MouseEvent('click', { bubbles: true })) })
+  const tab = [...document.querySelectorAll("button[aria-pressed]")].find(
+    (candidate) => candidate.textContent?.trim() === `drawer.tabs.${key}`,
+  );
+  assert.ok(tab, `the ${key} tab is rendered`);
+  await act(async () => {
+    tab.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
 }
 
-test('an unrelated item edit preserves exact decimal text in all pricing fields', async (t) => {
-  const requests = await mountDrawer(t, { initialPricingView: 'simple', configuredPricingViews: ['simple'] })
-  await clickButton('actions.edit'); await clickTab('pricing')
+test("an unrelated item edit preserves exact decimal text in all pricing fields", async (t) => {
+  const requests = await mountDrawer(t, {
+    initialPricingView: "simple",
+    configuredPricingViews: ["simple"],
+  });
+  await clickButton("actions.edit");
+  await clickTab("pricing");
 
-  const pricingAmounts = [...document.querySelectorAll('input[inputmode="decimal"]')] as HTMLInputElement[]
-  assert.deepEqual(pricingAmounts.map((input) => input.value), ['1.2345', '9.8765'], document.body.textContent)
-  await clickTab('revenue')
-  assert.equal((document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null)?.value, '12.3400')
+  const pricingAmounts = [
+    ...document.querySelectorAll('input[inputmode="decimal"]'),
+  ] as HTMLInputElement[];
+  assert.deepEqual(
+    pricingAmounts.map((input) => input.value),
+    ["1.2345", "9.8765"],
+    document.body.textContent,
+  );
+  await clickTab("revenue");
+  assert.equal(
+    (document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null)?.value,
+    "12.3400",
+  );
 
-  await clickTab('overview'); const description = [...document.querySelectorAll('input')].find((input) => input.value === 'Existing description') as HTMLInputElement | undefined; assert.ok(description, 'the unrelated description remains editable')
-  await act(async () => { const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!; setter.call(description, 'Updated description only'); description.dispatchEvent(new window.Event('input', { bubbles: true })) })
-  await clickButton('actions.save')
+  await clickTab("overview");
+  const description = [...document.querySelectorAll("input")].find(
+    (input) => input.value === "Existing description",
+  ) as HTMLInputElement | undefined;
+  assert.ok(description, "the unrelated description remains editable");
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(description, "Updated description only");
+    description.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await clickButton("actions.save");
 
-  const save = requests.find((request) => request.method === 'PATCH')
-  assert.deepEqual([save?.body?.description, save?.body?.defaultRate, save?.body?.defaultCost, save?.body?.standaloneSellingPrice], ['Updated description only', '1.2345', '9.8765', '12.3400'])
-})
+  const save = requests.find((request) => request.method === "PATCH");
+  assert.deepEqual(
+    [
+      save?.body?.description,
+      save?.body?.defaultRate,
+      save?.body?.defaultCost,
+      save?.body?.standaloneSellingPrice,
+    ],
+    ["Updated description only", "1.2345", "9.8765", "12.3400"],
+  );
+});
 
-test('a read-only pricing chooser exposes all modes and disables unconfigured changes', async (t) => {
-  await mountDrawer(t, { canManage: false, initialPricingView: 'landing', configuredPricingViews: ['matrix'] })
-  await clickTab('pricing')
-  const buttons = [...document.querySelectorAll('button')]
-  const modeButton = (key: string) => buttons.find((button) => button.textContent?.includes(`pricingModes.${key}Title`))
-  assert.deepEqual(['simple', 'matrix', 'customer', 'cost', 'rules', 'contract', 'subscription'].filter((key) => modeButton(key)), ['simple', 'matrix', 'customer', 'cost', 'rules', 'contract', 'subscription'])
-  assert.deepEqual([modeButton('simple')?.disabled, modeButton('matrix')?.disabled], [true, false])
-})
+test("a read-only pricing chooser exposes all modes and disables unconfigured changes", async (t) => {
+  await mountDrawer(t, {
+    canManage: false,
+    initialPricingView: "landing",
+    configuredPricingViews: ["matrix"],
+  });
+  await clickTab("pricing");
+  const buttons = [...document.querySelectorAll("button")];
+  const modeButton = (key: string) =>
+    buttons.find((button) => button.textContent?.includes(`pricingModes.${key}Title`));
+  assert.deepEqual(
+    ["simple", "matrix", "customer", "cost", "rules", "contract", "subscription"].filter((key) =>
+      modeButton(key),
+    ),
+    ["simple", "matrix", "customer", "cost", "rules", "contract", "subscription"],
+  );
+  assert.deepEqual([modeButton("simple")?.disabled, modeButton("matrix")?.disabled], [true, false]);
+});
 
-test('a persisted simple-pricing mode opens its editor and returns to the chooser', async (t) => {
-  await mountDrawer(t, { canManage: false, initialPricingView: 'simple', configuredPricingViews: ['simple'] })
-  await clickTab('pricing')
-  assert.ok(['labels.defaultRate', 'labels.defaultCost', '1.2345', '9.8765'].every((text) => document.body.textContent?.includes(text)))
-  await clickButton('pricingModes.back'); assert.ok(document.body.textContent?.includes('pricingModes.title'), 'the pricing mode chooser is reachable again')
-})
+test("a persisted simple-pricing mode opens its editor and returns to the chooser", async (t) => {
+  await mountDrawer(t, {
+    canManage: false,
+    initialPricingView: "simple",
+    configuredPricingViews: ["simple"],
+  });
+  await clickTab("pricing");
+  assert.ok(
+    ["labels.defaultRate", "labels.defaultCost", "1.2345", "9.8765"].every((text) =>
+      document.body.textContent?.includes(text),
+    ),
+  );
+  await clickButton("pricingModes.back");
+  assert.ok(
+    document.body.textContent?.includes("pricingModes.title"),
+    "the pricing mode chooser is reachable again",
+  );
+});
 
-test('a disabled pricing style names how to enable it', async (t) => {
-  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [] })
-  await clickTab('pricing')
-  const buttons = [...document.querySelectorAll('button')]
-  const modeButton = (key: string) => buttons.find((button) => button.textContent?.includes(`pricingModes.${key}Title`))
-  assert.equal(modeButton('matrix')?.disabled, true, 'an unconfigured style stays inert outside edit mode')
-  assert.ok(document.body.textContent?.includes('pricingModes.editToChange'), 'the disabled style says to open Edit')
-  assert.ok(!document.body.textContent?.includes('pricingModes.rulesRequirePromotions'), 'no promotions refusal without the promotions signal')
-})
+test("a disabled pricing style names how to enable it", async (t) => {
+  await mountDrawer(t, { initialPricingView: "landing", configuredPricingViews: [] });
+  await clickTab("pricing");
+  const buttons = [...document.querySelectorAll("button")];
+  const modeButton = (key: string) =>
+    buttons.find((button) => button.textContent?.includes(`pricingModes.${key}Title`));
+  assert.equal(
+    modeButton("matrix")?.disabled,
+    true,
+    "an unconfigured style stays inert outside edit mode",
+  );
+  assert.ok(
+    document.body.textContent?.includes("pricingModes.editToChange"),
+    "the disabled style says to open Edit",
+  );
+  assert.ok(
+    !document.body.textContent?.includes("pricingModes.rulesRequirePromotions"),
+    "no promotions refusal without the promotions signal",
+  );
+});
 
-test('entering edit mode keeps the pricing chooser available', async (t) => {
-  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [], promotionsEnabled: true })
-  await clickTab('pricing')
-  assert.ok(document.body.textContent?.includes('pricingModes.title'), 'the chooser is showing before Edit')
-  await clickButton('actions.edit')
-  assert.ok(document.body.textContent?.includes('pricingModes.title'), 'Edit keeps the operator on the chooser instead of jumping away')
-  const buttons = [...document.querySelectorAll('button')]
-  const matrix = buttons.find((button) => button.textContent?.includes('pricingModes.matrixTitle'))
-  assert.equal(matrix?.disabled, false, 'the chooser becomes actionable in edit mode')
-})
+test("entering edit mode keeps the pricing chooser available", async (t) => {
+  await mountDrawer(t, {
+    initialPricingView: "landing",
+    configuredPricingViews: [],
+    promotionsEnabled: true,
+  });
+  await clickTab("pricing");
+  assert.ok(
+    document.body.textContent?.includes("pricingModes.title"),
+    "the chooser is showing before Edit",
+  );
+  await clickButton("actions.edit");
+  assert.ok(
+    document.body.textContent?.includes("pricingModes.title"),
+    "Edit keeps the operator on the chooser instead of jumping away",
+  );
+  const buttons = [...document.querySelectorAll("button")];
+  const matrix = buttons.find((button) => button.textContent?.includes("pricingModes.matrixTitle"));
+  assert.equal(matrix?.disabled, false, "the chooser becomes actionable in edit mode");
+});
 
-test('pricing rules stay choosable while Promotions is on', async (t) => {
-  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [], promotionsEnabled: true })
-  await clickButton('actions.edit'); await clickTab('pricing')
-  const buttons = [...document.querySelectorAll('button')]
-  const rules = buttons.find((button) => button.textContent?.includes('pricingModes.rulesTitle'))
-  assert.equal(rules?.disabled, false, 'rules are no longer disabled while their feature is on')
-})
+test("pricing rules stay choosable while Promotions is on", async (t) => {
+  await mountDrawer(t, {
+    initialPricingView: "landing",
+    configuredPricingViews: [],
+    promotionsEnabled: true,
+  });
+  await clickButton("actions.edit");
+  await clickTab("pricing");
+  const buttons = [...document.querySelectorAll("button")];
+  const rules = buttons.find((button) => button.textContent?.includes("pricingModes.rulesTitle"));
+  assert.equal(rules?.disabled, false, "rules are no longer disabled while their feature is on");
+});
 
-test('pricing rules name the Promotions switch while it is off', async (t) => {
-  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [], promotionsEnabled: false })
-  await clickButton('actions.edit'); await clickTab('pricing')
-  const buttons = [...document.querySelectorAll('button')]
-  const refused = buttons.find((button) => button.textContent?.includes('pricingModes.rulesTitle'))
-  assert.equal(refused?.disabled, true, 'rules refuse while Promotions is off')
-  assert.ok(document.body.textContent?.includes('pricingModes.rulesRequirePromotions'), 'the refusal names the Promotions switch and where to turn it on')
-  const matrix = buttons.find((button) => button.textContent?.includes('pricingModes.matrixTitle'))
-  assert.equal(matrix?.disabled, false, 'the promotions refusal touches only rules')
-})
+test("pricing rules name the Promotions switch while it is off", async (t) => {
+  await mountDrawer(t, {
+    initialPricingView: "landing",
+    configuredPricingViews: [],
+    promotionsEnabled: false,
+  });
+  await clickButton("actions.edit");
+  await clickTab("pricing");
+  const buttons = [...document.querySelectorAll("button")];
+  const refused = buttons.find((button) => button.textContent?.includes("pricingModes.rulesTitle"));
+  assert.equal(refused?.disabled, true, "rules refuse while Promotions is off");
+  assert.ok(
+    document.body.textContent?.includes("pricingModes.rulesRequirePromotions"),
+    "the refusal names the Promotions switch and where to turn it on",
+  );
+  const matrix = buttons.find((button) => button.textContent?.includes("pricingModes.matrixTitle"));
+  assert.equal(matrix?.disabled, false, "the promotions refusal touches only rules");
+});
 
-test('failed rate and fair-value reads show retry instead of an empty editable state', async (t) => {
-  await mountDrawer(t, { payload: { ...payload, item: { ...item, kind: 'labor' } }, laborPricing: true, fairValuePrices: true, initialPricingView: 'contract' })
-  await clickButton('actions.edit')
-  await clickTab('pricing')
-  assert.ok(document.body.textContent?.includes('loadFailed') && ![...document.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'configure'))
-  await clickButton('actions.retry')
-  assert.ok(ratesRead === 2 && [...document.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'configure'))
+test("failed rate and fair-value reads show retry instead of an empty editable state", async (t) => {
+  await mountDrawer(t, {
+    payload: { ...payload, item: { ...item, kind: "labor" } },
+    laborPricing: true,
+    fairValuePrices: true,
+    initialPricingView: "contract",
+  });
+  await clickButton("actions.edit");
+  await clickTab("pricing");
+  assert.ok(
+    document.body.textContent?.includes("loadFailed") &&
+      ![...document.querySelectorAll("button")].some(
+        (button) => button.textContent?.trim() === "configure",
+      ),
+  );
+  await clickButton("actions.retry");
+  assert.ok(
+    ratesRead === 2 &&
+      [...document.querySelectorAll("button")].some(
+        (button) => button.textContent?.trim() === "configure",
+      ),
+  );
 
-  await clickTab('revenue')
-  await act(async () => { await tick() })
-  assert.ok(document.body.textContent?.includes('feedback.loadFailed') && !document.body.textContent?.includes('empty'))
-  await clickButton('actions.retry')
-  assert.ok(document.body.textContent?.includes('empty'))
-})
+  await clickTab("revenue");
+  await act(async () => {
+    await tick();
+  });
+  assert.ok(
+    document.body.textContent?.includes("feedback.loadFailed") &&
+      !document.body.textContent?.includes("empty"),
+  );
+  await clickButton("actions.retry");
+  assert.ok(document.body.textContent?.includes("empty"));
+});

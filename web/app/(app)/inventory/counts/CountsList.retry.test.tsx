@@ -1,26 +1,26 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
-import { stubModules } from '../../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import { bootJsdomEnvironment } from "../../../../testing/jsdom-env";
+import { stubModules } from "../../../../testing/stub-modules";
 
 // Stock-count commands retain one idempotency key for an unchanged retry and
 // rotate it after a successful command or an input change.
 
-await bootJsdomEnvironment({ url: 'http://localhost:4800/inventory?inventoryView=counts' })
+await bootJsdomEnvironment({ url: "http://localhost:4800/inventory?inventoryView=counts" });
 
-const COUNT_ID = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
-const LINE_ID = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb'
-const LOC_MAIN = 'loc-main'
-const ITEM_WIDGET = '11111111-1111-4111-8111-111111111111'
-const SL_BIN = '22222222-2222-4222-8222-222222222222'
+const COUNT_ID = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
+const LINE_ID = "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb";
+const LOC_MAIN = "loc-main";
+const ITEM_WIDGET = "11111111-1111-4111-8111-111111111111";
+const SL_BIN = "22222222-2222-4222-8222-222222222222";
 
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   postBodies: [] as Array<Record<string, unknown>>,
-  postBehavior: [] as Array<'fail' | 'ok' | Response>,
-  detailBehavior: [] as Array<'fail' | 'ok'>,
+  postBehavior: [] as Array<"fail" | "ok" | Response>,
+  detailBehavior: [] as Array<"fail" | "ok">,
   detailCalls: 0,
-}
+};
 Object.assign(globalThis, {
   __countRetryToasts: script.toasts,
   __countRetryRouter: {
@@ -30,48 +30,48 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
+});
 stubModules({
   navigation: {
     source:
-      'export function useRouter(){return globalThis.__countRetryRouter}' +
+      "export function useRouter(){return globalThis.__countRetryRouter}" +
       'export function usePathname(){return "/inventory"}' +
-      'export function useSearchParams(){return new URLSearchParams()}',
+      "export function useSearchParams(){return new URLSearchParams()}",
   },
   intl: false,
   authz: false,
   features: false,
   extra: {
-    'next/link':
+    "next/link":
       'export default function Link(p){return globalThis.React.createElement("a",{href:p.href,className:p.className},p.children)}',
     sonner:
       'export const toast={success(m){globalThis.__countRetryToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__countRetryToasts.push({kind:"error",message:String(m)})},info(m){globalThis.__countRetryToasts.push({kind:"info",message:String(m)})}};export function Toaster(){return null}',
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
-const { CountsList } = await import('./CountsList')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../../components/money-provider");
+const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
+const { CountsList } = await import("./CountsList");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const detailResponse = {
   ok: true,
   header: {
     id: COUNT_ID,
-    status: 'counting',
+    status: "counting",
     locationId: LOC_MAIN,
-    subsidiaryId: 'sub-1',
-    countedOn: '2026-09-23',
+    subsidiaryId: "sub-1",
+    countedOn: "2026-09-23",
     memo: null,
-    locationName: 'Main',
-    subsidiaryName: 'Sub',
+    locationName: "Main",
+    subsidiaryName: "Sub",
   },
   lines: [
     {
@@ -79,17 +79,17 @@ const detailResponse = {
       itemId: ITEM_WIDGET,
       stockLocationId: SL_BIN,
       lotId: null,
-      expectedQuantity: '10',
+      expectedQuantity: "10",
       countedQuantity: null,
       adjustmentMovementId: null,
-      itemCode: 'W-1',
-      itemName: 'Widget',
-      stockLocationCode: 'BIN-1',
+      itemCode: "W-1",
+      itemName: "Widget",
+      stockLocationCode: "BIN-1",
       lotNumber: null,
       variance: null,
     },
   ],
-}
+};
 
 function baseProps(overrides: Record<string, unknown> = {}) {
   return {
@@ -98,11 +98,11 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     nextCursor: null,
     page: 1,
     perPage: 25,
-    currentParams: { inventoryView: 'counts' },
-    locations: [{ id: LOC_MAIN, name: 'Main' }],
-    subsidiaries: [{ id: 'sub-1', name: 'Sub' }],
-    items: [{ id: ITEM_WIDGET, code: 'W-1', name: 'Widget' }],
-    stockLocations: [{ id: SL_BIN, code: 'BIN-1', locationId: LOC_MAIN }],
+    currentParams: { inventoryView: "counts" },
+    locations: [{ id: LOC_MAIN, name: "Main" }],
+    subsidiaries: [{ id: "sub-1", name: "Sub" }],
+    items: [{ id: ITEM_WIDGET, code: "W-1", name: "Widget" }],
+    stockLocations: [{ id: SL_BIN, code: "BIN-1", locationId: LOC_MAIN }],
     lots: [],
     canPost: true,
     canManageStockLocations: true,
@@ -110,53 +110,73 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     itemsExcludedCount: 0,
     createRequested: true,
     ...overrides,
-  }
+  };
 }
 
-async function mountCounts(t: TestContext, props: Record<string, unknown>, detailBehavior: Array<'fail' | 'ok'> = []): Promise<void> {
-  const prior = globalThis.fetch
+async function mountCounts(
+  t: TestContext,
+  props: Record<string, unknown>,
+  detailBehavior: Array<"fail" | "ok"> = [],
+): Promise<void> {
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: unknown }) => {
-    const url = String(input)
-    const method = init?.method ?? 'GET'
-    if (method === 'POST') {
-      script.postBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
-      const behavior = script.postBehavior.shift() ?? 'ok'
-      if (behavior === 'fail') throw new TypeError('fetch failed')
-      if (behavior instanceof Response) return behavior
-      if (url === '/api/inventory/execution') {
-        const body=script.postBodies.at(-1)!
-        if (body.action==='confirm') return Response.json({status:'done',taskId:LINE_ID,result:{},replayed:true})
-        return Response.json({task:{id:LINE_ID,stage:'count',status:'open',itemLabel:'W-1',binCode:'BIN-1',
-          quantity:body.quantity,unit:null,baseQuantity:body.quantity,lotNumber:null,serialNumber:null,barcodeScanning:false}})
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (method === "POST") {
+      script.postBodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      const behavior = script.postBehavior.shift() ?? "ok";
+      if (behavior === "fail") throw new TypeError("fetch failed");
+      if (behavior instanceof Response) return behavior;
+      if (url === "/api/inventory/execution") {
+        const body = script.postBodies.at(-1)!;
+        if (body.action === "confirm")
+          return Response.json({ status: "done", taskId: LINE_ID, result: {}, replayed: true });
+        return Response.json({
+          task: {
+            id: LINE_ID,
+            stage: "count",
+            status: "open",
+            itemLabel: "W-1",
+            binCode: "BIN-1",
+            quantity: body.quantity,
+            unit: null,
+            baseQuantity: body.quantity,
+            lotNumber: null,
+            serialNumber: null,
+            barcodeScanning: false,
+          },
+        });
       }
       // The replay returns the ORIGINAL count id — the retry must surface
       // that same id, never a second count.
-      return Response.json({ ok: true, replayed: script.postBodies.length > 1, id: COUNT_ID })
+      return Response.json({ ok: true, replayed: script.postBodies.length > 1, id: COUNT_ID });
     }
-    if (url.includes('counts?id=')) {
-      script.detailCalls += 1
-      const behavior = script.detailBehavior.shift() ?? 'ok'
-      if (behavior === 'fail') return Response.json({ error: 'Temporary count detail refusal' }, { status: 503 })
-      return Response.json(detailResponse)
+    if (url.includes("counts?id=")) {
+      script.detailCalls += 1;
+      const behavior = script.detailBehavior.shift() ?? "ok";
+      if (behavior === "fail")
+        return Response.json({ error: "Temporary count detail refusal" }, { status: 503 });
+      return Response.json(detailResponse);
     }
-    if (url.includes('/api/inventory/tracking-options')) return Response.json({ tracking: 'none', lots: [], serials: [] })
-    return Response.json({ counts: [], totalCount: 0, nextCursor: null })
-  }) as typeof fetch
+    if (url.includes("/api/inventory/tracking-options"))
+      return Response.json({ tracking: "none", lots: [], serials: [] });
+    return Response.json({ counts: [], totalCount: 0, nextCursor: null });
+  }) as typeof fetch;
   t.after(() => {
-    globalThis.fetch = prior
-  })
-  const rootHandle = createRoot(document.body)
+    globalThis.fetch = prior;
+  });
+  const rootHandle = createRoot(document.body);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    for (const node of [...document.body.children]) node.remove()
-  })
-  script.toasts.length = 0
-  script.postBodies.length = 0
-  script.postBehavior.length = 0
-  script.detailBehavior = [...detailBehavior]
-  script.detailCalls = 0
+      rootHandle.unmount();
+    });
+    for (const node of [...document.body.children]) node.remove();
+  });
+  script.toasts.length = 0;
+  script.postBodies.length = 0;
+  script.postBehavior.length = 0;
+  script.detailBehavior = [...detailBehavior];
+  script.detailCalls = 0;
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -166,135 +186,156 @@ async function mountCounts(t: TestContext, props: Record<string, unknown>, detai
           </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+    await tick();
+  });
 }
 
 function triggersNamed(label: string): HTMLButtonElement[] {
   return [...document.querySelectorAll('button[aria-haspopup="listbox"]')].filter(
-    (b) => b.getAttribute('aria-label') === label,
-  ) as HTMLButtonElement[]
+    (b) => b.getAttribute("aria-label") === label,
+  ) as HTMLButtonElement[];
 }
 
 async function pickOption(triggerLabel: string, optionText: string) {
-  const trigger = triggersNamed(triggerLabel)[0]
-  assert.ok(trigger, `a ${triggerLabel} picker must exist`)
+  const trigger = triggersNamed(triggerLabel)[0];
+  assert.ok(trigger, `a ${triggerLabel} picker must exist`);
   await act(async () => {
-    trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  await tick()
+    trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
   const option = [...document.querySelectorAll('button[role="option"]')].find((b) =>
-    (b.textContent ?? '').includes(optionText),
-  ) as HTMLElement | undefined
-  assert.ok(option, `option ${optionText} must be offered`)
+    (b.textContent ?? "").includes(optionText),
+  ) as HTMLElement | undefined;
+  assert.ok(option, `option ${optionText} must be offered`);
   await act(async () => {
-    option.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  await tick()
+    option.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-  setter.call(input, value)
-  input.dispatchEvent(new window.Event('input', { bubbles: true }))
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  setter.call(input, value);
+  input.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
 async function clickButtonNamed(name: string) {
-  const button = [...document.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === name,
-  ) as HTMLButtonElement | undefined
-  assert.ok(button, `a ${name} button must exist`)
+  const button = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === name,
+  ) as HTMLButtonElement | undefined;
+  assert.ok(button, `a ${name} button must exist`);
   await act(async () => {
-    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-  })
-  await tick()
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+    await tick();
+  });
+  await tick();
 }
 
 async function fillCreate(): Promise<void> {
-  await pickOption('Business location', 'Main')
-  await pickOption('Item', 'Widget')
-  await pickOption('Stock location', 'BIN-1')
+  await pickOption("Business location", "Main");
+  await pickOption("Item", "Widget");
+  await pickOption("Stock location", "BIN-1");
 }
 
-test('a failed count detail keeps its URL drawer open and retries in the same shell', async (t) => {
-  await mountCounts(t, baseProps({ createRequested: false, selectedCountId: COUNT_ID }), ['fail', 'ok'])
-  assert.match(document.body.textContent ?? '', /Temporary count detail refusal/)
-  assert.equal(script.detailCalls, 1)
+test("a failed count detail keeps its URL drawer open and retries in the same shell", async (t) => {
+  await mountCounts(t, baseProps({ createRequested: false, selectedCountId: COUNT_ID }), [
+    "fail",
+    "ok",
+  ]);
+  assert.match(document.body.textContent ?? "", /Temporary count detail refusal/);
+  assert.equal(script.detailCalls, 1);
 
-  await clickButtonNamed('Retry')
-  assert.equal(script.detailCalls, 2)
-  assert.match(document.body.textContent ?? '', /W-1/)
-  assert.doesNotMatch(document.body.textContent ?? '', /Temporary count detail refusal/)
-})
+  await clickButtonNamed("Retry");
+  assert.equal(script.detailCalls, 2);
+  assert.match(document.body.textContent ?? "", /W-1/);
+  assert.doesNotMatch(document.body.textContent ?? "", /Temporary count detail refusal/);
+});
 
-test('a lost create response retried with unchanged fields returns the original count', async (t) => {
-  await mountCounts(t, baseProps())
-  await fillCreate()
+test("a lost create response retried with unchanged fields returns the original count", async (t) => {
+  await mountCounts(t, baseProps());
+  await fillCreate();
   // Create commits server-side but the response is lost in transport.
-  script.postBehavior.push('fail', 'ok')
-  await clickButtonNamed('Open count')
-  assert.equal(script.postBodies.length, 1, 'the first create must fire exactly one request')
+  script.postBehavior.push("fail", "ok");
+  await clickButtonNamed("Open count");
+  assert.equal(script.postBodies.length, 1, "the first create must fire exactly one request");
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error'),
-    'the lost response must surface, not read as silence',
-  )
+    script.toasts.some((toast) => toast.kind === "error"),
+    "the lost response must surface, not read as silence",
+  );
   // Operator presses Open count again with unchanged fields: the retry must
   // carry the SAME key so the server replays the ORIGINAL count id.
-  await clickButtonNamed('Open count')
-  assert.equal(script.postBodies.length, 2, 'the retry must fire exactly one more request')
-  const [first, retry] = script.postBodies as Array<{ action: string; idempotencyKey: string; date: string }>
-  assert.equal(first!.action, 'create')
-  assert.ok(first!.idempotencyKey, 'the first create must carry a retry identity')
-  assert.equal(retry!.idempotencyKey, first!.idempotencyKey, 'the retry must reuse the create key, not mint a new one')
-  assert.equal(retry!.date, first!.date, 'the retry must replay the same count payload')
+  await clickButtonNamed("Open count");
+  assert.equal(script.postBodies.length, 2, "the retry must fire exactly one more request");
+  const [first, retry] = script.postBodies as Array<{
+    action: string;
+    idempotencyKey: string;
+    date: string;
+  }>;
+  assert.equal(first!.action, "create");
+  assert.ok(first!.idempotencyKey, "the first create must carry a retry identity");
+  assert.equal(
+    retry!.idempotencyKey,
+    first!.idempotencyKey,
+    "the retry must reuse the create key, not mint a new one",
+  );
+  assert.equal(retry!.date, first!.date, "the retry must replay the same count payload");
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'success' && /Count opened/.test(toast.message)),
-    'the replayed create must confirm with the original count',
-  )
-})
+    script.toasts.some((toast) => toast.kind === "success" && /Count opened/.test(toast.message)),
+    "the replayed create must confirm with the original count",
+  );
+});
 
-test('changing the create inputs after a failure rotates the retry identity', async (t) => {
-  await mountCounts(t, baseProps())
-  await fillCreate()
-  script.postBehavior.push('fail', 'fail')
-  await clickButtonNamed('Open count')
-  await clickButtonNamed('Open count')
-  const [first, retrySame] = script.postBodies as Array<{ idempotencyKey: string }>
-  assert.equal(retrySame!.idempotencyKey, first!.idempotencyKey, 'unchanged retry keeps the key (guard)')
+test("changing the create inputs after a failure rotates the retry identity", async (t) => {
+  await mountCounts(t, baseProps());
+  await fillCreate();
+  script.postBehavior.push("fail", "fail");
+  await clickButtonNamed("Open count");
+  await clickButtonNamed("Open count");
+  const [first, retrySame] = script.postBodies as Array<{ idempotencyKey: string }>;
+  assert.equal(
+    retrySame!.idempotencyKey,
+    first!.idempotencyKey,
+    "unchanged retry keeps the key (guard)",
+  );
   // New intended create after an input change: a reused key with different
   // input would 409, so the drawer must rotate.
-  const inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]
-  const memo = inputs.find((input) => input.type === 'text' && !input.hasAttribute('data-date-field'))
-  assert.ok(memo, 'a memo input must exist')
+  const inputs = [...document.querySelectorAll("input")] as HTMLInputElement[];
+  const memo = inputs.find(
+    (input) => input.type === "text" && !input.hasAttribute("data-date-field"),
+  );
+  assert.ok(memo, "a memo input must exist");
   await act(async () => {
-    setInputValue(memo, 'second attempt note')
-    await tick()
-  })
-  await tick()
-  await clickButtonNamed('Open count')
-  assert.equal(script.postBodies.length, 3)
-  const third = script.postBodies[2] as { idempotencyKey: string }
-  assert.notEqual(third!.idempotencyKey, first!.idempotencyKey, 'an input change must rotate the retry identity')
-})
+    setInputValue(memo, "second attempt note");
+    await tick();
+  });
+  await tick();
+  await clickButtonNamed("Open count");
+  assert.equal(script.postBodies.length, 3);
+  const third = script.postBodies[2] as { idempotencyKey: string };
+  assert.notEqual(
+    third!.idempotencyKey,
+    first!.idempotencyKey,
+    "an input change must rotate the retry identity",
+  );
+});
 
-test('a lost count suggestion response reuses its command key and confirmation reuses its task', async (t) => {
+test("a lost count suggestion response reuses its command key and confirmation reuses its task", async (t) => {
   await mountCounts(
     t,
     baseProps({
       counts: [
         {
           id: COUNT_ID,
-          status: 'counting',
+          status: "counting",
           locationId: LOC_MAIN,
-          locationName: 'Main',
-          countedOn: '2026-09-23',
+          locationName: "Main",
+          countedOn: "2026-09-23",
           memo: null,
           lineCount: 1,
           uncountedCount: 1,
@@ -305,48 +346,65 @@ test('a lost count suggestion response reuses its command key and confirmation r
       createRequested: false,
       selectedCountId: COUNT_ID,
     }),
-  )
-  await tick()
-  await tick()
-  const counted = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
-  assert.ok(counted, 'a counted-quantity input must render for a counting line')
+  );
+  await tick();
+  await tick();
+  const counted = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null;
+  assert.ok(counted, "a counted-quantity input must render for a counting line");
   await act(async () => {
-    setInputValue(counted, '7')
-    await tick()
-  })
-  await tick()
+    setInputValue(counted, "7");
+    await tick();
+  });
+  await tick();
   // Preparing the observation commits server-side but the response is lost;
   // the operator presses Save again with the same quantity.
-  script.postBehavior.push('fail', 'ok')
-  await clickButtonNamed('Save')
-  await clickButtonNamed('Save')
-  assert.equal(script.postBodies.length, 2, 'two saves must fire exactly two requests')
-  const [first, retry] = script.postBodies as Array<{ action: string; commandKey: string; quantity: string }>
-  assert.equal(first!.action, 'count')
-  assert.ok(first!.commandKey, 'the observation suggestion must carry a retry identity')
-  assert.equal(retry!.commandKey, first!.commandKey, 'the retry must reuse the command key, not mint a new one')
-  assert.equal(retry!.quantity, '7', 'the retry must replay the same counted quantity')
-  script.postBehavior.push('fail','ok')
-  await clickButtonNamed('Confirm')
-  await clickButtonNamed('Confirm')
-  assert.equal(script.postBodies.length,4)
-  assert.equal(script.postBodies[2]!.action,'confirm')
-  assert.equal(script.postBodies[3]!.taskId,script.postBodies[2]!.taskId,'a lost count confirmation retries the exact task')
-})
+  script.postBehavior.push("fail", "ok");
+  await clickButtonNamed("Save");
+  await clickButtonNamed("Save");
+  assert.equal(script.postBodies.length, 2, "two saves must fire exactly two requests");
+  const [first, retry] = script.postBodies as Array<{
+    action: string;
+    commandKey: string;
+    quantity: string;
+  }>;
+  assert.equal(first!.action, "count");
+  assert.ok(first!.commandKey, "the observation suggestion must carry a retry identity");
+  assert.equal(
+    retry!.commandKey,
+    first!.commandKey,
+    "the retry must reuse the command key, not mint a new one",
+  );
+  assert.equal(retry!.quantity, "7", "the retry must replay the same counted quantity");
+  script.postBehavior.push("fail", "ok");
+  await clickButtonNamed("Confirm");
+  await clickButtonNamed("Confirm");
+  assert.equal(script.postBodies.length, 4);
+  assert.equal(script.postBodies[2]!.action, "confirm");
+  assert.equal(
+    script.postBodies[3]!.taskId,
+    script.postBodies[2]!.taskId,
+    "a lost count confirmation retries the exact task",
+  );
+});
 
-test('a refused create names the server reason and a 502 names the translated fallback', async (t) => {
-  await mountCounts(t, baseProps())
-  await fillCreate()
+test("a refused create names the server reason and a 502 names the translated fallback", async (t) => {
+  await mountCounts(t, baseProps());
+  await fillCreate();
   script.postBehavior.push(
-    Response.json({ error: 'count date is in a closed period' }, { status: 422 }),
-    new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }),
-  )
-  await clickButtonNamed('Open count')
-  await clickButtonNamed('Open count')
-  const errors = script.toasts.filter((toast) => toast.kind === 'error').map((toast) => toast.message)
+    Response.json({ error: "count date is in a closed period" }, { status: 422 }),
+    new Response("<html>Bad Gateway</html>", {
+      status: 502,
+      headers: { "content-type": "text/html" },
+    }),
+  );
+  await clickButtonNamed("Open count");
+  await clickButtonNamed("Open count");
+  const errors = script.toasts
+    .filter((toast) => toast.kind === "error")
+    .map((toast) => toast.message);
   assert.deepEqual(
     errors,
-    ['count date is in a closed period', 'Stock count request failed (status 502)'],
-    'a named refusal must surface verbatim and a non-JSON failure must carry the translated fallback with the status — never a hard-coded Request failed or a SyntaxError',
-  )
-})
+    ["count date is in a closed period", "Stock count request failed (status 502)"],
+    "a named refusal must surface verbatim and a non-JSON failure must carry the translated fallback with the status — never a hard-coded Request failed or a SyntaxError",
+  );
+});

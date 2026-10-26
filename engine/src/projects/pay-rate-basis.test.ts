@@ -4,10 +4,18 @@ import { div } from "../money/money.ts";
 import { annualPayRate, hourlyPayRate, payRateIn, requirePayRateBasis } from "./pay-rate-basis.ts";
 
 test("a yearly rate converts to hourly exactly as rate ÷ annual hours", () => {
-  for (const [rate, hours] of [["88000.0000", "2080"], ["91234.5678", "1950.5"], ["0", "2080"]] as const) {
+  for (const [rate, hours] of [
+    ["88000.0000", "2080"],
+    ["91234.5678", "1950.5"],
+    ["0", "2080"],
+  ] as const) {
     assert.equal(hourlyPayRate(rate, "year", hours), div(rate, hours));
   }
-  assert.equal(hourlyPayRate("32.5000", "hour", "2080"), "32.5000", "an hourly rate is returned unchanged");
+  assert.equal(
+    hourlyPayRate("32.5000", "hour", "2080"),
+    "32.5000",
+    "an hourly rate is returned unchanged",
+  );
 });
 
 test("time-based cadences annualize through their periods per year", () => {
@@ -30,8 +38,14 @@ test("restating a whole-number monthly rate as yearly and back is exact", () => 
 test("an hourly rate annualizes through annual hours, which must be positive", () => {
   assert.equal(payRateIn("32.5", "hour", "year", "1950"), "63375.0000");
   for (const hours of ["0", "-2080"]) {
-    assert.throws(() => hourlyPayRate("88000", "year", hours), /annual hours must be greater than zero/);
-    assert.throws(() => annualPayRate("32.5", "hour", hours), /annual hours must be greater than zero/);
+    assert.throws(
+      () => hourlyPayRate("88000", "year", hours),
+      /annual hours must be greater than zero/,
+    );
+    assert.throws(
+      () => annualPayRate("32.5", "hour", hours),
+      /annual hours must be greater than zero/,
+    );
   }
   assert.throws(() => requirePayRateBasis("monthly"), /not a supported pay cadence/);
 });

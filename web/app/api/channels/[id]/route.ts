@@ -50,7 +50,8 @@ export const GET = defineRoute({
     if (!channel) return notFound("channel");
     // The workspace header also wants match counts, webhook topics and the
     // manage grant; all three stay read-scoped to this channel.
-    const counts = channel.kind === "shopify" ? await catalogQueueCounts(gate.user.orgId, id) : null;
+    const counts =
+      channel.kind === "shopify" ? await catalogQueueCounts(gate.user.orgId, id) : null;
     const topics = channel.kind === "shopify" ? [...SHOPIFY_WEBHOOK_TOPICS] : [];
     return NextResponse.json({ channel, counts, topics, canManage: can(gate, "channels.manage") });
   },

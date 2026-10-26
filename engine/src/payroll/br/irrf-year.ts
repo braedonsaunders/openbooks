@@ -127,7 +127,8 @@ export function calculateBrIrrfFromTables(
   for (const band of tables.bands) {
     if (band.upTo !== null && base > toCents(band.upTo, "band bound", tables.tag)) continue;
     const { num, den } = percentParts(band.rate);
-    impostoBruto = truncCents(base * num, den) - toCents(band.deduct, "parcela a deduzir", tables.tag);
+    impostoBruto =
+      truncCents(base * num, den) - toCents(band.deduct, "parcela a deduzir", tables.tag);
     if (impostoBruto < 0n) impostoBruto = 0n;
     break;
   }
@@ -141,8 +142,9 @@ export function calculateBrIrrfFromTables(
       const cap = toCents(reduction.faixaIsencaoCap, "reduction cap", tables.tag);
       reducao = impostoBruto < cap ? impostoBruto : cap;
     } else if (rendimentos <= faixaTransicao) {
-      const exact = toCents(reduction.base, "reduction base", tables.tag)
-        - truncCents(rendimentos * reduction.coeficienteNum, reduction.coeficienteDen);
+      const exact =
+        toCents(reduction.base, "reduction base", tables.tag) -
+        truncCents(rendimentos * reduction.coeficienteNum, reduction.coeficienteDen);
       const positive = exact < 0n ? 0n : exact;
       reducao = impostoBruto < positive ? impostoBruto : positive;
     }

@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useViewerFormat } from '../../../../../lib/viewer-format'
-import { Plus } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { SetupEditor } from './PaymentOperationsSetup'
-import type { PaymentOperationsData } from './view'
+import Link from "next/link";
+import { useViewerFormat } from "../../../../../lib/viewer-format";
+import { Plus } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import { SetupEditor } from "./PaymentOperationsSetup";
+import type { PaymentOperationsData } from "./view";
 
 /**
  * Client composites the payment setup page specs place by name:
@@ -25,22 +25,25 @@ import type { PaymentOperationsData } from './view'
  * the identical expression so the spec render matches byte for byte.
  */
 export function PaymentScheduleNextRun({ value }: { value: string | null }) {
-  const { dateTime } = useViewerFormat()
-  return <>{value ? dateTime(new Date(value)) : '—'}</>
+  const { dateTime } = useViewerFormat();
+  return <>{value ? dateTime(new Date(value)) : "—"}</>;
 }
 
 export function NewSetupRecordButton({ href, label }: { href: string; label: string }) {
   return (
     <Button asChild>
-      <Link href={href as never}><Plus size={15} />{label}</Link>
+      <Link href={href as never}>
+        <Plus size={15} />
+        {label}
+      </Link>
     </Button>
-  )
+  );
 }
 
 export function PaymentOperationsEditor({
   editor,
 }: {
-  editor: NonNullable<PaymentOperationsData['editor']>
+  editor: NonNullable<PaymentOperationsData["editor"]>;
 }) {
   return (
     <SetupEditor
@@ -51,5 +54,5 @@ export function PaymentOperationsEditor({
       closeHref={editor.closeHref}
       multiCurrency={editor.multiCurrency}
     />
-  )
+  );
 }

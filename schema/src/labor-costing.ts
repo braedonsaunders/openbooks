@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
 /**
@@ -34,12 +44,18 @@ export const laborCostRates = pgTable(
     currency: currencyCode("currency").notNull(),
     rate: money("rate").notNull(),
     /** Pay cadence; the labor_cost_rates_basis check (0585) admits exactly these. */
-    basis: text("basis", { enum: ["hour", "week", "biweekly", "semimonth", "month", "year"] }).notNull().default("hour"),
+    basis: text("basis", { enum: ["hour", "week", "biweekly", "semimonth", "month", "year"] })
+      .notNull()
+      .default("hour"),
     /** Divisor converting a time-based rate to hourly (2080 = 40h × 52w). */
     annualHours: money("annual_hours").notNull().default("2080"),
     /** Payroll multiplier precision and monetary rounding share this validity window. */
     payrollRateScale: integer("payroll_rate_scale").notNull().default(4),
-    payrollAmountRounding: text("payroll_amount_rounding", { enum: ["dimension_group", "time_entry"] }).notNull().default("dimension_group"),
+    payrollAmountRounding: text("payroll_amount_rounding", {
+      enum: ["dimension_group", "time_entry"],
+    })
+      .notNull()
+      .default("dimension_group"),
     /** Inclusive validity window. Active windows may not overlap within one
      *  labor scope (storage constraint 0051). */
     effectiveFrom: date("effective_from").notNull(),
@@ -68,9 +84,15 @@ export const laborCostRates = pgTable(
     ),
     check("labor_cost_rates_nonnegative", sql`${t.rate} >= 0`),
     check("labor_cost_rates_payroll_rate_scale", sql`${t.payrollRateScale} between 0 and 4`),
-    check("labor_cost_rates_payroll_amount_rounding", sql`${t.payrollAmountRounding} in ('dimension_group', 'time_entry')`),
+    check(
+      "labor_cost_rates_payroll_amount_rounding",
+      sql`${t.payrollAmountRounding} in ('dimension_group', 'time_entry')`,
+    ),
     check("labor_cost_rates_annual_hours", sql`${t.annualHours} > 0`),
-    check("labor_cost_rates_valid_range", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "labor_cost_rates_valid_range",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
     // Exactly zero or one scope key: zero is the organization default.
     check(
       "labor_cost_rates_one_scope",

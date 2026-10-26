@@ -1,41 +1,48 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import { NextResponse } from 'next/server'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import { NextResponse } from "next/server";
 
-const ROW_A = '00000000-0000-4000-8000-000000000001:ON:'
-const ROW_B = '00000000-0000-4000-8000-000000000002:QC:'
+const ROW_A = "00000000-0000-4000-8000-000000000001:ON:";
+const ROW_B = "00000000-0000-4000-8000-000000000002:QC:";
 
 interface RecordedIssue {
-  revision: string
-  rowIds?: readonly string[]
-  note?: string | null
-  reason?: string | null
-  scope?: unknown
-  params?: Record<string, string>
+  revision: string;
+  rowIds?: readonly string[];
+  note?: string | null;
+  reason?: string | null;
+  scope?: unknown;
+  params?: Record<string, string>;
 }
 
 interface GuardCall {
-  kind: 'rowIds' | 'data'
-  rowIds: string[]
+  kind: "rowIds" | "data";
+  rowIds: string[];
 }
 
 interface RouteState {
-  issues: RecordedIssue[]
-  gateScope: string[] | null
-  guardCalls: GuardCall[]
-  sectionRows: string[] | null
-  selectedRows: string[] | null
+  issues: RecordedIssue[];
+  gateScope: string[] | null;
+  guardCalls: GuardCall[];
+  sectionRows: string[] | null;
+  selectedRows: string[] | null;
 }
 
-const stateKey = Symbol.for('openbooks.payroll-amendments-route-test')
-const state: RouteState = { issues: [], gateScope: null, guardCalls: [], sectionRows: null, selectedRows: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollAmendmentsNextResponse = NextResponse
+const stateKey = Symbol.for("openbooks.payroll-amendments-route-test");
+const state: RouteState = {
+  issues: [],
+  gateScope: null,
+  guardCalls: [],
+  sectionRows: null,
+  selectedRows: null,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollAmendmentsNextResponse =
+  NextResponse;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
       export async function guardFeaturePermission() {
@@ -44,7 +51,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:subsidiary-scope',
+    "mock:subsidiary-scope",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
       const NextResponse = globalThis.openbooksPayrollAmendmentsNextResponse
@@ -68,7 +75,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:yearend',
+    "mock:yearend",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
       export async function orgYearEndFilings() {
@@ -84,9 +91,9 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
-      export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
+      export * from '${import.meta.resolve("@openbooks/engine/platform/db")}'
       export const ambientTenantOrgId = () => null
       export const currentRequestOrgResolver = () => null
       export const registerRequestOrgResolver = () => {}
@@ -96,13 +103,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
       export function sql() { return {} }
     `,
   ],
   [
-    'mock:filing-registry',
+    "mock:filing-registry",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
       export function yearEndFiling() {
@@ -113,19 +120,19 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:packs',
+    "mock:packs",
     `
       export class PayrollPackError extends Error {}
     `,
   ],
   [
-    'mock:payroll-error',
+    "mock:payroll-error",
     `
       export class PayrollError extends Error {}
     `,
   ],
   [
-    'mock:amendments',
+    "mock:amendments",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
       export async function filingLifecycle(orgId, country, filing, year, scope, authorizeRowIds) {
@@ -154,268 +161,295 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', new URL('../../../../../lib/api/json.ts', import.meta.url).href],
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['@/lib/feature-gates', 'mock:feature-gates'],
-  ['../../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/payroll/packs', 'mock:packs'],
-  ['@openbooks/engine/payroll/filing-registry', 'mock:filing-registry'],
-  ['@openbooks/engine/payroll/error', 'mock:payroll-error'],
-  ['@openbooks/engine/payroll/yearend', 'mock:yearend'],
-  ['@openbooks/engine/payroll/yearend-amendments', 'mock:amendments'],
-])
+  ["@/lib/api/json", new URL("../../../../../lib/api/json.ts", import.meta.url).href],
+  ["../../../../../lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
+  ["../../subsidiary-scope", "mock:subsidiary-scope"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["drizzle-orm", "mock:drizzle"],
+  ["@openbooks/engine/payroll/packs", "mock:packs"],
+  ["@openbooks/engine/payroll/filing-registry", "mock:filing-registry"],
+  ["@openbooks/engine/payroll/error", "mock:payroll-error"],
+  ["@openbooks/engine/payroll/yearend", "mock:yearend"],
+  ["@openbooks/engine/payroll/yearend-amendments", "mock:amendments"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?payroll-amendments-cancellation-test'
-const { POST, GET } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?payroll-amendments-cancellation-test";
+const { POST, GET } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
 function reset(): void {
-  state.issues.length = 0
-  state.guardCalls.length = 0
-  state.gateScope = null
-  state.sectionRows = null
-  state.selectedRows = null
+  state.issues.length = 0;
+  state.guardCalls.length = 0;
+  state.gateScope = null;
+  state.sectionRows = null;
+  state.selectedRows = null;
 }
 
 function restrict(): void {
-  state.gateScope = ['sub-a']
+  state.gateScope = ["sub-a"];
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
-  return POST(new Request('http://openbooks.test/api/payroll/year-end/amendments', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      country: 'CA', filing: 't4', year: 2026, rowIds: [ROW_A], ...body,
+  return POST(
+    new Request("http://openbooks.test/api/payroll/year-end/amendments", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        country: "CA",
+        filing: "t4",
+        year: 2026,
+        rowIds: [ROW_A],
+        ...body,
+      }),
     }),
-  }))
+  );
 }
 
 function get(query: string): Promise<Response> {
-  return GET(new Request(`http://openbooks.test/api/payroll/year-end/amendments${query}`))
+  return GET(new Request(`http://openbooks.test/api/payroll/year-end/amendments${query}`));
 }
 
-test('POST uses the shared refusal for a non-object JSON body', async () => {
-  reset()
-  const response = await POST(new Request('http://openbooks.test/api/payroll/year-end/amendments', { method: 'POST', body: 'null' }))
-  assert.equal(response.status, 400)
-  assert.equal((await response.json()).error, 'invalid request body')
-})
+test("POST uses the shared refusal for a non-object JSON body", async () => {
+  reset();
+  const response = await POST(
+    new Request("http://openbooks.test/api/payroll/year-end/amendments", {
+      method: "POST",
+      body: "null",
+    }),
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "invalid request body");
+});
 
-test('the API rejects a cancellation that lacks explicit confirmation', async () => {
-  reset()
-  const response = await post({ revision: 'cancelled', reason: 'Employee belonged to another entity' })
+test("the API rejects a cancellation that lacks explicit confirmation", async () => {
+  reset();
+  const response = await post({
+    revision: "cancelled",
+    reason: "Employee belonged to another entity",
+  });
 
-  assert.equal(response.status, 422)
-  assert.match((await response.json()).error, /explicitly confirmed/)
-  assert.deepEqual(state.issues, [])
-})
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /explicitly confirmed/);
+  assert.deepEqual(state.issues, []);
+});
 
-test('the API rejects a blank cancellation reason before the engine is reached', async () => {
-  reset()
-  const response = await post({ revision: 'cancelled', confirmedCancellation: true, reason: '   ' })
+test("the API rejects a blank cancellation reason before the engine is reached", async () => {
+  reset();
+  const response = await post({
+    revision: "cancelled",
+    confirmedCancellation: true,
+    reason: "   ",
+  });
 
-  assert.equal(response.status, 422)
-  assert.match((await response.json()).error, /nonblank cancellation reason/)
-  assert.deepEqual(state.issues, [])
-})
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /nonblank cancellation reason/);
+  assert.deepEqual(state.issues, []);
+});
 
-test('POST refuses each year cause by name, with the value and the range', async () => {
-  reset()
+test("POST refuses each year cause by name, with the value and the range", async () => {
+  reset();
   const cases: Array<{ year: unknown; match: RegExp[] }> = [
     { year: null, match: [/year is required/, /2020/, /2100/] },
-    { year: 'abc', match: [/not a number/, /abc/, /2020/, /2100/] },
+    { year: "abc", match: [/not a number/, /abc/, /2020/, /2100/] },
     { year: 2026.5, match: [/whole year/, /2026\.5/, /2020/, /2100/] },
     { year: 2019, match: [/2019/, /2020/, /2100/] },
     { year: 2101, match: [/2101/, /2020/, /2100/] },
-  ]
+  ];
   for (const { year, match } of cases) {
-    const response = await post({ year, revision: 'original' })
-    assert.equal(response.status, 422, `year ${String(year)} was not refused`)
-    const error = (await response.json() as { error: string }).error
-    for (const pattern of match) assert.match(error, pattern)
-    assert.deepEqual(state.issues, [])
+    const response = await post({ year, revision: "original" });
+    assert.equal(response.status, 422, `year ${String(year)} was not refused`);
+    const error = ((await response.json()) as { error: string }).error;
+    for (const pattern of match) assert.match(error, pattern);
+    assert.deepEqual(state.issues, []);
   }
-})
+});
 
-test('POST accepts the boundary years 2020 and 2100', async () => {
+test("POST accepts the boundary years 2020 and 2100", async () => {
   for (const year of [2020, 2100]) {
-    reset()
-    const response = await post({ year, revision: 'original' })
-    assert.equal(response.status, 200, `year ${year} was not accepted`)
+    reset();
+    const response = await post({ year, revision: "original" });
+    assert.equal(response.status, 200, `year ${year} was not accepted`);
   }
-})
+});
 
-test('GET refuses each year cause by name, with the value and the range', async () => {
+test("GET refuses each year cause by name, with the value and the range", async () => {
   const cases: Array<{ query: string; match: RegExp[] }> = [
     // No year parameter at all: absent, not a range error over zero.
-    { query: '?country=CA&filing=t4', match: [/year is required/, /2020/, /2100/] },
-    { query: '?country=CA&filing=t4&year=abc', match: [/not a number/, /abc/, /2020/, /2100/] },
-    { query: '?country=CA&filing=t4&year=2026.5', match: [/whole year/, /2026\.5/, /2020/, /2100/] },
-    { query: '?country=CA&filing=t4&year=2019', match: [/2019/, /2020/, /2100/] },
-    { query: '?country=CA&filing=t4&year=2101', match: [/2101/, /2020/, /2100/] },
-  ]
+    { query: "?country=CA&filing=t4", match: [/year is required/, /2020/, /2100/] },
+    { query: "?country=CA&filing=t4&year=abc", match: [/not a number/, /abc/, /2020/, /2100/] },
+    {
+      query: "?country=CA&filing=t4&year=2026.5",
+      match: [/whole year/, /2026\.5/, /2020/, /2100/],
+    },
+    { query: "?country=CA&filing=t4&year=2019", match: [/2019/, /2020/, /2100/] },
+    { query: "?country=CA&filing=t4&year=2101", match: [/2101/, /2020/, /2100/] },
+  ];
   for (const { query, match } of cases) {
-    const response = await get(query)
-    assert.equal(response.status, 422, `${query} was not refused`)
-    const error = (await response.json() as { error: string }).error
-    for (const pattern of match) assert.match(error, pattern)
+    const response = await get(query);
+    assert.equal(response.status, 422, `${query} was not refused`);
+    const error = ((await response.json()) as { error: string }).error;
+    for (const pattern of match) assert.match(error, pattern);
   }
-})
+});
 
-test('GET accepts the boundary years 2020 and 2100', async () => {
+test("GET accepts the boundary years 2020 and 2100", async () => {
   for (const year of [2020, 2100]) {
-    const response = await get(`?country=CA&filing=t4&year=${year}`)
-    assert.equal(response.status, 200, `year ${year} was not accepted`)
+    const response = await get(`?country=CA&filing=t4&year=${year}`);
+    assert.equal(response.status, 200, `year ${year} was not accepted`);
   }
-})
+});
 
-test('a confirmed cancellation passes its trimmed reason into the filing note', async () => {
-  reset()
+test("a confirmed cancellation passes its trimmed reason into the filing note", async () => {
+  reset();
   const response = await post({
-    revision: 'cancelled',
+    revision: "cancelled",
     confirmedCancellation: true,
-    reason: '  Employee belonged to the other entity  ',
-  })
+    reason: "  Employee belonged to the other entity  ",
+  });
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.issues, [{
-    orgId: 'org-1',
-    actorId: 'user-1',
-    country: 'CA',
-    filingKey: 't4',
-    taxYear: 2026,
-    revision: 'cancelled',
-    rowIds: [ROW_A],
-    scope: undefined,
-    note: 'Employee belonged to the other entity',
-    reason: 'Employee belonged to the other entity',
-  }])
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.issues, [
+    {
+      orgId: "org-1",
+      actorId: "user-1",
+      country: "CA",
+      filingKey: "t4",
+      taxYear: 2026,
+      revision: "cancelled",
+      rowIds: [ROW_A],
+      scope: undefined,
+      note: "Employee belonged to the other entity",
+      reason: "Employee belonged to the other entity",
+    },
+  ]);
+});
 
-test('a restricted original with rowIds [] is guarded on the full population, not the empty list', async () => {
-  reset()
-  restrict()
-  const response = await post({ revision: 'original', rowIds: [] })
+test("a restricted original with rowIds [] is guarded on the full population, not the empty list", async () => {
+  reset();
+  restrict();
+  const response = await post({ revision: "original", rowIds: [] });
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(state.issues, [])
+  assert.equal(response.status, 403);
+  assert.deepEqual(state.issues, []);
   // The bypass this closes: the old code guarded only the caller list (empty
   // → allowed) while the service persisted the whole population. The full
   // population is what gets guarded now.
-  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: [ROW_A, ROW_B] }])
-})
+  assert.deepEqual(state.guardCalls, [{ kind: "data", rowIds: [ROW_A, ROW_B] }]);
+});
 
-test('a restricted original naming one in-scope row is still refused: the service files the whole return', async () => {
-  reset()
-  restrict()
-  const response = await post({ revision: 'original', rowIds: [ROW_A] })
+test("a restricted original naming one in-scope row is still refused: the service files the whole return", async () => {
+  reset();
+  restrict();
+  const response = await post({ revision: "original", rowIds: [ROW_A] });
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(state.issues, [])
-  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: [ROW_A, ROW_B] }])
-})
+  assert.equal(response.status, 403);
+  assert.deepEqual(state.issues, []);
+  assert.deepEqual(state.guardCalls, [{ kind: "data", rowIds: [ROW_A, ROW_B] }]);
+});
 
-test('a restricted correction naming in-scope rows is allowed: it persists exactly those rows', async () => {
-  reset()
-  restrict()
+test("a restricted correction naming in-scope rows is allowed: it persists exactly those rows", async () => {
+  reset();
+  restrict();
   // Amendments need explicit confirmation (2ddfd6895); this posts past it like the cancellation posts do.
-  const response = await post({ revision: 'amended', confirmedAmendment: true, rowIds: [ROW_A] })
+  const response = await post({ revision: "amended", confirmedAmendment: true, rowIds: [ROW_A] });
 
-  assert.equal(response.status, 200)
-  assert.equal(state.issues.length, 1)
+  assert.equal(response.status, 200);
+  assert.equal(state.issues.length, 1);
   // Twice: the route's pre-guard, then the service's in-transaction
   // re-authorization of the exact rows it persists.
   assert.deepEqual(state.guardCalls, [
-    { kind: 'rowIds', rowIds: [ROW_A] },
-    { kind: 'rowIds', rowIds: [ROW_A] },
-  ])
-})
+    { kind: "rowIds", rowIds: [ROW_A] },
+    { kind: "rowIds", rowIds: [ROW_A] },
+  ]);
+});
 
-test('a pack-selected original authorizes its declared rows and preserves selection parameters', async () => {
-  reset()
-  restrict()
-  state.selectedRows = [ROW_A]
-  const params = { event: 'selected-event' }
-  const response = await post({ revision: 'original', params, rowIds: [ROW_B] })
+test("a pack-selected original authorizes its declared rows and preserves selection parameters", async () => {
+  reset();
+  restrict();
+  state.selectedRows = [ROW_A];
+  const params = { event: "selected-event" };
+  const response = await post({ revision: "original", params, rowIds: [ROW_B] });
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.issues[0]?.params, params)
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.issues[0]?.params, params);
   assert.deepEqual(state.guardCalls, [
-    { kind: 'rowIds', rowIds: [ROW_A] },
-    { kind: 'rowIds', rowIds: [ROW_A] },
-  ])
-})
+    { kind: "rowIds", rowIds: [ROW_A] },
+    { kind: "rowIds", rowIds: [ROW_A] },
+  ]);
+});
 
-test('caller row IDs cannot narrow an out-of-scope pack-selected original', async () => {
-  reset()
-  restrict()
-  state.selectedRows = [ROW_B]
-  const response = await post({ revision: 'original', params: { event: 'other-event' }, rowIds: [ROW_A] })
+test("caller row IDs cannot narrow an out-of-scope pack-selected original", async () => {
+  reset();
+  restrict();
+  state.selectedRows = [ROW_B];
+  const response = await post({
+    revision: "original",
+    params: { event: "other-event" },
+    rowIds: [ROW_A],
+  });
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(state.issues, [])
-  assert.deepEqual(state.guardCalls, [{ kind: 'rowIds', rowIds: [ROW_B] }])
-})
+  assert.equal(response.status, 403);
+  assert.deepEqual(state.issues, []);
+  assert.deepEqual(state.guardCalls, [{ kind: "rowIds", rowIds: [ROW_B] }]);
+});
 
-test('a restricted GET with filed history still guards the current population', async () => {
-  reset()
-  restrict()
+test("a restricted GET with filed history still guards the current population", async () => {
+  reset();
+  restrict();
   // The stored submission covers row-a only, but the current population has
   // grown row-b: the lifecycle would return row-b's label, id and status, so
   // the read is refused rather than exposing the new out-of-scope slip.
-  const response = await get('?country=CA&filing=t4&year=2026')
+  const response = await get("?country=CA&filing=t4&year=2026");
 
-  assert.equal(response.status, 403)
-})
+  assert.equal(response.status, 403);
+});
 
-test('an unrestricted GET with filed history still reads', async () => {
-  reset()
-  const response = await get('?country=CA&filing=t4&year=2026')
+test("an unrestricted GET with filed history still reads", async () => {
+  reset();
+  const response = await get("?country=CA&filing=t4&year=2026");
 
-  assert.equal(response.status, 200)
-})
+  assert.equal(response.status, 200);
+});
 
-test('a row committed between guard and issue is not issued: the service authorizes what it persists', async () => {
-  reset()
-  restrict()
+test("a row committed between guard and issue is not issued: the service authorizes what it persists", async () => {
+  reset();
+  restrict();
   // The pre-guard's snapshot holds row-a only, so it passes; the service's
   // own population then contains row-b, and the in-service authorization
   // denies before anything is persisted.
-  state.sectionRows = [ROW_A]
-  const response = await post({ revision: 'original', rowIds: [] })
+  state.sectionRows = [ROW_A];
+  const response = await post({ revision: "original", rowIds: [] });
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(state.issues, [])
+  assert.equal(response.status, 403);
+  assert.deepEqual(state.issues, []);
   assert.deepEqual(state.guardCalls, [
-    { kind: 'data', rowIds: [ROW_A] },
-    { kind: 'rowIds', rowIds: [ROW_A, ROW_B] },
-  ])
-})
+    { kind: "data", rowIds: [ROW_A] },
+    { kind: "rowIds", rowIds: [ROW_A, ROW_B] },
+  ]);
+});
 
-test('a row committed between guard and read is not returned: the lifecycle authorizes what it returns', async () => {
-  reset()
-  restrict()
-  state.sectionRows = [ROW_A]
-  const response = await get('?country=CA&filing=t4&year=2026')
+test("a row committed between guard and read is not returned: the lifecycle authorizes what it returns", async () => {
+  reset();
+  restrict();
+  state.sectionRows = [ROW_A];
+  const response = await get("?country=CA&filing=t4&year=2026");
 
-  assert.equal(response.status, 403)
-})
+  assert.equal(response.status, 403);
+});

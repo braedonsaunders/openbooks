@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const assistantChat: DocArticle = {
-  slug: 'assistant-chat',
-  title: 'Chatting with the assistant',
-  category: 'getting-started',
+  slug: "assistant-chat",
+  title: "Chatting with the assistant",
+  category: "getting-started",
   order: 5,
   summary:
-    'Start a conversation, read answers with evidence, review drafts before anything is saved, and find old threads again.',
-  updated: '2026-09-16',
-  related: ['welcome', 'agent-workbench'],
-  keywords: ['assistant', 'chat', 'conversation', 'draft', 'history', 'ask'],
+    "Start a conversation, read answers with evidence, review drafts before anything is saved, and find old threads again.",
+  updated: "2026-09-16",
+  related: ["welcome", "agent-workbench"],
+  keywords: ["assistant", "chat", "conversation", "draft", "history", "ask"],
   body: `# Chatting with the assistant
 
 The assistant answers questions about your books — balances, statements,
@@ -52,4 +52,4 @@ return to, delete the ones you will not. From an analysis finding you can
 choose **Ask about this** to open the assistant with that finding attached;
 remove the context chip in the composer any time you want it gone.
 `,
-}
+};

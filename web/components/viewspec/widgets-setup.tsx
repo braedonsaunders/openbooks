@@ -1,5 +1,5 @@
-import { type ComponentProps } from 'react'
-import { SetupSectionSlot } from './setup-section-slot'
+import { type ComponentProps } from "react";
+import { SetupSectionSlot } from "./setup-section-slot";
 import {
   NavEditor,
   FeaturesWorkspace,
@@ -34,39 +34,39 @@ import {
   CloseWizard,
   NewScriptButton,
   ScriptDrawer,
-} from './native-widgets.client'
-import { SecurityPageContent } from '../../app/(app)/settings/security/sections'
+} from "./native-widgets.client";
+import { SecurityPageContent } from "../../app/(app)/settings/security/sections";
 import {
   OverheadApplicationTabSlot,
   OverheadLifecycleTabSlot,
   OverheadModelBody,
   OverheadModelHeader,
   OverheadRatesTabSlot,
-} from '../../app/(app)/admin/setup/overhead/sections'
+} from "../../app/(app)/admin/setup/overhead/sections";
 import {
   AllocationsDriversTabSlot,
   AllocationsRuleDrawerSlot,
   AllocationsRulesTabSlot,
   AllocationsRunsTabSlot,
   AllocationsSetupHeader,
-} from '../../app/(app)/admin/setup/allocations/sections'
+} from "../../app/(app)/admin/setup/allocations/sections";
 import {
   SetupReadinessCheckCard,
   SetupReadinessHero,
-} from '../../app/(app)/admin/setup/readiness/sections'
+} from "../../app/(app)/admin/setup/readiness/sections";
 import {
   FlowNameCell,
   FlowLastRunCell,
   FlowRowActionsCell,
   NewFlowButton as NewFlowListButton,
   QuickApprovalButton as QuickApprovalListButton,
-} from '../../app/(app)/admin/flows/sections'
+} from "../../app/(app)/admin/flows/sections";
 import {
   AutomationLastRunCell,
   AutomationNameCell,
   AutomationRowActionsCell,
   NewAutomationListButton,
-} from '../../app/(app)/admin/automations/sections'
+} from "../../app/(app)/admin/automations/sections";
 import {
   SetupBadgeLinkCell,
   SetupCloseSlot,
@@ -77,30 +77,26 @@ import {
   SetupFxSlot,
   SetupPayrollStatutoryHolidaysSlot,
   SetupTaxProviderSlot,
-} from '../../app/(app)/admin/setup/[entity]/sections'
+} from "../../app/(app)/admin/setup/[entity]/sections";
 import {
   CustomizationTabs,
   FormDefaultCell,
   ViewScopeCell,
-} from '../../app/(app)/admin/customization/sections'
-import { BookOpen } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import Link from 'next/link'
-import { num, str, type WidgetRenderer } from './widget-props'
+} from "../../app/(app)/admin/customization/sections";
+import { BookOpen } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import Link from "next/link";
+import { num, str, type WidgetRenderer } from "./widget-props";
 
 /** Admin setup and configuration adapters. Compose native components without changing their props or boundaries. */
 export const SETUP_WIDGETS = {
-  'new-custom-field': () => <NewFieldButton />,
-  'custom-field-drawer': (props) => (
+  "new-custom-field": () => <NewFieldButton />,
+  "custom-field-drawer": (props) => (
     <FieldDrawer
-      def={(props.def as ComponentProps<typeof FieldDrawer>['def']) ?? null}
+      def={(props.def as ComponentProps<typeof FieldDrawer>["def"]) ?? null}
       hiddenKinds={(props.hiddenKinds as string[]) ?? []}
       hiddenTables={(props.hiddenTables as string[]) ?? []}
-      roleOptions={
-        (props.roleOptions as ComponentProps<
-          typeof FieldDrawer
-        >['roleOptions']) ?? []
-      }
+      roleOptions={(props.roleOptions as ComponentProps<typeof FieldDrawer>["roleOptions"]) ?? []}
     />
   ),
   /**
@@ -111,132 +107,104 @@ export const SETUP_WIDGETS = {
    * blocks would reimplement it rather than compose it. Its page uses
    * `layout: 'bare'` so the wizard's shell is the only one.
    */
-  'close-wizard': (props) => {
-    const wizard = props.wizard as ComponentProps<typeof CloseWizard> | null
-    if (!wizard) return null
-    return <CloseWizard {...wizard} />
+  "close-wizard": (props) => {
+    const wizard = props.wizard as ComponentProps<typeof CloseWizard> | null;
+    if (!wizard) return null;
+    return <CloseWizard {...wizard} />;
   },
-  'page-layout-drawer': (props) => {
-    const drawer = props.drawer as
-      ComponentProps<typeof LayoutDrawer>['drawer'] | null
-    if (!drawer) return null
+  "page-layout-drawer": (props) => {
+    const drawer = props.drawer as ComponentProps<typeof LayoutDrawer>["drawer"] | null;
+    if (!drawer) return null;
     return (
       <LayoutDrawer
-        key={`${drawer.route}:${JSON.stringify(drawer.segments)}:${drawer.overrideScope ?? 'org'}`}
+        key={`${drawer.route}:${JSON.stringify(drawer.segments)}:${drawer.overrideScope ?? "org"}`}
         drawer={drawer}
       />
-    )
+    );
   },
   /** The "N of M routes customized" line under the list. */
-  'page-layout-summary': (props) => (
+  "page-layout-summary": (props) => (
     <p className="px-1 pt-2 text-xs text-slate-500 dark:text-slate-400">
-      {str(props, 'text') ?? ''}
+      {str(props, "text") ?? ""}
     </p>
   ),
-  'new-script': () => <NewScriptButton />,
-  'script-drawer': (props) => (
+  "new-script": () => <NewScriptButton />,
+  "script-drawer": (props) => (
     <ScriptDrawer
-      script={
-        (props.script as ComponentProps<typeof ScriptDrawer>['script']) ?? null
-      }
-      runs={(props.runs as ComponentProps<typeof ScriptDrawer>['runs']) ?? []}
-      customTypes={
-        (props.customTypes as ComponentProps<
-          typeof ScriptDrawer
-        >['customTypes']) ?? []
-      }
+      script={(props.script as ComponentProps<typeof ScriptDrawer>["script"]) ?? null}
+      runs={(props.runs as ComponentProps<typeof ScriptDrawer>["runs"]) ?? []}
+      customTypes={(props.customTypes as ComponentProps<typeof ScriptDrawer>["customTypes"]) ?? []}
     />
   ),
 
   /* --- customization designer --------------------------------------------- */
-  'customization-tabs': (props) => (
+  "customization-tabs": (props) => (
     <CustomizationTabs
-      formsHref={str(props, 'formsHref') ?? ''}
-      viewsHref={str(props, 'viewsHref') ?? ''}
-      formsLabel={str(props, 'formsLabel') ?? ''}
-      viewsLabel={str(props, 'viewsLabel') ?? ''}
+      formsHref={str(props, "formsHref") ?? ""}
+      viewsHref={str(props, "viewsHref") ?? ""}
+      formsLabel={str(props, "formsLabel") ?? ""}
+      viewsLabel={str(props, "viewsLabel") ?? ""}
       formsActive={props.formsActive === true}
       showForms={props.showForms !== false}
     />
   ),
-  'form-default-cell': (props) => (
+  "form-default-cell": (props) => (
     <FormDefaultCell
       showDefault={props.showDefault === true}
-      defaultLabel={str(props, 'defaultLabel') ?? ''}
-      rolesLabel={str(props, 'rolesLabel') ?? ''}
+      defaultLabel={str(props, "defaultLabel") ?? ""}
+      rolesLabel={str(props, "rolesLabel") ?? ""}
     />
   ),
-  'view-scope-cell': (props) => (
+  "view-scope-cell": (props) => (
     <ViewScopeCell
-      scopeLabel={str(props, 'scopeLabel') ?? ''}
-      scopeVariant={
-        str(props, 'scopeVariant') === 'default' ? 'default' : 'secondary'
-      }
+      scopeLabel={str(props, "scopeLabel") ?? ""}
+      scopeVariant={str(props, "scopeVariant") === "default" ? "default" : "secondary"}
       showDefault={props.showDefault === true}
-      defaultLabel={str(props, 'defaultLabel') ?? ''}
+      defaultLabel={str(props, "defaultLabel") ?? ""}
     />
   ),
-  'new-form': (props) => (
-    <NewFormButton recordType={str(props, 'recordType') ?? ''} />
-  ),
-  'new-view': (props) => (
-    <NewListViewButton recordType={str(props, 'recordType') ?? ''} />
-  ),
+  "new-form": (props) => <NewFormButton recordType={str(props, "recordType") ?? ""} />,
+  "new-view": (props) => <NewListViewButton recordType={str(props, "recordType") ?? ""} />,
   /** Not `link-button`: that is a solid Button with no icon; this is the
    *  outline+icon treatment the designer header actually renders. */
-  'docs-link-button': (props) => {
-    const href = str(props, 'href')
-    if (!href) return null
+  "docs-link-button": (props) => {
+    const href = str(props, "href");
+    if (!href) return null;
     return (
       <Button asChild variant="outline" size="sm">
         <Link href={href as never}>
           <BookOpen size={14} aria-hidden />
-          {str(props, 'label') ?? ''}
+          {str(props, "label") ?? ""}
         </Link>
       </Button>
-    )
+    );
   },
-  'form-drawer': (props) => (
+  "form-drawer": (props) => (
     <FormDesigner
       // Session remount key: a duplicate opened after an edit
       // must not inherit the edit's mount-only state (notably isDefault).
-      key={str(props, 'drawerKey') ?? 'form-drawer'}
-      recordType={str(props, 'recordType') ?? ''}
-      def={(props.def as ComponentProps<typeof FormDesigner>['def']) ?? null}
-      headerDefs={
-        (props.headerDefs as ComponentProps<
-          typeof FormDesigner
-        >['headerDefs']) ?? null
-      }
-      lineDefs={
-        (props.lineDefs as ComponentProps<typeof FormDesigner>['lineDefs']) ??
-        null
-      }
+      key={str(props, "drawerKey") ?? "form-drawer"}
+      recordType={str(props, "recordType") ?? ""}
+      def={(props.def as ComponentProps<typeof FormDesigner>["def"]) ?? null}
+      headerDefs={(props.headerDefs as ComponentProps<typeof FormDesigner>["headerDefs"]) ?? null}
+      lineDefs={(props.lineDefs as ComponentProps<typeof FormDesigner>["lineDefs"]) ?? null}
       duplicateFrom={
-        (props.duplicateFrom as ComponentProps<
-          typeof FormDesigner
-        >['duplicateFrom']) ?? null
+        (props.duplicateFrom as ComponentProps<typeof FormDesigner>["duplicateFrom"]) ?? null
       }
       subsidiaryEnabled={props.subsidiaryEnabled === true}
     />
   ),
-  'list-view-drawer': (props) => (
+  "list-view-drawer": (props) => (
     <ListViewDesigner
-      recordType={str(props, 'recordType') ?? ''}
-      def={
-        (props.def as ComponentProps<typeof ListViewDesigner>['def']) ?? null
-      }
+      recordType={str(props, "recordType") ?? ""}
+      def={(props.def as ComponentProps<typeof ListViewDesigner>["def"]) ?? null}
       canManageOrg={props.canManageOrg === true}
-      userId={str(props, 'userId') ?? ''}
+      userId={str(props, "userId") ?? ""}
       showInListDefs={
-        (props.showInListDefs as ComponentProps<
-          typeof ListViewDesigner
-        >['showInListDefs']) ?? []
+        (props.showInListDefs as ComponentProps<typeof ListViewDesigner>["showInListDefs"]) ?? []
       }
       filterOptions={
-        (props.filterOptions as ComponentProps<
-          typeof ListViewDesigner
-        >['filterOptions']) ?? {}
+        (props.filterOptions as ComponentProps<typeof ListViewDesigner>["filterOptions"]) ?? {}
       }
       inventoryEnabled={props.inventoryEnabled === true}
       crmEnabled={props.crmEnabled === true}
@@ -248,106 +216,75 @@ export const SETUP_WIDGETS = {
   /* --- admin backups ---------------------------------------------------------- */
   /** Whole: a per-field schedule form, polling effects and fetch mutations
    *  are client state and capabilities, not spec vocabulary. */
-  'backup-manager': (props) => {
-    const runs =
-      (props.runs as ComponentProps<typeof BackupManager>['runs']) ?? []
+  "backup-manager": (props) => {
+    const runs = (props.runs as ComponentProps<typeof BackupManager>["runs"]) ?? [];
     return (
       <BackupManager
-        policy={
-          (props.policy as ComponentProps<typeof BackupManager>['policy']) ??
-          null
-        }
+        policy={(props.policy as ComponentProps<typeof BackupManager>["policy"]) ?? null}
         runs={runs}
-        totalRuns={num(props, 'totalRuns') ?? runs.length}
+        totalRuns={num(props, "totalRuns") ?? runs.length}
         s3Enabled={props.s3Enabled === true}
         workerOnline={props.workerOnline === true}
       />
-    )
+    );
   },
 
   /* --- admin islands ---------------------------------------------------------------- */
   /** The org nav-layout editor: unsaved client state, prompt() dialogs, a
    *  four-pin mobile limit with a toast, and a PUT save. */
-  'nav-editor': (props) => (
+  "nav-editor": (props) => (
     <NavEditor
-      initial={props.initial as ComponentProps<typeof NavEditor>['initial']}
-      apps={(props.apps as ComponentProps<typeof NavEditor>['apps']) ?? []}
+      initial={props.initial as ComponentProps<typeof NavEditor>["initial"]}
+      apps={(props.apps as ComponentProps<typeof NavEditor>["apps"]) ?? []}
       initialRevision={
-        (props.revision as ComponentProps<
-          typeof NavEditor
-        >['initialRevision']) ?? null
+        (props.revision as ComponentProps<typeof NavEditor>["initialRevision"]) ?? null
       }
-      localCatalog={
-        props.localCatalog as ComponentProps<typeof NavEditor>['localCatalog']
-      }
+      localCatalog={props.localCatalog as ComponentProps<typeof NavEditor>["localCatalog"]}
     />
   ),
   /** FLAT props, no wrapper bag — the bank-feeds division. */
-  'features-workspace': (props) => (
-    <FeaturesWorkspace
-      {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)}
-    />
+  "features-workspace": (props) => (
+    <FeaturesWorkspace {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)} />
   ),
   /** ONE prop. The secret ciphertext never leaves the engine module; only
    *  `hasSecret` crosses into the redacted view the loader reads. */
-  'email-settings-form': (props) => (
+  "email-settings-form": (props) => (
     <EmailSettingsForm
-      initial={
-        props.initial as ComponentProps<typeof EmailSettingsForm>['initial']
-      }
+      initial={props.initial as ComponentProps<typeof EmailSettingsForm>["initial"]}
     />
   ),
 
   /** `selectedAgentKey` uses a typeof guard rather than `str()`, because the
    *  native page passes `null` for an unrecognized key and `undefined` would
    *  not reproduce it. */
-  'ai-settings-form': (props) => (
+  "ai-settings-form": (props) => (
     <AiSettingsForm
-      specs={props.specs as ComponentProps<typeof AiSettingsForm>['specs']}
-      initial={
-        props.initial as ComponentProps<typeof AiSettingsForm>['initial']
-      }
+      specs={props.specs as ComponentProps<typeof AiSettingsForm>["specs"]}
+      initial={props.initial as ComponentProps<typeof AiSettingsForm>["initial"]}
     />
   ),
   /** Advanced Setup controls remain separate from the provider form. */
-  'ai-governance-ledger': (props) => (
+  "ai-governance-ledger": (props) => (
     <AiGovernanceSection
-      ledger={
-        (props.ledger as ComponentProps<
-          typeof AiGovernanceSection
-        >['ledger']) ?? null
-      }
+      ledger={(props.ledger as ComponentProps<typeof AiGovernanceSection>["ledger"]) ?? null}
     />
   ),
   /** SEVEN FLAT props, no wrapper bag. The page is seven conditional PAIRS
    *  (a badge plus an optional count line; a footer CTA that swaps both href
    *  and label on one flag) — presence omits, it never chooses. */
-  'invoicing-setup-workspace': (props) => (
+  "invoicing-setup-workspace": (props) => (
     <InvoicingSettingsWorkspace
-      {...(props as unknown as ComponentProps<
-        typeof InvoicingSettingsWorkspace
-      >)}
+      {...(props as unknown as ComponentProps<typeof InvoicingSettingsWorkspace>)}
     />
   ),
   /** Whole, not a `table` block: search, the type dropdown and pagination are
    *  PagedTable CLIENT state that reads no URL params, so spec table blocks
    *  would navigate where the native page never does. */
-  'pdf-templates-list': (props) => (
+  "pdf-templates-list": (props) => (
     <TemplatesList
-      templates={
-        (props.templates as ComponentProps<
-          typeof TemplatesList
-        >['templates']) ?? []
-      }
-      starters={
-        (props.starters as ComponentProps<typeof TemplatesList>['starters']) ??
-        []
-      }
-      recordTypes={
-        (props.recordTypes as ComponentProps<
-          typeof TemplatesList
-        >['recordTypes']) ?? []
-      }
+      templates={(props.templates as ComponentProps<typeof TemplatesList>["templates"]) ?? []}
+      starters={(props.starters as ComponentProps<typeof TemplatesList>["starters"]) ?? []}
+      recordTypes={(props.recordTypes as ComponentProps<typeof TemplatesList>["recordTypes"]) ?? []}
     />
   ),
 
@@ -355,44 +292,36 @@ export const SETUP_WIDGETS = {
   /** The schema IS server data — the same plain-data prop the native page
    *  hands the component — so it travels as a literal widget prop. Nothing
    *  here is a capability or an org id, so no slot is needed. */
-  'api-console': (props) => (
-    <ApiConsole
-      schema={
-        (props.schema as ComponentProps<typeof ApiConsole>['schema']) ?? []
-      }
-    />
+  "api-console": (props) => (
+    <ApiConsole schema={(props.schema as ComponentProps<typeof ApiConsole>["schema"]) ?? []} />
   ),
 
   /* --- setup wizard ----------------------------------------------------------------- */
   /** FIVE FLAT props. Ten animated steps, each owning state, mutations and
    *  framer-motion transitions. */
-  'setup-wizard': (props) => (
-    <SetupWizard
-      {...(props as unknown as ComponentProps<typeof SetupWizard>)}
-    />
+  "setup-wizard": (props) => (
+    <SetupWizard {...(props as unknown as ComponentProps<typeof SetupWizard>)} />
   ),
 
   /* --- payment providers setup ------------------------------------------------------ */
   /** Authorized provider and account reads arrive with the server page. */
-  'payment-providers-workspace': (props) => (
+  "payment-providers-workspace": (props) => (
     <PaymentProvidersClient
       initialData={
-        props.initialData as ComponentProps<
-          typeof PaymentProvidersClient
-        >['initialData']
+        props.initialData as ComponentProps<typeof PaymentProvidersClient>["initialData"]
       }
     />
   ),
 
   /* --- security settings ------------------------------------------------------------ */
   /** No props. Every control is client state or a fetch to /api/auth/*. */
-  'security-panel': () => <SecurityPageContent />,
+  "security-panel": () => <SecurityPageContent />,
 
   /* --- project types setup ---------------------------------------------------------- */
   /** FOUR FLAT props. `incomeAccounts` is loaded but currently unread by the
    *  workspace (it destructures it away) — passed anyway, so both renders
    *  carry identical data and a future read cannot diverge them. */
-  'project-types-workspace': (props) => (
+  "project-types-workspace": (props) => (
     <ProjectTypesWorkspace
       {...(props as unknown as ComponentProps<typeof ProjectTypesWorkspace>)}
     />
@@ -403,25 +332,19 @@ export const SETUP_WIDGETS = {
    *  page per record. Each builder is one client island — the outline, drag
    *  state, inspector drafts and fetch mutations share state a spec cannot
    *  name — so it arrives whole with loader-resolved data only. */
-  'review-template-index': (props) => (
-    <ReviewTemplateIndex
-      {...(props as unknown as ComponentProps<typeof ReviewTemplateIndex>)}
-    />
+  "review-template-index": (props) => (
+    <ReviewTemplateIndex {...(props as unknown as ComponentProps<typeof ReviewTemplateIndex>)} />
   ),
-  'review-template-builder': (props) => (
+  "review-template-builder": (props) => (
     <ReviewTemplateBuilder
       {...(props as unknown as ComponentProps<typeof ReviewTemplateBuilder>)}
     />
   ),
-  'hiring-pipeline-index': (props) => (
-    <PipelineIndex
-      {...(props as unknown as ComponentProps<typeof PipelineIndex>)}
-    />
+  "hiring-pipeline-index": (props) => (
+    <PipelineIndex {...(props as unknown as ComponentProps<typeof PipelineIndex>)} />
   ),
-  'hiring-pipeline-builder': (props) => (
-    <PipelineBuilder
-      {...(props as unknown as ComponentProps<typeof PipelineBuilder>)}
-    />
+  "hiring-pipeline-builder": (props) => (
+    <PipelineBuilder {...(props as unknown as ComponentProps<typeof PipelineBuilder>)} />
   ),
 
   /* --- sandboxes -------------------------------------------------------------------- */
@@ -431,242 +354,189 @@ export const SETUP_WIDGETS = {
    *  rather than being lifted into props. */
   /** The remount key rides along as a prop: reviewing a different change set
    *  must reset the drawer's approval state. */
-  'change-set-drawer': (props) => {
+  "change-set-drawer": (props) => {
     const drawer = props.drawer as
-      (ComponentProps<typeof ChangeSetDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <ChangeSetDrawer key={remountKey} {...rest} />
+      (ComponentProps<typeof ChangeSetDrawer> & { remountKey: string }) | null;
+    if (!drawer) return null;
+    const { remountKey, ...rest } = drawer;
+    return <ChangeSetDrawer key={remountKey} {...rest} />;
   },
-  'sandbox-manager': (props) => (
+  "sandbox-manager": (props) => (
     <SandboxManager
-      sandboxes={
-        props.sandboxes as ComponentProps<typeof SandboxManager>['sandboxes']
-      }
-      periods={
-        props.periods as ComponentProps<typeof SandboxManager>['periods']
-      }
+      sandboxes={props.sandboxes as ComponentProps<typeof SandboxManager>["sandboxes"]}
+      periods={props.periods as ComponentProps<typeof SandboxManager>["periods"]}
     />
   ),
   /** `permissions` is PERMISSION_CATALOGUE — the static list of permission
    *  KEYS the app defines, for the gate inspector's picker. A catalogue, not a
    *  grant: nothing about it is caller-specific and it confers nothing. */
-  'flow-builder': (props) => (
+  "flow-builder": (props) => (
     <FlowBuilder
-      flow={props.flow as ComponentProps<typeof FlowBuilder>['flow']}
-      runs={props.runs as ComponentProps<typeof FlowBuilder>['runs']}
-      profile={props.profile as ComponentProps<typeof FlowBuilder>['profile']}
-      users={props.users as ComponentProps<typeof FlowBuilder>['users']}
-      roles={props.roles as ComponentProps<typeof FlowBuilder>['roles']}
-      permissions={
-        props.permissions as ComponentProps<typeof FlowBuilder>['permissions']
-      }
-      subsidiaries={
-        props.subsidiaries as ComponentProps<typeof FlowBuilder>['subsidiaries']
-      }
+      flow={props.flow as ComponentProps<typeof FlowBuilder>["flow"]}
+      runs={props.runs as ComponentProps<typeof FlowBuilder>["runs"]}
+      profile={props.profile as ComponentProps<typeof FlowBuilder>["profile"]}
+      users={props.users as ComponentProps<typeof FlowBuilder>["users"]}
+      roles={props.roles as ComponentProps<typeof FlowBuilder>["roles"]}
+      permissions={props.permissions as ComponentProps<typeof FlowBuilder>["permissions"]}
+      subsidiaries={props.subsidiaries as ComponentProps<typeof FlowBuilder>["subsidiaries"]}
     />
   ),
   /** The GrapesJS canvas: its own document model, drag-and-drop, the
    *  merge-field palette and every save/preview mutation. */
-  'pdf-template-editor': (props) => (
+  "pdf-template-editor": (props) => (
     <PdfTemplateEditor
-      template={
-        props.template as ComponentProps<typeof PdfTemplateEditor>['template']
-      }
-      mergeFields={
-        props.mergeFields as ComponentProps<
-          typeof PdfTemplateEditor
-        >['mergeFields']
-      }
-      collections={
-        props.collections as ComponentProps<
-          typeof PdfTemplateEditor
-        >['collections']
-      }
+      template={props.template as ComponentProps<typeof PdfTemplateEditor>["template"]}
+      mergeFields={props.mergeFields as ComponentProps<typeof PdfTemplateEditor>["mergeFields"]}
+      collections={props.collections as ComponentProps<typeof PdfTemplateEditor>["collections"]}
       chequeBankProfiles={
-        props.chequeBankProfiles as ComponentProps<
-          typeof PdfTemplateEditor
-        >['chequeBankProfiles']
+        props.chequeBankProfiles as ComponentProps<typeof PdfTemplateEditor>["chequeBankProfiles"]
       }
     />
   ),
 
   /* --- overhead model --------------------------------------------------------- */
-  'overhead-model-header': (props) => (
-    <OverheadModelHeader
-      {...(props as ComponentProps<typeof OverheadModelHeader>)}
-    />
+  "overhead-model-header": (props) => (
+    <OverheadModelHeader {...(props as ComponentProps<typeof OverheadModelHeader>)} />
   ),
-  'overhead-model-body': (props) => (
-    <OverheadModelBody
-      {...(props as ComponentProps<typeof OverheadModelBody>)}
-    />
+  "overhead-model-body": (props) => (
+    <OverheadModelBody {...(props as ComponentProps<typeof OverheadModelBody>)} />
   ),
-  'overhead-rates-tab': (props) => (
-    <OverheadRatesTabSlot
-      {...(props as ComponentProps<typeof OverheadRatesTabSlot>)}
-    />
+  "overhead-rates-tab": (props) => (
+    <OverheadRatesTabSlot {...(props as ComponentProps<typeof OverheadRatesTabSlot>)} />
   ),
-  'overhead-lifecycle-tab': (props) => (
+  "overhead-lifecycle-tab": (props) => (
     <OverheadLifecycleTabSlot
       departments={
         props.departments as NonNullable<
           ComponentProps<typeof OverheadLifecycleTabSlot>
-        >['departments']
+        >["departments"]
       }
     />
   ),
-  'overhead-application-tab': () => <OverheadApplicationTabSlot />,
+  "overhead-application-tab": () => <OverheadApplicationTabSlot />,
 
   /* --- allocations setup ------------------------------------------------------ */
-  'allocations-setup-header': (props) => (
-    <AllocationsSetupHeader
-      {...(props as ComponentProps<typeof AllocationsSetupHeader>)}
-    />
+  "allocations-setup-header": (props) => (
+    <AllocationsSetupHeader {...(props as ComponentProps<typeof AllocationsSetupHeader>)} />
   ),
-  'allocations-rules-tab': (props) => (
-    <AllocationsRulesTabSlot
-      {...(props as ComponentProps<typeof AllocationsRulesTabSlot>)}
-    />
+  "allocations-rules-tab": (props) => (
+    <AllocationsRulesTabSlot {...(props as ComponentProps<typeof AllocationsRulesTabSlot>)} />
   ),
-  'allocations-drivers-tab': () => <AllocationsDriversTabSlot />,
-  'allocations-rule-drawer': (props) => (
-    <AllocationsRuleDrawerSlot
-      {...(props as ComponentProps<typeof AllocationsRuleDrawerSlot>)}
-    />
+  "allocations-drivers-tab": () => <AllocationsDriversTabSlot />,
+  "allocations-rule-drawer": (props) => (
+    <AllocationsRuleDrawerSlot {...(props as ComponentProps<typeof AllocationsRuleDrawerSlot>)} />
   ),
-  'allocations-runs-tab': () => <AllocationsRunsTabSlot />,
+  "allocations-runs-tab": () => <AllocationsRunsTabSlot />,
 
   /* --- setup readiness -------------------------------------------------------- */
   //
   // NOT the existing `readiness-panel`: that one renders the compliance 1099
   // queue and shares no markup with this page. Two names, two components.
-  'setup-readiness-hero': (props) => (
+  "setup-readiness-hero": (props) => (
     <SetupReadinessHero
-      kicker={str(props, 'kicker') ?? ''}
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      badgeLabel={str(props, 'badgeLabel') ?? ''}
+      kicker={str(props, "kicker") ?? ""}
+      title={str(props, "title") ?? ""}
+      description={str(props, "description") ?? ""}
+      badgeLabel={str(props, "badgeLabel") ?? ""}
       badgeReady={props.badgeReady === true}
-      progressLabel={str(props, 'progressLabel') ?? ''}
-      progressOf={str(props, 'progressOf') ?? ''}
-      progressPercent={num(props, 'progressPercent') ?? 0}
-      progressMin={num(props, 'progressMin') ?? 0}
-      progressMax={num(props, 'progressMax') ?? 0}
-      progressNow={num(props, 'progressNow') ?? 0}
+      progressLabel={str(props, "progressLabel") ?? ""}
+      progressOf={str(props, "progressOf") ?? ""}
+      progressPercent={num(props, "progressPercent") ?? 0}
+      progressMin={num(props, "progressMin") ?? 0}
+      progressMax={num(props, "progressMax") ?? 0}
+      progressNow={num(props, "progressNow") ?? 0}
     />
   ),
   /** `state` is a closed complete | review | waiting vocabulary the loader
    *  resolves; the component switches icon and tile classes on it, never the
    *  spec. */
-  'setup-readiness-check-card': (props) => (
+  "setup-readiness-check-card": (props) => (
     <SetupReadinessCheckCard
-      indexLabel={str(props, 'indexLabel') ?? ''}
-      title={str(props, 'title') ?? ''}
-      description={str(props, 'description') ?? ''}
-      href={str(props, 'href') ?? ''}
-      action={str(props, 'action') ?? ''}
+      indexLabel={str(props, "indexLabel") ?? ""}
+      title={str(props, "title") ?? ""}
+      description={str(props, "description") ?? ""}
+      href={str(props, "href") ?? ""}
+      action={str(props, "action") ?? ""}
       state={
-        str(props, 'state') === 'review'
-          ? 'review'
-          : str(props, 'state') === 'waiting'
-            ? 'waiting'
-            : 'complete'
+        str(props, "state") === "review"
+          ? "review"
+          : str(props, "state") === "waiting"
+            ? "waiting"
+            : "complete"
       }
-      stateLabel={str(props, 'stateLabel') ?? ''}
+      stateLabel={str(props, "stateLabel") ?? ""}
     />
   ),
 
   /* --- automation flows ------------------------------------------------------- */
   // HR-16 begin: the automation recipe list/builder cells (linear recipe
   // mode beside the graph-based flows builder — no new graph components).
-  'new-automation': (props) => (
-    <NewAutomationListButton label={str(props, 'label') ?? ''} />
+  "new-automation": (props) => <NewAutomationListButton label={str(props, "label") ?? ""} />,
+  "automation-name-cell": (props) => (
+    <AutomationNameCell name={str(props, "name") ?? ""} href={str(props, "href") ?? ""} />
   ),
-  'automation-name-cell': (props) => (
-    <AutomationNameCell
-      name={str(props, 'name') ?? ''}
-      href={str(props, 'href') ?? ''}
-    />
+  "automation-last-run-cell": (props) => (
+    <AutomationLastRunCell at={str(props, "at") ?? null} fallback={str(props, "fallback") ?? ""} />
   ),
-  'automation-last-run-cell': (props) => (
-    <AutomationLastRunCell
-      at={str(props, 'at') ?? null}
-      fallback={str(props, 'fallback') ?? ''}
-    />
-  ),
-  'automation-row-actions': (props) => (
+  "automation-row-actions": (props) => (
     <AutomationRowActionsCell
-      id={str(props, 'id') ?? ''}
-      status={str(props, 'status') ?? ''}
-      runLabel={str(props, 'runLabel') ?? ''}
-      enableLabel={str(props, 'enableLabel') ?? ''}
-      disableLabel={str(props, 'disableLabel') ?? ''}
-      actionFailed={str(props, 'actionFailed') ?? ''}
+      id={str(props, "id") ?? ""}
+      status={str(props, "status") ?? ""}
+      runLabel={str(props, "runLabel") ?? ""}
+      enableLabel={str(props, "enableLabel") ?? ""}
+      disableLabel={str(props, "disableLabel") ?? ""}
+      actionFailed={str(props, "actionFailed") ?? ""}
     />
   ),
-  'automation-builder': (props) => (
+  "automation-builder": (props) => (
     <AutomationBuilder
-      automation={
-        props.automation as ComponentProps<
-          typeof AutomationBuilder
-        >['automation']
-      }
-      runs={props.runs as ComponentProps<typeof AutomationBuilder>['runs']}
-      scopeOptions={
-        props.scopeOptions as ComponentProps<
-          typeof AutomationBuilder
-        >['scopeOptions']
-      }
+      automation={props.automation as ComponentProps<typeof AutomationBuilder>["automation"]}
+      runs={props.runs as ComponentProps<typeof AutomationBuilder>["runs"]}
+      scopeOptions={props.scopeOptions as ComponentProps<typeof AutomationBuilder>["scopeOptions"]}
       canSimulate={props.canSimulate === true}
       canManage={props.canManage === true}
-      saveFailed={str(props, 'saveFailed') ?? ''}
-      backHref={str(props, 'backHref') ?? '/admin/automations'}
-      backLabel={str(props, 'backLabel') ?? ''}
+      saveFailed={str(props, "saveFailed") ?? ""}
+      backHref={str(props, "backHref") ?? "/admin/automations"}
+      backLabel={str(props, "backLabel") ?? ""}
     />
   ),
-  'new-flow': () => (
+  "new-flow": () => (
     <span className="inline-flex items-center gap-2">
       <NewFlowListButton />
       <QuickApprovalListButton />
     </span>
   ),
-  'flow-name-cell': (props) => (
-    <FlowNameCell
-      name={str(props, 'name') ?? ''}
-      href={str(props, 'href') ?? ''}
-    />
+  "flow-name-cell": (props) => (
+    <FlowNameCell name={str(props, "name") ?? ""} href={str(props, "href") ?? ""} />
   ),
-  'flow-last-run-cell': (props) => (
+  "flow-last-run-cell": (props) => (
     <FlowLastRunCell
-      status={str(props, 'status') ?? null}
+      status={str(props, "status") ?? null}
       variant={
-        (str(props, 'variant') ?? 'outline') as ComponentProps<
-          typeof FlowLastRunCell
-        >['variant']
+        (str(props, "variant") ?? "outline") as ComponentProps<typeof FlowLastRunCell>["variant"]
       }
-      at={str(props, 'at') ?? null}
-      fallback={str(props, 'fallback') ?? ''}
+      at={str(props, "at") ?? null}
+      fallback={str(props, "fallback") ?? ""}
     />
   ),
-  'flow-row-actions': (props) => (
+  "flow-row-actions": (props) => (
     <FlowRowActionsCell
-      id={str(props, 'id') ?? ''}
-      name={str(props, 'name') ?? ''}
+      id={str(props, "id") ?? ""}
+      name={str(props, "name") ?? ""}
       enabled={props.enabled === true}
-      updatedAt={str(props, 'updatedAt') ?? ''}
+      updatedAt={str(props, "updatedAt") ?? ""}
     />
   ),
   /** A registry-backed configuration surface re-homed onto another module's
    *  tab. The registry entry is CODE, so the spec names it by key and the slot
    *  looks it up; org id and the manage gate are re-derived from the session. */
-  'setup-section': (props) => (
+  "setup-section": (props) => (
     <SetupSectionSlot
-      entityKey={str(props, 'entityKey') ?? ''}
+      entityKey={str(props, "entityKey") ?? ""}
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
-      basePath={str(props, 'basePath') ?? ''}
-      rowParam={str(props, 'rowParam') ?? 'row'}
-      paramPrefix={str(props, 'paramPrefix') ?? undefined}
+      basePath={str(props, "basePath") ?? ""}
+      rowParam={str(props, "rowParam") ?? "row"}
+      paramPrefix={str(props, "paramPrefix") ?? undefined}
     />
   ),
 
@@ -674,71 +544,64 @@ export const SETUP_WIDGETS = {
   /** The inline "Learn more" link (with its significant leading space) appears
    *  only when the entity declares a doc slug — a conditional pair inside one
    *  paragraph, so a component. */
-  'setup-description': (props) => (
+  "setup-description": (props) => (
     <SetupDescription
-      description={str(props, 'description') ?? ''}
+      description={str(props, "description") ?? ""}
       docHref={(props.docHref as string | null) ?? null}
-      learnMore={str(props, 'learnMore') ?? ''}
+      learnMore={str(props, "learnMore") ?? ""}
     />
   ),
   /** A client component that pushes `?row=new` — not a link, so `link-button`
    *  cannot stand in for it. */
-  'new-setup-button': (props) => (
-    <NewSetupButton
-      entityKey={str(props, 'entityKey') ?? ''}
-      label={str(props, 'label') ?? ''}
-    />
+  "new-setup-button": (props) => (
+    <NewSetupButton entityKey={str(props, "entityKey") ?? ""} label={str(props, "label") ?? ""} />
   ),
-  'tax-return-library': (props) => (
+  "tax-return-library": (props) => (
     <TaxReturnLibrary
-      packs={
-        (props.packs as ComponentProps<typeof TaxReturnLibrary>['packs']) ?? []
-      }
+      packs={(props.packs as ComponentProps<typeof TaxReturnLibrary>["packs"]) ?? []}
       installedCodes={(props.installedCodes as string[]) ?? []}
       open={props.open === true}
-      openHref={str(props, 'openHref') ?? ''}
-      closeHref={str(props, 'closeHref') ?? ''}
+      openHref={str(props, "openHref") ?? ""}
+      closeHref={str(props, "closeHref") ?? ""}
     />
   ),
-  'setup-code-cell': (props) => (
+  "setup-code-cell": (props) => (
     <SetupCodeCell
-      text={str(props, 'text') ?? ''}
+      text={str(props, "text") ?? ""}
       shown={props.shown === true}
-      href={str(props, 'href')}
+      href={str(props, "href")}
     />
   ),
-  'setup-badge-link-cell': (props) => (
+  "setup-badge-link-cell": (props) => (
     <SetupBadgeLinkCell
-      label={str(props, 'label') ?? ''}
+      label={str(props, "label") ?? ""}
       variant={
-        (str(props, 'variant') ?? 'default') as ComponentProps<
-          typeof SetupBadgeLinkCell
-        >['variant']
+        (str(props, "variant") ?? "default") as ComponentProps<typeof SetupBadgeLinkCell>["variant"]
       }
-      href={str(props, 'href') ?? ''}
+      href={str(props, "href") ?? ""}
     />
   ),
   /** The drawer, its nested sub-tabs and its stacked child drawers arrive
    *  through a slot that re-derives Authz; the spec carries only the entity
    *  key and the current URL. */
-  'setup-drawer': (props) => (
+  "setup-drawer": (props) => (
     <SetupDrawerSlot
-      entityKey={str(props, 'entityKey') ?? ''}
+      entityKey={str(props, "entityKey") ?? ""}
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
     />
   ),
-  'setup-company': () => <SetupCompanySlot />,
-  'setup-close': (props) => (
+  "setup-company": () => <SetupCompanySlot />,
+  "setup-close": (props) => (
     <SetupCloseSlot
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
       canReopen={props.canReopen === true}
     />
   ),
-  'setup-fx': () => <SetupFxSlot />,
-  'setup-payroll-statutory-holidays': (props) => (
+  "setup-fx": () => <SetupFxSlot />,
+  "setup-payroll-statutory-holidays": (props) => (
     <SetupPayrollStatutoryHolidaysSlot
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
     />
   ),
-  'setup-tax-provider': () => <SetupTaxProviderSlot />,
-} satisfies Record<string, WidgetRenderer>
+  "setup-tax-provider": () => <SetupTaxProviderSlot />,
+} satisfies Record<string, WidgetRenderer>;

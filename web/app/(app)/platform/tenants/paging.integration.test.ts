@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { resolveEngineSpecifier } from "../../../../testing/engine-resolve-hooks";
 
 // Tenants list paging — platformOrganizations must page in SQL (limit/offset)
 // with a stable total, because the list renders server-side from whatever the
@@ -13,129 +13,167 @@ import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const engineUrl = resolveEngineSpecifier(specifier)
-    if (engineUrl) return nextResolve(engineUrl, context)
-    return nextResolve(specifier, context)
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
+    return nextResolve(specifier, context);
   },
-})
+});
 
-const { sql } = await import('drizzle-orm')
-const { db, withBypass } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { platformOrganizations } = await import('../../../../lib/platform-admin.ts')
+const { sql } = await import("drizzle-orm");
+const { db, withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { platformOrganizations } = await import("../../../../lib/platform-admin.ts");
 
-const PREFIX = 'W93T'
-const ORGS = 3
-const PAGE_SIZE = 2
+const PREFIX = "W93T";
+const ORGS = 3;
+const PAGE_SIZE = 2;
 
 function orgName(i: number): string {
-  return `${PREFIX} Org ${String(i).padStart(2, '0')}`
+  return `${PREFIX} Org ${String(i).padStart(2, "0")}`;
 }
 
 async function seedTenants(): Promise<{ ids: string[]; cleanup: () => Promise<void> }> {
-  const ids: string[] = []
+  const ids: string[] = [];
   for (let i = 0; i < ORGS; i++) {
-    const org = await withBypass(() => createScratchOrg())
-    ids.push(org.orgId)
+    const org = await withBypass(() => createScratchOrg());
+    ids.push(org.orgId);
   }
   // Deterministic tenant order for the assertions. The teardown guard only
   // drops orgs still named 'Scratch %', so the original names are restored
   // before the drop — a renamed org must never leak.
   const before = await withBypass(() =>
-    db.execute<{ id: string; name: string }>(sql`select id, name from orgs where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`, 'objects'),
-  )
-  const original = new Map(before.map((row) => [row.id, row.name]))
+    db.execute<{ id: string; name: string }>(
+      sql`select id, name from orgs where id in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+      "objects",
+    ),
+  );
+  const original = new Map(before.map((row) => [row.id, row.name]));
   await withBypass(async () => {
-    for (const [i, id] of ids.entries()) await db.execute(sql`update orgs set name = ${orgName(i)} where id = ${id}`)
-  })
+    for (const [i, id] of ids.entries())
+      await db.execute(sql`update orgs set name = ${orgName(i)} where id = ${id}`);
+  });
   return {
     ids,
     cleanup: async () => {
       // Teardowns run sequentially: parallel drops of several orgs contend
       // on the same catalog locks and time out (LockAcquireExtended).
       for (const id of ids) {
-        await withBypass(() => db.execute(sql`update orgs set name = ${original.get(id)} where id = ${id}`))
+        await withBypass(() =>
+          db.execute(sql`update orgs set name = ${original.get(id)} where id = ${id}`),
+        );
       }
       for (const id of ids) {
-        await dropScratchOrg(id)
+        await dropScratchOrg(id);
       }
     },
-  }
+  };
 }
 
-test('tenants list pages in sort order with a stable total', async () => {
-  const { cleanup } = await seedTenants()
+test("tenants list pages in sort order with a stable total", async () => {
+  const { cleanup } = await seedTenants();
   try {
     const full = await platformOrganizations({
       q: PREFIX,
       page: 1,
       perPage: 50,
-      dir: 'asc',
-      sort: 'name',
-    })
-    assert.equal(full.total, ORGS, 'the total equals the seeded count, not the window')
+      dir: "asc",
+      sort: "name",
+    });
+    assert.equal(full.total, ORGS, "the total equals the seeded count, not the window");
     assert.deepEqual(
       full.rows.map((row) => row.name),
       Array.from({ length: ORGS }, (_, i) => orgName(i)),
-      'the default tenant order is name-ascending',
-    )
+      "the default tenant order is name-ascending",
+    );
 
-    const first = await platformOrganizations({ q: PREFIX, page: 1, perPage: PAGE_SIZE, dir: 'asc', sort: 'name' })
-    const second = await platformOrganizations({ q: PREFIX, page: 2, perPage: PAGE_SIZE, dir: 'asc', sort: 'name' })
-    assert.equal(first.rows.length, PAGE_SIZE, 'page one holds one page, not the whole list')
-    assert.equal(first.total, ORGS, 'the total is stable across pages')
-    assert.equal(second.total, ORGS, 'the total is stable across pages')
-    const firstNames = new Set(first.rows.map((row) => row.name))
-    assert.equal(firstNames.size, PAGE_SIZE, 'page-one rows are distinct')
+    const first = await platformOrganizations({
+      q: PREFIX,
+      page: 1,
+      perPage: PAGE_SIZE,
+      dir: "asc",
+      sort: "name",
+    });
+    const second = await platformOrganizations({
+      q: PREFIX,
+      page: 2,
+      perPage: PAGE_SIZE,
+      dir: "asc",
+      sort: "name",
+    });
+    assert.equal(first.rows.length, PAGE_SIZE, "page one holds one page, not the whole list");
+    assert.equal(first.total, ORGS, "the total is stable across pages");
+    assert.equal(second.total, ORGS, "the total is stable across pages");
+    const firstNames = new Set(first.rows.map((row) => row.name));
+    assert.equal(firstNames.size, PAGE_SIZE, "page-one rows are distinct");
     assert.deepEqual(
       [...first.rows, ...second.rows].map((row) => row.name),
       full.rows.map((row) => row.name),
-      'pages partition the whole filtered list in order',
-    )
+      "pages partition the whole filtered list in order",
+    );
 
     // The pager total must be the FILTERED count: a search narrowing the
     // table to one row must report one, never the unfiltered list size.
-    const narrowed = await platformOrganizations({ q: orgName(2), page: 1, perPage: 50, dir: 'asc', sort: 'name' })
-    assert.equal(narrowed.total, 1, 'a search matching one row reports a total of one')
+    const narrowed = await platformOrganizations({
+      q: orgName(2),
+      page: 1,
+      perPage: 50,
+      dir: "asc",
+      sort: "name",
+    });
+    assert.equal(narrowed.total, 1, "a search matching one row reports a total of one");
     assert.deepEqual(
       narrowed.rows.map((row) => row.name),
       [orgName(2)],
-      'the narrowed window holds exactly the matching row',
-    )
+      "the narrowed window holds exactly the matching row",
+    );
 
-    const beyond = await platformOrganizations({ q: PREFIX, page: 99, perPage: PAGE_SIZE, dir: 'asc', sort: 'name' })
-    assert.equal(beyond.rows.length, 0, 'an out-of-range page returns an empty window')
-    assert.equal(beyond.total, ORGS, 'an out-of-range page keeps the total so the pager can clamp')
+    const beyond = await platformOrganizations({
+      q: PREFIX,
+      page: 99,
+      perPage: PAGE_SIZE,
+      dir: "asc",
+      sort: "name",
+    });
+    assert.equal(beyond.rows.length, 0, "an out-of-range page returns an empty window");
+    assert.equal(beyond.total, ORGS, "an out-of-range page keeps the total so the pager can clamp");
   } finally {
-    await cleanup()
+    await cleanup();
   }
-})
+});
 
-test('tenants environment filter narrows the tenant list', async () => {
-  const { ids, cleanup } = await seedTenants()
+test("tenants environment filter narrows the tenant list", async () => {
+  const { ids, cleanup } = await seedTenants();
   try {
     await withBypass(() =>
-      db.execute(sql`update orgs set env_kind = 'sandbox' where id in (${sql.join(ids.slice(0, 2).map((id) => sql`${id}`), sql`, `)})`),
-    )
+      db.execute(
+        sql`update orgs set env_kind = 'sandbox' where id in (${sql.join(
+          ids.slice(0, 2).map((id) => sql`${id}`),
+          sql`, `,
+        )})`,
+      ),
+    );
     const sandboxes = await platformOrganizations({
       q: PREFIX,
       page: 1,
       perPage: 50,
-      dir: 'asc',
-      sort: 'name',
-      environment: 'sandbox',
-    })
-    assert.equal(sandboxes.total, 2, 'the sandbox filter returns only sandboxes')
+      dir: "asc",
+      sort: "name",
+      environment: "sandbox",
+    });
+    assert.equal(sandboxes.total, 2, "the sandbox filter returns only sandboxes");
     const production = await platformOrganizations({
       q: PREFIX,
       page: 1,
       perPage: 50,
-      dir: 'asc',
-      sort: 'name',
-      environment: 'production',
-    })
-    assert.equal(production.total, ORGS - 2, 'the production filter excludes sandboxes')
+      dir: "asc",
+      sort: "name",
+      environment: "production",
+    });
+    assert.equal(production.total, ORGS - 2, "the production filter excludes sandboxes");
   } finally {
-    await cleanup()
+    await cleanup();
   }
-})
+});

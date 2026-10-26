@@ -10,9 +10,26 @@ export type BaselineManifest = {
   upgradeFrom: MigrationIdentity[];
   covered: MigrationIdentity[];
 };
-export function orderMigrationPrerequisites(directory: string, filenames: readonly string[]): string[];
+export function orderMigrationPrerequisites(
+  directory: string,
+  filenames: readonly string[],
+): string[];
 export function validateBaselineManifest(manifest: BaselineManifest, directory: string): void;
-export function releaseMigrationPlan(directory: string, generated: readonly string[]): { baseline: BaselineManifest | null; filenames: string[] };
-export function missingUpgradeLedger(baseline: BaselineManifest, recorded: MigrationIdentity[]): string[];
-export function assertBaselineHistory(baseline: BaselineManifest | null, recorded: MigrationIdentity[], applicationTablesPresent: boolean): void;
-export function migrationIdentityIsApplied(filename: string, recorded: MigrationIdentity[], baseline: BaselineManifest | null): boolean;
+export function releaseMigrationPlan(
+  directory: string,
+  generated: readonly string[],
+): { baseline: BaselineManifest | null; filenames: string[] };
+export function missingUpgradeLedger(
+  baseline: BaselineManifest,
+  recorded: MigrationIdentity[],
+): string[];
+export function assertBaselineHistory(
+  baseline: BaselineManifest | null,
+  recorded: MigrationIdentity[],
+  applicationTablesPresent: boolean,
+): void;
+export function migrationIdentityIsApplied(
+  filename: string,
+  recorded: MigrationIdentity[],
+  baseline: BaselineManifest | null,
+): boolean;

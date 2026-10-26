@@ -2,8 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { assertAccountCurrencyRestrictions } from "./posting-subsidiaries.ts";
 import { assertCreditMemoDirection } from "../journal/posting-invariants.ts";
-import { defaultPartyAddress, providerTaxDocumentKind, taxConfigsFromEvidence } from "./posting-provider-tax.ts";
-import { PostingError, type KernelLine, type PostingDeps, type PostingDocument, type PostingDocumentLine, type TaxPostingComponent } from "../journal/posting-contracts.ts";
+import {
+  defaultPartyAddress,
+  providerTaxDocumentKind,
+  taxConfigsFromEvidence,
+} from "./posting-provider-tax.ts";
+import {
+  PostingError,
+  type KernelLine,
+  type PostingDeps,
+  type PostingDocument,
+  type PostingDocumentLine,
+  type TaxPostingComponent,
+} from "../journal/posting-contracts.ts";
 import { validateRequiredDimensions } from "./posting-accounts.ts";
 import { validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import type { db } from "../platform/db.ts";
@@ -13,7 +24,8 @@ type Runner = Pick<typeof db, "execute">;
 const stubRunner = (rows: unknown[], onQuery?: () => void): Runner =>
   ({
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       onQuery?.();
       return inMode({ rows });
     },
@@ -44,8 +56,7 @@ const docLine = (over: Record<string, unknown> = {}): PostingDocumentLine =>
     ...over,
   }) as unknown as PostingDocumentLine;
 
-const doc = (kind: string): PostingDocument =>
-  ({ kind }) as unknown as PostingDocument;
+const doc = (kind: string): PostingDocument => ({ kind }) as unknown as PostingDocument;
 
 const deps = (over: Partial<PostingDeps> = {}): PostingDeps =>
   ({
@@ -59,7 +70,11 @@ const withComponents = (...cs: TaxPostingComponent[]): PostingDeps =>
 test("tax components that do not cross-foot to the stored line total are refused", () => {
   assert.throws(
     () =>
-      validateTaxControlAccounts(doc("customer_invoice"), [docLine({ taxAmount: "12.0000" })], withComponents(component())),
+      validateTaxControlAccounts(
+        doc("customer_invoice"),
+        [docLine({ taxAmount: "12.0000" })],
+        withComponents(component()),
+      ),
     (e: unknown) => e instanceof PostingError && /do not match stored tax total/.test(e.message),
   );
 });
@@ -86,9 +101,18 @@ test("documents outside purchase/sales skip tax control-account validation", () 
 });
 
 test("withholding without a withholding account fails closed on purchase documents", () => {
-  const c = component({ taxAmount: "5.0000", recoverableAmount: "0.0000", calculationType: "withholding" });
+  const c = component({
+    taxAmount: "5.0000",
+    recoverableAmount: "0.0000",
+    calculationType: "withholding",
+  });
   assert.throws(
-    () => validateTaxControlAccounts(doc("vendor_bill"), [docLine({ taxAmount: "-5.0000" })], withComponents(c)),
+    () =>
+      validateTaxControlAccounts(
+        doc("vendor_bill"),
+        [docLine({ taxAmount: "-5.0000" })],
+        withComponents(c),
+      ),
     (e: unknown) => e instanceof PostingError && /no withholding account/.test(e.message),
   );
 });
@@ -102,7 +126,8 @@ test("sales lines demand the collected account, never the paid account", () => {
   });
   assert.throws(
     () => validateTaxControlAccounts(doc("customer_invoice"), [docLine()], d),
-    (e: unknown) => e instanceof PostingError && /no configured tax control account/.test(e.message),
+    (e: unknown) =>
+      e instanceof PostingError && /no configured tax control account/.test(e.message),
   );
 });
 
@@ -111,7 +136,11 @@ test("reverse-charge sales lines need no collected account", () => {
   // while the self-assessed component stays nonzero and must still be seen.
   const c = component({ calculationType: "reverse_charge" });
   assert.deepEqual(
-    validateTaxControlAccounts(doc("customer_invoice"), [docLine({ taxAmount: "0.0000" })], withComponents(c)),
+    validateTaxControlAccounts(
+      doc("customer_invoice"),
+      [docLine({ taxAmount: "0.0000" })],
+      withComponents(c),
+    ),
     undefined,
   );
 });
@@ -127,15 +156,32 @@ test("fully nonrecoverable purchase tax needs no paid account", () => {
 test("reverse-charge purchases refuse one account for output and input tax", () => {
   // The return tells the collected box from the paid box by account; one
   // shared account would net both boxes to zero. Distinct accounts post.
-  const rc = (taxPaid: string) => deps({
-    control: { ar: "ar", ap: "ap", bank: "bank", taxCollected: "vat-out", taxPaid },
-    taxComponentsByLine: new Map([["line-1", [component({ calculationType: "reverse_charge" })]]]),
-  });
+  const rc = (taxPaid: string) =>
+    deps({
+      control: { ar: "ar", ap: "ap", bank: "bank", taxCollected: "vat-out", taxPaid },
+      taxComponentsByLine: new Map([
+        ["line-1", [component({ calculationType: "reverse_charge" })]],
+      ]),
+    });
   assert.throws(
-    () => validateTaxControlAccounts(doc("vendor_bill"), [docLine({ taxAmount: "0.0000" })], rc("vat-out")),
-    (e: unknown) => e instanceof PostingError && /line 1 reverse-charge tax GST .*collected \(output\) account different/.test(e.message),
+    () =>
+      validateTaxControlAccounts(
+        doc("vendor_bill"),
+        [docLine({ taxAmount: "0.0000" })],
+        rc("vat-out"),
+      ),
+    (e: unknown) =>
+      e instanceof PostingError &&
+      /line 1 reverse-charge tax GST .*collected \(output\) account different/.test(e.message),
   );
-  assert.equal(validateTaxControlAccounts(doc("vendor_bill"), [docLine({ taxAmount: "0.0000" })], rc("vat-in")), undefined);
+  assert.equal(
+    validateTaxControlAccounts(
+      doc("vendor_bill"),
+      [docLine({ taxAmount: "0.0000" })],
+      rc("vat-in"),
+    ),
+    undefined,
+  );
 });
 
 test("provider-tax document kinds are exactly the four taxable commercial documents", () => {
@@ -152,14 +198,23 @@ test("a null party needs no address lookup", async () => {
 });
 
 test("a currency-restricted account refuses any other line currency", async () => {
-  const runner = stubRunner([{ id: "acct-1", number: "1000", name: "USD bank", restriction: "USD" }]);
+  const runner = stubRunner([
+    { id: "acct-1", number: "1000", name: "USD bank", restriction: "USD" },
+  ]);
   await assert.rejects(
-    () => assertAccountCurrencyRestrictions(runner, "org-1", [{ accountId: "acct-1", currency: "EUR" }]),
+    () =>
+      assertAccountCurrencyRestrictions(runner, "org-1", [
+        { accountId: "acct-1", currency: "EUR" },
+      ]),
     (e: unknown) => e instanceof PostingError && /only accepts USD postings/.test(e.message),
   );
-  await assertAccountCurrencyRestrictions(runner, "org-1", [{ accountId: "acct-1", currency: "USD" }]);
+  await assertAccountCurrencyRestrictions(runner, "org-1", [
+    { accountId: "acct-1", currency: "USD" },
+  ]);
   const open = stubRunner([{ id: "acct-1", number: "1000", name: "Operating", restriction: null }]);
-  await assertAccountCurrencyRestrictions(open, "org-1", [{ accountId: "acct-1", currency: "EUR" }]);
+  await assertAccountCurrencyRestrictions(open, "org-1", [
+    { accountId: "acct-1", currency: "EUR" },
+  ]);
 });
 
 test("currency-restriction checks issue no query for an empty line set", async () => {
@@ -175,11 +230,23 @@ test("currency-restriction checks issue no query for an empty line set", async (
 test("a negative-total credit memo is refused; migrations and invoices are unaffected", () => {
   const customer = (total: string) => ({ kind: "customer_credit", total });
   const vendor = (total: string) => ({ kind: "vendor_credit", total });
-  assert.throws(() => assertCreditMemoDirection(customer("-1.0000")), /negative balance owed by the customer is an invoice/);
-  assert.throws(() => assertCreditMemoDirection(vendor("-1.0000")), /negative balance owed to the vendor is a bill/);
+  assert.throws(
+    () => assertCreditMemoDirection(customer("-1.0000")),
+    /negative balance owed by the customer is an invoice/,
+  );
+  assert.throws(
+    () => assertCreditMemoDirection(vendor("-1.0000")),
+    /negative balance owed to the vendor is a bill/,
+  );
   // Exact boundary: even one unit below zero (a tenth of a cent) is backwards.
-  assert.throws(() => assertCreditMemoDirection(customer("-0.0001")), /negative balance owed by the customer/);
-  assert.throws(() => assertCreditMemoDirection(vendor("-0.0001")), /negative balance owed to the vendor/);
+  assert.throws(
+    () => assertCreditMemoDirection(customer("-0.0001")),
+    /negative balance owed by the customer/,
+  );
+  assert.throws(
+    () => assertCreditMemoDirection(vendor("-0.0001")),
+    /negative balance owed to the vendor/,
+  );
   assertCreditMemoDirection(customer("1.0000"));
   assertCreditMemoDirection(vendor("1.0000"));
   assertCreditMemoDirection(customer("-1.0000"), true);
@@ -191,7 +258,9 @@ test("evidence without a recovery ratio reconstructs it exactly; zero tax recove
     component({ ratePercent: "13", taxAmount: "13.0000", recoverableAmount: "6.5000" }),
   ]);
   assert.equal(partial[0]!.recoverablePercent, "50.0000");
-  const zeroed = taxConfigsFromEvidence([component({ taxAmount: "0.0000", recoverableAmount: "0.0000" })]);
+  const zeroed = taxConfigsFromEvidence([
+    component({ taxAmount: "0.0000", recoverableAmount: "0.0000" }),
+  ]);
   assert.equal(zeroed[0]!.recoverablePercent, "100");
   const explicit = taxConfigsFromEvidence([component({ recoverablePercent: "25" })]);
   assert.equal(explicit[0]!.recoverablePercent, "25");
@@ -207,10 +276,13 @@ test("a line missing a required dimension names the segment; present dimensions 
       segment_names: { department: "Department" },
     },
   ];
-  const missing: KernelLine[] = [{ accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] }];
+  const missing: KernelLine[] = [
+    { accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] },
+  ];
   await assert.rejects(
     () => validateRequiredDimensions(stubRunner(rows), "org-1", missing),
-    (e: unknown) => e instanceof PostingError && /Department is required for account 6000/.test(e.message),
+    (e: unknown) =>
+      e instanceof PostingError && /Department is required for account 6000/.test(e.message),
   );
   await validateRequiredDimensions(stubRunner(rows), "org-1", [
     { accountId: "acct-1", amount: "10.0000" as KernelLine["amount"], departmentId: "dept-1" },
@@ -222,7 +294,10 @@ test("the party segment label reads Party in the required-dimension refusal", as
     { id: "acct-1", number: null, name: "AR", required_dimensions: ["party"], segment_names: {} },
   ];
   await assert.rejects(
-    () => validateRequiredDimensions(stubRunner(rows), "org-1", [{ accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] }]),
+    () =>
+      validateRequiredDimensions(stubRunner(rows), "org-1", [
+        { accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] },
+      ]),
     (e: unknown) => e instanceof PostingError && /^Party is required/.test(e.message),
   );
 });

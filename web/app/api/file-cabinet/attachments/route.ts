@@ -4,16 +4,9 @@ import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from "@/lib/api/form-data";
 import { NextResponse } from "next/server";
-import {
-  attachExisting,
-  getFile,
-  uploadAndAttach,
-} from "../../../../lib/file-cabinet";
+import { attachExisting, getFile, uploadAndAttach } from "../../../../lib/file-cabinet";
 import { isUuid } from "../../../../lib/list-params";
-import {
-  attachmentMutationRefusal,
-  authorizeAttachmentTargetMutation,
-} from "../lib";
+import { attachmentMutationRefusal, authorizeAttachmentTargetMutation } from "../lib";
 import {
   attachmentTargetInScope,
   attachmentViewer,
@@ -30,7 +23,9 @@ import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
   fileId: uuidString("fileId must be a valid id"),
   targetId: uuidString("targetId must be a valid id"),
-  targetTable: z.string().refine(isAttachableTargetTable, "targetTable must be an attachable record type"),
+  targetTable: z
+    .string()
+    .refine(isAttachableTargetTable, "targetTable must be an attachable record type"),
 });
 
 export const runtime = "nodejs";
@@ -43,25 +38,14 @@ export const GET = defineRoute({
     const targetTable = url.searchParams.get("targetTable") ?? "";
     const targetId = url.searchParams.get("targetId") ?? "";
     if (!targetTable || !isUuid(targetId)) {
-      return NextResponse.json(
-        { error: "targetTable and targetId are required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "targetTable and targetId are required" }, { status: 400 });
     }
     if (!isAttachableTargetTable(targetTable)) {
-      return NextResponse.json(
-        { error: "unsupported targetTable" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "unsupported targetTable" }, { status: 422 });
     }
 
-    if (!gate)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    const target = await loadAttachmentTarget(
-      gate.user.orgId,
-      targetTable,
-      targetId,
-    );
+    if (!gate) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId);
     if (!target || !attachmentTargetInScope(gate, target)) {
       return notFound("record");
     }
@@ -99,10 +83,7 @@ export const POST = defineRoute({
       const targetTable = String(form.get("targetTable") ?? "");
       const targetId = String(form.get("targetId") ?? "");
       if (!(file instanceof File))
-        return NextResponse.json(
-          { error: "file is required" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "file is required" }, { status: 400 });
       if (!targetTable || !isUuid(targetId)) {
         return NextResponse.json(
           { error: "targetTable and targetId are required" },
@@ -110,18 +91,10 @@ export const POST = defineRoute({
         );
       }
       if (!isAttachableTargetTable(targetTable)) {
-        return NextResponse.json(
-          { error: "unsupported targetTable" },
-          { status: 422 },
-        );
+        return NextResponse.json({ error: "unsupported targetTable" }, { status: 422 });
       }
-      const target = await loadAttachmentTarget(
-        gate.user.orgId,
-        targetTable,
-        targetId,
-      );
-      if (!target || !attachmentTargetInScope(gate, target))
-        return notFound("record");
+      const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId);
+      if (!target || !attachmentTargetInScope(gate, target)) return notFound("record");
       if (!(await canMutateAttachmentTarget(gate, target)))
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
       if (!isAllowedContentType(file.type)) {
@@ -131,19 +104,12 @@ export const POST = defineRoute({
         );
       }
       if (file.size > MAX_BYTES)
-        return NextResponse.json(
-          { error: "file exceeds 25 MB limit" },
-          { status: 413 },
-        );
+        return NextResponse.json({ error: "file exceeds 25 MB limit" }, { status: 413 });
 
       const bytes = Buffer.from(await file.arrayBuffer());
       if (bytes.length > MAX_BYTES)
-        return NextResponse.json(
-          { error: "file exceeds 25 MB limit" },
-          { status: 413 },
-        );
-      if (bytes.length === 0)
-        return NextResponse.json({ error: "file is empty" }, { status: 400 });
+        return NextResponse.json({ error: "file exceeds 25 MB limit" }, { status: 413 });
+      if (bytes.length === 0) return NextResponse.json({ error: "file is empty" }, { status: 400 });
 
       let meta: Awaited<ReturnType<typeof uploadAndAttach>>;
       try {
@@ -171,13 +137,8 @@ export const POST = defineRoute({
     const parsed = await parseJsonBody(req, postBodySchema0);
     if (!parsed.ok) return parsed.response;
     const { fileId, targetId, targetTable } = parsed.data;
-    const target = await loadAttachmentTarget(
-      gate.user.orgId,
-      targetTable,
-      targetId,
-    );
-    if (!target || !attachmentTargetInScope(gate, target))
-      return notFound("record");
+    const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId);
+    if (!target || !attachmentTargetInScope(gate, target)) return notFound("record");
     if (!(await canMutateAttachmentTarget(gate, target)))
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     // The file must belong to the caller's org and be visible to them —
@@ -193,16 +154,14 @@ export const POST = defineRoute({
         targetTable,
         targetId,
         createdBy: gate.user.id,
-        authorizeTarget: (tx) =>
-          authorizeAttachmentTargetMutation(gate, targetTable, targetId, tx),
+        authorizeTarget: (tx) => authorizeAttachmentTargetMutation(gate, targetTable, targetId, tx),
       });
     } catch (error) {
       const refusal = attachmentMutationRefusal(error);
       if (refusal) return refusal;
       throw error;
     }
-    if (!id)
-      return NextResponse.json({ error: "already attached" }, { status: 409 });
+    if (!id) return NextResponse.json({ error: "already attached" }, { status: 409 });
     return NextResponse.json({ id }, { status: 201 });
   },
 });

@@ -67,8 +67,11 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  const r = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -76,8 +79,12 @@ async function enableProperty(org: ScratchOrg, straightLineRentAccountId?: strin
   await db.execute(sql`
     update orgs set settings = settings
       || ${JSON.stringify({ features: { propertyManagement: true } })}::jsonb
-      ${straightLineRentAccountId ? sql`|| jsonb_build_object('controlAccounts',
-           coalesce(settings->'controlAccounts', '{}'::jsonb) || ${JSON.stringify({ straightLineRent: straightLineRentAccountId })}::jsonb)` : sql``}
+      ${
+        straightLineRentAccountId
+          ? sql`|| jsonb_build_object('controlAccounts',
+           coalesce(settings->'controlAccounts', '{}'::jsonb) || ${JSON.stringify({ straightLineRent: straightLineRentAccountId })}::jsonb)`
+          : sql``
+      }
      where id = ${org.orgId}`);
 }
 
@@ -116,18 +123,26 @@ async function seedLevellingLease(org: ScratchOrg): Promise<string> {
   return leaseId;
 }
 
-test("open period: rent levelling still posts (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const leaseId = await seedLevellingLease(org);
-    const results = await levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId });
-    assert.equal(results.length, 1);
-    assert.equal(results[0]!.delta, "2000.0000");
-    assert.ok(results[0]!.entryId, "expected the accrual to post");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "open period: rent levelling still posts (setup can post, refusal is load-bearing)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const leaseId = await seedLevellingLease(org);
+      const results = await levelLeaseRentStraightLine(org.orgId, null, {
+        allowedSubsidiaryIds: null,
+        asOf: "2026-07-15",
+        onlyLeaseId: leaseId,
+      });
+      assert.equal(results.length, 1);
+      assert.equal(results[0]!.delta, "2000.0000");
+      assert.ok(results[0]!.entryId, "expected the accrual to post");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("rent levelling refuses a user-closed period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -137,7 +152,11 @@ test("rent levelling refuses a user-closed period", { skip: !DB }, async () => {
     await closeGlForUser(org, actorId);
     const before = await journalCount(org.orgId);
     await assert.rejects(
-      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, {
+        allowedSubsidiaryIds: null,
+        asOf: "2026-07-15",
+        onlyLeaseId: leaseId,
+      }),
       /The GL period covering .* is closed; straight-line rent cannot post into it/,
       "levelling into a user-closed period must be refused",
     );
@@ -147,22 +166,34 @@ test("rent levelling refuses a user-closed period", { skip: !DB }, async () => {
   }
 });
 
-test("rent levelling resolves the lease's effective subsidiary calendar", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const leaseId = await seedLevellingLease(org);
-    const periodId = await useEntityPostingCalendar(org);
-    await closeEntityGl(org, periodId);
-    const before = await journalCount(org.orgId);
-    await assert.rejects(
-      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null, asOf: org.date, onlyLeaseId: leaseId }),
-      /The GL period covering .* is closed; straight-line rent cannot post into it/,
-    );
-    assert.equal(await journalCount(org.orgId), before, "the entity close leaves no rent accrual journal");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "rent levelling resolves the lease's effective subsidiary calendar",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const leaseId = await seedLevellingLease(org);
+      const periodId = await useEntityPostingCalendar(org);
+      await closeEntityGl(org, periodId);
+      const before = await journalCount(org.orgId);
+      await assert.rejects(
+        levelLeaseRentStraightLine(org.orgId, null, {
+          allowedSubsidiaryIds: null,
+          asOf: org.date,
+          onlyLeaseId: leaseId,
+        }),
+        /The GL period covering .* is closed; straight-line rent cannot post into it/,
+      );
+      assert.equal(
+        await journalCount(org.orgId),
+        before,
+        "the entity close leaves no rent accrual journal",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("rent levelling refuses a source-owned imported lock", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -171,7 +202,11 @@ test("rent levelling refuses a source-owned imported lock", { skip: !DB }, async
     await closeAllImported(org);
     const before = await journalCount(org.orgId);
     await assert.rejects(
-      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, {
+        allowedSubsidiaryIds: null,
+        asOf: "2026-07-15",
+        onlyLeaseId: leaseId,
+      }),
       /The GL period covering .* is closed; straight-line rent cannot post into it/,
       "levelling into an imported lock must be refused: the accrual is new activity, not replay",
     );
@@ -181,7 +216,11 @@ test("rent levelling refuses a source-owned imported lock", { skip: !DB }, async
   }
 });
 
-async function seedDepositLease(org: ScratchOrg, tag: string, subsidiaryId = org.subsidiaryId): Promise<string> {
+async function seedDepositLease(
+  org: ScratchOrg,
+  tag: string,
+  subsidiaryId = org.subsidiaryId,
+): Promise<string> {
   await enableProperty(org);
   const propertyId = randomUUID();
   await db.execute(sql`insert into managed_properties
@@ -215,45 +254,83 @@ async function closeEntityGl(org: ScratchOrg, periodId: string): Promise<void> {
     values (${org.orgId},${periodId},${org.bookId},${org.subsidiaryId},'gl','closed','Entity GL close')`);
 }
 
-test("security deposits resolve recording and reversal periods through the property's entity calendar", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const leaseId = await seedDepositLease(org, "entity-calendar");
-    const periodId = await useEntityPostingCalendar(org);
-    const recorded = await recordSecurityDeposit({
-      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId,
-      occurredOn: org.date, kind: "received", amount: "100",
-    });
-    await closeEntityGl(org, periodId);
-    const before = await journalCount(org.orgId);
-    await assert.rejects(recordSecurityDeposit({
-      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId,
-      occurredOn: org.date, kind: "received", amount: "10",
-    }), /An open GL period is required/);
-    await assert.rejects(reverseSecurityDepositTransaction({
-      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, transactionId: recorded.id,
-      occurredOn: org.date, reason: "Correct the deposit in its entity period",
-    }), /An open GL period is required for the reversal date/);
-    assert.equal(await journalCount(org.orgId), before, "entity-closed deposit activity posts no journal");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "security deposits resolve recording and reversal periods through the property's entity calendar",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const leaseId = await seedDepositLease(org, "entity-calendar");
+      const periodId = await useEntityPostingCalendar(org);
+      const recorded = await recordSecurityDeposit({
+        orgId: org.orgId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        leaseId,
+        occurredOn: org.date,
+        kind: "received",
+        amount: "100",
+      });
+      await closeEntityGl(org, periodId);
+      const before = await journalCount(org.orgId);
+      await assert.rejects(
+        recordSecurityDeposit({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          leaseId,
+          occurredOn: org.date,
+          kind: "received",
+          amount: "10",
+        }),
+        /An open GL period is required/,
+      );
+      await assert.rejects(
+        reverseSecurityDepositTransaction({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          transactionId: recorded.id,
+          occurredOn: org.date,
+          reason: "Correct the deposit in its entity period",
+        }),
+        /An open GL period is required for the reversal date/,
+      );
+      assert.equal(
+        await journalCount(org.orgId),
+        before,
+        "entity-closed deposit activity posts no journal",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("open period: a deposit still records (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const leaseId = await seedDepositLease(org, "open");
-    const recorded = await recordSecurityDeposit({
-      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
-    });
-    assert.equal(recorded.balance, "100.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "open period: a deposit still records (setup can post, refusal is load-bearing)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const leaseId = await seedDepositLease(org, "open");
+      const recorded = await recordSecurityDeposit({
+        orgId: org.orgId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        leaseId,
+        occurredOn: org.date,
+        kind: "received",
+        amount: "100",
+      });
+      assert.equal(recorded.balance, "100.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("deposit recording refuses a user-closed period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -263,7 +340,13 @@ test("deposit recording refuses a user-closed period", { skip: !DB }, async () =
     await closeGlForUser(org, actorId);
     await assert.rejects(
       recordSecurityDeposit({
-        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+        orgId: org.orgId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        leaseId,
+        occurredOn: org.date,
+        kind: "received",
+        amount: "100",
       }),
       /An open GL period is required/,
       "a deposit into a user-closed period must be refused",
@@ -281,7 +364,13 @@ test("deposit recording refuses a source-owned imported lock", { skip: !DB }, as
     await closeAllImported(org);
     await assert.rejects(
       recordSecurityDeposit({
-        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+        orgId: org.orgId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        leaseId,
+        occurredOn: org.date,
+        kind: "received",
+        amount: "100",
       }),
       /An open GL period is required/,
       "a deposit into an imported lock must be refused: it is new activity, not replay",
@@ -291,44 +380,58 @@ test("deposit recording refuses a source-owned imported lock", { skip: !DB }, as
   }
 });
 
-test("deposit period refusal follows the property's subsidiary instead of the lease", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const propertySubsidiaryId = randomUUID();
-    await db.execute(sql`
+test(
+  "deposit period refusal follows the property's subsidiary instead of the lease",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const propertySubsidiaryId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${propertySubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Deposit period branch', 'CAD', 'CA')`);
-    const leaseId = await seedDepositLease(org, "property-branch", propertySubsidiaryId);
-    await setPeriodLockState({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      subsidiaryId: propertySubsidiaryId,
-      module: "gl",
-      state: "closed",
-      actorId,
-      reason: "The property subsidiary period is closed",
-    });
+      const leaseId = await seedDepositLease(org, "property-branch", propertySubsidiaryId);
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: propertySubsidiaryId,
+        module: "gl",
+        state: "closed",
+        actorId,
+        reason: "The property subsidiary period is closed",
+      });
 
-    await assert.rejects(
-      recordSecurityDeposit({
-        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId,
-        occurredOn: org.date, kind: "received", amount: "100",
-      }),
-      /An open GL period is required/,
-    );
-    assert.deepEqual(
-      (await db.execute<{ journals: number; deposits: number }>(sql`
+      await assert.rejects(
+        recordSecurityDeposit({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          leaseId,
+          occurredOn: org.date,
+          kind: "received",
+          amount: "100",
+        }),
+        /An open GL period is required/,
+      );
+      assert.deepEqual(
+        (
+          await db.execute<{ journals: number; deposits: number }>(
+            sql`
         select (select count(*)::int from journal_entries where org_id = ${org.orgId}) as journals,
-               (select count(*)::int from security_deposit_transactions where org_id = ${org.orgId}) as deposits`, "objects"))[0],
-      { journals: 0, deposits: 0 },
-      "the property-scoped period refusal leaves no posting or subledger row",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+               (select count(*)::int from security_deposit_transactions where org_id = ${org.orgId}) as deposits`,
+            "objects",
+          )
+        )[0],
+        { journals: 0, deposits: 0 },
+        "the property-scoped period refusal leaves no posting or subledger row",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("deposit reversal refuses a user-closed period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -336,13 +439,23 @@ test("deposit reversal refuses a user-closed period", { skip: !DB }, async () =>
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const leaseId = await seedDepositLease(org, "rev-user");
     const recorded = await recordSecurityDeposit({
-      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+      orgId: org.orgId,
+      actorId,
+      allowedSubsidiaryIds: null,
+      leaseId,
+      occurredOn: org.date,
+      kind: "received",
+      amount: "100",
     });
     await closeGlForUser(org, actorId);
     await assert.rejects(
       reverseSecurityDepositTransaction({
-        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, transactionId: recorded.id,
-        occurredOn: org.date, reason: "Gate probe reversal of a closed-period deposit",
+        orgId: org.orgId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        transactionId: recorded.id,
+        occurredOn: org.date,
+        reason: "Gate probe reversal of a closed-period deposit",
       }),
       /An open GL period is required for the reversal date/,
       "a deposit reversal into a user-closed period must be refused",
@@ -358,13 +471,23 @@ test("deposit reversal refuses a source-owned imported lock", { skip: !DB }, asy
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const leaseId = await seedDepositLease(org, "rev-imported");
     const recorded = await recordSecurityDeposit({
-      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+      orgId: org.orgId,
+      actorId,
+      allowedSubsidiaryIds: null,
+      leaseId,
+      occurredOn: org.date,
+      kind: "received",
+      amount: "100",
     });
     await closeAllImported(org);
     await assert.rejects(
       reverseSecurityDepositTransaction({
-        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, transactionId: recorded.id,
-        occurredOn: org.date, reason: "Gate probe reversal into an imported lock",
+        orgId: org.orgId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        transactionId: recorded.id,
+        occurredOn: org.date,
+        reason: "Gate probe reversal into an imported lock",
       }),
       /An open GL period is required for the reversal date/,
       "a deposit reversal into an imported lock must be refused: reversals are not replay",
@@ -420,11 +543,23 @@ async function postCamExpense(fixture: CamGateFixture, amount: string): Promise<
      where org_id = ${fixture.org.orgId} and id = ${entryId}`);
 }
 
-async function createJulyPool(fixture: CamGateFixture, actorId: string, tag: string): Promise<string> {
+async function createJulyPool(
+  fixture: CamGateFixture,
+  actorId: string,
+  tag: string,
+): Promise<string> {
   const created = await createCamPool({
-    orgId: fixture.org.orgId, actorId, allowedSubsidiaryIds: null, propertyId: fixture.propertyId,
-    name: `CAM gate ${tag}`, fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
-    allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+    orgId: fixture.org.orgId,
+    actorId,
+    allowedSubsidiaryIds: null,
+    propertyId: fixture.propertyId,
+    name: `CAM gate ${tag}`,
+    fiscalYear: 2026,
+    periodStartsOn: "2026-07-01",
+    periodEndsOn: "2026-07-31",
+    allocationBasis: "equal",
+    budgetAmount: "1000",
+    expenseAccountIds: [fixture.ledgerAccount],
   });
   return created.id;
 }

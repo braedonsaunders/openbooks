@@ -1,88 +1,92 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApplicationError } from "../../../../lib/application/errors";
 import { applicationContextFromSession } from "../../../../lib/application/context";
-import {
-  applicationTool,
-  executeApplicationTool,
-} from "../../../../lib/application/tool-catalog";
+import { applicationTool, executeApplicationTool } from "../../../../lib/application/tool-catalog";
 import { defineRoute } from "../../../../lib/api/route";
 import { commitAppToolCommand } from "../../../../lib/apps/tools";
 import { verifyApplicationCommand } from "../../../../lib/assistant/application-proposals";
 
 export const runtime = "nodejs";
 const MAX_BODY_BYTES = 1_000_000;
-const applicationCommandBody = z.object({
-  toolName: z.string().min(1),
-  // Tool arguments have a per-tool schema resolved from toolName below.
-  input: z.json().optional(),
-  confirmToken: z.string().min(1),
-}).strict();
+const applicationCommandBody = z
+  .object({
+    toolName: z.string().min(1),
+    // Tool arguments have a per-tool schema resolved from toolName below.
+    input: z.json().optional(),
+    confirmToken: z.string().min(1),
+  })
+  .strict();
 
 export const POST = defineRoute({
   permission: "assistant.write",
-  feature: { none: "Assistant commands are controlled by assistant permissions and provider configuration." },
+  feature: {
+    none: "Assistant commands are controlled by assistant permissions and provider configuration.",
+  },
   handler: async ({ request, authz: gate }) => {
-
-  let body: z.output<typeof applicationCommandBody>;
-  try {
-    const text = await request.text();
-    if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
-      return NextResponse.json({ error: "request_too_large" }, { status: 413 });
+    let body: z.output<typeof applicationCommandBody>;
+    try {
+      const text = await request.text();
+      if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
+        return NextResponse.json({ error: "request_too_large" }, { status: 413 });
+      }
+      const parsed = applicationCommandBody.safeParse(JSON.parse(text));
+      if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
+      body = parsed.data;
+    } catch {
+      return NextResponse.json({ error: "bad_request" }, { status: 400 });
     }
-    const parsed = applicationCommandBody.safeParse(JSON.parse(text));
-    if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
-    body = parsed.data;
-  } catch {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  }
 
-  const definition = applicationTool(body.toolName);
-  if (!definition) {
-    // App-declared mutating tools share this commit path and its HMAC
-    // confirmation scheme; the route stays thin and static commands unchanged.
-    if (body.toolName.startsWith("app_")) {
-      const committed = await commitAppToolCommand(gate, body.toolName, body.input, body.confirmToken);
-      return NextResponse.json(
-        committed.ok ? { ok: true, result: committed.result } : { ok: false, error: committed.error },
-        { status: committed.ok ? 200 : committed.status },
-      );
+    const definition = applicationTool(body.toolName);
+    if (!definition) {
+      // App-declared mutating tools share this commit path and its HMAC
+      // confirmation scheme; the route stays thin and static commands unchanged.
+      if (body.toolName.startsWith("app_")) {
+        const committed = await commitAppToolCommand(
+          gate,
+          body.toolName,
+          body.input,
+          body.confirmToken,
+        );
+        return NextResponse.json(
+          committed.ok
+            ? { ok: true, result: committed.result }
+            : { ok: false, error: committed.error },
+          { status: committed.ok ? 200 : committed.status },
+        );
+      }
+      return NextResponse.json({ error: "unsupported_command" }, { status: 400 });
     }
-    return NextResponse.json({ error: "unsupported_command" }, { status: 400 });
-  }
-  if (definition.readOnly || definition.assistantConfirmation !== "always") {
-    return NextResponse.json({ error: "unsupported_command" }, { status: 400 });
-  }
-  if (!definition.visibleTo(gate)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-
-  const parsed = definition.inputSchema.safeParse(body.input);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "invalid_input" }, { status: 422 });
-  }
-  if (!verifyApplicationCommand(definition.name, parsed.data, body.confirmToken, gate)) {
-    return NextResponse.json(
-      { error: "confirmation_expired_or_modified" },
-      { status: 422 },
-    );
-  }
-
-  try {
-    const requestId = request.headers.get("x-request-id") || randomUUID();
-    const context = applicationContextFromSession(gate, "assistant", requestId);
-    const result = await executeApplicationTool(definition, context, parsed.data);
-    return NextResponse.json(result, {
-      headers: { "cache-control": "no-store", "x-request-id": requestId },
-    });
-  } catch (error) {
-    if (error instanceof ApplicationError) {
-      return apiErrorResponse(error, { details: { code: error.code, details: error.details } });
+    if (definition.readOnly || definition.assistantConfirmation !== "always") {
+      return NextResponse.json({ error: "unsupported_command" }, { status: 400 });
     }
-    console.error(`[assistant/application-command] ${definition.name} failed`, error);
-    return NextResponse.json({ error: "command_failed" }, { status: 500 });
-  }
+    if (!definition.visibleTo(gate)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+
+    const parsed = definition.inputSchema.safeParse(body.input);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "invalid_input" }, { status: 422 });
+    }
+    if (!verifyApplicationCommand(definition.name, parsed.data, body.confirmToken, gate)) {
+      return NextResponse.json({ error: "confirmation_expired_or_modified" }, { status: 422 });
+    }
+
+    try {
+      const requestId = request.headers.get("x-request-id") || randomUUID();
+      const context = applicationContextFromSession(gate, "assistant", requestId);
+      const result = await executeApplicationTool(definition, context, parsed.data);
+      return NextResponse.json(result, {
+        headers: { "cache-control": "no-store", "x-request-id": requestId },
+      });
+    } catch (error) {
+      if (error instanceof ApplicationError) {
+        return apiErrorResponse(error, { details: { code: error.code, details: error.details } });
+      }
+      console.error(`[assistant/application-command] ${definition.name} failed`, error);
+      return NextResponse.json({ error: "command_failed" }, { status: 500 });
+    }
   },
 });

@@ -148,10 +148,13 @@ export function calculateFrApec2026(input: {
 }): { base: string; employee: string; employer: string } {
   frRetraiteYearForPayDate(input.payDate);
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
-    throw new PayrollPackError(`FR APEC needs a positive integer periodsPerYear, got ${input.periodsPerYear}`);
+    throw new PayrollPackError(
+      `FR APEC needs a positive integer periodsPerYear, got ${input.periodsPerYear}`,
+    );
   }
   const brut = U(input.brut);
-  if (brut < 0n) throw new PayrollPackError(`FR APEC brut must be non-negative, got "${input.brut}"`);
+  if (brut < 0n)
+    throw new PayrollPackError(`FR APEC brut must be non-negative, got "${input.brut}"`);
   const base = input.covered
     ? cappedPerPeriod(brut, input.periodsPerYear, U(FR_QUATRE_PASS_2026), "APEC 4 PASS")
     : 0n;
@@ -300,9 +303,7 @@ function split6040(totalRate6: bigint): { sal: bigint; er: bigint } {
   return { sal, er: totalRate6 - sal };
 }
 
-export function calculateFrCotisations2026(
-  input: FrCotisations2026Input,
-): FrCotisations2026Result {
+export function calculateFrCotisations2026(input: FrCotisations2026Input): FrCotisations2026Result {
   frCotisationYearForPayDate(input.payDate);
   frRetraiteYearForPayDate(input.payDate);
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
@@ -360,15 +361,19 @@ export function calculateFrCotisations2026(
     through: elapsedInput * 30,
   };
   if (
-    !Number.isInteger(thirtieths.before) || !Number.isInteger(thirtieths.through)
-    || thirtieths.before < 0 || thirtieths.through < thirtieths.before
+    !Number.isInteger(thirtieths.before) ||
+    !Number.isInteger(thirtieths.through) ||
+    thirtieths.before < 0 ||
+    thirtieths.through < thirtieths.before
   ) {
     throw new PayrollPackError(
       `FR cotisations need a non-decreasing, non-negative ceiling position, got ${thirtieths.before} → ${thirtieths.through}`,
     );
   }
   if (input.ceilingThirtieths !== undefined && periods !== 12) {
-    throw new PayrollPackError("FR cotisations prorate the plafond by calendar days for monthly pay only");
+    throw new PayrollPackError(
+      "FR cotisations prorate the plafond by calendar days for monthly pay only",
+    );
   }
   const cumCeil = (capAnnual: bigint, positionThirtieths: number): bigint =>
     roundDiv(capAnnual * BigInt(positionThirtieths), BigInt(periods) * 30n);
@@ -403,14 +408,14 @@ export function calculateFrCotisations2026(
   const vieilErDeplaf = lineOf(brut, rate6(FR_VIEILLESSE_ER_2026.deplafonnee.rate));
   const allocFamSeuilAnnual = U(FR_ALLOC_FAM_SEUIL_2026.annual);
   const allocFamAnnualised = brut * BigInt(periods);
-  const allocFamRate = input.allocFamReducedEligible === true && allocFamAnnualised <= allocFamSeuilAnnual
-    ? FR_ALLOC_FAM_ER_2026.reduit.rate
-    : FR_ALLOC_FAM_ER_2026.plein.rate;
+  const allocFamRate =
+    input.allocFamReducedEligible === true && allocFamAnnualised <= allocFamSeuilAnnual
+      ? FR_ALLOC_FAM_ER_2026.reduit.rate
+      : FR_ALLOC_FAM_ER_2026.plein.rate;
   const allocFamEr = lineOf(brut, rate6(allocFamRate));
   const chomageEr = lineOf(largePer, rate6(FR_CHOMAGE_ER_2026.rate.rate));
-  const agsRate = input.agsInterim === true
-    ? FR_AGS_ER_2026.interimVariant.rate
-    : FR_AGS_ER_2026.rate.rate;
+  const agsRate =
+    input.agsInterim === true ? FR_AGS_ER_2026.interimVariant.rate : FR_AGS_ER_2026.rate.rate;
   const agsEr = lineOf(largePer, rate6(agsRate));
   const csaEr = lineOf(brut, rate6(FR_CSA_ER_2026.rate));
   const dialogueEr = lineOf(brut, rate6(FR_DIALOGUE_SOCIAL_ER_2026.rate));
@@ -420,10 +425,10 @@ export function calculateFrCotisations2026(
   const declaredEffectif = input.employerEffectif;
   if (declaredEffectif === null || declaredEffectif === undefined) {
     throw new PayrollPackError(
-      "FR FNAL refuses: effectif_moyen_annuel is not configured — the 0,10 % "
-      + "plafonné (< 50 salariés) vs 0,50 % sur la totalité (≥ 50) choice "
-      + "needs the prior-calendar-year legal-employer average including its establishments "
-      + "(CSS L.130-1 and R.130-1). Configure the effective-dated fact in Payroll Setup.",
+      "FR FNAL refuses: effectif_moyen_annuel is not configured — the 0,10 % " +
+        "plafonné (< 50 salariés) vs 0,50 % sur la totalité (≥ 50) choice " +
+        "needs the prior-calendar-year legal-employer average including its establishments " +
+        "(CSS L.130-1 and R.130-1). Configure the effective-dated fact in Payroll Setup.",
     );
   }
   let effectif: bigint;
@@ -436,10 +441,14 @@ export function calculateFrCotisations2026(
       `FR FNAL refuses: effectif_moyen_annuel must be a non-negative exact value to hundredths, got "${declaredEffectif}"`,
     );
   }
-  if (effectif < 0n) throw new PayrollPackError(`FR FNAL refuses: effectif_moyen_annuel cannot be negative, got "${declaredEffectif}"`);
-  const fnalEr = effectif >= U("50")
-    ? lineOf(brut, rate6(FR_FNAL_ER_2026.cinquanteEtPlus.rate))
-    : lineOf(plafPer, rate6(FR_FNAL_ER_2026.moins50.rate));
+  if (effectif < 0n)
+    throw new PayrollPackError(
+      `FR FNAL refuses: effectif_moyen_annuel cannot be negative, got "${declaredEffectif}"`,
+    );
+  const fnalEr =
+    effectif >= U("50")
+      ? lineOf(brut, rate6(FR_FNAL_ER_2026.cinquanteEtPlus.rate))
+      : lineOf(plafPer, rate6(FR_FNAL_ER_2026.moins50.rate));
 
   // CFP (CUFPA): 0,55 % under 11 salariés, 1 % at 11 and above, on the
   // brut with no ceiling — so no regularization, flat on the versement.
@@ -464,13 +473,13 @@ export function calculateFrCotisations2026(
 
   // Tenant-declared: priced when declared, zero and pushed nowhere when not.
   const atmpPct = input.atmpRatePct ?? null;
-  const atmpEr = atmpPct === null || atmpPct === ""
-    ? 0n
-    : lineOf(brut, percent6(atmpPct, "taux AT/MP") / 100n);
+  const atmpEr =
+    atmpPct === null || atmpPct === "" ? 0n : lineOf(brut, percent6(atmpPct, "taux AT/MP") / 100n);
   const vmPct = input.versementMobilitePct ?? null;
-  const vmEr = vmPct === null || vmPct === ""
-    ? 0n
-    : lineOf(brut, percent6(vmPct, "taux versement mobilité") / 100n);
+  const vmEr =
+    vmPct === null || vmPct === ""
+      ? 0n
+      : lineOf(brut, percent6(vmPct, "taux versement mobilité") / 100n);
 
   const add = (...units: bigint[]): bigint => units.reduce((a, b) => a + b, 0n);
 
@@ -480,12 +489,12 @@ export function calculateFrCotisations2026(
   const t1Base = plafPer;
   const huitPassAnnual = passAnnual * 8n;
   const t2cum = (remuneration: bigint, position: number): bigint => {
-    const capped = remuneration < cumCeil(passAnnual, position)
-      ? remuneration
-      : cumCeil(passAnnual, position);
-    const wide = remuneration < cumCeil(huitPassAnnual, position)
-      ? remuneration
-      : cumCeil(huitPassAnnual, position);
+    const capped =
+      remuneration < cumCeil(passAnnual, position) ? remuneration : cumCeil(passAnnual, position);
+    const wide =
+      remuneration < cumCeil(huitPassAnnual, position)
+        ? remuneration
+        : cumCeil(huitPassAnnual, position);
     return wide - capped;
   };
   const t2Base = t2cum(cumRem, thirtieths.through) - t2cum(ytdBefore, thirtieths.before);
@@ -632,8 +641,9 @@ export function calculateFrNetImposable2026(
   const plafPer = cappedPerPeriod(brut, periods, passAnnual, "plafond");
   const largePer = cappedPerPeriod(brut, periods, quatrePassAnnual, "4 PASS");
 
-  const vieillesse = lineOf(plafPer, rate6(FR_VIEILLESSE_SAL_2026.plafonnee.rate))
-    + lineOf(brut, rate6(FR_VIEILLESSE_SAL_2026.deplafonnee.rate));
+  const vieillesse =
+    lineOf(plafPer, rate6(FR_VIEILLESSE_SAL_2026.plafonnee.rate)) +
+    lineOf(brut, rate6(FR_VIEILLESSE_SAL_2026.deplafonnee.rate));
   const csgBase = rCent(roundDiv(largePer * BigInt(9825), BigInt(10000)));
   const csgDed = lineOf(csgBase, rate6(FR_CSG_SAL_2026.nonImposable.rate));
   const csgNonDed = lineOf(csgBase, rate6(FR_CSG_SAL_2026.imposable.rate));
@@ -642,9 +652,12 @@ export function calculateFrNetImposable2026(
   const t1Base = plafPer;
   const huitPass = passAnnual * 8n;
   const annualised = brut * BigInt(periods);
-  const t2Annualised = annualised < passAnnual
-    ? 0n
-    : annualised - passAnnual > huitPass - passAnnual ? huitPass - passAnnual : annualised - passAnnual;
+  const t2Annualised =
+    annualised < passAnnual
+      ? 0n
+      : annualised - passAnnual > huitPass - passAnnual
+        ? huitPass - passAnnual
+        : annualised - passAnnual;
   const t2Base = roundDiv(t2Annualised, BigInt(periods));
 
   const arrcoT1 = split6040(rate6(FR_ARRCO_TAUX_2026.t1.rate));
@@ -658,7 +671,8 @@ export function calculateFrNetImposable2026(
   const cetApplies = annualised > passAnnual;
   const cet = cetApplies ? lineOf(t1Base + t2Base, cetSplit.sal) : 0n;
   const apecSal = U(input.apecEmployeeContribution ?? "0");
-  if (apecSal < 0n) throw new PayrollPackError("FR net imposable APEC employee contribution cannot be negative");
+  if (apecSal < 0n)
+    throw new PayrollPackError("FR net imposable APEC employee contribution cannot be negative");
 
   // Payslip arithmetic on centime-rounded lines: net social first, then the
   // non-déductible add-back. netImposable is equivalently brut minus the

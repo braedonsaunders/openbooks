@@ -24,10 +24,10 @@ const hrmCatalog = JSON.parse(
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     const parent = context.parentURL ?? "";
     const owned =
-      parent.endsWith("/web/lib/hrm/change-requests.ts") || parent.endsWith("/hrm/change-requests/view.ts");
+      parent.endsWith("/web/lib/hrm/change-requests.ts") ||
+      parent.endsWith("/hrm/change-requests/view.ts");
     if (owned && specifier === "next-intl/server") {
       return {
         shortCircuit: true,
@@ -70,7 +70,13 @@ registerHooks({
           ),
       };
     }
-    if (owned && (specifier === "../features" || specifier === "../feature-gates" || specifier.endsWith("/lib/features") || specifier.endsWith("/lib/feature-gates"))) {
+    if (
+      owned &&
+      (specifier === "../features" ||
+        specifier === "../feature-gates" ||
+        specifier.endsWith("/lib/features") ||
+        specifier.endsWith("/lib/feature-gates"))
+    ) {
       return {
         shortCircuit: true,
         format: "module",
@@ -137,8 +143,16 @@ test("?reasons=1&row=new forwards row into the embedded setup section", async ()
   });
   assert.equal(data.showReasons, true, "the reasons section renders");
   const params = data.currentParams as Record<string, unknown>;
-  assert.equal(params.row, "new", "the loader forwards sp.row so the setup section's New drawer opens");
-  assert.equal(params.reasons, "1", "the loader keeps the host gate param so setup links stay inside the section");
+  assert.equal(
+    params.row,
+    "new",
+    "the loader forwards sp.row so the setup section's New drawer opens",
+  );
+  assert.equal(
+    params.reasons,
+    "1",
+    "the loader keeps the host gate param so setup links stay inside the section",
+  );
   assert.equal(params.status, "submitted", "the queue segment still rides along");
   assert.equal(params.q, "merit", "the section's search term survives the host page");
   assert.equal(params.showInactive, "true", "the section's inactive toggle survives the host page");
@@ -171,23 +185,35 @@ test("the queue spec hands the forwarded params to the setup-section widget", as
   );
 });
 
-
 test("the queue uses one shared list toolbar without a second titled panel or tab strip", async () => {
   const { changeRequestQueueSpec } = await import("./view.ts");
   const data = await loadChangeRequestQueue(HR_ADMIN, {});
   const spec = changeRequestQueueSpec(data);
   assert.equal(spec.layout, "list");
   assert.ok(!spec.body.some((block) => block.kind === "panel"));
-  const list = spec.body.find((block) => block.kind === "widget" && block.widget === "registered-record-list");
-  assert.ok(list && list.kind === "widget", "the collection renders directly through the shared list");
+  const list = spec.body.find(
+    (block) => block.kind === "widget" && block.widget === "registered-record-list",
+  );
+  assert.ok(
+    list && list.kind === "widget",
+    "the collection renders directly through the shared list",
+  );
   assert.equal(list.props?.source, "hrm_change_requests");
   const toolbar = list.props?.toolbar as Array<{ widget: string; props: { filters: unknown[] } }>;
   assert.equal(toolbar.length, 1);
   assert.equal(toolbar[0]?.widget, "list-toolbar");
-  assert.deepEqual(toolbar[0]?.props.filters, [{
-    paramKey: "status", label: data.segmentsLabel, allLabel: data.allLabel, options: data.segments,
-  }]);
+  assert.deepEqual(toolbar[0]?.props.filters, [
+    {
+      paramKey: "status",
+      label: data.segmentsLabel,
+      allLabel: data.allLabel,
+      options: data.segments,
+    },
+  ]);
   const header = spec.header[0];
   assert.ok(header?.kind === "page-header");
-  assert.ok(!header.actions?.some((action) => action.widget === "module-home-tabs"), "the shared page layout owns the sibling tabs");
+  assert.ok(
+    !header.actions?.some((action) => action.widget === "module-home-tabs"),
+    "the shared page layout owns the sibling tabs",
+  );
 });

@@ -17,7 +17,12 @@ import { storeCabinetFile } from "./cabinet.ts";
 import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
 import { decryptRespondentLink } from "../surveys/responses.ts";
 import { dsarCoverageManifest } from "./dsar-coverage.ts";
-import { gatherCompensationRecords, gatherPayrollEvidenceRecords, gatherTrainingRecords, gatherWorkRecords } from "./dsar-work-records.ts";
+import {
+  gatherCompensationRecords,
+  gatherPayrollEvidenceRecords,
+  gatherTrainingRecords,
+  gatherWorkRecords,
+} from "./dsar-work-records.ts";
 
 /**
  * HR-19 data-subject (DSAR) exports.
@@ -115,11 +120,21 @@ export async function requestExport(input: {
   partyId: string;
 }): Promise<DsarExportDTO> {
   return withOrgTransaction(input.orgId, async () => {
-    const manages = await actorHasPermission(db, input.orgId, input.actorId, "hrm.documents.manage");
+    const manages = await actorHasPermission(
+      db,
+      input.orgId,
+      input.actorId,
+      "hrm.documents.manage",
+    );
     if (!manages) {
-      const own = (await db.execute<{ partyId: string | null }>(sql`
+      const own = (
+        await db.execute<{ partyId: string | null }>(
+          sql`
         select party_id as "partyId" from users where org_id = ${input.orgId} and id = ${input.actorId}
-      `, "objects"))[0]?.partyId;
+      `,
+          "objects",
+        )
+      )[0]?.partyId;
       if (own !== input.partyId) {
         throw new HrmDocumentsError(
           "FORBIDDEN",
@@ -136,19 +151,29 @@ export async function requestExport(input: {
     // The manage grant never carries a subject: the export's subject must be
     // inside the actor's legal-entity scope, or no full data ZIP is queued.
     await requirePartyInScope(db, input.orgId, input.actorId, input.partyId);
-    const party = (await db.execute<{ id: string }>(sql`
+    const party = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from parties where org_id = ${input.orgId} and id = ${input.partyId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!party) {
       throw new HrmDocumentsError("NOT_FOUND", "the subject is not visible in this organization");
     }
-    const inserted = (await db.execute<ExportRow>(sql`
+    const inserted = (
+      await db.execute<ExportRow>(
+        sql`
       insert into hrm_data_subject_exports (org_id, party_id, requested_by, scope, created_by, updated_by)
       values (${input.orgId}, ${input.partyId}, ${input.actorId},
               ${JSON.stringify(DSAR_MODULES)}::jsonb, ${input.actorId}, ${input.actorId})
       returning id, party_id, requested_by, requested_at::text as requested_at, status,
                 file_id, scope, completed_at::text as completed_at, error
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) {
       throw new HrmDocumentsError(
         "REFUSED",
@@ -171,14 +196,17 @@ export async function listExports(query: {
     if (query.partyId) {
       await requirePartyInScope(db, query.orgId, query.actorId, query.partyId);
     }
-    const rows = await db.execute<ExportRow>(sql`
+    const rows = await db.execute<ExportRow>(
+      sql`
       ${EXPORT_COLS}
        where org_id = ${query.orgId}
          ${query.partyId ? sql`and party_id = ${query.partyId}` : sql``}
          ${exportScopePredicate(query.orgId, allowed)}
        order by requested_at desc
        limit 100
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toDTO);
   });
 }
@@ -213,21 +241,29 @@ export async function listOwnExports(query: {
     await requireHrmDocumentsRead(db, query.orgId, query.actorId);
     return { exports: await listExports(query), partyId: "" };
   }
-  const partyId = (await db.execute<{ partyId: string | null }>(sql`
+  const partyId = (
+    await db.execute<{ partyId: string | null }>(
+      sql`
     select party_id as "partyId" from users where org_id = ${query.orgId} and id = ${query.actorId}
-  `, "objects"))[0]?.partyId;
+  `,
+      "objects",
+    )
+  )[0]?.partyId;
   if (!partyId) {
     throw new HrmDocumentsError(
       "REFUSED",
       "your login is not linked to a person record — ask HR to link it before opening your exports",
     );
   }
-  const rows = await db.execute<ExportRow>(sql`
+  const rows = await db.execute<ExportRow>(
+    sql`
     ${EXPORT_COLS}
      where org_id = ${query.orgId} and party_id = ${partyId}
      order by requested_at desc
      limit 100
-  `, "objects");
+  `,
+    "objects",
+  );
   return { exports: rows.map(toDTO), partyId };
 }
 
@@ -258,7 +294,9 @@ export async function claimQueuedExport(
   owner: string = randomUUID(),
   leaseSeconds: number = DSAR_CLAIM_LEASE_SECONDS,
 ): Promise<ClaimedExport | null> {
-  const row = (await exec.execute<ExportRow & { claimed_by: string }>(sql`
+  const row = (
+    await exec.execute<ExportRow & { claimed_by: string }>(
+      sql`
     update hrm_data_subject_exports
        set status = 'building', claimed_by = ${owner}, claimed_at = now(),
            lease_expires_at = now() + make_interval(secs => ${leaseSeconds}),
@@ -277,7 +315,10 @@ export async function claimQueuedExport(
      )
     returning id, party_id, requested_by, requested_at::text as requested_at, status,
               file_id, scope, completed_at::text as completed_at, error, claimed_by
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return { ...row, claimedBy: row.claimed_by };
 }
@@ -296,7 +337,8 @@ async function claimSpecificExport(
   owner: string,
   leaseSeconds: number = DSAR_CLAIM_LEASE_SECONDS,
 ): Promise<boolean> {
-  const rows = await exec.execute<{ n: string }>(sql`
+  const rows = await exec.execute<{ n: string }>(
+    sql`
     update hrm_data_subject_exports
        set status = 'building', claimed_by = ${owner}, claimed_at = now(),
            lease_expires_at = now() + make_interval(secs => ${leaseSeconds}),
@@ -308,7 +350,9 @@ async function claimSpecificExport(
                 and lease_expires_at is not null
                 and lease_expires_at < now()))
     returning 1 as n
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.length > 0;
 }
 
@@ -366,13 +410,18 @@ async function fetchExportFileBytes(
   orgId: string,
   fileId: string,
 ): Promise<{ bytes: Buffer; extension: string | null } | null> {
-  const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null; extension: string | null }>(sql`
+  const blob = (
+    await db.execute<{ storage_kind: string; bytes: Buffer | null; extension: string | null }>(
+      sql`
     select v.storage_kind, b.bytes, f.extension
       from files f
       join file_versions v on v.id = f.current_version_id
       left join file_blobs b on b.version_id = v.id
      where f.id = ${fileId} and f.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (blob) refuseMaskedStorageKind(blob.storage_kind);
   if (!blob?.bytes) return null;
   return { bytes: blob.bytes as Buffer, extension: blob.extension };
@@ -418,12 +467,15 @@ const HELD_DATA_TEXT_CAST_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 async function heldDataProjection(table: string, denied: ReadonlySet<string>): Promise<SQL> {
-  const columns = await db.execute<{ column_name: string; udt_name: string }>(sql`
+  const columns = await db.execute<{ column_name: string; udt_name: string }>(
+    sql`
     select column_name, udt_name
       from information_schema.columns
      where table_schema = 'public' and table_name = ${table}
      order by ordinal_position
-  `, "objects");
+  `,
+    "objects",
+  );
   const names = new Set(columns.map((column) => column.column_name));
   // Fail closed on a catalog the deny set no longer describes: a renamed
   // secret that stops matching its deny entry must refuse loudly, never
@@ -437,7 +489,9 @@ async function heldDataProjection(table: string, denied: ReadonlySet<string>): P
   }
   const picked = columns.filter((column) => !denied.has(column.column_name));
   if (picked.length === 0) {
-    throw new Error(`DSAR ${table} projection is empty — nothing held about the subject would export`);
+    throw new Error(
+      `DSAR ${table} projection is empty — nothing held about the subject would export`,
+    );
   }
   return sql.join(
     picked.map((column) =>
@@ -659,12 +713,15 @@ const PAYROLL_OPENING_BALANCES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
 const PAYROLL_PRIOR_EARNINGS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   ...PAYROLL_OPENING_BALANCES_DENIED_COLUMNS,
   // A retained register can contain several employees; export this subject's dated facts only.
-  'source_file_id', 'source_version_id',
+  "source_file_id",
+  "source_version_id",
 ]);
 
 // Dated assignment evidence is insert-only: its schema has a creator, not an updater.
 const PAYROLL_EMPLOYER_ASSIGNMENTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
-  "org_id", "employee_party_id", "created_by",
+  "org_id",
+  "employee_party_id",
+  "created_by",
 ]);
 
 const PAYROLL_PRIOR_STUBS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
@@ -737,20 +794,32 @@ const WORK_SCHEDULES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
-export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
+export async function buildExport(
+  orgId: string,
+  exportId: string,
+  opts?: { owner?: string },
+): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
   const claimed = await withOrgTransaction(orgId, () =>
     claimSpecificExport(db, orgId, exportId, owner),
   );
   if (!claimed) return;
   await withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<ExportRow & { claimed_by: string | null }>(sql`
+    const row = (
+      await db.execute<ExportRow & { claimed_by: string | null }>(
+        sql`
       select id, party_id, requested_by, requested_at::text as requested_at, status,
              file_id, scope, completed_at::text as completed_at, error, claimed_by
         from hrm_data_subject_exports where org_id = ${orgId} and id = ${exportId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) {
-      throw new HrmDocumentsError("NOT_FOUND", "export request is not visible in this organization");
+      throw new HrmDocumentsError(
+        "NOT_FOUND",
+        "export request is not visible in this organization",
+      );
     }
     // The self-claim above just marked this row building under our owner;
     // anything else here means the claim moved on without us — walk away
@@ -764,7 +833,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     const requesterId = row.requested_by;
     const included: { module: string; status: string; detail?: string }[] = [];
     const entries: ZipEntry[] = [];
-    const fail = (module: string, detail: string) => included.push({ module, status: "failed", detail });
+    const fail = (module: string, detail: string) =>
+      included.push({ module, status: "failed", detail });
 
     // Each module gathers inside its own savepoint: a failed module
     // query ABORTS its savepoint only, not the export transaction — a
@@ -794,31 +864,43 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     };
 
     await gather("party", async () => {
-      const party = (await db.execute<Record<string, unknown>>(sql`
+      const party = (
+        await db.execute<Record<string, unknown>>(
+          sql`
         select id, display_name, legal_name, email, phone, kind, created_at::text as created_at
           from parties where org_id = ${orgId} and id = ${partyId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!party) throw new Error("subject party is gone");
       payload.party = party;
       // The subject's own address book and contact rows, by direct party
       // link — part of the party file, like any other HR record about the
       // subject's account.
-      payload.addresses = await db.execute<Record<string, unknown>>(sql`
+      payload.addresses = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("addresses", ADDRESSES_DENIED_COLUMNS)}
           from addresses
          where org_id = ${orgId} and party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.contacts = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.contacts = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("contacts", CONTACTS_DENIED_COLUMNS)}
           from contacts
          where org_id = ${orgId} and party_id = ${partyId}
          order by created_at
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     await gather("employments", async () => {
-      const employments = await db.execute<Record<string, unknown>>(sql`
+      const employments = await db.execute<Record<string, unknown>>(
+        sql`
         select e.id, e.revision, v.version_no, v.status, v.effective_from::text as effective_from,
                v.effective_to::text as effective_to
           from worker_employments e
@@ -826,8 +908,11 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
             on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
          where e.org_id = ${orgId} and e.worker_party_id = ${partyId}
          order by e.id, v.version_no
-      `, "objects");
-      const assignments = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      const assignments = await db.execute<Record<string, unknown>>(
+        sql`
         select a.employment_id, a.assignment_key, v.job_title, v.department_id, v.location_id,
                v.fte, v.is_primary, v.effective_from::text as effective_from,
                v.effective_to::text as effective_to
@@ -838,76 +923,103 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by a.employment_id, v.effective_from
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.employments = employments;
       payload.assignments = assignments;
       // Employment-lifecycle records keyed by the subject's full employment
       // set (the party subselect, never the versioned read above, so an
       // employment without a current version still exports its history).
       const subjectEmployments = sql`select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}`;
-      payload.employmentChanges = await db.execute<Record<string, unknown>>(sql`
+      payload.employmentChanges = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, change_kind, reason, recorded_at::text as recorded_at
           from employment_changes
          where org_id = ${orgId} and employment_id in (${subjectEmployments})
          order by recorded_at
-      `, "objects");
-      payload.exitRecords = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.exitRecords = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, reason_kind, is_voluntary, is_regrettable,
                would_rehire, interview_held_on::text as interview_held_on,
                interviewer_party_id, destination, notes, recorded_at::text as recorded_at
           from hrm_exit_records
          where org_id = ${orgId} and employment_id in (${subjectEmployments})
          order by recorded_at
-      `, "objects");
-      payload.complianceFindings = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.complianceFindings = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, kind, project_id, worked_on::text as worked_on,
                detail, status, resolved_reason, recorded_at::text as recorded_at
           from hrm_compliance_findings
          where org_id = ${orgId} and employment_id in (${subjectEmployments})
          order by recorded_at
-      `, "objects");
-      payload.employmentClassifications = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.employmentClassifications = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, classification_id, effective_from::text as effective_from,
                effective_to::text as effective_to
           from hrm_employment_classifications
          where org_id = ${orgId} and employment_id in (${subjectEmployments})
          order by effective_from
-      `, "objects");
-      payload.processes = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.processes = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, kind, effective_date::text as effective_date,
                status, cancel_reason, completed_at::text as completed_at
           from hrm_processes
          where org_id = ${orgId} and employment_id in (${subjectEmployments})
          order by effective_date
-      `, "objects");
+      `,
+        "objects",
+      );
       // Steps of the subject's processes (transitive under the gathered
       // processes above), plus the subject's own assignment row and both
       // directions of the manager chain.
-      payload.processSteps = await db.execute<Record<string, unknown>>(sql`
+      payload.processSteps = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("hrm_process_steps", PROCESS_STEPS_DENIED_COLUMNS)}
           from hrm_process_steps
          where org_id = ${orgId} and process_id in (
            select id from hrm_processes where org_id = ${orgId} and employment_id in (${subjectEmployments})
          )
          order by created_at
-      `, "objects");
-      payload.employeeRoles = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.employeeRoles = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("employee_roles", EMPLOYEE_ROLES_DENIED_COLUMNS)}
           from employee_roles
          where org_id = ${orgId} and party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.reportingRelationships = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.reportingRelationships = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("reporting_relationships", REPORTING_DENIED_COLUMNS)}
           from reporting_relationships
          where org_id = ${orgId}
            and (employment_id in (${subjectEmployments}) or manager_employment_id in (${subjectEmployments}))
          order by effective_from
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     await gather("change_requests", async () => {
-      payload.changeRequests = await db.execute<Record<string, unknown>>(sql`
+      payload.changeRequests = await db.execute<Record<string, unknown>>(
+        sql`
         select r.id, r.employment_id, r.status, r.reason,
                r.submitted_by, r.created_at::text as created_at
           from hrm_employment_change_requests r
@@ -915,11 +1027,14 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by r.created_at
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     await gather("leave", async () => {
-      payload.leaveRequests = await db.execute<Record<string, unknown>>(sql`
+      payload.leaveRequests = await db.execute<Record<string, unknown>>(
+        sql`
         select r.id, r.employment_id, r.status, r.starts_on::text as starts_on,
                r.ends_on::text as ends_on, r.created_at::text as created_at
           from hrm_leave_requests r
@@ -927,8 +1042,11 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by r.starts_on
-      `, "objects");
-      payload.absences = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.absences = await db.execute<Record<string, unknown>>(
+        sql`
         select a.id, a.leave_request_id, a.employment_id, a.on_date::text as on_date,
                a.hours, a.leave_type_id, a.source
           from hrm_absences a
@@ -936,21 +1054,29 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by a.on_date
-      `, "objects");
+      `,
+        "objects",
+      );
       // The subject's own entitlement movements and the balance caps scoped
       // to them — leave-domain subject data by direct party link.
-      payload.entitlementMovements = await db.execute<Record<string, unknown>>(sql`
+      payload.entitlementMovements = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("entitlement_ledger", ENTITLEMENT_LEDGER_DENIED_COLUMNS)}
           from entitlement_ledger
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by movement_date
-      `, "objects");
-      payload.entitlementPlanLimits = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.entitlementPlanLimits = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("entitlement_plan_limits", ENTITLEMENT_LIMITS_DENIED_COLUMNS)}
           from entitlement_plan_limits
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by effective_from
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     await gather("time", async () => {
@@ -964,7 +1090,10 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       let lastWorkedOn: string | null = null;
       let lastId: string | null = null;
       for (;;) {
-        const page: (Record<string, unknown> & TimeRow)[] = await db.execute<Record<string, unknown> & TimeRow>(sql`
+        const page: (Record<string, unknown> & TimeRow)[] = await db.execute<
+          Record<string, unknown> & TimeRow
+        >(
+          sql`
           select id, worked_on::text as worked_on, hours, status, project_id
             from time_entries
            where org_id = ${orgId} and employee_party_id = ${partyId}
@@ -972,7 +1101,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                   or (worked_on, id) > (${lastWorkedOn}::date, ${lastId}::uuid))
            order by worked_on, id
            limit 1000
-        `, "objects");
+        `,
+          "objects",
+        );
         timeEntries.push(...page);
         if (page.length < 1000) break;
         lastWorkedOn = page[page.length - 1]!.worked_on;
@@ -981,24 +1112,33 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       payload.timeEntries = timeEntries;
       // The subject's own crew lines, timesheet-week envelopes and
       // field-ticket labor lines — work records naming the employee.
-      payload.crewTimeBatchLines = await db.execute<Record<string, unknown>>(sql`
+      payload.crewTimeBatchLines = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("crew_time_batch_lines", CREW_LINES_DENIED_COLUMNS)}
           from crew_time_batch_lines
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.timesheetWeeks = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.timesheetWeeks = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("timesheet_weeks", TIMESHEET_WEEKS_DENIED_COLUMNS)}
           from timesheet_weeks
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by week_start
-      `, "objects");
+      `,
+        "objects",
+      );
       type AssignmentRow = { id: string; week_start: string };
       const resourcingAssignments: Record<string, unknown>[] = [];
       let lastAssignmentWeek: string | null = null;
       let lastAssignmentId: string | null = null;
       for (;;) {
-        const page: (Record<string, unknown> & AssignmentRow)[] = await db.execute<Record<string, unknown> & AssignmentRow>(sql`
+        const page: (Record<string, unknown> & AssignmentRow)[] = await db.execute<
+          Record<string, unknown> & AssignmentRow
+        >(
+          sql`
           select id, project_id, employee_party_id, job_title, week_start::text as week_start,
                  planned_hours, is_billable, bill_item_id, project_task_id, booking, state,
                  source, request_id, custom, created_at::text as created_at,
@@ -1009,7 +1149,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                   or (week_start, id) > (${lastAssignmentWeek}::date, ${lastAssignmentId}::uuid))
            order by week_start, id
            limit 1000
-        `, "objects");
+        `,
+          "objects",
+        );
         resourcingAssignments.push(...page);
         if (page.length < 1000) break;
         lastAssignmentWeek = page[page.length - 1]!.week_start;
@@ -1022,7 +1164,10 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       let lastBookingStart: string | null = null;
       let lastBookingId: string | null = null;
       for (;;) {
-        const page: (Record<string, unknown> & BookingRow)[] = await db.execute<Record<string, unknown> & BookingRow>(sql`
+        const page: (Record<string, unknown> & BookingRow)[] = await db.execute<
+          Record<string, unknown> & BookingRow
+        >(
+          sql`
           select id, board_id, worker_party_id, target_kind, customer_party_id, project_id, project_task_id,
                  location_id, schedule_code_id, department_id, detail, notes, span_mode, time_zone,
                  starts_on::text as starts_on, ends_on::text as ends_on, starts_at::text as starts_at,
@@ -1035,7 +1180,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                   or (starts_at, id) > (${lastBookingStart}::timestamptz, ${lastBookingId}::uuid))
            order by starts_at, id
            limit 1000
-        `, "objects");
+        `,
+          "objects",
+        );
         scheduleBookings.push(...page);
         if (page.length < 1000) break;
         lastBookingStart = page[page.length - 1]!.starts_at;
@@ -1048,7 +1195,10 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       let lastRequestWeek: string | null = null;
       let lastRequestId: string | null = null;
       for (;;) {
-        const page: (Record<string, unknown> & RequestRow)[] = await db.execute<Record<string, unknown> & RequestRow>(sql`
+        const page: (Record<string, unknown> & RequestRow)[] = await db.execute<
+          Record<string, unknown> & RequestRow
+        >(
+          sql`
           select id, project_id, employee_party_id, job_title, first_week::text as first_week,
                  last_week::text as last_week, hours_per_week, is_billable, bill_item_id,
                  reason, status, decided_by, decided_at::text as decided_at,
@@ -1060,37 +1210,46 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                   or (first_week, id) > (${lastRequestWeek}::date, ${lastRequestId}::uuid))
            order by first_week, id
            limit 1000
-        `, "objects");
+        `,
+          "objects",
+        );
         resourcingRequests.push(...page);
         if (page.length < 1000) break;
         lastRequestWeek = page[page.length - 1]!.first_week;
         lastRequestId = page[page.length - 1]!.id;
       }
       payload.resourcingRequests = resourcingRequests;
-      payload.fieldTicketLaborLines = await db.execute<Record<string, unknown>>(sql`
+      payload.fieldTicketLaborLines = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("field_ticket_labor_lines", FIELD_TICKET_LINES_DENIED_COLUMNS)}
           from field_ticket_labor_lines
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     await gather("reviews", async () => {
       // Only reviews the person may see: shared/acknowledged reviews of
       // them, plus reviews they authored. Drafts and pending peer reviews
       // stay out — an export never leaks an unfinished assessment.
-      const reviews = await db.execute<Record<string, unknown> & { id: string }>(sql`
+      const reviews = await db.execute<Record<string, unknown> & { id: string }>(
+        sql`
         select id, cycle_id, kind, status, submitted_at::text as submitted_at
           from hrm_reviews
          where org_id = ${orgId}
            and ((subject_party_id = ${partyId} and status in ('shared', 'acknowledged'))
                 or reviewer_party_id = ${partyId})
          order by submitted_at nulls last
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.reviews = reviews;
       const reviewIds = reviews.map((r) => r.id);
       payload.reviewAnswers = reviewIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, review_id, section_title, question_prompt, position,
                    answer_kind, rating, text
               from hrm_review_answers
@@ -1099,9 +1258,12 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by review_id, position
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
-      payload.goals = await db.execute<Record<string, unknown> & { id: string }>(sql`
+      payload.goals = await db.execute<Record<string, unknown> & { id: string }>(
+        sql`
         select g.id, g.employment_id, g.title, g.description, g.due_on::text as due_on,
                g.weight, g.status, g.progress_percent
           from hrm_goals g
@@ -1109,10 +1271,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by g.due_on nulls last
-      `, "objects");
-      const goalIds = (payload.goals as ({ id: string })[]).map((g) => g.id);
+      `,
+        "objects",
+      );
+      const goalIds = (payload.goals as { id: string }[]).map((g) => g.id);
       payload.goalUpdates = goalIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, goal_id, progress_percent, note, recorded_at::text as recorded_at
               from hrm_goal_updates
              where org_id = ${orgId} and goal_id in (${sql.join(
@@ -1120,17 +1285,23 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by recorded_at
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
-      payload.successionCandidates = await db.execute<Record<string, unknown>>(sql`
+      payload.successionCandidates = await db.execute<Record<string, unknown>>(
+        sql`
         select id, plan_id, employment_id, readiness, candidate_order, notes
           from hrm_succession_candidates
          where org_id = ${orgId} and employment_id in (
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by candidate_order
-      `, "objects");
-      payload.talentReviews = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.talentReviews = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, cycle_id, performance_key, potential_key,
                impact_of_loss, risk_of_loss, promotion_ready, notes,
                reviewed_at::text as reviewed_at
@@ -1139,13 +1310,16 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by reviewed_at nulls last
-      `, "objects");
+      `,
+        "objects",
+      );
       // Continuous-performance records: feedback by any of its three
       // person links, 1:1s as report or manager with their items, and
       // succession plans where the subject is the incumbent.
       const subjectReviewsEmployments = sql`select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}`;
       const subjectOneOnOnes = sql`select id from hrm_one_on_ones where org_id = ${orgId} and (report_employment_id in (${subjectReviewsEmployments}) or manager_employment_id in (${subjectReviewsEmployments}))`;
-      payload.feedback = await db.execute<Record<string, unknown>>(sql`
+      payload.feedback = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("hrm_feedback", FEEDBACK_DENIED_COLUMNS)}
           from hrm_feedback
          where org_id = ${orgId}
@@ -1153,29 +1327,41 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                 or author_party_id = ${partyId}
                 or requested_from_party_id = ${partyId})
          order by recorded_at
-      `, "objects");
-      payload.oneOnOnes = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.oneOnOnes = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("hrm_one_on_ones", ONE_ON_ONES_DENIED_COLUMNS)}
           from hrm_one_on_ones
          where org_id = ${orgId} and id in (${subjectOneOnOnes})
          order by scheduled_at
-      `, "objects");
-      payload.oneOnOneItems = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.oneOnOneItems = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("hrm_one_on_one_items", ONE_ON_ONE_ITEMS_DENIED_COLUMNS)}
           from hrm_one_on_one_items
          where org_id = ${orgId} and one_on_one_id in (${subjectOneOnOnes})
          order by created_at
-      `, "objects");
-      payload.successionPlans = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.successionPlans = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("hrm_succession_plans", SUCCESSION_PLANS_DENIED_COLUMNS)}
           from hrm_succession_plans
          where org_id = ${orgId} and incumbent_employment_id in (${subjectReviewsEmployments})
          order by created_at
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     await gather("benefits", async () => {
-      payload.benefitEnrollments = await db.execute<Record<string, unknown>>(sql`
+      payload.benefitEnrollments = await db.execute<Record<string, unknown>>(
+        sql`
         select e.id, e.plan_id, e.status, e.effective_from::text as effective_from,
                e.effective_to::text as effective_to
           from hrm_benefit_enrollments e
@@ -1183,10 +1369,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by e.effective_from
-      `, "objects");
+      `,
+        "objects",
+      );
       const benefitSubjectEmployments = sql`select id from worker_employments
         where org_id = ${orgId} and worker_party_id = ${partyId}`;
-      payload.benefitContributionElections = await db.execute<Record<string, unknown>>(sql`
+      payload.benefitContributionElections = await db.execute<Record<string, unknown>>(
+        sql`
         select t.id, t.enrollment_id, t.rule_id, t.election_mode,
                t.elected_rate::text as elected_rate, t.declared_periods_per_year,
                t.effective_from::text as effective_from, t.effective_to::text as effective_to,
@@ -1195,30 +1384,46 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           join hrm_benefit_enrollments e on e.org_id = t.org_id and e.id = t.enrollment_id
          where t.org_id = ${orgId} and e.employment_id in (${benefitSubjectEmployments})
          order by t.effective_from, t.id
-      `, "objects");
-      payload.benefitProgramMemberships = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.benefitProgramMemberships = await db.execute<Record<string, unknown>>(
+        sql`
         select id, program_id, employment_id, effective_from::text as effective_from,
                effective_to::text as effective_to, weight::text as weight, role
           from hrm_benefit_program_members
          where org_id = ${orgId} and employment_id in (${benefitSubjectEmployments})
          order by effective_from, id
-      `, "objects");
+      `,
+        "objects",
+      );
       // The export identifies only this subject's dated position. Other
       // recipient assignments and company source/cap totals remain private.
-      if ((await db.execute<{ installed: boolean }>(sql`select to_regclass('public.hrm_benefit_transaction_responsibilities') is not null as installed`, "objects"))[0]?.installed) {
-        payload.benefitTransactionResponsibilities = await db.execute<Record<string, unknown>>(sql`
+      if (
+        (
+          await db.execute<{ installed: boolean }>(
+            sql`select to_regclass('public.hrm_benefit_transaction_responsibilities') is not null as installed`,
+            "objects",
+          )
+        )[0]?.installed
+      ) {
+        payload.benefitTransactionResponsibilities = await db.execute<Record<string, unknown>>(
+          sql`
           select r.id,r.program_id,r.employment_id,r.position_key,p.name as position_name,
                  r.effective_from::text,r.effective_to::text
            from hrm_benefit_transaction_responsibilities r
            join hrm_benefit_transaction_positions p on p.org_id=r.org_id and p.program_id=r.program_id and p.position_key=r.position_key
            where r.org_id=${orgId} and r.employment_id in (${benefitSubjectEmployments})
            order by r.effective_from,r.id
-        `, "objects");
+        `,
+          "objects",
+        );
       }
       // Export the subject's award and its policy identity. Company ledger
       // measurements remain in the controlled source snapshot, which is not
       // a personal record about the subject or a component of their payment.
-      payload.benefitAwards = await db.execute<Record<string, unknown>>(sql`
+      payload.benefitAwards = await db.execute<Record<string, unknown>>(
+        sql`
         select id, program_id, employment_id, period_from::text as period_from,
                period_to::text as period_to, value::text as value, currency, status,
                program_snapshot->>'name' as program_name,
@@ -1231,18 +1436,24 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           from hrm_benefit_awards
          where org_id = ${orgId} and employment_id in (${benefitSubjectEmployments})
          order by period_from, id
-      `, "objects");
-      payload.benefitAwardEvents = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.benefitAwardEvents = await db.execute<Record<string, unknown>>(
+        sql`
         select event.id, event.award_id, event.kind, event.reason, event.recorded_at
           from hrm_benefit_award_events event
           join hrm_benefit_awards award on award.org_id = event.org_id and award.id = event.award_id
          where event.org_id = ${orgId} and award.employment_id in (${benefitSubjectEmployments})
          order by event.recorded_at, event.id
-      `, "objects");
+      `,
+        "objects",
+      );
       // Dependents are third parties, but their records live on the
       // subject's employment file — the export carries them as part of
       // that file, like any other HR record about the subject's account.
-      payload.benefitDependents = await db.execute<Record<string, unknown>>(sql`
+      payload.benefitDependents = await db.execute<Record<string, unknown>>(
+        sql`
         select d.id, d.employment_id, d.relationship, d.display_name,
                d.birth_date::text as birth_date, d.is_active
           from hrm_benefit_dependents d
@@ -1250,7 +1461,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by d.display_name
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     // Omission evidence for the manifest: every requested document whose
@@ -1267,12 +1480,15 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
         status: string;
         file_id: string | null;
         completed_at: string | null;
-      }>(sql`
+      }>(
+        sql`
         select id, title, status, file_id, completed_at::text as completed_at
           from hrm_documents
          where org_id = ${orgId} and party_id = ${partyId} and status != 'deleted'
          order by created_at
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.documents = docs.map((d) => ({
         id: d.id,
         title: d.title,
@@ -1289,13 +1505,18 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           });
           continue;
         }
-        const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null }>(sql`
+        const blob = (
+          await db.execute<{ storage_kind: string; bytes: Buffer | null }>(
+            sql`
           select v.storage_kind, b.bytes
             from files f
             join file_versions v on v.id = f.current_version_id
             left join file_blobs b on b.version_id = v.id
            where f.id = ${doc.file_id} and f.org_id = ${orgId}
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         // A masked-clone tombstone refuses by name: a subject-access export
         // must never silently omit the file (that would certify a complete
         // export that is missing documents).
@@ -1307,13 +1528,19 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           omittedDocuments.push({
             id: doc.id,
             title: doc.title,
-            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+            reason:
+              "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
           });
           continue;
         }
         n += 1;
         entries.push({
-          name: `documents/${String(n).padStart(2, "0")}-${doc.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || "document"}.pdf`,
+          name: `documents/${String(n).padStart(2, "0")}-${
+            doc.title
+              .replace(/[^\w\- ]+/g, "")
+              .trim()
+              .slice(0, 60) || "document"
+          }.pdf`,
           data: blob.bytes as Buffer,
         });
       }
@@ -1321,7 +1548,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       // Signature events on the subject's file, plus files the subject
       // signed elsewhere — the ceremony around the subject's documents and
       // the subject's own signing acts.
-      payload.documentSigners = await db.execute<Record<string, unknown>>(sql`
+      payload.documentSigners = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("hrm_document_signers", DOCUMENT_SIGNERS_DENIED_COLUMNS)}
           from hrm_document_signers
          where org_id = ${orgId}
@@ -1330,7 +1558,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                   select id from hrm_documents where org_id = ${orgId} and party_id = ${partyId} and status != 'deleted'
                 ))
          order by created_at
-      `, "objects");
+      `,
+        "objects",
+      );
     });
     if (omittedDocuments.length > 0) {
       const entry = included.find((s) => s.module === "documents");
@@ -1348,7 +1578,10 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     }
     await gather("payroll", async () => {
       Object.assign(payload, await gatherCompensationRecords(orgId, partyId, heldDataProjection));
-      Object.assign(payload, await gatherPayrollEvidenceRecords(orgId, partyId, heldDataProjection));
+      Object.assign(
+        payload,
+        await gatherPayrollEvidenceRecords(orgId, partyId, heldDataProjection),
+      );
       // The persisted stub records (snapshots at calculate time — the
       // payroll read seam), never live re-resolution. Stubs paginate by
       // (pay_date, id) and lines fetch per stub chunk: a lifetime of pay
@@ -1367,7 +1600,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       let lastPayDate: string | null = null;
       let lastStubId: string | null = null;
       for (;;) {
-        const page: StubRow[] = await db.execute<StubRow>(sql`
+        const page: StubRow[] = await db.execute<StubRow>(
+          sql`
           select id, pay_date::text as pay_date, tax_year, gross::text as gross,
                  net_pay::text as net_pay, currency_code as currency
             from pay_stubs
@@ -1376,7 +1610,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                   or (pay_date, id) > (${lastPayDate}::date, ${lastStubId}::uuid))
            order by pay_date, id
            limit 500
-        `, "objects");
+        `,
+          "objects",
+        );
         stubs.push(...page);
         if (page.length < 500) break;
         lastPayDate = page[page.length - 1]!.pay_date;
@@ -1388,77 +1624,109 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       const lines: Record<string, unknown>[] = [];
       for (let at = 0; at < stubs.length; at += 500) {
         const chunk = stubs.slice(at, at + 500);
-        lines.push(...(await db.execute<Record<string, unknown>>(sql`
+        lines.push(
+          ...(await db.execute<Record<string, unknown>>(
+            sql`
           select stub_id, description, kind, amount::text as amount
             from pay_stub_lines
-           where stub_id in (${sql.join(chunk.map((s) => sql`${s.id}`), sql`, `)})
+           where stub_id in (${sql.join(
+             chunk.map((s) => sql`${s.id}`),
+             sql`, `,
+           )})
            order by stub_id
-        `, "objects")));
+        `,
+            "objects",
+          )),
+        );
       }
       payload.payStubLines = lines;
       // Pay inputs about the subject's employments: allowances, benefit
       // deductions and payroll inputs awaiting (or consumed by) a run, plus
       // per-diem and travel entries. Same subject link as the stubs.
       const subjectPartyEmployments = sql`select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}`;
-      payload.allowancePayrollInputs = await db.execute<Record<string, unknown>>(sql`
+      payload.allowancePayrollInputs = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, entry_kind, amount::text as amount, currency,
                coverage_date::text as coverage_date, status
           from hrm_allowance_payroll_inputs
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by coverage_date
-      `, "objects");
-      payload.benefitPayrollInputs = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.benefitPayrollInputs = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, kind, amount::text as amount, currency,
                coverage_from::text as coverage_from, coverage_to::text as coverage_to, status
           from hrm_benefit_payroll_inputs
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by coverage_from
-      `, "objects");
-      payload.benefitPayrollContributions = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.benefitPayrollContributions = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, enrollment_id, rule_id, term_id, pay_run_document_id,
                pay_stub_line_id, period_from::text as period_from, period_to::text as period_to,
                amount::text as amount, currency, status
           from pay_run_benefit_allocations
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by period_from, id
-      `, "objects");
-      payload.serviceCredits = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.serviceCredits = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, convention, as_of_date::text as as_of_date,
                credited_days::text as credited_days, credited_months,
                effective_from::text as effective_from, effective_to::text as effective_to, reason
           from payroll_service_credits
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by effective_from, id
-      `, "objects");
-      payload.vacationTerms = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.vacationTerms = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, method, percent_floor::text as percent_floor,
                annual_days_floor::text as annual_days_floor,
                effective_from::text as effective_from, effective_to::text as effective_to, reason
           from payroll_vacation_terms
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by effective_from, id
-      `, "objects");
-      payload.payrollInputs = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.payrollInputs = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, kind, absence_date::text as absence_date,
                hours, status
           from hrm_payroll_inputs
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by absence_date nulls last
-      `, "objects");
-      payload.perDiemEntries = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.perDiemEntries = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, worked_on::text as worked_on, amount::text as amount,
                currency, status
           from hrm_per_diem_entries
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by worked_on
-      `, "objects");
-      payload.travelPayEntries = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.travelPayEntries = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, worked_on::text as worked_on, amount::text as amount,
                currency, status
           from hrm_travel_pay_entries
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by worked_on
-      `, "objects");
+      `,
+        "objects",
+      );
       // The employee's own withholding elections and certificate answers, by
       // direct employee_party_id link (not via employment — unstamped rows
       // are still the subject's data): certificate answers with their
@@ -1470,7 +1738,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       // subject identifies the record through sin_last3, which IS
       // exported. Exporting sealed bytes the subject cannot decrypt would
       // add exfiltration surface for zero subject-visible data.
-      payload.taxCertificates = await db.execute<Record<string, unknown>>(sql`
+      payload.taxCertificates = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id, country, certificate_key, region, sub_region,
                answers, effective_from::text as effective_from,
                superseded_on::text as superseded_on,
@@ -1478,14 +1747,20 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           from employee_tax_certificates
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by country, certificate_key, effective_from nulls last
-      `, "objects");
-      payload.payrollProfiles = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.payrollProfiles = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("employee_payroll_profiles", PAYROLL_PROFILE_DENIED_COLUMNS)}
           from employee_payroll_profiles
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.workLocationAllocations = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.workLocationAllocations = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_work_location_allocations", WORK_LOCATION_DENIED_COLUMNS)}
           from payroll_work_location_allocations
          where org_id = ${orgId}
@@ -1493,20 +1768,29 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
              select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
            )
          order by period_start
-      `, "objects");
-      payload.roeSeparationEvents = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.roeSeparationEvents = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_roe_separation_events", ROE_SEPARATION_DENIED_COLUMNS)}
           from payroll_roe_separation_events
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by interruption_on
-      `, "objects");
-      payload.itAddizionaliOpeningBalances = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.itAddizionaliOpeningBalances = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("it_addizionali_opening_balances", IT_ADDIZIONALI_DENIED_COLUMNS)}
           from it_addizionali_opening_balances
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by tax_year
-      `, "objects");
-      payload.roeSeparationPayments = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.roeSeparationPayments = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_roe_separation_payments", ROE_PAYMENTS_DENIED_COLUMNS)}
           from payroll_roe_separation_payments
          where org_id = ${orgId}
@@ -1514,7 +1798,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
              select id from payroll_roe_separation_events where org_id = ${orgId} and employee_party_id = ${partyId}
            )
          order by expected_payment_on
-      `, "objects");
+      `,
+        "objects",
+      );
       // Carry-ins, recomputations and adjustments about the subject: pay
       // component values, YTD opening balances with their program and
       // filing-account bases, the pre-migration stub register, retro
@@ -1522,99 +1808,144 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       // parallel-run findings, run anomaly flags on the subject's
       // employments, per-employee run adjustments, holiday assertions, and
       // the subject-scoped costing rate and schedule pattern.
-      payload.employeePayComponents = await db.execute<Record<string, unknown>>(sql`
+      payload.employeePayComponents = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("employee_pay_components", EMPLOYEE_PAY_COMPONENTS_DENIED_COLUMNS)}
           from employee_pay_components
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by effective_from
-      `, "objects");
-      payload.openingBalances = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.openingBalances = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_opening_balances", PAYROLL_OPENING_BALANCES_DENIED_COLUMNS)}
           from payroll_opening_balances
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by tax_year
-      `, "objects");
+      `,
+        "objects",
+      );
       // These are the subject's reviewed adoption and employer-assignment
       // facts. Preserve their source, dates and revision without disclosing
       // the operator's identity or another employee's evidence.
-      payload.periodOpenings = await db.execute<Record<string, unknown>>(sql`
+      payload.periodOpenings = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_period_openings", PAYROLL_OPENING_BALANCES_DENIED_COLUMNS)}
           from payroll_period_openings
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by tax_year, period_start, paid_through, id
-      `, "objects");
-      payload.priorEarnings = await db.execute<Record<string, unknown>>(sql`
-        select ${await heldDataProjection('payroll_prior_earnings', PAYROLL_PRIOR_EARNINGS_DENIED_COLUMNS)}
+      `,
+        "objects",
+      );
+      payload.priorEarnings = await db.execute<Record<string, unknown>>(
+        sql`
+        select ${await heldDataProjection("payroll_prior_earnings", PAYROLL_PRIOR_EARNINGS_DENIED_COLUMNS)}
           from payroll_prior_earnings
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by history_from, id
-      `, "objects");
-      payload.employerAssignments = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.employerAssignments = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_employee_employer_assignments", PAYROLL_EMPLOYER_ASSIGNMENTS_DENIED_COLUMNS)}
           from payroll_employee_employer_assignments
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by effective_from, assignment_kind, id
-      `, "objects");
-      payload.openingProgramBases = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.openingProgramBases = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_opening_program_bases", PAYROLL_PROGRAM_BASES_DENIED_COLUMNS)}
           from payroll_opening_program_bases
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by tax_year, program_key
-      `, "objects");
-      payload.openingAccountBases = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.openingAccountBases = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_opening_account_bases", PAYROLL_ACCOUNT_BASES_DENIED_COLUMNS)}
           from payroll_opening_account_bases
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by tax_year, program_key
-      `, "objects");
-      payload.priorStubs = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.priorStubs = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_prior_stubs", PAYROLL_PRIOR_STUBS_DENIED_COLUMNS)}
           from payroll_prior_stubs
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.retroSettlements = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.retroSettlements = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_retro_settlements", PAYROLL_RETRO_DENIED_COLUMNS)}
           from payroll_retro_settlements
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.parallelFindings = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.parallelFindings = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_parallel_findings", PAYROLL_PARALLEL_FINDINGS_DENIED_COLUMNS)}
           from payroll_parallel_findings
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.anomalyFlags = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.anomalyFlags = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("payroll_anomaly_flags", PAYROLL_ANOMALY_FLAGS_DENIED_COLUMNS)}
           from payroll_anomaly_flags
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by created_at
-      `, "objects");
-      payload.runAdjustments = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.runAdjustments = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("pay_run_adjustments", PAY_RUN_ADJUSTMENTS_DENIED_COLUMNS)}
           from pay_run_adjustments
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
-      `, "objects");
-      payload.holidayAssertions = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.holidayAssertions = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("pay_run_holiday_assertions", PAY_RUN_HOLIDAY_DENIED_COLUMNS)}
           from pay_run_holiday_assertions
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by holiday_date
-      `, "objects");
-      payload.laborCostRates = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.laborCostRates = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("labor_cost_rates", LABOR_COST_RATES_DENIED_COLUMNS)}
           from labor_cost_rates
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by effective_from
-      `, "objects");
-      payload.workSchedules = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.workSchedules = await db.execute<Record<string, unknown>>(
+        sql`
         select ${await heldDataProjection("work_schedules", WORK_SCHEDULES_DENIED_COLUMNS)}
           from work_schedules
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by effective_from
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     // Omission evidence for export-referenced files beyond documents:
@@ -1647,18 +1978,22 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       // gather both ways: assessments OF the subject's interviews, and
       // assessments the subject authored as interviewer — mirroring the
       // reviews module's subject-or-author rule.
-      const candidates = await db.execute<Record<string, unknown> & { id: string }>(sql`
+      const candidates = await db.execute<Record<string, unknown> & { id: string }>(
+        sql`
         select id, display_name, email, phone, source, source_detail,
                consent_recorded_at::text as consent_recorded_at, is_internal,
                notes, created_at::text as created_at
           from hrm_candidates
          where org_id = ${orgId} and party_id = ${partyId}
          order by created_at
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.candidates = candidates;
       const candidateIds = candidates.map((c) => c.id);
       payload.candidateConsents = candidateIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, candidate_id, purpose, granted_at::text as granted_at,
                    expires_at::text as expires_at, withdrawn_at::text as withdrawn_at, source
               from hrm_candidate_consents
@@ -1667,10 +2002,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by granted_at
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       const applications = candidateIds.length
-        ? (await db.execute<Record<string, unknown> & { id: string }>(sql`
+        ? await db.execute<Record<string, unknown> & { id: string }>(
+            sql`
             select id, requisition_id, candidate_id, stage_id, status,
                    applied_on::text as applied_on, rejected_reason,
                    withdrawn_at::text as withdrawn_at, hired_employment_id
@@ -1680,12 +2018,15 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by applied_on
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       payload.applications = applications;
       const applicationIds = applications.map((a) => a.id);
       payload.applicationEvents = applicationIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, application_id, kind, reason, recorded_at::text as recorded_at
               from hrm_application_events
              where org_id = ${orgId} and application_id in (${sql.join(
@@ -1693,10 +2034,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by recorded_at
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       const interviews = applicationIds.length
-        ? (await db.execute<Record<string, unknown> & { id: string }>(sql`
+        ? await db.execute<Record<string, unknown> & { id: string }>(
+            sql`
             select id, application_id, kind, scheduled_at::text as scheduled_at,
                    location, status, outcome, feedback, scorecard,
                    completed_at::text as completed_at
@@ -1706,28 +2050,36 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by scheduled_at
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       payload.interviews = interviews;
       const interviewIds = interviews.map((i) => i.id);
-      const scorecards = await db.execute<Record<string, unknown> & { id: string }>(sql`
+      const scorecards = await db.execute<Record<string, unknown> & { id: string }>(
+        sql`
         select id, interview_id, interviewer_party_id, overall,
                submitted_at::text as submitted_at, private_notes, shared_notes
           from hrm_scorecards
          where org_id = ${orgId}
-           and (${interviewIds.length
-             ? sql`interview_id in (${sql.join(
-               interviewIds.map((id) => sql`${id}`),
-               sql`, `,
-             )})`
-             : sql`false`}
+           and (${
+             interviewIds.length
+               ? sql`interview_id in (${sql.join(
+                   interviewIds.map((id) => sql`${id}`),
+                   sql`, `,
+                 )})`
+               : sql`false`
+           }
                or interviewer_party_id = ${partyId})
          order by submitted_at nulls last
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.scorecards = scorecards;
       const scorecardIds = scorecards.map((s) => s.id);
       payload.scorecardRatings = scorecardIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, scorecard_id, attribute_id, rating_key, note
               from hrm_scorecard_ratings
              where org_id = ${orgId} and scorecard_id in (${sql.join(
@@ -1735,10 +2087,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by scorecard_id
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       const offers = applicationIds.length
-        ? (await db.execute<Record<string, unknown> & { id: string }>(sql`
+        ? await db.execute<Record<string, unknown> & { id: string }>(
+            sql`
             select id, application_id, job_title, proposed_start_on::text as proposed_start_on,
                    compensation_amount::text as compensation_amount, compensation_currency,
                    status, sent_at::text as sent_at, decline_reason
@@ -1748,12 +2103,15 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by sent_at nulls last
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       payload.offers = offers;
       const offerIds = offers.map((o) => o.id);
       payload.offerVersions = offerIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, offer_id, version, payload
               from hrm_offer_versions
              where org_id = ${orgId} and offer_id in (${sql.join(
@@ -1761,10 +2119,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by version
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       payload.talentPoolMembers = candidateIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, pool_id, candidate_id, added_at::text as added_at, note
               from hrm_talent_pool_members
              where org_id = ${orgId} and candidate_id in (${sql.join(
@@ -1772,37 +2133,55 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by added_at
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
-      payload.interviewPanel = await db.execute<Record<string, unknown>>(sql`
+      payload.interviewPanel = await db.execute<Record<string, unknown>>(
+        sql`
         select id, interview_id, party_id
           from hrm_interview_panel
          where org_id = ${orgId}
-           and (${interviewIds.length
-             ? sql`interview_id in (${sql.join(
-               interviewIds.map((id) => sql`${id}`),
-               sql`, `,
-             )})`
-             : sql`false`}
+           and (${
+             interviewIds.length
+               ? sql`interview_id in (${sql.join(
+                   interviewIds.map((id) => sql`${id}`),
+                   sql`, `,
+                 )})`
+               : sql`false`
+           }
                or party_id = ${partyId})
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     await gather("qualifications", async () => {
       Object.assign(payload, await gatherTrainingRecords(orgId, partyId, heldDataProjection));
-      for (const participant of payload.trainingParticipants as { id: string; evidence_file_id: string | null }[]) {
+      for (const participant of payload.trainingParticipants as {
+        id: string;
+        evidence_file_id: string | null;
+      }[]) {
         if (!participant.evidence_file_id) continue;
         const fetched = await fetchExportFileBytes(orgId, participant.evidence_file_id);
         if (!fetched) {
-          omittedQualificationFiles.push({ id: participant.id, title: `training evidence ${participant.id.slice(0, 8)}`,
-            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain" });
+          omittedQualificationFiles.push({
+            id: participant.id,
+            title: `training evidence ${participant.id.slice(0, 8)}`,
+            reason:
+              "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+          });
           continue;
         }
-        entries.push({ name: `qualifications/training-evidence-${participant.id}.${fetched.extension ?? "bin"}`, data: fetched.bytes });
+        entries.push({
+          name: `qualifications/training-evidence-${participant.id}.${fetched.extension ?? "bin"}`,
+          data: fetched.bytes,
+        });
       }
       const qualifications = await db.execute<
         Record<string, unknown> & { id: string; evidence_file_id: string | null }
-      >(sql`
+      >(
+        sql`
         select id, employment_id, type_id, identifier, issued_on::text as issued_on,
                expires_on::text as expires_on, status, evidence_file_id,
                verified_at::text as verified_at, notes
@@ -1811,14 +2190,17 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by issued_on
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.qualifications = qualifications.map(({ evidence_file_id, ...rest }) => ({
         ...rest,
         hasEvidenceFile: evidence_file_id !== null,
       }));
       const qualificationIds = qualifications.map((q) => q.id);
       payload.qualificationEvents = qualificationIds.length
-        ? (await db.execute<Record<string, unknown>>(sql`
+        ? await db.execute<Record<string, unknown>>(
+            sql`
             select id, qualification_id, kind, reason, recorded_at::text as recorded_at
               from hrm_qualification_events
              where org_id = ${orgId} and qualification_id in (${sql.join(
@@ -1826,7 +2208,9 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
                sql`, `,
              )})
              order by recorded_at
-          `, "objects"))
+          `,
+            "objects",
+          )
         : [];
       let n = 0;
       for (const q of qualifications) {
@@ -1837,7 +2221,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           omittedQualificationFiles.push({
             id: q.id,
             title: `qualification evidence ${q.id.slice(0, 8)}`,
-            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+            reason:
+              "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
           });
           continue;
         }
@@ -1852,7 +2237,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     await gather("statements", async () => {
       const statements = await db.execute<
         Record<string, unknown> & { id: string; file_id: string | null; period_from: string }
-      >(sql`
+      >(
+        sql`
         select id, employment_id, cycle_id, period_from::text as period_from,
                period_to::text as period_to, payload, file_id,
                generated_at::text as generated_at
@@ -1861,26 +2247,34 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by period_from
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.compStatements = statements.map(({ file_id, ...rest }) => ({
         ...rest,
         hasFile: file_id !== null,
       }));
-      payload.compCycleLines = await db.execute<Record<string, unknown>>(sql`
+      payload.compCycleLines = await db.execute<Record<string, unknown>>(
+        sql`
         select id, cycle_id, employment_id, status
           from hrm_comp_cycle_lines
          where org_id = ${orgId} and employment_id in (
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by cycle_id
-      `, "objects");
-      payload.payInformationRequests = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      );
+      payload.payInformationRequests = await db.execute<Record<string, unknown>>(
+        sql`
         select id, employment_id
           from hrm_pay_information_requests
          where org_id = ${orgId} and employment_id in (
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
-      `, "objects");
+      `,
+        "objects",
+      );
       let n = 0;
       for (const s of statements) {
         const fileId = s.file_id;
@@ -1891,7 +2285,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           omittedStatements.push({
             id: s.id,
             title: `compensation statement ${period}`,
-            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+            reason:
+              "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
           });
           continue;
         }
@@ -1904,14 +2299,17 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     });
 
     await gather("surveys", async () => {
-      const invitations = await db.execute<Record<string, unknown> & { survey_id: string }>(sql`
+      const invitations = await db.execute<Record<string, unknown> & { survey_id: string }>(
+        sql`
         select i.id, i.survey_id, s.name as survey_name,
                i.sent_at::text as sent_at, i.responded_at::text as responded_at
           from hrm_survey_invitations i
           join hrm_surveys s on s.org_id = i.org_id and s.id = i.survey_id
          where i.org_id = ${orgId} and i.party_id = ${partyId}
          order by i.sent_at
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.surveyInvitations = invitations;
       // Only attributable responses export: anonymous surveys store a NULL
       // link by design and stay out (counted, never decrypted). Anything
@@ -1923,13 +2321,16 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
         submitted_at: string;
         answers: unknown;
         segment_snapshot: unknown;
-      }>(sql`
+      }>(
+        sql`
         select id, survey_id, respondent_link_enc, submitted_at::text as submitted_at,
                answers, segment_snapshot
           from hrm_survey_responses
          where org_id = ${orgId}
          order by submitted_at
-      `, "objects");
+      `,
+        "objects",
+      );
       const mine: Record<string, unknown>[] = [];
       let anonymousSkipped = 0;
       for (const row of rows) {
@@ -1954,13 +2355,16 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     await gather("clock_events", async () => {
       const events = await db.execute<
         Record<string, unknown> & { id: string; photo_file_id: string | null; occurred_at: string }
-      >(sql`
+      >(
+        sql`
         select id, kind, occurred_at::text as occurred_at, device_id, source,
                project_id, geo, geo_check, photo_file_id, status, void_reason
           from time_clock_events
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by occurred_at
-      `, "objects");
+      `,
+        "objects",
+      );
       payload.clockEvents = events.map(({ photo_file_id, ...rest }) => ({
         ...rest,
         hasPhoto: photo_file_id !== null,
@@ -1975,7 +2379,8 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           omittedClockPhotos.push({
             id: e.id,
             title: `clock photo ${when}`,
-            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+            reason:
+              "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
           });
           continue;
         }
@@ -1991,13 +2396,16 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       // The subject's own prior export ledger (metadata only, never file
       // bytes: the current export must not nest itself). The row being
       // built is excluded — it is still mid-build, not history.
-      payload.priorExports = await db.execute<Record<string, unknown>>(sql`
+      payload.priorExports = await db.execute<Record<string, unknown>>(
+        sql`
         select id, requested_at::text as requested_at, status, scope,
                completed_at::text as completed_at, error
           from hrm_data_subject_exports
          where org_id = ${orgId} and party_id = ${partyId} and id != ${exportId}
          order by requested_at
-      `, "objects");
+      `,
+        "objects",
+      );
     });
 
     // Omission downgrades run after their gathers resolve, where the module
@@ -2011,7 +2419,10 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     // reviewed reason (dsar-coverage.ts). A reader can verify the export
     // covers the whole personal-data inventory without trusting the code.
     payload.manifest = dsarCoverageManifest(included);
-    entries.unshift({ name: "export.json", data: Buffer.from(JSON.stringify(payload, null, 2), "utf8") });
+    entries.unshift({
+      name: "export.json",
+      data: Buffer.from(JSON.stringify(payload, null, 2), "utf8"),
+    });
     const zip = buildStoredZip(entries);
     const { fileId } = await storeCabinetFile(db, {
       orgId,
@@ -2042,14 +2453,19 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     // omissions recorded by later gathers.)
     const exportComplete = included.every((s) => s.status === "included");
     const terminalStatus = exportComplete ? "ready" : "incomplete";
-    const marked = (await db.execute<{ n: string }>(sql`
+    const marked = (
+      await db.execute<{ n: string }>(
+        sql`
       update hrm_data_subject_exports
          set status = ${terminalStatus}, file_id = ${fileId}, scope = ${JSON.stringify(included)}::jsonb,
              completed_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${exportId}
          and status = 'building' and claimed_by = ${owner}
       returning 1
-    `, "objects")).length;
+    `,
+        "objects",
+      )
+    ).length;
     if (marked === 0) {
       throw new HrmDocumentsError(
         "REFUSED",
@@ -2073,7 +2489,12 @@ function describeExportError(e: unknown): string {
   while (cursor instanceof Error && parts.length < 5) {
     parts.push(cursor.message);
     const cause = (cursor as { cause?: unknown }).cause;
-    cursor = cause instanceof Error ? cause : cause !== undefined && cause !== null ? new Error(String(cause)) : null;
+    cursor =
+      cause instanceof Error
+        ? cause
+        : cause !== undefined && cause !== null
+          ? new Error(String(cause))
+          : null;
   }
   if (parts.length === 0) return String(e);
   return parts.join(" | caused by ");
@@ -2094,12 +2515,15 @@ export async function drainExportQueue(orgId: string, limit = 5): Promise<number
       await buildExport(orgId, claimed.id, { owner: claimed.claimedBy });
       done += 1;
     } catch (cause) {
-      failures.push(new Error(`subject-access export ${claimed.id}: ${describeExportError(cause)}`, { cause }));
+      failures.push(
+        new Error(`subject-access export ${claimed.id}: ${describeExportError(cause)}`, { cause }),
+      );
     }
   }
   // Keep draining independent requests, but never report a failed build as
   // completed work. The persisted error remains visible to its requester.
-  if (failures.length) throw new AggregateError(failures, failures.map((error) => error.message).join("; "));
+  if (failures.length)
+    throw new AggregateError(failures, failures.map((error) => error.message).join("; "));
   return done;
 }
 
@@ -2118,21 +2542,40 @@ export async function downloadExport(query: {
     // must not download a subject's whole data zip for a switched-off
     // feature. The org row lock serializes against the disable.
     await assertDataSubjectExportFeature(db, query.orgId);
-    const row = (await db.execute<ExportRow>(sql`
+    const row = (
+      await db.execute<ExportRow>(
+        sql`
       ${EXPORT_COLS} where org_id = ${query.orgId} and id = ${query.exportId}
-    `, "objects"))[0];
-    if (!row) throw new HrmDocumentsError("NOT_FOUND", "export request is not visible in this organization");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!row)
+      throw new HrmDocumentsError(
+        "NOT_FOUND",
+        "export request is not visible in this organization",
+      );
     if (row.status !== "ready" && row.status !== "incomplete" && row.status !== "delivered") {
       throw new HrmDocumentsError(
         "REFUSED",
         `this export is ${row.status} — download opens once it is ready`,
       );
     }
-    const manages = await actorHasPermission(db, query.orgId, query.actorId, "hrm.documents.manage");
+    const manages = await actorHasPermission(
+      db,
+      query.orgId,
+      query.actorId,
+      "hrm.documents.manage",
+    );
     if (!manages) {
-      const own = (await db.execute<{ partyId: string | null }>(sql`
+      const own = (
+        await db.execute<{ partyId: string | null }>(
+          sql`
         select party_id as "partyId" from users where org_id = ${query.orgId} and id = ${query.actorId}
-      `, "objects"))[0]?.partyId;
+      `,
+          "objects",
+        )
+      )[0]?.partyId;
       if (own !== row.party_id) {
         throw new HrmDocumentsError(
           "FORBIDDEN",
@@ -2144,24 +2587,34 @@ export async function downloadExport(query: {
     // missing one — and it is never marked delivered on a refused read.
     await requirePartyInScope(db, query.orgId, query.actorId, row.party_id);
     if (!row.file_id) throw new HrmDocumentsError("NOT_FOUND", "this export has no file yet");
-    const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null }>(sql`
+    const blob = (
+      await db.execute<{ storage_kind: string; bytes: Buffer | null }>(
+        sql`
       select v.storage_kind, b.bytes
         from files f
         join file_versions v on v.id = f.current_version_id
         left join file_blobs b on b.version_id = v.id
        where f.id = ${row.file_id} and f.org_id = ${query.orgId}
-    `, "objects"))[0];
-    if (!blob) throw new HrmDocumentsError("NOT_FOUND", "the export file is missing from the cabinet");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!blob)
+      throw new HrmDocumentsError("NOT_FOUND", "the export file is missing from the cabinet");
     // Masked-clone tombstone: refuse by name (mapped to 403 downstream),
     // never as a missing file or a bare 500.
     refuseMaskedStorageKind(blob.storage_kind);
-    if (!blob.bytes) throw new HrmDocumentsError("NOT_FOUND", "the export file is missing from the cabinet");
+    if (!blob.bytes)
+      throw new HrmDocumentsError("NOT_FOUND", "the export file is missing from the cabinet");
     if (row.status === "ready") {
       await db.execute(sql`
         update hrm_data_subject_exports set status = 'delivered', updated_at = now()
          where org_id = ${query.orgId} and id = ${query.exportId} and status = 'ready'
       `);
     }
-    return { bytes: blob.bytes as Buffer, filename: `subject-access-export-${row.id.slice(0, 8)}.zip` };
+    return {
+      bytes: blob.bytes as Buffer,
+      filename: `subject-access-export-${row.id.slice(0, 8)}.zip`,
+    };
   });
 }

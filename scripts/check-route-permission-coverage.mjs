@@ -49,10 +49,16 @@ function hasNamedImport(source, name, test) {
   let found = false;
   const visit = (node) => {
     if (found) return;
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && test(node.moduleSpecifier.text)) {
+    if (
+      ts.isImportDeclaration(node) &&
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      test(node.moduleSpecifier.text)
+    ) {
       const bindings = node.importClause?.namedBindings;
       if (bindings && ts.isNamedImports(bindings)) {
-        found = bindings.elements.some((element) => (element.propertyName ?? element.name).text === name);
+        found = bindings.elements.some(
+          (element) => (element.propertyName ?? element.name).text === name,
+        );
       }
     }
     if (!found) ts.forEachChild(node, visit);
@@ -72,7 +78,9 @@ function factorySpecifier(fileDir) {
 }
 
 function jsonSpecifier(specifier) {
-  return specifier === "@/lib/api/json" || specifier.endsWith("/lib/api/json") || specifier === "./json";
+  return (
+    specifier === "@/lib/api/json" || specifier.endsWith("/lib/api/json") || specifier === "./json"
+  );
 }
 
 /**
@@ -101,16 +109,33 @@ export function findRouteFeatures(sourceText) {
       ts.isObjectLiteralExpression(node.arguments[0])
     ) {
       const literal = node.arguments[0];
-      const prop = (name) => literal.properties.find((property) =>
-        ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === name);
+      const prop = (name) =>
+        literal.properties.find(
+          (property) =>
+            ts.isPropertyAssignment(property) &&
+            ts.isIdentifier(property.name) &&
+            property.name.text === name,
+        );
       const feature = prop("feature");
-      const entry = { hasPublic: prop("public") !== undefined, hasFeature: feature !== undefined, noneReason: null, noneEmpty: false };
+      const entry = {
+        hasPublic: prop("public") !== undefined,
+        hasFeature: feature !== undefined,
+        noneReason: null,
+        noneEmpty: false,
+      };
       if (feature && ts.isObjectLiteralExpression(feature.initializer)) {
-        const none = feature.initializer.properties.find((property) =>
-          ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === "none");
+        const none = feature.initializer.properties.find(
+          (property) =>
+            ts.isPropertyAssignment(property) &&
+            ts.isIdentifier(property.name) &&
+            property.name.text === "none",
+        );
         if (none) {
-          entry.noneReason = ts.isStringLiteral(none.initializer) ? none.initializer.text : "<non-literal>";
-          entry.noneEmpty = ts.isStringLiteral(none.initializer) && none.initializer.text.trim() === "";
+          entry.noneReason = ts.isStringLiteral(none.initializer)
+            ? none.initializer.text
+            : "<non-literal>";
+          entry.noneEmpty =
+            ts.isStringLiteral(none.initializer) && none.initializer.text.trim() === "";
         }
       }
       calls.push(entry);
@@ -140,20 +165,33 @@ export function analyzeRouteBodies(sourceText) {
 
   const resolveSchema = (node, seen = new Set()) => {
     let current = unwrap(node);
-    while (current && ts.isIdentifier(current) && bindings.has(current.text) && !seen.has(current.text)) {
+    while (
+      current &&
+      ts.isIdentifier(current) &&
+      bindings.has(current.text) &&
+      !seen.has(current.text)
+    ) {
       seen.add(current.text);
       current = unwrap(bindings.get(current.text));
     }
     return current;
   };
   const opaqueReason = (options, field) => {
-    const opaque = options.properties.find((property) =>
-      ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === "opaque");
-    const allowance = opaque && ts.isObjectLiteralExpression(opaque.initializer)
-      ? opaque.initializer.properties.find((property) =>
-          ts.isPropertyAssignment(property) &&
-          ((ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === field))
-      : undefined;
+    const opaque = options.properties.find(
+      (property) =>
+        ts.isPropertyAssignment(property) &&
+        ts.isIdentifier(property.name) &&
+        property.name.text === "opaque",
+    );
+    const allowance =
+      opaque && ts.isObjectLiteralExpression(opaque.initializer)
+        ? opaque.initializer.properties.find(
+            (property) =>
+              ts.isPropertyAssignment(property) &&
+              (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
+              property.name.text === field,
+          )
+        : undefined;
     if (!allowance || !ts.isPropertyAssignment(allowance)) return null;
     return ts.isStringLiteral(allowance.initializer) && allowance.initializer.text.trim() !== ""
       ? allowance.initializer.text
@@ -163,7 +201,11 @@ export function analyzeRouteBodies(sourceText) {
     let current = resolveSchema(node);
     while (current && ts.isCallExpression(current)) {
       const callee = unwrap(current.expression);
-      if (ts.isPropertyAccessExpression(callee) && ["optional", "default", "catch"].includes(callee.name.text)) return true;
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        ["optional", "default", "catch"].includes(callee.name.text)
+      )
+        return true;
       if (ts.isIdentifier(callee) && callee.text === "optional") return true;
       if (ts.isPropertyAccessExpression(callee) && current.arguments.length > 0) {
         current = unwrap(callee.expression);
@@ -177,17 +219,25 @@ export function analyzeRouteBodies(sourceText) {
     const schema = resolveSchema(node, seen);
     if (!schema || !ts.isCallExpression(schema)) return [];
     const callee = unwrap(schema.expression);
-    if (ts.isPropertyAccessExpression(callee) && ["object", "looseObject"].includes(callee.name.text)) {
+    if (
+      ts.isPropertyAccessExpression(callee) &&
+      ["object", "looseObject"].includes(callee.name.text)
+    ) {
       const shape = schema.arguments[0];
       return shape && ts.isObjectLiteralExpression(shape) ? [shape] : [];
     }
-    if (ts.isPropertyAccessExpression(callee) && ["union", "discriminatedUnion"].includes(callee.name.text)) {
+    if (
+      ts.isPropertyAccessExpression(callee) &&
+      ["union", "discriminatedUnion"].includes(callee.name.text)
+    ) {
       const options = schema.arguments.find(ts.isArrayLiteralExpression);
       return options ? options.elements.flatMap((option) => objectShapes(option, seen)) : [];
     }
     if (
       ts.isPropertyAccessExpression(callee) &&
-      ["refine", "superRefine", "strict", "strip", "passthrough", "catchall"].includes(callee.name.text)
+      ["refine", "superRefine", "strict", "strip", "passthrough", "catchall"].includes(
+        callee.name.text,
+      )
     ) {
       return objectShapes(callee.expression, seen);
     }
@@ -200,41 +250,76 @@ export function analyzeRouteBodies(sourceText) {
       if (!ts.isPropertyAccessExpression(callee)) return false;
       if (["refine", "superRefine"].includes(callee.name.text)) {
         const predicate = schema.arguments[0];
-        const parameter = predicate && (ts.isArrowFunction(predicate) || ts.isFunctionExpression(predicate))
-          ? predicate.parameters[0]?.name
-          : undefined;
+        const parameter =
+          predicate && (ts.isArrowFunction(predicate) || ts.isFunctionExpression(predicate))
+            ? predicate.parameters[0]?.name
+            : undefined;
         if (parameter && ts.isIdentifier(parameter)) {
-          const names = new Set(shape.properties
-            .filter((property) => ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)))
-            .map((property) => property.name.text));
+          const names = new Set(
+            shape.properties
+              .filter(
+                (property) =>
+                  ts.isPropertyAssignment(property) &&
+                  (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)),
+              )
+              .map((property) => property.name.text),
+          );
           let provesNonEmpty = false;
           const inspectPredicate = (candidate) => {
             if (ts.isBinaryExpression(candidate)) {
               const op = candidate.operatorToken.kind;
-              if ([ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken].includes(op)) {
-                const isNullish = (value) => (ts.isIdentifier(unwrap(value)) && unwrap(value).text === "undefined") ||
+              if (
+                [
+                  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+                  ts.SyntaxKind.ExclamationEqualsToken,
+                ].includes(op)
+              ) {
+                const isNullish = (value) =>
+                  (ts.isIdentifier(unwrap(value)) && unwrap(value).text === "undefined") ||
                   unwrap(value).kind === ts.SyntaxKind.NullKeyword;
                 const checksField = (value) => {
                   const field = unwrap(value);
-                  return ts.isPropertyAccessExpression(field) && ts.isIdentifier(field.expression) &&
-                    field.expression.text === parameter.text && names.has(field.name.text);
+                  return (
+                    ts.isPropertyAccessExpression(field) &&
+                    ts.isIdentifier(field.expression) &&
+                    field.expression.text === parameter.text &&
+                    names.has(field.name.text)
+                  );
                 };
-                if ((checksField(candidate.left) && isNullish(candidate.right)) ||
-                    (checksField(candidate.right) && isNullish(candidate.left))) provesNonEmpty = true;
+                if (
+                  (checksField(candidate.left) && isNullish(candidate.right)) ||
+                  (checksField(candidate.right) && isNullish(candidate.left))
+                )
+                  provesNonEmpty = true;
               }
             }
             if (
               ts.isBinaryExpression(candidate) &&
-              [ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(candidate.operatorToken.kind)
+              [ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(
+                candidate.operatorToken.kind,
+              )
             ) {
               const left = unwrap(candidate.left);
               const right = unwrap(candidate.right);
-              if (ts.isNumericLiteral(right) && Number(right.text) === 0 && ts.isPropertyAccessExpression(left) &&
-                  left.name.text === "length" && ts.isCallExpression(unwrap(left.expression))) {
+              if (
+                ts.isNumericLiteral(right) &&
+                Number(right.text) === 0 &&
+                ts.isPropertyAccessExpression(left) &&
+                left.name.text === "length" &&
+                ts.isCallExpression(unwrap(left.expression))
+              ) {
                 const keys = unwrap(left.expression);
                 const keysCallee = unwrap(keys.expression);
-                if (ts.isPropertyAccessExpression(keysCallee) && ts.isIdentifier(keysCallee.expression) && keysCallee.expression.text === "Object" &&
-                    keysCallee.name.text === "keys" && keys.arguments.some((argument) => ts.isIdentifier(unwrap(argument)) && unwrap(argument).text === parameter.text)) {
+                if (
+                  ts.isPropertyAccessExpression(keysCallee) &&
+                  ts.isIdentifier(keysCallee.expression) &&
+                  keysCallee.expression.text === "Object" &&
+                  keysCallee.name.text === "keys" &&
+                  keys.arguments.some(
+                    (argument) =>
+                      ts.isIdentifier(unwrap(argument)) && unwrap(argument).text === parameter.text,
+                  )
+                ) {
                   provesNonEmpty = true;
                 }
               }
@@ -252,21 +337,40 @@ export function analyzeRouteBodies(sourceText) {
   };
   const topLevelField = (node, bodySchema) => {
     for (let current = node.parent; current && current !== bodySchema; current = current.parent) {
-      if (!ts.isPropertyAssignment(current) || !ts.isObjectLiteralExpression(current.parent)) continue;
+      if (!ts.isPropertyAssignment(current) || !ts.isObjectLiteralExpression(current.parent))
+        continue;
       const parentCall = current.parent.parent;
-      if (!parentCall || !ts.isCallExpression(parentCall) || parentCall.arguments[0] !== current.parent) continue;
+      if (
+        !parentCall ||
+        !ts.isCallExpression(parentCall) ||
+        parentCall.arguments[0] !== current.parent
+      )
+        continue;
       const callee = unwrap(parentCall.expression);
-      if (!ts.isPropertyAccessExpression(callee) || !["object", "looseObject"].includes(callee.name.text)) continue;
+      if (
+        !ts.isPropertyAccessExpression(callee) ||
+        !["object", "looseObject"].includes(callee.name.text)
+      )
+        continue;
       const shapeProps = current.parent.properties;
       const outer = shapeProps.find((property) => property === current);
-      if (outer && (ts.isIdentifier(outer.name) || ts.isStringLiteral(outer.name))) return outer.name.text;
+      if (outer && (ts.isIdentifier(outer.name) || ts.isStringLiteral(outer.name)))
+        return outer.name.text;
     }
     return "body";
   };
   const inspectHandler = (handler) => {
     const walk = (node) => {
-      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Request") {
-        violations.push({ node, message: "defineRoute handler constructs a new Request; use its parsed body and request context directly" });
+      if (
+        ts.isNewExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "Request"
+      ) {
+        violations.push({
+          node,
+          message:
+            "defineRoute handler constructs a new Request; use its parsed body and request context directly",
+        });
       }
       ts.forEachChild(node, walk);
     };
@@ -275,12 +379,19 @@ export function analyzeRouteBodies(sourceText) {
 
   const visitRoutes = (node) => {
     if (
-      ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "defineRoute" &&
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "defineRoute" &&
       ts.isObjectLiteralExpression(node.arguments[0])
     ) {
       const options = node.arguments[0];
-      const getOption = (name) => options.properties.find((property) =>
-        ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === name);
+      const getOption = (name) =>
+        options.properties.find(
+          (property) =>
+            ts.isPropertyAssignment(property) &&
+            ts.isIdentifier(property.name) &&
+            property.name.text === name,
+        );
       const bodyProperty = getOption("body");
       if (bodyProperty && ts.isPropertyAssignment(bodyProperty)) {
         const bodySchema = resolveSchema(bodyProperty.initializer);
@@ -288,13 +399,22 @@ export function analyzeRouteBodies(sourceText) {
         const walkBody = (child) => {
           if (ts.isCallExpression(child)) {
             const callee = unwrap(child.expression);
-            if (ts.isPropertyAccessExpression(callee) && ["unknown", "any"].includes(callee.name.text)) {
+            if (
+              ts.isPropertyAccessExpression(callee) &&
+              ["unknown", "any"].includes(callee.name.text)
+            ) {
               const field = topLevelField(child, bodySchema);
               const reason = opaqueReason(options, field);
               if (reason === null) {
-                fieldViolations.push({ node: child, message: `body field "${field}" uses z.${callee.name.text}() without an opaque allowance and reason` });
+                fieldViolations.push({
+                  node: child,
+                  message: `body field "${field}" uses z.${callee.name.text}() without an opaque allowance and reason`,
+                });
               } else if (reason === "") {
-                fieldViolations.push({ node: child, message: `opaque allowance for body field "${field}" needs a non-empty reason` });
+                fieldViolations.push({
+                  node: child,
+                  message: `opaque allowance for body field "${field}" needs a non-empty reason`,
+                });
               }
             }
           }
@@ -305,15 +425,28 @@ export function analyzeRouteBodies(sourceText) {
 
         const shapes = objectShapes(bodyProperty.initializer);
         for (const shape of shapes) {
-          const properties = shape.properties.filter((property) => ts.isPropertyAssignment(property));
-          if (properties.length === 0 || !properties.every((property) => isOptional(property.initializer))) continue;
+          const properties = shape.properties.filter((property) =>
+            ts.isPropertyAssignment(property),
+          );
+          if (
+            properties.length === 0 ||
+            !properties.every((property) => isOptional(property.initializer))
+          )
+            continue;
           const allOpaque = properties.every((property) => {
-            const name = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : "";
+            const name =
+              ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
+                ? property.name.text
+                : "";
             const reason = opaqueReason(options, name);
             return reason !== null && reason !== "";
           });
           if (!allOpaque && !hasNonEmptyRefinement(bodyProperty.initializer, shape)) {
-            violations.push({ node: shape, message: "body object has only optional fields; require a field or explicitly allow each opaque JSON field with a reason" });
+            violations.push({
+              node: shape,
+              message:
+                "body object has only optional fields; require a field or explicitly allow each opaque JSON field with a reason",
+            });
           }
         }
       }
@@ -346,10 +479,7 @@ function unwrap(node) {
 function stringSet(node) {
   const values = [];
   const unwrapped = unwrap(node);
-  const list =
-    unwrapped && ts.isNewExpression(unwrapped)
-      ? unwrapped.arguments?.[0]
-      : unwrapped;
+  const list = unwrapped && ts.isNewExpression(unwrapped) ? unwrapped.arguments?.[0] : unwrapped;
   const elements = list && ts.isArrayLiteralExpression(list) ? list.elements : [];
   for (const element of elements) {
     if (ts.isStringLiteral(element)) values.push(element.text);
@@ -366,8 +496,10 @@ export function loadPublicSurface(proxySourceText) {
     if (ts.isVariableStatement(node)) {
       for (const declaration of node.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
-        if (declaration.name.text === "EXACT_PUBLIC_PATHS") exact = stringSet(declaration.initializer);
-        if (declaration.name.text === "PUBLIC_SEGMENT_ROOTS") roots = stringSet(declaration.initializer);
+        if (declaration.name.text === "EXACT_PUBLIC_PATHS")
+          exact = stringSet(declaration.initializer);
+        if (declaration.name.text === "PUBLIC_SEGMENT_ROOTS")
+          roots = stringSet(declaration.initializer);
       }
     }
     ts.forEachChild(node, visit);
@@ -386,7 +518,11 @@ function routeUrlPath(file) {
 }
 
 function discoverRoutes(root = repoRoot()) {
-  return execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+  return execFileSync("git", ["ls-files", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .split("\0")
     .filter(Boolean)
     .filter((file) => file.startsWith(API_PREFIX) && file.endsWith("/route.ts"));
@@ -418,10 +554,14 @@ function snapshot(root) {
       }
       for (const call of findRouteFeatures(source)) {
         if (!call.hasPublic && !call.hasFeature) {
-          featureViolations.push(`${file}: defineRoute without a feature (the type refuses omission; add a key or { none: "<reason>" })`);
+          featureViolations.push(
+            `${file}: defineRoute without a feature (the type refuses omission; add a key or { none: "<reason>" })`,
+          );
         }
-        if (call.noneEmpty) featureViolations.push(`${file}: feature { none: "" } carries no reason`);
-        if (call.noneReason !== null && !call.noneEmpty) noneRoutes.push(`${file} ({ none: "${call.noneReason}" })`);
+        if (call.noneEmpty)
+          featureViolations.push(`${file}: feature { none: "" } carries no reason`);
+        if (call.noneReason !== null && !call.noneEmpty)
+          noneRoutes.push(`${file} ({ none: "${call.noneReason}" })`);
       }
       continue;
     }
@@ -438,20 +578,25 @@ function runCli() {
   if (process.argv.includes("--write-baseline")) {
     const current = snapshot(root);
     const baseline = {
-      $comment: "Shrink-only ledger for the route-factory migration: every entry is a non-public route still hand-rolling its guards. Shards remove entries as they migrate; nothing here may grow.",
+      $comment:
+        "Shrink-only ledger for the route-factory migration: every entry is a non-public route still hand-rolling its guards. Shards remove entries as they migrate; nothing here may grow.",
       routes: current.uncovered,
       jsonObjectImporters: current.jsonObjectImporters,
       sqlImporters: current.sqlImporters,
     };
     writeFileSync(join(root, BASELINE_PATH), `${JSON.stringify(baseline, null, 2)}\n`);
-    console.log(`seeded ${BASELINE_PATH}: ${current.uncovered.length} routes, ${current.jsonObjectImporters} jsonObject importers, ${current.sqlImporters} sql importers.`);
+    console.log(
+      `seeded ${BASELINE_PATH}: ${current.uncovered.length} routes, ${current.jsonObjectImporters} jsonObject importers, ${current.sqlImporters} sql importers.`,
+    );
     return;
   }
 
   const current = snapshot(root);
   const baseline = readBaseline(root);
   if (!baseline) {
-    console.error(`missing ${BASELINE_PATH}: seed it with \`node ${SELF} --write-baseline\` at landing.`);
+    console.error(
+      `missing ${BASELINE_PATH}: seed it with \`node ${SELF} --write-baseline\` at landing.`,
+    );
     process.exitCode = 1;
     return;
   }
@@ -459,16 +604,24 @@ function runCli() {
   const baselineSet = new Set(baseline.routes ?? []);
   const currentSet = new Set(current.uncovered);
   for (const file of current.uncovered) {
-    if (!baselineSet.has(file)) failures.push(`new uncovered route (use the factory or mark public in proxy-policy): ${file}`);
+    if (!baselineSet.has(file))
+      failures.push(
+        `new uncovered route (use the factory or mark public in proxy-policy): ${file}`,
+      );
   }
   for (const file of baseline.routes ?? []) {
-    if (!currentSet.has(file)) failures.push(`stale baseline entry (migrated — remove it): ${file}`);
+    if (!currentSet.has(file))
+      failures.push(`stale baseline entry (migrated — remove it): ${file}`);
   }
   if (current.jsonObjectImporters !== baseline.jsonObjectImporters) {
-    failures.push(`jsonObject importers: tree has ${current.jsonObjectImporters}, baseline pins ${baseline.jsonObjectImporters} (update the ledger as shards land)`);
+    failures.push(
+      `jsonObject importers: tree has ${current.jsonObjectImporters}, baseline pins ${baseline.jsonObjectImporters} (update the ledger as shards land)`,
+    );
   }
   if (current.sqlImporters !== baseline.sqlImporters) {
-    failures.push(`sql importers: tree has ${current.sqlImporters}, baseline pins ${baseline.sqlImporters} (update the ledger as shards land)`);
+    failures.push(
+      `sql importers: tree has ${current.sqlImporters}, baseline pins ${baseline.sqlImporters} (update the ledger as shards land)`,
+    );
   }
   failures.push(...current.featureViolations);
   if (failures.length > 0) {
@@ -477,7 +630,7 @@ function runCli() {
   } else {
     console.log(
       `route permission coverage passed (${current.uncovered.length} ledger routes, ` +
-      `${current.jsonObjectImporters} jsonObject importers, ${current.sqlImporters} sql importers).`,
+        `${current.jsonObjectImporters} jsonObject importers, ${current.sqlImporters} sql importers).`,
     );
   }
   if (current.noneRoutes.length > 0) {

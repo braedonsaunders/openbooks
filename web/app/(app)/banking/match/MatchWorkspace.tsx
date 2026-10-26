@@ -1,152 +1,200 @@
-'use client'
+"use client";
 
-import { sum, toUnits } from '@openbooks/engine/money/money'
-import { parseStoredMatchReasons, type MatchReason } from '@openbooks/engine/banking/match-scoring'
-import { useMoney } from '@/components/money-provider'
-import type { MoneyValue } from '@/lib/money-format'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { useEffect, useId, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { ArrowUpRight, Ban, FilePlus2, Link2, Pencil, Receipt, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
-import { toast } from 'sonner'
+import { sum, toUnits } from "@openbooks/engine/money/money";
+import { parseStoredMatchReasons, type MatchReason } from "@openbooks/engine/banking/match-scoring";
+import { useMoney } from "@/components/money-provider";
+import type { MoneyValue } from "@/lib/money-format";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { useEffect, useId, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
-  Badge, Button, Drawer, EmptyState, Label, SearchSelect, Table, TableBody,
-  TableCell, TableHead, TableHeader, TableRow, cn,
-} from '@openbooks/ui'
-import { SearchInput } from '../../../../components/search-input'
-import { Pagination } from '../../../../components/pagination'
-import { confirmDialog } from '../../../../lib/confirm'
-import { promptDialog } from '../../../../lib/prompt'
-import { isZeroAmount } from '../[accountId]/reconcile/[reconciliationId]/DifferenceBadge'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { CorrectStatementLineDialog } from './CorrectStatementLineDialog'
-import { MatchReasonBadges, matchReasonLabel } from './MatchReasons'
-import { SettleLineDrawer } from './SettleLineDrawer'
-type Search = Record<string, string | string[] | undefined>
+  ArrowUpRight,
+  Ban,
+  FilePlus2,
+  Link2,
+  Pencil,
+  Receipt,
+  RotateCcw,
+  Sparkles,
+  Wand2,
+  Workflow,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  Badge,
+  Button,
+  Drawer,
+  EmptyState,
+  Label,
+  SearchSelect,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from "@openbooks/ui";
+import { SearchInput } from "../../../../components/search-input";
+import { Pagination } from "../../../../components/pagination";
+import { confirmDialog } from "../../../../lib/confirm";
+import { promptDialog } from "../../../../lib/prompt";
+import { isZeroAmount } from "../[accountId]/reconcile/[reconciliationId]/DifferenceBadge";
+import { InteractiveTableRow } from "@/components/interactive-table-row";
+import { CorrectStatementLineDialog } from "./CorrectStatementLineDialog";
+import { MatchReasonBadges, matchReasonLabel } from "./MatchReasons";
+import { SettleLineDrawer } from "./SettleLineDrawer";
+type Search = Record<string, string | string[] | undefined>;
 type Opt = { id: string; label: string; unmatched?: number };
-interface Account { id: string; label: string }
-interface Session { id: string; throughDate: string; statementBalance: string; currency: string }
+interface Account {
+  id: string;
+  label: string;
+}
+interface Session {
+  id: string;
+  throughDate: string;
+  statementBalance: string;
+  currency: string;
+}
 interface ListParams {
-  q?: string
-  page: number
-  perPage: number
+  q?: string;
+  page: number;
+  perPage: number;
 }
 export interface StatementRow extends Record<string, unknown> {
-  id: string
-  posted_on: string
-  amount: string
-  description: string | null
-  counterparty_ref?: string | null
-  possible_duplicate_of?: string | null
-  dup_posted_on?: string | null
-  dup_amount?: string | number | null
-  dup_description?: string | null
+  id: string;
+  posted_on: string;
+  amount: string;
+  description: string | null;
+  counterparty_ref?: string | null;
+  possible_duplicate_of?: string | null;
+  dup_posted_on?: string | null;
+  dup_amount?: string | number | null;
+  dup_description?: string | null;
 }
 export interface GlRow extends Record<string, unknown> {
-  id: string
-  posting_date: string
-  entry_number: string
-  amount: string
-  memo: string | null
-  party: string | null
+  id: string;
+  posting_date: string;
+  entry_number: string;
+  amount: string;
+  memo: string | null;
+  party: string | null;
 }
 export interface ReviewRow extends Record<string, unknown> {
-  id: string
-  statement_line_id: string
-  confidence: string | number
+  id: string;
+  statement_line_id: string;
+  confidence: string | number;
   /** Stored reasons behind the automatic match; null for matches without recorded reasons. */
-  match_reasons?: unknown
-  stmt_date: string
-  stmt_amount: string
-  stmt_description: string | null
-  entry_number: string
+  match_reasons?: unknown;
+  stmt_date: string;
+  stmt_amount: string;
+  stmt_description: string | null;
+  entry_number: string;
 }
 interface MatchData {
-  stmtRows: StatementRow[]
-  stmtTotal: number
-  stmtParams: ListParams
+  stmtRows: StatementRow[];
+  stmtTotal: number;
+  stmtParams: ListParams;
   /** Offset accounts suggested from confirmed history, by statement line id. */
-  offsetSuggestions?: Record<string, { offsetAccountId: string; reasons: MatchReason[] }>
+  offsetSuggestions?: Record<string, { offsetAccountId: string; reasons: MatchReason[] }>;
   /** The viewer may record customer receipts or vendor payments. */
-  canRecordPayments?: boolean
-  flaggedTotal: number
-  glRows: GlRow[]
-  glTotal: number
-  glParams: ListParams
-  reviewRows: ReviewRow[]
-  reviewTotal: number
-  excludedRows: StatementRow[]
-  excludedTotal: number
-  exParams: ListParams
+  canRecordPayments?: boolean;
+  flaggedTotal: number;
+  glRows: GlRow[];
+  glTotal: number;
+  glParams: ListParams;
+  reviewRows: ReviewRow[];
+  reviewTotal: number;
+  excludedRows: StatementRow[];
+  excludedTotal: number;
+  exParams: ListParams;
 }
 interface MatchTotals {
-  statementBalance: string
-  clearedBalance: string
-  difference: string
+  statementBalance: string;
+  clearedBalance: string;
+  difference: string;
 }
 interface MatchActionResult {
-  error?: string
-  matched?: number
-  highConfidence?: number
-  mediumConfidence?: number
-  excluded?: number
-  scanned?: number
-  journalLinesReconciled?: number
-  refused?: { reason: string }[]
+  error?: string;
+  matched?: number;
+  highConfidence?: number;
+  mediumConfidence?: number;
+  excluded?: number;
+  scanned?: number;
+  journalLinesReconciled?: number;
+  refused?: { reason: string }[];
 }
 
-const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
-const NO_REASONS: readonly MatchReason[] = []
+const selectedRow = "bg-teal-50 dark:bg-teal-950/40";
+const NO_REASONS: readonly MatchReason[] = [];
 
 /** Stored confidence (0..1, four places) as a whole percentage, exactly. */
 export function confidencePercent(confidence: string | number): string {
-  return `${toUnits(String(confidence)) / 100n}%`
+  return `${toUnits(String(confidence)) / 100n}%`;
 }
-const NO_SUGGESTIONS: ReadonlyMap<string, { ruleId: string; ruleName: string }> = new Map()
-const NO_SELECTED_GL: ReadonlySet<string> = new Set()
+const NO_SUGGESTIONS: ReadonlyMap<string, { ruleId: string; ruleName: string }> = new Map();
+const NO_SELECTED_GL: ReadonlySet<string> = new Set();
 
 export function matchSelectionMatchesScope(selectionScope: string, currentScope: string): boolean {
-  return selectionScope === currentScope
+  return selectionScope === currentScope;
 }
 
 export function MatchWorkspace({
-  accounts, offsetAccounts, account, session, data, totals, currentParams, tab,
+  accounts,
+  offsetAccounts,
+  account,
+  session,
+  data,
+  totals,
+  currentParams,
+  tab,
 }: {
-  accounts: Opt[]
-  offsetAccounts: Opt[]
-  account: Account | null
-  session: Session | null
-  data: MatchData | null
-  totals: MatchTotals | null
-  currentParams: Search
-  tab: 'match' | 'review' | 'excluded'
+  accounts: Opt[];
+  offsetAccounts: Opt[];
+  account: Account | null;
+  session: Session | null;
+  data: MatchData | null;
+  totals: MatchTotals | null;
+  currentParams: Search;
+  tab: "match" | "review" | "excluded";
 }) {
-  const { money: formatMoney } = useMoney(session?.currency)
-  const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 })
-  const t = useTranslations('banking.match')
-  const tW = useTranslations('banking.workspace')
-  const tCommon = useTranslations('common')
-  const tBanking = useTranslations('banking')
-  const tReasons = useTranslations('banking.match.reasons')
-  const router = useRouter()
-  const accountPickerId = useId()
-  const [busy, setBusy] = useState(false)
-  const [selection, setSelection] = useState<{ scope: string; stmt: Set<string>; gl: Set<string> }>({ scope: '', stmt: new Set(), gl: new Set() })
-  const [addLine, setAddLine] = useState<{ id: string; label: string; reasons: readonly MatchReason[] } | null>(null)
-  const [settleLine, setSettleLine] = useState<{ id: string; label: string } | null>(null)
-  const [correctLine, setCorrectLine] = useState<{ id: string; posted_on: string; amount: string; description: string | null } | null>(null)
-  const [offsetId, setOffsetId] = useState('')
+  const { money: formatMoney } = useMoney(session?.currency);
+  const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 });
+  const t = useTranslations("banking.match");
+  const tW = useTranslations("banking.workspace");
+  const tCommon = useTranslations("common");
+  const tBanking = useTranslations("banking");
+  const tReasons = useTranslations("banking.match.reasons");
+  const router = useRouter();
+  const accountPickerId = useId();
+  const [busy, setBusy] = useState(false);
+  const [selection, setSelection] = useState<{ scope: string; stmt: Set<string>; gl: Set<string> }>(
+    { scope: "", stmt: new Set(), gl: new Set() },
+  );
+  const [addLine, setAddLine] = useState<{
+    id: string;
+    label: string;
+    reasons: readonly MatchReason[];
+  } | null>(null);
+  const [settleLine, setSettleLine] = useState<{ id: string; label: string } | null>(null);
+  const [correctLine, setCorrectLine] = useState<{
+    id: string;
+    posted_on: string;
+    amount: string;
+    description: string | null;
+  } | null>(null);
+  const [offsetId, setOffsetId] = useState("");
   // A refused add-journal that only fires a transient toast reads as
   // "nothing happened" once it dismisses with the dialog left open
   // The typed refusal also persists as a dialog-level alert,
   // cleared on the next edit — the same pattern ImportStatementButton uses.
-  const [addError, setAddError] = useState<string | null>(null)
+  const [addError, setAddError] = useState<string | null>(null);
   // Suggest-mode rule proposals for the current account's unmatched lines,
   // keyed by statement line id. Computed live via the rules preview (no post).
-  const accountId = account?.id
-  const sessionId = session?.id
+  const accountId = account?.id;
+  const sessionId = session?.id;
   const matchScope = JSON.stringify([
     accountId,
     sessionId,
@@ -155,244 +203,323 @@ export function MatchWorkspace({
     currentParams.stmtPage ?? null,
     currentParams.glQ ?? null,
     currentParams.glPage ?? null,
-  ])
-  const selectionIsCurrent = matchSelectionMatchesScope(selection.scope, matchScope)
+  ]);
+  const selectionIsCurrent = matchSelectionMatchesScope(selection.scope, matchScope);
   const selectedStmts = useMemo(() => {
-    if (!selectionIsCurrent) return new Set<string>()
-    const visibleIds = new Set((data?.stmtRows ?? []).map(row => row.id))
-    return new Set([...selection.stmt].filter(id => visibleIds.has(id)))
-  }, [selectionIsCurrent, selection.stmt, data?.stmtRows])
+    if (!selectionIsCurrent) return new Set<string>();
+    const visibleIds = new Set((data?.stmtRows ?? []).map((row) => row.id));
+    return new Set([...selection.stmt].filter((id) => visibleIds.has(id)));
+  }, [selectionIsCurrent, selection.stmt, data?.stmtRows]);
   const selectedGl = useMemo<ReadonlySet<string>>(() => {
-    if (!matchSelectionMatchesScope(selection.scope, matchScope)) return NO_SELECTED_GL
-    const visibleIds = new Set((data?.glRows ?? []).map((row) => row.id))
-    return new Set([...selection.gl].filter((id) => visibleIds.has(id)))
-  }, [selection.scope, selection.gl, matchScope, data?.glRows])
+    if (!matchSelectionMatchesScope(selection.scope, matchScope)) return NO_SELECTED_GL;
+    const visibleIds = new Set((data?.glRows ?? []).map((row) => row.id));
+    return new Set([...selection.gl].filter((id) => visibleIds.has(id)));
+  }, [selection.scope, selection.gl, matchScope, data?.glRows]);
   const [suggestionResult, setSuggestionResult] = useState<{
-    accountId: string; sessionId: string; rows: Map<string, { ruleId: string; ruleName: string }>
-  } | null>(null)
+    accountId: string;
+    sessionId: string;
+    rows: Map<string, { ruleId: string; ruleName: string }>;
+  } | null>(null);
   // A refused/unavailable rules preview must not read as "no rules
   // matched": track the outcome per request separately from the (possibly
   // empty) suggestion map so the workspace can say so. Set only in the
   // async continuations, and matched to the current request when read.
   const [previewOutcome, setPreviewOutcome] = useState<{
-    accountId: string; sessionId: string; failed: boolean
-  } | null>(null)
-  const previewFailed = previewOutcome !== null && previewOutcome.failed
-    && previewOutcome.accountId === accountId && previewOutcome.sessionId === sessionId
-  const suggestions = suggestionResult && suggestionResult.accountId === accountId && suggestionResult.sessionId === sessionId
-    ? suggestionResult.rows : NO_SUGGESTIONS
+    accountId: string;
+    sessionId: string;
+    failed: boolean;
+  } | null>(null);
+  const previewFailed =
+    previewOutcome !== null &&
+    previewOutcome.failed &&
+    previewOutcome.accountId === accountId &&
+    previewOutcome.sessionId === sessionId;
+  const suggestions =
+    suggestionResult &&
+    suggestionResult.accountId === accountId &&
+    suggestionResult.sessionId === sessionId
+      ? suggestionResult.rows
+      : NO_SUGGESTIONS;
 
   useEffect(() => {
-    if (!accountId || !sessionId) return
-    const controller = new AbortController()
-    fetch('/api/banking/rules/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    if (!accountId || !sessionId) return;
+    const controller = new AbortController();
+    fetch("/api/banking/rules/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accountId, onlyUnmatched: true, limit: 200 }),
       signal: controller.signal,
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (controller.signal.aborted) return
-        setPreviewOutcome({ accountId, sessionId, failed: !d })
-        const next = new Map<string, { ruleId: string; ruleName: string }>()
+        if (controller.signal.aborted) return;
+        setPreviewOutcome({ accountId, sessionId, failed: !d });
+        const next = new Map<string, { ruleId: string; ruleName: string }>();
         for (const m of d?.matches ?? []) {
-          if (m.action === 'categorize' && m.ruleMode === 'suggest' && m.ruleId) {
-            next.set(m.lineId, { ruleId: m.ruleId, ruleName: m.ruleName ?? '' })
+          if (m.action === "categorize" && m.ruleMode === "suggest" && m.ruleId) {
+            next.set(m.lineId, { ruleId: m.ruleId, ruleName: m.ruleName ?? "" });
           }
         }
-        setSuggestionResult({ accountId, sessionId, rows: next })
+        setSuggestionResult({ accountId, sessionId, rows: next });
       })
       .catch(() => {
-        if (controller.signal.aborted) return
-        setPreviewOutcome({ accountId, sessionId, failed: true })
-        setSuggestionResult({ accountId, sessionId, rows: new Map() })
-      })
-    return () => controller.abort()
-  }, [accountId, sessionId, data])
+        if (controller.signal.aborted) return;
+        setPreviewOutcome({ accountId, sessionId, failed: true });
+        setSuggestionResult({ accountId, sessionId, rows: new Map() });
+      });
+    return () => controller.abort();
+  }, [accountId, sessionId, data]);
 
   async function confirmSuggestion(lineId: string, ruleId: string) {
-    if (!session) return
-    const d = await call('POST', '/api/banking/rules/apply-line', {
+    if (!session) return;
+    const d = await call("POST", "/api/banking/rules/apply-line", {
       statementLineId: lineId,
       ruleId,
       reconciliationId: session.id,
-    })
-    if (!d) return
-    toast.success(tW('matchedToast'))
-    router.refresh()
+    });
+    if (!d) return;
+    toast.success(tW("matchedToast"));
+    router.refresh();
   }
 
   const glSelectionSum = useMemo(
     () => sum((data?.glRows ?? []).filter((r) => selectedGl.has(r.id)).map((r) => r.amount)),
     [data, selectedGl],
-  )
+  );
   const stmtSelectionSum = useMemo(
     () => sum((data?.stmtRows ?? []).filter((r) => selectedStmts.has(r.id)).map((r) => r.amount)),
     [data, selectedStmts],
-  )
+  );
 
   function clearSelection() {
-    setSelection((current) => current.scope === matchScope ? { scope: matchScope, stmt: new Set(), gl: new Set() } : current)
+    setSelection((current) =>
+      current.scope === matchScope
+        ? { scope: matchScope, stmt: new Set(), gl: new Set() }
+        : current,
+    );
   }
 
-  async function call(method: string, url: string, body?: unknown, onError?: (message: string) => void): Promise<MatchActionResult | null> {
-    setBusy(true)
+  async function call(
+    method: string,
+    url: string,
+    body?: unknown,
+    onError?: (message: string) => void,
+  ): Promise<MatchActionResult | null> {
+    setBusy(true);
     try {
       const res = await fetch(url, {
         method,
-        headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
-      })
+      });
       // Refusals read through the shared helper so message, remedy and code
       // render instead of a bare fallback; the success body parses after the
       // ok check and never lets the read itself throw.
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, tBanking('errors.requestFailed'))
-        if (onError) onError(message); else toast.error(message)
-        return null
+        const message = await readApiErrorMessage(res, tBanking("errors.requestFailed"));
+        if (onError) onError(message);
+        else toast.error(message);
+        return null;
       }
-      return await res.json().catch(() => null) as MatchActionResult | null
+      return (await res.json().catch(() => null)) as MatchActionResult | null;
     } catch {
-      const message = tBanking('errors.requestFailed')
-      if (onError) onError(message); else toast.error(message)
-      return null
-    } finally { setBusy(false) }
+      const message = tBanking("errors.requestFailed");
+      if (onError) onError(message);
+      else toast.error(message);
+      return null;
+    } finally {
+      setBusy(false);
+    }
   }
 
   function pickAccount(id: string) {
-    router.push(((id ? `/banking/match?account=${id}` : '/banking/match')))
+    router.push(id ? `/banking/match?account=${id}` : "/banking/match");
   }
 
   async function startMatching() {
-    if (!account) return
-    const d = await call('POST', '/api/banking/reconciliations/ensure', { accountId: account.id })
-    if (!d) return
-    router.refresh()
+    if (!account) return;
+    const d = await call("POST", "/api/banking/reconciliations/ensure", { accountId: account.id });
+    if (!d) return;
+    router.refresh();
   }
 
   async function autoMatch() {
-    if (!session) return
-    const d = await call('POST', `/api/banking/reconciliations/${session.id}/auto-match`)
-    if (!d) return
-    if (d.matched === 0) toast.info(tW('noAutoMatches'))
-    else toast.success(tW('autoMatchedToast', { count: d.matched ?? 0, high: d.highConfidence ?? 0, medium: d.mediumConfidence ?? 0 }))
-    router.refresh()
+    if (!session) return;
+    const d = await call("POST", `/api/banking/reconciliations/${session.id}/auto-match`);
+    if (!d) return;
+    if (d.matched === 0) toast.info(tW("noAutoMatches"));
+    else
+      toast.success(
+        tW("autoMatchedToast", {
+          count: d.matched ?? 0,
+          high: d.highConfidence ?? 0,
+          medium: d.mediumConfidence ?? 0,
+        }),
+      );
+    router.refresh();
   }
 
   async function runRules() {
-    if (!account) return
-    const d = await call('POST', '/api/banking/rules/apply', { accountId: account.id })
-    if (!d) return
-    const refused = d.refused ?? []
+    if (!account) return;
+    const d = await call("POST", "/api/banking/rules/apply", { accountId: account.id });
+    if (!d) return;
+    const refused = d.refused ?? [];
     if (d.matched === 0 && d.excluded === 0) {
-      if (refused.length === 0) toast.info(tBanking('rules.runNoneMatched', { scanned: d.scanned ?? 0 }))
-    } else toast.success(tBanking('rules.runDone', { matched: d.matched ?? 0, excluded: d.excluded ?? 0 }))
-    if (refused.length > 0) toast.error(tBanking('rules.runRefused', { count: refused.length, reason: refused[0]!.reason }))
-    router.refresh()
+      if (refused.length === 0)
+        toast.info(tBanking("rules.runNoneMatched", { scanned: d.scanned ?? 0 }));
+    } else
+      toast.success(
+        tBanking("rules.runDone", { matched: d.matched ?? 0, excluded: d.excluded ?? 0 }),
+      );
+    if (refused.length > 0)
+      toast.error(
+        tBanking("rules.runRefused", { count: refused.length, reason: refused[0]!.reason }),
+      );
+    router.refresh();
   }
 
   async function matchSelected() {
-    if (!session || selectedStmts.size === 0 || selectedGl.size === 0) return
-    const d = await call('POST', `/api/banking/reconciliations/${session.id}/matches`, { statementLineIds: [...selectedStmts], journalLineIds: [...selectedGl] })
-    if (!d) return
-    toast.success(tW('matchedToast')); clearSelection(); router.refresh()
+    if (!session || selectedStmts.size === 0 || selectedGl.size === 0) return;
+    const d = await call("POST", `/api/banking/reconciliations/${session.id}/matches`, {
+      statementLineIds: [...selectedStmts],
+      journalLineIds: [...selectedGl],
+    });
+    if (!d) return;
+    toast.success(tW("matchedToast"));
+    clearSelection();
+    router.refresh();
   }
 
   async function exclude(id: string) {
     const reason = await promptDialog({
-      title: t('excludeReasonTitle'),
-      label: t('excludeReasonLabel'),
-      placeholder: t('excludeReasonPlaceholder'),
-      confirmLabel: t('exclude'),
-    })
-    if (!reason) return
-    const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'exclude', reason })
-    if (!d) return
-    toast.success(t('excludedToast')); if (selectedStmts.has(id)) setSelection((current) => {
-      if (current.scope !== matchScope) return current
-      const stmt = new Set(current.stmt)
-      stmt.delete(id)
-      return { ...current, stmt }
-    }); router.refresh()
+      title: t("excludeReasonTitle"),
+      label: t("excludeReasonLabel"),
+      placeholder: t("excludeReasonPlaceholder"),
+      confirmLabel: t("exclude"),
+    });
+    if (!reason) return;
+    const d = await call("PATCH", `/api/banking/statement-lines/${id}`, {
+      action: "exclude",
+      reason,
+    });
+    if (!d) return;
+    toast.success(t("excludedToast"));
+    if (selectedStmts.has(id))
+      setSelection((current) => {
+        if (current.scope !== matchScope) return current;
+        const stmt = new Set(current.stmt);
+        stmt.delete(id);
+        return { ...current, stmt };
+      });
+    router.refresh();
   }
   async function restore(id: string) {
-    const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'restore' })
-    if (!d) return
-    toast.success(t('restoredToast')); router.refresh()
+    const d = await call("PATCH", `/api/banking/statement-lines/${id}`, { action: "restore" });
+    if (!d) return;
+    toast.success(t("restoredToast"));
+    router.refresh();
   }
   async function clearDuplicate(id: string) {
-    const ok = await confirmDialog({ message: t('clearDuplicateConfirm') })
-    if (!ok) return
-    const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'clear-duplicate' })
-    if (!d) return
-    toast.success(t('clearedDuplicateToast')); if (selectedStmts.has(id)) setSelection((current) => {
-      if (current.scope !== matchScope) return current
-      const stmt = new Set(current.stmt)
-      stmt.delete(id)
-      return { ...current, stmt }
-    }); router.refresh()
+    const ok = await confirmDialog({ message: t("clearDuplicateConfirm") });
+    if (!ok) return;
+    const d = await call("PATCH", `/api/banking/statement-lines/${id}`, {
+      action: "clear-duplicate",
+    });
+    if (!d) return;
+    toast.success(t("clearedDuplicateToast"));
+    if (selectedStmts.has(id))
+      setSelection((current) => {
+        if (current.scope !== matchScope) return current;
+        const stmt = new Set(current.stmt);
+        stmt.delete(id);
+        return { ...current, stmt };
+      });
+    router.refresh();
   }
   async function excludeFlaggedDuplicates() {
-    if (!account || (data?.flaggedTotal ?? 0) === 0) return
-    const ok = await confirmDialog({ message: t('excludeFlaggedConfirm', { count: data?.flaggedTotal ?? 0 }) })
-    if (!ok) return
-    const d = await call('POST', '/api/banking/statement-lines/bulk', {
-      action: 'exclude-duplicates',
+    if (!account || (data?.flaggedTotal ?? 0) === 0) return;
+    const ok = await confirmDialog({
+      message: t("excludeFlaggedConfirm", { count: data?.flaggedTotal ?? 0 }),
+    });
+    if (!ok) return;
+    const d = await call("POST", "/api/banking/statement-lines/bulk", {
+      action: "exclude-duplicates",
       accountId: account.id,
-      reason: t('excludeFlaggedReason'),
-    })
-    if (!d) return
-    toast.success(t('excludedFlaggedToast', { count: d.excluded ?? 0 }))
-    clearSelection(); router.refresh()
+      reason: t("excludeFlaggedReason"),
+    });
+    if (!d) return;
+    toast.success(t("excludedFlaggedToast", { count: d.excluded ?? 0 }));
+    clearSelection();
+    router.refresh();
   }
   async function unmatch(statementLineId: string) {
-    if (!session) return
-    const d = await call('DELETE', `/api/banking/reconciliations/${session.id}/matches?statementLineId=${statementLineId}`)
-    if (!d) return
-    toast.success(tW('unmatchedToast')); router.refresh()
+    if (!session) return;
+    const d = await call(
+      "DELETE",
+      `/api/banking/reconciliations/${session.id}/matches?statementLineId=${statementLineId}`,
+    );
+    if (!d) return;
+    toast.success(tW("unmatchedToast"));
+    router.refresh();
   }
 
   async function confirmAddJournal() {
-    if (!session || !addLine || !offsetId) return
-    setAddError(null)
-    const d = await call('POST', `/api/banking/statement-lines/${addLine.id}/create-match`, { reconciliationId: session.id, offsetAccountId: offsetId }, (message) => {
-      setAddError(message)
-      toast.error(message)
-    })
-    if (!d) return
-    toast.success(t('addedToast')); setAddLine(null); setOffsetId(''); setAddError(null); router.refresh()
+    if (!session || !addLine || !offsetId) return;
+    setAddError(null);
+    const d = await call(
+      "POST",
+      `/api/banking/statement-lines/${addLine.id}/create-match`,
+      { reconciliationId: session.id, offsetAccountId: offsetId },
+      (message) => {
+        setAddError(message);
+        toast.error(message);
+      },
+    );
+    if (!d) return;
+    toast.success(t("addedToast"));
+    setAddLine(null);
+    setOffsetId("");
+    setAddError(null);
+    router.refresh();
   }
 
   // Sign-off lives in the reconciliation workspace, not here: this view has
   // no Adjust action, so a refusal could never be repaired in place. The
   // workspace link below carries the session; the note names why.
-  const workspaceHref = session && account ? `/banking/${account.id}/reconcile/${session.id}` : null
+  const workspaceHref =
+    session && account ? `/banking/${account.id}/reconcile/${session.id}` : null;
 
   // ---- account picker (always shown) --------------------------------------
   const picker = (
     <div className="flex flex-wrap items-center gap-2">
-      <Label htmlFor={accountPickerId} className="text-sm">{t('accountLabel')}</Label>
+      <Label htmlFor={accountPickerId} className="text-sm">
+        {t("accountLabel")}
+      </Label>
       <div className="min-w-[18rem]">
         <SearchSelect
           id={accountPickerId}
-          ariaLabel={t('accountLabel')}
-          options={accounts.map((a) => ({ value: a.id, label: a.unmatched ? `${a.label}  ·  ${t('unmatchedCount', { count: a.unmatched })}` : a.label }))}
-          value={account?.id ?? ''}
-          onChange={(v) => pickAccount(v ?? '')}
-          placeholder={t('selectAccount')}
+          ariaLabel={t("accountLabel")}
+          options={accounts.map((a) => ({
+            value: a.id,
+            label: a.unmatched
+              ? `${a.label}  ·  ${t("unmatchedCount", { count: a.unmatched })}`
+              : a.label,
+          }))}
+          value={account?.id ?? ""}
+          onChange={(v) => pickAccount(v ?? "")}
+          placeholder={t("selectAccount")}
         />
       </div>
     </div>
-  )
+  );
 
   if (!account) {
     return (
       <div className="space-y-4">
         {picker}
-        <EmptyState title={t('pickTitle')} description={t('pickDescription')} />
+        <EmptyState title={t("pickTitle")} description={t("pickDescription")} />
       </div>
-    )
+    );
   }
 
   if (!session || !data || !totals) {
@@ -400,34 +527,45 @@ export function MatchWorkspace({
       <div className="space-y-4">
         {picker}
         <EmptyState
-          title={t('noSessionTitle')}
-          description={t('noSessionDescription')}
-          action={<Button disabled={busy} onClick={startMatching}><Wand2 size={15} /> {t('startMatching')}</Button>}
+          title={t("noSessionTitle")}
+          description={t("noSessionDescription")}
+          action={
+            <Button disabled={busy} onClick={startMatching}>
+              <Wand2 size={15} /> {t("startMatching")}
+            </Button>
+          }
         />
       </div>
-    )
+    );
   }
 
   const tabHref = (tb: string) => {
-    const p = new URLSearchParams()
-    p.set('account', account.id)
-    if (tb !== 'match') p.set('tab', tb)
-    return `/banking/match?${p.toString()}`
-  }
-  const tabBtn = (tb: 'match' | 'review' | 'excluded', label: string, count?: number) => (
+    const p = new URLSearchParams();
+    p.set("account", account.id);
+    if (tb !== "match") p.set("tab", tb);
+    return `/banking/match?${p.toString()}`;
+  };
+  const tabBtn = (tb: "match" | "review" | "excluded", label: string, count?: number) => (
     <Link
-      href={(tabHref(tb))}
+      href={tabHref(tb)}
       className={cn(
-        'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-        tab === tb ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-200' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+        "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+        tab === tb
+          ? "bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-200"
+          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
       )}
     >
-      {label}{typeof count === 'number' ? <span className="ml-1.5 text-xs text-slate-400">{count}</span> : null}
+      {label}
+      {typeof count === "number" ? (
+        <span className="ml-1.5 text-xs text-slate-400">{count}</span>
+      ) : null}
     </Link>
-  )
+  );
 
-  const stat = 'rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900'
-  const statLabel = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'
+  const stat =
+    "rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900";
+  const statLabel =
+    "text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400";
 
   return (
     <div className="space-y-4">
@@ -435,249 +573,568 @@ export function MatchWorkspace({
 
       {/* stats */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className={stat}><div className={statLabel}>{tBanking('labels.statementBalance')}</div><div className="text-sm font-semibold tabular-nums">{money(totals.statementBalance)}</div></div>
-        <div className={stat}><div className={statLabel}>{tBanking('reconcile.stats.clearedGlBalance')}</div><div className="text-sm font-semibold tabular-nums">{money(totals.clearedBalance)}</div></div>
-        <div className={stat}><div className={statLabel}>{tBanking('reconcile.stats.difference')}</div><div className={cn('text-sm font-semibold tabular-nums', isZeroAmount(String(totals.difference ?? '0')) ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400')}>{money(totals.difference)}</div></div>
-        <div className={stat}><div className={statLabel}>{t('throughDate')}</div><div className="text-sm font-semibold">{session.throughDate}</div></div>
+        <div className={stat}>
+          <div className={statLabel}>{tBanking("labels.statementBalance")}</div>
+          <div className="text-sm font-semibold tabular-nums">{money(totals.statementBalance)}</div>
+        </div>
+        <div className={stat}>
+          <div className={statLabel}>{tBanking("reconcile.stats.clearedGlBalance")}</div>
+          <div className="text-sm font-semibold tabular-nums">{money(totals.clearedBalance)}</div>
+        </div>
+        <div className={stat}>
+          <div className={statLabel}>{tBanking("reconcile.stats.difference")}</div>
+          <div
+            className={cn(
+              "text-sm font-semibold tabular-nums",
+              isZeroAmount(String(totals.difference ?? "0"))
+                ? "text-green-600 dark:text-green-400"
+                : "text-amber-600 dark:text-amber-400",
+            )}
+          >
+            {money(totals.difference)}
+          </div>
+        </div>
+        <div className={stat}>
+          <div className={statLabel}>{t("throughDate")}</div>
+          <div className="text-sm font-semibold">{session.throughDate}</div>
+        </div>
       </div>
 
       {/* toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" disabled={busy} onClick={autoMatch}><Wand2 size={15} /> {tW('autoMatch')}</Button>
-        <Button variant="outline" disabled={busy} onClick={runRules}><Workflow size={15} /> {tBanking('rules.runRules')}</Button>
+        <Button variant="outline" disabled={busy} onClick={autoMatch}>
+          <Wand2 size={15} /> {tW("autoMatch")}
+        </Button>
+        <Button variant="outline" disabled={busy} onClick={runRules}>
+          <Workflow size={15} /> {tBanking("rules.runRules")}
+        </Button>
         {(data?.flaggedTotal ?? 0) > 0 ? (
-          <Button variant="outline" disabled={busy} onClick={excludeFlaggedDuplicates}><Ban size={15} /> {t('excludeFlagged', { count: data?.flaggedTotal ?? 0 })}</Button>
+          <Button variant="outline" disabled={busy} onClick={excludeFlaggedDuplicates}>
+            <Ban size={15} /> {t("excludeFlagged", { count: data?.flaggedTotal ?? 0 })}
+          </Button>
         ) : null}
         <span className="flex-1" />
-        {selectedStmts.size > 0 || selectedGl.size > 0 ? <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">{tW('selectionSummary', { bank: money(stmtSelectionSum), gl: money(glSelectionSum) })}</span> : null}
-        <Button disabled={busy || selectedStmts.size === 0 || selectedGl.size === 0} onClick={matchSelected}><Link2 size={15} /> {tW('matchSelected')}</Button>
+        {selectedStmts.size > 0 || selectedGl.size > 0 ? (
+          <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
+            {tW("selectionSummary", { bank: money(stmtSelectionSum), gl: money(glSelectionSum) })}
+          </span>
+        ) : null}
+        <Button
+          disabled={busy || selectedStmts.size === 0 || selectedGl.size === 0}
+          onClick={matchSelected}
+        >
+          <Link2 size={15} /> {tW("matchSelected")}
+        </Button>
         {workspaceHref ? (
           <Button asChild disabled={busy}>
-            <Link href={workspaceHref}><ArrowUpRight size={15} /> {tW('openWorkspace')}</Link>
+            <Link href={workspaceHref}>
+              <ArrowUpRight size={15} /> {tW("openWorkspace")}
+            </Link>
           </Button>
         ) : null}
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400">{tW('signOffWorkspaceNote')}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{tW("signOffWorkspaceNote")}</p>
 
       {/* tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200 pb-2 dark:border-slate-800">
-        {tabBtn('match', t('tabs.toMatch'), data.stmtTotal)}
-        {tabBtn('review', t('tabs.review'), data.reviewTotal)}
-        {tabBtn('excluded', t('tabs.excluded'), data.excludedTotal)}
+        {tabBtn("match", t("tabs.toMatch"), data.stmtTotal)}
+        {tabBtn("review", t("tabs.review"), data.reviewTotal)}
+        {tabBtn("excluded", t("tabs.excluded"), data.excludedTotal)}
       </div>
       {previewFailed ? (
-        <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">{tW('suggestionsUnavailable')}</p>
+        <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">
+          {tW("suggestionsUnavailable")}
+        </p>
       ) : null}
 
-      {tab === 'match' ? (
+      {tab === "match" ? (
         <div className="grid gap-6 xl:grid-cols-2">
           {/* left: unmatched statement lines */}
           <section className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{tW('bankLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{tW('bankLinesCount', { count: data.stmtTotal })}</span></h2>
-              <SearchInput placeholder={tW('searchBankLines')} paramKey="stmtQ" pageParamKey="stmtPage" />
+              <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {tW("bankLinesTitle")}{" "}
+                <span className="font-normal text-slate-500 dark:text-slate-400">
+                  {tW("bankLinesCount", { count: data.stmtTotal })}
+                </span>
+              </h2>
+              <SearchInput
+                placeholder={tW("searchBankLines")}
+                paramKey="stmtQ"
+                pageParamKey="stmtPage"
+              />
             </div>
             <Table>
-              <TableHeader><TableRow>
-                <TableHead className="w-8" />
-                <TableHead>{tCommon('labels.date')}</TableHead>
-                <TableHead>{tCommon('labels.description')}</TableHead>
-                <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
-                <TableHead />
-              </TableRow></TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead>{tCommon("labels.date")}</TableHead>
+                  <TableHead>{tCommon("labels.description")}</TableHead>
+                  <TableHead className="text-right">{tCommon("labels.amount")}</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {data.stmtRows.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.stmtParams.q ? tW('noBankLinesSearch') : tW('allBankLinesMatched')}</TableCell></TableRow>
-                ) : data.stmtRows.map((l) => {
-                  const sel = selectedStmts.has(l.id)
-                  const lineLabel = `${l.posted_on} · ${money(l.amount)}`
-                  // History suggests an offset only where no rule does, and
-                  // only an account the viewer can post to.
-                  const historyEntry = data.offsetSuggestions?.[l.id]
-                  const historyAccount = historyEntry ? offsetAccounts.find((a) => a.id === historyEntry.offsetAccountId) : undefined
-                  const historySuggestion = historyEntry && historyAccount
-                    ? { ...historyEntry, accountLabel: historyAccount.label }
-                    : null
-                  const toggleStmt = () => setSelection((current) => {
-                    const next = new Set(current.scope === matchScope ? selectedStmts : new Set<string>())
-                    if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
-                    return { scope: matchScope, stmt: next, gl: current.scope === matchScope ? new Set(selectedGl) : new Set<string>() }
-                  })
-                  return (
-                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggleStmt}>
-                      <TableCell className="w-8"><input type="checkbox" checked={sel} onChange={toggleStmt} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })} /></TableCell>
-                      <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
-                      <TableCell className="max-w-[14rem]">
-                        <div className="truncate">{l.description ?? '—'}{l.counterparty_ref ? <span className="ml-1.5 text-xs text-slate-400">{l.counterparty_ref}</span> : null}</div>
-                        {l.possible_duplicate_of ? (
-                          <div className="mt-1 flex flex-wrap items-center gap-1">
-                            <Badge variant="warning">{t('possibleDuplicateBadge')}</Badge>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                              {t('possibleDuplicateOf', {
-                                date: String(l.dup_posted_on ?? ''),
-                                amount: money((l.dup_amount ?? 0) as MoneyValue),
-                              })}
-                            </span>
-                            <Button variant="ghost" size="sm" disabled={busy} title={t('clearDuplicate')} onClick={(e) => { e.stopPropagation(); clearDuplicate(l.id) }}><RotateCcw size={14} /></Button>
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-slate-500 dark:text-slate-400"
+                    >
+                      {data.stmtParams.q ? tW("noBankLinesSearch") : tW("allBankLinesMatched")}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data.stmtRows.map((l) => {
+                    const sel = selectedStmts.has(l.id);
+                    const lineLabel = `${l.posted_on} · ${money(l.amount)}`;
+                    // History suggests an offset only where no rule does, and
+                    // only an account the viewer can post to.
+                    const historyEntry = data.offsetSuggestions?.[l.id];
+                    const historyAccount = historyEntry
+                      ? offsetAccounts.find((a) => a.id === historyEntry.offsetAccountId)
+                      : undefined;
+                    const historySuggestion =
+                      historyEntry && historyAccount
+                        ? { ...historyEntry, accountLabel: historyAccount.label }
+                        : null;
+                    const toggleStmt = () =>
+                      setSelection((current) => {
+                        const next = new Set(
+                          current.scope === matchScope ? selectedStmts : new Set<string>(),
+                        );
+                        if (next.has(l.id)) next.delete(l.id);
+                        else next.add(l.id);
+                        return {
+                          scope: matchScope,
+                          stmt: next,
+                          gl:
+                            current.scope === matchScope ? new Set(selectedGl) : new Set<string>(),
+                        };
+                      });
+                    return (
+                      <InteractiveTableRow
+                        key={l.id}
+                        className={cn("cursor-pointer", sel && selectedRow)}
+                        onClick={toggleStmt}
+                      >
+                        <TableCell className="w-8">
+                          <input
+                            type="checkbox"
+                            checked={sel}
+                            onChange={toggleStmt}
+                            onClick={(e) => e.stopPropagation()}
+                            className="accent-teal-700"
+                            aria-label={tW("selectBankLineAria", {
+                              date: l.posted_on,
+                              amount: money(l.amount),
+                            })}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
+                        <TableCell className="max-w-[14rem]">
+                          <div className="truncate">
+                            {l.description ?? "—"}
+                            {l.counterparty_ref ? (
+                              <span className="ml-1.5 text-xs text-slate-400">
+                                {l.counterparty_ref}
+                              </span>
+                            ) : null}
                           </div>
-                        ) : null}
-                        {suggestions.has(l.id) ? (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId) }}
-                            disabled={busy}
-                            className="mt-1 inline-flex items-center gap-1 rounded-full border border-teal-300 bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/40"
-                            title={t('postAndMatch')}
-                          >
-                            <Sparkles size={11} /> {t('suggestedBy', { rule: suggestions.get(l.id)!.ruleName })}
-                          </button>
-                        ) : historySuggestion ? (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setAddLine({ id: l.id, label: lineLabel, reasons: historySuggestion.reasons }); setOffsetId(historySuggestion.offsetAccountId); setAddError(null) }}
-                            disabled={busy}
-                            className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                            title={historySuggestion.reasons.map((reason) => matchReasonLabel(tReasons, reason)).join(' · ')}
-                          >
-                            <Sparkles size={11} /> {t('historySuggestion', { account: historySuggestion.accountLabel })}
-                          </button>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1">
+                          {l.possible_duplicate_of ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              <Badge variant="warning">{t("possibleDuplicateBadge")}</Badge>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                {t("possibleDuplicateOf", {
+                                  date: String(l.dup_posted_on ?? ""),
+                                  amount: money((l.dup_amount ?? 0) as MoneyValue),
+                                })}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={busy}
+                                title={t("clearDuplicate")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  clearDuplicate(l.id);
+                                }}
+                              >
+                                <RotateCcw size={14} />
+                              </Button>
+                            </div>
+                          ) : null}
                           {suggestions.has(l.id) ? (
-                            <Button variant="ghost" size="sm" disabled={busy} title={t('postAndMatch')} onClick={() => confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId)}><Link2 size={14} /></Button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId);
+                              }}
+                              disabled={busy}
+                              className="mt-1 inline-flex items-center gap-1 rounded-full border border-teal-300 bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/40"
+                              title={t("postAndMatch")}
+                            >
+                              <Sparkles size={11} />{" "}
+                              {t("suggestedBy", { rule: suggestions.get(l.id)!.ruleName })}
+                            </button>
+                          ) : historySuggestion ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAddLine({
+                                  id: l.id,
+                                  label: lineLabel,
+                                  reasons: historySuggestion.reasons,
+                                });
+                                setOffsetId(historySuggestion.offsetAccountId);
+                                setAddError(null);
+                              }}
+                              disabled={busy}
+                              className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                              title={historySuggestion.reasons
+                                .map((reason) => matchReasonLabel(tReasons, reason))
+                                .join(" · ")}
+                            >
+                              <Sparkles size={11} />{" "}
+                              {t("historySuggestion", { account: historySuggestion.accountLabel })}
+                            </button>
                           ) : null}
-                          <Button variant="ghost" size="sm" disabled={busy} title={t('createRule')} onClick={() => router.push((`/banking/rules?rule=new&fromLine=${l.id}`))}><Workflow size={14} /></Button>
-                          {data.canRecordPayments ? (
-                            <Button variant="ghost" size="sm" disabled={busy} title={t('settle.open')} onClick={() => setSettleLine({ id: l.id, label: lineLabel })}><Receipt size={14} /></Button>
-                          ) : null}
-                          <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: lineLabel, reasons: NO_REASONS }); setOffsetId(''); setAddError(null) }}><FilePlus2 size={14} /></Button>
-                          <Button variant="ghost" size="sm" disabled={busy} title={t('correctLine')} onClick={(e) => { e.stopPropagation(); setCorrectLine({ id: l.id, posted_on: l.posted_on, amount: l.amount, description: l.description }) }}><Pencil size={14} /></Button>
-                          <Button variant="ghost" size="sm" disabled={busy} title={t('exclude')} onClick={() => exclude(l.id)}><Ban size={14} /></Button>
-                        </div>
-                      </TableCell>
-                    </InteractiveTableRow>
-                  )
-                })}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">
+                            {suggestions.has(l.id) ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={busy}
+                                title={t("postAndMatch")}
+                                onClick={() =>
+                                  confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId)
+                                }
+                              >
+                                <Link2 size={14} />
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              title={t("createRule")}
+                              onClick={() =>
+                                router.push(`/banking/rules?rule=new&fromLine=${l.id}`)
+                              }
+                            >
+                              <Workflow size={14} />
+                            </Button>
+                            {data.canRecordPayments ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={busy}
+                                title={t("settle.open")}
+                                onClick={() => setSettleLine({ id: l.id, label: lineLabel })}
+                              >
+                                <Receipt size={14} />
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              title={t("addJournal")}
+                              onClick={() => {
+                                setAddLine({ id: l.id, label: lineLabel, reasons: NO_REASONS });
+                                setOffsetId("");
+                                setAddError(null);
+                              }}
+                            >
+                              <FilePlus2 size={14} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              title={t("correctLine")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCorrectLine({
+                                  id: l.id,
+                                  posted_on: l.posted_on,
+                                  amount: l.amount,
+                                  description: l.description,
+                                });
+                              }}
+                            >
+                              <Pencil size={14} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              title={t("exclude")}
+                              onClick={() => exclude(l.id)}
+                            >
+                              <Ban size={14} />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </InteractiveTableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
-            <Pagination basePath="/banking/match" currentParams={currentParams} total={data.stmtTotal} page={data.stmtParams.page} perPage={data.stmtParams.perPage} pageParamKey="stmtPage" />
+            <Pagination
+              basePath="/banking/match"
+              currentParams={currentParams}
+              total={data.stmtTotal}
+              page={data.stmtParams.page}
+              perPage={data.stmtParams.perPage}
+              pageParamKey="stmtPage"
+            />
           </section>
 
           {/* right: available GL lines */}
           <section className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{tW('ledgerLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{tW('ledgerLinesCount', { count: data.glTotal })}</span></h2>
-              <SearchInput placeholder={tW('searchGlLines')} paramKey="glQ" pageParamKey="glPage" />
+              <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {tW("ledgerLinesTitle")}{" "}
+                <span className="font-normal text-slate-500 dark:text-slate-400">
+                  {tW("ledgerLinesCount", { count: data.glTotal })}
+                </span>
+              </h2>
+              <SearchInput placeholder={tW("searchGlLines")} paramKey="glQ" pageParamKey="glPage" />
             </div>
             <Table>
-              <TableHeader><TableRow>
-                <TableHead className="w-8" />
-                <TableHead>{tCommon('labels.date')}</TableHead>
-                <TableHead>{tBanking('labels.entry')}</TableHead>
-                <TableHead>{tCommon('labels.memo')}</TableHead>
-                <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
-              </TableRow></TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead>{tCommon("labels.date")}</TableHead>
+                  <TableHead>{tBanking("labels.entry")}</TableHead>
+                  <TableHead>{tCommon("labels.memo")}</TableHead>
+                  <TableHead className="text-right">{tCommon("labels.amount")}</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {data.glRows.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.glParams.q ? tW('noGlLinesSearch') : tW('allGlLinesReconciled')}</TableCell></TableRow>
-                ) : data.glRows.map((l) => {
-                  const sel = selectedGl.has(l.id)
-                  const toggle = () => setSelection((current) => {
-                    const next = new Set(current.scope === matchScope ? selectedGl : NO_SELECTED_GL)
-                    if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
-                    return { scope: matchScope, stmt: current.scope === matchScope ? new Set(selectedStmts) : new Set<string>(), gl: next }
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-slate-500 dark:text-slate-400"
+                    >
+                      {data.glParams.q ? tW("noGlLinesSearch") : tW("allGlLinesReconciled")}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data.glRows.map((l) => {
+                    const sel = selectedGl.has(l.id);
+                    const toggle = () =>
+                      setSelection((current) => {
+                        const next = new Set(
+                          current.scope === matchScope ? selectedGl : NO_SELECTED_GL,
+                        );
+                        if (next.has(l.id)) next.delete(l.id);
+                        else next.add(l.id);
+                        return {
+                          scope: matchScope,
+                          stmt:
+                            current.scope === matchScope
+                              ? new Set(selectedStmts)
+                              : new Set<string>(),
+                          gl: next,
+                        };
+                      });
+                    return (
+                      <InteractiveTableRow
+                        key={l.id}
+                        className={cn("cursor-pointer", sel && selectedRow)}
+                        onClick={toggle}
+                      >
+                        <TableCell className="w-8">
+                          <input
+                            type="checkbox"
+                            checked={sel}
+                            onChange={toggle}
+                            onClick={(e) => e.stopPropagation()}
+                            className="accent-teal-700"
+                            aria-label={tW("selectGlLineAria", {
+                              entry: l.entry_number,
+                              amount: money(l.amount),
+                            })}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{l.posting_date}</TableCell>
+                        <TableCell className="font-mono text-[13px]">{l.entry_number}</TableCell>
+                        <TableCell className="max-w-[12rem] truncate">
+                          {l.memo ?? l.party ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
+                      </InteractiveTableRow>
+                    );
                   })
-                  return (
-                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggle}>
-                      <TableCell className="w-8"><input type="checkbox" checked={sel} onChange={toggle} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })} /></TableCell>
-                      <TableCell className="whitespace-nowrap">{l.posting_date}</TableCell>
-                      <TableCell className="font-mono text-[13px]">{l.entry_number}</TableCell>
-                      <TableCell className="max-w-[12rem] truncate">{l.memo ?? l.party ?? '—'}</TableCell>
-                      <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                    </InteractiveTableRow>
-                  )
-                })}
+                )}
               </TableBody>
             </Table>
-            <Pagination basePath="/banking/match" currentParams={currentParams} total={data.glTotal} page={data.glParams.page} perPage={data.glParams.perPage} pageParamKey="glPage" />
+            <Pagination
+              basePath="/banking/match"
+              currentParams={currentParams}
+              total={data.glTotal}
+              page={data.glParams.page}
+              perPage={data.glParams.perPage}
+              pageParamKey="glPage"
+            />
           </section>
         </div>
       ) : null}
 
-      {tab === 'review' ? (
+      {tab === "review" ? (
         <section className="space-y-2">
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('reviewHint')}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("reviewHint")}</p>
           {data.reviewTotal > data.reviewRows.length ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('reviewTruncated', { shown: data.reviewRows.length, total: data.reviewTotal })}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t("reviewTruncated", { shown: data.reviewRows.length, total: data.reviewTotal })}
+            </p>
           ) : null}
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>{t('columns.bankDate')}</TableHead>
-              <TableHead>{tCommon('labels.description')}</TableHead>
-              <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
-              <TableHead>{tBanking('labels.entry')}</TableHead>
-              <TableHead className="text-right">{t('columns.confidence')}</TableHead>
-              <TableHead>{t('columns.why')}</TableHead>
-              <TableHead />
-            </TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("columns.bankDate")}</TableHead>
+                <TableHead>{tCommon("labels.description")}</TableHead>
+                <TableHead className="text-right">{tCommon("labels.amount")}</TableHead>
+                <TableHead>{tBanking("labels.entry")}</TableHead>
+                <TableHead className="text-right">{t("columns.confidence")}</TableHead>
+                <TableHead>{t("columns.why")}</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {data.reviewRows.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-slate-500 dark:text-slate-400">{t('noReview')}</TableCell></TableRow>
-              ) : data.reviewRows.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="whitespace-nowrap">{m.stmt_date}</TableCell>
-                  <TableCell className="max-w-[14rem] truncate">{m.stmt_description ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(m.stmt_amount)}</TableCell>
-                  <TableCell className="font-mono text-[13px]">{m.entry_number}</TableCell>
-                  <TableCell className="text-right"><Badge variant="warning">{confidencePercent(m.confidence)}</Badge></TableCell>
-                  <TableCell className="max-w-[22rem]"><MatchReasonBadges reasons={parseStoredMatchReasons(m.match_reasons)} /></TableCell>
-                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={busy} onClick={() => unmatch(m.statement_line_id)}>{tW('unmatch')}</Button></TableCell>
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-slate-500 dark:text-slate-400">
+                    {t("noReview")}
+                  </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                data.reviewRows.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="whitespace-nowrap">{m.stmt_date}</TableCell>
+                    <TableCell className="max-w-[14rem] truncate">
+                      {m.stmt_description ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {money(m.stmt_amount)}
+                    </TableCell>
+                    <TableCell className="font-mono text-[13px]">{m.entry_number}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="warning">{confidencePercent(m.confidence)}</Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[22rem]">
+                      <MatchReasonBadges reasons={parseStoredMatchReasons(m.match_reasons)} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => unmatch(m.statement_line_id)}
+                      >
+                        {tW("unmatch")}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </section>
       ) : null}
 
-      {tab === 'excluded' ? (
+      {tab === "excluded" ? (
         <section className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="mr-auto text-sm text-slate-500 dark:text-slate-400">{t('excludedHint')}</p>
-            <SearchInput placeholder={t('searchExcluded')} paramKey="exQ" pageParamKey="exPage" />
+            <p className="mr-auto text-sm text-slate-500 dark:text-slate-400">
+              {t("excludedHint")}
+            </p>
+            <SearchInput placeholder={t("searchExcluded")} paramKey="exQ" pageParamKey="exPage" />
           </div>
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>{tCommon('labels.date')}</TableHead>
-              <TableHead>{tCommon('labels.description')}</TableHead>
-              <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
-              <TableHead />
-            </TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tCommon("labels.date")}</TableHead>
+                <TableHead>{tCommon("labels.description")}</TableHead>
+                <TableHead className="text-right">{tCommon("labels.amount")}</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {data.excludedRows.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center text-slate-500 dark:text-slate-400">{t('noExcluded')}</TableCell></TableRow>
-              ) : data.excludedRows.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
-                  <TableCell className="max-w-[18rem] truncate">{l.description ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={busy} onClick={() => restore(l.id)}><RotateCcw size={14} /> {t('restore')}</Button></TableCell>
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-slate-500 dark:text-slate-400">
+                    {t("noExcluded")}
+                  </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                data.excludedRows.map((l) => (
+                  <TableRow key={l.id}>
+                    <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
+                    <TableCell className="max-w-[18rem] truncate">{l.description ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => restore(l.id)}
+                      >
+                        <RotateCcw size={14} /> {t("restore")}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
-          <Pagination basePath="/banking/match" currentParams={currentParams} total={data.excludedTotal} page={data.exParams.page} perPage={data.exParams.perPage} pageParamKey="exPage" />
+          <Pagination
+            basePath="/banking/match"
+            currentParams={currentParams}
+            total={data.excludedTotal}
+            page={data.exParams.page}
+            perPage={data.exParams.perPage}
+            pageParamKey="exPage"
+          />
         </section>
       ) : null}
 
       {/* add-journal drawer */}
-      <Drawer open={!!addLine} onClose={() => { setAddLine(null); setAddError(null) }} size="sm" title={t('addJournalTitle')} description={addLine?.label}
-        headerActions={<>
-          <Button variant="outline" onClick={() => { setAddLine(null); setAddError(null) }}>{tCommon('actions.cancel')}</Button>
-          <Button disabled={busy || !offsetId} onClick={confirmAddJournal}>{busy ? tCommon('actions.saving') : t('addJournal')}</Button>
-        </>}>
+      <Drawer
+        open={!!addLine}
+        onClose={() => {
+          setAddLine(null);
+          setAddError(null);
+        }}
+        size="sm"
+        title={t("addJournalTitle")}
+        description={addLine?.label}
+        headerActions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddLine(null);
+                setAddError(null);
+              }}
+            >
+              {tCommon("actions.cancel")}
+            </Button>
+            <Button disabled={busy || !offsetId} onClick={confirmAddJournal}>
+              {busy ? tCommon("actions.saving") : t("addJournal")}
+            </Button>
+          </>
+        }
+      >
         <div className="space-y-1.5 p-1">
           {addError ? (
             <p
@@ -689,13 +1146,23 @@ export function MatchWorkspace({
           ) : null}
           {addLine && addLine.reasons.length > 0 ? (
             <div className="space-y-1 pb-2">
-              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('historySuggestionWhy')}</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                {t("historySuggestionWhy")}
+              </p>
               <MatchReasonBadges reasons={addLine.reasons} />
             </div>
           ) : null}
-          <Label>{t('offsetAccount')}</Label>
-          <SearchSelect options={offsetAccounts.map((a) => ({ value: a.id, label: a.label }))} value={offsetId} onChange={(v) => { setAddError(null); setOffsetId(v ?? '') }} placeholder={tBanking('drawer.accountPlaceholder')} />
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('addJournalHint')}</p>
+          <Label>{t("offsetAccount")}</Label>
+          <SearchSelect
+            options={offsetAccounts.map((a) => ({ value: a.id, label: a.label }))}
+            value={offsetId}
+            onChange={(v) => {
+              setAddError(null);
+              setOffsetId(v ?? "");
+            }}
+            placeholder={tBanking("drawer.accountPlaceholder")}
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("addJournalHint")}</p>
         </div>
       </Drawer>
 
@@ -708,7 +1175,10 @@ export function MatchWorkspace({
           currency={session.currency}
           discountAccounts={offsetAccounts}
           onClose={() => setSettleLine(null)}
-          onRecorded={() => { setSettleLine(null); router.refresh() }}
+          onRecorded={() => {
+            setSettleLine(null);
+            router.refresh();
+          }}
         />
       ) : null}
 
@@ -719,12 +1189,12 @@ export function MatchWorkspace({
           line={correctLine}
           onClose={() => setCorrectLine(null)}
           onSaved={() => {
-            setCorrectLine(null)
-            toast.success(t('correctedToast'))
-            router.refresh()
+            setCorrectLine(null);
+            toast.success(t("correctedToast"));
+            router.refresh();
           }}
         />
       ) : null}
     </div>
-  )
+  );
 }

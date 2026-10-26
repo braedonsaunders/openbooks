@@ -50,7 +50,10 @@ export function parseRatingScale(value: unknown): RatingScale {
   const scale = value as Record<string, unknown>;
   const min = scale.min;
   const max = scale.max;
-  if ((typeof min !== "number" && typeof min !== "string") || (typeof max !== "number" && typeof max !== "string")) {
+  if (
+    (typeof min !== "number" && typeof min !== "string") ||
+    (typeof max !== "number" && typeof max !== "string")
+  ) {
     throw new PerformanceMathError(
       "the review template carries no readable rating scale — set min, max and labels on the template before opening the cycle",
     );
@@ -90,7 +93,11 @@ export function parseRatingScale(value: unknown): RatingScale {
  * A submitted rating inside the template scale (inclusive). The question
  * prompt travels in the refusal so the reviewer knows which answer to fix.
  */
-export function assertRatingInScale(scale: RatingScale, rating: string, questionPrompt: string): void {
+export function assertRatingInScale(
+  scale: RatingScale,
+  rating: string,
+  questionPrompt: string,
+): void {
   if (canonicalDecimal(rating, Infinity) === null) {
     throw new PerformanceMathError(
       `the answer to ${JSON.stringify(questionPrompt)} must be a decimal rating, got ${JSON.stringify(rating)}`,
@@ -163,7 +170,10 @@ export function scopeMatchesEmployment(
   scope: AppliesScope,
   employment: { employerSubsidiaryId: string | null; departmentId: string | null },
 ): boolean {
-  if (scope.employerSubsidiaryId !== null && employment.employerSubsidiaryId !== scope.employerSubsidiaryId) {
+  if (
+    scope.employerSubsidiaryId !== null &&
+    employment.employerSubsidiaryId !== scope.employerSubsidiaryId
+  ) {
     return false;
   }
   if (scope.departmentId !== null && employment.departmentId !== scope.departmentId) {
@@ -216,7 +226,9 @@ export function computeTurnover(inputs: TurnoverInputs): TurnoverResult {
     ["regrettable", inputs.regrettable],
   ] as const) {
     if (!Number.isInteger(value) || value < 0) {
-      throw new PerformanceMathError(`turnover ${key} must be a non-negative integer, got ${JSON.stringify(value)}`);
+      throw new PerformanceMathError(
+        `turnover ${key} must be a non-negative integer, got ${JSON.stringify(value)}`,
+      );
     }
   }
   if (inputs.voluntary > inputs.terminations) {
@@ -231,7 +243,9 @@ export function computeTurnover(inputs: TurnoverInputs): TurnoverResult {
   }
   for (const days of inputs.tenureDays) {
     if (!Number.isInteger(days) || days < 0) {
-      throw new PerformanceMathError(`leaver tenure must be non-negative days, got ${JSON.stringify(days)}`);
+      throw new PerformanceMathError(
+        `leaver tenure must be non-negative days, got ${JSON.stringify(days)}`,
+      );
     }
   }
   const average = (inputs.headcountStart + inputs.headcountEnd) / 2;

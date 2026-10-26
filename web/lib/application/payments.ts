@@ -3,7 +3,10 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
-import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
+import {
+  createPaymentDocument,
+  updateDraftPayment,
+} from "@openbooks/engine/payments/payment-documents";
 import { loadPaymentDocument } from "@openbooks/engine/payments/payment-queries";
 import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
 import { postPaymentWithApplications } from "@openbooks/engine/payments/payment-posting";
@@ -13,10 +16,7 @@ import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization
 import { PostingError } from "@openbooks/engine/journal/contracts";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
-import {
-  assertApplicationPermission,
-  assertSubsidiaryAccess,
-} from "./context";
+import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
@@ -48,14 +48,17 @@ async function paymentHeader(
   documentId: string,
 ): Promise<PaymentHeader> {
   if (!isUuid(documentId)) throw invalidInput("documentId must be a UUID");
-  const result = (await db.execute<PaymentHeader>(sql`
+  const result = await db.execute<PaymentHeader>(
+    sql`
     select kind, status, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${documentId}
        and org_id = ${context.authz.user.orgId}
        and kind in ('vendor_payment', 'customer_payment')
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const header = result[0];
   if (!header) throw notFound("payment");
   assertSubsidiaryAccess(context, header.subsidiaryId);
@@ -161,7 +164,13 @@ export async function postPayment(
         await lockLedgerSetupFence(db, context.authz.user.orgId, "shared");
         // Recheck the persisted scope while holding the outer boundary lock:
         // a concurrent rehome must not authorize this save or post.
-        await lockScopeRow(db, context.authz.user.orgId, "document", input.documentId, context.authz.allowedSubsidiaryIds);
+        await lockScopeRow(
+          db,
+          context.authz.user.orgId,
+          "document",
+          input.documentId,
+          context.authz.allowedSubsidiaryIds,
+        );
 
         if (header.status === "draft") {
           // Persist the final-action allocation set before submission. The
@@ -192,13 +201,15 @@ export async function postPayment(
             return {
               status: "pending_approval",
               requestId: submission.runId,
-              payment: await loadPaymentDocument(input.documentId, header.kind, context.authz.user.orgId),
+              payment: await loadPaymentDocument(
+                input.documentId,
+                header.kind,
+                context.authz.user.orgId,
+              ),
             };
           }
         } else if (header.status !== "approved") {
-          throw invalidInput(
-            `payment is ${header.status}; only an approved payment can be posted`,
-          );
+          throw invalidInput(`payment is ${header.status}; only an approved payment can be posted`);
         }
         const posted = await postPaymentWithApplications(
           input.documentId,
@@ -209,7 +220,11 @@ export async function postPayment(
         return {
           status: "posted",
           ...posted,
-          payment: await loadPaymentDocument(input.documentId, header.kind, context.authz.user.orgId),
+          payment: await loadPaymentDocument(
+            input.documentId,
+            header.kind,
+            context.authz.user.orgId,
+          ),
         };
       } catch (error) {
         paymentFailure(error);

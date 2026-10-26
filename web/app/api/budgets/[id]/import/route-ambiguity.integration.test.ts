@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Spreadsheet names can repeat: period names repeat across fiscal calendars,
 // dimension codes carry no uniqueness, and account names are not unique. The
@@ -10,164 +10,215 @@ import test from 'node:test'
 // within the budget's pinned (default) calendar only.
 
 const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
-  orgId: '', actorId: '', allowed: null,
-}
-Object.assign(globalThis, { __budgetAmbiguityState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+  orgId: "",
+  actorId: "",
+  allowed: null,
+};
+Object.assign(globalThis, { __budgetAmbiguityState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     // The route factory resolves its session gate through the "@/lib/…"
     // spellings at request time; they must see the same test session as the
     // route file's relative imports. Identical sources share one module
     // instance across both spellings.
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
+    if (specifier === "../../../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetAmbiguityState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
       }
-    `)
-    if (specifier === '../../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
+    `);
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz")
+      return virtual(`
       export function subsidiariesInScope(gate, ids) {
         const scope = gate.allowedSubsidiaryIds;
         if (scope === null) return true;
         return ids.every((id) => id !== null && id !== undefined && id !== '' && scope.has(id));
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { POST } = await import('./route.ts')
+});
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { POST } = await import("./route.ts");
 
 function csv(rows: string[][]) {
-  return rows.map((cells) => cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')
+  return rows.map((cells) => cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(",")).join("\n");
 }
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) })
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function post(id: string, body: unknown) {
-  return withOrgContext(state.orgId, () => POST(
-    new Request(`http://budget.test/api/budgets/${id}/import`, { method: 'POST', body: JSON.stringify(body) }),
-    params(id),
-  ))
+  return withOrgContext(state.orgId, () =>
+    POST(
+      new Request(`http://budget.test/api/budgets/${id}/import`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+      params(id),
+    ),
+  );
 }
 
 async function fixture() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
-  state.allowed = null
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
+  state.allowed = null;
   // Two P&L accounts sharing one name: resolving by name must refuse.
-  for (const number of ['9001', '9002']) {
+  for (const number of ["9001", "9002"]) {
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active)
-      values (${randomUUID()}, ${org.orgId}, ${number}, 'Dupe Account', 'expense', false, true)`)
+      values (${randomUUID()}, ${org.orgId}, ${number}, 'Dupe Account', 'expense', false, true)`);
   }
-  const sub = (await db.execute<{ id: string }>(sql`
+  const sub = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-    values (${org.orgId}, ${org.subsidiaryId}, 'Hidden Budget Branch', 'CAD', 'CA') returning id`, 'objects'))[0]!
+    values (${org.orgId}, ${org.subsidiaryId}, 'Hidden Budget Branch', 'CAD', 'CA') returning id`,
+      "objects",
+    )
+  )[0]!;
   // Two departments sharing one name (codes differ): same refusal.
-  for (const [code, subsidiaryId] of [['D1', org.subsidiaryId], ['D2', sub.id]] as const) {
+  for (const [code, subsidiaryId] of [
+    ["D1", org.subsidiaryId],
+    ["D2", sub.id],
+  ] as const) {
     await db.execute(sql`
       insert into departments (id, org_id, subsidiary_id, code, name, is_active)
-      values (${randomUUID()}, ${org.orgId}, ${subsidiaryId}, ${code}, 'Dupe Dept', true)`)
+      values (${randomUUID()}, ${org.orgId}, ${subsidiaryId}, ${code}, 'Dupe Dept', true)`);
   }
   // A second calendar reusing the default period's name.
-  const otherCalendar = randomUUID()
+  const otherCalendar = randomUUID();
   await db.execute(sql`
     insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
                                   adjustment_period_enabled, is_default, is_active, config)
-    values (${otherCalendar}, ${org.orgId}, 'Retail', 'monthly', 1, 1, 'UTC', false, false, true, '{}'::jsonb)`)
-  const otherPeriod = randomUUID()
+    values (${otherCalendar}, ${org.orgId}, 'Retail', 'monthly', 1, 1, 'UTC', false, false, true, '{}'::jsonb)`);
+  const otherPeriod = randomUUID();
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-    values (${otherPeriod}, ${org.orgId}, 2026, 7, '2026-07', '2026-07-01', '2026-07-31', false, ${otherCalendar})`)
-  const accountNumber = (await db.execute<{ number: string }>(sql`
-    select number from accounts where id = ${org.accounts.cogs}`, 'objects'))[0]!.number
-  const scenarioId = randomUUID()
+    values (${otherPeriod}, ${org.orgId}, 2026, 7, '2026-07', '2026-07-01', '2026-07-31', false, ${otherCalendar})`);
+  const accountNumber = (
+    await db.execute<{ number: string }>(
+      sql`
+    select number from accounts where id = ${org.accounts.cogs}`,
+      "objects",
+    )
+  )[0]!.number;
+  const scenarioId = randomUUID();
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-    values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Ambiguity Target', 'budget', 'draft')`)
-  return { org, subB: sub.id, accountNumber, scenarioId, otherPeriod }
+    values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Ambiguity Target', 'budget', 'draft')`);
+  return { org, subB: sub.id, accountNumber, scenarioId, otherPeriod };
 }
 
-test('import refuses ambiguous names naming the candidates', async () => {
-  const f = await fixture()
+test("import refuses ambiguous names naming the candidates", async () => {
+  const f = await fixture();
   try {
     const text = csv([
-      ['Account Number', 'Account Name', 'Period', 'Department', 'Amount'],
-      ['', '', '2026-07', '', '100'],
-      ['', 'Dupe Account', '2026-07', '', '100'],
-      [f.accountNumber, '', '2026-07', 'Dupe Dept', '100'],
-    ])
-    const dry = await post(f.scenarioId, { format: 'csv', text, expectedRevision: 1 })
-    assert.equal(dry.status, 200)
+      ["Account Number", "Account Name", "Period", "Department", "Amount"],
+      ["", "", "2026-07", "", "100"],
+      ["", "Dupe Account", "2026-07", "", "100"],
+      [f.accountNumber, "", "2026-07", "Dupe Dept", "100"],
+    ]);
+    const dry = await post(f.scenarioId, { format: "csv", text, expectedRevision: 1 });
+    assert.equal(dry.status, 200);
     const result = (await dry.json()) as {
-      valid: boolean
-      errors: { row: number; field: string; message: string }[]
-    }
-    assert.equal(result.valid, false)
-    const byRow = new Map(result.errors.map((e) => [e.row, e.message]))
+      valid: boolean;
+      errors: { row: number; field: string; message: string }[];
+    };
+    assert.equal(result.valid, false);
+    const byRow = new Map(result.errors.map((e) => [e.row, e.message]));
     // Row 2: blank number + blank name side... 'Account Name' column absent,
     // so the number cell is blank and no name is supplied: unknown.
-    assert.equal(byRow.get(2), 'unknown_account')
-    const dupAccount = result.errors.find((e) => e.row === 3)
-    assert.match(dupAccount?.message ?? '', /ambiguous_account/, 'duplicate account name refuses')
-    assert.match(dupAccount?.message ?? '', /9001/, 'the refusal names the first candidate')
-    assert.match(dupAccount?.message ?? '', /9002/, 'the refusal names the second candidate')
-    const dupDept = result.errors.find((e) => e.row === 4)
-    assert.match(dupDept?.message ?? '', /ambiguous_dimension/, 'duplicate department name refuses')
-    assert.match(dupDept?.message ?? '', /D1/, 'the refusal names department candidates')
+    assert.equal(byRow.get(2), "unknown_account");
+    const dupAccount = result.errors.find((e) => e.row === 3);
+    assert.match(dupAccount?.message ?? "", /ambiguous_account/, "duplicate account name refuses");
+    assert.match(dupAccount?.message ?? "", /9001/, "the refusal names the first candidate");
+    assert.match(dupAccount?.message ?? "", /9002/, "the refusal names the second candidate");
+    const dupDept = result.errors.find((e) => e.row === 4);
+    assert.match(
+      dupDept?.message ?? "",
+      /ambiguous_dimension/,
+      "duplicate department name refuses",
+    );
+    assert.match(dupDept?.message ?? "", /D1/, "the refusal names department candidates");
   } finally {
-    await dropScratchOrg(f.org.orgId)
+    await dropScratchOrg(f.org.orgId);
   }
-})
+});
 
-test('import resolves a repeated period name within the default calendar', async () => {
-  const f = await fixture()
+test("import resolves a repeated period name within the default calendar", async () => {
+  const f = await fixture();
   try {
     const text = csv([
-      ['Account Number', 'Period', 'Amount'],
-      [f.accountNumber, '2026-07', '100'],
-    ])
-    const dry = await post(f.scenarioId, { format: 'csv', text, expectedRevision: 1 })
-    assert.equal(dry.status, 200)
-    const result = (await dry.json()) as { valid: boolean; errors: unknown[] }
-    assert.equal(result.valid, true, `repeated period name must resolve: ${JSON.stringify(result.errors)}`)
+      ["Account Number", "Period", "Amount"],
+      [f.accountNumber, "2026-07", "100"],
+    ]);
+    const dry = await post(f.scenarioId, { format: "csv", text, expectedRevision: 1 });
+    assert.equal(dry.status, 200);
+    const result = (await dry.json()) as { valid: boolean; errors: unknown[] };
+    assert.equal(
+      result.valid,
+      true,
+      `repeated period name must resolve: ${JSON.stringify(result.errors)}`,
+    );
 
-    const committed = await post(f.scenarioId, { format: 'csv', text, expectedRevision: 1, commit: true })
-    assert.equal(committed.status, 200)
-    const line = (await db.execute<{ period_id: string }>(sql`
-      select period_id from budget_lines where scenario_id = ${f.scenarioId} and org_id = ${f.org.orgId}`, 'objects'))[0]!
-    assert.equal(line.period_id, f.org.periodId, 'the line lands on the default-calendar period, not the same-named one')
+    const committed = await post(f.scenarioId, {
+      format: "csv",
+      text,
+      expectedRevision: 1,
+      commit: true,
+    });
+    assert.equal(committed.status, 200);
+    const line = (
+      await db.execute<{ period_id: string }>(
+        sql`
+      select period_id from budget_lines where scenario_id = ${f.scenarioId} and org_id = ${f.org.orgId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(
+      line.period_id,
+      f.org.periodId,
+      "the line lands on the default-calendar period, not the same-named one",
+    );
   } finally {
-    await dropScratchOrg(f.org.orgId)
+    await dropScratchOrg(f.org.orgId);
   }
-})
+});
 
-test('a scoped import resolves dimension names only among visible subsidiaries', async () => {
-  const f = await fixture()
+test("a scoped import resolves dimension names only among visible subsidiaries", async () => {
+  const f = await fixture();
   try {
-    state.allowed = new Set([f.org.subsidiaryId])
+    state.allowed = new Set([f.org.subsidiaryId]);
     await db.execute(sql`update accounts set subsidiary_id = ${f.org.subsidiaryId}
-      where org_id = ${f.org.orgId} and id = ${f.org.accounts.cogs}`)
+      where org_id = ${f.org.orgId} and id = ${f.org.accounts.cogs}`);
     const text = csv([
-      ['Account Number', 'Period', 'Department', 'Amount'],
-      [f.accountNumber, '2026-07', 'Dupe Dept', '100'],
-    ])
-    const dry = await post(f.scenarioId, { format: 'csv', text, expectedRevision: 1 })
-    assert.equal(dry.status, 200)
-    const result = await dry.json() as {
-      valid: boolean
-      errors: { field: string; message: string }[]
-      sample: { departmentId: string | null }[]
-    }
-    assert.equal(result.valid, true, `only the visible department should participate in resolution: ${JSON.stringify(result.errors)}`)
-    assert.deepEqual(result.errors, [])
-    assert.ok(result.sample[0]?.departmentId)
+      ["Account Number", "Period", "Department", "Amount"],
+      [f.accountNumber, "2026-07", "Dupe Dept", "100"],
+    ]);
+    const dry = await post(f.scenarioId, { format: "csv", text, expectedRevision: 1 });
+    assert.equal(dry.status, 200);
+    const result = (await dry.json()) as {
+      valid: boolean;
+      errors: { field: string; message: string }[];
+      sample: { departmentId: string | null }[];
+    };
+    assert.equal(
+      result.valid,
+      true,
+      `only the visible department should participate in resolution: ${JSON.stringify(result.errors)}`,
+    );
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.sample[0]?.departmentId);
   } finally {
-    state.allowed = null
-    await dropScratchOrg(f.org.orgId)
+    state.allowed = null;
+    await dropScratchOrg(f.org.orgId);
   }
-})
+});

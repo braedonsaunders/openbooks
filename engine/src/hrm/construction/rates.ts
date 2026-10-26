@@ -1,10 +1,7 @@
 import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
-import {
-  requireConstructionScope,
-  requireUnrestrictedHrmScope,
-} from "../authorization.ts";
+import { requireConstructionScope, requireUnrestrictedHrmScope } from "../authorization.ts";
 import { classificationAsOf } from "./classifications.ts";
 import { primaryDepartmentForEmploymentAsOf } from "../effective-employment.ts";
 import { recordFinding } from "./findings.ts";
@@ -126,11 +123,16 @@ export async function assertDeclaredScheduleScope(
     return;
   }
   if (target.employerSubsidiaryId !== null) {
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
         select 1 as one from subsidiaries
          where org_id = ${orgId}::uuid and id = ${target.employerSubsidiaryId}::uuid
            ${allowed === null ? sql`` : sql`and id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmConstructionError(
         "The schedule's employer subsidiary does not exist in this organization — declare the schedule for a subsidiary of this organization, or leave it org-wide.",
@@ -138,11 +140,16 @@ export async function assertDeclaredScheduleScope(
     }
   }
   for (const projectId of target.projectIds) {
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
         select 1 as one from projects
          where org_id = ${orgId}::uuid and id = ${projectId}::uuid
            ${allowed === null ? sql`` : sql`and subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmConstructionError(
         "One of the schedule's projects does not exist in this organization — declare the schedule for projects of this organization.",
@@ -165,10 +172,15 @@ export async function lockScheduleScopeForWrite(
   scheduleId: string,
   allowed: ReadonlySet<string> | null,
 ): Promise<ScheduleScopeTarget> {
-  const row = (await exec.execute<{ appliesTo: unknown }>(sql`
+  const row = (
+    await exec.execute<{ appliesTo: unknown }>(
+      sql`
       select applies_to as "appliesTo" from hrm_rate_schedules
        where org_id = ${orgId}::uuid and id = ${scheduleId}::uuid for update
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   const missing = (): HrmConstructionError =>
     new HrmConstructionError(
       `Rate schedule ${scheduleId} does not exist in this organization — use one of its schedules.`,
@@ -187,11 +199,16 @@ export async function lockScheduleScopeForWrite(
     throw missing();
   }
   for (const projectId of target.projectIds) {
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
         select 1 as one from projects
          where org_id = ${orgId}::uuid and id = ${projectId}::uuid
            ${allowed === null ? sql`` : sql`and subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!found) throw missing();
   }
   return target;
@@ -209,17 +226,18 @@ export async function listSchedules(
   // reference like the trade taxonomy, so they stay readable.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
   const rows = await exec.execute<{
-      id: string;
-      kind: ScheduleKind;
-      name: string;
-      sourceRef: string | null;
-      jurisdictionCode: string | null;
-      appliesTo: AppliesTo;
-      reciprocity: Reciprocity;
-      effectiveFrom: string;
-      effectiveTo: string | null;
-      isActive: boolean;
-    }>(sql`
+    id: string;
+    kind: ScheduleKind;
+    name: string;
+    sourceRef: string | null;
+    jurisdictionCode: string | null;
+    appliesTo: AppliesTo;
+    reciprocity: Reciprocity;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+    isActive: boolean;
+  }>(
+    sql`
       select id::text as id, kind, name,
              source_ref as "sourceRef", jurisdiction_code as "jurisdictionCode",
              applies_to as "appliesTo", reciprocity,
@@ -228,20 +246,26 @@ export async function listSchedules(
         from hrm_rate_schedules
        where org_id = ${orgId}::uuid
        order by name
-    `, "objects");
+    `,
+    "objects",
+  );
   if (allowed === null) return rows;
   const projectIds = [...new Set(rows.flatMap((row) => row.appliesTo?.project_ids ?? []))];
   const subsidiaries = new Map<string, string | null>();
   if (projectIds.length > 0) {
-    const projectRows = await exec.execute<{ id: string; subsidiaryId: string | null }>(sql`
+    const projectRows = await exec.execute<{ id: string; subsidiaryId: string | null }>(
+      sql`
         select id::text as id, subsidiary_id::text as "subsidiaryId" from projects
          where org_id = ${orgId}::uuid and id = any (${`{${projectIds.join(",")}}`}::uuid[])
-      `, "objects");
+      `,
+      "objects",
+    );
     for (const project of projectRows) subsidiaries.set(project.id, project.subsidiaryId);
   }
   return rows.filter((row) => {
     const target = scheduleScopeTarget(row.appliesTo ?? {});
-    if (target.employerSubsidiaryId !== null && !allowed.has(target.employerSubsidiaryId)) return false;
+    if (target.employerSubsidiaryId !== null && !allowed.has(target.employerSubsidiaryId))
+      return false;
     for (const projectId of target.projectIds) {
       const subsidiary = subsidiaries.get(projectId);
       if (!subsidiary || !allowed.has(subsidiary)) return false;
@@ -253,17 +277,18 @@ export async function listSchedules(
 export async function createSchedule(
   exec: SqlExecutor,
   input: {
-  orgId: string;
-  actorId: string;
-  kind: ScheduleKind;
-  name: string;
-  sourceRef?: string | null;
-  jurisdictionCode?: string | null;
-  appliesTo?: AppliesTo;
-  reciprocity: Reciprocity;
-  effectiveFrom: string;
-  effectiveTo?: string | null;
-}): Promise<RateSchedule> {
+    orgId: string;
+    actorId: string;
+    kind: ScheduleKind;
+    name: string;
+    sourceRef?: string | null;
+    jurisdictionCode?: string | null;
+    appliesTo?: AppliesTo;
+    reciprocity: Reciprocity;
+    effectiveFrom: string;
+    effectiveTo?: string | null;
+  },
+): Promise<RateSchedule> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   if (!["prevailing_wage", "union_agreement", "org_declared"].includes(input.kind)) {
@@ -295,8 +320,16 @@ export async function createSchedule(
     // subsidiary or B project reads exactly like a fabricated id, and an
     // org-wide target needs unrestricted scope.
     const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
-    await assertDeclaredScheduleScope(exec, orgId, actorId, scheduleScopeTarget(appliesTo), allowed);
-    const created = (await exec.execute<{ id: string }>(sql`
+    await assertDeclaredScheduleScope(
+      exec,
+      orgId,
+      actorId,
+      scheduleScopeTarget(appliesTo),
+      allowed,
+    );
+    const created = (
+      await exec.execute<{ id: string }>(
+        sql`
         insert into hrm_rate_schedules
           (org_id, kind, name, source_ref, jurisdiction_code, applies_to,
            reciprocity, effective_from, effective_to, created_by, updated_by)
@@ -306,11 +339,16 @@ export async function createSchedule(
                 ${effectiveFrom}::date, ${effectiveTo}::date,
                 ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `, "objects"))[0];
-    if (!created) throw new HrmConstructionError(`Schedule ${name} was not created — no row was written.`);
+      `,
+        "objects",
+      )
+    )[0];
+    if (!created)
+      throw new HrmConstructionError(`Schedule ${name} was not created — no row was written.`);
     const rows = await listSchedules(exec, orgId, actorId);
     const found = rows.find((row) => row.id === created.id);
-    if (!found) throw new HrmConstructionError(`Schedule ${name} was not created — it cannot be read back.`);
+    if (!found)
+      throw new HrmConstructionError(`Schedule ${name} was not created — it cannot be read back.`);
     return found;
   });
 }
@@ -324,11 +362,12 @@ export async function createSchedule(
 export async function updateScheduleScope(
   exec: SqlExecutor,
   input: {
-  orgId: string;
-  actorId: string;
-  scheduleId: string;
-  appliesTo: AppliesTo;
-}): Promise<RateSchedule> {
+    orgId: string;
+    actorId: string;
+    scheduleId: string;
+    appliesTo: AppliesTo;
+  },
+): Promise<RateSchedule> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const scheduleId = requireId(input.scheduleId, "scheduleId");
@@ -341,11 +380,23 @@ export async function updateScheduleScope(
     // refuses as not-found), then the NEW target validates like a
     // creation — retargeting onto B or org-wide needs the scope for it.
     await lockScheduleScopeForWrite(exec, orgId, actorId, scheduleId, allowed);
-    await proveScopeTarget(exec, orgId, "department", "departments", appliesTo.department_id ?? null);
+    await proveScopeTarget(
+      exec,
+      orgId,
+      "department",
+      "departments",
+      appliesTo.department_id ?? null,
+    );
     for (const locationId of appliesTo.location_ids ?? []) {
       await proveScopeTarget(exec, orgId, "location", "locations", locationId);
     }
-    await assertDeclaredScheduleScope(exec, orgId, actorId, scheduleScopeTarget(appliesTo), allowed);
+    await assertDeclaredScheduleScope(
+      exec,
+      orgId,
+      actorId,
+      scheduleScopeTarget(appliesTo),
+      allowed,
+    );
     await exec.execute(sql`
       update hrm_rate_schedules
          set applies_to = ${JSON.stringify(appliesTo)}::jsonb,
@@ -354,7 +405,10 @@ export async function updateScheduleScope(
     `);
     const rows = await listSchedules(exec, orgId, actorId);
     const found = rows.find((row) => row.id === scheduleId);
-    if (!found) throw new HrmConstructionError(`Rate schedule ${scheduleId} cannot be read back after scoping.`);
+    if (!found)
+      throw new HrmConstructionError(
+        `Rate schedule ${scheduleId} cannot be read back after scoping.`,
+      );
     return found;
   });
 }
@@ -372,10 +426,15 @@ export async function listScheduleLines(
   return withOrgTransaction(orgId, async () => {
     // Match the FOR UPDATE schedule scope writer so lines cannot be read
     // under the old subsidiary scope while the schedule is being rehomed.
-    const locked = (await exec.execute(sql`
+    const locked = (
+      await exec.execute(
+        sql`
       select id from hrm_rate_schedules
        where org_id = ${orgId}::uuid and id = ${scheduleId}::uuid for share
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const schedules = await listSchedules(exec, orgId, actorId);
     if (!locked || !schedules.some((schedule) => schedule.id === scheduleId)) {
       throw new HrmConstructionError(
@@ -385,18 +444,19 @@ export async function listScheduleLines(
     // Sequential reads: a transaction exec is one pg client, so reading
     // lines and classifications at once queues concurrent queries on it.
     const lines = await exec.execute<{
-        id: string;
-        classificationId: string;
-        classificationCode: string;
-        classificationName: string;
-        baseRate: string;
-        fringeRate: string;
-        fringeCreditRate: string;
-        overtimeMultiplier: string;
-        currency: string;
-        effectiveFrom: string;
-        effectiveTo: string | null;
-      }>(sql`
+      id: string;
+      classificationId: string;
+      classificationCode: string;
+      classificationName: string;
+      baseRate: string;
+      fringeRate: string;
+      fringeCreditRate: string;
+      overtimeMultiplier: string;
+      currency: string;
+      effectiveFrom: string;
+      effectiveTo: string | null;
+    }>(
+      sql`
       select line.id::text as id, line.classification_id::text as "classificationId",
              classification.code as "classificationCode", classification.name as "classificationName",
              line.base_rate::text as "baseRate", line.fringe_rate::text as "fringeRate",
@@ -408,13 +468,18 @@ export async function listScheduleLines(
           on classification.org_id = line.org_id and classification.id = line.classification_id
        where line.org_id = ${input.orgId}::uuid and line.schedule_id = ${scheduleId}::uuid
        order by line.effective_from desc, classification.code
-      `, "objects");
-    const classifications = await exec.execute<{ id: string; code: string; name: string }>(sql`
+      `,
+      "objects",
+    );
+    const classifications = await exec.execute<{ id: string; code: string; name: string }>(
+      sql`
       select id::text as id, code, name
         from hrm_work_classifications
        where org_id = ${input.orgId}::uuid and is_active
        order by code, name
-      `, "objects");
+      `,
+      "objects",
+    );
     return { lines, classifications };
   });
 }
@@ -427,9 +492,14 @@ async function proveScopeTarget(
   id: string | null,
 ): Promise<void> {
   if (!id) return;
-  const row = (await exec.execute<{ id: string }>(sql`
+  const row = (
+    await exec.execute<{ id: string }>(
+      sql`
       select id from ${sql.raw(table)} where org_id = ${orgId}::uuid and id = ${id}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new HrmConstructionError(
       `Scope ${kind} ${id} does not exist in this organization — scope the schedule to one of its ${kind}s.`,
@@ -451,7 +521,11 @@ function assertAppliesTo(appliesTo: AppliesTo): void {
   }
   for (const listKey of ["project_ids", "location_ids"] as const) {
     const list = appliesTo[listKey];
-    if (list !== undefined && list !== null && (!Array.isArray(list) || list.some((id) => typeof id !== "string"))) {
+    if (
+      list !== undefined &&
+      list !== null &&
+      (!Array.isArray(list) || list.some((id) => typeof id !== "string"))
+    ) {
       throw new HrmConstructionError(`Schedule scope ${listKey} must be an array of id strings.`);
     }
   }
@@ -460,18 +534,19 @@ function assertAppliesTo(appliesTo: AppliesTo): void {
 export async function addScheduleLine(
   exec: SqlExecutor,
   input: {
-  orgId: string;
-  actorId: string;
-  scheduleId: string;
-  classificationId: string;
-  baseRate: string;
-  fringeRate?: string;
-  fringeCreditRate?: string;
-  overtimeMultiplier?: string;
-  currency: string;
-  effectiveFrom: string;
-  effectiveTo?: string | null;
-}): Promise<string> {
+    orgId: string;
+    actorId: string;
+    scheduleId: string;
+    classificationId: string;
+    baseRate: string;
+    fringeRate?: string;
+    fringeCreditRate?: string;
+    overtimeMultiplier?: string;
+    currency: string;
+    effectiveFrom: string;
+    effectiveTo?: string | null;
+  },
+): Promise<string> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const scheduleId = requireId(input.scheduleId, "scheduleId");
@@ -483,11 +558,14 @@ export async function addScheduleLine(
     ["overtimeMultiplier", input.overtimeMultiplier ?? "1.5"],
   ] as const) {
     if (canonicalNonNegativeDecimal(value, 4) === null) {
-      throw new HrmConstructionError(`${field} must be a non-negative decimal with at most 4 places — got ${value}.`);
+      throw new HrmConstructionError(
+        `${field} must be a non-negative decimal with at most 4 places — got ${value}.`,
+      );
     }
   }
   const currency = requireText(input.currency, "currency");
-  if (currency.length !== 3) throw new HrmConstructionError("Currency must be a 3-letter ISO code.");
+  if (currency.length !== 3)
+    throw new HrmConstructionError("Currency must be a 3-letter ISO code.");
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
   return withOrgTransaction(orgId, async () => {
     await assertConstructionFeature(exec, orgId, "Rate schedules");
@@ -496,16 +574,23 @@ export async function addScheduleLine(
     // refuses a restricted actor before the line is even validated.
     const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await lockScheduleScopeForWrite(exec, orgId, actorId, scheduleId, allowed);
-    const classification = (await exec.execute<{ id: string }>(sql`
+    const classification = (
+      await exec.execute<{ id: string }>(
+        sql`
         select id from hrm_work_classifications where org_id = ${orgId}::uuid and id = ${classificationId}::uuid
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!classification) {
       throw new HrmConstructionError(
         `Classification ${classificationId} does not exist in this organization — declare it before pricing it.`,
       );
     }
     try {
-      const created = (await exec.execute<{ id: string }>(sql`
+      const created = (
+        await exec.execute<{ id: string }>(
+          sql`
           insert into hrm_rate_schedule_lines
             (org_id, schedule_id, classification_id, base_rate, fringe_rate, fringe_credit_rate,
              overtime_multiplier, currency, effective_from, effective_to, created_by, updated_by)
@@ -515,8 +600,12 @@ export async function addScheduleLine(
                   ${effectiveFrom}::date, ${input.effectiveTo ?? null}::date,
                   ${actorId}::uuid, ${actorId}::uuid)
           returning id::text as id
-        `, "objects"))[0];
-      if (!created) throw new HrmConstructionError("The rate line was not written — no row was created.");
+        `,
+          "objects",
+        )
+      )[0];
+      if (!created)
+        throw new HrmConstructionError("The rate line was not written — no row was created.");
       return String(created.id);
     } catch (error) {
       if (error instanceof HrmConstructionError) throw error;
@@ -535,7 +624,13 @@ export async function addScheduleLine(
  */
 export async function resolveWage(
   exec: SqlExecutor,
-  input: { orgId: string; actorId: string; employmentId: string; projectId: string | null; workedOn: string },
+  input: {
+    orgId: string;
+    actorId: string;
+    employmentId: string;
+    projectId: string | null;
+    workedOn: string;
+  },
 ): Promise<ResolvedWage> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
@@ -549,11 +644,21 @@ export async function resolveWage(
   // refusing identically.
   const lens = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   await assertEmploymentInScope(exec, orgId, employmentId, lens);
-  const employmentSubsidiary = (await exec.execute<{ subsidiaryId: string | null }>(sql`
+  const employmentSubsidiary =
+    (
+      await exec.execute<{ subsidiaryId: string | null }>(
+        sql`
       select employer_subsidiary_id::text as "subsidiaryId"
         from worker_employments where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
-    `, "objects"))[0]?.subsidiaryId ?? null;
-  const employmentDepartment = await primaryDepartmentForEmploymentAsOf(exec, { orgId, employmentId, workedOn });
+    `,
+        "objects",
+      )
+    )[0]?.subsidiaryId ?? null;
+  const employmentDepartment = await primaryDepartmentForEmploymentAsOf(exec, {
+    orgId,
+    employmentId,
+    workedOn,
+  });
   const assignment = await classificationAsOf(exec, orgId, employmentId, workedOn);
   if (!assignment) {
     await recordFinding(exec, {
@@ -575,10 +680,15 @@ export async function resolveWage(
     // The project's own subsidiary fences the priced read: an A-scoped
     // caller pricing B's project refuses exactly like a fabricated id.
     await assertProjectInScope(exec, orgId, input.projectId, lens);
-    const project = (await exec.execute<{ subsidiaryId: string | null; custom: Record<string, unknown> }>(sql`
+    const project = (
+      await exec.execute<{ subsidiaryId: string | null; custom: Record<string, unknown> }>(
+        sql`
         select subsidiary_id::text as "subsidiaryId", custom
           from projects where org_id = ${orgId}::uuid and id = ${input.projectId}::uuid
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     projectSubsidiary = project?.subsidiaryId ?? null;
     const customLocation = (project?.custom as Record<string, unknown> | null)?.location_id;
     projectLocation = typeof customLocation === "string" ? customLocation : null;
@@ -590,18 +700,21 @@ export async function resolveWage(
     subsidiaryId: employmentSubsidiary ?? projectSubsidiary,
   };
   const schedules = await exec.execute<{
-      id: string;
-      kind: ScheduleKind;
-      name: string;
-      appliesTo: AppliesTo;
-      reciprocity: Reciprocity;
-    }>(sql`
+    id: string;
+    kind: ScheduleKind;
+    name: string;
+    appliesTo: AppliesTo;
+    reciprocity: Reciprocity;
+  }>(
+    sql`
       select id::text as id, kind, name, applies_to as "appliesTo", reciprocity
         from hrm_rate_schedules
        where org_id = ${orgId}::uuid and is_active
          and effective_from <= ${workedOn}::date
          and (effective_to is null or effective_to >= ${workedOn}::date)
-    `, "objects");
+    `,
+    "objects",
+  );
   const scored = schedules
     .map((schedule) => ({ schedule, score: scopeScore(schedule.appliesTo ?? {}, target) }))
     .filter((candidate) => candidate.score >= 0)
@@ -612,14 +725,19 @@ export async function resolveWage(
   let priceClassificationId = assignment.classificationId;
   let rateAtJourney = false;
   if (assignment.isApprentice && assignment.journeyClassificationId && input.projectId) {
-    const breach = (await exec.execute<{ detail: Record<string, unknown> }>(sql`
+    const breach = (
+      await exec.execute<{ detail: Record<string, unknown> }>(
+        sql`
         select detail from hrm_compliance_findings
          where org_id = ${orgId}::uuid and kind = 'ratio_breach' and status = 'open'
            and project_id is not distinct from ${input.projectId}::uuid
            and worked_on is not distinct from ${workedOn}::date
            and employment_id is not distinct from ${employmentId}::uuid
          order by recorded_at desc limit 1
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     // A breach reprices only under its recorded schedule obligation: the
     // finding's schedule must still resolve for this employment, so another
     // jurisdiction's rule cannot alter this wage. Findings recorded before
@@ -644,10 +762,19 @@ export async function resolveWage(
       schedule.reciprocity,
       { base: line.baseRate, fringeCash: line.fringeRate, fringeCredit: line.fringeCreditRate },
       homeLine
-        ? { base: homeLine.baseRate, fringeCash: homeLine.fringeRate, fringeCredit: homeLine.fringeCreditRate }
+        ? {
+            base: homeLine.baseRate,
+            fringeCash: homeLine.fringeRate,
+            fringeCredit: homeLine.fringeCreditRate,
+          }
         : null,
     );
-    const kindSource = schedule.kind === "prevailing_wage" ? "prevailing" : schedule.kind === "union_agreement" ? "union" : "org";
+    const kindSource =
+      schedule.kind === "prevailing_wage"
+        ? "prevailing"
+        : schedule.kind === "union_agreement"
+          ? "union"
+          : "org";
     return {
       scheduleId: schedule.id,
       scheduleName: schedule.name,
@@ -696,13 +823,15 @@ async function lineAsOf(
   currency: string;
   overtimeMultiplier: string;
 } | null> {
-  const row = (await exec.execute<{
+  const row = (
+    await exec.execute<{
       baseRate: string;
       fringeRate: string;
       fringeCreditRate: string;
       currency: string;
       overtimeMultiplier: string;
-    }>(sql`
+    }>(
+      sql`
       select base_rate::text as "baseRate", fringe_rate::text as "fringeRate",
              fringe_credit_rate::text as "fringeCreditRate",
              currency, overtime_multiplier::text as "overtimeMultiplier"
@@ -712,6 +841,9 @@ async function lineAsOf(
          and effective_from <= ${workedOn}::date
          and (effective_to is null or effective_to >= ${workedOn}::date)
        order by effective_from desc limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   return row ?? null;
 }

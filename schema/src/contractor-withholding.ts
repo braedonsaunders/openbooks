@@ -1,5 +1,18 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
 /**
@@ -18,7 +31,7 @@ export const withholdingEnrollments = pgTable(
     authorityPartyId: uuid("authority_party_id"),
     thresholdBasis: text("threshold_basis"),
     payerScope: text("payer_scope"),
-    returnFrequency: text("return_frequency", { enum: ["monthly","quarterly","annual"] }),
+    returnFrequency: text("return_frequency", { enum: ["monthly", "quarterly", "annual"] }),
     remittanceScheduleCode: text("remittance_schedule_code"),
     remittancePolicy: jsonb("remittance_policy"),
     effectiveFrom: date("effective_from").notNull(),
@@ -46,14 +59,22 @@ export const withholdingStandings = pgTable(
     payeeReference: text("payee_reference"),
     payeeTaxOffice: text("payee_tax_office"),
     applyFromFirstPayment: boolean("apply_from_first_payment").notNull().default(false),
-    status: text("status", { enum: ["active", "revoked"] }).notNull().default("active"),
+    status: text("status", { enum: ["active", "revoked"] })
+      .notNull()
+      .default("active"),
     revokedReason: text("revoked_reason"),
     notes: text("notes"),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("withholding_standings_org_id_id_key").on(t.orgId, t.id),
-    index("withholding_standings_party").on(t.orgId, t.subsidiaryId, t.partyId, t.schemeCode, t.validFrom),
+    index("withholding_standings_party").on(
+      t.orgId,
+      t.subsidiaryId,
+      t.partyId,
+      t.schemeCode,
+      t.validFrom,
+    ),
   ],
 );
 
@@ -99,7 +120,9 @@ export const withholdingDeductions = pgTable(
     belowThreshold: boolean("below_threshold").notNull().default(false),
     authorisationReference: text("authorisation_reference"),
     reasons: jsonb("reasons").notNull().default([]),
-    status: text("status", { enum: ["posted", "voided"] }).notNull().default("posted"),
+    status: text("status", { enum: ["posted", "voided"] })
+      .notNull()
+      .default("posted"),
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     voidedBy: uuid("voided_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -107,11 +130,24 @@ export const withholdingDeductions = pgTable(
   },
   (t) => [
     uniqueIndex("withholding_deductions_org_id_id_key").on(t.orgId, t.id),
-    uniqueIndex("withholding_deductions_payment_line_key").on(t.orgId, t.paymentDocumentId, t.billOpenLineId),
+    uniqueIndex("withholding_deductions_payment_line_key").on(
+      t.orgId,
+      t.paymentDocumentId,
+      t.billOpenLineId,
+    ),
     index("withholding_deductions_payee_year").on(t.orgId, t.partyId, t.schemeCode, t.paymentDate),
-    check("withholding_deductions_fx_evidence_complete", sql`num_nonnulls(${t.transactionCurrency},${t.transactionPaidAmount},${t.transactionDeductedAmount},${t.reportingFxRate},${t.reportingFxEvidence}) IN (0,5)`),
-    check("withholding_deductions_transaction_amounts", sql`${t.transactionPaidAmount} >= 0 AND ${t.transactionDeductedAmount} >= 0 AND ${t.transactionDeductedAmount} <= ${t.transactionPaidAmount} AND ${t.reportingFxRate} > 0`),
-    check("withholding_deductions_fx_evidence_scope", sql`${t.reportingFxEvidence} IS NULL OR (jsonb_typeof(${t.reportingFxEvidence})='object' AND ${t.reportingFxEvidence}->>'kind'='as-of' AND ${t.reportingFxEvidence}->>'from'=${t.transactionCurrency} AND ${t.reportingFxEvidence}->>'to'=${t.currency} AND ${t.reportingFxEvidence}->>'asOf'=${t.paymentDate}::text AND ${t.reportingFxEvidence}->>'policy'='direct-or-inverse-spot' AND ${t.reportingFxEvidence}->>'table'='fx_rates' AND ${t.reportingFxEvidence}->>'digest' ~ '^[a-f0-9]{64}$' AND (${t.reportingFxEvidence}->>'rate')::numeric=${t.reportingFxRate} AND jsonb_typeof(${t.reportingFxEvidence}->'observations')='array' AND (${t.reportingFxEvidence}->>'sameCurrencyPar')::boolean=(${t.transactionCurrency}=${t.currency})) IS TRUE`),
+    check(
+      "withholding_deductions_fx_evidence_complete",
+      sql`num_nonnulls(${t.transactionCurrency},${t.transactionPaidAmount},${t.transactionDeductedAmount},${t.reportingFxRate},${t.reportingFxEvidence}) IN (0,5)`,
+    ),
+    check(
+      "withholding_deductions_transaction_amounts",
+      sql`${t.transactionPaidAmount} >= 0 AND ${t.transactionDeductedAmount} >= 0 AND ${t.transactionDeductedAmount} <= ${t.transactionPaidAmount} AND ${t.reportingFxRate} > 0`,
+    ),
+    check(
+      "withholding_deductions_fx_evidence_scope",
+      sql`${t.reportingFxEvidence} IS NULL OR (jsonb_typeof(${t.reportingFxEvidence})='object' AND ${t.reportingFxEvidence}->>'kind'='as-of' AND ${t.reportingFxEvidence}->>'from'=${t.transactionCurrency} AND ${t.reportingFxEvidence}->>'to'=${t.currency} AND ${t.reportingFxEvidence}->>'asOf'=${t.paymentDate}::text AND ${t.reportingFxEvidence}->>'policy'='direct-or-inverse-spot' AND ${t.reportingFxEvidence}->>'table'='fx_rates' AND ${t.reportingFxEvidence}->>'digest' ~ '^[a-f0-9]{64}$' AND (${t.reportingFxEvidence}->>'rate')::numeric=${t.reportingFxRate} AND jsonb_typeof(${t.reportingFxEvidence}->'observations')='array' AND (${t.reportingFxEvidence}->>'sameCurrencyPar')::boolean=(${t.transactionCurrency}=${t.currency})) IS TRUE`,
+    ),
   ],
 );
 
@@ -127,7 +163,9 @@ export const withholdingReturns = pgTable(
     periodStart: date("period_start").notNull(),
     periodEnd: date("period_end").notNull(),
     revision: integer("revision").notNull().default(1),
-    status: text("status", { enum: ["prepared", "filed", "superseded"] }).notNull().default("prepared"),
+    status: text("status", { enum: ["prepared", "filed", "superseded"] })
+      .notNull()
+      .default("prepared"),
     currency: currencyCode("currency").notNull(),
     totals: jsonb("totals").notNull(),
     lines: jsonb("lines").notNull(),
@@ -141,6 +179,11 @@ export const withholdingReturns = pgTable(
   },
   (t) => [
     uniqueIndex("withholding_returns_org_id_id_key").on(t.orgId, t.id),
-    uniqueIndex("withholding_returns_period_revision_key").on(t.orgId, t.enrollmentId, t.periodStart, t.revision),
+    uniqueIndex("withholding_returns_period_revision_key").on(
+      t.orgId,
+      t.enrollmentId,
+      t.periodStart,
+      t.revision,
+    ),
   ],
 );

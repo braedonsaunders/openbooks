@@ -1,99 +1,158 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { evaluateUsNexus, thresholdForState } from './us-nexus.ts'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { evaluateUsNexus, thresholdForState } from "./us-nexus.ts";
 
-test('default states use $100k OR 200 transactions', () => {
-  const t = thresholdForState('FL')
-  assert.equal(t.salesUsd, '100000')
-  assert.equal(t.txnCount, 200)
-  assert.equal(t.measure, 'sales_or_txn')
-})
+test("default states use $100k OR 200 transactions", () => {
+  const t = thresholdForState("FL");
+  assert.equal(t.salesUsd, "100000");
+  assert.equal(t.txnCount, 200);
+  assert.equal(t.measure, "sales_or_txn");
+});
 
-test('overrides win (CA sales-only $500k, NY sales AND 100 txns, AL/MS sales-only $250k)', () => {
-  assert.deepEqual(thresholdForState('CA'), { state: 'CA', salesUsd: '500000', txnCount: null, measure: 'sales_only' })
-  assert.deepEqual(thresholdForState('NY'), { state: 'NY', salesUsd: '500000', txnCount: 100, measure: 'sales_and_txn' })
-  assert.deepEqual(thresholdForState('AL'), { state: 'AL', salesUsd: '250000', txnCount: null, measure: 'sales_only' })
-  assert.deepEqual(thresholdForState('MS'), { state: 'MS', salesUsd: '250000', txnCount: null, measure: 'sales_only' })
-})
+test("overrides win (CA sales-only $500k, NY sales AND 100 txns, AL/MS sales-only $250k)", () => {
+  assert.deepEqual(thresholdForState("CA"), {
+    state: "CA",
+    salesUsd: "500000",
+    txnCount: null,
+    measure: "sales_only",
+  });
+  assert.deepEqual(thresholdForState("NY"), {
+    state: "NY",
+    salesUsd: "500000",
+    txnCount: 100,
+    measure: "sales_and_txn",
+  });
+  assert.deepEqual(thresholdForState("AL"), {
+    state: "AL",
+    salesUsd: "250000",
+    txnCount: null,
+    measure: "sales_only",
+  });
+  assert.deepEqual(thresholdForState("MS"), {
+    state: "MS",
+    salesUsd: "250000",
+    txnCount: null,
+    measure: "sales_only",
+  });
+});
 
-test('states without a statewide sales tax never create nexus obligations', () => {
+test("states without a statewide sales tax never create nexus obligations", () => {
   const rows = evaluateUsNexus([
-    { state: 'OR', salesUsd: '1000000', txnCount: 1_000 },
-    { state: 'DE', salesUsd: '1000000', txnCount: 1_000 },
-  ])
-  assert.deepEqual(rows.map((row) => row.status), ['none', 'none'])
-  assert.deepEqual(rows.map((row) => row.threshold.measure), ['none', 'none'])
-  assert.deepEqual(rows.map((row) => row.progress), [0, 0])
-  assert.equal(evaluateUsNexus([{ state: 'OR', salesUsd: '1000000', txnCount: 1_000 }], { approachingAt: 0 })[0]!.status, 'none')
-})
+    { state: "OR", salesUsd: "1000000", txnCount: 1_000 },
+    { state: "DE", salesUsd: "1000000", txnCount: 1_000 },
+  ]);
+  assert.deepEqual(
+    rows.map((row) => row.status),
+    ["none", "none"],
+  );
+  assert.deepEqual(
+    rows.map((row) => row.threshold.measure),
+    ["none", "none"],
+  );
+  assert.deepEqual(
+    rows.map((row) => row.progress),
+    [0, 0],
+  );
+  assert.equal(
+    evaluateUsNexus([{ state: "OR", salesUsd: "1000000", txnCount: 1_000 }], {
+      approachingAt: 0,
+    })[0]!.status,
+    "none",
+  );
+});
 
-test('OR states are met by hitting either the dollar or the transaction trigger', () => {
-  assert.equal(evaluateUsNexus([{ state: 'FL', salesUsd: '40000', txnCount: 250 }])[0]!.status, 'met') // 250 > 200 transactions
-  assert.equal(evaluateUsNexus([{ state: 'FL', salesUsd: '120000', txnCount: 5 }])[0]!.status, 'met') // $120k > $100k
-})
+test("OR states are met by hitting either the dollar or the transaction trigger", () => {
+  assert.equal(
+    evaluateUsNexus([{ state: "FL", salesUsd: "40000", txnCount: 250 }])[0]!.status,
+    "met",
+  ); // 250 > 200 transactions
+  assert.equal(
+    evaluateUsNexus([{ state: "FL", salesUsd: "120000", txnCount: 5 }])[0]!.status,
+    "met",
+  ); // $120k > $100k
+});
 
-test('sales-only states ignore transaction count', () => {
-  const ca = evaluateUsNexus([{ state: 'CA', salesUsd: '200000', txnCount: 100_000 }])[0]!
-  assert.equal(ca.status, 'none') // huge txn count irrelevant; $200k < $500k
-})
+test("sales-only states ignore transaction count", () => {
+  const ca = evaluateUsNexus([{ state: "CA", salesUsd: "200000", txnCount: 100_000 }])[0]!;
+  assert.equal(ca.status, "none"); // huge txn count irrelevant; $200k < $500k
+});
 
-test('AND states require both triggers', () => {
+test("AND states require both triggers", () => {
   // Sales blown past but only 40% of the transaction count → not close on the
   // binding (min) leg, so not yet approaching.
-  const far = evaluateUsNexus([{ state: 'NY', salesUsd: '600000', txnCount: 40 }])[0]!
-  assert.equal(far.status, 'none')
+  const far = evaluateUsNexus([{ state: "NY", salesUsd: "600000", txnCount: 40 }])[0]!;
+  assert.equal(far.status, "none");
   // Both legs near (sales met, 85 of 100 txns) → approaching.
-  const near = evaluateUsNexus([{ state: 'NY', salesUsd: '600000', txnCount: 85 }])[0]!
-  assert.equal(near.status, 'approaching')
-  const both = evaluateUsNexus([{ state: 'NY', salesUsd: '600000', txnCount: 150 }])[0]!
-  assert.equal(both.status, 'met')
-})
+  const near = evaluateUsNexus([{ state: "NY", salesUsd: "600000", txnCount: 85 }])[0]!;
+  assert.equal(near.status, "approaching");
+  const both = evaluateUsNexus([{ state: "NY", salesUsd: "600000", txnCount: 150 }])[0]!;
+  assert.equal(both.status, "met");
+});
 
-test('approaching fires at 80% of the binding trigger', () => {
-  const near = evaluateUsNexus([{ state: 'FL', salesUsd: '85000', txnCount: 10 }])[0]!
-  assert.equal(near.status, 'approaching') // 85% of $100k
-  const far = evaluateUsNexus([{ state: 'FL', salesUsd: '50000', txnCount: 10 }])[0]!
-  assert.equal(far.status, 'none')
-})
+test("approaching fires at 80% of the binding trigger", () => {
+  const near = evaluateUsNexus([{ state: "FL", salesUsd: "85000", txnCount: 10 }])[0]!;
+  assert.equal(near.status, "approaching"); // 85% of $100k
+  const far = evaluateUsNexus([{ state: "FL", salesUsd: "50000", txnCount: 10 }])[0]!;
+  assert.equal(far.status, "none");
+});
 
-test('results sort most-urgent first: met, then approaching, then none', () => {
+test("results sort most-urgent first: met, then approaching, then none", () => {
   const rows = evaluateUsNexus([
-    { state: 'FL', salesUsd: '50000', txnCount: 5 }, // none
-    { state: 'TX', salesUsd: '600000', txnCount: 5 }, // met (sales-only $500k)
-    { state: 'GA', salesUsd: '90000', txnCount: 5 }, // approaching
-  ])
-  assert.deepEqual(rows.map((r) => r.state), ['TX', 'GA', 'FL'])
-})
+    { state: "FL", salesUsd: "50000", txnCount: 5 }, // none
+    { state: "TX", salesUsd: "600000", txnCount: 5 }, // met (sales-only $500k)
+    { state: "GA", salesUsd: "90000", txnCount: 5 }, // approaching
+  ]);
+  assert.deepEqual(
+    rows.map((r) => r.state),
+    ["TX", "GA", "FL"],
+  );
+});
 
-test('a penny under the dollar threshold is not met', () => {
-  const justUnder = evaluateUsNexus([{ state: 'FL', salesUsd: '99999.9999', txnCount: 0 }])[0]!
-  assert.equal(justUnder.status, 'approaching')
-  const exact = evaluateUsNexus([{ state: 'FL', salesUsd: '100000', txnCount: 0 }])[0]!
-  assert.equal(exact.status, 'met')
-})
+test("a penny under the dollar threshold is not met", () => {
+  const justUnder = evaluateUsNexus([{ state: "FL", salesUsd: "99999.9999", txnCount: 0 }])[0]!;
+  assert.equal(justUnder.status, "approaching");
+  const exact = evaluateUsNexus([{ state: "FL", salesUsd: "100000", txnCount: 0 }])[0]!;
+  assert.equal(exact.status, "met");
+});
 
-test('injected thresholds evaluate in the working currency (entity ledger)', () => {
+test("injected thresholds evaluate in the working currency (entity ledger)", () => {
   // A CAD entity ledger converts the CA $500k sales-only trigger at its
   // policy rate (×1.35 → $675k) and injects it; the decision is exact in CAD.
-  const cad = new Map([['CA', { state: 'CA', salesUsd: '675000', txnCount: null, measure: 'sales_only' as const }]])
-  const below = evaluateUsNexus([{ state: 'CA', salesUsd: '400000.0000', txnCount: 3 }], { thresholds: cad })[0]!
-  assert.equal(below.status, 'none')
-  assert.equal(below.threshold.salesUsd, '675000')
+  const cad = new Map([
+    ["CA", { state: "CA", salesUsd: "675000", txnCount: null, measure: "sales_only" as const }],
+  ]);
+  const below = evaluateUsNexus([{ state: "CA", salesUsd: "400000.0000", txnCount: 3 }], {
+    thresholds: cad,
+  })[0]!;
+  assert.equal(below.status, "none");
+  assert.equal(below.threshold.salesUsd, "675000");
   // A sub-cent fractional threshold still decides exactly through the string path.
-  const hair = evaluateUsNexus(
-    [{ state: 'CA', salesUsd: '675000.0050', txnCount: 3 }],
-    { thresholds: new Map([['CA', { state: 'CA', salesUsd: '675000.005', txnCount: null, measure: 'sales_only' as const }]]) },
-  )[0]!
-  assert.equal(hair.status, 'met')
-  const above = evaluateUsNexus([{ state: 'CA', salesUsd: '700000.0000', txnCount: 3 }], { thresholds: cad })[0]!
-  assert.equal(above.status, 'met')
+  const hair = evaluateUsNexus([{ state: "CA", salesUsd: "675000.0050", txnCount: 3 }], {
+    thresholds: new Map([
+      [
+        "CA",
+        { state: "CA", salesUsd: "675000.005", txnCount: null, measure: "sales_only" as const },
+      ],
+    ]),
+  })[0]!;
+  assert.equal(hair.status, "met");
+  const above = evaluateUsNexus([{ state: "CA", salesUsd: "700000.0000", txnCount: 3 }], {
+    thresholds: cad,
+  })[0]!;
+  assert.equal(above.status, "met");
   // States without an injected entry keep the USD reference threshold.
   const mixed = evaluateUsNexus(
     [
-      { state: 'CA', salesUsd: '400000.0000', txnCount: 3 },
-      { state: 'FL', salesUsd: '120000.0000', txnCount: 3 },
+      { state: "CA", salesUsd: "400000.0000", txnCount: 3 },
+      { state: "FL", salesUsd: "120000.0000", txnCount: 3 },
     ],
     { thresholds: cad },
-  )
-  assert.deepEqual(mixed.map((r) => [r.state, r.status]), [['FL', 'met'], ['CA', 'none']])
-})
+  );
+  assert.deepEqual(
+    mixed.map((r) => [r.state, r.status]),
+    [
+      ["FL", "met"],
+      ["CA", "none"],
+    ],
+  );
+});

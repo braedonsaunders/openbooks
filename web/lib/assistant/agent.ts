@@ -115,7 +115,10 @@ export async function runBackgroundAgent(
  * Run one agentic turn and return a streaming Response (UI-message SSE protocol).
  * Throws AIDisabledError when the org has no model configured.
  */
-export function runAgentTurn(config: AiConfig | null | undefined, args: RunAgentTurnArgs): Response {
+export function runAgentTurn(
+  config: AiConfig | null | undefined,
+  args: RunAgentTurnArgs,
+): Response {
   const model = getModel(config, args.tier ?? "smart");
   if (!model) throw new AIDisabledError();
   const maxSteps = Math.max(2, args.maxSteps ?? DEFAULT_MAX_STEPS);

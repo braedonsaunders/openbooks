@@ -30,9 +30,12 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const entityRoute = context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
-    if ((specifier === "../../../../../lib/authz" && entityRoute)
-      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
+    const entityRoute =
+      context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
+    if (
+      (specifier === "../../../../../lib/authz" && entityRoute) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -48,20 +51,21 @@ registerHooks({
 const routeUrl = "./route.ts?hrm-review-template-labels-route-test";
 const { PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 const { listReviewTemplates } = await import("@openbooks/engine/hrm/performance/review-cycles");
 
 async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
   await withBypassContext(async () => {
     for (const permission of permissions) {
-      const rows = await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(
+        sql`
       insert into user_permission_overrides (org_id, user_id, permission, effect)
       values (${orgId}, ${userId}, ${permission}, 'grant')
       on conflict (user_id, permission) do update set effect = 'grant'
       returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(rows.length, 1, `performance permission ${permission} must be granted once`);
     }
   });
@@ -71,10 +75,13 @@ async function seedReviewOrg() {
   return withBypassContext(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
-    const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
        where id = ${org.orgId} returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal(rows.length, 1, "the review organization must enable HRM exactly once");
     return { org, actorId };
   });
@@ -98,9 +105,17 @@ function postRequest(entity: string, body: unknown): Request {
 
 const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
-async function scaleOf(id: string): Promise<{ name: string; scale: { min: unknown; max: unknown; labels: unknown } }> {
-  const rows = await db.execute<{ name: string; scale: { min: unknown; max: unknown; labels: unknown } }>(sql`
-      select name, rating_scale as scale from hrm_review_templates where id = ${id}`, "objects");
+async function scaleOf(
+  id: string,
+): Promise<{ name: string; scale: { min: unknown; max: unknown; labels: unknown } }> {
+  const rows = await db.execute<{
+    name: string;
+    scale: { min: unknown; max: unknown; labels: unknown };
+  }>(
+    sql`
+      select name, rating_scale as scale from hrm_review_templates where id = ${id}`,
+    "objects",
+  );
   assert.equal(rows.length, 1, "the created template must read back exactly once");
   return rows[0]!;
 }
@@ -122,14 +137,27 @@ test("a review template created with rating-scale labels persists and reads back
     }),
     call("hrm-review-templates"),
   );
-  assert.equal(created.status, 200, JSON.stringify(await created.clone().json().catch(() => null)));
+  assert.equal(
+    created.status,
+    200,
+    JSON.stringify(
+      await created
+        .clone()
+        .json()
+        .catch(() => null),
+    ),
+  );
   const { id } = (await created.json()) as { id: string };
 
   const stored = await scaleOf(id);
   assert.equal(stored.name, "Annual review");
   assert.equal(String(stored.scale.min), "1");
   assert.equal(String(stored.scale.max), "5");
-  assert.deepEqual(stored.scale.labels, ["Needs improvement", "Meets expectations", "Exceeds expectations"]);
+  assert.deepEqual(stored.scale.labels, [
+    "Needs improvement",
+    "Meets expectations",
+    "Exceeds expectations",
+  ]);
 
   // A label edit keeps the untouched bounds: the edit path merges the stored
   // scale before the engine's own parseRatingScale proves it again. PATCH
@@ -148,7 +176,16 @@ test("a review template created with rating-scale labels persists and reads back
     }),
     call("hrm-review-templates"),
   );
-  assert.equal(patched.status, 200, JSON.stringify(await patched.clone().json().catch(() => null)));
+  assert.equal(
+    patched.status,
+    200,
+    JSON.stringify(
+      await patched
+        .clone()
+        .json()
+        .catch(() => null),
+    ),
+  );
   const edited = await scaleOf(id);
   assert.deepEqual(edited.scale.labels, ["Low", "High"]);
   assert.equal(String(edited.scale.min), "1");
@@ -173,7 +210,16 @@ test("string scale bounds from the drawer save as numbers; garbage is refused by
     }),
     call("hrm-review-templates"),
   );
-  assert.equal(created.status, 200, JSON.stringify(await created.clone().json().catch(() => null)));
+  assert.equal(
+    created.status,
+    200,
+    JSON.stringify(
+      await created
+        .clone()
+        .json()
+        .catch(() => null),
+    ),
+  );
   const { id } = (await created.json()) as { id: string };
   const stored = await scaleOf(id);
   assert.equal(typeof stored.scale.min, "number");
@@ -253,7 +299,16 @@ test("a template created with drawer string bounds appears in the cycle picker",
     }),
     call("hrm-review-templates"),
   );
-  assert.equal(created.status, 200, JSON.stringify(await created.clone().json().catch(() => null)));
+  assert.equal(
+    created.status,
+    200,
+    JSON.stringify(
+      await created
+        .clone()
+        .json()
+        .catch(() => null),
+    ),
+  );
   const { id } = (await created.json()) as { id: string };
 
   const options = await listReviewTemplates({ orgId: org.orgId, actorId });

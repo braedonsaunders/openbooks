@@ -1,5 +1,10 @@
 import { sql } from "drizzle-orm";
-import { deriveEmailDeliveryKey, quoteSignatureRequestEmail, sendVia, emailDeliveryBlockedMessage } from "@openbooks/emails";
+import {
+  deriveEmailDeliveryKey,
+  quoteSignatureRequestEmail,
+  sendVia,
+  emailDeliveryBlockedMessage,
+} from "@openbooks/emails";
 import { db } from "@openbooks/engine/platform/database";
 import {
   insertEmailLog,
@@ -33,9 +38,14 @@ function baseUrl(req: Request): string {
 }
 
 async function orgName(orgId: string): Promise<string> {
-  const row = (await db.execute<{ name: string }>(sql`
+  const row = (
+    await db.execute<{ name: string }>(
+      sql`
     select name from orgs where id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.name ?? "Your organization";
 }
 
@@ -86,16 +96,30 @@ export async function deliverQuoteSignature(args: {
     const outcome = await sendVia(
       transport,
       { to: args.signerEmail, subject: email.subject, html: email.html, text: email.text },
-      { deliveryKey: deriveEmailDeliveryKey({ orgId: args.orgId, scope: `direct:${logId}`, to: args.signerEmail }) },
+      {
+        deliveryKey: deriveEmailDeliveryKey({
+          orgId: args.orgId,
+          scope: `direct:${logId}`,
+          to: args.signerEmail,
+        }),
+      },
     );
     if (outcome.kind === "sent") {
       await markEmailSent(args.orgId, logId, outcome.providerMessageId);
       return { signUrl, emailed: true, emailSkippedReason: null };
     }
     await markEmailUncertain(args.orgId, logId, outcome.reason);
-    return { signUrl, emailed: false, emailSkippedReason: `email acceptance is uncertain (${outcome.reason}) — the link above still works` };
+    return {
+      signUrl,
+      emailed: false,
+      emailSkippedReason: `email acceptance is uncertain (${outcome.reason}) — the link above still works`,
+    };
   } catch (e) {
     await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e));
-    return { signUrl, emailed: false, emailSkippedReason: "email send threw — the link above still works" };
+    return {
+      signUrl,
+      emailed: false,
+      emailSkippedReason: "email send threw — the link above still works",
+    };
   }
 }

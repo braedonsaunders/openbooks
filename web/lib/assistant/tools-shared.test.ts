@@ -4,7 +4,17 @@ import { safeApplicationToolError } from "./tool-errors";
 
 // tools-shared.ts is server-only; run its pure helpers under Node with the
 // same marker shim the other assistant tests use.
-const { compactRows, assistantListPage, capList, num, numberValue, money, decimalText, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
+const {
+  compactRows,
+  assistantListPage,
+  capList,
+  num,
+  numberValue,
+  money,
+  decimalText,
+  MAX_LIST_ROWS,
+  MAX_ROW_STRING,
+} = await import("./tools-shared.ts");
 
 test("num rounds to cents and normalizes negative zero", () => {
   assert.deepEqual(num("12.345"), { ok: true, value: 12.35 });
@@ -13,24 +23,37 @@ test("num rounds to cents and normalizes negative zero", () => {
     ok: false,
     error: {
       code: "unreadable_numeric_result",
-      message: "An assistant numeric result is missing or unreadable. Review the source record and correct its numeric value before retrying.",
+      message:
+        "An assistant numeric result is missing or unreadable. Review the source record and correct its numeric value before retrying.",
     },
   });
-  assert.throws(() => numberValue(null), (error) => {
-    assert.match(safeApplicationToolError(error), /invalid_input: unreadable_numeric_result/);
-    assert.match(safeApplicationToolError(error), /Review the source record and correct its numeric value/);
-    return true;
-  });
+  assert.throws(
+    () => numberValue(null),
+    (error) => {
+      assert.match(safeApplicationToolError(error), /invalid_input: unreadable_numeric_result/);
+      assert.match(
+        safeApplicationToolError(error),
+        /Review the source record and correct its numeric value/,
+      );
+      return true;
+    },
+  );
   assert.ok(Object.is(numberValue(-0.0001), 0));
   assert.ok(Object.is(numberValue("-0"), 0));
 });
 
 test("money refuses absent and unreadable financial results", () => {
-  assert.throws(() => money(null), (error) => {
-    assert.match(safeApplicationToolError(error), /invalid_input: assistant financial result/);
-    assert.match(safeApplicationToolError(error), /Review the source record and correct its amount/);
-    return true;
-  });
+  assert.throws(
+    () => money(null),
+    (error) => {
+      assert.match(safeApplicationToolError(error), /invalid_input: assistant financial result/);
+      assert.match(
+        safeApplicationToolError(error),
+        /Review the source record and correct its amount/,
+      );
+      return true;
+    },
+  );
   assert.throws(() => money(undefined), /assistant financial result/);
   assert.throws(() => money("1,234.56"), /assistant financial result/);
   assert.equal(money("12.3400"), "12.3400");
@@ -50,7 +73,12 @@ test("compactRows caps the list and reports total/returned/truncated", () => {
     returned: 5,
     truncated: false,
   });
-  assert.deepEqual(compactRows([], { limit: 3 }), { items: [], total: 0, returned: 0, truncated: false });
+  assert.deepEqual(compactRows([], { limit: 3 }), {
+    items: [],
+    total: 0,
+    returned: 0,
+    truncated: false,
+  });
 });
 
 test("compactRows defaults to the catalog list budget", () => {
@@ -64,10 +92,26 @@ test("compactRows defaults to the catalog list budget", () => {
 test("compactRows trims wide strings with a marker and leaves the rest alone", () => {
   const wide = "x".repeat(MAX_ROW_STRING + 10);
   const result = compactRows(
-    [{ memo: wide, short: "ok", nested: { note: wide, list: [wide, 7] }, when: null, n: 3, flag: true }],
+    [
+      {
+        memo: wide,
+        short: "ok",
+        nested: { note: wide, list: [wide, 7] },
+        when: null,
+        n: 3,
+        flag: true,
+      },
+    ],
     { maxString: MAX_ROW_STRING },
   );
-  const row = result.items[0] as { memo: string; short: string; nested: { note: string; list: unknown[] }; when: null; n: number; flag: boolean };
+  const row = result.items[0] as {
+    memo: string;
+    short: string;
+    nested: { note: string; list: unknown[] };
+    when: null;
+    n: number;
+    flag: boolean;
+  };
   assert.equal(row.memo, `${"x".repeat(MAX_ROW_STRING)}…[truncated]`);
   assert.equal(row.short, "ok");
   assert.equal(row.nested.note, row.memo);
@@ -104,6 +148,18 @@ test("decimalText preserves exact decimal strings", () => {
 });
 
 test("assistantListPage reports exact-limit completeness from an extra-row fetch", () => {
-  assert.deepEqual(assistantListPage(["a", "b", "c"], 2, 3), { items: ["a", "b"], total: 3, returned: 2, truncated: true, dropped: 1 });
-  assert.deepEqual(assistantListPage(["a", "b"], 2, 2), { items: ["a", "b"], total: 2, returned: 2, truncated: false, dropped: 0 });
+  assert.deepEqual(assistantListPage(["a", "b", "c"], 2, 3), {
+    items: ["a", "b"],
+    total: 3,
+    returned: 2,
+    truncated: true,
+    dropped: 1,
+  });
+  assert.deepEqual(assistantListPage(["a", "b"], 2, 2), {
+    items: ["a", "b"],
+    total: 2,
+    returned: 2,
+    truncated: false,
+    dropped: 0,
+  });
 });

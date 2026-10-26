@@ -1,15 +1,25 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
-import 'server-only'
-import { enqueueCabinetCleanup } from './shared'
-import type { FolderNode } from './types'
-import type { FileViewer } from '@openbooks/engine/records/file-cabinet-access'
-import { resolveReadScope, visibleFolderPredicate, visibleFileRowPredicate, recordScopeFolderPredicate } from '@openbooks/engine/records/file-cabinet-access'
-import { retainedFileEvidence } from './files'
-import { type FileMutationAudit, viewerFolderGate, lockCabinetAuthorization, runMutation } from './mutation'
-import { sql, type SQL } from 'drizzle-orm'
-import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
-import { deleteS3Blobs } from '../file-storage'
-import { recordFileEvent } from '../file-audit'
+import "server-only";
+import { enqueueCabinetCleanup } from "./shared";
+import type { FolderNode } from "./types";
+import type { FileViewer } from "@openbooks/engine/records/file-cabinet-access";
+import {
+  resolveReadScope,
+  visibleFolderPredicate,
+  visibleFileRowPredicate,
+  recordScopeFolderPredicate,
+} from "@openbooks/engine/records/file-cabinet-access";
+import { retainedFileEvidence } from "./files";
+import {
+  type FileMutationAudit,
+  viewerFolderGate,
+  lockCabinetAuthorization,
+  runMutation,
+} from "./mutation";
+import { sql, type SQL } from "drizzle-orm";
+import { db, inDbTransaction, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { deleteS3Blobs } from "../file-storage";
+import { recordFileEvent } from "../file-audit";
 
 // --- folder CRUD ------------------------------------------------------------
 
@@ -33,10 +43,11 @@ import { recordFileEvent } from '../file-audit'
  * only children the viewer could actually open within their subsidiary fence.
  */
 export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<FolderNode[]> {
-  const scope = await resolveReadScope(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer);
   const parentVisible = sql`${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)}
-    and ${recordScopeFolderPredicate(orgId, viewer, sql`f.parent_folder_id`)}`
-  const r = (await db.execute<FolderNode>(sql`
+    and ${recordScopeFolderPredicate(orgId, viewer, sql`f.parent_folder_id`)}`;
+  const r = await db.execute<FolderNode>(
+    sql`
     select f.id, f.name,
            case when ${parentVisible} then f.parent_folder_id end as "parentId",
            f.is_system as "isSystem",
@@ -66,8 +77,10 @@ export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<
        and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
        and ${recordScopeFolderPredicate(orgId, viewer, sql`f.id`)}
      order by f.is_system desc, f.name asc
-  `, 'objects'))
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 /**
@@ -82,10 +95,11 @@ export async function getFolderPath(
   viewer: FileViewer,
   folderId: string,
 ): Promise<{ id: string; name: string; systemKind: string | null }[]> {
-  const scope = await resolveReadScope(orgId, viewer)
-  const visible = visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)
-  const recordVisible = recordScopeFolderPredicate(orgId, viewer, sql`f.id`)
-  const r = (await db.execute<{ id: string; name: string; systemKind: string | null }>(sql`
+  const scope = await resolveReadScope(orgId, viewer);
+  const visible = visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`);
+  const recordVisible = recordScopeFolderPredicate(orgId, viewer, sql`f.id`);
+  const r = await db.execute<{ id: string; name: string; systemKind: string | null }>(
+    sql`
     with recursive chain as (
       select id, name, system_kind, parent_folder_id, 0 as depth
         from folders f
@@ -96,8 +110,10 @@ export async function getFolderPath(
        where ${visible} and ${recordVisible}
     )
     select id, name, system_kind as "systemKind" from chain order by depth desc
-  `, 'objects'))
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 /**
@@ -112,23 +128,25 @@ export async function getFolder(
   id: string,
   viewer?: FileViewer,
 ): Promise<(FolderNode & { ownerId: string | null }) | null> {
-  const scope = viewer ? await resolveReadScope(orgId, viewer) : null
-  const selfVisible = scope ? visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`) : sql`true`
-  const parentVisible = scope && viewer
-    ? sql`${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)}
+  const scope = viewer ? await resolveReadScope(orgId, viewer) : null;
+  const selfVisible = scope ? visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`) : sql`true`;
+  const parentVisible =
+    scope && viewer
+      ? sql`${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)}
         and ${recordScopeFolderPredicate(orgId, viewer, sql`f.parent_folder_id`)}`
-    : sql`true`
-  const childVisible = scope && viewer
-    ? sql`${visibleFolderPredicate(scope.hiddenFolderIds, sql`c.id`)}
+      : sql`true`;
+  const childVisible =
+    scope && viewer
+      ? sql`${visibleFolderPredicate(scope.hiddenFolderIds, sql`c.id`)}
         and ${recordScopeFolderPredicate(orgId, viewer, sql`c.id`)}`
-    : sql`true`
-  const recordVisible = viewer
-    ? recordScopeFolderPredicate(orgId, viewer, sql`f.id`)
-    : sql`true`
-  const fileCountVisible = viewer && scope
-    ? visibleFileRowPredicate(orgId, viewer, scope)
-    : sql`fi.org_id = ${orgId} and not fi.is_inactive`
-  const r = (await db.execute<FolderNode & { ownerId: string | null }>(sql`
+      : sql`true`;
+  const recordVisible = viewer ? recordScopeFolderPredicate(orgId, viewer, sql`f.id`) : sql`true`;
+  const fileCountVisible =
+    viewer && scope
+      ? visibleFileRowPredicate(orgId, viewer, scope)
+      : sql`fi.org_id = ${orgId} and not fi.is_inactive`;
+  const r = await db.execute<FolderNode & { ownerId: string | null }>(
+    sql`
     select f.id, f.name,
            case when ${parentVisible} then f.parent_folder_id end as "parentId",
            f.is_system as "isSystem",
@@ -143,39 +161,47 @@ export async function getFolder(
       from folders f
      where f.id = ${id} and f.org_id = ${orgId} and not f.is_inactive and ${selfVisible}
        and ${recordVisible}
-  `, 'objects'))
-  return r[0] ?? null
+  `,
+    "objects",
+  );
+  return r[0] ?? null;
 }
 
 export async function createFolder(input: {
-  orgId: string
-  parentId: string | null
-  name: string
-  isPrivate?: boolean
-  ownerId?: string
-  createdBy: string
-  audit?: FileMutationAudit
+  orgId: string;
+  parentId: string | null;
+  name: string;
+  isPrivate?: boolean;
+  ownerId?: string;
+  createdBy: string;
+  audit?: FileMutationAudit;
 }): Promise<string> {
   const work = async (tx: SqlExecutor): Promise<string> => {
-    if (input.parentId && !(await viewerFolderGate(tx, input.orgId, input.audit, input.parentId, 'editor'))) {
-      throw new Error('createFolder refused: caller lacks editor access to the parent folder')
+    if (
+      input.parentId &&
+      !(await viewerFolderGate(tx, input.orgId, input.audit, input.parentId, "editor"))
+    ) {
+      throw new Error("createFolder refused: caller lacks editor access to the parent folder");
     }
-    const ins = (await tx.execute<{ id: string }>(sql`
+    const ins = await tx.execute<{ id: string }>(
+      sql`
       insert into folders (org_id, parent_folder_id, name, is_private, owner_id,
                            created_by, updated_by, created_at, updated_at)
       values (${input.orgId}, ${input.parentId}, ${input.name},
               ${input.isPrivate ?? false}, ${input.ownerId ?? null},
               ${input.createdBy}, ${input.createdBy}, now(), now())
       returning id
-    `, 'objects'))
-    const id = ins[0]!.id
+    `,
+      "objects",
+    );
+    const id = ins[0]!.id;
     if (input.audit) {
       await recordFileEvent({
         orgId: input.orgId,
         actorId: input.audit.actorId,
-        table: 'folders',
+        table: "folders",
         rowId: id,
-        action: 'create',
+        action: "create",
         changes: {
           before: null,
           after: {
@@ -187,11 +213,11 @@ export async function createFolder(input: {
           },
         },
         executor: tx,
-      })
+      });
     }
-    return id
-  }
-  return input.audit?.executor ? work(input.audit.executor) : inDbTransaction(work)
+    return id;
+  };
+  return input.audit?.executor ? work(input.audit.executor) : inDbTransaction(work);
 }
 
 export async function renameFolder(
@@ -200,12 +226,15 @@ export async function renameFolder(
   name: string,
   updatedBy: string,
 ): Promise<boolean> {
-  const r = (await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     update folders set name = ${name}, updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and not is_system
     returning id
-  `, 'objects'))
-  return r.length > 0
+  `,
+    "objects",
+  );
+  return r.length > 0;
 }
 
 export async function moveFolder(
@@ -216,19 +245,28 @@ export async function moveFolder(
   audit?: FileMutationAudit,
 ): Promise<boolean> {
   const work = async (tx: SqlExecutor): Promise<boolean> => {
-    const before = (await tx.execute<{ id: string; parentId: string | null; isSystem: boolean }>(sql`
+    const before = (
+      await tx.execute<{ id: string; parentId: string | null; isSystem: boolean }>(
+        sql`
       select id, parent_folder_id as "parentId", is_system as "isSystem"
         from folders where id = ${id} and org_id = ${orgId} for update
-    `, 'objects'))[0]
-    if (!before || before.isSystem || parentId === id) return false
-    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) return false
+    `,
+        "objects",
+      )
+    )[0];
+    if (!before || before.isSystem || parentId === id) return false;
+    if (!(await viewerFolderGate(tx, orgId, audit, id, "manager"))) return false;
     if (parentId) {
-      const parent = (await tx.execute(sql`
+      const parent = await tx.execute(
+        sql`
         select 1 from folders where id = ${parentId} and org_id = ${orgId}
-      `, 'objects'))
-      if (parent.length === 0) return false
-      if (!(await viewerFolderGate(tx, orgId, audit, parentId, 'editor'))) return false
-      const cycle = (await tx.execute(sql`
+      `,
+        "objects",
+      );
+      if (parent.length === 0) return false;
+      if (!(await viewerFolderGate(tx, orgId, audit, parentId, "editor"))) return false;
+      const cycle = await tx.execute(
+        sql`
         with recursive ancestors as (
           select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
           union
@@ -237,27 +275,31 @@ export async function moveFolder(
           where f.parent_folder_id is not null
         )
         select 1 from ancestors where parent_folder_id = ${id} limit 1
-      `, 'objects'))
-      if (cycle.length > 0) return false
+      `,
+        "objects",
+      );
+      if (cycle.length > 0) return false;
     }
     await tx.execute(sql`
       update folders set parent_folder_id = ${parentId}, updated_by = ${updatedBy}, updated_at = now()
        where id = ${id} and org_id = ${orgId} and not is_system
-    `)
+    `);
     if (audit) {
       await recordFileEvent({
         orgId,
         actorId: audit.actorId,
-        table: 'folders',
+        table: "folders",
         rowId: id,
-        action: 'move',
+        action: "move",
         changes: { before: { parentId: before.parentId }, after: { parentId } },
         executor: tx,
-      })
+      });
     }
-    return true
-  }
-  return audit ? runMutation(audit.executor, work, audit.viewer ? orgId : undefined) : inDbTransaction(work)
+    return true;
+  };
+  return audit
+    ? runMutation(audit.executor, work, audit.viewer ? orgId : undefined)
+    : inDbTransaction(work);
 }
 
 export async function updateFolder(
@@ -269,29 +311,42 @@ export async function updateFolder(
   const setParts: ReturnType<typeof sql.raw>[] = [
     sql`updated_by = ${updatedBy}`,
     sql`updated_at = now()`,
-  ]
-  if (patch.name !== undefined) setParts.push(sql`name = ${patch.name}`)
+  ];
+  if (patch.name !== undefined) setParts.push(sql`name = ${patch.name}`);
   if (patch.isPrivate !== undefined) {
-    setParts.push(sql`is_private = ${patch.isPrivate}`)
+    setParts.push(sql`is_private = ${patch.isPrivate}`);
     // A private folder needs an owner (it is visible only to owner + admins);
     // default to the user flipping the flag.
-    if (patch.isPrivate) setParts.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`)
+    if (patch.isPrivate) setParts.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`);
   }
-  const r = (await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     update folders set ${sql.join(setParts, sql`, `)}
      where id = ${id} and org_id = ${orgId} and not is_system
     returning id
-  `, 'objects'))
-  return r.length > 0
+  `,
+    "objects",
+  );
+  return r.length > 0;
 }
 
 export type FolderPatch = {
-  parentId?: string | null
-  name?: string
-  isPrivate?: boolean
-}
+  parentId?: string | null;
+  name?: string;
+  isPrivate?: boolean;
+};
 
-export type FolderPatchResult = { ok: true } | { ok: false; reason: 'not found' | 'forbidden' | 'cannot move folder' | 'cannot rename system folder' | 'cannot update system folder' }
+export type FolderPatchResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "not found"
+        | "forbidden"
+        | "cannot move folder"
+        | "cannot rename system folder"
+        | "cannot update system folder";
+    };
 
 /**
  * Apply every requested folder edit and its activity evidence in one
@@ -306,54 +361,67 @@ export async function patchFolder(
   updatedBy: string,
   audit: FileMutationAudit,
 ): Promise<FolderPatchResult> {
-  let hasParent = Object.prototype.hasOwnProperty.call(patch, 'parentId')
-  const hasName = patch.name !== undefined
-  const hasFlags = patch.isPrivate !== undefined
-  return runMutation(audit.executor, async (tx) => {
-    const before = (await tx.execute<{
-      id: string
-      name: string
-      parentId: string | null
-      isPrivate: boolean
-      isSystem: boolean
-    }>(sql`
+  let hasParent = Object.prototype.hasOwnProperty.call(patch, "parentId");
+  const hasName = patch.name !== undefined;
+  const hasFlags = patch.isPrivate !== undefined;
+  return runMutation(
+    audit.executor,
+    async (tx) => {
+      const before = (
+        await tx.execute<{
+          id: string;
+          name: string;
+          parentId: string | null;
+          isPrivate: boolean;
+          isSystem: boolean;
+        }>(
+          sql`
       select id, name, parent_folder_id as "parentId", is_private as "isPrivate",
              is_system as "isSystem"
         from folders
        where id = ${id} and org_id = ${orgId}
        for update
-    `, 'objects'))[0]
-    if (!before) return { ok: false as const, reason: 'not found' as const }
-    // Renames also apply inside the trash: evaluate the tier with inactive rows.
-    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager', { includeInactive: true }))) {
-      return { ok: false as const, reason: 'forbidden' as const }
-    }
+    `,
+          "objects",
+        )
+      )[0];
+      if (!before) return { ok: false as const, reason: "not found" as const };
+      // Renames also apply inside the trash: evaluate the tier with inactive rows.
+      if (!(await viewerFolderGate(tx, orgId, audit, id, "manager", { includeInactive: true }))) {
+        return { ok: false as const, reason: "forbidden" as const };
+      }
 
-    if (before.isSystem && hasName) {
-      return { ok: false as const, reason: 'cannot rename system folder' as const }
-    }
-    if (before.isSystem && hasParent) {
-      return { ok: false as const, reason: 'cannot move folder' as const }
-    }
-    if (before.isSystem && hasFlags) {
-      return { ok: false as const, reason: 'cannot update system folder' as const }
-    }
+      if (before.isSystem && hasName) {
+        return { ok: false as const, reason: "cannot rename system folder" as const };
+      }
+      if (before.isSystem && hasParent) {
+        return { ok: false as const, reason: "cannot move folder" as const };
+      }
+      if (before.isSystem && hasFlags) {
+        return { ok: false as const, reason: "cannot update system folder" as const };
+      }
 
-    // A move to the already-stored parent is a rename with a redundant key,
-    // not a relocation: skip the destination gates and the move evidence.
-    if (hasParent && (patch.parentId ?? null) === before.parentId) hasParent = false
-    if (hasParent) {
-      const parentId = patch.parentId ?? null
-      if (parentId === id) return { ok: false as const, reason: 'cannot move folder' as const }
-      if (parentId) {
-        const parent = (await tx.execute<{ id: string }>(sql`
+      // A move to the already-stored parent is a rename with a redundant key,
+      // not a relocation: skip the destination gates and the move evidence.
+      if (hasParent && (patch.parentId ?? null) === before.parentId) hasParent = false;
+      if (hasParent) {
+        const parentId = patch.parentId ?? null;
+        if (parentId === id) return { ok: false as const, reason: "cannot move folder" as const };
+        if (parentId) {
+          const parent = (
+            await tx.execute<{ id: string }>(
+              sql`
           select id from folders where id = ${parentId} and org_id = ${orgId} for share
-        `, 'objects'))[0]
-        if (!parent) return { ok: false as const, reason: 'cannot move folder' as const }
-        if (!(await viewerFolderGate(tx, orgId, audit, parentId, 'editor'))) {
-          return { ok: false as const, reason: 'forbidden' as const }
-        }
-        const cycle = await tx.execute(sql`
+        `,
+              "objects",
+            )
+          )[0];
+          if (!parent) return { ok: false as const, reason: "cannot move folder" as const };
+          if (!(await viewerFolderGate(tx, orgId, audit, parentId, "editor"))) {
+            return { ok: false as const, reason: "forbidden" as const };
+          }
+          const cycle = await tx.execute(
+            sql`
           with recursive ancestors as (
             select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
             union
@@ -362,68 +430,76 @@ export async function patchFolder(
             where f.parent_folder_id is not null
           )
           select 1 from ancestors where parent_folder_id = ${id} limit 1
-        `, 'objects')
-        if (cycle.length > 0) return { ok: false as const, reason: 'cannot move folder' as const }
-      } else if (audit.viewer && !(audit.viewer.isAdmin || audit.viewer.baseline === 'manager')) {
-        // Moving to the cabinet root publishes the subtree to every
-        // documents.read user: the same bar as creating a top-level folder
-        // (documents.manage baseline). A viewer-less audit is a trusted
-        // internal caller and keeps the historical allow.
-        return { ok: false as const, reason: 'forbidden' as const }
+        `,
+            "objects",
+          );
+          if (cycle.length > 0)
+            return { ok: false as const, reason: "cannot move folder" as const };
+        } else if (audit.viewer && !(audit.viewer.isAdmin || audit.viewer.baseline === "manager")) {
+          // Moving to the cabinet root publishes the subtree to every
+          // documents.read user: the same bar as creating a top-level folder
+          // (documents.manage baseline). A viewer-less audit is a trusted
+          // internal caller and keeps the historical allow.
+          return { ok: false as const, reason: "forbidden" as const };
+        }
       }
-    }
 
-    const updates: ReturnType<typeof sql.raw>[] = [sql`updated_by = ${updatedBy}`, sql`updated_at = now()`]
-    if (hasParent) updates.push(sql`parent_folder_id = ${patch.parentId ?? null}`)
-    if (hasName) updates.push(sql`name = ${patch.name}`)
-    if (patch.isPrivate !== undefined) {
-      updates.push(sql`is_private = ${patch.isPrivate}`)
-      if (patch.isPrivate) updates.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`)
-    }
-    if (updates.length > 2) {
-      await tx.execute(sql`
+      const updates: ReturnType<typeof sql.raw>[] = [
+        sql`updated_by = ${updatedBy}`,
+        sql`updated_at = now()`,
+      ];
+      if (hasParent) updates.push(sql`parent_folder_id = ${patch.parentId ?? null}`);
+      if (hasName) updates.push(sql`name = ${patch.name}`);
+      if (patch.isPrivate !== undefined) {
+        updates.push(sql`is_private = ${patch.isPrivate}`);
+        if (patch.isPrivate) updates.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`);
+      }
+      if (updates.length > 2) {
+        await tx.execute(sql`
         update folders set ${sql.join(updates, sql`, `)}
          where id = ${id} and org_id = ${orgId}
-      `)
-    }
+      `);
+      }
 
-    if (hasParent) {
-      await recordFileEvent({
-        orgId,
-        actorId: audit.actorId,
-        table: 'folders',
-        rowId: id,
-        action: 'move',
-        changes: { fromParentId: before.parentId, toParentId: patch.parentId ?? null },
-        executor: tx,
-      })
-    }
-    if (hasName) {
-      await recordFileEvent({
-        orgId,
-        actorId: audit.actorId,
-        table: 'folders',
-        rowId: id,
-        action: 'rename',
-        changes: { from: before.name, to: patch.name },
-        executor: tx,
-      })
-    }
-    if (hasFlags) {
-      await recordFileEvent({
-        orgId,
-        actorId: audit.actorId,
-        table: 'folders',
-        rowId: id,
-        action: 'update',
-        changes: {
-          isPrivate: patch.isPrivate ?? before.isPrivate,
-        },
-        executor: tx,
-      })
-    }
-    return { ok: true as const }
-  }, audit.viewer ? orgId : undefined)
+      if (hasParent) {
+        await recordFileEvent({
+          orgId,
+          actorId: audit.actorId,
+          table: "folders",
+          rowId: id,
+          action: "move",
+          changes: { fromParentId: before.parentId, toParentId: patch.parentId ?? null },
+          executor: tx,
+        });
+      }
+      if (hasName) {
+        await recordFileEvent({
+          orgId,
+          actorId: audit.actorId,
+          table: "folders",
+          rowId: id,
+          action: "rename",
+          changes: { from: before.name, to: patch.name },
+          executor: tx,
+        });
+      }
+      if (hasFlags) {
+        await recordFileEvent({
+          orgId,
+          actorId: audit.actorId,
+          table: "folders",
+          rowId: id,
+          action: "update",
+          changes: {
+            isPrivate: patch.isPrivate ?? before.isPrivate,
+          },
+          executor: tx,
+        });
+      }
+      return { ok: true as const };
+    },
+    audit.viewer ? orgId : undefined,
+  );
 }
 
 const FOLDER_DESCENDANTS = (orgId: string, id: string): SQL => sql`
@@ -432,7 +508,7 @@ const FOLDER_DESCENDANTS = (orgId: string, id: string): SQL => sql`
     union
     select f.id from folders f join descendants d on f.parent_folder_id = d.id and f.org_id = ${orgId}
   )
-  select id from descendants`
+  select id from descendants`;
 
 /**
  * Trash a folder — soft-delete (is_inactive) the folder and everything beneath
@@ -444,77 +520,104 @@ export async function deleteFolder(
   id: string,
   audit?: FileMutationAudit,
 ): Promise<{ ok: boolean; reason?: string }> {
-  const result = await runMutation(audit?.executor, async (tx) => {
-    const descendants = FOLDER_DESCENDANTS(orgId, id)
-    const folder = (await tx.execute<{ id: string; isSystem: boolean; isInactive: boolean }>(sql`
+  const result = await runMutation(
+    audit?.executor,
+    async (tx) => {
+      const descendants = FOLDER_DESCENDANTS(orgId, id);
+      const folder = (
+        await tx.execute<{ id: string; isSystem: boolean; isInactive: boolean }>(
+          sql`
       select id, is_system as "isSystem", is_inactive as "isInactive"
         from folders
        where id = ${id} and org_id = ${orgId}
        for update
-    `, 'objects'))[0]
-    if (!folder) return { ok: false, reason: 'not found' as const }
-    if (folder.isSystem) return { ok: false, reason: 'system' as const }
-    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) {
-      return { ok: false, reason: 'forbidden' as const }
-    }
-    if (folder.isInactive) return { ok: false, reason: 'inactive' as const }
-    const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      if (!folder) return { ok: false, reason: "not found" as const };
+      if (folder.isSystem) return { ok: false, reason: "system" as const };
+      if (!(await viewerFolderGate(tx, orgId, audit, id, "manager"))) {
+        return { ok: false, reason: "forbidden" as const };
+      }
+      if (folder.isInactive) return { ok: false, reason: "inactive" as const };
+      const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(
+        sql`
       select f.id, f.is_inactive as "isInactive"
         from folders f
        where f.id in (${descendants}) and f.org_id = ${orgId}
        order by f.id
        for update
-    `, 'objects')
-    const beforeFiles = await tx.execute<{ id: string; isInactive: boolean; isProtected: boolean }>(sql`
+    `,
+        "objects",
+      );
+      const beforeFiles = await tx.execute<{
+        id: string;
+        isInactive: boolean;
+        isProtected: boolean;
+      }>(
+        sql`
       select fi.id, fi.is_inactive as "isInactive",
              exists (select 1 from ap_capture_items ci where ci.file_id = fi.id and ci.org_id = ${orgId}) as "isProtected"
         from files fi
        where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
        order by fi.id
        for update
-    `, 'objects')
-    // Retained evidence must never be hidden by a subtree trash: fail the whole
-    // folder closed when any live contained file is retained (checked after the
-    // file-row locks above, inside the same transaction). The per-file update
-    // below repeats the exclusion so a concurrent link can only newly protect.
-    const retained = (await tx.execute(sql`
+    `,
+        "objects",
+      );
+      // Retained evidence must never be hidden by a subtree trash: fail the whole
+      // folder closed when any live contained file is retained (checked after the
+      // file-row locks above, inside the same transaction). The per-file update
+      // below repeats the exclusion so a concurrent link can only newly protect.
+      const retained = await tx.execute(
+        sql`
       select 1 from files fi
        where fi.folder_id in (${descendants}) and fi.org_id = ${orgId} and not fi.is_inactive
          and ${retainedFileEvidence(orgId, sql`fi.id`)}
        limit 1
-    `, 'objects'))
-    if (retained.length > 0) return { ok: false, reason: 'retained' as const }
-    await tx.execute(sql`update folders set is_inactive = true, updated_at = now() where id in (${descendants}) and org_id = ${orgId}`)
-    await tx.execute(sql`
+    `,
+        "objects",
+      );
+      if (retained.length > 0) return { ok: false, reason: "retained" as const };
+      await tx.execute(
+        sql`update folders set is_inactive = true, updated_at = now() where id in (${descendants}) and org_id = ${orgId}`,
+      );
+      await tx.execute(sql`
       update files set is_inactive = true, updated_at = now()
        where folder_id in (${descendants}) and org_id = ${orgId} and not is_inactive
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
          and not ${retainedFileEvidence(orgId, sql`files.id`)}
-    `)
-    if (audit) {
-      await recordFileEvent({
-        orgId,
-        actorId: audit.actorId,
-        table: 'folders',
-        rowId: id,
-        action: 'delete',
-        changes: {
-          permanent: false,
-          before: { folders: beforeFolders, files: beforeFiles },
-          after: {
-            folders: beforeFolders.map(({ id: folderId }) => ({ id: folderId, isInactive: true })),
-            files: beforeFiles.map(({ id: fileId, isInactive, isProtected }) => ({
-              id: fileId,
-              isInactive: isProtected ? isInactive : true,
-            })),
+    `);
+      if (audit) {
+        await recordFileEvent({
+          orgId,
+          actorId: audit.actorId,
+          table: "folders",
+          rowId: id,
+          action: "delete",
+          changes: {
+            permanent: false,
+            before: { folders: beforeFolders, files: beforeFiles },
+            after: {
+              folders: beforeFolders.map(({ id: folderId }) => ({
+                id: folderId,
+                isInactive: true,
+              })),
+              files: beforeFiles.map(({ id: fileId, isInactive, isProtected }) => ({
+                id: fileId,
+                isInactive: isProtected ? isInactive : true,
+              })),
+            },
           },
-        },
-        executor: tx,
-      })
-    }
-    return { ok: true as const }
-  }, audit?.viewer ? orgId : undefined)
-  return result
+          executor: tx,
+        });
+      }
+      return { ok: true as const };
+    },
+    audit?.viewer ? orgId : undefined,
+  );
+  return result;
 }
 
 /** Restore a trashed folder subtree (folder + descendants + their files). */
@@ -523,102 +626,122 @@ export async function restoreFolder(
   id: string,
   audit: FileMutationAudit,
 ): Promise<boolean> {
-  return runMutation(audit.executor, async (tx) => {
-    const descendants = FOLDER_DESCENDANTS(orgId, id)
+  return runMutation(
+    audit.executor,
+    async (tx) => {
+      const descendants = FOLDER_DESCENDANTS(orgId, id);
 
-    // Lock and retain the complete pre-restore state before changing either
-    // table. The audit row describes the whole subtree, not just the root
-    // folder, so a reviewer can verify exactly which rows were reactivated.
-    const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(sql`
+      // Lock and retain the complete pre-restore state before changing either
+      // table. The audit row describes the whole subtree, not just the root
+      // folder, so a reviewer can verify exactly which rows were reactivated.
+      const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(
+        sql`
       select f.id, f.is_inactive as "isInactive"
         from folders f
        where f.id in (${descendants}) and f.org_id = ${orgId}
        order by f.id
        for update
-    `, 'objects')
-    if (beforeFolders.length === 0) return false
-    // Restores by definition operate on trashed folders: include inactive rows.
-    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager', { includeInactive: true }))) return false
+    `,
+        "objects",
+      );
+      if (beforeFolders.length === 0) return false;
+      // Restores by definition operate on trashed folders: include inactive rows.
+      if (!(await viewerFolderGate(tx, orgId, audit, id, "manager", { includeInactive: true })))
+        return false;
 
-    const beforeFiles = await tx.execute<{ id: string; isInactive: boolean }>(sql`
+      const beforeFiles = await tx.execute<{ id: string; isInactive: boolean }>(
+        sql`
       select fi.id, fi.is_inactive as "isInactive"
         from files fi
        where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
        order by fi.id
        for update
-    `, 'objects')
+    `,
+        "objects",
+      );
 
-    // Restore is the exact inverse of the trash: deleteFolder recorded which
-    // rows it actually deactivated and which were ALREADY in the trash (a file
-    // or sub-folder the user trashed on its own beforehand). Those keep their
-    // own trash entry and their own restore; resurrecting them here would
-    // silently undo a separate, audited decision. Without evidence (a delete
-    // that predates audited trashing) the whole subtree is restored.
-    const evidence = (await tx.execute<{ changes: FolderDeleteEvidence }>(sql`
+      // Restore is the exact inverse of the trash: deleteFolder recorded which
+      // rows it actually deactivated and which were ALREADY in the trash (a file
+      // or sub-folder the user trashed on its own beforehand). Those keep their
+      // own trash entry and their own restore; resurrecting them here would
+      // silently undo a separate, audited decision. Without evidence (a delete
+      // that predates audited trashing) the whole subtree is restored.
+      const evidence = (
+        await tx.execute<{ changes: FolderDeleteEvidence }>(
+          sql`
       select changes
         from audit_log
        where org_id = ${orgId} and table_name = 'folders' and row_id = ${id}
          and action = 'delete' and changes ->> 'event' = 'delete'
        order by at desc
        limit 1
-    `, 'objects'))[0]?.changes
-    const keepFolders = new Set(
-      (evidence?.before?.folders ?? []).filter((row) => row.isInactive).map((row) => row.id),
-    )
-    const keepFiles = new Set(
-      (evidence?.before?.files ?? []).filter((row) => row.isInactive).map((row) => row.id),
-    )
-    const foldersToRestore = beforeFolders.filter((row) => !keepFolders.has(row.id)).map((row) => row.id)
-    const filesToRestore = beforeFiles.filter((row) => !keepFiles.has(row.id)).map((row) => row.id)
+    `,
+          "objects",
+        )
+      )[0]?.changes;
+      const keepFolders = new Set(
+        (evidence?.before?.folders ?? []).filter((row) => row.isInactive).map((row) => row.id),
+      );
+      const keepFiles = new Set(
+        (evidence?.before?.files ?? []).filter((row) => row.isInactive).map((row) => row.id),
+      );
+      const foldersToRestore = beforeFolders
+        .filter((row) => !keepFolders.has(row.id))
+        .map((row) => row.id);
+      const filesToRestore = beforeFiles
+        .filter((row) => !keepFiles.has(row.id))
+        .map((row) => row.id);
 
-    if (foldersToRestore.length > 0) {
-      await tx.execute(sql`
+      if (foldersToRestore.length > 0) {
+        await tx.execute(sql`
         update folders
            set is_inactive = false, updated_at = now()
          where id in (${descendants}) and org_id = ${orgId}
-           and id = any(${`{${foldersToRestore.join(',')}}`}::uuid[])
-      `)
-    }
-    if (filesToRestore.length > 0) {
-      await tx.execute(sql`
+           and id = any(${`{${foldersToRestore.join(",")}}`}::uuid[])
+      `);
+      }
+      if (filesToRestore.length > 0) {
+        await tx.execute(sql`
         update files
            set is_inactive = false, updated_at = now()
          where folder_id in (${descendants}) and org_id = ${orgId}
-           and id = any(${`{${filesToRestore.join(',')}}`}::uuid[])
-      `)
-    }
+           and id = any(${`{${filesToRestore.join(",")}}`}::uuid[])
+      `);
+      }
 
-    await recordFileEvent({
-      orgId,
-      actorId: audit.actorId,
-      table: 'folders',
-      rowId: id,
-      action: 'restore',
-      changes: {
-        before: { folders: beforeFolders, files: beforeFiles },
-        after: {
-          folders: beforeFolders.map(({ id: folderId, isInactive }) => ({
-            id: folderId,
-            isInactive: keepFolders.has(folderId) ? isInactive : false,
-          })),
-          files: beforeFiles.map(({ id: fileId, isInactive }) => ({
-            id: fileId,
-            isInactive: keepFiles.has(fileId) ? isInactive : false,
-          })),
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: "folders",
+        rowId: id,
+        action: "restore",
+        changes: {
+          before: { folders: beforeFolders, files: beforeFiles },
+          after: {
+            folders: beforeFolders.map(({ id: folderId, isInactive }) => ({
+              id: folderId,
+              isInactive: keepFolders.has(folderId) ? isInactive : false,
+            })),
+            files: beforeFiles.map(({ id: fileId, isInactive }) => ({
+              id: fileId,
+              isInactive: keepFiles.has(fileId) ? isInactive : false,
+            })),
+          },
         },
-      },
-      executor: tx,
-    })
-    return true
-  }, audit.viewer ? orgId : undefined)
+        executor: tx,
+      });
+      return true;
+    },
+    audit.viewer ? orgId : undefined,
+  );
 }
 
 /** Shape of deleteFolder's audit evidence consulted by restoreFolder. */
 interface FolderDeleteEvidence {
   before?: {
-    folders?: Array<{ id: string; isInactive: boolean }>
-    files?: Array<{ id: string; isInactive: boolean }>
-  }
+    folders?: Array<{ id: string; isInactive: boolean }>;
+    files?: Array<{ id: string; isInactive: boolean }>;
+  };
 }
 
 /**
@@ -637,24 +760,29 @@ export async function purgeFolder(
   // blocks the purge) or waits until after the deleted file is gone and fails.
   // This closes the check/delete race without relying on a process-local lock.
   const outcome = await inDbTransaction(async (tx) => {
-    if (audit?.viewer) await lockCabinetAuthorization(tx, orgId)
+    if (audit?.viewer) await lockCabinetAuthorization(tx, orgId);
     const descendants = sql`
       with recursive descendants as (
         select id from folders where id = ${id} and org_id = ${orgId}
         union
         select f.id from folders f join descendants d on f.parent_folder_id = d.id and f.org_id = ${orgId}
       )
-      select id from descendants`
-    const folder = (await tx.execute<{ id: string; isSystem: boolean }>(sql`
+      select id from descendants`;
+    const folder = (
+      await tx.execute<{ id: string; isSystem: boolean }>(
+        sql`
       select id, is_system as "isSystem"
         from folders
        where id = ${id} and org_id = ${orgId}
        for update
-    `, 'objects'))[0]
-    if (!folder) return { ok: false as const, reason: 'not found' as const }
-    if (folder.isSystem) return { ok: false as const, reason: 'system' as const }
-    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) {
-      return { ok: false as const, reason: 'forbidden' as const }
+    `,
+        "objects",
+      )
+    )[0];
+    if (!folder) return { ok: false as const, reason: "not found" as const };
+    if (folder.isSystem) return { ok: false as const, reason: "system" as const };
+    if (!(await viewerFolderGate(tx, orgId, audit, id, "manager"))) {
+      return { ok: false as const, reason: "forbidden" as const };
     }
 
     // Lock every file in the subtree before evaluating attachments.  The FK
@@ -664,70 +792,88 @@ export async function purgeFolder(
         from files fi
        where fi.org_id = ${orgId} and fi.folder_id in (${descendants})
        for update
-    `)
-    const attached = await tx.execute(sql`
+    `);
+    const attached = await tx.execute(
+      sql`
       select 1
         from file_attachments fa
         join files fi on fi.id = fa.file_id and fi.org_id = fa.org_id
        where fa.org_id = ${orgId}
          and fi.folder_id in (${descendants})
        limit 1
-    `, 'objects')
-    if (attached.length > 0) return { ok: false as const, reason: 'has attached files' as const }
+    `,
+      "objects",
+    );
+    if (attached.length > 0) return { ok: false as const, reason: "has attached files" as const };
     // Pinned references with no attachment row (payment artifacts, HRM
     // documents, mandate proofs) dangle the same way when bytes are purged.
-    const pinned = (await tx.execute(sql`
+    const pinned = await tx.execute(
+      sql`
       select 1
         from files fi
        where fi.org_id = ${orgId}
          and fi.folder_id in (${descendants})
          and ${retainedFileEvidence(orgId, sql`fi.id`)}
        limit 1
-    `, 'objects'))
-    if (pinned.length > 0) return { ok: false as const, reason: 'retained' as const }
+    `,
+      "objects",
+    );
+    if (pinned.length > 0) return { ok: false as const, reason: "retained" as const };
 
-    const s3Versions = (await tx.execute<{ id: string; file_id: string }>(sql`
+    const s3Versions = await tx.execute<{ id: string; file_id: string }>(
+      sql`
       select fv.id, fv.file_id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
       where fi.folder_id in (${descendants}) and fv.storage_kind = 's3'
-    `, 'objects'))
+    `,
+      "objects",
+    );
     await tx.execute(sql`
       delete from file_blobs where version_id in (
         select fv.id from file_versions fv
         join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
         where fi.folder_id in (${descendants})
       )
-    `)
+    `);
     await tx.execute(sql`
       update files set current_version_id = null
        where folder_id in (${descendants}) and org_id = ${orgId}
-    `)
+    `);
     await tx.execute(sql`
       delete from file_versions fv
       using files fi
       where fv.file_id = fi.id and fi.org_id = ${orgId}
         and fi.folder_id in (${descendants})
-    `)
+    `);
     await tx.execute(sql`
       delete from file_attachments
        where org_id = ${orgId} and file_id in (
          select fi.id from files fi
           where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
        )
-    `)
+    `);
     // Subtree before-state inventory for the purge event: purged rows are
     // unrecoverable, so the audit carries folder/file identities (and
     // per-file version/attachment counts) alongside the permanent flag.
     // Read after the row locks above, inside the same transaction.
-    const beforeFolders = audit ? await tx.execute<{ id: string; name: string }>(sql`
+    const beforeFolders = audit
+      ? await tx.execute<{ id: string; name: string }>(sql`
       select f.id, f.name from folders f
        where f.id in (${descendants}) and f.org_id = ${orgId}
        order by f.id
        for update
-    `) : null
-    const beforeFiles = audit ? await tx.execute<{
-      id: string; folderId: string; name: string; contentType: string; sizeBytes: number; versions: number; attachments: number
-    }>(sql`
+    `)
+      : null;
+    const beforeFiles = audit
+      ? await tx.execute<{
+          id: string;
+          folderId: string;
+          name: string;
+          contentType: string;
+          sizeBytes: number;
+          versions: number;
+          attachments: number;
+        }>(sql`
       select fi.id, fi.folder_id as "folderId", fi.name, fi.content_type as "contentType",
              fi.size_bytes as "sizeBytes",
              (select count(*)::int from file_versions fv where fv.file_id = fi.id) as versions,
@@ -735,26 +881,30 @@ export async function purgeFolder(
         from files fi
        where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
        order by fi.id
-    `) : null
+    `)
+      : null;
     await tx.execute(sql`
       delete from files where folder_id in (${descendants}) and org_id = ${orgId}
-    `)
-    await tx.execute(sql`delete from folders where id in (${descendants}) and org_id = ${orgId}`)
+    `);
+    await tx.execute(sql`delete from folders where id in (${descendants}) and org_id = ${orgId}`);
     if (audit) {
       await recordFileEvent({
         orgId,
         actorId: audit.actorId,
-        table: 'folders',
+        table: "folders",
         rowId: id,
-        action: 'delete',
-        changes: { permanent: true, before: { folders: beforeFolders!.rows, files: beforeFiles!.rows } },
+        action: "delete",
+        changes: {
+          permanent: true,
+          before: { folders: beforeFolders!.rows, files: beforeFiles!.rows },
+        },
         executor: tx,
-      })
+      });
     }
-    await enqueueCabinetCleanup(tx, orgId, s3Versions)
-    return { ok: true as const, s3VersionIds: s3Versions.map((v) => v.id) }
-  })
-  if (!outcome.ok) return outcome
-  await deleteS3Blobs(outcome.s3VersionIds)
-  return { ok: true }
+    await enqueueCabinetCleanup(tx, orgId, s3Versions);
+    return { ok: true as const, s3VersionIds: s3Versions.map((v) => v.id) };
+  });
+  if (!outcome.ok) return outcome;
+  await deleteS3Blobs(outcome.s3VersionIds);
+  return { ok: true };
 }

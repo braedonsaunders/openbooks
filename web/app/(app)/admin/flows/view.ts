@@ -1,17 +1,13 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { documentRevisionSql } from '@openbooks/engine/records/revision'
-import { db } from '@openbooks/engine/platform/db'
-import { lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/flows/module'
-import {
-  flowReadiness,
-  nodeDisplayName,
-  type AutomationNode,
-} from '@openbooks/forms-core'
-import { nameFlowWarnings } from './_builder/warnings'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
+import { db } from "@openbooks/engine/platform/db";
+import { lintFlowGraphForSubject, listFlowSubjectProfiles } from "@openbooks/engine/flows/module";
+import { flowReadiness, nodeDisplayName, type AutomationNode } from "@openbooks/forms-core";
+import { nameFlowWarnings } from "./_builder/warnings";
 import {
   pagination,
   badge,
@@ -27,10 +23,10 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { parseListParams, pickString } from '../../../../lib/list-params'
-import { requirePermission } from '../../../../lib/authz'
-import { dateTime } from '../../../../lib/format'
+} from "@braedonsaunders/appkit-viewspec";
+import { parseListParams, pickString } from "../../../../lib/list-params";
+import { requirePermission } from "../../../../lib/authz";
+import { dateTime } from "../../../../lib/format";
 
 /**
  * Automation flows, split into a loader and a spec.
@@ -47,113 +43,114 @@ import { dateTime } from '../../../../lib/format'
  * Query, permission and formatting logic below are verbatim from page.tsx.
  */
 
-const BASE = '/admin/flows'
+const BASE = "/admin/flows";
 
-const RUN_BADGE: Record<string, 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'> = {
-  completed: 'success',
-  waiting: 'warning',
-  failed: 'destructive',
-  running: 'secondary',
-  cancelled: 'outline',
-}
+const RUN_BADGE: Record<string, "success" | "warning" | "destructive" | "secondary" | "outline"> = {
+  completed: "success",
+  waiting: "warning",
+  failed: "destructive",
+  running: "secondary",
+  cancelled: "outline",
+};
 
 /** Display names for a stored graph's nodes, so list-side lint reasons name
  *  canvas cards (kind + label) instead of storage ids. Nodes whose shape is
  *  unrecognizable stay unnamed and the raw reason passes through. */
 function flowNodeNames(graph: unknown): Map<string, string> {
-  const names = new Map<string, string>()
-  const raw = (graph as { nodes?: unknown } | null)?.nodes
-  if (!Array.isArray(raw)) return names
+  const names = new Map<string, string>();
+  const raw = (graph as { nodes?: unknown } | null)?.nodes;
+  if (!Array.isArray(raw)) return names;
   for (const entry of raw) {
-    const rec = entry as { id?: unknown }
-    if (typeof rec?.id !== 'string') continue
+    const rec = entry as { id?: unknown };
+    if (typeof rec?.id !== "string") continue;
     try {
-      const name = nodeDisplayName(entry as AutomationNode)
-      if (typeof name === 'string' && name.length > 0) names.set(rec.id, name)
+      const name = nodeDisplayName(entry as AutomationNode);
+      if (typeof name === "string" && name.length > 0) names.set(rec.id, name);
     } catch {
       // Unrecognizable node shape — leave it unnamed.
     }
   }
-  return names
+  return names;
 }
 
 /** A `flows` list row with its latest run: `updated_at` is the revision-token
  *  text, `node_count` an integer, the lateral-join run columns nullable. */
 type FlowDbRow = {
-  id: string
-  name: string
-  subject_kind: string
-  enabled: boolean
-  updated_at: string
-  node_count: number
-  graph: unknown
-  last_run_status: string | null
-  last_run_at: Date | string | null
-}
+  id: string;
+  name: string;
+  subject_kind: string;
+  enabled: boolean;
+  updated_at: string;
+  node_count: number;
+  graph: unknown;
+  last_run_status: string | null;
+  last_run_at: Date | string | null;
+};
 
 export interface FlowListRow {
-  id: string
-  name: string
-  href: string
-  subjectKind: string
-  subjectLabel: string
-  nodeCount: string
-  lastRunStatus: string | null
-  lastRunVariant: 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'
-  lastRunAt: string | null
-  neverRanLabel: string
-  updatedAt: string
-  enabled: boolean
-  enabledLabel: string
-  enabledVariant: 'success' | 'warning' | 'outline'
-  rowActions: { id: string; name: string; enabled: boolean; updatedAt: string }
+  id: string;
+  name: string;
+  href: string;
+  subjectKind: string;
+  subjectLabel: string;
+  nodeCount: string;
+  lastRunStatus: string | null;
+  lastRunVariant: "success" | "warning" | "destructive" | "secondary" | "outline";
+  lastRunAt: string | null;
+  neverRanLabel: string;
+  updatedAt: string;
+  enabled: boolean;
+  enabledLabel: string;
+  enabledVariant: "success" | "warning" | "outline";
+  rowActions: { id: string; name: string; enabled: boolean; updatedAt: string };
 }
 
 export interface FlowsData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  searchPlaceholder: string
-  subjectLabel: string
-  subjectOptions: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
-  isEmpty: boolean
-  hasRows: boolean
-  emptyTitle: string
-  emptyDescription: string
-  columnFlow: string
-  columnSubject: string
-  columnNodes: string
-  columnLastRun: string
-  columnUpdated: string
-  columnStatus: string
-  rows: FlowListRow[]
-  total: number
-  currentPage: number
-  perPage: number
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  searchPlaceholder: string;
+  subjectLabel: string;
+  subjectOptions: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  isEmpty: boolean;
+  hasRows: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  columnFlow: string;
+  columnSubject: string;
+  columnNodes: string;
+  columnLastRun: string;
+  columnUpdated: string;
+  columnStatus: string;
+  rows: FlowListRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
 }
 
 export async function loadFlows(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<FlowsData> {
-  const authz = await requirePermission('flows.manage')
-  const orgId = authz.user.orgId
-  const t = await getTranslations('admin.flows')
-  const tHub = await getTranslations('admin.hub')
+  const authz = await requirePermission("flows.manage");
+  const orgId = authz.user.orgId;
+  const t = await getTranslations("admin.flows");
+  const tHub = await getTranslations("admin.hub");
   const params = parseListParams(sp, {
-    sort: 'name',
-    allowedSorts: ['name'] as const,
+    sort: "name",
+    allowedSorts: ["name"] as const,
     perPage: 50,
-  })
-  const subject = pickString(sp.subject)
+  });
+  const subject = pickString(sp.subject);
 
   const where = sql`f.org_id = ${orgId}
     ${subject ? sql` and f.subject_kind = ${subject}` : sql``}
-    ${params.q ? sql` and f.name ilike ${'%' + params.q + '%'}` : sql``}`
+    ${params.q ? sql` and f.name ilike ${"%" + params.q + "%"}` : sql``}`;
 
   const [flows, subjects, totalRow] = await Promise.all([
-    db.execute<FlowDbRow>(sql`
+    db.execute<FlowDbRow>(
+      sql`
       select f.id, f.name, f.subject_kind, f.enabled, ${documentRevisionSql(sql`f.updated_at`)} as updated_at,
              jsonb_array_length(f.graph->'nodes') as node_count, f.graph as graph,
              lr.status as last_run_status, lr.started_at as last_run_at
@@ -165,35 +162,35 @@ export async function loadFlows(
        where ${where}
        order by f.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `, 'objects'),
-    db.execute<{ subject_kind: string; n: string }>(sql`
-      select subject_kind, count(*) as n from flows f
-       where f.org_id = ${orgId} group by 1 order by 1`, 'objects'),
-    db.execute<{ n: string }>(
-      sql`select count(*) as n from flows f where ${where}`, 'objects',
+    `,
+      "objects",
     ),
-  ])
+    db.execute<{ subject_kind: string; n: string }>(
+      sql`
+      select subject_kind, count(*) as n from flows f
+       where f.org_id = ${orgId} group by 1 order by 1`,
+      "objects",
+    ),
+    db.execute<{ n: string }>(sql`select count(*) as n from flows f where ${where}`, "objects"),
+  ]);
 
-  const tSubjects = await getTranslations('customization.recordTypes')
+  const tSubjects = await getTranslations("customization.recordTypes");
   const subjectLabel = new Map(
-    listFlowSubjectProfiles().map((p) => [
-      p.subjectKind,
-      p.labelKey ? p.labelKey : p.label,
-    ]),
-  )
+    listFlowSubjectProfiles().map((p) => [p.subjectKind, p.labelKey ? p.labelKey : p.label]),
+  );
   const subjectName = (kind: string) => {
-    const key = subjectLabel.get(kind) ?? kind
-    return tSubjects.has(key as never) ? tSubjects(key as never) : key
-  }
-  const total = Number(totalRow[0]?.n ?? 0)
+    const key = subjectLabel.get(kind) ?? kind;
+    return tSubjects.has(key as never) ? tSubjects(key as never) : key;
+  };
+  const total = Number(totalRow[0]?.n ?? 0);
 
   return {
-    title: t('title'),
-    description: t('description'),
-    backHref: '/admin',
-    backLabel: tHub('title'),
-    searchPlaceholder: t('searchPlaceholder'),
-    subjectLabel: t('subjectFilter'),
+    title: t("title"),
+    description: t("description"),
+    backHref: "/admin",
+    backLabel: tHub("title"),
+    searchPlaceholder: t("searchPlaceholder"),
+    subjectLabel: t("subjectFilter"),
     subjectOptions: subjects.map((r) => ({
       value: r.subject_kind,
       label: subjectName(String(r.subject_kind)),
@@ -202,35 +199,36 @@ export async function loadFlows(
     currentParams: sp,
     isEmpty: total === 0 && !params.q && !subject,
     hasRows: !(total === 0 && !params.q && !subject),
-    emptyTitle: t('empty.title'),
-    emptyDescription: t('empty.description'),
-    columnFlow: t('table.flow'),
-    columnSubject: t('table.subject'),
-    columnNodes: t('table.nodes'),
-    columnLastRun: t('table.lastRun'),
-    columnUpdated: t('table.updated'),
-    columnStatus: t('table.status'),
+    emptyTitle: t("empty.title"),
+    emptyDescription: t("empty.description"),
+    columnFlow: t("table.flow"),
+    columnSubject: t("table.subject"),
+    columnNodes: t("table.nodes"),
+    columnLastRun: t("table.lastRun"),
+    columnUpdated: t("table.updated"),
+    columnStatus: t("table.status"),
     rows: flows.map((f) => {
       // Fire-readiness in the list's own words: the stored enabled flag is
       // the single source, and an enabled flow whose graph cannot fire reads
       // "Incomplete: <reason>" instead of a clean "enabled".
-      const lint = lintFlowGraphForSubject(String(f.subject_kind), f.graph)
-      const readiness = flowReadiness(Boolean(f.enabled), lint.ok ? [] : lint.errors)
-      const named = readiness.state === 'incomplete'
-        ? nameFlowWarnings(readiness.reasons.slice(0, 1), flowNodeNames(f.graph))
-        : []
+      const lint = lintFlowGraphForSubject(String(f.subject_kind), f.graph);
+      const readiness = flowReadiness(Boolean(f.enabled), lint.ok ? [] : lint.errors);
+      const named =
+        readiness.state === "incomplete"
+          ? nameFlowWarnings(readiness.reasons.slice(0, 1), flowNodeNames(f.graph))
+          : [];
       const enabledLabel =
-        readiness.state === 'disabled'
-          ? t('statusDisabled')
-          : readiness.state === 'incomplete'
-            ? t('statusIncomplete', { reason: named[0] ?? '' })
-            : t('statusEnabled')
+        readiness.state === "disabled"
+          ? t("statusDisabled")
+          : readiness.state === "incomplete"
+            ? t("statusIncomplete", { reason: named[0] ?? "" })
+            : t("statusEnabled");
       const enabledVariant =
-        readiness.state === 'disabled'
-          ? ('outline' as const)
-          : readiness.state === 'incomplete'
-            ? ('warning' as const)
-            : ('success' as const)
+        readiness.state === "disabled"
+          ? ("outline" as const)
+          : readiness.state === "incomplete"
+            ? ("warning" as const)
+            : ("success" as const);
       return {
         id: String(f.id),
         name: String(f.name),
@@ -238,11 +236,10 @@ export async function loadFlows(
         subjectKind: String(f.subject_kind),
         subjectLabel: subjectName(String(f.subject_kind)),
         nodeCount: String(f.node_count),
-        lastRunStatus:
-          f.last_run_status != null ? String(f.last_run_status) : null,
-        lastRunVariant: RUN_BADGE[String(f.last_run_status)] ?? 'outline',
+        lastRunStatus: f.last_run_status != null ? String(f.last_run_status) : null,
+        lastRunVariant: RUN_BADGE[String(f.last_run_status)] ?? "outline",
         lastRunAt: f.last_run_at ? dateTime(f.last_run_at) : null,
-        neverRanLabel: t('neverRan'),
+        neverRanLabel: t("neverRan"),
         updatedAt: dateTime(f.updated_at),
         enabled: Boolean(f.enabled),
         enabledLabel,
@@ -253,35 +250,35 @@ export async function loadFlows(
           enabled: Boolean(f.enabled),
           updatedAt: String(f.updated_at),
         },
-      }
+      };
     }),
     total,
     currentPage: params.page,
     perPage: params.perPage,
-  }
+  };
 }
 
-const f = ref<FlowsData>()
-const item = field
-const rootF = rootRef<FlowsData>()
+const f = ref<FlowsData>();
+const item = field;
+const rootF = rootRef<FlowsData>();
 
 export function flowsSpec(data: FlowsData): PageSpec {
   return page({
-    route: '/admin/flows',
-    layout: 'list',
+    route: "/admin/flows",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: f('backHref'), label: f('backLabel') },
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('new-flow', {})],
+        back: { href: f("backHref"), label: f("backLabel") },
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("new-flow", {})],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+        widgetBlock("filter-chips", {
           basePath: BASE,
           currentParams: data.currentParams,
-          paramKey: 'subject',
+          paramKey: "subject",
           label: data.subjectLabel,
           options: data.subjectOptions,
         }),
@@ -293,73 +290,70 @@ export function flowsSpec(data: FlowsData): PageSpec {
         // — until the empty-state widget's icon map gains it, the spec
         // path renders the empty state without the glyph. Icon and action
         // named, not carried, per the component-reference rule.
-        ...widgetBlock('empty-state', {
-          icon: 'workflow',
+        ...widgetBlock("empty-state", {
+          icon: "workflow",
           title: data.emptyTitle,
           description: data.emptyDescription,
-          action: 'new-flow',
+          action: "new-flow",
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
-        ...registeredListTable('admin_flows', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
+        ...registeredListTable("admin_flows", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
           columns: [
             column(
-              rootF('columnFlow'),
-              widgetCell('flow-name-cell', {
-                name: item('name'),
-                href: item('href'),
+              rootF("columnFlow"),
+              widgetCell("flow-name-cell", {
+                name: item("name"),
+                href: item("href"),
               }),
             ),
-            column(
-              rootF('columnSubject'),
-              badge(item('subjectLabel'), { variant: 'secondary' }),
-            ),
-            column(rootF('columnNodes'), text(item('nodeCount')), {
-              align: 'right',
-              className: 'tabular-nums',
+            column(rootF("columnSubject"), badge(item("subjectLabel"), { variant: "secondary" })),
+            column(rootF("columnNodes"), text(item("nodeCount")), {
+              align: "right",
+              className: "tabular-nums",
             }),
             column(
-              rootF('columnLastRun'),
-              widgetCell('flow-last-run-cell', {
-                status: item('lastRunStatus'),
-                variant: item('lastRunVariant'),
-                at: item('lastRunAt'),
-                fallback: item('neverRanLabel'),
+              rootF("columnLastRun"),
+              widgetCell("flow-last-run-cell", {
+                status: item("lastRunStatus"),
+                variant: item("lastRunVariant"),
+                at: item("lastRunAt"),
+                fallback: item("neverRanLabel"),
               }),
-              { className: 'text-slate-500 dark:text-slate-400' },
+              { className: "text-slate-500 dark:text-slate-400" },
             ),
-            column(rootF('columnUpdated'), text(item('updatedAt')), {
-              className: 'text-slate-500 tabular-nums dark:text-slate-400',
+            column(rootF("columnUpdated"), text(item("updatedAt")), {
+              className: "text-slate-500 tabular-nums dark:text-slate-400",
             }),
             column(
-              rootF('columnStatus'),
-              badge(item('enabledLabel'), { variant: item('enabledVariant') }),
+              rootF("columnStatus"),
+              badge(item("enabledLabel"), { variant: item("enabledVariant") }),
             ),
             column(
-              '',
-              widgetCell('flow-row-actions', {
-                id: item('id'),
-                name: item('name'),
-                enabled: item('enabled'),
-                updatedAt: item('rowActions.updatedAt'),
+              "",
+              widgetCell("flow-row-actions", {
+                id: item("id"),
+                name: item("name"),
+                enabled: item("enabled"),
+                updatedAt: item("rowActions.updatedAt"),
               }),
               // No alignment at all: the native header is a bare <TableHead />
               // and its body cell carries no class either.
             ),
           ],
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
       pagination({
         basePath: BASE,
-        total: f('total'),
-        page: f('currentPage'),
-        perPage: f('perPage'),
+        total: f("total"),
+        page: f("currentPage"),
+        perPage: f("perPage"),
       }),
     ],
-  })
+  });
 }

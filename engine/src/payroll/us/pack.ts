@@ -5,11 +5,18 @@ import type {
   PayrollJurisdiction,
   PayrollRegionCoverage,
 } from "../pack-types.ts";
-import { computeUsStatutory, US_COMPUTE_FACTOR_LABELS, usWaivedSuiRateSlots } from "./compute-statutory.ts";
+import {
+  computeUsStatutory,
+  US_COMPUTE_FACTOR_LABELS,
+  usWaivedSuiRateSlots,
+} from "./compute-statutory.ts";
 import { usPackFilings } from "./filings.ts";
 import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./jurisdictions.ts";
 import {
-  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS, US_SUI_ACCOUNT_BASE,
+  US_FICA_WAGES_ACCOUNT_BASE,
+  US_FICA_WITHHELD_ACCOUNT_BASE,
+  US_OPENING_YTD_FIELDS,
+  US_SUI_ACCOUNT_BASE,
 } from "./opening-ytd.ts";
 import { PUB15T_FACTOR_LABELS } from "./pub15t.ts";
 import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./rates.ts";
@@ -113,17 +120,73 @@ function usDescribeFactor(key: string): string | null {
  */
 
 const US_FEDERAL_HOLIDAYS: readonly PayrollHoliday[] = [
-      { key: "new_years", name: "New Year's Day", rule: { kind: "fixed", month: 1, day: 1 }, observance: "nearest_weekday" },
-      { key: "mlk_day", name: "Birthday of Martin Luther King, Jr.", rule: { kind: "nth_weekday", month: 1, weekday: 1, nth: 3 }, observance: "nearest_weekday" },
-      { key: "washingtons_birthday", name: "Washington's Birthday", rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 3 }, observance: "nearest_weekday" },
-      { key: "memorial_day", name: "Memorial Day", rule: { kind: "nth_weekday", month: 5, weekday: 1, nth: -1 }, observance: "nearest_weekday" },
-      { key: "juneteenth", name: "Juneteenth National Independence Day", rule: { kind: "fixed", month: 6, day: 19 }, observance: "nearest_weekday", from: 2021 },
-      { key: "independence_day", name: "Independence Day", rule: { kind: "fixed", month: 7, day: 4 }, observance: "nearest_weekday" },
-      { key: "labor_day", name: "Labor Day", rule: { kind: "nth_weekday", month: 9, weekday: 1, nth: 1 }, observance: "nearest_weekday" },
-      { key: "columbus_day", name: "Columbus Day", rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: 2 }, observance: "nearest_weekday" },
-      { key: "veterans_day", name: "Veterans Day", rule: { kind: "fixed", month: 11, day: 11 }, observance: "nearest_weekday" },
-      { key: "thanksgiving", name: "Thanksgiving Day", rule: { kind: "nth_weekday", month: 11, weekday: 4, nth: 4 }, observance: "nearest_weekday" },
-      { key: "christmas", name: "Christmas Day", rule: { kind: "fixed", month: 12, day: 25 }, observance: "nearest_weekday" },
+  {
+    key: "new_years",
+    name: "New Year's Day",
+    rule: { kind: "fixed", month: 1, day: 1 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "mlk_day",
+    name: "Birthday of Martin Luther King, Jr.",
+    rule: { kind: "nth_weekday", month: 1, weekday: 1, nth: 3 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "washingtons_birthday",
+    name: "Washington's Birthday",
+    rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 3 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "memorial_day",
+    name: "Memorial Day",
+    rule: { kind: "nth_weekday", month: 5, weekday: 1, nth: -1 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "juneteenth",
+    name: "Juneteenth National Independence Day",
+    rule: { kind: "fixed", month: 6, day: 19 },
+    observance: "nearest_weekday",
+    from: 2021,
+  },
+  {
+    key: "independence_day",
+    name: "Independence Day",
+    rule: { kind: "fixed", month: 7, day: 4 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "labor_day",
+    name: "Labor Day",
+    rule: { kind: "nth_weekday", month: 9, weekday: 1, nth: 1 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "columbus_day",
+    name: "Columbus Day",
+    rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: 2 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "veterans_day",
+    name: "Veterans Day",
+    rule: { kind: "fixed", month: 11, day: 11 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "thanksgiving",
+    name: "Thanksgiving Day",
+    rule: { kind: "nth_weekday", month: 11, weekday: 4, nth: 4 },
+    observance: "nearest_weekday",
+  },
+  {
+    key: "christmas",
+    name: "Christmas Day",
+    rule: { kind: "fixed", month: 12, day: 25 },
+    observance: "nearest_weekday",
+  },
 ] as const;
 
 /**
@@ -150,17 +213,17 @@ const US_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   // federal calendar and mandates nothing — declared explicitly, one per
   // state, so that "this state was never considered" and "this state requires
   // nothing" cannot be the same answer.
-  ...US_STATES.filter((state) => !US_STATES_WITH_HOLIDAY_PAY_MANDATE.has(state))
-    .map((state): PayrollJurisdiction => ({
+  ...US_STATES.filter((state) => !US_STATES_WITH_HOLIDAY_PAY_MANDATE.has(state)).map(
+    (state): PayrollJurisdiction => ({
       key: `US-${state}`,
       name: `United States — ${state}`,
       scope: "employment",
       citation: "5 U.S.C. 6103; FLSA 29 U.S.C. 201 et seq. (no state holiday-pay mandate)",
       holidays: US_FEDERAL_HOLIDAYS,
       holidayPay: null,
-    })),
+    }),
+  ),
 ];
-
 
 /**
  * Display name per state postal code, for pickers and labels. USPS
@@ -170,18 +233,57 @@ const US_JURISDICTIONS: readonly PayrollJurisdiction[] = [
  * names.
  */
 const US_STATE_NAMES: Readonly<Record<string, string>> = {
-  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
-  CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia",
-  FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
-  IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana",
-  ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan",
-  MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
-  NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
-  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota",
-  OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
-  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota",
-  TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia",
-  WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+  AL: "Alabama",
+  AK: "Alaska",
+  AZ: "Arizona",
+  AR: "Arkansas",
+  CA: "California",
+  CO: "Colorado",
+  CT: "Connecticut",
+  DE: "Delaware",
+  DC: "District of Columbia",
+  FL: "Florida",
+  GA: "Georgia",
+  HI: "Hawaii",
+  ID: "Idaho",
+  IL: "Illinois",
+  IN: "Indiana",
+  IA: "Iowa",
+  KS: "Kansas",
+  KY: "Kentucky",
+  LA: "Louisiana",
+  ME: "Maine",
+  MD: "Maryland",
+  MA: "Massachusetts",
+  MI: "Michigan",
+  MN: "Minnesota",
+  MS: "Mississippi",
+  MO: "Missouri",
+  MT: "Montana",
+  NE: "Nebraska",
+  NV: "Nevada",
+  NH: "New Hampshire",
+  NJ: "New Jersey",
+  NM: "New Mexico",
+  NY: "New York",
+  NC: "North Carolina",
+  ND: "North Dakota",
+  OH: "Ohio",
+  OK: "Oklahoma",
+  OR: "Oregon",
+  PA: "Pennsylvania",
+  RI: "Rhode Island",
+  SC: "South Carolina",
+  SD: "South Dakota",
+  TN: "Tennessee",
+  TX: "Texas",
+  UT: "Utah",
+  VT: "Vermont",
+  VA: "Virginia",
+  WA: "Washington",
+  WV: "West Virginia",
+  WI: "Wisconsin",
+  WY: "Wyoming",
 };
 
 const US_REGIONS: PayrollRegionCoverage = {
@@ -197,9 +299,9 @@ const US_REGIONS: PayrollRegionCoverage = {
    */
   supported: supportedUsStates(),
   unsupportedReason:
-    "{region} income tax withholding is not implemented by the US payroll pack. "
-    + "This state is not yet supported by the US pack; contact support. "
-    + `Implemented: ${implementedUsStates().join(", ")}.`,
+    "{region} income tax withholding is not implemented by the US payroll pack. " +
+    "This state is not yet supported by the US pack; contact support. " +
+    `Implemented: ${implementedUsStates().join(", ")}.`,
 };
 
 /**
@@ -247,7 +349,8 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     example: "123-45-6789",
     requiredForPayroll: true,
     neededFor: "W-2",
-    citation: "SSA Handbook §101: 'A Social Security Number (SSN) is a nine digit number SSA assigns'",
+    citation:
+      "SSA Handbook §101: 'A Social Security Number (SSN) is a nine digit number SSA assigns'",
     numericEntry: false,
   },
   installable: true,
@@ -297,18 +400,22 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     {
       key: "us_creditor_garnishment",
       label: "Ordinary creditor garnishment",
-      help: "A garnishment for an ordinary debt: withholds at most the lesser of the configured share of disposable "
-        + "earnings (25% under the CCPA) and the disposable earnings above 30 times the minimum hourly wage per week. "
-        + "Below that floor nothing is withheld, and the unpaid amount is reported as a shortfall.",
-      legalBasis: "15 U.S.C. §1673(a); U.S. Department of Labor Fact Sheet #30 (https://www.dol.gov/agencies/whd/fact-sheets/30-cppa).",
+      help:
+        "A garnishment for an ordinary debt: withholds at most the lesser of the configured share of disposable " +
+        "earnings (25% under the CCPA) and the disposable earnings above 30 times the minimum hourly wage per week. " +
+        "Below that floor nothing is withheld, and the unpaid amount is reported as a shortfall.",
+      legalBasis:
+        "15 U.S.C. §1673(a); U.S. Department of Labor Fact Sheet #30 (https://www.dol.gov/agencies/whd/fact-sheets/30-cppa).",
       exemptFloor: { employerFactKey: "us_garnishment_minimum_hourly_wage", weeklyHours: "30" },
     },
     {
       key: "us_support_order",
       label: "Child or spousal support order",
-      help: "A support order withholds at most its configured share of disposable earnings (50% to 65% under the CCPA, "
-        + "depending on other dependents and arrears); no minimum-wage floor applies.",
-      legalBasis: "15 U.S.C. §1673(b)(2); U.S. Department of Labor Fact Sheet #30 (https://www.dol.gov/agencies/whd/fact-sheets/30-cppa).",
+      help:
+        "A support order withholds at most its configured share of disposable earnings (50% to 65% under the CCPA, " +
+        "depending on other dependents and arrears); no minimum-wage floor applies.",
+      legalBasis:
+        "15 U.S.C. §1673(b)(2); U.S. Department of Labor Fact Sheet #30 (https://www.dol.gov/agencies/whd/fact-sheets/30-cppa).",
     },
   ],
   deductionTreatments: [
@@ -330,9 +437,12 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       reduces: [
         "income",
         // NE Circular EN, ND IRC §3401 and NC-30 use federal wage exclusions.
-        "state:US:NE:income", "state:US:NE:nonPeriodic",
-        "state:US:ND:income", "state:US:ND:nonPeriodic",
-        "state:US:NC:income", "state:US:NC:nonPeriodic",
+        "state:US:NE:income",
+        "state:US:NE:nonPeriodic",
+        "state:US:ND:income",
+        "state:US:ND:nonPeriodic",
+        "state:US:NC:income",
+        "state:US:NC:nonPeriodic",
       ],
     },
     {
@@ -363,16 +473,18 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     {
       column: "fica_exempt",
       label: "FICA exempt",
-      help: "No Social Security or Medicare tax is withheld or matched for this "
-        + "employee: the employment is exempt under the IRC (for example a "
-        + "qualifying student employee). Income tax withholding is unaffected.",
+      help:
+        "No Social Security or Medicare tax is withheld or matched for this " +
+        "employee: the employment is exempt under the IRC (for example a " +
+        "qualifying student employee). Income tax withholding is unaffected.",
     },
     {
       column: "futa_exempt",
       label: "FUTA exempt",
-      help: "No federal unemployment tax is computed for this employee: "
-        + "the employment is exempt under 26 U.S.C. §3306(c). Income tax and "
-        + "FICA withholding and state unemployment coverage are unaffected.",
+      help:
+        "No federal unemployment tax is computed for this employee: " +
+        "the employment is exempt under 26 U.S.C. §3306(c). Income tax and " +
+        "FICA withholding and state unemployment coverage are unaffected.",
     },
     {
       column: "sui_exempt",
@@ -405,10 +517,38 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       requiresRegion: true,
       replacesStateCarryIn: true,
     },
-    { key: "us_w2_taxable", label: "W-2 wages per federal EIN", help: "Federal taxable wages reported under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "taxableYtd" },
-    { key: "us_w2_tax", label: "Federal income tax per EIN", help: "Federal income tax withheld under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "taxYtd" },
-    { key: US_FICA_WAGES_ACCOUNT_BASE, label: "FICA wages per federal EIN", help: "Social Security and Medicare wages under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "pensionableYtd" },
-    { key: US_FICA_WITHHELD_ACCOUNT_BASE, label: "FICA withheld per federal EIN", help: "Social Security and Medicare tax withheld under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "ficaWithheldYtd" },
+    {
+      key: "us_w2_taxable",
+      label: "W-2 wages per federal EIN",
+      help: "Federal taxable wages reported under this EIN before OpenBooks adoption.",
+      filingProgramType: "us_ein",
+      requiresRegion: false,
+      replacesLegacyField: "taxableYtd",
+    },
+    {
+      key: "us_w2_tax",
+      label: "Federal income tax per EIN",
+      help: "Federal income tax withheld under this EIN before OpenBooks adoption.",
+      filingProgramType: "us_ein",
+      requiresRegion: false,
+      replacesLegacyField: "taxYtd",
+    },
+    {
+      key: US_FICA_WAGES_ACCOUNT_BASE,
+      label: "FICA wages per federal EIN",
+      help: "Social Security and Medicare wages under this EIN before OpenBooks adoption.",
+      filingProgramType: "us_ein",
+      requiresRegion: false,
+      replacesLegacyField: "pensionableYtd",
+    },
+    {
+      key: US_FICA_WITHHELD_ACCOUNT_BASE,
+      label: "FICA withheld per federal EIN",
+      help: "Social Security and Medicare tax withheld under this EIN before OpenBooks adoption.",
+      filingProgramType: "us_ein",
+      requiresRegion: false,
+      replacesLegacyField: "ficaWithheldYtd",
+    },
   ],
   statutorySlots: [
     {
@@ -416,30 +556,94 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       components: [
         // Pub 15-T works from annualized taxable wages, so a pre-tax
         // deduction (§125, 401(k)) moves it exactly as factor F moves T.
-        { code: "FIT", name: "Federal income tax", systemKey: "fit", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "FIT",
+          name: "Federal income tax",
+          systemKey: "fit",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
       key: "fica",
       components: [
         // Rate × FICA wages against the wage base — deductions do not enter.
-        { code: "SS", name: "Social Security", systemKey: "ss", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "MED", name: "Medicare", systemKey: "medicare", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "MED2", name: "Additional Medicare", systemKey: "medicare_addl", kind: "deduction", sequence: 135, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "SS-ER", name: "Social Security (employer)", systemKey: "ss", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "MED-ER", name: "Medicare (employer)", systemKey: "medicare", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "SS",
+          name: "Social Security",
+          systemKey: "ss",
+          kind: "deduction",
+          sequence: 120,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "MED",
+          name: "Medicare",
+          systemKey: "medicare",
+          kind: "deduction",
+          sequence: 130,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "MED2",
+          name: "Additional Medicare",
+          systemKey: "medicare_addl",
+          kind: "deduction",
+          sequence: 135,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "SS-ER",
+          name: "Social Security (employer)",
+          systemKey: "ss",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "MED-ER",
+          name: "Medicare (employer)",
+          systemKey: "medicare",
+          kind: "employer_contribution",
+          sequence: 220,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
       key: "futa",
       components: [
-        { code: "FUTA", name: "Federal unemployment (FUTA)", systemKey: "futa", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "FUTA",
+          name: "Federal unemployment (FUTA)",
+          systemKey: "futa",
+          kind: "employer_contribution",
+          sequence: 230,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
       key: "suta",
       components: [
-        { code: "SUTA", name: "State unemployment (SUI)", systemKey: "suta", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SUTA",
+          name: "State unemployment (SUI)",
+          systemKey: "suta",
+          kind: "employer_contribution",
+          sequence: 250,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -449,7 +653,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // District Paid Family Leave (2026: 0.75% of covered wages each
         // quarter): an EMPLOYER contribution remitted to the District,
         // beside SUI rather than inside it.
-        { code: "DC-OPFL", name: "DC Paid Family Leave (employer)", systemKey: "dc_opfl_employer", kind: "employer_contribution", sequence: 254, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "DC-OPFL",
+          name: "DC Paid Family Leave (employer)",
+          systemKey: "dc_opfl_employer",
+          kind: "employer_contribution",
+          sequence: 254,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -471,7 +683,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // REGISTRATION (a payroll_filing_account), which is a different axis
         // from the component. Remittance is 'external': a state's
         // withholding goes to the state, never to the federal vendor.
-        { code: "SIT", name: "State income tax", systemKey: "state_income_tax", kind: "deduction", sequence: 140, assessedOn: "taxable_income", remittance: "external" },
+        {
+          code: "SIT",
+          name: "State income tax",
+          systemKey: "state_income_tax",
+          kind: "deduction",
+          sequence: 140,
+          assessedOn: "taxable_income",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -495,7 +715,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       components: [
         // Colorado FAMLI employee premium (2026: 0.44% of covered wages): an
         // EMPLOYEE deduction beside DR 1098 income tax, never inside it.
-        { code: "CO-FAMLI", name: "Colorado FAMLI (employee)", systemKey: "co_famli_employee", kind: "deduction", sequence: 149, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "CO-FAMLI",
+          name: "Colorado FAMLI (employee)",
+          systemKey: "co_famli_employee",
+          kind: "deduction",
+          sequence: 149,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -504,7 +732,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       components: [
         // The matching 0.44% employer contribution: employer expense plus a
         // liability to the state, never out of the cheque.
-        { code: "CO-FAMLI-ER", name: "Colorado FAMLI (employer)", systemKey: "co_famli_employer", kind: "employer_contribution", sequence: 252, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "CO-FAMLI-ER",
+          name: "Colorado FAMLI (employer)",
+          systemKey: "co_famli_employer",
+          kind: "employer_contribution",
+          sequence: 252,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -514,7 +750,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // Connecticut Paid Leave employee contribution (2026: 0.5% of
         // FICA-taxable wages to the SS base): an EMPLOYEE deduction beside
         // income tax, never inside it.
-        { code: "CT-PL", name: "Connecticut Paid Leave (employee)", systemKey: "ct_pl_employee", kind: "deduction", sequence: 150, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "CT-PL",
+          name: "Connecticut Paid Leave (employee)",
+          systemKey: "ct_pl_employee",
+          kind: "deduction",
+          sequence: 150,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -529,7 +773,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // income tax slot carries every city on one component. The districts
         // are mutually exclusive in geography and the transit record carries
         // one district, so one stub carries at most one transit line.
-        { code: "TRANSIT", name: "Transit payroll tax", systemKey: "transit_payroll_tax", kind: "employer_contribution", sequence: 260, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "TRANSIT",
+          name: "Transit payroll tax",
+          systemKey: "transit_payroll_tax",
+          kind: "employer_contribution",
+          sequence: 260,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -540,7 +792,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // positive UI-reserve-balance employers only): an EMPLOYER
         // contribution remitted to the state, beside SUI rather than inside
         // it — a deficit-balance account is exempt while still owing SUI.
-        { code: "CA-ETT", name: "CA employment training tax", systemKey: "ca_ett", kind: "employer_contribution", sequence: 251, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "CA-ETT",
+          name: "CA employment training tax",
+          systemKey: "ca_ett",
+          kind: "employer_contribution",
+          sequence: 251,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -553,8 +813,24 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // the employees' contributions as distinct figures, and netting them
         // would hide an over-withheld employee share inside the employer's
         // cost. One component each, like SIT's one-component-per-state rule.
-        { code: "VT-CCC", name: "Vermont Child Care Contribution", systemKey: "vt_child_care_contribution", kind: "employer_contribution", sequence: 261, assessedOn: "earnings", remittance: "external" },
-        { code: "VT-CCCE", name: "Vermont Child Care Contribution (employee)", systemKey: "vt_child_care_contribution_employee", kind: "deduction", sequence: 142, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "VT-CCC",
+          name: "Vermont Child Care Contribution",
+          systemKey: "vt_child_care_contribution",
+          kind: "employer_contribution",
+          sequence: 261,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "VT-CCCE",
+          name: "Vermont Child Care Contribution (employee)",
+          systemKey: "vt_child_care_contribution_employee",
+          kind: "deduction",
+          sequence: 142,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -566,8 +842,24 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // wage-detail report and premium reconcile employer and employee
         // figures as distinct amounts, and netting them would hide an
         // over-deducted employee share inside the employer's cost.
-        { code: "MN-PL", name: "Minnesota Paid Leave (employer)", systemKey: "mn_paid_leave", kind: "employer_contribution", sequence: 262, assessedOn: "earnings", remittance: "external" },
-        { code: "MN-PLE", name: "Minnesota Paid Leave (employee)", systemKey: "mn_paid_leave_employee", kind: "deduction", sequence: 143, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "MN-PL",
+          name: "Minnesota Paid Leave (employer)",
+          systemKey: "mn_paid_leave",
+          kind: "employer_contribution",
+          sequence: 262,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "MN-PLE",
+          name: "Minnesota Paid Leave (employee)",
+          systemKey: "mn_paid_leave_employee",
+          kind: "deduction",
+          sequence: 143,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -583,7 +875,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // to a different authority — the City of Philadelphia is not the
         // Commonwealth of Pennsylvania — and an employer posting both to one
         // payable cannot reconcile either.
-        { code: "LIT", name: "Local income tax", systemKey: "local_income_tax", kind: "deduction", sequence: 145, assessedOn: "taxable_income", remittance: "external" },
+        {
+          code: "LIT",
+          name: "Local income tax",
+          systemKey: "local_income_tax",
+          kind: "deduction",
+          sequence: 145,
+          assessedOn: "taxable_income",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -595,7 +895,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // its own slot rather than the SIT line — folding it into SIT would
         // overstate income-tax withholding and misroute the remittance.
         // Assessed on earnings (gross, no pre-tax reduction), like transit.
-        { code: "PA-UC", name: "Pennsylvania UC (employee)", systemKey: "pa_uc_employee", kind: "deduction", sequence: 147, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "PA-UC",
+          name: "Pennsylvania UC (employee)",
+          systemKey: "pa_uc_employee",
+          kind: "deduction",
+          sequence: 147,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -605,7 +913,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // California State Disability Insurance (2026: 1.3% of all covered
         // wages, no cap since 2024): an EMPLOYEE deduction, not PIT, so its
         // own slot rather than the SIT line. Assessed on earnings (gross).
-        { code: "CA-SDI", name: "California SDI (employee)", systemKey: "ca_sdi_employee", kind: "deduction", sequence: 148, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "CA-SDI",
+          name: "California SDI (employee)",
+          systemKey: "ca_sdi_employee",
+          kind: "deduction",
+          sequence: 148,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -617,8 +933,24 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // employer for employers with 50+ employees): the two legs remit to
         // ESD as one premium, so one slot covers both, as Vermont's and
         // Minnesota's single-remittance levies do. Assessed on earnings.
-        { code: "WA-PFML", name: "Washington PFML (employee)", systemKey: "wa_pfml_employee", kind: "deduction", sequence: 144, assessedOn: "earnings", remittance: "external" },
-        { code: "WA-PFML-ER", name: "Washington PFML (employer)", systemKey: "wa_pfml_employer", kind: "employer_contribution", sequence: 253, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "WA-PFML",
+          name: "Washington PFML (employee)",
+          systemKey: "wa_pfml_employee",
+          kind: "deduction",
+          sequence: 144,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "WA-PFML-ER",
+          name: "Washington PFML (employer)",
+          systemKey: "wa_pfml_employer",
+          kind: "employer_contribution",
+          sequence: 253,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -628,7 +960,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // WA Cares Fund (RCW 50B.04: 0.58% of gross wages, employee-paid, no
         // cap): an EMPLOYEE deduction beside income tax, never inside it.
         // Assessed on earnings (gross).
-        { code: "WA-CARES", name: "Washington WA Cares (employee)", systemKey: "wa_cares_employee", kind: "deduction", sequence: 146, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "WA-CARES",
+          name: "Washington WA Cares (employee)",
+          systemKey: "wa_cares_employee",
+          kind: "deduction",
+          sequence: 146,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
   ],

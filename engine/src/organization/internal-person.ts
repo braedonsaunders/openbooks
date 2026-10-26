@@ -25,7 +25,8 @@ export async function pinInternalPerson(
   partyId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<InternalPersonPin | null> {
-  const owned = (await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const owned = await runner.execute<{ id: string; subsidiary_id: string | null }>(
+    sql`
     select id, subsidiary_id from parties
      where org_id = ${orgId} and id = ${partyId}
        and is_active
@@ -39,7 +40,9 @@ export async function pinInternalPerson(
               and r.is_active
          )
        )
-     limit 1`, "objects"));
+     limit 1`,
+    "objects",
+  );
   const row = owned[0];
   if (!row) return null;
   // An employee party is a single-subsidiary record. A restricted caller
@@ -72,7 +75,8 @@ export async function listInternalPersonOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<InternalPersonOption[]> {
-  const result = await runner.execute<InternalPersonOption>(sql`
+  const result = await runner.execute<InternalPersonOption>(
+    sql`
     select p.id, p.display_name, p.subsidiary_id, p.kind
       from parties p
      where p.org_id = ${orgId}
@@ -90,6 +94,8 @@ export async function listInternalPersonOptions(
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by p.display_name, p.id
      limit 2000
-  `, "objects");
+  `,
+    "objects",
+  );
   return result;
 }

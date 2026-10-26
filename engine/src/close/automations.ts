@@ -3,11 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 
 type CloseAutomationTrigger =
-  | "run_started"
-  | "task_ready"
-  | "exception_opened"
-  | "deadline_approaching"
-  | "run_closed";
+  "run_started" | "task_ready" | "exception_opened" | "deadline_approaching" | "run_closed";
 
 export type CloseAutomationContext = {
   orgId: string;
@@ -49,10 +45,13 @@ async function readCloseExecutionStages(
   orgId: string,
   executionId: string,
 ): Promise<Record<string, unknown>> {
-  const result = (await db.execute<{ stages: Record<string, unknown> }>(sql`
+  const result = await db.execute<{ stages: Record<string, unknown> }>(
+    sql`
     select stages from close_automation_executions
      where id = ${executionId} and org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return (result[0]?.stages ?? {}) as Record<string, unknown>;
 }
 
@@ -67,7 +66,8 @@ export async function claimCloseAutomationExecution(
   context: CloseAutomationContext,
   ruleId: string,
 ): Promise<CloseAutomationClaim | null> {
-  const inserted = (await db.execute<{ id: string; lease_token: string }>(sql`
+  const inserted = await db.execute<{ id: string; lease_token: string }>(
+    sql`
     insert into close_automation_executions
       (org_id, rule_id, run_id, task_id, trigger, event_key, status,
        attempt_count, lease_token, locked_at, created_by, updated_by)
@@ -76,15 +76,19 @@ export async function claimCloseAutomationExecution(
             ${context.actorId ?? null}, ${context.actorId ?? null})
     -- A repeated event reuses its execution row and follows the lease/state checks below.
     on conflict (rule_id, event_key) do nothing returning id, lease_token
-  `, "objects"));
+  `,
+    "objects",
+  );
   let claimed = inserted[0];
   if (!claimed) {
-    const existing = (await db.execute<{
-      id: string;
-      status: "running" | "completed" | "failed";
-      lease_token: string | null;
-      reclaimable: boolean;
-    }>(sql`
+    const existing = (
+      await db.execute<{
+        id: string;
+        status: "running" | "completed" | "failed";
+        lease_token: string | null;
+        reclaimable: boolean;
+      }>(
+        sql`
       select id, status, lease_token,
              (status = 'running'
               and (locked_at is null
@@ -92,14 +96,19 @@ export async function claimCloseAutomationExecution(
         from close_automation_executions
        where org_id = ${context.orgId} and rule_id = ${ruleId}
          and event_key = ${context.eventKey}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     // Terminal rows keep their audit verdict; a live claim means another
     // scheduler is mid-run right now. Only a stale lock is reclaimable (the
     // comparison lives in SQL: executor timestamps arrive as raw strings).
     if (!existing || !existing.reclaimable) return null;
     // Compare-and-set over the crashed claim's stored token: concurrent
     // recoverers race, exactly one wins the row, every other loser skips.
-    const takeover = (await db.execute<{ id: string; lease_token: string }>(sql`
+    const takeover = (
+      await db.execute<{ id: string; lease_token: string }>(
+        sql`
       update close_automation_executions
          set attempt_count = attempt_count + 1,
              lease_token = gen_random_uuid(),
@@ -108,7 +117,10 @@ export async function claimCloseAutomationExecution(
        where id = ${existing.id} and org_id = ${context.orgId} and status = 'running'
          and lease_token is not distinct from ${existing.lease_token}
        returning id, lease_token
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!takeover) return null;
     claimed = takeover;
   }
@@ -135,12 +147,17 @@ export async function commitCloseEffectStage(args: {
   effect: (tx: SqlExecutor) => Promise<void>;
 }): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const gate = (await tx.execute<{ done: boolean }>(sql`
+    const gate = (
+      await tx.execute<{ done: boolean }>(
+        sql`
       select (stages ->> ${args.stageKey}) is not null as done
         from close_automation_executions
        where id = ${args.executionId} and org_id = ${args.orgId} and status = 'running'
          and lease_token = ${args.leaseToken}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!gate) throw new CloseAutomationLeaseFencedError(args.executionId);
     if (gate.done) return false;
     await args.effect(tx);
@@ -151,8 +168,7 @@ export async function commitCloseEffectStage(args: {
        where id = ${args.executionId} and org_id = ${args.orgId} and status = 'running'
          and lease_token = ${args.leaseToken}
     `);
-    if ((stamped.rowCount ?? 0) !== 1)
-      throw new CloseAutomationLeaseFencedError(args.executionId);
+    if ((stamped.rowCount ?? 0) !== 1) throw new CloseAutomationLeaseFencedError(args.executionId);
     return true;
   });
 }
@@ -180,8 +196,7 @@ export async function finishCloseExecution(args: {
        where id = ${args.executionId} and org_id = ${args.orgId} and status = 'running'
          and lease_token = ${args.leaseToken}
     `);
-    if ((marked.rowCount ?? 0) !== 1)
-      throw new CloseAutomationLeaseFencedError(args.executionId);
+    if ((marked.rowCount ?? 0) !== 1) throw new CloseAutomationLeaseFencedError(args.executionId);
     await tx.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
       values (${args.orgId}, ${args.runId}, ${args.taskId ?? null},
               ${args.outcome === "completed" ? "automation.completed" : "automation.failed"},

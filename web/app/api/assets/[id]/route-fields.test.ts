@@ -57,9 +57,7 @@ function inspect(query: unknown): { text: string; params: unknown[] } {
   return { text: walk(chunks, true), params };
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksAssetPatchInspect = inspect;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksAssetPatchInspect = inspect;
 
 const EXISTING = {
   id: ASSET_ID,
@@ -187,14 +185,8 @@ const cases: [Record<string, unknown>, string][] = [
   [{ depreciationMethodId: "not-a-uuid" }, "Invalid depreciation formula"],
   [{ depreciationMethodId: FORMULA_ID }, "Depreciation formula not found or inactive"],
   [{ assetAccountId: ACCOUNT_ID }, "Invalid asset account"],
-  [
-    { accumulatedDepreciationAccountId: ACCOUNT_ID },
-    "Invalid accumulated depreciation account",
-  ],
-  [
-    { depreciationExpenseAccountId: ACCOUNT_ID },
-    "Invalid depreciation expense account",
-  ],
+  [{ accumulatedDepreciationAccountId: ACCOUNT_ID }, "Invalid accumulated depreciation account"],
+  [{ depreciationExpenseAccountId: ACCOUNT_ID }, "Invalid depreciation expense account"],
   [{ taxDepreciation: [] }, "Invalid tax depreciation elections"],
   [
     { taxDepreciation: { us: { businessUsePercent: "150" } } },
@@ -204,10 +196,7 @@ const cases: [Record<string, unknown>, string][] = [
     { taxDepreciation: { us: { bonusPercent: "101" } } },
     "Bonus depreciation must be between 0 and 100 percent",
   ],
-  [
-    { taxDepreciation: { us: { section179: "-5" } } },
-    "Section 179 must be non-negative",
-  ],
+  [{ taxDepreciation: { us: { section179: "-5" } } }, "Section 179 must be non-negative"],
   [
     { taxDepreciation: { us: { businessUsePercent: "not a decimal" } } },
     "Business use must be between 0 and 100 percent",
@@ -220,15 +209,9 @@ const cases: [Record<string, unknown>, string][] = [
     { taxDepreciation: { us: { section179: "not a decimal" } } },
     "Section 179 must be non-negative",
   ],
-  [
-    { taxDepreciation: { us: { classCode: "NOPE" } } },
-    "Invalid tax depreciation class",
-  ],
+  [{ taxDepreciation: { us: { classCode: "NOPE" } } }, "Invalid tax depreciation class"],
   [{ openingAccumulated: "abc" }, "Opening accumulated depreciation must be a number"],
-  [
-    { openingAccumulated: "1000000000000000" },
-    "Opening accumulated depreciation must be a number",
-  ],
+  [{ openingAccumulated: "1000000000000000" }, "Opening accumulated depreciation must be a number"],
   [{ unitsTotal: "abc" }, "Expected lifetime units must be an exact positive quantity"],
   [
     { unitsTotal: "1000000000000000" },

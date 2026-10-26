@@ -60,8 +60,7 @@ export interface InboxAdapter {
 export class InboxError extends Error {
   readonly name = "InboxError";
   constructor(
-    readonly code:
-      "NOT_FOUND" | "REFUSED" | "REASON_REQUIRED" | "UNKNOWN_ACTION",
+    readonly code: "NOT_FOUND" | "REFUSED" | "REASON_REQUIRED" | "UNKNOWN_ACTION",
     message: string,
   ) {
     super(message);
@@ -108,11 +107,7 @@ export interface InboxSourceNotice {
  * permission keys or setup routes at the person it refused. Anything
  * unexpected logs the way the house does.
  */
-function recordSourceFailure(
-  kind: InboxKind,
-  error: unknown,
-  notices?: InboxSourceNotice[],
-): void {
+function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSourceNotice[]): void {
   if (error instanceof HrmAuthorizationError) return;
   // A source whose module is switched off has no work to show either.
   if ((error as { code?: unknown } | null)?.code === "FEATURE_OFF") return;
@@ -208,9 +203,7 @@ async function readSources<T>(
     kinds.map(
       async (
         kind,
-      ): Promise<
-        { value: T | InboxItem[] } | { kind: InboxKind; error: unknown } | null
-      > => {
+      ): Promise<{ value: T | InboxItem[] } | { kind: InboxKind; error: unknown } | null> => {
         const adapter = adapterFor(kind);
         if (!adapter) return null;
         const cacheKey = JSON.stringify({
@@ -263,8 +256,7 @@ export async function actOnInboxItem(
   if (sep < 0) throw new InboxError("NOT_FOUND", "inbox item not found");
   const kind = itemId.slice(0, sep);
   const sourceId = itemId.slice(sep + 1);
-  if (!kind || !sourceId)
-    throw new InboxError("NOT_FOUND", "inbox item not found");
+  if (!kind || !sourceId) throw new InboxError("NOT_FOUND", "inbox item not found");
   const adapter = adapterFor(kind);
   if (!adapter) throw new InboxError("NOT_FOUND", "inbox item not found");
   // Re-resolve the item through the source's own gate: an item the actor
@@ -274,8 +266,7 @@ export async function actOnInboxItem(
   // window stays actionable; without one the first window arbitrates.
   const item = adapter.lookup
     ? await adapter.lookup(ctx, sourceId)
-    : ((await adapter.list(ctx)).find((candidate) => candidate.id === itemId) ??
-      null);
+    : ((await adapter.list(ctx)).find((candidate) => candidate.id === itemId) ?? null);
   if (!item)
     throw new InboxError(
       "NOT_FOUND",

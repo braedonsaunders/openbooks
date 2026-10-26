@@ -11,8 +11,7 @@ const { act } = React;
 const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
-const { DirectedExecutionForm, useDirectedExecution } =
-  await import("./directed-execution");
+const { DirectedExecutionForm, useDirectedExecution } = await import("./directed-execution");
 const suggestion = {
   id: "11111111-1111-4111-8111-111111111111",
   stage: "putaway",
@@ -39,19 +38,13 @@ function Harness({ done }: { done: () => void }) {
     />
   ) : (
     <>
-      <button
-        onClick={() => work.prepare({ action: "putaway", itemId: "item" })}
-      >
-        Prepare
-      </button>
+      <button onClick={() => work.prepare({ action: "putaway", itemId: "item" })}>Prepare</button>
       {work.error ? <p role="alert">{work.error}</p> : null}
     </>
   );
 }
 async function click(host: HTMLElement, text: string) {
-  const button = [...host.querySelectorAll("button")].find(
-    (node) => node.textContent === text,
-  );
+  const button = [...host.querySelectorAll("button")].find((node) => node.textContent === text);
   assert.ok(button, `button ${text} must be visible`);
   await act(async () => {
     button.click();
@@ -60,10 +53,10 @@ async function click(host: HTMLElement, text: string) {
 }
 async function enter(input: HTMLInputElement, value: string) {
   await act(async () => {
-    Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      "value",
-    )!.set!.call(input, value);
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      value,
+    );
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
     input.dispatchEvent(new window.Event("change", { bubbles: true }));
   });
@@ -119,10 +112,7 @@ test("a mismatch retains the original suggestion and task; lost responses retry 
   await enter(inputs[1]!, "WRONG");
   await enter(inputs[2]!, "2");
   await click(host, "Confirm");
-  assert.match(
-    host.querySelector('[role="alert"]')!.textContent!,
-    /does not match/,
-  );
+  assert.match(host.querySelector('[role="alert"]')!.textContent!, /does not match/);
   assert.equal(
     host.querySelector("dd.font-mono")!.textContent,
     "A1",
@@ -137,10 +127,7 @@ test("a mismatch retains the original suggestion and task; lost responses retry 
   const confirms = requests.filter((body) => body.action === "confirm");
   assert.ok(confirms.every((body) => body.taskId === suggestion.id));
   assert.ok(
-    confirms.every(
-      (body) =>
-        !("toBinId" in body) && !("itemId" in body) && !("quantity" in body),
-    ),
+    confirms.every((body) => !("toBinId" in body) && !("itemId" in body) && !("quantity" in body)),
     "confirmation carries observations and task identity, never replacement suggestion coordinates",
   );
 });
@@ -172,9 +159,6 @@ test("an HTTP refusal keeps the suggestion and displays an actionable error befo
   await click(host, "Prepare");
   assert.equal(host.querySelectorAll("input").length, 0);
   await click(host, "Confirm");
-  assert.match(
-    host.querySelector('[role="alert"]')!.textContent!,
-    /Putaway rule changed/,
-  );
+  assert.match(host.querySelector('[role="alert"]')!.textContent!, /Putaway rule changed/);
   assert.equal(host.querySelector("dd.font-mono")!.textContent, "A1");
 });

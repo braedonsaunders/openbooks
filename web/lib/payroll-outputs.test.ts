@@ -1,11 +1,11 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { pathToFileURL } from 'node:url'
-import { PDFDocument } from 'pdf-lib'
-import { renderPasswordExpression } from '../../packages/pdf/src/password-expression.ts'
-import { pdfEncryptionAvailable } from '../../packages/pdf/src/encrypt.ts'
-import { PDF_RECORD_TYPE_BY_KEY } from './pdf-templates/catalog.ts'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { pathToFileURL } from "node:url";
+import { PDFDocument } from "pdf-lib";
+import { renderPasswordExpression } from "../../packages/pdf/src/password-expression.ts";
+import { pdfEncryptionAvailable } from "../../packages/pdf/src/encrypt.ts";
+import { PDF_RECORD_TYPE_BY_KEY } from "./pdf-templates/catalog.ts";
 
 // Regression coverage for the payroll attachment ciphertext contract: a
 // compensation PDF may only leave as verified ciphertext, and the batch
@@ -15,87 +15,91 @@ import { PDF_RECORD_TYPE_BY_KEY } from './pdf-templates/catalog.ts'
 // forged encryption marker cannot pass here any more than in production.
 
 interface StubRow {
-  id: string
-  name: string
-  email: string | null
-  delivery: 'email' | 'print' | 'both'
-  employee_number: string | null
-  birth_date: string | null
+  id: string;
+  name: string;
+  email: string | null;
+  delivery: "email" | "print" | "both";
+  employee_number: string | null;
+  birth_date: string | null;
 }
 
 interface SendCall {
-  recordType: string
-  orgId: string
-  id: string
-  encrypt?: (pdf: Buffer) => Promise<Buffer>
+  recordType: string;
+  orgId: string;
+  id: string;
+  encrypt?: (pdf: Buffer) => Promise<Buffer>;
 }
 
 interface SqlQuery {
-  text: string
-  values: unknown[]
+  text: string;
+  values: unknown[];
 }
 
 // Fixed one-page fixtures keep the sender test hermetic. The encrypted
 // fixture is genuine AES-256 ciphertext (non-empty user password, produced by
 // qpdf); neither fixture contains payroll data.
 const plainPdfFixture = Buffer.from(
-  'JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgKHB5cGRmKQo+PgplbmRvYmoKMiAwIG9iago8PAovVHlwZSAvUGFnZXMKL0NvdW50IDEKL0tpZHMgWyA0IDAgUiBdCj4+CmVuZG9iagozIDAgb2JqCjw8Ci9UeXBlIC9DYXRhbG9nCi9QYWdlcyAyIDAgUgo+PgplbmRvYmoKNCAwIG9iago8PAovVHlwZSAvUGFnZQovUmVzb3VyY2VzIDw8Cj4+Ci9NZWRpYUJveCBbIDAuMCAwLjAgNzIgNzIgXQovUGFyZW50IDIgMCBSCj4+CmVuZG9iagp4cmVmCjAgNQowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTEzIDAwMDAwIG4gCjAwMDAwMDAxNjIgMDAwMDAgbiAKdHJhaWxlcgo8PAovU2l6ZSA1Ci9Sb290IDMgMCBSCi9JbmZvIDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTQKJSVFT0YK',
-  'base64',
-)
+  "JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgKHB5cGRmKQo+PgplbmRvYmoKMiAwIG9iago8PAovVHlwZSAvUGFnZXMKL0NvdW50IDEKL0tpZHMgWyA0IDAgUiBdCj4+CmVuZG9iagozIDAgb2JqCjw8Ci9UeXBlIC9DYXRhbG9nCi9QYWdlcyAyIDAgUgo+PgplbmRvYmoKNCAwIG9iago8PAovVHlwZSAvUGFnZQovUmVzb3VyY2VzIDw8Cj4+Ci9NZWRpYUJveCBbIDAuMCAwLjAgNzIgNzIgXQovUGFyZW50IDIgMCBSCj4+CmVuZG9iagp4cmVmCjAgNQowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTEzIDAwMDAwIG4gCjAwMDAwMDAxNjIgMDAwMDAgbiAKdHJhaWxlcgo8PAovU2l6ZSA1Ci9Sb290IDMgMCBSCi9JbmZvIDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTQKJSVFT0YK",
+  "base64",
+);
 const encryptedPdfFixture = Buffer.from(
-  'JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgPDU4MDY2NWJkNmIxMjA4OTcyYWMxZjgyNjFjODQxMzVhZWI2NzVmYmUxMWFjNzg3OGVkMjRhOTZlYTRmOTI4ZjE+Cj4+CmVuZG9iagoyIDAgb2JqCjw8Ci9UeXBlIC9QYWdlcwovQ291bnQgMQovS2lkcyBbIDQgMCBSIF0KPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iago0IDAgb2JqCjw8Ci9UeXBlIC9QYWdlCi9SZXNvdXJjZXMgPDwKPj4KL01lZGlhQm94IFsgMC4wIDAuMCAyMDAgMjAwIF0KL1BhcmVudCAyIDAgUgo+PgplbmRvYmoKNSAwIG9iago8PAovViA1Ci9SIDYKL0xlbmd0aCAyNTYKL1AgNDI5NDk2NzI5MgovRmlsdGVyIC9TdGFuZGFyZAovTyA8NTc5MDY5MjNiMjNmOGQyOGMzYzVhZjcwOWQyNzVhMWY5Y2ZmMGZiYmY4NzM2MDcwNTY3NzA3ZWFhMDM2OTQzMzAzNTlhOWRmNjBjOGFkNGIzNDcwYjliZDQwMDE4ZjUwYT4KL1UgPGVjYmYxYjM3OGNjMjEyM2M2ZTE5NmJjYjdhMTkxODgwOGYzZWFhOGE3M2M0NDIyYmQyZjcyOWI5NGZiNjA5YjYyMGFjOTM1ZTEzYzU2NjkyZmNkZmY4MWM4NGI0MDIwPgovQ0YgPDwKL1N0ZENGIDw8Ci9BdXRoRXZlbnQgL0RvY09wZW4KL0NGTSAvQUVTVjMKL0xlbmd0aCAzMgo+Pgo+PgovU3RtRiAvU3RkQ0YKL1N0ckYgL1N0ZENGCi9PRSA8NjY3YmRkNTVjMTY5OTJiYTIwOWE4MjI4MjY5ZjdhNTg0MTJmMTg4YmM0YTk2MWVmMjVmNmM5ZTlkOWUxOTAxNz4KL1VFIDwwZjM2MjIwZmM1ODdjNzVjNDkwNjExZDI5MWYxZWFlNmRjYzhmMmRlMzg2OGJiZjNkYmRmMWM0MTJhYzI4MzJmPgovUGVybXMgPDhjODEwODdkZjE1MzRjZmIzZGZlMzUxODE0ZWFjZTM5Pgo+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAxMTMgMDAwMDAgbiAKMDAwMDAwMDE3MiAwMDAwMCBuIAowMDAwMDAwMjIxIDAwMDAwIG4gCjAwMDAwMDAzMTUgMDAwMDAgbiAKdHJhaWxlcgo8PAovU2l6ZSA2Ci9Sb290IDMgMCBSCi9JbmZvIDEgMCBSCi9JRCBbIDwzNTM5NjMzMjMwNjI2MjYxNjU2MzM4MzI2NTMxNjIzNTYzMzYzMzYzNjE2MjY1NjY2MzU2MTY2NjE2NTY2MzEzMTMxPiA8MzUzOTYzMjMwNjI2MjYxNjU2MzM4MzI2NTMxNjIzNTYzMzYzMzYzNjE2MjY1NjY2MzU2MTY2NjE2NTY2MzEzMT4gXQovRW5jcnlwdCA1IDAgUgo+PgpzdGFydHhyZWYKODcwCiUlRU9GCg==',
-  'base64',
-)
+  "JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgPDU4MDY2NWJkNmIxMjA4OTcyYWMxZjgyNjFjODQxMzVhZWI2NzVmYmUxMWFjNzg3OGVkMjRhOTZlYTRmOTI4ZjE+Cj4+CmVuZG9iagoyIDAgb2JqCjw8Ci9UeXBlIC9QYWdlcwovQ291bnQgMQovS2lkcyBbIDQgMCBSIF0KPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iago0IDAgb2JqCjw8Ci9UeXBlIC9QYWdlCi9SZXNvdXJjZXMgPDwKPj4KL01lZGlhQm94IFsgMC4wIDAuMCAyMDAgMjAwIF0KL1BhcmVudCAyIDAgUgo+PgplbmRvYmoKNSAwIG9iago8PAovViA1Ci9SIDYKL0xlbmd0aCAyNTYKL1AgNDI5NDk2NzI5MgovRmlsdGVyIC9TdGFuZGFyZAovTyA8NTc5MDY5MjNiMjNmOGQyOGMzYzVhZjcwOWQyNzVhMWY5Y2ZmMGZiYmY4NzM2MDcwNTY3NzA3ZWFhMDM2OTQzMzAzNTlhOWRmNjBjOGFkNGIzNDcwYjliZDQwMDE4ZjUwYT4KL1UgPGVjYmYxYjM3OGNjMjEyM2M2ZTE5NmJjYjdhMTkxODgwOGYzZWFhOGE3M2M0NDIyYmQyZjcyOWI5NGZiNjA5YjYyMGFjOTM1ZTEzYzU2NjkyZmNkZmY4MWM4NGI0MDIwPgovQ0YgPDwKL1N0ZENGIDw8Ci9BdXRoRXZlbnQgL0RvY09wZW4KL0NGTSAvQUVTVjMKL0xlbmd0aCAzMgo+Pgo+PgovU3RtRiAvU3RkQ0YKL1N0ckYgL1N0ZENGCi9PRSA8NjY3YmRkNTVjMTY5OTJiYTIwOWE4MjI4MjY5ZjdhNTg0MTJmMTg4YmM0YTk2MWVmMjVmNmM5ZTlkOWUxOTAxNz4KL1VFIDwwZjM2MjIwZmM1ODdjNzVjNDkwNjExZDI5MWYxZWFlNmRjYzhmMmRlMzg2OGJiZjNkYmRmMWM0MTJhYzI4MzJmPgovUGVybXMgPDhjODEwODdkZjE1MzRjZmIzZGZlMzUxODE0ZWFjZTM5Pgo+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAxMTMgMDAwMDAgbiAKMDAwMDAwMDE3MiAwMDAwMCBuIAowMDAwMDAwMjIxIDAwMDAwIG4gCjAwMDAwMDAzMTUgMDAwMDAgbiAKdHJhaWxlcgo8PAovU2l6ZSA2Ci9Sb290IDMgMCBSCi9JbmZvIDEgMCBSCi9JRCBbIDwzNTM5NjMzMjMwNjI2MjYxNjU2MzM4MzI2NTMxNjIzNTYzMzYzMzYzNjE2MjY1NjY2MzU2MTY2NjE2NTY2MzEzMTMxPiA8MzUzOTYzMjMwNjI2MjYxNjU2MzM4MzI2NTMxNjIzNTYzMzYzMzYzNjE2MjY1NjY2MzU2MTY2NjE2NTY2MzEzMT4gXQovRW5jcnlwdCA1IDAgUgo+PgpzdGFydHhyZWYKODcwCiUlRU9GCg==",
+  "base64",
+);
 
-const stateKey = Symbol.for('openbooks.payroll-outputs-test')
+const stateKey = Symbol.for("openbooks.payroll-outputs-test");
 const state = {
   stubs: [] as StubRow[],
-  policy: { enabled: false, expression: '' } as { enabled?: unknown; expression?: unknown },
+  policy: { enabled: false, expression: "" } as { enabled?: unknown; expression?: unknown },
   sendCalls: [] as SendCall[],
   deliveryCalls: [] as Array<{ to: string; attachment: Buffer }>,
-  recordEmail: 'employee@example.test',
+  recordEmail: "employee@example.test",
   templateResolveCalls: 0,
   recordLoadCalls: 0,
   transportResolveCalls: 0,
   chequeIssueCalls: 0,
   chequeTemplate: {
-    id: 'template-1',
-    provenance: { templateId: 'template-1', revision: 1, contentHash: 'payroll-provenance' },
-  } as { id: string; provenance: { templateId: string; revision: number; contentHash: string } } | null,
+    id: "template-1",
+    provenance: { templateId: "template-1", revision: 1, contentHash: "payroll-provenance" },
+  } as {
+    id: string;
+    provenance: { templateId: string; revision: number; contentHash: string };
+  } | null,
   encryptionPasswords: [] as string[],
   encryptionError: null as Error | null,
   renderError: null as unknown,
   renderedPdf: plainPdfFixture,
-  encryptedFixture: encryptedPdfFixture.toString('base64'),
-}
+  encryptedFixture: encryptedPdfFixture.toString("base64"),
+};
 
 const harness = {
   state,
   // The mocked @openbooks/pdf delegates certification to the real qpdf-backed
   // verifier, imported lazily at call time (after the hooks deregister).
-  pdfCryptoModuleUrl: new URL('../../packages/pdf/src/encrypt.ts', import.meta.url).href,
+  pdfCryptoModuleUrl: new URL("../../packages/pdf/src/encrypt.ts", import.meta.url).href,
   async execute(query: SqlQuery, mode?: string) {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
-    if (query.text.includes('from pay_stubs s')) return inMode({ rows: state.stubs })
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
+    if (query.text.includes("from pay_stubs s")) return inMode({ rows: state.stubs });
     if (query.text.includes("settings#>'{payroll,stubPassword}'")) {
-      return inMode({ rows: [{ policy: state.policy }] })
+      return inMode({ rows: [{ policy: state.policy }] });
     }
-    throw new Error(`unexpected payroll output query: ${query.text}`)
+    throw new Error(`unexpected payroll output query: ${query.text}`);
   },
   renderPasswordExpression,
-}
+};
 
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = harness
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = harness;
 
 // Absolute file URL of the real @openbooks/pdf surface, interpolated into the
 // mock below. A bare or relative specifier cannot be used there: the mock
 // module's base is the opaque `mock:` URL, so only an absolute URL reaches
 // the real file without being re-intercepted by these same hooks.
-const pdfIndexUrl = pathToFileURL(`${process.cwd()}/packages/pdf/src/index.ts`).href
+const pdfIndexUrl = pathToFileURL(`${process.cwd()}/packages/pdf/src/index.ts`).href;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:drizzle-orm',
+    "mock:drizzle-orm",
     `
       export function sql(strings, ...values) {
         return { text: strings.join('?'), values }
@@ -111,7 +115,7 @@ const mockSources = new Map<string, string>([
   // so the next export added to the package cannot break this double's link
   // again. Importing the real index never launches Chromium.
   [
-    'mock:openbooks-pdf',
+    "mock:openbooks-pdf",
     `
       export * from '${pdfIndexUrl}'
       export { RendererUnavailableError, PdfTemplateValidationError } from '${pdfIndexUrl}'
@@ -134,14 +138,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export const db = { execute: (query, mode) => harness.execute(query, mode) }
     `,
   ],
   [
-    'mock:payroll-cheques',
+    "mock:payroll-cheques",
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export async function lockIssuedChequePrint() { throw new Error('unexpected cheque print in delivery boundary test') }
@@ -158,7 +162,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:render',
+    "mock:render",
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export async function mergeAndPrintPdf() {
@@ -168,7 +172,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:store',
+    "mock:store",
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export async function resolvePdfTemplate() {
@@ -183,7 +187,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:values',
+    "mock:values",
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
 
@@ -201,7 +205,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:emails',
+    "mock:emails",
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
 
@@ -225,7 +229,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:email-config',
+    "mock:email-config",
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export async function resolveOrgEmailTransportDetailed() {
@@ -238,273 +242,308 @@ const mockSources = new Map<string, string>([
       export async function markEmailUncertain() {}
     `,
   ],
-  ['mock:business-date', `export async function businessToday() { return '2026-08-24' }`],
-  ['mock:email-tokens', `export function appBaseUrl() { return 'https://openbooks.example' }`],
-  ['mock:features', `export async function isFeatureEnabled() { return false }`],
-])
+  ["mock:business-date", `export async function businessToday() { return '2026-08-24' }`],
+  ["mock:email-tokens", `export function appBaseUrl() { return 'https://openbooks.example' }`],
+  ["mock:features", `export async function isFeatureEnabled() { return false }`],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
-      'drizzle-orm': 'mock:drizzle-orm',
-      '@openbooks/pdf': 'mock:openbooks-pdf',
-      '@openbooks/engine/platform/db': 'mock:db',
-      '@openbooks/engine/payroll/cheques': 'mock:payroll-cheques',
-      '@openbooks/emails': 'mock:emails',
-      '@openbooks/engine/delivery/email-config/module': 'mock:email-config',
-      '@openbooks/engine/platform/business-date/module': 'mock:business-date',
-      '@openbooks/engine/flows/email-tokens': 'mock:email-tokens',
-      './pdf-templates/render': 'mock:render',
-      './pdf-templates/store': 'mock:store',
-      './pdf-templates/values': 'mock:values',
-      './render': 'mock:render',
-      './store': 'mock:store',
-      './values': 'mock:values',
-      '../features': 'mock:features',
-    }
-    const url = mocks[specifier]
-    if (url) return { url, shortCircuit: true }
-    return nextResolve(specifier, context)
+      "drizzle-orm": "mock:drizzle-orm",
+      "@openbooks/pdf": "mock:openbooks-pdf",
+      "@openbooks/engine/platform/db": "mock:db",
+      "@openbooks/engine/payroll/cheques": "mock:payroll-cheques",
+      "@openbooks/emails": "mock:emails",
+      "@openbooks/engine/delivery/email-config/module": "mock:email-config",
+      "@openbooks/engine/platform/business-date/module": "mock:business-date",
+      "@openbooks/engine/flows/email-tokens": "mock:email-tokens",
+      "./pdf-templates/render": "mock:render",
+      "./pdf-templates/store": "mock:store",
+      "./pdf-templates/values": "mock:values",
+      "./render": "mock:render",
+      "./store": "mock:store",
+      "./values": "mock:values",
+      "../features": "mock:features",
+    };
+    const url = mocks[specifier];
+    if (url) return { url, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const payrollOutputsUrl = './payroll-outputs.ts?payroll-ciphertext-test'
-const { emailRunStubs, mergedRunChequesPdf } = await import(payrollOutputsUrl) as typeof import('./payroll-outputs.ts')
-const protectedSenderUrl = './pdf-templates/send.ts?payroll-ciphertext-test'
-const {
-  isProtectedPayrollRecordType,
-  sendRecordPdfEmail,
-} = await import(protectedSenderUrl) as typeof import('./pdf-templates/send.ts')
+const payrollOutputsUrl = "./payroll-outputs.ts?payroll-ciphertext-test";
+const { emailRunStubs, mergedRunChequesPdf } = (await import(
+  payrollOutputsUrl
+)) as typeof import("./payroll-outputs.ts");
+const protectedSenderUrl = "./pdf-templates/send.ts?payroll-ciphertext-test";
+const { isProtectedPayrollRecordType, sendRecordPdfEmail } = (await import(
+  protectedSenderUrl
+)) as typeof import("./pdf-templates/send.ts");
 // The mock's refusal class, captured while the hooks are still active.
-const { RendererUnavailableError: MockRendererUnavailableError } = (await import('@openbooks/pdf')) as {
-  RendererUnavailableError: new (executablePath: string) => Error
-}
-hooks.deregister()
+const { RendererUnavailableError: MockRendererUnavailableError } =
+  (await import("@openbooks/pdf")) as {
+    RendererUnavailableError: new (executablePath: string) => Error;
+  };
+hooks.deregister();
 
 function reset(stubs: StubRow[], policy: { enabled: boolean; expression: string }): void {
-  state.stubs = stubs
-  state.policy = policy
-  state.sendCalls.length = 0
-  state.deliveryCalls.length = 0
-  state.recordEmail = 'employee@example.test'
-  state.templateResolveCalls = 0
-  state.recordLoadCalls = 0
-  state.transportResolveCalls = 0
-  state.chequeIssueCalls = 0
+  state.stubs = stubs;
+  state.policy = policy;
+  state.sendCalls.length = 0;
+  state.deliveryCalls.length = 0;
+  state.recordEmail = "employee@example.test";
+  state.templateResolveCalls = 0;
+  state.recordLoadCalls = 0;
+  state.transportResolveCalls = 0;
+  state.chequeIssueCalls = 0;
   state.chequeTemplate = {
-    id: 'template-1',
-    provenance: { templateId: 'template-1', revision: 1, contentHash: 'payroll-provenance' },
-  }
-  state.encryptionPasswords.length = 0
-  state.encryptionError = null
-  state.renderError = null
-  state.renderedPdf = plainPdfFixture
-  state.encryptedFixture = encryptedPdfFixture.toString('base64')
+    id: "template-1",
+    provenance: { templateId: "template-1", revision: 1, contentHash: "payroll-provenance" },
+  };
+  state.encryptionPasswords.length = 0;
+  state.encryptionError = null;
+  state.renderError = null;
+  state.renderedPdf = plainPdfFixture;
+  state.encryptedFixture = encryptedPdfFixture.toString("base64");
 }
 
 const protectedPayrollRecordTypes = Object.values(PDF_RECORD_TYPE_BY_KEY)
-  .filter((meta) => meta.readPermission.startsWith('payroll.'))
+  .filter((meta) => meta.readPermission.startsWith("payroll."))
   .map((meta) => meta.key)
-  .sort()
+  .sort();
 
 const stub = (overrides: Partial<StubRow> = {}): StubRow => ({
-  id: 'stub-1',
-  name: 'Jordan Sparks',
-  email: 'jordan@example.test',
-  delivery: 'email',
-  employee_number: 'EMP-42',
-  birth_date: '1990-02-03',
+  id: "stub-1",
+  name: "Jordan Sparks",
+  email: "jordan@example.test",
+  delivery: "email",
+  employee_number: "EMP-42",
+  birth_date: "1990-02-03",
   ...overrides,
-})
+});
 
-test('the catalog-derived protection class covers every compensation PDF alias', () => {
-  assert.ok(protectedPayrollRecordTypes.includes('pay_stub'))
-  assert.ok(protectedPayrollRecordTypes.includes('payroll_cheque'))
+test("the catalog-derived protection class covers every compensation PDF alias", () => {
+  assert.ok(protectedPayrollRecordTypes.includes("pay_stub"));
+  assert.ok(protectedPayrollRecordTypes.includes("payroll_cheque"));
   for (const recordType of protectedPayrollRecordTypes) {
-    assert.equal(isProtectedPayrollRecordType(recordType), true, `${recordType} must be protected`)
+    assert.equal(isProtectedPayrollRecordType(recordType), true, `${recordType} must be protected`);
   }
-  assert.equal(isProtectedPayrollRecordType('customer_invoice'), false)
-})
+  assert.equal(isProtectedPayrollRecordType("customer_invoice"), false);
+});
 
-test('cheque output checks for a template before consuming cheque numbers', async () => {
-  reset([], { enabled: true, expression: '{surname:3|upper}' })
-  state.chequeTemplate = null
+test("cheque output checks for a template before consuming cheque numbers", async () => {
+  reset([], { enabled: true, expression: "{surname:3|upper}" });
+  state.chequeTemplate = null;
 
   await assert.rejects(
-    mergedRunChequesPdf('org-1', 'run-1', 'actor-1'),
+    mergedRunChequesPdf("org-1", "run-1", "actor-1"),
     /Configure an active payroll cheque template in PDF templates/,
-  )
-  assert.equal(state.chequeIssueCalls, 0)
-})
+  );
+  assert.equal(state.chequeIssueCalls, 0);
+});
 
-test('a protected payroll PDF cannot be sent without a protection pass', async () => {
-  reset([], { enabled: true, expression: '{surname:3|upper}' })
+test("a protected payroll PDF cannot be sent without a protection pass", async () => {
+  reset([], { enabled: true, expression: "{surname:3|upper}" });
   for (const recordType of protectedPayrollRecordTypes) {
     await assert.rejects(
-      () => sendRecordPdfEmail({ recordType, orgId: 'org-1', id: 'stub-1', scope: null }),
+      () => sendRecordPdfEmail({ recordType, orgId: "org-1", id: "stub-1", scope: null }),
       /payroll compensation PDFs must be encrypted before email delivery/,
-    )
+    );
   }
   // Refused before any dependency work: nothing was rendered or loaded.
-  assert.equal(state.templateResolveCalls, 0)
-  assert.equal(state.recordLoadCalls, 0)
-  assert.equal(state.transportResolveCalls, 0)
-  assert.equal(state.deliveryCalls.length, 0)
-})
+  assert.equal(state.templateResolveCalls, 0);
+  assert.equal(state.recordLoadCalls, 0);
+  assert.equal(state.transportResolveCalls, 0);
+  assert.equal(state.deliveryCalls.length, 0);
+});
 
-test('verified ciphertext is what actually reaches the transport', async (context) => {
-  if (!(await pdfEncryptionAvailable())) { context.skip('Native qpdf verifier is unavailable'); return }
-  reset([], { enabled: true, expression: '{surname:3|upper}' })
+test("verified ciphertext is what actually reaches the transport", async (context) => {
+  if (!(await pdfEncryptionAvailable())) {
+    context.skip("Native qpdf verifier is unavailable");
+    return;
+  }
+  reset([], { enabled: true, expression: "{surname:3|upper}" });
   for (const recordType of protectedPayrollRecordTypes) {
-    let encryptionCalls = 0
+    let encryptionCalls = 0;
     await sendRecordPdfEmail({
       recordType,
-      orgId: 'org-1',
-      id: 'stub-1',
+      orgId: "org-1",
+      id: "stub-1",
       scope: null,
       encrypt: async (pdf) => {
-        encryptionCalls += 1
-        assert.deepEqual(pdf, plainPdfFixture)
-        return Buffer.from(encryptedPdfFixture)
+        encryptionCalls += 1;
+        assert.deepEqual(pdf, plainPdfFixture);
+        return Buffer.from(encryptedPdfFixture);
       },
-    })
-    const delivery = state.deliveryCalls.at(-1)
-    assert.equal(delivery?.to, 'employee@example.test')
-    assert.deepEqual(delivery?.attachment, encryptedPdfFixture)
-    assert.notDeepEqual(delivery?.attachment, plainPdfFixture)
-    assert.equal(encryptionCalls, 1)
+    });
+    const delivery = state.deliveryCalls.at(-1);
+    assert.equal(delivery?.to, "employee@example.test");
+    assert.deepEqual(delivery?.attachment, encryptedPdfFixture);
+    assert.notDeepEqual(delivery?.attachment, plainPdfFixture);
+    assert.equal(encryptionCalls, 1);
   }
-  assert.equal(state.deliveryCalls.length, protectedPayrollRecordTypes.length)
-})
+  assert.equal(state.deliveryCalls.length, protectedPayrollRecordTypes.length);
+});
 
-test('identity, copied, alternate-plaintext, unencrypted, and malformed outputs are all refused', async () => {
-  reset([], { enabled: true, expression: '{surname:3|upper}' })
+test("identity, copied, alternate-plaintext, unencrypted, and malformed outputs are all refused", async () => {
+  reset([], { enabled: true, expression: "{surname:3|upper}" });
   const plaintextEncryptors: Array<[string, (pdf: Buffer) => Promise<Buffer>]> = [
-    ['identity', async (pdf) => pdf],
-    ['copied plaintext', async (pdf) => Buffer.from(pdf)],
-    ['changed plaintext', async (pdf) => Buffer.concat([pdf, Buffer.from('\n')])],
-    ['unencrypted PDF', async () => Buffer.from(plainPdfFixture)],
-    ['malformed bytes', async () => Buffer.from('this is not a pdf')],
-  ]
+    ["identity", async (pdf) => pdf],
+    ["copied plaintext", async (pdf) => Buffer.from(pdf)],
+    ["changed plaintext", async (pdf) => Buffer.concat([pdf, Buffer.from("\n")])],
+    ["unencrypted PDF", async () => Buffer.from(plainPdfFixture)],
+    ["malformed bytes", async () => Buffer.from("this is not a pdf")],
+  ];
 
   for (const recordType of protectedPayrollRecordTypes) {
     for (const [kind, encrypt] of plaintextEncryptors) {
       await assert.rejects(
-        () => sendRecordPdfEmail({ recordType, orgId: 'org-1', id: 'stub-1', encrypt, scope: null }),
+        () =>
+          sendRecordPdfEmail({ recordType, orgId: "org-1", id: "stub-1", encrypt, scope: null }),
         /payroll compensation PDF encryption must return a valid encrypted PDF/,
         `${recordType} accepted ${kind}`,
-      )
+      );
     }
   }
-  assert.equal(state.deliveryCalls.length, 0)
-})
+  assert.equal(state.deliveryCalls.length, 0);
+});
 
-test('a forged encryption marker cannot smuggle plaintext past the sender', async () => {
-  reset([], { enabled: true, expression: '{surname:3|upper}' })
+test("a forged encryption marker cannot smuggle plaintext past the sender", async () => {
+  reset([], { enabled: true, expression: "{surname:3|upper}" });
   // A plaintext file whose trailer carries an /Encrypt entry: lenient parsers
   // report it as encrypted while every viewer reads the payload without a
   // password — exactly what the old parser-flag check accepted.
-  const doc = await PDFDocument.load(plainPdfFixture)
+  const doc = await PDFDocument.load(plainPdfFixture);
   doc.context.trailerInfo.Encrypt = doc.context.register(
     doc.context.obj({
-      Filter: 'Standard', V: 5, R: 6, Length: 256,
-      O: '00', U: '00', OE: '00', UE: '00', P: -1, Perms: '00',
+      Filter: "Standard",
+      V: 5,
+      R: 6,
+      Length: 256,
+      O: "00",
+      U: "00",
+      OE: "00",
+      UE: "00",
+      P: -1,
+      Perms: "00",
     }),
-  )
-  const forged = Buffer.from(await doc.save())
-  await assert.rejects(() => PDFDocument.load(forged), /encrypted/)
+  );
+  const forged = Buffer.from(await doc.save());
+  await assert.rejects(() => PDFDocument.load(forged), /encrypted/);
 
   for (const recordType of protectedPayrollRecordTypes) {
     await assert.rejects(
-      () => sendRecordPdfEmail({
-        recordType,
-        orgId: 'org-1',
-        id: 'stub-1',
-        scope: null,
-        encrypt: async () => Buffer.from(forged),
-      }),
+      () =>
+        sendRecordPdfEmail({
+          recordType,
+          orgId: "org-1",
+          id: "stub-1",
+          scope: null,
+          encrypt: async () => Buffer.from(forged),
+        }),
       /payroll compensation PDF encryption must return a valid encrypted PDF/,
       `${recordType} accepted a forged encryption marker`,
-    )
+    );
   }
-  assert.equal(state.deliveryCalls.length, 0)
-})
+  assert.equal(state.deliveryCalls.length, 0);
+});
 
-test('an ordinary record still emails without encryption', async () => {
-  reset([], { enabled: true, expression: '{surname:3|upper}' })
-  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'invoice-1', scope: null })
-  assert.equal(state.deliveryCalls.length, 1)
-  assert.deepEqual(state.deliveryCalls[0]?.attachment, plainPdfFixture)
-})
+test("an ordinary record still emails without encryption", async () => {
+  reset([], { enabled: true, expression: "{surname:3|upper}" });
+  await sendRecordPdfEmail({
+    recordType: "customer_invoice",
+    orgId: "org-1",
+    id: "invoice-1",
+    scope: null,
+  });
+  assert.equal(state.deliveryCalls.length, 1);
+  assert.deepEqual(state.deliveryCalls[0]?.attachment, plainPdfFixture);
+});
 
-test('a disabled password policy delivers no eligible pay stubs', async () => {
-  reset([
-    stub({ id: 'print', name: 'Print Only', delivery: 'print' }),
-    stub({ id: 'missing', name: 'No Email', email: null }),
-    stub({ id: 'email', name: 'Email Employee' }),
-    stub({ id: 'both', name: 'Both Employee', delivery: 'both' }),
-  ], {
-    enabled: false,
-    // A stale saved expression must not turn a disabled policy into consent.
-    expression: '{surname:3|upper}{dob:MMDDYYYY}',
-  })
+test("a disabled password policy delivers no eligible pay stubs", async () => {
+  reset(
+    [
+      stub({ id: "print", name: "Print Only", delivery: "print" }),
+      stub({ id: "missing", name: "No Email", email: null }),
+      stub({ id: "email", name: "Email Employee" }),
+      stub({ id: "both", name: "Both Employee", delivery: "both" }),
+    ],
+    {
+      enabled: false,
+      // A stale saved expression must not turn a disabled policy into consent.
+      expression: "{surname:3|upper}{dob:MMDDYYYY}",
+    },
+  );
 
-  const result = await emailRunStubs('org-1', 'run-1')
+  const result = await emailRunStubs("org-1", "run-1");
 
   assert.deepEqual(result, {
     sent: 0,
-    noEmail: ['No Email'],
-    printOnly: ['Print Only'],
+    noEmail: ["No Email"],
+    printOnly: ["Print Only"],
     failed: [
-      { name: 'Email Employee', error: 'pay-stub email delivery requires an enabled password policy' },
-      { name: 'Both Employee', error: 'pay-stub email delivery requires an enabled password policy' },
+      {
+        name: "Email Employee",
+        error: "pay-stub email delivery requires an enabled password policy",
+      },
+      {
+        name: "Both Employee",
+        error: "pay-stub email delivery requires an enabled password policy",
+      },
     ],
-  })
-  assert.equal(state.deliveryCalls.length, 0)
-  assert.equal(state.encryptionPasswords.length, 0)
-})
+  });
+  assert.equal(state.deliveryCalls.length, 0);
+  assert.equal(state.encryptionPasswords.length, 0);
+});
 
-test('every eligible delivery is encrypted with the employee-derived password', async (context) => {
-  if (!(await pdfEncryptionAvailable())) { context.skip('Native qpdf verifier is unavailable'); return }
-  reset([stub()], { enabled: true, expression: '{surname:3|upper}{dob:MMDDYYYY}' })
-
-  const result = await emailRunStubs('org-1', 'run-1')
-
-  assert.deepEqual(result, { sent: 1, noEmail: [], printOnly: [], failed: [] })
-  assert.equal(state.deliveryCalls.length, 1)
-  assert.equal(state.deliveryCalls[0]?.to, 'employee@example.test')
-  assert.deepEqual(state.encryptionPasswords, ['SPA02031990'])
-})
-
-test('an encryption failure is recorded and never reported as a successful send', async () => {
-  reset([stub()], { enabled: true, expression: '{employeeNumber|upper}{dob:MMDDYYYY}' })
-  state.encryptionError = new Error('qpdf unavailable')
-
-  const result = await emailRunStubs('org-1', 'run-1')
-
-  assert.equal(result.sent, 0)
-  assert.deepEqual(result.failed, [{ name: 'Jordan Sparks', error: 'qpdf unavailable' }])
-  assert.equal(state.deliveryCalls.length, 0)
-  assert.deepEqual(state.encryptionPasswords, ['EMP4202031990'])
-})
-
-test('a renderer outage flags the batch and names the outage per stub', async () => {
-  reset([stub(), stub({ id: 'stub-2', name: 'Alex Ray' })], { enabled: true, expression: '{employeeNumber|upper}{dob:MMDDYYYY}' })
-  state.renderError = new MockRendererUnavailableError('/usr/bin/chromium')
-
-  const result = await emailRunStubs('org-1', 'run-1')
-
-  assert.equal(result.sent, 0)
-  assert.equal(result.rendererOutage, true)
-  assert.equal(result.failed.length, 2)
-  for (const failure of result.failed) {
-    assert.ok(failure.error.includes('/usr/bin/chromium'), 'each entry names the path it tried')
-    assert.ok(failure.error.includes('PUPPETEER_EXECUTABLE_PATH'), 'each entry names the remedy')
+test("every eligible delivery is encrypted with the employee-derived password", async (context) => {
+  if (!(await pdfEncryptionAvailable())) {
+    context.skip("Native qpdf verifier is unavailable");
+    return;
   }
-  assert.equal(state.deliveryCalls.length, 0)
-})
+  reset([stub()], { enabled: true, expression: "{surname:3|upper}{dob:MMDDYYYY}" });
+
+  const result = await emailRunStubs("org-1", "run-1");
+
+  assert.deepEqual(result, { sent: 1, noEmail: [], printOnly: [], failed: [] });
+  assert.equal(state.deliveryCalls.length, 1);
+  assert.equal(state.deliveryCalls[0]?.to, "employee@example.test");
+  assert.deepEqual(state.encryptionPasswords, ["SPA02031990"]);
+});
+
+test("an encryption failure is recorded and never reported as a successful send", async () => {
+  reset([stub()], { enabled: true, expression: "{employeeNumber|upper}{dob:MMDDYYYY}" });
+  state.encryptionError = new Error("qpdf unavailable");
+
+  const result = await emailRunStubs("org-1", "run-1");
+
+  assert.equal(result.sent, 0);
+  assert.deepEqual(result.failed, [{ name: "Jordan Sparks", error: "qpdf unavailable" }]);
+  assert.equal(state.deliveryCalls.length, 0);
+  assert.deepEqual(state.encryptionPasswords, ["EMP4202031990"]);
+});
+
+test("a renderer outage flags the batch and names the outage per stub", async () => {
+  reset([stub(), stub({ id: "stub-2", name: "Alex Ray" })], {
+    enabled: true,
+    expression: "{employeeNumber|upper}{dob:MMDDYYYY}",
+  });
+  state.renderError = new MockRendererUnavailableError("/usr/bin/chromium");
+
+  const result = await emailRunStubs("org-1", "run-1");
+
+  assert.equal(result.sent, 0);
+  assert.equal(result.rendererOutage, true);
+  assert.equal(result.failed.length, 2);
+  for (const failure of result.failed) {
+    assert.ok(failure.error.includes("/usr/bin/chromium"), "each entry names the path it tried");
+    assert.ok(failure.error.includes("PUPPETEER_EXECUTABLE_PATH"), "each entry names the remedy");
+  }
+  assert.equal(state.deliveryCalls.length, 0);
+});

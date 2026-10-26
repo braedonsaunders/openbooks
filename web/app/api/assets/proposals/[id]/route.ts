@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { rejectAssetProposal, restoreAssetProposal } from "@openbooks/engine/assets/asset-proposals";
+import {
+  rejectAssetProposal,
+  restoreAssetProposal,
+} from "@openbooks/engine/assets/asset-proposals";
 import { id, reasonText, scopeOf } from "../../_depth";
 
 export const runtime = "nodejs";
@@ -20,7 +23,12 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, params, body: input }) => {
     const { id: proposalId } = await params;
-    const args = { proposalId, reason: input.reason, actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) };
+    const args = {
+      proposalId,
+      reason: input.reason,
+      actorId: gate.user.id,
+      allowedSubsidiaryIds: scopeOf(gate),
+    };
     if (input.action === "reject") await rejectAssetProposal(gate.user.orgId, args);
     else await restoreAssetProposal(gate.user.orgId, args);
     return NextResponse.json({ ok: true });

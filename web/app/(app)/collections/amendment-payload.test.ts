@@ -24,7 +24,15 @@ test("blank amendment fields are omitted so the typed body schema never sees an 
 
 test("a filled plan-change version and its date reach the request unchanged", () => {
   assert.deepEqual(
-    amendmentRequestPayload({ type: "change_plan", planVersionId: "00000000-0000-4000-8000-00000000d001", effectiveOn: "2026-11-01" }),
-    { type: "change_plan", planVersionId: "00000000-0000-4000-8000-00000000d001", effectiveOn: "2026-11-01" },
+    amendmentRequestPayload({
+      type: "change_plan",
+      planVersionId: "00000000-0000-4000-8000-00000000d001",
+      effectiveOn: "2026-11-01",
+    }),
+    {
+      type: "change_plan",
+      planVersionId: "00000000-0000-4000-8000-00000000d001",
+      effectiveOn: "2026-11-01",
+    },
   );
 });

@@ -1,7 +1,14 @@
-import { sql } from 'drizzle-orm'
-import { type SqlExecutor } from '../platform/db.ts'
-import { canonicalJson } from '../platform/canonical-json.ts'
-export class ExtensionProjectionError extends Error { constructor(message: string, readonly status = 409) { super(message) } }
+import { sql } from "drizzle-orm";
+import { type SqlExecutor } from "../platform/db.ts";
+import { canonicalJson } from "../platform/canonical-json.ts";
+export class ExtensionProjectionError extends Error {
+  constructor(
+    message: string,
+    readonly status = 409,
+  ) {
+    super(message);
+  }
+}
 async function writeAudit(
   tx: SqlExecutor,
   opts: {
@@ -41,7 +48,7 @@ export async function projectExtensionPage(
     extensionKey: string;
     version: string;
     versionId: string;
-    contribution: { kind: 'page'; route: string; spec: unknown; scope?: 'org' };
+    contribution: { kind: "page"; route: string; spec: unknown; scope?: "org" };
     reason: string;
   },
 ): Promise<string> {
@@ -49,14 +56,22 @@ export async function projectExtensionPage(
   // Extension rows only: org-native layouts coexist (see above) so they are
   // not occupants here. The FOR UPDATE lock serializes same-route installs
   // of extension rows against each other for the check below.
-  const occupants = await tx.execute<{ id: string; extension_version_id: string | null; app_id: string | null; extension_key: string | null }>(sql`
+  const occupants = await tx.execute<{
+    id: string;
+    extension_version_id: string | null;
+    app_id: string | null;
+    extension_key: string | null;
+  }>(
+    sql`
       select s.id, s.extension_version_id, v.app_id, m.key as extension_key
         from page_specs s
         left join app_versions v on v.org_id = s.org_id and v.id = s.extension_version_id
         left join apps m on m.org_id = v.org_id and m.id = v.app_id
        where s.org_id = ${orgId} and s.route = ${contribution.route} and s.is_active and s.user_id is null
          and s.extension_version_id is not null
-       for update of s`, 'objects');
+       for update of s`,
+    "objects",
+  );
 
   for (const row of occupants) {
     if (row.app_id !== opts.extensionId) {
@@ -68,11 +83,14 @@ export async function projectExtensionPage(
     }
   }
 
-  const superseded = await tx.execute<{ id: string; extension_version_id: string }>(sql`
+  const superseded = await tx.execute<{ id: string; extension_version_id: string }>(
+    sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${orgId} and route = ${contribution.route} and is_active and user_id is null
          and extension_version_id in (select id from app_versions where org_id = ${orgId} and app_id = ${opts.extensionId})
-      returning id, extension_version_id`, 'objects');
+      returning id, extension_version_id`,
+    "objects",
+  );
   for (const row of superseded) {
     await writeAudit(tx, {
       orgId,
@@ -81,8 +99,16 @@ export async function projectExtensionPage(
       action: "update",
       event: "extension_projection_superseded",
       reason: opts.reason,
-      before: { route: contribution.route, is_active: true, extension_version_id: row.extension_version_id },
-      after: { route: contribution.route, is_active: false, extension_version_id: row.extension_version_id },
+      before: {
+        route: contribution.route,
+        is_active: true,
+        extension_version_id: row.extension_version_id,
+      },
+      after: {
+        route: contribution.route,
+        is_active: false,
+        extension_version_id: row.extension_version_id,
+      },
       actorId: opts.actorId,
     });
   }
@@ -93,20 +119,31 @@ export async function projectExtensionPage(
   // index — one live row per extension VERSION per route — so a conflict here
   // can only be this same version's row, never the org-native row (its own
   // partial index) and never a superseded version (a different version id).
-  const inserted = (await tx.execute<{ id: string }>(sql`
+  const inserted =
+    (
+      await tx.execute<{ id: string }>(
+        sql`
       insert into page_specs (org_id, user_id, route, spec, note, extension_version_id, created_by, updated_by)
       values (${orgId}, null, ${contribution.route}, ${JSON.stringify(contribution.spec)}::jsonb,
               ${`Projected by extension "${opts.extensionKey}" version ${opts.version}`},
               ${opts.versionId}, ${opts.actorId}, ${opts.actorId})
       -- An identical projection reuses this live version row and verifies its stored spec below.
       on conflict (org_id, route, extension_version_id) where (is_active and extension_version_id is not null) do nothing
-      returning id`, 'objects'))[0] ?? null;
+      returning id`,
+        "objects",
+      )
+    )[0] ?? null;
   if (!inserted) {
-    const live = (await tx.execute<{ id: string; extension_version_id: string; spec: unknown }>(sql`
+    const live = (
+      await tx.execute<{ id: string; extension_version_id: string; spec: unknown }>(
+        sql`
         select id, extension_version_id, spec from page_specs
          where org_id = ${orgId} and route = ${contribution.route} and is_active and user_id is null
            and extension_version_id = ${opts.versionId}
-         limit 1`, 'objects'))[0];
+         limit 1`,
+        "objects",
+      )
+    )[0];
     if (
       live &&
       live.extension_version_id === opts.versionId &&

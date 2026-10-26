@@ -10,17 +10,21 @@ import {
 } from "../api/schema-registry";
 import { createRecord, deleteRecord, updateRecord, type WriteResult } from "../api/writers";
 import { clamp, isUuid } from "../list-params";
-import { documentRevisionProjection, normalizeDocumentRecordRevisions } from "@openbooks/engine/records/document-edit-policy";
+import {
+  documentRevisionProjection,
+  normalizeDocumentRecordRevisions,
+} from "@openbooks/engine/records/document-edit-policy";
 import { pgTextArrayLiteral } from "../pg-array";
 import type { ApplicationContext } from "./context";
-import {
-  assertApplicationPermission,
-  assertSubsidiaryAccess,
-} from "./context";
+import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 import { inTypeAudience, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql } from "../records";
-import { customFieldViewerFor, loadCustomFieldAccessDefs, redactHiddenCustomValues } from "../custom-fields";
+import {
+  customFieldViewerFor,
+  loadCustomFieldAccessDefs,
+  redactHiddenCustomValues,
+} from "../custom-fields";
 
 export interface RecordListInput {
   typeKey: string;
@@ -50,11 +54,11 @@ async function typeAudienceVisible(
   const type = await loadRecordTypeByKey(context.authz.user.orgId, schema.key);
   return Boolean(
     type &&
-      type.status === "published" &&
-      inTypeAudience(
-        context.authz.user.roles.map(({ key }) => key),
-        type.allowed_roles,
-      ),
+    type.status === "published" &&
+    inTypeAudience(
+      context.authz.user.roles.map(({ key }) => key),
+      type.allowed_roles,
+    ),
   );
 }
 
@@ -83,15 +87,12 @@ async function scopeFor(
   const schema = schemas.find((candidate) => candidate.key === resolved.key);
   if (!schema) throw notFound("record type schema");
   if (!(await typeAudienceVisible(context, schema))) throw notFound("record type");
-  const permission = operation === "list" || operation === "get"
-    ? resolved.readPermission
-    : resolved.writePermission;
+  const permission =
+    operation === "list" || operation === "get"
+      ? resolved.readPermission
+      : resolved.writePermission;
   if (!permission) {
-    throw new ApplicationError(
-      "unsupported_operation",
-      `${typeKey} is read-only`,
-      405,
-    );
+    throw new ApplicationError("unsupported_operation", `${typeKey} is read-only`, 405);
   }
   assertApplicationPermission(context, permission);
   return { resolved, schema };
@@ -110,7 +111,7 @@ function subsidiaryWhere(
     if (!isUuid(requested)) throw invalidInput("subsidiaryId must be a UUID");
     assertSubsidiaryAccess(context, requested);
     return scope.resolved.dynamic
-      ? sql`data ->> ${'subsidiary_id'} = ${requested}`
+      ? sql`data ->> ${"subsidiary_id"} = ${requested}`
       : sql`subsidiary_id = ${requested}`;
   }
   if (scope.resolved.dynamic) {
@@ -124,7 +125,7 @@ function subsidiaryWhere(
   if (allowed === null) return null;
   if (allowed.size === 0) return sql`false`;
   return scope.resolved.dynamic
-    ? sql`data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...allowed])}::text[])`
+    ? sql`data ->> ${"subsidiary_id"} = any(${pgTextArrayLiteral([...allowed])}::text[])`
     : sql`subsidiary_id = any(${pgTextArrayLiteral([...allowed])}::uuid[])`;
 }
 
@@ -156,9 +157,10 @@ function baseWhere(
 
 function requestedSubsidiary(body: Record<string, unknown>): string | null | undefined {
   const direct = body.subsidiaryId ?? body.subsidiary_id;
-  const nested = body.data && typeof body.data === "object" && !Array.isArray(body.data)
-    ? (body.data as Record<string, unknown>).subsidiary_id
-    : undefined;
+  const nested =
+    body.data && typeof body.data === "object" && !Array.isArray(body.data)
+      ? (body.data as Record<string, unknown>).subsidiary_id
+      : undefined;
   const value = direct ?? nested;
   if (value === null || value === undefined) return value;
   if (typeof value !== "string" || !isUuid(value)) {
@@ -168,21 +170,22 @@ function requestedSubsidiary(body: Record<string, unknown>): string | null | und
 }
 
 function writerError(result: WriteResult): never {
-  const body = result.body && typeof result.body === "object"
-    ? result.body as Record<string, unknown>
-    : {};
+  const body =
+    result.body && typeof result.body === "object" ? (result.body as Record<string, unknown>) : {};
   const raw = typeof body.error === "string" ? body.error : "record mutation rejected";
-  const leaksInternals = /\b(sql|constraint|duplicate key|foreign key|stack|query)\b/i.test(raw)
-    || raw.startsWith("could not ")
-    || raw.startsWith("cannot delete — referenced");
+  const leaksInternals =
+    /\b(sql|constraint|duplicate key|foreign key|stack|query)\b/i.test(raw) ||
+    raw.startsWith("could not ") ||
+    raw.startsWith("cannot delete — referenced");
   const message = leaksInternals ? "record mutation rejected by a data integrity control" : raw;
-  const code = result.status === 404
-    ? "not_found"
-    : result.status === 409
-      ? "conflict"
-      : result.status === 405
-        ? "unsupported_operation"
-        : "invalid_input";
+  const code =
+    result.status === 404
+      ? "not_found"
+      : result.status === 409
+        ? "conflict"
+        : result.status === 405
+          ? "unsupported_operation"
+          : "invalid_input";
   throw new ApplicationError(code, message, result.status, {
     ...(body.fieldErrors ? { fieldErrors: body.fieldErrors } : {}),
     ...(body.errors ? { errors: body.errors } : {}),
@@ -201,26 +204,29 @@ async function assertExistingRecordAccess(
 ): Promise<void> {
   const table = sql.raw(`"${scope.resolved.table}"`);
   const where = baseWhere(context, scope, { id });
-  const row = (await db.execute<{ "?column?": number }>(sql`
+  const row = await db.execute<{ "?column?": number }>(
+    sql`
     select 1 from ${table} where ${where} limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!row[0]) throw notFound();
 }
 
-export async function listRecordTypes(
-  context: ApplicationContext,
-): Promise<ApiRecordTypeSchema[]> {
+export async function listRecordTypes(context: ApplicationContext): Promise<ApiRecordTypeSchema[]> {
   const schemas = await loadApiSchema(context.authz.user.orgId);
-  const visible = await Promise.all(schemas.map(async (schema) => {
-    if (!(await typeAudienceVisible(context, schema))) return null;
-    try {
-      assertApplicationPermission(context, schema.readPermission);
-      return schema;
-    } catch {
-      return null;
-    }
-  }));
-  return visible.flatMap((schema) => schema ? [schema] : []);
+  const visible = await Promise.all(
+    schemas.map(async (schema) => {
+      if (!(await typeAudienceVisible(context, schema))) return null;
+      try {
+        assertApplicationPermission(context, schema.readPermission);
+        return schema;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return visible.flatMap((schema) => (schema ? [schema] : []));
 }
 
 export async function listRecords(
@@ -255,7 +261,13 @@ export async function listRecords(
     records: normalizeDocumentRecordRevisions(scope.resolved.table, rows.rows).map((row) => ({
       ...row,
       ...(row.custom && typeof row.custom === "object"
-        ? { custom: redactHiddenCustomValues(definitions, viewer, row.custom as Record<string, unknown>) }
+        ? {
+            custom: redactHiddenCustomValues(
+              definitions,
+              viewer,
+              row.custom as Record<string, unknown>,
+            ),
+          }
         : {}),
     })),
     total: Number(count.rows[0]?.count ?? 0),
@@ -272,9 +284,12 @@ export async function getRecord(
   const scope = await scopeFor(context, input.typeKey, "get");
   const table = sql.raw(`"${scope.resolved.table}"`);
   const where = baseWhere(context, scope, { id: input.id });
-  const result = (await db.execute<Record<string, unknown>>(sql`
+  const result = await db.execute<Record<string, unknown>>(
+    sql`
     select *${documentRevisionProjection(scope.resolved.table)} from ${table} where ${where} limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!result[0]) throw notFound();
   const row = normalizeDocumentRecordRevisions(scope.resolved.table, result)[0]!;
   const definitions = await loadCustomFieldAccessDefs(
@@ -282,7 +297,11 @@ export async function getRecord(
     scope.resolved.documentKinds?.[0],
   );
   if (row.custom && typeof row.custom === "object") {
-    row.custom = redactHiddenCustomValues(definitions, customFieldViewerFor(context.authz), row.custom as Record<string, unknown>);
+    row.custom = redactHiddenCustomValues(
+      definitions,
+      customFieldViewerFor(context.authz),
+      row.custom as Record<string, unknown>,
+    );
   }
   return row;
 }
@@ -307,17 +326,14 @@ export async function createApplicationRecord(
     request: input.body,
     // The transport responds with the write result's own status; record it.
     successStatus: (value) => value.status,
-    execute: async () => applicationWriteValue(await createRecord(
-      context.authz.user,
-      scope.resolved,
-      scope.schema.fields,
-      input.body,
-      {
-        source: context.source,
-        allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
-        customFieldViewer: customFieldViewerFor(context.authz),
-      },
-    )),
+    execute: async () =>
+      applicationWriteValue(
+        await createRecord(context.authz.user, scope.resolved, scope.schema.fields, input.body, {
+          source: context.source,
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+          customFieldViewer: customFieldViewerFor(context.authz),
+        }),
+      ),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
 }
@@ -342,18 +358,21 @@ export async function updateApplicationRecord(
     idempotencyKey: input.idempotencyKey,
     request: { id: input.id, body: input.body },
     successStatus: (value) => value.status,
-    execute: async () => applicationWriteValue(await updateRecord(
-      context.authz.user,
-      scope.resolved,
-      scope.schema.fields,
-      input.id,
-      input.body,
-      {
-        source: context.source,
-        allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
-        customFieldViewer: customFieldViewerFor(context.authz),
-      },
-    )),
+    execute: async () =>
+      applicationWriteValue(
+        await updateRecord(
+          context.authz.user,
+          scope.resolved,
+          scope.schema.fields,
+          input.id,
+          input.body,
+          {
+            source: context.source,
+            allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+            customFieldViewer: customFieldViewerFor(context.authz),
+          },
+        ),
+      ),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
 }
@@ -371,12 +390,12 @@ export async function deleteApplicationRecord(
     idempotencyKey: input.idempotencyKey,
     request: { id: input.id },
     successStatus: (value) => value.status,
-    execute: async () => applicationWriteValue(await deleteRecord(
-      context.authz.user,
-      scope.resolved,
-      input.id,
-      { allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
-    )),
+    execute: async () =>
+      applicationWriteValue(
+        await deleteRecord(context.authz.user, scope.resolved, input.id, {
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+        }),
+      ),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
 }

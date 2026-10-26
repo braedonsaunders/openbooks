@@ -1,26 +1,26 @@
 /** Transport-neutral edit contracts; monetary values remain exact decimal strings. */
-import type { TaxQuoteRequest, TaxQuoteResult } from '../tax/rate-providers.ts'
-import type { ExplicitFxInput } from './document-fx.ts'
+import type { TaxQuoteRequest, TaxQuoteResult } from "../tax/rate-providers.ts";
+import type { ExplicitFxInput } from "./document-fx.ts";
 
 export interface BillLineInput {
-  accountId: string
-  description?: string | null
-  amount: string
-  taxCodeId?: string | null
-  taxGroupId?: string | null
+  accountId: string;
+  description?: string | null;
+  amount: string;
+  taxCodeId?: string | null;
+  taxGroupId?: string | null;
   /** Manual tax override: when true, `taxAmount` is honored instead of computed. */
-  withholdingTreatment?: "labour" | "materials" | "excluded" | null
+  withholdingTreatment?: "labour" | "materials" | "excluded" | null;
   /** Direct materials cost in transaction currency; never inferred from selling price. */
-  withholdingMaterialsCost?: string | null
-  taxOverridden?: boolean
-  taxAmount?: string | null
-  custom?: Record<string, unknown>
+  withholdingMaterialsCost?: string | null;
+  taxOverridden?: boolean;
+  taxAmount?: string | null;
+  custom?: Record<string, unknown>;
   /** Internal pre-persistence provider evidence; never accepted from API input. */
   providerQuote?: {
-    providerConfigId: string
-    request: TaxQuoteRequest
-    result: TaxQuoteResult
-  }
+    providerConfigId: string;
+    request: TaxQuoteRequest;
+    result: TaxQuoteResult;
+  };
 }
 
 /** A line as accepted on a document edit (built-ins + dimensions + custom). */
@@ -30,28 +30,28 @@ export interface DocumentLineInput extends BillLineInput {
    * line). Never trusted for provenance: the server re-attaches native
    * evidence from its own locked rows and strips caller-supplied native keys.
    */
-  lineId?: string | null
-  itemId?: string | null
-  quantity?: string | null
-  unit?: string | null
-  unitPrice?: string | null
+  lineId?: string | null;
+  itemId?: string | null;
+  quantity?: string | null;
+  unit?: string | null;
+  unitPrice?: string | null;
   /** Line entity: the customer/vendor/employee this line belongs to. */
-  partyId?: string | null
-  departmentId?: string | null
-  projectId?: string | null
-  locationId?: string | null
-  classId?: string | null
+  partyId?: string | null;
+  departmentId?: string | null;
+  projectId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
   /** First and last day of the work this line bills (customer invoices,
    *  credits and sales orders). Either may be absent; both must be ordered. */
-  workFrom?: string | null
-  workTo?: string | null
+  workFrom?: string | null;
+  workTo?: string | null;
   /** Amortization template this line defers through (vendor bills, journals
    *  and expense reports), with the optional service window it covers. */
-  amortizationTemplateId?: string | null
-  amortizationStartOn?: string | null
-  amortizationEndOn?: string | null
+  amortizationTemplateId?: string | null;
+  amortizationStartOn?: string | null;
+  amortizationEndOn?: string | null;
   /** Warehouse used by inventory receipt or issue effects for this line. */
-  stockLocationId?: string | null
+  stockLocationId?: string | null;
   /**
    * Operator-chosen stock return on a credit memo: the posted receipt (vendor
    * credit) or shipment (customer credit) whose units are coming back.
@@ -66,12 +66,12 @@ export interface DocumentLineInput extends BillLineInput {
    * selection, null clears it, an object replaces it.
    */
   inventoryReturnSource?: {
-    movementId: string
+    movementId: string;
     /** Source warehouse when returned stock is routed to a different bin. */
-    sourceStockLocationId?: string
-    lotId?: string | null
-    serialId?: string | null
-  } | null
+    sourceStockLocationId?: string;
+    lotId?: string | null;
+    serialId?: string | null;
+  } | null;
   /**
    * Operator-chosen allowance on a credit memo: a damage or price concession
    * where nothing physically returns. The credit settles commercially (a
@@ -83,22 +83,22 @@ export interface DocumentLineInput extends BillLineInput {
    * return source and an allowance is refused — it cannot both move stock
    * and move nothing.
    */
-  inventoryAllowance?: boolean | null
-  extraDims?: Record<string, string | null>
-  custom?: Record<string, unknown>
+  inventoryAllowance?: boolean | null;
+  extraDims?: Record<string, string | null>;
+  custom?: Record<string, unknown>;
   /**
    * Marketplace collecting this line's tax (a name in marketplace_facilitators),
    * or null when the merchant collects. The server validates the name against
    * the active facilitators and refuses it on non-sales kinds; posting and tax
    * evidence derive collected_by from the stored line, never from this input.
    */
-  marketplaceFacilitator?: string | null
+  marketplaceFacilitator?: string | null;
   /** Entry-mode allocation: rule key to explode this line (explicit request). */
-  distributionKey?: string | null
+  distributionKey?: string | null;
   /** Stored distribution group this submitted line belongs to (re-save matching). */
-  distributionGroupId?: string | null
+  distributionGroupId?: string | null;
   /** True locks the group against re-explosion; false unlocks; absent preserves. */
-  distributionLocked?: boolean | null
+  distributionLocked?: boolean | null;
 }
 
 /** The header + lines payload for a document edit. Every field is optional; an
@@ -106,40 +106,40 @@ export interface DocumentLineInput extends BillLineInput {
 export interface DocumentEditInput {
   /** Required evidence for every posted-document amendment. Not persisted on
    * the document; stored only in the immutable before/after audit envelope. */
-  amendmentReason?: string
+  amendmentReason?: string;
   /** Optimistic concurrency token from documents.revision_seq. Required when
    * editing any existing document. A newly minted, still-private draft is the
    * sole initialization path that may omit it. */
-  expectedUpdatedAt?: string
-  partyId?: string | null
-  paymentCardId?: string | null
-  documentDate?: string
-  dueDate?: string | null
-  referenceNumber?: string | null
+  expectedUpdatedAt?: string;
+  partyId?: string | null;
+  paymentCardId?: string | null;
+  documentDate?: string;
+  dueDate?: string | null;
+  referenceNumber?: string | null;
   /**
    * The originating external system's own identity for the document and
    * which system minted it (dedupe key for storefront and integrator
    * writes). Both or neither; storage refuses a half-filled or blank pair.
    */
-  externalRef?: string | null
-  externalSource?: string | null
-  memo?: string | null
-  postingDate?: string | null
-  departmentId?: string | null
-  projectId?: string | null
-  locationId?: string | null
-  classId?: string | null
-  extraDims?: Record<string, string | null>
-  subsidiaryId?: string | null
-  expectedPayDate?: string | null
+  externalRef?: string | null;
+  externalSource?: string | null;
+  memo?: string | null;
+  postingDate?: string | null;
+  departmentId?: string | null;
+  projectId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
+  extraDims?: Record<string, string | null>;
+  subsidiaryId?: string | null;
+  expectedPayDate?: string | null;
   /** Date the invoiced work was completed (customer invoices, credits and
    *  sales orders). Informational: never a posting or recognition date. */
-  workCompletedOn?: string | null
-  paymentHoldReason?: string | null
-  internalNotes?: string | null
-  billingMethod?: string | null
-  isFinalInvoice?: boolean
-  currency?: string
+  workCompletedOn?: string | null;
+  paymentHoldReason?: string | null;
+  internalNotes?: string | null;
+  billingMethod?: string | null;
+  isFinalInvoice?: boolean;
+  currency?: string;
   /**
    * Explicit transaction-to-functional exchange rate (customer invoices and
    * vendor bills, drafts only). Absent keeps recorded evidence while the
@@ -147,23 +147,23 @@ export interface DocumentEditInput {
    * and returns the document to the organization's exchange rates; an
    * object records it for the identity the edited document posts with.
    */
-  explicitFx?: ExplicitFxInput | null
-  custom?: Record<string, unknown>
-  lines?: DocumentLineInput[]
+  explicitFx?: ExplicitFxInput | null;
+  custom?: Record<string, unknown>;
+  lines?: DocumentLineInput[];
   /** Stored distribution groups collapsing back to one line each. */
-  unsplitDistributionGroups?: string[]
+  unsplitDistributionGroups?: string[];
 }
 
 /** The pre-edit snapshot a caller loads under its own org scope. */
 export type DocumentEditCurrent = {
-  kind: string
-  status: string
-  total: string
-  taxTotal: string
-  partyId: string | null
-  documentDate: string
-  updatedAt: string
-  custom?: Record<string, unknown>
+  kind: string;
+  status: string;
+  total: string;
+  taxTotal: string;
+  partyId: string | null;
+  documentDate: string;
+  updatedAt: string;
+  custom?: Record<string, unknown>;
   /** Owning legal entity; present on rows loaded after the provider-tax fix. */
-  subsidiaryId?: string | null
+  subsidiaryId?: string | null;
 };

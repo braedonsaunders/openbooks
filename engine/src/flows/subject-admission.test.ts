@@ -36,7 +36,10 @@ test("policy SQL counts a scoped flow for an unknown entity (fail closed)", () =
 
 test("policy SQL matches listed entities case-insensitively, as uuid text", () => {
   const text = compiled(flowGraphAdmitsSubjectSql(sql`f.graph`, sql`d.subsidiary_id`));
-  assert.match(text, /jsonb_array_elements_text\(coalesce\(f\.graph -> 'subjectScope' -> 'subsidiaryIds', '\[\]'::jsonb\)\)/);
+  assert.match(
+    text,
+    /jsonb_array_elements_text\(coalesce\(f\.graph -> 'subjectScope' -> 'subsidiaryIds', '\[\]'::jsonb\)\)/,
+  );
   assert.match(text, /lower\(scope_id\) = d\.subsidiary_id::text/);
 });
 
@@ -47,8 +50,10 @@ const ORG_ID = "33333333-3333-4333-8333-333333333333";
 test("managed-write validation refuses malformed scope entries instead of filtering them", async () => {
   // Every case refuses BEFORE any organization lookup, so none of these
   // may silently persist a narrower or wider limit than submitted.
-  const overlength = Array.from({ length: 101 }, (_, i) =>
-    `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`);
+  const overlength = Array.from(
+    { length: 101 },
+    (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`,
+  );
   const malformed: unknown[] = [
     { subsidiaryIds: [] },
     { subsidiaryIds: "not-an-array" },

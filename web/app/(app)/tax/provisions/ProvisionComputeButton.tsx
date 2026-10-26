@@ -16,7 +16,9 @@ export function ProvisionComputeButton() {
   const [framework, setFramework] = useState<"asc740" | "ias12">("asc740");
   const [fiscalYear, setFiscalYear] = useState<number | "">("");
   const [permanent, setPermanent] = useState([{ description: "", amount: "" }]);
-  const [temporary, setTemporary] = useState([{ category: "other", description: "", difference: "" }]);
+  const [temporary, setTemporary] = useState([
+    { category: "other", description: "", difference: "" },
+  ]);
   const [lossUsed, setLossUsed] = useState("0");
   const [va, setVa] = useState("0");
   const [busy, setBusy] = useState(false);
@@ -40,9 +42,10 @@ export function ProvisionComputeButton() {
    *  (1-based, as the preparer sees it). Anything unrecognized falls back to
    *  the server's own text so a refusal never renders as a blank alert. */
   function describeRowError(serverError: string | undefined): string {
-    const match = /^(permanentDifferences|additionalDifferences)\[(\d+)\]: (description|amount|difference) is required/.exec(
-      serverError ?? "",
-    );
+    const match =
+      /^(permanentDifferences|additionalDifferences)\[(\d+)\]: (description|amount|difference) is required/.exec(
+        serverError ?? "",
+      );
     if (match) {
       const row = Number(match[2]) + 1;
       if (match[1] === "permanentDifferences") {
@@ -56,9 +59,10 @@ export function ProvisionComputeButton() {
     }
     // A grid element that is not a row object at all (string, null, number,
     // nested array): the server refuses it by the same grid index.
-    const shape = /^(permanentDifferences|additionalDifferences)\[(\d+)\]: each row must be an object/.exec(
-      serverError ?? "",
-    );
+    const shape =
+      /^(permanentDifferences|additionalDifferences)\[(\d+)\]: each row must be an object/.exec(
+        serverError ?? "",
+      );
     if (shape) {
       const row = Number(shape[2]) + 1;
       return shape[1] === "permanentDifferences"
@@ -113,51 +117,82 @@ export function ProvisionComputeButton() {
     <>
       <Button onClick={() => setOpen(true)}>{t("button")}</Button>
       {open ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
             <h2 className="text-base font-semibold text-slate-900 dark:text-white">{t("title")}</h2>
             <div className="mt-4 space-y-4">
               <div className="space-y-1.5">
                 <Label>{t("fiscalYear")}</Label>
-                <Select value={String(fiscalYear)} onChange={(e) => setFiscalYear(Number(e.target.value))}>
+                <Select
+                  value={String(fiscalYear)}
+                  onChange={(e) => setFiscalYear(Number(e.target.value))}
+                >
                   {years.map((y) => (
-                    <option key={y} value={y}>FY{y}</option>
+                    <option key={y} value={y}>
+                      FY{y}
+                    </option>
                   ))}
                 </Select>
               </div>
 
               <fieldset className="space-y-2">
-                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("permanent")}</legend>
+                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {t("permanent")}
+                </legend>
                 {permanent.map((p, i) => (
                   <div key={i} className="flex gap-2">
                     <Input
                       placeholder={t("descriptionPlaceholder")}
                       value={p.description}
-                      onChange={(e) => setPermanent((rows) => rows.map((r, j) => (j === i ? { ...r, description: e.target.value } : r)))}
+                      onChange={(e) =>
+                        setPermanent((rows) =>
+                          rows.map((r, j) => (j === i ? { ...r, description: e.target.value } : r)),
+                        )
+                      }
                     />
                     <Input
                       className="w-32"
                       placeholder="0.00"
                       value={p.amount}
-                      onChange={(e) => setPermanent((rows) => rows.map((r, j) => (j === i ? { ...r, amount: e.target.value } : r)))}
+                      onChange={(e) =>
+                        setPermanent((rows) =>
+                          rows.map((r, j) => (j === i ? { ...r, amount: e.target.value } : r)),
+                        )
+                      }
                     />
                   </div>
                 ))}
-                <Button variant="ghost" size="sm" onClick={() => setPermanent((r) => [...r, { description: "", amount: "" }])}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPermanent((r) => [...r, { description: "", amount: "" }])}
+                >
                   {t("addLine")}
                 </Button>
               </fieldset>
 
               <fieldset className="space-y-2">
-                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("temporary")}</legend>
+                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {t("temporary")}
+                </legend>
                 {temporary.map((d, i) => (
                   <div key={i} className="flex gap-2">
                     <Select
                       value={d.category}
-                      onChange={(e) => setTemporary((rows) => rows.map((r, j) => (j === i ? { ...r, category: e.target.value } : r)))}
+                      onChange={(e) =>
+                        setTemporary((rows) =>
+                          rows.map((r, j) => (j === i ? { ...r, category: e.target.value } : r)),
+                        )
+                      }
                     >
                       <option value="fixed_assets">{t("categories.fixed_assets")}</option>
-                      <option value="revenue_recognition">{t("categories.revenue_recognition")}</option>
+                      <option value="revenue_recognition">
+                        {t("categories.revenue_recognition")}
+                      </option>
                       <option value="provisions">{t("categories.provisions")}</option>
                       <option value="loss_carryforward">{t("categories.loss_carryforward")}</option>
                       <option value="other">{t("categories.other")}</option>
@@ -165,17 +200,34 @@ export function ProvisionComputeButton() {
                     <Input
                       placeholder={t("descriptionPlaceholder")}
                       value={d.description}
-                      onChange={(e) => setTemporary((rows) => rows.map((r, j) => (j === i ? { ...r, description: e.target.value } : r)))}
+                      onChange={(e) =>
+                        setTemporary((rows) =>
+                          rows.map((r, j) => (j === i ? { ...r, description: e.target.value } : r)),
+                        )
+                      }
                     />
                     <Input
                       className="w-32"
                       placeholder="0.00"
                       value={d.difference}
-                      onChange={(e) => setTemporary((rows) => rows.map((r, j) => (j === i ? { ...r, difference: e.target.value } : r)))}
+                      onChange={(e) =>
+                        setTemporary((rows) =>
+                          rows.map((r, j) => (j === i ? { ...r, difference: e.target.value } : r)),
+                        )
+                      }
                     />
                   </div>
                 ))}
-                <Button variant="ghost" size="sm" onClick={() => setTemporary((r) => [...r, { category: "other", description: "", difference: "" }])}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setTemporary((r) => [
+                      ...r,
+                      { category: "other", description: "", difference: "" },
+                    ])
+                  }
+                >
                   {t("addLine")}
                 </Button>
               </fieldset>
@@ -186,14 +238,22 @@ export function ProvisionComputeButton() {
                   <Input value={lossUsed} onChange={(e) => setLossUsed(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>{framework === "ias12" ? t("valuationAllowanceIas12") : t("valuationAllowance")}</Label>
+                  <Label>
+                    {framework === "ias12" ? t("valuationAllowanceIas12") : t("valuationAllowance")}
+                  </Label>
                   <Input value={va} onChange={(e) => setVa(e.target.value)} />
                 </div>
               </div>
 
-              {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
+              {error ? (
+                <p className="text-sm text-red-600" role="alert">
+                  {error}
+                </p>
+              ) : null}
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setOpen(false)}>{t("cancel")}</Button>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  {t("cancel")}
+                </Button>
                 <Button disabled={busy || !fiscalYear} onClick={() => void compute()}>
                   {busy ? t("computing") : t("compute")}
                 </Button>

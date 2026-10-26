@@ -12,7 +12,9 @@ import { isUuid } from "../../../../lib/list-params";
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = civilDateInput();
-const exactHours = z.string().regex(/^-?\d+(\.\d{1,2})?$/, "must be an exact decimal with at most 2 fraction digits");
+const exactHours = z
+  .string()
+  .regex(/^-?\d+(\.\d{1,2})?$/, "must be an exact decimal with at most 2 fraction digits");
 
 export const fileLeaveRequestBody = z.object({
   employmentId: uuid,
@@ -47,4 +49,3 @@ export const recordAbsenceBody = z.object({
  * the service (the same shape as completeProcessBody).
  */
 export const submitLeaveRequestBody = z.object({});
-

@@ -3,9 +3,21 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { functionalReportReader } from "./currency-basis";
 import { payrollOriginSql } from "../payroll-confidentiality";
-import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookIdsExpr } from "../gl-summary";
+import {
+  glActivityBuckets,
+  glSummaryEligibleDims,
+  bucketSubsidiaryFilter,
+  statementBookIdsExpr,
+} from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
-import { decimalAdd, decimalCmp, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
+import {
+  decimalAdd,
+  decimalCmp,
+  decimalIsMaterial,
+  decimalNeg,
+  decimalSum,
+  type ExactDecimal,
+} from "../statement-format";
 import { ZERO, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
 import { PNL_TYPES } from "../account-types";
@@ -41,14 +53,26 @@ export interface StatementRow {
  */
 export const REVENUE_TYPES = ["income", "income_other"];
 export const CREDIT_NORMAL = new Set([
-  "income", "income_other",
-  "liability_payable", "liability_card", "liability_current_other", "liability_long_term",
+  "income",
+  "income_other",
+  "liability_payable",
+  "liability_card",
+  "liability_current_other",
+  "liability_long_term",
   "equity",
 ]);
 
-async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, orgId?: string, bookId?: string | null) {
+async function accountBalances(
+  where: ReturnType<typeof sql>,
+  dims?: DimFilter,
+  orgId?: string,
+  bookId?: string | null,
+) {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const reportDb = functionalReportReader(resolvedOrgId, sql`${where} and a.type in ${PNL_TYPES} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const reportDb = functionalReportReader(
+    resolvedOrgId,
+    sql`${where} and a.type in ${PNL_TYPES} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`,
+  );
   // The qualifying entry set (org + status + the caller's e.* predicates,
   // which reference only e.posting_date / e.org_id) materializes once via an
   // index-only scan and hash-joins to the lines. The predicates MUST live
@@ -57,7 +81,7 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
   // per-line join to journal_entries re-fetched the entry heap for every
   // journal line in the tenant. Statements answer for one accounting book —
   // entries are book-mandatory and an unscoped read would fuse parallel books.
-  const r = (await reportDb.execute(sql`
+  const r = await reportDb.execute(sql`
     with e as materialized (
       select e.id from journal_entries e
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and ${where}
@@ -72,10 +96,15 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
      where a.org_id = ${resolvedOrgId}
      group by a.id
      order by a.number nulls last, a.name
-  `));
+  `);
   return r.rows as {
-    id: string; parent_id: string | null; number: string | null; name: string;
-    type: string; is_summary: boolean; raw: string;
+    id: string;
+    parent_id: string | null;
+    number: string | null;
+    name: string;
+    type: string;
+    is_summary: boolean;
+    raw: string;
   }[];
 }
 
@@ -84,7 +113,10 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
  * treeifyMatrix): every row shows its OWN balance and contra accounts print
  * as sibling lines, so displayed lines foot to the section total.
  */
-function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: string[]): StatementRow[] {
+function treeify(
+  rows: Awaited<ReturnType<typeof accountBalances>>,
+  types: string[],
+): StatementRow[] {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const signedOwn = new Map(
     rows.map((r) => [r.id, CREDIT_NORMAL.has(r.type) ? decimalNeg(r.raw) : r.raw] as const),
@@ -123,8 +155,13 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
     for (const r of children.get(parent) ?? []) {
       if (emits(r.id)) {
         out.push({
-          id: r.id, number: r.number, name: r.name, type: r.type,
-          balance: signedOwn.get(r.id) ?? ZERO, depth, isSummary: r.is_summary,
+          id: r.id,
+          number: r.number,
+          name: r.name,
+          type: r.type,
+          balance: signedOwn.get(r.id) ?? ZERO,
+          depth,
+          isSummary: r.is_summary,
         });
       }
       walk(r.id, depth + 1);
@@ -143,9 +180,19 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
  * accountBalances answered from the gl_month_activity summary — same row
  * shape, whole months from the aggregate, split boundary months from lines.
  */
-async function summaryAccountBalances(orgId: string, from: string | null, to: string, subsidiaryIds?: string[], bookId?: string | null, accountTypes?: string[]) {
-  const reportDb = functionalReportReader(orgId, sql`e.posting_date <= ${to} ${from === null ? sql`` : sql`and e.posting_date >= ${from}`}
-    and e.book_id in ${statementBookIdsExpr(orgId, bookId)} and ${dimWhere({ subsidiaryIds })} ${accountTypes ? sql`and a.type in ${accountTypes}` : sql``}`);
+async function summaryAccountBalances(
+  orgId: string,
+  from: string | null,
+  to: string,
+  subsidiaryIds?: string[],
+  bookId?: string | null,
+  accountTypes?: string[],
+) {
+  const reportDb = functionalReportReader(
+    orgId,
+    sql`e.posting_date <= ${to} ${from === null ? sql`` : sql`and e.posting_date >= ${from}`}
+    and e.book_id in ${statementBookIdsExpr(orgId, bookId)} and ${dimWhere({ subsidiaryIds })} ${accountTypes ? sql`and a.type in ${accountTypes}` : sql``}`,
+  );
   const buckets = glActivityBuckets(orgId, {
     minDate: from,
     maxDate: to,
@@ -154,13 +201,11 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
   });
   // Split boundary months come back as individual lines for the whole month;
   // the bucket date is therefore the authoritative inclusive report window.
-  const dateFilter = from === null
-    ? sql`b.d <= ${to}`
-    : sql`b.d >= ${from} and b.d <= ${to}`;
+  const dateFilter = from === null ? sql`b.d <= ${to}` : sql`b.d >= ${from} and b.d <= ${to}`;
   // Aggregate the buckets FIRST, then join accounts to the tiny per-account
   // result — joining accounts against the raw union invites a plan that
   // re-executes the union once per account.
-  const r = (await reportDb.execute(sql`
+  const r = await reportDb.execute(sql`
     select ${reportDb.censusColumn}, a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(s.raw, 0) as raw
       from accounts a
@@ -172,11 +217,17 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
       ) s on s.account_id = a.id
      where a.org_id = ${orgId}
      order by a.number nulls last, a.name
-  `));
+  `);
   return r.rows as Awaited<ReturnType<typeof accountBalances>>;
 }
 
-export async function profitAndLoss(from: string, to: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
+export async function profitAndLoss(
+  from: string,
+  to: string,
+  dims?: DimFilter,
+  orgId?: string,
+  bookId?: string | null,
+) {
   const resolvedOrgId = await resolveOrgId(orgId);
   const rows = glSummaryEligibleDims(dims)
     ? await summaryAccountBalances(resolvedOrgId, from, to, dims?.subsidiaryIds, bookId, PNL_TYPES)
@@ -196,7 +247,14 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter, 
   const cogs = total(["cogs"]);
   const expenses = total(["expense", "expense_other", "expense_deferred"]);
   const grossProfit = decimalSubtract(revenue, cogs);
-  return { items, revenue, cogs, grossProfit, expenses, netIncome: decimalSubtract(grossProfit, expenses) };
+  return {
+    items,
+    revenue,
+    cogs,
+    grossProfit,
+    expenses,
+    netIncome: decimalSubtract(grossProfit, expenses),
+  };
 }
 
 /**
@@ -219,8 +277,19 @@ export async function balanceSheet(
     summaryAccountBalances(resolvedOrgId, null, asOf, dims?.subsidiaryIds, bookId),
     summaryAccountBalances(resolvedOrgId, fyStart, asOf, dims?.subsidiaryIds, bookId, PNL_TYPES),
   ]);
-  const assets = treeify(rows, ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"]);
-  const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
+  const assets = treeify(rows, [
+    "asset_bank",
+    "asset_receivable",
+    "asset_current_other",
+    "asset_fixed",
+    "asset_other",
+  ]);
+  const liabilities = treeify(rows, [
+    "liability_payable",
+    "liability_card",
+    "liability_current_other",
+    "liability_long_term",
+  ]);
   const equity = treeify(rows, ["equity"]);
 
   // Gross presentation: every account prints once at its own balance, so the
@@ -235,18 +304,33 @@ export async function balanceSheet(
   // journals are excluded, so the sheet is identical whether or not a year
   // has been closed by journal.
   const lifetimePnl = decimalSum(rows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw));
-  const currentPnl = decimalSum(currentRows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw));
+  const currentPnl = decimalSum(
+    currentRows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw),
+  );
   const currentYearEarnings = decimalNeg(currentPnl);
   const retainedEarningsPrior = decimalNeg(decimalSubtract(lifetimePnl, currentPnl));
   equity.push({
-    id: COMPUTED_RETAINED_EARNINGS_PRIOR_ID, number: null, name: COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
-    type: "equity", balance: retainedEarningsPrior, depth: 0, isSummary: false,
+    id: COMPUTED_RETAINED_EARNINGS_PRIOR_ID,
+    number: null,
+    name: COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
+    type: "equity",
+    balance: retainedEarningsPrior,
+    depth: 0,
+    isSummary: false,
   });
   equity.push({
-    id: COMPUTED_CURRENT_YEAR_EARNINGS_ID, number: null, name: COMPUTED_CURRENT_YEAR_EARNINGS_NAME,
-    type: "equity", balance: currentYearEarnings, depth: 0, isSummary: false,
+    id: COMPUTED_CURRENT_YEAR_EARNINGS_ID,
+    number: null,
+    name: COMPUTED_CURRENT_YEAR_EARNINGS_NAME,
+    type: "equity",
+    balance: currentYearEarnings,
+    depth: 0,
+    isSummary: false,
   });
-  const totalEquity = decimalAdd(statedEquity, decimalAdd(retainedEarningsPrior, currentYearEarnings));
+  const totalEquity = decimalAdd(
+    statedEquity,
+    decimalAdd(retainedEarningsPrior, currentYearEarnings),
+  );
 
   return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity };
 }
@@ -275,12 +359,20 @@ function trialBalancePriorRow(prior: string): TrialBalanceRow | null {
   };
 }
 
-export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
+export async function trialBalance(
+  asOf: string,
+  dims?: DimFilter,
+  orgId?: string,
+  bookId?: string | null,
+) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   // Same declared-calendar year start as the balance sheet, so the FYTD
   // P&L window agrees with the earnings split.
   const fyStart = await fiscalYearStartOnDate(asOf, resolvedOrgId);
-  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${asOf} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const reportDb = functionalReportReader(
+    resolvedOrgId,
+    sql`e.posting_date <= ${asOf} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`,
+  );
   const pnl = sql`acct.type in ${PNL_TYPES}`;
   const inYear = sql`not (${pnl}) or b.d >= ${fyStart}`;
   if (glSummaryEligibleDims(dims)) {
@@ -289,8 +381,13 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
     // accounts whose debit/credit legs are real instead of
     // filtering on the net balance alone. P&L activity is FYTD so the
     // trial balance still foots after the prior-year RE placeholder.
-    const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [], bookId });
-    const r = (await reportDb.execute(sql`
+    const buckets = glActivityBuckets(resolvedOrgId, {
+      minDate: null,
+      maxDate: asOf,
+      boundaries: [],
+      bookId,
+    });
+    const r = await reportDb.execute(sql`
       select ${reportDb.censusColumn}, a.id, a.number, a.name, a.type, s.debits, s.credits, s.balance
         from (
           select b.account_id,
@@ -307,14 +404,14 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
         ) s
         join accounts a on a.id = s.account_id and a.org_id = ${resolvedOrgId}
        order by a.number nulls last, a.name
-    `));
-    const priorRes = (await reportDb.execute<{ prior: string }>(sql`
+    `);
+    const priorRes = await reportDb.execute<{ prior: string }>(sql`
       select ${reportDb.censusColumn}, coalesce(sum(b.amount), 0) as prior
         from ${buckets} b
         join accounts acct on acct.id = b.account_id and acct.org_id = ${resolvedOrgId}
        where b.d < ${fyStart} ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
          and acct.type in ${PNL_TYPES}
-    `));
+    `);
     const rows = r.rows as TrialBalanceRow[];
     const prior = trialBalancePriorRow(priorRes.rows[0]?.prior ?? ZERO);
     if (prior) rows.push(prior);
@@ -322,7 +419,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
   }
   // Materialized entry set + hash join — see accountBalances.
   const lineInYear = sql`not (a.type in ${PNL_TYPES}) or e.posting_date >= ${fyStart}`;
-  const r = (await reportDb.execute(sql`
+  const r = await reportDb.execute(sql`
     with e as materialized (
       select id, posting_date from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
@@ -344,8 +441,8 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
         or sum(case when l.amount > 0 and (${lineInYear}) then l.amount else 0 end) > 0
         or sum(case when l.amount < 0 and (${lineInYear}) then -l.amount else 0 end) > 0
      order by a.number nulls last, a.name
-  `));
-  const priorRes = (await reportDb.execute<{ prior: string }>(sql`
+  `);
+  const priorRes = await reportDb.execute<{ prior: string }>(sql`
     with e as materialized (
       select id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
@@ -359,7 +456,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId}
        and a.org_id = ${resolvedOrgId} and a.type in ${PNL_TYPES} and ${dimWhere(dims)}
-  `));
+  `);
   const rows = r.rows as TrialBalanceRow[];
   const prior = trialBalancePriorRow(priorRes.rows[0]?.prior ?? ZERO);
   if (prior) rows.push(prior);
@@ -371,7 +468,12 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
  * Interactive callers default to the org's business day; exports and other
  * reproducible reads can pin that same boundary explicitly.
  */
-export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string, bookId?: string | null, dims?: DimFilter,
+export async function partnerBalances(
+  kind: "receivable" | "payable",
+  orgId?: string,
+  asOf?: string,
+  bookId?: string | null,
+  dims?: DimFilter,
   /**
    * True when the reader holds payroll.read and may see per-employee pay
    * detail. Defaults to false (fail closed): without it, party-tagged
@@ -384,12 +486,17 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   const resolvedAsOf = asOf ?? (await businessToday(resolvedOrgId));
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
-  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${resolvedAsOf} and a.type = ${type} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const reportDb = functionalReportReader(
+    resolvedOrgId,
+    sql`e.posting_date <= ${resolvedAsOf} and a.type = ${type} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`,
+  );
   const masked = canSeePayroll === true;
   const payrollParty = sql`${payrollOriginSql(sql`dd.kind`, sql`e.origin`)} and l.party_id is not null`;
   const partyIdExpr = masked ? sql`p.id` : sql`case when ${payrollParty} then null else p.id end`;
-  const partyNameExpr = masked ? sql`p.display_name` : sql`case when ${payrollParty} then null else p.display_name end`;
-  const r = (await reportDb.execute(sql`
+  const partyNameExpr = masked
+    ? sql`p.display_name`
+    : sql`case when ${payrollParty} then null else p.display_name end`;
+  const r = await reportDb.execute(sql`
     with e as materialized (
       select id, origin, source_document_id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
@@ -410,6 +517,12 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
      group by ${partyIdExpr}, ${partyNameExpr}
     having abs(sum(l.amount)) > 0
      order by abs(sum(l.amount)) desc
-  `));
-  return r.rows as { id: string | null; display_name: string | null; balance: string; line_count: string; latest_due: string | null }[];
+  `);
+  return r.rows as {
+    id: string | null;
+    display_name: string | null;
+    balance: string;
+    line_count: string;
+    latest_due: string | null;
+  }[];
 }

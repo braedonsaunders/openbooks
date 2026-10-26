@@ -55,15 +55,23 @@ export function parseEmployerLevyAdjustmentEvidence(
   if (value == null) return null;
   try {
     const parsed = JSON.parse(value) as Partial<EmployerLevyAdjustmentEvidence>;
-    if (parsed.kind !== "employer_levy_adjustment"
-      || !isEmployerLevyProgramKey(parsed.programKey)
-      || canonicalLevySourceKey(parsed.sourceKey) !== parsed.sourceKey
-      || typeof parsed.reason !== "string" || !parsed.reason.trim() || parsed.reason.length > 500
-      || typeof parsed.sourceReference !== "string" || !parsed.sourceReference.trim()
-      || parsed.sourceReference.length > 300
-      || typeof parsed.requestId !== "string" || !isUuid(parsed.requestId)) return null;
+    if (
+      parsed.kind !== "employer_levy_adjustment" ||
+      !isEmployerLevyProgramKey(parsed.programKey) ||
+      canonicalLevySourceKey(parsed.sourceKey) !== parsed.sourceKey ||
+      typeof parsed.reason !== "string" ||
+      !parsed.reason.trim() ||
+      parsed.reason.length > 500 ||
+      typeof parsed.sourceReference !== "string" ||
+      !parsed.sourceReference.trim() ||
+      parsed.sourceReference.length > 300 ||
+      typeof parsed.requestId !== "string" ||
+      !isUuid(parsed.requestId)
+    )
+      return null;
     if (parsed.programKey === "ca_wcb") {
-      if (typeof parsed.workerCompGroupId !== "string" || !isUuid(parsed.workerCompGroupId)) return null;
+      if (typeof parsed.workerCompGroupId !== "string" || !isUuid(parsed.workerCompGroupId))
+        return null;
     } else if (parsed.workerCompGroupId !== null) return null;
     return parsed as EmployerLevyAdjustmentEvidence;
   } catch {
@@ -79,7 +87,10 @@ export function employerLevyAdjustmentEvidence(input: {
   sourceReference: string;
   requestId: string;
 }): string {
-  return JSON.stringify({ kind: "employer_levy_adjustment", ...input } satisfies EmployerLevyAdjustmentEvidence);
+  return JSON.stringify({
+    kind: "employer_levy_adjustment",
+    ...input,
+  } satisfies EmployerLevyAdjustmentEvidence);
 }
 
 export function isEmployerLevyAdjustmentEvidenceCandidate(value: string | null): boolean {
@@ -87,7 +98,9 @@ export function isEmployerLevyAdjustmentEvidenceCandidate(value: string | null):
   if (/"kind"\s*:\s*"employer_levy_adjustment"/.test(value)) return true;
   try {
     const parsed = JSON.parse(value) as { kind?: unknown };
-    return parsed !== null && typeof parsed === "object" && parsed.kind === "employer_levy_adjustment";
+    return (
+      parsed !== null && typeof parsed === "object" && parsed.kind === "employer_levy_adjustment"
+    );
   } catch {
     return false;
   }
@@ -102,10 +115,14 @@ export function isEmployerLevyAdjustmentEvidenceCandidate(value: string | null):
 export function canonicalEmployerLevyAdjustmentAmount(amount: string): string {
   const exact = canonicalDecimal(amount, 2);
   if (exact === null) {
-    throw new PayrollError("employer levy adjustment amount must be an exact currency amount of at most 2 decimal places");
+    throw new PayrollError(
+      "employer levy adjustment amount must be an exact currency amount of at most 2 decimal places",
+    );
   }
   if (cmp(exact, "0") <= 0) {
-    throw new PayrollError("employer levy adjustment amount must be the exact positive issued premium — corrections to issued entries use the governed reversal path, not a negative entry");
+    throw new PayrollError(
+      "employer levy adjustment amount must be the exact positive issued premium — corrections to issued entries use the governed reversal path, not a negative entry",
+    );
   }
   return exact;
 }

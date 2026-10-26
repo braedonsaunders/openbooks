@@ -1,19 +1,28 @@
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getTranslations } from 'next-intl/server'
-import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
-import { SearchInput } from '../../../../components/search-input'
-import { Pagination } from '../../../../components/pagination'
-import { SortTh } from '../../../../components/sortable-th'
-import { mergeHref } from '../../../../lib/list-params'
-import { StatementBalanceForm } from './StatementBalanceForm'
-const MATCH_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
-  matched: 'success',
-  unmatched: 'secondary',
-  excluded: 'outline',
-}
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getTranslations } from "next-intl/server";
+import {
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  UrlDrawer,
+} from "@openbooks/ui";
+import { SearchInput } from "../../../../components/search-input";
+import { Pagination } from "../../../../components/pagination";
+import { SortTh } from "../../../../components/sortable-th";
+import { mergeHref } from "../../../../lib/list-params";
+import { StatementBalanceForm } from "./StatementBalanceForm";
+const MATCH_VARIANT: Record<string, "success" | "secondary" | "outline"> = {
+  matched: "success",
+  unmatched: "secondary",
+  excluded: "outline",
+};
 
 // Known match_status enum values — unknown values render verbatim.
-const MATCH_STATUS_KEYS = ['matched', 'unmatched', 'excluded']
+const MATCH_STATUS_KEYS = ["matched", "unmatched", "excluded"];
 
 /**
  * Read-only flyout over the account view (?statement=<id>) showing an
@@ -35,38 +44,38 @@ export async function StatementDrawer({
   sort,
   dir,
 }: {
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
   statement: {
-    id: string
-    source: string
-    currency: string
-    statement_date: string
-    opening_balance: string | null
-    closing_balance: string | null
+    id: string;
+    source: string;
+    currency: string;
+    statement_date: string;
+    opening_balance: string | null;
+    closing_balance: string | null;
     /** The import timestamp, formatted in the business time zone with its time. */
-    importedAtLabel: string
-  }
-  canEditBalances: boolean
-  balancesBlockedReason: string | null
+    importedAtLabel: string;
+  };
+  canEditBalances: boolean;
+  balancesBlockedReason: string | null;
   lines: {
-    id: string
-    line_number: number
-    posted_on: string
-    amount: string
-    description: string | null
-    counterparty_ref: string | null
-    match_status: string
-  }[]
-  lineTotal: number
-  page: number
-  perPage: number
-  sort: string
-  dir: 'asc' | 'desc'
+    id: string;
+    line_number: number;
+    posted_on: string;
+    amount: string;
+    description: string | null;
+    counterparty_ref: string | null;
+    match_status: string;
+  }[];
+  lineTotal: number;
+  page: number;
+  perPage: number;
+  sort: string;
+  dir: "asc" | "desc";
 }) {
-  const { money } = await getMoneyFormatter(undefined, statement.currency)
-  const t = await getTranslations('banking')
-  const tCommon = await getTranslations('common')
+  const { money } = await getMoneyFormatter(undefined, statement.currency);
+  const t = await getTranslations("banking");
+  const tCommon = await getTranslations("common");
   const closeHref = mergeHref(basePath, currentParams, {
     statement: undefined,
     slQ: undefined,
@@ -74,16 +83,16 @@ export async function StatementDrawer({
     slDir: undefined,
     slPage: undefined,
     slPerPage: undefined,
-  })
+  });
   const sortProps = {
     basePath,
     currentParams,
     sort,
     dir,
-    sortParamKey: 'slSort',
-    dirParamKey: 'slDir',
-    pageParamKey: 'slPage',
-  }
+    sortParamKey: "slSort",
+    dirParamKey: "slDir",
+    pageParamKey: "slPage",
+  };
 
   return (
     <UrlDrawer
@@ -92,14 +101,14 @@ export async function StatementDrawer({
       size="xl"
       title={
         <span className="flex items-center gap-2.5">
-          {t('drawer.title', { date: statement.statement_date })}
+          {t("drawer.title", { date: statement.statement_date })}
           <Badge variant="outline">{statement.source}</Badge>
         </span>
       }
-      description={t('drawer.description', {
+      description={t("drawer.description", {
         date: statement.importedAtLabel,
-        opening: statement.opening_balance != null ? money(statement.opening_balance) : '—',
-        closing: statement.closing_balance != null ? money(statement.closing_balance) : '—',
+        opening: statement.opening_balance != null ? money(statement.opening_balance) : "—",
+        closing: statement.closing_balance != null ? money(statement.closing_balance) : "—",
       })}
     >
       <div className="space-y-3">
@@ -110,36 +119,48 @@ export async function StatementDrawer({
           canEdit={canEditBalances}
           blockedReason={balancesBlockedReason}
         />
-        <SearchInput placeholder={t('drawer.searchLines')} paramKey="slQ" pageParamKey="slPage" />
+        <SearchInput placeholder={t("drawer.searchLines")} paramKey="slQ" pageParamKey="slPage" />
         <Table>
           <TableHeader>
             <TableRow>
-              <SortTh {...sortProps} column="line" sort={sort}>#</SortTh>
-              <SortTh {...sortProps} column="date" sort={sort}>{tCommon('labels.date')}</SortTh>
-              <TableHead>{tCommon('labels.description')}</TableHead>
-              <TableHead>{t('labels.ref')}</TableHead>
-              <SortTh {...sortProps} column="amount" sort={sort} align="right">{tCommon('labels.amount')}</SortTh>
-              <TableHead>{t('drawer.matchColumn')}</TableHead>
+              <SortTh {...sortProps} column="line" sort={sort}>
+                #
+              </SortTh>
+              <SortTh {...sortProps} column="date" sort={sort}>
+                {tCommon("labels.date")}
+              </SortTh>
+              <TableHead>{tCommon("labels.description")}</TableHead>
+              <TableHead>{t("labels.ref")}</TableHead>
+              <SortTh {...sortProps} column="amount" sort={sort} align="right">
+                {tCommon("labels.amount")}
+              </SortTh>
+              <TableHead>{t("drawer.matchColumn")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {lines.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-slate-500 dark:text-slate-400">
-                  {t('drawer.noLines')}
+                  {t("drawer.noLines")}
                 </TableCell>
               </TableRow>
             ) : (
               lines.map((l) => (
                 <TableRow key={l.id}>
-                  <TableCell className="text-slate-500 tabular-nums dark:text-slate-400">{l.line_number}</TableCell>
+                  <TableCell className="text-slate-500 tabular-nums dark:text-slate-400">
+                    {l.line_number}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
-                  <TableCell className="max-w-[20rem] truncate">{l.description ?? '—'}</TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{l.counterparty_ref ?? ''}</TableCell>
+                  <TableCell className="max-w-[20rem] truncate">{l.description ?? "—"}</TableCell>
+                  <TableCell className="text-slate-500 dark:text-slate-400">
+                    {l.counterparty_ref ?? ""}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
                   <TableCell>
-                    <Badge variant={MATCH_VARIANT[l.match_status] ?? 'secondary'}>
-                      {MATCH_STATUS_KEYS.includes(l.match_status) ? t(`matchStatus.${l.match_status}`) : l.match_status}
+                    <Badge variant={MATCH_VARIANT[l.match_status] ?? "secondary"}>
+                      {MATCH_STATUS_KEYS.includes(l.match_status)
+                        ? t(`matchStatus.${l.match_status}`)
+                        : l.match_status}
                     </Badge>
                   </TableCell>
                 </TableRow>
@@ -157,5 +178,5 @@ export async function StatementDrawer({
         />
       </div>
     </UrlDrawer>
-  )
+  );
 }

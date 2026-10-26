@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 
@@ -42,20 +39,32 @@ async function removeOrg(orgId: string): Promise<void> {
   await withBypassContext(() => dropScratchOrg(orgId));
 }
 
-async function makeProject(orgId: string, name: string, customerId: string | null = null): Promise<string> {
+async function makeProject(
+  orgId: string,
+  name: string,
+  customerId: string | null = null,
+): Promise<string> {
   return withBypassContext(async () => {
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = (
+      await db.execute<{ id: string }>(sql`
       insert into projects (org_id, name, customer_id) values (${orgId}, ${name}, ${customerId}) returning id
-    `)).rows;
+    `)
+    ).rows;
     return rows[0]!.id;
   });
 }
 
-async function makeParty(orgId: string, kind: "employee" | "customer", name: string): Promise<string> {
+async function makeParty(
+  orgId: string,
+  kind: "employee" | "customer",
+  name: string,
+): Promise<string> {
   return withBypassContext(async () => {
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = (
+      await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name) values (${orgId}, ${kind}, ${name}) returning id
-    `)).rows;
+    `)
+    ).rows;
     return rows[0]!.id;
   });
 }
@@ -66,40 +75,53 @@ async function makeAssignment(
   values: { employeePartyId: string | null; jobTitle: string | null; weekStart?: string },
 ): Promise<string> {
   return withBypassContext(async () => {
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = (
+      await db.execute<{ id: string }>(sql`
       insert into res_assignments
         (org_id, project_id, employee_party_id, job_title, week_start, planned_hours)
       values
         (${orgId}, ${projectId}, ${values.employeePartyId}, ${values.jobTitle}, ${values.weekStart ?? "2026-09-20"}, 32.0000)
       returning id
-    `)).rows;
+    `)
+    ).rows;
     return rows[0]!.id;
   });
 }
 
-test("booking identity prevents duplicate person and case-insensitive role weeks", { skip }, async () => {
-  const org = await makeOrg();
-  try {
-    const projectId = await makeProject(org.orgId, "Northwind Advisory Engagement");
-    const employeeId = await makeParty(org.orgId, "employee", "Alex Chen");
+test(
+  "booking identity prevents duplicate person and case-insensitive role weeks",
+  { skip },
+  async () => {
+    const org = await makeOrg();
+    try {
+      const projectId = await makeProject(org.orgId, "Northwind Advisory Engagement");
+      const employeeId = await makeParty(org.orgId, "employee", "Alex Chen");
 
-    await makeAssignment(org.orgId, projectId, { employeePartyId: employeeId, jobTitle: null });
-    await rejectedBy(
-      () => makeAssignment(org.orgId, projectId, { employeePartyId: employeeId, jobTitle: null }),
-      "23505",
-      "res_assignments_booking_key",
-    );
+      await makeAssignment(org.orgId, projectId, { employeePartyId: employeeId, jobTitle: null });
+      await rejectedBy(
+        () => makeAssignment(org.orgId, projectId, { employeePartyId: employeeId, jobTitle: null }),
+        "23505",
+        "res_assignments_booking_key",
+      );
 
-    await makeAssignment(org.orgId, projectId, { employeePartyId: null, jobTitle: "Financial Analyst" });
-    await rejectedBy(
-      () => makeAssignment(org.orgId, projectId, { employeePartyId: null, jobTitle: "financial analyst" }),
-      "23505",
-      "res_assignments_booking_key",
-    );
-  } finally {
-    await removeOrg(org.orgId);
-  }
-});
+      await makeAssignment(org.orgId, projectId, {
+        employeePartyId: null,
+        jobTitle: "Financial Analyst",
+      });
+      await rejectedBy(
+        () =>
+          makeAssignment(org.orgId, projectId, {
+            employeePartyId: null,
+            jobTitle: "financial analyst",
+          }),
+        "23505",
+        "res_assignments_booking_key",
+      );
+    } finally {
+      await removeOrg(org.orgId);
+    }
+  },
+);
 
 test("booking rows require one subject and a Sunday week", { skip }, async () => {
   const org = await makeOrg();
@@ -108,10 +130,11 @@ test("booking rows require one subject and a Sunday week", { skip }, async () =>
     const employeeId = await makeParty(org.orgId, "employee", "Jordan Lee");
 
     await rejectedBy(
-      () => makeAssignment(org.orgId, projectId, {
-        employeePartyId: employeeId,
-        jobTitle: "Tax Consultant",
-      }),
+      () =>
+        makeAssignment(org.orgId, projectId, {
+          employeePartyId: employeeId,
+          jobTitle: "Tax Consultant",
+        }),
       "23514",
       "res_assignments_subject",
     );
@@ -121,11 +144,12 @@ test("booking rows require one subject and a Sunday week", { skip }, async () =>
       "res_assignments_subject",
     );
     await rejectedBy(
-      () => makeAssignment(org.orgId, projectId, {
-        employeePartyId: employeeId,
-        jobTitle: null,
-        weekStart: "2026-09-21",
-      }),
+      () =>
+        makeAssignment(org.orgId, projectId, {
+          employeePartyId: employeeId,
+          jobTitle: null,
+          weekStart: "2026-09-21",
+        }),
       "23514",
       "res_assignments_week_start_sunday",
     );
@@ -145,9 +169,13 @@ test("organization RLS hides another tenant's assignments", { skip }, async () =
       jobTitle: null,
     });
 
-    const visible = await withOrgContext(reader.orgId, async () => await db.execute<{ id: string }>(sql`
+    const visible = await withOrgContext(
+      reader.orgId,
+      async () =>
+        await db.execute<{ id: string }>(sql`
       select id from res_assignments where id = ${assignmentId}
-    `));
+    `),
+    );
     assert.deepEqual(visible.rows, [], "a tenant can only read its own assignment rows");
   } finally {
     await removeOrg(owner.orgId);
@@ -161,13 +189,21 @@ test("one time entry cannot support two retainer drawdowns", { skip }, async () 
     const customerId = await makeParty(org.orgId, "customer", "Bluebird Systems");
     const projectId = await makeProject(org.orgId, "Bluebird Consulting Retainer", customerId);
     const employeeId = await makeParty(org.orgId, "employee", "Casey Morgan");
-    const itemRows = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    const itemRows = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ id: string }>(sql`
       insert into items (org_id, kind, name)
       values (${org.orgId}, 'service', 'Advisory Services')
       returning id
-    `)).rows);
+    `)
+        ).rows,
+    );
     const itemId = itemRows[0]!.id;
-    const retainerRows = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    const retainerRows = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ id: string }>(sql`
       insert into res_retainers
         (org_id, project_id, customer_party_id, kind, total_amount, currency, total_hours,
          unit_rate, starts_on, ends_on, retainer_item_id)
@@ -175,34 +211,58 @@ test("one time entry cannot support two retainer drawdowns", { skip }, async () 
         (${org.orgId}, ${projectId}, ${customerId}, 'hours', 1500.0000, 'CAD', 10.0000,
          150.0000, '2026-09-01', '2026-12-31', ${itemId})
       returning id
-    `)).rows);
+    `)
+        ).rows,
+    );
     const retainerId = retainerRows[0]!.id;
-    const firstDrawdown = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    const firstDrawdown = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ id: string }>(sql`
       insert into res_retainer_drawdowns (org_id, retainer_id, week_start, hours, amount)
       values (${org.orgId}, ${retainerId}, '2026-09-20', 1.0000, 150.0000)
       returning id
-    `)).rows[0]!.id);
-    const secondDrawdown = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    `)
+        ).rows[0]!.id,
+    );
+    const secondDrawdown = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ id: string }>(sql`
       insert into res_retainer_drawdowns (org_id, retainer_id, week_start, hours, amount)
       values (${org.orgId}, ${retainerId}, '2026-09-27', 1.0000, 150.0000)
       returning id
-    `)).rows[0]!.id);
-    const timeRows = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    `)
+        ).rows[0]!.id,
+    );
+    const timeRows = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ id: string }>(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id)
       values (${org.orgId}, ${employeeId}, '2026-09-23', 1.0000, ${projectId})
       returning id
-    `)).rows);
+    `)
+        ).rows,
+    );
     const timeEntryId = timeRows[0]!.id;
 
-    await withBypassContext(async () => await db.execute(sql`
+    await withBypassContext(
+      async () =>
+        await db.execute(sql`
       insert into res_retainer_drawdown_entries (org_id, drawdown_id, time_entry_id)
       values (${org.orgId}, ${firstDrawdown}, ${timeEntryId})
-    `));
+    `),
+    );
     await rejectedBy(
-      () => withBypassContext(async () => await db.execute(sql`
+      () =>
+        withBypassContext(
+          async () =>
+            await db.execute(sql`
         insert into res_retainer_drawdown_entries (org_id, drawdown_id, time_entry_id)
         values (${org.orgId}, ${secondDrawdown}, ${timeEntryId})
-      `)),
+      `),
+        ),
       "23505",
       "res_retainer_drawdown_entries_time_entry",
     );

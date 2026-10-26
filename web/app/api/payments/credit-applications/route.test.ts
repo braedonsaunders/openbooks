@@ -47,17 +47,21 @@ const state: RouteState = {
 (globalThis as Record<symbol, unknown>)[stateKey] = state;
 
 function reset(overrides: Partial<RouteState> = {}): void {
-  Object.assign(state, {
-    permissions: ["ap.pay", "ar.pay", "ap.read", "ar.read"],
-    guardedWith: null,
-    scopeDenied: false,
-    partyRow: { subsidiaryId: null },
-    settlementRow: { kind: "customer_credit", partyId: PARTY_ID },
-    documentRow: { partyId: PARTY_ID },
-    stateCalls: [],
-    applied: [],
-    released: [],
-  }, overrides);
+  Object.assign(
+    state,
+    {
+      permissions: ["ap.pay", "ar.pay", "ap.read", "ar.read"],
+      guardedWith: null,
+      scopeDenied: false,
+      partyRow: { subsidiaryId: null },
+      settlementRow: { kind: "customer_credit", partyId: PARTY_ID },
+      documentRow: { partyId: PARTY_ID },
+      stateCalls: [],
+      applied: [],
+      released: [],
+    },
+    overrides,
+  );
 }
 
 const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
@@ -114,7 +118,10 @@ registerHooks({
         };
       `);
     }
-    if (specifier.includes("credit-settlement.ts") || specifier === "@openbooks/engine/payments/credit-settlement") {
+    if (
+      specifier.includes("credit-settlement.ts") ||
+      specifier === "@openbooks/engine/payments/credit-settlement"
+    ) {
       return module_(`
         const s = globalThis[Symbol.for("openbooks.credit-applications-route-test")];
         export async function applyStandaloneCredits(orgId, userId, input) {
@@ -211,7 +218,9 @@ test("an empty or malformed settlement never reaches the engine", async () => {
     { partyId: "not-a-uuid", side: "ar", appliedOn: "2026-07-15", credits: validCredits },
     { partyId: PARTY_ID, side: "gl", appliedOn: "2026-07-15", credits: validCredits },
     {
-      partyId: PARTY_ID, side: "ar", appliedOn: "2026-07-15",
+      partyId: PARTY_ID,
+      side: "ar",
+      appliedOn: "2026-07-15",
       credits: [{ ...validCredits[0]!, amount: "1,234" }],
     },
   ]) {
@@ -231,7 +240,12 @@ test("an apply without an Idempotency-Key is refused before any write", async ()
     new Request("http://localhost/api/payments/credit-applications", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ partyId: PARTY_ID, side: "ar", appliedOn: "2026-07-15", credits: validCredits }),
+      body: JSON.stringify({
+        partyId: PARTY_ID,
+        side: "ar",
+        appliedOn: "2026-07-15",
+        credits: validCredits,
+      }),
     }),
   );
   assert.equal(res.status, 400);

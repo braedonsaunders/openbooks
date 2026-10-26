@@ -10,11 +10,17 @@ import {
 
 test("catch-up reason is trimmed and must be a meaningful audit explanation", () => {
   assert.equal(normalizeCatchUpReason("  Cost backlog from June  "), "Cost backlog from June");
-  assert.throws(() => normalizeCatchUpReason(" abcd "), (error: unknown) =>
-    error instanceof LaborCostCatchUpRefusal && error.code === "reason_invalid" && error.status === 422 && error.remedy.length > 0,
+  assert.throws(
+    () => normalizeCatchUpReason(" abcd "),
+    (error: unknown) =>
+      error instanceof LaborCostCatchUpRefusal &&
+      error.code === "reason_invalid" &&
+      error.status === 422 &&
+      error.remedy.length > 0,
   );
-  assert.throws(() => normalizeCatchUpReason("x".repeat(501)), (error: unknown) =>
-    error instanceof LaborCostCatchUpRefusal && error.code === "reason_invalid",
+  assert.throws(
+    () => normalizeCatchUpReason("x".repeat(501)),
+    (error: unknown) => error instanceof LaborCostCatchUpRefusal && error.code === "reason_invalid",
   );
 });
 
@@ -29,7 +35,14 @@ test("totals keep currencies separate and add exact four-decimal costs", () => {
   const rows: UnpostedLaborRow[] = [
     { id: "a", hours: "1.5000", cost: "37.5000", currency: "CAD", month: "2026-07", state: "open" },
     { id: "b", hours: "2.0000", cost: "0.0001", currency: "CAD", month: "2026-07", state: "open" },
-    { id: "c", hours: "1.0000", cost: "20.0000", currency: "USD", month: "2026-06", state: "closed" },
+    {
+      id: "c",
+      hours: "1.0000",
+      cost: "20.0000",
+      currency: "USD",
+      month: "2026-06",
+      state: "closed",
+    },
   ];
   const { months, totals } = summarizeUnpostedRows(rows);
   assert.deepEqual(months, [

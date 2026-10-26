@@ -1,45 +1,77 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell, TableFooter as SharedTableFooter } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
-import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
-import { Copy, Download, Eraser, FileUp, LockKeyhole, MoreHorizontal, Rows3 } from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, ContextMenu, Input, Label, Popover, Select, Textarea, UrlDrawer, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
-import { useDirtyClose } from '@/lib/use-dirty-close'
-import { FlowManualButtons } from '../../../components/flow-manual-buttons'
-import { ApprovalActions } from '../../../components/approval-actions'
-import { SearchInput } from '../../../components/search-input'
-import { Pagination } from '../../../components/pagination'
-import { mergeHref } from '../../../lib/list-params'
-import { readApiErrorMessage, refusalMessageFromBody } from '../../../lib/api-error'
-import { confirmDialog } from '@/lib/confirm'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+  TableFooter as SharedTableFooter,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Copy, Download, Eraser, FileUp, LockKeyhole, MoreHorizontal, Rows3 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ContextMenu,
+  Input,
+  Label,
+  Popover,
+  Select,
+  Textarea,
+  UrlDrawer,
+  useContextMenu,
+  type ContextMenuEntry,
+} from "@openbooks/ui";
+import { useDirtyClose } from "@/lib/use-dirty-close";
+import { FlowManualButtons } from "../../../components/flow-manual-buttons";
+import { ApprovalActions } from "../../../components/approval-actions";
+import { SearchInput } from "../../../components/search-input";
+import { Pagination } from "../../../components/pagination";
+import { mergeHref } from "../../../lib/list-params";
+import { readApiErrorMessage, refusalMessageFromBody } from "../../../lib/api-error";
+import { confirmDialog } from "@/lib/confirm";
 
-import { budgetFromUnits, budgetToUnits, spreadBudgetTotal, upliftBudgetAmount } from '../../../lib/budget-math'
-import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../lib/budgets'
-import { ReadOnlyValue } from '../../../components/read-only-value'
+import {
+  budgetFromUnits,
+  budgetToUnits,
+  spreadBudgetTotal,
+  upliftBudgetAmount,
+} from "../../../lib/budget-math";
+import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from "../../../lib/budgets";
+import { ReadOnlyValue } from "../../../components/read-only-value";
 
-type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
+type SaveState = "saved" | "dirty" | "saving" | "error";
 /** Full cell identity: the legal entity rides along, never implied. */
-type Cell = { accountId: string; periodId: string; subsidiaryId: string; amount: string }
-type PendingCellSnapshot = { key: string; cell: Cell; version: number }
+type Cell = { accountId: string; periodId: string; subsidiaryId: string; amount: string };
+type PendingCellSnapshot = { key: string; cell: Cell; version: number };
 
 /** Identify refused cells that no newer edit has superseded. */
 export function restoreFailedBudgetCells(
   snapshots: readonly PendingCellSnapshot[],
   latestVersions: ReadonlyMap<string, number>,
 ): Cell[] {
-  return snapshots.filter(({ key, version }) => latestVersions.get(key) === version).map(({ cell }) => cell)
+  return snapshots
+    .filter(({ key, version }) => latestVersions.get(key) === version)
+    .map(({ cell }) => cell);
 }
 
-const CREDIT_NORMAL = new Set(['income', 'income_other'])
+const CREDIT_NORMAL = new Set(["income", "income_other"]);
 
 /** Full value identity: account, period, and the legal entity that owns the cell. */
 function cellKey(accountId: string, periodId: string, subsidiaryId: string) {
-  return `${accountId}|${periodId}|${subsidiaryId}`
+  return `${accountId}|${periodId}|${subsidiaryId}`;
 }
 
 export function BudgetDrawer({
@@ -56,443 +88,590 @@ export function BudgetDrawer({
   canApprove,
   canExport,
 }: {
-  initial: BudgetWorkspace
-  currentParams: Record<string, string | string[] | undefined>
-  dims: BudgetDimensions
-  closeHref: string
-  books: { id: string; code: string; name: string; is_primary: boolean }[]
-  years: number[]
-  sources: { id: string; name: string; fiscal_year: number }[]
-  newlyCreated: boolean
+  initial: BudgetWorkspace;
+  currentParams: Record<string, string | string[] | undefined>;
+  dims: BudgetDimensions;
+  closeHref: string;
+  books: { id: string; code: string; name: string; is_primary: boolean }[];
+  years: number[];
+  sources: { id: string; name: string; fiscal_year: number }[];
+  newlyCreated: boolean;
   /** Unsaved-create: no persisted row exists — every edit stays local until an explicit Save. */
-  createMode?: boolean
-  canManage: boolean
-  canApprove: boolean
-  canExport: boolean
+  createMode?: boolean;
+  canManage: boolean;
+  canApprove: boolean;
+  canExport: boolean;
 }) {
-  const { money } = useMoney()
-  const t = useTranslations('budgets')
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const unsaved = createMode === true
-  const pathname = usePathname()
-  const [scenario, setScenario] = useState(initial.scenario)
-  const revisionRef = useRef(initial.scenario.revision)
-  const [name, setName] = useState(initial.scenario.name)
-  const [description, setDescription] = useState(initial.scenario.description ?? '')
-  const [kind, setKind] = useState(initial.scenario.kind)
-  const [bookId, setBookId] = useState(initial.scenario.bookId)
-  const [fiscalYear, setFiscalYear] = useState(String(initial.scenario.fiscalYear))
-  const [sourceScenarioId, setSourceScenarioId] = useState('')
-  const viewMode = currentParams.budgetView === 'monthly' ? 'monthly' : 'annual'
-  const cellMenu = useContextMenu()
-  const [menuTarget, setMenuTarget] = useState<{ accountId: string; periodId?: string } | null>(null)
-  const [saveState, setSaveState] = useState<SaveState>('saved')
-  const [busy, setBusy] = useState(false)
-  const [uplift, setUplift] = useState('')
-  const chainRef = useRef<Promise<unknown>>(Promise.resolve())
-  const pendingRef = useRef(new Map<string, Cell>())
-  const pendingVersionsRef = useRef(new Map<string, number>())
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const metadataTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const metadataBaselineRef = useRef(JSON.stringify([name, description, kind, bookId, fiscalYear]))
-  const accountType = useMemo(() => new Map(initial.accounts.map((account) => [account.id, account.type])), [initial.accounts])
-  const creditAccount = useCallback((accountId: string) => CREDIT_NORMAL.has(accountType.get(accountId) ?? ''), [accountType])
-  const toDisplay = useCallback((accountId: string, raw: string) => creditAccount(accountId) ? budgetFromUnits(-budgetToUnits(raw)) : raw, [creditAccount])
-  const toStorage = useCallback((accountId: string, display: string) => creditAccount(accountId) ? budgetFromUnits(-budgetToUnits(display)) : display, [creditAccount])
+  const { money } = useMoney();
+  const t = useTranslations("budgets");
+  const tc = useTranslations("common");
+  const router = useRouter();
+  const unsaved = createMode === true;
+  const pathname = usePathname();
+  const [scenario, setScenario] = useState(initial.scenario);
+  const revisionRef = useRef(initial.scenario.revision);
+  const [name, setName] = useState(initial.scenario.name);
+  const [description, setDescription] = useState(initial.scenario.description ?? "");
+  const [kind, setKind] = useState(initial.scenario.kind);
+  const [bookId, setBookId] = useState(initial.scenario.bookId);
+  const [fiscalYear, setFiscalYear] = useState(String(initial.scenario.fiscalYear));
+  const [sourceScenarioId, setSourceScenarioId] = useState("");
+  const viewMode = currentParams.budgetView === "monthly" ? "monthly" : "annual";
+  const cellMenu = useContextMenu();
+  const [menuTarget, setMenuTarget] = useState<{ accountId: string; periodId?: string } | null>(
+    null,
+  );
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [busy, setBusy] = useState(false);
+  const [uplift, setUplift] = useState("");
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const pendingRef = useRef(new Map<string, Cell>());
+  const pendingVersionsRef = useRef(new Map<string, number>());
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metadataTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metadataBaselineRef = useRef(JSON.stringify([name, description, kind, bookId, fiscalYear]));
+  const accountType = useMemo(
+    () => new Map(initial.accounts.map((account) => [account.id, account.type])),
+    [initial.accounts],
+  );
+  const creditAccount = useCallback(
+    (accountId: string) => CREDIT_NORMAL.has(accountType.get(accountId) ?? ""),
+    [accountType],
+  );
+  const toDisplay = useCallback(
+    (accountId: string, raw: string) =>
+      creditAccount(accountId) ? budgetFromUnits(-budgetToUnits(raw)) : raw,
+    [creditAccount],
+  );
+  const toStorage = useCallback(
+    (accountId: string, display: string) =>
+      creditAccount(accountId) ? budgetFromUnits(-budgetToUnits(display)) : display,
+    [creditAccount],
+  );
   // The worksheet is one entity slice (requested subsidiary, else the tenant
   // root): the key carries the full value identity so two subsidiaries'
   // lines on the same account/period can never collapse into one input.
-  const sliceSubsidiaryId = dims.subsidiaryId ?? initial.effectiveSubsidiaryId ?? ''
-  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(
-    initial.lines.map((line) => [cellKey(line.accountId, line.periodId, line.subsidiaryId ?? ''), toDisplay(line.accountId, line.amount)]),
-  ))
-  const editable = canManage && scenario.status === 'draft'
+  const sliceSubsidiaryId = dims.subsidiaryId ?? initial.effectiveSubsidiaryId ?? "";
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      initial.lines.map((line) => [
+        cellKey(line.accountId, line.periodId, line.subsidiaryId ?? ""),
+        toDisplay(line.accountId, line.amount),
+      ]),
+    ),
+  );
+  const editable = canManage && scenario.status === "draft";
 
-  const execute = useCallback(<T,>(url: string, method: string, payload: Record<string, unknown>): Promise<T> => {
-    const task = chainRef.current.then(async () => {
-      setSaveState('saving')
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, expectedRevision: revisionRef.current }),
-      })
-      if (!response.ok) {
-        const message = await readApiErrorMessage(response, 'request_failed')
-        if (response.status === 409 && message.includes('revision_conflict')) {
-          toast.error(t('feedback.revisionConflict'))
+  const execute = useCallback(
+    <T,>(url: string, method: string, payload: Record<string, unknown>): Promise<T> => {
+      const task = chainRef.current.then(async () => {
+        setSaveState("saving");
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, expectedRevision: revisionRef.current }),
+        });
+        if (!response.ok) {
+          const message = await readApiErrorMessage(response, "request_failed");
+          if (response.status === 409 && message.includes("revision_conflict")) {
+            toast.error(t("feedback.revisionConflict"));
+          }
+          throw new Error(message);
         }
-        throw new Error(message)
-      }
-      const data = (await response.json()) as T & { revision?: number }
-      if (typeof data.revision === 'number') {
-        const revision = data.revision
-        revisionRef.current = revision
-        setScenario((current) => ({ ...current, revision }))
-      }
-      setSaveState('saved')
-      return data as T
-    })
-    chainRef.current = task.catch(() => undefined)
-    return task
-  }, [t])
+        const data = (await response.json()) as T & { revision?: number };
+        if (typeof data.revision === "number") {
+          const revision = data.revision;
+          revisionRef.current = revision;
+          setScenario((current) => ({ ...current, revision }));
+        }
+        setSaveState("saved");
+        return data as T;
+      });
+      chainRef.current = task.catch(() => undefined);
+      return task;
+    },
+    [t],
+  );
 
   const flushCells = useCallback(async (): Promise<boolean> => {
-    if (unsaved) return true
-    if (saveTimer.current) clearTimeout(saveTimer.current)
+    if (unsaved) return true;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
     const pending: PendingCellSnapshot[] = [...pendingRef.current.entries()].map(([key, cell]) => ({
       key,
       cell,
       version: pendingVersionsRef.current.get(key) ?? 0,
-    }))
-    pendingRef.current.clear()
-    if (pending.length === 0) return true
+    }));
+    pendingRef.current.clear();
+    if (pending.length === 0) return true;
     try {
-      await execute(`/api/budgets/${scenario.id}/lines`, 'PATCH', {
+      await execute(`/api/budgets/${scenario.id}/lines`, "PATCH", {
         // The cell's resolved entity wins over the slice param: both name the
         // same subsidiary, but an explicit id must never degrade to an
         // omitted one (which the save path would re-resolve).
-        cells: pending.map(({ cell }) => ({ ...dims, extraDims: initial.effectiveExtraDims, ...cell, amount: toStorage(cell.accountId, cell.amount) })),
-      })
-      return true
+        cells: pending.map(({ cell }) => ({
+          ...dims,
+          extraDims: initial.effectiveExtraDims,
+          ...cell,
+          amount: toStorage(cell.accountId, cell.amount),
+        })),
+      });
+      return true;
     } catch {
-      const rejected = restoreFailedBudgetCells(pending, pendingVersionsRef.current)
-      const rejectedKeys = new Set(rejected.map((cell) => cellKey(cell.accountId, cell.periodId, cell.subsidiaryId)))
-      rejectedKeys.forEach((key) => pendingRef.current.delete(key))
+      const rejected = restoreFailedBudgetCells(pending, pendingVersionsRef.current);
+      const rejectedKeys = new Set(
+        rejected.map((cell) => cellKey(cell.accountId, cell.periodId, cell.subsidiaryId)),
+      );
+      rejectedKeys.forEach((key) => pendingRef.current.delete(key));
       setValues((current) => {
-        const next = { ...current }
+        const next = { ...current };
         for (const { key, cell } of pending) {
-          if (!rejectedKeys.has(key)) continue
-          const saved = initial.lines.find((line) => line.accountId === cell.accountId
-            && line.periodId === cell.periodId
-            && (line.subsidiaryId ?? '') === cell.subsidiaryId)
-          if (saved) next[key] = toDisplay(cell.accountId, saved.amount)
-          else delete next[key]
+          if (!rejectedKeys.has(key)) continue;
+          const saved = initial.lines.find(
+            (line) =>
+              line.accountId === cell.accountId &&
+              line.periodId === cell.periodId &&
+              (line.subsidiaryId ?? "") === cell.subsidiaryId,
+          );
+          if (saved) next[key] = toDisplay(cell.accountId, saved.amount);
+          else delete next[key];
         }
-        return next
-      })
-      setSaveState(pendingRef.current.size > 0 ? 'dirty' : 'error')
-      toast.error(t('workspace.saveFailed'))
-      return false
+        return next;
+      });
+      setSaveState(pendingRef.current.size > 0 ? "dirty" : "error");
+      toast.error(t("workspace.saveFailed"));
+      return false;
     }
-  }, [dims, execute, initial.effectiveExtraDims, initial.lines, scenario.id, t, toDisplay, toStorage, unsaved])
+  }, [
+    dims,
+    execute,
+    initial.effectiveExtraDims,
+    initial.lines,
+    scenario.id,
+    t,
+    toDisplay,
+    toStorage,
+    unsaved,
+  ]);
 
   // Annual-total drafts keyed by account: while an annual figure is being
   // typed, the input is controlled and the totals below read the draft, so
   // the total updates live instead of waiting for blur. Cleared on commit.
-  const [annualDrafts, setAnnualDrafts] = useState<Record<string, string>>({})
-  const initialValues = Object.fromEntries(initial.lines.map((line) => [
-    cellKey(line.accountId, line.periodId, line.subsidiaryId ?? ''),
-    toDisplay(line.accountId, line.amount),
-  ]))
+  const [annualDrafts, setAnnualDrafts] = useState<Record<string, string>>({});
+  const initialValues = Object.fromEntries(
+    initial.lines.map((line) => [
+      cellKey(line.accountId, line.periodId, line.subsidiaryId ?? ""),
+      toDisplay(line.accountId, line.amount),
+    ]),
+  );
   const createCloseGuard = useDirtyClose({
-    dirty: unsaved && (
-      name !== initial.scenario.name || description !== (initial.scenario.description ?? '') ||
-      kind !== initial.scenario.kind || bookId !== initial.scenario.bookId ||
-      fiscalYear !== String(initial.scenario.fiscalYear) || sourceScenarioId !== '' ||
-      Object.keys(annualDrafts).length > 0 || JSON.stringify(values) !== JSON.stringify(initialValues)
-    ),
+    dirty:
+      unsaved &&
+      (name !== initial.scenario.name ||
+        description !== (initial.scenario.description ?? "") ||
+        kind !== initial.scenario.kind ||
+        bookId !== initial.scenario.bookId ||
+        fiscalYear !== String(initial.scenario.fiscalYear) ||
+        sourceScenarioId !== "" ||
+        Object.keys(annualDrafts).length > 0 ||
+        JSON.stringify(values) !== JSON.stringify(initialValues)),
     busy,
     onClose: () => router.push(closeHref),
-    message: tc('feedback.unsavedChanges'),
-    confirmLabel: tc('confirm.discardChanges'),
-  })
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
+  });
 
-  function queueCell(cell: Omit<Cell, 'subsidiaryId'>) {
-    if (!editable) return
-    const full: Cell = { ...cell, subsidiaryId: sliceSubsidiaryId }
-    const key = cellKey(full.accountId, full.periodId, full.subsidiaryId)
-    setValues((current) => ({ ...current, [key]: full.amount }))
+  function queueCell(cell: Omit<Cell, "subsidiaryId">) {
+    if (!editable) return;
+    const full: Cell = { ...cell, subsidiaryId: sliceSubsidiaryId };
+    const key = cellKey(full.accountId, full.periodId, full.subsidiaryId);
+    setValues((current) => ({ ...current, [key]: full.amount }));
     // A month edit supersedes a half-typed annual figure for the same
     // account: the draft no longer describes the months, so drop it and let
     // the total follow the months.
     setAnnualDrafts((current) => {
-      if (!(full.accountId in current)) return current
-      const next = { ...current }
-      delete next[full.accountId]
-      return next
-    })
+      if (!(full.accountId in current)) return current;
+      const next = { ...current };
+      delete next[full.accountId];
+      return next;
+    });
     if (unsaved) {
       // No persisted row exists yet: the edit stays in local state until the
       // explicit Save commits the scenario and its lines together.
-      setSaveState('dirty')
-      return
+      setSaveState("dirty");
+      return;
     }
-    pendingRef.current.set(key, full)
-    pendingVersionsRef.current.set(key, (pendingVersionsRef.current.get(key) ?? 0) + 1)
-    setSaveState('dirty')
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => void flushCells(), 700)
+    pendingRef.current.set(key, full);
+    pendingVersionsRef.current.set(key, (pendingVersionsRef.current.get(key) ?? 0) + 1);
+    setSaveState("dirty");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void flushCells(), 700);
   }
 
   const saveMetadataNow = useCallback(async (): Promise<boolean> => {
-    if (unsaved || !editable) return true
-    if (metadataTimer.current) clearTimeout(metadataTimer.current)
-    const snapshot = JSON.stringify([name, description, kind, bookId, fiscalYear])
-    if (snapshot === metadataBaselineRef.current) return true
+    if (unsaved || !editable) return true;
+    if (metadataTimer.current) clearTimeout(metadataTimer.current);
+    const snapshot = JSON.stringify([name, description, kind, bookId, fiscalYear]);
+    if (snapshot === metadataBaselineRef.current) return true;
     try {
-      const result = await execute<{ scopeChanged?: boolean }>(`/api/budgets/${scenario.id}`, 'PATCH', {
-        name,
-        description,
-        kind,
-        bookId,
-        fiscalYear: Number(fiscalYear),
-      })
-      metadataBaselineRef.current = snapshot
-      if (result.scopeChanged) router.refresh()
-      return true
+      const result = await execute<{ scopeChanged?: boolean }>(
+        `/api/budgets/${scenario.id}`,
+        "PATCH",
+        {
+          name,
+          description,
+          kind,
+          bookId,
+          fiscalYear: Number(fiscalYear),
+        },
+      );
+      metadataBaselineRef.current = snapshot;
+      if (result.scopeChanged) router.refresh();
+      return true;
     } catch {
-      setSaveState('error')
-      toast.error(t('workspace.saveFailed'))
-      return false
+      setSaveState("error");
+      toast.error(t("workspace.saveFailed"));
+      return false;
     }
-  }, [bookId, description, editable, execute, fiscalYear, kind, name, router, scenario.id, t, unsaved])
+  }, [
+    bookId,
+    description,
+    editable,
+    execute,
+    fiscalYear,
+    kind,
+    name,
+    router,
+    scenario.id,
+    t,
+    unsaved,
+  ]);
 
   // Keep the unmount handler pointed at the latest callbacks without making
   // the handler itself rerun (and flush) whenever an editor value changes.
-  const flushCellsRef = useRef(flushCells)
-  const saveMetadataNowRef = useRef(saveMetadataNow)
+  const flushCellsRef = useRef(flushCells);
+  const saveMetadataNowRef = useRef(saveMetadataNow);
   useEffect(() => {
-    flushCellsRef.current = flushCells
-    saveMetadataNowRef.current = saveMetadataNow
-  }, [flushCells, saveMetadataNow])
+    flushCellsRef.current = flushCells;
+    saveMetadataNowRef.current = saveMetadataNow;
+  }, [flushCells, saveMetadataNow]);
 
   useEffect(() => {
-    if (!editable) return
-    if (JSON.stringify([name, description, kind, bookId, fiscalYear]) === metadataBaselineRef.current) return
-    setSaveState('dirty')
-    metadataTimer.current = setTimeout(() => void saveMetadataNow(), 700)
-    return () => { if (metadataTimer.current) clearTimeout(metadataTimer.current) }
-  }, [bookId, description, editable, fiscalYear, kind, name, saveMetadataNow])
+    if (!editable) return;
+    if (
+      JSON.stringify([name, description, kind, bookId, fiscalYear]) === metadataBaselineRef.current
+    )
+      return;
+    setSaveState("dirty");
+    metadataTimer.current = setTimeout(() => void saveMetadataNow(), 700);
+    return () => {
+      if (metadataTimer.current) clearTimeout(metadataTimer.current);
+    };
+  }, [bookId, description, editable, fiscalYear, kind, name, saveMetadataNow]);
 
-  useEffect(() => () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    if (metadataTimer.current) clearTimeout(metadataTimer.current)
-    void flushCellsRef.current()
-    void saveMetadataNowRef.current()
-  }, [])
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (metadataTimer.current) clearTimeout(metadataTimer.current);
+      void flushCellsRef.current();
+      void saveMetadataNowRef.current();
+    },
+    [],
+  );
 
   // A half-typed annual figure counts toward the totals while it parses, so
   // the slice total follows keystrokes instead of waiting for blur; an
   // unparseable intermediate falls back to the committed months.
   const rowTotal = useCallback(
     (accountId: string) => {
-      const draft = annualDrafts[accountId]
+      const draft = annualDrafts[accountId];
       if (draft !== undefined) {
-      try { return budgetToUnits(draft) } catch { /* fall through to committed months */ }
-    }
+        try {
+          return budgetToUnits(draft);
+        } catch {
+          /* fall through to committed months */
+        }
+      }
       return initial.periods.reduce((sum, period) => {
         try {
           return (
-            sum + budgetToUnits(values[cellKey(accountId, period.id, sliceSubsidiaryId)] ?? '0')
-          )
+            sum + budgetToUnits(values[cellKey(accountId, period.id, sliceSubsidiaryId)] ?? "0")
+          );
         } catch {
-          return sum
+          return sum;
         }
-      }, 0n)
+      }, 0n);
     },
     [annualDrafts, initial.periods, sliceSubsidiaryId, values],
-  )
+  );
 
-  const pageTotalUnits = useMemo(() => initial.accounts.reduce((sum, account) => {
-    try { return sum + rowTotal(account.id) } catch { return sum }
-  }, 0n), [initial.accounts, rowTotal])
-  const initialPageTotalUnits = useMemo(() => initial.lines.reduce((sum, line) => {
-    try { return sum + budgetToUnits(toDisplay(line.accountId, line.amount)) } catch { return sum }
-  }, 0n), [initial.lines, toDisplay])
+  const pageTotalUnits = useMemo(
+    () =>
+      initial.accounts.reduce((sum, account) => {
+        try {
+          return sum + rowTotal(account.id);
+        } catch {
+          return sum;
+        }
+      }, 0n),
+    [initial.accounts, rowTotal],
+  );
+  const initialPageTotalUnits = useMemo(
+    () =>
+      initial.lines.reduce((sum, line) => {
+        try {
+          return sum + budgetToUnits(toDisplay(line.accountId, line.amount));
+        } catch {
+          return sum;
+        }
+      }, 0n),
+    [initial.lines, toDisplay],
+  );
   const sliceTotalUnits = useMemo(
     () => budgetToUnits(initial.sliceTotal) + pageTotalUnits - initialPageTotalUnits,
     [initial.sliceTotal, initialPageTotalUnits, pageTotalUnits],
-  )
+  );
 
   function replaceUrl(key: string, value: string) {
-    const params = new URLSearchParams()
+    const params = new URLSearchParams();
     Object.entries(currentParams).forEach(([param, raw]) => {
-      if (typeof raw === 'string') params.set(param, raw)
-    })
-    if (value) params.set(key, value)
-    else params.delete(key)
-    params.delete('budgetPage')
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+      if (typeof raw === "string") params.set(param, raw);
+    });
+    if (value) params.set(key, value);
+    else params.delete(key);
+    params.delete("budgetPage");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   function spreadRow(accountId: string, total: string) {
-    if (!editable) return
+    if (!editable) return;
     try {
-      const amounts = spreadBudgetTotal(total || '0', initial.periods.length)
-      initial.periods.forEach((period, index) => queueCell({ accountId, periodId: period.id, amount: amounts[index]! }))
+      const amounts = spreadBudgetTotal(total || "0", initial.periods.length);
+      initial.periods.forEach((period, index) =>
+        queueCell({ accountId, periodId: period.id, amount: amounts[index]! }),
+      );
     } catch {
-      toast.error(t('workspace.saveFailed'))
+      toast.error(t("workspace.saveFailed"));
     }
   }
 
   function commitAnnual(accountId: string, raw: string) {
     setAnnualDrafts((current) => {
-      if (!(accountId in current)) return current
-      const next = { ...current }
-      delete next[accountId]
-      return next
-    })
-    spreadRow(accountId, raw)
+      if (!(accountId in current)) return current;
+      const next = { ...current };
+      delete next[accountId];
+      return next;
+    });
+    spreadRow(accountId, raw);
   }
 
   function copyMonth(accountId: string, periodId: string, forwardOnly: boolean) {
-    if (!editable) return
-    const sourceIndex = initial.periods.findIndex((period) => period.id === periodId)
-    if (sourceIndex < 0) return
-    const amount = values[cellKey(accountId, periodId, sliceSubsidiaryId)] ?? '0'
+    if (!editable) return;
+    const sourceIndex = initial.periods.findIndex((period) => period.id === periodId);
+    if (sourceIndex < 0) return;
+    const amount = values[cellKey(accountId, periodId, sliceSubsidiaryId)] ?? "0";
     initial.periods.forEach((period, index) => {
-      if (!forwardOnly || index >= sourceIndex) queueCell({ accountId, periodId: period.id, amount })
-    })
+      if (!forwardOnly || index >= sourceIndex)
+        queueCell({ accountId, periodId: period.id, amount });
+    });
   }
 
   async function clearRow(accountId: string) {
-    if (!editable) return
-    if (!(await confirmDialog(t('confirm.clearYear')))) return
-    initial.periods.forEach((period) => queueCell({ accountId, periodId: period.id, amount: '0.0000' }))
+    if (!editable) return;
+    if (!(await confirmDialog(t("confirm.clearYear")))) return;
+    initial.periods.forEach((period) =>
+      queueCell({ accountId, periodId: period.id, amount: "0.0000" }),
+    );
   }
 
   function openCellMenu(event: React.MouseEvent, accountId: string, periodId?: string) {
-    if (!editable) return
-    setMenuTarget({ accountId, periodId })
-    cellMenu.onContextMenu(event)
+    if (!editable) return;
+    setMenuTarget({ accountId, periodId });
+    cellMenu.onContextMenu(event);
   }
 
   function openRowMenu(element: HTMLElement, accountId: string) {
-    if (!editable) return
-    setMenuTarget({ accountId })
-    cellMenu.openBelow(element)
+    if (!editable) return;
+    setMenuTarget({ accountId });
+    cellMenu.openBelow(element);
   }
 
-  const menuItems: ContextMenuEntry[] = editable && menuTarget ? [
-    ...(menuTarget.periodId ? [
-      { key: 'copy-year', label: t('workspace.copyMonthAcrossYear'), icon: Copy, onSelect: () => copyMonth(menuTarget.accountId, menuTarget.periodId!, false) },
-      { key: 'copy-forward', label: t('workspace.copyMonthForward'), icon: Rows3, onSelect: () => copyMonth(menuTarget.accountId, menuTarget.periodId!, true) },
-      { key: 'month-separator', separator: true as const },
-    ] : []),
-    { key: 'split', label: t('workspace.splitAnnualEvenly'), icon: Rows3, onSelect: () => spreadRow(menuTarget.accountId, budgetFromUnits(rowTotal(menuTarget.accountId))) },
-    { key: 'clear', label: t('workspace.clearYear'), icon: Eraser, danger: true, onSelect: () => { void clearRow(menuTarget.accountId) } },
-  ] : []
+  const menuItems: ContextMenuEntry[] =
+    editable && menuTarget
+      ? [
+          ...(menuTarget.periodId
+            ? [
+                {
+                  key: "copy-year",
+                  label: t("workspace.copyMonthAcrossYear"),
+                  icon: Copy,
+                  onSelect: () => copyMonth(menuTarget.accountId, menuTarget.periodId!, false),
+                },
+                {
+                  key: "copy-forward",
+                  label: t("workspace.copyMonthForward"),
+                  icon: Rows3,
+                  onSelect: () => copyMonth(menuTarget.accountId, menuTarget.periodId!, true),
+                },
+                { key: "month-separator", separator: true as const },
+              ]
+            : []),
+          {
+            key: "split",
+            label: t("workspace.splitAnnualEvenly"),
+            icon: Rows3,
+            onSelect: () =>
+              spreadRow(menuTarget.accountId, budgetFromUnits(rowTotal(menuTarget.accountId))),
+          },
+          {
+            key: "clear",
+            label: t("workspace.clearYear"),
+            icon: Eraser,
+            danger: true,
+            onSelect: () => {
+              void clearRow(menuTarget.accountId);
+            },
+          },
+        ]
+      : [];
 
   function upliftPage() {
     try {
-      initial.accounts.forEach((account) => initial.periods.forEach((period) => {
-        const key = cellKey(account.id, period.id, sliceSubsidiaryId)
-        const current = values[key] ?? '0'
-        if (budgetToUnits(current) !== 0n) queueCell({ accountId: account.id, periodId: period.id, amount: upliftBudgetAmount(current, uplift) })
-      }))
+      initial.accounts.forEach((account) =>
+        initial.periods.forEach((period) => {
+          const key = cellKey(account.id, period.id, sliceSubsidiaryId);
+          const current = values[key] ?? "0";
+          if (budgetToUnits(current) !== 0n)
+            queueCell({
+              accountId: account.id,
+              periodId: period.id,
+              amount: upliftBudgetAmount(current, uplift),
+            });
+        }),
+      );
     } catch {
-      toast.error(t('workspace.saveFailed'))
+      toast.error(t("workspace.saveFailed"));
     }
   }
 
   async function clearPage() {
-    if (!(await confirmDialog(t('confirm.clearPage')))) return
-    initial.accounts.forEach((account) => initial.periods.forEach((period) => queueCell({ accountId: account.id, periodId: period.id, amount: '0.0000' })))
+    if (!(await confirmDialog(t("confirm.clearPage")))) return;
+    initial.accounts.forEach((account) =>
+      initial.periods.forEach((period) =>
+        queueCell({ accountId: account.id, periodId: period.id, amount: "0.0000" }),
+      ),
+    );
   }
 
   // A refusal the operator can trigger (empty submit) pins on the record
   // until the next action — a 4-second toast alone reads as nothing
   // happening once it dismisses.
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [createError, setCreateError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   function actionRefusal(message: string): string | null {
-    if (message === 'budget_requires_lines') return t('feedback.budgetRequiresLines')
-    if (message === 'self_approval_forbidden') return t('feedback.selfApprovalForbidden')
-    if (message === 'revision_conflict') return t('feedback.revisionConflict')
-    if (message === 'target_year_has_no_periods') return t('feedback.targetYearHasNoPeriods')
-    if (message.startsWith('unmapped_periods:')) {
-      const year = /no (\d+) period matches/.exec(message)?.[1] ?? ''
-      const periods = /period\(s\) (.+)$/.exec(message)?.[1] ?? ''
-      return t('feedback.unmappedPeriods', { year, periods })
+    if (message === "budget_requires_lines") return t("feedback.budgetRequiresLines");
+    if (message === "self_approval_forbidden") return t("feedback.selfApprovalForbidden");
+    if (message === "revision_conflict") return t("feedback.revisionConflict");
+    if (message === "target_year_has_no_periods") return t("feedback.targetYearHasNoPeriods");
+    if (message.startsWith("unmapped_periods:")) {
+      const year = /no (\d+) period matches/.exec(message)?.[1] ?? "";
+      const periods = /period\(s\) (.+)$/.exec(message)?.[1] ?? "";
+      return t("feedback.unmappedPeriods", { year, periods });
     }
-    if (message.startsWith('non_pnl_account:')) {
-      const accounts = /only: (.+)$/.exec(message)?.[1] ?? ''
-      return t('feedback.nonPnlAccounts', { accounts })
+    if (message.startsWith("non_pnl_account:")) {
+      const accounts = /only: (.+)$/.exec(message)?.[1] ?? "";
+      return t("feedback.nonPnlAccounts", { accounts });
     }
-    if (message.startsWith('out_of_scope_subsidiaries:')) {
-      const names = message.slice('out_of_scope_subsidiaries:'.length).trim()
-      return t('feedback.outOfScopeSubsidiaries', { names })
+    if (message.startsWith("out_of_scope_subsidiaries:")) {
+      const names = message.slice("out_of_scope_subsidiaries:".length).trim();
+      return t("feedback.outOfScopeSubsidiaries", { names });
     }
-    if (message === 'only_drafts_can_be_submitted') return t('feedback.onlyDraftsCanBeSubmitted')
-    if (message === 'only_pending_budgets_can_be_decided') return t('feedback.onlyPendingCanBeDecided')
-    if (message === 'budget_is_locked') return t('feedback.budgetIsLocked')
-    if (message === 'invalid_subsidiary') return t('feedback.invalidSubsidiary')
-    if (message === 'invalid_source_scenario') return t('feedback.invalidSourceScenario')
-    if (message === 'invalid_status_transition') return t('feedback.invalidStatusTransition')
-    if (message === 'approved_budget_requires_approver') return t('feedback.approvedBudgetRequiresApprover')
-    if (message === 'not_found') return t('feedback.budgetNotFound')
-    return null
+    if (message === "only_drafts_can_be_submitted") return t("feedback.onlyDraftsCanBeSubmitted");
+    if (message === "only_pending_budgets_can_be_decided")
+      return t("feedback.onlyPendingCanBeDecided");
+    if (message === "budget_is_locked") return t("feedback.budgetIsLocked");
+    if (message === "invalid_subsidiary") return t("feedback.invalidSubsidiary");
+    if (message === "invalid_source_scenario") return t("feedback.invalidSourceScenario");
+    if (message === "invalid_status_transition") return t("feedback.invalidStatusTransition");
+    if (message === "approved_budget_requires_approver")
+      return t("feedback.approvedBudgetRequiresApprover");
+    if (message === "not_found") return t("feedback.budgetNotFound");
+    return null;
   }
-  async function action(
-    actionName: string,
-    extra: Record<string, unknown> = {},
-  ) {
-    if (unsaved) return
-    if (actionName === 'archive' && !(await confirmDialog(t('confirm.archive')))) return
-    if (actionName === 'copy_prior_actuals' && !(await confirmDialog(t('confirm.copyPriorActuals')))) return
-    if (actionName === 'apply_source' && !(await confirmDialog(t('confirm.applySource')))) return
-    if (actionName === 'submit' && !(await confirmDialog(t('confirm.submit')))) return
-    setMenuTarget(null)
-    cellMenu.close()
-    setBusy(true)
-    setActionError(null)
+  async function action(actionName: string, extra: Record<string, unknown> = {}) {
+    if (unsaved) return;
+    if (actionName === "archive" && !(await confirmDialog(t("confirm.archive")))) return;
+    if (
+      actionName === "copy_prior_actuals" &&
+      !(await confirmDialog(t("confirm.copyPriorActuals")))
+    )
+      return;
+    if (actionName === "apply_source" && !(await confirmDialog(t("confirm.applySource")))) return;
+    if (actionName === "submit" && !(await confirmDialog(t("confirm.submit")))) return;
+    setMenuTarget(null);
+    cellMenu.close();
+    setBusy(true);
+    setActionError(null);
     try {
-      if (!(await flushCells()) || !(await saveMetadataNow())) return
-      const data = await execute<{ id?: string; status?: BudgetStatus; revision: number }>(`/api/budgets/${scenario.id}/actions`, 'POST', {
-        action: actionName,
-        ...dims,
-        ...extra,
-      })
+      if (!(await flushCells()) || !(await saveMetadataNow())) return;
+      const data = await execute<{ id?: string; status?: BudgetStatus; revision: number }>(
+        `/api/budgets/${scenario.id}/actions`,
+        "POST",
+        {
+          action: actionName,
+          ...dims,
+          ...extra,
+        },
+      );
       if (data.id) {
-        toast.success(t('feedback.copied'))
-        const params = new URLSearchParams()
+        toast.success(t("feedback.copied"));
+        const params = new URLSearchParams();
         Object.entries(currentParams).forEach(([key, value]) => {
-          if (typeof value === 'string' && !key.startsWith('budget')) params.set(key, value)
-        })
-        params.set('budget', data.id)
-        router.push(`/budgets?${params.toString()}`)
-        return
+          if (typeof value === "string" && !key.startsWith("budget")) params.set(key, value);
+        });
+        params.set("budget", data.id);
+        router.push(`/budgets?${params.toString()}`);
+        return;
       }
-      if (data.status) setScenario((current) => ({ ...current, status: data.status! }))
+      if (data.status) setScenario((current) => ({ ...current, status: data.status! }));
       const feedback: Record<string, string> = {
-        archive: 'archived',
-        copy_prior_actuals: 'actualsCopied',
-        apply_source: 'sourceApplied',
-        submit: 'submitted',
-        withdraw: 'withdrawn',
-      }
-      toast.success(t(`feedback.${feedback[actionName]}`))
-      router.refresh()
+        archive: "archived",
+        copy_prior_actuals: "actualsCopied",
+        apply_source: "sourceApplied",
+        submit: "submitted",
+        withdraw: "withdrawn",
+      };
+      toast.success(t(`feedback.${feedback[actionName]}`));
+      router.refresh();
     } catch (error) {
-      const refusal = error instanceof Error ? actionRefusal(error.message) : null
+      const refusal = error instanceof Error ? actionRefusal(error.message) : null;
       if (refusal) {
-        setActionError(refusal)
+        setActionError(refusal);
       } else {
-        setSaveState('error')
-        toast.error(t('feedback.actionFailed'))
+        setSaveState("error");
+        toast.error(t("feedback.actionFailed"));
       }
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function deleteDraft() {
-    if (unsaved) return
-    if (!(await confirmDialog(t('confirm.delete')))) return
-    setMenuTarget(null)
-    cellMenu.close()
-    setBusy(true)
+    if (unsaved) return;
+    if (!(await confirmDialog(t("confirm.delete")))) return;
+    setMenuTarget(null);
+    cellMenu.close();
+    setBusy(true);
     try {
-      const response = await fetch(`/api/budgets/${scenario.id}`, { method: 'DELETE' })
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('feedback.actionFailed')))
-      toast.success(t('feedback.deleted'))
-      router.push(closeHref)
-      router.refresh()
+      const response = await fetch(`/api/budgets/${scenario.id}`, { method: "DELETE" });
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t("feedback.actionFailed")));
+      toast.success(t("feedback.deleted"));
+      router.push(closeHref);
+      router.refresh();
     } catch {
-      toast.error(t('feedback.actionFailed'))
+      toast.error(t("feedback.actionFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -503,29 +682,31 @@ export function BudgetDrawer({
    * lines. Abandoning the drawer (Cancel/close) writes nothing at all.
    */
   // Navigating away from the create sheet clears every custom segment slice too.
-  const segmentParamResets = Object.fromEntries(Object.keys(currentParams)
-    .filter((param) => param.startsWith('budgetSeg_'))
-    .map((param) => [param, null]))
+  const segmentParamResets = Object.fromEntries(
+    Object.keys(currentParams)
+      .filter((param) => param.startsWith("budgetSeg_"))
+      .map((param) => [param, null]),
+  );
 
   async function saveNew() {
-    const trimmedName = name.trim()
+    const trimmedName = name.trim();
     if (!trimmedName) {
-      setCreateError(t('create.nameRequired'))
-      return
+      setCreateError(t("create.nameRequired"));
+      return;
     }
-    const cells: Record<string, unknown>[] = []
+    const cells: Record<string, unknown>[] = [];
     for (const account of initial.accounts) {
       for (const period of initial.periods) {
-        const raw = values[cellKey(account.id, period.id, sliceSubsidiaryId)]
-        if (raw === undefined) continue
-        let units: bigint
+        const raw = values[cellKey(account.id, period.id, sliceSubsidiaryId)];
+        if (raw === undefined) continue;
+        let units: bigint;
         try {
-          units = budgetToUnits(raw)
+          units = budgetToUnits(raw);
         } catch {
-          setCreateError(t('create.invalidAmount', { account: account.name }))
-          return
+          setCreateError(t("create.invalidAmount", { account: account.name }));
+          return;
         }
-        if (units === 0n) continue
+        if (units === 0n) continue;
         cells.push({
           ...dims,
           extraDims: initial.effectiveExtraDims,
@@ -533,65 +714,46 @@ export function BudgetDrawer({
           periodId: period.id,
           subsidiaryId: sliceSubsidiaryId,
           amount: toStorage(account.id, raw),
-        })
+        });
       }
     }
-    setBusy(true)
-    setCreateError(null)
-    let createdDraftId: string | null = null
+    setBusy(true);
+    setCreateError(null);
+    let createdDraftId: string | null = null;
     try {
       const draftBody: Record<string, unknown> = {
         name: trimmedName,
         bookId,
         fiscalYear: Number(fiscalYear),
         kind,
-      }
-      if (description.trim() !== '') draftBody.description = description.trim()
-      if (sourceScenarioId !== '') draftBody.sourceScenarioId = sourceScenarioId
-      const draftResponse = await fetch('/api/budgets/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      };
+      if (description.trim() !== "") draftBody.description = description.trim();
+      if (sourceScenarioId !== "") draftBody.sourceScenarioId = sourceScenarioId;
+      const draftResponse = await fetch("/api/budgets/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(draftBody),
-      })
-      if (!draftResponse.ok) throw new Error(await readApiErrorMessage(draftResponse, t('create.failed')))
+      });
+      if (!draftResponse.ok)
+        throw new Error(await readApiErrorMessage(draftResponse, t("create.failed")));
       const draft = (await draftResponse.json()) as {
-        id: string
-        revision: number
-      }
-      createdDraftId = draft.id
+        id: string;
+        revision: number;
+      };
+      createdDraftId = draft.id;
       if (cells.length > 0) {
         const linesResponse = await fetch(`/api/budgets/${draft.id}/lines`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ expectedRevision: draft.revision, cells }),
-        })
-        if (!linesResponse.ok) throw new Error(await readApiErrorMessage(linesResponse, t('create.failed')))
+        });
+        if (!linesResponse.ok)
+          throw new Error(await readApiErrorMessage(linesResponse, t("create.failed")));
       }
-      toast.success(t('feedback.created'))
+      toast.success(t("feedback.created"));
       router.push(
-        mergeHref('/budgets', currentParams, {
-        budget: draft.id,
-        budgetNew: null,
-        budgetQ: null,
-        budgetPage: null,
-        budgetSubsidiary: null,
-        budgetDepartment: null,
-        budgetProject: null,
-        budgetLocation: null,
-        budgetClass: null,
-        ...segmentParamResets,
-        budgetImport: null,
-        budgetView: null,
-      }),
-      )
-      router.refresh()
-    } catch (error) {
-      if (createdDraftId) {
-        toast.error(t('feedback.savedWithLineFailure', {
-          reason: error instanceof Error ? error.message : t('create.failed'),
-        }))
-        router.push(mergeHref('/budgets', currentParams, {
-          budget: createdDraftId,
+        mergeHref("/budgets", currentParams, {
+          budget: draft.id,
           budgetNew: null,
           budgetQ: null,
           budgetPage: null,
@@ -603,30 +765,62 @@ export function BudgetDrawer({
           ...segmentParamResets,
           budgetImport: null,
           budgetView: null,
-        }))
-        router.refresh()
-        return
+        }),
+      );
+      router.refresh();
+    } catch (error) {
+      if (createdDraftId) {
+        toast.error(
+          t("feedback.savedWithLineFailure", {
+            reason: error instanceof Error ? error.message : t("create.failed"),
+          }),
+        );
+        router.push(
+          mergeHref("/budgets", currentParams, {
+            budget: createdDraftId,
+            budgetNew: null,
+            budgetQ: null,
+            budgetPage: null,
+            budgetSubsidiary: null,
+            budgetDepartment: null,
+            budgetProject: null,
+            budgetLocation: null,
+            budgetClass: null,
+            ...segmentParamResets,
+            budgetImport: null,
+            budgetView: null,
+          }),
+        );
+        router.refresh();
+        return;
       }
-      setCreateError(error instanceof Error ? error.message : t('create.failed'))
+      setCreateError(error instanceof Error ? error.message : t("create.failed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  const badgeVariant = scenario.status === 'approved' ? 'success' : scenario.status === 'pending_approval' ? 'warning' : scenario.status === 'archived' ? 'outline' : 'secondary'
-  const selectedBook = books.find((book) => book.id === bookId)
-  const importHref = mergeHref('/budgets', currentParams, { budgetImport: '1' })
-  const importCloseHref = mergeHref('/budgets', currentParams, { budgetImport: null })
+  const badgeVariant =
+    scenario.status === "approved"
+      ? "success"
+      : scenario.status === "pending_approval"
+        ? "warning"
+        : scenario.status === "archived"
+          ? "outline"
+          : "secondary";
+  const selectedBook = books.find((book) => book.id === bookId);
+  const importHref = mergeHref("/budgets", currentParams, { budgetImport: "1" });
+  const importCloseHref = mergeHref("/budgets", currentParams, { budgetImport: null });
   // Unsaved-create chrome: an explicit Save plus a Cancel that writes
   // nothing — no report link, approvals, import, or row actions exist before
   // the first Save commits the row they would act on.
   const headerActions = unsaved ? (
     <>
       <Button size="sm" disabled={busy} onClick={() => void saveNew()}>
-        {t('create.save')}
+        {t("create.save")}
       </Button>
       <Button variant="outline" size="sm" disabled={busy} onClick={createCloseGuard.close}>
-        {tc('actions.cancel')}
+        {tc("actions.cancel")}
       </Button>
     </>
   ) : (
@@ -635,35 +829,36 @@ export function BudgetDrawer({
         <Button variant="outline" size="sm" asChild>
           <Link href={importHref}>
             <FileUp size={15} />
-            {t('import.button')}
+            {t("import.button")}
           </Link>
         </Button>
       ) : null}
       <Button variant="outline" size="sm" asChild>
-        <Link href={`/reports/budget?scenario=${scenario.id}`}>
-          {t('actions.openReport')}
-        </Link>
+        <Link href={`/reports/budget?scenario=${scenario.id}`}>{t("actions.openReport")}</Link>
       </Button>
       <FlowManualButtons subjectKind="budget_scenario" subjectId={scenario.id} />
       <ApprovalActions subjectKind="budget_scenario" subjectId={scenario.id} />
-      {canManage && scenario.status === 'draft' ? (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => void action('submit')}>
-          {t('actions.submit')}
+      {canManage && scenario.status === "draft" ? (
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => void action("submit")}>
+          {t("actions.submit")}
         </Button>
       ) : null}
-      {canManage && scenario.status === 'pending_approval' ? (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => void action('withdraw')}
-        >
-          {t('actions.withdraw')}
+      {canManage && scenario.status === "pending_approval" ? (
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => void action("withdraw")}>
+          {t("actions.withdraw")}
         </Button>
       ) : null}
-      <BudgetMoreActions scenario={scenario} canManage={canManage} canApprove={canApprove} canExport={canExport} busy={busy} onAction={action} onDelete={deleteDraft} />
+      <BudgetMoreActions
+        scenario={scenario}
+        canManage={canManage}
+        canApprove={canApprove}
+        canExport={canExport}
+        busy={busy}
+        onAction={action}
+        onDelete={deleteDraft}
+      />
     </>
-  )
+  );
 
   return (
     <>
@@ -675,24 +870,31 @@ export function BudgetDrawer({
         initialFullscreen
         title={
           <span className="flex items-center gap-2.5">
-            <span>
-              {newlyCreated ? t('create.title') : name || scenario.name}
-            </span>
-            <Badge variant={badgeVariant}>
-              {t(`status.${scenario.status}`)}
-            </Badge>
+            <span>{newlyCreated ? t("create.title") : name || scenario.name}</span>
+            <Badge variant={badgeVariant}>{t(`status.${scenario.status}`)}</Badge>
           </span>
         }
-        description={t('workspace.subtitle', { book: selectedBook?.name ?? scenario.bookName, year: fiscalYear })}
+        description={t("workspace.subtitle", {
+          book: selectedBook?.name ?? scenario.bookName,
+          year: fiscalYear,
+        })}
         headerActions={headerActions}
         footer={
           <div className="flex w-full items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             <span>
               {unsaved
-                ? saveState === 'dirty' ? t('workspace.unsaved') : t('create.unsavedHint')
-                : saveState === 'saving' ? t('workspace.saving') : saveState === 'dirty' ? t('workspace.unsaved') : saveState === 'error' ? t('workspace.saveFailed') : t('workspace.saved')}
+                ? saveState === "dirty"
+                  ? t("workspace.unsaved")
+                  : t("create.unsavedHint")
+                : saveState === "saving"
+                  ? t("workspace.saving")
+                  : saveState === "dirty"
+                    ? t("workspace.unsaved")
+                    : saveState === "error"
+                      ? t("workspace.saveFailed")
+                      : t("workspace.saved")}
             </span>
-            {unsaved ? null : <span>{t('workspace.autosaveHint')}</span>}
+            {unsaved ? null : <span>{t("workspace.autosaveHint")}</span>}
           </div>
         }
       >
@@ -700,33 +902,35 @@ export function BudgetDrawer({
           {!editable ? (
             <Alert variant="info" className="flex items-center gap-2">
               <LockKeyhole size={16} />
-              <span>{t('workspace.locked')}</span>
+              <span>{t("workspace.locked")}</span>
             </Alert>
           ) : null}
-          {actionError ? (
-            <Alert variant="destructive">{actionError}</Alert>
-          ) : null}
-          {createError ? (
-            <Alert variant="destructive">{createError}</Alert>
-          ) : null}
+          {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
+          {createError ? <Alert variant="destructive">{createError}</Alert> : null}
           <Card>
             <CardContent className="grid gap-4 pt-6 md:grid-cols-2 xl:grid-cols-5">
               <div className="space-y-1.5">
-                <Label htmlFor={editable ? 'scenario-name' : undefined}>
-                  {t('workspace.name')}
+                <Label htmlFor={editable ? "scenario-name" : undefined}>
+                  {t("workspace.name")}
                 </Label>
                 {editable ? (
-                  <Input id="scenario-name" value={name} onChange={(event) => setName(event.target.value)} />
+                  <Input
+                    id="scenario-name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                  />
                 ) : (
                   <ReadOnlyValue value={name} />
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={editable ? 'scenario-book' : undefined}>
-                  {t('create.book')}
-                </Label>
+                <Label htmlFor={editable ? "scenario-book" : undefined}>{t("create.book")}</Label>
                 {editable ? (
-                  <Select id="scenario-book" value={bookId} onChange={(event) => setBookId(event.target.value)}>
+                  <Select
+                    id="scenario-book"
+                    value={bookId}
+                    onChange={(event) => setBookId(event.target.value)}
+                  >
                     {books.map((book) => (
                       <option key={book.id} value={book.id}>
                         {book.name}
@@ -734,15 +938,19 @@ export function BudgetDrawer({
                     ))}
                   </Select>
                 ) : (
-                  <ReadOnlyValue value={books.find((book) => book.id === bookId)?.name ?? scenario.bookName} />
+                  <ReadOnlyValue
+                    value={books.find((book) => book.id === bookId)?.name ?? scenario.bookName}
+                  />
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={editable ? 'scenario-year' : undefined}>
-                  {t('create.year')}
-                </Label>
+                <Label htmlFor={editable ? "scenario-year" : undefined}>{t("create.year")}</Label>
                 {editable ? (
-                  <Select id="scenario-year" value={fiscalYear} onChange={(event) => setFiscalYear(event.target.value)}>
+                  <Select
+                    id="scenario-year"
+                    value={fiscalYear}
+                    onChange={(event) => setFiscalYear(event.target.value)}
+                  >
                     {years.map((year) => (
                       <option key={year} value={year}>
                         {year}
@@ -754,13 +962,15 @@ export function BudgetDrawer({
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={editable ? 'scenario-kind' : undefined}>
-                  {t('create.kind')}
-                </Label>
+                <Label htmlFor={editable ? "scenario-kind" : undefined}>{t("create.kind")}</Label>
                 {editable ? (
-                  <Select id="scenario-kind" value={kind} onChange={(event) => setKind(event.target.value as 'budget' | 'forecast')}>
-                    <option value="budget">{t('kind.budget')}</option>
-                    <option value="forecast">{t('kind.forecast')}</option>
+                  <Select
+                    id="scenario-kind"
+                    value={kind}
+                    onChange={(event) => setKind(event.target.value as "budget" | "forecast")}
+                  >
+                    <option value="budget">{t("kind.budget")}</option>
+                    <option value="forecast">{t("kind.forecast")}</option>
                   </Select>
                 ) : (
                   <ReadOnlyValue value={t(`kind.${kind}`)} />
@@ -768,30 +978,51 @@ export function BudgetDrawer({
               </div>
               {editable ? (
                 <div className="space-y-1.5">
-                  <Label htmlFor="scenario-source">{t('create.source')}</Label>
+                  <Label htmlFor="scenario-source">{t("create.source")}</Label>
                   <div className="flex gap-2">
-                    <Select id="scenario-source" value={sourceScenarioId} disabled={busy} onChange={(event) => setSourceScenarioId(event.target.value)}>
-                      <option value="">{t('create.blank')}</option>
-                      {sources.filter((source) => source.id !== scenario.id).map((source) => (
+                    <Select
+                      id="scenario-source"
+                      value={sourceScenarioId}
+                      disabled={busy}
+                      onChange={(event) => setSourceScenarioId(event.target.value)}
+                    >
+                      <option value="">{t("create.blank")}</option>
+                      {sources
+                        .filter((source) => source.id !== scenario.id)
+                        .map((source) => (
                           <option key={source.id} value={source.id}>
-                            {t('create.sourceOption', { name: source.name, year: source.fiscal_year })}
+                            {t("create.sourceOption", {
+                              name: source.name,
+                              year: source.fiscal_year,
+                            })}
                           </option>
                         ))}
                     </Select>
                     {sourceScenarioId && !unsaved ? (
-                      <Button variant="outline" size="sm" disabled={busy} onClick={() => void action('apply_source', { sourceScenarioId })}>
-                        {t('actions.applySource')}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void action("apply_source", { sourceScenarioId })}
+                      >
+                        {t("actions.applySource")}
                       </Button>
                     ) : null}
                   </div>
                 </div>
               ) : null}
               <div className="space-y-1.5 md:col-span-2 xl:col-span-5">
-                <Label htmlFor={editable ? 'scenario-description' : undefined}>
-                  {t('workspace.description')}
+                <Label htmlFor={editable ? "scenario-description" : undefined}>
+                  {t("workspace.description")}
                 </Label>
                 {editable ? (
-                  <Textarea id="scenario-description" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t('workspace.descriptionPlaceholder')} />
+                  <Textarea
+                    id="scenario-description"
+                    rows={2}
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder={t("workspace.descriptionPlaceholder")}
+                  />
                 ) : (
                   <ReadOnlyValue value={description} className="whitespace-pre-wrap" />
                 )}
@@ -803,55 +1034,114 @@ export function BudgetDrawer({
             <CardHeader className="gap-3 pb-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <CardTitle className="text-base">
-                    {t('workspace.dimensions.title')}
-                  </CardTitle>
+                  <CardTitle className="text-base">{t("workspace.dimensions.title")}</CardTitle>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {t('workspace.sheetDescription')}
+                    {t("workspace.sheetDescription")}
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-slate-500">
-                    {t('workspace.sliceTotal')}
-                  </div>
+                  <div className="text-xs text-slate-500">{t("workspace.sliceTotal")}</div>
                   <div className="font-semibold tabular-nums">
                     {money(budgetFromUnits(sliceTotalUnits))}
                   </div>
                 </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                <DimensionSelect label={t('workspace.dimensions.subsidiary')} value={sliceSubsidiaryId} options={initial.dimensions.subsidiaries} allowEmpty={false} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetSubsidiary', value)} />
-                <DimensionSelect label={t('workspace.dimensions.department')} value={dims.departmentId ?? ''} options={initial.dimensions.departments} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetDepartment', value)} />
-                <DimensionSelect label={t('workspace.dimensions.project')} value={dims.projectId ?? ''} options={initial.dimensions.projects} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetProject', value)} />
-                <DimensionSelect label={t('workspace.dimensions.location')} value={dims.locationId ?? ''} options={initial.dimensions.locations} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetLocation', value)} />
-                <DimensionSelect label={t('workspace.dimensions.class')} value={dims.classId ?? ''} options={initial.dimensions.classes} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetClass', value)} />
+                <DimensionSelect
+                  label={t("workspace.dimensions.subsidiary")}
+                  value={sliceSubsidiaryId}
+                  options={initial.dimensions.subsidiaries}
+                  allowEmpty={false}
+                  allLabel={t("workspace.dimensions.all")}
+                  onChange={(value) => replaceUrl("budgetSubsidiary", value)}
+                />
+                <DimensionSelect
+                  label={t("workspace.dimensions.department")}
+                  value={dims.departmentId ?? ""}
+                  options={initial.dimensions.departments}
+                  allLabel={t("workspace.dimensions.all")}
+                  onChange={(value) => replaceUrl("budgetDepartment", value)}
+                />
+                <DimensionSelect
+                  label={t("workspace.dimensions.project")}
+                  value={dims.projectId ?? ""}
+                  options={initial.dimensions.projects}
+                  allLabel={t("workspace.dimensions.all")}
+                  onChange={(value) => replaceUrl("budgetProject", value)}
+                />
+                <DimensionSelect
+                  label={t("workspace.dimensions.location")}
+                  value={dims.locationId ?? ""}
+                  options={initial.dimensions.locations}
+                  allLabel={t("workspace.dimensions.all")}
+                  onChange={(value) => replaceUrl("budgetLocation", value)}
+                />
+                <DimensionSelect
+                  label={t("workspace.dimensions.class")}
+                  value={dims.classId ?? ""}
+                  options={initial.dimensions.classes}
+                  allLabel={t("workspace.dimensions.all")}
+                  onChange={(value) => replaceUrl("budgetClass", value)}
+                />
                 {/* Custom segments (fund included) are part of the budget cell budgetary control matches on; a segment with a default (the fund) always names a value. */}
                 {initial.dimensions.segments.map((segment) => (
-                  <DimensionSelect key={segment.key} label={segment.name} value={initial.effectiveExtraDims[segment.key] ?? ''} options={segment.values} allowEmpty={!segment.defaultValueId} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl(`budgetSeg_${segment.key}`, value)} />
+                  <DimensionSelect
+                    key={segment.key}
+                    label={segment.name}
+                    value={initial.effectiveExtraDims[segment.key] ?? ""}
+                    options={segment.values}
+                    allowEmpty={!segment.defaultValueId}
+                    allLabel={t("workspace.dimensions.all")}
+                    onChange={(value) => replaceUrl(`budgetSeg_${segment.key}`, value)}
+                  />
                 ))}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <SearchInput placeholder={t('workspace.searchAccounts')} paramKey="budgetQ" pageParamKey="budgetPage" />
-                  <Select className="h-8 w-auto" value={viewMode} onChange={(event) => replaceUrl('budgetView', event.target.value)} aria-label={t('workspace.viewMode')}>
-                    <option value="annual">{t('workspace.annualOnly')}</option>
-                    <option value="monthly">
-                      {t('workspace.monthlyBreakdown')}
-                    </option>
+                  <SearchInput
+                    placeholder={t("workspace.searchAccounts")}
+                    paramKey="budgetQ"
+                    pageParamKey="budgetPage"
+                  />
+                  <Select
+                    className="h-8 w-auto"
+                    value={viewMode}
+                    onChange={(event) => replaceUrl("budgetView", event.target.value)}
+                    aria-label={t("workspace.viewMode")}
+                  >
+                    <option value="annual">{t("workspace.annualOnly")}</option>
+                    <option value="monthly">{t("workspace.monthlyBreakdown")}</option>
                   </Select>
                 </div>
                 {editable ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <Input className="h-8 w-28" inputMode="decimal" value={uplift} onChange={(event) => setUplift(event.target.value)} placeholder={t('workspace.uplift')} aria-label={t('workspace.uplift')} />
+                    <Input
+                      className="h-8 w-28"
+                      inputMode="decimal"
+                      value={uplift}
+                      onChange={(event) => setUplift(event.target.value)}
+                      placeholder={t("workspace.uplift")}
+                      aria-label={t("workspace.uplift")}
+                    />
                     <Button variant="outline" size="sm" disabled={!uplift} onClick={upliftPage}>
-                      {t('workspace.applyUplift')}
+                      {t("workspace.applyUplift")}
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => { void clearPage() }}>
-                      {t('workspace.clearPage')}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        void clearPage();
+                      }}
+                    >
+                      {t("workspace.clearPage")}
                     </Button>
                     {unsaved ? null : (
-                      <Button variant="outline" size="sm" onClick={() => void action('copy_prior_actuals')}>
-                        {t('actions.copyPriorActuals')}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void action("copy_prior_actuals")}
+                      >
+                        {t("actions.copyPriorActuals")}
                       </Button>
                     )}
                   </div>
@@ -860,21 +1150,30 @@ export function BudgetDrawer({
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto border-y border-slate-200 dark:border-slate-800">
-                <SharedTable className={viewMode === 'monthly' ? 'w-full min-w-[1050px] border-collapse text-sm' : 'w-full min-w-[520px] border-collapse text-sm'}>
+                <SharedTable
+                  className={
+                    viewMode === "monthly"
+                      ? "w-full min-w-[1050px] border-collapse text-sm"
+                      : "w-full min-w-[520px] border-collapse text-sm"
+                  }
+                >
                   <SharedTableHeader className="bg-slate-50 dark:bg-slate-950/50">
                     <SharedTableRow>
                       <SharedTableHead className="sticky left-0 z-10 min-w-60 border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-medium dark:border-slate-800 dark:bg-slate-950">
-                        {t('workspace.account')}
+                        {t("workspace.account")}
                       </SharedTableHead>
-                      {viewMode === 'monthly'
+                      {viewMode === "monthly"
                         ? initial.periods.map((period) => (
-                            <SharedTableHead key={period.id} className="min-w-28 px-2 py-2 text-right font-medium">
+                            <SharedTableHead
+                              key={period.id}
+                              className="min-w-28 px-2 py-2 text-right font-medium"
+                            >
                               {period.name}
                             </SharedTableHead>
                           ))
                         : null}
                       <SharedTableHead className="min-w-32 border-l border-slate-200 px-2 py-2 text-right font-medium dark:border-slate-800">
-                        {t('workspace.annualTotal')}
+                        {t("workspace.annualTotal")}
                       </SharedTableHead>
                     </SharedTableRow>
                   </SharedTableHeader>
@@ -884,41 +1183,90 @@ export function BudgetDrawer({
                         const annual = initial.periods.reduce((sum, period) => {
                           try {
                             return (
-                              sum + budgetToUnits(values[cellKey(account.id, period.id, sliceSubsidiaryId)] ?? '0')
-                            )
+                              sum +
+                              budgetToUnits(
+                                values[cellKey(account.id, period.id, sliceSubsidiaryId)] ?? "0",
+                              )
+                            );
                           } catch {
-                            return sum
+                            return sum;
                           }
-                        }, 0n)
+                        }, 0n);
                         return (
-                          <SharedTableRow key={account.id} className="border-t border-slate-100 dark:border-slate-800/70">
+                          <SharedTableRow
+                            key={account.id}
+                            className="border-t border-slate-100 dark:border-slate-800/70"
+                          >
                             <SharedTableCell className="sticky left-0 z-10 border-r border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
                               <span className="font-mono text-xs text-slate-500">
                                 {account.number}
                               </span>
-                              <span className="ml-2 font-medium">
-                                {account.name}
-                              </span>
+                              <span className="ml-2 font-medium">{account.name}</span>
                             </SharedTableCell>
-                            {viewMode === 'monthly'
+                            {viewMode === "monthly"
                               ? initial.periods.map((period) => {
-                                  const key = cellKey(account.id, period.id, sliceSubsidiaryId)
+                                  const key = cellKey(account.id, period.id, sliceSubsidiaryId);
                                   return (
-                                    <SharedTableCell key={period.id} className="px-2 py-1.5 text-right tabular-nums" onContextMenu={(event) => openCellMenu(event, account.id, period.id)}>
+                                    <SharedTableCell
+                                      key={period.id}
+                                      className="px-2 py-1.5 text-right tabular-nums"
+                                      onContextMenu={(event) =>
+                                        openCellMenu(event, account.id, period.id)
+                                      }
+                                    >
                                       {editable ? (
-                                        <Input className="h-8 min-w-24 text-right tabular-nums" inputMode="decimal" value={values[key] ?? ''} onChange={(event) => queueCell({ accountId: account.id, periodId: period.id, amount: event.target.value })} onBlur={() => void flushCells()} aria-label={`${account.name} ${period.name}`} />
+                                        <Input
+                                          className="h-8 min-w-24 text-right tabular-nums"
+                                          inputMode="decimal"
+                                          value={values[key] ?? ""}
+                                          onChange={(event) =>
+                                            queueCell({
+                                              accountId: account.id,
+                                              periodId: period.id,
+                                              amount: event.target.value,
+                                            })
+                                          }
+                                          onBlur={() => void flushCells()}
+                                          aria-label={`${account.name} ${period.name}`}
+                                        />
                                       ) : (
-                                        money(values[key] ?? '0')
+                                        money(values[key] ?? "0")
                                       )}
                                     </SharedTableCell>
-                                  )
+                                  );
                                 })
                               : null}
-                            <SharedTableCell className="border-l border-slate-200 px-2 py-1.5 text-right font-medium tabular-nums dark:border-slate-800" onContextMenu={(event) => openCellMenu(event, account.id)}>
+                            <SharedTableCell
+                              className="border-l border-slate-200 px-2 py-1.5 text-right font-medium tabular-nums dark:border-slate-800"
+                              onContextMenu={(event) => openCellMenu(event, account.id)}
+                            >
                               {editable ? (
                                 <div className="flex items-center justify-end gap-1">
-                                  <Input className="h-8 min-w-28 text-right font-medium tabular-nums" inputMode="decimal" value={annualDrafts[account.id] ?? budgetFromUnits(annual)} onChange={(event) => { setAnnualDrafts((current) => ({ ...current, [account.id]: event.target.value })); setSaveState('dirty') }} onBlur={(event) => commitAnnual(account.id, event.target.value)} aria-label={`${account.name} ${t('workspace.annualTotal')}`} />
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={t('workspace.rowActions', { account: account.name })} onClick={(event) => openRowMenu(event.currentTarget, account.id)}>
+                                  <Input
+                                    className="h-8 min-w-28 text-right font-medium tabular-nums"
+                                    inputMode="decimal"
+                                    value={annualDrafts[account.id] ?? budgetFromUnits(annual)}
+                                    onChange={(event) => {
+                                      setAnnualDrafts((current) => ({
+                                        ...current,
+                                        [account.id]: event.target.value,
+                                      }));
+                                      setSaveState("dirty");
+                                    }}
+                                    onBlur={(event) => commitAnnual(account.id, event.target.value)}
+                                    aria-label={`${account.name} ${t("workspace.annualTotal")}`}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    aria-label={t("workspace.rowActions", {
+                                      account: account.name,
+                                    })}
+                                    onClick={(event) =>
+                                      openRowMenu(event.currentTarget, account.id)
+                                    }
+                                  >
                                     <MoreHorizontal size={15} />
                                   </Button>
                                 </div>
@@ -927,12 +1275,15 @@ export function BudgetDrawer({
                               )}
                             </SharedTableCell>
                           </SharedTableRow>
-                        )
+                        );
                       })
                     ) : (
                       <SharedTableRow>
-                        <SharedTableCell colSpan={viewMode === 'monthly' ? initial.periods.length + 2 : 2} className="px-4 py-10 text-center text-slate-500">
-                          {t('workspace.emptyAccounts')}
+                        <SharedTableCell
+                          colSpan={viewMode === "monthly" ? initial.periods.length + 2 : 2}
+                          className="px-4 py-10 text-center text-slate-500"
+                        >
+                          {t("workspace.emptyAccounts")}
                         </SharedTableCell>
                       </SharedTableRow>
                     )}
@@ -940,38 +1291,67 @@ export function BudgetDrawer({
                   <SharedTableFooter>
                     <SharedTableRow className="border-t border-slate-200 bg-slate-50 font-semibold dark:border-slate-800 dark:bg-slate-950/50">
                       <SharedTableCell className="sticky left-0 border-r border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
-                        {t('workspace.sliceTotal')}
+                        {t("workspace.sliceTotal")}
                       </SharedTableCell>
-                      <SharedTableCell colSpan={viewMode === 'monthly' ? initial.periods.length + 1 : 1} className="px-3 py-2 text-right tabular-nums">
+                      <SharedTableCell
+                        colSpan={viewMode === "monthly" ? initial.periods.length + 1 : 1}
+                        className="px-3 py-2 text-right tabular-nums"
+                      >
                         {money(budgetFromUnits(pageTotalUnits))}
                       </SharedTableCell>
                     </SharedTableRow>
                   </SharedTableFooter>
                 </SharedTable>
               </div>
-              <Pagination basePath={pathname} currentParams={currentParams} total={initial.totalAccounts} page={initial.page} perPage={initial.perPage} pageParamKey="budgetPage" />
+              <Pagination
+                basePath={pathname}
+                currentParams={currentParams}
+                total={initial.totalAccounts}
+                page={initial.page}
+                perPage={initial.perPage}
+                pageParamKey="budgetPage"
+              />
             </CardContent>
           </Card>
         </div>
       </UrlDrawer>
-      <ContextMenu open={editable && cellMenu.open} position={cellMenu.position} items={menuItems} onClose={cellMenu.close} />
-      {editable && !unsaved && currentParams.budgetImport === '1' ? (
+      <ContextMenu
+        open={editable && cellMenu.open}
+        position={cellMenu.position}
+        items={menuItems}
+        onClose={cellMenu.close}
+      />
+      {editable && !unsaved && currentParams.budgetImport === "1" ? (
         <BudgetImport
           scenarioId={scenario.id}
           closeHref={importCloseHref}
           revisionRef={revisionRef}
           execute={execute}
           onCommitted={() => {
-            router.push(importCloseHref)
-            router.refresh()
+            router.push(importCloseHref);
+            router.refresh();
           }}
         />
       ) : null}
     </>
-  )
+  );
 }
 
-function DimensionSelect({ label, value, options, allLabel, allowEmpty = true, onChange }: { label: string; value: string; options: { id: string; code: string | null; name: string }[]; allLabel: string; allowEmpty?: boolean; onChange: (value: string) => void }) {
+function DimensionSelect({
+  label,
+  value,
+  options,
+  allLabel,
+  allowEmpty = true,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { id: string; code: string | null; name: string }[];
+  allLabel: string;
+  allowEmpty?: boolean;
+  onChange: (value: string) => void;
+}) {
   return (
     <label className="space-y-1 text-xs font-medium text-slate-500 dark:text-slate-400">
       <span>{label}</span>
@@ -979,19 +1359,35 @@ function DimensionSelect({ label, value, options, allLabel, allowEmpty = true, o
         {allowEmpty ? <option value="">{allLabel}</option> : null}
         {options.map((option) => (
           <option key={option.id} value={option.id}>
-            {option.code ? `${option.code} · ` : ''}
+            {option.code ? `${option.code} · ` : ""}
             {option.name}
           </option>
         ))}
       </Select>
     </label>
-  )
+  );
 }
 
-function BudgetMoreActions({ scenario, canManage, canApprove, canExport, busy, onAction, onDelete }: { scenario: BudgetWorkspace['scenario']; canManage: boolean; canApprove: boolean; canExport: boolean; busy: boolean; onAction: (action: string) => Promise<void>; onDelete: () => Promise<void> }) {
-  const t = useTranslations('budgets')
-  const tc = useTranslations('common')
-  const [open, setOpen] = useState(false)
+function BudgetMoreActions({
+  scenario,
+  canManage,
+  canApprove,
+  canExport,
+  busy,
+  onAction,
+  onDelete,
+}: {
+  scenario: BudgetWorkspace["scenario"];
+  canManage: boolean;
+  canApprove: boolean;
+  canExport: boolean;
+  busy: boolean;
+  onAction: (action: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const t = useTranslations("budgets");
+  const tc = useTranslations("common");
+  const [open, setOpen] = useState(false);
   return (
     <Popover
       open={open}
@@ -999,15 +1395,27 @@ function BudgetMoreActions({ scenario, canManage, canApprove, canExport, busy, o
       align="end"
       className="w-56 p-1"
       trigger={
-        <Button variant="outline" size="sm" aria-label={tc('actions.more')} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={tc("actions.more")}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
           <MoreHorizontal size={16} />
         </Button>
       }
     >
       <div className="grid gap-1">
         {canManage ? (
-          <Button variant="ghost" size="sm" className="justify-start" disabled={busy} onClick={() => void onAction('copy')}>
-            {t('actions.copy')}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start"
+            disabled={busy}
+            onClick={() => void onAction("copy")}
+          >
+            {t("actions.copy")}
           </Button>
         ) : null}
         {canExport ? (
@@ -1015,98 +1423,171 @@ function BudgetMoreActions({ scenario, canManage, canApprove, canExport, busy, o
             <Button variant="ghost" size="sm" className="justify-start" asChild>
               <a href={`/api/budgets/${scenario.id}/export?format=xlsx`}>
                 <Download size={15} />
-                {t('actions.exportXlsx')}
+                {t("actions.exportXlsx")}
               </a>
             </Button>
             <Button variant="ghost" size="sm" className="justify-start" asChild>
               <a href={`/api/budgets/${scenario.id}/export?format=csv`}>
                 <Download size={15} />
-                {t('actions.exportCsv')}
+                {t("actions.exportCsv")}
               </a>
             </Button>
           </>
         ) : null}
-        {canManage && scenario.status !== 'archived' && (scenario.status !== 'approved' || canApprove) ? (
-          <Button variant="ghost" size="sm" className="justify-start" disabled={busy} onClick={() => void onAction('archive')}>
-            {t('actions.archive')}
+        {canManage &&
+        scenario.status !== "archived" &&
+        (scenario.status !== "approved" || canApprove) ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start"
+            disabled={busy}
+            onClick={() => void onAction("archive")}
+          >
+            {t("actions.archive")}
           </Button>
         ) : null}
-        {canManage && scenario.status === 'draft' ? (
-          <Button variant="ghost" size="sm" className="justify-start text-red-600 dark:text-red-400" disabled={busy} onClick={() => void onDelete()}>
-            {t('actions.delete')}
+        {canManage && scenario.status === "draft" ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start text-red-600 dark:text-red-400"
+            disabled={busy}
+            onClick={() => void onDelete()}
+          >
+            {t("actions.delete")}
           </Button>
         ) : null}
       </div>
     </Popover>
-  )
+  );
 }
 
-function BudgetImport({ scenarioId, closeHref, revisionRef, execute, onCommitted }: { scenarioId: string; closeHref: string; revisionRef: React.MutableRefObject<number>; execute: <T>(url: string, method: string, payload: Record<string, unknown>) => Promise<T>; onCommitted: () => void }) {
-  const t = useTranslations('budgets')
-  const [file, setFile] = useState<File | null>(null)
-  const requestId = useRef(0)
-  const [requestVersion, setRequestVersion] = useState(0)
-  const [payload, setPayload] = useState<{ requestId: number; value: Record<string, unknown> } | null>(null)
-  const [preview, setPreview] = useState<{ requestId: number; valid: boolean; rows: number; errors: { row: number; field: string; message: string }[] } | null>(null)
-  const [importError, setImportError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+function BudgetImport({
+  scenarioId,
+  closeHref,
+  revisionRef,
+  execute,
+  onCommitted,
+}: {
+  scenarioId: string;
+  closeHref: string;
+  revisionRef: React.MutableRefObject<number>;
+  execute: <T>(url: string, method: string, payload: Record<string, unknown>) => Promise<T>;
+  onCommitted: () => void;
+}) {
+  const t = useTranslations("budgets");
+  const [file, setFile] = useState<File | null>(null);
+  const requestId = useRef(0);
+  const [requestVersion, setRequestVersion] = useState(0);
+  const [payload, setPayload] = useState<{
+    requestId: number;
+    value: Record<string, unknown>;
+  } | null>(null);
+  const [preview, setPreview] = useState<{
+    requestId: number;
+    valid: boolean;
+    rows: number;
+    errors: { row: number; field: string; message: string }[];
+  } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   async function encode(selected: File) {
-    const format = selected.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'csv'
-    if (format === 'csv') return { format, text: await selected.text() }
+    const format = selected.name.toLowerCase().endsWith(".xlsx") ? "xlsx" : "csv";
+    if (format === "csv") return { format, text: await selected.text() };
     const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onerror = () => reject(reader.error)
-      reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
-      reader.readAsDataURL(selected)
-    })
-    return { format, base64 }
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+      reader.readAsDataURL(selected);
+    });
+    return { format, base64 };
   }
   async function validate() {
-    if (!file) return
-    const selectedFile = file
-    const request = requestId.current
-    setBusy(true)
-    setImportError(null)
+    if (!file) return;
+    const selectedFile = file;
+    const request = requestId.current;
+    setBusy(true);
+    setImportError(null);
     try {
-      const encoded = await encode(selectedFile)
-      if (requestId.current !== request) return
-      const response = await fetch(`/api/budgets/${scenarioId}/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...encoded, expectedRevision: revisionRef.current }) })
+      const encoded = await encode(selectedFile);
+      if (requestId.current !== request) return;
+      const response = await fetch(`/api/budgets/${scenarioId}/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...encoded, expectedRevision: revisionRef.current }),
+      });
       // A body with no `error` code still names its refusal through the
       // shared helper (message, joined errors) instead of the generic
       // failure; mapped codes keep their copy below.
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: unknown; detail?: unknown; remedy?: unknown } | null
-        const code = typeof body?.error === 'string' && body.error
-          ? body.error
-          : (refusalMessageFromBody(body, { fallback: t('import.failed') }) ?? t('import.failed'))
-        const detail = typeof body?.detail === 'string' && body.detail.trim() ? `: ${body.detail.trim()}` : ''
-        const remedy = typeof body?.remedy === 'string' && body.remedy.trim() ? ` — ${body.remedy.trim()}` : ''
-        const refusal = code === 'duplicate_columns'
-          ? t('import.duplicateColumns', { detail: detail.slice(2) || t('import.failed') })
-          : code === 'file_has_no_rows'
-            ? t('import.fileHasNoRows')
-            : code === 'budget_is_locked'
-              ? t('import.budgetIsLocked')
-              : t('import.refused', { reason: `${code}${detail}${remedy}` })
-        throw new Error(refusal)
+        const body = (await response.json().catch(() => null)) as {
+          error?: unknown;
+          detail?: unknown;
+          remedy?: unknown;
+        } | null;
+        const code =
+          typeof body?.error === "string" && body.error
+            ? body.error
+            : (refusalMessageFromBody(body, { fallback: t("import.failed") }) ??
+              t("import.failed"));
+        const detail =
+          typeof body?.detail === "string" && body.detail.trim() ? `: ${body.detail.trim()}` : "";
+        const remedy =
+          typeof body?.remedy === "string" && body.remedy.trim() ? ` — ${body.remedy.trim()}` : "";
+        const refusal =
+          code === "duplicate_columns"
+            ? t("import.duplicateColumns", { detail: detail.slice(2) || t("import.failed") })
+            : code === "file_has_no_rows"
+              ? t("import.fileHasNoRows")
+              : code === "budget_is_locked"
+                ? t("import.budgetIsLocked")
+                : t("import.refused", { reason: `${code}${detail}${remedy}` });
+        throw new Error(refusal);
       }
-      const data = await response.json()
-      if (requestId.current !== request) return
-      setPayload({ requestId: request, value: encoded })
-      setPreview({ ...data, requestId: request })
+      const data = await response.json();
+      if (requestId.current !== request) return;
+      setPayload({ requestId: request, value: encoded });
+      setPreview({ ...data, requestId: request });
     } catch (error) {
-      if (requestId.current === request) setImportError(error instanceof Error ? error.message : t('import.failed'))
-    } finally { if (requestId.current === request) setBusy(false) }
+      if (requestId.current === request)
+        setImportError(error instanceof Error ? error.message : t("import.failed"));
+    } finally {
+      if (requestId.current === request) setBusy(false);
+    }
   }
   async function commit() {
-    if (!payload || payload.requestId !== requestId.current || !preview?.valid || preview.requestId !== requestId.current) return
-    setBusy(true)
-    setImportError(null)
+    if (
+      !payload ||
+      payload.requestId !== requestId.current ||
+      !preview?.valid ||
+      preview.requestId !== requestId.current
+    )
+      return;
+    setBusy(true);
+    setImportError(null);
     try {
-      const data = await execute<{ revision: number; imported: number }>(`/api/budgets/${scenarioId}/import`, 'POST', { ...payload.value, commit: true })
-      toast.success(t('import.imported', { count: data.imported }))
-      setFile(null); setPayload(null); setPreview(null); requestId.current += 1; setRequestVersion(requestId.current); onCommitted()
-    } catch (error) { setImportError(t('import.refused', { reason: error instanceof Error ? error.message : t('import.failed') })) } finally { setBusy(false) }
+      const data = await execute<{ revision: number; imported: number }>(
+        `/api/budgets/${scenarioId}/import`,
+        "POST",
+        { ...payload.value, commit: true },
+      );
+      toast.success(t("import.imported", { count: data.imported }));
+      setFile(null);
+      setPayload(null);
+      setPreview(null);
+      requestId.current += 1;
+      setRequestVersion(requestId.current);
+      onCommitted();
+    } catch (error) {
+      setImportError(
+        t("import.refused", {
+          reason: error instanceof Error ? error.message : t("import.failed"),
+        }),
+      );
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <UrlDrawer
@@ -1117,26 +1598,51 @@ function BudgetImport({ scenarioId, closeHref, revisionRef, execute, onCommitted
       title={
         <span className="flex items-center gap-2">
           <FileUp size={17} />
-          {t('import.title')}
+          {t("import.title")}
         </span>
       }
-      description={t('import.description')}
+      description={t("import.description")}
     >
       <div className="space-y-3">
-        <Input type="file" accept=".csv,.xlsx" aria-label={t('import.choose')} onChange={(event) => { requestId.current += 1; setRequestVersion(requestId.current); setFile(event.target.files?.[0] ?? null); setPayload(null); setPreview(null); setBusy(false) }} />
+        <Input
+          type="file"
+          accept=".csv,.xlsx"
+          aria-label={t("import.choose")}
+          onChange={(event) => {
+            requestId.current += 1;
+            setRequestVersion(requestId.current);
+            setFile(event.target.files?.[0] ?? null);
+            setPayload(null);
+            setPreview(null);
+            setBusy(false);
+          }}
+        />
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" disabled={!file || busy} onClick={() => void validate()}>
-            {t('import.preview')}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!file || busy}
+            onClick={() => void validate()}
+          >
+            {t("import.preview")}
           </Button>
           {preview?.valid && preview.requestId === requestVersion ? (
             <Button size="sm" disabled={busy} onClick={() => void commit()}>
-              {t('import.apply')}
+              {t("import.apply")}
             </Button>
           ) : null}
         </div>
         {preview ? (
-          <div className={preview.valid ? 'text-sm text-emerald-700 dark:text-emerald-300' : 'text-sm text-red-700 dark:text-red-300'}>
-            {preview.valid ? t('import.valid', { count: preview.rows }) : t('import.invalid', { count: preview.errors.length })}
+          <div
+            className={
+              preview.valid
+                ? "text-sm text-emerald-700 dark:text-emerald-300"
+                : "text-sm text-red-700 dark:text-red-300"
+            }
+          >
+            {preview.valid
+              ? t("import.valid", { count: preview.rows })
+              : t("import.invalid", { count: preview.errors.length })}
           </div>
         ) : null}
         {importError ? (
@@ -1147,13 +1653,11 @@ function BudgetImport({ scenarioId, closeHref, revisionRef, execute, onCommitted
         {preview && !preview.valid ? (
           <ul className="max-h-40 space-y-1 overflow-auto text-xs text-red-700 dark:text-red-300">
             {preview.errors.slice(0, 50).map((error, index) => (
-              <li key={`${error.row}-${error.field}-${index}`}>
-                {t('import.rowError', error)}
-              </li>
+              <li key={`${error.row}-${error.field}-${index}`}>{t("import.rowError", error)}</li>
             ))}
           </ul>
         ) : null}
       </div>
     </UrlDrawer>
-  )
+  );
 }

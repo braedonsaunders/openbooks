@@ -1,7 +1,13 @@
-import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import { seedPayrollDocument, seedPayrollStub } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollProfile, createScratchOrg, dropScratchOrgReporting, seedFlowActors,
-  seedWorkerEmployment, seedPayrollSettings,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollProfile,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  seedPayrollSettings,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
@@ -9,9 +15,19 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { saveOpeningBalances } from "./opening-balances.ts";
-import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "./opening-employer-authority.ts";
-import { qualifyOpeningLevySourceAuthority, readOpeningLevySourceContext, type OpeningLevySourceAllocationInput } from "./opening-levy-source-authority.ts";
-import { qualifyCanadianOpeningReportingSource, readCanadianOpeningReportingSourceContext } from "./canada/opening-reporting-authority.ts";
+import {
+  qualifyOpeningEmployerAuthority,
+  readOpeningEmployerContext,
+} from "./opening-employer-authority.ts";
+import {
+  qualifyOpeningLevySourceAuthority,
+  readOpeningLevySourceContext,
+  type OpeningLevySourceAllocationInput,
+} from "./opening-levy-source-authority.ts";
+import {
+  qualifyCanadianOpeningReportingSource,
+  readCanadianOpeningReportingSourceContext,
+} from "./canada/opening-reporting-authority.ts";
 import { readEmployeeCanadianOpeningReportingSource } from "./canada/opening-reporting-reader.ts";
 import type { CanadianOpeningReportingAllocation } from "./canada/opening-reporting-source.ts";
 import { rl1Return, rl1Slips, rl1Summary } from "./canada/quebec/rl1.ts";
@@ -42,68 +58,195 @@ type QcFixture = {
   onOpeningOnlyEmployee: string;
 };
 
-const facts = { originalCountry: 'CA', originalCurrency: 'CAD', coverageStart: '2026-01-01',
-  coverageEnd: '2026-06-30', coverageComplete: true } as const;
+const facts = {
+  originalCountry: "CA",
+  originalCurrency: "CAD",
+  coverageStart: "2026-01-01",
+  coverageEnd: "2026-06-30",
+  coverageComplete: true,
+} as const;
 const levies: OpeningLevySourceAllocationInput[] = [
-  ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
-    ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: '0' })),
-  ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
-  { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
+  ...["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"].map(
+    (region) => ({ programKey: "ca_wcb", region, federalAccountId: null, amount: "0" }),
+  ),
+  ...["BC", "MB", "NL", "ON"].map((region) => ({
+    programKey: "ca_eht",
+    region,
+    federalAccountId: null,
+    amount: "0",
+  })),
+  { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
 ];
 
 async function retainOriginalFile(orgId: string, actorId: string, evidence: unknown) {
-  const sourceFileId = randomUUID(), sourceVersionId = randomUUID(), folderId = randomUUID();
+  const sourceFileId = randomUUID(),
+    sourceVersionId = randomUUID(),
+    folderId = randomUUID();
   const bytes = Buffer.from(JSON.stringify(evidence));
-  const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
-  assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-    values (${folderId},${orgId},'Original payroll evidence',true,${actorId},${actorId},${actorId}) returning id`, "objects")).length, 1);
-  assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-    values (${sourceFileId},${orgId},${folderId},'original-payroll.json','application/json',${bytes.length},${actorId},${actorId}) returning id`, "objects")).length, 1);
-  assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-    values (${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${actorId}) returning id`, "objects")).length, 1);
-  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes)
-    values (${sourceVersionId},${bytes}) returning version_id`, "objects")).length, 1);
-  assert.equal((await db.execute(sql`update files set current_version_id=${sourceVersionId}
-    where org_id=${orgId} and id=${sourceFileId} returning id`, "objects")).length, 1);
+  const sourceSha256 = createHash("sha256").update(bytes).digest("hex");
+  assert.equal(
+    (
+      await db.execute(
+        sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
+    values (${folderId},${orgId},'Original payroll evidence',true,${actorId},${actorId},${actorId}) returning id`,
+        "objects",
+      )
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      await db.execute(
+        sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
+    values (${sourceFileId},${orgId},${folderId},'original-payroll.json','application/json',${bytes.length},${actorId},${actorId}) returning id`,
+        "objects",
+      )
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      await db.execute(
+        sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
+    values (${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${actorId}) returning id`,
+        "objects",
+      )
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      await db.execute(
+        sql`insert into file_blobs(version_id,bytes)
+    values (${sourceVersionId},${bytes}) returning version_id`,
+        "objects",
+      )
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      await db.execute(
+        sql`update files set current_version_id=${sourceVersionId}
+    where org_id=${orgId} and id=${sourceFileId} returning id`,
+        "objects",
+      )
+    ).length,
+    1,
+  );
   return { sourceFileId, sourceVersionId, sourceSha256 };
 }
 
-async function qualifyOpening(orgId: string, actorId: string, subsidiaryId: string, employeePartyId: string,
-  filingAccountId: string, province: string, taxable: string, pensionable: string, qpipBase: string) {
+async function qualifyOpening(
+  orgId: string,
+  actorId: string,
+  subsidiaryId: string,
+  employeePartyId: string,
+  filingAccountId: string,
+  province: string,
+  taxable: string,
+  pensionable: string,
+  qpipBase: string,
+) {
   await withOrgContext(orgId, async () => {
-    const amounts = { pensionableYtd: pensionable, insurableYtd: '9000', cppYtd: '500', cpp2Ytd: '50',
-      eiYtd: '100', qpipYtd: province === 'QC' ? '40' : '0', taxableYtd: taxable, taxYtd: '1500',
-      qcTaxYtd: province === 'QC' ? '125' : '0', unionDuesYtd: '75' };
-    const programs = province === 'QC' ? { qpip: qpipBase } : {};
-    const saved = await saveOpeningBalances({ orgId, actorId, taxYear: 2026,
-      rows: [{ employeePartyId, amounts, programs }] });
-    assert.deepEqual(saved.errors, []); assert.equal(saved.created, 1);
-    const file = await retainOriginalFile(orgId, actorId, { employeePartyId, subsidiaryId, taxYear: 2026,
-      ...facts, amounts, programs, levies });
-    const contextInput = { orgId, actorId, employeePartyId, taxYear: 2026, allowedSubsidiaryIds: null };
-    const employer = await readOpeningEmployerContext({ ...contextInput, sourceFileId: file.sourceFileId });
+    const amounts = {
+      pensionableYtd: pensionable,
+      insurableYtd: "9000",
+      cppYtd: "500",
+      cpp2Ytd: "50",
+      eiYtd: "100",
+      qpipYtd: province === "QC" ? "40" : "0",
+      taxableYtd: taxable,
+      taxYtd: "1500",
+      qcTaxYtd: province === "QC" ? "125" : "0",
+      unionDuesYtd: "75",
+    };
+    const programs = province === "QC" ? { qpip: qpipBase } : {};
+    const saved = await saveOpeningBalances({
+      orgId,
+      actorId,
+      taxYear: 2026,
+      rows: [{ employeePartyId, amounts, programs }],
+    });
+    assert.deepEqual(saved.errors, []);
+    assert.equal(saved.created, 1);
+    const file = await retainOriginalFile(orgId, actorId, {
+      employeePartyId,
+      subsidiaryId,
+      taxYear: 2026,
+      ...facts,
+      amounts,
+      programs,
+      levies,
+    });
+    const contextInput = {
+      orgId,
+      actorId,
+      employeePartyId,
+      taxYear: 2026,
+      allowedSubsidiaryIds: null,
+    };
+    const employer = await readOpeningEmployerContext({
+      ...contextInput,
+      sourceFileId: file.sourceFileId,
+    });
     const levyContext = await readOpeningLevySourceContext(contextInput);
-    assert.ok(employer.record); assert.ok(levyContext.record);
-    const packet = { orgId, actorId, openingBalanceId: employer.record.id,
+    assert.ok(employer.record);
+    assert.ok(levyContext.record);
+    const packet = {
+      orgId,
+      actorId,
+      openingBalanceId: employer.record.id,
       expectedOpeningSha256: employer.record.openingSha256,
-      expectedOpeningChildrenSha256: levyContext.record.openingChildrenSha256, ...facts, ...file,
-      allocations: levies, sourceReference: 'Complete original Canadian payroll report',
-      reason: 'Retain exact original payroll ownership and statutory coverage', allowedSubsidiaryIds: null };
+      expectedOpeningChildrenSha256: levyContext.record.openingChildrenSha256,
+      ...facts,
+      ...file,
+      allocations: levies,
+      sourceReference: "Complete original Canadian payroll report",
+      reason: "Retain exact original payroll ownership and statutory coverage",
+      allowedSubsidiaryIds: null,
+    };
     await qualifyOpeningEmployerAuthority({ ...packet, subsidiaryId });
     const levy = await qualifyOpeningLevySourceAuthority(packet);
     const context = await readCanadianOpeningReportingSourceContext(contextInput);
     assert.ok(context.original.children);
-    const allocations: CanadianOpeningReportingAllocation[] = [{ sourceOrdinal: 1, firstCoveredPayDate: '2026-01-15',
-      filingAccountId, province, annualAmounts: context.original.annualAmounts,
-      reportableBases: { ei: '9000', cpp: pensionable, qpip: qpipBase }, children: context.original.children }];
-    const reportingFile = await retainOriginalFile(orgId, actorId, { employeePartyId, subsidiaryId,
-      taxYear: 2026, ...facts, allocations });
-    const reporting = await qualifyCanadianOpeningReportingSource({ orgId, actorId, openingBalanceId: packet.openingBalanceId,
-      requestId: randomUUID(), expectedLevyAuthorityId: levy.id, expectedLevyAllocationSha256: levy.allocationSha256,
-      expectedOpeningSha256: packet.expectedOpeningSha256, expectedOpeningChildrenSha256: packet.expectedOpeningChildrenSha256,
-      ...reportingFile, sourceReference: 'Original RP and province payroll allocation',
-      reason: 'Preserve exact original reporting amounts and capped bases', allocations, allowedSubsidiaryIds: null });
-    assert.equal((await readEmployeeCanadianOpeningReportingSource(db, contextInput)).authority?.id, reporting.id);
+    const allocations: CanadianOpeningReportingAllocation[] = [
+      {
+        sourceOrdinal: 1,
+        firstCoveredPayDate: "2026-01-15",
+        filingAccountId,
+        province,
+        annualAmounts: context.original.annualAmounts,
+        reportableBases: { ei: "9000", cpp: pensionable, qpip: qpipBase },
+        children: context.original.children,
+      },
+    ];
+    const reportingFile = await retainOriginalFile(orgId, actorId, {
+      employeePartyId,
+      subsidiaryId,
+      taxYear: 2026,
+      ...facts,
+      allocations,
+    });
+    const reporting = await qualifyCanadianOpeningReportingSource({
+      orgId,
+      actorId,
+      openingBalanceId: packet.openingBalanceId,
+      requestId: randomUUID(),
+      expectedLevyAuthorityId: levy.id,
+      expectedLevyAllocationSha256: levy.allocationSha256,
+      expectedOpeningSha256: packet.expectedOpeningSha256,
+      expectedOpeningChildrenSha256: packet.expectedOpeningChildrenSha256,
+      ...reportingFile,
+      sourceReference: "Original RP and province payroll allocation",
+      reason: "Preserve exact original reporting amounts and capped bases",
+      allocations,
+      allowedSubsidiaryIds: null,
+    });
+    assert.equal(
+      (await readEmployeeCanadianOpeningReportingSource(db, contextInput)).authority?.id,
+      reporting.id,
+    );
   });
 }
 
@@ -111,12 +254,28 @@ async function seedQcYear(): Promise<QcFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   await seedPayrollSettings(org.orgId, { features: { payroll: true } });
-  assert.equal((await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values (${org.orgId},${actorId},'payroll.read','grant'),(${org.orgId},${actorId},'payroll.run','grant') returning user_id`, "objects")).length, 2);
+  assert.equal(
+    (
+      await db.execute(
+        sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
+    values (${org.orgId},${actorId},'payroll.read','grant'),(${org.orgId},${actorId},'payroll.run','grant') returning user_id`,
+        "objects",
+      )
+    ).length,
+    2,
+  );
   const filingAccountId = randomUUID();
-  assert.equal((await db.execute(sql`insert into payroll_filing_accounts
+  assert.equal(
+    (
+      await db.execute(
+        sql`insert into payroll_filing_accounts
     (id,org_id,country,program_type,account_number,name,subsidiary_id,created_by,updated_by)
-    values (${filingAccountId},${org.orgId},'CA','ca_rp','123456789RP0001','Original RP',${org.subsidiaryId},${actorId},${actorId}) returning id`, "objects")).length, 1);
+    values (${filingAccountId},${org.orgId},'CA','ca_rp','123456789RP0001','Original RP',${org.subsidiaryId},${actorId},${actorId}) returning id`,
+        "objects",
+      )
+    ).length,
+    1,
+  );
 
   // Employee elections reference the scenario's declared vacation program;
   // tax profiles do not provision organization policy implicitly.
@@ -142,7 +301,10 @@ async function seedQcYear(): Promise<QcFixture> {
 
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    name: "Biweekly",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
 
@@ -160,25 +322,53 @@ async function seedQcYear(): Promise<QcFixture> {
     });
     const employmentId = await seedWorkerEmployment(org.orgId, id, org.subsidiaryId);
     if (id === qcStubEmployee) qcStubEmploymentId = employmentId;
-    await seedPayrollProfile(org.orgId, id, employmentId, scheduleId, actorId, {
-      province: province, filingAccountId, payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
-    }, { percentFloor: '4', method: 'accrue' });
-
+    await seedPayrollProfile(
+      org.orgId,
+      id,
+      employmentId,
+      scheduleId,
+      actorId,
+      {
+        province: province,
+        filingAccountId,
+        payBasis: "hourly",
+        country: "CA",
+        federalClaimCode: 1,
+        provincialClaimCode: 1,
+      },
+      { percentFloor: "4", method: "accrue" },
+    );
   }
 
   // All source certificates exist before any committed payroll consumes them.
   for (const [id, province, taxable, pensionable, qpipBase] of [
-    [qcStubEmployee, 'QC', '10000.0000', '10000.0000', '8000'],
-    [qcOpeningOnlyEmployee, 'QC', '5000.0000', '5000.0000', '4000'],
-    [onOpeningOnlyEmployee, 'ON', '7000.0000', '7000.0000', '0'],
+    [qcStubEmployee, "QC", "10000.0000", "10000.0000", "8000"],
+    [qcOpeningOnlyEmployee, "QC", "5000.0000", "5000.0000", "4000"],
+    [onOpeningOnlyEmployee, "ON", "7000.0000", "7000.0000", "0"],
   ] as const) {
-    await qualifyOpening(org.orgId, actorId, org.subsidiaryId, id, filingAccountId, province, taxable, pensionable, qpipBase);
+    await qualifyOpening(
+      org.orgId,
+      actorId,
+      org.subsidiaryId,
+      id,
+      filingAccountId,
+      province,
+      taxable,
+      pensionable,
+      qpipBase,
+    );
   }
 
   const documentId = randomUUID();
   await seedPayrollDocument(org.orgId, documentId, {
-    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: org.subsidiaryId,
-    documentDate: '2026-07-21', currency: 'CAD', status: 'draft', createdBy: actorId, updatedBy: actorId,
+    kind: "pay_run",
+    documentNumber: `PAY-${documentId.slice(0, 8)}`,
+    subsidiaryId: org.subsidiaryId,
+    documentDate: "2026-07-21",
+    currency: "CAD",
+    status: "draft",
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
@@ -191,9 +381,22 @@ async function seedQcYear(): Promise<QcFixture> {
   // 30,000 EI-insurable but only 22,000 QPIP-insurable (benefits the QPIP
   // program excludes). Box I must follow the program factor, never EI.
   await seedPayrollStub(org.orgId, documentId, qcStubEmployee, qcStubEmploymentId, {
-    id: stubId, country: 'CA', countrySource: 'calculation', filingAccountId, filingAccountSource: 'insertion', province: 'QC', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
-    gross: '30000.0000', netPay: '24000.0000', pensionableEarnings: '30000.0000', insurableEarnings: '30000.0000',
-    factors: { C: "1500.00", EI: "390.00", QPIP: "129.00", IE_QPIP: "22000.00" }, createdBy: actorId,
+    id: stubId,
+    country: "CA",
+    countrySource: "calculation",
+    filingAccountId,
+    filingAccountSource: "insertion",
+    province: "QC",
+    periodsPerYear: 26,
+    payDate: "2026-07-21",
+    taxYear: 2026,
+    currency: "CAD",
+    gross: "30000.0000",
+    netPay: "24000.0000",
+    pensionableEarnings: "30000.0000",
+    insurableEarnings: "30000.0000",
+    factors: { C: "1500.00", EI: "390.00", QPIP: "129.00", IE_QPIP: "22000.00" },
+    createdBy: actorId,
     updatedBy: actorId,
   });
   await db.execute(sql`
@@ -206,7 +409,13 @@ async function seedQcYear(): Promise<QcFixture> {
            (${org.orgId}, ${stubId}, ${unionId}, 'deduction', 'Union dues', '300.0000',
             ${actorId}, ${actorId})`);
 
-  return { orgId: org.orgId, actorId, qcStubEmployee, qcOpeningOnlyEmployee, onOpeningOnlyEmployee };
+  return {
+    orgId: org.orgId,
+    actorId,
+    qcStubEmployee,
+    qcOpeningOnlyEmployee,
+    onOpeningOnlyEmployee,
+  };
 }
 
 test(
@@ -224,7 +433,11 @@ test(
       assert.equal(stub.boxC, "490.0000", "390 EI + 100 opening");
       assert.equal(stub.boxH, "169.0000", "129 QPIP + 40 opening");
       assert.equal(stub.boxG, "40000.0000", "30000 + 10000 pensionable, under the YMPE");
-      assert.equal(stub.boxI, "30000.0000", "22000 program base + 8000 carried, never the 30000 EI leg");
+      assert.equal(
+        stub.boxI,
+        "30000.0000",
+        "22000 program base + 8000 carried, never the 30000 EI leg",
+      );
       assert.equal(stub.boxE, "2125.0000", "2000 stub Québec tax plus 125 original Québec tax");
       assert.equal(stub.boxF, "375.0000", "300 stub union dues plus 75 original union dues");
     } finally {
@@ -251,7 +464,11 @@ test(
       assert.equal(seeded.boxG, "5000.0000");
       assert.equal(seeded.boxE, "125.0000");
       assert.equal(seeded.boxF, "75.0000");
-      assert.equal(seeded.boxI, "4000.0000", "the carried program base alone: no stubs, no EI backfill");
+      assert.equal(
+        seeded.boxI,
+        "4000.0000",
+        "the carried program base alone: no stubs, no EI backfill",
+      );
       assert.ok(
         !slips.some((slip) => slip.employeePartyId === fx.onOpeningOnlyEmployee),
         "an opening-only ON employee gets no RL-1 slip",
@@ -275,9 +492,18 @@ test(
     let editPromise: ReturnType<typeof saveOpeningBalances> | undefined;
     let lockHeld = false;
     try {
-      await withBypassContext(() => seedPayrollSettings(fx.orgId, { payroll: { rl1Transmitter: { identificationNumber: 'RQ-OLD-123' } } }));
-      const original = await withOrgContext(fx.orgId, () => readEmployeeCanadianOpeningReportingSource(db, {
-        orgId: fx.orgId, employeePartyId: fx.qcStubEmployee, taxYear: 2026 }));
+      await withBypassContext(() =>
+        seedPayrollSettings(fx.orgId, {
+          payroll: { rl1Transmitter: { identificationNumber: "RQ-OLD-123" } },
+        }),
+      );
+      const original = await withOrgContext(fx.orgId, () =>
+        readEmployeeCanadianOpeningReportingSource(db, {
+          orgId: fx.orgId,
+          employeePartyId: fx.qcStubEmployee,
+          taxYear: 2026,
+        }),
+      );
       await blocker.query("begin");
       const pidResult = await blocker.query<{ pid: number }>("select pg_backend_pid() as pid");
       const blockerPid = pidResult.rows[0]!.pid;
@@ -286,8 +512,14 @@ test(
 
       returnPromise = rl1Return(fx.orgId, 2026);
       const reportingPid = await waitUntilBlockedBy(blockerPid);
-      editPromise = withOrgContext(fx.orgId, () => saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId,
-        taxYear: 2026, rows: [{ employeePartyId: fx.qcStubEmployee, amounts: { taxableYtd: '20000' } }] }));
+      editPromise = withOrgContext(fx.orgId, () =>
+        saveOpeningBalances({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          taxYear: 2026,
+          rows: [{ employeePartyId: fx.qcStubEmployee, amounts: { taxableYtd: "20000" } }],
+        }),
+      );
       await waitUntilBlockedBy(reportingPid);
       await blocker.query("commit");
       lockHeld = false;
@@ -303,13 +535,21 @@ test(
       await assert.rejects(editPromise, (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.match(error.message, /committed|locked|source-qualified/i);
-        const refused = (error as Error & { result: { created: number; updated: number; errors: unknown[] } }).result;
-        assert.equal(refused.created, 0); assert.equal(refused.updated, 0);
+        const refused = (
+          error as Error & { result: { created: number; updated: number; errors: unknown[] } }
+        ).result;
+        assert.equal(refused.created, 0);
+        assert.equal(refused.updated, 0);
         assert.equal(refused.errors.length, 1);
         return true;
       });
-      const retained = await withOrgContext(fx.orgId, () => readEmployeeCanadianOpeningReportingSource(db, {
-        orgId: fx.orgId, employeePartyId: fx.qcStubEmployee, taxYear: 2026 }));
+      const retained = await withOrgContext(fx.orgId, () =>
+        readEmployeeCanadianOpeningReportingSource(db, {
+          orgId: fx.orgId,
+          employeePartyId: fx.qcStubEmployee,
+          taxYear: 2026,
+        }),
+      );
       assert.deepEqual(retained, original);
       assert.deepEqual((await rl1Return(fx.orgId, 2026)).slips, result.slips);
     } finally {

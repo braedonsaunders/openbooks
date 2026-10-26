@@ -105,37 +105,64 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
 
   // Service policy governs ordinary banks. Vacation preserves a separately
   // granted higher personal rate while still advancing lower rates by service.
-  const personalVacationRate = plan.systemKey === "vacation" && input.employeeAccrualValue != null
-    && (input.serviceAccrualValue == null || cmp(input.employeeAccrualValue, input.serviceAccrualValue) > 0);
-  const accrualValue = personalVacationRate ? input.employeeAccrualValue : input.serviceAccrualValue
-    ?? input.employeeAccrualValue
-    ?? plan.accrualValue;
-  const declaredAmount = input.declaredAccrualAmount == null ? null : canonicalDecimal(input.declaredAccrualAmount, 2);
-  if (input.declaredAccrualAmount != null && (declaredAmount === null || plan.systemKey !== "vacation"
-    || plan.unit !== "money" || plan.direction !== "accrue"
-    || cmp(declaredAmount!, "0") <= 0)) {
-    throw new PayrollError("A declared vacation accrual requires a positive amount and an active money-denominated vacation plan.");
-  }
-  const policyEarned = input.scheduledRepaymentValue != null && declaredAmount == null
-    ? "0" : accrualValue == null ? "0" : earnedAmount(plan, accrualValue, input);
-  if (declaredAmount != null && cmp(declaredAmount, policyEarned) < 0) {
+  const personalVacationRate =
+    plan.systemKey === "vacation" &&
+    input.employeeAccrualValue != null &&
+    (input.serviceAccrualValue == null ||
+      cmp(input.employeeAccrualValue, input.serviceAccrualValue) > 0);
+  const accrualValue = personalVacationRate
+    ? input.employeeAccrualValue
+    : (input.serviceAccrualValue ?? input.employeeAccrualValue ?? plan.accrualValue);
+  const declaredAmount =
+    input.declaredAccrualAmount == null ? null : canonicalDecimal(input.declaredAccrualAmount, 2);
+  if (
+    input.declaredAccrualAmount != null &&
+    (declaredAmount === null ||
+      plan.systemKey !== "vacation" ||
+      plan.unit !== "money" ||
+      plan.direction !== "accrue" ||
+      cmp(declaredAmount!, "0") <= 0)
+  ) {
     throw new PayrollError(
-      `The declared vacation accrual ${declaredAmount} is below the effective policy accrual ${policyEarned} — `
-      + "review the retained source and enter an amount that preserves the employee's effective vacation entitlement.",
+      "A declared vacation accrual requires a positive amount and an active money-denominated vacation plan.",
     );
   }
-  const earned = input.declaredAccrualAmount != null
-    ? roundMoney(declaredAmount!, 2)
-    : input.scheduledRepaymentValue != null
-    ? roundMoney(input.scheduledRepaymentValue, 2)
-    : policyEarned;
+  const policyEarned =
+    input.scheduledRepaymentValue != null && declaredAmount == null
+      ? "0"
+      : accrualValue == null
+        ? "0"
+        : earnedAmount(plan, accrualValue, input);
+  if (declaredAmount != null && cmp(declaredAmount, policyEarned) < 0) {
+    throw new PayrollError(
+      `The declared vacation accrual ${declaredAmount} is below the effective policy accrual ${policyEarned} — ` +
+        "review the retained source and enter an amount that preserves the employee's effective vacation entitlement.",
+    );
+  }
+  const earned =
+    input.declaredAccrualAmount != null
+      ? roundMoney(declaredAmount!, 2)
+      : input.scheduledRepaymentValue != null
+        ? roundMoney(input.scheduledRepaymentValue, 2)
+        : policyEarned;
 
   if (plan.direction === "owe") {
-    if (input.unpaidCoverageValue != null && cmp(input.unpaidCoverageValue, '0') > 0) {
-      if (plan.unit !== 'money') throw new PayrollError('Carried benefit coverage requires a money-denominated owe plan; select the native benefit recovery bank.');
+    if (input.unpaidCoverageValue != null && cmp(input.unpaidCoverageValue, "0") > 0) {
+      if (plan.unit !== "money")
+        throw new PayrollError(
+          "Carried benefit coverage requires a money-denominated owe plan; select the native benefit recovery bank.",
+        );
       const debt = neg(roundMoney(input.unpaidCoverageValue, 2));
-      movements.push({ planId: plan.id, employeePartyId, movementDate, amount: debt, hours: null,
-        kind: 'bank_in', componentId: null, note: 'Employee benefit coverage carried during an unpaid period' });
+      movements.push({
+        planId: plan.id,
+        employeePartyId,
+        movementDate,
+        amount: debt,
+        hours: null,
+        kind: "bank_in",
+        componentId: null,
+        note: "Employee benefit coverage carried during an unpaid period",
+      });
       return { movements, warnings, closingBalance: add(openingBalance, debt) };
     }
     // The balance is negative; recoup toward zero and stop there.
@@ -163,13 +190,22 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
     if (max != null && cmp(projected, max) > 0) {
       if (plan.capBehavior === "block") {
         throw new PayrollError(
-          `entitlement plan ${plan.code} would exceed its ${max} limit `
-          + `(balance ${balance} + ${earned}) — raise the limit or pay the bank down`,
+          `entitlement plan ${plan.code} would exceed its ${max} limit ` +
+            `(balance ${balance} + ${earned}) — raise the limit or pay the bank down`,
         );
       }
       if (plan.capBehavior === "auto_payout") {
         const excess = add(projected, neg(max));
-        movements.push(accrualMovement(plan, employeePartyId, movementDate, earned, input.hours, input.declaredAccrualNote ?? null));
+        movements.push(
+          accrualMovement(
+            plan,
+            employeePartyId,
+            movementDate,
+            earned,
+            input.hours,
+            input.declaredAccrualNote ?? null,
+          ),
+        );
         movements.push({
           planId: plan.id,
           employeePartyId,
@@ -193,7 +229,16 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
         threshold: max,
       });
     }
-    movements.push(accrualMovement(plan, employeePartyId, movementDate, earned, input.hours, input.declaredAccrualNote ?? null));
+    movements.push(
+      accrualMovement(
+        plan,
+        employeePartyId,
+        movementDate,
+        earned,
+        input.hours,
+        input.declaredAccrualNote ?? null,
+      ),
+    );
     balance = projected;
   }
 
@@ -236,8 +281,8 @@ export function entitlementMoneyValue(args: {
   if (args.plan.unit === "money") return roundMoney(args.amount, 2) as Money;
   if (args.wage == null || cmp(args.wage, "0") <= 0) {
     throw new PayrollError(
-      `entitlement plan ${args.plan.code} banks hours but ${args.employeeName} has no hourly wage `
-      + `on the pay date — add a labor cost rate covering the pay date for this employee, then recalculate`,
+      `entitlement plan ${args.plan.code} banks hours but ${args.employeeName} has no hourly wage ` +
+        `on the pay date — add a labor cost rate covering the pay date for this employee, then recalculate`,
     );
   }
   return roundMoney(mulDecimal(args.amount, args.wage), 2) as Money;
@@ -278,9 +323,9 @@ function earnedAmount(
       // (the entitlement_plans check in the 0253 forward migration).
       if (plan.unit === "hours") {
         throw new PayrollError(
-          `entitlement plan ${plan.code} banks hours but accrues a percent of earnings — `
-          + `accrue per hour worked or a fixed amount per period instead, or change the plan's `
-          + `unit to money, in Payroll setup → Entitlement plans`,
+          `entitlement plan ${plan.code} banks hours but accrues a percent of earnings — ` +
+            `accrue per hour worked or a fixed amount per period instead, or change the plan's ` +
+            `unit to money, in Payroll setup → Entitlement plans`,
         );
       }
       return mulPercent(input.earnings, accrualValue, 2);

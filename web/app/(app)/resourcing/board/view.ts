@@ -1,6 +1,13 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
-import { grid, page, pageHeader, ref, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import {
+  grid,
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
 import { projects } from "@openbooks/schema";
 import { addCalendarDays, businessToday } from "@openbooks/engine/platform/business-date/module";
 import { weekStartOf, weeksBetween } from "@openbooks/engine/resourcing/weeks";
@@ -12,7 +19,10 @@ import { db } from "@openbooks/engine/platform/db";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { loadDemandWeeks, type DemandWeek } from "../../../../lib/resourcing/demand";
 import { loadResourcingBoard, type ResourcingBoard } from "../../../../lib/resourcing/queries";
-import { loadAssignmentDrawerData, type AssignmentDrawerData } from "../../../../lib/resourcing/assignment-drawer";
+import {
+  loadAssignmentDrawerData,
+  type AssignmentDrawerData,
+} from "../../../../lib/resourcing/assignment-drawer";
 
 type DepartmentOption = { id: string; name: string };
 type JobTitleOption = { job_title: string };
@@ -34,11 +44,14 @@ export type ResourcingBoardPageData = {
     skills: { value: string; label: string }[];
     projects: { value: string; label: string }[];
   };
-  drawer: (AssignmentDrawerData & { remountKey: string; closeHref: string }) | {
-    notFound: true;
-    remountKey: string;
-    closeHref: string;
-  } | null;
+  drawer:
+    | (AssignmentDrawerData & { remountKey: string; closeHref: string })
+    | {
+        notFound: true;
+        remountKey: string;
+        closeHref: string;
+      }
+    | null;
 };
 
 function queryDate(value: string | undefined, fallback: string): string {
@@ -58,7 +71,14 @@ function queryWeeks(value: string | undefined): number {
 function closePath(path: string, params: Record<string, string | string[] | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (key === "assignment" || key === "person" || key === "week" || key === "prefillProject" || key === "prefillHours") continue;
+    if (
+      key === "assignment" ||
+      key === "person" ||
+      key === "week" ||
+      key === "prefillProject" ||
+      key === "prefillHours"
+    )
+      continue;
     if (typeof value === "string") search.set(key, value);
   }
   const query = search.toString();
@@ -80,11 +100,16 @@ export async function loadResourcingBoardPage(
   const weekCount = queryWeeks(pickString(searchParams.weeks));
   const weeks = weeksBetween(firstSunday, addCalendarDays(firstSunday, (weekCount - 1) * 7));
   const lastSunday = weeks.at(-1)!;
-  const departmentId = isUuid(pickString(searchParams.department)) ? pickString(searchParams.department) : undefined;
-  const projectId = isUuid(pickString(searchParams.project)) ? pickString(searchParams.project) : undefined;
-  const qualificationTypeId = certificatesOn && isUuid(pickString(searchParams.skill))
-    ? pickString(searchParams.skill)
+  const departmentId = isUuid(pickString(searchParams.department))
+    ? pickString(searchParams.department)
     : undefined;
+  const projectId = isUuid(pickString(searchParams.project))
+    ? pickString(searchParams.project)
+    : undefined;
+  const qualificationTypeId =
+    certificatesOn && isUuid(pickString(searchParams.skill))
+      ? pickString(searchParams.skill)
+      : undefined;
   const jobTitle = pickString(searchParams.jobTitle)?.trim() || undefined;
   const page = Math.max(1, Number.parseInt(pickString(searchParams.page) ?? "1", 10) || 1);
   const view = pickString(searchParams.view) === "project" ? "project" : "person";
@@ -92,32 +117,44 @@ export async function loadResourcingBoardPage(
 
   const [t, departments, jobTitles, skills, projectOptions] = await Promise.all([
     import("next-intl/server").then(({ getTranslations }) => getTranslations("resourcing")),
-    db.execute<DepartmentOption>(sql`
+    db.execute<DepartmentOption>(
+      sql`
       select id, name from departments where org_id = ${orgId} and is_active
         ${subsidiaryVisibleFilter(sql`departments.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by name, id
-    `, "objects"),
-    db.execute<JobTitleOption>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<JobTitleOption>(
+      sql`
       select distinct er.job_title from employee_roles er
       join parties p on p.org_id = er.org_id and p.id = er.party_id
        where er.org_id = ${orgId} and er.is_active and er.job_title is not null
          and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by er.job_title
-    `, "objects"),
+    `,
+      "objects",
+    ),
     certificatesOn
-      ? db.execute<QualificationOption>(sql`
+      ? db.execute<QualificationOption>(
+          sql`
           select id, name from hrm_qualification_types
            where org_id = ${orgId} and is_active order by name, id
-        `, "objects")
+        `,
+          "objects",
+        )
       : Promise.resolve([] as QualificationOption[]),
-    db.select({ id: projects.id, name: projects.name })
+    db
+      .select({ id: projects.id, name: projects.name })
       .from(projects)
-      .where(and(
-        eq(projects.orgId, orgId),
-        eq(projects.isActive, true),
-        subsidiaryVisibleFilter(sql`projects.subsidiary_id`, authz.allowedSubsidiaryIds),
-      ))
+      .where(
+        and(
+          eq(projects.orgId, orgId),
+          eq(projects.isActive, true),
+          subsidiaryVisibleFilter(sql`projects.subsidiary_id`, authz.allowedSubsidiaryIds),
+        ),
+      )
       .orderBy(projects.name, projects.id),
   ]);
   const board = await loadResourcingBoard(orgId, authz.allowedSubsidiaryIds, {
@@ -148,22 +185,29 @@ export async function loadResourcingBoardPage(
   let drawer: ResourcingBoardPageData["drawer"] = null;
   if (assignmentParam && (isUuid(assignmentParam) || assignmentParam === "new")) {
     const createMode = assignmentParam === "new" && can(authz, "resourcing.manage");
-    const prefill = createMode ? {
-      projectId: isUuid(pickString(searchParams.prefillProject)) ? pickString(searchParams.prefillProject)! : "",
-      employeePartyId: isUuid(pickString(searchParams.person)) ? pickString(searchParams.person)! : "",
-      jobTitle: "",
-      weekStart: queryDate(pickString(searchParams.week), firstSunday),
-      plannedHours: pickString(searchParams.prefillHours) ?? "8.0000",
-    } : undefined;
-    const resolved = assignmentParam === "new" && !createMode
-      ? null
-      : await loadAssignmentDrawerData({
-          orgId,
-          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-          assignmentId: createMode ? null : assignmentParam,
-          createMode,
-          prefill,
-        });
+    const prefill = createMode
+      ? {
+          projectId: isUuid(pickString(searchParams.prefillProject))
+            ? pickString(searchParams.prefillProject)!
+            : "",
+          employeePartyId: isUuid(pickString(searchParams.person))
+            ? pickString(searchParams.person)!
+            : "",
+          jobTitle: "",
+          weekStart: queryDate(pickString(searchParams.week), firstSunday),
+          plannedHours: pickString(searchParams.prefillHours) ?? "8.0000",
+        }
+      : undefined;
+    const resolved =
+      assignmentParam === "new" && !createMode
+        ? null
+        : await loadAssignmentDrawerData({
+            orgId,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+            assignmentId: createMode ? null : assignmentParam,
+            createMode,
+            prefill,
+          });
     if (resolved) {
       drawer = {
         ...resolved,
@@ -233,30 +277,35 @@ const f = ref<ResourcingBoardPageData>();
 
 export function resourcingBoardSpec(data: ResourcingBoardPageData): PageSpec {
   return page({
-    route: '/resourcing/board',
+    route: "/resourcing/board",
     layout: "list",
     header: [pageHeader({ title: f("title"), description: f("description") })],
-    body: [grid("grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]", [
-      widgetBlock("resourcing-board", {
-        board: data.board,
-        weeks: data.weeks,
-        view: data.view,
+    body: [
+      grid("grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]", [
+        widgetBlock("resourcing-board", {
+          board: data.board,
+          weeks: data.weeks,
+          view: data.view,
+          canManage: data.canManage,
+          currentParams: data.currentParams,
+          filterOptions: data.filterOptions,
+          labels: data.labels,
+        }),
+        widgetBlock("resourcing-demand-rail", {
+          genericDemand: data.board.forecast.genericDemand,
+          assignments: data.board.rows,
+          demand: data.demand,
+          projectNames: Object.fromEntries(
+            data.filterOptions.projects.map((project) => [project.value, project.label]),
+          ),
+          canManage: data.canManage,
+          labels: data.labels,
+        }),
+      ]),
+      widgetBlock("resourcing-assignment-drawer", {
+        drawer: data.drawer,
         canManage: data.canManage,
-        currentParams: data.currentParams,
-        filterOptions: data.filterOptions,
-        labels: data.labels,
       }),
-      widgetBlock("resourcing-demand-rail", {
-        genericDemand: data.board.forecast.genericDemand,
-        assignments: data.board.rows,
-        demand: data.demand,
-        projectNames: Object.fromEntries(data.filterOptions.projects.map((project) => [project.value, project.label])),
-        canManage: data.canManage,
-        labels: data.labels,
-      }),
-    ]), widgetBlock("resourcing-assignment-drawer", {
-      drawer: data.drawer,
-      canManage: data.canManage,
-    })],
+    ],
   });
 }

@@ -1,31 +1,35 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { documentRevisionSql } from '@openbooks/engine/records/revision'
-import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
-import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from '../../../lib/custom-fields'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
+import {
+  loadCustomFieldAccessDefs,
+  redactHiddenCustomValues,
+  type CustomFieldViewer,
+} from "../../../lib/custom-fields";
 
 /**
  * Full party payload for the directory flyout: the party row plus its role
  * rows (customer/vendor/employee), related lists, and activity summary.
  */
 export interface PartyPayload {
-  party: Record<string, unknown>
-  customer: Record<string, unknown> | null
-  vendor: Record<string, unknown> | null
-  employee: Record<string, unknown> | null
-  addresses: Record<string, unknown>[]
-  contacts: Record<string, unknown>[]
-  bankAccounts: Record<string, unknown>[]
+  party: Record<string, unknown>;
+  customer: Record<string, unknown> | null;
+  vendor: Record<string, unknown> | null;
+  employee: Record<string, unknown> | null;
+  addresses: Record<string, unknown>[];
+  contacts: Record<string, unknown>[];
+  bankAccounts: Record<string, unknown>[];
   transactionSummary: {
-    count: number
-    openCount: number
-    lastDate: string | null
-    currencies: Array<{ currency: string; total: string; openBalance: string }>
-  }
+    count: number;
+    openCount: number;
+    lastDate: string | null;
+    currencies: Array<{ currency: string; total: string; openBalance: string }>;
+  };
   /** ADDITIONAL subsidiaries the party transacts with (party_subsidiaries),
    *  beyond its primary (parties.subsidiary_id). */
-  additionalSubsidiaryIds: string[]
+  additionalSubsidiaryIds: string[];
 }
 
 /**
@@ -38,9 +42,9 @@ function withoutPartyRoleSecrets(
   row: Record<string, unknown>,
   omitted: readonly string[],
 ): Record<string, unknown> {
-  const safe = { ...row }
-  for (const key of omitted) delete safe[key]
-  return safe
+  const safe = { ...row };
+  for (const key of omitted) delete safe[key];
+  return safe;
 }
 
 export interface LoadPartyOptions {
@@ -52,37 +56,54 @@ export interface LoadPartyOptions {
    * and they stay behind the parties/compliance/payroll-gated surfaces.
    * Defaults to the full directory bundle.
    */
-  bundle?: 'directory' | 'crm'
+  bundle?: "directory" | "crm";
   /**
    * The reader's custom-field viewer. The party's custom values are redacted
    * to the fields this viewer may see. Omitted, the payload keeps only fields
    * open to every role.
    */
-  customFieldViewer?: CustomFieldViewer
+  customFieldViewer?: CustomFieldViewer;
 }
 
-const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = { roleKeys: [], canManageCustomFields: false }
+const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = {
+  roleKeys: [],
+  canManageCustomFields: false,
+};
 
 /**
  * Party payload with the custom bag redacted for the reader. Every consumer of
  * the directory payload (drawers, page loaders, the party API) gets the same
  * role-visibility rule, including deactivated fields.
  */
-export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, opts?: LoadPartyOptions): Promise<PartyPayload | null> {
-  const payload = await loadPartyRecord(id, orgId, allowedSubsidiaryIds, opts)
-  if (!payload || !('custom' in payload.party)) return payload
-  const defs = await loadCustomFieldAccessDefs('parties')
+export async function loadParty(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  opts?: LoadPartyOptions,
+): Promise<PartyPayload | null> {
+  const payload = await loadPartyRecord(id, orgId, allowedSubsidiaryIds, opts);
+  if (!payload || !("custom" in payload.party)) return payload;
+  const defs = await loadCustomFieldAccessDefs("parties");
   return {
     ...payload,
     party: {
       ...payload.party,
-      custom: redactHiddenCustomValues(defs, opts?.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER, payload.party.custom as Record<string, unknown> | null),
+      custom: redactHiddenCustomValues(
+        defs,
+        opts?.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER,
+        payload.party.custom as Record<string, unknown> | null,
+      ),
     },
-  }
+  };
 }
 
-async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, opts?: LoadPartyOptions): Promise<PartyPayload | null> {
-  const crmOnly = opts?.bundle === 'crm'
+async function loadPartyRecord(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  opts?: LoadPartyOptions,
+): Promise<PartyPayload | null> {
+  const crmOnly = opts?.bundle === "crm";
   // One transaction for the scoped party read and every child read, locking
   // the party row first (READ COMMITTED, like loadAsset): a concurrent party
   // rehome blocks on the lock instead of authorizing the party and then
@@ -91,25 +112,28 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
   // query. (A REPEATABLE READ snapshot cannot take the lock: a locking read
   // that meets a concurrent update errors with 40001 instead of waiting.)
   const bundle = await withOrgTransaction(orgId, async () => {
-    const party = (await db.execute<Record<string, unknown>>(sql`
+    const party = await db.execute<Record<string, unknown>>(
+      sql`
       select *, ${documentRevisionSql(sql`updated_at`)} as updated_at from parties where id = ${id} and org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
         for share
-    `, 'objects'))
-    if (!party[0]) return null
+    `,
+      "objects",
+    );
+    if (!party[0]) return null;
     if (crmOnly) {
       const addresses = await db.execute<Record<string, unknown>>(sql`
         select id, label, line1, line2, city, region, postal_code, country,
                is_default_billing, is_default_shipping
           from addresses where party_id = ${id} and org_id = ${orgId} order by created_at
-      `)
+      `);
       const contacts = await db.execute<Record<string, unknown>>(sql`
         select id, first_name, last_name, name, title, role, email, phone,
                mobile_phone, fax, is_primary, is_active
           from contacts where party_id = ${id} and org_id = ${orgId}
          order by is_primary desc, name
-      `)
-      return { party: party[0]!, crm: { addresses, contacts } as const, full: null }
+      `);
+      return { party: party[0]!, crm: { addresses, contacts } as const, full: null };
     }
 
     const customer = await db.execute<Record<string, unknown>>(sql`
@@ -123,7 +147,7 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
         left join accounts a on a.id = r.ar_account_id and a.org_id = r.org_id
         left join tax_codes tc on tc.id = r.tax_code_id and tc.org_id = r.org_id
         left join parties sp on sp.id = r.sales_rep_id and sp.org_id = r.org_id
-       where r.party_id = ${id} and r.org_id = ${orgId}`)
+       where r.party_id = ${id} and r.org_id = ${orgId}`);
     const vendor = await db.execute<Record<string, unknown>>(sql`
       select r.id, r.org_id, r.party_id, r.ap_account_id, r.payment_terms_id,
              r.default_expense_account_id, r.payment_method,
@@ -140,7 +164,7 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
         left join accounts ap on ap.id = r.ap_account_id and ap.org_id = r.org_id
         left join accounts ex on ex.id = r.default_expense_account_id and ex.org_id = r.org_id
         left join tax_codes tc on tc.id = r.tax_code_id and tc.org_id = r.org_id
-       where r.party_id = ${id} and r.org_id = ${orgId}`)
+       where r.party_id = ${id} and r.org_id = ${orgId}`);
     const employee = await db.execute<Record<string, unknown>>(sql`
       select id, org_id, party_id, employee_number, department_id,
              supervisor_id, trade_id, worker_comp_group_id, hired_on,
@@ -148,35 +172,35 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
              billable_utilization_target, expense_account_id,
              external_payroll_id, is_active, custom, created_at, created_by,
              updated_at, updated_by, job_title
-        from employee_roles where party_id = ${id} and org_id = ${orgId}`)
+        from employee_roles where party_id = ${id} and org_id = ${orgId}`);
     const addresses = await db.execute<Record<string, unknown>>(sql`
       select id, label, line1, line2, city, region, postal_code, country,
              is_default_billing, is_default_shipping
         from addresses where party_id = ${id} and org_id = ${orgId} order by created_at
-    `)
+    `);
     const contacts = await db.execute<Record<string, unknown>>(sql`
       select id, first_name, last_name, name, title, role, email, phone,
              mobile_phone, fax, is_primary, is_active
         from contacts where party_id = ${id} and org_id = ${orgId}
        order by is_primary desc, name
-    `)
+    `);
     const bankAccounts = await db.execute<Record<string, unknown>>(sql`
       select id, bank_name, country, currency, routing, account_last_four,
              approval_status, approved_at, approved_by, submitted_by,
              submitted_at, retired_at, retired_by, retirement_reason,
              is_active, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from party_bank_accounts where party_id = ${id} and org_id = ${orgId} order by created_at
-    `)
+    `);
     const partySubs = await db.execute<Record<string, unknown>>(sql`
       select subsidiary_id from party_subsidiaries where party_id = ${id} and org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by created_at
-    `)
+    `);
     const txnSummary = await db.execute<Record<string, unknown>>(sql`
       select count(*)::int as count,
              count(*) filter (where coalesce(open_balance, 0) <> 0)::int as open_count,
              max(document_date)::text as last_date
         from documents where party_id = ${id} and org_id = ${orgId}
-          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`)
+          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`);
     const currencySummary = await db.execute<Record<string, unknown>>(sql`
       select currency, coalesce(sum(abs(total)), 0)::text as total,
              -- Document open balances are stored unsigned per document (the
@@ -188,17 +212,27 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
                then -abs(open_balance) else abs(open_balance) end), 0)::text as open_balance
         from documents where party_id = ${id} and org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-       group by currency order by currency`)
+       group by currency order by currency`);
     return {
       party: party[0]!,
       crm: null,
-      full: { customer, vendor, employee, addresses, contacts, bankAccounts, partySubs, txnSummary, currencySummary } as const,
-    }
-  })
-  if (!bundle) return null
+      full: {
+        customer,
+        vendor,
+        employee,
+        addresses,
+        contacts,
+        bankAccounts,
+        partySubs,
+        txnSummary,
+        currencySummary,
+      } as const,
+    };
+  });
+  if (!bundle) return null;
   if (bundle.crm) {
     return {
-      party: withoutPartyRoleSecrets(bundle.party, ['tax_ids']),
+      party: withoutPartyRoleSecrets(bundle.party, ["tax_ids"]),
       customer: null,
       vendor: null,
       employee: null,
@@ -207,24 +241,30 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
       bankAccounts: [],
       transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] },
       additionalSubsidiaryIds: [],
-    }
+    };
   }
-  const { customer, vendor, employee, addresses, contacts, bankAccounts, partySubs, txnSummary, currencySummary } = bundle.full!
+  const {
+    customer,
+    vendor,
+    employee,
+    addresses,
+    contacts,
+    bankAccounts,
+    partySubs,
+    txnSummary,
+    currencySummary,
+  } = bundle.full!;
 
-  const summary = txnSummary.rows[0] ?? {}
+  const summary = txnSummary.rows[0] ?? {};
 
   return {
     // Full tax identifiers are sealed: no directory surface renders them
     // and the governed query layer withholds them from reportable
     // projections, so they never leave the server inside this payload.
-    party: withoutPartyRoleSecrets(bundle.party, ['tax_ids']),
+    party: withoutPartyRoleSecrets(bundle.party, ["tax_ids"]),
     customer: customer.rows[0] ?? null,
-    vendor: vendor.rows[0]
-      ? withoutPartyRoleSecrets(vendor.rows[0], ['tin_encrypted'])
-      : null,
-    employee: employee.rows[0]
-      ? withoutPartyRoleSecrets(employee.rows[0], ['birth_date'])
-      : null,
+    vendor: vendor.rows[0] ? withoutPartyRoleSecrets(vendor.rows[0], ["tin_encrypted"]) : null,
+    employee: employee.rows[0] ? withoutPartyRoleSecrets(employee.rows[0], ["birth_date"]) : null,
     addresses: addresses.rows,
     contacts: contacts.rows,
     bankAccounts: bankAccounts.rows,
@@ -239,5 +279,5 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
       })),
     },
     additionalSubsidiaryIds: partySubs.rows.map((r) => String(r.subsidiary_id)),
-  }
+  };
 }

@@ -16,17 +16,10 @@ export const POST = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: leaveDecisionBody,
   invalidBodyStatus: 400,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "request id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
 
     try {
       const request = await withdrawLeaveRequest({

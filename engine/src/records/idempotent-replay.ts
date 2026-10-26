@@ -31,10 +31,13 @@ export async function resolveIdempotentReplay(
   // The key travels as a quoted literal (never a bound parameter: Postgres
   // has no placeholder for an object key), sanitized to a bare identifier so
   // a caller cannot shape the statement text through it.
-  const keyLiteral = args.matchField === undefined || args.matchField === "after"
-    ? `'after'`
-    : `'${args.matchField.replace(/[^a-z_]/g, "")}'`;
-  const original = (await tx.execute<{ after: unknown }>(sql`
+  const keyLiteral =
+    args.matchField === undefined || args.matchField === "after"
+      ? `'after'`
+      : `'${args.matchField.replace(/[^a-z_]/g, "")}'`;
+  const original = (
+    await tx.execute<{ after: unknown }>(
+      sql`
       select changes->${sql.raw(keyLiteral)} as after
         from audit_log
        where org_id = ${args.orgId}
@@ -44,7 +47,10 @@ export async function resolveIdempotentReplay(
          and request_id = ${args.key}
        order by at asc
        limit 1
-    `, "objects"))[0]?.after;
+    `,
+      "objects",
+    )
+  )[0]?.after;
   if (!original || typeof original !== "object" || original === null) return "conflict";
   const keys = Object.keys(args.match);
   const projected: Record<string, unknown> = {};

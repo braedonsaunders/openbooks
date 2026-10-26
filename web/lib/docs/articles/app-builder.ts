@@ -1,27 +1,33 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const appBuilder: DocArticle = {
-  slug: 'app-builder',
-  title: 'Advanced sandbox package reference',
-  category: 'apps',
+  slug: "app-builder",
+  title: "Advanced sandbox package reference",
+  category: "apps",
   order: 2,
   summary:
-    'Create, edit, provision, secure, run, and publish organization apps — a sandboxed frontend plus a governed backend.',
-  updated: '2026-07-31',
+    "Create, edit, provision, secure, run, and publish organization apps — a sandboxed frontend plus a governed backend.",
+  updated: "2026-07-31",
   keywords: [
-    'app builder',
-    'app package',
-    'manifest',
-    'endpoints',
-    'capabilities',
-    'provisioning',
-    'objects',
-    'publish',
-    'marketplace',
-    'App Library',
-    'sandbox',
+    "app builder",
+    "app package",
+    "manifest",
+    "endpoints",
+    "capabilities",
+    "provisioning",
+    "objects",
+    "publish",
+    "marketplace",
+    "App Library",
+    "sandbox",
   ],
-  related: ['apps', 'app-api-reference', 'scripting-engine', 'scripting-api-reference', 'record-customization'],
+  related: [
+    "apps",
+    "app-api-reference",
+    "scripting-engine",
+    "scripting-api-reference",
+    "record-customization",
+  ],
   body: `# Advanced sandbox package reference
 
 For the current creation and review flow, see [App authoring guide](/docs/app-authoring).
@@ -154,4 +160,4 @@ and ship no user interface. Apps are packaged apps with a frontend, backend
 endpoints, provisioned objects, and a distribution channel. Use a script to
 automate rules on existing records. Use an app to deliver a packaged feature.
 `,
-}
+};

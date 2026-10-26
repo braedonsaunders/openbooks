@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, toUnits } from "../money/money.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { sameCurrencyAllocation, validateAllocationInputs, type AllocationInput } from "./settlement-policy.ts";
+import {
+  sameCurrencyAllocation,
+  validateAllocationInputs,
+  type AllocationInput,
+} from "./settlement-policy.ts";
 import { type OpenItemSide, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentControlDeps } from "./payment-accounts.ts";
 /** A credit's source-document claim, judged against the line's actual source.
@@ -13,7 +17,9 @@ export function assertCreditSourceDocument(
   actualSourceDocumentId: string | null | undefined,
 ): void {
   if (!credit.sourceDocumentId || actualSourceDocumentId !== credit.sourceDocumentId) {
-    throw new PaymentError("credit source document must match the tenant-owned posted credit entry");
+    throw new PaymentError(
+      "credit source document must match the tenant-owned posted credit entry",
+    );
   }
 }
 
@@ -23,16 +29,22 @@ export function assertCreditSourceDocument(
  * satisfy the source match — without this, the evidence lock fails it first
  * with a generic retry that hides the remedy. The full validation below
  * re-judges every claim under the lock. */
-export async function assertCreditSourcesExist(orgId: string, credits: CreditAllocationInput[]): Promise<void> {
+export async function assertCreditSourcesExist(
+  orgId: string,
+  credits: CreditAllocationInput[],
+): Promise<void> {
   const fromIds = [...new Set(credits.map((credit) => credit.fromLineId))];
   if (fromIds.length === 0) return;
-  const rows = await db.execute<{ id: string; source_document_id: string | null }>(sql`
+  const rows = await db.execute<{ id: string; source_document_id: string | null }>(
+    sql`
     select jl.id as id, d.id as source_document_id
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
       left join documents d on d.id = je.source_document_id and d.org_id = jl.org_id
      where jl.org_id = ${orgId} and jl.id in ${fromIds}
-  `, "objects");
+  `,
+    "objects",
+  );
   const byId = new Map(rows.map((row) => [row.id, row.source_document_id]));
   for (const credit of credits) {
     assertCreditSourceDocument(credit, byId.get(credit.fromLineId) ?? null);
@@ -42,9 +54,15 @@ export async function assertCreditSourcesExist(orgId: string, credits: CreditAll
 /** Validate credit workpapers against the payment, not merely against each
  * other. Endpoint locks serialize cash and credit capacity checks together. */
 export async function validateCreditAllocations(
-  credits: CreditAllocationInput[], allocations: AllocationInput[],
+  credits: CreditAllocationInput[],
+  allocations: AllocationInput[],
   scope: {
-    orgId: string; partyId: string | null; subsidiaryId: string | null; bookId: string; side: OpenItemSide; controlAccountId: string | null;
+    orgId: string;
+    partyId: string | null;
+    subsidiaryId: string | null;
+    bookId: string;
+    side: OpenItemSide;
+    controlAccountId: string | null;
     /**
      * Admit credits and open items in a foreign transaction currency. Only a
      * caller that measures each side's carrying amount and posts the realized
@@ -63,17 +81,40 @@ export async function validateCreditAllocations(
   },
 ): Promise<void> {
   if (!credits.length) return;
-  if (!scope.partyId || !scope.subsidiaryId) throw new PaymentError("credit applications require a payment party and subsidiary");
-  validateAllocationInputs(credits.map(a => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
-  const ids = [...new Set([...allocations.map(a => a.openLineId), ...credits.flatMap(a => [a.fromLineId, a.toLineId])])];
-  await db.execute(sql`select id from journal_lines where org_id = ${scope.orgId} and id in ${ids} order by id for update`);
+  if (!scope.partyId || !scope.subsidiaryId)
+    throw new PaymentError("credit applications require a payment party and subsidiary");
+  validateAllocationInputs(
+    credits.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)),
+  );
+  const ids = [
+    ...new Set([
+      ...allocations.map((a) => a.openLineId),
+      ...credits.flatMap((a) => [a.fromLineId, a.toLineId]),
+    ]),
+  ];
+  await db.execute(
+    sql`select id from journal_lines where org_id = ${scope.orgId} and id in ${ids} order by id for update`,
+  );
   const rows = await db.execute<{
-    id: string; account_id: string; party_id: string | null; subsidiary_id: string;
-    book_id: string; status: string; is_open_item: boolean; amount: string; source_document_id: string | null;
+    id: string;
+    account_id: string;
+    party_id: string | null;
+    subsidiary_id: string;
+    book_id: string;
+    status: string;
+    is_open_item: boolean;
+    amount: string;
+    source_document_id: string | null;
     source_document_kind: string | null;
-    currency: string; base_currency: string; txn_amount: string;
-    source_used: string; target_used: string; source_txn_used: string; target_txn_used: string;
-  }>(sql`
+    currency: string;
+    base_currency: string;
+    txn_amount: string;
+    source_used: string;
+    target_used: string;
+    source_txn_used: string;
+    target_txn_used: string;
+  }>(
+    sql`
     select jl.id, jl.account_id, jl.party_id, jl.subsidiary_id, je.book_id, je.status,
            jl.is_open_item, jl.amount, jl.currency, jl.txn_amount, s.base_currency, d.id as source_document_id,
            d.kind as source_document_kind,
@@ -92,16 +133,24 @@ export async function validateCreditAllocations(
            and (a.from_line_id=jl.id or a.to_line_id=jl.id)
       ) ap on true
      where jl.org_id=${scope.orgId} and jl.id in ${ids}
-  `, "objects");
-  const byId = new Map(rows.map(row => [row.id, row]));
-  const targetAccounts = new Set(allocations.map(a => byId.get(a.openLineId)?.account_id));
+  `,
+    "objects",
+  );
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const targetAccounts = new Set(allocations.map((a) => byId.get(a.openLineId)?.account_id));
   const deps = scope.controlAccountId ? null : await paymentControlDeps(scope.orgId);
-  const account = scope.controlAccountId ?? (targetAccounts.size === 1 ? [...targetAccounts][0] : null)
-    ?? (scope.side === "ap" ? deps!.control.ap : deps!.control.ar);
+  const account =
+    scope.controlAccountId ??
+    (targetAccounts.size === 1 ? [...targetAccounts][0] : null) ??
+    (scope.side === "ap" ? deps!.control.ap : deps!.control.ar);
   const sourceAmounts = new Map<string, bigint>();
   const targetAmounts = new Map<string, bigint>();
-  for (const allocation of allocations) targetAmounts.set(allocation.openLineId,
-    (targetAmounts.get(allocation.openLineId) ?? 0n) + toUnits(allocation.targetTransactionAmount));
+  for (const allocation of allocations)
+    targetAmounts.set(
+      allocation.openLineId,
+      (targetAmounts.get(allocation.openLineId) ?? 0n) +
+        toUnits(allocation.targetTransactionAmount),
+    );
   for (const credit of credits) {
     assertCreditSourceDocument(credit, byId.get(credit.fromLineId)?.source_document_id);
     // The "credit" in a credit settlement must be a credit MEMO. The source-
@@ -118,27 +167,48 @@ export async function validateCreditAllocations(
     const expectedKind = scope.side === "ap" ? "vendor_credit" : "customer_credit";
     const paymentKind = scope.side === "ap" ? "vendor_payment" : "customer_payment";
     const sourceKind = byId.get(credit.fromLineId)?.source_document_kind;
-    if (sourceKind !== expectedKind && !(scope.admitUnappliedPayments && sourceKind === paymentKind)) {
+    if (
+      sourceKind !== expectedKind &&
+      !(scope.admitUnappliedPayments && sourceKind === paymentKind)
+    ) {
       throw new PaymentError(
         scope.admitUnappliedPayments
           ? `the credit in a ${scope.side} settlement must be a posted ${expectedKind} line or the unapplied cash of a posted ${paymentKind}; invoice and bill open items are not credits`
           : `the credit in a ${scope.side} settlement must be a posted ${expectedKind} line; cash-sourced or invoice open items settle through a payment, not the credit path`,
       );
     }
-    for (const [id, source] of [[credit.fromLineId, true], [credit.toLineId, false]] as const) {
+    for (const [id, source] of [
+      [credit.fromLineId, true],
+      [credit.toLineId, false],
+    ] as const) {
       const row = byId.get(id);
-      if (!row || row.party_id !== scope.partyId || row.subsidiary_id !== scope.subsidiaryId ||
-          row.book_id !== scope.bookId || row.account_id !== account || row.status !== "posted" || !row.is_open_item) {
-        throw new PaymentError("credit applications must use posted open items in the payment's party, control account, subsidiary, and book");
+      if (
+        !row ||
+        row.party_id !== scope.partyId ||
+        row.subsidiary_id !== scope.subsidiaryId ||
+        row.book_id !== scope.bookId ||
+        row.account_id !== account ||
+        row.status !== "posted" ||
+        !row.is_open_item
+      ) {
+        throw new PaymentError(
+          "credit applications must use posted open items in the payment's party, control account, subsidiary, and book",
+        );
       }
       const positive = scope.side === "ap" ? source : !source;
-      if ((positive ? cmp(row.amount, "0") <= 0 : cmp(row.amount, "0") >= 0)) {
+      if (positive ? cmp(row.amount, "0") <= 0 : cmp(row.amount, "0") >= 0) {
         throw new PaymentError("credit application endpoints have the wrong payment side or sign");
       }
-      if (row.currency !== row.base_currency ? !scope.foreignCurrency : cmp(row.amount, row.txn_amount) !== 0) {
+      if (
+        row.currency !== row.base_currency
+          ? !scope.foreignCurrency
+          : cmp(row.amount, row.txn_amount) !== 0
+      ) {
         // Applying a foreign-currency credit realizes FX between the two
         // carrying amounts; only the standalone credit application posts it.
-        throw new PaymentError("credits and open items in a foreign transaction currency apply through a standalone credit application, not with a payment");
+        throw new PaymentError(
+          "credits and open items in a foreign transaction currency apply through a standalone credit application, not with a payment",
+        );
       }
     }
     if (byId.get(credit.fromLineId)!.currency !== byId.get(credit.toLineId)!.currency) {
@@ -148,18 +218,27 @@ export async function validateCreditAllocations(
     sourceAmounts.set(credit.fromLineId, (sourceAmounts.get(credit.fromLineId) ?? 0n) + units);
     targetAmounts.set(credit.toLineId, (targetAmounts.get(credit.toLineId) ?? 0n) + units);
   }
-  for (const [amounts, source] of [[sourceAmounts, true], [targetAmounts, false]] as const) {
+  for (const [amounts, source] of [
+    [sourceAmounts, true],
+    [targetAmounts, false],
+  ] as const) {
     for (const [id, amount] of amounts) {
       const row = byId.get(id);
       // Cash-only foreign targets already undergo dual-currency validation.
-      if (!row || (!source && !credits.some(a => a.toLineId === id))) continue;
-      const abs = (v: string) => { const n = toUnits(v); return n < 0n ? -n : n; };
+      if (!row || (!source && !credits.some((a) => a.toLineId === id))) continue;
+      const abs = (v: string) => {
+        const n = toUnits(v);
+        return n < 0n ? -n : n;
+      };
       // Credit amounts are transaction-currency amounts. A functional-currency
       // endpoint's two frames are equal; a foreign one is bounded by its
       // transaction-currency balance, its carrying amount following pro rata.
       const foreign = row.currency !== row.base_currency;
-      if ((!foreign && amount > abs(row.amount) - toUnits(source ? row.source_used : row.target_used)) ||
-          amount > abs(row.txn_amount) - toUnits(source ? row.source_txn_used : row.target_txn_used)) {
+      if (
+        (!foreign &&
+          amount > abs(row.amount) - toUnits(source ? row.source_used : row.target_used)) ||
+        amount > abs(row.txn_amount) - toUnits(source ? row.source_txn_used : row.target_txn_used)
+      ) {
         throw new PaymentError("credit and cash applications exceed an endpoint's open balance");
       }
     }

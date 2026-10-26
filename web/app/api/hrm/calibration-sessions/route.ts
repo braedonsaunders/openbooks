@@ -18,10 +18,7 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz }) => {
     const cycleId = new URL(req.url).searchParams.get("cycleId");
     if (cycleId !== null && !isUuid(cycleId)) {
-      return NextResponse.json(
-        { error: "cycleId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "cycleId must be a uuid" }, { status: 400 });
     }
     try {
       const sessions = await listCalibrationSessions({

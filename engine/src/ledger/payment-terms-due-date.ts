@@ -1,4 +1,10 @@
-import { addCalendarDays, addMonthsStart, civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/civil-date.ts";
+import {
+  addCalendarDays,
+  addMonthsStart,
+  civilDateFromParts,
+  daysInCivilMonth,
+  isIsoCalendarDate,
+} from "../platform/civil-date.ts";
 
 /**
  * The one due-date rule for payment terms. Every surface that derives a due
@@ -35,13 +41,26 @@ export class PaymentTermsDueDateError extends Error {
 }
 
 /** Why a rule cannot be stored or applied, or null when it is valid. */
-export function paymentTermsDueRuleRefusal(rule: { netDays: unknown; dueDayOfMonth: unknown }): string | null {
+export function paymentTermsDueRuleRefusal(rule: {
+  netDays: unknown;
+  dueDayOfMonth: unknown;
+}): string | null {
   const { netDays, dueDayOfMonth } = rule;
-  if (typeof netDays !== "number" || !Number.isSafeInteger(netDays) || netDays < 0 || netDays > PAYMENT_TERMS_MAX_NET_DAYS) {
+  if (
+    typeof netDays !== "number" ||
+    !Number.isSafeInteger(netDays) ||
+    netDays < 0 ||
+    netDays > PAYMENT_TERMS_MAX_NET_DAYS
+  ) {
     return `Payment terms must state zero or more whole net days; found ${String(netDays)}. Correct the terms in Setup → Payment terms`;
   }
-  if (dueDayOfMonth !== null && (typeof dueDayOfMonth !== "number" || !Number.isSafeInteger(dueDayOfMonth)
-    || dueDayOfMonth < PAYMENT_TERMS_DUE_DAY_MIN || dueDayOfMonth > PAYMENT_TERMS_DUE_DAY_MAX)) {
+  if (
+    dueDayOfMonth !== null &&
+    (typeof dueDayOfMonth !== "number" ||
+      !Number.isSafeInteger(dueDayOfMonth) ||
+      dueDayOfMonth < PAYMENT_TERMS_DUE_DAY_MIN ||
+      dueDayOfMonth > PAYMENT_TERMS_DUE_DAY_MAX)
+  ) {
     return `Payment terms due day of month must be a whole day from ${PAYMENT_TERMS_DUE_DAY_MIN} to ${PAYMENT_TERMS_DUE_DAY_MAX}, or blank for terms counted only in days; found ${String(dueDayOfMonth)}. Correct the terms in Setup → Payment terms`;
   }
   return null;
@@ -56,17 +75,22 @@ function dueDayIn(date: string, dueDayOfMonth: number): string {
 
 /** The due date of a document dated `documentDate` under `rule`. */
 export function paymentTermsDueDate(documentDate: string, rule: PaymentTermsDueRule): string {
-  if (!isIsoCalendarDate(documentDate)) throw new PaymentTermsDueDateError("document date must be a calendar date (YYYY-MM-DD)");
+  if (!isIsoCalendarDate(documentDate))
+    throw new PaymentTermsDueDateError("document date must be a calendar date (YYYY-MM-DD)");
   const refusal = paymentTermsDueRuleRefusal(rule);
   if (refusal) throw new PaymentTermsDueDateError(refusal);
   try {
     const earliest = addCalendarDays(documentDate, rule.netDays);
     if (rule.dueDayOfMonth === null) return earliest;
     const sameMonth = dueDayIn(earliest, rule.dueDayOfMonth);
-    return sameMonth > earliest ? sameMonth : dueDayIn(addMonthsStart(earliest, 1), rule.dueDayOfMonth);
+    return sameMonth > earliest
+      ? sameMonth
+      : dueDayIn(addMonthsStart(earliest, 1), rule.dueDayOfMonth);
   } catch (error) {
     if (error instanceof RangeError) {
-      throw new PaymentTermsDueDateError(`The payment terms put the due date for a document dated ${documentDate} past the supported calendar (year 9999)`);
+      throw new PaymentTermsDueDateError(
+        `The payment terms put the due date for a document dated ${documentDate} past the supported calendar (year 9999)`,
+      );
     }
     throw error;
   }

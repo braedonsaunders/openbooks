@@ -23,7 +23,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.setup-route-contract-test')]
@@ -38,8 +38,8 @@ const hooks = registerHooks({
     // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
-    const entityRoute = context.parentURL?.includes("%5Bentity%5D")
-      ?? context.parentURL?.includes("[entity]");
+    const entityRoute =
+      context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
     if (specifier === "../../../../../lib/authz" && entityRoute) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -60,17 +60,18 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "../app/api/admin/setup/[entity]/route.ts?setup-route-contract-test";
-const { PATCH, POST } = (await import(routeUrl)) as typeof import("../app/api/admin/setup/[entity]/route.ts");
+const { PATCH, POST } = (await import(
+  routeUrl
+)) as typeof import("../app/api/admin/setup/[entity]/route.ts");
 const setupResourceUrl = "./data-io/setup-resources.ts?segment-hierarchy-contract-test";
-const { setupResource } = (await import(setupResourceUrl)) as typeof import("./data-io/setup-resources.ts");
+const { setupResource } = (await import(
+  setupResourceUrl
+)) as typeof import("./data-io/setup-resources.ts");
 const { SETUP_ENTITY_BY_KEY } = await import("./setup/registry.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
-
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -156,15 +157,21 @@ function validOwnershipBody(f: Fixture): Record<string, unknown> {
 }
 
 async function persistedInterestCount(orgId: string): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from subsidiary_ownership_interests where org_id = ${orgId}`, "objects");
+  const r = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from subsidiary_ownership_interests where org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
 async function persistedAuditCount(orgId: string): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'subsidiary_ownership_interests'`, "objects");
+     where org_id = ${orgId} and table_name = 'subsidiary_ownership_interests'`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -184,18 +191,26 @@ test("a valid ownership write persists the interest with audit evidence", async 
     const { id } = (await res.json()) as { id: string };
     assert.ok(id);
 
-    const row = (await db.execute(sql`
+    const row = (
+      await db.execute(
+        sql`
       select method, ownership_percent as "ownershipPercent", investment_account_id as "investmentAccountId"
-        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`, "objects"))[0];
+        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`,
+        "objects",
+      )
+    )[0];
     assert.ok(row);
     assert.equal(row.method, "proportionate");
     assert.equal(Number(row.ownershipPercent), 100);
     assert.equal(row.investmentAccountId, f.investmentAccountId);
 
-    const audits = await db.execute<{ n: number }>(sql`
+    const audits = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from audit_log
        where org_id = ${f.orgId} and table_name = 'subsidiary_ownership_interests'
-         and row_id = ${id} and action = 'insert'`, "objects");
+         and row_id = ${id} and action = 'insert'`,
+      "objects",
+    );
     assert.equal(audits[0]!.n, 1);
   } finally {
     routeState.authz = null;
@@ -214,8 +229,11 @@ test("a malformed or hostile ownership account id is a contract 400 that writes 
 
     const beforeInterests = await persistedInterestCount(f.orgId);
     const beforeAudits = await persistedAuditCount(f.orgId);
-    const beforeAccounts = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from accounts where org_id = ${f.orgId}`, "objects");
+    const beforeAccounts = await db.execute<{ n: number }>(
+      sql`
+      select count(*)::int as n from accounts where org_id = ${f.orgId}`,
+      "objects",
+    );
 
     // Malformed uuid, SQL syntax, and an empty value that would form a
     // malformed array literal if it ever reached a cast.
@@ -229,7 +247,11 @@ test("a malformed or hostile ownership account id is a contract 400 that writes 
         { params: Promise.resolve({ entity: "subsidiary-ownership-interests" }) },
       );
       assert.equal(res.status, 400, `${label}: expected the documented 400 contract`);
-      assert.match(res.headers.get("content-type") ?? "", /application\/json/, `${label}: JSON, not HTML`);
+      assert.match(
+        res.headers.get("content-type") ?? "",
+        /application\/json/,
+        `${label}: JSON, not HTML`,
+      );
       const body = (await res.json()) as { error: string };
       assert.equal(typeof body.error, "string");
       assert.ok(body.error.length > 0, `${label}: carries a client-facing message`);
@@ -237,8 +259,11 @@ test("a malformed or hostile ownership account id is a contract 400 that writes 
 
     assert.equal(await persistedInterestCount(f.orgId), beforeInterests);
     assert.equal(await persistedAuditCount(f.orgId), beforeAudits);
-    const afterAccounts = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from accounts where org_id = ${f.orgId}`, "objects");
+    const afterAccounts = await db.execute<{ n: number }>(
+      sql`
+      select count(*)::int as n from accounts where org_id = ${f.orgId}`,
+      "objects",
+    );
     assert.equal(afterAccounts[0]!.n, beforeAccounts[0]!.n);
   } finally {
     routeState.authz = null;
@@ -278,7 +303,10 @@ test("a full-method ownership without goodwill legs is a typed refusal without S
     const body = (await res.json()) as { error?: unknown; code?: unknown };
     assert.equal(body.code, "invalid");
     assert.match(String(body.error), /goodwill/i);
-    assert.doesNotMatch(JSON.stringify(body), /insert into|failed query|subsidiary_ownership_interests \(/i);
+    assert.doesNotMatch(
+      JSON.stringify(body),
+      /insert into|failed query|subsidiary_ownership_interests \(/i,
+    );
     assert.equal(await persistedInterestCount(f.orgId), 0, "refused create writes nothing");
   } finally {
     routeState.authz = null;
@@ -295,13 +323,16 @@ test("a full-method ownership with goodwill legs persists", async () => {
       allowedSubsidiaryIds: null,
     };
 
-    const res = await POST(postRequest("subsidiary-ownership-interests", {
-      ...fullOwnershipBody(f),
-      goodwillAccountId: f.goodwillAccountId,
-      fairValueAdjustmentAccountId: f.fairValueAdjustmentAccountId,
-    }), {
-      params: Promise.resolve({ entity: "subsidiary-ownership-interests" }),
-    });
+    const res = await POST(
+      postRequest("subsidiary-ownership-interests", {
+        ...fullOwnershipBody(f),
+        goodwillAccountId: f.goodwillAccountId,
+        fairValueAdjustmentAccountId: f.fairValueAdjustmentAccountId,
+      }),
+      {
+        params: Promise.resolve({ entity: "subsidiary-ownership-interests" }),
+      },
+    );
     const created = (await res.json()) as { id?: unknown };
     assert.equal(res.status, 200, `full-payload create failed: ${JSON.stringify(created)}`);
     assert.ok(created.id);
@@ -324,20 +355,28 @@ test("blank keepDefault ownership fields fall through to database defaults", asy
       allowedSubsidiaryIds: null,
     };
 
-    const res = await POST(postRequest("subsidiary-ownership-interests", {
-      ...validOwnershipBody(f),
-      acquisitionRate: "",
-      nciMeasurement: "",
-    }), {
-      params: Promise.resolve({ entity: "subsidiary-ownership-interests" }),
-    });
+    const res = await POST(
+      postRequest("subsidiary-ownership-interests", {
+        ...validOwnershipBody(f),
+        acquisitionRate: "",
+        nciMeasurement: "",
+      }),
+      {
+        params: Promise.resolve({ entity: "subsidiary-ownership-interests" }),
+      },
+    );
     const created = (await res.json()) as { id?: unknown };
     assert.equal(res.status, 200, `blank-keepDefault create failed: ${JSON.stringify(created)}`);
     const id = String(created.id);
     assert.ok(created.id);
-    const row = (await db.execute(sql`
+    const row = (
+      await db.execute(
+        sql`
       select acquisition_rate as "acquisitionRate", nci_measurement as "nciMeasurement"
-        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`, "objects"))[0];
+        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`,
+        "objects",
+      )
+    )[0];
     assert.ok(row);
     assert.equal(Number(row.acquisitionRate), 1);
     assert.equal(row.nciMeasurement, "proportionate");
@@ -407,9 +446,12 @@ function segmentValueBody(f: SegmentFixture, id: string, name: string, parentId:
 }
 
 async function segmentAuditCount(orgId: string): Promise<number> {
-  const result = await db.execute<{ n: number }>(sql`
+  const result = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'segment_values'`, "objects");
+     where org_id = ${orgId} and table_name = 'segment_values'`,
+    "objects",
+  );
   return result[0]!.n;
 }
 
@@ -431,15 +473,22 @@ test("segment value PATCH preflights cycles and preserves the audited valid path
       error: "A segment value cannot be parented beneath itself",
       code: "invalid",
     });
-    assert.equal(await segmentAuditCount(f.orgId), beforeAudits, "cycle preflight writes no audit or row");
+    assert.equal(
+      await segmentAuditCount(f.orgId),
+      beforeAudits,
+      "cycle preflight writes no audit or row",
+    );
 
     const accepted = await PATCH(
       patchRequest("segment-values", segmentValueBody(f, f.grandchildId, "Grandchild", f.rootId)),
       { params: Promise.resolve({ entity: "segment-values" }) },
     );
     assert.equal(accepted.status, 200);
-    const stored = await db.execute<{ parent_id: string | null }>(sql`
-      select parent_id from segment_values where id = ${f.grandchildId} and org_id = ${f.orgId}`, "objects");
+    const stored = await db.execute<{ parent_id: string | null }>(
+      sql`
+      select parent_id from segment_values where id = ${f.grandchildId} and org_id = ${f.orgId}`,
+      "objects",
+    );
     assert.equal(stored[0]?.parent_id, f.rootId);
     assert.equal(await segmentAuditCount(f.orgId), beforeAudits + 1);
   } finally {
@@ -455,41 +504,56 @@ test("segment value imports inherit storage scope enforcement and audit valid wr
     assert.ok(entity);
     const resource = setupResource(entity, f.orgId);
     const beforeAudits = await segmentAuditCount(f.orgId);
-    const invalid = await resource.write([
-      {
-        segmentId: "region_tree",
-        code: "INVALID",
-        name: "Invalid cross-segment child",
-        parentId: f.otherSegmentValueId,
-        isActive: true,
-      },
-    ], "insert", { orgId: f.orgId, actorId: f.actorId, dryRun: false });
+    const invalid = await resource.write(
+      [
+        {
+          segmentId: "region_tree",
+          code: "INVALID",
+          name: "Invalid cross-segment child",
+          parentId: f.otherSegmentValueId,
+          isActive: true,
+        },
+      ],
+      "insert",
+      { orgId: f.orgId, actorId: f.actorId, dryRun: false },
+    );
     assert.equal(invalid.failed, 1);
     assert.equal(invalid.created, 0);
     assert.match(invalid.errors[0]?.message ?? "", /Choose a parent value from the same segment/);
-    assert.equal(await segmentAuditCount(f.orgId), beforeAudits, "rejected import has no orphan audit");
-
-    const valid = await resource.write([
-      {
-        segmentId: "region_tree",
-        code: "IMPORTED",
-        name: "Imported child",
-        parentId: f.rootId,
-        isActive: true,
-      },
-    ], "insert", { orgId: f.orgId, actorId: f.actorId, dryRun: false });
-    assert.deepEqual(
-      { created: valid.created, failed: valid.failed },
-      { created: 1, failed: 0 },
+    assert.equal(
+      await segmentAuditCount(f.orgId),
+      beforeAudits,
+      "rejected import has no orphan audit",
     );
-    const imported = await db.execute<{ id: string }>(sql`
+
+    const valid = await resource.write(
+      [
+        {
+          segmentId: "region_tree",
+          code: "IMPORTED",
+          name: "Imported child",
+          parentId: f.rootId,
+          isActive: true,
+        },
+      ],
+      "insert",
+      { orgId: f.orgId, actorId: f.actorId, dryRun: false },
+    );
+    assert.deepEqual({ created: valid.created, failed: valid.failed }, { created: 1, failed: 0 });
+    const imported = await db.execute<{ id: string }>(
+      sql`
       select id from segment_values
-       where org_id = ${f.orgId} and segment_id = ${f.segmentId} and code = 'IMPORTED'`, "objects");
+       where org_id = ${f.orgId} and segment_id = ${f.segmentId} and code = 'IMPORTED'`,
+      "objects",
+    );
     assert.ok(imported[0]);
-    const audit = await db.execute<{ source: string | null }>(sql`
+    const audit = await db.execute<{ source: string | null }>(
+      sql`
       select changes->>'source' as source from audit_log
        where org_id = ${f.orgId} and table_name = 'segment_values'
-         and row_id = ${imported[0]!.id} and action = 'insert'`, "objects");
+         and row_id = ${imported[0]!.id} and action = 'insert'`,
+      "objects",
+    );
     assert.deepEqual(audit, [{ source: "import" }]);
   } finally {
     await dropScratchOrgReporting(f.orgId);

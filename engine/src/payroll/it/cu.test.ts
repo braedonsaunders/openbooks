@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { IT_PACK_FILINGS } from "./filings.ts";
-import {
-  CU_SUPPORTED_TAX_YEAR,
-  cuSlipBoxes,
-  parseCuRowId,
-  type CuSlip,
-} from "./cu.ts";
+import { CU_SUPPORTED_TAX_YEAR, cuSlipBoxes, parseCuRowId, type CuSlip } from "./cu.ts";
 
 /**
  * The IT Certificazione Unica declaration and its pure halves.
@@ -30,10 +25,7 @@ test("the CU is an annual employee slip with a named e-file refusal", () => {
   assert.ok(filing.slip, "the employee-owed slip is declared");
   assert.match(filing.downloadRefusal ?? "", /Entratel/);
   assert.equal(filing.amendment.supported, false);
-  assert.match(
-    ("refusal" in filing.amendment && filing.amendment.refusal) || "",
-    /Sostituzione/,
-  );
+  assert.match(("refusal" in filing.amendment && filing.amendment.refusal) || "", /Sostituzione/);
 });
 
 test("the local row grammar agrees with the registry's UUID shape", async () => {
@@ -49,7 +41,7 @@ test("the local row grammar agrees with the registry's UUID shape", async () => 
   ];
   for (const sample of samples) {
     assert.equal(
-      (parseCuRowId(sample) !== null),
+      parseCuRowId(sample) !== null,
       isFilingRowUuid(sample),
       `grammar agrees on ${JSON.stringify(sample)}`,
     );
@@ -82,10 +74,7 @@ test("population refuses 2026: the CU 2027 layout is not transcribed", async () 
   // 2026 payroll computes, but the CU box set must come from that year's own
   // CU istruzioni (CU 2027, redditi 2026) — unpublished at transcription time
   // (tax-year-2026.ts says so) — so printing CU 2026 boxes would be a guess.
-  await assert.rejects(
-    filing.population("00000000-0000-0000-0000-000000000000", 2026),
-    /CU 2027/,
-  );
+  await assert.rejects(filing.population("00000000-0000-0000-0000-000000000000", 2026), /CU 2027/);
 });
 
 test("the 770 stays refused by name", async () => {

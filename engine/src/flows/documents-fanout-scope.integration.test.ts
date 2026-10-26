@@ -51,7 +51,11 @@ test("documents fan-out candidates stay inside the firing org", { skip: !DB }, a
     const candidates = await withOrg(orgA.orgId, () =>
       createDocumentsFlowAdapter("vendor_bill").findCandidateIds!(100),
     );
-    assert.deepEqual(new Set(candidates), new Set(aDocs), "only the firing org's docs are candidates");
+    assert.deepEqual(
+      new Set(candidates),
+      new Set(aDocs),
+      "only the firing org's docs are candidates",
+    );
 
     const otherWay = await withOrg(orgB.orgId, () =>
       getFlowAdapter("vendor_bill")!.findCandidateIds!(100),

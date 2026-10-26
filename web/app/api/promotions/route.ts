@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { listActivePromotions } from '@/lib/promotions'
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { listActivePromotions } from "@/lib/promotions";
 
 export const GET = defineRoute({
-  permission: 'ar.create',
-  feature: 'promotions',
+  permission: "ar.create",
+  feature: "promotions",
   handler: async ({ authz }) => {
-    const promotions = await listActivePromotions(authz.user.orgId)
+    const promotions = await listActivePromotions(authz.user.orgId);
     return NextResponse.json({
       promotions: promotions.map((promotion) => ({
         id: promotion.id,
@@ -14,6 +14,6 @@ export const GET = defineRoute({
         name: promotion.name,
         kind: promotion.kind,
       })),
-    })
+    });
   },
-})
+});

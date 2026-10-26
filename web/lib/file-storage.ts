@@ -1,4 +1,4 @@
-import 'server-only'
+import "server-only";
 
 export {
   activeStorageKind,
@@ -14,10 +14,10 @@ export {
   emailAttachmentsKeyPrefix,
   fileCabinetKeyPrefix,
   fileCabinetObjectKey,
-} from '@openbooks/engine/platform/file-storage'
+} from "@openbooks/engine/platform/file-storage";
 export {
   enqueueStorageCleanup,
   enqueueStorageCleanupStandalone,
   type StorageCleanupIntent,
   type StorageCleanupOwnerKind,
-} from '@openbooks/engine/platform/storage-cleanup'
+} from "@openbooks/engine/platform/storage-cleanup";

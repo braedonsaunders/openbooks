@@ -1,26 +1,26 @@
-'use client'
+"use client";
 
-import { RecordTabs } from '@/components/module-home/record-tabs'
+import { RecordTabs } from "@/components/module-home/record-tabs";
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { useViewerFormat } from '@/lib/viewer-format'
-import { ArrowDown, ArrowUp, Undo2, X } from 'lucide-react'
-import { toast } from 'sonner'
-import { Badge, Button, Input, Textarea, UrlDrawer } from '@openbooks/ui'
-import { refusalMessageFromBody } from '@/lib/api-error'
-import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
+import { ArrowDown, ArrowUp, Undo2, X } from "lucide-react";
+import { toast } from "sonner";
+import { Badge, Button, Input, Textarea, UrlDrawer } from "@openbooks/ui";
+import { refusalMessageFromBody } from "@/lib/api-error";
+import type { PageSpec } from "@braedonsaunders/appkit-viewspec";
 import {
   moveBlock,
   outlineSpec,
   removeBlock,
   type BlockPath,
   type OutlineNode,
-} from '@/lib/page-layout-outline'
-import type { FieldDescriptor } from '@/lib/page-fields'
-import type { PageSpecVersion } from '@/lib/page-specs'
-import type { PageLayoutDrawerData } from './view'
+} from "@/lib/page-layout-outline";
+import type { FieldDescriptor } from "@/lib/page-fields";
+import type { PageSpecVersion } from "@/lib/page-specs";
+import type { PageLayoutDrawerData } from "./view";
 
 /**
  * The editor for one route's layout.
@@ -42,9 +42,9 @@ import type { PageLayoutDrawerData } from './view'
  */
 
 const TONE = {
-  chrome: 'text-slate-500 dark:text-slate-400',
-  mono: 'font-mono text-[11px]',
-}
+  chrome: "text-slate-500 dark:text-slate-400",
+  mono: "font-mono text-[11px]",
+};
 
 function Node({
   node,
@@ -53,48 +53,75 @@ function Node({
   onRemove,
   t,
 }: {
-  node: OutlineNode
-  depth: number
-  onMove: (path: BlockPath, delta: -1 | 1) => void
-  onRemove: (path: BlockPath) => void
-  t: ReturnType<typeof useTranslations>
+  node: OutlineNode;
+  depth: number;
+  onMove: (path: BlockPath, delta: -1 | 1) => void;
+  onRemove: (path: BlockPath) => void;
+  t: ReturnType<typeof useTranslations>;
 }) {
   return (
     <li>
       {/* The path is the row's identity. Children nest inside this `li`, so
           the row element — not the list item — is what addresses one block. */}
       <div
-        data-block-path={node.path.join('.')}
+        data-block-path={node.path.join(".")}
         className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/60"
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-          {t.has(`blocks.${node.kind}` as never) ? t(`blocks.${node.kind}` as never) : t('blocks.widget')}
+          {t.has(`blocks.${node.kind}` as never)
+            ? t(`blocks.${node.kind}` as never)
+            : t("blocks.widget")}
         </span>
         {node.name ? (
-          <span className={node.nameIsBinding ? `${TONE.mono} text-indigo-600 dark:text-indigo-400` : 'text-sm text-slate-500'}>
+          <span
+            className={
+              node.nameIsBinding
+                ? `${TONE.mono} text-indigo-600 dark:text-indigo-400`
+                : "text-sm text-slate-500"
+            }
+          >
             {node.nameIsBinding ? `{ ${node.name} }` : node.name}
           </span>
         ) : null}
         {node.count !== null ? (
-          <span className={`text-xs ${TONE.chrome}`}>{t('outline.count', { count: node.count })}</span>
+          <span className={`text-xs ${TONE.chrome}`}>
+            {t("outline.count", { count: node.count })}
+          </span>
         ) : null}
         {node.conditional ? (
           // Worth saying: the page may already be omitting this block for some
           // readers, and hiding something that was never showing is confusing.
-          <Badge variant="outline" className="text-[10px]">{t('outline.conditional')}</Badge>
+          <Badge variant="outline" className="text-[10px]">
+            {t("outline.conditional")}
+          </Badge>
         ) : null}
         {/* Dimmed, never hidden. Controls that appear only on hover are
             unreachable by touch and invisible to anyone scanning the row, and
             these three are the entire point of the screen. */}
         <span className="ml-auto flex items-center gap-1 opacity-60 transition group-hover:opacity-100 focus-within:opacity-100">
-          <Button size="icon" variant="ghost" aria-label={t('outline.moveUp')} onClick={() => onMove(node.path, -1)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={t("outline.moveUp")}
+            onClick={() => onMove(node.path, -1)}
+          >
             <ArrowUp className="h-3.5 w-3.5" />
           </Button>
-          <Button size="icon" variant="ghost" aria-label={t('outline.moveDown')} onClick={() => onMove(node.path, 1)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={t("outline.moveDown")}
+            onClick={() => onMove(node.path, 1)}
+          >
             <ArrowDown className="h-3.5 w-3.5" />
           </Button>
-          <Button size="icon" variant="ghost" aria-label={t('outline.hide')} onClick={() => onRemove(node.path)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={t("outline.hide")}
+            onClick={() => onRemove(node.path)}
+          >
             <X className="h-3.5 w-3.5" />
           </Button>
         </span>
@@ -102,18 +129,33 @@ function Node({
       {node.children.length > 0 ? (
         <ul>
           {node.children.map((child) => (
-            <Node key={child.path.join('.')} node={child} depth={depth + 1} onMove={onMove} onRemove={onRemove} t={t} />
+            <Node
+              key={child.path.join(".")}
+              node={child}
+              depth={depth + 1}
+              onMove={onMove}
+              onRemove={onRemove}
+              t={t}
+            />
           ))}
         </ul>
       ) : null}
     </li>
-  )
+  );
 }
 
-function Fields({ fields, truncated, t }: { fields: FieldDescriptor[]; truncated: boolean; t: ReturnType<typeof useTranslations> }) {
+function Fields({
+  fields,
+  truncated,
+  t,
+}: {
+  fields: FieldDescriptor[];
+  truncated: boolean;
+  t: ReturnType<typeof useTranslations>;
+}) {
   return (
     <div className="space-y-1">
-      <p className={`text-xs ${TONE.chrome}`}>{t('fields.help')}</p>
+      <p className={`text-xs ${TONE.chrome}`}>{t("fields.help")}</p>
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
         {fields.map((f) => (
           <li key={f.path} className="py-1.5">
@@ -124,10 +166,14 @@ function Fields({ fields, truncated, t }: { fields: FieldDescriptor[]; truncated
                 // Rows, not "parts": an array here is DATA the page loaded,
                 // not a piece of the layout, and borrowing the block word for
                 // both would make the two lists read as the same thing.
-                <span className={`text-[11px] ${TONE.chrome}`}>{t('fields.count', { count: f.count })}</span>
+                <span className={`text-[11px] ${TONE.chrome}`}>
+                  {t("fields.count", { count: f.count })}
+                </span>
               ) : null}
               {f.sample !== undefined ? (
-                <span className="truncate text-xs text-slate-600 dark:text-slate-300">{f.sample}</span>
+                <span className="truncate text-xs text-slate-600 dark:text-slate-300">
+                  {f.sample}
+                </span>
               ) : null}
             </div>
             {f.item && f.item.length > 0 ? (
@@ -148,86 +194,93 @@ function Fields({ fields, truncated, t }: { fields: FieldDescriptor[]; truncated
           </li>
         ))}
       </ul>
-      {truncated ? <p className={`text-xs ${TONE.chrome}`}>{t('fields.truncated')}</p> : null}
+      {truncated ? <p className={`text-xs ${TONE.chrome}`}>{t("fields.truncated")}</p> : null}
     </div>
-  )
+  );
 }
 
 export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
-  const { dateTime } = useViewerFormat()
-  const t = useTranslations('admin.pageLayouts')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
+  const { dateTime } = useViewerFormat();
+  const t = useTranslations("admin.pageLayouts");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
 
-  const initial = drawer.override ?? drawer.builtIn
-  const [working, setWorking] = useState<PageSpec | null>(initial)
-  const [undo, setUndo] = useState<PageSpec[]>([])
-  const [mode, setMode] = useState<'structure' | 'json' | 'preview' | 'fields' | 'history'>('structure')
-  const [json, setJson] = useState(() => (initial ? JSON.stringify(initial, null, 2) : ''))
+  const initial = drawer.override ?? drawer.builtIn;
+  const [working, setWorking] = useState<PageSpec | null>(initial);
+  const [undo, setUndo] = useState<PageSpec[]>([]);
+  const [mode, setMode] = useState<"structure" | "json" | "preview" | "fields" | "history">(
+    "structure",
+  );
+  const [json, setJson] = useState(() => (initial ? JSON.stringify(initial, null, 2) : ""));
   // Blank each time: a note explains THIS change, so carrying the previous
   // one forward would quietly attribute an old reason to a new edit.
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState("");
   /**
    * Who the save is for. Defaults to the whole org because that is the
    * decision this screen exists to make; personal is the deliberate choice.
    */
-  const [scope, setScope] = useState<'org' | 'user'>('org')
-  const [errors, setErrors] = useState<string[]>([])
-  const [busy, setBusy] = useState(false)
+  const [scope, setScope] = useState<"org" | "user">("org");
+  const [errors, setErrors] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
   /** The url of the live preview, and a token that forces the frame to reload. */
-  const [preview, setPreview] = useState<{ href: string; nonce: number } | null>(null)
-  const [versions, setVersions] = useState<PageSpecVersion[] | null>(null)
+  const [preview, setPreview] = useState<{ href: string; nonce: number } | null>(null);
+  const [versions, setVersions] = useState<PageSpecVersion[] | null>(null);
 
-  const outline = useMemo(() => (working ? outlineSpec(working) : null), [working])
-  const dirty = working !== initial
+  const outline = useMemo(() => (working ? outlineSpec(working) : null), [working]);
+  const dirty = working !== initial;
 
   /** Apply a structural edit, keeping an undo entry only when it changed. */
   const apply = (next: PageSpec) => {
-    if (!working || next === working) return
-    setUndo((stack) => [...stack, working])
-    setWorking(next)
-    setJson(JSON.stringify(next, null, 2))
-    setErrors([])
-  }
+    if (!working || next === working) return;
+    setUndo((stack) => [...stack, working]);
+    setWorking(next);
+    setJson(JSON.stringify(next, null, 2));
+    setErrors([]);
+  };
 
   const revert = () => {
-    const previous = undo[undo.length - 1]
-    if (!previous) return
-    setUndo((stack) => stack.slice(0, -1))
-    setWorking(previous)
-    setJson(JSON.stringify(previous, null, 2))
-    setErrors([])
-  }
+    const previous = undo[undo.length - 1];
+    if (!previous) return;
+    setUndo((stack) => stack.slice(0, -1));
+    setWorking(previous);
+    setJson(JSON.stringify(previous, null, 2));
+    setErrors([]);
+  };
 
   /** The document to send: the JSON tab's text when it is the active edit. */
   const candidate = (): PageSpec | null => {
-    if (mode !== 'json') return working
+    if (mode !== "json") return working;
     try {
-      return JSON.parse(json) as PageSpec
+      return JSON.parse(json) as PageSpec;
     } catch (error) {
-      setErrors([t('errors.json', { message: (error as Error).message })])
-      return null
+      setErrors([t("errors.json", { message: (error as Error).message })]);
+      return null;
     }
-  }
+  };
 
   const post = async (spec: PageSpec, validateOnly: boolean) => {
-    const query = validateOnly ? '?validate=1' : scope === 'user' ? '?scope=user' : ''
+    const query = validateOnly ? "?validate=1" : scope === "user" ? "?scope=user" : "";
     const response = await fetch(`/api/page-specs${query}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ route: drawer.route, spec, note: note.trim() || null }),
-    })
-    const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
+    });
+    const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string };
     if (!response.ok) {
       // Returned to the author, never swallowed: an unknown widget has to be
       // NAMED or there is nothing to act on. The single-refusal path reads
       // through the shared helper so message, remedy and code render.
-      setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
-      return false
+      setErrors(
+        body.errors ?? [
+          refusalMessageFromBody(body, { fallback: tCommon("feedback.somethingWentWrong") }) ??
+            tCommon("feedback.somethingWentWrong"),
+        ],
+      );
+      return false;
     }
-    setErrors([])
-    return true
-  }
+    setErrors([]);
+    return true;
+  };
 
   /**
    * Store the working layout as this author's draft and point the frame at
@@ -238,143 +291,177 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
    * layout would actually do.
    */
   const showPreview = async () => {
-    const spec = candidate()
-    if (!spec) return
-    setBusy(true)
+    const spec = candidate();
+    if (!spec) return;
+    setBusy(true);
     try {
-      const response = await fetch('/api/page-specs?preview=1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/page-specs?preview=1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ route: drawer.route, spec, params: drawer.segments }),
-      })
+      });
       const body = (await response.json().catch(() => ({}))) as {
-        previewUrl?: string
-        errors?: string[]
-        error?: string
-      }
+        previewUrl?: string;
+        errors?: string[];
+        error?: string;
+      };
       // The single-refusal path reads through the shared helper so message,
       // remedy and code render instead of the bare `error` field.
       if (!response.ok || !body.previewUrl) {
-        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
-        return
+        setErrors(
+          body.errors ?? [
+            refusalMessageFromBody(body, { fallback: tCommon("feedback.somethingWentWrong") }) ??
+              tCommon("feedback.somethingWentWrong"),
+          ],
+        );
+        return;
       }
-      setErrors([])
-      setPreview({ href: body.previewUrl, nonce: Date.now() })
+      setErrors([]);
+      setPreview({ href: body.previewUrl, nonce: Date.now() });
       // Opened only after the draft is stored, so the new tab never races the
       // write and shows the layout the author had a moment ago.
-      window.open(body.previewUrl, '_blank', 'noopener,noreferrer')
+      window.open(body.previewUrl, "_blank", "noopener,noreferrer");
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   const validate = async () => {
-    const spec = candidate()
-    if (!spec) return
-    setBusy(true)
+    const spec = candidate();
+    if (!spec) return;
+    setBusy(true);
     try {
-      if (await post(spec, true)) toast.success(t('actions.validated'))
+      if (await post(spec, true)) toast.success(t("actions.validated"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   const save = async () => {
-    const spec = candidate()
-    if (!spec) return
-    setBusy(true)
+    const spec = candidate();
+    if (!spec) return;
+    setBusy(true);
     try {
       if (await post(spec, false)) {
-        toast.success(t('actions.saved'))
-        router.refresh()
+        toast.success(t("actions.saved"));
+        router.refresh();
       }
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   const loadHistory = async () => {
-    setVersions(null)
-    setErrors([])
+    setVersions(null);
+    setErrors([]);
     try {
       const response = await fetch(
         `/api/page-specs?route=${encodeURIComponent(drawer.route)}&history=1`,
-      )
+      );
       const body = (await response.json().catch(() => ({}))) as {
-        versions?: PageSpecVersion[]
-        errors?: string[]
-        error?: string
-      }
+        versions?: PageSpecVersion[];
+        errors?: string[];
+        error?: string;
+      };
       if (!response.ok) {
-        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
-        return
+        setErrors(
+          body.errors ?? [
+            refusalMessageFromBody(body, { fallback: tCommon("feedback.somethingWentWrong") }) ??
+              tCommon("feedback.somethingWentWrong"),
+          ],
+        );
+        return;
       }
-      setVersions(body.versions ?? [])
+      setVersions(body.versions ?? []);
     } catch {
-      setErrors([tCommon('feedback.somethingWentWrong')])
+      setErrors([tCommon("feedback.somethingWentWrong")]);
     }
-  }
+  };
 
   const restore = async (versionId: string) => {
-    const version = versions?.find((candidate) => candidate.id === versionId)
-    if (!version) return
-    setBusy(true)
+    const version = versions?.find((candidate) => candidate.id === versionId);
+    if (!version) return;
+    setBusy(true);
     try {
       const response = await fetch(
         `/api/page-specs?restore=${encodeURIComponent(versionId)}` +
-          (version.scope === 'user' ? '&scope=user' : ''),
+          (version.scope === "user" ? "&scope=user" : ""),
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ route: drawer.route }),
         },
-      )
-      const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        errors?: string[];
+        error?: string;
+      };
       // The single-refusal path reads through the shared helper so message,
       // remedy and code render instead of the bare `error` field.
       if (!response.ok) {
-        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
-        return
+        setErrors(
+          body.errors ?? [
+            refusalMessageFromBody(body, { fallback: tCommon("feedback.somethingWentWrong") }) ??
+              tCommon("feedback.somethingWentWrong"),
+          ],
+        );
+        return;
       }
-      setErrors([])
-      toast.success(t('actions.restored'))
-      router.refresh()
+      setErrors([]);
+      toast.success(t("actions.restored"));
+      router.refresh();
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   const remove = async () => {
-    setBusy(true)
-    setErrors([])
+    setBusy(true);
+    setErrors([]);
     try {
       const response = await fetch(
         `/api/page-specs?route=${encodeURIComponent(drawer.route)}` +
-          (scope === 'user' ? '&scope=user' : ''),
-        { method: 'DELETE' },
-      )
-      const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
+          (scope === "user" ? "&scope=user" : ""),
+        { method: "DELETE" },
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        errors?: string[];
+        error?: string;
+      };
       if (!response.ok) {
-        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
-        return
+        setErrors(
+          body.errors ?? [
+            refusalMessageFromBody(body, { fallback: tCommon("feedback.somethingWentWrong") }) ??
+              tCommon("feedback.somethingWentWrong"),
+          ],
+        );
+        return;
       }
-      toast.success(t('actions.removed'))
-      router.replace('/admin/page-layouts')
-      router.refresh()
+      toast.success(t("actions.removed"));
+      router.replace("/admin/page-layouts");
+      router.refresh();
     } catch {
-      setErrors([tCommon('feedback.somethingWentWrong')])
+      setErrors([tCommon("feedback.somethingWentWrong")]);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
-  const TABS = ['structure', 'json', 'preview', 'fields', 'history'] as const
+  const TABS = ["structure", "json", "preview", "fields", "history"] as const;
 
   // The drawer chrome owns the tab strip, so the tabs sit above the scrolling
   // body instead of scrolling away with it.
   const subtabs = working ? (
-    <RecordTabs label={t('tabs.aria')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={mode} onChange={(tab) => { setMode(tab); if (tab === 'history') void loadHistory() }} />
-  ) : undefined
+    <RecordTabs
+      label={t("tabs.aria")}
+      tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))}
+      active={mode}
+      onChange={(tab) => {
+        setMode(tab);
+        if (tab === "history") void loadHistory();
+      }}
+    />
+  ) : undefined;
 
   return (
     <UrlDrawer
@@ -384,8 +471,8 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
       title={drawer.route}
       description={
         drawer.override
-          ? t(drawer.overrideScope === 'user' ? 'drawer.customizedByYou' : 'drawer.customized')
-          : t('drawer.builtIn')
+          ? t(drawer.overrideScope === "user" ? "drawer.customizedByYou" : "drawer.customized")
+          : t("drawer.builtIn")
       }
       subtabs={subtabs}
       headerActions={
@@ -393,11 +480,11 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
           {undo.length > 0 ? (
             <Button variant="ghost" disabled={busy} onClick={revert}>
               <Undo2 className="mr-1 h-3.5 w-3.5" />
-              {t('actions.undo')}
+              {t("actions.undo")}
             </Button>
           ) : null}
-          <Button disabled={busy || !working || (mode !== 'json' && !dirty)} onClick={save}>
-            {busy ? tCommon('actions.saving') : t('actions.save')}
+          <Button disabled={busy || !working || (mode !== "json" && !dirty)} onClick={save}>
+            {busy ? tCommon("actions.saving") : t("actions.save")}
           </Button>
         </>
       }
@@ -405,14 +492,14 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
         <div className="flex w-full items-center justify-between gap-2">
           {drawer.override ? (
             <Button variant="destructive" disabled={busy} onClick={remove}>
-              {t('actions.remove')}
+              {t("actions.remove")}
             </Button>
           ) : (
             <span />
           )}
-          {mode === 'json' ? (
+          {mode === "json" ? (
             <Button variant="outline" disabled={busy} onClick={validate}>
-              {t('actions.validate')}
+              {t("actions.validate")}
             </Button>
           ) : null}
         </div>
@@ -422,7 +509,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
         {/* Stated on the way in, not discovered later: a stored layout is the
             whole page, so the route stops tracking the app's own changes. */}
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          {t('drawer.replacesWarning')}
+          {t("drawer.replacesWarning")}
         </p>
 
         {drawer.unavailable ? (
@@ -441,17 +528,19 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
 
         {working ? (
           <>
-            {mode === 'structure' && outline ? (
+            {mode === "structure" && outline ? (
               <div className="space-y-3">
-                {(['header', 'body'] as const).map((region) => (
+                {(["header", "body"] as const).map((region) => (
                   <section key={region}>
-                    <h3 className={`px-2 text-xs font-semibold uppercase tracking-wide ${TONE.chrome}`}>
+                    <h3
+                      className={`px-2 text-xs font-semibold uppercase tracking-wide ${TONE.chrome}`}
+                    >
                       {t(`outline.${region}`)}
                     </h3>
                     <ul>
                       {outline[region].map((node) => (
                         <Node
-                          key={node.path.join('.')}
+                          key={node.path.join(".")}
                           node={node}
                           depth={0}
                           onMove={(path, delta) => apply(moveBlock(working, path, delta))}
@@ -465,19 +554,19 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
               </div>
             ) : null}
 
-            {mode === 'json' ? (
+            {mode === "json" ? (
               <Textarea
                 value={json}
                 onChange={(event) => setJson(event.target.value)}
                 spellCheck={false}
                 className="h-[28rem] font-mono text-xs"
-                aria-label={t('tabs.json')}
+                aria-label={t("tabs.json")}
               />
             ) : null}
 
-            {mode === 'preview' ? (
+            {mode === "preview" ? (
               <div className="space-y-3">
-                <p className="text-sm text-slate-600 dark:text-slate-300">{t('preview.help')}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">{t("preview.help")}</p>
                 {/* A new tab rather than an inline frame, and not for want of
                     trying: the app sends `X-Frame-Options: DENY` and
                     `frame-ancestors 'none'`, which is the clickjacking
@@ -486,25 +575,27 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                     opt-out via a query parameter an attacker can add. The
                     convenience is not worth the hole — do not "fix" this by
                     widening the header. */}
-                <p className={`text-xs ${TONE.chrome}`}>{t('preview.newTab')}</p>
+                <p className={`text-xs ${TONE.chrome}`}>{t("preview.newTab")}</p>
                 <Button disabled={busy} onClick={showPreview}>
-                  {busy ? tCommon('actions.saving') : t('actions.openPreview')}
+                  {busy ? tCommon("actions.saving") : t("actions.openPreview")}
                 </Button>
                 {preview ? (
                   <p className={`text-xs ${TONE.chrome}`}>
-                    {t('preview.opened')} <code className={TONE.mono}>{preview.href}</code>
+                    {t("preview.opened")} <code className={TONE.mono}>{preview.href}</code>
                   </p>
                 ) : null}
               </div>
             ) : null}
 
-            {mode === 'history' ? (
+            {mode === "history" ? (
               <div className="space-y-2">
-                <p className={`text-xs ${TONE.chrome}`}>{t('history.help')}</p>
+                <p className={`text-xs ${TONE.chrome}`}>{t("history.help")}</p>
                 {versions === null ? (
-                  errors.length === 0 ? <p className={`text-xs ${TONE.chrome}`}>{t('history.loading')}</p> : null
+                  errors.length === 0 ? (
+                    <p className={`text-xs ${TONE.chrome}`}>{t("history.loading")}</p>
+                  ) : null
                 ) : versions.length === 0 ? (
-                  <p className={`text-sm ${TONE.chrome}`}>{t('history.empty')}</p>
+                  <p className={`text-sm ${TONE.chrome}`}>{t("history.empty")}</p>
                 ) : (
                   <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                     {versions.map((version) => (
@@ -513,7 +604,9 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                           {dateTime(new Date(version.savedAt))}
                         </span>
                         {version.active ? (
-                          <Badge variant="success" className="text-[10px]">{t('history.active')}</Badge>
+                          <Badge variant="success" className="text-[10px]">
+                            {t("history.active")}
+                          </Badge>
                         ) : null}
                         {version.authorName ? (
                           <span className={`text-xs ${TONE.chrome}`}>{version.authorName}</span>
@@ -529,7 +622,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                             disabled={busy}
                             onClick={() => restore(version.id)}
                           >
-                            {t('actions.restore')}
+                            {t("actions.restore")}
                           </Button>
                         ) : null}
                       </li>
@@ -539,49 +632,49 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
               </div>
             ) : null}
 
-            {mode === 'fields' ? (
+            {mode === "fields" ? (
               <Fields fields={drawer.fields} truncated={drawer.fieldsTruncated} t={t} />
             ) : null}
 
             {/* Only where something is being edited. On History or Available
                 fields there is no save to explain, and an input that does
                 nothing invites someone to fill it in. */}
-            {mode === 'structure' || mode === 'json' ? (
-            <div className="space-y-3">
-              <fieldset className="space-y-1">
-                <legend className={`text-xs ${TONE.chrome}`}>{t('scope.legend')}</legend>
-                <div className="flex flex-wrap gap-3">
-                  {(['org', 'user'] as const).map((value) => (
-                    <label key={value} className="flex items-center gap-1.5 text-sm">
-                      <input
-                        type="radio"
-                        name="page-layout-scope"
-                        checked={scope === value}
-                        onChange={() => setScope(value)}
-                      />
-                      <span>{t(`scope.${value}`)}</span>
-                    </label>
-                  ))}
+            {mode === "structure" || mode === "json" ? (
+              <div className="space-y-3">
+                <fieldset className="space-y-1">
+                  <legend className={`text-xs ${TONE.chrome}`}>{t("scope.legend")}</legend>
+                  <div className="flex flex-wrap gap-3">
+                    {(["org", "user"] as const).map((value) => (
+                      <label key={value} className="flex items-center gap-1.5 text-sm">
+                        <input
+                          type="radio"
+                          name="page-layout-scope"
+                          checked={scope === value}
+                          onChange={() => setScope(value)}
+                        />
+                        <span>{t(`scope.${value}`)}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className={`text-xs ${TONE.chrome}`}>{t(`scope.${scope}Help`)}</p>
+                </fieldset>
+                <div className="space-y-1">
+                  <label className={`text-xs ${TONE.chrome}`} htmlFor="page-layout-note">
+                    {t("drawer.note")}
+                  </label>
+                  <Input
+                    id="page-layout-note"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    placeholder={t("drawer.notePlaceholder")}
+                    maxLength={500}
+                  />
                 </div>
-                <p className={`text-xs ${TONE.chrome}`}>{t(`scope.${scope}Help`)}</p>
-              </fieldset>
-            <div className="space-y-1">
-              <label className={`text-xs ${TONE.chrome}`} htmlFor="page-layout-note">
-                {t('drawer.note')}
-              </label>
-              <Input
-                id="page-layout-note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder={t('drawer.notePlaceholder')}
-                maxLength={500}
-              />
-            </div>
-            </div>
+              </div>
             ) : null}
           </>
         ) : null}
       </div>
     </UrlDrawer>
-  )
+  );
 }

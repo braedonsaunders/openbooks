@@ -112,20 +112,16 @@ function isOperatorMapping(value: unknown): value is OperatorEmploymentMapping {
       ].includes(key),
     ) &&
     typeof mapping.partyId === "string" &&
-    (mapping.employerSubsidiaryId === null ||
-      typeof mapping.employerSubsidiaryId === "string") &&
+    (mapping.employerSubsidiaryId === null || typeof mapping.employerSubsidiaryId === "string") &&
     (mapping.hiredOn === null || typeof mapping.hiredOn === "string") &&
-    (mapping.terminatedOn === null ||
-      typeof mapping.terminatedOn === "string") &&
+    (mapping.terminatedOn === null || typeof mapping.terminatedOn === "string") &&
     // Native submission authority is re-resolved in the migration transaction.
     isOptionalText(mapping.rationale) &&
     isOptionalText(mapping.approvalSubmissionId)
   );
 }
 
-function mappingSetEntries(
-  mappings: readonly OperatorEmploymentMapping[],
-): MappingSetEntry[] {
+function mappingSetEntries(mappings: readonly OperatorEmploymentMapping[]): MappingSetEntry[] {
   return mappings.map((mapping) => ({
     partyId: mapping.partyId,
     employerSubsidiaryId: mapping.employerSubsidiaryId,
@@ -134,9 +130,7 @@ function mappingSetEntries(
   }));
 }
 
-function readOperatorMappings(
-  path: string,
-): OperatorEmploymentMapping[] | null {
+function readOperatorMappings(path: string): OperatorEmploymentMapping[] | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
@@ -177,9 +171,12 @@ function fail(message: string): number {
  */
 async function readDatabaseMarker(): Promise<string | null> {
   try {
-    const result = await db.execute<{ marker: string | null }>(sql`
+    const result = await db.execute<{ marker: string | null }>(
+      sql`
       select shobj_description(oid, 'pg_database') as marker
-        from pg_database where datname = current_database()`, "objects");
+        from pg_database where datname = current_database()`,
+      "objects",
+    );
     return result[0]?.marker ?? null;
   } catch {
     // Fail closed: an unreadable marker never counts as ephemeral.
@@ -218,8 +215,7 @@ async function runRequestApproval(options: {
   collectOrg: string | null;
   apply: boolean;
 }): Promise<number> {
-  const { mappingsPath, requestedBy, orgFlag, inputPath, collectOrg, apply } =
-    options;
+  const { mappingsPath, requestedBy, orgFlag, inputPath, collectOrg, apply } = options;
   if (mappingsPath === null) {
     console.error(usage());
     return fail(
@@ -282,9 +278,7 @@ export interface HrmMigrationCliOptions {
  * arguments and environment. Importing this module never runs it and never
  * closes the shared pool — only the isEntrypoint block below does that.
  */
-export async function runHrmMigrationCli(
-  options: HrmMigrationCliOptions,
-): Promise<number> {
+export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promise<number> {
   const args = options.argv;
   const env = options.env ?? process.env;
   if (args.includes("--help") || args.includes("-h")) {
@@ -297,34 +291,23 @@ export async function runHrmMigrationCli(
         "Export OPENBOOKS_DB_URL (and OPENBOOKS_RUNTIME_DB_URL) for the target database first.",
     );
   }
-  const orgFlag =
-    args.find((a) => a.startsWith("--org="))?.slice("--org=".length) ?? null;
-  const inputPath =
-    args.find((a) => a.startsWith("--input="))?.slice("--input=".length) ??
-    null;
+  const orgFlag = args.find((a) => a.startsWith("--org="))?.slice("--org=".length) ?? null;
+  const inputPath = args.find((a) => a.startsWith("--input="))?.slice("--input=".length) ?? null;
   const collectOrg =
-    args.find((a) => a.startsWith("--collect="))?.slice("--collect=".length) ??
-    null;
+    args.find((a) => a.startsWith("--collect="))?.slice("--collect=".length) ?? null;
   const mappingsPath =
-    args
-      .find((a) => a.startsWith("--operator-mappings="))
-      ?.slice("--operator-mappings=".length) ?? null;
+    args.find((a) => a.startsWith("--operator-mappings="))?.slice("--operator-mappings=".length) ??
+    null;
   const apply = args.includes("--apply");
   const allowPartial = args.includes("--allow-partial");
   const allowProduction = args.includes("--allow-production");
   const requestApproval = args.includes("--request-approval");
   const dryRunHash =
-    args
-      .find((a) => a.startsWith("--dry-run-hash="))
-      ?.slice("--dry-run-hash=".length) ?? null;
+    args.find((a) => a.startsWith("--dry-run-hash="))?.slice("--dry-run-hash=".length) ?? null;
   const appliedBy =
-    args
-      .find((a) => a.startsWith("--applied-by="))
-      ?.slice("--applied-by=".length) ?? null;
+    args.find((a) => a.startsWith("--applied-by="))?.slice("--applied-by=".length) ?? null;
   const requestedBy =
-    args
-      .find((a) => a.startsWith("--requested-by="))
-      ?.slice("--requested-by=".length) ?? null;
+    args.find((a) => a.startsWith("--requested-by="))?.slice("--requested-by=".length) ?? null;
   const unknown = args.filter(
     (a) =>
       !a.startsWith("--org=") &&
@@ -432,10 +415,7 @@ export async function runHrmMigrationCli(
           `${collectOrg}; evidence hash ${collected.evidenceHash}`,
       );
     } catch (error) {
-      if (
-        error instanceof EmploymentCollectionError ||
-        error instanceof MappingApprovalError
-      ) {
+      if (error instanceof EmploymentCollectionError || error instanceof MappingApprovalError) {
         return fail(error.message);
       }
       throw error;
@@ -451,17 +431,13 @@ export async function runHrmMigrationCli(
     try {
       raw = inputPath === "-" ? readStdin() : readFileSync(inputPath, "utf8");
     } catch (error) {
-      return fail(
-        `cannot read input ${inputPath}: ${(error as Error).message}`,
-      );
+      return fail(`cannot read input ${inputPath}: ${(error as Error).message}`);
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw) as unknown;
     } catch (error) {
-      return fail(
-        `cannot parse input ${inputPath}: ${(error as Error).message}`,
-      );
+      return fail(`cannot parse input ${inputPath}: ${(error as Error).message}`);
     }
     if (!Array.isArray(parsed) || !parsed.every(isSourcePersonRow)) {
       return fail(
@@ -547,9 +523,7 @@ function isEntrypoint(): boolean {
   const invoked = process.argv[1];
   if (!invoked) return false;
   try {
-    return (
-      realpathSync(invoked) === realpathSync(fileURLToPath(import.meta.url))
-    );
+    return realpathSync(invoked) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }

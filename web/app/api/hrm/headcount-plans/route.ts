@@ -21,10 +21,7 @@ export const GET = defineRoute({
     try {
       if (planId) {
         if (!isUuid(planId))
-          return NextResponse.json(
-            { error: "planId must be a uuid" },
-            { status: 400 },
-          );
+          return NextResponse.json({ error: "planId must be a uuid" }, { status: 400 });
         const lines = await listPlanLines({
           orgId: gate.user.orgId,
           actorId: gate.user.id,

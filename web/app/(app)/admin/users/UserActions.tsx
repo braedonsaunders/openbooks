@@ -1,16 +1,26 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { Check, UserCog } from 'lucide-react'
-import { Badge, BaseLabel, Button, cn, Drawer, Label, Popover, SearchSelect, Textarea } from '@openbooks/ui'
-import { confirmDialog } from '@/lib/confirm'
-import { useAppAction } from '@/lib/use-app-action'
-import { useDirtyClose } from '@/lib/use-dirty-close'
-import { InviteLinkDrawer } from './InviteLinkDrawer'
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { Check, UserCog } from "lucide-react";
+import {
+  Badge,
+  BaseLabel,
+  Button,
+  cn,
+  Drawer,
+  Label,
+  Popover,
+  SearchSelect,
+  Textarea,
+} from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
+import { useAppAction } from "@/lib/use-app-action";
+import { useDirtyClose } from "@/lib/use-dirty-close";
+import { InviteLinkDrawer } from "./InviteLinkDrawer";
 
 /**
  * Per-user role editor: a popover listing every role in the org with a
@@ -22,41 +32,41 @@ export function RoleAssignmentButton({
   allRoles,
   assignedRoleIds,
 }: {
-  userId: string
-  userName: string
-  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
-  assignedRoleIds: string[]
+  userId: string;
+  userName: string;
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[];
+  assignedRoleIds: string[];
 }) {
-  const t = useTranslations('admin.users')
-  const [open, setOpen] = useState(false)
-  const [busyRole, setBusyRole] = useState<string | null>(null)
-  const router = useRouter()
-  const assigned = new Set(assignedRoleIds)
+  const t = useTranslations("admin.users");
+  const [open, setOpen] = useState(false);
+  const [busyRole, setBusyRole] = useState<string | null>(null);
+  const router = useRouter();
+  const assigned = new Set(assignedRoleIds);
   // Shared action path for busy/finally and refusal toast; the per-row
   // spinner is local state reset in a finally around it.
-  const { execute } = useAppAction()
+  const { execute } = useAppAction();
 
   async function toggle(roleId: string) {
-    setBusyRole(roleId)
+    setBusyRole(roleId);
     try {
       await execute(
         () =>
-          fetchAction('/api/admin/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+          fetchAction("/api/admin/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              action: assigned.has(roleId) ? 'unassign' : 'assign',
+              action: assigned.has(roleId) ? "unassign" : "assign",
               userId,
               roleId,
             }),
           }),
         {
-          fallbackMessage: t('requestFailed'),
+          fallbackMessage: t("requestFailed"),
           onOk: () => router.refresh(),
         },
-      )
+      );
     } finally {
-      setBusyRole(null)
+      setBusyRole(null);
     }
   }
 
@@ -71,7 +81,7 @@ export function RoleAssignmentButton({
           type="button"
           aria-haspopup="dialog"
           aria-expanded={open}
-          aria-label={t('editRolesFor', { name: userName })}
+          aria-label={t("editRolesFor", { name: userName })}
           onClick={() => setOpen((v) => !v)}
           className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         >
@@ -80,16 +90,14 @@ export function RoleAssignmentButton({
       }
     >
       <div className="px-2 pt-1.5 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {t('rolesFor', { name: userName })}
+        {t("rolesFor", { name: userName })}
       </div>
       <div className="max-h-72 overflow-auto">
         {allRoles.length === 0 ? (
-          <p className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400">
-            {t('noRoles')}
-          </p>
+          <p className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400">{t("noRoles")}</p>
         ) : (
           allRoles.map((role) => {
-            const active = assigned.has(role.id)
+            const active = assigned.has(role.id);
             return (
               <button
                 key={role.id}
@@ -97,34 +105,36 @@ export function RoleAssignmentButton({
                 disabled={busyRole !== null}
                 onClick={() => toggle(role.id)}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors disabled:opacity-50',
+                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors disabled:opacity-50",
                   active
-                    ? 'bg-teal-50 font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
-                    : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60',
+                    ? "bg-teal-50 font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+                    : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60",
                 )}
               >
                 <Check
                   size={14}
-                  className={cn('shrink-0', active ? 'text-teal-600' : 'text-transparent')}
+                  className={cn("shrink-0", active ? "text-teal-600" : "text-transparent")}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{role.name}</span>
                   {role.description ? (
-                    <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">{role.description}</span>
+                    <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">
+                      {role.description}
+                    </span>
                   ) : null}
                 </span>
                 {role.isBuiltIn ? (
                   <Badge variant="secondary" className="text-[10px]">
-                    {t('builtInBadge')}
+                    {t("builtInBadge")}
                   </Badge>
                 ) : null}
               </button>
-            )
+            );
           })
         )}
       </div>
     </Popover>
-  )
+  );
 }
 
 /**
@@ -137,45 +147,45 @@ export function ResendInviteButton({
   userEmail,
   isPending,
 }: {
-  userId: string
-  userEmail: string
-  isPending: boolean
+  userId: string;
+  userEmail: string;
+  isPending: boolean;
 }) {
-  const t = useTranslations('admin.users')
-  const [link, setLink] = useState<{ url: string; emailFailed: boolean } | null>(null)
-  const router = useRouter()
-  const { busy, execute } = useAppAction()
+  const t = useTranslations("admin.users");
+  const [link, setLink] = useState<{ url: string; emailFailed: boolean } | null>(null);
+  const router = useRouter();
+  const { busy, execute } = useAppAction();
 
-  if (!isPending) return null
+  if (!isPending) return null;
 
   async function resend() {
     await execute(
       () =>
-        fetchAction<{ setPasswordUrl?: string; emailFailed?: boolean }>('/api/admin/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'resend-invite', userId }),
+        fetchAction<{ setPasswordUrl?: string; emailFailed?: boolean }>("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "resend-invite", userId }),
         }),
       {
         // The 429 rate-limit refusal carries the server's own "try again
         // later", which the hook renders verbatim — no call-site copy needed.
-        fallbackMessage: t('requestFailed'),
+        fallbackMessage: t("requestFailed"),
         onOk: (data) => {
-          if (typeof data.setPasswordUrl === 'string') {
-            setLink({ url: data.setPasswordUrl, emailFailed: data.emailFailed === true })
-            return
+          if (typeof data.setPasswordUrl === "string") {
+            setLink({ url: data.setPasswordUrl, emailFailed: data.emailFailed === true });
+            return;
           }
-          toast.success(t('inviteResent', { email: userEmail }))
-          router.refresh()
+          toast.success(t("inviteResent", { email: userEmail }));
+          router.refresh();
         },
       },
-    )
+    );
   }
 
   return (
     <>
       <Button size="sm" variant="outline" disabled={busy} onClick={resend}>
-        {t('inviteResend')}
+        {t("inviteResend")}
       </Button>
       {link ? (
         <InviteLinkDrawer
@@ -183,13 +193,13 @@ export function ResendInviteButton({
           url={link.url}
           emailFailed={link.emailFailed}
           onClose={() => {
-            setLink(null)
-            router.refresh()
+            setLink(null);
+            router.refresh();
           }}
         />
       ) : null}
     </>
-  )
+  );
 }
 
 /** Deactivate / reactivate a user (blocked for your own account). */
@@ -199,58 +209,62 @@ export function ActiveToggle({
   isActive,
   isSelf,
 }: {
-  userId: string
-  userName: string
-  isActive: boolean
-  isSelf: boolean
+  userId: string;
+  userName: string;
+  isActive: boolean;
+  isSelf: boolean;
 }) {
-  const t = useTranslations('admin.users')
-  const router = useRouter()
-  const { busy, execute } = useAppAction()
+  const t = useTranslations("admin.users");
+  const router = useRouter();
+  const { busy, execute } = useAppAction();
 
   async function toggle() {
     if (isActive) {
       const ok = await confirmDialog({
-        message: t('deactivateConfirm', { name: userName }),
-        tone: 'danger',
-        confirmLabel: t('deactivate'),
-      })
-      if (!ok) return
+        message: t("deactivateConfirm", { name: userName }),
+        tone: "danger",
+        confirmLabel: t("deactivate"),
+      });
+      if (!ok) return;
     }
-    const deactivating = isActive
+    const deactivating = isActive;
     await execute(
       () =>
-        fetchAction('/api/admin/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'set-active', userId, isActive: !isActive }),
+        fetchAction("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "set-active", userId, isActive: !isActive }),
         }),
       {
-        fallbackMessage: t('requestFailed'),
+        fallbackMessage: t("requestFailed"),
         onOk: () => {
-          toast.success(deactivating ? t('deactivated', { name: userName }) : t('reactivated', { name: userName }))
-          router.refresh()
+          toast.success(
+            deactivating
+              ? t("deactivated", { name: userName })
+              : t("reactivated", { name: userName }),
+          );
+          router.refresh();
         },
       },
-    )
+    );
   }
 
-  if (isSelf) return null
+  if (isSelf) return null;
   return (
     <Button size="sm" variant="outline" disabled={busy} onClick={toggle}>
-      {isActive ? t('deactivate') : t('reactivate')}
+      {isActive ? t("deactivate") : t("reactivate")}
     </Button>
-  )
+  );
 }
 
 type PersonOption = {
-  value: string
-  label: string
-  hint?: string
-  kind: string
-  roles: string[]
-  isActive: boolean
-}
+  value: string;
+  label: string;
+  hint?: string;
+  kind: string;
+  roles: string[];
+  isActive: boolean;
+};
 
 /**
  * Native linked-person editor. Opens a Drawer with a remote SearchSelect
@@ -273,33 +287,33 @@ export function LinkPersonButton({
   isSelf,
   selfLinkAllowed = false,
 }: {
-  userId: string
-  userName: string
-  partyId: string | null
-  partyName: string | null
-  isSelf: boolean
-  selfLinkAllowed?: boolean
+  userId: string;
+  userName: string;
+  partyId: string | null;
+  partyName: string | null;
+  isSelf: boolean;
+  selfLinkAllowed?: boolean;
 }) {
-  const t = useTranslations('admin.users')
-  const [open, setOpen] = useState(false)
-  const router = useRouter()
+  const t = useTranslations("admin.users");
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
   if (isSelf && !selfLinkAllowed) {
     return (
       <Button
         size="sm"
         variant="outline"
         disabled
-        title={t('linkSelfRefused')}
-        aria-label={t('linkSelfRefused')}
+        title={t("linkSelfRefused")}
+        aria-label={t("linkSelfRefused")}
       >
-        {partyId ? t('linkChangePerson') : t('linkPersonButton')}
+        {partyId ? t("linkChangePerson") : t("linkPersonButton")}
       </Button>
-    )
+    );
   }
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        {partyId ? t('linkChangePerson') : t('linkPersonButton')}
+        {partyId ? t("linkChangePerson") : t("linkPersonButton")}
       </Button>
       {open ? (
         <LinkPersonDrawer
@@ -309,13 +323,13 @@ export function LinkPersonButton({
           initialOption={partyId && partyName ? { value: partyId, label: partyName } : null}
           selfLink={isSelf}
           onClose={() => {
-            setOpen(false)
-            router.refresh()
+            setOpen(false);
+            router.refresh();
           }}
         />
       ) : null}
     </>
-  )
+  );
 }
 
 function LinkPersonDrawer({
@@ -326,124 +340,130 @@ function LinkPersonDrawer({
   selfLink = false,
   onClose,
 }: {
-  userId: string
-  userName: string
-  expectedPartyId: string | null
-  initialOption: { value: string; label: string } | null
+  userId: string;
+  userName: string;
+  expectedPartyId: string | null;
+  initialOption: { value: string; label: string } | null;
   /** The sole active administrator linking their own login. */
-  selfLink?: boolean
-  onClose: () => void
+  selfLink?: boolean;
+  onClose: () => void;
 }) {
-  const t = useTranslations('admin.users')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [value, setValue] = useState(initialOption?.value ?? '')
-  const [selectedOption, setSelectedOption] = useState<{ value: string; label: string } | null>(initialOption)
-  const [options, setOptions] = useState<PersonOption[]>([])
-  const [query, setQuery] = useState('')
+  const t = useTranslations("admin.users");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [value, setValue] = useState(initialOption?.value ?? "");
+  const [selectedOption, setSelectedOption] = useState<{ value: string; label: string } | null>(
+    initialOption,
+  );
+  const [options, setOptions] = useState<PersonOption[]>([]);
+  const [query, setQuery] = useState("");
   // True from mount: the first page is fetched as soon as the drawer opens.
-  const [loading, setLoading] = useState(true)
-  const [statusMessage, setStatusMessage] = useState<string | undefined>(undefined)
-  const [reason, setReason] = useState('')
-  const [attested, setAttested] = useState(false)
-  const [attestMissing, setAttestMissing] = useState(false)
-  const attestRef = useRef<HTMLInputElement>(null)
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
+  const [loading, setLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | undefined>(undefined);
+  const [reason, setReason] = useState("");
+  const [attested, setAttested] = useState(false);
+  const [attestMissing, setAttestMissing] = useState(false);
+  const attestRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
   const closeGuard = useDirtyClose({
-    dirty: value !== (initialOption?.value ?? '') || reason !== '' || attested,
+    dirty: value !== (initialOption?.value ?? "") || reason !== "" || attested,
     busy,
     onClose,
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
-  const requestId = useRef(0)
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
+  const requestId = useRef(0);
 
   // Remote per-query search: bounded page per query so people beyond the
   // first page stay selectable. A sequence guard drops stale responses so a
   // slow earlier query never overwrites newer results. The selected option
   // is merged back when the page does not contain it.
   useEffect(() => {
-    const id = (requestId.current += 1)
-    const params = new URLSearchParams()
-    if (query.trim()) params.set('q', query.trim())
-    params.set('limit', '25')
-    const include = value || expectedPartyId
-    if (include) params.set('include', include)
-    fetch(`/api/admin/users?${params.toString()}`, { method: 'GET' })
+    const id = (requestId.current += 1);
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    params.set("limit", "25");
+    const include = value || expectedPartyId;
+    if (include) params.set("include", include);
+    fetch(`/api/admin/users?${params.toString()}`, { method: "GET" })
       .then(async (res) => {
-        if (id !== requestId.current) return
+        if (id !== requestId.current) return;
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          setStatusMessage((data as { error?: string }).error ?? t('requestFailed'))
-          setLoading(false)
-          return
+          const data = await res.json().catch(() => ({}));
+          setStatusMessage((data as { error?: string }).error ?? t("requestFailed"));
+          setLoading(false);
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: PersonOption[]
-          selected?: PersonOption | null
-        }
-        if (id !== requestId.current) return
-        const page = Array.isArray(payload.options) ? payload.options : []
-        const merged = [...page]
-        const ensure = (opt: { value: string; label: string; hint?: string } | null | undefined) => {
-          if (!opt || !opt.value) return
+          options?: PersonOption[];
+          selected?: PersonOption | null;
+        };
+        if (id !== requestId.current) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
+        const merged = [...page];
+        const ensure = (
+          opt: { value: string; label: string; hint?: string } | null | undefined,
+        ) => {
+          if (!opt || !opt.value) return;
           if (!merged.some((o) => o.value === opt.value)) {
             merged.push({
               value: opt.value,
               label: opt.label,
               hint: opt.hint,
-              kind: '',
+              kind: "",
               roles: [],
               isActive: true,
-            })
+            });
           }
-        }
-        ensure(payload.selected)
-        ensure(selectedOption)
-        setOptions(merged)
-        setLoading(false)
+        };
+        ensure(payload.selected);
+        ensure(selectedOption);
+        setOptions(merged);
+        setLoading(false);
       })
       .catch(() => {
-        if (id !== requestId.current) return
-        setStatusMessage(t('requestFailed'))
-        setLoading(false)
-      })
+        if (id !== requestId.current) return;
+        setStatusMessage(t("requestFailed"));
+        setLoading(false);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query]);
 
   function pick(next: string) {
-    setValue(next)
-    setError(null)
+    setValue(next);
+    setError(null);
     if (!next) {
-      setSelectedOption(null)
-      return
+      setSelectedOption(null);
+      return;
     }
-    const found = options.find((o) => o.value === next)
-    setSelectedOption(found ? { value: found.value, label: found.label } : { value: next, label: next })
+    const found = options.find((o) => o.value === next);
+    setSelectedOption(
+      found ? { value: found.value, label: found.label } : { value: next, label: next },
+    );
   }
 
   async function save() {
     if (!reason.trim()) {
-      setError(t('linkReasonRequired'))
-      return
+      setError(t("linkReasonRequired"));
+      return;
     }
     if (!attested) {
       // Refusing without attestation must land the operator on the checkbox:
       // focus it and highlight the control until it is checked.
-      setError(t('linkAttestationRequired'))
-      setAttestMissing(true)
-      attestRef.current?.focus()
-      return
+      setError(t("linkAttestationRequired"));
+      setAttestMissing(true);
+      attestRef.current?.focus();
+      return;
     }
-    setError(null)
+    setError(null);
     await execute(
       () =>
-        fetchAction('/api/admin/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        fetchAction("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action: 'set-party',
+            action: "set-party",
             userId,
             partyId: value || null,
             expectedPartyId,
@@ -452,15 +472,15 @@ function LinkPersonDrawer({
           }),
         }),
       {
-        fallbackMessage: t('requestFailed'),
-        successMessage: t('linkSaved'),
+        fallbackMessage: t("requestFailed"),
+        successMessage: t("linkSaved"),
         onOk: () => {
-          onClose()
-          router.refresh()
+          onClose();
+          router.refresh();
         },
-        onRefused: (actionError) => setError(actionError.displayMessage(t('requestFailed'))),
+        onRefused: (actionError) => setError(actionError.displayMessage(t("requestFailed"))),
       },
-    )
+    );
   }
 
   return (
@@ -468,65 +488,67 @@ function LinkPersonDrawer({
       open
       onClose={closeGuard.close}
       size="md"
-      title={t('linkPersonTitle', { name: userName })}
-      description={t('linkPersonDescription')}
+      title={t("linkPersonTitle", { name: userName })}
+      description={t("linkPersonDescription")}
       headerActions={
         <>
           <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
-            {tCommon('actions.cancel')}
+            {tCommon("actions.cancel")}
           </Button>
           <Button disabled={busy} onClick={save}>
-            {t('linkSave')}
+            {t("linkSave")}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
         <div className="space-y-1.5">
-          <Label htmlFor="link-person-search">{t('linkPersonLabel')}</Label>
+          <Label htmlFor="link-person-search">{t("linkPersonLabel")}</Label>
           <SearchSelect
             id="link-person-search"
             value={value}
             onChange={pick}
             options={options.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-            placeholder={t('linkPersonPlaceholder')}
-            searchPlaceholder={t('linkPersonSearchPlaceholder')}
-            sheetTitle={t('linkPersonLabel')}
-            ariaLabel={t('linkPersonLabel')}
+            placeholder={t("linkPersonPlaceholder")}
+            searchPlaceholder={t("linkPersonSearchPlaceholder")}
+            sheetTitle={t("linkPersonLabel")}
+            ariaLabel={t("linkPersonLabel")}
             clearable
-            emptyLabel={t('unlinkedPerson')}
+            emptyLabel={t("unlinkedPerson")}
             remote
             loading={loading}
             statusMessage={statusMessage}
-            statusTone={statusMessage ? 'error' : 'muted'}
+            statusTone={statusMessage ? "error" : "muted"}
             onSearchChange={(next) => {
-              setQuery(next)
-              setLoading(true)
-              setStatusMessage(undefined)
+              setQuery(next);
+              setLoading(true);
+              setStatusMessage(undefined);
             }}
           />
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('linkPersonSignalsNote')}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("linkPersonSignalsNote")}</p>
           {selfLink ? (
-            <p role="note" className="text-xs text-amber-800 dark:text-amber-200">{t('linkSelfSoleAdministrator')}</p>
+            <p role="note" className="text-xs text-amber-800 dark:text-amber-200">
+              {t("linkSelfSoleAdministrator")}
+            </p>
           ) : null}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="link-person-reason">{t('linkReasonLabel')}</Label>
+          <Label htmlFor="link-person-reason">{t("linkReasonLabel")}</Label>
           <Textarea
             id="link-person-reason"
             value={reason}
             disabled={busy}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={t('linkReasonPlaceholder')}
+            placeholder={t("linkReasonPlaceholder")}
             required
           />
         </div>
         <div
           className={cn(
-            'flex items-start gap-3 rounded-lg border p-3',
+            "flex items-start gap-3 rounded-lg border p-3",
             attestMissing
-              ? 'border-rose-400 ring-1 ring-rose-400 dark:border-rose-500'
-              : 'border-slate-200 dark:border-slate-800',
+              ? "border-rose-400 ring-1 ring-rose-400 dark:border-rose-500"
+              : "border-slate-200 dark:border-slate-800",
           )}
         >
           <input
@@ -536,16 +558,16 @@ function LinkPersonDrawer({
             checked={attested}
             disabled={busy}
             onChange={(e) => {
-              setAttested(e.target.checked)
-              setAttestMissing(false)
+              setAttested(e.target.checked);
+              setAttestMissing(false);
             }}
             className="mt-0.5 h-5 w-5 shrink-0 accent-teal-600"
             required
             aria-invalid={attestMissing}
-            aria-describedby={attestMissing ? 'link-person-error' : undefined}
+            aria-describedby={attestMissing ? "link-person-error" : undefined}
           />
           <BaseLabel htmlFor="link-person-attest" className="text-sm leading-5 font-medium">
-            {t('linkAttestationLabel')}
+            {t("linkAttestationLabel")}
           </BaseLabel>
         </div>
         {error ? (
@@ -555,5 +577,5 @@ function LinkPersonDrawer({
         ) : null}
       </div>
     </Drawer>
-  )
+  );
 }

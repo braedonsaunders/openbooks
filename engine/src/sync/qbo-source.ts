@@ -1,14 +1,28 @@
 import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { qboAttachmentProvider } from "./attachment-providers.ts";
-import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
+import {
+  syncTransactionAttachments,
+  type AttachmentSyncOptions,
+} from "./transaction-attachments.ts";
 import { addCalendarDays, businessToday, parseIsoDate } from "../platform/business-date.ts";
 import { QboClient } from "../connectors/qbo.ts";
 import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
-import { buildNativeFromQbo, isQboVoided, qboVoidNote, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
+import {
+  buildNativeFromQbo,
+  isQboVoided,
+  qboVoidNote,
+  type QboBuildOpts,
+  type QboTxn,
+} from "./qbo-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
-  EntityStream, MigrationSource, NativeChanges, SourceEntity,
-  SourceAccountMonthRow, SourceOpenItem, SourceTrialBalanceRow,
+  EntityStream,
+  MigrationSource,
+  NativeChanges,
+  SourceEntity,
+  SourceAccountMonthRow,
+  SourceOpenItem,
+  SourceTrialBalanceRow,
 } from "./source.ts";
 import { allModules, fiscalYearsForRange, monthlySourcePeriods } from "./periods.ts";
 
@@ -26,7 +40,7 @@ import { allModules, fiscalYearsForRange, monthlySourcePeriods } from "./periods
  */
 
 const QBO_ACCOUNT_TYPE: Record<string, string> = {
-  "Bank": "asset_bank",
+  Bank: "asset_bank",
   "Accounts Receivable": "asset_receivable",
   "Other Current Asset": "asset_current_other",
   "Fixed Asset": "asset_fixed",
@@ -35,46 +49,103 @@ const QBO_ACCOUNT_TYPE: Record<string, string> = {
   "Credit Card": "liability_card",
   "Other Current Liability": "liability_current_other",
   "Long Term Liability": "liability_long_term",
-  "Equity": "equity",
-  "Income": "income",
+  Equity: "equity",
+  Income: "income",
   "Other Income": "income_other",
   "Cost of Goods Sold": "cogs",
-  "Expense": "expense",
+  Expense: "expense",
   "Other Expense": "expense_other",
 };
 
 const TXN_ENTITIES = [
-  "Invoice", "CreditMemo", "Bill", "VendorCredit", "Payment", "BillPayment",
-  "JournalEntry", "Deposit", "Purchase", "Transfer", "SalesReceipt", "RefundReceipt",
+  "Invoice",
+  "CreditMemo",
+  "Bill",
+  "VendorCredit",
+  "Payment",
+  "BillPayment",
+  "JournalEntry",
+  "Deposit",
+  "Purchase",
+  "Transfer",
+  "SalesReceipt",
+  "RefundReceipt",
   "TaxPayment",
 ];
 
 interface QboAccount {
-  Id: string; Name: string; AcctNum?: string; AccountType: string; AccountSubType?: string;
-  Active?: boolean; SubAccount?: boolean; ParentRef?: { value: string };
+  Id: string;
+  Name: string;
+  AcctNum?: string;
+  AccountType: string;
+  AccountSubType?: string;
+  Active?: boolean;
+  SubAccount?: boolean;
+  ParentRef?: { value: string };
 }
-interface QboParty { Id: string; DisplayName?: string; Active?: boolean }
+interface QboParty {
+  Id: string;
+  DisplayName?: string;
+  Active?: boolean;
+}
 interface QboItem {
-  Id: string; Name: string; Sku?: string; Type: string; Active?: boolean;
-  IncomeAccountRef?: { value: string }; ExpenseAccountRef?: { value: string };
+  Id: string;
+  Name: string;
+  Sku?: string;
+  Type: string;
+  Active?: boolean;
+  IncomeAccountRef?: { value: string };
+  ExpenseAccountRef?: { value: string };
 }
-interface QboTaxRate { Id: string; Name: string; RateValue?: number; Active?: boolean }
-interface QboCompanyInfo { CompanyStartDate?: string; FiscalYearStartMonth?: string }
-interface QboPreferences { AccountingInfoPrefs?: { FirstMonthOfFiscalYear?: string; BookCloseDate?: string } }
+interface QboTaxRate {
+  Id: string;
+  Name: string;
+  RateValue?: number;
+  Active?: boolean;
+}
+interface QboCompanyInfo {
+  CompanyStartDate?: string;
+  FiscalYearStartMonth?: string;
+}
+interface QboPreferences {
+  AccountingInfoPrefs?: { FirstMonthOfFiscalYear?: string; BookCloseDate?: string };
+}
 
 const MONTH_NUMBER: Record<string, number> = {
-  January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
-  July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
+  January: 1,
+  February: 2,
+  March: 3,
+  April: 4,
+  May: 5,
+  June: 6,
+  July: 7,
+  August: 8,
+  September: 9,
+  October: 10,
+  November: 11,
+  December: 12,
 };
 
 export class QboSource implements MigrationSource {
   readonly name = "qbo";
-  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors', 'employees'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
+  readonly entityMappingMetadata = entityMappingMetadata(
+    ["accounting_periods", "accounts", "tax_codes", "parties", "items", "files"],
+    ["customers", "vendors", "employees"],
+    {
+      accounts: ["number", "name", "type", "isActive"],
+      parties: ["displayName", "kind", "isActive"],
+      items: ["code", "name", "kind", "isActive"],
+      tax_codes: ["code", "name", "ratePercent", "appliesTo"],
+    },
+  );
   readonly refKey = "qboId";
   readonly baseCurrency: string;
   private readonly orgId: string;
 
-  constructor(private client: QboClient, opts: { orgId: string; baseCurrency?: string }) {
+  constructor(
+    private client: QboClient,
+    opts: { orgId: string; baseCurrency?: string },
+  ) {
     this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
   }
@@ -85,7 +156,10 @@ export class QboSource implements MigrationSource {
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {
     const info = await this.client.queryAll<{ CompanyName?: string }>("CompanyInfo");
-    return { ok: true, detail: info[0]?.CompanyName ? `Connected to ${info[0].CompanyName}` : "Connected" };
+    return {
+      ok: true,
+      detail: info[0]?.CompanyName ? `Connected to ${info[0].CompanyName}` : "Connected",
+    };
   }
 
   // --- master data ---------------------------------------------------------------
@@ -112,10 +186,12 @@ export class QboSource implements MigrationSource {
     const preferenceResponse = await this.client.preferences<{ Preferences?: QboPreferences }>();
     const preferences = preferenceResponse.Preferences;
     const start = company?.CompanyStartDate;
-    if (!start) throw new Error("QBO CompanyInfo.CompanyStartDate is required for period migration");
-    const firstMonth = preferences?.AccountingInfoPrefs?.FirstMonthOfFiscalYear
-      ?? company.FiscalYearStartMonth
-      ?? "January";
+    if (!start)
+      throw new Error("QBO CompanyInfo.CompanyStartDate is required for period migration");
+    const firstMonth =
+      preferences?.AccountingInfoPrefs?.FirstMonthOfFiscalYear ??
+      company.FiscalYearStartMonth ??
+      "January";
     const startMonth = MONTH_NUMBER[firstMonth] ?? Number(firstMonth);
     if (!Number.isInteger(startMonth) || startMonth < 1 || startMonth > 12) {
       throw new Error(`QBO fiscal year start month is invalid: ${firstMonth}`);
@@ -177,15 +253,17 @@ export class QboSource implements MigrationSource {
       await this.client.queryAll<QboParty>("Vendor", where),
       await this.client.queryAll<QboParty>("Employee", where),
     ];
-    const mk = (prefix: string, kind: string) => (p: QboParty): SourceEntity => ({
-      sourceRef: `${prefix}:${p.Id}`,
-      mappingEntities: [prefix === "C" ? "customers" : prefix === "V" ? "vendors" : "employees"],
-      fields: {
-        displayName: String(p.DisplayName ?? `${prefix} ${p.Id}`).slice(0, 500),
-        kind,
-        isActive: p.Active !== false,
-      },
-    });
+    const mk =
+      (prefix: string, kind: string) =>
+      (p: QboParty): SourceEntity => ({
+        sourceRef: `${prefix}:${p.Id}`,
+        mappingEntities: [prefix === "C" ? "customers" : prefix === "V" ? "vendors" : "employees"],
+        fields: {
+          displayName: String(p.DisplayName ?? `${prefix} ${p.Id}`).slice(0, 500),
+          kind,
+          isActive: p.Active !== false,
+        },
+      });
     return [
       ...customers.map(mk("C", "company")),
       ...vendors.map(mk("V", "company")),
@@ -203,7 +281,12 @@ export class QboSource implements MigrationSource {
         fields: {
           code: i.Sku || `qbo-${i.Id}`,
           name: String(i.Name).slice(0, 500),
-          kind: i.Type === "Service" ? "service" : i.Type === "Inventory" ? "inventory" : "non_inventory",
+          kind:
+            i.Type === "Service"
+              ? "service"
+              : i.Type === "Inventory"
+                ? "inventory"
+                : "non_inventory",
           isActive: i.Active !== false,
         },
       }));
@@ -211,11 +294,16 @@ export class QboSource implements MigrationSource {
 
   // --- control accounts -------------------------------------------------------------
 
-  async controlAccounts(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>> {
+  async controlAccounts(): Promise<
+    Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>
+  > {
     const rows = await this.client.queryAll<QboAccount>("Account");
     const firstType = (t: string) => rows.find((a) => a.AccountType === t && a.Active !== false);
     const bySub = (s: string) => rows.find((a) => a.AccountSubType === s);
-    const tax = bySub("GlobalTaxPayable") ?? bySub("SalesTaxPayable") ?? rows.find((a) => /tax.*payable/i.test(a.Name));
+    const tax =
+      bySub("GlobalTaxPayable") ??
+      bySub("SalesTaxPayable") ??
+      rows.find((a) => /tax.*payable/i.test(a.Name));
     return {
       ar: firstType("Accounts Receivable")?.Id,
       ap: firstType("Accounts Payable")?.Id,
@@ -234,8 +322,16 @@ export class QboSource implements MigrationSource {
     const items = await this.client.queryAll<QboItem>("Item");
     const accounts = await this.client.queryAll<QboAccount>("Account");
     const opts: QboBuildOpts = {
-      itemIncomeAccount: new Map(items.filter((i) => i.IncomeAccountRef).map((i) => [String(i.Id), String(i.IncomeAccountRef!.value)])),
-      itemExpenseAccount: new Map(items.filter((i) => i.ExpenseAccountRef).map((i) => [String(i.Id), String(i.ExpenseAccountRef!.value)])),
+      itemIncomeAccount: new Map(
+        items
+          .filter((i) => i.IncomeAccountRef)
+          .map((i) => [String(i.Id), String(i.IncomeAccountRef!.value)]),
+      ),
+      itemExpenseAccount: new Map(
+        items
+          .filter((i) => i.ExpenseAccountRef)
+          .map((i) => [String(i.Id), String(i.ExpenseAccountRef!.value)]),
+      ),
       undepositedFundsRef: accounts.find((a) => a.AccountSubType === "UndepositedFunds")?.Id,
       taxSuspenseRef: accounts.find((a) => a.AccountSubType === "GlobalTaxSuspense")?.Id,
     };
@@ -285,7 +381,9 @@ export class QboSource implements MigrationSource {
             } else if (lt.TxnType === "CreditMemo" || lt.TxnType === "VendorCredit") {
               // A zero-amount payment can consume a credit against the other
               // linked open item — the credit becomes the settling side.
-              const target = (l.LinkedTxn ?? []).find((x) => x.TxnType === "Invoice" || x.TxnType === "Bill");
+              const target = (l.LinkedTxn ?? []).find(
+                (x) => x.TxnType === "Invoice" || x.TxnType === "Bill",
+              );
               if (target) {
                 applications.push({
                   paymentRef: `${lt.TxnType}:${lt.TxnId}`,
@@ -301,7 +399,13 @@ export class QboSource implements MigrationSource {
       }
     }
 
-    return { documents, applications, deletedRefs: [], syncedThrough: maxWrite ?? since ?? new Date(0), unbuildable };
+    return {
+      documents,
+      applications,
+      deletedRefs: [],
+      syncedThrough: maxWrite ?? since ?? new Date(0),
+      unbuildable,
+    };
   }
 
   // --- verification ----------------------------------------------------------------------
@@ -355,7 +459,12 @@ export class QboSource implements MigrationSource {
     // here would make every foreign-currency open item unverifiable.
     const out: SourceOpenItem[] = [];
     for (const entity of ["Invoice", "Bill", "CreditMemo", "VendorCredit"]) {
-      const rows = await this.client.queryAll<{ Id: string; Balance?: number; ExchangeRate?: number; PrivateNote?: string }>(entity);
+      const rows = await this.client.queryAll<{
+        Id: string;
+        Balance?: number;
+        ExchangeRate?: number;
+        PrivateNote?: string;
+      }>(entity);
       for (const r of rows) {
         // The open-item rows carry no amount lines, so a voided transaction is
         // recognized by the exact provider marker plus an OBSERVED zero
@@ -371,9 +480,18 @@ export class QboSource implements MigrationSource {
 
 // --- QBO report helpers ------------------------------------------------------------
 
-interface QboColData { value?: string; id?: string }
-interface QboReportRow { ColData?: QboColData[]; Rows?: QboReport["Rows"]; type?: string }
-interface QboReport { Rows?: { Row?: QboReportRow[] } }
+interface QboColData {
+  value?: string;
+  id?: string;
+}
+interface QboReportRow {
+  ColData?: QboColData[];
+  Rows?: QboReport["Rows"];
+  type?: string;
+}
+interface QboReport {
+  Rows?: { Row?: QboReportRow[] };
+}
 
 function walk(rows: QboReport["Rows"], fn: (cd: QboColData[]) => void): void {
   for (const row of rows?.Row ?? []) {
@@ -383,6 +501,8 @@ function walk(rows: QboReport["Rows"], fn: (cd: QboColData[]) => void): void {
 }
 
 function numeric(v: string | undefined): string {
-  const s = String(v ?? "").replace(/,/g, "").trim();
+  const s = String(v ?? "")
+    .replace(/,/g, "")
+    .trim();
   return s === "" ? "0" : s;
 }

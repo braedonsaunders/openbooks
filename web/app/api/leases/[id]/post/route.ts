@@ -17,8 +17,7 @@ export const POST = defineRoute({
   body: leasePostSchema,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid lease" }, { status: 422 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid lease" }, { status: 422 });
 
     // A valid-but-unknown id is a missing record, not an empty run: posting
     // nothing with a 200 would read as success for a lease that is gone (or
@@ -27,33 +26,27 @@ export const POST = defineRoute({
     const known = await db.execute<{
       id: string;
       subsidiary_id: string | null;
-    }>(sql`
+    }>(
+      sql`
     select id, subsidiary_id from lease_agreements
      where org_id = ${gate.user.orgId} and id = ${id}
-  `, "objects");
-    if (!known[0])
-      return NextResponse.json({ error: "lease not found" }, { status: 404 });
+  `,
+      "objects",
+    );
+    if (!known[0]) return NextResponse.json({ error: "lease not found" }, { status: 404 });
     // An out-of-scope lease answers exactly like a missing one — same body,
     // same status — without which a restricted caller told B's lease apart
     // (200 {posted: 0} or 422) from a missing id (404). The write transaction
     // rechecks under its row lock in postDueLeaseSchedules via
     // assertFinancialChangeAccess.
-    if (
-      !subsidiaryScopeAllows(
-        gate.allowedSubsidiaryIds,
-        known[0].subsidiary_id,
-      )
-    ) {
+    if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, known[0].subsidiary_id)) {
       return NextResponse.json({ error: "lease not found" }, { status: 404 });
     }
     try {
       return NextResponse.json(
-        await postDueLeaseSchedules(
-          gate.user.orgId,
-          routeBody.asOfDate,
-          gate.user.id,
-          { leaseId: id },
-        ),
+        await postDueLeaseSchedules(gate.user.orgId, routeBody.asOfDate, gate.user.id, {
+          leaseId: id,
+        }),
       );
     } catch (e) {
       if (e instanceof LeaseError) {

@@ -1,121 +1,293 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import { sql } from 'drizzle-orm';
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db';
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures';
-const {setupResource}=await import('./setup-resources');
-const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry');
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
+const { setupResource } = await import("./setup-resources");
+const { SETUP_ENTITY_BY_KEY } = await import("../setup/registry");
 
-for (const mode of ['insert','upsert'] as const) {
-  test(`setup preview ${mode} sees prior rows in the same batch without persisting them`,
-    {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-      const org=await createScratchOrg();
+for (const mode of ["insert", "upsert"] as const) {
+  test(
+    `setup preview ${mode} sees prior rows in the same batch without persisting them`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await createScratchOrg();
       try {
-        const actorId=(await seedFlowActors(org.orgId)).adminId;
-        const resource=setupResource(SETUP_ENTITY_BY_KEY.get('departments')!,org.orgId);
-        const ctx={orgId:org.orgId,actorId,dryRun:true};
-        const rows=[{code:'SAME',name:'First'},{code:'SAME',name:'Second'}];
-        const preview=await resource.write(rows,mode,ctx);
-        assert.equal(preview.created,1);
-        assert.equal(preview.updated,mode==='upsert'?1:0);
-        assert.equal(preview.failed,mode==='insert'?1:0);
-        assert.equal((await db.execute(sql`select id from departments where org_id=${org.orgId}`, 'objects')).length,0);
-        assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`, 'objects')).length,0);
-        assert.deepEqual(await resource.write(rows,mode,ctx),preview,'preview can be repeated without accumulating state');
-        assert.deepEqual(await resource.write(rows,mode,{...ctx,dryRun:false}),preview);
-      } finally {await dropScratchOrg(org.orgId);}
-    });
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        const resource = setupResource(SETUP_ENTITY_BY_KEY.get("departments")!, org.orgId);
+        const ctx = { orgId: org.orgId, actorId, dryRun: true };
+        const rows = [
+          { code: "SAME", name: "First" },
+          { code: "SAME", name: "Second" },
+        ];
+        const preview = await resource.write(rows, mode, ctx);
+        assert.equal(preview.created, 1);
+        assert.equal(preview.updated, mode === "upsert" ? 1 : 0);
+        assert.equal(preview.failed, mode === "insert" ? 1 : 0);
+        assert.equal(
+          (await db.execute(sql`select id from departments where org_id=${org.orgId}`, "objects"))
+            .length,
+          0,
+        );
+        assert.equal(
+          (
+            await db.execute(
+              sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`,
+              "objects",
+            )
+          ).length,
+          0,
+        );
+        assert.deepEqual(
+          await resource.write(rows, mode, ctx),
+          preview,
+          "preview can be repeated without accumulating state",
+        );
+        assert.deepEqual(await resource.write(rows, mode, { ...ctx, dryRun: false }), preview);
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }
 
-test('setup preview evaluates storage checks and keeps successful mixed rows temporary',
-  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+test(
+  "setup preview evaluates storage checks and keeps successful mixed rows temporary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
     try {
-      const actorId=(await seedFlowActors(org.orgId)).adminId;
-      const resource=setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId);
-      const rows=[{code:'GOOD',name:'Good earning',kind:'earning'},
-        {code:'INVALID',name:'Invalid protected earning',kind:'earning',protectionBase:'net_pay',protectionMaxPercent:'10'}];
-      const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
-      assert.equal(preview.created,1);assert.equal(preview.failed,1);
-      assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`, 'objects')).length,0);
-      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='pay_components'`, 'objects')).length,0);
-      const committed=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:false});
-      const counts=(outcome: typeof preview)=>({created:outcome.created,updated:outcome.updated,failed:outcome.failed,rows:outcome.errors.map(error=>error.row)});
-      assert.deepEqual(counts(committed),counts(preview));
-      for(const outcome of [preview,committed]) {
-        assert.match(outcome.errors[0]!.message,/inspect log reference [a-f0-9-]+, correct the cause, then retry/);
-        assert.doesNotMatch(outcome.errors[0]!.message,/Failed query|insert into|INVALID/);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const resource = setupResource(SETUP_ENTITY_BY_KEY.get("pay-components")!, org.orgId);
+      const rows = [
+        { code: "GOOD", name: "Good earning", kind: "earning" },
+        {
+          code: "INVALID",
+          name: "Invalid protected earning",
+          kind: "earning",
+          protectionBase: "net_pay",
+          protectionMaxPercent: "10",
+        },
+      ];
+      const preview = await resource.write(rows, "insert", {
+        orgId: org.orgId,
+        actorId,
+        dryRun: true,
+      });
+      assert.equal(preview.created, 1);
+      assert.equal(preview.failed, 1);
+      assert.equal(
+        (await db.execute(sql`select id from pay_components where org_id=${org.orgId}`, "objects"))
+          .length,
+        0,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from audit_log where org_id=${org.orgId} and table_name='pay_components'`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+      const committed = await resource.write(rows, "insert", {
+        orgId: org.orgId,
+        actorId,
+        dryRun: false,
+      });
+      const counts = (outcome: typeof preview) => ({
+        created: outcome.created,
+        updated: outcome.updated,
+        failed: outcome.failed,
+        rows: outcome.errors.map((error) => error.row),
+      });
+      assert.deepEqual(counts(committed), counts(preview));
+      for (const outcome of [preview, committed]) {
+        assert.match(
+          outcome.errors[0]!.message,
+          /inspect log reference [a-f0-9-]+, correct the cause, then retry/,
+        );
+        assert.doesNotMatch(outcome.errors[0]!.message, /Failed query|insert into|INVALID/);
       }
-    } finally {await dropScratchOrg(org.orgId);}
-  });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('setup preview rolls back only its savepoint inside the caller transaction',
-  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+test(
+  "setup preview rolls back only its savepoint inside the caller transaction",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
     try {
-      const actorId=(await seedFlowActors(org.orgId)).adminId;
-      const resource=setupResource(SETUP_ENTITY_BY_KEY.get('departments')!,org.orgId);
-      await withOrgTransaction(org.orgId,async()=>{
-        await db.execute(sql`insert into departments(org_id,code,name) values(${org.orgId},'BEFORE','Before preview')`);
-        const outcome=await resource.write([{code:'TEMP',name:'Temporary'}],'insert',{orgId:org.orgId,actorId,dryRun:true});
-        assert.equal(outcome.created,1);
-        await db.execute(sql`insert into departments(org_id,code,name) values(${org.orgId},'AFTER','After preview')`);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const resource = setupResource(SETUP_ENTITY_BY_KEY.get("departments")!, org.orgId);
+      await withOrgTransaction(org.orgId, async () => {
+        await db.execute(
+          sql`insert into departments(org_id,code,name) values(${org.orgId},'BEFORE','Before preview')`,
+        );
+        const outcome = await resource.write([{ code: "TEMP", name: "Temporary" }], "insert", {
+          orgId: org.orgId,
+          actorId,
+          dryRun: true,
+        });
+        assert.equal(outcome.created, 1);
+        await db.execute(
+          sql`insert into departments(org_id,code,name) values(${org.orgId},'AFTER','After preview')`,
+        );
       });
-      assert.deepEqual(await db.execute(sql`select code from departments where org_id=${org.orgId} order by code`, 'objects'),[{code:'AFTER'},{code:'BEFORE'}]);
-      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`, 'objects')).length,0);
-    } finally {await dropScratchOrg(org.orgId);}
-  });
+      assert.deepEqual(
+        await db.execute(
+          sql`select code from departments where org_id=${org.orgId} order by code`,
+          "objects",
+        ),
+        [{ code: "AFTER" }, { code: "BEFORE" }],
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('setup preview refuses unavailable audit evidence and leaves the outer transaction usable',
-  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();const name='preview_audit_'+randomUUID().replaceAll('-','');
+test(
+  "setup preview refuses unavailable audit evidence and leaves the outer transaction usable",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    const name = "preview_audit_" + randomUUID().replaceAll("-", "");
     try {
-      const actorId=(await seedFlowActors(org.orgId)).adminId;
-      await db.execute(sql.raw(`create function ${name}() returns trigger language plpgsql as $$ begin if NEW.org_id='${org.orgId}'::uuid and NEW.table_name='departments' then raise exception 'preview audit unavailable'; end if; return NEW; end $$`));
-      await db.execute(sql.raw(`create trigger ${name} before insert on audit_log for each row execute function ${name}()`));
-      await withOrgTransaction(org.orgId,async()=>{
-        const outcome=await setupResource(SETUP_ENTITY_BY_KEY.get('departments')!,org.orgId)
-          .write([{code:'VETO',name:'Vetoed'}],'insert',{orgId:org.orgId,actorId,dryRun:true});
-        assert.equal(outcome.created,0);assert.equal(outcome.failed,1);
-        assert.match(outcome.errors[0]!.message,/preview audit unavailable/);
-        await db.execute(sql`insert into departments(org_id,code,name) values(${org.orgId},'AFTER','Outer transaction remains valid')`);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await db.execute(
+        sql.raw(
+          `create function ${name}() returns trigger language plpgsql as $$ begin if NEW.org_id='${org.orgId}'::uuid and NEW.table_name='departments' then raise exception 'preview audit unavailable'; end if; return NEW; end $$`,
+        ),
+      );
+      await db.execute(
+        sql.raw(
+          `create trigger ${name} before insert on audit_log for each row execute function ${name}()`,
+        ),
+      );
+      await withOrgTransaction(org.orgId, async () => {
+        const outcome = await setupResource(
+          SETUP_ENTITY_BY_KEY.get("departments")!,
+          org.orgId,
+        ).write([{ code: "VETO", name: "Vetoed" }], "insert", {
+          orgId: org.orgId,
+          actorId,
+          dryRun: true,
+        });
+        assert.equal(outcome.created, 0);
+        assert.equal(outcome.failed, 1);
+        assert.match(outcome.errors[0]!.message, /preview audit unavailable/);
+        await db.execute(
+          sql`insert into departments(org_id,code,name) values(${org.orgId},'AFTER','Outer transaction remains valid')`,
+        );
       });
-      assert.deepEqual(await db.execute(sql`select code from departments where org_id=${org.orgId}`, 'objects'),[{code:'AFTER'}]);
+      assert.deepEqual(
+        await db.execute(sql`select code from departments where org_id=${org.orgId}`, "objects"),
+        [{ code: "AFTER" }],
+      );
     } finally {
       await db.execute(sql.raw(`drop trigger if exists ${name} on audit_log`));
-      await db.execute(sql.raw(`drop function if exists ${name}()`));await dropScratchOrg(org.orgId);
+      await db.execute(sql.raw(`drop function if exists ${name}()`));
+      await dropScratchOrg(org.orgId);
     }
-  });
+  },
+);
 
-test('setup import refuses a pay-component treatment the country pack does not declare',
-  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+test(
+  "setup import refuses a pay-component treatment the country pack does not declare",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
     try {
-      const actorId=(await seedFlowActors(org.orgId)).adminId;
-      const resource=setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const resource = setupResource(SETUP_ENTITY_BY_KEY.get("pay-components")!, org.orgId);
       // pension_f is shape-valid but the AU pack declares only salary_sacrifice:
       // the import must name the pack's declarations, not store an inert treatment.
-      const rows=[{code:'AUUNDECL',name:'Undeclared treatment',kind:'deduction',country:'AU',taxTreatment:'pension_f'}];
-      const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
-      assert.equal(preview.created,0);assert.equal(preview.failed,1);
-      assert.match(preview.errors[0]!.message,/pension_f.*is not declared by the .* payroll pack/);
-      assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`, 'objects')).length,0);
-    } finally {await dropScratchOrg(org.orgId);}
-  });
+      const rows = [
+        {
+          code: "AUUNDECL",
+          name: "Undeclared treatment",
+          kind: "deduction",
+          country: "AU",
+          taxTreatment: "pension_f",
+        },
+      ];
+      const preview = await resource.write(rows, "insert", {
+        orgId: org.orgId,
+        actorId,
+        dryRun: true,
+      });
+      assert.equal(preview.created, 0);
+      assert.equal(preview.failed, 1);
+      assert.match(preview.errors[0]!.message, /pension_f.*is not declared by the .* payroll pack/);
+      assert.equal(
+        (await db.execute(sql`select id from pay_components where org_id=${org.orgId}`, "objects"))
+          .length,
+        0,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('setup import refuses a filing account under a program type its pack does not declare',
-  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+test(
+  "setup import refuses a filing account under a program type its pack does not declare",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
     try {
-      const actorId=(await seedFlowActors(org.orgId)).adminId;
-      const resource=setupResource(SETUP_ENTITY_BY_KEY.get('payroll-filing-accounts')!,org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const resource = setupResource(
+        SETUP_ENTITY_BY_KEY.get("payroll-filing-accounts")!,
+        org.orgId,
+      );
       // us_ein is shape-valid but the CA pack files only under ca_rp: the
       // import must name the pack's program types, not store an unfillable account.
-      const rows=[{accountNumber:'CAUNDECL',name:'Undeclared program',country:'CA',programType:'us_ein'}];
-      const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
-      assert.equal(preview.created,0);assert.equal(preview.failed,1);
-      assert.match(preview.errors[0]!.message,/does not file under program type/);
-      assert.equal((await db.execute(sql`select id from payroll_filing_accounts where org_id=${org.orgId}`, 'objects')).length,0);
-    } finally {await dropScratchOrg(org.orgId);}
-  });
+      const rows = [
+        {
+          accountNumber: "CAUNDECL",
+          name: "Undeclared program",
+          country: "CA",
+          programType: "us_ein",
+        },
+      ];
+      const preview = await resource.write(rows, "insert", {
+        orgId: org.orgId,
+        actorId,
+        dryRun: true,
+      });
+      assert.equal(preview.created, 0);
+      assert.equal(preview.failed, 1);
+      assert.match(preview.errors[0]!.message, /does not file under program type/);
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from payroll_filing_accounts where org_id=${org.orgId}`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -1,5 +1,7 @@
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
+stubModules({
+  intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}",
+});
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
@@ -12,7 +14,8 @@ import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { loadDashboardMetrics, pruneDashboardMetrics } = await import("./_metrics.ts");
 const { canSeeWidget } = await import("./_widget-access.ts");
 type Authz = import("@/lib/authz.ts").Authz;
@@ -22,29 +25,43 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Agent Watcher", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Agent Watcher",
+      orgId,
       roles: [{ key: "staff", name: "staff" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(permissions),
     allowedSubsidiaryIds: null,
   };
 }
 
-async function seedFinding(orgId: string, row: {
-  agent?: string; status?: string; summary?: unknown; lastDetected?: string;
-}): Promise<string> {
+async function seedFinding(
+  orgId: string,
+  row: {
+    agent?: string;
+    status?: string;
+    summary?: unknown;
+    lastDetected?: string;
+  },
+): Promise<string> {
   const id = randomUUID();
   // File-local seed helper: one body wrap covers every caller.
-  await withBypassContext(() => db.execute(sql`insert into ai_work_items
+  await withBypassContext(() =>
+    db.execute(sql`insert into ai_work_items
     (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, status,
      confidence, materiality, subject_type, subject_id, summary, first_detected_at, last_detected_at)
-    values (${id}, ${orgId}, ${row.agent ?? 'accounting'}, 'unmatched_bank_activity',
-      'test', ${`fp-${id}`}, 'warning', ${row.status ?? 'open'},
+    values (${id}, ${orgId}, ${row.agent ?? "accounting"}, 'unmatched_bank_activity',
+      'test', ${`fp-${id}`}, 'warning', ${row.status ?? "open"},
       '1', '1000', null, null, ${JSON.stringify(row.summary ?? {})}::jsonb,
       ${row.lastDetected ?? new Date(Date.now() - 86_400_000).toISOString()}::timestamptz,
-      ${row.lastDetected ?? new Date(Date.now() - 86_400_000).toISOString()}::timestamptz)`));
+      ${row.lastDetected ?? new Date(Date.now() - 86_400_000).toISOString()}::timestamptz)`),
+  );
   return id;
 }
 
@@ -67,10 +84,18 @@ test("agent findings tile counts the inbox scope, not the org", { skip: !DB }, a
     // Other org: invisible everywhere.
     await seedFinding(other.orgId, { lastDetected: fresh });
 
-    const reader = await withBypassContext(() => createScratchUser(org.orgId, "Watcher", "b06_tile_watcher"));
-    const authz = authzFor(org.orgId, reader as unknown as string, ["assistant.use", "gl.read", "dashboard.read"]);
+    const reader = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Watcher", "b06_tile_watcher"),
+    );
+    const authz = authzFor(org.orgId, reader as unknown as string, [
+      "assistant.use",
+      "gl.read",
+      "dashboard.read",
+    ]);
     assert.equal(canSeeWidget(authz, "kpi-agent-findings"), true);
-    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authz, ["kpi-agent-findings"]));
+    const metrics = await withOrgContext(org.orgId, () =>
+      loadDashboardMetrics(authz, ["kpi-agent-findings"]),
+    );
     assert.equal(metrics.agentFindingsOpen, 2);
     assert.equal(metrics.agentFindingsProposals, 1);
     assert.equal(metrics.agentFindingsLastRun, new Date(fresh).toISOString());
@@ -82,7 +107,9 @@ test("agent findings tile counts the inbox scope, not the org", { skip: !DB }, a
     // No assistant.use: the tile hides and the counts stay zero.
     const blind = authzFor(org.orgId, reader as unknown as string, ["gl.read", "dashboard.read"]);
     assert.equal(canSeeWidget(blind, "kpi-agent-findings"), false);
-    const blindMetrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(blind, ["kpi-agent-findings"]));
+    const blindMetrics = await withOrgContext(org.orgId, () =>
+      loadDashboardMetrics(blind, ["kpi-agent-findings"]),
+    );
     assert.equal(blindMetrics.agentFindingsOpen, 0);
     assert.equal(blindMetrics.agentFindingsProposals, 0);
     assert.equal(blindMetrics.agentFindingsLastRun, null);

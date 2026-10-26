@@ -97,12 +97,7 @@ export function PostingPeriodsView({
       try {
         const response = await fetch(url, { signal });
         if (!response.ok) {
-          throw new Error(
-            await readApiErrorMessage(
-              response,
-              t("postingPeriods.previewFailed"),
-            ),
-          );
+          throw new Error(await readApiErrorMessage(response, t("postingPeriods.previewFailed")));
         }
         const preview = (await response.json()) as { rows?: Candidate[] };
         // A body without rows is a failed preview, not an empty table: fail
@@ -113,8 +108,7 @@ export function PostingPeriodsView({
         setPreviewError(null);
       } catch (e) {
         if (signal?.aborted) return;
-        const message =
-          e instanceof Error ? e.message : t("postingPeriods.previewFailed");
+        const message = e instanceof Error ? e.message : t("postingPeriods.previewFailed");
         setPreviewFailed(true);
         setPreviewError(message);
         toast.error(message);
@@ -162,28 +156,20 @@ export function PostingPeriodsView({
       // body must surface the named refusal, never a SyntaxError from
       // response.json().
       if (!response.ok) {
-        toast.error(
-          await readApiErrorMessage(response, t("postingPeriods.commitFailed")),
-        );
+        toast.error(await readApiErrorMessage(response, t("postingPeriods.commitFailed")));
         return;
       }
-      const payload = (await response
-        .json()
-        .catch(() => null)) as CommitResult | null;
+      const payload = (await response.json().catch(() => null)) as CommitResult | null;
       if (!payload) {
         toast.error(t("postingPeriods.commitFailed"));
         return;
       }
       setResult(payload);
-      toast.success(
-        t("postingPeriods.committed", { count: payload.assigned.length }),
-      );
+      toast.success(t("postingPeriods.committed", { count: payload.assigned.length }));
       setRows((current) =>
         (current ?? []).filter(
           (row) =>
-            !payload.assigned.some(
-              (item) => item.documentId === row.documentId,
-            ) &&
+            !payload.assigned.some((item) => item.documentId === row.documentId) &&
             !payload.skipped.some((item) => item.documentId === row.documentId),
         ),
       );
@@ -207,7 +193,8 @@ export function PostingPeriodsView({
               href={runId ? `/close?run=${encodeURIComponent(runId)}` : "/close"}
               className="inline-flex items-center gap-1 text-sm"
             >
-              <ArrowLeft size={14} />{t("postingPeriods.backToClose")}
+              <ArrowLeft size={14} />
+              {t("postingPeriods.backToClose")}
             </Link>
             {canManageBooks ? (
               <Link
@@ -225,9 +212,7 @@ export function PostingPeriodsView({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">
-        {t("postingPeriods.previewDescription")}
-      </p>
+      <p className="text-sm text-slate-500">{t("postingPeriods.previewDescription")}</p>
       {!canPreview ? (
         <PermissionHint permission="close.run" action={t("postingPeriods.title")} />
       ) : previewFailed ? (
@@ -277,20 +262,13 @@ export function PostingPeriodsView({
             {
               key: "document",
               header: t("postingPeriods.document"),
-              cell: (row) => (
-                <span className="font-mono">{row.documentNumber}</span>
-              ),
+              cell: (row) => <span className="font-mono">{row.documentNumber}</span>,
               search: (row) => row.documentNumber,
             },
             {
               key: "kind",
               header: t("postingPeriods.kind"),
-              cell: (row) =>
-                enumLabel(
-                  row.kind,
-                  transactionKindLabels,
-                  tc("labels.unknownValue"),
-                ),
+              cell: (row) => enumLabel(row.kind, transactionKindLabels, tc("labels.unknownValue")),
               search: (row) => row.kind,
             },
             {
@@ -311,9 +289,7 @@ export function PostingPeriodsView({
                 row.blocked ? (
                   <Badge variant="destructive">{row.blockReason}</Badge>
                 ) : (
-                  <Badge variant="success">
-                    {t("postingPeriods.assignable")}
-                  </Badge>
+                  <Badge variant="success">{t("postingPeriods.assignable")}</Badge>
                 ),
             },
           ]}

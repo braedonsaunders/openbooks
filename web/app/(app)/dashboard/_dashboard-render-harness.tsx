@@ -49,8 +49,10 @@ for (const key of [
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
 if (typeof window.requestAnimationFrame !== "function") {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as typeof window.requestAnimationFrame;
-  window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as typeof window.cancelAnimationFrame;
+  window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
+    setTimeout(() => cb(Date.now()), 16)) as typeof window.requestAnimationFrame;
+  window.cancelAnimationFrame = ((id: number) =>
+    clearTimeout(id)) as typeof window.cancelAnimationFrame;
 }
 
 // Controllable viewport: the grid picks phone/tablet/desktop from these.
@@ -131,19 +133,34 @@ registerHooks({
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(NAV_MOCK) };
     }
     if (specifier === "next/dynamic") {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(DYNAMIC_MOCK) };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent(DYNAMIC_MOCK),
+      };
     }
     if (specifier === "sonner") {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(SONNER_MOCK) };
     }
-    if (specifier.endsWith("dashboard/actions") || (specifier === "./actions" && /\/dashboard\/_(?:dashboard-grid|deferred-widget-preview)\.tsx$/.test(context.parentURL ?? ""))) {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(ACTIONS_MOCK) };
+    if (
+      specifier.endsWith("dashboard/actions") ||
+      (specifier === "./actions" &&
+        /\/dashboard\/_(?:dashboard-grid|deferred-widget-preview)\.tsx$/.test(
+          context.parentURL ?? "",
+        ))
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent(ACTIONS_MOCK),
+      };
     }
     if (specifier.endsWith("/lib/prompt")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(PROMPT_MOCK) };
     }
     if (specifier.endsWith("/lib/confirm")) {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(CONFIRM_MOCK) };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent(CONFIRM_MOCK),
+      };
     }
     if (specifier.endsWith(".css")) {
       return { shortCircuit: true, url: "data:text/javascript,export default {}" };

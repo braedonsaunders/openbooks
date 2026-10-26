@@ -54,17 +54,23 @@ async function seedInvoiceSchedule(
 }
 
 async function postedInvoiceCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from documents
      where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
 async function journalEntryCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
@@ -77,24 +83,30 @@ async function failOccurrenceLineageInsert(scheduleId: string): Promise<() => Pr
   const suffix = scheduleId.replaceAll("-", "").slice(0, 12);
   const functionName = `openbooks_test_fail_recurring_${suffix}`;
   const triggerName = `openbooks_test_fail_recurring_${suffix}`;
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     create function public.${functionName}() returns trigger
     language plpgsql as $$
     begin
       raise exception 'forced recurring lineage failure';
     end
     $$
-  `));
-  await db.execute(sql.raw(`
+  `),
+  );
+  await db.execute(
+    sql.raw(`
     create trigger ${triggerName}
     before insert on public.recurring_occurrence_documents
     for each row when (new.schedule_id = '${scheduleId}'::uuid)
     execute function public.${functionName}()
-  `));
+  `),
+  );
   return async () => {
-    await db.execute(sql.raw(`
+    await db.execute(
+      sql.raw(`
       drop trigger if exists ${triggerName} on public.recurring_occurrence_documents
-    `));
+    `),
+    );
     await db.execute(sql.raw(`drop function if exists public.${functionName}()`));
   };
 }
@@ -137,12 +149,19 @@ test(
         firstDoc,
         "the retry replays the occurrence-guard document, never mints a second one",
       );
-      assert.equal(await postedInvoiceCount(org.orgId), 1, "exactly one invoice exists for the occurrence");
+      assert.equal(
+        await postedInvoiceCount(org.orgId),
+        1,
+        "exactly one invoice exists for the occurrence",
+      );
       assert.equal(await journalEntryCount(org.orgId), 1, "the ledger was hit exactly once");
 
-      const guard = (await db.execute<{ n: number }>(sql`
+      const guard = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from recurring_occurrence_documents where org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(Number(guard[0]!.n), 1);
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -188,17 +207,19 @@ test(
       assert.equal(run.failed, 0);
       assert.equal(run.posted, 1);
       const documentId = run.documents[0]!.documentId;
-      const provenance = (await db.execute<{
-        documentCreatedBy: string | null;
-        submittedBy: string | null;
-        lineCreatedBy: string | null;
-        lineageCreatedBy: string | null;
-        scheduleId: string;
-        occurrenceOn: string;
-        custom: Record<string, string>;
-        auditActor: string | null;
-        auditSource: string | null;
-      }>(sql`
+      const provenance = (
+        await db.execute<{
+          documentCreatedBy: string | null;
+          submittedBy: string | null;
+          lineCreatedBy: string | null;
+          lineageCreatedBy: string | null;
+          scheduleId: string;
+          occurrenceOn: string;
+          custom: Record<string, string>;
+          auditActor: string | null;
+          auditSource: string | null;
+        }>(
+          sql`
         select d.created_by::text as "documentCreatedBy",
                d.submitted_by::text as "submittedBy",
                line.created_by::text as "lineCreatedBy",
@@ -216,11 +237,22 @@ test(
             on audit.row_id = d.id and audit.org_id = d.org_id
            and audit.table_name = 'documents' and audit.action = 'post'
          where d.id = ${documentId} and d.org_id = ${org.orgId}
-      `, "objects"))[0]!;
-      assert.equal(provenance.documentCreatedBy, null, "the scheduler never impersonates the template author");
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        provenance.documentCreatedBy,
+        null,
+        "the scheduler never impersonates the template author",
+      );
       assert.equal(provenance.submittedBy, null, "system submission retains a null actor");
       assert.equal(provenance.lineCreatedBy, null, "generated lines carry the same system actor");
-      assert.equal(provenance.lineageCreatedBy, null, "immutable occurrence lineage carries the system actor");
+      assert.equal(
+        provenance.lineageCreatedBy,
+        null,
+        "immutable occurrence lineage carries the system actor",
+      );
       assert.equal(provenance.scheduleId, scheduleId);
       assert.equal(provenance.occurrenceOn, org.date);
       assert.equal(provenance.custom.actorKind, "system");
@@ -248,15 +280,17 @@ test(
 
       const run = await runScheduleNow(org.orgId, scheduleId, currentActor, org.date);
       assert.equal(run.posted, true);
-      const provenance = (await db.execute<{
-        documentCreatedBy: string | null;
-        submittedBy: string | null;
-        lineCreatedBy: string | null;
-        lineageCreatedBy: string | null;
-        custom: Record<string, string>;
-        auditActor: string | null;
-        auditSource: string | null;
-      }>(sql`
+      const provenance = (
+        await db.execute<{
+          documentCreatedBy: string | null;
+          submittedBy: string | null;
+          lineCreatedBy: string | null;
+          lineageCreatedBy: string | null;
+          custom: Record<string, string>;
+          auditActor: string | null;
+          auditSource: string | null;
+        }>(
+          sql`
         select d.created_by::text as "documentCreatedBy",
                d.submitted_by::text as "submittedBy",
                line.created_by::text as "lineCreatedBy",
@@ -272,7 +306,10 @@ test(
             on audit.row_id = d.id and audit.org_id = d.org_id
            and audit.table_name = 'documents' and audit.action = 'post'
          where d.id = ${run.documentId} and d.org_id = ${org.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(provenance.documentCreatedBy, currentActor);
       assert.equal(provenance.submittedBy, currentActor);
       assert.equal(provenance.lineCreatedBy, currentActor);
@@ -299,19 +336,24 @@ test(
       const run = await runDueRecurringSchedules(org.date);
       assert.equal(run.failed, 0);
       assert.equal(run.posted, 1);
-      const generated = (await db.execute<{
-        status: string;
-        createdBy: string | null;
-        lineCreatedBy: string | null;
-        actorKind: string | null;
-      }>(sql`
+      const generated = (
+        await db.execute<{
+          status: string;
+          createdBy: string | null;
+          lineCreatedBy: string | null;
+          actorKind: string | null;
+        }>(
+          sql`
         select d.status, d.created_by::text as "createdBy",
                line.created_by::text as "lineCreatedBy",
                d.custom->>'actorKind' as "actorKind"
           from documents d
           join document_lines line on line.document_id = d.id and line.org_id = d.org_id
          where d.id = ${run.documents[0]!.documentId} and d.org_id = ${org.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(generated, {
         status: "posted",
         createdBy: null,
@@ -342,7 +384,9 @@ test(
       const run = await runDueRecurringSchedules(org.date);
       assert.equal(run.failed, 1);
       assert.equal(run.generated, 0);
-      const state = (await db.execute<{ lastError: string | null; documents: number; lineage: number }>(sql`
+      const state = (
+        await db.execute<{ lastError: string | null; documents: number; lineage: number }>(
+          sql`
         select schedule.last_error as "lastError",
                (select count(*)::int from documents d
                  where d.org_id = schedule.org_id and d.id <> schedule.template_document_id) as documents,
@@ -350,9 +394,19 @@ test(
                  where occurrence.org_id = schedule.org_id) as lineage
           from recurring_schedules schedule
          where schedule.org_id = ${org.orgId}
-      `, "objects"))[0]!;
-      assert.match(state.lastError ?? "", /approval flow "Test approval" failed: gate.*zero assignees/);
-      assert.equal(state.documents, 0, "a system submission never bypasses an unresolved approval gate");
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.match(
+        state.lastError ?? "",
+        /approval flow "Test approval" failed: gate.*zero assignees/,
+      );
+      assert.equal(
+        state.documents,
+        0,
+        "a system submission never bypasses an unresolved approval gate",
+      );
       assert.equal(state.lineage, 0, "the refused generation consumes no occurrence");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -368,9 +422,14 @@ test(
     try {
       const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
       const scheduleId = await seedInvoiceSchedule(org, actorId);
-      const templateId = (await db.execute<{ id: string }>(sql`
+      const templateId = (
+        await db.execute<{ id: string }>(
+          sql`
         select template_document_id::text as id from recurring_schedules where id = ${scheduleId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       // Throw at the final lineage insert, after the cloned header and lines
       // and even auto-posting have run. The outer org transaction must unwind
       // the complete accounting unit, including the occurrence claim.
@@ -383,11 +442,20 @@ test(
         }
       })();
       assert.equal(run.failed, 1);
-      const state = (await db.execute<{ nextRunOn: string; lastError: string | null; isActive: boolean; runCount: number; lastDocumentId: string | null }>(sql`
+      const state = await db.execute<{
+        nextRunOn: string;
+        lastError: string | null;
+        isActive: boolean;
+        runCount: number;
+        lastDocumentId: string | null;
+      }>(
+        sql`
         select next_run_on as "nextRunOn", last_error as "lastError", is_active as "isActive",
                run_count as "runCount", last_document_id as "lastDocumentId"
           from recurring_schedules where id = ${scheduleId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(state[0]!.nextRunOn, org.date, "the occurrence stays due for the next tick");
       assert.ok(state[0]!.lastError, "last_error names the failure");
       assert.equal(state[0]!.isActive, true, "the schedule was not deactivated by the failure");
@@ -395,14 +463,22 @@ test(
       assert.equal(state[0]!.lastDocumentId, null);
       assert.equal(await postedInvoiceCount(org.orgId), 0);
       assert.equal(await journalEntryCount(org.orgId), 0);
-      const persisted = (await db.execute<{ documents: number; lines: number; lineage: number }>(sql`
+      const persisted = (
+        await db.execute<{ documents: number; lines: number; lineage: number }>(
+          sql`
         select
           (select count(*)::int from documents where org_id = ${org.orgId} and id <> ${templateId}) as documents,
           (select count(*)::int from document_lines where org_id = ${org.orgId} and document_id <> ${templateId}) as lines,
           (select count(*)::int from recurring_occurrence_documents where org_id = ${org.orgId}) as lineage
-      `, "objects"))[0]!;
-      assert.deepEqual(persisted, { documents: 0, lines: 0, lineage: 0 },
-        "the failed lineage write leaves no partial document, line, or lineage evidence");
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(
+        persisted,
+        { documents: 0, lines: 0, lineage: 0 },
+        "the failed lineage write leaves no partial document, line, or lineage evidence",
+      );
 
       // The crash-window regression: whatever killed the first attempt (here a
       // mid-generation throw; equally a SIGKILL — no durable claim exists to
@@ -416,9 +492,12 @@ test(
       assert.equal(retry.posted, 1);
       assert.equal(await postedInvoiceCount(org.orgId), 1, "exactly one invoice ever exists");
       assert.equal(await journalEntryCount(org.orgId), 1, "the ledger was hit exactly once");
-      const retriedState = (await db.execute<{ nextRunOn: string; runCount: number }>(sql`
+      const retriedState = await db.execute<{ nextRunOn: string; runCount: number }>(
+        sql`
         select next_run_on as "nextRunOn", run_count as "runCount" from recurring_schedules where id = ${scheduleId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.notEqual(retriedState[0]!.nextRunOn, org.date, "the claim now advances");
       assert.equal(retriedState[0]!.runCount, 1);
     } finally {
@@ -427,31 +506,27 @@ test(
   },
 );
 
-test(
-  "occurrence lineage is append-only outside a sandbox wipe",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
-      await seedInvoiceSchedule(org, actorId);
-      await runDueRecurringSchedules(org.date);
-      await assert.rejects(
-        db.execute(sql`
+test("occurrence lineage is append-only outside a sandbox wipe", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+    await seedInvoiceSchedule(org, actorId);
+    await runDueRecurringSchedules(org.date);
+    await assert.rejects(
+      db.execute(sql`
           update recurring_occurrence_documents set occurrence_on = '2030-01-01' where org_id = ${org.orgId}
         `),
-        (error: unknown) => {
-          // Drizzle wraps driver errors; the guard's message rides on .cause.
-          const text = [error, (error as { cause?: unknown })?.cause].map(String).join(": ");
-          return /immutable/.test(text);
-        },
-        "guard lineage must refuse UPDATE outside a sandbox wipe",
-      );
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+      (error: unknown) => {
+        // Drizzle wraps driver errors; the guard's message rides on .cause.
+        const text = [error, (error as { cause?: unknown })?.cause].map(String).join(": ");
+        return /immutable/.test(text);
+      },
+      "guard lineage must refuse UPDATE outside a sandbox wipe",
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 test(
   "occurrence lineage rejects cross-tenant schedule and document references",
@@ -464,16 +539,26 @@ test(
       const foreignActor = await createScratchUser(foreign.orgId, "Foreign scheduler", "admin");
       const ownerScheduleId = await seedInvoiceSchedule(owner, ownerActor);
       const foreignScheduleId = await seedInvoiceSchedule(foreign, foreignActor);
-      const ownerTemplateId = (await db.execute<{ id: string }>(sql`
+      const ownerTemplateId = (
+        await db.execute<{ id: string }>(
+          sql`
         select template_document_id::text as id
           from recurring_schedules
          where id = ${ownerScheduleId}
-      `, "objects"))[0]!.id;
-      const foreignTemplateId = (await db.execute<{ id: string }>(sql`
+      `,
+          "objects",
+        )
+      )[0]!.id;
+      const foreignTemplateId = (
+        await db.execute<{ id: string }>(
+          sql`
         select template_document_id::text as id
           from recurring_schedules
          where id = ${foreignScheduleId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
 
       await assert.rejects(
         db.execute(sql`
@@ -481,9 +566,10 @@ test(
             (org_id, schedule_id, occurrence_on, document_id)
           values (${owner.orgId}, ${foreignScheduleId}, '2026-07-15', ${ownerTemplateId})
         `),
-        (error: unknown) => /foreign key|recurring_occurrence_schedule_fk/i.test(
-          [error, (error as { cause?: unknown })?.cause].map(String).join(": "),
-        ),
+        (error: unknown) =>
+          /foreign key|recurring_occurrence_schedule_fk/i.test(
+            [error, (error as { cause?: unknown })?.cause].map(String).join(": "),
+          ),
         "a lineage row cannot name another tenant's schedule",
       );
 
@@ -493,17 +579,23 @@ test(
             (org_id, schedule_id, occurrence_on, document_id)
           values (${owner.orgId}, ${ownerScheduleId}, '2026-08-15', ${foreignTemplateId})
         `),
-        (error: unknown) => /foreign key|recurring_occurrence_document_fk/i.test(
-          [error, (error as { cause?: unknown })?.cause].map(String).join(": "),
-        ),
+        (error: unknown) =>
+          /foreign key|recurring_occurrence_document_fk/i.test(
+            [error, (error as { cause?: unknown })?.cause].map(String).join(": "),
+          ),
         "a lineage row cannot name another tenant's document",
       );
 
-      const persisted = (await db.execute<{ n: number }>(sql`
+      const persisted = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n
           from recurring_occurrence_documents
          where org_id = ${owner.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(Number(persisted.n), 0, "rejected cross-tenant rows leave no lineage evidence");
     } finally {
       await dropScratchOrgReporting(owner.orgId);
@@ -513,110 +605,169 @@ test(
 );
 
 for (const changed of ["is_active", "auto_post"] as const) {
-  test(`scheduler rechecks ${changed} after waiting for a concurrent schedule edit`, { skip: !DB }, async () => {
-    const org = await createScratchOrg();
-    let release = () => {};
-    let edit: Promise<unknown> | undefined;
-    let tick: ReturnType<typeof runDueRecurringSchedules> | undefined;
-    try {
-      const actor = await createScratchUser(org.orgId, "Scheduler", "admin");
-      const scheduleId = await seedInvoiceSchedule(org, actor);
-      let staged!: () => void;
-      const ready = new Promise<void>(resolve => { staged = resolve; });
-      const hold = new Promise<void>(resolve => { release = resolve; });
-      let editorPid = 0;
-      edit = withOrg(org.orgId, async () => {
-        editorPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
-        await db.execute(sql`update recurring_schedules set ${sql.identifier(changed)} = false
+  test(
+    `scheduler rechecks ${changed} after waiting for a concurrent schedule edit`,
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      let release = () => {};
+      let edit: Promise<unknown> | undefined;
+      let tick: ReturnType<typeof runDueRecurringSchedules> | undefined;
+      try {
+        const actor = await createScratchUser(org.orgId, "Scheduler", "admin");
+        const scheduleId = await seedInvoiceSchedule(org, actor);
+        let staged!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          staged = resolve;
+        });
+        const hold = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let editorPid = 0;
+        edit = withOrg(org.orgId, async () => {
+          editorPid = (
+            await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects")
+          )[0]!.pid;
+          await db.execute(sql`update recurring_schedules set ${sql.identifier(changed)} = false
           where id = ${scheduleId} and org_id = ${org.orgId}`);
-        staged();
-        await hold;
-      });
-      await Promise.race([ready, edit]);
-      tick = runDueRecurringSchedules(org.date);
-      let settled = false;
-      void tick.then(() => { settled = true; }, () => { settled = true; });
-      const deadline = Date.now() + 10_000;
-      let blocked = false;
-      while (!settled && Date.now() < deadline) {
-        blocked = (await db.execute<{ blocked: boolean }>(sql`select exists (
+          staged();
+          await hold;
+        });
+        await Promise.race([ready, edit]);
+        tick = runDueRecurringSchedules(org.date);
+        let settled = false;
+        void tick.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        const deadline = Date.now() + 10_000;
+        let blocked = false;
+        while (!settled && Date.now() < deadline) {
+          blocked = (
+            await db.execute<{ blocked: boolean }>(
+              sql`select exists (
           select 1 from pg_stat_activity where datname = current_database()
             and ${editorPid} = any(pg_blocking_pids(pid))
-        ) as blocked`, "objects"))[0]!.blocked;
-        if (blocked) break;
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-      assert.ok(blocked, "candidate must wait on the schedule edit after reading its old state");
-      release();
-      await edit;
-      const result = await tick;
-      assert.equal(result.failed, 0);
-      assert.equal(result.generated, changed === "is_active" ? 0 : 1);
-      assert.equal(result.posted, 0);
-      assert.equal(await journalEntryCount(org.orgId), 0);
-      const stored = (await db.execute<{ nextRunOn: string }>(sql`
+        ) as blocked`,
+              "objects",
+            )
+          )[0]!.blocked;
+          if (blocked) break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        assert.ok(blocked, "candidate must wait on the schedule edit after reading its old state");
+        release();
+        await edit;
+        const result = await tick;
+        assert.equal(result.failed, 0);
+        assert.equal(result.generated, changed === "is_active" ? 0 : 1);
+        assert.equal(result.posted, 0);
+        assert.equal(await journalEntryCount(org.orgId), 0);
+        const stored = (
+          await db.execute<{ nextRunOn: string }>(
+            sql`
         select next_run_on as "nextRunOn" from recurring_schedules where id = ${scheduleId}
-      `, "objects"))[0]!;
-      if (changed === "is_active") assert.equal(stored.nextRunOn, org.date);
-    } finally {
-      release();
-      await Promise.allSettled([edit, tick]);
-      await dropScratchOrgReporting(org.orgId);
-    }
-  });
+      `,
+            "objects",
+          )
+        )[0]!;
+        if (changed === "is_active") assert.equal(stored.nextRunOn, org.date);
+      } finally {
+        release();
+        await Promise.allSettled([edit, tick]);
+        await dropScratchOrgReporting(org.orgId);
+      }
+    },
+  );
 }
 
-test("malformed recurring cron records a failure without changing cadence or aborting other schedules", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Scheduler", "admin");
-    const bad = await seedInvoiceSchedule(org, actor);
-    const good = await seedInvoiceSchedule(org, actor);
-    await db.execute(sql`update recurring_schedules set cadence='custom_cron', cron='not a cron' where id=${bad}`);
-    const result = await runDueRecurringSchedules(org.date);
-    assert.equal(result.failed, 1);
-    assert.deepEqual(result.documents.map(row => row.scheduleId), [good]);
-    const stored = (await db.execute<{ nextRunOn: string; error: string }>(sql`
+test(
+  "malformed recurring cron records a failure without changing cadence or aborting other schedules",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Scheduler", "admin");
+      const bad = await seedInvoiceSchedule(org, actor);
+      const good = await seedInvoiceSchedule(org, actor);
+      await db.execute(
+        sql`update recurring_schedules set cadence='custom_cron', cron='not a cron' where id=${bad}`,
+      );
+      const result = await runDueRecurringSchedules(org.date);
+      assert.equal(result.failed, 1);
+      assert.deepEqual(
+        result.documents.map((row) => row.scheduleId),
+        [good],
+      );
+      const stored = (
+        await db.execute<{ nextRunOn: string; error: string }>(
+          sql`
       select next_run_on as "nextRunOn", last_error as error from recurring_schedules where id=${bad}
-    `, "objects"))[0]!;
-    assert.equal(stored.nextRunOn, org.date);
-    assert.match(stored.error, /cron/);
-    assert.equal(await journalEntryCount(org.orgId), 1);
-  } finally { await dropScratchOrgReporting(org.orgId); }
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(stored.nextRunOn, org.date);
+      assert.match(stored.error, /cron/);
+      assert.equal(await journalEntryCount(org.orgId), 1);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("a catch-up occurrence is dated with its occurrence date, not today", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
-    // Draft only: dating must not depend on posting, and the old-period
-    // document must not require that period to be open.
-    const scheduleId = await seedInvoiceSchedule(org, actorId, { autoPost: false });
-    // Two cadences back-dated (e.g. after a scheduler outage): the tick
-    // generates the oldest occurrence first.
-    const occurrence = addCalendarDays(org.date, -62);
-    await db.execute(sql`
+test(
+  "a catch-up occurrence is dated with its occurrence date, not today",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+      // Draft only: dating must not depend on posting, and the old-period
+      // document must not require that period to be open.
+      const scheduleId = await seedInvoiceSchedule(org, actorId, { autoPost: false });
+      // Two cadences back-dated (e.g. after a scheduler outage): the tick
+      // generates the oldest occurrence first.
+      const occurrence = addCalendarDays(org.date, -62);
+      await db.execute(sql`
       update recurring_schedules set next_run_on = ${occurrence} where id = ${scheduleId}
     `);
-    const run = await runDueRecurringSchedules(org.date);
-    assert.equal(run.failed, 0);
-    assert.equal(run.generated, 1);
-    assert.equal(run.posted, 0);
-    const documentId = run.documents[0]!.documentId;
-    const doc = (await db.execute<{ documentDate: string; dueDate: string }>(sql`
+      const run = await runDueRecurringSchedules(org.date);
+      assert.equal(run.failed, 0);
+      assert.equal(run.generated, 1);
+      assert.equal(run.posted, 0);
+      const documentId = run.documents[0]!.documentId;
+      const doc = (
+        await db.execute<{ documentDate: string; dueDate: string }>(
+          sql`
       select document_date::text as "documentDate", due_date::text as "dueDate"
         from documents where id = ${documentId} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
-    // The template carries same-day terms, so the due date follows the
-    // occurrence too — not today.
-    assert.equal(doc.documentDate, occurrence);
-    assert.equal(doc.dueDate, occurrence);
-    const next = (await db.execute<{ nextRunOn: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      // The template carries same-day terms, so the due date follows the
+      // occurrence too — not today.
+      assert.equal(doc.documentDate, occurrence);
+      assert.equal(doc.dueDate, occurrence);
+      const next = (
+        await db.execute<{ nextRunOn: string }>(
+          sql`
       select next_run_on::text as "nextRunOn" from recurring_schedules where id = ${scheduleId}
-    `, "objects"))[0]!;
-    assert.equal(next.nextRunOn, advanceCadence(occurrence, "monthly"));
-  } finally { await dropScratchOrgReporting(org.orgId); }
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(next.nextRunOn, advanceCadence(occurrence, "monthly"));
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
 test("a stored anchor day recovers month-end starts after drift", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -632,14 +783,26 @@ test("a stored anchor day recovers month-end starts after drift", { skip: !DB },
     assert.equal(run.failed, 0);
     assert.equal(run.generated, 1);
     const documentId = run.documents[0]!.documentId;
-    const doc = (await db.execute<{ documentDate: string }>(sql`
+    const doc = (
+      await db.execute<{ documentDate: string }>(
+        sql`
       select document_date::text as "documentDate" from documents
        where id = ${documentId} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(doc.documentDate, "2026-02-28");
-    const next = (await db.execute<{ nextRunOn: string }>(sql`
+    const next = (
+      await db.execute<{ nextRunOn: string }>(
+        sql`
       select next_run_on::text as "nextRunOn" from recurring_schedules where id = ${scheduleId}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(next.nextRunOn, "2026-03-31");
-  } finally { await dropScratchOrgReporting(org.orgId); }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
 });

@@ -32,9 +32,8 @@ function encodedBirthDate(pesel: string): { year: number; month: number; day: nu
   const encodedMonth = Number(pesel.slice(2, 4));
   const century = centuryForMonth(encodedMonth);
   if (century === null) return null;
-  const month = encodedMonth >= 81 ? encodedMonth - 80
-    : encodedMonth >= 21 ? encodedMonth - 20
-    : encodedMonth;
+  const month =
+    encodedMonth >= 81 ? encodedMonth - 80 : encodedMonth >= 21 ? encodedMonth - 20 : encodedMonth;
   const day = Number(pesel.slice(4, 6));
   const year = century + encodedYear;
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);

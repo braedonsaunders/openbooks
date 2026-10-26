@@ -41,7 +41,10 @@ export const apCaptureMailboxes = pgTable(
     emailAddress: text("email_address"),
     token: text("token").notNull(),
     provider: text("provider", { enum: AP_CAPTURE_MAILBOX_PROVIDERS }).notNull(),
-    allowedSenders: jsonb("allowed_senders").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    allowedSenders: jsonb("allowed_senders")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     isActive: boolean("is_active").notNull().default(true),
     rateWindowStart: timestamp("rate_window_start", { withTimezone: true }),
     rateWindowCount: integer("rate_window_count").notNull().default(0),
@@ -103,7 +106,10 @@ export const apCaptureInboundMessages = pgTable(
     claimAttempt: integer("claim_attempt").notNull().default(1),
     outcome: text("outcome", { enum: AP_CAPTURE_INBOUND_OUTCOMES }).notNull().default("received"),
     outcomeReason: text("outcome_reason"),
-    captureItemIds: uuid("capture_item_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    captureItemIds: uuid("capture_item_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
     processedAt: timestamp("processed_at", { withTimezone: true }),
   },
   (t) => [

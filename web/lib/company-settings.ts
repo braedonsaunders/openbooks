@@ -26,18 +26,17 @@ import { isFeatureEnabled } from "./features";
 import { isUuid } from "./list-params";
 import { DEFAULT_LOCALE, isLocale } from "../i18n/config";
 import { isCountryCode, normalizeCountryCode } from "./countries";
+import { periodDerivationSql, periodDerivationStagingSql } from "./fiscal-periods";
 import {
-  periodDerivationSql,
-  periodDerivationStagingSql,
-} from "./fiscal-periods";
-import { PARTYLESS_CONTROL_POLICIES, parsePartylessControlPolicy, type PartylessControlPolicy } from "@openbooks/engine/ledger/partyless-control-policy";
+  PARTYLESS_CONTROL_POLICIES,
+  parsePartylessControlPolicy,
+  type PartylessControlPolicy,
+} from "@openbooks/engine/ledger/partyless-control-policy";
 import { assertUnrestrictedScope } from "@openbooks/engine/organization/scope";
-
 
 /** Transport-neutral outcome: the HTTP status the route would answer with and
  *  the JSON body. Adapters (route, assistant/MCP tool) map it onto their wire. */
 export type CompanySettingsResult = { status: number; body: Record<string, unknown> };
-
 
 /**
  * Company & Accounting settings. GET preserves the user-administration view of
@@ -97,7 +96,10 @@ export type BillingSettings = {
 
 /** Normalize the stored billing defaults: unknown keys and non-id values drop. */
 export function readBillingSettings(raw: unknown): BillingSettings {
-  const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<
+    string,
+    unknown
+  >;
   const id = bag.defaultPaymentTermsId;
   return {
     defaultPaymentTermsId: typeof id === "string" && isUuid(id) ? id : null,
@@ -106,7 +108,10 @@ export function readBillingSettings(raw: unknown): BillingSettings {
 
 /** Normalize the stored till defaults: unknown keys and non-id values drop. */
 export function readCashSalesSettings(raw: unknown): CashSalesSettings {
-  const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<
+    string,
+    unknown
+  >;
   const pick = (key: string): string | null =>
     typeof bag[key] === "string" && isUuid(bag[key] as string) ? (bag[key] as string) : null;
   const rawDeposit = Array.isArray(bag.depositAccountIds) ? bag.depositAccountIds : [];
@@ -115,30 +120,34 @@ export function readCashSalesSettings(raw: unknown): CashSalesSettings {
     defaultCashAccountId: pick("defaultCashAccountId"),
     defaultCardAccountId: pick("defaultCardAccountId"),
     defaultBankAccountId: pick("defaultBankAccountId"),
-    depositAccountIds: [...new Set(rawDeposit.filter((id): id is string => typeof id === "string" && isUuid(id)))],
+    depositAccountIds: [
+      ...new Set(rawDeposit.filter((id): id is string => typeof id === "string" && isUuid(id))),
+    ],
   };
 }
 
 function fiscalCalendarLockedResponse(): CompanySettingsResult {
-  return { status: 409, body: {
+  return {
+    status: 409,
+    body: {
       error: "fiscal-calendar-locked",
-      message:
-        "Cannot change the fiscal calendar after postings or period closure.",
-    } };
+      message: "Cannot change the fiscal calendar after postings or period closure.",
+    },
+  };
 }
 
 /** The Company & Accounting settings view (identity, locale, frameworks) —
  *  the same shape the settings screen renders. */
-export async function readCompanySettings(orgId: string,
-): Promise<CompanySettingsResult> {
-
-  const org = await db.execute(sql`
+export async function readCompanySettings(orgId: string): Promise<CompanySettingsResult> {
+  const org = await db.execute(
+    sql`
     select id, name, legal_name, country, tax_ids, settings
-      from orgs where id = ${orgId}`, "objects");
+      from orgs where id = ${orgId}`,
+    "objects",
+  );
 
-  const row = org[0]
-  if (!row)
-    return { status: 404, body: { error: "org not found" } };
+  const row = org[0];
+  if (!row) return { status: 404, body: { error: "org not found" } };
   const settings = (row.settings ?? {}) as Record<string, unknown>;
 
   return {
@@ -152,30 +161,28 @@ export async function readCompanySettings(orgId: string,
         // and the tax/registration identifiers documents print.
         address: readCompanyAddress(settings.companyAddress),
         legalForm: isLegalForm(settings.legalForm) ? settings.legalForm : null,
-        taxClassification: isTaxClassification(settings.taxClassification) ? settings.taxClassification : null,
+        taxClassification: isTaxClassification(settings.taxClassification)
+          ? settings.taxClassification
+          : null,
         taxIds: readTaxIds(row.tax_ids),
-        defaultLocale: isLocale(settings.defaultLocale)
-        ? settings.defaultLocale
-        : DEFAULT_LOCALE,
+        defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
         timeZone: canonicalTimeZone(settings.timeZone) ?? "UTC",
         reportingFramework:
-        settings.reportingFramework === "ifrs" ||
-        settings.reportingFramework === "us_gaap"
-          ? settings.reportingFramework
-          : null,
-        taxFramework:
-        settings.taxFramework === "ias12" ? "ias12" : "asc740",
+          settings.reportingFramework === "ifrs" || settings.reportingFramework === "us_gaap"
+            ? settings.reportingFramework
+            : null,
+        taxFramework: settings.taxFramework === "ias12" ? "ias12" : "asc740",
         // The company default payment terms are core billing configuration,
         // always visible; only the till defaults below are feature-gated.
         billing: readBillingSettings(settings.billing),
         // A gated feature's settings stay hidden while the gate is off; the
         // stored values are kept and reappear with the switch.
         ...((await isFeatureEnabled(orgId, "cashSales"))
-        ? { cashSales: readCashSalesSettings(settings.cashSales) }
-        : {}),
+          ? { cashSales: readCashSalesSettings(settings.cashSales) }
+          : {}),
       },
     },
-  }
+  };
 }
 
 /**
@@ -190,30 +197,30 @@ export async function updateCompanySettings(
   rawBody: Record<string, unknown>,
 ): Promise<CompanySettingsResult> {
   assertUnrestrictedScope(actor.allowedSubsidiaryIds);
-  const { orgId } = actor
+  const { orgId } = actor;
   const body = rawBody as {
-    name?: unknown
-    legalName?: unknown
-    country?: unknown
-    baseCurrency?: unknown
-    fiscalYearStartMonth?: unknown
-    reportingFramework?: unknown
-    taxFramework?: unknown
-    controlAccounts?: unknown
-    cashSales?: unknown
-    billing?: unknown
-    defaultLocale?: unknown
-    timeZone?: unknown
-    reportPdfStyle?: unknown
-    fairValueRangePolicy?: unknown
-    contractCreation?: unknown
-    saasMetrics?: unknown
-    partylessControlPolicy?: unknown
-    address?: unknown
-    legalForm?: unknown
-    taxClassification?: unknown
-    taxIds?: unknown
-  }
+    name?: unknown;
+    legalName?: unknown;
+    country?: unknown;
+    baseCurrency?: unknown;
+    fiscalYearStartMonth?: unknown;
+    reportingFramework?: unknown;
+    taxFramework?: unknown;
+    controlAccounts?: unknown;
+    cashSales?: unknown;
+    billing?: unknown;
+    defaultLocale?: unknown;
+    timeZone?: unknown;
+    reportPdfStyle?: unknown;
+    fairValueRangePolicy?: unknown;
+    contractCreation?: unknown;
+    saasMetrics?: unknown;
+    partylessControlPolicy?: unknown;
+    address?: unknown;
+    legalForm?: unknown;
+    taxClassification?: unknown;
+    taxIds?: unknown;
+  };
 
   // This feature probe does not contribute persisted state. Do it before the
   // row lock so disabled-feature requests cannot hold an accounting-policy
@@ -229,10 +236,7 @@ export async function updateCompanySettings(
   }
   // Contract creation belongs to scoped revenue contracts; without the
   // switch the choice has no surface and the write is refused, never stored.
-  if (
-    body.contractCreation !== undefined &&
-    !(await isFeatureEnabled(orgId, "revenueContracts"))
-  ) {
+  if (body.contractCreation !== undefined && !(await isFeatureEnabled(orgId, "revenueContracts"))) {
     return { status: 404, body: { error: "not_found" } };
   }
 
@@ -252,16 +256,18 @@ export async function updateCompanySettings(
     if (postingPolicyKeys.some((key) => body[key] !== undefined)) {
       await lockLedgerSetupFence(tx, orgId, "exclusive");
     }
-    const existing = await tx.execute(sql`
+    const existing = await tx.execute(
+      sql`
     select name, legal_name, base_currency, country, tax_ids, settings
-      from orgs where id = ${orgId} for update`, "objects");
-    const cur = existing[0]
-    if (!cur)
-      return { status: 404, body: { error: "org not found" } };
+      from orgs where id = ${orgId} for update`,
+      "objects",
+    );
+    const cur = existing[0];
+    if (!cur) return { status: 404, body: { error: "org not found" } };
     const settings = (cur.settings ?? {}) as Record<string, unknown>;
 
     const changes: Record<string, unknown> = {};
-    const sets: SQL[] = []
+    const sets: SQL[] = [];
 
     // --- display name (required) ---
     if (body.name !== undefined) {
@@ -303,33 +309,56 @@ export async function updateCompanySettings(
     // and tax/registration identifiers. Validated against the country this
     // same save leaves the company in; refusals name the field and the fix.
     const effectiveCountry = (normalizeCountryCode(body.country) ?? cur.country) as string;
-    const identitySettings: { key: "companyAddress" | "legalForm" | "taxClassification"; value: unknown }[] = [];
+    const identitySettings: {
+      key: "companyAddress" | "legalForm" | "taxClassification";
+      value: unknown;
+    }[] = [];
     if (body.address !== undefined) {
       const result = normalizeCompanyAddress(body.address, isCountryCode);
       if (!result.ok) {
         const { field, reason } = result.problem;
-        const message = reason === "required"
-          ? `the company address needs a ${field === "line1" ? "street address" : "city"} — complete it or clear every address field`
-          : reason === "invalid_country"
-            ? "the company address needs a valid country"
-            : `the company address ${field} is too long — shorten it to 200 characters`;
-        return { status: 400, body: { error: message, code: "invalid-company-address", field, reason } };
+        const message =
+          reason === "required"
+            ? `the company address needs a ${field === "line1" ? "street address" : "city"} — complete it or clear every address field`
+            : reason === "invalid_country"
+              ? "the company address needs a valid country"
+              : `the company address ${field} is too long — shorten it to 200 characters`;
+        return {
+          status: 400,
+          body: { error: message, code: "invalid-company-address", field, reason },
+        };
       }
       identitySettings.push({ key: "companyAddress", value: result.address });
     }
-    const storedLegalForm: LegalForm | null = isLegalForm(settings.legalForm) ? settings.legalForm : null;
-    let effectiveLegalForm = storedLegalForm
+    const storedLegalForm: LegalForm | null = isLegalForm(settings.legalForm)
+      ? settings.legalForm
+      : null;
+    let effectiveLegalForm = storedLegalForm;
     if (body.legalForm !== undefined) {
       if (body.legalForm !== null && !isLegalForm(body.legalForm)) {
-        return { status: 400, body: { error: "legal form is not one of the supported business structures", code: "invalid-legal-form" } };
+        return {
+          status: 400,
+          body: {
+            error: "legal form is not one of the supported business structures",
+            code: "invalid-legal-form",
+          },
+        };
       }
       effectiveLegalForm = body.legalForm;
       identitySettings.push({ key: "legalForm", value: body.legalForm });
     }
-    let effectiveClassification = isTaxClassification(settings.taxClassification) ? settings.taxClassification : null;
+    let effectiveClassification = isTaxClassification(settings.taxClassification)
+      ? settings.taxClassification
+      : null;
     if (body.taxClassification !== undefined) {
       if (body.taxClassification !== null && !isTaxClassification(body.taxClassification)) {
-        return { status: 400, body: { error: "tax classification is not one of the supported treatments", code: "invalid-tax-classification" } };
+        return {
+          status: 400,
+          body: {
+            error: "tax classification is not one of the supported treatments",
+            code: "invalid-tax-classification",
+          },
+        };
       }
       effectiveClassification = body.taxClassification;
       identitySettings.push({ key: "taxClassification", value: body.taxClassification });
@@ -338,32 +367,49 @@ export async function updateCompanySettings(
     // law allows (an LLC may elect S status only in the US; a sole
     // proprietorship is taxed with its owner).
     if (
-      effectiveClassification !== null
-      && (body.legalForm !== undefined || body.taxClassification !== undefined || body.country !== undefined)
-      && !taxClassificationsFor(effectiveLegalForm, effectiveCountry).includes(effectiveClassification)
+      effectiveClassification !== null &&
+      (body.legalForm !== undefined ||
+        body.taxClassification !== undefined ||
+        body.country !== undefined) &&
+      !taxClassificationsFor(effectiveLegalForm, effectiveCountry).includes(effectiveClassification)
     ) {
-      return { status: 400, body: {
-        error: "the tax classification does not apply to this legal form in this country — choose a classification the structure can elect",
-        code: "tax-classification-mismatch",
-        legalForm: effectiveLegalForm,
-        taxClassification: effectiveClassification,
-      } };
+      return {
+        status: 400,
+        body: {
+          error:
+            "the tax classification does not apply to this legal form in this country — choose a classification the structure can elect",
+          code: "tax-classification-mismatch",
+          legalForm: effectiveLegalForm,
+          taxClassification: effectiveClassification,
+        },
+      };
     }
     const storedTaxIds = readTaxIds(cur.tax_ids);
     if (body.taxIds !== undefined) {
       if (body.taxIds === null || typeof body.taxIds !== "object" || Array.isArray(body.taxIds)) {
-        return { status: 400, body: { error: "taxIds must be an object keyed by identifier scheme", code: "invalid-tax-id" } };
+        return {
+          status: 400,
+          body: {
+            error: "taxIds must be an object keyed by identifier scheme",
+            code: "invalid-tax-id",
+          },
+        };
       }
-      const result = normalizeTaxIds(body.taxIds as Record<string, unknown>, effectiveCountry, storedTaxIds);
+      const result = normalizeTaxIds(
+        body.taxIds as Record<string, unknown>,
+        effectiveCountry,
+        storedTaxIds,
+      );
       if (!result.ok) {
         const { scheme, reason } = result.problem;
         const label = taxIdScheme(scheme)?.printLabel ?? scheme;
         const example = taxIdScheme(scheme)?.example;
-        const message = reason === "unknown_scheme"
-          ? `${scheme} is not a supported tax identifier`
-          : reason === "not_in_country"
-            ? `${label} is not issued in ${effectiveCountry} — remove it or change the company's country`
-            : `${label} is not a valid number${example ? ` — enter it like ${example}` : ""}`;
+        const message =
+          reason === "unknown_scheme"
+            ? `${scheme} is not a supported tax identifier`
+            : reason === "not_in_country"
+              ? `${label} is not issued in ${effectiveCountry} — remove it or change the company's country`
+              : `${label} is not a valid number${example ? ` — enter it like ${example}` : ""}`;
         return { status: 400, body: { error: message, code: "invalid-tax-id", scheme, reason } };
       }
       if (JSON.stringify(result.taxIds) !== JSON.stringify(storedTaxIds)) {
@@ -374,30 +420,37 @@ export async function updateCompanySettings(
 
     // --- base currency (must be a known currency) ---
     if (body.baseCurrency !== undefined) {
-      if (
-        typeof body.baseCurrency !== "string" ||
-        !/^[A-Z]{3}$/.test(body.baseCurrency)
-      ) {
+      if (typeof body.baseCurrency !== "string" || !/^[A-Z]{3}$/.test(body.baseCurrency)) {
         return { status: 400, body: { error: "base currency must be a 3-letter code" } };
       }
       const known = await tx.execute(
-        sql`select 1 from currencies where code = ${body.baseCurrency} limit 1`, "objects",
+        sql`select 1 from currencies where code = ${body.baseCurrency} limit 1`,
+        "objects",
       );
       if (!known[0]) {
-        return { status: 400, body: {
+        return {
+          status: 400,
+          body: {
             error: `unknown currency "${body.baseCurrency}" — add it to the currency table first`,
-          } };
+          },
+        };
       }
       if (body.baseCurrency !== cur.base_currency) {
-        const ledgerEvidence = await tx.execute(sql`
+        const ledgerEvidence = await tx.execute(
+          sql`
         select exists (
           select 1 from journal_lines where org_id = ${orgId} limit 1
-        ) as exists`, "objects");
+        ) as exists`,
+          "objects",
+        );
         if (ledgerEvidence[0]?.exists) {
-          return { status: 409, body: {
+          return {
+            status: 409,
+            body: {
               error: "base-currency-locked",
               message: "Cannot change base currency after postings exist.",
-            } };
+            },
+          };
         }
         sets.push(sql`base_currency = ${body.baseCurrency}`);
         changes.baseCurrency = [cur.base_currency, body.baseCurrency];
@@ -419,9 +472,12 @@ export async function updateCompanySettings(
         (key) => !CONTROL_ACCOUNT_ROLES.some((role) => role === key),
       );
       if (unknownRoles.length > 0) {
-        return { status: 400, body: {
-          error: unknownRoles.map((key) => `unknown control account role ${key}`).join("; "),
-        } };
+        return {
+          status: 400,
+          body: {
+            error: unknownRoles.map((key) => `unknown control account role ${key}`).join("; "),
+          },
+        };
       }
       const currentControl =
         settings.controlAccounts && typeof settings.controlAccounts === "object"
@@ -436,7 +492,15 @@ export async function updateCompanySettings(
           continue;
         }
         if (typeof v !== "string" || !isUuid(v)) {
-          return { status: 400, body: { error: `${CONTROL_ACCOUNT_ROLE_LABELS[key]} must be an account id`, code: "control-account-invalid", role: key, reason: "missing" } };
+          return {
+            status: 400,
+            body: {
+              error: `${CONTROL_ACCOUNT_ROLE_LABELS[key]} must be an account id`,
+              code: "control-account-invalid",
+              role: key,
+              reason: "missing",
+            },
+          };
         }
         collected[key] = v;
       }
@@ -445,37 +509,48 @@ export async function updateCompanySettings(
         const accountId = collected[key];
         if (accountId === undefined) continue;
         if (typeof accountId !== "string" || !isUuid(accountId)) {
-          return { status: 400, body: { error: `${CONTROL_ACCOUNT_ROLE_LABELS[key]}: stored control account id is invalid — choose the account again`, code: "control-account-invalid", role: key, reason: "missing" } };
+          return {
+            status: 400,
+            body: {
+              error: `${CONTROL_ACCOUNT_ROLE_LABELS[key]}: stored control account id is invalid — choose the account again`,
+              code: "control-account-invalid",
+              role: key,
+              reason: "missing",
+            },
+          };
         }
         ids.add(accountId);
       }
       if (ids.size > 0) {
-        const found = await tx.execute<ControlAccountRecord>(sql`
+        const found = await tx.execute<ControlAccountRecord>(
+          sql`
         select id, type, is_active as "isActive", is_summary as "isSummary"
           from accounts
          where org_id = ${orgId} and id in (${sql.join(
            [...ids].map((i) => sql`${i}`),
            sql`, `,
          )})
-         for share`, "objects");
+         for share`,
+          "objects",
+        );
         try {
-          assertValidControlAccountMappings(
-            collected as OrgControlAccounts,
-            found,
-          );
+          assertValidControlAccountMappings(collected as OrgControlAccounts, found);
         } catch (error) {
           if (error instanceof ControlAccountsIncompleteError) {
             // The message names the role in plain words; the structured
             // detail lets the settings screen restate it in the operator's
             // language beside the field.
-            return { status: 400, body: {
-              error: error.message,
-              code: "control-account-invalid",
-              ...(error.role ? { role: error.role } : {}),
-              ...(error.reason ? { reason: error.reason } : {}),
-              ...(error.accountType ? { accountType: error.accountType } : {}),
-              ...(error.allowedTypes ? { allowedTypes: error.allowedTypes } : {}),
-            } };
+            return {
+              status: 400,
+              body: {
+                error: error.message,
+                code: "control-account-invalid",
+                ...(error.role ? { role: error.role } : {}),
+                ...(error.reason ? { reason: error.reason } : {}),
+                ...(error.accountType ? { accountType: error.accountType } : {}),
+                ...(error.allowedTypes ? { allowedTypes: error.allowedTypes } : {}),
+              },
+            };
           }
           throw error;
         }
@@ -502,9 +577,12 @@ export async function updateCompanySettings(
         (key) => !CASH_SALES_SETTING_KEYS.some((known) => known === key),
       );
       if (unknownKeys.length > 0) {
-        return { status: 400, body: {
-          error: unknownKeys.map((key) => `unknown cash sales setting ${key}`).join("; "),
-        } };
+        return {
+          status: 400,
+          body: {
+            error: unknownKeys.map((key) => `unknown cash sales setting ${key}`).join("; "),
+          },
+        };
       }
       const currentCashSales =
         settings.cashSales && typeof settings.cashSales === "object"
@@ -532,38 +610,55 @@ export async function updateCompanySettings(
           delete collected.depositAccountIds;
         } else {
           if (!Array.isArray(v)) {
-            return { status: 400, body: { error: "Till-drop bank accounts must be a list of account ids" } };
+            return {
+              status: 400,
+              body: { error: "Till-drop bank accounts must be a list of account ids" },
+            };
           }
           const ids = [...new Set(v)];
           for (const id of ids) {
             if (typeof id !== "string" || !isUuid(id)) {
-              return { status: 400, body: { error: "Till-drop bank accounts must be a list of account ids" } };
+              return {
+                status: 400,
+                body: { error: "Till-drop bank accounts must be a list of account ids" },
+              };
             }
           }
           collected.depositAccountIds = ids;
         }
       }
       if (typeof collected.walkInCustomerId === "string") {
-        const party = await tx.execute(sql`
+        const party = await tx.execute(
+          sql`
           select p.id
             from parties p
             join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
            where p.org_id = ${orgId} and p.id = ${collected.walkInCustomerId} and p.is_active
-           limit 1`, "objects");
+           limit 1`,
+          "objects",
+        );
         if (!party[0]) {
-          return { status: 400, body: {
-            error: "walkInCustomerId must be an active customer of this organization",
-          } };
+          return {
+            status: 400,
+            body: {
+              error: "walkInCustomerId must be an active customer of this organization",
+            },
+          };
         }
       }
-      const tenderAccountIds = CASH_SALES_SETTING_KEYS.filter((key) => key !== "walkInCustomerId" && key !== "depositAccountIds")
+      const tenderAccountIds = CASH_SALES_SETTING_KEYS.filter(
+        (key) => key !== "walkInCustomerId" && key !== "depositAccountIds",
+      )
         .map((key) => collected[key])
         .filter((id): id is string => typeof id === "string");
       if (tenderAccountIds.length > 0) {
-        const found = await tx.execute<{ id: string; type: string }>(sql`
+        const found = await tx.execute<{ id: string; type: string }>(
+          sql`
           select id, type from accounts
            where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(tenderAccountIds)}::jsonb)::uuid)
-             and is_active and not is_summary`, "objects");
+             and is_active and not is_summary`,
+          "objects",
+        );
         const byId = new Map(found.map((row) => [row.id, row.type]));
         for (const key of CASH_SALES_SETTING_KEYS) {
           if (key === "walkInCustomerId" || key === "depositAccountIds") continue;
@@ -571,12 +666,18 @@ export async function updateCompanySettings(
           if (typeof accountId !== "string") continue;
           const type = byId.get(accountId);
           if (!type) {
-            return { status: 400, body: { error: `${key} must be an active, non-summary account of this organization` } };
+            return {
+              status: 400,
+              body: { error: `${key} must be an active, non-summary account of this organization` },
+            };
           }
           if (type === "asset_receivable" || type === "liability_payable") {
-            return { status: 400, body: {
-              error: `${key} cannot be a receivable or payable control account — tenders settle into clearing or bank accounts`,
-            } };
+            return {
+              status: 400,
+              body: {
+                error: `${key} cannot be a receivable or payable control account — tenders settle into clearing or bank accounts`,
+              },
+            };
           }
         }
       }
@@ -584,21 +685,38 @@ export async function updateCompanySettings(
       // clearing only, active and postable — never receivables, payables,
       // or P&L accounts.
       const depositIds = Array.isArray(collected.depositAccountIds)
-        ? (collected.depositAccountIds as unknown[]).filter((id): id is string => typeof id === "string")
+        ? (collected.depositAccountIds as unknown[]).filter(
+            (id): id is string => typeof id === "string",
+          )
         : [];
       if (depositIds.length > 0) {
-        const found = await tx.execute<{ id: string; type: string }>(sql`
+        const found = await tx.execute<{ id: string; type: string }>(
+          sql`
           select id, type from accounts
            where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(depositIds)}::jsonb)::uuid)
-             and is_active and not is_summary`, "objects");
+             and is_active and not is_summary`,
+          "objects",
+        );
         const byId = new Map(found.map((row) => [row.id, row.type]));
         for (const accountId of depositIds) {
           const type = byId.get(accountId);
           if (!type) {
-            return { status: 400, body: { error: "depositAccountIds must be active, non-summary accounts of this organization" } };
+            return {
+              status: 400,
+              body: {
+                error:
+                  "depositAccountIds must be active, non-summary accounts of this organization",
+              },
+            };
           }
           if (type !== "asset_bank" && type !== "asset_current_other") {
-            return { status: 400, body: { error: "depositAccountIds must be bank or asset clearing accounts — till drops move cash to the bank" } };
+            return {
+              status: 400,
+              body: {
+                error:
+                  "depositAccountIds must be bank or asset clearing accounts — till drops move cash to the bank",
+              },
+            };
           }
         }
       }
@@ -615,7 +733,7 @@ export async function updateCompanySettings(
     }
 
     // --- fiscal year start month ---
-    let nextStartMonth: number | undefined
+    let nextStartMonth: number | undefined;
     if (body.fiscalYearStartMonth !== undefined) {
       const m = Number(body.fiscalYearStartMonth);
       if (!Number.isInteger(m) || m < 1 || m > 12) {
@@ -626,13 +744,10 @@ export async function updateCompanySettings(
 
     // Assemble the settings jsonb (merge, don't clobber sibling keys like eft).
     const curStartMonth =
-      typeof settings.fiscalYearStartMonth === "number"
-        ? settings.fiscalYearStartMonth
-        : 1;
-    const startMonthChanged =
-      nextStartMonth !== undefined && nextStartMonth !== curStartMonth;
+      typeof settings.fiscalYearStartMonth === "number" ? settings.fiscalYearStartMonth : 1;
+    const startMonthChanged = nextStartMonth !== undefined && nextStartMonth !== curStartMonth;
     const nextSettings = { ...settings } as Record<string, unknown>;
-    let settingsChanged = false
+    let settingsChanged = false;
     if (nextStartMonth !== undefined && nextStartMonth !== curStartMonth) {
       nextSettings.fiscalYearStartMonth = nextStartMonth;
       changes.fiscalYearStartMonth = [curStartMonth, nextStartMonth];
@@ -642,8 +757,7 @@ export async function updateCompanySettings(
       if (body.taxFramework !== "asc740" && body.taxFramework !== "ias12") {
         return { status: 400, body: { error: "taxFramework must be asc740 or ias12" } };
       }
-      const curFramework =
-        settings.taxFramework === "ias12" ? "ias12" : "asc740";
+      const curFramework = settings.taxFramework === "ias12" ? "ias12" : "asc740";
       if (body.taxFramework !== curFramework) {
         nextSettings.taxFramework = body.taxFramework;
         changes.taxFramework = [curFramework, body.taxFramework];
@@ -651,15 +765,11 @@ export async function updateCompanySettings(
       }
     }
     if (body.reportingFramework !== undefined) {
-      if (
-        body.reportingFramework !== "us_gaap" &&
-        body.reportingFramework !== "ifrs"
-      ) {
+      if (body.reportingFramework !== "us_gaap" && body.reportingFramework !== "ifrs") {
         return { status: 400, body: { error: "reportingFramework must be us_gaap or ifrs" } };
       }
       const curReportingFramework =
-        settings.reportingFramework === "ifrs" ||
-        settings.reportingFramework === "us_gaap"
+        settings.reportingFramework === "ifrs" || settings.reportingFramework === "us_gaap"
           ? settings.reportingFramework
           : null;
       if (body.reportingFramework !== curReportingFramework) {
@@ -671,34 +781,34 @@ export async function updateCompanySettings(
           const evidence = await tx.execute<{
             leaseEvidence: boolean;
             inventoryEvidence: boolean;
-          }>(sql`
+          }>(
+            sql`
             select exists (
                      select 1 from lease_agreements where org_id = ${orgId}
                    ) as "leaseEvidence",
                    exists (
                      select 1 from inventory_writedowns where org_id = ${orgId}
-                   ) as "inventoryEvidence"`, "objects");
+                   ) as "inventoryEvidence"`,
+            "objects",
+          );
           if (evidence[0]?.leaseEvidence || evidence[0]?.inventoryEvidence) {
-            return { status: 409, body: {
+            return {
+              status: 409,
+              body: {
                 error: "reporting-framework-locked",
                 message:
                   "Cannot change the reporting framework after lease or inventory NRV evidence exists.",
-              } };
+              },
+            };
           }
         }
         nextSettings.reportingFramework = body.reportingFramework;
-        changes.reportingFramework = [
-          curReportingFramework,
-          body.reportingFramework,
-        ];
+        changes.reportingFramework = [curReportingFramework, body.reportingFramework];
         settingsChanged = true;
       }
     }
     if (nextControl !== undefined) {
-      const curControl = (settings.controlAccounts ?? {}) as Record<
-        string,
-        string
-      >;
+      const curControl = (settings.controlAccounts ?? {}) as Record<string, string>;
       if (JSON.stringify(curControl) !== JSON.stringify(nextControl)) {
         nextSettings.controlAccounts = nextControl;
         changes.controlAccounts = [curControl, nextControl];
@@ -716,7 +826,11 @@ export async function updateCompanySettings(
     // --- company default payment terms (invoices and bills fall back to
     // these when the counterparty names none) ---
     if (body.billing !== undefined) {
-      if (typeof body.billing !== "object" || body.billing === null || Array.isArray(body.billing)) {
+      if (
+        typeof body.billing !== "object" ||
+        body.billing === null ||
+        Array.isArray(body.billing)
+      ) {
         return { status: 400, body: { error: "billing must be an object" } };
       }
       const billingInput = body.billing as Record<string, unknown>;
@@ -724,23 +838,44 @@ export async function updateCompanySettings(
         (key) => !(BILLING_SETTING_KEYS as readonly string[]).includes(key),
       );
       if (unknownBilling.length > 0) {
-        return { status: 400, body: { error: `unknown billing setting: ${unknownBilling.join(", ")}` } };
+        return {
+          status: 400,
+          body: { error: `unknown billing setting: ${unknownBilling.join(", ")}` },
+        };
       }
       let nextBilling: BillingSettings | undefined;
       if (billingInput.defaultPaymentTermsId !== undefined) {
         const rawTerms = billingInput.defaultPaymentTermsId;
         if (rawTerms !== null) {
           if (typeof rawTerms !== "string" || !isUuid(rawTerms)) {
-            return { status: 400, body: { error: "billing.defaultPaymentTermsId must be a payment-terms id or null" } };
+            return {
+              status: 400,
+              body: { error: "billing.defaultPaymentTermsId must be a payment-terms id or null" },
+            };
           }
-          const terms = (await tx.execute<{ name: string; isActive: boolean }>(sql`
+          const terms = (
+            await tx.execute<{ name: string; isActive: boolean }>(
+              sql`
             select name, is_active as "isActive" from payment_terms
-             where org_id = ${orgId} and id = ${rawTerms}`, "objects"))[0];
+             where org_id = ${orgId} and id = ${rawTerms}`,
+              "objects",
+            )
+          )[0];
           if (!terms) {
-            return { status: 400, body: { error: `billing.defaultPaymentTermsId ${rawTerms} does not exist in this organization — choose terms from Setup → Payment terms` } };
+            return {
+              status: 400,
+              body: {
+                error: `billing.defaultPaymentTermsId ${rawTerms} does not exist in this organization — choose terms from Setup → Payment terms`,
+              },
+            };
           }
           if (!terms.isActive) {
-            return { status: 422, body: { error: `payment terms "${terms.name}" is inactive — activate it in Setup → Payment terms or choose active terms` } };
+            return {
+              status: 422,
+              body: {
+                error: `payment terms "${terms.name}" is inactive — activate it in Setup → Payment terms or choose active terms`,
+              },
+            };
           }
         }
         nextBilling = { defaultPaymentTermsId: rawTerms };
@@ -763,10 +898,7 @@ export async function updateCompanySettings(
     const curDefaultLocale = isLocale(settings.defaultLocale)
       ? settings.defaultLocale
       : DEFAULT_LOCALE;
-    if (
-      nextDefaultLocale !== undefined &&
-      nextDefaultLocale !== curDefaultLocale
-    ) {
+    if (nextDefaultLocale !== undefined && nextDefaultLocale !== curDefaultLocale) {
       nextSettings.defaultLocale = nextDefaultLocale;
       changes.defaultLocale = [curDefaultLocale, nextDefaultLocale];
       settingsChanged = true;
@@ -791,7 +923,12 @@ export async function updateCompanySettings(
       } else {
         const canonical = canonicalTimeZone(body.timeZone);
         if (!canonical) {
-          return { status: 400, body: { error: `timeZone ${JSON.stringify(body.timeZone) ?? "null"} is not a known IANA time zone` } };
+          return {
+            status: 400,
+            body: {
+              error: `timeZone ${JSON.stringify(body.timeZone) ?? "null"} is not a known IANA time zone`,
+            },
+          };
         }
         if (canonical !== canonicalTimeZone(settings.timeZone)) {
           nextSettings.timeZone = canonical;
@@ -803,8 +940,7 @@ export async function updateCompanySettings(
     // --- financial report PDF style (formal GAAP / modern branded) ---
     if (body.reportPdfStyle !== undefined) {
       const style = body.reportPdfStyle === "formal" ? "formal" : "modern";
-      const curStyle =
-        settings.reportPdfStyle === "formal" ? "formal" : "modern";
+      const curStyle = settings.reportPdfStyle === "formal" ? "formal" : "modern";
       if (style !== curStyle) {
         nextSettings.reportPdfStyle = style;
         changes.reportPdfStyle = [curStyle, style];
@@ -816,15 +952,11 @@ export async function updateCompanySettings(
     // Recognition. Turning that switch off must refuse a new write; the stored
     // value stays so turning the feature back on restores the same review rule.
     if (body.fairValueRangePolicy !== undefined) {
-      if (
-        body.fairValueRangePolicy !== "warn" &&
-        body.fairValueRangePolicy !== "off"
-      ) {
+      if (body.fairValueRangePolicy !== "warn" && body.fairValueRangePolicy !== "off") {
         return { status: 400, body: { error: "fairValueRangePolicy must be 'warn' or 'off'" } };
       }
       const curRevenue = (settings.revenue ?? {}) as Record<string, unknown>;
-      const curPolicy =
-        curRevenue.fairValueRangePolicy === "off" ? "off" : "warn";
+      const curPolicy = curRevenue.fairValueRangePolicy === "off" ? "off" : "warn";
       if (body.fairValueRangePolicy !== curPolicy) {
         nextSettings.revenue = {
           ...curRevenue,
@@ -838,15 +970,14 @@ export async function updateCompanySettings(
     // When scoped contracts turn off the stored choice stays, so turning them
     // back on restores the same booking behavior instead of a blank control.
     if (body.contractCreation !== undefined) {
-      if (
-        body.contractCreation !== "first_billing" &&
-        body.contractCreation !== "booking"
-      ) {
-        return { status: 400, body: { error: "contractCreation must be 'first_billing' or 'booking'" } };
+      if (body.contractCreation !== "first_billing" && body.contractCreation !== "booking") {
+        return {
+          status: 400,
+          body: { error: "contractCreation must be 'first_billing' or 'booking'" },
+        };
       }
       const curRevenue = (settings.revenue ?? {}) as Record<string, unknown>;
-      const curCreation =
-        curRevenue.contractCreation === "booking" ? "booking" : "first_billing";
+      const curCreation = curRevenue.contractCreation === "booking" ? "booking" : "first_billing";
       if (body.contractCreation !== curCreation) {
         nextSettings.revenue = {
           ...curRevenue,
@@ -857,7 +988,7 @@ export async function updateCompanySettings(
       }
     }
     if (body.saasMetrics !== undefined) {
-      const candidate = body.saasMetrics
+      const candidate = body.saasMetrics;
       if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
         return { status: 400, body: { error: "saasMetrics must be an object" } };
       }
@@ -865,8 +996,14 @@ export async function updateCompanySettings(
       const evergreenBookingMonths = supplied.evergreenBookingMonths;
       const billingsUsePreTaxSubtotal = supplied.billingsUsePreTaxSubtotal;
       const customerCreditsReduceBillings = supplied.customerCreditsReduceBillings;
-      if (typeof evergreenBookingMonths !== "string" || !/^[1-9]\d*$/.test(evergreenBookingMonths)) {
-        return { status: 400, body: { error: "evergreenBookingMonths must be a positive whole number of months" } };
+      if (
+        typeof evergreenBookingMonths !== "string" ||
+        !/^[1-9]\d*$/.test(evergreenBookingMonths)
+      ) {
+        return {
+          status: 400,
+          body: { error: "evergreenBookingMonths must be a positive whole number of months" },
+        };
       }
       if (typeof billingsUsePreTaxSubtotal !== "boolean") {
         return { status: 400, body: { error: "billingsUsePreTaxSubtotal must be a boolean" } };
@@ -878,7 +1015,7 @@ export async function updateCompanySettings(
       const current =
         currentValue !== null && typeof currentValue === "object" && !Array.isArray(currentValue)
           ? (currentValue as Record<string, unknown>)
-          : {}
+          : {};
       const before = {
         evergreenBookingMonths: current.evergreenBookingMonths ?? "12",
         billingsUsePreTaxSubtotal: current.billingsUsePreTaxSubtotal ?? true,
@@ -901,8 +1038,13 @@ export async function updateCompanySettings(
     // refused at posting. It gates new postings only; posted history is
     // never re-evaluated. Absent reads as "warn".
     if (body.partylessControlPolicy !== undefined) {
-      if (!PARTYLESS_CONTROL_POLICIES.includes(body.partylessControlPolicy as PartylessControlPolicy)) {
-        return { status: 400, body: { error: "partylessControlPolicy must be 'warn' or 'refuse'" } };
+      if (
+        !PARTYLESS_CONTROL_POLICIES.includes(body.partylessControlPolicy as PartylessControlPolicy)
+      ) {
+        return {
+          status: 400,
+          body: { error: "partylessControlPolicy must be 'warn' or 'refuse'" },
+        };
       }
       const curLedger = (settings.ledger ?? {}) as Record<string, unknown>;
       const curPolicy = parsePartylessControlPolicy(curLedger.partylessControlPolicy);
@@ -913,7 +1055,8 @@ export async function updateCompanySettings(
       }
     }
     for (const { key, value } of identitySettings) {
-      const before = key === "companyAddress" ? readCompanyAddress(settings[key]) : (settings[key] ?? null);
+      const before =
+        key === "companyAddress" ? readCompanyAddress(settings[key]) : (settings[key] ?? null);
       if (JSON.stringify(before) === JSON.stringify(value)) continue;
       if (value === null) delete nextSettings[key];
       else nextSettings[key] = value;
@@ -939,17 +1082,23 @@ export async function updateCompanySettings(
       // these rows, so they cannot race the eligibility decision. Existing
       // lock and journal rows are locked below so close/post status changes are
       // equally fenced until this transaction commits.
-      const calendar = await tx.execute<{ id: string }>(sql`
+      const calendar = await tx.execute<{ id: string }>(
+        sql`
         select id
           from fiscal_calendars
          where org_id = ${orgId} and is_default and is_active
-         for update`, "objects");
+         for update`,
+        "objects",
+      );
       const calendarId = calendar[0]?.id;
       if (!calendarId) {
-        return { status: 409, body: {
+        return {
+          status: 409,
+          body: {
             error: "fiscal-calendar-not-found",
             message: "An active default fiscal calendar is required.",
-          } };
+          },
+        };
       }
 
       await tx.execute(sql`
@@ -964,7 +1113,8 @@ export async function updateCompanySettings(
       const activity = await tx.execute<{
         posted: boolean;
         closed: boolean;
-      }>(sql`
+      }>(
+        sql`
         select exists (
                  select 1
                    from journal_entries entry
@@ -989,7 +1139,9 @@ export async function updateCompanySettings(
                       or period_lock.reopen_expires_at <= now()
                     )
                   limit 1
-               ) as closed`, "objects");
+               ) as closed`,
+        "objects",
+      );
       if (activity[0]?.posted || activity[0]?.closed) {
         return fiscalCalendarLockedResponse();
       }
@@ -997,7 +1149,8 @@ export async function updateCompanySettings(
       const periodLocks = await tx.execute<{
         state: string;
         reopenExpired: boolean;
-      }>(sql`
+      }>(
+        sql`
         select period_lock.state,
                period_lock.reopen_expires_at <= now() as "reopenExpired"
           from period_locks period_lock
@@ -1006,12 +1159,15 @@ export async function updateCompanySettings(
            and period.id = period_lock.period_id
          where period.org_id = ${orgId}
            and period.fiscal_calendar_id = ${calendarId}
-         for update of period_lock`, "objects");
+         for update of period_lock`,
+        "objects",
+      );
       const calendarClosed = periodLocks.some(
         (periodLock) => periodLock.state !== "open" || periodLock.reopenExpired,
       );
 
-      const journals = await tx.execute<{ status: string }>(sql`
+      const journals = await tx.execute<{ status: string }>(
+        sql`
         select entry.status
           from journal_entries entry
           join accounting_periods period
@@ -1019,7 +1175,9 @@ export async function updateCompanySettings(
            and period.id = entry.period_id
          where period.org_id = ${orgId}
            and period.fiscal_calendar_id = ${calendarId}
-         for update of entry`, "objects");
+         for update of entry`,
+        "objects",
+      );
       const calendarPosted = journals.some(
         (entry) => entry.status === "posted" || entry.status === "reversed",
       );
@@ -1050,10 +1208,13 @@ export async function updateCompanySettings(
     values (${orgId}, 'orgs', ${orgId}, 'update',
             ${JSON.stringify(changes)}, ${actor.id})`);
 
-    return { status: 200, body: {
-      ok: true,
-      changed: true,
-      periodsRederived: startMonthChanged,
-    } };
-  })
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        changed: true,
+        periodsRederived: startMonthChanged,
+      },
+    };
+  });
 }

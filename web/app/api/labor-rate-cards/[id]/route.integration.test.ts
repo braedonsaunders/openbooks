@@ -20,7 +20,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.lrc-route-test')]
@@ -55,9 +55,8 @@ const routeUrl = "./route.ts?lrc-array-binding-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -107,8 +106,11 @@ async function seed(): Promise<Fixture> {
   }
 
   // createScratchOrg seeds two active locations but returns only the first.
-  const locationRows = (await db.execute<{ id: string }>(sql`
-    select id from locations where org_id = ${org.orgId} and is_active order by name`, "objects"));
+  const locationRows = await db.execute<{ id: string }>(
+    sql`
+    select id from locations where org_id = ${org.orgId} and is_active order by name`,
+    "objects",
+  );
   assert.equal(locationRows.length >= 2, true, "scratch org seeds two locations");
 
   const customers: string[] = [];
@@ -183,7 +185,10 @@ function putBody(fixture: Fixture, keepLineIds?: string[], status = "draft") {
         value: "50",
         unit: "flat",
         presentation: "separate",
-        targets: customers.map((customerId) => ({ targetType: "customer", targetValueId: customerId })),
+        targets: customers.map((customerId) => ({
+          targetType: "customer",
+          targetValueId: customerId,
+        })),
       },
     ],
     terms: [
@@ -203,19 +208,28 @@ function put(fixture: Fixture, body: Record<string, unknown>): Promise<Response>
     permissions: new Set(["*"]),
     allowedSubsidiaryIds: null,
   };
-  return PUT(new Request(`http://openbooks.test/api/labor-rate-cards/${fixture.versionId}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }), { params: Promise.resolve({ id: fixture.versionId }) });
+  return PUT(
+    new Request(`http://openbooks.test/api/labor-rate-cards/${fixture.versionId}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ id: fixture.versionId }) },
+  );
 }
 
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 
-test('labor card saves refuse unowned kept lines and missing registration without changing either tenant', async () => {
-  await withSeededFixture(async fixture => withSeededFixture(async foreign => {
-    const snapshot = (orgId: string) => withOrgContext(orgId, async () =>
-      (await db.execute(sql`select jsonb_build_object(
+test("labor card saves refuse unowned kept lines and missing registration without changing either tenant", async () => {
+  await withSeededFixture(async (fixture) =>
+    withSeededFixture(async (foreign) => {
+      const snapshot = (orgId: string) =>
+        withOrgContext(
+          orgId,
+          async () =>
+            (
+              await db.execute(
+                sql`select jsonb_build_object(
         'books',(select coalesce(jsonb_agg(to_jsonb(b) order by b.id),'[]'::jsonb) from item_rate_books b where b.org_id=${orgId}),
         'versions',(select coalesce(jsonb_agg(to_jsonb(v) order by v.id),'[]'::jsonb) from item_rate_versions v where v.org_id=${orgId}),
         'policies',(select coalesce(jsonb_agg(to_jsonb(p) order by p.id),'[]'::jsonb) from labor_rate_version_policies p where p.org_id=${orgId}),
@@ -225,364 +239,456 @@ test('labor card saves refuse unowned kept lines and missing registration withou
         'targets',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]'::jsonb) from labor_rate_adjustment_targets t where t.org_id=${orgId}),
         'terms',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]'::jsonb) from labor_rate_terms t where t.org_id=${orgId}),
         'audit',(select coalesce(jsonb_agg(to_jsonb(a) order by a.id),'[]'::jsonb) from audit_log a where a.org_id=${orgId})
-      ) as state`, "objects"))[0]!.state)
-    const before = await snapshot(fixture.orgId)
-    const foreignBefore = await snapshot(foreign.orgId)
-    for (const invalidLine of [randomUUID(), foreign.storedLineIds[0]!]) {
-      const body = putBody(fixture)
-      body.lines[0]!.id = invalidLine
-      const response = await withOrgContext(fixture.orgId, () => put(fixture, body))
-      assert.equal(response.status, 422)
-      assert.deepEqual(await response.json(), { errorCode: 'item' })
-      assert.deepEqual(await snapshot(fixture.orgId), before, 'a refused retained line cannot prune prices or partially rename the book')
-      assert.deepEqual(await snapshot(foreign.orgId), foreignBefore)
-    }
-    await withBypass(async () => {
-      const removed = await db.execute(sql`delete from labor_rate_version_policies
-        where org_id=${fixture.orgId} and version_id=${fixture.versionId} returning id`, "objects")
-      assert.equal(removed.length, 1)
-    })
-    const unregisteredBefore = await snapshot(fixture.orgId)
-    const missing = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture)))
-    assert.equal(missing.status, 404)
-    assert.deepEqual(await missing.json(), { errorCode: 'notFound' })
-    assert.deepEqual(await snapshot(fixture.orgId), unregisteredBefore, 'a missing labor policy cannot be reported as saved or created implicitly')
-    assert.deepEqual(await snapshot(foreign.orgId), foreignBefore)
-  }))
-})
+      ) as state`,
+                "objects",
+              )
+            )[0]!.state,
+        );
+      const before = await snapshot(fixture.orgId);
+      const foreignBefore = await snapshot(foreign.orgId);
+      for (const invalidLine of [randomUUID(), foreign.storedLineIds[0]!]) {
+        const body = putBody(fixture);
+        body.lines[0]!.id = invalidLine;
+        const response = await withOrgContext(fixture.orgId, () => put(fixture, body));
+        assert.equal(response.status, 422);
+        assert.deepEqual(await response.json(), { errorCode: "item" });
+        assert.deepEqual(
+          await snapshot(fixture.orgId),
+          before,
+          "a refused retained line cannot prune prices or partially rename the book",
+        );
+        assert.deepEqual(await snapshot(foreign.orgId), foreignBefore);
+      }
+      await withBypass(async () => {
+        const removed = await db.execute(
+          sql`delete from labor_rate_version_policies
+        where org_id=${fixture.orgId} and version_id=${fixture.versionId} returning id`,
+          "objects",
+        );
+        assert.equal(removed.length, 1);
+      });
+      const unregisteredBefore = await snapshot(fixture.orgId);
+      const missing = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture)));
+      assert.equal(missing.status, 404);
+      assert.deepEqual(await missing.json(), { errorCode: "notFound" });
+      assert.deepEqual(
+        await snapshot(fixture.orgId),
+        unregisteredBefore,
+        "a missing labor policy cannot be reported as saved or created implicitly",
+      );
+      assert.deepEqual(await snapshot(foreign.orgId), foreignBefore);
+    }),
+  );
+});
 
-test(
-  "PUT saves multi-element item/customer/location/line collections against live Postgres",
-  async () => {
-    await withSeededFixture(async (fixture) => {
-      // Activating from the editor is the deepest legal save: children must
-      // be rewritten while the stored status is still draft.
-      const response = await withOrgContext(fixture.orgId, () =>
-        put(fixture, putBody(fixture, undefined, "active")));
-      const payload = (await response.json()) as { ok?: boolean; id?: string; errorCode?: string };
-      assert.equal(response.status, 200, `save failed: ${JSON.stringify(payload)}`);
-      assert.deepEqual(payload, { ok: true, id: fixture.versionId });
+test("PUT saves multi-element item/customer/location/line collections against live Postgres", async () => {
+  await withSeededFixture(async (fixture) => {
+    // Activating from the editor is the deepest legal save: children must
+    // be rewritten while the stored status is still draft.
+    const response = await withOrgContext(fixture.orgId, () =>
+      put(fixture, putBody(fixture, undefined, "active")),
+    );
+    const payload = (await response.json()) as { ok?: boolean; id?: string; errorCode?: string };
+    assert.equal(response.status, 200, `save failed: ${JSON.stringify(payload)}`);
+    assert.deepEqual(payload, { ok: true, id: fixture.versionId });
 
-      await withOrgContext(fixture.orgId, async () => {
-        const book = (await db.execute<{ name: string; code: string }>(sql`
-          select name, code from item_rate_books where id = ${fixture.bookId}`, "objects"));
-        assert.deepEqual(book[0], { name: "Field Crew Rates", code: "FIELD2" });
+    await withOrgContext(fixture.orgId, async () => {
+      const book = await db.execute<{ name: string; code: string }>(
+        sql`
+          select name, code from item_rate_books where id = ${fixture.bookId}`,
+        "objects",
+      );
+      assert.deepEqual(book[0], { name: "Field Crew Rates", code: "FIELD2" });
 
-        const version = (await db.execute<{ status: string }>(sql`
-          select status from item_rate_versions where id = ${fixture.versionId}`, "objects"));
-        assert.equal(version[0]?.status, "active");
+      const version = await db.execute<{ status: string }>(
+        sql`
+          select status from item_rate_versions where id = ${fixture.versionId}`,
+        "objects",
+      );
+      assert.equal(version[0]?.status, "active");
 
-        // All three re-sent stored lines survive the not(id = any(...)) prune,
-        // re-pointed at their items with fresh rates in payload order.
-        const lines = (await db.execute<{ id: string; billRate: string | null; sortOrder: number }>(sql`
+      // All three re-sent stored lines survive the not(id = any(...)) prune,
+      // re-pointed at their items with fresh rates in payload order.
+      const lines = await db.execute<{ id: string; billRate: string | null; sortOrder: number }>(
+        sql`
           select id, bill_rate::text as "billRate", sort_order as "sortOrder"
             from item_rate_lines
            where version_id = ${fixture.versionId}
-           order by sort_order`, "objects"));
-        assert.deepEqual(lines.map((row) => row.id), fixture.storedLineIds);
-        // All three re-sent stored lines survive the prune: the per-line
-        // rate check below cannot pass over an empty set.
-        assert.equal(lines.length, 3);
-        for (const row of lines) assert.equal(row.billRate, "125.5000");
+           order by sort_order`,
+        "objects",
+      );
+      assert.deepEqual(
+        lines.map((row) => row.id),
+        fixture.storedLineIds,
+      );
+      // All three re-sent stored lines survive the prune: the per-line
+      // rate check below cannot pass over an empty set.
+      assert.equal(lines.length, 3);
+      for (const row of lines) assert.equal(row.billRate, "125.5000");
 
-        const adjustments = (await db.execute<{ code: string; n_targets: number }>(sql`
+      const adjustments = await db.execute<{ code: string; n_targets: number }>(
+        sql`
           select a.code, count(at.id)::int as "nTargets"
             from labor_rate_adjustments a
             left join labor_rate_adjustment_targets at on at.adjustment_id = a.id and at.org_id = a.org_id
            where a.version_id = ${fixture.versionId} and a.org_id = ${fixture.orgId}
-           group by a.code order by a.code`, "objects"));
-        assert.deepEqual(adjustments, [
-          { code: "markup", nTargets: 3 },
-          { code: "rush", nTargets: 2 },
-        ]);
+           group by a.code order by a.code`,
+        "objects",
+      );
+      assert.deepEqual(adjustments, [
+        { code: "markup", nTargets: 3 },
+        { code: "rush", nTargets: 2 },
+      ]);
 
-        const scopes = (await db.execute<{ n: number }>(sql`
+      const scopes = await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from labor_rate_version_scopes
-           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`, "objects"));
-        assert.equal(scopes[0]?.n, 2);
+           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`,
+        "objects",
+      );
+      assert.equal(scopes[0]?.n, 2);
 
-        const terms = (await db.execute<{ n: number }>(sql`
+      const terms = await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from labor_rate_terms
-           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`, "objects"));
-        assert.equal(terms[0]?.n, 1);
+           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`,
+        "objects",
+      );
+      assert.equal(terms[0]?.n, 1);
 
-        const audit = (await db.execute<{ n: number }>(sql`
+      const audit = await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from audit_log
            where org_id = ${fixture.orgId} and table_name = 'item_rate_versions'
-             and row_id = ${fixture.versionId} and action = 'update'`, "objects"));
-        assert.equal(audit[0]?.n, 1);
-      });
-    });  },
-);
+             and row_id = ${fixture.versionId} and action = 'update'`,
+        "objects",
+      );
+      assert.equal(audit[0]?.n, 1);
+    });
+  });
+});
 
-test(
-  "PUT prunes exactly the kept-line complement via not(id = any(multi-element))",
-  async () => {
-    await withSeededFixture(async (fixture) => {
-      const first = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture)));
-      assert.equal(first.status, 200, `initial save failed: ${JSON.stringify(await first.json())}`);
+test("PUT prunes exactly the kept-line complement via not(id = any(multi-element))", async () => {
+  await withSeededFixture(async (fixture) => {
+    const first = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture)));
+    assert.equal(first.status, 200, `initial save failed: ${JSON.stringify(await first.json())}`);
 
-      // Re-send only two of the three stored lines: the third is the
-      // complement of a multi-element any() list and must be deleted alone.
-      const keepTwo = fixture.storedLineIds.slice(0, 2);
-      const second = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture, keepTwo)));
-      assert.equal(second.status, 200, `prune save failed: ${JSON.stringify(await second.json())}`);
+    // Re-send only two of the three stored lines: the third is the
+    // complement of a multi-element any() list and must be deleted alone.
+    const keepTwo = fixture.storedLineIds.slice(0, 2);
+    const second = await withOrgContext(fixture.orgId, () =>
+      put(fixture, putBody(fixture, keepTwo)),
+    );
+    assert.equal(second.status, 200, `prune save failed: ${JSON.stringify(await second.json())}`);
 
-      await withOrgContext(fixture.orgId, async () => {
-        const remaining = (await db.execute<{ id: string }>(sql`
+    await withOrgContext(fixture.orgId, async () => {
+      const remaining = await db.execute<{ id: string }>(
+        sql`
           select id from item_rate_lines
            where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}
-           order by sort_order`, "objects"));
-        assert.deepEqual(remaining.map((row) => row.id), keepTwo);
-      });
-    });  },
-);
-
-test(
-  "PUT rejects non-string rate-card names at the JSON boundary",
-  async () => {
-    await withSeededFixture(async (fixture) => {
-      const response = await withOrgContext(fixture.orgId, () =>
-        put(fixture, { ...putBody(fixture), name: 0 }),
+           order by sort_order`,
+        "objects",
       );
-      assert.equal(response.status, 400);
-    });  },
-);
-
-test(
-  "PUT rejects non-string rate-card codes at the JSON boundary",
-  async () => {
-    await withSeededFixture(async (fixture) => {
-      const response = await withOrgContext(fixture.orgId, () =>
-        put(fixture, { ...putBody(fixture), code: 0 }),
+      assert.deepEqual(
+        remaining.map((row) => row.id),
+        keepTwo,
       );
-      assert.equal(response.status, 400);
-    });  },
-);
+    });
+  });
+});
 
-test(
-  "PUT rejects an impossible effective date with the date error",
-  async () => {
-    await withSeededFixture(async (fixture) => {
-      // February 30 passes a shape check but is not a calendar day: the
-      // save must name the date field, not fail as a generic save error
-      // from the DATE column, and must leave the stored version untouched.
-      const response = await withOrgContext(fixture.orgId, () =>
-        put(fixture, { ...putBody(fixture), effective_from: "2026-02-30" }),
+test("PUT rejects non-string rate-card names at the JSON boundary", async () => {
+  await withSeededFixture(async (fixture) => {
+    const response = await withOrgContext(fixture.orgId, () =>
+      put(fixture, { ...putBody(fixture), name: 0 }),
+    );
+    assert.equal(response.status, 400);
+  });
+});
+
+test("PUT rejects non-string rate-card codes at the JSON boundary", async () => {
+  await withSeededFixture(async (fixture) => {
+    const response = await withOrgContext(fixture.orgId, () =>
+      put(fixture, { ...putBody(fixture), code: 0 }),
+    );
+    assert.equal(response.status, 400);
+  });
+});
+
+test("PUT rejects an impossible effective date with the date error", async () => {
+  await withSeededFixture(async (fixture) => {
+    // February 30 passes a shape check but is not a calendar day: the
+    // save must name the date field, not fail as a generic save error
+    // from the DATE column, and must leave the stored version untouched.
+    const response = await withOrgContext(fixture.orgId, () =>
+      put(fixture, { ...putBody(fixture), effective_from: "2026-02-30" }),
+    );
+    assert.equal(response.status, 422);
+    assert.deepEqual(await response.json(), { errorCode: "effectiveDate" });
+    await withOrgContext(fixture.orgId, async () => {
+      const version = await db.execute<{ from: string; status: string }>(
+        sql`
+          select effective_from::text as "from", status from item_rate_versions where id = ${fixture.versionId}`,
+        "objects",
       );
-      assert.equal(response.status, 422);
-      assert.deepEqual(await response.json(), { errorCode: "effectiveDate" });
-      await withOrgContext(fixture.orgId, async () => {
-        const version = (await db.execute<{ from: string; status: string }>(sql`
-          select effective_from::text as "from", status from item_rate_versions where id = ${fixture.versionId}`, "objects"));
-        assert.deepEqual(version[0], { from: "2026-07-01", status: "draft" });
-      });
-    });  },
-);
+      assert.deepEqual(version[0], { from: "2026-07-01", status: "draft" });
+    });
+  });
+});
 
-test(
-  "PUT refuses a foreign reference custom value instead of storing it",
-  async () => {
-    const fixture = await withBypass(seed);
-    const foreign = await withBypass(() => createScratchOrg());
-    try {
-      await db.execute(sql`
+test("PUT refuses a foreign reference custom value instead of storing it", async () => {
+  const fixture = await withBypass(seed);
+  const foreign = await withBypass(() => createScratchOrg());
+  try {
+    await db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${fixture.orgId}, 'item_rate_versions', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${fixture.actorId}, ${fixture.actorId})
       `);
-      const refused = await withOrgContext(fixture.orgId, () =>
-        put(fixture, { ...putBody(fixture), custom: { ref_party: foreign.vendorId } }));
-      const refusedPayload = (await refused.json()) as { errorCode?: string };
-      assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refusedPayload)}`);
-      assert.equal(refusedPayload.errorCode, "unknownCustomReference");
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from item_rate_versions where id = ${fixture.versionId}`, "objects"))[0]?.custom;
-      assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, "refused references store nothing");
-      const saved = await withOrgContext(fixture.orgId, () =>
-        put(fixture, { ...putBody(fixture), custom: { ref_party: fixture.customers[0] } }));
-      assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(await saved.json())}`);
-    } finally {
-      await withBypass(() => dropScratchOrg(foreign.orgId));
-      await withBypass(() => dropScratchOrg(fixture.orgId));
+    const refused = await withOrgContext(fixture.orgId, () =>
+      put(fixture, { ...putBody(fixture), custom: { ref_party: foreign.vendorId } }),
+    );
+    const refusedPayload = (await refused.json()) as { errorCode?: string };
+    assert.equal(
+      refused.status,
+      422,
+      `expected 422, got ${refused.status}: ${JSON.stringify(refusedPayload)}`,
+    );
+    assert.equal(refusedPayload.errorCode, "unknownCustomReference");
+    const stored = (
+      await db.execute<{ custom: Record<string, unknown> }>(
+        sql`select custom from item_rate_versions where id = ${fixture.versionId}`,
+        "objects",
+      )
+    )[0]?.custom;
+    assert.equal(
+      (stored as Record<string, unknown> | undefined)?.ref_party,
+      undefined,
+      "refused references store nothing",
+    );
+    const saved = await withOrgContext(fixture.orgId, () =>
+      put(fixture, { ...putBody(fixture), custom: { ref_party: fixture.customers[0] } }),
+    );
+    assert.equal(
+      saved.status,
+      200,
+      `own-org reference must stay green: ${JSON.stringify(await saved.json())}`,
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(foreign.orgId));
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
+
+test("PUT refuses unmatchable adjustment targets by name instead of billing zero", async () => {
+  // transaction_type and other have no matcher case: an adjustment saved
+  // with one would measure nothing and bill zero forever. The save names
+  // them rather than storing the silence.
+  await withSeededFixture(async (fixture) => {
+    for (const target of [
+      { targetType: "transaction_type", targetValueText: "vendor_bill" },
+      { targetType: "other", targetValueText: "Something bespoke" },
+    ]) {
+      const body = {
+        ...putBody(fixture),
+        adjustments: [
+          {
+            code: "badtarget",
+            name: "Bad target",
+            category: "surcharge",
+            calculation: "percent",
+            value: "5",
+            presentation: "separate",
+            targets: [target],
+          },
+        ],
+      };
+      const response = await withOrgContext(fixture.orgId, () => put(fixture, body));
+      const payload = (await response.json()) as { errorCode?: string };
+      assert.equal(
+        response.status,
+        422,
+        `expected 422, got ${response.status}: ${JSON.stringify(payload)}`,
+      );
+      assert.equal(payload.errorCode, "target", JSON.stringify(target));
     }
-  },
-);
+    const stored = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`,
+      "objects",
+    );
+    assert.equal(stored[0]?.n, 0, "refused targets store nothing");
+  });
+});
 
-test(
-  "PUT refuses unmatchable adjustment targets by name instead of billing zero",
-  async () => {
-    // transaction_type and other have no matcher case: an adjustment saved
-    // with one would measure nothing and bill zero forever. The save names
-    // them rather than storing the silence.
-    await withSeededFixture(async (fixture) => {
-      for (const target of [
-        { targetType: "transaction_type", targetValueText: "vendor_bill" },
-        { targetType: "other", targetValueText: "Something bespoke" },
-      ]) {
-        const body = {
-          ...putBody(fixture),
-          adjustments: [
-            {
-              code: "badtarget",
-              name: "Bad target",
-              category: "surcharge",
-              calculation: "percent",
-              value: "5",
-              presentation: "separate",
-              targets: [target],
-            },
-          ],
-        };
-        const response = await withOrgContext(fixture.orgId, () => put(fixture, body));
-        const payload = (await response.json()) as { errorCode?: string };
-        assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(payload)}`);
-        assert.equal(payload.errorCode, "target", JSON.stringify(target));
-      }
-      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`, "objects"));
-      assert.equal(stored[0]?.n, 0, "refused targets store nothing");
-    });  },
-);
+test("PUT accepts all-labor and all-materials selectors and refuses them with an id", async () => {
+  // PRC10: labor/material are value-less selectors. The stored text echoes
+  // the selector so the one-value CHECK stays satisfied; an id is refused.
+  await withSeededFixture(async (fixture) => {
+    const withId = await withOrgContext(fixture.orgId, () =>
+      put(fixture, {
+        ...putBody(fixture),
+        adjustments: [
+          {
+            code: "badd",
+            name: "Bad selector",
+            category: "surcharge",
+            calculation: "percent",
+            value: "5",
+            presentation: "separate",
+            targets: [{ targetType: "labor", targetValueId: fixture.customers[0] }],
+          },
+        ],
+      }),
+    );
+    const withIdPayload = (await withId.json()) as { errorCode?: string };
+    assert.equal(
+      withId.status,
+      422,
+      `selector with id must refuse: ${JSON.stringify(withIdPayload)}`,
+    );
+    assert.equal(withIdPayload.errorCode, "target");
 
-test(
-  "PUT accepts all-labor and all-materials selectors and refuses them with an id",
-  async () => {
-    // PRC10: labor/material are value-less selectors. The stored text echoes
-    // the selector so the one-value CHECK stays satisfied; an id is refused.
-    await withSeededFixture(async (fixture) => {
-      const withId = await withOrgContext(fixture.orgId, () =>
-        put(fixture, {
-          ...putBody(fixture),
-          adjustments: [
-            {
-              code: "badd",
-              name: "Bad selector",
-              category: "surcharge",
-              calculation: "percent",
-              value: "5",
-              presentation: "separate",
-              targets: [{ targetType: "labor", targetValueId: fixture.customers[0] }],
-            },
-          ],
-        }));
-      const withIdPayload = (await withId.json()) as { errorCode?: string };
-      assert.equal(withId.status, 422, `selector with id must refuse: ${JSON.stringify(withIdPayload)}`);
-      assert.equal(withIdPayload.errorCode, "target");
-
-      const saved = await withOrgContext(fixture.orgId, () =>
-        put(fixture, {
-          ...putBody(fixture),
-          adjustments: [
-            {
-              code: "alllabor",
-              name: "All labor",
-              category: "surcharge",
-              calculation: "percent",
-              value: "5",
-              presentation: "separate",
-              targets: [{ targetType: "labor" }],
-            },
-            {
-              code: "allmat",
-              name: "All materials",
-              category: "surcharge",
-              calculation: "percent",
-              value: "5",
-              presentation: "separate",
-              targets: [{ targetType: "material", targetValueText: "material" }],
-            },
-          ],
-        }));
-      assert.equal(saved.status, 200, `selectors must save: ${JSON.stringify(await saved.json())}`);
-      const stored = (await db.execute<{ target_type: string; target_value_id: string | null; target_value_text: string | null }>(sql`
+    const saved = await withOrgContext(fixture.orgId, () =>
+      put(fixture, {
+        ...putBody(fixture),
+        adjustments: [
+          {
+            code: "alllabor",
+            name: "All labor",
+            category: "surcharge",
+            calculation: "percent",
+            value: "5",
+            presentation: "separate",
+            targets: [{ targetType: "labor" }],
+          },
+          {
+            code: "allmat",
+            name: "All materials",
+            category: "surcharge",
+            calculation: "percent",
+            value: "5",
+            presentation: "separate",
+            targets: [{ targetType: "material", targetValueText: "material" }],
+          },
+        ],
+      }),
+    );
+    assert.equal(saved.status, 200, `selectors must save: ${JSON.stringify(await saved.json())}`);
+    const stored = await db.execute<{
+      target_type: string;
+      target_value_id: string | null;
+      target_value_text: string | null;
+    }>(
+      sql`
         select t.target_type, t.target_value_id::text, t.target_value_text
           from labor_rate_adjustment_targets t
           join labor_rate_adjustments a on a.id = t.adjustment_id and a.org_id = t.org_id
          where a.version_id = ${fixture.versionId} and a.org_id = ${fixture.orgId}
-         order by a.code`, "objects"));
-      assert.deepEqual(stored, [
-        { target_type: "labor", target_value_id: null, target_value_text: "labor" },
-        { target_type: "material", target_value_id: null, target_value_text: "material" },
-      ]);
-    });  },
-);
+         order by a.code`,
+      "objects",
+    );
+    assert.deepEqual(stored, [
+      { target_type: "labor", target_value_id: null, target_value_text: "labor" },
+      { target_type: "material", target_value_id: null, target_value_text: "material" },
+    ]);
+  });
+});
 
-test(
-  "PUT caps fixed adjustment amounts at ledger precision and keeps full percent precision",
-  async () => {
-    // PRC11: percents store to 10dp and price exactly; a fixed 5.12345 the
-    // ledger cannot store is refused at save, not at invoicing.
-    await withSeededFixture(async (fixture) => {
-      const fixed = (value: string) => ({
+test("PUT caps fixed adjustment amounts at ledger precision and keeps full percent precision", async () => {
+  // PRC11: percents store to 10dp and price exactly; a fixed 5.12345 the
+  // ledger cannot store is refused at save, not at invoicing.
+  await withSeededFixture(async (fixture) => {
+    const fixed = (value: string) => ({
+      ...putBody(fixture),
+      adjustments: [
+        {
+          code: "fixd",
+          name: "Fixed",
+          category: "surcharge",
+          calculation: "fixed",
+          value,
+          presentation: "separate",
+          targets: [],
+        },
+      ],
+    });
+    const wide = await withOrgContext(fixture.orgId, () => put(fixture, fixed("5.12345")));
+    const widePayload = (await wide.json()) as { errorCode?: string };
+    assert.equal(
+      wide.status,
+      422,
+      `expected 422, got ${wide.status}: ${JSON.stringify(widePayload)}`,
+    );
+    assert.equal(widePayload.errorCode, "value");
+    const narrow = await withOrgContext(fixture.orgId, () => put(fixture, fixed("5.1234")));
+    assert.equal(narrow.status, 200, `4dp fixed must save: ${JSON.stringify(await narrow.json())}`);
+
+    const percent = await withOrgContext(fixture.orgId, () =>
+      put(fixture, {
         ...putBody(fixture),
         adjustments: [
           {
-            code: "fixd",
-            name: "Fixed",
+            code: "prec",
+            name: "Precise",
             category: "surcharge",
-            calculation: "fixed",
-            value,
+            calculation: "percent",
+            value: "3.1234567891",
             presentation: "separate",
             targets: [],
           },
         ],
-      });
-      const wide = await withOrgContext(fixture.orgId, () => put(fixture, fixed("5.12345")));
-      const widePayload = (await wide.json()) as { errorCode?: string };
-      assert.equal(wide.status, 422, `expected 422, got ${wide.status}: ${JSON.stringify(widePayload)}`);
-      assert.equal(widePayload.errorCode, "value");
-      const narrow = await withOrgContext(fixture.orgId, () => put(fixture, fixed("5.1234")));
-      assert.equal(narrow.status, 200, `4dp fixed must save: ${JSON.stringify(await narrow.json())}`);
+      }),
+    );
+    assert.equal(
+      percent.status,
+      200,
+      `10dp percent must save: ${JSON.stringify(await percent.json())}`,
+    );
+    const stored = await db.execute<{ value: string }>(
+      sql`select value::text as value from labor_rate_adjustments where version_id = ${fixture.versionId}`,
+      "objects",
+    );
+    assert.deepEqual(
+      stored.map((row) => row.value),
+      ["3.1234567891"],
+    );
+  });
+});
 
-      const percent = await withOrgContext(fixture.orgId, () =>
-        put(fixture, {
-          ...putBody(fixture),
-          adjustments: [
-            {
-              code: "prec",
-              name: "Precise",
-              category: "surcharge",
-              calculation: "percent",
-              value: "3.1234567891",
-              presentation: "separate",
-              targets: [],
-            },
-          ],
-        }));
-      assert.equal(percent.status, 200, `10dp percent must save: ${JSON.stringify(await percent.json())}`);
-      const stored = (await db.execute<{ value: string }>(sql`select value::text as value from labor_rate_adjustments where version_id = ${fixture.versionId}`, "objects"));
-      assert.deepEqual(stored.map((row) => row.value), ["3.1234567891"]);
-    });  },
-);
-
-test(
-  "PUT refuses distance and time calculations by name instead of billing zero",
-  async () => {
-    // PRC12: distance names no mileage source the bill line carries and time
-    // is undefined, so neither has a pricing case. Saving one billed zero
-    // forever; the save names the calculation instead.
-    await withSeededFixture(async (fixture) => {
-      for (const calculation of ["distance", "time"]) {
-        const body = {
-          ...putBody(fixture),
-          adjustments: [
-            {
-              code: "unpriced",
-              name: "Unpriced",
-              category: "travel",
-              calculation,
-              value: "5",
-              presentation: "separate",
-              targets: [],
-            },
-          ],
-        };
-        const response = await withOrgContext(fixture.orgId, () => put(fixture, body));
-        const payload = (await response.json()) as { errorCode?: string };
-        assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(payload)}`);
-        assert.equal(payload.errorCode, "calculation", calculation);
-      }
-      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`, "objects"));
-      assert.equal(stored[0]?.n, 0, "refused calculations store nothing");
-    });  },
-);
+test("PUT refuses distance and time calculations by name instead of billing zero", async () => {
+  // PRC12: distance names no mileage source the bill line carries and time
+  // is undefined, so neither has a pricing case. Saving one billed zero
+  // forever; the save names the calculation instead.
+  await withSeededFixture(async (fixture) => {
+    for (const calculation of ["distance", "time"]) {
+      const body = {
+        ...putBody(fixture),
+        adjustments: [
+          {
+            code: "unpriced",
+            name: "Unpriced",
+            category: "travel",
+            calculation,
+            value: "5",
+            presentation: "separate",
+            targets: [],
+          },
+        ],
+      };
+      const response = await withOrgContext(fixture.orgId, () => put(fixture, body));
+      const payload = (await response.json()) as { errorCode?: string };
+      assert.equal(
+        response.status,
+        422,
+        `expected 422, got ${response.status}: ${JSON.stringify(payload)}`,
+      );
+      assert.equal(payload.errorCode, "calculation", calculation);
+    }
+    const stored = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`,
+      "objects",
+    );
+    assert.equal(stored[0]?.n, 0, "refused calculations store nothing");
+  });
+});

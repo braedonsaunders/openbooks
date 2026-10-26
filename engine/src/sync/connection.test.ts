@@ -82,11 +82,19 @@ test("save-time validation shares the build path's base-currency validator", () 
   assert.ok(manifest);
   const opts = { today: "2026-09-23" };
   assert.equal(
-    validateSourceConfig(manifest, { historyStartDate: "2020-01-01", region: "CA", baseCurrency: "CAD" }, opts),
+    validateSourceConfig(
+      manifest,
+      { historyStartDate: "2020-01-01", region: "CA", baseCurrency: "CAD" },
+      opts,
+    ),
     null,
   );
   assert.equal(
-    validateSourceConfig(manifest, { historyStartDate: "2020-01-01", region: "CA", baseCurrency: "ZZZ" }, opts),
+    validateSourceConfig(
+      manifest,
+      { historyStartDate: "2020-01-01", region: "CA", baseCurrency: "ZZZ" },
+      opts,
+    ),
     "Base currency has an invalid value",
   );
 });
@@ -103,7 +111,13 @@ function netsuiteRow(
     authKind: "token",
     status: "active",
     config,
-    secrets: secrets === null ? null : sealJson(secrets, { orgId: "00000000-0000-4000-8000-000000000001", purpose: "connection.secrets" }),
+    secrets:
+      secrets === null
+        ? null
+        : sealJson(secrets, {
+            orgId: "00000000-0000-4000-8000-000000000001",
+            purpose: "connection.secrets",
+          }),
     mirrorEnabled: false,
     mirrorSchedule: "",
     postedChangePolicy: "append_only_automatic",
@@ -116,7 +130,11 @@ function netsuiteRow(
   };
 }
 
-const NETSUITE_CONFIG = { account: "1234567", host: "https://1234567.suitetalk.api.netsuite.com", baseCurrency: "USD" };
+const NETSUITE_CONFIG = {
+  account: "1234567",
+  host: "https://1234567.suitetalk.api.netsuite.com",
+  baseCurrency: "USD",
+};
 const NETSUITE_SECRETS = {
   consumerKey: "ck",
   consumerSecret: "cs",
@@ -140,26 +158,71 @@ test("buildSource names every missing NetSuite credential at once", () => {
 });
 
 test("buildSource builds a NetSuite source once every credential is present", () => {
-  assert.throws(() => buildSource(netsuiteRow({ ...NETSUITE_CONFIG, baseCurrency: "" }, NETSUITE_SECRETS)), /NetSuite connection needs its base currency/);
+  assert.throws(
+    () => buildSource(netsuiteRow({ ...NETSUITE_CONFIG, baseCurrency: "" }, NETSUITE_SECRETS)),
+    /NetSuite connection needs its base currency/,
+  );
   const source = buildSource(netsuiteRow(NETSUITE_CONFIG, NETSUITE_SECRETS));
   assert.ok(source instanceof NetSuiteSource);
 });
 
-
 test("connection commands validate supported content and nested mappings through the real manifests", () => {
   const netsuite = sourceType("netsuite")!;
-  assert.equal(netsuite.configFields.find((field) => field.key === "entityMappings")?.kind, "entity-mappings");
+  assert.equal(
+    netsuite.configFields.find((field) => field.key === "entityMappings")?.kind,
+    "entity-mappings",
+  );
   for (const name of ["netsuite", "odoo", "erpnext", "qbd", "qbo", "xero", "dynamics"]) {
     const manifest = sourceType(name)!;
     assert.equal(manifest.configFields.filter((field) => field.key === "syncOptions").length, 1);
-    assert.match(validateSourceConfig(manifest, { syncOptions: { attachments: "false" } }) ?? "", /enabled or disabled/);
-    if (name === "qbd") assert.match(validateSourceConfig(manifest, { syncOptions: { attachments: true } }) ?? "", /does not support attachments/);
-    if (name !== "netsuite") assert.match(validateSourceConfig(manifest, { syncOptions: { crm: true } }) ?? "", /does not support crm/);
+    assert.match(
+      validateSourceConfig(manifest, { syncOptions: { attachments: "false" } }) ?? "",
+      /enabled or disabled/,
+    );
+    if (name === "qbd")
+      assert.match(
+        validateSourceConfig(manifest, { syncOptions: { attachments: true } }) ?? "",
+        /does not support attachments/,
+      );
+    if (name !== "netsuite")
+      assert.match(
+        validateSourceConfig(manifest, { syncOptions: { crm: true } }) ?? "",
+        /does not support crm/,
+      );
   }
-  assert.equal(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, syncOptions: { attachments: false }, entityMappings: { version: 1, entities: {}, sourceOptions: {
-    timeTypeRecord: "customrecord_time", timeTypeMultiplierField: "custrecord_multiplier", projectStatuses: { Complete: "closed" },
-  } } }), null);
-  assert.match(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, entityMappings: { version: 1, entities: {}, sourceOptions: { timeTypeMultiplierField: "custrecord_multiplier" } } }) ?? "", /requires timeTypeRecord/);
-  assert.match(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, account: "evil.example.com/x?" }) ?? "", /NetSuite account ID must be/);
-  assert.equal(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, account: "1234567_SB1" }), null);
+  assert.equal(
+    validateSourceConfig(netsuite, {
+      ...NETSUITE_CONFIG,
+      syncOptions: { attachments: false },
+      entityMappings: {
+        version: 1,
+        entities: {},
+        sourceOptions: {
+          timeTypeRecord: "customrecord_time",
+          timeTypeMultiplierField: "custrecord_multiplier",
+          projectStatuses: { Complete: "closed" },
+        },
+      },
+    }),
+    null,
+  );
+  assert.match(
+    validateSourceConfig(netsuite, {
+      ...NETSUITE_CONFIG,
+      entityMappings: {
+        version: 1,
+        entities: {},
+        sourceOptions: { timeTypeMultiplierField: "custrecord_multiplier" },
+      },
+    }) ?? "",
+    /requires timeTypeRecord/,
+  );
+  assert.match(
+    validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, account: "evil.example.com/x?" }) ?? "",
+    /NetSuite account ID must be/,
+  );
+  assert.equal(
+    validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, account: "1234567_SB1" }),
+    null,
+  );
 });

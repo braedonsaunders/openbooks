@@ -60,7 +60,10 @@ export const assetMaintenanceSchedules = pgTable(
   (t) => [
     uniqueIndex("asset_maintenance_schedules_org_id_id_unique").on(t.orgId, t.id),
     index("asset_maintenance_schedules_asset").on(t.orgId, t.assetId),
-    check("asset_maintenance_schedules_interval", sql`${t.intervalMonths} is not null or ${t.intervalUsage} is not null`),
+    check(
+      "asset_maintenance_schedules_interval",
+      sql`${t.intervalMonths} is not null or ${t.intervalUsage} is not null`,
+    ),
   ],
 );
 
@@ -81,7 +84,9 @@ export const assetMaintenanceRecords = pgTable(
     sourceDocumentId: uuid("source_document_id"),
     sourceDocumentLineId: uuid("source_document_line_id"),
     proposalId: uuid("proposal_id"),
-    status: text("status", { enum: ["recorded", "cancelled"] }).notNull().default("recorded"),
+    status: text("status", { enum: ["recorded", "cancelled"] })
+      .notNull()
+      .default("recorded"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by"),
     cancelReason: text("cancel_reason"),
@@ -126,13 +131,20 @@ export const assetInsurancePolicies = pgTable(
     deductible: money("deductible").notNull().default("0"),
     currency: text("currency").notNull(),
     renewalLeadDays: integer("renewal_lead_days").notNull().default(30),
-    status: text("status", { enum: ["active", "cancelled"] }).notNull().default("active"),
+    status: text("status", { enum: ["active", "cancelled"] })
+      .notNull()
+      .default("active"),
     renewsPolicyId: uuid("renews_policy_id"),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("asset_insurance_policies_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("asset_insurance_policies_identity").on(t.orgId, t.insurerPartyId, t.policyNumber, t.coverageStartsOn),
+    uniqueIndex("asset_insurance_policies_identity").on(
+      t.orgId,
+      t.insurerPartyId,
+      t.policyNumber,
+      t.coverageStartsOn,
+    ),
     check("asset_insurance_policies_period", sql`${t.coverageEndsOn} >= ${t.coverageStartsOn}`),
   ],
 );

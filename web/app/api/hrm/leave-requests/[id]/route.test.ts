@@ -85,7 +85,8 @@ const mockSources = new Map<string, string>([
 ]);
 
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveDetailCanned = canned;
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveDetailNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveDetailNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -95,22 +96,23 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-leave-detail";
-  const detailRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-leave-detail";
+const detailRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };
@@ -172,7 +174,8 @@ test("unauthorized, switched-off, and non-uuid requests fail closed", async () =
   assert.equal((await detailRoute!.GET(new Request("http://x"), ctx)).status, 404);
   reset();
   assert.equal(
-    (await detailRoute!.GET(new Request("http://x"), { params: Promise.resolve({ id: "nope" }) })).status,
+    (await detailRoute!.GET(new Request("http://x"), { params: Promise.resolve({ id: "nope" }) }))
+      .status,
     400,
   );
 });

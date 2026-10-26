@@ -1,30 +1,30 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Play, Plus } from 'lucide-react'
-import { Button, Drawer, Label, Select } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { DateField } from '../../../../components/date-field'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Play, Plus } from "lucide-react";
+import { Button, Drawer, Label, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { DateField } from "../../../../components/date-field";
 
 export interface FinalPayCandidate {
-  id: string
-  name: string
-  pay_schedule_id: string
-  terminated_on: string
+  id: string;
+  name: string;
+  pay_schedule_id: string;
+  terminated_on: string;
 }
 
 export interface RunSchedule {
-  id: string
-  name: string
-  frequency: string
-  pay_date_offset_days: number
+  id: string;
+  name: string;
+  frequency: string;
+  pay_date_offset_days: number;
   /** Canonical next period, derived on the server from the schedule anchor. */
-  next_period_start: string
-  next_period_end: string
-  next_pay_date: string
+  next_period_start: string;
+  next_period_end: string;
+  next_pay_date: string;
 }
 
 /**
@@ -37,29 +37,29 @@ export function nextPeriod(schedule: RunSchedule): { start: string; end: string;
     start: schedule.next_period_start,
     end: schedule.next_period_end,
     payDate: schedule.next_pay_date,
-  }
+  };
 }
 
 /** Keep the server's derived-period path authoritative until an operator edits a date. */
 export function runPayload(
   scheduleId: string,
   shown: { start: string; end: string; payDate: string },
-  runType: 'regular' | 'bonus' | 'termination' | 'supplemental',
+  runType: "regular" | "bonus" | "termination" | "supplemental",
   paidEmployees: readonly string[],
   touched: boolean,
 ): Record<string, unknown> {
   // A supplemental run pays inside an already-open period, so it always
   // names its dates explicitly: the derived next period belongs to the week
   // after, and the engine refuses a supplemental run without explicit dates.
-  const explicitDates = touched || runType === 'supplemental'
+  const explicitDates = touched || runType === "supplemental";
   return {
     payScheduleId: scheduleId,
     ...(explicitDates
       ? { periodStart: shown.start, periodEnd: shown.end, payDate: shown.payDate }
       : {}),
     runType,
-    employeePartyIds: runType === 'termination' ? [...paidEmployees] : [],
-  }
+    employeePartyIds: runType === "termination" ? [...paidEmployees] : [],
+  };
 }
 
 /**
@@ -67,42 +67,53 @@ export function runPayload(
  * non-JSON error body (a proxy page, an empty 502) must surface the
  * fallback with the status, never a SyntaxError from `res.json()`.
  */
-export async function postRun(body: Record<string, unknown>, failedMessage: string): Promise<string> {
-  const res = await fetch('/api/payroll/runs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export async function postRun(
+  body: Record<string, unknown>,
+  failedMessage: string,
+): Promise<string> {
+  const res = await fetch("/api/payroll/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  })
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, failedMessage))
-  const j = (await res.json()) as { documentId?: string }
-  if (typeof j.documentId !== 'string' || j.documentId === '') {
-    throw new Error(`${failedMessage} (status 200)`)
+  });
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, failedMessage));
+  const j = (await res.json()) as { documentId?: string };
+  if (typeof j.documentId !== "string" || j.documentId === "") {
+    throw new Error(`${failedMessage} (status 200)`);
   }
-  return j.documentId
+  return j.documentId;
 }
 
 /** One-click run for a known schedule, using its derived next period. */
-export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: string; size?: 'sm' | 'md' }) {
-  const t = useTranslations('payroll')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+export function StartRunButton({
+  payScheduleId,
+  size = "sm",
+}: {
+  payScheduleId: string;
+  size?: "sm" | "md";
+}) {
+  const t = useTranslations("payroll");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
   return (
     <Button
       size={size}
       disabled={busy}
       onClick={async () => {
-        setBusy(true)
+        setBusy(true);
         try {
-          router.push(`/payroll/runs/${await postRun({ payScheduleId }, t('newRun.createFailed'))}`)
+          router.push(
+            `/payroll/runs/${await postRun({ payScheduleId }, t("newRun.createFailed"))}`,
+          );
         } catch (e) {
-          toast.error((e as Error).message)
-          setBusy(false)
+          toast.error((e as Error).message);
+          setBusy(false);
         }
       }}
     >
-      <Play size={14} aria-hidden /> {t('home.actions.startRun')}
+      <Play size={14} aria-hidden /> {t("home.actions.startRun")}
     </Button>
-  )
+  );
 }
 
 /**
@@ -116,124 +127,143 @@ export function NewRunButton({
   finalPayCandidates = [],
   today,
 }: {
-  schedules: RunSchedule[]
+  schedules: RunSchedule[];
   /** Employees whose employment has ended — the only final-pay scope. */
-  finalPayCandidates?: FinalPayCandidate[]
+  finalPayCandidates?: FinalPayCandidate[];
   /** Org business day — never the browser's UTC date. */
-  today: string
+  today: string;
 }) {
-  const t = useTranslations('payroll')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
-  const [runType, setRunType] = useState<'regular' | 'bonus' | 'termination' | 'supplemental'>('regular')
-  const [paidEmployees, setPaidEmployees] = useState<string[]>([])
-  const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0]
-  const derived = schedule ? nextPeriod(schedule) : { start: '', end: '', payDate: '' }
-  const [period, setPeriod] = useState(derived)
-  const [touched, setTouched] = useState(false)
+  const t = useTranslations("payroll");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? "");
+  const [runType, setRunType] = useState<"regular" | "bonus" | "termination" | "supplemental">(
+    "regular",
+  );
+  const [paidEmployees, setPaidEmployees] = useState<string[]>([]);
+  const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0];
+  const derived = schedule ? nextPeriod(schedule) : { start: "", end: "", payDate: "" };
+  const [period, setPeriod] = useState(derived);
+  const [touched, setTouched] = useState(false);
 
   // Switching schedules re-prefills until the operator edits a date.
-  const shown = touched ? period : derived
+  const shown = touched ? period : derived;
 
   function selectSchedule(id: string) {
-    setScheduleId(id)
-    setTouched(false)
+    setScheduleId(id);
+    setTouched(false);
     // The scope belongs to the schedule that was chosen with it.
-    setPaidEmployees([])
-    const next = schedules.find((s) => s.id === id)
-    if (next) setPeriod(nextPeriod(next))
+    setPaidEmployees([]);
+    const next = schedules.find((s) => s.id === id);
+    if (next) setPeriod(nextPeriod(next));
   }
 
-  function setField(key: 'start' | 'end' | 'payDate', value: string) {
-    setTouched(true)
-    setPeriod({ ...shown, [key]: value })
+  function setField(key: "start" | "end" | "payDate", value: string) {
+    setTouched(true);
+    setPeriod({ ...shown, [key]: value });
   }
 
-  const scopeCandidates = finalPayCandidates.filter((e) => e.pay_schedule_id === scheduleId)
+  const scopeCandidates = finalPayCandidates.filter((e) => e.pay_schedule_id === scheduleId);
 
   async function create() {
-    if (!scheduleId) return
-    setBusy(true)
+    if (!scheduleId) return;
+    setBusy(true);
     try {
       const documentId = await postRun(
         runPayload(scheduleId, shown, runType, paidEmployees, touched),
-        t('newRun.createFailed'),
-      )
-      setOpen(false)
-      router.push(`/payroll/runs/${documentId}`)
+        t("newRun.createFailed"),
+      );
+      setOpen(false);
+      router.push(`/payroll/runs/${documentId}`);
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   // Mirrors the server guards so the dialog never proposes a rejected window.
-  const badWindow = !shown.start || !shown.end || !shown.payDate
-    || shown.end < shown.start || shown.payDate < shown.end
-  const notBegun = !!shown.start && shown.start > today
+  const badWindow =
+    !shown.start ||
+    !shown.end ||
+    !shown.payDate ||
+    shown.end < shown.start ||
+    shown.payDate < shown.end;
+  const notBegun = !!shown.start && shown.start > today;
   // A final pay run without a named scope would pay and drain the whole
   // schedule; the engine refuses one, so the dialog never proposes one either.
-  const unscopedFinalPay = runType === 'termination' && paidEmployees.length === 0
+  const unscopedFinalPay = runType === "termination" && paidEmployees.length === 0;
   // A supplemental run belongs to an already-open period the dialog cannot
   // derive (the derived dates are the week after), so the operator must
   // confirm the dates; the engine refuses one without explicit dates.
-  const unconfirmedSupplemental = runType === 'supplemental' && !touched
-  const invalid = !scheduleId || badWindow || notBegun || unscopedFinalPay || unconfirmedSupplemental
+  const unconfirmedSupplemental = runType === "supplemental" && !touched;
+  const invalid =
+    !scheduleId || badWindow || notBegun || unscopedFinalPay || unconfirmedSupplemental;
 
-  if (schedules.length === 0) return null
+  if (schedules.length === 0) return null;
   return (
     <>
       <Button onClick={() => setOpen(true)}>
-        <Plus size={14} aria-hidden /> {t('newRun.create')}
+        <Plus size={14} aria-hidden /> {t("newRun.create")}
       </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
-        title={t('newRun.create')}
-        description={t('newRun.description')}
+        title={t("newRun.create")}
+        description={t("newRun.description")}
         size="sm"
         footer={
           <div className="flex items-center justify-end gap-2">
-            <Button variant="ghost" onClick={() => setOpen(false)}>{tCommon('actions.cancel')}</Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              {tCommon("actions.cancel")}
+            </Button>
             <Button onClick={create} disabled={busy || invalid}>
-              {busy ? tCommon('actions.saving') : t('newRun.create')}
+              {busy ? tCommon("actions.saving") : t("newRun.create")}
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="run-type" help={t(`newRun.runTypeHint.${runType}`)}>{t('newRun.runType')}</Label>
+            <Label htmlFor="run-type" help={t(`newRun.runTypeHint.${runType}`)}>
+              {t("newRun.runType")}
+            </Label>
             <Select
               id="run-type"
               value={runType}
               onChange={(e) => setRunType(e.target.value as typeof runType)}
             >
-              <option value="regular">{t('runType.regular')}</option>
-              <option value="supplemental">{t('runType.supplemental')}</option>
-              <option value="bonus">{t('runType.bonus')}</option>
-              <option value="termination">{t('runType.termination')}</option>
+              <option value="regular">{t("runType.regular")}</option>
+              <option value="supplemental">{t("runType.supplemental")}</option>
+              <option value="bonus">{t("runType.bonus")}</option>
+              <option value="termination">{t("runType.termination")}</option>
             </Select>
           </div>
           {schedules.length > 1 && (
             <div className="space-y-1.5">
-              <Label htmlFor="run-schedule">{t('columns.schedule')}</Label>
-              <Select id="run-schedule" value={scheduleId} onChange={(e) => selectSchedule(e.target.value)}>
+              <Label htmlFor="run-schedule">{t("columns.schedule")}</Label>
+              <Select
+                id="run-schedule"
+                value={scheduleId}
+                onChange={(e) => selectSchedule(e.target.value)}
+              >
                 {schedules.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
                 ))}
               </Select>
             </div>
           )}
-          {runType === 'termination' && (
+          {runType === "termination" && (
             <div className="space-y-1.5">
-              <Label help={t('newRun.employeesHint')}>{t('newRun.employees')}</Label>
+              <Label help={t("newRun.employeesHint")}>{t("newRun.employees")}</Label>
               {scopeCandidates.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('newRun.noTerminated')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t("newRun.noTerminated")}
+                </p>
               ) : (
                 <>
                   <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2 dark:border-slate-700">
@@ -242,11 +272,13 @@ export function NewRunButton({
                         <input
                           type="checkbox"
                           checked={paidEmployees.includes(employee.id)}
-                          onChange={(e) => setPaidEmployees((current) => (
-                            e.target.checked
-                              ? [...current, employee.id]
-                              : current.filter((id) => id !== employee.id)
-                          ))}
+                          onChange={(e) =>
+                            setPaidEmployees((current) =>
+                              e.target.checked
+                                ? [...current, employee.id]
+                                : current.filter((id) => id !== employee.id),
+                            )
+                          }
                         />
                         <span>{employee.name}</span>
                         <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -261,39 +293,44 @@ export function NewRunButton({
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="run-start">{t('newRun.periodStart')}</Label>
+              <Label htmlFor="run-start">{t("newRun.periodStart")}</Label>
               <DateField
-                id="run-start" value={shown.start}
-                onChange={(value) => setField('start', value)}
+                id="run-start"
+                value={shown.start}
+                onChange={(value) => setField("start", value)}
                 className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="run-end">{t('newRun.periodEnd')}</Label>
+              <Label htmlFor="run-end">{t("newRun.periodEnd")}</Label>
               <DateField
-                id="run-end" value={shown.end}
-                onChange={(value) => setField('end', value)}
+                id="run-end"
+                value={shown.end}
+                onChange={(value) => setField("end", value)}
                 className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
               />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="run-paydate" help={t('newRun.payDateHint')}>{t('columns.payDate')}</Label>
+            <Label htmlFor="run-paydate" help={t("newRun.payDateHint")}>
+              {t("columns.payDate")}
+            </Label>
             <DateField
-              id="run-paydate" value={shown.payDate}
-              onChange={(value) => setField('payDate', value)}
+              id="run-paydate"
+              value={shown.payDate}
+              onChange={(value) => setField("payDate", value)}
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             />
           </div>
           {badWindow && (shown.start || shown.end) ? (
-            <p className="text-sm text-red-600 dark:text-red-400">{t('newRun.invalidWindow')}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{t("newRun.invalidWindow")}</p>
           ) : notBegun ? (
             <p className="text-sm text-amber-600 dark:text-amber-400">
-              {t('newRun.notBegun', { date: shown.start })}
+              {t("newRun.notBegun", { date: shown.start })}
             </p>
           ) : null}
         </div>
       </Drawer>
     </>
-  )
+  );
 }

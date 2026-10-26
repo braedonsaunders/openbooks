@@ -37,9 +37,15 @@ import { seedHiredEmployee } from "./filing-test-fixtures.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const row = (over: Partial<StatutoryRateRow>): StatutoryRateRow => ({
-  id: randomUUID(), country: "US", rateKey: "us_futa", region: "MI",
-  filingAccountId: null, taxYear: 2026, values: { rate: "0.0060" },
-  sourceCitation: "Test rate notice", reason: "test fixture rate",
+  id: randomUUID(),
+  country: "US",
+  rateKey: "us_futa",
+  region: "MI",
+  filingAccountId: null,
+  taxYear: 2026,
+  values: { rate: "0.0060" },
+  sourceCitation: "Test rate notice",
+  reason: "test fixture rate",
   supersededOn: null,
   ...over,
 });
@@ -57,9 +63,14 @@ test("as-of resolution answers the row in force on that date, not the current ro
     row({ id: "r1", values: { rate: "0.0060" }, supersededOn: "2026-03-01" }),
     row({ id: "r2", values: { rate: "0.0090" }, supersededOn: "2026-06-01" }),
   ];
-  const at = (asOf: string | null) => buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows, asOf,
-  }).values("us_futa", { region: "MI" })?.rate;
+  const at = (asOf: string | null) =>
+    buildResolution({
+      country: "US",
+      taxYear: 2026,
+      pack: US_PACK_RATES,
+      rows,
+      asOf,
+    }).values("us_futa", { region: "MI" })?.rate;
   assert.equal(at("2026-02-01"), "0.0060");
   assert.equal(at("2026-04-15"), "0.0090");
   assert.equal(at("2026-07-01"), "0.0120");
@@ -89,20 +100,26 @@ test(
     // The DDL I wrote is not the witness — the catalog is. A migration
     // ledger once claimed a migration had applied while the object said
     // otherwise, so this asserts pg_indexes, not the .sql file.
-    const found = (await db.execute<{ indexdef: string }>(sql`
+    const found = await db.execute<{ indexdef: string }>(
+      sql`
       select indexdef from pg_indexes
        where schemaname = 'public' and indexname = 'payroll_statutory_rates_org_point'
-    `, "objects"));
+    `,
+      "objects",
+    );
     assert.equal(found.length, 1);
     const def = found[0]!.indexdef;
     assert.match(def, /WHERE \(superseded_on IS NULL\)/);
     assert.match(def, /COALESCE\(region/);
     assert.match(def, /COALESCE\(sub_region/);
     assert.match(def, /COALESCE\(filing_account_id/);
-    const pred = (await db.execute<{ indpred: string | null }>(sql`
+    const pred = await db.execute<{ indpred: string | null }>(
+      sql`
       select pg_get_expr(indpred, indrelid) as indpred from pg_index
        where indexrelid = 'payroll_statutory_rates_org_point'::regclass
-    `, "objects"));
+    `,
+      "objects",
+    );
     assert.ok(
       pred[0]?.indpred?.includes("superseded_on"),
       "pg_index.indpred must carry the partial predicate",
@@ -122,19 +139,40 @@ test(
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const v1 = await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_futa",
+        region: "MI",
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { rate: "0.006" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       const v2 = await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_futa",
+        region: "MI",
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { rate: "0.009" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       const v3 = await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.012" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_futa",
+        region: "MI",
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { rate: "0.012" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       // Three distinct ids: no row was ever rewritten.
       assert.equal(new Set([v1.id, v2.id, v3.id]).size, 3);
@@ -146,8 +184,9 @@ test(
         update payroll_statutory_rates set superseded_on = '2026-06-01' where id = ${v2.id}`);
       // The live read answers the successor; the default list shows one row.
       assert.equal(
-        (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026))
-          .values("us_futa", { region: "MI" })?.rate,
+        (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", {
+          region: "MI",
+        })?.rate,
         "0.0120",
       );
       assert.equal((await listStatutoryRates(org.orgId, { country: "US" })).length, 1);
@@ -156,9 +195,10 @@ test(
         3,
       );
       // Each date answers its own row, through the real reader.
-      const at = async (asOf: string) => (await resolveStatutoryRates(
-        org.orgId, US_PACK_RATES, 2026, asOf,
-      )).values("us_futa", { region: "MI" })?.rate;
+      const at = async (asOf: string) =>
+        (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026, asOf)).values("us_futa", {
+          region: "MI",
+        })?.rate;
       assert.equal(await at("2026-02-01"), "0.0060");
       assert.equal(await at("2026-04-15"), "0.0090");
       assert.equal(await at("2026-07-01"), "0.0120");
@@ -184,7 +224,10 @@ interface CommittedFixture {
 async function seedCommittedRun(): Promise<CommittedFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const { craPayable } = await seedCanadianPostingAccounts(org.orgId, { liabilityType: "liability_current_other", enablePayroll: false });
+  const { craPayable } = await seedCanadianPostingAccounts(org.orgId, {
+    liabilityType: "liability_current_other",
+    enablePayroll: false,
+  });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
@@ -206,29 +249,59 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
             ${actorId}, ${actorId})`);
 
   const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
-    scheduleId, subsidiaryId: org.subsidiaryId, name: "Harriet History", country: "CA",
-    province: "ON", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
-    rateEffectiveFrom: "2020-01-01", federalClaimCode: 1, provincialClaimCode: 1,
-    vacationPercent: "4", vacationMethod: "accrue", hiredOn: "2020-01-06",
-    wcbExempt: true, wcbExemptReason: "The retained source classifies this test worker as an exempt owner",
-    timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
-      .map((workedOn) => ({ workedOn })),
+    scheduleId,
+    subsidiaryId: org.subsidiaryId,
+    name: "Harriet History",
+    country: "CA",
+    province: "ON",
+    payBasis: "hourly",
+    currency: "CAD",
+    rate: "30",
+    rateBasis: "hour",
+    rateEffectiveFrom: "2020-01-01",
+    federalClaimCode: 1,
+    provincialClaimCode: 1,
+    vacationPercent: "4",
+    vacationMethod: "accrue",
+    hiredOn: "2020-01-06",
+    wcbExempt: true,
+    wcbExemptReason: "The retained source classifies this test worker as an exempt owner",
+    timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"].map((workedOn) => ({
+      workedOn,
+    })),
   });
 
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
-    region: "ON", filingAccountId: null, taxYear: 2026,
+    orgId: org.orgId,
+    actorId,
+    rates: CA_PACK_RATES,
+    rateKey: "ca_eht",
+    region: "ON",
+    filingAccountId: null,
+    taxYear: 2026,
     values: { rate: "1.95", annualExemption: "1000" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
 
-  await upsertPayrollEmployerFact({ orgId:org.orgId, actorId, subsidiaryId:org.subsidiaryId, country:"CA",
-    factKey:"eht_exemption_share_on", effectiveFrom:"2026-01-01", value:"1000",
-    changeReason:"Declare the test employer's complete share of the Ontario exemption" });
+  await upsertPayrollEmployerFact({
+    orgId: org.orgId,
+    actorId,
+    subsidiaryId: org.subsidiaryId,
+    country: "CA",
+    factKey: "eht_exemption_share_on",
+    effectiveFrom: "2026-01-01",
+    value: "1000",
+    changeReason: "Declare the test employer's complete share of the Ontario exemption",
+  });
   const payDate = "2026-07-21";
   const run = await createPayRun({
-    orgId: org.orgId, actorId, payScheduleId: scheduleId,
-    periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate,
+    orgId: org.orgId,
+    actorId,
+    payScheduleId: scheduleId,
+    periodStart: "2026-07-05",
+    periodEnd: "2026-07-18",
+    payDate,
   });
   const calc = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
   assert.deepEqual(calc.errors, []);
@@ -237,21 +310,32 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
 }
 
 async function ehtLine(
-  orgId: string, documentId: string,
+  orgId: string,
+  documentId: string,
 ): Promise<{ gross: string; netPay: string; employerCost: string; eht: string }> {
-  const stub = (await db.execute<{ gross: string; net_pay: string; employer_cost: string }>(sql`
+  const stub = (
+    await db.execute<{ gross: string; net_pay: string; employer_cost: string }>(
+      sql`
     select gross, net_pay, employer_cost from pay_stubs
-     where org_id = ${orgId} and pay_run_document_id = ${documentId}`, "objects"))[0]!;
-  const lines = (await db.execute<{ amount: string }>(sql`
+     where org_id = ${orgId} and pay_run_document_id = ${documentId}`,
+      "objects",
+    )
+  )[0]!;
+  const lines = await db.execute<{ amount: string }>(
+    sql`
     select l.amount from pay_stub_lines l
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId} and l.stub_id in (
        select id from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
-     ) and c.system_key = 'eht'`, "objects"));
+     ) and c.system_key = 'eht'`,
+    "objects",
+  );
   assert.equal(lines.length, 1, "the committed run carries exactly one EHT line");
   return {
-    gross: String(stub.gross), netPay: String(stub.net_pay),
-    employerCost: String(stub.employer_cost), eht: String(lines[0]!.amount),
+    gross: String(stub.gross),
+    netPay: String(stub.net_pay),
+    employerCost: String(stub.employer_cost),
+    eht: String(lines[0]!.amount),
   };
 }
 
@@ -266,24 +350,34 @@ test(
       assert.equal(cmp(committed.eht, "27.30"), 0);
 
       const corrected = await upsertStatutoryRate({
-        orgId: fx.orgId, actorId: fx.actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
-        region: "ON", filingAccountId: null, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        rates: CA_PACK_RATES,
+        rateKey: "ca_eht",
+        region: "ON",
+        filingAccountId: null,
+        taxYear: 2026,
         values: { rate: "2.95", annualExemption: "1000" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       await db.execute(sql`
         update payroll_statutory_rates set superseded_on = '2026-07-25'
          where org_id = ${fx.orgId} and country = 'CA' and rate_key = 'ca_eht'
            and region = 'ON' and tax_year = 2026 and id <> ${corrected.id}`);
       assert.equal(
-        (await resolveStatutoryRates(fx.orgId, CA_PACK_RATES, 2026))
-          .values("ca_eht", { region: "ON" })?.rate,
+        (await resolveStatutoryRates(fx.orgId, CA_PACK_RATES, 2026)).values("ca_eht", {
+          region: "ON",
+        })?.rate,
         "2.9500",
         "the new rate is live for new periods",
       );
 
       const replay = await calculatePayRun({
-        orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId, simulate: true,
+        orgId: fx.orgId,
+        documentId: fx.documentId,
+        actorId: fx.actorId,
+        simulate: true,
       });
       assert.deepEqual(replay.errors, []);
       assert.ok(replay.stubs && replay.stubs.length === 1);
@@ -303,18 +397,28 @@ test(
                   'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
       }
       const run2 = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-19", periodEnd: "2026-08-01", payDate: "2026-08-04",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-19",
+        periodEnd: "2026-08-01",
+        payDate: "2026-08-04",
       });
       const calc2 = await calculatePayRun({
-        orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run2.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(calc2.errors, []);
 
       let releaseRateWriter!: () => void;
       let rateWriterLocked!: () => void;
-      const writerLocked = new Promise<void>((resolve) => { rateWriterLocked = resolve; });
-      const releaseWriter = new Promise<void>((resolve) => { releaseRateWriter = resolve; });
+      const writerLocked = new Promise<void>((resolve) => {
+        rateWriterLocked = resolve;
+      });
+      const releaseWriter = new Promise<void>((resolve) => {
+        releaseRateWriter = resolve;
+      });
       const rateWriter = db.transaction(async (tx) => {
         await lockStatutoryRatesForPayRun(tx, fx.orgId, 2026, [CA_PACK_RATES]);
         rateWriterLocked();
@@ -322,21 +426,30 @@ test(
       });
       await writerLocked;
       const committing = commitPayRun({
-        orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run2.documentId,
+        actorId: fx.actorId,
       });
       let commitQueuedOnRateFence = false;
       const waitUntil = Date.now() + 2_000;
       while (!commitQueuedOnRateFence && Date.now() < waitUntil) {
-        const locks = await db.execute<{ waiting: boolean }>(sql`
+        const locks = await db.execute<{ waiting: boolean }>(
+          sql`
           select exists (select 1 from pg_locks where locktype = 'advisory' and not granted) as waiting
-        `, "objects");
+        `,
+          "objects",
+        );
         commitQueuedOnRateFence = locks[0]?.waiting ?? false;
         if (!commitQueuedOnRateFence) await new Promise((resolve) => setTimeout(resolve, 10));
       }
       releaseRateWriter();
       await rateWriter;
       await committing;
-      assert.equal(commitQueuedOnRateFence, true, "commit waits for the shared statutory-rate fence");
+      assert.equal(
+        commitQueuedOnRateFence,
+        true,
+        "commit waits for the shared statutory-rate fence",
+      );
       assert.equal(cmp((await ehtLine(fx.orgId, run2.documentId)).eht, "70.80"), 0);
     } finally {
       await dropScratchOrgReporting(fx.orgId);

@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Route boundary suite for DELETE /api/file-cabinet/attachments/[id]. The
 // REAL handler and the real attachment gate helpers run against scripted
@@ -10,19 +10,19 @@ import test from 'node:test'
 // applies, and it must surface the service's retention refusal instead of
 // silently succeeding.
 
-const stateKey = Symbol.for('openbooks.file-cabinet-attachment-detach-route-test')
-const attachmentId = '00000000-0000-4000-8000-000000000011'
-const targetId = '00000000-0000-4000-8000-000000000001'
-const fileId = '00000000-0000-4000-8000-000000000002'
+const stateKey = Symbol.for("openbooks.file-cabinet-attachment-detach-route-test");
+const attachmentId = "00000000-0000-4000-8000-000000000011";
+const targetId = "00000000-0000-4000-8000-000000000001";
+const fileId = "00000000-0000-4000-8000-000000000002";
 
 interface RouteState {
-  permissions: Set<string>
-  allowedSubsidiaryIds: Set<string> | null
-  link: { id: string; fileId: string; targetTable: string; targetId: string } | null
-  targetRows: unknown[]
-  detachResult: { ok: true } | { ok: false; reason: 'not found' | 'retained' }
-  detachCalls: unknown[][]
-  permissionChecks: string[]
+  permissions: Set<string>;
+  allowedSubsidiaryIds: Set<string> | null;
+  link: { id: string; fileId: string; targetTable: string; targetId: string } | null;
+  targetRows: unknown[];
+  detachResult: { ok: true } | { ok: false; reason: "not found" | "retained" };
+  detachCalls: unknown[][];
+  permissionChecks: string[];
 }
 
 const routeState: RouteState = {
@@ -33,12 +33,12 @@ const routeState: RouteState = {
   detachResult: { ok: true },
   detachCalls: [],
   permissionChecks: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.file-cabinet-attachment-detach-route-test')]
       export const db = {
@@ -53,7 +53,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.file-cabinet-attachment-detach-route-test')]
       export async function getAuthz() {
@@ -75,7 +75,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:file-cabinet',
+    "mock:file-cabinet",
     `
       import { attachmentReadPermission } from '@/lib/file-cabinet'
       export { attachmentReadPermission }
@@ -92,133 +92,161 @@ const mockSources = new Map<string, string>([
       export async function folderAccessLevel() { return 'viewer' }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/file-cabinet', 'mock:file-cabinet'],
-  ['../../../lib/file-cabinet', 'mock:file-cabinet'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../lib/authz", "mock:authz"],
+  ["../../../../../lib/file-cabinet", "mock:file-cabinet"],
+  ["../../../lib/file-cabinet", "mock:file-cabinet"],
+]);
 
-const selfUrl = new URL(import.meta.url).href
+const selfUrl = new URL(import.meta.url).href;
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // The engine's attachment-target loader reads through its own relative
     // database import, so that edge is served the same double.
-    const mocked = mockUrls.get(specifier)
-      ?? (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/engine/src/records/file-attachment-target.ts') ? 'mock:db' : undefined)
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/engine/src/records/file-attachment-target.ts")
+        ? "mock:db"
+        : undefined);
     // File-URL serving: the double re-exports the real permission map (opaque mock: URLs cannot resolve it).
-    if (mocked === 'mock:file-cabinet') return { url: `${selfUrl}?mock=file-cabinet`, shortCircuit: true }
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (mocked === "mock:file-cabinet")
+      return { url: `${selfUrl}?mock=file-cabinet`, shortCircuit: true };
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source =
+      mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const { DELETE } = (await import('./route.ts')) as typeof import('./route.ts')
+const { DELETE } = (await import("./route.ts")) as typeof import("./route.ts");
 
 function reset(input: {
-  permissions: string[]
-  allowedSubsidiaryIds?: string[] | null
-  targetTable?: string
-  targetRows: unknown[]
-  detachResult?: RouteState['detachResult']
+  permissions: string[];
+  allowedSubsidiaryIds?: string[] | null;
+  targetTable?: string;
+  targetRows: unknown[];
+  detachResult?: RouteState["detachResult"];
 }): void {
-  routeState.permissions = new Set(input.permissions)
-  routeState.allowedSubsidiaryIds = input.allowedSubsidiaryIds == null ? null : new Set(input.allowedSubsidiaryIds)
-  routeState.link = { id: attachmentId, fileId, targetTable: input.targetTable ?? 'documents', targetId }
-  routeState.targetRows = [...input.targetRows]
-  routeState.detachResult = input.detachResult ?? { ok: true }
-  routeState.detachCalls = []
-  routeState.permissionChecks.length = 0
+  routeState.permissions = new Set(input.permissions);
+  routeState.allowedSubsidiaryIds =
+    input.allowedSubsidiaryIds == null ? null : new Set(input.allowedSubsidiaryIds);
+  routeState.link = {
+    id: attachmentId,
+    fileId,
+    targetTable: input.targetTable ?? "documents",
+    targetId,
+  };
+  routeState.targetRows = [...input.targetRows];
+  routeState.detachResult = input.detachResult ?? { ok: true };
+  routeState.detachCalls = [];
+  routeState.permissionChecks.length = 0;
 }
 
 function del(id = attachmentId): Promise<Response> {
-  return DELETE(new Request(`http://openbooks.test/api/file-cabinet/attachments/${id}`, { method: 'DELETE' }), {
-    params: Promise.resolve({ id }),
-  })
+  return DELETE(
+    new Request(`http://openbooks.test/api/file-cabinet/attachments/${id}`, { method: "DELETE" }),
+    {
+      params: Promise.resolve({ id }),
+    },
+  );
 }
 
-test('DELETE hides an out-of-scope target exactly like a missing attachment', async () => {
+test("DELETE hides an out-of-scope target exactly like a missing attachment", async () => {
   reset({
-    permissions: ['documents.manage', 'ap.read'],
-    allowedSubsidiaryIds: ['00000000-0000-4000-8000-000000000099'],
-    targetRows: [[{ kind: 'vendor_bill', subsidiaryId: '00000000-0000-4000-8000-000000000098' }]],
-  })
+    permissions: ["documents.manage", "ap.read"],
+    allowedSubsidiaryIds: ["00000000-0000-4000-8000-000000000099"],
+    targetRows: [[{ kind: "vendor_bill", subsidiaryId: "00000000-0000-4000-8000-000000000098" }]],
+  });
 
-  const response = await del()
+  const response = await del();
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-  assert.deepEqual(routeState.detachCalls, [], 'nothing is detached from a hidden record')
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.deepEqual(routeState.detachCalls, [], "nothing is detached from a hidden record");
+});
 
-test('DELETE requires the owning record permission, not just cabinet management', async () => {
+test("DELETE requires the owning record permission, not just cabinet management", async () => {
   reset({
-    permissions: ['documents.manage'],
-    targetRows: [[{ kind: 'pay_run', subsidiaryId: null }]],
-  })
+    permissions: ["documents.manage"],
+    targetRows: [[{ kind: "pay_run", subsidiaryId: null }]],
+  });
 
-  const response = await del()
+  const response = await del();
 
-  assert.equal(response.status, 403)
-  assert.ok(routeState.permissionChecks.includes('payroll.read'), 'the pay-run family permission is consulted')
-  assert.deepEqual(routeState.detachCalls, [])
-})
+  assert.equal(response.status, 403);
+  assert.ok(
+    routeState.permissionChecks.includes("payroll.read"),
+    "the pay-run family permission is consulted",
+  );
+  assert.deepEqual(routeState.detachCalls, []);
+});
 
-test('DELETE keeps the file-mutation gate for the target family', async () => {
+test("DELETE keeps the file-mutation gate for the target family", async () => {
   reset({
-    permissions: ['ar.read'],
-    targetRows: [[{ kind: 'customer_invoice', subsidiaryId: null }]],
-  })
+    permissions: ["ar.read"],
+    targetRows: [[{ kind: "customer_invoice", subsidiaryId: null }]],
+  });
 
-  const response = await del()
+  const response = await del();
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(routeState.detachCalls, [])
-})
+  assert.equal(response.status, 403);
+  assert.deepEqual(routeState.detachCalls, []);
+});
 
-test('DELETE surfaces the retention refusal of a posted or active record as a conflict', async () => {
+test("DELETE surfaces the retention refusal of a posted or active record as a conflict", async () => {
   reset({
-    permissions: ['ap.create', 'ap.read'],
-    targetRows: [[{ kind: 'vendor_bill', subsidiaryId: null }]],
-    detachResult: { ok: false, reason: 'retained' },
-  })
+    permissions: ["ap.create", "ap.read"],
+    targetRows: [[{ kind: "vendor_bill", subsidiaryId: null }]],
+    detachResult: { ok: false, reason: "retained" },
+  });
 
-  const response = await del()
+  const response = await del();
 
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), { error: 'attachments of posted or active records are retained' })
-  assert.equal(routeState.detachCalls.length, 1)
-})
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "attachments of posted or active records are retained",
+  });
+  assert.equal(routeState.detachCalls.length, 1);
+});
 
-test('DELETE detaches an in-scope, permitted attachment with actor attribution', async () => {
+test("DELETE detaches an in-scope, permitted attachment with actor attribution", async () => {
   reset({
-    permissions: ['ap.create', 'ap.read'],
-    allowedSubsidiaryIds: ['00000000-0000-4000-8000-000000000099'],
-    targetRows: [[{ kind: 'vendor_bill', subsidiaryId: '00000000-0000-4000-8000-000000000099' }]],
-  })
+    permissions: ["ap.create", "ap.read"],
+    allowedSubsidiaryIds: ["00000000-0000-4000-8000-000000000099"],
+    targetRows: [[{ kind: "vendor_bill", subsidiaryId: "00000000-0000-4000-8000-000000000099" }]],
+  });
 
-  const response = await del()
+  const response = await del();
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true })
-  assert.deepEqual(routeState.detachCalls.map(([orgId, id, audit]) => [orgId, id, (audit as { actorId: string }).actorId, typeof (audit as { authorizeAttachmentTarget?: unknown }).authorizeAttachmentTarget]), [['org-1', attachmentId, 'user-1', 'function']])
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(
+    routeState.detachCalls.map(([orgId, id, audit]) => [
+      orgId,
+      id,
+      (audit as { actorId: string }).actorId,
+      typeof (audit as { authorizeAttachmentTarget?: unknown }).authorizeAttachmentTarget,
+    ]),
+    [["org-1", attachmentId, "user-1", "function"]],
+  );
+});
 
-test('DELETE refuses a malformed id before any lookup', async () => {
-  reset({ permissions: ['*'], targetRows: [] })
+test("DELETE refuses a malformed id before any lookup", async () => {
+  reset({ permissions: ["*"], targetRows: [] });
 
-  const response = await del('not-a-uuid')
+  const response = await del("not-a-uuid");
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(routeState.detachCalls, [])
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(routeState.detachCalls, []);
+});

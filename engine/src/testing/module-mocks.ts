@@ -34,9 +34,7 @@ export async function importWithMocks<T>(
   });
   try {
     const href =
-      typeof specifier === "string"
-        ? new URL(specifier, parentURL).href
-        : specifier.href;
+      typeof specifier === "string" ? new URL(specifier, parentURL).href : specifier.href;
     return (await import(href)) as T;
   } finally {
     hooks.deregister();

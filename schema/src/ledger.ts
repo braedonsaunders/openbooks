@@ -11,18 +11,11 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
-import {
-  accountingPeriods,
-  classes,
-  departments,
-  locations,
-  paymentCards,
-  projects
-} from "./core";
+import { accountingPeriods, classes, departments, locations, paymentCards, projects } from "./core";
 import { documents } from "./documents";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 import { parties } from "./parties";
@@ -241,7 +234,8 @@ export const journalLines = pgTable(
   (t) => [
     foreignKey({
       name: "journal_lines_entity_period_fkey",
-      columns: [t.orgId,t.periodId], foreignColumns:[accountingPeriods.orgId,accountingPeriods.id],
+      columns: [t.orgId, t.periodId],
+      foreignColumns: [accountingPeriods.orgId, accountingPeriods.id],
     }),
     foreignKey({
       name: "journal_lines_entry_id_fkey",
@@ -350,11 +344,14 @@ export const journalLines = pgTable(
     index("jl_org_foreign_currency")
       .on(t.orgId)
       .where(sql`${t.fxRate} <> 1`),
-    check("jl_nonzero", sql`${t.amount} <> 0 OR (
+    check(
+      "jl_nonzero",
+      sql`${t.amount} <> 0 OR (
       ${t.txnAmount} = 0 AND ${t.quantity} IS NOT NULL AND ${t.quantity} <> 0 AND ${t.quantity} = trunc(${t.quantity}, 4)
       AND coalesce(length(btrim(${t.unit})), 0) > 0
       AND NOT ${t.isOpenItem} AND NOT ${t.isCurrencyAdjustment}
-    )`),
+    )`,
+    ),
   ],
 );
 

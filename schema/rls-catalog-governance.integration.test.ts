@@ -77,8 +77,7 @@ const GLOBAL_ALLOWLIST: Record<string, string> = {
     "pre-authentication throttling counters keyed by bucket key, reached before app.current_org is set so no org policy could match",
   auth_sessions:
     "pre-authentication session state keyed by user_id, reached before app.current_org is set so no org policy could match",
-  currencies:
-    "shared ISO reference data identical for every org; no tenant rows",
+  currencies: "shared ISO reference data identical for every org; no tenant rows",
   marketplace_nexus_state_rules:
     "shared per-state marketplace-facilitator nexus rules with their cited source, identical for every org; written only by migrations, no tenant rows",
   openbooks_document_close_modules:
@@ -103,7 +102,8 @@ const GLOBAL_ALLOWLIST: Record<string, string> = {
  * a table whose rows no tenant boundary constrains.
  */
 async function orgLessViolations(db: EngineDb["db"]): Promise<string[]> {
-  const rows = (await db.execute<{ tbl: string }>(sql`
+  const rows = (
+    await db.execute<{ tbl: string }>(sql`
     with base as (
       select c.relname as tbl, c.relrowsecurity as rls,
              c.relforcerowsecurity as force
@@ -128,12 +128,14 @@ async function orgLessViolations(db: EngineDb["db"]): Promise<string[]> {
        )
      )
      order by 1
-  `)).rows;
+  `)
+  ).rows;
   return rows.map((row) => row.tbl).filter((tbl) => !(tbl in GLOBAL_ALLOWLIST));
 }
 
 async function catalogViolations(db: EngineDb["db"]): Promise<string[]> {
-  const rows = (await db.execute<{ tbl: string }>(sql`
+  const rows = (
+    await db.execute<{ tbl: string }>(sql`
     with t as (
       select c.relname as tbl, c.relrowsecurity as rls,
              c.relforcerowsecurity as force, count(pol.oid) as npol
@@ -147,7 +149,8 @@ async function catalogViolations(db: EngineDb["db"]): Promise<string[]> {
        group by 1, 2, 3
     )
     select tbl from t where not (rls and force and npol > 0) order by 1
-  `)).rows;
+  `)
+  ).rows;
   return rows.map((row) => row.tbl).filter((tbl) => !(tbl in RLS_EXEMPT));
 }
 
@@ -159,7 +162,8 @@ async function catalogViolations(db: EngineDb["db"]): Promise<string[]> {
  * query, so it must not satisfy this test.
  */
 async function leadingOrgIndexViolations(db: EngineDb["db"]): Promise<string[]> {
-  const rows = (await db.execute<{ tbl: string }>(sql`
+  const rows = (
+    await db.execute<{ tbl: string }>(sql`
     with org_tables as (
       select c.oid, c.relname as tbl,
              (select a.attnum
@@ -180,7 +184,8 @@ async function leadingOrgIndexViolations(db: EngineDb["db"]): Promise<string[]> 
             and i.indkey[0] = o.org_attnum
        )
      order by 1
-  `)).rows;
+  `)
+  ).rows;
   return rows.map((row) => row.tbl);
 }
 
@@ -259,7 +264,9 @@ test("the org-less test passes a parent-scoped child table", { skip: !DB }, asyn
     await db.execute(sql`alter table public.${sql.raw(table)} enable row level security`);
     await db.execute(sql`alter table only public.${sql.raw(table)} force row level security`);
     const scope = sql`exists (select 1 from users u where u.id = public.${sql.raw(table)}.owner_id and (u.org_id)::text = current_setting('app.current_org'::text, true))`;
-    await db.execute(sql`create policy child_isolation on public.${sql.raw(table)} using (${scope}) with check (${scope})`);
+    await db.execute(
+      sql`create policy child_isolation on public.${sql.raw(table)} using (${scope}) with check (${scope})`,
+    );
     const violations = await orgLessViolations(db);
     assert.ok(
       !violations.includes(table),
@@ -285,128 +292,158 @@ test("the catalog test fires on an unwired org-scoped table", { skip: !DB }, asy
   }
 });
 
-test("G1/G2/G3 tables hide foreign rows and NULL-org rows from tenants", { skip: !DB }, async () => {
-  const [{ db, withBypass, withOrg }, { createScratchOrg, dropScratchOrg, seedFlowActors }] =
-    await Promise.all([
-      import("@openbooks/engine/platform/db"),
-      import("@openbooks/engine/testing/fixtures"),
-    ]);
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
-  try {
-    const actorsA = await seedFlowActors(orgA.orgId);
-    const actorsB = await seedFlowActors(orgB.orgId);
-    const auditA = randomUUID();
-    const auditB = randomUUID();
-    const auditNull = randomUUID();
-    // Terminal scheduler evidence for each org, plus the NULL-org
-    // crash-recovery shape: insertable only under bypass (the WITH CHECK
-    // refuses a NULL org_id to any scoped writer).
-    await withBypass(async () => {
-      for (const [orgId, id] of [[orgA.orgId, auditA], [orgB.orgId, auditB]] as const) {
-        await db.execute(sql`
+test(
+  "G1/G2/G3 tables hide foreign rows and NULL-org rows from tenants",
+  { skip: !DB },
+  async () => {
+    const [{ db, withBypass, withOrg }, { createScratchOrg, dropScratchOrg, seedFlowActors }] =
+      await Promise.all([
+        import("@openbooks/engine/platform/db"),
+        import("@openbooks/engine/testing/fixtures"),
+      ]);
+    const orgA = await createScratchOrg();
+    const orgB = await createScratchOrg();
+    try {
+      const actorsA = await seedFlowActors(orgA.orgId);
+      const actorsB = await seedFlowActors(orgB.orgId);
+      const auditA = randomUUID();
+      const auditB = randomUUID();
+      const auditNull = randomUUID();
+      // Terminal scheduler evidence for each org, plus the NULL-org
+      // crash-recovery shape: insertable only under bypass (the WITH CHECK
+      // refuses a NULL org_id to any scoped writer).
+      await withBypass(async () => {
+        for (const [orgId, id] of [
+          [orgA.orgId, auditA],
+          [orgB.orgId, auditB],
+        ] as const) {
+          await db.execute(sql`
           insert into scheduler_outbox_terminal_audit
             (id, outbox_row_id, event, org_id, kind, occurrence_key, attempt_count, marked_by, detail)
           values (${id}, ${randomUUID()}, 'terminal_failure', ${orgId}, 'flow',
                   ${`occ-${id.slice(0, 8)}`}, 1, 'test', '{}'::jsonb)`);
-      }
-      await db.execute(sql`
+        }
+        await db.execute(sql`
         insert into scheduler_outbox_terminal_audit
           (id, outbox_row_id, event, org_id, kind, occurrence_key, attempt_count, marked_by, detail)
         values (${auditNull}, ${randomUUID()}, 'crash_recovery_terminal_failure', null, 'flow',
                 ${`occ-${auditNull.slice(0, 8)}`}, 0, 'test', '{}'::jsonb)`);
-    });
-    // A scoped writer cannot plant a NULL-org row behind the check. Drizzle
-    // wraps the PostgreSQL refusal, so match the whole rendered chain.
-    await assert.rejects(
-      withOrg(orgA.orgId, () => db.execute(sql`
+      });
+      // A scoped writer cannot plant a NULL-org row behind the check. Drizzle
+      // wraps the PostgreSQL refusal, so match the whole rendered chain.
+      await assert.rejects(
+        withOrg(orgA.orgId, () =>
+          db.execute(sql`
         insert into scheduler_outbox_terminal_audit
           (id, outbox_row_id, event, org_id, kind, occurrence_key, attempt_count, marked_by, detail)
         values (${randomUUID()}, ${randomUUID()}, 'terminal_failure', null, 'flow',
-                ${`occ-x-${auditA.slice(0, 4)}`}, 1, 'test', '{}'::jsonb)`)),
-      (error: unknown) => {
-        const chain: string[] = [];
-        for (let cur: unknown = error; cur && typeof cur === "object"; cur = (cur as { cause?: unknown }).cause) {
-          chain.push(String((cur as { message?: unknown }).message ?? ""));
-        }
-        assert.match(
-          chain.join(" "),
-          /row-level security policy/,
-          "a tenant session must not insert a NULL-org scheduler row",
-        );
-        return true;
-      },
-    );
+                ${`occ-x-${auditA.slice(0, 4)}`}, 1, 'test', '{}'::jsonb)`),
+        ),
+        (error: unknown) => {
+          const chain: string[] = [];
+          for (
+            let cur: unknown = error;
+            cur && typeof cur === "object";
+            cur = (cur as { cause?: unknown }).cause
+          ) {
+            chain.push(String((cur as { message?: unknown }).message ?? ""));
+          }
+          assert.match(
+            chain.join(" "),
+            /row-level security policy/,
+            "a tenant session must not insert a NULL-org scheduler row",
+          );
+          return true;
+        },
+      );
 
-    // Agent workbench notes, one per org.
-    const noteA = randomUUID();
-    const noteB = randomUUID();
-    await withBypass(async () => {
-      for (const [orgId, userId, noteId] of [
-        [orgA.orgId, actorsA.adminId, noteA],
-        [orgB.orgId, actorsB.adminId, noteB],
-      ] as const) {
-        const itemId = randomUUID();
-        await db.execute(sql`
+      // Agent workbench notes, one per org.
+      const noteA = randomUUID();
+      const noteB = randomUUID();
+      await withBypass(async () => {
+        for (const [orgId, userId, noteId] of [
+          [orgA.orgId, actorsA.adminId, noteA],
+          [orgB.orgId, actorsB.adminId, noteB],
+        ] as const) {
+          const itemId = randomUUID();
+          await db.execute(sql`
           insert into ai_work_items (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity)
           values (${itemId}, ${orgId}, 'hygiene', 'stale', 'v1', ${`fp-${noteId.slice(0, 8)}`}, 'info')`);
-        await db.execute(sql`
+          await db.execute(sql`
           insert into ai_work_item_notes (id, org_id, work_item_id, user_id, body)
           values (${noteId}, ${orgId}, ${itemId}, ${userId}, 'tenant note')`);
-      }
-    });
+        }
+      });
 
-    // HRM exit-record events, one per org (employment -> exit record -> event).
-    const eventA = randomUUID();
-    const eventB = randomUUID();
-    await withBypass(async () => {
-      for (const [org, userId, eventId] of [
-        [orgA, actorsA.adminId, eventA],
-        [orgB, actorsB.adminId, eventB],
-      ] as const) {
-        const employmentId = randomUUID();
-        const recordId = randomUUID();
-        await db.execute(sql`
+      // HRM exit-record events, one per org (employment -> exit record -> event).
+      const eventA = randomUUID();
+      const eventB = randomUUID();
+      await withBypass(async () => {
+        for (const [org, userId, eventId] of [
+          [orgA, actorsA.adminId, eventA],
+          [orgB, actorsB.adminId, eventB],
+        ] as const) {
+          const employmentId = randomUUID();
+          const recordId = randomUUID();
+          await db.execute(sql`
           insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
           values (${employmentId}, ${org.orgId}, ${org.customerId}, ${org.subsidiaryId})`);
-        await db.execute(sql`
+          await db.execute(sql`
           insert into hrm_exit_records (id, org_id, employment_id, reason_kind, is_voluntary)
           values (${recordId}, ${org.orgId}, ${employmentId}, 'resignation', true)`);
-        await db.execute(sql`
+          await db.execute(sql`
           insert into hrm_exit_record_events (id, org_id, exit_record_id, kind, actor_user_id, after_snapshot)
           values (${eventId}, ${org.orgId}, ${recordId}, 'recorded', ${userId}, '{}'::jsonb)`);
+        }
+      });
+
+      // Tenant A sees exactly its own rows on all three tables, and never the
+      // NULL-org scheduler row.
+      const seenAudit = await withOrg(orgA.orgId, () =>
+        db.execute<{ id: string }>(sql`select id from scheduler_outbox_terminal_audit`),
+      );
+      assert.deepEqual(
+        seenAudit.rows.map((row) => row.id).sort(),
+        [auditA].sort(),
+        "tenant A must see only its own scheduler rows, never B's or the NULL-org row",
+      );
+      const seenNotes = await withOrg(orgA.orgId, () =>
+        db.execute<{ id: string }>(sql`select id from ai_work_item_notes`),
+      );
+      assert.deepEqual(
+        seenNotes.rows.map((row) => row.id),
+        [noteA],
+      );
+      const seenEvents = await withOrg(orgA.orgId, () =>
+        db.execute<{ id: string }>(sql`select id from hrm_exit_record_events`),
+      );
+      assert.deepEqual(
+        seenEvents.rows.map((row) => row.id),
+        [eventA],
+      );
+
+      // Mirror: tenant B sees exactly its own.
+      const seenAuditB = await withOrg(orgB.orgId, () =>
+        db.execute<{ id: string }>(sql`select id from scheduler_outbox_terminal_audit`),
+      );
+      assert.deepEqual(
+        seenAuditB.rows.map((row) => row.id),
+        [auditB],
+      );
+
+      // Platform-only: bypass sees all four scheduler rows including NULL-org.
+      const seenAll = await withBypass(() =>
+        db.execute<{ id: string }>(sql`select id from scheduler_outbox_terminal_audit`),
+      );
+      for (const id of [auditA, auditB, auditNull]) {
+        assert.ok(
+          seenAll.rows.some((row) => row.id === id),
+          `bypass must see scheduler row ${id}`,
+        );
       }
-    });
-
-    // Tenant A sees exactly its own rows on all three tables, and never the
-    // NULL-org scheduler row.
-    const seenAudit = await withOrg(orgA.orgId, () =>
-      db.execute<{ id: string }>(sql`select id from scheduler_outbox_terminal_audit`));
-    assert.deepEqual(
-      seenAudit.rows.map((row) => row.id).sort(),
-      [auditA].sort(),
-      "tenant A must see only its own scheduler rows, never B's or the NULL-org row",
-    );
-    const seenNotes = await withOrg(orgA.orgId, () =>
-      db.execute<{ id: string }>(sql`select id from ai_work_item_notes`));
-    assert.deepEqual(seenNotes.rows.map((row) => row.id), [noteA]);
-    const seenEvents = await withOrg(orgA.orgId, () =>
-      db.execute<{ id: string }>(sql`select id from hrm_exit_record_events`));
-    assert.deepEqual(seenEvents.rows.map((row) => row.id), [eventA]);
-
-    // Mirror: tenant B sees exactly its own.
-    const seenAuditB = await withOrg(orgB.orgId, () =>
-      db.execute<{ id: string }>(sql`select id from scheduler_outbox_terminal_audit`));
-    assert.deepEqual(seenAuditB.rows.map((row) => row.id), [auditB]);
-
-    // Platform-only: bypass sees all four scheduler rows including NULL-org.
-    const seenAll = await withBypass(() =>
-      db.execute<{ id: string }>(sql`select id from scheduler_outbox_terminal_audit`));
-    for (const id of [auditA, auditB, auditNull]) {
-      assert.ok(seenAll.rows.some((row) => row.id === id), `bypass must see scheduler row ${id}`);
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
     }
-  } finally {
-    await dropScratchOrg(orgA.orgId);
-    await dropScratchOrg(orgB.orgId);
-  }
-});
+  },
+);

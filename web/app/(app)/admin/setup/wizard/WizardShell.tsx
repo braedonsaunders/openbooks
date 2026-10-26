@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
-import { cn } from '@openbooks/ui'
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
+import { cn } from "@openbooks/ui";
 
 /**
  * The house first-run wizard chrome — the full-screen scrim, centered modal
@@ -18,29 +18,31 @@ import { cn } from '@openbooks/ui'
  * interactive while the rest of the page is inert.
  */
 export function WizardShell(props: {
-  testId: string
-  dialogLabel: string
+  testId: string;
+  dialogLabel: string;
   /** Key of the current step — drives the AnimatePresence transition. */
-  stepKey: string
+  stepKey: string;
   /** Segmented progress bar; null hides it (welcome / applying / done). */
-  progress: { index: number; total: number } | null
+  progress: { index: number; total: number } | null;
   /** Top-right skip/close affordance; null hides it (applying / done). */
-  skip: { label: React.ReactNode; onClick: () => void; disabled?: boolean } | null
+  skip: { label: React.ReactNode; onClick: () => void; disabled?: boolean } | null;
   /** Footer navigation; null hides it (applying / done). */
   footer: {
-    back: { label: React.ReactNode; onClick: () => void; disabled?: boolean } | null
-    primary: { label: React.ReactNode; onClick: () => void; disabled?: boolean }
-  } | null
-  children: React.ReactNode
+    back: { label: React.ReactNode; onClick: () => void; disabled?: boolean } | null;
+    primary: { label: React.ReactNode; onClick: () => void; disabled?: boolean };
+  } | null;
+  children: React.ReactNode;
 }) {
-  const reduceMotion = useReducedMotion()
-  const dialogRef = useRef<HTMLDialogElement>(null)
+  const reduceMotion = useReducedMotion();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog || dialog.open) return
-    dialog.showModal()
-    return () => { if (dialog.open) dialog.close() }
-  }, [])
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
   return (
     <AnimatePresence>
       <motion.dialog
@@ -51,7 +53,10 @@ export function WizardShell(props: {
         transition={{ duration: 0.2 }}
         data-testid={props.testId}
         aria-label={props.dialogLabel}
-        onCancel={(event) => { event.preventDefault(); props.skip?.onClick() }}
+        onCancel={(event) => {
+          event.preventDefault();
+          props.skip?.onClick();
+        }}
         className="fixed inset-0 z-50 m-0 flex h-dvh w-screen max-h-none max-w-none items-center justify-center border-0 bg-transparent p-0 text-inherit backdrop:bg-slate-950/80 backdrop:backdrop-blur-sm"
       >
         {props.skip && (
@@ -68,7 +73,7 @@ export function WizardShell(props: {
         <motion.div
           initial={reduceMotion ? false : { scale: 0.95, y: 10 }}
           animate={{ scale: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
           className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
         >
           {props.progress && (
@@ -77,8 +82,8 @@ export function WizardShell(props: {
                 <div
                   key={i}
                   className={cn(
-                    'h-1.5 flex-1 rounded-full transition-colors duration-300',
-                    i <= props.progress!.index ? 'bg-teal-500' : 'bg-slate-200 dark:bg-slate-700',
+                    "h-1.5 flex-1 rounded-full transition-colors duration-300",
+                    i <= props.progress!.index ? "bg-teal-500" : "bg-slate-200 dark:bg-slate-700",
                   )}
                 />
               ))}
@@ -128,5 +133,5 @@ export function WizardShell(props: {
         </motion.div>
       </motion.dialog>
     </AnimatePresence>
-  )
+  );
 }

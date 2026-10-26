@@ -78,7 +78,10 @@ test("allocation spreads across compatible lines and spends every capacity", () 
   const app1 = line({ sign: "-1", remaining: "60.00", remainingTransaction: "60.00" });
   const app2 = line({ sign: "-1", remaining: "60.00", remainingTransaction: "60.00" });
   const out = allocatePairApplications("PAY-1", [pay], [app1, app2], toUnits("100.00"), 0n);
-  assert.deepEqual(out.rows.map((r) => fromUnits(r.amount)), ["60.0000", "40.0000"]);
+  assert.deepEqual(
+    out.rows.map((r) => fromUnits(r.amount)),
+    ["60.0000", "40.0000"],
+  );
   assert.equal(out.unallocated, 0n);
   // Every capacity is spent exactly: a dropped remaining decrement would
   // leave one of these positive (or over-allocate the rows above).
@@ -94,7 +97,10 @@ test("capacity beyond the applied lines lands in unallocated, never forced", () 
   const pay = line({ sign: "1", remaining: "100.00", remainingTransaction: "100.00" });
   const app = line({ sign: "-1", remaining: "60.00", remainingTransaction: "60.00" });
   const out = allocatePairApplications("PAY-1", [pay], [app], toUnits("100.00"), 0n);
-  assert.deepEqual(out.rows.map((r) => fromUnits(r.amount)), ["60.0000"]);
+  assert.deepEqual(
+    out.rows.map((r) => fromUnits(r.amount)),
+    ["60.0000"],
+  );
   assert.equal(fromUnits(out.unallocated), "40.0000");
 });
 
@@ -114,7 +120,10 @@ test("a prior partial application reduces the want first", () => {
   const pay = line({ sign: "1", remaining: "100.00", remainingTransaction: "100.00" });
   const app = line({ sign: "-1", remaining: "100.00", remainingTransaction: "100.00" });
   const out = allocatePairApplications("PAY-1", [pay], [app], toUnits("100.00"), toUnits("30.00"));
-  assert.deepEqual(out.rows.map((r) => fromUnits(r.amount)), ["70.0000"]);
+  assert.deepEqual(
+    out.rows.map((r) => fromUnits(r.amount)),
+    ["70.0000"],
+  );
   assert.equal(out.unallocated, 0n);
 });
 
@@ -131,7 +140,12 @@ test("incompatible lines never settle", () => {
     { remaining: "100.00", remainingTransaction: "0.00" },
   ];
   for (const variant of variants) {
-    const app = line({ sign: "-1", remaining: "100.00", remainingTransaction: "100.00", ...variant });
+    const app = line({
+      sign: "-1",
+      remaining: "100.00",
+      remainingTransaction: "100.00",
+      ...variant,
+    });
     const out = allocatePairApplications("PAY-1", [pay], [app], toUnits("100.00"), 0n);
     assert.deepEqual(out.rows, [], `variant settles: ${JSON.stringify(variant)}`);
     assert.equal(out.unallocated, toUnits("100.00"));
@@ -147,12 +161,18 @@ test("incompatible lines never settle", () => {
 
 test("the transaction cap binds before the functional cap", () => {
   const pay = line({
-    sign: "1", currency: "USD", fxRate: "1.36",
-    remaining: "136.00", remainingTransaction: "100.00",
+    sign: "1",
+    currency: "USD",
+    fxRate: "1.36",
+    remaining: "136.00",
+    remainingTransaction: "100.00",
   });
   const app = line({
-    sign: "-1", currency: "USD", fxRate: "1.36",
-    remaining: "68.00", remainingTransaction: "50.00",
+    sign: "-1",
+    currency: "USD",
+    fxRate: "1.36",
+    remaining: "68.00",
+    remainingTransaction: "50.00",
   });
   const out = allocatePairApplications("PAY-1", [pay], [app], toUnits("136.00"), 0n);
   assert.equal(out.rows.length, 1);
@@ -169,7 +189,10 @@ test("a shared applied line cannot spend its transaction capacity twice", () => 
   const out = allocatePairApplications("PAY-1", [pay1, pay2], [app], toUnits("100.00"), 0n);
   // The applied line's 50.00 of transaction capacity settles once: the first
   // payment takes all of it, and the second finds nothing left.
-  assert.deepEqual(out.rows.map((r) => fromUnits(r.targetTransactionAmount)), ["50.0000"]);
+  assert.deepEqual(
+    out.rows.map((r) => fromUnits(r.targetTransactionAmount)),
+    ["50.0000"],
+  );
   assert.equal(fromUnits(out.unallocated), "50.0000");
   assert.equal(units(app, "remainingTransaction"), "0.0000");
 });
@@ -178,7 +201,12 @@ test("a dust remainder that cannot price a transaction allocates nothing", () =>
   // 0.0001 of functional want at a 1000000 rate prices zero transaction
   // units, so the allocator must break with no rows — not emit a zero-amount
   // row.
-  const pay = line({ sign: "1", fxRate: "1000000", remaining: "100.00", remainingTransaction: "100.00" });
+  const pay = line({
+    sign: "1",
+    fxRate: "1000000",
+    remaining: "100.00",
+    remainingTransaction: "100.00",
+  });
   const app = line({ sign: "-1", remaining: "100.00", remainingTransaction: "100.00" });
   const out = allocatePairApplications("PAY-1", [pay], [app], toUnits("0.0001"), 0n);
   assert.deepEqual(out.rows, []);
@@ -196,12 +224,25 @@ test("flipped debit/credit signs still net zero drift at one rate", () => {
 
 test("evidence rows group by control dimension, never across parties", () => {
   const row = (over: Partial<PendingApplication>): PendingApplication => ({
-    fromLineId: "f", toLineId: "t", amount: 0n, sourceAmount: 0n,
-    sourceTransactionAmount: 0n, targetTransactionAmount: 0n, date: "2026-07-15",
-    currency: "CAD", fxGainLossEntryId: null, fxAdjustment: 0n, paymentRef: "PAY-1",
-    sourceDocumentId: "doc-1", bookId: "book-1", periodId: "period-1",
-    subsidiaryId: "sub-1", accountId: "acct-ap", partyId: "party-1",
-    functionalCurrency: "CAD", ...over,
+    fromLineId: "f",
+    toLineId: "t",
+    amount: 0n,
+    sourceAmount: 0n,
+    sourceTransactionAmount: 0n,
+    targetTransactionAmount: 0n,
+    date: "2026-07-15",
+    currency: "CAD",
+    fxGainLossEntryId: null,
+    fxAdjustment: 0n,
+    paymentRef: "PAY-1",
+    sourceDocumentId: "doc-1",
+    bookId: "book-1",
+    periodId: "period-1",
+    subsidiaryId: "sub-1",
+    accountId: "acct-ap",
+    partyId: "party-1",
+    functionalCurrency: "CAD",
+    ...over,
   });
   const groups = groupSettlementRows([
     row({ toLineId: "t1" }),
@@ -220,11 +261,23 @@ test("evidence rows group by control dimension, never across parties", () => {
 
 test("a group's FX drift nets exactly, and an empty group drifts nothing", () => {
   const row = (fxAdjustment: bigint): PendingApplication => ({
-    fromLineId: "f", toLineId: "t", amount: 0n, sourceAmount: 0n,
-    sourceTransactionAmount: 0n, targetTransactionAmount: 0n, date: "2026-07-15",
-    currency: "CAD", fxGainLossEntryId: null, fxAdjustment, paymentRef: "PAY-1",
-    sourceDocumentId: "doc-1", bookId: "book-1", periodId: "period-1",
-    subsidiaryId: "sub-1", accountId: "acct-ap", partyId: "party-1",
+    fromLineId: "f",
+    toLineId: "t",
+    amount: 0n,
+    sourceAmount: 0n,
+    sourceTransactionAmount: 0n,
+    targetTransactionAmount: 0n,
+    date: "2026-07-15",
+    currency: "CAD",
+    fxGainLossEntryId: null,
+    fxAdjustment,
+    paymentRef: "PAY-1",
+    sourceDocumentId: "doc-1",
+    bookId: "book-1",
+    periodId: "period-1",
+    subsidiaryId: "sub-1",
+    accountId: "acct-ap",
+    partyId: "party-1",
     functionalCurrency: "CAD",
   });
   assert.equal(settlementGroupAdjustment([row(1000n), row(-300n)]), 700n);
@@ -237,7 +290,9 @@ function stubClient(taken: Set<string>): {
   return {
     query: async (_text: string, params?: unknown[]) => {
       const entryNumber = params?.[1];
-      return { rows: typeof entryNumber === "string" && taken.has(entryNumber) ? [{ one: 1 }] : [] };
+      return {
+        rows: typeof entryNumber === "string" && taken.has(entryNumber) ? [{ one: 1 }] : [],
+      };
     },
   };
 }
@@ -249,7 +304,11 @@ test("FX evidence numbering prefers the bare name and steps past collisions", as
     "DOC-FX-2",
   );
   assert.equal(
-    await allocateFxEntryNumber(stubClient(new Set(["DOC-FX", "DOC-FX-2", "DOC-FX-3"])), "org-1", "DOC-FX"),
+    await allocateFxEntryNumber(
+      stubClient(new Set(["DOC-FX", "DOC-FX-2", "DOC-FX-3"])),
+      "org-1",
+      "DOC-FX",
+    ),
     "DOC-FX-4",
   );
 });

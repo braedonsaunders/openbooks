@@ -79,7 +79,12 @@ stubModules({
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 
-function post(id: string, action: string, body?: unknown, idempotencyKey = "doc-action-key-1"): Promise<Response> {
+function post(
+  id: string,
+  action: string,
+  body?: unknown,
+  idempotencyKey = "doc-action-key-1",
+): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/v1/documents/${id}/${action}`, {
       method: "POST",
@@ -100,7 +105,10 @@ test("POST submit dispatches to advanceDocumentLifecycle", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, action: "submit" });
   assert.deepEqual(routeState.calls, [
-    { fn: "advance", input: { documentId: "doc-1", action: "submit", idempotencyKey: "doc-action-key-1" } },
+    {
+      fn: "advance",
+      input: { documentId: "doc-1", action: "submit", idempotencyKey: "doc-action-key-1" },
+    },
   ]);
 });
 

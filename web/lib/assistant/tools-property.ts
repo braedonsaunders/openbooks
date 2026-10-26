@@ -10,7 +10,15 @@ import { isFeatureEnabled } from "../features";
 import { withOrgContext } from "@openbooks/engine/platform/db";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { assistantListPage, dateInput, money, uuidInput, numberValue, capList, decimalText } from "./tools-shared";
+import {
+  assistantListPage,
+  dateInput,
+  money,
+  uuidInput,
+  numberValue,
+  capList,
+  decimalText,
+} from "./tools-shared";
 
 /**
  * Property-management read/search tools for the agentic assistant. Every tool
@@ -43,7 +51,11 @@ type ChargeRow = Workspace["charges"][number];
 type OverdueLeaseRow = Workspace["overdueByLease"][number];
 type OverdueInvoiceRow = Workspace["overdueInvoices"][number];
 
-async function visibleWorkspace(orgId: string, allowed: ReadonlySet<string> | null, asOf?: string): Promise<Workspace> {
+async function visibleWorkspace(
+  orgId: string,
+  allowed: ReadonlySet<string> | null,
+  asOf?: string,
+): Promise<Workspace> {
   // Same loader as GET /api/property-management: the engine scopes every
   // query to the caller inside one repeatable-read snapshot, so the
   // narrowing below is unnecessary — and filtering an org-wide read
@@ -55,9 +67,10 @@ async function visibleWorkspace(orgId: string, allowed: ReadonlySet<string> | nu
 function monthlyChargesFor(charges: ChargeRow[], lease: LeaseRow, asOf: string): string {
   const current = charges.filter(
     (charge) =>
-      String(charge.leaseId) === String(lease.id) && charge.frequency === "monthly"
-      && String(charge.effectiveFrom) <= asOf
-      && (!charge.effectiveTo || String(charge.effectiveTo) >= asOf),
+      String(charge.leaseId) === String(lease.id) &&
+      charge.frequency === "monthly" &&
+      String(charge.effectiveFrom) <= asOf &&
+      (!charge.effectiveTo || String(charge.effectiveTo) >= asOf),
   );
   if (current.length) return sum(current.map((charge) => String(charge.amount)));
   return lease.status === "draft" ? money(lease.baseRent) : "0";
@@ -93,7 +106,8 @@ const listProperties: AssistantToolDef = {
     const workspace = await visibleWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds);
     const q = (a.query ?? "").toLowerCase();
     const rows = workspace.properties.filter(
-      (p) => !q || String(p.code).toLowerCase().includes(q) || String(p.name).toLowerCase().includes(q),
+      (p) =>
+        !q || String(p.code).toLowerCase().includes(q) || String(p.name).toLowerCase().includes(q),
     );
     const capped = capList(
       rows.map((p) => ({
@@ -123,10 +137,24 @@ const listProperties: AssistantToolDef = {
 };
 
 const listLeasesSchema = z.object({
-  query: z.string().max(100).optional().describe("Substring over lease number, tenant, property, or unit"),
+  query: z
+    .string()
+    .max(100)
+    .optional()
+    .describe("Substring over lease number, tenant, property, or unit"),
   propertyId: uuidInput.optional().describe("Property id; omit for every property"),
-  status: z.string().max(20).optional().describe("Lease status (active, notice, draft, …); omit for active and notice"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); totals always cover ALL matches"),
+  status: z
+    .string()
+    .max(20)
+    .optional()
+    .describe("Lease status (active, notice, draft, …); omit for active and notice"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); totals always cover ALL matches"),
 });
 
 const listLeases: AssistantToolDef = {
@@ -145,10 +173,14 @@ const listLeases: AssistantToolDef = {
     const q = (a.query ?? "").toLowerCase();
     const rows = workspace.leases.filter(
       (l) =>
-        (!a.status ? l.status === "active" || l.status === "notice" : l.status === a.status)
-        && (!a.propertyId || String(l.propertyId) === a.propertyId)
-        && (!q || [l.leaseNumber, l.tenantName, l.propertyName, l.unitCode]
-          .some((v) => String(v ?? "").toLowerCase().includes(q))),
+        (!a.status ? l.status === "active" || l.status === "notice" : l.status === a.status) &&
+        (!a.propertyId || String(l.propertyId) === a.propertyId) &&
+        (!q ||
+          [l.leaseNumber, l.tenantName, l.propertyName, l.unitCode].some((v) =>
+            String(v ?? "")
+              .toLowerCase()
+              .includes(q),
+          )),
     );
     const byStatus = new Map<string, number>();
     for (const l of rows) {
@@ -221,7 +253,8 @@ const getLease: AssistantToolDef = {
           invoiceNumber: s.invoiceNumber,
           invoiceStatus: s.invoiceStatus,
           invoiceDueOn: s.invoiceDueOn,
-          invoiceOpenBalance: s.invoiceOpenBalance == null ? null : decimalText(s.invoiceOpenBalance),
+          invoiceOpenBalance:
+            s.invoiceOpenBalance == null ? null : decimalText(s.invoiceOpenBalance),
         })),
       50,
     );
@@ -251,7 +284,10 @@ const getLease: AssistantToolDef = {
           endsOn: lease.endsOn,
           billingDay: lease.billingDay,
           paymentTermsDays: lease.paymentTermsDays,
-          securityDepositRequired: lease.securityDepositRequired == null ? null : numberValue(lease.securityDepositRequired),
+          securityDepositRequired:
+            lease.securityDepositRequired == null
+              ? null
+              : numberValue(lease.securityDepositRequired),
           camMethod: lease.camMethod,
           camSharePercent: lease.camSharePercent,
           lateFeeType: lease.lateFeeType,
@@ -288,8 +324,18 @@ const getLease: AssistantToolDef = {
 const rentRollSchema = z.object({
   asOf: dateInput.optional().describe("Roll date; defaults to today"),
   propertyId: uuidInput.optional().describe("Property id; omit for every property"),
-  query: z.string().max(100).optional().describe("Substring over lease number, tenant, property, or unit"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); totals always cover ALL matches"),
+  query: z
+    .string()
+    .max(100)
+    .optional()
+    .describe("Substring over lease number, tenant, property, or unit"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); totals always cover ALL matches"),
 });
 
 const rentRoll: AssistantToolDef = {
@@ -309,10 +355,14 @@ const rentRoll: AssistantToolDef = {
     const q = (a.query ?? "").toLowerCase();
     const leases = workspace.leases.filter(
       (l) =>
-        (l.status === "active" || l.status === "notice")
-        && (!a.propertyId || String(l.propertyId) === a.propertyId)
-        && (!q || [l.leaseNumber, l.tenantName, l.propertyName, l.unitCode]
-          .some((v) => String(v ?? "").toLowerCase().includes(q))),
+        (l.status === "active" || l.status === "notice") &&
+        (!a.propertyId || String(l.propertyId) === a.propertyId) &&
+        (!q ||
+          [l.leaseNumber, l.tenantName, l.propertyName, l.unitCode].some((v) =>
+            String(v ?? "")
+              .toLowerCase()
+              .includes(q),
+          )),
     );
     const rows = leases.map((l) => ({
       lease: l,
@@ -322,7 +372,10 @@ const rentRoll: AssistantToolDef = {
     const chargesByCurrency = new Map<string, string>();
     const pastDueByCurrency = new Map<string, string>();
     for (const row of rows) {
-      const code = String(row.lease.currency ?? "").trim().toUpperCase() || "UNKNOWN";
+      const code =
+        String(row.lease.currency ?? "")
+          .trim()
+          .toUpperCase() || "UNKNOWN";
       chargesByCurrency.set(code, add(chargesByCurrency.get(code) ?? "0", row.monthly));
       pastDueByCurrency.set(code, add(pastDueByCurrency.get(code) ?? "0", row.pastDue));
     }
@@ -338,7 +391,7 @@ const rentRoll: AssistantToolDef = {
         monthlyCharges: numberValue(row.monthly),
         pastDue: numberValue(row.pastDue),
       })),
-      limit
+      limit,
     );
     const units = a.propertyId
       ? workspace.units.filter((u) => String(u.propertyId) === a.propertyId)
@@ -351,8 +404,14 @@ const rentRoll: AssistantToolDef = {
         total: rows.length,
         truncated: capped.truncated,
         roll: capped.items,
-        monthlyChargesByCurrency: [...chargesByCurrency].map(([currency, amount]) => ({ currency, amount: decimalText(amount) })),
-        pastDueByCurrency: [...pastDueByCurrency].map(([currency, amount]) => ({ currency, amount: decimalText(amount) })),
+        monthlyChargesByCurrency: [...chargesByCurrency].map(([currency, amount]) => ({
+          currency,
+          amount: decimalText(amount),
+        })),
+        pastDueByCurrency: [...pastDueByCurrency].map(([currency, amount]) => ({
+          currency,
+          amount: decimalText(amount),
+        })),
         occupancy: {
           totalUnits: units.length,
           occupiedUnits: units.filter((u) => String(u.status) === "occupied").length,
@@ -366,7 +425,13 @@ const rentRoll: AssistantToolDef = {
 const leaseArrearsSchema = z.object({
   asOf: dateInput.optional().describe("Arrears date; defaults to today"),
   propertyId: uuidInput.optional().describe("Property id; omit for every property"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); totals always cover ALL matches"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); totals always cover ALL matches"),
 });
 
 const leaseArrears: AssistantToolDef = {
@@ -396,7 +461,10 @@ const leaseArrears: AssistantToolDef = {
       .sort((x, y) => cmp(y.pastDue, x.pastDue));
     const totalsByCurrency = new Map<string, string>();
     for (const row of rows) {
-      const code = String(row.lease.currency ?? "").trim().toUpperCase() || "UNKNOWN";
+      const code =
+        String(row.lease.currency ?? "")
+          .trim()
+          .toUpperCase() || "UNKNOWN";
       totalsByCurrency.set(code, add(totalsByCurrency.get(code) ?? "0", row.pastDue));
     }
     const capped = capList(
@@ -416,7 +484,7 @@ const leaseArrears: AssistantToolDef = {
           invoiceOpenBalance: line.openBalance == null ? null : decimalText(line.openBalance),
         })),
       })),
-      limit
+      limit,
     );
     return {
       ok: true,
@@ -426,7 +494,10 @@ const leaseArrears: AssistantToolDef = {
         total: rows.length,
         truncated: capped.truncated,
         arrears: capped.items,
-        totalsByCurrency: [...totalsByCurrency].map(([currency, amount]) => ({ currency, amount: decimalText(amount) })),
+        totalsByCurrency: [...totalsByCurrency].map(([currency, amount]) => ({
+          currency,
+          amount: decimalText(amount),
+        })),
         href: "/property-management",
       },
     };
@@ -454,7 +525,11 @@ const propertyDeposits: AssistantToolDef = {
       // date, re-checks the feature itself, and scopes every query to the
       // caller inside one snapshot (with scoped totals), so no narrowing
       // afterwards — filtering org-wide totals would tear across a rehome.
-      reconciliation = await securityDepositReconciliation(authz.user.orgId, authz.allowedSubsidiaryIds, a.asOf);
+      reconciliation = await securityDepositReconciliation(
+        authz.user.orgId,
+        authz.allowedSubsidiaryIds,
+        a.asOf,
+      );
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "reconciliation failed" };
     }
@@ -473,7 +548,8 @@ const propertyDeposits: AssistantToolDef = {
           linkedGlBalance: decimalText(sum(rows.map((row) => row.linkedGlBalance))),
           cashActivity: numberValue(sum(rows.map((row) => row.cashActivity))),
           discrepancies: rows.filter((row) => row.status === "discrepancy").length,
-          configurationRequired: rows.filter((row) => row.status === "configuration_required").length,
+          configurationRequired: rows.filter((row) => row.status === "configuration_required")
+            .length,
         },
         href: "/property-management",
       },

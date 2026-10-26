@@ -1,4 +1,11 @@
-import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import { authedContext, dismissSetupWizard } from "../auth";
 import { withIdempotencyKey } from "./idempotency";
 
@@ -75,10 +82,19 @@ function fmtUSD(cents: bigint): string {
 const toCents = (units: bigint): bigint => units / 100n;
 
 type Json = Record<string, unknown>;
-interface ApiResult { status: number; body: Json }
+interface ApiResult {
+  status: number;
+  body: Json;
+}
 
 /** Real product API call from inside the page (authenticated session). */
-async function api(page: Page, method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<ApiResult> {
+async function api(
+  page: Page,
+  method: string,
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<ApiResult> {
   const retryable = method === "GET";
   return page.evaluate(
     async ({ method, path, data, extra, retryable }) => {
@@ -92,7 +108,11 @@ async function api(page: Page, method: string, path: string, body?: unknown, hea
           });
           const text = await res.text();
           let parsed: unknown = {};
-          try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = { raw: text.slice(0, 500) }; }
+          try {
+            parsed = text ? JSON.parse(text) : {};
+          } catch {
+            parsed = { raw: text.slice(0, 500) };
+          }
           return { status: res.status, body: parsed as Json };
         } catch (error) {
           lastError = error;
@@ -105,11 +125,15 @@ async function api(page: Page, method: string, path: string, body?: unknown, hea
   );
 }
 function req(result: ApiResult, url: string): Json {
-  expect(result.status, `${url}: HTTP ${result.status} ${JSON.stringify(result.body).slice(0, 400)}`).toBeLessThan(300);
+  expect(
+    result.status,
+    `${url}: HTTP ${result.status} ${JSON.stringify(result.body).slice(0, 400)}`,
+  ).toBeLessThan(300);
   return result.body;
 }
 function str(value: unknown, what = "id"): string {
-  if (typeof value !== "string" || !value) throw new Error(`expected ${what} string, got ${JSON.stringify(value)?.slice(0, 80)}`);
+  if (typeof value !== "string" || !value)
+    throw new Error(`expected ${what} string, got ${JSON.stringify(value)?.slice(0, 80)}`);
   return value;
 }
 /** Optimistic-concurrency revision, wherever the payload carries it. */
@@ -156,7 +180,10 @@ async function reportRows(page: Page): Promise<string[][]> {
     const table = document.querySelectorAll("table")[0];
     if (!table) return [];
     return [...table.querySelectorAll("tr")].map((tr) =>
-      [...tr.querySelectorAll("th,td")].map((c) => (c.textContent ?? "").trim().replace(/\s+/g, " ")));
+      [...tr.querySelectorAll("th,td")].map((c) =>
+        (c.textContent ?? "").trim().replace(/\s+/g, " "),
+      ),
+    );
   });
 }
 function findRow(rows: string[][], needle: string): string[] {
@@ -166,7 +193,14 @@ function findRow(rows: string[][], needle: string): string[] {
 }
 
 /** Convert the open order through the Actions menu; returns the created doc. */
-async function uiConvert(page: Page, drawerUrl: string, apiBase: string, id: string, button: string, targetKind: string): Promise<{ id: string; documentNumber: string }> {
+async function uiConvert(
+  page: Page,
+  drawerUrl: string,
+  apiBase: string,
+  id: string,
+  button: string,
+  targetKind: string,
+): Promise<{ id: string; documentNumber: string }> {
   await openDrawer(page, drawerUrl);
   const drawer = page.locator('[role="dialog"]').first();
   await drawer.getByRole("button", { name: "Actions", exact: true }).click();
@@ -180,7 +214,10 @@ async function uiConvert(page: Page, drawerUrl: string, apiBase: string, id: str
   expect(res.status(), await res.text()).toBe(200);
   const body = (await res.json()) as { id: string; documentNumber: string; kind: string };
   expect(body.kind).toBe(targetKind);
-  return { id: str(body.id, "converted id"), documentNumber: str(body.documentNumber, "converted number") };
+  return {
+    id: str(body.id, "converted id"),
+    documentNumber: str(body.documentNumber, "converted number"),
+  };
 }
 
 /**
@@ -188,7 +225,11 @@ async function uiConvert(page: Page, drawerUrl: string, apiBase: string, id: str
  * invoice carrying a balance resolves to the open status; balance-less docs
  * show the posted status.
  */
-async function uiSubmitAndPost(page: Page, drawerUrl: string, expectedBadge: "Open" | "Posted"): Promise<void> {
+async function uiSubmitAndPost(
+  page: Page,
+  drawerUrl: string,
+  expectedBadge: "Open" | "Posted",
+): Promise<void> {
   await openDrawer(page, drawerUrl);
   const drawer = page.locator('[role="dialog"]').first();
   await drawer.getByRole("button", { name: "Actions", exact: true }).click();
@@ -262,8 +303,15 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
   let customerId = "";
   let itemName = "";
   // Shipment + invoice ids carried across tests (serial saga).
-  const flow: { ship1: string; inv1: string; so2: string; ship3: string; inv3: string; poC: string; credit: string } =
-    { ship1: "", inv1: "", so2: "", ship3: "", inv3: "", poC: "", credit: "" };
+  const flow: {
+    ship1: string;
+    inv1: string;
+    so2: string;
+    ship3: string;
+    inv3: string;
+    poC: string;
+    credit: string;
+  } = { ship1: "", inv1: "", so2: "", ship3: "", inv3: "", poC: "", credit: "" };
 
   let storageState: Awaited<ReturnType<BrowserContext["storageState"]>>;
 
@@ -300,8 +348,11 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       async function accountId(number: string): Promise<string> {
         const res = await api(page, "GET", `/api/search?q=${number}`);
         const body = req(res, `GET /api/search?q=${number}`);
-        const groups = body.groups as Array<{ hits?: Array<{ id?: string; title?: string; subtitle?: string }> }>;
-        const hit = (groups ?? []).flatMap((g) => g.hits ?? [])
+        const groups = body.groups as Array<{
+          hits?: Array<{ id?: string; title?: string; subtitle?: string }>;
+        }>;
+        const hit = (groups ?? [])
+          .flatMap((g) => g.hits ?? [])
           .find((h) => `${h.title ?? ""} ${h.subtitle ?? ""}`.includes(number));
         expect(hit?.id, `account ${number} resolvable via search`).toBeTruthy();
         return hit!.id!;
@@ -311,7 +362,13 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
         [RNB_ID, "2150", "W3 Goods Received Not Billed", "liability_current_other"],
         [INV_ASSET_ID, "1210", "W3 Inventory Asset", "asset_current_other"],
       ] as const) {
-        const created = await api(page, "POST", "/api/accounts", { name, number, type }, { "Idempotency-Key": id });
+        const created = await api(
+          page,
+          "POST",
+          "/api/accounts",
+          { name, number, type },
+          { "Idempotency-Key": id },
+        );
         if (created.status !== 201 && created.status !== 200) {
           acct[number] = await accountId(number);
         } else {
@@ -323,7 +380,9 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       // the location only when the choice is unambiguous.
       const t = tag("W3I");
       T = t;
-      const loc = await api(page, "POST", "/api/admin/setup/locations", { name: `W3 Warehouse ${t}` });
+      const loc = await api(page, "POST", "/api/admin/setup/locations", {
+        name: `W3 Warehouse ${t}`,
+      });
       const locationId = str(req(loc, "POST setup/locations").id, "location id");
       const sloc = await api(page, "POST", "/api/admin/setup/stock-locations", {
         locationId,
@@ -334,34 +393,50 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       shared.stockLocationId = str(req(sloc, "POST setup/stock-locations").id, "stock location id");
 
       itemName = `W3 Widget ${t}`;
-      const createdItem = await api(page, "POST", "/api/items", {
-        kind: "inventory",
-        name: itemName,
-        incomeAccountId: acct["4000"],
-        isActive: true,
-      }, { "Idempotency-Key": crypto.randomUUID() });
+      const createdItem = await api(
+        page,
+        "POST",
+        "/api/items",
+        {
+          kind: "inventory",
+          name: itemName,
+          incomeAccountId: acct["4000"],
+          isActive: true,
+        },
+        { "Idempotency-Key": crypto.randomUUID() },
+      );
       itemId = str((req(createdItem, "POST /api/items").item as Json).id, "item id");
-      req(await api(page, "PUT", `/api/items/${itemId}/costing`, {
-        costingMethod: "fifo",
-        tracking: "none",
-        assetAccountId: acct["1210"],
-        cogsAccountId: acct["5000"],
-        adjustmentAccountId: acct["5000"],
-        receivedNotBilledAccountId: acct["2150"],
-        baseUnit: "ea",
-        expectedUpdatedAt: null,
-      }), "PUT /api/items/[id]/costing");
+      req(
+        await api(page, "PUT", `/api/items/${itemId}/costing`, {
+          costingMethod: "fifo",
+          tracking: "none",
+          assetAccountId: acct["1210"],
+          cogsAccountId: acct["5000"],
+          adjustmentAccountId: acct["5000"],
+          receivedNotBilledAccountId: acct["2150"],
+          baseUnit: "ea",
+          expectedUpdatedAt: null,
+        }),
+        "PUT /api/items/[id]/costing",
+      );
 
       async function createParty(role: string, displayName: string): Promise<string> {
-        const pDraft = await api(page, "POST", "/api/parties", { displayName, isActive: false, roles: { [role]: { enabled: true } } });
+        const pDraft = await api(page, "POST", "/api/parties", {
+          displayName,
+          isActive: false,
+          roles: { [role]: { enabled: true } },
+        });
         const id = str((req(pDraft, "POST /api/parties").party as Json).id, `${role} id`);
         const got = await api(page, "GET", `/api/parties/${id}`);
-        req(await api(page, "PATCH", `/api/parties/${id}`, {
-          displayName,
-          isActive: true,
-          expectedUpdatedAt: revOf(req(got, "GET party")),
-          changeReason: "W3 E2E: activate test party",
-        }), "PATCH party activate");
+        req(
+          await api(page, "PATCH", `/api/parties/${id}`, {
+            displayName,
+            isActive: true,
+            expectedUpdatedAt: revOf(req(got, "GET party")),
+            changeReason: "W3 E2E: activate test party",
+          }),
+          "PATCH party activate",
+        );
         return id;
       }
       vendorId = await createParty("vendor", `W3 Supplier ${t}`);
@@ -373,7 +448,10 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
     }
   });
 
-  async function freshPage(browser: Browser, baseURL: string | undefined): Promise<{ context: BrowserContext; page: Page }> {
+  async function freshPage(
+    browser: Browser,
+    baseURL: string | undefined,
+  ): Promise<{ context: BrowserContext; page: Page }> {
     const context = await browser.newContext({
       baseURL,
       storageState,
@@ -392,29 +470,48 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
   }
 
   /** Purchase order -> goods receipt -> vendor bill, bill submitted + posted. */
-  async function receiveLot(page: Page, qty: string, unitPrice: string, documentDate: string): Promise<{ poId: string; receiptId: string; billId: string; poNumber: string }> {
-    const poDraft = await api(page, "POST", "/api/purchase-orders/draft", {}, { "Idempotency-Key": crypto.randomUUID() });
+  async function receiveLot(
+    page: Page,
+    qty: string,
+    unitPrice: string,
+    documentDate: string,
+  ): Promise<{ poId: string; receiptId: string; billId: string; poNumber: string }> {
+    const poDraft = await api(
+      page,
+      "POST",
+      "/api/purchase-orders/draft",
+      {},
+      { "Idempotency-Key": crypto.randomUUID() },
+    );
     const poId = str(req(poDraft, "POST /api/purchase-orders/draft").id, "PO id");
     const poGet = await api(page, "GET", `/api/purchase-orders/${poId}`);
     const poEdit = await api(page, "PATCH", `/api/purchase-orders/${poId}`, {
       partyId: vendorId,
       documentDate,
-      lines: [{
-        itemId,
-        accountId: acct["1210"],
-        description: itemName,
-        quantity: qty,
-        unit: "ea",
-        unitPrice,
-      }],
+      lines: [
+        {
+          itemId,
+          accountId: acct["1210"],
+          description: itemName,
+          quantity: qty,
+          unit: "ea",
+          unitPrice,
+        },
+      ],
       expectedUpdatedAt: revOf(req(poGet, "GET PO")),
     });
     const poEdited = req(poEdit, "PATCH PO lines");
-    const poNumber = str(docOf(poEdited).documentNumber ?? docOf(poEdited).document_number, "PO number");
-    req(await api(page, "PATCH", `/api/purchase-orders/${poId}`, {
-      status: "approved",
-      expectedUpdatedAt: revOf(poEdited),
-    }), "PATCH PO issue");
+    const poNumber = str(
+      docOf(poEdited).documentNumber ?? docOf(poEdited).document_number,
+      "PO number",
+    );
+    req(
+      await api(page, "PATCH", `/api/purchase-orders/${poId}`, {
+        status: "approved",
+        expectedUpdatedAt: revOf(poEdited),
+      }),
+      "PATCH PO issue",
+    );
     const poFresh = await api(page, "GET", `/api/purchase-orders/${poId}`);
     const rcpt = await api(page, "POST", `/api/purchase-orders/${poId}/convert`, {
       targetKind: "purchase_receipt",
@@ -427,12 +524,21 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       expectedUpdatedAt: revOf(req(poFresh2, "GET PO fresh2")),
     });
     const billId = str(req(billConv, "POST PO convert bill").id, "bill id");
-    req(await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: billId }), "POST bill submit");
-    req(await api(page, "POST", "/api/documents/actions", { action: "post", documentId: billId }), "POST bill post");
+    req(
+      await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: billId }),
+      "POST bill submit",
+    );
+    req(
+      await api(page, "POST", "/api/documents/actions", { action: "post", documentId: billId }),
+      "POST bill post",
+    );
     return { poId, receiptId, billId, poNumber };
   }
 
-  test("receives two lots at different costs and ties the subledger to the GL", async ({ browser, baseURL }) => {
+  test("receives two lots at different costs and ties the subledger to the GL", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await freshPage(browser, baseURL);
     try {
       const lotA = await receiveLot(page, LOT_A_QTY, LOT_A_COST, DAY);
@@ -457,7 +563,9 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       // subledger value; RNB cleared to zero by the two posted bills; AP
       // carries the $300 owed. Columns: Account # | Account | Debits |
       // Credits | Balance.
-      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(fmtUSD(toCents(toUnits("300.0000"))));
+      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(
+        fmtUSD(toCents(toUnits("300.0000"))),
+      );
       expect(await tbCell(page, "W3 Goods Received Not Billed", 4)).toBe(fmtUSD(0n));
       // Trial balance balances.
       await gotoReport(page, `/reports/trial-balance?${MONTH}`, "Account #");
@@ -468,12 +576,22 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       }
 
       // Both bills posted: exact legs DR RNB / CR AP per bill.
-      for (const [billId, expected] of [[lotA.billId, "100.0000"], [lotB.billId, "200.0000"]] as const) {
+      for (const [billId, expected] of [
+        [lotA.billId, "100.0000"],
+        [lotB.billId, "200.0000"],
+      ] as const) {
         const billGet = await api(page, "GET", `/api/documents/${billId}`);
         const bill = docOf(req(billGet, "GET bill posted"));
         expect(String(bill.status), "bill posted").toBe("posted");
-        const entry = await api(page, "GET", `/api/reports/entry/${str(bill.posted_entry_id, "bill entry id")}`);
-        const legs = (req(entry, "GET bill entry").lines ?? []) as Array<{ account_number?: string; amount?: string }>;
+        const entry = await api(
+          page,
+          "GET",
+          `/api/reports/entry/${str(bill.posted_entry_id, "bill entry id")}`,
+        );
+        const legs = (req(entry, "GET bill entry").lines ?? []) as Array<{
+          account_number?: string;
+          amount?: string;
+        }>;
         const leg = (number: string) => legs.find((l) => l.account_number === number)?.amount;
         expect(leg("2150"), "bill clears RNB").toBe(expected);
         expect(leg("2000"), "bill credits AP").toBe(`-${expected}`);
@@ -488,7 +606,14 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       }
 
       // Audit trail per step.
-      for (const id of [lotA.poId, lotA.receiptId, lotA.billId, lotB.poId, lotB.receiptId, lotB.billId]) {
+      for (const id of [
+        lotA.poId,
+        lotA.receiptId,
+        lotA.billId,
+        lotB.poId,
+        lotB.receiptId,
+        lotB.billId,
+      ]) {
         const audit = await api(page, "GET", `/api/audit/record?table=documents&id=${id}`);
         const rows = (req(audit, "GET audit/record").rows ?? []) as Array<{ action?: string }>;
         expect(rows.length, `audit entries for ${id}`).toBeGreaterThan(0);
@@ -500,33 +625,54 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
   });
 
   /** Sales order seeded + approved through the product order routes. */
-  async function seedSalesOrder(page: Page, qty: string, documentDate: string): Promise<{ soId: string; soNumber: string }> {
-    const soDraft = await api(page, "POST", "/api/sales-orders/draft", {}, { "Idempotency-Key": crypto.randomUUID() });
+  async function seedSalesOrder(
+    page: Page,
+    qty: string,
+    documentDate: string,
+  ): Promise<{ soId: string; soNumber: string }> {
+    const soDraft = await api(
+      page,
+      "POST",
+      "/api/sales-orders/draft",
+      {},
+      { "Idempotency-Key": crypto.randomUUID() },
+    );
     const soId = str(req(soDraft, "POST /api/sales-orders/draft").id, "SO id");
     const soGet = await api(page, "GET", `/api/sales-orders/${soId}`);
     const soEdit = await api(page, "PATCH", `/api/sales-orders/${soId}`, {
       partyId: customerId,
       documentDate,
-      lines: [{
-        itemId,
-        accountId: acct["4000"],
-        description: itemName,
-        quantity: qty,
-        unit: "ea",
-        unitPrice: SELL_PRICE,
-      }],
+      lines: [
+        {
+          itemId,
+          accountId: acct["4000"],
+          description: itemName,
+          quantity: qty,
+          unit: "ea",
+          unitPrice: SELL_PRICE,
+        },
+      ],
       expectedUpdatedAt: revOf(req(soGet, "GET SO")),
     });
     const soEdited = req(soEdit, "PATCH SO lines");
-    const soNumber = str(docOf(soEdited).documentNumber ?? docOf(soEdited).document_number, "SO number");
-    req(await api(page, "PATCH", `/api/sales-orders/${soId}`, {
-      status: "approved",
-      expectedUpdatedAt: revOf(soEdited),
-    }), "PATCH SO issue");
+    const soNumber = str(
+      docOf(soEdited).documentNumber ?? docOf(soEdited).document_number,
+      "SO number",
+    );
+    req(
+      await api(page, "PATCH", `/api/sales-orders/${soId}`, {
+        status: "approved",
+        expectedUpdatedAt: revOf(soEdited),
+      }),
+      "PATCH SO issue",
+    );
     return { soId, soNumber };
   }
 
-  test("ships the first sales order and posts FIFO COGS at shipment", async ({ browser, baseURL }) => {
+  test("ships the first sales order and posts FIFO COGS at shipment", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await freshPage(browser, baseURL);
     try {
       // No COGS row at all before the first shipment: the report omits
@@ -534,12 +680,22 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       await gotoReport(page, `/reports/trial-balance?${MONTH}`, "Account #");
       {
         const rows = await reportRows(page);
-        expect(rows.some((r) => r.some((c) => c.includes("Cost of Goods Sold"))), "no COGS before any shipment").toBe(false);
+        expect(
+          rows.some((r) => r.some((c) => c.includes("Cost of Goods Sold"))),
+          "no COGS before any shipment",
+        ).toBe(false);
       }
       const { soId, soNumber } = await seedSalesOrder(page, "10", DAY);
 
       // UI: pick, pack, ship — Convert to Fulfillment through the order drawer.
-      const ship = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Fulfillment", "sales_fulfillment");
+      const ship = await uiConvert(
+        page,
+        `/sales-orders?order=${soId}`,
+        "/api/sales-orders",
+        soId,
+        "Convert to Fulfillment",
+        "sales_fulfillment",
+      );
       flow.ship1 = ship.id;
       expect(ship.documentNumber.startsWith("SHIP-"), ship.documentNumber).toBe(true);
       await page.goto("/sales-orders");
@@ -547,11 +703,22 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       // The shipment is linked from its order's drawer (fulfillments are
       // operational documents, not rows on the orders list).
       await openDrawer(page, `/sales-orders?order=${soId}`);
-      await page.locator('[role="dialog"]').first().getByRole("button", { name: "Origin / Converted into", exact: true }).click();
+      await page
+        .locator('[role="dialog"]')
+        .first()
+        .getByRole("button", { name: "Origin / Converted into", exact: true })
+        .click();
       await expect(page.locator('[role="dialog"]').first()).toContainText(ship.documentNumber);
 
       // UI: invoice the shipment, submit, post.
-      const inv = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Invoice", "customer_invoice");
+      const inv = await uiConvert(
+        page,
+        `/sales-orders?order=${soId}`,
+        "/api/sales-orders",
+        soId,
+        "Convert to Invoice",
+        "customer_invoice",
+      );
       flow.inv1 = inv.id;
       await uiSubmitAndPost(page, `/ar/invoices?doc=${inv.id}`, "Open");
 
@@ -571,7 +738,9 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
         await expect(ohRow).toContainText("10.0000");
         await expect(ohRow).toContainText("$200.00");
       }
-      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(fmtUSD(toCents(toUnits("200.0000"))));
+      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(
+        fmtUSD(toCents(toUnits("200.0000"))),
+      );
 
       // AR aging carries the $500 open invoice.
       await gotoReport(page, `/reports/aging?${MONTH}&side=ar`, "Current");
@@ -602,7 +771,8 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       const drawer = page.locator('[role="dialog"]').first();
       await drawer.getByRole("button", { name: "Actions", exact: true }).click();
       const waited = page.waitForResponse(
-        (r) => r.url().endsWith(`/api/sales-orders/${soId}/convert`) && r.request().method() === "POST",
+        (r) =>
+          r.url().endsWith(`/api/sales-orders/${soId}/convert`) && r.request().method() === "POST",
       );
       await page.locator("button", { hasText: "Convert to Fulfillment" }).click();
       const res = await waited;
@@ -618,34 +788,61 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       // Nothing moved: the failed shipment leaves on hand and the GL alone.
       await page.goto("/sales-orders");
       await expect(page.locator("main")).toContainText(soNumber);
-      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(fmtUSD(toCents(toUnits("200.0000"))));
-      expect(await tbCell(page, "Cost of Goods Sold", 4)).toBe(fmtUSD(toCents(toUnits("100.0000"))));
+      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(
+        fmtUSD(toCents(toUnits("200.0000"))),
+      );
+      expect(await tbCell(page, "Cost of Goods Sold", 4)).toBe(
+        fmtUSD(toCents(toUnits("100.0000"))),
+      );
     } finally {
       await context.close();
     }
   });
 
-  test("ships again, restocks, then unwinds the return at the cost it left at", async ({ browser, baseURL }) => {
+  test("ships again, restocks, then unwinds the return at the cost it left at", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await freshPage(browser, baseURL);
     try {
       const { soId, soNumber } = await seedSalesOrder(page, "2", DAY);
-      const ship = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Fulfillment", "sales_fulfillment");
+      const ship = await uiConvert(
+        page,
+        `/sales-orders?order=${soId}`,
+        "/api/sales-orders",
+        soId,
+        "Convert to Fulfillment",
+        "sales_fulfillment",
+      );
       flow.ship3 = ship.id;
-      const inv = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Invoice", "customer_invoice");
+      const inv = await uiConvert(
+        page,
+        `/sales-orders?order=${soId}`,
+        "/api/sales-orders",
+        soId,
+        "Convert to Invoice",
+        "customer_invoice",
+      );
       flow.inv3 = inv.id;
       await uiSubmitAndPost(page, `/ar/invoices?doc=${inv.id}`, "Open");
 
       // Second shipment consumes 2 units @ $20.00 from lot B: COGS $140.00
       // cumulative, on hand 8 worth $160.00.
-      expect(await tbCell(page, "Cost of Goods Sold", 4)).toBe(fmtUSD(toCents(toUnits("140.0000"))));
-      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(fmtUSD(toCents(toUnits("160.0000"))));
+      expect(await tbCell(page, "Cost of Goods Sold", 4)).toBe(
+        fmtUSD(toCents(toUnits("140.0000"))),
+      );
+      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(
+        fmtUSD(toCents(toUnits("160.0000"))),
+      );
 
       // Lot C arrives before the return is processed: 10 units @ $30.00.
       // On hand 18, value $460.00 — and the prevailing average ($25.5556)
       // now differs from the $20.00 the returned units left at.
       const lotC = await receiveLot(page, "10", "30.0000", DAY);
       flow.poC = lotC.poId;
-      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(fmtUSD(toCents(toUnits("460.0000"))));
+      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(
+        fmtUSD(toCents(toUnits("460.0000"))),
+      );
       await page.goto("/purchase-orders");
       await expect(page.locator("main")).toContainText(lotC.poNumber);
 
@@ -665,39 +862,70 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       });
       const rmaBody = req(rma, "POST inventory/actions receive");
       // Leg-level proof of the cost: DR inventory $40.00 / CR COGS $40.00.
-      const rmaEntry = await api(page, "GET", `/api/reports/entry/${str(rmaBody.entryId, "RMA entry id")}`);
-      const rmaLegs = (req(rmaEntry, "GET RMA entry").lines ?? []) as Array<{ account_number?: string; amount?: string }>;
+      const rmaEntry = await api(
+        page,
+        "GET",
+        `/api/reports/entry/${str(rmaBody.entryId, "RMA entry id")}`,
+      );
+      const rmaLegs = (req(rmaEntry, "GET RMA entry").lines ?? []) as Array<{
+        account_number?: string;
+        amount?: string;
+      }>;
       const rmaLeg = (number: string) => rmaLegs.find((l) => l.account_number === number)?.amount;
       expect(rmaLeg("1210"), "RMA restores inventory $40 at original cost").toBe("40.0000");
       expect(rmaLeg("5000"), "RMA unwinds COGS $40").toBe("-40.0000");
 
       // $100 credit memo against the invoice (2 units @ $50.00), then post.
-      const creditDraft = await api(page, "POST", "/api/documents/draft", { kind: "customer_credit" });
+      const creditDraft = await api(page, "POST", "/api/documents/draft", {
+        kind: "customer_credit",
+      });
       const creditId = str(req(creditDraft, "POST customer_credit draft").id, "credit id");
       flow.credit = creditId;
       const creditGet = await api(page, "GET", `/api/documents/${creditId}`);
-      req(await api(page, "PATCH", `/api/documents/${creditId}`, {
-        partyId: customerId,
-        documentDate: DAY,
-        lines: [{
-          itemId,
-          accountId: acct["4000"],
-          description: `Return of ${itemName}`,
-          quantity: "2",
-          unitPrice: SELL_PRICE,
-          // Document lines carry their own amount (unlike order lines,
-          // which the order writer prices): 2 x $50.00.
-          amount: "100.0000",
-        }],
-        expectedUpdatedAt: revOf(req(creditGet, "GET credit draft")),
-      }), "PATCH credit lines");
-      req(await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: creditId }), "POST credit submit");
-      req(await api(page, "POST", "/api/documents/actions", { action: "post", documentId: creditId }), "POST credit post");
+      req(
+        await api(page, "PATCH", `/api/documents/${creditId}`, {
+          partyId: customerId,
+          documentDate: DAY,
+          lines: [
+            {
+              itemId,
+              accountId: acct["4000"],
+              description: `Return of ${itemName}`,
+              quantity: "2",
+              unitPrice: SELL_PRICE,
+              // Document lines carry their own amount (unlike order lines,
+              // which the order writer prices): 2 x $50.00.
+              amount: "100.0000",
+            },
+          ],
+          expectedUpdatedAt: revOf(req(creditGet, "GET credit draft")),
+        }),
+        "PATCH credit lines",
+      );
+      req(
+        await api(page, "POST", "/api/documents/actions", {
+          action: "submit",
+          documentId: creditId,
+        }),
+        "POST credit submit",
+      );
+      req(
+        await api(page, "POST", "/api/documents/actions", { action: "post", documentId: creditId }),
+        "POST credit post",
+      );
       // The credit reverses revenue, not stock: DR revenue $100 / CR AR $100.
       const creditGet2 = await api(page, "GET", `/api/documents/${creditId}`);
-      const creditEntry = await api(page, "GET", `/api/reports/entry/${str(docOf(req(creditGet2, "GET credit posted")).posted_entry_id, "credit entry id")}`);
-      const creditLegs = (req(creditEntry, "GET credit entry").lines ?? []) as Array<{ account_number?: string; amount?: string }>;
-      const creditLeg = (number: string) => creditLegs.find((l) => l.account_number === number)?.amount;
+      const creditEntry = await api(
+        page,
+        "GET",
+        `/api/reports/entry/${str(docOf(req(creditGet2, "GET credit posted")).posted_entry_id, "credit entry id")}`,
+      );
+      const creditLegs = (req(creditEntry, "GET credit entry").lines ?? []) as Array<{
+        account_number?: string;
+        amount?: string;
+      }>;
+      const creditLeg = (number: string) =>
+        creditLegs.find((l) => l.account_number === number)?.amount;
       expect(creditLeg("4000"), "credit reverses revenue $100").toBe("100.0000");
       for (const id of [lotC.poId, lotC.receiptId, lotC.billId]) {
         const audit = await api(page, "GET", `/api/audit/record?table=documents&id=${id}`);
@@ -713,8 +941,12 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
         await expect(ohRow).toContainText("20.0000");
         await expect(ohRow).toContainText("$500.00");
       }
-      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(fmtUSD(toCents(toUnits("500.0000"))));
-      expect(await tbCell(page, "Cost of Goods Sold", 4)).toBe(fmtUSD(toCents(toUnits("100.0000"))));
+      expect(await tbCell(page, "W3 Inventory Asset", 4)).toBe(
+        fmtUSD(toCents(toUnits("500.0000"))),
+      );
+      expect(await tbCell(page, "Cost of Goods Sold", 4)).toBe(
+        fmtUSD(toCents(toUnits("100.0000"))),
+      );
 
       // AR nets to $500 ($600 billed, $100 credited).
       await page.goto("/sales-orders");
@@ -736,7 +968,10 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
     }
   });
 
-  test("closing tie-out: subledger, warehouse, reports, and ledger agree", async ({ browser, baseURL }) => {
+  test("closing tie-out: subledger, warehouse, reports, and ledger agree", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await freshPage(browser, baseURL);
     try {
       // Trial balance balances and carries the suite-exact economics:

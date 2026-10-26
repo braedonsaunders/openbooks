@@ -44,11 +44,8 @@ import type {
 } from "../../../../lib/pre-billing";
 import { PrebillDrawer } from "./PrebillDrawer";
 import { RecordTabs } from "../../../../components/module-home/record-tabs";
-import {
-  prebillDisplayAmount, projectWorkspace,
-  type WorkspaceEntry,
-} from "./workspace-model";
-import { DateField } from '../../../../components/date-field'
+import { prebillDisplayAmount, projectWorkspace, type WorkspaceEntry } from "./workspace-model";
+import { DateField } from "../../../../components/date-field";
 
 type ProjectOption = {
   id: string;
@@ -58,7 +55,10 @@ type ProjectOption = {
   lineBuilder: string;
 };
 
-export const STAGE_TONE: Record<PrebillStage, "secondary" | "warning" | "default" | "success" | "outline" | "destructive"> = {
+export const STAGE_TONE: Record<
+  PrebillStage,
+  "secondary" | "warning" | "default" | "success" | "outline" | "destructive"
+> = {
   draft: "secondary",
   review: "warning",
   ready: "default",
@@ -69,7 +69,10 @@ export const STAGE_TONE: Record<PrebillStage, "secondary" | "warning" | "default
   void: "outline",
 };
 
-export async function requestJson<T = Record<string, unknown>>(url: string, init?: RequestInit): Promise<T> {
+export async function requestJson<T = Record<string, unknown>>(
+  url: string,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) throw new Error(await readApiErrorMessage(response, "Request failed"));
   return (await response.json()) as T;
@@ -137,9 +140,18 @@ export function PreBillingWorkspace({
     }
   }
 
-  const projection = useMemo(() => projectWorkspace({
-    prebills, unbilled, query, stage: requestedStage, approvalFlowsConfigured, customerPortalEnabled,
-  }), [prebills, unbilled, query, requestedStage, approvalFlowsConfigured, customerPortalEnabled]);
+  const projection = useMemo(
+    () =>
+      projectWorkspace({
+        prebills,
+        unbilled,
+        query,
+        stage: requestedStage,
+        approvalFlowsConfigured,
+        customerPortalEnabled,
+      }),
+    [prebills, unbilled, query, requestedStage, approvalFlowsConfigured, customerPortalEnabled],
+  );
 
   useEffect(() => {
     if (requestedStage === null || requestedStage === projection.activeStage) return;
@@ -158,12 +170,18 @@ export function PreBillingWorkspace({
     <EmptyState
       icon={<FileText />}
       title={projects.length === 0 ? t("empty.noProjectsTitle") : t("empty.nothingToBillTitle")}
-      description={projects.length === 0 ? t("empty.noProjectsDescription") : t("empty.nothingToBillDescription")}
-      action={projects.length === 0 && canManage ? (
-        <Button asChild variant="outline">
-          <Link href="/admin/setup/project-types">{t("empty.configureProjectTypes")}</Link>
-        </Button>
-      ) : undefined}
+      description={
+        projects.length === 0
+          ? t("empty.noProjectsDescription")
+          : t("empty.nothingToBillDescription")
+      }
+      action={
+        projects.length === 0 && canManage ? (
+          <Button asChild variant="outline">
+            <Link href="/admin/setup/project-types">{t("empty.configureProjectTypes")}</Link>
+          </Button>
+        ) : undefined
+      }
     />
   ) : null;
 
@@ -186,7 +204,9 @@ export function PreBillingWorkspace({
               key={mode}
               type="button"
               aria-pressed={view === mode}
-              onClick={() => switchView(() => navigatePresentation({ view: mode === "board" ? null : "table" }))}
+              onClick={() =>
+                switchView(() => navigatePresentation({ view: mode === "board" ? null : "table" }))
+              }
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors",
                 view === mode
@@ -194,7 +214,11 @@ export function PreBillingWorkspace({
                   : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200",
               )}
             >
-              {mode === "board" ? <LayoutGrid className="size-3.5" /> : <Rows3 className="size-3.5" />}
+              {mode === "board" ? (
+                <LayoutGrid className="size-3.5" />
+              ) : (
+                <Rows3 className="size-3.5" />
+              )}
               {mode === "board" ? t("toolbar.board") : t("toolbar.table")}
             </button>
           ))}
@@ -213,14 +237,22 @@ export function PreBillingWorkspace({
         label={t("table.stageFilter")}
         active={projection.activeStage}
         onChange={(stage) => navigatePresentation({ stage })}
-        tabs={projection.stages.map(({ key, count }) => ({ key, label: t(`stages.${key}`), count }))}
+        tabs={projection.stages.map(({ key, count }) => ({
+          key,
+          label: t(`stages.${key}`),
+          count,
+        }))}
         className="min-w-0 max-w-full border-b border-slate-200 dark:border-slate-800"
       >
         <div className="min-w-0 pt-4">
           {view === "board" ? (
             <>
               {emptyWorkspace}
-              <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-start gap-3 pb-2" role="list" aria-label={t("board.aria")}>
+              <div
+                className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-start gap-3 pb-2"
+                role="list"
+                aria-label={t("board.aria")}
+              >
                 {projection.lanes.map((lane) => (
                   <BoardLane
                     key={lane.key}
@@ -234,7 +266,9 @@ export function PreBillingWorkspace({
                 ))}
               </div>
             </>
-          ) : projection.nothingYet ? emptyWorkspace : (
+          ) : projection.nothingYet ? (
+            emptyWorkspace
+          ) : (
             <PrebillTable
               rows={projection.rows}
               total={projection.total}
@@ -310,15 +344,29 @@ function BoardLane({
             {count}
           </span>
         </h3>
-        <span className="min-w-0 break-words text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{money(total)}</span>
+        <span className="min-w-0 break-words text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
+          {money(total)}
+        </span>
       </header>
       <div className="flex max-h-[calc(100vh-16rem)] min-h-24 flex-col gap-2 overflow-y-auto p-2">
         {count === 0 ? (
-          <p className="px-1 py-3 text-xs text-slate-500 dark:text-slate-400">{t(`stageEmpty.${column}`)}</p>
+          <p className="px-1 py-3 text-xs text-slate-500 dark:text-slate-400">
+            {t(`stageEmpty.${column}`)}
+          </p>
         ) : (
-          rows.map((entry) => entry.kind === "unbilled"
-            ? <UnbilledCard key={entry.key} row={entry.source} money={money} canManage={canManage} onPrebill={onPrebill} />
-            : <PackageCard key={entry.key} row={entry.source} money={money} onOpen={onOpen} />)
+          rows.map((entry) =>
+            entry.kind === "unbilled" ? (
+              <UnbilledCard
+                key={entry.key}
+                row={entry.source}
+                money={money}
+                canManage={canManage}
+                onPrebill={onPrebill}
+              />
+            ) : (
+              <PackageCard key={entry.key} row={entry.source} money={money} onOpen={onOpen} />
+            ),
+          )
         )}
       </div>
     </section>
@@ -338,17 +386,30 @@ function UnbilledCard({
 }) {
   const t = useTranslations("projects.preBilling");
   const today = useBusinessToday();
-  const ageDays = Math.max(0, Math.round((Date.parse(today) - Date.parse(row.oldestWorkDate)) / 86_400_000));
+  const ageDays = Math.max(
+    0,
+    Math.round((Date.parse(today) - Date.parse(row.oldestWorkDate)) / 86_400_000),
+  );
   return (
     <article className="rounded-lg border border-dashed border-slate-300 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
-      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.customerName ?? row.projectName}</p>
+      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+        {row.customerName ?? row.projectName}
+      </p>
       <p className="truncate text-xs text-slate-500 dark:text-slate-400">{row.projectName}</p>
-      <p className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">{money(row.unbilledAmount)}</p>
+      <p className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">
+        {money(row.unbilledAmount)}
+      </p>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-        <span className={cn(
-          "inline-flex items-center gap-1 text-xs",
-          ageDays > 60 ? "text-red-600 dark:text-red-400" : ageDays > 30 ? "text-amber-700 dark:text-amber-300" : "text-slate-500",
-        )}>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 text-xs",
+            ageDays > 60
+              ? "text-red-600 dark:text-red-400"
+              : ageDays > 30
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-slate-500",
+          )}
+        >
           <CalendarClock className="size-3.5" />
           {t("card.oldest", { days: ageDays })}
         </span>
@@ -362,7 +423,15 @@ function UnbilledCard({
   );
 }
 
-function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (value: string) => string; onOpen: (id: string) => void }) {
+function PackageCard({
+  row,
+  money,
+  onOpen,
+}: {
+  row: PrebillListRow;
+  money: (value: string) => string;
+  onOpen: (id: string) => void;
+}) {
   const t = useTranslations("projects.preBilling");
   const disputed = row.stage === "draft" && row.customerDecision === "disputed";
   return (
@@ -376,7 +445,9 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.customerName ?? row.projectName}</p>
+          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {row.customerName ?? row.projectName}
+          </p>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">{row.projectName}</p>
         </div>
         <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -387,11 +458,15 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
         {money(prebillDisplayAmount(row))}
       </p>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        {row.periodStart ? t("card.period", { start: row.periodStart, end: row.periodEnd }) : t("card.through", { date: row.periodEnd })}
+        {row.periodStart
+          ? t("card.period", { start: row.periodStart, end: row.periodEnd })
+          : t("card.through", { date: row.periodEnd })}
       </p>
       <div className="mt-2 flex flex-wrap gap-1">
         <Badge variant="outline">{t("card.lines", { count: row.lineCount })}</Badge>
-        {row.heldLineCount > 0 ? <Badge variant="warning">{t("card.held", { count: row.heldLineCount })}</Badge> : null}
+        {row.heldLineCount > 0 ? (
+          <Badge variant="warning">{t("card.held", { count: row.heldLineCount })}</Badge>
+        ) : null}
         {disputed ? (
           <Badge variant="destructive">
             <MessageSquareWarning className="mr-1 size-3" />
@@ -401,10 +476,14 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
         {row.customerDecision === "accepted" && row.stage !== "draft" ? (
           <Badge variant="success">
             <CheckCircle2 className="mr-1 size-3" />
-            {row.customerPoNumber ? t("card.acceptedPo", { po: row.customerPoNumber }) : t("card.accepted")}
+            {row.customerPoNumber
+              ? t("card.acceptedPo", { po: row.customerPoNumber })
+              : t("card.accepted")}
           </Badge>
         ) : null}
-        {row.customerReviewRequired && row.customerDecision !== "accepted" && (row.stage === "draft" || row.stage === "review" || row.stage === "ready") ? (
+        {row.customerReviewRequired &&
+        row.customerDecision !== "accepted" &&
+        (row.stage === "draft" || row.stage === "review" || row.stage === "ready") ? (
           <Badge variant="secondary">{t("card.reviewRequired")}</Badge>
         ) : null}
         {row.stage === "customer" && row.customerViewedAt ? (
@@ -423,7 +502,9 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
           </Badge>
         ) : null}
         {row.stage === "sent" && row.invoiceOpenBalance ? (
-          <Badge variant="outline">{t("card.open", { amount: money(row.invoiceOpenBalance) })}</Badge>
+          <Badge variant="outline">
+            {t("card.open", { amount: money(row.invoiceOpenBalance) })}
+          </Badge>
         ) : null}
       </div>
     </button>
@@ -431,7 +512,14 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
 }
 
 function PrebillTable({
-  rows, total, resetPageKey, onOpen, onPrebill, canManage, selectedId, money,
+  rows,
+  total,
+  resetPageKey,
+  onOpen,
+  onPrebill,
+  canManage,
+  selectedId,
+  money,
 }: {
   rows: WorkspaceEntry[];
   total: string;
@@ -459,26 +547,39 @@ function PrebillTable({
         onRowClick={open}
         rowInteractive={(entry) => entry.kind === "prebill" || canManage}
         rowSelected={(entry) => entry.kind === "prebill" && entry.source.id === selectedId}
-        empty={<EmptyState icon={<FileText />} title={t("table.emptyTitle")} description={t("table.emptyDescription")} />}
-        footer={rows.length ? (
-          <TableRow>
-            <TableCell colSpan={4} className="font-medium">{t("table.total")}</TableCell>
-            <TableCell className="text-right font-medium tabular-nums">{money(total)}</TableCell>
-            <TableCell />
-          </TableRow>
-        ) : undefined}
+        empty={
+          <EmptyState
+            icon={<FileText />}
+            title={t("table.emptyTitle")}
+            description={t("table.emptyDescription")}
+          />
+        }
+        footer={
+          rows.length ? (
+            <TableRow>
+              <TableCell colSpan={4} className="font-medium">
+                {t("table.total")}
+              </TableCell>
+              <TableCell className="text-right font-medium tabular-nums">{money(total)}</TableCell>
+              <TableCell />
+            </TableRow>
+          ) : undefined
+        }
         columns={[
           {
             key: "worksheet",
             header: t("table.worksheet"),
-            cell: (entry) => entry.kind === "unbilled" ? (
-              <span className="text-slate-500">{t("stages.unbilled")}</span>
-            ) : (
-              <>
-                <p className="font-medium">{entry.source.worksheetNumber}</p>
-                {entry.source.invoiceNumber ? <p className="text-xs text-slate-500">{entry.source.invoiceNumber}</p> : null}
-              </>
-            ),
+            cell: (entry) =>
+              entry.kind === "unbilled" ? (
+                <span className="text-slate-500">{t("stages.unbilled")}</span>
+              ) : (
+                <>
+                  <p className="font-medium">{entry.source.worksheetNumber}</p>
+                  {entry.source.invoiceNumber ? (
+                    <p className="text-xs text-slate-500">{entry.source.invoiceNumber}</p>
+                  ) : null}
+                </>
+              ),
           },
           {
             key: "customer",
@@ -495,8 +596,13 @@ function PrebillTable({
             header: t("table.period"),
             cell: (entry) => (
               <span className="whitespace-nowrap text-sm">
-                {entry.kind === "unbilled" ? t("billRun.oldest", { date: entry.source.oldestWorkDate })
-                  : entry.source.periodStart ? t("card.period", { start: entry.source.periodStart, end: entry.source.periodEnd })
+                {entry.kind === "unbilled"
+                  ? t("billRun.oldest", { date: entry.source.oldestWorkDate })
+                  : entry.source.periodStart
+                    ? t("card.period", {
+                        start: entry.source.periodStart,
+                        end: entry.source.periodEnd,
+                      })
                     : t("card.through", { date: entry.source.periodEnd })}
               </span>
             ),
@@ -506,21 +612,38 @@ function PrebillTable({
             header: t("table.stage"),
             cell: (entry) => (
               <span className="flex flex-wrap items-center gap-1">
-                <Badge variant={entry.kind === "unbilled" ? "outline" : STAGE_TONE[entry.stage]}>{t(`stages.${entry.stage}`)}</Badge>
-                {entry.kind === "prebill" && entry.stage === "draft" && entry.source.customerDecision === "disputed" ? (
-                  <AlertTriangle className="size-4 text-red-600" aria-label={t("card.disputed", { count: entry.source.disputedLineCount })} />
+                <Badge variant={entry.kind === "unbilled" ? "outline" : STAGE_TONE[entry.stage]}>
+                  {t(`stages.${entry.stage}`)}
+                </Badge>
+                {entry.kind === "prebill" &&
+                entry.stage === "draft" &&
+                entry.source.customerDecision === "disputed" ? (
+                  <AlertTriangle
+                    className="size-4 text-red-600"
+                    aria-label={t("card.disputed", { count: entry.source.disputedLineCount })}
+                  />
                 ) : null}
               </span>
             ),
           },
           {
-            key: "amount", header: t("table.amount"), align: "right", className: "tabular-nums",
+            key: "amount",
+            header: t("table.amount"),
+            align: "right",
+            className: "tabular-nums",
             cell: (entry) => money(entry.amount),
           },
           {
-            key: "balance", header: t("table.openBalance"), align: "right", className: "tabular-nums",
-            cell: (entry) => entry.kind === "prebill" && entry.source.invoiceStatus === "posted" && entry.source.invoiceOpenBalance != null
-              ? money(entry.source.invoiceOpenBalance) : "—",
+            key: "balance",
+            header: t("table.openBalance"),
+            align: "right",
+            className: "tabular-nums",
+            cell: (entry) =>
+              entry.kind === "prebill" &&
+              entry.source.invoiceStatus === "posted" &&
+              entry.source.invoiceOpenBalance != null
+                ? money(entry.source.invoiceOpenBalance)
+                : "—",
           },
         ]}
       />
@@ -595,16 +718,20 @@ function BillRunDrawer({
       size="lg"
       title={t("billRun.title")}
       description={t("billRun.description")}
-      headerActions={result ? (
-        <Button onClick={() => onFinished(null)}>{t("billRun.done")}</Button>
-      ) : (
-        <>
-          <Button variant="outline" onClick={onClose}>{t("billRun.cancel")}</Button>
-          <Button disabled={busy || !periodEnd || selectedIds.size === 0} onClick={run}>
-            {busy ? t("billRun.running") : t("billRun.submit", { count: selectedIds.size })}
-          </Button>
-        </>
-      )}
+      headerActions={
+        result ? (
+          <Button onClick={() => onFinished(null)}>{t("billRun.done")}</Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={onClose}>
+              {t("billRun.cancel")}
+            </Button>
+            <Button disabled={busy || !periodEnd || selectedIds.size === 0} onClick={run}>
+              {busy ? t("billRun.running") : t("billRun.submit", { count: selectedIds.size })}
+            </Button>
+          </>
+        )
+      }
     >
       {result ? (
         <div className="space-y-4">
@@ -612,11 +739,18 @@ function BillRunDrawer({
             {t("billRun.created", { count: result.created.length })}
           </p>
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{t("billRun.skippedTitle")}</h3>
+            <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("billRun.skippedTitle")}
+            </h3>
             <ul className="space-y-2">
               {result.skipped.map((entry) => (
-                <li key={entry.projectId} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-                  <p className="font-medium text-slate-900 dark:text-slate-100">{entry.projectName}</p>
+                <li
+                  key={entry.projectId}
+                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20"
+                >
+                  <p className="font-medium text-slate-900 dark:text-slate-100">
+                    {entry.projectName}
+                  </p>
                   <p className="text-amber-800 dark:text-amber-200">{entry.reason}</p>
                 </li>
               ))}
@@ -628,20 +762,34 @@ function BillRunDrawer({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="bill-run-end">{t("billRun.cutoff")}</Label>
-              <DateField id="bill-run-end" value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
+              <DateField
+                id="bill-run-end"
+                value={periodEnd}
+                onChange={(value) => setPeriodEnd(value)}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bill-run-start">{t("billRun.start")}</Label>
-              <DateField id="bill-run-start" value={periodStart} onChange={(value) => setPeriodStart(value)} />
+              <DateField
+                id="bill-run-start"
+                value={periodStart}
+                onChange={(value) => setPeriodStart(value)}
+              />
             </div>
           </div>
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("billRun.projects")}</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("billRun.projects")}
+              </h3>
               <button
                 type="button"
                 className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-                onClick={() => setSelectedIds(allSelected ? new Set() : new Set(unbilled.map((row) => row.projectId)))}
+                onClick={() =>
+                  setSelectedIds(
+                    allSelected ? new Set() : new Set(unbilled.map((row) => row.projectId)),
+                  )
+                }
               >
                 {allSelected ? t("billRun.selectNone") : t("billRun.selectAll")}
               </button>
@@ -650,14 +798,26 @@ function BillRunDrawer({
               {unbilled.map((row) => (
                 <li key={row.projectId}>
                   <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-900">
-                    <input type="checkbox" checked={selectedIds.has(row.projectId)} onChange={() => toggle(row.projectId)} />
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(row.projectId)}
+                      onChange={() => toggle(row.projectId)}
+                    />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">{row.projectName}</span>
-                      <span className="block truncate text-xs text-slate-500">{row.customerName ?? "—"} · {row.projectTypeName}</span>
+                      <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {row.projectName}
+                      </span>
+                      <span className="block truncate text-xs text-slate-500">
+                        {row.customerName ?? "—"} · {row.projectTypeName}
+                      </span>
                     </span>
                     <span className="text-right">
-                      <span className="block text-sm font-semibold tabular-nums">{money(row.unbilledAmount)}</span>
-                      <span className="block text-xs text-slate-500">{t("billRun.oldest", { date: row.oldestWorkDate })}</span>
+                      <span className="block text-sm font-semibold tabular-nums">
+                        {money(row.unbilledAmount)}
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        {t("billRun.oldest", { date: row.oldestWorkDate })}
+                      </span>
                     </span>
                   </label>
                 </li>
@@ -666,7 +826,12 @@ function BillRunDrawer({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="bill-run-notes">{t("billRun.notes")}</Label>
-            <Textarea id="bill-run-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <Textarea
+              id="bill-run-notes"
+              rows={3}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+            />
           </div>
         </div>
       )}

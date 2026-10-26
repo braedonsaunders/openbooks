@@ -178,7 +178,8 @@ export async function listProcesses(query: {
     const today = await businessToday(orgId);
     const statusFilter =
       segment === "completed" ? "completed" : segment === "cancelled" ? "cancelled" : "open";
-    const rows = await db.execute<ProcessListRow>(sql`
+    const rows = await db.execute<ProcessListRow>(
+      sql`
       select p.id, p.kind, p.effective_date::text as effective_date, p.status,
              p.employment_id, e.worker_party_id::text as worker_party_id,
              wp.display_name as worker_name,
@@ -199,11 +200,16 @@ export async function listProcesses(query: {
            select value::uuid from jsonb_array_elements_text(${JSON.stringify([...allowed])}::jsonb) as _a(value))`
          }
        order by p.effective_date desc, p.id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (segment === "needs_action") {
-      const person = (await db.execute<{ party_id: string | null }>(
-          sql`select party_id from users where org_id=${orgId} and id=${actorId} and is_active`, "objects",
-        ))[0];
+      const person = (
+        await db.execute<{ party_id: string | null }>(
+          sql`select party_id from users where org_id=${orgId} and id=${actorId} and is_active`,
+          "objects",
+        )
+      )[0];
       const manages = await actorHasPermission(db, orgId, actorId, "hrm.process.manage");
       return rows
         .filter((row) =>
@@ -286,7 +292,8 @@ export async function getProcess(query: {
   const processId = requireId(query.processId, "processId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
-    const head = (await db.execute<{
+    const head = (
+      await db.execute<{
         id: string;
         kind: string;
         effective_date: string;
@@ -295,7 +302,8 @@ export async function getProcess(query: {
         worker_party_id: string;
         worker_name: string;
         opened_by_change_id: string | null;
-      }>(sql`
+      }>(
+        sql`
       select p.id, p.kind, p.effective_date::text as effective_date, p.status,
              p.employment_id::text as employment_id,
              e.worker_party_id::text as worker_party_id,
@@ -305,7 +313,10 @@ export async function getProcess(query: {
         join worker_employments e on e.org_id = p.org_id and e.id = p.employment_id
         join parties wp on wp.org_id = p.org_id and wp.id = e.worker_party_id
        where p.org_id = ${orgId} and p.id = ${processId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!head) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -339,26 +350,27 @@ async function assembleDetail(
   actorId: string,
 ): Promise<ProcessDetail> {
   const rows = await exec.execute<{
-      id: string;
-      position: number;
-      title: string;
-      description: string | null;
-      owner_kind: string;
-      owner_party_id: string | null;
-      due_on: string;
-      required: boolean;
-      evidence_kind: string;
-      status: string;
-      done_by: string | null;
-      done_by_name: string | null;
-      skip_reason: string | null;
-      attachment_id: string | null;
-      design: unknown;
-      response: Record<string, unknown> | null;
-      approval_status: string;
-      template_step_id: string | null;
-      done_at: string | null;
-    }>(sql`
+    id: string;
+    position: number;
+    title: string;
+    description: string | null;
+    owner_kind: string;
+    owner_party_id: string | null;
+    due_on: string;
+    required: boolean;
+    evidence_kind: string;
+    status: string;
+    done_by: string | null;
+    done_by_name: string | null;
+    skip_reason: string | null;
+    attachment_id: string | null;
+    design: unknown;
+    response: Record<string, unknown> | null;
+    approval_status: string;
+    template_step_id: string | null;
+    done_at: string | null;
+  }>(
+    sql`
     select design,response,approval_status,template_step_id,done_at::text, id, position, title, description, owner_kind,
            owner_party_id::text as owner_party_id, due_on::text as due_on,
            required, evidence_kind, status,
@@ -367,7 +379,9 @@ async function assembleDetail(
       from hrm_process_steps
      where org_id = ${orgId} and process_id = ${head.id}
      order by position
-  `, "objects");
+  `,
+    "objects",
+  );
   const maySkipRequired = await actorHasPermission(exec, orgId, actorId, "hrm.employment.manage");
   const summary = summarizeProgress(
     rows.map((row) => ({ required: row.required, status: row.status })),
@@ -449,7 +463,8 @@ export async function getOnboardingOverview(query: {
     await assertHrmFeatureOn(db, orgId);
     const allowed = await requireAggregateProcessRead(db, orgId, actorId);
     const today = await businessToday(orgId);
-    const rows = await db.execute<ProcessListRow>(sql`
+    const rows = await db.execute<ProcessListRow>(
+      sql`
       select p.id, p.kind, p.effective_date::text as effective_date, p.status,
              p.employment_id, e.worker_party_id::text as worker_party_id,
              wp.display_name as worker_name,
@@ -470,26 +485,29 @@ export async function getOnboardingOverview(query: {
            select value::uuid from jsonb_array_elements_text(${JSON.stringify([...allowed])}::jsonb) as _a(value))`
          }
        order by p.effective_date desc, p.id
-    `, "objects");
+    `,
+      "objects",
+    );
     const openProcesses = rows.map((row) => toListItem(row, today));
     const stepRows = await db.execute<{
-        id: string;
-        process_id: string;
-        process_kind: string;
-        worker_name: string;
-        position: number;
-        title: string;
-        description: string | null;
-        owner_kind: string;
-        owner_party_id: string | null;
-        due_on: string;
-        required: boolean;
-        evidence_kind: string;
-        status: string;
-        done_by: string | null;
-        skip_reason: string | null;
-        attachment_id: string | null;
-      }>(sql`
+      id: string;
+      process_id: string;
+      process_kind: string;
+      worker_name: string;
+      position: number;
+      title: string;
+      description: string | null;
+      owner_kind: string;
+      owner_party_id: string | null;
+      due_on: string;
+      required: boolean;
+      evidence_kind: string;
+      status: string;
+      done_by: string | null;
+      skip_reason: string | null;
+      attachment_id: string | null;
+    }>(
+      sql`
       select st.id, st.process_id::text as process_id, p.kind as process_kind,
              wp.display_name as worker_name,
              st.position, st.title, st.description, st.owner_kind,
@@ -509,7 +527,9 @@ export async function getOnboardingOverview(query: {
            select value::uuid from jsonb_array_elements_text(${JSON.stringify([...allowed])}::jsonb) as _a(value))`
          }
        order by st.due_on, st.position
-    `, "objects");
+    `,
+      "objects",
+    );
     const overdueSteps: OnboardingOverview["overdueSteps"] = [];
     const dueNextSevenDays: OnboardingOverview["dueNextSevenDays"] = [];
     for (const row of stepRows) {
@@ -575,7 +595,8 @@ export async function getOwnStep(query: {
   const stepId = requireId(query.stepId, "stepId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
-    const row = (await db.execute<{
+    const row = (
+      await db.execute<{
         design: unknown;
         response: Record<string, unknown> | null;
         approval_status: string;
@@ -593,7 +614,8 @@ export async function getOwnStep(query: {
         status: string;
         employment_id: string;
         worker_party_id: string;
-      }>(sql`
+      }>(
+        sql`
       select s.design,s.response,s.approval_status,s.attachment_id,p.status as process_status,s.id, s.process_id::text as process_id, s.title, s.description,
              s.owner_kind, s.owner_party_id::text as owner_party_id,
              s.due_on::text as due_on, s.required, s.evidence_kind, s.status,
@@ -603,7 +625,10 @@ export async function getOwnStep(query: {
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
         join worker_employments e on e.org_id = s.org_id and e.id = p.employment_id
        where s.org_id = ${orgId} and s.id = ${stepId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -620,9 +645,12 @@ export async function getOwnStep(query: {
     const today = await businessToday(orgId);
     const design = checklistStepDesignSchema.parse(row.design);
     const blocked =
-      (await db.execute(
-          sql`select id from hrm_process_steps where org_id=${orgId} and process_id=${row.process_id} and status='pending' and template_step_id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as ids(value)) limit 1`, "objects",
-        )).length > 0;
+      (
+        await db.execute(
+          sql`select id from hrm_process_steps where org_id=${orgId} and process_id=${row.process_id} and status='pending' and template_step_id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as ids(value)) limit 1`,
+          "objects",
+        )
+      ).length > 0;
     return {
       design,
       response: row.response,
@@ -651,9 +679,12 @@ export async function getChecklistForStep(query: {
 }): Promise<ProcessDetail> {
   const stepId = requireId(query.stepId, "stepId");
   return withOrgTransaction(query.orgId, async () => {
-    const parent = (await db.execute<{ process_id: string }>(
-        sql`select process_id from hrm_process_steps where org_id=${query.orgId} and id=${stepId}`, "objects",
-      ))[0];
+    const parent = (
+      await db.execute<{ process_id: string }>(
+        sql`select process_id from hrm_process_steps where org_id=${query.orgId} and id=${stepId}`,
+        "objects",
+      )
+    )[0];
     if (!parent)
       throw new HrmProcessError(
         "NOT_FOUND",

@@ -1,28 +1,28 @@
-import { createHash, randomUUID } from 'node:crypto'
-import { Queue, type JobsOptions } from 'bullmq'
+import { createHash, randomUUID } from "node:crypto";
+import { Queue, type JobsOptions } from "bullmq";
 import {
   assertEmailDeliveryKey,
   deriveEmailDeliveryKey,
   normalizeEmailDeliveryInput,
   type EmailAttachment,
-} from '@openbooks/emails'
-import { getConnection } from '../connection'
+} from "@openbooks/emails";
+import { getConnection } from "../connection";
 
-export const EMAIL_QUEUE = 'emails'
+export const EMAIL_QUEUE = "emails";
 
-export type { EmailAttachment }
+export type { EmailAttachment };
 
 export type EmailJobData = {
   /** The org this send belongs to — selects the provider transport + logs. */
-  orgId: string
+  orgId: string;
   /** One recipient per durable job prevents address disclosure between users. */
-  to: string
-  subject: string
-  html: string
-  text: string
-  attachments?: EmailAttachment[]
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  attachments?: EmailAttachment[];
   /** Per-message Reply-To overriding the org transport default. */
-  replyTo?: string
+  replyTo?: string;
   /**
    * Durable delivery identity, computed at enqueue from the caller's
    * idempotency key — never from the BullMQ job id. BullMQ auto-increment
@@ -31,23 +31,23 @@ export type EmailJobData = {
    * delivered" without ever sending. The worker reconciles + claims the
    * email_log row through this key.
    */
-  deliveryKey: string
+  deliveryKey: string;
   meta?: {
-    userId?: string
-    category?: string
-    reportRunId?: string
-    reportDeliveryId?: string
+    userId?: string;
+    category?: string;
+    reportRunId?: string;
+    reportDeliveryId?: string;
     /** Native reviewed schedule and its immutable audience/report version. */
-    distributionId?: string
-    version?: string
+    distributionId?: string;
+    version?: string;
     /** Payment remittance row completed by the email worker after provider acceptance. */
-    paymentRemittanceId?: string
+    paymentRemittanceId?: string;
     /** Dunning claim row settled by the email worker from the provider verdict. */
-    dunningLogId?: string
-  }
-}
+    dunningLogId?: string;
+  };
+};
 
-export type EnqueueEmailData = Omit<EmailJobData, 'to' | 'deliveryKey'> & { to: string | string[] }
+export type EnqueueEmailData = Omit<EmailJobData, "to" | "deliveryKey"> & { to: string | string[] };
 
 /**
  * The caller's durable idempotency key for one logical send. It must be
@@ -57,22 +57,22 @@ export type EnqueueEmailData = Omit<EmailJobData, 'to' | 'deliveryKey'> & { to: 
  * fresh `randomUUID()` — see `newEmailIntentKey` — so a Redis reset can
  * never align new mail with an old sent-log row.
  */
-export type EnqueueEmailOptions = Omit<JobsOptions, 'jobId'> & { jobId: string }
+export type EnqueueEmailOptions = Omit<JobsOptions, "jobId"> & { jobId: string };
 
 /** Fresh intent key for one-off sends with no natural idempotency key. */
 export function newEmailIntentKey(prefix: string): string {
-  if (!prefix.trim()) throw new Error('email intent keys require a non-empty prefix')
-  return `${prefix}|${randomUUID()}`
+  if (!prefix.trim()) throw new Error("email intent keys require a non-empty prefix");
+  return `${prefix}|${randomUUID()}`;
 }
 
-let emailQueue: Queue<EmailJobData> | undefined
+let emailQueue: Queue<EmailJobData> | undefined;
 
 export function getEmailQueue(): Queue<EmailJobData> {
   emailQueue ??= new Queue<EmailJobData>(EMAIL_QUEUE, {
     connection: getConnection(),
     defaultJobOptions: {
       attempts: 5,
-      backoff: { type: 'exponential', delay: 30_000 },
+      backoff: { type: "exponential", delay: 30_000 },
       // Completed email jobs carry the full message body: the durable record
       // is the email_log row, so completed payloads are trimmed after a day
       // instead of lingering a week in Redis. Failed payloads keep 30 days
@@ -80,16 +80,20 @@ export function getEmailQueue(): Queue<EmailJobData> {
       removeOnComplete: { age: 24 * 3600 },
       removeOnFail: { age: 30 * 24 * 3600 },
     },
-  })
-  return emailQueue
+  });
+  return emailQueue;
 }
 
 function fanoutOptions(options: EnqueueEmailOptions, recipient: string): EnqueueEmailOptions {
-  const digest = createHash('sha256').update(options.jobId).update('\0').update(recipient.toLowerCase()).digest('hex')
-  return { ...options, jobId: `email-fanout|${digest}` }
+  const digest = createHash("sha256")
+    .update(options.jobId)
+    .update("\0")
+    .update(recipient.toLowerCase())
+    .digest("hex");
+  return { ...options, jobId: `email-fanout|${digest}` };
 }
 
-export type BuiltEmailJob = { data: EmailJobData; opts: EnqueueEmailOptions }
+export type BuiltEmailJob = { data: EmailJobData; opts: EnqueueEmailOptions };
 
 /**
  * Pure enqueue plan: validate, fan out one job per recipient, and derive
@@ -97,26 +101,35 @@ export type BuiltEmailJob = { data: EmailJobData; opts: EnqueueEmailOptions }
  * from any queue-assigned id. Exported so the identity contract is
  * unit-testable without Redis.
  */
-export function buildEmailJobs(data: EnqueueEmailData, options: EnqueueEmailOptions): BuiltEmailJob[] {
+export function buildEmailJobs(
+  data: EnqueueEmailData,
+  options: EnqueueEmailOptions,
+): BuiltEmailJob[] {
   if (!options?.jobId?.trim()) {
-    throw new Error('enqueueEmail requires options.jobId: a durable caller-supplied idempotency key (never omit it — BullMQ ids restart after a Redis reset)')
+    throw new Error(
+      "enqueueEmail requires options.jobId: a durable caller-supplied idempotency key (never omit it — BullMQ ids restart after a Redis reset)",
+    );
   }
-  const normalized = normalizeEmailDeliveryInput(data)
+  const normalized = normalizeEmailDeliveryInput(data);
   return normalized.to.map((recipient) => {
-    const opts = normalized.to.length === 1 ? options : fanoutOptions(options, recipient)
-    const deliveryKey = deriveEmailDeliveryKey({ orgId: data.orgId, scope: opts.jobId, to: recipient })
-    return { data: { ...data, ...normalized, to: recipient, deliveryKey }, opts }
-  })
+    const opts = normalized.to.length === 1 ? options : fanoutOptions(options, recipient);
+    const deliveryKey = deriveEmailDeliveryKey({
+      orgId: data.orgId,
+      scope: opts.jobId,
+      to: recipient,
+    });
+    return { data: { ...data, ...normalized, to: recipient, deliveryKey }, opts };
+  });
 }
 
 /** Enqueue one durable job per recipient (deterministic ids dedupe retries). */
 export async function enqueueEmail(data: EnqueueEmailData, options: EnqueueEmailOptions) {
-  const jobs = buildEmailJobs(data, options)
-  const queue = getEmailQueue()
+  const jobs = buildEmailJobs(data, options);
+  const queue = getEmailQueue();
   if (jobs.length === 1) {
-    return [await queue.add('send', jobs[0]!.data, jobs[0]!.opts)]
+    return [await queue.add("send", jobs[0]!.data, jobs[0]!.opts)];
   }
-  return queue.addBulk(jobs.map((job) => ({ name: 'send', data: job.data, opts: job.opts })))
+  return queue.addBulk(jobs.map((job) => ({ name: "send", data: job.data, opts: job.opts })));
 }
 
 /**
@@ -133,13 +146,13 @@ export async function enqueueEmail(data: EnqueueEmailData, options: EnqueueEmail
  * pre-key job can still be queued.
  */
 export function resolveEmailDeliveryKey(
-  data: Pick<EmailJobData, 'orgId' | 'to'> & { deliveryKey?: string },
+  data: Pick<EmailJobData, "orgId" | "to"> & { deliveryKey?: string },
 ): string {
   if (!data.deliveryKey) {
     throw new Error(
-      'email job carries no durable delivery key — refusing to guess its identity; ' +
-      're-enqueue through enqueueEmail with a caller idempotency key',
-    )
+      "email job carries no durable delivery key — refusing to guess its identity; " +
+        "re-enqueue through enqueueEmail with a caller idempotency key",
+    );
   }
-  return assertEmailDeliveryKey(data.deliveryKey)
+  return assertEmailDeliveryKey(data.deliveryKey);
 }

@@ -119,8 +119,7 @@ export function priorityForDueDate(
 
 /** Merge order: overdue → due soon → newest first, then stable id order. */
 export function compareInboxItems(a: InboxItem, b: InboxItem): number {
-  const rank = (p: InboxPriority): number =>
-    p === "overdue" ? 0 : p === "due_soon" ? 1 : 2;
+  const rank = (p: InboxPriority): number => (p === "overdue" ? 0 : p === "due_soon" ? 1 : 2);
   return (
     rank(a.priority) - rank(b.priority) ||
     (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0) ||
@@ -133,9 +132,7 @@ export function inboxItemId(kind: InboxKind, sourceId: string): string {
 }
 
 /** Split a `kind:sourceId` item id back into its source pointer. */
-export function parseInboxItemId(
-  itemId: string,
-): { kind: string; sourceId: string } | null {
+export function parseInboxItemId(itemId: string): { kind: string; sourceId: string } | null {
   const sep = itemId.indexOf(":");
   if (sep < 0) return null;
   const kind = itemId.slice(0, sep);

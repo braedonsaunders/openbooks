@@ -15,13 +15,16 @@ Object.assign(globalThis, { __closePackageRecipientsUser: state });
 stubModules({
   navigation: true,
   authz: {
-    source: withAuthzTestSurface("export async function guardPermission(){return {user:globalThis.__closePackageRecipientsUser.user,permissions:new Set(['*']),allowedSubsidiaryIds:null}} export function guardSubsidiaryScope(){return null}"),
+    source: withAuthzTestSurface(
+      "export async function guardPermission(){return {user:globalThis.__closePackageRecipientsUser.user,permissions:new Set(['*']),allowedSubsidiaryIds:null}} export function guardSubsidiaryScope(){return null}",
+    ),
   },
   features: false,
 });
 const { POST } = await import("./route");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const request = (body: unknown) =>
   new Request("http://close.local/api/admin/close", {
     method: "POST",
@@ -31,10 +34,15 @@ const request = (body: unknown) =>
 
 async function setup() {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Close Package Admin", "close-admin"));
+  const actorId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Close Package Admin", "close-admin"),
+  );
   state.user = { orgId: org.orgId, id: actorId };
   const enabled = await withBypassContext(() =>
-    db.execute<{ id: string }>(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId} returning id`, "objects"),
+    db.execute<{ id: string }>(
+      sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId} returning id`,
+      "objects",
+    ),
   );
   assert.equal(enabled.length, 1, "close package setup updates exactly one organization");
   assert.equal(enabled[0]?.id, org.orgId, "close package setup updates its own organization");
@@ -44,19 +52,30 @@ async function setup() {
 test("save-package refuses a malformed recipient without writing", async () => {
   const { org } = await setup();
   try {
-    const response = await withOrgContext(org.orgId, () => POST(request({
-      action: "save-package",
-      name: "Recipient Contract",
-      reports: [{ slug: "trial-balance" }],
-      recipients: ["controller@example.com", "not-an-email"],
-      delivery: {},
-      isActive: true,
-    })));
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${await response.text()}`);
-    const rows = (await db.execute<{ count: number }>(sql`
+    const response = await withOrgContext(org.orgId, () =>
+      POST(
+        request({
+          action: "save-package",
+          name: "Recipient Contract",
+          reports: [{ slug: "trial-balance" }],
+          recipients: ["controller@example.com", "not-an-email"],
+          delivery: {},
+          isActive: true,
+        }),
+      ),
+    );
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${await response.text()}`,
+    );
+    const rows = await db.execute<{ count: number }>(
+      sql`
       select count(*)::int as count from close_reporting_packages
        where org_id = ${org.orgId} and name = 'Recipient Contract'
-    `, "objects"));
+    `,
+      "objects",
+    );
     assert.equal(rows[0]!.count, 0, "a refused package must not be stored");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -66,19 +85,30 @@ test("save-package refuses a malformed recipient without writing", async () => {
 test("save-package still stores a fully valid recipient list", async () => {
   const { org } = await setup();
   try {
-    const response = await withOrgContext(org.orgId, () => POST(request({
-      action: "save-package",
-      name: "Valid Recipients",
-      reports: [{ slug: "trial-balance" }],
-      recipients: ["Controller@Example.com"],
-      delivery: {},
-      isActive: true,
-    })));
-    assert.equal(response.status, 200, `expected 200, got ${response.status}: ${await response.text()}`);
-    const rows = (await db.execute<{ recipients: string[] }>(sql`
+    const response = await withOrgContext(org.orgId, () =>
+      POST(
+        request({
+          action: "save-package",
+          name: "Valid Recipients",
+          reports: [{ slug: "trial-balance" }],
+          recipients: ["Controller@Example.com"],
+          delivery: {},
+          isActive: true,
+        }),
+      ),
+    );
+    assert.equal(
+      response.status,
+      200,
+      `expected 200, got ${response.status}: ${await response.text()}`,
+    );
+    const rows = await db.execute<{ recipients: string[] }>(
+      sql`
       select recipients from close_reporting_packages
        where org_id = ${org.orgId} and name = 'Valid Recipients'
-    `, "objects"));
+    `,
+      "objects",
+    );
     assert.deepEqual(rows[0]!.recipients, ["Controller@Example.com"]);
   } finally {
     await dropScratchOrg(org.orgId);

@@ -41,7 +41,9 @@ export function normalizeTaxReturnAdjustments(
   inputs: readonly TaxReturnAdjustmentInput[],
 ): TaxReturnAdjustmentInput[] {
   if (!Array.isArray(inputs)) {
-    throw new TaxReturnError("return adjustments must be a list of entries with a line, decimal amount and reason");
+    throw new TaxReturnError(
+      "return adjustments must be a list of entries with a line, decimal amount and reason",
+    );
   }
   if (inputs.length > TAX_RETURN_ADJUSTMENT_LIMIT) {
     throw new TaxReturnError(
@@ -49,15 +51,26 @@ export function normalizeTaxReturnAdjustments(
     );
   }
   return inputs.map((input, index) => {
-    if (!input || typeof input.lineCode !== "string" || typeof input.amount !== "string" || typeof input.reason !== "string") {
-      throw new TaxReturnError(`adjustment ${index + 1} needs a line, decimal amount as text and reason — complete all three fields before saving`);
+    if (
+      !input ||
+      typeof input.lineCode !== "string" ||
+      typeof input.amount !== "string" ||
+      typeof input.reason !== "string"
+    ) {
+      throw new TaxReturnError(
+        `adjustment ${index + 1} needs a line, decimal amount as text and reason — complete all three fields before saving`,
+      );
     }
     const lineCode = input.lineCode.trim();
     if (!lineCode) {
-      throw new TaxReturnError(`adjustment ${index + 1} names no return line — choose the adjustment line it belongs to`);
+      throw new TaxReturnError(
+        `adjustment ${index + 1} names no return line — choose the adjustment line it belongs to`,
+      );
     }
     if (lineCode.length > 20) {
-      throw new TaxReturnError(`adjustment ${index + 1} names an unsupported return line — choose a line of at most 20 characters`);
+      throw new TaxReturnError(
+        `adjustment ${index + 1} names an unsupported return line — choose a line of at most 20 characters`,
+      );
     }
     const amount = input.amount.trim();
     if (!ADJUSTMENT_AMOUNT_RE.test(amount)) {

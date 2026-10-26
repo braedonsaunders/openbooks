@@ -27,12 +27,17 @@ export async function lockAssetCategoryTaxLifecycle(
 ): Promise<string[]> {
   const locked = new Set<string>();
   while (true) {
-    const scopes = (await tx.execute<{ subsidiary_id: string }>(sql`
+    const scopes = (
+      await tx.execute<{ subsidiary_id: string }>(
+        sql`
       select distinct subsidiary_id
         from fixed_assets
        where org_id = ${orgId} and category_id = ${categoryId}
        order by subsidiary_id
-    `, "objects")).map((row) => row.subsidiary_id);
+    `,
+        "objects",
+      )
+    ).map((row) => row.subsidiary_id);
     const missing = scopes.filter((id) => !locked.has(id));
     if (missing.length === 0) return [...locked].sort();
     await lockAssetTaxLifecycle(tx, orgId, missing);

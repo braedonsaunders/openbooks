@@ -9,7 +9,12 @@ const BASE: Pick<Corpus, "accounts" | "parties"> = {
     { key: "bank", number: "1000", name: "Bank", type: "asset_bank" },
     { key: "ar", number: "1100", name: "AR", type: "asset_receivable" },
     { key: "ap", number: "2000", name: "AP", type: "liability_payable" },
-    { key: "employeePayable", number: "2110", name: "Emp Payable", type: "liability_current_other" },
+    {
+      key: "employeePayable",
+      number: "2110",
+      name: "Emp Payable",
+      type: "liability_current_other",
+    },
     { key: "revenueService", number: "4000", name: "Revenue", type: "income" },
     { key: "office", number: "6400", name: "Office", type: "expense" },
     { key: "travel", number: "6650", name: "Travel", type: "expense" },
@@ -33,30 +38,48 @@ test("cents arithmetic is exact and rejects loose input", () => {
 test("posting semantics: invoice, partial payment, credit, AP bill cycle", () => {
   const ledger = new ReferenceLedger(BASE);
   ledger.apply({
-    id: "INV-1", kind: "customer_invoice", date: "2026-01-05", party: "c1",
+    id: "INV-1",
+    kind: "customer_invoice",
+    date: "2026-01-05",
+    party: "c1",
     lines: [
       { account: "revenueService", amount: "66.67" },
       { account: "revenueService", amount: "33.33" },
     ],
   });
   ledger.apply({
-    id: "PAY-1", kind: "customer_payment", date: "2026-01-20", party: "c1",
+    id: "PAY-1",
+    kind: "customer_payment",
+    date: "2026-01-20",
+    party: "c1",
     allocations: [{ event: "INV-1", amount: "40.00" }],
   });
   ledger.apply({
-    id: "CR-1", kind: "customer_credit", date: "2026-01-21", party: "c1",
+    id: "CR-1",
+    kind: "customer_credit",
+    date: "2026-01-21",
+    party: "c1",
     lines: [{ account: "revenueService", amount: "10.00" }],
   });
   ledger.apply({
-    id: "BILL-1", kind: "vendor_bill", date: "2026-01-06", party: "v1",
+    id: "BILL-1",
+    kind: "vendor_bill",
+    date: "2026-01-06",
+    party: "v1",
     lines: [{ account: "office", amount: "25.10" }],
   });
   ledger.apply({
-    id: "VPAY-1", kind: "vendor_payment", date: "2026-01-25", party: "v1",
+    id: "VPAY-1",
+    kind: "vendor_payment",
+    date: "2026-01-25",
+    party: "v1",
     allocations: [{ event: "BILL-1", amount: "25.10" }],
   });
   ledger.apply({
-    id: "EXP-1", kind: "expense_report", date: "2026-01-10", party: "e1",
+    id: "EXP-1",
+    kind: "expense_report",
+    date: "2026-01-10",
+    party: "e1",
     lines: [{ account: "travel", amount: "12.34" }],
   });
 
@@ -75,29 +98,46 @@ test("posting semantics: invoice, partial payment, credit, AP bill cycle", () =>
 test("over-application and unbalanced journals are rejected", () => {
   const ledger = new ReferenceLedger(BASE);
   ledger.apply({
-    id: "INV-1", kind: "customer_invoice", date: "2026-01-05", party: "c1",
+    id: "INV-1",
+    kind: "customer_invoice",
+    date: "2026-01-05",
+    party: "c1",
     lines: [{ account: "revenueService", amount: "100.00" }],
   });
   assert.throws(
-    () => ledger.apply({
-      id: "PAY-1", kind: "customer_payment", date: "2026-01-06", party: "c1",
-      allocations: [{ event: "INV-1", amount: "100.01" }],
-    }),
+    () =>
+      ledger.apply({
+        id: "PAY-1",
+        kind: "customer_payment",
+        date: "2026-01-06",
+        party: "c1",
+        allocations: [{ event: "INV-1", amount: "100.01" }],
+      }),
     /over-application/,
   );
   assert.throws(
-    () => ledger.apply({
-      id: "JE-1", kind: "journal", date: "2026-01-07",
-      lines: [{ account: "bank", amount: "1.00" }, { account: "office", amount: "-0.99" }],
-    }),
+    () =>
+      ledger.apply({
+        id: "JE-1",
+        kind: "journal",
+        date: "2026-01-07",
+        lines: [
+          { account: "bank", amount: "1.00" },
+          { account: "office", amount: "-0.99" },
+        ],
+      }),
     /does not balance/,
   );
   // Cross-party application must be refused.
   assert.throws(
-    () => ledger.apply({
-      id: "PAY-2", kind: "customer_payment", date: "2026-01-08", party: "c1",
-      allocations: [{ event: "MISSING", amount: "1.00" }],
-    }),
+    () =>
+      ledger.apply({
+        id: "PAY-2",
+        kind: "customer_payment",
+        date: "2026-01-08",
+        party: "c1",
+        allocations: [{ event: "MISSING", amount: "1.00" }],
+      }),
     /unknown event/,
   );
 });

@@ -49,9 +49,12 @@ function baseData(): Record<string, unknown> {
 
 test("an unlinked login reads the refusal state", () => {
   const data = baseData();
-  data.refusal = { title: "No employment link", message: "ask an administrator to link this login to a person record" };
+  data.refusal = {
+    title: "No employment link",
+    message: "ask an administrator to link this login to a person record",
+  };
   const json = specJson(data);
-  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes('"empty-state"'), "the refusal renders through the empty-state block");
   assert.ok(json.includes("No employment link"), "the refusal title reaches the page");
   assert.ok(
     json.includes("ask an administrator to link this login to a person record"),
@@ -61,16 +64,29 @@ test("an unlinked login reads the refusal state", () => {
 
 test("the surfaces bind their rows with the tab strip in the header", () => {
   const json = specJson(baseData());
-  assert.ok(json.includes("\"module-home-tabs\""), "the header carries the tab strip");
+  assert.ok(json.includes('"module-home-tabs"'), "the header carries the tab strip");
   assert.ok(json.includes("/me"), "the strip links the overview surface");
-  assert.ok(json.includes("\"hrm-leave-balances\""), "the balances widget renders");
+  assert.ok(json.includes('"hrm-leave-balances"'), "the balances widget renders");
   assert.ok(json.includes("No balances"), "the balances empty state resolves from its data");
 });
 
 test("the overview composes five vitals around one work queue and a summary rail", () => {
   const json = specJson(baseData());
-  assert.equal((json.match(/"kind":"stat-tile"/g) ?? []).length, 5, "the cockpit carries five vitals");
-  assert.ok(json.includes('"me_action_queue"'), "open steps and pending requests share one work queue");
-  assert.ok(!json.includes('"me_overview_steps"') && !json.includes('"me_overview_requests"'), "the page does not stack separate work tables");
-  assert.ok(json.includes('"hrm-facts"') && json.includes('"directory-section"'), "employment facts and self-service destinations stay in the rail");
+  assert.equal(
+    (json.match(/"kind":"stat-tile"/g) ?? []).length,
+    5,
+    "the cockpit carries five vitals",
+  );
+  assert.ok(
+    json.includes('"me_action_queue"'),
+    "open steps and pending requests share one work queue",
+  );
+  assert.ok(
+    !json.includes('"me_overview_steps"') && !json.includes('"me_overview_requests"'),
+    "the page does not stack separate work tables",
+  );
+  assert.ok(
+    json.includes('"hrm-facts"') && json.includes('"directory-section"'),
+    "employment facts and self-service destinations stay in the rail",
+  );
 });

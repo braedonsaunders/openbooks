@@ -1,5 +1,5 @@
-import { DocTypeBadge } from '../../../../components/doc-type-badge'
-import { TxnLink } from '../TxnLink'
+import { DocTypeBadge } from "../../../../components/doc-type-badge";
+import { TxnLink } from "../TxnLink";
 
 /**
  * The heading line above each journal entry's line table.
@@ -21,13 +21,13 @@ export function JournalEntryHeading({
   originLabel,
   memo,
 }: {
-  entryId: string
-  docKind: string | null
-  docId: string | null
-  entryNumber: string | null
-  date: string
-  originLabel: string
-  memo: string | null
+  entryId: string;
+  docKind: string | null;
+  docId: string | null;
+  entryNumber: string | null;
+  date: string;
+  originLabel: string;
+  memo: string | null;
 }) {
   return (
     <div className="mb-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm">
@@ -48,5 +48,5 @@ export function JournalEntryHeading({
       </span>
       {memo && <span className="text-slate-500 dark:text-slate-400">{memo}</span>}
     </div>
-  )
+  );
 }

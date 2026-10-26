@@ -18,17 +18,33 @@ import {
 import { createCycle, openCycle } from "./review-cycles.ts";
 import { submitReview } from "./reviews.ts";
 
-const setupScalesHarness = () => setupPerformanceHarness({ prefix: "Scale", permissions: ["hrm.performance.manage"], periodEndOn: "2026-12-31", version: {} });
+const setupScalesHarness = () =>
+  setupPerformanceHarness({
+    prefix: "Scale",
+    permissions: ["hrm.performance.manage"],
+    periodEndOn: "2026-12-31",
+    version: {},
+  });
 type Harness = Awaited<ReturnType<typeof setupScalesHarness>>;
 
 async function openEntryId(h: Harness): Promise<string> {
-  const reviewId = (await db.execute<{ id: string }>(sql`
+  const reviewId = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from hrm_reviews
      where org_id = ${h.org.orgId} and cycle_id = ${h.cycleId}
-       and employment_id = ${h.workerEmployment} and kind = 'manager'`, "objects"))[0]!.id;
-  const impact = (await db.execute<{ id: string }>(sql`
+       and employment_id = ${h.workerEmployment} and kind = 'manager'`,
+      "objects",
+    )
+  )[0]!.id;
+  const impact = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from hrm_review_answers where org_id = ${h.org.orgId} and review_id = ${reviewId}
-     order by position limit 1`, "objects"))[0]!.id;
+     order by position limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   await submitReview({
     orgId: h.org.orgId,
     actorId: h.managerUser,
@@ -42,148 +58,265 @@ async function openEntryId(h: Harness): Promise<string> {
     cycleId: h.cycleId,
     name: "Scale session",
   });
-  const opened = await openCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: draft.id });
+  const opened = await openCalibrationSession({
+    orgId: h.org.orgId,
+    actorId: h.hrId,
+    id: draft.id,
+  });
   assert.equal(opened.entries.length, 1);
   return opened.entries[0]!.id;
 }
 
 test("decided ratings and potential keys validate against the cycle scales", async () => {
-  await withHarness(() => setupScalesHarness(), async (h) => {
-    const entryId = await openEntryId(h);
-    // Off-scale and non-numeric ratings name the scale.
-    for (const bad of ["9", "0", "abc"]) {
-      const error = perfError(await setCalibratedRating({
+  await withHarness(
+    () => setupScalesHarness(),
+    async (h) => {
+      const entryId = await openEntryId(h);
+      // Off-scale and non-numeric ratings name the scale.
+      for (const bad of ["9", "0", "abc"]) {
+        const error = perfError(
+          await setCalibratedRating({
+            orgId: h.org.orgId,
+            actorId: h.hrId,
+            entryId,
+            calibratedRating: bad,
+            justification: "evidence reviewed",
+          }).then(
+            () => null,
+            (e: unknown) => e,
+          ),
+        );
+        assert.equal(error.code, "REFUSED", `rating ${bad} must be refused`);
+        assert.match(error.message, /outside the template scale 1 to 5|must be a decimal rating/);
+      }
+      // Free-text potential names the declared labels.
+      const potentialError = perfError(
+        await setPotential({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          entryId,
+          potentialKey: "cosmic",
+        }).then(
+          () => null,
+          (e: unknown) => e,
+        ),
+      );
+      assert.equal(potentialError.code, "REFUSED");
+      assert.match(potentialError.message, /"low", "high"/);
+      // Nothing was stored by the refusals.
+      const stored = (
+        await db.execute<{ rating: string | null; potential: string | null }>(
+          sql`
+      select calibrated_rating::text as rating, potential_key as potential
+        from hrm_calibration_entries where org_id = ${h.org.orgId} and id = ${entryId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(stored.rating, null);
+      assert.equal(stored.potential, null);
+      // In-scale values decide normally.
+      const decided = await setCalibratedRating({
         orgId: h.org.orgId,
         actorId: h.hrId,
         entryId,
-        calibratedRating: bad,
+        calibratedRating: "4",
         justification: "evidence reviewed",
-      }).then(
-        () => null,
-        (e: unknown) => e,
-      ));
-      assert.equal(error.code, "REFUSED", `rating ${bad} must be refused`);
-      assert.match(error.message, /outside the template scale 1 to 5|must be a decimal rating/);
-    }
-    // Free-text potential names the declared labels.
-    const potentialError = perfError(await setPotential({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      entryId,
-      potentialKey: "cosmic",
-    }).then(
-      () => null,
-      (e: unknown) => e,
-    ));
-    assert.equal(potentialError.code, "REFUSED");
-    assert.match(potentialError.message, /"low", "high"/);
-    // Nothing was stored by the refusals.
-    const stored = (await db.execute<{ rating: string | null; potential: string | null }>(sql`
-      select calibrated_rating::text as rating, potential_key as potential
-        from hrm_calibration_entries where org_id = ${h.org.orgId} and id = ${entryId}`, "objects"))[0]!;
-    assert.equal(stored.rating, null);
-    assert.equal(stored.potential, null);
-    // In-scale values decide normally.
-    const decided = await setCalibratedRating({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      entryId,
-      calibratedRating: "4",
-      justification: "evidence reviewed",
-    });
-    assert.equal(decided.calibratedRating, "4.0000");
-    await setPotential({ orgId: h.org.orgId, actorId: h.hrId, entryId, potentialKey: "high" });
-    const sessionId = (await db.execute<{ sessionId: string }>(sql`
+      });
+      assert.equal(decided.calibratedRating, "4.0000");
+      await setPotential({ orgId: h.org.orgId, actorId: h.hrId, entryId, potentialKey: "high" });
+      const sessionId = (
+        await db.execute<{ sessionId: string }>(
+          sql`
       select session_id as "sessionId" from hrm_calibration_entries
-       where org_id = ${h.org.orgId} and id = ${entryId}`, "objects"))[0]!.sessionId;
-    const session = await getCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId });
-    assert.equal(session.entries[0]!.potentialKey, "high");
-  });
+       where org_id = ${h.org.orgId} and id = ${entryId}`,
+          "objects",
+        )
+      )[0]!.sessionId;
+      const session = await getCalibrationSession({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        id: sessionId,
+      });
+      assert.equal(session.entries[0]!.potentialKey, "high");
+    },
+  );
 });
 
 test("the calibration editor offers the cycle scale labels and saves one", async () => {
-  await withHarness(() => setupScalesHarness(), async (h) => {
-    const entryId = await openEntryId(h);
-    const sessionId = (await db.execute<{ sessionId: string }>(sql`
+  await withHarness(
+    () => setupScalesHarness(),
+    async (h) => {
+      const entryId = await openEntryId(h);
+      const sessionId = (
+        await db.execute<{ sessionId: string }>(
+          sql`
       select session_id as "sessionId" from hrm_calibration_entries
-       where org_id = ${h.org.orgId} and id = ${entryId}`, "objects"))[0]!.sessionId;
-    assert.deepEqual(await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId }), [
-      "low",
-      "high",
-    ]);
-    await setPotential({ orgId: h.org.orgId, actorId: h.hrId, entryId, potentialKey: "high" });
-    const session = await getCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId });
-    assert.equal(session.entries[0]!.potentialKey, "high");
-  });
+       where org_id = ${h.org.orgId} and id = ${entryId}`,
+          "objects",
+        )
+      )[0]!.sessionId;
+      assert.deepEqual(
+        await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId }),
+        ["low", "high"],
+      );
+      await setPotential({ orgId: h.org.orgId, actorId: h.hrId, entryId, potentialKey: "high" });
+      const session = await getCalibrationSession({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        id: sessionId,
+      });
+      assert.equal(session.entries[0]!.potentialKey, "high");
+    },
+  );
 });
 
 test("a template with no scale labels offers no potential options", async () => {
-  await withHarness(() => setupScalesHarness(), async (h) => {
-    const templateId = (await db.execute<{ id: string }>(sql`
+  await withHarness(
+    () => setupScalesHarness(),
+    async (h) => {
+      const templateId = (
+        await db.execute<{ id: string }>(
+          sql`
       insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
       values (${h.org.orgId}, 'Labelless', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
-      returning id`, "objects"))[0]!.id;
-    // openCycle requires a required question on the template; a text
-    // question keeps the scale label-less, which is what this test probes.
-    const labellessSection = (await db.execute<{ id: string }>(sql`
+      returning id`,
+          "objects",
+        )
+      )[0]!.id;
+      // openCycle requires a required question on the template; a text
+      // question keeps the scale label-less, which is what this test probes.
+      const labellessSection = (
+        await db.execute<{ id: string }>(
+          sql`
       insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
       values (${h.org.orgId}, ${templateId}, 0, 'Notes', 'competency', ${h.hrId}, ${h.hrId})
-      returning id`, "objects"))[0]!.id;
-    await db.execute(sql`
+      returning id`,
+          "objects",
+        )
+      )[0]!.id;
+      await db.execute(sql`
       insert into hrm_review_template_questions
         (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
       values (${h.org.orgId}, ${labellessSection}, 0, 'General notes', 'text', true, ${h.hrId}, ${h.hrId})
     `);
-    const cycle = await createCycle({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      templateId,
-      name: "FY26 labelless",
-      periodStartOn: "2026-01-01",
-      periodEndOn: "2026-12-31",
-    });
-    // Calibration sessions require a live cycle: the
-    // label-less probe runs on an opened cycle, as the editor would.
-    await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    const session = await createCalibrationSession({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      cycleId: cycle.id,
-      name: "Labelless session",
-    });
-    assert.deepEqual(
-      await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId: session.id }),
-      [],
-    );
-  });
+      const cycle = await createCycle({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        templateId,
+        name: "FY26 labelless",
+        periodStartOn: "2026-01-01",
+        periodEndOn: "2026-12-31",
+      });
+      // Calibration sessions require a live cycle: the
+      // label-less probe runs on an opened cycle, as the editor would.
+      await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
+      const session = await createCalibrationSession({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        cycleId: cycle.id,
+        name: "Labelless session",
+      });
+      assert.deepEqual(
+        await calibrationPotentialOptions({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          sessionId: session.id,
+        }),
+        [],
+      );
+    },
+  );
 });
 
-for(const count of [0,10])test(`calibration publication applies exactly its ${count} tenant Flow gates`,async()=>{
-  await withHarness(()=>setupScalesHarness(),async h=>{
-    installEngineSeams();
-    const entryId=await openEntryId(h);
-    await setCalibratedRating({orgId:h.org.orgId,actorId:h.hrId,entryId,calibratedRating:"3",justification:"Reviewed the same supporting evidence"});
-    const sessionId=(await db.execute<{session_id:string}>(sql`select session_id from hrm_calibration_entries where org_id=${h.org.orgId} and id=${entryId}`, "objects"))[0]!.session_id;
-    for(let index=0;index<count;index++)await seedApprovalFlow(h.org.orgId,{subjectKind:"hrm_calibration_session",assignees:[{type:"user",userId:h.hrId}],mode:"all",preventSelfApproval:false});
-    const submitted=await closeCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId});
-    assert.equal(submitted.status,count?"open":"closed");
-    assert.equal(submitted.approvalPending,count>0);
-    const gates=await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_calibration_session' and subject_id=${sessionId} order by id`, "objects");
-    assert.equal(gates.length,count);
-    for(let index=0;index<gates.length;index++){
-      const before=(await getCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId}));
-      assert.equal(before.status,"open");
-      await assert.rejects(setCalibratedRating({orgId:h.org.orgId,actorId:h.hrId,entryId,calibratedRating:"5",justification:"Change submitted ratings"}),/Recall the pending calibration/);
-      await decideGate({gateId:gates[index]!.id,userId:h.hrId,decision:"approved"});
-    }
-    const closed=await getCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId});
-    assert.equal(closed.status,"closed");
-    assert.equal(closed.entries[0]?.calibratedRating,"3.0000");
-    const published=(await db.execute<{status:string;calibrated_rating:string}>(sql`select r.status,r.calibrated_rating::text from hrm_reviews r join hrm_calibration_entries e
-      on e.org_id=r.org_id and e.review_id=r.id where e.org_id=${h.org.orgId} and e.id=${entryId}`, "objects"))[0]!;
-    assert.equal(published.status,"calibrated");
-    assert.equal(published.calibrated_rating,"3.0000");
-    assert.deepEqual(await closeCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId}),closed,"replay reads the same published session");
-    await assert.rejects(setCalibratedRating({orgId:h.org.orgId,actorId:h.hrId,entryId,calibratedRating:"4",justification:"Change published ratings"}),/closed/);
+for (const count of [0, 10])
+  test(`calibration publication applies exactly its ${count} tenant Flow gates`, async () => {
+    await withHarness(
+      () => setupScalesHarness(),
+      async (h) => {
+        installEngineSeams();
+        const entryId = await openEntryId(h);
+        await setCalibratedRating({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          entryId,
+          calibratedRating: "3",
+          justification: "Reviewed the same supporting evidence",
+        });
+        const sessionId = (
+          await db.execute<{ session_id: string }>(
+            sql`select session_id from hrm_calibration_entries where org_id=${h.org.orgId} and id=${entryId}`,
+            "objects",
+          )
+        )[0]!.session_id;
+        for (let index = 0; index < count; index++)
+          await seedApprovalFlow(h.org.orgId, {
+            subjectKind: "hrm_calibration_session",
+            assignees: [{ type: "user", userId: h.hrId }],
+            mode: "all",
+            preventSelfApproval: false,
+          });
+        const submitted = await closeCalibrationSession({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          id: sessionId,
+        });
+        assert.equal(submitted.status, count ? "open" : "closed");
+        assert.equal(submitted.approvalPending, count > 0);
+        const gates = await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_calibration_session' and subject_id=${sessionId} order by id`,
+          "objects",
+        );
+        assert.equal(gates.length, count);
+        for (let index = 0; index < gates.length; index++) {
+          const before = await getCalibrationSession({
+            orgId: h.org.orgId,
+            actorId: h.hrId,
+            id: sessionId,
+          });
+          assert.equal(before.status, "open");
+          await assert.rejects(
+            setCalibratedRating({
+              orgId: h.org.orgId,
+              actorId: h.hrId,
+              entryId,
+              calibratedRating: "5",
+              justification: "Change submitted ratings",
+            }),
+            /Recall the pending calibration/,
+          );
+          await decideGate({ gateId: gates[index]!.id, userId: h.hrId, decision: "approved" });
+        }
+        const closed = await getCalibrationSession({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          id: sessionId,
+        });
+        assert.equal(closed.status, "closed");
+        assert.equal(closed.entries[0]?.calibratedRating, "3.0000");
+        const published = (
+          await db.execute<{ status: string; calibrated_rating: string }>(
+            sql`select r.status,r.calibrated_rating::text from hrm_reviews r join hrm_calibration_entries e
+      on e.org_id=r.org_id and e.review_id=r.id where e.org_id=${h.org.orgId} and e.id=${entryId}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(published.status, "calibrated");
+        assert.equal(published.calibrated_rating, "3.0000");
+        assert.deepEqual(
+          await closeCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId }),
+          closed,
+          "replay reads the same published session",
+        );
+        await assert.rejects(
+          setCalibratedRating({
+            orgId: h.org.orgId,
+            actorId: h.hrId,
+            entryId,
+            calibratedRating: "4",
+            justification: "Change published ratings",
+          }),
+          /closed/,
+        );
+      },
+    );
   });
-});

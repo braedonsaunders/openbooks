@@ -8,7 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 export const CRM_ACTIVITY_KINDS = ["task", "call", "event", "email", "note"] as const;
@@ -24,7 +24,9 @@ export const crmActivities = pgTable(
     status: text("status", { enum: CRM_ACTIVITY_STATUSES }).notNull().default("planned"),
     subject: text("subject").notNull(),
     body: text("body"),
-    priority: text("priority", { enum: ["low", "normal", "high", "urgent"] }).notNull().default("normal"),
+    priority: text("priority", { enum: ["low", "normal", "high", "urgent"] })
+      .notNull()
+      .default("normal"),
     ownerUserId: uuid("owner_user_id"),
     assignedUserId: uuid("assigned_user_id"),
     startsAt: timestamp("starts_at", { withTimezone: true }),
@@ -42,6 +44,9 @@ export const crmActivities = pgTable(
     index("crm_activities_assignee").on(t.orgId, t.assignedUserId, t.status, t.dueAt),
     index("crm_activities_calendar").on(t.orgId, t.startsAt, t.endsAt),
     check("crm_activity_duration", sql`${t.durationMinutes} is null or ${t.durationMinutes} >= 0`),
-    check("crm_activity_dates", sql`${t.endsAt} is null or ${t.startsAt} is null or ${t.endsAt} >= ${t.startsAt}`),
+    check(
+      "crm_activity_dates",
+      sql`${t.endsAt} is null or ${t.startsAt} is null or ${t.endsAt} >= ${t.startsAt}`,
+    ),
   ],
 );

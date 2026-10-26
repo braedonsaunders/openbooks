@@ -22,17 +22,11 @@ for (const model of ["finance", "operating"] as const) {
     assert.equal(m.schedule.at(-1)!.closing, "0.0000");
     assert.equal(m.schedule.at(-1)!.interest, "0.0000");
     assert.equal(
-      m.schedule.reduce(
-        (a, r) => a + toUnits(r.amortization ?? r.rouAdjustment!),
-        0n,
-      ),
+      m.schedule.reduce((a, r) => a + toUnits(r.amortization ?? r.rouAdjustment!), 0n),
       toUnits(m.rouAsset),
     );
     assert.equal(
-      m.schedule.reduce(
-        (a, r) => a + toUnits(r.payment) - toUnits(r.interest),
-        0n,
-      ),
+      m.schedule.reduce((a, r) => a + toUnits(r.payment) - toUnits(r.interest), 0n),
       toUnits(m.liability),
     );
     if (model === "operating")
@@ -53,10 +47,7 @@ for (const model of ["finance", "operating"] as const) {
     assert.equal(m.liability, "0.0000");
     assert.equal(m.rouAsset, "1000.0000");
     assert.equal(m.schedule[0]!.interest, "0.0000");
-    assert.equal(
-      m.schedule[0]!.amortization ?? m.schedule[0]!.singleCost,
-      "1000.0000",
-    );
+    assert.equal(m.schedule[0]!.amortization ?? m.schedule[0]!.singleCost, "1000.0000");
   });
   test(`${model}: ROU costs retire exactly without an unbalanced operating entry`, () => {
     const m = measureLesseeLease({
@@ -72,20 +63,12 @@ for (const model of ["finance", "operating"] as const) {
     });
     assert.equal(toUnits(m.rouAsset) - toUnits(m.liability), toUnits("105"));
     assert.equal(
-      m.schedule.reduce(
-        (a, r) => a + toUnits(r.amortization ?? r.rouAdjustment!),
-        0n,
-      ),
+      m.schedule.reduce((a, r) => a + toUnits(r.amortization ?? r.rouAdjustment!), 0n),
       toUnits(m.rouAsset),
     );
     if (model === "operating")
       for (const r of m.schedule)
-        assert.equal(
-          toUnits(r.singleCost!) -
-            toUnits(r.interest) -
-            toUnits(r.rouAdjustment!),
-          0n,
-        );
+        assert.equal(toUnits(r.singleCost!) - toUnits(r.interest) - toUnits(r.rouAdjustment!), 0n);
   });
 }
 test("scope reduction derecognizes proportional carrying amounts before remeasurement", () => {
@@ -135,10 +118,7 @@ test("every lease adjustment balances at ledger precision", () => {
         settlementPayment: "17.0001",
       });
       assert.equal(
-        toUnits(r.rouDelta) -
-          toUnits(r.liabilityDelta) -
-          toUnits(r.settlement) -
-          toUnits(r.gain),
+        toUnits(r.rouDelta) - toUnits(r.liabilityDelta) - toUnits(r.settlement) - toUnits(r.gain),
         0n,
       );
     }

@@ -20,7 +20,9 @@ export async function assetBasisDelta(
   bookId: string,
   asOf?: string,
 ): Promise<AssetBasisDelta> {
-  return (await tx.execute<AssetBasisDelta>(sql`
+  return (
+    await tx.execute<AssetBasisDelta>(
+      sql`
     select coalesce(sum(cost_delta),0)::text as cost,
            coalesce(sum(accumulated_delta),0)::text as accumulated,
            coalesce(sum(salvage_delta),0)::text as salvage,
@@ -30,14 +32,14 @@ export async function assetBasisDelta(
            (select latest.depreciable_after::text from asset_basis_changes latest where latest.org_id=${orgId} and latest.asset_id=${assetId} and latest.book_id=${bookId} ${asOf ? sql`and latest.effective_on<=${asOf}` : sql``} order by latest.effective_on desc,latest.ordinal desc limit 1) as "depreciableAfter"
       from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${bookId}
         ${asOf ? sql`and effective_on<=${asOf}` : sql``}
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
 }
 function money(value: string, name: string): string {
   const result = canonicalDecimal(value, 4);
-  if (
-    result === null ||
-    result.replace(/^-/, "").split(".")[0]!.replace(/^0+/, "").length > 15
-  )
+  if (result === null || result.replace(/^-/, "").split(".")[0]!.replace(/^0+/, "").length > 15)
     throw new Error(`${name} must be an exact ledger amount`);
   return fromUnits(toUnits(result));
 }
@@ -49,9 +51,7 @@ export function measurePartialDisposal(args: {
   accumulated: string;
   salvage: string;
   proceeds: string;
-  portion:
-    | { percent: string }
-    | { cost: string; accumulated: string; salvage: string };
+  portion: { percent: string } | { cost: string; accumulated: string; salvage: string };
 }) {
   const cost = money(args.cost, "cost"),
     accumulated = money(args.accumulated, "accumulated depreciation"),
@@ -71,18 +71,13 @@ export function measurePartialDisposal(args: {
   if ("percent" in args.portion) {
     const pct = toUnits(money(args.portion.percent, "disposed percentage"));
     if (pct <= 0n || pct > toUnits("100"))
-      throw new Error(
-        "disposed percentage must be greater than zero and at most 100",
-      );
+      throw new Error("disposed percentage must be greater than zero and at most 100");
     removedCost = mulRatio(cost, pct, toUnits("100"));
     removedAccumulated = mulRatio(accumulated, pct, toUnits("100"));
     removedSalvage = mulRatio(salvage, pct, toUnits("100"));
   } else {
     removedCost = money(args.portion.cost, "component cost");
-    removedAccumulated = money(
-      args.portion.accumulated,
-      "component accumulated depreciation",
-    );
+    removedAccumulated = money(args.portion.accumulated, "component accumulated depreciation");
     removedSalvage = money(args.portion.salvage, "component residual value");
   }
   const remainingCost = add(cost, neg(removedCost)),
@@ -96,12 +91,10 @@ export function measurePartialDisposal(args: {
     toUnits(removedAccumulated) > toUnits(removedCost) ||
     toUnits(removedSalvage) < 0n ||
     toUnits(removedSalvage) > toUnits(salvage) ||
-    toUnits(removedSalvage) >
-      toUnits(removedCost) - toUnits(removedAccumulated) ||
+    toUnits(removedSalvage) > toUnits(removedCost) - toUnits(removedAccumulated) ||
     toUnits(remainingAccumulated) < 0n ||
     toUnits(remainingAccumulated) > toUnits(remainingCost) ||
-    toUnits(remainingSalvage) >
-      toUnits(remainingCost) - toUnits(remainingAccumulated)
+    toUnits(remainingSalvage) > toUnits(remainingCost) - toUnits(remainingAccumulated)
   )
     throw new Error(
       "component amounts must leave valid cost, accumulated depreciation and residual value on both portions",

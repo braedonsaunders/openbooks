@@ -1,24 +1,24 @@
-import 'server-only'
-import { createHash } from 'node:crypto'
-import { chequeBankDesign } from './pdf-templates/cheque-stock'
-import { sql } from 'drizzle-orm'
-import { PDFDocument } from 'pdf-lib'
+import "server-only";
+import { createHash } from "node:crypto";
+import { chequeBankDesign } from "./pdf-templates/cheque-stock";
+import { sql } from "drizzle-orm";
+import { PDFDocument } from "pdf-lib";
 import {
   RendererUnavailableError,
   PdfTemplateValidationError,
   encryptPdf,
   renderPasswordExpression,
   type PasswordTokenCatalog,
-} from '@openbooks/pdf'
-import { db } from '@openbooks/engine/platform/db'
-import type { Authz } from './authz'
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { payrollSubsidiaryInScope } from '@openbooks/engine/payroll/scope'
-import { lockIssuedChequePrint, issuePayRunCheques } from '@openbooks/engine/payroll/cheques'
-import { mergeAndPrintPdf } from './pdf-templates/render'
-import { resolvePdfTemplate } from './pdf-templates/store'
-import { loadPdfRecordValues } from './pdf-templates/values'
-import { sendRecordPdfEmail } from './pdf-templates/send'
+} from "@openbooks/pdf";
+import { db } from "@openbooks/engine/platform/db";
+import type { Authz } from "./authz";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { payrollSubsidiaryInScope } from "@openbooks/engine/payroll/scope";
+import { lockIssuedChequePrint, issuePayRunCheques } from "@openbooks/engine/payroll/cheques";
+import { mergeAndPrintPdf } from "./pdf-templates/render";
+import { resolvePdfTemplate } from "./pdf-templates/store";
+import { loadPdfRecordValues } from "./pdf-templates/values";
+import { sendRecordPdfEmail } from "./pdf-templates/send";
 
 /**
  * End-of-run outputs: every stub as one printable PDF, and per-employee stub
@@ -35,40 +35,45 @@ import { sendRecordPdfEmail } from './pdf-templates/send'
 
 /** The record values a stub password expression may be written against. */
 export const STUB_PASSWORD_TOKENS: PasswordTokenCatalog = {
-  surname: 'text',
-  givenName: 'text',
-  employeeNumber: 'text',
-  dob: 'date',
-}
+  surname: "text",
+  givenName: "text",
+  employeeNumber: "text",
+  dob: "date",
+};
 
 /** orgs.settings.payroll.stubPassword. */
 export interface StubPasswordPolicy {
-  enabled: boolean
-  expression: string
+  enabled: boolean;
+  expression: string;
 }
 
 interface RunStub {
-  id: string
-  name: string
-  email: string | null
-  delivery: 'email' | 'print' | 'both'
-  surname: string | null
-  givenName: string | null
-  employeeNumber: string | null
-  birthDate: string | null
-  subsidiaryId: string | null
+  id: string;
+  name: string;
+  email: string | null;
+  delivery: "email" | "print" | "both";
+  surname: string | null;
+  givenName: string | null;
+  employeeNumber: string | null;
+  birthDate: string | null;
+  subsidiaryId: string | null;
 }
 
 async function runStubs(
   orgId: string,
   documentId: string,
-  allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
+  allowedSubsidiaryIds?: Authz["allowedSubsidiaryIds"],
 ): Promise<RunStub[]> {
-  const r = (await db.execute<{
-      id: string; name: string; email: string | null; delivery: string
-      employee_number: string | null; birth_date: string | null
-      subsidiary_id: string | null
-    }>(sql`
+  const r = await db.execute<{
+    id: string;
+    name: string;
+    email: string | null;
+    delivery: string;
+    employee_number: string | null;
+    birth_date: string | null;
+    subsidiary_id: string | null;
+  }>(
+    sql`
     select s.id, p.display_name as name, p.email,
            p.subsidiary_id,
            coalesce(prof.stub_delivery, 'email') as delivery,
@@ -80,47 +85,52 @@ async function runStubs(
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
      order by p.display_name
-  `, 'objects'))
+  `,
+    "objects",
+  );
   const stubs: RunStub[] = r.map((row) => {
-    const [surname, ...given] = splitName(row.name)
+    const [surname, ...given] = splitName(row.name);
     return {
       id: row.id,
       name: row.name,
       email: row.email,
-      delivery: (row.delivery === 'print' || row.delivery === 'both' ? row.delivery : 'email'),
+      delivery: row.delivery === "print" || row.delivery === "both" ? row.delivery : "email",
       surname: surname ?? null,
-      givenName: given.join(' ') || (surname ?? null),
+      givenName: given.join(" ") || (surname ?? null),
       employeeNumber: row.employee_number,
       birthDate: row.birth_date,
       subsidiaryId: row.subsidiary_id,
-    }
-  })
+    };
+  });
   // Stub PDFs carry every employee's wage data, so the whole set is visible
   // only when every stub is: a scoped caller must own the complete
   // population before seeing any stub, exactly as the run detail requires.
   if (!stubs.every((stub) => payrollSubsidiaryInScope(allowedSubsidiaryIds, stub.subsidiaryId))) {
-    throw new PayrollError('pay run not found')
+    throw new PayrollError("pay run not found");
   }
-  return stubs
+  return stubs;
 }
 
 /** "First Last" → [surname, ...given]; single token = both. */
 function splitName(displayName: string): string[] {
-  const clean = displayName.replace(/\s*\(.*\)\s*$/, '').trim()
-  const parts = clean.split(/\s+/)
-  if (parts.length === 1) return [parts[0]!]
-  return [parts[parts.length - 1]!, ...parts.slice(0, -1)]
+  const clean = displayName.replace(/\s*\(.*\)\s*$/, "").trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length === 1) return [parts[0]!];
+  return [parts[parts.length - 1]!, ...parts.slice(0, -1)];
 }
 
 export async function stubPasswordPolicy(orgId: string): Promise<StubPasswordPolicy> {
-  const r = (await db.execute<{ policy: { enabled?: unknown; expression?: unknown } | null }>(sql`
+  const r = await db.execute<{ policy: { enabled?: unknown; expression?: unknown } | null }>(
+    sql`
     select settings#>'{payroll,stubPassword}' as policy from orgs where id = ${orgId}
-  `, 'objects'))
-  const policy = r[0]?.policy ?? {}
+  `,
+    "objects",
+  );
+  const policy = r[0]?.policy ?? {};
   return {
     enabled: policy.enabled === true,
-    expression: typeof policy.expression === 'string' ? policy.expression : '',
-  }
+    expression: typeof policy.expression === "string" ? policy.expression : "",
+  };
 }
 
 /**
@@ -136,7 +146,7 @@ function stubPassword(policy: StubPasswordPolicy, stub: RunStub): string {
     givenName: stub.givenName,
     employeeNumber: stub.employeeNumber,
     dob: stub.birthDate,
-  })
+  });
 }
 
 /**
@@ -150,26 +160,32 @@ function stubPassword(policy: StubPasswordPolicy, stub: RunStub): string {
 export async function mergedRunStubsPdf(
   orgId: string,
   documentId: string,
-  options: { set?: 'all' | 'print'; allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'] } = {},
+  options: { set?: "all" | "print"; allowedSubsidiaryIds?: Authz["allowedSubsidiaryIds"] } = {},
 ): Promise<{ pdf: Uint8Array; count: number } | null> {
-  const all = await runStubs(orgId, documentId, options.allowedSubsidiaryIds)
-  const stubs = options.set === 'print'
-    ? all.filter((stub) => stub.delivery === 'print' || stub.delivery === 'both')
-    : all
-  if (stubs.length === 0) return null
-  const template = await resolvePdfTemplate(orgId, 'pay_stub', null)
-  if (!template) return null
+  const all = await runStubs(orgId, documentId, options.allowedSubsidiaryIds);
+  const stubs =
+    options.set === "print"
+      ? all.filter((stub) => stub.delivery === "print" || stub.delivery === "both")
+      : all;
+  if (stubs.length === 0) return null;
+  const template = await resolvePdfTemplate(orgId, "pay_stub", null);
+  if (!template) return null;
 
-  const merged = await PDFDocument.create()
+  const merged = await PDFDocument.create();
   for (const stub of stubs) {
-    const record = await loadPdfRecordValues('pay_stub', orgId, stub.id, options.allowedSubsidiaryIds ?? null)
-    if (!record) continue
-    const pdf = await mergeAndPrintPdf(template, record.values)
-    const doc = await PDFDocument.load(pdf)
-    const pages = await merged.copyPages(doc, doc.getPageIndices())
-    for (const page of pages) merged.addPage(page)
+    const record = await loadPdfRecordValues(
+      "pay_stub",
+      orgId,
+      stub.id,
+      options.allowedSubsidiaryIds ?? null,
+    );
+    if (!record) continue;
+    const pdf = await mergeAndPrintPdf(template, record.values);
+    const doc = await PDFDocument.load(pdf);
+    const pages = await merged.copyPages(doc, doc.getPageIndices());
+    for (const page of pages) merged.addPage(page);
   }
-  return { pdf: await merged.save(), count: stubs.length }
+  return { pdf: await merged.save(), count: stubs.length };
 }
 
 /**
@@ -185,48 +201,89 @@ export async function mergedRunChequesPdf(
   orgId: string,
   documentId: string,
   actorId: string,
-  allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
+  allowedSubsidiaryIds?: Authz["allowedSubsidiaryIds"],
 ): Promise<{ pdf: Uint8Array; count: number; issued: number } | null> {
-  const template = await resolvePdfTemplate(orgId, 'payroll_cheque', null)
-  if (!template) throw new PayrollError('Configure an active payroll cheque template in PDF templates before printing payroll cheques')
-  let bankDesign
-  try { bankDesign = chequeBankDesign(template.compiledHtml) }
-  catch (error) { throw new PdfTemplateValidationError(error instanceof Error ? error.message : 'Cheque bank configuration is invalid.') }
-  const batch = await issuePayRunCheques({ orgId, documentId, actorId, allowedSubsidiaryIds, bankProfileId:bankDesign.profileId, printMicr:bankDesign.printMicr })
-  if (batch.cheques.length === 0) return null
-
-  const merged = await PDFDocument.create()
-  let count = 0
-  for (const cheque of batch.cheques) {
-    const record = await loadPdfRecordValues('payroll_cheque', orgId, cheque.stubId, allowedSubsidiaryIds ?? null)
-    if (!record) throw new PayrollError('A cheque in this batch is no longer printable — reload the committed payroll run before printing')
-    const pdf = await mergeAndPrintPdf(template, record.values)
-    const doc = await PDFDocument.load(pdf)
-    if (doc.getPageCount() !== 1) throw new PayrollError('Each cheque must fit exactly one stock sheet — adjust its layout in the PDF designer and preview again')
-    const pages = await merged.copyPages(doc, doc.getPageIndices())
-    for (const page of pages) merged.addPage(page)
-    count += 1
+  const template = await resolvePdfTemplate(orgId, "payroll_cheque", null);
+  if (!template)
+    throw new PayrollError(
+      "Configure an active payroll cheque template in PDF templates before printing payroll cheques",
+    );
+  let bankDesign;
+  try {
+    bankDesign = chequeBankDesign(template.compiledHtml);
+  } catch (error) {
+    throw new PdfTemplateValidationError(
+      error instanceof Error ? error.message : "Cheque bank configuration is invalid.",
+    );
   }
-  const bytes = await merged.save()
-  await db.transaction(async tx => {
-    const live = await lockIssuedChequePrint(tx,{orgId,stubId:batch.cheques[0]!.stubId,actorId,allowedSubsidiaryIds})
-    if (live.documentId !== documentId || live.chequeNumber !== batch.cheques[0]!.chequeNumber) throw new PayrollError('Reload the issued cheque batch before printing')
-    const audit = await tx.execute<{id:string}>(sql`
+  const batch = await issuePayRunCheques({
+    orgId,
+    documentId,
+    actorId,
+    allowedSubsidiaryIds,
+    bankProfileId: bankDesign.profileId,
+    printMicr: bankDesign.printMicr,
+  });
+  if (batch.cheques.length === 0) return null;
+
+  const merged = await PDFDocument.create();
+  let count = 0;
+  for (const cheque of batch.cheques) {
+    const record = await loadPdfRecordValues(
+      "payroll_cheque",
+      orgId,
+      cheque.stubId,
+      allowedSubsidiaryIds ?? null,
+    );
+    if (!record)
+      throw new PayrollError(
+        "A cheque in this batch is no longer printable — reload the committed payroll run before printing",
+      );
+    const pdf = await mergeAndPrintPdf(template, record.values);
+    const doc = await PDFDocument.load(pdf);
+    if (doc.getPageCount() !== 1)
+      throw new PayrollError(
+        "Each cheque must fit exactly one stock sheet — adjust its layout in the PDF designer and preview again",
+      );
+    const pages = await merged.copyPages(doc, doc.getPageIndices());
+    for (const page of pages) merged.addPage(page);
+    count += 1;
+  }
+  const bytes = await merged.save();
+  await db.transaction(async (tx) => {
+    const live = await lockIssuedChequePrint(tx, {
+      orgId,
+      stubId: batch.cheques[0]!.stubId,
+      actorId,
+      allowedSubsidiaryIds,
+    });
+    if (live.documentId !== documentId || live.chequeNumber !== batch.cheques[0]!.chequeNumber)
+      throw new PayrollError("Reload the issued cheque batch before printing");
+    const audit = await tx.execute<{ id: string }>(
+      sql`
     insert into audit_log (org_id,table_name,row_id,action,changes,actor_id)
-    values (${orgId},'pay_runs',${documentId},'update',${JSON.stringify({event:'cheque_batch_printed',count,issued:batch.issued,
-      chequeNumbers:batch.cheques.map(cheque=>cheque.chequeNumber),template:template.provenance,contentHash:createHash('sha256').update(bytes).digest('hex')})}::jsonb,${actorId}) returning id
-  `, 'objects')
-    if (audit.length !== 1) throw new PayrollError('Cheque print audit was not recorded')
-  })
-  return { pdf: bytes, count, issued: batch.issued }
+    values (${orgId},'pay_runs',${documentId},'update',${JSON.stringify({
+      event: "cheque_batch_printed",
+      count,
+      issued: batch.issued,
+      chequeNumbers: batch.cheques.map((cheque) => cheque.chequeNumber),
+      template: template.provenance,
+      contentHash: createHash("sha256").update(bytes).digest("hex"),
+    })}::jsonb,${actorId}) returning id
+  `,
+      "objects",
+    );
+    if (audit.length !== 1) throw new PayrollError("Cheque print audit was not recorded");
+  });
+  return { pdf: bytes, count, issued: batch.issued };
 }
 
 export interface EmailStubsResult {
-  sent: number
-  noEmail: string[]
+  sent: number;
+  noEmail: string[];
   /** Employees whose delivery preference is print-only. */
-  printOnly: string[]
-  failed: { name: string; error: string }[]
+  printOnly: string[];
+  failed: { name: string; error: string }[];
   /**
    * A render was attempted and the outage struck: every failed entry carries
    * the named refusal in its message, but the batch envelope cannot show it
@@ -234,7 +291,7 @@ export interface EmailStubsResult {
    * Absent unless a render attempt met the outage — tenant refusals and
    * policy failures never set it.
    */
-  rendererOutage?: boolean
+  rendererOutage?: boolean;
 }
 
 /**
@@ -246,47 +303,48 @@ export interface EmailStubsResult {
 export async function emailRunStubs(
   orgId: string,
   documentId: string,
-  allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
+  allowedSubsidiaryIds?: Authz["allowedSubsidiaryIds"],
 ): Promise<EmailStubsResult> {
-  const stubs = await runStubs(orgId, documentId, allowedSubsidiaryIds)
-  const policy = await stubPasswordPolicy(orgId)
-  const result: EmailStubsResult = { sent: 0, noEmail: [], printOnly: [], failed: [] }
+  const stubs = await runStubs(orgId, documentId, allowedSubsidiaryIds);
+  const policy = await stubPasswordPolicy(orgId);
+  const result: EmailStubsResult = { sent: 0, noEmail: [], printOnly: [], failed: [] };
   for (const stub of stubs) {
-    if (stub.delivery === 'print') {
-      result.printOnly.push(stub.name)
-      continue
+    if (stub.delivery === "print") {
+      result.printOnly.push(stub.name);
+      continue;
     }
     if (!stub.email?.trim()) {
-      result.noEmail.push(stub.name)
-      continue
+      result.noEmail.push(stub.name);
+      continue;
     }
     if (!policy.enabled) {
       result.failed.push({
         name: stub.name,
-        error: 'pay-stub email delivery requires an enabled password policy',
-      })
-      continue
+        error: "pay-stub email delivery requires an enabled password policy",
+      });
+      continue;
     }
     try {
       await sendRecordPdfEmail({
-        recordType: 'pay_stub',
+        recordType: "pay_stub",
         orgId,
         id: stub.id,
         // Encryption fails closed: a policy that cannot produce this
         // employee's password stops their email, it never downgrades it.
-        encrypt: async (pdf: Buffer) => encryptPdf(pdf, { userPassword: stubPassword(policy, stub) }),
+        encrypt: async (pdf: Buffer) =>
+          encryptPdf(pdf, { userPassword: stubPassword(policy, stub) }),
         // The population gate above (runStubs) already fenced every stub;
         // the load re-enforces the same scope per record.
         scope: allowedSubsidiaryIds ?? null,
-      })
-      result.sent += 1
+      });
+      result.sent += 1;
     } catch (e) {
       // The per-item message already names the outage and its remedy, and
       // the flag below lets the route refuse the batch as the 503 it is
       // when nothing was sent at all.
-      if (e instanceof RendererUnavailableError) result.rendererOutage = true
-      result.failed.push({ name: stub.name, error: (e as Error).message })
+      if (e instanceof RendererUnavailableError) result.rendererOutage = true;
+      result.failed.push({ name: stub.name, error: (e as Error).message });
     }
   }
-  return result
+  return result;
 }

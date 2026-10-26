@@ -1,5 +1,5 @@
-import type { TaxReturnResult, TaxReturnBox } from '@openbooks/engine/tax-returns/return'
-import { formatDecimal } from './money-format'
+import type { TaxReturnResult, TaxReturnBox } from "@openbooks/engine/tax-returns/return";
+import { formatDecimal } from "./money-format";
 
 /**
  * Self-authored, form-faithful facsimiles of government indirect-tax returns.
@@ -21,45 +21,45 @@ import { formatDecimal } from './money-format'
 
 export interface TaxFormSection {
   /** Section heading (e.g. "NET TAX CALCULATION"); omit for an unlabelled group. */
-  title?: string
+  title?: string;
   /** Box line codes, in display order, that belong to this section. */
-  lineCodes: string[]
+  lineCodes: string[];
 }
 
 export interface TaxFormHeaderField {
-  label: string
+  label: string;
   /** Optional static hint/value shown in the field (e.g. a format mask). */
-  value?: string
+  value?: string;
 }
 
 export interface TaxFormLayout {
   /** Tax authority masthead, e.g. "Canada Revenue Agency". */
-  agency: string
+  agency: string;
   /** Secondary agency line (bilingual forms), e.g. "Agence du revenu du Canada". */
-  agencySub?: string
+  agencySub?: string;
   /** The form's own printed subtitle. */
-  subtitle?: string
+  subtitle?: string;
   /** Form's own printed identifier, e.g. "GST34-2". Defaults to the pack code. */
-  formNumber?: string
+  formNumber?: string;
   /** Identification fields printed above the line grid. */
-  headerFields?: TaxFormHeaderField[]
+  headerFields?: TaxFormHeaderField[];
   /** Explicit section grouping of the boxes. Boxes not named in any section are
    *  appended in their natural order under a trailing unlabelled section. */
-  sections?: TaxFormSection[]
+  sections?: TaxFormSection[];
   /** Instruction / declaration notes printed under the grid. */
-  footerNotes?: string[]
+  footerNotes?: string[];
 }
 
 export function escFacsimile(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
-    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
-  )
+    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;",
+  );
 }
 
 /** Government forms print 2-decimal amounts with thousands separators; negatives
  *  in parentheses, and an exact zero as a plain 0.00. */
-const EXACT_DECIMAL_TEXT = /^[-+]?\d+(?:\.\d+)?$/
-const NEGATIVE_ZERO_TEXT = /^-0+(?:\.0+)?$/
+const EXACT_DECIMAL_TEXT = /^[-+]?\d+(?:\.\d+)?$/;
+const NEGATIVE_ZERO_TEXT = /^-0+(?:\.0+)?$/;
 
 /**
  * Intl accepts decimal strings as mathematical values, so handing it the
@@ -69,26 +69,27 @@ const NEGATIVE_ZERO_TEXT = /^-0+(?:\.0+)?$/
  * text instead of silently becoming zero or NaN.
  */
 function formatExactFacsimileValue(value: string): string | null {
-  const normalized = value.trim()
-  if (!EXACT_DECIMAL_TEXT.test(normalized)) return null
-  return formatDecimal('en-US', normalized, {
+  const normalized = value.trim();
+  if (!EXACT_DECIMAL_TEXT.test(normalized)) return null;
+  return formatDecimal("en-US", normalized, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  });
 }
 
 export function fmtFacsimileAmount(value: string): string {
-  const normalized = value.trim()
-  const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
-  const magnitude = negative || NEGATIVE_ZERO_TEXT.test(normalized) ? normalized.slice(1) : normalized
-  const formatted = formatExactFacsimileValue(magnitude)
-  if (formatted === null) return escFacsimile(value)
-  return negative ? `(${formatted})` : formatted
+  const normalized = value.trim();
+  const negative = normalized.startsWith("-") && !NEGATIVE_ZERO_TEXT.test(normalized);
+  const magnitude =
+    negative || NEGATIVE_ZERO_TEXT.test(normalized) ? normalized.slice(1) : normalized;
+  const formatted = formatExactFacsimileValue(magnitude);
+  if (formatted === null) return escFacsimile(value);
+  return negative ? `(${formatted})` : formatted;
 }
 
 const GENERIC_FOOTER =
-  'This is a working copy generated from your ledger. Verify every amount and file through the ' +
-  'method the tax authority mandates. Not a certified government return.'
+  "This is a working copy generated from your ledger. Verify every amount and file through the " +
+  "method the tax authority mandates. Not a certified government return.";
 
 /**
  * Build the form body HTML for a computed return. Pure string assembly, so it is
@@ -100,80 +101,84 @@ export function renderTaxFormFacsimileHtml(
   branding?: { orgName?: string; primaryColor?: string | null } | null,
 ): string {
   const accent =
-    branding?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(branding.primaryColor) ? branding.primaryColor : '#0f766e'
-  const byCode = new Map(result.boxes.map((b) => [b.lineCode, b]))
+    branding?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(branding.primaryColor)
+      ? branding.primaryColor
+      : "#0f766e";
+  const byCode = new Map(result.boxes.map((b) => [b.lineCode, b]));
 
   // Partition boxes into sections; anything not placed falls to a trailing group.
-  const placed = new Set<string>()
-  const sections: TaxFormSection[] = []
+  const placed = new Set<string>();
+  const sections: TaxFormSection[] = [];
   for (const s of layout?.sections ?? []) {
-    const present = s.lineCodes.filter((c) => byCode.has(c))
-    present.forEach((c) => placed.add(c))
-    if (present.length) sections.push({ title: s.title, lineCodes: present })
+    const present = s.lineCodes.filter((c) => byCode.has(c));
+    present.forEach((c) => placed.add(c));
+    if (present.length) sections.push({ title: s.title, lineCodes: present });
   }
-  const leftover = result.boxes.filter((b) => !placed.has(b.lineCode)).map((b) => b.lineCode)
-  if (leftover.length) sections.push({ lineCodes: leftover })
+  const leftover = result.boxes.filter((b) => !placed.has(b.lineCode)).map((b) => b.lineCode);
+  if (leftover.length) sections.push({ lineCodes: leftover });
 
   const lineRow = (box: TaxReturnBox): string => {
-    const heavy = box.computed // computed totals read as the emphasized subtotal lines
-    const chipBg = heavy ? '#000000' : 'transparent'
-    const chipColor = heavy ? '#ffffff' : '#0f172a'
-    const amountStyle = `text-align:right;font-family:'Courier New',monospace;font-size:11px;padding:3px 8px;border:1px solid #94a3b8;min-width:120px;background:${box.editable ? '#fffef5' : '#ffffff'};${heavy ? 'font-weight:700;' : ''}`
+    const heavy = box.computed; // computed totals read as the emphasized subtotal lines
+    const chipBg = heavy ? "#000000" : "transparent";
+    const chipColor = heavy ? "#ffffff" : "#0f172a";
+    const amountStyle = `text-align:right;font-family:'Courier New',monospace;font-size:11px;padding:3px 8px;border:1px solid #94a3b8;min-width:120px;background:${box.editable ? "#fffef5" : "#ffffff"};${heavy ? "font-weight:700;" : ""}`;
     return `<tr>
       <td style="width:34px;padding:2px;border-bottom:1px solid #e2e8f0;">
         <div style="background:${chipBg};color:${chipColor};text-align:center;font-size:10px;font-weight:700;border:1px solid #000;padding:1px 0;">${escFacsimile(box.lineCode)}</div>
       </td>
-      <td style="padding:3px 8px;border-bottom:1px solid #e2e8f0;${heavy ? 'font-weight:700;' : ''}">${escFacsimile(box.label)}${box.editable ? ' <span style="color:#94a3b8;font-size:9px;">(enter)</span>' : ''}</td>
+      <td style="padding:3px 8px;border-bottom:1px solid #e2e8f0;${heavy ? "font-weight:700;" : ""}">${escFacsimile(box.label)}${box.editable ? ' <span style="color:#94a3b8;font-size:9px;">(enter)</span>' : ""}</td>
       <td style="border-bottom:1px solid #e2e8f0;${amountStyle}">${fmtFacsimileAmount(box.value)}</td>
-    </tr>`
-  }
+    </tr>`;
+  };
 
   const sectionHtml = sections
     .map((s) => {
       const head = s.title
         ? `<tr><td colspan="3" style="background:${accent};color:#fff;font-weight:700;font-size:11px;letter-spacing:.04em;padding:5px 8px;">${escFacsimile(s.title)}</td></tr>`
-        : ''
-      return head + s.lineCodes.map((c) => lineRow(byCode.get(c)!)).join('')
+        : "";
+      return head + s.lineCodes.map((c) => lineRow(byCode.get(c)!)).join("");
     })
-    .join('')
+    .join("");
 
   const headerFields = (layout?.headerFields ?? [])
     .map(
       (f) =>
         `<div style="border:1px solid #cbd5e1;padding:4px 8px;min-height:34px;">
           <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;">${escFacsimile(f.label)}</div>
-          <div style="font-size:11px;color:#0f172a;font-family:'Courier New',monospace;">${escFacsimile(f.value ?? '')}</div>
+          <div style="font-size:11px;color:#0f172a;font-family:'Courier New',monospace;">${escFacsimile(f.value ?? "")}</div>
         </div>`,
     )
-    .join('')
+    .join("");
 
-  const notes = layout?.footerNotes ?? [GENERIC_FOOTER]
+  const notes = layout?.footerNotes ?? [GENERIC_FOOTER];
   const agencyLine = layout
     ? `<div style="font-size:13px;font-weight:700;color:#0f172a;">${escFacsimile(layout.agency)}</div>${
-        layout.agencySub ? `<div style="font-size:11px;color:#475569;">${escFacsimile(layout.agencySub)}</div>` : ''
+        layout.agencySub
+          ? `<div style="font-size:11px;color:#475569;">${escFacsimile(layout.agencySub)}</div>`
+          : ""
       }`
-    : ''
-  const formNumber = layout?.formNumber ?? result.formCode
+    : "";
+  const formNumber = layout?.formNumber ?? result.formCode;
 
   return `<div style="font-family:'Helvetica Neue',Arial,sans-serif;color:#0f172a;font-size:11px;">
     ${
       result.watermark
         ? `<div style="border:1.5px solid #b91c1c;color:#b91c1c;font-weight:700;font-size:10px;text-align:center;padding:4px;margin-bottom:10px;letter-spacing:.03em;">${escFacsimile(result.watermark)}</div>`
-        : ''
+        : ""
     }
     <table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><tr>
       <td style="vertical-align:top;">${agencyLine}
         <div style="font-size:16px;font-weight:800;margin-top:4px;">${escFacsimile(result.formName)}</div>
-        ${layout?.subtitle ? `<div style="font-size:11px;color:#475569;">${escFacsimile(layout.subtitle)}</div>` : ''}
+        ${layout?.subtitle ? `<div style="font-size:11px;color:#475569;">${escFacsimile(layout.subtitle)}</div>` : ""}
       </td>
       <td style="vertical-align:top;text-align:right;color:#475569;font-size:10px;">
         <div style="font-weight:700;color:#0f172a;">${escFacsimile(String(formNumber))}</div>
         <div>Reporting period</div>
         <div style="font-weight:700;color:#0f172a;font-family:'Courier New',monospace;">${escFacsimile(result.from)} &ndash; ${escFacsimile(result.to)}</div>
-        ${branding?.orgName ? `<div style="margin-top:4px;">${escFacsimile(branding.orgName)}</div>` : ''}
+        ${branding?.orgName ? `<div style="margin-top:4px;">${escFacsimile(branding.orgName)}</div>` : ""}
       </td>
     </tr></table>
-    ${headerFields ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">${headerFields}</div>` : ''}
+    ${headerFields ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">${headerFields}</div>` : ""}
     <table style="width:100%;border-collapse:collapse;border:1px solid #94a3b8;">
       <tr style="background:#f1f5f9;">
         <td style="width:34px;text-align:center;font-size:9px;color:#475569;padding:4px;font-weight:700;">Line</td>
@@ -183,13 +188,13 @@ export function renderTaxFormFacsimileHtml(
       ${sectionHtml}
     </table>
     <div style="margin-top:12px;color:#475569;font-size:9px;line-height:1.5;">
-      ${notes.map((n) => `<div>${escFacsimile(n)}</div>`).join('')}
+      ${notes.map((n) => `<div>${escFacsimile(n)}</div>`).join("")}
     </div>
     <div style="margin-top:18px;display:grid;grid-template-columns:2fr 1fr;gap:16px;">
       <div style="border-top:1px solid #94a3b8;padding-top:3px;font-size:9px;color:#64748b;">Authorized signature</div>
       <div style="border-top:1px solid #94a3b8;padding-top:3px;font-size:9px;color:#64748b;">Date</div>
     </div>
-  </div>`
+  </div>`;
 }
 
 /**
@@ -201,29 +206,29 @@ export function renderTaxFormFacsimileHtml(
 export type TaxFormRenderer = (
   result: TaxReturnResult,
   branding?: { orgName?: string; primaryColor?: string | null } | null,
-) => string
+) => string;
 
 /** Amount as the CRA worksheet prints it: thousands + forced 2 decimals.
  * Unsigned lines have no minus box, so a negative there (net refunds, a
  * negative adjustment) parenthesizes like the generic renderer — it must
  * stay visible, never collapse to its absolute value. */
 function fmtGrid(value: string): string {
-  const normalized = value.trim()
-  const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
-  const formatted = formatExactFacsimileValue(normalized.replace(/^[+-]/, ''))
-  if (formatted === null) return escFacsimile(value)
-  return negative ? `(${formatted})` : formatted
+  const normalized = value.trim();
+  const negative = normalized.startsWith("-") && !NEGATIVE_ZERO_TEXT.test(normalized);
+  const formatted = formatExactFacsimileValue(normalized.replace(/^[+-]/, ""));
+  if (formatted === null) return escFacsimile(value);
+  return negative ? `(${formatted})` : formatted;
 }
 
 /** Absolute magnitude for the NET TAX / BALANCE lines, whose sign lives in
  *  the CRA minus box beside the chip (see signCell). Null (uncomputed line)
  *  stays null so the cell renders blank. */
 function absGrid(value: string | null): string | null {
-  if (value == null) return null
-  const normalized = value.trim()
-  if (normalized === '') return null
-  const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
-  return negative ? normalized.slice(1) : normalized.replace(/^\+/, '')
+  if (value == null) return null;
+  const normalized = value.trim();
+  if (normalized === "") return null;
+  const negative = normalized.startsWith("-") && !NEGATIVE_ZERO_TEXT.test(normalized);
+  return negative ? normalized.slice(1) : normalized.replace(/^\+/, "");
 }
 
 /**
@@ -241,21 +246,21 @@ export function renderGst34Facsimile(
   // stays so the form keeps its shape, but the amount cell renders blank —
   // never a fabricated zero.
   const v = (code: string): string | null => {
-    const b = result.boxes.find((x) => x.lineCode === code)
-    return b?.value ?? null
-  }
+    const b = result.boxes.find((x) => x.lineCode === code);
+    return b?.value ?? null;
+  };
   const isEditable = (code: string): boolean =>
-    result.boxes.find((x) => x.lineCode === code)?.editable ?? false
+    result.boxes.find((x) => x.lineCode === code)?.editable ?? false;
 
   const box = (value: string | null, editable = false) =>
-    `<td style="width:150px;border:1px solid #000;border-left:none;padding:3px 6px;text-align:right;font-family:'Courier New',monospace;font-size:11px;background:${editable ? '#fffef5' : '#fff'};">${value == null || value.trim() === '' ? '' : fmtGrid(value)}</td>`
+    `<td style="width:150px;border:1px solid #000;border-left:none;padding:3px 6px;text-align:right;font-family:'Courier New',monospace;font-size:11px;background:${editable ? "#fffef5" : "#fff"};">${value == null || value.trim() === "" ? "" : fmtGrid(value)}</td>`;
   const chip = (code: string, reversed: boolean) =>
-    `<td style="width:30px;padding:0 3px;text-align:center;vertical-align:middle;"><div style="border:1px solid #000;background:${reversed ? '#000' : '#fff'};color:${reversed ? '#fff' : '#000'};font-weight:700;font-size:11px;padding:1px 0;">${code}</div></td>`
+    `<td style="width:30px;padding:0 3px;text-align:center;vertical-align:middle;"><div style="border:1px solid #000;background:${reversed ? "#000" : "#fff"};color:${reversed ? "#fff" : "#000"};font-weight:700;font-size:11px;padding:1px 0;">${code}</div></td>`;
   const signCell = (value: string | null) => {
-    const normalized = (value ?? '').trim()
-    const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
-    return `<td style="width:16px;text-align:center;font-weight:700;font-family:'Courier New',monospace;">${negative ? '&minus;' : ''}</td>`
-  }
+    const normalized = (value ?? "").trim();
+    const negative = normalized.startsWith("-") && !NEGATIVE_ZERO_TEXT.test(normalized);
+    return `<td style="width:16px;text-align:center;font-weight:700;font-family:'Courier New',monospace;">${negative ? "&minus;" : ""}</td>`;
+  };
 
   // A standard line: label box (left) · chip · amount box.
   const line = (label: string, code: string, opts?: { reversed?: boolean }) =>
@@ -264,7 +269,7 @@ export function renderGst34Facsimile(
       <td style="width:16px;"></td>
       ${chip(code, opts?.reversed ?? false)}
       ${box(v(code), isEditable(code))}
-    </tr>`
+    </tr>`;
   // A subtotal line: right-aligned caption spanning the label column.
   const subtotal = (caption: string, code: string) =>
     `<tr>
@@ -272,7 +277,7 @@ export function renderGst34Facsimile(
       <td style="width:16px;"></td>
       ${chip(code, true)}
       ${box(v(code))}
-    </tr>`
+    </tr>`;
   // NET TAX / BALANCE line: bold title + caption, with a sign box before the chip.
   const balance = (title: string, caption: string, code: string) =>
     `<tr>
@@ -280,23 +285,23 @@ export function renderGst34Facsimile(
       ${signCell(v(code))}
       ${chip(code, true)}
       ${box(absGrid(v(code)))}
-    </tr>`
+    </tr>`;
   const sectionHead = (title: string) =>
-    `<tr><td colspan="4" style="padding:8px 4px 3px;font-size:12px;font-weight:700;">&nbsp;&nbsp;${title}</td></tr>`
+    `<tr><td colspan="4" style="padding:8px 4px 3px;font-size:12px;font-weight:700;">&nbsp;&nbsp;${title}</td></tr>`;
   const note = (text: string) =>
-    `<tr><td colspan="4" style="padding:1px 6px 4px;font-size:9px;color:#333;"><strong>NOTE:</strong> ${text}</td></tr>`
+    `<tr><td colspan="4" style="padding:1px 6px 4px;font-size:9px;color:#333;"><strong>NOTE:</strong> ${text}</td></tr>`;
 
-  const period = `${result.from} &nbsp;&nbsp; ${result.to}`
+  const period = `${result.from} &nbsp;&nbsp; ${result.to}`;
   // The return's own filing identity from tax_registrations (threaded through
   // TaxReturnResult by computeTaxReturn) — an unregistered org prints a blank
   // business-number cell, never a fabricated number.
-  const bn = result.registrationNumber?.trim() ? result.registrationNumber.trim() : ''
+  const bn = result.registrationNumber?.trim() ? result.registrationNumber.trim() : "";
 
   return `<div style="width:780px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#000;">
     ${
       result.watermark
         ? `<div style="border:1.5px solid #b91c1c;color:#b91c1c;font-weight:700;font-size:10px;text-align:center;padding:4px;margin-bottom:8px;">${escFacsimile(result.watermark)}</div>`
-        : ''
+        : ""
     }
     <table style="width:100%;border-collapse:collapse;margin-bottom:6px;"><tr>
       <td style="vertical-align:top;font-weight:700;font-size:11px;line-height:1.3;">
@@ -310,7 +315,7 @@ export function renderGst34Facsimile(
     <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:10px;">
       <tr>
         <td style="border:1px solid #000;padding:4px 6px;width:50%;">Business Number<br><span style="font-family:'Courier New',monospace;font-size:11px;">${escFacsimile(bn)}</span></td>
-        <td style="border:1px solid #000;border-left:none;padding:4px 6px;">Name<br><span style="font-family:'Courier New',monospace;font-size:11px;">${escFacsimile(branding?.orgName ?? '')}</span></td>
+        <td style="border:1px solid #000;border-left:none;padding:4px 6px;">Name<br><span style="font-family:'Courier New',monospace;font-size:11px;">${escFacsimile(branding?.orgName ?? "")}</span></td>
       </tr>
       <tr>
         <td colspan="2" style="border:1px solid #000;border-top:none;padding:4px 6px;">
@@ -320,46 +325,46 @@ export function renderGst34Facsimile(
       </tr>
     </table>
     <table style="width:100%;border-collapse:collapse;">
-      ${line('Enter your total <strong>sales and other revenue.</strong> Do not include provincial sales tax, GST or HST. If you are using the Quick Method of accounting, include the GST or HST.', '101', { reversed: true })}
-      ${sectionHead('NET TAX CALCULATION')}
-      ${line('Enter the total of all <strong>GST and HST amounts that you collected or that became collectible</strong> by you in the reporting period.', '103')}
-      ${line('Enter the total amount of <strong>adjustments</strong> to be added to the net tax for the reporting period (e.g., GST/HST obtained from the recovery of a bad debt).', '104')}
-      ${subtotal('Total GST/HST and adjustments (add lines 103 and 104)', '105')}
-      ${line('Enter the GST/HST you paid or owe on qualifying expenses <strong>(input tax credits &ndash; ITCs)</strong> for the current period and any eligible unclaimed ITCs from a previous period.', '106')}
-      ${line('Enter the total amount of <strong>adjustments</strong> to be deducted when determining the net tax for the reporting period (e.g., GST/HST included in a bad debt).', '107')}
-      ${subtotal('Total ITCs and adjustments (add lines 106 and 107)', '108')}
-      ${balance('NET TAX', '(subtract line 108 from line 105). If the result is negative, enter a minus sign in the box next to the line number.', '109')}
-      ${sectionHead('OTHER CREDITS IF APPLICABLE')}
-      ${note('Do not complete line 111 until you have read the instructions on the reverse side of this return.')}
-      ${line('Enter any <strong>instalment and other annual filer payments</strong> you made for the reporting period.', '110', { reversed: true })}
-      ${line('Enter the total amount of the GST/HST <strong>rebates</strong>, only if the rebate form indicates that you can claim the amount on this line. Attach the rebate form to this return.', '111', { reversed: true })}
-      ${subtotal('Total other credits (add lines 110 and 111)', '112')}
-      ${balance('BALANCE', '(subtract line 112 from line 109). If the result is negative, enter a minus sign in the box next to the line number.', '113A')}
-      ${sectionHead('OTHER DEBITS IF APPLICABLE')}
-      ${note('Do not complete line 205 or line 405 until you have read the instructions on the reverse side of this return.')}
-      ${line('Enter the total amount of the <strong>GST/HST due on the acquisition of taxable real property.</strong>', '205', { reversed: true })}
-      ${line('Enter the total amount of <strong>other GST/HST to be self-assessed.</strong>', '405', { reversed: true })}
-      ${subtotal('Total other debits (add lines 205 and 405)', '113B')}
-      ${balance('BALANCE', '(add lines 113A and 113B). If the result is negative, enter a minus sign in the box next to the line number.', '113C')}
+      ${line("Enter your total <strong>sales and other revenue.</strong> Do not include provincial sales tax, GST or HST. If you are using the Quick Method of accounting, include the GST or HST.", "101", { reversed: true })}
+      ${sectionHead("NET TAX CALCULATION")}
+      ${line("Enter the total of all <strong>GST and HST amounts that you collected or that became collectible</strong> by you in the reporting period.", "103")}
+      ${line("Enter the total amount of <strong>adjustments</strong> to be added to the net tax for the reporting period (e.g., GST/HST obtained from the recovery of a bad debt).", "104")}
+      ${subtotal("Total GST/HST and adjustments (add lines 103 and 104)", "105")}
+      ${line("Enter the GST/HST you paid or owe on qualifying expenses <strong>(input tax credits &ndash; ITCs)</strong> for the current period and any eligible unclaimed ITCs from a previous period.", "106")}
+      ${line("Enter the total amount of <strong>adjustments</strong> to be deducted when determining the net tax for the reporting period (e.g., GST/HST included in a bad debt).", "107")}
+      ${subtotal("Total ITCs and adjustments (add lines 106 and 107)", "108")}
+      ${balance("NET TAX", "(subtract line 108 from line 105). If the result is negative, enter a minus sign in the box next to the line number.", "109")}
+      ${sectionHead("OTHER CREDITS IF APPLICABLE")}
+      ${note("Do not complete line 111 until you have read the instructions on the reverse side of this return.")}
+      ${line("Enter any <strong>instalment and other annual filer payments</strong> you made for the reporting period.", "110", { reversed: true })}
+      ${line("Enter the total amount of the GST/HST <strong>rebates</strong>, only if the rebate form indicates that you can claim the amount on this line. Attach the rebate form to this return.", "111", { reversed: true })}
+      ${subtotal("Total other credits (add lines 110 and 111)", "112")}
+      ${balance("BALANCE", "(subtract line 112 from line 109). If the result is negative, enter a minus sign in the box next to the line number.", "113A")}
+      ${sectionHead("OTHER DEBITS IF APPLICABLE")}
+      ${note("Do not complete line 205 or line 405 until you have read the instructions on the reverse side of this return.")}
+      ${line("Enter the total amount of the <strong>GST/HST due on the acquisition of taxable real property.</strong>", "205", { reversed: true })}
+      ${line("Enter the total amount of <strong>other GST/HST to be self-assessed.</strong>", "405", { reversed: true })}
+      ${subtotal("Total other debits (add lines 205 and 405)", "113B")}
+      ${balance("BALANCE", "(add lines 113A and 113B). If the result is negative, enter a minus sign in the box next to the line number.", "113C")}
     </table>
     <table style="width:100%;border-collapse:collapse;margin-top:10px;text-align:center;"><tr>
       <td style="width:50%;padding:4px;">
         <div style="font-weight:700;font-size:10px;">REFUND CLAIMED &nbsp;&#9660;</div>
-        <table style="width:100%;border-collapse:collapse;margin-top:2px;"><tr>${chip('114', true)}${box(v('114'))}</tr></table>
+        <table style="width:100%;border-collapse:collapse;margin-top:2px;"><tr>${chip("114", true)}${box(v("114"))}</tr></table>
       </td>
       <td style="width:50%;padding:4px;">
         <div style="font-weight:700;font-size:10px;">PAYMENT ENCLOSED &nbsp;&#9660;</div>
-        <table style="width:100%;border-collapse:collapse;margin-top:2px;"><tr>${chip('115', true)}${box(v('115'))}</tr></table>
+        <table style="width:100%;border-collapse:collapse;margin-top:2px;"><tr>${chip("115", true)}${box(v("115"))}</tr></table>
       </td>
     </tr></table>
     <div style="margin-top:8px;font-size:8px;color:#333;">GST34-1 E (02)</div>
-    <div style="margin-top:6px;font-size:8px;color:#666;">${escFacsimile(result.watermark ?? '')}</div>
-  </div>`
+    <div style="margin-top:6px;font-size:8px;color:#666;">${escFacsimile(result.watermark ?? "")}</div>
+  </div>`;
 }
 
 export const TAX_FORM_RENDERERS: Record<string, TaxFormRenderer> = {
   CA_GST34: renderGst34Facsimile,
-}
+};
 
 /**
  * Single entry point: use a bespoke renderer when the form has one, else the
@@ -375,10 +380,14 @@ export function renderTaxFormFacsimileBody(
   layout?: TaxFormLayout | null,
 ): string {
   if (layout === undefined) {
-    const bespoke = TAX_FORM_RENDERERS[result.formCode]
-    if (bespoke) return bespoke(result, branding)
+    const bespoke = TAX_FORM_RENDERERS[result.formCode];
+    if (bespoke) return bespoke(result, branding);
   }
-  return renderTaxFormFacsimileHtml(result, layout ?? TAX_FORM_LAYOUTS[result.formCode] ?? null, branding)
+  return renderTaxFormFacsimileHtml(
+    result,
+    layout ?? TAX_FORM_LAYOUTS[result.formCode] ?? null,
+    branding,
+  );
 }
 
 /**
@@ -388,26 +397,29 @@ export function renderTaxFormFacsimileBody(
  */
 export const TAX_FORM_LAYOUTS: Record<string, TaxFormLayout> = {
   CA_GST34: {
-    agency: 'Canada Revenue Agency',
-    agencySub: 'Agence du revenu du Canada',
-    subtitle: 'Goods and Services Tax / Harmonized Sales Tax (GST/HST) — Return for registrants',
-    formNumber: 'GST34-2',
+    agency: "Canada Revenue Agency",
+    agencySub: "Agence du revenu du Canada",
+    subtitle: "Goods and Services Tax / Harmonized Sales Tax (GST/HST) — Return for registrants",
+    formNumber: "GST34-2",
     headerFields: [
-      { label: 'Business Number' },
-      { label: 'Legal name' },
-      { label: 'Reporting period — from / to' },
-      { label: 'Due date' },
+      { label: "Business Number" },
+      { label: "Legal name" },
+      { label: "Reporting period — from / to" },
+      { label: "Due date" },
     ],
     sections: [
-      { title: 'SALES AND REVENUE', lineCodes: ['101'] },
-      { title: 'NET TAX CALCULATION', lineCodes: ['103', '104', '105', '106', '107', '108', '109'] },
-      { title: 'OTHER CREDITS IF APPLICABLE', lineCodes: ['110', '111', '112', '113A'] },
-      { title: 'OTHER DEBITS IF APPLICABLE', lineCodes: ['205', '405', '113B', '113C'] },
-      { title: 'REFUND OR PAYMENT', lineCodes: ['114', '115'] },
+      { title: "SALES AND REVENUE", lineCodes: ["101"] },
+      {
+        title: "NET TAX CALCULATION",
+        lineCodes: ["103", "104", "105", "106", "107", "108", "109"],
+      },
+      { title: "OTHER CREDITS IF APPLICABLE", lineCodes: ["110", "111", "112", "113A"] },
+      { title: "OTHER DEBITS IF APPLICABLE", lineCodes: ["205", "405", "113B", "113C"] },
+      { title: "REFUND OR PAYMENT", lineCodes: ["114", "115"] },
     ],
     footerNotes: [
-      'Do not complete line 205 or line 405 until you have read the instructions on the back of the return.',
-      'Working copy — file electronically through the CRA. Not a government return.',
+      "Do not complete line 205 or line 405 until you have read the instructions on the back of the return.",
+      "Working copy — file electronically through the CRA. Not a government return.",
     ],
   },
 
@@ -418,50 +430,50 @@ export const TAX_FORM_LAYOUTS: Record<string, TaxFormLayout> = {
   // and PDF route merge them in via the `layout` override parameter.
   // ------------------------------------------------------------------
   CA_T4: {
-    agency: 'Canada Revenue Agency',
-    agencySub: 'Agence du revenu du Canada',
-    subtitle: 'Statement of Remuneration Paid · État de la rémunération payée',
-    formNumber: 'T4',
+    agency: "Canada Revenue Agency",
+    agencySub: "Agence du revenu du Canada",
+    subtitle: "Statement of Remuneration Paid · État de la rémunération payée",
+    formNumber: "T4",
     footerNotes: [
-      'Working copy generated from committed pay stubs — every box reconciles to the stub traces. ' +
-        'File the T4 return electronically through the CRA. Not a certified government slip.',
+      "Working copy generated from committed pay stubs — every box reconciles to the stub traces. " +
+        "File the T4 return electronically through the CRA. Not a certified government slip.",
     ],
   },
   CA_RL1: {
-    agency: 'Revenu Québec',
+    agency: "Revenu Québec",
     subtitle: "Revenus d'emploi et revenus divers",
-    formNumber: 'RL-1',
+    formNumber: "RL-1",
     footerNotes: [
       "Copie de travail générée à partir des bulletins de paie validés — working copy from committed pay stubs. " +
         "File through Revenu Québec's online services. Not a certified government slip.",
     ],
   },
   CA_ROE: {
-    agency: 'Service Canada',
-    agencySub: 'Employment and Social Development Canada',
-    subtitle: 'Record of Employment · Relevé d’emploi',
-    formNumber: 'ROE',
+    agency: "Service Canada",
+    agencySub: "Employment and Social Development Canada",
+    subtitle: "Record of Employment · Relevé d’emploi",
+    formNumber: "ROE",
     footerNotes: [
-      'Working copy of the ROE blocks assembled from committed pay stubs. ' +
-        'Issue the ROE through ROE Web — this print is not a Service Canada form.',
+      "Working copy of the ROE blocks assembled from committed pay stubs. " +
+        "Issue the ROE through ROE Web — this print is not a Service Canada form.",
     ],
   },
   US_941: {
-    agency: 'Department of the Treasury — Internal Revenue Service',
+    agency: "Department of the Treasury — Internal Revenue Service",
     subtitle: "Employer's QUARTERLY Federal Tax Return",
-    formNumber: 'Form 941',
+    formNumber: "Form 941",
     footerNotes: [
-      'Worksheet built from committed pay stubs — the source data for the return. ' +
-        'File Form 941 with the IRS directly. Not an IRS form.',
+      "Worksheet built from committed pay stubs — the source data for the return. " +
+        "File Form 941 with the IRS directly. Not an IRS form.",
     ],
   },
   US_W2: {
-    agency: 'Department of the Treasury — Internal Revenue Service',
-    subtitle: 'Wage and Tax Statement',
-    formNumber: 'Form W-2',
+    agency: "Department of the Treasury — Internal Revenue Service",
+    subtitle: "Wage and Tax Statement",
+    formNumber: "Form W-2",
     footerNotes: [
-      'Working copy of the W-2 box data built from committed pay stubs. ' +
-        'Transmit W-2s through SSA Business Services Online. Not a scannable SSA form.',
+      "Working copy of the W-2 box data built from committed pay stubs. " +
+        "Transmit W-2s through SSA Business Services Online. Not a scannable SSA form.",
     ],
   },
-}
+};

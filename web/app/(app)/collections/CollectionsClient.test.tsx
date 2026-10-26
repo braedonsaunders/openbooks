@@ -1,9 +1,14 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 // Domain refusals remain visible and retain their records in the shared list.
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/collections', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/collections",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const script = {
   deletes: [] as string[],
@@ -12,7 +17,7 @@ const script = {
   recurringLoads: 0,
   recurringFailFirst: false,
   plans: [] as Record<string, unknown>[],
-}
+};
 Object.assign(globalThis, {
   __collectionsTestRouter: {
     push() {},
@@ -21,302 +26,481 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__collectionsTestRouter}export function usePathname(){return "/collections"}export function useSearchParams(){return new URLSearchParams(globalThis.__collectionsTestQuery ?? "")}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__collectionsTestRouter}export function usePathname(){return "/collections"}export function useSearchParams(){return new URLSearchParams(globalThis.__collectionsTestQuery ?? "")}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { CollectionsClient } = await import('./CollectionsClient')
-const { PlanVersionEntitlementsDrawer, SubscriptionEntitlementsDrawer } = await import('./EntitlementDrawers')
-const { BusinessDateProvider } = await import('../../../components/business-date-provider')
-const { MoneyProvider } = await import('../../../components/money-provider')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { CollectionsClient } = await import("./CollectionsClient");
+const { PlanVersionEntitlementsDrawer, SubscriptionEntitlementsDrawer } =
+  await import("./EntitlementDrawers");
+const { BusinessDateProvider } = await import("../../../components/business-date-provider");
+const { MoneyProvider } = await import("../../../components/money-provider");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const POLICY = {
-  id: 'pol-1',
-  name: 'Standard net-30',
-  appliesToKind: 'customer_invoice',
+  id: "pol-1",
+  name: "Standard net-30",
+  appliesToKind: "customer_invoice",
   gracePeriodDays: 0,
-  minBalance: '0',
+  minBalance: "0",
   isActive: true,
   updatedAt: "2026-10-01T10:00:00.000001Z",
   stages: [
-    { id: 'stage-1', sequence: 4, name: 'First reminder', offsetDays: 7, subjectTemplate: 's', bodyTemplate: 'b' },
+    {
+      id: "stage-1",
+      sequence: 4,
+      name: "First reminder",
+      offsetDays: 7,
+      subjectTemplate: "s",
+      bodyTemplate: "b",
+    },
   ],
-}
+};
 
-async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false, view: 'policies' | 'recurring' | 'plans' = 'policies', policyParam = '', plans: Record<string, unknown>[] = []): Promise<void> {
-  Object.assign(globalThis, { __collectionsTestQuery: policyParam ? `policy=${policyParam}` : "" })
-  script.writes = []
-  script.deletes = []
-  script.loads = 0
-  script.recurringLoads = 0
-  script.recurringFailFirst = recurringFailFirst
-  script.plans = plans
-  const prior = globalThis.fetch
+async function mount(
+  t: TestContext,
+  deleteResponder: () => Response,
+  recurringFailFirst = false,
+  view: "policies" | "recurring" | "plans" = "policies",
+  policyParam = "",
+  plans: Record<string, unknown>[] = [],
+): Promise<void> {
+  Object.assign(globalThis, { __collectionsTestQuery: policyParam ? `policy=${policyParam}` : "" });
+  script.writes = [];
+  script.deletes = [];
+  script.loads = 0;
+  script.recurringLoads = 0;
+  script.recurringFailFirst = recurringFailFirst;
+  script.plans = plans;
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    const url = String(input)
-    const method = init?.method ?? 'GET'
-    if (method === 'POST' || method === 'PATCH') { script.writes.push(JSON.parse(String(init?.body))); return deleteResponder() }
-    if (url === '/api/subscriptions') return Response.json({ plans: script.plans, subscriptions: [], mrr: '0' })
-    if (url === '/api/recurring') return ++script.recurringLoads === 1 && script.recurringFailFirst ? Response.json({}, { status: 503 }) : Response.json({ schedules: [] })
-    if (url === '/api/dunning' && method === 'GET') {
-      script.loads += 1
-      return Response.json({ policies: [POLICY] })
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (method === "POST" || method === "PATCH") {
+      script.writes.push(JSON.parse(String(init?.body)));
+      return deleteResponder();
     }
-    if (url === '/api/dunning/pol-1' && method === 'DELETE') {
-      script.deletes.push(url)
-      return deleteResponder()
+    if (url === "/api/subscriptions")
+      return Response.json({ plans: script.plans, subscriptions: [], mrr: "0" });
+    if (url === "/api/recurring")
+      return ++script.recurringLoads === 1 && script.recurringFailFirst
+        ? Response.json({}, { status: 503 })
+        : Response.json({ schedules: [] });
+    if (url === "/api/dunning" && method === "GET") {
+      script.loads += 1;
+      return Response.json({ policies: [POLICY] });
     }
-    throw new Error(`unexpected fetch ${method} ${url}`)
-  }) as typeof fetch
+    if (url === "/api/dunning/pol-1" && method === "DELETE") {
+      script.deletes.push(url);
+      return deleteResponder();
+    }
+    throw new Error(`unexpected fetch ${method} ${url}`);
+  }) as typeof fetch;
   t.after(() => {
-    globalThis.fetch = prior
-  })
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+    globalThis.fetch = prior;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const node of [...document.body.children]) node.remove()
-  })
+      rootHandle.unmount();
+    });
+    host.remove();
+    for (const node of [...document.body.children]) node.remove();
+  });
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <BusinessDateProvider today="2026-10-05"><MoneyProvider currency="CAD"><CollectionsClient initialView={view} subscriptionsEnabled /></MoneyProvider></BusinessDateProvider>
+        <BusinessDateProvider today="2026-10-05">
+          <MoneyProvider currency="CAD">
+            <CollectionsClient initialView={view} subscriptionsEnabled />
+          </MoneyProvider>
+        </BusinessDateProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 async function click(element: HTMLElement): Promise<void> {
   await act(async () => {
-    element.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
+    element.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
 }
 
 function findButton(text: string): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined
+  return [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === text,
+  ) as HTMLButtonElement | undefined;
 }
 
+test("a delete refusal names the reason inline and the row stays", async (t) => {
+  await mount(t, () =>
+    Response.json({ error: "policy is assigned to 3 customers" }, { status: 422 }),
+  );
+  assert.ok(document.body.textContent?.includes("Standard net-30"), "the policy row must render");
+  const del = findButton("Delete");
+  assert.ok(del, "the row must offer Delete");
+  await click(del);
+  assert.deepEqual(script.deletes, ["/api/dunning/pol-1"]);
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the refusal must render inline");
+  assert.match(alert.textContent ?? "", /policy is assigned to 3 customers/);
+  assert.ok(document.body.textContent?.includes("Standard net-30"), "the refused row must stay");
+  assert.equal(script.loads, 1, "a refused delete must not reload over the row");
+});
 
-test('a delete refusal names the reason inline and the row stays', async (t) => {
-  await mount(t, () => Response.json({ error: 'policy is assigned to 3 customers' }, { status: 422 }))
-  assert.ok(document.body.textContent?.includes('Standard net-30'), 'the policy row must render')
-  const del = findButton('Delete')
-  assert.ok(del, 'the row must offer Delete')
-  await click(del)
-  assert.deepEqual(script.deletes, ['/api/dunning/pol-1'])
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the refusal must render inline')
-  assert.match(alert.textContent ?? '', /policy is assigned to 3 customers/)
-  assert.ok(document.body.textContent?.includes('Standard net-30'), 'the refused row must stay')
-  assert.equal(script.loads, 1, 'a refused delete must not reload over the row')
-})
+test("a successful delete reloads the list", async (t) => {
+  await mount(t, () => Response.json({ ok: true }));
+  const del = findButton("Delete");
+  assert.ok(del, "the row must offer Delete");
+  await click(del);
+  assert.equal(document.querySelector('[role="alert"]'), null, "no refusal renders on success");
+  assert.equal(script.loads, 2, "a confirmed delete reloads the list");
+});
 
-test('a successful delete reloads the list', async (t) => {
-  await mount(t, () => Response.json({ ok: true }))
-  const del = findButton('Delete')
-  assert.ok(del, 'the row must offer Delete')
-  await click(del)
-  assert.equal(document.querySelector('[role="alert"]'), null, 'no refusal renders on success')
-  assert.equal(script.loads, 2, 'a confirmed delete reloads the list')
-})
-
-test('a failed recurring-schedule read shows retry instead of none yet', async (t) => {
-  await mount(t, () => Response.json({ ok: true }), true, 'recurring')
-  assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes('Failed to load'))
-  assert.ok(!document.body.textContent?.includes('No recurring schedules yet.'))
-  await click(findButton('Retry')!)
-  assert.ok(script.recurringLoads === 2 && document.body.textContent?.includes('No recurring schedules yet.'))
-})
+test("a failed recurring-schedule read shows retry instead of none yet", async (t) => {
+  await mount(t, () => Response.json({ ok: true }), true, "recurring");
+  assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes("Failed to load"));
+  assert.ok(!document.body.textContent?.includes("No recurring schedules yet."));
+  await click(findButton("Retry")!);
+  assert.ok(
+    script.recurringLoads === 2 &&
+      document.body.textContent?.includes("No recurring schedules yet."),
+  );
+});
 
 async function fill(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
   await act(async () => {
-    const prototype = input instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : HTMLInputElement.prototype
-    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(input, value)
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-  })
+    const prototype =
+      input instanceof window.HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
 }
 
-test('a plan save refusal retains its exact decimal draft and names the remedy', async (t) => {
-  await mount(t, () => Response.json({ error: 'The income account is inactive. Choose an active account.' }, { status: 409 }), false, 'plans')
-  await click(findButton('New plan')!)
-  const dialog = document.querySelector('[role="dialog"]')!
-  const name = dialog.querySelector('input[aria-labelledby]') as HTMLInputElement
-  const price = dialog.querySelector('input[inputmode="decimal"]') as HTMLInputElement
-  await fill(name, 'Annual support'); await fill(price, '1234.5600'); await click(findButton('Add plan')!)
-  assert.equal(script.writes.length, 1)
-  assert.ok(script.writes[0]); assert.equal(script.writes[0].name, 'Annual support'); assert.equal(script.writes[0].amount, '1234.5600')
-  assert.match(dialog.querySelector('[role="alert"]')?.textContent ?? '', /Choose an active account/)
-  assert.equal(document.querySelector('[role="dialog"]'), dialog)
-  assert.equal(name.value, 'Annual support'); assert.equal(price.value, '1234.5600')
-})
+test("a plan save refusal retains its exact decimal draft and names the remedy", async (t) => {
+  await mount(
+    t,
+    () =>
+      Response.json(
+        { error: "The income account is inactive. Choose an active account." },
+        { status: 409 },
+      ),
+    false,
+    "plans",
+  );
+  await click(findButton("New plan")!);
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const name = dialog.querySelector("input[aria-labelledby]") as HTMLInputElement;
+  const price = dialog.querySelector('input[inputmode="decimal"]') as HTMLInputElement;
+  await fill(name, "Annual support");
+  await fill(price, "1234.5600");
+  await click(findButton("Add plan")!);
+  assert.equal(script.writes.length, 1);
+  assert.ok(script.writes[0]);
+  assert.equal(script.writes[0].name, "Annual support");
+  assert.equal(script.writes[0].amount, "1234.5600");
+  assert.match(
+    dialog.querySelector('[role="alert"]')?.textContent ?? "",
+    /Choose an active account/,
+  );
+  assert.equal(document.querySelector('[role="dialog"]'), dialog);
+  assert.equal(name.value, "Annual support");
+  assert.equal(price.value, "1234.5600");
+});
 
-test('editing reminders preserves their identities and numbers additions after the stored sequence', async (t) => {
-  await mount(t, () => Response.json({ error: 'Policy changed. Reload before saving.' }, { status: 409 }), false, 'policies', 'pol-1')
+test("editing reminders preserves their identities and numbers additions after the stored sequence", async (t) => {
+  await mount(
+    t,
+    () => Response.json({ error: "Policy changed. Reload before saving." }, { status: 409 }),
+    false,
+    "policies",
+    "pol-1",
+  );
   // The record opens read-only; reminders edit after entering edit mode.
-  await click(findButton('Edit')!)
-  const dialog = document.querySelector('[role="dialog"]')!
-  await click(findButton('Add reminder')!)
-  assert.deepEqual([...dialog.querySelectorAll('input[aria-label="Sequence"]')].map((input) => (input as HTMLInputElement).value), ['4', '5'])
-  await click([...dialog.querySelectorAll('button')].filter((button) => button.textContent?.includes('Remove row')).at(-1)!)
-  await fill(dialog.querySelector('textarea') as HTMLTextAreaElement, 'Please contact Accounts Receivable.')
-  await click(findButton('Save')!)
-  assert.equal(script.writes.length, 1); assert.ok(script.writes[0]); assert.equal(script.writes[0].expectedUpdatedAt, POLICY.updatedAt)
-  const stages = script.writes[0].stages as typeof POLICY.stages
-  assert.ok(stages[0]); assert.equal(stages[0].id, 'stage-1'); assert.equal(stages[0].sequence, 4)
-  assert.equal(stages[0].bodyTemplate, 'Please contact Accounts Receivable.')
-})
+  await click(findButton("Edit")!);
+  const dialog = document.querySelector('[role="dialog"]')!;
+  await click(findButton("Add reminder")!);
+  assert.deepEqual(
+    [...dialog.querySelectorAll('input[aria-label="Sequence"]')].map(
+      (input) => (input as HTMLInputElement).value,
+    ),
+    ["4", "5"],
+  );
+  await click(
+    [...dialog.querySelectorAll("button")]
+      .filter((button) => button.textContent?.includes("Remove row"))
+      .at(-1)!,
+  );
+  await fill(
+    dialog.querySelector("textarea") as HTMLTextAreaElement,
+    "Please contact Accounts Receivable.",
+  );
+  await click(findButton("Save")!);
+  assert.equal(script.writes.length, 1);
+  assert.ok(script.writes[0]);
+  assert.equal(script.writes[0].expectedUpdatedAt, POLICY.updatedAt);
+  const stages = script.writes[0].stages as typeof POLICY.stages;
+  assert.ok(stages[0]);
+  assert.equal(stages[0].id, "stage-1");
+  assert.equal(stages[0].sequence, 4);
+  assert.equal(stages[0].bodyTemplate, "Please contact Accounts Receivable.");
+});
 
+for (const kind of ["plan", "subscription"] as const)
+  test(`${kind} entitlement refusal retains its remedy and retries in the same drawer`, async (t) => {
+    const prior = globalThis.fetch;
+    let refused = true;
+    const requests: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      assert.equal(init?.method ?? "GET", "GET", "a failed read cannot write grants");
+      requests.push(String(input));
+      return refused
+        ? Response.json(
+            {
+              error: "The selected plan version is no longer available.",
+              remedy: "Choose the current plan version before changing its entitlements.",
+            },
+            { status: 404 },
+          )
+        : Response.json(
+            String(input).includes("features=1")
+              ? { features: [] }
+              : kind === "plan"
+                ? { entitlements: [] }
+                : {
+                    snapshot: {
+                      subscriptionId: "sub-1",
+                      planVersionId: null,
+                      planVersionNumber: null,
+                      grandfathered: false,
+                      features: [],
+                      sourceHash: "test-read",
+                      resolvedAt: "2026-10-05T10:00:00Z",
+                    },
+                  },
+          );
+    }) as typeof fetch;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    t.after(async () => {
+      await act(async () => root.unmount());
+      host.remove();
+      globalThis.fetch = prior;
+    });
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <BusinessDateProvider today="2026-10-05">
+            {kind === "plan" ? (
+              <PlanVersionEntitlementsDrawer
+                versionId="00000000-0000-4000-8000-000000000001"
+                versionName="Annual support"
+                open
+                onClose={() => {}}
+              />
+            ) : (
+              <SubscriptionEntitlementsDrawer
+                subscriptionId="sub-1"
+                subscriptionLabel="Annual support"
+                open
+                onClose={() => {}}
+              />
+            )}
+          </BusinessDateProvider>
+        </NextIntlClientProvider>,
+      );
+      await tick();
+      await tick();
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    assert.ok(dialog, "the native drawer remains open");
+    assert.match(dialog.textContent ?? "", /selected plan version is no longer available/);
+    assert.match(
+      dialog.textContent ?? "",
+      /Choose the current plan version before changing its entitlements/,
+    );
+    assert.ok(
+      !dialog.textContent?.includes(kind === "plan" ? "No grants yet" : "No open overrides"),
+      "a failed read is not an empty result",
+    );
+    assert.ok(!findButton("Add feature"), "the grid cannot edit unread grants");
+    assert.ok(!dialog.textContent?.includes("ar.collections."), "shared action labels resolve");
+    refused = false;
+    await click(findButton("Retry")!);
+    assert.equal(
+      document.querySelector('[role="dialog"]'),
+      dialog,
+      "retry keeps the same native dialog",
+    );
+    assert.equal(
+      requests.length,
+      kind === "plan" ? 4 : 3,
+      "retry rereads both the catalog and the current grants",
+    );
+    assert.ok(
+      dialog.textContent?.includes(kind === "plan" ? "No grants yet" : "No open overrides"),
+      "only the successful read can report the current grants",
+    );
+    assert.ok(
+      !dialog.textContent?.includes("ar.collections."),
+      "loaded grant controls resolve their labels",
+    );
+    if (kind === "plan")
+      assert.ok(findButton("Add feature"), "editing becomes available after the successful read");
+  });
 
-for (const kind of ['plan', 'subscription'] as const) test(`${kind} entitlement refusal retains its remedy and retries in the same drawer`, async (t) => {
-  const prior = globalThis.fetch
-  let refused = true
-  const requests: string[] = []
-  globalThis.fetch = (async (input, init) => {
-    assert.equal(init?.method ?? 'GET', 'GET', 'a failed read cannot write grants')
-    requests.push(String(input))
-    return refused ? Response.json({
-      error: 'The selected plan version is no longer available.',
-      remedy: 'Choose the current plan version before changing its entitlements.',
-    }, { status: 404 }) : Response.json(String(input).includes('features=1') ? { features: [] } : kind === 'plan' ? { entitlements: [] } : { snapshot: { subscriptionId: 'sub-1', planVersionId: null, planVersionNumber: null, grandfathered: false, features: [], sourceHash: 'test-read', resolvedAt: '2026-10-05T10:00:00Z' } })
-  }) as typeof fetch
-  const host = document.createElement('div'); document.body.appendChild(host)
-  const root = createRoot(host)
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior })
-  await act(async () => {
-    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-      <BusinessDateProvider today="2026-10-05">{kind === 'plan' ? <PlanVersionEntitlementsDrawer
-        versionId="00000000-0000-4000-8000-000000000001" versionName="Annual support" open onClose={() => {}}
-      /> : <SubscriptionEntitlementsDrawer subscriptionId="sub-1" subscriptionLabel="Annual support" open onClose={() => {}} />}</BusinessDateProvider>
-    </NextIntlClientProvider>)
-    await tick(); await tick()
-  })
-  const dialog = document.querySelector('[role="dialog"]')
-  assert.ok(dialog, 'the native drawer remains open')
-  assert.match(dialog.textContent ?? '', /selected plan version is no longer available/)
-  assert.match(dialog.textContent ?? '', /Choose the current plan version before changing its entitlements/)
-  assert.ok(!dialog.textContent?.includes(kind === 'plan' ? 'No grants yet' : 'No open overrides'), 'a failed read is not an empty result')
-  assert.ok(!findButton('Add feature'), 'the grid cannot edit unread grants')
-  assert.ok(!dialog.textContent?.includes('ar.collections.'), 'shared action labels resolve')
-  refused = false
-  await click(findButton('Retry')!)
-  assert.equal(document.querySelector('[role="dialog"]'), dialog, 'retry keeps the same native dialog')
-  assert.equal(requests.length, kind === 'plan' ? 4 : 3, 'retry rereads both the catalog and the current grants')
-  assert.ok(dialog.textContent?.includes(kind === 'plan' ? 'No grants yet' : 'No open overrides'), 'only the successful read can report the current grants')
-  assert.ok(!dialog.textContent?.includes('ar.collections.'), 'loaded grant controls resolve their labels')
-  if (kind === 'plan') assert.ok(findButton('Add feature'), 'editing becomes available after the successful read')
-})
-
-test('plan entitlement rows cannot be removed when the save contract only upserts grants', async (t) => {
-  const prior = globalThis.fetch
+test("plan entitlement rows cannot be removed when the save contract only upserts grants", async (t) => {
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown) => {
-    const url = String(input)
-    if (url.includes('features=1')) return Response.json({ features: [{ key: 'seats_included', name: 'Seats', featureType: 'quantity', isActive: true }] })
-    if (url.includes('planVersionId=')) return Response.json({ entitlements: [{
-      featureKey: 'seats_included', enabled: true, limitQty: '100', customValue: null,
-      overagePolicy: 'block', meterKey: null,
-    }] })
-    throw new Error(`unexpected entitlement read ${url}`)
-  }) as typeof fetch
-  const host = document.createElement('div'); document.body.appendChild(host)
-  const root = createRoot(host)
+    const url = String(input);
+    if (url.includes("features=1"))
+      return Response.json({
+        features: [
+          { key: "seats_included", name: "Seats", featureType: "quantity", isActive: true },
+        ],
+      });
+    if (url.includes("planVersionId="))
+      return Response.json({
+        entitlements: [
+          {
+            featureKey: "seats_included",
+            enabled: true,
+            limitQty: "100",
+            customValue: null,
+            overagePolicy: "block",
+            meterKey: null,
+          },
+        ],
+      });
+    throw new Error(`unexpected entitlement read ${url}`);
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-    globalThis.fetch = prior
-  })
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = prior;
+  });
   await act(async () => {
-    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-      <BusinessDateProvider today="2026-10-05"><PlanVersionEntitlementsDrawer
-        versionId="00000000-0000-4000-8000-000000000001" versionName="Annual support" open onClose={() => {}}
-      /></BusinessDateProvider>
-    </NextIntlClientProvider>)
-    await tick(); await tick()
-  })
-  const trigger = document.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')
-  assert.ok(trigger, 'the populated grid keeps its other row actions')
-  await click(trigger)
-  const menuItems = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim())
-  assert.ok(menuItems.includes('Duplicate'), 'grant rows remain editable')
-  assert.ok(!menuItems.includes('Remove line') && !menuItems.includes('Clear line'), 'the UI does not offer an unpersistable removal')
-  assert.ok(findButton('Add feature'), 'new grants can still be added')
-  assert.equal(findButton('Save grants (0)')?.disabled, true, 'the unchanged baseline stays clean')
-})
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BusinessDateProvider today="2026-10-05">
+          <PlanVersionEntitlementsDrawer
+            versionId="00000000-0000-4000-8000-000000000001"
+            versionName="Annual support"
+            open
+            onClose={() => {}}
+          />
+        </BusinessDateProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+    await tick();
+  });
+  const trigger = document.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+  assert.ok(trigger, "the populated grid keeps its other row actions");
+  await click(trigger);
+  const menuItems = [...document.querySelectorAll('[role="menuitem"]')].map((item) =>
+    item.textContent?.trim(),
+  );
+  assert.ok(menuItems.includes("Duplicate"), "grant rows remain editable");
+  assert.ok(
+    !menuItems.includes("Remove line") && !menuItems.includes("Clear line"),
+    "the UI does not offer an unpersistable removal",
+  );
+  assert.ok(findButton("Add feature"), "new grants can still be added");
+  assert.equal(findButton("Save grants (0)")?.disabled, true, "the unchanged baseline stays clean");
+});
 
 const SNOW_PLAN = {
-  id: 'plan-snow',
-  name: 'Snow season monthly 2025-26',
-  description: 'Winter upkeep',
-  amount: '130.0000',
+  id: "plan-snow",
+  name: "Snow season monthly 2025-26",
+  description: "Winter upkeep",
+  amount: "130.0000",
   currency: null,
-  interval: 'monthly',
+  interval: "monthly",
   intervalCount: 1,
   incomeAccountId: null,
-  taxCodeId: 'tax-hst',
+  taxCodeId: "tax-hst",
   isActive: true,
-}
+};
 
-test('plan rows offer Edit and save through updatePlan without wiping unexposed fields', async (t) => {
-  await mount(t, () => Response.json({ ok: true }), false, 'plans', '', [SNOW_PLAN])
-  assert.ok(document.body.textContent?.includes('Snow season monthly 2025-26'), 'the plan row must render')
-  const edit = findButton('Edit')
-  assert.ok(edit, 'the plan row must offer Edit, not only Delete')
-  await click(edit)
-  const dialog = document.querySelector('[role="dialog"]')
-  assert.ok(dialog, 'editing opens the plan drawer')
-  assert.match(dialog?.querySelector('input[aria-labelledby]')?.getAttribute('value') ?? '', /Snow season monthly/, 'the drawer prefills the row values')
-  const price = dialog?.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
-  assert.ok(price, 'the price field must render')
-  await fill(price, '140.0000')
-  await click(findButton('Save')!)
-  assert.equal(script.writes.length, 1)
+test("plan rows offer Edit and save through updatePlan without wiping unexposed fields", async (t) => {
+  await mount(t, () => Response.json({ ok: true }), false, "plans", "", [SNOW_PLAN]);
+  assert.ok(
+    document.body.textContent?.includes("Snow season monthly 2025-26"),
+    "the plan row must render",
+  );
+  const edit = findButton("Edit");
+  assert.ok(edit, "the plan row must offer Edit, not only Delete");
+  await click(edit);
+  const dialog = document.querySelector('[role="dialog"]');
+  assert.ok(dialog, "editing opens the plan drawer");
+  assert.match(
+    dialog?.querySelector("input[aria-labelledby]")?.getAttribute("value") ?? "",
+    /Snow season monthly/,
+    "the drawer prefills the row values",
+  );
+  const price = dialog?.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null;
+  assert.ok(price, "the price field must render");
+  await fill(price, "140.0000");
+  await click(findButton("Save")!);
+  assert.equal(script.writes.length, 1);
   assert.deepEqual(script.writes[0], {
-    action: 'updatePlan',
-    id: 'plan-snow',
-    name: 'Snow season monthly 2025-26',
-    description: 'Winter upkeep',
-    amount: '140.0000',
-    interval: 'monthly',
+    action: "updatePlan",
+    id: "plan-snow",
+    name: "Snow season monthly 2025-26",
+    description: "Winter upkeep",
+    amount: "140.0000",
+    interval: "monthly",
     intervalCount: 1,
     incomeAccountId: null,
-    taxCodeId: 'tax-hst',
+    taxCodeId: "tax-hst",
     isActive: true,
-  })
-})
+  });
+});
 
-test('the plan interval count reads as a repeat-every period length', async (t) => {
-  await mount(t, () => Response.json({ ok: true }), false, 'plans', '', [SNOW_PLAN])
-  await click(findButton('New plan')!)
-  const dialog = document.querySelector('[role="dialog"]')
-  assert.ok(dialog, 'the plan drawer must open')
-  assert.match(dialog?.textContent ?? '', /Repeat every/, 'the count field names the period length')
-  assert.doesNotMatch(dialog?.textContent ?? '', /Number of intervals/)
-})
+test("the plan interval count reads as a repeat-every period length", async (t) => {
+  await mount(t, () => Response.json({ ok: true }), false, "plans", "", [SNOW_PLAN]);
+  await click(findButton("New plan")!);
+  const dialog = document.querySelector('[role="dialog"]');
+  assert.ok(dialog, "the plan drawer must open");
+  assert.match(
+    dialog?.textContent ?? "",
+    /Repeat every/,
+    "the count field names the period length",
+  );
+  assert.doesNotMatch(dialog?.textContent ?? "", /Number of intervals/);
+});

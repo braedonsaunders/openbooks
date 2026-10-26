@@ -42,7 +42,8 @@ test("every emitted evidence kind has a label in en/fr/es", () => {
     for (const locale of ["en", "fr", "es"]) {
       const evidence = (catalogs[locale]!.evidence ?? {}) as Record<string, unknown>;
       const label = evidence[kind];
-      if (typeof label !== "string" || label.length === 0) missing.push(`${locale}:evidence.${kind}`);
+      if (typeof label !== "string" || label.length === 0)
+        missing.push(`${locale}:evidence.${kind}`);
     }
   }
   assert.deepEqual(missing, [], "evidence labels must exist for every emitted kind");

@@ -3,12 +3,21 @@ import test from "node:test";
 import { mrpStockQuantity } from "./mrp.ts";
 
 test("MRP converts eight-place document quantities exactly and accepts a result that fits stock scale", () => {
-  assert.deepEqual(mrpStockQuantity("0.123456", "case", { case: 100 }, "ea", "Sales order SO-1 line 1"), {
+  assert.deepEqual(
+    mrpStockQuantity("0.123456", "case", { case: 100 }, "ea", "Sales order SO-1 line 1"),
+    {
+      ok: true,
+      quantity: "12.3456",
+    },
+  );
+  assert.deepEqual(mrpStockQuantity("2.5", "box", { box: 12 }, "ea", "PO line 2"), {
     ok: true,
-    quantity: "12.3456",
+    quantity: "30.0000",
   });
-  assert.deepEqual(mrpStockQuantity("2.5", "box", { box: 12 }, "ea", "PO line 2"), { ok: true, quantity: "30.0000" });
-  assert.deepEqual(mrpStockQuantity("3", null, {}, "ea", "PO line 3"), { ok: true, quantity: "3.0000" });
+  assert.deepEqual(mrpStockQuantity("3", null, {}, "ea", "PO line 3"), {
+    ok: true,
+    quantity: "3.0000",
+  });
 });
 
 test("MRP refuses a unit with no configured conversion as not convertible", () => {

@@ -123,7 +123,11 @@ test("open items settle before the running due-to/due-from position", () => {
     settleCash: false,
     rateFor: par,
     components: [
-      item("a-position", A, "-50.0000", { component: "due_position", journalLineId: null, sortKey: "~" }),
+      item("a-position", A, "-50.0000", {
+        component: "due_position",
+        journalLineId: null,
+        sortKey: "~",
+      }),
       item("a-bill", A, "-50.0000"),
       item("a-invoice", A, "50.0000"),
     ],
@@ -142,8 +146,16 @@ test("a foreign-currency settlement realizes the difference between spot and car
     settleCash: true,
     rateFor: (subsidiaryId) => (subsidiaryId === A ? "1.2000000000" : "1"),
     components: [
-      item("a-ar", A, "100.0000", { currency: "EUR", functionalCurrency: "USD", openCarrying: "110.0000" }),
-      item("b-ap", B, "-100.0000", { currency: "EUR", functionalCurrency: "EUR", openCarrying: "-100.0000" }),
+      item("a-ar", A, "100.0000", {
+        currency: "EUR",
+        functionalCurrency: "USD",
+        openCarrying: "110.0000",
+      }),
+      item("b-ap", B, "-100.0000", {
+        currency: "EUR",
+        functionalCurrency: "EUR",
+        openCarrying: "-100.0000",
+      }),
     ],
   });
   const byKey = new Map(result.allocations.map((a) => [a.key, a]));
@@ -164,15 +176,16 @@ test("a partial settlement releases carrying value in proportion and a full one 
 
 test("a component whose carrying value has the opposite sign is refused, not settled", () => {
   assert.throws(
-    () => allocatePairNetting({
-      pairId: PAIR,
-      currency: "USD",
-      fromSubsidiaryId: A,
-      toSubsidiaryId: B,
-      settleCash: false,
-      rateFor: par,
-      components: [item("bad", A, "10.0000", { openCarrying: "-10.0000" })],
-    }),
+    () =>
+      allocatePairNetting({
+        pairId: PAIR,
+        currency: "USD",
+        fromSubsidiaryId: A,
+        toSubsidiaryId: B,
+        settleCash: false,
+        rateFor: par,
+        components: [item("bad", A, "10.0000", { openCarrying: "-10.0000" })],
+      }),
     /opposite sign/,
   );
 });
@@ -228,14 +241,35 @@ function formatUnits(units: bigint): string {
 }
 
 for (const [title, components, from, to, refusal] of [
-  ["duplicate component identities cannot clear an open item twice", [item("same", A, "100"), item("same", A, "100"), item("payable", B, "-200")], A, B, /only once/],
-  ["a netting component cannot name an unrelated counterparty", [item("receivable", A, "100", { counterpartySubsidiaryId: "another-entity" })], A, B, /other entity/],
+  [
+    "duplicate component identities cannot clear an open item twice",
+    [item("same", A, "100"), item("same", A, "100"), item("payable", B, "-200")],
+    A,
+    B,
+    /only once/,
+  ],
+  [
+    "a netting component cannot name an unrelated counterparty",
+    [item("receivable", A, "100", { counterpartySubsidiaryId: "another-entity" })],
+    A,
+    B,
+    /other entity/,
+  ],
   ["an entity cannot net against itself", [], A, A, /different entities/],
 ] as const) {
   test(title, () => {
-    assert.throws(() => allocatePairNetting({
-      pairId: PAIR, currency: "USD", fromSubsidiaryId: from, toSubsidiaryId: to,
-      components: [...components], settleCash: true, rateFor: par,
-    }), refusal);
+    assert.throws(
+      () =>
+        allocatePairNetting({
+          pairId: PAIR,
+          currency: "USD",
+          fromSubsidiaryId: from,
+          toSubsidiaryId: to,
+          components: [...components],
+          settleCash: true,
+          rateFor: par,
+        }),
+      refusal,
+    );
   });
 }

@@ -6,17 +6,35 @@
  * the vocabulary without converging. Both render paths import these.
  */
 
-import Link from 'next/link'
+import Link from "next/link";
 
 /** Resource name over its optional source filename, with durable job recovery. */
-export function ResourceCell({ label, fileName, href, failureMessage }: { label: string; fileName: string | null; href?: string | null; failureMessage?: string | null }) {
+export function ResourceCell({
+  label,
+  fileName,
+  href,
+  failureMessage,
+}: {
+  label: string;
+  fileName: string | null;
+  href?: string | null;
+  failureMessage?: string | null;
+}) {
   return (
     <>
-      <div className="font-medium">{href ? <Link className="text-primary hover:underline" href={href}>{label}</Link> : label}</div>
+      <div className="font-medium">
+        {href ? (
+          <Link className="text-primary hover:underline" href={href}>
+            {label}
+          </Link>
+        ) : (
+          label
+        )}
+      </div>
       {fileName && <div className="text-xs text-muted-foreground">{fileName}</div>}
       {failureMessage && <p className="mt-1 text-sm text-destructive">{failureMessage}</p>}
     </>
-  )
+  );
 }
 
 /**
@@ -29,21 +47,21 @@ export function RowCountsCell({
   updated,
   failed,
 }: {
-  created: number
-  updated: number
-  failed: number
+  created: number;
+  updated: number;
+  failed: number;
 }) {
   return (
     <>
       <span className="text-emerald-600 dark:text-emerald-400">+{created}</span>
-      {' / '}
+      {" / "}
       <span className="text-sky-600 dark:text-sky-400">~{updated}</span>
       {failed > 0 && (
         <>
-          {' / '}
+          {" / "}
           <span className="text-rose-600 dark:text-rose-400">✕{failed}</span>
         </>
       )}
     </>
-  )
+  );
 }

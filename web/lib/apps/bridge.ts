@@ -20,84 +20,84 @@
  * it, and the host revokes its end and reloads the App on any further load.
  */
 
-export const BRIDGE_MARKER = '__ob' as const
+export const BRIDGE_MARKER = "__ob" as const;
 
 /** Methods the host relays to the server (getContext is answered locally). */
 export const BRIDGE_METHODS = [
-  'callBackend',
-  'records.list',
-  'records.get',
-  'platform.query',
-  'platform.schema',
-  'platform.list',
-  'platform.get',
-  'platform.create',
-  'platform.update',
-  'platform.delete',
-] as const
-export type BridgeMethod = (typeof BRIDGE_METHODS)[number]
+  "callBackend",
+  "records.list",
+  "records.get",
+  "platform.query",
+  "platform.schema",
+  "platform.list",
+  "platform.get",
+  "platform.create",
+  "platform.update",
+  "platform.delete",
+] as const;
+export type BridgeMethod = (typeof BRIDGE_METHODS)[number];
 
 export interface BridgeContext {
   /** Informational sample-mode flag; the host independently refuses preview bridge calls. */
-  preview?: boolean
-  app: { id: string; key: string; name: string; versionId?: string }
-  user: { id: string; name: string; roles: string[] } | null
+  preview?: boolean;
+  app: { id: string; key: string; name: string; versionId?: string };
+  user: { id: string; name: string; roles: string[] } | null;
 }
 
 export interface BridgeRequest {
-  [BRIDGE_MARKER]: true
-  type: 'call'
-  id: string
-  method: string
-  payload: unknown
+  [BRIDGE_MARKER]: true;
+  type: "call";
+  id: string;
+  method: string;
+  payload: unknown;
   /**
    * Client-generated invocation key (one per intended action, preserved
    * across that action's retries). The SDK always sends one; absent here
    * only from a malformed envelope, which writes refuse downstream.
    */
-  invocationKey?: string
+  invocationKey?: string;
 }
 
 export interface BridgeResult {
-  [BRIDGE_MARKER]: true
-  type: 'result'
-  id: string
-  ok: boolean
-  result?: unknown
-  error?: string
+  [BRIDGE_MARKER]: true;
+  type: "result";
+  id: string;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
 }
 
 /** Narrow an untrusted postMessage payload to a BridgeRequest, or null. */
 export function parseBridgeRequest(data: unknown): BridgeRequest | null {
-  if (!data || typeof data !== 'object') return null
-  const d = data as Record<string, unknown>
-  if (d[BRIDGE_MARKER] !== true || d.type !== 'call') return null
-  if (typeof d.id !== 'string' || typeof d.method !== 'string') return null
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  if (d[BRIDGE_MARKER] !== true || d.type !== "call") return null;
+  if (typeof d.id !== "string" || typeof d.method !== "string") return null;
   return {
     [BRIDGE_MARKER]: true,
-    type: 'call',
+    type: "call",
     id: d.id,
     method: d.method,
     payload: d.payload,
-    ...(typeof d.invocationKey === 'string' ? { invocationKey: d.invocationKey } : {}),
-  }
+    ...(typeof d.invocationKey === "string" ? { invocationKey: d.invocationKey } : {}),
+  };
 }
 
 /** Whether a window message is the SDK's handshake for the given single-use proof. */
 export function isBridgeHandshake(data: unknown, proof: string | null): boolean {
-  if (!proof || !data || typeof data !== 'object') return false
-  const d = data as Record<string, unknown>
-  return d[BRIDGE_MARKER] === true && d.type === 'ready' && d.proof === proof
+  if (!proof || !data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  return d[BRIDGE_MARKER] === true && d.type === "ready" && d.proof === proof;
 }
 
 export function makeBridgeResult(id: string, ok: boolean, resultOrError: unknown): BridgeResult {
   return ok
-    ? { [BRIDGE_MARKER]: true, type: 'result', id, ok: true, result: resultOrError }
-    : { [BRIDGE_MARKER]: true, type: 'result', id, ok: false, error: String(resultOrError) }
+    ? { [BRIDGE_MARKER]: true, type: "result", id, ok: true, result: resultOrError }
+    : { [BRIDGE_MARKER]: true, type: "result", id, ok: false, error: String(resultOrError) };
 }
 
 export function isBridgeMethod(method: string): method is BridgeMethod {
-  return (BRIDGE_METHODS as readonly string[]).includes(method)
+  return (BRIDGE_METHODS as readonly string[]).includes(method);
 }
 
 /**
@@ -114,7 +114,7 @@ export const APP_CSP =
   "font-src data:; " +
   "connect-src 'none'; " +
   "base-uri 'none'; " +
-  "form-action 'none'"
+  "form-action 'none'";
 
 /**
  * The client SDK source injected into the iframe as an inline <script>. Exposes
@@ -126,7 +126,7 @@ export function bridgeClientSource(context: BridgeContext, handshakeProof: strin
   return `(function(){
   var script = document.currentScript;
   if (script && script.parentNode) script.parentNode.removeChild(script);
-  var CTX = ${JSON.stringify(context).replace(/</g, '\\u003c')};
+  var CTX = ${JSON.stringify(context).replace(/</g, "\\u003c")};
   var channel = new MessageChannel();
   var port = channel.port1;
   var pending = {};
@@ -175,7 +175,7 @@ export function bridgeClientSource(context: BridgeContext, handshakeProof: strin
     }
   };
   window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'ready', proof: ${JSON.stringify(handshakeProof)} }, '*', [channel.port2]);
-})();`
+})();`;
 }
 
 /**
@@ -190,25 +190,29 @@ export function inlineDocument(
   entryHtml: string,
   replacements: Record<string, string>,
   headHtml: string,
-  entry = '',
+  entry = "",
 ): string {
-  const directory = entry.includes('/') ? entry.slice(0, entry.lastIndexOf('/') + 1) : ''
-  const html = entryHtml.replace(/\b(src|href)\s*=\s*(["'])([^"']+)\2/gi, (attribute, name: string, quote: string, reference: string) => {
-    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(reference)) return attribute
-    const path = reference.split(/[?#]/)[0]!
-    const parts: string[] = []
-    for (const part of (path.startsWith('/') ? path.slice(1) : directory + path).split('/')) {
-      if (!part || part === '.') continue
-      if (part === '..') { if (!parts.length) return attribute; parts.pop() } else parts.push(part)
-    }
-    const resolved = replacements[parts.join('/')] ?? replacements[path.replace(/^\.?\//, '')]
-    return resolved ? `${name}=${quote}${resolved}${quote}` : attribute
-  })
+  const directory = entry.includes("/") ? entry.slice(0, entry.lastIndexOf("/") + 1) : "";
+  const html = entryHtml.replace(
+    /\b(src|href)\s*=\s*(["'])([^"']+)\2/gi,
+    (attribute, name: string, quote: string, reference: string) => {
+      if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(reference)) return attribute;
+      const path = reference.split(/[?#]/)[0]!;
+      const parts: string[] = [];
+      for (const part of (path.startsWith("/") ? path.slice(1) : directory + path).split("/")) {
+        if (!part || part === ".") continue;
+        if (part === "..") {
+          if (!parts.length) return attribute;
+          parts.pop();
+        } else parts.push(part);
+      }
+      const resolved = replacements[parts.join("/")] ?? replacements[path.replace(/^\.?\//, "")];
+      return resolved ? `${name}=${quote}${resolved}${quote}` : attribute;
+    },
+  );
   // The injected head runs before anything the App wrote, including scripts
   // placed ahead of its own <head>, so the SDK completes its handshake before
   // App code executes. Only a leading doctype stays in front of it.
-  const doctype = /^\s*<!doctype[^>]*>/i.exec(html)
-  return doctype
-    ? doctype[0] + headHtml + html.slice(doctype[0].length)
-    : headHtml + html
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
+  return doctype ? doctype[0] + headHtml + html.slice(doctype[0].length) : headHtml + html;
 }

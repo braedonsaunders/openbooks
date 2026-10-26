@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { guardCloseScope } from "@/lib/close-scope";
 
 import { NextResponse } from "next/server";
@@ -15,10 +15,12 @@ const requestBodySchema = z.object({
   bookId: uuidString(),
   blueprintId: uuidString().optional(),
   reportingPackageId: uuidString().optional(),
-  targetCloseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  targetCloseDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   subsidiaryIds: z.array(uuidString()).min(1).nullable().optional(),
 });
-
 
 export const runtime = "nodejs";
 
@@ -54,15 +56,9 @@ function parseCloseRunSubsidiaryIds(
         );
   }
   if (!Array.isArray(raw)) {
-    return NextResponse.json(
-      { error: "subsidiaryIds must be an array or null" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "subsidiaryIds must be an array or null" }, { status: 400 });
   }
-  if (
-    raw.some((id) => typeof id !== "string" || !isUuid(id))
-    || new Set(raw).size !== raw.length
-  ) {
+  if (raw.some((id) => typeof id !== "string" || !isUuid(id)) || new Set(raw).size !== raw.length) {
     return NextResponse.json(
       { error: "subsidiaryIds must contain unique valid UUIDs" },
       { status: 400 },
@@ -80,10 +76,7 @@ function parseCloseRunSubsidiaryIds(
           { status: 403 },
         );
   }
-  if (
-    allowedSubsidiaryIds !== null
-    && requested.some((id) => !allowedSubsidiaryIds.has(id))
-  ) {
+  if (allowedSubsidiaryIds !== null && requested.some((id) => !allowedSubsidiaryIds.has(id))) {
     return NextResponse.json(
       { error: "one or more close-scope subsidiaries are outside the caller's scope" },
       { status: 403 },
@@ -92,18 +85,12 @@ function parseCloseRunSubsidiaryIds(
   return requested;
 }
 
-
-
 export const POST = defineRoute({
   permission: "close.run",
   feature: "continuousClose",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
-
-
-
 
     const periodId = typeof body.periodId === "string" ? body.periodId : "";
     const bookId = typeof body.bookId === "string" ? body.bookId : "";
@@ -118,14 +105,10 @@ export const POST = defineRoute({
         ? body.blueprintId
         : undefined;
     const reportingPackageId =
-      typeof body.reportingPackageId === "string" &&
-      isUuid(body.reportingPackageId)
+      typeof body.reportingPackageId === "string" && isUuid(body.reportingPackageId)
         ? body.reportingPackageId
         : undefined;
-    const subsidiaryIds = parseCloseRunSubsidiaryIds(
-      body,
-      gate.allowedSubsidiaryIds,
-    );
+    const subsidiaryIds = parseCloseRunSubsidiaryIds(body, gate.allowedSubsidiaryIds);
     if (subsidiaryIds instanceof Response) return subsidiaryIds;
     const scopeDenied = guardCloseScope(gate);
     if (scopeDenied) return scopeDenied;
@@ -138,17 +121,14 @@ export const POST = defineRoute({
         blueprintId,
         reportingPackageId,
         targetCloseDate:
-          typeof body.targetCloseDate === "string"
-            ? body.targetCloseDate
-            : undefined,
+          typeof body.targetCloseDate === "string" ? body.targetCloseDate : undefined,
         // Preserve the explicit null org-wide sentinel end-to-end. Restricted
         // omissions are resolved to their concrete allowed IDs above.
         subsidiaryIds,
       });
       return NextResponse.json({ ok: true, runId });
     } catch (error) {
-      if (error instanceof CloseError)
-        return apiErrorResponse(error, { safeStatus: 422 });
+      if (error instanceof CloseError) return apiErrorResponse(error, { safeStatus: 422 });
       throw error;
     }
   },

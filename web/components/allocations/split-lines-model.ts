@@ -6,64 +6,76 @@
  * module, so existing consumers keep importing from the component.
  */
 
-export type CodingKey = 'department' | 'project' | 'location' | 'class' | 'tax' | 'party' | 'subsidiary' | `extra:${string}`
+export type CodingKey =
+  | "department"
+  | "project"
+  | "location"
+  | "class"
+  | "tax"
+  | "party"
+  | "subsidiary"
+  | `extra:${string}`;
 
 export const CODING_FIELD: Record<Exclude<CodingKey, `extra:${string}`>, keyof AllocationLine> = {
-  department: 'departmentId',
-  project: 'projectId',
-  location: 'locationId',
-  class: 'classId',
-  tax: 'taxCodeId',
-  party: 'partyId',
-  subsidiary: 'subsidiaryId',
-}
+  department: "departmentId",
+  project: "projectId",
+  location: "locationId",
+  class: "classId",
+  tax: "taxCodeId",
+  party: "partyId",
+  subsidiary: "subsidiaryId",
+};
 
 export interface CodingConfig {
-  key: CodingKey
-  label: string
-  options: { value: string; label: string }[]
+  key: CodingKey;
+  label: string;
+  options: { value: string; label: string }[];
 }
 
 export interface AllocationLine {
   /** Persisted allocation target identity used to retain hidden server fields. */
-  targetId?: string
-  accountId: string
+  targetId?: string;
+  accountId: string;
   // Fixed amounts, percents, and manual weights stay as their exact decimal
   // text while they are being edited. Converting every keystroke through
   // Number loses precision before the server-side money validator can
   // canonicalize the value.
   portion:
-    | { kind: 'remainder' }
-    | { kind: 'percent'; value: number | string }
-    | { kind: 'fixed'; value: string }
-    | { kind: 'weight'; value: string }
-  departmentId?: string | null
-  projectId?: string | null
-  locationId?: string | null
-  classId?: string | null
-  subsidiaryId?: string | null
-  extraDims?: Record<string, string | null>
-  taxCodeId?: string | null
-  partyId?: string | null
-  description?: string | null
+    | { kind: "remainder" }
+    | { kind: "percent"; value: number | string }
+    | { kind: "fixed"; value: string }
+    | { kind: "weight"; value: string };
+  departmentId?: string | null;
+  projectId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
+  subsidiaryId?: string | null;
+  extraDims?: Record<string, string | null>;
+  taxCodeId?: string | null;
+  partyId?: string | null;
+  description?: string | null;
   /** Allocation target label (the rule drawer shows it beside the share). */
-  label?: string | null
+  label?: string | null;
 }
 
 export function allocationCodingValue(line: AllocationLine, key: CodingKey): string | null {
-  if (key.startsWith('extra:')) return line.extraDims?.[key.slice(6)] ?? null
-  const value = line[CODING_FIELD[key as Exclude<CodingKey, `extra:${string}`>]]
-  return typeof value === 'string' ? value : null
+  if (key.startsWith("extra:")) return line.extraDims?.[key.slice(6)] ?? null;
+  const value = line[CODING_FIELD[key as Exclude<CodingKey, `extra:${string}`>]];
+  return typeof value === "string" ? value : null;
 }
 
-export function allocationCodingPatch(line: AllocationLine, key: CodingKey, value: string | null): Partial<AllocationLine> {
-  if (key.startsWith('extra:')) {
-    const extraDims = { ...line.extraDims }
-    if (value) extraDims[key.slice(6)] = value
-    else delete extraDims[key.slice(6)]
-    return { extraDims }
+export function allocationCodingPatch(
+  line: AllocationLine,
+  key: CodingKey,
+  value: string | null,
+): Partial<AllocationLine> {
+  if (key.startsWith("extra:")) {
+    const extraDims = { ...line.extraDims };
+    if (value) extraDims[key.slice(6)] = value;
+    else delete extraDims[key.slice(6)];
+    return { extraDims };
   }
-  return { [CODING_FIELD[key as Exclude<CodingKey, `extra:${string}`>]]: value }
+  return { [CODING_FIELD[key as Exclude<CodingKey, `extra:${string}`>]]: value };
 }
 
 /**
@@ -73,44 +85,49 @@ export function allocationCodingPatch(line: AllocationLine, key: CodingKey, valu
  * (dimensions map one-to-one); an empty account means "same account".
  */
 export interface AllocationTargetBasis {
-  targetAccountId: string | null
-  fixedPercent: string | null
-  weight: string | null
-  isRemainder: boolean
-  label: string | null
+  targetAccountId: string | null;
+  fixedPercent: string | null;
+  weight: string | null;
+  isRemainder: boolean;
+  label: string | null;
 }
 
 export function allocationTargetBasisFromLine(line: AllocationLine): AllocationTargetBasis {
   const base = {
-    targetAccountId: line.accountId === '' ? null : line.accountId,
+    targetAccountId: line.accountId === "" ? null : line.accountId,
     label: line.label ?? null,
-  }
+  };
   switch (line.portion.kind) {
-    case 'remainder':
-      return { ...base, fixedPercent: null, weight: null, isRemainder: true }
-    case 'percent':
-      return { ...base, fixedPercent: String(line.portion.value), weight: null, isRemainder: false }
-    case 'weight':
-      return { ...base, fixedPercent: null, weight: line.portion.value, isRemainder: false }
-    case 'fixed':
+    case "remainder":
+      return { ...base, fixedPercent: null, weight: null, isRemainder: true };
+    case "percent":
+      return {
+        ...base,
+        fixedPercent: String(line.portion.value),
+        weight: null,
+        isRemainder: false,
+      };
+    case "weight":
+      return { ...base, fixedPercent: null, weight: line.portion.value, isRemainder: false };
+    case "fixed":
       // Fixed-amount splits belong to entry/bank surfaces, not allocation
       // targets — the drawer never offers the kind, but the mapping stays
       // total so a misconfigured line fails closed at publish, not silently.
-      return { ...base, fixedPercent: null, weight: null, isRemainder: false }
+      return { ...base, fixedPercent: null, weight: null, isRemainder: false };
   }
 }
 
-export function newAllocationLine(accountId = ''): AllocationLine {
-  return { accountId, portion: { kind: 'remainder' } }
+export function newAllocationLine(accountId = ""): AllocationLine {
+  return { accountId, portion: { kind: "remainder" } };
 }
 
 /** Convert an amount input without coercing fixed money through IEEE-754. */
 export function allocationPortionFromInput(
-  portion: AllocationLine['portion'],
+  portion: AllocationLine["portion"],
   rawValue: string,
-): AllocationLine['portion'] {
-  if (portion.kind === 'fixed') return { kind: 'fixed', value: rawValue }
-  if (portion.kind === 'weight') return { kind: 'weight', value: rawValue }
-  if (portion.kind === 'percent') return { kind: 'percent', value: rawValue }
-  return portion
+): AllocationLine["portion"] {
+  if (portion.kind === "fixed") return { kind: "fixed", value: rawValue };
+  if (portion.kind === "weight") return { kind: "weight", value: rawValue };
+  if (portion.kind === "percent") return { kind: "percent", value: rawValue };
+  return portion;
 }

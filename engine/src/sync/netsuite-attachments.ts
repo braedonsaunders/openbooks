@@ -1,8 +1,22 @@
 import { AttachmentImportError, type ImportSummary } from "./attachment-contract.ts";
-export { AttachmentImportError, type ImportSummary, type AttachmentImportFailure } from "./attachment-contract.ts";
+export {
+  AttachmentImportError,
+  type ImportSummary,
+  type AttachmentImportFailure,
+} from "./attachment-contract.ts";
 import { linkExistingTransactionFiles } from "./transaction-attachments.ts";
-import { detectContentType, normalizeAttachmentBytes, persistTransactionFile, verifyTransactionFiles, type SourceFileTarget } from "./transaction-file-storage.ts";
-export { safeFilename, detectContentType, normalizeAttachmentBytes } from "./transaction-file-storage.ts";
+import {
+  detectContentType,
+  normalizeAttachmentBytes,
+  persistTransactionFile,
+  verifyTransactionFiles,
+  type SourceFileTarget,
+} from "./transaction-file-storage.ts";
+export {
+  safeFilename,
+  detectContentType,
+  normalizeAttachmentBytes,
+} from "./transaction-file-storage.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { s3Enabled } from "../platform/file-storage.ts";
@@ -61,7 +75,8 @@ export interface ImportOptions {
  */
 export function normalizeImportActorId(actorId: string | null | undefined): string | null {
   if (actorId == null) return null;
-  if (typeof actorId !== "string") throw new Error("attachment import actorId must be a valid user id");
+  if (typeof actorId !== "string")
+    throw new Error("attachment import actorId must be a valid user id");
   const normalized = actorId.trim();
   if (!normalized) return null;
   if (!isUuid(normalized)) throw new Error("attachment import actorId must be a valid user id");
@@ -70,7 +85,8 @@ export function normalizeImportActorId(actorId: string | null | undefined): stri
 
 function chunks<T>(values: T[], size: number): T[][] {
   const result: T[][] = [];
-  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+  for (let index = 0; index < values.length; index += size)
+    result.push(values.slice(index, index + size));
   return result;
 }
 
@@ -106,13 +122,15 @@ async function concurrentMap<T, R>(
 ): Promise<R[]> {
   const result = new Array<R>(values.length);
   let next = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
-    for (;;) {
-      const index = next++;
-      if (index >= values.length) return;
-      result[index] = await task(values[index]!, index);
-    }
-  }));
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      for (;;) {
+        const index = next++;
+        if (index >= values.length) return;
+        result[index] = await task(values[index]!, index);
+      }
+    }),
+  );
   return result;
 }
 
@@ -140,38 +158,56 @@ async function resolveContext(options: ImportOptions): Promise<{
   soapEndpointVersion: string;
   connectionId: string;
 }> {
-  const orgResult = (await db.execute<{ id: string; name: string }>(sql`
+  const orgResult = await db.execute<{ id: string; name: string }>(
+    sql`
     select id, name from orgs where id::text = ${options.org} or name = ${options.org}
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (orgResult.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
   const orgId = orgResult[0]!.id;
 
-  const connectionResult = (await db.execute<{ id: string; config: Record<string, unknown>; secrets: string | null }>(sql`
+  const connectionResult = await db.execute<{
+    id: string;
+    config: Record<string, unknown>;
+    secrets: string | null;
+  }>(
+    sql`
     select id, config, secrets
       from connections
      where org_id = ${orgId} and source = 'netsuite'
        ${options.connectionId ? sql`and id = ${options.connectionId}` : sql``}
      order by (status = 'active') desc, created_at desc
-  `, "objects"));
-  if (connectionResult.length > 1) throw new Error('Select one NetSuite connection before importing transaction files');
+  `,
+    "objects",
+  );
+  if (connectionResult.length > 1)
+    throw new Error("Select one NetSuite connection before importing transaction files");
   const connection = connectionResult[0];
   if (!connection) throw new Error("tenant does not have a NetSuite connection");
   const secret =
     connection.secrets == null
       ? null
-      : unsealJson<Partial<NetSuiteCreds>>(connection.secrets, { orgId, purpose: "connection.secrets" });
+      : unsealJson<Partial<NetSuiteCreds>>(connection.secrets, {
+          orgId,
+          purpose: "connection.secrets",
+        });
   if (!secret?.consumerKey || !secret.consumerSecret || !secret.tokenKey || !secret.tokenSecret) {
     throw new Error("tenant NetSuite connection is missing sealed credentials");
   }
   const account = String(connection.config.account ?? "");
   const host = String(connection.config.host ?? "");
-  if (!account || !host) throw new Error("tenant NetSuite connection is missing account or host configuration");
+  if (!account || !host)
+    throw new Error("tenant NetSuite connection is missing account or host configuration");
 
   const actorId = normalizeImportActorId(options.actorId);
   if (actorId) {
-    const actorResult = (await db.execute<{ id: string }>(sql`
+    const actorResult = await db.execute<{ id: string }>(
+      sql`
       select id from users where id = ${actorId} and org_id = ${orgId} and is_active
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!actorResult[0]) {
       throw new Error("attachment import actor must be an active user in the tenant");
     }
@@ -196,12 +232,18 @@ async function resolveContext(options: ImportOptions): Promise<{
   };
 }
 
-async function sourceDocuments(orgId: string, connectionId: string, limit?: number, sourceRefs?: readonly string[]): Promise<{
+async function sourceDocuments(
+  orgId: string,
+  connectionId: string,
+  limit?: number,
+  sourceRefs?: readonly string[],
+): Promise<{
   documents: SourceDocument[];
   withoutSourceId: number;
 }> {
   if (sourceRefs && sourceRefs.length === 0) return { documents: [], withoutSourceId: 0 };
-  const result = (await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(sql`
+  const result = await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(
+    sql`
     select id, kind, custom->>'nsId' as "nsId"
       from documents
      where org_id = ${orgId} and custom->>'nsId' is not null
@@ -209,7 +251,9 @@ async function sourceDocuments(orgId: string, connectionId: string, limit?: numb
        ${sourceRefs ? sql`and custom->>'nsId' = any(${`{${sourceRefs.join(",")}}`}::text[])` : sql``}
      order by kind, id
      ${limit ? sql`limit ${limit}` : sql``}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return {
     documents: result.filter((row): row is SourceDocument => Boolean(row.nsId)),
     withoutSourceId: result.filter((row) => !row.nsId).length,
@@ -227,18 +271,10 @@ async function targetedAttachmentInventory(
   documents: SourceDocument[];
   fileToDocuments: Map<string, Set<string>>;
 }> {
-  const relationships = await concurrentMap(
-    sourceFileIds,
-    concurrency,
-    async (fileId) => ({
-      fileId,
-      transactionIds: await netsuiteSoapTransactionIdsForFile(
-        fileId,
-        creds,
-        soapEndpointVersion,
-      ),
-    }),
-  );
+  const relationships = await concurrentMap(sourceFileIds, concurrency, async (fileId) => ({
+    fileId,
+    transactionIds: await netsuiteSoapTransactionIdsForFile(fileId, creds, soapEndpointVersion),
+  }));
   const sourceTransactionIds = Array.from(
     new Set(relationships.flatMap((row) => row.transactionIds)),
   );
@@ -251,7 +287,8 @@ async function targetedAttachmentInventory(
     sourceTransactionIds.map((sourceId) => sql`${sourceId}`),
     sql`, `,
   );
-  const result = (await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(sql`
+  const result = await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(
+    sql`
     select id, kind, custom->>'nsId' as "nsId"
       from documents
      where org_id = ${orgId}
@@ -259,16 +296,14 @@ async function targetedAttachmentInventory(
        and (custom->>'connectionId' is null or custom->>'connectionId'=${connectionId})
        and custom->>'nsId' in (${sourceIdsSql})
      order by kind, id
-  `, "objects"));
-  const documents = result.filter(
-    (row): row is SourceDocument => Boolean(row.nsId),
+  `,
+    "objects",
   );
+  const documents = result.filter((row): row is SourceDocument => Boolean(row.nsId));
   const documentBySourceId = new Map<string, SourceDocument>();
   for (const document of documents) {
     if (documentBySourceId.has(document.nsId)) {
-      throw new Error(
-        `multiple imported documents share NetSuite transaction ${document.nsId}`,
-      );
+      throw new Error(`multiple imported documents share NetSuite transaction ${document.nsId}`);
     }
     documentBySourceId.set(document.nsId, document);
   }
@@ -319,18 +354,29 @@ async function attachmentInventory(
       ok?: boolean;
       error?: string;
       records?: Record<string, string[]>;
-    }>(bridge.script, bridge.deploy, {
-      action: "attachmentInventory",
-      records: batch.map((item) => ({ recordType: item.recordType, internalId: item.nsId })),
-    }, creds, "POST");
-    if (!response.ok || !response.records) throw new Error(response.error || "attachment inventory failed");
+    }>(
+      bridge.script,
+      bridge.deploy,
+      {
+        action: "attachmentInventory",
+        records: batch.map((item) => ({ recordType: item.recordType, internalId: item.nsId })),
+      },
+      creds,
+      "POST",
+    );
+    if (!response.ok || !response.records)
+      throw new Error(response.error || "attachment inventory failed");
     for (const item of batch) {
       if (!Array.isArray(response.records[item.nsId])) {
-        throw new Error(`attachment inventory omitted source record ${item.nsId}; update the extraction bridge and retry`);
+        throw new Error(
+          `attachment inventory omitted source record ${item.nsId}; update the extraction bridge and retry`,
+        );
       }
     }
     if ((index + 1) % 20 === 0 || index + 1 === batches.length) {
-      console.log(`[inventory] ${Math.min((index + 1) * RESTLET_BATCH_SIZE, records.length)}/${records.length} ${label}`);
+      console.log(
+        `[inventory] ${Math.min((index + 1) * RESTLET_BATCH_SIZE, records.length)}/${records.length} ${label}`,
+      );
     }
     return { batch, records: response.records };
   });
@@ -340,7 +386,8 @@ async function attachmentInventory(
   const nativeIdBySourceId = new Map<string, string>();
   for (const item of records) {
     const prior = nativeIdBySourceId.get(item.nsId);
-    if (prior && prior !== item.id) throw new Error(`Multiple native records share NetSuite identity ${item.nsId}`);
+    if (prior && prior !== item.id)
+      throw new Error(`Multiple native records share NetSuite identity ${item.nsId}`);
     nativeIdBySourceId.set(item.nsId, item.id);
   }
   const fileToTargets = new Map<string, Set<string>>();
@@ -349,7 +396,8 @@ async function attachmentInventory(
       const nativeId = nativeIdBySourceId.get(sourceId);
       if (!nativeId) throw new Error(`resolver returned unknown source record ${sourceId}`);
       for (const fileId of fileIds) {
-        if (!/^\d+$/.test(fileId)) throw new Error(`resolver returned malformed file id for source record ${sourceId}`);
+        if (!/^\d+$/.test(fileId))
+          throw new Error(`resolver returned malformed file id for source record ${sourceId}`);
         const targets = fileToTargets.get(fileId) ?? new Set<string>();
         targets.add(nativeId);
         fileToTargets.set(fileId, targets);
@@ -360,9 +408,19 @@ async function attachmentInventory(
 }
 
 /** Imported parties and the NetSuite entity types they mirror, one ref per role. */
-async function sourcePartyRecords(orgId: string, nsIds?: readonly string[]): Promise<SourceRecordRef[]> {
+async function sourcePartyRecords(
+  orgId: string,
+  nsIds?: readonly string[],
+): Promise<SourceRecordRef[]> {
   if (nsIds && nsIds.length === 0) return [];
-  const rows = await db.execute<{ id: string; nsId: string; customer: boolean; vendor: boolean; employee: boolean }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    nsId: string;
+    customer: boolean;
+    vendor: boolean;
+    employee: boolean;
+  }>(
+    sql`
     select p.id, p.custom->>'nsId' as "nsId",
            exists(select 1 from customer_roles r where r.org_id = p.org_id and r.party_id = p.id) as customer,
            exists(select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id) as vendor,
@@ -371,25 +429,35 @@ async function sourcePartyRecords(orgId: string, nsIds?: readonly string[]): Pro
      where p.org_id = ${orgId} and p.custom->>'nsId' ~ '^[0-9]+$'
        ${nsIds ? sql`and p.custom->>'nsId' = any(${`{${nsIds.join(",")}}`}::text[])` : sql``}
      order by p.id
-  `, "objects");
-  return rows.flatMap((row) => (["customer", "vendor", "employee"] as const)
-    .filter((role) => row[role])
-    .map((recordType) => ({ id: row.id, nsId: row.nsId, recordType })));
+  `,
+    "objects",
+  );
+  return rows.flatMap((row) =>
+    (["customer", "vendor", "employee"] as const)
+      .filter((role) => row[role])
+      .map((recordType) => ({ id: row.id, nsId: row.nsId, recordType })),
+  );
 }
 
-export function decodeBridgeAttachment(response: unknown, expectedFileId: string): {
+export function decodeBridgeAttachment(
+  response: unknown,
+  expectedFileId: string,
+): {
   source: SourceFile;
   bytes: Buffer;
 } {
-  if (!response || typeof response !== "object") throw new Error("attachment bridge returned an invalid response");
+  if (!response || typeof response !== "object")
+    throw new Error("attachment bridge returned an invalid response");
   const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
-  if (body.ok !== true || !body.file) throw new Error(String(body.error || "attachment bridge download failed"));
+  if (body.ok !== true || !body.file)
+    throw new Error(String(body.error || "attachment bridge download failed"));
   const id = String(body.file.id ?? "");
   const name = String(body.file.name ?? "");
   const size = Number(body.file.size);
   const encoding = String(body.file.encoding ?? "");
   const contents = body.file.contents;
-  if (id !== expectedFileId || !/^\d+$/.test(id)) throw new Error("attachment bridge returned the wrong file");
+  if (id !== expectedFileId || !/^\d+$/.test(id))
+    throw new Error("attachment bridge returned the wrong file");
   if (!name || encoding !== "base64" || typeof contents !== "string") {
     throw new Error(`attachment bridge returned malformed content for source file ${id}`);
   }
@@ -406,14 +474,23 @@ export async function downloadSourceFile(
   bridge: { script: string; deploy: string },
   soapEndpointVersion?: string,
 ): Promise<{ source: SourceFile; bytes: Buffer }> {
-  const response = await netsuiteRestlet<unknown>(bridge.script, bridge.deploy, {
-    action: "attachmentContent",
-    fileId,
-  }, creds, "POST");
+  const response = await netsuiteRestlet<unknown>(
+    bridge.script,
+    bridge.deploy,
+    {
+      action: "attachmentContent",
+      fileId,
+    },
+    creds,
+    "POST",
+  );
   const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
   const encoding = body?.file ? String(body.file.encoding ?? "") : "";
   if (encoding === "base64") return decodeBridgeAttachment(response, fileId);
-  if (body?.ok === true && (encoding === "oversized" || encoding === "base64-chunks" || encoding === "raw-bytes")) {
+  if (
+    body?.ok === true &&
+    (encoding === "oversized" || encoding === "base64-chunks" || encoding === "raw-bytes")
+  ) {
     // SOAP preserves source bytes for text and files exceeding the RESTlet
     // transport limit; older chunk markers use the same read path.
     const { name, bytes } = await netsuiteSoapFileGet(fileId, creds, soapEndpointVersion);
@@ -438,11 +515,18 @@ export async function fetchSourceFileModified(
       ok?: boolean;
       error?: string;
       rows?: { id: string | number; lastmod: string | null }[];
-    }>(bridge.script, bridge.deploy, {
-      action: "query",
-      sql: `SELECT id, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS lastmod FROM file WHERE id IN (${chunk.join(",")})`,
-    }, creds, "POST");
-    if (response.ok === false) throw new Error(response.error || "source file metadata query failed");
+    }>(
+      bridge.script,
+      bridge.deploy,
+      {
+        action: "query",
+        sql: `SELECT id, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS lastmod FROM file WHERE id IN (${chunk.join(",")})`,
+      },
+      creds,
+      "POST",
+    );
+    if (response.ok === false)
+      throw new Error(response.error || "source file metadata query failed");
     for (const row of response.rows ?? []) {
       const ms = row.lastmod ? Date.parse(`${row.lastmod.replace(" ", "T")}Z`) : NaN;
       if (Number.isFinite(ms)) modified.set(String(row.id), ms);
@@ -466,7 +550,11 @@ export async function changedAttachmentTransactions(
 ): Promise<string[]> {
   const day = new Date(since.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const response = await netsuiteRestlet<{ ok?: boolean; error?: string; transactions?: unknown }>(
-    bridge.script, bridge.deploy, { action: "attachmentChanges", since: day, recordType }, creds, "POST",
+    bridge.script,
+    bridge.deploy,
+    { action: "attachmentChanges", since: day, recordType },
+    creds,
+    "POST",
   );
   if (response.ok !== true || !Array.isArray(response.transactions)) {
     throw new Error(response.error || "attachment change lookup failed");
@@ -474,10 +562,13 @@ export async function changedAttachmentTransactions(
   const refs = new Set(pulledRefs.map(String));
   for (const id of response.transactions) {
     const ref = String(id);
-    if (!/^\d+$/.test(ref)) throw new Error("attachment change lookup returned a malformed transaction id");
+    if (!/^\d+$/.test(ref))
+      throw new Error("attachment change lookup returned a malformed transaction id");
     refs.add(ref);
   }
-  return Array.from(refs).filter((ref) => /^\d+$/.test(ref)).sort((a, b) => Number(a) - Number(b));
+  return Array.from(refs)
+    .filter((ref) => /^\d+$/.test(ref))
+    .sort((a, b) => Number(a) - Number(b));
 }
 
 export function attachmentNeedsDownload(input: {
@@ -497,18 +588,32 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     throw new Error("targeted source-file retries cannot be combined with a document limit");
   }
   if (options.changes && (requestedSourceFileIds.length > 0 || options.limit !== undefined)) {
-    throw new Error("an incremental attachment sync cannot be combined with file ids or a document limit");
+    throw new Error(
+      "an incremental attachment sync cannot be combined with file ids or a document limit",
+    );
   }
-  const { orgId, connectionId, actorId, creds, bridge, soapEndpointVersion } = await resolveContext(options);
-  const otherConnection = (await db.execute(sql`select id from connections where org_id=${orgId} and source='netsuite' and id<>${connectionId} limit 1`, "objects"))[0];
+  const { orgId, connectionId, actorId, creds, bridge, soapEndpointVersion } =
+    await resolveContext(options);
+  const otherConnection = (
+    await db.execute(
+      sql`select id from connections where org_id=${orgId} and source='netsuite' and id<>${connectionId} limit 1`,
+      "objects",
+    )
+  )[0];
   // Legacy NetSuite file identities are account-wide; never reuse them across connections.
-  if (otherConnection) throw new Error("NetSuite file sync requires one source connection per organization; resolve the account identity before importing files");
+  if (otherConnection)
+    throw new Error(
+      "NetSuite file sync requires one source connection per organization; resolve the account identity before importing files",
+    );
   if (options.execute && !s3Enabled) {
     throw new Error("S3/MinIO is not configured; refusing to fall back to database blobs");
   }
   // Inventory asks for every transaction type; older bridges accept only
   // bills and expense reports and would refuse mid-run.
-  await new NetSuiteBridgeClient(creds, { scriptId: bridge.script, deploymentId: bridge.deploy }).requireCompatible();
+  await new NetSuiteBridgeClient(creds, {
+    scriptId: bridge.script,
+    deploymentId: bridge.deploy,
+  }).requireCompatible();
   let documents: SourceDocument[];
   let withoutSourceId: number;
   let fileToDocuments: Map<string, Set<string>>;
@@ -529,14 +634,17 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     );
   } else {
     const scopedRefs = options.changes
-      ? await changedAttachmentTransactions(options.changes.since, options.changes.sourceRefs, creds, bridge)
+      ? await changedAttachmentTransactions(
+          options.changes.since,
+          options.changes.sourceRefs,
+          creds,
+          bridge,
+        )
       : undefined;
     const source = await sourceDocuments(orgId, connectionId, options.limit, scopedRefs);
     documents = source.documents;
     withoutSourceId = source.withoutSourceId;
-    console.log(
-      `[inventory] resolving attachments for ${documents.length} source transactions`,
-    );
+    console.log(`[inventory] resolving attachments for ${documents.length} source transactions`);
     fileToDocuments = await attachmentInventory(
       transactionRecordRefs(documents),
       creds,
@@ -553,16 +661,33 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     if (options.changes) {
       const changed = new Set<string>();
       for (const recordType of ["customer", "vendor", "employee"]) {
-        for (const id of await changedAttachmentTransactions(options.changes.since, [], creds, bridge, recordType)) changed.add(id);
+        for (const id of await changedAttachmentTransactions(
+          options.changes.since,
+          [],
+          creds,
+          bridge,
+          recordType,
+        ))
+          changed.add(id);
       }
       changedPartyIds = [...changed];
     }
     partyRecords = await sourcePartyRecords(orgId, changedPartyIds);
-    fileToParties = await attachmentInventory(partyRecords, creds, options.concurrency, bridge, "party records");
+    fileToParties = await attachmentInventory(
+      partyRecords,
+      creds,
+      options.concurrency,
+      bridge,
+      "party records",
+    );
   }
-  const sourceLinks = [...fileToDocuments.values(), ...fileToParties.values()].reduce((sum, ids) => sum + ids.size, 0);
+  const sourceLinks = [...fileToDocuments.values(), ...fileToParties.values()].reduce(
+    (sum, ids) => sum + ids.size,
+    0,
+  );
   const summary: ImportSummary = {
-    scope: requestedSourceFileIds.length > 0 ? "source_file_ids" : options.changes ? "changes" : "all",
+    scope:
+      requestedSourceFileIds.length > 0 ? "source_file_ids" : options.changes ? "changes" : "all",
     ...(options.changes ? { changedSince: options.changes.since.toISOString() } : {}),
     requestedSourceFileIds,
     sourceDocuments: documents.length,
@@ -586,8 +711,13 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   if (!options.execute) return summary;
 
   const graph = {
-    orgId, actorId, creds, bridge, soapEndpointVersion,
-    concurrency: options.concurrency, summary,
+    orgId,
+    actorId,
+    creds,
+    bridge,
+    soapEndpointVersion,
+    concurrency: options.concurrency,
+    summary,
     verifyStoredBytes: requestedSourceFileIds.length > 0 || Boolean(options.changes),
   };
   // Transactions first, so a file shared with a party is downloaded once and
@@ -621,19 +751,25 @@ async function importFileGraph(input: {
   // The source marker is the change token, so a scheduled sync never rereads
   // the archive: held files download again only when their marker moves.
   const sourceModified = await fetchSourceFileModified(
-    Array.from(fileToDocuments.keys()), creds, bridge,
+    Array.from(fileToDocuments.keys()),
+    creds,
+    bridge,
   );
   // The metadata query cannot see files in folders the integration role may
   // not browse, although the inventory search and download path can. Such a
   // file has no change marker: it is imported when not yet held and kept when
   // held, and the count is reported rather than refusing the whole graph.
   for (const fileId of fileToDocuments.keys()) {
-    if (!sourceModified.has(fileId)) summary.filesWithoutSourceMarker = (summary.filesWithoutSourceMarker ?? 0) + 1;
+    if (!sourceModified.has(fileId))
+      summary.filesWithoutSourceMarker = (summary.filesWithoutSourceMarker ?? 0) + 1;
   }
   const inventoriedIds = Array.from(fileToDocuments.keys());
-  const imported = (await db.execute<{
-    sourceId: string; sourceModifiedAt: string | null; currentVersionReady: boolean;
-  }>(sql`
+  const imported = await db.execute<{
+    sourceId: string;
+    sourceModifiedAt: string | null;
+    currentVersionReady: boolean;
+  }>(
+    sql`
     select f.source_id as "sourceId", f.source_modified_at as "sourceModifiedAt",
            (f.storage_kind = 's3' and fv.storage_kind = 's3'
             and f.content_hash is not null and f.content_hash = fv.content_hash
@@ -642,17 +778,21 @@ async function importFileGraph(input: {
       left join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
        and f.source_id = any(${`{${inventoriedIds.join(",")}}`}::text[])
-  `, "objects"));
+  `,
+    "objects",
+  );
   const importedById = new Map(imported.map((row) => [row.sourceId, row]));
   const downloadIds: string[] = [];
   const downloadSet = new Set<string>();
   for (const fileId of fileToDocuments.keys()) {
     const have = importedById.get(fileId);
-    if (attachmentNeedsDownload({
-      sourceModifiedMs: sourceModified.get(fileId) ?? null,
-      storedModifiedMs: have?.sourceModifiedAt ? Date.parse(have.sourceModifiedAt) : null,
-      currentVersionReady: have?.currentVersionReady === true,
-    })) {
+    if (
+      attachmentNeedsDownload({
+        sourceModifiedMs: sourceModified.get(fileId) ?? null,
+        storedModifiedMs: have?.sourceModifiedAt ? Date.parse(have.sourceModifiedAt) : null,
+        currentVersionReady: have?.currentVersionReady === true,
+      })
+    ) {
       downloadIds.push(fileId);
       downloadSet.add(fileId);
     } else summary.skippedUnchanged++;
@@ -667,14 +807,27 @@ async function importFileGraph(input: {
     for (const documentId of documentIds) linkTuples.push({ sourceId: fileId, documentId });
   }
   for (const batch of chunks(linkTuples, 1000)) {
-    summary.createdLinks += await linkExistingTransactionFiles(orgId, SOURCE_SYSTEM, actorId, batch, targetTable);
+    summary.createdLinks += await linkExistingTransactionFiles(
+      orgId,
+      SOURCE_SYSTEM,
+      actorId,
+      batch,
+      targetTable,
+    );
   }
 
   downloadIds.sort((left, right) => Number(left) - Number(right));
-  console.log(`[import] ${targetTable}: downloading ${downloadIds.length} new/changed files (${summary.skippedUnchanged} skipped unchanged)`);
+  console.log(
+    `[import] ${targetTable}: downloading ${downloadIds.length} new/changed files (${summary.skippedUnchanged} skipped unchanged)`,
+  );
   await concurrentMap(downloadIds, input.concurrency, async (fileId, index) => {
     try {
-      const { source, bytes: sourceBytes } = await downloadSourceFile(fileId, creds, bridge, soapEndpointVersion);
+      const { source, bytes: sourceBytes } = await downloadSourceFile(
+        fileId,
+        creds,
+        bridge,
+        soapEndpointVersion,
+      );
       const bytes = normalizeAttachmentBytes(sourceBytes);
       const contentType = detectContentType(bytes, source.name);
       const lastModifiedMs = sourceModified.get(fileId) ?? null;
@@ -705,5 +858,11 @@ async function importFileGraph(input: {
     }
   });
   if (summary.failures) throw new AttachmentImportError(summary);
-  await verifyTransactionFiles(orgId, SOURCE_SYSTEM, fileToDocuments, input.verifyStoredBytes, targetTable);
+  await verifyTransactionFiles(
+    orgId,
+    SOURCE_SYSTEM,
+    fileToDocuments,
+    input.verifyStoredBytes,
+    targetTable,
+  );
 }

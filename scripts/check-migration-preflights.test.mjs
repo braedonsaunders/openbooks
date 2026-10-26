@@ -69,10 +69,26 @@ test("a non-SELECT statement is refused before any keyword scan", () => {
 
 test("every write keyword is refused by name", () => {
   const cases = [
-    ["INSERT", "with i as (insert into t values (1) returning x) select * from i;", "preflight-write-keyword"],
-    ["UPDATE", "with u as (update t set x = 1 returning id) select * from u;", "preflight-write-keyword"],
-    ["DELETE", "with d as (delete from t returning id) select * from d;", "preflight-write-keyword"],
-    ["MERGE", "merge into t using s on t.id = s.id when matched then update set x = 1;", "preflight-not-select"],
+    [
+      "INSERT",
+      "with i as (insert into t values (1) returning x) select * from i;",
+      "preflight-write-keyword",
+    ],
+    [
+      "UPDATE",
+      "with u as (update t set x = 1 returning id) select * from u;",
+      "preflight-write-keyword",
+    ],
+    [
+      "DELETE",
+      "with d as (delete from t returning id) select * from d;",
+      "preflight-write-keyword",
+    ],
+    [
+      "MERGE",
+      "merge into t using s on t.id = s.id when matched then update set x = 1;",
+      "preflight-not-select",
+    ],
     ["CREATE", "create temp table t(x int);", "preflight-not-select"],
     ["DROP", "drop table t;", "preflight-not-select"],
     ["TRUNCATE", "truncate t;", "preflight-not-select"],
@@ -88,7 +104,10 @@ test("every write keyword is refused by name", () => {
     const findings = scanPreflightSql("0296_x.sql", body);
     assert.ok(kinds(findings).includes(kind), `${keyword}: ${JSON.stringify(findings)}`);
     if (kind === "preflight-write-keyword") {
-      assert.ok(findings.some((finding) => finding.value === keyword), keyword);
+      assert.ok(
+        findings.some((finding) => finding.value === keyword),
+        keyword,
+      );
     }
   }
   const setConfig = scanPreflightSql("0296_x.sql", "select set_config('x', 'y', true);");
@@ -111,10 +130,7 @@ test("advisory-lock calls are refused: a preflight must not lock a live install"
 });
 
 test("a quoted identifier or literal that merely contains a keyword is not a write", () => {
-  assert.deepEqual(
-    scanPreflightSql("0296_x.sql", 'select "update" from t;'),
-    [],
-  );
+  assert.deepEqual(scanPreflightSql("0296_x.sql", 'select "update" from t;'), []);
   const blanked = blankQuotedSpans(`select 'it''s a delete' as x, "grant"`);
   assert.equal(blanked.length, `select 'it''s a delete' as x, "grant"`.length);
   assert.ok(!blanked.includes("'") && !blanked.includes('"'));
@@ -128,7 +144,10 @@ test("a semicolon inside a literal does not split the statement", () => {
 });
 
 test("an adequate .none reason passes; a short one names the deficit", () => {
-  assert.deepEqual(scanNoneFile("0242_x.none", "Adds only a NOT VALID guard; existing rows are untouched.\n"), []);
+  assert.deepEqual(
+    scanNoneFile("0242_x.none", "Adds only a NOT VALID guard; existing rows are untouched.\n"),
+    [],
+  );
   const findings = scanNoneFile("0242_x.none", "no data touched");
   assert.deepEqual(kinds(findings), ["preflight-none-short"]);
   const boundary = scanNoneFile("0242_x.none", "a".repeat(19));

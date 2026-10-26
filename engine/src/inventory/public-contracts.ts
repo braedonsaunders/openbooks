@@ -1,12 +1,16 @@
 /** Client-safe permission catalog; command implementations remain server-only. */
-export { INVENTORY_ACTION_PERMISSIONS } from '../organization/permissions.ts'
-export type { DisassemblyInput, DisassemblyResult } from './disassembly.ts'
-export type { InventoryOperationOption } from './operation-options.ts'
+export { INVENTORY_ACTION_PERMISSIONS } from "../organization/permissions.ts";
+export type { DisassemblyInput, DisassemblyResult } from "./disassembly.ts";
+export type { InventoryOperationOption } from "./operation-options.ts";
 
-export type { InventoryInquiry } from './inquiry.ts'
+export type { InventoryInquiry } from "./inquiry.ts";
 
 /** The recipe requirement calculation (quantity x (1 + scrap %)) shared by the BOM editor and the work-order engine. */
-export { bomRequiredQuantity, type BomQuantityBasis, type BomRequiredQuantity } from './bom-scrap.ts'
+export {
+  bomRequiredQuantity,
+  type BomQuantityBasis,
+  type BomRequiredQuantity,
+} from "./bom-scrap.ts";
 
 /**
  * Item kinds that can parent a bill of materials: assemblies built by the

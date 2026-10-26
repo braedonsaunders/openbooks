@@ -85,7 +85,11 @@ test("signatures verify with the documented t.body scheme", () => {
   assert.equal(verifyWebhookSignature(secret, header, body, 1_700_000_000 * 1000), true);
   assert.equal(verifyWebhookSignature("other", header, body, 1_700_000_000 * 1000), false);
   assert.equal(verifyWebhookSignature(secret, header, '{"id":"2"}', 1_700_000_000 * 1000), false);
-  assert.equal(verifyWebhookSignature(secret, header, body, 1_700_000_000 * 1000 + 10 * 60 * 1000), false, "stale timestamps refuse");
+  assert.equal(
+    verifyWebhookSignature(secret, header, body, 1_700_000_000 * 1000 + 10 * 60 * 1000),
+    false,
+    "stale timestamps refuse",
+  );
   assert.equal(verifyWebhookSignature(secret, "garbage", body), false);
 });
 

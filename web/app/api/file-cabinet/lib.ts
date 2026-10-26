@@ -1,11 +1,25 @@
-import { loadAttachmentTarget, attachmentTargetInScope, type AttachmentTarget } from '@openbooks/engine/records/file-attachment-target'
-import { NextResponse } from 'next/server'
-import type { SqlExecutor } from '@openbooks/engine/platform/db'
-import { can, getAuthz, type Authz } from '../../../lib/authz'
-import { accessAtLeast, attachmentReadPermission, fileAccessLevel, folderAccessLevel, getFile, listAttachments, type AttachedFile, type AccessLevel, type FileViewer } from '../../../lib/file-cabinet'
-import { expenseAccess, expenseAccessAllows } from '../../../lib/expense-access'
+import {
+  loadAttachmentTarget,
+  attachmentTargetInScope,
+  type AttachmentTarget,
+} from "@openbooks/engine/records/file-attachment-target";
+import { NextResponse } from "next/server";
+import type { SqlExecutor } from "@openbooks/engine/platform/db";
+import { can, getAuthz, type Authz } from "../../../lib/authz";
+import {
+  accessAtLeast,
+  attachmentReadPermission,
+  fileAccessLevel,
+  folderAccessLevel,
+  getFile,
+  listAttachments,
+  type AttachedFile,
+  type AccessLevel,
+  type FileViewer,
+} from "../../../lib/file-cabinet";
+import { expenseAccess, expenseAccessAllows } from "../../../lib/expense-access";
 
-export const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
+export const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 
 /**
  * Content-type allowlist. Files are only stored/served with a type on this
@@ -13,26 +27,26 @@ export const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
  * so browsers never re-interpret the bytes.
  */
 export const ALLOWED_CONTENT_TYPES: Record<string, true> = {
-  'application/pdf': true,
-  'image/png': true,
-  'image/jpeg': true,
-  'image/gif': true,
-  'text/csv': true,
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': true,
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': true,
-  'text/plain': true,
+  "application/pdf": true,
+  "image/png": true,
+  "image/jpeg": true,
+  "image/gif": true,
+  "text/csv": true,
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+  "text/plain": true,
   // Text/code files — safe to store and serve: the download route sends
   // `X-Content-Type-Options: nosniff`, and the preview reads them as text into
   // a textarea (never executed).
-  'text/markdown': true,
-  'text/javascript': true,
-  'application/json': true,
-  'application/xml': true,
-  'text/xml': true,
-}
+  "text/markdown": true,
+  "text/javascript": true,
+  "application/json": true,
+  "application/xml": true,
+  "text/xml": true,
+};
 
 export function isAllowedContentType(ct: string): boolean {
-  return ALLOWED_CONTENT_TYPES[ct.split(';')[0]!.trim().toLowerCase()] === true
+  return ALLOWED_CONTENT_TYPES[ct.split(";")[0]!.trim().toLowerCase()] === true;
 }
 
 /**
@@ -49,62 +63,75 @@ export function isAllowedContentType(ct: string): boolean {
  * AP/AR clerks). Admin's `*` covers everything.
  */
 const DOCUMENT_ATTACHMENT_WRITE_PERMS: Record<string, string> = {
-  vendor_bill: 'ap.create',
-  vendor_payment: 'ap.pay',
-  vendor_credit: 'ap.create',
-  purchase_order: 'purchase_orders.create',
-  check: 'ap.create',
-  card_charge: 'ap.create',
-  card_refund: 'ap.create',
-  customer_invoice: 'ar.create',
-  customer_credit: 'ar.create',
-  customer_payment: 'ar.pay',
-  sales_order: 'ar.create',
-  quote: 'ar.create',
-  expense_report: 'expenses.create',
-  field_ticket: 'time.manage',
-  pick_list: 'orders.fulfill',
-  shipment: 'orders.fulfill',
-  project_charge: 'projects.manage',
-  pay_run: 'payroll.run',
-  journal: 'gl.post',
-  deposit: 'gl.post',
-  transfer: 'gl.post',
-}
+  vendor_bill: "ap.create",
+  vendor_payment: "ap.pay",
+  vendor_credit: "ap.create",
+  purchase_order: "purchase_orders.create",
+  check: "ap.create",
+  card_charge: "ap.create",
+  card_refund: "ap.create",
+  customer_invoice: "ar.create",
+  customer_credit: "ar.create",
+  customer_payment: "ar.pay",
+  sales_order: "ar.create",
+  quote: "ar.create",
+  expense_report: "expenses.create",
+  field_ticket: "time.manage",
+  pick_list: "orders.fulfill",
+  shipment: "orders.fulfill",
+  project_charge: "projects.manage",
+  pay_run: "payroll.run",
+  journal: "gl.post",
+  deposit: "gl.post",
+  transfer: "gl.post",
+};
 
 export function canMutateFiles(authz: Authz, targetTable?: string, kind?: string | null): boolean {
-  if (can(authz, 'documents.manage')) return true
-  if (targetTable === 'item_rate_versions') return can(authz, 'admin.setup.manage')
-  if (targetTable === 'fixed_assets') return can(authz, 'assets.manage')
-  if (targetTable !== 'documents') return false
-  const permission = kind ? DOCUMENT_ATTACHMENT_WRITE_PERMS[kind] : undefined
-  return permission !== undefined && can(authz, permission)
+  if (can(authz, "documents.manage")) return true;
+  if (targetTable === "item_rate_versions") return can(authz, "admin.setup.manage");
+  if (targetTable === "fixed_assets") return can(authz, "assets.manage");
+  if (targetTable !== "documents") return false;
+  const permission = kind ? DOCUMENT_ATTACHMENT_WRITE_PERMS[kind] : undefined;
+  return permission !== undefined && can(authz, permission);
 }
 
 /**
  * Whether the caller may attach to or detach from this loaded record: the
  * kind's write grant, or the self-service grant on their own expense report.
  */
-export async function canMutateAttachmentTarget(authz: Authz, target: AttachmentTarget, executor?: SqlExecutor): Promise<boolean> {
-  if (canMutateFiles(authz, target.targetTable, target.kind)) return true
-  return ownExpenseReportTarget(authz, target, 'edit', executor)
+export async function canMutateAttachmentTarget(
+  authz: Authz,
+  target: AttachmentTarget,
+  executor?: SqlExecutor,
+): Promise<boolean> {
+  if (canMutateFiles(authz, target.targetTable, target.kind)) return true;
+  return ownExpenseReportTarget(authz, target, "edit", executor);
 }
 
 /**
  * Whether the caller may read this loaded record's attachments: the owning
  * record's read grant, or the self-service grant on their own expense report.
  */
-export async function canReadAttachmentTarget(authz: Authz, target: AttachmentTarget, executor?: SqlExecutor): Promise<boolean> {
-  const permission = attachmentReadPermission(target.targetTable, target.kind)
-  if (!permission) return false
-  if (can(authz, permission)) return true
-  return ownExpenseReportTarget(authz, target, 'read', executor)
+export async function canReadAttachmentTarget(
+  authz: Authz,
+  target: AttachmentTarget,
+  executor?: SqlExecutor,
+): Promise<boolean> {
+  const permission = attachmentReadPermission(target.targetTable, target.kind);
+  if (!permission) return false;
+  if (can(authz, permission)) return true;
+  return ownExpenseReportTarget(authz, target, "read", executor);
 }
 
-async function ownExpenseReportTarget(authz: Authz, target: AttachmentTarget, authority: 'read' | 'edit', executor?: SqlExecutor): Promise<boolean> {
-  if (target.targetTable !== 'documents' || target.kind !== 'expense_report') return false
-  const access = await expenseAccess(authz, authority, executor)
-  return access !== null && expenseAccessAllows(access, target.documentPartyId)
+async function ownExpenseReportTarget(
+  authz: Authz,
+  target: AttachmentTarget,
+  authority: "read" | "edit",
+  executor?: SqlExecutor,
+): Promise<boolean> {
+  if (target.targetTable !== "documents" || target.kind !== "expense_report") return false;
+  const access = await expenseAccess(authz, authority, executor);
+  return access !== null && expenseAccessAllows(access, target.documentPartyId);
 }
 
 /**
@@ -113,24 +140,37 @@ async function ownExpenseReportTarget(authz: Authz, target: AttachmentTarget, au
  * reader needs no cabinet-wide grant to open their own receipts.
  */
 export function attachmentViewer(authz: Authz, target: AttachmentTarget): FileViewer {
-  const viewer = fileViewer(authz)
-  if (viewer.baseline !== 'none' || target.targetTable !== 'documents' || target.kind !== 'expense_report') return viewer
-  return { ...viewer, baseline: 'viewer' }
+  const viewer = fileViewer(authz);
+  if (
+    viewer.baseline !== "none" ||
+    target.targetTable !== "documents" ||
+    target.kind !== "expense_report"
+  )
+    return viewer;
+  return { ...viewer, baseline: "viewer" };
 }
 
-export { ATTACHABLE_TARGET_TABLES, isAttachableTargetTable } from './target-tables'
+export { ATTACHABLE_TARGET_TABLES, isAttachableTargetTable } from "./target-tables";
 
-export { loadAttachmentTarget, attachmentTargetInScope, type AttachmentTarget } from '@openbooks/engine/records/file-attachment-target'
+export {
+  loadAttachmentTarget,
+  attachmentTargetInScope,
+  type AttachmentTarget,
+} from "@openbooks/engine/records/file-attachment-target";
 
 /** Combined target lookup + legal-entity gate used by attachment writes. */
-export async function attachmentTargetVisible(authz: Authz, targetTable: string, targetId: string): Promise<boolean> {
-  const target = await loadAttachmentTarget(authz.user.orgId, targetTable, targetId)
-  return target !== null && attachmentTargetInScope(authz, target)
+export async function attachmentTargetVisible(
+  authz: Authz,
+  targetTable: string,
+  targetId: string,
+): Promise<boolean> {
+  const target = await loadAttachmentTarget(authz.user.orgId, targetTable, targetId);
+  return target !== null && attachmentTargetInScope(authz, target);
 }
 
 export class AttachmentMutationRefusal extends Error {
   constructor(readonly status: 403 | 404) {
-    super(status === 404 ? 'not found' : 'forbidden')
+    super(status === 404 ? "not found" : "forbidden");
   }
 }
 
@@ -141,39 +181,51 @@ export async function authorizeAttachmentTargetMutation(
   targetId: string,
   executor: SqlExecutor,
 ): Promise<void> {
-  const target = await loadAttachmentTarget(authz.user.orgId, targetTable, targetId, executor, true)
-  if (!target || !attachmentTargetInScope(authz, target)) throw new AttachmentMutationRefusal(404)
-  if (!(await canMutateAttachmentTarget(authz, target, executor))) throw new AttachmentMutationRefusal(403)
+  const target = await loadAttachmentTarget(
+    authz.user.orgId,
+    targetTable,
+    targetId,
+    executor,
+    true,
+  );
+  if (!target || !attachmentTargetInScope(authz, target)) throw new AttachmentMutationRefusal(404);
+  if (!(await canMutateAttachmentTarget(authz, target, executor)))
+    throw new AttachmentMutationRefusal(403);
 }
 
 export function attachmentMutationRefusal(error: unknown): NextResponse | null {
-  if (!(error instanceof AttachmentMutationRefusal)) return null
-  return NextResponse.json({ error: error.message }, { status: error.status })
+  if (!(error instanceof AttachmentMutationRefusal)) return null;
+  return NextResponse.json({ error: error.message }, { status: error.status });
 }
 
-export { attachmentReadPermission }
+export { attachmentReadPermission };
 
 /**
  * List only attachment metadata whose file is visible to this caller. The
  * cabinet's getFile() is the owning visibility primitive (private folder and
  * direct-file grants); inactive files are omitted as well.
  */
-export async function listVisibleAttachments(orgId: string, targetTable: string, targetId: string, viewer: FileViewer): Promise<AttachedFile[]> {
-  const items = await listAttachments(orgId, targetTable, targetId)
+export async function listVisibleAttachments(
+  orgId: string,
+  targetTable: string,
+  targetId: string,
+  viewer: FileViewer,
+): Promise<AttachedFile[]> {
+  const items = await listAttachments(orgId, targetTable, targetId);
   const visible = await Promise.all(
     items.map(async (item) => {
-      const file = await getFile(orgId, item.id, viewer)
-      return file && !file.isInactive ? item : null
+      const file = await getFile(orgId, item.id, viewer);
+      return file && !file.isInactive ? item : null;
     }),
-  )
-  return visible.filter((item): item is AttachedFile => item !== null)
+  );
+  return visible.filter((item): item is AttachedFile => item !== null);
 }
 
 /** Resolve authz or the 401 response. */
 export async function requireSession(): Promise<Authz | NextResponse> {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  return authz
+  const authz = await getAuthz();
+  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  return authz;
 }
 
 /**
@@ -183,15 +235,29 @@ export async function requireSession(): Promise<Authz | NextResponse> {
  * resource_grants layer on top per folder/file.
  */
 export function fileViewer(authz: Authz): FileViewer {
-  const baseline: AccessLevel = can(authz, 'documents.manage') ? 'manager' : can(authz, 'documents.read') ? 'viewer' : 'none'
-  return { userId: authz.user.id, isAdmin: can(authz, '*'), baseline, canReadApCapture: can(authz, 'ap.read'), allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
+  const baseline: AccessLevel = can(authz, "documents.manage")
+    ? "manager"
+    : can(authz, "documents.read")
+      ? "viewer"
+      : "none";
+  return {
+    userId: authz.user.id,
+    isAdmin: can(authz, "*"),
+    baseline,
+    canReadApCapture: can(authz, "ap.read"),
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  };
 }
 
 /** Gate: the caller must have at least `min` access on a folder. */
-export async function requireFolderAccess(authz: Authz, folderId: string, min: AccessLevel): Promise<NextResponse | null> {
-  const level = await folderAccessLevel(authz.user.orgId, fileViewer(authz), folderId)
-  if (!accessAtLeast(level, min)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  return null
+export async function requireFolderAccess(
+  authz: Authz,
+  folderId: string,
+  min: AccessLevel,
+): Promise<NextResponse | null> {
+  const level = await folderAccessLevel(authz.user.orgId, fileViewer(authz), folderId);
+  if (!accessAtLeast(level, min)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  return null;
 }
 
 /** Gate: the caller must have at least `min` access on a file. */
@@ -201,7 +267,13 @@ export async function requireFileAccess(
   min: AccessLevel,
   options: { includeInactive?: boolean } = {},
 ): Promise<NextResponse | null> {
-  const level = await fileAccessLevel(authz.user.orgId, fileViewer(authz), fileId, undefined, options)
-  if (!accessAtLeast(level, min)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  return null
+  const level = await fileAccessLevel(
+    authz.user.orgId,
+    fileViewer(authz),
+    fileId,
+    undefined,
+    options,
+  );
+  if (!accessAtLeast(level, min)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  return null;
 }

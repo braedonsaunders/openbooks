@@ -1,16 +1,16 @@
-import { platformListSources } from '../../../../lib/list/platform-sources'
-import { EmailLogList } from './sections'
+import { platformListSources } from "../../../../lib/list/platform-sources";
+import { EmailLogList } from "./sections";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export default async function PlatformEmailLogPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const source = platformListSources.emails
-  const { params, filter: status, result } = await source.read(sp)
+  const sp = await searchParams;
+  const source = platformListSources.emails;
+  const { params, filter: status, result } = await source.read(sp);
   return (
     <EmailLogList
       rows={result.rows}
@@ -24,5 +24,5 @@ export default async function PlatformEmailLogPage({
       basePath={source.basePath}
       currentParams={sp}
     />
-  )
+  );
 }

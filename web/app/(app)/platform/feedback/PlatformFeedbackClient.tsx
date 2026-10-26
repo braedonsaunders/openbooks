@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // Operator console for the in-app issue reporter. The form itself belongs to
 // @braedonsaunders/appkit-feedback (the same package the header control comes
@@ -6,17 +6,17 @@
 // wrapper owns the host's half: the server actions, the saved/failed status,
 // and the token-removal control the package deliberately leaves to the host.
 
-import { useState, useTransition } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   FeedbackSettingsForm,
   type FeedbackSettingsValue,
-} from '@braedonsaunders/appkit-feedback/react'
-import { Button } from '@openbooks/ui'
-import { PageContainer, PageHeader } from '@braedonsaunders/appkit-ui'
-import { clearFeedbackTokenAction, saveFeedbackSettingsAction } from './actions'
-import type { FeedbackSettingsView } from '../../../../lib/feedback/config'
+} from "@braedonsaunders/appkit-feedback/react";
+import { Button } from "@openbooks/ui";
+import { PageContainer, PageHeader } from "@braedonsaunders/appkit-ui";
+import { clearFeedbackTokenAction, saveFeedbackSettingsAction } from "./actions";
+import type { FeedbackSettingsView } from "../../../../lib/feedback/config";
 
 function toFormValue(settings: FeedbackSettingsView): FeedbackSettingsValue {
   return {
@@ -25,27 +25,27 @@ function toFormValue(settings: FeedbackSettingsView): FeedbackSettingsValue {
     repo: settings.repo,
     // Never round-trips: the stored token is sealed, and an empty field means
     // "keep what is stored".
-    token: '',
+    token: "",
     hasToken: settings.hasToken,
     labels: settings.labels,
     searchDuplicates: settings.searchDuplicates,
-  }
+  };
 }
 
 export function PlatformFeedbackClient({ settings }: { settings: FeedbackSettingsView }) {
-  const t = useTranslations('platform.feedback')
-  const [value, setValue] = useState<FeedbackSettingsValue>(() => toFormValue(settings))
-  const [hasToken, setHasToken] = useState(settings.hasToken)
-  const [pending, startTransition] = useTransition()
+  const t = useTranslations("platform.feedback");
+  const [value, setValue] = useState<FeedbackSettingsValue>(() => toFormValue(settings));
+  const [hasToken, setHasToken] = useState(settings.hasToken);
+  const [pending, startTransition] = useTransition();
 
   function apply(result: Awaited<ReturnType<typeof saveFeedbackSettingsAction>>, success: string) {
     if (!result.ok) {
-      toast.error(result.message)
-      return
+      toast.error(result.message);
+      return;
     }
-    setValue(toFormValue(result.settings))
-    setHasToken(result.settings.hasToken)
-    toast.success(success)
+    setValue(toFormValue(result.settings));
+    setHasToken(result.settings.hasToken);
+    toast.success(success);
   }
 
   // The same operator shell the sibling platform pages render through
@@ -59,9 +59,9 @@ export function PlatformFeedbackClient({ settings }: { settings: FeedbackSetting
     <PageContainer>
       <div className="space-y-5">
         <PageHeader
-          title={t('title')}
-          description={t('description')}
-          back={{ href: '/platform', label: t('backToPlatform') }}
+          title={t("title")}
+          description={t("description")}
+          back={{ href: "/platform", label: t("backToPlatform") }}
         />
         <div className="flex flex-col gap-4">
           <FeedbackSettingsForm
@@ -79,23 +79,23 @@ export function PlatformFeedbackClient({ settings }: { settings: FeedbackSetting
                     searchDuplicates: next.searchDuplicates,
                     token: next.token.trim() || undefined,
                   }),
-                  t('saved'),
-                )
+                  t("saved"),
+                );
               })
             }
             labels={{
-              settingsDescription: t('settingsDescription'),
-              tokenHelp: t('tokenHelp'),
+              settingsDescription: t("settingsDescription"),
+              tokenHelp: t("tokenHelp"),
             }}
           />
           {hasToken ? (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
               <div>
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {t('storedToken')}
+                  {t("storedToken")}
                 </p>
                 <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                  {t('storedTokenDescription')}
+                  {t("storedTokenDescription")}
                 </p>
               </div>
               <Button
@@ -104,16 +104,16 @@ export function PlatformFeedbackClient({ settings }: { settings: FeedbackSetting
                 disabled={pending}
                 onClick={() =>
                   startTransition(async () => {
-                    apply(await clearFeedbackTokenAction(), t('tokenRemoved'))
+                    apply(await clearFeedbackTokenAction(), t("tokenRemoved"));
                   })
                 }
               >
-                {t('removeToken')}
+                {t("removeToken")}
               </Button>
             </div>
           ) : null}
         </div>
       </div>
     </PageContainer>
-  )
+  );
 }

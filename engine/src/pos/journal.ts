@@ -32,15 +32,30 @@ export async function postDrawerJournal(
   },
 ): Promise<string> {
   if (input.cashUnits === 0n) throw new Error("a drawer journal needs a nonzero amount");
-  const book = (await runner.execute<{ id: string }>(sql`
+  const book = (
+    await runner.execute<{ id: string }>(
+      sql`
     select id from accounting_books
      where org_id = ${input.orgId} and is_primary and is_active and posts_gl
-     limit 1 for share`, "objects"))[0];
-  const subsidiary = (await runner.execute<{ currency: string | null }>(sql`
+     limit 1 for share`,
+      "objects",
+    )
+  )[0];
+  const subsidiary = (
+    await runner.execute<{ currency: string | null }>(
+      sql`
     select nullif(trim(base_currency), '') as currency from subsidiaries
      where org_id = ${input.orgId} and id = ${input.subsidiaryId} and is_active
-     for share`, "objects"))[0];
-  const period = await resolveCoveringPeriod(runner, input.orgId, input.postingDate, input.subsidiaryId);
+     for share`,
+      "objects",
+    )
+  )[0];
+  const period = await resolveCoveringPeriod(
+    runner,
+    input.orgId,
+    input.postingDate,
+    input.subsidiaryId,
+  );
   if (!book || !subsidiary?.currency || !period) {
     throw posRefusal(
       "The drawer movement cannot post: the organization needs an active primary book, a legal entity with a currency and an accounting period covering today.",
@@ -68,7 +83,12 @@ export async function postDrawerJournal(
     auditChanges: input.auditChanges,
     lines: [
       { accountId: input.cashAccountId, amount, locationId: input.locationId, memo: input.memo },
-      { accountId: input.counterAccountId, amount: counter, locationId: input.locationId, memo: input.memo },
+      {
+        accountId: input.counterAccountId,
+        amount: counter,
+        locationId: input.locationId,
+        memo: input.memo,
+      },
     ],
   });
   return posted.entryId;

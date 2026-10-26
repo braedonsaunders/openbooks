@@ -36,7 +36,10 @@ export type ReviewStatus = "pending" | "submitted" | "calibrated" | "shared" | "
 const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY)) || !(await lockAndCheckOrgFeature(exec,orgId,'hrmPerformance'))) {
+  if (
+    !(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY)) ||
+    !(await lockAndCheckOrgFeature(exec, orgId, "hrmPerformance"))
+  ) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before answering reviews",
@@ -160,8 +163,15 @@ function toReviewDTO(row: StoredReview): ReviewDTO {
   };
 }
 
-async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string, forUpdate = false): Promise<StoredReview> {
-  const row = (await exec.execute<StoredReview>(sql`
+async function loadReview(
+  exec: SqlExecutor,
+  orgId: string,
+  reviewId: string,
+  forUpdate = false,
+): Promise<StoredReview> {
+  const row = (
+    await exec.execute<StoredReview>(
+      sql`
     select r.id, r.revision, r.draft_saved_at as "draftSavedAt",
            r.cycle_id as "cycleId",
            c.status as "cycleStatus",
@@ -183,7 +193,10 @@ async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string, fo
       join worker_employments e
         on e.org_id = r.org_id and e.id = r.employment_id
      where r.org_id = ${orgId} and r.id = ${reviewId} ${forUpdate ? sql`for update of r` : sql``}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // Zero rows is a failure: unknown id, or an id from another organization.
   // Callers narrow this to NOT_FOUND uniformly so an unreadable review is
   // indistinguishable from a missing one (see performance-read.ts).
@@ -201,7 +214,8 @@ async function loadAnswers(
   orgId: string,
   reviewId: string,
 ): Promise<ReviewAnswerDTO[]> {
-  const rows = await exec.execute<ReviewAnswerDTO>(sql`
+  const rows = await exec.execute<ReviewAnswerDTO>(
+    sql`
     select id,
            section_title as "sectionTitle",
            question_prompt as "questionPrompt",
@@ -213,7 +227,9 @@ async function loadAnswers(
       from hrm_review_answers
      where org_id = ${orgId} and review_id = ${reviewId}
      order by position
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -273,13 +289,26 @@ async function writeReviewAnswers(args: {
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const partyId = await actorParty(db, orgId, actorId);
-    const cycleLock = (await db.execute<{status:string}>(sql`
+    const cycleLock = (
+      await db.execute<{ status: string }>(
+        sql`
       select c.status from hrm_review_cycles c join hrm_reviews r on r.org_id=c.org_id and r.cycle_id=c.id
       where r.org_id=${orgId} and r.id=${reviewId} for share of c
-    `, "objects"))[0];
-    if(!cycleLock || cycleLock.status!=='open') throw new HrmPerformanceError('BAD_STATE','This cycle is not open for review answers. Return to the review list and check its status.');
+    `,
+        "objects",
+      )
+    )[0];
+    if (!cycleLock || cycleLock.status !== "open")
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        "This cycle is not open for review answers. Return to the review list and check its status.",
+      );
     const review = toReviewDTO(await loadReview(db, orgId, reviewId, true));
-    if(args.revision!==undefined && args.revision!==review.revision) throw new HrmPerformanceError('STALE_REVISION','This review changed in another session. Reload it before saving; your answers have not been applied.');
+    if (args.revision !== undefined && args.revision !== review.revision)
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "This review changed in another session. Reload it before saving; your answers have not been applied.",
+      );
 
     if (review.reviewerPartyId !== partyId) {
       throw new HrmPerformanceError(
@@ -293,18 +322,42 @@ async function writeReviewAnswers(args: {
         `review ${reviewId} is ${review.status} — only a pending review submits`,
       );
     }
-    if(!Array.isArray(args.answers)||args.answers.some(a=>!a||(typeof a.answerId!=='string'||!a.answerId.trim())||(a.text!=null&&(typeof a.text!=='string'||a.text.length>8000))))throw new HrmPerformanceError('INVALID_INPUT','Every answer needs its question identifier and written text of at most 8,000 characters.');
+    if (
+      !Array.isArray(args.answers) ||
+      args.answers.some(
+        (a) =>
+          !a ||
+          typeof a.answerId !== "string" ||
+          !a.answerId.trim() ||
+          (a.text != null && (typeof a.text !== "string" || a.text.length > 8000)),
+      )
+    )
+      throw new HrmPerformanceError(
+        "INVALID_INPUT",
+        "Every answer needs its question identifier and written text of at most 8,000 characters.",
+      );
     const stored = await loadAnswers(db, orgId, reviewId);
     const byId = new Map(args.answers.map((a) => [a.answerId, a]));
-    if(byId.size!==args.answers.length || args.answers.some(a=>!stored.some(s=>s.id===a.answerId)))
-      throw new HrmPerformanceError('INVALID_INPUT','The answer list contains duplicate or unrelated questions. Reload this review and retry.');
+    if (
+      byId.size !== args.answers.length ||
+      args.answers.some((a) => !stored.some((s) => s.id === a.answerId))
+    )
+      throw new HrmPerformanceError(
+        "INVALID_INPUT",
+        "The answer list contains duplicate or unrelated questions. Reload this review and retry.",
+      );
 
-    const template = (await db.execute<{ ratingScale: unknown }>(sql`
+    const template = (
+      await db.execute<{ ratingScale: unknown }>(
+        sql`
       select c.rating_scale_snapshot as "ratingScale"
         from hrm_review_templates t
         join hrm_review_cycles c on c.org_id = t.org_id and c.template_id = t.id
        where c.org_id = ${orgId} and c.id = ${review.cycleId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!template) {
       throw new HrmPerformanceError(
         "TEMPLATE_NOT_FOUND",
@@ -314,25 +367,37 @@ async function writeReviewAnswers(args: {
     const scale = mathRefusal("REFUSED", () => parseRatingScale(template.ratingScale));
     for (const answer of stored) {
       const supplied = byId.get(answer.id);
-      if(args.draft && !supplied) continue;
+      if (args.draft && !supplied) continue;
       const rating = supplied?.rating == null ? null : String(supplied.rating);
       const text = supplied?.text ?? null;
       const needsRating = answer.answerKind === "rating" || answer.answerKind === "rating_and_text";
       const needsText = answer.answerKind === "text" || answer.answerKind === "rating_and_text";
-      if (!args.draft && answer.required && needsRating && (rating === null || rating.trim().length === 0)) {
+      if (
+        !args.draft &&
+        answer.required &&
+        needsRating &&
+        (rating === null || rating.trim().length === 0)
+      ) {
         throw new HrmPerformanceError(
           "REFUSED",
           `the question ${JSON.stringify(answer.questionPrompt ?? answer.sectionTitle)} needs a rating — rate it inside the scale ${scale.min} to ${scale.max}`,
         );
       }
-      if (!args.draft && answer.required && needsText && (text === null || text.trim().length === 0)) {
+      if (
+        !args.draft &&
+        answer.required &&
+        needsText &&
+        (text === null || text.trim().length === 0)
+      ) {
         throw new HrmPerformanceError(
           "REFUSED",
           `the question ${JSON.stringify(answer.questionPrompt ?? answer.sectionTitle)} needs a written answer — write it before submitting`,
         );
       }
       if (rating !== null && rating.trim().length > 0) {
-        mathRefusal("REFUSED", () => assertRatingInScale(scale, rating.trim(), answer.questionPrompt ?? answer.sectionTitle));
+        mathRefusal("REFUSED", () =>
+          assertRatingInScale(scale, rating.trim(), answer.questionPrompt ?? answer.sectionTitle),
+        );
       }
       const answerWrite = await db.execute<never>(sql`
         update hrm_review_answers
@@ -341,22 +406,30 @@ async function writeReviewAnswers(args: {
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and review_id = ${reviewId} and id = ${answer.id}
       `);
-      if(answerWrite.rowCount!==1) throw new HrmPerformanceError("REFUSED","An answer could not be saved. Reload this review and retry.");
+      if (answerWrite.rowCount !== 1)
+        throw new HrmPerformanceError(
+          "REFUSED",
+          "An answer could not be saved. Reload this review and retry.",
+        );
     }
-    const overall = args.overallRating == null || String(args.overallRating).trim().length === 0
-      ? null
-      : String(args.overallRating).trim();
+    const overall =
+      args.overallRating == null || String(args.overallRating).trim().length === 0
+        ? null
+        : String(args.overallRating).trim();
     if (overall !== null) {
       mathRefusal("REFUSED", () => assertRatingInScale(scale, overall, "overall rating"));
     }
-    const moved = (await db.execute<never>(sql`
+    const moved =
+      (
+        await db.execute<never>(sql`
       update hrm_reviews
-         set status = ${args.draft?'pending':'submitted'}, submitted_at = case when ${!!args.draft} then null else now() end,
+         set status = ${args.draft ? "pending" : "submitted"}, submitted_at = case when ${!!args.draft} then null else now() end,
              revision=revision+1, draft_saved_at=case when ${!!args.draft} then now() else draft_saved_at end,
              overall_rating = ${overall}::numeric,
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${reviewId} and status = 'pending'
-    `)).rowCount ?? 0;
+    `)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -365,20 +438,40 @@ async function writeReviewAnswers(args: {
     }
     await db.execute(sql`
       insert into hrm_review_events (org_id, review_id, kind, actor_user_id, reason)
-      values (${orgId}, ${reviewId}, ${args.draft?'draft_saved':'submitted'}, ${actorId}, ${args.draft?'reviewer saved an incomplete draft':'reviewer submitted'})
+      values (${orgId}, ${reviewId}, ${args.draft ? "draft_saved" : "submitted"}, ${actorId}, ${args.draft ? "reviewer saved an incomplete draft" : "reviewer submitted"})
     `);
-    const after=toReviewDTO(await loadReview(db,orgId,reviewId));
-    await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'hrm_reviews',${reviewId},'update',${JSON.stringify({event:args.draft?'review_draft_saved':'review_submitted',before:{review,answers:stored},after:{review:after,answers:await loadAnswers(db,orgId,reviewId)}})}::jsonb,${actorId})`);
+    const after = toReviewDTO(await loadReview(db, orgId, reviewId));
+    await db.execute(
+      sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'hrm_reviews',${reviewId},'update',${JSON.stringify({ event: args.draft ? "review_draft_saved" : "review_submitted", before: { review, answers: stored }, after: { review: after, answers: await loadAnswers(db, orgId, reviewId) } })}::jsonb,${actorId})`,
+    );
     return after;
   });
 }
 
-export async function submitReview(args: {orgId:string;actorId:string;reviewId:string;answers:readonly SubmitAnswer[];overallRating?:string|number|null;revision?:number}):Promise<ReviewDTO> {
+export async function submitReview(args: {
+  orgId: string;
+  actorId: string;
+  reviewId: string;
+  answers: readonly SubmitAnswer[];
+  overallRating?: string | number | null;
+  revision?: number;
+}): Promise<ReviewDTO> {
   return writeReviewAnswers(args);
 }
-export async function saveReviewDraft(args: {orgId:string;actorId:string;reviewId:string;answers:readonly SubmitAnswer[];overallRating?:string|number|null;revision:number}):Promise<ReviewDTO> {
-  if(!Number.isSafeInteger(args.revision)||args.revision<1) throw new HrmPerformanceError('INVALID_INPUT','A review draft requires its current revision. Reload the review and retry.');
-  return writeReviewAnswers({...args,draft:true});
+export async function saveReviewDraft(args: {
+  orgId: string;
+  actorId: string;
+  reviewId: string;
+  answers: readonly SubmitAnswer[];
+  overallRating?: string | number | null;
+  revision: number;
+}): Promise<ReviewDTO> {
+  if (!Number.isSafeInteger(args.revision) || args.revision < 1)
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "A review draft requires its current revision. Reload the review and retry.",
+    );
+  return writeReviewAnswers({ ...args, draft: true });
 }
 
 export async function shareReview(args: {
@@ -394,12 +487,20 @@ export async function shareReview(args: {
     const partyId = await actorParty(db, orgId, actorId);
     const stored = await loadReview(db, orgId, reviewId);
     const review = toReviewDTO(stored);
-    const cycle = (await db.execute<{ status: string }>(sql`
+    const cycle = (
+      await db.execute<{ status: string }>(
+        sql`
       select status from hrm_review_cycles where org_id = ${orgId} and id = ${review.cycleId}
        for share
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!cycle) {
-      throw new HrmPerformanceError("NOT_FOUND", `review cycle for review ${reviewId} is not visible in this organization`);
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        `review cycle for review ${reviewId} is not visible in this organization`,
+      );
     }
     if (review.kind === "self") {
       throw new HrmPerformanceError(
@@ -423,11 +524,14 @@ export async function shareReview(args: {
         `review ${reviewId} sits in a calibrating cycle — finish calibration (close the cycle) before sharing it with the subject`,
       );
     }
-    const moved = (await db.execute<never>(sql`
+    const moved =
+      (
+        await db.execute<never>(sql`
       update hrm_reviews
          set revision=revision+1, status = 'shared', shared_at = now(), updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${reviewId} and status in ('submitted', 'calibrated')
-    `)).rowCount ?? 0;
+    `)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -438,7 +542,13 @@ export async function shareReview(args: {
       insert into hrm_review_events (org_id, review_id, kind, actor_user_id, reason)
       values (${orgId}, ${reviewId}, 'shared', ${actorId}, 'shared with the subject')
     `);
-    return projectReviewForActor(db, orgId, actorId, partyId, toReviewDTO(await loadReview(db, orgId, reviewId)));
+    return projectReviewForActor(
+      db,
+      orgId,
+      actorId,
+      partyId,
+      toReviewDTO(await loadReview(db, orgId, reviewId)),
+    );
   });
 }
 
@@ -470,12 +580,15 @@ export async function acknowledgeReview(args: {
         `review ${reviewId} is ${review.status} — only a shared review acknowledges`,
       );
     }
-    const moved = (await db.execute<never>(sql`
+    const moved =
+      (
+        await db.execute<never>(sql`
       update hrm_reviews
          set revision=revision+1, status = 'acknowledged', acknowledged_at = now(),
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${reviewId} and status = 'shared'
-    `)).rowCount ?? 0;
+    `)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -486,7 +599,13 @@ export async function acknowledgeReview(args: {
       insert into hrm_review_events (org_id, review_id, kind, actor_user_id, reason)
       values (${orgId}, ${reviewId}, 'acknowledged', ${actorId}, 'subject acknowledged')
     `);
-    return projectReviewForActor(db, orgId, actorId, partyId, toReviewDTO(await loadReview(db, orgId, reviewId)));
+    return projectReviewForActor(
+      db,
+      orgId,
+      actorId,
+      partyId,
+      toReviewDTO(await loadReview(db, orgId, reviewId)),
+    );
   });
 }
 
@@ -525,12 +644,15 @@ export async function reopenReview(args: {
     // Back to pending clears the submission stamp (the submitted event
     // remains as evidence); answers and the author's rating stay for
     // correction, calibration stays beside them as history.
-    const moved = (await db.execute<never>(sql`
+    const moved =
+      (
+        await db.execute<never>(sql`
       update hrm_reviews
          set revision=revision+1, status = 'pending', submitted_at = null,
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${reviewId} and status in ('submitted', 'calibrated')
-    `)).rowCount ?? 0;
+    `)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
         "BAD_STATE",

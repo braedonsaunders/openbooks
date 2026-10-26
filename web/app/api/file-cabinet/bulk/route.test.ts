@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
 // Bulk mutations run every verb inside the route's single transaction and
 // report per-item outcomes: unauthorized items are skipped, not fatal, and
@@ -10,40 +10,40 @@ import { sql } from 'drizzle-orm'
 // real route, real validation, and real storage against a scratch org — only
 // the session boundary is stubbed.
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
+const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-const stateKey = Symbol.for('openbooks.file-cabinet-bulk-route-test')
+const stateKey = Symbol.for("openbooks.file-cabinet-bulk-route-test");
 const state: {
   authz: {
-    user: { id: string; orgId: string }
-    permissions: Set<string>
-    allowedSubsidiaryIds: null
-  } | null
-} = { authz: null }
-;(globalThis as Record<symbol, unknown>)[stateKey] = state
+    user: { id: string; orgId: string };
+    permissions: Set<string>;
+    allowedSubsidiaryIds: null;
+  } | null;
+} = { authz: null };
+(globalThis as Record<symbol, unknown>)[stateKey] = state;
 
-const permissionsUrl = new URL('../../../../lib/permissions.ts', import.meta.url).href
+const permissionsUrl = new URL("../../../../lib/permissions.ts", import.meta.url).href;
 const subsidiaryScopeUrl = new URL(
-  '../../../../../engine/src/organization/subsidiary-scope.ts',
+  "../../../../../engine/src/organization/subsidiary-scope.ts",
   import.meta.url,
-).href
-const jsonUrl = new URL('../../../../lib/api/json.ts', import.meta.url).href
+).href;
+const jsonUrl = new URL("../../../../lib/api/json.ts", import.meta.url).href;
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@/lib/authz' || /(^|\/)lib\/authz$/.test(specifier)) {
-      return { shortCircuit: true, url: 'mock:bulk-authz' }
+    if (specifier === "@/lib/authz" || /(^|\/)lib\/authz$/.test(specifier)) {
+      return { shortCircuit: true, url: "mock:bulk-authz" };
     }
-    if (specifier === '@/lib/api/json') {
-      return nextResolve(jsonUrl, context)
+    if (specifier === "@/lib/api/json") {
+      return nextResolve(jsonUrl, context);
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:bulk-authz') {
+    if (url === "mock:bulk-authz") {
       return {
         shortCircuit: true,
-        format: 'module',
+        format: "module",
         source: `import { permissionSetCovers } from '${permissionsUrl}'
           import { subsidiaryScopeAllows } from '${subsidiaryScopeUrl}'
           const state = globalThis[Symbol.for('openbooks.file-cabinet-bulk-route-test')]
@@ -51,168 +51,186 @@ const _hooks = registerHooks({
           export { subsidiaryScopeAllows }
           export async function getAuthz() { return state.authz }
           export async function guardPermission() { throw new Error('unreached in this test') }`,
-      }
+      };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?file-cabinet-bulk'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?file-cabinet-bulk";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 function gate(orgId: string, userId: string, permissions: string[]) {
   state.authz = {
     user: { id: userId, orgId },
     permissions: new Set(permissions),
     allowedSubsidiaryIds: null,
-  }
+  };
 }
 
 function postRequest(body: unknown): Request {
-  return new Request('http://openbooks.test/api/file-cabinet/bulk', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+  return new Request("http://openbooks.test/api/file-cabinet/bulk", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-  })
+  });
 }
 
 async function makeFolder(orgId: string, name: string): Promise<string> {
   const rows = await db.execute<{ id: string }>(
-      sql`insert into folders (org_id, parent_folder_id, name) values (${orgId}, null, ${name}) returning id`, 'objects',
-    )
-  return rows[0]!.id
+    sql`insert into folders (org_id, parent_folder_id, name) values (${orgId}, null, ${name}) returning id`,
+    "objects",
+  );
+  return rows[0]!.id;
 }
 
 async function isInactive(orgId: string, id: string): Promise<boolean> {
   const rows = await db.execute<{ is_inactive: boolean }>(
-      sql`select is_inactive from folders where id = ${id} and org_id = ${orgId}`, 'objects',
-    )
-  return rows[0]?.is_inactive === true
+    sql`select is_inactive from folders where id = ${id} and org_id = ${orgId}`,
+    "objects",
+  );
+  return rows[0]?.is_inactive === true;
 }
 
-async function auditEvents(orgId: string, rowId: string): Promise<Array<{ actor: string; event: string }>> {
+async function auditEvents(
+  orgId: string,
+  rowId: string,
+): Promise<Array<{ actor: string; event: string }>> {
   const rows = await db.execute<{ actor_id: string; event: string }>(
-      sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${orgId} and table_name = 'folders' and row_id = ${rowId} order by at`, 'objects',
-    )
-  return rows.map((r) => ({ actor: r.actor_id, event: r.event }))
+    sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${orgId} and table_name = 'folders' and row_id = ${rowId} order by at`,
+    "objects",
+  );
+  return rows.map((r) => ({ actor: r.actor_id, event: r.event }));
 }
 
-test('bulk delete trashes every folder and audits each with the actor', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  const userId = randomUUID()
+test("bulk delete trashes every folder and audits each with the actor", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const userId = randomUUID();
   try {
-    gate(org.orgId, userId, ['documents.manage'])
-    const a = await makeFolder(org.orgId, 'A')
-    const b = await makeFolder(org.orgId, 'B')
+    gate(org.orgId, userId, ["documents.manage"]);
+    const a = await makeFolder(org.orgId, "A");
+    const b = await makeFolder(org.orgId, "B");
 
-    const response = await POST(postRequest({ action: 'delete', folderIds: [a, b] }))
+    const response = await POST(postRequest({ action: "delete", folderIds: [a, b] }));
 
-    assert.equal(response.status, 200)
+    assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       ok: true,
       done: 2,
       skipped: 0,
       results: [
-        { id: a, kind: 'folder', ok: true },
-        { id: b, kind: 'folder', ok: true },
+        { id: a, kind: "folder", ok: true },
+        { id: b, kind: "folder", ok: true },
       ],
-    })
-    assert.equal(await isInactive(org.orgId, a), true)
-    assert.equal(await isInactive(org.orgId, b), true)
-    assert.deepEqual(await auditEvents(org.orgId, a), [{ actor: userId, event: 'delete' }])
-    assert.deepEqual(await auditEvents(org.orgId, b), [{ actor: userId, event: 'delete' }])
+    });
+    assert.equal(await isInactive(org.orgId, a), true);
+    assert.equal(await isInactive(org.orgId, b), true);
+    assert.deepEqual(await auditEvents(org.orgId, a), [{ actor: userId, event: "delete" }]);
+    assert.deepEqual(await auditEvents(org.orgId, b), [{ actor: userId, event: "delete" }]);
   } finally {
-    state.authz = null
-    await dropScratchOrg(org.orgId)
+    state.authz = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('bulk move relinks the folder and audits the move', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  const userId = randomUUID()
+test("bulk move relinks the folder and audits the move", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const userId = randomUUID();
   try {
-    gate(org.orgId, userId, ['documents.manage'])
-    const target = await makeFolder(org.orgId, 'Target')
-    const moving = await makeFolder(org.orgId, 'Moving')
+    gate(org.orgId, userId, ["documents.manage"]);
+    const target = await makeFolder(org.orgId, "Target");
+    const moving = await makeFolder(org.orgId, "Moving");
 
     const response = await POST(
-      postRequest({ action: 'move', folderIds: [moving], targetFolderId: target }),
-    )
+      postRequest({ action: "move", folderIds: [moving], targetFolderId: target }),
+    );
 
-    assert.equal(response.status, 200)
+    assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       ok: true,
       done: 1,
       skipped: 0,
-      results: [{ id: moving, kind: 'folder', ok: true }],
-    })
+      results: [{ id: moving, kind: "folder", ok: true }],
+    });
     const rows = await db.execute<{ parent_folder_id: string | null }>(
-        sql`select parent_folder_id from folders where id = ${moving} and org_id = ${org.orgId}`, 'objects',
-      )
-    assert.equal(rows[0]?.parent_folder_id, target)
-    assert.deepEqual(await auditEvents(org.orgId, moving), [{ actor: userId, event: 'move' }])
+      sql`select parent_folder_id from folders where id = ${moving} and org_id = ${org.orgId}`,
+      "objects",
+    );
+    assert.equal(rows[0]?.parent_folder_id, target);
+    assert.deepEqual(await auditEvents(org.orgId, moving), [{ actor: userId, event: "move" }]);
   } finally {
-    state.authz = null
-    await dropScratchOrg(org.orgId)
+    state.authz = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('items below the caller tier are skipped without failing the batch', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  try {
-    gate(org.orgId, randomUUID(), ['documents.read'])
-    const a = await makeFolder(org.orgId, 'A')
+test(
+  "items below the caller tier are skipped without failing the batch",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      gate(org.orgId, randomUUID(), ["documents.read"]);
+      const a = await makeFolder(org.orgId, "A");
 
-    const response = await POST(postRequest({ action: 'delete', folderIds: [a] }))
+      const response = await POST(postRequest({ action: "delete", folderIds: [a] }));
 
-    assert.equal(response.status, 200)
-    assert.deepEqual(await response.json(), {
-      ok: true,
-      done: 0,
-      skipped: 1,
-      results: [{ id: a, kind: 'folder', ok: false, error: 'forbidden' }],
-    })
-    assert.equal(await isInactive(org.orgId, a), false)
-    assert.deepEqual(await auditEvents(org.orgId, a), [])
-  } finally {
-    state.authz = null
-    await dropScratchOrg(org.orgId)
-  }
-})
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        ok: true,
+        done: 0,
+        skipped: 1,
+        results: [{ id: a, kind: "folder", ok: false, error: "forbidden" }],
+      });
+      assert.equal(await isInactive(org.orgId, a), false);
+      assert.deepEqual(await auditEvents(org.orgId, a), []);
+    } finally {
+      state.authz = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('an unknown action and an empty selection are refused before any write', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  const userId = randomUUID()
-  try {
-    gate(org.orgId, userId, ['documents.manage'])
-    const a = await makeFolder(org.orgId, 'A')
+test(
+  "an unknown action and an empty selection are refused before any write",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const userId = randomUUID();
+    try {
+      gate(org.orgId, userId, ["documents.manage"]);
+      const a = await makeFolder(org.orgId, "A");
 
-    const unknown = await POST(postRequest({ action: 'archive', folderIds: [a] }))
-    assert.equal(unknown.status, 400)
-    const invalidAction = await unknown.json() as {error:string;issues:{path:string;message:string}[]}
-    assert.match(invalidAction.error,/delete.*move/)
-    assert.equal(invalidAction.issues[0]?.path,'action')
+      const unknown = await POST(postRequest({ action: "archive", folderIds: [a] }));
+      assert.equal(unknown.status, 400);
+      const invalidAction = (await unknown.json()) as {
+        error: string;
+        issues: { path: string; message: string }[];
+      };
+      assert.match(invalidAction.error, /delete.*move/);
+      assert.equal(invalidAction.issues[0]?.path, "action");
 
-    const empty = await POST(postRequest({ action: 'delete', folderIds: [] }))
-    assert.equal(empty.status, 400)
-    const emptySelection = await empty.json() as {error:string}
-    assert.equal(emptySelection.error,'select at least one file or folder')
+      const empty = await POST(postRequest({ action: "delete", folderIds: [] }));
+      assert.equal(empty.status, 400);
+      const emptySelection = (await empty.json()) as { error: string };
+      assert.equal(emptySelection.error, "select at least one file or folder");
 
-    const noTarget = await POST(postRequest({ action: 'move', folderIds: [a] }))
-    assert.equal(noTarget.status, 400)
-    const missingTarget = await noTarget.json() as {issues:{path:string;message:string}[]}
-    assert.equal(missingTarget.issues[0]?.path,'targetFolderId')
-    assert.match(missingTarget.issues[0]!.message,/valid id/)
+      const noTarget = await POST(postRequest({ action: "move", folderIds: [a] }));
+      assert.equal(noTarget.status, 400);
+      const missingTarget = (await noTarget.json()) as {
+        issues: { path: string; message: string }[];
+      };
+      assert.equal(missingTarget.issues[0]?.path, "targetFolderId");
+      assert.match(missingTarget.issues[0]!.message, /valid id/);
 
-    assert.equal(await isInactive(org.orgId, a), false)
-    assert.deepEqual(await auditEvents(org.orgId, a), [])
-  } finally {
-    state.authz = null
-    await dropScratchOrg(org.orgId)
-  }
-})
+      assert.equal(await isInactive(org.orgId, a), false);
+      assert.deepEqual(await auditEvents(org.orgId, a), []);
+    } finally {
+      state.authz = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

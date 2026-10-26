@@ -47,8 +47,7 @@ async function postOneLineDocument(
   const id = randomUUID();
   const actor = randomUUID();
   const partyId = kind === "vendor_bill" ? o.vendorId : o.customerId;
-  const lineAccount =
-    kind === "vendor_bill" ? o.accounts.cogs : o.accounts.revenue;
+  const lineAccount = kind === "vendor_bill" ? o.accounts.cogs : o.accounts.revenue;
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into documents (id, org_id, kind, status, document_number, party_id,
@@ -78,18 +77,24 @@ const control = (o: ScratchOrg) => ({
 });
 
 async function header(orgId: string, docId: string) {
-  const res = await db.execute<{ subtotal: string; tax_total: string; total: string }>(sql`
+  const res = await db.execute<{ subtotal: string; tax_total: string; total: string }>(
+    sql`
     select subtotal, tax_total, total from documents
-     where id = ${docId} and org_id = ${orgId}`, "objects");
+     where id = ${docId} and org_id = ${orgId}`,
+    "objects",
+  );
   return res[0]!;
 }
 
 async function openItemLeg(orgId: string, docId: string): Promise<number> {
-  const res = await db.execute<{ amount: string }>(sql`
+  const res = await db.execute<{ amount: string }>(
+    sql`
     select jl.amount from journal_lines jl
       join documents d on d.posted_entry_id = jl.entry_id and d.org_id = jl.org_id
      where d.id = ${docId} and d.org_id = ${orgId} and jl.is_open_item
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   return Number(res[0]!.amount);
 }
 
@@ -156,9 +161,12 @@ test(
 
     await refreshDocumentHeaderTotals(creditId, o.orgId);
     const h = await header(o.orgId, creditId);
-    const lines = await db.execute<{ sum: string }>(sql`
+    const lines = await db.execute<{ sum: string }>(
+      sql`
       select coalesce(sum(amount), 0) as sum from document_lines
-       where document_id = ${creditId} and org_id = ${o.orgId}`, "objects");
+       where document_id = ${creditId} and org_id = ${o.orgId}`,
+      "objects",
+    );
     assert.equal(
       Number(h.total),
       Number(lines[0]!.sum),
@@ -196,12 +204,15 @@ test(
         [1, "54.5500", "7.0900"],
         [2, "54.5600", "7.1000"],
       ] as const) {
-        const line = await tx.execute<{ id: string }>(sql`
+        const line = await tx.execute<{ id: string }>(
+          sql`
           insert into document_lines (org_id, document_id, line_number, account_id, description,
                                       quantity, unit_price, amount, tax_amount, created_by)
           values (${o.orgId}, ${id}, ${n}, ${o.accounts.cogs}, 'rounding',
                   '1', ${amount}, ${amount}, ${tax}, ${actor})
-          returning id`, "objects");
+          returning id`,
+          "objects",
+        );
         await tx.execute(sql`
           insert into document_line_tax_components
             (org_id, document_line_id, tax_code_id, sequence, rate_percent,

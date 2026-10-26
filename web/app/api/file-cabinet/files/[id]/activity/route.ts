@@ -14,8 +14,7 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const access = await requireFileAccess(gate, id, "viewer");
     if (access) return access;
     const entries = await listFileActivity(gate.user.orgId, "files", id);

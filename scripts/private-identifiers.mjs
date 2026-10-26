@@ -33,10 +33,14 @@ function parseFingerprints(text, origin) {
 
 function defaultFingerprintFile() {
   try {
-    const commonDir = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    const commonDir = execFileSync(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
     return join(commonDir, "openbooks-private-fingerprints");
   } catch {
     return null;
@@ -50,13 +54,17 @@ function defaultFingerprintFile() {
 export function loadPrivateFingerprints(env = process.env) {
   let fingerprints = new Set();
   if (env.OPENBOOKS_PRIVATE_FINGERPRINTS?.trim()) {
-    fingerprints = parseFingerprints(env.OPENBOOKS_PRIVATE_FINGERPRINTS, "OPENBOOKS_PRIVATE_FINGERPRINTS");
+    fingerprints = parseFingerprints(
+      env.OPENBOOKS_PRIVATE_FINGERPRINTS,
+      "OPENBOOKS_PRIVATE_FINGERPRINTS",
+    );
   } else {
     const file = env.OPENBOOKS_PRIVATE_FINGERPRINTS_FILE || defaultFingerprintFile();
     if (env.OPENBOOKS_PRIVATE_FINGERPRINTS_FILE && !existsSync(file)) {
       throw new Error(`OPENBOOKS_PRIVATE_FINGERPRINTS_FILE does not exist: ${file}`);
     }
-    if (file && existsSync(file)) fingerprints = parseFingerprints(readFileSync(file, "utf8"), file);
+    if (file && existsSync(file))
+      fingerprints = parseFingerprints(readFileSync(file, "utf8"), file);
   }
   if (fingerprints.size === 0 && env.OPENBOOKS_REQUIRE_PRIVATE_FINGERPRINTS === "1") {
     throw new Error(

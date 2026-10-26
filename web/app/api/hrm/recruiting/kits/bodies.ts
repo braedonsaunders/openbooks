@@ -8,7 +8,11 @@ export const createKitBody = z.object({
   name: z.string().trim().min(1).max(120),
   pipelineStageId: uuid.nullable().optional(),
   instructions: z.string().max(4000).nullable().optional(),
-  ratingScale: z.array(z.enum(["strong_no", "no", "yes", "strong_yes"])).min(2).max(4).optional(),
+  ratingScale: z
+    .array(z.enum(["strong_no", "no", "yes", "strong_yes"]))
+    .min(2)
+    .max(4)
+    .optional(),
 });
 
 export const setKitActiveBody = z.object({

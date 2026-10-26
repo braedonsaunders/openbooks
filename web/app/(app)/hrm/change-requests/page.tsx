@@ -1,10 +1,14 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { changeRequestQueueSpec, changeRequestQueueTitle, loadChangeRequestQueuePage } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import {
+  changeRequestQueueSpec,
+  changeRequestQueueTitle,
+  loadChangeRequestQueuePage,
+} from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await changeRequestQueueTitle() }
+  return { title: await changeRequestQueueTitle() };
 }
 
 /**
@@ -21,9 +25,9 @@ export async function generateMetadata() {
 export default async function ChangeRequestQueuePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadChangeRequestQueuePage(sp)
-  return <ModuleView spec={changeRequestQueueSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadChangeRequestQueuePage(sp);
+  return <ModuleView spec={changeRequestQueueSpec(data)} data={data} searchParams={sp} trusted />;
 }

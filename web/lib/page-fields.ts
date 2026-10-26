@@ -19,74 +19,81 @@
 
 /** How a value may be bound, phrased in the language's own terms. */
 export type FieldType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'null'
-  | 'object'
-  | 'array'
+  | "string"
+  | "number"
+  | "boolean"
+  | "null"
+  | "object"
+  | "array"
   /** A rendered React element. Present in the data, but nothing can bind it. */
-  | 'node'
+  | "node"
   /** A function or other value a spec has no way to express. */
-  | 'unbindable'
+  | "unbindable";
 
 export interface FieldDescriptor {
   /** Dot path, relative to the scope this descriptor belongs to. */
-  path: string
-  type: FieldType
+  path: string;
+  type: FieldType;
   /** For arrays: how many items the loader produced on this run. */
-  count?: number
+  count?: number;
   /** For arrays: the paths available on each ITEM, relative to the item. */
-  item?: FieldDescriptor[]
+  item?: FieldDescriptor[];
   /** A short rendering of the value, so an author can see what it holds. */
-  sample?: string
+  sample?: string;
   /** Set when this subtree was cut off by the depth or size budget. */
-  truncated?: boolean
+  truncated?: boolean;
 }
 
 export interface FieldCatalog {
-  fields: FieldDescriptor[]
+  fields: FieldDescriptor[];
   /** True when the budget stopped the walk before it finished. */
-  truncated: boolean
+  truncated: boolean;
 }
 
-const MAX_DEPTH = 4
-const MAX_FIELDS = 600
-const SAMPLE_CHARS = 120
+const MAX_DEPTH = 4;
+const MAX_FIELDS = 600;
+const SAMPLE_CHARS = 120;
 /** Enough items to see that a row shape is consistent, few enough to stay cheap. */
-const ARRAY_PROBE = 3
+const ARRAY_PROBE = 3;
 
 function classify(value: unknown): FieldType {
-  if (value === null) return 'null'
-  if (Array.isArray(value)) return 'array'
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
   switch (typeof value) {
-    case 'string': return 'string'
-    case 'number':
-    case 'bigint': return 'number'
-    case 'boolean': return 'boolean'
-    case 'undefined': return 'null'
-    case 'function': return 'unbindable'
-    case 'symbol': return 'unbindable'
+    case "string":
+      return "string";
+    case "number":
+    case "bigint":
+      return "number";
+    case "boolean":
+      return "boolean";
+    case "undefined":
+      return "null";
+    case "function":
+      return "unbindable";
+    case "symbol":
+      return "unbindable";
   }
   // A React element is an object, and reporting it as one would invite an
   // author to bind `header.props.children` — a path that resolves to something
   // no block can render. Saying so is the difference between a catalog and a
   // list of properties.
-  if (isReactNode(value)) return 'node'
-  if (value instanceof Date) return 'string'
-  return 'object'
+  if (isReactNode(value)) return "node";
+  if (value instanceof Date) return "string";
+  return "object";
 }
 
 function isReactNode(value: object): boolean {
-  return '$$typeof' in value && typeof (value as { $$typeof: unknown }).$$typeof === 'symbol'
+  return "$$typeof" in value && typeof (value as { $$typeof: unknown }).$$typeof === "symbol";
 }
 
 function sampleOf(value: unknown, type: FieldType): string | undefined {
-  if (type === 'object' || type === 'array' || type === 'node' || type === 'unbindable') return undefined
-  if (value === null || value === undefined) return undefined
-  if (value instanceof Date) return value.toISOString()
-  const text = typeof value === 'string' ? value : String(value)
-  return text.length > SAMPLE_CHARS ? `${text.slice(0, SAMPLE_CHARS)}…` : text
+  if (type === "object" || type === "array" || type === "node" || type === "unbindable")
+    return undefined;
+  if (value === null || value === undefined) return undefined;
+  if (value instanceof Date) return value.toISOString();
+  const text = typeof value === "string" ? value : String(value);
+  return text.length > SAMPLE_CHARS ? `${text.slice(0, SAMPLE_CHARS)}…` : text;
 }
 
 /**
@@ -100,9 +107,9 @@ function sampleOf(value: unknown, type: FieldType): string | undefined {
  * that reading the page would not already show.
  */
 export function describeFields(scope: unknown): FieldCatalog {
-  const budget = { remaining: MAX_FIELDS }
-  const fields = walk(scope, '', 0, budget)
-  return { fields, truncated: budget.remaining <= 0 }
+  const budget = { remaining: MAX_FIELDS };
+  const fields = walk(scope, "", 0, budget);
+  return { fields, truncated: budget.remaining <= 0 };
 }
 
 function walk(
@@ -111,39 +118,39 @@ function walk(
   depth: number,
   budget: { remaining: number },
 ): FieldDescriptor[] {
-  if (scope === null || typeof scope !== 'object' || Array.isArray(scope)) return []
-  const out: FieldDescriptor[] = []
+  if (scope === null || typeof scope !== "object" || Array.isArray(scope)) return [];
+  const out: FieldDescriptor[] = [];
   for (const key of Object.keys(scope).sort()) {
-    if (budget.remaining <= 0) break
-    budget.remaining--
+    if (budget.remaining <= 0) break;
+    budget.remaining--;
     // A key that is not a plain identifier cannot be written in a dot path, so
     // it is not bindable and listing it would be a lie.
-    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)) continue
-    const value = (scope as Record<string, unknown>)[key]
-    const type = classify(value)
-    const path = prefix ? `${prefix}.${key}` : key
-    const descriptor: FieldDescriptor = { path, type }
-    const sample = sampleOf(value, type)
-    if (sample !== undefined) descriptor.sample = sample
+    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)) continue;
+    const value = (scope as Record<string, unknown>)[key];
+    const type = classify(value);
+    const path = prefix ? `${prefix}.${key}` : key;
+    const descriptor: FieldDescriptor = { path, type };
+    const sample = sampleOf(value, type);
+    if (sample !== undefined) descriptor.sample = sample;
 
-    if (type === 'array') {
-      const items = value as unknown[]
-      descriptor.count = items.length
-      if (depth + 1 > MAX_DEPTH) descriptor.truncated = true
-      else descriptor.item = itemShape(items, depth + 1, budget)
-    } else if (type === 'object') {
-      if (depth + 1 > MAX_DEPTH) descriptor.truncated = true
+    if (type === "array") {
+      const items = value as unknown[];
+      descriptor.count = items.length;
+      if (depth + 1 > MAX_DEPTH) descriptor.truncated = true;
+      else descriptor.item = itemShape(items, depth + 1, budget);
+    } else if (type === "object") {
+      if (depth + 1 > MAX_DEPTH) descriptor.truncated = true;
       else {
-        const children = walk(value, path, depth + 1, budget)
+        const children = walk(value, path, depth + 1, budget);
         // A nested object contributes its leaves; the container itself is
         // listed too, because `repeat` and `table` bind containers.
-        out.push(descriptor, ...children)
-        continue
+        out.push(descriptor, ...children);
+        continue;
       }
     }
-    out.push(descriptor)
+    out.push(descriptor);
   }
-  return out
+  return out;
 }
 
 /**
@@ -165,18 +172,18 @@ function itemShape(
   depth: number,
   budget: { remaining: number },
 ): FieldDescriptor[] {
-  const merged = new Map<string, FieldDescriptor>()
+  const merged = new Map<string, FieldDescriptor>();
   for (const item of items.slice(0, ARRAY_PROBE)) {
-    if (budget.remaining <= 0) break
-    for (const field of walk(item, '', depth, budget)) {
-      const existing = merged.get(field.path)
+    if (budget.remaining <= 0) break;
+    for (const field of walk(item, "", depth, budget)) {
+      const existing = merged.get(field.path);
       // A path seen as `null` in one row and `string` in another is a string
       // field that is sometimes empty. Keeping the informative type is more
       // useful than keeping whichever row came first.
-      if (!existing || existing.type === 'null') merged.set(field.path, field)
+      if (!existing || existing.type === "null") merged.set(field.path, field);
     }
   }
-  return [...merged.values()].sort((a, b) => a.path.localeCompare(b.path))
+  return [...merged.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /**
@@ -184,34 +191,34 @@ function itemShape(
  * the data the built-in layout uses — and, by difference, which it ignores.
  */
 export function boundPaths(spec: unknown): string[] {
-  const paths = new Set<string>()
+  const paths = new Set<string>();
   const visit = (node: unknown) => {
-    if (node === null || typeof node !== 'object') return
+    if (node === null || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      for (const child of node) visit(child)
-      return
+      for (const child of node) visit(child);
+      return;
     }
-    const record = node as Record<string, unknown>
-    if (typeof record.$ === 'string' && Object.keys(record).length === 1) {
-      paths.add(record.$)
-      return
+    const record = node as Record<string, unknown>;
+    if (typeof record.$ === "string" && Object.keys(record).length === 1) {
+      paths.add(record.$);
+      return;
     }
-    for (const child of Object.values(record)) visit(child)
-  }
-  visit(spec)
-  return [...paths].sort()
+    for (const child of Object.values(record)) visit(child);
+  };
+  visit(spec);
+  return [...paths].sort();
 }
 
 export interface UnresolvedPath {
   /** The dot path exactly as the spec wrote it. */
-  path: string
+  path: string;
   /** `page` for the loader root, `row` inside a table row or repeat item. */
-  scope: 'page' | 'row'
+  scope: "page" | "row";
   /** The closest path that does exist in that scope, when one is near. */
-  suggestion?: string
+  suggestion?: string;
 }
 
-const ROOT_PREFIX = '$root.'
+const ROOT_PREFIX = "$root.";
 
 /**
  * Field references a spec makes that the loader output provably lacks.
@@ -223,104 +230,116 @@ const ROOT_PREFIX = '$root.'
  * no rows this run there is nothing to compare against, so nothing is claimed.
  */
 export function unresolvedPaths(spec: unknown, catalog: FieldCatalog): UnresolvedPath[] {
-  const out = new Map<string, UnresolvedPath>()
-  const check = (path: string, scope: FieldDescriptor[] | null, kind: 'page' | 'row') => {
-    if (path.startsWith(ROOT_PREFIX)) return check(path.slice(ROOT_PREFIX.length), catalog.fields, 'page')
-    if (scope === null) return
-    if (kind === 'page' && catalog.truncated) return
-    if (resolvable(path, scope)) return
-    const key = `${kind}:${path}`
-    if (out.has(key)) return
-    const suggestion = nearestPath(path, scope)
-    out.set(key, { path, scope: kind, ...(suggestion ? { suggestion } : {}) })
-  }
-  const visit = (node: unknown, scope: FieldDescriptor[] | null, kind: 'page' | 'row') => {
-    if (node === null || typeof node !== 'object') return
+  const out = new Map<string, UnresolvedPath>();
+  const check = (path: string, scope: FieldDescriptor[] | null, kind: "page" | "row") => {
+    if (path.startsWith(ROOT_PREFIX))
+      return check(path.slice(ROOT_PREFIX.length), catalog.fields, "page");
+    if (scope === null) return;
+    if (kind === "page" && catalog.truncated) return;
+    if (resolvable(path, scope)) return;
+    const key = `${kind}:${path}`;
+    if (out.has(key)) return;
+    const suggestion = nearestPath(path, scope);
+    out.set(key, { path, scope: kind, ...(suggestion ? { suggestion } : {}) });
+  };
+  const visit = (node: unknown, scope: FieldDescriptor[] | null, kind: "page" | "row") => {
+    if (node === null || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      for (const child of node) visit(child, scope, kind)
-      return
+      for (const child of node) visit(child, scope, kind);
+      return;
     }
-    const record = node as Record<string, unknown>
-    if (typeof record.$ === 'string' && Object.keys(record).length === 1) {
-      check(record.$, scope, kind)
-      return
+    const record = node as Record<string, unknown>;
+    if (typeof record.$ === "string" && Object.keys(record).length === 1) {
+      check(record.$, scope, kind);
+      return;
     }
-    const rowsRef = record.kind === 'table' ? record.rows : record.kind === 'repeat' ? record.items : undefined
-    if (rowsRef && typeof rowsRef === 'object' && typeof (rowsRef as { $?: unknown }).$ === 'string') {
-      const rowsPath = (rowsRef as { $: string }).$
-      check(rowsPath, scope, kind)
-      const rowScope = itemScope(rowsPath, scope)
+    const rowsRef =
+      record.kind === "table" ? record.rows : record.kind === "repeat" ? record.items : undefined;
+    if (
+      rowsRef &&
+      typeof rowsRef === "object" &&
+      typeof (rowsRef as { $?: unknown }).$ === "string"
+    ) {
+      const rowsPath = (rowsRef as { $: string }).$;
+      check(rowsPath, scope, kind);
+      const rowScope = itemScope(rowsPath, scope);
       for (const [key, child] of Object.entries(record)) {
-        if (key === 'rows' || key === 'items') continue
-        if (key === 'rowKey' || key === 'itemKey' || key === 'blocks') {
-          visit(child, rowScope, 'row')
-        } else if (key === 'columns' && Array.isArray(child)) {
+        if (key === "rows" || key === "items") continue;
+        if (key === "rowKey" || key === "itemKey" || key === "blocks") {
+          visit(child, rowScope, "row");
+        } else if (key === "columns" && Array.isArray(child)) {
           // A column's header reads the page; its cell reads each row.
           for (const column of child) {
-            if (column === null || typeof column !== 'object') continue
+            if (column === null || typeof column !== "object") continue;
             for (const [field, value] of Object.entries(column as Record<string, unknown>)) {
-              visit(value, field === 'cell' ? rowScope : scope, field === 'cell' ? 'row' : kind)
+              visit(value, field === "cell" ? rowScope : scope, field === "cell" ? "row" : kind);
             }
           }
         } else {
-          visit(child, scope, kind)
+          visit(child, scope, kind);
         }
       }
-      return
+      return;
     }
-    for (const child of Object.values(record)) visit(child, scope, kind)
-  }
-  visit(spec, catalog.fields, 'page')
-  return [...out.values()]
+    for (const child of Object.values(record)) visit(child, scope, kind);
+  };
+  visit(spec, catalog.fields, "page");
+  return [...out.values()];
 }
 
 function itemScope(path: string, scope: FieldDescriptor[] | null): FieldDescriptor[] | null {
-  if (path.startsWith(ROOT_PREFIX) || scope === null) return null
-  const array = scope.find((field) => field.path === path)
-  if (!array || array.type !== 'array' || !array.item || !array.count) return null
-  return array.item
+  if (path.startsWith(ROOT_PREFIX) || scope === null) return null;
+  const array = scope.find((field) => field.path === path);
+  if (!array || array.type !== "array" || !array.item || !array.count) return null;
+  return array.item;
 }
 
 function resolvable(path: string, scope: FieldDescriptor[]): boolean {
-  if (scope.some((field) => field.path === path)) return true
+  if (scope.some((field) => field.path === path)) return true;
   // A deeper path under a value the catalog could not open is unknown, not
   // missing: a null today may be an object on another run.
-  const segments = path.split('.')
+  const segments = path.split(".");
   for (let length = segments.length - 1; length > 0; length--) {
-    const parent = scope.find((field) => field.path === segments.slice(0, length).join('.'))
-    if (!parent) continue
-    return parent.truncated === true || parent.type === 'null' || parent.type === 'unbindable'
+    const parent = scope.find((field) => field.path === segments.slice(0, length).join("."));
+    if (!parent) continue;
+    return parent.truncated === true || parent.type === "null" || parent.type === "unbindable";
   }
-  return false
+  return false;
 }
 
 function nearestPath(path: string, scope: FieldDescriptor[]): string | undefined {
-  const target = path.toLowerCase()
-  const leaf = target.split('.').pop()!
-  let best: string | undefined
-  let bestScore = Infinity
+  const target = path.toLowerCase();
+  const leaf = target.split(".").pop()!;
+  let best: string | undefined;
+  let bestScore = Infinity;
   for (const field of scope) {
-    const candidate = field.path.toLowerCase()
-    const candidateLeaf = candidate.split('.').pop()!
-    const score = Math.min(distance(target, candidate), distance(leaf, candidateLeaf) + 1)
+    const candidate = field.path.toLowerCase();
+    const candidateLeaf = candidate.split(".").pop()!;
+    const score = Math.min(distance(target, candidate), distance(leaf, candidateLeaf) + 1);
     if (score < bestScore) {
-      bestScore = score
-      best = field.path
+      bestScore = score;
+      best = field.path;
     }
   }
-  return best !== undefined && bestScore <= Math.max(2, Math.floor(leaf.length / 2)) ? best : undefined
+  return best !== undefined && bestScore <= Math.max(2, Math.floor(leaf.length / 2))
+    ? best
+    : undefined;
 }
 
 function distance(a: string, b: string): number {
-  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
-    const current = [i]
+    const current = [i];
     for (let j = 1; j <= b.length; j++) {
-      current[j] = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1))
+      current[j] = Math.min(
+        previous[j]! + 1,
+        current[j - 1]! + 1,
+        previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
     }
-    previous = current
+    previous = current;
   }
-  return previous[b.length]!
+  return previous[b.length]!;
 }
 
 /**
@@ -336,78 +355,110 @@ function distance(a: string, b: string): number {
  * more than one path is ambiguous and stays literal.
  */
 export function bindLiteralProps<T>(spec: T, data: unknown): T {
-  const index = new Map<string, string[]>()
+  const index = new Map<string, string[]>();
   // Structured values the spec passed through unchanged are the SAME object
   // as in the loader output, so identity binds them exactly — including an
   // empty list, which by value would be indistinguishable from any other.
-  const identity = new Map<object, string>()
+  const identity = new Map<object, string>();
   const record = (value: unknown, path: string, depth: number) => {
-    if (depth > MAX_DEPTH + 1 || !path) return
-    if (value && typeof value === 'object' && !identity.has(value)) identity.set(value, path)
+    if (depth > MAX_DEPTH + 1 || !path) return;
+    if (value && typeof value === "object" && !identity.has(value)) identity.set(value, path);
     if (bindable(value)) {
-      const key = stableJson(value)
-      const paths = index.get(key) ?? []
-      paths.push(path)
-      index.set(key, paths)
+      const key = stableJson(value);
+      const paths = index.get(key) ?? [];
+      paths.push(path);
+      index.set(key, paths);
     }
-    if (value && typeof value === 'object' && !Array.isArray(value) && !isReactNode(value as object)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      !isReactNode(value as object)
+    ) {
       for (const [name, child] of Object.entries(value as Record<string, unknown>)) {
-        if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) record(child, path ? `${path}.${name}` : name, depth + 1)
+        if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name))
+          record(child, path ? `${path}.${name}` : name, depth + 1);
       }
     }
-  }
-  if (data && typeof data === 'object') {
+  };
+  if (data && typeof data === "object") {
     for (const [name, child] of Object.entries(data as Record<string, unknown>)) {
-      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) record(child, name, 1)
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) record(child, name, 1);
     }
   }
-  const bind = (props: Record<string, unknown>) => Object.fromEntries(Object.entries(props).map(([name, value]) => {
-    if (value && typeof value === 'object' && identity.has(value)) return [name, { $: identity.get(value)! }]
-    if (!bindable(value) || isRef(value)) return [name, value]
-    const paths = index.get(stableJson(value))
-    if (!paths?.length) return [name, value]
-    const structured = typeof value === 'object'
-    if (!structured && paths.length > 1) {
-      // Equal primitives at several paths (two totals both "CA$0") are told
-      // apart only when exactly one path is named for the prop.
-      const named = paths.filter((path) => path.split('.').pop()!.toLowerCase().includes(name.toLowerCase()))
-      return named.length === 1 ? [name, { $: named[0]! }] : [name, value]
-    }
-    const path = [...paths].sort((a, b) => a.length - b.length || a.localeCompare(b))[0]!
-    return [name, { $: path }]
-  }))
+  const bind = (props: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(props).map(([name, value]) => {
+        if (value && typeof value === "object" && identity.has(value))
+          return [name, { $: identity.get(value)! }];
+        if (!bindable(value) || isRef(value)) return [name, value];
+        const paths = index.get(stableJson(value));
+        if (!paths?.length) return [name, value];
+        const structured = typeof value === "object";
+        if (!structured && paths.length > 1) {
+          // Equal primitives at several paths (two totals both "CA$0") are told
+          // apart only when exactly one path is named for the prop.
+          const named = paths.filter((path) =>
+            path.split(".").pop()!.toLowerCase().includes(name.toLowerCase()),
+          );
+          return named.length === 1 ? [name, { $: named[0]! }] : [name, value];
+        }
+        const path = [...paths].sort((a, b) => a.length - b.length || a.localeCompare(b))[0]!;
+        return [name, { $: path }];
+      }),
+    );
   const visit = (node: unknown, inCell: boolean): unknown => {
-    if (Array.isArray(node)) return node.map((child) => visit(child, inCell))
-    if (!node || typeof node !== 'object') return node
-    const source = node as Record<string, unknown>
-    const out: Record<string, unknown> = {}
+    if (Array.isArray(node)) return node.map((child) => visit(child, inCell));
+    if (!node || typeof node !== "object") return node;
+    const source = node as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
     for (const [name, value] of Object.entries(source)) {
-      if (name === 'props' && value && typeof value === 'object' && !Array.isArray(value) && !inCell && (typeof source.widget === 'string' || typeof source.frame === 'string')) {
-        out[name] = bind(value as Record<string, unknown>)
+      if (
+        name === "props" &&
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        !inCell &&
+        (typeof source.widget === "string" || typeof source.frame === "string")
+      ) {
+        out[name] = bind(value as Record<string, unknown>);
       } else {
         // Cells resolve against a row, so their literals are left alone.
-        out[name] = visit(value, inCell || name === 'cell' || name === 'inner')
+        out[name] = visit(value, inCell || name === "cell" || name === "inner");
       }
     }
-    return out
-  }
-  return visit(spec, false) as T
+    return out;
+  };
+  return visit(spec, false) as T;
 }
 
 function isRef(value: unknown): boolean {
-  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && typeof (value as { $?: unknown }).$ === 'string'
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    typeof (value as { $?: unknown }).$ === "string"
+  );
 }
 
 function bindable(value: unknown): boolean {
-  if (typeof value === 'string') return value.length > 0
-  if (typeof value === 'number') return Number.isFinite(value)
-  if (Array.isArray(value)) return value.length > 0
-  if (value && typeof value === 'object') return !isReactNode(value) && Object.keys(value).length > 0
-  return false
+  if (typeof value === "string") return value.length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object")
+    return !isReactNode(value) && Object.keys(value).length > 0;
+  return false;
 }
 
 function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_, inner) => inner && typeof inner === 'object' && !Array.isArray(inner)
-    ? Object.fromEntries(Object.keys(inner).sort().map((key) => [key, (inner as Record<string, unknown>)[key]]))
-    : inner)
+  return JSON.stringify(value, (_, inner) =>
+    inner && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(
+          Object.keys(inner)
+            .sort()
+            .map((key) => [key, (inner as Record<string, unknown>)[key]]),
+        )
+      : inner,
+  );
 }

@@ -19,13 +19,14 @@ export async function invoiceDeferredCredit(
   source: RevenueCreditSource,
 ): Promise<string> {
   const rows = await tx.execute<{
-      id: string;
-      currency: string;
-      amount: string;
-      txn_amount: string;
-      applied: string;
-      principal: string;
-    }>(sql`
+    id: string;
+    currency: string;
+    amount: string;
+    txn_amount: string;
+    applied: string;
+    principal: string;
+  }>(
+    sql`
  select credit.id,cl.currency,sum(cl.amount)::text as amount,sum(cl.txn_amount)::text as txn_amount,
    (select coalesce(sum(abs(app.target_transaction_amount)),0)::text from applications app join journal_lines fl on fl.id=app.from_line_id and fl.org_id=app.org_id join journal_lines tl on tl.id=app.to_line_id and tl.org_id=app.org_id
      where app.org_id=credit.org_id and app.unapplied_at is null and app.target_transaction_currency=${source.currency} and fl.entry_id=credit.posted_entry_id and tl.entry_id=inv.posted_entry_id) as applied,
@@ -35,16 +36,16 @@ export async function invoiceDeferredCredit(
  join journal_entries ce on ce.id=credit.posted_entry_id and ce.org_id=credit.org_id and ce.status='posted'
  join journal_lines cl on cl.entry_id=ce.id and cl.org_id=ce.org_id and cl.account_id=${source.deferredAccountId} and cl.amount>0
  where inv.org_id=${orgId} and inv.id=${source.invoiceId}
- group by credit.id,credit.org_id,credit.posted_entry_id,inv.posted_entry_id,cl.currency`, "objects");
+ group by credit.id,credit.org_id,credit.posted_entry_id,inv.posted_entry_id,cl.currency`,
+    "objects",
+  );
   return sum(
     rows.map((row) => {
       const applied = toUnits(row.applied),
         principal = toUnits(row.principal);
       if (applied === 0n) return "0.0000";
       if (principal === 0n)
-        throw new Error(
-          "an applied deferred credit has no settlement principal",
-        );
+        throw new Error("an applied deferred credit has no settlement principal");
       return fromUnits(roundDiv(toUnits(row.txn_amount) * applied, principal));
     }),
   );
@@ -84,19 +85,17 @@ export async function measureCreditExposure(
     return creditShare(raw, exposure.weights, exposure.index);
   }
   if (exposure.bookId !== bookId)
-    throw new Error(
-      "deferred-credit evidence belongs to another accounting book",
-    );
-  const row = (await tx.execute<{
+    throw new Error("deferred-credit evidence belongs to another accounting book");
+  const row = (
+    await tx.execute<{
       before_state: { creditGroups: Record<string, CreditGroup[]> };
     }>(
-      sql`select before_state from financial_changes where org_id=${orgId} and id=${exposure.changeId} and domain='revenue'`, "objects",
-    ))[0];
+      sql`select before_state from financial_changes where org_id=${orgId} and id=${exposure.changeId} and domain='revenue'`,
+      "objects",
+    )
+  )[0];
   const group = row?.before_state.creditGroups[bookId]?.[exposure.groupIndex];
-  if (!group)
-    throw new Error(
-      "the approved deferred-credit allocation evidence is missing",
-    );
+  if (!group) throw new Error("the approved deferred-credit allocation evidence is missing");
   // Sequential recursion: the posting transaction holds one pg client, so
   // measuring every predecessor at once queues concurrent queries on it.
   const parts: string[] = [];

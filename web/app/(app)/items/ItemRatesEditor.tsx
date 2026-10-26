@@ -1,59 +1,96 @@
-'use client'
+"use client";
 
-import { useBusinessToday } from '@/components/business-date-provider'
-import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
-import { useMoney } from '@/components/money-provider'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import Link from 'next/link'
-import { toast } from 'sonner'
-import { Badge, Button, Card, CardContent, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { DrawerSublist, SublistAddButton, SublistLoadError, SublistLoading, useSublistRows } from '../../../components/drawer-sublist'
-import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { PagedTable } from '../../../components/paged-table'
-import { enumLabel } from '../../../lib/enum-label'
-import { DateField } from '@/components/date-field'
+import { useBusinessToday } from "@/components/business-date-provider";
+import { readApiErrorMessage, refusalMessageFromBody } from "@/lib/api-error";
+import { useMoney } from "@/components/money-provider";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Badge, Button, Card, CardContent, Drawer, Input, Label, Select } from "@openbooks/ui";
+import {
+  DrawerSublist,
+  SublistAddButton,
+  SublistLoadError,
+  SublistLoading,
+  useSublistRows,
+} from "../../../components/drawer-sublist";
+import { LineGrid, type LineGridColumn } from "../../../components/line-grid";
+import { PagedTable } from "../../../components/paged-table";
+import { enumLabel } from "../../../lib/enum-label";
+import { DateField } from "@/components/date-field";
 
-type RateVersionStatus = 'draft' | 'active' | 'retired'
+type RateVersionStatus = "draft" | "active" | "retired";
 
 export interface Tier extends Record<string, unknown> {
-  unitCode: string
-  unitName: string
-  baseQuantity: string
-  costRate: string
-  billRate: string
-  timeTypeBillRates: Record<string, string>
+  unitCode: string;
+  unitName: string;
+  baseQuantity: string;
+  costRate: string;
+  billRate: string;
+  timeTypeBillRates: Record<string, string>;
 }
 
 interface RateData {
-  books: { id: string; code: string; name: string; currency: string; is_default: boolean }[]
-  profile: { base_unit: string; pricing_policy: string; invoice_presentation: string } | null
-  versions: { id: string; rate_book_id: string; rate_book_name: string; effective_from: string; effective_to: string | null; status: string; tiers: Tier[] }[]
-  timeTypes: { id: string; name: string; bill_multiplier: string }[]
+  books: { id: string; code: string; name: string; currency: string; is_default: boolean }[];
+  profile: { base_unit: string; pricing_policy: string; invoice_presentation: string } | null;
+  versions: {
+    id: string;
+    rate_book_id: string;
+    rate_book_name: string;
+    effective_from: string;
+    effective_to: string | null;
+    status: string;
+    tiers: Tier[];
+  }[];
+  timeTypes: { id: string; name: string; bill_multiplier: string }[];
 }
-type RateVersionRow = RateData['versions'][number]
+type RateVersionRow = RateData["versions"][number];
 
 export function defaultRateTiers(
   itemKind: string,
   itemUnit: string,
   names: { day: string; week: string; month: string },
 ): Tier[] {
-  if (itemKind === 'equipment_charge') {
+  if (itemKind === "equipment_charge") {
     return [
-      { unitCode: 'day', unitName: names.day, baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} },
-      { unitCode: 'week', unitName: names.week, baseQuantity: '4', costRate: '0', billRate: '0', timeTypeBillRates: {} },
-      { unitCode: 'month', unitName: names.month, baseQuantity: '12', costRate: '0', billRate: '0', timeTypeBillRates: {} },
-    ]
+      {
+        unitCode: "day",
+        unitName: names.day,
+        baseQuantity: "1",
+        costRate: "0",
+        billRate: "0",
+        timeTypeBillRates: {},
+      },
+      {
+        unitCode: "week",
+        unitName: names.week,
+        baseQuantity: "4",
+        costRate: "0",
+        billRate: "0",
+        timeTypeBillRates: {},
+      },
+      {
+        unitCode: "month",
+        unitName: names.month,
+        baseQuantity: "12",
+        costRate: "0",
+        billRate: "0",
+        timeTypeBillRates: {},
+      },
+    ];
   }
-  const unitCode = itemKind === 'labor' ? 'hour' : (itemUnit.trim().toLowerCase() || 'each')
-  return [{
-    unitCode,
-    unitName: itemKind === 'labor' ? 'Hour' : (itemUnit.trim() || 'Each'),
-    baseQuantity: '1',
-    costRate: '0',
-    billRate: '0',
-    timeTypeBillRates: {},
-  }]
+  const unitCode = itemKind === "labor" ? "hour" : itemUnit.trim().toLowerCase() || "each";
+  return [
+    {
+      unitCode,
+      unitName: itemKind === "labor" ? "Hour" : itemUnit.trim() || "Each",
+      baseQuantity: "1",
+      costRate: "0",
+      billRate: "0",
+      timeTypeBillRates: {},
+    },
+  ];
 }
 
 /**
@@ -62,7 +99,7 @@ export function defaultRateTiers(
  * the already-parsed body; the shared helper never invents locale copy.
  */
 function errorMessage(payload: unknown, fallback: string): string {
-  return refusalMessageFromBody(payload, { fallback }) ?? fallback
+  return refusalMessageFromBody(payload, { fallback }) ?? fallback;
 }
 
 export function ItemRatesEditor({
@@ -73,149 +110,200 @@ export function ItemRatesEditor({
   itemUnit,
   canManage,
 }: {
-  itemId: string
-  itemPrice: string
-  itemCost: string
-  itemKind: string
-  itemUnit: string
-  canManage: boolean
+  itemId: string;
+  itemPrice: string;
+  itemCost: string;
+  itemKind: string;
+  itemUnit: string;
+  canManage: boolean;
 }) {
-  const { money } = useMoney()
-  const t = useTranslations('items.rates')
-  const common = useTranslations('common')
-  const today = useBusinessToday()
-  const defaults = useMemo(() => defaultRateTiers(itemKind, itemUnit, {
-    day: t('defaults.day'), week: t('defaults.week'), month: t('defaults.month'),
-  }), [itemKind, itemUnit, t])
-  const [data, setData] = useState<RateData | null>(null)
-  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading')
-  const [loadError, setLoadError] = useState('')
-  const [editingRequested, setEditingRequested] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [serverError, setServerError] = useState('')
-  const [rateBookId, setRateBookId] = useState('')
-  const [effectiveFrom, setEffectiveFrom] = useState(today)
-  const [baseUnit, setBaseUnit] = useState(itemKind === 'labor' ? 'hour' : (itemUnit || defaults[0]!.unitCode))
-  const [pricingPolicy, setPricingPolicy] = useState('capped_ladder')
-  const [invoicePresentation, setInvoicePresentation] = useState('rate_components')
-  const [tiers, setTiers] = useState<Tier[]>(defaults)
-  const [showPremiums, setShowPremiums] = useState(false)
+  const { money } = useMoney();
+  const t = useTranslations("items.rates");
+  const common = useTranslations("common");
+  const today = useBusinessToday();
+  const defaults = useMemo(
+    () =>
+      defaultRateTiers(itemKind, itemUnit, {
+        day: t("defaults.day"),
+        week: t("defaults.week"),
+        month: t("defaults.month"),
+      }),
+    [itemKind, itemUnit, t],
+  );
+  const [data, setData] = useState<RateData | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "loaded" | "failed">("loading");
+  const [loadError, setLoadError] = useState("");
+  const [editingRequested, setEditingRequested] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState("");
+  const [rateBookId, setRateBookId] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState(today);
+  const [baseUnit, setBaseUnit] = useState(
+    itemKind === "labor" ? "hour" : itemUnit || defaults[0]!.unitCode,
+  );
+  const [pricingPolicy, setPricingPolicy] = useState("capped_ladder");
+  const [invoicePresentation, setInvoicePresentation] = useState("rate_components");
+  const [tiers, setTiers] = useState<Tier[]>(defaults);
+  const [showPremiums, setShowPremiums] = useState(false);
 
   // A read-only viewer must never retain an edit form after permissions
   // change. Derived rather than reset from an effect: an effect would leave
   // the form rendered for the render in which the permission was lost.
-  const editing = editingRequested && canManage && loadState === 'loaded' && data !== null
+  const editing = editingRequested && canManage && loadState === "loaded" && data !== null;
 
   // Fetch chain rather than an async body: every state update below sits in a
   // promise continuation (the fetch response), never synchronously in the
   // effect that calls this. The promise is returned so callers can await it.
   const load = useCallback(() => {
-    setLoadState('loading')
-    setLoadError('')
-    setData(null)
-    return fetch(`/api/items/${itemId}/rates`).then(async (res) => {
-      // The refusal reads through the shared helper so the server's reason
-      // renders instead of a bare fallback.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('loadFailed')))
-      const next = await res.json() as RateData
-      setData(next)
-      setLoadState('loaded')
-      setRateBookId(next.books.find((book) => book.is_default)?.id ?? next.books[0]?.id ?? '')
-      if (next.profile) {
-        setBaseUnit(next.profile.base_unit)
-        setPricingPolicy(next.profile.pricing_policy)
-        setInvoicePresentation(next.profile.invoice_presentation)
-      }
-    }).catch((error: unknown) => {
-      setLoadError(error instanceof Error ? error.message : t('loadFailed'))
-      setLoadState('failed')
-    })
-  }, [itemId, t])
-  useEffect(() => { void Promise.resolve().then(load) }, [load])
+    setLoadState("loading");
+    setLoadError("");
+    setData(null);
+    return fetch(`/api/items/${itemId}/rates`)
+      .then(async (res) => {
+        // The refusal reads through the shared helper so the server's reason
+        // renders instead of a bare fallback.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, t("loadFailed")));
+        const next = (await res.json()) as RateData;
+        setData(next);
+        setLoadState("loaded");
+        setRateBookId(next.books.find((book) => book.is_default)?.id ?? next.books[0]?.id ?? "");
+        if (next.profile) {
+          setBaseUnit(next.profile.base_unit);
+          setPricingPolicy(next.profile.pricing_policy);
+          setInvoicePresentation(next.profile.invoice_presentation);
+        }
+      })
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error ? error.message : t("loadFailed"));
+        setLoadState("failed");
+      });
+  }, [itemId, t]);
+  useEffect(() => {
+    void Promise.resolve().then(load);
+  }, [load]);
 
   const tierTypes = useMemo(
-    () => itemKind === 'labor' && baseUnit === 'hour'
-      ? (data?.timeTypes ?? []).filter((type) => Number(type.bill_multiplier) !== 1)
-      : [],
+    () =>
+      itemKind === "labor" && baseUnit === "hour"
+        ? (data?.timeTypes ?? []).filter((type) => Number(type.bill_multiplier) !== 1)
+        : [],
     [baseUnit, data?.timeTypes, itemKind],
-  )
-  const columns = useMemo<LineGridColumn<Tier>[]>(() => [
-    { key: 'unitCode', label: t('unitCode'), width: 'minmax(110px,1fr)', type: 'text', required: true },
-    { key: 'unitName', label: t('unitName'), width: 'minmax(140px,1.4fr)', type: 'text', required: true },
-    { key: 'baseQuantity', label: t('baseQuantity'), width: '120px', type: 'decimal', decimalScale: 4, required: true },
-    { key: 'costRate', label: t('costRate'), width: '120px', type: 'amount', required: true },
-    { key: 'billRate', label: t('billRate'), width: '120px', type: 'amount', required: true },
-    ...(showPremiums ? tierTypes.map<LineGridColumn<Tier>>((type) => ({
-      key: `premium_${type.id}`,
-      label: type.name,
-      help: t('tierOverrides'),
-      width: '120px',
-      type: 'amount',
-    })) : []),
-  ], [showPremiums, t, tierTypes])
+  );
+  const columns = useMemo<LineGridColumn<Tier>[]>(
+    () => [
+      {
+        key: "unitCode",
+        label: t("unitCode"),
+        width: "minmax(110px,1fr)",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "unitName",
+        label: t("unitName"),
+        width: "minmax(140px,1.4fr)",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "baseQuantity",
+        label: t("baseQuantity"),
+        width: "120px",
+        type: "decimal",
+        decimalScale: 4,
+        required: true,
+      },
+      { key: "costRate", label: t("costRate"), width: "120px", type: "amount", required: true },
+      { key: "billRate", label: t("billRate"), width: "120px", type: "amount", required: true },
+      ...(showPremiums
+        ? tierTypes.map<LineGridColumn<Tier>>((type) => ({
+            key: `premium_${type.id}`,
+            label: type.name,
+            help: t("tierOverrides"),
+            width: "120px",
+            type: "amount",
+          }))
+        : []),
+    ],
+    [showPremiums, t, tierTypes],
+  );
 
   function gridRows(): Tier[] {
     return tiers.map((tier) => ({
       ...tier,
-      ...Object.fromEntries(tierTypes.map((type) => [`premium_${type.id}`, tier.timeTypeBillRates[type.id] ?? ''])),
-    }))
+      ...Object.fromEntries(
+        tierTypes.map((type) => [`premium_${type.id}`, tier.timeTypeBillRates[type.id] ?? ""]),
+      ),
+    }));
   }
 
   function updateRows(rows: Tier[]) {
-    setTiers(rows.map((row) => ({
-      ...row,
-      timeTypeBillRates: {
-        ...row.timeTypeBillRates,
-        ...Object.fromEntries(tierTypes.flatMap((type) => {
-          const value = String(row[`premium_${type.id}`] ?? '')
-          return value === '' ? [] : [[type.id, value]]
-        })),
-      },
-    })))
+    setTiers(
+      rows.map((row) => ({
+        ...row,
+        timeTypeBillRates: {
+          ...row.timeTypeBillRates,
+          ...Object.fromEntries(
+            tierTypes.flatMap((type) => {
+              const value = String(row[`premium_${type.id}`] ?? "");
+              return value === "" ? [] : [[type.id, value]];
+            }),
+          ),
+        },
+      })),
+    );
   }
 
   function beginEditing() {
-    const latest = data?.versions.find((version) => version.rate_book_id === rateBookId)
-    setTiers(latest?.tiers.length ? latest.tiers : defaults)
-    setEffectiveFrom(today)
-    setServerError('')
-    setShowPremiums(false)
-    setEditingRequested(true)
+    const latest = data?.versions.find((version) => version.rate_book_id === rateBookId);
+    setTiers(latest?.tiers.length ? latest.tiers : defaults);
+    setEffectiveFrom(today);
+    setServerError("");
+    setShowPremiums(false);
+    setEditingRequested(true);
   }
 
-  const advancedPricing = data?.profile != null
-  const simpleValue = (value: string) => value === '' ? t('notSet') : money(value)
+  const advancedPricing = data?.profile != null;
+  const simpleValue = (value: string) => (value === "" ? t("notSet") : money(value));
 
   async function save() {
-    setBusy(true)
-    setServerError('')
+    setBusy(true);
+    setServerError("");
     try {
       const res = await fetch(`/api/items/${itemId}/rates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rateBookId: rateBookId || null, effectiveFrom, baseUnit, pricingPolicy, invoicePresentation, tiers }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rateBookId: rateBookId || null,
+          effectiveFrom,
+          baseUnit,
+          pricingPolicy,
+          invoicePresentation,
+          tiers,
+        }),
+      });
       if (!res.ok) {
-        const payload = await res.json().catch(() => null)
-        const message = errorMessage(payload, t('saveFailed'))
-        setServerError(message)
-        toast.error(message)
-        return
+        const payload = await res.json().catch(() => null);
+        const message = errorMessage(payload, t("saveFailed"));
+        setServerError(message);
+        toast.error(message);
+        return;
       }
-      toast.success(t('saved'))
-      setEditingRequested(false)
-      await load()
+      toast.success(t("saved"));
+      setEditingRequested(false);
+      await load();
     } catch {
-      const message = common('feedback.saveFailed')
-      setServerError(message)
-      toast.error(message)
+      const message = common("feedback.saveFailed");
+      setServerError(message);
+      toast.error(message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  const versionText = (version: RateVersionRow) => `${version.rate_book_name} ${version.effective_from} ${version.effective_to ?? ''}`
-  const list = useSublistRows(data?.versions ?? [], versionText)
+  const versionText = (version: RateVersionRow) =>
+    `${version.rate_book_name} ${version.effective_from} ${version.effective_to ?? ""}`;
+  const list = useSublistRows(data?.versions ?? [], versionText);
 
   return (
     <section className="space-y-3">
@@ -224,116 +312,241 @@ export function ItemRatesEditor({
           <CardContent className="space-y-4 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('guide.title')}</h3>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {t("guide.title")}
+                </h3>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  {advancedPricing ? t('guide.advancedDescription') : t('guide.simpleDescription')}
+                  {advancedPricing ? t("guide.advancedDescription") : t("guide.simpleDescription")}
                 </p>
               </div>
-              <Badge variant={advancedPricing ? 'success' : 'secondary'}>
-                {advancedPricing ? t('guide.advancedMode') : t('guide.simpleMode')}
+              <Badge variant={advancedPricing ? "success" : "secondary"}>
+                {advancedPricing ? t("guide.advancedMode") : t("guide.simpleMode")}
               </Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('guide.price')}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">{simpleValue(itemPrice)}</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('guide.priceHelp')}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('guide.cost')}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">{simpleValue(itemCost)}</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('guide.costHelp')}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('guide.advanced')}</p>
-                <p className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {advancedPricing ? t('guide.configured', { unit: data.profile?.base_unit ?? '—' }) : t('guide.notConfigured')}
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {t("guide.price")}
+                </p>
+                <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                  {simpleValue(itemPrice)}
                 </p>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {advancedPricing ? t('guide.advancedHelp') : t('guide.simpleHelp')}
+                  {t("guide.priceHelp")}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {t("guide.cost")}
+                </p>
+                <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                  {simpleValue(itemCost)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {t("guide.costHelp")}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {t("guide.advanced")}
+                </p>
+                <p className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {advancedPricing
+                    ? t("guide.configured", { unit: data.profile?.base_unit ?? "—" })
+                    : t("guide.notConfigured")}
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {advancedPricing ? t("guide.advancedHelp") : t("guide.simpleHelp")}
                 </p>
               </div>
             </div>
             <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-              <p className="font-medium text-slate-800 dark:text-slate-100">{t('guide.resolutionTitle')}</p>
-              <p className="mt-1">{advancedPricing ? t('guide.advancedResolution') : t('guide.simpleResolution')}</p>
-              <p className="mt-2">{t('guide.rateTypes')}</p>
+              <p className="font-medium text-slate-800 dark:text-slate-100">
+                {t("guide.resolutionTitle")}
+              </p>
+              <p className="mt-1">
+                {advancedPricing ? t("guide.advancedResolution") : t("guide.simpleResolution")}
+              </p>
+              <p className="mt-2">{t("guide.rateTypes")}</p>
             </div>
           </CardContent>
         </Card>
       ) : null}
 
       <DrawerSublist
-        title={t('title')}
-        description={<>{t('description')}{' '}<Link href="/docs/item-rates" className="font-medium text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link></>}
-        action={canManage && data && loadState === 'loaded' ? <SublistAddButton label={advancedPricing ? t('newVersion') : t('configure')} onClick={beginEditing} /> : undefined}
-        search={data?.versions.length ? { value: list.query, onChange: list.setQuery, placeholder: t('search') } : undefined}
+        title={t("title")}
+        description={
+          <>
+            {t("description")}{" "}
+            <Link
+              href="/docs/item-rates"
+              className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+            >
+              {t("documentation")}
+            </Link>
+          </>
+        }
+        action={
+          canManage && data && loadState === "loaded" ? (
+            <SublistAddButton
+              label={advancedPricing ? t("newVersion") : t("configure")}
+              onClick={beginEditing}
+            />
+          ) : undefined
+        }
+        search={
+          data?.versions.length
+            ? { value: list.query, onChange: list.setQuery, placeholder: t("search") }
+            : undefined
+        }
       >
-        {loadState === 'loading' ? <SublistLoading /> : null}
-        {loadState === 'failed' ? <SublistLoadError message={loadError} onRetry={() => { void load() }} /> : null}
+        {loadState === "loading" ? <SublistLoading /> : null}
+        {loadState === "failed" ? (
+          <SublistLoadError
+            message={loadError}
+            onRetry={() => {
+              void load();
+            }}
+          />
+        ) : null}
         <PagedTable
           rows={list.filtered}
           rowKey={(version) => version.id}
-          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t("empty")}</p>}
           columns={[
-            { key: 'book', header: t('rateBook'), cell: (version) => version.rate_book_name, search: (version) => version.rate_book_name },
-            { key: 'from', header: t('effectiveFrom'), cell: (version) => version.effective_from },
-            { key: 'to', header: t('effectiveTo'), cell: (version) => version.effective_to ?? '—' },
-            { key: 'status', header: common('labels.status'), cell: (version) => <Badge variant={version.status === 'active' ? 'success' : 'secondary'}>{enumLabel(version.status, {
-              draft: common('status.draft'), active: common('status.active'), retired: common('status.retired'),
-            } satisfies Record<RateVersionStatus, string>, t('statusUnknown'))}</Badge> },
-            { key: 'rates', header: t('rates'), cell: (version) => version.tiers.map((tier) => `${tier.unitName}: ${money(tier.billRate)}`).join(' · ') },
+            {
+              key: "book",
+              header: t("rateBook"),
+              cell: (version) => version.rate_book_name,
+              search: (version) => version.rate_book_name,
+            },
+            { key: "from", header: t("effectiveFrom"), cell: (version) => version.effective_from },
+            { key: "to", header: t("effectiveTo"), cell: (version) => version.effective_to ?? "—" },
+            {
+              key: "status",
+              header: common("labels.status"),
+              cell: (version) => (
+                <Badge variant={version.status === "active" ? "success" : "secondary"}>
+                  {enumLabel(
+                    version.status,
+                    {
+                      draft: common("status.draft"),
+                      active: common("status.active"),
+                      retired: common("status.retired"),
+                    } satisfies Record<RateVersionStatus, string>,
+                    t("statusUnknown"),
+                  )}
+                </Badge>
+              ),
+            },
+            {
+              key: "rates",
+              header: t("rates"),
+              cell: (version) =>
+                version.tiers
+                  .map((tier) => `${tier.unitName}: ${money(tier.billRate)}`)
+                  .join(" · "),
+            },
           ]}
         />
       </DrawerSublist>
 
       <Drawer
         open={editing}
-        onClose={() => { if (!busy) setEditingRequested(false) }}
+        onClose={() => {
+          if (!busy) setEditingRequested(false);
+        }}
         stacked
         size="xl"
-        title={advancedPricing ? t('newVersion') : t('configure')}
-        description={t('description')}
-        footer={(
+        title={advancedPricing ? t("newVersion") : t("configure")}
+        description={t("description")}
+        footer={
           <>
-            <Button variant="outline" disabled={busy} onClick={() => setEditingRequested(false)}>{common('actions.cancel')}</Button>
-            <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setEditingRequested(false)}>
+              {common("actions.cancel")}
+            </Button>
+            <Button disabled={busy} onClick={save}>
+              {busy ? common("actions.saving") : common("actions.save")}
+            </Button>
           </>
-        )}
+        }
       >
         <fieldset disabled={busy} className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1"><Label>{t('rateBook')}</Label><Select value={rateBookId} onChange={(event) => setRateBookId(event.target.value)}>
-                <option value="">{t('standardBook')}</option>{data?.books.map((book) => <option key={book.id} value={book.id}>{book.name} · {book.currency}</option>)}
-              </Select></div>
-              <div className="space-y-1"><Label>{t('effectiveFrom')}</Label><DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} /></div>
-              <div className="space-y-1"><Label>{t('baseUnit')}</Label><Input value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)} /></div>
-              <div className="space-y-1"><Label>{t('policy')}</Label><Select value={pricingPolicy} onChange={(event) => setPricingPolicy(event.target.value)}>
-                <option value="capped_ladder">{t('policies.capped_ladder')}</option><option value="lowest_cost">{t('policies.lowest_cost')}</option>
-              </Select></div>
-              <div className="space-y-1"><Label>{t('presentation')}</Label><Select value={invoicePresentation} onChange={(event) => setInvoicePresentation(event.target.value)}>
-                <option value="rate_components">{t('presentations.rate_components')}</option><option value="summary">{t('presentations.summary')}</option>
-              </Select></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label>{t("rateBook")}</Label>
+              <Select value={rateBookId} onChange={(event) => setRateBookId(event.target.value)}>
+                <option value="">{t("standardBook")}</option>
+                {data?.books.map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.name} · {book.currency}
+                  </option>
+                ))}
+              </Select>
             </div>
+            <div className="space-y-1">
+              <Label>{t("effectiveFrom")}</Label>
+              <DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("baseUnit")}</Label>
+              <Input value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("policy")}</Label>
+              <Select
+                value={pricingPolicy}
+                onChange={(event) => setPricingPolicy(event.target.value)}
+              >
+                <option value="capped_ladder">{t("policies.capped_ladder")}</option>
+                <option value="lowest_cost">{t("policies.lowest_cost")}</option>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>{t("presentation")}</Label>
+              <Select
+                value={invoicePresentation}
+                onChange={(event) => setInvoicePresentation(event.target.value)}
+              >
+                <option value="rate_components">{t("presentations.rate_components")}</option>
+                <option value="summary">{t("presentations.summary")}</option>
+              </Select>
+            </div>
+          </div>
 
-            <LineGrid<Tier>
-              columns={columns}
-              rows={gridRows()}
-              onRowsChange={updateRows}
-              emptyRow={() => ({ unitCode: '', unitName: '', baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} })}
-              minRows={1}
-              addLabel={t('addUnit')}
-              addPlacement="top"
-            />
+          <LineGrid<Tier>
+            columns={columns}
+            rows={gridRows()}
+            onRowsChange={updateRows}
+            emptyRow={() => ({
+              unitCode: "",
+              unitName: "",
+              baseQuantity: "1",
+              costRate: "0",
+              billRate: "0",
+              timeTypeBillRates: {},
+            })}
+            minRows={1}
+            addLabel={t("addUnit")}
+            addPlacement="top"
+          />
 
-            {tierTypes.length > 0 ? (
-              <button type="button" onClick={() => setShowPremiums((shown) => !shown)} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
-                {showPremiums ? t('tierOverridesHide') : t('tierOverrides')}
-              </button>
-            ) : null}
-            {serverError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{serverError}</p> : null}
+          {tierTypes.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowPremiums((shown) => !shown)}
+              className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+            >
+              {showPremiums ? t("tierOverridesHide") : t("tierOverrides")}
+            </button>
+          ) : null}
+          {serverError ? (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {serverError}
+            </p>
+          ) : null}
         </fieldset>
       </Drawer>
     </section>
-  )
+  );
 }

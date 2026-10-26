@@ -48,14 +48,19 @@ function closedPeriodSource(period: {
 async function waitForAdvisoryPark(): Promise<void> {
   const deadline = Date.now() + 10_000;
   for (;;) {
-    const parked = (await db.execute<{ n: number }>(sql`
+    const parked = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n
         from pg_stat_activity
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
          and query like '%pg_advisory_xact_lock%'
-    `, "objects"))[0]!.n;
+    `,
+        "objects",
+      )
+    )[0]!.n;
     if (parked > 0) return;
     assert.ok(Date.now() < deadline, "timed out waiting for the mirror to take the fence");
     await sleep(100);
@@ -63,104 +68,132 @@ async function waitForAdvisoryPark(): Promise<void> {
 }
 
 async function importedLockCount(orgId: string, periodId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from period_locks
      where org_id = ${orgId} and period_id = ${periodId}
        and reason = 'close.importedPeriodLockReason'
-  `, "objects"))[0]!.n;
+  `,
+      "objects",
+    )
+  )[0]!.n;
   return rows;
 }
 
-test("the period mirror takes the 0022 exclusive fence before writing lock rows", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const brake = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-  try {
-    const period = (await db.execute<{
-        fiscal_year: number; period_number: number; name: string; starts_on: string; ends_on: string;
-      }>(sql`
+test(
+  "the period mirror takes the 0022 exclusive fence before writing lock rows",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const brake = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+    try {
+      const period = (
+        await db.execute<{
+          fiscal_year: number;
+          period_number: number;
+          name: string;
+          starts_on: string;
+          ends_on: string;
+        }>(
+          sql`
       select fiscal_year, period_number, name, starts_on::text, ends_on::text
         from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
-    const movedEndsOn = new Date(
-      Date.parse(`${period.ends_on}T00:00:00Z`) + 86_400_000,
-    ).toISOString().slice(0, 10);
-    const fenceKey = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
+    `,
+          "objects",
+        )
+      )[0]!;
+      const movedEndsOn = new Date(Date.parse(`${period.ends_on}T00:00:00Z`) + 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      const fenceKey = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
 
-    // Parking brake on the exclusive side of the close/posting fence. A
-    // mirror that takes the fence must block here before writing anything;
-    // one that does not sails through and commits lock rows underneath us.
-    await brake.connect();
-    await brake.query(`select pg_advisory_lock(hashtextextended($1, 0))`, [fenceKey]);
-    let settled = false;
-    const sync = syncSourceAccountingPeriods(
-      closedPeriodSource({
-        fiscalYear: period.fiscal_year,
-        periodNumber: period.period_number,
-        name: period.name,
-        startsOn: period.starts_on,
-        endsOn: movedEndsOn,
-      }),
-      org.orgId,
-    ).then(
-      (stats) => {
-        settled = true;
-        return stats;
-      },
-      (error) => {
-        settled = true;
-        throw error;
-      },
-    );
-
-    const winner = await Promise.race([
-      sync.then(() => "settled" as const),
-      waitForAdvisoryPark().then(() => "parked" as const),
-    ]);
-    assert.equal(
-      winner,
-      "parked",
-      "mirror wrote period locks without taking the 0022 exclusive fence",
-    );
-    assert.equal(settled, false);
-    assert.equal(await importedLockCount(org.orgId, org.periodId), 0);
-
-    // While the mirror is queued on the period fence, another transaction can
-    // still acquire the period row. That proves the mirror has not rewritten
-    // the certified date window before acquiring the fence.
-    const observer = await pool.connect();
-    try {
-      await observer.query("begin");
-      await observer.query(
-        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
-        [org.orgId],
+      // Parking brake on the exclusive side of the close/posting fence. A
+      // mirror that takes the fence must block here before writing anything;
+      // one that does not sails through and commits lock rows underneath us.
+      await brake.connect();
+      await brake.query(`select pg_advisory_lock(hashtextextended($1, 0))`, [fenceKey]);
+      let settled = false;
+      const sync = syncSourceAccountingPeriods(
+        closedPeriodSource({
+          fiscalYear: period.fiscal_year,
+          periodNumber: period.period_number,
+          name: period.name,
+          startsOn: period.starts_on,
+          endsOn: movedEndsOn,
+        }),
+        org.orgId,
+      ).then(
+        (stats) => {
+          settled = true;
+          return stats;
+        },
+        (error) => {
+          settled = true;
+          throw error;
+        },
       );
-      await observer.query(
-        "select id from accounting_periods where org_id = $1 and id = $2 for update nowait",
-        [org.orgId, org.periodId],
-      );
-      await observer.query("commit");
-    } finally {
-      await observer.query("rollback").catch(() => undefined);
-      observer.release();
-    }
 
-    await brake.query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [fenceKey]);
-    const stats = await sync;
-    assert.equal(stats.created + stats.updated, 1);
-    const changedWindow = (await db.execute<{ ends_on: string }>(sql`
+      const winner = await Promise.race([
+        sync.then(() => "settled" as const),
+        waitForAdvisoryPark().then(() => "parked" as const),
+      ]);
+      assert.equal(
+        winner,
+        "parked",
+        "mirror wrote period locks without taking the 0022 exclusive fence",
+      );
+      assert.equal(settled, false);
+      assert.equal(await importedLockCount(org.orgId, org.periodId), 0);
+
+      // While the mirror is queued on the period fence, another transaction can
+      // still acquire the period row. That proves the mirror has not rewritten
+      // the certified date window before acquiring the fence.
+      const observer = await pool.connect();
+      try {
+        await observer.query("begin");
+        await observer.query(
+          "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+          [org.orgId],
+        );
+        await observer.query(
+          "select id from accounting_periods where org_id = $1 and id = $2 for update nowait",
+          [org.orgId, org.periodId],
+        );
+        await observer.query("commit");
+      } finally {
+        await observer.query("rollback").catch(() => undefined);
+        observer.release();
+      }
+
+      await brake.query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [fenceKey]);
+      const stats = await sync;
+      assert.equal(stats.created + stats.updated, 1);
+      const changedWindow = (
+        await db.execute<{ ends_on: string }>(
+          sql`
       select ends_on::text from accounting_periods
        where org_id = ${org.orgId} and id = ${org.periodId}
-    `, "objects"))[0]!;
-    assert.equal(changedWindow.ends_on, movedEndsOn);
-    const gl = (await db.execute<{ state: string; reason: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(changedWindow.ends_on, movedEndsOn);
+      const gl = (
+        await db.execute<{ state: string; reason: string }>(
+          sql`
       select state, reason from period_locks
        where org_id = ${org.orgId} and period_id = ${org.periodId}
          and book_id = ${org.bookId} and subsidiary_id is null and module = 'gl'
-    `, "objects"))[0]!;
-    assert.equal(gl.state, "closed");
-    assert.equal(gl.reason, "close.importedPeriodLockReason");
-  } finally {
-    await brake.end().catch(() => undefined);
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(gl.state, "closed");
+      assert.equal(gl.reason, "close.importedPeriodLockReason");
+    } finally {
+      await brake.end().catch(() => undefined);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

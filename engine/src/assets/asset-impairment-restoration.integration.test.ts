@@ -6,7 +6,12 @@ import { disposeAsset, remeasureAsset } from "./asset-lifecycle.ts";
 import { db } from "../platform/db.ts";
 import { buildSchedule, runDepreciation } from "./depreciation.ts";
 import { toUnits } from "../money/money.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -17,10 +22,13 @@ async function setFramework(orgId: string, framework: "us_gaap" | "ifrs"): Promi
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(amount), 0) as bal from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`, "objects"));
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
@@ -66,9 +74,14 @@ async function seedDepreciatedAsset(
             ${org.date}, ${org.date}, 1000, 0, 'straight_line', 10,
             'full_month', '{}'::jsonb, ${actorId}, ${actorId})`);
   if (opts.futurePeriods) {
-    const calendarId = (await db.execute<{ id: string }>(sql`
+    const calendarId = (
+      await db.execute<{ id: string }>(
+        sql`
         select fiscal_calendar_id as id from accounting_periods
-         where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
+         where org_id = ${org.orgId} limit 1`,
+        "objects",
+      )
+    )[0]!.id;
     for (const [fiscalYear, periodNumber, name, startsOn, endsOn] of FUTURE_PERIODS) {
       await db.execute(sql`
         insert into accounting_periods
@@ -105,7 +118,11 @@ test(
 
       // Fair value recovers: ANY write-up is a prohibited restoration.
       await assert.rejects(
-        remeasureAsset(org.orgId, assetId, { newCarryingValue: "820", date: "2026-07-31", actorId }),
+        remeasureAsset(org.orgId, assetId, {
+          newCarryingValue: "820",
+          date: "2026-07-31",
+          actorId,
+        }),
         /US GAAP prohibits restoring/,
       );
       // Further impairment remains permitted.
@@ -130,7 +147,11 @@ test(
       // Beyond depreciated historical cost (900) is refused: 850 → 950 asks
       // for 100 against the remaining 50 of unreversed impairment.
       await assert.rejects(
-        remeasureAsset(org.orgId, assetId, { newCarryingValue: "950", date: "2026-07-31", actorId }),
+        remeasureAsset(org.orgId, assetId, {
+          newCarryingValue: "950",
+          date: "2026-07-31",
+          actorId,
+        }),
         /IAS 36 caps an impairment reversal/,
       );
     } finally {
@@ -150,7 +171,11 @@ test(
 
       // Impair 900 → 750: accumulated-depreciation account now carries
       // 100 (schedule) + 150 (impairment) = 250 credit.
-      await remeasureAsset(org.orgId, assetId, { newCarryingValue: "750", date: "2026-07-31", actorId });
+      await remeasureAsset(org.orgId, assetId, {
+        newCarryingValue: "750",
+        date: "2026-07-31",
+        actorId,
+      });
       assert.equal(await glBalance(org.orgId, org.accounts.clearing), -toUnits("250"));
 
       // Sell for 800: NBV must be 750 (not 900), gain 50, and derecognition
@@ -183,20 +208,29 @@ test(
       // The whole remeasurement evidence surface: schedule lines (posted and
       // future), lifecycle events, and revaluation journals.
       const evidence = async () => ({
-        lines: await db.execute<{ sequence: number; planned: string; posted: string | null }>(sql`
+        lines: await db.execute<{ sequence: number; planned: string; posted: string | null }>(
+          sql`
           select l.sequence, l.planned_amount::text as planned, l.posted_amount::text as posted
             from depreciation_schedule_lines l
             join depreciation_schedules s
               on s.id = l.schedule_id and s.org_id = l.org_id
            where s.org_id = ${org.orgId} and s.asset_id = ${assetId}
              and s.book_id = ${org.bookId}
-           order by l.sequence`, "objects"),
-        events: await db.execute<{ n: number }>(sql`
+           order by l.sequence`,
+          "objects",
+        ),
+        events: await db.execute<{ n: number }>(
+          sql`
           select count(*)::int as n from asset_events
-           where org_id = ${org.orgId} and asset_id = ${assetId}`, "objects"),
-        journals: await db.execute<{ n: number }>(sql`
+           where org_id = ${org.orgId} and asset_id = ${assetId}`,
+          "objects",
+        ),
+        journals: await db.execute<{ n: number }>(
+          sql`
           select count(*)::int as n from journal_entries
-           where org_id = ${org.orgId} and origin = 'revaluation'`, "objects"),
+           where org_id = ${org.orgId} and origin = 'revaluation'`,
+          "objects",
+        ),
       });
       const futurePlanned = async () =>
         (await evidence()).lines.filter((line) => line.posted === null).map((line) => line.planned);
@@ -223,7 +257,11 @@ test(
 
       // A prohibited US GAAP restoration must not touch ANYTHING.
       await assert.rejects(
-        remeasureAsset(org.orgId, assetId, { newCarryingValue: "820", date: "2026-07-31", actorId }),
+        remeasureAsset(org.orgId, assetId, {
+          newCarryingValue: "820",
+          date: "2026-07-31",
+          actorId,
+        }),
         /US GAAP prohibits restoring/,
       );
       assert.deepEqual(await evidence(), snapshot, "a refused remeasurement writes nothing");
@@ -237,12 +275,12 @@ test(
       assert.equal(deeper.delta, "-50.0000");
       snapshot = await evidence();
       const deeperPlan = await futurePlanned();
-      assert.deepEqual(deeperPlan, [
-        ...Array.from({ length: 8 }, () => "77.7778"),
-        "77.7776",
-      ]);
-      assert.equal(deeperPlan.reduce((total,amount) => total+toUnits(amount),0n),toUnits("700"),
-        "nearest-four-decimal installments plus the final exact residual conserve the impaired basis");
+      assert.deepEqual(deeperPlan, [...Array.from({ length: 8 }, () => "77.7778"), "77.7776"]);
+      assert.equal(
+        deeperPlan.reduce((total, amount) => total + toUnits(amount), 0n),
+        toUnits("700"),
+        "nearest-four-decimal installments plus the final exact residual conserve the impaired basis",
+      );
       assert.equal(snapshot.lines.find((line) => line.sequence === 0)!.posted, "100.0000");
       assert.deepEqual(snapshot.events, [{ n: 2 }]);
       assert.deepEqual(snapshot.journals, [{ n: 2 }]);

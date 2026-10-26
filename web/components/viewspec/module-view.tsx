@@ -1,12 +1,12 @@
-import type { PageSpec, ViewData } from '@braedonsaunders/appkit-viewspec'
-import { validateSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, getAuthz } from '../../lib/authz'
-import { loadPageSpec, loadPageSpecDraft } from '../../lib/page-specs'
-import { ListPageLayout, DetailPageLayout } from '../page-layout'
-import { BlockList } from './blocks'
-import { RENDER_REGISTRIES } from './registries'
-import { SpecBoundary } from './spec-boundary'
-import { SpecValidationError } from './spec-validation-error'
+import type { PageSpec, ViewData } from "@braedonsaunders/appkit-viewspec";
+import { validateSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, getAuthz } from "../../lib/authz";
+import { loadPageSpec, loadPageSpecDraft } from "../../lib/page-specs";
+import { ListPageLayout, DetailPageLayout } from "../page-layout";
+import { BlockList } from "./blocks";
+import { RENDER_REGISTRIES } from "./registries";
+import { SpecBoundary } from "./spec-boundary";
+import { SpecValidationError } from "./spec-validation-error";
 
 /**
  * ModuleView — the single entry point that turns a spec plus its loader data
@@ -46,23 +46,23 @@ export async function ModuleView({
   trusted = false,
   contained = false,
 }: {
-  spec: PageSpec
-  data: ViewData
-  searchParams: Record<string, string | string[] | undefined>
+  spec: PageSpec;
+  data: ViewData;
+  searchParams: Record<string, string | string[] | undefined>;
   /** Set for compiler-checked native specs to skip runtime revalidation. */
-  trusted?: boolean
+  trusted?: boolean;
   /** Let interactive workspaces own their scrolling and use the available width. */
-  contained?: boolean
+  contained?: boolean;
 }) {
   if (!trusted) {
-    const result = validateSpec(spec)
+    const result = validateSpec(spec);
     if (!result.ok) {
-      return <SpecValidationError errors={result.errors} />
+      return <SpecValidationError errors={result.errors} />;
     }
   }
 
-  const effective = await resolveSpec(spec, searchParams)
-  if (effective === spec) return render(spec, data, searchParams, contained)
+  const effective = await resolveSpec(spec, searchParams);
+  if (effective === spec) return render(spec, data, searchParams, contained);
   // A tenant layout is rendered inside a boundary whose fallback is the page
   // the app shipped. Both subtrees are built here: the fallback has to exist
   // before the boundary can use it.
@@ -70,7 +70,7 @@ export async function ModuleView({
     <SpecBoundary fallback={render(spec, data, searchParams, contained)}>
       {render(effective, data, searchParams, contained)}
     </SpecBoundary>
-  )
+  );
 }
 
 function render(
@@ -79,25 +79,29 @@ function render(
   searchParams: Record<string, string | string[] | undefined>,
   contained: boolean,
 ) {
-  const header = <BlockList blocks={spec.header} scope={data} searchParams={searchParams} />
-  const body = <BlockList blocks={spec.body} scope={data} searchParams={searchParams} />
+  const header = <BlockList blocks={spec.header} scope={data} searchParams={searchParams} />;
+  const body = <BlockList blocks={spec.body} scope={data} searchParams={searchParams} />;
   // `bare` exists for pages that already sit INSIDE a shell — the setup
   // workspace renders its own sticky header and container, and wrapping its
   // pages in a second ListPageLayout would nest the chrome. A bare spec owns
   // its own outer element, so `header` and `body` are simply concatenated.
-  if (spec.layout === 'bare') {
+  if (spec.layout === "bare") {
     return (
       <>
         {header}
         {body}
       </>
-    )
+    );
   }
-  return spec.layout === 'detail' ? (
-    <DetailPageLayout header={header} className={spec.bodyClassName}>{body}</DetailPageLayout>
+  return spec.layout === "detail" ? (
+    <DetailPageLayout header={header} className={spec.bodyClassName}>
+      {body}
+    </DetailPageLayout>
   ) : (
-    <ListPageLayout header={header} className={spec.bodyClassName} contained={contained}>{body}</ListPageLayout>
-  )
+    <ListPageLayout header={header} className={spec.bodyClassName} contained={contained}>
+      {body}
+    </ListPageLayout>
+  );
 }
 
 /**
@@ -123,19 +127,24 @@ async function resolveSpec(
   builtIn: PageSpec,
   searchParams: Record<string, string | string[] | undefined>,
 ): Promise<PageSpec> {
-  if (!builtIn.route) return builtIn
-  const authz = await getAuthz()
-  if (!authz) return builtIn
-  const registries = RENDER_REGISTRIES
+  if (!builtIn.route) return builtIn;
+  const authz = await getAuthz();
+  if (!authz) return builtIn;
+  const registries = RENDER_REGISTRIES;
 
-  if (searchParams.layoutPreview === '1' && can(authz, 'admin.customization.manage')) {
-    const draft = await loadPageSpecDraft(authz.user.orgId, authz.user.id, builtIn.route, registries)
-    if (draft) return draft
+  if (searchParams.layoutPreview === "1" && can(authz, "admin.customization.manage")) {
+    const draft = await loadPageSpecDraft(
+      authz.user.orgId,
+      authz.user.id,
+      builtIn.route,
+      registries,
+    );
+    if (draft) return draft;
   }
 
   // The reader's OWN layout first, then the org's, then the built-in. A
   // personal layout is a preference, not an override of policy: it changes
   // what one person sees and nothing about what anyone else does.
-  const stored = await loadPageSpec(authz.user.orgId, builtIn.route, registries, authz.user.id)
-  return stored?.spec ?? builtIn
+  const stored = await loadPageSpec(authz.user.orgId, builtIn.route, registries, authz.user.id);
+  return stored?.spec ?? builtIn;
 }

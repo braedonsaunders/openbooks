@@ -151,7 +151,10 @@ test("explode splits a fixed 60/40 line exactly with shared stamps", () => {
     groupId: "group-1",
   });
   assert.equal(children.length, 2);
-  assert.deepEqual(children.map((c) => c.amount), ["60.0000", "40.0000"]);
+  assert.deepEqual(
+    children.map((c) => c.amount),
+    ["60.0000", "40.0000"],
+  );
   assert.equal(sumAmounts(children.map((c) => c.amount)), "100.0000");
   for (const child of children) {
     assert.equal(child.distributionGroupId, "group-1");
@@ -159,8 +162,14 @@ test("explode splits a fixed 60/40 line exactly with shared stamps", () => {
     assert.equal(child.distributionVersionId, r.version.id);
     assert.equal(child.distributionLocked, false);
   }
-  assert.deepEqual(children.map((c) => c.departmentId), ["d1", "d2"]);
-  assert.deepEqual(apportionments.map((a) => a.residual), ["0.0000", "0.0000"]);
+  assert.deepEqual(
+    children.map((c) => c.departmentId),
+    ["d1", "d2"],
+  );
+  assert.deepEqual(
+    apportionments.map((a) => a.residual),
+    ["0.0000", "0.0000"],
+  );
 });
 
 test("explode places the rounding residual per policy and never loses a cent", () => {
@@ -172,9 +181,15 @@ test("explode places the rounding residual per policy and never loses a cent", (
   const { children, apportionments } = explodeDocumentLine(entryLine({ amount: "10.0000" }), r, {
     groupId: "group-1",
   });
-  assert.deepEqual(children.map((c) => c.amount), ["3.3333", "3.3333", "3.3334"]);
+  assert.deepEqual(
+    children.map((c) => c.amount),
+    ["3.3333", "3.3333", "3.3334"],
+  );
   assert.equal(sumAmounts(children.map((c) => c.amount)), "10.0000");
-  assert.deepEqual(apportionments.map((a) => a.residual), ["0.0000", "0.0000", "0.0001"]);
+  assert.deepEqual(
+    apportionments.map((a) => a.residual),
+    ["0.0000", "0.0000", "0.0001"],
+  );
 });
 
 test("explode gives a remainder target the leftover percent", () => {
@@ -185,7 +200,10 @@ test("explode gives a remainder target the leftover percent", () => {
   const { children } = explodeDocumentLine(entryLine({ amount: "200.0000" }), r, {
     groupId: "group-1",
   });
-  assert.deepEqual(children.map((c) => c.amount), ["120.0000", "80.0000"]);
+  assert.deepEqual(
+    children.map((c) => c.amount),
+    ["120.0000", "80.0000"],
+  );
 });
 
 test("explode overrides target account and dims but inherits line economics", () => {
@@ -243,11 +261,9 @@ test("explode apportions quantity proportionally so it still sums to the parent"
     target({ departmentId: "d1", fixedPercent: "60" }),
     target({ departmentId: "d2", fixedPercent: "40" }),
   ]);
-  const { children } = explodeDocumentLine(
-    entryLine({ amount: "100.0000", quantity: "7" }),
-    r,
-    { groupId: "group-1" },
-  );
+  const { children } = explodeDocumentLine(entryLine({ amount: "100.0000", quantity: "7" }), r, {
+    groupId: "group-1",
+  });
   assert.equal(children.length, 2);
   let total = 0n;
   for (const child of children) {
@@ -265,15 +281,16 @@ test("explode handles negative and zero amounts exactly", () => {
   const neg = explodeDocumentLine(entryLine({ amount: "-100.0000" }), r, { groupId: "g" });
   assert.equal(sumAmounts(neg.children.map((c) => c.amount)), "-100.0000");
   const zero = explodeDocumentLine(entryLine({ amount: "0.0000" }), r, { groupId: "g" });
-  assert.deepEqual(zero.children.map((c) => c.amount), ["0.0000", "0.0000"]);
+  assert.deepEqual(
+    zero.children.map((c) => c.amount),
+    ["0.0000", "0.0000"],
+  );
 });
 
 test("explode renders the line description template with rule and target vars", () => {
-  const r = rule(
-    "tmpl",
-    [target({ departmentId: "d1", fixedPercent: "100", label: "Ops" })],
-    { lineDescriptionTemplate: "{{rule.name}} — {{target.label}}" },
-  );
+  const r = rule("tmpl", [target({ departmentId: "d1", fixedPercent: "100", label: "Ops" })], {
+    lineDescriptionTemplate: "{{rule.name}} — {{target.label}}",
+  });
   const { children } = explodeDocumentLine(entryLine({ description: "original" }), r, {
     groupId: "g",
   });
@@ -285,14 +302,23 @@ test("explode rejects misconfigured fixed_percent rules", () => {
     target({ fixedPercent: "50", isRemainder: true }),
     target({ isRemainder: true }),
   ]);
-  assert.throws(() => explodeDocumentLine(entryLine(), twoRemainders, { groupId: "g" }), EntryAllocationError);
+  assert.throws(
+    () => explodeDocumentLine(entryLine(), twoRemainders, { groupId: "g" }),
+    EntryAllocationError,
+  );
   const overHundred = rule("bad2", [
     target({ fixedPercent: "60" }),
     target({ fixedPercent: "50" }),
   ]);
-  assert.throws(() => explodeDocumentLine(entryLine(), overHundred, { groupId: "g" }), EntryAllocationError);
+  assert.throws(
+    () => explodeDocumentLine(entryLine(), overHundred, { groupId: "g" }),
+    EntryAllocationError,
+  );
   const missingPercent = rule("bad3", [target({ departmentId: "d1" })]);
-  assert.throws(() => explodeDocumentLine(entryLine(), missingPercent, { groupId: "g" }), EntryAllocationError);
+  assert.throws(
+    () => explodeDocumentLine(entryLine(), missingPercent, { groupId: "g" }),
+    EntryAllocationError,
+  );
 });
 
 test("explode refuses a fixed grid under 100 with no remainder target", () => {
@@ -302,33 +328,36 @@ test("explode refuses a fixed grid under 100 with no remainder target", () => {
 
 test("explode rejects stepped basis and dynamic targets without a resolver", () => {
   const stepped = rule("step", [target({ fixedPercent: "100" })], { basisKind: "stepped" });
-  assert.throws(() => explodeDocumentLine(entryLine(), stepped, { groupId: "g" }), EntryAllocationError);
+  assert.throws(
+    () => explodeDocumentLine(entryLine(), stepped, { groupId: "g" }),
+    EntryAllocationError,
+  );
   const dynamic = rule("dyn", [], { targetKind: "dynamic" });
-  assert.throws(() => explodeDocumentLine(entryLine(), dynamic, { groupId: "g" }), EntryAllocationError);
+  assert.throws(
+    () => explodeDocumentLine(entryLine(), dynamic, { groupId: "g" }),
+    EntryAllocationError,
+  );
 });
 
 test("explode resolves driver weights for explicit targets", () => {
   const r = rule(
     "drv",
-    [
-      target({ departmentId: "d1", weight: "3" }),
-      target({ departmentId: "d2", weight: "1" }),
-    ],
+    [target({ departmentId: "d1", weight: "3" }), target({ departmentId: "d2", weight: "1" })],
     { basisKind: "driver", driverId: "driver-1" },
   );
   const { children } = explodeDocumentLine(entryLine({ amount: "100.0000" }), r, {
     groupId: "g",
   });
-  assert.deepEqual(children.map((c) => c.amount), ["75.0000", "25.0000"]);
+  assert.deepEqual(
+    children.map((c) => c.amount),
+    ["75.0000", "25.0000"],
+  );
 });
 
 test("explode refuses a negative driver weight at parse time", () => {
   const r = rule(
     "drvneg",
-    [
-      target({ departmentId: "d1", weight: "-3" }),
-      target({ departmentId: "d2", weight: "1" }),
-    ],
+    [target({ departmentId: "d1", weight: "-3" }), target({ departmentId: "d2", weight: "1" })],
     { basisKind: "driver", driverId: "driver-1" },
   );
   // The entry parser's own guard names the refusal; apportion's later
@@ -340,11 +369,10 @@ test("explode refuses a negative driver weight at parse time", () => {
 });
 
 test("explode refuses a negative driver vector value", () => {
-  const r = rule(
-    "drvvecneg",
-    [target({ departmentId: "d1" }), target({ departmentId: "d2" })],
-    { basisKind: "driver", driverId: "driver-1" },
-  );
+  const r = rule("drvvecneg", [target({ departmentId: "d1" }), target({ departmentId: "d2" })], {
+    basisKind: "driver",
+    driverId: "driver-1",
+  });
   assert.throws(
     () =>
       explodeDocumentLine(entryLine({ amount: "100.0000" }), r, {
@@ -360,11 +388,10 @@ test("explode refuses a negative driver vector value", () => {
 });
 
 test("explode rejects a driver basis whose weights are all zero", () => {
-  const r = rule(
-    "drv0",
-    [target({ departmentId: "d1" }), target({ departmentId: "d2" })],
-    { basisKind: "driver", driverId: "driver-1" },
-  );
+  const r = rule("drv0", [target({ departmentId: "d1" }), target({ departmentId: "d2" })], {
+    basisKind: "driver",
+    driverId: "driver-1",
+  });
   assert.throws(
     () => explodeDocumentLine(entryLine(), r, { groupId: "g", driverVector: new Map() }),
     EntryAllocationError,
@@ -376,7 +403,10 @@ test("explode rejects a driver basis whose weights are all zero", () => {
 const autoRule = () =>
   rule(
     "auto-split",
-    [target({ departmentId: "d1", fixedPercent: "50" }), target({ departmentId: "d2", fixedPercent: "50" })],
+    [
+      target({ departmentId: "d1", fixedPercent: "50" }),
+      target({ departmentId: "d2", fixedPercent: "50" }),
+    ],
     { applyPolicy: "automatic", dimensionFilters: { departmentIds: ["d0"] } },
   );
 
@@ -399,7 +429,10 @@ test("plan explodes an automatic match and stamps lineage per child", () => {
     assert.equal(row.targetLineIndex, i);
     assert.equal(row.sourceDocumentLineId, null);
   }
-  assert.deepEqual(plan.lines.map((l) => l.distributionGroupId), ["group-new", "group-new"]);
+  assert.deepEqual(
+    plan.lines.map((l) => l.distributionGroupId),
+    ["group-new", "group-new"],
+  );
 });
 
 test("plan uses header-default dims when the line leaves them blank", () => {
@@ -423,11 +456,9 @@ test("plan leaves unmatched lines plain without lineage", () => {
 });
 
 test("plan explodes an explicit distributionKey regardless of apply policy", () => {
-  const r = rule(
-    "manual-split",
-    [target({ departmentId: "d1", fixedPercent: "100" })],
-    { applyPolicy: "manual" },
-  );
+  const r = rule("manual-split", [target({ departmentId: "d1", fixedPercent: "100" })], {
+    applyPolicy: "manual",
+  });
   const plan = planEntryDistributions(
     doc(),
     [entryLine({ amount: "30.0000", distributionKey: "manual-split" })],
@@ -442,14 +473,10 @@ test("plan explodes an explicit distributionKey regardless of apply policy", () 
 test("plan rejects an explicit key with no resolved rule", () => {
   assert.throws(
     () =>
-      planEntryDistributions(
-        doc(),
-        [entryLine({ distributionKey: "missing-key" })],
-        [],
-        { explicitRules: new Map() },
-      ),
-    (error: unknown) =>
-      error instanceof EntryAllocationError && error.code === "unknown_key",
+      planEntryDistributions(doc(), [entryLine({ distributionKey: "missing-key" })], [], {
+        explicitRules: new Map(),
+      }),
+    (error: unknown) => error instanceof EntryAllocationError && error.code === "unknown_key",
   );
 });
 
@@ -502,7 +529,10 @@ test("plan regenerates a stored group whose submitted sum changed", () => {
   assert.equal(plan.exploded, true);
   assert.equal(plan.lines.length, 2);
   assert.equal(sumAmounts(plan.lines.map((l) => l.amount)), "120.0000");
-  assert.deepEqual(plan.lines.map((l) => l.distributionGroupId), ["group-1", "group-1"]);
+  assert.deepEqual(
+    plan.lines.map((l) => l.distributionGroupId),
+    ["group-1", "group-1"],
+  );
   assert.equal(plan.lineage.length, 2);
   for (const row of plan.lineage) {
     assert.equal(row.sourceDocumentLineId, "old-child-1");
@@ -531,7 +561,10 @@ test("plan keeps a stored group untouched when its sum is unchanged", () => {
     ]),
   });
   assert.equal(plan.exploded, false);
-  assert.deepEqual(plan.lines.map((l) => l.amount), ["40.0000", "40.0000"]);
+  assert.deepEqual(
+    plan.lines.map((l) => l.amount),
+    ["40.0000", "40.0000"],
+  );
   assert.deepEqual(plan.lineage, []);
 });
 
@@ -553,7 +586,10 @@ test("plan never regenerates a locked group", () => {
     existingGroups: new Map([["group-1", stored]]),
   });
   assert.equal(kept.exploded, false);
-  assert.deepEqual(kept.lines.map((l) => l.departmentId), ["d1", "d9"]);
+  assert.deepEqual(
+    kept.lines.map((l) => l.departmentId),
+    ["d1", "d9"],
+  );
 
   const incomingLock = planEntryDistributions(
     doc(),
@@ -570,8 +606,18 @@ test("plan unlocks a group on an explicit false and regenerates the changed sum"
   const plan = planEntryDistributions(
     doc(),
     [
-      entryLine({ amount: "50.0000", departmentId: "d1", distributionGroupId: "group-1", distributionLocked: false }),
-      entryLine({ amount: "70.0000", departmentId: "d2", distributionGroupId: "group-1", distributionLocked: false }),
+      entryLine({
+        amount: "50.0000",
+        departmentId: "d1",
+        distributionGroupId: "group-1",
+        distributionLocked: false,
+      }),
+      entryLine({
+        amount: "70.0000",
+        departmentId: "d2",
+        distributionGroupId: "group-1",
+        distributionLocked: false,
+      }),
     ],
     [r],
     {
@@ -604,7 +650,10 @@ test("plan strips stamps from an unknown group and matches the line fresh", () =
     { existingGroups: new Map(), newGroupId: () => "group-new" },
   );
   assert.equal(plan.lines.length, 2);
-  assert.deepEqual(plan.lines.map((l) => l.distributionGroupId), ["group-new", "group-new"]);
+  assert.deepEqual(
+    plan.lines.map((l) => l.distributionGroupId),
+    ["group-new", "group-new"],
+  );
 });
 
 test("plan collapses an un-split group to one line at the first child's coordinates", () => {
@@ -648,7 +697,13 @@ test("plan lets an explicit key win over existing group membership with a new gr
   });
   const plan = planEntryDistributions(
     doc(),
-    [entryLine({ amount: "30.0000", distributionGroupId: "group-1", distributionKey: "manual-split" })],
+    [
+      entryLine({
+        amount: "30.0000",
+        distributionGroupId: "group-1",
+        distributionKey: "manual-split",
+      }),
+    ],
     [manual],
     {
       explicitRules: new Map([[manual.rule.key, manual]]),
@@ -676,12 +731,21 @@ test("plan lets an explicit key win over existing group membership with a new gr
 test("plan ignores an unsplit request for a line carrying an explicit key", () => {
   const manual = rule(
     "manual-split",
-    [target({ departmentId: "d8", fixedPercent: "50.0000" }), target({ departmentId: "d9", fixedPercent: "50.0000" })],
+    [
+      target({ departmentId: "d8", fixedPercent: "50.0000" }),
+      target({ departmentId: "d9", fixedPercent: "50.0000" }),
+    ],
     { applyPolicy: "manual" },
   );
   const plan = planEntryDistributions(
     doc({ unsplitDistributionGroups: ["group-1"] }),
-    [entryLine({ amount: "30.0000", distributionGroupId: "group-1", distributionKey: "manual-split" })],
+    [
+      entryLine({
+        amount: "30.0000",
+        distributionGroupId: "group-1",
+        distributionKey: "manual-split",
+      }),
+    ],
     [manual],
     {
       explicitRules: new Map([[manual.rule.key, manual]]),
@@ -692,26 +756,70 @@ test("plan ignores an unsplit request for a line carrying an explicit key", () =
   // collapse pass nor duplicate the line's amount.
   assert.equal(plan.lines.length, 2);
   assert.deepEqual(plan.lines.map((l) => l.amount).sort(), ["15.0000", "15.0000"]);
-  assert.deepEqual(plan.lines.map((l) => l.distributionGroupId), ["group-fresh", "group-fresh"]);
+  assert.deepEqual(
+    plan.lines.map((l) => l.distributionGroupId),
+    ["group-fresh", "group-fresh"],
+  );
 });
-
 
 test("entry distributions conserve direct materials cost and treatment through explode, keep and collapse", () => {
   const r = rule("material-cost", [target({ fixedPercent: "25" }), target({ fixedPercent: "75" })]);
-  const parent: EntryLineInput = { accountId: "expense", amount: "400", withholdingTreatment: "materials", withholdingMaterialsCost: "300.0001" };
+  const parent: EntryLineInput = {
+    accountId: "expense",
+    amount: "400",
+    withholdingTreatment: "materials",
+    withholdingMaterialsCost: "300.0001",
+  };
   const exploded = explodeDocumentLine(parent, r, { groupId: "cost-group" });
-  assert.deepEqual(exploded.children.map(line => [line.amount, line.withholdingTreatment, line.withholdingMaterialsCost]),
-    [["100.0000", "materials", "75.0000"], ["300.0000", "materials", "225.0001"]]);
-  const groups = new Map([["cost-group", { groupId: "cost-group", ruleId: r.rule.id, versionId: r.version.id,
-    locked: false, total: "400.0000", memberIds: ["one", "two"] }]]);
-  const kept = planEntryDistributions({ kind: "vendor_bill" }, exploded.children, [r], { existingGroups: groups });
-  assert.deepEqual(kept.lines.map(line => line.withholdingMaterialsCost), ["75.0000", "225.0001"]);
-  const collapsed = planEntryDistributions({ kind: "vendor_bill", unsplitDistributionGroups: ["cost-group"] },
-    exploded.children, [r], { existingGroups: groups });
+  assert.deepEqual(
+    exploded.children.map((line) => [
+      line.amount,
+      line.withholdingTreatment,
+      line.withholdingMaterialsCost,
+    ]),
+    [
+      ["100.0000", "materials", "75.0000"],
+      ["300.0000", "materials", "225.0001"],
+    ],
+  );
+  const groups = new Map([
+    [
+      "cost-group",
+      {
+        groupId: "cost-group",
+        ruleId: r.rule.id,
+        versionId: r.version.id,
+        locked: false,
+        total: "400.0000",
+        memberIds: ["one", "two"],
+      },
+    ],
+  ]);
+  const kept = planEntryDistributions({ kind: "vendor_bill" }, exploded.children, [r], {
+    existingGroups: groups,
+  });
+  assert.deepEqual(
+    kept.lines.map((line) => line.withholdingMaterialsCost),
+    ["75.0000", "225.0001"],
+  );
+  const collapsed = planEntryDistributions(
+    { kind: "vendor_bill", unsplitDistributionGroups: ["cost-group"] },
+    exploded.children,
+    [r],
+    { existingGroups: groups },
+  );
   assert.equal(collapsed.lines.length, 1);
   assert.equal(collapsed.lines[0]!.withholdingMaterialsCost, "300.0001");
   assert.equal(collapsed.lines[0]!.withholdingTreatment, "materials");
-  const increased = exploded.children.map(line => ({ ...line, amount: line.amount === "100.0000" ? "200" : "600" }));
-  const regenerated = planEntryDistributions({ kind: "vendor_bill" }, increased, [r], { existingGroups: groups });
-  assert.deepEqual(regenerated.lines.map(line => line.withholdingMaterialsCost), ["75.0000", "225.0001"]);
+  const increased = exploded.children.map((line) => ({
+    ...line,
+    amount: line.amount === "100.0000" ? "200" : "600",
+  }));
+  const regenerated = planEntryDistributions({ kind: "vendor_bill" }, increased, [r], {
+    existingGroups: groups,
+  });
+  assert.deepEqual(
+    regenerated.lines.map((line) => line.withholdingMaterialsCost),
+    ["75.0000", "225.0001"],
+  );
 });

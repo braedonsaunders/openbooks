@@ -7,9 +7,20 @@ import {
 } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { assertStageMoveAllowed } from "./funnel.ts";
-import { requireActorId, requireId, requireOrgId, requireReason, isUniqueViolation } from "./input.ts";
+import {
+  requireActorId,
+  requireId,
+  requireOrgId,
+  requireReason,
+  isUniqueViolation,
+} from "./input.ts";
 import { firstStage, loadPipelineTemplate } from "./pipeline.ts";
-import { createCandidate, isRetentionErasedCandidate, loadCandidate, type CandidateDTO } from "./candidates.ts";
+import {
+  createCandidate,
+  isRetentionErasedCandidate,
+  loadCandidate,
+  type CandidateDTO,
+} from "./candidates.ts";
 import { candidateApplicationCount, candidateInScopeRequisitionIds } from "./candidate-scope.ts";
 // Disposition sync for posting-sourced applications. Static edge
 // applications→postings only; postings reaches back dynamically, so the
@@ -64,7 +75,10 @@ const APPLICATION_COLUMNS = sql`
 
 function toDTO(row: ApplicationRow): ApplicationDTO {
   if (!(APPLICATION_STATUSES as readonly string[]).includes(row.status)) {
-    throw new RecruitingError("REFUSED", `application ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`);
+    throw new RecruitingError(
+      "REFUSED",
+      `application ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`,
+    );
   }
   return { ...row, status: row.status as ApplicationStatus };
 }
@@ -74,10 +88,17 @@ export async function loadApplication(
   orgId: string,
   applicationId: string,
 ): Promise<ApplicationRow | null> {
-  return (await exec.execute<ApplicationRow>(sql`
+  return (
+    (
+      await exec.execute<ApplicationRow>(
+        sql`
     select ${APPLICATION_COLUMNS} from hrm_applications
      where org_id = ${orgId} and id = ${applicationId}
-  `, "objects"))[0] ?? null;
+  `,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 async function loadApplicationForUpdate(
@@ -85,10 +106,15 @@ async function loadApplicationForUpdate(
   orgId: string,
   applicationId: string,
 ): Promise<ApplicationRow> {
-  const row = (await exec.execute<ApplicationRow>(sql`
+  const row = (
+    await exec.execute<ApplicationRow>(
+      sql`
     select ${APPLICATION_COLUMNS} from hrm_applications
      where org_id = ${orgId} and id = ${applicationId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
   }
@@ -108,16 +134,24 @@ export async function appendApplicationEvent(
     reason?: string | null;
   },
 ): Promise<void> {
-  const inserted = (await exec.execute<{ id: string }>(sql`
+  const inserted = (
+    await exec.execute<{ id: string }>(
+      sql`
     insert into hrm_application_events
       (org_id, application_id, kind, from_stage_id, to_stage_id, reason, actor_id)
     values (${args.orgId}, ${args.applicationId}, ${args.kind},
             ${args.fromStageId ?? null}, ${args.toStageId ?? null},
             ${args.reason ?? null}, ${args.actorId})
     returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!inserted) {
-    throw new RecruitingError("REFUSED", "the funnel event was not recorded — no row was written; retry the request");
+    throw new RecruitingError(
+      "REFUSED",
+      "the funnel event was not recorded — no row was written; retry the request",
+    );
   }
 }
 
@@ -162,10 +196,15 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
   const candidateId = requireId(query.candidateId, "candidateId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
-    const requisition = (await db.execute<{ status: string; pipelineTemplateId: string | null }>(sql`
+    const requisition = (
+      await db.execute<{ status: string; pipelineTemplateId: string | null }>(
+        sql`
       select status, pipeline_template_id as "pipelineTemplateId"
         from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!requisition) {
       throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
     }
@@ -175,12 +214,20 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
         `a ${requisition.status} requisition takes no new candidates — open it before attaching applications`,
       );
     }
-    const candidateLock = (await db.execute<{ id: string }>(sql`
+    const candidateLock = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from hrm_candidates where org_id = ${orgId} and id = ${candidateId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const candidate = candidateLock ? await loadCandidate(db, orgId, candidateId) : null;
     if (!candidate) {
-      throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "candidate is not visible in this organization — check the reference",
+      );
     }
     // Post-lock erasure recheck: a retention run may clear the prospect
     // between the caller's read and this lock. Attaching to the anonymized
@@ -202,7 +249,10 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
     if (allowed !== null) {
       const owned = await candidateInScopeRequisitionIds(db, orgId, candidateId, allowed);
       if (owned.length === 0 && (await candidateApplicationCount(db, orgId, candidateId)) > 0) {
-        throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
+        throw new RecruitingError(
+          "NOT_FOUND",
+          "candidate is not visible in this organization — check the reference",
+        );
       }
     }
     if (!requisition.pipelineTemplateId) {
@@ -213,18 +263,28 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
     }
     const template = await loadPipelineTemplate(db, orgId, requisition.pipelineTemplateId);
     if (!template) {
-      throw new RecruitingError("REFUSED", "the requisition's pipeline is gone — re-open the requisition onto a live funnel first");
+      throw new RecruitingError(
+        "REFUSED",
+        "the requisition's pipeline is gone — re-open the requisition onto a live funnel first",
+      );
     }
     const start = firstStage(template);
-    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
+    const today = (
+      await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects")
+    )[0]!.today;
     let inserted: ApplicationRow | undefined;
     try {
-      inserted = (await db.execute<ApplicationRow>(sql`
+      inserted = (
+        await db.execute<ApplicationRow>(
+          sql`
         insert into hrm_applications
           (org_id, requisition_id, candidate_id, stage_id, status, applied_on, created_by, updated_by)
         values (${orgId}, ${requisitionId}, ${candidateId}, ${start.id}, 'active', ${today}::date, ${actorId}, ${actorId})
         returning ${APPLICATION_COLUMNS}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new RecruitingError(
@@ -235,7 +295,10 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
       throw error;
     }
     if (!inserted) {
-      throw new RecruitingError("REFUSED", "the application was not stored — no row was written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "the application was not stored — no row was written; retry the request",
+      );
     }
     await appendApplicationEvent(db, {
       orgId,
@@ -302,7 +365,7 @@ export async function attachCandidate(query: AttachCandidateQuery): Promise<Atta
 }
 
 export interface MoveApplicationStageQuery {
-  readonly expectedStageId?:string;
+  readonly expectedStageId?: string;
   readonly orgId: string;
   readonly actorId: string;
   readonly applicationId: string;
@@ -317,7 +380,9 @@ export interface MoveApplicationStageQuery {
  * the hired stage except through hire, and out of a terminal state — each
  * by name, with the remedy in the message.
  */
-export async function moveApplicationStage(query: MoveApplicationStageQuery): Promise<ApplicationDTO> {
+export async function moveApplicationStage(
+  query: MoveApplicationStageQuery,
+): Promise<ApplicationDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const applicationId = requireId(query.applicationId, "applicationId");
@@ -326,19 +391,36 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
   const reason = query.reason === undefined || query.reason === null ? null : String(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadApplicationForUpdate(db, orgId, applicationId);
-    if(query.expectedStageId!==undefined&&current.stageId!==requireId(query.expectedStageId,'expectedStageId'))
-      throw new RecruitingError('REFUSED','This application changed stage in another session. Reload it before recording a decision.');
+    if (
+      query.expectedStageId !== undefined &&
+      current.stageId !== requireId(query.expectedStageId, "expectedStageId")
+    )
+      throw new RecruitingError(
+        "REFUSED",
+        "This application changed stage in another session. Reload it before recording a decision.",
+      );
     await requireApplicationMove(db, orgId, actorId, current.requisitionId);
-    const requisition = (await db.execute<{ pipelineTemplateId: string | null }>(sql`
+    const requisition = (
+      await db.execute<{ pipelineTemplateId: string | null }>(
+        sql`
       select pipeline_template_id as "pipelineTemplateId"
         from hrm_requisitions where org_id = ${orgId} and id = ${current.requisitionId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!requisition?.pipelineTemplateId) {
-      throw new RecruitingError("REFUSED", "the requisition's pipeline is gone — re-open the requisition onto a live funnel first");
+      throw new RecruitingError(
+        "REFUSED",
+        "the requisition's pipeline is gone — re-open the requisition onto a live funnel first",
+      );
     }
     const template = await loadPipelineTemplate(db, orgId, requisition.pipelineTemplateId);
     if (!template) {
-      throw new RecruitingError("REFUSED", "the requisition's pipeline is gone — re-open the requisition onto a live funnel first");
+      throw new RecruitingError(
+        "REFUSED",
+        "the requisition's pipeline is gone — re-open the requisition onto a live funnel first",
+      );
     }
     const fromStage = template.stages.find((stage) => stage.id === current.stageId) ?? null;
     const toStage = template.stages.find((stage) => stage.id === toStageId) ?? null;
@@ -355,14 +437,22 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
       throw new RecruitingError("REFUSED", error instanceof Error ? error.message : String(error));
     }
     if (fromStage && fromStage.id === toStage!.id) {
-      throw new RecruitingError("BAD_STATE", "the application already sits on that stage — move it to a different stage");
+      throw new RecruitingError(
+        "BAD_STATE",
+        "the application already sits on that stage — move it to a different stage",
+      );
     }
-    const updated = (await db.execute<ApplicationRow>(sql`
+    const updated = (
+      await db.execute<ApplicationRow>(
+        sql`
       update hrm_applications
          set stage_id = ${toStageId}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${applicationId} and status = 'active'
       returning ${APPLICATION_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -385,7 +475,7 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
 }
 
 export interface RejectApplicationQuery {
-  readonly expectedStageId?:string;
+  readonly expectedStageId?: string;
   readonly orgId: string;
   readonly actorId: string;
   readonly applicationId: string;
@@ -400,8 +490,14 @@ export async function rejectApplication(query: RejectApplicationQuery): Promise<
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadApplicationForUpdate(db, orgId, applicationId);
-    if(query.expectedStageId!==undefined&&current.stageId!==requireId(query.expectedStageId,'expectedStageId'))
-      throw new RecruitingError('REFUSED','This application changed stage in another session. Reload it before recording a decision.');
+    if (
+      query.expectedStageId !== undefined &&
+      current.stageId !== requireId(query.expectedStageId, "expectedStageId")
+    )
+      throw new RecruitingError(
+        "REFUSED",
+        "This application changed stage in another session. Reload it before recording a decision.",
+      );
     await requireHrmRecruitingManage(db, orgId, actorId, current.requisitionId);
     if (current.status !== "active") {
       throw new RecruitingError(
@@ -409,15 +505,23 @@ export async function rejectApplication(query: RejectApplicationQuery): Promise<
         `a ${current.status} application cannot be rejected — only active candidacies reject`,
       );
     }
-    const updated = (await db.execute<ApplicationRow>(sql`
+    const updated = (
+      await db.execute<ApplicationRow>(
+        sql`
       update hrm_applications
          set status = 'rejected', rejected_reason = ${reason}, rejected_at = now(),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${applicationId} and status = 'active'
       returning ${APPLICATION_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
-      throw new RecruitingError("STALE_REVISION", "the application changed while rejecting — reload it and try again");
+      throw new RecruitingError(
+        "STALE_REVISION",
+        "the application changed while rejecting — reload it and try again",
+      );
     }
     await appendApplicationEvent(db, {
       orgId,
@@ -440,7 +544,9 @@ export interface WithdrawApplicationQuery {
 }
 
 /** Withdraw a candidacy (the candidate's own decision; no reason demanded). */
-export async function withdrawApplication(query: WithdrawApplicationQuery): Promise<ApplicationDTO> {
+export async function withdrawApplication(
+  query: WithdrawApplicationQuery,
+): Promise<ApplicationDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const applicationId = requireId(query.applicationId, "applicationId");
@@ -453,15 +559,23 @@ export async function withdrawApplication(query: WithdrawApplicationQuery): Prom
         `a ${current.status} application cannot be withdrawn — only active candidacies withdraw`,
       );
     }
-    const updated = (await db.execute<ApplicationRow>(sql`
+    const updated = (
+      await db.execute<ApplicationRow>(
+        sql`
       update hrm_applications
          set status = 'withdrawn', withdrawn_at = now(),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${applicationId} and status = 'active'
       returning ${APPLICATION_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
-      throw new RecruitingError("STALE_REVISION", "the application changed while withdrawing — reload it and try again");
+      throw new RecruitingError(
+        "STALE_REVISION",
+        "the application changed while withdrawing — reload it and try again",
+      );
     }
     await appendApplicationEvent(db, {
       orgId,
@@ -483,7 +597,13 @@ export async function withdrawApplication(query: WithdrawApplicationQuery): Prom
  */
 export async function markApplicationHired(
   exec: SqlExecutor,
-  args: { orgId: string; actorId: string; applicationId: string; employmentId: string; hiredStageId: string },
+  args: {
+    orgId: string;
+    actorId: string;
+    applicationId: string;
+    employmentId: string;
+    hiredStageId: string;
+  },
 ): Promise<ApplicationDTO> {
   const current = await loadApplicationForUpdate(exec, args.orgId, args.applicationId);
   if (current.status !== "active") {
@@ -492,16 +612,24 @@ export async function markApplicationHired(
       `a ${current.status} application cannot be hired — only active candidacies hire`,
     );
   }
-  const updated = (await exec.execute<ApplicationRow>(sql`
+  const updated = (
+    await exec.execute<ApplicationRow>(
+      sql`
     update hrm_applications
        set status = 'hired', stage_id = ${args.hiredStageId},
            hired_employment_id = ${args.employmentId},
            updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${args.applicationId} and status = 'active'
     returning ${APPLICATION_COLUMNS}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!updated) {
-    throw new RecruitingError("REFUSED", "the application changed while hiring — the hire is refused rather than recorded twice");
+    throw new RecruitingError(
+      "REFUSED",
+      "the application changed while hiring — the hire is refused rather than recorded twice",
+    );
   }
   await appendApplicationEvent(exec, {
     orgId: args.orgId,
@@ -512,6 +640,9 @@ export async function markApplicationHired(
     toStageId: args.hiredStageId,
   });
   // HR-18: disposition sync for posting-sourced applications (no-op otherwise).
-  await recordDispositionForApplication(exec, { orgId: args.orgId, applicationId: args.applicationId });
+  await recordDispositionForApplication(exec, {
+    orgId: args.orgId,
+    applicationId: args.applicationId,
+  });
   return toDTO(updated);
 }

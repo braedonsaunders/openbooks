@@ -11,7 +11,7 @@
 // month boundary (including a DST fall-back day) cannot cancel out in the
 // correction.
 
-import { lastDayOfMonth, utcCivilDate } from './fiscal-calendar'
+import { lastDayOfMonth, utcCivilDate } from "./fiscal-calendar";
 
 /**
  * Schedule input validation the sanitizer can type-refuse: every message is
@@ -21,38 +21,38 @@ import { lastDayOfMonth, utcCivilDate } from './fiscal-calendar'
  */
 class ReportScheduleValidationError extends Error {
   constructor(message: string) {
-    super(message)
-    this.name = 'ReportScheduleValidationError'
+    super(message);
+    this.name = "ReportScheduleValidationError";
   }
 }
 
-export type ReportCadence = 'daily' | 'weekly' | 'monthly'
-export const REPORT_CADENCES: ReportCadence[] = ['daily', 'weekly', 'monthly']
+export type ReportCadence = "daily" | "weekly" | "monthly";
+export const REPORT_CADENCES: ReportCadence[] = ["daily", "weekly", "monthly"];
 
 export type CadenceInput = {
-  cadence: ReportCadence
+  cadence: ReportCadence;
   /** 0 = Sunday … 6 = Saturday. Required for weekly. */
-  dayOfWeek?: number | null
+  dayOfWeek?: number | null;
   /** 1..31. Required for monthly. */
-  dayOfMonth?: number | null
-  hour: number
-  minute: number
+  dayOfMonth?: number | null;
+  hour: number;
+  minute: number;
   /** IANA zone (e.g. 'America/Toronto'). */
-  timezone: string
-}
+  timezone: string;
+};
 
 /**
  * Returns the next future UTC Date matching the cadence (strictly > `from`).
  */
 export function computeNextRunAt(input: CadenceInput, from: Date = new Date()): Date {
-  const tz = input.timezone || 'UTC'
+  const tz = input.timezone || "UTC";
   // Probe candidate days starting from `from` (in tz). For weekly/monthly we
   // may need to walk forward up to ~60 days; 366 is a safe upper bound for
   // edge cases like Feb-29 monthly schedules.
-  const start = startOfTzDay(from, tz)
+  const start = startOfTzDay(from, tz);
   for (let i = 0; i < 366; i++) {
-    const dayLocal = addDays(start, i)
-    if (!matchesDay(dayLocal, input, tz)) continue
+    const dayLocal = addDays(start, i);
+    if (!matchesDay(dayLocal, input, tz)) continue;
     const candidate = zonedDateTimeToUtc(
       tzYear(dayLocal, tz),
       tzMonth(dayLocal, tz),
@@ -60,69 +60,69 @@ export function computeNextRunAt(input: CadenceInput, from: Date = new Date()): 
       input.hour,
       input.minute,
       tz,
-    )
-    if (candidate.getTime() > from.getTime()) return candidate
+    );
+    if (candidate.getTime() > from.getTime()) return candidate;
   }
   // Shouldn't happen for any realistic schedule.
-  throw new Error('computeNextRunAt: no match within a year')
+  throw new Error("computeNextRunAt: no match within a year");
 }
 
 /** Human description of a cadence, e.g. "Weekly on Monday at 07:00 (UTC)". */
 
 /** Whitelist/clamp an untrusted cadence payload. Throws on nonsense. */
 export function validateCadenceInput(raw: {
-  cadence?: unknown
-  dayOfWeek?: unknown
-  dayOfMonth?: unknown
-  hour?: unknown
-  minute?: unknown
-  timezone?: unknown
+  cadence?: unknown;
+  dayOfWeek?: unknown;
+  dayOfMonth?: unknown;
+  hour?: unknown;
+  minute?: unknown;
+  timezone?: unknown;
 }): CadenceInput {
-  const cadence = String(raw.cadence ?? '')
+  const cadence = String(raw.cadence ?? "");
   if (!REPORT_CADENCES.includes(cadence as ReportCadence)) {
-    throw new ReportScheduleValidationError(`Invalid cadence: ${cadence}`)
+    throw new ReportScheduleValidationError(`Invalid cadence: ${cadence}`);
   }
   const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
-    const n = Number(v)
-    if (!Number.isFinite(n)) return fallback
-    return Math.min(Math.max(Math.trunc(n), min), max)
-  }
-  const timezone = String(raw.timezone ?? 'UTC').trim() || 'UTC'
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(Math.max(Math.trunc(n), min), max);
+  };
+  const timezone = String(raw.timezone ?? "UTC").trim() || "UTC";
   if (timezone.length > REPORT_SCHEDULE_LIMITS.timezoneChars) {
-    throw new ReportScheduleValidationError('Timezone is too long')
+    throw new ReportScheduleValidationError("Timezone is too long");
   }
   // Probe the IANA zone — Intl throws on unknown zones.
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: timezone })
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
   } catch {
-    throw new ReportScheduleValidationError(`Unknown timezone: ${timezone}`)
+    throw new ReportScheduleValidationError(`Unknown timezone: ${timezone}`);
   }
   return {
     cadence: cadence as ReportCadence,
-    dayOfWeek: cadence === 'weekly' ? clampInt(raw.dayOfWeek, 0, 6, 1) : null,
-    dayOfMonth: cadence === 'monthly' ? clampInt(raw.dayOfMonth, 1, 31, 1) : null,
+    dayOfWeek: cadence === "weekly" ? clampInt(raw.dayOfWeek, 0, 6, 1) : null,
+    dayOfMonth: cadence === "monthly" ? clampInt(raw.dayOfMonth, 1, 31, 1) : null,
     hour: clampInt(raw.hour, 0, 23, 7),
     minute: clampInt(raw.minute, 0, 59, 0),
     timezone,
-  }
+  };
 }
 
 function matchesDay(localDay: Date, input: CadenceInput, tz: string): boolean {
-  if (input.cadence === 'daily') return true
-  if (input.cadence === 'weekly') {
-    const dow = tzWeekday(localDay, tz)
-    return dow === (input.dayOfWeek ?? 1)
+  if (input.cadence === "daily") return true;
+  if (input.cadence === "weekly") {
+    const dow = tzWeekday(localDay, tz);
+    return dow === (input.dayOfWeek ?? 1);
   }
-  if (input.cadence === 'monthly') {
-    const target = input.dayOfMonth ?? 1
-    const day = tzDay(localDay, tz)
-    if (day === target) return true
+  if (input.cadence === "monthly") {
+    const target = input.dayOfMonth ?? 1;
+    const day = tzDay(localDay, tz);
+    if (day === target) return true;
     // Clamp-to-month-end: a 31st schedule fires on April 30 (and February
     // 28/29), not never — short months would otherwise go dark.
-    const last = lastDayOfMonth(tzYear(localDay, tz), tzMonth(localDay, tz))
-    return target > last && day === last
+    const last = lastDayOfMonth(tzYear(localDay, tz), tzMonth(localDay, tz));
+    return target > last && day === last;
   }
-  return false
+  return false;
 }
 
 // --- Timezone arithmetic -------------------------------------------------
@@ -130,14 +130,14 @@ function matchesDay(localDay: Date, input: CadenceInput, tz: string): boolean {
 /** A near-noon UTC Date for the day-in-tz that `d` falls on. */
 function startOfTzDay(d: Date, tz: string): Date {
   // Build a noon-in-tz to avoid DST shoulders.
-  const y = tzYear(d, tz)
-  const m = tzMonth(d, tz)
-  const day = tzDay(d, tz)
-  return zonedDateTimeToUtc(y, m, day, 12, 0, tz)
+  const y = tzYear(d, tz);
+  const m = tzMonth(d, tz);
+  const day = tzDay(d, tz);
+  return zonedDateTimeToUtc(y, m, day, 12, 0, tz);
 }
 
 function addDays(d: Date, n: number): Date {
-  return new Date(d.getTime() + n * 24 * 3600 * 1000)
+  return new Date(d.getTime() + n * 24 * 3600 * 1000);
 }
 
 /**
@@ -154,11 +154,11 @@ function zonedDateTimeToUtc(
   // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto
   // 1900-1999 (both sides of the diff remapped identically before, so
   // contemporary schedules were unaffected — this makes ancient ones exact too).
-  let utcMs = utcCivilDate(year, month - 1, day, hour, minute).getTime()
+  let utcMs = utcCivilDate(year, month - 1, day, hour, minute).getTime();
   for (let i = 0; i < 3; i++) {
-    const guess = new Date(utcMs)
-    const have = tzReadAll(guess, tz)
-    const want = { year, month, day, hour, minute }
+    const guess = new Date(utcMs);
+    const have = tzReadAll(guess, tz);
+    const want = { year, month, day, hour, minute };
     // Treat both sets of local fields as UTC calendar values only for the
     // purpose of finding their exact difference. Approximating months as 30
     // days makes a target on the first of a month appear to be on the same
@@ -166,47 +166,47 @@ function zonedDateTimeToUtc(
     // hour that can converge to the wrong date and skip the occurrence.
     const diff =
       utcCivilDate(want.year, want.month - 1, want.day, want.hour, want.minute).getTime() -
-      utcCivilDate(have.year, have.month - 1, have.day, have.hour, have.minute).getTime()
-    if (diff === 0) break
-    utcMs += diff
+      utcCivilDate(have.year, have.month - 1, have.day, have.hour, have.minute).getTime();
+    if (diff === 0) break;
+    utcMs += diff;
   }
-  return new Date(utcMs)
+  return new Date(utcMs);
 }
 
 function tzReadAll(d: Date, tz: string) {
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
     hour12: false,
-  }).formatToParts(d)
-  const get = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? '0')
+  }).formatToParts(d);
+  const get = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? "0");
   return {
-    year: get('year'),
-    month: get('month'),
-    day: get('day'),
-    hour: get('hour') === 24 ? 0 : get('hour'),
-    minute: get('minute'),
-    second: get('second'),
-  }
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour") === 24 ? 0 : get("hour"),
+    minute: get("minute"),
+    second: get("second"),
+  };
 }
 
 function tzYear(d: Date, tz: string): number {
-  return tzReadAll(d, tz).year
+  return tzReadAll(d, tz).year;
 }
 function tzMonth(d: Date, tz: string): number {
-  return tzReadAll(d, tz).month
+  return tzReadAll(d, tz).month;
 }
 function tzDay(d: Date, tz: string): number {
-  return tzReadAll(d, tz).day
+  return tzReadAll(d, tz).day;
 }
 function tzWeekday(d: Date, tz: string): number {
-  const wd = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(d)
-  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(wd)
+  const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(d);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd);
 }
 
 // --- Recipient / filter bounds --------------------------------------------
@@ -221,31 +221,33 @@ const REPORT_SCHEDULE_LIMITS = {
   filtersDepth: 12,
   filtersNodes: 2_000,
   filterKeyChars: 128,
-} as const
+} as const;
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Dedupe, lowercase and validate recipient email addresses. Throws on the
  *  first invalid entry so the caller can surface it verbatim. */
 export function normalizeReportRecipientEmails(values: readonly string[]): string[] {
-  const normalized = new Set<string>()
+  const normalized = new Set<string>();
   for (const raw of values) {
-    const value = raw.trim().toLowerCase()
+    const value = raw.trim().toLowerCase();
     if (
       !value ||
       value.length > REPORT_SCHEDULE_LIMITS.recipientEmailChars ||
       !EMAIL_PATTERN.test(value)
     ) {
-      throw new ReportScheduleValidationError(`Invalid report recipient email address: ${value || '(blank)'}`)
+      throw new ReportScheduleValidationError(
+        `Invalid report recipient email address: ${value || "(blank)"}`,
+      );
     }
-    normalized.add(value)
+    normalized.add(value);
     if (normalized.size > REPORT_SCHEDULE_LIMITS.recipientCount) {
       throw new ReportScheduleValidationError(
         `Scheduled reports may have at most ${REPORT_SCHEDULE_LIMITS.recipientCount} recipients.`,
-      )
+      );
     }
   }
-  return [...normalized]
+  return [...normalized];
 }
 
 /** Bound an untrusted filters JSON object (size / depth / node count / keys). */

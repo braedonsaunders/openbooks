@@ -1,6 +1,6 @@
 /** Pack employee-identifier validation. Split from packs.ts (pure moves only). */
-import { type EmployeeIdentifierVerdict } from "./pack-types"
-import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
+import { type EmployeeIdentifierVerdict } from "./pack-types";
+import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry";
 
 /**
  * Judge one raw identifier value against one country's pack declaration.

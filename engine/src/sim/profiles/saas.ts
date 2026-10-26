@@ -1,4 +1,11 @@
-import type { CoaEntry, MeteredProductSpec, PlanSpec, Profile, SubscriberSpec, UsageSubscriptionSpec } from "./types.ts";
+import type {
+  CoaEntry,
+  MeteredProductSpec,
+  PlanSpec,
+  Profile,
+  SubscriberSpec,
+  UsageSubscriptionSpec,
+} from "./types.ts";
 
 /**
  * A B2B SaaS company running on RECURRING subscription revenue — the polar
@@ -93,7 +100,13 @@ const PLANS: PlanSpec[] = [
   { key: "scale_m", name: "Scale (Monthly)", amount: 299, interval: "monthly", termMonths: 1 },
   { key: "growth_a", name: "Growth (Annual)", amount: 990, interval: "annually", termMonths: 12 },
   { key: "scale_a", name: "Scale (Annual)", amount: 2990, interval: "annually", termMonths: 12 },
-  { key: "enterprise_a", name: "Enterprise (Annual)", amount: 4500, interval: "annually", termMonths: 12 },
+  {
+    key: "enterprise_a",
+    name: "Enterprise (Annual)",
+    amount: 4500,
+    interval: "annually",
+    termMonths: 12,
+  },
 ];
 
 // A subscriber base across plans; quantity = seats. Annual enterprise deals create
@@ -114,32 +127,143 @@ const SUBSCRIBERS: SubscriberSpec[] = [
   { customer: "Continental Bank Corp", plan: "enterprise_a", quantity: 200 },
 ];
 
-const METERED_PRODUCTS: MeteredProductSpec[] = [{
-  key: "api-requests",
-  name: "Northstar API Requests",
-  unit: "1,000 requests",
-  aggregation: "sum",
-  bands: [
-    { upToQty: "5000.00000000", unitPrice: "0.42000000" },
-    { upToQty: "20000.00000000", unitPrice: "0.28000000" },
-    { upToQty: null, unitPrice: "0.18000000" },
-  ],
-}];
+const METERED_PRODUCTS: MeteredProductSpec[] = [
+  {
+    key: "api-requests",
+    name: "Northstar API Requests",
+    unit: "1,000 requests",
+    aggregation: "sum",
+    bands: [
+      { upToQty: "5000.00000000", unitPrice: "0.42000000" },
+      { upToQty: "20000.00000000", unitPrice: "0.28000000" },
+      { upToQty: null, unitPrice: "0.18000000" },
+    ],
+  },
+];
 
 const USAGE_SUBSCRIPTIONS: UsageSubscriptionSpec[] = [
-  { customer: "Rivera Dental Group", product: "api-requests", volume: { initialMonthlyQuantity: "8000", monthlyChangeQuantity: "500", dailyVariationPercent: 4 } },
-  { customer: "Kettle & Co Roasters", product: "api-requests", volume: { initialMonthlyQuantity: "22000", monthlyChangeQuantity: "-3000", minimumMonthlyQuantity: "8000", dailyVariationPercent: 4 } },
-  { customer: "Brightpath Tutoring", product: "api-requests", volume: { initialMonthlyQuantity: "6000", monthlyChangeQuantity: "250", dailyVariationPercent: 3 }, pauseAfterDays: 23, resumeAfterDays: 38 },
-  { customer: "Nomad Gear Outfitters", product: "api-requests", volume: { initialMonthlyQuantity: "18000", monthlyChangeQuantity: "800", dailyVariationPercent: 4 } },
-  { customer: "Harbor Freight Logistics", product: "api-requests", volume: { initialMonthlyQuantity: "35000", monthlyChangeQuantity: "1800", dailyVariationPercent: 5 } },
-  { customer: "Summit Physical Therapy", product: "api-requests", volume: { initialMonthlyQuantity: "16000", monthlyChangeQuantity: "600", dailyVariationPercent: 4 } },
-  { customer: "Lumen Media Agency", product: "api-requests", volume: { initialMonthlyQuantity: "65000", monthlyChangeQuantity: "2500", dailyVariationPercent: 5 } },
-  { customer: "Vertex Manufacturing", product: "api-requests", volume: { initialMonthlyQuantity: "85000", monthlyChangeQuantity: "3000", dailyVariationPercent: 5 } },
-  { customer: "Cobalt Fintech", product: "api-requests", volume: { initialMonthlyQuantity: "42000", monthlyChangeQuantity: "1200", dailyVariationPercent: 4 }, annualCommitAmount: "240000" },
-  { customer: "Meridian Health Network", product: "api-requests", volume: { initialMonthlyQuantity: "78000", monthlyChangeQuantity: "3000", dailyVariationPercent: 5 } },
-  { customer: "Atlas Retail Group", product: "api-requests", volume: { initialMonthlyQuantity: "24000", monthlyChangeQuantity: "1200", dailyVariationPercent: 4 }, prepaidPack: { amount: "30000.0000" } },
-  { customer: "Orion Aerospace", product: "api-requests", volume: { initialMonthlyQuantity: "110000", monthlyChangeQuantity: "4000", dailyVariationPercent: 5 } },
-  { customer: "Continental Bank Corp", product: "api-requests", volume: { initialMonthlyQuantity: "145000", monthlyChangeQuantity: "5000", dailyVariationPercent: 5 } },
+  {
+    customer: "Rivera Dental Group",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "8000",
+      monthlyChangeQuantity: "500",
+      dailyVariationPercent: 4,
+    },
+  },
+  {
+    customer: "Kettle & Co Roasters",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "22000",
+      monthlyChangeQuantity: "-3000",
+      minimumMonthlyQuantity: "8000",
+      dailyVariationPercent: 4,
+    },
+  },
+  {
+    customer: "Brightpath Tutoring",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "6000",
+      monthlyChangeQuantity: "250",
+      dailyVariationPercent: 3,
+    },
+    pauseAfterDays: 23,
+    resumeAfterDays: 38,
+  },
+  {
+    customer: "Nomad Gear Outfitters",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "18000",
+      monthlyChangeQuantity: "800",
+      dailyVariationPercent: 4,
+    },
+  },
+  {
+    customer: "Harbor Freight Logistics",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "35000",
+      monthlyChangeQuantity: "1800",
+      dailyVariationPercent: 5,
+    },
+  },
+  {
+    customer: "Summit Physical Therapy",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "16000",
+      monthlyChangeQuantity: "600",
+      dailyVariationPercent: 4,
+    },
+  },
+  {
+    customer: "Lumen Media Agency",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "65000",
+      monthlyChangeQuantity: "2500",
+      dailyVariationPercent: 5,
+    },
+  },
+  {
+    customer: "Vertex Manufacturing",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "85000",
+      monthlyChangeQuantity: "3000",
+      dailyVariationPercent: 5,
+    },
+  },
+  {
+    customer: "Cobalt Fintech",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "42000",
+      monthlyChangeQuantity: "1200",
+      dailyVariationPercent: 4,
+    },
+    annualCommitAmount: "240000",
+  },
+  {
+    customer: "Meridian Health Network",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "78000",
+      monthlyChangeQuantity: "3000",
+      dailyVariationPercent: 5,
+    },
+  },
+  {
+    customer: "Atlas Retail Group",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "24000",
+      monthlyChangeQuantity: "1200",
+      dailyVariationPercent: 4,
+    },
+    prepaidPack: { amount: "30000.0000" },
+  },
+  {
+    customer: "Orion Aerospace",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "110000",
+      monthlyChangeQuantity: "4000",
+      dailyVariationPercent: 5,
+    },
+  },
+  {
+    customer: "Continental Bank Corp",
+    product: "api-requests",
+    volume: {
+      initialMonthlyQuantity: "145000",
+      monthlyChangeQuantity: "5000",
+      dailyVariationPercent: 5,
+    },
+  },
 ];
 
 export const saasCompany: Profile = {
@@ -159,23 +283,93 @@ export const saasCompany: Profile = {
   // up-front billings don't distort the burn.
   saasMonthlyPayroll: "640000",
   vendors: [
-    { name: "AWS", termDays: 30, expenseCategories: ["hostingCogs"], billMin: 18000, billMax: 60000 },
-    { name: "Datadog Observability", termDays: 30, expenseCategories: ["hostingCogs"], billMin: 3000, billMax: 12000 },
-    { name: "Stripe (processing)", termDays: 15, expenseCategories: ["paymentProcessing"], billMin: 4000, billMax: 22000 },
-    { name: "Zendesk Support", termDays: 30, expenseCategories: ["supportCogs"], billMin: 2000, billMax: 8000 },
-    { name: "Google Workspace & SaaS tools", termDays: 30, expenseCategories: ["office"], billMin: 3000, billMax: 14000 },
-    { name: "Demand-Gen Marketing", termDays: 30, expenseCategories: ["marketing"], billMin: 15000, billMax: 90000 },
-    { name: "WeWork HQ", termDays: 30, expenseCategories: ["rent"], billMin: 22000, billMax: 22000 },
-    { name: "Gusto Benefits", termDays: 30, expenseCategories: ["benefits"], billMin: 12000, billMax: 40000 },
-    { name: "Fenwick Legal", termDays: 30, expenseCategories: ["professionalFees"], billMin: 4000, billMax: 30000 },
-    { name: "Corporate Travel", termDays: 30, expenseCategories: ["travel", "meals"], billMin: 1500, billMax: 20000 },
+    {
+      name: "AWS",
+      termDays: 30,
+      expenseCategories: ["hostingCogs"],
+      billMin: 18000,
+      billMax: 60000,
+    },
+    {
+      name: "Datadog Observability",
+      termDays: 30,
+      expenseCategories: ["hostingCogs"],
+      billMin: 3000,
+      billMax: 12000,
+    },
+    {
+      name: "Stripe (processing)",
+      termDays: 15,
+      expenseCategories: ["paymentProcessing"],
+      billMin: 4000,
+      billMax: 22000,
+    },
+    {
+      name: "Zendesk Support",
+      termDays: 30,
+      expenseCategories: ["supportCogs"],
+      billMin: 2000,
+      billMax: 8000,
+    },
+    {
+      name: "Google Workspace & SaaS tools",
+      termDays: 30,
+      expenseCategories: ["office"],
+      billMin: 3000,
+      billMax: 14000,
+    },
+    {
+      name: "Demand-Gen Marketing",
+      termDays: 30,
+      expenseCategories: ["marketing"],
+      billMin: 15000,
+      billMax: 90000,
+    },
+    {
+      name: "WeWork HQ",
+      termDays: 30,
+      expenseCategories: ["rent"],
+      billMin: 22000,
+      billMax: 22000,
+    },
+    {
+      name: "Gusto Benefits",
+      termDays: 30,
+      expenseCategories: ["benefits"],
+      billMin: 12000,
+      billMax: 40000,
+    },
+    {
+      name: "Fenwick Legal",
+      termDays: 30,
+      expenseCategories: ["professionalFees"],
+      billMin: 4000,
+      billMax: 30000,
+    },
+    {
+      name: "Corporate Travel",
+      termDays: 30,
+      expenseCategories: ["travel", "meals"],
+      billMin: 1500,
+      billMax: 20000,
+    },
   ],
   // These customers back recurring subscriptions and metered API usage.
   // No unrelated per-day sales invoices dilute the subscription and usage flows.
   customers: [
-    "Rivera Dental Group", "Kettle & Co Roasters", "Brightpath Tutoring", "Nomad Gear Outfitters",
-    "Harbor Freight Logistics", "Summit Physical Therapy", "Lumen Media Agency", "Vertex Manufacturing",
-    "Cobalt Fintech", "Meridian Health Network", "Atlas Retail Group", "Orion Aerospace", "Continental Bank Corp",
+    "Rivera Dental Group",
+    "Kettle & Co Roasters",
+    "Brightpath Tutoring",
+    "Nomad Gear Outfitters",
+    "Harbor Freight Logistics",
+    "Summit Physical Therapy",
+    "Lumen Media Agency",
+    "Vertex Manufacturing",
+    "Cobalt Fintech",
+    "Meridian Health Network",
+    "Atlas Retail Group",
+    "Orion Aerospace",
+    "Continental Bank Corp",
   ].map((name) => ({
     name,
     termDays: 30,

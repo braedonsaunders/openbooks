@@ -21,10 +21,10 @@ const X = { expenseByDept: { A: "100.00", B: "50.00" }, baseByDept: { A: "4", B:
 // X: A 25.0000, B 25.0000.
 
 test("simple division is exact to 4dp, including repeating decimals", () => {
-  assert.deepEqual(
-    deriveOverheadCategoryDeptRates({ id: "x", allocationMethod: "simple", ...X }),
-    { A: "25.0000", B: "25.0000" },
-  );
+  assert.deepEqual(deriveOverheadCategoryDeptRates({ id: "x", allocationMethod: "simple", ...X }), {
+    A: "25.0000",
+    B: "25.0000",
+  });
   assert.deepEqual(
     deriveOverheadCategoryDeptRates({
       id: "r",
@@ -119,9 +119,27 @@ test("sum composite adds included category rates exactly", () => {
     deriveOverheadDeptComposite({
       compositeMethod: "sum",
       categories: [
-        { id: "x", rate: "25.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
-        { id: "y", rate: "7.5000", expense: "30.00", rateFormat: "per_hour", includeInComposite: true },
-        { id: "skip", rate: "999.0000", expense: "999.00", rateFormat: "per_hour", includeInComposite: false },
+        {
+          id: "x",
+          rate: "25.0000",
+          expense: "100.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
+        {
+          id: "y",
+          rate: "7.5000",
+          expense: "30.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
+        {
+          id: "skip",
+          rate: "999.0000",
+          expense: "999.00",
+          rateFormat: "per_hour",
+          includeInComposite: false,
+        },
       ],
     }),
     "32.5000",
@@ -134,8 +152,20 @@ test("weighted composite is the expense-weighted mean of department rates", () =
     deriveOverheadDeptComposite({
       compositeMethod: "weighted",
       categories: [
-        { id: "x", rate: "25.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
-        { id: "y", rate: "7.5000", expense: "30.00", rateFormat: "per_hour", includeInComposite: true },
+        {
+          id: "x",
+          rate: "25.0000",
+          expense: "100.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
+        {
+          id: "y",
+          rate: "7.5000",
+          expense: "30.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
       ],
     }),
     "20.9615",
@@ -144,8 +174,20 @@ test("weighted composite is the expense-weighted mean of department rates", () =
     deriveOverheadDeptComposite({
       compositeMethod: "weighted",
       categories: [
-        { id: "x", rate: "25.0000", expense: "50.00", rateFormat: "per_hour", includeInComposite: true },
-        { id: "y", rate: "45.0000", expense: "90.00", rateFormat: "per_hour", includeInComposite: true },
+        {
+          id: "x",
+          rate: "25.0000",
+          expense: "50.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
+        {
+          id: "y",
+          rate: "45.0000",
+          expense: "90.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
       ],
     }),
     "37.8571",
@@ -157,7 +199,13 @@ test("weighted composite with no positive expense is zero, not NaN", () => {
     deriveOverheadDeptComposite({
       compositeMethod: "weighted",
       categories: [
-        { id: "x", rate: "25.0000", expense: "0.00", rateFormat: "per_hour", includeInComposite: true },
+        {
+          id: "x",
+          rate: "25.0000",
+          expense: "0.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
       ],
     }),
     "0.0000",
@@ -170,8 +218,20 @@ test("cascading runs absolute rates over the department labor rate", () => {
       compositeMethod: "cascading",
       baseLaborRate: "50.0000",
       categories: [
-        { id: "x", rate: "25.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
-        { id: "y", rate: "7.5000", expense: "30.00", rateFormat: "per_hour", includeInComposite: true },
+        {
+          id: "x",
+          rate: "25.0000",
+          expense: "100.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
+        {
+          id: "y",
+          rate: "7.5000",
+          expense: "30.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
       ],
     }),
     "32.5000",
@@ -180,12 +240,28 @@ test("cascading runs absolute rates over the department labor rate", () => {
 
 test("cascading compounds percent categories and respects cascade order", () => {
   const cats = [
-    { id: "x", rate: "25.0000", expense: "100.00", rateFormat: "per_hour" as const, includeInComposite: true },
-    { id: "z", rate: "10.0000", expense: "13.00", rateFormat: "percent_labor" as const, includeInComposite: true },
+    {
+      id: "x",
+      rate: "25.0000",
+      expense: "100.00",
+      rateFormat: "per_hour" as const,
+      includeInComposite: true,
+    },
+    {
+      id: "z",
+      rate: "10.0000",
+      expense: "13.00",
+      rateFormat: "percent_labor" as const,
+      includeInComposite: true,
+    },
   ];
   // (50 + 25) * 1.10 - 50 = 32.5
   assert.equal(
-    deriveOverheadDeptComposite({ compositeMethod: "cascading", baseLaborRate: "50.0000", categories: cats }),
+    deriveOverheadDeptComposite({
+      compositeMethod: "cascading",
+      baseLaborRate: "50.0000",
+      categories: cats,
+    }),
     "32.5000",
   );
   // 50 * 1.10 + 25 - 50 = 30.0 when the percent layer runs first.
@@ -206,7 +282,13 @@ test("cascading without a labor rate refuses by name instead of assuming one", (
       deriveOverheadDeptComposite({
         compositeMethod: "cascading",
         categories: [
-          { id: "x", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
+          {
+            id: "x",
+            rate: "10.0000",
+            expense: "100.00",
+            rateFormat: "per_hour",
+            includeInComposite: true,
+          },
         ],
       }),
     (error: unknown) => {
@@ -221,7 +303,8 @@ test("cascading without a labor rate refuses by name instead of assuming one", (
 
 test("per_fte without resolved annual hours refuses by name instead of assuming 2080", () => {
   assert.throws(
-    () => deriveOverheadDisplayRate({ rawRate: "25.0000", expense: "100.0000", rateFormat: "per_fte" }),
+    () =>
+      deriveOverheadDisplayRate({ rawRate: "25.0000", expense: "100.0000", rateFormat: "per_fte" }),
     (error: unknown) => {
       assert.ok(error instanceof OverheadCalculationError);
       assert.equal(error.code, "perFteNoHours");
@@ -231,7 +314,12 @@ test("per_fte without resolved annual hours refuses by name instead of assuming 
     },
   );
   assert.equal(
-    deriveOverheadDisplayRate({ rawRate: "25.0000", expense: "100.0000", rateFormat: "per_fte", annualFteHours: "2000" }),
+    deriveOverheadDisplayRate({
+      rawRate: "25.0000",
+      expense: "100.0000",
+      rateFormat: "per_fte",
+      annualFteHours: "2000",
+    }),
     "50000.0000",
   );
 });
@@ -243,8 +331,22 @@ test("sum and weighted refuse mixed units with the categories named", () => {
         deriveOverheadDeptComposite({
           compositeMethod: method,
           categories: [
-            { id: "r", name: "Rent", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
-            { id: "b", name: "Benefits", rate: "25.0000", expense: "50.00", rateFormat: "percent_labor", includeInComposite: true },
+            {
+              id: "r",
+              name: "Rent",
+              rate: "10.0000",
+              expense: "100.00",
+              rateFormat: "per_hour",
+              includeInComposite: true,
+            },
+            {
+              id: "b",
+              name: "Benefits",
+              rate: "25.0000",
+              expense: "50.00",
+              rateFormat: "percent_labor",
+              includeInComposite: true,
+            },
           ],
         }),
       (error: unknown) => {
@@ -263,8 +365,22 @@ test("sum and weighted refuse mixed units with the categories named", () => {
     deriveOverheadDeptComposite({
       compositeMethod: "sum",
       categories: [
-        { id: "r", name: "Rent", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
-        { id: "b", name: "Benefits", rate: "25.0000", expense: "50.00", rateFormat: "percent_labor", includeInComposite: false },
+        {
+          id: "r",
+          name: "Rent",
+          rate: "10.0000",
+          expense: "100.00",
+          rateFormat: "per_hour",
+          includeInComposite: true,
+        },
+        {
+          id: "b",
+          name: "Benefits",
+          rate: "25.0000",
+          expense: "50.00",
+          rateFormat: "percent_labor",
+          includeInComposite: false,
+        },
       ],
     }),
     "10.0000",
@@ -277,7 +393,13 @@ test("empty and fully-excluded composites are zero", () => {
     deriveOverheadDeptComposite({
       compositeMethod: "cascading",
       categories: [
-        { id: "x", rate: "10.0000", expense: "100.00", rateFormat: "per_hour", includeInComposite: false },
+        {
+          id: "x",
+          rate: "10.0000",
+          expense: "100.00",
+          rateFormat: "per_hour",
+          includeInComposite: false,
+        },
       ],
     }),
     "0.0000",
@@ -301,7 +423,13 @@ test("legacy float path cannot publish a repeating decimal", () => {
       deriveOverheadDeptComposite({
         compositeMethod: "sum",
         categories: [
-          { id: "x", rate: "33.3333", expense: "100.00", rateFormat: "per_hour", includeInComposite: true },
+          {
+            id: "x",
+            rate: "33.3333",
+            expense: "100.00",
+            rateFormat: "per_hour",
+            includeInComposite: true,
+          },
         ],
       }),
     ),
@@ -345,9 +473,7 @@ test("publish gate refusal carries every blocker", () => {
     assert.equal(e.blockers.length, 1);
     assert.match(e.message, /cannot publish/);
   }
-  assertOverheadRatesPublishable([
-    { id: "a", rateFormat: "per_hour", includeInComposite: true },
-  ]);
+  assertOverheadRatesPublishable([{ id: "a", rateFormat: "per_hour", includeInComposite: true }]);
 });
 
 test("quantizeOverheadMoney rounds config decimals exactly, idempotent on money", () => {
@@ -371,15 +497,46 @@ test("compareOverheadDecimals orders finite decimals without floats", () => {
 });
 
 test("Overall preserves zero weights and tier bounds, and undefined display bases stay undefined", () => {
-  const weighted = { id: "cost", allocationMethod: "weighted" as const, expenseByDept: { A: "900", B: "100" }, baseByDept: { A: "10", B: "10" }, allocationWeights: { A: 0, B: 1 } };
+  const weighted = {
+    id: "cost",
+    allocationMethod: "weighted" as const,
+    expenseByDept: { A: "900", B: "100" },
+    baseByDept: { A: "10", B: "10" },
+    allocationWeights: { A: 0, B: 1 },
+  };
   assert.equal(deriveOverheadOverallRate(weighted), "10.0000");
   assert.deepEqual(deriveOverheadCategoryDeptRates(weighted), { A: "0.0000", B: "10.0000" });
-  assert.equal(deriveOverheadOverallRate({ ...weighted, expenseByDept: { A: "999999999999.9999", B: "100" } }), "10.0000");
-  const tiered = { id: "cost", allocationMethod: "stepped" as const, expenseByDept: { A: "100" }, baseByDept: { A: "4" }, allocationTiers: [{ min: 0, max: 0, rate: "20" }] };
+  assert.equal(
+    deriveOverheadOverallRate({ ...weighted, expenseByDept: { A: "999999999999.9999", B: "100" } }),
+    "10.0000",
+  );
+  const tiered = {
+    id: "cost",
+    allocationMethod: "stepped" as const,
+    expenseByDept: { A: "100" },
+    baseByDept: { A: "4" },
+    allocationTiers: [{ min: 0, max: 0, rate: "20" }],
+  };
   assert.equal(deriveOverheadOverallRate(tiered), deriveOverheadCategoryDeptRates(tiered).A);
   assert.equal(deriveOverheadOverallRate(tiered), "25.0000");
-  assert.equal(deriveOverheadDisplayRate({ rawRate: "25", expense: "100", rateFormat: "percent_labor", laborDollars: "0" }), null);
-  assert.equal(deriveOverheadDisplayRate({ rawRate: "25", expense: "100", rateFormat: "percent_labor", laborDollars: "400" }), "25.0000");
+  assert.equal(
+    deriveOverheadDisplayRate({
+      rawRate: "25",
+      expense: "100",
+      rateFormat: "percent_labor",
+      laborDollars: "0",
+    }),
+    null,
+  );
+  assert.equal(
+    deriveOverheadDisplayRate({
+      rawRate: "25",
+      expense: "100",
+      rateFormat: "percent_labor",
+      laborDollars: "400",
+    }),
+    "25.0000",
+  );
 });
 
 const STANDARD_IN_EFFECT = {
@@ -392,36 +549,80 @@ const STANDARD_IN_EFFECT = {
 
 test("a zero published over an in-effect non-zero standard is reported with the standard it replaces", () => {
   assert.deepEqual(
-    zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], [STANDARD_IN_EFFECT]),
-    [{ departmentId: "dept-shop", departmentName: "Shop", standardRatePerHour: "12.5000", publishedRatePerHour: "0.00" }],
+    zeroOverStandardReplacements(
+      [{ departmentId: "dept-shop", ratePerHour: "0.00" }],
+      [STANDARD_IN_EFFECT],
+    ),
+    [
+      {
+        departmentId: "dept-shop",
+        departmentName: "Shop",
+        standardRatePerHour: "12.5000",
+        publishedRatePerHour: "0.00",
+      },
+    ],
   );
 });
 
 test("a zero over a zero standard, or with no standard touched, replaces nothing", () => {
   const zeroStandard = { ...STANDARD_IN_EFFECT, ratePerHour: "0.0000" };
-  assert.deepEqual(zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], [zeroStandard]), []);
-  assert.deepEqual(zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], []), []);
+  assert.deepEqual(
+    zeroOverStandardReplacements(
+      [{ departmentId: "dept-shop", ratePerHour: "0.00" }],
+      [zeroStandard],
+    ),
+    [],
+  );
+  assert.deepEqual(
+    zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], []),
+    [],
+  );
 });
 
 test("a non-zero published rate never trips the zero-over-standard guard", () => {
-  assert.deepEqual(zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "9.00" }], [STANDARD_IN_EFFECT]), []);
+  assert.deepEqual(
+    zeroOverStandardReplacements(
+      [{ departmentId: "dept-shop", ratePerHour: "9.00" }],
+      [STANDARD_IN_EFFECT],
+    ),
+    [],
+  );
 });
 
 test("a standard only on another department does not match a zero publish", () => {
   assert.deepEqual(
-    zeroOverStandardReplacements([{ departmentId: "dept-office", ratePerHour: "0.00" }], [STANDARD_IN_EFFECT]),
+    zeroOverStandardReplacements(
+      [{ departmentId: "dept-office", ratePerHour: "0.00" }],
+      [STANDARD_IN_EFFECT],
+    ),
     [],
   );
 });
 
 test("the in-effect standard is named ahead of a future-dated row the publish would delete", () => {
-  const future = { ...STANDARD_IN_EFFECT, ratePerHour: "20.0000", effectiveFrom: "2026-06-01", inEffectAtStart: false };
-  const [entry] = zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], [future, STANDARD_IN_EFFECT]);
+  const future = {
+    ...STANDARD_IN_EFFECT,
+    ratePerHour: "20.0000",
+    effectiveFrom: "2026-06-01",
+    inEffectAtStart: false,
+  };
+  const [entry] = zeroOverStandardReplacements(
+    [{ departmentId: "dept-shop", ratePerHour: "0.00" }],
+    [future, STANDARD_IN_EFFECT],
+  );
   assert.equal(entry?.standardRatePerHour, "12.5000");
 });
 
 test("a future-dated non-zero standard is still refused when nothing is in effect", () => {
-  const future = { ...STANDARD_IN_EFFECT, ratePerHour: "20.0000", effectiveFrom: "2026-06-01", inEffectAtStart: false };
-  const [entry] = zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0" }], [future]);
+  const future = {
+    ...STANDARD_IN_EFFECT,
+    ratePerHour: "20.0000",
+    effectiveFrom: "2026-06-01",
+    inEffectAtStart: false,
+  };
+  const [entry] = zeroOverStandardReplacements(
+    [{ departmentId: "dept-shop", ratePerHour: "0" }],
+    [future],
+  );
   assert.equal(entry?.standardRatePerHour, "20.0000");
 });

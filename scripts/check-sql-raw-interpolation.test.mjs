@@ -4,11 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import {
-  checkTree,
-  discoverSources,
-  scanSource,
-} from "./check-sql-raw-interpolation.mjs";
+import { checkTree, discoverSources, scanSource } from "./check-sql-raw-interpolation.mjs";
 
 // The field-ticket import's old spelling: the CLI-controlled org id inside a
 // single-quoted literal, so a quote breaks out and runs as SQL.
@@ -33,7 +29,8 @@ test("discovery scans checkout-locally excluded sources but honors committed .gi
     const generated = "engine/src/generated/output.ts"; // source-path: synthetic
     const kept = "engine/src/platform/kept.ts"; // source-path: synthetic
     execFileSync("git", ["init", "-q"], { cwd: root });
-    for (const file of [hidden, generated, kept]) mkdirSync(join(root, file, ".."), { recursive: true });
+    for (const file of [hidden, generated, kept])
+      mkdirSync(join(root, file, ".."), { recursive: true });
     writeFileSync(join(root, ".gitignore"), "engine/src/generated/\n");
     writeFileSync(join(root, ".git/info/exclude"), "engine/src/validation/\n");
     writeFileSync(join(root, hidden), VALUE_INTERPOLATION);

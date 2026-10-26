@@ -1,6 +1,6 @@
 import { assertQpipReportingBasis, qpipReportingBasisColumns } from "../qpip-reporting-basis.ts";
-import { withOpeningReportingSnapshot } from '../../opening-reporting-snapshot.ts';
-import { readCanadianOpeningYearEndSlices } from '../opening-reporting-yearend.ts';
+import { withOpeningReportingSnapshot } from "../../opening-reporting-snapshot.ts";
+import { readCanadianOpeningYearEndSlices } from "../opening-reporting-yearend.ts";
 import { assertPayrollCountryKnown } from "../../country.ts";
 import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../../../platform/db.ts";
@@ -9,10 +9,7 @@ import { resolveEmployerFact } from "../../employer-facts.ts";
 import { canadianYearEndCaps } from "../yearend-caps.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollFilingData } from "../../filing-registry.ts";
-import {
-  type OpeningYearEndYtd,
-} from "../../yearend.ts";
-
+import { type OpeningYearEndYtd } from "../../yearend.ts";
 
 /**
  * RL-1 slip data assembly — Revenu Québec's "Revenus d'emploi et revenus
@@ -58,10 +55,10 @@ const num = (value: unknown): string => (value == null ? "0" : String(value));
 
 /** Named for the year-end surface, so omission is published, never implied. */
 export const RL1_UNSUPPORTED_BOXES =
-  "RL-1 boxes D (RPP-only contributions) and J–W (benefit, commission and tip "
-  + "attributions) are not populated: the payroll data cannot attribute them "
-  + "without guessing. Enter them on the slips in Revenu Québec's services if "
-  + "they apply.";
+  "RL-1 boxes D (RPP-only contributions) and J–W (benefit, commission and tip " +
+  "attributions) are not populated: the payroll data cannot attribute them " +
+  "without guessing. Enter them on the slips in Revenu Québec's services if " +
+  "they apply.";
 
 /**
  * Statutory caps for the RL-1 boxes, per tax year. REFUSES an unknown year —
@@ -72,7 +69,9 @@ export const RL1_UNSUPPORTED_BOXES =
  * the authoritative QPP and QPIP maximums used by the RL-1 boxes.
  */
 export function rl1YearCaps(taxYear: number): {
-  ympe: string; yampe: string; qpipMie: string;
+  ympe: string;
+  yampe: string;
+  qpipMie: string;
 } {
   const caps = canadianYearEndCaps(taxYear);
   return { ympe: caps.qppYmpe, yampe: caps.qppYampe, qpipMie: caps.qpipMie };
@@ -166,7 +165,8 @@ async function rl1SlipsInSnapshot(
 ): Promise<Rl1Slip[]> {
   await assertPayrollCountryKnown(runner, orgId, taxYear);
   const caps = rl1YearCaps(taxYear);
-  const rows = (await runner.execute<Record<string, unknown>>(sql`
+  const rows = await runner.execute<Record<string, unknown>>(
+    sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -201,9 +201,12 @@ async function rl1SlipsInSnapshot(
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
 
-  for (const row of rows) assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
+  for (const row of rows)
+    assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
   const stubAggregates: Rl1SlipAggregates[] = rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
@@ -220,21 +223,46 @@ async function rl1SlipsInSnapshot(
     stubCount: Number(row.stub_count ?? 0),
   }));
 
-  const originalSlices = (await readCanadianOpeningYearEndSlices(runner,orgId,taxYear)).filter(slice=>slice.allocation.province==='QC');
+  const originalSlices = (await readCanadianOpeningYearEndSlices(runner, orgId, taxYear)).filter(
+    (slice) => slice.allocation.province === "QC",
+  );
   for (const row of rows) {
-    const source=originalSlices.find(slice=>slice.employeePartyId===String(row.employee_party_id));
-    if(source && String(row.first_pay_date)<=source.coverageEnd) throw new PayrollError('Committed Québec payroll overlaps the certified original reporting coverage — reconcile its original carry-in before preparing RL-1 slips');
+    const source = originalSlices.find(
+      (slice) => slice.employeePartyId === String(row.employee_party_id),
+    );
+    if (source && String(row.first_pay_date) <= source.coverageEnd)
+      throw new PayrollError(
+        "Committed Québec payroll overlaps the certified original reporting coverage — reconcile its original carry-in before preparing RL-1 slips",
+      );
   }
-  const result = new Map(stubAggregates.map(row=>[row.employeePartyId,row]));
+  const result = new Map(stubAggregates.map((row) => [row.employeePartyId, row]));
   for (const slice of originalSlices) {
     const current = result.get(slice.employeePartyId) ?? {
-      employeePartyId:slice.employeePartyId,employeeName:slice.employeeName,
-      taxableIncome:'0',qpp:'0',qpp2:'0',ei:'0',qpip:'0',qcIncomeTax:'0',unionDues:'0',
-      pensionable:'0',insurable:'0',qpipInsurable:'0',stubCount:0,
+      employeePartyId: slice.employeePartyId,
+      employeeName: slice.employeeName,
+      taxableIncome: "0",
+      qpp: "0",
+      qpp2: "0",
+      ei: "0",
+      qpip: "0",
+      qcIncomeTax: "0",
+      unionDues: "0",
+      pensionable: "0",
+      insurable: "0",
+      qpipInsurable: "0",
+      stubCount: 0,
     };
-    result.set(slice.employeePartyId,openingYtdIntoRl1Aggregates(current,{...slice.ytd,
-      pensionableYtd:slice.allocation.reportableBases.cpp,
-      programBasesYtd:{...slice.ytd.programBasesYtd,qpip:slice.allocation.reportableBases.qpip}}));
+    result.set(
+      slice.employeePartyId,
+      openingYtdIntoRl1Aggregates(current, {
+        ...slice.ytd,
+        pensionableYtd: slice.allocation.reportableBases.cpp,
+        programBasesYtd: {
+          ...slice.ytd.programBasesYtd,
+          qpip: slice.allocation.reportableBases.qpip,
+        },
+      }),
+    );
   }
   const carried = [...result.values()];
   return carried.map((row) => assembleRl1Slip(row, caps));
@@ -332,10 +360,10 @@ export interface Rl1SummaryTotals {
 }
 
 export const RLZ1S_GAPS = [
-  "health services fund annual total is not reconciled on this summary — per-stub HSF accrues "
-  + "at the tenant-entered QC rate (TP-1015.F-V s. 5)",
-  "labour standards (CNT) annual total is not reconciled on this summary — per-stub CNT accrues "
-  + "at the statutory 2026 rate (0.06% to $103,000 per employee)",
+  "health services fund annual total is not reconciled on this summary — per-stub HSF accrues " +
+    "at the tenant-entered QC rate (TP-1015.F-V s. 5)",
+  "labour standards (CNT) annual total is not reconciled on this summary — per-stub CNT accrues " +
+    "at the statutory 2026 rate (0.06% to $103,000 per employee)",
   "remittances made to Revenu Québec during the year are not reconciled on this summary — " +
     "Payroll → Remittances dates and tracks each RQ bill from the RQ schedule",
 ];
@@ -362,7 +390,11 @@ async function rl1SummaryInSnapshot(
   taxYear: number,
   slips: readonly Rl1Slip[],
 ): Promise<Rl1SummaryTotals> {
-  const employer = (await runner.execute<{ employer_qpp: string | null; employer_qpip: string | null }>(sql`
+  const employer = await runner.execute<{
+    employer_qpp: string | null;
+    employer_qpip: string | null;
+  }>(
+    sql`
     select
       sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_qpp,
       sum(case when pc.system_key = 'qpip' then l.amount else 0 end) as employer_qpip
@@ -374,22 +406,24 @@ async function rl1SummaryInSnapshot(
        -- A null component country is SHARED baseline, not an unknown to
        -- default: shared rows apply to every pack's employees.
        and l.kind = 'employer_contribution' and (pc.country is null or pc.country = 'CA')
-  `, "objects"));
+  `,
+    "objects",
+  );
   const total = (pick: (slip: Rl1Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
   const wsdrf = await wsdrfForSummary(runner, orgId, taxYear);
   const gaps = [...RLZ1S_GAPS];
   if (wsdrf.status === "missing_training_expenditures") {
     gaps.push(
-      "WSDRF training contribution is not determined — record the year's eligible training "
-      + "expenditures (or a valid quality certificate) in Payroll Setup → Employer facts before "
-      + "filing; the 1% shortfall is never assumed to be zero",
+      "WSDRF training contribution is not determined — record the year's eligible training " +
+        "expenditures (or a valid quality certificate) in Payroll Setup → Employer facts before " +
+        "filing; the 1% shortfall is never assumed to be zero",
     );
   } else if (wsdrf.status === "ambiguous_facts") {
     gaps.push(
-      "WSDRF training contribution is not determined — the legal employers hold conflicting "
-      + "training-expenditure or quality-certificate values for this year; reconcile them in "
-      + "Payroll Setup → Employer facts before filing",
+      "WSDRF training contribution is not determined — the legal employers hold conflicting " +
+        "training-expenditure or quality-certificate values for this year; reconcile them in " +
+        "Payroll Setup → Employer facts before filing",
     );
   }
   return {
@@ -437,57 +471,86 @@ async function wsdrfForSummary(
   dueDate: string | null;
   status: WsdrfStatus;
 }> {
-  const payroll = (await runner.execute<{ payroll: string }>(sql`
+  const payroll =
+    (
+      await runner.execute<{ payroll: string }>(
+        sql`
     select coalesce(sum(s.gross), 0)::text as payroll
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'QC'
-  `, "objects"))[0]?.payroll ?? "0";
+  `,
+        "objects",
+      )
+    )[0]?.payroll ?? "0";
   const asOf = `${taxYear}-12-31`;
-  const stored = await runner.execute<{ fact_key: string; fact_value: string }>(sql`
+  const stored = await runner.execute<{ fact_key: string; fact_value: string }>(
+    sql`
     select distinct fact_key, fact_value
       from payroll_employer_facts
      where org_id = ${orgId} and country = 'CA'
        and fact_key in ('qc_wsdrf_training_expenditures', 'qc_wsdrf_quality_certificate')
        and effective_from <= ${asOf}::date
        and (superseded_on is null or superseded_on > ${asOf}::date)
-  `, "objects");
+  `,
+    "objects",
+  );
   const values = (key: string): string[] =>
     stored.filter((row) => row.fact_key === key).map((row) => row.fact_value);
   const expendituresRaw = values("qc_wsdrf_training_expenditures");
   const certificateRaw = values("qc_wsdrf_quality_certificate");
   if (expendituresRaw.length > 1 || certificateRaw.length > 1) {
     return {
-      eligiblePayroll: num(payroll), trainingExpenditures: null, qualityCertificate: false,
-      shortfall: null, dueDate: null, status: "ambiguous_facts",
+      eligiblePayroll: num(payroll),
+      trainingExpenditures: null,
+      qualityCertificate: false,
+      shortfall: null,
+      dueDate: null,
+      status: "ambiguous_facts",
     };
   }
-  const trainingExpenditures = expendituresRaw.length === 0
-    ? null
-    : resolveEmployerFact("CA", "qc_wsdrf_training_expenditures", expendituresRaw[0]);
-  const qualityCertificate = certificateRaw.length !== 0
-    && resolveEmployerFact("CA", "qc_wsdrf_quality_certificate", certificateRaw[0]) === "true";
+  const trainingExpenditures =
+    expendituresRaw.length === 0
+      ? null
+      : resolveEmployerFact("CA", "qc_wsdrf_training_expenditures", expendituresRaw[0]);
+  const qualityCertificate =
+    certificateRaw.length !== 0 &&
+    resolveEmployerFact("CA", "qc_wsdrf_quality_certificate", certificateRaw[0]) === "true";
   if (cmp(num(payroll), WSDRF_PAYROLL_THRESHOLD) < 0) {
     return {
-      eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
-      shortfall: "0", dueDate: null, status: "below_threshold",
+      eligiblePayroll: num(payroll),
+      trainingExpenditures,
+      qualityCertificate,
+      shortfall: "0",
+      dueDate: null,
+      status: "below_threshold",
     };
   }
   if (qualityCertificate) {
     return {
-      eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
-      shortfall: "0", dueDate: null, status: "exempt_certificate",
+      eligiblePayroll: num(payroll),
+      trainingExpenditures,
+      qualityCertificate,
+      shortfall: "0",
+      dueDate: null,
+      status: "exempt_certificate",
     };
   }
   if (trainingExpenditures === null) {
     return {
-      eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
-      shortfall: null, dueDate: null, status: "missing_training_expenditures",
+      eligiblePayroll: num(payroll),
+      trainingExpenditures,
+      qualityCertificate,
+      shortfall: null,
+      dueDate: null,
+      status: "missing_training_expenditures",
     };
   }
   const owing = add(mulPercent(num(payroll), WSDRF_RATE_PERCENT, 2), neg(trainingExpenditures));
   return {
-    eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
+    eligiblePayroll: num(payroll),
+    trainingExpenditures,
+    qualityCertificate,
     shortfall: cmp(owing, "0") > 0 ? owing : "0",
     dueDate: wsdrfDueDate(taxYear),
     status: "computed",
@@ -496,16 +559,16 @@ async function wsdrfForSummary(
 
 /** Build the public slip population under the same pinned source-year snapshot as the return. */
 export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[]> {
-  return withOpeningReportingSnapshot(orgId, taxYear, (tx) => rl1SlipsInSnapshot(tx, orgId, taxYear));
+  return withOpeningReportingSnapshot(orgId, taxYear, (tx) =>
+    rl1SlipsInSnapshot(tx, orgId, taxYear),
+  );
 }
 
 export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1SummaryTotals> {
-  return withOpeningReportingSnapshot(orgId,taxYear,
-    async (tx) => {
-      const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
-      return rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
-    },
-  );
+  return withOpeningReportingSnapshot(orgId, taxYear, async (tx) => {
+    const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
+    return rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
+  });
 }
 
 /** The year's RL-1 return: every QC slip under the org's RQ identification. */
@@ -518,20 +581,21 @@ export interface Rl1Return {
 }
 
 export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Return> {
-  return withOpeningReportingSnapshot(orgId,taxYear,
-    async (tx) => {
-      const cfg = (await tx.execute<{ id_number: string | null }>(sql`
+  return withOpeningReportingSnapshot(orgId, taxYear, async (tx) => {
+    const cfg = await tx.execute<{ id_number: string | null }>(
+      sql`
         select settings#>>'{payroll,rl1Transmitter,identificationNumber}' as id_number
           from orgs where id = ${orgId}
-      `, "objects"));
-      const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
-      return {
-        identificationNumber: cfg[0]?.id_number ?? null,
-        slips,
-        summary: await rl1SummaryInSnapshot(tx, orgId, taxYear, slips),
-      };
-    },
-  );
+      `,
+      "objects",
+    );
+    const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
+    return {
+      identificationNumber: cfg[0]?.id_number ?? null,
+      slips,
+      summary: await rl1SummaryInSnapshot(tx, orgId, taxYear, slips),
+    };
+  });
 }
 
 /**
@@ -540,64 +604,65 @@ export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Retu
  * engine/src/payroll/canada/filings.ts.
  */
 export async function rl1Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
-  return withOpeningReportingSnapshot(orgId,taxYear,
-    async (tx) => {
-      const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
-      const summary = await rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
-      return {
-        rowKey: "employeePartyId",
-        columns: [
-          { key: "employee", label: "Employee" },
-          { key: "boxA", label: "Box A income", align: "right", money: true },
-          { key: "boxB", label: "Box B.A/B.B QPP", align: "right", money: true },
-          { key: "boxC", label: "Box C EI", align: "right", money: true },
-          { key: "boxE", label: "Box E Québec tax", align: "right", money: true },
-          { key: "boxG", label: "Box G QPP salary", align: "right", money: true },
-          { key: "boxH", label: "Box H QPIP", align: "right", money: true },
-          { key: "boxI", label: "Box I QPIP salary", align: "right", money: true },
-          { key: "boxF", label: "Box F dues", align: "right", money: true },
-        ],
-        rows: slips.map((slip) => ({
-          employeePartyId: slip.employeePartyId,
-          employee: slip.employeeName,
-          boxA: slip.boxA,
-          // B.A + B.B together, as the T4 population shows 16 + 16A.
-          boxB: add(slip.boxBA, slip.boxBB),
-          boxC: slip.boxC,
-          boxE: slip.boxE,
-          boxG: slip.boxG,
-          boxH: slip.boxH,
-          boxI: slip.boxI,
-          boxF: slip.boxF,
-        })),
-        totals: [
-          { label: "Slips", value: String(summary.slips) },
-          { label: "Box A employment income", value: summary.boxA, money: true },
-          {
-            label: "QPP (employee + employer)",
-            value: add(add(summary.boxBA, summary.boxBB), summary.employerQpp),
-            money: true,
-          },
-          {
-            label: "QPIP (employee + employer)",
-            value: add(summary.boxH, summary.employerQpip),
-            money: true,
-          },
-          { label: "Québec income tax", value: summary.boxE, money: true },
-          // The annual WSDRF position rides the filing face: the shortfall
-          // with its due date when owed, or the named reason it cannot be
-          // determined — never a silent zero.
-          ...(summary.wsdrfStatus === "computed" && summary.wsdrfShortfall !== null
-            ? [{
-              label: `WSDRF training levy shortfall (due ${summary.wsdrfDueDate})`,
-              value: summary.wsdrfShortfall,
-              money: true,
-            }]
-            : summary.wsdrfStatus === "missing_training_expenditures" || summary.wsdrfStatus === "ambiguous_facts"
-              ? [{ label: "WSDRF training levy", value: "not determined — see RL-1 summary gaps" }]
-              : []),
-        ],
-      };
-    },
-  );
+  return withOpeningReportingSnapshot(orgId, taxYear, async (tx) => {
+    const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
+    const summary = await rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
+    return {
+      rowKey: "employeePartyId",
+      columns: [
+        { key: "employee", label: "Employee" },
+        { key: "boxA", label: "Box A income", align: "right", money: true },
+        { key: "boxB", label: "Box B.A/B.B QPP", align: "right", money: true },
+        { key: "boxC", label: "Box C EI", align: "right", money: true },
+        { key: "boxE", label: "Box E Québec tax", align: "right", money: true },
+        { key: "boxG", label: "Box G QPP salary", align: "right", money: true },
+        { key: "boxH", label: "Box H QPIP", align: "right", money: true },
+        { key: "boxI", label: "Box I QPIP salary", align: "right", money: true },
+        { key: "boxF", label: "Box F dues", align: "right", money: true },
+      ],
+      rows: slips.map((slip) => ({
+        employeePartyId: slip.employeePartyId,
+        employee: slip.employeeName,
+        boxA: slip.boxA,
+        // B.A + B.B together, as the T4 population shows 16 + 16A.
+        boxB: add(slip.boxBA, slip.boxBB),
+        boxC: slip.boxC,
+        boxE: slip.boxE,
+        boxG: slip.boxG,
+        boxH: slip.boxH,
+        boxI: slip.boxI,
+        boxF: slip.boxF,
+      })),
+      totals: [
+        { label: "Slips", value: String(summary.slips) },
+        { label: "Box A employment income", value: summary.boxA, money: true },
+        {
+          label: "QPP (employee + employer)",
+          value: add(add(summary.boxBA, summary.boxBB), summary.employerQpp),
+          money: true,
+        },
+        {
+          label: "QPIP (employee + employer)",
+          value: add(summary.boxH, summary.employerQpip),
+          money: true,
+        },
+        { label: "Québec income tax", value: summary.boxE, money: true },
+        // The annual WSDRF position rides the filing face: the shortfall
+        // with its due date when owed, or the named reason it cannot be
+        // determined — never a silent zero.
+        ...(summary.wsdrfStatus === "computed" && summary.wsdrfShortfall !== null
+          ? [
+              {
+                label: `WSDRF training levy shortfall (due ${summary.wsdrfDueDate})`,
+                value: summary.wsdrfShortfall,
+                money: true,
+              },
+            ]
+          : summary.wsdrfStatus === "missing_training_expenditures" ||
+              summary.wsdrfStatus === "ambiguous_facts"
+            ? [{ label: "WSDRF training levy", value: "not determined — see RL-1 summary gaps" }]
+            : []),
+      ],
+    };
+  });
 }

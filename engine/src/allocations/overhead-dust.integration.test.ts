@@ -34,10 +34,12 @@ async function seedDustOrg(): Promise<{
     const dustEarly = randomUUID();
     const dustLate = randomUUID();
     const normalId = randomUUID();
-    await db.execute(sql`update orgs set settings=settings || ${JSON.stringify({
-      features: { projects: true, timeTracking: true },
-      overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment },
-    })}::jsonb where id=${org.orgId}`);
+    await db.execute(
+      sql`update orgs set settings=settings || ${JSON.stringify({
+        features: { projects: true, timeTracking: true },
+        overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment },
+      })}::jsonb where id=${org.orgId}`,
+    );
     await db.execute(sql`insert into departments(id,org_id,name)
       values(${deptShop},${org.orgId},'Shop')`);
     // A dust-fine org-wide rate (0.01h x 0.0001 rounds to 0.0000) next to a
@@ -45,9 +47,14 @@ async function seedDustOrg(): Promise<{
     await db.execute(sql`insert into overhead_rates(id,org_id,department_id,category,method,rate_kind,rate_percent,effective_from)
       values(${randomUUID()},${org.orgId},null,'Facilities','standard','per_hour',0.0001,'2026-01-01'),
             (${randomUUID()},${org.orgId},${deptShop},'Facilities','standard','per_hour',10,'2026-01-01')`);
-    const employeeId = (await db.execute<{ id: string }>(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    const employeeId = (
+      await db.execute<{ id: string }>(
+        sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
       values(${randomUUID()},${org.orgId},'person','Dust worker',${org.subsidiaryId},true,'{}'::jsonb)
-      returning id`, "objects"))[0]!.id;
+      returning id`,
+        "objects",
+      )
+    )[0]!.id;
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
       values(${proj},${org.orgId},${org.subsidiaryId},'DUST-1','Dust job',${org.customerId},'active',true,'{}'::jsonb)`);
     // The late dust entry carries an existing custom key the stamp must
@@ -69,8 +76,11 @@ async function seedDustOrg(): Promise<{
 }
 
 async function customOf(orgId: string, id: string): Promise<Record<string, unknown>> {
-  const r = (await db.execute<{ custom: Record<string, unknown> }>(sql`
-    select custom from time_entries where org_id = ${orgId} and id = ${id}`, "objects"));
+  const r = await db.execute<{ custom: Record<string, unknown> }>(
+    sql`
+    select custom from time_entries where org_id = ${orgId} and id = ${id}`,
+    "objects",
+  );
   return r[0]?.custom ?? {};
 }
 
@@ -105,9 +115,19 @@ test("dust stamps applied-with-zero and clears the backlog", async () => {
     assert.equal((await countUnappliedOverheadTime(f.orgId)).entries, 0);
     assert.equal((await countUnappliedOverheadTime(f.orgId)).hours, "0");
 
-    await reverseOverheadForTime(f.orgId, f.actorId, [f.dustLate], "Re-evaluate edited time", "2026-07-20");
+    await reverseOverheadForTime(
+      f.orgId,
+      f.actorId,
+      [f.dustLate],
+      "Re-evaluate edited time",
+      "2026-07-20",
+    );
     assert.equal((await customOf(f.orgId, f.dustLate)).overheadZeroApplied, undefined);
-    assert.equal((await countUnappliedOverheadTime(f.orgId)).entries, 1, "released dust returns to the apply queue");
+    assert.equal(
+      (await countUnappliedOverheadTime(f.orgId)).entries,
+      1,
+      "released dust returns to the apply queue",
+    );
     const reapplied = await applyOverheadForTime(f.orgId, f.actorId, [f.dustLate]);
     assert.equal(reapplied.dust, 1);
     assert.equal((await customOf(f.orgId, f.dustLate)).overheadZeroApplied, true);
@@ -122,18 +142,25 @@ test("the backfill continues past an all-dust batch to later batches", async () 
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const deptShop = randomUUID();
     const proj = randomUUID();
-    await db.execute(sql`update orgs set settings=settings || ${JSON.stringify({
-      features: { projects: true, timeTracking: true },
-      overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment },
-    })}::jsonb where id=${org.orgId}`);
+    await db.execute(
+      sql`update orgs set settings=settings || ${JSON.stringify({
+        features: { projects: true, timeTracking: true },
+        overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment },
+      })}::jsonb where id=${org.orgId}`,
+    );
     await db.execute(sql`insert into departments(id,org_id,name)
       values(${deptShop},${org.orgId},'Shop')`);
     await db.execute(sql`insert into overhead_rates(id,org_id,department_id,category,method,rate_kind,rate_percent,effective_from)
       values(${randomUUID()},${org.orgId},null,'Facilities','standard','per_hour',0.0001,'2026-01-01'),
             (${randomUUID()},${org.orgId},${deptShop},'Facilities','standard','per_hour',10,'2026-01-01')`);
-    const employeeId = (await db.execute<{ id: string }>(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    const employeeId = (
+      await db.execute<{ id: string }>(
+        sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
       values(${randomUUID()},${org.orgId},'person','Batch dust worker',${org.subsidiaryId},true,'{}'::jsonb)
-      returning id`, "objects"))[0]!.id;
+      returning id`,
+        "objects",
+      )
+    )[0]!.id;
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
       values(${proj},${org.orgId},${org.subsidiaryId},'DUST-B','Dust batch job',${org.customerId},'active',true,'{}'::jsonb)`);
     // A full first page of dust (the backfill takes 2000 ids per pass)

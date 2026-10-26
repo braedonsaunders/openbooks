@@ -54,7 +54,10 @@ import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
 import type { PayrollTaxBases } from "../pack-types.ts";
 import { D, max0, mulRateCents, rate6, U } from "../../money/payroll-decimal.ts";
-import type { UsSupplementalWageAmount, UsSupplementalWageCategory } from "../supplemental-wages.ts";
+import type {
+  UsSupplementalWageAmount,
+  UsSupplementalWageCategory,
+} from "../supplemental-wages.ts";
 import type { UsStatutoryExemptionAmount } from "../statutory-exemptions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES, ratesForPayDate } from "./rates.ts";
 import {
@@ -92,10 +95,12 @@ export interface UsSupplementalFlatMethod {
   rounding?: "whole_dollar";
 }
 
-export type UsSeparateSupplementalSubRegionMethod = UsSupplementalFlatMethod | {
-  kind: "refuse";
-  detail: string;
-};
+export type UsSeparateSupplementalSubRegionMethod =
+  | UsSupplementalFlatMethod
+  | {
+      kind: "refuse";
+      detail: string;
+    };
 
 export type UsSeparateSupplementalMethod =
   | { kind: "refuse"; detail: string }
@@ -108,16 +113,16 @@ export type UsSeparateSupplementalMethod =
   // of computing a flat leg around it.
   | { kind: "engine"; source: string }
   | (UsSupplementalFlatMethod & {
-    subRegionMethods?: Readonly<Record<string, UsSeparateSupplementalSubRegionMethod>>;
-  });
+      subRegionMethods?: Readonly<Record<string, UsSeparateSupplementalSubRegionMethod>>;
+    });
 
 export type UsCombinedSupplementalMethod =
   | { kind: "state_formula" }
   | {
-    kind: "flat_supplemental";
-    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
-    honorsCertificateExemption?: true;
-  };
+      kind: "flat_supplemental";
+      rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+      honorsCertificateExemption?: true;
+    };
 
 /**
  * State method declarations for a supplemental check paid apart from regular
@@ -146,33 +151,43 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     categoryRates: [
       {
         category: "bonus_or_stock_option",
-        rates: [{
-          effectiveFrom: "2026-01-01", rate: "0.1023",
-          source: "https://edd.ca.gov/pdf_pub_ctr/de44.pdf",
-        }],
+        rates: [
+          {
+            effectiveFrom: "2026-01-01",
+            rate: "0.1023",
+            source: "https://edd.ca.gov/pdf_pub_ctr/de44.pdf",
+          },
+        ],
       },
       {
         category: "other",
-        rates: [{
-          effectiveFrom: "2026-01-01", rate: "0.066",
-          source: "https://edd.ca.gov/pdf_pub_ctr/de44.pdf",
-        }],
+        rates: [
+          {
+            effectiveFrom: "2026-01-01",
+            rate: "0.066",
+            source: "https://edd.ca.gov/pdf_pub_ctr/de44.pdf",
+          },
+        ],
       },
     ],
   } as const,
   AL: {
     kind: "flat",
     // Alabama Withholding Tax Tables / Booklet A, January 2026, p. 3.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.05",
-      source: "https://www.revenue.alabama.gov/wp-content/uploads/2026/01/whbooklet_0126.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.05",
+        source: "https://www.revenue.alabama.gov/wp-content/uploads/2026/01/whbooklet_0126.pdf",
+      },
+    ],
   } as const,
   DE: {
     kind: "refuse",
     // Delaware Employer's Guide Section 14:
     // https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
-    detail: "Delaware Employer's Guide Section 14 requires the incremental withholding differential and its regular-pay basis",
+    detail:
+      "Delaware Employer's Guide Section 14 requires the incremental withholding differential and its regular-pay basis",
   } as const,
   GA: {
     kind: "flat",
@@ -180,12 +195,16 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // paid bonuses use the income-tax rate effective on the payment date.
     rates: [
       {
-        effectiveFrom: "2026-01-01", rate: "0.0519",
-        source: "https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download",
+        effectiveFrom: "2026-01-01",
+        rate: "0.0519",
+        source:
+          "https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download",
       },
       {
-        effectiveFrom: "2026-05-11", rate: "0.0499",
-        source: "https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download",
+        effectiveFrom: "2026-05-11",
+        rate: "0.0499",
+        source:
+          "https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download",
       },
     ],
   } as const,
@@ -196,10 +215,13 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // multiplying it by 5.3%. Idaho rounds withholding to the nearest whole
     // dollar. Dated to the transcribed July 23 2026 percentage-table
     // edition (EPB00744), matching the ID engine's own edition floor.
-    rates: [{
-      effectiveFrom: "2026-07-23", rate: "0.053",
-      source: "https://tax.idaho.gov/taxes/income-tax/withholding/computing/",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-07-23",
+        rate: "0.053",
+        source: "https://tax.idaho.gov/taxes/income-tax/withholding/computing/",
+      },
+    ],
     rounding: "whole_dollar",
   } as const,
   KS: {
@@ -209,10 +231,13 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // percentage-method withholding takes 5% of gross. This declaration
     // serves the separately paid path only; supplements paid together with
     // regular wages keep the ordinary combined state-formula path.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.05",
-      source: "https://www.ksrevenue.gov/kw100.html",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.05",
+        source: "https://www.ksrevenue.gov/kw100.html",
+      },
+    ],
   } as const,
   MA: {
     kind: "engine",
@@ -222,7 +247,8 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // $1,107,750 surtax threshold, which takes 9%. The YTD-dependent rule
     // cannot be a static rate, so the MA engine prices it from the timed
     // input (prior supplemental via the run's YTD) instead.
-    source: "Massachusetts Circular M: Income Tax Withholding Tables at 5.0%, Effective January 1, 2026 (Rev. 12/25), section G",
+    source:
+      "Massachusetts Circular M: Income Tax Withholding Tables at 5.0%, Effective January 1, 2026 (Rev. 12/25), section G",
   } as const,
   MD: {
     kind: "engine",
@@ -232,24 +258,32 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // special rate for nonresidents). The rate is county- and
     // basis-dependent, so the MD engine prices it from the timed input
     // instead of a static rate declaration.
-    source: "https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/instructions/withholding/2026/withholding-guide.pdf",
+    source:
+      "https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/instructions/withholding/2026/withholding-guide.pdf",
   } as const,
   MI: {
     kind: "flat",
     // Michigan Form 446 (2026), "Bonuses and Other Payments": separately
     // paid supplemental compensation is withheld at 4.25% without exemptions.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.0425",
-      source: "https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.0425",
+        source:
+          "https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf",
+      },
+    ],
   } as const,
   MN: {
     kind: "flat",
     // Minnesota 2026 Withholding Tax Instructions, p. 7, Method 2.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.0625",
-      source: "https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.0625",
+        source: "https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf",
+      },
+    ],
   } as const,
   MO: {
     kind: "flat",
@@ -259,44 +293,58 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // same-period aggregate difference. The flag below enforces the
     // "regular withholding in effect" condition; without that history the
     // dispatch refuses and names the aggregate-basis alternative.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.047",
-      source: "https://dor.mo.gov/forms/4282_2026.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.047",
+        source: "https://dor.mo.gov/forms/4282_2026.pdf",
+      },
+    ],
     requiresRegularWithholding: true,
   } as const,
   MT: {
     kind: "flat",
     // Montana Employer and Information Agent Guide with Tax Tables – 2026,
     // p. 3: for a separately paid supplemental, an employer may use a flat 5%.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.05",
-      source: "https://revenuefiles.mt.gov/files/Forms/Montana_Employer_and_Information_Agent_Guide_with_Tax_Tables.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.05",
+        source:
+          "https://revenuefiles.mt.gov/files/Forms/Montana_Employer_and_Information_Agent_Guide_with_Tax_Tables.pdf",
+      },
+    ],
   } as const,
   NY: {
     kind: "flat",
     // NYS-50-T-NYS (1/26), p. 3: the 11.70% separate supplemental rate is
     // available only when the employee's regular wages had NYS withholding.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.1170",
-      source: "https://www.tax.ny.gov/pdf/publications/withholding/nys50_t_nys.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.1170",
+        source: "https://www.tax.ny.gov/pdf/publications/withholding/nys50_t_nys.pdf",
+      },
+    ],
     requiresRegularWithholding: true,
     subRegionMethods: {
       NYC: {
         kind: "flat",
         // NYS-50-T-NYC (1/26), p. 3: NYC separately-paid supplemental wages
         // use 4.25% when tax was withheld from regular NYC wages.
-        rates: [{
-          effectiveFrom: "2026-01-01", rate: "0.0425",
-          source: "https://www.tax.ny.gov/pdf/publications/withholding/nys50_t_nyc.pdf",
-        }],
+        rates: [
+          {
+            effectiveFrom: "2026-01-01",
+            rate: "0.0425",
+            source: "https://www.tax.ny.gov/pdf/publications/withholding/nys50_t_nyc.pdf",
+          },
+        ],
         requiresRegularWithholding: true,
       },
       YONKERS: {
         kind: "refuse",
-        detail: "New York separate-supplemental treatment for Yonkers depends on its resident/nonresident schedule and is not transcribed",
+        detail:
+          "New York separate-supplemental treatment for Yonkers depends on its resident/nonresident schedule and is not transcribed",
       },
     },
   } as const,
@@ -304,10 +352,14 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     kind: "flat",
     // NC-30 (2026), §12: the 4.09% option requires tax withheld from regular
     // wages; otherwise §12's aggregate method is mandatory.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.0409",
-      source: "https://www.ncdor.gov/income-tax-withholding-tables-and-instructions-employers/open",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.0409",
+        source:
+          "https://www.ncdor.gov/income-tax-withholding-tables-and-instructions-employers/open",
+      },
+    ],
     requiresRegularWithholding: true,
     rounding: "whole_dollar",
   } as const,
@@ -315,28 +367,40 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     kind: "flat",
     // North Dakota 2026 Income Tax Withholding Rates and Instructions,
     // Supplemental Wages: Option 1 is 1.50% of the supplemental wage.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.015",
-      source: "https://www.tax.nd.gov/sites/www/files/documents/forms/individual/2026-iit/2026-income-tax-withholding-rates-booklet.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.015",
+        source:
+          "https://www.tax.nd.gov/sites/www/files/documents/forms/individual/2026-iit/2026-income-tax-withholding-rates-booklet.pdf",
+      },
+    ],
   } as const,
   NE: {
     kind: "flat",
     // Nebraska Circular EN 2026, Bonuses, Supplemental Wages, and Taxable
     // Awards: employers may elect a flat 3.5% rate for separate payments.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.035",
-      source: "https://revenue.nebraska.gov/sites/revenue.nebraska.gov/files/doc/business/Cir_En_2025/2026cir_en_whole.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.035",
+        source:
+          "https://revenue.nebraska.gov/sites/revenue.nebraska.gov/files/doc/business/Cir_En_2025/2026cir_en_whole.pdf",
+      },
+    ],
   } as const,
   VA: {
     kind: "flat",
     // Virginia Employer Withholding Instructions, p. 19: 5.75% is the
     // separate-supplemental election when regular wages had tax withheld.
-    rates: [{
-      effectiveFrom: "2025-07-02", rate: "0.0575",
-      source: "https://www.tax.virginia.gov/sites/default/files/vatax-pdf/employer-withholding-instructions.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2025-07-02",
+        rate: "0.0575",
+        source:
+          "https://www.tax.virginia.gov/sites/default/files/vatax-pdf/employer-withholding-instructions.pdf",
+      },
+    ],
     requiresRegularWithholding: true,
   } as const,
   WI: {
@@ -345,7 +409,8 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // 2026), Alternate Method (pp. 25–26): the separately paid supplement
     // is the difference between withholding on (regular plus supplement)
     // and withholding on regular alone, on the current period's wages.
-    source: "Wisconsin DOR Publication W-166, Withholding Tax Guide (January 2026), Alternate Method (pp. 25–26)",
+    source:
+      "Wisconsin DOR Publication W-166, Withholding Tax Guide (January 2026), Alternate Method (pp. 25–26)",
   } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
 
@@ -364,10 +429,13 @@ export const US_COMBINED_SUPPLEMENTAL_METHODS = {
     kind: "flat_supplemental",
     // Arkansas DFA 2026 Employer Instructions, p. 4: tax the regular wages
     // with the formula and deduct 3.9% of bonuses paid at the same time.
-    rates: [{
-      effectiveFrom: "2026-01-01", rate: "0.039",
-      source: "https://www.dfa.arkansas.gov/wp-content/uploads/withholdInstructions_2026.pdf",
-    }],
+    rates: [
+      {
+        effectiveFrom: "2026-01-01",
+        rate: "0.039",
+        source: "https://www.dfa.arkansas.gov/wp-content/uploads/withholdInstructions_2026.pdf",
+      },
+    ],
     honorsCertificateExemption: true,
   },
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsCombinedSupplementalMethod>>;
@@ -541,8 +609,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     const value = input.taxableWageBases?.[key];
     if (value == null) {
       throw new UsWithholdingError(
-        `${regionalEngine?.label ?? levy.label} requires the declared ${kind} wage base ${key}; `
-        + "recalculate with the pack's deduction treatments before withholding — refused by name",
+        `${regionalEngine?.label ?? levy.label} requires the declared ${kind} wage base ${key}; ` +
+          "recalculate with the pack's deduction treatments before withholding — refused by name",
       );
     }
     // A derived supplemental base goes negative when pre-tax reductions exceed
@@ -568,36 +636,42 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   const localWageTrace = localTaxableWages === undefined ? {} : { localTaxableWages };
   const residentMethod = levy.residentWithholdingMethod ?? { kind: "full" as const };
   const needsResidentWorkFacts = residentMethod.kind !== "full";
-  const residentWithholdingFacts = levy.basis === "resident_out_of_region" && needsResidentWorkFacts
-    ? requireUsResidentWithholdingFacts(
-      input.residentWithholdingFacts,
-      levy.creditAgainstRegion,
-      levy.region,
-    )
-    : input.residentWithholdingFacts;
+  const residentWithholdingFacts =
+    levy.basis === "resident_out_of_region" && needsResidentWorkFacts
+      ? requireUsResidentWithholdingFacts(
+          input.residentWithholdingFacts,
+          levy.creditAgainstRegion,
+          levy.region,
+        )
+      : input.residentWithholdingFacts;
   const supplemental = input.supplemental == null ? 0n : U(input.supplemental);
-  const waiverWages = levy.basis === "resident_out_of_region" && residentWithholdingFacts
-    ? toUnits(residentWaivedWages(
-      residentWithholdingFacts.workRegionTaxes,
-      residentWithholdingFacts.workRegionWages,
-      levy.residentWithholdingMethod,
-    ))
-    : 0n;
+  const waiverWages =
+    levy.basis === "resident_out_of_region" && residentWithholdingFacts
+      ? toUnits(
+          residentWaivedWages(
+            residentWithholdingFacts.workRegionTaxes,
+            residentWithholdingFacts.workRegionWages,
+            levy.residentWithholdingMethod,
+          ),
+        )
+      : 0n;
   const totalResidentWages = toUnits(input.wages) + supplemental;
-  const eligibleResidentWages = totalResidentWages > waiverWages
-    ? totalResidentWages - waiverWages
-    : 0n;
-  const residentWages = waiverWages === 0n || totalResidentWages === 0n
-    ? stateWages
-    : fromUnits(roundDiv(toUnits(stateWages) * eligibleResidentWages, totalResidentWages));
-  const residentSupplemental = waiverWages === 0n || totalResidentWages === 0n
-    ? stateSupplemental
-    : fromUnits(roundDiv(toUnits(stateSupplemental) * eligibleResidentWages, totalResidentWages));
-  const waiverOutcome = levy.basis === "resident_out_of_region"
-    && residentMethod.kind === "waive_when_work_region_withheld"
-    && waiverWages > 0n
-    ? "eligible_to_waive_covered_wages"
-    : "withheld";
+  const eligibleResidentWages =
+    totalResidentWages > waiverWages ? totalResidentWages - waiverWages : 0n;
+  const residentWages =
+    waiverWages === 0n || totalResidentWages === 0n
+      ? stateWages
+      : fromUnits(roundDiv(toUnits(stateWages) * eligibleResidentWages, totalResidentWages));
+  const residentSupplemental =
+    waiverWages === 0n || totalResidentWages === 0n
+      ? stateSupplemental
+      : fromUnits(roundDiv(toUnits(stateSupplemental) * eligibleResidentWages, totalResidentWages));
+  const waiverOutcome =
+    levy.basis === "resident_out_of_region" &&
+    residentMethod.kind === "waive_when_work_region_withheld" &&
+    waiverWages > 0n
+      ? "eligible_to_waive_covered_wages"
+      : "withheld";
   // Certificate resolvers are keyed by declaration. A mismatched result
   // resolves as absent so a caller cannot accidentally apply another form's
   // answers to this levy (supporting certificates declare different fields,
@@ -607,16 +681,16 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     return resolved?.certificate.key === key ? resolved : null;
   };
   const certificate = levy.certificateKey
-    ? certificateForKey(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
+    ? (certificateForKey(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey))
     : emptyResolvedCertificate(`${levy.label} publishes no withholding certificate`);
   const supportingCertificates = (keys: readonly string[] | undefined) =>
-    Object.fromEntries((keys ?? []).map((key) => [
-      key,
-      certificateForKey(key) ?? emptyResolvedCertificate(key),
-    ]));
+    Object.fromEntries(
+      (keys ?? []).map((key) => [key, certificateForKey(key) ?? emptyResolvedCertificate(key)]),
+    );
   let separateFlatRate: string | undefined;
   let separateFlatWholeDollar = false;
-  let separateCategoryAmounts: { category: UsSupplementalWageCategory; amount: string; rate: string }[] | undefined;
+  let separateCategoryAmounts:
+    { category: UsSupplementalWageCategory; amount: string; rate: string }[] | undefined;
   // Aggregate method: the supplement is priced as the difference between
   // withholding on (regular + supplement) and withholding on regular alone,
   // both through the state engine on the current period's regular wages.
@@ -633,8 +707,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   // threading leaves declared-but-implemented levies (Oregon STT) refusing
   // as unwired. The tenant-rate body below prices assessed and elected
   // levies (Vermont CCC, Minnesota Paid Leave) off the same method shape.
-  const levyMethod = levy.withholdingMethod
-    ?? (levy.level === "sub_region" && levy.subRegion
+  const levyMethod =
+    levy.withholdingMethod ??
+    (levy.level === "sub_region" && levy.subRegion
       ? subRegionLevy("US", levy.region, levy.subRegion)?.withholdingMethod
       : undefined);
   if (levyMethod?.kind === "flat_rate") {
@@ -645,17 +720,18 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       // a refusal, and never a backdated rate.
       return null;
     }
-    const declared = levy.level === "sub_region" && levy.subRegion
-      ? subRegionLevy("US", levy.region, levy.subRegion)
-      : undefined;
+    const declared =
+      levy.level === "sub_region" && levy.subRegion
+        ? subRegionLevy("US", levy.region, levy.subRegion)
+        : undefined;
     // Wrong-pocket guard for this path: an employer flat-rate levy (Vermont
     // CCC) routed here would post the employer's tax as a stub deduction —
     // out of the employee's cheque. Same refusal as the guard below; the
     // employer path is the only way it posts.
     if (declared?.pocket === "employer") {
       throw new UsWithholdingError(
-        `${levy.label} is an employer payroll tax, not employee withholding — `
-        + "it posts as an employer contribution, never as a stub deduction.",
+        `${levy.label} is an employer payroll tax, not employee withholding — ` +
+          "it posts as an employer contribution, never as a stub deduction.",
       );
     }
     let rate: string;
@@ -667,9 +743,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       if (entered == null || entered === "") {
         if (method.absentTenantRate === "skip") return null;
         throw new UsWithholdingError(
-          `no ${levy.label} rate has been entered for ${input.payDate}; `
-          + "the rate is employer-entered because no publication carries it — "
-          + "enter the assessed figure in Payroll Setup → Statutory rates before calculating; refused by name",
+          `no ${levy.label} rate has been entered for ${input.payDate}; ` +
+            "the rate is employer-entered because no publication carries it — " +
+            "enter the assessed figure in Payroll Setup → Statutory rates before calculating; refused by name",
         );
       }
       let enteredRate: bigint;
@@ -677,14 +753,14 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         enteredRate = rate6(entered);
       } catch {
         throw new UsWithholdingError(
-          `${levy.label} has an unreadable entered rate "${entered}"; `
-          + "enter an exact decimal rate in Payroll Setup → Statutory rates before calculating — refused by name",
+          `${levy.label} has an unreadable entered rate "${entered}"; ` +
+            "enter an exact decimal rate in Payroll Setup → Statutory rates before calculating — refused by name",
         );
       }
       if (method.maxRate !== undefined && enteredRate > rate6(method.maxRate)) {
         throw new UsWithholdingError(
-          `${levy.label} entered rate ${entered} exceeds the published maximum of ${method.maxRate}; `
-          + "enter a rate within the statutory maximum in Payroll Setup → Statutory rates before calculating — refused by name",
+          `${levy.label} entered rate ${entered} exceeds the published maximum of ${method.maxRate}; ` +
+            "enter a rate within the statutory maximum in Payroll Setup → Statutory rates before calculating — refused by name",
         );
       }
       rate = entered;
@@ -694,16 +770,18 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
         .at(-1);
       if (!published) {
-        if (method.rates.length > 0
-          && input.payDate < method.rates.map((entry) => entry.effectiveFrom).sort()[0]!) {
+        if (
+          method.rates.length > 0 &&
+          input.payDate < method.rates.map((entry) => entry.effectiveFrom).sort()[0]!
+        ) {
           // The levy did not exist yet on the pay date (a pre-introduction
           // run priced directly): nothing is owed, so no line prices — never
           // a refusal, and never a backdated rate.
           return null;
         }
         throw new UsWithholdingError(
-          `${levy.label} has no published flat rate effective on ${input.payDate}; `
-          + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
+          `${levy.label} has no published flat rate effective on ${input.payDate}; ` +
+            "this levy is not yet supported by the US pack for this date; contact support — refused by name",
         );
       }
       rate = published.rate;
@@ -722,13 +800,13 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       const history = input.ytd?.wages;
       if (history == null || history === "") {
         throw new UsWithholdingError(
-          `${levy.label} needs the employee's priced base history this year to enforce its wage base; `
-          + "recalculate with the year-to-date base before calculating — refused by name",
+          `${levy.label} needs the employee's priced base history this year to enforce its wage base; ` +
+            "recalculate with the year-to-date base before calculating — refused by name",
         );
       }
       const room = U(ratesForPayDate(input.payDate).fica.ssWageBase) - U(history);
       const covered = U(base);
-      base = D(room <= 0n ? 0n : (covered < room ? covered : room));
+      base = D(room <= 0n ? 0n : covered < room ? covered : room);
     }
     const tax = D(mulRateCents(U(base), rate));
     return {
@@ -746,32 +824,35 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     };
   }
   if (supplemental > 0n && input.supplementalPaymentTiming === "separate") {
-    const declaredMethod = US_SEPARATE_SUPPLEMENTAL_METHODS[
-      levy.region as keyof typeof US_SEPARATE_SUPPLEMENTAL_METHODS
-    ];
-    const subRegionMethods = declaredMethod.kind === "flat" && "subRegionMethods" in declaredMethod
-      ? declaredMethod.subRegionMethods as Readonly<Record<string, UsSeparateSupplementalSubRegionMethod>>
-      : undefined;
+    const declaredMethod =
+      US_SEPARATE_SUPPLEMENTAL_METHODS[
+        levy.region as keyof typeof US_SEPARATE_SUPPLEMENTAL_METHODS
+      ];
+    const subRegionMethods =
+      declaredMethod.kind === "flat" && "subRegionMethods" in declaredMethod
+        ? (declaredMethod.subRegionMethods as Readonly<
+            Record<string, UsSeparateSupplementalSubRegionMethod>
+          >)
+        : undefined;
     const method: UsSeparateSupplementalMethod | UsSeparateSupplementalSubRegionMethod =
       input.levy.level === "sub_region" && subRegionMethods
-        ? subRegionMethods[input.levy.subRegion!]
-          ?? {
+        ? (subRegionMethods[input.levy.subRegion!] ?? {
             kind: "refuse",
             detail: `no separate-supplemental method is declared for ${input.levy.region}/${input.levy.subRegion}`,
-          }
+          })
         : declaredMethod;
     if (method.kind === "not_applicable") return null;
     if (method.kind === "refuse") {
       throw new UsWithholdingError(
-        `${levy.label} separately paid supplemental wages require a declared state method; ${method.detail}. `
-        + "Record the jurisdiction's official method and required inputs before calculating — refused by name",
+        `${levy.label} separately paid supplemental wages require a declared state method; ${method.detail}. ` +
+          "Record the jurisdiction's official method and required inputs before calculating — refused by name",
       );
     }
     if (method.kind === "engine") {
       if (input.levy.level !== "region") {
         throw new UsWithholdingError(
-          `${levy.label} separately paid supplemental wages route to the state engine, `
-          + "which prices region-level supplements only — refused by name",
+          `${levy.label} separately paid supplemental wages route to the state engine, ` +
+            "which prices region-level supplements only — refused by name",
         );
       }
       const stateEngine = requireUsStateWithholding(input.levy.region);
@@ -802,25 +883,30 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         ytd: input.ytd,
       });
       return {
-        code: stateEngine.state, label: stateEngine.label, tax: routed.tax,
-        factors: routed.factors, ...localWageTrace,
+        code: stateEngine.state,
+        label: stateEngine.label,
+        tax: routed.tax,
+        factors: routed.factors,
+        ...localWageTrace,
       };
     }
     if (method.kind === "aggregate") {
       separateAggregate = true;
     } else if (method.kind === "flat") {
-      const hasRegularWithholding = input.levy.level === "region"
-        ? input.regularWageTaxWithheldThisYear === true
-        : input.regularWageTaxWithheldFor?.includes(
-          `LIT_${input.levy.region}-${input.levy.subRegion}`,
-        ) === true;
+      const hasRegularWithholding =
+        input.levy.level === "region"
+          ? input.regularWageTaxWithheldThisYear === true
+          : input.regularWageTaxWithheldFor?.includes(
+              `LIT_${input.levy.region}-${input.levy.subRegion}`,
+            ) === true;
       if (
-        "requiresRegularWithholding" in method && method.requiresRegularWithholding
-        && !hasRegularWithholding
+        "requiresRegularWithholding" in method &&
+        method.requiresRegularWithholding &&
+        !hasRegularWithholding
       ) {
         throw new UsWithholdingError(
-          `${levy.label} cannot use its separate-supplemental flat rate without committed evidence of regular-wage withholding; `
-          + "provide that history or the regular-period basis required by the aggregate method before calculating — refused by name",
+          `${levy.label} cannot use its separate-supplemental flat rate without committed evidence of regular-wage withholding; ` +
+            "provide that history or the regular-period basis required by the aggregate method before calculating — refused by name",
         );
       }
       if (method.categoryRates && method.categoryRates.length > 0) {
@@ -828,16 +914,16 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         const categoryTotal = categories?.reduce((total, item) => total + U(item.amount), 0n) ?? 0n;
         if (!categories || categories.length === 0 || categoryTotal !== supplemental) {
           throw new UsWithholdingError(
-            `${levy.label} separate supplemental withholding needs earning-component amounts classified by the published wage category; `
-            + "set each non-periodic earning component to Bonus or stock option or Other supplemental wage and recalculate — refused by name",
+            `${levy.label} separate supplemental withholding needs earning-component amounts classified by the published wage category; ` +
+              "set each non-periodic earning component to Bonus or stock option or Other supplemental wage and recalculate — refused by name",
           );
         }
         const grouped = new Map<UsSupplementalWageCategory, bigint>();
         for (const item of categories) {
           if (item.category === null) {
             throw new UsWithholdingError(
-              `${levy.label} separate supplemental wages include an unclassified earning component; `
-              + "classify it as Bonus or stock option or Other supplemental wage in pay-component setup — refused by name",
+              `${levy.label} separate supplemental wages include an unclassified earning component; ` +
+                "classify it as Bonus or stock option or Other supplemental wage in pay-component setup — refused by name",
             );
           }
           grouped.set(item.category, (grouped.get(item.category) ?? 0n) + U(item.amount));
@@ -851,8 +937,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
             .at(-1);
           if (!applicable) {
             throw new UsWithholdingError(
-              `${levy.label} has no separate-supplemental rate for ${category} effective on ${input.payDate}; `
-              + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
+              `${levy.label} has no separate-supplemental rate for ${category} effective on ${input.payDate}; ` +
+                "this levy is not yet supported by the US pack for this date; contact support — refused by name",
             );
           }
           separateCategoryAmounts.push({ category, amount: D(amount), rate: applicable.rate });
@@ -864,8 +950,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           .at(-1);
         if (!applicable) {
           throw new UsWithholdingError(
-            `${levy.label} has no transcribed separate-supplemental flat rate for ${input.payDate}; `
-            + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
+            `${levy.label} has no transcribed separate-supplemental flat rate for ${input.payDate}; ` +
+              "this levy is not yet supported by the US pack for this date; contact support — refused by name",
           );
         }
         separateFlatRate = applicable.rate;
@@ -878,9 +964,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     }
   }
   if (supplemental > 0n && input.supplementalPaymentTiming === "combined") {
-    const method = US_COMBINED_SUPPLEMENTAL_METHODS[
-      levy.region as keyof typeof US_COMBINED_SUPPLEMENTAL_METHODS
-    ];
+    const method =
+      US_COMBINED_SUPPLEMENTAL_METHODS[
+        levy.region as keyof typeof US_COMBINED_SUPPLEMENTAL_METHODS
+      ];
     if (method.kind === "flat_supplemental") {
       const applicable = method.rates
         .filter((rate) => rate.effectiveFrom <= input.payDate)
@@ -888,8 +975,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         .at(-1);
       if (!applicable) {
         throw new UsWithholdingError(
-          `${levy.label} has no transcribed combined-supplemental rate for ${input.payDate}; `
-          + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
+          `${levy.label} has no transcribed combined-supplemental rate for ${input.payDate}; ` +
+            "this levy is not yet supported by the US pack for this date; contact support — refused by name",
         );
       }
       combinedFlatRate = applicable.rate;
@@ -910,8 +997,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       // the basis is the current period's regular wages.
       if (input.levy.level !== "region") {
         throw new UsWithholdingError(
-          `${levy.label} separately paid supplemental wages use the aggregate difference, `
-          + "which prices region-level regular wages only — refused by name",
+          `${levy.label} separately paid supplemental wages use the aggregate difference, ` +
+            "which prices region-level regular wages only — refused by name",
         );
       }
       const aggregateBase = {
@@ -937,7 +1024,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         ytd: input.ytd,
       };
       const regular = engine.compute({ ...aggregateBase, wages: input.wages });
-      const combined = engine.compute({ ...aggregateBase, wages: addAmounts(input.wages, input.supplemental) });
+      const combined = engine.compute({
+        ...aggregateBase,
+        wages: addAmounts(input.wages, input.supplemental),
+      });
       const combinedExcess = U(combined.tax) - U(regular.tax);
       const supplementalTax = combinedExcess > 0n ? combinedExcess : 0n;
       return {
@@ -986,12 +1076,15 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       // Approved exclusions (Alabama ALDOR severance) leave the flat base
       // through the state engine's gate — the same gate its formula
       // carve-out shares, so an invalid attestation refuses by name here too.
-      const flatExclusion = U(engine.separateFlatExclusion?.(supportingCertificates(engine.supportingCertificateKeys)) ?? "0");
+      const flatExclusion = U(
+        engine.separateFlatExclusion?.(supportingCertificates(engine.supportingCertificateKeys)) ??
+          "0",
+      );
       const rawSupplementalTax = separateCategoryAmounts
         ? separateCategoryAmounts.reduce(
-          (total, item) => total + mulRateCents(U(item.amount), item.rate),
-          0n,
-        )
+            (total, item) => total + mulRateCents(U(item.amount), item.rate),
+            0n,
+          )
         : mulRateCents(max0(toUnits(residentSupplemental) - flatExclusion), separateFlatRate!);
       const supplementalTax = separateFlatWholeDollar
         ? roundDiv(rawSupplementalTax, 10_000n) * 10_000n
@@ -1005,26 +1098,31 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       const separateStatutoryTax = fromUnits(
         toUnits(regular.statutoryTax ?? regular.tax) + supplementalTax,
       );
-      if (levy.basis === "resident_out_of_region"
-        && (regular.statutoryTax == null || regular.additionalWithholding == null)) {
+      if (
+        levy.basis === "resident_out_of_region" &&
+        (regular.statutoryTax == null || regular.additionalWithholding == null)
+      ) {
         throw new UsWithholdingError(
           `${levy.region} resident withholding must separate statutory tax and additional withholding; update ${engine.ratesModule}; refused by name`,
         );
       }
       const separateAdditional = regular.additionalWithholding ?? "0.0000";
-      const separateAdjustment = levy.basis === "resident_out_of_region"
-        && levy.residentWithholdingMethod?.kind === "net_of_work_region_tax"
-        ? adjustResidentWithholding(
-          separateStatutoryTax,
-          separateAdditional,
-          residentWithholdingFacts!.workRegionTaxes,
-          levy.residentWithholdingMethod,
-        )
-        : undefined;
+      const separateAdjustment =
+        levy.basis === "resident_out_of_region" &&
+        levy.residentWithholdingMethod?.kind === "net_of_work_region_tax"
+          ? adjustResidentWithholding(
+              separateStatutoryTax,
+              separateAdditional,
+              residentWithholdingFacts!.workRegionTaxes,
+              levy.residentWithholdingMethod,
+            )
+          : undefined;
       return {
         code: engine.state,
         label: engine.label,
-        tax: separateAdjustment?.tax ?? fromUnits(toUnits(separateStatutoryTax) + toUnits(separateAdditional)),
+        tax:
+          separateAdjustment?.tax ??
+          fromUnits(toUnits(separateStatutoryTax) + toUnits(separateAdditional)),
         statutoryTax: separateAdjustment?.statutoryTax ?? separateStatutoryTax,
         additionalWithholding: separateAdditional,
         ...localWageTrace,
@@ -1034,11 +1132,14 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           ...(separateFlatRate ? { US_SUPPLEMENTAL_RATE: separateFlatRate } : {}),
           ...categoryRateFactors,
           US_SUPPLEMENTAL_TAX: D(supplementalTax),
-          ...(levy.basis === "resident_out_of_region" ? {
-            US_RESIDENT_WITHHOLDING_OUTCOME: separateAdjustment?.outcome ?? waiverOutcome,
-            US_RESIDENT_WORK_REGION_TAX_CREDIT: separateAdjustment?.workRegionTaxCredit ?? "0.0000",
-            ...(waiverWages > 0n ? { US_RESIDENT_WAIVED_WAGES: fromUnits(waiverWages) } : {}),
-          } : {}),
+          ...(levy.basis === "resident_out_of_region"
+            ? {
+                US_RESIDENT_WITHHOLDING_OUTCOME: separateAdjustment?.outcome ?? waiverOutcome,
+                US_RESIDENT_WORK_REGION_TAX_CREDIT:
+                  separateAdjustment?.workRegionTaxCredit ?? "0.0000",
+                ...(waiverWages > 0n ? { US_RESIDENT_WAIVED_WAGES: fromUnits(waiverWages) } : {}),
+              }
+            : {}),
         },
       };
     }
@@ -1067,9 +1168,11 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         statutoryExemptionAmounts: input.statutoryExemptionAmounts,
         ytd: input.ytd,
       });
-      const exempt = combinedFlatHonorsCertificateExemption
-        && certificateFlag(certificate, "exempt");
-      const supplementalTax = exempt ? 0n : mulRateCents(toUnits(residentSupplemental), combinedFlatRate);
+      const exempt =
+        combinedFlatHonorsCertificateExemption && certificateFlag(certificate, "exempt");
+      const supplementalTax = exempt
+        ? 0n
+        : mulRateCents(toUnits(residentSupplemental), combinedFlatRate);
       return {
         code: engine.state,
         label: engine.label,
@@ -1118,45 +1221,51 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     // (3.30% state+local less Delaware credit) instead of the county
     // combined tables, and takes no further work-region credit — the
     // credit is already inside the schedule.
-    const delawareSchedule = levy.basis === "resident_out_of_region"
-      && engine.state === "MD"
-      && residentWithholdingFacts != null
-      && mdDelawareScheduleApplies(
+    const delawareSchedule =
+      levy.basis === "resident_out_of_region" &&
+      engine.state === "MD" &&
+      residentWithholdingFacts != null &&
+      mdDelawareScheduleApplies(
         residentWithholdingFacts.workRegionTaxes,
         residentWithholdingFacts.workRegionWages,
       )
-      ? mdDelawareResidentTax({
-        payDate: input.payDate,
-        periodsPerYear: input.periodsPerYear,
-        wages: residentWages,
-        supplemental: residentSupplemental,
-        certificate,
-        supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
-      })
-      : undefined;
+        ? mdDelawareResidentTax({
+            payDate: input.payDate,
+            periodsPerYear: input.periodsPerYear,
+            wages: residentWages,
+            supplemental: residentSupplemental,
+            certificate,
+            supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
+          })
+        : undefined;
     const priced = delawareSchedule ?? result;
-    const residentAdjustment = levy.basis === "resident_out_of_region"
-      && residentMethod.kind === "net_of_work_region_tax"
-      && delawareSchedule == null
-      ? (() => {
-        if (result.statutoryTax == null || result.additionalWithholding == null) {
-          throw new UsWithholdingError(
-            `${levy.region} resident withholding must separate statutory tax and additional withholding before applying its resident rule; update ${engine.ratesModule}; refused by name`,
-          );
-        }
-        return adjustResidentWithholding(
-          result.statutoryTax,
-          result.additionalWithholding,
-          residentWithholdingFacts!.workRegionTaxes,
-          residentMethod,
-        );
-      })()
-      : undefined;
+    const residentAdjustment =
+      levy.basis === "resident_out_of_region" &&
+      residentMethod.kind === "net_of_work_region_tax" &&
+      delawareSchedule == null
+        ? (() => {
+            if (result.statutoryTax == null || result.additionalWithholding == null) {
+              throw new UsWithholdingError(
+                `${levy.region} resident withholding must separate statutory tax and additional withholding before applying its resident rule; update ${engine.ratesModule}; refused by name`,
+              );
+            }
+            return adjustResidentWithholding(
+              result.statutoryTax,
+              result.additionalWithholding,
+              residentWithholdingFacts!.workRegionTaxes,
+              residentMethod,
+            );
+          })()
+        : undefined;
     return {
-      code: engine.state, label: engine.label,
+      code: engine.state,
+      label: engine.label,
       tax: residentAdjustment?.tax ?? priced.tax,
       statutoryTax: (() => {
-        if (levy.basis === "resident_out_of_region" && (priced.statutoryTax == null || priced.additionalWithholding == null)) {
+        if (
+          levy.basis === "resident_out_of_region" &&
+          (priced.statutoryTax == null || priced.additionalWithholding == null)
+        ) {
           throw new UsWithholdingError(
             `${levy.region} resident withholding must separate statutory tax and additional withholding; update ${engine.ratesModule}; refused by name`,
           );
@@ -1166,11 +1275,14 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       additionalWithholding: priced.additionalWithholding,
       factors: {
         ...priced.factors,
-        ...(levy.basis === "resident_out_of_region" ? {
-          US_RESIDENT_WITHHOLDING_OUTCOME: residentAdjustment?.outcome ?? waiverOutcome,
-          US_RESIDENT_WORK_REGION_TAX_CREDIT: residentAdjustment?.workRegionTaxCredit ?? "0.0000",
-          ...(waiverWages > 0n ? { US_RESIDENT_WAIVED_WAGES: fromUnits(waiverWages) } : {}),
-        } : {}),
+        ...(levy.basis === "resident_out_of_region"
+          ? {
+              US_RESIDENT_WITHHOLDING_OUTCOME: residentAdjustment?.outcome ?? waiverOutcome,
+              US_RESIDENT_WORK_REGION_TAX_CREDIT:
+                residentAdjustment?.workRegionTaxCredit ?? "0.0000",
+              ...(waiverWages > 0n ? { US_RESIDENT_WAIVED_WAGES: fromUnits(waiverWages) } : {}),
+            }
+          : {}),
       },
       ...localWageTrace,
     };
@@ -1183,8 +1295,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   // it posts.
   if (subRegionLevy("US", levy.region, subRegion)?.pocket === "employer") {
     throw new UsWithholdingError(
-      `${levy.label} is an employer payroll tax, not employee withholding — `
-      + "it posts as an employer contribution, never as a stub deduction.",
+      `${levy.label} is an employer payroll tax, not employee withholding — ` +
+        "it posts as an employer contribution, never as a stub deduction.",
     );
   }
   const engineCode = SUB_REGION_ENGINE_CODE[`${levy.region}:${subRegion}`];
@@ -1192,16 +1304,17 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     const engine = usStateWithholding(engineCode);
     if (!engine) {
       throw new UsWithholdingError(
-        `${levy.label} is declared with a published engine (${engineCode}) that is not registered — `
-        + "this configuration is not supported by the US pack; contact support.",
+        `${levy.label} is declared with a published engine (${engineCode}) that is not registered — ` +
+          "this configuration is not supported by the US pack; contact support.",
       );
     }
     // The per-allocation credit prices inside the Detroit engine, which sees
     // the wage allocations; the dispatch only forwards the other work
     // cities (a null rate refuses by name there, naming the city).
-    const detroitOtherCities = engineCode === "MI-DETROIT" && levy.reach === "resident"
-      ? input.detroitOtherCities ?? []
-      : [];
+    const detroitOtherCities =
+      engineCode === "MI-DETROIT" && levy.reach === "resident"
+        ? (input.detroitOtherCities ?? [])
+        : [];
     if (separateFlatRate) {
       const regular = engine.compute({
         payDate: input.payDate,
@@ -1274,7 +1387,13 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     // function: a published-engine levy (NYC, Yonkers, Philadelphia,
     // Detroit) is still a locality levy, and dropping the trace here makes
     // the slip refuse by name downstream.
-    return { code: engine.state, label: engine.label, tax: result.tax, factors: result.factors, ...localWageTrace };
+    return {
+      code: engine.state,
+      label: engine.label,
+      tax: result.tax,
+      factors: result.factors,
+      ...localWageTrace,
+    };
   }
 
   // No published engine. That is not a hole to skip: these are the levies whose
@@ -1286,13 +1405,14 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   // a future branch cannot wire it into a second stub line.
   if (declared?.computedByParent) {
     throw new UsWithholdingError(
-      `${levy.label} is computed inside ${declared.computedByParent}, not as a separate levy — `
-      + "posting it again would withhold the same tax twice.",
+      `${levy.label} is computed inside ${declared.computedByParent}, not as a separate levy — ` +
+        "posting it again would withhold the same tax twice.",
     );
   }
-  const rates = declared?.rateSource.kind === "tenant"
-    ? input.tenantRates(declared.rateSource.rateKey, subRegion)
-    : undefined;
+  const rates =
+    declared?.rateSource.kind === "tenant"
+      ? input.tenantRates(declared.rateSource.rateKey, subRegion)
+      : undefined;
   const compensation = input.wages;
 
   switch (levy.region) {
@@ -1303,9 +1423,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         const district = ohSchoolDistrict(input.payDate, subRegion);
         if (!district) {
           throw new UsWithholdingError(
-            `Ohio school district ${subRegion} does not levy an income tax in the list loaded for `
-            + `${input.payDate.slice(0, 4)} — only 214 of the state's districts do. Correct the `
-            + "district number on the employee's IT 4.",
+            `Ohio school district ${subRegion} does not levy an income tax in the list loaded for ` +
+              `${input.payDate.slice(0, 4)} — only 214 of the state's districts do. Correct the ` +
+              "district number on the employee's IT 4.",
           );
         }
         const result = ohSchoolDistrictWithholding({
@@ -1316,15 +1436,19 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           district,
         });
         return {
-          code: `OH-${subRegion}`, label: declared?.label ?? `Ohio school district ${subRegion}`,
-          tax: result.tax, factors: result.factors, ...localWageTrace,
+          code: `OH-${subRegion}`,
+          label: declared?.label ?? `Ohio school district ${subRegion}`,
+          tax: result.tax,
+          factors: result.factors,
+          ...localWageTrace,
         };
       }
       // A municipality. `ohMunicipalWithholding` throws, naming the
       // municipality and the `us_oh_municipal` slot, when no rate is entered.
-      const municipalWages = levy.reach === "nonresident"
-        ? requireUsSourceWages(input.wageAllocations, levy.region, subRegion)
-        : addAmounts(compensation, input.supplemental);
+      const municipalWages =
+        levy.reach === "nonresident"
+          ? requireUsSourceWages(input.wageAllocations, levy.region, subRegion)
+          : addAmounts(compensation, input.supplemental);
       // The R.C. 718.011 occasional-entrant posture rides the employer-kept
       // municipal record (MI precedent below reads its own state record the
       // same way); an unrecorded posture prices normally, never as exempt.
@@ -1347,9 +1471,14 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         },
       });
       return {
-        code: `OH-${subRegion}`, label: declared?.label ?? `${subRegion} municipal income tax`,
+        code: `OH-${subRegion}`,
+        label: declared?.label ?? `${subRegion} municipal income tax`,
         tax,
-        factors: { OH_MUNICIPAL: subRegion, OH_MUNICIPAL_RATE: rates?.rate ?? "", OH_MUNICIPAL_TAX: tax },
+        factors: {
+          OH_MUNICIPAL: subRegion,
+          OH_MUNICIPAL_RATE: rates?.rate ?? "",
+          OH_MUNICIPAL_TAX: tax,
+        },
         ...localWageTrace,
       };
     }
@@ -1364,14 +1493,15 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         supplemental: input.supplemental,
         rate: levy.reach === "resident" ? rates?.residentRate : rates?.nonresidentRate,
         exemptionPerYear: rates?.exemptionPerYear,
-        exemptions: exemptionCount(
-          input.certificateFor("us_mi_miw4") ?? certificate, "exemptions",
-        ),
+        exemptions: exemptionCount(input.certificateFor("us_mi_miw4") ?? certificate, "exemptions"),
         periodsPerYear: input.periodsPerYear,
       });
       return {
-        code: `MI-${subRegion}`, label: declared?.label ?? `${subRegion} city income tax`,
-        tax: result.tax, factors: result.factors, ...localWageTrace,
+        code: `MI-${subRegion}`,
+        label: declared?.label ?? `${subRegion} city income tax`,
+        tax: result.tax,
+        factors: result.factors,
+        ...localWageTrace,
       };
     }
     case "IN": {
@@ -1398,14 +1528,17 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         additionalPerPeriod: certificate.certificate.fields.some(
           (field) => field.key === "additional_county_per_period",
         )
-          ? certificateAmount(certificate, "additional_county_per_period") ?? undefined
+          ? (certificateAmount(certificate, "additional_county_per_period") ?? undefined)
           : undefined,
-        exempt: certificateFlag(certificate, "exempt")
-          || certificateFlag(certificate, "county_exempt"),
+        exempt:
+          certificateFlag(certificate, "exempt") || certificateFlag(certificate, "county_exempt"),
       });
       return {
-        code: `IN-${subRegion}`, label: declared?.label ?? `${county.name} County income tax`,
-        tax: countyResult.tax, factors: countyResult.factors, ...localWageTrace,
+        code: `IN-${subRegion}`,
+        label: declared?.label ?? `${county.name} County income tax`,
+        tax: countyResult.tax,
+        factors: countyResult.factors,
+        ...localWageTrace,
       };
     }
     case "PA": {
@@ -1415,19 +1548,21 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       const rate = levy.reach === "resident" ? rates?.residentRate : rates?.nonresidentRate;
       if (rate == null || rate === "") {
         throw new UsWithholdingError(
-          `no Act 32 local earned income tax rate has been entered for PSD ${subRegion} `
-          + `(${levy.reach} rate). Pennsylvania's roughly 2,500 taxing jurisdictions each set `
-          + "their own and DCED revises the register annually, so the rate is employer-entered: "
-          + "look the PSD up in DCED's register and record it against the jurisdiction "
-          + "(statutory rate \"us_pa_local_eit\"). Withholding nothing would under-withhold the "
-          + "employee and leave the tax collection district to assess it with interest.",
+          `no Act 32 local earned income tax rate has been entered for PSD ${subRegion} ` +
+            `(${levy.reach} rate). Pennsylvania's roughly 2,500 taxing jurisdictions each set ` +
+            "their own and DCED revises the register annually, so the rate is employer-entered: " +
+            "look the PSD up in DCED's register and record it against the jurisdiction " +
+            '(statutory rate "us_pa_local_eit"). Withholding nothing would under-withhold the ' +
+            "employee and leave the tax collection district to assess it with interest.",
         );
       }
       const tax = act32LocalEit({
-        compensation: addAmounts(compensation, input.supplemental), rate,
+        compensation: addAmounts(compensation, input.supplemental),
+        rate,
       });
       return {
-        code: `PA-${subRegion}`, label: declared?.label ?? `PA local EIT (PSD ${subRegion})`,
+        code: `PA-${subRegion}`,
+        label: declared?.label ?? `PA local EIT (PSD ${subRegion})`,
         tax,
         factors: { PA_EIT_PSD: subRegion, PA_EIT_RATE: rate, PA_EIT_TAX: tax },
         ...localWageTrace,
@@ -1464,16 +1599,16 @@ function paWorksiteLst(
   subRegion: string,
 ): Pick<UsWithholdingResult, "additionalLines"> {
   const clgs = input.certificateFor("us_pa_clgs32_6");
-  const workPsd = levy.side === "work"
-    ? subRegion
-    : clgs == null ? null : certificateCode(clgs, "work_psd_code");
+  const workPsd =
+    levy.side === "work" ? subRegion : clgs == null ? null : certificateCode(clgs, "work_psd_code");
   if (workPsd == null || workPsd === "") return {};
   const annualAmount = input.tenantRates("us_pa_lst", workPsd)?.annualAmount;
   if (annualAmount == null || annualAmount === "") return {};
   const record = input.certificateFor("us_pa_lst_record");
-  const exempt = record != null
-    && (certificateFlag(record, "exempt_low_income")
-      || certificateFlag(record, "principal_employer_withholds"));
+  const exempt =
+    record != null &&
+    (certificateFlag(record, "exempt_low_income") ||
+      certificateFlag(record, "principal_employer_withholds"));
   const factorKey = `LIT_PA-${workPsd}-LST`;
   const ytd = input.ytd?.lstWithheldYtd?.[factorKey] ?? "0";
   const tax = localServicesTaxPerPeriod({
@@ -1483,18 +1618,20 @@ function paWorksiteLst(
     alreadyWithheldYtd: ytd,
   });
   return {
-    additionalLines: [{
-      code: `PA-${workPsd}-LST`,
-      label: `PA Local Services Tax (worksite PSD ${workPsd})`,
-      tax,
-      factors: {
-        PA_LST_PSD: workPsd,
-        PA_LST_ANNUAL: annualAmount,
-        PA_LST_TAX: tax,
-        PA_LST_YTD: ytd,
-        ...(exempt ? { PA_LST_EXEMPT: "1" } : {}),
+    additionalLines: [
+      {
+        code: `PA-${workPsd}-LST`,
+        label: `PA Local Services Tax (worksite PSD ${workPsd})`,
+        tax,
+        factors: {
+          PA_LST_PSD: workPsd,
+          PA_LST_ANNUAL: annualAmount,
+          PA_LST_TAX: tax,
+          PA_LST_YTD: ytd,
+          ...(exempt ? { PA_LST_EXEMPT: "1" } : {}),
+        },
       },
-    }],
+    ],
   };
 }
 
@@ -1544,8 +1681,8 @@ export function computeUsEmployerWithholding(input: {
   const declared = subRegionLevy("US", levy.region, subRegion);
   if (declared?.pocket !== "employer") {
     throw new UsWithholdingError(
-      `${levy.label} is not declared as an employer payroll tax — `
-      + "it posts through the employee withholding path, not here.",
+      `${levy.label} is not declared as an employer payroll tax — ` +
+        "it posts through the employee withholding path, not here.",
     );
   }
   if (levy.region === "OR" && (subRegion === "TRIMET" || subRegion === "LTD")) {
@@ -1559,7 +1696,9 @@ export function computeUsEmployerWithholding(input: {
       throw new UsWithholdingError(error instanceof Error ? error.message : String(error));
     }
     return {
-      code: `OR-${subRegion}`, label: declared.label, tax,
+      code: `OR-${subRegion}`,
+      label: declared.label,
+      tax,
       factors: {
         OR_TRANSIT_DISTRICT: subRegion,
         OR_TRANSIT_RATE: rate ?? "",
@@ -1576,8 +1715,8 @@ export function computeUsEmployerWithholding(input: {
   if (method?.kind === "flat_rate") {
     if (method.effectiveFrom !== undefined && (input.payDate ?? "") < method.effectiveFrom) {
       throw new UsWithholdingError(
-        `${levy.label} starts ${method.effectiveFrom} and nothing is owed before then; `
-        + "run it on or after its start date in a transcribed tax year",
+        `${levy.label} starts ${method.effectiveFrom} and nothing is owed before then; ` +
+          "run it on or after its start date in a transcribed tax year",
       );
     }
     let rate: string;
@@ -1585,17 +1724,17 @@ export function computeUsEmployerWithholding(input: {
       const entered = input.tenantRates(declared.rateSource.rateKey, subRegion)?.rate;
       if (entered == null || entered === "") {
         throw new UsWithholdingError(
-          `no ${levy.label} rate has been entered for this period; `
-          + "the rate is employer-entered because no publication carries it — "
-          + "enter the assessed figure before calculating; refused by name",
+          `no ${levy.label} rate has been entered for this period; ` +
+            "the rate is employer-entered because no publication carries it — " +
+            "enter the assessed figure before calculating; refused by name",
         );
       }
       try {
         rate6(entered);
       } catch {
         throw new UsWithholdingError(
-          `${levy.label} has an unreadable entered rate "${entered}"; `
-          + "enter an exact decimal rate in Payroll Setup → Statutory rates before calculating — refused by name",
+          `${levy.label} has an unreadable entered rate "${entered}"; ` +
+            "enter an exact decimal rate in Payroll Setup → Statutory rates before calculating — refused by name",
         );
       }
       rate = entered;
@@ -1603,8 +1742,8 @@ export function computeUsEmployerWithholding(input: {
       const payDate = input.payDate;
       if (payDate == null || payDate === "") {
         throw new UsWithholdingError(
-          `${levy.label} needs the pay date to select its effective published rate; `
-          + "pass the payroll pay date before calculating — refused by name",
+          `${levy.label} needs the pay date to select its effective published rate; ` +
+            "pass the payroll pay date before calculating — refused by name",
         );
       }
       const published = method.rates
@@ -1613,8 +1752,8 @@ export function computeUsEmployerWithholding(input: {
         .at(-1);
       if (!published) {
         throw new UsWithholdingError(
-          `${levy.label} has no published flat rate effective on ${payDate}; `
-          + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
+          `${levy.label} has no published flat rate effective on ${payDate}; ` +
+            "this levy is not yet supported by the US pack for this date; contact support — refused by name",
         );
       }
       rate = published.rate;
@@ -1630,13 +1769,13 @@ export function computeUsEmployerWithholding(input: {
       const history = input.ytdWages;
       if (history == null || history === "") {
         throw new UsWithholdingError(
-          `${levy.label} needs the employee's priced base history this year to enforce its wage base; `
-          + "recalculate with the year-to-date base before calculating — refused by name",
+          `${levy.label} needs the employee's priced base history this year to enforce its wage base; ` +
+            "recalculate with the year-to-date base before calculating — refused by name",
         );
       }
       const room = U(ratesForPayDate(input.payDate ?? "").fica.ssWageBase) - U(history);
       const covered = U(base);
-      base = D(room <= 0n ? 0n : (covered < room ? covered : room));
+      base = D(room <= 0n ? 0n : covered < room ? covered : room);
     }
     const tax = D(mulRateCents(U(base), rate));
     const factors: Record<string, string> = {
@@ -1653,20 +1792,22 @@ export function computeUsEmployerWithholding(input: {
       const small = input.tenantRates("us_mn_pl", subRegion)?.small_employer;
       if (small !== "true" && small !== "false") {
         throw new UsWithholdingError(
-          "Minnesota Paid Leave needs the employer's DEED-notified small-employer qualification; "
-          + "record whether the employer qualifies before calculating — refused by name",
+          "Minnesota Paid Leave needs the employer's DEED-notified small-employer qualification; " +
+            "record whether the employer qualifies before calculating — refused by name",
         );
       }
       factors.MNPL_SMALL_EMPLOYER = small;
     }
     return {
-      code: `${levy.region}-${subRegion}`, label: declared.label, tax,
+      code: `${levy.region}-${subRegion}`,
+      label: declared.label,
+      tax,
       factors,
     };
   }
   throw new UsWithholdingError(
-    `${levy.label} is declared as an employer payroll tax inside ${levy.region} and the US pack `
-    + "has no employer computation for it",
+    `${levy.label} is declared as an employer payroll tax inside ${levy.region} and the US pack ` +
+      "has no employer computation for it",
   );
 }
 
@@ -1688,8 +1829,11 @@ export function computeUsEmployerWithholding(input: {
  */
 export function usSubRegionRateIndex(input: {
   codes: readonly { region: string; code: string }[];
-  tenantRates: (rateKey: string, region: string, subRegion: string)
-    => Record<string, string> | undefined;
+  tenantRates: (
+    rateKey: string,
+    region: string,
+    subRegion: string,
+  ) => Record<string, string> | undefined;
 }): Record<string, string> {
   const index: Record<string, string> = {};
   for (const { region, code } of input.codes) {

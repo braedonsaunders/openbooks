@@ -1,4 +1,4 @@
-import type { SetupEntity } from './types'
+import type { SetupEntity } from "./types";
 
 /**
  * Setup-registry descriptor for HR action/reason codes (0227).
@@ -12,41 +12,52 @@ import type { SetupEntity } from './types'
  */
 
 const HRM_ACTIONS = [
-  'hire', 'rehire', 'transfer', 'promotion', 'demotion', 'pay_change',
-  'manager_change', 'location_change', 'schedule_change',
-  'leave_of_absence', 'return', 'termination', 'profile_change', 'other',
-].map((value) => ({ value, labelKey: `options.hrmAction.${value}` }))
+  "hire",
+  "rehire",
+  "transfer",
+  "promotion",
+  "demotion",
+  "pay_change",
+  "manager_change",
+  "location_change",
+  "schedule_change",
+  "leave_of_absence",
+  "return",
+  "termination",
+  "profile_change",
+  "other",
+].map((value) => ({ value, labelKey: `options.hrmAction.${value}` }));
 
 export const ACTION_REASONS_ENTITY: SetupEntity = {
-  key: 'hrm-action-reasons',
-  table: 'hrm_action_reasons',
-  groupKey: 'workforce',
-  featureKey: 'hrm',
+  key: "hrm-action-reasons",
+  table: "hrm_action_reasons",
+  groupKey: "workforce",
+  featureKey: "hrm",
   rehomed: true,
-  iconKey: 'tag',
+  iconKey: "tag",
   orgScoped: true,
   actorCols: true,
   hasActive: true,
-  docSlug: 'correcting-and-rescinding-changes',
+  docSlug: "correcting-and-rescinding-changes",
   columns: [
-    { key: 'action', kind: 'badge' },
-    { key: 'reasonCode', kind: 'code' },
-    { key: 'label', kind: 'text' },
-    { key: 'requiresComment', kind: 'boolean' },
-    { key: 'isActive', kind: 'badge-active' },
+    { key: "action", kind: "badge" },
+    { key: "reasonCode", kind: "code" },
+    { key: "label", kind: "text" },
+    { key: "requiresComment", kind: "boolean" },
+    { key: "isActive", kind: "badge-active" },
   ],
-  filters: [{ key: 'action', options: HRM_ACTIONS }],
+  filters: [{ key: "action", options: HRM_ACTIONS }],
   fields: [
     {
-      key: 'action',
-      kind: 'select',
+      key: "action",
+      kind: "select",
       required: true,
       lockedOnEdit: true,
       options: HRM_ACTIONS,
     },
-    { key: 'reasonCode', kind: 'text', required: true, lockedOnEdit: true },
-    { key: 'label', kind: 'text', required: true },
-    { key: 'requiresComment', kind: 'boolean' },
-    { key: 'isActive', kind: 'boolean', defaultValue: true },
+    { key: "reasonCode", kind: "text", required: true, lockedOnEdit: true },
+    { key: "label", kind: "text", required: true },
+    { key: "requiresComment", kind: "boolean" },
+    { key: "isActive", kind: "boolean", defaultValue: true },
   ],
-}
+};

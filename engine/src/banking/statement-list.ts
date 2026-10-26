@@ -56,16 +56,19 @@ export async function listAccountStatements(
   input: AccountStatementListInput,
   ctx: BankingContext,
 ): Promise<{ rows: AccountStatementRow[]; total: number }> {
-  return withOrgTransaction(ctx.orgId, async () => {
-    await requireBankAccountInScope(db, ctx.orgId, accountId, ctx.allowedSubsidiaryIds);
-    const search = input.q?.trim() ? `%${input.q.trim()}%` : null;
-    const where = sql`s.account_id = ${accountId} and s.org_id = ${ctx.orgId}
+  return withOrgTransaction(
+    ctx.orgId,
+    async () => {
+      await requireBankAccountInScope(db, ctx.orgId, accountId, ctx.allowedSubsidiaryIds);
+      const search = input.q?.trim() ? `%${input.q.trim()}%` : null;
+      const where = sql`s.account_id = ${accountId} and s.org_id = ${ctx.orgId}
       ${input.source ? sql` and s.source = ${input.source}` : sql``}
       ${search ? sql` and (s.statement_date::text ilike ${search} or s.source ilike ${search})` : sql``}`;
-    const direction = input.dir === "asc" ? sql`asc` : sql`desc`;
-    const perPage = Math.min(MAX_PER_PAGE, Math.max(1, Math.trunc(input.perPage)));
-    const page = Math.max(1, Math.trunc(input.page));
-    const rows = await db.execute<AccountStatementRow>(sql`
+      const direction = input.dir === "asc" ? sql`asc` : sql`desc`;
+      const perPage = Math.min(MAX_PER_PAGE, Math.max(1, Math.trunc(input.perPage)));
+      const page = Math.max(1, Math.trunc(input.page));
+      const rows = await db.execute<AccountStatementRow>(
+        sql`
       select s.id, s.source,
              coalesce((select line.currency from bank_statement_lines line
                         where line.statement_id = s.id and line.org_id = s.org_id
@@ -87,10 +90,17 @@ export async function listAccountStatements(
        where ${where}
        order by ${SORT_EXPR[input.sort]} ${direction} nulls last, s.imported_at ${direction}, s.id ${direction}
        limit ${perPage} offset ${(page - 1) * perPage}
-    `, "objects");
-    const count = await db.execute<{ n: number }>(sql`
+    `,
+        "objects",
+      );
+      const count = await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from bank_statements s where ${where}
-    `, "objects");
-    return { rows, total: count[0]?.n ?? 0 };
-  }, { readOnly: true, isolationLevel: "REPEATABLE READ" });
+    `,
+        "objects",
+      );
+      return { rows, total: count[0]?.n ?? 0 };
+    },
+    { readOnly: true, isolationLevel: "REPEATABLE READ" },
+  );
 }

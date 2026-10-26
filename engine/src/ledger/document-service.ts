@@ -3,23 +3,26 @@
  * framework, editor, or web imports: adapters supply the organization and enforce
  * permissions/feature/subsidiary access before exposing these results.
  */
-import { sql } from 'drizzle-orm'
-import { db } from '../platform/db.ts'
-import { documentBalanceDueLateral } from '../records/balance-due.ts'
-import { documentRevisionCounterSql } from '../records/revision.ts'
-import { loadRequiredControlAccounts } from '../records/control-accounts.ts'
-import type { DocumentEditCurrent } from './document-input.ts'
-import { DocumentEditError } from '../records/document-edit-policy.ts'
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import { documentBalanceDueLateral } from "../records/balance-due.ts";
+import { documentRevisionCounterSql } from "../records/revision.ts";
+import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
+import type { DocumentEditCurrent } from "./document-input.ts";
+import { DocumentEditError } from "../records/document-edit-policy.ts";
 import {
   loadCustomFieldAccessDefs,
   redactHiddenCustomValues,
   UNATTRIBUTED_CUSTOM_FIELD_VIEWER,
   type CustomFieldViewer,
-} from '../records/custom-fields.ts'
+} from "../records/custom-fields.ts";
 
 function requireOrganization(orgId: string): void {
-  if (typeof orgId !== 'string' || !orgId.trim()) {
-    throw new DocumentEditError(422, 'organization id is required; supply the document organization explicitly')
+  if (typeof orgId !== "string" || !orgId.trim()) {
+    throw new DocumentEditError(
+      422,
+      "organization id is required; supply the document organization explicitly",
+    );
   }
 }
 
@@ -27,8 +30,8 @@ function requireOrganization(orgId: string): void {
  * ControlAccountsIncompleteError unless ar/ap/bank are configured, so a
  * half-configured org can never hand undefined account ids to the kernel. */
 export async function controlDeps(orgId: string) {
-  requireOrganization(orgId)
-  return { control: await loadRequiredControlAccounts(orgId) }
+  requireOrganization(orgId);
+  return { control: await loadRequiredControlAccounts(orgId) };
 }
 
 /**
@@ -38,15 +41,20 @@ export async function controlDeps(orgId: string) {
  * drawer, the customer PDF, and dunning report the same figure by
  * construction. Both stay NULL until the document posts.
  */
-export async function loadDocument(id: string, orgId: string, customFieldViewer?: CustomFieldViewer) {
-  requireOrganization(orgId)
-  const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
+export async function loadDocument(
+  id: string,
+  orgId: string,
+  customFieldViewer?: CustomFieldViewer,
+) {
+  requireOrganization(orgId);
+  const doc = await db.execute<Record<string, unknown> & { documentRevision: string }>(
+    sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
            (select s.base_currency from subsidiaries s
              where s.org_id = d.org_id and s.id = d.subsidiary_id) as functional_currency,
            pe.status as posting_effect_status, pe.attempt_count as posting_effect_attempts,
            pe.error as posting_effect_error, pe.next_attempt_at::text as posting_effect_next_attempt_at,
-           ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "documentRevision",
+           ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as "documentRevision",
            ${sql`case when d.status = 'posted' then ap.applied end`} as applied,
            ${sql`case when d.status = 'posted' then d.total - ap.applied end`} as balance_due
       from documents d
@@ -55,16 +63,18 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       left join posting_effects pe on pe.document_id = d.id and pe.org_id = d.org_id
       ${documentBalanceDueLateral()}
      where d.id = ${id} and d.org_id = ${orgId}
-  `, 'objects'))
-  const loaded = doc[0]
-  if (!loaded) return null
+  `,
+    "objects",
+  );
+  const loaded = doc[0];
+  if (!loaded) return null;
   // node-postgres maps timestamptz to JavaScript Date, which discards the
   // microseconds PostgreSQL retains. Keep the public `updated_at` shape, but
   // replace its lossy Date with the exact canonical token used by OCC.
-  const { documentRevision, ...document } = loaded
-  const viewer = customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER
-  const headerDefs = await loadCustomFieldAccessDefs('documents', String(document.kind))
-  const lineDefs = await loadCustomFieldAccessDefs('document_lines', String(document.kind))
+  const { documentRevision, ...document } = loaded;
+  const viewer = customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER;
+  const headerDefs = await loadCustomFieldAccessDefs("documents", String(document.kind));
+  const lineDefs = await loadCustomFieldAccessDefs("document_lines", String(document.kind));
   const exactDocument: Record<string, unknown> = {
     ...document,
     updated_at: documentRevision,
@@ -73,8 +83,8 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       viewer,
       document.custom as Record<string, unknown> | null,
     ),
-  }
-  const lines = (await db.execute<Record<string, unknown>>(sql`
+  };
+  const lines = await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
            l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
@@ -91,11 +101,12 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       left join promotions pr on pr.id = l.promotion_id and pr.org_id = l.org_id
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `))
+  `);
   // Paid-at-sale tenders ride the table (never custom): amounts leave as
   // canonical decimal strings so every reader — drawer, prefill, API —
   // shares one shape with the writer.
-  const tenders = (await db.execute<Record<string, unknown>>(sql`
+  const tenders = await db.execute<Record<string, unknown>>(
+    sql`
     select t.position, t.kind, t.method_label as "methodLabel", t.account_id as "accountId",
            t.stored_value_account_id as "storedValueAccountId",
            ((t.amount_minor / 10000)::text || '.' || lpad((t.amount_minor % 10000)::text, 4, '0')) as amount,
@@ -103,7 +114,9 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       from document_tenders t
      where t.document_id = ${id} and t.org_id = ${orgId}
      order by t.position
-  `, 'objects'))
+  `,
+    "objects",
+  );
   const visibleLines = lines.rows.map((line) => ({
     ...line,
     custom: redactHiddenCustomValues(
@@ -111,8 +124,8 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       viewer,
       line.custom as Record<string, unknown> | null,
     ),
-  }))
-  return { doc: exactDocument, lines: visibleLines as typeof lines.rows, tenders }
+  }));
+  return { doc: exactDocument, lines: visibleLines as typeof lines.rows, tenders };
 }
 
 /**
@@ -123,16 +136,19 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
 export async function loadDocumentEditCurrent(
   id: string,
   orgId: string,
-  executor: Pick<typeof db, 'execute'> = db,
+  executor: Pick<typeof db, "execute"> = db,
 ): Promise<DocumentEditCurrent | null> {
-  requireOrganization(orgId)
-  const result = await executor.execute<DocumentEditCurrent>(sql`
+  requireOrganization(orgId);
+  const result = await executor.execute<DocumentEditCurrent>(
+    sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
            custom, subsidiary_id as "subsidiaryId",
-           ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
+           ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents
      where id = ${id} and org_id = ${orgId}
-  `, 'objects')
-  return result[0] ?? null
+  `,
+    "objects",
+  );
+  return result[0] ?? null;
 }

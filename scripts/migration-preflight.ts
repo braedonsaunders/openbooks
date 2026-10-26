@@ -111,9 +111,7 @@ export function isAdequateNoneReason(reason: string): boolean {
   return reason.replace(/\s/g, "").length >= 20;
 }
 
-export function preflightStatementTimeoutMs(
-  source: Record<string, string | undefined>,
-): number {
+export function preflightStatementTimeoutMs(source: Record<string, string | undefined>): number {
   const parsed = Number(source.OPENBOOKS_PREFLIGHT_STATEMENT_TIMEOUT_MS);
   if (
     !Number.isInteger(parsed) ||
@@ -231,12 +229,21 @@ export function earlierPendingCreatesObject(
   // Guard preflights use regprocedure to inspect exact no-argument functions.
   // Their absence is expected only when an earlier pending migration creates
   // that same function. Other missing functions and overloads remain refusals.
-  const missingGuard = /function "((?:[A-Za-z_][\w$]*\.)?[A-Za-z_][\w$]*)\(\)" does not exist/.exec(raw);
+  const missingGuard = /function "((?:[A-Za-z_][\w$]*\.)?[A-Za-z_][\w$]*)\(\)" does not exist/.exec(
+    raw,
+  );
   if (missingGuard) {
     const name = missingGuard[1]!;
-    const functionName = name.startsWith('public.') ? `(?:public\\s*\\.\\s*)?${escapeRegExp(name.slice(7))}` : name.includes('.') ? escapeRegExp(name) : `(?:public\\s*\\.\\s*)?${escapeRegExp(name)}`;
-    const creator = new RegExp(`create\\s+(?:or\\s+replace\\s+)?function\\s+(?<![\\w.])${functionName}\\s*\\(\\s*\\)`, 'i');
-    return earlierContents.some(content => creator.test(stripSqlComments(content)));
+    const functionName = name.startsWith("public.")
+      ? `(?:public\\s*\\.\\s*)?${escapeRegExp(name.slice(7))}`
+      : name.includes(".")
+        ? escapeRegExp(name)
+        : `(?:public\\s*\\.\\s*)?${escapeRegExp(name)}`;
+    const creator = new RegExp(
+      `create\\s+(?:or\\s+replace\\s+)?function\\s+(?<![\\w.])${functionName}\\s*\\(\\s*\\)`,
+      "i",
+    );
+    return earlierContents.some((content) => creator.test(stripSqlComments(content)));
   }
   const missingTable = /relation "([^"]+)" does not exist/.exec(raw)?.[1];
   const missingColumn = /column "([^"]+)" of relation "([^"]+)" does not exist/.exec(raw);
@@ -409,7 +416,11 @@ export async function evaluatePreflight(
     const run = async (): Promise<PreflightEvaluation> => {
       try {
         const result = await client.query<Record<string, unknown>>(preflightSql);
-        return { status: "ready", findings: validateFindingRows(migration, ordinal, result.rows), leastPrivilege };
+        return {
+          status: "ready",
+          findings: validateFindingRows(migration, ordinal, result.rows),
+          leastPrivilege,
+        };
       } catch (error) {
         if (isDeferredPreflightError(error)) {
           const raw = error instanceof Error ? error.message : String(error);
@@ -440,7 +451,5 @@ export async function evaluatePreflight(
 }
 
 export function formatFinding(finding: PreflightFinding): string {
-  return (
-    `[${finding.severity}] ${finding.code} (${finding.migration}): ${finding.subject} — ${finding.detail} Remedy: ${finding.remedy}`
-  );
+  return `[${finding.severity}] ${finding.code} (${finding.migration}): ${finding.subject} — ${finding.detail} Remedy: ${finding.remedy}`;
 }

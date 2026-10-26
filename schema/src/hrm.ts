@@ -10,7 +10,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -22,8 +22,7 @@ import { auditColumns, id, orgRef } from "./helpers";
  * constant — never a second literal — so a rename cannot strand one side
  * on the old kind.
  */
-export const HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND =
-  "hrm_employment_migration_mapping";
+export const HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND = "hrm_employment_migration_mapping";
 
 /**
  * Immutable revision evidence: every version closure appends one row with
@@ -92,8 +91,6 @@ export const employmentChanges = pgTable(
     ...auditColumns,
   },
   (t) => [
-
-
     uniqueIndex("employment_changes_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("employment_changes_employment_revision").on(t.orgId, t.employmentId, t.revision),
     index("employment_changes_employment").on(t.orgId, t.employmentId, t.revision),
@@ -102,10 +99,7 @@ export const employmentChanges = pgTable(
     // employment_changes_provenance_guard: FKs alone cannot express it.
     check("employment_changes_revision", sql`${t.revision} >= 1`),
     check("employment_changes_reason", sql`char_length(btrim(${t.reason})) > 0`),
-    check(
-      "employment_changes_snapshot",
-      sql`jsonb_typeof(${t.priorSnapshot}) = 'object'`,
-    ),
+    check("employment_changes_snapshot", sql`jsonb_typeof(${t.priorSnapshot}) = 'object'`),
     check(
       "employment_changes_actor",
       sql`(${t.recordedSource} = 'user' and ${t.recordedBy} is not null and ${t.recordedSourceRef} is null)
@@ -113,10 +107,7 @@ export const employmentChanges = pgTable(
               and ${t.recordedSourceRef} is not null
               and char_length(btrim(${t.recordedSourceRef})) > 0)`,
     ),
-    check(
-      "employment_changes_closed_versions",
-      sql`jsonb_typeof(${t.closedVersions}) = 'array'`,
-    ),
+    check("employment_changes_closed_versions", sql`jsonb_typeof(${t.closedVersions}) = 'array'`),
     // Finite civil time: evidence is always recorded at a known instant.
     // Mirrors employment_changes_finite_time (0184).
     check(
@@ -142,7 +133,9 @@ export const reportingRelationships = pgTable(
     orgId: orgRef(),
     employmentId: uuid("employment_id").notNull(),
     managerEmploymentId: uuid("manager_employment_id").notNull(),
-    kind: text("kind", { enum: ["line", "matrix"] }).notNull().default("line"),
+    kind: text("kind", { enum: ["line", "matrix"] })
+      .notNull()
+      .default("line"),
     /**
      * Stable relationship identity across manager changes: every version of
      * one subordinate's LINE shares one id (a manager change closes the old
@@ -165,19 +158,20 @@ export const reportingRelationships = pgTable(
     ...auditColumns,
   },
   (t) => [
-
-
     uniqueIndex("reporting_relationships_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("reporting_relationships_line_version").on(t.orgId, t.relationshipId, t.versionNo),
     index("reporting_relationships_relationship").on(t.orgId, t.relationshipId),
     index("reporting_relationships_employment").on(t.orgId, t.employmentId, t.effectiveFrom),
     index("reporting_relationships_manager").on(t.orgId, t.managerEmploymentId),
+    check("reporting_relationships_no_self", sql`${t.managerEmploymentId} <> ${t.employmentId}`),
     check(
-      "reporting_relationships_no_self",
-      sql`${t.managerEmploymentId} <> ${t.employmentId}`,
+      "reporting_relationships_range",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`,
     ),
-    check("reporting_relationships_range", sql`${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`),
-    check("reporting_relationships_recorded", sql`${t.recordedUntil} is null or ${t.recordedUntil} > ${t.recordedAt}`),
+    check(
+      "reporting_relationships_recorded",
+      sql`${t.recordedUntil} is null or ${t.recordedUntil} > ${t.recordedAt}`,
+    ),
     check("reporting_relationships_no", sql`${t.versionNo} >= 1`),
     check(
       "reporting_relationships_closure",

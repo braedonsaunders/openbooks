@@ -1,6 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, allocateLargestRemainder, apportion, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, ledgerSideTotals, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits, fromUnits } from "./money.ts";
+import {
+  abs,
+  allocateLargestRemainder,
+  apportion,
+  cmp,
+  div,
+  divRate,
+  fitsLedgerRange,
+  formatMoney,
+  isZero,
+  ledgerSideTotals,
+  mul,
+  mulDecimal,
+  mulDecimalFactors,
+  mulPercent,
+  mulRate,
+  mulRatio,
+  normalizeDecimal,
+  normalizeMoney,
+  prorateDays,
+  roundDiv,
+  roundMoney,
+  sum,
+  toUnits,
+  fromUnits,
+} from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -42,13 +67,28 @@ test("mulRatio allocates exact partial carrying values", () => {
 
 test("decimal factors combine annualization and currency rounding without intermediate money rounding", () => {
   assert.equal(mulDecimalFactors("1", ["6.49499"], { decimalPlaces: 2 }), "6.4900");
-  assert.equal(mulDecimalFactors("1", ["28.1449"], { numerator: 12n, denominator: 52n, decimalPlaces: 2 }), "6.4900");
-  assert.equal(mulDecimalFactors("-1", ["28.1449"], { numerator: 12n, denominator: 52n, decimalPlaces: 2 }), "-6.4900");
+  assert.equal(
+    mulDecimalFactors("1", ["28.1449"], { numerator: 12n, denominator: 52n, decimalPlaces: 2 }),
+    "6.4900",
+  );
+  assert.equal(
+    mulDecimalFactors("-1", ["28.1449"], { numerator: 12n, denominator: 52n, decimalPlaces: 2 }),
+    "-6.4900",
+  );
   assert.equal(mulDecimalFactors("1", ["6.495"], { decimalPlaces: 2 }), "6.5000");
   assert.equal(mulDecimalFactors("1", ["6.49499"]), "6.4950");
-  assert.equal(mulDecimalFactors("1", ["6.49499"], { numerator: 0n, denominator: 7n, decimalPlaces: 2 }), "0.0000");
-  assert.throws(() => mulDecimalFactors("1", ["2"], { denominator: 0n }), /denominator must be greater than zero/);
-  assert.throws(() => mulDecimalFactors("1", ["2"], { numerator: -1n }), /numerator cannot be negative/);
+  assert.equal(
+    mulDecimalFactors("1", ["6.49499"], { numerator: 0n, denominator: 7n, decimalPlaces: 2 }),
+    "0.0000",
+  );
+  assert.throws(
+    () => mulDecimalFactors("1", ["2"], { denominator: 0n }),
+    /denominator must be greater than zero/,
+  );
+  assert.throws(
+    () => mulDecimalFactors("1", ["2"], { numerator: -1n }),
+    /numerator cannot be negative/,
+  );
   assert.throws(() => mulDecimalFactors("1", ["2"], { decimalPlaces: 5 }), /decimalPlaces/);
 });
 
@@ -100,8 +140,11 @@ test("div is the non-FX counterpart to divRate", () => {
 
 test("div matches divRate exactly wherever divRate is legal", () => {
   for (const pair of [
-    ["100", "3"], ["0.0001", "7"], ["-250.5000", "1.25"],
-    ["999999.9999", "0.0001"], ["12.3456", "2.50000000"],
+    ["100", "3"],
+    ["0.0001", "7"],
+    ["-250.5000", "1.25"],
+    ["999999.9999", "0.0001"],
+    ["12.3456", "2.50000000"],
   ]) {
     const a = pair[0]!;
     const b = pair[1]!;
@@ -167,7 +210,12 @@ test("div then mul returns the original within one rounding step", () => {
   // Compared in exact ledger units — a money test must not measure itself with
   // binary floats. Re-multiplying a rounded share can be off by at most half a
   // unit per whole of the divisor.
-  for (const pair of [["100", "3"], ["7.5000", "4"], ["0.0001", "7"], ["-100", "3"]]) {
+  for (const pair of [
+    ["100", "3"],
+    ["7.5000", "4"],
+    ["0.0001", "7"],
+    ["-100", "3"],
+  ]) {
     const amount = pair[0]!;
     const divisor = pair[1]!;
     const back = mul(div(amount, divisor), divisor);
@@ -238,7 +286,11 @@ test("mulRatio keeps dust shares visible and signs them with the amount", () => 
     ["0.0001", 1n, 1n, "0.0001"],
   ];
   for (const [amount, numerator, denominator, expected] of cases) {
-    assert.equal(mulRatio(amount, numerator, denominator), expected, `${amount} × ${numerator}/${denominator}`);
+    assert.equal(
+      mulRatio(amount, numerator, denominator),
+      expected,
+      `${amount} × ${numerator}/${denominator}`,
+    );
   }
   // Complementary shares bracket the whole: floor + ceiling, never two floors.
   assert.equal(
@@ -407,7 +459,11 @@ test("allocateLargestRemainder keeps the invoice total equal to the approved tot
   // approved 0.01. Largest remainder deals the single cent to the first
   // line by tie order, so the lines sum to the rounded total exactly.
   assert.deepEqual(allocateLargestRemainder(["0.0050", "0.0050"]), ["0.0100", "0.0000"]);
-  assert.deepEqual(allocateLargestRemainder(["0.0033", "0.0033", "0.0034"]), ["0.0000", "0.0000", "0.0100"]);
+  assert.deepEqual(allocateLargestRemainder(["0.0033", "0.0033", "0.0034"]), [
+    "0.0000",
+    "0.0000",
+    "0.0100",
+  ]);
   // Whole-cent inputs pass through untouched.
   assert.deepEqual(allocateLargestRemainder(["1.2500", "2.5000"]), ["1.2500", "2.5000"]);
   // A single half rounds the way roundMoney rounds it (away from zero).
@@ -446,7 +502,11 @@ test("allocateLargestRemainder always cross-foots to the rounded total", () => {
 test("apportion splits exactly, mirrors credits, and places the residual as asked", () => {
   // 1000/3 in money units: the largest remainder goes to the earlier part unless ties run last.
   assert.deepEqual(apportion(10_000_000n, [1n, 1n, 1n]), [3_333_334n, 3_333_333n, 3_333_333n]);
-  assert.deepEqual(apportion(10_000_000n, [1n, 1n, 1n], { residual: "largest_remainder_last" }), [3_333_333n, 3_333_333n, 3_333_334n]);
+  assert.deepEqual(apportion(10_000_000n, [1n, 1n, 1n], { residual: "largest_remainder_last" }), [
+    3_333_333n,
+    3_333_333n,
+    3_333_334n,
+  ]);
   assert.deepEqual(apportion(-10_000_000n, [1n, 1n, 1n]), [-3_333_334n, -3_333_333n, -3_333_333n]);
   assert.deepEqual(apportion(1000n, [3n, 1n]), [750n, 250n]);
   // Every part is its floor or floor + 1, so a zero weight never takes a unit.
@@ -455,7 +515,10 @@ test("apportion splits exactly, mirrors credits, and places the residual as aske
   assert.deepEqual(apportion(0n, [0n, 0n]), [0n, 0n]);
   assert.throws(() => apportion(1n, [1n, -1n]), /weight 1 is negative/);
   assert.throws(() => apportion(1n, [0n, 0n]), /weights sum to zero/);
-  assert.throws(() => apportion(1n, [1n], { residual: { absorber: 1 } }), /absorber 1 is not one of the 1 parts/);
+  assert.throws(
+    () => apportion(1n, [1n], { residual: { absorber: 1 } }),
+    /absorber 1 is not one of the 1 parts/,
+  );
 });
 
 test("the shared ledger bound holds fifteen whole digits, no more", () => {
@@ -481,11 +544,26 @@ test("side totals split debits and credit magnitudes exactly", () => {
 test("canonical money strings parse to the same units as every other spelling of the amount", () => {
   // A leading space keeps a value off the canonical fast path, so each pair
   // compares the two parsers on the same amount.
-  const samples = ["0.0000", "-0.0000", "1.0000", "-1.0000", "0.0001", "-0.0001", "123456789012345.6789", "-99999999999999.9999", "00042.5000", "-00000.0050"];
+  const samples = [
+    "0.0000",
+    "-0.0000",
+    "1.0000",
+    "-1.0000",
+    "0.0001",
+    "-0.0001",
+    "123456789012345.6789",
+    "-99999999999999.9999",
+    "00042.5000",
+    "-00000.0050",
+  ];
   for (let n = -20_000; n <= 20_000; n += 37) samples.push(fromUnits(BigInt(n) * 7919n));
   for (const value of samples) assert.equal(toUnits(value), toUnits(` ${value}`), value);
   assert.equal(toUnits("12.3400"), 123400n);
   assert.equal(toUnits("12.34"), 123400n, "non-canonical spellings still parse");
   assert.throws(() => toUnits("12.34567"), /beyond 4 decimal places/);
-  assert.throws(() => toUnits("１２.３４００"), /not a decimal number/, "only ASCII digits are money");
+  assert.throws(
+    () => toUnits("１２.３４００"),
+    /not a decimal number/,
+    "only ASCII digits are money",
+  );
 });

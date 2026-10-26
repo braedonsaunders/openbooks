@@ -33,7 +33,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -52,37 +53,47 @@ test("ratioRate uses exact decimal arithmetic and numeric(19,10) rounding", () =
 });
 
 test("ECB CSV parser groups EUR-anchored observations by date", () => {
-  const snapshots = parseEcbCsv([
-    "KEY,CURRENCY,TIME_PERIOD,OBS_VALUE",
-    "EXR.D.USD.EUR.SP00.A,USD,2026-07-14,1.1650",
-    "EXR.D.CAD.EUR.SP00.A,CAD,2026-07-14,1.5900",
-  ].join("\n"));
-  assert.deepEqual(snapshots, [{
-    date: "2026-07-14",
-    anchor: "EUR",
-    anchorBasis: "foreign-per-anchor",
-    unitsPerAnchor: { EUR: "1", USD: "1.1650", CAD: "1.5900" },
-  }]);
+  const snapshots = parseEcbCsv(
+    [
+      "KEY,CURRENCY,TIME_PERIOD,OBS_VALUE",
+      "EXR.D.USD.EUR.SP00.A,USD,2026-07-14,1.1650",
+      "EXR.D.CAD.EUR.SP00.A,CAD,2026-07-14,1.5900",
+    ].join("\n"),
+  );
+  assert.deepEqual(snapshots, [
+    {
+      date: "2026-07-14",
+      anchor: "EUR",
+      anchorBasis: "foreign-per-anchor",
+      unitsPerAnchor: { EUR: "1", USD: "1.1650", CAD: "1.5900" },
+    },
+  ]);
 });
 
 test("Bank of Canada parser stores CAD-per-foreign observations as observed", () => {
-  const snapshots = parseBankOfCanadaJson(JSON.stringify({
-    observations: [{ d: "2026-07-14", FXUSDCAD: { v: "1.2500" } }],
-  }));
+  const snapshots = parseBankOfCanadaJson(
+    JSON.stringify({
+      observations: [{ d: "2026-07-14", FXUSDCAD: { v: "1.2500" } }],
+    }),
+  );
   // No pre-inversion: the source quote stays exact and the reciprocal is
   // derived once at normalization.
-  assert.deepEqual(snapshots, [{
-    date: "2026-07-14",
-    anchor: "CAD",
-    anchorBasis: "anchor-per-foreign",
-    unitsPerAnchor: { CAD: "1", USD: "1.2500" },
-  }]);
+  assert.deepEqual(snapshots, [
+    {
+      date: "2026-07-14",
+      anchor: "CAD",
+      anchorBasis: "anchor-per-foreign",
+      unitsPerAnchor: { CAD: "1", USD: "1.2500" },
+    },
+  ]);
 });
 
 test("Bank of Canada quotes round-trip exactly through normalization", () => {
-  const snapshots = parseBankOfCanadaJson(JSON.stringify({
-    observations: [{ d: "2026-07-14", FXUSDCAD: { v: "1.3" }, FXEURCAD: { v: "1.09" } }],
-  }));
+  const snapshots = parseBankOfCanadaJson(
+    JSON.stringify({
+      observations: [{ d: "2026-07-14", FXUSDCAD: { v: "1.3" }, FXEURCAD: { v: "1.09" } }],
+    }),
+  );
   const rates = normalizeFxSnapshots(snapshots, "CAD", ["USD", "EUR"], "Bank of Canada");
   const pair = (from: string, to: string): string =>
     rates.find((rate) => rate.fromCurrency === from && rate.toCurrency === to)!.rate;
@@ -96,81 +107,100 @@ test("Bank of Canada quotes round-trip exactly through normalization", () => {
 });
 
 test("normalization materializes every directed currency pair", () => {
-  const rates = normalizeFxSnapshots([{
-    date: "2026-07-14",
-    anchor: "EUR",
-    anchorBasis: "foreign-per-anchor",
-    unitsPerAnchor: { EUR: "1", USD: "1.2", CAD: "1.5" },
-  }], "CAD", ["USD", "EUR"]);
+  const rates = normalizeFxSnapshots(
+    [
+      {
+        date: "2026-07-14",
+        anchor: "EUR",
+        anchorBasis: "foreign-per-anchor",
+        unitsPerAnchor: { EUR: "1", USD: "1.2", CAD: "1.5" },
+      },
+    ],
+    "CAD",
+    ["USD", "EUR"],
+  );
   assert.equal(rates.length, 6);
-  assert.equal(rates.find((rate) => rate.fromCurrency === "USD" && rate.toCurrency === "CAD")?.rate, "1.2500000000");
-  assert.equal(rates.find((rate) => rate.fromCurrency === "CAD" && rate.toCurrency === "USD")?.rate, "0.8000000000");
+  assert.equal(
+    rates.find((rate) => rate.fromCurrency === "USD" && rate.toCurrency === "CAD")?.rate,
+    "1.2500000000",
+  );
+  assert.equal(
+    rates.find((rate) => rate.fromCurrency === "CAD" && rate.toCurrency === "USD")?.rate,
+    "0.8000000000",
+  );
 });
 
-test(
-  "FX test sync requests the org's latest seven business days",
-  { skip: !DB },
-  async () => {
-    const org = await setupManualFxScratchOrg();
-    const captured: URL[] = [];
-    const provider = createServer((req, res) => {
-      const requested = new URL(req.url ?? "", "http://localhost");
-      captured.push(requested);
-      const end = requested.searchParams.get("end_date");
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
+test("FX test sync requests the org's latest seven business days", { skip: !DB }, async () => {
+  const org = await setupManualFxScratchOrg();
+  const captured: URL[] = [];
+  const provider = createServer((req, res) => {
+    const requested = new URL(req.url ?? "", "http://localhost");
+    captured.push(requested);
+    const end = requested.searchParams.get("end_date");
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
         observations: [{ d: end, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
-      }));
-    });
-    const providerOrigin = await listen(provider);
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-      if (requested.host === "www.bankofcanada.ca") {
-        requested.protocol = "http:";
-        requested.host = new URL(providerOrigin).host;
-      }
-      return originalFetch(requested, init);
-    }) as typeof fetch;
+      }),
+    );
+  });
+  const providerOrigin = await listen(provider);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const requested = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (requested.host === "www.bankofcanada.ca") {
+      requested.protocol = "http:";
+      requested.host = new URL(providerOrigin).host;
+    }
+    return originalFetch(requested, init);
+  }) as typeof fetch;
 
-    try {
-      const instant = (await db.execute<{ epoch: number; utcHour: number }>(sql`
+  try {
+    const instant = (
+      await db.execute<{ epoch: number; utcHour: number }>(
+        sql`
         select extract(epoch from now())::float8 as epoch,
                extract(hour from now() at time zone 'UTC')::int as "utcHour"
-      `, "objects"))[0]!;
-      // Select a valid IANA zone that places this instant on a different local
-      // date from UTC, so a UTC-based request cannot accidentally pass.
-      const timeZone = instant.utcHour >= 10 ? "Pacific/Kiritimati" : "Etc/GMT+12";
-      const savedZone = await db.execute<{ id: string }>(sql`
+      `,
+        "objects",
+      )
+    )[0]!;
+    // Select a valid IANA zone that places this instant on a different local
+    // date from UTC, so a UTC-based request cannot accidentally pass.
+    const timeZone = instant.utcHour >= 10 ? "Pacific/Kiritimati" : "Etc/GMT+12";
+    const savedZone = await db.execute<{ id: string }>(
+      sql`
         update orgs
            set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('timeZone', ${timeZone}::text)
          where id = ${org.orgId}
          returning id
-      `, "objects");
-      assert.equal(savedZone.length, 1, "the test organization stores its business time zone");
-      const dateParts = new Intl.DateTimeFormat("en-CA", {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).formatToParts(new Date(instant.epoch * 1000));
-      const today = `${dateParts.find((part) => part.type === "year")!.value}-${dateParts.find((part) => part.type === "month")!.value}-${dateParts.find((part) => part.type === "day")!.value}`;
-      const fromDate = new Date(`${today}T00:00:00.000Z`);
-      fromDate.setUTCDate(fromDate.getUTCDate() - 6);
+      `,
+      "objects",
+    );
+    assert.equal(savedZone.length, 1, "the test organization stores its business time zone");
+    const dateParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(instant.epoch * 1000));
+    const today = `${dateParts.find((part) => part.type === "year")!.value}-${dateParts.find((part) => part.type === "month")!.value}-${dateParts.find((part) => part.type === "day")!.value}`;
+    const fromDate = new Date(`${today}T00:00:00.000Z`);
+    fromDate.setUTCDate(fromDate.getUTCDate() - 6);
 
-      const result = await runFxProvider(org.orgId, "test");
-      assert.equal(result.observationsReceived, 1);
-      assert.equal(captured.length, 1, "the configured provider receives one bounded range request");
-      assert.equal(captured[0]!.searchParams.get("start_date"), fromDate.toISOString().slice(0, 10));
-      assert.equal(captured[0]!.searchParams.get("end_date"), today);
-    } finally {
-      globalThis.fetch = originalFetch;
-      await close(provider);
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
-
+    const result = await runFxProvider(org.orgId, "test");
+    assert.equal(result.observationsReceived, 1);
+    assert.equal(captured.length, 1, "the configured provider receives one bounded range request");
+    assert.equal(captured[0]!.searchParams.get("start_date"), fromDate.toISOString().slice(0, 10));
+    assert.equal(captured[0]!.searchParams.get("end_date"), today);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await close(provider);
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test("weekday schedules skip weekends and weekly schedules remain seven days apart", () => {
   assert.equal(
@@ -195,7 +225,9 @@ test(
     const now = new Date();
     const dueAt = new Date(now.getTime() - 60_000);
     try {
-      const actorId = await withBypass(async () => createScratchUser(org.orgId, "FX scheduler", "admin"));
+      const actorId = await withBypass(async () =>
+        createScratchUser(org.orgId, "FX scheduler", "admin"),
+      );
       await saveFxProviderConfig(org.orgId, actorId, {
         provider: "bank_of_canada",
         baseCurrency: "CAD",
@@ -218,25 +250,45 @@ test(
       `);
       const failedTick = await runDueFxProviders(now);
       assert.equal(failedTick, 0, "a failed durable claim is not counted as dispatched");
-      const afterFailedClaim = await db.execute<{ next_sync_at: string }>(sql`
-        select next_sync_at::text from fx_provider_configs where id = ${org.configId}`, "objects");
-      assert.equal(new Date(afterFailedClaim[0]!.next_sync_at).getTime(), dueAt.getTime(),
-        "the due cursor must remain unchanged when run creation rolls back");
+      const afterFailedClaim = await db.execute<{ next_sync_at: string }>(
+        sql`
+        select next_sync_at::text from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      );
+      assert.equal(
+        new Date(afterFailedClaim[0]!.next_sync_at).getTime(),
+        dueAt.getTime(),
+        "the due cursor must remain unchanged when run creation rolls back",
+      );
 
       await db.execute(sql`delete from fx_provider_runs where org_id = ${org.orgId}`);
-      globalThis.fetch = (async () => new Response(JSON.stringify({
-        observations: [{ d: "2026-07-15", FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
-      }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+      globalThis.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            observations: [
+              { d: "2026-07-15", FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )) as typeof fetch;
       const successfulTick = await runDueFxProviders(now);
       assert.equal(successfulTick, 1, "the still-due occurrence dispatches on the next tick");
-      const settled = await db.execute<{ status: string; next_sync_at: string }>(sql`
+      const settled = await db.execute<{ status: string; next_sync_at: string }>(
+        sql`
         select r.status, c.next_sync_at::text
           from fx_provider_runs r
           join fx_provider_configs c on c.id = r.provider_config_id
-         where r.org_id = ${org.orgId}`, "objects");
-      assert.deepEqual(settled.map((row) => row.status), ["ok"]);
-      assert.ok(new Date(settled[0]!.next_sync_at).getTime() > dueAt.getTime(),
-        "a successful dispatch advances the cursor after durable run creation");
+         where r.org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.deepEqual(
+        settled.map((row) => row.status),
+        ["ok"],
+      );
+      assert.ok(
+        new Date(settled[0]!.next_sync_at).getTime() > dueAt.getTime(),
+        "a successful dispatch advances the cursor after durable run creation",
+      );
     } finally {
       globalThis.fetch = originalFetch;
       await withBypass(() => dropScratchOrg(org.orgId));
@@ -285,17 +337,21 @@ test(
       } else if (target.includes("/service/data/EXR")) {
         const today = new Date().toISOString().slice(0, 10);
         res.writeHead(200, { "content-type": "text/csv" });
-        res.end([
-          "KEY,CURRENCY,TIME_PERIOD,OBS_VALUE",
-          `EXR.D.USD.EUR.SP00.A,USD,${today},1.1650`,
-          `EXR.D.CAD.EUR.SP00.A,CAD,${today},1.5900`,
-        ].join("\n"));
+        res.end(
+          [
+            "KEY,CURRENCY,TIME_PERIOD,OBS_VALUE",
+            `EXR.D.USD.EUR.SP00.A,USD,${today},1.1650`,
+            `EXR.D.CAD.EUR.SP00.A,CAD,${today},1.5900`,
+          ].join("\n"),
+        );
       } else {
         const today = new Date().toISOString().slice(0, 10);
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({
-          observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
-        }));
+        res.end(
+          JSON.stringify({
+            observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+          }),
+        );
       }
     });
     const redirectorOrigin = await listen(redirector);
@@ -310,7 +366,9 @@ test(
       "data-api.ecb.europa.eu": new URL(redirectorOrigin).host,
     };
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      const requested = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
       const mapped = fakeHosts[requested.host];
       redirectModes.push(init?.redirect);
       if (!mapped) return originalFetch(input, init);
@@ -393,7 +451,10 @@ test(
           // The secret really was in play on the first hop's URL — precisely
           // what a followed Location would have carried to the attacker.
           const firstHopQueries = providerPaths.filter((p) => p.startsWith(scenario.pathPrefix));
-          assert.ok(firstHopQueries.length >= 5, "each refused attempt hit the provider exactly once");
+          assert.ok(
+            firstHopQueries.length >= 5,
+            "each refused attempt hit the provider exactly once",
+          );
           assert.ok(firstHopQueries.every((p) => p.includes(`app_id=${OXR_SECRET}`)));
         }
       }
@@ -417,7 +478,11 @@ test(
         const result = await runFxProvider(org.orgId, "test");
         assert.equal(result.observationsReceived, scenario.expectedObservations);
         assert.ok(result.normalizedRates > 0);
-        assert.equal(result.ratesInserted + result.ratesUpdated, 0, "test runs must not write rates");
+        assert.equal(
+          result.ratesInserted + result.ratesUpdated,
+          0,
+          "test runs must not write rates",
+        );
       }
       assert.deepEqual(redirectModes.slice(happyStart), new Array(9).fill("error"));
       assert.equal(attackerRequests, 0, "the API key must never leave for any third host");
@@ -443,15 +508,19 @@ test(
     const provider = createServer((req, res) => {
       const today = new Date().toISOString().slice(0, 10);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
-        observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
-      }));
+      res.end(
+        JSON.stringify({
+          observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+        }),
+      );
     });
     const providerOrigin = await listen(provider);
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      const requested = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
       if (requested.host === "www.bankofcanada.ca") {
         requested.protocol = "http:";
         requested.host = new URL(providerOrigin).host;
@@ -480,8 +549,11 @@ test(
         isEnabled: true,
         apiKey: null,
       });
-      const config = await db.execute<{ id: string }>(sql`
-        select id from fx_provider_configs where org_id = ${org.orgId}`, "objects");
+      const config = await db.execute<{ id: string }>(
+        sql`
+        select id from fx_provider_configs where org_id = ${org.orgId}`,
+        "objects",
+      );
       const configId = config[0]!.id;
 
       async function plantRunningRow(startedAt: SQL): Promise<void> {
@@ -491,10 +563,19 @@ test(
           values (${org.orgId}, ${configId}, 'scheduler', current_date - 7, current_date, ${startedAt}, gen_random_uuid())
         `);
       }
-      async function runRows(): Promise<Array<{ status: string; error_message: string | null; lease_token: string | null }>> {
-        const r = await db.execute<{ status: string; error_message: string | null; lease_token: string | null }>(sql`
+      async function runRows(): Promise<
+        Array<{ status: string; error_message: string | null; lease_token: string | null }>
+      > {
+        const r = await db.execute<{
+          status: string;
+          error_message: string | null;
+          lease_token: string | null;
+        }>(
+          sql`
           select status, error_message, lease_token from fx_provider_runs
-           where org_id = ${org.orgId} order by started_at asc, id asc`, "objects");
+           where org_id = ${org.orgId} order by started_at asc, id asc`,
+          "objects",
+        );
         return r;
       }
 
@@ -505,21 +586,29 @@ test(
 
       const rows = await runRows();
       assert.equal(rows.length, 2);
-      assert.match(rows[0]!.error_message ?? "", /crashed|killed/i, "the abandonment must be operator-visible");
+      assert.match(
+        rows[0]!.error_message ?? "",
+        /crashed|killed/i,
+        "the abandonment must be operator-visible",
+      );
       assert.equal(rows[0]!.status, "failed");
-      assert.equal(rows[0]!.lease_token, null, "the takeover must clear the dead claim's fencing token");
+      assert.equal(
+        rows[0]!.lease_token,
+        null,
+        "the takeover must clear the dead claim's fencing token",
+      );
       assert.equal(rows[1]!.status, "ok");
 
       // Control: a fresh running row still excludes concurrent runs.
       await plantRunningRow(sql`now()`);
-      await assert.rejects(
-        runFxProvider(org.orgId, "test"),
-        (error: unknown) => {
-          assert.ok(error instanceof FxProviderError, "the insert race must remain a controlled domain refusal");
-          assert.equal(error.message, "an FX provider run is already in progress");
-          return true;
-        },
-      );
+      await assert.rejects(runFxProvider(org.orgId, "test"), (error: unknown) => {
+        assert.ok(
+          error instanceof FxProviderError,
+          "the insert race must remain a controlled domain refusal",
+        );
+        assert.equal(error.message, "an FX provider run is already in progress");
+        return true;
+      });
       // Age the control past the recovery budget so the next run reclaims it,
       // exactly as time itself would.
       await db.execute(sql`
@@ -538,17 +627,27 @@ test(
       const secondSync = await runFxProvider(org.orgId, "manual");
       assert.equal(secondSync.ratesInserted, 0, "retry after a post-commit crash stays idempotent");
       assert.equal(secondSync.ratesUpdated, 5);
-      assert.equal(secondSync.manualOverridesPreserved, 1, "manual overrides survive the recovery path");
-      const overridden = await db.execute<{ rate: string }>(sql`
+      assert.equal(
+        secondSync.manualOverridesPreserved,
+        1,
+        "manual overrides survive the recovery path",
+      );
+      const overridden = await db.execute<{ rate: string }>(
+        sql`
         select rate::text from fx_rates
-         where org_id = ${org.orgId} and from_currency = 'EUR' and to_currency = 'USD' and rate_type = 'spot'`, "objects");
+         where org_id = ${org.orgId} and from_currency = 'EUR' and to_currency = 'USD' and rate_type = 'spot'`,
+        "objects",
+      );
       assert.ok(Number(overridden[0]!.rate) > 90, "the manual override value must be untouched");
 
       const finalRows = await runRows();
       const abandoned = finalRows.filter((row) => (row.error_message ?? "").includes("abandoned"));
       assert.equal(abandoned.length, 3, "every planted stale row ends reclaimed and failed");
       assert.ok(abandoned.every((row) => row.status === "failed"));
-      assert.ok(abandoned.every((row) => row.lease_token === null), "every reclaimed claim is unfenced");
+      assert.ok(
+        abandoned.every((row) => row.lease_token === null),
+        "every reclaimed claim is unfenced",
+      );
       assert.equal(finalRows.at(-1)!.status, "ok");
     } finally {
       globalThis.fetch = originalFetch;
@@ -581,8 +680,11 @@ async function setupManualFxScratchOrg(): Promise<{ orgId: string; configId: str
       isEnabled: true,
       apiKey: null,
     });
-    const config = await db.execute<{ id: string }>(sql`
-      select id from fx_provider_configs where org_id = ${org.orgId}`, "objects");
+    const config = await db.execute<{ id: string }>(
+      sql`
+      select id from fx_provider_configs where org_id = ${org.orgId}`,
+      "objects",
+    );
     return { orgId: org.orgId, configId: config[0]!.id };
   } catch (error) {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -604,19 +706,25 @@ test(
     const provider = createServer((req, res) => {
       const today = new Date().toISOString().slice(0, 10);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
-        observations: [{
-          d: today,
-          FXUSDCAD: { v: "1.2500" },
-          FXEURCAD: { v: "1.0900" },
-        }],
-      }));
+      res.end(
+        JSON.stringify({
+          observations: [
+            {
+              d: today,
+              FXUSDCAD: { v: "1.2500" },
+              FXEURCAD: { v: "1.0900" },
+            },
+          ],
+        }),
+      );
     });
     const providerOrigin = await listen(provider);
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      const requested = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
       if (requested.host === "www.bankofcanada.ca") {
         requested.protocol = "http:";
         requested.host = new URL(providerOrigin).host;
@@ -638,7 +746,9 @@ test(
         }
         return false;
       };
-      await db.execute(sql`alter table fx_rates add constraint fx_apply_crash_proof check (from_currency <> 'CAD' or to_currency <> 'USD')`);
+      await db.execute(
+        sql`alter table fx_rates add constraint fx_apply_crash_proof check (from_currency <> 'CAD' or to_currency <> 'USD')`,
+      );
       try {
         await assert.rejects(
           runFxProvider(org.orgId, "manual"),
@@ -648,16 +758,31 @@ test(
       } finally {
         await db.execute(sql`alter table fx_rates drop constraint fx_apply_crash_proof`);
       }
-      const rateCount = await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`, "objects");
+      const rateCount = await db.execute<{ count: string }>(
+        sql`
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`,
+        "objects",
+      );
       assert.equal(rateCount[0]!.count, "0", "no partial application may survive the crash stage");
 
-      const crashed = await db.execute<{ status: string; lease_token: string | null }>(sql`
-        select status, lease_token from fx_provider_runs where org_id = ${org.orgId}`, "objects");
-      assert.deepEqual(crashed, [{ status: "failed", lease_token: null }],
-        "the crashed attempt must record its failure and release its fencing token");
-      const configState = await db.execute<{ last_error: string | null; last_success_at: Date | null }>(sql`
-        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`, "objects");
+      const crashed = await db.execute<{ status: string; lease_token: string | null }>(
+        sql`
+        select status, lease_token from fx_provider_runs where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.deepEqual(
+        crashed,
+        [{ status: "failed", lease_token: null }],
+        "the crashed attempt must record its failure and release its fencing token",
+      );
+      const configState = await db.execute<{
+        last_error: string | null;
+        last_success_at: Date | null;
+      }>(
+        sql`
+        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      );
       assert.ok(
         (configState[0]!.last_error ?? "").includes("fx_apply_crash_proof"),
         "the config must carry the failure",
@@ -667,20 +792,38 @@ test(
       // Replay from scratch: the recovery run re-claims cleanly and applies
       // every pair exactly once, with run state and rates committing together.
       const replay = await runFxProvider(org.orgId, "manual");
-      assert.equal(replay.ratesInserted, 6, "the replay materializes every directed pair exactly once");
-      const pairs = await db.execute<{ from_currency: string; to_currency: string; rate: string }>(sql`
+      assert.equal(
+        replay.ratesInserted,
+        6,
+        "the replay materializes every directed pair exactly once",
+      );
+      const pairs = await db.execute<{ from_currency: string; to_currency: string; rate: string }>(
+        sql`
         select from_currency, to_currency, rate::text from fx_rates
-         where org_id = ${org.orgId} order by from_currency, to_currency`, "objects");
+         where org_id = ${org.orgId} order by from_currency, to_currency`,
+        "objects",
+      );
       assert.equal(pairs.length, 6);
       for (const row of pairs) {
-        assert.match(row.rate, /^\d+\.\d{10}$/, `${row.from_currency}→${row.to_currency} stays inside numeric(19,10)`);
+        assert.match(
+          row.rate,
+          /^\d+\.\d{10}$/,
+          `${row.from_currency}→${row.to_currency} stays inside numeric(19,10)`,
+        );
       }
-      const settledRows = await db.execute<{ status: string; lease_token: string | null }>(sql`
-        select status, lease_token from fx_provider_runs where org_id = ${org.orgId} order by started_at asc, id asc`, "objects");
-      assert.deepEqual(settledRows, [
-        { status: "failed", lease_token: null },
-        { status: "ok", lease_token: null },
-      ], "recovery ends with the failed stage terminal and the replay committed unfenced");
+      const settledRows = await db.execute<{ status: string; lease_token: string | null }>(
+        sql`
+        select status, lease_token from fx_provider_runs where org_id = ${org.orgId} order by started_at asc, id asc`,
+        "objects",
+      );
+      assert.deepEqual(
+        settledRows,
+        [
+          { status: "failed", lease_token: null },
+          { status: "ok", lease_token: null },
+        ],
+        "recovery ends with the failed stage terminal and the replay committed unfenced",
+      );
     } finally {
       globalThis.fetch = originalFetch;
       await close(provider);
@@ -698,11 +841,55 @@ test(
   { skip: !DB },
   async () => {
     const foreigns = [
-      "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "SEK", "NOK", "DKK",
-      "PLN", "CZK", "HUF", "RON", "BGN", "ISK", "TRY", "ZAR", "MXN", "BRL",
-      "ARS", "CLP", "COP", "PEN", "UYU", "PYG", "BOB", "VES", "CRC", "PAB",
-      "DOP", "GTQ", "HNL", "NIO", "JMD", "TTD", "BBD", "XCD", "AWG", "SRD",
-      "GYD", "BZD", "QAR", "SAR", "AED", "KWD", "BHD", "OMR", "JOD",
+      "USD",
+      "EUR",
+      "GBP",
+      "JPY",
+      "CHF",
+      "AUD",
+      "NZD",
+      "SEK",
+      "NOK",
+      "DKK",
+      "PLN",
+      "CZK",
+      "HUF",
+      "RON",
+      "BGN",
+      "ISK",
+      "TRY",
+      "ZAR",
+      "MXN",
+      "BRL",
+      "ARS",
+      "CLP",
+      "COP",
+      "PEN",
+      "UYU",
+      "PYG",
+      "BOB",
+      "VES",
+      "CRC",
+      "PAB",
+      "DOP",
+      "GTQ",
+      "HNL",
+      "NIO",
+      "JMD",
+      "TTD",
+      "BBD",
+      "XCD",
+      "AWG",
+      "SRD",
+      "GYD",
+      "BZD",
+      "QAR",
+      "SAR",
+      "AED",
+      "KWD",
+      "BHD",
+      "OMR",
+      "JOD",
     ];
     assert.equal(foreigns.length, 49, "base CAD plus 49 foreigns is the 50-currency config");
     const provider = createServer((req, res) => {
@@ -724,7 +911,9 @@ test(
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      const requested = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
       if (requested.host === "www.bankofcanada.ca") {
         requested.protocol = "http:";
         requested.host = new URL(providerOrigin).host;
@@ -760,14 +949,20 @@ test(
       assert.equal(result.normalizedRates, expected);
       assert.equal(result.ratesInserted, expected);
       assert.equal(result.ratesUpdated, 0);
-      const stored = await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`, "objects");
+      const stored = await db.execute<{ count: string }>(
+        sql`
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`,
+        "objects",
+      );
       assert.equal(stored[0]!.count, String(expected));
       // A quoted pair still reproduces the source observation exactly at scale.
-      const usdCad = await db.execute<{ rate: string }>(sql`
+      const usdCad = await db.execute<{ rate: string }>(
+        sql`
         select rate::text as rate from fx_rates
          where org_id = ${org.orgId} and from_currency = 'USD' and to_currency = 'CAD'
-           and rate_type = 'spot' limit 1`, "objects");
+           and rate_type = 'spot' limit 1`,
+        "objects",
+      );
       assert.equal(usdCad[0]!.rate, "1.0100000000");
     } finally {
       globalThis.fetch = originalFetch;
@@ -787,19 +982,25 @@ test(
   async () => {
     let gated = false;
     let releaseLoser!: () => void;
-    const gate = new Promise<void>((resolve) => { releaseLoser = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      releaseLoser = resolve;
+    });
     const provider = createServer((req, res) => {
       const today = new Date().toISOString().slice(0, 10);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
-        observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
-      }));
+      res.end(
+        JSON.stringify({
+          observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+        }),
+      );
     });
     const providerOrigin = await listen(provider);
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      const requested = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
       if (requested.host === "www.bankofcanada.ca") {
         requested.protocol = "http:";
         requested.host = new URL(providerOrigin).host;
@@ -816,9 +1017,12 @@ test(
       const loserPromise = runFxProvider(org.orgId, "manual").catch((error: unknown) => error);
       let lost: { id: string } | undefined;
       for (let waited = 0; waited < 10_000 && !lost; waited += 50) {
-        const runningRow = await db.execute<{ id: string }>(sql`
+        const runningRow = await db.execute<{ id: string }>(
+          sql`
           select id from fx_provider_runs
-           where org_id = ${org.orgId} and status = 'running' limit 1`, "objects");
+           where org_id = ${org.orgId} and status = 'running' limit 1`,
+          "objects",
+        );
         lost = runningRow[0];
         if (!lost) await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -835,33 +1039,68 @@ test(
       releaseLoser();
       const loserOutcome = await Promise.race([
         loserPromise,
-        new Promise((resolve) => setTimeout(() => resolve(new Error("loser promise did not settle")), 15_000)),
+        new Promise((resolve) =>
+          setTimeout(() => resolve(new Error("loser promise did not settle")), 15_000),
+        ),
       ]);
       assert.ok(
         loserOutcome instanceof FxRunLeaseLostError,
         `the supseded attempt must surface its lost lease, got: ${String(loserOutcome)}`,
       );
 
-      const rows = await db.execute<{ id: string; status: string; error_message: string | null; lease_token: string | null }>(sql`
+      const rows = await db.execute<{
+        id: string;
+        status: string;
+        error_message: string | null;
+        lease_token: string | null;
+      }>(
+        sql`
         select id, status, error_message, lease_token from fx_provider_runs
-         where org_id = ${org.orgId} order by started_at asc, id asc`, "objects");
-      assert.deepEqual(rows.map((row) => ({
-        status: row.status,
-        messageAbandoned: (row.error_message ?? "").includes("abandoned"),
-        lease_token: row.lease_token,
-      })), [
-        { status: "failed", messageAbandoned: true, lease_token: null },
-        { status: "ok", messageAbandoned: false, lease_token: null },
-      ], "exactly one ok row survives: the winner's");
+         where org_id = ${org.orgId} order by started_at asc, id asc`,
+        "objects",
+      );
+      assert.deepEqual(
+        rows.map((row) => ({
+          status: row.status,
+          messageAbandoned: (row.error_message ?? "").includes("abandoned"),
+          lease_token: row.lease_token,
+        })),
+        [
+          { status: "failed", messageAbandoned: true, lease_token: null },
+          { status: "ok", messageAbandoned: false, lease_token: null },
+        ],
+        "exactly one ok row survives: the winner's",
+      );
 
-      const rates = await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`, "objects");
-      assert.equal(rates[0]!.count, "6", "the stale attempt applied nothing before or after losing its lease");
+      const rates = await db.execute<{ count: string }>(
+        sql`
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(
+        rates[0]!.count,
+        "6",
+        "the stale attempt applied nothing before or after losing its lease",
+      );
 
-      const configState = await db.execute<{ last_error: string | null; last_success_at: Date | null }>(sql`
-        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`, "objects");
-      assert.equal(configState[0]!.last_error, null, "the fenced attempt may not write config errors either");
-      assert.notEqual(configState[0]!.last_success_at, null, "schedule ownership stays with the winner");
+      const configState = await db.execute<{
+        last_error: string | null;
+        last_success_at: Date | null;
+      }>(
+        sql`
+        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      );
+      assert.equal(
+        configState[0]!.last_error,
+        null,
+        "the fenced attempt may not write config errors either",
+      );
+      assert.notEqual(
+        configState[0]!.last_success_at,
+        null,
+        "schedule ownership stays with the winner",
+      );
     } finally {
       globalThis.fetch = originalFetch;
       await close(provider);
@@ -874,63 +1113,86 @@ test(
 // production schedule cursor is not its to move. Recomputing next_sync_at
 // from the probe time silently skips the next due sync (a probe fired after
 // today's slot pushes the real run out by a day).
-test(
-  "a test synchronization preserves the production schedule cursor",
-  { skip: !DB },
-  async () => {
-    const provider = createServer((req, res) => {
-      const url = new URL(req.url ?? "", "http://localhost");
-      const end = url.searchParams.get("end_date") ?? new Date().toISOString().slice(0, 10);
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
+test("a test synchronization preserves the production schedule cursor", { skip: !DB }, async () => {
+  const provider = createServer((req, res) => {
+    const url = new URL(req.url ?? "", "http://localhost");
+    const end = url.searchParams.get("end_date") ?? new Date().toISOString().slice(0, 10);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
         observations: [{ d: end, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
-      }));
-    });
-    const providerOrigin = await listen(provider);
+      }),
+    );
+  });
+  const providerOrigin = await listen(provider);
 
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-      if (requested.host === "www.bankofcanada.ca") {
-        requested.protocol = "http:";
-        requested.host = new URL(providerOrigin).host;
-      }
-      return originalFetch(requested, init);
-    }) as typeof fetch;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const requested = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (requested.host === "www.bankofcanada.ca") {
+      requested.protocol = "http:";
+      requested.host = new URL(providerOrigin).host;
+    }
+    return originalFetch(requested, init);
+  }) as typeof fetch;
 
-    const org = await setupManualFxScratchOrg();
-    try {
-      await db.execute(sql`
+  const org = await setupManualFxScratchOrg();
+  try {
+    await db.execute(sql`
         update fx_provider_configs
            set schedule = 'daily', sync_hour_utc = 22, is_enabled = true,
                next_sync_at = '2026-01-01T00:00:00Z'
          where id = ${org.configId}`);
-      const before = (await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(sql`
+    const before = (
+      await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(
+        sql`
         select next_sync_at::text as next_sync_at, last_success_at
-          from fx_provider_configs where id = ${org.configId}`, "objects"))[0]!;
-      const result = await runFxProvider(org.orgId, "test");
-      assert.equal(result.observationsReceived, 1);
-      const after = (await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(sql`
+          from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      )
+    )[0]!;
+    const result = await runFxProvider(org.orgId, "test");
+    assert.equal(result.observationsReceived, 1);
+    const after = (
+      await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(
+        sql`
         select next_sync_at::text as next_sync_at, last_success_at
-          from fx_provider_configs where id = ${org.configId}`, "objects"))[0]!;
-      assert.equal(after.next_sync_at, before.next_sync_at, "a test probe must not move the schedule cursor");
-      assert.equal(after.last_success_at, before.last_success_at, "a test probe owns no success");
+          from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(
+      after.next_sync_at,
+      before.next_sync_at,
+      "a test probe must not move the schedule cursor",
+    );
+    assert.equal(after.last_success_at, before.last_success_at, "a test probe owns no success");
 
-      // A failed probe must not move the cursor either: the recovery retry
-      // belongs to the production schedule, not to the probe.
-      globalThis.fetch = (() => Promise.reject(new Error("probe transport down"))) as typeof fetch;
-      await assert.rejects(runFxProvider(org.orgId, "test"), /probe transport down/);
-      const afterFailure = (await db.execute<{ next_sync_at: string }>(sql`
+    // A failed probe must not move the cursor either: the recovery retry
+    // belongs to the production schedule, not to the probe.
+    globalThis.fetch = (() => Promise.reject(new Error("probe transport down"))) as typeof fetch;
+    await assert.rejects(runFxProvider(org.orgId, "test"), /probe transport down/);
+    const afterFailure = (
+      await db.execute<{ next_sync_at: string }>(
+        sql`
         select next_sync_at::text as next_sync_at
-          from fx_provider_configs where id = ${org.configId}`, "objects"))[0]!;
-      assert.equal(afterFailure.next_sync_at, before.next_sync_at, "a failed test probe must not move the schedule cursor");
-    } finally {
-      globalThis.fetch = originalFetch;
-      await close(provider);
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+          from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(
+      afterFailure.next_sync_at,
+      before.next_sync_at,
+      "a failed test probe must not move the schedule cursor",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    await close(provider);
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test(
   "a running FX sync cannot restore the schedule from its stale config snapshot",
@@ -938,19 +1200,26 @@ test(
   async () => {
     let gated = true;
     let releaseFetch!: () => void;
-    const fetchGate = new Promise<void>((resolve) => { releaseFetch = resolve; });
+    const fetchGate = new Promise<void>((resolve) => {
+      releaseFetch = resolve;
+    });
     const provider = createServer((req, res) => {
-      const end = new URL(req.url ?? "", "http://localhost").searchParams.get("end_date")
-        ?? new Date().toISOString().slice(0, 10);
+      const end =
+        new URL(req.url ?? "", "http://localhost").searchParams.get("end_date") ??
+        new Date().toISOString().slice(0, 10);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
-        observations: [{ d: end, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
-      }));
+      res.end(
+        JSON.stringify({
+          observations: [{ d: end, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+        }),
+      );
     });
     const providerOrigin = await listen(provider);
     const originalFetch = globalThis.fetch;
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      const requested = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
       if (requested.host === "www.bankofcanada.ca") {
         requested.protocol = "http:";
         requested.host = new URL(providerOrigin).host;
@@ -961,7 +1230,9 @@ test(
 
     const org = await setupManualFxScratchOrg();
     try {
-      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX schedule editor", "admin"));
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "FX schedule editor", "admin"),
+      );
       const current = await readFxProviderConfig(org.orgId);
       assert.ok(current);
       const input = {
@@ -979,32 +1250,62 @@ test(
       const running = runFxProvider(org.orgId, "manual");
       let claimed = false;
       for (let waited = 0; waited < 10_000 && !claimed; waited += 50) {
-        const row = await db.execute(sql`
-          select id from fx_provider_runs where org_id = ${org.orgId} and status = 'running' limit 1`, "objects");
+        const row = await db.execute(
+          sql`
+          select id from fx_provider_runs where org_id = ${org.orgId} and status = 'running' limit 1`,
+          "objects",
+        );
         claimed = row.length > 0;
         if (!claimed) await new Promise((resolve) => setTimeout(resolve, 50));
       }
       assert.equal(claimed, true, "the old-config sync must be paused after claiming its run");
 
-      await saveFxProviderConfig(org.orgId, actorId, { ...input, schedule: "weekly", syncHourUtc: 8 });
-      const saved = await db.execute<{ schedule: string; sync_hour_utc: number; next_sync_at: Date }>(sql`
-        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`, "objects");
+      await saveFxProviderConfig(org.orgId, actorId, {
+        ...input,
+        schedule: "weekly",
+        syncHourUtc: 8,
+      });
+      const saved = await db.execute<{
+        schedule: string;
+        sync_hour_utc: number;
+        next_sync_at: Date;
+      }>(
+        sql`
+        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      );
       releaseFetch();
       gated = false;
       await running;
 
-      const after = await db.execute<{ schedule: string; sync_hour_utc: number; next_sync_at: Date }>(sql`
-        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`, "objects");
+      const after = await db.execute<{
+        schedule: string;
+        sync_hour_utc: number;
+        next_sync_at: Date;
+      }>(
+        sql`
+        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`,
+        "objects",
+      );
       assert.equal(after[0]!.schedule, "weekly");
       assert.equal(after[0]!.sync_hour_utc, 8);
-      assert.equal(new Date(after[0]!.next_sync_at).getTime(), new Date(saved[0]!.next_sync_at).getTime(),
-        "completion from the old snapshot must preserve the newer saved schedule cursor");
+      assert.equal(
+        new Date(after[0]!.next_sync_at).getTime(),
+        new Date(saved[0]!.next_sync_at).getTime(),
+        "completion from the old snapshot must preserve the newer saved schedule cursor",
+      );
 
-      const audit = await db.execute<{ changes: unknown }>(sql`
+      const audit = await db.execute<{ changes: unknown }>(
+        sql`
         select changes from audit_log where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
            and changes->'after'->>'schedule' = 'daily'
-         order by at asc, id asc limit 1`, "objects");
-      const changes = audit[0]!.changes as { before: { schedule: string } | null; after: { schedule: string } };
+         order by at asc, id asc limit 1`,
+        "objects",
+      );
+      const changes = audit[0]!.changes as {
+        before: { schedule: string } | null;
+        after: { schedule: string };
+      };
       assert.equal(changes.before?.schedule, "manual");
       assert.equal(changes.after.schedule, "daily");
     } finally {
@@ -1017,94 +1318,111 @@ test(
   },
 );
 
-test(
-  "a failed config audit rolls back the config write with it",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      for (const code of ["CAD", "USD"]) {
-        await db.execute(sql`
+test("a failed config audit rolls back the config write with it", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    for (const code of ["CAD", "USD"]) {
+      await db.execute(sql`
           insert into currencies (code, name, minor_units) values (${code}, ${code}, 2)
           on conflict (code) do nothing`);
-      }
-      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX operator", "admin"));
-      const input = {
-        provider: "bank_of_canada" as const,
-        baseCurrency: "CAD",
-        currencies: ["USD"],
-        schedule: "manual" as const,
-        syncHourUtc: 0,
-        lookbackDays: 7,
-        isEnabled: true,
-        apiKey: null,
-      };
-      // Block only the audit leg: the config upsert would succeed alone.
-      await db.execute(sql`alter table audit_log add constraint fx_audit_proof_block check (table_name <> 'fx_provider_configs')`);
-      try {
-        await assert.rejects(saveFxProviderConfig(org.orgId, actorId, input));
-        assert.equal(await readFxProviderConfig(org.orgId), null,
-          "the config must not survive its audit failing");
-      } finally {
-        await db.execute(sql`alter table audit_log drop constraint fx_audit_proof_block`);
-      }
-      // Recovery: the write and its evidence commit together — true before
-      // (null on insert) and after, with no secret material.
-      await saveFxProviderConfig(org.orgId, actorId, input);
-      const audits = await db.execute<{ action: string; changes: unknown }>(sql`
-        select action, changes from audit_log
-         where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
-         order by at asc, id asc`, "objects");
-      assert.equal(audits.length, 1);
-      assert.equal(audits[0]!.action, "insert");
-      const first = audits[0]!.changes as { before: null; after: Record<string, unknown> };
-      assert.equal(first.before, null);
-      const firstAfter = {
-        provider: "bank_of_canada",
-        displayName: "Bank of Canada",
-        baseCurrency: "CAD",
-        currencies: ["USD"],
-        schedule: "manual",
-        syncHourUtc: 0,
-        lookbackDays: 7,
-        isEnabled: true,
-        hasSecret: false,
-      };
-      assert.deepEqual(first.after, firstAfter);
-      // Update: the audit carries the true before-state and stays redacted
-      // even while a secret is stored.
-      await saveFxProviderConfig(org.orgId, actorId, {
-        ...input,
-        provider: "open_exchange_rates",
-        baseCurrency: "USD",
-        currencies: ["CAD"],
-        apiKey: "test-secret-proof",
-      });
-      const afterUpdate = await db.execute<{ action: string; changes: unknown }>(sql`
-        select action, changes from audit_log
-         where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
-         order by at asc, id asc`, "objects");
-      assert.equal(afterUpdate.length, 2);
-      assert.equal(afterUpdate[1]!.action, "update");
-      const second = afterUpdate[1]!.changes as { before: Record<string, unknown>; after: Record<string, unknown> };
-      assert.deepEqual(second.before, firstAfter, "the update audit must carry the true before-state");
-      assert.deepEqual(second.after, {
-        provider: "open_exchange_rates",
-        displayName: "Open Exchange Rates",
-        baseCurrency: "USD",
-        currencies: ["CAD"],
-        schedule: "manual",
-        syncHourUtc: 0,
-        lookbackDays: 7,
-        isEnabled: true,
-        hasSecret: true,
-      });
-      assert.ok(!JSON.stringify(second).includes("test-secret-proof"), "plaintext secrets must never enter audit evidence");
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
     }
-  },
-);
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "FX operator", "admin"));
+    const input = {
+      provider: "bank_of_canada" as const,
+      baseCurrency: "CAD",
+      currencies: ["USD"],
+      schedule: "manual" as const,
+      syncHourUtc: 0,
+      lookbackDays: 7,
+      isEnabled: true,
+      apiKey: null,
+    };
+    // Block only the audit leg: the config upsert would succeed alone.
+    await db.execute(
+      sql`alter table audit_log add constraint fx_audit_proof_block check (table_name <> 'fx_provider_configs')`,
+    );
+    try {
+      await assert.rejects(saveFxProviderConfig(org.orgId, actorId, input));
+      assert.equal(
+        await readFxProviderConfig(org.orgId),
+        null,
+        "the config must not survive its audit failing",
+      );
+    } finally {
+      await db.execute(sql`alter table audit_log drop constraint fx_audit_proof_block`);
+    }
+    // Recovery: the write and its evidence commit together — true before
+    // (null on insert) and after, with no secret material.
+    await saveFxProviderConfig(org.orgId, actorId, input);
+    const audits = await db.execute<{ action: string; changes: unknown }>(
+      sql`
+        select action, changes from audit_log
+         where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
+         order by at asc, id asc`,
+      "objects",
+    );
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0]!.action, "insert");
+    const first = audits[0]!.changes as { before: null; after: Record<string, unknown> };
+    assert.equal(first.before, null);
+    const firstAfter = {
+      provider: "bank_of_canada",
+      displayName: "Bank of Canada",
+      baseCurrency: "CAD",
+      currencies: ["USD"],
+      schedule: "manual",
+      syncHourUtc: 0,
+      lookbackDays: 7,
+      isEnabled: true,
+      hasSecret: false,
+    };
+    assert.deepEqual(first.after, firstAfter);
+    // Update: the audit carries the true before-state and stays redacted
+    // even while a secret is stored.
+    await saveFxProviderConfig(org.orgId, actorId, {
+      ...input,
+      provider: "open_exchange_rates",
+      baseCurrency: "USD",
+      currencies: ["CAD"],
+      apiKey: "test-secret-proof",
+    });
+    const afterUpdate = await db.execute<{ action: string; changes: unknown }>(
+      sql`
+        select action, changes from audit_log
+         where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
+         order by at asc, id asc`,
+      "objects",
+    );
+    assert.equal(afterUpdate.length, 2);
+    assert.equal(afterUpdate[1]!.action, "update");
+    const second = afterUpdate[1]!.changes as {
+      before: Record<string, unknown>;
+      after: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      second.before,
+      firstAfter,
+      "the update audit must carry the true before-state",
+    );
+    assert.deepEqual(second.after, {
+      provider: "open_exchange_rates",
+      displayName: "Open Exchange Rates",
+      baseCurrency: "USD",
+      currencies: ["CAD"],
+      schedule: "manual",
+      syncHourUtc: 0,
+      lookbackDays: 7,
+      isEnabled: true,
+      hasSecret: true,
+    });
+    assert.ok(
+      !JSON.stringify(second).includes("test-secret-proof"),
+      "plaintext secrets must never enter audit evidence",
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test("provider rates accept scientific notation and refuse non-positive input", () => {
   // Small and large exponents expand exactly: 1e1 is ten, 1e-1 is a tenth.
@@ -1128,7 +1446,10 @@ test("provider rates refuse unrepresentable scientific notation without expandin
   // A 9-byte '1e1000000' must refuse instead of materializing a million
   // zeros, and a ten-digit exponent must not ask String.repeat for a
   // gigabyte (or die with RangeError): both refuse as domain refusals.
-  assert.throws(() => ratioRate("1e1000000", "1"), /provider returned an unrepresentable rate: 1e1000000/);
+  assert.throws(
+    () => ratioRate("1e1000000", "1"),
+    /provider returned an unrepresentable rate: 1e1000000/,
+  );
   assert.throws(() => ratioRate("1", "1e1000000000"), /provider returned an unrepresentable rate/);
   assert.throws(() => ratioRate("1e-1000000", "1"), /provider returned an unrepresentable rate/);
   // Ordinary exponents still parse exactly.
@@ -1141,12 +1462,20 @@ test("provider rates refuse unrepresentable scientific notation without expandin
 
 test("normalization names the provider, pair, and date of an unrepresentable observation", () => {
   assert.throws(
-    () => normalizeFxSnapshots([{
-      date: "2026-07-14",
-      anchor: "EUR",
-      anchorBasis: "foreign-per-anchor",
-      unitsPerAnchor: { EUR: "1", USD: "1e1000000" },
-    }], "EUR", ["USD"], "European Central Bank"),
+    () =>
+      normalizeFxSnapshots(
+        [
+          {
+            date: "2026-07-14",
+            anchor: "EUR",
+            anchorBasis: "foreign-per-anchor",
+            unitsPerAnchor: { EUR: "1", USD: "1e1000000" },
+          },
+        ],
+        "EUR",
+        ["USD"],
+        "European Central Bank",
+      ),
     /European Central Bank returned an unrepresentable rate for EUR→USD on 2026-07-14/,
   );
 });
@@ -1154,27 +1483,33 @@ test("normalization names the provider, pair, and date of an unrepresentable obs
 test("ECB parsing tolerates any column order but requires every column", () => {
   const row = (header: string, body: string): string => [header, body].join("\n");
   const reordered = parseEcbCsv(row("CURRENCY,OBS_VALUE,TIME_PERIOD", "USD,1.1650,2026-07-14"));
-  assert.deepEqual(reordered, [{
-    date: "2026-07-14",
-    anchor: "EUR",
-    anchorBasis: "foreign-per-anchor",
-    unitsPerAnchor: { EUR: "1", USD: "1.1650" },
-  }]);
+  assert.deepEqual(reordered, [
+    {
+      date: "2026-07-14",
+      anchor: "EUR",
+      anchorBasis: "foreign-per-anchor",
+      unitsPerAnchor: { EUR: "1", USD: "1.1650" },
+    },
+  ]);
   const dateFirst = parseEcbCsv(row("TIME_PERIOD,CURRENCY,OBS_VALUE", "2026-07-14,USD,1.1650"));
   assert.equal(dateFirst[0]!.unitsPerAnchor["USD"], "1.1650");
   const valueFirst = parseEcbCsv(row("OBS_VALUE,TIME_PERIOD,CURRENCY", "1.1650,2026-07-14,USD"));
   assert.equal(valueFirst[0]!.unitsPerAnchor["USD"], "1.1650");
   for (const header of ["TIME_PERIOD,CURRENCY", "CURRENCY,OBS_VALUE", "TIME_PERIOD,OBS_VALUE"]) {
-    assert.throws(() => parseEcbCsv(row(header, "USD,2026-07-14")), /missing required columns/, header);
+    assert.throws(
+      () => parseEcbCsv(row(header, "USD,2026-07-14")),
+      /missing required columns/,
+      header,
+    );
   }
 });
 
 test("ECB parsing honors quoted fields in the currency column", () => {
-  const snapshots = parseEcbCsv([
-    "CURRENCY,TIME_PERIOD,OBS_VALUE",
-    '"USD",2026-07-14,1.1650',
-    '"U""SD",2026-07-15,1.1700',
-  ].join("\n"));
+  const snapshots = parseEcbCsv(
+    ["CURRENCY,TIME_PERIOD,OBS_VALUE", '"USD",2026-07-14,1.1650', '"U""SD",2026-07-15,1.1700'].join(
+      "\n",
+    ),
+  );
   assert.equal(snapshots[0]!.unitsPerAnchor["USD"], "1.1650");
   // An escaped quote is data, not a delimiter: the second row keys a
   // three-character currency and stays on its own date.
@@ -1190,7 +1525,8 @@ test("rate application writes in chunked multi-row upserts, not one statement pe
   const seen: unknown[] = [];
   const counting: Pick<typeof db, "execute"> = {
     execute: (async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       seen.push(true);
       return inMode({ rows: [] });
     }) as unknown as typeof db.execute,

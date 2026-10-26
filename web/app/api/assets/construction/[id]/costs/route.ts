@@ -7,7 +7,10 @@ import { id, reasonText, scopeOf } from "../../../_depth";
 export const runtime = "nodejs";
 
 const body = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("link"), journalLineIds: z.array(id).min(1, "choose at least one GL line").max(500) }),
+  z.strictObject({
+    action: z.literal("link"),
+    journalLineIds: z.array(id).min(1, "choose at least one GL line").max(500),
+  }),
   z.strictObject({ action: z.literal("unlink"), costId: id, reason: reasonText }),
 ]);
 
@@ -21,12 +24,22 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body: input }) => {
     const { id: cipAssetId } = await params;
     if (input.action === "link") {
-      return NextResponse.json(await linkCipCosts(gate.user.orgId, {
-        cipAssetId, journalLineIds: input.journalLineIds, actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate),
-      }));
+      return NextResponse.json(
+        await linkCipCosts(gate.user.orgId, {
+          cipAssetId,
+          journalLineIds: input.journalLineIds,
+          actorId: gate.user.id,
+          allowedSubsidiaryIds: scopeOf(gate),
+        }),
+      );
     }
-    return NextResponse.json(await unlinkCipCost(gate.user.orgId, {
-      costId: input.costId, reason: input.reason, actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate),
-    }));
+    return NextResponse.json(
+      await unlinkCipCost(gate.user.orgId, {
+        costId: input.costId,
+        reason: input.reason,
+        actorId: gate.user.id,
+        allowedSubsidiaryIds: scopeOf(gate),
+      }),
+    );
   },
 });

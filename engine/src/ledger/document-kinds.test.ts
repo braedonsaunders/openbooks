@@ -32,10 +32,7 @@ test("flow posting kinds are exactly the kernel posting rules", () => {
 
 test("posting plus explicitly non-posting covers the whole universe, disjointly", () => {
   const universe = new Set<string>(DOCUMENT_KINDS);
-  assert.deepEqual(
-    new Set<string>([...POSTING_DOC_KINDS, ...NON_POSTING_DOC_KINDS]),
-    universe,
-  );
+  assert.deepEqual(new Set<string>([...POSTING_DOC_KINDS, ...NON_POSTING_DOC_KINDS]), universe);
   const overlap = [...POSTING_DOC_KINDS].filter((kind) =>
     (NON_POSTING_DOC_KINDS as readonly string[]).includes(kind),
   );

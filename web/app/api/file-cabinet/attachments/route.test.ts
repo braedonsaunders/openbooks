@@ -1,20 +1,20 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.file-cabinet-attachments-route-test')
-const targetId = '00000000-0000-4000-8000-000000000001'
-const visibleFileId = '00000000-0000-4000-8000-000000000002'
-const hiddenFileId = '00000000-0000-4000-8000-000000000003'
+const stateKey = Symbol.for("openbooks.file-cabinet-attachments-route-test");
+const targetId = "00000000-0000-4000-8000-000000000001";
+const visibleFileId = "00000000-0000-4000-8000-000000000002";
+const hiddenFileId = "00000000-0000-4000-8000-000000000003";
 
 interface RouteState {
-  permissions: Set<string>
-  allowedSubsidiaryIds: Set<string> | null
-  targetRows: unknown[]
-  attachments: Array<{ id: string; name: string }>
-  fileVisibility: Map<string, { isInactive?: boolean } | null>
-  permissionChecks: string[]
-  listCalls: number
+  permissions: Set<string>;
+  allowedSubsidiaryIds: Set<string> | null;
+  targetRows: unknown[];
+  attachments: Array<{ id: string; name: string }>;
+  fileVisibility: Map<string, { isInactive?: boolean } | null>;
+  permissionChecks: string[];
+  listCalls: number;
 }
 
 const routeState: RouteState = {
@@ -25,12 +25,12 @@ const routeState: RouteState = {
   fileVisibility: new Map(),
   permissionChecks: [],
   listCalls: 0,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.file-cabinet-attachments-route-test')]
       export const ambientTenantOrgId = () => null
@@ -45,7 +45,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.file-cabinet-attachments-route-test')]
       export async function getAuthz() {
@@ -69,14 +69,14 @@ const mockSources = new Map<string, string>([
   [
     // Expense self-service is covered by its own integration tests; this
     // caller holds no expense grant.
-    'mock:expense-access',
+    "mock:expense-access",
     `
       export async function expenseAccess() { return null }
       export function expenseAccessAllows() { return false }
     `,
   ],
   [
-    'mock:file-cabinet',
+    "mock:file-cabinet",
     `
       import { attachmentReadPermission } from '@/lib/file-cabinet'
       export { attachmentReadPermission }
@@ -95,130 +95,164 @@ const mockSources = new Map<string, string>([
       export async function uploadAndAttach() { return { id: 'file-1' } }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../lib/expense-access', 'mock:expense-access'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../lib/authz', 'mock:authz'],
-  ['../../../../lib/file-cabinet', 'mock:file-cabinet'],
-  ['../../../lib/file-cabinet', 'mock:file-cabinet'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../lib/expense-access", "mock:expense-access"],
+  ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../lib/authz", "mock:authz"],
+  ["../../../../lib/file-cabinet", "mock:file-cabinet"],
+  ["../../../lib/file-cabinet", "mock:file-cabinet"],
+]);
 
-const selfUrl = new URL(import.meta.url).href
+const selfUrl = new URL(import.meta.url).href;
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // The engine's attachment-target loader reads through its own relative
     // database import, so that edge is served the same double.
-    const mocked = mockUrls.get(specifier)
-      ?? (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/engine/src/records/file-attachment-target.ts') ? 'mock:db' : undefined)
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/engine/src/records/file-attachment-target.ts")
+        ? "mock:db"
+        : undefined);
     // File-URL serving: the double re-exports the real permission map (opaque mock: URLs cannot resolve it).
-    if (mocked === 'mock:file-cabinet') return { url: `${selfUrl}?mock=file-cabinet`, shortCircuit: true }
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (mocked === "mock:file-cabinet")
+      return { url: `${selfUrl}?mock=file-cabinet`, shortCircuit: true };
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source =
+      mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const { GET, POST } = (await import('./route.ts')) as typeof import('./route.ts')
+const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
 
 function reset(input: {
-  permissions: string[]
-  allowedSubsidiaryIds?: string[] | null
-  targetRows: unknown[]
-  attachments?: Array<{ id: string; name: string }>
-  fileVisibility?: Map<string, { isInactive?: boolean } | null>
+  permissions: string[];
+  allowedSubsidiaryIds?: string[] | null;
+  targetRows: unknown[];
+  attachments?: Array<{ id: string; name: string }>;
+  fileVisibility?: Map<string, { isInactive?: boolean } | null>;
 }): void {
-  routeState.permissions = new Set(input.permissions)
-  routeState.allowedSubsidiaryIds = input.allowedSubsidiaryIds === null || input.allowedSubsidiaryIds === undefined ? null : new Set(input.allowedSubsidiaryIds)
-  routeState.targetRows = [...input.targetRows]
-  routeState.attachments = input.attachments ?? []
-  routeState.fileVisibility = input.fileVisibility ?? new Map()
-  routeState.permissionChecks.length = 0
-  routeState.listCalls = 0
+  routeState.permissions = new Set(input.permissions);
+  routeState.allowedSubsidiaryIds =
+    input.allowedSubsidiaryIds === null || input.allowedSubsidiaryIds === undefined
+      ? null
+      : new Set(input.allowedSubsidiaryIds);
+  routeState.targetRows = [...input.targetRows];
+  routeState.attachments = input.attachments ?? [];
+  routeState.fileVisibility = input.fileVisibility ?? new Map();
+  routeState.permissionChecks.length = 0;
+  routeState.listCalls = 0;
 }
 
 function get(targetTable: string): Promise<Response> {
-  return GET(new Request(`http://openbooks.test/api/file-cabinet/attachments?targetTable=${targetTable}&targetId=${targetId}`))
+  return GET(
+    new Request(
+      `http://openbooks.test/api/file-cabinet/attachments?targetTable=${targetTable}&targetId=${targetId}`,
+    ),
+  );
 }
 
-test('GET uses the owning resource permission instead of documents.read', async () => {
-  reset({ permissions: ['documents.read'], targetRows: [[{ partySubsidiaryId: null, projectSubsidiaryId: null }]] })
-
-  const response = await get('compliance_records')
-
-  assert.deepEqual([response.status, routeState.permissionChecks, routeState.listCalls], [403, ['compliance.read'], 0])
-})
-
-test('GET hides out-of-scope targets before listing their attachments', async () => {
+test("GET uses the owning resource permission instead of documents.read", async () => {
   reset({
-    permissions: ['compliance.read'],
-    allowedSubsidiaryIds: ['00000000-0000-4000-8000-000000000099'],
+    permissions: ["documents.read"],
+    targetRows: [[{ partySubsidiaryId: null, projectSubsidiaryId: null }]],
+  });
+
+  const response = await get("compliance_records");
+
+  assert.deepEqual(
+    [response.status, routeState.permissionChecks, routeState.listCalls],
+    [403, ["compliance.read"], 0],
+  );
+});
+
+test("GET hides out-of-scope targets before listing their attachments", async () => {
+  reset({
+    permissions: ["compliance.read"],
+    allowedSubsidiaryIds: ["00000000-0000-4000-8000-000000000099"],
     targetRows: [
       [
         {
           partySubsidiaryId: null,
-          projectSubsidiaryId: '00000000-0000-4000-8000-000000000098',
+          projectSubsidiaryId: "00000000-0000-4000-8000-000000000098",
         },
       ],
     ],
-  })
+  });
 
-  const response = await get('compliance_records')
+  const response = await get("compliance_records");
 
-  assert.deepEqual([response.status, routeState.listCalls], [404, 0])
-})
+  assert.deepEqual([response.status, routeState.listCalls], [404, 0]);
+});
 
-test('GET keeps org-wide rate-card targets visible to restricted setup users', async () => {
+test("GET keeps org-wide rate-card targets visible to restricted setup users", async () => {
   reset({
-    permissions: ['admin.setup.manage'],
-    allowedSubsidiaryIds: ['00000000-0000-4000-8000-000000000099'],
+    permissions: ["admin.setup.manage"],
+    allowedSubsidiaryIds: ["00000000-0000-4000-8000-000000000099"],
     targetRows: [[{}]],
-  })
+  });
 
-  const response = await get('item_rate_versions')
+  const response = await get("item_rate_versions");
 
-  assert.deepEqual([response.status, routeState.listCalls], [200, 1])
-})
+  assert.deepEqual([response.status, routeState.listCalls], [200, 1]);
+});
 
-test('GET filters attachment metadata through file visibility', async () => {
+test("GET filters attachment metadata through file visibility", async () => {
   reset({
-    permissions: ['compliance.read'],
-    allowedSubsidiaryIds: ['00000000-0000-4000-8000-000000000099'],
+    permissions: ["compliance.read"],
+    allowedSubsidiaryIds: ["00000000-0000-4000-8000-000000000099"],
     targetRows: [
       [
         {
           partySubsidiaryId: null,
-          projectSubsidiaryId: '00000000-0000-4000-8000-000000000099',
+          projectSubsidiaryId: "00000000-0000-4000-8000-000000000099",
         },
       ],
     ],
     attachments: [
-      { id: visibleFileId, name: 'visible.pdf' },
-      { id: hiddenFileId, name: 'private.pdf' },
+      { id: visibleFileId, name: "visible.pdf" },
+      { id: hiddenFileId, name: "private.pdf" },
     ],
     fileVisibility: new Map([
       [visibleFileId, { isInactive: false }],
       [hiddenFileId, null],
     ]),
-  })
+  });
 
-  const response = await get('compliance_records')
+  const response = await get("compliance_records");
 
-  assert.deepEqual([response.status, await response.json()], [200, { attachments: [{ id: visibleFileId, name: 'visible.pdf' }] }])
-})
+  assert.deepEqual(
+    [response.status, await response.json()],
+    [200, { attachments: [{ id: visibleFileId, name: "visible.pdf" }] }],
+  );
+});
 
-test('POST requires the write permission for the target document kind', async () => {
-  reset({ permissions: ['ar.create'], targetRows: [[{ kind: 'vendor_bill', subsidiaryId: null }]] })
+test("POST requires the write permission for the target document kind", async () => {
+  reset({
+    permissions: ["ar.create"],
+    targetRows: [[{ kind: "vendor_bill", subsidiaryId: null }]],
+  });
 
-  const response = await POST(new Request('http://openbooks.test/api/file-cabinet/attachments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fileId: visibleFileId, targetTable: 'documents', targetId }) }))
+  const response = await POST(
+    new Request("http://openbooks.test/api/file-cabinet/attachments", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileId: visibleFileId, targetTable: "documents", targetId }),
+    }),
+  );
 
-  assert.deepEqual([response.status, routeState.permissionChecks], [403, ['documents.manage', 'ap.create']])
-})
+  assert.deepEqual(
+    [response.status, routeState.permissionChecks],
+    [403, ["documents.manage", "ap.create"]],
+  );
+});

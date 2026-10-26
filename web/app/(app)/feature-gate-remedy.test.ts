@@ -1,8 +1,8 @@
 // source-pin-contract: feature-remedy invariant — no view or route-gate loader answers a disabled feature with a bare 404 or silent null, and the feature remedy never replaces a grant check; subjects derived by walking web/app/(app) and web/lib/hrm, never hand-listed.
-import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
 
 /**
  * Every route that gates on a Features switch must render the
@@ -17,91 +17,100 @@ import test from 'node:test'
  * feature check.
  */
 
-const APP = join(process.cwd(), 'web', 'app', '(app)')
-const LIB_HRM = join(process.cwd(), 'web', 'lib', 'hrm')
+const APP = join(process.cwd(), "web", "app", "(app)");
+const LIB_HRM = join(process.cwd(), "web", "lib", "hrm");
 
 function viewFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry)
+    const path = join(dir, entry);
     if (statSync(path).isDirectory()) {
-      viewFiles(path, out)
+      viewFiles(path, out);
     } else if (
-      (entry === 'view.ts' || entry === 'page.tsx' || entry === 'depth-view.ts') &&
-      !entry.endsWith('.test.ts')
+      (entry === "view.ts" || entry === "page.tsx" || entry === "depth-view.ts") &&
+      !entry.endsWith(".test.ts")
     ) {
-      out.push(path)
+      out.push(path);
     }
   }
-  return out
+  return out;
 }
 
 function featureCheck(line: string): boolean {
-  return line.includes('isFeatureEnabled(') || line.includes('isDocKindEnabled(')
+  return line.includes("isFeatureEnabled(") || line.includes("isDocKindEnabled(");
 }
 
-test('no view calls notFound directly after a feature check', () => {
-  const violations: string[] = []
+test("no view calls notFound directly after a feature check", () => {
+  const violations: string[] = [];
   for (const file of viewFiles(APP)) {
-    const lines = readFileSync(file, 'utf8').split('\n')
+    const lines = readFileSync(file, "utf8").split("\n");
     lines.forEach((line, index) => {
-      if (!line.includes('notFound()')) return
+      if (!line.includes("notFound()")) return;
       // A 404 on the same line as the check, or within three lines below
       // one (the dual-switch block shape), is the dropped refusal.
       if (featureCheck(line) || lines.slice(Math.max(0, index - 3), index).some(featureCheck)) {
-        violations.push(`${file}:${index + 1}: ${line.trim()}`)
+        violations.push(`${file}:${index + 1}: ${line.trim()}`);
       }
-    })
+    });
   }
   assert.deepEqual(
     violations,
     [],
-    `views that 404 on a disabled feature instead of naming the remedy:\n${violations.join('\n')}`,
-  )
-})
+    `views that 404 on a disabled feature instead of naming the remedy:\n${violations.join("\n")}`,
+  );
+});
 
-test('route-gate loaders refuse by remedy, never by silent null', () => {
+test("route-gate loaders refuse by remedy, never by silent null", () => {
   // The nullable-authz loaders behind the HRM and Me routes, derived from
   // the tree instead of a hand list: every lib/hrm module exporting a
   // *Authz route-gate entry. A switched-off feature must redirect through
   // requireFeatureEnabled while a missing session/grant still returns null
   // (the view's 404).
   const loaders = readdirSync(LIB_HRM)
-    .filter((entry) => entry.endsWith('.ts') && !entry.endsWith('.test.ts'))
+    .filter((entry) => entry.endsWith(".ts") && !entry.endsWith(".test.ts"))
     .map((entry) => join(LIB_HRM, entry))
-    .filter((path) => /export async function \w*Authz\(/.test(readFileSync(path, 'utf8')))
-  assert.ok(loaders.length > 0, 'the tree still has nullable-authz route-gate loaders; the derivation found none')
+    .filter((path) => /export async function \w*Authz\(/.test(readFileSync(path, "utf8")));
+  assert.ok(
+    loaders.length > 0,
+    "the tree still has nullable-authz route-gate loaders; the derivation found none",
+  );
   for (const path of loaders) {
-    const name = path.split('/').pop() as string
-    const source = readFileSync(path, 'utf8')
-    assert.match(source, /requireFeatureEnabled\(/, `${name}: the feature gate redirects to the remedy`)
-    const silent = source.split('\n').filter((line) => line.includes('isFeatureEnabled(') && line.includes('return null'))
-    assert.deepEqual(silent, [], `${name}: no feature check collapses to a silent null`)
+    const name = path.split("/").pop() as string;
+    const source = readFileSync(path, "utf8");
+    assert.match(
+      source,
+      /requireFeatureEnabled\(/,
+      `${name}: the feature gate redirects to the remedy`,
+    );
+    const silent = source
+      .split("\n")
+      .filter((line) => line.includes("isFeatureEnabled(") && line.includes("return null"));
+    assert.deepEqual(silent, [], `${name}: no feature check collapses to a silent null`);
   }
-})
+});
 
-test('permission denial stays separate from the feature remedy', () => {
+test("permission denial stays separate from the feature remedy", () => {
   // Every converted view still decides the grant first: requirePermission
   // throws the access denial, getAuthz-null keeps its 404, and can keeps
   // narrowing rows. None of that may ride the feature redirect.
-  const violations: string[] = []
+  const violations: string[] = [];
   for (const file of viewFiles(APP)) {
-    const source = readFileSync(file, 'utf8')
-    if (!source.includes('requireFeatureEnabled(')) continue
+    const source = readFileSync(file, "utf8");
+    if (!source.includes("requireFeatureEnabled(")) continue;
     if (
-      !source.includes('requirePermission(') &&
-      !source.includes('getAuthz(') &&
-      !source.includes('guardFeaturePermission(') &&
+      !source.includes("requirePermission(") &&
+      !source.includes("getAuthz(") &&
+      !source.includes("guardFeaturePermission(") &&
       // Expense views require the org-wide or self-service expense grant,
       // which throws the same access denial as requirePermission.
-      !source.includes('requireExpensePermission(') &&
-      !source.includes('can(')
+      !source.includes("requireExpensePermission(") &&
+      !source.includes("can(")
     ) {
-      violations.push(file)
+      violations.push(file);
     }
   }
   assert.deepEqual(
     violations,
     [],
-    `views whose feature remedy could mask a missing grant check:\n${violations.join('\n')}`,
-  )
-})
+    `views whose feature remedy could mask a missing grant check:\n${violations.join("\n")}`,
+  );
+});

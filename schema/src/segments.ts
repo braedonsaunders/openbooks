@@ -1,5 +1,17 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, foreignKey, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /** Values for custom segment definitions. Built-in values stay authoritative
@@ -101,7 +113,10 @@ export const segmentValueDependencies = pgTable(
   (t) => [
     uniqueIndex("segment_value_dependencies_org_id_id_unique").on(t.orgId, t.id),
     index("segment_value_dependencies_segment").on(t.orgId, t.segmentId, t.valueId),
-    check("segment_value_dependencies_distinct_segments", sql`${t.segmentId} <> ${t.controllingSegmentId}`),
+    check(
+      "segment_value_dependencies_distinct_segments",
+      sql`${t.segmentId} <> ${t.controllingSegmentId}`,
+    ),
     check(
       "segment_value_dependencies_window",
       sql`${t.effectiveFrom} is null or ${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,

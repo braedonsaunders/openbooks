@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  listTemplates,
-  saveTemplate,
-} from "@openbooks/engine/hrm/documents/templates";
+import { listTemplates, saveTemplate } from "@openbooks/engine/hrm/documents/templates";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveTemplateBody } from "./bodies";
 export const GET = defineRoute({
@@ -11,8 +8,7 @@ export const GET = defineRoute({
   feature: "hrmDocuments",
   handler: async ({ request: req, authz: gate }) => {
     try {
-      const includeInactive =
-        new URL(req.url).searchParams.get("includeInactive") === "1";
+      const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
       const templates = await listTemplates({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
@@ -43,10 +39,7 @@ export const POST = defineRoute({
         acknowledgmentOnly: body.acknowledgmentOnly,
         isActive: body.isActive,
       });
-      return NextResponse.json(
-        { template },
-        { status: body.templateId ? 200 : 201 },
-      );
+      return NextResponse.json({ template }, { status: body.templateId ? 200 : 201 });
     } catch (e) {
       return hrmDocumentsErrorResponse(e);
     }

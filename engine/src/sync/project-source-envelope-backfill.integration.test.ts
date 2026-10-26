@@ -22,9 +22,12 @@ const DB = !!env.OPENBOOKS_DB_URL;
 
 async function projectCustom(orgId: string, ref: string) {
   return withOrg(orgId, () =>
-    db.execute<{ custom: unknown }>(sql`
+    db.execute<{ custom: unknown }>(
+      sql`
       select custom from projects where org_id = ${orgId} and custom->>'migrationTest' = ${ref}
-    `, "objects"),
+    `,
+      "objects",
+    ),
   );
 }
 
@@ -46,9 +49,7 @@ test(
         loadEntities(source(), org.orgId, null, undefined, undefined, [
           {
             resource: "projects",
-            records: [
-              { sourceRef: "PRJ-1", fields: { name: "Backfilled project" } },
-            ],
+            records: [{ sourceRef: "PRJ-1", fields: { name: "Backfilled project" } }],
           },
         ]),
       );
@@ -66,9 +67,12 @@ test(
         "the adapter refKey identity survives the heal",
       );
       const name = await withOrg(org.orgId, () =>
-        db.execute<{ name: string }>(sql`
+        db.execute<{ name: string }>(
+          sql`
           select name from projects where org_id = ${org.orgId} and custom->>'migrationTest' = 'PRJ-1'
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.equal(name[0]?.name, "Backfilled project");
     } finally {
@@ -94,9 +98,7 @@ test(
         loadEntities(source(), org.orgId, null, undefined, undefined, [
           {
             resource: "projects",
-            records: [
-              { sourceRef: "PRJ-2", fields: { name: "Foreign project renamed" } },
-            ],
+            records: [{ sourceRef: "PRJ-2", fields: { name: "Foreign project renamed" } }],
           },
         ]),
       );

@@ -20,14 +20,8 @@ export const GET = defineRoute({
   feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     const status = new URL(req.url).searchParams.get("status");
-    if (
-      status !== null &&
-      !["draft", "open", "on_hold", "filled", "cancelled"].includes(status)
-    ) {
-      return NextResponse.json(
-        { error: "unknown requisition status" },
-        { status: 400 },
-      );
+    if (status !== null && !["draft", "open", "on_hold", "filled", "cancelled"].includes(status)) {
+      return NextResponse.json({ error: "unknown requisition status" }, { status: 400 });
     }
     try {
       const requisitions = await listRequisitions({

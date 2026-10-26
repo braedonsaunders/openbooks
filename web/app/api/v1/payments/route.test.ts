@@ -111,7 +111,13 @@ test("GET /api/v1/payments lists through the payments record type", async () => 
   routeState.calls.length = 0;
   const response = await GET(new Request("http://openbooks.test/api/v1/payments"));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { records: [], total: 0, page: 1, perPage: 25, typeKey: "payments" });
+  assert.deepEqual(await response.json(), {
+    records: [],
+    total: 0,
+    page: 1,
+    perPage: 25,
+    typeKey: "payments",
+  });
   assert.equal(routeState.calls[0]?.list, "payments");
 });
 

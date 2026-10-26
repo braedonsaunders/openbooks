@@ -34,9 +34,12 @@ test("invalid timezones fall back to UTC rather than throwing the scan", () => {
 });
 
 test("date_relative triggers wait until their configured organization-local time", () => {
-  const timezone = "America/Toronto"
-  assert.equal(orgCivilTime(new Date("2026-10-19T12:59:00Z"), timezone), "08:59")
-  assert.equal(dateRelativeTriggerIsDue(new Date("2026-10-19T12:59:00Z"), timezone, "09:00"), false)
-  assert.equal(orgCivilTime(new Date("2026-10-19T13:00:00Z"), timezone), "09:00")
-  assert.equal(dateRelativeTriggerIsDue(new Date("2026-10-19T13:00:00Z"), timezone, "09:00"), true)
-})
+  const timezone = "America/Toronto";
+  assert.equal(orgCivilTime(new Date("2026-10-19T12:59:00Z"), timezone), "08:59");
+  assert.equal(
+    dateRelativeTriggerIsDue(new Date("2026-10-19T12:59:00Z"), timezone, "09:00"),
+    false,
+  );
+  assert.equal(orgCivilTime(new Date("2026-10-19T13:00:00Z"), timezone), "09:00");
+  assert.equal(dateRelativeTriggerIsDue(new Date("2026-10-19T13:00:00Z"), timezone, "09:00"), true);
+});

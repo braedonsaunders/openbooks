@@ -77,11 +77,12 @@ stubModules({
 
 const { GET, PATCH } = (await import("./route.ts")) as typeof import("./route.ts");
 
-const json = (body: unknown, headers: Record<string, string> = {}) => new Request("http://openbooks.test/api/v1/settings/company", {
-  method: "POST",
-  headers: { "content-type": "application/json", ...headers },
-  body: JSON.stringify(body),
-});
+const json = (body: unknown, headers: Record<string, string> = {}) =>
+  new Request("http://openbooks.test/api/v1/settings/company", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
 
 test("GET /api/v1/settings/company reads through readCompanySettings", async () => {
   routeState.permissions = ["admin.setup.manage"];
@@ -102,7 +103,9 @@ test("GET /api/v1/settings/company refuses readers without settings authority", 
 test("PATCH /api/v1/settings/company wraps updateCompanySettings idempotently", async () => {
   routeState.updated = null;
   routeState.asserted = null;
-  const response = await PATCH(json({ changes: { name: "Acme Ltd" } }, { "idempotency-key": "key-1" }));
+  const response = await PATCH(
+    json({ changes: { name: "Acme Ltd" } }, { "idempotency-key": "key-1" }),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, changed: true });
   assert.equal(response.headers.get("idempotency-replayed"), "false");
@@ -121,11 +124,17 @@ test("PATCH /api/v1/settings/company also accepts top-level setting keys", async
 });
 
 test("PATCH /api/v1/settings/company requires an Idempotency-Key", async () => {
-  await assert.rejects(() => PATCH(json({ changes: { name: "Acme Ltd" } })), /Idempotency-Key header is required/);
+  await assert.rejects(
+    () => PATCH(json({ changes: { name: "Acme Ltd" } })),
+    /Idempotency-Key header is required/,
+  );
 });
 
 test("PATCH /api/v1/settings/company refuses empty changes", async () => {
   const response = await PATCH(json({ changes: {} }, { "idempotency-key": "key-1" }));
   assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), { error: "changes must name at least one setting", code: "invalid_input" });
+  assert.deepEqual(await response.json(), {
+    error: "changes must name at least one setting",
+    code: "invalid_input",
+  });
 });

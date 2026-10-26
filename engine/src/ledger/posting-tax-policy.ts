@@ -1,5 +1,11 @@
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
-import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "../journal/posting-contracts.ts";
+import {
+  type Doc,
+  type DocLine,
+  type PostingDeps,
+  type TaxPostingComponent,
+  PostingError,
+} from "../journal/posting-contracts.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { resolveMarketplaceClearing } from "../tax/marketplace-facilitators.ts";
 
@@ -58,21 +64,20 @@ export async function resolveMarketplaceClearingForDocument(
   return {
     ...deps,
     marketplaceClearingByName: new Map(
-      [...resolved].map(([name, clearing]) => [name, { accountId: clearing.accountId, mode: clearing.mode }]),
+      [...resolved].map(([name, clearing]) => [
+        name,
+        { accountId: clearing.accountId, mode: clearing.mode },
+      ]),
     ),
   };
 }
 
 function componentSettlementTotal(components: TaxPostingComponent[]): string {
   const standard = sum(
-    components
-      .filter((c) => c.calculationType === "standard")
-      .map((c) => c.taxAmount),
+    components.filter((c) => c.calculationType === "standard").map((c) => c.taxAmount),
   );
   const withholding = sum(
-    components
-      .filter((c) => c.calculationType === "withholding")
-      .map((c) => c.taxAmount),
+    components.filter((c) => c.calculationType === "withholding").map((c) => c.taxAmount),
   );
   return add(standard, neg(withholding));
 }
@@ -89,14 +94,10 @@ export function componentsForLine(
   if (!salesSide) refuseMarketplaceOnPurchase(line, components);
   const hasTaxProfile = Boolean(line.taxCodeId || line.taxGroupId);
   if (hasTaxProfile && components.length === 0) {
-    throw new PostingError(
-      `line ${line.lineNumber} has a tax profile but no calculation evidence`,
-    );
+    throw new PostingError(`line ${line.lineNumber} has a tax profile but no calculation evidence`);
   }
   if (!hasTaxProfile && components.length === 0 && !isZero(line.taxAmount ?? "0")) {
-    throw new PostingError(
-      `line ${line.lineNumber} has a tax amount but no calculation evidence`,
-    );
+    throw new PostingError(`line ${line.lineNumber} has a tax amount but no calculation evidence`);
   }
   if (components.length > 0) {
     // Marketplace-collected tax settles through the facilitator, not the
@@ -143,9 +144,14 @@ function taxControlAccount(
   deps: PostingDeps,
   side: "collected" | "paid",
 ): string | null {
-  const configured = side === "collected"
-    ? component.collectedAccountId ?? deps.taxCollectedByCode?.get(component.taxCodeId) ?? deps.control.taxCollected
-    : component.paidAccountId ?? deps.taxPaidByCode?.get(component.taxCodeId) ?? deps.control.taxPaid;
+  const configured =
+    side === "collected"
+      ? (component.collectedAccountId ??
+        deps.taxCollectedByCode?.get(component.taxCodeId) ??
+        deps.control.taxCollected)
+      : (component.paidAccountId ??
+        deps.taxPaidByCode?.get(component.taxCodeId) ??
+        deps.control.taxPaid);
   return configured && configured.length > 0 ? configured : null;
 }
 
@@ -156,9 +162,7 @@ export function assertTaxControlAccount(
 ): string {
   if (side === "withholding") {
     if (!component.withholdingAccountId) {
-      throw new PostingError(
-        `withholding tax ${component.taxCodeId} has no withholding account`,
-      );
+      throw new PostingError(`withholding tax ${component.taxCodeId} has no withholding account`);
     }
     return component.withholdingAccountId;
   }
@@ -172,11 +176,7 @@ export function assertTaxControlAccount(
 }
 
 /** Validate every tax control leg before scripts, flows, or ledger writes. */
-export function validateTaxControlAccounts(
-  doc: Doc,
-  lines: DocLine[],
-  deps: PostingDeps,
-): void {
+export function validateTaxControlAccounts(doc: Doc, lines: DocLine[], deps: PostingDeps): void {
   const purchase = new Set([
     "vendor_bill",
     "vendor_credit",
@@ -233,7 +233,7 @@ export function validateTaxControlAccounts(
           if (paid !== null && paid === collected) {
             throw new PostingError(
               `line ${line.lineNumber} reverse-charge tax ${component.taxCodeId} posts its output tax and its reclaimed input tax to the same account — ` +
-              `give the tax code a collected (output) account different from its paid (input) account in Setup → Taxes → Tax codes, then post again`,
+                `give the tax code a collected (output) account different from its paid (input) account in Setup → Taxes → Tax codes, then post again`,
             );
           }
         }

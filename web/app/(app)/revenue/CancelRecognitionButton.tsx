@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
-import { confirmDialog } from '@/lib/confirm'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { promptDialog } from '@/lib/prompt'
-import type { CancelRecognitionRequest } from '@/app/api/revenue/cancel-recognition/route'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button } from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { promptDialog } from "@/lib/prompt";
+import type { CancelRecognitionRequest } from "@/app/api/revenue/cancel-recognition/route";
 
 /**
  * "Cancel recognition" — the dedicated cancellation workflow the invoice-void
@@ -22,58 +22,58 @@ export function CancelRecognitionButton({
   documentId,
   invoiceNumber,
 }: {
-  documentId: string
-  invoiceNumber: string
+  documentId: string;
+  invoiceNumber: string;
 }) {
-  const t = useTranslations('revenue')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("revenue");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
 
   async function cancel() {
     const reason = await promptDialog({
-      title: t('cancel.reasonTitle'),
-      label: t('cancel.reasonLabel'),
-      placeholder: t('cancel.reasonPlaceholder'),
-      confirmLabel: t('cancel.confirm'),
-    })
-    if (!reason) return
+      title: t("cancel.reasonTitle"),
+      label: t("cancel.reasonLabel"),
+      placeholder: t("cancel.reasonPlaceholder"),
+      confirmLabel: t("cancel.confirm"),
+    });
+    if (!reason) return;
     const confirmed = await confirmDialog({
-      title: t('cancel.confirmTitle'),
-      message: t('cancel.confirmBody', { invoice: invoiceNumber }),
-      confirmLabel: t('cancel.confirm'),
-      tone: 'danger',
-    })
-    if (!confirmed) return
-    setBusy(true)
+      title: t("cancel.confirmTitle"),
+      message: t("cancel.confirmBody", { invoice: invoiceNumber }),
+      confirmLabel: t("cancel.confirm"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setBusy(true);
     try {
-      const requestBody = { documentId, reason } satisfies CancelRecognitionRequest
-      const res = await fetch('/api/revenue/cancel-recognition', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const requestBody = { documentId, reason } satisfies CancelRecognitionRequest;
+      const res = await fetch("/api/revenue/cancel-recognition", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(requestBody),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('cancel.failed')))
+        toast.error(await readApiErrorMessage(res, t("cancel.failed")));
       } else if (res.status === 202) {
-        toast.success(t('cancel.submitted'))
+        toast.success(t("cancel.submitted"));
       } else {
-        toast.success(t('cancel.done'))
+        toast.success(t("cancel.done"));
       }
-      router.refresh()
+      router.refresh();
     } catch {
       // A network failure must toast like a refusal, never strand the
       // button on busy with an unhandled rejection.
-      toast.error(t('cancel.failed'))
+      toast.error(t("cancel.failed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <Button variant="destructive" onClick={cancel} disabled={busy}>
-      {t('cancel.button')}
+      {t("cancel.button")}
     </Button>
-  )
+  );
 }

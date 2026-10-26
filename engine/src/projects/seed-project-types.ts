@@ -9,10 +9,7 @@ import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { canonicalizeProjectFinancialProfile } from "./financial-profile-versions.ts";
 
-export async function seedProjectTypes(
-  orgId: string,
-  actorId?: string | null,
-): Promise<void> {
+export async function seedProjectTypes(orgId: string, actorId?: string | null): Promise<void> {
   for (const t of BUILTIN_PROJECT_TYPES) {
     await db.transaction(async (tx) => {
       await tx.execute(sql`
@@ -29,12 +26,15 @@ export async function seedProjectTypes(
         -- Default provisioning preserves the existing type and any operator changes; its row is selected below.
         on conflict (org_id, key) do nothing
       `);
-      const row = (await tx.execute<{ id: string }>(sql`
+      const row = await tx.execute<{ id: string }>(
+        sql`
         select id
           from project_types
          where org_id = ${orgId} and key = ${t.key}
          limit 1
-      `, "objects"));
+      `,
+        "objects",
+      );
       const type = row[0]!;
       await tx.execute(sql`
         insert into project_financial_profile_versions (
@@ -58,14 +58,17 @@ export async function seedProjectTypes(
 
 async function main() {
   const org = await db.execute<{ id: string }>(
-    sql`select id from orgs order by created_at`, "objects",
+    sql`select id from orgs order by created_at`,
+    "objects",
   );
   for (const row of org) await seedProjectTypes(row.id);
   const c = await db.execute<{ n: number }>(
-    sql`select count(*)::int n from project_types`, "objects",
+    sql`select count(*)::int n from project_types`,
+    "objects",
   );
   const b = await db.execute<{ n: number }>(
-    sql`select count(*)::int n from projects where project_type_id is not null`, "objects",
+    sql`select count(*)::int n from projects where project_type_id is not null`,
+    "objects",
   );
   console.log("project_types:", c[0]!.n, "| projects typed:", b[0]!.n);
   process.exit(0);

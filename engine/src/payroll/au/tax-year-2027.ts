@@ -204,9 +204,9 @@ export function auTablesForPayDate(payDate: string): { readonly taxYear: 2027 } 
     return { taxYear: 2027 };
   }
   throw new PayrollPackError(
-    `AU has no transcribed PAYG tables for pay date ${payDate}: the only `
-    + `transcribed edition covers ${AU_FY2027_START} to ${AU_FY2027_END} `
-    + "(2026–27, taxYear 2027). This date is not yet supported by the AU pack; contact support.",
+    `AU has no transcribed PAYG tables for pay date ${payDate}: the only ` +
+      `transcribed edition covers ${AU_FY2027_START} to ${AU_FY2027_END} ` +
+      "(2026–27, taxYear 2027). This date is not yet supported by the AU pack; contact support.",
   );
 }
 

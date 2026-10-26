@@ -9,7 +9,13 @@ import {
   completeFinancialChange,
 } from "../platform/financial-changes.ts";
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
-import { addCalendarDays, addMonthsClamped, calendarDaysBetween, inclusiveCalendarDays, isIsoCalendarDate } from "../platform/business-date.ts";
+import {
+  addCalendarDays,
+  addMonthsClamped,
+  calendarDaysBetween,
+  inclusiveCalendarDays,
+  isIsoCalendarDate,
+} from "../platform/business-date.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import {
@@ -23,10 +29,7 @@ import {
   toUnits,
   roundDiv,
 } from "../money/money.ts";
-import {
-  presentValueOfLevelStream,
-  periodRateFromAnnualPercent,
-} from "../money/present-value.ts";
+import { presentValueOfLevelStream, periodRateFromAnnualPercent } from "../money/present-value.ts";
 import {
   LeaseError,
   leaseRow,
@@ -45,8 +48,7 @@ import {
 } from "./leases.ts";
 
 export interface LeaseChangeInput {
-  operation:
-    "modification" | "remeasurement" | "termination" | "separate_lease";
+  operation: "modification" | "remeasurement" | "termination" | "separate_lease";
   effectiveOn: string;
   reason: string;
   idempotencyKey: string;
@@ -73,8 +75,7 @@ export interface LeaseChangeInput {
 }
 function money(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
-  if (exact === null)
-    throw new LeaseError(`${label} must be an exact ledger decimal`);
+  if (exact === null) throw new LeaseError(`${label} must be an exact ledger decimal`);
   return fromUnits(toUnits(exact));
 }
 const periodsPerYear = { monthly: 12, quarterly: 4, annual: 1 };
@@ -102,16 +103,9 @@ export function measureLeaseChange(args: {
     throw new LeaseError(
       "carrying amounts must be non-negative and scope reduction must be between 0 and 100 percent",
     );
-  const removedLiability = fromUnits(
-    roundDiv(toUnits(liability) * percent, 1_000_000n),
-  );
-  const removedRou = fromUnits(
-    roundDiv(toUnits(rouAsset) * percent, 1_000_000n),
-  );
-  const remeasurement = add(
-    newLiability,
-    neg(add(liability, neg(removedLiability))),
-  );
+  const removedLiability = fromUnits(roundDiv(toUnits(liability) * percent, 1_000_000n));
+  const removedRou = fromUnits(roundDiv(toUnits(rouAsset) * percent, 1_000_000n));
+  const remeasurement = add(newLiability, neg(add(liability, neg(removedLiability))));
   const revisedRou = sum([rouAsset, neg(removedRou), remeasurement]);
   const newRou = cmp(revisedRou, "0") < 0 ? "0.0000" : revisedRou;
   const liabilityDelta = add(newLiability, neg(liability));
@@ -146,23 +140,20 @@ type PlanRow = {
   payment_posted_at: string | null;
   accrual_posted_at: string | null;
 };
-async function snapshot(
-  tx: SqlExecutor,
-  orgId: string,
-  lease: LeaseRow,
-  effectiveOn: string,
-) {
+async function snapshot(tx: SqlExecutor, orgId: string, lease: LeaseRow, effectiveOn: string) {
   if (!isIsoCalendarDate(effectiveOn))
     throw new LeaseError("effective date must be a calendar date (YYYY-MM-DD)");
-  if (lease.status !== "active")
-    throw new LeaseError("only an active lease can be changed");
-  const rows = await tx.execute<PlanRow>(sql`
+  if (lease.status !== "active") throw new LeaseError("only an active lease can be changed");
+  const rows = await tx.execute<PlanRow>(
+    sql`
     select id,sequence,revision,period_start::text,period_end::text,due_on::text,
       payment::text,interest::text,amortization::text,single_cost::text,rou_adjustment::text,
       payment_posted_at::text,accrual_posted_at::text
      from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${lease.id}
        and revision=${lease.revision} and superseded_by_change_id is null order by sequence for update
-  `, "objects");
+  `,
+    "objects",
+  );
   const previous = lease.last_change_id
     ? await loadFinancialChange(tx, orgId, lease.last_change_id)
     : null;
@@ -178,9 +169,7 @@ async function snapshot(
   if (
     rows.some(
       (r) =>
-        (r.payment_posted_at &&
-          r.due_on >= effectiveOn &&
-          !isZero(r.payment)) ||
+        (r.payment_posted_at && r.due_on >= effectiveOn && !isZero(r.payment)) ||
         (r.accrual_posted_at && r.period_end >= effectiveOn),
     )
   ) {
@@ -199,12 +188,8 @@ async function snapshot(
       `post the lease schedule through ${addCalendarDays(effectiveOn, -1)} before proposing this change`,
     );
   }
-  const baseLiability = String(
-    previous?.result?.newLiability ?? lease.initial_liability ?? "0",
-  );
-  const baseRou = String(
-    previous?.result?.newRou ?? lease.initial_rou_asset ?? "0",
-  );
+  const baseLiability = String(previous?.result?.newLiability ?? lease.initial_liability ?? "0");
+  const baseRou = String(previous?.result?.newRou ?? lease.initial_rou_asset ?? "0");
   const liability = sum([
     baseLiability,
     ...rows.filter((r) => r.payment_posted_at).map((r) => neg(r.payment)),
@@ -217,10 +202,7 @@ async function snapshot(
       .map((r) => neg(r.amortization ?? r.rou_adjustment ?? "0")),
   ]);
   const partial = rows.find(
-    (r) =>
-      r.period_start < effectiveOn &&
-      r.period_end >= effectiveOn &&
-      !r.accrual_posted_at,
+    (r) => r.period_start < effectiveOn && r.period_end >= effectiveOn && !r.accrual_posted_at,
   );
   // Actual days within the current contractual period, exact ratio. The stub
   // is separately posted at the change date, never written into the old row.
@@ -234,9 +216,7 @@ async function snapshot(
   const stubAmortization = prorate(partial?.amortization ?? null);
   const stubCost = prorate(partial?.single_cost ?? null);
   const stubRou =
-    lease.classification === "finance"
-      ? stubAmortization
-      : add(stubCost, neg(stubInterest));
+    lease.classification === "finance" ? stubAmortization : add(stubCost, neg(stubInterest));
   const prepaid = lease.exemption
     ? sum([
         String(previous?.result?.prepaidCarrying ?? "0"),
@@ -260,19 +240,9 @@ async function snapshot(
   };
 }
 function validateInput(input: LeaseChangeInput, lease: LeaseRow) {
-  if (
-    ![
-      "modification",
-      "remeasurement",
-      "termination",
-      "separate_lease",
-    ].includes(input.operation)
-  )
+  if (!["modification", "remeasurement", "termination", "separate_lease"].includes(input.operation))
     throw new LeaseError("select a lease change type");
-  if (
-    typeof input.assessment !== "string" ||
-    input.assessment.trim().length < 8
-  )
+  if (typeof input.assessment !== "string" || input.assessment.trim().length < 8)
     throw new LeaseError(
       "record the contractual scope, discount-rate and classification assessment",
     );
@@ -281,13 +251,9 @@ function validateInput(input: LeaseChangeInput, lease: LeaseRow) {
   if (cmp(reduction, "0") < 0 || cmp(reduction, "100") > 0)
     throw new LeaseError("scope reduction must be 0–100 percent");
   if (input.operation === "termination" && cmp(reduction, "100") !== 0)
-    throw new LeaseError(
-      "full termination must remove 100 percent of the right of use",
-    );
+    throw new LeaseError("full termination must remove 100 percent of the right of use");
   if (input.operation === "remeasurement" && !isZero(reduction))
-    throw new LeaseError(
-      "a scope reduction is a modification, not a remeasurement",
-    );
+    throw new LeaseError("a scope reduction is a modification, not a remeasurement");
   if (input.operation === "separate_lease") {
     if (
       !input.separateLease?.additionalRightOfUse ||
@@ -301,17 +267,12 @@ function validateInput(input: LeaseChangeInput, lease: LeaseRow) {
         "a separate lease from this modification must belong to the same legal entity",
       );
     if (input.separateLease.agreement.commencementOn !== input.effectiveOn)
-      throw new LeaseError(
-        "the added lease must commence on the approved effective date",
-      );
+      throw new LeaseError("the added lease must commence on the approved effective date");
     if (!isZero(reduction) || !isZero(settlement))
-      throw new LeaseError(
-        "a separate lease must not extinguish or settle the original lease",
-      );
+      throw new LeaseError("a separate lease must not extinguish or settle the original lease");
   } else if (input.operation !== "termination") {
     const terms = input.remainingTerms;
-    if (!terms)
-      throw new LeaseError("enter the remaining contractual payment terms");
+    if (!terms) throw new LeaseError("enter the remaining contractual payment terms");
     assertLeaseTermWithinHorizon(terms.periods, terms.paymentFrequency);
     if (cmp(money(terms.payment, "Payment"), "0") <= 0)
       throw new LeaseError("remaining payment must be positive");
@@ -353,11 +314,7 @@ function revisionMeasurement(
           purchaseOptionReasonablyCertain:
             terms.classificationInputs.purchaseOptionReasonablyCertain,
         }));
-  if (
-    exemptionContinues &&
-    terms?.paymentTiming === "advance" &&
-    !lease.cost_clearing_account_id
-  ) {
+  if (exemptionContinues && terms?.paymentTiming === "advance" && !lease.cost_clearing_account_id) {
     throw new LeaseError(
       "an exempt advance schedule requires the prepaid expense clearing account on the lease",
     );
@@ -384,16 +341,11 @@ function revisionMeasurement(
   const removedPrepaid = lease.exemption
     ? terms
       ? fromUnits(
-          roundDiv(
-            toUnits(state.prepaid) * toUnits(input.scopeReductionPercent),
-            1_000_000n,
-          ),
+          roundDiv(toUnits(state.prepaid) * toUnits(input.scopeReductionPercent), 1_000_000n),
         )
       : state.prepaid
     : "0.0000";
-  const remainingPrepaid = lease.exemption
-    ? add(state.prepaid, neg(removedPrepaid))
-    : "0.0000";
+  const remainingPrepaid = lease.exemption ? add(state.prepaid, neg(removedPrepaid)) : "0.0000";
   const prepaidCarrying = exemptionContinues ? remainingPrepaid : "0.0000";
   if (lease.exemption) {
     measured = {
@@ -442,10 +394,7 @@ function proposalState(
         "an added right of use is a new lease, not a carried-in opening balance",
       );
     if (agreement.exemption) {
-      if (
-        agreement.exemption === "low_value" &&
-        state.beforeState.framework !== "ifrs"
-      )
+      if (agreement.exemption === "low_value" && state.beforeState.framework !== "ifrs")
         throw new LeaseError("low-value recognition exemption requires IFRS");
       if (
         agreement.exemption === "short_term" &&
@@ -454,9 +403,7 @@ function proposalState(
           purchaseOptionReasonablyCertain: classificationInputs.purchaseOptionReasonablyCertain,
         })
       )
-        throw new LeaseError(
-          "the added lease does not qualify for the short-term exemption",
-        );
+        throw new LeaseError("the added lease does not qualify for the short-term exemption");
       return {
         ...state.beforeState,
         preview: {
@@ -472,10 +419,7 @@ function proposalState(
       annualRatePercent: agreement.annualDiscountRatePercent,
       periodsPerYear: periodsPerYear[agreement.paymentFrequency],
       timing: agreement.paymentTiming ?? "arrears",
-      model: classifyLease(
-        classificationInputs,
-        state.beforeState.framework,
-      ).model,
+      model: classifyLease(classificationInputs, state.beforeState.framework).model,
       initialDirectCosts: agreement.initialDirectCosts,
       prepayments: agreement.prepayments,
       incentives: agreement.incentives,
@@ -551,9 +495,12 @@ export async function applyLeaseChange(
   return withLeaseTransaction(orgId, async (tx) => {
     // Lock the aggregate before its change request, consistently with proposal
     // and posting. The initial identity read holds no change-row lock.
-    const identity = (await tx.execute<{ subject_id: string }>(
-        sql`select subject_id from financial_changes where org_id=${orgId} and id=${changeId} and domain='lease'`, "objects",
-      ))[0];
+    const identity = (
+      await tx.execute<{ subject_id: string }>(
+        sql`select subject_id from financial_changes where org_id=${orgId} and id=${changeId} and domain='lease'`,
+        "objects",
+      )
+    )[0];
     if (!identity) throw new LeaseError("lease change not found");
     const lease = await leaseRow(orgId, identity.subject_id, tx);
     await assertFinancialChangeAccess(tx, {
@@ -574,11 +521,7 @@ export async function applyLeaseChange(
       beforeState: proposalState(lease, state, input),
     });
     if (input.operation === "separate_lease") {
-      const created = await createLeaseAgreement(
-        orgId,
-        actorId,
-        input.separateLease!.agreement,
-      );
+      const created = await createLeaseAgreement(orgId, actorId, input.separateLease!.agreement);
       const commenced = await commenceLease(orgId, created.leaseId, actorId);
       const result = {
         separateLeaseId: created.leaseId,
@@ -588,10 +531,7 @@ export async function applyLeaseChange(
       return result;
     }
     const entryIds: string[] = [];
-    const post = async (
-      suffix: string,
-      lines: { accountId: string; amount: string }[],
-    ) => {
+    const post = async (suffix: string, lines: { accountId: string; amount: string }[]) => {
       if (lines.every((l) => isZero(l.amount))) return;
       entryIds.push(
         await postLeaseEntry(tx, {
@@ -606,9 +546,12 @@ export async function applyLeaseChange(
       );
     };
     const revision = lease.revision + 1;
-    const max = (await tx.execute<{ sequence: number }>(
-        sql`select coalesce(max(sequence),0)::int as sequence from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${lease.id}`, "objects",
-      ))[0]!.sequence;
+    const max = (
+      await tx.execute<{ sequence: number }>(
+        sql`select coalesce(max(sequence),0)::int as sequence from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${lease.id}`,
+        "objects",
+      )
+    )[0]!.sequence;
     // Recognize the elapsed stub using the OLD agreement before remeasurement.
     await post(
       "STUB",
@@ -619,9 +562,7 @@ export async function applyLeaseChange(
               amount: state.stubCost,
             },
             {
-              accountId:
-                lease.cost_clearing_account_id ??
-                lease.lease_liability_account_id,
+              accountId: lease.cost_clearing_account_id ?? lease.lease_liability_account_id,
               amount: neg(state.stubCost),
             },
           ]
@@ -682,17 +623,14 @@ export async function applyLeaseChange(
             amount: neg(newLiability),
           },
           {
-            accountId:
-              lease.cost_clearing_account_id ??
-              lease.lease_liability_account_id,
+            accountId: lease.cost_clearing_account_id ?? lease.lease_liability_account_id,
             amount: neg(remaining),
           },
         ]);
       }
       await post("ADJUST", [
         {
-          accountId:
-            lease.cost_clearing_account_id ?? lease.lease_liability_account_id,
+          accountId: lease.cost_clearing_account_id ?? lease.lease_liability_account_id,
           amount: neg(removed),
         },
         {
@@ -717,21 +655,15 @@ export async function applyLeaseChange(
         },
         { accountId: input.gainLossAccountId, amount: neg(measured.gain) },
       ]);
-    const superseded =
-      await tx.execute(sql`update lease_agreement_schedule_lines set superseded_by_change_id=${changeId},updated_at=now(),updated_by=${actorId}
-      where org_id=${orgId} and lease_id=${lease.id} and superseded_by_change_id is null and accrual_posted_at is null returning id`, "objects");
-    if (
-      superseded.length !==
-      state.beforeState.rows.filter((row) => !row.accrual_posted_at).length
-    )
-      throw new LeaseError(
-        "future lease rows changed while applying the approved revision",
-      );
+    const superseded = await tx.execute(
+      sql`update lease_agreement_schedule_lines set superseded_by_change_id=${changeId},updated_at=now(),updated_by=${actorId}
+      where org_id=${orgId} and lease_id=${lease.id} and superseded_by_change_id is null and accrual_posted_at is null returning id`,
+      "objects",
+    );
+    if (superseded.length !== state.beforeState.rows.filter((row) => !row.accrual_posted_at).length)
+      throw new LeaseError("future lease rows changed while applying the approved revision");
     if (terms) {
-      const months = assertLeaseTermWithinHorizon(
-        terms.periods,
-        terms.paymentFrequency,
-      );
+      const months = assertLeaseTermWithinHorizon(terms.periods, terms.paymentFrequency);
       const prepaidAllocation = apportion(
         toUnits(prepaidCarrying),
         new Array<bigint>(terms.periods).fill(1n),
@@ -769,17 +701,17 @@ export async function applyLeaseChange(
             ${line.amortization ?? null},${line.singleCost ?? null},${line.rouAdjustment ?? null},${actorId},${actorId})`);
       }
     }
-    const updated =
-      await tx.execute(sql`update lease_agreements set revision=${revision},last_change_id=${changeId},
+    const updated = await tx.execute(
+      sql`update lease_agreements set revision=${revision},last_change_id=${changeId},
       status=${terms ? "active" : "terminated"},term_periods=${terms?.periods ?? lease.term_periods},
       payment_amount=${terms?.payment ?? lease.payment_amount},payment_frequency=${terms?.paymentFrequency ?? lease.payment_frequency},
       payment_timing=${terms?.paymentTiming ?? lease.payment_timing},annual_discount_rate_percent=${terms?.annualRatePercent ?? lease.annual_discount_rate_percent},
       classification=${model},classification_inputs=${JSON.stringify(classificationInputs ?? lease.classification_inputs)}::jsonb,exemption=${exemptionContinues ? lease.exemption : null},updated_by=${actorId},updated_at=now()
-      where id=${lease.id} and org_id=${orgId} and revision=${lease.revision} returning id`, "objects");
+      where id=${lease.id} and org_id=${orgId} and revision=${lease.revision} returning id`,
+      "objects",
+    );
     if (updated.length !== 1)
-      throw new LeaseError(
-        "lease changed while applying the approved revision",
-      );
+      throw new LeaseError("lease changed while applying the approved revision");
     const result = {
       ...measured,
       prepaidCarrying,

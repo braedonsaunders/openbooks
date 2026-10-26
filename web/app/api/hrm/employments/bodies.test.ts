@@ -40,7 +40,12 @@ test("hire accepts an initial assignment riding the same approval", () => {
       workerPartyId,
       employerSubsidiaryId,
       effectiveFrom: "2026-09-01",
-      initialAssignment: { assignmentKey: "primary", jobTitle: "Engineer", departmentId, isPrimary: true },
+      initialAssignment: {
+        assignmentKey: "primary",
+        jobTitle: "Engineer",
+        departmentId,
+        isPrimary: true,
+      },
       reason: "Hire with the first assignment",
     }).initialAssignment,
     { assignmentKey: "primary", jobTitle: "Engineer", departmentId, isPrimary: true },
@@ -59,11 +64,13 @@ test("hire accepts an initial assignment riding the same approval", () => {
 
 test("hire refuses a missing person, entity, start, or reason at the boundary", () => {
   assert.equal(
-    hireEmploymentBody.safeParse({ employerSubsidiaryId, effectiveFrom: "2026-09-01", reason: "x" }).success,
+    hireEmploymentBody.safeParse({ employerSubsidiaryId, effectiveFrom: "2026-09-01", reason: "x" })
+      .success,
     false,
   );
   assert.equal(
-    hireEmploymentBody.safeParse({ workerPartyId, effectiveFrom: "2026-09-01", reason: "x" }).success,
+    hireEmploymentBody.safeParse({ workerPartyId, effectiveFrom: "2026-09-01", reason: "x" })
+      .success,
     false,
   );
   assert.equal(

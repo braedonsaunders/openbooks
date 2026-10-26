@@ -1,8 +1,12 @@
 import { mergeStatutoryFactors } from "./statutory-factors.ts";
-import { vacationBaseIncluded } from './component-statutory-treatment.ts';
-import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
-import { historicalWithholdingProfile } from './historical-withholding.ts';
-import { prepareCompensationPackages, appendCompensationPackageStage, persistCompensationPackageCalculations } from './compensation-package-payroll.ts';
+import { vacationBaseIncluded } from "./component-statutory-treatment.ts";
+import type { CaBonusIncomeReferenceSource } from "./canada/bonus-income-reference.ts";
+import { historicalWithholdingProfile } from "./historical-withholding.ts";
+import {
+  prepareCompensationPackages,
+  appendCompensationPackageStage,
+  persistCompensationPackageCalculations,
+} from "./compensation-package-payroll.ts";
 import { ONE_OFF_RUN_TYPES, type PayRunType } from "./run-contracts.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -14,19 +18,63 @@ import { revalidateStoredCertificates } from "./certificates.ts";
 import { assertPayrollRegionSupported, type PayrollTaxBaseKey } from "./packs.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
-import { assertSettlementFactorsMergeable, settleAnnualSettlement } from "./annual-settlement-run.ts";
+import {
+  assertSettlementFactorsMergeable,
+  settleAnnualSettlement,
+} from "./annual-settlement-run.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./statutory-context.ts";
 import { payRateIsUsable, payrollHourlyWage } from "./rate.ts";
-import { alternateDayPlanOf, assertComponentServiceEligibility, entitlementPlans, planMovementsForStub, resolveVacationTerms, resolveServiceTier, vacationPlanOf, type EntitlementWarning } from "./entitlements.ts";
+import {
+  alternateDayPlanOf,
+  assertComponentServiceEligibility,
+  entitlementPlans,
+  planMovementsForStub,
+  resolveVacationTerms,
+  resolveServiceTier,
+  vacationPlanOf,
+  type EntitlementWarning,
+} from "./entitlements.ts";
 import { grantRemembranceAlternateDay } from "./remembrance-grants.ts";
 import { resolvePayrollPaymentMethod } from "./payment-method.ts";
-import { assertEarningsAssessedStable, dropIncomeAssessedLines, type EarningsAssessedLine } from "./limits.ts";
+import {
+  assertEarningsAssessedStable,
+  dropIncomeAssessedLines,
+  type EarningsAssessedLine,
+} from "./limits.ts";
 import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
-import { type StubComputation, type StubComputationInput, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
-import { assertPackStatutoryRatesConfigured, createStubCertificateResolver } from "./run-stub-preflight.ts";
-import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, stampEntitlementSettlementAccounts, employeeHomeDepartment, stampEarningLineStatutoryTreatments } from "./run-stub-records.ts";
-import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments } from "./run-earning-lines.ts";
+import {
+  type StubComputation,
+  type StubComputationInput,
+  storedTaxCertificates,
+  resolvePayRate,
+  resolveStubStatutoryHours,
+} from "./run-calculation-support.ts";
+import {
+  assertPackStatutoryRatesConfigured,
+  createStubCertificateResolver,
+} from "./run-stub-preflight.ts";
+import {
+  type Line,
+  installablePackOrThrow,
+  insertPayStubRow,
+  insertPayStubLineRows,
+  persistEntitlementMovements,
+  earningsAssessedSnapshot,
+  resolveEmployeeJurisdiction,
+  stampDepartmentExpenseAccounts,
+  stampEntitlementSettlementAccounts,
+  employeeHomeDepartment,
+  stampEarningLineStatutoryTreatments,
+} from "./run-stub-records.ts";
+import {
+  appendPeriodicEarnings,
+  appendRetroSettlementLines,
+  appendDerivedEarningLines,
+  appendStatutoryHolidayEarningLines,
+  applyAssignedComponentLines,
+  applyRunLineAdjustments,
+} from "./run-earning-lines.ts";
 import { appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-plan-earning-lines.ts";
 import type { DeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
 import { applyBankDrawdown } from "./run-bank-drawdown.ts";
@@ -35,8 +83,8 @@ import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
 import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import { applyEarningPaymentKinds, payableStubTotals } from "./non-cash-earnings.ts";
-import { appendRecurringBenefitLines, recurringBenefitSource } from './benefit-plan-inputs.ts';
-import { appendApprovedHolidaySettlements } from './holiday-settlements.ts';
+import { appendRecurringBenefitLines, recurringBenefitSource } from "./benefit-plan-inputs.ts";
+import { appendApprovedHolidaySettlements } from "./holiday-settlements.ts";
 import { priceLeavePayrollInputs } from "./leave-payroll-effects.ts";
 import { priceAllowancePayrollInputs } from "./allowance-payroll-inputs.ts";
 /** Compute one employee's stub: earning phases, statutory passes and deduction protection. */
@@ -53,10 +101,13 @@ export async function calculateStub(
       `payroll cannot calculate a stub for ${employeePartyId} without an HRM employment — create or resolve the worker's employment before running payroll`,
     );
   }
-  const schedule = (await tx.execute<{ periods_per_year: number }>(sql`
+  const schedule = await tx.execute<{ periods_per_year: number }>(
+    sql`
     select periods_per_year from pay_schedules
      where org_id = ${orgId} and id = ${run.pay_schedule_id}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const P = schedule[0]!.periods_per_year;
   // Every one of these comes from the resolved context, not from re-reading
   // `emp` and defaulting. `country` decides which statutory engine runs;
@@ -67,8 +118,17 @@ export async function calculateStub(
   const pack = installablePackOrThrow(country);
 
   await assertPackStatutoryRatesConfigured({
-    tx, orgId, pack, country, taxYear, province, jurisdiction, run, employeePartyId,
-    displayName: emp.display_name ?? employeePartyId, statutoryRatesFor: ctx.statutoryRatesFor,
+    tx,
+    orgId,
+    pack,
+    country,
+    taxYear,
+    province,
+    jurisdiction,
+    run,
+    employeePartyId,
+    displayName: emp.display_name ?? employeePartyId,
+    statutoryRatesFor: ctx.statutoryRatesFor,
   });
 
   const lines: Line[] = [];
@@ -78,10 +138,17 @@ export async function calculateStub(
   const entitlementWarnings: EntitlementWarning[] = [];
 
   const payRate = await resolvePayRate(
-    tx, orgId, employeePartyId, run.period_end!, run.doc_currency ?? null,
+    tx,
+    orgId,
+    employeePartyId,
+    run.period_end!,
+    run.doc_currency ?? null,
   );
   const baseComponent = ctx.need("base_pay", "earning");
-  if(typeof baseComponent.id!=='string')throw new PayrollError('The native base-pay component identity is unavailable — correct Payroll Setup before calculating');
+  if (typeof baseComponent.id !== "string")
+    throw new PayrollError(
+      "The native base-pay component identity is unavailable — correct Payroll Setup before calculating",
+    );
 
   // Recorded withholding answers, read ONCE for the stub rather than once
   // per statutory pass: the deduction-protection fixpoint runs the pass up to
@@ -105,10 +172,18 @@ export async function calculateStub(
       `${emp.display_name ?? employeePartyId}: ${mismatched.map((entry) => entry.message).join(" ")}`,
     );
   }
-  emp = historicalWithholdingProfile({ country, profile: emp, stored: storedCertificates, payDate: run.pay_date! });
+  emp = historicalWithholdingProfile({
+    country,
+    profile: emp,
+    stored: storedCertificates,
+    payDate: run.pay_date!,
+  });
   const workerCompGroupId = emp.resolved_worker_comp_group_id ?? null;
   const certificateFor = createStubCertificateResolver({
-    country, storedCertificates, emp, payDate: run.pay_date,
+    country,
+    storedCertificates,
+    emp,
+    payDate: run.pay_date,
   });
 
   // An off-cycle run pays only its one-off lines: no salary, no time, and no
@@ -128,18 +203,32 @@ export async function calculateStub(
   // predicate had one owner: a salaried employee holding only an hourly rate
   // passed readiness green and then threw here.
   if (!oneOffRun && !payRateIsUsable(emp.pay_basis!, payRate)) {
-    throw new PayrollError(payRate
-      ? "salaried employee has only an hourly labor cost rate (employee scope); a salary needs a rate per week, two weeks, half-month, month or year"
-      : "no labor cost rate covers this employee for the period");
+    throw new PayrollError(
+      payRate
+        ? "salaried employee has only an hourly labor cost rate (employee scope); a salary needs a rate per week, two weeks, half-month, month or year"
+        : "no labor cost rate covers this employee for the period",
+    );
   }
 
   await appendPeriodicEarnings(tx, {
-    orgId, documentId, run, emp, employeePartyId, payRate,
-    periodsPerYear: P, baseComponent, oneOffRun, need: ctx.need,
-    wageExpenseAccountId: ctx.wageExpenseAccountId, lines,
+    orgId,
+    documentId,
+    run,
+    emp,
+    employeePartyId,
+    payRate,
+    periodsPerYear: P,
+    baseComponent,
+    oneOffRun,
+    need: ctx.need,
+    wageExpenseAccountId: ctx.wageExpenseAccountId,
+    lines,
   });
 
-  const allowanceEarnings = priceAllowancePayrollInputs(ctx.allowancePayrollInputs ?? [], run.doc_currency!);
+  const allowanceEarnings = priceAllowancePayrollInputs(
+    ctx.allowancePayrollInputs ?? [],
+    run.doc_currency!,
+  );
   for (const [index, allowance] of allowanceEarnings.entries()) {
     const component = ctx.components.find((candidate) => candidate.id === allowance.payComponentId);
     if (!component || component.kind !== "earning" || typeof component.name !== "string") {
@@ -162,7 +251,9 @@ export async function calculateStub(
   const leaveInputs = ctx.leavePayrollInputs ?? [];
   const leaveEffects = priceLeavePayrollInputs(
     leaveInputs,
-    leaveInputs.some((input) => input.kind === "payout") && payRate ? payrollHourlyWage(payRate) : null,
+    leaveInputs.some((input) => input.kind === "payout") && payRate
+      ? payrollHourlyWage(payRate)
+      : null,
   );
   for (const [index, payout] of leaveEffects.payouts.entries()) {
     const sequence = Math.max(0, ...lines.map((line) => line.sequence)) + 1;
@@ -234,9 +325,12 @@ export async function calculateStub(
   // employment-scoped assignment applies only to its recorded employment.
   const rosterEmploymentId = emp.employment_id;
   if (!rosterEmploymentId) {
-    throw new PayrollError(`${emp.display_name ?? employeePartyId}: the payroll employment identity is unavailable — select the employee's native employment before calculating`);
+    throw new PayrollError(
+      `${emp.display_name ?? employeePartyId}: the payroll employment identity is unavailable — select the employee's native employment before calculating`,
+    );
   }
-  const assigned = (await tx.execute<Record<string, unknown>>(sql`
+  const assigned = await tx.execute<Record<string, unknown>>(
+    sql`
     select a.value as override, a.effective_from, a.effective_to, a.run_applicability, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from employee_pay_components a
@@ -251,7 +345,9 @@ export async function calculateStub(
        and (a.employment_id is null
             or a.employment_id = ${rosterEmploymentId}::uuid)
      order by c.sequence
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   // Phase 2 — derived earnings. Per diem for nights stayed, on-call days,
   // travel pay costed to the first job of the day, site and equipment
@@ -262,7 +358,12 @@ export async function calculateStub(
   // Off-cycle bonus runs are skipped: they pay only their one-off lines, and a
   // month_end rule landing inside an already-paid period would settle twice.
   await appendDerivedEarningLines(tx, {
-    orgId, documentId, run, employeePartyId, oneOffRun, lines,
+    orgId,
+    documentId,
+    run,
+    employeePartyId,
+    oneOffRun,
+    lines,
   });
 
   // Phase 2 — statutory holiday pay. The jurisdiction gate itself — the
@@ -278,37 +379,86 @@ export async function calculateStub(
   // upgrade). Skipped on an off-cycle bonus run, which pays only its one-off
   // lines.
   await appendStatutoryHolidayEarningLines(tx, {
-    orgId, documentId, employeePartyId, emp, country,
+    orgId,
+    documentId,
+    employeePartyId,
+    emp,
+    country,
     subsidiaryId: ctx.runContext.subsidiaryId || null,
-    province, run, payRate,
-    statHolidayPay: ctx.statHolidayPay, oneOffRun, need: ctx.need, lines,
+    province,
+    run,
+    payRate,
+    statHolidayPay: ctx.statHolidayPay,
+    oneOffRun,
+    need: ctx.need,
+    lines,
     allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
     holidayEligibility: ctx.holidayEligibility,
     occupationClass: emp.statutory_occupation_class,
     currentEarningLines: lines,
   });
   await appendApprovedHolidaySettlements(tx, {
-    orgId, actorId, documentId, employeePartyId, employmentId,
-    subsidiaryId: ctx.runContext.subsidiaryId, country, province, labourJurisdiction: emp.labour_jurisdiction ?? null,
-    payDate: run.pay_date!, runType, statHolidayPay: ctx.statHolidayPay, simulate: ctx.simulate,
-    allowedSubsidiaryIds: ctx.allowedSubsidiaryIds, need: ctx.need, lines,
+    orgId,
+    actorId,
+    documentId,
+    employeePartyId,
+    employmentId,
+    subsidiaryId: ctx.runContext.subsidiaryId,
+    country,
+    province,
+    labourJurisdiction: emp.labour_jurisdiction ?? null,
+    payDate: run.pay_date!,
+    runType,
+    statHolidayPay: ctx.statHolidayPay,
+    simulate: ctx.simulate,
+    allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
+    need: ctx.need,
+    lines,
   });
 
-  const compensationPackages = await prepareCompensationPackages(tx, {
-    orgId, actorId, documentId, employeePartyId, employmentId,
-    subsidiaryId: ctx.runContext.subsidiaryId ?? null, country, currency: run.doc_currency!,
-    periodStart: run.period_start!, periodEnd: run.period_end!, payDate: run.pay_date!, taxYear,
-    hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
-    payScheduleId: run.pay_schedule_id!, runType, oneOffRun, terminationRun: runType === "termination", simulate: !!ctx.simulate,
-    assignedRows: assigned, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
-    unionAgreementId: emp.union_agreement_id ?? null, unionClassificationId: emp.union_classification_id ?? null,
-  }, lines);
-  await appendCompensationPackageStage(tx, compensationPackages, 'earnings', lines);
+  const compensationPackages = await prepareCompensationPackages(
+    tx,
+    {
+      orgId,
+      actorId,
+      documentId,
+      employeePartyId,
+      employmentId,
+      subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+      country,
+      currency: run.doc_currency!,
+      periodStart: run.period_start!,
+      periodEnd: run.period_end!,
+      payDate: run.pay_date!,
+      taxYear,
+      hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
+      payScheduleId: run.pay_schedule_id!,
+      runType,
+      oneOffRun,
+      terminationRun: runType === "termination",
+      simulate: !!ctx.simulate,
+      assignedRows: assigned,
+      allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
+      unionAgreementId: emp.union_agreement_id ?? null,
+      unionClassificationId: emp.union_classification_id ?? null,
+    },
+    lines,
+  );
+  await appendCompensationPackageStage(tx, compensationPackages, "earnings", lines);
 
   await applyAssignedComponentLines(tx, {
-    orgId, employeePartyId, employmentId, taxYear, documentId,
-    assignedRows: assigned, runType, oneOffRun, lines,
-    periodStart: run.period_start!, periodEnd: run.period_end!, payDate: run.pay_date!,
+    orgId,
+    employeePartyId,
+    employmentId,
+    taxYear,
+    documentId,
+    assignedRows: assigned,
+    runType,
+    oneOffRun,
+    lines,
+    periodStart: run.period_start!,
+    periodEnd: run.period_end!,
+    payDate: run.pay_date!,
   });
 
   // Run-level 'line' adjustments — one-off inputs for THIS employee in THIS
@@ -317,11 +467,16 @@ export async function calculateStub(
   // statutory math below sees the adjusted inputs, never edited outputs.
   const declaredVacationAccruals = new Map<string, DeclaredVacationAccrualInput>();
   const replacedComponentIds = await applyRunLineAdjustments(tx, {
-    orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines,
-    terminationRun: runType === "termination", declaredVacationAccruals,
+    orgId,
+    documentId,
+    employeePartyId,
+    bonusRun,
+    retroRun,
+    country,
+    lines,
+    terminationRun: runType === "termination",
+    declaredVacationAccruals,
   });
-
-
 
   // Union fringes and dues (collective agreement).
   await appendUnionFringeLines(tx, { orgId, emp, country, lines });
@@ -338,8 +493,10 @@ export async function calculateStub(
   const terminationRun = runType === "termination";
   // Final settlement uses the entitlement terms at employment's end.
   // A later payment date cannot grant additional service or replace those terms.
-  const entitlementPolicyDate = terminationRun && emp.terminated_on && emp.terminated_on < run.period_end!
-    ? emp.terminated_on : run.period_end!;
+  const entitlementPolicyDate =
+    terminationRun && emp.terminated_on && emp.terminated_on < run.period_end!
+      ? emp.terminated_on
+      : run.period_end!;
   const plans = await entitlementPlans(orgId, tx);
   // Resolved on the plan's ENGINE BINDING, never on its operator-typed code.
   const vacationPlan = vacationPlanOf(plans);
@@ -348,62 +505,155 @@ export async function calculateStub(
   // Vacationable non-cash premiums then enter the native entitlement basis;
   // deductions and employer contributions price final cash earnings afterward.
   await applyEarningPaymentKinds(tx, {
-    orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null,
-    currency: run.doc_currency!, components: ctx.components, lines,
+    orgId,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    currency: run.doc_currency!,
+    components: ctx.components,
+    lines,
     wageExpenseAccountId: ctx.wageExpenseAccountId,
   });
   const regularCashLines = lines.slice();
-  const recurringSource=await recurringBenefitSource(tx,{
-    orgId,employmentId,subsidiaryId:ctx.runContext.subsidiaryId ?? null,
-    periodStart:run.period_start!,periodEnd:run.period_end!,payDate:run.pay_date!,documentId,
+  const recurringSource = await recurringBenefitSource(tx, {
+    orgId,
+    employmentId,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    periodStart: run.period_start!,
+    periodEnd: run.period_end!,
+    payDate: run.pay_date!,
+    documentId,
   });
   const recurringBenefitInput: Omit<Parameters<typeof appendRecurringBenefitLines>[1], "stage"> = {
-    source:recurringSource,basePayComponentId:baseComponent.id,
-    orgId, actorId, documentId, employmentId, employeePartyId, workerCompGroupId, regularCashLines, replacedComponentIds,
-    subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!, country,
-    periodStart: run.period_start!, periodEnd: run.period_end!, periodsPerYear: P,
+    source: recurringSource,
+    basePayComponentId: baseComponent.id,
+    orgId,
+    actorId,
+    documentId,
+    employmentId,
+    employeePartyId,
+    workerCompGroupId,
+    regularCashLines,
+    replacedComponentIds,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    currency: run.doc_currency!,
+    country,
+    periodStart: run.period_start!,
+    periodEnd: run.period_end!,
+    periodsPerYear: P,
     hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
-    payBasis: emp.pay_basis!, payDate: run.pay_date!, taxYear,
-    runType, oneOffRun, simulate: ctx.simulate, lines, entitlementMovements,
+    payBasis: emp.pay_basis!,
+    payDate: run.pay_date!,
+    taxYear,
+    runType,
+    oneOffRun,
+    simulate: ctx.simulate,
+    lines,
+    entitlementMovements,
   };
-  await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "vacationable_earnings" });
+  await appendRecurringBenefitLines(tx, {
+    ...recurringBenefitInput,
+    stage: "vacationable_earnings",
+  });
 
-  await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
+  await stampEarningLineStatutoryTreatments(tx, {
+    orgId,
+    payDate: run.pay_date!,
+    workerCompGroupId,
+    lines,
+  });
 
-  const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, entitlementPolicyDate) : null;
-  const vacationableEarnings = lines.some(line => line.kind === 'earning' && !line.accrualOnly &&
-    vacationBaseIncluded(line) && line.componentId !== vacationPlan?.payoutComponentId && cmp(line.amount, '0') !== 0);
+  const vacationElection = emp.employment_id
+    ? await resolveVacationTerms(tx, orgId, emp.employment_id, entitlementPolicyDate)
+    : null;
+  const vacationableEarnings = lines.some(
+    (line) =>
+      line.kind === "earning" &&
+      !line.accrualOnly &&
+      vacationBaseIncluded(line) &&
+      line.componentId !== vacationPlan?.payoutComponentId &&
+      cmp(line.amount, "0") !== 0,
+  );
   // No method or rate is needed to accrue zero on earnings explicitly excluded
   // from vacation. Any eligible earning, including a non-cash benefit, or a
   // final settlement still requires documented terms before calculation.
-  if (vacationPlan && !vacationElection && (vacationableEarnings || terminationRun)) throw new PayrollError(`${emp.display_name ?? employeePartyId} has no effective vacation terms; configure their vacation method and entitlement in Benefits before calculating payroll.`);
-  if (vacationElection && vacationElection.planId !== vacationPlan?.id) throw new PayrollError(`${emp.display_name ?? employeePartyId} has vacation terms assigned to a different or inactive program; activate their governing vacation program in Benefits before calculating payroll.`);
-  vacationPercent = vacationElection?.percentFloor ?? (vacationElection ? vacationPlan?.accrualValue ?? null : null);
+  if (vacationPlan && !vacationElection && (vacationableEarnings || terminationRun))
+    throw new PayrollError(
+      `${emp.display_name ?? employeePartyId} has no effective vacation terms; configure their vacation method and entitlement in Benefits before calculating payroll.`,
+    );
+  if (vacationElection && vacationElection.planId !== vacationPlan?.id)
+    throw new PayrollError(
+      `${emp.display_name ?? employeePartyId} has vacation terms assigned to a different or inactive program; activate their governing vacation program in Benefits before calculating payroll.`,
+    );
+  vacationPercent =
+    vacationElection?.percentFloor ??
+    (vacationElection ? (vacationPlan?.accrualValue ?? null) : null);
   const vacationMethod = vacationElection?.method ?? null;
-  assertVacationPlanResolved({ ...emp, vacation_percent: vacationPercent, vacation_method: vacationMethod }, vacationPlan, terminationRun);
-  const vacationTerms = vacationPlan && vacationElection ? await resolveServiceTier(tx, orgId, employeePartyId, entitlementPolicyDate, emp.employment_id ?? undefined) : null;
+  assertVacationPlanResolved(
+    { ...emp, vacation_percent: vacationPercent, vacation_method: vacationMethod },
+    vacationPlan,
+    terminationRun,
+  );
+  const vacationTerms =
+    vacationPlan && vacationElection
+      ? await resolveServiceTier(
+          tx,
+          orgId,
+          employeePartyId,
+          entitlementPolicyDate,
+          emp.employment_id ?? undefined,
+        )
+      : null;
   const vacationTier = vacationPlan ? vacationTerms?.planAccrualValues.get(vacationPlan.id) : null;
   const paidLeave = vacationMethod === "paid_leave";
   const personalDays = vacationElection?.annualDaysFloor;
   const policyDays = vacationPlan ? vacationTerms?.planAnnualDays.get(vacationPlan.id) : null;
-  const annualDays = personalDays != null && (policyDays == null || cmp(personalDays, policyDays) > 0) ? personalDays : policyDays;
-  if (paidLeave && (annualDays == null || cmp(annualDays, "0") <= 0)) throw new PayrollError(`${emp.display_name ?? employeePartyId} has paid leave without an annual day allowance; enter their annual vacation days or configure the reached service tier.`);
+  const annualDays =
+    personalDays != null && (policyDays == null || cmp(personalDays, policyDays) > 0)
+      ? personalDays
+      : policyDays;
+  if (paidLeave && (annualDays == null || cmp(annualDays, "0") <= 0))
+    throw new PayrollError(
+      `${emp.display_name ?? employeePartyId} has paid leave without an annual day allowance; enter their annual vacation days or configure the reached service tier.`,
+    );
   // Personal vacation terms are a floor: progression must never erase a
   // separately granted higher employee rate. Paid leave keeps salary running
   // and never creates a second percentage payment or money-bank accrual.
   if (paidLeave) vacationPercent = null;
-  else if (vacationTier != null && (vacationPercent == null || cmp(vacationTier, vacationPercent) > 0)) vacationPercent = vacationTier;
+  else if (
+    vacationTier != null &&
+    (vacationPercent == null || cmp(vacationTier, vacationPercent) > 0)
+  )
+    vacationPercent = vacationTier;
 
   await settleTerminationBankPayouts(tx, {
-    orgId, documentId, payDate: run.pay_date!, payCurrency: run.doc_currency!, employeePartyId, employmentId,
+    orgId,
+    documentId,
+    payDate: run.pay_date!,
+    payCurrency: run.doc_currency!,
+    employeePartyId,
+    employmentId,
     employeeName: emp.display_name ?? employeePartyId,
-    terminationRun, plans, lines, entitlementMovements,
+    terminationRun,
+    plans,
+    lines,
+    entitlementMovements,
   });
 
-  await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
+  await stampEarningLineStatutoryTreatments(tx, {
+    orgId,
+    payDate: run.pay_date!,
+    workerCompGroupId,
+    lines,
+  });
 
   const payVacationInCash = vacationMethod === "pay_each_period" || terminationRun;
-  await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines, replacedComponentIds, vacationPayoutComponentId: vacationPlan?.payoutComponentId });
+  await appendCashVacationPay({
+    vacationPercent,
+    payVacationInCash,
+    need: ctx.need,
+    lines,
+    replacedComponentIds,
+    vacationPayoutComponentId: vacationPlan?.payoutComponentId,
+  });
 
   // Work-triggered alternate-day grants: a statutory day off
   // banked as hours, never cash on this stub. Under the same gate as the
@@ -421,7 +671,10 @@ export async function calculateStub(
       // re-derivation, so the labour-jurisdiction override moves the grant
       // exactly the way it moves the holiday pay.
       jurisdiction: resolveEmployeeJurisdiction({
-        country, province, emp, employeeName: emp.display_name ?? employeePartyId,
+        country,
+        province,
+        emp,
+        employeeName: emp.display_name ?? employeePartyId,
       }),
       subsidiaryId: ctx.runContext.subsidiaryId ?? null,
       periodStart: run.period_start!,
@@ -431,36 +684,67 @@ export async function calculateStub(
     if (grant) entitlementMovements.push(grant);
   }
 
-  await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
+  await stampEarningLineStatutoryTreatments(tx, {
+    orgId,
+    payDate: run.pay_date!,
+    workerCompGroupId,
+    lines,
+  });
 
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
-    orgId, documentId, employeePartyId, payDate: run.pay_date!, payCurrency: run.doc_currency!,
+    orgId,
+    documentId,
+    employeePartyId,
+    payDate: run.pay_date!,
+    payCurrency: run.doc_currency!,
     employeeName: emp.display_name ?? employeePartyId,
-    employmentId: emp.employment_id ?? undefined, policyDate: entitlementPolicyDate, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave || vacationElection === null, vacationPlan, plans,
-    lines, entitlementMovements, entitlementWarnings, declaredVacationAccruals,
+    employmentId: emp.employment_id ?? undefined,
+    policyDate: entitlementPolicyDate,
+    vacationPercent,
+    payVacationInCash,
+    excludeVacationAccrual: paidLeave || vacationElection === null,
+    vacationPlan,
+    plans,
+    lines,
+    entitlementMovements,
+    entitlementWarnings,
+    declaredVacationAccruals,
   });
 
   // Bank drawdown runs after accrual by construction: the accrual basis above
   // never sees payout lines, and this run's accrual movements already sit in
   // entitlementMovements, so the overdraw check counts them as available.
   await applyBankDrawdown(tx, {
-    orgId, documentId, payDate: run.pay_date!, employeePartyId,
+    orgId,
+    documentId,
+    payDate: run.pay_date!,
+    employeePartyId,
     employeeName: emp.display_name ?? employeePartyId,
-    terminationRun, plans, lines, entitlementMovements,
+    terminationRun,
+    plans,
+    lines,
+    entitlementMovements,
   });
 
   await applyEarningPaymentKinds(tx, {
-    orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null,
-    currency: run.doc_currency!, components: ctx.components, lines,
+    orgId,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    currency: run.doc_currency!,
+    components: ctx.components,
+    lines,
     wageExpenseAccountId: ctx.wageExpenseAccountId,
   });
 
   await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "remaining" });
-  await appendCompensationPackageStage(tx, compensationPackages, 'remaining', lines);
+  await appendCompensationPackageStage(tx, compensationPackages, "remaining", lines);
 
   await applyEarningPaymentKinds(tx, {
-    orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!,
-    components: ctx.components, lines, wageExpenseAccountId: ctx.wageExpenseAccountId,
+    orgId,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    currency: run.doc_currency!,
+    components: ctx.components,
+    lines,
+    wageExpenseAccountId: ctx.wageExpenseAccountId,
   });
 
   await stampEarningLineStatutoryTreatments(tx, {
@@ -470,8 +754,15 @@ export async function calculateStub(
     lines,
   });
 
-  await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: entitlementPolicyDate,
-    componentIds: lines.filter((line) => cmp(line.amount, "0") !== 0).map((line) => line.componentId).filter((id): id is string => id !== null) });
+  await assertComponentServiceEligibility(tx, {
+    orgId,
+    employmentId,
+    policyDate: entitlementPolicyDate,
+    componentIds: lines
+      .filter((line) => cmp(line.amount, "0") !== 0)
+      .map((line) => line.componentId)
+      .filter((id): id is string => id !== null),
+  });
 
   // ---- Statutory lines: one helper, one declared recomputation class -------
   //
@@ -494,7 +785,10 @@ export async function calculateStub(
   const emittedEarningsAssessed = new Set<string>();
 
   const pushStatutory = createPushStatutory({
-    country, lines, emittedEarningsAssessed, need: ctx.need,
+    country,
+    lines,
+    emittedEarningsAssessed,
+    need: ctx.need,
   });
 
   // ---- Phase 8: pack-declared earnings-assessed employer levies ----------
@@ -505,37 +799,63 @@ export async function calculateStub(
   // races are caught by the ytd staleness arm, disjoint-roster races by the
   // employerLevyYtd arm, which the Phase-8 hook arms) — see the pack's
   // employer-levies module.
-  const employerLevies = await pack.applyEmployerLevies?.({
-    tx, orgId, documentId, employeePartyId,
-    employeeName: emp.display_name ?? employeePartyId,
-    taxYear, region: province, lines, pushStatutory, payDate: run.pay_date!,
-    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
-    workerCompGroupId,
-  }) ?? EMPTY_EMPLOYER_LEVY_FACTORS;
+  const employerLevies =
+    (await pack.applyEmployerLevies?.({
+      tx,
+      orgId,
+      documentId,
+      employeePartyId,
+      employeeName: emp.display_name ?? employeePartyId,
+      taxYear,
+      region: province,
+      lines,
+      pushStatutory,
+      payDate: run.pay_date!,
+      subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+      workerCompGroupId,
+    })) ?? EMPTY_EMPLOYER_LEVY_FACTORS;
 
   // Statutory inputs from the line set. The pack's contributoryBases declaration
   // documents what pensionable and insurable accumulate for each jurisdiction.
   const earning = (predicate: (l: Line) => boolean) =>
-    sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly && predicate(l)).map((l) => l.amount));
+    sum(
+      lines
+        .filter((l) => l.kind === "earning" && !l.accrualOnly && predicate(l))
+        .map((l) => l.amount),
+    );
   const deduction = (treatment: string) =>
-    sum(lines.filter((l) => l.kind === "deduction" && l.taxTreatment === treatment).map((l) => l.amount));
+    sum(
+      lines
+        .filter((l) => l.kind === "deduction" && l.taxTreatment === treatment)
+        .map((l) => l.amount),
+    );
 
   const gross = earning(() => true);
   const income = earning((l) => (l.taxable ?? true) && !(l.nonPeriodic ?? false));
   const nonPeriodic = earning((l) => (l.taxable ?? true) && (l.nonPeriodic ?? false));
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
-  const insurableNonPeriodic=earning((l)=>(l.insurable??true)&&(l.nonPeriodic??false));
+  const insurableNonPeriodic = earning((l) => (l.insurable ?? true) && (l.nonPeriodic ?? false));
   // The one-off share of the pensionable leg, for packs that annualise the
   // leg: annualising the whole leg and adding the one-off again counts it
   // periodsPerYear + 1 times. No taxable filter — a non-taxable erogazione
   // still contributes to the contributory base exactly once.
-  const pensionableNonPeriodic = earning((l) => (l.pensionable ?? true) && (l.nonPeriodic ?? false));
+  const pensionableNonPeriodic = earning(
+    (l) => (l.pensionable ?? true) && (l.nonPeriodic ?? false),
+  );
 
-  const statutoryHours = pack.statutoryHours?.basis === "contractual-plus-worked-extra"
-    ? await resolveStubStatutoryHours(tx, { orgId, employeePartyId, payBasis: emp.pay_basis ?? null,
-        periodStart: run.period_start!, subsidiaryId: ctx.runContext.subsidiaryId, periodsPerYear: P, lines })
-    : undefined;
+  const statutoryHours =
+    pack.statutoryHours?.basis === "contractual-plus-worked-extra"
+      ? await resolveStubStatutoryHours(tx, {
+          orgId,
+          employeePartyId,
+          payBasis: emp.pay_basis ?? null,
+          periodStart: run.period_start!,
+          subsidiaryId: ctx.runContext.subsidiaryId,
+          periodsPerYear: P,
+          lines,
+        })
+      : undefined;
 
   // Per-program bases for contribution programs the pack declares. Each
   // program accumulates its OWN base from the per-earning-type applicability
@@ -543,11 +863,12 @@ export async function calculateStub(
   // applicability means included (the sibling flags' default-true), so a
   // pack that declares no program skips this loop and nothing changes.
   const programBases: Record<string, string> = {};
-  const programNonPeriodicBases:Record<string,string>={};
+  const programNonPeriodicBases: Record<string, string> = {};
   for (const program of pack.contributionPrograms ?? []) {
-    programNonPeriodicBases[program.key]=earning((l)=>(l.programApplicability?.[program.key]??true)&&(l.nonPeriodic??false));
-    programBases[program.key] =
-      earning((l) => l.programApplicability?.[program.key] ?? true);
+    programNonPeriodicBases[program.key] = earning(
+      (l) => (l.programApplicability?.[program.key] ?? true) && (l.nonPeriodic ?? false),
+    );
+    programBases[program.key] = earning((l) => l.programApplicability?.[program.key] ?? true);
   }
 
   // Pack-declared pre-tax treatments, computed generically: each base less
@@ -561,9 +882,13 @@ export async function calculateStub(
   const packTreatments = pack.deductionTreatments;
   const reducedBases = () => {
     const stateBases = Object.fromEntries(
-      [...new Set(packTreatments.flatMap((treatment) => treatment.reduces)
-        .filter((base): base is PayrollTaxBaseKey => base.startsWith("state:")))]
-        .map((base) => [base, base.endsWith(":nonPeriodic") ? nonPeriodic : income]),
+      [
+        ...new Set(
+          packTreatments
+            .flatMap((treatment) => treatment.reduces)
+            .filter((base): base is PayrollTaxBaseKey => base.startsWith("state:")),
+        ),
+      ].map((base) => [base, base.endsWith(":nonPeriodic") ? nonPeriodic : income]),
     );
     return reduceTaxBases(
       lines,
@@ -580,10 +905,21 @@ export async function calculateStub(
   // merge into the statutory factors below, which is what the year-to-date
   // reads back. Annual-timing levies assess to zeros by construction.
   const aggregateFactors = await assessStubAggregateLevies({
-    tx, orgId, documentId, employeePartyId, taxYear, country, region: province,
-    gross, taxableGross: earning((l) => l.taxable ?? true),
-    pensionable, periodsPerYear: P, subsidiaryId: ctx.runContext.subsidiaryId,
-    lines, pushStatutory, payDate: run.pay_date!,
+    tx,
+    orgId,
+    documentId,
+    employeePartyId,
+    taxYear,
+    country,
+    region: province,
+    gross,
+    taxableGross: earning((l) => l.taxable ?? true),
+    pensionable,
+    periodsPerYear: P,
+    subsidiaryId: ctx.runContext.subsidiaryId,
+    lines,
+    pushStatutory,
+    payDate: run.pay_date!,
   });
 
   const clearIncomeAssessedLines = () => dropIncomeAssessedLines(lines);
@@ -606,10 +942,15 @@ export async function calculateStub(
   // for untimed work. YTD source wages are read only from committed stubs.
   const workAllocations = pack.loadWorkAllocations
     ? await pack.loadWorkAllocations(tx, {
-      orgId, employeePartyId, employmentId: emp.employment_id ?? null,
-      periodStart: run.period_start!, periodEnd: run.period_end!, taxYear,
-      documentId, currentWages: sum([income, nonPeriodic]),
-    })
+        orgId,
+        employeePartyId,
+        employmentId: emp.employment_id ?? null,
+        periodStart: run.period_start!,
+        periodEnd: run.period_end!,
+        taxYear,
+        documentId,
+        currentWages: sum([income, nonPeriodic]),
+      })
     : undefined;
 
   const bonusIncomeReferences: CaBonusIncomeReferenceSource[] = [];
@@ -617,33 +958,59 @@ export async function calculateStub(
     bonusIncomeReferences.length = 0;
     clearIncomeAssessedLines();
     factors = await pack.computeStatutory({
-      tx, orgId, documentId, employeePartyId,
+      tx,
+      orgId,
+      documentId,
+      employeePartyId,
       subsidiaryId: ctx.runContext.subsidiaryId,
       resolveStatutoryRates: () => ctx.statutoryRatesFor(country, taxYear),
       gross,
       statutoryHours,
       employmentId,
       employeeName: emp.display_name ?? employeePartyId,
-      taxYear, country, region: province, run, emp,
+      taxYear,
+      country,
+      region: province,
+      run,
+      emp,
       filingAccountId: jurisdiction.filingAccountId,
-      recordBonusIncomeReference: source => { bonusIncomeReferences.push(source); },
-      periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
+      recordBonusIncomeReference: (source) => {
+        bonusIncomeReferences.push(source);
+      },
+      periodsPerYear: P,
+      employerEmployeeCount: ctx.employerEmployeeCount,
       workAllocations,
-      income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,insurableNonPeriodic,programNonPeriodicBases,
+      income,
+      nonPeriodic,
+      pensionable,
+      insurable,
+      pensionableNonPeriodic,
+      insurableNonPeriodic,
+      programNonPeriodicBases,
       supplementalWageAmounts: aggregateUsSupplementalWageAmounts(lines),
       statutoryExemptionAmounts: aggregateUsStatutoryExemptionAmounts(lines),
       programBases,
       reducedBases: reducedBases(),
       deduction,
-      pushStatutory, storedCertificates, certificateFor, noteAdvisory, bool,
+      pushStatutory,
+      storedCertificates,
+      certificateFor,
+      noteAdvisory,
+      bool,
       assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
       employerLevies,
       periodPriors: ctx.periodPriors,
       supplementalTaxMethod: ctx.supplementalTaxMethod,
     });
-    mergeStatutoryFactors(factors,
-      (pack.contributionPrograms ?? []).map((program): [string, unknown] => [program.stubFactorKey, programBases[program.key]!]),
-      "program", country);
+    mergeStatutoryFactors(
+      factors,
+      (pack.contributionPrograms ?? []).map((program): [string, unknown] => [
+        program.stubFactorKey,
+        programBases[program.key]!,
+      ]),
+      "program",
+      country,
+    );
     mergeStatutoryFactors(factors, Object.entries(aggregateFactors), "employer-aggregate", country);
     firstEarningsAssessed ??= earningsAssessedSnapshot(lines);
   };
@@ -667,19 +1034,26 @@ export async function calculateStub(
   // A protected order's class (a creditor garnishment, a support order)
   // adds its pack-declared exempt floor beside the configured percentage.
   const exemptFloors = await resolveProtectionExemptFloors({
-    tx, orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null, country,
-    classes: pack.protectionClasses ?? [], payDate: run.pay_date!, periodsPerYear: P,
+    tx,
+    orgId,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    country,
+    classes: pack.protectionClasses ?? [],
+    payDate: run.pay_date!,
+    periodsPerYear: P,
     employeeLabel: emp.display_name ?? employeePartyId,
-    lines: lines.filter((line) => line.kind === "deduction" && line.protectionBase && line.protectionBase !== "none"),
+    lines: lines.filter(
+      (line) => line.kind === "deduction" && line.protectionBase && line.protectionBase !== "none",
+    ),
   });
-  const { lastProtection, protectedLines, protectionRequested } =
-    await settleDeductionProtection({
-      lines, gross,
-      employeeLabel: emp.display_name ?? employeePartyId,
-      packTreatments,
-      exemptFloors,
-      runStatutoryPass,
-    });
+  const { lastProtection, protectedLines, protectionRequested } = await settleDeductionProtection({
+    lines,
+    gross,
+    employeeLabel: emp.display_name ?? employeePartyId,
+    packTreatments,
+    exemptFloors,
+    runStatutoryPass,
+  });
 
   // The loop has settled: hold the pack's `earnings` declarations to their
   // word before any of it reaches the stub. A levy that moved was recomputed
@@ -692,7 +1066,9 @@ export async function calculateStub(
   );
 
   recordProtectionShortfalls(factors, {
-    lastProtection, protectedLines, protectionRequested,
+    lastProtection,
+    protectedLines,
+    protectionRequested,
   });
 
   // ---- Annual settlement: the pack's year-end recomputation ----------------
@@ -706,18 +1082,40 @@ export async function calculateStub(
   // and this block costs the stub nothing: ordinary months are byte-identical
   // with or without it.
   const settlementFactors = await settleAnnualSettlement({
-    tx, orgId, documentId, pack, run, emp, country, region: province, taxYear,
-    periodsPerYear: P, runType, employeePartyId,
+    tx,
+    orgId,
+    documentId,
+    pack,
+    run,
+    emp,
+    country,
+    region: province,
+    taxYear,
+    periodsPerYear: P,
+    runType,
+    employeePartyId,
     employeeName: emp.display_name ?? employeePartyId,
-    income, nonPeriodic, lines, need: ctx.need, components: ctx.components,
+    income,
+    nonPeriodic,
+    lines,
+    need: ctx.need,
+    components: ctx.components,
     filingAccountId: jurisdiction.filingAccountId,
-    storedCertificates, certificateFor, bool, employerLevies,
+    storedCertificates,
+    certificateFor,
+    bool,
+    employerLevies,
   });
   if (settlementFactors !== null) {
     // The settlement owns its factor namespace and the monthly pass owns
     // its; a key in both would settle one levy's money under another's name.
     // Refused by name rather than merged and misattributed.
-    assertSettlementFactorsMergeable(emp.display_name ?? employeePartyId, country, factors, settlementFactors);
+    assertSettlementFactorsMergeable(
+      emp.display_name ?? employeePartyId,
+      country,
+      factors,
+      settlementFactors,
+    );
     Object.assign(factors, settlementFactors);
   }
 
@@ -739,11 +1137,17 @@ export async function calculateStub(
   // mapping is per component and department, so it can only resolve once
   // the lines carry both. Item-routed lines keep their item account.
   const homeDepartment = await employeeHomeDepartment(tx, {
-    orgId, employeePartyId, employmentId: employmentId ?? null, onDate: run.period_end!,
+    orgId,
+    employeePartyId,
+    employmentId: employmentId ?? null,
+    onDate: run.period_end!,
   });
   if (homeDepartment) {
     for (const line of lines) {
-      if (line.departmentId == null && (line.kind === "earning" || line.kind === "employer_contribution")) {
+      if (
+        line.departmentId == null &&
+        (line.kind === "earning" || line.kind === "employer_contribution")
+      ) {
         line.departmentId = homeDepartment;
       }
     }
@@ -752,31 +1156,69 @@ export async function calculateStub(
   // Bank settlements answer last: the liability they relieve or fund is the
   // accounting nature of the line, whatever department or item costed it.
   stampEntitlementSettlementAccounts({
-    lines, plans, components: ctx.components, employeeName: emp.display_name ?? employeePartyId,
+    lines,
+    plans,
+    components: ctx.components,
+    employeeName: emp.display_name ?? employeePartyId,
   });
 
   const stubId = await insertPayStubRow(tx, {
-    orgId, actorId, documentId, employeePartyId, employmentId,
-    country, filingAccountId: jurisdiction.filingAccountId, province, periodsPerYear: P, payDate: run.pay_date!, taxYear,
-    federalClaim: factors.TC ?? "0", provincialClaim: factors.TCP ?? "0",
-    currency: run.doc_currency!, gross, pensionable, insurable, net,
-    employerCost, vacationAccrued, factors, paymentMethod,
+    orgId,
+    actorId,
+    documentId,
+    employeePartyId,
+    employmentId,
+    country,
+    filingAccountId: jurisdiction.filingAccountId,
+    province,
+    periodsPerYear: P,
+    payDate: run.pay_date!,
+    taxYear,
+    federalClaim: factors.TC ?? "0",
+    provincialClaim: factors.TCP ?? "0",
+    currency: run.doc_currency!,
+    gross,
+    pensionable,
+    insurable,
+    net,
+    employerCost,
+    vacationAccrued,
+    factors,
+    paymentMethod,
   });
-  const entitlementLineIds=await insertPayStubLineRows(tx, {
-    orgId, stubId, actorId, country, payDate: run.pay_date!,
-  }, lines);
+  const entitlementLineIds = await insertPayStubLineRows(
+    tx,
+    {
+      orgId,
+      stubId,
+      actorId,
+      country,
+      payDate: run.pay_date!,
+    },
+    lines,
+  );
 
   await persistEntitlementMovements(tx, {
-    orgId, actorId, documentId,
+    orgId,
+    actorId,
+    documentId,
     employeePartyIds: [employeePartyId],
-    simulate: ctx.simulate, movements: entitlementMovements, stubLineIds: entitlementLineIds,
+    simulate: ctx.simulate,
+    movements: entitlementMovements,
+    stubLineIds: entitlementLineIds,
   });
 
   await persistCompensationPackageCalculations(tx, compensationPackages);
   for (const source of bonusIncomeReferences) ctx.onBonusIncomeReference?.(source);
 
   return {
-    employeePartyId, province, gross, net, employerCost,
-    errors: [], warnings: entitlementWarnings, advisories,
+    employeePartyId,
+    province,
+    gross,
+    net,
+    employerCost,
+    errors: [],
+    warnings: entitlementWarnings,
+    advisories,
   };
 }

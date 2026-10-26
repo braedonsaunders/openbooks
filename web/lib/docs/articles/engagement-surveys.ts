@@ -1,15 +1,26 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const engagementSurveys: DocArticle = {
-  slug: 'engagement-surveys',
-  title: 'Engagement and Pulse Surveys',
-  category: 'administration',
+  slug: "engagement-surveys",
+  title: "Engagement and Pulse Surveys",
+  category: "administration",
   order: 14,
   summary:
-    'How HR authors engagement surveys, invites respondents with single-use tokens, and reads aggregate results with minimum-group suppression — plus the recurring pulse cadence and the org-chart directory.',
-  updated: '2026-09-27',
-  keywords: ['survey', 'engagement', 'pulse', 'enps', 'anonymity', 'heatmap', 'invitation', 'driver', 'onboarding', 'exit'],
-  related: ['positions-and-headcount', 'documents-signatures-and-retention'],
+    "How HR authors engagement surveys, invites respondents with single-use tokens, and reads aggregate results with minimum-group suppression — plus the recurring pulse cadence and the org-chart directory.",
+  updated: "2026-09-27",
+  keywords: [
+    "survey",
+    "engagement",
+    "pulse",
+    "enps",
+    "anonymity",
+    "heatmap",
+    "invitation",
+    "driver",
+    "onboarding",
+    "exit",
+  ],
+  related: ["positions-and-headcount", "documents-signatures-and-retention"],
   body: `# Engagement and Pulse Surveys
 
 Surveys answer one question: how does the workforce feel, in groups large enough to protect. Authoring declares kinds, anonymity grades, and question cards; invitations carry single-use tokens; results read aggregate only, with minimum-group suppression and anonymity handling that differs per grade. A recycled token refuses by name — one response per invitation, never silent overwrites.
@@ -42,4 +53,4 @@ Survey results also read as a report: one row per survey with kind, anonymity gr
 
 Pulse surveys carry a recurrence rule (weekly, monthly, quarterly) with an anchor date. Closing a pulse survey schedules its successor, linked by lineage, so trends read across generations. The trend panel shows each generation's eNPS in order.
 `,
-}
+};

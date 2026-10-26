@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const allocations: DocArticle = {
-  slug: 'allocations',
-  title: 'Cost Allocations',
-  category: 'accounting',
+  slug: "allocations",
+  title: "Cost Allocations",
+  category: "accounting",
   order: 6,
   summary:
-    'Distribute pooled costs to targets on a driver with one rule model bound at three moments: splits at entry, contributions at posting, and scheduled period sweeps.',
-  updated: '2026-09-16',
-  keywords: ['allocation', 'apportion', 'driver', 'distribution', 'sweep', 'reclass', 'lineage', 'period run', 'residual'],
-  related: ['overhead-costing', 'fixed-assets-depreciation', 'scripting-engine', 'period-close'],
+    "Distribute pooled costs to targets on a driver with one rule model bound at three moments: splits at entry, contributions at posting, and scheduled period sweeps.",
+  updated: "2026-09-16",
+  keywords: [
+    "allocation",
+    "apportion",
+    "driver",
+    "distribution",
+    "sweep",
+    "reclass",
+    "lineage",
+    "period run",
+    "residual",
+  ],
+  related: ["overhead-costing", "fixed-assets-depreciation", "scripting-engine", "period-close"],
   body: `# Cost Allocations
 
 Cost allocations move pooled amounts — rent sitting in an Overhead
@@ -353,4 +363,4 @@ snapshot at the window end, and fixed query weighs the report's own scope
 untouched. Previews and runs echo the enforced contract, and evidence that
 reaches the report row cap is refused instead of weighed truncated.
 `,
-}
+};

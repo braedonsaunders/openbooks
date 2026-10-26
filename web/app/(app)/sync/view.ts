@@ -1,6 +1,6 @@
-import 'server-only'
+import "server-only";
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
 
 /**
  * The client console owns ListPageLayout and PageHeader because connection
@@ -9,17 +9,17 @@ import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewsp
  * writes and sync actions remain guarded by their API permissions.
  */
 
-export type SyncData = Record<string, never>
+export type SyncData = Record<string, never>;
 
 export async function loadSync(): Promise<SyncData> {
-  return {}
+  return {};
 }
 
 export function syncSpec(): PageSpec {
   return page({
-    route: '/sync',
-    layout: 'bare',
+    route: "/sync",
+    layout: "bare",
     header: [],
-    body: [widgetBlock('sync-console')],
-  })
+    body: [widgetBlock("sync-console")],
+  });
 }

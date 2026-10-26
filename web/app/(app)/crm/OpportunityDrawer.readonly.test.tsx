@@ -7,14 +7,21 @@ import test from "node:test";
 // together behind canManage.
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/crm/opportunities?view=list", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/crm/opportunities?view=list",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -101,9 +108,9 @@ async function renderDrawer(canManage: boolean, host: HTMLElement) {
 }
 
 function lineInput(value: string): HTMLInputElement | undefined {
-  return [...document.querySelectorAll("input")].find((el) => (el as HTMLInputElement).value === value) as
-    | HTMLInputElement
-    | undefined;
+  return [...document.querySelectorAll("input")].find(
+    (el) => (el as HTMLInputElement).value === value,
+  ) as HTMLInputElement | undefined;
 }
 
 test("read-only line cells are disabled; managers keep all four editable", async (t) => {
@@ -119,7 +126,11 @@ test("read-only line cells are disabled; managers keep all four editable", async
   for (const value of ["Line work", "2", "10.5", "4"]) {
     const input = lineInput(value);
     assert.ok(input, `line input ${JSON.stringify(value)} must render`);
-    assert.equal(input.disabled, true, `line input ${JSON.stringify(value)} must lock for read-only users`);
+    assert.equal(
+      input.disabled,
+      true,
+      `line input ${JSON.stringify(value)} must lock for read-only users`,
+    );
   }
 });
 
@@ -136,6 +147,10 @@ test("managers can still edit every line cell", async (t) => {
   for (const value of ["Line work", "2", "10.5", "4"]) {
     const input = lineInput(value);
     assert.ok(input, `line input ${JSON.stringify(value)} must render`);
-    assert.equal(input.disabled, false, `line input ${JSON.stringify(value)} must stay editable for managers`);
+    assert.equal(
+      input.disabled,
+      false,
+      `line input ${JSON.stringify(value)} must stay editable for managers`,
+    );
   }
 });

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -14,7 +14,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -63,7 +71,9 @@ const REASON = "approved the wrong bill batch";
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -116,7 +126,13 @@ async function mountBill(options: { status?: string; canPost?: boolean } = {}) {
             lineDefs={[]}
             canCreate
             canPost={options.canPost ?? true}
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "post", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -129,7 +145,9 @@ async function mountBill(options: { status?: string; canPost?: boolean } = {}) {
 }
 
 async function openActionsMenu() {
-  const actions = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Actions"));
+  const actions = [...document.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Actions"),
+  );
   assert.ok(actions, "Actions menu must render");
   await act(async () => {
     actions.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -194,7 +212,11 @@ test("Return to draft posts the prompted reason with the drawer revision", async
     if (!url.endsWith("/api/documents/actions")) return null;
     const body = JSON.parse(String(init?.body ?? "{}"));
     if (body.action === "return_to_draft") {
-      seen.push({ action: body.action, reason: body.reason, expectedUpdatedAt: body.expectedUpdatedAt });
+      seen.push({
+        action: body.action,
+        reason: body.reason,
+        expectedUpdatedAt: body.expectedUpdatedAt,
+      });
       return Response.json({ ok: true, supersededRunIds: [] });
     }
     return null;
@@ -211,10 +233,15 @@ test("Return to draft posts the prompted reason with the drawer revision", async
   await clickReturnToDraft();
   assert.equal(seen.length, 1, "exactly one return_to_draft call posts");
   assert.equal(seen[0]!.reason, REASON);
-  assert.ok(typeof seen[0]!.expectedUpdatedAt === "string" && (seen[0]!.expectedUpdatedAt as string).length > 0,
-    "the drawer revision travels for optimistic concurrency");
-  assert.ok((globalThis.__drawerToasts ?? []).some((toast) => toast.kind === "success"),
-    "a success toast confirms the return");
+  assert.ok(
+    typeof seen[0]!.expectedUpdatedAt === "string" &&
+      (seen[0]!.expectedUpdatedAt as string).length > 0,
+    "the drawer revision travels for optimistic concurrency",
+  );
+  assert.ok(
+    (globalThis.__drawerToasts ?? []).some((toast) => toast.kind === "success"),
+    "a success toast confirms the return",
+  );
 });
 
 /** A refused return pins the remedy as a drawer-header alert, not just a toast. */
@@ -222,7 +249,14 @@ test("a refused return persists its remedy as a drawer-header alert", async (t) 
   const restore = scriptFetch((url, init) => {
     const body = JSON.parse(String((init as RequestInit | undefined)?.body ?? "{}"));
     return url.endsWith("/api/documents/actions") && body.action === "return_to_draft"
-      ? Response.json({ error: "BILL-00005 has live payment instructions against it — settle or cancel the payments before returning to draft", code: "applied" }, { status: 422 })
+      ? Response.json(
+          {
+            error:
+              "BILL-00005 has live payment instructions against it — settle or cancel the payments before returning to draft",
+            code: "applied",
+          },
+          { status: 422 },
+        )
       : null;
   });
   globalThis.__drawerPrompt = REASON;

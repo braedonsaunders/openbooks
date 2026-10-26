@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { createPrepaidGrant } from "../billing/usage/prepaid.ts";
 import { commitRateRun, previewRateRun } from "../billing/usage/rate-run.ts";
-import { createUsageMeter, ingestUsageRecords, type IngestUsageRecordInput } from "../billing/usage/records.ts";
+import {
+  createUsageMeter,
+  ingestUsageRecords,
+  type IngestUsageRecordInput,
+} from "../billing/usage/records.ts";
 import {
   createSubscriptionUsageLink,
   createUsageRatingPlan,
@@ -50,13 +54,20 @@ function quantityText(units: bigint): string {
   const magnitude = units < 0n ? -units : units;
   const whole = magnitude / QUANTITY_SCALE;
   // Daily API volumes use four fractional places; graduated money rates keep eight.
-  const fraction = (magnitude % QUANTITY_SCALE).toString().padStart(8, "0").slice(0, 4).replace(/0+$/, "");
+  const fraction = (magnitude % QUANTITY_SCALE)
+    .toString()
+    .padStart(8, "0")
+    .slice(0, 4)
+    .replace(/0+$/, "");
   return `${sign}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
 function monthDistance(from: string, to: string): number {
-  return (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12
-    + Number(to.slice(5, 7)) - Number(from.slice(5, 7));
+  return (
+    (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 +
+    Number(to.slice(5, 7)) -
+    Number(from.slice(5, 7))
+  );
 }
 
 function daysInMonth(date: string): number {
@@ -75,7 +86,8 @@ function monthlyQuantity(spec: UsageSubscriptionSpec, startOn: string, today: st
 }
 
 async function linkedUsageSubscriptions(orgId: string): Promise<SubscriptionUsageRow[]> {
-  return await db.execute<SubscriptionUsageRow>(sql`
+  return await db.execute<SubscriptionUsageRow>(
+    sql`
     select s.id, s.customer_id as "customerId", customer.display_name as "customerName",
            s.start_on::text as "startOn", s.status, s.paused_on::text as "pausedOn",
            s.resume_on::text as "resumeOn", link.id as "linkId", meter.key as "productKey",
@@ -85,7 +97,9 @@ async function linkedUsageSubscriptions(orgId: string): Promise<SubscriptionUsag
       join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
       join usage_meters meter on meter.org_id = link.org_id and meter.id = any(link.meter_ids)
      where link.org_id = ${orgId}
-     order by customer.display_name, meter.key`, "objects");
+     order by customer.display_name, meter.key`,
+    "objects",
+  );
 }
 
 async function applyProfileLifecycle(
@@ -98,35 +112,53 @@ async function applyProfileLifecycle(
   for (const spec of profile.usageSubscriptions ?? []) {
     if (spec.pauseAfterDays === undefined && spec.resumeAfterDays === undefined) continue;
     if (
-      spec.pauseAfterDays === undefined || spec.resumeAfterDays === undefined ||
-      !Number.isInteger(spec.pauseAfterDays) || !Number.isInteger(spec.resumeAfterDays) ||
-      spec.pauseAfterDays < 0 || spec.resumeAfterDays <= spec.pauseAfterDays
+      spec.pauseAfterDays === undefined ||
+      spec.resumeAfterDays === undefined ||
+      !Number.isInteger(spec.pauseAfterDays) ||
+      !Number.isInteger(spec.resumeAfterDays) ||
+      spec.pauseAfterDays < 0 ||
+      spec.resumeAfterDays <= spec.pauseAfterDays
     ) {
       throw new Error(`Invalid pause/resume schedule for ${spec.customer}`);
     }
     const subscription = rowByCustomer.get(spec.customer);
-    if (!subscription) throw new Error(`No usage subscription exists for ${spec.customer} in ${world.orgId}`);
+    if (!subscription)
+      throw new Error(`No usage subscription exists for ${spec.customer} in ${world.orgId}`);
     const pauseOn = addCalendarDays(subscription.startOn, spec.pauseAfterDays);
     const resumeOn = addCalendarDays(subscription.startOn, spec.resumeAfterDays);
     if (today === pauseOn) {
       if (subscription.status === "paused" && subscription.pausedOn === today) continue;
-      if (subscription.status !== "active") throw new Error(`Cannot pause ${spec.customer} from subscription status ${subscription.status}`);
-      const paused = await db.execute(sql`
+      if (subscription.status !== "active")
+        throw new Error(
+          `Cannot pause ${spec.customer} from subscription status ${subscription.status}`,
+        );
+      const paused = await db.execute(
+        sql`
         update subscriptions set status = 'paused', paused_on = ${today}
          where org_id = ${world.orgId} and id = ${subscription.id} and status = 'active'
-        returning id`, "objects");
-      if (paused.length !== 1) throw new Error(`Pausing ${spec.customer} did not update one active subscription`);
+        returning id`,
+        "objects",
+      );
+      if (paused.length !== 1)
+        throw new Error(`Pausing ${spec.customer} did not update one active subscription`);
       subscription.status = "paused";
       subscription.pausedOn = today;
     }
     if (today === resumeOn) {
       if (subscription.status === "active" && subscription.resumeOn === today) continue;
-      if (subscription.status !== "paused") throw new Error(`Cannot resume ${spec.customer} from subscription status ${subscription.status}`);
-      const resumed = await db.execute(sql`
+      if (subscription.status !== "paused")
+        throw new Error(
+          `Cannot resume ${spec.customer} from subscription status ${subscription.status}`,
+        );
+      const resumed = await db.execute(
+        sql`
         update subscriptions set status = 'active', resume_on = ${today}
          where org_id = ${world.orgId} and id = ${subscription.id} and status = 'paused'
-        returning id`, "objects");
-      if (resumed.length !== 1) throw new Error(`Resuming ${spec.customer} did not update one paused subscription`);
+        returning id`,
+        "objects",
+      );
+      if (resumed.length !== 1)
+        throw new Error(`Resuming ${spec.customer} did not update one paused subscription`);
       subscription.status = "active";
       subscription.resumeOn = today;
     }
@@ -141,7 +173,8 @@ export async function provisionSaasUsage(
 ): Promise<void> {
   if (!profile.meteredProducts?.length) return;
   const specs = profile.usageSubscriptions ?? [];
-  if (!specs.length) throw new Error(`Profile ${profile.id} declares metered products without usage subscriptions`);
+  if (!specs.length)
+    throw new Error(`Profile ${profile.id} declares metered products without usage subscriptions`);
 
   for (const product of profile.meteredProducts) {
     const usageItemId = randomUUID();
@@ -165,7 +198,10 @@ export async function provisionSaasUsage(
       planId: plan.id,
       effectiveFrom: window.startDate,
     });
-    await replaceUsageRatingBands(world.orgId, world.actors.controller, version.id,
+    await replaceUsageRatingBands(
+      world.orgId,
+      world.actors.controller,
+      version.id,
       product.bands.map((band, index) => ({
         meterId: meter.id,
         kind: "graduated" as const,
@@ -177,21 +213,27 @@ export async function provisionSaasUsage(
     await publishUsagePlanVersion(world.orgId, world.actors.controller, version.id);
 
     const customerIds = new Map(world.customers.map((customer) => [customer.name, customer.id]));
-    const subscriptionsByCustomer = new Map(world.subscriptions.map((subscription) => [subscription.customerId, subscription]));
+    const subscriptionsByCustomer = new Map(
+      world.subscriptions.map((subscription) => [subscription.customerId, subscription]),
+    );
     const productSpecs = specs.filter((spec) => spec.product === product.key);
-    if (!productSpecs.length) throw new Error(`No profile subscribers use metered product ${product.key}`);
+    if (!productSpecs.length)
+      throw new Error(`No profile subscribers use metered product ${product.key}`);
 
     for (const spec of productSpecs) {
       const customerId = customerIds.get(spec.customer);
       const subscriber = customerId ? subscriptionsByCustomer.get(customerId) : undefined;
-      if (!customerId || !subscriber) throw new Error(`No recurring subscription exists for metered customer ${spec.customer}`);
+      if (!customerId || !subscriber)
+        throw new Error(`No recurring subscription exists for metered customer ${spec.customer}`);
       await createSubscriptionUsageLink(world.orgId, world.actors.controller, {
         subscriptionId: subscriber.id,
         customerId,
         planVersionId: version.id,
         meterIds: [meter.id],
         effectiveFrom: window.startDate,
-        ...(spec.annualCommitAmount ? { commitAmount: spec.annualCommitAmount, commitPeriod: "annual" as const } : {}),
+        ...(spec.annualCommitAmount
+          ? { commitAmount: spec.annualCommitAmount, commitPeriod: "annual" as const }
+          : {}),
         allowOverage: true,
       });
     }
@@ -215,7 +257,8 @@ export async function provisionSaasUsage(
                 ${world.accounts.usageRevenue}, ${ruleId}, ${world.accounts.deferredRevenue})`);
       for (const spec of prepaidSpecs) {
         const customer = world.customers.find((candidate) => candidate.name === spec.customer);
-        if (!customer || !spec.prepaidPack) throw new Error(`Prepaid pack customer ${spec.customer} is missing`);
+        if (!customer || !spec.prepaidPack)
+          throw new Error(`Prepaid pack customer ${spec.customer} is missing`);
         const invoice = await createSubscriptionInvoice({
           orgId: world.orgId,
           actorId: world.actors.controller,
@@ -231,21 +274,29 @@ export async function provisionSaasUsage(
           memo: `${product.name} prepaid usage pack`,
           invoiceDate: window.startDate,
           autoPost: false,
-          lines: [{
-            description: `${product.name} prepaid usage pack`,
-            quantity: "1",
-            unitPrice: spec.prepaidPack.amount,
-            incomeAccountId: world.accounts.usageRevenue!,
-            itemId: prepaidItemId,
-            taxCodeId: null,
-          }],
+          lines: [
+            {
+              description: `${product.name} prepaid usage pack`,
+              quantity: "1",
+              unitPrice: spec.prepaidPack.amount,
+              incomeAccountId: world.accounts.usageRevenue!,
+              itemId: prepaidItemId,
+              taxCodeId: null,
+            },
+          ],
           custom: { simPrepaidUsageProduct: product.key },
         });
         await issueInvoice(world, invoice.invoiceId);
-        const sourceLine = await db.execute<{ id: string }>(sql`
+        const sourceLine = await db.execute<{ id: string }>(
+          sql`
           select id from document_lines where org_id = ${world.orgId} and document_id = ${invoice.invoiceId}
-          order by line_number`, "objects");
-        if (sourceLine.length !== 1) throw new Error(`Prepaid invoice ${invoice.documentNumber} must have exactly one source line`);
+          order by line_number`,
+          "objects",
+        );
+        if (sourceLine.length !== 1)
+          throw new Error(
+            `Prepaid invoice ${invoice.documentNumber} must have exactly one source line`,
+          );
         await createPrepaidGrant(world.orgId, world.actors.controller, {
           customerId: customer.id,
           sourceDocumentLineId: sourceLine[0]!.id,
@@ -268,22 +319,30 @@ export async function runSaasUsageDay(
   await applyProfileLifecycle(profile, world, today, rows);
 
   const specsByCustomerAndProduct = new Map(
-    (profile.usageSubscriptions ?? []).map((spec) => [`${spec.customer}\u0000${spec.product}`, spec]),
+    (profile.usageSubscriptions ?? []).map((spec) => [
+      `${spec.customer}\u0000${spec.product}`,
+      spec,
+    ]),
   );
   const records: IngestUsageRecordInput[] = [];
   for (const row of rows) {
     if (row.status !== "active") continue;
     const spec = specsByCustomerAndProduct.get(`${row.customerName}\u0000${row.productKey}`);
-    if (!spec) throw new Error(`No usage volume shape exists for ${row.customerName} and ${row.productKey}`);
+    if (!spec)
+      throw new Error(`No usage volume shape exists for ${row.customerName} and ${row.productKey}`);
     const monthly = monthlyQuantity(spec, row.startOn, today);
     const days = BigInt(daysInMonth(today));
     const variation = spec.volume.dailyVariationPercent;
     if (!Number.isInteger(variation) || variation < 0 || variation > 20) {
-      throw new Error(`Daily usage variation for ${row.customerName} must be a whole percent from 0 through 20`);
+      throw new Error(
+        `Daily usage variation for ${row.customerName} must be a whole percent from 0 through 20`,
+      );
     }
-    const stream = Rng.fromSeed(`${profile.id}:${row.customerName}:${today}`).stream("saas-daily-usage");
+    const stream = Rng.fromSeed(`${profile.id}:${row.customerName}:${today}`).stream(
+      "saas-daily-usage",
+    );
     const factor = BigInt(stream.int(100 - variation, 100 + variation));
-    const quantity = quantityText((monthly / days) * factor / 100n);
+    const quantity = quantityText(((monthly / days) * factor) / 100n);
     records.push({
       meterKey: row.productKey,
       customerId: row.customerId,
@@ -302,13 +361,27 @@ export async function runSaasUsageDay(
   const periodStart = `${today.slice(0, 7)}-01`;
   for (const row of rows) {
     const start = row.effectiveFrom > periodStart ? row.effectiveFrom : periodStart;
-    const result = await commitRateRun(world.orgId, world.actors.controller, row.linkId, start, today);
+    const result = await commitRateRun(
+      world.orgId,
+      world.actors.controller,
+      row.linkId,
+      start,
+      today,
+    );
     if (!result.invoiceId) continue;
-    const invoice = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${world.orgId} and id = ${result.invoiceId}`, "objects"))[0];
+    const invoice = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from documents where org_id = ${world.orgId} and id = ${result.invoiceId}`,
+        "objects",
+      )
+    )[0];
     if (!invoice) throw new Error(`Usage rating run ${result.run.id} points to a missing invoice`);
     if (invoice.status === "draft") await issueInvoice(world, result.invoiceId);
-    else if (invoice.status !== "posted") throw new Error(`Usage invoice ${result.invoiceId} cannot post from status ${invoice.status}`);
+    else if (invoice.status !== "posted")
+      throw new Error(
+        `Usage invoice ${result.invoiceId} cannot post from status ${invoice.status}`,
+      );
   }
 }
 
@@ -324,8 +397,13 @@ export interface SaasUsageInvariantFailure {
 
 /** Verify that the latest rated month still replays and its 4010 credit ties to usage. */
 export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageInvariantFailure[]> {
-  const latest = (await db.execute<{ periodEnd: string | null }>(sql`
-    select max(period_end)::text as "periodEnd" from usage_rating_runs where org_id = ${orgId} and status = 'active'`, "objects"))[0]?.periodEnd;
+  const latest = (
+    await db.execute<{ periodEnd: string | null }>(
+      sql`
+    select max(period_end)::text as "periodEnd" from usage_rating_runs where org_id = ${orgId} and status = 'active'`,
+      "objects",
+    )
+  )[0]?.periodEnd;
   if (!latest) return [];
   const monthStart = `${latest.slice(0, 7)}-01`;
   const runs = await db.execute<{
@@ -335,12 +413,15 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
     periodEnd: string;
     inputHash: string;
     outputHash: string;
-  }>(sql`
+  }>(
+    sql`
     select id, link_id as "linkId", period_start::text as "periodStart", period_end::text as "periodEnd",
            input_hash as "inputHash", output_hash as "outputHash"
       from usage_rating_runs
      where org_id = ${orgId} and status = 'active' and period_end = ${latest}::date
-     order by link_id`, "objects");
+     order by link_id`,
+    "objects",
+  );
   const failures: SaasUsageInvariantFailure[] = [];
   for (const run of runs) {
     const preview = await previewRateRun(orgId, run.linkId, run.periodStart, run.periodEnd);
@@ -355,7 +436,10 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
   // Posted invoice history survives both voiding and rating-run supersession.
   // Each reversal is a separate negative leg in its own accounting month;
   // filtering the original by its current state would erase earlier revenue.
-  const invoiceAmount = (await db.execute<{ amount: string }>(sql`
+  const invoiceAmount =
+    (
+      await db.execute<{ amount: string }>(
+        sql`
     with invoice_legs as (
       select line.amount, posted.posting_date
         from usage_rating_runs run
@@ -374,23 +458,46 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
          and reversal.status in ('posted', 'reversed')
     )
     select coalesce(sum(amount), 0)::text as amount from invoice_legs
-     where posting_date >= ${monthStart}::date and posting_date <= ${latest}::date`, "objects"))[0]?.amount ?? "0";
-  const drawAmount = (await db.execute<{ amount: string }>(sql`
+     where posting_date >= ${monthStart}::date and posting_date <= ${latest}::date`,
+        "objects",
+      )
+    )[0]?.amount ?? "0";
+  const drawAmount =
+    (
+      await db.execute<{ amount: string }>(
+        sql`
     select coalesce(sum(amount), 0)::text as amount from usage_prepaid_draws
-     where org_id = ${orgId} and period_month = ${monthStart}::date`, "objects"))[0]?.amount ?? "0";
-  const usageAccount = (await db.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${orgId} and number = '4010' and is_active`, "objects"))[0];
+     where org_id = ${orgId} and period_month = ${monthStart}::date`,
+        "objects",
+      )
+    )[0]?.amount ?? "0";
+  const usageAccount = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from accounts where org_id = ${orgId} and number = '4010' and is_active`,
+      "objects",
+    )
+  )[0];
   if (!usageAccount) {
-    failures.push({ invariant: "saas-usage-revenue-tieout", detail: "usage revenue account 4010 is missing or inactive" });
+    failures.push({
+      invariant: "saas-usage-revenue-tieout",
+      detail: "usage revenue account 4010 is missing or inactive",
+    });
     return failures;
   }
-  const creditAmount = (await db.execute<{ amount: string }>(sql`
+  const creditAmount =
+    (
+      await db.execute<{ amount: string }>(
+        sql`
     select coalesce(sum(line.amount), 0)::text as amount
       from journal_lines line
       join journal_entries entry on entry.org_id = line.org_id and entry.id = line.entry_id
      where line.org_id = ${orgId} and line.account_id = ${usageAccount.id}
        and line.posting_date >= ${monthStart}::date and line.posting_date <= ${latest}::date
-       and entry.status in ('posted', 'reversed')`, "objects"))[0]?.amount ?? "0";
+       and entry.status in ('posted', 'reversed')`,
+        "objects",
+      )
+    )[0]?.amount ?? "0";
   const expected = add(invoiceAmount, drawAmount);
   const credited = neg(parseMoney(creditAmount));
   if (cmp(credited, expected) !== 0) {

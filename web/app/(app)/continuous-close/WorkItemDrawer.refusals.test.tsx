@@ -15,7 +15,11 @@ declare global {
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/close", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/close",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -23,7 +27,10 @@ const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return{push(){},refresh(){globalThis.__workItemRefreshed=true},replace(){}}}export function usePathname(){return '/close'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return{push(){},refresh(){globalThis.__workItemRefreshed=true},replace(){}}}export function usePathname(){return '/close'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
@@ -64,10 +71,14 @@ type WorkItem = Parameters<typeof WorkItemDrawer>[0]["item"];
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -166,14 +177,21 @@ test("a refused resolve pins the translated reason and does not refresh", async 
   );
   const toasts = globalThis.__workItemToasts ?? [];
   assert.ok(
-    toasts.some((toast) => toast.kind === "error" && /isn't available for this finding anymore/.test(toast.message)),
+    toasts.some(
+      (toast) =>
+        toast.kind === "error" && /isn't available for this finding anymore/.test(toast.message),
+    ),
     `the refusal must also toast, saw ${JSON.stringify(toasts)}`,
   );
   assert.ok(
     toasts.every((toast) => toast.kind !== "success"),
     "a refused transition must never toast success",
   );
-  assert.equal(globalThis.__workItemRefreshed, false, "the un-applied finding must not refresh away its refusal");
+  assert.equal(
+    globalThis.__workItemRefreshed,
+    false,
+    "the un-applied finding must not refresh away its refusal",
+  );
 });
 
 test("a forbidden note pins the translated reason", async (t) => {
@@ -190,7 +208,10 @@ test("a forbidden note pins the translated reason", async (t) => {
 
   const box = document.querySelector("textarea");
   assert.ok(box, "the note composer must render when notes are provided");
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    "value",
+  )?.set;
   assert.ok(setter, "jsdom must expose the textarea value setter");
   await act(async () => {
     setter.call(box, "checking this tomorrow");
@@ -222,17 +243,21 @@ test("clearing an assignment clears its inputs after the server confirms", async
     return Response.json({});
   });
   t.after(restoreFetch);
-  const { unmount } = await renderDrawer(false, {
-    assigneeUserId: "user-1",
-    assigneeUserName: "Alex Operator",
-    assigneeRole: "controller",
-    assigneeRoleName: "Controller",
-    dueAt: "2026-10-25T00:00:00.000Z",
-    overdue: false,
-  }, {
-    users: [{ id: "user-1", name: "Alex Operator", email: "alex@example.test" }],
-    roles: [{ id: "controller", name: "Controller" }],
-  });
+  const { unmount } = await renderDrawer(
+    false,
+    {
+      assigneeUserId: "user-1",
+      assigneeUserName: "Alex Operator",
+      assigneeRole: "controller",
+      assigneeRoleName: "Controller",
+      dueAt: "2026-10-25T00:00:00.000Z",
+      overdue: false,
+    },
+    {
+      users: [{ id: "user-1", name: "Alex Operator", email: "alex@example.test" }],
+      roles: [{ id: "controller", name: "Controller" }],
+    },
+  );
   t.after(unmount);
 
   const selects = document.querySelectorAll("select");
@@ -247,11 +272,13 @@ test("clearing an assignment clears its inputs after the server confirms", async
   assert.ok(clear, "the assignment clear action renders");
   await click(clear);
 
-  assert.deepEqual(requests, [{
-    url: `/api/continuous-close/items/${ITEM.id}`,
-    method: "PATCH",
-    body: { action: "assign", assigneeUserId: null, assigneeRole: null, dueAt: null },
-  }]);
+  assert.deepEqual(requests, [
+    {
+      url: `/api/continuous-close/items/${ITEM.id}`,
+      method: "PATCH",
+      body: { action: "assign", assigneeUserId: null, assigneeRole: null, dueAt: null },
+    },
+  ]);
   assert.equal(selects[0]?.value, "");
   assert.equal(selects[1]?.value, "");
   assert.equal(dueDate?.value, "");

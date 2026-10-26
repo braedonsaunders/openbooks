@@ -9,12 +9,12 @@
  */
 
 /** The name the draft-creation endpoint stamps on placeholder projects. */
-export const PROJECT_PLACEHOLDER_NAME = 'New project'
+export const PROJECT_PLACEHOLDER_NAME = "New project";
 
 /** True while the project still carries no operator-given name. */
 export function isProjectPlaceholderName(name: string | null | undefined): boolean {
-  const trimmed = (name ?? '').trim()
-  return trimmed === '' || trimmed === PROJECT_PLACEHOLDER_NAME
+  const trimmed = (name ?? "").trim();
+  return trimmed === "" || trimmed === PROJECT_PLACEHOLDER_NAME;
 }
 
 /**
@@ -28,7 +28,7 @@ export function shouldAutoActivateProject(
   persistedIsActive: boolean,
   nextName: string,
 ): boolean {
-  if (persistedIsActive) return false
-  if (!isProjectPlaceholderName(persistedName)) return false
-  return !isProjectPlaceholderName(nextName)
+  if (persistedIsActive) return false;
+  if (!isProjectPlaceholderName(persistedName)) return false;
+  return !isProjectPlaceholderName(nextName);
 }

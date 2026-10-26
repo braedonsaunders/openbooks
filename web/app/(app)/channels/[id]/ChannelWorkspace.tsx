@@ -26,7 +26,10 @@ import { LocationsTab } from "./LocationsTab";
 import { SettingsTab } from "./SettingsTab";
 import { SetupEntitySection } from "../../admin/setup/[entity]/SetupEntitySection";
 
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "success" | "secondary" | "outline" | "destructive" | "warning"
+> = {
   active: "success",
   paused: "outline",
   error: "destructive",
@@ -85,8 +88,11 @@ export async function ChannelWorkspace({
     return tRoot.has(labelKey) ? tRoot(labelKey) : labelKey;
   };
   const adapterKeys = new Set(adapterTabs.map((adapterTab) => `adapter:${adapterTab.key}`));
-  const activeTab = tab === "activity" || tab === "settings" || adapterKeys.has(tab) ? tab : "overview";
-  const statusLabel = t.has(`status.${channel.status}`) ? t(`status.${channel.status}`) : channel.status;
+  const activeTab =
+    tab === "activity" || tab === "settings" || adapterKeys.has(tab) ? tab : "overview";
+  const statusLabel = t.has(`status.${channel.status}`)
+    ? t(`status.${channel.status}`)
+    : channel.status;
 
   return (
     <DetailPageLayout
@@ -95,7 +101,9 @@ export async function ChannelWorkspace({
           back={{ href: "/channels", label: t("workspace.back") }}
           title={channel.name}
           subtitle={`${channel.kind} · ${channel.externalAccount} · ${channel.currency}`}
-          badge={<Badge variant={STATUS_VARIANT[channel.status] ?? "secondary"}>{statusLabel}</Badge>}
+          badge={
+            <Badge variant={STATUS_VARIANT[channel.status] ?? "secondary"}>{statusLabel}</Badge>
+          }
           actions={
             <ChannelActions
               channelId={channel.id}
@@ -144,7 +152,9 @@ async function WorkspaceOverview({ channelId }: { channelId: string }) {
   const channel = await loadChannel(authz, channelId);
   const events = await listInboundEvents(authz.user.orgId, channelId, 5);
   const healthEntries = Object.entries(channel.health ?? {});
-  const outstanding = events.filter((event) => event.status === "failed" || event.status === "dead").length;
+  const outstanding = events.filter(
+    (event) => event.status === "failed" || event.status === "dead",
+  ).length;
   return (
     <div className="space-y-5">
       {channel.status === "connecting" ? (
@@ -187,7 +197,9 @@ async function WorkspaceOverview({ channelId }: { channelId: string }) {
                   {event.topic} <span className="text-slate-400">{event.providerEventId}</span>
                 </span>
                 <Badge variant={STATUS_VARIANT[event.status] ?? "secondary"}>
-                  {t.has(`activity.status.${event.status}`) ? t(`activity.status.${event.status}`) : event.status}
+                  {t.has(`activity.status.${event.status}`)
+                    ? t(`activity.status.${event.status}`)
+                    : event.status}
                 </Badge>
               </li>
             ))}
@@ -213,7 +225,11 @@ async function WorkspaceSettings({
   const tSetup = await getTranslations("admin.setup");
   const activeSection = resolveSettingsSection(sp);
   const sections: { key: SettingsSectionKey; label: string; href: string }[] = [
-    { key: "connection", label: t("settings.title"), href: settingsSectionHref(channelId, sp, "connection") },
+    {
+      key: "connection",
+      label: t("settings.title"),
+      href: settingsSectionHref(channelId, sp, "connection"),
+    },
     ...SETTINGS_ENTITY_SECTIONS.map((section) => {
       const entity = SETUP_ENTITY_BY_KEY.get(section.entityKey);
       if (!entity) notFound();

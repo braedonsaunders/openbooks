@@ -55,8 +55,7 @@ export const PATCH = defineRoute({
   body: patchSuccessionPlanBody,
   handler: async ({ request: req, authz, body }) => {
     const id = new URL(req.url).searchParams.get("id");
-    if (!id)
-      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
     try {
       if (body.status !== undefined) {
         await setSuccessionPlanStatus({

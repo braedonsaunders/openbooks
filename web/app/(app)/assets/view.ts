@@ -1,11 +1,11 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
-import { listTaxRegimes } from '@openbooks/engine/tax-returns/pool-run'
+import { getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
+import { listTaxRegimes } from "@openbooks/engine/tax-returns/pool-run";
 import {
   page,
   pageHeader,
@@ -13,18 +13,22 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../lib/features'
-import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
-import { loadAsset, type AssetCategoryRow as ApiAssetCategoryRow, type AssetPayload } from '../../api/assets/_lib'
-import { assetAccountScopeSql } from '../../api/assets/_fields'
-import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
-import { loadFieldDefs } from '../../../lib/custom-fields'
-import type { AssetDrawer } from './AssetDrawer'
-import { loadAssetWorkspaceTabs } from './tabs-loader'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../lib/features";
+import { isUuid, mergeHref, pickString } from "../../../lib/list-params";
+import {
+  loadAsset,
+  type AssetCategoryRow as ApiAssetCategoryRow,
+  type AssetPayload,
+} from "../../api/assets/_lib";
+import { assetAccountScopeSql } from "../../api/assets/_fields";
+import { isMultiSubsidiary, subsidiaryOptions } from "../../../lib/subsidiaries";
+import { resolveFormLayout } from "../../../lib/customization/resolve";
+import { loadFieldDefs } from "../../../lib/custom-fields";
+import type { AssetDrawer } from "./AssetDrawer";
+import { loadAssetWorkspaceTabs } from "./tabs-loader";
 
 /**
  * The fixed-asset register, split into a loader and a spec.
@@ -46,133 +50,158 @@ import { loadAssetWorkspaceTabs } from './tabs-loader'
  * exactly like every other page-level subtab strip.
  */
 
-type AssetDrawerProps = Parameters<typeof AssetDrawer>[0]
+type AssetDrawerProps = Parameters<typeof AssetDrawer>[0];
 
 /** Picker rows for the asset drawer: books, categories, GL accounts (number
  *  is nullable), tax regimes with their pool classes, and methods. */
-type AssetBookRow = { id: string; name: string; is_primary: boolean }
-type AssetAccountRow = { id: string; number: string | null; name: string }
+type AssetBookRow = { id: string; name: string; is_primary: boolean };
+type AssetAccountRow = { id: string; number: string | null; name: string };
 type AssetTaxRegimeRow = {
-  code: string
-  name: string
-  class_attribute: string
-  classes: { code: string; name: string }[]
-}
-type AssetMethodRow = { id: string; code: string; name: string }
-type DepreciationCandidateRow = { id: string; asset_number: string; name: string; status: string }
-type DepreciationPeriodRow = { id: string; fiscal_year: number; period_number: number; starts_on: string; ends_on: string }
+  code: string;
+  name: string;
+  class_attribute: string;
+  classes: { code: string; name: string }[];
+};
+type AssetMethodRow = { id: string; code: string; name: string };
+type DepreciationCandidateRow = { id: string; asset_number: string; name: string; status: string };
+type DepreciationPeriodRow = {
+  id: string;
+  fiscal_year: number;
+  period_number: number;
+  starts_on: string;
+  ends_on: string;
+};
 
 /** A regular period as a run/review option, labelled in the viewer's locale. */
 function depreciationPeriodOption(row: DepreciationPeriodRow, locale: string) {
   return {
     id: row.id,
-    name: periodDisplayLabel({
-      fiscalYear: Number(row.fiscal_year),
-      periodNumber: Number(row.period_number),
-      adjustment: false,
-      startsOn: row.starts_on,
-      endsOn: row.ends_on,
-    }, locale),
+    name: periodDisplayLabel(
+      {
+        fiscalYear: Number(row.fiscal_year),
+        periodNumber: Number(row.period_number),
+        adjustment: false,
+        startsOn: row.starts_on,
+        endsOn: row.ends_on,
+      },
+      locale,
+    ),
     startsOn: row.starts_on,
     endsOn: row.ends_on,
-  }
+  };
 }
 
 export interface AssetsData {
-  title: string
-  description: string
-  tabs: { key: string; href: string; label: string; active: boolean }[]
-  onRegister: boolean
-  onTax: boolean
-  docLabel: string
-  showActions: boolean
-  books: { id: string; name: string; is_primary?: boolean }[]
+  title: string;
+  description: string;
+  tabs: { key: string; href: string; label: string; active: boolean }[];
+  onRegister: boolean;
+  onTax: boolean;
+  docLabel: string;
+  showActions: boolean;
+  books: { id: string; name: string; is_primary?: boolean }[];
   /** Depreciable-register candidates for the review drawer picker. */
-  candidates: { id: string; number: string; name: string; status: string }[]
+  candidates: { id: string; number: string; name: string; status: string }[];
   /** Valid accounting periods for the review drawer period control. */
-  periods: { id: string; name: string; startsOn: string; endsOn: string }[]
+  periods: { id: string; name: string; startsOn: string; endsOn: string }[];
   /** Compatibility data for tenant PageSpecs saved before Equipment became a tab. */
-  equipmentLabel: string
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
-  canRun: boolean
-  canConfigure: boolean
-  regimes: { code: string; name: string }[]
-  defaultTaxYear: number
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
+  equipmentLabel: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
+  canRun: boolean;
+  canConfigure: boolean;
+  regimes: { code: string; name: string }[];
+  defaultTaxYear: number;
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
 }
 
 export async function loadAssets(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AssetsData> {
-  const t = await getTranslations('assets')
-  const authz = await requirePermission('assets.read')
-  await requireFeatureEnabled(authz.user.orgId, 'fixedAssets')
-  const canManage = can(authz, 'assets.manage')
-  const canSetupTaxDepreciation = can(authz, 'admin.setup.manage')
-  const canCustomize = can(authz, 'admin.customization.manage')
-  const orgId = authz.user.orgId
+  const t = await getTranslations("assets");
+  const authz = await requirePermission("assets.read");
+  await requireFeatureEnabled(authz.user.orgId, "fixedAssets");
+  const canManage = can(authz, "assets.manage");
+  const canSetupTaxDepreciation = can(authz, "admin.setup.manage");
+  const canCustomize = can(authz, "admin.customization.manage");
+  const orgId = authz.user.orgId;
 
-  const tab = pickString(sp.tab) === 'tax-depreciation' ? 'tax-depreciation' : 'register'
+  const tab = pickString(sp.tab) === "tax-depreciation" ? "tax-depreciation" : "register";
   const tabs = await loadAssetWorkspaceTabs(orgId, tab, {
-    register: t('tabs.register'),
-    taxDepreciation: t('tabs.taxDepreciation'),
-    equipment: t('equipment.title'),
-    proposals: t('proposals.title'),
-    construction: t('construction.title'),
-    leases: t('leases.pageTitle'),
-    maintenance: t('maintenance.title'),
-    insurance: t('insurance.title'),
-  })
+    register: t("tabs.register"),
+    taxDepreciation: t("tabs.taxDepreciation"),
+    equipment: t("equipment.title"),
+    proposals: t("proposals.title"),
+    construction: t("construction.title"),
+    leases: t("leases.pageTitle"),
+    maintenance: t("maintenance.title"),
+    insurance: t("insurance.title"),
+  });
 
   const base = {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     tabs,
-    onRegister: tab === 'register',
-    onTax: tab === 'tax-depreciation',
-    docLabel: t('equipment.documentation'),
+    onRegister: tab === "register",
+    onTax: tab === "tax-depreciation",
+    docLabel: t("equipment.documentation"),
     showActions: false,
-    books: [] as AssetsData['books'],
-    candidates: [] as AssetsData['candidates'],
-    periods: [] as AssetsData['periods'],
-    equipmentLabel: t('equipment.title'),
+    books: [] as AssetsData["books"],
+    candidates: [] as AssetsData["candidates"],
+    periods: [] as AssetsData["periods"],
+    equipmentLabel: t("equipment.title"),
     currentParams: sp,
     canManage,
     canRun: false,
     canConfigure: canSetupTaxDepreciation,
-    regimes: [] as AssetsData['regimes'],
+    regimes: [] as AssetsData["regimes"],
     defaultTaxYear: 0,
-    drawer: null as AssetsData['drawer'],
-  }
+    drawer: null as AssetsData["drawer"],
+  };
 
-  if (tab === 'tax-depreciation') {
-    const [regimes, today] = await Promise.all([listTaxRegimes(orgId), businessToday(orgId)])
+  if (tab === "tax-depreciation") {
+    const [regimes, today] = await Promise.all([listTaxRegimes(orgId), businessToday(orgId)]);
     return {
       ...base,
       canRun: canManage,
       regimes: regimes.map((regime) => ({ code: regime.code, name: regime.name })),
       // Last completed calendar year on the org business day — never browser UTC.
       defaultTaxYear: Number(today.slice(0, 4)) - 1,
-    }
+    };
   }
 
-  const [locale, multiSub, allSubsidiaries, depreciationBooks, depreciationPeriods, depreciationCandidates] = await Promise.all([
+  const [
+    locale,
+    multiSub,
+    allSubsidiaries,
+    depreciationBooks,
+    depreciationPeriods,
+    depreciationCandidates,
+  ] = await Promise.all([
     getLocale(),
     isMultiSubsidiary(orgId),
     subsidiaryOptions(),
-    db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active order by is_primary desc, code`, 'objects'),
-    db.execute<DepreciationPeriodRow>(sql`select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods where org_id=${orgId} and not is_adjustment order by starts_on desc`, 'objects'),
+    db.execute<AssetBookRow>(
+      sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active order by is_primary desc, code`,
+      "objects",
+    ),
+    db.execute<DepreciationPeriodRow>(
+      sql`select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods where org_id=${orgId} and not is_adjustment order by starts_on desc`,
+      "objects",
+    ),
     // Picker rows for the review drawer: live depreciable register only.
     // Reader-scoped like the drawer payload — never the whole tenant.
-    db.execute<DepreciationCandidateRow>(authz.allowedSubsidiaryIds
-      ? sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[]) order by asset_number`
-      : sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') order by asset_number`, 'objects'),
-  ])
+    db.execute<DepreciationCandidateRow>(
+      authz.allowedSubsidiaryIds
+        ? sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[]) order by asset_number`
+        : sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') order by asset_number`,
+      "objects",
+    ),
+  ]);
   const subsidiaries = authz.allowedSubsidiaryIds
     ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
-    : allSubsidiaries
-  const assetId = pickString(sp.asset)
+    : allSubsidiaries;
+  const assetId = pickString(sp.asset);
 
   // Unsaved create: ?assetNew=1 opens the SAME tenant-customizable drawer on
   // an in-memory payload over no record — identical layout, custom fields,
@@ -180,21 +209,25 @@ export async function loadAssets(
   // no draft row, no FA-#### number, no category write, no audit row.
   // Allocation happens on Save in POST /api/assets, which routes back to
   // ?asset=<persisted id>.
-  const creating = pickString(sp.assetNew) === '1' && canManage
-  const requestedReturn = pickString(sp.drawerReturn)
-  const createCloseHref = requestedReturn?.startsWith('/assets')
+  const creating = pickString(sp.assetNew) === "1" && canManage;
+  const requestedReturn = pickString(sp.drawerReturn);
+  const createCloseHref = requestedReturn?.startsWith("/assets")
     ? requestedReturn
-    : mergeHref('/assets', sp, {
+    : mergeHref("/assets", sp, {
         asset: undefined,
         assetNew: undefined,
         drawerReturn: undefined,
-      })
-  let drawer: AssetsData['drawer'] = null
-  if (creating && tab === 'register') {
+      });
+  let drawer: AssetsData["drawer"] = null;
+  if (creating && tab === "register") {
     const [createPickers, createFieldDefs] = await Promise.all([
       Promise.all([
-        db.execute<ApiAssetCategoryRow>(sql`select id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id, default_method, default_depreciation_method_id, default_life_months, default_convention, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`),
-        db.execute<AssetAccountRow>(sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null)} order by a.number nulls last`),
+        db.execute<ApiAssetCategoryRow>(
+          sql`select id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id, default_method, default_depreciation_method_id, default_life_months, default_convention, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`,
+        ),
+        db.execute<AssetAccountRow>(
+          sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null)} order by a.number nulls last`,
+        ),
         db.execute<AssetTaxRegimeRow>(sql`
           select r.code, r.name, r.class_attribute,
                  coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
@@ -203,25 +236,27 @@ export async function loadAssets(
             left join tax_pool_classes c on c.org_id=r.org_id and c.regime=r.code and c.is_active
            where r.org_id=${orgId} and r.is_active
            group by r.code,r.name,r.class_attribute order by r.name`),
-        db.execute<AssetMethodRow>(sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`),
+        db.execute<AssetMethodRow>(
+          sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`,
+        ),
       ]),
-      loadFieldDefs('fixed_assets'),
-    ])
-    const createCategory = createPickers[0].rows[0] ?? null
-    const createSubsidiaryId = subsidiaries[0]?.id ?? null
+      loadFieldDefs("fixed_assets"),
+    ]);
+    const createCategory = createPickers[0].rows[0] ?? null;
+    const createSubsidiaryId = subsidiaries[0]?.id ?? null;
     const createPayload: AssetPayload = {
       asset: {
-        id: '',
-        category_id: createCategory?.id ?? '',
-        subsidiary_id: createSubsidiaryId ?? '',
-        asset_number: '',
-        name: '',
+        id: "",
+        category_id: createCategory?.id ?? "",
+        subsidiary_id: createSubsidiaryId ?? "",
+        asset_number: "",
+        name: "",
         description: null,
-        status: 'draft',
+        status: "draft",
         acquired_on: null,
         in_service_on: null,
-        acquisition_cost: '0.0000',
-        salvage_value: '0.0000',
+        acquisition_cost: "0.0000",
+        salvage_value: "0.0000",
         serial_number: null,
         depreciation_method: null,
         depreciation_method_id: null,
@@ -232,7 +267,7 @@ export async function loadAssets(
         opening_accumulated_depreciation: null,
         opening_accumulated_as_of: null,
         custom: {},
-        updated_at: '',
+        updated_at: "",
         asset_account_id: null,
         accumulated_depreciation_account_id: null,
         depreciation_expense_account_id: null,
@@ -245,64 +280,68 @@ export async function loadAssets(
       },
       accountNames: { asset: null, accumulated: null, expense: null },
       totals: {
-        remainingCost: '0.0000',
-        accumulated: '0.0000',
-        netBookValue: '0.0000',
-        posted: '0.0000',
-        planned: '0.0000',
+        remainingCost: "0.0000",
+        accumulated: "0.0000",
+        netBookValue: "0.0000",
+        posted: "0.0000",
+        planned: "0.0000",
       },
       books: [],
-      schedulePage: { total: 0, page: 1, perPage: 25, bookId: null, query: '' },
+      schedulePage: { total: 0, page: 1, perPage: 25, bookId: null, query: "" },
       hasAccountingEvidence: false,
       placement: { missing: [] },
       schedule: [],
-    }
+    };
     const createForm = await resolveFormLayout({
       orgId,
       userId: authz.user.id,
-      recordType: 'fixed_asset',
+      recordType: "fixed_asset",
       userRoles: authz.user.roles.map(({ key }) => key),
       headerDefs: createFieldDefs,
       lineDefs: [],
       explicitLayoutId: pickString(sp.form),
-    })
+    });
     drawer = {
-      remountKey: 'new-asset',
+      remountKey: "new-asset",
       payload: createPayload,
       categories: createPickers[0].rows,
       accounts: createPickers[1].rows,
       taxConfigurations: createPickers[2].rows,
       subsidiaries: multiSub ? subsidiaries : [],
       canManage,
-      canPostGl: can(authz,'gl.post'),
+      canPostGl: can(authz, "gl.post"),
       canManageSetup: canSetupTaxDepreciation,
       canCustomize,
       layout: createForm.layout,
       forms: createForm.available,
       currentFormId: createForm.row?.id ?? null,
-      fieldDefs: createFieldDefs as AssetDrawerProps['fieldDefs'],
+      fieldDefs: createFieldDefs as AssetDrawerProps["fieldDefs"],
       depreciationMethods: createPickers[3].rows,
-      periods: [] as AssetDrawerProps['periods'],
+      periods: [] as AssetDrawerProps["periods"],
       closeHref: createCloseHref,
       createMode: true,
-    }
+    };
   }
-  if (assetId && assetId !== 'new' && isUuid(assetId)) {
+  if (assetId && assetId !== "new" && isUuid(assetId)) {
     const openAsset = await loadAsset(assetId, orgId, {
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       locale,
       bookId: pickString(sp.deprbook),
-      query: pickString(sp.deprq) ?? '',
-      page: Math.max(1, Number.parseInt(pickString(sp.deprpage) ?? '1', 10) || 1),
+      query: pickString(sp.deprq) ?? "",
+      page: Math.max(1, Number.parseInt(pickString(sp.deprpage) ?? "1", 10) || 1),
       perPage: 25,
-    })
+    });
     if (openAsset) {
-      const targetAccountScope = [String(openAsset.asset.subsidiary_id)]
+      const targetAccountScope = [String(openAsset.asset.subsidiary_id)];
       const [pickers, fieldDefs] = await Promise.all([
-      Promise.all([
-        db.execute<ApiAssetCategoryRow>(sql`select id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id, default_method, default_depreciation_method_id, default_life_months, default_convention, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`),
-        db.execute<AssetAccountRow>(sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, targetAccountScope)} order by a.number nulls last`),
-        db.execute<AssetTaxRegimeRow>(sql`
+        Promise.all([
+          db.execute<ApiAssetCategoryRow>(
+            sql`select id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id, default_method, default_depreciation_method_id, default_life_months, default_convention, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`,
+          ),
+          db.execute<AssetAccountRow>(
+            sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, targetAccountScope)} order by a.number nulls last`,
+          ),
+          db.execute<AssetTaxRegimeRow>(sql`
           select r.code, r.name, r.class_attribute,
                  coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
                    filter (where c.class_code is not null), '[]'::jsonb) as classes
@@ -310,21 +349,23 @@ export async function loadAssets(
             left join tax_pool_classes c on c.org_id=r.org_id and c.regime=r.code and c.is_active
            where r.org_id=${orgId} and r.is_active
            group by r.code,r.name,r.class_attribute order by r.name`),
-        db.execute<AssetMethodRow>(sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`),
-      ]),
-      loadFieldDefs('fixed_assets'),
-      ])
+          db.execute<AssetMethodRow>(
+            sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`,
+          ),
+        ]),
+        loadFieldDefs("fixed_assets"),
+      ]);
       const resolvedForm = await resolveFormLayout({
         orgId,
         userId: authz.user.id,
-        recordType: 'fixed_asset',
+        recordType: "fixed_asset",
         userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: fieldDefs,
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),
-      })
-      const editRequestedReturn = pickString(sp.drawerReturn)
-      const componentsEnabled = await isFeatureEnabled(orgId, 'assetComponents')
+      });
+      const editRequestedReturn = pickString(sp.drawerReturn);
+      const componentsEnabled = await isFeatureEnabled(orgId, "assetComponents");
       drawer = {
         remountKey: String(openAsset.asset.id),
         payload: openAsset as AssetPayload,
@@ -333,25 +374,25 @@ export async function loadAssets(
         taxConfigurations: pickers[2].rows,
         subsidiaries: multiSub ? subsidiaries : [],
         canManage,
-        canPostGl: can(authz,'gl.post'),
-      canManageSetup: canSetupTaxDepreciation,
+        canPostGl: can(authz, "gl.post"),
+        canManageSetup: canSetupTaxDepreciation,
         canCustomize,
         layout: resolvedForm.layout,
         forms: resolvedForm.available,
         currentFormId: resolvedForm.row?.id ?? null,
-        fieldDefs: fieldDefs as AssetDrawerProps['fieldDefs'],
+        fieldDefs: fieldDefs as AssetDrawerProps["fieldDefs"],
         depreciationMethods: pickers[3].rows,
         periods: depreciationPeriods.map((row) => depreciationPeriodOption(row, locale)),
-        closeHref: editRequestedReturn?.startsWith('/assets') ? editRequestedReturn : '/assets',
+        closeHref: editRequestedReturn?.startsWith("/assets") ? editRequestedReturn : "/assets",
         componentsEnabled,
-      }
+      };
     }
   }
 
   return {
     ...base,
     showActions: canManage,
-    books: depreciationBooks as AssetsData['books'],
+    books: depreciationBooks as AssetsData["books"],
     candidates: depreciationCandidates.map((row) => ({
       id: row.id,
       number: row.asset_number,
@@ -360,57 +401,57 @@ export async function loadAssets(
     })),
     periods: depreciationPeriods.map((row) => depreciationPeriodOption(row, locale)),
     drawer,
-  }
+  };
 }
 
-const f = ref<AssetsData>()
+const f = ref<AssetsData>();
 
 export function assetsSpec(data: AssetsData): PageSpec {
   const newAsset = {
-    widget: 'new-asset',
+    widget: "new-asset",
     props: { currentParams: data.currentParams },
-  }
+  };
   const runDepreciation = {
-    widget: 'run-depreciation',
+    widget: "run-depreciation",
     props: { books: data.books, candidates: data.candidates, periods: data.periods },
-  }
+  };
   return page({
-    route: '/assets',
-    layout: 'list',
+    route: "/assets",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center justify-end gap-2",
         actions: [
-          widget('assets-doc-link', { label: data.docLabel }, f('onRegister')),
-          widget(runDepreciation.widget, runDepreciation.props, f('showActions')),
-          widget(newAsset.widget, newAsset.props, f('showActions')),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("assets-doc-link", { label: data.docLabel }, f("onRegister")),
+          widget(runDepreciation.widget, runDepreciation.props, f("showActions")),
+          widget(newAsset.widget, newAsset.props, f("showActions")),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
       {
-        ...widgetBlock('entity-list-view', {
-          recordType: 'fixed_asset',
+        ...widgetBlock("entity-list-view", {
+          recordType: "fixed_asset",
           sp: data.currentParams,
           drawer: [
-            data.drawer ? { widget: 'asset-drawer', props: { drawer: data.drawer } } : null,
+            data.drawer ? { widget: "asset-drawer", props: { drawer: data.drawer } } : null,
           ].filter(Boolean),
           emptyAction: data.canManage ? newAsset : null,
         }),
-        when: f('onRegister'),
+        when: f("onRegister"),
       },
       {
-        ...widgetBlock('tax-pools', {
+        ...widgetBlock("tax-pools", {
           canRun: data.canRun,
           canConfigure: data.canConfigure,
           regimes: data.regimes,
           defaultTaxYear: data.defaultTaxYear,
         }),
-        when: f('onTax'),
+        when: f("onTax"),
       },
     ],
-  })
+  });
 }

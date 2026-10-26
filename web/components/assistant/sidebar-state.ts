@@ -71,9 +71,7 @@ export function isDeletedConversation(id: string): boolean {
 }
 
 /** Strip tombstoned ids from any server list, however stale. */
-export function withoutDeletedConversations(
-  list: SidebarConversation[],
-): SidebarConversation[] {
+export function withoutDeletedConversations(list: SidebarConversation[]): SidebarConversation[] {
   if (deletedConversationIds.size === 0) return list;
   return list.filter((c) => !deletedConversationIds.has(c.id));
 }
@@ -117,9 +115,7 @@ export function syncServerConversations(
     provisionalIds,
   );
   const active =
-    activeId && !isDeletedConversation(activeId)
-      ? local.find((c) => c.id === activeId)
-      : undefined;
+    activeId && !isDeletedConversation(activeId) ? local.find((c) => c.id === activeId) : undefined;
   if (active && !items.some((c) => c.id === active.id)) {
     const next = [...items];
     next.splice(Math.min(local.indexOf(active), next.length), 0, active);

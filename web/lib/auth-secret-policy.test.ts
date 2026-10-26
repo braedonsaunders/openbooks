@@ -9,10 +9,11 @@ test("production authentication rejects missing, short, placeholder, and repetit
     /32 random bytes/,
   );
   assert.throws(
-    () => requireSessionSecret({
-      NODE_ENV: "production",
-      SESSION_SECRET: "replace-with-this-session-secret-1234567890",
-    }),
+    () =>
+      requireSessionSecret({
+        NODE_ENV: "production",
+        SESSION_SECRET: "replace-with-this-session-secret-1234567890",
+      }),
     /32 random bytes/,
   );
   assert.throws(

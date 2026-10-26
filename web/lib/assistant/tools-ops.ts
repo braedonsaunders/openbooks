@@ -29,7 +29,10 @@ const listDataResources: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["data.export"] },
   inputSchema: z.object({
-    group: z.enum(["Setup", "Master data", "Property management", "Records", "Transactions"]).optional().describe("Only resources in this group"),
+    group: z
+      .enum(["Setup", "Master data", "Property management", "Records", "Transactions"])
+      .optional()
+      .describe("Only resources in this group"),
     supportsImport: z.boolean().optional().describe("Only resources that support import"),
     q: z.string().max(100).optional().describe("Filter by label or key text"),
   }),
@@ -60,7 +63,10 @@ const listDataResources: AssistantToolDef = {
   },
 };
 
-const importRunStatus = z.enum(["committed", "failed"]).optional().describe("Only runs in this status");
+const importRunStatus = z
+  .enum(["committed", "failed"])
+  .optional()
+  .describe("Only runs in this status");
 
 function firstErrorText(errors: unknown): string | null {
   if (!Array.isArray(errors) || errors.length === 0) return null;
@@ -87,7 +93,12 @@ const listImportRuns: AssistantToolDef = {
     offset: z.number().int().min(0).optional().describe("Rows to skip for paging (default 0)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { resourceKey?: string; status?: "committed" | "failed"; limit?: number; offset?: number };
+    const a = raw as {
+      resourceKey?: string;
+      status?: "committed" | "failed";
+      limit?: number;
+      offset?: number;
+    };
     const limit = Math.min(a.limit ?? 25, 100);
     const offset = a.offset ?? 0;
     // Same shape as loadImportHistory in
@@ -97,7 +108,8 @@ const listImportRuns: AssistantToolDef = {
     if (a.resourceKey) where = sql`${where} and j.resource_key = ${a.resourceKey}`;
     if (a.status) where = sql`${where} and j.status = ${a.status}`;
     const [rows, count] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select j.id, j.resource_key, j.resource_label, j.format, j.file_name, j.status,
                j.total_rows, j.created_count, j.updated_count, j.failed_count, j.created_at,
                u.name as actor_name,
@@ -108,8 +120,13 @@ const listImportRuns: AssistantToolDef = {
          where ${where}
          order by j.created_at desc
          limit ${limit} offset ${offset}
-      `, "objects"),
-      db.execute<{ n: string }>(sql`select count(*) as n from import_jobs j where ${where}`, "objects"),
+      `,
+        "objects",
+      ),
+      db.execute<{ n: string }>(
+        sql`select count(*) as n from import_jobs j where ${where}`,
+        "objects",
+      ),
     ]);
     const total = Number(count[0]?.n ?? 0);
     const items = rows.map((j) => ({
@@ -171,12 +188,15 @@ const listSyncConnections: AssistantToolDef = {
     // credential blob never leaves the server — only its presence bit.
     const [connections, runs] = await Promise.all([
       listConnections(authz.user.orgId),
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select distinct on (connection_id) id, connection_id as "connectionId", source, kind, status,
                started_at as "startedAt", finished_at as "finishedAt",
                synced_through as "syncedThrough", error_message as "errorMessage", triggered_by as "triggeredBy"
           from sync_runs where org_id = ${authz.user.orgId} and connection_id is not null
-         order by connection_id, started_at desc, id desc`, "objects"),
+         order by connection_id, started_at desc, id desc`,
+        "objects",
+      ),
     ]);
     const latestByConnection = new Map<string, SyncRunEvidence>();
     for (const row of runs) {
@@ -267,7 +287,11 @@ const listPdfTemplatesTool: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["admin.customization.manage"] },
   inputSchema: z.object({
-    recordType: z.string().max(60).optional().describe("Only templates for this record type, e.g. customer_invoice"),
+    recordType: z
+      .string()
+      .max(60)
+      .optional()
+      .describe("Only templates for this record type, e.g. customer_invoice"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { recordType?: string };
@@ -371,7 +395,11 @@ const listReportRuns: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
     definitionId: uuidInput.optional().describe("Only runs of this report definition"),
-    status: z.string().max(30).optional().describe("Only runs in this status, e.g. succeeded, failed"),
+    status: z
+      .string()
+      .max(30)
+      .optional()
+      .describe("Only runs in this status, e.g. succeeded, failed"),
     limit: z.number().int().min(1).max(100).optional().describe("Max runs, default 25"),
     offset: z.number().int().min(0).optional().describe("Rows to skip for paging (default 0)"),
   }),
@@ -382,17 +410,25 @@ const listReportRuns: AssistantToolDef = {
     let where = sql`r.org_id = ${authz.user.orgId}`;
     if (a.definitionId) where = sql`${where} and r.definition_id = ${a.definitionId}`;
     if (a.status) where = sql`${where} and r.status = ${a.status}`;
-    const rows = (await db.execute<ReportRunRow>(sql`
+    const rows = await db.execute<ReportRunRow>(
+      sql`
       select r.id, r.definition_id, r.trigger, r.status, r.error, r.row_count,
              r.started_at, r.finished_at, r.scheduled_for, r.recipient_emails, r.authorization_snapshot
         from report_runs r
        where ${where}
        order by r.started_at desc nulls last, r.created_at desc
        limit ${limit} offset ${offset}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const items: Record<string, unknown>[] = [];
     for (const row of rows) {
-      const label = await visibleReportLabel(authz, authz.user.orgId, row.definition_id, row.authorization_snapshot);
+      const label = await visibleReportLabel(
+        authz,
+        authz.user.orgId,
+        row.definition_id,
+        row.authorization_snapshot,
+      );
       if (!label) continue;
       items.push({
         id: row.id,
@@ -422,7 +458,11 @@ const listEmailDeliveries: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    status: z.string().max(30).optional().describe("Only deliveries in this status, e.g. sent, failed, pending"),
+    status: z
+      .string()
+      .max(30)
+      .optional()
+      .describe("Only deliveries in this status, e.g. sent, failed, pending"),
     recipient: z.string().max(200).optional().describe("Filter by recipient address text"),
     limit: z.number().int().min(1).max(100).optional().describe("Max deliveries, default 25"),
     offset: z.number().int().min(0).optional().describe("Rows to skip for paging (default 0)"),
@@ -434,7 +474,8 @@ const listEmailDeliveries: AssistantToolDef = {
     let where = sql`d.org_id = ${authz.user.orgId}`;
     if (a.status) where = sql`${where} and d.status = ${a.status}`;
     if (a.recipient) where = sql`${where} and d.recipient ilike ${"%" + a.recipient + "%"}`;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select d.id, d.run_id as "runId", d.recipient, d.status, d.attempt_count as "attemptCount",
              d.last_attempt_at as "lastAttemptAt", d.sent_at as "sentAt", d.error, d.created_at as "createdAt",
              r.definition_id as "definitionId", r.authorization_snapshot as "snapshot"
@@ -443,10 +484,17 @@ const listEmailDeliveries: AssistantToolDef = {
        where ${where}
        order by d.created_at desc
        limit ${limit} offset ${offset}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const items: Record<string, unknown>[] = [];
     for (const row of rows) {
-      const label = await visibleReportLabel(authz, authz.user.orgId, String(row.definitionId), row.snapshot);
+      const label = await visibleReportLabel(
+        authz,
+        authz.user.orgId,
+        String(row.definitionId),
+        row.snapshot,
+      );
       if (!label) continue;
       items.push({
         id: row.id,

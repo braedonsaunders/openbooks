@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // F5-5: EnvironmentPicker hardcoded its English labels (Workspace,
 // Production/Sample company, Manage environments) while the hosting
@@ -32,7 +32,9 @@ registerHooks({
     if (specifier.endsWith("/workspace-switch")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(`
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(`
           export class WorkspaceSwitchError extends Error { constructor(refusal) { super(refusal); this.refusal = refusal } }
           export function workspaceSwitchMessageKey(error) {
             return error instanceof WorkspaceSwitchError && error.refusal === "workspace_unavailable" ? "switchUnavailable" : "switchFailed"
@@ -110,7 +112,10 @@ test("F5-5: the workspace switcher reads German, never English", async () => {
     assert.match(text, /Beispielunternehmen/);
     assert.match(text, /Umgebungen verwalten/);
     for (const leaked of ["Workspace", "Production", "Manage environments", "Sample company"]) {
-      assert.ok(!text.includes(leaked), `English ${JSON.stringify(leaked)} must not leak into the German switcher`);
+      assert.ok(
+        !text.includes(leaked),
+        `English ${JSON.stringify(leaked)} must not leak into the German switcher`,
+      );
     }
   } finally {
     await act(async () => {
@@ -131,7 +136,9 @@ async function renderPicker() {
     );
   });
   const row = (label: string) =>
-    [...host.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find((button) => button.textContent?.includes(label))!;
+    [...host.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find((button) =>
+      button.textContent?.includes(label),
+    )!;
   const click = async (label: string) => {
     await act(async () => {
       row(label).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

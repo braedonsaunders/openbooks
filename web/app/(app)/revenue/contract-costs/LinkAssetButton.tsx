@@ -55,7 +55,10 @@ export function LinkAssetButton({
               <label className="text-sm font-medium">{t("link.contract")}</label>
               <SearchSelect
                 value={contractId}
-                options={contracts.map((c) => ({ value: c.id, label: `${c.number} · ${c.customer}` }))}
+                options={contracts.map((c) => ({
+                  value: c.id,
+                  label: `${c.number} · ${c.customer}`,
+                }))}
                 onChange={(v) => setContractId(v ?? "")}
                 ariaLabel={t("link.contract")}
               />

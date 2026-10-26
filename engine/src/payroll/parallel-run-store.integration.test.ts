@@ -23,8 +23,16 @@ import {
 } from "./parallel-run-store.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedCanadianPayrollComponentsForTest as seedPayrollComponents, seedHiredEmployee } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  seedCanadianPayrollComponentsForTest as seedPayrollComponents,
+  seedHiredEmployee,
+} from "./filing-test-fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import { grantPermissions } from "../testing/hrm-harness.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -99,470 +107,806 @@ async function priorEvidence(
   orgId: string,
   employeePartyId: string,
 ): Promise<{ stub: Record<string, unknown> | null; amounts: unknown[] }> {
-  const stubs = (await db.execute<Record<string, unknown>>(sql`
+  const stubs = await db.execute<Record<string, unknown>>(
+    sql`
     select employee_label, gross::text as gross, net_pay::text as net_pay
       from payroll_prior_stubs
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}`, "objects"));
-  const amounts = (await db.execute(sql`
+     where org_id = ${orgId} and employee_party_id = ${employeePartyId}`,
+    "objects",
+  );
+  const amounts = await db.execute(
+    sql`
     select a.kind, a.slot, a.amount::text as amount
       from payroll_prior_amounts a
       join payroll_prior_stubs s on s.id = a.prior_stub_id and s.org_id = a.org_id
      where a.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-     order by a.kind, a.slot`, "objects"));
+     order by a.kind, a.slot`,
+    "objects",
+  );
   return { stub: stubs[0] ?? null, amounts };
 }
 
 async function tableCount(orgId: string, table: string, extraWhere = ""): Promise<number> {
   if (!/^[a-z_]+$/.test(table)) throw new Error(`unsafe table name: ${table}`);
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from ${sql.raw(`public.${table}`)}
-     where org_id = ${orgId}${extraWhere ? sql.raw(` and ${extraWhere}`) : sql.raw("")}`, "objects"));
+     where org_id = ${orgId}${extraWhere ? sql.raw(` and ${extraWhere}`) : sql.raw("")}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test("a suppressed identity-correction audit rolls back its employee binding and source header", { skip: !DB }, async () => {
-  const f = await importFixture();
-  const name = `payroll_prior_audit_${randomUUID().replaceAll('-', '')}`;
-  let installed = false;
-  try {
-    const target = await seedEmployee(f.orgId, 'Verified payroll employee');
-    await db.execute(sql`update parties set subsidiary_id=${f.org.subsidiaryId} where org_id=${f.orgId}
+test(
+  "a suppressed identity-correction audit rolls back its employee binding and source header",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    const name = `payroll_prior_audit_${randomUUID().replaceAll("-", "")}`;
+    let installed = false;
+    try {
+      const target = await seedEmployee(f.orgId, "Verified payroll employee");
+      await db.execute(sql`update parties set subsidiary_id=${f.org.subsidiaryId} where org_id=${f.orgId}
       and id in (${target},${f.employeePartyId})`);
-    await db.execute(sql`insert into employee_roles(org_id,party_id,is_active) values(${f.orgId},${target},true)`);
-    await savePriorStub({ orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: { employeePartyId: f.employeePartyId, employeeLabel: 'SOURCE-AUDIT', gross: '100', netPay: '80', employerCost: null, amounts: [] } }, f.slots);
-    const stubId = (await db.execute<{id:string}>(sql`select id from payroll_prior_stubs where org_id=${f.orgId} and register_id=${f.registerId}`, "objects"))[0]!.id;
-    const snapshot = async () => (await db.execute<{state:unknown}>(sql`select jsonb_build_object(
+      await db.execute(
+        sql`insert into employee_roles(org_id,party_id,is_active) values(${f.orgId},${target},true)`,
+      );
+      await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "SOURCE-AUDIT",
+            gross: "100",
+            netPay: "80",
+            employerCost: null,
+            amounts: [],
+          },
+        },
+        f.slots,
+      );
+      const stubId = (
+        await db.execute<{ id: string }>(
+          sql`select id from payroll_prior_stubs where org_id=${f.orgId} and register_id=${f.registerId}`,
+          "objects",
+        )
+      )[0]!.id;
+      const snapshot = async () =>
+        (
+          await db.execute<{ state: unknown }>(
+            sql`select jsonb_build_object(
       'register',(select to_jsonb(r) from payroll_prior_registers r where r.org_id=${f.orgId} and r.id=${f.registerId}),
       'stub',(select to_jsonb(s) from payroll_prior_stubs s where s.org_id=${f.orgId} and s.id=${stubId}),
-      'auditCount',(select count(*) from audit_log where org_id=${f.orgId} and table_name='payroll_prior_stubs')) as state`, "objects"))[0]!.state;
-    const before = await snapshot();
-    await db.execute(sql.raw(`create function ${name}() returns trigger language plpgsql as $$ begin return null; end $$`));
-    await db.execute(sql.raw(`create trigger ${name} before insert on audit_log for each row
-      when (new.org_id='${f.orgId}'::uuid and new.table_name='payroll_prior_stubs' and new.action='update') execute function ${name}()`));
-    installed = true;
-    await assert.rejects(correctPriorStubEmployee({ orgId: f.orgId, actorId: f.actorId, stubId,
-      expectedEmployeePartyId: f.employeePartyId, expectedSourceEmployerId: f.org.subsidiaryId,
-      employeePartyId: target, expectedEmployeeLabel: 'SOURCE-AUDIT', reason: 'Correct the reviewed employee identity',
-      sourceReference: 'Verified employee crosswalk', allowedSubsidiaryIds: null, dryRun: false }), /audit was not recorded/);
-    assert.deepEqual(await snapshot(), before);
-  } finally {
-    if (installed) await db.execute(sql.raw(`drop trigger ${name} on audit_log`));
-    await db.execute(sql.raw(`drop function if exists ${name}()`));
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+      'auditCount',(select count(*) from audit_log where org_id=${f.orgId} and table_name='payroll_prior_stubs')) as state`,
+            "objects",
+          )
+        )[0]!.state;
+      const before = await snapshot();
+      await db.execute(
+        sql.raw(
+          `create function ${name}() returns trigger language plpgsql as $$ begin return null; end $$`,
+        ),
+      );
+      await db.execute(
+        sql.raw(`create trigger ${name} before insert on audit_log for each row
+      when (new.org_id='${f.orgId}'::uuid and new.table_name='payroll_prior_stubs' and new.action='update') execute function ${name}()`),
+      );
+      installed = true;
+      await assert.rejects(
+        correctPriorStubEmployee({
+          orgId: f.orgId,
+          actorId: f.actorId,
+          stubId,
+          expectedEmployeePartyId: f.employeePartyId,
+          expectedSourceEmployerId: f.org.subsidiaryId,
+          employeePartyId: target,
+          expectedEmployeeLabel: "SOURCE-AUDIT",
+          reason: "Correct the reviewed employee identity",
+          sourceReference: "Verified employee crosswalk",
+          allowedSubsidiaryIds: null,
+          dryRun: false,
+        }),
+        /audit was not recorded/,
+      );
+      assert.deepEqual(await snapshot(), before);
+    } finally {
+      if (installed) await db.execute(sql.raw(`drop trigger ${name} on audit_log`));
+      await db.execute(sql.raw(`drop function if exists ${name}()`));
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
-test("reviewed prior-payroll identity corrections preserve money, serialize competing bindings and audit once", { skip: !DB }, async () => {
-  const f = await importFixture();
-  try {
-    const target = await seedEmployee(f.orgId, "Verified Former Employee");
-    const alternative = await seedEmployee(f.orgId, "Another Employee");
-    await db.execute(sql`update parties set subsidiary_id=${f.org.subsidiaryId}
+test(
+  "reviewed prior-payroll identity corrections preserve money, serialize competing bindings and audit once",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    try {
+      const target = await seedEmployee(f.orgId, "Verified Former Employee");
+      const alternative = await seedEmployee(f.orgId, "Another Employee");
+      await db.execute(sql`update parties set subsidiary_id=${f.org.subsidiaryId}
       where org_id=${f.orgId} and id in (${f.employeePartyId},${target},${alternative})`);
-    await db.execute(sql`insert into employee_roles(org_id,party_id,is_active)
+      await db.execute(sql`insert into employee_roles(org_id,party_id,is_active)
       values(${f.orgId},${target},false),(${f.orgId},${alternative},true)`);
-    await db.execute(sql`update parties set is_active=false where org_id=${f.orgId} and id=${target}`);
-    await savePriorStub({ orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: { employeePartyId: f.employeePartyId, employeeLabel: "SOURCE-001", gross: "3000", netPay: "2500", employerCost: "125",
-        amounts: [{ fieldKey: "SALARY", amount: "3000", sourceColumn: "Source Salary" }] } }, f.slots);
-    const stubId = (await db.execute<{ id: string }>(sql`select id from payroll_prior_stubs
-      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`, "objects"))[0]!.id;
-    const before = await priorEvidence(f.orgId, f.employeePartyId);
-    const auditCount = () => tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
-    const baseline = await auditCount();
-    const correction = { orgId: f.orgId, actorId: f.actorId, stubId, expectedEmployeePartyId: f.employeePartyId,
-      expectedSourceEmployerId: f.org.subsidiaryId,
-      employeePartyId: target, expectedEmployeeLabel: "SOURCE-001", reason: "Correct source identity using dated employee crosswalk",
-      sourceReference: "Prior provider employee SOURCE-001, verified employee master", allowedSubsidiaryIds: null, dryRun: true };
-    assert.deepEqual(await correctPriorStubEmployee(correction), { changed: true });
-    assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
-    assert.equal(await auditCount(), baseline, "preview writes no identity or audit event");
-    await assert.rejects(correctPriorStubEmployee({ ...correction, expectedEmployeeLabel: "WRONG-SOURCE" }), /source employee label changed/);
-    await assert.rejects(correctPriorStubEmployee({ ...correction, allowedSubsidiaryIds: new Set<string>() }), /not found/);
-    assert.equal(await auditCount(), baseline, "refusals create no audit events");
-    const competing = await Promise.allSettled([
-      correctPriorStubEmployee({ ...correction, dryRun: false }),
-      correctPriorStubEmployee({ ...correction, employeePartyId: alternative, dryRun: false }),
-    ]);
-    assert.equal(competing.filter(r => r.status === "fulfilled").length, 1);
-    assert.equal(competing.filter(r => r.status === "rejected").length, 1);
-    const winner = competing[0]!.status === "fulfilled" ? target : alternative;
-    assert.deepEqual(await priorEvidence(f.orgId, winner), before, "all stated totals and source component amounts survive exactly");
-    assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 1, "no duplicated paycard");
-    assert.equal(await auditCount(), baseline + 1);
-    assert.deepEqual(await correctPriorStubEmployee({ ...correction, employeePartyId: winner, dryRun: false }), { changed: false });
-    assert.equal(await auditCount(), baseline + 1, "a replay creates no extra event");
-    const audit = (await db.execute<{ changes: { before: { employee_party_id: string }; after: { employee_party_id: string }; reason: string; sourceReference: string } }>(sql`
-      select changes from audit_log where org_id=${f.orgId} and row_id=${stubId} and action='update'`, "objects"))[0]!;
-    assert.equal(audit.changes.before.employee_party_id, f.employeePartyId);
-    assert.equal(audit.changes.after.employee_party_id, winner);
-    assert.equal(audit.changes.reason, correction.reason);
-    assert.equal(audit.changes.sourceReference, correction.sourceReference);
-    await savePriorStub({ orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: { employeePartyId: f.employeePartyId, employeeLabel: "SECOND-SOURCE", gross: "10", netPay: "8", employerCost: null, amounts: [] } }, f.slots);
-    const duplicateId = (await db.execute<{ id: string }>(sql`select id from payroll_prior_stubs
-      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`, "objects"))[0]!.id;
-    const beforeConflict = await auditCount();
-    await assert.rejects(correctPriorStubEmployee({ ...correction, stubId: duplicateId, employeePartyId: winner,
-      expectedEmployeeLabel: "SECOND-SOURCE", dryRun: false }), /already contains the verified employee/);
-    assert.equal(await auditCount(), beforeConflict);
-    assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 2, "conflicting source amounts cannot be silently merged");
-    const remaining = winner === target ? alternative : target;
-    await db.execute(sql`update parties set subsidiary_id=null where org_id=${f.orgId} and id=${f.employeePartyId}`);
-    const legacyCorrection = { ...correction, stubId: duplicateId, employeePartyId: remaining, expectedEmployeeLabel: "SECOND-SOURCE", dryRun: false };
-    await assert.rejects(correctPriorStubEmployee(legacyCorrection), /reviewed source employer changed/);
-    assert.equal(await auditCount(), beforeConflict, "an undeclared missing employer cannot be silently accepted");
-    assert.deepEqual(await correctPriorStubEmployee({ ...legacyCorrection, expectedSourceEmployerId: null }), { changed: true });
-    assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 2);
-    assert.equal(await auditCount(), beforeConflict + 1);
-  } finally { await dropScratchOrgReporting(f.orgId); }
-});
-
-test("a failed re-import leaves the original stub evidence exactly as it was", { skip: !DB }, async () => {
-  const f = await importFixture();
-  try {
-    const first = await savePriorStub({
-      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: {
-        employeePartyId: f.employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: "3000", netPay: "2500", employerCost: null,
-        amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
-      },
-    }, f.slots);
-    assert.equal(first.created, true);
-
-    const before = await priorEvidence(f.orgId, f.employeePartyId);
-    const auditsBefore = await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
-
-    // 1e16 passes exact-decimal validation but overflows the numeric(19,4)
-    // amount column — a failure that strikes AFTER the stub has been rewritten
-    // and its previous amounts deleted. The whole write must roll back.
-    await assert.rejects(
-      savePriorStub({
-        orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-        row: {
-          employeePartyId: f.employeePartyId,
-          employeeLabel: "EMP-0001-REWRITTEN",
-          gross: null, netPay: null, employerCost: null,
-          amounts: [{ fieldKey: "SALARY", amount: "10000000000000000", sourceColumn: null }],
+      await db.execute(
+        sql`update parties set is_active=false where org_id=${f.orgId} and id=${target}`,
+      );
+      await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "SOURCE-001",
+            gross: "3000",
+            netPay: "2500",
+            employerCost: "125",
+            amounts: [{ fieldKey: "SALARY", amount: "3000", sourceColumn: "Source Salary" }],
+          },
         },
-      }, f.slots),
-    );
-
-    assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
-    assert.equal(
-      await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'"),
-      auditsBefore,
-      "a failed import must not leave an audit row for a rewrite that never happened",
-    );
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
-
-test("a locale-money re-import is refused before any write, leaving evidence intact", { skip: !DB }, async () => {
-  // A decimal comma is twelve-thirty-four written correctly, not a grouping
-  // typo: stripping it would store a 100x prior-system figure and corrupt
-  // every comparison against this register. Both the header cell and the
-  // component cell refuse with the remedy, and the stored stub is untouched.
-  const f = await importFixture();
-  try {
-    await savePriorStub({
-      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: {
-        employeePartyId: f.employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: "3000", netPay: "2500", employerCost: null,
-        amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
-      },
-    }, f.slots);
-    const before = await priorEvidence(f.orgId, f.employeePartyId);
-    const auditsBefore = await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
-
-    await assert.rejects(
-      savePriorStub({
-        orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-        row: {
-          employeePartyId: f.employeePartyId,
-          employeeLabel: "EMP-0001",
-          gross: "12,34", netPay: "2500", employerCost: null,
-          amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+        f.slots,
+      );
+      const stubId = (
+        await db.execute<{ id: string }>(
+          sql`select id from payroll_prior_stubs
+      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`,
+          "objects",
+        )
+      )[0]!.id;
+      const before = await priorEvidence(f.orgId, f.employeePartyId);
+      const auditCount = () =>
+        tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
+      const baseline = await auditCount();
+      const correction = {
+        orgId: f.orgId,
+        actorId: f.actorId,
+        stubId,
+        expectedEmployeePartyId: f.employeePartyId,
+        expectedSourceEmployerId: f.org.subsidiaryId,
+        employeePartyId: target,
+        expectedEmployeeLabel: "SOURCE-001",
+        reason: "Correct source identity using dated employee crosswalk",
+        sourceReference: "Prior provider employee SOURCE-001, verified employee master",
+        allowedSubsidiaryIds: null,
+        dryRun: true,
+      };
+      assert.deepEqual(await correctPriorStubEmployee(correction), { changed: true });
+      assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
+      assert.equal(await auditCount(), baseline, "preview writes no identity or audit event");
+      await assert.rejects(
+        correctPriorStubEmployee({ ...correction, expectedEmployeeLabel: "WRONG-SOURCE" }),
+        /source employee label changed/,
+      );
+      await assert.rejects(
+        correctPriorStubEmployee({ ...correction, allowedSubsidiaryIds: new Set<string>() }),
+        /not found/,
+      );
+      assert.equal(await auditCount(), baseline, "refusals create no audit events");
+      const competing = await Promise.allSettled([
+        correctPriorStubEmployee({ ...correction, dryRun: false }),
+        correctPriorStubEmployee({ ...correction, employeePartyId: alternative, dryRun: false }),
+      ]);
+      assert.equal(competing.filter((r) => r.status === "fulfilled").length, 1);
+      assert.equal(competing.filter((r) => r.status === "rejected").length, 1);
+      const winner = competing[0]!.status === "fulfilled" ? target : alternative;
+      assert.deepEqual(
+        await priorEvidence(f.orgId, winner),
+        before,
+        "all stated totals and source component amounts survive exactly",
+      );
+      assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 1, "no duplicated paycard");
+      assert.equal(await auditCount(), baseline + 1);
+      assert.deepEqual(
+        await correctPriorStubEmployee({ ...correction, employeePartyId: winner, dryRun: false }),
+        { changed: false },
+      );
+      assert.equal(await auditCount(), baseline + 1, "a replay creates no extra event");
+      const audit = (
+        await db.execute<{
+          changes: {
+            before: { employee_party_id: string };
+            after: { employee_party_id: string };
+            reason: string;
+            sourceReference: string;
+          };
+        }>(
+          sql`
+      select changes from audit_log where org_id=${f.orgId} and row_id=${stubId} and action='update'`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(audit.changes.before.employee_party_id, f.employeePartyId);
+      assert.equal(audit.changes.after.employee_party_id, winner);
+      assert.equal(audit.changes.reason, correction.reason);
+      assert.equal(audit.changes.sourceReference, correction.sourceReference);
+      await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "SECOND-SOURCE",
+            gross: "10",
+            netPay: "8",
+            employerCost: null,
+            amounts: [],
+          },
         },
-      }, f.slots),
-      (error: unknown) => {
-        assert.ok(error instanceof ParallelRunStoreError);
-        assert.match(
-          error.message,
-          /gross must use "\." as the decimal point — write "12,34" as "12\.34"/,
-        );
-        return true;
-      },
-    );
-    await assert.rejects(
-      savePriorStub({
-        orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-        row: {
-          employeePartyId: f.employeePartyId,
-          employeeLabel: "EMP-0001",
-          gross: "3000", netPay: "2500", employerCost: null,
-          amounts: [{ fieldKey: "SALARY", amount: "1,234", sourceColumn: "Salary" }],
+        f.slots,
+      );
+      const duplicateId = (
+        await db.execute<{ id: string }>(
+          sql`select id from payroll_prior_stubs
+      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`,
+          "objects",
+        )
+      )[0]!.id;
+      const beforeConflict = await auditCount();
+      await assert.rejects(
+        correctPriorStubEmployee({
+          ...correction,
+          stubId: duplicateId,
+          employeePartyId: winner,
+          expectedEmployeeLabel: "SECOND-SOURCE",
+          dryRun: false,
+        }),
+        /already contains the verified employee/,
+      );
+      assert.equal(await auditCount(), beforeConflict);
+      assert.equal(
+        await tableCount(f.orgId, "payroll_prior_stubs"),
+        2,
+        "conflicting source amounts cannot be silently merged",
+      );
+      const remaining = winner === target ? alternative : target;
+      await db.execute(
+        sql`update parties set subsidiary_id=null where org_id=${f.orgId} and id=${f.employeePartyId}`,
+      );
+      const legacyCorrection = {
+        ...correction,
+        stubId: duplicateId,
+        employeePartyId: remaining,
+        expectedEmployeeLabel: "SECOND-SOURCE",
+        dryRun: false,
+      };
+      await assert.rejects(
+        correctPriorStubEmployee(legacyCorrection),
+        /reviewed source employer changed/,
+      );
+      assert.equal(
+        await auditCount(),
+        beforeConflict,
+        "an undeclared missing employer cannot be silently accepted",
+      );
+      assert.deepEqual(
+        await correctPriorStubEmployee({ ...legacyCorrection, expectedSourceEmployerId: null }),
+        { changed: true },
+      );
+      assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 2);
+      assert.equal(await auditCount(), beforeConflict + 1);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "a failed re-import leaves the original stub evidence exactly as it was",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    try {
+      const first = await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: "3000",
+            netPay: "2500",
+            employerCost: null,
+            amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+          },
         },
-      }, f.slots),
-      /is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
-    );
+        f.slots,
+      );
+      assert.equal(first.created, true);
 
-    assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
-    assert.equal(
-      await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'"),
-      auditsBefore,
-      "a refused import must not leave an audit row for a rewrite that never happened",
-    );
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+      const before = await priorEvidence(f.orgId, f.employeePartyId);
+      const auditsBefore = await tableCount(
+        f.orgId,
+        "audit_log",
+        "table_name = 'payroll_prior_stubs'",
+      );
 
-test("an amount nobody can map refuses before any write, leaving evidence intact", { skip: !DB }, async () => {
-  const f = await importFixture();
-  try {
-    await savePriorStub({
-      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: {
-        employeePartyId: f.employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: "3000", netPay: "2500", employerCost: null,
-        amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
-      },
-    }, f.slots);
-    const before = await priorEvidence(f.orgId, f.employeePartyId);
+      // 1e16 passes exact-decimal validation but overflows the numeric(19,4)
+      // amount column — a failure that strikes AFTER the stub has been rewritten
+      // and its previous amounts deleted. The whole write must roll back.
+      await assert.rejects(
+        savePriorStub(
+          {
+            orgId: f.orgId,
+            actorId: f.actorId,
+            registerId: f.registerId,
+            row: {
+              employeePartyId: f.employeePartyId,
+              employeeLabel: "EMP-0001-REWRITTEN",
+              gross: null,
+              netPay: null,
+              employerCost: null,
+              amounts: [{ fieldKey: "SALARY", amount: "10000000000000000", sourceColumn: null }],
+            },
+          },
+          f.slots,
+        ),
+      );
 
-    await assert.rejects(
-      savePriorStub({
-        orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-        row: {
-          employeePartyId: f.employeePartyId,
-          employeeLabel: "EMP-0001",
-          gross: "3000", netPay: "2500", employerCost: null,
-          amounts: [{ fieldKey: "GHOST", amount: "1", sourceColumn: null }],
+      assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
+      assert.equal(
+        await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'"),
+        auditsBefore,
+        "a failed import must not leave an audit row for a rewrite that never happened",
+      );
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "a locale-money re-import is refused before any write, leaving evidence intact",
+  { skip: !DB },
+  async () => {
+    // A decimal comma is twelve-thirty-four written correctly, not a grouping
+    // typo: stripping it would store a 100x prior-system figure and corrupt
+    // every comparison against this register. Both the header cell and the
+    // component cell refuse with the remedy, and the stored stub is untouched.
+    const f = await importFixture();
+    try {
+      await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: "3000",
+            netPay: "2500",
+            employerCost: null,
+            amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+          },
         },
-      }, f.slots),
-      ParallelRunStoreError,
-    );
-    assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+        f.slots,
+      );
+      const before = await priorEvidence(f.orgId, f.employeePartyId);
+      const auditsBefore = await tableCount(
+        f.orgId,
+        "audit_log",
+        "table_name = 'payroll_prior_stubs'",
+      );
 
-test("a re-import replaces amounts wholesale, files one attributable audit row per write", { skip: !DB }, async () => {
-  const f = await importFixture();
-  try {
-    const first = await savePriorStub({
-      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: {
-        employeePartyId: f.employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: "3000", netPay: "2500", employerCost: null,
-        amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
-      },
-    }, f.slots);
-    assert.equal(first.created, true);
+      await assert.rejects(
+        savePriorStub(
+          {
+            orgId: f.orgId,
+            actorId: f.actorId,
+            registerId: f.registerId,
+            row: {
+              employeePartyId: f.employeePartyId,
+              employeeLabel: "EMP-0001",
+              gross: "12,34",
+              netPay: "2500",
+              employerCost: null,
+              amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+            },
+          },
+          f.slots,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof ParallelRunStoreError);
+          assert.match(
+            error.message,
+            /gross must use "\." as the decimal point — write "12,34" as "12\.34"/,
+          );
+          return true;
+        },
+      );
+      await assert.rejects(
+        savePriorStub(
+          {
+            orgId: f.orgId,
+            actorId: f.actorId,
+            registerId: f.registerId,
+            row: {
+              employeePartyId: f.employeePartyId,
+              employeeLabel: "EMP-0001",
+              gross: "3000",
+              netPay: "2500",
+              employerCost: null,
+              amounts: [{ fieldKey: "SALARY", amount: "1,234", sourceColumn: "Salary" }],
+            },
+          },
+          f.slots,
+        ),
+        /is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
+      );
 
-    const second = await savePriorStub({
-      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: {
-        employeePartyId: f.employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: "3500", netPay: "2800", employerCost: "3900",
-        amounts: [{ fieldKey: "BONUS", amount: "500", sourceColumn: "Bonus" }],
-      },
-    }, f.slots);
-    assert.equal(second.created, false);
+      assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
+      assert.equal(
+        await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'"),
+        auditsBefore,
+        "a refused import must not leave an audit row for a rewrite that never happened",
+      );
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
-    const evidence = await priorEvidence(f.orgId, f.employeePartyId);
-    assert.deepEqual(evidence.amounts, [{ kind: "earning", slot: "code:BONUS", amount: "500.0000" }]);
-    assert.equal(evidence.stub!.gross, "3500.0000");
+test(
+  "an amount nobody can map refuses before any write, leaving evidence intact",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    try {
+      await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: "3000",
+            netPay: "2500",
+            employerCost: null,
+            amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+          },
+        },
+        f.slots,
+      );
+      const before = await priorEvidence(f.orgId, f.employeePartyId);
 
-    // Two columns mapped onto one component: last one wins, one row stored.
-    await savePriorStub({
-      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: {
-        employeePartyId: f.employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: "3700", netPay: "2900", employerCost: null,
-        amounts: [
-          { fieldKey: "SALARY", amount: "600", sourceColumn: "Salary A" },
-          { fieldKey: "SALARY", amount: "700", sourceColumn: "Salary B" },
-        ],
-      },
-    }, f.slots);
-    const deduped = await priorEvidence(f.orgId, f.employeePartyId);
-    assert.deepEqual(deduped.amounts, [{ kind: "earning", slot: "code:SALARY", amount: "700.0000" }]);
+      await assert.rejects(
+        savePriorStub(
+          {
+            orgId: f.orgId,
+            actorId: f.actorId,
+            registerId: f.registerId,
+            row: {
+              employeePartyId: f.employeePartyId,
+              employeeLabel: "EMP-0001",
+              gross: "3000",
+              netPay: "2500",
+              employerCost: null,
+              amounts: [{ fieldKey: "GHOST", amount: "1", sourceColumn: null }],
+            },
+          },
+          f.slots,
+        ),
+        ParallelRunStoreError,
+      );
+      assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
-    const audits = (await db.execute<{ action: string }>(sql`
+test(
+  "a re-import replaces amounts wholesale, files one attributable audit row per write",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    try {
+      const first = await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: "3000",
+            netPay: "2500",
+            employerCost: null,
+            amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+          },
+        },
+        f.slots,
+      );
+      assert.equal(first.created, true);
+
+      const second = await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: "3500",
+            netPay: "2800",
+            employerCost: "3900",
+            amounts: [{ fieldKey: "BONUS", amount: "500", sourceColumn: "Bonus" }],
+          },
+        },
+        f.slots,
+      );
+      assert.equal(second.created, false);
+
+      const evidence = await priorEvidence(f.orgId, f.employeePartyId);
+      assert.deepEqual(evidence.amounts, [
+        { kind: "earning", slot: "code:BONUS", amount: "500.0000" },
+      ]);
+      assert.equal(evidence.stub!.gross, "3500.0000");
+
+      // Two columns mapped onto one component: last one wins, one row stored.
+      await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: "3700",
+            netPay: "2900",
+            employerCost: null,
+            amounts: [
+              { fieldKey: "SALARY", amount: "600", sourceColumn: "Salary A" },
+              { fieldKey: "SALARY", amount: "700", sourceColumn: "Salary B" },
+            ],
+          },
+        },
+        f.slots,
+      );
+      const deduped = await priorEvidence(f.orgId, f.employeePartyId);
+      assert.deepEqual(deduped.amounts, [
+        { kind: "earning", slot: "code:SALARY", amount: "700.0000" },
+      ]);
+
+      const audits = await db.execute<{ action: string }>(
+        sql`
       select action from audit_log
        where org_id = ${f.orgId} and table_name = 'payroll_prior_stubs'
-       order by at`, "objects"));
-    assert.deepEqual(audits.map((row) => row.action), ["insert", "update", "update"]);
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+       order by at`,
+        "objects",
+      );
+      assert.deepEqual(
+        audits.map((row) => row.action),
+        ["insert", "update", "update"],
+      );
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
-test("recording unmapped columns merges across passes and never loses a column", { skip: !DB }, async () => {
-  const f = await importFixture();
-  try {
-    await recordUnmappedColumns(f.orgId, f.registerId, [
-      { column: "Dept", valuedRows: 5 },
-      { column: "Cost Centre", valuedRows: 2 },
-    ]);
-    await recordUnmappedColumns(f.orgId, f.registerId, [
-      { column: "Union", valuedRows: 3 },
-      { column: "Dept", valuedRows: 2 },
-    ]);
+test(
+  "recording unmapped columns merges across passes and never loses a column",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    try {
+      await recordUnmappedColumns(f.orgId, f.registerId, [
+        { column: "Dept", valuedRows: 5 },
+        { column: "Cost Centre", valuedRows: 2 },
+      ]);
+      await recordUnmappedColumns(f.orgId, f.registerId, [
+        { column: "Union", valuedRows: 3 },
+        { column: "Dept", valuedRows: 2 },
+      ]);
 
-    const registers = await priorRegisters(f.orgId);
-    const register = registers.find((r) => r.id === f.registerId)!;
-    assert.deepEqual(register.unmappedColumns, [
-      { column: "Cost Centre", valuedRows: 2 },
-      { column: "Dept", valuedRows: 5 },
-      { column: "Union", valuedRows: 3 },
-    ]);
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+      const registers = await priorRegisters(f.orgId);
+      const register = registers.find((r) => r.id === f.registerId)!;
+      assert.deepEqual(register.unmappedColumns, [
+        { column: "Cost Centre", valuedRows: 2 },
+        { column: "Dept", valuedRows: 5 },
+        { column: "Union", valuedRows: 3 },
+      ]);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
-test("discarding a register removes every trace in one motion and audits the deletion", { skip: !DB }, async () => {
-  const f = await importFixture();
-  try {
-    await savePriorStub({
-      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-      row: {
-        employeePartyId: f.employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: "3000", netPay: "2500", employerCost: null,
-        amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
-      },
-    }, f.slots);
+test(
+  "discarding a register removes every trace in one motion and audits the deletion",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    try {
+      await savePriorStub(
+        {
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          row: {
+            employeePartyId: f.employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: "3000",
+            netPay: "2500",
+            employerCost: null,
+            amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+          },
+        },
+        f.slots,
+      );
 
-    await deletePriorRegister(f.orgId, f.registerId, f.actorId);
+      await deletePriorRegister(f.orgId, f.registerId, f.actorId);
 
-    assert.equal(await tableCount(f.orgId, "payroll_prior_registers"), 0);
-    assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 0);
-    assert.equal(await tableCount(f.orgId, "payroll_prior_amounts"), 0);
+      assert.equal(await tableCount(f.orgId, "payroll_prior_registers"), 0);
+      assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 0);
+      assert.equal(await tableCount(f.orgId, "payroll_prior_amounts"), 0);
 
-    const deletions = (await db.execute<{ n: number }>(sql`
+      const deletions = await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from audit_log
        where org_id = ${f.orgId} and table_name = 'payroll_prior_registers'
-         and row_id = ${f.registerId} and action = 'delete'`, "objects"));
-    assert.equal(deletions[0]!.n, 1);
+         and row_id = ${f.registerId} and action = 'delete'`,
+        "objects",
+      );
+      assert.equal(deletions[0]!.n, 1);
 
-    // The deletion is audited; the history of what WAS there stays.
-    const stubHistory = await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
-    assert.ok(stubHistory >= 1, "prior-stub audit history must survive the register's deletion");
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+      // The deletion is audited; the history of what WAS there stays.
+      const stubHistory = await tableCount(
+        f.orgId,
+        "audit_log",
+        "table_name = 'payroll_prior_stubs'",
+      );
+      assert.ok(stubHistory >= 1, "prior-stub audit history must survive the register's deletion");
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
-test("discarding an unknown register is a named refusal with no audit row", { skip: !DB }, async () => {
-  // The phantom-delete defect: all five deletes matched zero rows unchecked,
-  // the audit row still landed, and the route answered {ok:true}.
-  const f = await importFixture();
-  try {
-    const missing = randomUUID();
-    await assert.rejects(
-      deletePriorRegister(f.orgId, missing, f.actorId),
-      (error: unknown) => {
+test(
+  "discarding an unknown register is a named refusal with no audit row",
+  { skip: !DB },
+  async () => {
+    // The phantom-delete defect: all five deletes matched zero rows unchecked,
+    // the audit row still landed, and the route answered {ok:true}.
+    const f = await importFixture();
+    try {
+      const missing = randomUUID();
+      await assert.rejects(deletePriorRegister(f.orgId, missing, f.actorId), (error: unknown) => {
         assert.ok(error instanceof PriorRegisterNotFoundError);
         assert.match(error.message, /does not exist in this organization/);
         return true;
-      },
-    );
-    const phantom = (await db.execute<{ n: number }>(sql`
+      });
+      const phantom = await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from audit_log
        where org_id = ${f.orgId} and table_name = 'payroll_prior_registers'
-         and row_id = ${missing} and action = 'delete'`, "objects"));
-    assert.equal(phantom[0]!.n, 0, "a refused discard must leave no audit evidence");
+         and row_id = ${missing} and action = 'delete'`,
+        "objects",
+      );
+      assert.equal(phantom[0]!.n, 0, "a refused discard must leave no audit evidence");
 
-    // And the untouched register is still fully there.
-    assert.equal(await tableCount(f.orgId, "payroll_prior_registers"), 1);
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+      // And the untouched register is still fully there.
+      assert.equal(await tableCount(f.orgId, "payroll_prior_registers"), 1);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
-test("tolerance changes never land without their audit row beside them", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+test(
+  "tolerance changes never land without their audit row beside them",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
 
-    await saveParallelTolerance({
-      orgId: org.orgId, actorId, kind: "earning", slot: "base_pay",
-      tolerance: "25", reason: "provider rounding on hourly conversions",
-    });
-    assert.equal((await parallelTolerances(org.orgId)).length, 1);
-    assert.equal(await tableCount(org.orgId, "audit_log", "table_name = 'payroll_parallel_tolerances'"), 1);
+      await saveParallelTolerance({
+        orgId: org.orgId,
+        actorId,
+        kind: "earning",
+        slot: "base_pay",
+        tolerance: "25",
+        reason: "provider rounding on hourly conversions",
+      });
+      assert.equal((await parallelTolerances(org.orgId)).length, 1);
+      assert.equal(
+        await tableCount(org.orgId, "audit_log", "table_name = 'payroll_parallel_tolerances'"),
+        1,
+      );
 
-    // Zero is the default, so saving it removes the allowance instead — and
-    // that removal is audited too.
-    await saveParallelTolerance({
-      orgId: org.orgId, actorId, kind: "earning", slot: "base_pay",
-      tolerance: "0", reason: "compares exactly again",
-    });
-    assert.equal((await parallelTolerances(org.orgId)).length, 0);
-    assert.equal(await tableCount(org.orgId, "audit_log", "table_name = 'payroll_parallel_tolerances'"), 2);
+      // Zero is the default, so saving it removes the allowance instead — and
+      // that removal is audited too.
+      await saveParallelTolerance({
+        orgId: org.orgId,
+        actorId,
+        kind: "earning",
+        slot: "base_pay",
+        tolerance: "0",
+        reason: "compares exactly again",
+      });
+      assert.equal((await parallelTolerances(org.orgId)).length, 0);
+      assert.equal(
+        await tableCount(org.orgId, "audit_log", "table_name = 'payroll_parallel_tolerances'"),
+        2,
+      );
 
-    // Removing an absent tolerance writes nothing at all.
-    await deleteParallelTolerance(org.orgId, "earning", "base_pay", actorId);
-    assert.equal(await tableCount(org.orgId, "audit_log", "table_name = 'payroll_parallel_tolerances'"), 2);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      // Removing an absent tolerance writes nothing at all.
+      await deleteParallelTolerance(org.orgId, "earning", "base_pay", actorId);
+      assert.equal(
+        await tableCount(org.orgId, "audit_log", "table_name = 'payroll_parallel_tolerances'"),
+        2,
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("a first tolerance save audits create with a null before-image; a second audits update with before/after", { skip: !DB }, async () => {
-  // The hardcoded-action defect: the upsert always audited 'update', so the
-  // slot's birth read as an edit and no before-image was ever recorded.
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+test(
+  "a first tolerance save audits create with a null before-image; a second audits update with before/after",
+  { skip: !DB },
+  async () => {
+    // The hardcoded-action defect: the upsert always audited 'update', so the
+    // slot's birth read as an edit and no before-image was ever recorded.
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
 
-    await saveParallelTolerance({
-      orgId: org.orgId, actorId, kind: "earning", slot: "base_pay",
-      tolerance: "25", reason: "provider rounding on hourly conversions",
-    });
-    await saveParallelTolerance({
-      orgId: org.orgId, actorId, kind: "earning", slot: "base_pay",
-      tolerance: "50", reason: "overtime codes included",
-    });
-    const audits = (await db.execute<{ action: string; changes: unknown }>(sql`
+      await saveParallelTolerance({
+        orgId: org.orgId,
+        actorId,
+        kind: "earning",
+        slot: "base_pay",
+        tolerance: "25",
+        reason: "provider rounding on hourly conversions",
+      });
+      await saveParallelTolerance({
+        orgId: org.orgId,
+        actorId,
+        kind: "earning",
+        slot: "base_pay",
+        tolerance: "50",
+        reason: "overtime codes included",
+      });
+      const audits = await db.execute<{ action: string; changes: unknown }>(
+        sql`
       select action, changes from audit_log
        where org_id = ${org.orgId} and table_name = 'payroll_parallel_tolerances'
-       order by id`, "objects"));
-    assert.equal(audits.length, 2);
-    assert.equal(audits[0]!.action, "create");
-    const created = audits[0]!.changes as {
-      before: null; after: { tolerance: string; reason: string };
-    };
-    assert.equal(created.before, null);
-    assert.equal(created.after.tolerance, "25.0000");
-    assert.equal(created.after.reason, "provider rounding on hourly conversions");
-    assert.equal(audits[1]!.action, "update");
-    const updated = audits[1]!.changes as {
-      before: { tolerance: string; reason: string }; after: { tolerance: string; reason: string };
-    };
-    assert.equal(updated.before.tolerance, "25.0000");
-    assert.equal(updated.before.reason, "provider rounding on hourly conversions");
-    assert.equal(updated.after.tolerance, "50.0000");
-    assert.equal(updated.after.reason, "overtime codes included");
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+       order by id`,
+        "objects",
+      );
+      assert.equal(audits.length, 2);
+      assert.equal(audits[0]!.action, "create");
+      const created = audits[0]!.changes as {
+        before: null;
+        after: { tolerance: string; reason: string };
+      };
+      assert.equal(created.before, null);
+      assert.equal(created.after.tolerance, "25.0000");
+      assert.equal(created.after.reason, "provider rounding on hourly conversions");
+      assert.equal(audits[1]!.action, "update");
+      const updated = audits[1]!.changes as {
+        before: { tolerance: string; reason: string };
+        after: { tolerance: string; reason: string };
+      };
+      assert.equal(updated.before.tolerance, "25.0000");
+      assert.equal(updated.before.reason, "provider rounding on hourly conversions");
+      assert.equal(updated.after.tolerance, "50.0000");
+      assert.equal(updated.after.reason, "overtime codes included");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
 /**
  * One real calculated CA pay run; the prior register mirrors whatever the run
@@ -586,12 +930,20 @@ async function cleanComparisonFixture() {
   const craPayable = await account("2310", "CRA remittances payable", "liability_current");
   const vacationPayable = await account("2320", "Vacation payable", "liability_current");
   await seedPayrollAccountingConfiguration(org.orgId, {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }
-      });
+    wageExpenseAccountId: wageExpense,
+    burdenExpenseAccountId: burdenExpense,
+    netPayAccountId: netPayable,
+    wagesTo: "expense",
+    slotAccounts: {
+      CA: {
+        cpp: craPayable,
+        ei: craPayable,
+        qpip: craPayable,
+        income_tax: craPayable,
+        vacation: vacationPayable,
+      },
+    },
+  });
   await seedPayrollComponents(org.orgId, actorId);
 
   const projectId = randomUUID();
@@ -606,185 +958,258 @@ async function cleanComparisonFixture() {
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
             ${actorId}, ${actorId})`);
   const { employeeId: employeePartyId } = await seedHiredEmployee(org.orgId, actorId, {
-    scheduleId, subsidiaryId: org.subsidiaryId, name: "Robin Field", country: "CA",
-    province: "ON", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
-    rateEffectiveFrom: "2025-06-01", federalClaimCode: 1, provincialClaimCode: 1,
-    vacationPercent: "4", vacationMethod: "accrue",
-    wcbExempt: true, wcbExemptReason: "Declared exemption for the payroll-comparison scenario",
-    timeEntries: ["2026-07-06", "2026-07-13"]
-      .map((workedOn) => ({ workedOn, hours: "40", projectId })),
+    scheduleId,
+    subsidiaryId: org.subsidiaryId,
+    name: "Robin Field",
+    country: "CA",
+    province: "ON",
+    payBasis: "hourly",
+    currency: "CAD",
+    rate: "30",
+    rateBasis: "hour",
+    rateEffectiveFrom: "2025-06-01",
+    federalClaimCode: 1,
+    provincialClaimCode: 1,
+    vacationPercent: "4",
+    vacationMethod: "accrue",
+    wcbExempt: true,
+    wcbExemptReason: "Declared exemption for the payroll-comparison scenario",
+    timeEntries: ["2026-07-06", "2026-07-13"].map((workedOn) => ({
+      workedOn,
+      hours: "40",
+      projectId,
+    })),
   });
 
   const run = await createPayRun({
-    orgId: org.orgId, actorId, payScheduleId: scheduleId,
-    periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21",
+    orgId: org.orgId,
+    actorId,
+    payScheduleId: scheduleId,
+    periodStart: "2026-07-05",
+    periodEnd: "2026-07-18",
+    payDate: "2026-07-21",
   });
-  const calculated = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+  const calculated = await calculatePayRun({
+    orgId: org.orgId,
+    documentId: run.documentId,
+    actorId,
+  });
   assert.deepEqual(calculated.errors, [], "the fixture run must calculate cleanly");
   assert.equal(calculated.gross, "2400.0000", "80 h × $30.00");
   return { org, actorId, run, employeePartyId };
 }
 
-test("a filed comparison stores its header, its findings and its audit row together", { skip: !DB }, async () => {
-  const fixture = await cleanComparisonFixture();
-  const { org, actorId, run, employeePartyId } = fixture;
-  try {
-    // The mirror register states exactly what our run paid, slot by slot.
-    const slots = await comparableSlots(org.orgId);
-    const fieldKeyByCell = new Map(
-      slots.filter((slot) => slot.kind !== "total").map((slot) => [`${slot.kind}/${slot.slot}`, slot.fieldKey]),
-    );
-    const ours = await loadOurSide(org.orgId, run.documentId);
-    assert.equal(ours.employees.length, 1);
-    const mirror = ours.employees[0]!;
-    const amounts = mirror.amounts.map((amount) => {
-      const fieldKey = fieldKeyByCell.get(`${amount.kind}/${amount.slot}`);
-      if (!fieldKey) throw new Error(`our side carries a slot no component claims: ${amount.kind}/${amount.slot}`);
-      return { fieldKey, amount: amount.amount, sourceColumn: fieldKey };
-    });
-    assert.ok(amounts.length > 0, "the fixture run must have produced component lines");
+test(
+  "a filed comparison stores its header, its findings and its audit row together",
+  { skip: !DB },
+  async () => {
+    const fixture = await cleanComparisonFixture();
+    const { org, actorId, run, employeePartyId } = fixture;
+    try {
+      // The mirror register states exactly what our run paid, slot by slot.
+      const slots = await comparableSlots(org.orgId);
+      const fieldKeyByCell = new Map(
+        slots
+          .filter((slot) => slot.kind !== "total")
+          .map((slot) => [`${slot.kind}/${slot.slot}`, slot.fieldKey]),
+      );
+      const ours = await loadOurSide(org.orgId, run.documentId);
+      assert.equal(ours.employees.length, 1);
+      const mirror = ours.employees[0]!;
+      const amounts = mirror.amounts.map((amount) => {
+        const fieldKey = fieldKeyByCell.get(`${amount.kind}/${amount.slot}`);
+        if (!fieldKey)
+          throw new Error(
+            `our side carries a slot no component claims: ${amount.kind}/${amount.slot}`,
+          );
+        return { fieldKey, amount: amount.amount, sourceColumn: fieldKey };
+      });
+      assert.ok(amounts.length > 0, "the fixture run must have produced component lines");
 
-    const registerId = await upsertPriorRegister({
-      orgId: org.orgId, actorId,
-      name: "Mirror register — 2026-07-18",
-      periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21",
-      allowedSubsidiaryIds: null,
-    });
-    await savePriorStub({
-      orgId: org.orgId, actorId, registerId,
-      row: {
-        employeePartyId,
-        employeeLabel: "EMP-0001",
-        gross: mirror.gross, netPay: mirror.netPay, employerCost: mirror.employerCost,
-        amounts,
-      },
-    }, slots);
+      const registerId = await upsertPriorRegister({
+        orgId: org.orgId,
+        actorId,
+        name: "Mirror register — 2026-07-18",
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
+        payDate: "2026-07-21",
+        allowedSubsidiaryIds: null,
+      });
+      await savePriorStub(
+        {
+          orgId: org.orgId,
+          actorId,
+          registerId,
+          row: {
+            employeePartyId,
+            employeeLabel: "EMP-0001",
+            gross: mirror.gross,
+            netPay: mirror.netPay,
+            employerCost: mirror.employerCost,
+            amounts,
+          },
+        },
+        slots,
+      );
 
-    await assert.rejects(
-      runParallelComparison({
-        orgId: org.orgId, actorId, registerId, payRunDocumentId: run.documentId,
-        allowedSubsidiaryIds: new Set(),
-      }),
-      /does not exist/i,
-      "an explicit restricted lens cannot be widened at the service boundary",
-    );
-    const filed = await runParallelComparison({
-      orgId: org.orgId, actorId, registerId, payRunDocumentId: run.documentId,
-      allowedSubsidiaryIds: null,
-    });
-    assert.equal(filed.comparison.status, "clean");
-    assert.equal(filed.comparison.counts.difference, 0);
-    assert.ok(filed.comparison.findings.length > 0, "a clean result still compared real cells");
+      await assert.rejects(
+        runParallelComparison({
+          orgId: org.orgId,
+          actorId,
+          registerId,
+          payRunDocumentId: run.documentId,
+          allowedSubsidiaryIds: new Set(),
+        }),
+        /does not exist/i,
+        "an explicit restricted lens cannot be widened at the service boundary",
+      );
+      const filed = await runParallelComparison({
+        orgId: org.orgId,
+        actorId,
+        registerId,
+        payRunDocumentId: run.documentId,
+        allowedSubsidiaryIds: null,
+      });
+      assert.equal(filed.comparison.status, "clean");
+      assert.equal(filed.comparison.counts.difference, 0);
+      assert.ok(filed.comparison.findings.length > 0, "a clean result still compared real cells");
 
-    const headers = (await db.execute<{ status: string; compared: number; difference_count: number }>(sql`
+      const headers = await db.execute<{
+        status: string;
+        compared: number;
+        difference_count: number;
+      }>(
+        sql`
       select status, compared_employee_count as compared, difference_count
         from payroll_parallel_comparisons
-       where org_id = ${org.orgId} and id = ${filed.comparisonId}`, "objects"));
-    assert.equal(headers.length, 1);
-    assert.deepEqual(headers[0], { status: "clean", compared: 1, difference_count: 0 });
+       where org_id = ${org.orgId} and id = ${filed.comparisonId}`,
+        "objects",
+      );
+      assert.equal(headers.length, 1);
+      assert.deepEqual(headers[0], { status: "clean", compared: 1, difference_count: 0 });
 
-    const findings = await tableCount(org.orgId, "payroll_parallel_findings",
-      `comparison_id = '${filed.comparisonId}'`);
-    assert.equal(findings, filed.comparison.findings.length);
+      const findings = await tableCount(
+        org.orgId,
+        "payroll_parallel_findings",
+        `comparison_id = '${filed.comparisonId}'`,
+      );
+      assert.equal(findings, filed.comparison.findings.length);
 
-    const audits = (await db.execute<{ n: number }>(sql`
+      const audits = await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from audit_log
        where org_id = ${org.orgId} and table_name = 'payroll_parallel_comparisons'
-         and row_id = ${filed.comparisonId} and action = 'insert'`, "objects"));
-    assert.equal(audits[0]!.n, 1);
+         and row_id = ${filed.comparisonId} and action = 'insert'`,
+        "objects",
+      );
+      assert.equal(audits[0]!.n, 1);
 
-    const summaries = await parallelComparisons(org.orgId);
-    assert.equal(summaries.length, 1);
-    assert.equal(summaries[0]!.status, "clean");
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
-
-test("a comparison whose findings cannot be stored files nothing at all", { skip: !DB }, async () => {
-  const f = await importFixture();
-  try {
-    // Two employees whose per-cell differences need sixteen integer digits —
-    // more than any numeric(19,4) finding column can hold — chosen so the
-    // POPULATION sums cancel: the header's totals and unattributed figures
-    // all fit, and only the finding rows overflow. The filing must therefore
-    // die between the header insert and the findings insert.
-    const huge = "900000000000000.0000";
-    const otherPartyId = await seedEmployee(f.orgId, "Casey Lin");
-    // Direct-seeded stubs still carry the HRM employment 0374 requires.
-    const employments = new Map<string, string>();
-    for (const partyId of [f.employeePartyId, otherPartyId]) {
-      employments.set(partyId, await seedWorkerEmployment(f.orgId, partyId, f.org.subsidiaryId));
+      const summaries = await parallelComparisons(org.orgId);
+      assert.equal(summaries.length, 1);
+      assert.equal(summaries[0]!.status, "clean");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
-    for (const [employeePartyId, sign] of [
-      [f.employeePartyId, ""],
-      [otherPartyId, "-"],
-    ] as const) {
-      await savePriorStub({
-        orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
-        row: {
-          employeePartyId,
-          employeeLabel: employeePartyId === f.employeePartyId ? "EMP-0001" : "EMP-0002",
-          gross: sign + huge, netPay: null, employerCost: null,
-          amounts: [{ fieldKey: "SALARY", amount: sign + huge, sourceColumn: "Salary" }],
-        },
-      }, f.slots);
-    }
+  },
+);
 
-    // Our side, seeded directly so stubs can carry the mirrored negatives:
-    // Robin pays -huge where the register says +huge, and Casey pays +huge
-    // where it says -huge.
-    const scheduleId = randomUUID();
-    await db.execute(sql`
+test(
+  "a comparison whose findings cannot be stored files nothing at all",
+  { skip: !DB },
+  async () => {
+    const f = await importFixture();
+    try {
+      // Two employees whose per-cell differences need sixteen integer digits —
+      // more than any numeric(19,4) finding column can hold — chosen so the
+      // POPULATION sums cancel: the header's totals and unattributed figures
+      // all fit, and only the finding rows overflow. The filing must therefore
+      // die between the header insert and the findings insert.
+      const huge = "900000000000000.0000";
+      const otherPartyId = await seedEmployee(f.orgId, "Casey Lin");
+      // Direct-seeded stubs still carry the HRM employment 0374 requires.
+      const employments = new Map<string, string>();
+      for (const partyId of [f.employeePartyId, otherPartyId]) {
+        employments.set(partyId, await seedWorkerEmployment(f.orgId, partyId, f.org.subsidiaryId));
+      }
+      for (const [employeePartyId, sign] of [
+        [f.employeePartyId, ""],
+        [otherPartyId, "-"],
+      ] as const) {
+        await savePriorStub(
+          {
+            orgId: f.orgId,
+            actorId: f.actorId,
+            registerId: f.registerId,
+            row: {
+              employeePartyId,
+              employeeLabel: employeePartyId === f.employeePartyId ? "EMP-0001" : "EMP-0002",
+              gross: sign + huge,
+              netPay: null,
+              employerCost: null,
+              amounts: [{ fieldKey: "SALARY", amount: sign + huge, sourceColumn: "Salary" }],
+            },
+          },
+          f.slots,
+        );
+      }
+
+      // Our side, seeded directly so stubs can carry the mirrored negatives:
+      // Robin pays -huge where the register says +huge, and Casey pays +huge
+      // where it says -huge.
+      const scheduleId = randomUUID();
+      await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year,
                                  anchor_period_end, pay_date_offset_days, is_active,
                                  created_by, updated_by)
       values (${scheduleId}, ${f.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
               ${f.actorId}, ${f.actorId})`);
-    const documentId = randomUUID();
-    await db.execute(sql`
+      const documentId = randomUUID();
+      await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, status)
       values (${documentId}, ${f.orgId}, 'pay_run', 'PR-PARALLEL-1', '2026-07-21', 'CAD', 'draft')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                             pay_date, tax_year, run_status, employee_count)
       values (${documentId}, ${f.orgId}, ${scheduleId},
               '2026-07-05', '2026-07-18', '2026-07-21', 2026, 'calculated', 2)`);
-    for (const [employeePartyId, sign] of [
-      [f.employeePartyId, "-"],
-      [otherPartyId, ""],
-    ] as const) {
-      const stubId = randomUUID();
-      await db.execute(sql`
+      for (const [employeePartyId, sign] of [
+        [f.employeePartyId, "-"],
+        [otherPartyId, ""],
+      ] as const) {
+        const stubId = randomUUID();
+        await db.execute(sql`
         insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
                                province, periods_per_year, pay_date, tax_year, currency_code,
                                gross, net_pay, employer_cost)
         values ('CA', 'calculation', ${stubId}, ${f.orgId}, ${documentId}, ${employeePartyId},
                 ${employments.get(employeePartyId)}, 'ON', 26,
                 '2026-07-21', 2026, 'CAD', ${sign + huge}, '0', '0')`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount)
         values (${f.orgId}, ${stubId}, ${f.salaryId}, 'earning', 'Salary', ${sign + huge})`);
+      }
+
+      await assert.rejects(
+        runParallelComparison({
+          orgId: f.orgId,
+          actorId: f.actorId,
+          registerId: f.registerId,
+          payRunDocumentId: documentId,
+          allowedSubsidiaryIds: null,
+        }),
+      );
+
+      // Nothing survived: not the header, not a fragment of the findings, and
+      // no audit row claiming a comparison happened.
+      assert.equal(await tableCount(f.orgId, "payroll_parallel_comparisons"), 0);
+      assert.equal(await tableCount(f.orgId, "payroll_parallel_findings"), 0);
+      assert.equal(
+        await tableCount(f.orgId, "audit_log", "table_name = 'payroll_parallel_comparisons'"),
+        0,
+      );
+      assert.equal((await parallelComparisons(f.orgId)).length, 0);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
     }
-
-    await assert.rejects(
-      runParallelComparison({
-        orgId: f.orgId, actorId: f.actorId,
-        registerId: f.registerId, payRunDocumentId: documentId,
-        allowedSubsidiaryIds: null,
-      }),
-    );
-
-    // Nothing survived: not the header, not a fragment of the findings, and
-    // no audit row claiming a comparison happened.
-    assert.equal(await tableCount(f.orgId, "payroll_parallel_comparisons"), 0);
-    assert.equal(await tableCount(f.orgId, "payroll_parallel_findings"), 0);
-    assert.equal(
-      await tableCount(f.orgId, "audit_log", "table_name = 'payroll_parallel_comparisons'"),
-      0,
-    );
-    assert.equal((await parallelComparisons(f.orgId)).length, 0);
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+  },
+);

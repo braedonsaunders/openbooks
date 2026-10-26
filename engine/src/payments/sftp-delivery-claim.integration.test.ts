@@ -102,24 +102,38 @@ async function teardown(fixture: DeliveryFixture): Promise<void> {
   // The scratch-org teardown does not know about payment artifacts; drop
   // them first (evidence before files, deliveries before the files they
   // reference), mirroring payments.integration.test.ts.
-  await withBypass(() => db.transaction(async (tx) => {
-    await tx.execute(sql`
+  await withBypass(() =>
+    db.transaction(async (tx) => {
+      await tx.execute(sql`
       select set_config('openbooks.amend', 'on', true),
              set_config('openbooks.sandbox_wipe', 'on', true),
              set_config('app.bypass_rls', 'on', true)`);
-    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${fixture.orgId} and name like 'Scratch %'`);
-    await tx.execute(sql`delete from payment_events where org_id = ${fixture.orgId} and payment_file_id is not null`);
-    await tx.execute(sql`delete from payment_file_deliveries where org_id = ${fixture.orgId}`);
-    await tx.execute(sql`delete from payment_files where org_id = ${fixture.orgId}`);
-  }));
+      await tx.execute(
+        sql`update orgs set env_kind = 'sandbox' where id = ${fixture.orgId} and name like 'Scratch %'`,
+      );
+      await tx.execute(
+        sql`delete from payment_events where org_id = ${fixture.orgId} and payment_file_id is not null`,
+      );
+      await tx.execute(sql`delete from payment_file_deliveries where org_id = ${fixture.orgId}`);
+      await tx.execute(sql`delete from payment_files where org_id = ${fixture.orgId}`);
+    }),
+  );
   await withBypass(() => dropScratchOrg(fixture.orgId));
 }
 
 async function fileState(fixture: DeliveryFixture, fileId: string) {
-  return withOrgContext(fixture.orgId, async () =>
-    (await db.execute<{ status: string; delivery_claim_token: string | null; delivery_claim_owner: string | null }>(sql`
+  return withOrgContext(
+    fixture.orgId,
+    async () =>
+      (
+        await db.execute<{
+          status: string;
+          delivery_claim_token: string | null;
+          delivery_claim_owner: string | null;
+        }>(sql`
       select status, delivery_claim_token, delivery_claim_owner from payment_files where id = ${fileId}
-    `)).rows[0]!,
+    `)
+      ).rows[0]!,
   );
 }
 
@@ -129,82 +143,144 @@ async function generateApprovedFile(fixture: DeliveryFixture) {
   );
 }
 
-test("a voided file cannot be claimed, so a raced delivery never publishes", { skip: !DB }, async () => {
-  const fixture = await seedDeliveryFixture();
-  try {
-    const file = await generateApprovedFile(fixture);
-    await withOrgContext(fixture.orgId, () =>
-      rollbackPaymentRun(fixture.runId, fixture.orgId, fixture.actorId, "void before delivery"),
-    );
-    // RED before the fix: delivery checked approval with a plain SELECT and
-    // published anyway; the claim now refuses on the voided state.
-    await assert.rejects(
-      withOrgContext(fixture.orgId, () =>
-        claimPaymentFileDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, owner: "sftp:test" }),
-      ),
-      (e: unknown) => e instanceof PaymentError && /voided/.test(e.message),
-    );
-    assert.equal((await fileState(fixture, file.id)).status, "voided");
-    const deliveries = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from payment_file_deliveries where payment_file_id = ${file.id}`)).rows[0]!.n,
-    );
-    assert.equal(deliveries, 0);
-  } finally {
-    await teardown(fixture);
-  }
-});
-
-test("a delivered run rolls back only with the operator's typed bank attestation", { skip: !DB }, async () => {
-  const fixture = await seedDeliveryFixture();
-  try {
-    const file = await generateApprovedFile(fixture);
-    await withOrgContext(fixture.orgId, () => recordPaymentFileDownload(file.id, fixture.orgId, fixture.actorId));
-    const runNumber = `DLV-RUN-${fixture.runId}`;
-    // A reason alone would free the bills while the bank may still execute the file.
-    for (const attestation of [undefined, "yes", "the bank did not process it"]) {
+test(
+  "a voided file cannot be claimed, so a raced delivery never publishes",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDeliveryFixture();
+    try {
+      const file = await generateApprovedFile(fixture);
+      await withOrgContext(fixture.orgId, () =>
+        rollbackPaymentRun(fixture.runId, fixture.orgId, fixture.actorId, "void before delivery"),
+      );
+      // RED before the fix: delivery checked approval with a plain SELECT and
+      // published anyway; the claim now refuses on the voided state.
       await assert.rejects(
         withOrgContext(fixture.orgId, () =>
-          rollbackPaymentRun(fixture.runId, fixture.orgId, fixture.actorId, "file sent in error", { bankNotProcessedAttestation: attestation }),
+          claimPaymentFileDelivery({
+            fileId: file.id,
+            orgId: fixture.orgId,
+            userId: fixture.actorId,
+            owner: "sftp:test",
+          }),
         ),
-        (e: unknown) => e instanceof PaymentError
-          && e.message.includes(`payment run ${runNumber} has a file delivered to the bank`)
-          && e.message.includes(`type ${runNumber} to attest`),
+        (e: unknown) => e instanceof PaymentError && /voided/.test(e.message),
       );
+      assert.equal((await fileState(fixture, file.id)).status, "voided");
+      const deliveries = await withOrgContext(
+        fixture.orgId,
+        async () =>
+          (
+            await db.execute<{ n: number }>(
+              sql`select count(*)::int as n from payment_file_deliveries where payment_file_id = ${file.id}`,
+            )
+          ).rows[0]!.n,
+      );
+      assert.equal(deliveries, 0);
+    } finally {
+      await teardown(fixture);
     }
-    assert.equal((await fileState(fixture, file.id)).status, "delivered");
-    await withOrgContext(fixture.orgId, () =>
-      rollbackPaymentRun(fixture.runId, fixture.orgId, fixture.actorId, "bank rejected the batch before value date", { bankNotProcessedAttestation: ` ${runNumber} ` }),
-    );
-    const evidence = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ run_status: string; from_status: string; details: { reason: string; bankNotProcessedAttestation: { attestedBy: string; typedConfirmation: string; deliveries: Array<{ file_id: string; channel: string }> } } }>(sql`
+  },
+);
+
+test(
+  "a delivered run rolls back only with the operator's typed bank attestation",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDeliveryFixture();
+    try {
+      const file = await generateApprovedFile(fixture);
+      await withOrgContext(fixture.orgId, () =>
+        recordPaymentFileDownload(file.id, fixture.orgId, fixture.actorId),
+      );
+      const runNumber = `DLV-RUN-${fixture.runId}`;
+      // A reason alone would free the bills while the bank may still execute the file.
+      for (const attestation of [undefined, "yes", "the bank did not process it"]) {
+        await assert.rejects(
+          withOrgContext(fixture.orgId, () =>
+            rollbackPaymentRun(
+              fixture.runId,
+              fixture.orgId,
+              fixture.actorId,
+              "file sent in error",
+              { bankNotProcessedAttestation: attestation },
+            ),
+          ),
+          (e: unknown) =>
+            e instanceof PaymentError &&
+            e.message.includes(`payment run ${runNumber} has a file delivered to the bank`) &&
+            e.message.includes(`type ${runNumber} to attest`),
+        );
+      }
+      assert.equal((await fileState(fixture, file.id)).status, "delivered");
+      await withOrgContext(fixture.orgId, () =>
+        rollbackPaymentRun(
+          fixture.runId,
+          fixture.orgId,
+          fixture.actorId,
+          "bank rejected the batch before value date",
+          { bankNotProcessedAttestation: ` ${runNumber} ` },
+        ),
+      );
+      const evidence = await withOrgContext(
+        fixture.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              from_status: string;
+              details: {
+                reason: string;
+                bankNotProcessedAttestation: {
+                  attestedBy: string;
+                  typedConfirmation: string;
+                  deliveries: Array<{ file_id: string; channel: string }>;
+                };
+              };
+            }>(sql`
         select r.status as run_status, e.from_status, e.details
           from payment_runs r
           join payment_events e on e.payment_run_id = r.id and e.org_id = r.org_id and e.event_type = 'run_rolled_back'
          where r.id = ${fixture.runId} and r.org_id = ${fixture.orgId}
-      `)).rows[0]!,
-    );
-    assert.equal(evidence.run_status, "rolled_back");
-    assert.equal(evidence.from_status, "delivered");
-    assert.equal(evidence.details.bankNotProcessedAttestation.attestedBy, fixture.actorId);
-    assert.equal(evidence.details.bankNotProcessedAttestation.typedConfirmation, runNumber);
-    assert.deepEqual(evidence.details.bankNotProcessedAttestation.deliveries.map((d) => [d.file_id, d.channel]), [[file.id, "download"]]);
-  } finally {
-    await teardown(fixture);
-  }
-});
+      `)
+          ).rows[0]!,
+      );
+      assert.equal(evidence.run_status, "rolled_back");
+      assert.equal(evidence.from_status, "delivered");
+      assert.equal(evidence.details.bankNotProcessedAttestation.attestedBy, fixture.actorId);
+      assert.equal(evidence.details.bankNotProcessedAttestation.typedConfirmation, runNumber);
+      assert.deepEqual(
+        evidence.details.bankNotProcessedAttestation.deliveries.map((d) => [d.file_id, d.channel]),
+        [[file.id, "download"]],
+      );
+    } finally {
+      await teardown(fixture);
+    }
+  },
+);
 
 test("a claim blocks the void; releasing the claim unblocks it", { skip: !DB }, async () => {
   const fixture = await seedDeliveryFixture();
   try {
     const file = await generateApprovedFile(fixture);
     const claim = await withOrgContext(fixture.orgId, () =>
-      claimPaymentFileDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, owner: "sftp:test" }),
+      claimPaymentFileDelivery({
+        fileId: file.id,
+        orgId: fixture.orgId,
+        userId: fixture.actorId,
+        owner: "sftp:test",
+      }),
     );
     assert.equal((await fileState(fixture, file.id)).status, "delivering");
     // Second claimant names the owner instead of publishing over it.
     await assert.rejects(
       withOrgContext(fixture.orgId, () =>
-        claimPaymentFileDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, owner: "sftp:other" }),
+        claimPaymentFileDelivery({
+          fileId: file.id,
+          orgId: fixture.orgId,
+          userId: fixture.actorId,
+          owner: "sftp:other",
+        }),
       ),
       (e: unknown) => e instanceof PaymentError && /sftp:test/.test(e.message),
     );
@@ -216,7 +292,12 @@ test("a claim blocks the void; releasing the claim unblocks it", { skip: !DB }, 
       (e: unknown) => e instanceof PaymentError && /in-flight SFTP delivery/.test(e.message),
     );
     await withOrgContext(fixture.orgId, () =>
-      releaseDeliveryClaim({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, token: claim.token }),
+      releaseDeliveryClaim({
+        fileId: file.id,
+        orgId: fixture.orgId,
+        userId: fixture.actorId,
+        token: claim.token,
+      }),
     );
     assert.equal((await fileState(fixture, file.id)).status, "approved");
     await withOrgContext(fixture.orgId, () =>
@@ -233,11 +314,18 @@ test("a supersede refuses while the delivery is claimed", { skip: !DB }, async (
   try {
     const file = await generateApprovedFile(fixture);
     await withOrgContext(fixture.orgId, () =>
-      claimPaymentFileDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, owner: "sftp:test" }),
+      claimPaymentFileDelivery({
+        fileId: file.id,
+        orgId: fixture.orgId,
+        userId: fixture.actorId,
+        owner: "sftp:test",
+      }),
     );
     await assert.rejects(
       withOrgContext(fixture.orgId, () =>
-        generatePaymentFileArtifact(fixture.runId, fixture.orgId, fixture.actorId, { reprocessFileId: file.id }),
+        generatePaymentFileArtifact(fixture.runId, fixture.orgId, fixture.actorId, {
+          reprocessFileId: file.id,
+        }),
       ),
       (e: unknown) => e instanceof PaymentError && /delivery/.test(e.message),
     );
@@ -247,43 +335,69 @@ test("a supersede refuses while the delivery is claimed", { skip: !DB }, async (
   }
 });
 
-test("a successful delivery publishes under the claim and records delivered", { skip: !DB }, async () => {
-  const fixture = await seedDeliveryFixture();
-  try {
-    const now = new Date();
-    const res = await withOrgContext(fixture.orgId, () =>
-      deliverRunToSftp(fixture.runId, fixture.serverId, fixture.orgId, fixture.actorId, now),
-    );
-    assert.equal(res.path, `outbound/${res.filename}`);
-    const onDisk = readFileSync(join(scratchDataDir, "sftp", fixture.rootPrefix, res.path));
-    const file = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ id: string; status: string; content_hash: string }>(sql`
+test(
+  "a successful delivery publishes under the claim and records delivered",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDeliveryFixture();
+    try {
+      const now = new Date();
+      const res = await withOrgContext(fixture.orgId, () =>
+        deliverRunToSftp(fixture.runId, fixture.serverId, fixture.orgId, fixture.actorId, now),
+      );
+      assert.equal(res.path, `outbound/${res.filename}`);
+      const onDisk = readFileSync(join(scratchDataDir, "sftp", fixture.rootPrefix, res.path));
+      const file = await withOrgContext(
+        fixture.orgId,
+        async () =>
+          (
+            await db.execute<{ id: string; status: string; content_hash: string }>(sql`
         select id, status, content_hash from payment_files where payment_run_id = ${fixture.runId} and org_id = ${fixture.orgId}
-      `)).rows[0]!,
-    );
-    assert.equal(file.status, "delivered");
-    assert.deepEqual(onDisk.subarray(0, 9).toString("utf8"), "reference");
-    const delivery = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ status: string; target_ref: string; response: { path?: string; sha256?: string } | null }>(sql`
+      `)
+          ).rows[0]!,
+      );
+      assert.equal(file.status, "delivered");
+      assert.deepEqual(onDisk.subarray(0, 9).toString("utf8"), "reference");
+      const delivery = await withOrgContext(
+        fixture.orgId,
+        async () =>
+          (
+            await db.execute<{
+              status: string;
+              target_ref: string;
+              response: { path?: string; sha256?: string } | null;
+            }>(sql`
         select status, target_ref, response from payment_file_deliveries where payment_file_id = ${file.id}
-      `)).rows[0]!,
-    );
-    assert.equal(delivery.status, "delivered");
-    assert.equal(delivery.target_ref, `${fixture.serverId}:${res.path}`);
-    // The delivery evidence carries the approved artifact's hash: the bank
-    // (or an operator) can prove the published bytes are still approved.
-    assert.equal(delivery.response?.path, res.path);
-    const { createHash } = await import("node:crypto");
-    assert.equal(delivery.response?.sha256, createHash("sha256").update(onDisk).digest("hex"));
-    assert.equal(delivery.response?.sha256, file.content_hash, "the evidence hash is the approved artifact's hash");
-    const run = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ status: string }>(sql`select status from payment_runs where id = ${fixture.runId}`)).rows[0]!,
-    );
-    assert.equal(run.status, "delivered");
-  } finally {
-    await teardown(fixture);
-  }
-});
+      `)
+          ).rows[0]!,
+      );
+      assert.equal(delivery.status, "delivered");
+      assert.equal(delivery.target_ref, `${fixture.serverId}:${res.path}`);
+      // The delivery evidence carries the approved artifact's hash: the bank
+      // (or an operator) can prove the published bytes are still approved.
+      assert.equal(delivery.response?.path, res.path);
+      const { createHash } = await import("node:crypto");
+      assert.equal(delivery.response?.sha256, createHash("sha256").update(onDisk).digest("hex"));
+      assert.equal(
+        delivery.response?.sha256,
+        file.content_hash,
+        "the evidence hash is the approved artifact's hash",
+      );
+      const run = await withOrgContext(
+        fixture.orgId,
+        async () =>
+          (
+            await db.execute<{ status: string }>(
+              sql`select status from payment_runs where id = ${fixture.runId}`,
+            )
+          ).rows[0]!,
+      );
+      assert.equal(run.status, "delivered");
+    } finally {
+      await teardown(fixture);
+    }
+  },
+);
 
 test("a failed write releases the claim and records the failure", { skip: !DB }, async () => {
   const fixture = await seedDeliveryFixture();
@@ -294,25 +408,41 @@ test("a failed write releases the claim and records the failure", { skip: !DB },
     mkdirSync(rootDir, { recursive: true });
     writeFileSync(join(rootDir, "blocked"), Buffer.from("in the way"));
     await withOrgContext(fixture.orgId, async () =>
-      db.execute(sql`update payment_bank_profiles set sftp_folder = 'blocked' where id = ${fixture.profileId}`),
+      db.execute(
+        sql`update payment_bank_profiles set sftp_folder = 'blocked' where id = ${fixture.profileId}`,
+      ),
     );
     await assert.rejects(
       withOrgContext(fixture.orgId, () =>
-        deliverRunToSftp(fixture.runId, fixture.serverId, fixture.orgId, fixture.actorId, new Date()),
+        deliverRunToSftp(
+          fixture.runId,
+          fixture.serverId,
+          fixture.orgId,
+          fixture.actorId,
+          new Date(),
+        ),
       ),
     );
-    const file = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ id: string; status: string; delivery_claim_token: string | null }>(sql`
+    const file = await withOrgContext(
+      fixture.orgId,
+      async () =>
+        (
+          await db.execute<{ id: string; status: string; delivery_claim_token: string | null }>(sql`
         select id, status, delivery_claim_token from payment_files where payment_run_id = ${fixture.runId}
-      `)).rows[0]!,
+      `)
+        ).rows[0]!,
     );
     // Nothing published, so the claim is released: the file is deliverable again.
     assert.equal(file.status, "approved");
     assert.equal(file.delivery_claim_token, null);
-    const failure = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ status: string; channel: string }>(sql`
+    const failure = await withOrgContext(
+      fixture.orgId,
+      async () =>
+        (
+          await db.execute<{ status: string; channel: string }>(sql`
         select status, channel from payment_file_deliveries where payment_file_id = ${file.id}
-      `)).rows[0]!,
+      `)
+        ).rows[0]!,
     );
     assert.deepEqual(failure, { status: "failed", channel: "sftp" });
   } finally {
@@ -320,15 +450,19 @@ test("a failed write releases the claim and records the failure", { skip: !DB },
   }
 });
 
-test("a failed record after publish parks the file uncertain — never undelivered", { skip: !DB }, async () => {
-  const fixture = await seedDeliveryFixture();
-  const trigger = `sftp_delivery_claim_record_failure_${process.pid}`;
-  try {
-    // Force every record commit to fail AFTER the bytes publish: the
-    // delivery must still be recorded as published (uncertain), never as
-    // undelivered, and re-delivery must block.
-    await withBypass(() =>
-      db.execute(sql.raw(`
+test(
+  "a failed record after publish parks the file uncertain — never undelivered",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDeliveryFixture();
+    const trigger = `sftp_delivery_claim_record_failure_${process.pid}`;
+    try {
+      // Force every record commit to fail AFTER the bytes publish: the
+      // delivery must still be recorded as published (uncertain), never as
+      // undelivered, and re-delivery must block.
+      await withBypass(() =>
+        db.execute(
+          sql.raw(`
         create function public."${trigger}"() returns trigger language plpgsql as $$
         begin
           -- Break only the record step (delivering -> delivered under the
@@ -339,111 +473,203 @@ test("a failed record after publish parks the file uncertain — never undeliver
         end $$;
         create trigger "${trigger}_trg" before update on payment_files
           for each row execute function public."${trigger}"();
-      `)),
-    );
-    const res = await withOrgContext(fixture.orgId, () =>
-      deliverRunToSftp(fixture.runId, fixture.serverId, fixture.orgId, fixture.actorId, new Date()).then(
-        () => { throw new Error("delivery should have failed to record"); },
-        (e: unknown) => e,
-      ),
-    );
-    assert.match((res as Error).message, /delivery-uncertain/);
-    const file = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ id: string; status: string; delivery_claim_owner: string | null }>(sql`
+      `),
+        ),
+      );
+      const res = await withOrgContext(fixture.orgId, () =>
+        deliverRunToSftp(
+          fixture.runId,
+          fixture.serverId,
+          fixture.orgId,
+          fixture.actorId,
+          new Date(),
+        ).then(
+          () => {
+            throw new Error("delivery should have failed to record");
+          },
+          (e: unknown) => e,
+        ),
+      );
+      assert.match((res as Error).message, /delivery-uncertain/);
+      const file = await withOrgContext(
+        fixture.orgId,
+        async () =>
+          (
+            await db.execute<{
+              id: string;
+              status: string;
+              delivery_claim_owner: string | null;
+            }>(sql`
         select id, status, delivery_claim_owner from payment_files where payment_run_id = ${fixture.runId}
-      `)).rows[0]!,
-    );
-    assert.equal(file.status, "delivery_uncertain");
-    // The bytes ARE on the endpoint even though no delivered record exists.
-    const listed = await withOrgContext(fixture.orgId, async () =>
-      deliverRunToSftp(fixture.runId, fixture.serverId, fixture.orgId, fixture.actorId, new Date()).then(
-        () => { throw new Error("re-delivery of an uncertain file must refuse"); },
-        (e: unknown) => e,
-      ),
-    );
-    assert.match((listed as Error).message, /uncertain/);
-    // Operator recovery with a reason: confirm the bank has the file.
-    await assert.rejects(
-      withOrgContext(fixture.orgId, () =>
-        resolveUncertainDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, outcome: "delivered", reason: "  " }),
-      ),
-      (e: unknown) => e instanceof PaymentError && /requires a reason/.test(e.message),
-    );
-    await withOrgContext(fixture.orgId, () =>
-      resolveUncertainDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, outcome: "delivered", reason: "bank confirmed receipt by phone" }),
-    );
-    assert.equal((await fileState(fixture, file.id)).status, "delivered");
-  } finally {
-    await withBypass(() =>
-      db.execute(sql.raw(`drop trigger if exists "${trigger}_trg" on payment_files; drop function if exists public."${trigger}"();`)),
-    );
-    await teardown(fixture);
-  }
-});
+      `)
+          ).rows[0]!,
+      );
+      assert.equal(file.status, "delivery_uncertain");
+      // The bytes ARE on the endpoint even though no delivered record exists.
+      const listed = await withOrgContext(fixture.orgId, async () =>
+        deliverRunToSftp(
+          fixture.runId,
+          fixture.serverId,
+          fixture.orgId,
+          fixture.actorId,
+          new Date(),
+        ).then(
+          () => {
+            throw new Error("re-delivery of an uncertain file must refuse");
+          },
+          (e: unknown) => e,
+        ),
+      );
+      assert.match((listed as Error).message, /uncertain/);
+      // Operator recovery with a reason: confirm the bank has the file.
+      await assert.rejects(
+        withOrgContext(fixture.orgId, () =>
+          resolveUncertainDelivery({
+            fileId: file.id,
+            orgId: fixture.orgId,
+            userId: fixture.actorId,
+            outcome: "delivered",
+            reason: "  ",
+          }),
+        ),
+        (e: unknown) => e instanceof PaymentError && /requires a reason/.test(e.message),
+      );
+      await withOrgContext(fixture.orgId, () =>
+        resolveUncertainDelivery({
+          fileId: file.id,
+          orgId: fixture.orgId,
+          userId: fixture.actorId,
+          outcome: "delivered",
+          reason: "bank confirmed receipt by phone",
+        }),
+      );
+      assert.equal((await fileState(fixture, file.id)).status, "delivered");
+    } finally {
+      await withBypass(() =>
+        db.execute(
+          sql.raw(
+            `drop trigger if exists "${trigger}_trg" on payment_files; drop function if exists public."${trigger}"();`,
+          ),
+        ),
+      );
+      await teardown(fixture);
+    }
+  },
+);
 
-test("an expired lease reclaims to uncertain and never silently republishes", { skip: !DB }, async () => {
-  const fixture = await seedDeliveryFixture();
-  try {
-    const file = await generateApprovedFile(fixture);
-    // A crashed worker: claim with a 1s lease, then age it past expiry.
-    await withOrgContext(fixture.orgId, () =>
-      claimPaymentFileDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, owner: "sftp:crashed", ttlSeconds: 1 }),
-    );
-    await withOrgContext(fixture.orgId, async () =>
-      db.execute(sql`update payment_files set delivery_claim_expires_at = now() - interval '1 minute' where id = ${file.id}`),
-    );
-    const reclaimed = await withOrgContext(fixture.orgId, () =>
-      reclaimExpiredDeliveryClaims({ orgId: fixture.orgId, userId: fixture.actorId }),
-    );
-    assert.deepEqual(reclaimed, [{ fileId: file.id, runId: fixture.runId }]);
-    assert.equal((await fileState(fixture, file.id)).status, "delivery_uncertain");
-    // Uncertain blocks the claim (no silent re-publish of bytes the bank
-    // may already hold) and blocks the void (evidence must survive).
-    await assert.rejects(
-      withOrgContext(fixture.orgId, () =>
-        claimPaymentFileDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, owner: "sftp:retry" }),
-      ),
-      (e: unknown) => e instanceof PaymentError && /uncertain/.test(e.message),
-    );
-    await assert.rejects(
-      withOrgContext(fixture.orgId, () =>
-        rollbackPaymentRun(fixture.runId, fixture.orgId, fixture.actorId, "void the uncertain file"),
-      ),
-      (e: unknown) => e instanceof PaymentError && /in-flight SFTP delivery/.test(e.message),
-    );
-    // The operator verifies with the bank that nothing arrived, then
-    // releases the file back to approved for a careful re-delivery.
-    await withOrgContext(fixture.orgId, () =>
-      resolveUncertainDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, outcome: "approved", reason: "bank confirms nothing arrived; safe to re-deliver" }),
-    );
-    assert.equal((await fileState(fixture, file.id)).status, "approved");
-    const retry = await withOrgContext(fixture.orgId, () =>
-      claimPaymentFileDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, owner: "sftp:retry" }),
-    );
-    assert.ok(retry.token);
-    await withOrgContext(fixture.orgId, () =>
-      markDeliveryUncertain({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, token: retry.token, error: "test cleanup" }),
-    );
-  } finally {
-    await teardown(fixture);
-  }
-});
+test(
+  "an expired lease reclaims to uncertain and never silently republishes",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDeliveryFixture();
+    try {
+      const file = await generateApprovedFile(fixture);
+      // A crashed worker: claim with a 1s lease, then age it past expiry.
+      await withOrgContext(fixture.orgId, () =>
+        claimPaymentFileDelivery({
+          fileId: file.id,
+          orgId: fixture.orgId,
+          userId: fixture.actorId,
+          owner: "sftp:crashed",
+          ttlSeconds: 1,
+        }),
+      );
+      await withOrgContext(fixture.orgId, async () =>
+        db.execute(
+          sql`update payment_files set delivery_claim_expires_at = now() - interval '1 minute' where id = ${file.id}`,
+        ),
+      );
+      const reclaimed = await withOrgContext(fixture.orgId, () =>
+        reclaimExpiredDeliveryClaims({ orgId: fixture.orgId, userId: fixture.actorId }),
+      );
+      assert.deepEqual(reclaimed, [{ fileId: file.id, runId: fixture.runId }]);
+      assert.equal((await fileState(fixture, file.id)).status, "delivery_uncertain");
+      // Uncertain blocks the claim (no silent re-publish of bytes the bank
+      // may already hold) and blocks the void (evidence must survive).
+      await assert.rejects(
+        withOrgContext(fixture.orgId, () =>
+          claimPaymentFileDelivery({
+            fileId: file.id,
+            orgId: fixture.orgId,
+            userId: fixture.actorId,
+            owner: "sftp:retry",
+          }),
+        ),
+        (e: unknown) => e instanceof PaymentError && /uncertain/.test(e.message),
+      );
+      await assert.rejects(
+        withOrgContext(fixture.orgId, () =>
+          rollbackPaymentRun(
+            fixture.runId,
+            fixture.orgId,
+            fixture.actorId,
+            "void the uncertain file",
+          ),
+        ),
+        (e: unknown) => e instanceof PaymentError && /in-flight SFTP delivery/.test(e.message),
+      );
+      // The operator verifies with the bank that nothing arrived, then
+      // releases the file back to approved for a careful re-delivery.
+      await withOrgContext(fixture.orgId, () =>
+        resolveUncertainDelivery({
+          fileId: file.id,
+          orgId: fixture.orgId,
+          userId: fixture.actorId,
+          outcome: "approved",
+          reason: "bank confirms nothing arrived; safe to re-deliver",
+        }),
+      );
+      assert.equal((await fileState(fixture, file.id)).status, "approved");
+      const retry = await withOrgContext(fixture.orgId, () =>
+        claimPaymentFileDelivery({
+          fileId: file.id,
+          orgId: fixture.orgId,
+          userId: fixture.actorId,
+          owner: "sftp:retry",
+        }),
+      );
+      assert.ok(retry.token);
+      await withOrgContext(fixture.orgId, () =>
+        markDeliveryUncertain({
+          fileId: file.id,
+          orgId: fixture.orgId,
+          userId: fixture.actorId,
+          token: retry.token,
+          error: "test cleanup",
+        }),
+      );
+    } finally {
+      await teardown(fixture);
+    }
+  },
+);
 
-test("recording against a lost claim refuses instead of inventing delivery", { skip: !DB }, async () => {
-  const fixture = await seedDeliveryFixture();
-  try {
-    const file = await generateApprovedFile(fixture);
-    await assert.rejects(
-      withOrgContext(fixture.orgId, () =>
-        recordPaymentFileSftpDelivery({ fileId: file.id, orgId: fixture.orgId, userId: fixture.actorId, targetRef: "sftp:nowhere", claimToken: randomUUID() }),
-      ),
-      (e: unknown) => e instanceof PaymentError && /lost claim|not approved|delivering/.test(e.message),
-    );
-    assert.equal((await fileState(fixture, file.id)).status, "approved");
-  } finally {
-    await teardown(fixture);
-  }
-});
+test(
+  "recording against a lost claim refuses instead of inventing delivery",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDeliveryFixture();
+    try {
+      const file = await generateApprovedFile(fixture);
+      await assert.rejects(
+        withOrgContext(fixture.orgId, () =>
+          recordPaymentFileSftpDelivery({
+            fileId: file.id,
+            orgId: fixture.orgId,
+            userId: fixture.actorId,
+            targetRef: "sftp:nowhere",
+            claimToken: randomUUID(),
+          }),
+        ),
+        (e: unknown) =>
+          e instanceof PaymentError && /lost claim|not approved|delivering/.test(e.message),
+      );
+      assert.equal((await fileState(fixture, file.id)).status, "approved");
+    } finally {
+      await teardown(fixture);
+    }
+  },
+);
 
 test.after(() => {
   rmSync(scratchDataDir, { recursive: true, force: true });

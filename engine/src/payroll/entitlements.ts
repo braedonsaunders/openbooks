@@ -42,10 +42,7 @@ export {
   VACATION_PLAN_SYSTEM_KEY,
 } from "./entitlements-types.ts";
 
-export {
-  limitScopeOf,
-  pickPlanLimit,
-} from "./entitlements-limits.ts";
+export { limitScopeOf, pickPlanLimit } from "./entitlements-limits.ts";
 
 export {
   monthsOfService,
@@ -106,9 +103,23 @@ export {
   type ServiceMilestone,
 } from "./entitlements-reports.ts";
 
-export { computeEmploymentServiceCredit, resolveEmploymentServiceCredit, validateServiceCreditConfiguration, meetsServiceYears, serviceCreditMilestoneDate, lockPayrollServiceConfiguration, type EmploymentServiceCredit, type ServiceCreditBaseline } from "./service-credit.ts";
+export {
+  computeEmploymentServiceCredit,
+  resolveEmploymentServiceCredit,
+  validateServiceCreditConfiguration,
+  meetsServiceYears,
+  serviceCreditMilestoneDate,
+  lockPayrollServiceConfiguration,
+  type EmploymentServiceCredit,
+  type ServiceCreditBaseline,
+} from "./service-credit.ts";
 
-export { resolveVacationTerms, validateVacationTermConfiguration, type VacationTerms, type VacationMethod } from "./vacation-terms.ts";
+export {
+  resolveVacationTerms,
+  validateVacationTermConfiguration,
+  type VacationTerms,
+  type VacationMethod,
+} from "./vacation-terms.ts";
 export { validateEntitlementServiceTierConfiguration } from "./entitlement-service-config.ts";
 export { validateEntitlementPlanConfiguration } from "./entitlement-plan-config.ts";
 export { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";

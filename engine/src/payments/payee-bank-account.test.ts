@@ -24,8 +24,18 @@ test("an approved status without an approval date is undated, not payable", () =
 });
 
 test("pending details wait for approval and rejected details are missing", () => {
-  assert.equal(classifyPayeeBankAccount(account({ approvalStatus: "pending", approvedAt: null, isActive: false })), "pending");
-  assert.equal(classifyPayeeBankAccount(account({ approvalStatus: "rejected", approvedAt: null, isActive: false })), "missing");
+  assert.equal(
+    classifyPayeeBankAccount(
+      account({ approvalStatus: "pending", approvedAt: null, isActive: false }),
+    ),
+    "pending",
+  );
+  assert.equal(
+    classifyPayeeBankAccount(
+      account({ approvalStatus: "rejected", approvedAt: null, isActive: false }),
+    ),
+    "missing",
+  );
 });
 
 test("a retired or inactive approved account is missing", () => {

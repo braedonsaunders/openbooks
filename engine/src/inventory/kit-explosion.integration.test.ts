@@ -29,11 +29,16 @@ const depsFor = (org: ScratchOrg) => ({
 });
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  return (await db.execute<{ balance: string }>(sql`
+  return (
+    await db.execute<{ balance: string }>(
+      sql`
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `, "objects"))[0]!.balance;
+  `,
+      "objects",
+    )
+  )[0]!.balance;
 }
 
 async function stockedComponent(org: ScratchOrg, name: string): Promise<string> {
@@ -50,7 +55,11 @@ async function stockedComponent(org: ScratchOrg, name: string): Promise<string> 
   return id;
 }
 
-async function kitItem(org: ScratchOrg, name: string, components: { itemId: string; quantityPer: string }[]): Promise<string> {
+async function kitItem(
+  org: ScratchOrg,
+  name: string,
+  components: { itemId: string; quantityPer: string }[],
+): Promise<string> {
   const id = await stockedComponent(org, name);
   await db.execute(sql`update items set kind = 'kit' where id = ${id} and org_id = ${org.orgId}`);
   let sortOrder = 0;
@@ -63,7 +72,12 @@ async function kitItem(org: ScratchOrg, name: string, components: { itemId: stri
   return id;
 }
 
-async function receive(org: ScratchOrg, itemId: string, quantity: string, unitCost: string): Promise<void> {
+async function receive(
+  org: ScratchOrg,
+  itemId: string,
+  quantity: string,
+  unitCost: string,
+): Promise<void> {
   await receiveInventory(org.orgId, null, {
     itemId,
     stockLocationId: org.stockLocationId,
@@ -107,12 +121,26 @@ async function postKitInvoice(
   return { documentId, lineId };
 }
 
-async function kitIssueMovements(orgId: string, lineId: string): Promise<{ id: string; item_id: string; quantity: string; total_value: string; idempotency_key: string }[]> {
-  return await db.execute<{ id: string; item_id: string; quantity: string; total_value: string; idempotency_key: string }>(sql`
+async function kitIssueMovements(
+  orgId: string,
+  lineId: string,
+): Promise<
+  { id: string; item_id: string; quantity: string; total_value: string; idempotency_key: string }[]
+> {
+  return await db.execute<{
+    id: string;
+    item_id: string;
+    quantity: string;
+    total_value: string;
+    idempotency_key: string;
+  }>(
+    sql`
     select id, item_id, quantity::text as quantity, total_value::text as total_value, idempotency_key
       from inventory_movements
      where org_id = ${orgId} and document_line_id = ${lineId} and kind = 'issue'
-     order by item_id`, "objects");
+     order by item_id`,
+    "objects",
+  );
 }
 
 test("kit quantities floor to whole kits", () => {
@@ -146,10 +174,18 @@ test(
         await receive(org, kettle, "10", "4");
         await receive(org, mug, "10", "6");
 
-        const sale = await postKitInvoice(org, { kitId: starter, quantity: "2", unitPrice: "25", amount: "50" });
+        const sale = await postKitInvoice(org, {
+          kitId: starter,
+          quantity: "2",
+          unitPrice: "25",
+          amount: "50",
+        });
         const issues = await kitIssueMovements(org.orgId, sale.lineId);
         assert.equal(issues.length, 2);
-        assert.ok(issues.every((issue) => issue.item_id !== starter), "no movement may carry the kit item");
+        assert.ok(
+          issues.every((issue) => issue.item_id !== starter),
+          "no movement may carry the kit item",
+        );
         const byItem = new Map(issues.map((issue) => [issue.item_id, issue]));
         assert.equal(byItem.get(kettle)?.quantity, "-2.0000");
         assert.equal(byItem.get(kettle)?.total_value, "-8.0000");
@@ -166,7 +202,11 @@ test(
         // Re-running the post-commit drain finds every component movement.
         const { applyInventoryIssuesForInvoice } = await import("./documents-sales.ts");
         const replayed = await applyInventoryIssuesForInvoice(
-          org.orgId, null, sale.documentId, org.date, org.subsidiaryId,
+          org.orgId,
+          null,
+          sale.documentId,
+          org.date,
+          org.subsidiaryId,
         );
         assert.equal(replayed, 0);
         assert.equal((await kitIssueMovements(org.orgId, sale.lineId)).length, 2);
@@ -177,48 +217,47 @@ test(
   },
 );
 
-test(
-  "kit availability is the limiting component, net of kit demand",
-  { skip: !DB },
-  async () => {
-    const org = await run(() => createScratchOrg());
-    try {
-      await run(async () => {
-        await db.execute(sql`
+test("kit availability is the limiting component, net of kit demand", { skip: !DB }, async () => {
+  const org = await run(() => createScratchOrg());
+  try {
+    await run(async () => {
+      await db.execute(sql`
           update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
                  || '{"orders": true, "warehousing": true, "fulfillment": true}'::jsonb) where id = ${org.orgId}`);
-        const kettle = await stockedComponent(org, "Kettle");
-        const mug = await stockedComponent(org, "Mug");
-        const starter = await kitItem(org, "Starter set", [
-          { itemId: kettle, quantityPer: "1.0000" },
-          { itemId: mug, quantityPer: "2.0000" },
-        ]);
-        await receive(org, kettle, "10", "4");
-        await receive(org, mug, "10", "6");
+      const kettle = await stockedComponent(org, "Kettle");
+      const mug = await stockedComponent(org, "Mug");
+      const starter = await kitItem(org, "Starter set", [
+        { itemId: kettle, quantityPer: "1.0000" },
+        { itemId: mug, quantityPer: "2.0000" },
+      ]);
+      await receive(org, kettle, "10", "4");
+      await receive(org, mug, "10", "6");
 
-        const atp = () => getAvailableToPromise(db, org.orgId, { itemId: starter, subsidiaryId: org.subsidiaryId });
-        assert.equal((await atp()).available, "5.0000");
-        assert.equal((await atp()).onHand, "0.0000");
+      const atp = () =>
+        getAvailableToPromise(db, org.orgId, { itemId: starter, subsidiaryId: org.subsidiaryId });
+      assert.equal((await atp()).available, "5.0000");
+      assert.equal((await atp()).onHand, "0.0000");
 
-        // An issued order owing two kits commits its components, not the kit.
-        const orderId = randomUUID();
-        await db.execute(sql`
+      // An issued order owing two kits commits its components, not the kit.
+      const orderId = randomUUID();
+      await db.execute(sql`
           insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status, subsidiary_id)
           values (${orderId}, ${org.orgId}, 'sales_order', 'SO-KIT-1', ${org.customerId}, ${org.date}, 'CAD', 'draft', ${org.subsidiaryId})`);
-        await db.execute(sql`
+      await db.execute(sql`
           insert into document_lines (id, org_id, document_id, line_number, item_id, description, quantity, unit,
                                       unit_price, amount, tax_amount, stock_location_id, custom)
           values (${randomUUID()}, ${org.orgId}, ${orderId}, 1, ${starter}, 'Starter set', '2', 'ea',
                   '25', '50', '0', ${org.stockLocationId}, '{}'::jsonb)`);
-        await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${org.orgId}`);
+      await db.execute(
+        sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${org.orgId}`,
+      );
 
-        assert.equal((await atp()).available, "3.0000");
-      });
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      assert.equal((await atp()).available, "3.0000");
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "returning a kit restocks its components at their original issue cost",
@@ -235,7 +274,12 @@ test(
         ]);
         await receive(org, kettle, "10", "4");
         await receive(org, mug, "10", "6");
-        const sale = await postKitInvoice(org, { kitId: starter, quantity: "2", unitPrice: "25", amount: "50" });
+        const sale = await postKitInvoice(org, {
+          kitId: starter,
+          quantity: "2",
+          unitPrice: "25",
+          amount: "50",
+        });
         const sources = await kitIssueMovements(org.orgId, sale.lineId);
         assert.equal(sources.length, 2);
 
@@ -267,11 +311,18 @@ test(
           update documents set status = 'approved' where id = ${creditId} and org_id = ${org.orgId}`);
         await postDocument(creditId, depsFor(org));
 
-        const receipts = await db.execute<{ item_id: string; quantity: string; total_value: string }>(sql`
+        const receipts = await db.execute<{
+          item_id: string;
+          quantity: string;
+          total_value: string;
+        }>(
+          sql`
           select item_id, quantity::text as quantity, total_value::text as total_value
             from inventory_movements
            where org_id = ${org.orgId} and document_line_id = ${creditLineId} and kind = 'receipt'
-           order by item_id`, "objects");
+           order by item_id`,
+          "objects",
+        );
         assert.equal(receipts.length, 2);
         const byItem = new Map(receipts.map((receipt) => [receipt.item_id, receipt]));
         assert.equal(byItem.get(kettle)?.quantity, "1.0000");
@@ -283,9 +334,14 @@ test(
         assert.equal(await glBalance(org.orgId, org.accounts.cogs), "16.0000");
 
         // Re-running the return drain restores nothing twice.
-        const { applyInventoryReturnsForCustomerCredit } = await import("./documents-customer-credits.ts");
+        const { applyInventoryReturnsForCustomerCredit } =
+          await import("./documents-customer-credits.ts");
         const replayed = await applyInventoryReturnsForCustomerCredit(
-          org.orgId, null, creditId, org.date, org.subsidiaryId,
+          org.orgId,
+          null,
+          creditId,
+          org.date,
+          org.subsidiaryId,
         );
         assert.equal(replayed, 0);
 
@@ -324,34 +380,31 @@ test(
   },
 );
 
-test(
-  "receiving or adjusting a kit is refused by name",
-  { skip: !DB },
-  async () => {
-    const org = await run(() => createScratchOrg());
-    try {
-      await run(async () => {
-        const starter = await kitItem(org, "Starter set", [
-          { itemId: await stockedComponent(org, "Kettle"), quantityPer: "1.0000" },
-        ]);
-        await assert.rejects(
-          receive(org, starter, "1", "4"),
-          /kits hold no stock; receive the components/,
-        );
-        await assert.rejects(
-          adjustInventory(org.orgId, null, {
-            itemId: starter,
-            stockLocationId: org.stockLocationId,
-            quantityDelta: "1",
-            subsidiaryId: org.subsidiaryId,
-            date: org.date,
-          }),
-          /kits hold no stock; receive the components/,
-        );
+test("receiving or adjusting a kit is refused by name", { skip: !DB }, async () => {
+  const org = await run(() => createScratchOrg());
+  try {
+    await run(async () => {
+      const starter = await kitItem(org, "Starter set", [
+        { itemId: await stockedComponent(org, "Kettle"), quantityPer: "1.0000" },
+      ]);
+      await assert.rejects(
+        receive(org, starter, "1", "4"),
+        /kits hold no stock; receive the components/,
+      );
+      await assert.rejects(
+        adjustInventory(org.orgId, null, {
+          itemId: starter,
+          stockLocationId: org.stockLocationId,
+          quantityDelta: "1",
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        /kits hold no stock; receive the components/,
+      );
 
-        // A vendor bill naming the kit is refused before its journal posts.
-        const billId = randomUUID();
-        await db.execute(sql`
+      // A vendor bill naming the kit is refused before its journal posts.
+      const billId = randomUUID();
+      await db.execute(sql`
           insert into documents
             (id, org_id, kind, document_number, party_id, subsidiary_id,
              document_date, posting_date, currency, fx_rate, status,
@@ -360,7 +413,7 @@ test(
             (${billId}, ${org.orgId}, 'vendor_bill',
              ${`BILL-KIT-${billId.slice(0, 8)}`}, ${org.vendorId}, ${org.subsidiaryId},
              ${org.date}, ${org.date}, 'CAD', 1, 'draft', '10', '0', '10', '{}'::jsonb)`);
-        await db.execute(sql`
+      await db.execute(sql`
           insert into document_lines
             (id, org_id, document_id, line_number, item_id, account_id,
              quantity, unit_price, amount, tax_amount, is_billable,
@@ -368,12 +421,14 @@ test(
           values
             (${randomUUID()}, ${org.orgId}, ${billId}, 1, ${starter},
              ${org.accounts.ap}, '1', '10', '10', '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`);
-        await db.execute(sql`
+      await db.execute(sql`
           update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
-        await assert.rejects(postDocument(billId, depsFor(org)), /kits hold no stock; receive the components/);
-      });
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      await assert.rejects(
+        postDocument(billId, depsFor(org)),
+        /kits hold no stock; receive the components/,
+      );
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

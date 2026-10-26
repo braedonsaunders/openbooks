@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useRef, useState } from 'react'
-import Link from 'next/link'
-import { Badge, Button } from '@openbooks/ui'
-import { promptDialog } from '../../../lib/prompt'
-import { formatTicketHours } from '../../../lib/format'
-import { refusalMessageFromBody } from '../../../lib/api-error'
-import type { BusySeasonGap, BusySeasonProject } from '../../../lib/resourcing/busy-season'
+import { useRef, useState } from "react";
+import Link from "next/link";
+import { Badge, Button } from "@openbooks/ui";
+import { promptDialog } from "../../../lib/prompt";
+import { formatTicketHours } from "../../../lib/format";
+import { refusalMessageFromBody } from "../../../lib/api-error";
+import type { BusySeasonGap, BusySeasonProject } from "../../../lib/resourcing/busy-season";
 
 /**
  * The cockpit's busy-season panel body: one row per department and week
@@ -21,69 +21,63 @@ import type { BusySeasonGap, BusySeasonProject } from '../../../lib/resourcing/b
  * request route; nothing here assigns, books, or submits.
  */
 export interface BusySeasonLabels {
-  empty: string
-  weekOf: string
-  gap: string
-  demand: string
-  capacity: string
-  plan: string
-  evidence: string
-  staff: string
-  assignments: string
-  opportunities: string
-  absences: string
-  holidays: string
-  requestAction: string
-  noProjects: string
-  confirmTitle: string
-  projectLabel: string
-  confirm: string
-  created: string
-  requestFailed: string
-  reason: string
+  empty: string;
+  weekOf: string;
+  gap: string;
+  demand: string;
+  capacity: string;
+  plan: string;
+  evidence: string;
+  staff: string;
+  assignments: string;
+  opportunities: string;
+  absences: string;
+  holidays: string;
+  requestAction: string;
+  noProjects: string;
+  confirmTitle: string;
+  projectLabel: string;
+  confirm: string;
+  created: string;
+  requestFailed: string;
+  reason: string;
 }
 
-type Refusal = { message: string; remedy?: string }
+type Refusal = { message: string; remedy?: string };
 
 async function readRefusal(response: Response, fallback: string): Promise<Refusal> {
-  const body = await response.json().catch(() => null) as {
-    message?: string
-    remedy?: string
-    error?: string
-  } | null
+  const body = (await response.json().catch(() => null)) as {
+    message?: string;
+    remedy?: string;
+    error?: string;
+  } | null;
   // The message reads through the shared helper so message and code render;
   // the remedy stays separate because the caller renders it alone.
   return {
     message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback }) ?? fallback,
     remedy: body?.remedy,
-  }
+  };
 }
 
 function fill(template: string, values: Record<string, string>): string {
-  let out = template
+  let out = template;
   for (const [key, value] of Object.entries(values)) {
-    out = out.split(`{${key}}`).join(value)
+    out = out.split(`{${key}}`).join(value);
   }
-  return out
+  return out;
 }
 
 function shortId(id: string): string {
-  return id.length <= 8 ? id : id.slice(0, 8)
+  return id.length <= 8 ? id : id.slice(0, 8);
 }
 
-function EvidenceLinks({
-  gap,
-  labels,
-}: {
-  gap: BusySeasonGap
-  labels: BusySeasonLabels
-}) {
-  const evidence = gap.evidence
+function EvidenceLinks({ gap, labels }: { gap: BusySeasonGap; labels: BusySeasonLabels }) {
+  const evidence = gap.evidence;
   return (
     <div className="mt-1 space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
       {evidence.demandLineIds.length > 0 ? (
         <p>
-          {labels.demand} ({evidence.demandLineIds.length}):{' '}
+          {labels.demand} ({evidence.demandLineIds.length}):{" "}
           {evidence.demandLineIds.map((id) => (
             <Link
               key={id}
@@ -98,7 +92,7 @@ function EvidenceLinks({
       ) : null}
       {evidence.opportunityIds.length > 0 ? (
         <p>
-          {labels.opportunities} ({evidence.opportunityIds.length}):{' '}
+          {labels.opportunities} ({evidence.opportunityIds.length}):{" "}
           {evidence.opportunityIds.map((id) => (
             <Link
               key={id}
@@ -113,7 +107,7 @@ function EvidenceLinks({
       ) : null}
       {evidence.assignmentIds.length > 0 ? (
         <p>
-          {labels.assignments} ({evidence.assignmentIds.length}):{' '}
+          {labels.assignments} ({evidence.assignmentIds.length}):{" "}
           {evidence.assignmentIds.map((id) => (
             <Link
               key={id}
@@ -128,7 +122,7 @@ function EvidenceLinks({
       ) : null}
       {evidence.capacityPersonIds.length > 0 ? (
         <p>
-          {labels.staff} ({evidence.capacityPersonIds.length}):{' '}
+          {labels.staff} ({evidence.capacityPersonIds.length}):{" "}
           {evidence.capacityPersonIds.map((id) => (
             <Link
               key={id}
@@ -144,7 +138,10 @@ function EvidenceLinks({
       {evidence.absenceRowIds.length > 0 ? (
         <p>
           {labels.absences} (
-          <Link href="/hrm/leave" className="underline underline-offset-2 hover:text-teal-700 dark:hover:text-teal-300">
+          <Link
+            href="/hrm/leave"
+            className="underline underline-offset-2 hover:text-teal-700 dark:hover:text-teal-300"
+          >
             {evidence.absenceRowIds.length}
           </Link>
           )
@@ -163,7 +160,7 @@ function EvidenceLinks({
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 function GapRow({
@@ -172,36 +169,36 @@ function GapRow({
   labels,
   canCreateDraft,
 }: {
-  gap: BusySeasonGap
-  projects: BusySeasonProject[]
-  labels: BusySeasonLabels
-  canCreateDraft: boolean
+  gap: BusySeasonGap;
+  projects: BusySeasonProject[];
+  labels: BusySeasonLabels;
+  canCreateDraft: boolean;
 }) {
-  const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState<Refusal | null>(null)
-  const [createdId, setCreatedId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const [createdId, setCreatedId] = useState<string | null>(null);
   // One key per row, kept until the draft exists: a retry after a refusal
   // resumes the same creation instead of minting a duplicate.
-  const idempotencyKey = useRef<string | null>(null)
+  const idempotencyKey = useRef<string | null>(null);
 
   async function createDraftRequest() {
-    if (busy) return
+    if (busy) return;
     const projectId = await promptDialog({
       title: fill(labels.confirmTitle, { department: gap.departmentName, week: gap.weekStart }),
       label: labels.projectLabel,
       confirmLabel: labels.confirm,
       options: projects.map((project) => ({ value: project.id, label: project.name })),
-    })
-    if (!projectId) return
-    if (!idempotencyKey.current) idempotencyKey.current = crypto.randomUUID()
-    setBusy(true)
-    setRefusal(null)
+    });
+    if (!projectId) return;
+    if (!idempotencyKey.current) idempotencyKey.current = crypto.randomUUID();
+    setBusy(true);
+    setRefusal(null);
     try {
-      const response = await fetch('/api/resourcing/requests', {
-        method: 'POST',
+      const response = await fetch("/api/resourcing/requests", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': idempotencyKey.current,
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey.current,
         },
         body: JSON.stringify({
           projectId,
@@ -218,21 +215,21 @@ function GapRow({
             plan: formatTicketHours(gap.planHours),
           }),
         }),
-      })
+      });
       if (!response.ok) {
-        setRefusal(await readRefusal(response, labels.requestFailed))
-        return
+        setRefusal(await readRefusal(response, labels.requestFailed));
+        return;
       }
-      const result = await response.json() as { id?: unknown }
-      if (typeof result.id !== 'string' || !result.id) {
-        setRefusal({ message: labels.requestFailed })
-        return
+      const result = (await response.json()) as { id?: unknown };
+      if (typeof result.id !== "string" || !result.id) {
+        setRefusal({ message: labels.requestFailed });
+        return;
       }
-      setCreatedId(result.id)
+      setCreatedId(result.id);
     } catch {
-      setRefusal({ message: labels.requestFailed })
+      setRefusal({ message: labels.requestFailed });
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -245,13 +242,15 @@ function GapRow({
             {gap.departmentName} · {labels.weekOf} {gap.weekStart}
           </p>
           <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-300">
-            {labels.gap} {formatTicketHours(gap.gapHours)} h · {labels.demand} {formatTicketHours(gap.demandHours)} h ·{' '}
-            {labels.plan} {formatTicketHours(gap.planHours)} h · {labels.capacity}{' '}
+            {labels.gap} {formatTicketHours(gap.gapHours)} h · {labels.demand}{" "}
+            {formatTicketHours(gap.demandHours)} h · {labels.plan}{" "}
+            {formatTicketHours(gap.planHours)} h · {labels.capacity}{" "}
             {formatTicketHours(gap.capacityHours)} h
           </p>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            {labels.evidence}: {labels.demand} ×{gap.evidence.demandLineIds.length} · {labels.plan} ×
-            {gap.evidence.assignmentIds.length} · {labels.staff} ×{gap.evidence.capacityPersonIds.length}
+            {labels.evidence}: {labels.demand} ×{gap.evidence.demandLineIds.length} · {labels.plan}{" "}
+            ×{gap.evidence.assignmentIds.length} · {labels.staff} ×
+            {gap.evidence.capacityPersonIds.length}
           </p>
           <EvidenceLinks gap={gap} labels={labels} />
           {refusal ? (
@@ -262,7 +261,7 @@ function GapRow({
           ) : null}
           {createdId ? (
             <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-300">
-              {labels.created}{' '}
+              {labels.created}{" "}
               <Link
                 href={`/resourcing/requests?request=${createdId}` as never}
                 className="underline underline-offset-2 hover:text-teal-700 dark:hover:text-teal-300"
@@ -278,17 +277,24 @@ function GapRow({
           </Badge>
           {canCreateDraft && !createdId ? (
             projects.length > 0 ? (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => void createDraftRequest()}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void createDraftRequest()}
+              >
                 {labels.requestAction}
               </Button>
             ) : (
-              <span className="max-w-44 text-right text-xs text-slate-500 dark:text-slate-400">{labels.noProjects}</span>
+              <span className="max-w-44 text-right text-xs text-slate-500 dark:text-slate-400">
+                {labels.noProjects}
+              </span>
             )
           ) : null}
         </div>
       </div>
     </li>
-  )
+  );
 }
 
 export function BusySeasonSection({
@@ -297,17 +303,17 @@ export function BusySeasonSection({
   labels,
   canCreateDraft,
 }: {
-  gaps: BusySeasonGap[]
-  projects: BusySeasonProject[]
-  labels: BusySeasonLabels
-  canCreateDraft: boolean
+  gaps: BusySeasonGap[];
+  projects: BusySeasonProject[];
+  labels: BusySeasonLabels;
+  canCreateDraft: boolean;
 }) {
   if (gaps.length === 0) {
     return (
       <div className="px-6 py-16 text-center">
         <p className="text-sm text-slate-400 dark:text-slate-500">{labels.empty}</p>
       </div>
-    )
+    );
   }
   return (
     <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
@@ -321,5 +327,5 @@ export function BusySeasonSection({
         />
       ))}
     </ul>
-  )
+  );
 }

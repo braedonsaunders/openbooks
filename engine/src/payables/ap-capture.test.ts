@@ -32,11 +32,26 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("upload signature validation accepts supported formats and rejects mislabeled content", () => {
-  assert.equal(captureContentMatchesMime(new Uint8Array([0x25, 0x50, 0x44, 0x46]), "application/pdf"), true);
+  assert.equal(
+    captureContentMatchesMime(new Uint8Array([0x25, 0x50, 0x44, 0x46]), "application/pdf"),
+    true,
+  );
   assert.equal(captureContentMatchesMime(new Uint8Array([0xff, 0xd8, 0xff]), "image/jpeg"), true);
-  assert.equal(captureContentMatchesMime(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png"), true);
-  assert.equal(captureContentMatchesMime(new Uint8Array([0x49, 0x49, 0x2a, 0x00]), "image/tiff"), true);
-  assert.equal(captureContentMatchesMime(new Uint8Array([0x25, 0x50, 0x44, 0x46]), "image/png"), false);
+  assert.equal(
+    captureContentMatchesMime(
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      "image/png",
+    ),
+    true,
+  );
+  assert.equal(
+    captureContentMatchesMime(new Uint8Array([0x49, 0x49, 0x2a, 0x00]), "image/tiff"),
+    true,
+  );
+  assert.equal(
+    captureContentMatchesMime(new Uint8Array([0x25, 0x50, 0x44, 0x46]), "image/png"),
+    false,
+  );
 });
 
 test("normalizeCapturedDecimal handles localized and signed OCR amounts exactly", () => {
@@ -48,16 +63,41 @@ test("normalizeCapturedDecimal handles localized and signed OCR amounts exactly"
 });
 
 test("capture materialization refuses unresolved and incompletely matched purchase orders", () => {
-  const line = { description: "Part", productCode: null, quantity: "1.0000", unit: null, unitPrice: "10.0000", amount: "10.0000", taxAmount: "0.0000", accountId: "account-1", purchaseOrderLineId: null, confidence: null };
+  const line = {
+    description: "Part",
+    productCode: null,
+    quantity: "1.0000",
+    unit: null,
+    unitPrice: "10.0000",
+    amount: "10.0000",
+    taxAmount: "0.0000",
+    accountId: "account-1",
+    purchaseOrderLineId: null,
+    confidence: null,
+  };
   assert.throws(
-    () => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-9999", lines: [line] }, null),
-    (error: unknown) => error instanceof CaptureMaterializationError && error.code === "purchase_order_unresolved" && /select an approved purchase order|clear its reference/i.test(error.message),
+    () =>
+      assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-9999", lines: [line] }, null),
+    (error: unknown) =>
+      error instanceof CaptureMaterializationError &&
+      error.code === "purchase_order_unresolved" &&
+      /select an approved purchase order|clear its reference/i.test(error.message),
   );
   assert.throws(
-    () => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-100", lines: [line] }, "po-1"),
-    (error: unknown) => error instanceof CaptureMaterializationError && error.code === "po_line_unmatched" && error.details?.line === 1 && /match every line/i.test(error.message),
+    () =>
+      assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-100", lines: [line] }, "po-1"),
+    (error: unknown) =>
+      error instanceof CaptureMaterializationError &&
+      error.code === "po_line_unmatched" &&
+      error.details?.line === 1 &&
+      /match every line/i.test(error.message),
   );
-  assert.doesNotThrow(() => assertCapturePurchaseOrderMatches({ purchaseOrderNumber: "PO-100", lines: [{ ...line, purchaseOrderLineId: "po-line-1" }] }, "po-1"));
+  assert.doesNotThrow(() =>
+    assertCapturePurchaseOrderMatches(
+      { purchaseOrderNumber: "PO-100", lines: [{ ...line, purchaseOrderLineId: "po-line-1" }] },
+      "po-1",
+    ),
+  );
 });
 
 test("normalizeCapturedDecimal refuses ambiguous comma text instead of guessing", () => {
@@ -91,25 +131,61 @@ test("normalizeCapturedDecimal refuses multi-dot text instead of guessing the la
 const raw = {
   status: "succeeded",
   analyzeResult: {
-    documents: [{
-      confidence: 0.97,
-      fields: {
-        VendorName: { type: "string", content: "Northwind Supplies", valueString: "Northwind Supplies", confidence: 0.99, boundingRegions: [{ pageNumber: 1, polygon: [1, 1, 3, 1, 3, 2, 1, 2] }] },
-        InvoiceId: { type: "string", content: "INV-1042", valueString: "INV-1042", confidence: 0.98 },
-        InvoiceDate: { type: "date", content: "2026-07-01", valueDate: "2026-07-01", confidence: 0.99 },
-        CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
-        SubTotal: { type: "currency", valueCurrency: { amount: 10, currencyCode: "CAD" }, confidence: 0.97 },
-        TotalTax: { type: "currency", valueCurrency: { amount: 1.3, currencyCode: "CAD" }, confidence: 0.96 },
-        InvoiceTotal: { type: "currency", valueCurrency: { amount: 11.3, currencyCode: "CAD" }, confidence: 0.98 },
-        Items: { valueArray: [{ valueObject: {
-          Description: { valueString: "Shop supplies", confidence: 0.98 },
-          Quantity: { valueNumber: 2, confidence: 0.98 },
-          UnitPrice: { valueCurrency: { amount: 5 }, confidence: 0.98 },
-          Amount: { valueCurrency: { amount: 10 }, confidence: 0.98 },
-          Tax: { valueCurrency: { amount: 1.3 }, confidence: 0.95 },
-        } }] },
+    documents: [
+      {
+        confidence: 0.97,
+        fields: {
+          VendorName: {
+            type: "string",
+            content: "Northwind Supplies",
+            valueString: "Northwind Supplies",
+            confidence: 0.99,
+            boundingRegions: [{ pageNumber: 1, polygon: [1, 1, 3, 1, 3, 2, 1, 2] }],
+          },
+          InvoiceId: {
+            type: "string",
+            content: "INV-1042",
+            valueString: "INV-1042",
+            confidence: 0.98,
+          },
+          InvoiceDate: {
+            type: "date",
+            content: "2026-07-01",
+            valueDate: "2026-07-01",
+            confidence: 0.99,
+          },
+          CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
+          SubTotal: {
+            type: "currency",
+            valueCurrency: { amount: 10, currencyCode: "CAD" },
+            confidence: 0.97,
+          },
+          TotalTax: {
+            type: "currency",
+            valueCurrency: { amount: 1.3, currencyCode: "CAD" },
+            confidence: 0.96,
+          },
+          InvoiceTotal: {
+            type: "currency",
+            valueCurrency: { amount: 11.3, currencyCode: "CAD" },
+            confidence: 0.98,
+          },
+          Items: {
+            valueArray: [
+              {
+                valueObject: {
+                  Description: { valueString: "Shop supplies", confidence: 0.98 },
+                  Quantity: { valueNumber: 2, confidence: 0.98 },
+                  UnitPrice: { valueCurrency: { amount: 5 }, confidence: 0.98 },
+                  Amount: { valueCurrency: { amount: 10 }, confidence: 0.98 },
+                  Tax: { valueCurrency: { amount: 1.3 }, confidence: 0.95 },
+                },
+              },
+            ],
+          },
+        },
       },
-    }],
+    ],
     pages: [{ pageNumber: 1, width: 8.5, height: 11 }],
   },
 };
@@ -122,32 +198,58 @@ function ambiguousRawPayload(): Parameters<typeof normalizeAzureInvoice>[0] {
   return {
     status: "succeeded",
     analyzeResult: {
-      documents: [{
-        confidence: 0.97,
-        fields: {
-          VendorName: { type: "string", content: "Northwind Supplies", valueString: "Northwind Supplies", confidence: 0.99 },
-          InvoiceId: { type: "string", content: "INV-1042", valueString: "INV-1042", confidence: 0.98 },
-          InvoiceDate: { type: "date", content: "2026-07-01", valueDate: "2026-07-01", confidence: 0.99 },
-          CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
-          SubTotal: header("10"),
-          TotalTax: header("1,234"),
-          InvoiceTotal: header("1,234"),
-          Items: { valueArray: [{ valueObject: {
-            Description: { valueString: "Shop supplies", confidence: 0.98 },
-            Quantity: line("1,234"),
-            UnitPrice: line("1,234"),
-            Amount: line("1,234"),
-            Tax: line("1,234"),
-          } }, { valueObject: {
-            // Typed provider numbers disambiguate and stay canonical.
-            Description: { valueString: "Typed control", confidence: 0.98 },
-            Quantity: { valueNumber: 2, confidence: 0.98 },
-            UnitPrice: { valueCurrency: { amount: 5 }, confidence: 0.98 },
-            Amount: { valueCurrency: { amount: 10 }, confidence: 0.98 },
-            Tax: { valueCurrency: { amount: 1.3 }, confidence: 0.95 },
-          } }] },
+      documents: [
+        {
+          confidence: 0.97,
+          fields: {
+            VendorName: {
+              type: "string",
+              content: "Northwind Supplies",
+              valueString: "Northwind Supplies",
+              confidence: 0.99,
+            },
+            InvoiceId: {
+              type: "string",
+              content: "INV-1042",
+              valueString: "INV-1042",
+              confidence: 0.98,
+            },
+            InvoiceDate: {
+              type: "date",
+              content: "2026-07-01",
+              valueDate: "2026-07-01",
+              confidence: 0.99,
+            },
+            CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
+            SubTotal: header("10"),
+            TotalTax: header("1,234"),
+            InvoiceTotal: header("1,234"),
+            Items: {
+              valueArray: [
+                {
+                  valueObject: {
+                    Description: { valueString: "Shop supplies", confidence: 0.98 },
+                    Quantity: line("1,234"),
+                    UnitPrice: line("1,234"),
+                    Amount: line("1,234"),
+                    Tax: line("1,234"),
+                  },
+                },
+                {
+                  valueObject: {
+                    // Typed provider numbers disambiguate and stay canonical.
+                    Description: { valueString: "Typed control", confidence: 0.98 },
+                    Quantity: { valueNumber: 2, confidence: 0.98 },
+                    UnitPrice: { valueCurrency: { amount: 5 }, confidence: 0.98 },
+                    Amount: { valueCurrency: { amount: 10 }, confidence: 0.98 },
+                    Tax: { valueCurrency: { amount: 1.3 }, confidence: 0.95 },
+                  },
+                },
+              ],
+            },
+          },
         },
-      }],
+      ],
       pages: [{ pageNumber: 1, width: 8.5, height: 11 }],
     },
   };
@@ -181,7 +283,10 @@ test("ambiguous OCR amounts never become guessed money, defaults, or throws", ()
   for (const key of ["quantity", "unitPrice", "amount", "taxAmount"] as const) {
     const refusal = blocking.find((issue) => issue.lineIndex === 0 && issue.field === key);
     assert.ok(refusal, `missing line refusal for ${key}`);
-    assert.match(refusal.message ?? "", /could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/);
+    assert.match(
+      refusal.message ?? "",
+      /could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
+    );
     assert.match(refusal.message ?? "", /retype it in plain digits/);
   }
 });
@@ -191,7 +296,8 @@ test("truly missing capture amounts keep their long-standing defaults", () => {
   // The shared fixture supplies typed numbers; drop the quantity entirely on
   // a copy to prove absence (not refusal) still takes the legacy defaults.
   const payload = structuredClone(raw);
-  const lineFields = payload.analyzeResult.documents![0]!.fields!.Items!.valueArray![0]!.valueObject!;
+  const lineFields =
+    payload.analyzeResult.documents![0]!.fields!.Items!.valueArray![0]!.valueObject!;
   delete (lineFields as Record<string, unknown>).Quantity;
   delete (lineFields as Record<string, unknown>).Tax;
   const result = normalizeAzureInvoice(payload);
@@ -205,9 +311,13 @@ test("Azure normalization preserves line evidence and exact invoice math", () =>
   assert.equal(result.normalized.total, "11.3000");
   assert.equal(result.normalized.lines[0]!.amount, "10.0000");
   assert.equal(result.overallConfidence, "0.9700");
-  assert.ok(result.evidence.some((field) => field.fieldKey === "lines.amount" && field.lineIndex === 0));
+  assert.ok(
+    result.evidence.some((field) => field.fieldKey === "lines.amount" && field.lineIndex === 0),
+  );
   assert.deepEqual(result.evidence.find((field) => field.fieldKey === "vendorName")?.polygon, {
-    points: [1, 1, 3, 1, 3, 2, 1, 2], width: 8.5, height: 11,
+    points: [1, 1, 3, 1, 3, 2, 1, 2],
+    width: 8.5,
+    height: 11,
   });
   assert.deepEqual(validateNormalizedCapture(result.normalized), []);
 });
@@ -261,8 +371,14 @@ test("Azure adapter submits bytes and polls the provider operation", async () =>
     const url = String(request);
     calls.push(url);
     if (init?.method === "POST") {
-      assert.equal(init.headers && new Headers(init.headers).get("Content-Type"), "application/pdf");
-      return new Response(null, { status: 202, headers: { "operation-location": "https://demo.cognitiveservices.azure.com/result/1" } });
+      assert.equal(
+        init.headers && new Headers(init.headers).get("Content-Type"),
+        "application/pdf",
+      );
+      return new Response(null, {
+        status: 202,
+        headers: { "operation-location": "https://demo.cognitiveservices.azure.com/result/1" },
+      });
     }
     return Response.json(raw);
   };
@@ -286,7 +402,9 @@ test("Azure adapter rejects non-provider endpoints before making a request", asy
       apiKey: "secret",
       contentType: "application/pdf",
       bytes: new Uint8Array(),
-      fetchImpl: async () => { throw new Error("must not run"); },
+      fetchImpl: async () => {
+        throw new Error("must not run");
+      },
     }),
     /not an Azure Document Intelligence endpoint/,
   );
@@ -301,17 +419,15 @@ test("endpoint verification resolves DNS and refuses non-public addresses", asyn
   // Suffix-pinned but rebound to a private address: the validator used to
   // pass this, and the request then carried the subscription key there.
   await assert.rejects(
-    verifyAzureDocumentEndpoint(
-      "https://rebound.cognitiveservices.azure.com",
-      async () => ["10.9.9.9"],
-    ),
+    verifyAzureDocumentEndpoint("https://rebound.cognitiveservices.azure.com", async () => [
+      "10.9.9.9",
+    ]),
     /did not resolve to a public address/,
   );
   await assert.rejects(
-    verifyAzureDocumentEndpoint(
-      "https://unresolvable.cognitiveservices.azure.com",
-      async () => { throw new Error("ENOTFOUND"); },
-    ),
+    verifyAzureDocumentEndpoint("https://unresolvable.cognitiveservices.azure.com", async () => {
+      throw new Error("ENOTFOUND");
+    }),
     /did not resolve to a public address/,
   );
 });
@@ -323,16 +439,24 @@ test("provider failures name the fault without echoing response bodies", async (
     apiKey: "secret",
     contentType: "application/pdf",
     bytes: new Uint8Array([37, 80, 68, 70]),
-    fetchImpl: async () => new Response(htmlBody, { status: 502, headers: { "Content-Type": "text/html" } }),
+    fetchImpl: async () =>
+      new Response(htmlBody, { status: 502, headers: { "Content-Type": "text/html" } }),
     lookup: async () => ["20.50.100.1"],
-  }).then(() => null, (error: unknown) => error as Error);
+  }).then(
+    () => null,
+    (error: unknown) => error as Error,
+  );
   assert.ok(refused instanceof Error, "a 502 submission must fail");
   assert.match(refused.message, /HTTP 502/);
-  assert.ok(!refused.message.includes("document bytes"), "raw response bodies never surface in errors");
+  assert.ok(
+    !refused.message.includes("document bytes"),
+    "raw response bodies never surface in errors",
+  );
   const structured = await testAzureDocumentProvider({
     endpoint: "https://demo.cognitiveservices.azure.com",
     apiKey: "secret",
-    fetchImpl: async () => Response.json({ error: { message: "Invalid subscription key" } }, { status: 401 }),
+    fetchImpl: async () =>
+      Response.json({ error: { message: "Invalid subscription key" } }, { status: 401 }),
     lookup: async () => ["20.50.100.1"],
   });
   assert.equal(structured.ok, false);
@@ -340,27 +464,53 @@ test("provider failures name the fault without echoing response bodies", async (
 });
 
 test("PO matching enforces both ordered and received quantities exactly", () => {
-  assert.deepEqual(validatePurchaseOrderQuantities({
-    invoiceQuantity: "2.0000", orderedQuantity: "10.0000", billedQuantity: "8.5000",
-    cancelledQuantity: "0.0000", fulfilledQuantity: "9.0000", requiresReceipt: true,
-  }), [
-    { code: "po_quantity_exceeded", expected: "1.5000", actual: "2.0000" },
-    { code: "receipt_quantity_shortfall", expected: "0.5000", actual: "2.0000" },
-  ]);
-  assert.deepEqual(validatePurchaseOrderQuantities({
-    invoiceQuantity: "0.3333", orderedQuantity: "1.0000", billedQuantity: "0.3333",
-    cancelledQuantity: "0.0000", fulfilledQuantity: "0.6666", requiresReceipt: true,
-  }), []);
-  assert.deepEqual(validatePurchaseOrderQuantities({
-    invoiceQuantity: "1.0000", orderedQuantity: "1.0000", billedQuantity: "0.0000",
-    cancelledQuantity: "0.0000", fulfilledQuantity: "0.0000", requiresReceipt: false,
-  }), []);
-  assert.deepEqual(validatePurchaseOrderQuantities({
-    invoiceQuantity: "1.00000002", orderedQuantity: "10.00000000", cancelledQuantity: "4.00000000",
-    billedQuantity: "4.99999999", fulfilledQuantity: "7.00000002", requiresReceipt: true,
-  }), [
-    { code: "po_quantity_exceeded", expected: "1.00000001", actual: "1.00000002" },
-  ]);
+  assert.deepEqual(
+    validatePurchaseOrderQuantities({
+      invoiceQuantity: "2.0000",
+      orderedQuantity: "10.0000",
+      billedQuantity: "8.5000",
+      cancelledQuantity: "0.0000",
+      fulfilledQuantity: "9.0000",
+      requiresReceipt: true,
+    }),
+    [
+      { code: "po_quantity_exceeded", expected: "1.5000", actual: "2.0000" },
+      { code: "receipt_quantity_shortfall", expected: "0.5000", actual: "2.0000" },
+    ],
+  );
+  assert.deepEqual(
+    validatePurchaseOrderQuantities({
+      invoiceQuantity: "0.3333",
+      orderedQuantity: "1.0000",
+      billedQuantity: "0.3333",
+      cancelledQuantity: "0.0000",
+      fulfilledQuantity: "0.6666",
+      requiresReceipt: true,
+    }),
+    [],
+  );
+  assert.deepEqual(
+    validatePurchaseOrderQuantities({
+      invoiceQuantity: "1.0000",
+      orderedQuantity: "1.0000",
+      billedQuantity: "0.0000",
+      cancelledQuantity: "0.0000",
+      fulfilledQuantity: "0.0000",
+      requiresReceipt: false,
+    }),
+    [],
+  );
+  assert.deepEqual(
+    validatePurchaseOrderQuantities({
+      invoiceQuantity: "1.00000002",
+      orderedQuantity: "10.00000000",
+      cancelledQuantity: "4.00000000",
+      billedQuantity: "4.99999999",
+      fulfilledQuantity: "7.00000002",
+      requiresReceipt: true,
+    }),
+    [{ code: "po_quantity_exceeded", expected: "1.00000001", actual: "1.00000002" }],
+  );
 });
 
 const stockPoLine = {
@@ -377,23 +527,35 @@ const stockPoLine = {
 test("PO match refuses an off-price capture the quantity and receipt legs would pass", () => {
   // Quantities clear both legs (6 ≤ 10 ordered, 6 ≤ 6 received), but +50% on
   // unit price is far outside tolerance and must block, not ride through.
-  const codes = matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "15.0000" })
-    .map((matchIssue) => matchIssue.code);
+  const codes = matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "15.0000" }).map(
+    (matchIssue) => matchIssue.code,
+  );
   assert.ok(codes.includes("po_price_variance"));
-  const variance = matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "15.0000" })
-    .find((matchIssue) => matchIssue.code === "po_price_variance");
+  const variance = matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "15.0000" }).find(
+    (matchIssue) => matchIssue.code === "po_price_variance",
+  );
   assert.deepEqual(variance, { code: "po_price_variance", expected: "10.0000", actual: "15.0000" });
   // The receipt leg cannot be routed around on either channel: an unreceived
   // stock line bills nothing, even with ordered quantity remaining.
   assert.deepEqual(
-    matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "10.0000", fulfilledQuantity: "0.0000" })
-      .map((matchIssue) => matchIssue.code),
+    matchPurchaseOrderLine({
+      ...stockPoLine,
+      invoiceUnitPrice: "10.0000",
+      fulfilledQuantity: "0.0000",
+    }).map((matchIssue) => matchIssue.code),
     ["receipt_quantity_shortfall"],
   );
-  assert.equal(billableRemainderUnits({
-    orderedQuantity: "10.0000", cancelledQuantity: "0.0000", billedQuantity: "0.0000", fulfilledQuantity: "0.0000",
-    itemId: "item-1", itemKind: "inventory",
-  }), 0n);
+  assert.equal(
+    billableRemainderUnits({
+      orderedQuantity: "10.0000",
+      cancelledQuantity: "0.0000",
+      billedQuantity: "0.0000",
+      fulfilledQuantity: "0.0000",
+      itemId: "item-1",
+      itemKind: "inventory",
+    }),
+    0n,
+  );
 });
 
 test("PO match accepts captures within the price tolerance unchanged", () => {
@@ -413,23 +575,29 @@ test("PO capture billing deltas move in the document's commercial direction", ()
 });
 
 test("PO quantity matching retains eight decimals and subtracts cancellations", () => {
-  assert.deepEqual(matchPurchaseOrderLine({
-    ...stockPoLine,
-    invoiceQuantity: "0.00000005",
-    orderedQuantity: "1.00000005",
-    cancelledQuantity: "0.00000002",
-    billedQuantity: "0.00000003",
-    fulfilledQuantity: "0.00000008",
-    invoiceUnitPrice: "10.0000",
-  }), []);
-  assert.equal(billableRemainderUnits({
-    orderedQuantity: "1.00000007",
-    cancelledQuantity: "0.00000002",
-    billedQuantity: "0.00000003",
-    fulfilledQuantity: "0.50000004",
-    itemId: "item-1",
-    itemKind: "inventory",
-  }), 50_000_001n);
+  assert.deepEqual(
+    matchPurchaseOrderLine({
+      ...stockPoLine,
+      invoiceQuantity: "0.00000005",
+      orderedQuantity: "1.00000005",
+      cancelledQuantity: "0.00000002",
+      billedQuantity: "0.00000003",
+      fulfilledQuantity: "0.00000008",
+      invoiceUnitPrice: "10.0000",
+    }),
+    [],
+  );
+  assert.equal(
+    billableRemainderUnits({
+      orderedQuantity: "1.00000007",
+      cancelledQuantity: "0.00000002",
+      billedQuantity: "0.00000003",
+      fulfilledQuantity: "0.50000004",
+      itemId: "item-1",
+      itemKind: "inventory",
+    }),
+    50_000_001n,
+  );
 });
 
 test("PO vendor credits release billed quantity and reject over-credit", () => {
@@ -474,19 +642,21 @@ function captureNormalized(
     taxTotal: "0.0000",
     total: amount,
     memo: null,
-    lines: [{
-      description: "Regression line",
-      productCode: null,
-      quantity,
-      unit: "ea",
-      unitPrice: "10.0000",
-      amount,
-      taxAmount: "0.0000",
-      accountId,
-      itemId: null,
-      purchaseOrderLineId,
-      confidence: "1.0000",
-    }],
+    lines: [
+      {
+        description: "Regression line",
+        productCode: null,
+        quantity,
+        unit: "ea",
+        unitPrice: "10.0000",
+        amount,
+        taxAmount: "0.0000",
+        accountId,
+        itemId: null,
+        purchaseOrderLineId,
+        confidence: "1.0000",
+      },
+    ],
   };
 }
 
@@ -546,14 +716,19 @@ test(
         purchaseOrder = { id: poId, lineId: poLineId },
       ): Promise<string> {
         const captureId = randomUUID();
-        const normalized = captureNormalized(invoiceNumber, quantity, purchaseOrder.lineId, org.accounts.cogs);
+        const normalized = captureNormalized(
+          invoiceNumber,
+          quantity,
+          purchaseOrder.lineId,
+          org.accounts.cogs,
+        );
         await db.execute(sql`
           insert into ap_capture_items
             (id, org_id, file_id, status, original_filename, content_hash,
              document_kind, normalized, validation_issues, vendor_candidate_id, purchase_order_id,
              created_by, updated_by)
-          values (${captureId}, ${org.orgId}, ${fileId}, 'ready', ${invoiceNumber + '.pdf'},
-                  ${randomUUID().replaceAll('-', '').padEnd(64, '0')}, ${documentKind},
+          values (${captureId}, ${org.orgId}, ${fileId}, 'ready', ${invoiceNumber + ".pdf"},
+                  ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, ${documentKind},
                   ${JSON.stringify(normalized)}::jsonb, '[]'::jsonb, ${org.vendorId}, ${purchaseOrder.id},
                   ${actorId}, ${actorId})
         `);
@@ -561,73 +736,177 @@ test(
       }
 
       const billId = await insertCapture("vendor_bill", "BILL-CAPTURE-REG", "2.1250");
-      const bill = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId, allowedSubsidiaryIds: null });
+      const bill = await materializeCapture({
+        orgId: org.orgId,
+        captureItemId: billId,
+        actorId,
+        allowedSubsidiaryIds: null,
+      });
       assert.ok(bill.documentId);
-      let billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+      let billed = normalizeCapturedDecimal(
+        (
+          await db.execute<{ quantity_billed: string }>(
+            sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `, "objects"))[0]!.quantity_billed);
+      `,
+            "objects",
+          )
+        )[0]!.quantity_billed,
+      );
       assert.equal(billed, "6.1250", "a positive vendor bill increases PO billed quantity");
 
-      const replay = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId, allowedSubsidiaryIds: null });
-      assert.equal(replay.documentId, bill.documentId, "replaying a materialized capture is idempotent");
-      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+      const replay = await materializeCapture({
+        orgId: org.orgId,
+        captureItemId: billId,
+        actorId,
+        allowedSubsidiaryIds: null,
+      });
+      assert.equal(
+        replay.documentId,
+        bill.documentId,
+        "replaying a materialized capture is idempotent",
+      );
+      billed = normalizeCapturedDecimal(
+        (
+          await db.execute<{ quantity_billed: string }>(
+            sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `, "objects"))[0]!.quantity_billed);
+      `,
+            "objects",
+          )
+        )[0]!.quantity_billed,
+      );
       assert.equal(billed, "6.1250");
 
       const creditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-REG", "2.1250");
-      const credit = await materializeCapture({ orgId: org.orgId, captureItemId: creditId, actorId, allowedSubsidiaryIds: null });
+      const credit = await materializeCapture({
+        orgId: org.orgId,
+        captureItemId: creditId,
+        actorId,
+        allowedSubsidiaryIds: null,
+      });
       assert.ok(credit.documentId);
-      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+      billed = normalizeCapturedDecimal(
+        (
+          await db.execute<{ quantity_billed: string }>(
+            sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `, "objects"))[0]!.quantity_billed);
+      `,
+            "objects",
+          )
+        )[0]!.quantity_billed,
+      );
       assert.equal(billed, "4.0000", "a positive vendor credit decreases PO billed quantity");
 
       const overCreditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-OVER", "4.0001");
       await assert.rejects(
-        materializeCapture({ orgId: org.orgId, captureItemId: overCreditId, actorId, allowedSubsidiaryIds: null }),
-        (error: unknown) => error instanceof CaptureMaterializationError && /insufficient billed quantity/.test(error.message),
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: overCreditId,
+          actorId,
+          allowedSubsidiaryIds: null,
+        }),
+        (error: unknown) =>
+          error instanceof CaptureMaterializationError &&
+          /insufficient billed quantity/.test(error.message),
       );
-      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+      billed = normalizeCapturedDecimal(
+        (
+          await db.execute<{ quantity_billed: string }>(
+            sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `, "objects"))[0]!.quantity_billed);
+      `,
+            "objects",
+          )
+        )[0]!.quantity_billed,
+      );
       assert.equal(billed, "4.0000", "an over-credit cannot underflow the PO billed balance");
 
-      const overCancelledId = await insertCapture("vendor_bill", "BILL-CAPTURE-CANCELLED", "2.0000",
-        { id: cancelledPoId, lineId: cancelledPoLineId });
-      await assert.rejects(
-        materializeCapture({ orgId: org.orgId, captureItemId: overCancelledId, actorId, allowedSubsidiaryIds: null }),
-        (error: unknown) => error instanceof CaptureMaterializationError && /only 1\.0000 remains/.test(error.message),
+      const overCancelledId = await insertCapture(
+        "vendor_bill",
+        "BILL-CAPTURE-CANCELLED",
+        "2.0000",
+        { id: cancelledPoId, lineId: cancelledPoLineId },
       );
-      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+      await assert.rejects(
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: overCancelledId,
+          actorId,
+          allowedSubsidiaryIds: null,
+        }),
+        (error: unknown) =>
+          error instanceof CaptureMaterializationError &&
+          /only 1\.0000 remains/.test(error.message),
+      );
+      billed = normalizeCapturedDecimal(
+        (
+          await db.execute<{ quantity_billed: string }>(
+            sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `, "objects"))[0]!.quantity_billed);
+      `,
+            "objects",
+          )
+        )[0]!.quantity_billed,
+      );
       assert.equal(billed, "4.0000", "a refused bill leaves the other order unchanged");
-      const cancelledBilled = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+      const cancelledBilled = normalizeCapturedDecimal(
+        (
+          await db.execute<{ quantity_billed: string }>(
+            sql`
         select quantity_billed::text from document_lines where id = ${cancelledPoLineId}
-      `, "objects"))[0]!.quantity_billed);
-      assert.equal(cancelledBilled, "4.0000", "cancelled quantity is excluded from AP capture billing without advancing the source");
+      `,
+            "objects",
+          )
+        )[0]!.quantity_billed,
+      );
+      assert.equal(
+        cancelledBilled,
+        "4.0000",
+        "cancelled quantity is excluded from AP capture billing without advancing the source",
+      );
 
       const racingBillA = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-A", "4.0000");
       const racingBillB = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-B", "4.0000");
       const raced = await Promise.allSettled([
-        materializeCapture({ orgId: org.orgId, captureItemId: racingBillA, actorId, allowedSubsidiaryIds: null }),
-        materializeCapture({ orgId: org.orgId, captureItemId: racingBillB, actorId, allowedSubsidiaryIds: null }),
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: racingBillA,
+          actorId,
+          allowedSubsidiaryIds: null,
+        }),
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: racingBillB,
+          actorId,
+          allowedSubsidiaryIds: null,
+        }),
       ]);
       assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
       assert.equal(raced.filter((result) => result.status === "rejected").length, 1);
-      billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
+      billed = normalizeCapturedDecimal(
+        (
+          await db.execute<{ quantity_billed: string }>(
+            sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `, "objects"))[0]!.quantity_billed);
+      `,
+            "objects",
+          )
+        )[0]!.quantity_billed,
+      );
       assert.equal(billed, "8.0000", "the locked PO line admits only one concurrent bill");
     } finally {
       // Capture evidence is intentionally append-only in production. Remove
       // this disposable fixture's events through a transaction-local trigger
       // disable before the generic scratch wipe reaches its source files.
       await db.transaction(async (tx) => {
-        await tx.execute(sql`alter table public.ap_capture_events disable trigger ap_capture_events_append_only`);
+        await tx.execute(
+          sql`alter table public.ap_capture_events disable trigger ap_capture_events_append_only`,
+        );
         await tx.execute(sql`delete from ap_capture_events where org_id = ${org.orgId}`);
-        await tx.execute(sql`alter table public.ap_capture_events enable trigger ap_capture_events_append_only`);
+        await tx.execute(
+          sql`alter table public.ap_capture_events enable trigger ap_capture_events_append_only`,
+        );
         await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
       });
       await dropScratchOrg(org.orgId);
@@ -656,19 +935,21 @@ test(
       taxTotal: "0.0000",
       total: "100.0000",
       memo: null,
-      lines: [{
-        description: "Race line",
-        productCode: null,
-        quantity: "10.0000",
-        unit: "ea",
-        unitPrice: "10.0000",
-        amount: "100.0000",
-        taxAmount: "0.0000",
-        accountId: org.accounts.cogs,
-        itemId: null,
-        purchaseOrderLineId: null,
-        confidence: "1.0000",
-      }],
+      lines: [
+        {
+          description: "Race line",
+          productCode: null,
+          quantity: "10.0000",
+          unit: "ea",
+          unitPrice: "10.0000",
+          amount: "100.0000",
+          taxAmount: "0.0000",
+          accountId: org.accounts.cogs,
+          itemId: null,
+          purchaseOrderLineId: null,
+          confidence: "1.0000",
+        },
+      ],
     };
     async function insertCapture(fileId: string): Promise<string> {
       const captureId = randomUUID();
@@ -677,7 +958,7 @@ test(
           (id, org_id, file_id, status, original_filename, content_hash,
            document_kind, normalized, validation_issues, vendor_candidate_id,
            created_by, updated_by)
-        values (${captureId}, ${org.orgId}, ${fileId}, 'ready', ${invoiceNumber + '.pdf'},
+        values (${captureId}, ${org.orgId}, ${fileId}, 'ready', ${invoiceNumber + ".pdf"},
                 ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'vendor_bill',
                 ${JSON.stringify(normalized)}::jsonb, '[]'::jsonb, ${org.vendorId},
                 null, null)
@@ -704,8 +985,18 @@ test(
       // is the materialize fence.
       const [itemA, itemB] = [await insertCapture(fileA), await insertCapture(fileB)];
       const raced = await Promise.allSettled([
-        materializeCapture({ orgId: org.orgId, captureItemId: itemA, actorId: null, allowedSubsidiaryIds: null }),
-        materializeCapture({ orgId: org.orgId, captureItemId: itemB, actorId: null, allowedSubsidiaryIds: null }),
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: itemA,
+          actorId: null,
+          allowedSubsidiaryIds: null,
+        }),
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: itemB,
+          actorId: null,
+          allowedSubsidiaryIds: null,
+        }),
       ]);
       assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
       const rejected = raced.filter((result) => result.status === "rejected");
@@ -714,18 +1005,27 @@ test(
         String((rejected[0] as PromiseRejectedResult).reason),
         /already uses this source or vendor invoice number/,
       );
-      const drafts = (await db.execute<{ count: string }>(sql`
+      const drafts = (
+        await db.execute<{ count: string }>(
+          sql`
         select count(*)::text as count from documents
          where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
            and party_id = ${org.vendorId}
            and regexp_replace(lower(nullif(reference_number, '')), '[^a-z0-9]', '', 'g') = 'invduprace'
-      `, "objects"))[0]!.count;
+      `,
+          "objects",
+        )
+      )[0]!.count;
       assert.equal(drafts, "1", "exactly one draft bill survives the race");
     } finally {
       await db.transaction(async (tx) => {
-        await tx.execute(sql`alter table public.ap_capture_events disable trigger ap_capture_events_append_only`);
+        await tx.execute(
+          sql`alter table public.ap_capture_events disable trigger ap_capture_events_append_only`,
+        );
         await tx.execute(sql`delete from ap_capture_events where org_id = ${org.orgId}`);
-        await tx.execute(sql`alter table public.ap_capture_events enable trigger ap_capture_events_append_only`);
+        await tx.execute(
+          sql`alter table public.ap_capture_events enable trigger ap_capture_events_append_only`,
+        );
         await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
       });
       await dropScratchOrg(org.orgId);
@@ -749,25 +1049,48 @@ test(
     const payload = {
       status: "succeeded",
       analyzeResult: {
-        documents: [{
-          confidence: 0.97,
-          fields: {
-            VendorName: { type: "string", content: "Northwind Supplies", valueString: "Northwind Supplies", confidence: 0.99 },
-            InvoiceId: { type: "string", content: "INV-AMB-PROOF", valueString: "INV-AMB-PROOF", confidence: 0.98 },
-            InvoiceDate: { type: "date", content: "2026-07-01", valueDate: "2026-07-01", confidence: 0.99 },
-            CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
-            SubTotal: money("10"),
-            TotalTax: money("1,234"),
-            InvoiceTotal: money("1,234"),
-            Items: { valueArray: [{ valueObject: {
-              Description: { valueString: "Ambiguous line", confidence: 0.98 },
-              Quantity: money("1,234"),
-              UnitPrice: money("5.0000"),
-              Amount: money("10.0000"),
-              Tax: money("0.0000"),
-            } }] },
+        documents: [
+          {
+            confidence: 0.97,
+            fields: {
+              VendorName: {
+                type: "string",
+                content: "Northwind Supplies",
+                valueString: "Northwind Supplies",
+                confidence: 0.99,
+              },
+              InvoiceId: {
+                type: "string",
+                content: "INV-AMB-PROOF",
+                valueString: "INV-AMB-PROOF",
+                confidence: 0.98,
+              },
+              InvoiceDate: {
+                type: "date",
+                content: "2026-07-01",
+                valueDate: "2026-07-01",
+                confidence: 0.99,
+              },
+              CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
+              SubTotal: money("10"),
+              TotalTax: money("1,234"),
+              InvoiceTotal: money("1,234"),
+              Items: {
+                valueArray: [
+                  {
+                    valueObject: {
+                      Description: { valueString: "Ambiguous line", confidence: 0.98 },
+                      Quantity: money("1,234"),
+                      UnitPrice: money("5.0000"),
+                      Amount: money("10.0000"),
+                      Tax: money("0.0000"),
+                    },
+                  },
+                ],
+              },
+            },
           },
-        }],
+        ],
         pages: [],
       },
     };
@@ -815,7 +1138,10 @@ test(
               endpoint,
               model: "prebuilt-invoice",
               confidenceThreshold: "0.9000",
-              keyEncrypted: sealSecret("db-proof-key", { orgId: org.orgId, purpose: "payables.ap-capture.key" }),
+              keyEncrypted: sealSecret("db-proof-key", {
+                orgId: org.orgId,
+                purpose: "payables.ap-capture.key",
+              }),
             },
           })}::jsonb)
          where id = ${org.orgId}
@@ -829,34 +1155,64 @@ test(
                 '{}'::jsonb, '[]'::jsonb, null, null)
       `);
 
-      await processCaptureItem({ orgId: org.orgId, captureItemId: captureId, allowedSubsidiaryIds: null, fetchImpl: stubFetch, lookup: stubLookup });
+      await processCaptureItem({
+        orgId: org.orgId,
+        captureItemId: captureId,
+        allowedSubsidiaryIds: null,
+        fetchImpl: stubFetch,
+        lookup: stubLookup,
+      });
 
-      const item = (await db.execute<{
-        status: string; normalized: NormalizedCapture; validation_issues: CaptureIssue[];
-      }>(sql`
+      const item = (
+        await db.execute<{
+          status: string;
+          normalized: NormalizedCapture;
+          validation_issues: CaptureIssue[];
+        }>(
+          sql`
         select status, normalized, validation_issues from ap_capture_items
          where id = ${captureId} and org_id = ${org.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(item.status, "needs_review");
       assert.equal(item.normalized.total, "1,234", "refused header money stays raw in storage");
-      assert.equal(item.normalized.lines[0]!.quantity, "1,234", "refused line money stays raw in storage");
+      assert.equal(
+        item.normalized.lines[0]!.quantity,
+        "1,234",
+        "refused line money stays raw in storage",
+      );
       const refusal = item.validation_issues.find((issue) => issue.field === "total");
       assert.equal(refusal?.code, "invalid_amount");
       assert.equal(refusal?.severity, "blocking");
-      assert.match(refusal?.message ?? "", /could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/);
+      assert.match(
+        refusal?.message ?? "",
+        /could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
+      );
       const lineRefusal = item.validation_issues.find(
         (issue) => issue.lineIndex === 0 && issue.field === "quantity",
       );
       assert.equal(lineRefusal?.code, "invalid_amount");
-      const evidence = (await db.execute<{ raw_value: string | null; normalized_value: unknown }>(sql`
+      const evidence = (
+        await db.execute<{ raw_value: string | null; normalized_value: unknown }>(
+          sql`
         select raw_value, normalized_value from ap_capture_fields
          where org_id = ${org.orgId} and field_key = 'total'
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       assert.equal(evidence?.raw_value, "1,234", "raw OCR evidence is retained");
-      const run = (await db.execute<{ status: string; raw_provider_payload: unknown }>(sql`
+      const run = (
+        await db.execute<{ status: string; raw_provider_payload: unknown }>(
+          sql`
         select status, raw_provider_payload from ap_capture_runs
          where org_id = ${org.orgId} and capture_item_id = ${captureId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(run.status, "succeeded");
       assert.ok(run.raw_provider_payload, "raw provider payload is retained");
     } finally {
@@ -878,13 +1234,16 @@ test("PO match requires a receipt when an item-backed line has no kind", () => {
     }).map((matchIssue) => matchIssue.code),
     ["receipt_quantity_shortfall"],
   );
-  assert.equal(billableRemainderUnits({
-    orderedQuantity: "10.0000",
-    cancelledQuantity: "0.0000",
-    billedQuantity: "0.0000",
-    fulfilledQuantity: "0.0000",
-    itemId: "item-1",
-    itemKind: null,
-  }), 0n);
+  assert.equal(
+    billableRemainderUnits({
+      orderedQuantity: "10.0000",
+      cancelledQuantity: "0.0000",
+      billedQuantity: "0.0000",
+      fulfilledQuantity: "0.0000",
+      itemId: "item-1",
+      itemKind: null,
+    }),
+    0n,
+  );
   assert.equal(lineRequiresReceipt("service"), false);
 });

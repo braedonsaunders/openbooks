@@ -1,5 +1,8 @@
 import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";
+import {
+  lockSharedTimeAuthority,
+  TimeWorkTargetError,
+} from "@openbooks/engine/projects/time-work-target";
 import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { z } from "zod";
@@ -9,14 +12,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
-import {
-  customKey,
-  isIsoDate,
-  loadWeek,
-  pinTimekeeper,
-  weekStart,
-  weekWindow,
-} from "../_lib";
+import { customKey, isIsoDate, loadWeek, pinTimekeeper, weekStart, weekWindow } from "../_lib";
 
 const lineSchema = z.strictObject({
   projectId: uuidId.nullable(),
@@ -69,23 +65,20 @@ interface Body {
  */
 export const POST = defineRoute({
   authorize: authorizeTimeWorkspace("time.approve"),
-  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
+  feature: {
+    none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target.",
+  },
   body: postBodySchema0,
   handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
     const body = routeBody as Body;
-    if (!body.employee || !isUuid(body.employee))
-      return bad("Invalid employee");
+    if (!body.employee || !isUuid(body.employee)) return bad("Invalid employee");
     if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
     if (!body.line || typeof body.isBillable !== "boolean")
       return bad("A review line and its billable flag are required");
-    const ownedEmployee = await pinTimekeeper(
-      orgId,
-      body.employee,
-      gate.allowedSubsidiaryIds,
-    );
+    const ownedEmployee = await pinTimekeeper(orgId, body.employee, gate.allowedSubsidiaryIds);
     if (!ownedEmployee) return bad("Employee not found");
     const week = weekStart(body.week);
     const days = weekWindow(week);
@@ -94,19 +87,28 @@ export const POST = defineRoute({
 
     try {
       return await withOrgTransaction(orgId, async () => {
-        await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.approve", workFamily: timeWorkFamily(workspaceRequest) });
+        await lockSharedTimeAuthority(db, orgId, user.id, {
+          employeeId: ownedEmployee,
+          from: days[0]!,
+          through: days[6]!,
+          requestedScope: gate.allowedSubsidiaryIds,
+          permission: "time.approve",
+          workFamily: timeWorkFamily(workspaceRequest),
+        });
         // Candidate lines: project time only (production lines never bill),
         // amendment offsets excluded — an approver never retargets a
         // correction entry, and custom values are matched in code below
         // (jsonb key order cannot be compared canonically in SQL).
-        const candidates = (await db.execute<{
-          id: string;
-          status: string;
-          is_billable: boolean;
-          custom: Record<string, unknown> | null;
-          billing_status: string | null;
-          invoiced_by_line_id: string | null;
-        }>(sql`
+        const candidates = (
+          await db.execute<{
+            id: string;
+            status: string;
+            is_billable: boolean;
+            custom: Record<string, unknown> | null;
+            billing_status: string | null;
+            invoiced_by_line_id: string | null;
+          }>(
+            sql`
           select id, status, is_billable, custom, billing_status, invoiced_by_line_id
             from time_entries
            where org_id = ${orgId}
@@ -121,7 +123,10 @@ export const POST = defineRoute({
              and department_id is not distinct from ${line.departmentId ?? null}
              and memo is not distinct from ${line.memo ?? null}
            for update
-        `, "objects")).filter((row) => customKey(row.custom) === wantCustom);
+        `,
+            "objects",
+          )
+        ).filter((row) => customKey(row.custom) === wantCustom);
 
         const billed = candidates.filter(
           (row) => row.billing_status === "billed" || row.invoiced_by_line_id !== null,
@@ -129,7 +134,8 @@ export const POST = defineRoute({
         if (billed.length > 0) {
           throw new TimeApprovalRefusal(
             "this line is already billed — correct the invoice with a credit memo instead of changing the timesheet",
-            "line_billed", 409,
+            "line_billed",
+            409,
             "Correct billed time on the invoice (credit memo and rebill); the timesheet line is locked.",
           );
         }
@@ -138,13 +144,15 @@ export const POST = defineRoute({
           if (candidates.some((row) => row.status === "approved")) {
             throw new TimeApprovalRefusal(
               "this line is already approved — reopen or amend the week to change it",
-              "line_approved", 409,
+              "line_approved",
+              409,
               "Reopen or amend the week to change approved hours.",
             );
           }
           throw new TimeApprovalRefusal(
             "this line has no submitted entries — submit the week before changing it",
-            "nothing_submitted", 422,
+            "nothing_submitted",
+            422,
             "Submit the week before changing its billable flags.",
           );
         }
@@ -168,7 +176,8 @@ export const POST = defineRoute({
         if ((moved.rowCount ?? 0) !== targets.length) {
           throw new TimeApprovalRefusal(
             "One or more time entries are unavailable. Reload before changing billable flags.",
-            "entries_unavailable", 409,
+            "entries_unavailable",
+            409,
             "Reload the week and try again — an entry changed while the line was prepared.",
           );
         }

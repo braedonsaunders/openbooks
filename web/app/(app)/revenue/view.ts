@@ -1,4 +1,4 @@
-import { breakageGrantOptions } from '@openbooks/engine/revenue'
+import { breakageGrantOptions } from "@openbooks/engine/revenue";
 import "server-only";
 
 import { getLocale, getTranslations } from "next-intl/server";
@@ -73,7 +73,12 @@ export async function loadRevenue(
     contractId && isUuid(contractId)
       ? await loadContract(contractId, orgId, authz.allowedSubsidiaryIds, locale)
       : null;
-  if (openContract && canRun) openContract.prepaidGrants=await breakageGrantOptions(orgId,authz.user.id,openContract.contract.id)
+  if (openContract && canRun)
+    openContract.prepaidGrants = await breakageGrantOptions(
+      orgId,
+      authz.user.id,
+      openContract.contract.id,
+    );
   const requestedReturn = pickString(sp.drawerReturn);
 
   const drawer: ContractDrawerProps | null = openContract
@@ -83,9 +88,7 @@ export async function loadRevenue(
           ? await revenueModificationOptions(orgId, authz.allowedSubsidiaryIds)
           : undefined,
         canRun,
-        closeHref: requestedReturn?.startsWith("/revenue")
-          ? requestedReturn
-          : "/revenue",
+        closeHref: requestedReturn?.startsWith("/revenue") ? requestedReturn : "/revenue",
       }
     : null;
 
@@ -152,15 +155,13 @@ export function revenueSpec(data: RevenueData): PageSpec {
     props: { books: data.books, periods: data.periods, candidates: data.candidates },
   };
   return page({
-    route: '/revenue',
+    route: "/revenue",
     layout: "list",
     header: [
       pageHeader({
         title: f("title"),
         description: f("description"),
-        actions: [
-          widget(runRecognition.widget, runRecognition.props, f("canRun")),
-        ],
+        actions: [widget(runRecognition.widget, runRecognition.props, f("canRun"))],
       }),
     ],
     body: [
@@ -172,9 +173,7 @@ export function revenueSpec(data: RevenueData): PageSpec {
       widgetBlock("entity-list-view", {
         recordType: "revenue_contract",
         sp: data.currentParams,
-        drawer: data.drawer
-          ? { widget: "contract-drawer", props: { drawer: data.drawer } }
-          : null,
+        drawer: data.drawer ? { widget: "contract-drawer", props: { drawer: data.drawer } } : null,
       }),
     ],
   });

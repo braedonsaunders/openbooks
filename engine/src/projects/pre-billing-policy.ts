@@ -1,50 +1,54 @@
-import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
-import { add, cmp, mul, mulPercent, neg, normalizeMoney } from '../money/money.ts'
+import type { FinancialProfile, InvoicingProfile } from "@openbooks/schema";
+import { add, cmp, mul, mulPercent, neg, normalizeMoney } from "../money/money.ts";
 
 export type PreBillingPolicyVersion = {
-  id: string | null
-  effectiveFrom: string
-  effectiveTo: string | null
-  financialProfile: FinancialProfile
-}
+  id: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  financialProfile: FinancialProfile;
+};
 
 export type PreBillingPricingSource = {
-  sourceType: 'time_entry' | 'document_line'
-  sourceDate: string
-  documentKind: string | null
-  documentStatus: string | null
-  directCostAmount: string
-  nativeBillAmount: string
-  quantity: string
-  costingBasis?: string | null
-  rateEngineOverhead?: string
-}
+  sourceType: "time_entry" | "document_line";
+  sourceDate: string;
+  documentKind: string | null;
+  documentStatus: string | null;
+  directCostAmount: string;
+  nativeBillAmount: string;
+  quantity: string;
+  costingBasis?: string | null;
+  rateEngineOverhead?: string;
+};
 
 export type PricedPreBillingSource = {
-  eligible: boolean
-  reason: string | null
-  directCostAmount: string
-  overheadAmount: string
-  loadedCostAmount: string
-  billAmount: string
-  pricingMode: 'bill_rate' | 'cost_times_markup'
-  markupPercent: string
-}
+  eligible: boolean;
+  reason: string | null;
+  directCostAmount: string;
+  overheadAmount: string;
+  loadedCostAmount: string;
+  billAmount: string;
+  pricingMode: "bill_rate" | "cost_times_markup";
+  markupPercent: string;
+};
 
-const DEFAULT_COST_KINDS = ['vendor_bill', 'expense_report', 'card_charge', 'check']
-const DEFAULT_COST_STATUSES = ['approved', 'posted']
+const DEFAULT_COST_KINDS = ["vendor_bill", "expense_report", "card_charge", "check"];
+const DEFAULT_COST_STATUSES = ["approved", "posted"];
 
 export function sourceLinePrebillingReason(invoicing: InvoicingProfile): string | null {
-  if ((invoicing.billingProcedure ?? 'standard') !== 'standard') {
-    return 'This project type uses applications for payment instead of source-line prebilling.'
+  if ((invoicing.billingProcedure ?? "standard") !== "standard") {
+    return "This project type uses applications for payment instead of source-line prebilling.";
   }
-  if (!['tm_actual', 'cost_plus'].includes(invoicing.lineBuilder)) {
-    return 'This project type bills milestones or draws instead of source-line prebilling.'
+  if (!["tm_actual", "cost_plus"].includes(invoicing.lineBuilder)) {
+    return "This project type bills milestones or draws instead of source-line prebilling.";
   }
-  if (!(invoicing.allowedBases ?? []).some((basis) => basis === 'time_selection' || basis === 'date_range')) {
-    return 'This project type has no time-selection or date-range billing basis.'
+  if (
+    !(invoicing.allowedBases ?? []).some(
+      (basis) => basis === "time_selection" || basis === "date_range",
+    )
+  ) {
+    return "This project type has no time-selection or date-range billing basis.";
   }
-  return null
+  return null;
 }
 
 export function effectivePreBillingPolicy(
@@ -52,21 +56,24 @@ export function effectivePreBillingPolicy(
   fallback: FinancialProfile,
   sourceDate: string,
 ): PreBillingPolicyVersion {
-  return versions.find((version) => (
-    version.effectiveFrom <= sourceDate
-      && (version.effectiveTo == null || version.effectiveTo >= sourceDate)
-  )) ?? {
-    id: null,
-    effectiveFrom: '0001-01-01',
-    effectiveTo: null,
-    financialProfile: fallback,
-  }
+  return (
+    versions.find(
+      (version) =>
+        version.effectiveFrom <= sourceDate &&
+        (version.effectiveTo == null || version.effectiveTo >= sourceDate),
+    ) ?? {
+      id: null,
+      effectiveFrom: "0001-01-01",
+      effectiveTo: null,
+      financialProfile: fallback,
+    }
+  );
 }
 
 function effectiveMarkup(profile: FinancialProfile, projectMarkupPercent: string): string {
-  return cmp(projectMarkupPercent, '0') === 0 && profile.totalPrice.defaultMarkupPercent != null
+  return cmp(projectMarkupPercent, "0") === 0 && profile.totalPrice.defaultMarkupPercent != null
     ? normalizeMoney(String(profile.totalPrice.defaultMarkupPercent))
-    : normalizeMoney(projectMarkupPercent)
+    : normalizeMoney(projectMarkupPercent);
 }
 
 export function pricePreBillingSource(
@@ -74,81 +81,129 @@ export function pricePreBillingSource(
   source: PreBillingPricingSource,
   projectMarkupPercent: string,
 ): PricedPreBillingSource {
-  const directCostAmount = normalizeMoney(source.directCostAmount)
-  const nativeBillAmount = normalizeMoney(source.nativeBillAmount)
-  const markupPercent = effectiveMarkup(profile, projectMarkupPercent)
+  const directCostAmount = normalizeMoney(source.directCostAmount);
+  const nativeBillAmount = normalizeMoney(source.nativeBillAmount);
+  const markupPercent = effectiveMarkup(profile, projectMarkupPercent);
 
-  if (source.sourceType === 'time_entry' && !profile.billableValue.includeUnbilledTime) {
-    return { eligible: false, reason: 'Unbilled time is excluded by the effective project-type policy.', directCostAmount, overheadAmount: '0.0000', loadedCostAmount: directCostAmount, billAmount: '0.0000', pricingMode: profile.billableValue.timeRate, markupPercent }
+  if (source.sourceType === "time_entry" && !profile.billableValue.includeUnbilledTime) {
+    return {
+      eligible: false,
+      reason: "Unbilled time is excluded by the effective project-type policy.",
+      directCostAmount,
+      overheadAmount: "0.0000",
+      loadedCostAmount: directCostAmount,
+      billAmount: "0.0000",
+      pricingMode: profile.billableValue.timeRate,
+      markupPercent,
+    };
   }
-  if (source.sourceType === 'document_line') {
+  if (source.sourceType === "document_line") {
     if (!profile.billableValue.includeUnbilledCostLines) {
-      return { eligible: false, reason: 'Unbilled cost lines are excluded by the effective project-type policy.', directCostAmount, overheadAmount: '0.0000', loadedCostAmount: directCostAmount, billAmount: '0.0000', pricingMode: profile.billableValue.timeRate, markupPercent }
+      return {
+        eligible: false,
+        reason: "Unbilled cost lines are excluded by the effective project-type policy.",
+        directCostAmount,
+        overheadAmount: "0.0000",
+        loadedCostAmount: directCostAmount,
+        billAmount: "0.0000",
+        pricingMode: profile.billableValue.timeRate,
+        markupPercent,
+      };
     }
-    const kinds = profile.billableValue.costSourceKinds?.length ? profile.billableValue.costSourceKinds : DEFAULT_COST_KINDS
-    if (source.documentKind !== 'project_charge' && !kinds.includes(source.documentKind ?? '')) {
-      return { eligible: false, reason: 'The source document kind is excluded by the effective project-type policy.', directCostAmount, overheadAmount: '0.0000', loadedCostAmount: directCostAmount, billAmount: '0.0000', pricingMode: profile.billableValue.timeRate, markupPercent }
+    const kinds = profile.billableValue.costSourceKinds?.length
+      ? profile.billableValue.costSourceKinds
+      : DEFAULT_COST_KINDS;
+    if (source.documentKind !== "project_charge" && !kinds.includes(source.documentKind ?? "")) {
+      return {
+        eligible: false,
+        reason: "The source document kind is excluded by the effective project-type policy.",
+        directCostAmount,
+        overheadAmount: "0.0000",
+        loadedCostAmount: directCostAmount,
+        billAmount: "0.0000",
+        pricingMode: profile.billableValue.timeRate,
+        markupPercent,
+      };
     }
-    const statuses = profile.billableValue.costSourceStatuses?.length ? profile.billableValue.costSourceStatuses : DEFAULT_COST_STATUSES
+    const statuses = profile.billableValue.costSourceStatuses?.length
+      ? profile.billableValue.costSourceStatuses
+      : DEFAULT_COST_STATUSES;
     if (!statuses.includes(source.documentStatus as never)) {
-      return { eligible: false, reason: 'The source document status is excluded by the effective project-type policy.', directCostAmount, overheadAmount: '0.0000', loadedCostAmount: directCostAmount, billAmount: '0.0000', pricingMode: profile.billableValue.timeRate, markupPercent }
+      return {
+        eligible: false,
+        reason: "The source document status is excluded by the effective project-type policy.",
+        directCostAmount,
+        overheadAmount: "0.0000",
+        loadedCostAmount: directCostAmount,
+        billAmount: "0.0000",
+        pricingMode: profile.billableValue.timeRate,
+        markupPercent,
+      };
     }
   }
 
-  const billAmount = profile.billableValue.timeRate === 'cost_times_markup'
-    ? add(directCostAmount, mulPercent(directCostAmount, markupPercent))
-    : nativeBillAmount
-  let overheadAmount = '0.0000'
-  if (source.sourceType === 'time_entry' && profile.totalCost.components.includes('overhead')) {
-    if (profile.overhead.method === 'percent_of_labor') {
-      overheadAmount = mulPercent(directCostAmount, String(profile.overhead.ratePercent ?? 0))
-    } else if (profile.overhead.method === 'per_labor_hour') {
-      overheadAmount = mul(source.quantity, String(profile.overhead.ratePerHour ?? 0))
-    } else if (profile.overhead.method === 'rate_engine') {
-      overheadAmount = normalizeMoney(source.rateEngineOverhead ?? '0')
+  const billAmount =
+    profile.billableValue.timeRate === "cost_times_markup"
+      ? add(directCostAmount, mulPercent(directCostAmount, markupPercent))
+      : nativeBillAmount;
+  let overheadAmount = "0.0000";
+  if (source.sourceType === "time_entry" && profile.totalCost.components.includes("overhead")) {
+    if (profile.overhead.method === "percent_of_labor") {
+      overheadAmount = mulPercent(directCostAmount, String(profile.overhead.ratePercent ?? 0));
+    } else if (profile.overhead.method === "per_labor_hour") {
+      overheadAmount = mul(source.quantity, String(profile.overhead.ratePerHour ?? 0));
+    } else if (profile.overhead.method === "rate_engine") {
+      overheadAmount = normalizeMoney(source.rateEngineOverhead ?? "0");
     }
   }
-  const loadedCostAmount = add(directCostAmount, overheadAmount)
+  const loadedCostAmount = add(directCostAmount, overheadAmount);
 
   // Prebill lines carry a non-negative CHECK on cost and bill amounts, so a
   // credit source can never become a line: exclude it here and let creation
   // fail closed with "no eligible work" instead of dying on the schema CHECK.
-  if (cmp(billAmount, '0') < 0 || cmp(loadedCostAmount, '0') < 0) {
+  if (cmp(billAmount, "0") < 0 || cmp(loadedCostAmount, "0") < 0) {
     return {
       eligible: false,
-      reason: 'Credits are not prebilled as source lines — bill them through a credit document.',
+      reason: "Credits are not prebilled as source lines — bill them through a credit document.",
       directCostAmount,
       overheadAmount,
       loadedCostAmount,
       billAmount,
       pricingMode: profile.billableValue.timeRate,
       markupPercent,
-    }
+    };
   }
 
   return {
-    eligible: cmp(billAmount, '0') !== 0,
-    reason: cmp(billAmount, '0') === 0 ? 'The effective project-type policy produced no billable value.' : null,
+    eligible: cmp(billAmount, "0") !== 0,
+    reason:
+      cmp(billAmount, "0") === 0
+        ? "The effective project-type policy produced no billable value."
+        : null,
     directCostAmount,
     overheadAmount,
     loadedCostAmount,
     billAmount,
     pricingMode: profile.billableValue.timeRate,
     markupPercent,
-  }
+  };
 }
 
 export function capPreBillingSources<T extends { billAmount: string }>(
   sources: T[],
   remainingCap: string | null,
 ): Array<T & { cappedBillAmount: string }> {
-  if (remainingCap == null) return sources.map((source) => ({ ...source, cappedBillAmount: normalizeMoney(source.billAmount) }))
-  let remaining = normalizeMoney(remainingCap)
+  if (remainingCap == null)
+    return sources.map((source) => ({
+      ...source,
+      cappedBillAmount: normalizeMoney(source.billAmount),
+    }));
+  let remaining = normalizeMoney(remainingCap);
   return sources.flatMap((source) => {
-    if (cmp(remaining, '0') <= 0) return []
-    const billAmount = normalizeMoney(source.billAmount)
-    const cappedBillAmount = cmp(billAmount, remaining) > 0 ? remaining : billAmount
-    remaining = add(remaining, neg(cappedBillAmount))
-    return cmp(cappedBillAmount, '0') !== 0 ? [{ ...source, cappedBillAmount }] : []
-  })
+    if (cmp(remaining, "0") <= 0) return [];
+    const billAmount = normalizeMoney(source.billAmount);
+    const cappedBillAmount = cmp(billAmount, remaining) > 0 ? remaining : billAmount;
+    remaining = add(remaining, neg(cappedBillAmount));
+    return cmp(cappedBillAmount, "0") !== 0 ? [{ ...source, cappedBillAmount }] : [];
+  });
 }

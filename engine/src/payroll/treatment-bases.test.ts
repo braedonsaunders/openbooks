@@ -39,10 +39,7 @@ const SACRIFICE = {
 
 test("AU salary sacrifice reduces the income leg and leaves the other three whole", () => {
   const reduced = reduceTaxBases(
-    [
-      { kind: "earning", amount: "3653.8500" },
-      { ...SACRIFICE },
-    ],
+    [{ kind: "earning", amount: "3653.8500" }, { ...SACRIFICE }],
     BASES,
     AU_PAYROLL_PACK.deductionTreatments,
   );
@@ -88,10 +85,16 @@ test("declared treatments only reduce the bases their pack names", () => {
 });
 
 test("the pack declaration is the authority on which treatments exist", () => {
-  assert.equal(payComponentTreatmentProblem({ country: "AU", taxTreatment: "salary_sacrifice" }), null);
+  assert.equal(
+    payComponentTreatmentProblem({ country: "AU", taxTreatment: "salary_sacrifice" }),
+    null,
+  );
   assert.equal(payComponentTreatmentProblem({ country: "AU", taxTreatment: "none" }), null);
   assert.equal(payComponentTreatmentProblem({ country: "AU", taxTreatment: null }), null);
-  assert.equal(payComponentTreatmentProblem({ country: null, taxTreatment: "salary_sacrifice" }), null);
+  assert.equal(
+    payComponentTreatmentProblem({ country: null, taxTreatment: "salary_sacrifice" }),
+    null,
+  );
   assert.equal(payComponentTreatmentProblem({ country: "CA", taxTreatment: "pension_f" }), null);
 
   const refusal = payComponentTreatmentProblem({ country: "AU", taxTreatment: "pension_f" });

@@ -40,10 +40,7 @@ test("the books' line rate wins over a stale producer rate for the same currency
   // `have` accumulates carrying values at booked rates, so only the booked
   // rate keeps the pair loop convergent. The producer rate is a fallback for
   // currencies the books don't carry — never an override.
-  assert.equal(
-    resolveLinkFunctional(link("100", "EUR", "9.99"), line("EUR", "1.2")),
-    120_0000n,
-  );
+  assert.equal(resolveLinkFunctional(link("100", "EUR", "9.99"), line("EUR", "1.2")), 120_0000n);
 });
 
 test("a cross-currency link converts at the stated producer rate", () => {
@@ -61,10 +58,7 @@ test("a link with no currency is refused", () => {
 });
 
 test("a link in an unresolvable currency with no rate is refused", () => {
-  assert.throws(
-    () => resolveLinkFunctional(link("100", "JPY"), line("EUR", "1.2")),
-    /JPY/,
-  );
+  assert.throws(() => resolveLinkFunctional(link("100", "JPY"), line("EUR", "1.2")), /JPY/);
 });
 
 test("a link with an unusable producer rate is refused", () => {

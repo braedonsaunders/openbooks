@@ -1,37 +1,44 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, schema, withOrgTransaction } from "@openbooks/engine/platform/db";
+import {
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "@openbooks/engine/organization/scope";
 import { nextDocumentNumber } from "./bills.ts";
-import { resolveOrgId } from './org-scope'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { allowedSubsidiaryIds as resolveAllowedSubsidiaryIds } from './subsidiaries'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
-import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
-import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from './custom-fields'
+import { resolveOrgId } from "./org-scope";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { allowedSubsidiaryIds as resolveAllowedSubsidiaryIds } from "./subsidiaries";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
+import {
+  loadCustomFieldAccessDefs,
+  redactHiddenCustomValues,
+  type CustomFieldViewer,
+} from "./custom-fields";
 
 export interface CreateDraftJournalOptions {
   /** Explicit legal entity requested by the caller (omitted = choose a default). */
-  subsidiaryId?: string | null
+  subsidiaryId?: string | null;
   /** null = unrestricted; a Set = the caller's authorized subsidiary scope. */
-  allowedSubsidiaryIds?: ReadonlySet<string> | null
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 export type DraftJournalScopeErrorCode =
-  | 'invalid_subsidiary'
-  | 'subsidiary_not_allowed'
-  | 'no_available_subsidiary'
-  | 'ambiguous_subsidiary_scope'
+  | "invalid_subsidiary"
+  | "subsidiary_not_allowed"
+  | "no_available_subsidiary"
+  | "ambiguous_subsidiary_scope";
 
 /** Request-state refusal for an invalid or unresolved draft-journal scope. */
 export class DraftJournalScopeError extends Error {
-  readonly name = 'DraftJournalScopeError'
+  readonly name = "DraftJournalScopeError";
 
   constructor(
     public readonly code: DraftJournalScopeErrorCode,
     message: string,
   ) {
-    super(message)
+    super(message);
   }
 }
 
@@ -44,78 +51,89 @@ export async function createDraftJournal(
   // Existing non-HTTP callers do not carry an authorization scope. Resolve it
   // from the actor so they cannot bypass the same invariant as this route.
   // Unrestricted roles resolve to null and retain the existing root behavior.
-  const resolvedScope = options.allowedSubsidiaryIds === undefined
-    ? await resolveAllowedSubsidiaryIds(userId, orgId)
-    : options.allowedSubsidiaryIds
-  const scope = resolvedScope === null
-    ? null
-    : new Set([...resolvedScope].map((id) => id.toLowerCase()))
-  const requestedSubsidiaryId = options.subsidiaryId
-  let subsidiary: { id: string; base_currency: string } | undefined
+  const resolvedScope =
+    options.allowedSubsidiaryIds === undefined
+      ? await resolveAllowedSubsidiaryIds(userId, orgId)
+      : options.allowedSubsidiaryIds;
+  const scope =
+    resolvedScope === null ? null : new Set([...resolvedScope].map((id) => id.toLowerCase()));
+  const requestedSubsidiaryId = options.subsidiaryId;
+  let subsidiary: { id: string; base_currency: string } | undefined;
 
   if (requestedSubsidiaryId !== undefined && requestedSubsidiaryId !== null) {
     if (!isUuid(requestedSubsidiaryId)) {
-      throw new DraftJournalScopeError('invalid_subsidiary', 'invalid subsidiary')
+      throw new DraftJournalScopeError("invalid_subsidiary", "invalid subsidiary");
     }
-    const normalizedSubsidiaryId = requestedSubsidiaryId.toLowerCase()
+    const normalizedSubsidiaryId = requestedSubsidiaryId.toLowerCase();
     if (scope !== null && !scope.has(normalizedSubsidiaryId)) {
       // Keep an out-of-scope entity indistinguishable from an unavailable one.
-      throw new DraftJournalScopeError('subsidiary_not_allowed', 'not found')
+      throw new DraftJournalScopeError("subsidiary_not_allowed", "not found");
     }
-    const explicit = (await db.execute<{ id: string; base_currency: string }>(sql`
+    const explicit = (
+      await db.execute<{ id: string; base_currency: string }>(
+        sql`
       select id, base_currency
         from subsidiaries
        where org_id = ${orgId} and id = ${normalizedSubsidiaryId}
-         and is_active and not is_elimination`, 'objects'))[0]
-    if (!explicit) throw new DraftJournalScopeError('invalid_subsidiary', 'invalid subsidiary')
-    subsidiary = explicit
+         and is_active and not is_elimination`,
+        "objects",
+      )
+    )[0];
+    if (!explicit) throw new DraftJournalScopeError("invalid_subsidiary", "invalid subsidiary");
+    subsidiary = explicit;
   } else if (scope !== null) {
     // A restricted caller may auto-select only when the database confirms
     // exactly one active, non-elimination legal entity in its allowed set.
-    const ids = [...scope].filter((id) => isUuid(id))
+    const ids = [...scope].filter((id) => isUuid(id));
     if (ids.length === 0) {
-      throw new DraftJournalScopeError('no_available_subsidiary', 'no available subsidiary')
+      throw new DraftJournalScopeError("no_available_subsidiary", "no available subsidiary");
     }
-    const allowed = await db.execute<{ id: string; base_currency: string }>(sql`
+    const allowed = await db.execute<{ id: string; base_currency: string }>(
+      sql`
       select id, base_currency
         from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination
-         and id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')
+         and id = any(${`{${ids.join(",")}}`}::uuid[])`,
+      "objects",
+    );
     if (allowed.length === 0) {
-      throw new DraftJournalScopeError('no_available_subsidiary', 'no available subsidiary')
+      throw new DraftJournalScopeError("no_available_subsidiary", "no available subsidiary");
     }
     if (allowed.length !== 1) {
       throw new DraftJournalScopeError(
-        'ambiguous_subsidiary_scope',
-        'a subsidiary must be selected when more than one legal entity is available',
-      )
+        "ambiguous_subsidiary_scope",
+        "a subsidiary must be selected when more than one legal entity is available",
+      );
     }
-    subsidiary = allowed[0]
+    subsidiary = allowed[0];
   } else {
-    const root = (await db.execute<{ id: string; base_currency: string }>(sql`
-      select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null`, 'objects'))
-    subsidiary = root[0]
-    if (!subsidiary) throw new Error('org has no root subsidiary')
+    const root = await db.execute<{ id: string; base_currency: string }>(
+      sql`
+      select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null`,
+      "objects",
+    );
+    subsidiary = root[0];
+    if (!subsidiary) throw new Error("org has no root subsidiary");
   }
 
-  if (!subsidiary) throw new Error('no subsidiary selected')
-  const documentNumber = await nextDocumentNumber(orgId, 'journal', 'JE-', subsidiary.id)
+  if (!subsidiary) throw new Error("no subsidiary selected");
+  const documentNumber = await nextDocumentNumber(orgId, "journal", "JE-", subsidiary.id);
   const [doc] = await db
     .insert(schema.documents)
     .values({
       orgId,
-      kind: 'journal',
+      kind: "journal",
       subsidiaryId: subsidiary.id,
       documentNumber,
       documentDate: await businessToday(orgId),
       currency: subsidiary.base_currency,
-      subtotal: '0',
-      taxTotal: '0',
-      total: '0',
+      subtotal: "0",
+      taxTotal: "0",
+      total: "0",
       createdBy: userId,
     })
-    .returning({ id: schema.documents.id, documentNumber: schema.documents.documentNumber })
-  return doc!
+    .returning({ id: schema.documents.id, documentNumber: schema.documents.documentNumber });
+  return doc!;
 }
 
 /** Full manual-journal payload for the drawer: header + signed lines. */
@@ -124,13 +142,14 @@ export async function loadJournalDoc(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  if (!isUuid(id)) return null
-  const resolvedOrgId = await resolveOrgId(orgId)
+  if (!isUuid(id)) return null;
+  const resolvedOrgId = await resolveOrgId(orgId);
   return withOrgTransaction(resolvedOrgId, async () => {
     // Scope and lock the journal header before reading detail, keeping both
     // reads in the same transaction so a concurrent rehome cannot move the
     // header between authorization and the line read.
-    const doc = await db.execute<Record<string, unknown>>(sql`
+    const doc = await db.execute<Record<string, unknown>>(
+      sql`
       select d.*, d.document_date::text as document_date, d.journal_reverse_on::text as journal_reverse_on,
              ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at,
              p.display_name as party_name, e.id as entry_id,
@@ -143,9 +162,12 @@ export async function loadJournalDoc(
        where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'journal'
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for share of d
-    `, 'objects')
-    if (!doc[0]) return null
-    const lines = await db.execute<Record<string, unknown>>(sql`
+    `,
+      "objects",
+    );
+    if (!doc[0]) return null;
+    const lines = await db.execute<Record<string, unknown>>(
+      sql`
       select l.id, l.line_number, l.account_id, l.description, l.amount, l.quantity::text as quantity, l.unit,
              l.journal_currency, l.journal_fx_rate::text as journal_fx_rate, l.journal_eliminate,
              l.party_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom,
@@ -154,19 +176,21 @@ export async function loadJournalDoc(
         from document_lines l
        where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
        order by l.line_number
-    `, 'objects')
+    `,
+      "objects",
+    );
     // Every leg carries its own legal entity: a null line subsidiary falls
     // back to the authorized header, but an explicit one outside the
     // caller's scope refuses the whole detail (uniform null, never a
     // silently partial journal that implies a complete editable record).
     for (const line of lines) {
-      const lineSubsidiary = line.subsidiary_id as string | null
+      const lineSubsidiary = line.subsidiary_id as string | null;
       if (lineSubsidiary !== null && !subsidiaryScopeAllows(allowedSubsidiaryIds, lineSubsidiary)) {
-        return null
+        return null;
       }
     }
-    return { doc: doc[0], lines }
-  })
+    return { doc: doc[0], lines };
+  });
 }
 
 /**
@@ -177,10 +201,17 @@ export async function redactJournalHeaderCustom<T extends { doc: Record<string, 
   loaded: T,
   viewer: CustomFieldViewer,
 ): Promise<T> {
-  if (!('custom' in loaded.doc)) return loaded
-  const headerDefs = await loadCustomFieldAccessDefs('documents', 'journal')
+  if (!("custom" in loaded.doc)) return loaded;
+  const headerDefs = await loadCustomFieldAccessDefs("documents", "journal");
   return {
     ...loaded,
-    doc: { ...loaded.doc, custom: redactHiddenCustomValues(headerDefs, viewer, loaded.doc.custom as Record<string, unknown> | null) },
-  }
+    doc: {
+      ...loaded.doc,
+      custom: redactHiddenCustomValues(
+        headerDefs,
+        viewer,
+        loaded.doc.custom as Record<string, unknown> | null,
+      ),
+    },
+  };
 }

@@ -11,8 +11,15 @@ import {
 } from "./process-math.ts";
 
 const step = (overrides: Record<string, unknown> = {}) => ({
-  ...checklistStep({ id: 'step-1', title: 'Collect documents', description: null, ownerKind: 'hr', evidenceKind: 'none' }),
-  position: 0, ...overrides,
+  ...checklistStep({
+    id: "step-1",
+    title: "Collect documents",
+    description: null,
+    ownerKind: "hr",
+    evidenceKind: "none",
+  }),
+  position: 0,
+  ...overrides,
 });
 
 test("offsets walk the civil grid across month, year, and leap boundaries", () => {
@@ -34,11 +41,23 @@ test("offsets refuse non-integers and out-of-range results", () => {
 });
 
 test("overdue is strictly-before-today while pending, never when terminal", () => {
-  assert.equal(isStepOverdue({ dueOn: "2026-06-14", today: "2026-06-15", status: "pending" }), true);
-  assert.equal(isStepOverdue({ dueOn: "2026-06-15", today: "2026-06-15", status: "pending" }), false);
-  assert.equal(isStepOverdue({ dueOn: "2026-06-16", today: "2026-06-15", status: "pending" }), false);
+  assert.equal(
+    isStepOverdue({ dueOn: "2026-06-14", today: "2026-06-15", status: "pending" }),
+    true,
+  );
+  assert.equal(
+    isStepOverdue({ dueOn: "2026-06-15", today: "2026-06-15", status: "pending" }),
+    false,
+  );
+  assert.equal(
+    isStepOverdue({ dueOn: "2026-06-16", today: "2026-06-15", status: "pending" }),
+    false,
+  );
   assert.equal(isStepOverdue({ dueOn: "2026-06-01", today: "2026-06-15", status: "done" }), false);
-  assert.equal(isStepOverdue({ dueOn: "2026-06-01", today: "2026-06-15", status: "skipped" }), false);
+  assert.equal(
+    isStepOverdue({ dueOn: "2026-06-01", today: "2026-06-15", status: "skipped" }),
+    false,
+  );
   assert.throws(
     () => isStepOverdue({ dueOn: "2026-06-01", today: "2026-06-15", status: "archived" }),
     /unknown step status "archived"/,
@@ -65,7 +84,10 @@ test("progress reports exact counts, never a float", () => {
     ]).allRequiredDone,
     false,
   );
-  assert.throws(() => summarizeProgress([{ required: true, status: "archived" }]), /unknown step status/);
+  assert.throws(
+    () => summarizeProgress([{ required: true, status: "archived" }]),
+    /unknown step status/,
+  );
 });
 
 test("snapshots copy the template in position order with concrete due dates", () => {
@@ -87,14 +109,18 @@ test("snapshots copy the template in position order with concrete due dates", ()
 test("snapshots refuse empty, duplicated, and malformed templates by name", () => {
   assert.throws(() => snapshotTemplateSteps("tpl-empty", [], "2026-09-01"), /carries no steps/);
   const invalid: Array<[string, ReturnType<typeof step>[], RegExp]> = [
-    ['tpl-dupe', [step({ id: 'a', position: 0 }), step({ id: 'b', position: 0 })], /lists position 0 twice/],
-    ['tpl-owner', [step({ ownerKind: 'peer' })], /names owner "peer"/],
-    ['tpl-party', [step({ ownerKind: 'hr', ownerPartyId: 'p-1' })], /pairs owner hr with a party/],
-    ['tpl-evidence', [step({ evidenceKind: 'video' })], /names evidence "video"/],
-    ['tpl-blank', [step({ title: '  ' })], /blank title/],
+    [
+      "tpl-dupe",
+      [step({ id: "a", position: 0 }), step({ id: "b", position: 0 })],
+      /lists position 0 twice/,
+    ],
+    ["tpl-owner", [step({ ownerKind: "peer" })], /names owner "peer"/],
+    ["tpl-party", [step({ ownerKind: "hr", ownerPartyId: "p-1" })], /pairs owner hr with a party/],
+    ["tpl-evidence", [step({ evidenceKind: "video" })], /names evidence "video"/],
+    ["tpl-blank", [step({ title: "  " })], /blank title/],
   ];
   for (const [id, steps, message] of invalid) {
-    assert.throws(() => snapshotTemplateSteps(id, steps, '2026-09-01'), message);
+    assert.throws(() => snapshotTemplateSteps(id, steps, "2026-09-01"), message);
   }
 });
 
@@ -103,8 +129,14 @@ test("template resolution prefers the most specific cover and refuses ties by id
   const general = { id: "tpl-general", employerSubsidiaryId: null, departmentId: null };
   const employer = { id: "tpl-employer", employerSubsidiaryId: "sub-1", departmentId: null };
   const exact = { id: "tpl-exact", employerSubsidiaryId: "sub-1", departmentId: "dep-1" };
-  assert.equal(resolveTemplateForEmployment("onboarding", [general, employer, exact], employment).id, "tpl-exact");
-  assert.equal(resolveTemplateForEmployment("onboarding", [general, employer], employment).id, "tpl-employer");
+  assert.equal(
+    resolveTemplateForEmployment("onboarding", [general, employer, exact], employment).id,
+    "tpl-exact",
+  );
+  assert.equal(
+    resolveTemplateForEmployment("onboarding", [general, employer], employment).id,
+    "tpl-employer",
+  );
   assert.throws(
     () => resolveTemplateForEmployment("onboarding", [], employment),
     /no active onboarding template covers this employment/,
@@ -120,7 +152,11 @@ test("template resolution prefers the most specific cover and refuses ties by id
   // Non-covering filters never match, even when they are the only option.
   assert.throws(
     () =>
-      resolveTemplateForEmployment("onboarding", [{ id: "tpl-other", employerSubsidiaryId: "sub-9", departmentId: null }], employment),
+      resolveTemplateForEmployment(
+        "onboarding",
+        [{ id: "tpl-other", employerSubsidiaryId: "sub-9", departmentId: null }],
+        employment,
+      ),
     /no active onboarding template/,
   );
 });

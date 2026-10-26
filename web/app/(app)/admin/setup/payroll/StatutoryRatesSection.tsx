@@ -1,16 +1,16 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { useBusinessToday } from '../../../../../components/business-date-provider'
-import { PagedTable } from '../../../../../components/paged-table'
-import { countryName } from '../../../../../lib/countries'
-import { useAppAction } from '../../../../../lib/use-app-action'
-import { formatRateFieldValue } from './statutory-rates-format'
-import { useDirtyClose } from '../../../../../lib/use-dirty-close'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { Alert, Badge, Button, Drawer, Input, Label, Select } from "@openbooks/ui";
+import { useBusinessToday } from "../../../../../components/business-date-provider";
+import { PagedTable } from "../../../../../components/paged-table";
+import { countryName } from "../../../../../lib/countries";
+import { useAppAction } from "../../../../../lib/use-app-action";
+import { formatRateFieldValue } from "./statutory-rates-format";
+import { useDirtyClose } from "../../../../../lib/use-dirty-close";
 
 /**
  * Statutory rates the employer supplies — at the scope the country pack says
@@ -29,268 +29,298 @@ import { useDirtyClose } from '../../../../../lib/use-dirty-close'
  * field help in the FieldLabel `?` popover.
  */
 
-type Scope = 'org' | 'region' | 'sub_region' | 'filing_account'
+type Scope = "org" | "region" | "sub_region" | "filing_account";
 
 interface RateField {
-  key: string
-  label: string
-  kind: 'rate' | 'percent' | 'amount' | 'flag'
-  decimals: number
-  min: string
-  max: string
-  required: boolean
-  help: string
+  key: string;
+  label: string;
+  kind: "rate" | "percent" | "amount" | "flag";
+  decimals: number;
+  min: string;
+  max: string;
+  required: boolean;
+  help: string;
 }
 
 interface RateSlot {
-  key: string
-  label: string
-  scope: Scope
-  programType: string | null
-  regions: string[] | null
-  citation: string
-  variesBecause: string
-  systemKeys: string[]
-  fields: RateField[]
+  key: string;
+  label: string;
+  scope: Scope;
+  programType: string | null;
+  regions: string[] | null;
+  citation: string;
+  variesBecause: string;
+  systemKeys: string[];
+  fields: RateField[];
 }
 
 interface RateAccount {
-  id: string
-  accountNumber: string
-  name: string
-  programType: string
-  stateCode: string | null
+  id: string;
+  accountNumber: string;
+  name: string;
+  programType: string;
+  stateCode: string | null;
 }
 
 interface RatePack {
-  country: string
-  regionLabel: string
-  knownRegions: string[]
-  slots: RateSlot[]
-  accounts: RateAccount[]
+  country: string;
+  regionLabel: string;
+  knownRegions: string[];
+  slots: RateSlot[];
+  accounts: RateAccount[];
 }
 
 interface RateRow {
-  id: string
-  country: string
-  rateKey: string
-  region: string | null
-  subRegion: string | null
-  filingAccountId: string | null
-  accountNumber: string | null
-  accountName: string | null
-  taxYear: number
-  values: Record<string, string>
-  sourceCitation: string | null
-  reason: string | null
+  id: string;
+  country: string;
+  rateKey: string;
+  region: string | null;
+  subRegion: string | null;
+  filingAccountId: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
+  taxYear: number;
+  values: Record<string, string>;
+  sourceCitation: string | null;
+  reason: string | null;
 }
 
 interface RateGap {
-  country: string
-  slotKey: string
-  label: string
-  region: string | null
-  subRegion?: string | null
-  filingAccountId: string | null
-  message: string
+  country: string;
+  slotKey: string;
+  label: string;
+  region: string | null;
+  subRegion?: string | null;
+  filingAccountId: string | null;
+  message: string;
 }
 
 interface Coverage {
-  country: string
-  supported: number[]
-  draft: number[]
-  ratesModule: string
-  regions: { region: string; supported: number[]; draft: number[] }[]
-  editions: { year: number; label: string; effectiveFrom: string; status: string; region?: string }[]
+  country: string;
+  supported: number[];
+  draft: number[];
+  ratesModule: string;
+  regions: { region: string; supported: number[]; draft: number[] }[];
+  editions: {
+    year: number;
+    label: string;
+    effectiveFrom: string;
+    status: string;
+    region?: string;
+  }[];
 }
 
 interface Payload {
-  year: number
-  installed: string[]
-  packs: RatePack[]
-  rows: RateRow[]
-  gaps: RateGap[]
-  coverage: Coverage[]
+  year: number;
+  installed: string[];
+  packs: RatePack[];
+  rows: RateRow[];
+  gaps: RateGap[];
+  coverage: Coverage[];
 }
 
 interface DraftRate {
-  country: string
-  rateKey: string
-  region: string
-  subRegion: string
-  filingAccountId: string
-  taxYear: number
-  values: Record<string, string>
-  sourceCitation: string
-  reason: string
-  existingId: string | null
+  country: string;
+  rateKey: string;
+  region: string;
+  subRegion: string;
+  filingAccountId: string;
+  taxYear: number;
+  values: Record<string, string>;
+  sourceCitation: string;
+  reason: string;
+  existingId: string | null;
 }
 
 export function StatutoryRatesSection({ initialYear }: { initialYear?: number }) {
-  const t = useTranslations('payroll.settingsPage')
-  const locale = useLocale()
-  const today = useBusinessToday()
-  const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
-  const [data, setData] = useState<Payload | null>(null)
-  const [year, setYear] = useState<number | null>(initialYear ?? null)
-  const [draft, setDraft] = useState<DraftRate | null>(null)
-  const { busy, execute } = useAppAction()
-  const tc = useTranslations('common')
-  const [baseline, setBaseline] = useState<string | null>(null)
-  const dirty = draft !== null && JSON.stringify(draft) !== baseline
+  const t = useTranslations("payroll.settingsPage");
+  const locale = useLocale();
+  const today = useBusinessToday();
+  const label = (key: string, fallback: string) =>
+    t.has(key as never) ? t(key as never) : fallback;
+  const [data, setData] = useState<Payload | null>(null);
+  const [year, setYear] = useState<number | null>(initialYear ?? null);
+  const [draft, setDraft] = useState<DraftRate | null>(null);
+  const { busy, execute } = useAppAction();
+  const tc = useTranslations("common");
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const dirty = draft !== null && JSON.stringify(draft) !== baseline;
   const discardDraft = useCallback(() => {
-    setBaseline(null)
-    setDraft(null)
-  }, [])
+    setBaseline(null);
+    setDraft(null);
+  }, []);
   const { close } = useDirtyClose({
     dirty,
     busy,
     onClose: discardDraft,
-    message: tc('feedback.unsavedChanges'),
-    confirmLabel: tc('confirm.discardChanges'),
-  })
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
+  });
   const openDraft = (next: DraftRate) => {
-    setBaseline(JSON.stringify(next))
-    setDraft(next)
-  }
-  const [failure, setFailure] = useState<string | null>(null)
-  const loadSequence = useRef(0)
-  const { execute: executeLoad, busy: loading } = useAppAction()
-  const loadFallback = label('failed', 'Failed')
+    setBaseline(JSON.stringify(next));
+    setDraft(next);
+  };
+  const [failure, setFailure] = useState<string | null>(null);
+  const loadSequence = useRef(0);
+  const { execute: executeLoad, busy: loading } = useAppAction();
+  const loadFallback = label("failed", "Failed");
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body. The shared action path
   // also catches transport rejections, so a dead initial or year-change GET
   // pins a refusal with retry instead of dropping an unhandled rejection.
-  const load = useCallback((forYear: number | null) => {
-    const sequence = ++loadSequence.current
-    const query = forYear ? `?year=${forYear}` : ''
-    return executeLoad(() => fetchAction<Payload>(`/api/payroll/settings/rates${query}`), {
-      fallbackMessage: loadFallback,
-      onRefused: (error) => {
-        if (sequence === loadSequence.current) setFailure(error.displayMessage(loadFallback))
-      },
-      onOk: (payload) => {
-        if (sequence !== loadSequence.current) return
-        setFailure(null)
-        setData(payload)
-        if (forYear == null) setYear(payload.year)
-      },
-    })
-  }, [executeLoad, loadFallback])
+  const load = useCallback(
+    (forYear: number | null) => {
+      const sequence = ++loadSequence.current;
+      const query = forYear ? `?year=${forYear}` : "";
+      return executeLoad(() => fetchAction<Payload>(`/api/payroll/settings/rates${query}`), {
+        fallbackMessage: loadFallback,
+        onRefused: (error) => {
+          if (sequence === loadSequence.current) setFailure(error.displayMessage(loadFallback));
+        },
+        onOk: (payload) => {
+          if (sequence !== loadSequence.current) return;
+          setFailure(null);
+          setData(payload);
+          if (forYear == null) setYear(payload.year);
+        },
+      });
+    },
+    [executeLoad, loadFallback],
+  );
 
   useEffect(() => {
-    void load(initialYear ?? null)
-  }, [load, initialYear])
+    void load(initialYear ?? null);
+  }, [load, initialYear]);
 
   const slotOf = useCallback(
     (country: string, rateKey: string): RateSlot | undefined =>
-      data?.packs.find((pack) => pack.country === country)?.slots.find((slot) => slot.key === rateKey),
+      data?.packs
+        .find((pack) => pack.country === country)
+        ?.slots.find((slot) => slot.key === rateKey),
     [data],
-  )
+  );
 
-  const rows = data?.rows ?? []
+  const rows = data?.rows ?? [];
 
   const yearOptions = useMemo(() => {
-    const current = year ?? Number(today.slice(0, 4))
-    return [current - 1, current, current + 1]
-  }, [year, today])
+    const current = year ?? Number(today.slice(0, 4));
+    return [current - 1, current, current + 1];
+  }, [year, today]);
 
   // The last save rejection, kept visible inside the drawer: a 422 that
   // only toasts reads as "still saving" and invites repeated Save clicks.
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   async function save() {
-    if (!draft) return
-    setSaveError(null)
-    const fallbackMessage = label('failed', 'Failed')
-    const saved = await execute(() => fetchAction('/api/payroll/settings/rates', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        country: draft.country,
-        rateKey: draft.rateKey,
-        region: draft.region || null,
-        subRegion: draft.subRegion || null,
-        filingAccountId: draft.filingAccountId || null,
-        taxYear: draft.taxYear,
-        values: draft.values,
-        sourceCitation: draft.sourceCitation,
-        reason: draft.reason,
-      }),
-    }), {
-      fallbackMessage,
-      onOk: () => {
-        toast.success(label('saved', 'Saved'))
-        discardDraft()
+    if (!draft) return;
+    setSaveError(null);
+    const fallbackMessage = label("failed", "Failed");
+    const saved = await execute(
+      () =>
+        fetchAction("/api/payroll/settings/rates", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            country: draft.country,
+            rateKey: draft.rateKey,
+            region: draft.region || null,
+            subRegion: draft.subRegion || null,
+            filingAccountId: draft.filingAccountId || null,
+            taxYear: draft.taxYear,
+            values: draft.values,
+            sourceCitation: draft.sourceCitation,
+            reason: draft.reason,
+          }),
+        }),
+      {
+        fallbackMessage,
+        onOk: () => {
+          toast.success(label("saved", "Saved"));
+          discardDraft();
+        },
+        onRefused: (error) => setSaveError(error.displayMessage(fallbackMessage)),
       },
-      onRefused: (error) => setSaveError(error.displayMessage(fallbackMessage)),
-    })
-    if (saved) await load(year)
+    );
+    if (saved) await load(year);
   }
 
   async function remove(id: string) {
-    const fallbackMessage = label('failed', 'Failed')
-    const removed = await execute(() => fetchAction(`/api/payroll/settings/rates?id=${id}`, { method: 'DELETE' }), {
-      fallbackMessage,
-      onOk: () => {
-        toast.success(label('saved', 'Saved'))
-        discardDraft()
+    const fallbackMessage = label("failed", "Failed");
+    const removed = await execute(
+      () => fetchAction(`/api/payroll/settings/rates?id=${id}`, { method: "DELETE" }),
+      {
+        fallbackMessage,
+        onOk: () => {
+          toast.success(label("saved", "Saved"));
+          discardDraft();
+        },
+        onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
       },
-      onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
-    })
-    if (removed) await load(year)
+    );
+    if (removed) await load(year);
   }
 
   // Decimal-rate fields read as percents in the table (0.0060 renders
   // 0.60%); percent and amount fields render as entered.
   const formatValues = (row: RateRow): string => {
-    const slot = slotOf(row.country, row.rateKey)
-    if (!slot) return Object.keys(row.values).map((key) => `${key} ${row.values[key]}`).join(' · ')
+    const slot = slotOf(row.country, row.rateKey);
+    if (!slot)
+      return Object.keys(row.values)
+        .map((key) => `${key} ${row.values[key]}`)
+        .join(" · ");
     return slot.fields
       .filter((field) => row.values[field.key] != null)
-      .map((field) => `${field.label} ${formatRateFieldValue(field, row.values[field.key] ?? '')}`)
-      .join(' · ')
-  }
+      .map((field) => `${field.label} ${formatRateFieldValue(field, row.values[field.key] ?? "")}`)
+      .join(" · ");
+  };
 
   const scopeBadge = (slot: RateSlot | undefined, row: RateRow) => {
-    if (!slot) return null
-    if (slot.scope === 'org') return <Badge variant="outline">{label('rates.scope.org', 'Employer-wide')}</Badge>
-    if (slot.scope === 'sub_region') {
+    if (!slot) return null;
+    if (slot.scope === "org")
+      return <Badge variant="outline">{label("rates.scope.org", "Employer-wide")}</Badge>;
+    if (slot.scope === "sub_region") {
       return (
-        <Badge variant="outline">
-          {label('rates.scope.subRegion', 'Per taxing jurisdiction')}
-        </Badge>
-      )
+        <Badge variant="outline">{label("rates.scope.subRegion", "Per taxing jurisdiction")}</Badge>
+      );
     }
-    if (slot.scope === 'region' || !row.filingAccountId) {
-      return <Badge variant="outline">{label('rates.scope.region', 'Per region')}</Badge>
+    if (slot.scope === "region" || !row.filingAccountId) {
+      return <Badge variant="outline">{label("rates.scope.region", "Per region")}</Badge>;
     }
-    return <Badge variant="success">{label('rates.scope.account', 'Per filing account')}</Badge>
-  }
+    return <Badge variant="success">{label("rates.scope.account", "Per filing account")}</Badge>;
+  };
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {label('rates.title', 'Statutory rates')}
+          {label("rates.title", "Statutory rates")}
         </h2>
         <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
           {label(
-            'rates.description',
-            'Rates no publication can supply, or that agencies publish per region or per registered account. Everything else — tax brackets, contribution maximums, credit amounts — comes from the country pack and cannot be edited here.',
+            "rates.description",
+            "Rates no publication can supply, or that agencies publish per region or per registered account. Everything else — tax brackets, contribution maximums, credit amounts — comes from the country pack and cannot be edited here.",
           )}
         </p>
       </div>
 
-      {failure ? <Alert variant="destructive">{failure} <Button variant="outline" onClick={() => void load(year)} disabled={loading}>{tc('actions.retry')}</Button></Alert> : null}
-      {loading && !data ? <p role="status">{label('rates.loading', 'Loading statutory rates…')}</p> : null}
+      {failure ? (
+        <Alert variant="destructive">
+          {failure}{" "}
+          <Button variant="outline" onClick={() => void load(year)} disabled={loading}>
+            {tc("actions.retry")}
+          </Button>
+        </Alert>
+      ) : null}
+      {loading && !data ? (
+        <p role="status">{label("rates.loading", "Loading statutory rates…")}</p>
+      ) : null}
 
       {data && data.packs.length === 0 ? (
         <Alert>
           {label(
-            'rates.noPacks',
-            'No installed country pack declares an employer-entered statutory rate. Install a pack on the Country packs tab.',
+            "rates.noPacks",
+            "No installed country pack declares an employer-entered statutory rate. Install a pack on the Country packs tab.",
           )}
         </Alert>
       ) : null}
@@ -304,21 +334,25 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           className="rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-slate-900 dark:text-slate-100">{countryName(entry.country, locale)}</span>
+            <span className="font-medium text-slate-900 dark:text-slate-100">
+              {countryName(entry.country, locale)}
+            </span>
             <span className="text-slate-500 dark:text-slate-400">
-              {label('rates.tablesLoaded', 'Statutory tables loaded for')}
+              {label("rates.tablesLoaded", "Statutory tables loaded for")}
             </span>
             {entry.supported.map((loaded) => (
-              <Badge key={loaded} variant="success">{loaded}</Badge>
+              <Badge key={loaded} variant="success">
+                {loaded}
+              </Badge>
             ))}
             {entry.draft.map((drafted) => (
               <Badge key={drafted} variant="warning">
-                {drafted} · {label('rates.draftEdition', 'scaffolded, not transcribed')}
+                {drafted} · {label("rates.draftEdition", "scaffolded, not transcribed")}
               </Badge>
             ))}
             {year != null && !entry.supported.includes(year) ? (
               <Badge variant="destructive">
-                {year} · {label('rates.notLoaded', 'not loaded')}
+                {year} · {label("rates.notLoaded", "not loaded")}
               </Badge>
             ) : null}
           </div>
@@ -326,7 +360,8 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               {entry.regions.map((region) => (
                 <span key={region.region} className="mr-3">
-                  {region.region}: {region.supported.join(', ') || label('rates.notLoaded', 'not loaded')}
+                  {region.region}:{" "}
+                  {region.supported.join(", ") || label("rates.notLoaded", "not loaded")}
                 </span>
               ))}
             </div>
@@ -336,45 +371,53 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Label htmlFor="rates-year" help={label('rates.yearHelp', 'Statutory rates are assigned for a tax year — a state rate notice, a credit-reduction determination, a provincial exemption. Rates entered for one year never reinterpret another year’s payroll.')}>
-            {label('rates.year', 'Tax year')}
+          <Label
+            htmlFor="rates-year"
+            help={label(
+              "rates.yearHelp",
+              "Statutory rates are assigned for a tax year — a state rate notice, a credit-reduction determination, a provincial exemption. Rates entered for one year never reinterpret another year’s payroll.",
+            )}
+          >
+            {label("rates.year", "Tax year")}
           </Label>
           <Select
             id="rates-year"
-            value={String(year ?? '')}
+            value={String(year ?? "")}
             onChange={(e) => {
-              const nextYear = Number(e.target.value)
-              setYear(nextYear)
-              setData(null)
-              void load(nextYear)
+              const nextYear = Number(e.target.value);
+              setYear(nextYear);
+              setData(null);
+              void load(nextYear);
             }}
           >
             {yearOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </Select>
         </div>
         <Button
           disabled={!data || data.packs.length === 0}
           onClick={() => {
-            const pack = data?.packs[0]
-            const slot = pack?.slots[0]
-            if (!pack || !slot || year == null) return
+            const pack = data?.packs[0];
+            const slot = pack?.slots[0];
+            if (!pack || !slot || year == null) return;
             openDraft({
               country: pack.country,
               rateKey: slot.key,
-              region: '',
-              subRegion: '',
-              filingAccountId: '',
+              region: "",
+              subRegion: "",
+              filingAccountId: "",
               taxYear: year,
               values: {},
-              sourceCitation: '',
-              reason: '',
+              sourceCitation: "",
+              reason: "",
               existingId: null,
-            })
+            });
           }}
         >
-          {label('rates.add', 'Add a rate')}
+          {label("rates.add", "Add a rate")}
         </Button>
       </div>
 
@@ -382,10 +425,14 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           text, not prose — it changes as rates are entered. */}
       {data && data.gaps.length > 0 ? (
         <Alert variant="warning">
-          <div className="font-medium">{label('rates.gapsTitle', 'Not configured for this year')}</div>
+          <div className="font-medium">
+            {label("rates.gapsTitle", "Not configured for this year")}
+          </div>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {data.gaps.map((gap) => (
-              <li key={`${gap.country}-${gap.slotKey}-${gap.region ?? ''}-${gap.subRegion ?? ''}-${gap.filingAccountId ?? ''}`}>
+              <li
+                key={`${gap.country}-${gap.slotKey}-${gap.region ?? ""}-${gap.subRegion ?? ""}-${gap.filingAccountId ?? ""}`}
+              >
                 {gap.message}
               </li>
             ))}
@@ -399,53 +446,58 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
         searchable
         empty={
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-            {label('rates.empty', 'No statutory rates are entered for this year.')}
+            {label("rates.empty", "No statutory rates are entered for this year.")}
           </div>
         }
-        onRowClick={(row) => openDraft({
-          country: row.country,
-          rateKey: row.rateKey,
-          region: row.region ?? '',
-          subRegion: row.subRegion ?? '',
-          filingAccountId: row.filingAccountId ?? '',
-          taxYear: row.taxYear,
-          values: { ...row.values },
-          sourceCitation: row.sourceCitation ?? '',
-          reason: row.reason ?? '',
-          existingId: row.id,
-        })}
+        onRowClick={(row) =>
+          openDraft({
+            country: row.country,
+            rateKey: row.rateKey,
+            region: row.region ?? "",
+            subRegion: row.subRegion ?? "",
+            filingAccountId: row.filingAccountId ?? "",
+            taxYear: row.taxYear,
+            values: { ...row.values },
+            sourceCitation: row.sourceCitation ?? "",
+            reason: row.reason ?? "",
+            existingId: row.id,
+          })
+        }
         columns={[
           {
-            key: 'levy',
-            header: label('rates.columns.levy', 'Rate'),
+            key: "levy",
+            header: label("rates.columns.levy", "Rate"),
             cell: (row) => slotOf(row.country, row.rateKey)?.label ?? row.rateKey,
-            search: (row) => `${row.country} ${countryName(row.country, locale)} ${slotOf(row.country, row.rateKey)?.label ?? row.rateKey}`,
+            search: (row) =>
+              `${row.country} ${countryName(row.country, locale)} ${slotOf(row.country, row.rateKey)?.label ?? row.rateKey}`,
           },
           {
-            key: 'scope',
-            header: label('rates.columns.scope', 'Scope'),
+            key: "scope",
+            header: label("rates.columns.scope", "Scope"),
             cell: (row) => scopeBadge(slotOf(row.country, row.rateKey), row),
           },
           {
-            key: 'region',
-            header: label('rates.columns.region', 'Region'),
+            key: "region",
+            header: label("rates.columns.region", "Region"),
             // The jurisdiction below the region belongs beside it, not in a
             // column of its own: an Ohio municipal rate reads "OH · COLUMBUS",
             // and a state-wide rate reads "OH".
-            cell: (row) => row.subRegion ? `${row.region ?? '—'} · ${row.subRegion}` : (row.region ?? '—'),
-            search: (row) => `${row.region ?? ''} ${row.subRegion ?? ''}`,
+            cell: (row) =>
+              row.subRegion ? `${row.region ?? "—"} · ${row.subRegion}` : (row.region ?? "—"),
+            search: (row) => `${row.region ?? ""} ${row.subRegion ?? ""}`,
           },
           {
-            key: 'account',
-            header: label('rates.columns.account', 'Filing account'),
-            cell: (row) => row.accountNumber
-              ? `${row.accountNumber}${row.accountName ? ` · ${row.accountName}` : ''}`
-              : label('rates.allAccounts', 'All accounts'),
-            search: (row) => `${row.accountNumber ?? ''} ${row.accountName ?? ''}`,
+            key: "account",
+            header: label("rates.columns.account", "Filing account"),
+            cell: (row) =>
+              row.accountNumber
+                ? `${row.accountNumber}${row.accountName ? ` · ${row.accountName}` : ""}`
+                : label("rates.allAccounts", "All accounts"),
+            search: (row) => `${row.accountNumber ?? ""} ${row.accountName ?? ""}`,
           },
           {
-            key: 'values',
-            header: label('rates.columns.values', 'Values'),
+            key: "values",
+            header: label("rates.columns.values", "Values"),
             cell: (row) => <span className="tabular-nums">{formatValues(row)}</span>,
           },
         ]}
@@ -463,50 +515,67 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
         onRemove={remove}
       />
     </div>
-  )
+  );
 }
 
 function RateDrawer({
-  draft, data, busy, label, saveError, onChange, onClose, onSave, onRemove,
+  draft,
+  data,
+  busy,
+  label,
+  saveError,
+  onChange,
+  onClose,
+  onSave,
+  onRemove,
 }: {
-  draft: DraftRate | null
-  data: Payload | null
-  busy: boolean
-  label: (key: string, fallback: string) => string
-  saveError: string | null
-  onChange: (next: DraftRate) => void
-  onClose: () => void
-  onSave: () => void
-  onRemove: (id: string) => void
+  draft: DraftRate | null;
+  data: Payload | null;
+  busy: boolean;
+  label: (key: string, fallback: string) => string;
+  saveError: string | null;
+  onChange: (next: DraftRate) => void;
+  onClose: () => void;
+  onSave: () => void;
+  onRemove: (id: string) => void;
 }) {
-  const locale = useLocale()
-  const pack = data?.packs.find((entry) => entry.country === draft?.country)
-  const slot = pack?.slots.find((entry) => entry.key === draft?.rateKey)
-  const regions = slot?.regions ?? pack?.knownRegions ?? []
+  const locale = useLocale();
+  const pack = data?.packs.find((entry) => entry.country === draft?.country);
+  const slot = pack?.slots.find((entry) => entry.key === draft?.rateKey);
+  const regions = slot?.regions ?? pack?.knownRegions ?? [];
   // Only accounts of the program type the slot declares can hold the rate — a
   // SUI rate cannot be attached to an EIN, and the API refuses it either way.
   const accounts = (pack?.accounts ?? []).filter((account) =>
-    slot?.programType ? account.programType === slot.programType : true)
+    slot?.programType ? account.programType === slot.programType : true,
+  );
 
   return (
     <Drawer
       open={draft !== null}
       onClose={onClose}
-      title={slot?.label ?? label('rates.add', 'Add a rate')}
+      title={slot?.label ?? label("rates.add", "Add a rate")}
       description={draft ? `${countryName(draft.country, locale)} · ${draft.taxYear}` : undefined}
-      footer={draft ? (
-        <div className="flex items-center justify-between gap-2">
-          {draft.existingId ? (
-            <Button variant="ghost" disabled={busy} onClick={() => onRemove(draft.existingId!)}>
-              {label('rates.remove', 'Supersede')}
-            </Button>
-          ) : <span />}
-          <div className="flex gap-2">
-            <Button variant="outline" disabled={busy} onClick={onClose}>{label('cancel', 'Cancel')}</Button>
-            <Button disabled={busy} onClick={onSave}>{label('save', 'Save')}</Button>
+      footer={
+        draft ? (
+          <div className="flex items-center justify-between gap-2">
+            {draft.existingId ? (
+              <Button variant="ghost" disabled={busy} onClick={() => onRemove(draft.existingId!)}>
+                {label("rates.remove", "Supersede")}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" disabled={busy} onClick={onClose}>
+                {label("cancel", "Cancel")}
+              </Button>
+              <Button disabled={busy} onClick={onSave}>
+                {label("save", "Save")}
+              </Button>
+            </div>
           </div>
-        </div>
-      ) : undefined}
+        ) : undefined
+      }
     >
       {draft && data ? (
         <div className="space-y-4" inert={busy}>
@@ -514,80 +583,105 @@ function RateDrawer({
           <div className="grid gap-3 sm:grid-cols-2">
             {data.packs.length > 1 ? (
               <div>
-                <Label htmlFor="rate-country">{label('rates.columns.country', 'Country pack')}</Label>
+                <Label htmlFor="rate-country">
+                  {label("rates.columns.country", "Country pack")}
+                </Label>
                 <Select
                   id="rate-country"
                   value={draft.country}
                   disabled={draft.existingId !== null}
                   onChange={(e) => {
-                    const next = data.packs.find((entry) => entry.country === e.target.value)
+                    const next = data.packs.find((entry) => entry.country === e.target.value);
                     onChange({
                       ...draft,
                       country: e.target.value,
-                      rateKey: next?.slots[0]?.key ?? '',
-                      region: '', subRegion: '', filingAccountId: '', values: {},
-                    })
+                      rateKey: next?.slots[0]?.key ?? "",
+                      region: "",
+                      subRegion: "",
+                      filingAccountId: "",
+                      values: {},
+                    });
                   }}
                 >
                   {data.packs.map((entry) => (
-                    <option key={entry.country} value={entry.country}>{countryName(entry.country, locale)}</option>
+                    <option key={entry.country} value={entry.country}>
+                      {countryName(entry.country, locale)}
+                    </option>
                   ))}
                 </Select>
               </div>
             ) : null}
             <div>
               <Label htmlFor="rate-slot" help={slot?.variesBecause}>
-                {label('rates.columns.levy', 'Rate')}
+                {label("rates.columns.levy", "Rate")}
               </Label>
               <Select
                 id="rate-slot"
                 value={draft.rateKey}
                 disabled={draft.existingId !== null}
-                onChange={(e) => onChange({
-                  ...draft, rateKey: e.target.value,
-                  region: '', subRegion: '', filingAccountId: '', values: {},
-                })}
+                onChange={(e) =>
+                  onChange({
+                    ...draft,
+                    rateKey: e.target.value,
+                    region: "",
+                    subRegion: "",
+                    filingAccountId: "",
+                    values: {},
+                  })
+                }
               >
                 {(pack?.slots ?? []).map((entry) => (
-                  <option key={entry.key} value={entry.key}>{entry.label}</option>
+                  <option key={entry.key} value={entry.key}>
+                    {entry.label}
+                  </option>
                 ))}
               </Select>
             </div>
-            {slot && slot.scope !== 'org' ? (
+            {slot && slot.scope !== "org" ? (
               <div>
                 <Label
                   htmlFor="rate-region"
-                  help={label('rates.regionHelp', 'The region the rate applies in. A rate entered for one region is never applied to another.')}
+                  help={label(
+                    "rates.regionHelp",
+                    "The region the rate applies in. A rate entered for one region is never applied to another.",
+                  )}
                 >
                   {pack?.regionLabel
                     ? pack.regionLabel.slice(0, 1).toUpperCase() + pack.regionLabel.slice(1)
-                    : label('rates.columns.region', 'Region')}
+                    : label("rates.columns.region", "Region")}
                 </Label>
                 <Select
                   id="rate-region"
                   value={draft.region}
                   disabled={draft.existingId !== null}
-                  onChange={(e) => onChange({
-                    ...draft, region: e.target.value, subRegion: '', filingAccountId: '',
-                  })}
+                  onChange={(e) =>
+                    onChange({
+                      ...draft,
+                      region: e.target.value,
+                      subRegion: "",
+                      filingAccountId: "",
+                    })
+                  }
                 >
                   <option value="">—</option>
                   {regions.map((region) => (
-                    <option key={region} value={region}>{region}</option>
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
                   ))}
                 </Select>
               </div>
             ) : null}
-            {slot?.scope === 'sub_region' ? (
+            {slot?.scope === "sub_region" ? (
               <div>
                 <Label
                   htmlFor="rate-sub-region"
                   help={label(
-                    'rates.subRegionHelp',
-                    'The taxing jurisdiction inside the region — a Pennsylvania PSD code, an Ohio municipality, a Michigan city. Each one sets its own rate, so each one is entered separately; a jurisdiction with no rate on file refuses the pay run by name rather than withholding nothing.',
+                    "rates.subRegionHelp",
+                    "The taxing jurisdiction inside the region — a Pennsylvania PSD code, an Ohio municipality, a Michigan city. Each one sets its own rate, so each one is entered separately; a jurisdiction with no rate on file refuses the pay run by name rather than withholding nothing.",
                   )}
                 >
-                  {label('rates.columns.subRegion', 'Taxing jurisdiction')}
+                  {label("rates.columns.subRegion", "Taxing jurisdiction")}
                 </Label>
                 <Input
                   id="rate-sub-region"
@@ -597,13 +691,16 @@ function RateDrawer({
                 />
               </div>
             ) : null}
-            {slot?.scope === 'filing_account' ? (
+            {slot?.scope === "filing_account" ? (
               <div>
                 <Label
                   htmlFor="rate-account"
-                  help={label('rates.accountHelp', 'This rate is assigned to a registered account, so an employer with two accounts in one region has two rates. Leave as All accounts to use one value for every account in the region.')}
+                  help={label(
+                    "rates.accountHelp",
+                    "This rate is assigned to a registered account, so an employer with two accounts in one region has two rates. Leave as All accounts to use one value for every account in the region.",
+                  )}
                 >
-                  {label('rates.columns.account', 'Filing account')}
+                  {label("rates.columns.account", "Filing account")}
                 </Label>
                 <Select
                   id="rate-account"
@@ -611,9 +708,12 @@ function RateDrawer({
                   disabled={draft.existingId !== null}
                   onChange={(e) => onChange({ ...draft, filingAccountId: e.target.value })}
                 >
-                  <option value="">{label('rates.allAccounts', 'All accounts')}</option>
+                  <option value="">{label("rates.allAccounts", "All accounts")}</option>
                   {accounts
-                    .filter((account) => !draft.region || !account.stateCode || account.stateCode === draft.region)
+                    .filter(
+                      (account) =>
+                        !draft.region || !account.stateCode || account.stateCode === draft.region,
+                    )
                     .map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.accountNumber} · {account.name}
@@ -623,13 +723,15 @@ function RateDrawer({
               </div>
             ) : null}
             <div>
-              <Label htmlFor="rate-year">{label('rates.year', 'Tax year')}</Label>
+              <Label htmlFor="rate-year">{label("rates.year", "Tax year")}</Label>
               <Input
                 id="rate-year"
                 inputMode="numeric"
                 value={String(draft.taxYear)}
                 disabled={draft.existingId !== null}
-                onChange={(e) => onChange({ ...draft, taxYear: Number(e.target.value) || draft.taxYear })}
+                onChange={(e) =>
+                  onChange({ ...draft, taxYear: Number(e.target.value) || draft.taxYear })
+                }
               />
             </div>
           </div>
@@ -639,34 +741,38 @@ function RateDrawer({
               <Label htmlFor={`rate-field-${field.key}`} help={field.help}>
                 {field.label}
               </Label>
-              {field.kind === 'flag' ? (
+              {field.kind === "flag" ? (
                 <input
                   id={`rate-field-${field.key}`}
                   type="checkbox"
                   className="h-4 w-4 accent-teal-600"
-                  checked={draft.values[field.key] === 'true'}
-                  onChange={(e) => onChange({
-                    ...draft,
-                    values: { ...draft.values, [field.key]: e.target.checked ? 'true' : 'false' },
-                  })}
+                  checked={draft.values[field.key] === "true"}
+                  onChange={(e) =>
+                    onChange({
+                      ...draft,
+                      values: { ...draft.values, [field.key]: e.target.checked ? "true" : "false" },
+                    })
+                  }
                 />
               ) : (
-              <Input
-                id={`rate-field-${field.key}`}
-                inputMode="decimal"
-                value={draft.values[field.key] ?? ''}
-                onChange={(e) => onChange({
-                  ...draft,
-                  values: { ...draft.values, [field.key]: e.target.value },
-                })}
-              />
+                <Input
+                  id={`rate-field-${field.key}`}
+                  inputMode="decimal"
+                  value={draft.values[field.key] ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...draft,
+                      values: { ...draft.values, [field.key]: e.target.value },
+                    })
+                  }
+                />
               )}
-              {(field.kind === 'rate' || field.kind === 'percent') && (
+              {(field.kind === "rate" || field.kind === "percent") && (
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {field.kind === 'rate'
-                    ? label('rates.rateScaleHint', 'Decimal rate')
-                    : label('rates.percentScaleHint', 'Percent')}
-                  {' · '}
+                  {field.kind === "rate"
+                    ? label("rates.rateScaleHint", "Decimal rate")
+                    : label("rates.percentScaleHint", "Percent")}
+                  {" · "}
                   {field.min}–{field.max}
                 </p>
               )}
@@ -680,11 +786,11 @@ function RateDrawer({
             <Label
               htmlFor="rate-source-citation"
               help={label(
-                'rates.sourceCitationHelp',
-                'The publication the figures were taken from — the state rate notice, the agency table, the announced premium. Shown on the row ever after.',
+                "rates.sourceCitationHelp",
+                "The publication the figures were taken from — the state rate notice, the agency table, the announced premium. Shown on the row ever after.",
               )}
             >
-              {label('rates.sourceCitation', 'Source citation')}
+              {label("rates.sourceCitation", "Source citation")}
             </Label>
             <Input
               id="rate-source-citation"
@@ -696,11 +802,11 @@ function RateDrawer({
             <Label
               htmlFor="rate-reason"
               help={label(
-                'rates.reasonHelp',
-                'Why this rate is being recorded — the notice year, the correction, the account it applies to. Shown on the row ever after.',
+                "rates.reasonHelp",
+                "Why this rate is being recorded — the notice year, the correction, the account it applies to. Shown on the row ever after.",
               )}
             >
-              {label('rates.reason', 'Reason')}
+              {label("rates.reason", "Reason")}
             </Label>
             <Input
               id="rate-reason"
@@ -715,5 +821,5 @@ function RateDrawer({
         </div>
       ) : null}
     </Drawer>
-  )
+  );
 }

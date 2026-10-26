@@ -1,20 +1,22 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import {
-  canonicalJson,
-  NonJsonValueError,
-  toCanonicalJsonValue,
-} from "./canonical-json.ts";
+import { canonicalJson, NonJsonValueError, toCanonicalJsonValue } from "./canonical-json.ts";
 
 test("canonical JSON survives jsonb-style object key reordering", () => {
   const published = {
     format: "openbooks.close-binder.v1",
     run: { status: "published", id: "run-1" },
-    tasks: [{ sortOrder: 2, key: "publish" }, { sortOrder: 1, key: "review" }],
+    tasks: [
+      { sortOrder: 2, key: "publish" },
+      { sortOrder: 1, key: "review" },
+    ],
   };
   const downloaded = {
-    tasks: [{ key: "publish", sortOrder: 2 }, { key: "review", sortOrder: 1 }],
+    tasks: [
+      { key: "publish", sortOrder: 2 },
+      { key: "review", sortOrder: 1 },
+    ],
     run: { id: "run-1", status: "published" },
     format: "openbooks.close-binder.v1",
   };

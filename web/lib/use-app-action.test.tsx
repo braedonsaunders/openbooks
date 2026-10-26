@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __adapterToasts: { kind: string; message: string }[] | undefined;
@@ -39,7 +39,10 @@ const { useAppAction } = await import("./use-app-action");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-async function mountProbe(task: () => Promise<{ ok: boolean; error?: InstanceType<typeof ActionError> }>, fallback: string) {
+async function mountProbe(
+  task: () => Promise<{ ok: boolean; error?: InstanceType<typeof ActionError> }>,
+  fallback: string,
+) {
   globalThis.__adapterToasts = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -48,7 +51,9 @@ async function mountProbe(task: () => Promise<{ ok: boolean; error?: InstanceTyp
     const { refusal, execute } = useAppAction();
     return (
       <>
-        <button onClick={() => void execute(task as never, { fallbackMessage: fallback })}>Go</button>
+        <button onClick={() => void execute(task as never, { fallbackMessage: fallback })}>
+          Go
+        </button>
         <ActionAlert error={refusal} fallbackMessage="Alert fallback" />
       </>
     );
@@ -87,8 +92,16 @@ test("a messageless refusal pins the call-site fallback, not the alert fallback"
   await clickGo();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the refusal must pin");
-  assert.match(alert.textContent ?? "", /Call-site fallback/, "the pin must carry the call-site copy");
-  assert.doesNotMatch(alert.textContent ?? "", /Alert fallback/, "the alert-level copy must not leak across actions");
+  assert.match(
+    alert.textContent ?? "",
+    /Call-site fallback/,
+    "the pin must carry the call-site copy",
+  );
+  assert.doesNotMatch(
+    alert.textContent ?? "",
+    /Alert fallback/,
+    "the alert-level copy must not leak across actions",
+  );
   const toasts = globalThis.__adapterToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /Call-site fallback/.test(toast.message)),
@@ -98,12 +111,19 @@ test("a messageless refusal pins the call-site fallback, not the alert fallback"
 
 test("a usable server reason still wins over the fallback", async (t) => {
   const { unmount } = await mountProbe(
-    async () => ({ ok: false, error: new ActionError({ kind: "refused", serverMessage: "Server says no" }) }),
+    async () => ({
+      ok: false,
+      error: new ActionError({ kind: "refused", serverMessage: "Server says no" }),
+    }),
     "Call-site fallback",
   );
   t.after(unmount);
   await clickGo();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the refusal must pin");
-  assert.match(alert.textContent ?? "", /Server says no/, "a usable server reason is never replaced");
+  assert.match(
+    alert.textContent ?? "",
+    /Server says no/,
+    "a usable server reason is never replaced",
+  );
 });

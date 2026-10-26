@@ -39,7 +39,9 @@
 import { PayrollError } from "../../error.ts";
 import { bmin, D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, type PayrollCertificate,
+  certificateAmount,
+  certificateChoice,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -53,7 +55,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ct.ts";
 
 /**
@@ -101,18 +107,20 @@ const CT_EDITIONS_BY_YEAR: Record<number, CtYearRates> = {
   [CT_RATES_2026.year]: CT_RATES_2026,
 };
 
-export const CT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "TPG-211 2026 Withholding Calculation Rules (Rev. 12/25)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Connecticut Department of Revenue Services, Informational Publication 2026(1), "
-    + "Connecticut Employer's Tax Guide, Circular CT, Issued 12/12/2025, Replaces "
-    + "IP 2025(1); TPG-211, 2026 Withholding Calculation Rules (Rev. 12/25), Steps 1–16 "
-    + "and Tables A–E; Form CT-W4 (Rev. 12/25)",
-  status: "published",
-  region: "CT",
-}];
+export const CT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "TPG-211 2026 Withholding Calculation Rules (Rev. 12/25)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Connecticut Department of Revenue Services, Informational Publication 2026(1), " +
+      "Connecticut Employer's Tax Guide, Circular CT, Issued 12/12/2025, Replaces " +
+      "IP 2025(1); TPG-211, 2026 Withholding Calculation Rules (Rev. 12/25), Steps 1–16 " +
+      "and Tables A–E; Form CT-W4 (Rev. 12/25)",
+    status: "published",
+    region: "CT",
+  },
+];
 
 const THOUSAND = U("1000");
 
@@ -329,33 +337,54 @@ export function ctTaxRecapture(code: CtWithholdingCode, annualSalary: bigint): b
   if (code === "A" || code === "D" || code === "F") {
     return recaptureStepped(
       annualSalary,
-      U("105000"), U("5000"), U("25"),
-      U("150000"), U("250"),
-      U("200000"), U("90"),
-      U("345000"), U("2950"),
-      U("500000"), U("50"),
-      U("540000"), U("3400"),
+      U("105000"),
+      U("5000"),
+      U("25"),
+      U("150000"),
+      U("250"),
+      U("200000"),
+      U("90"),
+      U("345000"),
+      U("2950"),
+      U("500000"),
+      U("50"),
+      U("540000"),
+      U("3400"),
     );
   }
   if (code === "B") {
     return recaptureStepped(
       annualSalary,
-      U("168000"), U("8000"), U("40"),
-      U("240000"), U("400"),
-      U("320000"), U("140"),
-      U("552000"), U("4600"),
-      U("800000"), U("80"),
-      U("864000"), U("5320"),
+      U("168000"),
+      U("8000"),
+      U("40"),
+      U("240000"),
+      U("400"),
+      U("320000"),
+      U("140"),
+      U("552000"),
+      U("4600"),
+      U("800000"),
+      U("80"),
+      U("864000"),
+      U("5320"),
     );
   }
   return recaptureStepped(
     annualSalary,
-    U("210000"), U("10000"), U("50"),
-    U("300000"), U("500"),
-    U("400000"), U("180"),
-    U("690000"), U("5900"),
-    U("1000000"), U("100"),
-    U("1080000"), U("6800"),
+    U("210000"),
+    U("10000"),
+    U("50"),
+    U("300000"),
+    U("500"),
+    U("400000"),
+    U("180"),
+    U("690000"),
+    U("5900"),
+    U("1000000"),
+    U("100"),
+    U("1080000"),
+    U("6800"),
   );
 }
 
@@ -524,7 +553,9 @@ function compute(
     if (ctRecords.length > 0) {
       const allocation = requireUsWageAllocation(input.wageAllocations, "CT", null);
       const threshold = evaluateUsNonresidentThreshold(
-        allocation, CT_NONRESIDENT_DAY_RULE, input.periodsPerYear,
+        allocation,
+        CT_NONRESIDENT_DAY_RULE,
+        input.periodsPerYear,
       );
       if (!threshold.crossed) {
         factors.CT_NONRESIDENT_UNDER_15_DAYS = "1";
@@ -543,11 +574,11 @@ function compute(
   // refuse by name rather than aggregate it as if it rode the regular check.
   if (U(input.supplemental ?? "0") > 0n && U(input.wages) === 0n) {
     throw new PayrollError(
-      "Connecticut supplemental compensation paid separately from regular wages needs "
-      + "Circular CT Example 12's recompute — tax on regular-plus-supplemental wages minus tax "
-      + "already withheld on the regular wages — and this payment carries no regular wages whose "
-      + "withheld tax the recompute could subtract. Pay the supplemental with the regular wages "
-      + "(Example 11, aggregated) instead of on a standalone check.",
+      "Connecticut supplemental compensation paid separately from regular wages needs " +
+        "Circular CT Example 12's recompute — tax on regular-plus-supplemental wages minus tax " +
+        "already withheld on the regular wages — and this payment carries no regular wages whose " +
+        "withheld tax the recompute could subtract. Pay the supplemental with the regular wages " +
+        "(Example 11, aggregated) instead of on a standalone check.",
     );
   }
   let wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -555,9 +586,8 @@ function compute(
   // Circular CT Examples 8–9: a filed CT-W4NA allocates a nonresident's wages
   // by its percentage, and only that share is priced. Without one, Example 10
   // withholds on all wages — never a guessed default.
-  const w4na = input.basis === "nonresident"
-    ? input.supportingCertificates?.us_ct_ctw4na ?? null
-    : null;
+  const w4na =
+    input.basis === "nonresident" ? (input.supportingCertificates?.us_ct_ctw4na ?? null) : null;
   if (w4na != null) {
     const allocationRaw = certificateAmount(w4na, "allocation_percentage");
     if (allocationRaw == null) {
@@ -591,8 +621,8 @@ function compute(
 
   if (taxable === 0n) {
     const extraOnly = max0(
-      U(certificateAmount(input.certificate, "additional_per_period") ?? "0")
-      - U(certificateAmount(input.certificate, "reduced_per_period") ?? "0"),
+      U(certificateAmount(input.certificate, "additional_per_period") ?? "0") -
+        U(certificateAmount(input.certificate, "reduced_per_period") ?? "0"),
     );
     trace("CT_TAX", extraOnly);
     return { state: "CT", year: rates.year, tax: D(extraOnly), taxSupplemental: D(0n), factors };
@@ -641,13 +671,14 @@ function compute(
  * never folded into it.
  */
 export function ctPaidLeaveWithholding(
-  payDate: string, ficaWages: string, ytdFicaWages: string,
+  payDate: string,
+  ficaWages: string,
+  ytdFicaWages: string,
 ): string {
   const rates = CT_STATE_ENGINE.ratesForPayDate(payDate);
-  return D(mulRateCents(
-    max0(bmin(U(ficaWages), U(rates.ctplWageBase) - U(ytdFicaWages))),
-    rates.ctplRate,
-  ));
+  return D(
+    mulRateCents(max0(bmin(U(ficaWages), U(rates.ctplWageBase) - U(ytdFicaWages))), rates.ctplRate),
+  );
 }
 
 export const CT_FACTOR_LABELS: Readonly<Record<string, string>> = {
@@ -708,17 +739,18 @@ export const CT_CERTIFICATE: PayrollCertificate = {
   purpose: "withholding",
   // Connecticut's annual exemption code E expires February 15 of the next year.
   validity: {
-    kind: "following_year_date", monthDay: "02-15",
+    kind: "following_year_date",
+    monthDay: "02-15",
     appliesWhen: { field: "withholding_code", values: ["E"] },
   },
   citation:
-    "Connecticut Form CT-W4 (Rev. 12/25); TPG-211, 2026 Withholding Calculation Rules "
-    + "(Rev. 12/25); Informational Publication 2026(1), Connecticut Employer's Tax Guide, "
-    + "Circular CT, Issued 12/12/2025",
+    "Connecticut Form CT-W4 (Rev. 12/25); TPG-211, 2026 Withholding Calculation Rules " +
+    "(Rev. 12/25); Informational Publication 2026(1), Connecticut Employer's Tax Guide, " +
+    "Circular CT, Issued 12/12/2025",
   summary:
-    "Sets the Connecticut withholding code (A, B, C, D, E, or F) and optional extra or "
-    + "reduced withholding. \"If an employee fails to give you a completed Form CT-W4, "
-    + "you must withhold at a flat rate of 6.99%, without allowance for exemption.\"",
+    "Sets the Connecticut withholding code (A, B, C, D, E, or F) and optional extra or " +
+    'reduced withholding. "If an employee fails to give you a completed Form CT-W4, ' +
+    'you must withhold at a flat rate of 6.99%, without allowance for exemption."',
   storage: "certificate_rows",
   fields: [
     {
@@ -729,14 +761,13 @@ export const CT_CERTIFICATE: PayrollCertificate = {
         {
           value: "A",
           label:
-            "A — Married filing jointly (spouse employed, combined income $24,000–$100,500) "
-            + "or married filing separately",
+            "A — Married filing jointly (spouse employed, combined income $24,000–$100,500) " +
+            "or married filing separately",
         },
         { value: "B", label: "B — Head of household" },
         {
           value: "C",
-          label:
-            "C — Married filing jointly (spouse not employed) or qualifying surviving spouse",
+          label: "C — Married filing jointly (spouse not employed) or qualifying surviving spouse",
         },
         {
           value: "D",
@@ -750,9 +781,9 @@ export const CT_CERTIFICATE: PayrollCertificate = {
       ],
       required: true,
       help:
-        "Form CT-W4 line 1, chosen from the filing-status chart on the form. Codes A, B, C, "
-        + "D and F select TPG-211 Tables A–E. Code E stops withholding. A missing code is "
-        + "not a completed CT-W4 — Circular CT then requires a flat 6.99% with no exemption.",
+        "Form CT-W4 line 1, chosen from the filing-status chart on the form. Codes A, B, C, " +
+        "D and F select TPG-211 Tables A–E. Code E stops withholding. A missing code is " +
+        "not a completed CT-W4 — Circular CT then requires a flat 6.99% with no exemption.",
     },
     {
       key: "additional_per_period",
@@ -761,9 +792,9 @@ export const CT_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "Added AFTER the TPG-211 calculation and AFTER de-annualizing (Step 14). A flat "
-        + "dollar amount, not a taxable-wage adjustment. Used with Line 3 when IP 2026(7) "
-        + "tells a two-earner couple the tables alone will miss.",
+        "Added AFTER the TPG-211 calculation and AFTER de-annualizing (Step 14). A flat " +
+        "dollar amount, not a taxable-wage adjustment. Used with Line 3 when IP 2026(7) " +
+        "tells a two-earner couple the tables alone will miss.",
     },
     {
       key: "reduced_per_period",
@@ -772,9 +803,9 @@ export const CT_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "Subtracted AFTER the calculation rules (TPG-211 Step 15). Circular CT: the Line 3 "
-        + "amount cannot exceed the withholding computed at Step 13, and the result cannot "
-        + "be less than zero.",
+        "Subtracted AFTER the calculation rules (TPG-211 Step 15). Circular CT: the Line 3 " +
+        "amount cannot exceed the withholding computed at Step 13, and the result cannot " +
+        "be less than zero.",
     },
   ],
 };
@@ -792,12 +823,12 @@ export const CT_W4NA_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "CT" },
   purpose: "withholding",
   citation:
-    "Connecticut Form CT-W4NA (Rev. 12/25); Informational Publication 2026(1), "
-    + "Connecticut Employer's Tax Guide, Circular CT, Issued 12/12/2025, Examples 8–9",
+    "Connecticut Form CT-W4NA (Rev. 12/25); Informational Publication 2026(1), " +
+    "Connecticut Employer's Tax Guide, Circular CT, Issued 12/12/2025, Examples 8–9",
   summary:
-    "States the percentage of a nonresident's services performed in Connecticut. "
-    + "Only the allocated share is priced; without a filed CT-W4NA, Example 10 "
-    + "withholds on all wages.",
+    "States the percentage of a nonresident's services performed in Connecticut. " +
+    "Only the allocated share is priced; without a filed CT-W4NA, Example 10 " +
+    "withholds on all wages.",
   storage: "certificate_rows",
   fields: [
     {
@@ -809,9 +840,9 @@ export const CT_W4NA_CERTIFICATE: PayrollCertificate = {
       max: "100",
       required: true,
       help:
-        "The CT-W4NA percentage from the employee's allocation records (Examples 8–9). "
-        + "A filed CT-W4NA with no percentage refuses calculation instead of pricing "
-        + "an invented default.",
+        "The CT-W4NA percentage from the employee's allocation records (Examples 8–9). " +
+        "A filed CT-W4NA with no percentage refuses calculation instead of pricing " +
+        "an invented default.",
     },
   ],
 };
@@ -840,7 +871,7 @@ export const CT_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Informational Publication 2026(1), Connecticut Employer's Tax Guide, Circular CT, "
-    + "Issued 12/12/2025, Replaces IP 2025(1); TPG-211, 2026 Withholding Calculation "
-    + "Rules (Rev. 12/25); Form CT-W4 (Rev. 12/25)",
+    "Informational Publication 2026(1), Connecticut Employer's Tax Guide, Circular CT, " +
+    "Issued 12/12/2025, Replaces IP 2025(1); TPG-211, 2026 Withholding Calculation " +
+    "Rules (Rev. 12/25); Form CT-W4 (Rev. 12/25)",
 };

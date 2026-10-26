@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { runScenario } from "../golden/scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -65,52 +61,68 @@ async function makeProject(orgId: string): Promise<string> {
   return id;
 }
 
-test("overhead-pair-zero fails when an overhead entry moves one account", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await postOverheadEntry(org, "OVH-PAIR-PROBE", [
-      { accountId: org.accounts.cogs, amount: "100.0000" },
-      { accountId: org.accounts.cogs, amount: "-60.0000" },
-      { accountId: org.accounts.clearing, amount: "-40.0000" },
-    ]);
+test(
+  "overhead-pair-zero fails when an overhead entry moves one account",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await postOverheadEntry(org, "OVH-PAIR-PROBE", [
+        { accountId: org.accounts.cogs, amount: "100.0000" },
+        { accountId: org.accounts.cogs, amount: "-60.0000" },
+        { accountId: org.accounts.clearing, amount: "-40.0000" },
+      ]);
 
-    const cp = await runScenario(org.orgId, { at: org.date });
-    const pair = check(cp, "overhead-pair-zero");
-    assert.equal(pair.ok, false, `pair-zero MUST fail: ${pair.detail}`);
-    assert.match(pair.detail, /2 accounts moved/, "detail must name both moved accounts");
-    assert.equal(cp.pass, false, "a drifted fixture cannot be golden");
-    for (const other of cp.checks.filter((c) => c.name !== "overhead-pair-zero")) {
-      assert.equal(other.ok, true, `${other.name} must stay green here — only pair-zero fires`);
+      const cp = await runScenario(org.orgId, { at: org.date });
+      const pair = check(cp, "overhead-pair-zero");
+      assert.equal(pair.ok, false, `pair-zero MUST fail: ${pair.detail}`);
+      assert.match(pair.detail, /2 accounts moved/, "detail must name both moved accounts");
+      assert.equal(cp.pass, false, "a drifted fixture cannot be golden");
+      for (const other of cp.checks.filter((c) => c.name !== "overhead-pair-zero")) {
+        assert.equal(other.ok, true, `${other.name} must stay green here — only pair-zero fires`);
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("overhead-burdens-jobs fails on backwards application that nets to zero", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await makeProject(org.orgId);
-    // Backwards on ONE account: the project-tagged leg is a CREDIT. The
-    // account nets to zero, so pair-zero stays green while the direction
-    // gate must fire — the exact invisible-on-a-trial-balance geometry.
-    await postOverheadEntry(org, "OVH-DIR-PROBE", [
-      { accountId: org.accounts.cogs, amount: "100.0000" },
-      { accountId: org.accounts.cogs, amount: "-100.0000", projectId },
-    ]);
+test(
+  "overhead-burdens-jobs fails on backwards application that nets to zero",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await makeProject(org.orgId);
+      // Backwards on ONE account: the project-tagged leg is a CREDIT. The
+      // account nets to zero, so pair-zero stays green while the direction
+      // gate must fire — the exact invisible-on-a-trial-balance geometry.
+      await postOverheadEntry(org, "OVH-DIR-PROBE", [
+        { accountId: org.accounts.cogs, amount: "100.0000" },
+        { accountId: org.accounts.cogs, amount: "-100.0000", projectId },
+      ]);
 
-    const cp = await runScenario(org.orgId, { at: org.date });
-    const dir = check(cp, "overhead-burdens-jobs");
-    assert.equal(dir.ok, false, `direction gate MUST fail: ${dir.detail}`);
-    assert.match(dir.detail, /-100\.00/, "detail must state the negative tagged total");
-    assert.equal(check(cp, "overhead-pair-zero").ok, true, "pair-zero must stay green — the pair nets");
-    assert.equal(cp.pass, false, "a backwards fixture cannot be golden");
-    for (const other of cp.checks.filter(
-      (c) => c.name !== "overhead-burdens-jobs" && c.name !== "overhead-pair-zero",
-    )) {
-      assert.equal(other.ok, true, `${other.name} must stay green here — only the direction gate fires`);
+      const cp = await runScenario(org.orgId, { at: org.date });
+      const dir = check(cp, "overhead-burdens-jobs");
+      assert.equal(dir.ok, false, `direction gate MUST fail: ${dir.detail}`);
+      assert.match(dir.detail, /-100\.00/, "detail must state the negative tagged total");
+      assert.equal(
+        check(cp, "overhead-pair-zero").ok,
+        true,
+        "pair-zero must stay green — the pair nets",
+      );
+      assert.equal(cp.pass, false, "a backwards fixture cannot be golden");
+      for (const other of cp.checks.filter(
+        (c) => c.name !== "overhead-burdens-jobs" && c.name !== "overhead-pair-zero",
+      )) {
+        assert.equal(
+          other.ok,
+          true,
+          `${other.name} must stay green here — only the direction gate fires`,
+        );
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);

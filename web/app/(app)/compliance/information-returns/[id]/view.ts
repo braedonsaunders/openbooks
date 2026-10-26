@@ -1,13 +1,13 @@
-import 'server-only'
+import "server-only";
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { formDefinition } from '@openbooks/engine/compliance/information-returns'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { loadFiling, requireInformationReturnsFeature } from '../../../../../lib/compliance'
-import { isUuid } from '../../../../../lib/list-params'
-import type { FilingWorksheetProps } from './FilingWorksheet'
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { formDefinition } from "@openbooks/engine/compliance/information-returns";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { loadFiling, requireInformationReturnsFeature } from "../../../../../lib/compliance";
+import { isUuid } from "../../../../../lib/list-params";
+import type { FilingWorksheetProps } from "./FilingWorksheet";
 
 /**
  * One information-return filing's recipient worksheet data, shared by its
@@ -23,52 +23,52 @@ import type { FilingWorksheetProps } from './FilingWorksheet'
  * which is string building — so the loader builds it. A spec has no `+`.
  */
 
-type WorksheetProps = FilingWorksheetProps
+type WorksheetProps = FilingWorksheetProps;
 
 export interface FilingDetailData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  filing: WorksheetProps['filing']
-  boxes: WorksheetProps['boxes']
-  canManage: boolean
-  canFile: boolean
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  filing: WorksheetProps["filing"];
+  boxes: WorksheetProps["boxes"];
+  canManage: boolean;
+  canFile: boolean;
 }
 export async function loadFilingDetail(id: string): Promise<FilingDetailData> {
-  const authz = await requirePermission('compliance.read')
-  const orgId = authz.user.orgId
-  await requireInformationReturnsFeature(orgId)
-  if (!isUuid(id)) notFound()
-  const filing = await loadFiling(orgId, id, authz.allowedSubsidiaryIds)
-  if (!filing) notFound()
-  const t = await getTranslations('compliance')
-  const form = formDefinition(filing.formType)
+  const authz = await requirePermission("compliance.read");
+  const orgId = authz.user.orgId;
+  await requireInformationReturnsFeature(orgId);
+  if (!isUuid(id)) notFound();
+  const filing = await loadFiling(orgId, id, authz.allowedSubsidiaryIds);
+  if (!filing) notFound();
+  const t = await getTranslations("compliance");
+  const form = formDefinition(filing.formType);
 
   return {
     title: `${filing.formType} · ${filing.taxYear}`,
-    description: t('informationReturns.detailDescription', {
-      entity: filing.subsidiaryName ?? t('informationReturns.orgRoot'),
+    description: t("informationReturns.detailDescription", {
+      entity: filing.subsidiaryName ?? t("informationReturns.orgRoot"),
       threshold: `${filing.currency} ${filing.threshold}`,
     }),
-    backHref: '/compliance/information-returns',
-    backLabel: t('informationReturns.title'),
+    backHref: "/compliance/information-returns",
+    backLabel: t("informationReturns.title"),
     filing,
     boxes: form.boxes,
-    canManage: can(authz, 'compliance.manage'),
-    canFile: can(authz, 'compliance.file'),
-  }
+    canManage: can(authz, "compliance.manage"),
+    canFile: can(authz, "compliance.file"),
+  };
 }
 
 export function filingDetailSpec(data: FilingDetailData): PageSpec {
   return page({
-    route: '/compliance/information-returns/[id]',
-    layout: 'detail',
+    route: "/compliance/information-returns/[id]",
+    layout: "detail",
     body: [
-      widgetBlock('information-return-filing-drawer', {
+      widgetBlock("information-return-filing-drawer", {
         detail: data,
         closeHref: data.backHref,
       }),
     ],
-  })
+  });
 }

@@ -1,13 +1,13 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { NextResponse } from 'next/server'
-import { rescindEmploymentChange } from '@openbooks/engine/hrm/change-event-actions'
-import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
-import { hrmAuthorizationResponse } from '../../../../../../lib/api/record-not-found'
-import { isUuid } from '../../../../../../lib/list-params'
-import { changeRequestErrorResponse } from '../../_lib'
-import { automationErrorResponse } from '../../../../automations/_lib'
-import { rescindBody } from '../../../../automations/bodies'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { rescindEmploymentChange } from "@openbooks/engine/hrm/change-event-actions";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { hrmAuthorizationResponse } from "../../../../../../lib/api/record-not-found";
+import { isUuid } from "../../../../../../lib/list-params";
+import { changeRequestErrorResponse } from "../../_lib";
+import { automationErrorResponse } from "../../../../automations/_lib";
+import { rescindBody } from "../../../../automations/bodies";
 /**
  * Rescind a COMPLETED employment change: closes the version it created,
  * reopens the prior image, and appends the verb rescind event. Danger
@@ -15,33 +15,30 @@ import { rescindBody } from '../../../../automations/bodies'
  * consumed payroll period.
  */
 export const POST = defineRoute({
-  permission: 'hrm.employment.manage',
-  feature: 'hrm',
+  permission: "hrm.employment.manage",
+  feature: "hrm",
   body: rescindBody,
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {
-    const { id } = params
+    const { id } = params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: 'change id must be a uuid' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: "change id must be a uuid" }, { status: 400 });
     try {
       const result = await rescindEmploymentChange({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         changeId: id,
         reason: body.reason,
-      })
-      return NextResponse.json(result, { status: 201 })
+      });
+      return NextResponse.json(result, { status: 201 });
     } catch (e) {
       // Uniform HRM mapping first — the permission regex below
       // must not swallow scope denials into the request-error shape.
-      if (e instanceof HrmAuthorizationError) return hrmAuthorizationResponse(e)
+      if (e instanceof HrmAuthorizationError) return hrmAuthorizationResponse(e);
       if (e instanceof Error && /requires the .* permission/.test(e.message)) {
-        return changeRequestErrorResponse(e)
+        return changeRequestErrorResponse(e);
       }
-      return automationErrorResponse(e)
+      return automationErrorResponse(e);
     }
   },
-})
+});

@@ -50,10 +50,7 @@ import {
   missingSettlementInputs,
   resolveAnnualSettlement,
 } from "../annual-settlement.ts";
-import type {
-  PayrollStatutoryComputeContext,
-  PushStatutoryFn,
-} from "../statutory-context.ts";
+import type { PayrollStatutoryComputeContext, PushStatutoryFn } from "../statutory-context.ts";
 import { computeItStatutoryWithRates } from "./compute-statutory.ts";
 import {
   calculateItConguaglio,
@@ -88,8 +85,12 @@ const RATES_123_08 = {
 function monthlyCollector() {
   const pushed: Pushed[] = [];
   const ctx = {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     taxYear: 2026,
     region: "01",
     periodsPerYear: 12,
@@ -135,10 +136,7 @@ function settle(
   };
   const ytdBySystemKey: Record<string, string> = {};
   for (const line of pushed) {
-    ytdBySystemKey[line.systemKey] = add(
-      ytdBySystemKey[line.systemKey] ?? "0.0000",
-      line.amount,
-    );
+    ytdBySystemKey[line.systemKey] = add(ytdBySystemKey[line.systemKey] ?? "0.0000", line.amount);
   }
   const factors = calculateItConguaglio(
     {
@@ -164,10 +162,10 @@ test("edition declared for transcribed years only, with the contract's fields", 
     assert.match(edition.citation, /DPR 29 settembre 1973, n\. 600/);
     assert.deepEqual([...edition.requiredEmployeeFacts], []);
     assert.deepEqual([...edition.requiredCertificates], []);
-    assert.deepEqual([...edition.usesTenantRates], [
-      "it_addizionale_regionale",
-      "it_addizionale_comunale",
-    ]);
+    assert.deepEqual(
+      [...edition.usesTenantRates],
+      ["it_addizionale_regionale", "it_addizionale_comunale"],
+    );
     assert.equal(edition.settlementSystemKey, "income_tax");
   }
   assert.equal(itAnnualSettlement(2024), null, "2024 is not transcribed in this tree");
@@ -190,10 +188,7 @@ test("December closes the calendar year; November does not", () => {
 test("no per-employee declaration gate: absence computes without detrazioni", () => {
   const edition = itAnnualSettlement(2026);
   assert.ok(edition);
-  assert.deepEqual(
-    missingSettlementInputs(edition, { emp: {}, certificateFor: () => null }),
-    [],
-  );
+  assert.deepEqual(missingSettlementInputs(edition, { emp: {}, certificateFor: () => null }), []);
 });
 
 test("full-year level pay: ADDCOM zero pushes nothing, IRPEF/ADDREG dust settles", async () => {
@@ -310,11 +305,11 @@ test("TI/somma indebito refuses the whole employee, naming figures and remedy", 
         }),
       ),
     (error: unknown) =>
-      error instanceof ItConguaglioRefusal
-      && /trattamento integrativo/i.test(error.message)
-      && /somma/i.test(error.message)
-      && /1100/.test(error.message)
-      && /dieci rate|10 rate/i.test(error.message),
+      error instanceof ItConguaglioRefusal &&
+      /trattamento integrativo/i.test(error.message) &&
+      /somma/i.test(error.message) &&
+      /1100/.test(error.message) &&
+      /dieci rate|10 rate/i.test(error.message),
   );
   assert.deepEqual(seen, [], "a refused settlement pushes nothing — all or nothing per employee");
 });
@@ -329,19 +324,11 @@ test("unconfigured tenant rates refuse by name, never settle zero", () => {
   } as const;
   const noop: PushStatutoryFn = () => {};
   assert.throws(
-    () =>
-      calculateItConguaglio(
-        { ...base, rates: { ...RATES_123_08, regionalRate: null } },
-        noop,
-      ),
+    () => calculateItConguaglio({ ...base, rates: { ...RATES_123_08, regionalRate: null } }, noop),
     /it_addizionale_regionale/,
   );
   assert.throws(
-    () =>
-      calculateItConguaglio(
-        { ...base, rates: { ...RATES_123_08, municipalRate: null } },
-        noop,
-      ),
+    () => calculateItConguaglio({ ...base, rates: { ...RATES_123_08, municipalRate: null } }, noop),
     /it_addizionale_comunale/,
   );
   assert.throws(
@@ -403,26 +390,27 @@ test("annual conguaglio refuses an unknown post-1995 status above the IVS massim
   // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2026/02/Circolare_15162/Allegati/16561_Circolare-numero-14-del-09-02-2026.pdf
   const pushed: Pushed[] = [];
   assert.throws(
-    () => calculateItConguaglio({
-      taxYear: 2026,
-      regionCode: "01",
-      ytdGross: "130000.0000",
-      ytdBySystemKey: {},
-      declaration: { ...DECLARATION_FILED, isPost1995: undefined },
-      rates: { ...RATES_123_08 },
-    }, (systemKey, kind, _description, amount, sequence) => {
-      pushed.push({ systemKey, kind, amount, sequence });
-    }),
+    () =>
+      calculateItConguaglio(
+        {
+          taxYear: 2026,
+          regionCode: "01",
+          ytdGross: "130000.0000",
+          ytdBySystemKey: {},
+          declaration: { ...DECLARATION_FILED, isPost1995: undefined },
+          rates: { ...RATES_123_08 },
+        },
+        (systemKey, kind, _description, amount, sequence) => {
+          pushed.push({ systemKey, kind, amount, sequence });
+        },
+      ),
     /IVS base.*122295.*anzianita_post_1995/,
   );
   assert.deepEqual(pushed, [], "a refused conguaglio must not emit partial settlement lines");
 });
 
 test("monthly adapter preserves missing post-1995 status instead of defaulting it to false", async () => {
-  await assert.rejects(
-    () => monthlyRun("10833.3333"),
-    /IVS base.*122295.*anzianita_post_1995/,
-  );
+  await assert.rejects(() => monthlyRun("10833.3333"), /IVS base.*122295.*anzianita_post_1995/);
 });
 
 test("somma band uses recurring annualized pay plus one-off employment income", async () => {

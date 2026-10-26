@@ -17,48 +17,61 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("concurrent posts of one document produce exactly one journal entry", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
-  try {
-    const docId = randomUUID();
-    await db.execute(sql`
+test(
+  "concurrent posts of one document produce exactly one journal entry",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+    try {
+      const docId = randomUUID();
+      await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
                              currency, fx_rate, status, subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
       values (${docId}, ${org.orgId}, 'vendor_bill', 'BILL-RACE', ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
               'CAD', 1, 'draft', '100', '0', '100', false, '{}'::jsonb, '{}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount,
                                  tax_amount, is_billable, quantity_fulfilled, quantity_billed, stock_location_id, custom,
                                  tax_overridden, extra_dims)
       values (${randomUUID()}, ${org.orgId}, ${docId}, 1, null, ${org.accounts.cogs}, '1', '100', '100', '0',
               false, '0', '0', null, '{}'::jsonb, false, '{}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       update documents
          set status = 'approved', updated_at = now()
        where id = ${docId} and org_id = ${org.orgId}
     `);
 
-    // Fire two posts at once.
-    const results = await Promise.allSettled([postDocument(docId, deps), postDocument(docId, deps)]);
-    const ok = results.filter((r) => r.status === "fulfilled");
-    const failed = results.filter((r) => r.status === "rejected");
-    assert.equal(ok.length, 1, "exactly one post succeeded");
-    assert.equal(failed.length, 1, "the racing post was rejected");
-    assert.ok((failed[0] as PromiseRejectedResult).reason instanceof PostingError);
+      // Fire two posts at once.
+      const results = await Promise.allSettled([
+        postDocument(docId, deps),
+        postDocument(docId, deps),
+      ]);
+      const ok = results.filter((r) => r.status === "fulfilled");
+      const failed = results.filter((r) => r.status === "rejected");
+      assert.equal(ok.length, 1, "exactly one post succeeded");
+      assert.equal(failed.length, 1, "the racing post was rejected");
+      assert.ok((failed[0] as PromiseRejectedResult).reason instanceof PostingError);
 
-    // The invariant: one and only one journal entry for the document.
-    const entries = (await db.execute<{ id: string }>(sql`
+      // The invariant: one and only one journal entry for the document.
+      const entries = await db.execute<{ id: string }>(
+        sql`
       select id from journal_entries where source_document_id = ${docId} and reverses_entry_id is null
-    `, "objects"));
-    assert.equal(entries.length, 1, "no duplicate GL entry");
+    `,
+        "objects",
+      );
+      assert.equal(entries.length, 1, "no duplicate GL entry");
 
-    const doc = (await db.execute<{ status: string; postedEntryId: string | null }>(sql`
+      const doc = await db.execute<{ status: string; postedEntryId: string | null }>(
+        sql`
       select status, posted_entry_id as "postedEntryId" from documents where id = ${docId}
-    `, "objects"));
-    assert.equal(doc[0]!.status, "posted");
-    assert.equal(doc[0]!.postedEntryId, entries[0]!.id, "document points at the one entry");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.equal(doc[0]!.status, "posted");
+      assert.equal(doc[0]!.postedEntryId, entries[0]!.id, "document points at the one entry");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

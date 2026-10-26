@@ -10,11 +10,17 @@ const Params = z.object({ id: uuidString() });
 const Body = z.object({}).strict();
 
 export const POST = defineRoute({
-  permission: "manufacturing.manage", feature: "manufacturingMrp", params: Params, body: Body,
-  handler: async ({ authz, params }) => manufacturingTransaction(authz.user.orgId, async () => {
-    const suggestion = await getPlannedOrder(db, authz.user.orgId, params.id);
-    const denied = guardSubsidiaryScope(authz, suggestion.subsidiaryId);
-    if (denied) return denied;
-    return Response.json(await confirmPlannedOrder(db, authz.user.orgId, authz.user.id, params.id));
-  }),
+  permission: "manufacturing.manage",
+  feature: "manufacturingMrp",
+  params: Params,
+  body: Body,
+  handler: async ({ authz, params }) =>
+    manufacturingTransaction(authz.user.orgId, async () => {
+      const suggestion = await getPlannedOrder(db, authz.user.orgId, params.id);
+      const denied = guardSubsidiaryScope(authz, suggestion.subsidiaryId);
+      if (denied) return denied;
+      return Response.json(
+        await confirmPlannedOrder(db, authz.user.orgId, authz.user.id, params.id),
+      );
+    }),
 });

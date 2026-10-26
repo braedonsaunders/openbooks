@@ -8,20 +8,12 @@ import {
 } from "@openbooks/engine/hrm/recruiting/pools";
 
 import { recruitingErrorResponse } from "../../../_lib";
-import {
-  addPoolMemberBody,
-  removePoolMemberBody,
-  tagCandidateBody,
-} from "../../bodies";
+import { addPoolMemberBody, removePoolMemberBody, tagCandidateBody } from "../../bodies";
 import { z } from "zod";
 
 export const runtime = "nodejs";
 
-const memberActionBody = z.union([
-  removePoolMemberBody,
-  tagCandidateBody,
-  addPoolMemberBody,
-]);
+const memberActionBody = z.union([removePoolMemberBody, tagCandidateBody, addPoolMemberBody]);
 
 /**
  * Pool members: GET lists, POST adds / removes / tags (manage gates in the
@@ -51,11 +43,7 @@ export const POST = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: memberActionBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
 
     try {

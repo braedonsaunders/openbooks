@@ -1,4 +1,4 @@
-import {seedCloseRunApprovalFixture} from "../testing/close.ts";
+import { seedCloseRunApprovalFixture } from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -21,15 +21,17 @@ import {
   provisionReversalEntryNumber,
   stackEnactedRateComponents,
 } from "./income-tax-provision.ts";
-import type {
-  EntityProvisionResult,
-  ProvisionSourceSnapshot,
-} from "./income-tax-provision.ts";
+import type { EntityProvisionResult, ProvisionSourceSnapshot } from "./income-tax-provision.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { generateAccountingPeriods } from "../close/calendar.ts";
 import { closeApprovedRun } from "../close/run-completion.ts";
 import { startCloseRun } from "../close/run-start.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 import {
   TaxFilingError,
   TAX_FILING_SNAPSHOT_VERSION,
@@ -38,7 +40,11 @@ import {
   prepareTaxFiling,
 } from "./filing.ts";
 import { computeTaxReturn } from "./return.ts";
-import { BUILT_IN_ROLES, PERMISSION_CATALOGUE, permissionSetCovers } from "../organization/permissions.ts";
+import {
+  BUILT_IN_ROLES,
+  PERMISSION_CATALOGUE,
+  permissionSetCovers,
+} from "../organization/permissions.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -47,30 +53,27 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * post through the kernel (origin tax_provision) → repost reverses and
  * supersedes cleanly.
  */
-test(
-  "income tax provision computes, posts, and reposts with reversal",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const userId = await createScratchUser(org.orgId, "Tax Tester", "admin");
+test("income tax provision computes, posts, and reposts with reversal", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Tax Tester", "admin");
 
-      // Income-tax accounts + control mapping.
-      const mk = async (number: string, name: string, type: string) => {
-        const id = randomUUID();
-        await db.execute(sql`
+    // Income-tax accounts + control mapping.
+    const mk = async (number: string, name: string, type: string) => {
+      const id = randomUUID();
+      await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
         values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-        return id;
-      };
-      const [expense, payable, dta, dtl, va] = await Promise.all([
-        mk("6100", "Income Tax Expense", "expense"),
-        mk("2110", "Income Tax Payable", "liability_current_other"),
-        mk("1410", "Deferred Tax Assets", "asset_current_other"),
-        mk("2410", "Deferred Tax Liabilities", "liability_long_term"),
-        mk("1415", "Valuation Allowance", "asset_current_other"),
-      ]);
-      await db.execute(sql`
+      return id;
+    };
+    const [expense, payable, dta, dtl, va] = await Promise.all([
+      mk("6100", "Income Tax Expense", "expense"),
+      mk("2110", "Income Tax Payable", "liability_current_other"),
+      mk("1410", "Deferred Tax Assets", "asset_current_other"),
+      mk("2410", "Deferred Tax Liabilities", "liability_long_term"),
+      mk("1415", "Valuation Allowance", "asset_current_other"),
+    ]);
+    await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{controlAccounts}',
         coalesce(settings->'controlAccounts', '{}'::jsonb) ||
         ${JSON.stringify({
@@ -82,159 +85,159 @@ test(
         })}::jsonb)
       where id = ${org.orgId}`);
 
-      // Enacted rate: 26.5% federal, org-wide.
-      await db.execute(sql`
+    // Enacted rate: 26.5% federal, org-wide.
+    await db.execute(sql`
       insert into income_tax_rates (org_id, jurisdiction, rate_percent, effective_from, created_by, updated_by)
       values (${org.orgId}, 'Federal', '26.5', '2020-01-01', ${userId}, ${userId})`);
 
-      // $1,000,000 of pretax income in FY2026: one posted invoice.
-      const invoiceId = randomUUID();
-      await db.execute(sql`
+    // $1,000,000 of pretax income in FY2026: one posted invoice.
+    const invoiceId = randomUUID();
+    await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
       values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-TAX-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
               '1000000', '0', '1000000', ${userId})`);
-      await db.execute(sql`
+    await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '1000000', '1000000', '0', '0')`);
-      await db.execute(sql`
+    await db.execute(sql`
       update documents
          set status = 'approved', submitted_by = ${userId}, submitted_at = now()
        where id = ${invoiceId} and org_id = ${org.orgId}`);
-      await postDocument(invoiceId, {
-        control: {
-          ar: org.accounts.ar,
-          ap: org.accounts.ap,
-          bank: org.accounts.bank,
-        },
-      });
+    await postDocument(invoiceId, {
+      control: {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      },
+    });
 
-      // Compute: DTL 200,000 taxable diff, DTA −80,000 deductible diff, VA 10,000.
-      const runId = await computeProvisionRun(
-        org.orgId,
-        2026,
-        {
-          permanentDifferences: [],
-          valuationAllowance: "10000",
-          additionalDifferences: [
-            {
-              category: "fixed_assets",
-              description: "P&E book vs tax",
-              difference: "200000",
-              source: "manual",
-            },
-            {
-              category: "provisions",
-              description: "Accrued warranty",
-              difference: "-80000",
-              source: "manual",
-            },
-          ],
-        },
-        userId,
-      );
-      const run = await getProvisionRun(org.orgId, runId);
-      assert.ok(run);
-      const payload = run.payload as {
-        pretaxBookIncome: string;
-        currentTax: string;
-        totalExpense: string;
-        effectiveRatePercent: string;
-      };
-      assert.equal(payload.pretaxBookIncome, "1000000.0000");
-      // Originating net taxable difference 120,000 → taxable profit 880,000,
-      // current tax 233,200. Pure timing cancels in the total, so total =
-      // statutory 265,000 + 10,000 valuation allowance = 275,000.
-      assert.equal(payload.currentTax, "233200.0000");
-      assert.equal(payload.totalExpense, "275000.0000");
-      assert.equal(payload.effectiveRatePercent, "27.50");
-      assert.equal(run.differences.length, 2);
+    // Compute: DTL 200,000 taxable diff, DTA −80,000 deductible diff, VA 10,000.
+    const runId = await computeProvisionRun(
+      org.orgId,
+      2026,
+      {
+        permanentDifferences: [],
+        valuationAllowance: "10000",
+        additionalDifferences: [
+          {
+            category: "fixed_assets",
+            description: "P&E book vs tax",
+            difference: "200000",
+            source: "manual",
+          },
+          {
+            category: "provisions",
+            description: "Accrued warranty",
+            difference: "-80000",
+            source: "manual",
+          },
+        ],
+      },
+      userId,
+    );
+    const run = await getProvisionRun(org.orgId, runId);
+    assert.ok(run);
+    const payload = run.payload as {
+      pretaxBookIncome: string;
+      currentTax: string;
+      totalExpense: string;
+      effectiveRatePercent: string;
+    };
+    assert.equal(payload.pretaxBookIncome, "1000000.0000");
+    // Originating net taxable difference 120,000 → taxable profit 880,000,
+    // current tax 233,200. Pure timing cancels in the total, so total =
+    // statutory 265,000 + 10,000 valuation allowance = 275,000.
+    assert.equal(payload.currentTax, "233200.0000");
+    assert.equal(payload.totalExpense, "275000.0000");
+    assert.equal(payload.effectiveRatePercent, "27.50");
+    assert.equal(run.differences.length, 2);
 
-      // Post through the kernel.
-      const { entryId } = await postProvisionRun(org.orgId, runId, userId);
-      const entry = (await db.execute<{ status: string; origin: string }>(sql`
+    // Post through the kernel.
+    const { entryId } = await postProvisionRun(org.orgId, runId, userId);
+    const entry = await db.execute<{ status: string; origin: string }>(
+      sql`
       select status, origin from journal_entries where id = ${entryId}
-    `, "objects"));
-      assert.equal(entry[0]!.status, "posted");
-      assert.equal(entry[0]!.origin, "tax_provision");
-      const lines = (await db.execute<{ account_id: string; amount: string }>(sql`
+    `,
+      "objects",
+    );
+    assert.equal(entry[0]!.status, "posted");
+    assert.equal(entry[0]!.origin, "tax_provision");
+    const lines = await db.execute<{ account_id: string; amount: string }>(
+      sql`
       select account_id, amount from journal_lines where entry_id = ${entryId} order by line_number
-    `, "objects"));
-      const byAccount = new Map(
-        lines.map((l) => [l.account_id, l.amount]),
-      );
-      assert.equal(byAccount.get(payable), "-233200.0000");
-      assert.equal(byAccount.get(dta), "21200.0000");
-      assert.equal(byAccount.get(dtl), "-53000.0000");
-      assert.equal(byAccount.get(va), "-10000.0000");
-      assert.equal(byAccount.get(expense), "275000.0000");
-      assert.equal(
-        isZero(sum(lines.map((line) => line.amount))),
-        true,
-        "provision journal balances",
-      );
-      const posted = await getProvisionRun(org.orgId, runId);
-      assert.equal(posted?.status, "posted");
+    `,
+      "objects",
+    );
+    const byAccount = new Map(lines.map((l) => [l.account_id, l.amount]));
+    assert.equal(byAccount.get(payable), "-233200.0000");
+    assert.equal(byAccount.get(dta), "21200.0000");
+    assert.equal(byAccount.get(dtl), "-53000.0000");
+    assert.equal(byAccount.get(va), "-10000.0000");
+    assert.equal(byAccount.get(expense), "275000.0000");
+    assert.equal(isZero(sum(lines.map((line) => line.amount))), true, "provision journal balances");
+    const posted = await getProvisionRun(org.orgId, runId);
+    assert.equal(posted?.status, "posted");
 
-      // Repost the FY: reverse + supersede, exactly one live posted run remains.
-      const runId2 = await computeProvisionRun(
-        org.orgId,
-        2026,
-        {
-          permanentDifferences: [],
-          valuationAllowance: "10000",
-          additionalDifferences: [
-            {
-              category: "fixed_assets",
-              description: "P&E book vs tax",
-              difference: "300000",
-              source: "manual",
-            },
-            {
-              category: "provisions",
-              description: "Accrued warranty",
-              difference: "-80000",
-              source: "manual",
-            },
-          ],
-        },
-        userId,
-      );
-      const { entryId: entryId2 } = await postProvisionRun(
-        org.orgId,
-        runId2,
-        userId,
-      );
-      const states = (await db.execute<{ status: string; n: number }>(sql`
+    // Repost the FY: reverse + supersede, exactly one live posted run remains.
+    const runId2 = await computeProvisionRun(
+      org.orgId,
+      2026,
+      {
+        permanentDifferences: [],
+        valuationAllowance: "10000",
+        additionalDifferences: [
+          {
+            category: "fixed_assets",
+            description: "P&E book vs tax",
+            difference: "300000",
+            source: "manual",
+          },
+          {
+            category: "provisions",
+            description: "Accrued warranty",
+            difference: "-80000",
+            source: "manual",
+          },
+        ],
+      },
+      userId,
+    );
+    const { entryId: entryId2 } = await postProvisionRun(org.orgId, runId2, userId);
+    const states = await db.execute<{ status: string; n: number }>(
+      sql`
       select status, count(*)::int as n from tax_provision_runs
        where org_id = ${org.orgId} and fiscal_year = 2026 group by status
-    `, "objects"));
-      const byStatus = new Map(states.map((r) => [r.status, r.n]));
-      assert.equal(byStatus.get("posted"), 1);
-      assert.equal(byStatus.get("superseded"), 1);
-      const reversal = (await db.execute<{ n: number }>(sql`
+    `,
+      "objects",
+    );
+    const byStatus = new Map(states.map((r) => [r.status, r.n]));
+    assert.equal(byStatus.get("posted"), 1);
+    assert.equal(byStatus.get("superseded"), 1);
+    const reversal = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${entryId}
-    `, "objects"));
-      assert.equal(
-        reversal[0]!.n,
-        1,
-        "repost reversed the superseded entry",
-      );
+    `,
+      "objects",
+    );
+    assert.equal(reversal[0]!.n, 1, "repost reversed the superseded entry");
 
-      // The DTL movement between the two runs (53,000 → 79,500) shows in entry 2.
-      const dtlLine = (await db.execute<{ amount: string }>(sql`
+    // The DTL movement between the two runs (53,000 → 79,500) shows in entry 2.
+    const dtlLine = await db.execute<{ amount: string }>(
+      sql`
       select amount from journal_lines where entry_id = ${entryId2} and account_id = ${dtl}
-    `, "objects"));
-      assert.equal(dtlLine[0]!.amount, "-79500.0000");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    `,
+      "objects",
+    );
+    assert.equal(dtlLine[0]!.amount, "-79500.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Shared fixtures for the defect-regression cases below.
@@ -275,7 +278,7 @@ async function seedEnactedRate(
   orgId: string,
   jurisdiction: string,
   ratePercent: string,
-  opts: { subsidiaryId?: string; effectiveFrom?: string; userId: string } ,
+  opts: { subsidiaryId?: string; effectiveFrom?: string; userId: string },
 ): Promise<void> {
   await db.execute(sql`
     insert into income_tax_rates (org_id, jurisdiction, rate_percent, effective_from, subsidiary_id, created_by, updated_by)
@@ -386,23 +389,17 @@ test("enacted rate stacking adds org-wide and subsidiary jurisdictions and fails
   );
   assert.throws(
     () =>
-      stackEnactedRateComponents([
-        { jurisdiction: "Federal", ratePercent: "-3", scope: "org" },
-      ]),
+      stackEnactedRateComponents([{ jurisdiction: "Federal", ratePercent: "-3", scope: "org" }]),
     IncomeTaxProvisionError,
   );
 });
 
-function lineageSnapshot(
-  over: Partial<ProvisionSourceSnapshot> = {},
-): ProvisionSourceSnapshot {
+function lineageSnapshot(over: Partial<ProvisionSourceSnapshot> = {}): ProvisionSourceSnapshot {
   return {
     framework: "asc740",
     pretaxBySubsidiaryId: { a: "100.0000" },
     fixedAssetDifferences: [],
-    rateRows: [
-      { jurisdiction: "Federal", ratePercent: "21.0000", subsidiaryId: null },
-    ],
+    rateRows: [{ jurisdiction: "Federal", ratePercent: "21.0000", subsidiaryId: null }],
     priorPostedRunId: null,
     priorPostedSnapshotHash: null,
     priorBalancesBySubsidiaryId: {},
@@ -423,9 +420,7 @@ test("source-lineage drift names exactly the section that changed", () => {
     detectProvisionSourceDrift(
       lineageSnapshot(),
       lineageSnapshot({
-        rateRows: [
-          { jurisdiction: "Federal", ratePercent: "22.0000", subsidiaryId: null },
-        ],
+        rateRows: [{ jurisdiction: "Federal", ratePercent: "22.0000", subsidiaryId: null }],
       }),
     ),
     ["enacted income tax rates"],
@@ -541,48 +536,61 @@ test("provision journal numbering is deterministic and collision-free through re
 // DB-backed regression cases (one per defect, plus unchanged-input controls).
 // ---------------------------------------------------------------------------
 
-test("fixed-asset tax basis counts each equal-cost asset once across multi-line schedules", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Fixed Asset Tester", "admin");
-    const taxBookId = randomUUID();
-    await db.execute(sql`
+test(
+  "fixed-asset tax basis counts each equal-cost asset once across multi-line schedules",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Fixed Asset Tester", "admin");
+      const taxBookId = randomUUID();
+      await db.execute(sql`
       insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
       values (${taxBookId}, ${org.orgId}, 'tax', 'Tax', false, true, true)`);
 
-    const categoryId = randomUUID();
-    await db.execute(sql`
+      const categoryId = randomUUID();
+      await db.execute(sql`
       insert into asset_categories
         (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
          depreciation_expense_account_id, default_method, default_convention, tax_attributes, is_active)
       values (${categoryId}, ${org.orgId}, 'Equipment', ${org.accounts.invAsset}, ${org.accounts.clearing},
               ${org.accounts.adjustment}, 'straight_line', 'full_month', '{}'::jsonb, true)`);
 
-    // A real posted entry supplies the immutable posting reference required by
-    // depreciation schedule lines without introducing a second posting path.
-    await postInvoice(org, {
-      subsidiaryId: org.subsidiaryId,
-      amount: "100",
-      number: "INV-FA-BASIS",
-      userId,
-    });
-    const journalEntryId = (await db.execute<{ id: string }>(sql`
+      // A real posted entry supplies the immutable posting reference required by
+      // depreciation schedule lines without introducing a second posting path.
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "100",
+        number: "INV-FA-BASIS",
+        userId,
+      });
+      const journalEntryId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from journal_entries
        where org_id = ${org.orgId} and entry_number = 'INV-FA-BASIS'
-    `, "objects"))[0]!.id;
+    `,
+          "objects",
+        )
+      )[0]!.id;
 
-    const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+      const calendarId = (
+        await db.execute<{ fiscal_calendar_id: string }>(
+          sql`
       select fiscal_calendar_id from accounting_periods where id = ${org.periodId}
-    `, "objects"))[0]!.fiscal_calendar_id;
-    const secondPeriodId = randomUUID();
-    await db.execute(sql`
+    `,
+          "objects",
+        )
+      )[0]!.fiscal_calendar_id;
+      const secondPeriodId = randomUUID();
+      await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${secondPeriodId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendarId})`);
 
-    const assets = [randomUUID(), randomUUID()];
-    for (const [index, assetId] of assets.entries()) {
-      await db.execute(sql`
+      const assets = [randomUUID(), randomUUID()];
+      for (const [index, assetId] of assets.entries()) {
+        await db.execute(sql`
         insert into fixed_assets
           (id, org_id, subsidiary_id, category_id, asset_number, name, status,
            acquired_on, in_service_on, acquisition_cost, salvage_value,
@@ -590,188 +598,282 @@ test("fixed-asset tax basis counts each equal-cost asset once across multi-line 
         values (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, ${`FA-BASIS-${index + 1}`},
                 ${`Equal-cost asset ${index + 1}`}, 'in_service', ${org.date}, ${org.date}, '10000', '0',
                 'straight_line', 12, '{}'::jsonb)`);
-    }
+      }
 
-    const schedules = [
-      { assetId: assets[0]!, bookId: org.bookId, id: randomUUID(), amounts: ["1000", "500"] },
-      { assetId: assets[0]!, bookId: taxBookId, id: randomUUID(), amounts: ["2000", "1000"] },
-      { assetId: assets[1]!, bookId: org.bookId, id: randomUUID(), amounts: ["1200", "300"] },
-      { assetId: assets[1]!, bookId: taxBookId, id: randomUUID(), amounts: ["2500", "500"] },
-    ];
-    for (const schedule of schedules) {
-      await db.execute(sql`
+      const schedules = [
+        { assetId: assets[0]!, bookId: org.bookId, id: randomUUID(), amounts: ["1000", "500"] },
+        { assetId: assets[0]!, bookId: taxBookId, id: randomUUID(), amounts: ["2000", "1000"] },
+        { assetId: assets[1]!, bookId: org.bookId, id: randomUUID(), amounts: ["1200", "300"] },
+        { assetId: assets[1]!, bookId: taxBookId, id: randomUUID(), amounts: ["2500", "500"] },
+      ];
+      for (const schedule of schedules) {
+        await db.execute(sql`
         insert into depreciation_schedules
           (id, org_id, asset_id, book_id, method, life_months, created_by, updated_by)
         values (${schedule.id}, ${org.orgId}, ${schedule.assetId}, ${schedule.bookId}, 'straight_line', 12,
                 ${userId}, ${userId})`);
-      for (const [index, amount] of schedule.amounts.entries()) {
-        await db.execute(sql`
+        for (const [index, amount] of schedule.amounts.entries()) {
+          await db.execute(sql`
           insert into depreciation_schedule_lines
             (id, org_id, schedule_id, period_id, sequence, planned_amount, posted_amount,
              journal_entry_id, source, created_by, updated_by)
           values (${randomUUID()}, ${org.orgId}, ${schedule.id},
                   ${index === 0 ? org.periodId : secondPeriodId}, ${index + 1}, ${amount}, ${amount},
                   ${journalEntryId}, 'formula', ${userId}, ${userId})`);
+        }
       }
+
+      const differences = await computeFixedAssetDifferences(org.orgId, "2026-12-31");
+      assert.equal(differences.length, 1);
+      const difference = differences[0]!;
+      // Each asset costs 10,000, so equal-cost rows must still sum to 20,000.
+      // Book depreciation is 3,000 and tax depreciation is 6,000 across all
+      // four schedules and their two posted lines each.
+      assert.equal(difference.bookBasis, "17000.0000");
+      assert.equal(difference.taxBasis, "14000.0000");
+      assert.equal(difference.difference, "3000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
+  },
+);
 
-    const differences = await computeFixedAssetDifferences(org.orgId, "2026-12-31");
-    assert.equal(differences.length, 1);
-    const difference = differences[0]!;
-    // Each asset costs 10,000, so equal-cost rows must still sum to 20,000.
-    // Book depreciation is 3,000 and tax depreciation is 6,000 across all
-    // four schedules and their two posted lines each.
-    assert.equal(difference.bookBasis, "17000.0000");
-    assert.equal(difference.taxBasis, "14000.0000");
-    assert.equal(difference.difference, "3000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "posting refuses a stale draft after ledger activity changes and zero rows are written",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Stale Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "1000000",
+        number: "INV-STALE-1",
+        userId,
+      });
 
-test("posting refuses a stale draft after ledger activity changes and zero rows are written", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Stale Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "1000000", number: "INV-STALE-1", userId });
+      const draftId = await computeProvisionRun(org.orgId, 2026, {}, userId);
 
-    const draftId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      // The ledger moves AFTER the draft was reviewed.
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "500000",
+        number: "INV-STALE-2",
+        userId,
+      });
 
-    // The ledger moves AFTER the draft was reviewed.
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "500000", number: "INV-STALE-2", userId });
-
-    await assert.rejects(
-      () => postProvisionRun(org.orgId, draftId, userId),
-      /stale.*pretax book income/s,
-    );
-    // Zero journal/status writes happened for the rejected post.
-    const entries = (await db.execute<{ n: number }>(sql`
+      await assert.rejects(
+        () => postProvisionRun(org.orgId, draftId, userId),
+        /stale.*pretax book income/s,
+      );
+      // Zero journal/status writes happened for the rejected post.
+      const entries = await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${org.orgId} and origin = 'tax_provision'`, "objects"));
-    assert.equal(entries[0]!.n, 0);
-    const stillDraft = await getProvisionRun(org.orgId, draftId);
-    assert.equal(stillDraft?.status, "draft");
+       where org_id = ${org.orgId} and origin = 'tax_provision'`,
+        "objects",
+      );
+      assert.equal(entries[0]!.n, 0);
+      const stillDraft = await getProvisionRun(org.orgId, draftId);
+      assert.equal(stillDraft?.status, "draft");
 
-    // Happy control: recompute against the live ledger posts cleanly.
-    const freshId = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    assert.notEqual(freshId, draftId);
-    const { entryId } = await postProvisionRun(org.orgId, freshId, userId);
-    const posted = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where id = ${entryId}`, "objects"));
-    assert.equal(posted[0]!.status, "posted");
-    const payload = payloadOf((await getProvisionRun(org.orgId, freshId))!);
-    assert.equal(payload.pretaxBookIncome, "1500000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Happy control: recompute against the live ledger posts cleanly.
+      const freshId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      assert.notEqual(freshId, draftId);
+      const { entryId } = await postProvisionRun(org.orgId, freshId, userId);
+      const posted = await db.execute<{ status: string }>(
+        sql`
+      select status from journal_entries where id = ${entryId}`,
+        "objects",
+      );
+      assert.equal(posted[0]!.status, "posted");
+      const payload = payloadOf((await getProvisionRun(org.orgId, freshId))!);
+      assert.equal(payload.pretaxBookIncome, "1500000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("equal-aggregate drafts with different temporary-difference detail get distinct identities", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Detail Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
+test(
+  "equal-aggregate drafts with different temporary-difference detail get distinct identities",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Detail Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
 
-    const diffsA = [
-      { category: "fixed_assets" as const, description: "Fixture lease timing", difference: "100000", source: "manual" as const },
-      { category: "provisions" as const, description: "Warranty accrual", difference: "-50000", source: "manual" as const },
-    ];
-    // Same amounts, same categories, same aggregates — ONLY descriptions and
-    // composition differ. Under the aggregate-only hash this returned draft A.
-    const diffsB = [
-      { category: "fixed_assets" as const, description: "Tooling lease timing", difference: "100000", source: "manual" as const },
-      { category: "provisions" as const, description: "Rebate accrual", difference: "-50000", source: "manual" as const },
-    ];
-    const runA = await computeProvisionRun(org.orgId, 2026, { additionalDifferences: diffsA }, userId);
-    const runB = await computeProvisionRun(org.orgId, 2026, { additionalDifferences: diffsB }, userId);
-    assert.notEqual(runB, runA, "materially different workpapers must not reuse the prior draft");
+      const diffsA = [
+        {
+          category: "fixed_assets" as const,
+          description: "Fixture lease timing",
+          difference: "100000",
+          source: "manual" as const,
+        },
+        {
+          category: "provisions" as const,
+          description: "Warranty accrual",
+          difference: "-50000",
+          source: "manual" as const,
+        },
+      ];
+      // Same amounts, same categories, same aggregates — ONLY descriptions and
+      // composition differ. Under the aggregate-only hash this returned draft A.
+      const diffsB = [
+        {
+          category: "fixed_assets" as const,
+          description: "Tooling lease timing",
+          difference: "100000",
+          source: "manual" as const,
+        },
+        {
+          category: "provisions" as const,
+          description: "Rebate accrual",
+          difference: "-50000",
+          source: "manual" as const,
+        },
+      ];
+      const runA = await computeProvisionRun(
+        org.orgId,
+        2026,
+        { additionalDifferences: diffsA },
+        userId,
+      );
+      const runB = await computeProvisionRun(
+        org.orgId,
+        2026,
+        { additionalDifferences: diffsB },
+        userId,
+      );
+      assert.notEqual(runB, runA, "materially different workpapers must not reuse the prior draft");
 
-    const discarded = await getProvisionRun(org.orgId, runA);
-    assert.equal(discarded?.status, "discarded");
-    const detail = (await db.execute<{ description: string }>(sql`
-      select description from temporary_differences where run_id = ${runB} order by description`, "objects"));
-    assert.deepEqual(
-      detail.map((r) => r.description),
-      ["Rebate accrual", "Tooling lease timing"],
-    );
+      const discarded = await getProvisionRun(org.orgId, runA);
+      assert.equal(discarded?.status, "discarded");
+      const detail = await db.execute<{ description: string }>(
+        sql`
+      select description from temporary_differences where run_id = ${runB} order by description`,
+        "objects",
+      );
+      assert.deepEqual(
+        detail.map((r) => r.description),
+        ["Rebate accrual", "Tooling lease timing"],
+      );
 
-    // Byte-equivalent retry remains idempotent.
-    const retry = await computeProvisionRun(org.orgId, 2026, { additionalDifferences: diffsB }, userId);
-    assert.equal(retry, runB);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Byte-equivalent retry remains idempotent.
+      const retry = await computeProvisionRun(
+        org.orgId,
+        2026,
+        { additionalDifferences: diffsB },
+        userId,
+      );
+      assert.equal(retry, runB);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("missing enacted-rate coverage fails closed while a genuine 0% rate computes", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Coverage Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD", org.subsidiaryId);
-    // Only the ROOT has coverage; the active USD entity has none.
-    await seedEnactedRate(org.orgId, "CAD federal", "26", { subsidiaryId: org.subsidiaryId, userId });
-    await db.execute(sql`
+test(
+  "missing enacted-rate coverage fails closed while a genuine 0% rate computes",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Coverage Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      const usSub = await createSubsidiary(org.orgId, "US Ops", "USD", org.subsidiaryId);
+      // Only the ROOT has coverage; the active USD entity has none.
+      await seedEnactedRate(org.orgId, "CAD federal", "26", {
+        subsidiaryId: org.subsidiaryId,
+        userId,
+      });
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.25', 'manual')`);
-    await postInvoice(org, { subsidiaryId: usSub, amount: "100000", currency: "USD", number: "INV-COV-1", userId });
+      await postInvoice(org, {
+        subsidiaryId: usSub,
+        amount: "100000",
+        currency: "USD",
+        number: "INV-COV-1",
+        userId,
+      });
 
-    await assert.rejects(
-      () => computeProvisionRun(org.orgId, 2026, {}, userId),
-      /no enacted income tax rate covers US Ops/,
-    );
+      await assert.rejects(
+        () => computeProvisionRun(org.orgId, 2026, {}, userId),
+        /no enacted income tax rate covers US Ops/,
+      );
 
-    // Control: an explicit 0% row IS coverage and computes silently fine.
-    await seedEnactedRate(org.orgId, "US federal", "0", { subsidiaryId: usSub, userId });
-    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    const payload = payloadOf((await getProvisionRun(org.orgId, runId))!);
-    const usEntity = payload.entities.find((e) => e.subsidiaryId === usSub)!;
-    assert.equal(usEntity.enactedRatePercent, "0.0000");
-    assert.equal(usEntity.computation.currentTax, "0.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Control: an explicit 0% row IS coverage and computes silently fine.
+      await seedEnactedRate(org.orgId, "US federal", "0", { subsidiaryId: usSub, userId });
+      const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      const payload = payloadOf((await getProvisionRun(org.orgId, runId))!);
+      const usEntity = payload.entities.find((e) => e.subsidiaryId === usSub)!;
+      assert.equal(usEntity.enactedRatePercent, "0.0000");
+      assert.equal(usEntity.computation.currentTax, "0.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("multi-entity provisions calculate, post and translate per entity instead of posting to the root", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Entity Tester", "admin");
-    const accounts = await seedTaxControlAccounts(org.orgId);
-    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD", org.subsidiaryId);
-    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
-    await seedEnactedRate(org.orgId, "US federal", "21", { subsidiaryId: usSub, userId });
-    await db.execute(sql`
+test(
+  "multi-entity provisions calculate, post and translate per entity instead of posting to the root",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Entity Tester", "admin");
+      const accounts = await seedTaxControlAccounts(org.orgId);
+      const usSub = await createSubsidiary(org.orgId, "US Ops", "USD", org.subsidiaryId);
+      await seedEnactedRate(org.orgId, "CA federal", "26", {
+        subsidiaryId: org.subsidiaryId,
+        userId,
+      });
+      await seedEnactedRate(org.orgId, "US federal", "21", { subsidiaryId: usSub, userId });
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.25', 'manual')`);
 
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-ENT-CA", userId });
-    await postInvoice(org, { subsidiaryId: usSub, amount: "100000", currency: "USD", number: "INV-ENT-US", userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "200000",
+        number: "INV-ENT-CA",
+        userId,
+      });
+      await postInvoice(org, {
+        subsidiaryId: usSub,
+        amount: "100000",
+        currency: "USD",
+        number: "INV-ENT-US",
+        userId,
+      });
 
-    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    const run = (await getProvisionRun(org.orgId, runId))!;
-    const payload = payloadOf(run);
-    assert.equal(payload.entities.length, 2);
-    const ca = payload.entities.find((e) => e.subsidiaryId === org.subsidiaryId)!;
-    const us = payload.entities.find((e) => e.subsidiaryId === usSub)!;
-    assert.equal(ca.computation.currentTax, "52000.0000");
-    assert.equal(us.computation.currentTax, "21000.0000");
-    assert.equal(us.fxRate, "1.2500000000");
-    // Consolidated view translates: 52,000 + 21,000 × 1.25 = 78,250 — never
-    // the raw 73,000 unit sum.
-    assert.equal(payload.currentTax, "78250.0000");
+      const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      const run = (await getProvisionRun(org.orgId, runId))!;
+      const payload = payloadOf(run);
+      assert.equal(payload.entities.length, 2);
+      const ca = payload.entities.find((e) => e.subsidiaryId === org.subsidiaryId)!;
+      const us = payload.entities.find((e) => e.subsidiaryId === usSub)!;
+      assert.equal(ca.computation.currentTax, "52000.0000");
+      assert.equal(us.computation.currentTax, "21000.0000");
+      assert.equal(us.fxRate, "1.2500000000");
+      // Consolidated view translates: 52,000 + 21,000 × 1.25 = 78,250 — never
+      // the raw 73,000 unit sum.
+      assert.equal(payload.currentTax, "78250.0000");
 
-    await postProvisionRun(org.orgId, runId, userId);
-    const journals = (await db.execute<{
-      id: string;
-      subsidiary_id: string;
-      currency: string | null;
-      n: number;
-      balanced: string;
-    }>(sql`
+      await postProvisionRun(org.orgId, runId, userId);
+      const journals = await db.execute<{
+        id: string;
+        subsidiary_id: string;
+        currency: string | null;
+        n: number;
+        balanced: string;
+      }>(
+        sql`
       select e.id, e.subsidiary_id,
              (select currency from journal_lines l where l.entry_id = e.id limit 1) as currency,
              count(*)::int as n,
@@ -779,157 +881,222 @@ test("multi-entity provisions calculate, post and translate per entity instead o
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${org.orgId} and e.origin = 'tax_provision' and e.status = 'posted'
-       group by e.id, e.subsidiary_id`, "objects"));
-    assert.equal(journals.length, 2, "one functional-currency journal per entity");
-    const bySub = new Map(journals.map((j) => [j.subsidiary_id, j]));
-    const usJournal = bySub.get(usSub)!;
-    const caJournal = bySub.get(org.subsidiaryId)!;
-    assert.equal(usJournal.currency, "USD");
-    assert.equal(caJournal.currency, "CAD");
-    for (const journal of [usJournal, caJournal]) {
-      assert.equal(journal.balanced, "0.0000", `entity ${journal.subsidiary_id} balances on its own`);
-    }
-    // The USD entity's expense line carries its functional amount.
-    const usExpense = (await db.execute<{ amount: string }>(sql`
+       group by e.id, e.subsidiary_id`,
+        "objects",
+      );
+      assert.equal(journals.length, 2, "one functional-currency journal per entity");
+      const bySub = new Map(journals.map((j) => [j.subsidiary_id, j]));
+      const usJournal = bySub.get(usSub)!;
+      const caJournal = bySub.get(org.subsidiaryId)!;
+      assert.equal(usJournal.currency, "USD");
+      assert.equal(caJournal.currency, "CAD");
+      for (const journal of [usJournal, caJournal]) {
+        assert.equal(
+          journal.balanced,
+          "0.0000",
+          `entity ${journal.subsidiary_id} balances on its own`,
+        );
+      }
+      // The USD entity's expense line carries its functional amount.
+      const usExpense = await db.execute<{ amount: string }>(
+        sql`
       select l.amount from journal_lines l
        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.id = ${usJournal.id} and l.account_id = ${accounts.expense}
-        and l.subsidiary_id = ${usSub}`, "objects"));
-    assert.equal(usExpense[0]!.amount, "21000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        and l.subsidiary_id = ${usSub}`,
+        "objects",
+      );
+      assert.equal(usExpense[0]!.amount, "21000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("subsidiary rates stack onto org-wide jurisdictions deterministically and ambiguity fails closed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Stack Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    const otherSub = await createSubsidiary(org.orgId, "Other Co", "EUR", org.subsidiaryId);
-    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
-    await seedEnactedRate(org.orgId, "State", "5", { subsidiaryId: org.subsidiaryId, userId });
-    // Unrelated jurisdiction scoped to ANOTHER entity must not touch the root.
-    await seedEnactedRate(org.orgId, "Other Province", "99", { subsidiaryId: otherSub, userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-STACK-1", userId });
+test(
+  "subsidiary rates stack onto org-wide jurisdictions deterministically and ambiguity fails closed",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Stack Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      const otherSub = await createSubsidiary(org.orgId, "Other Co", "EUR", org.subsidiaryId);
+      await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+      await seedEnactedRate(org.orgId, "State", "5", { subsidiaryId: org.subsidiaryId, userId });
+      // Unrelated jurisdiction scoped to ANOTHER entity must not touch the root.
+      await seedEnactedRate(org.orgId, "Other Province", "99", { subsidiaryId: otherSub, userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "100000",
+        number: "INV-STACK-1",
+        userId,
+      });
 
-    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    const payload = payloadOf((await getProvisionRun(org.orgId, runId))!);
-    const rootEntity = payload.entities.find((e) => e.subsidiaryId === org.subsidiaryId)!;
-    assert.equal(rootEntity.enactedRatePercent, "26.0000", "org-wide 21% + subsidiary 5% stack");
-    assert.deepEqual(rootEntity.enactedRateJurisdictions, ["Federal", "State"]);
-    assert.equal(rootEntity.computation.currentTax, "26000.0000");
+      const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      const payload = payloadOf((await getProvisionRun(org.orgId, runId))!);
+      const rootEntity = payload.entities.find((e) => e.subsidiaryId === org.subsidiaryId)!;
+      assert.equal(rootEntity.enactedRatePercent, "26.0000", "org-wide 21% + subsidiary 5% stack");
+      assert.deepEqual(rootEntity.enactedRateJurisdictions, ["Federal", "State"]);
+      assert.equal(rootEntity.computation.currentTax, "26000.0000");
 
-    // Ambiguity: the SAME jurisdiction now configured at both scopes.
-    await seedEnactedRate(org.orgId, "State", "2", { userId });
-    await assert.rejects(
-      () => computeProvisionRun(org.orgId, 2026, {}, userId),
-      /both org-wide and subsidiary-scoped/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Ambiguity: the SAME jurisdiction now configured at both scopes.
+      await seedEnactedRate(org.orgId, "State", "2", { userId });
+      await assert.rejects(
+        () => computeProvisionRun(org.orgId, 2026, {}, userId),
+        /both org-wide and subsidiary-scoped/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("third same-year repost writes a third distinct reversal without number collisions", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Repost Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "1000000", number: "INV-REPOST-1", userId });
+test(
+  "third same-year repost writes a third distinct reversal without number collisions",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Repost Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "1000000",
+        number: "INV-REPOST-1",
+        userId,
+      });
 
-    const diff = (n: number) => [
-      {
-        category: "fixed_assets" as const,
-        description: `P&E book vs tax v${n}`,
-        difference: String(n * 100000),
-        source: "manual" as const,
-      },
-    ];
-    const mainNumbers: string[] = [];
-    const reversalNumbers: string[] = [];
-    let previousEntryId: string | null = null;
-    for (const version of [1, 2, 3]) {
+      const diff = (n: number) => [
+        {
+          category: "fixed_assets" as const,
+          description: `P&E book vs tax v${n}`,
+          difference: String(n * 100000),
+          source: "manual" as const,
+        },
+      ];
+      const mainNumbers: string[] = [];
+      const reversalNumbers: string[] = [];
+      let previousEntryId: string | null = null;
+      for (const version of [1, 2, 3]) {
+        const runId = await computeProvisionRun(
+          org.orgId,
+          2026,
+          { additionalDifferences: diff(version) },
+          userId,
+        );
+        const { entryId } = await postProvisionRun(org.orgId, runId, userId);
+        const entryNumber = (
+          await db.execute<{ entry_number: string }>(
+            sql`
+        select entry_number from journal_entries where id = ${entryId}`,
+            "objects",
+          )
+        )[0]!.entry_number;
+        mainNumbers.push(entryNumber);
+        if (previousEntryId) {
+          const reversalRows: { entry_number: string }[] = await db.execute<{
+            entry_number: string;
+          }>(
+            sql`
+          select entry_number from journal_entries
+           where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${previousEntryId}`,
+            "objects",
+          );
+          assert.equal(reversalRows.length, 1, "each superseded entry reversed exactly once");
+          reversalNumbers.push(reversalRows[0]!.entry_number);
+        }
+        previousEntryId = entryId;
+      }
+
+      // Three mains, two reversals — all six numbers distinct. The pre-fix code
+      // reused one fixed ITX-REV-FY number, so the THIRD repost collided.
+      assert.equal(new Set([...mainNumbers, ...reversalNumbers]).size, 5);
+      assert.match(reversalNumbers[0]!, /^ITX-REV-FY2026-v1-/);
+      assert.match(reversalNumbers[1]!, /^ITX-REV-FY2026-v2-/);
+
+      const statuses = await db.execute<{ status: string; n: number }>(
+        sql`
+      select status, count(*)::int as n from tax_provision_runs
+       where org_id = ${org.orgId} and fiscal_year = 2026 group by status`,
+        "objects",
+      );
+      const byStatus = new Map(statuses.map((r) => [r.status, r.n]));
+      assert.equal(byStatus.get("posted"), 1);
+      assert.equal(byStatus.get("superseded"), 2);
+
+      // Idempotent retry of the live run returns its own entry.
+      const liveRun = (
+        await db.execute<{ id: string; journal_entry_id: string }>(
+          sql`
+      select id, journal_entry_id from tax_provision_runs
+       where org_id = ${org.orgId} and fiscal_year = 2026 and status = 'posted'`,
+          "objects",
+        )
+      )[0]!;
+      const retry = await postProvisionRun(org.orgId, liveRun.id, userId);
+      assert.equal(retry.entryId, liveRun.journal_entry_id);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "positive NOL carryforward and warranty reserve measure as DTA, never DTL",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Provision Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      await seedEnactedRate(org.orgId, "Federal", "25", { userId });
+      // Preparers enter the reserve/carryforward as the positive amount it is.
+      // Both are future-deductible by nature, so at 25% the whole 30,000 must
+      // land in gross DTA with the DTL side empty. Pre-fix both booked as DTL.
       const runId = await computeProvisionRun(
         org.orgId,
         2026,
-        { additionalDifferences: diff(version) },
+        {
+          additionalDifferences: [
+            {
+              category: "loss_carryforward",
+              description: "NOL carryforward",
+              difference: "100000",
+              source: "manual",
+            },
+            {
+              category: "provisions",
+              description: "Warranty reserve",
+              difference: "20000",
+              source: "manual",
+            },
+          ],
+        },
         userId,
       );
-      const { entryId } = await postProvisionRun(org.orgId, runId, userId);
-      const entryNumber = (await db.execute<{ entry_number: string }>(sql`
-        select entry_number from journal_entries where id = ${entryId}`, "objects"))[0]!.entry_number;
-      mainNumbers.push(entryNumber);
-      if (previousEntryId) {
-        const reversalRows: { entry_number: string }[] = await db.execute<{ entry_number: string }>(sql`
-          select entry_number from journal_entries
-           where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${previousEntryId}`, "objects");
-        assert.equal(reversalRows.length, 1, "each superseded entry reversed exactly once");
-        reversalNumbers.push(reversalRows[0]!.entry_number);
-      }
-      previousEntryId = entryId;
-    }
-
-    // Three mains, two reversals — all six numbers distinct. The pre-fix code
-    // reused one fixed ITX-REV-FY number, so the THIRD repost collided.
-    assert.equal(new Set([...mainNumbers, ...reversalNumbers]).size, 5);
-    assert.match(reversalNumbers[0]!, /^ITX-REV-FY2026-v1-/);
-    assert.match(reversalNumbers[1]!, /^ITX-REV-FY2026-v2-/);
-
-    const statuses = (await db.execute<{ status: string; n: number }>(sql`
-      select status, count(*)::int as n from tax_provision_runs
-       where org_id = ${org.orgId} and fiscal_year = 2026 group by status`, "objects"));
-    const byStatus = new Map(statuses.map((r) => [r.status, r.n]));
-    assert.equal(byStatus.get("posted"), 1);
-    assert.equal(byStatus.get("superseded"), 2);
-
-    // Idempotent retry of the live run returns its own entry.
-    const liveRun = (await db.execute<{ id: string; journal_entry_id: string }>(sql`
-      select id, journal_entry_id from tax_provision_runs
-       where org_id = ${org.orgId} and fiscal_year = 2026 and status = 'posted'`, "objects"))[0]!;
-    const retry = await postProvisionRun(org.orgId, liveRun.id, userId);
-    assert.equal(retry.entryId, liveRun.journal_entry_id);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("positive NOL carryforward and warranty reserve measure as DTA, never DTL", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Provision Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    await seedEnactedRate(org.orgId, "Federal", "25", { userId });
-    // Preparers enter the reserve/carryforward as the positive amount it is.
-    // Both are future-deductible by nature, so at 25% the whole 30,000 must
-    // land in gross DTA with the DTL side empty. Pre-fix both booked as DTL.
-    const runId = await computeProvisionRun(
-      org.orgId,
-      2026,
-      {
-        additionalDifferences: [
-          { category: "loss_carryforward", description: "NOL carryforward", difference: "100000", source: "manual" },
-          { category: "provisions", description: "Warranty reserve", difference: "20000", source: "manual" },
+      const run = await getProvisionRun(org.orgId, runId);
+      assert.ok(run);
+      const balances = (
+        run.payload as unknown as { balances: { dtaGross: string; dtlGross: string } }
+      ).balances;
+      assert.equal(balances.dtaGross, "30000.0000");
+      assert.equal(balances.dtlGross, "0.0000");
+      // The normalization is visible on the measured rows; entered negatives
+      // keep flowing through untouched (covered by the -80000 warranty above).
+      assert.deepEqual(
+        run.differences.map((d) => [d.category, d.difference]),
+        [
+          ["loss_carryforward", "-100000.0000"],
+          ["provisions", "-20000.0000"],
         ],
-      },
-      userId,
-    );
-    const run = await getProvisionRun(org.orgId, runId);
-    assert.ok(run);
-    const balances = (run.payload as unknown as { balances: { dtaGross: string; dtlGross: string } }).balances;
-    assert.equal(balances.dtaGross, "30000.0000");
-    assert.equal(balances.dtlGross, "0.0000");
-    // The normalization is visible on the measured rows; entered negatives
-    // keep flowing through untouched (covered by the -80000 warranty above).
-    assert.deepEqual(
-      run.differences.map((d) => [d.category, d.difference]),
-      [["loss_carryforward", "-100000.0000"], ["provisions", "-20000.0000"]],
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Tax filing segregation of duties (fnd_mt9844pt_0bwnsn)
@@ -1051,15 +1218,24 @@ async function prepareFiling(
 ): Promise<{ id: string; snapshotHash: string }> {
   const snapshotVersion = opts.snapshotVersion ?? TAX_FILING_SNAPSHOT_VERSION;
   const amounts = opts.adjustments ?? {};
-  const result = await computeTaxReturn(org.orgId, 'FP_GST', '2026-07-01', '2026-07-31', amounts, {
+  const result = await computeTaxReturn(org.orgId, "FP_GST", "2026-07-01", "2026-07-31", amounts, {
     ...(opts.filingEntity ? { filingEntity: opts.filingEntity } : {}),
   });
-  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, snapshotVersion === 3 ? [] : amounts, snapshotVersion);
+  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(
+    result,
+    snapshotVersion === 3 ? [] : amounts,
+    snapshotVersion,
+  );
   const filingId = randomUUID();
-  const versions = (await db.execute<{ version: number }>(sql`
+  const versions = (
+    await db.execute<{ version: number }>(
+      sql`
     select coalesce(max(version), 0)::int + 1 as version from tax_filings
      where org_id = ${org.orgId} and form_code = ${result.formCode}
-       and period_from = ${result.from} and period_to = ${result.to}`, "objects"))[0]!;
+       and period_from = ${result.from} and period_to = ${result.to}`,
+      "objects",
+    )
+  )[0]!;
   const storedScope =
     opts.storedSubsidiaryIds === undefined
       ? `{${result.subsidiaryIds.join(",")}}`
@@ -1085,20 +1261,28 @@ async function prepareFiling(
 }
 
 async function filingState(orgId: string, filingId: string) {
-  return (await db.execute<{
-    status: string;
-    filed_at: Date | null;
-    filing_reference: string | null;
-    snapshot_hash: string;
-  }>(sql`
+  return (
+    await db.execute<{
+      status: string;
+      filed_at: Date | null;
+      filing_reference: string | null;
+      snapshot_hash: string;
+    }>(
+      sql`
     select status, filed_at, filing_reference, snapshot_hash
-      from tax_filings where org_id = ${orgId} and id = ${filingId}`, "objects"))[0]!;
+      from tax_filings where org_id = ${orgId} and id = ${filingId}`,
+      "objects",
+    )
+  )[0]!;
 }
 
 function filingAudits(orgId: string, filingId: string) {
-  return db.execute<{ n: number }>(sql`
+  return db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'tax_filings' and row_id = ${filingId} and action = 'update'`, "objects");
+     where org_id = ${orgId} and table_name = 'tax_filings' and row_id = ${filingId} and action = 'update'`,
+    "objects",
+  );
 }
 
 function closeCoveredPeriod(org: ScratchOrg): Promise<void> {
@@ -1114,7 +1298,8 @@ function closeCoveredPeriod(org: ScratchOrg): Promise<void> {
 
 async function waitForAdvisoryWaiter(key: string, expected = 1): Promise<boolean> {
   for (let attempt = 0; attempt < 200; attempt++) {
-    const rows = await db.execute<{ n: number }>(sql`
+    const rows = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n
         from pg_locks,
              (select hashtextextended(${key}, 0) as h) as k
@@ -1122,133 +1307,160 @@ async function waitForAdvisoryWaiter(key: string, expected = 1): Promise<boolean
          and classid::text = ((k.h >> 32) & 4294967295)::text
          and objid::text = (k.h & 4294967295)::text
          and not granted
-    `, "objects");
+    `,
+      "objects",
+    );
     if (Number(rows[0]?.n ?? 0) >= expected) return true;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   return false;
 }
 
-test("mark-filed serializes with a concurrent controlled period reopen", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let holder: PoolClient | null = null;
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Reopen Race", "admin");
-    await seedFilingFingerprintFixture(org);
-    const prepared = await prepareFiling(org, userId);
-    await closeCoveredPeriod(org);
+test(
+  "mark-filed serializes with a concurrent controlled period reopen",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let holder: PoolClient | null = null;
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Reopen Race", "admin");
+      await seedFilingFingerprintFixture(org);
+      const prepared = await prepareFiling(org, userId);
+      await closeCoveredPeriod(org);
 
-    // Connection A models the approved reopen transaction: it owns the same
-    // period/book fence that the reopen service holds through the lock flip.
-    const connection = await pool.connect();
-    holder = connection;
-    await connection.query("begin");
-    await connection.query(
-      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
-      [org.orgId],
-    );
-    const key = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
-    await connection.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+      // Connection A models the approved reopen transaction: it owns the same
+      // period/book fence that the reopen service holds through the lock flip.
+      const connection = await pool.connect();
+      holder = connection;
+      await connection.query("begin");
+      await connection.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+        [org.orgId],
+      );
+      const key = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
+      await connection.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
 
-    // Connection B must park on that fence before it certifies the closure.
-    const filing = markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-RACE");
-    const parked = await waitForAdvisoryWaiter(key);
+      // Connection B must park on that fence before it certifies the closure.
+      const filing = markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-RACE");
+      const parked = await waitForAdvisoryWaiter(key);
 
-    // The reopen wins the race and commits before the filer can inspect the
-    // lock state. Mark-filed must then refuse instead of certifying an open
-    // period based on the earlier closed state.
-    await connection.query(`
+      // The reopen wins the race and commits before the filer can inspect the
+      // lock state. Mark-filed must then refuse instead of certifying an open
+      // period based on the earlier closed state.
+      await connection.query(
+        `
       update period_locks set state = 'open', locked_at = null, reason = 'test: concurrent reopen'
        where org_id = $1 and period_id = $2 and book_id = $3
          and subsidiary_id is null and module in ('gl', 'tax')`,
-      [org.orgId, org.periodId, org.bookId],
-    );
-    await connection.query("commit");
-    connection.release();
-    holder = null;
+        [org.orgId, org.periodId, org.bookId],
+      );
+      await connection.query("commit");
+      connection.release();
+      holder = null;
 
-    assert.ok(parked, "mark-filed must wait on the period-scope fence held by reopening");
-    await assert.rejects(
-      filing,
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-  } finally {
-    if (holder) {
-      await holder.query("rollback").catch(() => undefined);
-      holder.release();
+      assert.ok(parked, "mark-filed must wait on the period-scope fence held by reopening");
+      await assert.rejects(
+        filing,
+        (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+      );
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+    } finally {
+      if (holder) {
+        await holder.query("rollback").catch(() => undefined);
+        holder.release();
+      }
+      await dropScratchOrg(org.orgId);
     }
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("period generation serializes its boundary rewrite with mark-filed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let holder: PoolClient | null = null;
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Calendar Race", "admin");
-    await seedFilingFingerprintFixture(org);
-    const prepared = await prepareFiling(org, userId);
-    await closeCoveredPeriod(org);
-    const calendarId = (await db.execute<{ id: string }>(sql`
+test(
+  "period generation serializes its boundary rewrite with mark-filed",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let holder: PoolClient | null = null;
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Calendar Race", "admin");
+      await seedFilingFingerprintFixture(org);
+      const prepared = await prepareFiling(org, userId);
+      await closeCoveredPeriod(org);
+      const calendarId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from fiscal_calendars
        where org_id = ${org.orgId} and is_default and is_active
-       limit 1`, "objects"))[0]!.id;
-    const configured = [
-      ["2026-01-01", "2026-01-31"],
-      ["2026-02-01", "2026-02-28"],
-      ["2026-03-01", "2026-03-31"],
-      ["2026-04-01", "2026-04-30"],
-      ["2026-05-01", "2026-05-31"],
-      ["2026-06-01", "2026-06-30"],
-      ["2026-07-01", "2026-08-01"],
-    ].map(([startsOn, endsOn], index) => ({
-      startsOn, endsOn, name: `Period ${index + 1}`, adjustment: false,
-    }));
-    await db.execute(sql`
+       limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      const configured = [
+        ["2026-01-01", "2026-01-31"],
+        ["2026-02-01", "2026-02-28"],
+        ["2026-03-01", "2026-03-31"],
+        ["2026-04-01", "2026-04-30"],
+        ["2026-05-01", "2026-05-31"],
+        ["2026-06-01", "2026-06-30"],
+        ["2026-07-01", "2026-08-01"],
+      ].map(([startsOn, endsOn], index) => ({
+        startsOn,
+        endsOn,
+        name: `Period ${index + 1}`,
+        adjustment: false,
+      }));
+      await db.execute(sql`
       update fiscal_calendars
          set cadence = 'custom', adjustment_period_enabled = false,
              config = ${JSON.stringify({ years: { "2026": configured } })}::jsonb
        where org_id = ${org.orgId} and id = ${calendarId}`);
 
-    const connection = await pool.connect();
-    holder = connection;
-    await connection.query("begin");
-    await connection.query(
-      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
-      [org.orgId],
-    );
-    const key = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
-    await connection.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+      const connection = await pool.connect();
+      holder = connection;
+      await connection.query("begin");
+      await connection.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+        [org.orgId],
+      );
+      const key = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
+      await connection.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
 
-    // Filing resolves the old July window and queues on the period fence.
-    const filing = markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-CALENDAR-RACE");
-    assert.ok(await waitForAdvisoryWaiter(key), "mark-filed waits on the period/book fence");
-    // Generation wants to move the July boundary too, so it must queue behind
-    // the same filing fence instead of certifying against a date range that is
-    // being rewritten concurrently.
-    const generation = generateAccountingPeriods(org.orgId, calendarId, 2026, userId);
-    assert.ok(await waitForAdvisoryWaiter(key, 2), "generation also waits on the held period/book fence");
+      // Filing resolves the old July window and queues on the period fence.
+      const filing = markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-CALENDAR-RACE");
+      assert.ok(await waitForAdvisoryWaiter(key), "mark-filed waits on the period/book fence");
+      // Generation wants to move the July boundary too, so it must queue behind
+      // the same filing fence instead of certifying against a date range that is
+      // being rewritten concurrently.
+      const generation = generateAccountingPeriods(org.orgId, calendarId, 2026, userId);
+      assert.ok(
+        await waitForAdvisoryWaiter(key, 2),
+        "generation also waits on the held period/book fence",
+      );
 
-    await connection.query("commit");
-    connection.release();
-    holder = null;
+      await connection.query("commit");
+      connection.release();
+      holder = null;
 
-    await filing;
-    await generation;
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
-    const period = (await db.execute<{ ends_on: string }>(sql`
+      await filing;
+      await generation;
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+      const period = (
+        await db.execute<{ ends_on: string }>(
+          sql`
       select ends_on::text as ends_on from accounting_periods
-       where org_id = ${org.orgId} and id = ${org.periodId}`, "objects"))[0]!;
-    assert.equal(period.ends_on, "2026-08-01");
-  } finally {
-    if (holder) {
-      await holder.query("rollback").catch(() => undefined);
-      holder.release();
+       where org_id = ${org.orgId} and id = ${org.periodId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(period.ends_on, "2026-08-01");
+    } finally {
+      if (holder) {
+        await holder.query("rollback").catch(() => undefined);
+        holder.release();
+      }
+      await dropScratchOrg(org.orgId);
     }
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 /** Close the covered period for one legal entity only (gl + tax). */
 function closeEntityPeriod(org: ScratchOrg, subsidiaryId: string): Promise<void> {
@@ -1262,203 +1474,237 @@ function closeEntityPeriod(org: ScratchOrg, subsidiaryId: string): Promise<void>
   });
 }
 
-test("mark-filed rejects a filing whose source ledger moved after preparation", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-1", taxAmount: "13.00" });
-    const prepared = await prepareFiling(org, userId);
+test(
+  "mark-filed rejects a filing whose source ledger moved after preparation",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-1", taxAmount: "13.00" });
+      const prepared = await prepareFiling(org, userId);
 
-    // The covered period moves AFTER the snapshot was frozen, and the period
-    // is then closed — a closed period alone must not certify stale numbers.
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-2", taxAmount: "7.00", date: "2026-07-20" });
-    await closeCoveredPeriod(org);
+      // The covered period moves AFTER the snapshot was frozen, and the period
+      // is then closed — a closed period alone must not certify stale numbers.
+      await postTaxJournal(org, userId, taxCodeId, {
+        number: "JE-FP-2",
+        taxAmount: "7.00",
+        date: "2026-07-20",
+      });
+      await closeCoveredPeriod(org);
 
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-001"),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "stale",
-    );
-    // Zero writes on rejection: still prepared, nothing filed, no audit trail.
-    const row = await filingState(org.orgId, prepared.id);
-    assert.equal(row.status, "prepared");
-    assert.equal(row.filed_at, null);
-    assert.equal(row.filing_reference, null);
-    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-001"),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "stale",
+      );
+      // Zero writes on rejection: still prepared, nothing filed, no audit trail.
+      const row = await filingState(org.orgId, prepared.id);
+      assert.equal(row.status, "prepared");
+      assert.equal(row.filed_at, null);
+      assert.equal(row.filing_reference, null);
+      assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
 
-    // The fence forces re-preparation, not lockout: a new version prepared
-    // against the moved ledger carries a different fingerprint.
-    const fresh = await prepareFiling(org, userId);
-    assert.notEqual(fresh.id, prepared.id);
-    assert.notEqual(fresh.snapshotHash, prepared.snapshotHash);
-    assert.equal((await filingState(org.orgId, fresh.id)).status, "prepared");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // The fence forces re-preparation, not lockout: a new version prepared
+      // against the moved ledger carries a different fingerprint.
+      const fresh = await prepareFiling(org, userId);
+      assert.notEqual(fresh.id, prepared.id);
+      assert.notEqual(fresh.snapshotHash, prepared.snapshotHash);
+      assert.equal((await filingState(org.orgId, fresh.id)).status, "prepared");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("mark-filed trips stale when the registration changes after preparation", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-REG", taxAmount: "13.00" });
-    // Prepared while unregistered: registrationId null is the frozen posture.
-    const prepared = await prepareFiling(org, userId, { snapshotVersion: 2 });
+test(
+  "mark-filed trips stale when the registration changes after preparation",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-REG", taxAmount: "13.00" });
+      // Prepared while unregistered: registrationId null is the frozen posture.
+      const prepared = await prepareFiling(org, userId, { snapshotVersion: 2 });
 
-    // The org registers for this form afterwards. No box moves — the ledger
-    // is untouched — but the return's identity changed, so the v2 fingerprint
-    // must no longer reproduce and the filing is stale, not fileable.
-    const jurisdictionId = randomUUID();
-    await db.execute(sql`
+      // The org registers for this form afterwards. No box moves — the ledger
+      // is untouched — but the return's identity changed, so the v2 fingerprint
+      // must no longer reproduce and the filing is stale, not fileable.
+      const jurisdictionId = randomUUID();
+      await db.execute(sql`
       insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
       values (${jurisdictionId}, ${org.orgId}, 'FP-REG', 'Fingerprint jurisdiction', 'CA', 'country', 'gst')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
       values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, '111222333RT0001', 'quarterly', 'FP_GST', true)`);
-    await closeCoveredPeriod(org);
+      await closeCoveredPeriod(org);
 
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REG"),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "stale",
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REG"),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "stale",
+      );
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+      assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a pre-identity (v1) filing still verifies after a registration change", { skip: !DB }, async () => {
-  // Documented versioning contract: rows prepared before the identity columns
-  // existed verify boxes only, so a posture change the old snapshot never
-  // fingerprinted cannot strand them as stale. New filings (v2) verify
-  // posture — see the test above.
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-REGV1", taxAmount: "13.00" });
-    const prepared = await prepareFiling(org, userId, { snapshotVersion: 1 });
+test(
+  "a pre-identity (v1) filing still verifies after a registration change",
+  { skip: !DB },
+  async () => {
+    // Documented versioning contract: rows prepared before the identity columns
+    // existed verify boxes only, so a posture change the old snapshot never
+    // fingerprinted cannot strand them as stale. New filings (v2) verify
+    // posture — see the test above.
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-REGV1", taxAmount: "13.00" });
+      const prepared = await prepareFiling(org, userId, { snapshotVersion: 1 });
 
-    const jurisdictionId = randomUUID();
-    await db.execute(sql`
+      const jurisdictionId = randomUUID();
+      await db.execute(sql`
       insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
       values (${jurisdictionId}, ${org.orgId}, 'FP-REGV1', 'Fingerprint jurisdiction', 'CA', 'country', 'gst')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
       values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, '111222333RT0001', 'quarterly', 'FP_GST', true)`);
-    await closeCoveredPeriod(org);
+      await closeCoveredPeriod(org);
 
-    const filed = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REGV1");
-    assert.equal(filed.id, prepared.id);
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const filed = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REGV1");
+      assert.equal(filed.id, prepared.id);
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("mark-filed refuses a filing while its covered period is not closed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-3", taxAmount: "5.00" });
-    const prepared = await prepareFiling(org, userId);
+test(
+  "mark-filed refuses a filing while its covered period is not closed",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-3", taxAmount: "5.00" });
+      const prepared = await prepareFiling(org, userId);
 
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed"
-        && error.message.startsWith("period P07 FY2026 must be closed for gl"),
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+        (error: unknown) =>
+          error instanceof TaxFilingError &&
+          error.code === "period-not-closed" &&
+          error.message.startsWith("period P07 FY2026 must be closed for gl"),
+      );
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
 
-    // Partial closure is not closure: gl closed, tax still open.
-    await db.execute(sql`
+      // Partial closure is not closure: gl closed, tax still open.
+      await db.execute(sql`
       insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
       values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl',
               'closed', now(), 'test: gl only')`);
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+      );
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+      assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("mark-filed refuses a filing when one covered subsidiary is still open", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-3b", taxAmount: "5.00" });
-    const prepared = await prepareFiling(org, userId);
+test(
+  "mark-filed refuses a filing when one covered subsidiary is still open",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-3b", taxAmount: "5.00" });
+      const prepared = await prepareFiling(org, userId);
 
-    // Entity-scope closure only for the root: the child has no locks. A filing
-    // certifies every active legal entity, so a partial scoped close must not
-    // stand in for a complete close and must leave the filing untouched.
-    await db.execute(sql`
+      // Entity-scope closure only for the root: the child has no locks. A filing
+      // certifies every active legal entity, so a partial scoped close must not
+      // stand in for a complete close and must leave the filing untouched.
+      await db.execute(sql`
       insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
       values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl',
               'closed', now(), 'test: subsidiary-scope close only'),
              (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'tax',
               'closed', now(), 'test: subsidiary-scope close only')`);
 
-    assert.equal(
-      (await db.execute<{ n: number }>(sql`
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`
         select count(*)::int as n from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
-           and book_id = ${org.bookId} and subsidiary_id = ${childId}`, "objects"))[0]!.n,
-      0,
-      "the uncovered child must remain visibly unlocked",
-    );
+           and book_id = ${org.bookId} and subsidiary_id = ${childId}`,
+            "objects",
+          )
+        )[0]!.n,
+        0,
+        "the uncovered child must remain visibly unlocked",
+      );
 
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+      );
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+      assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("mark-filed accepts complete subsidiary closure without implying an org-wide lock", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const {grantScratchPermissions}=await import("../testing/fixtures.ts");
-    await grantScratchPermissions(org.orgId,userId,["close.run","close.approve"]);
-    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-5", taxAmount: "11.00" });
+test(
+  "mark-filed accepts complete subsidiary closure without implying an org-wide lock",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const { grantScratchPermissions } = await import("../testing/fixtures.ts");
+      await grantScratchPermissions(org.orgId, userId, ["close.run", "close.approve"]);
+      const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-5", taxAmount: "11.00" });
 
-    // Drive the real close writer with a non-empty legal-entity scope. The
-    // approval row is seeded exactly as the close-flow integration tests do;
-    // closeApprovedRun still performs its final refresh, blocker check, lock
-    // writes, run-state transition, and close event atomically.
-    const runId = await startCloseRun({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: userId,
-      subsidiaryIds: [org.subsidiaryId, childId],
-    });
-    await seedCloseRunApprovalFixture(org.orgId,runId,userId);
-    await closeApprovedRun(org.orgId, runId, userId);
+      // Drive the real close writer with a non-empty legal-entity scope. The
+      // approval row is seeded exactly as the close-flow integration tests do;
+      // closeApprovedRun still performs its final refresh, blocker check, lock
+      // writes, run-state transition, and close event atomically.
+      const runId = await startCloseRun({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: userId,
+        subsidiaryIds: [org.subsidiaryId, childId],
+      });
+      await seedCloseRunApprovalFixture(org.orgId, runId, userId);
+      await closeApprovedRun(org.orgId, runId, userId);
 
-    // The tenant-wide rows remain OPEN (with a lapsed reopen window), while
-    // both active legal entities are explicitly closed. Complete subsidiary
-    // evidence is sufficient; the filing must not require an artificial
-    // org-wide lock row.
-    await db.execute(sql`
+      // The tenant-wide rows remain OPEN (with a lapsed reopen window), while
+      // both active legal entities are explicitly closed. Complete subsidiary
+      // evidence is sufficient; the filing must not require an artificial
+      // org-wide lock row.
+      await db.execute(sql`
       insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, reopen_expires_at, locked_at, reason)
       values
         (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl',
@@ -1466,74 +1712,86 @@ test("mark-filed accepts complete subsidiary closure without implying an org-wid
         (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'tax',
          'open', now() - interval '1 hour', now(), 'test: lapsed reopen')`);
 
-    const prepared = await prepareFiling(org, userId);
+      const prepared = await prepareFiling(org, userId);
 
-    const updated = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-002");
-    assert.ok(updated.filedAt);
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
-    assert.equal(
-      (await db.execute<{ n: number }>(sql`
+      const updated = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-002");
+      assert.ok(updated.filedAt);
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`
         select count(*)::int as n from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
-           and book_id = ${org.bookId} and subsidiary_id is null and state = 'closed'`, "objects"))[0]!.n,
-      0,
-      "scoped closes must not imply an org-wide closed lock",
-    );
+           and book_id = ${org.bookId} and subsidiary_id is null and state = 'closed'`,
+            "objects",
+          )
+        )[0]!.n,
+        0,
+        "scoped closes must not imply an org-wide closed lock",
+      );
 
-    // Reopening either legal entity invalidates the effective closure even
-    // though the other entity and the org-wide defaults remain unchanged.
-    const second = await prepareFiling(org, userId);
-    await db.execute(sql`
+      // Reopening either legal entity invalidates the effective closure even
+      // though the other entity and the org-wide defaults remain unchanged.
+      const second = await prepareFiling(org, userId);
+      await db.execute(sql`
       update period_locks set state = 'open', reopen_expires_at = now() + interval '1 hour'
        where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}
          and subsidiary_id = ${childId} and module = 'gl'`);
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, second.id, userId, "GOV-003"),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
-    );
-    assert.equal((await filingState(org.orgId, second.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, second.id))[0]!.n, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, second.id, userId, "GOV-003"),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+      );
+      assert.equal((await filingState(org.orgId, second.id)).status, "prepared");
+      assert.equal((await filingAudits(org.orgId, second.id))[0]!.n, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("mark-filed fences the filing's frozen scope, not every subsidiary", { skip: !DB }, async () => {
-  // TR4: the governance fence covers the exact subsidiary set the return
-  // summed. Closing the root's periods certifies the root filing while an
-  // unrelated open entity cannot alter its fenced source or hash — and the
-  // still-open entity's own filing refuses.
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-SC1", taxAmount: "13.00" });
-    await postTaxJournal(org, userId, taxCodeId, {
-      number: "JE-FP-SC2", taxAmount: "7.00", subsidiaryId: childId,
-    });
-    const rootFiling = await prepareFiling(org, userId, {
-      filingEntity: { subsidiaryIds: [org.subsidiaryId] },
-    });
-    const childFiling = await prepareFiling(org, userId, {
-      filingEntity: { subsidiaryIds: [childId] },
-    });
+test(
+  "mark-filed fences the filing's frozen scope, not every subsidiary",
+  { skip: !DB },
+  async () => {
+    // TR4: the governance fence covers the exact subsidiary set the return
+    // summed. Closing the root's periods certifies the root filing while an
+    // unrelated open entity cannot alter its fenced source or hash — and the
+    // still-open entity's own filing refuses.
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-SC1", taxAmount: "13.00" });
+      await postTaxJournal(org, userId, taxCodeId, {
+        number: "JE-FP-SC2",
+        taxAmount: "7.00",
+        subsidiaryId: childId,
+      });
+      const rootFiling = await prepareFiling(org, userId, {
+        filingEntity: { subsidiaryIds: [org.subsidiaryId] },
+      });
+      const childFiling = await prepareFiling(org, userId, {
+        filingEntity: { subsidiaryIds: [childId] },
+      });
 
-    await closeEntityPeriod(org, org.subsidiaryId);
+      await closeEntityPeriod(org, org.subsidiaryId);
 
-    const filed = await markTaxFilingFiled(org.orgId, rootFiling.id, userId, "GOV-SC-1");
-    assert.equal(filed.id, rootFiling.id);
-    assert.equal((await filingState(org.orgId, rootFiling.id)).status, "filed");
+      const filed = await markTaxFilingFiled(org.orgId, rootFiling.id, userId, "GOV-SC-1");
+      assert.equal(filed.id, rootFiling.id);
+      assert.equal((await filingState(org.orgId, rootFiling.id)).status, "filed");
 
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, childFiling.id, userId, null),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
-    );
-    assert.equal((await filingState(org.orgId, childFiling.id)).status, "prepared");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, childFiling.id, userId, null),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+      );
+      assert.equal((await filingState(org.orgId, childFiling.id)).status, "prepared");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("an open planning calendar does not block mark-filed", { skip: !DB }, async () => {
   // TR4: the fence resolves the window through the shared posting-calendar
@@ -1564,546 +1822,847 @@ test("an open planning calendar does not block mark-filed", { skip: !DB }, async
   }
 });
 
-test("a legacy filing without a frozen scope still needs every entity closed", { skip: !DB }, async () => {
-  // TR4: a pre-snapshot row (NULL subsidiary_ids) is the org-wide return and
-  // keeps the all-entity fence — closing one entity must not certify it.
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-LEG", taxAmount: "13.00" });
-    const prepared = await prepareFiling(org, userId, {
-      snapshotVersion: 1,
-      storedSubsidiaryIds: null,
-    });
-
-    await closeEntityPeriod(org, org.subsidiaryId);
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-
-    await closeEntityPeriod(org, childId);
-    const filed = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-LEG-1");
-    assert.equal(filed.id, prepared.id);
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("mark-filed refuses a filing whose frozen scope names unknown subsidiaries", { skip: !DB }, async () => {
-  // TR4: a frozen scope that no longer resolves fails closed by name (stale),
-  // never by silently certifying against org-wide locks alone.
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-BAD", taxAmount: "13.00" });
-    const ghostId = randomUUID();
-    const prepared = await prepareFiling(org, userId, {
-      filingEntity: { subsidiaryIds: [org.subsidiaryId] },
-      storedSubsidiaryIds: [ghostId],
-    });
-    await closeCoveredPeriod(org);
-
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
-      (error: unknown) =>
-        error instanceof TaxFilingError &&
-        error.code === "stale" &&
-        error.message.includes(ghostId),
-    );
-    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("a fingerprint-matching filing marks filed once its covered period is closed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-4", taxAmount: "13.00" });
-    const prepared = await prepareFiling(org, userId);
-    await closeCoveredPeriod(org);
-
-    const updated = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REF-1");
-    assert.ok(updated.filedAt, "filed_at stamped");
-    const row = await filingState(org.orgId, prepared.id);
-    assert.equal(row.status, "filed");
-    assert.equal(row.filing_reference, "GOV-REF-1");
-    assert.ok(row.filed_at);
-
-    // The certification is auditable: the audit row names the verified
-    // fingerprint, so the filed lineage survives later re-preparation.
-    const audits = (await db.execute<{ changes: Record<string, unknown> }>(sql`
-      select changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id}
-         and action = 'update'`, "objects"))[0]!;
-    const after = audits.changes as { after: { status: string; snapshotHash: string; sourceVerified: boolean } };
-    assert.equal(after.after.status, "filed");
-    assert.equal(after.after.snapshotHash, prepared.snapshotHash);
-    assert.equal(after.after.sourceVerified, true);
-
-    // The transition stays one-way.
-    await assert.rejects(
-      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REF-2"),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "already-filed",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-for (const policy of ["account", "inactive subsidiary", "inactive book", "non-posting book"] as const) {
-  for (const phase of ["initial", "replacement"] as const) {
-  test(`tax provision ${phase} refuses ${policy} before posting or superseding history`, { skip: !DB }, async () => {
+test(
+  "a legacy filing without a frozen scope still needs every entity closed",
+  { skip: !DB },
+  async () => {
+    // TR4: a pre-snapshot row (NULL subsidiary_ids) is the org-wide return and
+    // keeps the all-entity fence — closing one entity must not certify it.
     const org = await createScratchOrg();
     try {
-      const actorId = await createScratchUser(org.orgId, "Tax policy operator", "admin");
-      const accounts = await seedTaxControlAccounts(org.orgId);
-      const branchId = await createSubsidiary(org.orgId, "Tax policy branch", "CAD", org.subsidiaryId);
-      await seedEnactedRate(org.orgId, "Federal", "25", { userId: actorId });
-      const subsidiaryId = policy === "inactive subsidiary" ? branchId : org.subsidiaryId;
-      let runId = await computeProvisionRun(org.orgId, 2026, {
-        permanentDifferences: [{ description: "Non-deductible expense", amount: "1000", subsidiaryId }],
-      }, actorId);
-      let priorRunId: string | null = null;
-      if (phase === "replacement") {
-        priorRunId = runId;
-        await postProvisionRun(org.orgId, runId, actorId);
-        runId = await computeProvisionRun(org.orgId, 2026, {
-          permanentDifferences: [{ description: "Revised non-deductible expense", amount: "2000", subsidiaryId }],
-        }, actorId);
-      }
-      if (policy === "account") await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
-        where org_id=${org.orgId} and id=${accounts.expense}`);
-      if (policy === "inactive subsidiary") await db.execute(sql`update subsidiaries set is_active=false
-        where org_id=${org.orgId} and id=${branchId}`);
-      if (policy === "inactive book") await db.execute(sql`update accounting_books set is_active=false
-        where org_id=${org.orgId} and id=${org.bookId}`);
-      if (policy === "non-posting book") await db.execute(sql`update accounting_books set posts_gl=false
-        where org_id=${org.orgId} and id=${org.bookId}`);
-      await assert.rejects(postProvisionRun(org.orgId, runId, actorId), (error: unknown) => {
-        assert.ok(error instanceof IncomeTaxProvisionError);
-        assert.match(error.message, policy === "account" ? /restricted to another subsidiary/
-          : policy === "inactive subsidiary" ? /inactive/ : /active primary posting book/);
-        return true;
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-LEG", taxAmount: "13.00" });
+      const prepared = await prepareFiling(org, userId, {
+        snapshotVersion: 1,
+        storedSubsidiaryIds: null,
       });
-      const state = (await db.execute<{ status: string; journals: number }>(sql`
+
+      await closeEntityPeriod(org, org.subsidiaryId);
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+      );
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+
+      await closeEntityPeriod(org, childId);
+      const filed = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-LEG-1");
+      assert.equal(filed.id, prepared.id);
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "mark-filed refuses a filing whose frozen scope names unknown subsidiaries",
+  { skip: !DB },
+  async () => {
+    // TR4: a frozen scope that no longer resolves fails closed by name (stale),
+    // never by silently certifying against org-wide locks alone.
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-BAD", taxAmount: "13.00" });
+      const ghostId = randomUUID();
+      const prepared = await prepareFiling(org, userId, {
+        filingEntity: { subsidiaryIds: [org.subsidiaryId] },
+        storedSubsidiaryIds: [ghostId],
+      });
+      await closeCoveredPeriod(org);
+
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+        (error: unknown) =>
+          error instanceof TaxFilingError &&
+          error.code === "stale" &&
+          error.message.includes(ghostId),
+      );
+      assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a fingerprint-matching filing marks filed once its covered period is closed",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-4", taxAmount: "13.00" });
+      const prepared = await prepareFiling(org, userId);
+      await closeCoveredPeriod(org);
+
+      const updated = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REF-1");
+      assert.ok(updated.filedAt, "filed_at stamped");
+      const row = await filingState(org.orgId, prepared.id);
+      assert.equal(row.status, "filed");
+      assert.equal(row.filing_reference, "GOV-REF-1");
+      assert.ok(row.filed_at);
+
+      // The certification is auditable: the audit row names the verified
+      // fingerprint, so the filed lineage survives later re-preparation.
+      const audits = (
+        await db.execute<{ changes: Record<string, unknown> }>(
+          sql`
+      select changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id}
+         and action = 'update'`,
+          "objects",
+        )
+      )[0]!;
+      const after = audits.changes as {
+        after: { status: string; snapshotHash: string; sourceVerified: boolean };
+      };
+      assert.equal(after.after.status, "filed");
+      assert.equal(after.after.snapshotHash, prepared.snapshotHash);
+      assert.equal(after.after.sourceVerified, true);
+
+      // The transition stays one-way.
+      await assert.rejects(
+        () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REF-2"),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "already-filed",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+for (const policy of [
+  "account",
+  "inactive subsidiary",
+  "inactive book",
+  "non-posting book",
+] as const) {
+  for (const phase of ["initial", "replacement"] as const) {
+    test(
+      `tax provision ${phase} refuses ${policy} before posting or superseding history`,
+      { skip: !DB },
+      async () => {
+        const org = await createScratchOrg();
+        try {
+          const actorId = await createScratchUser(org.orgId, "Tax policy operator", "admin");
+          const accounts = await seedTaxControlAccounts(org.orgId);
+          const branchId = await createSubsidiary(
+            org.orgId,
+            "Tax policy branch",
+            "CAD",
+            org.subsidiaryId,
+          );
+          await seedEnactedRate(org.orgId, "Federal", "25", { userId: actorId });
+          const subsidiaryId = policy === "inactive subsidiary" ? branchId : org.subsidiaryId;
+          let runId = await computeProvisionRun(
+            org.orgId,
+            2026,
+            {
+              permanentDifferences: [
+                { description: "Non-deductible expense", amount: "1000", subsidiaryId },
+              ],
+            },
+            actorId,
+          );
+          let priorRunId: string | null = null;
+          if (phase === "replacement") {
+            priorRunId = runId;
+            await postProvisionRun(org.orgId, runId, actorId);
+            runId = await computeProvisionRun(
+              org.orgId,
+              2026,
+              {
+                permanentDifferences: [
+                  { description: "Revised non-deductible expense", amount: "2000", subsidiaryId },
+                ],
+              },
+              actorId,
+            );
+          }
+          if (policy === "account")
+            await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
+        where org_id=${org.orgId} and id=${accounts.expense}`);
+          if (policy === "inactive subsidiary")
+            await db.execute(sql`update subsidiaries set is_active=false
+        where org_id=${org.orgId} and id=${branchId}`);
+          if (policy === "inactive book")
+            await db.execute(sql`update accounting_books set is_active=false
+        where org_id=${org.orgId} and id=${org.bookId}`);
+          if (policy === "non-posting book")
+            await db.execute(sql`update accounting_books set posts_gl=false
+        where org_id=${org.orgId} and id=${org.bookId}`);
+          await assert.rejects(postProvisionRun(org.orgId, runId, actorId), (error: unknown) => {
+            assert.ok(error instanceof IncomeTaxProvisionError);
+            assert.match(
+              error.message,
+              policy === "account"
+                ? /restricted to another subsidiary/
+                : policy === "inactive subsidiary"
+                  ? /inactive/
+                  : /active primary posting book/,
+            );
+            return true;
+          });
+          const state = (
+            await db.execute<{ status: string; journals: number }>(
+              sql`
         select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals
-        from tax_provision_runs where org_id=${org.orgId} and id=${runId}`, "objects"))[0]!;
-      assert.deepEqual(state,{status:"draft",journals:phase === "replacement" ? 1 : 0});
-      if (priorRunId) {
-        const original = (await db.execute<{ status: string; entry_status: string }>(sql`
+        from tax_provision_runs where org_id=${org.orgId} and id=${runId}`,
+              "objects",
+            )
+          )[0]!;
+          assert.deepEqual(state, { status: "draft", journals: phase === "replacement" ? 1 : 0 });
+          if (priorRunId) {
+            const original = (
+              await db.execute<{ status: string; entry_status: string }>(
+                sql`
           select r.status,e.status as entry_status from tax_provision_runs r
           join journal_entries e on e.id=r.journal_entry_id and e.org_id=r.org_id
-          where r.org_id=${org.orgId} and r.id=${priorRunId}`, "objects"))[0]!;
-        assert.deepEqual(original,{status:"posted",entry_status:"posted"},"refusal cannot supersede or reverse prior history");
-      }
-      await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
+          where r.org_id=${org.orgId} and r.id=${priorRunId}`,
+                "objects",
+              )
+            )[0]!;
+            assert.deepEqual(
+              original,
+              { status: "posted", entry_status: "posted" },
+              "refusal cannot supersede or reverse prior history",
+            );
+          }
+          await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${accounts.expense}`);
-      await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`);
-      await db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
-      assert.ok((await postProvisionRun(org.orgId,runId,actorId)).entryId);
-    } finally { await dropScratchOrg(org.orgId); }
-  });
-}
+          await db.execute(
+            sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`,
+          );
+          await db.execute(
+            sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`,
+          );
+          assert.ok((await postProvisionRun(org.orgId, runId, actorId)).entryId);
+        } finally {
+          await dropScratchOrg(org.orgId);
+        }
+      },
+    );
+  }
 }
 
-test("per-entity overrides keyed by an unknown or out-of-scope subsidiary refuse with zero writes", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Scope Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-SCP-1", userId });
+test(
+  "per-entity overrides keyed by an unknown or out-of-scope subsidiary refuse with zero writes",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Scope Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "100000",
+        number: "INV-SCP-1",
+        userId,
+      });
 
-    // A foreign (or mistyped) subsidiary id carrying a material DTA input
-    // must refuse BY ID — never compute a draft that silently omits it.
-    const foreign = randomUUID();
-    await assert.rejects(
-      () => computeProvisionRun(org.orgId, 2026, {
-        entities: {
-          [foreign]: {
-            additionalDifferences: [
-              { category: "provisions", description: "Warranty reserve", difference: "10000.0000", source: "manual" },
-            ],
+      // A foreign (or mistyped) subsidiary id carrying a material DTA input
+      // must refuse BY ID — never compute a draft that silently omits it.
+      const foreign = randomUUID();
+      await assert.rejects(
+        () =>
+          computeProvisionRun(
+            org.orgId,
+            2026,
+            {
+              entities: {
+                [foreign]: {
+                  additionalDifferences: [
+                    {
+                      category: "provisions",
+                      description: "Warranty reserve",
+                      difference: "10000.0000",
+                      source: "manual",
+                    },
+                  ],
+                },
+              },
+            },
+            userId,
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof IncomeTaxProvisionError);
+          assert.match(error.message, new RegExp(foreign.replace(/-/g, "-")));
+          assert.match(error.message, /not a subsidiary of this organization/);
+          return true;
+        },
+      );
+
+      // A real subsidiary outside the caller's scope refuses the same way.
+      await assert.rejects(
+        () =>
+          computeProvisionRun(
+            org.orgId,
+            2026,
+            {
+              entities: { [org.subsidiaryId]: { valuationAllowance: "1.0000" } },
+            },
+            userId,
+            new Set(),
+          ),
+        /outside your authorized subsidiary scope/,
+      );
+
+      // The same key inside the caller's scope still computes (with a
+      // deductible difference backing the allowance so it stays measurable).
+      const runId = await computeProvisionRun(
+        org.orgId,
+        2026,
+        {
+          entities: {
+            [org.subsidiaryId]: {
+              valuationAllowance: "1.0000",
+              additionalDifferences: [
+                {
+                  category: "provisions",
+                  description: "Warranty reserve",
+                  difference: "-80000.0000",
+                  source: "manual",
+                },
+              ],
+            },
           },
         },
-      }, userId),
-      (error: unknown) => {
-        assert.ok(error instanceof IncomeTaxProvisionError);
-        assert.match(error.message, new RegExp(foreign.replace(/-/g, "-")));
-        assert.match(error.message, /not a subsidiary of this organization/);
-        return true;
-      },
-    );
+        userId,
+        new Set([org.subsidiaryId]),
+      );
+      assert.ok(runId);
 
-    // A real subsidiary outside the caller's scope refuses the same way.
-    await assert.rejects(
-      () => computeProvisionRun(org.orgId, 2026, {
-        entities: { [org.subsidiaryId]: { valuationAllowance: "1.0000" } },
-      }, userId, new Set()),
-      /outside your authorized subsidiary scope/,
-    );
+      // Both rejections wrote nothing: exactly one run (the in-scope one) and
+      // one audit row exist for this org's provision history.
+      const runs = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(runs[0]!.n, 1);
+      const audits = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`,
+        "objects",
+      );
+      assert.equal(audits[0]!.n, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    // The same key inside the caller's scope still computes (with a
-    // deductible difference backing the allowance so it stays measurable).
-    const runId = await computeProvisionRun(org.orgId, 2026, {
-      entities: {
-        [org.subsidiaryId]: {
-          valuationAllowance: "1.0000",
+test(
+  "reposting a superseded run refuses by status instead of returning its reversed entry",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Repost Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "100000",
+        number: "INV-RPL-1",
+        userId,
+      });
+
+      const runId1 = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      const { entryId: entryId1 } = await postProvisionRun(org.orgId, runId1, userId);
+      // A changed recomputation becomes v2; posting it supersedes v1 and
+      // reverses v1's journals.
+      const runId2 = await computeProvisionRun(
+        org.orgId,
+        2026,
+        {
           additionalDifferences: [
-            { category: "provisions", description: "Warranty reserve", difference: "-80000.0000", source: "manual" },
+            {
+              category: "fixed_assets",
+              description: "P&E book vs tax",
+              difference: "1000.0000",
+              source: "manual",
+            },
           ],
         },
-      },
-    }, userId, new Set([org.subsidiaryId]));
-    assert.ok(runId);
+        userId,
+      );
+      await postProvisionRun(org.orgId, runId2, userId);
+      assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
 
-    // Both rejections wrote nothing: exactly one run (the in-scope one) and
-    // one audit row exist for this org's provision history.
-    const runs = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`, "objects"));
-    assert.equal(runs[0]!.n, 1);
-    const audits = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
-    assert.equal(audits[0]!.n, 1);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const ledgersBefore = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`,
+        "objects",
+      );
+      const auditsBefore = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`,
+        "objects",
+      );
 
-test("reposting a superseded run refuses by status instead of returning its reversed entry", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Repost Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-RPL-1", userId });
+      // Retrying the superseded run refuses by status and names the remedy —
+      // it must NOT hand back v1's reversed entry as an effective posting.
+      await assert.rejects(
+        () => postProvisionRun(org.orgId, runId1, userId),
+        (error: unknown) => {
+          assert.ok(error instanceof IncomeTaxProvisionError);
+          assert.match(error.message, /is superseded/);
+          assert.match(error.message, new RegExp(`use the current run ${runId2}`));
+          assert.equal(error.message.includes(entryId1), false);
+          return true;
+        },
+      );
 
-    const runId1 = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    const { entryId: entryId1 } = await postProvisionRun(org.orgId, runId1, userId);
-    // A changed recomputation becomes v2; posting it supersedes v1 and
-    // reverses v1's journals.
-    const runId2 = await computeProvisionRun(org.orgId, 2026, {
-      additionalDifferences: [
-        { category: "fixed_assets", description: "P&E book vs tax", difference: "1000.0000", source: "manual" },
-      ],
-    }, userId);
-    await postProvisionRun(org.orgId, runId2, userId);
-    assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
+      // No ledger or audit mutation, and v2 stays authoritative.
+      const ledgersAfter = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`,
+        "objects",
+      );
+      assert.equal(ledgersAfter[0]!.n, ledgersBefore[0]!.n);
+      const auditsAfter = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`,
+        "objects",
+      );
+      assert.equal(auditsAfter[0]!.n, auditsBefore[0]!.n);
+      assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
+      const current = (await getProvisionRun(org.orgId, runId2))!;
+      assert.equal(current.status, "posted");
+      const live = await db.execute<{ status: string }>(
+        sql`
+      select status from journal_entries where id = ${current.journalEntryId}`,
+        "objects",
+      );
+      assert.equal(live[0]!.status, "posted");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    const ledgersBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`, "objects"));
-    const auditsBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
+test(
+  "negative loss benefits and valuation allowances refuse by field name with zero writes",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Negativity Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "100000",
+        number: "INV-NEG-1",
+        userId,
+      });
 
-    // Retrying the superseded run refuses by status and names the remedy —
-    // it must NOT hand back v1's reversed entry as an effective posting.
-    await assert.rejects(
-      () => postProvisionRun(org.orgId, runId1, userId),
-      (error: unknown) => {
-        assert.ok(error instanceof IncomeTaxProvisionError);
-        assert.match(error.message, /is superseded/);
-        assert.match(error.message, new RegExp(`use the current run ${runId2}`));
-        assert.equal(error.message.includes(entryId1), false);
-        return true;
-      },
-    );
+      // Root request: a negative allowance would otherwise be stored as 0.
+      await assert.rejects(
+        () => computeProvisionRun(org.orgId, 2026, { valuationAllowance: "-500.0000" }, userId),
+        (error: unknown) => {
+          assert.ok(error instanceof IncomeTaxProvisionError);
+          assert.match(error.message, /valuationAllowance cannot be negative/);
+          return true;
+        },
+      );
+      // Per-entity request: a negative loss benefit would otherwise inflate
+      // taxable income. The refusal names the field and the subsidiary.
+      await assert.rejects(
+        () =>
+          computeProvisionRun(
+            org.orgId,
+            2026,
+            {
+              entities: { [org.subsidiaryId]: { lossCarryforwardUsed: "-500.0000" } },
+            },
+            userId,
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof IncomeTaxProvisionError);
+          assert.match(
+            error.message,
+            new RegExp(
+              `lossCarryforwardUsed cannot be negative for subsidiary ${org.subsidiaryId}`,
+            ),
+          );
+          return true;
+        },
+      );
 
-    // No ledger or audit mutation, and v2 stays authoritative.
-    const ledgersAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`, "objects"));
-    assert.equal(ledgersAfter[0]!.n, ledgersBefore[0]!.n);
-    const auditsAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
-    assert.equal(auditsAfter[0]!.n, auditsBefore[0]!.n);
-    assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
-    const current = (await getProvisionRun(org.orgId, runId2))!;
-    assert.equal(current.status, "posted");
-    const live = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where id = ${current.journalEntryId}`, "objects"));
-    assert.equal(live[0]!.status, "posted");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Both refusals happened before any draft or audit row could exist.
+      const runs = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(runs[0]!.n, 0);
+      const audits = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`,
+        "objects",
+      );
+      assert.equal(audits[0]!.n, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("negative loss benefits and valuation allowances refuse by field name with zero writes", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Negativity Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-NEG-1", userId });
+test(
+  "restricted reads expose only a visible entity's journal entry, never the hidden first entity's",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Disclosure Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
+      await seedEnactedRate(org.orgId, "CA federal", "26", {
+        subsidiaryId: org.subsidiaryId,
+        userId,
+      });
+      await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "200000",
+        number: "INV-DSC-CA",
+        userId,
+      });
+      await postInvoice(org, {
+        subsidiaryId: branch,
+        amount: "100000",
+        number: "INV-DSC-BR",
+        userId,
+      });
 
-    // Root request: a negative allowance would otherwise be stored as 0.
-    await assert.rejects(
-      () => computeProvisionRun(org.orgId, 2026, { valuationAllowance: "-500.0000" }, userId),
-      (error: unknown) => {
-        assert.ok(error instanceof IncomeTaxProvisionError);
-        assert.match(error.message, /valuationAllowance cannot be negative/);
-        return true;
-      },
-    );
-    // Per-entity request: a negative loss benefit would otherwise inflate
-    // taxable income. The refusal names the field and the subsidiary.
-    await assert.rejects(
-      () => computeProvisionRun(org.orgId, 2026, {
-        entities: { [org.subsidiaryId]: { lossCarryforwardUsed: "-500.0000" } },
-      }, userId),
-      (error: unknown) => {
-        assert.ok(error instanceof IncomeTaxProvisionError);
-        assert.match(error.message, new RegExp(`lossCarryforwardUsed cannot be negative for subsidiary ${org.subsidiaryId}`));
-        return true;
-      },
-    );
-
-    // Both refusals happened before any draft or audit row could exist.
-    const runs = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`, "objects"));
-    assert.equal(runs[0]!.n, 0);
-    const audits = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
-    assert.equal(audits[0]!.n, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("restricted reads expose only a visible entity's journal entry, never the hidden first entity's", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Disclosure Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
-    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
-    await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-DSC-CA", userId });
-    await postInvoice(org, { subsidiaryId: branch, amount: "100000", number: "INV-DSC-BR", userId });
-
-    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    await postProvisionRun(org.orgId, runId, userId);
-    const stored = (await getProvisionRun(org.orgId, runId))!;
-    assert.ok(stored.journalEntryId);
-    const entries = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
+      const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      await postProvisionRun(org.orgId, runId, userId);
+      const stored = (await getProvisionRun(org.orgId, runId))!;
+      assert.ok(stored.journalEntryId);
+      const entries = await db.execute<{ id: string; subsidiary_id: string }>(
+        sql`
       select id, subsidiary_id from journal_entries
-       where org_id = ${org.orgId} and origin = 'tax_provision' and status = 'posted'`, "objects"));
-    assert.equal(entries.length, 2);
-    const entryOf = new Map(entries.map((e) => [e.subsidiary_id, e.id]));
-    const storedEntrySub = entries.find((e) => e.id === stored.journalEntryId)!.subsidiary_id;
-    const otherSub = storedEntrySub === org.subsidiaryId ? branch : org.subsidiaryId;
+       where org_id = ${org.orgId} and origin = 'tax_provision' and status = 'posted'`,
+        "objects",
+      );
+      assert.equal(entries.length, 2);
+      const entryOf = new Map(entries.map((e) => [e.subsidiary_id, e.id]));
+      const storedEntrySub = entries.find((e) => e.id === stored.journalEntryId)!.subsidiary_id;
+      const otherSub = storedEntrySub === org.subsidiaryId ? branch : org.subsidiaryId;
 
-    // Hidden first entity, visible second: figures AND journal id are B-only.
-    const restricted = (await getProvisionRun(org.orgId, runId, new Set([otherSub])))!;
-    assert.deepEqual(
-      (restricted.payload as { entities: { subsidiaryId: string }[] }).entities.map((e) => e.subsidiaryId),
-      [otherSub],
-    );
-    assert.equal(restricted.journalEntryId, entryOf.get(otherSub));
-    assert.notEqual(restricted.journalEntryId, entryOf.get(storedEntrySub));
+      // Hidden first entity, visible second: figures AND journal id are B-only.
+      const restricted = (await getProvisionRun(org.orgId, runId, new Set([otherSub])))!;
+      assert.deepEqual(
+        (restricted.payload as { entities: { subsidiaryId: string }[] }).entities.map(
+          (e) => e.subsidiaryId,
+        ),
+        [otherSub],
+      );
+      assert.equal(restricted.journalEntryId, entryOf.get(otherSub));
+      assert.notEqual(restricted.journalEntryId, entryOf.get(storedEntrySub));
 
-    // Only the stored entity visible: the stored id is returned unchanged.
-    const storedScope = (await getProvisionRun(org.orgId, runId, new Set([storedEntrySub])))!;
-    assert.equal(storedScope.journalEntryId, stored.journalEntryId);
+      // Only the stored entity visible: the stored id is returned unchanged.
+      const storedScope = (await getProvisionRun(org.orgId, runId, new Set([storedEntrySub])))!;
+      assert.equal(storedScope.journalEntryId, stored.journalEntryId);
 
-    // Empty scope: the run is indistinguishable from missing.
-    assert.equal(await getProvisionRun(org.orgId, runId, new Set()), null);
+      // Empty scope: the run is indistinguishable from missing.
+      assert.equal(await getProvisionRun(org.orgId, runId, new Set()), null);
 
-    // The list projection scopes journal ids the same way.
-    const listed = await listProvisionRuns(org.orgId, new Set([otherSub]));
-    assert.equal(listed.length, 1);
-    assert.equal(listed[0]!.journalEntryId, entryOf.get(otherSub));
-    assert.deepEqual(await listProvisionRuns(org.orgId, new Set()), []);
-    // Unrestricted reads keep the stored first-sorted id.
-    const listedAll = await listProvisionRuns(org.orgId, null);
-    assert.equal(listedAll[0]!.journalEntryId, stored.journalEntryId);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // The list projection scopes journal ids the same way.
+      const listed = await listProvisionRuns(org.orgId, new Set([otherSub]));
+      assert.equal(listed.length, 1);
+      assert.equal(listed[0]!.journalEntryId, entryOf.get(otherSub));
+      assert.deepEqual(await listProvisionRuns(org.orgId, new Set()), []);
+      // Unrestricted reads keep the stored first-sorted id.
+      const listedAll = await listProvisionRuns(org.orgId, null);
+      assert.equal(listedAll[0]!.journalEntryId, stored.journalEntryId);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("restricted provision views are byte-identical across hidden-subsidiary activity", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Side Channel Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
-    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
-    await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-SC-A", userId });
-    await postInvoice(org, { subsidiaryId: branch, amount: "100000", number: "INV-SC-B", userId });
+test(
+  "restricted provision views are byte-identical across hidden-subsidiary activity",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Side Channel Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
+      await seedEnactedRate(org.orgId, "CA federal", "26", {
+        subsidiaryId: org.subsidiaryId,
+        userId,
+      });
+      await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "200000",
+        number: "INV-SC-A",
+        userId,
+      });
+      await postInvoice(org, {
+        subsidiaryId: branch,
+        amount: "100000",
+        number: "INV-SC-B",
+        userId,
+      });
 
-    const scope = new Set([org.subsidiaryId]);
-    const runId1 = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    // Run identity (id/version/createdAt) names the run itself, not hidden
-    // activity, so the side-channel comparison strips exactly those envelope
-    // fields — everything else must be byte-identical.
-    const viewOf = async (runId: string): Promise<string> => {
-      const run = (await getProvisionRun(org.orgId, runId, scope))!;
-      assert.ok(run);
-      const { id: _id, version: _version, createdAt: _createdAt, ...rest } = run as Record<string, unknown>;
-      return JSON.stringify(rest);
-    };
-    const before = await viewOf(runId1);
+      const scope = new Set([org.subsidiaryId]);
+      const runId1 = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      // Run identity (id/version/createdAt) names the run itself, not hidden
+      // activity, so the side-channel comparison strips exactly those envelope
+      // fields — everything else must be byte-identical.
+      const viewOf = async (runId: string): Promise<string> => {
+        const run = (await getProvisionRun(org.orgId, runId, scope))!;
+        assert.ok(run);
+        const {
+          id: _id,
+          version: _version,
+          createdAt: _createdAt,
+          ...rest
+        } = run as Record<string, unknown>;
+        return JSON.stringify(rest);
+      };
+      const before = await viewOf(runId1);
 
-    // Hidden-subsidiary activity ONLY: B books more income and the org
-    // recomputes, so every whole-org fingerprint moves under the reader.
-    await postInvoice(org, { subsidiaryId: branch, amount: "50000", number: "INV-SC-B2", userId });
-    const runId2 = await computeProvisionRun(org.orgId, 2026, {}, userId);
-    const after = await viewOf(runId2);
+      // Hidden-subsidiary activity ONLY: B books more income and the org
+      // recomputes, so every whole-org fingerprint moves under the reader.
+      await postInvoice(org, {
+        subsidiaryId: branch,
+        amount: "50000",
+        number: "INV-SC-B2",
+        userId,
+      });
+      const runId2 = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      const after = await viewOf(runId2);
 
-    // A's numbers are unchanged while the org-wide hashes moved: a restricted
-    // caller must not be able to tell B did anything.
-    assert.equal(after, before);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // A's numbers are unchanged while the org-wide hashes moved: a restricted
+      // caller must not be able to tell B did anything.
+      assert.equal(after, before);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("restricted provision projections expose only allowlisted payload and lineage keys", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Allowlist Tester", "admin");
-    await seedTaxControlAccounts(org.orgId);
-    const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
-    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
-    await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
-    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-AL-A", userId });
-    await postInvoice(org, { subsidiaryId: branch, amount: "100000", number: "INV-AL-B", userId });
+test(
+  "restricted provision projections expose only allowlisted payload and lineage keys",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Allowlist Tester", "admin");
+      await seedTaxControlAccounts(org.orgId);
+      const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
+      await seedEnactedRate(org.orgId, "CA federal", "26", {
+        subsidiaryId: org.subsidiaryId,
+        userId,
+      });
+      await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
+      await postInvoice(org, {
+        subsidiaryId: org.subsidiaryId,
+        amount: "200000",
+        number: "INV-AL-A",
+        userId,
+      });
+      await postInvoice(org, {
+        subsidiaryId: branch,
+        amount: "100000",
+        number: "INV-AL-B",
+        userId,
+      });
 
-    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+      const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
 
-    // Unrestricted callers keep the full payload exactly as today.
-    const full = (await getProvisionRun(org.orgId, runId))!;
-    const fullPayload = full.payload as Record<string, unknown>;
-    assert.equal(typeof fullPayload.sourceFingerprint, "string");
-    assert.ok("priorPostedRunId" in fullPayload);
-    const fullLineage = fullPayload.sourceLineage as Record<string, unknown>;
-    assert.ok("priorPostedRunId" in fullLineage);
-    assert.ok("priorPostedSnapshotHash" in fullLineage);
-    const stored = (await db.execute<{ snapshot_hash: string }>(sql`
-      select snapshot_hash from tax_provision_runs where org_id = ${org.orgId} and id = ${runId}`, "objects"));
-    assert.equal(full.snapshotHash, stored[0]!.snapshot_hash);
+      // Unrestricted callers keep the full payload exactly as today.
+      const full = (await getProvisionRun(org.orgId, runId))!;
+      const fullPayload = full.payload as Record<string, unknown>;
+      assert.equal(typeof fullPayload.sourceFingerprint, "string");
+      assert.ok("priorPostedRunId" in fullPayload);
+      const fullLineage = fullPayload.sourceLineage as Record<string, unknown>;
+      assert.ok("priorPostedRunId" in fullLineage);
+      assert.ok("priorPostedSnapshotHash" in fullLineage);
+      const stored = await db.execute<{ snapshot_hash: string }>(
+        sql`
+      select snapshot_hash from tax_provision_runs where org_id = ${org.orgId} and id = ${runId}`,
+        "objects",
+      );
+      assert.equal(full.snapshotHash, stored[0]!.snapshot_hash);
 
-    // Restricted callers see exactly the allowlisted fields: adding a payload
-    // or lineage field without updating this list fails here on purpose.
-    const restricted = (await getProvisionRun(org.orgId, runId, new Set([org.subsidiaryId])))!;
-    const payload = restricted.payload as Record<string, unknown>;
-    assert.deepEqual(Object.keys(payload).sort(), [
-      "balances",
-      "currentTax",
-      "deferredExpense",
-      "effectiveRatePercent",
-      "enactedRateJurisdictions",
-      "enactedRatePercent",
-      "entities",
-      "fiscalYear",
-      "framework",
-      "movement",
-      "netTemporaryDifference",
-      "presentationCurrency",
-      "pretaxBookIncome",
-      "rateReconciliation",
-      "sourceLineage",
-      "taxableIncome",
-      "totalExpense",
-    ]);
-    assert.ok(!("sourceFingerprint" in payload));
-    assert.ok(!("priorPostedRunId" in payload));
-    const lineage = payload.sourceLineage as Record<string, unknown>;
-    assert.deepEqual(Object.keys(lineage).sort(), [
-      "fixedAssetDifferences",
-      "framework",
-      "pretaxBySubsidiaryId",
-      "priorBalancesBySubsidiaryId",
-      "rateRows",
-    ]);
-    assert.ok(!("priorPostedRunId" in lineage));
-    assert.ok(!("priorPostedSnapshotHash" in lineage));
-    // The restricted hash is scoped to the visible projection, never the
-    // stored whole-org identity.
-    assert.notEqual(restricted.snapshotHash, full.snapshotHash);
+      // Restricted callers see exactly the allowlisted fields: adding a payload
+      // or lineage field without updating this list fails here on purpose.
+      const restricted = (await getProvisionRun(org.orgId, runId, new Set([org.subsidiaryId])))!;
+      const payload = restricted.payload as Record<string, unknown>;
+      assert.deepEqual(Object.keys(payload).sort(), [
+        "balances",
+        "currentTax",
+        "deferredExpense",
+        "effectiveRatePercent",
+        "enactedRateJurisdictions",
+        "enactedRatePercent",
+        "entities",
+        "fiscalYear",
+        "framework",
+        "movement",
+        "netTemporaryDifference",
+        "presentationCurrency",
+        "pretaxBookIncome",
+        "rateReconciliation",
+        "sourceLineage",
+        "taxableIncome",
+        "totalExpense",
+      ]);
+      assert.ok(!("sourceFingerprint" in payload));
+      assert.ok(!("priorPostedRunId" in payload));
+      const lineage = payload.sourceLineage as Record<string, unknown>;
+      assert.deepEqual(Object.keys(lineage).sort(), [
+        "fixedAssetDifferences",
+        "framework",
+        "pretaxBySubsidiaryId",
+        "priorBalancesBySubsidiaryId",
+        "rateRows",
+      ]);
+      assert.ok(!("priorPostedRunId" in lineage));
+      assert.ok(!("priorPostedSnapshotHash" in lineage));
+      // The restricted hash is scoped to the visible projection, never the
+      // stored whole-org identity.
+      assert.notEqual(restricted.snapshotHash, full.snapshotHash);
 
-    // A new whole-org payload field stored at rest must not silently leak: it
-    // is absent from the restricted view because the projection allowlists.
-    await db.execute(sql`
+      // A new whole-org payload field stored at rest must not silently leak: it
+      // is absent from the restricted view because the projection allowlists.
+      await db.execute(sql`
       update tax_provision_runs
          set payload = jsonb_set(payload || '{"sneakyOrgField":"whole-org"}', '{sourceLineage,sneakyLineageField}', '"whole-org"')
        where org_id = ${org.orgId} and id = ${runId}`);
-    const leaked = (await getProvisionRun(org.orgId, runId, new Set([org.subsidiaryId])))!;
-    const leakedPayload = leaked.payload as Record<string, unknown>;
-    assert.ok(!("sneakyOrgField" in leakedPayload));
-    assert.ok(!("sneakyLineageField" in (leakedPayload.sourceLineage as Record<string, unknown>)));
-    // And the unrestricted view still carries the stored row verbatim.
-    const stillFull = (await getProvisionRun(org.orgId, runId))!;
-    assert.equal((stillFull.payload as Record<string, unknown>).sneakyOrgField, "whole-org");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const leaked = (await getProvisionRun(org.orgId, runId, new Set([org.subsidiaryId])))!;
+      const leakedPayload = leaked.payload as Record<string, unknown>;
+      assert.ok(!("sneakyOrgField" in leakedPayload));
+      assert.ok(
+        !("sneakyLineageField" in (leakedPayload.sourceLineage as Record<string, unknown>)),
+      );
+      // And the unrestricted view still carries the stored row verbatim.
+      const stillFull = (await getProvisionRun(org.orgId, runId))!;
+      assert.equal((stillFull.payload as Record<string, unknown>).sneakyOrgField, "whole-org");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-
-test("prepared adjustments preserve reasoned audit evidence through filing and later preparation", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const other = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Tax preparer", "admin");
-    const taxCodeId = await seedFilingFingerprintFixture(org);
-    await postTaxJournal(org, userId, taxCodeId, { number: "TAX-ADJUSTED", taxAmount: "13.00" });
-    await db.execute(sql`
+test(
+  "prepared adjustments preserve reasoned audit evidence through filing and later preparation",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const other = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Tax preparer", "admin");
+      const taxCodeId = await seedFilingFingerprintFixture(org);
+      await postTaxJournal(org, userId, taxCodeId, { number: "TAX-ADJUSTED", taxAmount: "13.00" });
+      await db.execute(sql`
       insert into tax_report_lines (id, org_id, report_code, line_code, label, sign, sequence)
       values (${randomUUID()}, ${org.orgId}, 'FP_GST', '104', 'Adjustments', 1, 3)`);
-    const inputs = [
-      { lineCode: "104", amount: "1000.00", reason: "January to June activity per prior system" },
-      { lineCode: "104", amount: "2018.84", reason: "July and August activity per prior system" },
-    ];
-    const result = await computeTaxReturn(org.orgId, "FP_GST", "2026-07-01", "2026-07-31", { "104": "3018.8400" });
-    const prepared = await prepareTaxFiling(org.orgId, userId, result, inputs);
-    const frozen = (await db.execute<{ adjustments: unknown[]; snapshot_hash: string; snapshot_version: number; boxes: unknown[] }>(sql`
+      const inputs = [
+        { lineCode: "104", amount: "1000.00", reason: "January to June activity per prior system" },
+        { lineCode: "104", amount: "2018.84", reason: "July and August activity per prior system" },
+      ];
+      const result = await computeTaxReturn(org.orgId, "FP_GST", "2026-07-01", "2026-07-31", {
+        "104": "3018.8400",
+      });
+      const prepared = await prepareTaxFiling(org.orgId, userId, result, inputs);
+      const frozen = (
+        await db.execute<{
+          adjustments: unknown[];
+          snapshot_hash: string;
+          snapshot_version: number;
+          boxes: unknown[];
+        }>(
+          sql`
       select adjustments, snapshot_hash, snapshot_version, boxes from tax_filings
-       where org_id = ${org.orgId} and id = ${prepared.id}`, "objects"))[0]!;
-    assert.equal(frozen.snapshot_version, 3);
-    assert.equal(frozen.adjustments.length, 2);
-    for (let index = 0; index < inputs.length; index++) {
-      const entry = frozen.adjustments[index] as { lineCode: string; reason: string; enteredBy: string; enteredAt: string };
-      assert.equal(entry.reason, inputs[index]!.reason);
-      assert.equal(entry.enteredBy, userId);
-      assert.ok(!Number.isNaN(Date.parse(entry.enteredAt)));
-    }
-    const audits = await db.execute<{ actor_id: string; changes: { before?: unknown; after?: unknown; adjustment?: unknown } }>(sql`
+       where org_id = ${org.orgId} and id = ${prepared.id}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(frozen.snapshot_version, 3);
+      assert.equal(frozen.adjustments.length, 2);
+      for (let index = 0; index < inputs.length; index++) {
+        const entry = frozen.adjustments[index] as {
+          lineCode: string;
+          reason: string;
+          enteredBy: string;
+          enteredAt: string;
+        };
+        assert.equal(entry.reason, inputs[index]!.reason);
+        assert.equal(entry.enteredBy, userId);
+        assert.ok(!Number.isNaN(Date.parse(entry.enteredAt)));
+      }
+      const audits = await db.execute<{
+        actor_id: string;
+        changes: { before?: unknown; after?: unknown; adjustment?: unknown };
+      }>(
+        sql`
       select actor_id, changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id} and action = 'insert'`, "objects");
-    const adjustmentAudits = audits.filter((audit) => audit.changes.adjustment);
-    assert.equal(adjustmentAudits.length, 2);
-    for (const audit of adjustmentAudits) {
-      assert.equal(audit.actor_id, userId);
-      assert.equal(audit.changes.before, null);
-      assert.ok(frozen.adjustments.some((entry) => canonicalJson(entry) === canonicalJson(audit.changes.after)));
-    }
-    await assert.rejects(() => markTaxFilingFiled(other.orgId, prepared.id, userId, null),
-      (error: unknown) => error instanceof TaxFilingError && error.code === "not-found");
-    await closeCoveredPeriod(org);
-    await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-ADJUSTED");
-    const nextResult = await computeTaxReturn(org.orgId, "FP_GST", result.from, result.to, { "104": "3019.0000" });
-    const next = await prepareTaxFiling(org.orgId, userId, nextResult, [{ lineCode: "104", amount: "3019", reason: "Revised prior-system reconciliation" }]);
-    assert.equal(next.version, prepared.version + 1);
-    const preserved = (await db.execute<{ adjustments: unknown[]; snapshot_hash: string; snapshot_version: number; boxes: unknown[] }>(sql`
+       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id} and action = 'insert'`,
+        "objects",
+      );
+      const adjustmentAudits = audits.filter((audit) => audit.changes.adjustment);
+      assert.equal(adjustmentAudits.length, 2);
+      for (const audit of adjustmentAudits) {
+        assert.equal(audit.actor_id, userId);
+        assert.equal(audit.changes.before, null);
+        assert.ok(
+          frozen.adjustments.some(
+            (entry) => canonicalJson(entry) === canonicalJson(audit.changes.after),
+          ),
+        );
+      }
+      await assert.rejects(
+        () => markTaxFilingFiled(other.orgId, prepared.id, userId, null),
+        (error: unknown) => error instanceof TaxFilingError && error.code === "not-found",
+      );
+      await closeCoveredPeriod(org);
+      await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-ADJUSTED");
+      const nextResult = await computeTaxReturn(org.orgId, "FP_GST", result.from, result.to, {
+        "104": "3019.0000",
+      });
+      const next = await prepareTaxFiling(org.orgId, userId, nextResult, [
+        { lineCode: "104", amount: "3019", reason: "Revised prior-system reconciliation" },
+      ]);
+      assert.equal(next.version, prepared.version + 1);
+      const preserved = (
+        await db.execute<{
+          adjustments: unknown[];
+          snapshot_hash: string;
+          snapshot_version: number;
+          boxes: unknown[];
+        }>(
+          sql`
       select adjustments, snapshot_hash, snapshot_version, boxes from tax_filings
-       where org_id = ${org.orgId} and id = ${prepared.id}`, "objects"))[0]!;
-    assert.deepEqual(preserved, frozen);
-    // Earlier amount-map snapshots keep their own replay and fingerprint schema.
-    const legacy = await prepareFiling(org, userId, { snapshotVersion: 2, adjustments: { "104": "3018.8400" } });
-    await markTaxFilingFiled(org.orgId, legacy.id, userId, "GOV-LEGACY-AMOUNTS");
-    assert.equal((await filingState(org.orgId, legacy.id)).status, "filed");
-  } finally {
-    await dropScratchOrg(other.orgId);
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and id = ${prepared.id}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(preserved, frozen);
+      // Earlier amount-map snapshots keep their own replay and fingerprint schema.
+      const legacy = await prepareFiling(org, userId, {
+        snapshotVersion: 2,
+        adjustments: { "104": "3018.8400" },
+      });
+      await markTaxFilingFiled(org.orgId, legacy.id, userId, "GOV-LEGACY-AMOUNTS");
+      assert.equal((await filingState(org.orgId, legacy.id)).status, "filed");
+    } finally {
+      await dropScratchOrg(other.orgId);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

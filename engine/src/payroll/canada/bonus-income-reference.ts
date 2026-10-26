@@ -1,6 +1,6 @@
-import { sql } from 'drizzle-orm';
-import type { db } from '../../platform/db.ts';
-import { PayrollError } from '../error.ts';
+import { sql } from "drizzle-orm";
+import type { db } from "../../platform/db.ts";
+import { PayrollError } from "../error.ts";
 
 export type CaBonusIncomeReferenceScope = {
   orgId: string;
@@ -21,11 +21,11 @@ export type CaBonusIncomeReferenceSource = CaBonusIncomeReferenceScope & {
   referenceRunId: string;
   referencePayDate: string;
   income: string;
-  referenceMethod: 'option1' | 'option2';
+  referenceMethod: "option1" | "option2";
   method: {
-    key: 'ca_t4127_method';
-    option: 'option1';
-    origin: 'statutory_default' | 'certificate';
+    key: "ca_t4127_method";
+    option: "option1";
+    origin: "statutory_default" | "certificate";
     certificateId: string | null;
     effectiveFrom: string | null;
     answers: Record<string, string>;
@@ -37,16 +37,33 @@ export type CaBonusIncomeReferenceSource = CaBonusIncomeReferenceScope & {
  * not exclude regular pay already received before the retro payment.
  */
 export async function resolveCaBonusIncomeReference(
-  tx: Pick<typeof db, 'execute'>,
+  tx: Pick<typeof db, "execute">,
   scope: CaBonusIncomeReferenceScope,
 ): Promise<CaBonusIncomeReferenceSource> {
-  const { orgId, documentId, employeePartyId, employmentId, subsidiaryId,
-    filingAccountId, currency, payScheduleId, taxYear, payDate } = scope;
-  const reference = (await tx.execute<{
-    stub_id: string; document_id: string; income: string; pay_date: string;
-    averaging: string | null; certificate_id: string | null;
-    effective_from: string | null; answers: Record<string,string> | null;
-  }>(sql`
+  const {
+    orgId,
+    documentId,
+    employeePartyId,
+    employmentId,
+    subsidiaryId,
+    filingAccountId,
+    currency,
+    payScheduleId,
+    taxYear,
+    payDate,
+  } = scope;
+  const reference = (
+    await tx.execute<{
+      stub_id: string;
+      document_id: string;
+      income: string;
+      pay_date: string;
+      averaging: string | null;
+      certificate_id: string | null;
+      effective_from: string | null;
+      answers: Record<string, string> | null;
+    }>(
+      sql`
     select s.id as stub_id,r.document_id,s.factors->>'I' as income,
            s.pay_date::text as pay_date,s.factors->>'S1_DEN' as averaging,
            method.id as certificate_id,method.effective_from::text,method.answers
@@ -71,18 +88,33 @@ export async function resolveCaBonusIncomeReference(
        and (s.factors->>'I')::numeric>0
      order by s.pay_date desc,r.period_end desc,r.updated_at desc,r.document_id desc,s.id desc
      limit 1
-  `, 'objects'))[0];
-  if (!reference) throw new PayrollError('A separately paid Canadian bonus has no committed regular income for this employment, employer, currency, schedule and filing account — calculate and commit its regular pay before the bonus');
-  if (reference.certificate_id && reference.answers?.method !== 'option1') {
-    throw new PayrollError('The Canadian bonus reference requires the effective Option 1 withholding method — review the employee’s dated withholding method record and recalculate');
+  `,
+      "objects",
+    )
+  )[0];
+  if (!reference)
+    throw new PayrollError(
+      "A separately paid Canadian bonus has no committed regular income for this employment, employer, currency, schedule and filing account — calculate and commit its regular pay before the bonus",
+    );
+  if (reference.certificate_id && reference.answers?.method !== "option1") {
+    throw new PayrollError(
+      "The Canadian bonus reference requires the effective Option 1 withholding method — review the employee’s dated withholding method record and recalculate",
+    );
   }
   return {
-    ...scope,referenceStubId:reference.stub_id,referenceRunId:reference.document_id,
-    referencePayDate:reference.pay_date,income:reference.income,
-    referenceMethod:reference.averaging === null ? 'option1' : 'option2',
-    method:{key:'ca_t4127_method',option:'option1',
-      origin:reference.certificate_id ? 'certificate' : 'statutory_default',
-      certificateId:reference.certificate_id,effectiveFrom:reference.effective_from,
-      answers:reference.answers ?? {}},
+    ...scope,
+    referenceStubId: reference.stub_id,
+    referenceRunId: reference.document_id,
+    referencePayDate: reference.pay_date,
+    income: reference.income,
+    referenceMethod: reference.averaging === null ? "option1" : "option2",
+    method: {
+      key: "ca_t4127_method",
+      option: "option1",
+      origin: reference.certificate_id ? "certificate" : "statutory_default",
+      certificateId: reference.certificate_id,
+      effectiveFrom: reference.effective_from,
+      answers: reference.answers ?? {},
+    },
   };
 }

@@ -46,7 +46,11 @@ export function workLocationsSpec(_data: WorkLocationsData): PageSpec {
         title: f("title"),
         description: f("description"),
         actions: [
-          widget("link-button", { href: f("record.href"), label: f("record.label"), iconKey: "plus" }),
+          widget("link-button", {
+            href: f("record.href"),
+            label: f("record.label"),
+            iconKey: "plus",
+          }),
         ],
       }),
     ],

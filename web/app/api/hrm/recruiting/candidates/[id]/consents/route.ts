@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  recordConsent,
-  withdrawConsent,
-} from "@openbooks/engine/hrm/recruiting/retention";
+import { recordConsent, withdrawConsent } from "@openbooks/engine/hrm/recruiting/retention";
 
 import { recruitingErrorResponse } from "../../../_lib";
 import { recordConsentBody, withdrawConsentBody } from "./bodies";
@@ -23,11 +20,7 @@ export const POST = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: consentActionBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
 
     try {

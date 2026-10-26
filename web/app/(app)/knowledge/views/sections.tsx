@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from "next/link";
 
 /**
  * The two composite cells in the saved-views list.
@@ -14,22 +14,25 @@ export function ViewNameCell({
   href,
   description,
 }: {
-  name: string
-  href: string
-  description: string | null
+  name: string;
+  href: string;
+  description: string | null;
 }) {
   return (
     <>
       {/* Name RUNS the view; editing is the
           explicit action on the right. */}
-      <Link href={href as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+      <Link
+        href={href as never}
+        className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+      >
         {name}
       </Link>
       {description ? (
         <div className="text-xs text-slate-500 dark:text-slate-400">{description}</div>
       ) : null}
     </>
-  )
+  );
 }
 
 /** Run, plus Edit when the viewer owns the view or is an admin. */
@@ -40,11 +43,11 @@ export function ViewActionsCell({
   editLabel,
   canEdit,
 }: {
-  runHref: string
-  runLabel: string
-  editHref: string
-  editLabel: string
-  canEdit: boolean
+  runHref: string;
+  runLabel: string;
+  editHref: string;
+  editLabel: string;
+  canEdit: boolean;
 }) {
   return (
     <div className="flex items-center gap-3 text-sm">
@@ -60,5 +63,5 @@ export function ViewActionsCell({
         </Link>
       ) : null}
     </div>
-  )
+  );
 }

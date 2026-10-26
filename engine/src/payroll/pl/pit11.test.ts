@@ -85,7 +85,13 @@ test("a korekta restates only the boxes that moved, as-filed beside amended", as
       boxes: [],
     },
     changes: [
-      { code: "33", label: "Zaliczka pobrana przez płatnika", previous: "990.0000", current: "996.0000", redacted: false },
+      {
+        code: "33",
+        label: "Zaliczka pobrana przez płatnika",
+        previous: "990.0000",
+        current: "996.0000",
+        redacted: false,
+      },
       { code: null, label: "PESEL", previous: null, current: null, redacted: true },
     ],
   });
@@ -93,10 +99,18 @@ test("a korekta restates only the boxes that moved, as-filed beside amended", as
   assert.match(slip.formName, /KOREKTA/);
   assert.deepEqual(slip.boxes, [
     { code: "33", label: "Zaliczka pobrana przez płatnika — as filed", value: "990.0000" },
-    { code: "33", label: "Zaliczka pobrana przez płatnika — amended", value: "996.0000", emphasis: true },
+    {
+      code: "33",
+      label: "Zaliczka pobrana przez płatnika — amended",
+      value: "996.0000",
+      emphasis: true,
+    },
   ]);
   assert.ok(
-    slip.headerFields.some((field) => field.label === "Cel złożenia (poz. 7)" && field.value === "2 — korekta informacji"),
+    slip.headerFields.some(
+      (field) =>
+        field.label === "Cel złożenia (poz. 7)" && field.value === "2 — korekta informacji",
+    ),
     "the korekta marks poz. 7 option 2",
   );
 });

@@ -53,8 +53,15 @@ export function workCompletedOn(periods: readonly WorkPeriod[]): string | null {
  * ordered.
  */
 export function workPeriodRefusal(workFrom: unknown, workTo: unknown): string | null {
-  for (const [label, value] of [["work from", workFrom], ["work to", workTo]] as const) {
-    if (value !== undefined && value !== null && (typeof value !== "string" || !isIsoCalendarDate(value))) {
+  for (const [label, value] of [
+    ["work from", workFrom],
+    ["work to", workTo],
+  ] as const) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      (typeof value !== "string" || !isIsoCalendarDate(value))
+    ) {
       return `invalid ${label} date — expected YYYY-MM-DD`;
     }
   }
@@ -65,7 +72,11 @@ export function workPeriodRefusal(workFrom: unknown, workTo: unknown): string | 
 }
 
 /** Document kinds whose header and lines carry a work period. */
-export const WORK_PERIOD_DOCUMENT_KINDS: ReadonlySet<string> = new Set(["customer_invoice", "customer_credit", "sales_order"]);
+export const WORK_PERIOD_DOCUMENT_KINDS: ReadonlySet<string> = new Set([
+  "customer_invoice",
+  "customer_credit",
+  "sales_order",
+]);
 
 /**
  * Refusal for a submitted header work-completed date and line work periods,
@@ -77,7 +88,11 @@ export function documentWorkDatesRefusal(
   workCompletedOn: unknown,
   lines: readonly { workFrom?: unknown; workTo?: unknown }[] | undefined,
 ): string | null {
-  if (workCompletedOn !== undefined && workCompletedOn !== null && (typeof workCompletedOn !== "string" || !isIsoCalendarDate(workCompletedOn))) {
+  if (
+    workCompletedOn !== undefined &&
+    workCompletedOn !== null &&
+    (typeof workCompletedOn !== "string" || !isIsoCalendarDate(workCompletedOn))
+  ) {
     return "invalid workCompletedOn — expected YYYY-MM-DD";
   }
   const lineList = lines ?? [];
@@ -85,8 +100,9 @@ export function documentWorkDatesRefusal(
     const refusal = workPeriodRefusal(lineList[index]!.workFrom, lineList[index]!.workTo);
     if (refusal) return `Line ${index + 1}: ${refusal}`;
   }
-  const carries = (workCompletedOn ?? null) !== null
-    || lineList.some((line) => (line.workFrom ?? null) !== null || (line.workTo ?? null) !== null);
+  const carries =
+    (workCompletedOn ?? null) !== null ||
+    lineList.some((line) => (line.workFrom ?? null) !== null || (line.workTo ?? null) !== null);
   if (carries && !WORK_PERIOD_DOCUMENT_KINDS.has(kind)) {
     return "work dates apply only to customer invoices, customer credits and sales orders";
   }

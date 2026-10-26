@@ -42,7 +42,8 @@ const privatePathPatterns = [
 // UUIDs, but runnable source must resolve its target from explicit arguments or
 // environment input and keep tenant-specific repair/setup scripts private.
 const executableSourcePattern = /\.(?:[cm]?[jt]sx?)$/i;
-const fixtureSourcePattern = /(?:^|\/)(?:__tests__|fixtures?|tests?)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const fixtureSourcePattern =
+  /(?:^|\/)(?:__tests__|fixtures?|tests?)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 const hardcodedOperatorIdentityPattern = new RegExp(
   `\\bconst\\s+(?:${joined("ORG", "(?:_ID)?")}|${joined("TENANT", "(?:_ID)?")}|${joined("ACTOR", "(?:_ID)?")})\\s*=\\s*["']` +
     `[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}["']`,
@@ -137,13 +138,9 @@ function firstMatch(text, patterns) {
 }
 
 function discoverPublicFiles() {
-  return execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-    {
-      encoding: "utf8",
-    },
-  )
+  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+    encoding: "utf8",
+  })
     .split("\0")
     .filter(Boolean);
 }
@@ -156,10 +153,15 @@ function discoverPublicFiles() {
 /** Connector export names are interoperability contracts, not product copy.
  * Only exact mappings to existing connector sources receive that scope. */
 export function connectorManifestVendorSource(source) {
-  return source.split('\n').map(line => {
-    const entry = /^\s*"\.\/connectors\/([a-z0-9-]+)": "\.\/src\/connectors\/\1\.ts",?\s*$/.exec(line);
-    return entry && existsSync(`engine/src/connectors/${entry[1]}.ts`) ? '' : line;
-  }).join('\n');
+  return source
+    .split("\n")
+    .map((line) => {
+      const entry = /^\s*"\.\/connectors\/([a-z0-9-]+)": "\.\/src\/connectors\/\1\.ts",?\s*$/.exec(
+        line,
+      );
+      return entry && existsSync(`engine/src/connectors/${entry[1]}.ts`) ? "" : line;
+    })
+    .join("\n");
 }
 
 export function auditPublicSnapshot(publicFiles) {
@@ -181,9 +183,7 @@ export function auditPublicSnapshot(publicFiles) {
 
     const vendorPathMatch = firstMatch(filePath, vendorPatterns);
     if (vendorPathMatch && !isConnectorPath(filePath)) {
-      violations.push(
-        `${filePath}: accounting-vendor name in non-connector path`,
-      );
+      violations.push(`${filePath}: accounting-vendor name in non-connector path`);
     }
 
     let source;
@@ -205,19 +205,16 @@ export function auditPublicSnapshot(publicFiles) {
     }
 
     if (containsPrivateProvenance(source)) {
-      violations.push(
-        `${filePath}: private provenance identifier in public content`,
-      );
+      violations.push(`${filePath}: private provenance identifier in public content`);
     }
 
     if (!isConnectorPath(filePath)) {
-      const vendorSource = filePath === 'engine/package.json' ? connectorManifestVendorSource(source) : source;
+      const vendorSource =
+        filePath === "engine/package.json" ? connectorManifestVendorSource(source) : source;
       const vendorMatch = firstMatch(vendorSource, vendorPatterns);
       if (vendorMatch) {
         const line = vendorSource.slice(0, vendorMatch.index).split("\n").length;
-        violations.push(
-          `${filePath}:${line}: accounting-vendor name outside connector scope`,
-        );
+        violations.push(`${filePath}:${line}: accounting-vendor name outside connector scope`);
       }
     }
   }
@@ -235,7 +232,9 @@ function main() {
   }
 
   if (privateFingerprints.size === 0) {
-    console.warn("Private identifier fingerprints are not configured; that part of the audit was skipped.");
+    console.warn(
+      "Private identifier fingerprints are not configured; that part of the audit was skipped.",
+    );
   }
   console.log("Product-neutrality audit passed.");
 }

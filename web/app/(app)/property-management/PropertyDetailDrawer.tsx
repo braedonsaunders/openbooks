@@ -35,8 +35,19 @@ import type { Option } from "./workspace-ui";
 import { Empty, PROPERTY_TYPE_OPTIONS, RecordTabs, Status } from "./workspace-ui";
 import { CamTable } from "./CamTable";
 import { DepositTable, RentTable } from "./LeaseTables";
-import type { CamPool, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyRow, PropertyWorkspace, SaveAction, UnitRow, WorkspaceOptions } from "./types";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+import type {
+  CamPool,
+  LeaseRow,
+  Money,
+  PropertyAction,
+  PropertyPermissions,
+  PropertyRow,
+  PropertyWorkspace,
+  SaveAction,
+  UnitRow,
+  WorkspaceOptions,
+} from "./types";
+import { InteractiveTableRow } from "@/components/interactive-table-row";
 
 type PropertyCustomization = {
   layout: FormLayoutConfig;
@@ -102,33 +113,24 @@ export function PropertyDetailDrawer({
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [tab, setTab] = useState(initialTab ?? "overview");
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [form, setForm] = useState(() =>
-    propertyForm(property ?? {}, customization.fieldDefs),
-  );
-  const effectiveLayout: FormLayoutConfig =
-    customization.layout ?? defaultFormLayout("property");
+  const [form, setForm] = useState(() => propertyForm(property ?? {}, customization.fieldDefs));
+  const effectiveLayout: FormLayoutConfig = customization.layout ?? defaultFormLayout("property");
   const customByKey = useMemo(
     () =>
       new Map<string, CustomFieldDefClient>(
-        customization.fieldDefs.map((def: CustomFieldDefClient) => [
-          def.key,
-          def,
-        ]),
+        customization.fieldDefs.map((def: CustomFieldDefClient) => [def.key, def]),
       ),
     [customization.fieldDefs],
   );
   const tabs = resolveFormTabs(effectiveLayout).filter((item) => item.visible);
   const customGroupIds = new Set(
-    tabs
-      .filter((item) => isCustomTabKey(item.key))
-      .flatMap((item) => item.groupIds ?? []),
+    tabs.filter((item) => isCustomTabKey(item.key)).flatMap((item) => item.groupIds ?? []),
   );
   const overviewLayout: FormLayoutConfig = {
     ...effectiveLayout,
     header: {
       groups: effectiveLayout.header.groups.filter(
-        (group: FormLayoutConfig["header"]["groups"][number]) =>
-          !customGroupIds.has(group.id),
+        (group: FormLayoutConfig["header"]["groups"][number]) => !customGroupIds.has(group.id),
       ),
     },
   };
@@ -198,9 +200,7 @@ export function PropertyDetailDrawer({
             isRequired: requiredFor(placement, def.isRequired),
           }}
           value={form.custom[def.key]}
-          onChange={(value) =>
-            setForm({ ...form, custom: { ...form.custom, [def.key]: value } })
-          }
+          onChange={(value) => setForm({ ...form, custom: { ...form.custom, [def.key]: value } })}
           readOnly={!editable}
         />
       );
@@ -211,10 +211,7 @@ export function PropertyDetailDrawer({
           placement,
           t("fields.name"),
           editable ? (
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           ) : (
             read(form.name)
           ),
@@ -242,9 +239,7 @@ export function PropertyDetailDrawer({
           editable ? (
             <Select
               value={form.propertyType}
-              onChange={(e) =>
-                setForm({ ...form, propertyType: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, propertyType: e.target.value })}
             >
               {PROPERTY_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -255,8 +250,8 @@ export function PropertyDetailDrawer({
           ) : (
             read(
               tTypes(
-                PROPERTY_TYPE_OPTIONS.find((option) => option.value === form.propertyType)?.key
-                  ?? "other",
+                PROPERTY_TYPE_OPTIONS.find((option) => option.value === form.propertyType)?.key ??
+                  "other",
               ),
               "capitalize",
             )
@@ -325,9 +320,7 @@ export function PropertyDetailDrawer({
               className="font-mono uppercase"
               maxLength={3}
               value={form.currency}
-              onChange={(e) =>
-                setForm({ ...form, currency: e.target.value.toUpperCase() })
-              }
+              onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
             />
           ) : (
             read(form.currency, "font-mono")
@@ -352,10 +345,7 @@ export function PropertyDetailDrawer({
           placement,
           t("fields.city"),
           editable ? (
-            <Input
-              value={form.city}
-              onChange={(e) => setForm({ ...form, city: e.target.value })}
-            />
+            <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           ) : (
             read(form.city)
           ),
@@ -443,26 +433,26 @@ export function PropertyDetailDrawer({
     }[item.key] ??
       item.key.replace(/^tab_/, "").replaceAll("_", " "));
   const propertyPayload = (status = form.status) => ({
-      propertyId: property.id,
-      name: form.name,
-      code: form.code,
-      propertyType: form.propertyType,
-      status,
-      subsidiaryId: form.subsidiaryId,
-      locationId: form.locationId || null,
-      ...(fixedAssetsEnabled ? { fixedAssetId: form.fixedAssetId || null } : {}),
-      ...(multiCurrency ? { currency: form.currency } : {}),
-      address: {
-        street: form.street,
-        city: form.city,
-        region: form.region,
-        postalCode: form.postalCode,
-      },
-      rentIncomeAccountId: form.rentIncomeAccountId || null,
-      camIncomeAccountId: form.camIncomeAccountId || null,
-      depositLiabilityAccountId: form.depositLiabilityAccountId || null,
-      defaultBankAccountId: form.defaultBankAccountId || null,
-      custom: form.custom,
+    propertyId: property.id,
+    name: form.name,
+    code: form.code,
+    propertyType: form.propertyType,
+    status,
+    subsidiaryId: form.subsidiaryId,
+    locationId: form.locationId || null,
+    ...(fixedAssetsEnabled ? { fixedAssetId: form.fixedAssetId || null } : {}),
+    ...(multiCurrency ? { currency: form.currency } : {}),
+    address: {
+      street: form.street,
+      city: form.city,
+      region: form.region,
+      postalCode: form.postalCode,
+    },
+    rentIncomeAccountId: form.rentIncomeAccountId || null,
+    camIncomeAccountId: form.camIncomeAccountId || null,
+    depositLiabilityAccountId: form.depositLiabilityAccountId || null,
+    defaultBankAccountId: form.defaultBankAccountId || null,
+    custom: form.custom,
   });
   const save = async () => {
     const result = await onSave(propertyPayload());
@@ -547,9 +537,7 @@ export function PropertyDetailDrawer({
                   onClick={() => setActionsOpen((open) => !open)}
                 >
                   {t("actions")}{" "}
-                  <ChevronDown
-                    className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")}
-                  />
+                  <ChevronDown className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")} />
                 </Button>
               }
             >
@@ -605,7 +593,8 @@ export function PropertyDetailDrawer({
                     className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
                     disabled={busy}
                     onClick={async () => {
-                      if (!(await confirmDialog(t("deleteConfirm", { name: property.name })))) return
+                      if (!(await confirmDialog(t("deleteConfirm", { name: property.name }))))
+                        return;
                       void onDelete();
                     }}
                   >
@@ -632,9 +621,7 @@ export function PropertyDetailDrawer({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">{t("units.title")}</h3>
-              <p className="text-xs text-slate-500">
-                {t("units.description")}
-              </p>
+              <p className="text-xs text-slate-500">{t("units.description")}</p>
             </div>
             {permissions.manage && property.status === "active" ? (
               <Button size="sm" onClick={onAddUnit}>
@@ -670,9 +657,7 @@ export function PropertyDetailDrawer({
                   >
                     <TableCell>
                       <div className="font-medium">{unit.code}</div>
-                      <div className="text-xs text-slate-500">
-                        {unit.name || "—"}
-                      </div>
+                      <div className="text-xs text-slate-500">{unit.name || "—"}</div>
                     </TableCell>
                     <TableCell>{unit.unitType || "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -689,10 +674,7 @@ export function PropertyDetailDrawer({
               </TableBody>
             </Table>
           ) : (
-            <Empty
-              title={t("units.emptyTitle")}
-              detail={t("units.emptyDetail")}
-            />
+            <Empty title={t("units.emptyTitle")} detail={t("units.emptyDetail")} />
           )}
         </div>
       ) : null}
@@ -701,9 +683,7 @@ export function PropertyDetailDrawer({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">{t("leases.title")}</h3>
-              <p className="text-xs text-slate-500">
-                {t("leases.description")}
-              </p>
+              <p className="text-xs text-slate-500">{t("leases.description")}</p>
             </div>
             {permissions.manage && property.status === "active" ? (
               <Button size="sm" onClick={() => onAddLease(null)}>
@@ -737,9 +717,7 @@ export function PropertyDetailDrawer({
                       }
                     }}
                   >
-                    <TableCell className="font-medium text-teal-700">
-                      {lease.leaseNumber}
-                    </TableCell>
+                    <TableCell className="font-medium text-teal-700">{lease.leaseNumber}</TableCell>
                     <TableCell>{lease.unitCode || t("leases.wholeProperty")}</TableCell>
                     <TableCell>{lease.tenantName}</TableCell>
                     <TableCell>
@@ -753,10 +731,7 @@ export function PropertyDetailDrawer({
               </TableBody>
             </Table>
           ) : (
-            <Empty
-              title={t("leases.emptyTitle")}
-              detail={t("leases.emptyDetail")}
-            />
+            <Empty title={t("leases.emptyTitle")} detail={t("leases.emptyDetail")} />
           )}
         </div>
       ) : null}
@@ -765,9 +740,7 @@ export function PropertyDetailDrawer({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">{t("rent.title")}</h3>
-              <p className="text-xs text-slate-500">
-                {t("rent.description")}
-              </p>
+              <p className="text-xs text-slate-500">{t("rent.description")}</p>
             </div>
             {permissions.bill ? (
               <div className="flex gap-2">
@@ -788,10 +761,7 @@ export function PropertyDetailDrawer({
                   size="sm"
                   disabled={busy}
                   onClick={() =>
-                    act(
-                      { action: "billRent", propertyId: property.id },
-                      t("toasts.rentBilled"),
-                    )
+                    act({ action: "billRent", propertyId: property.id }, t("toasts.rentBilled"))
                   }
                 >
                   {t("rent.billDueRent")}
@@ -815,9 +785,7 @@ export function PropertyDetailDrawer({
         <div className="space-y-3 p-1">
           <div>
             <h3 className="text-sm font-semibold">{t("depositsTab.title")}</h3>
-            <p className="text-xs text-slate-500">
-              {t("depositsTab.description")}
-            </p>
+            <p className="text-xs text-slate-500">{t("depositsTab.description")}</p>
           </div>
           <DepositTable
             deposits={data.deposits.filter((row) =>
@@ -833,9 +801,7 @@ export function PropertyDetailDrawer({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">{t("cam.title")}</h3>
-              <p className="text-xs text-slate-500">
-                {t("cam.description")}
-              </p>
+              <p className="text-xs text-slate-500">{t("cam.description")}</p>
             </div>
             {permissions.manage && property.status === "active" ? (
               <Button size="sm" onClick={onAddCam}>
@@ -865,9 +831,7 @@ export function PropertyDetailDrawer({
               header: {
                 groups: effectiveLayout.header.groups.filter(
                   (group: FormLayoutConfig["header"]["groups"][number]) =>
-                    (
-                      tabs.find((item) => item.key === tab)?.groupIds ?? []
-                    ).includes(group.id),
+                    (tabs.find((item) => item.key === tab)?.groupIds ?? []).includes(group.id),
                 ),
               },
             }}
@@ -898,8 +862,9 @@ function propertyForm(property: Partial<PropertyRow>, defs: CustomFieldDefClient
     camIncomeAccountId: property.camIncomeAccountId ?? "",
     depositLiabilityAccountId: property.depositLiabilityAccountId ?? "",
     defaultBankAccountId: property.defaultBankAccountId ?? "",
-    custom: Object.fromEntries(
-      defs.map((def) => [def.key, property.custom?.[def.key]]),
-    ) as Record<string, unknown>,
+    custom: Object.fromEntries(defs.map((def) => [def.key, property.custom?.[def.key]])) as Record<
+      string,
+      unknown
+    >,
   };
 }

@@ -1,11 +1,4 @@
-import {
-  index,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uuid
-} from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { id, orgRef } from "./helpers";
 
 /** One immutable execution envelope for a manual or scheduled agent scan. */
@@ -14,7 +7,21 @@ export const aiAgentRuns = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    agentKey: text("agent_key", { enum: ["accounting", "finance", "collections", "payables", "reconciliation", "hygiene", "forensics", "tax", "payroll", "projects", "cash"] }).notNull(),
+    agentKey: text("agent_key", {
+      enum: [
+        "accounting",
+        "finance",
+        "collections",
+        "payables",
+        "reconciliation",
+        "hygiene",
+        "forensics",
+        "tax",
+        "payroll",
+        "projects",
+        "cash",
+      ],
+    }).notNull(),
     trigger: text("trigger", { enum: ["manual", "scheduler"] }).notNull(),
     status: text("status", { enum: ["running", "completed", "failed", "skipped"] })
       .notNull()

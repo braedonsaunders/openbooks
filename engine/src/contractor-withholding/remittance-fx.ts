@@ -11,17 +11,30 @@ export async function withholdingRemittanceFx(
   currency: string,
   documentDate: string,
 ): Promise<FxAsOfEvidence & { rate: string }> {
-  const entity = (await executor.execute<{ base_currency: string }>(sql`
+  const entity = (
+    await executor.execute<{ base_currency: string }>(
+      sql`
     select base_currency from subsidiaries
-     where org_id=${orgId} and id=${subsidiaryId} and is_active for share`, "objects"))[0];
-  if (!entity?.base_currency) throw new ContractorWithholdingError(
-    "The enrolled legal entity must remain active with a configured functional currency.",
-    "Review the legal entity in Setup before preparing the authority document.",
+     where org_id=${orgId} and id=${subsidiaryId} and is_active for share`,
+      "objects",
+    )
+  )[0];
+  if (!entity?.base_currency)
+    throw new ContractorWithholdingError(
+      "The enrolled legal entity must remain active with a configured functional currency.",
+      "Review the legal entity in Setup before preparing the authority document.",
+    );
+  const evidence = await lookupSpotRateWithEvidence(
+    executor,
+    orgId,
+    currency,
+    entity.base_currency,
+    documentDate,
   );
-  const evidence = await lookupSpotRateWithEvidence(executor, orgId, currency, entity.base_currency, documentDate);
-  if (evidence.rate === null) throw new ContractorWithholdingError(
-    `No stored ${currency} → ${entity.base_currency} spot rate is available on or before ${documentDate}.`,
-    `Enter or refresh the ${currency} → ${entity.base_currency} quote in Setup → Exchange Rates, then prepare the authority document again.`,
-  );
+  if (evidence.rate === null)
+    throw new ContractorWithholdingError(
+      `No stored ${currency} → ${entity.base_currency} spot rate is available on or before ${documentDate}.`,
+      `Enter or refresh the ${currency} → ${entity.base_currency} quote in Setup → Exchange Rates, then prepare the authority document again.`,
+    );
   return { ...evidence, rate: evidence.rate };
 }

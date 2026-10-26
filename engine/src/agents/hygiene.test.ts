@@ -33,7 +33,11 @@ test("name/type keywords fire only on genuine contradictions", () => {
   assert.equal(nameTypeMismatch({ name: "Trade Receivables", type: "asset_receivable" }), null);
   assert.equal(nameTypeMismatch({ name: "Cost of Goods", type: "cogs" }), null);
   assert.equal(nameTypeMismatch({ name: "Provision USA", type: "liability_provision" }), null);
-  assert.equal(nameTypeMismatch({ name: "Cashflow Forecast", type: "asset_bank" }), null, "whole-word match only");
+  assert.equal(
+    nameTypeMismatch({ name: "Cashflow Forecast", type: "asset_bank" }),
+    null,
+    "whole-word match only",
+  );
 });
 
 test("party names canonicalize whitespace and case", () => {
@@ -92,8 +96,20 @@ test("bank credit balances carry their balance and a cash review", async () => {
 test("duplicate parties rank tax-id matches above name matches", async () => {
   const loaders = stubLoaders({
     duplicateParties: async () => [
-      { key: "acme corp", matchOn: "name", partyIds: ["p1", "p2"], displayNames: ["Acme Corp", "ACME Corp"], taxIds: ["{}", "{}"] },
-      { key: "tax:{\"gst\":\"123\"}", matchOn: "tax_id", partyIds: ["p3", "p4"], displayNames: ["Foo", "Bar"], taxIds: ["x", "x"] },
+      {
+        key: "acme corp",
+        matchOn: "name",
+        partyIds: ["p1", "p2"],
+        displayNames: ["Acme Corp", "ACME Corp"],
+        taxIds: ["{}", "{}"],
+      },
+      {
+        key: 'tax:{"gst":"123"}',
+        matchOn: "tax_id",
+        partyIds: ["p3", "p4"],
+        displayNames: ["Foo", "Bar"],
+        taxIds: ["x", "x"],
+      },
     ],
   });
   const findings = await hygieneFindings(ORG, "1000.0000", policies(), loaders);
@@ -106,7 +122,13 @@ test("duplicate parties rank tax-id matches above name matches", async () => {
 test("unmapped components name every missing mapping", async () => {
   const loaders = stubLoaders({
     unmappedComponents: async () => [
-      { componentId: "c1", code: "DED-1", name: "Garnishment", kind: "deduction", missing: ["liabilityAccountId", "remittancePartyId"] },
+      {
+        componentId: "c1",
+        code: "DED-1",
+        name: "Garnishment",
+        kind: "deduction",
+        missing: ["liabilityAccountId", "remittancePartyId"],
+      },
     ],
   });
   const findings = await hygieneFindings(ORG, "1000.0000", policies(), loaders);

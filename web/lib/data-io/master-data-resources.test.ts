@@ -1,28 +1,34 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 interface MasterImportState {
-  failAudit: boolean
-  transactionCalls: number
-  transactionRollbacks: number
-  savepointsOpened: number
-  savepointReleases: number
-  savepointRollbacks: number
-  attemptedMutations: string[]
-  committedMutations: { table: string; id: string }[]
-  masterInserts: string[]
-  roleEnsures: string[]
-  scopedAccountOwnershipChecks: string[]
-  scopedAccountLabelLookups: string[]
-  auditInsertCalls: number
-  readRows: Record<string, Record<string, unknown>[]>
-  writtenPartyKind?: string | null
-  unscopedLabelLookups: number
-  customDefs: { key: string; label: string; fieldType: string; isRequired: boolean; config: Record<string, unknown> }[]
+  failAudit: boolean;
+  transactionCalls: number;
+  transactionRollbacks: number;
+  savepointsOpened: number;
+  savepointReleases: number;
+  savepointRollbacks: number;
+  attemptedMutations: string[];
+  committedMutations: { table: string; id: string }[];
+  masterInserts: string[];
+  roleEnsures: string[];
+  scopedAccountOwnershipChecks: string[];
+  scopedAccountLabelLookups: string[];
+  auditInsertCalls: number;
+  readRows: Record<string, Record<string, unknown>[]>;
+  writtenPartyKind?: string | null;
+  unscopedLabelLookups: number;
+  customDefs: {
+    key: string;
+    label: string;
+    fieldType: string;
+    isRequired: boolean;
+    config: Record<string, unknown>;
+  }[];
 }
 
-const stateKey = Symbol.for('openbooks.master-data-import-test')
+const stateKey = Symbol.for("openbooks.master-data-import-test");
 const importState: MasterImportState = {
   failAudit: false,
   transactionCalls: 0,
@@ -40,12 +46,12 @@ const importState: MasterImportState = {
   readRows: {},
   unscopedLabelLookups: 0,
   customDefs: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
       function render(value) {
         if (value === null || value === undefined) return ''
@@ -74,7 +80,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       export function ambientTenantOrgId() { return null }
       export async function withBypassContext(work) { return work() }
@@ -204,7 +210,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:custom-fields',
+    "mock:custom-fields",
     `
       const state = globalThis[Symbol.for('openbooks.master-data-import-test')]
       export async function loadFieldDefs() {
@@ -253,13 +259,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:resource-core',
+    "mock:resource-core",
     `
       const state = globalThis[Symbol.for('openbooks.master-data-import-test')]
       // The pure cap/gate/scope re-export the REAL modules through this
       // double — never copied. Only impure surfaces are stubbed below.
-      export * from '${new URL('./export-cap.ts', import.meta.url).href}'
-      export * from '${new URL('./subsidiary-scope.ts', import.meta.url).href}'
+      export * from '${new URL("./export-cap.ts", import.meta.url).href}'
+      export * from '${new URL("./subsidiary-scope.ts", import.meta.url).href}'
 
       export async function orgFeatureEnabled() {
         return true
@@ -293,417 +299,515 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
-      ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/platform/db', 'mock:db'],
-      ['../custom-fields', 'mock:custom-fields'],
-      ['./resource-core', 'mock:resource-core'],
-    ]).get(specifier)
-    if (mockUrl) return { url: mockUrl, shortCircuit: true }
-    return nextResolve(specifier, context)
+      ["drizzle-orm", "mock:drizzle"],
+      ["@openbooks/engine/platform/db", "mock:db"],
+      ["../custom-fields", "mock:custom-fields"],
+      ["./resource-core", "mock:resource-core"],
+    ]).get(specifier);
+    if (mockUrl) return { url: mockUrl, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const resourceUrl = './master-data-resources.ts?master-data-behavior-test'
-const { MASTER_BY_KEY, masterResource } = await import(resourceUrl) as typeof import('./master-data-resources.ts')
-hooks.deregister()
+const resourceUrl = "./master-data-resources.ts?master-data-behavior-test";
+const { MASTER_BY_KEY, masterResource } = (await import(
+  resourceUrl
+)) as typeof import("./master-data-resources.ts");
+hooks.deregister();
 
 function resetImportState(failAudit: boolean): void {
-  importState.failAudit = failAudit
-  importState.transactionCalls = 0
-  importState.transactionRollbacks = 0
-  importState.savepointsOpened = 0
-  importState.savepointReleases = 0
-  importState.savepointRollbacks = 0
-  importState.attemptedMutations.length = 0
-  importState.committedMutations.length = 0
-  importState.masterInserts.length = 0
-  importState.roleEnsures.length = 0
-  importState.scopedAccountOwnershipChecks.length = 0
-  importState.scopedAccountLabelLookups.length = 0
-  importState.auditInsertCalls = 0
-  importState.readRows = {}
-  importState.writtenPartyKind = null
-  importState.unscopedLabelLookups = 0
-  importState.customDefs = []
+  importState.failAudit = failAudit;
+  importState.transactionCalls = 0;
+  importState.transactionRollbacks = 0;
+  importState.savepointsOpened = 0;
+  importState.savepointReleases = 0;
+  importState.savepointRollbacks = 0;
+  importState.attemptedMutations.length = 0;
+  importState.committedMutations.length = 0;
+  importState.masterInserts.length = 0;
+  importState.roleEnsures.length = 0;
+  importState.scopedAccountOwnershipChecks.length = 0;
+  importState.scopedAccountLabelLookups.length = 0;
+  importState.auditInsertCalls = 0;
+  importState.readRows = {};
+  importState.writtenPartyKind = null;
+  importState.unscopedLabelLookups = 0;
+  importState.customDefs = [];
 }
 
-const writeContext = { orgId: 'org-1', actorId: 'actor-1', dryRun: false }
+const writeContext = { orgId: "org-1", actorId: "actor-1", dryRun: false };
 
-function resource(key: 'accounts' | 'items' | 'parties') {
-  const entity = MASTER_BY_KEY.get(key)
-  assert.ok(entity)
-  return masterResource(entity, writeContext.orgId)
+function resource(key: "accounts" | "items" | "parties") {
+  const entity = MASTER_BY_KEY.get(key);
+  assert.ok(entity);
+  return masterResource(entity, writeContext.orgId);
 }
 
 const rowsByResource = {
-  accounts: { number: '1000', name: 'Cash', type: 'asset_bank' },
-  items: { code: 'SKU-1', name: 'Widget', kind: 'service' },
-  parties: { shortCode: 'CUS-1', displayName: 'Customer', kind: 'company' },
-} as const
+  accounts: { number: "1000", name: "Cash", type: "asset_bank" },
+  items: { code: "SKU-1", name: "Widget", kind: "service" },
+  parties: { shortCode: "CUS-1", displayName: "Customer", kind: "company" },
+} as const;
 
-test('master-data mutations roll back when their audit insert fails', async () => {
-  resetImportState(true)
+test("master-data mutations roll back when their audit insert fails", async () => {
+  resetImportState(true);
 
-  for (const key of ['accounts', 'items', 'parties'] as const) {
-    const outcome = await resource(key).write([rowsByResource[key]], 'insert', writeContext)
+  for (const key of ["accounts", "items", "parties"] as const) {
+    const outcome = await resource(key).write([rowsByResource[key]], "insert", writeContext);
     assert.deepEqual(outcome, {
       created: 0,
       updated: 0,
       failed: 1,
-      errors: [{ row: 1, message: 'forced audit insert failure' }],
-    })
+      errors: [{ row: 1, message: "forced audit insert failure" }],
+    });
   }
 
-  assert.deepEqual(importState.attemptedMutations, ['accounts', 'items', 'parties'])
-  assert.deepEqual(importState.committedMutations, [])
-  assert.equal(importState.transactionCalls, 3)
-  assert.equal(importState.transactionRollbacks, 3)
-  assert.equal(importState.auditInsertCalls, 3)
-  assert.equal(importState.savepointsOpened, 3)
-  assert.equal(importState.savepointRollbacks, 3)
-  assert.equal(importState.savepointReleases, 3)
-})
+  assert.deepEqual(importState.attemptedMutations, ["accounts", "items", "parties"]);
+  assert.deepEqual(importState.committedMutations, []);
+  assert.equal(importState.transactionCalls, 3);
+  assert.equal(importState.transactionRollbacks, 3);
+  assert.equal(importState.auditInsertCalls, 3);
+  assert.equal(importState.savepointsOpened, 3);
+  assert.equal(importState.savepointRollbacks, 3);
+  assert.equal(importState.savepointReleases, 3);
+});
 
-test('master-data mutations commit with their audit evidence on the happy path', async () => {
-  resetImportState(false)
+test("master-data mutations commit with their audit evidence on the happy path", async () => {
+  resetImportState(false);
 
-  for (const key of ['accounts', 'items', 'parties'] as const) {
-    const outcome = await resource(key).write([rowsByResource[key]], 'insert', writeContext)
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  for (const key of ["accounts", "items", "parties"] as const) {
+    const outcome = await resource(key).write([rowsByResource[key]], "insert", writeContext);
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
   }
 
   assert.deepEqual(importState.committedMutations, [
-    { table: 'accounts', id: 'account-1' },
-    { table: 'items', id: 'item-1' },
-    { table: 'parties', id: 'party-1' },
-  ])
-  assert.equal(importState.transactionRollbacks, 0)
-  assert.equal(importState.auditInsertCalls, 3)
-})
+    { table: "accounts", id: "account-1" },
+    { table: "items", id: "item-1" },
+    { table: "parties", id: "party-1" },
+  ]);
+  assert.equal(importState.transactionRollbacks, 0);
+  assert.equal(importState.auditInsertCalls, 3);
+});
 
-test('account UUID references from another organization are rejected before writes', async () => {
-  resetImportState(false)
-  const foreignAccountId = '11111111-1111-4111-8111-111111111111'
+test("account UUID references from another organization are rejected before writes", async () => {
+  resetImportState(false);
+  const foreignAccountId = "11111111-1111-4111-8111-111111111111";
 
-  const outcome = await resource('items').write([
-    {
-      code: 'SKU-FOREIGN',
-      name: 'Foreign account item',
-      kind: 'service',
-      incomeAccount: foreignAccountId,
-    },
-  ], 'insert', writeContext)
+  const outcome = await resource("items").write(
+    [
+      {
+        code: "SKU-FOREIGN",
+        name: "Foreign account item",
+        kind: "service",
+        incomeAccount: foreignAccountId,
+      },
+    ],
+    "insert",
+    writeContext,
+  );
 
   assert.deepEqual(outcome, {
     created: 0,
     updated: 0,
     failed: 1,
     errors: [{ row: 1, message: `incomeAccount: "${foreignAccountId}" not found` }],
-  })
-  assert.equal(importState.scopedAccountOwnershipChecks.length, 1)
-  assert.match(importState.scopedAccountOwnershipChecks[0]!, /org_id\s*=/i)
-  assert.deepEqual(importState.attemptedMutations, [])
-  assert.deepEqual(importState.committedMutations, [])
-  assert.equal(importState.transactionCalls, 0)
-})
+  });
+  assert.equal(importState.scopedAccountOwnershipChecks.length, 1);
+  assert.match(importState.scopedAccountOwnershipChecks[0]!, /org_id\s*=/i);
+  assert.deepEqual(importState.attemptedMutations, []);
+  assert.deepEqual(importState.committedMutations, []);
+  assert.equal(importState.transactionCalls, 0);
+});
 
-test('master-data numeric import rejects inexact decimal representations', async () => {
-  resetImportState(false)
+test("master-data numeric import rejects inexact decimal representations", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('items').write([
-    { code: 'SKU-ROUND', name: 'Over-scale probe', kind: 'service', defaultRate: '12.345678' },
-    { code: 'SKU-HEX', name: 'Hex probe', kind: 'service', defaultRate: '0x10' },
-  ], 'insert', writeContext)
+  const outcome = await resource("items").write(
+    [
+      { code: "SKU-ROUND", name: "Over-scale probe", kind: "service", defaultRate: "12.345678" },
+      { code: "SKU-HEX", name: "Hex probe", kind: "service", defaultRate: "0x10" },
+    ],
+    "insert",
+    writeContext,
+  );
 
   assert.deepEqual(outcome, {
     created: 0,
     updated: 0,
     failed: 2,
     errors: [
-      { row: 1, message: 'defaultRate must be an exact decimal with at most 4 decimal places' },
-      { row: 2, message: 'defaultRate must be an exact decimal with at most 4 decimal places' },
+      { row: 1, message: "defaultRate must be an exact decimal with at most 4 decimal places" },
+      { row: 2, message: "defaultRate must be an exact decimal with at most 4 decimal places" },
     ],
-  })
-  assert.deepEqual(importState.attemptedMutations, [])
-  assert.deepEqual(importState.committedMutations, [])
-})
+  });
+  assert.deepEqual(importState.attemptedMutations, []);
+  assert.deepEqual(importState.committedMutations, []);
+});
 
-test('master-data numeric import still accepts canonical decimals', async () => {
-  resetImportState(false)
+test("master-data numeric import still accepts canonical decimals", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('items').write([
-    { code: 'SKU-OK', name: 'Canonical probe', kind: 'service', defaultRate: '12.3456' },
-  ], 'insert', writeContext)
+  const outcome = await resource("items").write(
+    [{ code: "SKU-OK", name: "Canonical probe", kind: "service", defaultRate: "12.3456" }],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
   // Core text/select columns must reach the insert alongside the normalized
   // rate — a coercion refactor that drops the fallthrough push silently
   // stores rows without their natural key, name, or kind.
-  assert.equal(importState.masterInserts.length, 1)
-  const insert = importState.masterInserts[0]!
-  assert.match(insert, /\bcode\b.*\bname\b.*\bkind\b.*default_rate\b/i)
-  assert.match(insert, /SKU-OK/)
-  assert.match(insert, /Canonical probe/)
-  assert.match(insert, /service/)
-  assert.match(insert, /12\.3456/)
-})
+  assert.equal(importState.masterInserts.length, 1);
+  const insert = importState.masterInserts[0]!;
+  assert.match(insert, /\bcode\b.*\bname\b.*\bkind\b.*default_rate\b/i);
+  assert.match(insert, /SKU-OK/);
+  assert.match(insert, /Canonical probe/);
+  assert.match(insert, /service/);
+  assert.match(insert, /12\.3456/);
+});
 
-test('master-data updates validate omitted required custom fields from the stored row', async () => {
-  resetImportState(false)
+test("master-data updates validate omitted required custom fields from the stored row", async () => {
+  resetImportState(false);
   importState.customDefs = [
-    { key: 'requiredCode', label: 'Required code', fieldType: 'text', isRequired: true, config: {} },
-    { key: 'optionalNote', label: 'Optional note', fieldType: 'text', isRequired: false, config: {} },
-  ]
-  importState.readRows.items = [{
-    id: 'item-1',
-    code: 'SKU-PATCH',
-    name: 'Legacy item',
-    kind: 'service',
-    custom: { requiredCode: 'R-1' },
-  }]
+    {
+      key: "requiredCode",
+      label: "Required code",
+      fieldType: "text",
+      isRequired: true,
+      config: {},
+    },
+    {
+      key: "optionalNote",
+      label: "Optional note",
+      fieldType: "text",
+      isRequired: false,
+      config: {},
+    },
+  ];
+  importState.readRows.items = [
+    {
+      id: "item-1",
+      code: "SKU-PATCH",
+      name: "Legacy item",
+      kind: "service",
+      custom: { requiredCode: "R-1" },
+    },
+  ];
 
-  const outcome = await resource('items').write([
-    { code: 'SKU-PATCH', name: 'Updated item', kind: 'service', optionalNote: 'updated' },
-  ], 'upsert', writeContext)
+  const outcome = await resource("items").write(
+    [{ code: "SKU-PATCH", name: "Updated item", kind: "service", optionalNote: "updated" }],
+    "upsert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
-})
+  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] });
+});
 
 // Export emits the role-denormalized kinds the product stores
 // (customer/vendor/employee) — import must accept them so the round trip
 // is lossless.
-test('parties import accepts the role kinds export emits', async () => {
-  resetImportState(false)
+test("parties import accepts the role kinds export emits", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'CUS-1', displayName: 'Customer One', kind: 'customer' },
-    { shortCode: 'VEN-1', displayName: 'Vendor One', kind: 'vendor' },
-    { shortCode: 'EMP-1', displayName: 'Employee One', kind: 'employee' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [
+      { shortCode: "CUS-1", displayName: "Customer One", kind: "customer" },
+      { shortCode: "VEN-1", displayName: "Vendor One", kind: "vendor" },
+      { shortCode: "EMP-1", displayName: "Employee One", kind: "employee" },
+    ],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] })
-})
+  assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] });
+});
 
 // An imported role kind names its role row — the write must back
 // the claim in the same row transaction instead of stranding a "Kind:
 // Vendor" no read can observe. company/person kinds back nothing.
-test('parties import backs an imported role kind with its role row', async () => {
-  resetImportState(false)
+test("parties import backs an imported role kind with its role row", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'VEN-1', displayName: 'Vendor One', kind: 'vendor' },
-    { shortCode: 'CUS-1', displayName: 'Customer One', kind: 'customer' },
-    { shortCode: 'COM-1', displayName: 'Company One', kind: 'company' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [
+      { shortCode: "VEN-1", displayName: "Vendor One", kind: "vendor" },
+      { shortCode: "CUS-1", displayName: "Customer One", kind: "customer" },
+      { shortCode: "COM-1", displayName: "Company One", kind: "company" },
+    ],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] })
-  assert.deepEqual(importState.roleEnsures, ['vendor_roles', 'customer_roles'])
-})
+  assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] });
+  assert.deepEqual(importState.roleEnsures, ["vendor_roles", "customer_roles"]);
+});
 
-test('parties import backs a role kind adopted on upsert', async () => {
-  resetImportState(false)
-  importState.readRows.parties = [{ id: 'party-9', short_code: 'VEN-9', kind: 'company', is_active: true }]
+test("parties import backs a role kind adopted on upsert", async () => {
+  resetImportState(false);
+  importState.readRows.parties = [
+    { id: "party-9", short_code: "VEN-9", kind: "company", is_active: true },
+  ];
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'VEN-9', displayName: 'Vendor Nine', kind: 'vendor' },
-  ], 'upsert', writeContext)
+  const outcome = await resource("parties").write(
+    [{ shortCode: "VEN-9", displayName: "Vendor Nine", kind: "vendor" }],
+    "upsert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
-  assert.deepEqual(importState.roleEnsures, ['vendor_roles'])
-})
+  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] });
+  assert.deepEqual(importState.roleEnsures, ["vendor_roles"]);
+});
 
 // SIM/CRM parties carry no short_code and export emits them
 // codeless — import must synthesize a stable code instead of refusing.
-test('parties import synthesizes a stable shortCode for codeless export rows', async () => {
-  resetImportState(false)
+test("parties import synthesizes a stable shortCode for codeless export rows", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { shortCode: '', displayName: 'Acme Co', kind: 'vendor' },
-    { displayName: 'Beta LLC', kind: 'customer' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [
+      { shortCode: "", displayName: "Acme Co", kind: "vendor" },
+      { displayName: "Beta LLC", kind: "customer" },
+    ],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] })
-  assert.equal(importState.masterInserts.length, 2)
-  assert.match(importState.masterInserts[0]!, /short_code/)
-  assert.match(importState.masterInserts[0]!, /ACMECO/)
-  assert.match(importState.masterInserts[1]!, /BETALLC/)
-})
+  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] });
+  assert.equal(importState.masterInserts.length, 2);
+  assert.match(importState.masterInserts[0]!, /short_code/);
+  assert.match(importState.masterInserts[0]!, /ACMECO/);
+  assert.match(importState.masterInserts[1]!, /BETALLC/);
+});
 
-test('parties import disambiguates synthesized shortCodes within one file', async () => {
-  resetImportState(false)
+test("parties import disambiguates synthesized shortCodes within one file", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { displayName: 'Acme Co', kind: 'vendor' },
-    { displayName: 'Acme Co', kind: 'customer' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [
+      { displayName: "Acme Co", kind: "vendor" },
+      { displayName: "Acme Co", kind: "customer" },
+    ],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] })
-  assert.match(importState.masterInserts[0]!, /ACMECO/)
-  assert.match(importState.masterInserts[1]!, /ACMECO-2/)
-})
+  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] });
+  assert.match(importState.masterInserts[0]!, /ACMECO/);
+  assert.match(importState.masterInserts[1]!, /ACMECO-2/);
+});
 
-test('parties import matches a codeless export row to its coded party by name', async () => {
-  resetImportState(false)
-  importState.readRows.parties = [{
-    id: 'party-9',
-    short_code: 'ACME',
-    display_name: 'Acme Co',
-    kind: 'vendor',
-    custom: {},
-  }]
-
-  const outcome = await resource('parties').write([
-    { displayName: 'Acme Co', kind: 'vendor' },
-  ], 'insert', writeContext)
-
-  assert.deepEqual(outcome, {
-    created: 0,
-    updated: 0,
-    failed: 1,
-    errors: [{ row: 1, message: 'already exists (shortCode=ACME)' }],
-  })
-})
-
-test('parties import refuses a codeless row matching several parties by name', async () => {
-  resetImportState(false)
+test("parties import matches a codeless export row to its coded party by name", async () => {
+  resetImportState(false);
   importState.readRows.parties = [
-    { id: 'party-9', short_code: null, display_name: 'Acme Co', kind: 'vendor', custom: {} },
-    { id: 'party-10', short_code: null, display_name: 'Acme Co', kind: 'customer', custom: {} },
-  ]
+    {
+      id: "party-9",
+      short_code: "ACME",
+      display_name: "Acme Co",
+      kind: "vendor",
+      custom: {},
+    },
+  ];
 
-  const outcome = await resource('parties').write([
-    { displayName: 'Acme Co', kind: 'vendor' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [{ displayName: "Acme Co", kind: "vendor" }],
+    "insert",
+    writeContext,
+  );
 
   assert.deepEqual(outcome, {
     created: 0,
     updated: 0,
     failed: 1,
-    errors: [{ row: 1, message: 'multiple parties named "Acme Co": supply shortCode to disambiguate' }],
-  })
-})
+    errors: [{ row: 1, message: "already exists (shortCode=ACME)" }],
+  });
+});
 
-test('master-data exports do not resolve account labels through an unscoped lookup', async () => {
-  resetImportState(false)
-  const foreignAccountId = '22222222-2222-4222-8222-222222222222'
-  importState.readRows.items = [{
-    code: 'SKU-FOREIGN',
-    name: 'Legacy item',
-    kind: 'service',
-    category: null,
-    income_account_id: foreignAccountId,
-    expense_account_id: null,
-    default_rate: null,
-    unit: null,
-    tax_code_id: null,
-    show_on_timesheet: false,
-    is_active: true,
-    custom: {},
-  }]
+test("parties import refuses a codeless row matching several parties by name", async () => {
+  resetImportState(false);
+  importState.readRows.parties = [
+    { id: "party-9", short_code: null, display_name: "Acme Co", kind: "vendor", custom: {} },
+    { id: "party-10", short_code: null, display_name: "Acme Co", kind: "customer", custom: {} },
+  ];
 
-  const result = await resource('items').read()
+  const outcome = await resource("parties").write(
+    [{ displayName: "Acme Co", kind: "vendor" }],
+    "insert",
+    writeContext,
+  );
 
-  assert.equal(result.rows.length, 1)
-  assert.equal(result.rows[0]?.incomeAccount, foreignAccountId)
-  assert.equal(importState.unscopedLabelLookups, 0)
-  assert.equal(importState.scopedAccountLabelLookups.length, 1)
-  assert.match(importState.scopedAccountLabelLookups[0]!, /org_id\s*=/i)
-})
+  assert.deepEqual(outcome, {
+    created: 0,
+    updated: 0,
+    failed: 1,
+    errors: [
+      { row: 1, message: 'multiple parties named "Acme Co": supply shortCode to disambiguate' },
+    ],
+  });
+});
+
+test("master-data exports do not resolve account labels through an unscoped lookup", async () => {
+  resetImportState(false);
+  const foreignAccountId = "22222222-2222-4222-8222-222222222222";
+  importState.readRows.items = [
+    {
+      code: "SKU-FOREIGN",
+      name: "Legacy item",
+      kind: "service",
+      category: null,
+      income_account_id: foreignAccountId,
+      expense_account_id: null,
+      default_rate: null,
+      unit: null,
+      tax_code_id: null,
+      show_on_timesheet: false,
+      is_active: true,
+      custom: {},
+    },
+  ];
+
+  const result = await resource("items").read();
+
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0]?.incomeAccount, foreignAccountId);
+  assert.equal(importState.unscopedLabelLookups, 0);
+  assert.equal(importState.scopedAccountLabelLookups.length, 1);
+  assert.match(importState.scopedAccountLabelLookups[0]!, /org_id\s*=/i);
+});
 
 // Operators write what the drawer shows ("Company", "Customer"), in any
 // capitalization — the stored value stays the canonical lowercase code.
-test('parties import accepts displayed kind labels and stores the canonical value', async () => {
-  resetImportState(false)
+test("parties import accepts displayed kind labels and stores the canonical value", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'COM-1', displayName: 'Acme Co', kind: 'Company' },
-    { shortCode: 'CUS-1', displayName: 'Beta LLC', kind: 'CUSTOMER' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [
+      { shortCode: "COM-1", displayName: "Acme Co", kind: "Company" },
+      { shortCode: "CUS-1", displayName: "Beta LLC", kind: "CUSTOMER" },
+    ],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] })
-  assert.equal(importState.masterInserts.length, 2)
-  assert.match(importState.masterInserts[0]!, /,\s*company,/)
-  assert.match(importState.masterInserts[1]!, /,\s*customer,/)
+  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] });
+  assert.equal(importState.masterInserts.length, 2);
+  assert.match(importState.masterInserts[0]!, /,\s*company,/);
+  assert.match(importState.masterInserts[1]!, /,\s*customer,/);
   // A role-like kind still backs its native role row, exactly as a
   // lowercase kind does.
-  assert.deepEqual(importState.roleEnsures, ['customer_roles'])
-})
+  assert.deepEqual(importState.roleEnsures, ["customer_roles"]);
+});
 
 // Localized kind labels alias their canonical value through the shipped
 // message catalogs, so a translated template re-imports.
-test('parties import accepts localized kind labels', async () => {
-  resetImportState(false)
+test("parties import accepts localized kind labels", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'COM-1', displayName: 'Acme GmbH', kind: 'Unternehmen' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [{ shortCode: "COM-1", displayName: "Acme GmbH", kind: "Unternehmen" }],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-  assert.match(importState.masterInserts[0]!, /,\s*company,/)
-})
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+  assert.match(importState.masterInserts[0]!, /,\s*company,/);
+});
 
 // A refused enum cell names the field, quotes the input, and lists the
 // accepted values — the operator fixes the file without guessing.
-test('parties import refusal lists the allowed kind values', async () => {
-  resetImportState(false)
+test("parties import refusal lists the allowed kind values", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'PAR-1', displayName: 'Partner Co', kind: 'Partner' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [{ shortCode: "PAR-1", displayName: "Partner Co", kind: "Partner" }],
+    "insert",
+    writeContext,
+  );
 
   assert.deepEqual(outcome, {
     created: 0,
     updated: 0,
     failed: 1,
-    errors: [{ row: 1, message: 'kind: invalid value "Partner" — use one of: company, person, customer, vendor, employee' }],
-  })
-  assert.deepEqual(importState.attemptedMutations, [])
-})
+    errors: [
+      {
+        row: 1,
+        message:
+          'kind: invalid value "Partner" — use one of: company, person, customer, vendor, employee',
+      },
+    ],
+  });
+  assert.deepEqual(importState.attemptedMutations, []);
+});
 
 // Enum tolerance is generic to the data-io select handling, not parties-only.
-test('master-data select columns match case-insensitively beyond parties', async () => {
-  resetImportState(false)
+test("master-data select columns match case-insensitively beyond parties", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('items').write([
-    { code: 'SKU-CASE', name: 'Cased service', kind: 'Service' },
-  ], 'insert', writeContext)
+  const outcome = await resource("items").write(
+    [{ code: "SKU-CASE", name: "Cased service", kind: "Service" }],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-  assert.match(importState.masterInserts[0]!, /,\s*service,/)
-})
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+  assert.match(importState.masterInserts[0]!, /,\s*service,/);
+});
 
 // Role flags create native roles through the native role command, alongside
 // the row write — a company kind plus its roles, idempotent on re-import.
-test('parties import role flags ensure native role rows', async () => {
-  resetImportState(false)
+test("parties import role flags ensure native role rows", async () => {
+  resetImportState(false);
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'BOTH-1', displayName: 'Both Co', kind: 'company', isCustomer: 'yes', isVendor: true, isEmployee: '' },
-  ], 'insert', writeContext)
+  const outcome = await resource("parties").write(
+    [
+      {
+        shortCode: "BOTH-1",
+        displayName: "Both Co",
+        kind: "company",
+        isCustomer: "yes",
+        isVendor: true,
+        isEmployee: "",
+      },
+    ],
+    "insert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-  assert.deepEqual(importState.roleEnsures, ['customer_roles', 'vendor_roles'])
-})
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+  assert.deepEqual(importState.roleEnsures, ["customer_roles", "vendor_roles"]);
+});
 
 // A false or blank role flag never strips a role: imports add, the drawer removes.
-test('parties import role flags leave roles alone when false or blank', async () => {
-  resetImportState(false)
-  importState.readRows.parties = [{ id: 'party-9', short_code: 'KEEP-9', kind: 'company', is_active: true }]
+test("parties import role flags leave roles alone when false or blank", async () => {
+  resetImportState(false);
+  importState.readRows.parties = [
+    { id: "party-9", short_code: "KEEP-9", kind: "company", is_active: true },
+  ];
 
-  const outcome = await resource('parties').write([
-    { shortCode: 'KEEP-9', displayName: 'Keep Co', kind: 'company', isCustomer: false, isVendor: '', isEmployee: 'no' },
-  ], 'upsert', writeContext)
+  const outcome = await resource("parties").write(
+    [
+      {
+        shortCode: "KEEP-9",
+        displayName: "Keep Co",
+        kind: "company",
+        isCustomer: false,
+        isVendor: "",
+        isEmployee: "no",
+      },
+    ],
+    "upsert",
+    writeContext,
+  );
 
-  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
-  assert.deepEqual(importState.roleEnsures, [])
-})
+  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] });
+  assert.deepEqual(importState.roleEnsures, []);
+});

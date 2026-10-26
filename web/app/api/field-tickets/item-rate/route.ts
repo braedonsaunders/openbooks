@@ -1,109 +1,143 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { divRate, mul } from '@openbooks/engine/money/money'
-import { guardSubsidiaryScope } from '../../../../lib/authz'
-import { defineRoute } from '../../../../lib/api/route'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { isUuid } from '../../../../lib/list-params'
-import { resolveItemRate } from '../../../../lib/item-rates'
-import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { divRate, mul } from "@openbooks/engine/money/money";
+import { guardSubsidiaryScope } from "../../../../lib/authz";
+import { defineRoute } from "../../../../lib/api/route";
+import { isFeatureEnabled } from "../../../../lib/features";
+import { isUuid } from "../../../../lib/list-params";
+import { resolveItemRate } from "../../../../lib/item-rates";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { notFound } from "@/lib/api/responses";
 
+export const runtime = "nodejs";
 
-export const runtime = 'nodejs'
-
-const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /** Live item-price preview using the same assignment and tier engine as charges. */
 export const GET = defineRoute({
-  permission: 'time.read',
-  feature: 'fieldTickets',
+  permission: "time.read",
+  feature: "fieldTickets",
   handler: async ({ request: req, authz: gate }) => {
-  const q = new URL(req.url).searchParams
-  const projectId = q.get('projectId')
-  const itemId = q.get('itemId')
-  const equipmentUnitId = q.get('equipmentUnitId') || null
-  const rateUnitCode = q.get('rateUnitCode')?.trim().toLowerCase() || null
-  const quantity = q.get('quantity') ?? ''
-  const onDate = q.get('onDate') ?? ''
-  if (!projectId || !itemId || !isUuid(projectId) || !isUuid(itemId) || (equipmentUnitId && !isUuid(equipmentUnitId))) {
-    return NextResponse.json({ error: 'invalid selection' }, { status: 422 })
-  }
-  if (!Number.isInteger(Number(quantity)) || Number(quantity) <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(onDate)) {
-    return NextResponse.json({ error: 'invalid quantity or date' }, { status: 422 })
-  }
-  if (rateUnitCode && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(rateUnitCode)) {
-    return NextResponse.json({ error: 'invalid rate unit' }, { status: 422 })
-  }
+    const q = new URL(req.url).searchParams;
+    const projectId = q.get("projectId");
+    const itemId = q.get("itemId");
+    const equipmentUnitId = q.get("equipmentUnitId") || null;
+    const rateUnitCode = q.get("rateUnitCode")?.trim().toLowerCase() || null;
+    const quantity = q.get("quantity") ?? "";
+    const onDate = q.get("onDate") ?? "";
+    if (
+      !projectId ||
+      !itemId ||
+      !isUuid(projectId) ||
+      !isUuid(itemId) ||
+      (equipmentUnitId && !isUuid(equipmentUnitId))
+    ) {
+      return NextResponse.json({ error: "invalid selection" }, { status: 422 });
+    }
+    if (
+      !Number.isInteger(Number(quantity)) ||
+      Number(quantity) <= 0 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(onDate)
+    ) {
+      return NextResponse.json({ error: "invalid quantity or date" }, { status: 422 });
+    }
+    if (rateUnitCode && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(rateUnitCode)) {
+      return NextResponse.json({ error: "invalid rate unit" }, { status: 422 });
+    }
 
-  const project = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    const project = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
     select subsidiary_id from projects
      where id = ${projectId} and org_id = ${gate.user.orgId} and is_active
-  `, 'objects'))[0]
-  if (!project) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, project.subsidiary_id)
-  if (denied) return denied
+  `,
+        "objects",
+      )
+    )[0];
+    if (!project) return notFound("record");
+    const denied = guardSubsidiaryScope(gate, project.subsidiary_id);
+    if (denied) return denied;
 
-  const item = (await db.execute<{ name: string; default_rate: string | null; default_cost: string | null; unit: string | null; kind: string }>(sql`
+    const item = await db.execute<{
+      name: string;
+      default_rate: string | null;
+      default_cost: string | null;
+      unit: string | null;
+      kind: string;
+    }>(
+      sql`
     select name, default_rate, default_cost, unit, kind from items
      where id = ${itemId} and org_id = ${gate.user.orgId} and is_active
-  `, 'objects'))
-  if (!item[0]) return notFound("record")
-  // The picker and add-line already refuse these kinds. Turning Inventory off
-  // must also 404 a crafted preview so a live price cannot be quoted for an
-  // inventory / assembly / kit item. Stored ticket lines stay as they are.
-  if (INVENTORY_ITEM_KINDS.has(item[0].kind) && !(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
-    return notFound("record")
-  }
-  // The picker and add-line already refuse this kind. Turning Equipment off
-  // must also 404 a crafted preview so a live price cannot be quoted for an
-  // equipment_charge item. Stored ticket lines stay as they are.
-  if (item[0].kind === 'equipment_charge' && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
-    return notFound("record")
-  }
+  `,
+      "objects",
+    );
+    if (!item[0]) return notFound("record");
+    // The picker and add-line already refuse these kinds. Turning Inventory off
+    // must also 404 a crafted preview so a live price cannot be quoted for an
+    // inventory / assembly / kit item. Stored ticket lines stay as they are.
+    if (
+      INVENTORY_ITEM_KINDS.has(item[0].kind) &&
+      !(await isFeatureEnabled(gate.user.orgId, "inventory"))
+    ) {
+      return notFound("record");
+    }
+    // The picker and add-line already refuse this kind. Turning Equipment off
+    // must also 404 a crafted preview so a live price cannot be quoted for an
+    // equipment_charge item. Stored ticket lines stay as they are.
+    if (
+      item[0].kind === "equipment_charge" &&
+      !(await isFeatureEnabled(gate.user.orgId, "equipment"))
+    ) {
+      return notFound("record");
+    }
 
-  let resolved: Awaited<ReturnType<typeof resolveItemRate>>
-  try {
-    resolved = await resolveItemRate({
-      orgId: gate.user.orgId,
-      projectId,
-      itemId,
-      equipmentUnitId,
-      onDate,
-      baseQuantity: quantity,
-      rateUnitCode,
-      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    })
-  } catch (error) {
-    if (error instanceof ScopeNotFoundError) return notFound("record")
-    return apiErrorResponse(error)
-  }
-  // Absent pricing is not a zero price: when the rate book has no match and
-  // the item carries no default rate or cost, quoting '0' labeled
-  // item_default would persist a billable zero line. An explicitly stored
-  // zero default still quotes zero; only the unconfigured case refuses.
-  const defaultRate = item[0].default_rate
-  const defaultCost = item[0].default_cost
-  if (!resolved && defaultRate == null && defaultCost == null) {
-    return NextResponse.json({ error: `No price for ${item[0].name} on ${onDate}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.` }, { status: 422 })
-  }
-  const fallbackRate = defaultRate ?? defaultCost ?? '0'
-  const amount = resolved?.bill.amount ?? mul(quantity, fallbackRate)
-  return NextResponse.json({
-    rate: divRate(amount, quantity),
-    amount,
-    baseUnit: resolved?.baseUnit ?? item[0].unit ?? 'unit',
-    baseQuantity: resolved?.baseQuantity ?? quantity,
-    transactionUnitCode: resolved?.transactionUnitCode ?? item[0].unit ?? 'unit',
-    transactionUnitName: resolved?.transactionUnitName ?? item[0].unit ?? 'Unit',
-    rateUnits: resolved?.rateUnits ?? [],
-    source: resolved ? 'rate_book' : 'item_default',
-    // 'inferred' when the version's pin was backfilled from the live profile
-    // (0326 legacy): the drawer names it so the operator verifies before billing.
-    policyProvenance: resolved?.policyProvenance ?? null,
-    components: resolved?.bill.components ?? [],
-  })
+    let resolved: Awaited<ReturnType<typeof resolveItemRate>>;
+    try {
+      resolved = await resolveItemRate({
+        orgId: gate.user.orgId,
+        projectId,
+        itemId,
+        equipmentUnitId,
+        onDate,
+        baseQuantity: quantity,
+        rateUnitCode,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) return notFound("record");
+      return apiErrorResponse(error);
+    }
+    // Absent pricing is not a zero price: when the rate book has no match and
+    // the item carries no default rate or cost, quoting '0' labeled
+    // item_default would persist a billable zero line. An explicitly stored
+    // zero default still quotes zero; only the unconfigured case refuses.
+    const defaultRate = item[0].default_rate;
+    const defaultCost = item[0].default_cost;
+    if (!resolved && defaultRate == null && defaultCost == null) {
+      return NextResponse.json(
+        {
+          error: `No price for ${item[0].name} on ${onDate}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.`,
+        },
+        { status: 422 },
+      );
+    }
+    const fallbackRate = defaultRate ?? defaultCost ?? "0";
+    const amount = resolved?.bill.amount ?? mul(quantity, fallbackRate);
+    return NextResponse.json({
+      rate: divRate(amount, quantity),
+      amount,
+      baseUnit: resolved?.baseUnit ?? item[0].unit ?? "unit",
+      baseQuantity: resolved?.baseQuantity ?? quantity,
+      transactionUnitCode: resolved?.transactionUnitCode ?? item[0].unit ?? "unit",
+      transactionUnitName: resolved?.transactionUnitName ?? item[0].unit ?? "Unit",
+      rateUnits: resolved?.rateUnits ?? [],
+      source: resolved ? "rate_book" : "item_default",
+      // 'inferred' when the version's pin was backfilled from the live profile
+      // (0326 legacy): the drawer names it so the operator verifies before billing.
+      policyProvenance: resolved?.policyProvenance ?? null,
+      components: resolved?.bill.components ?? [],
+    });
   },
-})
+});

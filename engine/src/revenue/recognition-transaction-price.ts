@@ -3,8 +3,22 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { add, cmp, fromUnits, mulPercent, mulRate, neg, roundDiv, sum, toUnits } from "../money/money.ts";
-import { periodInterest, periodRateFromAnnualPercent, type AccretionPeriod } from "../money/present-value.ts";
+import {
+  add,
+  cmp,
+  fromUnits,
+  mulPercent,
+  mulRate,
+  neg,
+  roundDiv,
+  sum,
+  toUnits,
+} from "../money/money.ts";
+import {
+  periodInterest,
+  periodRateFromAnnualPercent,
+  type AccretionPeriod,
+} from "../money/present-value.ts";
 
 // ---------------------------------------------------------------------------
 // Step 3 — determining the transaction price (pure)
@@ -16,11 +30,16 @@ export class TransactionPriceError extends Error {
   readonly code: string;
   readonly remedy: string;
 
-  constructor(message: string, options: { status?: 422 | 409; code?: string; remedy?: string } = {}) {
+  constructor(
+    message: string,
+    options: { status?: 422 | 409; code?: string; remedy?: string } = {},
+  ) {
     super(message);
     this.status = options.status ?? 422;
     this.code = options.code ?? "revenue_transaction_price_invalid";
-    this.remedy = options.remedy ?? "Correct the contract pricing assumptions and submit the revised transaction price.";
+    this.remedy =
+      options.remedy ??
+      "Correct the contract pricing assumptions and submit the revised transaction price.";
   }
 }
 
@@ -44,7 +63,10 @@ export async function revenueRecognitionFeatureEnabled(
   return orgFeatureEnabled(orgId, "revenueRecognition", runner as SqlExecutor);
 }
 
-export async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {
+export async function assertEnabled(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+): Promise<void> {
   if (!(await revenueRecognitionFeatureEnabled(runner, orgId))) {
     throw new RevenueRecognitionFeatureOffError("Revenue recognition feature is disabled");
   }
@@ -212,9 +234,9 @@ export function separateFinancingComponent(
   let carrying = toUnits(pv);
   const target = toUnits(input.consideration);
   for (let year = 1; year <= input.years; year++) {
-    const interest =
-      year < input.years ? periodInterest(carrying, rate) : target - carrying;
-    if (interest < 0n) throw new TransactionPriceError("financing accretion produced negative interest");
+    const interest = year < input.years ? periodInterest(carrying, rate) : target - carrying;
+    if (interest < 0n)
+      throw new TransactionPriceError("financing accretion produced negative interest");
     const closing = carrying + interest;
     accretion.push({
       sequence: year,
@@ -253,10 +275,18 @@ export interface ContractPricingResult {
 }
 
 /** Read the contract's legal-entity assignment for the route's record-level guard. */
-export async function getContractPricingSubsidiary(orgId: string, contractId: string): Promise<string | null | undefined> {
+export async function getContractPricingSubsidiary(
+  orgId: string,
+  contractId: string,
+): Promise<string | null | undefined> {
   return withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId" from revenue_contracts where org_id = ${orgId} and id = ${contractId}`, "objects"))[0];
+    const row = (
+      await db.execute<{ subsidiaryId: string | null }>(
+        sql`
+      select subsidiary_id as "subsidiaryId" from revenue_contracts where org_id = ${orgId} and id = ${contractId}`,
+        "objects",
+      )
+    )[0];
     return row ? row.subsidiaryId : undefined;
   });
 }
@@ -278,16 +308,31 @@ export async function setContractPricing(
 ): Promise<ContractPricingResult> {
   return withOrgTransaction(orgId, async () => {
     await assertEnabled(db, orgId);
-    const contract = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    const contract = (
+      await db.execute<{ subsidiaryId: string | null }>(
+        sql`
       select subsidiary_id as "subsidiaryId" from revenue_contracts
-       where org_id = ${orgId} and id = ${contractId} for update`, "objects"))[0];
-    if (!contract || !subsidiaryScopeAllows(allowedSubsidiaryIds, contract.subsidiaryId)) throw new ScopeNotFoundError();
-    const allocated = (await db.execute<{ id: string }>(sql`
-      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`, "objects"))[0];
+       where org_id = ${orgId} and id = ${contractId} for update`,
+        "objects",
+      )
+    )[0];
+    if (!contract || !subsidiaryScopeAllows(allowedSubsidiaryIds, contract.subsidiaryId))
+      throw new ScopeNotFoundError();
+    const allocated = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`,
+        "objects",
+      )
+    )[0];
     if (allocated) {
       throw new TransactionPriceError(
         "The contract has been allocated to performance obligations.",
-        { status: 409, code: "revenue_contract_pricing_locked", remedy: "Propose a contract modification from Revenue → contract → Modify contract." },
+        {
+          status: 409,
+          code: "revenue_contract_pricing_locked",
+          remedy: "Propose a contract modification from Revenue → contract → Modify contract.",
+        },
       );
     }
     if (cmp(input.fixedConsideration, "0") < 0) {
@@ -304,7 +349,8 @@ export async function setContractPricing(
       : null;
     const transactionPrice = financing ? financing.cashSellingPrice : fromUnits(toUnits(promised));
 
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update revenue_contracts
          set pricing = ${JSON.stringify({
            fixedConsideration: fromUnits(toUnits(input.fixedConsideration)),
@@ -324,12 +370,15 @@ export async function setContractPricing(
              updated_at = now(), updated_by = ${actorId}
        where id = ${contractId} and org_id = ${orgId}
          and not exists (select 1 from performance_obligations o where o.org_id=${orgId} and o.contract_id=${contractId})
-       returning id`, "objects");
+       returning id`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new TransactionPriceError(
-        "Contract pricing changed before it could be saved.",
-        { status: 409, code: "revenue_contract_pricing_conflict", remedy: "Reload Revenue → contract → Pricing and submit the intended values again." },
-      );
+      throw new TransactionPriceError("Contract pricing changed before it could be saved.", {
+        status: 409,
+        code: "revenue_contract_pricing_conflict",
+        remedy: "Reload Revenue → contract → Pricing and submit the intended values again.",
+      });
     }
 
     return {

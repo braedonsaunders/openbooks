@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { RecordTabs } from '@/components/module-home/record-tabs'
+import { RecordTabs } from "@/components/module-home/record-tabs";
 
-import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { useRouter } from 'next/navigation'
-import { X } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import {
   Badge,
   Button,
@@ -21,12 +21,15 @@ import {
   TableRow,
   TagInput,
   UrlDrawer,
-} from '@openbooks/ui'
-import { SplitLinesEditor } from '../../../../../components/allocations/SplitLinesEditor'
-import type { AllocationLine } from '../../../../../components/allocations/split-lines-model'
-import type { AllocationRuleTarget, AllocationRuleVersion } from '@openbooks/engine/allocations/types'
-import { confirmDialog } from '../../../../../lib/confirm'
-import { ApiResponseError, throwApiErrorIfNotOk } from '../../../../../lib/api-error'
+} from "@openbooks/ui";
+import { SplitLinesEditor } from "../../../../../components/allocations/SplitLinesEditor";
+import type { AllocationLine } from "../../../../../components/allocations/split-lines-model";
+import type {
+  AllocationRuleTarget,
+  AllocationRuleVersion,
+} from "@openbooks/engine/allocations/types";
+import { confirmDialog } from "../../../../../lib/confirm";
+import { ApiResponseError, throwApiErrorIfNotOk } from "../../../../../lib/api-error";
 import {
   apiError,
   blankDefinitionForm,
@@ -40,101 +43,120 @@ import {
   testLinePayload,
   type DefinitionForm,
   type GeneralForm,
-} from './rule-drawer-form'
-import { AllocationRuleWizard } from './AllocationRuleWizard'
-import { ComputationView, type Computation } from './runs-tab'
-import { DateField } from '@/components/date-field'
+} from "./rule-drawer-form";
+import { AllocationRuleWizard } from "./AllocationRuleWizard";
+import { ComputationView, type Computation } from "./runs-tab";
+import { DateField } from "@/components/date-field";
 
-type DrawerTab = 'general' | 'definition' | 'versions' | 'test'
+type DrawerTab = "general" | "definition" | "versions" | "test";
 
 interface RuleHead {
-  id: string
-  key: string
-  name: string
-  description?: string | null
-  mode: 'entry' | 'post' | 'period'
-  sortOrder: number
-  isActive: boolean
+  id: string;
+  key: string;
+  name: string;
+  description?: string | null;
+  mode: "entry" | "post" | "period";
+  sortOrder: number;
+  isActive: boolean;
 }
 
 interface VersionEntry {
   version: Record<string, unknown> & {
-    id: string
-    versionNo: number
-    status: 'draft' | 'published' | 'retired'
-    effectiveFrom: string
-    effectiveTo?: string | null
-    definitionHash?: string | null
-  }
-  revision: string
-  targetCount: number
+    id: string;
+    versionNo: number;
+    status: "draft" | "published" | "retired";
+    effectiveFrom: string;
+    effectiveTo?: string | null;
+    definitionHash?: string | null;
+  };
+  revision: string;
+  targetCount: number;
 }
 
 interface RuleDetail {
-  rule: RuleHead
-  revision: string
-  versions: VersionEntry[]
+  rule: RuleHead;
+  revision: string;
+  versions: VersionEntry[];
 }
 
 interface VersionDetail {
-  version: AllocationRuleVersion
-  targets: AllocationRuleTarget[]
-  revision: string
+  version: AllocationRuleVersion;
+  targets: AllocationRuleTarget[];
+  revision: string;
 }
 
 interface Option {
-  id: string
-  label: string
-  extra?: string
+  id: string;
+  label: string;
+  extra?: string;
 }
 
-async function fetchJson(url: string, init?: RequestInit): Promise<{ status: number; body: unknown }> {
+async function fetchJson(
+  url: string,
+  init?: RequestInit,
+): Promise<{ status: number; body: unknown }> {
   try {
-    const res = await fetch(url, { ...init, headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) } })
+    const res = await fetch(url, {
+      ...init,
+      headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    });
     if (!res.ok) {
       try {
-        await throwApiErrorIfNotOk(res, 'Request failed')
+        await throwApiErrorIfNotOk(res, "Request failed");
       } catch (error) {
         if (error instanceof ApiResponseError) {
-          const body = error.body !== null && typeof error.body === 'object' && !Array.isArray(error.body) ? error.body : {}
-          return { status: error.status, body: { ...body, error: error.message } }
+          const body =
+            error.body !== null && typeof error.body === "object" && !Array.isArray(error.body)
+              ? error.body
+              : {};
+          return { status: error.status, body: { ...body, error: error.message } };
         }
-        throw error
+        throw error;
       }
     }
-    let body: unknown = null
+    let body: unknown = null;
     try {
-      body = await res.json()
+      body = await res.json();
     } catch {
-      body = null
+      body = null;
     }
-    return { status: res.status, body }
+    return { status: res.status, body };
   } catch {
     // Resolve transport failures through the same status branch as refusals so
     // every action renders its localized fallback and releases its busy flag.
-    return { status: 0, body: null }
+    return { status: 0, body: null };
   }
 }
 
 /** Native searchable multi-value picker for reference fields. */
-function MultiCheck({ options, values, onChange, ariaLabel, disabled = false }: {
-  options: { value: string; label: string }[]
-  values: string[]
-  onChange: (next: string[]) => void
-  ariaLabel: string
-  disabled?: boolean
+function MultiCheck({
+  options,
+  values,
+  onChange,
+  ariaLabel,
+  disabled = false,
+}: {
+  options: { value: string; label: string }[];
+  values: string[];
+  onChange: (next: string[]) => void;
+  ariaLabel: string;
+  disabled?: boolean;
 }) {
-  const t = useTranslations('allocations')
+  const t = useTranslations("allocations");
   if (options.length === 0 && values.length === 0) {
-    return (
-      <p className="text-xs text-slate-400">
-        {t('rules.definition.noOptions')}
-      </p>
-    )
+    return <p className="text-xs text-slate-400">{t("rules.definition.noOptions")}</p>;
   }
   return (
-    <TagInput value={values} onChange={onChange} options={options} ariaLabel={ariaLabel} placeholder={ariaLabel} allowNew={false} disabled={disabled} />
-  )
+    <TagInput
+      value={values}
+      onChange={onChange}
+      options={options}
+      ariaLabel={ariaLabel}
+      placeholder={ariaLabel}
+      allowNew={false}
+      disabled={disabled}
+    />
+  );
 }
 
 /**
@@ -144,16 +166,24 @@ function MultiCheck({ options, values, onChange, ariaLabel, disabled = false }: 
  * this file uses CHECKBOX_CLASS (the SetupDrawer boolean styling), never a
  * bare input.
  */
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
       <Label help={hint}>{label}</Label>
       {children}
     </div>
-  )
+  );
 }
 
-const CHECKBOX_CLASS = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
+const CHECKBOX_CLASS = "h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500";
 
 function Check({
   checked,
@@ -161,10 +191,10 @@ function Check({
   disabled,
   children,
 }: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-  children: React.ReactNode
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  children: React.ReactNode;
 }) {
   return (
     <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
@@ -177,7 +207,7 @@ function Check({
       />
       {children}
     </label>
-  )
+  );
 }
 
 /**
@@ -189,27 +219,35 @@ function DrawerSection({
   first,
   children,
 }: {
-  title: string
-  first?: boolean
-  children: React.ReactNode
+  title: string;
+  first?: boolean;
+  children: React.ReactNode;
 }) {
   return (
     <section className="space-y-3">
       <h3
         className={
           first
-            ? 'text-sm font-semibold text-slate-800 dark:text-slate-100'
-            : 'border-t border-slate-200 pt-4 text-sm font-semibold text-slate-800 dark:border-slate-800 dark:text-slate-100'
+            ? "text-sm font-semibold text-slate-800 dark:text-slate-100"
+            : "border-t border-slate-200 pt-4 text-sm font-semibold text-slate-800 dark:border-slate-800 dark:text-slate-100"
         }
       >
         {title}
       </h3>
       {children}
     </section>
-  )
+  );
 }
 
-function ErrorBox({ message, onRetry, retryLabel }: { message: string; onRetry?: () => void; retryLabel?: string }) {
+function ErrorBox({
+  message,
+  onRetry,
+  retryLabel,
+}: {
+  message: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
   return (
     <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
       <p>{message}</p>
@@ -219,7 +257,7 @@ function ErrorBox({ message, onRetry, retryLabel }: { message: string; onRetry?:
         </Button>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -227,174 +265,205 @@ function ErrorBox({ message, onRetry, retryLabel }: { message: string; onRetry?:
  * guided WizardShell. The slot mounts this only when the param is present;
  * the editor UrlDrawer and the wizard both close back to the list.
  */
-const TABS: DrawerTab[] = ['general', 'definition', 'versions', 'test']
+const TABS: DrawerTab[] = ["general", "definition", "versions", "test"];
 
-export function RuleDrawerHost({ ruleParam, closeHref, payrollExpenses = false }: { ruleParam: string; closeHref: string; payrollExpenses?: boolean }) {
-  if (ruleParam === 'new')
-    return (
-      <AllocationRuleWizard closeHref={closeHref} payrollExpenses={payrollExpenses} />
-    )
-  return (
-    <RuleEditDrawer key={ruleParam} ruleId={ruleParam} closeHref={closeHref} />
-  )
+export function RuleDrawerHost({
+  ruleParam,
+  closeHref,
+  payrollExpenses = false,
+}: {
+  ruleParam: string;
+  closeHref: string;
+  payrollExpenses?: boolean;
+}) {
+  if (ruleParam === "new")
+    return <AllocationRuleWizard closeHref={closeHref} payrollExpenses={payrollExpenses} />;
+  return <RuleEditDrawer key={ruleParam} ruleId={ruleParam} closeHref={closeHref} />;
 }
 
 function TabStrip({ tab, onTab }: { tab: DrawerTab; onTab: (tab: DrawerTab) => void }) {
-  const t = useTranslations('allocations')
+  const t = useTranslations("allocations");
   const labels: Record<DrawerTab, string> = {
-    general: t('rules.drawer.tabs.general'),
-    definition: t('rules.drawer.tabs.definition'),
-    versions: t('rules.drawer.tabs.versions'),
-    test: t('rules.drawer.tabs.test'),
-  }
+    general: t("rules.drawer.tabs.general"),
+    definition: t("rules.drawer.tabs.definition"),
+    versions: t("rules.drawer.tabs.versions"),
+    test: t("rules.drawer.tabs.test"),
+  };
   // Underline tab strip — the SetupDrawer drawer-tabs style verbatim. The
   // drawer shell already wraps subtabs in its bordered band.
   return (
-    <RecordTabs label={t('rules.tabsAria')} tabs={TABS.map((key) => ({ key, label: labels[key] }))} active={tab} onChange={onTab} />
-  )
+    <RecordTabs
+      label={t("rules.tabsAria")}
+      tabs={TABS.map((key) => ({ key, label: labels[key] }))}
+      active={tab}
+      onChange={onTab}
+    />
+  );
 }
 
 interface PartyOption extends Option {
-  roles?: string[]
+  roles?: string[];
 }
 
 interface SegmentOption {
-  key: string
-  label: string
-  values: Option[]
+  key: string;
+  label: string;
+  values: Option[];
 }
 
 interface PickerOptions {
-  accounts: Option[]
-  expenseAccounts: Option[]
-  payComponents: Option[]
-  departments: Option[]
-  locations: Option[]
-  classes: Option[]
-  projects: Option[]
-  subsidiaries: Option[]
-  books: Option[]
-  periods: Option[]
-  parties: PartyOption[]
-  items: Option[]
-  segments: SegmentOption[]
+  accounts: Option[];
+  expenseAccounts: Option[];
+  payComponents: Option[];
+  departments: Option[];
+  locations: Option[];
+  classes: Option[];
+  projects: Option[];
+  subsidiaries: Option[];
+  books: Option[];
+  periods: Option[];
+  parties: PartyOption[];
+  items: Option[];
+  segments: SegmentOption[];
   /** Enabled flows over the allocation_run subject (A14 approval picker). */
-  flows: Option[]
+  flows: Option[];
 }
 
 /** Edit mode: loads head + versions + pickers once, then one tab body at a time. */
 function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: string }) {
-  const t = useTranslations('allocations')
-  const router = useRouter()
-  const notFoundMessage = t('rules.drawer.notFound')
-  const loadErrorMessage = t('rules.errors.load')
-  const driversErrorMessage = t('drivers.loadFailed')
-  const [tab, setTab] = useState<DrawerTab>('general')
-  const [detail, setDetail] = useState<RuleDetail | null>(null)
-  const [options, setOptions] = useState<PickerOptions | null>(null)
-  const [drivers, setDrivers] = useState<{ id: string; key: string; name: string; dimension: string; isActive: boolean }[]>([])
+  const t = useTranslations("allocations");
+  const router = useRouter();
+  const notFoundMessage = t("rules.drawer.notFound");
+  const loadErrorMessage = t("rules.errors.load");
+  const driversErrorMessage = t("drivers.loadFailed");
+  const [tab, setTab] = useState<DrawerTab>("general");
+  const [detail, setDetail] = useState<RuleDetail | null>(null);
+  const [options, setOptions] = useState<PickerOptions | null>(null);
+  const [drivers, setDrivers] = useState<
+    { id: string; key: string; name: string; dimension: string; isActive: boolean }[]
+  >([]);
   // A refused drivers list is not an empty drivers list: without this the
   // picker renders the "no drivers" copy and the operator never retries.
-  const [driversError, setDriversError] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [requestKey, setRequestKey] = useState(0)
+  const [driversError, setDriversError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [requestKey, setRequestKey] = useState(0);
 
   useEffect(() => {
-    const controller = new AbortController()
-    let live = true
+    const controller = new AbortController();
+    let live = true;
     const load = async () => {
-      setError(null)
-      setDriversError(null)
+      setError(null);
+      setDriversError(null);
       const [detailRes, optionsRes, driversRes] = await Promise.all([
-        fetchJson(`/api/allocations/rules/${encodeURIComponent(ruleId)}`, { signal: controller.signal }),
-        fetchJson('/api/allocations/options', { signal: controller.signal }),
-        fetchJson('/api/allocations/drivers', { signal: controller.signal }),
-      ])
-      if (!live) return
+        fetchJson(`/api/allocations/rules/${encodeURIComponent(ruleId)}`, {
+          signal: controller.signal,
+        }),
+        fetchJson("/api/allocations/options", { signal: controller.signal }),
+        fetchJson("/api/allocations/drivers", { signal: controller.signal }),
+      ]);
+      if (!live) return;
       if (detailRes.status === 404) {
-        setError(notFoundMessage)
-        return
+        setError(notFoundMessage);
+        return;
       }
       if (detailRes.status !== 200 || optionsRes.status !== 200) {
-        setError(apiError(detailRes.status, detailRes.body, loadErrorMessage).message)
-        return
+        setError(apiError(detailRes.status, detailRes.body, loadErrorMessage).message);
+        return;
       }
-      setDetail(detailRes.body as RuleDetail)
-      const payload = optionsRes.body as Record<string, Option[]>
-      const rawParties = (payload['parties'] ?? []) as (Option & { roles?: unknown })[]
-      const rawSegments = (payload['segments'] ?? []) as unknown as SegmentOption[]
+      setDetail(detailRes.body as RuleDetail);
+      const payload = optionsRes.body as Record<string, Option[]>;
+      const rawParties = (payload["parties"] ?? []) as (Option & { roles?: unknown })[];
+      const rawSegments = (payload["segments"] ?? []) as unknown as SegmentOption[];
       setOptions({
-        accounts: payload['accounts'] ?? [],
-        expenseAccounts: payload['expenseAccounts'] ?? [],
-        payComponents: payload['payComponents'] ?? [],
-        departments: payload['departments'] ?? [],
-        locations: payload['locations'] ?? [],
-        classes: payload['classes'] ?? [],
-        projects: payload['projects'] ?? [],
-        subsidiaries: payload['subsidiaries'] ?? [],
-        books: payload['books'] ?? [],
-        periods: payload['periods'] ?? [],
+        accounts: payload["accounts"] ?? [],
+        expenseAccounts: payload["expenseAccounts"] ?? [],
+        payComponents: payload["payComponents"] ?? [],
+        departments: payload["departments"] ?? [],
+        locations: payload["locations"] ?? [],
+        classes: payload["classes"] ?? [],
+        projects: payload["projects"] ?? [],
+        subsidiaries: payload["subsidiaries"] ?? [],
+        books: payload["books"] ?? [],
+        periods: payload["periods"] ?? [],
         parties: rawParties.map((party) => ({
           ...party,
-          roles: Array.isArray(party.roles) ? party.roles.filter((role): role is string => typeof role === 'string') : [],
+          roles: Array.isArray(party.roles)
+            ? party.roles.filter((role): role is string => typeof role === "string")
+            : [],
         })),
-        items: payload['items'] ?? [],
-        flows: payload['flows'] ?? [],
-        segments: rawSegments.map((segment) => ({
-          key: typeof segment?.key === 'string' ? segment.key : '',
-          label: typeof segment?.label === 'string' ? segment.label : '',
-          values: Array.isArray(segment?.values) ? segment.values : [],
-        })).filter((segment) => segment.key !== ''),
-      })
+        items: payload["items"] ?? [],
+        flows: payload["flows"] ?? [],
+        segments: rawSegments
+          .map((segment) => ({
+            key: typeof segment?.key === "string" ? segment.key : "",
+            label: typeof segment?.label === "string" ? segment.label : "",
+            values: Array.isArray(segment?.values) ? segment.values : [],
+          }))
+          .filter((segment) => segment.key !== ""),
+      });
       if (driversRes.status === 200) {
-        setDrivers((driversRes.body as { drivers?: typeof drivers })?.drivers ?? [])
+        setDrivers((driversRes.body as { drivers?: typeof drivers })?.drivers ?? []);
       } else {
-        setDriversError(apiError(driversRes.status, driversRes.body, driversErrorMessage).message)
+        setDriversError(apiError(driversRes.status, driversRes.body, driversErrorMessage).message);
       }
-    }
+    };
     void load().catch((loadError: unknown) => {
-      if (live && !(loadError instanceof DOMException && loadError.name === 'AbortError')) {
-        setError(loadError instanceof Error ? loadError.message : loadErrorMessage)
+      if (live && !(loadError instanceof DOMException && loadError.name === "AbortError")) {
+        setError(loadError instanceof Error ? loadError.message : loadErrorMessage);
       }
-    })
+    });
     return () => {
-      live = false
-      controller.abort()
-    }
-  }, [ruleId, requestKey, notFoundMessage, loadErrorMessage, driversErrorMessage])
+      live = false;
+      controller.abort();
+    };
+  }, [ruleId, requestKey, notFoundMessage, loadErrorMessage, driversErrorMessage]);
 
   const reload = () => {
-    setDetail(null)
-    setRequestKey((key) => key + 1)
-    router.refresh()
-  }
+    setDetail(null);
+    setRequestKey((key) => key + 1);
+    router.refresh();
+  };
 
   return (
     <UrlDrawer
       open
       closeHref={closeHref}
-      title={detail ? t('rules.drawer.editTitle', { name: detail.rule.name }) : t('rules.drawer.loading')}
+      title={
+        detail ? t("rules.drawer.editTitle", { name: detail.rule.name }) : t("rules.drawer.loading")
+      }
       description={detail ? detail.rule.key : undefined}
       size="2xl"
       subtabs={<TabStrip tab={tab} onTab={setTab} />}
     >
       {error ? (
-        <ErrorBox message={error} onRetry={reload} retryLabel={t('rules.drawer.retry')} />
+        <ErrorBox message={error} onRetry={reload} retryLabel={t("rules.drawer.retry")} />
       ) : detail === null || options === null ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t('rules.drawer.loading')}
-        </p>
-      ) : tab === 'general' ? (
-        <GeneralTab detail={detail} onSaved={(next) => { setDetail(next); router.refresh() }} onStale={reload} />
-      ) : tab === 'definition' ? (
-        <DefinitionTab ruleId={ruleId} detail={detail} options={options} drivers={drivers} driversError={driversError} onChanged={reload} />
-      ) : tab === 'versions' ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t("rules.drawer.loading")}</p>
+      ) : tab === "general" ? (
+        <GeneralTab
+          detail={detail}
+          onSaved={(next) => {
+            setDetail(next);
+            router.refresh();
+          }}
+          onStale={reload}
+        />
+      ) : tab === "definition" ? (
+        <DefinitionTab
+          ruleId={ruleId}
+          detail={detail}
+          options={options}
+          drivers={drivers}
+          driversError={driversError}
+          onChanged={reload}
+        />
+      ) : tab === "versions" ? (
         <VersionsTab ruleId={ruleId} detail={detail} onChanged={reload} />
       ) : (
         <TestTab ruleId={ruleId} detail={detail} options={options} />
       )}
     </UrlDrawer>
-  )
+  );
 }
 
 /** General tab: head identity/ordering; key + mode are immutable after create. */
@@ -403,80 +472,104 @@ function GeneralTab({
   onSaved,
   onStale,
 }: {
-  detail: RuleDetail
-  onSaved: (detail: RuleDetail) => void
-  onStale: () => void
+  detail: RuleDetail;
+  onSaved: (detail: RuleDetail) => void;
+  onStale: () => void;
 }) {
-  const t = useTranslations('allocations')
-  const tc = useTranslations('common')
-  const [form, setForm] = useState<GeneralForm>(() => generalFormFromRule(detail.rule))
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const modeLabels: Record<RuleHead['mode'], string> = {
-    entry: t('rules.modes.entry'),
-    post: t('rules.modes.post'),
-    period: t('rules.modes.period'),
-  }
+  const t = useTranslations("allocations");
+  const tc = useTranslations("common");
+  const [form, setForm] = useState<GeneralForm>(() => generalFormFromRule(detail.rule));
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const modeLabels: Record<RuleHead["mode"], string> = {
+    entry: t("rules.modes.entry"),
+    post: t("rules.modes.post"),
+    period: t("rules.modes.period"),
+  };
 
   const save = async () => {
-    setSaving(true)
-    setError(null)
-    const { status, body } = await fetchJson(`/api/allocations/rules/${encodeURIComponent(detail.rule.id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(generalPayload(form, detail.revision)),
-    })
-    setSaving(false)
+    setSaving(true);
+    setError(null);
+    const { status, body } = await fetchJson(
+      `/api/allocations/rules/${encodeURIComponent(detail.rule.id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(generalPayload(form, detail.revision)),
+      },
+    );
+    setSaving(false);
     if (status !== 200) {
-      const failure = apiError(status, body, t('rules.errors.save'))
+      const failure = apiError(status, body, t("rules.errors.save"));
       if (failure.stale) {
-        setError(t('rules.errors.stale'))
-        onStale()
-        return
+        setError(t("rules.errors.stale"));
+        onStale();
+        return;
       }
-      setError(failure.message)
-      return
+      setError(failure.message);
+      return;
     }
-    const rule = (body as { rule?: RuleHead })?.rule
-    if (rule) onSaved({ ...detail, rule, revision: (body as { rule?: { revision?: string } })?.rule?.revision ?? detail.revision })
-  }
+    const rule = (body as { rule?: RuleHead })?.rule;
+    if (rule)
+      onSaved({
+        ...detail,
+        rule,
+        revision: (body as { rule?: { revision?: string } })?.rule?.revision ?? detail.revision,
+      });
+  };
 
   return (
     <div className="space-y-4 p-1">
       {error ? <ErrorBox message={error} /> : null}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t('rules.general.key')} hint={t('rules.general.keyHint')}>
-          <Input value={detail.rule.key} disabled aria-label={t('rules.general.key')} />
+        <Field label={t("rules.general.key")} hint={t("rules.general.keyHint")}>
+          <Input value={detail.rule.key} disabled aria-label={t("rules.general.key")} />
         </Field>
-        <Field label={t('rules.general.mode')} hint={t('rules.general.modeHint')}>
-          <Input value={modeLabels[detail.rule.mode]} disabled aria-label={t('rules.general.mode')} />
+        <Field label={t("rules.general.mode")} hint={t("rules.general.modeHint")}>
+          <Input
+            value={modeLabels[detail.rule.mode]}
+            disabled
+            aria-label={t("rules.general.mode")}
+          />
         </Field>
       </div>
-      <Field label={t('rules.general.name')}>
-        <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label={t('rules.general.name')} />
+      <Field label={t("rules.general.name")}>
+        <Input
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          aria-label={t("rules.general.name")}
+        />
       </Field>
-      <Field label={t('rules.general.description')}>
-        <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} aria-label={t('rules.general.description')} />
+      <Field label={t("rules.general.description")}>
+        <Input
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          aria-label={t("rules.general.description")}
+        />
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t('rules.general.sortOrder')} hint={t('rules.general.sortOrderHint')}>
+        <Field label={t("rules.general.sortOrder")} hint={t("rules.general.sortOrderHint")}>
           <Input
             value={form.sortOrder}
             inputMode="numeric"
-            aria-label={t('rules.general.sortOrder')}
+            aria-label={t("rules.general.sortOrder")}
             onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
           />
         </Field>
         <div className="self-end pb-2">
           <Check checked={form.isActive} onChange={(isActive) => setForm({ ...form, isActive })}>
-            {t('rules.general.isActive')}
+            {t("rules.general.isActive")}
           </Check>
         </div>
       </div>
-      <Button type="button" onClick={() => void save()} disabled={saving || form.name.trim() === ''}>
-        {tc('actions.save')}
+      <Button
+        type="button"
+        onClick={() => void save()}
+        disabled={saving || form.name.trim() === ""}
+      >
+        {tc("actions.save")}
       </Button>
     </div>
-  )
+  );
 }
 
 /** Definition tab: the draft version editor (window/books/applicability/basis/targets/policy). */
@@ -488,34 +581,37 @@ function DefinitionTab({
   driversError,
   onChanged,
 }: {
-  ruleId: string
-  detail: RuleDetail
-  options: PickerOptions
-  drivers: { id: string; key: string; name: string; dimension: string; isActive: boolean }[]
-  driversError: string | null
-  onChanged: () => void
+  ruleId: string;
+  detail: RuleDetail;
+  options: PickerOptions;
+  drivers: { id: string; key: string; name: string; dimension: string; isActive: boolean }[];
+  driversError: string | null;
+  onChanged: () => void;
 }) {
-  const t = useTranslations('allocations')
-  const tc = useTranslations('common')
-  const loadErrorMessage = t('rules.errors.load')
+  const t = useTranslations("allocations");
+  const tc = useTranslations("common");
+  const loadErrorMessage = t("rules.errors.load");
   const defaultVersionId =
-    detail.versions.find((entry) => entry.version.id === (detail.rule as { currentVersionId?: string }).currentVersionId)?.version.id
-    ?? detail.versions.find((entry) => entry.version.status === 'draft')?.version.id
-    ?? detail.versions[0]?.version.id
-    ?? ''
-  const [versionId, setVersionId] = useState(defaultVersionId)
-  const [loaded, setLoaded] = useState<VersionDetail | null>(null)
-  const [form, setForm] = useState<DefinitionForm>(blankDefinitionForm())
-  const [lines, setLines] = useState<AllocationLine[]>([])
-  const [docKindInput, setDocKindInput] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
-  const [saving, setSaving] = useState(false)
+    detail.versions.find(
+      (entry) =>
+        entry.version.id === (detail.rule as { currentVersionId?: string }).currentVersionId,
+    )?.version.id ??
+    detail.versions.find((entry) => entry.version.status === "draft")?.version.id ??
+    detail.versions[0]?.version.id ??
+    "";
+  const [versionId, setVersionId] = useState(defaultVersionId);
+  const [loaded, setLoaded] = useState<VersionDetail | null>(null);
+  const [form, setForm] = useState<DefinitionForm>(blankDefinitionForm());
+  const [lines, setLines] = useState<AllocationLine[]>([]);
+  const [docKindInput, setDocKindInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (versionId === '') return
-    const controller = new AbortController()
-    let live = true
+    if (versionId === "") return;
+    const controller = new AbortController();
+    let live = true;
     // StrictMode double-invokes effects in dev: the cleanup aborts the first
     // fetch, so swallow that AbortError — anything else surfaces.
     void fetchJson(
@@ -523,211 +619,243 @@ function DefinitionTab({
       { signal: controller.signal },
     ).then(
       ({ status, body }) => {
-        if (!live) return
+        if (!live) return;
         if (status !== 200) {
-          setError(apiError(status, body, loadErrorMessage).message)
-          return
+          setError(apiError(status, body, loadErrorMessage).message);
+          return;
         }
-        const payload = body as VersionDetail
-        setLoaded(payload)
-        setForm(definitionFormFromVersion(payload.version))
-        setLines(((payload.targets ?? []) as Parameters<typeof targetToLine>[0][]).map(targetToLine))
+        const payload = body as VersionDetail;
+        setLoaded(payload);
+        setForm(definitionFormFromVersion(payload.version));
+        setLines(
+          ((payload.targets ?? []) as Parameters<typeof targetToLine>[0][]).map(targetToLine),
+        );
       },
       (fetchError: unknown) => {
-        if (live && !(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
-          setError(fetchError instanceof Error ? fetchError.message : loadErrorMessage)
+        if (live && !(fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+          setError(fetchError instanceof Error ? fetchError.message : loadErrorMessage);
         }
       },
-    )
+    );
     return () => {
-      live = false
-      controller.abort()
-    }
-  }, [ruleId, versionId, loadErrorMessage])
+      live = false;
+      controller.abort();
+    };
+  }, [ruleId, versionId, loadErrorMessage]);
 
-  const isDraft = (loaded?.version?.status as string | undefined) === 'draft'
+  const isDraft = (loaded?.version?.status as string | undefined) === "draft";
   const set = <K extends keyof DefinitionForm>(key: K, value: DefinitionForm[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
-    setSaved(false)
-  }
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+  };
 
   const save = async () => {
-    if (!loaded) return
-    setSaving(true)
-    setError(null)
-    setSaved(false)
-    const versionUrl = `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions/${encodeURIComponent(versionId)}`
+    if (!loaded) return;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    const versionUrl = `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions/${encodeURIComponent(versionId)}`;
     const patched = await fetchJson(versionUrl, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify(definitionPayload(form, loaded.revision)),
-    })
+    });
     if (patched.status !== 200) {
-      setSaving(false)
-      const failure = apiError(patched.status, patched.body, t('rules.errors.save'))
-      setError(failure.stale ? t('rules.errors.stale') : failure.message)
-      if (failure.stale) onChanged()
-      return
+      setSaving(false);
+      const failure = apiError(patched.status, patched.body, t("rules.errors.save"));
+      setError(failure.stale ? t("rules.errors.stale") : failure.message);
+      if (failure.stale) onChanged();
+      return;
     }
-    let revision = (patched.body as { version?: { revision?: string } })?.version?.revision ?? loaded.revision
-    if (form.targetKind === 'explicit') {
+    let revision =
+      (patched.body as { version?: { revision?: string } })?.version?.revision ?? loaded.revision;
+    if (form.targetKind === "explicit") {
       const replaced = await fetchJson(`${versionUrl}/targets`, {
-        method: 'PUT',
-        body: JSON.stringify({ targets: mergeLinesToTargets(loaded.targets, lines), expectedRevision: revision }),
-      })
+        method: "PUT",
+        body: JSON.stringify({
+          targets: mergeLinesToTargets(loaded.targets, lines),
+          expectedRevision: revision,
+        }),
+      });
       if (replaced.status !== 200) {
-        setSaving(false)
-        const failure = apiError(replaced.status, replaced.body, t('rules.errors.save'))
-        setError(failure.stale ? t('rules.errors.stale') : failure.message)
-        if (failure.stale) onChanged()
-        return
+        setSaving(false);
+        const failure = apiError(replaced.status, replaced.body, t("rules.errors.save"));
+        setError(failure.stale ? t("rules.errors.stale") : failure.message);
+        if (failure.stale) onChanged();
+        return;
       }
-      revision = (replaced.body as { revision?: string })?.revision ?? revision
-      const targets = (replaced.body as { targets: VersionDetail['targets'] }).targets
-      setLoaded({ ...loaded, revision, targets })
-      setLines((targets as Parameters<typeof targetToLine>[0][]).map(targetToLine))
+      revision = (replaced.body as { revision?: string })?.revision ?? revision;
+      const targets = (replaced.body as { targets: VersionDetail["targets"] }).targets;
+      setLoaded({ ...loaded, revision, targets });
+      setLines((targets as Parameters<typeof targetToLine>[0][]).map(targetToLine));
     }
-    setSaving(false)
-    setSaved(true)
-    if (form.targetKind !== 'explicit') setLoaded({ ...loaded, revision })
-  }
+    setSaving(false);
+    setSaved(true);
+    if (form.targetKind !== "explicit") setLoaded({ ...loaded, revision });
+  };
 
   const filterLabels: Record<string, string> = {
-    department: t('rules.definition.filters.department'),
-    location: t('rules.definition.filters.location'),
-    class: t('rules.definition.filters.class'),
-    project: t('rules.definition.filters.project'),
-    subsidiary: t('rules.definition.filters.subsidiary'),
-    party: t('rules.definition.filters.party'),
-    item: t('rules.definition.filters.item'),
-  }
+    department: t("rules.definition.filters.department"),
+    location: t("rules.definition.filters.location"),
+    class: t("rules.definition.filters.class"),
+    project: t("rules.definition.filters.project"),
+    subsidiary: t("rules.definition.filters.subsidiary"),
+    party: t("rules.definition.filters.party"),
+    item: t("rules.definition.filters.item"),
+  };
   const partyRoleLabels: Record<string, string> = {
-    vendor: t('rules.definition.partyRoles.vendor'),
-    customer: t('rules.definition.partyRoles.customer'),
-    employee: t('rules.definition.partyRoles.employee'),
-    other: t('rules.definition.partyRoles.other'),
-  }
-  const accountOptions = (form.payrollExpensesOnly ? options.expenseAccounts : options.accounts).map((account) => ({ value: account.id, label: account.label }))
+    vendor: t("rules.definition.partyRoles.vendor"),
+    customer: t("rules.definition.partyRoles.customer"),
+    employee: t("rules.definition.partyRoles.employee"),
+    other: t("rules.definition.partyRoles.other"),
+  };
+  const accountOptions = (
+    form.payrollExpensesOnly ? options.expenseAccounts : options.accounts
+  ).map((account) => ({ value: account.id, label: account.label }));
   const driverOptions = [
     ...drivers.map((driver) => ({ value: driver.id, label: `${driver.key} · ${driver.name}` })),
-    ...(form.driverId !== '' && !drivers.some((driver) => driver.id === form.driverId)
+    ...(form.driverId !== "" && !drivers.some((driver) => driver.id === form.driverId)
       ? [{ value: form.driverId, label: form.driverId }]
       : []),
-  ]
+  ];
   /** Parties grouped under their primary role (vendor → customer → employee, else other). */
-  const partyGroups: { role: string; label: string; parties: PartyOption[] }[] = ((): { role: string; label: string; parties: PartyOption[] }[] => {
-    const order = ['vendor', 'customer', 'employee']
-    const buckets = new Map<string, PartyOption[]>()
+  const partyGroups: { role: string; label: string; parties: PartyOption[] }[] = ((): {
+    role: string;
+    label: string;
+    parties: PartyOption[];
+  }[] => {
+    const order = ["vendor", "customer", "employee"];
+    const buckets = new Map<string, PartyOption[]>();
     for (const party of options.parties) {
-      const primary = order.find((role) => party.roles?.includes(role)) ?? 'other'
-      const bucket = buckets.get(primary) ?? []
-      bucket.push(party)
-      buckets.set(primary, bucket)
+      const primary = order.find((role) => party.roles?.includes(role)) ?? "other";
+      const bucket = buckets.get(primary) ?? [];
+      bucket.push(party);
+      buckets.set(primary, bucket);
     }
     return [...buckets.entries()].map(([role, group]) => ({
       role,
       label: partyRoleLabels[role] ?? role,
       parties: group,
-    }))
-  })()
+    }));
+  })();
   const dynamicDimOptions = ((): { value: string; label: string }[] => {
     const dims: { value: string; label: string }[] = [
-      { value: 'department', label: t('rules.test.department') },
-      { value: 'location', label: t('rules.test.location') },
-      { value: 'class', label: t('rules.test.class') },
-      { value: 'project', label: t('rules.test.project') },
-      { value: 'subsidiary', label: t('rules.test.subsidiary') },
-    ]
-    return dims
-  })()
-  const dynamicValues: { value: string; label: string }[] = ((): { value: string; label: string }[] => {
+      { value: "department", label: t("rules.test.department") },
+      { value: "location", label: t("rules.test.location") },
+      { value: "class", label: t("rules.test.class") },
+      { value: "project", label: t("rules.test.project") },
+      { value: "subsidiary", label: t("rules.test.subsidiary") },
+    ];
+    return dims;
+  })();
+  const dynamicValues: { value: string; label: string }[] = ((): {
+    value: string;
+    label: string;
+  }[] => {
     const map: Record<string, Option[]> = {
       department: options.departments,
       location: options.locations,
       class: options.classes,
       project: options.projects,
       subsidiary: options.subsidiaries,
-    }
-    return (map[form.dynamicDimension] ?? []).map((item) => ({ value: item.id, label: item.label }))
-  })()
+    };
+    return (map[form.dynamicDimension] ?? []).map((item) => ({
+      value: item.id,
+      label: item.label,
+    }));
+  })();
 
   return (
     <div className="space-y-5 p-1">
-      <Field label={t('rules.test.version')}>
+      <Field label={t("rules.test.version")}>
         <Select
           value={versionId}
-          aria-label={t('rules.test.version')}
+          aria-label={t("rules.test.version")}
           onChange={(e) => {
-            setVersionId(e.target.value)
-            setLoaded(null)
-            setError(null)
-            setSaved(false)
+            setVersionId(e.target.value);
+            setLoaded(null);
+            setError(null);
+            setSaved(false);
           }}
         >
           {detail.versions.map((entry) => (
             <option key={entry.version.id} value={entry.version.id}>
-              {t('rules.versions.version', { n: entry.version.versionNo })} ·{' '}
-              {entry.version.status}
+              {t("rules.versions.version", { n: entry.version.versionNo })} · {entry.version.status}
             </option>
           ))}
         </Select>
       </Field>
       {error ? <ErrorBox message={error} /> : null}
       {loaded === null ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t('rules.drawer.loading')}
-        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t("rules.drawer.loading")}</p>
       ) : (
         <>
           {!isDraft ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {t('rules.definition.readOnly')}
+              {t("rules.definition.readOnly")}
             </p>
           ) : null}
-          <DrawerSection first title={t('rules.definition.windowHeading')}>
+          <DrawerSection first title={t("rules.definition.windowHeading")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('rules.definition.effectiveFrom')}>
-                <DateField value={form.effectiveFrom} disabled={!isDraft} aria-label={t('rules.definition.effectiveFrom')} onChange={(value) => set('effectiveFrom', value)} />
+              <Field label={t("rules.definition.effectiveFrom")}>
+                <DateField
+                  value={form.effectiveFrom}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.effectiveFrom")}
+                  onChange={(value) => set("effectiveFrom", value)}
+                />
               </Field>
-              <Field label={t('rules.definition.effectiveTo')}>
-                <DateField value={form.effectiveTo} disabled={!isDraft} aria-label={t('rules.definition.effectiveTo')} onChange={(value) => set('effectiveTo', value)} />
+              <Field label={t("rules.definition.effectiveTo")}>
+                <DateField
+                  value={form.effectiveTo}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.effectiveTo")}
+                  onChange={(value) => set("effectiveTo", value)}
+                />
               </Field>
             </div>
-            <Field label={t('rules.definition.bookScope')}>
-              <Select value={form.bookScope} disabled={!isDraft} aria-label={t('rules.definition.bookScope')} onChange={(e) => set('bookScope', e.target.value as DefinitionForm['bookScope'])}>
-                <option value="primary">
-                  {t('rules.definition.bookScopes.primary')}
-                </option>
-                <option value="all_posting">
-                  {t('rules.definition.bookScopes.all_posting')}
-                </option>
-                <option value="books">
-                  {t('rules.definition.bookScopes.books')}
-                </option>
+            <Field label={t("rules.definition.bookScope")}>
+              <Select
+                value={form.bookScope}
+                disabled={!isDraft}
+                aria-label={t("rules.definition.bookScope")}
+                onChange={(e) => set("bookScope", e.target.value as DefinitionForm["bookScope"])}
+              >
+                <option value="primary">{t("rules.definition.bookScopes.primary")}</option>
+                <option value="all_posting">{t("rules.definition.bookScopes.all_posting")}</option>
+                <option value="books">{t("rules.definition.bookScopes.books")}</option>
               </Select>
             </Field>
-            {form.bookScope === 'books' ? (
+            {form.bookScope === "books" ? (
               <MultiCheck
                 disabled={!isDraft}
-                ariaLabel={t('rules.definition.bookScope')}
+                ariaLabel={t("rules.definition.bookScope")}
                 options={options.books.map((book) => ({ value: book.id, label: book.label }))}
                 values={form.bookIds}
-                onChange={(bookIds) => set('bookIds', bookIds)}
+                onChange={(bookIds) => set("bookIds", bookIds)}
               />
             ) : null}
           </DrawerSection>
-          <DrawerSection title={t('rules.definition.applicabilityHeading')}>
+          <DrawerSection title={t("rules.definition.applicabilityHeading")}>
             <div>
-              <Label>{t('rules.definition.documentKinds')}</Label>
+              <Label>{t("rules.definition.documentKinds")}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {form.documentKinds.map((kind) => (
-                  <span key={kind} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">
+                  <span
+                    key={kind}
+                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800"
+                  >
                     {kind}
                     {isDraft ? (
                       <button
                         type="button"
-                        aria-label={`${tc('actions.delete')} ${kind}`}
+                        aria-label={`${tc("actions.delete")} ${kind}`}
                         className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
-                        onClick={() => set('documentKinds', form.documentKinds.filter((k) => k !== kind))}
+                        onClick={() =>
+                          set(
+                            "documentKinds",
+                            form.documentKinds.filter((k) => k !== kind),
+                          )
+                        }
                       >
                         <X size={12} />
                       </button>
@@ -737,129 +865,160 @@ function DefinitionTab({
               </div>
               {isDraft ? (
                 <span className="mt-1.5 flex gap-2">
-                  <Input value={docKindInput} onChange={(e) => setDocKindInput(e.target.value)} placeholder={t('rules.definition.documentKinds')} aria-label={t('rules.definition.documentKinds')} />
+                  <Input
+                    value={docKindInput}
+                    onChange={(e) => setDocKindInput(e.target.value)}
+                    placeholder={t("rules.definition.documentKinds")}
+                    aria-label={t("rules.definition.documentKinds")}
+                  />
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={docKindInput.trim() === ''}
+                    disabled={docKindInput.trim() === ""}
                     onClick={() => {
-                      const kind = docKindInput.trim()
-                      if (kind !== '' && !form.documentKinds.includes(kind)) set('documentKinds', [...form.documentKinds, kind])
-                      setDocKindInput('')
+                      const kind = docKindInput.trim();
+                      if (kind !== "" && !form.documentKinds.includes(kind))
+                        set("documentKinds", [...form.documentKinds, kind]);
+                      setDocKindInput("");
                     }}
                   >
-                    {t('rules.definition.documentKindAdd')}
+                    {t("rules.definition.documentKindAdd")}
                   </Button>
                 </span>
               ) : null}
             </div>
-            <Field label={t('rules.definition.accountScope')}>
-              <Select value={form.accountScopeKind} disabled={!isDraft} aria-label={t('rules.definition.accountScope')} onChange={(e) => set('accountScopeKind', e.target.value as DefinitionForm['accountScopeKind'])}>
-                <option value="any">
-                  {t('rules.definition.accountScopes.any')}
-                </option>
-                <option value="accounts">
-                  {t('rules.definition.accountScopes.accounts')}
-                </option>
+            <Field label={t("rules.definition.accountScope")}>
+              <Select
+                value={form.accountScopeKind}
+                disabled={!isDraft}
+                aria-label={t("rules.definition.accountScope")}
+                onChange={(e) =>
+                  set("accountScopeKind", e.target.value as DefinitionForm["accountScopeKind"])
+                }
+              >
+                <option value="any">{t("rules.definition.accountScopes.any")}</option>
+                <option value="accounts">{t("rules.definition.accountScopes.accounts")}</option>
                 <option value="account_group">
-                  {t('rules.definition.accountScopes.account_group')}
+                  {t("rules.definition.accountScopes.account_group")}
                 </option>
               </Select>
             </Field>
-            {form.accountScopeKind === 'accounts' ? (
+            {form.accountScopeKind === "accounts" ? (
               <MultiCheck
                 disabled={!isDraft}
-                ariaLabel={t('rules.definition.accountScope')}
+                ariaLabel={t("rules.definition.accountScope")}
                 options={accountOptions}
                 values={form.accountIds}
-                onChange={(accountIds) => set('accountIds', accountIds)}
+                onChange={(accountIds) => set("accountIds", accountIds)}
               />
             ) : null}
-            {form.accountScopeKind === 'account_group' ? (
+            {form.accountScopeKind === "account_group" ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label={t('rules.definition.accountGroupDimension')}>
-                  <Input value={form.accountGroupDimension} disabled={!isDraft} aria-label={t('rules.definition.accountGroupDimension')} onChange={(e) => set('accountGroupDimension', e.target.value)} />
+                <Field label={t("rules.definition.accountGroupDimension")}>
+                  <Input
+                    value={form.accountGroupDimension}
+                    disabled={!isDraft}
+                    aria-label={t("rules.definition.accountGroupDimension")}
+                    onChange={(e) => set("accountGroupDimension", e.target.value)}
+                  />
                 </Field>
-                <Field label={t('rules.definition.accountGroup')}>
-                  <Input value={form.accountGroupKey} disabled={!isDraft} aria-label={t('rules.definition.accountGroup')} onChange={(e) => set('accountGroupKey', e.target.value)} />
+                <Field label={t("rules.definition.accountGroup")}>
+                  <Input
+                    value={form.accountGroupKey}
+                    disabled={!isDraft}
+                    aria-label={t("rules.definition.accountGroup")}
+                    onChange={(e) => set("accountGroupKey", e.target.value)}
+                  />
                 </Field>
               </div>
             ) : null}
             <div>
-              <Label>{t('rules.definition.filtersHeading')}</Label>
+              <Label>{t("rules.definition.filtersHeading")}</Label>
               <div className="space-y-2">
-                {EDITABLE_FILTER_DIMS.filter((dim) => dim !== 'subsidiary' || options.subsidiaries.length > 1).map((dim) => {
+                {EDITABLE_FILTER_DIMS.filter(
+                  (dim) => dim !== "subsidiary" || options.subsidiaries.length > 1,
+                ).map((dim) => {
                   const source: Record<string, Option[]> = {
                     department: options.departments,
                     location: options.locations,
                     class: options.classes,
                     project: options.projects,
                     subsidiary: options.subsidiaries,
-                  }
-                  const filterKey = `filter${dim.charAt(0).toUpperCase()}${dim.slice(1)}Ids` as keyof DefinitionForm
+                  };
+                  const filterKey =
+                    `filter${dim.charAt(0).toUpperCase()}${dim.slice(1)}Ids` as keyof DefinitionForm;
                   return (
                     <div key={dim}>
                       <Label>{filterLabels[dim]}</Label>
                       <MultiCheck
                         disabled={!isDraft}
                         ariaLabel={filterLabels[dim] ?? dim}
-                        options={(source[dim] ?? []).map((item) => ({ value: item.id, label: item.label }))}
+                        options={(source[dim] ?? []).map((item) => ({
+                          value: item.id,
+                          label: item.label,
+                        }))}
                         values={form[filterKey] as string[]}
                         onChange={(next) => set(filterKey, next as never)}
                       />
                     </div>
-                  )
+                  );
                 })}
               </div>
               {!form.payrollExpensesOnly && (
                 <div>
-                  <Label>{filterLabels['party']}</Label>
+                  <Label>{filterLabels["party"]}</Label>
                   <div className="space-y-2">
                     {partyGroups.map((group) => (
                       <div key={group.role}>
                         <Label>{group.label}</Label>
                         <MultiCheck
-                        disabled={!isDraft}
-                        ariaLabel={group.label}
-                        options={group.parties.map((item) => ({ value: item.id, label: item.label }))}
-                        values={form.filterPartyIds}
-                        onChange={(next) => set('filterPartyIds', next)}
-                      />
+                          disabled={!isDraft}
+                          ariaLabel={group.label}
+                          options={group.parties.map((item) => ({
+                            value: item.id,
+                            label: item.label,
+                          }))}
+                          values={form.filterPartyIds}
+                          onChange={(next) => set("filterPartyIds", next)}
+                        />
                       </div>
                     ))}
                     {partyGroups.length === 0 ? (
-                    <MultiCheck
-                      disabled={!isDraft}
-                      ariaLabel={filterLabels['party'] ?? 'party'}
-                      options={[]}
-                      values={form.filterPartyIds}
-                      onChange={(next) => set('filterPartyIds', next)}
-                    />
-                  ) : null}
+                      <MultiCheck
+                        disabled={!isDraft}
+                        ariaLabel={filterLabels["party"] ?? "party"}
+                        options={[]}
+                        values={form.filterPartyIds}
+                        onChange={(next) => set("filterPartyIds", next)}
+                      />
+                    ) : null}
                   </div>
                 </div>
               )}
               {!form.payrollExpensesOnly && (
                 <div>
-                  <Label>{filterLabels['item']}</Label>
+                  <Label>{filterLabels["item"]}</Label>
                   <MultiCheck
-                  disabled={!isDraft}
-                  ariaLabel={filterLabels['item'] ?? 'item'}
-                  options={options.items.map((item) => ({ value: item.id, label: item.label }))}
-                  values={form.filterItemIds}
-                  onChange={(next) => set('filterItemIds', next)}
-                />
+                    disabled={!isDraft}
+                    ariaLabel={filterLabels["item"] ?? "item"}
+                    options={options.items.map((item) => ({ value: item.id, label: item.label }))}
+                    values={form.filterItemIds}
+                    onChange={(next) => set("filterItemIds", next)}
+                  />
                 </div>
               )}
               {form.payrollExpensesOnly && (
                 <div>
-                  <Label>{t('rules.definition.filters.payComponent')}</Label>
+                  <Label>{t("rules.definition.filters.payComponent")}</Label>
                   <MultiCheck
                     disabled={!isDraft}
-                    ariaLabel={t('rules.definition.filters.payComponent')}
-                    options={(options.payComponents ?? []).map((item) => ({ value: item.id, label: item.label }))}
+                    ariaLabel={t("rules.definition.filters.payComponent")}
+                    options={(options.payComponents ?? []).map((item) => ({
+                      value: item.id,
+                      label: item.label,
+                    }))}
                     values={form.filterPayComponentIds}
-                    onChange={(next) => set('filterPayComponentIds', next)}
+                    onChange={(next) => set("filterPayComponentIds", next)}
                   />
                 </div>
               )}
@@ -871,106 +1030,120 @@ function DefinitionTab({
                     ariaLabel={segment.label}
                     options={segment.values.map((item) => ({ value: item.id, label: item.label }))}
                     values={form.filterExtraDims[segment.key] ?? []}
-                    onChange={(next) => set('filterExtraDims', { ...form.filterExtraDims, [segment.key]: next })}
+                    onChange={(next) =>
+                      set("filterExtraDims", { ...form.filterExtraDims, [segment.key]: next })
+                    }
                   />
                 </div>
               ))}
               <div className="mt-2 space-y-1">
-                <Label>{t('rules.definition.filtersUntagged')}</Label>
+                <Label>{t("rules.definition.filtersUntagged")}</Label>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('rules.definition.filtersUntaggedHint')}
+                  {t("rules.definition.filtersUntaggedHint")}
                 </p>
-                {(['department', 'location', 'class', 'project'] as const).map(
-                  (dim) => (
-                    <Check
+                {(["department", "location", "class", "project"] as const).map((dim) => (
+                  <Check
                     key={dim}
                     disabled={!isDraft}
                     checked={form.requireUntagged.includes(dim)}
                     onChange={(checked) =>
                       set(
-                        'requireUntagged',
+                        "requireUntagged",
                         checked
                           ? [...form.requireUntagged, dim]
                           : form.requireUntagged.filter((d) => d !== dim),
                       )
                     }
                   >
-                      {filterLabels[dim]}
-                    </Check>
-                  ),
-                )}
+                    {filterLabels[dim]}
+                  </Check>
+                ))}
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('rules.definition.applyPolicy')}>
-                <Select value={form.applyPolicy} disabled={!isDraft} aria-label={t('rules.definition.applyPolicy')} onChange={(e) => set('applyPolicy', e.target.value as DefinitionForm['applyPolicy'])}>
-                  <option value="automatic">
-                    {t('rules.definition.applyPolicies.automatic')}
-                  </option>
-                  <option value="suggest">
-                    {t('rules.definition.applyPolicies.suggest')}
-                  </option>
-                  <option value="manual">
-                    {t('rules.definition.applyPolicies.manual')}
-                  </option>
+              <Field label={t("rules.definition.applyPolicy")}>
+                <Select
+                  value={form.applyPolicy}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.applyPolicy")}
+                  onChange={(e) =>
+                    set("applyPolicy", e.target.value as DefinitionForm["applyPolicy"])
+                  }
+                >
+                  <option value="automatic">{t("rules.definition.applyPolicies.automatic")}</option>
+                  <option value="suggest">{t("rules.definition.applyPolicies.suggest")}</option>
+                  <option value="manual">{t("rules.definition.applyPolicies.manual")}</option>
                 </Select>
               </Field>
-              <Field label={t('rules.definition.sourceMeasure')}>
-                <Select value={form.sourceMeasure} disabled={!isDraft} aria-label={t('rules.definition.sourceMeasure')} onChange={(e) => set('sourceMeasure', e.target.value as DefinitionForm['sourceMeasure'])}>
+              <Field label={t("rules.definition.sourceMeasure")}>
+                <Select
+                  value={form.sourceMeasure}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.sourceMeasure")}
+                  onChange={(e) =>
+                    set("sourceMeasure", e.target.value as DefinitionForm["sourceMeasure"])
+                  }
+                >
                   <option value="period_activity">
-                    {t('rules.definition.sourceMeasures.period_activity')}
+                    {t("rules.definition.sourceMeasures.period_activity")}
                   </option>
                   <option value="period_end_balance">
-                    {t('rules.definition.sourceMeasures.period_end_balance')}
+                    {t("rules.definition.sourceMeasures.period_end_balance")}
                   </option>
                   <option value="ytd_activity">
-                    {t('rules.definition.sourceMeasures.ytd_activity')}
+                    {t("rules.definition.sourceMeasures.ytd_activity")}
                   </option>
                 </Select>
               </Field>
             </div>
           </DrawerSection>
-          <DrawerSection title={t('rules.definition.basisHeading')}>
+          <DrawerSection title={t("rules.definition.basisHeading")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('rules.definition.basisKind')}>
-                <Select value={form.basisKind} disabled={!isDraft} aria-label={t('rules.definition.basisKind')} onChange={(e) => set('basisKind', e.target.value as DefinitionForm['basisKind'])}>
+              <Field label={t("rules.definition.basisKind")}>
+                <Select
+                  value={form.basisKind}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.basisKind")}
+                  onChange={(e) => set("basisKind", e.target.value as DefinitionForm["basisKind"])}
+                >
                   <option value="fixed_percent">
-                    {t('rules.definition.basisKinds.fixed_percent')}
+                    {t("rules.definition.basisKinds.fixed_percent")}
                   </option>
-                  <option value="driver">
-                    {t('rules.definition.basisKinds.driver')}
-                  </option>
-                  <option value="stepped">
-                    {t('rules.definition.basisKinds.stepped')}
-                  </option>
+                  <option value="driver">{t("rules.definition.basisKinds.driver")}</option>
+                  <option value="stepped">{t("rules.definition.basisKinds.stepped")}</option>
                 </Select>
               </Field>
-              <Field label={t('rules.definition.driverAsOf')}>
-                <Select value={form.driverAsOf} disabled={!isDraft} aria-label={t('rules.definition.driverAsOf')} onChange={(e) => set('driverAsOf', e.target.value as DefinitionForm['driverAsOf'])}>
-                  <option value="period">
-                    {t('rules.definition.driverAsOfs.period')}
-                  </option>
+              <Field label={t("rules.definition.driverAsOf")}>
+                <Select
+                  value={form.driverAsOf}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.driverAsOf")}
+                  onChange={(e) =>
+                    set("driverAsOf", e.target.value as DefinitionForm["driverAsOf"])
+                  }
+                >
+                  <option value="period">{t("rules.definition.driverAsOfs.period")}</option>
                   <option value="document_date">
-                    {t('rules.definition.driverAsOfs.document_date')}
+                    {t("rules.definition.driverAsOfs.document_date")}
                   </option>
                   <option value="prior_period">
-                    {t('rules.definition.driverAsOfs.prior_period')}
+                    {t("rules.definition.driverAsOfs.prior_period")}
                   </option>
                 </Select>
               </Field>
             </div>
-            {form.basisKind === 'driver' ? (
-              <Field label={t('rules.definition.driver')}>
+            {form.basisKind === "driver" ? (
+              <Field label={t("rules.definition.driver")}>
                 <SearchSelect
                   value={form.driverId}
-                  onChange={(value) => set('driverId', value ?? '')}
+                  onChange={(value) => set("driverId", value ?? "")}
                   options={driverOptions}
                   disabled={!isDraft}
-                  placeholder={t('rules.definition.driver')}
-                  sheetTitle={t('rules.definition.driver')}
-                  ariaLabel={t('rules.definition.driver')}
+                  placeholder={t("rules.definition.driver")}
+                  sheetTitle={t("rules.definition.driver")}
+                  ariaLabel={t("rules.definition.driver")}
                   clearable={isDraft}
-                  emptyLabel={t('rules.definition.driver')}
+                  emptyLabel={t("rules.definition.driver")}
                 />
                 {driversError ? (
                   <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
@@ -979,11 +1152,11 @@ function DefinitionTab({
                 ) : null}
               </Field>
             ) : null}
-            {form.basisKind === 'stepped' ? (
+            {form.basisKind === "stepped" ? (
               <div>
-                <Label>{t('rules.definition.tiersHeading')}</Label>
+                <Label>{t("rules.definition.tiersHeading")}</Label>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('rules.definition.tierOpenEnded')}
+                  {t("rules.definition.tierOpenEnded")}
                 </p>
                 <div className="mt-1.5 space-y-2">
                   {form.tiers.map((tier, index) => (
@@ -992,11 +1165,11 @@ function DefinitionTab({
                         value={tier.upTo}
                         disabled={!isDraft}
                         inputMode="decimal"
-                        placeholder={t('rules.definition.tierUpTo')}
-                        aria-label={t('rules.definition.tierUpTo')}
+                        placeholder={t("rules.definition.tierUpTo")}
+                        aria-label={t("rules.definition.tierUpTo")}
                         onChange={(e) =>
                           set(
-                            'tiers',
+                            "tiers",
                             form.tiers.map((current, j) =>
                               j === index ? { ...current, upTo: e.target.value } : current,
                             ),
@@ -1006,11 +1179,11 @@ function DefinitionTab({
                       <Input
                         value={tier.targetKey}
                         disabled={!isDraft}
-                        placeholder={t('rules.definition.tierTargetKey')}
-                        aria-label={t('rules.definition.tierTargetKey')}
+                        placeholder={t("rules.definition.tierTargetKey")}
+                        aria-label={t("rules.definition.tierTargetKey")}
                         onChange={(e) =>
                           set(
-                            'tiers',
+                            "tiers",
                             form.tiers.map((current, j) =>
                               j === index ? { ...current, targetKey: e.target.value } : current,
                             ),
@@ -1018,81 +1191,113 @@ function DefinitionTab({
                         }
                       />
                       {isDraft ? (
-                        <Button type="button" variant="ghost" size="sm" onClick={() => set('tiers', form.tiers.filter((_, j) => j !== index))}>
-                          {t('rules.definition.tierRemove')}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            set(
+                              "tiers",
+                              form.tiers.filter((_, j) => j !== index),
+                            )
+                          }
+                        >
+                          {t("rules.definition.tierRemove")}
                         </Button>
                       ) : null}
                     </span>
                   ))}
                 </div>
                 {isDraft ? (
-                  <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => set('tiers', [...form.tiers, { upTo: '', targetKey: '' }])}>
-                    {t('rules.definition.tierAdd')}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => set("tiers", [...form.tiers, { upTo: "", targetKey: "" }])}
+                  >
+                    {t("rules.definition.tierAdd")}
                   </Button>
                 ) : null}
               </div>
             ) : null}
           </DrawerSection>
-          <DrawerSection title={t('rules.definition.targetsHeading')}>
-            <Field label={t('rules.definition.targetKind')}>
-              <Select value={form.targetKind} disabled={!isDraft} aria-label={t('rules.definition.targetKind')} onChange={(e) => set('targetKind', e.target.value as DefinitionForm['targetKind'])}>
-                <option value="explicit">
-                  {t('rules.definition.targetKinds.explicit')}
-                </option>
-                <option value="dynamic">
-                  {t('rules.definition.targetKinds.dynamic')}
-                </option>
+          <DrawerSection title={t("rules.definition.targetsHeading")}>
+            <Field label={t("rules.definition.targetKind")}>
+              <Select
+                value={form.targetKind}
+                disabled={!isDraft}
+                aria-label={t("rules.definition.targetKind")}
+                onChange={(e) => set("targetKind", e.target.value as DefinitionForm["targetKind"])}
+              >
+                <option value="explicit">{t("rules.definition.targetKinds.explicit")}</option>
+                <option value="dynamic">{t("rules.definition.targetKinds.dynamic")}</option>
               </Select>
             </Field>
-            {form.targetKind === 'explicit' ? (
+            {form.targetKind === "explicit" ? (
               <fieldset disabled={!isDraft}>
                 <SplitLinesEditor
-                lines={lines}
-                onChange={(next) => {
-                  setLines(next)
-                  setSaved(false)
-                }}
-                accountOptions={accountOptions}
-                codings={[...(['department', 'location', 'class', 'project', 'subsidiary'] as const).filter((dim) => dim !== 'subsidiary' || options.subsidiaries.length > 1).map((dim) => ({
-                  key: dim,
-                  label: filterLabels[dim] ?? dim,
-                  options: {
-                    department: options.departments,
-                    location: options.locations,
-                    class: options.classes,
-                    project: options.projects,
-                    subsidiary: options.subsidiaries,
-                  }[dim].map((item) => ({ value: item.id, label: item.label })),
-                })), ...options.segments.map((segment) => ({ key: `extra:${segment.key}` as const, label: segment.label, options: segment.values.map((item) => ({ value: item.id, label: item.label })) }))]}
-                portionKinds={['remainder', 'percent', 'weight']}
-                allowEmptyAccount
-                showLabel
-                labels={{
-                  account: t('rules.targets.account'),
-                  sameAccount: t('rules.targets.sameAccount'),
-                  portion: t('rules.targets.portion'),
-                  remainder: t('rules.targets.portionKinds.remainder'),
-                  percent: t('rules.targets.portionKinds.percent'),
-                  weight: t('rules.targets.portionKinds.weight'),
-                  addLine: t('rules.targets.add'),
-                  removeLine: t('rules.targets.remove'),
-                  labelPlaceholder: t('rules.targets.labelPlaceholder'),
-                }}
-              />
+                  lines={lines}
+                  onChange={(next) => {
+                    setLines(next);
+                    setSaved(false);
+                  }}
+                  accountOptions={accountOptions}
+                  codings={[
+                    ...(["department", "location", "class", "project", "subsidiary"] as const)
+                      .filter((dim) => dim !== "subsidiary" || options.subsidiaries.length > 1)
+                      .map((dim) => ({
+                        key: dim,
+                        label: filterLabels[dim] ?? dim,
+                        options: {
+                          department: options.departments,
+                          location: options.locations,
+                          class: options.classes,
+                          project: options.projects,
+                          subsidiary: options.subsidiaries,
+                        }[dim].map((item) => ({ value: item.id, label: item.label })),
+                      })),
+                    ...options.segments.map((segment) => ({
+                      key: `extra:${segment.key}` as const,
+                      label: segment.label,
+                      options: segment.values.map((item) => ({
+                        value: item.id,
+                        label: item.label,
+                      })),
+                    })),
+                  ]}
+                  portionKinds={["remainder", "percent", "weight"]}
+                  allowEmptyAccount
+                  showLabel
+                  labels={{
+                    account: t("rules.targets.account"),
+                    sameAccount: t("rules.targets.sameAccount"),
+                    portion: t("rules.targets.portion"),
+                    remainder: t("rules.targets.portionKinds.remainder"),
+                    percent: t("rules.targets.portionKinds.percent"),
+                    weight: t("rules.targets.portionKinds.weight"),
+                    addLine: t("rules.targets.add"),
+                    removeLine: t("rules.targets.remove"),
+                    labelPlaceholder: t("rules.targets.labelPlaceholder"),
+                  }}
+                />
               </fieldset>
             ) : (
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label={t('rules.definition.dynamicDimension')}>
+                  <Field label={t("rules.definition.dynamicDimension")}>
                     <Select
                       value={form.dynamicDimension}
                       disabled={!isDraft}
-                      aria-label={t('rules.definition.dynamicDimension')}
-                      onChange={(e) => set('dynamicDimension', e.target.value as DefinitionForm['dynamicDimension'])}
+                      aria-label={t("rules.definition.dynamicDimension")}
+                      onChange={(e) =>
+                        set(
+                          "dynamicDimension",
+                          e.target.value as DefinitionForm["dynamicDimension"],
+                        )
+                      }
                     >
-                      <option value="">
-                        {t('rules.definition.dynamicDimensionNone')}
-                      </option>
+                      <option value="">{t("rules.definition.dynamicDimensionNone")}</option>
                       {dynamicDimOptions.map((dim) => (
                         <option key={dim.value} value={dim.value}>
                           {dim.label}
@@ -1100,71 +1305,79 @@ function DefinitionTab({
                       ))}
                     </Select>
                   </Field>
-                  <Field label={t('rules.definition.dynamicMinWeight')}>
+                  <Field label={t("rules.definition.dynamicMinWeight")}>
                     <Input
                       value={form.dynamicMinWeight}
                       disabled={!isDraft}
                       inputMode="decimal"
-                      aria-label={t('rules.definition.dynamicMinWeight')}
-                      onChange={(e) => set('dynamicMinWeight', e.target.value)}
+                      aria-label={t("rules.definition.dynamicMinWeight")}
+                      onChange={(e) => set("dynamicMinWeight", e.target.value)}
                     />
                   </Field>
                 </div>
                 <div>
-                  <Label>{t('rules.definition.dynamicInclude')}</Label>
+                  <Label>{t("rules.definition.dynamicInclude")}</Label>
                   <MultiCheck
                     disabled={!isDraft}
-                    ariaLabel={t('rules.definition.dynamicInclude')}
+                    ariaLabel={t("rules.definition.dynamicInclude")}
                     options={dynamicValues}
                     values={form.dynamicInclude}
-                    onChange={(next) => set('dynamicInclude', next)}
+                    onChange={(next) => set("dynamicInclude", next)}
                   />
                 </div>
                 <div>
-                  <Label>{t('rules.definition.dynamicExclude')}</Label>
+                  <Label>{t("rules.definition.dynamicExclude")}</Label>
                   <MultiCheck
                     disabled={!isDraft}
-                    ariaLabel={t('rules.definition.dynamicExclude')}
+                    ariaLabel={t("rules.definition.dynamicExclude")}
                     options={dynamicValues}
                     values={form.dynamicExclude}
-                    onChange={(next) => set('dynamicExclude', next)}
+                    onChange={(next) => set("dynamicExclude", next)}
                   />
                 </div>
-                <Field label={t('rules.definition.offsetAccount')}>
+                <Field label={t("rules.definition.offsetAccount")}>
                   <SearchSelect
                     value={form.dynamicTargetAccountId}
-                    onChange={(value) => set('dynamicTargetAccountId', value ?? '')}
+                    onChange={(value) => set("dynamicTargetAccountId", value ?? "")}
                     options={accountOptions}
                     disabled={!isDraft}
-                    placeholder={t('rules.definition.offsetAccount')}
-                    sheetTitle={t('rules.definition.offsetAccount')}
-                    ariaLabel={t('rules.definition.offsetAccount')}
+                    placeholder={t("rules.definition.offsetAccount")}
+                    sheetTitle={t("rules.definition.offsetAccount")}
+                    ariaLabel={t("rules.definition.offsetAccount")}
                     clearable={isDraft}
-                    emptyLabel={t('rules.definition.offsetAccount')}
+                    emptyLabel={t("rules.definition.offsetAccount")}
                   />
                 </Field>
               </div>
             )}
           </DrawerSection>
-          <DrawerSection title={t('rules.definition.impactHeading')}>
+          <DrawerSection title={t("rules.definition.impactHeading")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('rules.definition.impact')}>
-                <Select value={form.impact} disabled={!isDraft} aria-label={t('rules.definition.impact')} onChange={(e) => set('impact', e.target.value as DefinitionForm['impact'])}>
-                  <option value="reclass">
-                    {t('rules.definition.impacts.reclass')}
-                  </option>
+              <Field label={t("rules.definition.impact")}>
+                <Select
+                  value={form.impact}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.impact")}
+                  onChange={(e) => set("impact", e.target.value as DefinitionForm["impact"])}
+                >
+                  <option value="reclass">{t("rules.definition.impacts.reclass")}</option>
                   <option value="net_zero_pair">
-                    {t('rules.definition.impacts.net_zero_pair')}
+                    {t("rules.definition.impacts.net_zero_pair")}
                   </option>
-                  <option value="report_only">
-                    {t('rules.definition.impacts.report_only')}
-                  </option>
+                  <option value="report_only">{t("rules.definition.impacts.report_only")}</option>
                 </Select>
               </Field>
-              <Field label={t('rules.definition.solveMethod')}>
-                <Select value={form.solveMethod} disabled={!isDraft} aria-label={t('rules.definition.solveMethod')} onChange={(e) => set('solveMethod', e.target.value as DefinitionForm['solveMethod'])}>
+              <Field label={t("rules.definition.solveMethod")}>
+                <Select
+                  value={form.solveMethod}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.solveMethod")}
+                  onChange={(e) =>
+                    set("solveMethod", e.target.value as DefinitionForm["solveMethod"])
+                  }
+                >
                   <option value="sequential">
-                    {t('rules.definition.solveMethods.sequential')}
+                    {t("rules.definition.solveMethods.sequential")}
                   </option>
                   {/* Simultaneous (reciprocal) solving is not implemented: publication and runs
                       refuse it, so it is hidden here rather than offered. */}
@@ -1172,99 +1385,112 @@ function DefinitionTab({
               </Field>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('rules.definition.offsetAccount')}>
+              <Field label={t("rules.definition.offsetAccount")}>
                 <SearchSelect
                   value={form.offsetAccountId}
-                  onChange={(value) => set('offsetAccountId', value ?? '')}
+                  onChange={(value) => set("offsetAccountId", value ?? "")}
                   options={accountOptions}
                   disabled={!isDraft}
-                  placeholder={t('rules.definition.offsetAccount')}
-                  sheetTitle={t('rules.definition.offsetAccount')}
-                  ariaLabel={t('rules.definition.offsetAccount')}
+                  placeholder={t("rules.definition.offsetAccount")}
+                  sheetTitle={t("rules.definition.offsetAccount")}
+                  ariaLabel={t("rules.definition.offsetAccount")}
                   clearable={isDraft}
-                  emptyLabel={t('rules.definition.offsetAccount')}
+                  emptyLabel={t("rules.definition.offsetAccount")}
                 />
               </Field>
-              <Field label={t('rules.definition.residualPolicy')}>
-                <Select value={form.residualPolicy} disabled={!isDraft} aria-label={t('rules.definition.residualPolicy')} onChange={(e) => set('residualPolicy', e.target.value as DefinitionForm['residualPolicy'])}>
+              <Field label={t("rules.definition.residualPolicy")}>
+                <Select
+                  value={form.residualPolicy}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.residualPolicy")}
+                  onChange={(e) =>
+                    set("residualPolicy", e.target.value as DefinitionForm["residualPolicy"])
+                  }
+                >
                   <option value="largest_share">
-                    {t('rules.definition.residualPolicies.largest_share')}
+                    {t("rules.definition.residualPolicies.largest_share")}
                   </option>
                   <option value="first_target">
-                    {t('rules.definition.residualPolicies.first_target')}
+                    {t("rules.definition.residualPolicies.first_target")}
                   </option>
                   <option value="last_target">
-                    {t('rules.definition.residualPolicies.last_target')}
+                    {t("rules.definition.residualPolicies.last_target")}
                   </option>
                   <option value="explicit_target">
-                    {t('rules.definition.residualPolicies.explicit_target')}
+                    {t("rules.definition.residualPolicies.explicit_target")}
                   </option>
                 </Select>
               </Field>
             </div>
-            {form.residualPolicy === 'explicit_target' ? (
-              <Field label={t('rules.definition.residualTarget')}>
+            {form.residualPolicy === "explicit_target" ? (
+              <Field label={t("rules.definition.residualTarget")}>
                 <SearchSelect
                   value={form.residualTargetId}
-                  onChange={(value) => set('residualTargetId', value ?? '')}
+                  onChange={(value) => set("residualTargetId", value ?? "")}
                   options={accountOptions}
                   disabled={!isDraft}
-                  placeholder={t('rules.definition.residualTarget')}
-                  sheetTitle={t('rules.definition.residualTarget')}
-                  ariaLabel={t('rules.definition.residualTarget')}
+                  placeholder={t("rules.definition.residualTarget")}
+                  sheetTitle={t("rules.definition.residualTarget")}
+                  ariaLabel={t("rules.definition.residualTarget")}
                   clearable={isDraft}
-                  emptyLabel={t('rules.definition.residualTarget')}
+                  emptyLabel={t("rules.definition.residualTarget")}
                 />
               </Field>
             ) : null}
           </DrawerSection>
-          <DrawerSection title={t('rules.definition.scheduleHeading')}>
+          <DrawerSection title={t("rules.definition.scheduleHeading")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('rules.definition.runPolicy')}>
-                <Select value={form.runPolicy} disabled={!isDraft} aria-label={t('rules.definition.runPolicy')} onChange={(e) => set('runPolicy', e.target.value as DefinitionForm['runPolicy'])}>
-                  <option value="manual">
-                    {t('rules.definition.runPolicies.manual')}
-                  </option>
+              <Field label={t("rules.definition.runPolicy")}>
+                <Select
+                  value={form.runPolicy}
+                  disabled={!isDraft}
+                  aria-label={t("rules.definition.runPolicy")}
+                  onChange={(e) => set("runPolicy", e.target.value as DefinitionForm["runPolicy"])}
+                >
+                  <option value="manual">{t("rules.definition.runPolicies.manual")}</option>
                   <option value="auto_preview">
-                    {t('rules.definition.runPolicies.auto_preview')}
+                    {t("rules.definition.runPolicies.auto_preview")}
                   </option>
-                  <option value="auto_post">
-                    {t('rules.definition.runPolicies.auto_post')}
-                  </option>
+                  <option value="auto_post">{t("rules.definition.runPolicies.auto_post")}</option>
                 </Select>
               </Field>
-              <Field label={t('rules.definition.runOffsetDays')}>
+              <Field label={t("rules.definition.runOffsetDays")}>
                 <Input
                   value={form.runOffsetDays}
                   disabled={!isDraft}
                   inputMode="numeric"
-                  aria-label={t('rules.definition.runOffsetDays')}
-                  onChange={(e) => set('runOffsetDays', e.target.value)}
+                  aria-label={t("rules.definition.runOffsetDays")}
+                  onChange={(e) => set("runOffsetDays", e.target.value)}
                 />
               </Field>
             </div>
           </DrawerSection>
-          <DrawerSection title={t('rules.definition.presentationHeading')}>
-            <Field label={t('rules.definition.memoTemplate')}>
-              <Input value={form.memoTemplate} disabled={!isDraft} aria-label={t('rules.definition.memoTemplate')} onChange={(e) => set('memoTemplate', e.target.value)} />
+          <DrawerSection title={t("rules.definition.presentationHeading")}>
+            <Field label={t("rules.definition.memoTemplate")}>
+              <Input
+                value={form.memoTemplate}
+                disabled={!isDraft}
+                aria-label={t("rules.definition.memoTemplate")}
+                onChange={(e) => set("memoTemplate", e.target.value)}
+              />
             </Field>
-            <Field label={t('rules.definition.lineDescriptionTemplate')}>
+            <Field label={t("rules.definition.lineDescriptionTemplate")}>
               <Input
                 value={form.lineDescriptionTemplate}
                 disabled={!isDraft}
-                aria-label={t('rules.definition.lineDescriptionTemplate')}
-                onChange={(e) => set('lineDescriptionTemplate', e.target.value)}
+                aria-label={t("rules.definition.lineDescriptionTemplate")}
+                onChange={(e) => set("lineDescriptionTemplate", e.target.value)}
               />
             </Field>
           </DrawerSection>
           {isDraft ? (
             <span className="flex items-center gap-2">
               <Button type="button" onClick={() => void save()} disabled={saving}>
-                {tc('actions.save')}
+                {tc("actions.save")}
               </Button>
               {saved ? (
                 <span className="text-sm text-teal-700 dark:text-teal-300">
-                  {t('rules.targets.saved')}
+                  {t("rules.targets.saved")}
                 </span>
               ) : null}
             </span>
@@ -1272,7 +1498,7 @@ function DefinitionTab({
         </>
       )}
     </div>
-  )
+  );
 }
 
 /** Versions tab: the timeline with new-version, publish, and retire wiring. */
@@ -1281,143 +1507,169 @@ function VersionsTab({
   detail,
   onChanged,
 }: {
-  ruleId: string
-  detail: RuleDetail
-  onChanged: () => void
+  ruleId: string;
+  detail: RuleDetail;
+  onChanged: () => void;
 }) {
-  const t = useTranslations('allocations')
-  const [error, setError] = useState<string | null>(null)
-  const [problems, setProblems] = useState<{ message?: string }[]>([])
-  const [busy, setBusy] = useState(false)
-  const [retiring, setRetiring] = useState<string | null>(null)
-  const [reason, setReason] = useState('')
-  const currentId = (detail.rule as { currentVersionId?: string | null }).currentVersionId ?? null
-  const statusLabels: Record<VersionEntry['version']['status'], string> = {
-    draft: t('rules.statuses.draft'),
-    published: t('rules.statuses.published'),
-    retired: t('rules.statuses.retired'),
-  }
+  const t = useTranslations("allocations");
+  const [error, setError] = useState<string | null>(null);
+  const [problems, setProblems] = useState<{ message?: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [retiring, setRetiring] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const currentId = (detail.rule as { currentVersionId?: string | null }).currentVersionId ?? null;
+  const statusLabels: Record<VersionEntry["version"]["status"], string> = {
+    draft: t("rules.statuses.draft"),
+    published: t("rules.statuses.published"),
+    retired: t("rules.statuses.retired"),
+  };
 
   /** POST a version transition; each action keeps its literal path for audit. */
   const transition = async (url: string, payload: Record<string, unknown>) => {
-    setBusy(true)
-    setError(null)
-    setProblems([])
-    const { status, body } = await fetchJson(url, { method: 'POST', body: JSON.stringify(payload) })
-    setBusy(false)
+    setBusy(true);
+    setError(null);
+    setProblems([]);
+    const { status, body } = await fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    setBusy(false);
     if (status !== 200) {
-      const failure = apiError(status, body, t('rules.errors.save'))
-      const record = body as { problems?: { message?: string }[] } | null
-      if (Array.isArray(record?.problems) && record.problems.length > 0) setProblems(record.problems)
-      setError(failure.stale ? t('rules.errors.stale') : failure.message)
-      if (failure.stale) onChanged()
-      return
+      const failure = apiError(status, body, t("rules.errors.save"));
+      const record = body as { problems?: { message?: string }[] } | null;
+      if (Array.isArray(record?.problems) && record.problems.length > 0)
+        setProblems(record.problems);
+      setError(failure.stale ? t("rules.errors.stale") : failure.message);
+      if (failure.stale) onChanged();
+      return;
     }
-    setRetiring(null)
-    setReason('')
-    onChanged()
-  }
+    setRetiring(null);
+    setReason("");
+    onChanged();
+  };
 
   const versionBaseUrl = (versionId: string) =>
-    `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions/${encodeURIComponent(versionId)}`
+    `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions/${encodeURIComponent(versionId)}`;
 
   const createVersion = async () => {
-    setBusy(true)
-    setError(null)
-    const { status, body } = await fetchJson(`/api/allocations/rules/${encodeURIComponent(ruleId)}/versions`, {
-      method: 'POST',
-      body: JSON.stringify(currentId ? { fromVersionId: currentId } : {}),
-    })
-    setBusy(false)
+    setBusy(true);
+    setError(null);
+    const { status, body } = await fetchJson(
+      `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions`,
+      {
+        method: "POST",
+        body: JSON.stringify(currentId ? { fromVersionId: currentId } : {}),
+      },
+    );
+    setBusy(false);
     if (status !== 201) {
-      const failure = apiError(status, body, t('rules.errors.save'))
-      setError(failure.message)
-      return
+      const failure = apiError(status, body, t("rules.errors.save"));
+      setError(failure.message);
+      return;
     }
-    onChanged()
-  }
+    onChanged();
+  };
 
   const publish = async (entry: VersionEntry) => {
-    if (!(await confirmDialog(t('rules.drawer.publishConfirm')))) return
-    await transition(`${versionBaseUrl(entry.version.id)}/publish`, {})
-  }
+    if (!(await confirmDialog(t("rules.drawer.publishConfirm")))) return;
+    await transition(`${versionBaseUrl(entry.version.id)}/publish`, {});
+  };
 
   const retire = async (entry: VersionEntry) => {
-    if (reason.trim() === '') {
-      setError(t('rules.errors.retireReasonRequired'))
-      return
+    if (reason.trim() === "") {
+      setError(t("rules.errors.retireReasonRequired"));
+      return;
     }
-    await transition(`${versionBaseUrl(entry.version.id)}/retire`, { reason: reason.trim() })
-  }
+    await transition(`${versionBaseUrl(entry.version.id)}/retire`, { reason: reason.trim() });
+  };
 
   return (
     <div className="space-y-4 p-1">
       <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-        {t('rules.versions.heading')}
+        {t("rules.versions.heading")}
       </h2>
       {error ? <ErrorBox message={error} /> : null}
       {problems.length > 0 ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40">
-          <p className="font-medium">{t('rules.problems.title')}</p>
+          <p className="font-medium">{t("rules.problems.title")}</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {problems.map((problem, index) => (
-              <li key={index}>
-                {problem.message ?? t('rules.problems.fallback')}
-              </li>
+              <li key={index}>{problem.message ?? t("rules.problems.fallback")}</li>
             ))}
           </ul>
         </div>
       ) : null}
       {detail.versions.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t('rules.versions.empty')}
-        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t("rules.versions.empty")}</p>
       ) : (
         <ul className="space-y-2">
           {detail.versions.map((entry) => (
-            <li key={entry.version.id} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+            <li
+              key={entry.version.id}
+              className="rounded-md border border-slate-200 p-3 dark:border-slate-800"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">
-                  {t('rules.versions.version', { n: entry.version.versionNo })}
+                  {t("rules.versions.version", { n: entry.version.versionNo })}
                 </span>
                 <Badge>{statusLabels[entry.version.status]}</Badge>
                 {entry.version.id === currentId ? (
-                  <Badge>{t('rules.versions.current')}</Badge>
+                  <Badge>{t("rules.versions.current")}</Badge>
                 ) : null}
                 <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                  {t('rules.versions.effective', {
+                  {t("rules.versions.effective", {
                     from: entry.version.effectiveFrom,
-                    to: entry.version.effectiveTo ?? t('rules.versions.openEnded'),
+                    to: entry.version.effectiveTo ?? t("rules.versions.openEnded"),
                   })}
                 </span>
               </div>
               {entry.version.definitionHash ? (
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {t('rules.versions.hash', { hash: entry.version.definitionHash.slice(0, 12) })}
+                  {t("rules.versions.hash", { hash: entry.version.definitionHash.slice(0, 12) })}
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap gap-2">
-                {entry.version.status === 'draft' ? (
-                  <Button type="button" size="sm" disabled={busy} onClick={() => void publish(entry)}>
-                    {t('rules.versions.publish')}
+                {entry.version.status === "draft" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void publish(entry)}
+                  >
+                    {t("rules.versions.publish")}
                   </Button>
                 ) : null}
-                {entry.version.status === 'published' ? (
+                {entry.version.status === "published" ? (
                   retiring === entry.version.id ? (
                     <span className="flex flex-1 items-center gap-2">
                       <Input
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
-                        placeholder={t('rules.versions.retireReasonLabel')}
-                        aria-label={t('rules.versions.retireReasonLabel')}
+                        placeholder={t("rules.versions.retireReasonLabel")}
+                        aria-label={t("rules.versions.retireReasonLabel")}
                       />
-                      <Button type="button" size="sm" disabled={busy} onClick={() => void retire(entry)}>
-                        {t('rules.versions.retire')}
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void retire(entry)}
+                      >
+                        {t("rules.versions.retire")}
                       </Button>
                     </span>
                   ) : (
-                    <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { setRetiring(entry.version.id); setReason(''); setError(null) }}>
-                      {t('rules.versions.retire')}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        setRetiring(entry.version.id);
+                        setReason("");
+                        setError(null);
+                      }}
+                    >
+                      {t("rules.versions.retire")}
                     </Button>
                   )
                 ) : null}
@@ -1427,18 +1679,18 @@ function VersionsTab({
         </ul>
       )}
       <Button type="button" variant="outline" disabled={busy} onClick={() => void createVersion()}>
-        {t('rules.versions.newVersion')}
+        {t("rules.versions.newVersion")}
       </Button>
     </div>
-  )
+  );
 }
 
 interface TestPreviewRow {
-  sequence: number
-  label: string | null
-  targetAccountId: string | null
-  sharePercent: string | null
-  isRemainder: boolean
+  sequence: number;
+  label: string | null;
+  targetAccountId: string | null;
+  sharePercent: string | null;
+  isRemainder: boolean;
 }
 
 /** Test tab: match a sample line (entry/post) or deep-link a period sweep. */
@@ -1447,121 +1699,153 @@ function TestTab({
   detail,
   options,
 }: {
-  ruleId: string
-  detail: RuleDetail
-  options: PickerOptions
+  ruleId: string;
+  detail: RuleDetail;
+  options: PickerOptions;
 }) {
-  const t = useTranslations('allocations')
+  const t = useTranslations("allocations");
   const payrollExpenses = detail.versions.some((entry) => {
-    const filters = entry.version['dimensionFilters']
+    const filters = entry.version["dimensionFilters"];
     return (
-      typeof filters === 'object' && filters !== null && (filters as { payrollExpensesOnly?: unknown }).payrollExpensesOnly === true
-    )
-  })
+      typeof filters === "object" &&
+      filters !== null &&
+      (filters as { payrollExpensesOnly?: unknown }).payrollExpensesOnly === true
+    );
+  });
   const [versionId, setVersionId] = useState(
-    (detail.rule as { currentVersionId?: string | null }).currentVersionId
-      ?? detail.versions.find((entry) => entry.version.status === 'published')?.version.id
-      ?? detail.versions[0]?.version.id
-      ?? '',
-  )
-  const [accountId, setAccountId] = useState('')
-  const [documentKind, setDocumentKind] = useState(payrollExpenses ? 'pay_run' : '')
-  const [payrollExpense, setPayrollExpense] = useState(true)
-  const [dims, setDims] = useState<Record<string, string>>({})
-  const [periodId, setPeriodId] = useState(options.periods[0]?.id ?? '')
-  const [bookId, setBookId] = useState(options.books[0]?.id ?? '')
-  const [error, setError] = useState<string | null>(null)
-  const [testing, setTesting] = useState(false)
-  const [verdict, setVerdict] = useState<{ matched: boolean; specificity: number } | null>(null)
-  const [preview, setPreview] = useState<TestPreviewRow[]>([])
-  const [basisNote, setBasisNote] = useState<string | null>(null)
-  const [runsUrl, setRunsUrl] = useState<string | null>(null)
-  const [computation, setComputation] = useState<Computation | null>(null)
-  const isPeriod = detail.rule.mode === 'period'
-  const accountOptions = options.accounts.map((account) => ({ value: account.id, label: account.label }))
+    (detail.rule as { currentVersionId?: string | null }).currentVersionId ??
+      detail.versions.find((entry) => entry.version.status === "published")?.version.id ??
+      detail.versions[0]?.version.id ??
+      "",
+  );
+  const [accountId, setAccountId] = useState("");
+  const [documentKind, setDocumentKind] = useState(payrollExpenses ? "pay_run" : "");
+  const [payrollExpense, setPayrollExpense] = useState(true);
+  const [dims, setDims] = useState<Record<string, string>>({});
+  const [periodId, setPeriodId] = useState(options.periods[0]?.id ?? "");
+  const [bookId, setBookId] = useState(options.books[0]?.id ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [verdict, setVerdict] = useState<{ matched: boolean; specificity: number } | null>(null);
+  const [preview, setPreview] = useState<TestPreviewRow[]>([]);
+  const [basisNote, setBasisNote] = useState<string | null>(null);
+  const [runsUrl, setRunsUrl] = useState<string | null>(null);
+  const [computation, setComputation] = useState<Computation | null>(null);
+  const isPeriod = detail.rule.mode === "period";
+  const accountOptions = options.accounts.map((account) => ({
+    value: account.id,
+    label: account.label,
+  }));
   const dimSources: { key: string; label: string; values: Option[] }[] = [
-    { key: 'departmentId', label: t('rules.test.department'), values: options.departments },
-    { key: 'locationId', label: t('rules.test.location'), values: options.locations },
-    { key: 'classId', label: t('rules.test.class'), values: options.classes },
-    { key: 'projectId', label: t('rules.test.project'), values: options.projects },
-    { key: 'subsidiaryId', label: t('rules.test.subsidiary'), values: options.subsidiaries },
-    { key: 'partyId', label: t('rules.test.party'), values: options.parties },
-    { key: 'itemId', label: t('rules.test.item'), values: options.items },
-    ...(payrollExpenses ? [{ key: 'payComponentId', label: t('rules.definition.filters.payComponent'), values: options.payComponents ?? [] }] : []),
-    ...options.segments.map((segment) => ({ key: `extra:${segment.key}`, label: segment.label, values: segment.values })),
-  ]
+    { key: "departmentId", label: t("rules.test.department"), values: options.departments },
+    { key: "locationId", label: t("rules.test.location"), values: options.locations },
+    { key: "classId", label: t("rules.test.class"), values: options.classes },
+    { key: "projectId", label: t("rules.test.project"), values: options.projects },
+    { key: "subsidiaryId", label: t("rules.test.subsidiary"), values: options.subsidiaries },
+    { key: "partyId", label: t("rules.test.party"), values: options.parties },
+    { key: "itemId", label: t("rules.test.item"), values: options.items },
+    ...(payrollExpenses
+      ? [
+          {
+            key: "payComponentId",
+            label: t("rules.definition.filters.payComponent"),
+            values: options.payComponents ?? [],
+          },
+        ]
+      : []),
+    ...options.segments.map((segment) => ({
+      key: `extra:${segment.key}`,
+      label: segment.label,
+      values: segment.values,
+    })),
+  ];
 
   const run = async () => {
-    setTesting(true)
-    setError(null)
-    setVerdict(null)
-    setPreview([])
-    setBasisNote(null)
-    setRunsUrl(null)
-    setComputation(null)
+    setTesting(true);
+    setError(null);
+    setVerdict(null);
+    setPreview([]);
+    setBasisNote(null);
+    setRunsUrl(null);
+    setComputation(null);
     // Period rules do not match lines: compute the sweep preview inline
     // (rule + period + book) instead of linking onto an empty Runs table.
     if (isPeriod) {
-      const { status, body } = await fetchJson('/api/allocations/runs/preview', {
-        method: 'POST',
+      const { status, body } = await fetchJson("/api/allocations/runs/preview", {
+        method: "POST",
         body: JSON.stringify({ ruleId, periodId, bookId }),
-      })
-      setTesting(false)
+      });
+      setTesting(false);
       if (status !== 200) {
-        setError(apiError(status, body, t('rules.errors.load')).message)
-        return
+        setError(apiError(status, body, t("rules.errors.load")).message);
+        return;
       }
-      const payload = body as { computation?: Computation }
+      const payload = body as { computation?: Computation };
       if (payload.computation) {
-        setComputation(payload.computation)
-        setRunsUrl(`/admin/setup/allocations?tab=runs&rule=${encodeURIComponent(ruleId)}&period=${encodeURIComponent(periodId)}`)
+        setComputation(payload.computation);
+        setRunsUrl(
+          `/admin/setup/allocations?tab=runs&rule=${encodeURIComponent(ruleId)}&period=${encodeURIComponent(periodId)}`,
+        );
       } else {
-        setError(t('rules.errors.load'))
+        setError(t("rules.errors.load"));
       }
-      return
+      return;
     }
-    const { status, body } = await fetchJson(`/api/allocations/rules/${encodeURIComponent(ruleId)}/test-match`, {
-      method: 'POST',
-      body: JSON.stringify(
-        { versionId: versionId === '' ? undefined : versionId, line: testLinePayload({ accountId, documentKind, dims, ...(payrollExpenses ? { payrollExpense } : {}) }) },
-      ),
-    })
-    setTesting(false)
+    const { status, body } = await fetchJson(
+      `/api/allocations/rules/${encodeURIComponent(ruleId)}/test-match`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          versionId: versionId === "" ? undefined : versionId,
+          line: testLinePayload({
+            accountId,
+            documentKind,
+            dims,
+            ...(payrollExpenses ? { payrollExpense } : {}),
+          }),
+        }),
+      },
+    );
+    setTesting(false);
     if (status !== 200) {
-      setError(apiError(status, body, t('rules.errors.load')).message)
-      return
+      setError(apiError(status, body, t("rules.errors.load")).message);
+      return;
     }
     const payload = body as {
-      matched?: boolean
-      specificity?: number
-      preview?: TestPreviewRow[]
-      basisNote?: string | null
-    }
-    setVerdict({ matched: payload.matched === true, specificity: Number(payload.specificity ?? 0) })
-    setPreview(payload.preview ?? [])
-    setBasisNote(payload.basisNote ?? null)
-  }
+      matched?: boolean;
+      specificity?: number;
+      preview?: TestPreviewRow[];
+      basisNote?: string | null;
+    };
+    setVerdict({
+      matched: payload.matched === true,
+      specificity: Number(payload.specificity ?? 0),
+    });
+    setPreview(payload.preview ?? []);
+    setBasisNote(payload.basisNote ?? null);
+  };
 
   if (detail.versions.length === 0) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        {t('rules.test.noVersion')}
-      </p>
-    )
+      <p className="text-sm text-slate-500 dark:text-slate-400">{t("rules.test.noVersion")}</p>
+    );
   }
 
   return (
     <div className="space-y-4 p-1">
       <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-        {t('rules.test.heading')}
+        {t("rules.test.heading")}
       </h2>
       {error ? <ErrorBox message={error} /> : null}
-      <Field label={t('rules.test.version')}>
-        <Select value={versionId} aria-label={t('rules.test.version')} onChange={(e) => setVersionId(e.target.value)}>
+      <Field label={t("rules.test.version")}>
+        <Select
+          value={versionId}
+          aria-label={t("rules.test.version")}
+          onChange={(e) => setVersionId(e.target.value)}
+        >
           {detail.versions.map((entry) => (
             <option key={entry.version.id} value={entry.version.id}>
-              {t('rules.versions.version', { n: entry.version.versionNo })} ·{' '}
-              {entry.version.status}
+              {t("rules.versions.version", { n: entry.version.versionNo })} · {entry.version.status}
             </option>
           ))}
         </Select>
@@ -1569,34 +1853,41 @@ function TestTab({
       {isPeriod ? (
         <>
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {t('rules.test.periodHeading')}
+            {t("rules.test.periodHeading")}
           </h3>
-          <Field label={t('rules.test.period')}>
+          <Field label={t("rules.test.period")}>
             <SearchSelect
               value={periodId}
-              onChange={(value) => setPeriodId(value ?? '')}
+              onChange={(value) => setPeriodId(value ?? "")}
               options={options.periods.map((period) => ({ value: period.id, label: period.label }))}
-              placeholder={t('rules.test.period')}
-              sheetTitle={t('rules.test.period')}
-              ariaLabel={t('rules.test.period')}
+              placeholder={t("rules.test.period")}
+              sheetTitle={t("rules.test.period")}
+              ariaLabel={t("rules.test.period")}
             />
           </Field>
-          <Field label={t('rules.test.book')}>
+          <Field label={t("rules.test.book")}>
             <SearchSelect
               value={bookId}
-              onChange={(value) => setBookId(value ?? '')}
+              onChange={(value) => setBookId(value ?? "")}
               options={options.books.map((book) => ({ value: book.id, label: book.label }))}
-              placeholder={t('rules.test.book')}
-              sheetTitle={t('rules.test.book')}
-              ariaLabel={t('rules.test.book')}
+              placeholder={t("rules.test.book")}
+              sheetTitle={t("rules.test.book")}
+              ariaLabel={t("rules.test.book")}
             />
           </Field>
-          <Button type="button" onClick={() => void run()} disabled={testing || periodId === '' || bookId === ''}>
-            {testing ? t('rules.test.testing') : t('rules.test.run')}
+          <Button
+            type="button"
+            onClick={() => void run()}
+            disabled={testing || periodId === "" || bookId === ""}
+          >
+            {testing ? t("rules.test.testing") : t("rules.test.run")}
           </Button>
           {runsUrl ? (
-            <a className="text-sm font-medium text-teal-700 underline dark:text-teal-300" href={runsUrl as never}>
-              {t('rules.test.openRuns')}
+            <a
+              className="text-sm font-medium text-teal-700 underline dark:text-teal-300"
+              href={runsUrl as never}
+            >
+              {t("rules.test.openRuns")}
             </a>
           ) : null}
           {computation ? <ComputationView computation={computation} /> : null}
@@ -1604,39 +1895,43 @@ function TestTab({
       ) : (
         <>
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {t('rules.test.lineHeading')}
+            {t("rules.test.lineHeading")}
           </h3>
-          <Field label={t('rules.test.account')}>
+          <Field label={t("rules.test.account")}>
             <SearchSelect
               value={accountId}
-              onChange={(value) => setAccountId(value ?? '')}
+              onChange={(value) => setAccountId(value ?? "")}
               options={accountOptions}
-              placeholder={t('rules.test.account')}
-              sheetTitle={t('rules.test.account')}
-              ariaLabel={t('rules.test.account')}
+              placeholder={t("rules.test.account")}
+              sheetTitle={t("rules.test.account")}
+              ariaLabel={t("rules.test.account")}
               clearable
-              emptyLabel={t('rules.test.account')}
+              emptyLabel={t("rules.test.account")}
             />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             {payrollExpenses && (
               <Check checked={payrollExpense} onChange={setPayrollExpense}>
-                {t('rules.test.payrollExpense')}
+                {t("rules.test.payrollExpense")}
               </Check>
             )}
-            <Field label={t('rules.test.documentKind')}>
-              <Input value={documentKind} aria-label={t('rules.test.documentKind')} onChange={(e) => setDocumentKind(e.target.value)} />
+            <Field label={t("rules.test.documentKind")}>
+              <Input
+                value={documentKind}
+                aria-label={t("rules.test.documentKind")}
+                onChange={(e) => setDocumentKind(e.target.value)}
+              />
             </Field>
             {dimSources.map((dim) => (
               <Field key={dim.key} label={dim.label}>
                 <SearchSelect
-                  value={dims[dim.key] ?? ''}
+                  value={dims[dim.key] ?? ""}
                   onChange={(value) =>
                     setDims((prev) => {
-                      const next = { ...prev }
-                      if (value === '' || value === null) delete next[dim.key]
-                      else next[dim.key] = value
-                      return next
+                      const next = { ...prev };
+                      if (value === "" || value === null) delete next[dim.key];
+                      else next[dim.key] = value;
+                      return next;
                     })
                   }
                   options={dim.values.map((item) => ({ value: item.id, label: item.label }))}
@@ -1649,37 +1944,33 @@ function TestTab({
               </Field>
             ))}
           </div>
-          <Button type="button" onClick={() => void run()} disabled={testing || accountId === ''}>
-            {testing ? t('rules.test.testing') : t('rules.test.run')}
+          <Button type="button" onClick={() => void run()} disabled={testing || accountId === ""}>
+            {testing ? t("rules.test.testing") : t("rules.test.run")}
           </Button>
           {verdict ? (
             <p className="text-sm font-medium">
-              {verdict.matched ? t('rules.test.matched', { n: verdict.specificity }) : t('rules.test.notMatched')}
+              {verdict.matched
+                ? t("rules.test.matched", { n: verdict.specificity })
+                : t("rules.test.notMatched")}
             </p>
           ) : null}
           {basisNote ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {basisNote}
-            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{basisNote}</p>
           ) : null}
           {preview.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('rules.test.targetColumn')}</TableHead>
-                  <TableHead className="text-right">
-                    {t('rules.test.shareColumn')}
-                  </TableHead>
+                  <TableHead>{t("rules.test.targetColumn")}</TableHead>
+                  <TableHead className="text-right">{t("rules.test.shareColumn")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {preview.map((row) => (
                   <TableRow key={row.sequence}>
-                    <TableCell>
-                      {row.label ?? row.targetAccountId ?? ''}
-                    </TableCell>
+                    <TableCell>{row.label ?? row.targetAccountId ?? ""}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {row.sharePercent ?? ''}
+                      {row.sharePercent ?? ""}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1689,5 +1980,5 @@ function TestTab({
         </>
       )}
     </div>
-  )
+  );
 }

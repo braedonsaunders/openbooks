@@ -95,7 +95,12 @@ export function rekeyTurn(oldKey: string, conversationId: string): void {
   const entry = turns.get(oldKey);
   if (entry) {
     turns.delete(oldKey);
-    turns.set(conversationId, { ...entry, key: conversationId, conversationId, revision: entry.revision + 1 });
+    turns.set(conversationId, {
+      ...entry,
+      key: conversationId,
+      conversationId,
+      revision: entry.revision + 1,
+    });
   }
   const controller = controllers.get(oldKey);
   if (controller) {

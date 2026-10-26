@@ -104,8 +104,8 @@ async function seedTwoLinePo(
       ${actorId}, ${actorId}
     )`);
   const specs = [
-    { id: lineIds[0], n: 1, qty: '10', unit: 'ea', price: '2', amount: '20' },
-    { id: lineIds[1], n: 2, qty: '2', unit: 'box', price: '24', amount: '48' },
+    { id: lineIds[0], n: 1, qty: "10", unit: "ea", price: "2", amount: "20" },
+    { id: lineIds[1], n: 2, qty: "2", unit: "box", price: "24", amount: "48" },
   ];
   for (const s of specs) {
     await db.execute(sql`
@@ -138,27 +138,31 @@ function postReceive(orderId: string, key: string | null, body: unknown): Promis
 }
 
 function getReceive(orderId: string): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/purchase-orders/${orderId}/receive`),
-    { params: Promise.resolve({ id: orderId }) } as never,
-  ) as unknown as Promise<Response>;
+  return GET(new Request(`http://openbooks.test/api/purchase-orders/${orderId}/receive`), {
+    params: Promise.resolve({ id: orderId }),
+  } as never) as unknown as Promise<Response>;
 }
 
 async function receiptFacts(orgId: string, lineId: string) {
-  return (await db.execute<{
+  return (
+    await db.execute<{
       received: string;
       receipts: number;
       moved: string;
       receiptDate: string;
       postingDate: string;
-    }>(sql`
+    }>(
+      sql`
       select (select quantity_fulfilled::text from document_lines where id = ${lineId}) as received,
              (select count(*)::int from documents where org_id = ${orgId} and kind = 'purchase_receipt') as receipts,
              (select coalesce(sum(quantity), 0)::text from inventory_movements
                where org_id = ${orgId} and status = 'posted') as moved,
              (select document_date::text from documents where org_id = ${orgId} and kind = 'purchase_receipt' limit 1) as "receiptDate",
              (select posting_date::text from journal_entries where org_id = ${orgId} limit 1) as "postingDate"
-    `, "objects"))[0]!;
+    `,
+      "objects",
+    )
+  )[0]!;
 }
 
 test("receive prefill excludes cancelled purchase-order quantity", { skip: !DB }, async () => {
@@ -167,12 +171,23 @@ test("receive prefill excludes cancelled purchase-order quantity", { skip: !DB }
     const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
     state.user = { orgId: org.orgId, id: actorId };
     const { orderId } = await seedApprovedPo(
-      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
-      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-CANCELLED", "ea", "6",
+      org.orgId,
+      actorId,
+      org.vendorId,
+      org.subsidiaryId,
+      org.date,
+      org.items.fifo,
+      org.accounts.invAsset,
+      org.stockLocationId,
+      "PO-RCV-CANCELLED",
+      "ea",
+      "6",
     );
     const response = await getReceive(orderId);
     assert.equal(response.status, 200, await response.clone().text());
-    const body = (await response.json()) as { lines: Array<{ remaining: string; maxReceivable: string }> };
+    const body = (await response.json()) as {
+      lines: Array<{ remaining: string; maxReceivable: string }>;
+    };
     assert.equal(body.lines.length, 1);
     assert.equal(toUnits(body.lines[0]!.remaining), toUnits("4"));
     assert.equal(toUnits(body.lines[0]!.maxReceivable), toUnits("4"));
@@ -186,74 +201,104 @@ test("receive prefill excludes cancelled purchase-order quantity", { skip: !DB }
  * (inside the open period) and replays a retried save instead of receiving
  * twice.
  */
-test("explicit receive posts a partial past-dated receipt exactly once", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    const { orderId, lineId } = await seedApprovedPo(
-      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
-      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-1",
-    );
-    const key = randomUUID();
-    const first = await postReceive(orderId, key, {
-      receiptDate: PAST_DATE,
-      lines: [{ sourceLineId: lineId, quantity: "4" }],
-    });
-    assert.equal(first.status, 200, await first.clone().text());
-    const created = (await first.json()) as { kind: string; id: string; documentNumber: string };
-    assert.equal(created.kind, "purchase_receipt");
+test(
+  "explicit receive posts a partial past-dated receipt exactly once",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+      state.user = { orgId: org.orgId, id: actorId };
+      const { orderId, lineId } = await seedApprovedPo(
+        org.orgId,
+        actorId,
+        org.vendorId,
+        org.subsidiaryId,
+        org.date,
+        org.items.fifo,
+        org.accounts.invAsset,
+        org.stockLocationId,
+        "PO-RCV-1",
+      );
+      const key = randomUUID();
+      const first = await postReceive(orderId, key, {
+        receiptDate: PAST_DATE,
+        lines: [{ sourceLineId: lineId, quantity: "4" }],
+      });
+      assert.equal(first.status, 200, await first.clone().text());
+      const created = (await first.json()) as { kind: string; id: string; documentNumber: string };
+      assert.equal(created.kind, "purchase_receipt");
 
-    const facts = await receiptFacts(org.orgId, lineId);
-    assert.equal(toUnits(facts.received), toUnits("4"), "only the entered quantity advances the order");
-    assert.equal(facts.receipts, 1);
-    assert.equal(toUnits(facts.moved), toUnits("4"), "only the entered quantity moves stock");
-    assert.equal(facts.receiptDate, PAST_DATE, "the receipt carries the entered past date");
-    assert.equal(facts.postingDate, PAST_DATE, "the inventory journal posts on the entered past date");
+      const facts = await receiptFacts(org.orgId, lineId);
+      assert.equal(
+        toUnits(facts.received),
+        toUnits("4"),
+        "only the entered quantity advances the order",
+      );
+      assert.equal(facts.receipts, 1);
+      assert.equal(toUnits(facts.moved), toUnits("4"), "only the entered quantity moves stock");
+      assert.equal(facts.receiptDate, PAST_DATE, "the receipt carries the entered past date");
+      assert.equal(
+        facts.postingDate,
+        PAST_DATE,
+        "the inventory journal posts on the entered past date",
+      );
 
-    const retry = await postReceive(orderId, key, {
-      receiptDate: PAST_DATE,
-      lines: [{ sourceLineId: lineId, quantity: "4" }],
-    });
-    assert.equal(retry.status, 200);
-    assert.equal(((await retry.json()) as { replayed?: boolean }).replayed, true);
-    const after = await receiptFacts(org.orgId, lineId);
-    assert.equal(toUnits(after.received), toUnits("4"), "a retried save never double-receives");
-    assert.equal(after.receipts, 1);
-    assert.equal(toUnits(after.moved), toUnits("4"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const retry = await postReceive(orderId, key, {
+        receiptDate: PAST_DATE,
+        lines: [{ sourceLineId: lineId, quantity: "4" }],
+      });
+      assert.equal(retry.status, 200);
+      assert.equal(((await retry.json()) as { replayed?: boolean }).replayed, true);
+      const after = await receiptFacts(org.orgId, lineId);
+      assert.equal(toUnits(after.received), toUnits("4"), "a retried save never double-receives");
+      assert.equal(after.receipts, 1);
+      assert.equal(toUnits(after.moved), toUnits("4"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("explicit receive refuses without an idempotency key and over-receipt commits nothing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    const { orderId, lineId } = await seedApprovedPo(
-      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
-      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-2",
-    );
-    const noKey = await postReceive(orderId, null, {
-      receiptDate: org.date,
-      lines: [{ sourceLineId: lineId, quantity: "1" }],
-    });
-    assert.equal(noKey.status, 400);
+test(
+  "explicit receive refuses without an idempotency key and over-receipt commits nothing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+      state.user = { orgId: org.orgId, id: actorId };
+      const { orderId, lineId } = await seedApprovedPo(
+        org.orgId,
+        actorId,
+        org.vendorId,
+        org.subsidiaryId,
+        org.date,
+        org.items.fifo,
+        org.accounts.invAsset,
+        org.stockLocationId,
+        "PO-RCV-2",
+      );
+      const noKey = await postReceive(orderId, null, {
+        receiptDate: org.date,
+        lines: [{ sourceLineId: lineId, quantity: "1" }],
+      });
+      assert.equal(noKey.status, 400);
 
-    const over = await postReceive(orderId, randomUUID(), {
-      receiptDate: org.date,
-      lines: [{ sourceLineId: lineId, quantity: "99" }],
-    });
-    assert.equal(over.status, 422);
-    const facts = await receiptFacts(org.orgId, lineId);
-    assert.equal(toUnits(facts.received), toUnits("0"), "a refused save advances nothing");
-    assert.equal(facts.receipts, 0, "a refused save creates no receipt");
-    assert.equal(toUnits(facts.moved), toUnits("0"), "a refused save moves no stock");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const over = await postReceive(orderId, randomUUID(), {
+        receiptDate: org.date,
+        lines: [{ sourceLineId: lineId, quantity: "99" }],
+      });
+      assert.equal(over.status, 422);
+      const facts = await receiptFacts(org.orgId, lineId);
+      assert.equal(toUnits(facts.received), toUnits("0"), "a refused save advances nothing");
+      assert.equal(facts.receipts, 0, "a refused save creates no receipt");
+      assert.equal(toUnits(facts.moved), toUnits("0"), "a refused save moves no stock");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * A two-line order can receive one line while the other waits at zero: the
@@ -261,49 +306,73 @@ test("explicit receive refuses without an idempotency key and over-receipt commi
  * moves stock, and a later save receives the waiting line through its
  * explicit unit conversion (2 box at 12 per box moves 24 base units).
  */
-test("a two-line receipt skips a zero line and converts the later line", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    await db.execute(sql`
+test(
+  "a two-line receipt skips a zero line and converts the later line",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+      state.user = { orgId: org.orgId, id: actorId };
+      await db.execute(sql`
       update item_inventory_profiles set unit_conversions = '{"box": 12}'::jsonb
        where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
-    const { orderId, lineIds } = await seedTwoLinePo(
-      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
-      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-5",
-    );
-    const partial = await postReceive(orderId, randomUUID(), {
-      receiptDate: org.date,
-      lines: [
-        { sourceLineId: lineIds[0], quantity: "3" },
-        { sourceLineId: lineIds[1], quantity: "0" },
-      ],
-    });
-    assert.equal(partial.status, 200, await partial.clone().text());
-    const fulfilled = await db.execute<{ line: number; received: string }>(sql`
+      const { orderId, lineIds } = await seedTwoLinePo(
+        org.orgId,
+        actorId,
+        org.vendorId,
+        org.subsidiaryId,
+        org.date,
+        org.items.fifo,
+        org.accounts.invAsset,
+        org.stockLocationId,
+        "PO-RCV-5",
+      );
+      const partial = await postReceive(orderId, randomUUID(), {
+        receiptDate: org.date,
+        lines: [
+          { sourceLineId: lineIds[0], quantity: "3" },
+          { sourceLineId: lineIds[1], quantity: "0" },
+        ],
+      });
+      assert.equal(partial.status, 200, await partial.clone().text());
+      const fulfilled = await db.execute<{ line: number; received: string }>(
+        sql`
       select line_number as line, quantity_fulfilled::text as received from document_lines
-       where id in (${lineIds[0]}, ${lineIds[1]}) order by line_number`, "objects");
-    assert.equal(toUnits(fulfilled[0]!.received), toUnits("3"), "the entered line advances");
-    assert.equal(toUnits(fulfilled[1]!.received), toUnits("0"), "the zero line waits untouched");
-    const moved = (await db.execute<{ moved: string }>(sql`
+       where id in (${lineIds[0]}, ${lineIds[1]}) order by line_number`,
+        "objects",
+      );
+      assert.equal(toUnits(fulfilled[0]!.received), toUnits("3"), "the entered line advances");
+      assert.equal(toUnits(fulfilled[1]!.received), toUnits("0"), "the zero line waits untouched");
+      const moved = (
+        await db.execute<{ moved: string }>(
+          sql`
       select coalesce(sum(quantity), 0)::text as moved from inventory_movements
-       where org_id = ${org.orgId} and status = 'posted'`, "objects"))[0]!.moved;
-    assert.equal(toUnits(moved), toUnits("3"), "only the entered line moves stock");
+       where org_id = ${org.orgId} and status = 'posted'`,
+          "objects",
+        )
+      )[0]!.moved;
+      assert.equal(toUnits(moved), toUnits("3"), "only the entered line moves stock");
 
-    const rest = await postReceive(orderId, randomUUID(), {
-      receiptDate: org.date,
-      lines: [{ sourceLineId: lineIds[1], quantity: "2" }],
-    });
-    assert.equal(rest.status, 200, await rest.clone().text());
-    const after = (await db.execute<{ moved: string }>(sql`
+      const rest = await postReceive(orderId, randomUUID(), {
+        receiptDate: org.date,
+        lines: [{ sourceLineId: lineIds[1], quantity: "2" }],
+      });
+      assert.equal(rest.status, 200, await rest.clone().text());
+      const after = (
+        await db.execute<{ moved: string }>(
+          sql`
       select coalesce(sum(quantity), 0)::text as moved from inventory_movements
-       where org_id = ${org.orgId} and status = 'posted'`, "objects"))[0]!.moved;
-    assert.equal(toUnits(after), toUnits("27"), "the box line converts at 12 base units each");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and status = 'posted'`,
+          "objects",
+        )
+      )[0]!.moved;
+      assert.equal(toUnits(after), toUnits("27"), "the box line converts at 12 base units each");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * Zero on every line refuses naming what to enter, and a malformed quantity
@@ -316,8 +385,15 @@ test("all-zero and malformed receipts refuse with actionable messages", { skip: 
     const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
     state.user = { orgId: org.orgId, id: actorId };
     const { orderId, lineIds } = await seedTwoLinePo(
-      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
-      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-6",
+      org.orgId,
+      actorId,
+      org.vendorId,
+      org.subsidiaryId,
+      org.date,
+      org.items.fifo,
+      org.accounts.invAsset,
+      org.stockLocationId,
+      "PO-RCV-6",
     );
     const zeroes = await postReceive(orderId, randomUUID(), {
       receiptDate: org.date,
@@ -356,56 +432,82 @@ test("all-zero and malformed receipts refuse with actionable messages", { skip: 
  * 1:1 with no conversion row; a genuinely unmapped unit ("crate") refuses
  * with its remedy and receives nothing.
  */
-test("unit aliases receive against the base unit; unknown units refuse with a message", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    const aliased = await seedApprovedPo(
-      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
-      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-3",
-      "Each",
-    );
-    const saved = await postReceive(aliased.orderId, randomUUID(), {
-      receiptDate: org.date,
-      lines: [{ sourceLineId: aliased.lineId, quantity: "10" }],
-    });
-    assert.equal(saved.status, 200, `an aliased unit saves, got: ${await saved.text()}`);
-    const savedFacts = await receiptFacts(org.orgId, aliased.lineId);
-    assert.equal(toUnits(savedFacts.received), toUnits("10"), "the alias receives in full");
-    assert.equal(toUnits(savedFacts.moved), toUnits("10"), "the alias moves 1:1 against the base unit");
+test(
+  "unit aliases receive against the base unit; unknown units refuse with a message",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+      state.user = { orgId: org.orgId, id: actorId };
+      const aliased = await seedApprovedPo(
+        org.orgId,
+        actorId,
+        org.vendorId,
+        org.subsidiaryId,
+        org.date,
+        org.items.fifo,
+        org.accounts.invAsset,
+        org.stockLocationId,
+        "PO-RCV-3",
+        "Each",
+      );
+      const saved = await postReceive(aliased.orderId, randomUUID(), {
+        receiptDate: org.date,
+        lines: [{ sourceLineId: aliased.lineId, quantity: "10" }],
+      });
+      assert.equal(saved.status, 200, `an aliased unit saves, got: ${await saved.text()}`);
+      const savedFacts = await receiptFacts(org.orgId, aliased.lineId);
+      assert.equal(toUnits(savedFacts.received), toUnits("10"), "the alias receives in full");
+      assert.equal(
+        toUnits(savedFacts.moved),
+        toUnits("10"),
+        "the alias moves 1:1 against the base unit",
+      );
 
-    const { orderId: refusedId, lineId: refusedLine } = await seedApprovedPo(
-      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
-      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-4",
-      "crate",
-    );
-    const refused = await postReceive(refusedId, randomUUID(), {
-      receiptDate: org.date,
-      lines: [{ sourceLineId: refusedLine, quantity: "10" }],
-    });
-    assert.equal(refused.status, 422);
-    const body = (await refused.json()) as {
-      error?: unknown
-      code?: unknown
-      details?: { itemId?: unknown; itemName?: unknown; unit?: unknown; baseUnit?: unknown }
-    };
-    assert.match(
-      String(body.error ?? ""),
-      /no conversion to the item's base unit/,
-      "the refusal renders its remedy instead of an empty answer",
-    );
-    // The drawer links the refusal to the item's costing section, so the
-    // code and item identity ride the body — never message text alone.
-    assert.equal(body.code, "ITEM_MISSING_UNIT_CONVERSION");
-    assert.equal(body.details?.itemId, org.items.fifo);
-    assert.equal(typeof body.details?.itemName, "string");
-    assert.equal(body.details?.unit, "crate");
-    const refusedFacts = await receiptFacts(org.orgId, refusedLine);
-    assert.equal(toUnits(refusedFacts.received), toUnits("0"), "a refused save advances nothing");
-    assert.equal(refusedFacts.receipts, 1, "only the aliased receipt exists");
-    assert.equal(toUnits(refusedFacts.moved), toUnits("10"), "a refused save moves no further stock");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const { orderId: refusedId, lineId: refusedLine } = await seedApprovedPo(
+        org.orgId,
+        actorId,
+        org.vendorId,
+        org.subsidiaryId,
+        org.date,
+        org.items.fifo,
+        org.accounts.invAsset,
+        org.stockLocationId,
+        "PO-RCV-4",
+        "crate",
+      );
+      const refused = await postReceive(refusedId, randomUUID(), {
+        receiptDate: org.date,
+        lines: [{ sourceLineId: refusedLine, quantity: "10" }],
+      });
+      assert.equal(refused.status, 422);
+      const body = (await refused.json()) as {
+        error?: unknown;
+        code?: unknown;
+        details?: { itemId?: unknown; itemName?: unknown; unit?: unknown; baseUnit?: unknown };
+      };
+      assert.match(
+        String(body.error ?? ""),
+        /no conversion to the item's base unit/,
+        "the refusal renders its remedy instead of an empty answer",
+      );
+      // The drawer links the refusal to the item's costing section, so the
+      // code and item identity ride the body — never message text alone.
+      assert.equal(body.code, "ITEM_MISSING_UNIT_CONVERSION");
+      assert.equal(body.details?.itemId, org.items.fifo);
+      assert.equal(typeof body.details?.itemName, "string");
+      assert.equal(body.details?.unit, "crate");
+      const refusedFacts = await receiptFacts(org.orgId, refusedLine);
+      assert.equal(toUnits(refusedFacts.received), toUnits("0"), "a refused save advances nothing");
+      assert.equal(refusedFacts.receipts, 1, "only the aliased receipt exists");
+      assert.equal(
+        toUnits(refusedFacts.moved),
+        toUnits("10"),
+        "a refused save moves no further stock",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -13,13 +13,20 @@ await bootJsdomEnvironment({
   matchMediaMatches: false,
 });
 
-const script = { refreshed: 0, putBodies: [] as Record<string, unknown>[], confirms: 0, confirmNext: false };
+const script = {
+  refreshed: 0,
+  putBodies: [] as Record<string, unknown>[],
+  confirms: 0,
+  confirmNext: false,
+};
 Object.assign(globalThis, {
   __gridStale: script,
   __gridStaleRouter: {
     push() {},
     replace() {},
-    refresh() { script.refreshed++; },
+    refresh() {
+      script.refreshed++;
+    },
   },
 });
 
@@ -52,7 +59,15 @@ const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 function payload(revision: string) {
   return {
@@ -99,7 +114,9 @@ async function mountGrid() {
   script.confirmNext = false;
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === "/api/timesheets" && init?.method === "PUT") {
       script.putBodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
       return new Response(
@@ -169,7 +186,14 @@ test("a refused save shows the named 409 with a reload path and keeps local edit
   });
   await tick(60);
 
-  assert.ok(['button[aria-label="Line 1 time type"]', 'button[aria-label="Line 1 department"]', 'input[aria-label="Line 1 memo"]'].every((selector) => document.querySelector(selector)), "line controls name their field and row");
+  assert.ok(
+    [
+      'button[aria-label="Line 1 time type"]',
+      'button[aria-label="Line 1 department"]',
+      'input[aria-label="Line 1 memo"]',
+    ].every((selector) => document.querySelector(selector)),
+    "line controls name their field and row",
+  );
 
   const save = buttonsNamed("Save")[0];
   assert.ok(save, "the grid must offer Save");
@@ -220,5 +244,8 @@ test("closing a dirty weekly grid asks before discarding and keeps it open when 
   });
 
   assert.equal(script.confirms, 1, "the dirty-close guard asks for confirmation");
-  assert.ok(document.querySelector('[role="dialog"]'), "declining the confirmation keeps the drawer open");
+  assert.ok(
+    document.querySelector('[role="dialog"]'),
+    "declining the confirmation keeps the drawer open",
+  );
 });

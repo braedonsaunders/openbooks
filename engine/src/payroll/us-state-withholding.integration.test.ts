@@ -3,14 +3,18 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  packCertificates, payrollCertificate, resolveCertificate,
-} from "./certificates.ts";
+import { packCertificates, payrollCertificate, resolveCertificate } from "./certificates.ts";
 import { reciprocityAgreement } from "./reciprocity.ts";
 import { regionWithholding } from "./withholding-jurisdictions.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import {
-  AL_WITHHOLDING, CA_WITHHOLDING, DC_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
+  AL_WITHHOLDING,
+  CA_WITHHOLDING,
+  DC_WITHHOLDING,
+  MA_WITHHOLDING,
+  NY_WITHHOLDING,
+  NYC_WITHHOLDING,
+  PA_WITHHOLDING,
 } from "./us/states/index.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
@@ -18,7 +22,13 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedWorkAllocation } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  seedWorkAllocation,
+} from "../testing/fixtures.ts";
 import { seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 
 /**
@@ -79,7 +89,10 @@ test("the US pack PUBLISHES its withholding declarations — they used to be dea
   // Canada answers the same interface, which is what keeps it an interface.
   const ca = PAYROLL_COUNTRY_PACKS.CA!;
   assert.equal(ca.withholding().regions.length, 14);
-  assert.equal(ca.certificates().certificates.some((entry) => entry.key === "ca_td1"), true);
+  assert.equal(
+    ca.certificates().certificates.some((entry) => entry.key === "ca_td1"),
+    true,
+  );
   assert.equal(ca.reciprocity, undefined);
 });
 
@@ -144,18 +157,35 @@ async function usPayrollOrg(): Promise<Fixture> {
   const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
   for (const state of ["AL", "CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"]) {
     const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state, {
-      federalAccountId: einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+      federalAccountId: einAccountId,
+      subsidiaryId,
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
       sourceReference: `${state} original employer registration`,
     });
     await upsertStatutoryRate({
-      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-      region: state, filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
-      sourceCitation: "Test rate notice", reason: "test fixture rate",
+      orgId: org.orgId,
+      actorId,
+      rates: US_PACK_RATES,
+      rateKey: "us_sui",
+      region: state,
+      filingAccountId,
+      taxYear: 2026,
+      values: { rate: "0.03", wageBase: "7000" },
+      sourceCitation: "Test rate notice",
+      reason: "test fixture rate",
     });
     await upsertStatutoryRate({
-      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-      region: state, filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
-      sourceCitation: "Test rate notice", reason: "test fixture rate",
+      orgId: org.orgId,
+      actorId,
+      rates: US_PACK_RATES,
+      rateKey: "us_futa",
+      region: state,
+      filingAccountId: null,
+      taxYear: 2026,
+      values: { rate: "0.006" },
+      sourceCitation: "Test rate notice",
+      reason: "test fixture rate",
     });
   }
   // CA ETT reserve status: an unconfigured balance refuses by name.
@@ -215,15 +245,23 @@ async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Pro
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   if (opts.locality) {
     await seedWorkAllocation(
-      fx.orgId, employmentId, PERIOD_START, PERIOD_END,
-      opts.locality.region, opts.locality.subregion, opts.locality.workShare,
+      fx.orgId,
+      employmentId,
+      PERIOD_START,
+      PERIOD_END,
+      opts.locality.region,
+      opts.locality.subregion,
+      opts.locality.workShare,
     );
   }
   // Every hire works under a contributory SUI account for their work state:
   // a run with no recorded financing method refuses by design, and these
   // tests assert withholding, never the method refusal.
   const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state, {
-    federalAccountId: fx.einAccountId, subsidiaryId: fx.subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    federalAccountId: fx.einAccountId,
+    subsidiaryId: fx.subsidiaryId,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
     sourceReference: `${opts.state} original employer registration`,
   });
   await db.execute(sql`
@@ -260,32 +298,43 @@ async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Pro
 
 async function runPayroll(fx: Fixture) {
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart: PERIOD_START, periodEnd: PERIOD_END,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart: PERIOD_START,
+    periodEnd: PERIOD_END,
   });
   const result = await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+    orgId: fx.orgId,
+    documentId: run.documentId,
+    actorId: fx.actorId,
   });
   return { run, result };
 }
 
 const stubOf = async (fx: Fixture, documentId: string, employeePartyId: string) => {
-  const r = (await db.execute<{ id: string; gross: string; factors: Record<string, string> }>(sql`
+  const r = await db.execute<{ id: string; gross: string; factors: Record<string, string> }>(
+    sql`
     select id, gross::text as gross, factors from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
        and employee_party_id = ${employeePartyId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0] ?? null;
 };
 
 /** Every deduction line on a stub, by the system key its component carries. */
 const deductionsOf = async (fx: Fixture, stubId: string) => {
-  const r = (await db.execute<{ system_key: string; description: string; amount: string }>(sql`
+  const r = await db.execute<{ system_key: string; description: string; amount: string }>(
+    sql`
     select c.system_key, l.description, l.amount::text as amount
       from pay_stub_lines l join pay_components c on c.id = l.component_id
      where l.org_id = ${fx.orgId} and l.stub_id = ${stubId} and l.kind = 'deduction'
      order by l.sequence
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 };
 
@@ -316,7 +365,8 @@ test(
         periodsPerYear: 26,
         wages: PERIOD_WAGES,
         certificate: resolveCertificate({
-          certificate: payrollCertificate("US", "us_ca_de4"), asOf: PAY_DATE,
+          certificate: payrollCertificate("US", "us_ca_de4"),
+          asOf: PAY_DATE,
         }),
         basis: "resident",
       });
@@ -339,48 +389,58 @@ test(
       // ETT is an employer contribution on the first $7,000, not a deduction
       // ($2,000 × 0.1% = $2.00); SDI is its own employee deduction ($2,000 × 1.3% = $26.00).
       assert.equal(stub!.factors.CA_ETT_EMPLOYEE, "2.0000");
-      assert.equal(deductions.find((line) => line.system_key === "ca_sdi_employee")?.amount, "26.0000");
+      assert.equal(
+        deductions.find((line) => line.system_key === "ca_sdi_employee")?.amount,
+        "26.0000",
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
   },
 );
 
-test(
-  "Alabama withholding uses the current pay run's federal tax",
-  { skip: !DB },
-  async () => {
-    const fx = await usPayrollOrg();
-    try {
-      const employee = await usEmployee(fx, "Alabama Employee", { state: "AL" });
-      const { run, result } = await runPayroll(fx);
-      assert.deepEqual(result.errors, []);
+test("Alabama withholding uses the current pay run's federal tax", { skip: !DB }, async () => {
+  const fx = await usPayrollOrg();
+  try {
+    const employee = await usEmployee(fx, "Alabama Employee", { state: "AL" });
+    const { run, result } = await runPayroll(fx);
+    assert.deepEqual(result.errors, []);
 
-      const stub = await stubOf(fx, run.documentId, employee);
-      assert.ok(stub, "the Alabama employee was paid");
-      const expected = AL_WITHHOLDING.compute({
-        payDate: PAY_DATE,
-        periodStart: PERIOD_START,
-        periodEnd: PERIOD_END,
-        periodsPerYear: 26,
-        wages: PERIOD_WAGES,
-        federalIncomeTax: stub!.factors.FIT,
-        certificate: resolveCertificate({
-          certificate: payrollCertificate("US", "us_al_a4"),
-          asOf: PAY_DATE,
-        }),
-        basis: "resident",
-      });
-      assert.notEqual(stub!.factors.FIT, "0.0000", "the fixture must have current federal withholding");
-      assert.equal(stub!.factors.SIT_AL, expected.tax);
-      assert.notEqual(expected.tax, "0.0000", "the fixture must exercise Alabama's federal-tax deduction");
-      const deductions = await deductionsOf(fx, stub!.id);
-      assert.equal(deductions.find((line) => line.system_key === "state_income_tax")?.amount, expected.tax);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+    const stub = await stubOf(fx, run.documentId, employee);
+    assert.ok(stub, "the Alabama employee was paid");
+    const expected = AL_WITHHOLDING.compute({
+      payDate: PAY_DATE,
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      periodsPerYear: 26,
+      wages: PERIOD_WAGES,
+      federalIncomeTax: stub!.factors.FIT,
+      certificate: resolveCertificate({
+        certificate: payrollCertificate("US", "us_al_a4"),
+        asOf: PAY_DATE,
+      }),
+      basis: "resident",
+    });
+    assert.notEqual(
+      stub!.factors.FIT,
+      "0.0000",
+      "the fixture must have current federal withholding",
+    );
+    assert.equal(stub!.factors.SIT_AL, expected.tax);
+    assert.notEqual(
+      expected.tax,
+      "0.0000",
+      "the fixture must exercise Alabama's federal-tax deduction",
+    );
+    const deductions = await deductionsOf(fx, stub!.id);
+    assert.equal(
+      deductions.find((line) => line.system_key === "state_income_tax")?.amount,
+      expected.tax,
+    );
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 /* --------------------------------------------------------------------- */
 /* 2. Cross-border — the resolution order decides, and the stub shows it   */
@@ -397,7 +457,8 @@ test(
       // Pennsylvania tax is withheld instead. Get the order wrong and nothing
       // crashes — the wrong state simply receives the money.
       const claimed = await usEmployee(fx, "Reciprocal Rita", {
-        state: "NJ", residence: "PA",
+        state: "NJ",
+        residence: "PA",
         certificates: [{ key: "us_nj_nj165", region: "NJ" }],
       });
       // The same employee WITHOUT the form: New Jersey withholds in full. That
@@ -420,10 +481,13 @@ test(
       const claimedStub = await stubOf(fx, run.documentId, claimed);
       assert.ok(claimedStub);
       const expectedPa = PA_WITHHOLDING.compute({
-        payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
+        payDate: PAY_DATE,
+        periodEnd: PERIOD_END,
+        periodsPerYear: 26,
         wages: PERIOD_WAGES,
         certificate: resolveCertificate({
-          certificate: payrollCertificate("US", "us_ca_de4"), asOf: PAY_DATE,
+          certificate: payrollCertificate("US", "us_ca_de4"),
+          asOf: PAY_DATE,
         }),
         basis: "resident",
       });
@@ -459,8 +523,9 @@ test(
 
       const paulaStub = await stubOf(fx, run.documentId, paula);
       assert.ok(paulaStub, "the plain Pennsylvania employee is paid");
-      const paulaUc = (await deductionsOf(fx, paulaStub!.id))
-        .find((line) => line.system_key === "pa_uc_employee");
+      const paulaUc = (await deductionsOf(fx, paulaStub!.id)).find(
+        (line) => line.system_key === "pa_uc_employee",
+      );
       assert.equal(paulaUc?.amount, "1.4000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -488,10 +553,13 @@ test(
       `);
       const rider = await usEmployee(fx, "TriMet Tess", {
         state: "OR",
-        certificates: [{
-          key: "us_or_transit_record", region: "OR",
-          answers: { work_transit_district: "TRIMET" },
-        }],
+        certificates: [
+          {
+            key: "us_or_transit_record",
+            region: "OR",
+            answers: { work_transit_district: "TRIMET" },
+          },
+        ],
         locality: { region: "OR", subregion: "TRIMET", workShare: "1" },
       });
 
@@ -506,22 +574,33 @@ test(
       assert.ok(factors.OR_TRANSIT_TAX, "the transit amount is on the stub trace");
       assert.equal(factors["EPT_OR-TRIMET"], factors.OR_TRANSIT_TAX);
       assert.ok(factors.SIT_OR, "Oregon state tax still withholds beside it");
-      const lines = await db.execute<{ kind: string; description: string; amount: string }>(sql`
+      const lines = await db.execute<{ kind: string; description: string; amount: string }>(
+        sql`
         select l.kind, l.description, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and s.employee_party_id = ${rider}
-      `, "objects");
+      `,
+        "objects",
+      );
       // The statewide transit deduction matches /transit/i too, so the
       // district line is selected by its mark: the pack posts the district
       // levy once, at employer cost, beside the statewide employee line.
       const transit = lines.filter((line) => /trimet/i.test(line.description));
       assert.equal(transit.length, 1, "exactly one district transit line");
-      assert.equal(transit[0]!.kind, "employer_contribution", "the employer's pocket, not the cheque");
+      assert.equal(
+        transit[0]!.kind,
+        "employer_contribution",
+        "the employer's pocket, not the cheque",
+      );
       assert.equal(transit[0]!.amount, factors.OR_TRANSIT_TAX!);
       const statewide = lines.filter((line) => /statewide transit/i.test(line.description));
-      assert.equal(statewide.length, 1, "the statewide employee transit line still posts beside it");
+      assert.equal(
+        statewide.length,
+        1,
+        "the statewide employee transit line still posts beside it",
+      );
       assert.equal(statewide[0]!.kind, "deduction");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -545,9 +624,13 @@ test(
       // withholding. The run stops naming the form instead of honouring it.
       const moved = await usEmployee(fx, "Moved Molly", {
         state: "NJ",
-        certificates: [{
-          key: "us_pa_rev419", region: "PA", answers: { resident_state: "NJ" },
-        }],
+        certificates: [
+          {
+            key: "us_pa_rev419",
+            region: "PA",
+            answers: { resident_state: "NJ" },
+          },
+        ],
       });
 
       const { run, result } = await runPayroll(fx);
@@ -577,12 +660,15 @@ test(
     try {
       const resident = await usEmployee(fx, "Gotham Gil", {
         state: "NY",
-        certificates: [{
-          key: "us_ny_it2104", region: "NY",
-          // The IT-2104's own question. New York City reaches RESIDENTS ONLY,
-          // so without this answer the city tax is silently zero.
-          answers: { nyc_resident: "true" },
-        }],
+        certificates: [
+          {
+            key: "us_ny_it2104",
+            region: "NY",
+            // The IT-2104's own question. New York City reaches RESIDENTS ONLY,
+            // so without this answer the city tax is silently zero.
+            answers: { nyc_resident: "true" },
+          },
+        ],
       });
       // A commuter INTO the city owes it nothing — there has been no city
       // nonresident earnings tax since 1999.
@@ -594,18 +680,27 @@ test(
       const { run, result } = await runPayroll(fx);
       assert.deepEqual(result.errors, []);
 
-      const it2104 = (answers: Record<string, string>) => resolveCertificate({
-        certificate: payrollCertificate("US", "us_ny_it2104"),
-        stored: [{ certificateKey: "us_ny_it2104", answers, effectiveFrom: "2026-01-01" }],
-        asOf: PAY_DATE,
-      });
+      const it2104 = (answers: Record<string, string>) =>
+        resolveCertificate({
+          certificate: payrollCertificate("US", "us_ny_it2104"),
+          stored: [{ certificateKey: "us_ny_it2104", answers, effectiveFrom: "2026-01-01" }],
+          asOf: PAY_DATE,
+        });
       const expectedState = NY_WITHHOLDING.compute({
-        payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
-        wages: PERIOD_WAGES, certificate: it2104({ nyc_resident: "true" }), basis: "resident",
+        payDate: PAY_DATE,
+        periodEnd: PERIOD_END,
+        periodsPerYear: 26,
+        wages: PERIOD_WAGES,
+        certificate: it2104({ nyc_resident: "true" }),
+        basis: "resident",
       });
       const expectedCity = NYC_WITHHOLDING.compute({
-        payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
-        wages: PERIOD_WAGES, certificate: it2104({ nyc_resident: "true" }), basis: "resident",
+        payDate: PAY_DATE,
+        periodEnd: PERIOD_END,
+        periodsPerYear: 26,
+        wages: PERIOD_WAGES,
+        certificate: it2104({ nyc_resident: "true" }),
+        basis: "resident",
       });
       assert.notEqual(expectedCity.tax, "0.0000");
 
@@ -614,7 +709,8 @@ test(
       assert.equal(stub!.factors["LIT_NY-NYC"], expectedCity.tax);
       const lines = await deductionsOf(fx, stub!.id);
       assert.equal(
-        lines.find((line) => line.system_key === "local_income_tax")!.amount, expectedCity.tax,
+        lines.find((line) => line.system_key === "local_income_tax")!.amount,
+        expectedCity.tax,
       );
       assert.equal(
         lines.find((line) => line.system_key === "local_income_tax")!.description,
@@ -625,8 +721,9 @@ test(
       assert.equal(commuterStub!.factors.SIT_NY, expectedState.tax);
       assert.equal(commuterStub!.factors["LIT_NY-NYC"], undefined);
       assert.equal(
-        (await deductionsOf(fx, commuterStub!.id))
-          .some((line) => line.system_key === "local_income_tax"),
+        (await deductionsOf(fx, commuterStub!.id)).some(
+          (line) => line.system_key === "local_income_tax",
+        ),
         false,
       );
     } finally {
@@ -651,9 +748,13 @@ test(
       // 2022-08, and the stub amount equals the engine called directly.
       const employee = await usEmployee(fx, "District Dana", {
         state: "DC",
-        certificates: [{
-          key: "us_dc_d4", region: "DC", answers: { allowances: "1" },
-        }],
+        certificates: [
+          {
+            key: "us_dc_d4",
+            region: "DC",
+            answers: { allowances: "1" },
+          },
+        ],
       });
       const { run, result } = await runPayroll(fx);
       assert.deepEqual(result.errors, []);
@@ -667,11 +768,13 @@ test(
         wages: PERIOD_WAGES,
         certificate: resolveCertificate({
           certificate: payrollCertificate("US", "us_dc_d4"),
-          stored: [{
-            certificateKey: "us_dc_d4",
-            answers: { allowances: "1" },
-            effectiveFrom: "2026-01-01",
-          }],
+          stored: [
+            {
+              certificateKey: "us_dc_d4",
+              answers: { allowances: "1" },
+              effectiveFrom: "2026-01-01",
+            },
+          ],
           asOf: PAY_DATE,
         }),
         basis: "resident",
@@ -696,45 +799,44 @@ test(
 /* 5. The refusals — never a silent zero                                  */
 /* --------------------------------------------------------------------- */
 
-test(
-  "an unrated Ohio municipality REFUSES by name",
-  { skip: !DB },
-  async () => {
-    const fx = await usPayrollOrg();
-    try {
-      // An Ohio municipality the employer has entered no rate for. Ohio
-      // publishes no municipal withholding rate table, so the rate is
-      // employer-entered — and an unentered one must stop the run, not withhold
-      // zero for a levy the municipality will assess later with interest.
-      const ohio = await usEmployee(fx, "Westerville Wes", {
-        state: "OH",
-        certificates: [{
-          key: "us_oh_municipal_record", region: "OH",
+test("an unrated Ohio municipality REFUSES by name", { skip: !DB }, async () => {
+  const fx = await usPayrollOrg();
+  try {
+    // An Ohio municipality the employer has entered no rate for. Ohio
+    // publishes no municipal withholding rate table, so the rate is
+    // employer-entered — and an unentered one must stop the run, not withhold
+    // zero for a levy the municipality will assess later with interest.
+    const ohio = await usEmployee(fx, "Westerville Wes", {
+      state: "OH",
+      certificates: [
+        {
+          key: "us_oh_municipal_record",
+          region: "OH",
           answers: { work_municipality: "WESTERVILLE" },
-        }],
-        locality: { region: "OH", subregion: "WESTERVILLE", workShare: "1" },
-      });
-      // The control: an Ohio employee in no taxing municipality is paid
-      // normally, so the refusal above is about the missing RATE and not about
-      // Ohio.
-      const plainOhio = await usEmployee(fx, "Plain Ohio Pat", { state: "OH" });
+        },
+      ],
+      locality: { region: "OH", subregion: "WESTERVILLE", workShare: "1" },
+    });
+    // The control: an Ohio employee in no taxing municipality is paid
+    // normally, so the refusal above is about the missing RATE and not about
+    // Ohio.
+    const plainOhio = await usEmployee(fx, "Plain Ohio Pat", { state: "OH" });
 
-      const { run, result } = await runPayroll(fx);
+    const { run, result } = await runPayroll(fx);
 
-      assert.equal(await stubOf(fx, run.documentId, ohio), null);
-      const ohRefusal = result.errors.find((error) => error.employee === "Westerville Wes");
-      assert.ok(ohRefusal, "the municipality refuses rather than withholding zero");
-      assert.match(ohRefusal!.message, /no income tax rate has been entered for WESTERVILLE/);
-      assert.match(ohRefusal!.message, /us_oh_municipal/);
+    assert.equal(await stubOf(fx, run.documentId, ohio), null);
+    const ohRefusal = result.errors.find((error) => error.employee === "Westerville Wes");
+    assert.ok(ohRefusal, "the municipality refuses rather than withholding zero");
+    assert.match(ohRefusal!.message, /no income tax rate has been entered for WESTERVILLE/);
+    assert.match(ohRefusal!.message, /us_oh_municipal/);
 
-      const ohioStub = await stubOf(fx, run.documentId, plainOhio);
-      assert.ok(ohioStub, "an Ohio employee outside every municipality is paid");
-      assert.ok(ohioStub!.factors.SIT_OH);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+    const ohioStub = await stubOf(fx, run.documentId, plainOhio);
+    assert.ok(ohioStub, "an Ohio employee outside every municipality is paid");
+    assert.ok(ohioStub!.factors.SIT_OH);
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 /* --------------------------------------------------------------------- */
 /* 6. Year-to-date — a second bonus is not the year's first                */
@@ -757,17 +859,30 @@ test(
       // exemptions — the engine refuses an unfiled certificate by name.
       const employee = await usEmployee(fx, "Bay Stater", {
         state: "MA",
-        certificates: [{
-          key: "us_ma_m4", region: "MA", answers: { total_exemptions: "0" },
-        }],
+        certificates: [
+          {
+            key: "us_ma_m4",
+            region: "MA",
+            answers: { total_exemptions: "0" },
+          },
+        ],
       });
-      const bonusComponent = (await db.execute<{ id: string }>(sql`
+      const bonusComponent = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from pay_components where org_id = ${fx.orgId} and code = 'BONUS'
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       const bonus = async (amount: string) => {
         const run = await createPayRun({
-          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-          periodStart: PERIOD_START, periodEnd: PERIOD_END, runType: "bonus",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          payScheduleId: fx.scheduleId,
+          periodStart: PERIOD_START,
+          periodEnd: PERIOD_END,
+          runType: "bonus",
         });
         await db.execute(sql`
           insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
@@ -776,7 +891,9 @@ test(
           values (${fx.orgId}, ${run.documentId}, ${employee}, 'line', ${bonusComponent.id},
                   ${amount}, 'Performance bonus', ${fx.actorId}, ${fx.actorId})`);
         const result = await calculatePayRun({
-          orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+          orgId: fx.orgId,
+          documentId: run.documentId,
+          actorId: fx.actorId,
         });
         assert.deepEqual(result.errors, []);
         return run;
@@ -798,13 +915,16 @@ test(
       // reconstructed from the two stubs' own FICA figures, the way the run
       // supplies it.
       const fica = (factors: Record<string, string>) =>
-        ["SS", "MED", "MED2"].reduce((sum, key) => sum + Number(factors[key] ?? "0"), 0)
-          .toFixed(4);
+        ["SS", "MED", "MED2"].reduce((sum, key) => sum + Number(factors[key] ?? "0"), 0).toFixed(4);
       const expected = MA_WITHHOLDING.compute({
-        payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
-        wages: "0.0000", supplemental: "200000.00",
+        payDate: PAY_DATE,
+        periodEnd: PERIOD_END,
+        periodsPerYear: 26,
+        wages: "0.0000",
+        supplemental: "200000.00",
         certificate: resolveCertificate({
-          certificate: payrollCertificate("US", "us_ma_m4"), asOf: PAY_DATE,
+          certificate: payrollCertificate("US", "us_ma_m4"),
+          asOf: PAY_DATE,
         }),
         basis: "resident",
         socialInsuranceDeducted: {
@@ -815,10 +935,14 @@ test(
       });
       assert.notEqual(
         MA_WITHHOLDING.compute({
-          payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
-          wages: "0.0000", supplemental: "200000.00",
+          payDate: PAY_DATE,
+          periodEnd: PERIOD_END,
+          periodsPerYear: 26,
+          wages: "0.0000",
+          supplemental: "200000.00",
           certificate: resolveCertificate({
-            certificate: payrollCertificate("US", "us_ma_m4"), asOf: PAY_DATE,
+            certificate: payrollCertificate("US", "us_ma_m4"),
+            asOf: PAY_DATE,
           }),
           basis: "resident",
           socialInsuranceDeducted: {
@@ -840,33 +964,29 @@ test(
 /* Canada must not move                                                   */
 /* --------------------------------------------------------------------- */
 
-test(
-  "the CA pack's new declarations change no Canadian withholding",
-  { skip: !DB },
-  async () => {
-    // The state work adds `certificates` and `withholding` to the CA pack. Both
-    // are DECLARATIONS: the Canadian arm of `runStatutoryPass` does not consult
-    // the resolution at all, and the TD1 family still reads from the profile
-    // columns it always did. This asserts the mapping resolves to the same
-    // answers the T4127 engine is given, which is the property that keeps the
-    // 18 T4127 and 19 TP-1015 goldens where they are.
-    const td1 = payrollCertificate("CA", "ca_td1");
-    assert.equal(td1.storage, "profile_columns");
-    const resolved = resolveCertificate({
-      certificate: td1,
-      profile: { federal_claim_code: 1, additional_tax_per_period: "25.0000", cpp_exempt: true },
-    });
-    assert.equal(resolved.answers.federal_claim_code, "1");
-    assert.equal(resolved.answers.additional_tax_per_period, "25.0000");
-    assert.equal(resolved.answers.cpp_exempt, "true");
-    // An untouched profile does not look like a signed TD1.
-    assert.equal(resolveCertificate({ certificate: td1, profile: {} }).onFile, false);
-    // Québec's provincial form is TP-1015.3-V, not "TD1QC" — a product that
-    // calls it the wrong thing cannot help anybody fill it in.
-    assert.equal(payrollCertificate("CA", "ca_td1_QC").form, "TP-1015.3-V");
-    assert.equal(payrollCertificate("CA", "ca_td1_ON").form, "TD1ON");
-  },
-);
+test("the CA pack's new declarations change no Canadian withholding", { skip: !DB }, async () => {
+  // The state work adds `certificates` and `withholding` to the CA pack. Both
+  // are DECLARATIONS: the Canadian arm of `runStatutoryPass` does not consult
+  // the resolution at all, and the TD1 family still reads from the profile
+  // columns it always did. This asserts the mapping resolves to the same
+  // answers the T4127 engine is given, which is the property that keeps the
+  // 18 T4127 and 19 TP-1015 goldens where they are.
+  const td1 = payrollCertificate("CA", "ca_td1");
+  assert.equal(td1.storage, "profile_columns");
+  const resolved = resolveCertificate({
+    certificate: td1,
+    profile: { federal_claim_code: 1, additional_tax_per_period: "25.0000", cpp_exempt: true },
+  });
+  assert.equal(resolved.answers.federal_claim_code, "1");
+  assert.equal(resolved.answers.additional_tax_per_period, "25.0000");
+  assert.equal(resolved.answers.cpp_exempt, "true");
+  // An untouched profile does not look like a signed TD1.
+  assert.equal(resolveCertificate({ certificate: td1, profile: {} }).onFile, false);
+  // Québec's provincial form is TP-1015.3-V, not "TD1QC" — a product that
+  // calls it the wrong thing cannot help anybody fill it in.
+  assert.equal(payrollCertificate("CA", "ca_td1_QC").form, "TP-1015.3-V");
+  assert.equal(payrollCertificate("CA", "ca_td1_ON").form, "TD1ON");
+});
 
 test(
   "employer burden: each component posts its own labeled expense debit",
@@ -882,21 +1002,27 @@ test(
       const { run, result } = await runPayroll(fx);
       assert.deepEqual(result.errors, []);
       await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
-      const stubBurden = await db.execute<{ description: string; amount: string }>(sql`
+      const stubBurden = await db.execute<{ description: string; amount: string }>(
+        sql`
         select l.description, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind = 'employer_contribution'
-         order by l.description`, "objects");
+         order by l.description`,
+        "objects",
+      );
       assert.ok(stubBurden.length >= 2, "the stub carries multiple employer shares");
-      const debits = await db.execute<{ description: string; amount: string }>(sql`
+      const debits = await db.execute<{ description: string; amount: string }>(
+        sql`
         select dl.description, dl.amount::text as amount
           from document_lines dl
           join accounts a on a.id = dl.account_id
          where dl.org_id = ${fx.orgId} and dl.document_id = ${run.documentId}
            and a.number = '6010' and dl.amount::numeric > 0
-         order by dl.description`, "objects");
+         order by dl.description`,
+        "objects",
+      );
       assert.deepEqual(
         debits.map((leg) => leg.description),
         stubBurden.map((line) => line.description),

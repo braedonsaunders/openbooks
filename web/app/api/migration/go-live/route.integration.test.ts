@@ -44,10 +44,14 @@ registerHooks({
   },
 });
 
-const { POST } = (await import(new URL("./route.ts?migration-go-live", import.meta.url).href)) as typeof import("./route.ts");
+const { POST } = (await import(
+  new URL("./route.ts?migration-go-live", import.meta.url).href
+)) as typeof import("./route.ts");
 
-const { withBypassContext, withOrgTransaction, db, env } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { withBypassContext, withOrgTransaction, db, env } =
+  await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { resolveAuthzByUserId } = await import("@/lib/authz");
 const { readMigrationPlan, updateMigrationPlan } = await import("@/lib/migration/plan");
 
@@ -61,28 +65,54 @@ function postRequest(body: unknown): Request {
   });
 }
 
-test("go-live refuses without a cutover date and while a required check is open", { skip, timeout: 180_000 }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-    await withOrgTransaction(org.orgId, () => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`));
-    const authz = await withOrgTransaction(org.orgId, () => resolveAuthzByUserId(org.orgId, adminId));
-    assert.ok(authz);
-    routeState.authz = authz;
-    const inOrg = <T>(fn: () => Promise<T>) => withOrgTransaction(org.orgId, fn);
-    await inOrg(() => updateMigrationPlan({ orgId: org.orgId, id: adminId }, { path: "spreadsheet", sourceSystem: "spreadsheet" }, "test plan"));
+test(
+  "go-live refuses without a cutover date and while a required check is open",
+  { skip, timeout: 180_000 },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+      await withOrgTransaction(org.orgId, () =>
+        db.execute(
+          sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`,
+        ),
+      );
+      const authz = await withOrgTransaction(org.orgId, () =>
+        resolveAuthzByUserId(org.orgId, adminId),
+      );
+      assert.ok(authz);
+      routeState.authz = authz;
+      const inOrg = <T>(fn: () => Promise<T>) => withOrgTransaction(org.orgId, fn);
+      await inOrg(() =>
+        updateMigrationPlan(
+          { orgId: org.orgId, id: adminId },
+          { path: "spreadsheet", sourceSystem: "spreadsheet" },
+          "test plan",
+        ),
+      );
 
-    const dateless = await POST(postRequest({ confirmation: "the books are verified" }));
-    assert.equal(dateless.status, 409);
-    assert.match(((await dateless.json()) as { error: string }).error, /cutover date/);
+      const dateless = await POST(postRequest({ confirmation: "the books are verified" }));
+      assert.equal(dateless.status, 409);
+      assert.match(((await dateless.json()) as { error: string }).error, /cutover date/);
 
-    await inOrg(() => updateMigrationPlan({ orgId: org.orgId, id: adminId }, { cutoverDate: "2026-10-01" }, "test plan"));
-    const blocked = await POST(postRequest({ confirmation: "the books are verified" }));
-    assert.equal(blocked.status, 409);
-    assert.match(((await blocked.json()) as { error: string }).error, /openingJournalPosted/);
-    assert.equal((await inOrg(() => readMigrationPlan(org.orgId))).goLive, null, "a refused go-live records nothing");
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      await inOrg(() =>
+        updateMigrationPlan(
+          { orgId: org.orgId, id: adminId },
+          { cutoverDate: "2026-10-01" },
+          "test plan",
+        ),
+      );
+      const blocked = await POST(postRequest({ confirmation: "the books are verified" }));
+      assert.equal(blocked.status, 409);
+      assert.match(((await blocked.json()) as { error: string }).error, /openingJournalPosted/);
+      assert.equal(
+        (await inOrg(() => readMigrationPlan(org.orgId))).goLive,
+        null,
+        "a refused go-live records nothing",
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

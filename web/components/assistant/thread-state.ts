@@ -5,10 +5,7 @@
 export type ThreadMessage = { id: string; role: string; parts: unknown[] };
 
 /** Replace the last assistant message's parts with freshly streamed ones. */
-export function withLastAssistantParts<T extends ThreadMessage>(
-  list: T[],
-  parts: unknown[],
-): T[] {
+export function withLastAssistantParts<T extends ThreadMessage>(list: T[], parts: unknown[]): T[] {
   const copy = list.slice();
   for (let index = copy.length - 1; index >= 0; index -= 1) {
     const message = copy[index];
@@ -93,18 +90,28 @@ export function formatMessageTimestamp(
 ): { compact: string; full: string } | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const civilDate = (value: Date) => new Intl.DateTimeFormat(locale, {
-    year: 'numeric', month: '2-digit', day: '2-digit', timeZone,
-  }).format(value)
-  const sameDay =
-    civilDate(date) === civilDate(now);
-  const time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", timeZone }).format(date);
+  const civilDate = (value: Date) =>
+    new Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone,
+    }).format(value);
+  const sameDay = civilDate(date) === civilDate(now);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(date);
   const compact = sameDay
     ? time
     : `${new Intl.DateTimeFormat(locale, {
         month: "short",
         day: "numeric",
-        ...(new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone }).format(date) === new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone }).format(now) ? {} : { year: "numeric" as const }),
+        ...(new Intl.DateTimeFormat(locale, { year: "numeric", timeZone }).format(date) ===
+        new Intl.DateTimeFormat(locale, { year: "numeric", timeZone }).format(now)
+          ? {}
+          : { year: "numeric" as const }),
         timeZone,
       }).format(date)} · ${time}`;
   const full = new Intl.DateTimeFormat(locale, {

@@ -29,8 +29,13 @@ export const temporaryDifferences = pgTable(
     difference: money("difference").notNull(),
     ratePercent: money("rate_percent").notNull(),
     taxEffect: money("tax_effect").notNull(),
-    source: text("source", { enum: ["auto", "manual"] }).notNull().default("manual"),
+    source: text("source", { enum: ["auto", "manual"] })
+      .notNull()
+      .default("manual"),
     ...auditColumns,
   },
-  (t) => [index("temporary_differences_run").on(t.runId), index("temporary_differences_org").on(t.orgId, t.category)],
+  (t) => [
+    index("temporary_differences_run").on(t.runId),
+    index("temporary_differences_org").on(t.orgId, t.category),
+  ],
 );

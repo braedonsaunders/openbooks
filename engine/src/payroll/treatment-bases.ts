@@ -51,7 +51,10 @@ export function reduceTaxBases(
     if (amount == null) continue;
     const preTax = sum(
       lines
-        .filter((line) => line.kind === "deduction" && line.taxTreatment != null && keys.has(line.taxTreatment))
+        .filter(
+          (line) =>
+            line.kind === "deduction" && line.taxTreatment != null && keys.has(line.taxTreatment),
+        )
         .map((line) => line.amount),
     );
     out[base] = add(amount, neg(preTax));
@@ -120,9 +123,11 @@ export function payComponentTreatmentProblem(input: {
   if (country === "") {
     const keys = declaredTreatmentKeys();
     if (keys.includes(treatment)) return null;
-    return `tax treatment "${treatment}" is not declared by any payroll pack — `
-      + `declared treatments: "none" (After-tax)${keys.length > 0 ? `, ${keys.map((key) => `"${key}"`).join(", ")}` : ""}. `
-      + "Scope the component to a country to see that pack's treatments.";
+    return (
+      `tax treatment "${treatment}" is not declared by any payroll pack — ` +
+      `declared treatments: "none" (After-tax)${keys.length > 0 ? `, ${keys.map((key) => `"${key}"`).join(", ")}` : ""}. ` +
+      "Scope the component to a country to see that pack's treatments."
+    );
   }
   let pack;
   try {
@@ -131,12 +136,16 @@ export function payComponentTreatmentProblem(input: {
     pack = null;
   }
   if (pack === null) {
-    return `no payroll pack exists for country "${country || "(unset)"}" — `
-      + `components exist for ${Object.keys(PAYROLL_COUNTRY_PACKS).join(", ")}`;
+    return (
+      `no payroll pack exists for country "${country || "(unset)"}" — ` +
+      `components exist for ${Object.keys(PAYROLL_COUNTRY_PACKS).join(", ")}`
+    );
   }
   if (pack.deductionTreatments.some((declared) => declared.key === treatment)) return null;
   const declared = pack.deductionTreatments.map(namedTreatment).join(", ");
-  return `tax treatment "${treatment}" is not declared by the ${pack.name} payroll pack — `
-    + `it declares "none" (After-tax)${declared !== "" ? `, ${declared}` : ": this pack transcribes no pre-tax treatment"}. `
-    + "A treatment the pack does not declare is inert on its runs, so it is refused here rather than stored.";
+  return (
+    `tax treatment "${treatment}" is not declared by the ${pack.name} payroll pack — ` +
+    `it declares "none" (After-tax)${declared !== "" ? `, ${declared}` : ": this pack transcribes no pre-tax treatment"}. ` +
+    "A treatment the pack does not declare is inert on its runs, so it is refused here rather than stored."
+  );
 }

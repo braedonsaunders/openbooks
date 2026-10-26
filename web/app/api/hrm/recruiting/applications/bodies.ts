@@ -16,9 +16,9 @@ export const patchApplicationBody = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("move"),
     toStageId: uuid,
-    expectedStageId:uuid.optional(),
+    expectedStageId: uuid.optional(),
     reason: z.string().max(2000).nullable().optional(),
   }),
-  z.object({ action: z.literal("reject"), expectedStageId:uuid.optional(), reason }),
+  z.object({ action: z.literal("reject"), expectedStageId: uuid.optional(), reason }),
   z.object({ action: z.literal("withdraw") }),
 ]);

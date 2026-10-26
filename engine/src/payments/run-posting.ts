@@ -4,7 +4,10 @@ import { toUnits } from "../money/money.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
-import { PaymentError, PaymentRunPostingClaimFencedError } from "../payments-core/payment-errors.ts";
+import {
+  PaymentError,
+  PaymentRunPostingClaimFencedError,
+} from "../payments-core/payment-errors.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { paymentRunComplianceDecisions } from "./run-readiness.ts";
 import { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";
@@ -35,29 +38,40 @@ async function claimPaymentRunForPosting(
   userId: string,
 ): Promise<PostingClaim> {
   return withOrgTransaction(orgId, async () => {
-    const locked = (await db.execute<{
-      status: string;
-      token: string | null;
-    }>(sql`
+    const locked = (
+      await db.execute<{
+        status: string;
+        token: string | null;
+      }>(
+        sql`
       select status, posting_claim_token as token
         from payment_runs
        where id = ${runId} and org_id = ${orgId}
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!locked) throw new PaymentError("payment run not found");
 
     if (locked.status === "processing") {
       // Recovery path: only an abandoned lease may be taken over. The
       // staleness judgement uses the database clock so app-side skew cannot
       // resurrect a live worker's claim.
-      const stale = (await db.execute<{ stale: boolean }>(sql`
+      const stale = (
+        await db.execute<{ stale: boolean }>(
+          sql`
         select (posting_claimed_at is null or
                 posting_claimed_at <= now() - ${PAYMENT_RUN_POSTING_CLAIM_STALE_MS} * interval '1 millisecond') as stale
           from payment_runs
          where id = ${runId} and org_id = ${orgId} and status = 'processing'
-      `, "objects"))[0]?.stale;
+      `,
+          "objects",
+        )
+      )[0]?.stale;
       if (!stale) throw new PaymentError("run is already being posted");
-      const recovered = await db.execute<{ token: string }>(sql`
+      const recovered = await db.execute<{ token: string }>(
+        sql`
         update payment_runs
            set posting_claim_token = gen_random_uuid(),
                posting_claimed_at = now(),
@@ -66,7 +80,9 @@ async function claimPaymentRunForPosting(
                updated_by = ${userId}
          where id = ${runId} and org_id = ${orgId} and status = 'processing'
          returning posting_claim_token as token
-      `, "objects");
+      `,
+        "objects",
+      );
       const recovery = recovered[0];
       if (!recovery?.token) throw new PaymentRunPostingClaimFencedError(runId);
       await db.insert(schema.paymentEvents).values({
@@ -92,14 +108,20 @@ async function claimPaymentRunForPosting(
       // by the actual remainder under this lock, never by the label alone:
       // with nothing pending the refusal stands; with work left, the run is
       // re-claimed and exactly the outstanding instructions are finished.
-      const pending = (await db.execute<{ n: number }>(sql`
+      const pending = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n
           from payment_instructions
          where payment_run_id = ${runId} and org_id = ${orgId} and status = 'pending'
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       if (pending === 0) throw new PaymentError("run is already posted");
     }
-    const claimed = await db.execute<{ token: string }>(sql`
+    const claimed = await db.execute<{ token: string }>(
+      sql`
       update payment_runs
          set status = 'processing',
              posting_claim_token = gen_random_uuid(),
@@ -109,7 +131,9 @@ async function claimPaymentRunForPosting(
              updated_by = ${userId}
        where id = ${runId} and org_id = ${orgId} and status = ${locked.status}
        returning posting_claim_token as token
-    `, "objects");
+    `,
+      "objects",
+    );
     const fresh = claimed[0];
     if (!fresh?.token) throw new PaymentRunPostingClaimFencedError(runId);
     await db.insert(schema.paymentEvents).values({
@@ -146,16 +170,18 @@ async function postClaimedPaymentInstruction(
   return withOrgTransaction(orgId, async () => {
     await assertPostingClaimLive(runId, orgId, claim);
 
-    const instruction = (await db.execute<{
-      id: string;
-      payment_document_id: string | null;
-      status: string;
-      document_status: string | null;
-      instruction_amount: string;
-      instruction_currency: string;
-      document_total: string | null;
-      document_currency: string | null;
-    }>(sql`
+    const instruction = (
+      await db.execute<{
+        id: string;
+        payment_document_id: string | null;
+        status: string;
+        document_status: string | null;
+        instruction_amount: string;
+        instruction_currency: string;
+        document_total: string | null;
+        document_currency: string | null;
+      }>(
+        sql`
       select instruction.id, instruction.payment_document_id, instruction.status,
              document.status as document_status,
              instruction.amount as instruction_amount,
@@ -168,9 +194,15 @@ async function postClaimedPaymentInstruction(
          and instruction.payment_run_id = ${runId}
          and instruction.org_id = ${orgId}
        for update of instruction
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!instruction || instruction.status !== "pending") {
-      return { status: "failed", error: "payment instruction changed while its run was being posted" };
+      return {
+        status: "failed",
+        error: "payment instruction changed while its run was being posted",
+      };
     }
     if (!instruction.payment_document_id) {
       return { status: "failed", error: "instruction has no payment document" };
@@ -187,23 +219,27 @@ async function postClaimedPaymentInstruction(
     // instruction fails loudly and the run goes partially failed instead of
     // sending drifted cash) or waits on the document lock (then finds a
     // non-draft and refuses itself). Fail closed on unreadable amounts.
-    const lockedDoc = (await db.execute<{
-      total: string | null;
-      currency: string | null;
-    }>(sql`
+    const lockedDoc = (
+      await db.execute<{
+        total: string | null;
+        currency: string | null;
+      }>(
+        sql`
       select total, currency
         from documents
        where id = ${instruction.payment_document_id} and org_id = ${orgId}
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!lockedDoc || lockedDoc.total === null || lockedDoc.currency === null) {
       return { status: "failed", error: "instruction payment document is missing" };
     }
     let amountsMatch = instruction.instruction_currency === lockedDoc.currency;
     if (amountsMatch) {
       try {
-        amountsMatch =
-          toUnits(lockedDoc.total) === toUnits(instruction.instruction_amount);
+        amountsMatch = toUnits(lockedDoc.total) === toUnits(instruction.instruction_amount);
       } catch {
         amountsMatch = false;
       }
@@ -230,7 +266,10 @@ async function postClaimedPaymentInstruction(
           userId,
         );
         if (submission.flowError) {
-          return { status: "failed", error: `approval could not be routed: ${submission.flowError}` };
+          return {
+            status: "failed",
+            error: `approval could not be routed: ${submission.flowError}`,
+          };
         }
         if (submission.gated) {
           return {
@@ -244,21 +283,21 @@ async function postClaimedPaymentInstruction(
           error: `the payment document is ${instruction.document_status}; only an approved payment can be sent`,
         };
       }
-      await postPaymentWithApplications(
-        instruction.payment_document_id,
-        undefined,
-        userId,
-        "ui",
-        { deferEffects: true, runClaim: { runId, token: claim.token } },
-      );
+      await postPaymentWithApplications(instruction.payment_document_id, undefined, userId, "ui", {
+        deferEffects: true,
+        runClaim: { runId, token: claim.token },
+      });
     }
-    const sent = await db.execute<{ id: string }>(sql`
+    const sent = await db.execute<{ id: string }>(
+      sql`
       update payment_instructions
          set status = 'sent', updated_at = now(), updated_by = ${userId}
        where id = ${instruction.id} and payment_run_id = ${runId}
          and org_id = ${orgId} and status = 'pending'
        returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!sent[0]) {
       throw new PaymentError("payment instruction changed while its run was being posted");
     }
@@ -314,18 +353,25 @@ async function finishPaymentRunPosting(
          and instruction.org_id = ${orgId}
          and instruction.remittance_email_sent_at is null
     `);
-    const tally = (await db.execute<{ pending: number; returned: number }>(sql`
+    const tally = (
+      await db.execute<{ pending: number; returned: number }>(
+        sql`
       select count(*) filter (where status = 'pending')::int as pending,
              count(*) filter (where status in ('returned', 'rejected'))::int as returned
         from payment_instructions
        where payment_run_id = ${runId} and org_id = ${orgId}
-    `, "objects"))[0]!;
-    const status = tally.pending > 0
-      ? "partially_failed"
-      : tally.returned > 0 && requestedStatus === "confirmed"
-        ? "returned"
-        : requestedStatus;
-    const completed = await db.execute<{ id: string }>(sql`
+    `,
+        "objects",
+      )
+    )[0]!;
+    const status =
+      tally.pending > 0
+        ? "partially_failed"
+        : tally.returned > 0 && requestedStatus === "confirmed"
+          ? "returned"
+          : requestedStatus;
+    const completed = await db.execute<{ id: string }>(
+      sql`
       update payment_runs
          set status = ${status},
              posting_claim_token = null,
@@ -337,14 +383,17 @@ async function finishPaymentRunPosting(
          and status = 'processing'
          and posting_claim_token = ${claim.token}
        returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!completed[0]) throw new PaymentRunPostingClaimFencedError(runId);
     await db.insert(schema.paymentEvents).values({
       orgId,
       paymentRunId: runId,
-      eventType: status === "partially_failed"
-        ? PAYMENT_RUN_POSTING_EVENTS.failed
-        : PAYMENT_RUN_POSTING_EVENTS.completed,
+      eventType:
+        status === "partially_failed"
+          ? PAYMENT_RUN_POSTING_EVENTS.failed
+          : PAYMENT_RUN_POSTING_EVENTS.completed,
       fromStatus: "processing",
       toStatus: status,
       details: tally.pending > 0 ? { ...details, incompleteInstructions: tally.pending } : details,
@@ -366,7 +415,8 @@ async function releaseFailedPaymentRunPosting(
   claim: PostingClaim,
 ): Promise<boolean> {
   return withOrgTransaction(orgId, async () => {
-    const released = await db.execute<{ id: string }>(sql`
+    const released = await db.execute<{ id: string }>(
+      sql`
       update payment_runs
          set status = 'partially_failed',
              posting_claim_token = null,
@@ -378,7 +428,9 @@ async function releaseFailedPaymentRunPosting(
          and status = 'processing'
          and posting_claim_token = ${claim.token}
        returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!released[0]) return false;
     await db.insert(schema.paymentEvents).values({
       orgId,
@@ -424,7 +476,8 @@ export async function postPaymentRun(
   }
   const claim = await claimPaymentRunForPosting(runId, orgId, userId);
   try {
-    const instructions = await db.execute<{ id: string; payee: string }>(sql`
+    const instructions = await db.execute<{ id: string; payee: string }>(
+      sql`
       select instruction.id, party.display_name as payee
         from payment_instructions instruction
         join parties party
@@ -434,12 +487,17 @@ export async function postPaymentRun(
          and instruction.org_id = ${orgId}
          and instruction.status = 'pending'
        order by party.display_name, instruction.id
-    `, "objects");
+    `,
+      "objects",
+    );
 
     // Final compliance gate. Posting is the irreversible step, so the control
     // runs once more against today's evidence and blocks one instruction rather
     // than stranding every other payee in the run.
-    const complianceByInstruction = new Map<string, (BillReleaseDecision & { instructionId: string })[]>();
+    const complianceByInstruction = new Map<
+      string,
+      (BillReleaseDecision & { instructionId: string })[]
+    >();
     for (const decision of await paymentRunComplianceDecisions(runId, orgId)) {
       const list = complianceByInstruction.get(decision.instructionId) ?? [];
       list.push(decision);
@@ -461,7 +519,11 @@ export async function postPaymentRun(
             paymentInstructionId: instruction.id,
             stage: "run_posted",
             decision: decision.decision,
-            snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
+            snapshot: {
+              compliance: decision.compliance,
+              lienWaiver: decision.lienWaiver,
+              reasons: decision.reasons,
+            },
             checkedBy: userId,
           });
         }
@@ -504,7 +566,10 @@ export async function postPaymentRun(
           await queueAutomaticRemittance(runId, instruction.id, orgId, userId, claim);
         } catch (error) {
           if (error instanceof PaymentRunPostingClaimFencedError) throw error;
-          console.error(`[payments] automatic remittance failed for instruction ${instruction.id}:`, error);
+          console.error(
+            `[payments] automatic remittance failed for instruction ${instruction.id}:`,
+            error,
+          );
         }
         posted += 1;
       } catch (error) {
@@ -521,11 +586,18 @@ export async function postPaymentRun(
     // POST response — so the activity feed can name them after the toast
     // dismisses and the clerk can fix and retry. Counts alone
     // left "0 sent · N failed" with no reason anywhere.
-    await finishPaymentRunPosting(runId, orgId, userId, finalStatus, {
-      posted,
-      failureCount: failures.length,
-      failures,
-    }, claim);
+    await finishPaymentRunPosting(
+      runId,
+      orgId,
+      userId,
+      finalStatus,
+      {
+        posted,
+        failureCount: failures.length,
+        failures,
+      },
+      claim,
+    );
     return { posted, failures };
   } catch (error) {
     if (error instanceof PaymentRunPostingClaimFencedError) throw error;

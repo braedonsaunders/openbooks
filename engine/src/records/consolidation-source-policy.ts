@@ -12,15 +12,23 @@ export async function consolidationSourceRefusal(
   orgId: string,
   documentId: string,
 ): Promise<string | null> {
-  const source = (await tx.execute<{ consolidation_status: string | null }>(sql`
+  const source = (
+    await tx.execute<{ consolidation_status: string | null }>(
+      sql`
     select custom->>'consolidationStatus' as consolidation_status
       from documents
      where org_id = ${orgId} and id = ${documentId} and kind = 'customer_invoice'
      for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!source) return null;
 
-  const retained = (await tx.execute(sql`
+  const retained =
+    (
+      await tx.execute(
+        sql`
     select 1
       from document_links link
       join consolidation_runs run
@@ -28,7 +36,10 @@ export async function consolidationSourceRefusal(
      where link.org_id = ${orgId} and link.from_document_id = ${documentId}
        and link.link_type = 'created_from'
      limit 1
-  `, "objects")).length > 0;
+  `,
+        "objects",
+      )
+    ).length > 0;
   if (retained || source.consolidation_status === "superseded") {
     return "This source invoice has been consolidated and cannot be edited, submitted or posted separately. Continue with the consolidated invoice; the source charge is retained as billing evidence.";
   }

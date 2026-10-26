@@ -71,8 +71,8 @@ function toDTO(row: TemplateRow): DocumentTemplateDTO {
     ? row.merge_fields.filter((f): f is string => typeof f === "string")
     : [];
   const signerRoles = Array.isArray(row.signer_roles)
-    ? row.signer_roles.filter((r): r is DocumentSignerRole =>
-        r === "employee" || r === "manager" || r === "hr",
+    ? row.signer_roles.filter(
+        (r): r is DocumentSignerRole => r === "employee" || r === "manager" || r === "hr",
       )
     : [];
   return {
@@ -117,17 +117,24 @@ export function validateTemplateInput(input: {
   const bodyTemplate = typeof input.bodyTemplate === "string" ? input.bodyTemplate : "";
   if (!bodyTemplate.trim()) throw new HrmDocumentsError("VALIDATION", "body template is required");
   if (!Array.isArray(input.mergeFields)) {
-    throw new HrmDocumentsError("VALIDATION", "mergeFields must be the declared list of merge keys");
+    throw new HrmDocumentsError(
+      "VALIDATION",
+      "mergeFields must be the declared list of merge keys",
+    );
   }
   const mergeFields = input.mergeFields.map((f) => String(f));
-  const unsupportedFields = mergeFields.filter((field) => !DOCUMENT_MERGE_FIELDS.includes(field as (typeof DOCUMENT_MERGE_FIELDS)[number]));
+  const unsupportedFields = mergeFields.filter(
+    (field) => !DOCUMENT_MERGE_FIELDS.includes(field as (typeof DOCUMENT_MERGE_FIELDS)[number]),
+  );
   if (unsupportedFields.length > 0) {
     throw new HrmDocumentsError(
       "VALIDATION",
       `mergeFields contains unsupported keys: ${unsupportedFields.join(", ")} — choose only declared document merge fields`,
     );
   }
-  const signerRoles = Array.isArray(input.signerRoles) ? input.signerRoles.map((r) => String(r)) : [];
+  const signerRoles = Array.isArray(input.signerRoles)
+    ? input.signerRoles.map((r) => String(r))
+    : [];
   for (const role of signerRoles) {
     if (role !== "employee" && role !== "manager" && role !== "hr") {
       throw new HrmDocumentsError(
@@ -172,12 +179,15 @@ export async function listTemplates(query: {
   includeInactive?: boolean;
 }): Promise<DocumentTemplateDTO[]> {
   await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  const rows = await db.execute<TemplateRow>(sql`
+  const rows = await db.execute<TemplateRow>(
+    sql`
     ${SELECT_COLS}
      where org_id = ${query.orgId}
        ${query.includeInactive ? sql`` : sql`and is_active`}
      order by name
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map(toDTO);
 }
 
@@ -207,7 +217,9 @@ export async function saveTemplate(input: {
     // source of truth.
     await assertCategoryDeclared(db, input.orgId, valid.categoryKey);
     if (input.templateId) {
-      const updated = (await db.execute<TemplateRow>(sql`
+      const updated = (
+        await db.execute<TemplateRow>(
+          sql`
         update hrm_document_templates
            set name = ${valid.name}, category_key = ${valid.categoryKey},
                body_template = ${valid.bodyTemplate},
@@ -220,7 +232,10 @@ export async function saveTemplate(input: {
          where org_id = ${input.orgId} and id = ${input.templateId}
         returning id, name, category_key, body_template, merge_fields, requires_signature,
                   signer_roles, acknowledgment_only, is_active
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       // Zero matched rows is a failure: unknown id or another org's row.
       if (!updated) {
         throw new HrmDocumentsError(
@@ -230,7 +245,9 @@ export async function saveTemplate(input: {
       }
       return toDTO(updated);
     }
-    const inserted = (await db.execute<TemplateRow>(sql`
+    const inserted = (
+      await db.execute<TemplateRow>(
+        sql`
       insert into hrm_document_templates
         (org_id, name, category_key, body_template, merge_fields, requires_signature,
          signer_roles, acknowledgment_only, is_active, created_by, updated_by)
@@ -240,7 +257,10 @@ export async function saveTemplate(input: {
               ${input.isActive ?? true}, ${input.actorId}, ${input.actorId})
       returning id, name, category_key, body_template, merge_fields, requires_signature,
                 signer_roles, acknowledgment_only, is_active
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) {
       throw new HrmDocumentsError(
         "REFUSED",

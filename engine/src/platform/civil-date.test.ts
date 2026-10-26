@@ -64,7 +64,16 @@ test("civil leap years: 0096 is leap, 0100 is not", () => {
 });
 
 test("isoFromCivilDayIndex inverts civilDayIndex at the boundaries", () => {
-  for (const iso of ["0001-01-01", "0096-02-29", "0099-12-31", "0100-01-01", "1999-12-31", "2000-01-01", "2026-08-21", "9999-12-31"]) {
+  for (const iso of [
+    "0001-01-01",
+    "0096-02-29",
+    "0099-12-31",
+    "0100-01-01",
+    "1999-12-31",
+    "2000-01-01",
+    "2026-08-21",
+    "9999-12-31",
+  ]) {
     assert.equal(isoFromCivilDayIndex(civilDayIndex(iso)), iso);
   }
 });
@@ -96,20 +105,11 @@ test("utcDateFromParts carries out-of-range time into the date like Date.UTC", (
     [2026, 11, 31, 24, 0, 0, 0, "2027-01-01T00:00:00.000Z"],
   ];
   for (const [y, mo, d, h, mi, s, ms, want] of cases) {
-    assert.equal(
-      utcDateFromParts(y, mo, d, h, mi, s, ms).getTime(),
-      new Date(want).getTime(),
-    );
+    assert.equal(utcDateFromParts(y, mo, d, h, mi, s, ms).getTime(), new Date(want).getTime());
   }
   // The same carries across the 0099/0100 boundary keep the literal year.
-  assert.equal(
-    utcDateFromParts(99, 11, 31, 24).toISOString().slice(0, 10),
-    "0100-01-01",
-  );
-  assert.equal(
-    utcDateFromParts(100, 0, 1, -1).toISOString().slice(0, 10),
-    "0099-12-31",
-  );
+  assert.equal(utcDateFromParts(99, 11, 31, 24).toISOString().slice(0, 10), "0100-01-01");
+  assert.equal(utcDateFromParts(100, 0, 1, -1).toISOString().slice(0, 10), "0099-12-31");
 });
 
 test("civilDateFromParts renders zero-padded YYYY-MM-DD", () => {
@@ -153,8 +153,20 @@ test("month steps clamp to the target month's end and walk back across years", (
 test("civilDayIndex counts every calendar day consecutively and matches the platform calendar", () => {
   const MS_DAY = 86_400_000;
   // Walk every day of several leap cycles and the calendar's ends.
-  for (const [from, to] of [["0001-01-01", "0005-12-31"], ["1896-01-01", "1904-12-31"], ["1968-06-01", "2032-12-31"], ["2096-01-01", "2104-12-31"], ["9996-01-01", "9999-12-31"]] as [string, string][]) {
-    let expected = Math.round(utcDateFromParts(Number(from.slice(0, 4)), Number(from.slice(5, 7)) - 1, Number(from.slice(8, 10))).getTime() / MS_DAY);
+  for (const [from, to] of [
+    ["0001-01-01", "0005-12-31"],
+    ["1896-01-01", "1904-12-31"],
+    ["1968-06-01", "2032-12-31"],
+    ["2096-01-01", "2104-12-31"],
+    ["9996-01-01", "9999-12-31"],
+  ] as [string, string][]) {
+    let expected = Math.round(
+      utcDateFromParts(
+        Number(from.slice(0, 4)),
+        Number(from.slice(5, 7)) - 1,
+        Number(from.slice(8, 10)),
+      ).getTime() / MS_DAY,
+    );
     for (let iso: string = from; ; iso = addCalendarDays(iso, 1)) {
       assert.equal(civilDayIndex(iso), expected, iso);
       if (iso === to) break;

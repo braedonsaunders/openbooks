@@ -17,7 +17,9 @@
  */
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateCount, type PayrollCertificate,
+  certificateAmount,
+  certificateCount,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -29,7 +31,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/sc.ts";
 
 export interface ScYearRates {
@@ -66,19 +72,25 @@ const SC_EDITIONS_BY_YEAR: Record<number, ScYearRates> = {
   [SC_RATES_2026.year]: SC_RATES_2026,
 };
 
-export const SC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "WH-1603F 2026 SC Withholding Tax Formula",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "South Carolina Department of Revenue, WH-1603F, 2026 SC Withholding Tax Formula "
-    + "— $5,000 per allowance, 10% / $7,500 standard deduction, subtraction and "
-    + "addition methods, $750 weekly 3-allowance example",
-  status: "published",
-  region: "SC",
-}];
+export const SC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "WH-1603F 2026 SC Withholding Tax Formula",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "South Carolina Department of Revenue, WH-1603F, 2026 SC Withholding Tax Formula " +
+      "— $5,000 per allowance, 10% / $7,500 standard deduction, subtraction and " +
+      "addition methods, $750 weekly 3-allowance example",
+    status: "published",
+    region: "SC",
+  },
+];
 
-export function scStandardDeduction(annualWages: bigint, allowances: number, rates: ScYearRates): bigint {
+export function scStandardDeduction(
+  annualWages: bigint,
+  allowances: number,
+  rates: ScYearRates,
+): bigint {
   if (allowances <= 0) return 0n;
   const tenPercent = mulRateCents(annualWages, rates.standardDeductionRate);
   const cap = U(rates.standardDeductionCap);
@@ -102,7 +114,12 @@ function compute(
   const P = context.requirePeriodsPerYear();
   const { factors, trace } = context;
 
-  const exempt = context.exemptResult({ factorKey: "SC_EXEMPT", factorFormat: "decimal", statutoryTax: true, additionalWithholding: true });
+  const exempt = context.exemptResult({
+    factorKey: "SC_EXEMPT",
+    factorFormat: "decimal",
+    statutoryTax: true,
+    additionalWithholding: true,
+  });
   if (exempt) return exempt;
 
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
@@ -195,16 +212,17 @@ export const SC_CERTIFICATE: PayrollCertificate = {
   purpose: "withholding",
   // SCDOR requires a replacement exempt certificate by February 15 each year.
   validity: {
-    kind: "following_year_date", monthDay: "02-15",
+    kind: "following_year_date",
+    monthDay: "02-15",
     appliesWhen: { field: "exempt", values: ["true"] },
   },
   citation:
-    "South Carolina Department of Revenue, WH-1603F, 2026 SC Withholding Tax Formula; "
-    + "Form SC W-4 (2026), https://dor.sc.gov/sites/dor/files/forms/SCW4_2026.pdf; "
-    + "SCDOR Withholding FAQs, https://dor.sc.gov/withholding/withholding-faqs-refund-procedures",
+    "South Carolina Department of Revenue, WH-1603F, 2026 SC Withholding Tax Formula; " +
+    "Form SC W-4 (2026), https://dor.sc.gov/sites/dor/files/forms/SCW4_2026.pdf; " +
+    "SCDOR Withholding FAQs, https://dor.sc.gov/withholding/withholding-faqs-refund-procedures",
   summary:
-    "Sets South Carolina allowances and extra withholding. If a new employee does "
-    + "not provide an SC W-4, SCDOR requires the employer to withhold at zero allowances.",
+    "Sets South Carolina allowances and extra withholding. If a new employee does " +
+    "not provide an SC W-4, SCDOR requires the employer to withhold at zero allowances.",
   storage: "certificate_rows",
   fields: [
     {
@@ -215,8 +233,8 @@ export const SC_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each allowance is $5,000 a year. Zero allowances also forces the standard "
-        + "deduction to $0. Default zero is SCDOR's own rule when no SC W-4 is on file.",
+        "Each allowance is $5,000 a year. Zero allowances also forces the standard " +
+        "deduction to $0. Default zero is SCDOR's own rule when no SC W-4 is on file.",
     },
     {
       key: "additional_per_period",
@@ -231,9 +249,9 @@ export const SC_CERTIFICATE: PayrollCertificate = {
       label: "Line 7 — Exempt from South Carolina withholding",
       kind: "flag",
       help:
-        "The exemption expires December 31. To keep it, file a new SC W-4 by February 15; "
-        + "if none is received by then, SCDOR requires single with zero allowances. A current "
-        + "Exempt on line 7 withholds zero.",
+        "The exemption expires December 31. To keep it, file a new SC W-4 by February 15; " +
+        "if none is received by then, SCDOR requires single with zero allowances. A current " +
+        "Exempt on line 7 withholds zero.",
     },
   ],
 };
@@ -250,6 +268,6 @@ export const SC_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "SCDOR Revenue Ruling 22-3; WH-1603F, 2026 SC Withholding Tax Formula; "
-    + "Form SC W-4 (2026); WH-105",
+    "SCDOR Revenue Ruling 22-3; WH-1603F, 2026 SC Withholding Tax Formula; " +
+    "Form SC W-4 (2026); WH-105",
 };

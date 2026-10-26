@@ -1,14 +1,7 @@
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  DetailHeader,
-} from '@openbooks/ui'
-import { useTranslations } from 'next-intl'
-import { revokeAccessAction, setSuperAdminAction } from '../../actions'
-import { PlatformMutationButton } from '../../_components/PlatformMutationButton'
+import { Badge, Card, CardContent, CardHeader, CardTitle, DetailHeader } from "@openbooks/ui";
+import { useTranslations } from "next-intl";
+import { revokeAccessAction, setSuperAdminAction } from "../../actions";
+import { PlatformMutationButton } from "../../_components/PlatformMutationButton";
 
 /**
  * Pieces of the platform user record that the page and the widget registry share.
@@ -29,16 +22,16 @@ export function PlatformUserHeader({
   backHref,
   backLabel,
 }: {
-  userId: string
-  name: string
-  subtitle: string
-  isActive: boolean
-  isSuperAdmin: boolean
-  isSelf: boolean
-  backHref: string
-  backLabel: string
+  userId: string;
+  name: string;
+  subtitle: string;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+  isSelf: boolean;
+  backHref: string;
+  backLabel: string;
 }) {
-  const t = useTranslations('platform.users')
+  const t = useTranslations("platform.users");
   return (
     <DetailHeader
       back={{ href: backHref, label: backLabel }}
@@ -46,26 +39,30 @@ export function PlatformUserHeader({
       subtitle={subtitle}
       badge={
         <div className="flex items-center gap-2">
-          <Badge variant={isActive ? 'success' : 'secondary'}>
-            {isActive ? t('statuses.active') : t('statuses.inactive')}
+          <Badge variant={isActive ? "success" : "secondary"}>
+            {isActive ? t("statuses.active") : t("statuses.inactive")}
           </Badge>
-          {isSuperAdmin ? <Badge variant="warning">{t('statuses.superAdmin')}</Badge> : null}
+          {isSuperAdmin ? <Badge variant="warning">{t("statuses.superAdmin")}</Badge> : null}
         </div>
       }
       actions={
         <PlatformMutationButton
           action={setSuperAdminAction.bind(null, userId, !isSuperAdmin)}
-          success={isSuperAdmin ? t('mutation.superAdminRevoked') : t('mutation.superAdminGranted')}
-          fallbackError={t('mutation.requestFailed')}
-          pendingLabel={t('mutation.working')}
-          variant={isSuperAdmin ? 'destructive' : 'outline'}
+          success={isSuperAdmin ? t("mutation.superAdminRevoked") : t("mutation.superAdminGranted")}
+          fallbackError={t("mutation.requestFailed")}
+          pendingLabel={t("mutation.working")}
+          variant={isSuperAdmin ? "destructive" : "outline"}
           disabled={isSelf && isSuperAdmin}
         >
-          {isSuperAdmin ? (isSelf ? t('currentOperator') : t('revokeSuperAdmin')) : t('makeSuperAdmin')}
+          {isSuperAdmin
+            ? isSelf
+              ? t("currentOperator")
+              : t("revokeSuperAdmin")
+            : t("makeSuperAdmin")}
         </PlatformMutationButton>
       }
     />
-  )
+  );
 }
 
 /** A grant's acting identity: display name over its email. */
@@ -75,35 +72,52 @@ export function GrantActingCell({ name, email }: { name: string; email: string }
       <div>{name}</div>
       <div className="text-xs text-slate-500">{email}</div>
     </>
-  )
+  );
 }
 
 /** Revoke control, or the preserved marker once a grant is already revoked. */
-export function GrantControlCell({ grantId, isActive, labels }: { grantId: string; isActive: boolean; labels?: { preserved: string; revoked: string; requestFailed: string; working: string; revoke: string } }) {
-  const t = useTranslations('platform.access')
-  if (!isActive) return <span className="text-xs text-slate-400">{labels?.preserved ?? t('historyPreserved')}</span>
+export function GrantControlCell({
+  grantId,
+  isActive,
+  labels,
+}: {
+  grantId: string;
+  isActive: boolean;
+  labels?: {
+    preserved: string;
+    revoked: string;
+    requestFailed: string;
+    working: string;
+    revoke: string;
+  };
+}) {
+  const t = useTranslations("platform.access");
+  if (!isActive)
+    return (
+      <span className="text-xs text-slate-400">{labels?.preserved ?? t("historyPreserved")}</span>
+    );
   return (
     <PlatformMutationButton
       action={revokeAccessAction.bind(null, grantId)}
-      success={labels?.revoked ?? t('mutation.revoked')}
-      fallbackError={labels?.requestFailed ?? t('mutation.requestFailed')}
-      pendingLabel={labels?.working ?? t('mutation.working')}
+      success={labels?.revoked ?? t("mutation.revoked")}
+      fallbackError={labels?.requestFailed ?? t("mutation.requestFailed")}
+      pendingLabel={labels?.working ?? t("mutation.working")}
       size="sm"
       variant="ghost"
     >
-      {labels?.revoke ?? t('revoke')}
+      {labels?.revoke ?? t("revoke")}
     </PlatformMutationButton>
-  )
+  );
 }
 
 /** The empty grants card body. */
 export function NoGrantsBody() {
-  const t = useTranslations('platform.users')
+  const t = useTranslations("platform.users");
   return (
     <CardContent className="p-5 text-sm text-slate-500 dark:text-slate-400">
-      {t('noGrants')}
+      {t("noGrants")}
     </CardContent>
-  )
+  );
 }
 
 /**
@@ -118,8 +132,8 @@ export function IdentityRecordCard({
   title,
   facts,
 }: {
-  title: string
-  facts: { label: string; value: string; mono?: boolean }[]
+  title: string;
+  facts: { label: string; value: string; mono?: boolean }[];
 }) {
   return (
     <Card className="h-fit">
@@ -132,7 +146,7 @@ export function IdentityRecordCard({
         ))}
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
@@ -142,12 +156,12 @@ function Fact({ label, value, mono = false }: { label: string; value: string; mo
       <div
         className={
           mono
-            ? 'mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-200'
-            : 'mt-1 text-slate-800 dark:text-slate-200'
+            ? "mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-200"
+            : "mt-1 text-slate-800 dark:text-slate-200"
         }
       >
         {value}
       </div>
     </div>
-  )
+  );
 }

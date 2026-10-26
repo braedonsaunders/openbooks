@@ -97,7 +97,10 @@ function requireHireStatus(value: unknown): FirstHireStatus {
   return value as FirstHireStatus;
 }
 
-function requireEffectiveWindow(effectiveFrom: unknown, effectiveTo: unknown): { from: string; to: string | null } {
+function requireEffectiveWindow(
+  effectiveFrom: unknown,
+  effectiveTo: unknown,
+): { from: string; to: string | null } {
   if (typeof effectiveFrom !== "string" || !isCivilDate(effectiveFrom)) {
     throw new HrmChangeRequestError(
       "INVALID_PAYLOAD",
@@ -132,7 +135,9 @@ function requireHireReason(reason: unknown): string {
   return reason.trim();
 }
 
-export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery): Promise<FirstEmploymentResult> {
+export async function proposeFirstEmployment(
+  query: ProposeFirstEmploymentQuery,
+): Promise<FirstEmploymentResult> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const workerPartyId = requireUuid(query.workerPartyId, "workerPartyId");
@@ -152,10 +157,15 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
 
   return withOrgTransaction(orgId, async () => {
     await assertEmploymentWorker(db, orgId, workerPartyId);
-    const subsidiary = (await db.execute<{ id: string; isActive: boolean }>(sql`
+    const subsidiary = (
+      await db.execute<{ id: string; isActive: boolean }>(
+        sql`
       select id, is_active as "isActive" from subsidiaries
        where org_id = ${orgId} and id = ${employerSubsidiaryId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!subsidiary || !subsidiary.isActive) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -167,7 +177,9 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
     // leave, and payroll for this person. Fully terminated history (or a
     // version-less shell from an interrupted hire) is not active — a rehire
     // mints or reuses an identity below.
-    const duplicate = (await db.execute<{ id: string }>(sql`
+    const duplicate = (
+      await db.execute<{ id: string }>(
+        sql`
       select e.id from worker_employments e
        where e.org_id = ${orgId} and e.worker_party_id = ${workerPartyId}
          and exists (
@@ -176,7 +188,10 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
               and v.recorded_until is null and v.status <> 'terminated'
          )
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (duplicate) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -187,7 +202,9 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
     // left exactly this behind); otherwise mint the reserved identity the
     // hire change requires. A shell for another entity stays untouched —
     // the hire names its own employer.
-    const shell = (await db.execute<{ id: string }>(sql`
+    const shell = (
+      await db.execute<{ id: string }>(
+        sql`
       select e.id from worker_employments e
        where e.org_id = ${orgId} and e.worker_party_id = ${workerPartyId}
          and e.employer_subsidiary_id = ${employerSubsidiaryId}
@@ -196,22 +213,31 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
             where v.org_id = e.org_id and v.employment_id = e.id
          )
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     let employmentId = shell?.id ?? null;
     if (employmentId === null) {
       employmentId = randomUUID();
-      const reserved = (await db.execute<{ id: string }>(sql`
+      const reserved = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision, created_by, updated_by)
         values (${employmentId}, ${orgId}, ${workerPartyId}, ${employerSubsidiaryId}, 1, ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!reserved) {
         throw new HrmChangeRequestError(
           "REFUSED",
           "the employment was not stored — no row was written; retry the hire",
         );
       }
-      const audited = await db.execute<{ id: string }>(sql`
+      const audited = await db.execute<{ id: string }>(
+        sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'worker_employments', ${employmentId}, 'insert',
                 ${JSON.stringify({
@@ -220,7 +246,9 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
                   reason,
                 })}::jsonb, ${actorId})
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (audited.length !== 1) {
         throw new HrmChangeRequestError(
           "REFUSED",
@@ -228,13 +256,18 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
         );
       }
     } else {
-      const openProposal = (await db.execute<{ id: string }>(sql`
+      const openProposal = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from hrm_employment_change_requests
          where org_id = ${orgId} and employment_id = ${employmentId}
            and status in ('draft', 'pending_approval')
            and payload ->> 'kind' = 'hire'
          limit 1
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (openProposal) {
         throw new HrmChangeRequestError(
           "BAD_STATE",

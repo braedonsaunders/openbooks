@@ -36,19 +36,69 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
   payroll_us_filing_account_employer_lineage: ["payroll_filing_accounts", "subsidiaries", "users"],
   // The closing-rate guard resolves its book, entity, period and account parents during INSERT.
-  fx_revaluation_rate_evidence: ["accounting_books", "subsidiaries", "accounting_periods", "accounts", "users"],
+  fx_revaluation_rate_evidence: [
+    "accounting_books",
+    "subsidiaries",
+    "accounting_periods",
+    "accounts",
+    "users",
+  ],
   // Financial history clone admission resolves all referenced tenant parents immediately.
   fx_rate_types: ["users"],
-  journal_lines: ["journal_entries", "accounts", "subsidiaries", "accounting_periods", "parties", "departments", "projects", "locations", "classes", "equipment_units", "payment_cards", "tax_codes"],
+  journal_lines: [
+    "journal_entries",
+    "accounts",
+    "subsidiaries",
+    "accounting_periods",
+    "parties",
+    "departments",
+    "projects",
+    "locations",
+    "classes",
+    "equipment_units",
+    "payment_cards",
+    "tax_codes",
+  ],
   account_translation_policies: ["accounts", "users"],
-  subsidiary_accounting_preferences: ["subsidiaries", "fiscal_calendars", "fx_rate_types", "form_layouts", "users"],
+  subsidiary_accounting_preferences: [
+    "subsidiaries",
+    "fiscal_calendars",
+    "fx_rate_types",
+    "form_layouts",
+    "users",
+  ],
   segment_balancing_policies: ["segment_definitions", "accounts", "users"],
   gl_audit_number_policies: ["subsidiaries", "users"],
-  gl_audit_number_assignments: ["gl_audit_number_policies", "journal_entries", "journal_lines", "accounting_periods", "accounting_books", "subsidiaries", "users"],
-  rebate_agreements: ["accounts", "parties", "customer_roles", "vendor_roles", "classes", "items", "tax_codes", "users"],
+  gl_audit_number_assignments: [
+    "gl_audit_number_policies",
+    "journal_entries",
+    "journal_lines",
+    "accounting_periods",
+    "accounting_books",
+    "subsidiaries",
+    "users",
+  ],
+  rebate_agreements: [
+    "accounts",
+    "parties",
+    "customer_roles",
+    "vendor_roles",
+    "classes",
+    "items",
+    "tax_codes",
+    "users",
+  ],
   // Budget guards resolve their book, scenario and accounting dimensions during INSERT.
   budget_scenarios: ["accounting_books", "users"],
-  budget_lines: ["budget_scenarios", "accounts", "accounting_periods", "departments", "projects", "locations", "classes"],
+  budget_lines: [
+    "budget_scenarios",
+    "accounts",
+    "accounting_periods",
+    "departments",
+    "projects",
+    "locations",
+    "classes",
+  ],
   // Tender replay validates and locks the copied parent even under clone authority.
   document_tenders: ["documents"],
   // Physical identity and ownership guards resolve parents during INSERT.
@@ -56,7 +106,13 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   // Custody admission must observe the complete valued movement and layer history.
   cost_layers: ["inventory_movements"],
   serials: ["lots"],
-  consignment_stock: ["item_inventory_profiles", "stock_locations", "lots", "serials", "cost_layers"],
+  consignment_stock: [
+    "item_inventory_profiles",
+    "stock_locations",
+    "lots",
+    "serials",
+    "cost_layers",
+  ],
   // These ownership guards resolve parents before deferred FKs are checked.
   project_financial_adjustments: ["projects"],
   operating_profile_scopes: ["operating_profiles"],
@@ -75,7 +131,14 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   // Deferred FKs cannot admit child-first writes inside the cyclic tail.
   field_tickets: ["documents", "parties", "users"],
   // The certification guard resolves its native ticket, project, legal entity and retained file version during INSERT.
-  field_ticket_source_certifications: ["documents", "projects", "subsidiaries", "files", "file_versions", "users"],
+  field_ticket_source_certifications: [
+    "documents",
+    "projects",
+    "subsidiaries",
+    "files",
+    "file_versions",
+    "users",
+  ],
   field_ticket_labor_snapshots: ["field_tickets", "documents", "users"],
   field_ticket_signatures: ["field_tickets", "files"],
   field_ticket_labor_lines: [
@@ -90,9 +153,20 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   ],
   // The return line guard reads its return, line, source and scrap movements and location during INSERT.
   rma_documents: ["documents"],
-  rma_lines: ["rma_documents", "document_lines", "documents", "inventory_movements", "stock_locations"],
+  rma_lines: [
+    "rma_documents",
+    "document_lines",
+    "documents",
+    "inventory_movements",
+    "stock_locations",
+  ],
   // The match guard reads its reconciliation, statement line and journal line during INSERT.
-  reconciliation_matches: ["reconciliations", "bank_statement_lines", "journal_lines", "journal_entries"],
+  reconciliation_matches: [
+    "reconciliations",
+    "bank_statement_lines",
+    "journal_lines",
+    "journal_entries",
+  ],
 };
 
 /** Tables never copied into a sandbox: sandbox-management tables, real-world
@@ -100,13 +174,20 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
   // AP inbound mailboxes: live webhook tokens, sealed provider secrets and the delivery log stay with their source.
-  "ap_capture_mailboxes", "ap_capture_mailbox_credentials", "ap_capture_inbound_messages",
+  "ap_capture_mailboxes",
+  "ap_capture_mailbox_credentials",
+  "ap_capture_inbound_messages",
   // Exactly-once API responses and request identities never cross environment boundaries.
   "application_idempotency_keys",
   // Scheduled source instructions and reminder-producing policies are environment-specific.
-  "journal_reversal_instructions", "subscription_renewal_policies", "subscription_renewal_occurrences",
+  "journal_reversal_instructions",
+  "subscription_renewal_policies",
+  "subscription_renewal_occurrences",
   // Executable warehouse suggestions and wave releases belong to the source environment.
-  "warehouse_execution_tasks", "warehouse_scan_events", "pick_waves", "pick_wave_members",
+  "warehouse_execution_tasks",
+  "warehouse_scan_events",
+  "pick_waves",
+  "pick_wave_members",
   // Carts parked at a register are working state of the source environment.
   "pos_held_carts",
   // Equity action requests wait on the source environment's Flow gates.
@@ -265,12 +346,10 @@ export const UNREBASED_REFS: ReadonlySet<string> = new Set<string>([]);
 
 /** Source-row filter for the org-less rebased tables (they have no org_id). */
 export const PARENT_FILTER: Record<string, (prodOrg: string) => string> = {
-  file_versions: (o) =>
-    `file_id in (select id from files where org_id = '${o}')`,
+  file_versions: (o) => `file_id in (select id from files where org_id = '${o}')`,
   file_blobs: (o) =>
     `version_id in (select fv.id from file_versions fv join files f on f.id = fv.file_id where f.org_id = '${o}')`,
-  tax_group_members: (o) =>
-    `tax_group_id in (select id from tax_groups where org_id = '${o}')`,
+  tax_group_members: (o) => `tax_group_id in (select id from tax_groups where org_id = '${o}')`,
 };
 
 export interface ColumnInfo {
@@ -332,15 +411,21 @@ export async function loadCatalog(): Promise<Catalog> {
   // the columns that are copied. Every enumeration that feeds a write must
   // declare this stance (engine/src/testing/column-enumerations.ts).
   const colsRes = await db.execute<{
-    table_name: string; column_name: string; udt_name: string; is_nullable: string;
-  }>(sql`
+    table_name: string;
+    column_name: string;
+    udt_name: string;
+    is_nullable: string;
+  }>(
+    sql`
     select c.table_name, c.column_name, c.data_type, c.udt_name, c.is_nullable
       from information_schema.columns c
       join information_schema.tables t
         on t.table_name = c.table_name and t.table_schema = c.table_schema
      where c.table_schema = 'public' and t.table_type = 'BASE TABLE'
        and c.is_generated = 'NEVER'
-     order by c.table_name, c.ordinal_position`, "objects");
+     order by c.table_name, c.ordinal_position`,
+    "objects",
+  );
 
   // Foreign-key edges: (table, column) → referenced table + delete behavior.
   // Use pg_catalog OIDs, not the information_schema constraint-name joins.
@@ -348,8 +433,13 @@ export async function loadCatalog(): Promise<Catalog> {
   // common generated names across a large ERP catalog and made sandbox
   // provisioning spend minutes in introspection.
   const fkRes = await db.execute<{
-    table_name: string; column_name: string; ref_table: string; delete_rule: string; is_deferrable: string;
-  }>(sql`
+    table_name: string;
+    column_name: string;
+    ref_table: string;
+    delete_rule: string;
+    is_deferrable: string;
+  }>(
+    sql`
     select source.relname as table_name,
            source_column.attname as column_name,
            target.relname as ref_table,
@@ -373,7 +463,9 @@ export async function loadCatalog(): Promise<Catalog> {
        and source_column.attnum = con.conkey[position]
      where con.contype = 'f'
        and source_namespace.nspname = 'public'
-     order by source.relname, con.conname, position`, "objects");
+     order by source.relname, con.conname, position`,
+    "objects",
+  );
 
   const byTable = new Map<string, TableInfo>();
   for (const r of colsRes) {
@@ -412,14 +504,17 @@ export async function loadCatalog(): Promise<Catalog> {
 
   // uuid columns inside a UNIQUE index that omits org_id — must be force-rebased or
   // the copy collides with prod's own row (the key is global, not per-tenant).
-  const uqRes = await db.execute<{ table_name: string; column_name: string }>(sql`
+  const uqRes = await db.execute<{ table_name: string; column_name: string }>(
+    sql`
     select ix.indrelid::regclass::text as table_name, a.attname as column_name
       from pg_index ix
       join pg_attribute a on a.attrelid = ix.indrelid and a.attnum = any(ix.indkey)
      where ix.indisunique and a.atttypid = 'uuid'::regtype
        and exists (select 1 from pg_attribute o where o.attrelid = ix.indrelid and o.attname = 'org_id' and not o.attisdropped)
        and not exists (select 1 from pg_attribute o2 join lateral unnest(ix.indkey) kk(n) on o2.attnum = kk.n
-                        where o2.attrelid = ix.indrelid and o2.attname = 'org_id')`, "objects");
+                        where o2.attrelid = ix.indrelid and o2.attname = 'org_id')`,
+    "objects",
+  );
   for (const r of uqRes) {
     const t = byTable.get(r.table_name);
     if (t && r.column_name !== "id" && r.column_name !== "org_id") t.forceRebase.add(r.column_name);
@@ -437,22 +532,30 @@ export async function loadCatalog(): Promise<Catalog> {
   if (unclassified.length || stale.length) {
     throw new Error(
       `sandbox clone table policy is out of date; classify new tenant tables (${unclassified.join(", ") || "none"}) ` +
-      `and remove retired tables (${stale.join(", ") || "none"})`,
+        `and remove retired tables (${stale.join(", ") || "none"})`,
     );
   }
-  const policySkips = new Set(Object.entries(policies)
-    .filter(([, policy]) => policy === "skip:no-copy")
-    .map(([name]) => name));
+  const policySkips = new Set(
+    Object.entries(policies)
+      .filter(([, policy]) => policy === "skip:no-copy")
+      .map(([name]) => name),
+  );
   const tenantExclusions = new Set([...EXCLUDE].filter((name) => tenantSet.has(name)));
-  const exclusionDrift = [...new Set([...tenantExclusions, ...policySkips])]
-    .filter((name) => tenantExclusions.has(name) !== policySkips.has(name));
+  const exclusionDrift = [...new Set([...tenantExclusions, ...policySkips])].filter(
+    (name) => tenantExclusions.has(name) !== policySkips.has(name),
+  );
   if (exclusionDrift.length) {
-    throw new Error(`sandbox clone skip policies disagree with exclusion rationale for: ${exclusionDrift.join(", ")}`);
+    throw new Error(
+      `sandbox clone skip policies disagree with exclusion rationale for: ${exclusionDrift.join(", ")}`,
+    );
   }
-  const parentFilterDrift = [...tenantSet].filter((name) =>
-    (policies[name] === "clone:parent-filter") !== (name in PARENT_FILTER));
+  const parentFilterDrift = [...tenantSet].filter(
+    (name) => (policies[name] === "clone:parent-filter") !== name in PARENT_FILTER,
+  );
   if (parentFilterDrift.length) {
-    throw new Error(`sandbox clone parent-filter policies disagree for: ${parentFilterDrift.join(", ")}`);
+    throw new Error(
+      `sandbox clone parent-filter policies disagree for: ${parentFilterDrift.join(", ")}`,
+    );
   }
   const rebaseSet = new Set([...tenantSet].filter((name) => policies[name] !== "skip:no-copy"));
 
@@ -464,7 +567,8 @@ export async function loadCatalog(): Promise<Catalog> {
   // org_id (the copied prod key collides with prod's own row). Rebase iff the
   // inferred target is a table we actually clone. Only fills gaps — real FKs win.
   const allTables = new Set(byTable.keys());
-  const plural = (s: string) => (s.endsWith("s") ? s : s.endsWith("y") ? s.slice(0, -1) + "ies" : s + "s");
+  const plural = (s: string) =>
+    s.endsWith("s") ? s : s.endsWith("y") ? s.slice(0, -1) + "ies" : s + "s";
   const inferRef = (col: string): string | null => {
     const base = col.slice(0, -3); // strip "_id"
     const last = base.split("_").pop()!;
@@ -476,7 +580,14 @@ export async function loadCatalog(): Promise<Catalog> {
   for (const t of byTable.values()) {
     if (!rebaseSet.has(t.name)) continue;
     for (const c of t.columns) {
-      if (!c.isUuid || c.name === "id" || c.name === "org_id" || t.fks[c.name] || !c.name.endsWith("_id")) continue;
+      if (
+        !c.isUuid ||
+        c.name === "id" ||
+        c.name === "org_id" ||
+        t.fks[c.name] ||
+        !c.name.endsWith("_id")
+      )
+        continue;
       const ref = inferRef(c.name);
       if (ref && rebaseSet.has(ref)) {
         t.fks[c.name] = ref;
@@ -579,7 +690,8 @@ export function deletionOrder(cat: Catalog): string[] {
     if (!tailSet.has(t.name)) continue;
     for (const [column, ref] of Object.entries(t.fks)) {
       const rule = t.fkDeleteRules[column];
-      if (ref === t.name || !tailSet.has(ref) || rule === "CASCADE" || rule === "SET NULL") continue;
+      if (ref === t.name || !tailSet.has(ref) || rule === "CASCADE" || rule === "SET NULL")
+        continue;
       if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
       if (rule !== "RESTRICT" && t.hardFks[column] !== ref) continue;
       if (immediateDeps.get(t.name)!.has(ref)) continue;

@@ -45,9 +45,8 @@ const mockAuthz = `
 // most recently registered hooks run first: importing it here keeps this
 // file's session mock ahead of that forwarder for the factory's late
 // "@/lib/authz" gate import.
-const { installTestExtension, disableTestExtension } = await import(
-  "@openbooks/engine/testing/extension-packages"
-);
+const { installTestExtension, disableTestExtension } =
+  await import("@openbooks/engine/testing/extension-packages");
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // The route factory resolves its session gate through the "@/lib/authz"
@@ -65,7 +64,10 @@ registerHooks({
 });
 const routeUrl = "./route.ts?admin-roles-integration";
 const { POST, PATCH, DELETE, GET } = (await import(routeUrl)) as typeof import("./route.ts");
-function call(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>): Promise<Response> {
+function call(
+  method: "POST" | "PATCH" | "DELETE",
+  body: Record<string, unknown>,
+): Promise<Response> {
   const handler = method === "POST" ? POST : method === "PATCH" ? PATCH : DELETE;
   return handler(
     new Request("http://openbooks.test/api/admin/roles", {
@@ -77,27 +79,39 @@ function call(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>
 }
 
 async function rolePermissions(roleId: string): Promise<string[]> {
-  const r = await db.execute<{ permissions: string[] }>(sql`select permissions from app_roles where id = ${roleId}`, "objects");
+  const r = await db.execute<{ permissions: string[] }>(
+    sql`select permissions from app_roles where id = ${roleId}`,
+    "objects",
+  );
   return r[0]?.permissions ?? [];
 }
 
 async function roleIdByKey(orgId: string, key: string): Promise<string> {
-  const r = await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${orgId} and key = ${key}`, "objects");
+  const r = await db.execute<{ id: string }>(
+    sql`select id from app_roles where org_id = ${orgId} and key = ${key}`,
+    "objects",
+  );
   assert.ok(r[0], `role ${key} exists`);
   return r[0]!.id;
 }
 
 async function createRole(orgId: string, key: string, permissions: string[]): Promise<string> {
-  const r = await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     insert into app_roles (org_id, key, name, is_built_in, permissions)
     values (${orgId}, ${key}, ${key}, false, ${JSON.stringify(permissions)}::jsonb)
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   return r[0]!.id;
 }
 
 async function userRoleIds(orgId: string, userId: string): Promise<string[]> {
-  const r = await db.execute<{ role_id: string }>(sql`
-    select role_id from role_assignments where org_id = ${orgId} and user_id = ${userId} order by role_id`, "objects");
+  const r = await db.execute<{ role_id: string }>(
+    sql`
+    select role_id from role_assignments where org_id = ${orgId} and user_id = ${userId} order by role_id`,
+    "objects",
+  );
   return r.map((row) => row.role_id);
 }
 
@@ -124,12 +138,19 @@ async function seed(actorPermissions: string[]): Promise<Fixture> {
 test("ID2: an administrator holding only admin.roles.manage cannot widen their own role to the catalogue", async () => {
   const f = await seed(["admin.roles.manage"]);
   try {
-    const response = await call("PATCH", { id: f.actorRoleId, permissions: [...PERMISSION_CATALOGUE] });
+    const response = await call("PATCH", {
+      id: f.actorRoleId,
+      permissions: [...PERMISSION_CATALOGUE],
+    });
     assert.equal(response.status, 403);
     const body = (await response.json()) as { error: string; missing?: string[] };
     assert.match(body.error, /gl\.post/);
     assert.ok(Array.isArray(body.missing) && body.missing.includes("admin.users.manage"));
-    assert.deepEqual(await rolePermissions(f.actorRoleId), ["admin.roles.manage"], "the role is untouched");
+    assert.deepEqual(
+      await rolePermissions(f.actorRoleId),
+      ["admin.roles.manage"],
+      "the role is untouched",
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(f.orgId);
@@ -142,10 +163,16 @@ test("ID2: a role may only be created, or grow, inside the actor's own permissio
     const refused = await call("POST", { name: "Escalated", permissions: ["gl.read", "gl.post"] });
     assert.equal(refused.status, 403);
     assert.deepEqual(((await refused.json()) as { missing: string[] }).missing, ["gl.post"]);
-    const missing = await db.execute(sql`select 1 from app_roles where org_id = ${f.orgId} and key = 'escalated'`, "objects");
+    const missing = await db.execute(
+      sql`select 1 from app_roles where org_id = ${f.orgId} and key = 'escalated'`,
+      "objects",
+    );
     assert.equal(missing.length, 0, "the escalated role was not created");
 
-    const created = await call("POST", { name: "Within", permissions: ["gl.read", "ap.read", "ap.approve"] });
+    const created = await call("POST", {
+      name: "Within",
+      permissions: ["gl.read", "ap.read", "ap.approve"],
+    });
     assert.equal(created.status, 200, "module wildcards cover their keys");
     const { id } = (await created.json()) as { id: string };
 
@@ -162,7 +189,14 @@ test("ID2: a role may only be created, or grow, inside the actor's own permissio
     assert.equal(grown.status, 403);
     // New roles carry the employee self-service baseline by default (in
     // catalogue order), so the untouched role keeps it beside the grant.
-    assert.deepEqual(await rolePermissions(id), ["gl.read", "ap.read", "ap.approve", "hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
+    assert.deepEqual(await rolePermissions(id), [
+      "gl.read",
+      "ap.read",
+      "ap.approve",
+      "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+    ]);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(f.orgId);
@@ -170,21 +204,57 @@ test("ID2: a role may only be created, or grow, inside the actor's own permissio
 });
 
 test("a multi-group permission edit persists every change in one audited write, and a stale editor refuses", async () => {
-  const f = await seed(["admin.roles.manage", "gl.*", "ap.*", "ar.*", "items.*", "projects.*", "time.*", "reports.*"]);
+  const f = await seed([
+    "admin.roles.manage",
+    "gl.*",
+    "ap.*",
+    "ar.*",
+    "items.*",
+    "projects.*",
+    "time.*",
+    "reports.*",
+  ]);
   try {
     const original = ["gl.read", "ap.read", "ar.read", "items.read", "projects.read"];
     const id = await createRole(f.orgId, "field_lead", original);
-    const opened = (await db.execute<{ token: string }>(sql`select updated_at::text as token from app_roles where id = ${id}`, "objects"))[0]!.token;
-    const added = ["gl.post", "ap.create", "ap.approve", "ar.create", "items.manage", "projects.manage", "time.read", "time.manage", "time.approve", "reports.read"];
+    const opened = (
+      await db.execute<{ token: string }>(
+        sql`select updated_at::text as token from app_roles where id = ${id}`,
+        "objects",
+      )
+    )[0]!.token;
+    const added = [
+      "gl.post",
+      "ap.create",
+      "ap.approve",
+      "ar.create",
+      "items.manage",
+      "projects.manage",
+      "time.read",
+      "time.manage",
+      "time.approve",
+      "reports.read",
+    ];
     const next = [...original.filter((key) => key !== "items.read"), ...added];
     const response = await call("PATCH", { id, permissions: next, expectedUpdatedAt: opened });
     assert.equal(response.status, 200);
     const body = (await response.json()) as { role: { permissions: string[]; updatedAt: string } };
-    assert.deepEqual([...body.role.permissions].sort(), [...next].sort(), "the response is the persisted set");
-    assert.deepEqual([...await rolePermissions(id)].sort(), [...next].sort(), "every added and removed key across groups is stored");
+    assert.deepEqual(
+      [...body.role.permissions].sort(),
+      [...next].sort(),
+      "the response is the persisted set",
+    );
+    assert.deepEqual(
+      [...(await rolePermissions(id))].sort(),
+      [...next].sort(),
+      "every added and removed key across groups is stored",
+    );
     assert.notEqual(body.role.updatedAt, opened, "the version token advances");
-    const audit = await db.execute<{ changes: { permissions: [string[], string[]] } }>(sql`
-      select changes from audit_log where org_id = ${f.orgId} and table_name = 'app_roles' and row_id = ${id} and action = 'update'`, "objects");
+    const audit = await db.execute<{ changes: { permissions: [string[], string[]] } }>(
+      sql`
+      select changes from audit_log where org_id = ${f.orgId} and table_name = 'app_roles' and row_id = ${id} and action = 'update'`,
+      "objects",
+    );
     assert.equal(audit.length, 1, "one audit row for the one write");
     assert.deepEqual([...audit[0]!.changes.permissions[0]].sort(), [...original].sort());
     assert.deepEqual([...audit[0]!.changes.permissions[1]].sort(), [...next].sort());
@@ -193,7 +263,11 @@ test("a multi-group permission edit persists every change in one audited write, 
     const stale = await call("PATCH", { id, permissions: original, expectedUpdatedAt: opened });
     assert.equal(stale.status, 409);
     assert.match(((await stale.json()) as { error: string }).error, /changed after you opened it/);
-    assert.deepEqual([...await rolePermissions(id)].sort(), [...next].sort(), "the stale save changed nothing");
+    assert.deepEqual(
+      [...(await rolePermissions(id))].sort(),
+      [...next].sort(),
+      "the stale save changed nothing",
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(f.orgId);
@@ -207,7 +281,9 @@ test("ID3: deleting a role refuses to strand an active user, reassigns on reques
     const userId = await createScratchUser(f.orgId, "Only holder", "doomed");
     const doomed = await roleIdByKey(f.orgId, "doomed");
     const otherId = await createScratchUser(f.orgId, "Two roles", "other_role");
-    await db.execute(sql`insert into role_assignments (org_id, user_id, role_id) values (${f.orgId}, ${otherId}, ${doomed})`);
+    await db.execute(
+      sql`insert into role_assignments (org_id, user_id, role_id) values (${f.orgId}, ${otherId}, ${doomed})`,
+    );
     const inactiveId = await createScratchUser(f.orgId, "Departed", "doomed");
     await db.execute(sql`update users set is_active = false where id = ${inactiveId}`);
     const replacement = await createRole(f.orgId, "replacement", ["gl.read"]);
@@ -215,33 +291,78 @@ test("ID3: deleting a role refuses to strand an active user, reassigns on reques
 
     const refused = await call("DELETE", { id: doomed });
     assert.equal(refused.status, 409);
-    const body = (await refused.json()) as { error: string; affectedUsers?: { id: string }[]; affectedCount?: number };
-    assert.equal(body.affectedCount, 1, "only the active user whose sole role this is blocks deletion");
-    assert.deepEqual(body.affectedUsers?.map((u) => u.id), [userId]);
+    const body = (await refused.json()) as {
+      error: string;
+      affectedUsers?: { id: string }[];
+      affectedCount?: number;
+    };
+    assert.equal(
+      body.affectedCount,
+      1,
+      "only the active user whose sole role this is blocks deletion",
+    );
+    assert.deepEqual(
+      body.affectedUsers?.map((u) => u.id),
+      [userId],
+    );
     assert.match(body.error, /Only holder/);
-    assert.equal((await db.execute(sql`select 1 from app_roles where id = ${doomed}`, "objects")).length, 1, "role kept");
+    assert.equal(
+      (await db.execute(sql`select 1 from app_roles where id = ${doomed}`, "objects")).length,
+      1,
+      "role kept",
+    );
     assert.deepEqual(await userRoleIds(f.orgId, userId), [doomed], "assignment kept");
 
     const beyondCeiling = await call("DELETE", { id: doomed, replacementRoleId: tooWide });
     assert.equal(beyondCeiling.status, 403, "the replacement is subject to the ID2 ceiling");
-    assert.equal((await db.execute(sql`select 1 from app_roles where id = ${doomed}`, "objects")).length, 1);
+    assert.equal(
+      (await db.execute(sql`select 1 from app_roles where id = ${doomed}`, "objects")).length,
+      1,
+    );
 
     const self = await call("DELETE", { id: doomed, replacementRoleId: doomed });
     assert.equal(self.status, 400, "a role cannot replace itself");
 
     const ok = await call("DELETE", { id: doomed, replacementRoleId: replacement });
     assert.equal(ok.status, 200, await ok.text());
-    assert.equal((await db.execute(sql`select 1 from app_roles where id = ${doomed}`, "objects")).length, 0, "role deleted");
-    assert.deepEqual(await userRoleIds(f.orgId, userId), [replacement], "the stranded user now holds the replacement");
-    assert.deepEqual(await userRoleIds(f.orgId, otherId), [await roleIdByKey(f.orgId, "other_role")], "a user with another role is not widened");
-    assert.deepEqual(await userRoleIds(f.orgId, inactiveId), [], "inactive users just lose the assignment");
+    assert.equal(
+      (await db.execute(sql`select 1 from app_roles where id = ${doomed}`, "objects")).length,
+      0,
+      "role deleted",
+    );
+    assert.deepEqual(
+      await userRoleIds(f.orgId, userId),
+      [replacement],
+      "the stranded user now holds the replacement",
+    );
+    assert.deepEqual(
+      await userRoleIds(f.orgId, otherId),
+      [await roleIdByKey(f.orgId, "other_role")],
+      "a user with another role is not widened",
+    );
+    assert.deepEqual(
+      await userRoleIds(f.orgId, inactiveId),
+      [],
+      "inactive users just lose the assignment",
+    );
 
-    const audits = await db.execute<{ table_name: string; action: string; changes: Record<string, unknown> }>(sql`
+    const audits = await db.execute<{
+      table_name: string;
+      action: string;
+      changes: Record<string, unknown>;
+    }>(
+      sql`
       select table_name, action, changes from audit_log
        where org_id = ${f.orgId} and actor_id = ${f.actorId}
-       order by at, id`, "objects");
-    const assignmentDeletes = audits.filter((r) => r.table_name === "role_assignments" && r.action === "delete");
-    const assignmentInserts = audits.filter((r) => r.table_name === "role_assignments" && r.action === "insert");
+       order by at, id`,
+      "objects",
+    );
+    const assignmentDeletes = audits.filter(
+      (r) => r.table_name === "role_assignments" && r.action === "delete",
+    );
+    const assignmentInserts = audits.filter(
+      (r) => r.table_name === "role_assignments" && r.action === "insert",
+    );
     assert.equal(assignmentDeletes.length, 3, "one delete audit row per removed assignment");
     assert.deepEqual(
       assignmentDeletes.map((r) => (r.changes.userId as [string, null])[0]).sort(),
@@ -251,7 +372,10 @@ test("ID3: deleting a role refuses to strand an active user, reassigns on reques
     assert.equal(assignmentInserts.length, 1, "the replacement grant is audited");
     assert.deepEqual(assignmentInserts[0]!.changes.userId, [null, userId]);
     assert.deepEqual(assignmentInserts[0]!.changes.roleId, [null, replacement]);
-    assert.equal(audits.filter((r) => r.table_name === "app_roles" && r.action === "delete").length, 1);
+    assert.equal(
+      audits.filter((r) => r.table_name === "app_roles" && r.action === "delete").length,
+      1,
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(f.orgId);
@@ -263,13 +387,18 @@ test("ID3: a role nobody depends on still deletes cleanly and audits each remove
   try {
     const holder = await createScratchUser(f.orgId, "Holder", "keeper");
     const extra = await createRole(f.orgId, "extra", []);
-    await db.execute(sql`insert into role_assignments (org_id, user_id, role_id) values (${f.orgId}, ${holder}, ${extra})`);
+    await db.execute(
+      sql`insert into role_assignments (org_id, user_id, role_id) values (${f.orgId}, ${holder}, ${extra})`,
+    );
     const response = await call("DELETE", { id: extra });
     assert.equal(response.status, 200);
     assert.deepEqual(await userRoleIds(f.orgId, holder), [await roleIdByKey(f.orgId, "keeper")]);
-    const audits = await db.execute<{ changes: Record<string, unknown> }>(sql`
+    const audits = await db.execute<{ changes: Record<string, unknown> }>(
+      sql`
       select changes from audit_log
-       where org_id = ${f.orgId} and table_name = 'role_assignments' and action = 'delete'`, "objects");
+       where org_id = ${f.orgId} and table_name = 'role_assignments' and action = 'delete'`,
+      "objects",
+    );
     assert.equal(audits.length, 1);
     assert.deepEqual(audits[0]!.changes.userId, [holder, null]);
   } finally {
@@ -287,47 +416,83 @@ for (const method of ["POST", "PATCH", "DELETE"] as const) {
       try {
         const targetId = await createRole(f.orgId, "atomic_target", []);
         const snapshot = async () => ({
-          roles: await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`, "objects"),
-          dashboards: await db.execute(sql`select * from role_dashboard_layouts where org_id = ${f.orgId} order by id`, "objects"),
-          audit: await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`, "objects"),
+          roles: await db.execute(
+            sql`select * from app_roles where org_id = ${f.orgId} order by id`,
+            "objects",
+          ),
+          dashboards: await db.execute(
+            sql`select * from role_dashboard_layouts where org_id = ${f.orgId} order by id`,
+            "objects",
+          ),
+          audit: await db.execute(
+            sql`select * from audit_log where org_id = ${f.orgId} order by id`,
+            "objects",
+          ),
         });
-        await db.execute(sql.raw(`create function ${trigger}() returns trigger language plpgsql as $$
+        await db.execute(
+          sql.raw(`create function ${trigger}() returns trigger language plpgsql as $$
           begin
             if NEW.org_id = '${f.orgId}'::uuid and NEW.table_name = 'app_roles' then
               raise exception 'role audit storage unavailable';
             end if;
             return NEW;
-          end $$`));
-        await db.execute(sql.raw(`create trigger ${trigger} before insert on audit_log for each row execute function ${trigger}()`));
+          end $$`),
+        );
+        await db.execute(
+          sql.raw(
+            `create trigger ${trigger} before insert on audit_log for each row execute function ${trigger}()`,
+          ),
+        );
         installed = true;
-        const body = method === "POST"
-          ? { name: "Atomic role", key: "atomic_created", permissions: [] }
-          : method === "PATCH" ? { id: targetId, name: "Atomic rename" } : { id: targetId };
+        const body =
+          method === "POST"
+            ? { name: "Atomic role", key: "atomic_created", permissions: [] }
+            : method === "PATCH"
+              ? { id: targetId, name: "Atomic rename" }
+              : { id: targetId };
         const attempt = async () => {
           if (ambient) {
-            await db.execute(sql`update app_roles set description = 'earlier caller work' where id = ${targetId}`);
+            await db.execute(
+              sql`update app_roles set description = 'earlier caller work' where id = ${targetId}`,
+            );
           }
           const before = await snapshot();
           await assert.rejects(call(method, body));
-          assert.deepEqual(await snapshot(), before, "failure restores role/default/audit evidence and preserves prior caller work");
+          assert.deepEqual(
+            await snapshot(),
+            before,
+            "failure restores role/default/audit evidence and preserves prior caller work",
+          );
         };
         if (ambient) await withOrgTransaction(f.orgId, attempt);
         else await attempt();
         if (ambient) {
-          const result = await db.execute(sql`select description from app_roles where id = ${targetId}`, "objects");
+          const result = await db.execute(
+            sql`select description from app_roles where id = ${targetId}`,
+            "objects",
+          );
           assert.equal(result[0]?.description, "earlier caller work");
         }
         await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`));
         installed = false;
         const response = await call(method, body);
         assert.equal(response.status, 200);
-        const result = await response.json() as { id?: string };
+        const result = (await response.json()) as { id?: string };
         const changedId = result.id ?? targetId;
-        const evidence = await db.execute(sql`select action from audit_log where org_id = ${f.orgId}
-          and table_name = 'app_roles' and row_id = ${changedId}`, "objects");
-        assert.deepEqual(evidence.map((row) => row.action), [method === "POST" ? "insert" : method === "PATCH" ? "update" : "delete"]);
+        const evidence = await db.execute(
+          sql`select action from audit_log where org_id = ${f.orgId}
+          and table_name = 'app_roles' and row_id = ${changedId}`,
+          "objects",
+        );
+        assert.deepEqual(
+          evidence.map((row) => row.action),
+          [method === "POST" ? "insert" : method === "PATCH" ? "update" : "delete"],
+        );
         if (method === "POST") {
-          const layouts = await db.execute(sql`select id from role_dashboard_layouts where org_id = ${f.orgId} and role_key = 'atomic_created'`, "objects");
+          const layouts = await db.execute(
+            sql`select id from role_dashboard_layouts where org_id = ${f.orgId} and role_key = 'atomic_created'`,
+            "objects",
+          );
           assert.equal(layouts.length, 1);
         }
       } finally {
@@ -346,51 +511,81 @@ for (const method of ["PATCH", "DELETE"] as const) {
     const writer = await pool.connect();
     let pending: Promise<Response> | undefined;
     try {
-      const targetUserId = await createScratchUser(f.orgId, "Concurrent target", "concurrent_target");
+      const targetUserId = await createScratchUser(
+        f.orgId,
+        "Concurrent target",
+        "concurrent_target",
+      );
       const targetId = await roleIdByKey(f.orgId, "concurrent_target");
       const replacementId = await createRole(f.orgId, "concurrent_replacement", []);
       if (method === "PATCH") {
-        await db.execute(sql`update app_roles set permissions = '["gl.post"]'::jsonb where id = ${targetId}`);
+        await db.execute(
+          sql`update app_roles set permissions = '["gl.post"]'::jsonb where id = ${targetId}`,
+        );
       }
       await writer.query("begin");
       await writer.query("select set_config('app.bypass_rls', 'on', true)");
       if (method === "PATCH") {
-        await writer.query("update app_roles set permissions = '[]'::jsonb where id = $1", [targetId]);
+        await writer.query("update app_roles set permissions = '[]'::jsonb where id = $1", [
+          targetId,
+        ]);
       } else {
-        await writer.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [`openbooks:role-delete:${f.orgId}`]);
+        await writer.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          `openbooks:role-delete:${f.orgId}`,
+        ]);
       }
-      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-      const body = method === "PATCH"
-        ? { id: targetId, permissions: ["gl.post"] }
-        : { id: targetId, replacementRoleId: replacementId };
+      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
+      const body =
+        method === "PATCH"
+          ? { id: targetId, permissions: ["gl.post"] }
+          : { id: targetId, replacementRoleId: replacementId };
       pending = call(method, body);
       let blocked = false;
       for (let attempt = 0; attempt < 400; attempt++) {
-        const row = (await pool.query<{ blocked: boolean }>(
-          "select exists(select 1 from pg_stat_activity where $1::int = any(pg_blocking_pids(pid))) as blocked", [pid],
-        )).rows[0]!;
-        if (row.blocked) { blocked = true; break; }
+        const row = (
+          await pool.query<{ blocked: boolean }>(
+            "select exists(select 1 from pg_stat_activity where $1::int = any(pg_blocking_pids(pid))) as blocked",
+            [pid],
+          )
+        ).rows[0]!;
+        if (row.blocked) {
+          blocked = true;
+          break;
+        }
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       assert.ok(blocked, "request waits for the concurrent transaction");
       if (method === "DELETE") {
-        await writer.query(`update app_roles set permissions = '["gl.post"]'::jsonb where id = $1`, [replacementId]);
+        await writer.query(
+          `update app_roles set permissions = '["gl.post"]'::jsonb where id = $1`,
+          [replacementId],
+        );
       }
       await writer.query("commit");
       const response = await pending;
       assert.equal(response.status, 403);
-      assert.match((await response.json() as { error: string }).error, /gl.post/);
+      assert.match(((await response.json()) as { error: string }).error, /gl.post/);
       assert.deepEqual(await userRoleIds(f.orgId, targetUserId), [targetId]);
       if (method === "PATCH") assert.deepEqual(await rolePermissions(targetId), []);
-      const audits = await db.execute(sql`select id from audit_log where org_id = ${f.orgId} and table_name = 'app_roles'
-        and row_id = ${targetId}`, "objects");
+      const audits = await db.execute(
+        sql`select id from audit_log where org_id = ${f.orgId} and table_name = 'app_roles'
+        and row_id = ${targetId}`,
+        "objects",
+      );
       assert.equal(audits.length, 0, "refused operation adds no audit evidence");
       if (method === "DELETE") {
-        await db.execute(sql`update app_roles set permissions = '[]'::jsonb where id = ${replacementId}`);
+        await db.execute(
+          sql`update app_roles set permissions = '[]'::jsonb where id = ${replacementId}`,
+        );
       } else {
         routeState.authz!.permissions.add("gl.post");
       }
-      assert.equal((await call(method, body)).status, 200, "valid current permissions permit the retry");
+      assert.equal(
+        (await call(method, body)).status,
+        200,
+        "valid current permissions permit the retry",
+      );
     } finally {
       await writer.query("rollback");
       writer.release();
@@ -404,12 +599,23 @@ for (const method of ["PATCH", "DELETE"] as const) {
 test("role text fields reject malformed input without changing role state", async () => {
   const f = await seed(["admin.roles.manage"]);
   try {
-    const snapshot = async () => await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`, "objects");
+    const snapshot = async () =>
+      await db.execute(
+        sql`select * from app_roles where org_id = ${f.orgId} order by id`,
+        "objects",
+      );
     const before = await snapshot();
     for (const method of ["POST", "PATCH"] as const) {
-      for (const field of method === "POST" ? ["name", "key", "description"] : ["name", "description"]) {
+      for (const field of method === "POST"
+        ? ["name", "key", "description"]
+        : ["name", "description"]) {
         for (const value of [42, null, true, [], {}]) {
-          const response = await call(method, { id: f.actorRoleId, name: "Validated role", key: "validated_role", [field]: value });
+          const response = await call(method, {
+            id: f.actorRoleId,
+            name: "Validated role",
+            key: "validated_role",
+            [field]: value,
+          });
           const payload = (await response.json()) as { error: string; issues?: { path: string }[] };
           assert.equal(response.status, 400, `${method} ${field} ${JSON.stringify(value)}`);
           // Non-strings that fail the boundary contract are refused at the
@@ -427,7 +633,10 @@ test("role text fields reject malformed input without changing role state", asyn
       assert.equal((await call(method, { id: [f.actorRoleId], name: "Invalid ID" })).status, 400);
     }
     assert.deepEqual(await snapshot(), before);
-  } finally { routeState.authz = null; await dropScratchOrg(f.orgId); }
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
 });
 
 for (const mode of ["subtree", "list"] as const) {
@@ -435,26 +644,70 @@ for (const mode of ["subtree", "list"] as const) {
     const f = await seed(["admin.roles.manage"]);
     const other = await createScratchOrg();
     try {
-      const subsidiaryId = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${f.orgId} order by id limit 1`, "objects"))[0]!.id;
-      const foreignId = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${other.orgId} order by id limit 1`, "objects"))[0]!.id;
-      const restriction = (id: string) => mode === "subtree"
-        ? { mode, subsidiaryId: id.toUpperCase() }
-        : { mode, subsidiaryIds: [id.toUpperCase(), id] };
-      const create = await call("POST", { name: "Scope role", key: "scope_role", subsidiaryRestriction: restriction(subsidiaryId) });
+      const subsidiaryId = (
+        await db.execute<{ id: string }>(
+          sql`select id from subsidiaries where org_id = ${f.orgId} order by id limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      const foreignId = (
+        await db.execute<{ id: string }>(
+          sql`select id from subsidiaries where org_id = ${other.orgId} order by id limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      const restriction = (id: string) =>
+        mode === "subtree"
+          ? { mode, subsidiaryId: id.toUpperCase() }
+          : { mode, subsidiaryIds: [id.toUpperCase(), id] };
+      const create = await call("POST", {
+        name: "Scope role",
+        key: "scope_role",
+        subsidiaryRestriction: restriction(subsidiaryId),
+      });
       assert.equal(create.status, 200);
-      const { id } = await create.json() as { id: string };
-      const expected = mode === "subtree" ? { mode, subsidiaryId } : { mode, subsidiaryIds: [subsidiaryId] };
-      const read = async () => (await db.execute(sql`select subsidiary_restriction from app_roles where id = ${id}`, "objects"))[0]!.subsidiary_restriction;
-      assert.deepEqual([await read(), (await import("../../../../lib/subsidiary-restriction-display.ts")).asSubsidiaryRestriction({ mode: "unknown" })], [expected, { mode: "invalid" }]);
-      assert.equal((await call("PATCH", { id: id.toUpperCase(), subsidiaryRestriction: restriction(subsidiaryId) })).status, 200);
-      assert.equal((await call("PATCH", { id, subsidiaryRestriction: restriction(foreignId) })).status, 400);
+      const { id } = (await create.json()) as { id: string };
+      const expected =
+        mode === "subtree" ? { mode, subsidiaryId } : { mode, subsidiaryIds: [subsidiaryId] };
+      const read = async () =>
+        (
+          await db.execute(
+            sql`select subsidiary_restriction from app_roles where id = ${id}`,
+            "objects",
+          )
+        )[0]!.subsidiary_restriction;
+      assert.deepEqual(
+        [
+          await read(),
+          (
+            await import("../../../../lib/subsidiary-restriction-display.ts")
+          ).asSubsidiaryRestriction({ mode: "unknown" }),
+        ],
+        [expected, { mode: "invalid" }],
+      );
+      assert.equal(
+        (
+          await call("PATCH", {
+            id: id.toUpperCase(),
+            subsidiaryRestriction: restriction(subsidiaryId),
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await call("PATCH", { id, subsidiaryRestriction: restriction(foreignId) })).status,
+        400,
+      );
       assert.deepEqual(await read(), expected);
       assert.equal((await call("DELETE", { id, replacementRoleId: id.toUpperCase() })).status, 400);
       assert.equal((await call("DELETE", { id: id.toUpperCase() })).status, 200);
-    } finally { routeState.authz = null; await dropScratchOrg(f.orgId); await dropScratchOrg(other.orgId); }
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(f.orgId);
+      await dropScratchOrg(other.orgId);
+    }
   });
 }
-
 
 test("module permission declarations are tenant-scoped, explicitly grantable inside the ceiling, and withdrawn without erasing stored grants", async () => {
   const f = await seed(["*"]);
@@ -469,27 +722,66 @@ test("module permission declarations are tenant-scoped, explicitly grantable ins
   const scopedRolePermissions = (roleId: string) =>
     withOrgContext(f.orgId, () => rolePermissions(roleId));
   try {
-    await installTestExtension({orgId:f.orgId,actorId:f.actorId,manifest:{key:'role-addon',name:'Role addon',version:'1.0.0',permissions:['admin.roles.manage'],contributions:[{kind:'permission',key:'role_addon.read',label:'Read role addon'}]}});
+    await installTestExtension({
+      orgId: f.orgId,
+      actorId: f.actorId,
+      manifest: {
+        key: "role-addon",
+        name: "Role addon",
+        version: "1.0.0",
+        permissions: ["admin.roles.manage"],
+        contributions: [{ kind: "permission", key: "role_addon.read", label: "Read role addon" }],
+      },
+    });
     const available = await (await scopedGet()).json();
-    assert.ok(available.permissions.some((permission: { key: string }) => permission.key === "role_addon.read"));
-    const created = await scopedCall("POST", { name: "Addon reader", permissions: ["role_addon.read"] });
+    assert.ok(
+      available.permissions.some(
+        (permission: { key: string }) => permission.key === "role_addon.read",
+      ),
+    );
+    const created = await scopedCall("POST", {
+      name: "Addon reader",
+      permissions: ["role_addon.read"],
+    });
     assert.equal(created.status, 200);
-    const { id } = await created.json() as { id: string };
+    const { id } = (await created.json()) as { id: string };
     routeState.authz!.permissions = new Set(["admin.roles.manage"]);
-    assert.equal((await scopedCall("POST", { name: "Beyond ceiling", permissions: ["role_addon.read"] })).status, 403);
+    assert.equal(
+      (await scopedCall("POST", { name: "Beyond ceiling", permissions: ["role_addon.read"] }))
+        .status,
+      403,
+    );
     routeState.authz!.user.orgId = other.orgId;
     assert.deepEqual((await (await scopedGet()).json()).permissions, []);
     routeState.authz!.user.orgId = f.orgId;
     routeState.authz!.permissions = new Set(["*"]);
-    await withOrgContext(f.orgId, () => disableTestExtension({ orgId: f.orgId, actorId: f.actorId, key: "role-addon" }));
+    await withOrgContext(f.orgId, () =>
+      disableTestExtension({ orgId: f.orgId, actorId: f.actorId, key: "role-addon" }),
+    );
     assert.deepEqual((await (await scopedGet()).json()).permissions, []);
     // Creation unions the employee self-service baseline (catalogue order,
     // extension keys last), so the stored set is the grant plus the trio.
-    assert.deepEqual(await scopedRolePermissions(id), ["hrm.leave.request", "hrm.self.read", "hrm.self.request", "role_addon.read"]);
-    assert.equal((await scopedCall("POST", { name: "Inactive permission", permissions: ["role_addon.read"] })).status, 400);
-    assert.equal((await scopedCall("PATCH", { id, permissions: ["role_addon.read", "gl.read"] })).status, 200);
+    assert.deepEqual(await scopedRolePermissions(id), [
+      "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+      "role_addon.read",
+    ]);
+    assert.equal(
+      (await scopedCall("POST", { name: "Inactive permission", permissions: ["role_addon.read"] }))
+        .status,
+      400,
+    );
+    assert.equal(
+      (await scopedCall("PATCH", { id, permissions: ["role_addon.read", "gl.read"] })).status,
+      200,
+    );
     assert.equal((await scopedCall("PATCH", { id, permissions: ["gl.read"] })).status, 200);
-  } finally { routeState.authz = null; await dropScratchOrg(f.orgId); await dropScratchOrg(other.orgId); }
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(f.orgId);
+    await dropScratchOrg(other.orgId);
+  }
 });
 
 test("new roles carry the self-service baseline by default; an explicit opt-out stores exactly the sent set", async () => {
@@ -498,17 +790,34 @@ test("new roles carry the self-service baseline by default; an explicit opt-out 
     const created = await call("POST", { name: "Hourly", permissions: ["gl.read"] });
     assert.equal(created.status, 200);
     const { id } = (await created.json()) as { id: string };
-    assert.deepEqual(await rolePermissions(id), ["gl.read", "hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
+    assert.deepEqual(await rolePermissions(id), [
+      "gl.read",
+      "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+    ]);
 
     const omitted = await call("POST", { name: "Bare" });
     assert.equal(omitted.status, 200);
     const bare = (await omitted.json()) as { id: string };
-    assert.deepEqual(await rolePermissions(bare.id), ["hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
+    assert.deepEqual(await rolePermissions(bare.id), [
+      "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+    ]);
 
-    const optedOut = await call("POST", { name: "Kiosk", permissions: ["gl.read"], selfServiceBaseline: false });
+    const optedOut = await call("POST", {
+      name: "Kiosk",
+      permissions: ["gl.read"],
+      selfServiceBaseline: false,
+    });
     assert.equal(optedOut.status, 200);
     const kiosk = (await optedOut.json()) as { id: string };
-    assert.deepEqual(await rolePermissions(kiosk.id), ["gl.read"], "an explicit opt-out stores exactly the sent permissions");
+    assert.deepEqual(
+      await rolePermissions(kiosk.id),
+      ["gl.read"],
+      "an explicit opt-out stores exactly the sent permissions",
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(f.orgId);
@@ -522,7 +831,12 @@ test("the baseline default never escalates: an administrator lacking it still cr
     const created = await call("POST", { name: "Crew", permissions: ["gl.read"] });
     assert.equal(created.status, 200);
     const { id } = (await created.json()) as { id: string };
-    assert.deepEqual(await rolePermissions(id), ["gl.read", "hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
+    assert.deepEqual(await rolePermissions(id), [
+      "gl.read",
+      "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+    ]);
     const refused = await call("POST", { name: "Overreach", permissions: ["gl.post"] });
     assert.equal(refused.status, 403);
     assert.deepEqual(((await refused.json()) as { missing: string[] }).missing, ["gl.post"]);
@@ -538,10 +852,23 @@ test("PATCH with selfServiceBaseline true backfills the trio; edits without the 
     const bare = await createRole(f.orgId, "legacy_crew", ["gl.read"]);
     const untouched = await call("PATCH", { id: bare, permissions: ["gl.read", "ap.read"] });
     assert.equal(untouched.status, 200);
-    assert.deepEqual(await rolePermissions(bare), ["gl.read", "ap.read"], "no flag means no backfill");
+    assert.deepEqual(
+      await rolePermissions(bare),
+      ["gl.read", "ap.read"],
+      "no flag means no backfill",
+    );
 
-    const opened = (await db.execute<{ token: string }>(sql`select updated_at::text as token from app_roles where id = ${bare}`, "objects"))[0]!.token;
-    const backfilled = await call("PATCH", { id: bare, selfServiceBaseline: true, expectedUpdatedAt: opened });
+    const opened = (
+      await db.execute<{ token: string }>(
+        sql`select updated_at::text as token from app_roles where id = ${bare}`,
+        "objects",
+      )
+    )[0]!.token;
+    const backfilled = await call("PATCH", {
+      id: bare,
+      selfServiceBaseline: true,
+      expectedUpdatedAt: opened,
+    });
     assert.equal(backfilled.status, 200);
     const stored = (await backfilled.json()) as { role: { permissions: string[] } };
     assert.deepEqual(

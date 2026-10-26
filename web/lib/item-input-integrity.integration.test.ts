@@ -1,93 +1,189 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import type { SessionUser } from './auth';
-import { stubModules } from '../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import type { SessionUser } from "./auth";
+import { stubModules } from "../testing/stub-modules.ts";
 const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __itemInputSession: session });
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__itemInputSession.user}' };
-  return next(specifier,context);
-}});
-const { sql } = await import('drizzle-orm');
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__itemInputSession.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
 const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-const { PATCH } = await import('../app/api/items/[id]/route');
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("../app/api/items/[id]/route");
 const cases: Array<[string, Record<string, unknown>]> = [
-  ['safe integer rate',{defaultRate:75}],
-  ['fractional rate',{defaultRate:0.1}],
-  ['boolean cost',{defaultCost:false}],
-  ['array price',{standaloneSellingPrice:[]}],
-  ['object account',{incomeAccountId:{}}],
-  ['null name',{name:null}],
-  ['string activation',{isActive:'false'}],
-  ['numeric tracking flag',{showOnTimesheet:1}],
-  ['object description',{description:{}}],
-  ['array custom',{custom:[]}],
-  ['explicit clear',{defaultRate:null,defaultCost:'',incomeAccountId:null}],
-  ['valid edit',{defaultRate:'75.1250',defaultCost:'12.5000',name:'Reviewed item'}],
-  ['omitted finance',{description:'New description'}],
+  ["safe integer rate", { defaultRate: 75 }],
+  ["fractional rate", { defaultRate: 0.1 }],
+  ["boolean cost", { defaultCost: false }],
+  ["array price", { standaloneSellingPrice: [] }],
+  ["object account", { incomeAccountId: {} }],
+  ["null name", { name: null }],
+  ["string activation", { isActive: "false" }],
+  ["numeric tracking flag", { showOnTimesheet: 1 }],
+  ["object description", { description: {} }],
+  ["array custom", { custom: [] }],
+  ["explicit clear", { defaultRate: null, defaultCost: "", incomeAccountId: null }],
+  ["valid edit", { defaultRate: "75.1250", defaultCost: "12.5000", name: "Reviewed item" }],
+  ["omitted finance", { description: "New description" }],
 ];
-for (const [label,body] of cases) {
-  test(`item input integrity: ${label}`, {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+for (const [label, body] of cases) {
+  test(`item input integrity: ${label}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await createScratchOrg();
     try {
-      const actor=await createScratchUser(org.orgId,'Item controller','reviewer');
-      await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
-      session.user={id:actor,orgId:org.orgId,name:'Item controller',email:'item@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
-      const id=org.items.service;
-      await db.execute(sql`update items set default_rate='100',default_cost='40',income_account_id=${org.accounts.revenue} where id=${id}`);
-      const before=(await db.execute(sql`select * from items where id=${id}`, 'objects'))[0];
-      const accepted=['explicit clear','valid edit','omitted finance'].includes(label);
-      const response=await withOrgContext(org.orgId,()=>PATCH(new Request('http://audit.local/api/items/'+id,{method:'PATCH',body:JSON.stringify(body)}),{params:Promise.resolve({id})}));
-      const payload = (await response.json()) as { error?: string; issues?: Array<{ path: string; message: string }> };
-      assert.equal(response.status,accepted?200:400,JSON.stringify(payload));
+      const actor = await createScratchUser(org.orgId, "Item controller", "reviewer");
+      await db.execute(
+        sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+      );
+      session.user = {
+        id: actor,
+        orgId: org.orgId,
+        name: "Item controller",
+        email: "item@scratch.test",
+        roles: [],
+        isSuperAdmin: false,
+        envKind: "production",
+        productionOrgId: org.orgId,
+        homeOrgId: org.orgId,
+        homeUserId: actor,
+      };
+      const id = org.items.service;
+      await db.execute(
+        sql`update items set default_rate='100',default_cost='40',income_account_id=${org.accounts.revenue} where id=${id}`,
+      );
+      const before = (await db.execute(sql`select * from items where id=${id}`, "objects"))[0];
+      const accepted = ["explicit clear", "valid edit", "omitted finance"].includes(label);
+      const response = await withOrgContext(org.orgId, () =>
+        PATCH(
+          new Request("http://audit.local/api/items/" + id, {
+            method: "PATCH",
+            body: JSON.stringify(body),
+          }),
+          { params: Promise.resolve({ id }) },
+        ),
+      );
+      const payload = (await response.json()) as {
+        error?: string;
+        issues?: Array<{ path: string; message: string }>;
+      };
+      assert.equal(response.status, accepted ? 200 : 400, JSON.stringify(payload));
       if (!accepted) {
         const field = Object.keys(body)[0];
-        assert.equal(payload.issues?.length,1,`${label}: identify the rejected field`);
-        assert.equal(payload.issues?.[0]?.path,field,`${label}: name the rejected field`);
+        assert.equal(payload.issues?.length, 1, `${label}: identify the rejected field`);
+        assert.equal(payload.issues?.[0]?.path, field, `${label}: name the rejected field`);
         const refusal = payload.error;
-        assert.equal(refusal,payload.issues?.[0]?.message,`${label}: expose the field refusal`);
-        assert.ok(typeof refusal === 'string' && refusal.trim().length > 0,`${label}: provide a usable refusal`);
-        if (field === 'defaultRate' || field === 'defaultCost' || field === 'standaloneSellingPrice') {
-          assert.match(refusal,/decimal string.*precision/,`${label}: explain why JSON numbers are unsafe`);
+        assert.equal(refusal, payload.issues?.[0]?.message, `${label}: expose the field refusal`);
+        assert.ok(
+          typeof refusal === "string" && refusal.trim().length > 0,
+          `${label}: provide a usable refusal`,
+        );
+        if (
+          field === "defaultRate" ||
+          field === "defaultCost" ||
+          field === "standaloneSellingPrice"
+        ) {
+          assert.match(
+            refusal,
+            /decimal string.*precision/,
+            `${label}: explain why JSON numbers are unsafe`,
+          );
         }
       }
-      const after=(await db.execute(sql`select * from items where id=${id}`, 'objects'))[0];
-      if(!accepted) assert.deepEqual(after,before,'refused malformed input cannot change the item');
-      else if(label==='explicit clear') {assert.equal(after?.default_rate,null);assert.equal(after?.default_cost,null);assert.equal(after?.income_account_id,null);}
-      else if(label==='valid edit') {assert.equal(after?.default_rate,'75.1250');assert.equal(after?.default_cost,'12.5000');}
-      else {assert.equal(after?.default_rate,'100.0000');assert.equal(after?.default_cost,'40.0000');}
-      const audits=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and table_name='items' and row_id=${id}`, 'objects'))[0]!.n;
-      assert.equal(audits,accepted?1:0);
-    } finally {session.user=null;await dropScratchOrg(org.orgId);}
+      const after = (await db.execute(sql`select * from items where id=${id}`, "objects"))[0];
+      if (!accepted)
+        assert.deepEqual(after, before, "refused malformed input cannot change the item");
+      else if (label === "explicit clear") {
+        assert.equal(after?.default_rate, null);
+        assert.equal(after?.default_cost, null);
+        assert.equal(after?.income_account_id, null);
+      } else if (label === "valid edit") {
+        assert.equal(after?.default_rate, "75.1250");
+        assert.equal(after?.default_cost, "12.5000");
+      } else {
+        assert.equal(after?.default_rate, "100.0000");
+        assert.equal(after?.default_cost, "40.0000");
+      }
+      const audits = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and table_name='items' and row_id=${id}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(audits, accepted ? 1 : 0);
+    } finally {
+      session.user = null;
+      await dropScratchOrg(org.orgId);
+    }
   });
 }
 
-test('item PATCH preserves omitted required custom fields on a partial edit', {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
-  const org=await createScratchOrg();
-  try {
-    const actor=await createScratchUser(org.orgId,'Item custom fields','reviewer');
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
-    session.user={id:actor,orgId:org.orgId,name:'Item custom fields',email:'item-custom@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
-    const requiredId=randomUUID();
-    const optionalId=randomUUID();
-    const id=org.items.service;
-    await db.execute(sql`
+test(
+  "item PATCH preserves omitted required custom fields on a partial edit",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Item custom fields", "reviewer");
+      await db.execute(
+        sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+      );
+      session.user = {
+        id: actor,
+        orgId: org.orgId,
+        name: "Item custom fields",
+        email: "item-custom@scratch.test",
+        roles: [],
+        isSuperAdmin: false,
+        envKind: "production",
+        productionOrgId: org.orgId,
+        homeOrgId: org.orgId,
+        homeUserId: actor,
+      };
+      const requiredId = randomUUID();
+      const optionalId = randomUUID();
+      const id = org.items.service;
+      await db.execute(sql`
       insert into custom_field_defs
         (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
       values
         (${requiredId}, ${org.orgId}, 'items', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${actor}, ${actor}),
         (${optionalId}, ${org.orgId}, 'items', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${actor}, ${actor})
     `);
-    await db.execute(sql`update items set custom='{"required_code":"R-1"}'::jsonb where id=${id} and org_id=${org.orgId}`);
+      await db.execute(
+        sql`update items set custom='{"required_code":"R-1"}'::jsonb where id=${id} and org_id=${org.orgId}`,
+      );
 
-    const response=await withOrgContext(org.orgId,()=>PATCH(new Request('http://audit.local/api/items/'+id,{method:'PATCH',body:JSON.stringify({custom:{optional_note:'updated'}})}),{params:Promise.resolve({id})}));
-    assert.equal(response.status,200,JSON.stringify(await response.json()));
-    const stored=(await db.execute<{custom:Record<string,unknown>}>(sql`select custom from items where id=${id} and org_id=${org.orgId}`, 'objects'))[0]?.custom;
-    assert.deepEqual(stored,{required_code:'R-1',optional_note:'updated'});
-  } finally {session.user=null;await dropScratchOrg(org.orgId);}
-});
+      const response = await withOrgContext(org.orgId, () =>
+        PATCH(
+          new Request("http://audit.local/api/items/" + id, {
+            method: "PATCH",
+            body: JSON.stringify({ custom: { optional_note: "updated" } }),
+          }),
+          { params: Promise.resolve({ id }) },
+        ),
+      );
+      assert.equal(response.status, 200, JSON.stringify(await response.json()));
+      const stored = (
+        await db.execute<{ custom: Record<string, unknown> }>(
+          sql`select custom from items where id=${id} and org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]?.custom;
+      assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+    } finally {
+      session.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

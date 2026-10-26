@@ -38,15 +38,18 @@ async function handleV1DELETE(
 
 export const GET = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1GET(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const PATCH = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const DELETE = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1DELETE(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1DELETE(request, { params: Promise.resolve(params as never) } as never),
 });

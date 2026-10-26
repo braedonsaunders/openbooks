@@ -1,19 +1,26 @@
-import 'server-only'
+import "server-only";
 
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { grid, heading, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { detectorSpecsForAgent } from '@openbooks/engine/agents/continuous-close-config'
-import { isContinuousCloseAgentKey } from '@openbooks/engine/continuous-close/continuous-close'
-import { guardRootSubsidiaryScope, requirePermission } from '../../../../../../lib/authz'
-import { dateTime } from '../../../../../../lib/format'
-import { getMoneyFormatter } from '../../../../../../lib/money-server'
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import {
+  grid,
+  heading,
+  page,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { detectorSpecsForAgent } from "@openbooks/engine/agents/continuous-close-config";
+import { isContinuousCloseAgentKey } from "@openbooks/engine/continuous-close/continuous-close";
+import { guardRootSubsidiaryScope, requirePermission } from "../../../../../../lib/authz";
+import { dateTime } from "../../../../../../lib/format";
+import { getMoneyFormatter } from "../../../../../../lib/money-server";
 import {
   getAgentsOverview,
   getSetupAgentNotification,
   listAgentNotificationTargets,
-} from '../../../../../../lib/setup/agents'
-import type { AgentPolicyForm } from './AgentPolicyForm'
+} from "../../../../../../lib/setup/agents";
+import type { AgentPolicyForm } from "./AgentPolicyForm";
 
 /**
  * Per-pack policy — detectors on/off, thresholds, materiality, cadence,
@@ -41,61 +48,67 @@ import type { AgentPolicyForm } from './AgentPolicyForm'
  * like the overview.
  */
 
-type AgentPolicyFormProps = Parameters<typeof AgentPolicyForm>[0]
+type AgentPolicyFormProps = Parameters<typeof AgentPolicyForm>[0];
 
 export interface AgentPolicyData {
-  title: string
-  backHref: string
-  backLabel: string
-  hasFeatureOff: boolean
-  attentionItems: { tone: 'warning'; text: string; href: string }[]
-  attentionAllClear: string
-  statusLabel: AgentPolicyFormProps['statusLabel']
-  statusEnabled: AgentPolicyFormProps['statusEnabled']
-  description: AgentPolicyFormProps['description']
-  runLine: AgentPolicyFormProps['runLine']
-  currency: AgentPolicyFormProps['currency']
-  pack: AgentPolicyFormProps['pack']
-  specs: AgentPolicyFormProps['specs']
-  notification: AgentPolicyFormProps['notification']
-  roles: AgentPolicyFormProps['roles']
-  users: AgentPolicyFormProps['users']
-  usersTruncated: AgentPolicyFormProps['usersTruncated']
-  featureEnabled: AgentPolicyFormProps['featureEnabled']
+  title: string;
+  backHref: string;
+  backLabel: string;
+  hasFeatureOff: boolean;
+  attentionItems: { tone: "warning"; text: string; href: string }[];
+  attentionAllClear: string;
+  statusLabel: AgentPolicyFormProps["statusLabel"];
+  statusEnabled: AgentPolicyFormProps["statusEnabled"];
+  description: AgentPolicyFormProps["description"];
+  runLine: AgentPolicyFormProps["runLine"];
+  currency: AgentPolicyFormProps["currency"];
+  pack: AgentPolicyFormProps["pack"];
+  specs: AgentPolicyFormProps["specs"];
+  notification: AgentPolicyFormProps["notification"];
+  roles: AgentPolicyFormProps["roles"];
+  users: AgentPolicyFormProps["users"];
+  usersTruncated: AgentPolicyFormProps["usersTruncated"];
+  featureEnabled: AgentPolicyFormProps["featureEnabled"];
 }
 
 export async function loadAgentPolicy(agentKey: string): Promise<AgentPolicyData> {
-  if (!isContinuousCloseAgentKey(agentKey)) notFound()
-  const authz = await requirePermission('admin.setup.manage')
-  if (await guardRootSubsidiaryScope(authz)) notFound()
-  const t = await getTranslations('admin')
+  if (!isContinuousCloseAgentKey(agentKey)) notFound();
+  const authz = await requirePermission("admin.setup.manage");
+  if (await guardRootSubsidiaryScope(authz)) notFound();
+  const t = await getTranslations("admin");
   const [rows, notification, targets, { currency }] = await Promise.all([
     getAgentsOverview(authz.user.orgId),
     getSetupAgentNotification(authz.user.orgId, agentKey),
     listAgentNotificationTargets(authz.user.orgId),
     getMoneyFormatter(authz.user.orgId),
-  ])
-  const row = rows.find((entry) => entry.agentKey === agentKey)
-  if (!row) notFound()
-  const featureEnabled = row.featureEnabled
+  ]);
+  const row = rows.find((entry) => entry.agentKey === agentKey);
+  if (!row) notFound();
+  const featureEnabled = row.featureEnabled;
   return {
     title: t(`setup.agents.packs.${agentKey}.title`),
-    backHref: '/admin/setup/agents',
-    backLabel: t('setup.agents.policy.backLabel'),
+    backHref: "/admin/setup/agents",
+    backLabel: t("setup.agents.policy.backLabel"),
     hasFeatureOff: !featureEnabled,
     attentionItems: featureEnabled
       ? []
-      : [{ tone: 'warning', text: t('setup.agents.overview.featureOff'), href: '/admin/setup/features' }],
-    attentionAllClear: '',
-    statusLabel: t(`setup.agents.overview.${row.policy.enabled ? 'enabled' : 'disabled'}`),
+      : [
+          {
+            tone: "warning",
+            text: t("setup.agents.overview.featureOff"),
+            href: "/admin/setup/features",
+          },
+        ],
+    attentionAllClear: "",
+    statusLabel: t(`setup.agents.overview.${row.policy.enabled ? "enabled" : "disabled"}`),
     statusEnabled: row.policy.enabled,
     description: t(`setup.agents.packs.${agentKey}.description`),
     runLine: row.lastRun
-      ? `${t('setup.agents.overview.lastRun', {
+      ? `${t("setup.agents.overview.lastRun", {
           date: dateTime(row.lastRun.startedAt),
           status: t(`setup.agents.runStatuses.${row.lastRun.status}`),
-        })} · ${t('setup.agents.overview.openFindings', { count: row.openFindings })}`
-      : `${t('setup.agents.overview.neverRun')} · ${t('setup.agents.overview.openFindings', {
+        })} · ${t("setup.agents.overview.openFindings", { count: row.openFindings })}`
+      : `${t("setup.agents.overview.neverRun")} · ${t("setup.agents.overview.openFindings", {
           count: row.openFindings,
         })}`,
     currency,
@@ -115,38 +128,40 @@ export async function loadAgentPolicy(agentKey: string): Promise<AgentPolicyData
     users: targets.users,
     usersTruncated: targets.truncatedUsers,
     featureEnabled,
-  }
+  };
 }
 
-const f = ref<AgentPolicyData>()
+const f = ref<AgentPolicyData>();
 
 export function agentPolicySpec(data: AgentPolicyData): PageSpec {
   return page({
-    route: '/admin/setup/agents/[agentKey]',
+    route: "/admin/setup/agents/[agentKey]",
     // Same shell rule as the overview: the setup workspace owns the chrome.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('space-y-4', [
-        grid('flex items-start justify-between gap-3', [
-          grid('min-w-0', [heading(2, f('title'), 'text-lg font-semibold text-slate-900 dark:text-slate-100')]),
-          grid('flex shrink-0 items-center gap-2', [
-            widgetBlock('link-button', {
+      grid("space-y-4", [
+        grid("flex items-start justify-between gap-3", [
+          grid("min-w-0", [
+            heading(2, f("title"), "text-lg font-semibold text-slate-900 dark:text-slate-100"),
+          ]),
+          grid("flex shrink-0 items-center gap-2", [
+            widgetBlock("link-button", {
               href: data.backHref,
               label: data.backLabel,
-              variant: 'outline',
-              size: 'sm',
+              variant: "outline",
+              size: "sm",
             }),
           ]),
         ]),
         {
-          ...widgetBlock('attention-list', {
+          ...widgetBlock("attention-list", {
             items: data.attentionItems,
             allClear: data.attentionAllClear,
           }),
-          when: f('hasFeatureOff'),
+          when: f("hasFeatureOff"),
         },
-        widgetBlock('agents-policy-form', {
+        widgetBlock("agents-policy-form", {
           statusLabel: data.statusLabel,
           statusEnabled: data.statusEnabled,
           description: data.description,
@@ -162,5 +177,5 @@ export function agentPolicySpec(data: AgentPolicyData): PageSpec {
         }),
       ]),
     ],
-  })
+  });
 }

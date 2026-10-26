@@ -1,6 +1,11 @@
 import { parseIsoDate } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
-import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText, isPrintableAscii } from "./rail-text.ts";
+import {
+  ORIGINATOR_REMEDY,
+  PAYEE_NAME_REMEDY,
+  asciiRailText,
+  isPrintableAscii,
+} from "./rail-text.ts";
 
 // ---------------------------------------------------------------------------
 // Cemtex (Australian ABA) originator settings
@@ -63,10 +68,17 @@ export function normalizeCemtexAccount(value: string): string | null {
 }
 
 const CEMTEX_REQUIRED: (keyof CemtexSettings)[] = [
-  "bankAbbreviation", "userName", "userId", "traceBsb", "traceAccount", "remitterName",
+  "bankAbbreviation",
+  "userName",
+  "userId",
+  "traceBsb",
+  "traceAccount",
+  "remitterName",
 ];
 
-export function validateCemtexSettings(raw: Partial<CemtexSettings> | null): { ok: true; settings: CemtexSettings } | { ok: false; missing: string[] } {
+export function validateCemtexSettings(
+  raw: Partial<CemtexSettings> | null,
+): { ok: true; settings: CemtexSettings } | { ok: false; missing: string[] } {
   const s = raw ?? {};
   const missing: string[] = CEMTEX_REQUIRED.filter((k) => {
     const v = s[k];
@@ -87,7 +99,10 @@ export function validateCemtexSettings(raw: Partial<CemtexSettings> | null): { o
   if (!missing.includes("traceAccount") && normalizeCemtexAccount(s.traceAccount!) === null) {
     missing.push("traceAccount (1–9 digits)");
   }
-  if (!missing.includes("remitterName") && (s.remitterName!.trim() === "" || s.remitterName!.length > 16)) {
+  if (
+    !missing.includes("remitterName") &&
+    (s.remitterName!.trim() === "" || s.remitterName!.length > 16)
+  ) {
     missing.push("remitterName (1–16 characters, shown on employee statements)");
   }
   if (missing.length) return { ok: false, missing: [...new Set(missing)] };
@@ -192,9 +207,11 @@ export function buildCemtexFile(run: CemtexRun): string {
   // Free text is folded to ASCII before it is measured: the file is us-ascii
   // and fixed-offset, so one multi-byte character would shift every field
   // after it (see rail-text.ts).
-  const originator = (value: string, field: string) => asciiRailText(value, "Cemtex", field, ORIGINATOR_REMEDY);
+  const originator = (value: string, field: string) =>
+    asciiRailText(value, "Cemtex", field, ORIGINATOR_REMEDY);
   const padR = (value: string, len: number): string => {
-    if (value.length > len) throw new PaymentError(`field value "${value}" does not fit in ${len} characters`);
+    if (value.length > len)
+      throw new PaymentError(`field value "${value}" does not fit in ${len} characters`);
     return value.padEnd(len, " ");
   };
   const padL0 = (value: string, len: number): string => {
@@ -211,7 +228,9 @@ export function buildCemtexFile(run: CemtexRun): string {
   const account = (value: string, what: string): string => {
     const normal = normalizeCemtexAccount(value);
     if (normal === null) {
-      throw new PaymentError(`${what} "${value}" must be 1–9 digits (hyphens edited out), not blank and not all zeros`);
+      throw new PaymentError(
+        `${what} "${value}" must be 1–9 digits (hyphens edited out), not blank and not all zeros`,
+      );
     }
     return normal.padStart(9, " ");
   };
@@ -258,7 +277,8 @@ export function buildCemtexFile(run: CemtexRun): string {
     ddmmyy(run.processingDate) + // 75–80: release date DDMMYY
     padR("", 4) + // 81–84: processing time — blank, as the APCA specification requires
     padR("", 36); // 85–120: reserved, blank
-  if (descriptive.length !== 120) throw new PaymentError("internal error: Cemtex descriptive record is not 120 characters");
+  if (descriptive.length !== 120)
+    throw new PaymentError("internal error: Cemtex descriptive record is not 120 characters");
 
   // -- 1: details ---------------------------------------------------------
   const details = run.payments.map((p) => {
@@ -272,15 +292,29 @@ export function buildCemtexFile(run: CemtexRun): string {
       padL0(String(p.amountCents), 10) + // 21–30: cents, unsigned zero-filled
       // 31–62: the title is cut to width after folding, as every rail cuts
       // names — folding can lengthen it (ß → ss) past a pre-cut name.
-      padR(asciiRailText(p.accountTitle, "Cemtex", "account title", PAYEE_NAME_REMEDY).slice(0, 32), 32) +
-      padR(asciiRailText(p.lodgementReference, "Cemtex", "lodgement reference", "Edit the reference to Latin letters without that character, then generate the file again."), 18) + // 63–80
+      padR(
+        asciiRailText(p.accountTitle, "Cemtex", "account title", PAYEE_NAME_REMEDY).slice(0, 32),
+        32,
+      ) +
+      padR(
+        asciiRailText(
+          p.lodgementReference,
+          "Cemtex",
+          "lodgement reference",
+          "Edit the reference to Latin letters without that character, then generate the file again.",
+        ),
+        18,
+      ) + // 63–80
       traceBsb + // 81–87
       traceAccount + // 88–96
       padR(originator(s.remitterName, "remitter name"), 16) + // 97–112
       padL0("0", 8); // 113–120: withholding tax — zero (PAYG goes to the ATO, not here)
-    if (record.length !== 120) throw new PaymentError("internal error: Cemtex detail record is not 120 characters");
+    if (record.length !== 120)
+      throw new PaymentError("internal error: Cemtex detail record is not 120 characters");
     if (!isPrintableAscii(record)) {
-      throw new PaymentError("Cemtex detail record contains a character with no ASCII form, which would shift every field after it");
+      throw new PaymentError(
+        "Cemtex detail record contains a character with no ASCII form, which would shift every field after it",
+      );
     }
     return record;
   });
@@ -297,7 +331,8 @@ export function buildCemtexFile(run: CemtexRun): string {
     padR("", 24) + // 51–74: reserved, blank
     padL0(String(run.payments.length), 6) + // 75–80: detail-record count
     padR("", 40); // 81–120: reserved, blank
-  if (trailer.length !== 120) throw new PaymentError("internal error: Cemtex file-total record is not 120 characters");
+  if (trailer.length !== 120)
+    throw new PaymentError("internal error: Cemtex file-total record is not 120 characters");
 
   return [descriptive, ...details, trailer].join("\r\n") + "\r\n";
 }

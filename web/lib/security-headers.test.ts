@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registerHooks } from "node:module";
 import { NextRequest } from "next/server";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
 // House render guard: layout JSX may compile to the classic
 // React.createElement transform (shared tsx cache hazard), which needs a
@@ -23,16 +23,19 @@ stubModules({
     export async function getMessages(){return {}}
     export async function getLocale(){return 'en'}
     export async function getTimeZone(){return 'UTC'}`,
-  navigation: false, authz: false, features: false,
+  navigation: false,
+  authz: false,
+  features: false,
 });
 
 const proxyHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "next/server" &&
-      String(context.parentURL ?? "").includes("/web/proxy.ts")
-    ) {
-      return { shortCircuit: true, url: `${new URL(import.meta.url).href}?mock=next-server`, format: "module" };
+    if (specifier === "next/server" && String(context.parentURL ?? "").includes("/web/proxy.ts")) {
+      return {
+        shortCircuit: true,
+        url: `${new URL(import.meta.url).href}?mock=next-server`,
+        format: "module",
+      };
     }
     return nextResolve(specifier, context);
   },
@@ -80,10 +83,7 @@ const layoutState: { headers: Headers; scripts: Array<{ nonce?: string }> } = {
 (globalThis as Record<symbol, unknown>)[layoutKey] = layoutState;
 
 const layoutMocks = new Map<string, string>([
-  [
-    "mock:css",
-    "export default {}; export const __cssStub = true;",
-  ],
+  ["mock:css", "export default {}; export const __cssStub = true;"],
   [
     "mock:next-script",
     `
@@ -135,10 +135,14 @@ const layoutMockUrl = (name: string) => `${new URL(import.meta.url).href}?layout
 
 const layoutHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "./globals.css") return { shortCircuit: true, url: layoutMockUrl("mock:css") };
-    if (specifier === "next/script") return { shortCircuit: true, url: layoutMockUrl("mock:next-script") };
-    if (specifier === "next/headers") return { shortCircuit: true, url: layoutMockUrl("mock:next-headers") };
-    if (specifier === "next-intl") return { shortCircuit: true, url: layoutMockUrl("mock:next-intl") };
+    if (specifier === "./globals.css")
+      return { shortCircuit: true, url: layoutMockUrl("mock:css") };
+    if (specifier === "next/script")
+      return { shortCircuit: true, url: layoutMockUrl("mock:next-script") };
+    if (specifier === "next/headers")
+      return { shortCircuit: true, url: layoutMockUrl("mock:next-headers") };
+    if (specifier === "next-intl")
+      return { shortCircuit: true, url: layoutMockUrl("mock:next-intl") };
     if (specifier === "sonner") return { shortCircuit: true, url: layoutMockUrl("mock:sonner") };
     if (
       specifier === "../components/app-link-provider" ||
@@ -163,15 +167,21 @@ layoutHooks.deregister();
 const { renderToStaticMarkup } = await import("react-dom/server");
 
 test("Next.js applies the static security-header baseline to every route", async () => {
-  const { default: config, securityHeaders } =
-    await import("../next.config.mjs");
+  const { default: config, securityHeaders } = await import("../next.config.mjs");
 
   const headers = config.headers;
   assert.equal(typeof headers, "function");
   assert.ok(headers);
   const routes = await headers();
-  assert.deepEqual(routes.find((route) => route.source === "/(.*)"), { source: "/(.*)", headers: securityHeaders });
-  const workerHeaders = new Map(routes.find((route) => route.source === "/sw.js")?.headers.map(({ key, value }) => [key, value]));
+  assert.deepEqual(
+    routes.find((route) => route.source === "/(.*)"),
+    { source: "/(.*)", headers: securityHeaders },
+  );
+  const workerHeaders = new Map(
+    routes
+      .find((route) => route.source === "/sw.js")
+      ?.headers.map(({ key, value }) => [key, value]),
+  );
   assert.equal(workerHeaders.get("Content-Type"), "application/javascript; charset=utf-8");
   assert.equal(workerHeaders.get("Cache-Control"), "no-cache, no-store, must-revalidate");
   assert.equal(workerHeaders.get("Service-Worker-Allowed"), "/");
@@ -179,10 +189,7 @@ test("Next.js applies the static security-header baseline to every route", async
   const values = new Map(securityHeaders.map(({ key, value }) => [key, value]));
   assert.equal(values.get("X-Content-Type-Options"), "nosniff");
   assert.equal(values.get("X-Frame-Options"), "DENY");
-  assert.match(
-    values.get("Strict-Transport-Security") ?? "",
-    /max-age=63072000/,
-  );
+  assert.match(values.get("Strict-Transport-Security") ?? "", /max-age=63072000/);
   assert.equal(values.has("Content-Security-Policy"), false);
 });
 
@@ -252,13 +259,19 @@ test("only inline file-content previews may be framed, and only by the app's own
   const { isFramableContentRequest } = await import("./framable-content.ts");
   const id = "019f5ea3-44c5-72c0-ad3b-ef34c19c8763";
 
-  assert.match(buildContentSecurityPolicy("test-nonce-123456", false, { framableBySameOrigin: true }), /frame-ancestors 'self'/);
+  assert.match(
+    buildContentSecurityPolicy("test-nonce-123456", false, { framableBySameOrigin: true }),
+    /frame-ancestors 'self'/,
+  );
   assert.equal(isFramableContentRequest(`/api/file-cabinet/files/${id}/download`, "GET"), true);
   assert.equal(isFramableContentRequest(`/api/ap-capture/${id}/file`, "GET"), true);
 
   // Mutations, other file routes, malformed ids and app pages keep refusing every frame.
   assert.equal(isFramableContentRequest(`/api/file-cabinet/files/${id}/download`, "POST"), false);
   assert.equal(isFramableContentRequest(`/api/file-cabinet/files/${id}/replace`, "GET"), false);
-  assert.equal(isFramableContentRequest("/api/file-cabinet/files/not-an-id/download", "GET"), false);
+  assert.equal(
+    isFramableContentRequest("/api/file-cabinet/files/not-an-id/download", "GET"),
+    false,
+  );
   assert.equal(isFramableContentRequest("/documents", "GET"), false);
 });

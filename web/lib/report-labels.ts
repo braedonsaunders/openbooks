@@ -17,12 +17,15 @@ import { reportTemporalBucketLabel } from "./report-temporal-label";
  *  cross-package surface: orchestration falls back to English when a custom
  *  label set omits the hook, exactly like the engine's `${n} row(s)` default. */
 export type PagedExportLabels = ReportRunLabels & {
-  exportTruncated?: (shown: number, total: number) => string
-}
+  exportTruncated?: (shown: number, total: number) => string;
+};
 
 export async function reportRunLabels(): Promise<PagedExportLabels> {
   const [t, locale] = await Promise.all([getTranslations("reports"), getLocale()]);
-  const column = (entity: ReportEntity, key: string) => entity.key.startsWith('custom:') ? entity.columns.find(c => c.key === key)?.label ?? key : t(`catalog.columns.${entity.key}.${key}`);
+  const column = (entity: ReportEntity, key: string) =>
+    entity.key.startsWith("custom:")
+      ? (entity.columns.find((c) => c.key === key)?.label ?? key)
+      : t(`catalog.columns.${entity.key}.${key}`);
   return {
     column: (entity, key) => column(entity, key),
     measure: (entity, m) => {
@@ -51,7 +54,8 @@ export async function reportRunLabels(): Promise<PagedExportLabels> {
     grandTotalsTitle: () => t("run.grandTotals"),
     bool: (v) => t(v ? "run.yes" : "run.no"),
     enumValue: (v, scope) => reportEnumLabel(t, v, scope),
-    entityLabel: (entity) => entity.key.startsWith('custom:') ? entity.label : t(`catalog.entities.${entity.key}.label`),
+    entityLabel: (entity) =>
+      entity.key.startsWith("custom:") ? entity.label : t(`catalog.entities.${entity.key}.label`),
     exportTruncated: (shown, total) => t("run.exportTruncated", { shown, total }),
   };
 }

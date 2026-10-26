@@ -78,7 +78,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmGoalItemRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmGoalItemRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["@/lib/features", "mock:features"],
@@ -88,21 +89,23 @@ const mockUrls = new Map<string, string>([
   ["../../review-cycles/_lib", "mock:lib"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-goal-item";
-  const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-goal-item";
+const itemRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 const GOAL_ID = "00000000-0000-4000-8000-000000000071";
 const params = { params: Promise.resolve({ id: GOAL_ID }) };
@@ -142,7 +145,10 @@ test("an unknown id never reaches the service", async () => {
   reset();
   const bad = { params: Promise.resolve({ id: "nope" }) };
   assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
-  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "progress", progressPercent: 10 }), bad)).status, 400);
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ action: "progress", progressPercent: 10 }), bad)).status,
+    400,
+  );
   assert.deepEqual(routeState.calls, []);
 });
 
@@ -156,7 +162,13 @@ test("progress forwards the percent and note", async () => {
   assert.deepEqual(routeState.calls, [
     {
       fn: "progress",
-      args: { orgId: "org-1", actorId: "user-1", goalId: GOAL_ID, progressPercent: 50, note: "halfway" },
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        goalId: GOAL_ID,
+        progressPercent: 50,
+        note: "halfway",
+      },
     },
   ]);
 });
@@ -166,10 +178,14 @@ test("miss and cancel require their note at the real boundary", async () => {
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "miss" }), params)).status, 400);
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "achieve" }), params)).status, 200);
   assert.equal(
-    (await itemRoute!.PATCH(patchRequest({ action: "cancel", note: "role eliminated" }), params)).status,
+    (await itemRoute!.PATCH(patchRequest({ action: "cancel", note: "role eliminated" }), params))
+      .status,
     200,
   );
-  assert.deepEqual(routeState.calls.map((c) => c.fn), ["status", "status"]);
+  assert.deepEqual(
+    routeState.calls.map((c) => c.fn),
+    ["status", "status"],
+  );
 });
 
 test("action routes refuse hostile payloads at the real boundary", async () => {
@@ -192,7 +208,10 @@ test("a service refusal delegates to the shared mapping with the error intact", 
   reset();
   const refusal = new Error("only an active goal takes progress");
   routeState.serviceThrow = refusal;
-  const response = await itemRoute!.PATCH(patchRequest({ action: "progress", progressPercent: 10 }), params);
+  const response = await itemRoute!.PATCH(
+    patchRequest({ action: "progress", progressPercent: 10 }),
+    params,
+  );
   assert.equal(response.status, 409);
   assert.equal(routeState.mapped[0]!.error, refusal);
 });

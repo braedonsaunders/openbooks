@@ -40,13 +40,19 @@ async function maxioGet(
 ): Promise<unknown> {
   const query = new URLSearchParams(params);
   const suffix = query.toString();
-  const res = await fetchWithConnectorRetry(`${siteBase(site)}${path}${suffix ? `?${suffix}` : ""}`, {
-    method: "GET",
-    headers: { Authorization: authHeader(site), Accept: "application/json" },
-    redirect: "error",
-  }, { describe: "Maxio", transport });
+  const res = await fetchWithConnectorRetry(
+    `${siteBase(site)}${path}${suffix ? `?${suffix}` : ""}`,
+    {
+      method: "GET",
+      headers: { Authorization: authHeader(site), Accept: "application/json" },
+      redirect: "error",
+    },
+    { describe: "Maxio", transport },
+  );
   if (!res.ok) {
-    throw new Error(`Maxio ${path} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    throw new Error(
+      `Maxio ${path} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
   }
   return await res.json();
 }
@@ -61,9 +67,16 @@ export async function listAllMaxio<T>(
 ): Promise<T[]> {
   const out: T[] = [];
   for (let page = 1; page <= maxPages; page++) {
-    const payload = await maxioGet(site, path, { ...params, page: String(page), per_page: "200" }, transport);
+    const payload = await maxioGet(
+      site,
+      path,
+      { ...params, page: String(page), per_page: "200" },
+      transport,
+    );
     if (!Array.isArray(payload)) {
-      throw new Error(`Maxio ${path} answered a non-list payload — re-enter the subdomain and API key, then try again.`);
+      throw new Error(
+        `Maxio ${path} answered a non-list payload — re-enter the subdomain and API key, then try again.`,
+      );
     }
     if (!payload.length) return out;
     // Chargify wraps most resources (`{ subscription: {...} }`); pass wrapped
@@ -71,7 +84,9 @@ export async function listAllMaxio<T>(
     out.push(...(payload as T[]));
     if (payload.length < 200) return out;
   }
-  throw new Error(`Maxio ${path} exceeded ${maxPages} pages — narrow the window and import incrementally.`);
+  throw new Error(
+    `Maxio ${path} exceeded ${maxPages} pages — narrow the window and import incrementally.`,
+  );
 }
 
 /** Incremental bounds every dated Maxio list accepts. */

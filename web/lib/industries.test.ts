@@ -1,58 +1,71 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-const { INDUSTRY_BY_KEY } = await import('./industries.ts')
+import assert from "node:assert/strict";
+import test from "node:test";
+const { INDUSTRY_BY_KEY } = await import("./industries.ts");
 
-test('nonprofit preset has unique net-asset account numbers', () => {
-  const nonprofit = INDUSTRY_BY_KEY.get('nonprofit')
-  assert.ok(nonprofit)
+test("nonprofit preset has unique net-asset account numbers", () => {
+  const nonprofit = INDUSTRY_BY_KEY.get("nonprofit");
+  assert.ok(nonprofit);
 
-  const numbers = nonprofit.coa.map((account) => account.number)
-  assert.equal(new Set(numbers).size, numbers.length)
+  const numbers = nonprofit.coa.map((account) => account.number);
+  assert.equal(new Set(numbers).size, numbers.length);
   assert.deepEqual(
-    nonprofit.coa.filter((account) => account.type === 'equity').map(({ number, name }) => ({ number, name })),
+    nonprofit.coa
+      .filter((account) => account.type === "equity")
+      .map(({ number, name }) => ({ number, name })),
     [
-      { number: '3000', name: 'Unrestricted net assets' },
-      { number: '3100', name: 'Restricted net assets' },
-      { number: '3200', name: 'Endowment net assets' },
+      { number: "3000", name: "Unrestricted net assets" },
+      { number: "3100", name: "Restricted net assets" },
+      { number: "3200", name: "Endowment net assets" },
     ],
-  )
-})
+  );
+});
 
-test('nonprofit preset keeps its project revenue control account valid', () => {
-  const nonprofit = INDUSTRY_BY_KEY.get('nonprofit')
-  assert.ok(nonprofit)
+test("nonprofit preset keeps its project revenue control account valid", () => {
+  const nonprofit = INDUSTRY_BY_KEY.get("nonprofit");
+  assert.ok(nonprofit);
 
-  assert.equal(nonprofit.controlAccounts.projectRevenue, '4100')
-  assert.equal(nonprofit.coa.find((account) => account.number === '4100')?.name, 'Grant Revenue')
-})
+  assert.equal(nonprofit.controlAccounts.projectRevenue, "4100");
+  assert.equal(nonprofit.coa.find((account) => account.number === "4100")?.name, "Grant Revenue");
+});
 
-test('the withheld-payroll-tax role maps to a deductions account, never a payable', () => {
+test("the withheld-payroll-tax role maps to a deductions account, never a payable", () => {
   // Withheld PAYE/NIC/PRSI/USC must sit in the chart's payroll-deductions
   // account (2110/2300 family, liability_current_other) — never in a vendor
   // or subcontractor payable (2130 family, liability_payable), where employee
   // tax would mingle with accounts payable.
   for (const industry of INDUSTRY_BY_KEY.values()) {
-    const mapped = industry.controlAccounts.payrollDeductions
+    const mapped = industry.controlAccounts.payrollDeductions;
     const deductions = industry.coa.find(
-      (account) => /payroll deductions/i.test(account.name) && account.type === 'liability_current_other',
-    )
+      (account) =>
+        /payroll deductions/i.test(account.name) && account.type === "liability_current_other",
+    );
     if (!deductions) {
-      assert.equal(mapped, undefined, `${industry.key} has no deductions account so maps no role`)
-      continue
+      assert.equal(mapped, undefined, `${industry.key} has no deductions account so maps no role`);
+      continue;
     }
-    assert.equal(mapped, deductions.number, `${industry.key} resolves withheld payroll tax to its deductions account`)
+    assert.equal(
+      mapped,
+      deductions.number,
+      `${industry.key} resolves withheld payroll tax to its deductions account`,
+    );
   }
-})
+});
 
-test('construction shop supplies are overhead expense, not project direct cost', () => {
-  const construction = INDUSTRY_BY_KEY.get('construction_contractor')
-  assert.ok(construction)
+test("construction shop supplies are overhead expense, not project direct cost", () => {
+  const construction = INDUSTRY_BY_KEY.get("construction_contractor");
+  assert.ok(construction);
 
-  const numbers = construction.coa.map((account) => account.number)
-  assert.equal(new Set(numbers).size, numbers.length)
+  const numbers = construction.coa.map((account) => account.number);
+  assert.equal(new Set(numbers).size, numbers.length);
 
-  const shopSupplies = construction.coa.find((account) => account.name === 'Shop Supplies & Small Tools')
-  assert.ok(shopSupplies, 'construction chart includes a shop supplies account')
-  assert.equal(shopSupplies.type, 'expense')
-  assert.match(shopSupplies.number, /^6\d{3}$/, 'shop supplies sit in the overhead expense range, not the 5000 cost-of-sales range')
-})
+  const shopSupplies = construction.coa.find(
+    (account) => account.name === "Shop Supplies & Small Tools",
+  );
+  assert.ok(shopSupplies, "construction chart includes a shop supplies account");
+  assert.equal(shopSupplies.type, "expense");
+  assert.match(
+    shopSupplies.number,
+    /^6\d{3}$/,
+    "shop supplies sit in the overhead expense range, not the 5000 cost-of-sales range",
+  );
+});

@@ -65,7 +65,13 @@ test("payment links ride along stated in the payment currency at its rate", asyn
   ]);
   const changes = await src.nativeChanges(null, ctx);
   assert.deepEqual(changes.applications, [
-    { paymentRef: "Payment:900", appliedRef: "Invoice:101", amount: "100", currency: "EUR", rate: "1.2" },
+    {
+      paymentRef: "Payment:900",
+      appliedRef: "Invoice:101",
+      amount: "100",
+      currency: "EUR",
+      rate: "1.2",
+    },
   ]);
 });
 
@@ -79,6 +85,12 @@ test("a payment with no CurrencyRef falls back to the company base, never a defa
   ]);
   const changes = await src.nativeChanges(null, ctx);
   assert.deepEqual(changes.applications, [
-    { paymentRef: "Payment:901", appliedRef: "Invoice:102", amount: "50", currency: "USD", rate: null },
+    {
+      paymentRef: "Payment:901",
+      appliedRef: "Invoice:102",
+      amount: "50",
+      currency: "USD",
+      rate: null,
+    },
   ]);
 });

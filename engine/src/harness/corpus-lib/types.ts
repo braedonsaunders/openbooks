@@ -52,11 +52,7 @@ export interface CorpusDocLine {
 }
 
 export type CommercialKind =
-  | "customer_invoice"
-  | "customer_credit"
-  | "vendor_bill"
-  | "vendor_credit"
-  | "expense_report";
+  "customer_invoice" | "customer_credit" | "vendor_bill" | "vendor_credit" | "expense_report";
 
 export interface JournalEvent {
   id: string;

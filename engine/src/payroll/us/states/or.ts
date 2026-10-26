@@ -39,16 +39,30 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, divIntCents, max0, mulInt, mulRateCents, rate6, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  D,
+  divIntCents,
+  max0,
+  mulInt,
+  mulRateCents,
+  rate6,
+  U,
+} from "../../../money/payroll-decimal.ts";
+import {
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import { mulRatio, roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import {
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
@@ -166,13 +180,37 @@ export const OR_RATES_2026: OrYearRates = {
   low: {
     single: [
       { atLeast: "0", butNotOver: "4550", add: "263", subtract: "0", rate: pctToRate("4.75") },
-      { atLeast: "4550", butNotOver: "11400", add: "479", subtract: "4550", rate: pctToRate("6.75") },
-      { atLeast: "11400", butNotOver: "50000", add: "941", subtract: "11400", rate: pctToRate("8.75") },
+      {
+        atLeast: "4550",
+        butNotOver: "11400",
+        add: "479",
+        subtract: "4550",
+        rate: pctToRate("6.75"),
+      },
+      {
+        atLeast: "11400",
+        butNotOver: "50000",
+        add: "941",
+        subtract: "11400",
+        rate: pctToRate("8.75"),
+      },
     ],
     married_or_3plus: [
       { atLeast: "0", butNotOver: "9100", add: "263", subtract: "0", rate: pctToRate("4.75") },
-      { atLeast: "9100", butNotOver: "22800", add: "695", subtract: "9100", rate: pctToRate("6.75") },
-      { atLeast: "22800", butNotOver: "50000", add: "1620", subtract: "22800", rate: pctToRate("8.75") },
+      {
+        atLeast: "9100",
+        butNotOver: "22800",
+        add: "695",
+        subtract: "9100",
+        rate: pctToRate("6.75"),
+      },
+      {
+        atLeast: "22800",
+        butNotOver: "50000",
+        add: "1620",
+        subtract: "22800",
+        rate: pctToRate("8.75"),
+      },
     ],
   },
   high: {
@@ -180,12 +218,36 @@ export const OR_RATES_2026: OrYearRates = {
     // wages with the $8,750 cap and the $2,910 single standard deduction.
     // The open top is "125,000" with no "but not over".
     single: [
-      { atLeast: "0", butNotOver: "125000", add: "678", subtract: "11400", rate: pctToRate("8.75") },
-      { atLeast: "125000", butNotOver: null, add: "10618", subtract: "125000", rate: pctToRate("9.9") },
+      {
+        atLeast: "0",
+        butNotOver: "125000",
+        add: "678",
+        subtract: "11400",
+        rate: pctToRate("8.75"),
+      },
+      {
+        atLeast: "125000",
+        butNotOver: null,
+        add: "10618",
+        subtract: "125000",
+        rate: pctToRate("9.9"),
+      },
     ],
     married_or_3plus: [
-      { atLeast: "0", butNotOver: "250000", add: "1357", subtract: "22800", rate: pctToRate("8.75") },
-      { atLeast: "250000", butNotOver: null, add: "21237", subtract: "250000", rate: pctToRate("9.9") },
+      {
+        atLeast: "0",
+        butNotOver: "250000",
+        add: "1357",
+        subtract: "22800",
+        rate: pctToRate("8.75"),
+      },
+      {
+        atLeast: "250000",
+        butNotOver: null,
+        add: "21237",
+        subtract: "250000",
+        rate: pctToRate("9.9"),
+      },
     ],
   },
 };
@@ -194,17 +256,19 @@ const OR_EDITIONS_BY_YEAR: Record<number, OrYearRates> = {
   [OR_RATES_2026.year]: OR_RATES_2026,
 };
 
-export const OR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "150-206-436 (Rev. 12-31-25)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Oregon Department of Revenue, Oregon Withholding Tax Formulas, 150-206-436 "
-    + "(Rev. 12-31-25), effective January 1, 2026 — computer formula, Examples 1–4, "
-    + "and FAQ; Form OR-W-4; 2026 OR-W-4 instructions 150-101-402-1",
-  status: "published",
-  region: "OR",
-}];
+export const OR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "150-206-436 (Rev. 12-31-25)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Oregon Department of Revenue, Oregon Withholding Tax Formulas, 150-206-436 " +
+      "(Rev. 12-31-25), effective January 1, 2026 — computer formula, Examples 1–4, " +
+      "and FAQ; Form OR-W-4; 2026 OR-W-4 instructions 150-101-402-1",
+    status: "published",
+    region: "OR",
+  },
+];
 
 const DOLLAR = 10_000n;
 const RATE6 = 1_000_000n;
@@ -230,10 +294,7 @@ export function orPhaseTableFor(status: OrMaritalStatus): OrPhaseTable {
   return status === "married" ? "married" : "single";
 }
 
-export function orBracketTableFor(
-  status: OrMaritalStatus,
-  allowances: number,
-): OrBracketTable {
+export function orBracketTableFor(status: OrMaritalStatus, allowances: number): OrBracketTable {
   return status === "married" || allowances >= 3 ? "married_or_3plus" : "single";
 }
 
@@ -257,11 +318,7 @@ export function orAllowancesUsed(
 }
 
 /** Federal-tax subtraction cap for these annual wages and this phase-out table. */
-export function orFederalCap(
-  annualWages: bigint,
-  phase: OrPhaseTable,
-  rates: OrYearRates,
-): bigint {
+export function orFederalCap(annualWages: bigint, phase: OrPhaseTable, rates: OrYearRates): bigint {
   for (const step of rates.phaseOut[phase]) {
     const from = U(step.fromWages);
     const to = step.toWages === null ? null : U(step.toWages);
@@ -303,10 +360,15 @@ export interface OrAnnualResult {
 export function orAnnualWithholding(input: OrAnnualInput): OrAnnualResult {
   const { rates } = input;
   const factors: Record<string, string> = { OR_METHOD: "formula" };
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const trace = (key: string, value: bigint) => {
+    factors[key] = D(value);
+  };
 
   const allowances = orAllowancesUsed(
-    input.status, input.claimedAllowances, input.annualWages, rates,
+    input.status,
+    input.claimedAllowances,
+    input.annualWages,
+    rates,
   );
   const phase = orPhaseTableFor(input.status);
   const brackets = orBracketTableFor(input.status, allowances);
@@ -323,9 +385,12 @@ export function orAnnualWithholding(input: OrAnnualInput): OrAnnualResult {
       : rates.standardDeductionSingle,
   );
   const cap = orFederalCap(input.annualWages, phase, rates);
-  const federal = input.annualFederalWithheld < 0n
-    ? 0n
-    : input.annualFederalWithheld < cap ? input.annualFederalWithheld : cap;
+  const federal =
+    input.annualFederalWithheld < 0n
+      ? 0n
+      : input.annualFederalWithheld < cap
+        ? input.annualFederalWithheld
+        : cap;
   trace("OR_ANNUAL_WAGES", input.annualWages);
   trace("OR_FEDERAL_WITHHELD", input.annualFederalWithheld);
   trace("OR_FEDERAL_CAP", cap);
@@ -375,11 +440,11 @@ export function orTransitWithholding(input: {
 }): string {
   if (input.rate == null || input.rate === "") {
     throw new PayrollError(
-      `no transit payroll-tax rate has been entered for ${input.district} (Oregon). `
-      + "Publication 150-206-436 (Rev. 12-31-25) does not publish TriMet or Lane "
-      + "Transit District rates or an employee-withholding computation for them, "
-      + "so the rate is employer-entered. Inventing 0.8237% or 0.80% from Form OQ "
-      + "would silently withhold the wrong money the day either district moved.",
+      `no transit payroll-tax rate has been entered for ${input.district} (Oregon). ` +
+        "Publication 150-206-436 (Rev. 12-31-25) does not publish TriMet or Lane " +
+        "Transit District rates or an employee-withholding computation for them, " +
+        "so the rate is employer-entered. Inventing 0.8237% or 0.80% from Form OQ " +
+        "would silently withhold the wrong money the day either district moved.",
     );
   }
   return D(mulRateCents(max0(U(input.wages)), input.rate));
@@ -393,21 +458,24 @@ function compute(
   const P = context.requirePeriodsPerYear();
 
   const gross = U(input.wages) + U(input.supplemental ?? "0");
-  const regionalAllocations = (input.wageAllocations ?? []).filter((allocation) =>
-    allocation.subRegion === null,
+  const regionalAllocations = (input.wageAllocations ?? []).filter(
+    (allocation) => allocation.subRegion === null,
   );
   // Oregon's 2026 instructions tell part-year and nonresident employees to
   // use only the Oregon column. A resident is taxed on the full wage amount;
   // a nonresident with region-level allocation evidence is priced only on its
   // sourced Oregon share. Once the employer supplies a regional allocation,
   // a missing or duplicate Oregon row is an unknown basis, not zero wages.
-  const wages = input.basis === "resident" || regionalAllocations.length === 0
-    ? gross
-    : U(mulRatio(
-      D(gross),
-      rate6(requireUsWageAllocation(input.wageAllocations, "OR", null).workShare),
-      1_000_000n,
-    ));
+  const wages =
+    input.basis === "resident" || regionalAllocations.length === 0
+      ? gross
+      : U(
+          mulRatio(
+            D(gross),
+            rate6(requireUsWageAllocation(input.wageAllocations, "OR", null).workShare),
+            1_000_000n,
+          ),
+        );
 
   // HB 2119 / OR-W-4 instructions: no withholding statement on file → 8%.
   // emptyResolvedCertificate and resolveCertificate-with-no-row both report
@@ -423,11 +491,14 @@ function compute(
     };
   }
 
-  const exempt = context.exemptResult({ factorKey: "OR_EXEMPT", extraFactors: { OR_METHOD: "exempt" } });
+  const exempt = context.exemptResult({
+    factorKey: "OR_EXEMPT",
+    extraFactors: { OR_METHOD: "exempt" },
+  });
   if (exempt) return exempt;
 
-  const status = (certificateChoice(input.certificate, "marital_status")
-    ?? "single") as OrMaritalStatus;
+  const status = (certificateChoice(input.certificate, "marital_status") ??
+    "single") as OrMaritalStatus;
   const claimed = certificateCount(input.certificate, "allowances") ?? 0;
 
   // Publication 150-206-436: BASE subtracts federal income tax withheld. The
@@ -436,10 +507,10 @@ function compute(
   const periodFederal = input.federalIncomeTax;
   if (periodFederal == null || periodFederal.trim() === "") {
     throw new PayrollError(
-      "Oregon withholding (150-206-436) requires this period's federal income tax "
-      + "from the current Pub 15-T calculation as an input to BASE (FAQ 1: not "
-      + "FICA; FAQ 11: yes, the program must subtract it, up to the printed cap). "
-      + "The engine will not assume $0.",
+      "Oregon withholding (150-206-436) requires this period's federal income tax " +
+        "from the current Pub 15-T calculation as an input to BASE (FAQ 1: not " +
+        "FICA; FAQ 11: yes, the program must subtract it, up to the printed cap). " +
+        "The engine will not assume $0.",
     );
   }
 
@@ -538,16 +609,17 @@ export const OR_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "OR" },
   purpose: "withholding",
   validity: {
-    kind: "following_year_date", monthDay: "02-15",
+    kind: "following_year_date",
+    monthDay: "02-15",
     appliesWhen: { field: "exempt", values: ["true"] },
   },
   citation:
-    "Oregon Form OR-W-4; 2026 Form OR-W-4 instructions 150-101-402-1; "
-    + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25)",
+    "Oregon Form OR-W-4; 2026 Form OR-W-4 instructions 150-101-402-1; " +
+    "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25)",
   summary:
-    "Sets Oregon marital status, allowances, and extra withholding. If no OR-W-4 "
-    + "(and no pre-2020 Oregon-only or federal W-4) is on file, HB 2119 requires "
-    + "the employer to withhold eight percent of wages until the employee files.",
+    "Sets Oregon marital status, allowances, and extra withholding. If no OR-W-4 " +
+    "(and no pre-2020 Oregon-only or federal W-4) is on file, HB 2119 requires " +
+    "the employer to withhold eight percent of wages until the employee files.",
   storage: "certificate_rows",
   fields: [
     {
@@ -559,31 +631,31 @@ export const OR_CERTIFICATE: PayrollCertificate = {
           value: "single",
           label: "Single",
           help:
-            "OR-W-4: mark Single if you plan to file single, married filing separately, "
-            + "or head of household. Uses the Single standard deduction, brackets, and "
-            + "phase-out unless three or more allowances are claimed.",
+            "OR-W-4: mark Single if you plan to file single, married filing separately, " +
+            "or head of household. Uses the Single standard deduction, brackets, and " +
+            "phase-out unless three or more allowances are claimed.",
         },
         {
           value: "married",
           label: "Married",
           help:
-            "Married filing jointly or qualifying surviving spouse. Uses the Married "
-            + "standard deduction, brackets, and the [M] phase-out. FAQ 7: only this "
-            + "box uses the married phase-out amounts.",
+            "Married filing jointly or qualifying surviving spouse. Uses the Married " +
+            "standard deduction, brackets, and the [M] phase-out. FAQ 7: only this " +
+            "box uses the married phase-out amounts.",
         },
         {
           value: "married_higher_single",
           label: "Married, but withhold at the higher single rate",
           help:
-            "FAQ 4 and Example 4: use the Single phase-out and the Single $100,000 "
-            + "allowance cutoff, not the Married ones.",
+            "FAQ 4 and Example 4: use the Single phase-out and the Single $100,000 " +
+            "allowance cutoff, not the Married ones.",
         },
       ],
       default: "single",
       required: true,
       help:
-        "Form OR-W-4 line 1. Head of household marks Single — the form has no third "
-        + "filing-status box. Default Single is the form's own unread box, not a guess.",
+        "Form OR-W-4 line 1. Head of household marks Single — the form has no third " +
+        "filing-status box. Default Single is the form's own unread box, not a guess.",
     },
     {
       key: "allowances",
@@ -593,9 +665,9 @@ export const OR_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "From the OR-W-4 worksheets. Each allowance is a $263 annual credit in 2026, "
-        + "subtracted AFTER the rate (FAQ 12). Single wages over $100,000, or Married "
-        + "wages over $200,000, force this to zero — the publication's own cutoff.",
+        "From the OR-W-4 worksheets. Each allowance is a $263 annual credit in 2026, " +
+        "subtracted AFTER the rate (FAQ 12). Single wages over $100,000, or Married " +
+        "wages over $200,000, force this to zero — the publication's own cutoff.",
     },
     {
       key: "additional_per_period",
@@ -604,18 +676,18 @@ export const OR_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A flat dollar amount added AFTER the computer formula. It is not multiplied "
-        + "by a rate and it is not an allowance.",
+        "A flat dollar amount added AFTER the computer formula. It is not multiplied " +
+        "by a rate and it is not an allowance.",
     },
     {
       key: "exempt",
       label: "Line 4 — Exempt from Oregon withholding",
       kind: "flag",
       help:
-        "Line 4a exemption code plus the word Exempt on line 4b. For wages the "
-        + "election expires February 15 of the following year; a new OR-W-4 is due "
-        + "each year. Without a current exemption the employer withholds under the "
-        + "applicable Oregon method.",
+        "Line 4a exemption code plus the word Exempt on line 4b. For wages the " +
+        "election expires February 15 of the following year; a new OR-W-4 is due " +
+        "each year. Without a current exemption the employer withholds under the " +
+        "applicable Oregon method.",
     },
   ],
 };
@@ -639,23 +711,26 @@ export const OR_TRANSIT_RECORD: PayrollCertificate = {
   scope: { level: "region", region: "OR" },
   purpose: "withholding",
   citation:
-    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); "
-    + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25)",
+    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); " +
+    "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25)",
   summary:
-    "The transit district the employee's work is performed in, which the employer determines "
-    + "from the work address. Oregon publishes no employee form for it, so the code is the "
-    + "pack's own convention: TRIMET or LTD. Its RATE is entered separately against the "
-    + "district, because no Department publication carries one: a district with no rate on "
-    + "file refuses the run rather than accruing zero.",
+    "The transit district the employee's work is performed in, which the employer determines " +
+    "from the work address. Oregon publishes no employee form for it, so the code is the " +
+    "pack's own convention: TRIMET or LTD. Its RATE is entered separately against the " +
+    "district, because no Department publication carries one: a district with no rate on " +
+    "file refuses the run rather than accruing zero.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "work_transit_district", label: "Transit district the work is performed in", kind: "code",
+      key: "work_transit_district",
+      label: "Transit district the work is performed in",
+      kind: "code",
       subRegion: { side: "work" },
-      help: "TRIMET if the work address is inside the TriMet district, LTD if inside Lane Transit "
-        + "District — look the address up against the district boundary maps. Leave it blank if "
-        + "the work address is in neither district. Its RATE is entered separately against the "
-        + "district, because no Department publication carries one.",
+      help:
+        "TRIMET if the work address is inside the TriMet district, LTD if inside Lane Transit " +
+        "District — look the address up against the district boundary maps. Leave it blank if " +
+        "the work address is in neither district. Its RATE is entered separately against the " +
+        "district, because no Department publication carries one.",
     },
   ],
 };
@@ -692,10 +767,10 @@ export const OR_REGION: PayrollRegionWithholding = {
       implemented: true,
       pocket: "employer",
       citation:
-        "Publication 150-206-436 (Rev. 12-31-25) does not publish a TriMet rate or "
-        + "employee-withholding rule. The district exists; the rate is employer-entered. "
-        + "orTransitWithholding refuses without that rate and never invents 0.8237%. "
-        + "Employer-paid on Form OQ, never withheld from wages.",
+        "Publication 150-206-436 (Rev. 12-31-25) does not publish a TriMet rate or " +
+        "employee-withholding rule. The district exists; the rate is employer-entered. " +
+        "orTransitWithholding refuses without that rate and never invents 0.8237%. " +
+        "Employer-paid on Form OQ, never withheld from wages.",
     },
     {
       code: "LTD",
@@ -707,10 +782,10 @@ export const OR_REGION: PayrollRegionWithholding = {
       implemented: true,
       pocket: "employer",
       citation:
-        "Publication 150-206-436 (Rev. 12-31-25) does not publish an LTD rate or "
-        + "employee-withholding rule. The district exists; the rate is employer-entered. "
-        + "orTransitWithholding refuses without that rate and never invents 0.80%. "
-        + "Employer-paid on Form OQ, never withheld from wages.",
+        "Publication 150-206-436 (Rev. 12-31-25) does not publish an LTD rate or " +
+        "employee-withholding rule. The district exists; the rate is employer-entered. " +
+        "orTransitWithholding refuses without that rate and never invents 0.80%. " +
+        "Employer-paid on Form OQ, never withheld from wages.",
     },
     {
       code: "STT",
@@ -722,11 +797,14 @@ export const OR_REGION: PayrollRegionWithholding = {
       statutoryComponent: { systemKey: "or_statewide_transit_tax", kind: "deduction" },
       withholdingMethod: {
         kind: "flat_rate",
-        rates: [{
-          effectiveFrom: "2018-07-01",
-          rate: "0.001",
-          source: "Oregon DOR Statewide Transit Tax (https://www.oregon.gov/dor/programs/businesses/Pages/statewide-transit-tax.aspx)",
-        }],
+        rates: [
+          {
+            effectiveFrom: "2018-07-01",
+            rate: "0.001",
+            source:
+              "Oregon DOR Statewide Transit Tax (https://www.oregon.gov/dor/programs/businesses/Pages/statewide-transit-tax.aspx)",
+          },
+        ],
       },
       implemented: true,
       citation:
@@ -735,7 +813,7 @@ export const OR_REGION: PayrollRegionWithholding = {
   ],
   subRegionConflictRule: "both",
   citation:
-    "Oregon Department of Revenue, Oregon Withholding Tax Formulas, 150-206-436 "
-    + "(Rev. 12-31-25), effective January 1, 2026; Form OR-W-4; 2026 OR-W-4 "
-    + "instructions 150-101-402-1",
+    "Oregon Department of Revenue, Oregon Withholding Tax Formulas, 150-206-436 " +
+    "(Rev. 12-31-25), effective January 1, 2026; Form OR-W-4; 2026 OR-W-4 " +
+    "instructions 150-101-402-1",
 };

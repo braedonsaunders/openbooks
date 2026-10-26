@@ -35,9 +35,7 @@ import type {
 const norm = (amount: string): string => fromUnits(toUnits(amount));
 
 /** Net an entry's lines per role, dropping roles that net to zero. */
-function netByRole(
-  lines: { role: Role; amount: string }[],
-): Map<Role, string> {
+function netByRole(lines: { role: Role; amount: string }[]): Map<Role, string> {
   const totals = new Map<Role, bigint>();
   for (const line of lines) {
     totals.set(line.role, (totals.get(line.role) ?? 0n) + toUnits(line.amount));
@@ -70,7 +68,11 @@ function compareEntries(
     const label = exp?.step ?? act?.step ?? `#${i + 1}`;
 
     if (!exp) {
-      differences.push({ at: `entry "${label}"`, expected: "(no entry)", actual: "(entry produced)" });
+      differences.push({
+        at: `entry "${label}"`,
+        expected: "(no entry)",
+        actual: "(entry produced)",
+      });
       continue;
     }
     if (!act) {
@@ -131,7 +133,11 @@ function compareValues(
     // when both sides parse as decimals.
     const bothMoney = /^-?\d+(\.\d+)?$/.test(e) && /^-?\d+(\.\d+)?$/.test(a);
     if (bothMoney ? norm(e) !== norm(a) : e !== a) {
-      differences.push({ at: `value ${key}`, expected: bothMoney ? norm(e) : e, actual: bothMoney ? norm(a) : a });
+      differences.push({
+        at: `value ${key}`,
+        expected: bothMoney ? norm(e) : e,
+        actual: bothMoney ? norm(a) : a,
+      });
     }
   }
   return differences;
@@ -260,9 +266,7 @@ export async function runCase<C extends RunnableCase>(
     const differences: Difference[] = [];
 
     if (expected.entries || actual.entries) {
-      differences.push(
-        ...compareEntries(expected.entries ?? [], resolveRoles(actual, ctx.roles)),
-      );
+      differences.push(...compareEntries(expected.entries ?? [], resolveRoles(actual, ctx.roles)));
     }
     if (expected.values || actual.values) {
       differences.push(...compareValues(expected.values ?? {}, actual.values ?? {}));

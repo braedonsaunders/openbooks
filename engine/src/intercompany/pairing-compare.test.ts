@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BUYER_KIND, comparePairedDocuments, pairSideOf, SELLER_KIND, type PairedDocumentSummary } from "./pairing-compare.ts";
+import {
+  BUYER_KIND,
+  comparePairedDocuments,
+  pairSideOf,
+  SELLER_KIND,
+  type PairedDocumentSummary,
+} from "./pairing-compare.ts";
 
 function doc(overrides: Partial<PairedDocumentSummary> = {}): PairedDocumentSummary {
   return {
@@ -28,7 +34,10 @@ test("each sales kind pairs with exactly one purchase kind", () => {
 });
 
 test("agreeing documents in the same lifecycle are in sync", () => {
-  assert.deepEqual(comparePairedDocuments(doc(), doc({ documentId: "b" })), { state: "in_sync", mismatches: [] });
+  assert.deepEqual(comparePairedDocuments(doc(), doc({ documentId: "b" })), {
+    state: "in_sync",
+    mismatches: [],
+  });
 });
 
 test("a posted side against a draft side awaits its counterpart rather than mismatching", () => {
@@ -40,7 +49,9 @@ test("a posted side against a draft side awaits its counterpart rather than mism
 test("amount, currency, quantity and voided sides are named mismatches", () => {
   const amount = comparePairedDocuments(doc(), doc({ total: "990.0000" }));
   assert.equal(amount.state, "mismatched");
-  assert.deepEqual(amount.mismatches, [{ kind: "amount", seller: "1000.0000", buyer: "990.0000", difference: "10.0000" }]);
+  assert.deepEqual(amount.mismatches, [
+    { kind: "amount", seller: "1000.0000", buyer: "990.0000", difference: "10.0000" },
+  ]);
 
   const currency = comparePairedDocuments(doc(), doc({ currency: "CAD" }));
   assert.deepEqual(currency.mismatches, [{ kind: "currency", seller: "USD", buyer: "CAD" }]);
@@ -57,12 +68,17 @@ test("amount, currency, quantity and voided sides are named mismatches", () => {
 });
 
 test("quantities compare at their full eight-decimal precision", () => {
-  const result = comparePairedDocuments(doc({ quantities: { item: "1.00000001" } }), doc({ quantities: { item: "1" } }));
+  const result = comparePairedDocuments(
+    doc({ quantities: { item: "1.00000001" } }),
+    doc({ quantities: { item: "1" } }),
+  );
   assert.equal(result.state, "mismatched");
   assert.equal(result.mismatches[0]?.kind, "quantity");
 });
 
 test("a negative difference keeps its sign", () => {
   const result = comparePairedDocuments(doc({ total: "990.0000" }), doc());
-  assert.deepEqual(result.mismatches, [{ kind: "amount", seller: "990.0000", buyer: "1000.0000", difference: "-10.0000" }]);
+  assert.deepEqual(result.mismatches, [
+    { kind: "amount", seller: "990.0000", buyer: "1000.0000", difference: "-10.0000" },
+  ]);
 });

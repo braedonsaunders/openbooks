@@ -18,7 +18,10 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, certificateFlag,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -31,7 +34,11 @@ import {
 } from "./types.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/hi.ts";
 
 export type HiFilingStatus =
@@ -88,17 +95,19 @@ const HI_EDITIONS_BY_YEAR: Record<number, HiYearRates> = {
   [HI_RATES_2026.year]: HI_RATES_2026,
 };
 
-export const HI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Hawaii Booklet A Employer's Tax Guide (Rev. 2025) — 2026 tables",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Hawaii Department of Taxation, Booklet A, Employer's Tax Guide (Rev. 2025) "
-    + "— Appendix Part 1 annualized method, $1,144 allowance, $4,350 lump-sum "
-    + "allowance, $500 weekly 3-allowance example",
-  status: "published",
-  region: "HI",
-}];
+export const HI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Hawaii Booklet A Employer's Tax Guide (Rev. 2025) — 2026 tables",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Hawaii Department of Taxation, Booklet A, Employer's Tax Guide (Rev. 2025) " +
+      "— Appendix Part 1 annualized method, $1,144 allowance, $4,350 lump-sum " +
+      "allowance, $500 weekly 3-allowance example",
+    status: "published",
+    region: "HI",
+  },
+];
 
 export function hiAnnualTax(taxable: bigint, married: boolean, rates: HiYearRates): bigint {
   if (taxable <= 0n) return 0n;
@@ -120,7 +129,8 @@ function compute(
 
   // No HW-4: "withhold tax as if the employee was single and had claimed
   // no withholding allowance." Head of household is treated as single.
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as HiFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as HiFilingStatus;
   if (status === "certified_disabled") {
     if (!certificateFlag(input.certificate, "disability_certification_on_file")) {
       throw new PayrollError(
@@ -128,16 +138,41 @@ function compute(
       );
     }
     factors.HI_CERTIFIED_DISABLED_NOT_SUBJECT = "1";
-    return { state: "HI", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
+    return {
+      state: "HI",
+      year: rates.year,
+      tax: D(0n),
+      statutoryTax: D(0n),
+      additionalWithholding: D(0n),
+      taxSupplemental: D(0n),
+      factors,
+    };
   }
   if (status === "nonresident_military_spouse") {
     requireMilitarySpouseEligibility(input.certificate, "Hawaii", [
-      { key: "servicemember_present_under_orders", description: "the servicemember is in Hawaii solely under military or naval orders" },
-      { key: "spouse_present_to_accompany", description: "the spouse is in Hawaii solely to be with the servicemember" },
-      { key: "same_non_hawaii_domicile", description: "the spouse and servicemember are domiciled in the same state outside Hawaii" },
+      {
+        key: "servicemember_present_under_orders",
+        description: "the servicemember is in Hawaii solely under military or naval orders",
+      },
+      {
+        key: "spouse_present_to_accompany",
+        description: "the spouse is in Hawaii solely to be with the servicemember",
+      },
+      {
+        key: "same_non_hawaii_domicile",
+        description: "the spouse and servicemember are domiciled in the same state outside Hawaii",
+      },
     ]);
     factors.HI_NONRESIDENT_MILITARY_SPOUSE_NOT_SUBJECT = "1";
-    return { state: "HI", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
+    return {
+      state: "HI",
+      year: rates.year,
+      tax: D(0n),
+      statutoryTax: D(0n),
+      additionalWithholding: D(0n),
+      taxSupplemental: D(0n),
+      factors,
+    };
   }
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
@@ -226,13 +261,13 @@ export const HI_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "HI" },
   purpose: "withholding",
   citation:
-    "Hawaii Department of Taxation, Booklet A, Employer's Tax Guide (Rev. 2025); "
-    + "Form HW-4 (Rev. 2022). Federal Form W-4 may not be used.",
+    "Hawaii Department of Taxation, Booklet A, Employer's Tax Guide (Rev. 2025); " +
+    "Form HW-4 (Rev. 2022). Federal Form W-4 may not be used.",
   summary:
-    "Sets Hawaii marital status, allowances, and the two HW-4 not-subject-to-withholding statuses. "
-    + "Hawaii does not allow exempt status. If the employee does not "
-    + "furnish an HW-4, Booklet A requires withholding as single with no "
-    + "allowance. Head of household is treated as single.",
+    "Sets Hawaii marital status, allowances, and the two HW-4 not-subject-to-withholding statuses. " +
+    "Hawaii does not allow exempt status. If the employee does not " +
+    "furnish an HW-4, Booklet A requires withholding as single with no " +
+    "allowance. Head of household is treated as single.",
   storage: "certificate_rows",
   fields: [
     {
@@ -244,13 +279,19 @@ export const HI_CERTIFICATE: PayrollCertificate = {
         { value: "single", label: "Single (including unmarried heads of household)" },
         { value: "married", label: "Married" },
         { value: "married_single_rate", label: "Married, but withhold at the higher Single rate" },
-        { value: "certified_disabled", label: "Certified disabled person (not subject to withholding)" },
-        { value: "nonresident_military_spouse", label: "Nonresident military spouse (not subject to withholding)" },
+        {
+          value: "certified_disabled",
+          label: "Certified disabled person (not subject to withholding)",
+        },
+        {
+          value: "nonresident_military_spouse",
+          label: "Nonresident military spouse (not subject to withholding)",
+        },
       ],
       help:
-        "Booklet A treats head of household as single and separately permits married employees "
-        + "to choose the higher Single rate. Default Single is the publication's own rule when "
-        + "no HW-4 is on file.",
+        "Booklet A treats head of household as single and separately permits married employees " +
+        "to choose the higher Single rate. Default Single is the publication's own rule when " +
+        "no HW-4 is on file.",
     },
     {
       key: "allowances",
@@ -260,9 +301,9 @@ export const HI_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each allowance is $1,144 a year. The annualized method also subtracts "
-        + "the $4,350 extra lump-sum allowance. Default zero is Booklet A's "
-        + "missing-form rule (single, no allowance).",
+        "Each allowance is $1,144 a year. The annualized method also subtracts " +
+        "the $4,350 extra lump-sum allowance. Default zero is Booklet A's " +
+        "missing-form rule (single, no allowance).",
     },
     {
       key: "additional_per_period",
@@ -271,8 +312,8 @@ export const HI_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A written agreement may withhold more than, but not less than, the "
-        + "required amount. Added AFTER the annualized method is de-annualized.",
+        "A written agreement may withhold more than, but not less than, the " +
+        "required amount. Added AFTER the annualized method is de-annualized.",
     },
     {
       key: "disability_certification_on_file",
@@ -312,6 +353,5 @@ export const HI_REGION: PayrollRegionWithholding = {
   certificateKey: "us_hi_hw4",
   subRegions: [],
   subRegionConflictRule: "both",
-  citation:
-    "Hawaii Department of Taxation, Booklet A, Employer's Tax Guide (Rev. 2025); Form HW-4",
+  citation: "Hawaii Department of Taxation, Booklet A, Employer's Tax Guide (Rev. 2025); Form HW-4",
 };

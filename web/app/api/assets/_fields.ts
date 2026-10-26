@@ -89,10 +89,7 @@ export function parseLifeMonths(v: unknown): number | null | undefined {
   try {
     return depreciationPeriodCount(v);
   } catch (error) {
-    throw new FieldRefusal(
-      "invalid_life",
-      error instanceof Error ? error.message : undefined,
-    );
+    throw new FieldRefusal("invalid_life", error instanceof Error ? error.message : undefined);
   }
 }
 
@@ -113,12 +110,7 @@ export function parseUnitsTotal(v: unknown): string | null | undefined {
   if (v === undefined) return undefined;
   if (v === null || v === "") return null;
   const units = moneyOrNull(v);
-  if (
-    units === null ||
-    units === "unreadable" ||
-    units === "too-wide" ||
-    cmp(units, "0") <= 0
-  ) {
+  if (units === null || units === "unreadable" || units === "too-wide" || cmp(units, "0") <= 0) {
     throw new FieldRefusal("invalid_units");
   }
   return units;
@@ -146,24 +138,14 @@ export function parseOpeningAsOf(v: unknown): string | null | undefined {
 
 /** Both or neither: a carry-in amount without its measurement date (or the
  *  reverse) would silently reinterpret the depreciable basis. */
-export function checkOpeningPair(
-  accumulated: string | null,
-  asOf: string | null,
-): void {
+export function checkOpeningPair(accumulated: string | null, asOf: string | null): void {
   if ((accumulated === null) !== (asOf === null)) {
     throw new FieldRefusal("opening_pair_required");
   }
 }
 
-export function checkOpeningBasis(
-  accumulated: string | null,
-  cost: string,
-  salvage: string,
-): void {
-  if (
-    accumulated !== null &&
-    toUnits(accumulated) > toUnits(cost) - toUnits(salvage)
-  ) {
+export function checkOpeningBasis(accumulated: string | null, cost: string, salvage: string): void {
+  if (accumulated !== null && toUnits(accumulated) > toUnits(cost) - toUnits(salvage)) {
     throw new FieldRefusal("opening_exceeds_basis");
   }
 }
@@ -193,7 +175,8 @@ async function accountExists(
   const found = await exec.execute(
     sql`select 1 from accounts a
          where a.id = ${id} and a.org_id = ${orgId} and not a.is_summary
-           ${assetAccountScopeSql(orgId, allowedSubsidiaryIds)}`, "objects",
+           ${assetAccountScopeSql(orgId, allowedSubsidiaryIds)}`,
+    "objects",
   );
   return !!found[0];
 }
@@ -235,7 +218,11 @@ export async function parseAccountOverride(
   if (v === undefined) return undefined;
   const candidate = strOrNull(v);
   if (candidate === null) return null;
-  if (!isUuid(targetSubsidiaryId) || !isUuid(candidate) || !(await accountExists(exec, candidate, orgId, [targetSubsidiaryId]))) {
+  if (
+    !isUuid(targetSubsidiaryId) ||
+    !isUuid(candidate) ||
+    !(await accountExists(exec, candidate, orgId, [targetSubsidiaryId]))
+  ) {
     throw new FieldRefusal(code);
   }
   return candidate.toLowerCase();
@@ -251,11 +238,14 @@ export async function lockAccountOverridesForAssetWrite(
   targetSubsidiaryId: string,
   overrides: readonly { id: string | null | undefined; code: string }[],
 ): Promise<void> {
-  const target = await tx.execute(sql`
+  const target = await tx.execute(
+    sql`
     select id from subsidiaries
      where id = ${targetSubsidiaryId} and org_id = ${orgId} and is_active and not is_elimination
-     for share`, "objects")
-  if (!target[0]) throw new FieldRefusal('invalid_subsidiary')
+     for share`,
+    "objects",
+  );
+  if (!target[0]) throw new FieldRefusal("invalid_subsidiary");
   const byId = new Map<string, string>();
   for (const override of overrides) {
     if (override.id) byId.set(override.id, override.code);
@@ -282,9 +272,12 @@ export async function parseDepreciationMethodId(
   const candidate = strOrNull(v);
   if (candidate === null) return null;
   if (!isUuid(candidate)) throw new FieldRefusal("invalid_formula");
-  const formula = await exec.execute(sql`
+  const formula = await exec.execute(
+    sql`
     select 1 from depreciation_methods
-     where id = ${candidate} and org_id = ${orgId} and is_active`, "objects");
+     where id = ${candidate} and org_id = ${orgId} and is_active`,
+    "objects",
+  );
   if (!formula[0]) throw new FieldRefusal("unknown_formula");
   return candidate;
 }
@@ -340,9 +333,12 @@ export async function parseTaxDepreciation(
     }
     const classCode = strOrNull((raw as Record<string, unknown>).classCode);
     if (classCode) {
-      const valid = await exec.execute(sql`
+      const valid = await exec.execute(
+        sql`
         select 1 from tax_pool_classes
-         where org_id = ${orgId} and regime = ${regime} and class_code = ${classCode} and is_active`, "objects");
+         where org_id = ${orgId} and regime = ${regime} and class_code = ${classCode} and is_active`,
+        "objects",
+      );
       if (!valid[0]) throw new FieldRefusal("tax_class_invalid");
     }
     clean[regime] = {
@@ -360,12 +356,8 @@ export async function parseTaxDepreciation(
  * the effective bag). PATCH merges against the locked row itself and calls
  * checkCustomReferences on the supplied subset.
  */
-export async function parseCustomBag(
-  orgId: string,
-  v: unknown,
-): Promise<Record<string, unknown>> {
-  const bag =
-    v === undefined ? {} : (v as Record<string, unknown> | null) ?? {};
+export async function parseCustomBag(orgId: string, v: unknown): Promise<Record<string, unknown>> {
+  const bag = v === undefined ? {} : ((v as Record<string, unknown> | null) ?? {});
   if (!bag || typeof bag !== "object" || Array.isArray(bag)) {
     throw new FieldRefusal("invalid_custom_fields");
   }

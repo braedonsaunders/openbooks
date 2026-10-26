@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { notFound } from 'next/navigation'
-import { getFormatter, getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { notFound } from "next/navigation";
+import { getFormatter, getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -17,19 +17,23 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
+} from "@braedonsaunders/appkit-viewspec";
 import {
   getOneOnOne,
   listOneOnOneDirectory,
   listOneOnOnes,
-} from '@openbooks/engine/hrm/performance/one-on-ones'
-import { listOpenRequestsForParty } from '@openbooks/engine/hrm/performance/feedback'
-import { getAuthz } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { meTabs } from '../../../../lib/hrm/self-service'
-import { loadApprovalPerson } from '@openbooks/engine/hrm/authorization'
-import { db } from '@openbooks/engine/platform/db'
-import { businessTimeZone, formatInZone, formatTimeInZone } from '@openbooks/engine/platform/business-date/module'
+} from "@openbooks/engine/hrm/performance/one-on-ones";
+import { listOpenRequestsForParty } from "@openbooks/engine/hrm/performance/feedback";
+import { getAuthz } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { meTabs } from "../../../../lib/hrm/self-service";
+import { loadApprovalPerson } from "@openbooks/engine/hrm/authorization";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  businessTimeZone,
+  formatInZone,
+  formatTimeInZone,
+} from "@openbooks/engine/platform/business-date/module";
 
 /**
  * Me 1:1s — upcoming and past conversations with the agenda drawer
@@ -40,238 +44,268 @@ import { businessTimeZone, formatInZone, formatTimeInZone } from '@openbooks/eng
  * private items arrive already filtered to their author.
  */
 
-const f = ref<MeOneOnOnesData>()
+const f = ref<MeOneOnOnesData>();
 
 export interface AgendaRow {
-  id: string
-  kind: string
-  kindLabel: string
-  authorMine: boolean
-  body: string
-  visibility: string
-  visibilityLabel: string
-  status: string
-  carriedLabel: string | null
-  doneLabel: string
-  reopenLabel: string
+  id: string;
+  kind: string;
+  kindLabel: string;
+  authorMine: boolean;
+  body: string;
+  visibility: string;
+  visibilityLabel: string;
+  status: string;
+  carriedLabel: string | null;
+  doneLabel: string;
+  reopenLabel: string;
 }
 
 export interface MeOneOnOnesData {
-  title: string
-  description: string
-  tabs: { href: string; label: string; active?: boolean }[]
-  upcomingTitle: string
-  pastTitle: string
-  requestsTitle: string
-  cols: { when: string; with: string; status: string }
-  upcoming: { id: string; when: string; other: string; status: string; statusLabel: string; href: string }[]
-  past: { id: string; when: string; other: string; status: string; statusLabel: string; href: string }[]
-  upcomingEmpty: string
-  pastEmpty: string
-  requests: { id: string; body: string; subject: string; href: string }[]
-  requestsEmpty: string
+  title: string;
+  description: string;
+  tabs: { href: string; label: string; active?: boolean }[];
+  upcomingTitle: string;
+  pastTitle: string;
+  requestsTitle: string;
+  cols: { when: string; with: string; status: string };
+  upcoming: {
+    id: string;
+    when: string;
+    other: string;
+    status: string;
+    statusLabel: string;
+    href: string;
+  }[];
+  past: {
+    id: string;
+    when: string;
+    other: string;
+    status: string;
+    statusLabel: string;
+    href: string;
+  }[];
+  upcomingEmpty: string;
+  pastEmpty: string;
+  requests: { id: string; body: string; subject: string; href: string }[];
+  requestsEmpty: string;
   detail: {
-    id: string
-    title: string
-    when: string
-    with: string
-    status: string
-    canWrite: boolean
-    items: AgendaRow[]
-    newKinds: { value: string; label: string }[]
-    newKindLabel: string
-    bodyLabel: string
-    bodyPlaceholder: string
-    privateLabel: string
-    sharedLabel: string
-    addLabel: string
-    holdLabel: string
-    skipLabel: string
-    skipReasonLabel: string
-    cancelLabel: string
-    carryNote: string | null
-    failed: string
-    closeHref: string
-  } | null
+    id: string;
+    title: string;
+    when: string;
+    with: string;
+    status: string;
+    canWrite: boolean;
+    items: AgendaRow[];
+    newKinds: { value: string; label: string }[];
+    newKindLabel: string;
+    bodyLabel: string;
+    bodyPlaceholder: string;
+    privateLabel: string;
+    sharedLabel: string;
+    addLabel: string;
+    holdLabel: string;
+    skipLabel: string;
+    skipReasonLabel: string;
+    cancelLabel: string;
+    carryNote: string | null;
+    failed: string;
+    closeHref: string;
+  } | null;
   requestDetail: {
-    requestId: string
-    subjectLabel: string
-    kinds: { value: string; label: string }[]
-    kindLabel: string
-    visibilities: { value: string; label: string }[]
-    visibilityLabel: string
-    bodyLabel: string
-    bodyPlaceholder: string
-    submitLabel: string
-    cancelLabel: string
-    closeHref: string
-    failed: string
-    openLabel: string
-    subjectEmploymentId: string
-  } | null
-  drawerOpen: boolean
+    requestId: string;
+    subjectLabel: string;
+    kinds: { value: string; label: string }[];
+    kindLabel: string;
+    visibilities: { value: string; label: string }[];
+    visibilityLabel: string;
+    bodyLabel: string;
+    bodyPlaceholder: string;
+    submitLabel: string;
+    cancelLabel: string;
+    closeHref: string;
+    failed: string;
+    openLabel: string;
+    subjectEmploymentId: string;
+  } | null;
+  drawerOpen: boolean;
 }
 
 export function meOneOnOnesSpec(data: MeOneOnOnesData): PageSpec {
   return page({
-    route: '/me/one-on-ones',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/me/one-on-ones",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
     body: [
       // Upcoming, past and open requests render as direct lists under
       // house headings — no panel repeats the section name.
-      grid('flex h-full min-h-0 flex-col gap-4', [
-        heading(2, f('upcomingTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-        registeredListTable('me_one_on_ones_upcoming', {
-          variant: 'app',
-          rows: f('upcoming'),
-          rowKey: item('id'),
-          empty: { title: f('upcomingEmpty') },
+      grid("flex h-full min-h-0 flex-col gap-4", [
+        heading(2, f("upcomingTitle"), "text-sm font-semibold text-slate-900 dark:text-slate-100"),
+        registeredListTable("me_one_on_ones_upcoming", {
+          variant: "app",
+          rows: f("upcoming"),
+          rowKey: item("id"),
+          empty: { title: f("upcomingEmpty") },
           columns: [
-            column(data.cols.when, link(item('when'), item('href'))),
-            column(data.cols.with, text(item('other'))),
-            column(data.cols.status, badge(item('statusLabel'), { variant: 'secondary' })),
+            column(data.cols.when, link(item("when"), item("href"))),
+            column(data.cols.with, text(item("other"))),
+            column(data.cols.status, badge(item("statusLabel"), { variant: "secondary" })),
           ],
         }),
-        heading(2, f('pastTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-        registeredListTable('me_one_on_ones_past', {
-          variant: 'app',
-          rows: f('past'),
-          rowKey: item('id'),
-          empty: { title: f('pastEmpty') },
+        heading(2, f("pastTitle"), "text-sm font-semibold text-slate-900 dark:text-slate-100"),
+        registeredListTable("me_one_on_ones_past", {
+          variant: "app",
+          rows: f("past"),
+          rowKey: item("id"),
+          empty: { title: f("pastEmpty") },
           columns: [
-            column(data.cols.when, link(item('when'), item('href'))),
-            column(data.cols.with, text(item('other'))),
-            column(data.cols.status, badge(item('statusLabel'), { variant: 'secondary' })),
+            column(data.cols.when, link(item("when"), item("href"))),
+            column(data.cols.with, text(item("other"))),
+            column(data.cols.status, badge(item("statusLabel"), { variant: "secondary" })),
           ],
         }),
-        heading(2, f('requestsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-        registeredListTable('me_one_on_ones_requests', {
-          variant: 'app',
-          rows: f('requests'),
-          rowKey: item('id'),
-          empty: { title: f('requestsEmpty') },
+        heading(2, f("requestsTitle"), "text-sm font-semibold text-slate-900 dark:text-slate-100"),
+        registeredListTable("me_one_on_ones_requests", {
+          variant: "app",
+          rows: f("requests"),
+          rowKey: item("id"),
+          empty: { title: f("requestsEmpty") },
           columns: [
-            column(data.requestsTitle, link(item('body'), item('href'))),
-            column(data.cols.with, text(item('subject'))),
+            column(data.requestsTitle, link(item("body"), item("href"))),
+            column(data.cols.with, text(item("subject"))),
           ],
         }),
       ]),
       {
-        ...widgetBlock('hrm-one-on-one-drawer', { detail: data.detail }),
-        when: f('drawerOpen'),
+        ...widgetBlock("hrm-one-on-one-drawer", { detail: data.detail }),
+        when: f("drawerOpen"),
       },
-      widgetBlock('hrm-feedback-dialog', {
-        subjectEmploymentId: data.requestDetail?.subjectEmploymentId ?? '',
-        subjectLabel: data.requestDetail?.subjectLabel ?? '',
+      widgetBlock("hrm-feedback-dialog", {
+        subjectEmploymentId: data.requestDetail?.subjectEmploymentId ?? "",
+        subjectLabel: data.requestDetail?.subjectLabel ?? "",
         requestId: data.requestDetail?.requestId ?? null,
         kinds: data.requestDetail?.kinds ?? [],
-        kindLabel: data.requestDetail?.kindLabel ?? '',
+        kindLabel: data.requestDetail?.kindLabel ?? "",
         visibilities: data.requestDetail?.visibilities ?? [],
-        visibilityLabel: data.requestDetail?.visibilityLabel ?? '',
-        bodyLabel: data.requestDetail?.bodyLabel ?? '',
-        bodyPlaceholder: data.requestDetail?.bodyPlaceholder ?? '',
-        submitLabel: data.requestDetail?.submitLabel ?? '',
-        cancelLabel: data.requestDetail?.cancelLabel ?? '',
-        closeHref: data.requestDetail?.closeHref ?? '/me/one-on-ones',
-        failed: data.requestDetail?.failed ?? '',
-        openLabel: data.requestDetail?.openLabel ?? '',
+        visibilityLabel: data.requestDetail?.visibilityLabel ?? "",
+        bodyLabel: data.requestDetail?.bodyLabel ?? "",
+        bodyPlaceholder: data.requestDetail?.bodyPlaceholder ?? "",
+        submitLabel: data.requestDetail?.submitLabel ?? "",
+        cancelLabel: data.requestDetail?.cancelLabel ?? "",
+        closeHref: data.requestDetail?.closeHref ?? "/me/one-on-ones",
+        failed: data.requestDetail?.failed ?? "",
+        openLabel: data.requestDetail?.openLabel ?? "",
       }),
     ],
-  })
+  });
 }
 
 export async function meOneOnOnesTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('me.oneOnOnes.title')
+  const t = await getTranslations("hrm");
+  return t("me.oneOnOnes.title");
 }
 
 export async function loadMeOneOnOnesPage(
   sp: Record<string, string | undefined>,
   options: { detailOnly?: boolean } = {},
 ): Promise<MeOneOnOnesData> {
-  const authz = await getAuthz()
-  if (!authz) notFound()
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
-  const t = await getTranslations('hrm')
-  const format = await getFormatter()
-  const tabs = await meTabs(authz, '/me/one-on-ones')
+  const authz = await getAuthz();
+  if (!authz) notFound();
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  await requireFeatureEnabled(authz.user.orgId, "hrmPerformance");
+  const t = await getTranslations("hrm");
+  const format = await getFormatter();
+  const tabs = await meTabs(authz, "/me/one-on-ones");
 
-  const reportFilter = typeof sp.report === 'string' && sp.report.length > 0 ? sp.report : null
-  const ones = options.detailOnly ? [] : await listOneOnOnes({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    ...(reportFilter ? { employmentId: reportFilter } : {}),
-  })
-  const directory = options.detailOnly ? null : await listOneOnOneDirectory({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null)
-  const names = new Map((directory?.employments ?? []).map((e) => [e.id, e.name]))
-  const otherName = (one: { managerEmploymentId: string; reportEmploymentId: string; managerName: string; reportName: string }): string => {
-    const mineFirst = directory?.employments.find((e) => e.mine)
+  const reportFilter = typeof sp.report === "string" && sp.report.length > 0 ? sp.report : null;
+  const ones = options.detailOnly
+    ? []
+    : await listOneOnOnes({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        ...(reportFilter ? { employmentId: reportFilter } : {}),
+      });
+  const directory = options.detailOnly
+    ? null
+    : await listOneOnOneDirectory({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(
+        () => null,
+      );
+  const names = new Map((directory?.employments ?? []).map((e) => [e.id, e.name]));
+  const otherName = (one: {
+    managerEmploymentId: string;
+    reportEmploymentId: string;
+    managerName: string;
+    reportName: string;
+  }): string => {
+    const mineFirst = directory?.employments.find((e) => e.mine);
     if (mineFirst) {
-      return one.managerEmploymentId === mineFirst.id ? one.reportName : one.managerName
+      return one.managerEmploymentId === mineFirst.id ? one.reportName : one.managerName;
     }
-    return names.get(one.reportEmploymentId) ?? one.reportName
-  }
+    return names.get(one.reportEmploymentId) ?? one.reportName;
+  };
   const statusLabel = (status: string): string =>
-    status === 'held' ? t('me.oneOnOnes.held')
-    : status === 'skipped' ? t('me.oneOnOnes.skipped')
-    : status === 'cancelled' ? t('me.oneOnOnes.cancelled')
-    : t('me.oneOnOnes.scheduled')
+    status === "held"
+      ? t("me.oneOnOnes.held")
+      : status === "skipped"
+        ? t("me.oneOnOnes.skipped")
+        : status === "cancelled"
+          ? t("me.oneOnOnes.cancelled")
+          : t("me.oneOnOnes.scheduled");
   const toRow = (one: (typeof ones)[number]) => ({
     id: one.id,
-    when: format.dateTime(new Date(one.scheduledAt), { dateStyle: 'medium', timeStyle: 'short' }),
+    when: format.dateTime(new Date(one.scheduledAt), { dateStyle: "medium", timeStyle: "short" }),
     other: otherName(one),
     status: one.status,
     statusLabel: statusLabel(one.status),
     href: `/me/one-on-ones?one=${one.id}`,
-  })
-  const upcoming = ones.filter((o) => o.status === 'scheduled').map(toRow)
-  const past = ones.filter((o) => o.status !== 'scheduled').map(toRow)
+  });
+  const upcoming = ones.filter((o) => o.status === "scheduled").map(toRow);
+  const past = ones.filter((o) => o.status !== "scheduled").map(toRow);
 
-  let requests: MeOneOnOnesData['requests'] = []
+  let requests: MeOneOnOnesData["requests"] = [];
   try {
-    const open = options.detailOnly ? [] : await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id })
+    const open = options.detailOnly
+      ? []
+      : await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id });
     requests = open.map((r) => ({
       id: r.id,
       body: r.body.length > 80 ? `${r.body.slice(0, 80)}…` : r.body,
       subject: r.subjectName,
       href: `/me/one-on-ones?request=${r.id}`,
-    }))
+    }));
   } catch {
-    requests = []
+    requests = [];
   }
 
-  const oneId = typeof sp.one === 'string' && sp.one.length > 0 ? sp.one : null
-  let detail: MeOneOnOnesData['detail'] = null
+  const oneId = typeof sp.one === "string" && sp.one.length > 0 ? sp.one : null;
+  let detail: MeOneOnOnesData["detail"] = null;
   if (oneId) {
     try {
-      const one = await getOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id: oneId })
+      const one = await getOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id: oneId });
       // The drawer names a wall time, so it renders in the org's zone —
       // never the raw stored ISO with millis. A zone failure closes the
       // drawer (detail null) instead of blanking the page.
-      const timeZone = await businessTimeZone(authz.user.orgId)
+      const timeZone = await businessTimeZone(authz.user.orgId);
       const inZone = (iso: string): string => {
-        const at = new Date(iso)
-        const hhmm = formatTimeInZone(at, timeZone)
-        return `${formatInZone(at, timeZone)} ${hhmm.slice(0, 2)}:${hhmm.slice(2)}`
-      }
-      const when = inZone(one.scheduledAt)
+        const at = new Date(iso);
+        const hhmm = formatTimeInZone(at, timeZone);
+        return `${formatInZone(at, timeZone)} ${hhmm.slice(0, 2)}:${hhmm.slice(2)}`;
+      };
+      const when = inZone(one.scheduledAt);
       // authorMine derives from the delivered authorPartyId — private
       // notes arrive already filtered to their author by the service, so
       // this only names the author, never widens delivery. An unlinked
       // login resolves no party and sees every delivered item as not-mine.
       const myPartyId = await loadApprovalPerson(db, authz.user.orgId, authz.user.id)
         .then((person) => person.partyId)
-        .catch(() => null)
+        .catch(() => null);
       detail = {
         id: one.id,
         title: otherName(one),
@@ -283,96 +317,104 @@ export async function loadMeOneOnOnesPage(
           id: i.id,
           kind: i.kind,
           kindLabel:
-            i.kind === 'action_item' ? t('me.oneOnOnes.actionItem')
-            : i.kind === 'note' ? t('me.oneOnOnes.note')
-            : t('me.oneOnOnes.talkingPoint'),
+            i.kind === "action_item"
+              ? t("me.oneOnOnes.actionItem")
+              : i.kind === "note"
+                ? t("me.oneOnOnes.note")
+                : t("me.oneOnOnes.talkingPoint"),
           authorMine: myPartyId !== null && i.authorPartyId === myPartyId,
           body: i.body,
           visibility: i.visibility,
-          visibilityLabel: i.visibility === 'private' ? t('me.oneOnOnes.private') : t('me.oneOnOnes.shared'),
+          visibilityLabel:
+            i.visibility === "private" ? t("me.oneOnOnes.private") : t("me.oneOnOnes.shared"),
           status: i.status,
-          carriedLabel: i.status === 'carried' ? t('me.oneOnOnes.carriedForward') : null,
-          doneLabel: t('me.oneOnOnes.done'),
-          reopenLabel: t('me.oneOnOnes.reopen'),
+          carriedLabel: i.status === "carried" ? t("me.oneOnOnes.carriedForward") : null,
+          doneLabel: t("me.oneOnOnes.done"),
+          reopenLabel: t("me.oneOnOnes.reopen"),
         })),
         newKinds: [
-          { value: 'talking_point', label: t('me.oneOnOnes.talkingPoint') },
-          { value: 'action_item', label: t('me.oneOnOnes.actionItem') },
-          { value: 'note', label: t('me.oneOnOnes.note') },
+          { value: "talking_point", label: t("me.oneOnOnes.talkingPoint") },
+          { value: "action_item", label: t("me.oneOnOnes.actionItem") },
+          { value: "note", label: t("me.oneOnOnes.note") },
         ],
-        newKindLabel: t('me.oneOnOnes.kindLabel'),
-        bodyLabel: t('me.oneOnOnes.bodyLabel'),
-        bodyPlaceholder: t('me.oneOnOnes.bodyPlaceholder'),
-        privateLabel: t('me.oneOnOnes.privateNote'),
-        sharedLabel: t('me.oneOnOnes.shared'),
-        addLabel: t('me.oneOnOnes.addItem'),
-        holdLabel: t('me.oneOnOnes.hold'),
-        skipLabel: t('me.oneOnOnes.skip'),
-        skipReasonLabel: t('me.oneOnOnes.skipReason'),
-        cancelLabel: t('me.oneOnOnes.cancelMeeting'),
-        carryNote: t('me.oneOnOnes.carryNote'),
-        failed: t('me.oneOnOnes.actionFailed'),
-        closeHref: '/me/one-on-ones',
-      }
+        newKindLabel: t("me.oneOnOnes.kindLabel"),
+        bodyLabel: t("me.oneOnOnes.bodyLabel"),
+        bodyPlaceholder: t("me.oneOnOnes.bodyPlaceholder"),
+        privateLabel: t("me.oneOnOnes.privateNote"),
+        sharedLabel: t("me.oneOnOnes.shared"),
+        addLabel: t("me.oneOnOnes.addItem"),
+        holdLabel: t("me.oneOnOnes.hold"),
+        skipLabel: t("me.oneOnOnes.skip"),
+        skipReasonLabel: t("me.oneOnOnes.skipReason"),
+        cancelLabel: t("me.oneOnOnes.cancelMeeting"),
+        carryNote: t("me.oneOnOnes.carryNote"),
+        failed: t("me.oneOnOnes.actionFailed"),
+        closeHref: "/me/one-on-ones",
+      };
     } catch (error) {
-      if (options.detailOnly) throw error
-      detail = null
+      if (options.detailOnly) throw error;
+      detail = null;
     }
   }
 
-  const requestId = typeof sp.request === 'string' && sp.request.length > 0 ? sp.request : null
-  let requestDetail: MeOneOnOnesData['requestDetail'] = null
+  const requestId = typeof sp.request === "string" && sp.request.length > 0 ? sp.request : null;
+  let requestDetail: MeOneOnOnesData["requestDetail"] = null;
   if (requestId) {
     try {
-      const open = options.detailOnly ? [] : await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id })
-      const req = open.find((r) => r.id === requestId)
+      const open = options.detailOnly
+        ? []
+        : await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id });
+      const req = open.find((r) => r.id === requestId);
       if (req) {
         requestDetail = {
           requestId: req.id,
           subjectLabel: req.subjectName,
           kinds: [],
-          kindLabel: '',
+          kindLabel: "",
           visibilities: [
-            { value: 'manager_and_subject', label: t('performance.continuous.feedback.managerAndSubject') },
-            { value: 'manager_only', label: t('performance.continuous.feedback.managerOnly') },
-            { value: 'subject_only', label: t('performance.continuous.feedback.subjectOnly') },
+            {
+              value: "manager_and_subject",
+              label: t("performance.continuous.feedback.managerAndSubject"),
+            },
+            { value: "manager_only", label: t("performance.continuous.feedback.managerOnly") },
+            { value: "subject_only", label: t("performance.continuous.feedback.subjectOnly") },
           ],
-          visibilityLabel: t('performance.continuous.feedback.visibilityLabel'),
-          bodyLabel: t('performance.continuous.feedback.bodyLabel'),
-          bodyPlaceholder: t('performance.continuous.feedback.bodyPlaceholder'),
-          submitLabel: t('performance.continuous.feedback.submitLabel'),
-          cancelLabel: t('performance.cancel'),
-          closeHref: '/me/one-on-ones',
-          failed: t('me.oneOnOnes.actionFailed'),
-          openLabel: t('performance.continuous.feedback.respondLabel'),
+          visibilityLabel: t("performance.continuous.feedback.visibilityLabel"),
+          bodyLabel: t("performance.continuous.feedback.bodyLabel"),
+          bodyPlaceholder: t("performance.continuous.feedback.bodyPlaceholder"),
+          submitLabel: t("performance.continuous.feedback.submitLabel"),
+          cancelLabel: t("performance.cancel"),
+          closeHref: "/me/one-on-ones",
+          failed: t("me.oneOnOnes.actionFailed"),
+          openLabel: t("performance.continuous.feedback.respondLabel"),
           subjectEmploymentId: req.subjectEmploymentId,
-        }
+        };
       }
     } catch {
-      requestDetail = null
+      requestDetail = null;
     }
   }
 
   return {
-    title: t('me.oneOnOnes.title'),
-    description: t('me.oneOnOnes.description'),
+    title: t("me.oneOnOnes.title"),
+    description: t("me.oneOnOnes.description"),
     tabs,
-    upcomingTitle: t('me.oneOnOnes.upcoming'),
-    pastTitle: t('me.oneOnOnes.past'),
-    requestsTitle: t('me.oneOnOnes.requests'),
+    upcomingTitle: t("me.oneOnOnes.upcoming"),
+    pastTitle: t("me.oneOnOnes.past"),
+    requestsTitle: t("me.oneOnOnes.requests"),
     cols: {
-      when: t('me.oneOnOnes.colWhen'),
-      with: t('me.oneOnOnes.colWith'),
-      status: t('me.oneOnOnes.colStatus'),
+      when: t("me.oneOnOnes.colWhen"),
+      with: t("me.oneOnOnes.colWith"),
+      status: t("me.oneOnOnes.colStatus"),
     },
     upcoming,
     past,
-    upcomingEmpty: t('me.oneOnOnes.upcomingEmpty'),
-    pastEmpty: t('me.oneOnOnes.pastEmpty'),
+    upcomingEmpty: t("me.oneOnOnes.upcomingEmpty"),
+    pastEmpty: t("me.oneOnOnes.pastEmpty"),
     requests,
-    requestsEmpty: t('me.oneOnOnes.requestsEmpty'),
+    requestsEmpty: t("me.oneOnOnes.requestsEmpty"),
     detail,
     requestDetail,
     drawerOpen: detail !== null,
-  }
+  };
 }

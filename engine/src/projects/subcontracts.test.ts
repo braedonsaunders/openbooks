@@ -36,7 +36,9 @@ test("subcontract transition parser accepts only its three domain actions", () =
   ]) {
     assert.throws(
       () => parseSubcontractTransitionAction(invalid),
-      (error) => error instanceof SubcontractError && error.message === "Invalid subcontract transition action",
+      (error) =>
+        error instanceof SubcontractError &&
+        error.message === "Invalid subcontract transition action",
     );
   }
 });
@@ -50,56 +52,72 @@ test("invalid subcontract transition is refused before database work", async (t)
   });
 
   await assert.rejects(
-    transitionSubcontract({ orgId: "org-1", userId: "user-1", id: "sub-1", action: "approve" as never }),
+    transitionSubcontract({
+      orgId: "org-1",
+      userId: "user-1",
+      id: "sub-1",
+      action: "approve" as never,
+    }),
     (error: unknown) =>
-      error instanceof SubcontractError && error.message === "Invalid subcontract transition action",
+      error instanceof SubcontractError &&
+      error.message === "Invalid subcontract transition action",
   );
   assert.equal(transactionOpened, false);
 });
 
 test("vendor application treats stored materials as a cumulative balance", () => {
-  const result = computeVendorApplication([{
-    sovLineId: "line-1",
-    scheduledValue: "1000",
-    previousEarned: "400",
-    previousMaterialsStored: "100",
-    workCompletedThisPeriod: "150",
-    materialsStoredCurrent: "50",
-    retainagePercent: "10",
-  }]);
-  assert.deepEqual(result, {
-    lines: [{
+  const result = computeVendorApplication([
+    {
       sovLineId: "line-1",
-      grossThisPeriod: "100.0000",
-      retainageThisPeriod: "10.0000",
-      netDue: "90.0000",
-      earnedToDate: "500.0000",
-      materialsStoredCurrent: "50.0000",
-      remainingCommitment: "500.0000",
-    }],
+      scheduledValue: "1000",
+      previousEarned: "400",
+      previousMaterialsStored: "100",
+      workCompletedThisPeriod: "150",
+      materialsStoredCurrent: "50",
+      retainagePercent: "10",
+    },
+  ]);
+  assert.deepEqual(result, {
+    lines: [
+      {
+        sovLineId: "line-1",
+        grossThisPeriod: "100.0000",
+        retainageThisPeriod: "10.0000",
+        netDue: "90.0000",
+        earnedToDate: "500.0000",
+        materialsStoredCurrent: "50.0000",
+        remainingCommitment: "500.0000",
+      },
+    ],
     grossThisPeriod: "100.0000",
     retainageThisPeriod: "10.0000",
     netDue: "90.0000",
   });
 });
 test("vendor two-decimal settlement rounds the cumulative retained amount and carries the residual", () => {
-  const result = computeVendorApplication([{
-    sovLineId: "line-1",
-    scheduledValue: "10000",
-    previousEarned: "0",
-    previousMaterialsStored: "0",
-    workCompletedThisPeriod: "3333.33",
-    materialsStoredCurrent: "0",
-    retainagePercent: "10",
-  }, {
-    sovLineId: "line-2",
-    scheduledValue: "10000",
-    previousEarned: "0",
-    previousMaterialsStored: "0",
-    workCompletedThisPeriod: "3333.33",
-    materialsStoredCurrent: "0",
-    retainagePercent: "5",
-  }], { minorUnits: 2 });
+  const result = computeVendorApplication(
+    [
+      {
+        sovLineId: "line-1",
+        scheduledValue: "10000",
+        previousEarned: "0",
+        previousMaterialsStored: "0",
+        workCompletedThisPeriod: "3333.33",
+        materialsStoredCurrent: "0",
+        retainagePercent: "10",
+      },
+      {
+        sovLineId: "line-2",
+        scheduledValue: "10000",
+        previousEarned: "0",
+        previousMaterialsStored: "0",
+        workCompletedThisPeriod: "3333.33",
+        materialsStoredCurrent: "0",
+        retainagePercent: "5",
+      },
+    ],
+    { minorUnits: 2 },
+  );
   // Exact 333.333 + 166.6665 settles 333.33 + 166.67 = 500.00 exactly.
   assert.equal(result.lines[0]!.retainageThisPeriod, "333.3300");
   assert.equal(result.lines[1]!.retainageThisPeriod, "166.6700");
@@ -108,56 +126,64 @@ test("vendor two-decimal settlement rounds the cumulative retained amount and ca
 });
 
 test("vendor prior-draw replay carries the residual across draws", () => {
-  const result = computeVendorApplication([{
-    sovLineId: "line-1",
-    scheduledValue: "10000",
-    previousEarned: "333.33",
-    previousMaterialsStored: "0",
-    workCompletedThisPeriod: "333.33",
-    materialsStoredCurrent: "0",
-    retainagePercent: "10",
-  }], { minorUnits: 2, priorExactRetainage: ["33.3333"] });
+  const result = computeVendorApplication(
+    [
+      {
+        sovLineId: "line-1",
+        scheduledValue: "10000",
+        previousEarned: "333.33",
+        previousMaterialsStored: "0",
+        workCompletedThisPeriod: "333.33",
+        materialsStoredCurrent: "0",
+        retainagePercent: "10",
+      },
+    ],
+    { minorUnits: 2, priorExactRetainage: ["33.3333"] },
+  );
   // Cumulative exact 66.6666 rounds to 66.67; 33.33 already settled.
   assert.equal(result.retainageThisPeriod, "33.3400");
   assert.equal(result.lines[0]!.earnedToDate, "666.6600");
 });
 
 test("vendor application prevents stored-material double pay and overbilling", () => {
-  assert.throws(() => computeVendorApplication([{
-    sovLineId: "line-1",
-    scheduledValue: "1000",
-    previousEarned: "400",
-    previousMaterialsStored: "100",
-    workCompletedThisPeriod: "25",
-    materialsStoredCurrent: "50",
-    retainagePercent: "10",
-  }]), /reduction in stored materials must be offset/);
-  assert.throws(() => computeVendorApplication([{
-    sovLineId: "line-1",
-    scheduledValue: "450",
-    previousEarned: "400",
-    previousMaterialsStored: "0",
-    workCompletedThisPeriod: "51",
-    materialsStoredCurrent: "0",
-    retainagePercent: "10",
-  }]), /exceeds the revised SOV value/);
+  assert.throws(
+    () =>
+      computeVendorApplication([
+        {
+          sovLineId: "line-1",
+          scheduledValue: "1000",
+          previousEarned: "400",
+          previousMaterialsStored: "100",
+          workCompletedThisPeriod: "25",
+          materialsStoredCurrent: "50",
+          retainagePercent: "10",
+        },
+      ]),
+    /reduction in stored materials must be offset/,
+  );
+  assert.throws(
+    () =>
+      computeVendorApplication([
+        {
+          sovLineId: "line-1",
+          scheduledValue: "450",
+          previousEarned: "400",
+          previousMaterialsStored: "0",
+          workCompletedThisPeriod: "51",
+          materialsStoredCurrent: "0",
+          retainagePercent: "10",
+        },
+      ]),
+    /exceeds the revised SOV value/,
+  );
 });
 
 test("deductive change cannot erase earned work", () => {
   assert.equal(revisedSubcontractSovValue("1000", "-200", "750"), "800.0000");
   assert.equal(revisedSubcontractSovValue("1000.00", "-200.0000", "750"), "800.0000");
-  assert.throws(
-    () => revisedSubcontractSovValue("1000", "-300", "750"),
-    SubcontractError,
-  );
-  assert.throws(
-    () => revisedSubcontractSovValue("not-a-number", "-200", "750"),
-    SubcontractError,
-  );
-  assert.throws(
-    () => revisedSubcontractSovValue("1000", "-200", "0.00005"),
-    SubcontractError,
-  );
+  assert.throws(() => revisedSubcontractSovValue("1000", "-300", "750"), SubcontractError);
+  assert.throws(() => revisedSubcontractSovValue("not-a-number", "-200", "750"), SubcontractError);
+  assert.throws(() => revisedSubcontractSovValue("1000", "-200", "0.00005"), SubcontractError);
 });
 
 test("subcontract dates are validated as calendar days before any database work", async (t) => {
@@ -170,25 +196,59 @@ test("subcontract dates are validated as calendar days before any database work"
   const base = { orgId: "org-1", userId: "user-1", subcontractId: "sub-1" };
   // The route stringifies a missing approvedOn to "undefined"; that must be a
   // domain rejection, not a 22007 from the date column.
-  await assert.rejects(approveSubcontractChangeOrder("org-1", "user-1", "co-1", "undefined"), isDateError);
+  await assert.rejects(
+    approveSubcontractChangeOrder("org-1", "user-1", "co-1", "undefined"),
+    isDateError,
+  );
   for (const bad of ["", "2026-02-30", "07/31/2026", "2026-7-1"]) {
-    await assert.rejects(approveSubcontractChangeOrder("org-1", "user-1", "co-1", bad), isDateError, `approve(${bad})`);
-    await assert.rejects(releaseVendorRetainage({ ...base, periodEnd: bad, amount: "100" }), isDateError, `release(${bad})`);
-    await assert.rejects(createVendorPayApplication({ ...base, periodEnd: bad }), isDateError, `application(${bad})`);
     await assert.rejects(
-      createSubcontractPaymentControl({ ...base, controlType: "payment_hold", reason: "Lien notice", effectiveOn: bad }),
+      approveSubcontractChangeOrder("org-1", "user-1", "co-1", bad),
+      isDateError,
+      `approve(${bad})`,
+    );
+    await assert.rejects(
+      releaseVendorRetainage({ ...base, periodEnd: bad, amount: "100" }),
+      isDateError,
+      `release(${bad})`,
+    );
+    await assert.rejects(
+      createVendorPayApplication({ ...base, periodEnd: bad }),
+      isDateError,
+      `application(${bad})`,
+    );
+    await assert.rejects(
+      createSubcontractPaymentControl({
+        ...base,
+        controlType: "payment_hold",
+        reason: "Lien notice",
+        effectiveOn: bad,
+      }),
       isDateError,
       `control effectiveOn(${bad})`,
     );
     // Optional dates: empty means "not set"; anything else must be a calendar day.
     if (bad === "") continue;
     await assert.rejects(
-      createSubcontractPaymentControl({ ...base, controlType: "payment_hold", reason: "Lien notice", effectiveOn: "2026-07-01", expiresOn: bad }),
+      createSubcontractPaymentControl({
+        ...base,
+        controlType: "payment_hold",
+        reason: "Lien notice",
+        effectiveOn: "2026-07-01",
+        expiresOn: bad,
+      }),
       isDateError,
       `control expiresOn(${bad})`,
     );
     await assert.rejects(
-      createSubcontract({ ...base, projectId: "p-1", vendorId: "v-1", number: "S-1", title: "Roofing", originalCommitment: "1000", startsOn: bad }),
+      createSubcontract({
+        ...base,
+        projectId: "p-1",
+        vendorId: "v-1",
+        number: "S-1",
+        title: "Roofing",
+        originalCommitment: "1000",
+        startsOn: bad,
+      }),
       isDateError,
       `subcontract startsOn(${bad})`,
     );
@@ -215,7 +275,8 @@ type FakeTx = { execute: (query: unknown, mode?: string) => Promise<unknown> };
 function mockTransaction(t: TestContext, features: Record<string, boolean>, seen: string[]): void {
   const tx: FakeTx = {
     execute: async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       seen.push(sqlText(query));
       return inMode({ rows: [{ features }] });
     },
@@ -278,10 +339,12 @@ test("createSubcontract proceeds past enabled gates to the project lookup", asyn
   let calls = 0;
   const tx: FakeTx = {
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       calls += 1;
       if (calls === 1) return inMode({ rows: [] });
-      if (calls <= 3) return inMode({ rows: [{ features: { projects: true, subcontracts: true } }] });
+      if (calls <= 3)
+        return inMode({ rows: [{ features: { projects: true, subcontracts: true } }] });
       throw new Error("beyond-gate");
     },
   };
@@ -301,7 +364,12 @@ test("createVendorPayApplication shares the same fenced gate", async (t) => {
   const seen: string[] = [];
   mockTransaction(t, { projects: true, subcontracts: false }, seen);
   await assert.rejects(
-    createVendorPayApplication({ orgId: "org-1", userId: "user-1", subcontractId: "s-1", periodEnd: "2026-08-31" }),
+    createVendorPayApplication({
+      orgId: "org-1",
+      userId: "user-1",
+      subcontractId: "s-1",
+      periodEnd: "2026-08-31",
+    }),
     (error: unknown) =>
       error instanceof SubcontractError && error.message === "Subcontracts feature is disabled",
   );
@@ -314,7 +382,13 @@ test("addSubcontractSovLine shares the same fenced gate", async (t) => {
   const seen: string[] = [];
   mockTransaction(t, { projects: false, subcontracts: false }, seen);
   await assert.rejects(
-    addSubcontractSovLine({ orgId: "org-1", userId: "user-1", subcontractId: "s-1", description: "Demolition", scheduledValue: "500" }),
+    addSubcontractSovLine({
+      orgId: "org-1",
+      userId: "user-1",
+      subcontractId: "s-1",
+      description: "Demolition",
+      scheduledValue: "500",
+    }),
     (error: unknown) =>
       error instanceof SubcontractError && error.message === "Projects feature is disabled",
   );
@@ -337,17 +411,49 @@ test("addSubcontractSovLine shares the same fenced gate", async (t) => {
  */
 
 /** Values canonicalDecimal(4) refuses: separators, symbols, scale, science, blanks, nullish. */
-const MALFORMED_MONEY: unknown[] = ["12,34", "1,234", "1.23456", "$100", "\u20ac50", "1e3", "abc", "", "   ", null, undefined];
+const MALFORMED_MONEY: unknown[] = [
+  "12,34",
+  "1,234",
+  "1.23456",
+  "$100",
+  "\u20ac50",
+  "1e3",
+  "abc",
+  "",
+  "   ",
+  null,
+  undefined,
+];
 /** Optional fields that default on nullish (never reach the parser). */
-const MALFORMED_MONEY_PRESENT: unknown[] = ["12,34", "1,234", "1.23456", "$100", "\u20ac50", "1e3", "abc", "", "   "];
+const MALFORMED_MONEY_PRESENT: unknown[] = [
+  "12,34",
+  "1,234",
+  "1.23456",
+  "$100",
+  "\u20ac50",
+  "1e3",
+  "abc",
+  "",
+  "   ",
+];
 /** Optional fields that also skip on blank (never reach the parser). */
-const MALFORMED_MONEY_NONBLANK: unknown[] = ["12,34", "1,234", "1.23456", "$100", "\u20ac50", "1e3", "abc", "   "];
+const MALFORMED_MONEY_NONBLANK: unknown[] = [
+  "12,34",
+  "1,234",
+  "1.23456",
+  "$100",
+  "\u20ac50",
+  "1e3",
+  "abc",
+  "   ",
+];
 
 /** Valid money passes the money gate and dies at the disabled feature gate. */
 async function passesMoneyGate(promise: Promise<unknown>): Promise<void> {
   await assert.rejects(
     promise,
-    (error: unknown) => error instanceof SubcontractError && error.message === "Projects feature is disabled",
+    (error: unknown) =>
+      error instanceof SubcontractError && error.message === "Projects feature is disabled",
   );
 }
 
@@ -372,7 +478,15 @@ test("createSubcontract refuses unreadable commitment money before any database 
 
 test("updateDraftSubcontract refuses unreadable commitment money before any database work", async (t) => {
   mockTransaction(t, { projects: false }, []);
-  const base = { orgId: "org-1", userId: "user-1", id: "s-1", title: "Roofing", originalCommitment: "1000", defaultRetainagePercent: "10", expectedUpdatedAt: "2026-09-14T11:00:00.000Z" };
+  const base = {
+    orgId: "org-1",
+    userId: "user-1",
+    id: "s-1",
+    title: "Roofing",
+    originalCommitment: "1000",
+    defaultRetainagePercent: "10",
+    expectedUpdatedAt: "2026-09-14T11:00:00.000Z",
+  };
   for (const bad of MALFORMED_MONEY) {
     await assert.rejects(
       updateDraftSubcontract({ ...base, originalCommitment: bad as string }),
@@ -392,7 +506,13 @@ test("updateDraftSubcontract refuses unreadable commitment money before any data
 
 test("addSubcontractSovLine refuses unreadable line money before any database work", async (t) => {
   mockTransaction(t, { projects: false }, []);
-  const base = { orgId: "org-1", userId: "user-1", subcontractId: "s-1", description: "Demolition", scheduledValue: "500" };
+  const base = {
+    orgId: "org-1",
+    userId: "user-1",
+    subcontractId: "s-1",
+    description: "Demolition",
+    scheduledValue: "500",
+  };
   for (const bad of MALFORMED_MONEY) {
     await assert.rejects(
       addSubcontractSovLine({ ...base, scheduledValue: bad as string }),
@@ -412,7 +532,13 @@ test("addSubcontractSovLine refuses unreadable line money before any database wo
 
 test("createSubcontractChangeOrder refuses unreadable amounts before any database work", async (t) => {
   mockTransaction(t, { projects: false }, []);
-  const base = { orgId: "org-1", userId: "user-1", subcontractId: "s-1", number: "CO-1", amount: "500" };
+  const base = {
+    orgId: "org-1",
+    userId: "user-1",
+    subcontractId: "s-1",
+    number: "CO-1",
+    amount: "500",
+  };
   for (const bad of MALFORMED_MONEY) {
     await assert.rejects(
       createSubcontractChangeOrder({ ...base, amount: bad as string }),
@@ -425,7 +551,13 @@ test("createSubcontractChangeOrder refuses unreadable amounts before any databas
 
 test("releaseVendorRetainage refuses unreadable amounts before any database work", async (t) => {
   mockTransaction(t, { projects: false }, []);
-  const base = { orgId: "org-1", userId: "user-1", subcontractId: "s-1", periodEnd: "2026-07-31", amount: "100" };
+  const base = {
+    orgId: "org-1",
+    userId: "user-1",
+    subcontractId: "s-1",
+    periodEnd: "2026-07-31",
+    amount: "100",
+  };
   for (const bad of MALFORMED_MONEY) {
     await assert.rejects(
       releaseVendorRetainage({ ...base, amount: bad as string }),
@@ -439,8 +571,13 @@ test("releaseVendorRetainage refuses unreadable amounts before any database work
 test("createSubcontractPaymentControl refuses unreadable limits before any database work", async (t) => {
   mockTransaction(t, { projects: false }, []);
   const base = {
-    orgId: "org-1", userId: "user-1", subcontractId: "s-1",
-    controlType: "payment_hold" as const, reason: "Hold", effectiveOn: "2026-07-31", amountLimit: "500",
+    orgId: "org-1",
+    userId: "user-1",
+    subcontractId: "s-1",
+    controlType: "payment_hold" as const,
+    reason: "Hold",
+    effectiveOn: "2026-07-31",
+    amountLimit: "500",
   };
   for (const bad of MALFORMED_MONEY_NONBLANK) {
     await assert.rejects(
@@ -454,15 +591,28 @@ test("createSubcontractPaymentControl refuses unreadable limits before any datab
 
 test("computeVendorApplication refuses unreadable line money", () => {
   const line = {
-    sovLineId: "line-1", scheduledValue: "10000", previousEarned: "0",
-    previousMaterialsStored: "0", workCompletedThisPeriod: "3333.33",
-    materialsStoredCurrent: "0", retainagePercent: "10",
+    sovLineId: "line-1",
+    scheduledValue: "10000",
+    previousEarned: "0",
+    previousMaterialsStored: "0",
+    workCompletedThisPeriod: "3333.33",
+    materialsStoredCurrent: "0",
+    retainagePercent: "10",
   };
   const cases: Array<{ field: string; message: RegExp }> = [
     { field: "previousEarned", message: /previous earned must be an exact decimal/ },
-    { field: "previousMaterialsStored", message: /previous materials stored must be an exact decimal/ },
-    { field: "workCompletedThisPeriod", message: /work completed this period must be an exact decimal/ },
-    { field: "materialsStoredCurrent", message: /materials stored current must be an exact decimal/ },
+    {
+      field: "previousMaterialsStored",
+      message: /previous materials stored must be an exact decimal/,
+    },
+    {
+      field: "workCompletedThisPeriod",
+      message: /work completed this period must be an exact decimal/,
+    },
+    {
+      field: "materialsStoredCurrent",
+      message: /materials stored current must be an exact decimal/,
+    },
     { field: "retainagePercent", message: /retainage percent must be an exact decimal/ },
   ];
   for (const { field, message } of cases) {
@@ -479,7 +629,9 @@ test("computeVendorApplication refuses unreadable line money", () => {
 test("updateVendorPayApplicationLines refuses unreadable line money before any database work", async (t) => {
   mockTransaction(t, { projects: false }, []);
   const line = (work: unknown, stored: unknown) => ({
-    sovLineId: randomUUID(), workCompletedThisPeriod: work as string, materialsStoredCurrent: stored as string,
+    sovLineId: randomUUID(),
+    workCompletedThisPeriod: work as string,
+    materialsStoredCurrent: stored as string,
   });
   const base = { orgId: "org-1", userId: "user-1", payApplicationId: "app-1", expectedRevision: 1 };
   for (const bad of MALFORMED_MONEY) {
@@ -498,10 +650,26 @@ test("updateVendorPayApplicationLines refuses unreadable line money before any d
 });
 
 test("revisedSubcontractSovValue refuses unreadable inputs", () => {
-  const cases: Array<{ args: (bad: unknown) => [unknown, unknown, unknown]; message: RegExp; label: string }> = [
-    { args: (bad) => [bad, "-200", "750"], message: /current scheduled value must be an exact decimal/, label: "scheduled" },
-    { args: (bad) => ["1000", bad, "750"], message: /change amount must be an exact decimal/, label: "change" },
-    { args: (bad) => ["1000", "-200", bad], message: /earned to date must be an exact decimal/, label: "earned" },
+  const cases: Array<{
+    args: (bad: unknown) => [unknown, unknown, unknown];
+    message: RegExp;
+    label: string;
+  }> = [
+    {
+      args: (bad) => [bad, "-200", "750"],
+      message: /current scheduled value must be an exact decimal/,
+      label: "scheduled",
+    },
+    {
+      args: (bad) => ["1000", bad, "750"],
+      message: /change amount must be an exact decimal/,
+      label: "change",
+    },
+    {
+      args: (bad) => ["1000", "-200", bad],
+      message: /earned to date must be an exact decimal/,
+      label: "earned",
+    },
   ];
   for (const { args, message, label } of cases) {
     for (const bad of MALFORMED_MONEY) {

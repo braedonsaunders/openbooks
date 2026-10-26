@@ -46,7 +46,11 @@ export async function api(
 ): Promise<{ status: number; json: unknown }> {
   const response = await request.fetch(`${originOf(baseURL)}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", Origin: originOf(baseURL), ...withIdempotencyKey(method, headers) },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: originOf(baseURL),
+      ...withIdempotencyKey(method, headers),
+    },
     data: body === undefined ? undefined : body,
   });
   const text = await response.text();
@@ -59,10 +63,7 @@ export async function api(
   return { status: response.status(), json };
 }
 
-export function ok(
-  res: { status: number; json: unknown },
-  path: string,
-): Record<string, unknown> {
+export function ok(res: { status: number; json: unknown }, path: string): Record<string, unknown> {
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`${path} → HTTP ${res.status}: ${JSON.stringify(res.json).slice(0, 600)}`);
   }

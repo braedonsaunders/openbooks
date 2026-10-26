@@ -71,22 +71,25 @@ function fakeSettlement(overrides: {
   const pushSettlement = createSettlementPush((systemKey, kind, _desc, amount, sequence) => {
     pushed.push({ systemKey, kind, amount, sequence });
   });
-  const elstam = overrides.elstam === undefined
-    ? {
-      steuerklasse: "I",
-      kinderfreibetrag_anzahl: "0",
-      konfession: null,
-      freibetrag: "0.0000",
-      hinzurechnungsbetrag: "0.0000",
-      faktor: "1.000",
-    }
-    : overrides.elstam;
-  const pv = overrides.pv === undefined
-    ? { kinderlosenzuschlag: "true", abschlag_kinder: "0" }
-    : overrides.pv;
-  const ausgleich = overrides.ausgleich === undefined
-    ? { ganzjaehrig: "true", unveraendert: "true", kein_ausschluss: "true" }
-    : overrides.ausgleich;
+  const elstam =
+    overrides.elstam === undefined
+      ? {
+          steuerklasse: "I",
+          kinderfreibetrag_anzahl: "0",
+          konfession: null,
+          freibetrag: "0.0000",
+          hinzurechnungsbetrag: "0.0000",
+          faktor: "1.000",
+        }
+      : overrides.elstam;
+  const pv =
+    overrides.pv === undefined
+      ? { kinderlosenzuschlag: "true", abschlag_kinder: "0" }
+      : overrides.pv;
+  const ausgleich =
+    overrides.ausgleich === undefined
+      ? { ganzjaehrig: "true", unveraendert: "true", kein_ausschluss: "true" }
+      : overrides.ausgleich;
   const ctx = {
     taxYear: 2026,
     country: "DE",
@@ -111,15 +114,35 @@ function fakeSettlement(overrides: {
       }
       if (key === "de_ausgleich") {
         if (ausgleich == null) return null;
-        return { certificate: {}, onFile: true, effectiveFrom: null, answers: ausgleich, missing: [] };
+        return {
+          certificate: {},
+          onFile: true,
+          effectiveFrom: null,
+          answers: ausgleich,
+          missing: [],
+        };
       }
       return null;
     },
     bool: (value: string | null | undefined) => value === "true",
     assertRegionSupported: (region: string) => {
       const known = [
-        "BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV",
-        "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH",
+        "BW",
+        "BY",
+        "BE",
+        "BB",
+        "HB",
+        "HH",
+        "HE",
+        "MV",
+        "NI",
+        "NW",
+        "RP",
+        "SL",
+        "SN",
+        "ST",
+        "SH",
+        "TH",
       ];
       if (!known.includes(region)) {
         throw new PayrollPackError(
@@ -128,8 +151,14 @@ function fakeSettlement(overrides: {
       }
     },
     employerLevies: {
-      wcbAmount: "0", wcbAssessable: "0", ehtAmount: "0", ehtEarnings: "0",
-      hsfAmount: "0", hsfEarnings: "0", cntAmount: "0", cntEarnings: "0",
+      wcbAmount: "0",
+      wcbAssessable: "0",
+      ehtAmount: "0",
+      ehtEarnings: "0",
+      hsfAmount: "0",
+      hsfEarnings: "0",
+      cntAmount: "0",
+      cntEarnings: "0",
     },
     tx: {},
     payDate: overrides.payDate ?? "2026-12-31",
@@ -294,10 +323,13 @@ test("a missing §42b certificate refuses by name for the employee", async () =>
   const edition = deAnnualSettlement(2026);
   assert.ok(edition);
   const { ctx } = fakeSettlement({ ausgleich: null });
-  assert.deepEqual(missingSettlementInputs(edition, {
-    emp: ctx.emp,
-    certificateFor: ctx.certificateFor,
-  }), ["certificate de_ausgleich"]);
+  assert.deepEqual(
+    missingSettlementInputs(edition, {
+      emp: ctx.emp,
+      certificateFor: ctx.certificateFor,
+    }),
+    ["certificate de_ausgleich"],
+  );
   await assert.rejects(
     () => computeDeSettlementWithRates(ctx, { kvz: 2.9 }),
     (error: unknown) => {
@@ -343,15 +375,13 @@ test("certificate exclusions refuse: Freibetrag (Nr. 3a), Faktor (Nr. 3b), curre
     hinzurechnungsbetrag: "0.0000",
     faktor: "1.000",
   };
-  for (
-    const [name, elstam] of [
-      ["Freibetrag", { ...base, freibetrag: "1000.0000" }],
-      ["Hinzurechnungsbetrag", { ...base, hinzurechnungsbetrag: "500.0000" }],
-      ["Faktorverfahren", { ...base, steuerklasse: "IV", faktor: "0.850" }],
-      ["Steuerklasse V", { ...base, steuerklasse: "V" }],
-      ["Steuerklasse VI", { ...base, steuerklasse: "VI" }],
-    ] as const
-  ) {
+  for (const [name, elstam] of [
+    ["Freibetrag", { ...base, freibetrag: "1000.0000" }],
+    ["Hinzurechnungsbetrag", { ...base, hinzurechnungsbetrag: "500.0000" }],
+    ["Faktorverfahren", { ...base, steuerklasse: "IV", faktor: "0.850" }],
+    ["Steuerklasse V", { ...base, steuerklasse: "V" }],
+    ["Steuerklasse VI", { ...base, steuerklasse: "VI" }],
+  ] as const) {
     const { ctx } = fakeSettlement({ elstam });
     await assert.rejects(() => computeDeSettlementWithRates(ctx, { kvz: 2.9 }), /42b/, name);
   }
@@ -362,12 +392,18 @@ test("missing certificates refuse: no ELStAM, no PV Nachweis", async () => {
   assert.ok(edition);
   const noElstam = fakeSettlement({ elstam: null });
   assert.deepEqual(
-    missingSettlementInputs(edition, { emp: noElstam.ctx.emp, certificateFor: noElstam.ctx.certificateFor }),
+    missingSettlementInputs(edition, {
+      emp: noElstam.ctx.emp,
+      certificateFor: noElstam.ctx.certificateFor,
+    }),
     ["certificate de_elstam"],
   );
   await assert.rejects(() => computeDeSettlementWithRates(noElstam.ctx, { kvz: 2.9 }), /ELStAM/);
   const noPv = fakeSettlement({ pv: null });
-  await assert.rejects(() => computeDeSettlementWithRates(noPv.ctx, { kvz: 2.9 }), /PV|Pflegeversicherung/);
+  await assert.rejects(
+    () => computeDeSettlementWithRates(noPv.ctx, { kvz: 2.9 }),
+    /PV|Pflegeversicherung/,
+  );
 });
 
 test("only the final period settles: November refuses on §42b timing", async () => {

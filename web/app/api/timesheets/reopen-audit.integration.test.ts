@@ -41,9 +41,8 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./reopen/route.ts");
 
 const post = (body: Record<string, unknown>) =>
@@ -108,14 +107,21 @@ async function seedApprovedWeek() {
 }
 
 async function auditRows(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => await db.execute(sql`
+  return withOrgContext(
+    orgId,
+    async () =>
+      await db.execute(
+        sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'timesheet_weeks'
          and row_id = ${headerId}
        order by at, id
-    `, "objects"));
+    `,
+        "objects",
+      ),
+  );
 }
 
 async function cleanup(fixture: Awaited<ReturnType<typeof seedApprovedWeek>>) {
@@ -127,65 +133,60 @@ async function cleanup(fixture: Awaited<ReturnType<typeof seedApprovedWeek>>) {
   await dropScratchOrg(fixture.org.orgId);
 }
 
-test(
-  "reopening an approved week writes actor-attributed before/after audit evidence",
-  async () => {
-    const fixture = await seedApprovedWeek();
-    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
-    try {
-      const res = await post({ employee: fixture.employeeId, week: "2026-07-12" });
-      assert.equal(res.status, 200, await res.text());
-      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
-      assert.equal(rows.length, 1, "reopen must leave exactly one audit row for the week");
-      assert.equal(rows[0]!.action, "update");
-      assert.equal(rows[0]!.actorId, fixture.actorId);
-      const changes = rows[0]!.changes as {
-        before: { status: string };
-        after: { status: string };
-      };
-      assert.equal(changes.before.status, "approved");
-      assert.equal(changes.after.status, "draft");
-    } finally {
-      await cleanup(fixture);
-    }
-  },
-);
+test("reopening an approved week writes actor-attributed before/after audit evidence", async () => {
+  const fixture = await seedApprovedWeek();
+  state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+  try {
+    const res = await post({ employee: fixture.employeeId, week: "2026-07-12" });
+    assert.equal(res.status, 200, await res.text());
+    const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+    assert.equal(rows.length, 1, "reopen must leave exactly one audit row for the week");
+    assert.equal(rows[0]!.action, "update");
+    assert.equal(rows[0]!.actorId, fixture.actorId);
+    const changes = rows[0]!.changes as {
+      before: { status: string };
+      after: { status: string };
+    };
+    assert.equal(changes.before.status, "approved");
+    assert.equal(changes.after.status, "draft");
+  } finally {
+    await cleanup(fixture);
+  }
+});
 
-test(
-  "concurrent reopens serialize: exactly one unwinds and audits",
-  async () => {
-    const fixture = await seedApprovedWeek();
-    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
-    try {
-      const [first, second] = await Promise.all([
-        post({ employee: fixture.employeeId, week: "2026-07-12" }),
-        post({ employee: fixture.employeeId, week: "2026-07-12" }),
-      ]);
-      const statuses = [first.status, second.status].sort();
-      assert.deepEqual(statuses, [200, 422], "the replay loser must be refused under the header lock");
-      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
-      assert.equal(rows.length, 1, "the loser must not write a second 'reopened' audit");
-      assert.equal((rows[0]!.changes as { before: { status: string } }).before.status, "approved");
-    } finally {
-      await cleanup(fixture);
-    }
-  },
-);
+test("concurrent reopens serialize: exactly one unwinds and audits", async () => {
+  const fixture = await seedApprovedWeek();
+  state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+  try {
+    const [first, second] = await Promise.all([
+      post({ employee: fixture.employeeId, week: "2026-07-12" }),
+      post({ employee: fixture.employeeId, week: "2026-07-12" }),
+    ]);
+    const statuses = [first.status, second.status].sort();
+    assert.deepEqual(
+      statuses,
+      [200, 422],
+      "the replay loser must be refused under the header lock",
+    );
+    const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+    assert.equal(rows.length, 1, "the loser must not write a second 'reopened' audit");
+    assert.equal((rows[0]!.changes as { before: { status: string } }).before.status, "approved");
+  } finally {
+    await cleanup(fixture);
+  }
+});
 
-test(
-  "a refused reopen leaves no audit evidence behind",
-  async () => {
-    const fixture = await seedApprovedWeek();
-    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
-    try {
-      const first = await post({ employee: fixture.employeeId, week: "2026-07-12" });
-      assert.equal(first.status, 200, await first.text());
-      const second = await post({ employee: fixture.employeeId, week: "2026-07-12" });
-      assert.equal(second.status, 422, "a draft week is not reopenable");
-      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
-      assert.equal(rows.length, 1, "the refused reopen must not add evidence");
-    } finally {
-      await cleanup(fixture);
-    }
-  },
-);
+test("a refused reopen leaves no audit evidence behind", async () => {
+  const fixture = await seedApprovedWeek();
+  state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+  try {
+    const first = await post({ employee: fixture.employeeId, week: "2026-07-12" });
+    assert.equal(first.status, 200, await first.text());
+    const second = await post({ employee: fixture.employeeId, week: "2026-07-12" });
+    assert.equal(second.status, 422, "a draft week is not reopenable");
+    const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+    assert.equal(rows.length, 1, "the refused reopen must not add evidence");
+  } finally {
+    await cleanup(fixture);
+  }
+});

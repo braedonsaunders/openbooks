@@ -5,12 +5,22 @@ import { db } from "../platform/db.ts";
 import type { AgentFinding } from "./types.ts";
 
 type StrandedWork = {
-  id: string; surface: string; subjectId: string | null; kind: string;
-  status: string; attempts: number; terminal: boolean; lastActivity: string;
+  id: string;
+  surface: string;
+  subjectId: string | null;
+  kind: string;
+  status: string;
+  attempts: number;
+  terminal: boolean;
+  lastActivity: string;
 };
 
-export async function strandedWorkFindings(orgId: string, staleOnOrBefore: string): Promise<AgentFinding[]> {
-  const rows = await db.execute<StrandedWork>(sql`
+export async function strandedWorkFindings(
+  orgId: string,
+  staleOnOrBefore: string,
+): Promise<AgentFinding[]> {
+  const rows = await db.execute<StrandedWork>(
+    sql`
     select id, 'posting_effects' as surface, document_id as "subjectId", kind,
            status, attempt_count as attempts, status = 'terminal_failed' as terminal,
            updated_at::text as "lastActivity"
@@ -49,7 +59,9 @@ export async function strandedWorkFindings(orgId: string, staleOnOrBefore: strin
      where org_id = ${orgId} and status in ('pending','enqueued','sending','failed') and (
        terminal_failed_at is not null or
        (updated_at < ${staleOnOrBefore}::date and next_attempt_at <= now()))
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     agentKey: "accounting",
     findingType: "stranded_background_work",
@@ -60,19 +72,35 @@ export async function strandedWorkFindings(orgId: string, staleOnOrBefore: strin
     subjectType: row.surface,
     subjectId: row.id,
     summary: {
-      surface: row.surface, kind: row.kind, status: row.status,
-      attempts: row.attempts, lastActivity: row.lastActivity,
-      href: row.surface === "posting_effects" && row.subjectId
-        ? `/close?txn=${encodeURIComponent(row.subjectId)}` : "/close",
-      remedy: row.surface === "email_log" && row.status === "uncertain"
-        ? "Reconcile the recorded delivery attempt against the provider's acceptance evidence before sending another email. An uncertain outcome does not authorize a resend."
-        : row.surface === "posting_effects"
-          ? "Review the document's posting-effects failure and use the controlled retry action with a reason."
-          : "Review the recorded failure and repair the owning worker or delivery configuration. Report generation can be requested again from its report; inspect delivery evidence before sending another email.",
+      surface: row.surface,
+      kind: row.kind,
+      status: row.status,
+      attempts: row.attempts,
+      lastActivity: row.lastActivity,
+      href:
+        row.surface === "posting_effects" && row.subjectId
+          ? `/close?txn=${encodeURIComponent(row.subjectId)}`
+          : "/close",
+      remedy:
+        row.surface === "email_log" && row.status === "uncertain"
+          ? "Reconcile the recorded delivery attempt against the provider's acceptance evidence before sending another email. An uncertain outcome does not authorize a resend."
+          : row.surface === "posting_effects"
+            ? "Review the document's posting-effects failure and use the controlled retry action with a reason."
+            : "Review the recorded failure and repair the owning worker or delivery configuration. Report generation can be requested again from its report; inspect delivery evidence before sending another email.",
     },
-    evidence: [{
-      kind: "durable_work", sourceType: row.surface, sourceId: row.id,
-      data: { subjectId: row.subjectId, status: row.status, attempts: row.attempts, terminal: row.terminal, lastActivity: row.lastActivity },
-    }],
+    evidence: [
+      {
+        kind: "durable_work",
+        sourceType: row.surface,
+        sourceId: row.id,
+        data: {
+          subjectId: row.subjectId,
+          status: row.status,
+          attempts: row.attempts,
+          terminal: row.terminal,
+          lastActivity: row.lastActivity,
+        },
+      },
+    ],
   }));
 }

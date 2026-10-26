@@ -13,7 +13,12 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedVacationTerms } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, grantScratchPermissions } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  grantScratchPermissions,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -56,7 +61,9 @@ test(
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+        slotAccounts: {
+          CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable },
+        },
       });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
@@ -83,9 +90,13 @@ test(
         paymentKind = "cash",
       ) => {
         const id = randomUUID();
-        const exclusionList = exclusions.length === 0
-          ? sql`'{}'::text[]`
-          : sql`ARRAY[${sql.join(exclusions.map((key) => sql`${key}`), sql`, `)}]`;
+        const exclusionList =
+          exclusions.length === 0
+            ? sql`'{}'::text[]`
+            : sql`ARRAY[${sql.join(
+                exclusions.map((key) => sql`${key}`),
+                sql`, `,
+              )}]`;
         await db.execute(sql`
           insert into pay_components (id, org_id, code, name, kind, country, basis, value, taxable,
                                       pensionable, insurable, vacationable, payment_kind,
@@ -124,7 +135,10 @@ test(
                                         is_active, created_by, updated_by)
           values (${org.orgId}, ${employeeId}, 'CAD', ${annualSalary}, 'year', '2026-01-01', true,
                   ${actorId}, ${actorId})`);
-        const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId, from: "2026-01-01" });
+        const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, {
+          workerPartyId: employeeId,
+          from: "2026-01-01",
+        });
         await db.execute(sql`
           insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                                  country, province, pay_basis, federal_claim_code,
@@ -138,12 +152,21 @@ test(
             values (${org.orgId}, ${employeeId}, ${employmentId}, ${assignment.componentId},
                     ${assignment.value}, '2026-01-01', true, ${actorId}, ${actorId})`);
         }
-        await recordHistoricalEmployerAssignment({ orgId: org.orgId, actorId, employeePartyId: employeeId,
-          kind: 'worker_comp', assignmentId: groupId, expectedCurrentId: groupId,
-          effectiveFrom: '2026-01-01', effectiveTo: '2026-07-31',
-          sourceReference: 'Worker compensation classification for the paid period',
-          reason: 'Retain the evidenced classification independently of current employee-role activity',
-          allowedSubsidiaryIds: null, dryRun: false });
+        await recordHistoricalEmployerAssignment({
+          orgId: org.orgId,
+          actorId,
+          employeePartyId: employeeId,
+          kind: "worker_comp",
+          assignmentId: groupId,
+          expectedCurrentId: groupId,
+          effectiveFrom: "2026-01-01",
+          effectiveTo: "2026-07-31",
+          sourceReference: "Worker compensation classification for the paid period",
+          reason:
+            "Retain the evidenced classification independently of current employee-role activity",
+          allowedSubsidiaryIds: null,
+          dryRun: false,
+        });
         await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");
         return employeeId;
       };
@@ -164,21 +187,34 @@ test(
       ]);
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       // The selected run still owes premiums if the employee becomes inactive
       // before calculation; retained classification and assessable pay govern.
       await db.execute(sql`update employee_roles set is_active=false
         where org_id=${org.orgId} and party_id=${workerId}`);
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, [], `calculation refused: ${JSON.stringify(result.errors)}`);
       assert.equal(result.employees, 2);
 
-      const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
+      const stubs = await db.execute<{
+        employee_party_id: string;
+        factors: Record<string, string>;
+      }>(
+        sql`
         select employee_party_id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       const stubFor = (employeeId: string) =>
         stubs.find((row) => row.employee_party_id === employeeId)!;
 
@@ -197,12 +233,18 @@ test(
       assert.equal(execFactors.WCB, "6.0500");
 
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
-      assert.equal(sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)), "-19.3200");
+      assert.equal(
+        sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)),
+        "-19.3200",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

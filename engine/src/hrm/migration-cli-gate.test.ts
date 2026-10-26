@@ -33,14 +33,12 @@ test("dry runs proceed in every environment without controls", () => {
 });
 
 test("known-safe environment plus ephemeral database proceeds without controls", () => {
-  assert.deepEqual(
-    decideProductionApply(input({ apply: true, nodeEnv: "test" })),
-    { proceed: true },
-  );
-  assert.deepEqual(
-    decideProductionApply(input({ apply: true, nodeEnv: "development" })),
-    { proceed: true },
-  );
+  assert.deepEqual(decideProductionApply(input({ apply: true, nodeEnv: "test" })), {
+    proceed: true,
+  });
+  assert.deepEqual(decideProductionApply(input({ apply: true, nodeEnv: "development" })), {
+    proceed: true,
+  });
 });
 
 test("apply with no environment evidence refuses", () => {

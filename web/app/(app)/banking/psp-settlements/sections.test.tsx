@@ -4,7 +4,12 @@ import { isUuid } from "@/lib/list-params";
 
 // jsdom first: the workspace reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/banking/psp-settlements", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/banking/psp-settlements",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 registerHooks({
@@ -44,7 +49,8 @@ const STRINGS = {
   feeAccountId: "Processing-fee account",
   feeAccountHint: "The expense account for provider processing fees. Required before posting.",
   clearingAccountId: "Provider clearing account",
-  clearingAccountHint: "The clearing account holding provider receivables until payout. Required before posting.",
+  clearingAccountHint:
+    "The clearing account holding provider receivables until payout. Required before posting.",
   subsidiaryLabel: "Subsidiary",
   noneLabel: "None",
   payloadShapeHint: "Each row needs id, type, amount, fee, net and currency.",
@@ -84,12 +90,20 @@ const ACCOUNTS = [
 ];
 
 const REVIEW_FIELDS = {
-  bankAccountId: ACCOUNTS[0]!.id, bankAccountLabel: "1000 · Saved payout bank",
-  feeAccountId: ACCOUNTS[1]!.id, feeAccountLabel: "6810 · Saved processing fees",
-  clearingAccountId: ACCOUNTS[2]!.id, clearingAccountLabel: "1040 · Saved provider clearing",
-  disputeAccountId: null, disputeAccountLabel: "", fxAccountId: null, fxAccountLabel: "",
-  postingEntityId: "e0000000-0000-0000-0000-000000000001", postingEntityName: "Coffee company",
-  postingBookId: "b0000000-0000-0000-0000-000000000001", postingBookName: "Primary book",
+  bankAccountId: ACCOUNTS[0]!.id,
+  bankAccountLabel: "1000 · Saved payout bank",
+  feeAccountId: ACCOUNTS[1]!.id,
+  feeAccountLabel: "6810 · Saved processing fees",
+  clearingAccountId: ACCOUNTS[2]!.id,
+  clearingAccountLabel: "1040 · Saved provider clearing",
+  disputeAccountId: null,
+  disputeAccountLabel: "",
+  fxAccountId: null,
+  fxAccountLabel: "",
+  postingEntityId: "e0000000-0000-0000-0000-000000000001",
+  postingEntityName: "Coffee company",
+  postingBookId: "b0000000-0000-0000-0000-000000000001",
+  postingBookName: "Primary book",
   postingBasis: "current",
 };
 
@@ -138,7 +152,11 @@ const ROWS: PspSettlementRow[] = [
   },
 ];
 
-async function mount(options?: { canReconcile?: boolean; rows?: typeof ROWS; subsidiaries?: PspSubsidiaryOption[] }) {
+async function mount(options?: {
+  canReconcile?: boolean;
+  rows?: typeof ROWS;
+  subsidiaries?: PspSubsidiaryOption[];
+}) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -170,24 +188,33 @@ test("PSP reversal fields belong to the selected record and are associated with 
     await act(async () => root.unmount());
     host.remove();
   });
-  assert.ok(!host.querySelector('input[id*="reversal"]'), 'the list has no reversal editor');
+  assert.ok(!host.querySelector('input[id*="reversal"]'), "the list has no reversal editor");
   await openPostedBatch(host);
-  const actions = [...document.querySelectorAll('button')].find(button => button.textContent === 'Actions')!;
-  await act(async () => actions.click()); await tick();
-  const reverse = [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent?.trim() === STRINGS.reverse) as HTMLButtonElement;
-  assert.ok(reverse, 'the record Actions menu offers reversal');
-  await act(async () => reverse.click()); await tick();
+  const actions = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Actions",
+  )!;
+  await act(async () => actions.click());
+  await tick();
+  const reverse = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (button) => button.textContent?.trim() === STRINGS.reverse,
+  ) as HTMLButtonElement;
+  assert.ok(reverse, "the record Actions menu offers reversal");
+  await act(async () => reverse.click());
+  await tick();
   for (const name of [STRINGS.reversalDate, STRINGS.reversalReason]) {
-    const label = [...document.querySelectorAll("label")].find((candidate) => candidate.textContent?.trim() === name);
+    const label = [...document.querySelectorAll("label")].find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
     assert.ok(label, `${name} label renders`);
     assert.ok(label.control, `${name} label controls its input`);
   }
 });
 
 function setNativeValue(element: HTMLElement, value: string) {
-  const prototype = element instanceof window.HTMLTextAreaElement
-    ? window.HTMLTextAreaElement.prototype
-    : window.HTMLInputElement.prototype;
+  const prototype =
+    element instanceof window.HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")!.set!;
   setter.call(element, value);
   element.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -222,8 +249,8 @@ async function chooseAccount(triggerId: string, optionLabel: string) {
   });
   await tick();
   await tick();
-  const option = [...document.querySelectorAll('button[role="option"]')].find(
-    (candidate) => candidate.textContent?.includes(optionLabel),
+  const option = [...document.querySelectorAll('button[role="option"]')].find((candidate) =>
+    candidate.textContent?.includes(optionLabel),
   ) as HTMLButtonElement | undefined;
   assert.ok(option, `the picker must offer a named ${optionLabel} option`);
   await act(async () => {
@@ -258,7 +285,11 @@ test("settlement accounts render as labelled pickers with posting hints", async 
     assert.ok(labelled, `${id} must have an associated label`);
     assert.equal(labelled.textContent, label);
   }
-  for (const hint of [STRINGS.bankAccountHint, STRINGS.feeAccountHint, STRINGS.clearingAccountHint]) {
+  for (const hint of [
+    STRINGS.bankAccountHint,
+    STRINGS.feeAccountHint,
+    STRINGS.clearingAccountHint,
+  ]) {
     assert.ok(host.textContent?.includes(hint), `the form must explain: ${hint}`);
   }
   // The closed pickers show the empty state; opening one lists named
@@ -271,7 +302,11 @@ test("settlement accounts render as labelled pickers with posting hints", async 
   await tick();
   await tick();
   const options = [...document.querySelectorAll('button[role="option"]')];
-  assert.equal(options.length, 4, "the picker must list the empty option plus three named accounts");
+  assert.equal(
+    options.length,
+    4,
+    "the picker must list the empty option plus three named accounts",
+  );
   assert.ok(
     options.some((candidate) => candidate.textContent?.includes("1000 · Operating Cash")),
     "the picker must name the operating cash account",
@@ -360,21 +395,32 @@ test("multi-entity imports require and post the selected subsidiary with provide
   const prior = globalThis.fetch;
   globalThis.fetch = (async (_input: unknown, init?: { body?: unknown }) => {
     if (typeof init?.body === "string") bodies.push(JSON.parse(init.body));
-    return Response.json({ batchId: "batch-sub", batches: [], subsidiaries: [subsidiary] }, { status: 200 });
+    return Response.json(
+      { batchId: "batch-sub", batches: [], subsidiaries: [subsidiary] },
+      { status: 200 },
+    );
   }) as typeof fetch;
   const { host, root } = await mount({ subsidiaries: [subsidiary] });
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
     globalThis.fetch = prior;
   });
   await tick();
 
-  assert.ok(host.textContent?.includes(STRINGS.payloadShapeHint), "Stripe guidance must preserve the external row shape");
+  assert.ok(
+    host.textContent?.includes(STRINGS.payloadShapeHint),
+    "Stripe guidance must preserve the external row shape",
+  );
   const provider = host.querySelectorAll("select")[0]!;
   await act(async () => setSelectValue(provider, "recurly"));
   await tick();
-  assert.ok(host.textContent?.includes(STRINGS.genericPayloadHint), "non-Stripe providers receive generic object guidance");
+  assert.ok(
+    host.textContent?.includes(STRINGS.genericPayloadHint),
+    "non-Stripe providers receive generic object guidance",
+  );
   await act(async () => {
     setSelectValue(provider, "stripe");
     setNativeValue(host.querySelector("#psp-external-ref") as HTMLElement, "po_multi");
@@ -382,8 +428,13 @@ test("multi-entity imports require and post the selected subsidiary with provide
   });
   await tick();
 
-  const importButton = [...host.querySelectorAll("button")].find((button) => button.textContent === STRINGS.importDraft) as HTMLButtonElement;
-  assert.ok(importButton.disabled, "a multi-entity draft must not be created without a posting subsidiary");
+  const importButton = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent === STRINGS.importDraft,
+  ) as HTMLButtonElement;
+  assert.ok(
+    importButton.disabled,
+    "a multi-entity draft must not be created without a posting subsidiary",
+  );
   const subsidiarySelect = [...host.querySelectorAll("select")].find((select) =>
     [...select.options].some((option) => option.value === subsidiary.id),
   );
@@ -391,11 +442,17 @@ test("multi-entity imports require and post the selected subsidiary with provide
   await act(async () => setSelectValue(subsidiarySelect, subsidiary.id));
   await tick();
   assert.equal(importButton.disabled, false, "choosing the posting subsidiary enables import");
-  await act(async () => { importButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
+  await act(async () => {
+    importButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
   await tick();
   await tick();
   assert.equal(bodies.length, 1);
-  assert.equal(bodies[0]?.subsidiaryId, subsidiary.id, "the chosen legal entity must be part of the imported draft");
+  assert.equal(
+    bodies[0]?.subsidiaryId,
+    subsidiary.id,
+    "the chosen legal entity must be part of the imported draft",
+  );
 });
 
 /** The provider filter narrows the batch list without hiding the import form:
@@ -403,7 +460,9 @@ test("multi-entity imports require and post the selected subsidiary with provide
 test("the provider filter narrows batches to the chosen provider", async (t) => {
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await tick();
@@ -415,8 +474,14 @@ test("the provider filter narrows batches to the chosen provider", async (t) => 
   assert.ok(filter, "the provider filter must render");
   await act(async () => setSelectValue(filter, "paypal"));
   await tick();
-  assert.ok(!host.textContent?.includes("po_posted"), "Stripe batches hide under the PayPal filter");
-  assert.ok(host.textContent?.includes("week-34"), "the PayPal batch stays under the PayPal filter");
+  assert.ok(
+    !host.textContent?.includes("po_posted"),
+    "Stripe batches hide under the PayPal filter",
+  );
+  assert.ok(
+    host.textContent?.includes("week-34"),
+    "the PayPal batch stays under the PayPal filter",
+  );
 });
 
 /** A batch carrying dispute activity wears the dispute badge with its amount;
@@ -424,12 +489,14 @@ test("the provider filter narrows batches to the chosen provider", async (t) => 
 test("dispute activity renders as a named badge on the batch", async (t) => {
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await tick();
-  const badges = [...host.querySelectorAll("div")].filter((candidate) =>
-    candidate.textContent === "Disputes $45.00",
+  const badges = [...host.querySelectorAll("div")].filter(
+    (candidate) => candidate.textContent === "Disputes $45.00",
   );
   assert.equal(badges.length, 1, "exactly the disputed batch wears the dispute badge");
 });
@@ -439,14 +506,22 @@ test("dispute activity renders as a named badge on the batch", async (t) => {
 test("the review queue link carries the pending count", async (t) => {
   const { host, root } = await mount({ canReconcile: false, rows: ROWS });
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await tick();
   // The next/link stub renders children without an anchor, so the link is
   // asserted by its label; the href stays loader-resolved through reviewsHref.
-  assert.ok(host.textContent?.includes(STRINGS.reviewLinkLabel), "read-only operators still reach the review queue");
-  assert.ok(host.textContent?.includes("1 awaiting review"), "the pending count must render beside the link");
+  assert.ok(
+    host.textContent?.includes(STRINGS.reviewLinkLabel),
+    "read-only operators still reach the review queue",
+  );
+  assert.ok(
+    host.textContent?.includes("1 awaiting review"),
+    "the pending count must render beside the link",
+  );
 });
 
 /** A Shopify payout import posts the payout and its balance transactions, not
@@ -460,7 +535,9 @@ test("a shopify payout posts payout and transactions", async (t) => {
   }) as typeof fetch;
   const { host, root } = await mount();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
     globalThis.fetch = prior;
   });
@@ -495,7 +572,9 @@ test("a square payout posts payout and entries under the payout id", async (t) =
   }) as typeof fetch;
   const { host, root } = await mount();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
     globalThis.fetch = prior;
   });
@@ -540,7 +619,9 @@ test("pasted paypal csv posts report text instead of json", async (t) => {
   }) as typeof fetch;
   const { host, root } = await mount();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
     globalThis.fetch = prior;
   });
@@ -549,7 +630,10 @@ test("pasted paypal csv posts report text instead of json", async (t) => {
   await act(async () => setSelectValue(provider, "paypal"));
   await tick();
   setNativeValue(host.querySelector("#psp-external-ref") as HTMLElement, "stl-august");
-  setNativeValue(host.querySelector("#psp-payload") as HTMLElement, "Transaction ID,Event Code\ntxn-1,T0000\n");
+  setNativeValue(
+    host.querySelector("#psp-payload") as HTMLElement,
+    "Transaction ID,Event Code\ntxn-1,T0000\n",
+  );
   await tick();
   await importClick(host);
   assert.equal(seen.length, 1, "the valid import must POST once");
@@ -573,7 +657,9 @@ test("half-filled fx evidence is refused before posting", async (t) => {
   }) as typeof fetch;
   const { host, root } = await mount();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
     globalThis.fetch = prior;
   });
@@ -599,7 +685,7 @@ test("settlement detail shows the reconciliation with its lines", async (t) => {
       return Response.json(
         {
           batch: {
-          ...REVIEW_FIELDS,
+            ...REVIEW_FIELDS,
             id: "d0000000-0000-0000-0000-000000000003",
             provider: "paypal",
             externalRef: "week-34",
@@ -623,8 +709,28 @@ test("settlement detail shows the reconciliation with its lines", async (t) => {
             lineCount: 2,
           },
           lines: [
-            { lineNumber: 1, kind: "charge", externalRef: "txn-1", description: "PayPal T0000", amount: "140.0000", currency: "USD", documentId: null, documentKind: null, documentNumber: null },
-            { lineNumber: 2, kind: "dispute", externalRef: "txn-9", description: "PayPal T2000", amount: "45.0000", currency: "USD", documentId: null, documentKind: null, documentNumber: null },
+            {
+              lineNumber: 1,
+              kind: "charge",
+              externalRef: "txn-1",
+              description: "PayPal T0000",
+              amount: "140.0000",
+              currency: "USD",
+              documentId: null,
+              documentKind: null,
+              documentNumber: null,
+            },
+            {
+              lineNumber: 2,
+              kind: "dispute",
+              externalRef: "txn-9",
+              description: "PayPal T2000",
+              amount: "45.0000",
+              currency: "USD",
+              documentId: null,
+              documentKind: null,
+              documentNumber: null,
+            },
           ],
         },
         { status: 200 },
@@ -634,7 +740,9 @@ test("settlement detail shows the reconciliation with its lines", async (t) => {
   }) as typeof fetch;
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
     globalThis.fetch = prior;
   });
@@ -660,11 +768,19 @@ test("settlement detail shows the reconciliation with its lines", async (t) => {
 test("settlement lines address the invoice and receipt drawers", async () => {
   const { settlementDocumentHref } = await import("./sections");
   assert.equal(
-    settlementDocumentHref({ documentId: "d0000000-0000-0000-0000-000000000011", documentKind: "customer_invoice", documentNumber: "INV-1" }),
+    settlementDocumentHref({
+      documentId: "d0000000-0000-0000-0000-000000000011",
+      documentKind: "customer_invoice",
+      documentNumber: "INV-1",
+    }),
     "/ar/invoices?doc=d0000000-0000-0000-0000-000000000011",
   );
   assert.equal(
-    settlementDocumentHref({ documentId: "d0000000-0000-0000-0000-000000000012", documentKind: "customer_payment", documentNumber: "RCPT-1" }),
+    settlementDocumentHref({
+      documentId: "d0000000-0000-0000-0000-000000000012",
+      documentKind: "customer_payment",
+      documentNumber: "RCPT-1",
+    }),
     "/receipts?payment=d0000000-0000-0000-0000-000000000012",
   );
   assert.equal(
@@ -672,7 +788,11 @@ test("settlement lines address the invoice and receipt drawers", async () => {
     null,
   );
   assert.equal(
-    settlementDocumentHref({ documentId: "d0000000-0000-0000-0000-000000000013", documentKind: "charge", documentNumber: "txn-9" }),
+    settlementDocumentHref({
+      documentId: "d0000000-0000-0000-0000-000000000013",
+      documentKind: "charge",
+      documentNumber: "txn-9",
+    }),
     null,
   );
 });
@@ -694,11 +814,22 @@ for (const [name, canReconcile, present] of [
     await tick();
     const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent);
     const verb = present ? "render with" : "stay hidden without";
-    assert.equal(buttons.includes(STRINGS.importDraft), present, `the import button must ${verb} banking.reconcile`);
-    assert.ok(!buttons.includes("Review & post") && !buttons.includes(STRINGS.reverse), 'record controls do not appear in table rows');
+    assert.equal(
+      buttons.includes(STRINGS.importDraft),
+      present,
+      `the import button must ${verb} banking.reconcile`,
+    );
+    assert.ok(
+      !buttons.includes("Review & post") && !buttons.includes(STRINGS.reverse),
+      "record controls do not appear in table rows",
+    );
     await openPostedBatch(host, canReconcile);
     const dialog = document.querySelector('[role="dialog"]')!;
-    assert.equal([...dialog.querySelectorAll('button')].some(button => button.textContent === 'Actions'), present, `record actions must ${verb} banking.reconcile`);
+    assert.equal(
+      [...dialog.querySelectorAll("button")].some((button) => button.textContent === "Actions"),
+      present,
+      `record actions must ${verb} banking.reconcile`,
+    );
     if (!present) {
       assert.ok(host.textContent?.includes("po_draft"), "the draft batch row must still render");
       assert.ok(host.textContent?.includes("po_posted"), "the posted batch row must still render");
@@ -710,7 +841,8 @@ for (const [name, canReconcile, present] of [
  * offers audited deletion: the close gate's two remedies, in the workspace. */
 test("an unmatched line offers evidence actions and a draft offers delete", async (t) => {
   const prior = globalThis.fetch;
-  const posts: { action?: unknown; batchId?: unknown; lineId?: unknown; documentId?: unknown }[] = [];
+  const posts: { action?: unknown; batchId?: unknown; lineId?: unknown; documentId?: unknown }[] =
+    [];
   globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
     const href = String(input);
     if (href.includes("batchId=")) {
@@ -756,7 +888,14 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
     if (href.includes("resolveDoc=")) {
       return Response.json({
         documents: [
-          { id: "doc-1", kind: "customer_invoice", documentNumber: "INV-1", total: "100.00", currency: "USD", documentDate: "Sep 1, 2026" },
+          {
+            id: "doc-1",
+            kind: "customer_invoice",
+            documentNumber: "INV-1",
+            total: "100.00",
+            currency: "USD",
+            documentDate: "Sep 1, 2026",
+          },
         ],
       });
     }
@@ -795,18 +934,29 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
   };
   await click(opener as HTMLButtonElement);
   await click(buttonNamed("Actions"));
-  assert.ok(document.querySelector('[role="menu"]')?.textContent?.includes("Delete draft"), "the draft record offers audited deletion");
+  assert.ok(
+    document.querySelector('[role="menu"]')?.textContent?.includes("Delete draft"),
+    "the draft record offers audited deletion",
+  );
   await click(buttonNamed("Evidence"));
-  assert.ok(document.body.textContent?.includes("Settlement line evidence"), "the evidence panel opens for the line");
+  assert.ok(
+    document.body.textContent?.includes("Settlement line evidence"),
+    "the evidence panel opens for the line",
+  );
   const searchBox = document.querySelector('input[placeholder="Search posted sales documents"]');
   assert.ok(searchBox, "the panel searches posted sales documents");
   setNativeValue(searchBox as HTMLElement, "INV");
   await tick();
   await click(buttonNamed("Search"));
-  assert.ok(document.body.textContent?.includes("INV-1"), "the document search lists the posted invoice");
+  assert.ok(
+    document.body.textContent?.includes("INV-1"),
+    "the document search lists the posted invoice",
+  );
   await click(buttonNamed("Link"));
   assert.ok(
-    posts.some((body) => body.action === "link" && body.lineId === "l-0001" && body.documentId === "doc-1"),
+    posts.some(
+      (body) => body.action === "link" && body.lineId === "l-0001" && body.documentId === "doc-1",
+    ),
     "linking posts the audited line link",
   );
 });
@@ -814,7 +964,12 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
 /** A posted payout offers batch-level sales recognition: the suggestion
  * proposes the exact-total journal, confirming posts one audited batch
  * mark, and the reversal refusal pins its reason instead of vanishing. */
-function mockPostedBatchDetail(posts: { action?: unknown }[], suggest: unknown, postResponse: unknown, postStatus = 200) {
+function mockPostedBatchDetail(
+  posts: { action?: unknown }[],
+  suggest: unknown,
+  postResponse: unknown,
+  postStatus = 200,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
     const href = String(input);
@@ -840,9 +995,48 @@ function mockPostedBatchDetail(posts: { action?: unknown }[], suggest: unknown, 
           netAmount: "300.0000",
         },
         lines: [
-          { id: "l-1", lineNumber: 1, kind: "charge", externalRef: "ch_1", description: null, amount: "100.00", currency: "USD", documentId: null, documentKind: null, documentNumber: null, journalEntryId: null, journalEntryNumber: null },
-          { id: "l-2", lineNumber: 2, kind: "charge", externalRef: "ch_2", description: null, amount: "100.00", currency: "USD", documentId: null, documentKind: null, documentNumber: null, journalEntryId: null, journalEntryNumber: null },
-          { id: "l-3", lineNumber: 3, kind: "charge", externalRef: "ch_3", description: null, amount: "100.00", currency: "USD", documentId: null, documentKind: null, documentNumber: null, journalEntryId: null, journalEntryNumber: null },
+          {
+            id: "l-1",
+            lineNumber: 1,
+            kind: "charge",
+            externalRef: "ch_1",
+            description: null,
+            amount: "100.00",
+            currency: "USD",
+            documentId: null,
+            documentKind: null,
+            documentNumber: null,
+            journalEntryId: null,
+            journalEntryNumber: null,
+          },
+          {
+            id: "l-2",
+            lineNumber: 2,
+            kind: "charge",
+            externalRef: "ch_2",
+            description: null,
+            amount: "100.00",
+            currency: "USD",
+            documentId: null,
+            documentKind: null,
+            documentNumber: null,
+            journalEntryId: null,
+            journalEntryNumber: null,
+          },
+          {
+            id: "l-3",
+            lineNumber: 3,
+            kind: "charge",
+            externalRef: "ch_3",
+            description: null,
+            amount: "100.00",
+            currency: "USD",
+            documentId: null,
+            documentKind: null,
+            documentNumber: null,
+            journalEntryId: null,
+            journalEntryNumber: null,
+          },
         ],
         tieout: null,
         accruals: [],
@@ -860,7 +1054,9 @@ function mockPostedBatchDetail(posts: { action?: unknown }[], suggest: unknown, 
 }
 
 async function openPostedBatch(host: HTMLElement, canReconcile = true) {
-  const opener = [...host.querySelectorAll("button")].find((el) => el.textContent === "po_posted") as HTMLButtonElement;
+  const opener = [...host.querySelectorAll("button")].find(
+    (el) => el.textContent === "po_posted",
+  ) as HTMLButtonElement;
   assert.ok(opener, "the posted reference opens the detail drawer");
   await act(async () => {
     opener.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -868,7 +1064,8 @@ async function openPostedBatch(host: HTMLElement, canReconcile = true) {
   await tick();
   await tick();
   assert.equal(
-    Boolean(document.body.textContent?.includes("Batch sales recognition")), canReconcile,
+    Boolean(document.body.textContent?.includes("Batch sales recognition")),
+    canReconcile,
     "batch-level sales recognition follows reconciliation permission",
   );
 }
@@ -882,9 +1079,18 @@ test("a suggested journal confirms into one audited batch mark", async (t) => {
       chargeTotal: "300.0000",
       currency: "USD",
       excludedOtherCurrencyLines: 0,
-      candidates: [{ id: "e-0001", number: "JE-9", postingDate: "2026-09-20", revenueTotal: "300.0000" }],
+      candidates: [
+        { id: "e-0001", number: "JE-9", postingDate: "2026-09-20", revenueTotal: "300.0000" },
+      ],
     },
-    { batchId: "d0000000-0000-0000-0000-000000000002", journalEntryId: "e-0001", journalEntryNumber: "JE-9", marked: 3, skippedLinked: 0, skippedMarked: 0 },
+    {
+      batchId: "d0000000-0000-0000-0000-000000000002",
+      journalEntryId: "e-0001",
+      journalEntryNumber: "JE-9",
+      marked: 3,
+      skippedLinked: 0,
+      skippedMarked: 0,
+    },
   );
   t.after(restore);
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
@@ -896,7 +1102,9 @@ test("a suggested journal confirms into one audited batch mark", async (t) => {
   });
   await openPostedBatch(host);
   const click = async (name: string) => {
-    const button = [...document.querySelectorAll("button")].find((el) => el.textContent === name) as HTMLButtonElement;
+    const button = [...document.querySelectorAll("button")].find(
+      (el) => el.textContent === name,
+    ) as HTMLButtonElement;
     assert.ok(button, `a ${name} button must render`);
     await act(async () => {
       button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -905,7 +1113,10 @@ test("a suggested journal confirms into one audited batch mark", async (t) => {
     await tick();
   };
   await click("Suggest journal");
-  assert.ok(document.body.textContent?.includes("JE-9"), "the suggestion proposes the exact-total journal");
+  assert.ok(
+    document.body.textContent?.includes("JE-9"),
+    "the suggestion proposes the exact-total journal",
+  );
   await click("Recognise batch");
   assert.ok(
     posts.some((body) => body.action === "markBatchJournal" && body.journalEntryId === "e-0001"),
@@ -921,7 +1132,13 @@ test("a refused batch reversal pins its reason", async (t) => {
   const posts: { action?: unknown }[] = [];
   const restore = mockPostedBatchDetail(
     posts,
-    { batchId: "x", chargeTotal: "0.0000", currency: "USD", excludedOtherCurrencyLines: 0, candidates: [] },
+    {
+      batchId: "x",
+      chargeTotal: "0.0000",
+      currency: "USD",
+      excludedOtherCurrencyLines: 0,
+      candidates: [],
+    },
     { error: "payout po_posted carries no batch-level journal recognition to reverse" },
     422,
   );
@@ -954,22 +1171,51 @@ test("posting reviews saved accounts before sending one command and retains a re
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     if (init?.method === "POST") {
       posts.push(JSON.parse(String(init.body)));
-      return Response.json({ error: "The bank period is closed; reopen it through Period Close." }, { status: 422 });
+      return Response.json(
+        { error: "The bank period is closed; reopen it through Period Close." },
+        { status: 422 },
+      );
     }
-    if (String(input).includes("batchId=")) return Response.json({
-      batch: { ...REVIEW_FIELDS, id: ROWS[0]!.id, provider: "stripe", externalRef: "po_draft", status: "draft",
-        currency: "USD", settlementDate: "2026-09-20", grossAmount: "459.9600", feeAmount: "18.4400",
-        refundAmount: "0.0000", disputeAmount: "0.0000", adjustmentAmount: "0.0000", fxAmount: "0.0000",
-        netAmount: "441.5200", sourceCurrency: null, conversionRate: null, conversionRateSource: null,
-        payoutRate: null, payoutRateSource: null }, lines: [],
-    });
+    if (String(input).includes("batchId="))
+      return Response.json({
+        batch: {
+          ...REVIEW_FIELDS,
+          id: ROWS[0]!.id,
+          provider: "stripe",
+          externalRef: "po_draft",
+          status: "draft",
+          currency: "USD",
+          settlementDate: "2026-09-20",
+          grossAmount: "459.9600",
+          feeAmount: "18.4400",
+          refundAmount: "0.0000",
+          disputeAmount: "0.0000",
+          adjustmentAmount: "0.0000",
+          fxAmount: "0.0000",
+          netAmount: "441.5200",
+          sourceCurrency: null,
+          conversionRate: null,
+          conversionRateSource: null,
+          payoutRate: null,
+          payoutRateSource: null,
+        },
+        lines: [],
+      });
     return Response.json({ batches: [], subsidiaries: [] });
   }) as typeof fetch;
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior; });
-  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "po_draft");
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  const review = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent === "po_draft",
+  );
   assert.ok(review);
-  await act(async () => review.click()); await tick(); await tick();
+  await act(async () => review.click());
+  await tick();
+  await tick();
   assert.equal(posts.length, 0, "opening review must not post the payout");
   assert.ok(document.body.textContent?.includes("1000 · Saved payout bank"));
   assert.ok(document.body.textContent?.includes("6810 · Saved processing fees"));
@@ -978,61 +1224,140 @@ test("posting reviews saved accounts before sending one command and retains a re
   assert.ok(document.body.textContent?.includes("Primary book"));
   const dialog = document.querySelector('[role="dialog"]');
   assert.ok(dialog);
-  const entityLabel = [...dialog.querySelectorAll("dt")].find(label => label.textContent === messages.common.labels.subsidiary);
+  const entityLabel = [...dialog.querySelectorAll("dt")].find(
+    (label) => label.textContent === messages.common.labels.subsidiary,
+  );
   assert.ok(entityLabel, "the posting entity uses the native translated subsidiary label");
   assert.equal(entityLabel.nextElementSibling?.textContent, "Coffee company");
-  const post = [...dialog.querySelectorAll("button")].find(button => button.textContent === "Post");
+  const post = [...dialog.querySelectorAll("button")].find(
+    (button) => button.textContent === "Post",
+  );
   assert.ok(post);
-  await act(async () => { post.click(); post.click(); }); await tick(); await tick();
-  assert.deepEqual(posts, [{ action: "post", batchId: ROWS[0]!.id }], "the native action guard admits one command");
-  assert.ok(document.querySelector('[role="dialog"]') === dialog, "refusal keeps the original drawer shell");
-  assert.ok(dialog.textContent?.includes("The bank period is closed; reopen it through Period Close."));
+  await act(async () => {
+    post.click();
+    post.click();
+  });
+  await tick();
+  await tick();
+  assert.deepEqual(
+    posts,
+    [{ action: "post", batchId: ROWS[0]!.id }],
+    "the native action guard admits one command",
+  );
+  assert.ok(
+    document.querySelector('[role="dialog"]') === dialog,
+    "refusal keeps the original drawer shell",
+  );
+  assert.ok(
+    dialog.textContent?.includes("The bank period is closed; reopen it through Period Close."),
+  );
   assert.ok(dialog.textContent?.includes("1000 · Saved payout bank"));
 });
 
 test("missing settlement review data fails closed without offering Post", async (t) => {
   const prior = globalThis.fetch;
-  globalThis.fetch = (async () => Response.json({ batch: { id: ROWS[0]!.id, externalRef: "po_draft",
-    currency: "USD", grossAmount: "100", feeAmount: "0", refundAmount: "0", disputeAmount: "0",
-    adjustmentAmount: "0", fxAmount: "0", netAmount: "100" }, lines: [] })) as typeof fetch;
+  globalThis.fetch = (async () =>
+    Response.json({
+      batch: {
+        id: ROWS[0]!.id,
+        externalRef: "po_draft",
+        currency: "USD",
+        grossAmount: "100",
+        feeAmount: "0",
+        refundAmount: "0",
+        disputeAmount: "0",
+        adjustmentAmount: "0",
+        fxAmount: "0",
+        netAmount: "100",
+      },
+      lines: [],
+    })) as typeof fetch;
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior; });
-  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "po_draft");
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  const review = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent === "po_draft",
+  );
   assert.ok(review);
-  await act(async () => review.click()); await tick(); await tick();
+  await act(async () => review.click());
+  await tick();
+  await tick();
   const dialog = document.querySelector('[role="dialog"]');
   assert.ok(dialog);
   assert.ok(dialog.textContent?.includes(STRINGS.loadFailedLabel));
-  assert.ok(![...dialog.querySelectorAll("button")].some(button => button.textContent === "Post"));
+  assert.ok(
+    ![...dialog.querySelectorAll("button")].some((button) => button.textContent === "Post"),
+  );
 });
 
 test("successful settlement posting refreshes recorded basis without remounting the review drawer", async (t) => {
   const prior = globalThis.fetch;
   let posted = false;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    if (init?.method === "POST") { posted = true; return Response.json({entryId:"posted-entry"}); }
-    if (String(input).includes("batchId=")) return Response.json({
-      batch: { ...REVIEW_FIELDS, id: ROWS[0]!.id, provider: "stripe", externalRef: "po_draft",
-        status: posted ? "posted" : "draft", postingBasis: posted ? "recorded" : "current",
-        currency: "USD", settlementDate: "2026-09-20", grossAmount: "459.9600", feeAmount: "18.4400",
-        refundAmount: "0.0000", disputeAmount: "0.0000", adjustmentAmount: "0.0000", fxAmount: "0.0000",
-        netAmount: "441.5200", sourceCurrency: null, conversionRate: null, conversionRateSource: null,
-        payoutRate: null, payoutRateSource: null }, lines: [],
-    });
-    return Response.json({batches:[],subsidiaries:[]});
+    if (init?.method === "POST") {
+      posted = true;
+      return Response.json({ entryId: "posted-entry" });
+    }
+    if (String(input).includes("batchId="))
+      return Response.json({
+        batch: {
+          ...REVIEW_FIELDS,
+          id: ROWS[0]!.id,
+          provider: "stripe",
+          externalRef: "po_draft",
+          status: posted ? "posted" : "draft",
+          postingBasis: posted ? "recorded" : "current",
+          currency: "USD",
+          settlementDate: "2026-09-20",
+          grossAmount: "459.9600",
+          feeAmount: "18.4400",
+          refundAmount: "0.0000",
+          disputeAmount: "0.0000",
+          adjustmentAmount: "0.0000",
+          fxAmount: "0.0000",
+          netAmount: "441.5200",
+          sourceCurrency: null,
+          conversionRate: null,
+          conversionRateSource: null,
+          payoutRate: null,
+          payoutRateSource: null,
+        },
+        lines: [],
+      });
+    return Response.json({ batches: [], subsidiaries: [] });
   }) as typeof fetch;
-  const { host, root } = await mount({canReconcile:true,rows:ROWS});
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch=prior; });
-  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "po_draft");
+  const { host, root } = await mount({ canReconcile: true, rows: ROWS });
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  const review = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent === "po_draft",
+  );
   assert.ok(review);
-  await act(async () => review.click()); await tick(); await tick();
+  await act(async () => review.click());
+  await tick();
+  await tick();
   const dialog = document.querySelector('[role="dialog"]');
   assert.ok(dialog);
-  const post = [...dialog.querySelectorAll("button")].find(button => button.textContent === "Post");
+  const post = [...dialog.querySelectorAll("button")].find(
+    (button) => button.textContent === "Post",
+  );
   assert.ok(post);
-  await act(async () => post.click()); await tick(); await tick();
-  assert.ok(document.querySelector('[role="dialog"]') === dialog,"success retains the review shell");
+  await act(async () => post.click());
+  await tick();
+  await tick();
+  assert.ok(
+    document.querySelector('[role="dialog"]') === dialog,
+    "success retains the review shell",
+  );
   assert.ok(dialog.textContent?.includes("Entity and book are taken from the posted journal"));
   assert.ok(dialog.textContent?.includes("1000 · Saved payout bank"));
-  assert.ok(![...dialog.querySelectorAll("button")].some(button => button.textContent === "Post"));
+  assert.ok(
+    ![...dialog.querySelectorAll("button")].some((button) => button.textContent === "Post"),
+  );
 });

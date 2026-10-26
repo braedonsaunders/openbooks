@@ -1,11 +1,11 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import type { InvoicingSettingsWorkspace } from './InvoicingSettingsWorkspace'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../lib/features";
+import type { InvoicingSettingsWorkspace } from "./InvoicingSettingsWorkspace";
 
 /**
  * Company Settings → Invoicing setup, split into a loader and a spec.
@@ -39,25 +39,27 @@ import type { InvoicingSettingsWorkspace } from './InvoicingSettingsWorkspace'
  * loader is handed the request's params and reads none of them).
  */
 
-type InvoicingWorkspaceProps = Parameters<typeof InvoicingSettingsWorkspace>[0]
+type InvoicingWorkspaceProps = Parameters<typeof InvoicingSettingsWorkspace>[0];
 
 export interface InvoicingSetupData {
-  subscriptionBillingEnabled: boolean
-  activeSubscriptions: number
-  pausedSubscriptions: number
-  projectsEnabled: boolean
-  activeProjectTypes: number
-  standardProjectTypes: number
-  applicationProjectTypes: number
+  subscriptionBillingEnabled: boolean;
+  activeSubscriptions: number;
+  pausedSubscriptions: number;
+  projectsEnabled: boolean;
+  activeProjectTypes: number;
+  standardProjectTypes: number;
+  applicationProjectTypes: number;
 }
 
 export async function loadInvoicingSetup(): Promise<InvoicingSetupData> {
-  const authz = await requirePermission('admin.setup.manage')
-  const orgId = authz.user.orgId
-  const [subscriptionBillingEnabled, projectsEnabled, projectTypes, subscriptionCounts] = await Promise.all([
-    isFeatureEnabled(orgId, 'subscriptionBilling'),
-    isFeatureEnabled(orgId, 'projects'),
-    db.execute<{ active: number; standard: number; applications: number }>(sql`
+  const authz = await requirePermission("admin.setup.manage");
+  const orgId = authz.user.orgId;
+  const [subscriptionBillingEnabled, projectsEnabled, projectTypes, subscriptionCounts] =
+    await Promise.all([
+      isFeatureEnabled(orgId, "subscriptionBilling"),
+      isFeatureEnabled(orgId, "projects"),
+      db.execute<{ active: number; standard: number; applications: number }>(
+        sql`
       select count(*) filter (where is_active)::int as active,
              count(*) filter (
                where is_active
@@ -68,15 +70,20 @@ export async function loadInvoicingSetup(): Promise<InvoicingSetupData> {
                  and invoicing_profile->>'billingProcedure' = 'application_for_payment'
              )::int as applications
         from project_types
-       where org_id = ${orgId}`, 'objects'),
-    db.execute<{ active: number; paused: number }>(sql`
+       where org_id = ${orgId}`,
+        "objects",
+      ),
+      db.execute<{ active: number; paused: number }>(
+        sql`
       select count(*) filter (where status = 'active')::int as active,
              count(*) filter (where status = 'paused')::int as paused
         from subscriptions
-       where org_id = ${orgId}`, 'objects'),
-  ])
-  const typeCounts = projectTypes[0]
-  const subscriptions = subscriptionCounts[0]
+       where org_id = ${orgId}`,
+        "objects",
+      ),
+    ]);
+  const typeCounts = projectTypes[0];
+  const subscriptions = subscriptionCounts[0];
 
   return {
     subscriptionBillingEnabled,
@@ -86,7 +93,7 @@ export async function loadInvoicingSetup(): Promise<InvoicingSetupData> {
     activeProjectTypes: Number(typeCounts?.active ?? 0),
     standardProjectTypes: Number(typeCounts?.standard ?? 0),
     applicationProjectTypes: Number(typeCounts?.applications ?? 0),
-  }
+  };
 }
 
 export function invoicingSetupSpec(data: InvoicingSetupData): PageSpec {
@@ -101,14 +108,14 @@ export function invoicingSetupSpec(data: InvoicingSetupData): PageSpec {
     activeProjectTypes: data.activeProjectTypes,
     standardProjectTypes: data.standardProjectTypes,
     applicationProjectTypes: data.applicationProjectTypes,
-  }
+  };
   return page({
-    route: '/admin/setup/invoicing',
+    route: "/admin/setup/invoicing",
     // The setup workspace layout renders its own shell (sticky PageHeader +
     // SetupNav rail) around every setup page; wrapping it in a second page
     // layout would nest the chrome — the crm/bank-feeds precedent.
-    layout: 'bare',
+    layout: "bare",
     header: [],
-    body: [widgetBlock('invoicing-setup-workspace', { ...props })],
-  })
+    body: [widgetBlock("invoicing-setup-workspace", { ...props })],
+  });
 }

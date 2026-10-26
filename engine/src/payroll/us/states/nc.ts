@@ -33,11 +33,19 @@
  */
 import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import { certificateAmount, certificateChoice, certificateCount, certificateFlag }
-  from "../../certificates.ts";
+import {
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
+} from "../../certificates.ts";
 import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import {
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -110,17 +118,19 @@ const NC_EDITIONS_BY_YEAR: Record<number, NcYearRates> = {
   [NC_RATES_2026.year]: NC_RATES_2026,
 };
 
-export const NC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "NC-30 (2026)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "North Carolina Department of Revenue, NC-30, 2026 Income Tax Withholding Tables and "
-    + "Instructions for Employers — percentage method formula tables (pp. 17–18) and annualized "
-    + "method (p. 19), withholding rate 4.09% (income tax rate 3.99% plus 0.1%)",
-  status: "published",
-  region: "NC",
-}];
+export const NC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "NC-30 (2026)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "North Carolina Department of Revenue, NC-30, 2026 Income Tax Withholding Tables and " +
+      "Instructions for Employers — percentage method formula tables (pp. 17–18) and annualized " +
+      "method (p. 19), withholding rate 4.09% (income tax rate 3.99% plus 0.1%)",
+    status: "published",
+    region: "NC",
+  },
+];
 
 function ncPeriodFor(periodsPerYear: number): NcPeriod {
   return NC_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, NC_PERIODS) as NcPeriod;
@@ -205,11 +215,14 @@ export function ncAnnualizedMethod(input: {
 }): { tax: string; annualTax: string } {
   const rates = NC_STATE_ENGINE.ratesForPayDate(input.payDate);
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear < 1) {
-    throw new PayrollError(`invalid pay periods per year for North Carolina: ${input.periodsPerYear}`);
+    throw new PayrollError(
+      `invalid pay periods per year for North Carolina: ${input.periodsPerYear}`,
+    );
   }
   const annualWages = U(input.wages) * BigInt(input.periodsPerYear);
-  const deduction = U(rates.annual.standardDeduction[input.schedule])
-    + U(rates.annual.allowance) * BigInt(Math.max(input.allowances, 0));
+  const deduction =
+    U(rates.annual.standardDeduction[input.schedule]) +
+    U(rates.annual.allowance) * BigInt(Math.max(input.allowances, 0));
   const net = max0(annualWages - deduction);
   // Line 8 of the worked example prints $231.09 for 5,650 × .0409 = 231.085 —
   // the annual tax is rounded to the CENT before line 10 rounds the per-period
@@ -244,8 +257,8 @@ function compute(
   // the Servicemembers Civil Relief Act military-spouse exemption.
   if (certificateFlag(input.certificate, "exempt") && isNonresidentAlien) {
     throw new PayrollError(
-      "North Carolina Form NC-4 NRA does not permit an exempt claim; file the applicable "
-      + "NC-4 NRA withholding entries instead",
+      "North Carolina Form NC-4 NRA does not permit an exempt claim; file the applicable " +
+        "NC-4 NRA withholding entries instead",
     );
   }
   const exempt = context.exemptResult({ factorKey: "NC_EXEMPT" });
@@ -298,28 +311,33 @@ function compute(
   if (isNonresidentAlien) {
     if (additionalAnswer === null) {
       throw new PayrollError(
-        "North Carolina Form NC-4 NRA requires its Line 2 additional withholding amount; "
-        + "file a completed NC-4 NRA before calculating",
+        "North Carolina Form NC-4 NRA requires its Line 2 additional withholding amount; " +
+          "file a completed NC-4 NRA before calculating",
       );
     }
     if (input.certificate.answers.india_student_or_apprentice_resident == null) {
       throw new PayrollError(
-        "North Carolina Form NC-4 NRA requires confirmation whether the employee is a student "
-        + "or business apprentice resident of India; record the certificate fact before calculating",
+        "North Carolina Form NC-4 NRA requires confirmation whether the employee is a student " +
+          "or business apprentice resident of India; record the certificate fact before calculating",
       );
     }
     if (extra % DOLLAR !== 0n) {
-      throw new PayrollError("North Carolina Form NC-4 NRA Line 2 must be entered in whole dollars");
+      throw new PayrollError(
+        "North Carolina Form NC-4 NRA Line 2 must be entered in whole dollars",
+      );
     }
     if (certificateFlag(input.certificate, "india_student_or_apprentice_resident")) {
       if (extra !== 0n) {
         throw new PayrollError(
-          "North Carolina Form NC-4 NRA Line 2 must be $0 for a student or business apprentice "
-          + "who is a resident of India; correct the certificate before calculating",
+          "North Carolina Form NC-4 NRA Line 2 must be $0 for a student or business apprentice " +
+            "who is a resident of India; correct the certificate before calculating",
         );
       }
       factors.NC_NRA_INDIA_ZERO_ADJUSTMENT = "1";
-    } else if (wages * BigInt(input.periodsPerYear) <= U(rates.annual.standardDeduction.single_married_surviving)) {
+    } else if (
+      wages * BigInt(input.periodsPerYear) <=
+      U(rates.annual.standardDeduction.single_married_surviving)
+    ) {
       // NC-30 §13's worked example directs $21 on $500 monthly wages at 4.09%.
       // Round the cap upward to preserve that published amount; Line 2 itself
       // is stated in whole dollars on Form NC-4 NRA.
@@ -374,7 +392,8 @@ export const NC_WITHHOLDING: UsStateWithholdingEngine = {
   // the state's annualized method; printed frequencies stay percentage.
   printedPeriods: NC_PERIODS,
   taxableWageBases: {
-    income: "state:US:NC:income", nonPeriodic: "state:US:NC:nonPeriodic",
+    income: "state:US:NC:income",
+    nonPeriodic: "state:US:NC:nonPeriodic",
   },
   compute: NC_STATE_ENGINE.compute,
 };

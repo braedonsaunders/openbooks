@@ -4,7 +4,11 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 
 // When email delivery is not configured the
 // invite must still hand the admin a copyable set-password link (one-time,
@@ -26,7 +30,15 @@ const state: {
   deliveries: { to: string; subject: string; html: string; text: string }[];
   emailLogs: { recipients: string[]; subject: string; categoryKey: string | null }[];
   sentMarks: string[];
-} = { authz: null, transport: false, providerRefusal: null, failedMarks: [], deliveries: [], emailLogs: [], sentMarks: [] };
+} = {
+  authz: null,
+  transport: false,
+  providerRefusal: null,
+  failedMarks: [],
+  deliveries: [],
+  emailLogs: [],
+  sentMarks: [],
+};
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 registerHooks({
@@ -37,9 +49,10 @@ registerHooks({
     });
     const parent = String(context.parentURL ?? "");
     if (
-      (specifier === "../../../../lib/authz"
-        && (parent.includes("/api/admin/users/route.ts") || parent.includes("/admin/users/view.ts")))
-      || (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))
+      (specifier === "../../../../lib/authz" &&
+        (parent.includes("/api/admin/users/route.ts") ||
+          parent.includes("/admin/users/view.ts"))) ||
+      (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))
     ) {
       return virtual(`
         export { subsidiaryScopeAllows } from '${pathToFileURL(process.cwd() + "/").href}engine/src/organization/subsidiary-scope.ts';
@@ -70,7 +83,10 @@ registerHooks({
         }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
+    if (
+      parent.includes("auth-reset.ts") &&
+      specifier === "@openbooks/engine/delivery/email-config/module"
+    ) {
       return virtual(`
         const state = globalThis[Symbol.for('openbooks.admin-invite-link-integration')];
         export async function resolveOrgEmailTransport() { return state.transport ? { provider: 'isolated' } : null; }
@@ -98,8 +114,13 @@ async function seed(rolePermissions: string[] = []) {
   const seeded = await withBypassContext(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Invite actor", "invite_actor");
-    const roleId = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-        values (${org.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`, "objects"))[0]!.id;
+    const roleId = (
+      await db.execute<{ id: string }>(
+        sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${org.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`,
+        "objects",
+      )
+    )[0]!.id;
     await db.execute(sql`update orgs set env_kind = 'production' where id = ${org.orgId}`);
     return { org, actorId, roleId };
   });
@@ -130,8 +151,16 @@ const tokenFromUrl = (url: string): string =>
   new URL(url, "https://books.example.test").searchParams.get("token")!;
 
 async function liveTokenCount(userId: string): Promise<number> {
-  return withBypassContext(async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
-      where user_id = ${userId} and used_at is null and expires_at > now()`, "objects"))[0]!.n);
+  return withBypassContext(
+    async () =>
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from auth_password_resets
+      where user_id = ${userId} and used_at is null and expires_at > now()`,
+          "objects",
+        )
+      )[0]!.n,
+  );
 }
 
 /** Direct test-body reads/writes run under bypass; the route under test sets its own org scope. */
@@ -152,7 +181,8 @@ test("invite without email delivery returns a one-time set-password link", async
     assert.equal(payload.emailQueued, false);
     assert.equal(state.deliveries.length, 0);
     assert.ok(
-      typeof payload.setPasswordUrl === "string" && payload.setPasswordUrl.includes("/login/reset?token="),
+      typeof payload.setPasswordUrl === "string" &&
+        payload.setPasswordUrl.includes("/login/reset?token="),
       "the invite response carries a copyable set-password link",
     );
 
@@ -164,7 +194,10 @@ test("invite without email delivery returns a one-time set-password link", async
     // The handed-out link genuinely activates the account: full circle.
     // Consuming the link ends the pending state even before first sign-in.
     assert.deepEqual(
-      await completePasswordReset(tokenFromUrl(payload.setPasswordUrl!), "A brand new password 1042"),
+      await completePasswordReset(
+        tokenFromUrl(payload.setPasswordUrl!),
+        "A brand new password 1042",
+      ),
       { ok: true },
     );
     const settled = await withOrgContext(f.orgId, () => loadAdminUsers({}));
@@ -211,10 +244,17 @@ test("a provider refusal hands the administrator the link instead of reporting t
     assert.equal(payload.emailQueued, false, "a refused email is never reported as sent");
     assert.equal(payload.emailFailed, true);
     assert.ok(payload.setPasswordUrl, "the administrator receives the link to hand over");
-    assert.deepEqual(state.failedMarks, ["provider refused the sending address"], "the email log keeps the provider's reason");
+    assert.deepEqual(
+      state.failedMarks,
+      ["provider refused the sending address"],
+      "the email log keeps the provider's reason",
+    );
     assert.equal(await liveTokenCount(payload.userId), 1);
     assert.deepEqual(
-      await completePasswordReset(tokenFromUrl(payload.setPasswordUrl!), "A brand new password 1042"),
+      await completePasswordReset(
+        tokenFromUrl(payload.setPasswordUrl!),
+        "A brand new password 1042",
+      ),
       { ok: true },
     );
   } finally {
@@ -243,12 +283,15 @@ test("resend-invite mints a fresh link and supersedes the outstanding one", asyn
     assert.ok(payload.setPasswordUrl && payload.setPasswordUrl !== first.setPasswordUrl);
 
     // The superseded link is dead; the fresh one works.
+    assert.deepEqual(await completePasswordReset(oldToken, "A brand new password 1042"), {
+      ok: false,
+      reason: "invalid_token",
+    });
     assert.deepEqual(
-      await completePasswordReset(oldToken, "A brand new password 1042"),
-      { ok: false, reason: "invalid_token" },
-    );
-    assert.deepEqual(
-      await completePasswordReset(tokenFromUrl(payload.setPasswordUrl!), "A brand new password 1042"),
+      await completePasswordReset(
+        tokenFromUrl(payload.setPasswordUrl!),
+        "A brand new password 1042",
+      ),
       { ok: true },
     );
     assert.equal(await liveTokenCount(first.userId), 0);
@@ -262,7 +305,8 @@ test("resend-invite refuses unknown, activated, and deactivated users", async ()
   const f = await seed();
   try {
     assert.equal(
-      (await post({ action: "resend-invite", userId: "00000000-0000-4000-8000-ffffffffffff" })).status,
+      (await post({ action: "resend-invite", userId: "00000000-0000-4000-8000-ffffffffffff" }))
+        .status,
       404,
     );
     assert.equal((await post({ action: "resend-invite", userId: "not-a-uuid" })).status, 400);
@@ -270,13 +314,19 @@ test("resend-invite refuses unknown, activated, and deactivated users", async ()
     const invited = (await (
       await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId })
     ).json()) as { userId: string };
-    await asBypass(() => db.execute(sql`update users set password_hash = 'scrypt:activated' where id = ${invited.userId}`));
+    await asBypass(() =>
+      db.execute(
+        sql`update users set password_hash = 'scrypt:activated' where id = ${invited.userId}`,
+      ),
+    );
     assert.equal((await post({ action: "resend-invite", userId: invited.userId })).status, 409);
 
     const second = (await (
       await post({ action: "invite", email: "second.member@scratch.test", roleId: f.roleId })
     ).json()) as { userId: string };
-    await asBypass(() => db.execute(sql`update users set is_active = false where id = ${second.userId}`));
+    await asBypass(() =>
+      db.execute(sql`update users set is_active = false where id = ${second.userId}`),
+    );
     assert.equal((await post({ action: "resend-invite", userId: second.userId })).status, 409);
   } finally {
     state.authz = null;
@@ -308,7 +358,10 @@ test("a repeat invite for a pending user re-issues a fresh link and supersedes t
       { ok: false, reason: "invalid_token" },
     );
     assert.deepEqual(
-      await completePasswordReset(tokenFromUrl(payload.setPasswordUrl!), "A brand new password 1042"),
+      await completePasswordReset(
+        tokenFromUrl(payload.setPasswordUrl!),
+        "A brand new password 1042",
+      ),
       { ok: true },
     );
   } finally {
@@ -324,10 +377,20 @@ test("a refused re-issue never exposes a link, even with no mail transport", asy
       await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId })
     ).json()) as { userId: string; setPasswordUrl: string };
     // A different administrator grants a permission this actor does not hold.
-    const highRoleId = await asBypass(async () => (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`, "objects"))[0]!.id);
-    await asBypass(() => db.execute(sql`insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
-      values (${f.orgId}, ${invited.userId}, ${highRoleId}, ${f.actorId}, ${f.actorId})`));
+    const highRoleId = await asBypass(
+      async () =>
+        (
+          await db.execute<{ id: string }>(
+            sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`,
+            "objects",
+          )
+        )[0]!.id,
+    );
+    await asBypass(() =>
+      db.execute(sql`insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+      values (${f.orgId}, ${invited.userId}, ${highRoleId}, ${f.actorId}, ${f.actorId})`),
+    );
     // No mail transport here, so a leaked raw link would be a takeover URL.
     const response = await post({ action: "resend-invite", userId: invited.userId });
     assert.equal(response.status, 403);
@@ -352,10 +415,20 @@ test("resend-invite enforces the inviter's role ceiling", async () => {
       await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId })
     ).json()) as { userId: string };
     // A different administrator grants a permission this actor does not hold.
-    const highRoleId = await asBypass(async () => (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`, "objects"))[0]!.id);
-    await asBypass(() => db.execute(sql`insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
-      values (${f.orgId}, ${invited.userId}, ${highRoleId}, ${f.actorId}, ${f.actorId})`));
+    const highRoleId = await asBypass(
+      async () =>
+        (
+          await db.execute<{ id: string }>(
+            sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`,
+            "objects",
+          )
+        )[0]!.id,
+    );
+    await asBypass(() =>
+      db.execute(sql`insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+      values (${f.orgId}, ${invited.userId}, ${highRoleId}, ${f.actorId}, ${f.actorId})`),
+    );
     const response = await post({ action: "resend-invite", userId: invited.userId });
     assert.equal(response.status, 403);
   } finally {

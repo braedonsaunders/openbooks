@@ -3,12 +3,7 @@ import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from "@/lib/api/form-data"
 import { NextResponse } from "next/server";
 import { getFolder, listFiles } from "../../../../lib/file-cabinet";
 import { isUuid } from "../../../../lib/list-params";
-import {
-  fileViewer,
-  isAllowedContentType,
-  MAX_BYTES,
-  requireFolderAccess,
-} from "../lib";
+import { fileViewer, isAllowedContentType, MAX_BYTES, requireFolderAccess } from "../lib";
 
 export const runtime = "nodejs";
 
@@ -29,25 +24,19 @@ export const GET = defineRoute({
       ? Math.min(Math.max(Math.trunc(perPageRaw), 1), 100)
       : 50;
     const pageRaw = Number(url.searchParams.get("page") ?? "1");
-    const page = Number.isFinite(pageRaw)
-      ? Math.max(Math.trunc(pageRaw), 1)
-      : 1;
+    const page = Number.isFinite(pageRaw) ? Math.max(Math.trunc(pageRaw), 1) : 1;
 
     if (folderId && !isUuid(folderId)) {
       return NextResponse.json({ error: "invalid folderId" }, { status: 400 });
     }
-    const { files, total } = await listFiles(
-      gate.user.orgId,
-      fileViewer(gate),
-      {
-        folderId: folderId ?? undefined,
-        q: q ?? undefined,
-        sort,
-        dir: dir as "asc" | "desc",
-        limit,
-        offset: (page - 1) * limit,
-      },
-    );
+    const { files, total } = await listFiles(gate.user.orgId, fileViewer(gate), {
+      folderId: folderId ?? undefined,
+      q: q ?? undefined,
+      sort,
+      dir: dir as "asc" | "desc",
+      limit,
+      offset: (page - 1) * limit,
+    });
     return NextResponse.json({ files, total, page, perPage: limit });
   },
 });
@@ -67,10 +56,7 @@ export const POST = defineRoute({
     if (!(file instanceof File))
       return NextResponse.json({ error: "file is required" }, { status: 400 });
     if (!isUuid(folderId))
-      return NextResponse.json(
-        { error: "valid folderId is required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "valid folderId is required" }, { status: 400 });
     // Destination folder must belong to the caller's org.
     if (!(await getFolder(gate.user.orgId, folderId))) {
       return NextResponse.json({ error: "folder not found" }, { status: 404 });
@@ -85,19 +71,12 @@ export const POST = defineRoute({
       );
     }
     if (file.size > MAX_BYTES)
-      return NextResponse.json(
-        { error: "file exceeds 25 MB limit" },
-        { status: 413 },
-      );
+      return NextResponse.json({ error: "file exceeds 25 MB limit" }, { status: 413 });
 
     const bytes = Buffer.from(await file.arrayBuffer());
     if (bytes.length > MAX_BYTES)
-      return NextResponse.json(
-        { error: "file exceeds 25 MB limit" },
-        { status: 413 },
-      );
-    if (bytes.length === 0)
-      return NextResponse.json({ error: "file is empty" }, { status: 400 });
+      return NextResponse.json({ error: "file exceeds 25 MB limit" }, { status: 413 });
+    if (bytes.length === 0) return NextResponse.json({ error: "file is empty" }, { status: 400 });
 
     const { createFile } = await import("../../../../lib/file-cabinet");
     const meta = await createFile({

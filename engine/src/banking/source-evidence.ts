@@ -1,14 +1,8 @@
-import {
-  lockApprovalSubject,
-  requestNativeCommandApproval,
-} from "../platform/approval-routing.ts";
+import { lockApprovalSubject, requestNativeCommandApproval } from "../platform/approval-routing.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 /** Source-evidenced reconciliation. Split from banking.ts (pure moves only). */
 import { BankingError, type BankingContext } from "./banking-core";
-import {
-  loadReconcilableAccount,
-  lockReconciliationAccount,
-} from "./reconcilable-account";
+import { loadReconcilableAccount, lockReconciliationAccount } from "./reconcilable-account";
 import { reconciliationBookId } from "./reconciliation";
 import { assertRealDate } from "./statement-parsers/shared";
 import { sql } from "drizzle-orm";
@@ -27,20 +21,22 @@ import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
  */
 export const SOURCE_EVIDENCE_POLICY_CODE = "source-reconciliation-evidence";
 
-export async function sourceEvidencePolicyActive(
-  orgId: string,
-): Promise<boolean> {
-  const row = (await db.execute<{ is_active: boolean }>(sql`
+export async function sourceEvidencePolicyActive(orgId: string): Promise<boolean> {
+  const row = (
+    await db.execute<{ is_active: boolean }>(
+      sql`
     select is_active from close_policies
      where org_id = ${orgId} and code = ${SOURCE_EVIDENCE_POLICY_CODE}
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.is_active ?? true;
 }
 
 function validateSourceClearedDate(value: string): void {
-  const match =
-    typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  const match = typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
   if (!match) throw new BankingError("Source cleared date must be YYYY-MM-DD");
   assertRealDate(match[1]!, match[2]!, match[3]!, "Source cleared date");
 }
@@ -99,13 +95,17 @@ export async function applySourceLineEvidence(
         // the stamp below targets the whole (entry, account). An incomplete
         // group stays unstamped (and the account stays open) rather than
         // recording evidence the source did not give.
-        const actual = await tx.execute<{ count: string }>(sql`
+        const actual = await tx.execute<{ count: string }>(
+          sql`
           select count(*)::text as count from journal_lines
            where org_id = ${orgId} and entry_id = ${entry.entryId} and account_id = ${accountId}
-        `, "objects");
+        `,
+          "objects",
+        );
         if (group.length !== Number(actual[0]!.count)) continue;
         const maxDate = [...dates].sort().at(-1)!;
-        const stamped = await tx.execute<{ id: string }>(sql`
+        const stamped = await tx.execute<{ id: string }>(
+          sql`
           update journal_lines jl
              set source_cleared_date = ${maxDate}, source_cleared_connector = ${key}
            where jl.org_id = ${orgId} and jl.entry_id = ${entry.entryId} and jl.account_id = ${accountId}
@@ -115,7 +115,9 @@ export async function applySourceLineEvidence(
                 where a.id = jl.account_id and a.org_id = jl.org_id and a.reconcilable
              )
           returning jl.id
-        `, "objects");
+        `,
+          "objects",
+        );
         linesStamped += stamped.length;
       }
     }
@@ -148,13 +150,14 @@ export async function refreshSourceReconciliationState(
   if (!key) throw new BankingError("Source evidence requires a connector key");
   const bookId = await reconciliationBookId(db, orgId);
   const rows = await db.execute<{
-      account_id: string;
-      number: string | null;
-      name: string;
-      cleared: string;
-      uncleared: string;
-      through: string | null;
-    }>(sql`
+    account_id: string;
+    number: string | null;
+    name: string;
+    cleared: string;
+    uncleared: string;
+    through: string | null;
+  }>(
+    sql`
     select a.id as account_id, a.number, a.name,
            count(*) filter (where jl.source_cleared_date is not null or jl.reconciled_at is not null) as cleared,
            count(*) filter (where jl.source_cleared_date is null and jl.reconciled_at is null) as uncleared,
@@ -168,7 +171,9 @@ export async function refreshSourceReconciliationState(
      group by a.id, a.number, a.name
     having count(*) > 0
      order by a.number nulls last, a.name
-  `, "objects");
+  `,
+    "objects",
+  );
   await db.transaction(async (tx) => {
     for (const row of rows) {
       if (row.through) {
@@ -253,16 +258,17 @@ export async function signOffFromSourceEvidence(
       unclearedLines: 0,
     };
   }
-  let account = await loadReconcilableAccount(
-    ctx.orgId,
-    opts.accountId,
-    ctx.allowedSubsidiaryIds,
-  );
-  const state = (await db.execute<{ connector: string; reconciled_through: string }>(sql`
+  let account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds);
+  const state = (
+    await db.execute<{ connector: string; reconciled_through: string }>(
+      sql`
     select connector, reconciled_through::text
       from source_reconciliation_state
      where org_id = ${ctx.orgId} and account_id = ${account.id}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!state) {
     return {
       signed: false,
@@ -275,11 +281,7 @@ export async function signOffFromSourceEvidence(
   return withOrgTransaction(ctx.orgId, async () => {
     const tx = db;
     if (opts.reconciliationId)
-      await lockApprovalSubject(
-        ctx.orgId,
-        "bank_reconciliation_sign_off",
-        opts.reconciliationId,
-      );
+      await lockApprovalSubject(ctx.orgId, "bank_reconciliation_sign_off", opts.reconciliationId);
     const actualScope = await lockActorCommandAuthority(
       tx,
       ctx.orgId,
@@ -287,16 +289,12 @@ export async function signOffFromSourceEvidence(
       account.subsidiary_id,
       "banking.reconcile",
     );
-    account = await loadReconcilableAccount(
-      ctx.orgId,
-      opts.accountId,
-      actualScope,
-      tx,
-      true,
-    );
+    account = await loadReconcilableAccount(ctx.orgId, opts.accountId, actualScope, tx, true);
     const bookId = await reconciliationBookId(tx, ctx.orgId);
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
-    const coverage = (await tx.execute<{ cleared: string; open: string; balance: string }>(sql`
+    const coverage = (
+      await tx.execute<{ cleared: string; open: string; balance: string }>(
+        sql`
       select
         count(*) filter (
           where (jl.source_cleared_date is not null and jl.source_cleared_date <= ${state.reconciled_through})
@@ -314,14 +312,20 @@ export async function signOffFromSourceEvidence(
          and jl.currency = ${account.currency}
          and je.posting_date <= ${state.reconciled_through}
          and ${excludePeriodEndJournals(sql`je.origin`)}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     const clearedLines = Number(coverage.cleared);
     const openLines = Number(coverage.open);
-    const open = await tx.execute<{ id: string }>(sql`
+    const open = await tx.execute<{ id: string }>(
+      sql`
       select id from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status <> 'signed_off' and (${opts.reconciliationId ?? null}::uuid is null or id<>${opts.reconciliationId ?? null}::uuid)
        limit 1
-    `, "objects");
+    `,
+      "objects",
+    );
     if (open[0]) {
       return {
         signed: false,
@@ -331,11 +335,16 @@ export async function signOffFromSourceEvidence(
         unclearedLines: openLines,
       };
     }
-    const latestSigned = (await tx.execute<{ through_date: string }>(sql`
+    const latestSigned = (
+      await tx.execute<{ through_date: string }>(
+        sql`
       select through_date::text from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (latestSigned && state.reconciled_through <= latestSigned.through_date) {
       return {
         signed: false,
@@ -357,15 +366,20 @@ export async function signOffFromSourceEvidence(
     const statementBalance = fromUnits(toUnits(coverage.balance));
     let recon: { id: string };
     if (opts.reconciliationId) {
-      const existing = (await tx.execute<{
+      const existing = (
+        await tx.execute<{
           id: string;
           through_date: string;
           statement_balance: string;
           evidence_connector: string;
           status: string;
-        }>(sql`
+        }>(
+          sql`
         select id,through_date::text,statement_balance::text,evidence_connector,status from reconciliations
-        where org_id=${ctx.orgId} and id=${opts.reconciliationId} and account_id=${account.id} and evidence_kind='source' for update`, "objects"))[0];
+        where org_id=${ctx.orgId} and id=${opts.reconciliationId} and account_id=${account.id} and evidence_kind='source' for update`,
+          "objects",
+        )
+      )[0];
       if (
         !existing ||
         existing.status === "signed_off" ||
@@ -378,18 +392,18 @@ export async function signOffFromSourceEvidence(
         );
       recon = existing;
     } else {
-      const inserted = (await tx.execute<{
+      const inserted = (
+        await tx.execute<{
           id: string;
-        }>(sql`insert into reconciliations(org_id,account_id,through_date,currency,statement_balance,status,created_by,evidence_kind,evidence_connector)
-        values(${ctx.orgId},${account.id},${state.reconciled_through},${account.currency},${statementBalance},'in_progress',${ctx.userId},'source',${state.connector}) returning id`, "objects"))[0];
-      if (!inserted)
-        throw new BankingError("The source reconciliation was not stored.");
+        }>(
+          sql`insert into reconciliations(org_id,account_id,through_date,currency,statement_balance,status,created_by,evidence_kind,evidence_connector)
+        values(${ctx.orgId},${account.id},${state.reconciled_through},${account.currency},${statementBalance},'in_progress',${ctx.userId},'source',${state.connector}) returning id`,
+          "objects",
+        )
+      )[0];
+      if (!inserted) throw new BankingError("The source reconciliation was not stored.");
       recon = inserted;
-      await lockApprovalSubject(
-        ctx.orgId,
-        "bank_reconciliation_sign_off",
-        recon.id,
-      );
+      await lockApprovalSubject(ctx.orgId, "bank_reconciliation_sign_off", recon.id);
     }
     if (
       await requestNativeCommandApproval({
@@ -411,7 +425,8 @@ export async function signOffFromSourceEvidence(
     // The row above is still unsigned, so the trigger's source-evidenced
     // stamp path admits stamping the already-source-stamped lines. Lines
     // reconciled by an earlier sign-off keep their original stamp.
-    const stamped = await tx.execute<{ id: string }>(sql`
+    const stamped = await tx.execute<{ id: string }>(
+      sql`
       update journal_lines jl
          set reconciled_at = now(), reconciliation_id = ${recon.id}
        where jl.org_id = ${ctx.orgId} and jl.account_id = ${account.id}
@@ -425,7 +440,9 @@ export async function signOffFromSourceEvidence(
               and je.book_id = ${bookId} and je.posting_date <= ${state.reconciled_through}
          )
       returning jl.id
-    `, "objects");
+    `,
+      "objects",
+    );
     await tx.execute(sql`
       update reconciliations
          set status = 'signed_off', signed_off_by = ${ctx.userId}, signed_off_at = now(),

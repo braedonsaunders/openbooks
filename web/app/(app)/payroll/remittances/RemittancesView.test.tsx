@@ -1,54 +1,65 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import test from 'node:test'
-import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
-import { stubModules } from '../../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { bootJsdomEnvironment } from "../../../../testing/jsdom-env";
+import { stubModules } from "../../../../testing/stub-modules";
 
 // Exercise the real client view: a refusal must never look like a zero balance.
-await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/remittances', matchMediaMatches: false })
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/payroll/remittances",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
-    source: 'export function useRouter(){return {refresh(){}}}',
+    source: "export function useRouter(){return {refresh(){}}}",
   },
   intl: false,
   authz: false,
   features: false,
   extra: {
-    'next/link': 'export default function Link(props){return globalThis.React.createElement("a",{href:props.href},props.children)}',
-    sonner: 'export const toast={success(){},error(){}}',
+    "next/link":
+      'export default function Link(props){return globalThis.React.createElement("a",{href:props.href},props.children)}',
+    sonner: "export const toast={success(){},error(){}}",
   },
-})
+});
 
-const React = await import('react')
-const { renderToStaticMarkup } = await import('react-dom/server')
-const { createRoot } = await import('react-dom/client')
-const { act } = React
-const { NextIntlClientProvider } = await import('next-intl')
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { RemittancesView } = await import('./RemittancesView')
-const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
+const React = await import("react");
+const { renderToStaticMarkup } = await import("react-dom/server");
+const { createRoot } = await import("react-dom/client");
+const { act } = React;
+const { NextIntlClientProvider } = await import("next-intl");
+const { MoneyProvider } = await import("../../../../components/money-provider");
+const { RemittancesView } = await import("./RemittancesView");
+const messages = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/payroll.json", import.meta.url), "utf8"),
+);
 // The destination collection renders through the shared table, which reads
 // its search and pagination strings from the catalog like every workspace.
 const catalogMessages = {
   payroll: messages,
-  common: JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8')),
-  ui: JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8')),
-}
-import type { RemittanceGroup } from '@openbooks/engine/payroll/remittance'
-Object.assign(globalThis, { React })
+  common: JSON.parse(
+    readFileSync(new URL("../../../../messages/en/common.json", import.meta.url), "utf8"),
+  ),
+  ui: JSON.parse(readFileSync(new URL("../../../../messages/en/ui.json", import.meta.url), "utf8")),
+};
+import type { RemittanceGroup } from "@openbooks/engine/payroll/remittance";
+Object.assign(globalThis, { React });
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-async function mountInteractive(t: import('node:test').TestContext, group: RemittanceGroup): Promise<void> {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+async function mountInteractive(
+  t: import("node:test").TestContext,
+  group: RemittanceGroup,
+): Promise<void> {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-    for (const child of [...document.body.children]) child.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+    for (const child of [...document.body.children]) child.remove();
+  });
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
@@ -56,345 +67,417 @@ async function mountInteractive(t: import('node:test').TestContext, group: Remit
           <RemittancesView groups={[group]} from="2026-07-01" to="2026-07-31" canCreate />
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
+    );
+    await tick();
+  });
 }
 
-test('bill creation refuses an unapplied date draft', async (t) => {
+test("bill creation refuses an unapplied date draft", async (t) => {
   const group: RemittanceGroup = {
-    partyId: '11111111-1111-4111-8111-111111111111',
-    partyName: 'Receiver General',
-    filingAccount: { id: '22222222-2222-4222-8222-222222222222', accountNumber: null, name: null, remitterType: null },
+    partyId: "11111111-1111-4111-8111-111111111111",
+    partyName: "Receiver General",
+    filingAccount: {
+      id: "22222222-2222-4222-8222-222222222222",
+      accountNumber: null,
+      name: null,
+      remitterType: null,
+    },
     hasUnknownFilingAccount: false,
     hasEntitylessAccruals: false,
     regionalCalendar: null,
     vendorKeys: [],
     schedule: null,
-    provinces: ['ON'],
+    provinces: ["ON"],
     components: [],
-    total: '0.00',
-    currency: 'CAD',
+    total: "0.00",
+    currency: "CAD",
     translated: false,
     slices: [],
-    grossPayroll: '0.00',
+    grossPayroll: "0.00",
     employeeCount: 1,
     existingBills: [],
-  }
-  await mountInteractive(t, group)
+  };
+  await mountInteractive(t, group);
 
-  const requests: { url: string; body: unknown }[] = []
-  const priorFetch = globalThis.fetch
+  const requests: { url: string; body: unknown }[] = [];
+  const priorFetch = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    requests.push({ url: String(input), body: JSON.parse(String(init?.body)) })
-    return Response.json({ documentNumber: 'RB-104' })
-  }) as typeof fetch
-  t.after(() => { globalThis.fetch = priorFetch })
+    requests.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+    return Response.json({ documentNumber: "RB-104" });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = priorFetch;
+  });
 
-  for (const [name, value] of [['from', '2026-08-01'], ['to', '2026-08-31']] as const) {
+  for (const [name, value] of [
+    ["from", "2026-08-01"],
+    ["to", "2026-08-31"],
+  ] as const) {
     // The form submits the ISO date under the field name; the viewer types
     // into the field's text control beside it.
-    const submitted = document.querySelector(`input[name="${name}"]`) as HTMLInputElement | null
-    const input = submitted?.parentElement?.querySelector('input[data-date-field]') as HTMLInputElement | null
-    assert.ok(submitted && input, `${name} date field is rendered`)
+    const submitted = document.querySelector(`input[name="${name}"]`) as HTMLInputElement | null;
+    const input = submitted?.parentElement?.querySelector(
+      "input[data-date-field]",
+    ) as HTMLInputElement | null;
+    assert.ok(submitted && input, `${name} date field is rendered`);
     await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-      setter?.call(input, value)
-      input.dispatchEvent(new window.Event('input', { bubbles: true }))
-      input.dispatchEvent(new window.Event('change', { bubbles: true }))
-      await tick()
-    })
-    assert.equal(submitted.value, value, `${name} date field accepts the edited value`)
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new window.Event("input", { bubbles: true }));
+      input.dispatchEvent(new window.Event("change", { bubbles: true }));
+      await tick();
+    });
+    assert.equal(submitted.value, value, `${name} date field accepts the edited value`);
   }
-  const create = [...document.querySelectorAll('button')].find((button) =>
+  const create = [...document.querySelectorAll("button")].find((button) =>
     button.textContent?.includes(messages.remittances.createBill),
-  )
-  assert.ok(create, 'the bill action is available to a caller with create permission')
+  );
+  assert.ok(create, "the bill action is available to a caller with create permission");
   // The cards bill the applied July period, never a draft.
   await act(async () => {
-    create.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  assert.deepEqual(requests, [], 'an unapplied date draft never bills')
+    create.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  assert.deepEqual(requests, [], "an unapplied date draft never bills");
   assert.ok(
     document.body.textContent?.includes(messages.remittances.applyPeriodFirst),
-    'the unapplied draft names the remedy beside the bill action',
-  )
-})
+    "the unapplied draft names the remedy beside the bill action",
+  );
+});
 
-test('browser navigation to another applied period resyncs the draft and bills that period', async (t) => {
+test("browser navigation to another applied period resyncs the draft and bills that period", async (t) => {
   const group: RemittanceGroup = {
-    partyId: '11111111-1111-4111-8111-111111111111',
-    partyName: 'Receiver General',
-    filingAccount: { id: '22222222-2222-4222-8222-222222222222', accountNumber: null, name: null, remitterType: null },
+    partyId: "11111111-1111-4111-8111-111111111111",
+    partyName: "Receiver General",
+    filingAccount: {
+      id: "22222222-2222-4222-8222-222222222222",
+      accountNumber: null,
+      name: null,
+      remitterType: null,
+    },
     hasUnknownFilingAccount: false,
     hasEntitylessAccruals: false,
     regionalCalendar: null,
     vendorKeys: [],
     schedule: null,
-    provinces: ['ON'],
+    provinces: ["ON"],
     components: [],
-    total: '0.00',
-    currency: 'CAD',
+    total: "0.00",
+    currency: "CAD",
     translated: false,
     slices: [],
-    grossPayroll: '0.00',
+    grossPayroll: "0.00",
     employeeCount: 1,
     existingBills: [],
-  }
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
   const view = (from: string, to: string) => (
     <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="CAD">
         <RemittancesView groups={[group]} from={from} to={to} canCreate />
       </MoneyProvider>
     </NextIntlClientProvider>
-  )
+  );
   await act(async () => {
-    root.render(view('2026-07-01', '2026-07-31'))
-    await tick()
-  })
+    root.render(view("2026-07-01", "2026-07-31"));
+    await tick();
+  });
   // Back navigation re-renders the same mounted view with an earlier applied period.
   await act(async () => {
-    root.render(view('2026-06-01', '2026-06-30'))
-    await tick()
-  })
-  const from = document.querySelector('input[name="from"]') as HTMLInputElement | null
-  assert.equal(from?.value, '2026-06-01', 'the date fields show the applied period')
-  const create = [...document.querySelectorAll('button')].find((button) =>
+    root.render(view("2026-06-01", "2026-06-30"));
+    await tick();
+  });
+  const from = document.querySelector('input[name="from"]') as HTMLInputElement | null;
+  assert.equal(from?.value, "2026-06-01", "the date fields show the applied period");
+  const create = [...document.querySelectorAll("button")].find((button) =>
     button.textContent?.includes(messages.remittances.createBill),
-  )
-  assert.ok(create, 'the bill action is available')
-  assert.equal(create.disabled, false, 'a resynced draft does not disable the bill action')
-  assert.equal(document.body.textContent?.includes(messages.remittances.applyPeriodFirst), false)
+  );
+  assert.ok(create, "the bill action is available");
+  assert.equal(create.disabled, false, "a resynced draft does not disable the bill action");
+  assert.equal(document.body.textContent?.includes(messages.remittances.applyPeriodFirst), false);
 
-  const requests: { body: unknown }[] = []
-  const priorFetch = globalThis.fetch
+  const requests: { body: unknown }[] = [];
+  const priorFetch = globalThis.fetch;
   globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
-    requests.push({ body: JSON.parse(String(init?.body)) })
-    return Response.json({ documentNumber: 'RB-105' })
-  }) as typeof fetch
-  t.after(() => { globalThis.fetch = priorFetch })
+    requests.push({ body: JSON.parse(String(init?.body)) });
+    return Response.json({ documentNumber: "RB-105" });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = priorFetch;
+  });
   await act(async () => {
-    create.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  assert.equal(requests.length, 1)
+    create.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  assert.equal(requests.length, 1);
   assert.deepEqual(requests[0]!.body, {
-    action: 'create-bill',
+    action: "create-bill",
     partyId: group.partyId,
     filingAccountId: group.filingAccount.id,
     subsidiaryId: null,
-    from: '2026-06-01',
-    to: '2026-06-30',
-  })
-})
+    from: "2026-06-01",
+    to: "2026-06-30",
+  });
+});
 
-test('refused remittance view renders an alert and date form, without an empty balance or bill action', () => {
-  const message = 'Committed payroll has an unknown historical filing account.'
+test("refused remittance view renders an alert and date form, without an empty balance or bill action", () => {
+  const message = "Committed payroll has an unknown historical filing account.";
   const html = renderToStaticMarkup(
     <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="CAD">
-        <RemittancesView groups={[]} from="2026-08-01" to="2026-08-31" canCreate={false} populationRefusal={message} />
+        <RemittancesView
+          groups={[]}
+          from="2026-08-01"
+          to="2026-08-31"
+          canCreate={false}
+          populationRefusal={message}
+        />
       </MoneyProvider>
     </NextIntlClientProvider>,
-  )
-  assert.ok(html.includes(message))
-  assert.ok(html.includes('role="alert"'))
-  assert.ok(html.includes('action="/payroll/remittances"'))
-  assert.ok(html.includes('value="2026-08-01"'))
-  assert.ok(html.includes('value="2026-08-31"'))
-  assert.ok(!html.includes(messages.remittances.empty))
-  assert.ok(!html.includes(messages.remittances.createBill))
-})
+  );
+  assert.ok(html.includes(message));
+  assert.ok(html.includes('role="alert"'));
+  assert.ok(html.includes('action="/payroll/remittances"'));
+  assert.ok(html.includes('value="2026-08-01"'));
+  assert.ok(html.includes('value="2026-08-31"'));
+  assert.ok(!html.includes(messages.remittances.empty));
+  assert.ok(!html.includes(messages.remittances.createBill));
+});
 
-test('a scheduled destination names its authority, due date, and rule; legacy groups show none', () => {
+test("a scheduled destination names its authority, due date, and rule; legacy groups show none", () => {
   const rqGroup: RemittanceGroup = {
-    partyId: '11111111-1111-4111-8111-111111111111',
-    partyName: 'Revenu Québec',
-    filingAccount: { id: 'acct-1', accountNumber: '123456789RP0009', name: 'Quebec division', remitterType: 'accelerated_2' },
+    partyId: "11111111-1111-4111-8111-111111111111",
+    partyName: "Revenu Québec",
+    filingAccount: {
+      id: "acct-1",
+      accountNumber: "123456789RP0009",
+      name: "Quebec division",
+      remitterType: "accelerated_2",
+    },
     hasUnknownFilingAccount: false,
     hasEntitylessAccruals: false,
     // This group is scheduled, so its due date comes from the schedule and
     // never from a regional calendar; stating null keeps that explicit.
     regionalCalendar: null,
-    vendorKeys: ['rqRemittancePartyId'],
+    vendorKeys: ["rqRemittancePartyId"],
     schedule: {
-      vendorSettingsKey: 'rqRemittancePartyId',
-      authority: 'Revenu Québec',
-      frequency: 'monthly',
-      frequencySource: 'default',
-      dueDate: '2026-08-17',
-      rule: 'Revenu Québec monthly remitter (average monthly remittance $3,000 to under $25,000) — the 15th of the month following the month of the pay date',
+      vendorSettingsKey: "rqRemittancePartyId",
+      authority: "Revenu Québec",
+      frequency: "monthly",
+      frequencySource: "default",
+      dueDate: "2026-08-17",
+      rule: "Revenu Québec monthly remitter (average monthly remittance $3,000 to under $25,000) — the 15th of the month following the month of the pay date",
     },
-    provinces: ['QC'],
+    provinces: ["QC"],
     components: [
       {
-        componentId: 'c1', code: 'QPIP', name: 'QPIP', kind: 'deduction',
-        systemKey: 'qpip', liabilityAccountId: 'liab-1', accountLabel: '2320 · RQ payable',
-        amount: '400.0000', currency: 'CAD',
+        componentId: "c1",
+        code: "QPIP",
+        name: "QPIP",
+        kind: "deduction",
+        systemKey: "qpip",
+        liabilityAccountId: "liab-1",
+        accountLabel: "2320 · RQ payable",
+        amount: "400.0000",
+        currency: "CAD",
       },
     ],
-    total: '400.0000',
-    currency: 'CAD',
+    total: "400.0000",
+    currency: "CAD",
     translated: false,
     slices: [],
-    grossPayroll: '2000.0000',
+    grossPayroll: "2000.0000",
     employeeCount: 1,
     existingBills: [],
-  }
+  };
   const legacyGroup: RemittanceGroup = {
     ...rqGroup,
-    partyId: '22222222-2222-4222-8222-222222222222',
-    partyName: 'Receiver General',
-    vendorKeys: ['craRemittancePartyId'],
+    partyId: "22222222-2222-4222-8222-222222222222",
+    partyName: "Receiver General",
+    vendorKeys: ["craRemittancePartyId"],
     schedule: null,
-  }
+  };
   const html = renderToStaticMarkup(
     <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="CAD">
-        <RemittancesView groups={[rqGroup, legacyGroup]} from="2026-07-01" to="2026-07-31" canCreate={false} />
+        <RemittancesView
+          groups={[rqGroup, legacyGroup]}
+          from="2026-07-01"
+          to="2026-07-31"
+          canCreate={false}
+        />
       </MoneyProvider>
     </NextIntlClientProvider>,
-  )
+  );
   // The RQ card carries its destination schedule; the CRA card — dated by the
   // legacy function at bill creation — shows no schedule line.
-  assert.ok(html.includes('Revenu Québec'))
-  assert.ok(html.includes('2026-08-17'))
-  assert.ok(html.includes('Revenu Québec monthly remitter'))
-  assert.equal(html.split('Due ').length - 1, 1)
-})
+  assert.ok(html.includes("Revenu Québec"));
+  assert.ok(html.includes("2026-08-17"));
+  assert.ok(html.includes("Revenu Québec monthly remitter"));
+  assert.equal(html.split("Due ").length - 1, 1);
+});
 
-test('a group with unattributed payroll offers attribution, never a bill button', () => {
+test("a group with unattributed payroll offers attribution, never a bill button", () => {
   const entitylessGroup: RemittanceGroup = {
-    partyId: '55555555-5555-4555-8555-555555555555',
-    partyName: 'Receiver General',
+    partyId: "55555555-5555-4555-8555-555555555555",
+    partyName: "Receiver General",
     filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
     hasUnknownFilingAccount: false,
     hasEntitylessAccruals: true,
     regionalCalendar: null,
     vendorKeys: [],
     schedule: null,
-    provinces: ['ON'],
+    provinces: ["ON"],
     components: [
       {
-        componentId: 'c1', code: 'ITAX', name: 'Income tax', kind: 'deduction',
-        systemKey: 'income_tax', liabilityAccountId: 'liab-1', accountLabel: '2000 · Payroll liabilities',
-        amount: '150.00', currency: 'CAD',
+        componentId: "c1",
+        code: "ITAX",
+        name: "Income tax",
+        kind: "deduction",
+        systemKey: "income_tax",
+        liabilityAccountId: "liab-1",
+        accountLabel: "2000 · Payroll liabilities",
+        amount: "150.00",
+        currency: "CAD",
       },
     ],
-    total: '150.00',
-    currency: 'CAD',
+    total: "150.00",
+    currency: "CAD",
     translated: false,
     slices: [
       {
-        subsidiaryId: '66666666-6666-4666-8666-666666666666',
-        subsidiaryName: 'Main subsidiary',
-        currency: 'CAD',
+        subsidiaryId: "66666666-6666-4666-8666-666666666666",
+        subsidiaryName: "Main subsidiary",
+        currency: "CAD",
         components: [],
-        total: '100.00',
+        total: "100.00",
         existingBills: [],
       },
     ],
-    grossPayroll: '150.00',
+    grossPayroll: "150.00",
     employeeCount: 1,
     existingBills: [],
-  }
+  };
   const html = renderToStaticMarkup(
     <NextIntlClientProvider locale="en" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="CAD">
-        <RemittancesView groups={[entitylessGroup]} from="2026-09-01" to="2026-09-30" canCreate={true} />
+        <RemittancesView
+          groups={[entitylessGroup]}
+          from="2026-09-01"
+          to="2026-09-30"
+          canCreate={true}
+        />
       </MoneyProvider>
     </NextIntlClientProvider>,
-  )
+  );
   // The engine refuses to bill this group until its runs are attributed, so
   // the card must not offer the action that can only fail: it names the
   // remedy and links to the pay runs instead.
-  assert.ok(html.includes(messages.remittances.attributeEntity))
-  assert.ok(html.includes('/payroll/runs'))
-  assert.ok(!html.includes(messages.remittances.createBill))
-  assert.ok(!html.includes(messages.remittances.createAnother))
-})
+  assert.ok(html.includes(messages.remittances.attributeEntity));
+  assert.ok(html.includes("/payroll/runs"));
+  assert.ok(!html.includes(messages.remittances.createBill));
+  assert.ok(!html.includes(messages.remittances.createAnother));
+});
 
-test('a EUR-only scope under a GBP org renders euros, never pounds', () => {
+test("a EUR-only scope under a GBP org renders euros, never pounds", () => {
   const eurGroup: RemittanceGroup = {
-    partyId: '33333333-3333-4333-8333-333333333333',
-    partyName: 'Receiver General',
+    partyId: "33333333-3333-4333-8333-333333333333",
+    partyName: "Receiver General",
     filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
     hasUnknownFilingAccount: false,
     hasEntitylessAccruals: false,
     regionalCalendar: null,
     vendorKeys: [],
     schedule: null,
-    provinces: ['LON'],
+    provinces: ["LON"],
     components: [
       {
-        componentId: 'c1', code: 'ITAX', name: 'Income tax', kind: 'deduction',
-        systemKey: 'income_tax', liabilityAccountId: 'liab-1', accountLabel: '2000 · Payroll liabilities',
-        amount: '12250.00', currency: 'EUR',
+        componentId: "c1",
+        code: "ITAX",
+        name: "Income tax",
+        kind: "deduction",
+        systemKey: "income_tax",
+        liabilityAccountId: "liab-1",
+        accountLabel: "2000 · Payroll liabilities",
+        amount: "12250.00",
+        currency: "EUR",
       },
     ],
-    total: '12250.00',
-    currency: 'EUR',
+    total: "12250.00",
+    currency: "EUR",
     translated: false,
     slices: [],
-    grossPayroll: '12250.00',
+    grossPayroll: "12250.00",
     employeeCount: 1,
     existingBills: [],
-  }
+  };
   const html = renderToStaticMarkup(
     <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="GBP">
         <RemittancesView groups={[eurGroup]} from="2026-09-01" to="2026-09-30" canCreate={false} />
       </MoneyProvider>
     </NextIntlClientProvider>,
-  )
+  );
   // The stated currency labels the card and formats every amount: €12,250.00
   // is a euro figure an operator can act on, not £12,250 misread as pounds.
-  assert.ok(html.includes('EUR'), 'the card names its stated currency')
-  assert.ok(html.includes('€12,250.00'), `euro amounts render as euros: ${html}`)
-  assert.ok(!html.includes('£12,250.00'), 'no amount renders as pounds')
-})
+  assert.ok(html.includes("EUR"), "the card names its stated currency");
+  assert.ok(html.includes("€12,250.00"), `euro amounts render as euros: ${html}`);
+  assert.ok(!html.includes("£12,250.00"), "no amount renders as pounds");
+});
 
-test('a translated scope names the presentation currency it was translated into', () => {
+test("a translated scope names the presentation currency it was translated into", () => {
   const translatedGroup: RemittanceGroup = {
-    partyId: '44444444-4444-4444-8444-444444444444',
-    partyName: 'Receiver General',
+    partyId: "44444444-4444-4444-8444-444444444444",
+    partyName: "Receiver General",
     filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
     hasUnknownFilingAccount: false,
     hasEntitylessAccruals: false,
     regionalCalendar: null,
     vendorKeys: [],
     schedule: null,
-    provinces: ['LON', 'DUB'],
+    provinces: ["LON", "DUB"],
     components: [
       {
-        componentId: 'c1', code: 'ITAX', name: 'Income tax', kind: 'deduction',
-        systemKey: 'income_tax', liabilityAccountId: 'liab-1', accountLabel: '2000 · Payroll liabilities',
-        amount: '21495.83', currency: 'GBP',
+        componentId: "c1",
+        code: "ITAX",
+        name: "Income tax",
+        kind: "deduction",
+        systemKey: "income_tax",
+        liabilityAccountId: "liab-1",
+        accountLabel: "2000 · Payroll liabilities",
+        amount: "21495.83",
+        currency: "GBP",
       },
     ],
-    total: '21495.83',
-    currency: 'GBP',
+    total: "21495.83",
+    currency: "GBP",
     translated: true,
     slices: [],
-    grossPayroll: '21495.83',
+    grossPayroll: "21495.83",
     employeeCount: 2,
     existingBills: [],
-  }
+  };
   const html = renderToStaticMarkup(
     <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="GBP">
-        <RemittancesView groups={[translatedGroup]} from="2026-09-01" to="2026-09-30" canCreate={false} />
+        <RemittancesView
+          groups={[translatedGroup]}
+          from="2026-09-01"
+          to="2026-09-30"
+          canCreate={false}
+        />
       </MoneyProvider>
     </NextIntlClientProvider>,
-  )
-  assert.ok(html.includes('£21,495.83'))
-  assert.ok(html.includes('Translated to GBP'), 'the translated figure is labelled as translated')
-})
+  );
+  assert.ok(html.includes("£21,495.83"));
+  assert.ok(html.includes("Translated to GBP"), "the translated figure is labelled as translated");
+});

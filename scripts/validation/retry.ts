@@ -14,10 +14,11 @@ const TRANSIENT_MESSAGE = /timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Conne
 export function isTransient(error: unknown): boolean {
   const messages: string[] = [];
   const seen = new Set<unknown>();
-  for (let current = error; current && !seen.has(current); ) {
+  for (let current = error; current && !seen.has(current);) {
     seen.add(current);
     messages.push(current instanceof Error ? current.message : String(current));
-    const { code, cause } = typeof current === "object" ? (current as { code?: unknown; cause?: unknown }) : {};
+    const { code, cause } =
+      typeof current === "object" ? (current as { code?: unknown; cause?: unknown }) : {};
     if (typeof code === "string" && TRANSIENT_CODES.includes(code)) return true;
     current = cause;
   }
@@ -32,7 +33,8 @@ export async function retry<T>(fn: () => Promise<T>, attempts = 8, backoffMs = 1
     } catch (error) {
       if (!isTransient(error)) throw error;
       last = error;
-      if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, backoffMs * (attempt + 1)));
+      if (attempt + 1 < attempts)
+        await new Promise((resolve) => setTimeout(resolve, backoffMs * (attempt + 1)));
     }
   }
   throw last;

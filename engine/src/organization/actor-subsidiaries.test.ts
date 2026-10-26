@@ -84,26 +84,52 @@ test("restriction resolution requires an explicit policy; malformed fails closed
     restrictionSubsidiaryScope({ mode: "subtree", subsidiaryId: CHILD }, TREE),
     new Set([CHILD, LEAF]),
   );
-  assert.equal(restrictionSubsidiaryScope({ mode: "list", subsidiaryIds: "nope" } as never, TREE), undefined);
-  assert.equal(restrictionSubsidiaryScope({ mode: "list", subsidiaryIds: [42] } as never, TREE), undefined);
-  assert.equal(restrictionSubsidiaryScope({ mode: "subtree", subsidiaryId: 42 } as never, TREE), undefined);
+  assert.equal(
+    restrictionSubsidiaryScope({ mode: "list", subsidiaryIds: "nope" } as never, TREE),
+    undefined,
+  );
+  assert.equal(
+    restrictionSubsidiaryScope({ mode: "list", subsidiaryIds: [42] } as never, TREE),
+    undefined,
+  );
+  assert.equal(
+    restrictionSubsidiaryScope({ mode: "subtree", subsidiaryId: 42 } as never, TREE),
+    undefined,
+  );
   assert.equal(restrictionSubsidiaryScope({ mode: "island" } as never, TREE), undefined);
 });
 
 test("edit additions: narrowing adds nothing; finite to all is unbounded", () => {
   const empty = new Set<string>();
-  assert.equal(restrictionScopeAdditions(null, { mode: "list", subsidiaryIds: [ROOT] }, TREE), undefined);
+  assert.equal(
+    restrictionScopeAdditions(null, { mode: "list", subsidiaryIds: [ROOT] }, TREE),
+    undefined,
+  );
   assert.deepEqual(restrictionScopeAdditions({ mode: "all" }, { mode: "all" }, TREE), empty);
   assert.deepEqual(
-    restrictionScopeAdditions({ mode: "list", subsidiaryIds: [ROOT] }, { mode: "list", subsidiaryIds: [ROOT] }, TREE),
+    restrictionScopeAdditions(
+      { mode: "list", subsidiaryIds: [ROOT] },
+      { mode: "list", subsidiaryIds: [ROOT] },
+      TREE,
+    ),
     empty,
   );
   assert.deepEqual(
-    restrictionScopeAdditions({ mode: "list", subsidiaryIds: [ROOT] }, { mode: "list", subsidiaryIds: [ROOT, CHILD] }, TREE),
+    restrictionScopeAdditions(
+      { mode: "list", subsidiaryIds: [ROOT] },
+      { mode: "list", subsidiaryIds: [ROOT, CHILD] },
+      TREE,
+    ),
     new Set([CHILD]),
   );
-  assert.equal(restrictionScopeAdditions({ mode: "list", subsidiaryIds: [ROOT] }, { mode: "all" }, TREE), null);
-  assert.equal(restrictionScopeAdditions(undefined, { mode: "list", subsidiaryIds: [ROOT] }, TREE), undefined);
+  assert.equal(
+    restrictionScopeAdditions({ mode: "list", subsidiaryIds: [ROOT] }, { mode: "all" }, TREE),
+    null,
+  );
+  assert.equal(
+    restrictionScopeAdditions(undefined, { mode: "list", subsidiaryIds: [ROOT] }, TREE),
+    undefined,
+  );
   assert.equal(restrictionScopeAdditions(null, undefined, TREE), undefined);
 });
 
@@ -112,27 +138,47 @@ test("edit additions: subtree targets are open-ended, not today's enumeration", 
   // list[LEAF] -> subtree(LEAF) matches exactly today but grants LEAF's
   // future children: widening, so only an unrestricted ceiling passes.
   assert.equal(
-    restrictionScopeAdditions({ mode: "list", subsidiaryIds: [LEAF] }, { mode: "subtree", subsidiaryId: LEAF }, TREE),
+    restrictionScopeAdditions(
+      { mode: "list", subsidiaryIds: [LEAF] },
+      { mode: "subtree", subsidiaryId: LEAF },
+      TREE,
+    ),
     null,
   );
   // Same-root and parent-to-child subtree moves grant no future the old
   // policy did not already cover.
   assert.deepEqual(
-    restrictionScopeAdditions({ mode: "subtree", subsidiaryId: CHILD }, { mode: "subtree", subsidiaryId: CHILD }, TREE),
+    restrictionScopeAdditions(
+      { mode: "subtree", subsidiaryId: CHILD },
+      { mode: "subtree", subsidiaryId: CHILD },
+      TREE,
+    ),
     empty,
   );
   assert.deepEqual(
-    restrictionScopeAdditions({ mode: "subtree", subsidiaryId: CHILD }, { mode: "subtree", subsidiaryId: LEAF }, TREE),
+    restrictionScopeAdditions(
+      { mode: "subtree", subsidiaryId: CHILD },
+      { mode: "subtree", subsidiaryId: LEAF },
+      TREE,
+    ),
     empty,
   );
   // Child-to-parent subtree grants the parent's future children.
   assert.equal(
-    restrictionScopeAdditions({ mode: "subtree", subsidiaryId: LEAF }, { mode: "subtree", subsidiaryId: CHILD }, TREE),
+    restrictionScopeAdditions(
+      { mode: "subtree", subsidiaryId: LEAF },
+      { mode: "subtree", subsidiaryId: CHILD },
+      TREE,
+    ),
     null,
   );
   // Subtree -> closed list is exact: future children leave the grant.
   assert.deepEqual(
-    restrictionScopeAdditions({ mode: "subtree", subsidiaryId: ROOT }, { mode: "list", subsidiaryIds: [ROOT, CHILD] }, TREE),
+    restrictionScopeAdditions(
+      { mode: "subtree", subsidiaryId: ROOT },
+      { mode: "list", subsidiaryIds: [ROOT, CHILD] },
+      TREE,
+    ),
     empty,
   );
 });
@@ -156,7 +202,10 @@ test("coverage: all needs actor all; finite-all-today is not all", () => {
   assert.equal(grantedRestrictionWithinCoverage(allActor, { mode: "all" }), true);
   assert.equal(
     grantedRestrictionWithinCoverage(
-      { actorRestrictions: [{ mode: "list", subsidiaryIds: [ROOT, CHILD, LEAF] }], subsidiaries: TREE },
+      {
+        actorRestrictions: [{ mode: "list", subsidiaryIds: [ROOT, CHILD, LEAF] }],
+        subsidiaries: TREE,
+      },
       { mode: "all" },
     ),
     false,
@@ -247,6 +296,12 @@ test("coverage: unknown and malformed grants fail closed", () => {
     false,
   );
   assert.equal(grantedScopeSetWithinCoverage(allActor, undefined), false);
-  assert.equal(grantedScopeSetWithinCoverage({ actorRestrictions: [], subsidiaries: TREE }, new Set()), true);
-  assert.equal(grantedScopeSetWithinCoverage({ actorRestrictions: [], subsidiaries: TREE }, new Set([LEAF])), false);
+  assert.equal(
+    grantedScopeSetWithinCoverage({ actorRestrictions: [], subsidiaries: TREE }, new Set()),
+    true,
+  );
+  assert.equal(
+    grantedScopeSetWithinCoverage({ actorRestrictions: [], subsidiaries: TREE }, new Set([LEAF])),
+    false,
+  );
 });

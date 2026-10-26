@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // Top-bar account menu: a compact "launcher" landing — an identity header over a
 // grid of icon cards (Organizations, Language, Theme, Menu layout, …). Each card
@@ -7,11 +7,11 @@
 // how many tenants or languages exist (the old flat menu grew tall and its nested
 // dropdowns opened off-screen).
 
-import { useState, useTransition } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   Building2,
   Check,
@@ -26,34 +26,34 @@ import {
   ShieldCheck,
   ShieldAlert,
   type LucideIcon,
-} from 'lucide-react'
-import { Popover, cn } from '@openbooks/ui'
-import { ThemeToggle } from './theme-toggle'
-import { EnvironmentPicker } from './environment-picker'
-import { PlatformWorkspacePicker, useOnPlatform } from './platform-menu'
-import { LOCALES, type Locale } from '../i18n/config'
-import { NAV_MODES, type NavMode } from '../lib/nav-mode'
-import { useShortcutHelp } from './shortcuts/shortcut-provider'
-import type { WorkspaceEnvironments } from '../lib/environments'
+} from "lucide-react";
+import { Popover, cn } from "@openbooks/ui";
+import { ThemeToggle } from "./theme-toggle";
+import { EnvironmentPicker } from "./environment-picker";
+import { PlatformWorkspacePicker, useOnPlatform } from "./platform-menu";
+import { LOCALES, type Locale } from "../i18n/config";
+import { NAV_MODES, type NavMode } from "../lib/nav-mode";
+import { useShortcutHelp } from "./shortcuts/shortcut-provider";
+import type { WorkspaceEnvironments } from "../lib/environments";
 
 // Two-letter monogram from a display name, falling back to the email. Handles the
 // "Last, First" directory convention so the initials read First+Last either way.
 function initialsFrom(name: string, email: string): string {
-  const base = (name.trim() || email.trim()).trim()
-  if (!base) return '?'
-  const ordered = base.includes(',') ? base.split(',').reverse().join(' ') : base
+  const base = (name.trim() || email.trim()).trim();
+  if (!base) return "?";
+  const ordered = base.includes(",") ? base.split(",").reverse().join(" ") : base;
   // Only words that start with a letter or digit count, so a parenthetical or
   // punctuation ("Dana Lee (contractor)") never becomes an initial.
-  const parts = ordered.split(/\s+/).filter((part) => /^[\p{L}\p{N}]/u.test(part))
-  if (parts.length === 0) return base.slice(0, 1).toUpperCase()
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+  const parts = ordered.split(/\s+/).filter((part) => /^[\p{L}\p{N}]/u.test(part));
+  if (parts.length === 0) return base.slice(0, 1).toUpperCase();
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
-type View = 'home' | 'tenants' | 'language' | 'theme' | 'layout' | 'platform'
+type View = "home" | "tenants" | "language" | "theme" | "layout" | "platform";
 
 async function signOut() {
-  await fetch('/api/login', { method: 'DELETE' })
+  await fetch("/api/login", { method: "DELETE" });
 }
 
 export function AccountMenu({
@@ -64,100 +64,100 @@ export function AccountMenu({
   navModePreference,
   environments,
 }: {
-  name: string
-  email: string
-  roles: ReadonlyArray<{ key: string; name: string }>
-  localePreference: Locale | null
-  navModePreference: NavMode | null
-  environments: WorkspaceEnvironments
+  name: string;
+  email: string;
+  roles: ReadonlyArray<{ key: string; name: string }>;
+  localePreference: Locale | null;
+  navModePreference: NavMode | null;
+  environments: WorkspaceEnvironments;
 }) {
-  const t = useTranslations('shell.accountMenu')
-  const tLang = useTranslations('shell.language')
-  const tMenu = useTranslations('shell.menuMode')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [view, setView] = useState<View>('home')
-  const [pending, startSignOut] = useTransition()
-  const [, startRefresh] = useTransition()
-  const [locale, setLocale] = useState<string>(localePreference ?? '')
-  const [navMode, setNavMode] = useState<string>(navModePreference ?? '')
+  const t = useTranslations("shell.accountMenu");
+  const tLang = useTranslations("shell.language");
+  const tMenu = useTranslations("shell.menuMode");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<View>("home");
+  const [pending, startSignOut] = useTransition();
+  const [, startRefresh] = useTransition();
+  const [locale, setLocale] = useState<string>(localePreference ?? "");
+  const [navMode, setNavMode] = useState<string>(navModePreference ?? "");
   // The shell stays mounted across refreshes: a stored preference the server
   // now reports (saved here, or anywhere else) replaces the one marked.
-  const [stored, setStored] = useState({ locale: localePreference, navMode: navModePreference })
+  const [stored, setStored] = useState({ locale: localePreference, navMode: navModePreference });
   if (stored.locale !== localePreference || stored.navMode !== navModePreference) {
-    setStored({ locale: localePreference, navMode: navModePreference })
-    setLocale(localePreference ?? '')
-    setNavMode(navModePreference ?? '')
+    setStored({ locale: localePreference, navMode: navModePreference });
+    setLocale(localePreference ?? "");
+    setNavMode(navModePreference ?? "");
   }
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving] = useState(false);
 
-  const label = name || email || t('account')
-  const initials = initialsFrom(name, email)
-  const inSandbox = environments.envKind !== 'production'
-  const isPreview = environments.envKind === 'preview'
+  const label = name || email || t("account");
+  const initials = initialsFrom(name, email);
+  const inSandbox = environments.envKind !== "production";
+  const isPreview = environments.envKind === "preview";
   const environmentLabel = inSandbox
-    ? `${environments.currentName} · ${isPreview ? t('sampleCompany') : t('sandbox')}`
-    : environments.currentName
+    ? `${environments.currentName} · ${isPreview ? t("sampleCompany") : t("sandbox")}`
+    : environments.currentName;
   const environmentTone = isPreview
-    ? 'text-teal-600 dark:text-teal-400'
+    ? "text-teal-600 dark:text-teal-400"
     : inSandbox
-      ? 'text-amber-600 dark:text-amber-400'
-      : 'text-slate-600 dark:text-slate-400'
-  const onPlatform = useOnPlatform()
-  const openShortcutHelp = useShortcutHelp()
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-slate-600 dark:text-slate-400";
+  const onPlatform = useOnPlatform();
+  const openShortcutHelp = useShortcutHelp();
   const showTenants =
     environments.tenants.length > 1 ||
     environments.tenants.some((tn) => tn.sandboxes.length > 0) ||
-    inSandbox
+    inSandbox;
 
   const localeLabel = locale
     ? (LOCALES.find((l) => l.code === locale)?.label ?? locale)
-    : tLang('orgDefault')
-  const layoutLabel = navMode ? tMenu(`options.${navMode}`) : tMenu('orgDefault')
+    : tLang("orgDefault");
+  const layoutLabel = navMode ? tMenu(`options.${navMode}`) : tMenu("orgDefault");
 
   function close() {
-    setOpen(false)
+    setOpen(false);
     // reset to the landing view for next open, after the close animation
-    setTimeout(() => setView('home'), 150)
+    setTimeout(() => setView("home"), 150);
   }
 
   async function savePref(body: Record<string, string | null>, onErr: () => void, fail: string) {
-    setSaving(true)
+    setSaving(true);
     try {
-      const res = await fetch('/api/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      })
+      });
       if (!res.ok) {
-        onErr()
-        toast.error(fail)
-        return
+        onErr();
+        toast.error(fail);
+        return;
       }
-      startRefresh(() => router.refresh())
-      close()
+      startRefresh(() => router.refresh());
+      close();
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   const pickLocale = (v: string) => {
-    const prev = locale
-    setLocale(v)
-    void savePref({ locale: v || null }, () => setLocale(prev), tLang('saveFailed'))
-  }
+    const prev = locale;
+    setLocale(v);
+    void savePref({ locale: v || null }, () => setLocale(prev), tLang("saveFailed"));
+  };
   const pickLayout = (v: string) => {
-    const prev = navMode
-    setNavMode(v)
-    void savePref({ navMode: v || null }, () => setNavMode(prev), tMenu('saveFailed'))
-  }
+    const prev = navMode;
+    setNavMode(v);
+    void savePref({ navMode: v || null }, () => setNavMode(prev), tMenu("saveFailed"));
+  };
 
   return (
     <Popover
       open={open}
       onOpenChange={(v) => {
-        setOpen(v)
-        if (!v) setTimeout(() => setView('home'), 150)
+        setOpen(v);
+        if (!v) setTimeout(() => setView("home"), 150);
       }}
       align="end"
       className="w-72"
@@ -165,7 +165,7 @@ export function AccountMenu({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label={t('menuAriaLabel')}
+          aria-label={t("menuAriaLabel")}
           aria-expanded={open}
           aria-haspopup="menu"
           className="flex shrink-0 items-center gap-2 rounded-md border border-transparent px-1.5 py-1 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -175,20 +175,18 @@ export function AccountMenu({
           </span>
           <span className="hidden min-w-0 max-w-[11rem] flex-col text-left sm:flex">
             <span className="truncate text-sm leading-tight">{label}</span>
-            <span
-              className={cn(
-                'truncate text-[11px] leading-tight',
-                environmentTone,
-              )}
-            >
+            <span className={cn("truncate text-[11px] leading-tight", environmentTone)}>
               {environmentLabel}
             </span>
           </span>
-          <ChevronDown size={14} className="hidden shrink-0 text-slate-400 sm:inline dark:text-slate-500" />
+          <ChevronDown
+            size={14}
+            className="hidden shrink-0 text-slate-400 sm:inline dark:text-slate-500"
+          />
         </button>
       }
     >
-      {view === 'home' ? (
+      {view === "home" ? (
         <div>
           {/* identity */}
           <div className="flex items-center gap-3 px-3 py-3">
@@ -196,12 +194,14 @@ export function AccountMenu({
               {initials}
             </span>
             <span className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+              <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                {label}
+              </span>
               {email ? (
                 <span className="truncate text-xs text-slate-500 dark:text-slate-400">{email}</span>
               ) : null}
               <span className="mt-0.5 line-clamp-2 w-fit rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                {roles.length > 0 ? roles.map(({ name }) => name).join(' · ') : t('superAdmin')}
+                {roles.length > 0 ? roles.map(({ name }) => name).join(" · ") : t("superAdmin")}
               </span>
             </span>
           </div>
@@ -212,31 +212,31 @@ export function AccountMenu({
               <Card
                 icon={Building2}
                 tint="bg-teal-50 text-teal-600 dark:bg-teal-950/40 dark:text-teal-400"
-                label={t('organizations')}
+                label={t("organizations")}
                 sub={environmentLabel}
                 subTone={inSandbox ? environmentTone : undefined}
-                onClick={() => setView('tenants')}
+                onClick={() => setView("tenants")}
               />
             )}
             <Card
               icon={Languages}
               tint="bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400"
-              label={t('language')}
+              label={t("language")}
               sub={localeLabel}
-              onClick={() => setView('language')}
+              onClick={() => setView("language")}
             />
             <Card
               icon={Palette}
               tint="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400"
-              label={t('theme')}
-              onClick={() => setView('theme')}
+              label={t("theme")}
+              onClick={() => setView("theme")}
             />
             <Card
               icon={LayoutPanelLeft}
               tint="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
-              label={t('menuLayout')}
+              label={t("menuLayout")}
               sub={layoutLabel}
-              onClick={() => setView('layout')}
+              onClick={() => setView("layout")}
             />
             <Link
               href="/settings/security"
@@ -247,17 +247,17 @@ export function AccountMenu({
                 <ShieldCheck size={18} />
               </span>
               <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                {t('security')}
+                {t("security")}
               </span>
             </Link>
             {openShortcutHelp ? (
               <Card
                 icon={Keyboard}
                 tint="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                label={t('keyboardShortcuts')}
+                label={t("keyboardShortcuts")}
                 onClick={() => {
-                  close()
-                  openShortcutHelp(null)
+                  close();
+                  openShortcutHelp(null);
                 }}
               />
             ) : null}
@@ -265,10 +265,10 @@ export function AccountMenu({
               <Card
                 icon={ShieldAlert}
                 tint="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
-                label={t('platform')}
-                sub={onPlatform ? t('platform') : t('organizationWorkspace')}
-                subTone={onPlatform ? 'text-rose-600 dark:text-rose-400' : undefined}
-                onClick={() => setView('platform')}
+                label={t("platform")}
+                sub={onPlatform ? t("platform") : t("organizationWorkspace")}
+                subTone={onPlatform ? "text-rose-600 dark:text-rose-400" : undefined}
+                onClick={() => setView("platform")}
               />
             )}
           </div>
@@ -281,41 +281,46 @@ export function AccountMenu({
               role="menuitem"
               onClick={() =>
                 startSignOut(async () => {
-                  await signOut()
-                  router.replace('/login')
+                  await signOut();
+                  router.replace("/login");
                 })
               }
               className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800/60"
             >
               <LogOut size={15} className="text-slate-500 dark:text-slate-400" />
-              {pending ? t('signingOut') : t('signOut')}
+              {pending ? t("signingOut") : t("signOut")}
             </button>
           </div>
         </div>
       ) : (
         <div>
           <SubHeader
-            backLabel={t('back')}
+            backLabel={t("back")}
             title={
-              view === 'tenants'
-                ? t('organizations')
-                : view === 'language'
-                  ? t('language')
-                  : view === 'theme'
-                    ? t('theme')
-                    : view === 'platform'
-                      ? t('platform')
-                      : t('menuLayout')
+              view === "tenants"
+                ? t("organizations")
+                : view === "language"
+                  ? t("language")
+                  : view === "theme"
+                    ? t("theme")
+                    : view === "platform"
+                      ? t("platform")
+                      : t("menuLayout")
             }
-            onBack={() => setView('home')}
+            onBack={() => setView("home")}
           />
-          {view === 'tenants' && (
+          {view === "tenants" && (
             <EnvironmentPicker env={environments} hideHeading onNavigate={close} />
           )}
-          {view === 'platform' && <PlatformWorkspacePicker onNavigate={close} />}
-          {view === 'language' && (
+          {view === "platform" && <PlatformWorkspacePicker onNavigate={close} />}
+          {view === "language" && (
             <div className="max-h-72 overflow-y-auto p-1">
-              <OptionRow label={tLang('orgDefault')} active={locale === ''} disabled={saving} onClick={() => pickLocale('')} />
+              <OptionRow
+                label={tLang("orgDefault")}
+                active={locale === ""}
+                disabled={saving}
+                onClick={() => pickLocale("")}
+              />
               {LOCALES.map((l) => (
                 <OptionRow
                   key={l.code}
@@ -327,9 +332,14 @@ export function AccountMenu({
               ))}
             </div>
           )}
-          {view === 'layout' && (
+          {view === "layout" && (
             <div className="p-1">
-              <OptionRow label={tMenu('orgDefault')} active={navMode === ''} disabled={saving} onClick={() => pickLayout('')} />
+              <OptionRow
+                label={tMenu("orgDefault")}
+                active={navMode === ""}
+                disabled={saving}
+                onClick={() => pickLayout("")}
+              />
               {NAV_MODES.map((m) => (
                 <OptionRow
                   key={m}
@@ -341,7 +351,7 @@ export function AccountMenu({
               ))}
             </div>
           )}
-          {view === 'theme' && (
+          {view === "theme" && (
             <div className="p-3">
               <ThemeToggle />
             </div>
@@ -349,7 +359,7 @@ export function AccountMenu({
         </div>
       )}
     </Popover>
-  )
+  );
 }
 
 function Card({
@@ -360,12 +370,12 @@ function Card({
   subTone,
   onClick,
 }: {
-  icon: LucideIcon
-  tint: string
-  label: string
-  sub?: string
-  subTone?: string
-  onClick: () => void
+  icon: LucideIcon;
+  tint: string;
+  label: string;
+  sub?: string;
+  subTone?: string;
+  onClick: () => void;
 }) {
   return (
     <button
@@ -373,13 +383,20 @@ function Card({
       onClick={onClick}
       className="group relative flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
     >
-      <span className={cn('grid h-9 w-9 place-items-center rounded-lg', tint)}>
+      <span className={cn("grid h-9 w-9 place-items-center rounded-lg", tint)}>
         <Icon size={18} />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+        <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+          {label}
+        </span>
         {sub ? (
-          <span className={cn('block truncate text-[11px]', subTone ?? 'text-slate-400 dark:text-slate-500')}>
+          <span
+            className={cn(
+              "block truncate text-[11px]",
+              subTone ?? "text-slate-400 dark:text-slate-500",
+            )}
+          >
             {sub}
           </span>
         ) : null}
@@ -389,10 +406,18 @@ function Card({
         className="absolute right-2.5 top-3 text-slate-300 transition-transform group-hover:translate-x-0.5 dark:text-slate-600"
       />
     </button>
-  )
+  );
 }
 
-function SubHeader({ title, backLabel, onBack }: { title: string; backLabel: string; onBack: () => void }) {
+function SubHeader({
+  title,
+  backLabel,
+  onBack,
+}: {
+  title: string;
+  backLabel: string;
+  onBack: () => void;
+}) {
   return (
     <div className="flex items-center gap-1.5 border-b border-slate-100 px-2 py-2 dark:border-slate-800">
       <button
@@ -405,7 +430,7 @@ function SubHeader({ title, backLabel, onBack }: { title: string; backLabel: str
       </button>
       <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
     </div>
-  )
+  );
 }
 
 function OptionRow({
@@ -414,10 +439,10 @@ function OptionRow({
   disabled,
   onClick,
 }: {
-  label: string
-  active: boolean
-  disabled?: boolean
-  onClick: () => void
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
 }) {
   return (
     <button
@@ -428,8 +453,11 @@ function OptionRow({
       onClick={onClick}
       className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800/60"
     >
-      <Check size={15} className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-400' : 'text-transparent')} />
+      <Check
+        size={15}
+        className={cn("shrink-0", active ? "text-teal-600 dark:text-teal-400" : "text-transparent")}
+      />
       <span className="truncate">{label}</span>
     </button>
-  )
+  );
 }

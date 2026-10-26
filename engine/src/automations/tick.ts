@@ -3,13 +3,22 @@ import { sql, type SQL } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, schema, withBypassContext, withOrg } from "../platform/db.ts";
-import { addCalendarDays, businessTimeZone, formatInZone, formatTimeInZone } from "../platform/business-date.ts";
+import {
+  addCalendarDays,
+  businessTimeZone,
+  formatInZone,
+  formatTimeInZone,
+} from "../platform/business-date.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
 import { schedulerOutboxBackoffMs } from "../delivery/outbox-enqueue.ts";
 import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
 import { executeAutomation } from "./execute.ts";
 import { automationsFeatureOn } from "./services.ts";
-import { invalidScheduleCronReason, parseAutomationTrigger, type AutomationTrigger } from "./triggers.ts";
+import {
+  invalidScheduleCronReason,
+  parseAutomationTrigger,
+  type AutomationTrigger,
+} from "./triggers.ts";
 
 /**
  * HR-16 automation tick — schedule, date_relative, and queued-event firing.
@@ -80,7 +89,9 @@ export function ensureAutomationTick(intervalMs = 60_000): void {
   void runAutomationTickClaimed().catch((e) => console.error("[automations] tick failed:", e));
 }
 
-export async function runAutomationTickClaimed(now: Date = new Date()): Promise<TickSummary | null> {
+export async function runAutomationTickClaimed(
+  now: Date = new Date(),
+): Promise<TickSummary | null> {
   if (running) return null;
   running = true;
   try {
@@ -106,12 +117,29 @@ export function dateRelativeTriggerIsDue(now: Date, timezone: string, atTime: st
   return orgCivilTime(now, timezone) >= atTime;
 }
 
-const DATE_RELATIVE_SOURCES: Record<string, { table: string; dateColumn: string; entity: string }> = {
-  "employment:service_start": { table: "worker_employments", dateColumn: "service_start", entity: "employment" },
-  "leave_request:starts_on": { table: "hrm_leave_requests", dateColumn: "starts_on", entity: "leave_request" },
-  "leave_request:ends_on": { table: "hrm_leave_requests", dateColumn: "ends_on", entity: "leave_request" },
-  "enrollment:coverage_to": { table: "hrm_benefit_enrollments", dateColumn: "coverage_to", entity: "enrollment" },
-};
+const DATE_RELATIVE_SOURCES: Record<string, { table: string; dateColumn: string; entity: string }> =
+  {
+    "employment:service_start": {
+      table: "worker_employments",
+      dateColumn: "service_start",
+      entity: "employment",
+    },
+    "leave_request:starts_on": {
+      table: "hrm_leave_requests",
+      dateColumn: "starts_on",
+      entity: "leave_request",
+    },
+    "leave_request:ends_on": {
+      table: "hrm_leave_requests",
+      dateColumn: "ends_on",
+      entity: "leave_request",
+    },
+    "enrollment:coverage_to": {
+      table: "hrm_benefit_enrollments",
+      dateColumn: "coverage_to",
+      entity: "enrollment",
+    },
+  };
 
 export async function runAutomationTick(now: Date = new Date()): Promise<TickSummary> {
   const summary: TickSummary = {
@@ -126,14 +154,23 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
   // bypass: scheduler-tick — the tick scans enabled production automations only.
   await withBypassContext(async () => {
     const automations = await db.execute<{
-      id: string; orgId: string; name: string; trigger: unknown; version: number; createdAt: string; lastRunAt: string | null;
-    }>(sql`
+      id: string;
+      orgId: string;
+      name: string;
+      trigger: unknown;
+      version: number;
+      createdAt: string;
+      lastRunAt: string | null;
+    }>(
+      sql`
       select a.id, a.org_id as "orgId", a.name, a.trigger, a.version,
              a.created_at as "createdAt", a.last_run_at as "lastRunAt"
         from automations a
         join orgs o on o.id = a.org_id and o.env_kind = 'production'
        where a.status = 'enabled'
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const automation of automations) {
       try {
         await withOrg(automation.orgId, async () => {
@@ -171,10 +208,11 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
       }
     }
     const checklistOrgs = await db.execute<{ org_id: string }>(
-        sql`select distinct s.org_id from hrm_process_steps s
+      sql`select distinct s.org_id from hrm_process_steps s
           join orgs o on o.id = s.org_id and o.env_kind = 'production'
-         where s.status='pending' and s.design->>'reminderDays' is not null`, "objects",
-      );
+         where s.status='pending' and s.design->>'reminderDays' is not null`,
+      "objects",
+    );
     for (const org of checklistOrgs) {
       try {
         await runChecklistReminders(org.org_id);
@@ -241,7 +279,14 @@ async function recordInvalidScheduleCron(
 }
 
 async function fireSchedule(
-  automation: { id: string; orgId: string; name: string; version: number; createdAt: string; lastRunAt: string | null },
+  automation: {
+    id: string;
+    orgId: string;
+    name: string;
+    version: number;
+    createdAt: string;
+    lastRunAt: string | null;
+  },
   trigger: Extract<AutomationTrigger, { kind: "schedule" }>,
   now: Date,
 ): Promise<{ fired: boolean; failed: boolean }> {
@@ -254,7 +299,9 @@ async function fireSchedule(
     await recordInvalidScheduleCron(automation, cronReason);
     return { fired: false, failed: true };
   }
-  const after = automation.lastRunAt ? new Date(automation.lastRunAt) : new Date(automation.createdAt);
+  const after = automation.lastRunAt
+    ? new Date(automation.lastRunAt)
+    : new Date(automation.createdAt);
   // The flows scheduler's own occurrence function (same (after, now]
   // window, same catch-up-to-one semantics) — cron semantics reused,
   // cursor per automation row. flow_scheduled_occurrences rows are FK-bound
@@ -281,7 +328,9 @@ async function fireSchedule(
     // success — the next tick re-reports it instead of skipping it.
     return { fired: false, failed: true };
   }
-  await db.execute(sql`update automations set last_run_at = ${now} where id = ${automation.id} and org_id = ${automation.orgId}`);
+  await db.execute(
+    sql`update automations set last_run_at = ${now} where id = ${automation.id} and org_id = ${automation.orgId}`,
+  );
   return { fired: true, failed: false };
 }
 
@@ -303,9 +352,10 @@ async function fireDateRelative(
   const today = orgCivilDate(now, timezone);
   // direction before + offset 3 on target T means T is 3 days AFTER today:
   // match rows whose date equals today + offset (before) or today - offset (after).
-  const matchDate = trigger.direction === "before"
-    ? addCalendarDays(today, trigger.offsetDays)
-    : addCalendarDays(today, -trigger.offsetDays);
+  const matchDate =
+    trigger.direction === "before"
+      ? addCalendarDays(today, trigger.offsetDays)
+      : addCalendarDays(today, -trigger.offsetDays);
   const outcome = { fired: 0, failed: 0, errors: [] as string[] };
   const actorId = await tickActorFor(automation);
   const dateRelativeScope = await actorAllowedSubsidiaryIds(db, automation.orgId, actorId);
@@ -315,12 +365,15 @@ async function fireDateRelative(
   let lastId: string | null = null;
   for (;;) {
     const cursor: SQL = lastId ? sql`and id > ${lastId}` : sql``;
-    const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       select id from ${sql.identifier(source.table)}
        where org_id = ${automation.orgId} and ${sql.identifier(trigger.dateField)} = ${matchDate}::date
          ${cursor}
        order by id limit 200
-    `, "objects");
+    `,
+      "objects",
+    );
     if (rows.length === 0) break;
     for (const row of rows) {
       try {
@@ -342,7 +395,9 @@ async function fireDateRelative(
         else if (!result.replayed) outcome.fired += 1;
       } catch (e) {
         outcome.failed += 1;
-        outcome.errors.push(`${source.entity} ${row.id}: ${e instanceof Error ? e.message : String(e)}`);
+        outcome.errors.push(
+          `${source.entity} ${row.id}: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
     lastId = rows[rows.length - 1]!.id;
@@ -361,7 +416,9 @@ type ClaimedEvent = {
   attemptCount: number;
 };
 
-async function drainEventQueue(now: Date): Promise<{ drained: number; failed: number; errors: string[] }> {
+async function drainEventQueue(
+  now: Date,
+): Promise<{ drained: number; failed: number; errors: string[] }> {
   // Reclaim crash-orphaned claims before taking new ones: a dead worker never
   // parks or completes, so without this its rows stay 'claimed' forever and
   // the work stalls. The crash consumes an attempt, bounding poison events at
@@ -378,7 +435,8 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
        and org_id in (select id from orgs where env_kind = 'production')
        and claimed_at < ${new Date(now.getTime() - STALE_AUTOMATION_EVENT_CLAIM_MS)}
   `);
-  const claimed = await db.execute<ClaimedEvent>(sql`
+  const claimed = await db.execute<ClaimedEvent>(
+    sql`
     update automation_event_queue
        set status = 'claimed', claimed_at = now()
      where id in (
@@ -393,7 +451,9 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
               subject_kind as "subjectKind", subject_id as "subjectId",
               trigger_fingerprint as "triggerFingerprint", payload,
               attempt_count as "attemptCount"
-  `, "objects");
+  `,
+    "objects",
+  );
   const outcome = { drained: 0, failed: 0, errors: [] as string[] };
   for (const event of claimed) {
     try {
@@ -405,7 +465,10 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
         // A previous attempt failed and no enabled automation remains
         // (errored or disabled since): park dead with the history named,
         // never silently done.
-        await markEventDead(event, "no enabled automation remains for this event after a previous failure — inspect the automation's error state, fix it, and re-stage the trigger");
+        await markEventDead(
+          event,
+          "no enabled automation remains for this event after a previous failure — inspect the automation's error state, fix it, and re-stage the trigger",
+        );
         outcome.failed += 1;
       } else {
         const finished = await db.execute<never>(sql`
@@ -414,7 +477,9 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
              and org_id in (select id from orgs where env_kind = 'production')
         `);
         if ((finished.rowCount ?? 0) !== 1) {
-          throw new Error(`event ${event.id} fired but the done-mark matched no row — refusing to count it drained`);
+          throw new Error(
+            `event ${event.id} fired but the done-mark matched no row — refusing to count it drained`,
+          );
         }
         outcome.drained += 1;
       }
@@ -436,13 +501,18 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
 }
 
 /** Fire one claimed event against every enabled automation it matches. */
-async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: number; failed: number; firstError: string }> {
+async function fireClaimedEvent(
+  event: ClaimedEvent,
+): Promise<{ attempted: number; failed: number; firstError: string }> {
   return withOrg(event.orgId, async () => {
-    const automations = await db.execute<{ id: string; name: string; trigger: unknown }>(sql`
+    const automations = await db.execute<{ id: string; name: string; trigger: unknown }>(
+      sql`
       select a.id, a.name, a.trigger from automations a
        join orgs o on o.id = a.org_id and o.env_kind = 'production'
        where a.org_id = ${event.orgId} and a.status = 'enabled'
-    `, "objects");
+    `,
+      "objects",
+    );
     let attempted = 0;
     let failed = 0;
     let firstError = "";
@@ -461,7 +531,11 @@ async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: numbe
       attempted += 1;
       let actorId: string;
       try {
-        actorId = await tickActorFor({ id: automation.id, orgId: event.orgId, name: automation.name });
+        actorId = await tickActorFor({
+          id: automation.id,
+          orgId: event.orgId,
+          name: automation.name,
+        });
       } catch (e) {
         // A publisher who lost the permission fails this firing loudly
         // with the remedy — never silently under another user's identity.
@@ -476,14 +550,16 @@ async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: numbe
           automationId: automation.id,
           subjectEntity: event.subjectKind,
           subjectId: event.subjectId,
-          previous: (event.payload as Record<string, unknown>)?.["previous"] as Record<string, unknown> | undefined,
+          previous: (event.payload as Record<string, unknown>)?.["previous"] as
+            Record<string, unknown> | undefined,
           triggerPayload: { kind: "queued", eventKind: event.eventKind },
           fingerprint: `${event.eventKind}:${event.triggerFingerprint}`,
           allowedSubsidiaryIds: await actorAllowedSubsidiaryIds(db, event.orgId, actorId),
         });
         if (result.status === "failed") {
           failed += 1;
-          if (!firstError) firstError = `automation ${automation.id} recorded a failed run — see its run log`;
+          if (!firstError)
+            firstError = `automation ${automation.id} recorded a failed run — see its run log`;
         }
       } catch (e) {
         failed += 1;
@@ -510,7 +586,9 @@ async function parkEventForRetry(event: ClaimedEvent, message: string, now: Date
        and org_id in (select id from orgs where env_kind = 'production')
   `);
   if ((updated.rowCount ?? 0) !== 1) {
-    throw new Error(`event ${event.id} left 'claimed' under the drain — refusing to overwrite its state`);
+    throw new Error(
+      `event ${event.id} left 'claimed' under the drain — refusing to overwrite its state`,
+    );
   }
 }
 
@@ -522,13 +600,20 @@ async function markEventDead(event: ClaimedEvent, message: string): Promise<void
        and org_id in (select id from orgs where env_kind = 'production')
   `);
   if ((stamped.rowCount ?? 0) !== 1) {
-    throw new Error(`event ${event.id} could not be parked dead — the row moved under the drain; refusing to report it dead`);
+    throw new Error(
+      `event ${event.id} could not be parked dead — the row moved under the drain; refusing to report it dead`,
+    );
   }
 }
 
 function triggerMatchesEvent(
   trigger: AutomationTrigger,
-  event: { eventKind: string; subjectKind: string | null; subjectId: string | null; payload: unknown },
+  event: {
+    eventKind: string;
+    subjectKind: string | null;
+    subjectId: string | null;
+    payload: unknown;
+  },
 ): boolean {
   if (trigger.kind === "field_change") {
     if (event.eventKind !== "field_change") return false;
@@ -536,13 +621,16 @@ function triggerMatchesEvent(
     if (trigger.entity !== payload["entity"]) return false;
     if (trigger.field !== payload["field"]) return false;
     if ("to" in trigger && trigger.to !== undefined && payload["to"] !== trigger.to) return false;
-    if ("from" in trigger && trigger.from !== undefined && payload["from"] !== trigger.from) return false;
+    if ("from" in trigger && trigger.from !== undefined && payload["from"] !== trigger.from)
+      return false;
     return true;
   }
   if (trigger.kind === "event") {
-    return event.eventKind === "flow_event"
-      && (event.payload as Record<string, unknown>)?.["subjectKind"] === trigger.subjectKind
-      && (event.payload as Record<string, unknown>)?.["eventKind"] === trigger.eventKind;
+    return (
+      event.eventKind === "flow_event" &&
+      (event.payload as Record<string, unknown>)?.["subjectKind"] === trigger.subjectKind &&
+      (event.payload as Record<string, unknown>)?.["eventKind"] === trigger.eventKind
+    );
   }
   if (trigger.kind === "document") {
     if (event.eventKind !== "document") return false;
@@ -581,21 +669,31 @@ export async function stageAutomationEvent(input: {
  * instead of the whole org's automations silently stopping (or firing
  * under a stranger's identity).
  */
-async function tickActorFor(automation: { id: string; orgId: string; name: string }): Promise<string> {
-  const recipe = await db.execute<{ publisherId: string | null }>(sql`
+async function tickActorFor(automation: {
+  id: string;
+  orgId: string;
+  name: string;
+}): Promise<string> {
+  const recipe = await db.execute<{ publisherId: string | null }>(
+    sql`
     select updated_by as "publisherId" from automations
      where id = ${automation.id} and org_id = ${automation.orgId} limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const publisherId = recipe[0]?.publisherId;
   if (!publisherId) {
     throw new Error(
       `automation '${automation.name}' records no publishing author — re-save it as a user holding automations.run, then re-enable it`,
     );
   }
-  const publishers = await db.execute<{ name: string; isActive: boolean }>(sql`
+  const publishers = await db.execute<{ name: string; isActive: boolean }>(
+    sql`
     select name, is_active as "isActive" from users
      where id = ${publisherId} and org_id = ${automation.orgId} limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const publisher = publishers[0];
   if (!publisher?.isActive) {
     throw new Error(

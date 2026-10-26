@@ -41,7 +41,7 @@
 
 /* Skeleton shimmer sweep. Looped, 1.5s, respects prefers-reduced-motion. */
 .bhs-shimmer::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   transform: translateX(-100%);

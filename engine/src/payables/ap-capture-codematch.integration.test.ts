@@ -4,7 +4,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import type { NormalizedCapture } from "./ap-capture.ts";
-import { CaptureMaterializationError, resolveAndValidateCapture, materializeCapture } from "./ap-capture-service.ts";
+import {
+  CaptureMaterializationError,
+  resolveAndValidateCapture,
+  materializeCapture,
+} from "./ap-capture-service.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { cmp } from "../money/money.ts";
 
@@ -99,7 +103,12 @@ async function setupSingleLinePo(): Promise<Fixture> {
   return { org, itemX, poId, poLineId, fileId };
 }
 
-async function insertCapture(fx: Fixture, captureId: string, data: NormalizedCapture, status = "needs_review") {
+async function insertCapture(
+  fx: Fixture,
+  captureId: string,
+  data: NormalizedCapture,
+  status = "needs_review",
+) {
   await db.execute(sql`
     insert into ap_capture_items
       (id, org_id, file_id, status, original_filename, content_hash,
@@ -124,33 +133,46 @@ async function resolve(fx: Fixture, captureId: string, data: NormalizedCapture) 
 }
 
 async function billedOf(fx: Fixture): Promise<string> {
-  return (await db.execute<{ quantity_billed: string }>(sql`
+  return (
+    await db.execute<{ quantity_billed: string }>(
+      sql`
     select quantity_billed::text as quantity_billed from document_lines where id = ${fx.poLineId}
-  `, "objects"))[0]!.quantity_billed;
+  `,
+      "objects",
+    )
+  )[0]!.quantity_billed;
 }
 
 function assertBilled(actual: string, expected: string, message: string) {
   assert.equal(cmp(actual, expected), 0, `${message} (billed=${actual})`);
 }
 
-test("explicit non-matching product code on a single-line PO refuses as blocking", { skip: !DB }, async () => {
-  const fx = await setupSingleLinePo();
-  try {
-    const captureId = randomUUID();
-    const data = normalized("CODE-MISMATCH-1", [line("Y-999")]);
-    await insertCapture(fx, captureId, data);
-    const resolved = await resolve(fx, captureId, data);
-    const unmatched = resolved.issues.filter((i) => i.code === "po_line_unmatched");
-    assert.equal(unmatched.length, 1, `explicit code Y-999 must not silently match PO line X-001; issues=${JSON.stringify(resolved.issues)}`);
-    assert.equal(unmatched[0]!.severity, "blocking");
-    assert.equal(unmatched[0]!.lineIndex, 0);
-    const mapped = resolved.normalized.lines[0]!;
-    assert.equal(mapped.purchaseOrderLineId ?? null, null);
-    assert.equal(mapped.itemId ?? null, null);
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+test(
+  "explicit non-matching product code on a single-line PO refuses as blocking",
+  { skip: !DB },
+  async () => {
+    const fx = await setupSingleLinePo();
+    try {
+      const captureId = randomUUID();
+      const data = normalized("CODE-MISMATCH-1", [line("Y-999")]);
+      await insertCapture(fx, captureId, data);
+      const resolved = await resolve(fx, captureId, data);
+      const unmatched = resolved.issues.filter((i) => i.code === "po_line_unmatched");
+      assert.equal(
+        unmatched.length,
+        1,
+        `explicit code Y-999 must not silently match PO line X-001; issues=${JSON.stringify(resolved.issues)}`,
+      );
+      assert.equal(unmatched[0]!.severity, "blocking");
+      assert.equal(unmatched[0]!.lineIndex, 0);
+      const mapped = resolved.normalized.lines[0]!;
+      assert.equal(mapped.purchaseOrderLineId ?? null, null);
+      assert.equal(mapped.itemId ?? null, null);
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
 test("explicit bad code leaves no PO reserve and materialize refuses", { skip: !DB }, async () => {
   const fx = await setupSingleLinePo();
@@ -159,7 +181,9 @@ test("explicit bad code leaves no PO reserve and materialize refuses", { skip: !
     const data = normalized("CODE-MISMATCH-2", [line("Y-999")]);
     await insertCapture(fx, captureId, data);
     const resolved = await resolve(fx, captureId, data);
-    assert.ok(resolved.issues.some((i) => i.code === "po_line_unmatched" && i.severity === "blocking"));
+    assert.ok(
+      resolved.issues.some((i) => i.code === "po_line_unmatched" && i.severity === "blocking"),
+    );
     // Persist the refused resolution the way a review save would, then try
     // to bill through it: no PO line may be reserved and no draft may form.
     await db.execute(sql`
@@ -167,7 +191,12 @@ test("explicit bad code leaves no PO reserve and materialize refuses", { skip: !
              validation_issues = ${JSON.stringify(resolved.issues)}::jsonb, updated_at = now()
        where id = ${captureId} and org_id = ${fx.org.orgId}`);
     await assert.rejects(
-      materializeCapture({ orgId: fx.org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
+      materializeCapture({
+        orgId: fx.org.orgId,
+        captureItemId: captureId,
+        actorId: null,
+        allowedSubsidiaryIds: null,
+      }),
       (error: unknown) => error instanceof CaptureMaterializationError,
     );
     assertBilled(await billedOf(fx), "0", "the refused line reserves nothing on the PO line");
@@ -179,7 +208,10 @@ test("explicit bad code leaves no PO reserve and materialize refuses", { skip: !
 test("correct product code binds, including case/format variants", { skip: !DB }, async () => {
   const fx = await setupSingleLinePo();
   try {
-    for (const [invoiceNumber, code] of [["CODE-EXACT-1", "X-001"], ["CODE-CASE-1", "x 001"]] as const) {
+    for (const [invoiceNumber, code] of [
+      ["CODE-EXACT-1", "X-001"],
+      ["CODE-CASE-1", "x 001"],
+    ] as const) {
       const captureId = randomUUID();
       const data = normalized(invoiceNumber, [line(code)]);
       await insertCapture(fx, captureId, data);

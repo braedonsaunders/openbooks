@@ -1,9 +1,9 @@
 /** Pack tax-year resolution. Split from packs.ts (pure moves only). */
-import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
-import { payrollDraftTaxYears, payrollSupportedTaxYears } from "./tax-years.ts"
-import { taxYearFor } from "./tax-year-math.ts"
-import type { PayrollTaxYearEdition, PayrollTaxYearSupport } from "./tax-years.ts"
-import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts"
+import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry";
+import { payrollDraftTaxYears, payrollSupportedTaxYears } from "./tax-years.ts";
+import { taxYearFor } from "./tax-year-math.ts";
+import type { PayrollTaxYearEdition, PayrollTaxYearSupport } from "./tax-years.ts";
+import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
 
 /**
  * The tax year a pay date falls in, per the PACK's own year definition.
@@ -44,8 +44,7 @@ export function assertPayrollRegionSupported(country: string, region: string): v
   }
   if (regions.supported.includes(region)) return;
   throw new PayrollJurisdictionError(
-    regions.unsupportedReasons?.[region]
-    ?? regions.unsupportedReason.replace("{region}", region),
+    regions.unsupportedReasons?.[region] ?? regions.unsupportedReason.replace("{region}", region),
   );
 }
 
@@ -91,8 +90,8 @@ export function registerPayrollTaxYears(declaration: PayrollTaxYearSupport): voi
   }
   if (declaredPayrollTaxYears().some((declared) => declared.country === declaration.country)) {
     throw new PayrollPackError(
-      `payroll tax years for ${declaration.country} are already declared — a country has `
-      + "exactly one statutory-table declaration",
+      `payroll tax years for ${declaration.country} are already declared — a country has ` +
+        "exactly one statutory-table declaration",
     );
   }
   EXTRA_PAYROLL_TAX_YEARS.set(declaration.country, declaration);
@@ -108,9 +107,11 @@ export function payrollTaxYearSupport(country: string): PayrollTaxYearSupport {
   const declared = declaredPayrollTaxYears().find((entry) => entry.country === country);
   if (!declared) {
     throw new PayrollPackError(
-      `the ${country || "(unset)"} payroll pack declares no statutory tax years — a pack must `
-      + "declare which years its tables are transcribed for. Declared for: "
-      + (declaredPayrollTaxYears().map((entry) => entry.country).join(", ") || "none"),
+      `the ${country || "(unset)"} payroll pack declares no statutory tax years — a pack must ` +
+        "declare which years its tables are transcribed for. Declared for: " +
+        (declaredPayrollTaxYears()
+          .map((entry) => entry.country)
+          .join(", ") || "none"),
     );
   }
   return declared;
@@ -174,23 +175,23 @@ export function payrollTaxYearOperatorMessage(
     // year the refusal names the country and stops there.
     const yearClause = taxYear === null ? "" : `, so ${taxYear} cannot be calculated`;
     return (
-      `No statutory tables are published for ${country || "(unset)"} — no payroll pack declares `
-      + `that country${yearClause}. No action in the product loads tables `
-      + `for a country with no pack; the packs tab of payroll setup shows which packs are `
-      + `available and the years each publishes.`
+      `No statutory tables are published for ${country || "(unset)"} — no payroll pack declares ` +
+      `that country${yearClause}. No action in the product loads tables ` +
+      `for a country with no pack; the packs tab of payroll setup shows which packs are ` +
+      `available and the years each publishes.`
     );
   }
   if (kind === "draft") {
     return (
-      `${taxYear} statutory tables are not available for ${scope}. `
-      + `The ${country} pack publishes ${published}. No action in the product loads a year the `
-      + `pack does not publish; the packs tab of payroll setup shows the years each pack publishes.`
+      `${taxYear} statutory tables are not available for ${scope}. ` +
+      `The ${country} pack publishes ${published}. No action in the product loads a year the ` +
+      `pack does not publish; the packs tab of payroll setup shows the years each pack publishes.`
     );
   }
   return (
-    `${taxYear} statutory tables are not loaded for ${scope} — `
-    + `the ${country} pack publishes ${published}. No action in the product loads a year the `
-    + `pack does not publish; the packs tab of payroll setup shows the years each pack publishes.`
+    `${taxYear} statutory tables are not loaded for ${scope} — ` +
+    `the ${country} pack publishes ${published}. No action in the product loads a year the ` +
+    `pack does not publish; the packs tab of payroll setup shows the years each pack publishes.`
   );
 }
 
@@ -212,32 +213,40 @@ export function payrollTaxYearProblem(
     support = payrollTaxYearSupport(country);
   } catch (error) {
     return {
-      country, region: region ?? null, taxYear, kind: "undeclared",
+      country,
+      region: region ?? null,
+      taxYear,
+      kind: "undeclared",
       message: error instanceof Error ? error.message : String(error),
       operatorMessage: payrollTaxYearOperatorMessage(country, country, taxYear, "undeclared", []),
     };
   }
-  const scope = region && support.regionsWithOwnTables.includes(region)
-    ? `${country} · ${region}`
-    : country;
+  const scope =
+    region && support.regionsWithOwnTables.includes(region) ? `${country} · ${region}` : country;
   if (payrollSupportedTaxYears(support, region).includes(taxYear)) return null;
   const loaded = payrollSupportedTaxYears(support, region);
   if (payrollDraftTaxYears(support, region).includes(taxYear)) {
     return {
-      country, region: region ?? null, taxYear, kind: "draft",
+      country,
+      region: region ?? null,
+      taxYear,
+      kind: "draft",
       message:
-        `the ${taxYear} statutory tables for ${scope} are scaffolded but not filled in — this year `
-        + `is not yet supported by the ${country} pack; contact support. `
-        + (loaded.length > 0 ? `Loaded years: ${loaded.join(", ")}.` : "No years are loaded."),
+        `the ${taxYear} statutory tables for ${scope} are scaffolded but not filled in — this year ` +
+        `is not yet supported by the ${country} pack; contact support. ` +
+        (loaded.length > 0 ? `Loaded years: ${loaded.join(", ")}.` : "No years are loaded."),
       operatorMessage: payrollTaxYearOperatorMessage(country, scope, taxYear, "draft", loaded),
     };
   }
   return {
-    country, region: region ?? null, taxYear, kind: "missing",
+    country,
+    region: region ?? null,
+    taxYear,
+    kind: "missing",
     message:
-      `${taxYear} statutory tables are not loaded for ${scope} — `
-      + (loaded.length > 0 ? `loaded years: ${loaded.join(", ")}. ` : "no years are loaded. ")
-      + `This year is not yet supported by the ${country} pack; contact support.`,
+      `${taxYear} statutory tables are not loaded for ${scope} — ` +
+      (loaded.length > 0 ? `loaded years: ${loaded.join(", ")}. ` : "no years are loaded. ") +
+      `This year is not yet supported by the ${country} pack; contact support.`,
     operatorMessage: payrollTaxYearOperatorMessage(country, scope, taxYear, "missing", loaded),
   };
 }
@@ -274,8 +283,9 @@ export function payrollTaxYearCoverage(): PayrollTaxYearCoverage[] {
     draft: payrollDraftTaxYears(support),
     ratesModule: support.ratesModule,
     regionsWithOwnTables: [...support.regionsWithOwnTables],
-    editions: [...support.editions].sort((a, b) =>
-      a.year - b.year || a.effectiveFrom.localeCompare(b.effectiveFrom)),
+    editions: [...support.editions].sort(
+      (a, b) => a.year - b.year || a.effectiveFrom.localeCompare(b.effectiveFrom),
+    ),
     regions: support.regionsWithOwnTables.map((region) => ({
       region,
       supported: payrollSupportedTaxYears(support, region),
@@ -290,7 +300,10 @@ export function payrollTaxYearCoverage(): PayrollTaxYearCoverage[] {
  * itself comes from the pack's own tax-year definition (HMRC's 6 April, the
  * ATO's 1 July), never from `slice(0, 4)`.
  */
-export function payrollTaxYearForDate(country: string, date: string): {
+export function payrollTaxYearForDate(
+  country: string,
+  date: string,
+): {
   taxYear: number;
   problem: PayrollTaxYearProblem | null;
 } {

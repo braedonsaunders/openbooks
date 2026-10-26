@@ -24,8 +24,8 @@
 //     at `nestingDepth` nested markers like the renderer itself.
 //     Templates may also use `{{barcode path}}` for a Code 128 B/C symbol.
 
-import DOMPurify from 'isomorphic-dompurify'
-import { renderCode128Svg } from './barcode'
+import DOMPurify from "isomorphic-dompurify";
+import { renderCode128Svg } from "./barcode";
 
 /**
  * Header/footer fragment and print-setup validation the sanitizer can
@@ -35,8 +35,8 @@ import { renderCode128Svg } from './barcode'
  */
 export class PdfTemplateValidationError extends Error {
   constructor(message: string) {
-    super(message)
-    this.name = 'PdfTemplateValidationError'
+    super(message);
+    this.name = "PdfTemplateValidationError";
   }
 }
 
@@ -52,19 +52,19 @@ export const TEMPLATE_RENDER_LIMITS = {
   loopIterations: 10_000,
   expressionChars: 256,
   hiddenHtmlDepth: 32,
-} as const
+} as const;
 
 function assertLength(value: string, max: number, label: string): void {
   if (value.length > max) {
-    throw new Error(`${label} exceeded ${max} characters.`)
+    throw new Error(`${label} exceeded ${max} characters.`);
   }
 }
 
 class BoundedStringBuilder {
-  readonly #chunks: string[] = []
-  #pending: string[] = []
-  #pendingLength = 0
-  #length = 0
+  readonly #chunks: string[] = [];
+  #pending: string[] = [];
+  #pendingLength = 0;
+  #length = 0;
 
   constructor(
     private readonly max: number,
@@ -72,54 +72,54 @@ class BoundedStringBuilder {
   ) {}
 
   get length(): number {
-    return this.#length
+    return this.#length;
   }
 
   append(value: string): void {
-    if (!value) return
+    if (!value) return;
     if (this.#length > this.max - value.length) {
-      throw new Error(`${this.label} exceeded ${this.max} characters.`)
+      throw new Error(`${this.label} exceeded ${this.max} characters.`);
     }
     // Coalesce the many single-character writes made by the HTML/entity
     // scanners — millions of one-character array entries would defeat the
     // memory ceiling even though the final string itself was bounded.
     if (value.length >= 8_192) {
-      this.flushPending()
-      this.#chunks.push(value)
+      this.flushPending();
+      this.#chunks.push(value);
     } else {
-      this.#pending.push(value)
-      this.#pendingLength += value.length
-      if (this.#pendingLength >= 8_192) this.flushPending()
+      this.#pending.push(value);
+      this.#pendingLength += value.length;
+      if (this.#pendingLength >= 8_192) this.flushPending();
     }
-    this.#length += value.length
+    this.#length += value.length;
   }
 
   toString(): string {
-    const pending = this.#pending.join('')
-    return this.#chunks.length === 0 ? pending : [...this.#chunks, pending].join('')
+    const pending = this.#pending.join("");
+    return this.#chunks.length === 0 ? pending : [...this.#chunks, pending].join("");
   }
 
   private flushPending(): void {
-    if (this.#pendingLength > 0) this.#chunks.push(this.#pending.join(''))
-    this.#pending = []
-    this.#pendingLength = 0
+    if (this.#pendingLength > 0) this.#chunks.push(this.#pending.join(""));
+    this.#pending = [];
+    this.#pendingLength = 0;
   }
 }
 
 // --- HTML escaping -----------------------------------------------------------
 
 export function escapeTemplateHtml(s: string): string {
-  assertLength(s, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'HTML value')
-  const out = new BoundedStringBuilder(TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Rendered output')
+  assertLength(s, TEMPLATE_RENDER_LIMITS.renderOutputChars, "HTML value");
+  const out = new BoundedStringBuilder(TEMPLATE_RENDER_LIMITS.renderOutputChars, "Rendered output");
   for (let i = 0; i < s.length; i++) {
-    const char = s[i]!
-    if (char === '&') out.append('&amp;')
-    else if (char === '<') out.append('&lt;')
-    else if (char === '>') out.append('&gt;')
-    else if (char === '"') out.append('&quot;')
-    else out.append(char)
+    const char = s[i]!;
+    if (char === "&") out.append("&amp;");
+    else if (char === "<") out.append("&lt;");
+    else if (char === ">") out.append("&gt;");
+    else if (char === '"') out.append("&quot;");
+    else out.append(char);
   }
-  return out.toString()
+  return out.toString();
 }
 
 // --- merge-value plainification ----------------------------------------------
@@ -130,254 +130,255 @@ export function escapeTemplateHtml(s: string): string {
 
 /** Stringify a merge value; if it looks like HTML, reduce it to plain text. */
 function plainValue(v: unknown): string {
-  const s = v == null ? '' : String(v)
-  assertLength(s, TEMPLATE_RENDER_LIMITS.mergeValueChars, 'Template merge value')
-  return s.includes('<') || s.includes('&') ? htmlToPlainText(s) : s
+  const s = v == null ? "" : String(v);
+  assertLength(s, TEMPLATE_RENDER_LIMITS.mergeValueChars, "Template merge value");
+  return s.includes("<") || s.includes("&") ? htmlToPlainText(s) : s;
 }
 
 // --- Block template engine ----------------------------------------------------
 
-type Frame = { data: Record<string, unknown>; item?: unknown; meta?: Record<string, unknown> }
+type Frame = { data: Record<string, unknown>; item?: unknown; meta?: Record<string, unknown> };
 
 type TplNode =
-  | { t: 'text'; v: string }
-  | { t: 'var'; expr: string; raw: boolean }
-  | { t: 'barcode'; expr: string }
-  | { t: 'each'; expr: string; body: TplNode[] }
-  | { t: 'if'; expr: string; body: TplNode[]; alt: TplNode[] }
+  | { t: "text"; v: string }
+  | { t: "var"; expr: string; raw: boolean }
+  | { t: "barcode"; expr: string }
+  | { t: "each"; expr: string; body: TplNode[] }
+  | { t: "if"; expr: string; body: TplNode[]; alt: TplNode[] };
 
 type Tok =
-  | { k: 'text'; v: string }
-  | { k: 'var'; expr: string; raw: boolean }
-  | { k: 'barcode'; expr: string }
-  | { k: 'open'; block: 'each' | 'if'; expr: string }
-  | { k: 'else' }
-  | { k: 'close'; block: 'each' | 'if' }
+  | { k: "text"; v: string }
+  | { k: "var"; expr: string; raw: boolean }
+  | { k: "barcode"; expr: string }
+  | { k: "open"; block: "each" | "if"; expr: string }
+  | { k: "else" }
+  | { k: "close"; block: "each" | "if" };
 
 function tokenize(tpl: string): Tok[] {
-  assertLength(tpl, TEMPLATE_RENDER_LIMITS.templateChars, 'Document template')
-  const toks: Tok[] = []
+  assertLength(tpl, TEMPLATE_RENDER_LIMITS.templateChars, "Document template");
+  const toks: Tok[] = [];
   const push = (token: Tok) => {
     if (toks.length >= TEMPLATE_RENDER_LIMITS.tokens) {
-      throw new Error(`Document template exceeded ${TEMPLATE_RENDER_LIMITS.tokens} tokens.`)
+      throw new Error(`Document template exceeded ${TEMPLATE_RENDER_LIMITS.tokens} tokens.`);
     }
-    toks.push(token)
-  }
+    toks.push(token);
+  };
 
-  let cursor = 0
+  let cursor = 0;
   while (cursor < tpl.length) {
-    const start = tpl.indexOf('{{', cursor)
+    const start = tpl.indexOf("{{", cursor);
     if (start === -1) {
-      push({ k: 'text', v: tpl.slice(cursor) })
-      break
+      push({ k: "text", v: tpl.slice(cursor) });
+      break;
     }
-    if (start > cursor) push({ k: 'text', v: tpl.slice(cursor, start) })
+    if (start > cursor) push({ k: "text", v: tpl.slice(cursor, start) });
 
-    const raw = tpl.startsWith('{{{', start)
-    const close = raw ? '}}}' : '}}'
-    const contentStart = start + (raw ? 3 : 2)
-    const end = tpl.indexOf(close, contentStart)
+    const raw = tpl.startsWith("{{{", start);
+    const close = raw ? "}}}" : "}}";
+    const contentStart = start + (raw ? 3 : 2);
+    const end = tpl.indexOf(close, contentStart);
     if (end === -1) {
       // An unterminated marker is literal text.
-      push({ k: 'text', v: tpl.slice(start) })
-      break
+      push({ k: "text", v: tpl.slice(start) });
+      break;
     }
 
-    const inner = tpl.slice(contentStart, end).trim()
+    const inner = tpl.slice(contentStart, end).trim();
     if (inner.length > TEMPLATE_RENDER_LIMITS.expressionChars) {
       throw new Error(
         `Document template expression exceeded ${TEMPLATE_RENDER_LIMITS.expressionChars} characters.`,
-      )
+      );
     }
 
     if (raw) {
-      push({ k: 'var', expr: inner, raw: true })
-    } else if (inner === 'else') {
-      push({ k: 'else' })
-    } else if (inner === '/each') {
-      push({ k: 'close', block: 'each' })
-    } else if (inner === '/if') {
-      push({ k: 'close', block: 'if' })
-    } else if (inner.startsWith('/')) {
-      throw new Error(`Document template contains an unsupported closing block "${inner}".`)
+      push({ k: "var", expr: inner, raw: true });
+    } else if (inner === "else") {
+      push({ k: "else" });
+    } else if (inner === "/each") {
+      push({ k: "close", block: "each" });
+    } else if (inner === "/if") {
+      push({ k: "close", block: "if" });
+    } else if (inner.startsWith("/")) {
+      throw new Error(`Document template contains an unsupported closing block "${inner}".`);
     } else {
-      const eachPrefix = inner.slice(0, 5)
-      const ifPrefix = inner.slice(0, 3)
-      if (eachPrefix === '#each' && (inner.length === 5 || /\s/.test(inner[5]!))) {
-        const expr = inner.slice(5).trim()
-        if (!expr) throw new Error('Document template #each block requires a value path.')
-        push({ k: 'open', block: 'each', expr })
-      } else if (ifPrefix === '#if' && (inner.length === 3 || /\s/.test(inner[3]!))) {
-        const expr = inner.slice(3).trim()
-        if (!expr) throw new Error('Document template #if block requires a value path.')
-        push({ k: 'open', block: 'if', expr })
-      } else if (inner.startsWith('barcode') && (inner.length === 7 || /\s/.test(inner[7]!))) {
-        const expr = inner.slice(7).trim()
+      const eachPrefix = inner.slice(0, 5);
+      const ifPrefix = inner.slice(0, 3);
+      if (eachPrefix === "#each" && (inner.length === 5 || /\s/.test(inner[5]!))) {
+        const expr = inner.slice(5).trim();
+        if (!expr) throw new Error("Document template #each block requires a value path.");
+        push({ k: "open", block: "each", expr });
+      } else if (ifPrefix === "#if" && (inner.length === 3 || /\s/.test(inner[3]!))) {
+        const expr = inner.slice(3).trim();
+        if (!expr) throw new Error("Document template #if block requires a value path.");
+        push({ k: "open", block: "if", expr });
+      } else if (inner.startsWith("barcode") && (inner.length === 7 || /\s/.test(inner[7]!))) {
+        const expr = inner.slice(7).trim();
         if (!/^[A-Za-z0-9_.]+$/.test(expr)) {
-          throw new Error('Document template barcode requires a value path.')
+          throw new Error("Document template barcode requires a value path.");
         }
-        push({ k: 'barcode', expr })
-      } else if (inner.startsWith('#')) {
-        throw new Error(`Document template contains an unsupported block "${inner}".`)
+        push({ k: "barcode", expr });
+      } else if (inner.startsWith("#")) {
+        throw new Error(`Document template contains an unsupported block "${inner}".`);
       } else {
-        push({ k: 'var', expr: inner, raw: false })
+        push({ k: "var", expr: inner, raw: false });
       }
     }
-    cursor = end + close.length
+    cursor = end + close.length;
   }
-  return toks
+  return toks;
 }
 
-type ParseState = { index: number; nodes: number }
+type ParseState = { index: number; nodes: number };
 
 function addNode(state: ParseState, nodes: TplNode[], node: TplNode): void {
-  state.nodes += 1
+  state.nodes += 1;
   if (state.nodes > TEMPLATE_RENDER_LIMITS.astNodes) {
-    throw new Error(`Document template exceeded ${TEMPLATE_RENDER_LIMITS.astNodes} syntax nodes.`)
+    throw new Error(`Document template exceeded ${TEMPLATE_RENDER_LIMITS.astNodes} syntax nodes.`);
   }
-  nodes.push(node)
+  nodes.push(node);
 }
 
 function parseBlock(
   toks: Tok[],
   state: ParseState,
-  expected: 'each' | 'if' | null,
+  expected: "each" | "if" | null,
   depth: number,
   allowElse: boolean,
 ): TplNode[] {
-  const nodes: TplNode[] = []
+  const nodes: TplNode[] = [];
   while (state.index < toks.length) {
-    const token = toks[state.index]!
-    if (token.k === 'else') {
-      if (expected !== 'if' || !allowElse) {
-        throw new Error('Document template contains an unexpected {{else}} marker.')
+    const token = toks[state.index]!;
+    if (token.k === "else") {
+      if (expected !== "if" || !allowElse) {
+        throw new Error("Document template contains an unexpected {{else}} marker.");
       }
-      return nodes
+      return nodes;
     }
-    if (token.k === 'close') {
+    if (token.k === "close") {
       if (token.block !== expected) {
-        const wanted = expected ? `{{/${expected}}}` : 'no closing marker'
-        throw new Error(`Document template found {{/${token.block}}}; expected ${wanted}.`)
+        const wanted = expected ? `{{/${expected}}}` : "no closing marker";
+        throw new Error(`Document template found {{/${token.block}}}; expected ${wanted}.`);
       }
-      return nodes
+      return nodes;
     }
 
-    state.index += 1
-    if (token.k === 'text') {
-      addNode(state, nodes, { t: 'text', v: token.v })
-    } else if (token.k === 'var') {
-      addNode(state, nodes, { t: 'var', expr: token.expr, raw: token.raw })
-    } else if (token.k === 'barcode') {
-      addNode(state, nodes, { t: 'barcode', expr: token.expr })
+    state.index += 1;
+    if (token.k === "text") {
+      addNode(state, nodes, { t: "text", v: token.v });
+    } else if (token.k === "var") {
+      addNode(state, nodes, { t: "var", expr: token.expr, raw: token.raw });
+    } else if (token.k === "barcode") {
+      addNode(state, nodes, { t: "barcode", expr: token.expr });
     } else {
       if (depth >= TEMPLATE_RENDER_LIMITS.nestingDepth) {
         throw new Error(
           `Document template exceeded ${TEMPLATE_RENDER_LIMITS.nestingDepth} nested blocks.`,
-        )
+        );
       }
-      if (token.block === 'each') {
-        const body = parseBlock(toks, state, 'each', depth + 1, false)
-        const close = toks[state.index]
-        if (close?.k !== 'close' || close.block !== 'each') {
-          throw new Error('Document template contains an unclosed {{#each}} block.')
+      if (token.block === "each") {
+        const body = parseBlock(toks, state, "each", depth + 1, false);
+        const close = toks[state.index];
+        if (close?.k !== "close" || close.block !== "each") {
+          throw new Error("Document template contains an unclosed {{#each}} block.");
         }
-        state.index += 1
-        addNode(state, nodes, { t: 'each', expr: token.expr, body })
+        state.index += 1;
+        addNode(state, nodes, { t: "each", expr: token.expr, body });
       } else {
-        const body = parseBlock(toks, state, 'if', depth + 1, true)
-        let alt: TplNode[] = []
-        if (toks[state.index]?.k === 'else') {
-          state.index += 1
-          alt = parseBlock(toks, state, 'if', depth + 1, false)
+        const body = parseBlock(toks, state, "if", depth + 1, true);
+        let alt: TplNode[] = [];
+        if (toks[state.index]?.k === "else") {
+          state.index += 1;
+          alt = parseBlock(toks, state, "if", depth + 1, false);
         }
-        const close = toks[state.index]
-        if (close?.k !== 'close' || close.block !== 'if') {
-          throw new Error('Document template contains an unclosed {{#if}} block.')
+        const close = toks[state.index];
+        if (close?.k !== "close" || close.block !== "if") {
+          throw new Error("Document template contains an unclosed {{#if}} block.");
         }
-        state.index += 1
-        addNode(state, nodes, { t: 'if', expr: token.expr, body, alt })
+        state.index += 1;
+        addNode(state, nodes, { t: "if", expr: token.expr, body, alt });
       }
     }
   }
 
-  if (expected) throw new Error(`Document template contains an unclosed {{#${expected}}} block.`)
-  return nodes
+  if (expected) throw new Error(`Document template contains an unclosed {{#${expected}}} block.`);
+  return nodes;
 }
 
 function resolvePath(expr: string, stack: Frame[]): unknown {
-  const path = expr.trim()
-  if (path === 'this' || path === '.') return stack[stack.length - 1]?.item
-  if (path.startsWith('@')) {
-    const key = path.slice(1)
+  const path = expr.trim();
+  if (path === "this" || path === ".") return stack[stack.length - 1]?.item;
+  if (path.startsWith("@")) {
+    const key = path.slice(1);
     for (let i = stack.length - 1; i >= 0; i--) {
-      const meta = stack[i]?.meta
-      if (meta && Object.prototype.hasOwnProperty.call(meta, key)) return meta[key]
+      const meta = stack[i]?.meta;
+      if (meta && Object.prototype.hasOwnProperty.call(meta, key)) return meta[key];
     }
-    return undefined
+    return undefined;
   }
-  const parts = path.split('.')
-  const head = parts[0] ?? ''
-  let base: unknown
-  if (head === 'this') {
-    base = stack[stack.length - 1]?.item
+  const parts = path.split(".");
+  const head = parts[0] ?? "";
+  let base: unknown;
+  if (head === "this") {
+    base = stack[stack.length - 1]?.item;
   } else {
     for (let i = stack.length - 1; i >= 0; i--) {
-      const d = stack[i]?.data
-      if (d && typeof d === 'object' && Object.prototype.hasOwnProperty.call(d, head)) {
-        base = d[head]
-        break
+      const d = stack[i]?.data;
+      if (d && typeof d === "object" && Object.prototype.hasOwnProperty.call(d, head)) {
+        base = d[head];
+        break;
       }
     }
   }
   for (const part of parts.slice(1)) {
-    if (base == null || typeof base !== 'object') return undefined
-    if (!Object.prototype.hasOwnProperty.call(base, part)) return undefined
-    base = (base as Record<string, unknown>)[part]
+    if (base == null || typeof base !== "object") return undefined;
+    if (!Object.prototype.hasOwnProperty.call(base, part)) return undefined;
+    base = (base as Record<string, unknown>)[part];
   }
-  return base
+  return base;
 }
 
 function isTruthy(v: unknown): boolean {
-  if (Array.isArray(v)) return v.length > 0
-  if (v == null || v === false) return false
-  if (typeof v === 'number') return v !== 0 && !Number.isNaN(v)
-  if (typeof v === 'string') return v.length > 0
-  return true
+  if (Array.isArray(v)) return v.length > 0;
+  if (v == null || v === false) return false;
+  if (typeof v === "number") return v !== 0 && !Number.isNaN(v);
+  if (typeof v === "string") return v.length > 0;
+  return true;
 }
 
 type RenderState = {
-  out: BoundedStringBuilder
-  loopIterations: number
-  escape: boolean
-  allowRawValues: boolean
-}
+  out: BoundedStringBuilder;
+  loopIterations: number;
+  escape: boolean;
+  allowRawValues: boolean;
+};
 
 function renderNodes(nodes: TplNode[], stack: Frame[], state: RenderState): void {
   for (const n of nodes) {
-    if (n.t === 'text') {
-      state.out.append(n.v)
-    } else if (n.t === 'barcode') {
-      const value = plainValue(resolvePath(n.expr, stack))
-      if (value) state.out.append(renderCode128Svg(value))
-    } else if (n.t === 'var') {
-      const v = resolvePath(n.expr, stack)
-      const raw = n.raw && state.allowRawValues
-      const value = raw ? (v == null ? '' : String(v)) : plainValue(v)
-      if (raw) assertLength(value, TEMPLATE_RENDER_LIMITS.mergeValueChars, 'Raw template merge value')
-      state.out.append(state.escape && !raw ? escapeTemplateHtml(value) : value)
-    } else if (n.t === 'each') {
-      const coll = resolvePath(n.expr, stack)
+    if (n.t === "text") {
+      state.out.append(n.v);
+    } else if (n.t === "barcode") {
+      const value = plainValue(resolvePath(n.expr, stack));
+      if (value) state.out.append(renderCode128Svg(value));
+    } else if (n.t === "var") {
+      const v = resolvePath(n.expr, stack);
+      const raw = n.raw && state.allowRawValues;
+      const value = raw ? (v == null ? "" : String(v)) : plainValue(v);
+      if (raw)
+        assertLength(value, TEMPLATE_RENDER_LIMITS.mergeValueChars, "Raw template merge value");
+      state.out.append(state.escape && !raw ? escapeTemplateHtml(value) : value);
+    } else if (n.t === "each") {
+      const coll = resolvePath(n.expr, stack);
       if (Array.isArray(coll)) {
         for (let idx = 0; idx < coll.length; idx++) {
-          state.loopIterations += 1
+          state.loopIterations += 1;
           if (state.loopIterations > TEMPLATE_RENDER_LIMITS.loopIterations) {
             throw new Error(
               `Document template exceeded ${TEMPLATE_RENDER_LIMITS.loopIterations} loop iterations.`,
-            )
+            );
           }
-          const item = coll[idx]
+          const item = coll[idx];
           stack.push({
-            data: item && typeof item === 'object' ? (item as Record<string, unknown>) : {},
+            data: item && typeof item === "object" ? (item as Record<string, unknown>) : {},
             item,
             meta: {
               index: idx,
@@ -386,16 +387,16 @@ function renderNodes(nodes: TplNode[], stack: Frame[], state: RenderState): void
               last: idx === coll.length - 1,
               length: coll.length,
             },
-          })
+          });
           try {
-            renderNodes(n.body, stack, state)
+            renderNodes(n.body, stack, state);
           } finally {
-            stack.pop()
+            stack.pop();
           }
         }
       }
-    } else if (n.t === 'if') {
-      renderNodes(isTruthy(resolvePath(n.expr, stack)) ? n.body : n.alt, stack, state)
+    } else if (n.t === "if") {
+      renderNodes(isTruthy(resolvePath(n.expr, stack)) ? n.body : n.alt, stack, state);
     }
   }
 }
@@ -412,21 +413,21 @@ export function renderTemplate(
   values: Record<string, unknown>,
   opts?: { escapeHtml?: boolean; allowRawValues?: boolean },
 ): string {
-  assertLength(tpl, TEMPLATE_RENDER_LIMITS.templateChars, 'Document template')
-  if (tpl.indexOf('{{') === -1) return tpl
-  const tokens = tokenize(tpl)
-  const parseState: ParseState = { index: 0, nodes: 0 }
-  const nodes = parseBlock(tokens, parseState, null, 0, false)
+  assertLength(tpl, TEMPLATE_RENDER_LIMITS.templateChars, "Document template");
+  if (tpl.indexOf("{{") === -1) return tpl;
+  const tokens = tokenize(tpl);
+  const parseState: ParseState = { index: 0, nodes: 0 };
+  const nodes = parseBlock(tokens, parseState, null, 0, false);
   const renderState: RenderState = {
-    out: new BoundedStringBuilder(TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Rendered output'),
+    out: new BoundedStringBuilder(TEMPLATE_RENDER_LIMITS.renderOutputChars, "Rendered output"),
     loopIterations: 0,
     escape: opts?.escapeHtml ?? false,
     // Fail closed: record values are untrusted by default. Callers that own a
     // trusted HTML boundary must opt in explicitly with allowRawValues: true.
     allowRawValues: opts?.allowRawValues ?? false,
-  }
-  renderNodes(nodes, [{ data: values, item: values }], renderState)
-  return renderState.out.toString()
+  };
+  renderNodes(nodes, [{ data: values, item: values }], renderState);
+  return renderState.out.toString();
 }
 
 // --- Editable-builder markers → mustache (run at SAVE/compile) ----------------
@@ -439,105 +440,105 @@ export function renderTemplate(
 // expand them into the `{{#each}}` / `{{#if}}` blocks the renderer handles.
 
 type RepeatMarker = {
-  block: 'each' | 'if'
-  expr: string
-  removeStart: number
-  removeEnd: number
-}
+  block: "each" | "if";
+  expr: string;
+  removeStart: number;
+  removeEnd: number;
+};
 
 function isHtmlSpace(code: number): boolean {
-  return code === 9 || code === 10 || code === 12 || code === 13 || code === 32
+  return code === 9 || code === 10 || code === 12 || code === 13 || code === 32;
 }
 
 function assertTemplatePath(path: string): void {
   if (!path || path.length > TEMPLATE_RENDER_LIMITS.expressionChars) {
-    throw new Error('Repeat marker contains an invalid value path.')
+    throw new Error("Repeat marker contains an invalid value path.");
   }
-  const parts = path.split('.')
+  const parts = path.split(".");
   for (const part of parts) {
-    if (!part) throw new Error('Repeat marker contains an invalid value path.')
+    if (!part) throw new Error("Repeat marker contains an invalid value path.");
     for (let i = 0; i < part.length; i++) {
-      const code = part.charCodeAt(i)
+      const code = part.charCodeAt(i);
       const allowed =
         (code >= 48 && code <= 57) ||
         (code >= 65 && code <= 90) ||
         code === 95 ||
-        (code >= 97 && code <= 122)
-      if (!allowed) throw new Error('Repeat marker contains an invalid value path.')
+        (code >= 97 && code <= 122);
+      if (!allowed) throw new Error("Repeat marker contains an invalid value path.");
     }
   }
 }
 
 function readRepeatMarker(openTag: string, tagName: string): RepeatMarker | null {
-  let cursor = 1 + tagName.length // immediately after "<name"
-  let marker: RepeatMarker | null = null
+  let cursor = 1 + tagName.length; // immediately after "<name"
+  let marker: RepeatMarker | null = null;
 
   while (cursor < openTag.length) {
-    const whitespaceStart = cursor
-    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-    if (openTag[cursor] === '>' || openTag[cursor] === '/') break
+    const whitespaceStart = cursor;
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+    if (openTag[cursor] === ">" || openTag[cursor] === "/") break;
 
-    const nameStart = cursor
+    const nameStart = cursor;
     while (cursor < openTag.length) {
-      const code = openTag.charCodeAt(cursor)
+      const code = openTag.charCodeAt(cursor);
       const isName =
         (code >= 48 && code <= 57) ||
         (code >= 65 && code <= 90) ||
         code === 45 ||
         code === 58 ||
         code === 95 ||
-        (code >= 97 && code <= 122)
-      if (!isName) break
-      cursor += 1
+        (code >= 97 && code <= 122);
+      if (!isName) break;
+      cursor += 1;
     }
     if (cursor === nameStart) {
-      cursor += 1
-      continue
+      cursor += 1;
+      continue;
     }
-    const name = openTag.slice(nameStart, cursor).toLowerCase()
-    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+    const name = openTag.slice(nameStart, cursor).toLowerCase();
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
 
-    let value: string | null = null
-    if (openTag[cursor] === '=') {
-      cursor += 1
-      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-      const quote = openTag[cursor]
+    let value: string | null = null;
+    if (openTag[cursor] === "=") {
+      cursor += 1;
+      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+      const quote = openTag[cursor];
       if (quote === '"' || quote === "'") {
-        cursor += 1
-        const valueStart = cursor
-        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1
+        cursor += 1;
+        const valueStart = cursor;
+        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1;
         if (cursor >= openTag.length) {
-          throw new Error('Repeat marker contains an unterminated attribute value.')
+          throw new Error("Repeat marker contains an unterminated attribute value.");
         }
-        value = openTag.slice(valueStart, cursor)
-        cursor += 1
+        value = openTag.slice(valueStart, cursor);
+        cursor += 1;
       } else {
-        const valueStart = cursor
+        const valueStart = cursor;
         while (
           cursor < openTag.length &&
           !isHtmlSpace(openTag.charCodeAt(cursor)) &&
-          openTag[cursor] !== '>'
+          openTag[cursor] !== ">"
         ) {
-          cursor += 1
+          cursor += 1;
         }
-        value = openTag.slice(valueStart, cursor)
+        value = openTag.slice(valueStart, cursor);
       }
     }
 
-    if (name === 'data-each' || name === 'data-if') {
-      if (marker) throw new Error('A table row contains more than one repeat marker.')
-      const expr = value?.trim() ?? ''
-      assertTemplatePath(expr)
+    if (name === "data-each" || name === "data-if") {
+      if (marker) throw new Error("A table row contains more than one repeat marker.");
+      const expr = value?.trim() ?? "";
+      assertTemplatePath(expr);
       marker = {
-        block: name === 'data-each' ? 'each' : 'if',
+        block: name === "data-each" ? "each" : "if",
         expr,
         removeStart: whitespaceStart,
         removeEnd: cursor,
-      }
+      };
     }
   }
 
-  return marker
+  return marker;
 }
 
 /**
@@ -554,173 +555,186 @@ function readRepeatMarker(openTag: string, tagName: string): RepeatMarker | null
  * element.
  */
 export function expandRepeatMarkers(html: string): string {
-  assertLength(html, TEMPLATE_RENDER_LIMITS.templateChars, 'Document template')
-  const operations: { start: number; end: number; value: string }[] = []
+  assertLength(html, TEMPLATE_RENDER_LIMITS.templateChars, "Document template");
+  const operations: { start: number; end: number; value: string }[] = [];
   type Active = {
-    marker: RepeatMarker
+    marker: RepeatMarker;
     /** Index into `opens` of this frame's own open tag. */
-    level: number
-  }
+    level: number;
+  };
   // Every open element, marked or not: the close pairing consults this, never
   // the marker frames, so an unmarked inner element of the same name can
   // never steal its marked parent's closing tag (nor vice versa).
-  const opens: string[] = []
-  const stack: Active[] = []
-  let cursor = 0
+  const opens: string[] = [];
+  const stack: Active[] = [];
+  let cursor = 0;
 
   while (cursor < html.length) {
-    const start = html.indexOf('<', cursor)
-    if (start === -1) break
-    const tag = readHtmlTag(html, start)
+    const start = html.indexOf("<", cursor);
+    if (start === -1) break;
+    const tag = readHtmlTag(html, start);
     if (!tag) {
-      cursor = start + 1
-      continue
+      cursor = start + 1;
+      continue;
     }
-    cursor = tag.end
-    if (!tag.name) continue
+    cursor = tag.end;
+    if (!tag.name) continue;
 
     if (!tag.closing && !tag.selfClosing) {
-      const openTag = html.slice(start, tag.end)
-      const marker = readRepeatMarker(openTag, tag.name)
-      opens.push(tag.name)
+      const openTag = html.slice(start, tag.end);
+      const marker = readRepeatMarker(openTag, tag.name);
+      opens.push(tag.name);
       if (marker) {
         if (stack.length >= TEMPLATE_RENDER_LIMITS.nestingDepth) {
           throw new Error(
             `Document template exceeded ${TEMPLATE_RENDER_LIMITS.nestingDepth} nested blocks.`,
-          )
+          );
         }
-        stack.push({ marker, level: opens.length - 1 })
-        const withoutMarker = openTag.slice(0, marker.removeStart) + openTag.slice(marker.removeEnd)
+        stack.push({ marker, level: opens.length - 1 });
+        const withoutMarker =
+          openTag.slice(0, marker.removeStart) + openTag.slice(marker.removeEnd);
         operations.push({
           start,
           end: tag.end,
           value: `{{#${marker.block} ${marker.expr}}}${withoutMarker}`,
-        })
+        });
       }
-      continue
+      continue;
     }
 
     if (!tag.closing) {
       // Self-closing (`<br/>`, `<img/>` …): never pairable.
-      const openTag = html.slice(start, tag.end)
+      const openTag = html.slice(start, tag.end);
       if (readRepeatMarker(openTag, tag.name)) {
-        throw new Error('Repeat element must have a closing tag.')
+        throw new Error("Repeat element must have a closing tag.");
       }
-      continue
+      continue;
     }
 
     // Closing tag: closes the innermost open element of its name. A marked
     // element closes only when the match is its own open tag; closing an
     // outer element while a marked inner one is still open is overlap.
-    let level = -1
+    let level = -1;
     for (let i = opens.length - 1; i >= 0; i--) {
       if (opens[i] === tag.name) {
-        level = i
-        break
+        level = i;
+        break;
       }
     }
-    if (level === -1) continue
+    if (level === -1) continue;
     for (const frame of stack) {
       if (frame.level > level) {
-        throw new Error('Repeat elements must not overlap.')
+        throw new Error("Repeat elements must not overlap.");
       }
     }
-    opens.length = level
-    const frame = stack[stack.length - 1]
+    opens.length = level;
+    const frame = stack[stack.length - 1];
     if (frame && frame.level === level) {
-      stack.pop()
+      stack.pop();
       operations.push({
         start: tag.end,
         end: tag.end,
         value: `{{/${frame.marker.block}}}`,
-      })
+      });
     }
   }
 
-  if (stack.length > 0) throw new Error('Repeat element must have a closing tag.')
-  if (operations.length === 0) return html
+  if (stack.length > 0) throw new Error("Repeat element must have a closing tag.");
+  if (operations.length === 0) return html;
 
   const out = new BoundedStringBuilder(
     TEMPLATE_RENDER_LIMITS.renderOutputChars,
-    'Expanded document template',
-  )
-  cursor = 0
+    "Expanded document template",
+  );
+  cursor = 0;
   for (const operation of operations) {
-    out.append(html.slice(cursor, operation.start))
-    out.append(operation.value)
-    cursor = operation.end
+    out.append(html.slice(cursor, operation.start));
+    out.append(operation.value);
+    cursor = operation.end;
   }
-  out.append(html.slice(cursor))
-  return out.toString()
+  out.append(html.slice(cursor));
+  return out.toString();
 }
 
 // --- HTML scanning helpers -----------------------------------------------------
 
-const HIDDEN_TEXT_TAGS = new Set(['head', 'style', 'script', 'noscript'])
-const LINE_BREAK_TAGS = new Set(['p', 'div', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'table'])
+const HIDDEN_TEXT_TAGS = new Set(["head", "style", "script", "noscript"]);
+const LINE_BREAK_TAGS = new Set([
+  "p",
+  "div",
+  "tr",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "li",
+  "table",
+]);
 
 type HtmlTag = {
-  end: number
-  name: string | null
-  closing: boolean
-  selfClosing: boolean
-}
+  end: number;
+  name: string | null;
+  closing: boolean;
+  selfClosing: boolean;
+};
 
 function isAsciiLetter(code: number): boolean {
-  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 function isHtmlNameCode(code: number): boolean {
-  return isAsciiLetter(code) || (code >= 48 && code <= 57) || code === 45 || code === 58
+  return isAsciiLetter(code) || (code >= 48 && code <= 57) || code === 45 || code === 58;
 }
 
 /** Read one HTML tag without treating a `>` inside a quoted attribute as its end. */
 function readHtmlTag(html: string, start: number): HtmlTag | null {
-  if (html.charCodeAt(start) !== 60) return null
-  if (html.startsWith('<!--', start)) {
-    const end = html.indexOf('-->', start + 4)
+  if (html.charCodeAt(start) !== 60) return null;
+  if (html.startsWith("<!--", start)) {
+    const end = html.indexOf("-->", start + 4);
     return {
       end: end === -1 ? html.length : end + 3,
       name: null,
       closing: false,
       selfClosing: false,
-    }
+    };
   }
 
-  let cursor = start + 1
-  let closing = false
+  let cursor = start + 1;
+  let closing = false;
   if (html.charCodeAt(cursor) === 47) {
-    closing = true
-    cursor += 1
+    closing = true;
+    cursor += 1;
   }
   while (cursor < html.length) {
-    const code = html.charCodeAt(cursor)
-    if (code !== 9 && code !== 10 && code !== 12 && code !== 13 && code !== 32) break
-    cursor += 1
+    const code = html.charCodeAt(cursor);
+    if (code !== 9 && code !== 10 && code !== 12 && code !== 13 && code !== 32) break;
+    cursor += 1;
   }
 
-  const first = html.charCodeAt(cursor)
-  const declaration = first === 33 || first === 63
-  if (!declaration && !isAsciiLetter(first)) return null
+  const first = html.charCodeAt(cursor);
+  const declaration = first === 33 || first === 63;
+  if (!declaration && !isAsciiLetter(first)) return null;
 
-  const nameStart = cursor
+  const nameStart = cursor;
   if (declaration) {
-    cursor += 1
+    cursor += 1;
   } else {
-    while (cursor < html.length && isHtmlNameCode(html.charCodeAt(cursor))) cursor += 1
+    while (cursor < html.length && isHtmlNameCode(html.charCodeAt(cursor))) cursor += 1;
   }
-  const name = declaration ? null : html.slice(nameStart, cursor).toLowerCase()
-  let quote = 0
-  let lastNonWhitespace = 0
+  const name = declaration ? null : html.slice(nameStart, cursor).toLowerCase();
+  let quote = 0;
+  let lastNonWhitespace = 0;
   for (; cursor < html.length; cursor++) {
-    const code = html.charCodeAt(cursor)
+    const code = html.charCodeAt(cursor);
     if (quote) {
-      if (code === quote) quote = 0
-      continue
+      if (code === quote) quote = 0;
+      continue;
     }
     if (code === 34 || code === 39) {
-      quote = code
-      continue
+      quote = code;
+      continue;
     }
     if (code === 62) {
       return {
@@ -728,168 +742,168 @@ function readHtmlTag(html: string, start: number): HtmlTag | null {
         name,
         closing,
         selfClosing: lastNonWhitespace === 47,
-      }
+      };
     }
     if (code !== 9 && code !== 10 && code !== 12 && code !== 13 && code !== 32) {
-      lastNonWhitespace = code
+      lastNonWhitespace = code;
     }
   }
 
   // A recognized unterminated tag is not readable body text.
-  return { end: html.length, name, closing, selfClosing: false }
+  return { end: html.length, name, closing, selfClosing: false };
 }
 
 function decodeNumericEntity(entity: string, radix: 10 | 16): string | null {
-  const start = radix === 16 ? 2 : 1
-  if (entity.length === start || entity.length - start > 7) return null
-  let value = 0
+  const start = radix === 16 ? 2 : 1;
+  if (entity.length === start || entity.length - start > 7) return null;
+  let value = 0;
   for (let i = start; i < entity.length; i++) {
-    const code = entity.charCodeAt(i)
-    let digit = -1
-    if (code >= 48 && code <= 57) digit = code - 48
-    else if (radix === 16 && code >= 65 && code <= 70) digit = code - 55
-    else if (radix === 16 && code >= 97 && code <= 102) digit = code - 87
-    if (digit < 0 || digit >= radix) return null
-    value = value * radix + digit
+    const code = entity.charCodeAt(i);
+    let digit = -1;
+    if (code >= 48 && code <= 57) digit = code - 48;
+    else if (radix === 16 && code >= 65 && code <= 70) digit = code - 55;
+    else if (radix === 16 && code >= 97 && code <= 102) digit = code - 87;
+    if (digit < 0 || digit >= radix) return null;
+    value = value * radix + digit;
   }
-  if (value <= 0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) return '�'
-  return String.fromCodePoint(value)
+  if (value <= 0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) return "�";
+  return String.fromCodePoint(value);
 }
 
 function decodeEntityAt(html: string, start: number): { value: string; next: number } | null {
-  const maxEnd = Math.min(html.length, start + 18)
-  let semicolon = -1
+  const maxEnd = Math.min(html.length, start + 18);
+  let semicolon = -1;
   for (let i = start + 1; i < maxEnd; i++) {
     if (html.charCodeAt(i) === 59) {
-      semicolon = i
-      break
+      semicolon = i;
+      break;
     }
   }
-  if (semicolon === -1) return null
+  if (semicolon === -1) return null;
 
-  const entity = html.slice(start + 1, semicolon)
-  const lower = entity.toLowerCase()
-  let value: string | null = null
-  if (lower === 'amp') value = '&'
-  else if (lower === 'lt') value = '<'
-  else if (lower === 'gt') value = '>'
-  else if (lower === 'quot') value = '"'
-  else if (lower === 'apos' || lower === '#39') value = "'"
-  else if (lower === 'nbsp') value = ' '
-  else if (lower.startsWith('#x')) value = decodeNumericEntity(lower, 16)
-  else if (lower.startsWith('#')) value = decodeNumericEntity(lower, 10)
-  return value == null ? null : { value, next: semicolon + 1 }
+  const entity = html.slice(start + 1, semicolon);
+  const lower = entity.toLowerCase();
+  let value: string | null = null;
+  if (lower === "amp") value = "&";
+  else if (lower === "lt") value = "<";
+  else if (lower === "gt") value = ">";
+  else if (lower === "quot") value = '"';
+  else if (lower === "apos" || lower === "#39") value = "'";
+  else if (lower === "nbsp") value = " ";
+  else if (lower.startsWith("#x")) value = decodeNumericEntity(lower, 16);
+  else if (lower.startsWith("#")) value = decodeNumericEntity(lower, 10);
+  return value == null ? null : { value, next: semicolon + 1 };
 }
 
 class PlainTextBuilder {
   readonly #out = new BoundedStringBuilder(
     TEMPLATE_RENDER_LIMITS.plainTextChars,
-    'Plain-text output',
-  )
-  #pendingSpace = false
-  #pendingNewlines = 0
-  #previousWasCarriageReturn = false
+    "Plain-text output",
+  );
+  #pendingSpace = false;
+  #pendingNewlines = 0;
+  #previousWasCarriageReturn = false;
 
   append(value: string): void {
     for (const char of value) {
-      if (char === '\r') {
-        this.queueLineBreak()
-        this.#previousWasCarriageReturn = true
-      } else if (char === '\n') {
-        if (!this.#previousWasCarriageReturn) this.queueLineBreak()
-        this.#previousWasCarriageReturn = false
-      } else if (char === ' ' || char === '\t' || char === '\f') {
-        this.#previousWasCarriageReturn = false
-        this.#pendingSpace = this.#out.length > 0 || this.#pendingNewlines > 0
+      if (char === "\r") {
+        this.queueLineBreak();
+        this.#previousWasCarriageReturn = true;
+      } else if (char === "\n") {
+        if (!this.#previousWasCarriageReturn) this.queueLineBreak();
+        this.#previousWasCarriageReturn = false;
+      } else if (char === " " || char === "\t" || char === "\f") {
+        this.#previousWasCarriageReturn = false;
+        this.#pendingSpace = this.#out.length > 0 || this.#pendingNewlines > 0;
       } else {
-        this.#previousWasCarriageReturn = false
+        this.#previousWasCarriageReturn = false;
         if (this.#pendingNewlines > 0 && this.#out.length > 0) {
-          this.#out.append('\n'.repeat(this.#pendingNewlines))
+          this.#out.append("\n".repeat(this.#pendingNewlines));
         } else if (this.#pendingSpace && this.#out.length > 0) {
-          this.#out.append(' ')
+          this.#out.append(" ");
         }
-        this.#pendingSpace = false
-        this.#pendingNewlines = 0
-        this.#out.append(char)
+        this.#pendingSpace = false;
+        this.#pendingNewlines = 0;
+        this.#out.append(char);
       }
     }
   }
 
   lineBreak(): void {
-    this.#previousWasCarriageReturn = false
-    this.queueLineBreak()
+    this.#previousWasCarriageReturn = false;
+    this.queueLineBreak();
   }
 
   private queueLineBreak(): void {
-    this.#pendingSpace = false
-    if (this.#out.length > 0) this.#pendingNewlines = Math.min(2, this.#pendingNewlines + 1)
+    this.#pendingSpace = false;
+    if (this.#out.length > 0) this.#pendingNewlines = Math.min(2, this.#pendingNewlines + 1);
   }
 
   toString(): string {
-    return this.#out.toString()
+    return this.#out.toString();
   }
 }
 
 /** Derive readable plain text from HTML (used to plainify HTML-bearing values). */
 export function htmlToPlainText(html: string): string {
-  assertLength(html, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Rendered HTML')
-  const out = new PlainTextBuilder()
-  const hidden: string[] = []
-  let cursor = 0
+  assertLength(html, TEMPLATE_RENDER_LIMITS.renderOutputChars, "Rendered HTML");
+  const out = new PlainTextBuilder();
+  const hidden: string[] = [];
+  let cursor = 0;
 
   while (cursor < html.length) {
-    const code = html.charCodeAt(cursor)
+    const code = html.charCodeAt(cursor);
     if (code === 60) {
-      const tag = readHtmlTag(html, cursor)
+      const tag = readHtmlTag(html, cursor);
       if (tag) {
-        cursor = tag.end
-        if (!tag.name) continue
+        cursor = tag.end;
+        if (!tag.name) continue;
 
         if (hidden.length > 0) {
           if (tag.closing) {
-            const index = hidden.lastIndexOf(tag.name)
-            if (index !== -1) hidden.length = index
+            const index = hidden.lastIndexOf(tag.name);
+            if (index !== -1) hidden.length = index;
           } else if (!tag.selfClosing && HIDDEN_TEXT_TAGS.has(tag.name)) {
             if (hidden.length >= TEMPLATE_RENDER_LIMITS.hiddenHtmlDepth) {
               throw new Error(
                 `Rendered HTML exceeded ${TEMPLATE_RENDER_LIMITS.hiddenHtmlDepth} nested hidden elements.`,
-              )
+              );
             }
-            hidden.push(tag.name)
+            hidden.push(tag.name);
           }
-          continue
+          continue;
         }
 
         if (!tag.closing && !tag.selfClosing && HIDDEN_TEXT_TAGS.has(tag.name)) {
-          out.append(' ')
-          hidden.push(tag.name)
+          out.append(" ");
+          hidden.push(tag.name);
         } else if (
-          (!tag.closing && tag.name === 'br') ||
+          (!tag.closing && tag.name === "br") ||
           (tag.closing && LINE_BREAK_TAGS.has(tag.name))
         ) {
-          out.lineBreak()
+          out.lineBreak();
         }
-        continue
+        continue;
       }
     }
 
     if (hidden.length > 0) {
-      cursor += 1
-      continue
+      cursor += 1;
+      continue;
     }
     if (code === 38) {
-      const entity = decodeEntityAt(html, cursor)
+      const entity = decodeEntityAt(html, cursor);
       if (entity) {
-        out.append(entity.value)
-        cursor = entity.next
-        continue
+        out.append(entity.value);
+        cursor = entity.next;
+        continue;
       }
     }
-    out.append(html[cursor]!)
-    cursor += 1
+    out.append(html[cursor]!);
+    cursor += 1;
   }
 
-  return out.toString()
+  return out.toString();
 }
 
 // --- Sanitization (run at SAVE/compile time) -----------------------------------
@@ -914,51 +928,59 @@ const SANITIZE_TEMPLATE_OPTIONS = {
   // the allowlist rather than relying on attribute stripping alone. The
   // print path sets its own charset (see html.ts); viewport meta does
   // nothing on paper.
-  ADD_TAGS: ['style', 'link', 'title', 'head', 'body', 'html', 'center'],
+  ADD_TAGS: ["style", "link", "title", "head", "body", "html", "center"],
   ADD_ATTR: [
-    'style',
-    'class',
-    'bgcolor',
-    'background',
-    'align',
-    'valign',
-    'width',
-    'height',
-    'border',
-    'cellpadding',
-    'cellspacing',
-    'colspan',
-    'rowspan',
-    'dir',
-    'lang',
-    'role',
-    'target',
+    "style",
+    "class",
+    "bgcolor",
+    "background",
+    "align",
+    "valign",
+    "width",
+    "height",
+    "border",
+    "cellpadding",
+    "cellspacing",
+    "colspan",
+    "rowspan",
+    "dir",
+    "lang",
+    "role",
+    "target",
     // The row-repeat / conditional-row markers (see expandRepeatMarkers).
-    'data-each',
-    'data-if',
-    'data-cheque-region',
-    'data-cheque-stock',
-    'data-cheque-offset-x',
-    'data-cheque-offset-y', 'data-cheque-bank-profile', 'data-cheque-micr', 'data-cheque-micr-encoding',
+    "data-each",
+    "data-if",
+    "data-cheque-region",
+    "data-cheque-stock",
+    "data-cheque-offset-x",
+    "data-cheque-offset-y",
+    "data-cheque-bank-profile",
+    "data-cheque-micr",
+    "data-cheque-micr-encoding",
   ],
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea'],
+  FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "button", "textarea"],
   ALLOW_DATA_ATTR: false,
-}
+};
 
-function sanitizeMarkup(html: string, wholeDocument: boolean, inputLimit: number, inputLabel: string): string {
-  assertLength(html, inputLimit, inputLabel)
+function sanitizeMarkup(
+  html: string,
+  wholeDocument: boolean,
+  inputLimit: number,
+  inputLabel: string,
+): string {
+  assertLength(html, inputLimit, inputLabel);
   const sanitized = String(
     DOMPurify.sanitize(html, {
       ...SANITIZE_TEMPLATE_OPTIONS,
       WHOLE_DOCUMENT: wholeDocument,
     }),
-  )
-  assertLength(sanitized, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Sanitized template HTML')
-  return sanitized
+  );
+  assertLength(sanitized, TEMPLATE_RENDER_LIMITS.renderOutputChars, "Sanitized template HTML");
+  return sanitized;
 }
 
 export function sanitizeTemplateHtml(html: string): string {
-  return sanitizeMarkup(html, true, TEMPLATE_RENDER_LIMITS.templateChars, 'Authored template HTML')
+  return sanitizeMarkup(html, true, TEMPLATE_RENDER_LIMITS.templateChars, "Authored template HTML");
 }
 
 /**
@@ -968,15 +990,20 @@ export function sanitizeTemplateHtml(html: string): string {
  * authored guard here would reject real documents between the two limits.
  */
 export function sanitizeRenderedHtml(html: string): string {
-  return sanitizeMarkup(html, true, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Rendered HTML')
+  return sanitizeMarkup(html, true, TEMPLATE_RENDER_LIMITS.renderOutputChars, "Rendered HTML");
 }
 
 /** Sanitize an embeddable fragment without adding document wrappers. */
 export function sanitizeTemplateFragment(html: string): string {
-  return sanitizeMarkup(html, false, TEMPLATE_RENDER_LIMITS.templateChars, 'Authored template HTML')
+  return sanitizeMarkup(
+    html,
+    false,
+    TEMPLATE_RENDER_LIMITS.templateChars,
+    "Authored template HTML",
+  );
 }
 
-const INLINE_RESOURCE_TYPES = new Set(['image', 'font', 'stylesheet'])
+const INLINE_RESOURCE_TYPES = new Set(["image", "font", "stylesheet"]);
 
 /**
  * Return whether a request is safe for the print page to continue.
@@ -991,334 +1018,340 @@ const INLINE_RESOURCE_TYPES = new Set(['image', 'font', 'stylesheet'])
  * markup Chromium will load.
  */
 export function isAllowedPdfRequest(resourceType: string, requestUrl: string): boolean {
-  let url: URL
+  let url: URL;
   try {
-    url = new URL(requestUrl.trim())
+    url = new URL(requestUrl.trim());
   } catch {
-    return false
+    return false;
   }
 
-  if (resourceType === 'document') {
-    return url.href === 'about:blank'
+  if (resourceType === "document") {
+    return url.href === "about:blank";
   }
-  return url.protocol === 'data:' && INLINE_RESOURCE_TYPES.has(resourceType)
+  return url.protocol === "data:" && INLINE_RESOURCE_TYPES.has(resourceType);
 }
 
 /** True when the interceptor would continue this URL as a visual resource. */
 function isInlinePdfResourceUrl(value: string): boolean {
   return (
-    isAllowedPdfRequest('image', value) ||
-    isAllowedPdfRequest('font', value) ||
-    isAllowedPdfRequest('stylesheet', value)
-  )
+    isAllowedPdfRequest("image", value) ||
+    isAllowedPdfRequest("font", value) ||
+    isAllowedPdfRequest("stylesheet", value)
+  );
 }
 
-const RESOURCE_URI_ATTRS = new Set(['src', 'srcset', 'poster', 'background', 'xlink:href'])
+const RESOURCE_URI_ATTRS = new Set(["src", "srcset", "poster", "background", "xlink:href"]);
 
 /** SVG/CSS presentation attributes whose value is a paint or filter and may be `url(...)`. */
 const CSS_URL_PRESENTATION_ATTRS = new Set([
-  'filter',
-  'clip-path',
-  'mask',
-  'mask-image',
-  'fill',
-  'stroke',
-  'marker',
-  'marker-start',
-  'marker-mid',
-  'marker-end',
-  'cursor',
-])
+  "filter",
+  "clip-path",
+  "mask",
+  "mask-image",
+  "fill",
+  "stroke",
+  "marker",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+  "cursor",
+]);
 
 function attributeCarriesCssResourceUrl(attrName: string, decodedValue: string): boolean {
-  if (attrName === 'style' || CSS_URL_PRESENTATION_ATTRS.has(attrName)) return true
-  return /url\s*\(/i.test(decodeCssEscapes(decodedValue))
+  if (attrName === "style" || CSS_URL_PRESENTATION_ATTRS.has(attrName)) return true;
+  return /url\s*\(/i.test(decodeCssEscapes(decodedValue));
 }
 
 function isFetchUriAttr(tagName: string, attrName: string): boolean {
-  if (RESOURCE_URI_ATTRS.has(attrName)) return true
+  if (RESOURCE_URI_ATTRS.has(attrName)) return true;
   // <a>/<area> hrefs become PDF link annotations; they are not subresource
   // fetches. Every other href (link, image, use, base, …) is a fetch.
-  if (attrName === 'href') return tagName !== 'a' && tagName !== 'area'
-  return attrName === 'data' && tagName === 'object'
+  if (attrName === "href") return tagName !== "a" && tagName !== "area";
+  return attrName === "data" && tagName === "object";
 }
 
 function resourceTypeForAttr(tagName: string, attrName: string): string {
-  if (attrName === 'href' || tagName === 'link') return 'stylesheet'
-  return 'image'
+  if (attrName === "href" || tagName === "link") return "stylesheet";
+  return "image";
 }
 
 function isAllowedResourceAttrValue(tagName: string, attrName: string, value: string): boolean {
-  const resourceType = resourceTypeForAttr(tagName, attrName)
-  if (attrName !== 'srcset') return isAllowedPdfRequest(resourceType, value)
-  const trimmed = value.trim()
+  const resourceType = resourceTypeForAttr(tagName, attrName);
+  if (attrName !== "srcset") return isAllowedPdfRequest(resourceType, value);
+  const trimmed = value.trim();
   // A lone data: URL is unambiguous. Commas also appear inside base64, so a
   // srcset that mentions data: and cannot be proven to be a single data: URL
   // is dropped rather than half-parsed.
-  if (isAllowedPdfRequest(resourceType, trimmed)) return true
-  if (/data:/i.test(trimmed)) return false
-  return trimmed.split(',').every((candidate) => {
-    const url = candidate.trim().split(/\s+/)[0] ?? ''
-    return isAllowedPdfRequest(resourceType, url)
-  })
+  if (isAllowedPdfRequest(resourceType, trimmed)) return true;
+  if (/data:/i.test(trimmed)) return false;
+  return trimmed.split(",").every((candidate) => {
+    const url = candidate.trim().split(/\s+/)[0] ?? "";
+    return isAllowedPdfRequest(resourceType, url);
+  });
 }
 
 function decodeHtmlAttrValue(value: string): string {
-  let out = ''
-  let cursor = 0
+  let out = "";
+  let cursor = 0;
   while (cursor < value.length) {
     if (value.charCodeAt(cursor) === 38) {
-      const entity = decodeEntityAt(value, cursor)
+      const entity = decodeEntityAt(value, cursor);
       if (entity) {
-        out += entity.value
-        cursor = entity.next
-        continue
+        out += entity.value;
+        cursor = entity.next;
+        continue;
       }
     }
-    out += value[cursor]!
-    cursor += 1
+    out += value[cursor]!;
+    cursor += 1;
   }
-  return out
+  return out;
 }
 
 function decodeCssEscapes(input: string): string {
-  let out = ''
-  let cursor = 0
+  let out = "";
+  let cursor = 0;
   while (cursor < input.length) {
-    if (input[cursor] !== '\\') {
-      out += input[cursor]
-      cursor += 1
-      continue
+    if (input[cursor] !== "\\") {
+      out += input[cursor];
+      cursor += 1;
+      continue;
     }
-    if (cursor + 1 >= input.length) break
-    const next = input[cursor + 1]!
-    if (next === '\n' || next === '\f') {
-      cursor += 2
-      continue
+    if (cursor + 1 >= input.length) break;
+    const next = input[cursor + 1]!;
+    if (next === "\n" || next === "\f") {
+      cursor += 2;
+      continue;
     }
-    if (next === '\r') {
-      cursor += input[cursor + 2] === '\n' ? 3 : 2
-      continue
+    if (next === "\r") {
+      cursor += input[cursor + 2] === "\n" ? 3 : 2;
+      continue;
     }
-    let hex = ''
-    let hexEnd = cursor + 1
+    let hex = "";
+    let hexEnd = cursor + 1;
     while (hexEnd < input.length && hex.length < 6 && /[0-9a-fA-F]/.test(input[hexEnd]!)) {
-      hex += input[hexEnd]
-      hexEnd += 1
+      hex += input[hexEnd];
+      hexEnd += 1;
     }
     if (hex) {
-      const code = Number.parseInt(hex, 16)
+      const code = Number.parseInt(hex, 16);
       out +=
         code === 0 || (code >= 0xd800 && code <= 0xdfff) || code > 0x10ffff
-          ? '\uFFFD'
-          : String.fromCodePoint(code)
-      if (input[hexEnd] === '\r' && input[hexEnd + 1] === '\n') hexEnd += 2
+          ? "\uFFFD"
+          : String.fromCodePoint(code);
+      if (input[hexEnd] === "\r" && input[hexEnd + 1] === "\n") hexEnd += 2;
       else if (
-        input[hexEnd] === ' ' ||
-        input[hexEnd] === '\t' ||
-        input[hexEnd] === '\n' ||
-        input[hexEnd] === '\f' ||
-        input[hexEnd] === '\r'
+        input[hexEnd] === " " ||
+        input[hexEnd] === "\t" ||
+        input[hexEnd] === "\n" ||
+        input[hexEnd] === "\f" ||
+        input[hexEnd] === "\r"
       ) {
-        hexEnd += 1
+        hexEnd += 1;
       }
-      cursor = hexEnd
-      continue
+      cursor = hexEnd;
+      continue;
     }
-    out += next
-    cursor += 2
+    out += next;
+    cursor += 2;
   }
-  return out
+  return out;
 }
 
 function extractCssResourceUrls(fragment: string): string[] {
-  const urls: string[] = []
-  const urlFn = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi
-  let match: RegExpExecArray | null
+  const urls: string[] = [];
+  const urlFn = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi;
+  let match: RegExpExecArray | null;
   while ((match = urlFn.exec(fragment)) !== null) {
-    const url = (match[1] ?? match[2] ?? match[3] ?? '').trim()
-    if (url) urls.push(url)
+    const url = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (url) urls.push(url);
   }
-  const quoted = /["']([^"']*)["']/g
+  const quoted = /["']([^"']*)["']/g;
   while ((match = quoted.exec(fragment)) !== null) {
-    const url = match[1]!.trim()
-    if (url) urls.push(url)
+    const url = match[1]!.trim();
+    if (url) urls.push(url);
   }
-  const bare = /(?:https?:)?\/\/[^\s,)"']+/gi
+  const bare = /(?:https?:)?\/\/[^\s,)"']+/gi;
   while ((match = bare.exec(fragment)) !== null) {
-    urls.push(match[0])
+    urls.push(match[0]);
   }
-  return urls
+  return urls;
 }
 
 function cssImportIsInlineOnly(statement: string): boolean {
-  const urls = extractCssResourceUrls(statement)
-  return urls.length > 0 && urls.every(isInlinePdfResourceUrl)
+  const urls = extractCssResourceUrls(statement);
+  return urls.length > 0 && urls.every(isInlinePdfResourceUrl);
 }
 
 function findMatchingParen(source: string, openIndex: number): number {
-  let depth = 0
-  let quote = 0
+  let depth = 0;
+  let quote = 0;
   for (let i = openIndex; i < source.length; i++) {
-    const code = source.charCodeAt(i)
+    const code = source.charCodeAt(i);
     if (quote) {
       if (code === 92) {
-        i += 1
-        continue
+        i += 1;
+        continue;
       }
-      if (code === quote) quote = 0
-      continue
+      if (code === quote) quote = 0;
+      continue;
     }
     if (code === 34 || code === 39) {
-      quote = code
-      continue
+      quote = code;
+      continue;
     }
-    if (code === 40) depth += 1
+    if (code === 40) depth += 1;
     else if (code === 41) {
-      depth -= 1
-      if (depth === 0) return i
+      depth -= 1;
+      if (depth === 0) return i;
     }
   }
-  return -1
+  return -1;
 }
 
-const CSS_IMAGE_FUNCTIONS = ['-webkit-image-set', 'image-set', 'cross-fade', 'image'] as const
+const CSS_IMAGE_FUNCTIONS = ["-webkit-image-set", "image-set", "cross-fade", "image"] as const;
 
 function cssFunctionArgsAreInlineOnly(args: string): boolean {
-  const urls = extractCssResourceUrls(args)
-  if (urls.length === 0) return !/(?:https?:|url\s*\(|\/\/)/i.test(args)
-  return urls.every(isInlinePdfResourceUrl)
+  const urls = extractCssResourceUrls(args);
+  if (urls.length === 0) return !/(?:https?:|url\s*\(|\/\/)/i.test(args);
+  return urls.every(isInlinePdfResourceUrl);
 }
 
 function rewriteCssImageFunctions(css: string): string {
-  let out = ''
-  let cursor = 0
-  const lower = css.toLowerCase()
+  let out = "";
+  let cursor = 0;
+  const lower = css.toLowerCase();
   while (cursor < css.length) {
-    let found = -1
-    let foundName = ''
+    let found = -1;
+    let foundName = "";
     for (const name of CSS_IMAGE_FUNCTIONS) {
-      const idx = lower.indexOf(`${name}(`, cursor)
-      if (idx === -1) continue
-      if (name === 'image' && lower.startsWith('image-set(', idx)) continue
+      const idx = lower.indexOf(`${name}(`, cursor);
+      if (idx === -1) continue;
+      if (name === "image" && lower.startsWith("image-set(", idx)) continue;
       if (found === -1 || idx < found) {
-        found = idx
-        foundName = name
+        found = idx;
+        foundName = name;
       }
     }
     if (found === -1) {
-      out += css.slice(cursor)
-      break
+      out += css.slice(cursor);
+      break;
     }
-    const open = found + foundName.length
-    const close = findMatchingParen(css, open)
-    out += css.slice(cursor, found)
+    const open = found + foundName.length;
+    const close = findMatchingParen(css, open);
+    out += css.slice(cursor, found);
     if (close === -1) {
-      out += 'none'
-      break
+      out += "none";
+      break;
     }
-    const args = css.slice(open + 1, close)
-    out += cssFunctionArgsAreInlineOnly(args) ? css.slice(found, close + 1) : 'none'
-    cursor = close + 1
+    const args = css.slice(open + 1, close);
+    out += cssFunctionArgsAreInlineOnly(args) ? css.slice(found, close + 1) : "none";
+    cursor = close + 1;
   }
-  return out
+  return out;
 }
 
 function neutralizeCssFetches(css: string): string {
   // Decode first so `\75rl(...)` and `url(\68ttps://...)` become a visible
   // url() that isAllowedPdfRequest can refuse. image-set() can take a quoted
   // URL with no url() wrapper — those are rewritten as a whole function.
-  const decoded = decodeCssEscapes(css)
+  const decoded = decodeCssEscapes(css);
   let out = decoded.replace(/@import\b[^;]*;?/gi, (statement) =>
-    cssImportIsInlineOnly(statement) ? statement : '',
-  )
-  out = rewriteCssImageFunctions(out)
-  out = out.replace(/url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi, (full, quotedSingle, quotedDouble, bare) => {
-    const inner = String(quotedSingle ?? quotedDouble ?? bare ?? '').trim()
-    return isInlinePdfResourceUrl(inner) ? full : 'none'
-  })
+    cssImportIsInlineOnly(statement) ? statement : "",
+  );
+  out = rewriteCssImageFunctions(out);
+  out = out.replace(
+    /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi,
+    (full, quotedSingle, quotedDouble, bare) => {
+      const inner = String(quotedSingle ?? quotedDouble ?? bare ?? "").trim();
+      return isInlinePdfResourceUrl(inner) ? full : "none";
+    },
+  );
   // Quoted http(s) left outside url() — image-set("https://…") is handled
   // above; this is the fail-closed remainder and must not touch a data: URL.
   return out.replace(/["']https?:\/\/[^"']+["']/gi, (quoted, offset: number, source: string) => {
-    if (source.slice(Math.max(0, offset - 320), offset).includes('data:')) return quoted
-    const inner = quoted.slice(1, -1)
-    return isInlinePdfResourceUrl(inner) ? quoted : 'none'
-  })
+    if (source.slice(Math.max(0, offset - 320), offset).includes("data:")) return quoted;
+    const inner = quoted.slice(1, -1);
+    return isInlinePdfResourceUrl(inner) ? quoted : "none";
+  });
 }
 
 function rewriteTagResourceAttrs(openTag: string, tagName: string): string {
-  let cursor = 1
-  while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-  cursor += tagName.length
-  let rewritten = openTag.slice(0, cursor)
+  let cursor = 1;
+  while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+  cursor += tagName.length;
+  let rewritten = openTag.slice(0, cursor);
 
   while (cursor < openTag.length) {
-    const attrStart = cursor
-    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+    const attrStart = cursor;
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
     if (cursor >= openTag.length) {
-      rewritten += openTag.slice(attrStart)
-      break
+      rewritten += openTag.slice(attrStart);
+      break;
     }
-    const next = openTag[cursor]
-    if (next === '>' || next === '/') {
-      rewritten += openTag.slice(attrStart)
-      break
+    const next = openTag[cursor];
+    if (next === ">" || next === "/") {
+      rewritten += openTag.slice(attrStart);
+      break;
     }
 
-    const nameStart = cursor
+    const nameStart = cursor;
     while (cursor < openTag.length) {
-      const code = openTag.charCodeAt(cursor)
+      const code = openTag.charCodeAt(cursor);
       const isName =
         (code >= 48 && code <= 57) ||
         (code >= 65 && code <= 90) ||
         code === 45 ||
         code === 58 ||
         code === 95 ||
-        (code >= 97 && code <= 122)
-      if (!isName) break
-      cursor += 1
+        (code >= 97 && code <= 122);
+      if (!isName) break;
+      cursor += 1;
     }
     if (cursor === nameStart) {
-      rewritten += openTag[cursor] ?? ''
-      cursor += 1
-      continue
+      rewritten += openTag[cursor] ?? "";
+      cursor += 1;
+      continue;
     }
 
-    const attrName = openTag.slice(nameStart, cursor)
-    const attrNameLower = attrName.toLowerCase()
-    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+    const attrName = openTag.slice(nameStart, cursor);
+    const attrNameLower = attrName.toLowerCase();
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
 
-    let value: string | null = null
-    if (openTag[cursor] === '=') {
-      cursor += 1
-      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-      const quote = openTag[cursor]
+    let value: string | null = null;
+    if (openTag[cursor] === "=") {
+      cursor += 1;
+      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+      const quote = openTag[cursor];
       if (quote === '"' || quote === "'") {
-        cursor += 1
-        const valueStart = cursor
-        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1
-        value = openTag.slice(valueStart, cursor)
-        if (cursor < openTag.length) cursor += 1
+        cursor += 1;
+        const valueStart = cursor;
+        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1;
+        value = openTag.slice(valueStart, cursor);
+        if (cursor < openTag.length) cursor += 1;
       } else {
-        const valueStart = cursor
+        const valueStart = cursor;
         while (
           cursor < openTag.length &&
           !isHtmlSpace(openTag.charCodeAt(cursor)) &&
-          openTag[cursor] !== '>'
+          openTag[cursor] !== ">"
         ) {
-          cursor += 1
+          cursor += 1;
         }
-        value = openTag.slice(valueStart, cursor)
+        value = openTag.slice(valueStart, cursor);
       }
     }
 
-    if (value != null && attributeCarriesCssResourceUrl(attrNameLower, decodeHtmlAttrValue(value))) {
-      const decoded = decodeHtmlAttrValue(value)
-      const nextCss = neutralizeCssFetches(decoded)
+    if (
+      value != null &&
+      attributeCarriesCssResourceUrl(attrNameLower, decodeHtmlAttrValue(value))
+    ) {
+      const decoded = decodeHtmlAttrValue(value);
+      const nextCss = neutralizeCssFetches(decoded);
       if (nextCss === decoded) {
-        rewritten += openTag.slice(attrStart, cursor)
+        rewritten += openTag.slice(attrStart, cursor);
       } else {
-        rewritten += ` ${attrName}="${escapeTemplateHtml(nextCss)}"`
+        rewritten += ` ${attrName}="${escapeTemplateHtml(nextCss)}"`;
       }
     } else if (
       value != null &&
@@ -1327,11 +1360,11 @@ function rewriteTagResourceAttrs(openTag: string, tagName: string): string {
     ) {
       // Drop the fetchable attribute; keep the rest of the tag.
     } else {
-      rewritten += openTag.slice(attrStart, cursor)
+      rewritten += openTag.slice(attrStart, cursor);
     }
   }
 
-  return rewritten
+  return rewritten;
 }
 
 /**
@@ -1340,125 +1373,129 @@ function rewriteTagResourceAttrs(openTag: string, tagName: string): string {
  * Text content is left untouched — an escaped `https://` mention is not a fetch.
  */
 function rewriteNetworkPdfResources(html: string): string {
-  assertLength(html, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Sanitized template HTML')
+  assertLength(html, TEMPLATE_RENDER_LIMITS.renderOutputChars, "Sanitized template HTML");
   const out = new BoundedStringBuilder(
     TEMPLATE_RENDER_LIMITS.renderOutputChars,
-    'Sanitized template HTML',
-  )
-  let cursor = 0
-  let inStyle = false
+    "Sanitized template HTML",
+  );
+  let cursor = 0;
+  let inStyle = false;
   while (cursor < html.length) {
-    const start = html.indexOf('<', cursor)
+    const start = html.indexOf("<", cursor);
     if (start === -1) {
-      const rest = html.slice(cursor)
-      out.append(inStyle ? neutralizeCssFetches(rest) : rest)
-      break
+      const rest = html.slice(cursor);
+      out.append(inStyle ? neutralizeCssFetches(rest) : rest);
+      break;
     }
-    const text = html.slice(cursor, start)
-    out.append(inStyle ? neutralizeCssFetches(text) : text)
-    const tag = readHtmlTag(html, start)
+    const text = html.slice(cursor, start);
+    out.append(inStyle ? neutralizeCssFetches(text) : text);
+    const tag = readHtmlTag(html, start);
     if (!tag) {
-      out.append('<')
-      cursor = start + 1
-      continue
+      out.append("<");
+      cursor = start + 1;
+      continue;
     }
-    const rawTag = html.slice(start, tag.end)
-    if (tag.name === 'style') {
-      if (tag.closing) inStyle = false
-      else if (!tag.selfClosing) inStyle = true
+    const rawTag = html.slice(start, tag.end);
+    if (tag.name === "style") {
+      if (tag.closing) inStyle = false;
+      else if (!tag.selfClosing) inStyle = true;
     }
-    out.append(tag.name && !tag.closing ? rewriteTagResourceAttrs(rawTag, tag.name) : rawTag)
-    cursor = tag.end
+    out.append(tag.name && !tag.closing ? rewriteTagResourceAttrs(rawTag, tag.name) : rawTag);
+    cursor = tag.end;
   }
-  return out.toString()
+  return out.toString();
 }
 
-export type PdfChromeSubresourceRequest = { resourceType: string; url: string }
+export type PdfChromeSubresourceRequest = { resourceType: string; url: string };
 
 function collectCssSubresourceRequests(css: string): PdfChromeSubresourceRequest[] {
-  const decoded = decodeCssEscapes(css)
-  const requests: PdfChromeSubresourceRequest[] = []
-  const importPattern = /@import\b[^;]*;?/gi
-  let importMatch: RegExpExecArray | null
+  const decoded = decodeCssEscapes(css);
+  const requests: PdfChromeSubresourceRequest[] = [];
+  const importPattern = /@import\b[^;]*;?/gi;
+  let importMatch: RegExpExecArray | null;
   while ((importMatch = importPattern.exec(decoded)) !== null) {
     for (const url of extractCssResourceUrls(importMatch[0])) {
-      requests.push({ resourceType: 'stylesheet', url })
+      requests.push({ resourceType: "stylesheet", url });
     }
   }
   for (const url of extractCssResourceUrls(decoded)) {
-    requests.push({ resourceType: 'image', url })
+    requests.push({ resourceType: "image", url });
   }
-  return requests
+  return requests;
 }
 
-function collectTagSubresourceRequests(openTag: string, tagName: string): PdfChromeSubresourceRequest[] {
-  const requests: PdfChromeSubresourceRequest[] = []
-  let cursor = 1
-  while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-  cursor += tagName.length
+function collectTagSubresourceRequests(
+  openTag: string,
+  tagName: string,
+): PdfChromeSubresourceRequest[] {
+  const requests: PdfChromeSubresourceRequest[] = [];
+  let cursor = 1;
+  while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+  cursor += tagName.length;
   while (cursor < openTag.length) {
-    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-    if (cursor >= openTag.length) break
-    const next = openTag[cursor]
-    if (next === '>' || next === '/') break
-    const nameStart = cursor
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+    if (cursor >= openTag.length) break;
+    const next = openTag[cursor];
+    if (next === ">" || next === "/") break;
+    const nameStart = cursor;
     while (cursor < openTag.length) {
-      const code = openTag.charCodeAt(cursor)
+      const code = openTag.charCodeAt(cursor);
       const isName =
         (code >= 48 && code <= 57) ||
         (code >= 65 && code <= 90) ||
         code === 45 ||
         code === 58 ||
         code === 95 ||
-        (code >= 97 && code <= 122)
-      if (!isName) break
-      cursor += 1
+        (code >= 97 && code <= 122);
+      if (!isName) break;
+      cursor += 1;
     }
     if (cursor === nameStart) {
-      cursor += 1
-      continue
+      cursor += 1;
+      continue;
     }
-    const attrNameLower = openTag.slice(nameStart, cursor).toLowerCase()
-    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-    let value: string | null = null
-    if (openTag[cursor] === '=') {
-      cursor += 1
-      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
-      const quote = openTag[cursor]
+    const attrNameLower = openTag.slice(nameStart, cursor).toLowerCase();
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+    let value: string | null = null;
+    if (openTag[cursor] === "=") {
+      cursor += 1;
+      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1;
+      const quote = openTag[cursor];
       if (quote === '"' || quote === "'") {
-        cursor += 1
-        const valueStart = cursor
-        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1
-        value = openTag.slice(valueStart, cursor)
-        if (cursor < openTag.length) cursor += 1
+        cursor += 1;
+        const valueStart = cursor;
+        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1;
+        value = openTag.slice(valueStart, cursor);
+        if (cursor < openTag.length) cursor += 1;
       } else {
-        const valueStart = cursor
+        const valueStart = cursor;
         while (
           cursor < openTag.length &&
           !isHtmlSpace(openTag.charCodeAt(cursor)) &&
-          openTag[cursor] !== '>'
+          openTag[cursor] !== ">"
         ) {
-          cursor += 1
+          cursor += 1;
         }
-        value = openTag.slice(valueStart, cursor)
+        value = openTag.slice(valueStart, cursor);
       }
     }
-    if (value == null) continue
-    const decoded = decodeHtmlAttrValue(value)
+    if (value == null) continue;
+    const decoded = decodeHtmlAttrValue(value);
     if (attributeCarriesCssResourceUrl(attrNameLower, decoded)) {
-      requests.push(...collectCssSubresourceRequests(decoded))
+      requests.push(...collectCssSubresourceRequests(decoded));
     } else if (isFetchUriAttr(tagName, attrNameLower)) {
-      if (attrNameLower === 'srcset') {
-        for (const candidate of decoded.split(',')) {
-          const url = candidate.trim().split(/\s+/)[0] ?? ''
-          if (url) requests.push({ resourceType: resourceTypeForAttr(tagName, attrNameLower), url })
+      if (attrNameLower === "srcset") {
+        for (const candidate of decoded.split(",")) {
+          const url = candidate.trim().split(/\s+/)[0] ?? "";
+          if (url)
+            requests.push({ resourceType: resourceTypeForAttr(tagName, attrNameLower), url });
         }
       } else {
-        requests.push({ resourceType: resourceTypeForAttr(tagName, attrNameLower), url: decoded })
+        requests.push({ resourceType: resourceTypeForAttr(tagName, attrNameLower), url: decoded });
       }
     }
   }
-  return requests
+  return requests;
 }
 
 /**
@@ -1467,54 +1504,58 @@ function collectTagSubresourceRequests(openTag: string, tagName: string): PdfChr
  * `isAllowedPdfRequest` — the interceptor never sees these documents.
  */
 export function pdfChromeSubresourceRequests(html: string): PdfChromeSubresourceRequest[] {
-  const requests: PdfChromeSubresourceRequest[] = []
-  let cursor = 0
-  let inStyle = false
+  const requests: PdfChromeSubresourceRequest[] = [];
+  let cursor = 0;
+  let inStyle = false;
   while (cursor < html.length) {
-    const start = html.indexOf('<', cursor)
+    const start = html.indexOf("<", cursor);
     if (start === -1) {
-      if (inStyle) requests.push(...collectCssSubresourceRequests(html.slice(cursor)))
-      break
+      if (inStyle) requests.push(...collectCssSubresourceRequests(html.slice(cursor)));
+      break;
     }
-    if (inStyle) requests.push(...collectCssSubresourceRequests(html.slice(cursor, start)))
-    const tag = readHtmlTag(html, start)
+    if (inStyle) requests.push(...collectCssSubresourceRequests(html.slice(cursor, start)));
+    const tag = readHtmlTag(html, start);
     if (!tag) {
-      cursor = start + 1
-      continue
+      cursor = start + 1;
+      continue;
     }
-    const rawTag = html.slice(start, tag.end)
-    if (tag.name === 'style') {
-      if (tag.closing) inStyle = false
-      else if (!tag.selfClosing) inStyle = true
+    const rawTag = html.slice(start, tag.end);
+    if (tag.name === "style") {
+      if (tag.closing) inStyle = false;
+      else if (!tag.selfClosing) inStyle = true;
     }
-    if (tag.name && !tag.closing) requests.push(...collectTagSubresourceRequests(rawTag, tag.name))
-    cursor = tag.end
+    if (tag.name && !tag.closing) requests.push(...collectTagSubresourceRequests(rawTag, tag.name));
+    cursor = tag.end;
   }
-  return requests
+  return requests;
 }
 
 function assertTemplateTokensAreTextOnly(html: string): void {
-  let cursor = 0
-  let inStyle = false
+  let cursor = 0;
+  let inStyle = false;
   while (cursor < html.length) {
-    const start = html.indexOf('<', cursor)
-    const textEnd = start === -1 ? html.length : start
-    if (inStyle && html.slice(cursor, textEnd).includes('{{')) {
-      throw new PdfTemplateValidationError('Template tokens are only allowed in visible body text.')
+    const start = html.indexOf("<", cursor);
+    const textEnd = start === -1 ? html.length : start;
+    if (inStyle && html.slice(cursor, textEnd).includes("{{")) {
+      throw new PdfTemplateValidationError(
+        "Template tokens are only allowed in visible body text.",
+      );
     }
-    if (start === -1) break
+    if (start === -1) break;
 
-    const tag = readHtmlTag(html, start)
+    const tag = readHtmlTag(html, start);
     if (!tag) {
-      cursor = start + 1
-      continue
+      cursor = start + 1;
+      continue;
     }
-    const rawTag = html.slice(start, tag.end)
-    if (rawTag.includes('{{')) {
-      throw new PdfTemplateValidationError('Template tokens are only allowed in visible body text.')
+    const rawTag = html.slice(start, tag.end);
+    if (rawTag.includes("{{")) {
+      throw new PdfTemplateValidationError(
+        "Template tokens are only allowed in visible body text.",
+      );
     }
-    if (tag.name === 'style') inStyle = !tag.closing && !tag.selfClosing
-    cursor = tag.end
+    if (tag.name === "style") inStyle = !tag.closing && !tag.selfClosing;
+    cursor = tag.end;
   }
 }
 
@@ -1527,9 +1568,9 @@ function assertTemplateTokensAreTextOnly(html: string): void {
  * interceptor.
  */
 export function sanitizeTokenizedFragment(html: string): string {
-  const sanitized = rewriteNetworkPdfResources(sanitizeTemplateFragment(html))
-  assertTemplateTokensAreTextOnly(sanitized)
-  return sanitized
+  const sanitized = rewriteNetworkPdfResources(sanitizeTemplateFragment(html));
+  assertTemplateTokensAreTextOnly(sanitized);
+  return sanitized;
 }
 
 /**
@@ -1539,9 +1580,9 @@ export function sanitizeTokenizedFragment(html: string): string {
  * compiled HTML (merged at render time).
  */
 export function compileTemplateHtml(sourceHtml: string): {
-  sanitizedSource: string
-  compiledHtml: string
+  sanitizedSource: string;
+  compiledHtml: string;
 } {
-  const sanitizedSource = sanitizeTemplateHtml(sourceHtml)
-  return { sanitizedSource, compiledHtml: expandRepeatMarkers(sanitizedSource) }
+  const sanitizedSource = sanitizeTemplateHtml(sourceHtml);
+  return { sanitizedSource, compiledHtml: expandRepeatMarkers(sanitizedSource) };
 }

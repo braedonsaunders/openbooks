@@ -31,7 +31,11 @@ export async function postBill(world: SimOrg, documentId: string): Promise<{ ent
 }
 
 /** Hold/dispute a draft bill: flag it, don't post it (stays in the inbox). */
-export async function disputeBill(world: SimOrg, documentId: string, reason: string): Promise<void> {
+export async function disputeBill(
+  world: SimOrg,
+  documentId: string,
+  reason: string,
+): Promise<void> {
   await db.execute(sql`
     update documents
        set custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{sim,dispute}', to_jsonb(${reason}::text), true)
@@ -54,7 +58,9 @@ export async function payVendor(
   const chosen = items.filter((i) => wanted.has(i.lineId) && i.kind === "vendor_bill");
   if (chosen.length === 0) return null;
 
-  const allocations: AllocationInput[] = chosen.map((i) => sameCurrencyAllocation(i.lineId, i.open));
+  const allocations: AllocationInput[] = chosen.map((i) =>
+    sameCurrencyAllocation(i.lineId, i.open),
+  );
   const payment = await createPaymentDocument({
     orgId: world.orgId,
     kind: "vendor_payment",
@@ -91,9 +97,9 @@ export async function reimburseEmployee(
   actorId: string,
   documentDate: string,
 ): Promise<{ paymentId: string; paid: string } | null> {
-  const items = (await collectibleOpenItems(world.orgId, employeeId, "ap", ["expense_report"])).filter(
-    (i) => Number(i.open) > 0.005,
-  );
+  const items = (
+    await collectibleOpenItems(world.orgId, employeeId, "ap", ["expense_report"])
+  ).filter((i) => Number(i.open) > 0.005);
   if (items.length === 0) return null;
 
   const allocations: AllocationInput[] = items.map((i) => sameCurrencyAllocation(i.lineId, i.open));
@@ -109,7 +115,13 @@ export async function reimburseEmployee(
     currency: world.currency,
     memo: `Expense reimbursement ${documentDate}`,
   });
-  await updateDraftPayment(payment.id, { allocations, bankAccountId: world.accounts.bank }, actorId, world.orgId, { allowedSubsidiaryIds: null });
+  await updateDraftPayment(
+    payment.id,
+    { allocations, bankAccountId: world.accounts.bank },
+    actorId,
+    world.orgId,
+    { allowedSubsidiaryIds: null },
+  );
   await releaseDraftIfUngated(world, payment.id, actorId);
   await postPaymentWithApplications(payment.id, undefined, actorId);
   return { paymentId: payment.id, paid: sum(items.map((i) => i.open)) };
@@ -118,7 +130,10 @@ export async function reimburseEmployee(
 // --- AR -------------------------------------------------------------------
 
 /** Issue (post) a draft customer invoice. */
-export async function issueInvoice(world: SimOrg, documentId: string): Promise<{ entryId: string }> {
+export async function issueInvoice(
+  world: SimOrg,
+  documentId: string,
+): Promise<{ entryId: string }> {
   const entryId = await postDraftDocument(world, documentId);
   return { entryId };
 }
@@ -134,7 +149,9 @@ export async function applyReceipt(
   allocations: { lineId: string; amount: string }[],
   actorId: string,
 ): Promise<{ entryId: string }> {
-  const built: AllocationInput[] = allocations.map((a) => sameCurrencyAllocation(a.lineId, a.amount));
+  const built: AllocationInput[] = allocations.map((a) =>
+    sameCurrencyAllocation(a.lineId, a.amount),
+  );
   await updateDraftPayment(
     paymentDocId,
     { allocations: built, bankAccountId: world.accounts.bank },
@@ -157,7 +174,12 @@ export async function postAdjustingJournal(
   memo: string,
   documentDate: string,
 ): Promise<{ id: string; entryId?: string }> {
-  const res = await createScriptJournal(world.orgId, actorId, { documentDate, memo, lines }, { post: true });
+  const res = await createScriptJournal(
+    world.orgId,
+    actorId,
+    { documentDate, memo, lines },
+    { post: true },
+  );
   return { id: res.id, entryId: res.entryId };
 }
 

@@ -1,16 +1,19 @@
-import 'server-only'
-import { listAppSettingPages, loadExtensionSettingRows } from '../../../../../lib/setup/extension-settings'
-import { appSettingsHref } from '../../../../../lib/setup/rail'
-import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announcements'
+import "server-only";
+import {
+  listAppSettingPages,
+  loadExtensionSettingRows,
+} from "../../../../../lib/setup/extension-settings";
+import { appSettingsHref } from "../../../../../lib/setup/rail";
+import { loadHomeAnnouncementRows } from "../../../../../lib/setup/home-announcements";
 
-import { notFound } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { getLocale, getTimeZone, getTranslations } from 'next-intl/server'
-import { setupColumnSearchSql, setupDateLabel } from '../../../../../lib/setup/date-columns'
-import { decimalLabel } from '../../../../../lib/format'
-import { db } from '@openbooks/engine/platform/db'
-import { TAX_RETURN_PACKS } from '@openbooks/engine/tax/seed-tax-forms'
-import { ensureAiRailsSettingsForOrg } from '@openbooks/engine/hrm/ai/settings'
+import { notFound } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { getLocale, getTimeZone, getTranslations } from "next-intl/server";
+import { setupColumnSearchSql, setupDateLabel } from "../../../../../lib/setup/date-columns";
+import { decimalLabel } from "../../../../../lib/format";
+import { db } from "@openbooks/engine/platform/db";
+import { TAX_RETURN_PACKS } from "@openbooks/engine/tax/seed-tax-forms";
+import { ensureAiRailsSettingsForOrg } from "@openbooks/engine/hrm/ai/settings";
 import {
   badge,
   column,
@@ -26,11 +29,11 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { resolvedFeatureState, featureEnabled } from '../../../../../lib/features'
-import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { resolvedFeatureState, featureEnabled } from "../../../../../lib/features";
+import { mergeHref, parseListParams, pickString } from "../../../../../lib/list-params";
 import {
   SETUP_ENTITY_BY_KEY,
   resolveSetupEntityGate,
@@ -39,11 +42,14 @@ import {
   toSnake,
   type SetupColumn,
   type SetupColumnKind,
-} from '../../../../../lib/setup/registry'
-import { resolveDynamicSetupOptions, setupOptionsContext } from '../../../../../lib/setup/dynamic-options'
-import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
-import { setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
-import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
+} from "../../../../../lib/setup/registry";
+import {
+  resolveDynamicSetupOptions,
+  setupOptionsContext,
+} from "../../../../../lib/setup/dynamic-options";
+import { loadRefOptions, orderExpr } from "../../../../../lib/setup/ref-options";
+import { setupEntitySubsidiaryFilter } from "../../../../../lib/setup/subsidiary-scope";
+import { setupReadProjection, setupReadSource } from "../../../../../lib/setup/read-shape";
 
 /**
  * The generic setup-entity list, split into a loader and a spec.
@@ -62,71 +68,71 @@ import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/r
  * spec. The spec carries only the entity key, the URL, and presence flags.
  */
 
-const LINK = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
-const MUTED = 'text-slate-500 dark:text-slate-400'
+const LINK = "font-medium text-teal-700 hover:underline dark:text-teal-300";
+const MUTED = "text-slate-500 dark:text-slate-400";
 
 export interface SetupListColumn {
-  key: string
-  kind: SetupColumnKind
-  header: string
+  key: string;
+  kind: SetupColumnKind;
+  header: string;
 }
 
 export interface SetupListCell {
-  display: string
-  href: string | null
-  badgeVariant: 'default' | 'secondary' | 'outline' | 'success' | null
-  codeShown: boolean
+  display: string;
+  href: string | null;
+  badgeVariant: "default" | "secondary" | "outline" | "success" | null;
+  codeShown: boolean;
 }
 
 export interface SetupListRow {
-  id: string
-  cells: Record<string, SetupListCell>
+  id: string;
+  cells: Record<string, SetupListCell>;
 }
 
 export interface SetupLibraryPack {
-  code: string
-  name: string
-  country: string
+  code: string;
+  name: string;
+  country: string;
 }
 
 export interface SetupEntityData {
-  entityKey: string
+  entityKey: string;
   /** List, pagination and drawer links resolve against this page path. */
-  basePath: string
-  isCompany: boolean
-  isPeriodClose: boolean
-  isFxProvider: boolean
-  isTaxProvider: boolean
+  basePath: string;
+  isCompany: boolean;
+  isPeriodClose: boolean;
+  isFxProvider: boolean;
+  isTaxProvider: boolean;
   /** Business calendars offer a read-only payroll view beside the versions list. */
-  hasCalendarTabs: boolean
-  calendarTabs: { href: string; label: string; active: boolean }[]
-  onPayrollHolidays: boolean
+  hasCalendarTabs: boolean;
+  calendarTabs: { href: string; label: string; active: boolean }[];
+  onPayrollHolidays: boolean;
   /** The registry list (search, table, pagination) is the active body. */
-  showRecords: boolean
-  isRegistryList: boolean
-  canReopen: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  title: string
-  description: string
-  docHref: string | null
-  learnMore: string
-  newLabel: string
-  canCreate?: boolean
-  showLibrary: boolean
-  libraryPacks: SetupLibraryPack[]
-  libraryInstalled: string[]
-  libraryOpen: boolean
-  libraryOpenHref: string
-  libraryCloseHref: string
-  searchPlaceholder: string
-  hasActiveToggle: boolean
-  columns: SetupListColumn[]
-  rows: SetupListRow[]
-  emptyLabel: string
-  total: number
-  currentPage: number
-  perPage: number
-  drawerOpen: boolean
+  showRecords: boolean;
+  isRegistryList: boolean;
+  canReopen: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  title: string;
+  description: string;
+  docHref: string | null;
+  learnMore: string;
+  newLabel: string;
+  canCreate?: boolean;
+  showLibrary: boolean;
+  libraryPacks: SetupLibraryPack[];
+  libraryInstalled: string[];
+  libraryOpen: boolean;
+  libraryOpenHref: string;
+  libraryCloseHref: string;
+  searchPlaceholder: string;
+  hasActiveToggle: boolean;
+  columns: SetupListColumn[];
+  rows: SetupListRow[];
+  emptyLabel: string;
+  total: number;
+  currentPage: number;
+  perPage: number;
+  drawerOpen: boolean;
 }
 
 /** One table cell's presentation, resolved from the raw (snake-keyed) row. */
@@ -137,45 +143,48 @@ function cellDisplay(
   t: (k: string) => string,
   locale: string,
   timeZone: string,
-): { display: string; badgeVariant: SetupListCell['badgeVariant'] } {
-  const raw = row[toSnake(col.key)]
-  const option = col.options?.find((candidate) => candidate.value === String(raw))
-  if (option && col.kind !== 'badge') return { display: setupOptionLabel(option, t), badgeVariant: null }
+): { display: string; badgeVariant: SetupListCell["badgeVariant"] } {
+  const raw = row[toSnake(col.key)];
+  const option = col.options?.find((candidate) => candidate.value === String(raw));
+  if (option && col.kind !== "badge")
+    return { display: setupOptionLabel(option, t), badgeVariant: null };
   switch (col.kind) {
-    case 'badge-active':
+    case "badge-active":
       return raw
-        ? { display: t('statusActive'), badgeVariant: 'success' }
-        : { display: t('statusArchived'), badgeVariant: 'outline' }
-    case 'badge':
+        ? { display: t("statusActive"), badgeVariant: "success" }
+        : { display: t("statusArchived"), badgeVariant: "outline" };
+    case "badge":
       return {
-        display: option ? setupOptionLabel(option, t) : raw == null || raw === '' ? '—' : String(raw),
-        badgeVariant: raw === 'builtin' ? 'secondary' : 'default',
-      }
-    case 'boolean':
-      return { display: raw ? t('yes') : '—', badgeVariant: null }
-    case 'percent':
-      return { display: raw == null || raw === '' ? '—' : `${Number(raw)}%`, badgeVariant: null }
-    case 'number': {
-      if (raw == null || raw === '') return { display: '—', badgeVariant: null }
-      const num = Number(raw)
+        display: option
+          ? setupOptionLabel(option, t)
+          : raw == null || raw === ""
+            ? "—"
+            : String(raw),
+        badgeVariant: raw === "builtin" ? "secondary" : "default",
+      };
+    case "boolean":
+      return { display: raw ? t("yes") : "—", badgeVariant: null };
+    case "percent":
+      return { display: raw == null || raw === "" ? "—" : `${Number(raw)}%`, badgeVariant: null };
+    case "number": {
+      if (raw == null || raw === "") return { display: "—", badgeVariant: null };
+      const num = Number(raw);
       // Locale-formatted, trailing zeros trimmed (1.7500 → 1.75, 40.0000 → 40).
       return {
-        display: Number.isFinite(num)
-          ? decimalLabel(num, locale, 0, 4)
-          : String(raw),
+        display: Number.isFinite(num) ? decimalLabel(num, locale, 0, 4) : String(raw),
         badgeVariant: null,
-      }
+      };
     }
-    case 'date':
-      return { display: setupDateLabel(raw, locale, timeZone), badgeVariant: null }
-    case 'ref': {
-      const label = col.ref ? refLabels[col.ref]?.get(String(raw)) : undefined
-      return { display: label ?? (raw ? String(raw) : '—'), badgeVariant: null }
+    case "date":
+      return { display: setupDateLabel(raw, locale, timeZone), badgeVariant: null };
+    case "ref": {
+      const label = col.ref ? refLabels[col.ref]?.get(String(raw)) : undefined;
+      return { display: label ?? (raw ? String(raw) : "—"), badgeVariant: null };
     }
-    case 'code':
-    case 'text':
+    case "code":
+    case "text":
     default:
-      return { display: raw == null || raw === '' ? '—' : String(raw), badgeVariant: null }
+      return { display: raw == null || raw === "" ? "—" : String(raw), badgeVariant: null };
   }
 }
 
@@ -184,119 +193,175 @@ export async function loadSetupEntity(
   sp: Record<string, string | string[] | undefined>,
   scope: { appKey?: string } = {},
 ): Promise<SetupEntityData> {
-  const authz = await requirePermission('admin.setup.manage')
-  const { orgId } = authz.user
+  const authz = await requirePermission("admin.setup.manage");
+  const { orgId } = authz.user;
   // App settings are served one installed app per page; the combined
   // extension-settings list has no standalone page of its own.
-  const app = scope.appKey === undefined
-    ? null
-    : entityKey === 'extension-settings' && authz.allowedSubsidiaryIds === null
-      ? (await listAppSettingPages(orgId)).find((candidate) => candidate.key === scope.appKey) ?? notFound()
-      : notFound()
+  const app =
+    scope.appKey === undefined
+      ? null
+      : entityKey === "extension-settings" && authz.allowedSubsidiaryIds === null
+        ? ((await listAppSettingPages(orgId)).find((candidate) => candidate.key === scope.appKey) ??
+          notFound())
+        : notFound();
 
-  const isCompany = entityKey === 'company'
-  const isPeriodClose = entityKey === 'period-close'
-  const isFxProvider = entityKey === 'fx-provider'
-  const isTaxProvider = entityKey === 'tax-provider'
+  const isCompany = entityKey === "company";
+  const isPeriodClose = entityKey === "period-close";
+  const isFxProvider = entityKey === "fx-provider";
+  const isTaxProvider = entityKey === "tax-provider";
 
   // Bespoke tabs carry their own gates; the slots re-render the components.
-  let canReopen = false
+  let canReopen = false;
   if (isPeriodClose) {
-    await requirePermission('periods.manage')
-    canReopen = can(authz, 'close.reopen')
+    await requirePermission("periods.manage");
+    canReopen = can(authz, "close.reopen");
   }
   if (isFxProvider) {
-    await requireFeatureEnabled(orgId, 'multiCurrency')
+    await requireFeatureEnabled(orgId, "multiCurrency");
   }
 
-  const baseEntity = isCompany || isPeriodClose || isFxProvider || isTaxProvider ? undefined : SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!isCompany && !isPeriodClose && !isFxProvider && !isTaxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || (baseEntity.rehomed && !app))) {
-    notFound()
+  const baseEntity =
+    isCompany || isPeriodClose || isFxProvider || isTaxProvider
+      ? undefined
+      : SETUP_ENTITY_BY_KEY.get(entityKey);
+  if (
+    !isCompany &&
+    !isPeriodClose &&
+    !isFxProvider &&
+    !isTaxProvider &&
+    (!baseEntity ||
+      baseEntity.nestedUnder ||
+      baseEntity.parentRecords?.length ||
+      (baseEntity.rehomed && !app))
+  ) {
+    notFound();
   }
-  const features = await resolvedFeatureState(orgId)
+  const features = await resolvedFeatureState(orgId);
   // The payroll view reads payroll data, so it needs the payroll feature and the
   // payroll read permission; without both the versions list stays the only body.
-  const payrollHolidaysAvailable = entityKey === 'business-calendars'
-    && featureEnabled(features, 'payroll')
-    && can(authz, 'payroll.read')
-  const onPayrollHolidays = payrollHolidaysAvailable && pickString(sp.view) === 'payroll-holidays'
+  const payrollHolidaysAvailable =
+    entityKey === "business-calendars" &&
+    featureEnabled(features, "payroll") &&
+    can(authz, "payroll.read");
+  const onPayrollHolidays = payrollHolidaysAvailable && pickString(sp.view) === "payroll-holidays";
   // One authoritative gate stands between the loader and its rows. A
   // single-key entity keeps the feature-required redirect naming its key; an
   // any-of gate with every member off has no single feature to name, so the
   // page 404s — turning features off preserves rows and history either way.
   if (baseEntity && !resolveSetupEntityGate(baseEntity, features).enabled) {
-    if (baseEntity.featureKey) await requireFeatureEnabled(orgId, baseEntity.featureKey)
-    notFound()
+    if (baseEntity.featureKey) await requireFeatureEnabled(orgId, baseEntity.featureKey);
+    notFound();
   }
   const gatedEntity = baseEntity
     ? setupEntityForFeatureState(baseEntity, {
         ...features,
-        multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
-        equipment: featureEnabled(features, 'equipment'),
-        fieldTickets: featureEnabled(features, 'fieldTickets'),
-        einvoicing: featureEnabled(features, 'einvoicing'),
+        multiSubsidiary: featureEnabled(features, "multiSubsidiary"),
+        equipment: featureEnabled(features, "equipment"),
+        fieldTickets: featureEnabled(features, "fieldTickets"),
+        einvoicing: featureEnabled(features, "einvoicing"),
       })
-    : null
+    : null;
   const entity = gatedEntity
     ? resolveDynamicSetupOptions(gatedEntity, await setupOptionsContext(orgId, gatedEntity))
-    : null
+    : null;
 
-  const t = await getTranslations('admin.setup')
-  if (entityKey === 'ai-rails-settings' && authz.allowedSubsidiaryIds === null) {
-    await ensureAiRailsSettingsForOrg(orgId, authz.user.id)
+  const t = await getTranslations("admin.setup");
+  if (entityKey === "ai-rails-settings" && authz.allowedSubsidiaryIds === null) {
+    await ensureAiRailsSettingsForOrg(orgId, authz.user.id);
   }
-  const [locale, timeZone] = await Promise.all([getLocale(), getTimeZone()])
-  const isRegistryList = entity !== null
+  const [locale, timeZone] = await Promise.all([getLocale(), getTimeZone()]);
+  const isRegistryList = entity !== null;
 
-  const rowParam = typeof sp.row === 'string' ? sp.row : undefined
-  const showInactive = pickString(sp.showInactive) === 'true'
-  const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
+  const rowParam = typeof sp.row === "string" ? sp.row : undefined;
+  const showInactive = pickString(sp.showInactive) === "true";
+  const list = parseListParams(sp, {
+    sort: "default",
+    allowedSorts: ["default"] as const,
+    perPage: 25,
+  });
 
   const searchColumns = entity
-    ? entity.columns.map((c) => setupColumnSearchSql(c, list.q ?? '', locale, timeZone))
-    : []
+    ? entity.columns.map((c) => setupColumnSearchSql(c, list.q ?? "", locale, timeZone))
+    : [];
   const rowFilter = entity
     ? sql`where 1 = 1
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
     ${authz.allowedSubsidiaryIds === null ? sql`` : setupEntitySubsidiaryFilter(entity, authz.allowedSubsidiaryIds)}
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
-    : sql``
-  const moduleRows = entity?.dataSource === 'extension-settings'
-    ? (authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId, app?.key)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
+    : sql``;
+  const moduleRows =
+    entity?.dataSource === "extension-settings"
+      ? (authz.allowedSubsidiaryIds !== null
+          ? []
+          : await loadExtensionSettingRows(orgId, app?.key)
+        ).filter(
+          (row) =>
+            !list.q ||
+            Object.values(row).some((value) =>
+              String(value).toLowerCase().includes(list.q!.toLowerCase()),
+            ),
+        )
+      : null;
   // HR-15: home announcements list from org settings JSON.
-  const announcementRows = entity?.dataSource === 'home-announcements'
-    ? (authz.allowedSubsidiaryIds !== null ? [] : await loadHomeAnnouncementRows(orgId)).filter((row) => !list.q || [row.title, row.body ?? ''].some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase())))
-    : null
+  const announcementRows =
+    entity?.dataSource === "home-announcements"
+      ? (authz.allowedSubsidiaryIds !== null ? [] : await loadHomeAnnouncementRows(orgId)).filter(
+          (row) =>
+            !list.q ||
+            [row.title, row.body ?? ""].some((value) =>
+              String(value).toLowerCase().includes(list.q!.toLowerCase()),
+            ),
+        )
+      : null;
   const [rowsRes, countRes, refOptions, installedPackRows] = moduleRows
-    ? [moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage), [{ n: moduleRows.length }], {}, []]
+    ? [
+        moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage),
+        [{ n: moduleRows.length }],
+        {},
+        [],
+      ]
     : announcementRows
-      ? [announcementRows.slice((list.page - 1) * list.perPage, list.page * list.perPage), [{ n: announcementRows.length }], {}, []]
+      ? [
+          announcementRows.slice((list.page - 1) * list.perPage, list.page * list.perPage),
+          [{ n: announcementRows.length }],
+          {},
+          [],
+        ]
       : entity
-    ? await Promise.all([
-        (db.execute(sql`
+        ? await Promise.all([
+            db.execute(
+              sql`
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects')),
-        (db.execute(sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`, 'objects')),
-        loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds, locale),
-        entity.key === 'tax-return-forms'
-          ? db.execute<{ code: string }>(sql`select code from tax_return_forms where org_id = ${orgId}`, 'objects')
-          : Promise.resolve([] as { code: string }[]),
-      ])
-    : [[], [], {}, []]
-  const rows: Record<string, unknown>[] = rowsRes
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`,
+              "objects",
+            ),
+            db.execute(
+              sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`,
+              "objects",
+            ),
+            loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds, locale),
+            entity.key === "tax-return-forms"
+              ? db.execute<{ code: string }>(
+                  sql`select code from tax_return_forms where org_id = ${orgId}`,
+                  "objects",
+                )
+              : Promise.resolve([] as { code: string }[]),
+          ])
+        : [[], [], {}, []];
+  const rows: Record<string, unknown>[] = rowsRes;
 
   // Lookup maps for rendering ref columns.
-  const refLabels: Record<string, Map<string, string>> = {}
+  const refLabels: Record<string, Map<string, string>> = {};
   for (const [source, opts] of Object.entries(refOptions)) {
-    refLabels[source] = new Map(opts.map((o) => [o.value, o.label]))
+    refLabels[source] = new Map(opts.map((o) => [o.value, o.label]));
   }
 
-  const idColumn = entity?.idColumn ?? 'id'
-  const basePath = app ? appSettingsHref(app.key) : `/admin/setup/${entityKey}`
+  const idColumn = entity?.idColumn ?? "id";
+  const basePath = app ? appSettingsHref(app.key) : `/admin/setup/${entityKey}`;
   // On an app's own page the app is the page, so its key is not a column.
-  const listColumns = (entity?.columns ?? []).filter((c) => !(app && c.key === 'extensionKey'))
+  const listColumns = (entity?.columns ?? []).filter((c) => !(app && c.key === "extensionKey"));
 
   return {
     entityKey,
@@ -308,28 +373,44 @@ export async function loadSetupEntity(
     isRegistryList,
     canReopen,
     currentParams: sp,
-    title: app ? app.name : entity ? t(`entities.${entity.key}.title`) : '',
-    description: app ? t('entities.extension-settings.appDescription') : entity ? t(`entities.${entity.key}.description`) : '',
+    title: app ? app.name : entity ? t(`entities.${entity.key}.title`) : "",
+    description: app
+      ? t("entities.extension-settings.appDescription")
+      : entity
+        ? t(`entities.${entity.key}.description`)
+        : "",
     docHref: entity?.docSlug ? `/docs/${entity.docSlug}` : null,
-    learnMore: t('learnMore'),
-    newLabel: t('new'),
+    learnMore: t("learnMore"),
+    newLabel: t("new"),
     canCreate: entity?.allowCreate !== false && !entity?.readOnly && !onPayrollHolidays,
     hasCalendarTabs: payrollHolidaysAvailable,
     calendarTabs: payrollHolidaysAvailable
       ? [
-          { href: mergeHref(basePath, sp, { view: undefined, row: undefined, holidayYear: undefined }), label: t('businessCalendarTabs.calendars'), active: !onPayrollHolidays },
-          { href: mergeHref(basePath, sp, { view: 'payroll-holidays', row: undefined }), label: t('businessCalendarTabs.payrollHolidays'), active: onPayrollHolidays },
+          {
+            href: mergeHref(basePath, sp, {
+              view: undefined,
+              row: undefined,
+              holidayYear: undefined,
+            }),
+            label: t("businessCalendarTabs.calendars"),
+            active: !onPayrollHolidays,
+          },
+          {
+            href: mergeHref(basePath, sp, { view: "payroll-holidays", row: undefined }),
+            label: t("businessCalendarTabs.payrollHolidays"),
+            active: onPayrollHolidays,
+          },
         ]
       : [],
     onPayrollHolidays,
     showRecords: !onPayrollHolidays,
-    showLibrary: entity?.key === 'tax-return-forms',
+    showLibrary: entity?.key === "tax-return-forms",
     libraryPacks: TAX_RETURN_PACKS.map(({ code, name, country }) => ({ code, name, country })),
     libraryInstalled: installedPackRows.map((row: { code: string }) => row.code),
-    libraryOpen: entity?.key === 'tax-return-forms' && pickString(sp.library) === 'true',
-    libraryOpenHref: mergeHref('/admin/setup/tax-return-forms', sp, { library: 'true' }),
-    libraryCloseHref: mergeHref('/admin/setup/tax-return-forms', sp, { library: undefined }),
-    searchPlaceholder: t('searchPlaceholder'),
+    libraryOpen: entity?.key === "tax-return-forms" && pickString(sp.library) === "true",
+    libraryOpenHref: mergeHref("/admin/setup/tax-return-forms", sp, { library: "true" }),
+    libraryCloseHref: mergeHref("/admin/setup/tax-return-forms", sp, { library: undefined }),
+    searchPlaceholder: t("searchPlaceholder"),
     hasActiveToggle: Boolean(entity?.hasActive),
     columns: listColumns.map((c) => ({
       key: c.key,
@@ -338,31 +419,32 @@ export async function loadSetupEntity(
     })),
     rows: entity
       ? rows.map((row) => {
-          const rowId = String(row[idColumn])
-          const href = mergeHref(basePath, sp, { row: rowId })
-          const cells: Record<string, SetupListCell> = {}
+          const rowId = String(row[idColumn]);
+          const href = mergeHref(basePath, sp, { row: rowId });
+          const cells: Record<string, SetupListCell> = {};
           for (const c of listColumns) {
-            const { display, badgeVariant } = cellDisplay(c, row, refLabels, t, locale, timeZone)
+            const { display, badgeVariant } = cellDisplay(c, row, refLabels, t, locale, timeZone);
             cells[c.key] = {
               display,
               href,
               badgeVariant,
-              codeShown: c.kind === 'code' && row[toSnake(c.key)] != null && row[toSnake(c.key)] !== '',
-            }
+              codeShown:
+                c.kind === "code" && row[toSnake(c.key)] != null && row[toSnake(c.key)] !== "",
+            };
           }
-          return { id: rowId, cells }
+          return { id: rowId, cells };
         })
       : [],
-    emptyLabel: t('empty'),
+    emptyLabel: t("empty"),
     total: Number((countRes[0] as { n?: unknown } | undefined)?.n ?? 0),
     currentPage: list.page,
     perPage: list.perPage,
     drawerOpen: isRegistryList && rowParam !== undefined && !onPayrollHolidays,
-  }
+  };
 }
 
-const f = ref<SetupEntityData>()
-const item = field
+const f = ref<SetupEntityData>();
+const item = field;
 
 /**
  * Build one table column from its loader-resolved descriptor. The first
@@ -371,88 +453,88 @@ const item = field
  * `link` cell cannot render, so those go through the sections.tsx cells.
  */
 function setupColumn(col: SetupListColumn, isFirst: boolean) {
-  const display = item(`cells.${col.key}.display`)
-  const href = item(`cells.${col.key}.href`)
+  const display = item(`cells.${col.key}.display`);
+  const href = item(`cells.${col.key}.href`);
   if (isFirst) {
     switch (col.kind) {
-      case 'badge-active':
-      case 'badge':
+      case "badge-active":
+      case "badge":
         return column(
           col.header,
-          widgetCell('setup-badge-link-cell', {
+          widgetCell("setup-badge-link-cell", {
             label: display,
             variant: item(`cells.${col.key}.badgeVariant`),
             href,
           }),
-        )
-      case 'code':
+        );
+      case "code":
         return column(
           col.header,
-          widgetCell('setup-code-cell', {
+          widgetCell("setup-code-cell", {
             text: display,
             shown: item(`cells.${col.key}.codeShown`),
             href,
           }),
-        )
+        );
       default:
-        return column(col.header, link(display, href, LINK))
+        return column(col.header, link(display, href, LINK));
     }
   }
   switch (col.kind) {
-    case 'badge-active':
-    case 'badge':
-      return column(col.header, badge(display, { variant: item(`cells.${col.key}.badgeVariant`) }))
-    case 'code':
+    case "badge-active":
+    case "badge":
+      return column(col.header, badge(display, { variant: item(`cells.${col.key}.badgeVariant`) }));
+    case "code":
       return column(
         col.header,
-        widgetCell('setup-code-cell', {
+        widgetCell("setup-code-cell", {
           text: display,
           shown: item(`cells.${col.key}.codeShown`),
         }),
-      )
+      );
     default:
-      return column(col.header, text(display))
+      return column(col.header, text(display));
   }
 }
 
 export function setupEntitySpec(data: SetupEntityData): PageSpec {
   return page({
-    route: '/admin/setup/[entity]',
+    route: "/admin/setup/[entity]",
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
       {
-        ...widgetBlock('setup-company', {}),
-        when: f('isCompany'),
+        ...widgetBlock("setup-company", {}),
+        when: f("isCompany"),
       },
       {
-        ...widgetBlock('setup-close', { sp: data.currentParams, canReopen: data.canReopen }),
-        when: f('isPeriodClose'),
+        ...widgetBlock("setup-close", { sp: data.currentParams, canReopen: data.canReopen }),
+        when: f("isPeriodClose"),
       },
       {
-        ...widgetBlock('setup-fx', {}),
-        when: f('isFxProvider'),
+        ...widgetBlock("setup-fx", {}),
+        when: f("isFxProvider"),
       },
       {
-        ...widgetBlock('setup-tax-provider', {}),
-        when: f('isTaxProvider'),
+        ...widgetBlock("setup-tax-provider", {}),
+        when: f("isTaxProvider"),
       },
       {
-        ...grid('space-y-4', [
-          grid('flex items-start justify-between gap-3', [
-            grid('min-w-0', [
-              heading(2, f('title'), 'text-lg font-semibold text-slate-900 dark:text-slate-100'),
-              widgetBlock('setup-description', {
-                description: f('description'),
-                docHref: f('docHref'),
+        ...grid("space-y-4", [
+          grid("flex items-start justify-between gap-3", [
+            grid("min-w-0", [
+              heading(2, f("title"), "text-lg font-semibold text-slate-900 dark:text-slate-100"),
+              widgetBlock("setup-description", {
+                description: f("description"),
+                docHref: f("docHref"),
                 learnMore: data.learnMore,
               }),
             ]),
-            grid('flex items-center gap-2', [
+            grid("flex items-center gap-2", [
               widgetBlock(
-                'tax-return-library',
+                "tax-return-library",
                 {
                   packs: data.libraryPacks,
                   installedCodes: data.libraryInstalled,
@@ -460,51 +542,74 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
                   openHref: data.libraryOpenHref,
                   closeHref: data.libraryCloseHref,
                 },
-                f('showLibrary'),
+                f("showLibrary"),
               ),
-              widgetBlock('new-setup-button', { entityKey: data.entityKey, label: data.newLabel }, f('canCreate')),
+              widgetBlock(
+                "new-setup-button",
+                { entityKey: data.entityKey, label: data.newLabel },
+                f("canCreate"),
+              ),
             ]),
           ]),
-          { ...widgetBlock('module-home-tabs', { tabs: data.calendarTabs }), when: f('hasCalendarTabs') },
-          { ...grid('flex flex-wrap items-center gap-2', [
-            widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-            widgetBlock(
-              'show-inactives-toggle',
-              {
-                basePath: data.basePath,
-                currentParams: data.currentParams,
-              },
-              f('hasActiveToggle'),
+          {
+            ...widgetBlock("module-home-tabs", { tabs: data.calendarTabs }),
+            when: f("hasCalendarTabs"),
+          },
+          {
+            ...grid("flex flex-wrap items-center gap-2", [
+              widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+              widgetBlock(
+                "show-inactives-toggle",
+                {
+                  basePath: data.basePath,
+                  currentParams: data.currentParams,
+                },
+                f("hasActiveToggle"),
+              ),
+            ]),
+            when: f("showRecords"),
+          },
+          {
+            ...grid(
+              "rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
+              [
+                table({
+                  variant: "app",
+                  rows: f("rows"),
+                  rowKey: item("id"),
+                  emptyRow: {
+                    text: f("emptyLabel"),
+                    colSpan: data.columns.length,
+                    className: MUTED,
+                  },
+                  columns: data.columns.map((col, index) => setupColumn(col, index === 0)),
+                }),
+              ],
             ),
-          ]), when: f('showRecords') },
-          { ...grid(
-            'rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
-            [
-              table({
-                variant: 'app',
-                rows: f('rows'),
-                rowKey: item('id'),
-                emptyRow: { text: f('emptyLabel'), colSpan: data.columns.length, className: MUTED },
-                columns: data.columns.map((col, index) => setupColumn(col, index === 0)),
-              }),
-            ],
-          ), when: f('showRecords') },
-          { ...pagination({
-            basePath: data.basePath,
-            total: f('total'),
-            page: f('currentPage'),
-            perPage: f('perPage'),
-            bare: true,
-          }), when: f('showRecords') },
+            when: f("showRecords"),
+          },
+          {
+            ...pagination({
+              basePath: data.basePath,
+              total: f("total"),
+              page: f("currentPage"),
+              perPage: f("perPage"),
+              bare: true,
+            }),
+            when: f("showRecords"),
+          },
           widgetBlock(
-            'setup-drawer',
+            "setup-drawer",
             { entityKey: data.entityKey, sp: data.currentParams },
-            f('drawerOpen'),
+            f("drawerOpen"),
           ),
-          { ...widgetBlock('setup-payroll-statutory-holidays', { sp: data.currentParams }), when: f('onPayrollHolidays') },
+          {
+            ...widgetBlock("setup-payroll-statutory-holidays", { sp: data.currentParams }),
+            when: f("onPayrollHolidays"),
+          },
         ]),
-        when: f('isRegistryList'),
+        when: f("isRegistryList"),
       },
     ],
-  })
+  });
 }

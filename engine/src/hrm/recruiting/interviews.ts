@@ -64,19 +64,28 @@ const INTERVIEW_COLUMNS = sql`
 `;
 
 async function panelFor(exec: SqlExecutor, orgId: string, interviewId: string): Promise<string[]> {
-  const rows = await exec.execute<{ partyId: string }>(sql`
+  const rows = await exec.execute<{ partyId: string }>(
+    sql`
     select party_id as "partyId" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} order by party_id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.partyId);
 }
 
 function toDTO(row: InterviewRow, panelPartyIds: readonly string[]): InterviewDTO {
   if (!(INTERVIEW_KINDS as readonly string[]).includes(row.kind)) {
-    throw new RecruitingError("REFUSED", `interview ${row.id} carries unknown kind ${row.kind} — refusing a sitting the service cannot resolve`);
+    throw new RecruitingError(
+      "REFUSED",
+      `interview ${row.id} carries unknown kind ${row.kind} — refusing a sitting the service cannot resolve`,
+    );
   }
   if (!(INTERVIEW_STATUSES as readonly string[]).includes(row.status)) {
-    throw new RecruitingError("REFUSED", `interview ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`);
+    throw new RecruitingError(
+      "REFUSED",
+      `interview ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`,
+    );
   }
   return {
     ...row,
@@ -115,12 +124,17 @@ async function assertPanelVisible(
   if (panelPartyIds.length === 0) return;
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   for (const partyId of panelPartyIds) {
-    const row = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+    const row = (
+      await exec.execute<{ employerSubsidiaryId: string | null }>(
+        sql`
       select employer_subsidiary_id as "employerSubsidiaryId"
         from worker_employments
        where org_id = ${orgId} and worker_party_id = ${partyId}
        order by created_at limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row?.employerSubsidiaryId) {
       throw new RecruitingError(
         "REFUSED",
@@ -157,19 +171,33 @@ export async function scheduleInterview(query: ScheduleInterviewQuery): Promise<
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const applicationId = requireId(query.applicationId, "applicationId");
-  if (typeof query.kind !== "string" || !(INTERVIEW_KINDS as readonly string[]).includes(query.kind)) {
-    throw new RecruitingError("INVALID_INPUT", `interview kind must be one of ${INTERVIEW_KINDS.join(", ")} — check the kind`);
+  if (
+    typeof query.kind !== "string" ||
+    !(INTERVIEW_KINDS as readonly string[]).includes(query.kind)
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      `interview kind must be one of ${INTERVIEW_KINDS.join(", ")} — check the kind`,
+    );
   }
   if (typeof query.scheduledAt !== "string" || !isIsoInstantWithOffset(query.scheduledAt)) {
-    throw new RecruitingError("INVALID_INPUT", "scheduledAt must be an ISO instant with Z or an explicit UTC offset — include the timezone when scheduling");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "scheduledAt must be an ISO instant with Z or an explicit UTC offset — include the timezone when scheduling",
+    );
   }
   const durationMinutes =
     query.durationMinutes === undefined || query.durationMinutes === null
       ? null
-      : typeof query.durationMinutes === "number" && Number.isInteger(query.durationMinutes) && query.durationMinutes > 0
+      : typeof query.durationMinutes === "number" &&
+          Number.isInteger(query.durationMinutes) &&
+          query.durationMinutes > 0
         ? query.durationMinutes
         : (() => {
-            throw new RecruitingError("INVALID_INPUT", "durationMinutes is a positive integer of minutes when sent");
+            throw new RecruitingError(
+              "INVALID_INPUT",
+              "durationMinutes is a positive integer of minutes when sent",
+            );
           })();
   const location =
     query.location === undefined || query.location === null || query.location === ""
@@ -186,7 +214,10 @@ export async function scheduleInterview(query: ScheduleInterviewQuery): Promise<
           query.panelPartyIds.every((id) => typeof id === "string" && id.length > 0)
         ? [...new Set(query.panelPartyIds as string[])]
         : (() => {
-            throw new RecruitingError("INVALID_INPUT", "panelPartyIds must be an array of party ids");
+            throw new RecruitingError(
+              "INVALID_INPUT",
+              "panelPartyIds must be an array of party ids",
+            );
           })();
 
   return withOrgTransaction(orgId, async () => {
@@ -231,7 +262,9 @@ export async function scheduleInterview(query: ScheduleInterviewQuery): Promise<
         }
       }
     }
-    const inserted = (await db.execute<InterviewRow>(sql`
+    const inserted = (
+      await db.execute<InterviewRow>(
+        sql`
       insert into hrm_interviews
         (org_id, application_id, kind, scheduled_at, duration_minutes, location,
          kit_id, status, created_by, updated_by)
@@ -239,9 +272,15 @@ export async function scheduleInterview(query: ScheduleInterviewQuery): Promise<
               ${query.scheduledAt as string}::timestamptz, ${durationMinutes}, ${location},
               ${kitId}, 'scheduled', ${actorId}, ${actorId})
       returning ${INTERVIEW_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) {
-      throw new RecruitingError("REFUSED", "the interview was not stored — no row was written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "the interview was not stored — no row was written; retry the request",
+      );
     }
     for (const partyId of panelPartyIds) {
       const focusIds = query.panelFocus?.[partyId] ?? null;
@@ -276,11 +315,19 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const interviewId = requireId(query.interviewId, "interviewId");
-  if (typeof query.outcome !== "string" || !(INTERVIEW_OUTCOMES as readonly string[]).includes(query.outcome)) {
-    throw new RecruitingError("INVALID_INPUT", `interview outcome must be one of ${INTERVIEW_OUTCOMES.join(", ")} — check the outcome`);
+  if (
+    typeof query.outcome !== "string" ||
+    !(INTERVIEW_OUTCOMES as readonly string[]).includes(query.outcome)
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      `interview outcome must be one of ${INTERVIEW_OUTCOMES.join(", ")} — check the outcome`,
+    );
   }
   return withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<InterviewRow & { requisitionId: string }>(sql`
+    const row = (
+      await db.execute<InterviewRow & { requisitionId: string }>(
+        sql`
       select i.id, i.application_id as "applicationId", i.kind,
              i.scheduled_at as "scheduledAt", i.duration_minutes as "durationMinutes",
              i.location, i.status, i.outcome, i.feedback, i.scorecard,
@@ -288,7 +335,10 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
         from hrm_interviews i
         join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
        where i.org_id = ${orgId} and i.id = ${interviewId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }
@@ -299,7 +349,9 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
         `a ${row.status} interview cannot be completed — only scheduled sittings complete`,
       );
     }
-    const updated = (await db.execute<InterviewRow>(sql`
+    const updated = (
+      await db.execute<InterviewRow>(
+        sql`
       update hrm_interviews
          set status = 'completed', outcome = ${query.outcome as string},
              feedback = ${typeof query.feedback === "string" ? query.feedback : null},
@@ -307,9 +359,15 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
              completed_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${interviewId} and status = 'scheduled'
       returning ${INTERVIEW_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
-      throw new RecruitingError("STALE_REVISION", "the interview changed while completing — reload it and try again");
+      throw new RecruitingError(
+        "STALE_REVISION",
+        "the interview changed while completing — reload it and try again",
+      );
     }
     return toDTO(updated, await panelFor(db, orgId, interviewId));
   });
@@ -327,7 +385,9 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
   const actorId = requireActorId(query.actorId);
   const interviewId = requireId(query.interviewId, "interviewId");
   return withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<InterviewRow & { requisitionId: string }>(sql`
+    const row = (
+      await db.execute<InterviewRow & { requisitionId: string }>(
+        sql`
       select i.id, i.application_id as "applicationId", i.kind,
              i.scheduled_at as "scheduledAt", i.duration_minutes as "durationMinutes",
              i.location, i.status, i.outcome, i.feedback, i.scorecard,
@@ -335,7 +395,10 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
         from hrm_interviews i
         join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
        where i.org_id = ${orgId} and i.id = ${interviewId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }
@@ -346,14 +409,22 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
         `a ${row.status} interview cannot be cancelled — completed sittings stand as recorded`,
       );
     }
-    const updated = (await db.execute<InterviewRow>(sql`
+    const updated = (
+      await db.execute<InterviewRow>(
+        sql`
       update hrm_interviews
          set status = 'cancelled', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${interviewId} and status = 'scheduled'
       returning ${INTERVIEW_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
-      throw new RecruitingError("STALE_REVISION", "the interview changed while cancelling — reload it and try again");
+      throw new RecruitingError(
+        "STALE_REVISION",
+        "the interview changed while cancelling — reload it and try again",
+      );
     }
     // Cancelling kills the self-booking link in the same transaction:
     // outstanding proposed slots go declined and their token hashes are

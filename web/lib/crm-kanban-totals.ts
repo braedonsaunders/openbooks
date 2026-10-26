@@ -1,15 +1,15 @@
-import { cmp, sum } from '@openbooks/engine/money/money'
+import { cmp, sum } from "@openbooks/engine/money/money";
 
 export interface KanbanMoneyRow {
-  currency: string
-  projectedAmount: string
-  weightedAmount: string
+  currency: string;
+  projectedAmount: string;
+  weightedAmount: string;
 }
 
 export interface KanbanCurrencyTotal {
-  currency: string
-  projected: string
-  weighted: string
+  currency: string;
+  projected: string;
+  weighted: string;
 }
 
 /**
@@ -21,19 +21,19 @@ export interface KanbanCurrencyTotal {
  * guarantees one, so a blank is corruption that must be loud.
  */
 export function sumKanbanColumnByCurrency(rows: KanbanMoneyRow[]): KanbanCurrencyTotal[] {
-  const groups = new Map<string, { projected: string[]; weighted: string[] }>()
+  const groups = new Map<string, { projected: string[]; weighted: string[] }>();
   for (const row of rows) {
-    const currency = row.currency?.trim().toUpperCase()
+    const currency = row.currency?.trim().toUpperCase();
     if (!currency) {
-      throw new Error('kanban totals require an opportunity currency — refusing to invent one')
+      throw new Error("kanban totals require an opportunity currency — refusing to invent one");
     }
-    let group = groups.get(currency)
+    let group = groups.get(currency);
     if (!group) {
-      group = { projected: [], weighted: [] }
-      groups.set(currency, group)
+      group = { projected: [], weighted: [] };
+      groups.set(currency, group);
     }
-    group.projected.push(row.projectedAmount)
-    group.weighted.push(row.weightedAmount)
+    group.projected.push(row.projectedAmount);
+    group.weighted.push(row.weightedAmount);
   }
   return [...groups.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
@@ -41,10 +41,10 @@ export function sumKanbanColumnByCurrency(rows: KanbanMoneyRow[]): KanbanCurrenc
       currency,
       projected: sum(group.projected),
       weighted: sum(group.weighted),
-    }))
+    }));
 }
 
 /** Exact positivity gate for decimal amount strings (no float comparison). */
 export function isPositiveKanbanAmount(amount: string): boolean {
-  return cmp(amount, '0') > 0
+  return cmp(amount, "0") > 0;
 }

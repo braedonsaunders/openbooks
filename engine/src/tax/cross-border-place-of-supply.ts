@@ -80,15 +80,37 @@ export type CrossBorderOutcome =
   | { outcome: "export"; country: string; evidence: EvidenceKind[]; note: string };
 
 const EU_MEMBER_STATES: ReadonlySet<string> = new Set([
-  "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR",
-  "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO",
-  "SE", "SI", "SK",
+  "AT",
+  "BE",
+  "BG",
+  "CY",
+  "CZ",
+  "DE",
+  "DK",
+  "EE",
+  "ES",
+  "FI",
+  "FR",
+  "GR",
+  "HR",
+  "HU",
+  "IE",
+  "IT",
+  "LT",
+  "LU",
+  "LV",
+  "MT",
+  "NL",
+  "PL",
+  "PT",
+  "RO",
+  "SE",
+  "SI",
+  "SK",
 ]);
 
 /** Consumption states whose B2C rates and B2B reverse charge this module judges. */
-const SUPPORTED_SELLERS: ReadonlySet<string> = new Set([
-  ...EU_MEMBER_STATES, "GB", "AU", "CA",
-]);
+const SUPPORTED_SELLERS: ReadonlySet<string> = new Set([...EU_MEMBER_STATES, "GB", "AU", "CA"]);
 
 export const DEFAULT_EVIDENCE_PRECEDENCE: readonly EvidenceKind[] = [
   "billing_address",
@@ -179,9 +201,7 @@ export function assessEuDistanceThreshold(
  * and name the remedy; the caller raises them to the operator instead of
  * pricing the supply under a guessed country or a silent zero.
  */
-export function determineCrossBorderSupply(
-  input: CrossBorderSupplyInput,
-): CrossBorderOutcome {
+export function determineCrossBorderSupply(input: CrossBorderSupplyInput): CrossBorderOutcome {
   const sellerCountry = demandCountry(input.sellerCountry, "seller country");
   if (!SUPPORTED_SELLERS.has(sellerCountry)) {
     throw new CrossBorderTaxError(
@@ -226,7 +246,11 @@ export function determineCrossBorderSupply(
       country: idCountry,
       vatId: vatId.value,
       evidence: [],
-      note: reverseChargeNote({ supplyKind: input.supplyKind, scheme: vatId.scheme, country: idCountry }),
+      note: reverseChargeNote({
+        supplyKind: input.supplyKind,
+        scheme: vatId.scheme,
+        country: idCountry,
+      }),
     };
   }
 
@@ -265,7 +289,8 @@ export function determineCrossBorderSupply(
   const precedence = input.evidencePrecedence ?? DEFAULT_EVIDENCE_PRECEDENCE;
   const seen = new Map<EvidenceKind, string>();
   for (const piece of input.evidence) {
-    if (!seen.has(piece.kind)) seen.set(piece.kind, demandCountry(piece.country, `${piece.kind} country`));
+    if (!seen.has(piece.kind))
+      seen.set(piece.kind, demandCountry(piece.country, `${piece.kind} country`));
   }
   const ordered = [...seen.entries()].sort(
     ([a], [b]) => precedence.indexOf(a) - precedence.indexOf(b),
@@ -307,5 +332,3 @@ export function determineCrossBorderSupply(
     note: `B2C digital supply taxed in the customer's state under Articles 24b/24f (${first[0]} + ${second[0]})`,
   };
 }
-
-

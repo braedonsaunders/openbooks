@@ -63,7 +63,11 @@ const PASSWORD_REFUSAL_KEYS = {
 
 export type PasswordChangeRefusal =
   | { kind: "lockout"; seconds: number }
-  | { kind: "copy"; key: (typeof PASSWORD_REFUSAL_KEYS)[keyof typeof PASSWORD_REFUSAL_KEYS]; min?: number }
+  | {
+      kind: "copy";
+      key: (typeof PASSWORD_REFUSAL_KEYS)[keyof typeof PASSWORD_REFUSAL_KEYS];
+      min?: number;
+    }
   | { kind: "text"; text: string };
 
 /**
@@ -72,11 +76,16 @@ export type PasswordChangeRefusal =
  * keeps the server's message. The minimum length is the server's policy,
  * carried on the refusal, never a second copy here.
  */
-export async function passwordChangeRefusal(response: Response, requestFailed: string): Promise<PasswordChangeRefusal> {
+export async function passwordChangeRefusal(
+  response: Response,
+  requestFailed: string,
+): Promise<PasswordChangeRefusal> {
   const message = await readApiErrorMessage(response.clone(), requestFailed);
-  const body = (await response.json().catch(() => null)) as
-    | { code?: unknown; retryAfter?: unknown; minLength?: unknown }
-    | null;
+  const body = (await response.json().catch(() => null)) as {
+    code?: unknown;
+    retryAfter?: unknown;
+    minLength?: unknown;
+  } | null;
   if (body && typeof body.retryAfter === "number" && Number.isFinite(body.retryAfter)) {
     return { kind: "lockout", seconds: Math.max(0, Math.ceil(body.retryAfter)) };
   }
@@ -84,7 +93,9 @@ export async function passwordChangeRefusal(response: Response, requestFailed: s
   if (!code || !Object.hasOwn(PASSWORD_REFUSAL_KEYS, code)) return { kind: "text", text: message };
   const key = PASSWORD_REFUSAL_KEYS[code as keyof typeof PASSWORD_REFUSAL_KEYS];
   if (key !== "passwordTooShort") return { kind: "copy", key };
-  return typeof body?.minLength === "number" ? { kind: "copy", key, min: body.minLength } : { kind: "text", text: message };
+  return typeof body?.minLength === "number"
+    ? { kind: "copy", key, min: body.minLength }
+    : { kind: "text", text: message };
 }
 
 export function SecurityPanel() {
@@ -113,7 +124,10 @@ export function SecurityPanel() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [passwordNotice, setPasswordNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [passwordNotice, setPasswordNotice] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
@@ -121,15 +135,18 @@ export function SecurityPanel() {
     return Promise.all([
       jsonRequest("/api/auth/mfa", undefined, requestFailed, lockoutMessage),
       jsonRequest("/api/auth/sessions", undefined, requestFailed, lockoutMessage),
-    ]).then(([mfa, sessionResult]) => {
-      setStatus(mfa);
-      setSessions(sessionResult.sessions);
-      setLoadError(null);
-      setMessage(null);
-    }, (error: unknown) => {
-      setLoadError(securityErrorMessage(error, requestFailed));
-      throw error;
-    });
+    ]).then(
+      ([mfa, sessionResult]) => {
+        setStatus(mfa);
+        setSessions(sessionResult.sessions);
+        setLoadError(null);
+        setMessage(null);
+      },
+      (error: unknown) => {
+        setLoadError(securityErrorMessage(error, requestFailed));
+        throw error;
+      },
+    );
   }, [requestFailed, lockoutMessage]);
 
   useEffect(() => {
@@ -189,13 +206,14 @@ export function SecurityPanel() {
       }
       if (!response.ok) {
         const refusal = await passwordChangeRefusal(response, requestFailed);
-        const text = refusal.kind === "lockout"
-          ? lockoutMessage(refusal.seconds)
-          : refusal.kind === "text"
-            ? refusal.text
-            : refusal.key === "passwordTooShort"
-              ? t("passwordTooShort", { min: refusal.min ?? 0 })
-              : t(refusal.key);
+        const text =
+          refusal.kind === "lockout"
+            ? lockoutMessage(refusal.seconds)
+            : refusal.kind === "text"
+              ? refusal.text
+              : refusal.key === "passwordTooShort"
+                ? t("passwordTooShort", { min: refusal.min ?? 0 })
+                : t(refusal.key);
         setPasswordNotice({ tone: "error", text });
         return;
       }
@@ -209,7 +227,9 @@ export function SecurityPanel() {
     }
   }
 
-  const passwordSession = sessions.some((session) => session.current && session.authMethod === "password");
+  const passwordSession = sessions.some(
+    (session) => session.current && session.authMethod === "password",
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -217,8 +237,12 @@ export function SecurityPanel() {
         <Card>
           <CardContent className="space-y-5 p-6">
             <div>
-              <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("changePasswordTitle")}</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("changePasswordDescription")}</p>
+              <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
+                {t("changePasswordTitle")}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                {t("changePasswordDescription")}
+              </p>
             </div>
             <form
               className="space-y-3"
@@ -265,7 +289,10 @@ export function SecurityPanel() {
                   {passwordNotice.text}
                 </p>
               ) : null}
-              <Button type="submit" disabled={busy || !currentPassword || !newPassword || !confirmNewPassword}>
+              <Button
+                type="submit"
+                disabled={busy || !currentPassword || !newPassword || !confirmNewPassword}
+              >
                 {t("updatePassword")}
               </Button>
             </form>
@@ -276,7 +303,9 @@ export function SecurityPanel() {
       <Card>
         <CardContent className="space-y-5 p-6">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("authenticatorTitle")}</h2>
+            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
+              {t("authenticatorTitle")}
+            </h2>
             <p
               className={`mt-1 text-sm ${loadError ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-slate-400"}`}
               role={loadError ? "alert" : undefined}
@@ -285,9 +314,9 @@ export function SecurityPanel() {
                 ? tCommon("feedback.loading")
                 : loadError
                   ? loadError
-                : status?.enabled
-                  ? t("enabled", { count: status.recoveryCodesRemaining })
-                  : t("disabledDescription")}
+                  : status?.enabled
+                    ? t("enabled", { count: status.recoveryCodesRemaining })
+                    : t("disabledDescription")}
             </p>
           </div>
 
@@ -309,13 +338,25 @@ export function SecurityPanel() {
                   onChange={(event) => setPassword(event.target.value)}
                 />
               </div>
-              <Button disabled={busy || status === null || !password} onClick={() => void act(async () => {
-                setSetup(await jsonRequest("/api/auth/mfa", {
-                  method: "POST",
-                  body: JSON.stringify({ password }),
-                }, requestFailed, lockoutMessage));
-                setPassword("");
-              })}>
+              <Button
+                disabled={busy || status === null || !password}
+                onClick={() =>
+                  void act(async () => {
+                    setSetup(
+                      await jsonRequest(
+                        "/api/auth/mfa",
+                        {
+                          method: "POST",
+                          body: JSON.stringify({ password }),
+                        },
+                        requestFailed,
+                        lockoutMessage,
+                      ),
+                    );
+                    setPassword("");
+                  })
+                }
+              >
                 {t("setupAuthenticator")}
               </Button>
             </div>
@@ -324,22 +365,41 @@ export function SecurityPanel() {
           {setup && !status?.enabled ? (
             <div className="space-y-4">
               <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
-                <p className="text-sm font-medium text-slate-900 dark:text-white">{t("setupKey")}</p>
-                <code className="mt-2 block break-all font-mono text-sm text-teal-700 dark:text-teal-300">{setup.secret}</code>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">
+                  {t("setupKey")}
+                </p>
+                <code className="mt-2 block break-all font-mono text-sm text-teal-700 dark:text-teal-300">
+                  {setup.secret}
+                </code>
                 <p className="mt-2 text-xs text-slate-500">{t("setupKeyHelp")}</p>
                 <p className="mt-1 text-xs text-slate-500">{t("setupExpiry")}</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="confirm-mfa">{t("confirmCode")}</Label>
-                <Input id="confirm-mfa" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} />
+                <Input
+                  id="confirm-mfa"
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                />
               </div>
-              <Button disabled={busy || !code} onClick={() => void act(async () => {
-                const result = await jsonRequest("/api/auth/mfa", { method: "PUT", body: JSON.stringify({ code }) }, requestFailed, lockoutMessage);
-                setRecoveryCodes(result.recoveryCodes);
-                setSetup(null);
-                setCode("");
-                await reload();
-              })}>
+              <Button
+                disabled={busy || !code}
+                onClick={() =>
+                  void act(async () => {
+                    const result = await jsonRequest(
+                      "/api/auth/mfa",
+                      { method: "PUT", body: JSON.stringify({ code }) },
+                      requestFailed,
+                      lockoutMessage,
+                    );
+                    setRecoveryCodes(result.recoveryCodes);
+                    setSetup(null);
+                    setCode("");
+                    await reload();
+                  })
+                }
+              >
                 {t("enableMfa")}
               </Button>
             </div>
@@ -349,39 +409,81 @@ export function SecurityPanel() {
             <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
               <div className="space-y-1.5">
                 <Label htmlFor="security-code">{t("currentCode")}</Label>
-                <Input id="security-code" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} />
+                <Input
+                  id="security-code"
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="disable-password">{t("passwordRequired")}</Label>
-                <Input id="disable-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+                <Input
+                  id="disable-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
               </div>
-              <Button variant="outline" disabled={busy || !password || !code} onClick={() => void act(async () => {
-                const result = await jsonRequest("/api/auth/mfa/recovery", { method: "POST", body: JSON.stringify({ password, code }) }, requestFailed, lockoutMessage);
-                setRecoveryCodes(result.recoveryCodes);
-                setPassword("");
-                setCode("");
-                await reload();
-              })}>
+              <Button
+                variant="outline"
+                disabled={busy || !password || !code}
+                onClick={() =>
+                  void act(async () => {
+                    const result = await jsonRequest(
+                      "/api/auth/mfa/recovery",
+                      { method: "POST", body: JSON.stringify({ password, code }) },
+                      requestFailed,
+                      lockoutMessage,
+                    );
+                    setRecoveryCodes(result.recoveryCodes);
+                    setPassword("");
+                    setCode("");
+                    await reload();
+                  })
+                }
+              >
                 {t("replaceRecoveryCodes")}
               </Button>
-              <Button variant="destructive" disabled={busy || !password || !code} onClick={() => void act(async () => {
-                await jsonRequest("/api/auth/mfa", { method: "DELETE", body: JSON.stringify({ password, code }) }, requestFailed, lockoutMessage);
-                setPassword("");
-                setCode("");
-                setRecoveryCodes(null);
-                await reload();
-              })}>
+              <Button
+                variant="destructive"
+                disabled={busy || !password || !code}
+                onClick={() =>
+                  void act(async () => {
+                    await jsonRequest(
+                      "/api/auth/mfa",
+                      { method: "DELETE", body: JSON.stringify({ password, code }) },
+                      requestFailed,
+                      lockoutMessage,
+                    );
+                    setPassword("");
+                    setCode("");
+                    setRecoveryCodes(null);
+                    await reload();
+                  })
+                }
+              >
                 {t("disableMfa")}
               </Button>
             </div>
           ) : null}
 
           {recoveryCodes ? (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+            <div
+              className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+              role="status"
+            >
               <p className="font-semibold">{t("saveRecoveryCodes")}</p>
               <p className="mt-1 text-sm">{t("recoveryCodesHelp")}</p>
-              <pre className="mt-3 grid grid-cols-2 gap-1 whitespace-pre-wrap font-mono text-sm">{recoveryCodes.join("\n")}</pre>
-              <Button className="mt-3" variant="outline" onClick={() => void navigator.clipboard.writeText(recoveryCodes.join("\n"))}>
+              <pre className="mt-3 grid grid-cols-2 gap-1 whitespace-pre-wrap font-mono text-sm">
+                {recoveryCodes.join("\n")}
+              </pre>
+              <Button
+                className="mt-3"
+                variant="outline"
+                onClick={() => void navigator.clipboard.writeText(recoveryCodes.join("\n"))}
+              >
                 {t("copyCodes")}
               </Button>
             </div>
@@ -392,45 +494,80 @@ export function SecurityPanel() {
       <Card>
         <CardContent className="space-y-4 p-6">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("sessionsTitle")}</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("sessionsDescription")}</p>
+            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
+              {t("sessionsTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {t("sessionsDescription")}
+            </p>
           </div>
           <div className="divide-y divide-slate-200 dark:divide-slate-800">
             {loadError ? null : !loaded ? (
-              <p className="py-3 text-sm text-slate-500 dark:text-slate-400">{tCommon("feedback.loading")}</p>
+              <p className="py-3 text-sm text-slate-500 dark:text-slate-400">
+                {tCommon("feedback.loading")}
+              </p>
             ) : (
               sessions.map((session) => (
-              <div key={session.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="inline-flex gap-1 text-sm font-medium text-slate-900 dark:text-white">
-                    <span>{session.current ? t("thisSession") : t("browserSession")}</span>
-                    <span>{session.authMethod.toUpperCase()}</span>
-                  </p>
-                  <p className="text-xs text-slate-500">{t("lastUsed", { date: dateTime(new Date(session.lastSeenAt)) })}</p>
+                <div key={session.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="inline-flex gap-1 text-sm font-medium text-slate-900 dark:text-white">
+                      <span>{session.current ? t("thisSession") : t("browserSession")}</span>
+                      <span>{session.authMethod.toUpperCase()}</span>
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {t("lastUsed", { date: dateTime(new Date(session.lastSeenAt)) })}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      void act(async () => {
+                        await jsonRequest(
+                          `/api/auth/sessions/${session.id}`,
+                          { method: "DELETE" },
+                          requestFailed,
+                          lockoutMessage,
+                        );
+                        if (session.current) router.push("/login");
+                        else await reload();
+                      })
+                    }
+                  >
+                    {t("revoke")}
+                  </Button>
                 </div>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => {
-                  await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" }, requestFailed, lockoutMessage);
-                  if (session.current) router.push("/login");
-                  else await reload();
-                })}>
-                  {t("revoke")}
-                </Button>
-              </div>
               ))
             )}
           </div>
           {loaded && !loadError && sessions.length > 1 ? (
-            <Button variant="outline" disabled={busy} onClick={() => void act(async () => {
-              await jsonRequest("/api/auth/sessions", { method: "DELETE" }, requestFailed, lockoutMessage);
-              await reload();
-            })}>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  await jsonRequest(
+                    "/api/auth/sessions",
+                    { method: "DELETE" },
+                    requestFailed,
+                    lockoutMessage,
+                  );
+                  await reload();
+                })
+              }
+            >
               {t("revokeOtherSessions")}
             </Button>
           ) : null}
         </CardContent>
       </Card>
 
-      {message ? <p className="text-sm text-red-600 dark:text-red-400" role="alert">{message}</p> : null}
+      {message ? (
+        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          {message}
+        </p>
+      ) : null}
     </div>
   );
 }

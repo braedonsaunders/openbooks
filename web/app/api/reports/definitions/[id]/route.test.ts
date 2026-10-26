@@ -39,15 +39,13 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
 }
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksReportDefinitionSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksReportDefinitionSqlText =
+  sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -116,7 +114,10 @@ const mockSources = new Map<string, string>([
       export async function uniqueReportSlug(_orgId, slug) { return slug }
     `,
   ],
-  ["mock:catalog", `import { validateCustomQuery } from "@openbooks/reports"; export async function validateOrgReportQuery(_authz, query) { return validateCustomQuery(query) }`],
+  [
+    "mock:catalog",
+    `import { validateCustomQuery } from "@openbooks/reports"; export async function validateOrgReportQuery(_authz, query) { return validateCustomQuery(query) }`,
+  ],
 ]);
 
 const selfUrl = new URL(import.meta.url).href;
@@ -142,15 +143,13 @@ registerHooks({
     const source = mockSources.get(
       `mock:${new URL(url).searchParams.get("report-definition-mock")}`,
     );
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
 
 const routeUrl = new URL("./route.ts?report-definition-occ-test", import.meta.url).href;
-const { GET, PATCH } =
-  (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const DEFINITION_ID = "00000000-0000-4000-8000-0000000000d1";
 const REVISION = "2026-08-24T12:00:00.300001Z";
@@ -164,25 +163,19 @@ function reset(): void {
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
-    new Request(
-      `http://openbooks.test/api/reports/definitions/${DEFINITION_ID}`,
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    ),
+    new Request(`http://openbooks.test/api/reports/definitions/${DEFINITION_ID}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
     { params: Promise.resolve({ id: DEFINITION_ID }) },
   );
 }
 
 function get(): Promise<Response> {
-  return GET(
-    new Request(
-      `http://openbooks.test/api/reports/definitions/${DEFINITION_ID}`,
-    ),
-    { params: Promise.resolve({ id: DEFINITION_ID }) },
-  );
+  return GET(new Request(`http://openbooks.test/api/reports/definitions/${DEFINITION_ID}`), {
+    params: Promise.resolve({ id: DEFINITION_ID }),
+  });
 }
 
 test("GET exposes the lossless revision token consumed by autosave", async () => {
@@ -201,11 +194,7 @@ test("PATCH refuses an autosave without an exact revision token", async () => {
 
   assert.equal(response.status, 409);
   assert.match((await response.json()).error, /revision is required/);
-  assert.equal(
-    state.calls.filter((text) => text.includes("update report_definitions"))
-      .length,
-    0,
-  );
+  assert.equal(state.calls.filter((text) => text.includes("update report_definitions")).length, 0);
 });
 
 test("concurrent autosaves with one opened revision commit at most one definition", async () => {
@@ -220,9 +209,8 @@ test("concurrent autosaves with one opened revision commit at most one definitio
 
   assert.deepEqual(statuses, [200, 409]);
   assert.equal(
-    state.calls.filter(
-      (text) => text.includes("and to_char(") && text.includes("updated_at"),
-    ).length,
+    state.calls.filter((text) => text.includes("and to_char(") && text.includes("updated_at"))
+      .length,
     2,
     "both writes carry the atomic revision predicate",
   );
@@ -238,8 +226,5 @@ test("PATCH returns the fresh exact revision for the next queued autosave", asyn
   const response = await patch({ name: "Saved", expectedUpdatedAt: REVISION });
 
   assert.equal(response.status, 200);
-  assert.equal(
-    (await response.json()).definition.updated_at,
-    "2026-08-24T12:00:00.300002Z",
-  );
+  assert.equal((await response.json()).definition.updated_at, "2026-08-24T12:00:00.300002Z");
 });

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  closeDeliveryManualEmailIntentKey,
-  closeDeliveryManualJobId,
-} from "./close-delivery";
+import { closeDeliveryManualEmailIntentKey, closeDeliveryManualJobId } from "./close-delivery";
 
 const SCOPE = {
   packageId: "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70",

@@ -36,59 +36,74 @@ async function seedStraightLineAsset(
   return assetId;
 }
 
-test("a mid-period run names the next due line instead of an all-zero silence", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const seeded = await withBypassContext(async () => {
-      const actorId = (await seedFlowActors(org.orgId)).adminId;
-      const assetId = await seedStraightLineAsset(org.orgId, org.subsidiaryId, org.accounts);
-      return { actorId, assetId };
-    });
-    // The scratch spine is July 2026 only: one mapped July line (12000 / 12),
-    // later months stay beyond the calendared horizon.
-    const built = await buildSchedule(seeded.assetId, org.orgId, seeded.actorId, org.bookId);
-    assert.equal(built.lineCount, 1);
+test(
+  "a mid-period run names the next due line instead of an all-zero silence",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const seeded = await withBypassContext(async () => {
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        const assetId = await seedStraightLineAsset(org.orgId, org.subsidiaryId, org.accounts);
+        return { actorId, assetId };
+      });
+      // The scratch spine is July 2026 only: one mapped July line (12000 / 12),
+      // later months stay beyond the calendared horizon.
+      const built = await buildSchedule(seeded.assetId, org.orgId, seeded.actorId, org.bookId);
+      assert.equal(built.lineCount, 1);
 
-    // Mid-month the July period has not ended, so nothing posts — but the run
-    // must say which as-of it ran for and what is next.
-    const mid = await runDepreciation(org.orgId, "2026-07-15", seeded.actorId, seeded.assetId);
-    assert.equal(mid.posted, 0);
-    assert.equal(mid.skipped, 0);
-    assert.deepEqual(mid.problems, []);
-    assert.equal(mid.asOfDate, "2026-07-15");
-    assert.ok(mid.nextDue, "expected the run to name the next due line");
-    assert.equal(mid.nextDue.assetNumber, "NEXTDUE-1");
-    assert.equal(mid.nextDue.endsOn, "2026-07-31");
-    assert.equal(mid.nextDue.amount, "1000.0000");
-    // The scratch period is stored as '2026-07'; the run names it by fiscal position.
-    assert.equal(mid.nextDue.period, "P07 FY2026");
-    assert.deepEqual(mid.nextDue.periodRef, {
-      fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: "2026-07-01", endsOn: "2026-07-31",
-    });
+      // Mid-month the July period has not ended, so nothing posts — but the run
+      // must say which as-of it ran for and what is next.
+      const mid = await runDepreciation(org.orgId, "2026-07-15", seeded.actorId, seeded.assetId);
+      assert.equal(mid.posted, 0);
+      assert.equal(mid.skipped, 0);
+      assert.deepEqual(mid.problems, []);
+      assert.equal(mid.asOfDate, "2026-07-15");
+      assert.ok(mid.nextDue, "expected the run to name the next due line");
+      assert.equal(mid.nextDue.assetNumber, "NEXTDUE-1");
+      assert.equal(mid.nextDue.endsOn, "2026-07-31");
+      assert.equal(mid.nextDue.amount, "1000.0000");
+      // The scratch period is stored as '2026-07'; the run names it by fiscal position.
+      assert.equal(mid.nextDue.period, "P07 FY2026");
+      assert.deepEqual(mid.nextDue.periodRef, {
+        fiscalYear: 2026,
+        periodNumber: 7,
+        adjustment: false,
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-31",
+      });
 
-    // Control: once the period ends the same line posts, so the engine rule
-    // (post only ended periods) is intact — only the silence is fixed.
-    const end = await runDepreciation(org.orgId, "2026-07-31", seeded.actorId, seeded.assetId);
-    assert.equal(end.posted, 1);
-    assert.equal(end.totalAmount, "1000.0000");
-    assert.equal(end.entries[0]!.period, "P07 FY2026");
-    // The entry number keeps the stored period name (it is the journal's
-    // identity); the entry and line memos name the fiscal period.
-    const journal = (await withBypassContext(() => db.execute<{ entry_number: string; memo: string; line_memos: string[] }>(sql`
+      // Control: once the period ends the same line posts, so the engine rule
+      // (post only ended periods) is intact — only the silence is fixed.
+      const end = await runDepreciation(org.orgId, "2026-07-31", seeded.actorId, seeded.assetId);
+      assert.equal(end.posted, 1);
+      assert.equal(end.totalAmount, "1000.0000");
+      assert.equal(end.entries[0]!.period, "P07 FY2026");
+      // The entry number keeps the stored period name (it is the journal's
+      // identity); the entry and line memos name the fiscal period.
+      const journal = (
+        await withBypassContext(() =>
+          db.execute<{ entry_number: string; memo: string; line_memos: string[] }>(
+            sql`
       select e.entry_number, e.memo, array_agg(l.memo order by l.line_number) as line_memos
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${org.orgId} and e.id = ${end.entries[0]!.entryId}
-       group by e.entry_number, e.memo`, "objects")))[0]!;
-    assert.match(journal.entry_number, /^DEP-NEXTDUE-1-2026-07-/);
-    assert.equal(journal.memo, "Depreciation — Mid-period asset (P07 FY2026)");
-    assert.deepEqual(journal.line_memos, ["Depreciation P07 FY2026", "Depreciation P07 FY2026"]);
+       group by e.entry_number, e.memo`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.match(journal.entry_number, /^DEP-NEXTDUE-1-2026-07-/);
+      assert.equal(journal.memo, "Depreciation — Mid-period asset (P07 FY2026)");
+      assert.deepEqual(journal.line_memos, ["Depreciation P07 FY2026", "Depreciation P07 FY2026"]);
 
-    // And with nothing left unposted there is no next line to name.
-    const done = await runDepreciation(org.orgId, "2026-07-31", seeded.actorId, seeded.assetId);
-    assert.equal(done.posted, 0);
-    assert.equal(done.nextDue, null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // And with nothing left unposted there is no next line to name.
+      const done = await runDepreciation(org.orgId, "2026-07-31", seeded.actorId, seeded.assetId);
+      assert.equal(done.posted, 0);
+      assert.equal(done.nextDue, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

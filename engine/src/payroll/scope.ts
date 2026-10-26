@@ -18,7 +18,10 @@ export function payrollSubsidiaryScopeFilter(
   if (allowedSubsidiaryIds == null) return sql``;
   const ids = [...allowedSubsidiaryIds];
   return ids.length > 0
-    ? sql` and ${column} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    ? sql` and ${column} in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
     : sql` and false`;
 }
 
@@ -30,7 +33,10 @@ export function payrollSubsidiaryOutsideScopeFilter(
   if (allowedSubsidiaryIds == null) return sql`false`;
   const ids = [...allowedSubsidiaryIds];
   return ids.length > 0
-    ? sql`${column} is null or ${column} not in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    ? sql`${column} is null or ${column} not in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
     : sql`true`;
 }
 
@@ -42,7 +48,6 @@ export function payrollSubsidiaryInScope(
   if (allowedSubsidiaryIds == null) return true;
   return subsidiaryId != null && subsidiaryId !== "" && allowedSubsidiaryIds.has(subsidiaryId);
 }
-
 
 /** Whole-run totals are visible only when every stub and adjustment is visible. */
 export function payrollRunPopulationScopeFilter(
@@ -73,24 +78,39 @@ export async function lockAndCheckPayrollRunPopulation(
 ): Promise<void> {
   if (allowedSubsidiaryIds == null) return;
   const candidateIds = candidates.map((candidate) => candidate.id);
-  const participants = await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const participants = await runner.execute<{ id: string; subsidiary_id: string | null }>(
+    sql`
     select p.id,p.subsidiary_id from parties p where p.org_id=${orgId} and p.id in (
       select employee_party_id from pay_stubs where org_id=${orgId} and pay_run_document_id=${documentId}
       union select employee_party_id from pay_run_adjustments where org_id=${orgId} and pay_run_document_id=${documentId}
       union select unnest(${uuidArray(candidateIds)}::uuid[])
-    ) order by p.id for share`, "objects");
-  if (participants.some((party) => !payrollSubsidiaryInScope(allowedSubsidiaryIds, party.subsidiary_id))) {
+    ) order by p.id for share`,
+    "objects",
+  );
+  if (
+    participants.some(
+      (party) => !payrollSubsidiaryInScope(allowedSubsidiaryIds, party.subsidiary_id),
+    )
+  ) {
     throw new PayrollError("pay run not found");
   }
   const current = new Map(participants.map((party) => [party.id, party.subsidiary_id]));
   for (const candidate of candidates) {
     if (!current.has(candidate.id)) throw new PayrollError("pay run not found");
-    if (candidate.subsidiaryId !== undefined && current.get(candidate.id) !== candidate.subsidiaryId) {
+    if (
+      candidate.subsidiaryId !== undefined &&
+      current.get(candidate.id) !== candidate.subsidiaryId
+    ) {
       throw new PayrollError("pay run employee ownership changed — calculate again");
     }
   }
   // Also refuse orphaned evidence; inner ownership locks cannot return it.
-  const visible = (await runner.execute(sql`select 1 from pay_runs r where r.org_id=${orgId} and r.document_id=${documentId}
-    ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}`, "objects"))[0];
+  const visible = (
+    await runner.execute(
+      sql`select 1 from pay_runs r where r.org_id=${orgId} and r.document_id=${documentId}
+    ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}`,
+      "objects",
+    )
+  )[0];
   if (!visible) throw new PayrollError("pay run not found");
 }

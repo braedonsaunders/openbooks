@@ -33,8 +33,7 @@ stubModules({
       "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
     sonner:
       "export const toast={success(m){globalThis.__gridApproval.toasts.push({kind:'success',message:m})},error(m,o){globalThis.__gridApproval.toasts.push({kind:'error',message:m,options:o})},warning(){},info(){}};export function Toaster(){return null}",
-    "../../../lib/confirm":
-      "export async function confirmDialog(){return true}",
+    "../../../lib/confirm": "export async function confirmDialog(){return true}",
     "../../../lib/prompt": "export async function promptDialog(){return null}",
   },
 });
@@ -50,7 +49,15 @@ const { BusinessDateProvider } = await import("../../../components/business-date
 const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 function payload() {
   return {
@@ -96,9 +103,22 @@ async function mountGrid(approveBlockedReason: string | null) {
   script.posts = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if(url.startsWith('/api/flows/record-state'))return Response.json({approvalState:{status:'pending',pendingWith:[{name:'Assigned reviewer',since:'2026-07-14T00:00:00.000Z'}],myActions:approveBlockedReason?null:{gateId:'gate-1',signatureRequired:false},awaitingAnotherApprover:!!approveBlockedReason},history:[],failedRun:null,canRetry:false});
-    if (url==='/api/flows/gates/decide' && init?.method === "POST") {
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (url.startsWith("/api/flows/record-state"))
+      return Response.json({
+        approvalState: {
+          status: "pending",
+          pendingWith: [{ name: "Assigned reviewer", since: "2026-07-14T00:00:00.000Z" }],
+          myActions: approveBlockedReason ? null : { gateId: "gate-1", signatureRequired: false },
+          awaitingAnotherApprover: !!approveBlockedReason,
+        },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+      });
+    if (url === "/api/flows/gates/decide" && init?.method === "POST") {
       script.posts.push({ url, body: JSON.parse(String(init.body)) });
       return new Response(JSON.stringify(script.approveBody), {
         status: script.approveStatus,
@@ -150,10 +170,12 @@ function approveButton(): HTMLButtonElement | undefined {
 }
 
 test("a gate-owned week renders Approve disabled with its reason", async (t) => {
-  const { cleanup } = await mountGrid("This week is owned by a pending approval flow — decide it there.");
+  const { cleanup } = await mountGrid(
+    "This week is owned by a pending approval flow — decide it there.",
+  );
   t.after(cleanup);
   const button = approveButton();
-  assert.equal(button,undefined,"an unassigned viewer receives no alternate Approve action");
+  assert.equal(button, undefined, "an unassigned viewer receives no alternate Approve action");
   assert.match(document.body.textContent ?? "", /another approver|Assigned reviewer/);
   assert.equal(script.posts.length, 0, "a disabled button posts nothing");
 });

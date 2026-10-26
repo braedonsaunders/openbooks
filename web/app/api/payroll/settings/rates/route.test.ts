@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { stubModules, withPlatformDbTestSurface } from '../../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules, withPlatformDbTestSurface } from "../../../../../testing/stub-modules";
+import test from "node:test";
 
 /**
  * Statutory rate rows are effective-dated payroll inputs: the engine no longer
@@ -25,14 +25,14 @@ import test from 'node:test'
  */
 
 interface RouteState {
-  deleteAttempts: string[]
-  deleteResult: 'retired' | 'missing'
-  upsertAttempts: unknown[]
+  deleteAttempts: string[];
+  deleteResult: "retired" | "missing";
+  upsertAttempts: unknown[];
 }
 
-const stateKey = Symbol.for('openbooks.payroll-rates-route-test')
-const state: RouteState = { deleteAttempts: [], deleteResult: 'retired', upsertAttempts: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.payroll-rates-route-test");
+const state: RouteState = { deleteAttempts: [], deleteResult: "retired", upsertAttempts: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 // Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
 // mocked: the statutory-rate refusals this file pins are exactly the kind a
@@ -43,7 +43,7 @@ const featureGateStub = `
   export async function guardFeaturePermission() {
     return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
   }
-`
+`;
 
 stubModules({
   navigation: false,
@@ -110,120 +110,160 @@ stubModules({
       export function businessToday() { return '2026-09-19' }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?payroll-statutory-rates-refusal-test'
-const { DELETE, PUT } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?payroll-statutory-rates-refusal-test";
+const { DELETE, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const ROW_ID = '11111111-2222-4333-8444-555555555555'
+const ROW_ID = "11111111-2222-4333-8444-555555555555";
 
 function del(id: string): Promise<Response> {
-  return DELETE(new Request(`http://openbooks.test/api/payroll/settings/rates?id=${id}`, {
-    method: 'DELETE',
-  }))
+  return DELETE(
+    new Request(`http://openbooks.test/api/payroll/settings/rates?id=${id}`, {
+      method: "DELETE",
+    }),
+  );
 }
 
-test('retiring a statutory rate row succeeds with a 200, not the old refusal', async () => {
-  state.deleteAttempts.length = 0
-  state.deleteResult = 'retired'
+test("retiring a statutory rate row succeeds with a 200, not the old refusal", async () => {
+  state.deleteAttempts.length = 0;
+  state.deleteResult = "retired";
 
-  const response = await del(ROW_ID)
+  const response = await del(ROW_ID);
 
   // The old contract refused every existing row with a 422; Remove is now a
   // supersession, so the engine retires the row and the route reports success.
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true })
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
   // And the engine was genuinely reached, so this is the real retire path
   // rather than an early validation return that happens to share the status.
-  assert.deepEqual(state.deleteAttempts, [ROW_ID])
-})
+  assert.deepEqual(state.deleteAttempts, [ROW_ID]);
+});
 
-test('the response body is JSON, because the client reads the error out of it', async () => {
-  state.deleteAttempts.length = 0
-  state.deleteResult = 'missing'
+test("the response body is JSON, because the client reads the error out of it", async () => {
+  state.deleteAttempts.length = 0;
+  state.deleteResult = "missing";
 
-  const response = await del(ROW_ID)
+  const response = await del(ROW_ID);
 
   // StatutoryRatesSection.remove() used to do `await res.json()` BEFORE
   // checking res.ok, so a non-JSON error body threw a SyntaxError and the
   // toast showed a parse error instead of the message. Parsing must not
   // throw, on success or on failure.
-  assert.equal(response.headers.get('content-type')?.includes('application/json'), true)
-  await assert.doesNotReject(async () => { await response.json() })
-})
+  assert.equal(response.headers.get("content-type")?.includes("application/json"), true);
+  await assert.doesNotReject(async () => {
+    await response.json();
+  });
+});
 
-test('a row that does not exist is still a 404, not a success', async () => {
-  state.deleteAttempts.length = 0
-  state.deleteResult = 'missing'
+test("a row that does not exist is still a 404, not a success", async () => {
+  state.deleteAttempts.length = 0;
+  state.deleteResult = "missing";
 
-  const response = await del(ROW_ID)
+  const response = await del(ROW_ID);
 
-  assert.equal(response.status, 404)
-  assert.equal((await response.json()).error, 'not_found')
-})
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error, "not_found");
+});
 
-test('a malformed id is refused before the engine is reached', async () => {
-  state.deleteAttempts.length = 0
-  state.deleteResult = 'retired'
+test("a malformed id is refused before the engine is reached", async () => {
+  state.deleteAttempts.length = 0;
+  state.deleteResult = "retired";
 
-  const response = await del('not-a-uuid')
+  const response = await del("not-a-uuid");
 
-  assert.equal(response.status, 422)
-  assert.equal((await response.json()).error, 'invalid id')
-  assert.deepEqual(state.deleteAttempts, [])
-})
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).error, "invalid id");
+  assert.deepEqual(state.deleteAttempts, []);
+});
 
-test('a decimal-comma rate on PUT is refused with the dotted rewrite before the engine', async () => {
+test("a decimal-comma rate on PUT is refused with the dotted rewrite before the engine", async () => {
   // B3-SAL-01: '12,34' is a correctly-written decimal in seven installed
   // locales — persisting it as 1234 (or 12.34-by-guess) would mis-levy every
   // employee in scope. The house classifier names the dotted rewrite, and
   // the engine upsert is never reached.
-  state.upsertAttempts.length = 0
+  state.upsertAttempts.length = 0;
 
-  const refused = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '12,34' }, sourceCitation: 'rate notice', reason: 'test filing' }),
-  }))
-  const refusedJson = (await refused.json()) as { error?: string }
-  assert.equal(refused.status, 422)
-  assert.match(refusedJson.error ?? '', /EHT: Rate/)
-  assert.match(refusedJson.error ?? '', /must use "\." as the decimal point/)
-  assert.deepEqual(state.upsertAttempts, [])
+  const refused = await PUT(
+    new Request("http://openbooks.test/api/payroll/settings/rates", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        country: "CA",
+        rateKey: "eht",
+        taxYear: 2026,
+        values: { rate: "12,34" },
+        sourceCitation: "rate notice",
+        reason: "test filing",
+      }),
+    }),
+  );
+  const refusedJson = (await refused.json()) as { error?: string };
+  assert.equal(refused.status, 422);
+  assert.match(refusedJson.error ?? "", /EHT: Rate/);
+  assert.match(refusedJson.error ?? "", /must use "\." as the decimal point/);
+  assert.deepEqual(state.upsertAttempts, []);
 
-  const filed = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '0.027' }, sourceCitation: 'rate notice', reason: 'test filing' }),
-  }))
-  assert.equal(filed.status, 200)
-  assert.deepEqual(state.upsertAttempts, [{ values: { rate: '0.02700' }, sourceCitation: 'rate notice', reason: 'test filing' }])
-})
+  const filed = await PUT(
+    new Request("http://openbooks.test/api/payroll/settings/rates", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        country: "CA",
+        rateKey: "eht",
+        taxYear: 2026,
+        values: { rate: "0.027" },
+        sourceCitation: "rate notice",
+        reason: "test filing",
+      }),
+    }),
+  );
+  assert.equal(filed.status, 200);
+  assert.deepEqual(state.upsertAttempts, [
+    { values: { rate: "0.02700" }, sourceCitation: "rate notice", reason: "test filing" },
+  ]);
+});
 
-test('a PUT without a source citation and reason is refused before the engine', async () => {
+test("a PUT without a source citation and reason is refused before the engine", async () => {
   // Traceability: every new or changed row carries both. The route refuses
   // the write itself, so the engine upsert is never reached.
-  state.upsertAttempts.length = 0
+  state.upsertAttempts.length = 0;
 
-  const response = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '0.027' } }),
-  }))
-  assert.equal(response.status, 400)
-  assert.deepEqual(state.upsertAttempts, [])
-})
+  const response = await PUT(
+    new Request("http://openbooks.test/api/payroll/settings/rates", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        country: "CA",
+        rateKey: "eht",
+        taxYear: 2026,
+        values: { rate: "0.027" },
+      }),
+    }),
+  );
+  assert.equal(response.status, 400);
+  assert.deepEqual(state.upsertAttempts, []);
+});
 
-test('an unknown country on PUT is a 422 naming the implemented countries', async () => {
+test("an unknown country on PUT is a 422 naming the implemented countries", async () => {
   // `country` is any non-empty string off the request body, so payrollPack()
   // throws PayrollJurisdictionError for an unknown one. That call sits before
   // the handler's own try block, so uncaught it was a 500.
-  const response = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ country: 'XX', rateKey: 'eht', taxYear: 2026, values: {}, sourceCitation: 'rate notice', reason: 'test filing' }),
-  }))
+  const response = await PUT(
+    new Request("http://openbooks.test/api/payroll/settings/rates", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        country: "XX",
+        rateKey: "eht",
+        taxYear: 2026,
+        values: {},
+        sourceCitation: "rate notice",
+        reason: "test filing",
+      }),
+    }),
+  );
 
-  assert.equal(response.status, 422)
-  assert.match((await response.json()).error, /no payroll country pack for XX/)
-})
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /no payroll country pack for XX/);
+});

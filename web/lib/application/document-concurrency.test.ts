@@ -16,14 +16,20 @@ const IDEMPOTENCY_KEY = "document-occ-test-1";
 
 test("generic document reads replace the lossy Date with the exact persisted revision", () => {
   const lossy = new Date("2026-08-24T12:34:56.123Z");
-  const [record] = normalizeDocumentRecordRevisions("documents", [{
-    id: ID,
-    updated_at: lossy,
-    __documentRevision: EXACT_REVISION,
-  }]);
+  const [record] = normalizeDocumentRecordRevisions("documents", [
+    {
+      id: ID,
+      updated_at: lossy,
+      __documentRevision: EXACT_REVISION,
+    },
+  ]);
   assert.equal(record?.updated_at, EXACT_REVISION);
   assert.equal("__documentRevision" in (record ?? {}), false);
-  assert.equal(new Date(EXACT_REVISION).getTime(), lossy.getTime(), "the fixture proves Date loses the suffix");
+  assert.equal(
+    new Date(EXACT_REVISION).getTime(),
+    lossy.getTime(),
+    "the fixture proves Date loses the suffix",
+  );
 
   const ordinary = [{ id: ID, updated_at: lossy }];
   assert.equal(normalizeDocumentRecordRevisions("parties", ordinary), ordinary);
@@ -42,14 +48,20 @@ test("document update and correction tool schemas require the exact persisted to
     idempotencyKey: IDEMPOTENCY_KEY,
   };
   assert.equal(update.inputSchema.safeParse(updateInput).success, false);
-  assert.equal(update.inputSchema.safeParse({
-    ...updateInput,
-    body: { ...updateInput.body, expectedUpdatedAt: null },
-  }).success, false);
-  assert.equal(update.inputSchema.safeParse({
-    ...updateInput,
-    body: { ...updateInput.body, expectedUpdatedAt: "2026-08-24T12:34:56.123Z" },
-  }).success, false);
+  assert.equal(
+    update.inputSchema.safeParse({
+      ...updateInput,
+      body: { ...updateInput.body, expectedUpdatedAt: null },
+    }).success,
+    false,
+  );
+  assert.equal(
+    update.inputSchema.safeParse({
+      ...updateInput,
+      body: { ...updateInput.body, expectedUpdatedAt: "2026-08-24T12:34:56.123Z" },
+    }).success,
+    false,
+  );
   const parsedUpdate = update.inputSchema.safeParse({
     ...updateInput,
     body: { ...updateInput.body, expectedUpdatedAt: EXACT_REVISION },
@@ -97,10 +109,13 @@ test("document update and correction tool schemas require the exact persisted to
     idempotencyKey: IDEMPOTENCY_KEY,
   };
   assert.equal(correction.inputSchema.safeParse(correctionInput).success, false);
-  assert.equal(correction.inputSchema.safeParse({
-    ...correctionInput,
-    correction: { ...correctionInput.correction, expectedUpdatedAt: null },
-  }).success, false);
+  assert.equal(
+    correction.inputSchema.safeParse({
+      ...correctionInput,
+      correction: { ...correctionInput.correction, expectedUpdatedAt: null },
+    }).success,
+    false,
+  );
   const parsedCorrection = correction.inputSchema.safeParse({
     ...correctionInput,
     correction: { ...correctionInput.correction, expectedUpdatedAt: EXACT_REVISION },
@@ -116,10 +131,11 @@ test("a before_submit script veto reaches the operator as a 422 carrying the scr
   const reason = 'submission vetoed by script "Require PO": provide a purchase order';
   assert.throws(
     () => domainFailure(new SubmitError(reason)),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "invalid_input"
-      && error.status === 422
-      && error.message === reason,
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "invalid_input" &&
+      error.status === 422 &&
+      error.message === reason,
   );
 });
 
@@ -130,11 +146,11 @@ test("stale generic and correction writes surface a 409 conflict", () => {
   ]) {
     assert.throws(
       invoke,
-      (error: unknown) => error instanceof ApplicationError
-        && error.code === "conflict"
-        && error.status === 409
-        && error.message === "stale document revision",
+      (error: unknown) =>
+        error instanceof ApplicationError &&
+        error.code === "conflict" &&
+        error.status === 409 &&
+        error.message === "stale document revision",
     );
   }
 });
-

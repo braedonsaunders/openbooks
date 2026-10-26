@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { stubModules } from '../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { stubModules } from "../testing/stub-modules.ts";
 
 /**
  * Bank-file boundary: generating a file moves money, so POST demands
@@ -11,37 +11,37 @@ import { stubModules } from '../testing/stub-modules.ts'
  * live behind the sibling [fileId] route, where release is audited.
  */
 
-const RUN_ID = '11111111-1111-4111-8111-111111111111'
-const PROFILE = '22222222-2222-4222-8222-222222222222'
+const RUN_ID = "11111111-1111-4111-8111-111111111111";
+const PROFILE = "22222222-2222-4222-8222-222222222222";
 
-const bankKey = Symbol.for('openbooks.bank-file-route-test')
+const bankKey = Symbol.for("openbooks.bank-file-route-test");
 const bankState: { granted: Set<string>; generated: unknown[]; errorToThrow: unknown } = {
   granted: new Set(),
   generated: [],
   errorToThrow: null,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[bankKey] = bankState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[bankKey] = bankState;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankFileSqlText = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankFileSqlText = sqlText;
 
-const dbUrl = import.meta.resolve('@openbooks/engine/platform/db')
+const dbUrl = import.meta.resolve("@openbooks/engine/platform/db");
 
 const mockSources = new Map<string, string>([
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.bank-file-route-test')]
@@ -51,12 +51,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ["mock:authz", "export function guardSubsidiaryScope() { return null }"],
   [
-    'mock:authz',
-    'export function guardSubsidiaryScope() { return null }',
-  ],
-  [
-    'mock:db',
+    "mock:db",
     `
       export * from '${dbUrl}'
       const state = globalThis[Symbol.for('openbooks.bank-file-route-test')]
@@ -72,7 +69,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:bank-file',
+    "mock:bank-file",
     `
       export const PAYROLL_BANK_FILE_FORMATS = { EFT: { enabled: true, currency: 'CAD' } }
       export async function payRunBankFilePopulation() { return { rail: 'EFT', members: [] } }
@@ -80,7 +77,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:bank-file-artifact',
+    "mock:bank-file-artifact",
     `
       const state = globalThis[Symbol.for('openbooks.bank-file-route-test')]
       export async function generatePayRunBankFile(input) {
@@ -95,124 +92,134 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
-const SELF_URL = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
+const SELF_URL = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['../../../../../../lib/feature-gates', mockUrl('feature-gates')],
-  ['@/lib/feature-gates', mockUrl('feature-gates')],
-  ['../../../../../../lib/authz', mockUrl('authz')],
-  ['@/lib/authz', mockUrl('authz')],
-  ['@openbooks/engine/platform/db', mockUrl('db')],
-  ['@openbooks/engine/payroll/bank-file', mockUrl('bank-file')],
-  ['@openbooks/engine/payroll/bank-file-artifact', mockUrl('bank-file-artifact')],
-])
+  ["../../../../../../lib/feature-gates", mockUrl("feature-gates")],
+  ["@/lib/feature-gates", mockUrl("feature-gates")],
+  ["../../../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["@openbooks/engine/platform/db", mockUrl("db")],
+  ["@openbooks/engine/payroll/bank-file", mockUrl("bank-file")],
+  ["@openbooks/engine/payroll/bank-file-artifact", mockUrl("bank-file-artifact")],
+]);
 
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    const name = parsed.searchParams.get('mock')
-    const source = name ? mockSources.get(`mock:${name}`) : undefined
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const parsed = new URL(url);
+    const name = parsed.searchParams.get("mock");
+    const source = name ? mockSources.get(`mock:${name}`) : undefined;
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const bankFileUrl = '../app/api/payroll/runs/[id]/bank-file/route.ts?bank-file-route'
-const { GET, POST } = (await import(bankFileUrl)) as typeof import('../app/api/payroll/runs/[id]/bank-file/route.ts')
-after(() => hooks.deregister())
+const bankFileUrl = "../app/api/payroll/runs/[id]/bank-file/route.ts?bank-file-route";
+const { GET, POST } = (await import(
+  bankFileUrl
+)) as typeof import("../app/api/payroll/runs/[id]/bank-file/route.ts");
+after(() => hooks.deregister());
 
-const NO_STORE = 'no-store'
+const NO_STORE = "no-store";
 
 function asReader() {
-  bankState.granted = new Set(['payroll.read'])
-  bankState.generated = []
-  bankState.errorToThrow = null
+  bankState.granted = new Set(["payroll.read"]);
+  bankState.generated = [];
+  bankState.errorToThrow = null;
 }
 
 function asRunner() {
-  bankState.granted = new Set(['payroll.read', 'payroll.run'])
-  bankState.generated = []
-  bankState.errorToThrow = null
+  bankState.granted = new Set(["payroll.read", "payroll.run"]);
+  bankState.generated = [];
+  bankState.errorToThrow = null;
 }
 
-test('generating a bank file demands run authority; the panel needs only read', async () => {
-  asReader()
+test("generating a bank file demands run authority; the panel needs only read", async () => {
+  asReader();
   const denied = await POST(
     new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ paymentBankProfileId: PROFILE }),
     }),
     { params: Promise.resolve({ id: RUN_ID }) },
-  )
-  assert.equal(denied.status, 403)
-  assert.deepEqual(bankState.generated, [], 'no file may be generated for a read-only caller')
+  );
+  assert.equal(denied.status, 403);
+  assert.deepEqual(bankState.generated, [], "no file may be generated for a read-only caller");
 
-  const panel = await GET(new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`), {
-    params: Promise.resolve({ id: RUN_ID }),
-  })
-  assert.equal(panel.status, 200)
-})
+  const panel = await GET(
+    new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`),
+    {
+      params: Promise.resolve({ id: RUN_ID }),
+    },
+  );
+  assert.equal(panel.status, 200);
+});
 
-test('bank-file responses are never cached', async () => {
-  asRunner()
-  const panel = await GET(new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`), {
-    params: Promise.resolve({ id: RUN_ID }),
-  })
-  assert.equal(panel.headers.get('cache-control'), NO_STORE)
+test("bank-file responses are never cached", async () => {
+  asRunner();
+  const panel = await GET(
+    new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`),
+    {
+      params: Promise.resolve({ id: RUN_ID }),
+    },
+  );
+  assert.equal(panel.headers.get("cache-control"), NO_STORE);
 
   const generated = await POST(
     new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ paymentBankProfileId: PROFILE }),
     }),
     { params: Promise.resolve({ id: RUN_ID }) },
-  )
-  assert.equal(generated.headers.get('cache-control'), NO_STORE)
+  );
+  assert.equal(generated.headers.get("cache-control"), NO_STORE);
 
-  bankState.errorToThrow = new PayrollError('run is not committed')
+  bankState.errorToThrow = new PayrollError("run is not committed");
   const refused = await POST(
     new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ paymentBankProfileId: PROFILE }),
     }),
     { params: Promise.resolve({ id: RUN_ID }) },
-  )
-  bankState.errorToThrow = null
-  assert.equal(refused.status, 409)
-  assert.equal(refused.headers.get('cache-control'), NO_STORE)
-})
+  );
+  bankState.errorToThrow = null;
+  assert.equal(refused.status, 409);
+  assert.equal(refused.headers.get("cache-control"), NO_STORE);
+});
 
-test('generate returns artifact metadata as JSON, never bytes', async () => {
-  asRunner()
+test("generate returns artifact metadata as JSON, never bytes", async () => {
+  asRunner();
   const response = await POST(
     new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}/bank-file`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ paymentBankProfileId: PROFILE }),
     }),
     { params: Promise.resolve({ id: RUN_ID }) },
-  )
-  assert.equal(response.status, 200)
-  assert.match(response.headers.get('content-type') ?? '', /application\/json/)
-  assert.deepEqual(await response.json(), { artifact: { fileId: 'file-1', byteCount: 120 } })
-  assert.deepEqual(bankState.generated, [{
-    orgId: 'org-1',
-    documentId: RUN_ID,
-    actorId: 'user-1',
-    paymentBankProfileId: PROFILE,
-    supersedeReason: null,
-    allowedSubsidiaryIds: null,
-  }])
-})
+  );
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  assert.deepEqual(await response.json(), { artifact: { fileId: "file-1", byteCount: 120 } });
+  assert.deepEqual(bankState.generated, [
+    {
+      orgId: "org-1",
+      documentId: RUN_ID,
+      actorId: "user-1",
+      paymentBankProfileId: PROFILE,
+      supersedeReason: null,
+      allowedSubsidiaryIds: null,
+    },
+  ]);
+});

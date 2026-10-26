@@ -9,8 +9,10 @@ import type { SimOrg } from "./world.ts";
  * None of these mutate; they are the "screens" the team looks at.
  */
 
-async function rows<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
-  const r = (await db.execute<T>(q, "objects"));
+async function rows<T extends Record<string, unknown> = Record<string, unknown>>(
+  q: ReturnType<typeof sql>,
+) {
+  const r = await db.execute<T>(q, "objects");
   return r;
 }
 
@@ -35,11 +37,25 @@ export async function expenseInbox(world: SimOrg) {
 
 /** Open (posted, unpaid) AP items by vendor — what a pay run would consider. */
 export async function apOpen(world: SimOrg) {
-  const out: { vendor: string; vendorId: string; lineId: string; documentId: string; open: string; dueDate: string | null }[] = [];
+  const out: {
+    vendor: string;
+    vendorId: string;
+    lineId: string;
+    documentId: string;
+    open: string;
+    dueDate: string | null;
+  }[] = [];
   for (const v of world.vendors) {
     const items = await collectibleOpenItems(world.orgId, v.id, "ap");
     for (const i of items.filter((x) => x.kind === "vendor_bill")) {
-      out.push({ vendor: v.name, vendorId: v.id, lineId: i.lineId, documentId: i.documentId, open: i.open, dueDate: i.dueDate });
+      out.push({
+        vendor: v.name,
+        vendorId: v.id,
+        lineId: i.lineId,
+        documentId: i.documentId,
+        open: i.open,
+        dueDate: i.dueDate,
+      });
     }
   }
   return out.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
@@ -66,16 +82,37 @@ export async function arReceipts(world: SimOrg) {
 
 /** AR aging as of a date: open items bucketed by days past due. */
 export async function arAging(world: SimOrg, asOf: string) {
-  const out: { customer: string; number: string; open: string; dueDate: string | null; daysPastDue: number; bucket: string }[] = [];
+  const out: {
+    customer: string;
+    number: string;
+    open: string;
+    dueDate: string | null;
+    daysPastDue: number;
+    bucket: string;
+  }[] = [];
   for (const c of world.customers) {
     const items = await collectibleOpenItems(world.orgId, c.id, "ar");
     for (const i of items.filter((x) => x.kind === "customer_invoice")) {
-      const dpd = i.dueDate ? Math.floor((Date.parse(asOf) - Date.parse(i.dueDate)) / 86_400_000) : 0;
-      const bucket = dpd <= 0 ? "current" : dpd <= 30 ? "1-30" : dpd <= 60 ? "31-60" : dpd <= 90 ? "61-90" : "90+";
-      const docNum = await db.execute<{ document_number: string }>(sql`select document_number from documents where id = ${i.documentId}`, "objects");
+      const dpd = i.dueDate
+        ? Math.floor((Date.parse(asOf) - Date.parse(i.dueDate)) / 86_400_000)
+        : 0;
+      const bucket =
+        dpd <= 0
+          ? "current"
+          : dpd <= 30
+            ? "1-30"
+            : dpd <= 60
+              ? "31-60"
+              : dpd <= 90
+                ? "61-90"
+                : "90+";
+      const docNum = await db.execute<{ document_number: string }>(
+        sql`select document_number from documents where id = ${i.documentId}`,
+        "objects",
+      );
       out.push({
         customer: c.name,
-        number: (docNum[0]?.document_number) ?? "",
+        number: docNum[0]?.document_number ?? "",
         open: i.open,
         dueDate: i.dueDate,
         daysPastDue: dpd,
@@ -119,7 +156,12 @@ export async function projects(world: SimOrg) {
 
 /** Field crew and their cost/bill rates (T&M). */
 export function crew(world: SimOrg) {
-  return world.employees.map((e) => ({ id: e.id, name: e.name, costRate: e.costRate, billRate: e.billRate }));
+  return world.employees.map((e) => ({
+    id: e.id,
+    name: e.name,
+    costRate: e.costRate,
+    billRate: e.billRate,
+  }));
 }
 
 /** Unbilled billable time by project (hours, bill value, cost) — the T&M billing queue. */

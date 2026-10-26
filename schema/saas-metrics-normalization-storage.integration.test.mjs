@@ -87,13 +87,18 @@ async function pendingRequest(client, orgId, month) {
   return { id, requester };
 }
 
-test("metric reporting columns are nullable and both evidence tables force row-level security",
+test(
+  "metric reporting columns are nullable and both evidence tables force row-level security",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: connectionString() });
     await client.connect();
     try {
-      for (const table of ["saas_metrics_monthly", "saas_metrics_facts_monthly", "saas_metrics_cohort_monthly"]) {
+      for (const table of [
+        "saas_metrics_monthly",
+        "saas_metrics_facts_monthly",
+        "saas_metrics_cohort_monthly",
+      ]) {
         const cols = await client.query(
           `select column_name, is_nullable from information_schema.columns
             where table_schema = 'public' and table_name = $1
@@ -101,7 +106,8 @@ test("metric reporting columns are nullable and both evidence tables force row-l
           [table],
         );
         assert.equal(cols.rows.length, 3, `${table} carries the reporting triple`);
-        for (const row of cols.rows) assert.equal(row.is_nullable, "YES", `${table}.${row.column_name} stays nullable`);
+        for (const row of cols.rows)
+          assert.equal(row.is_nullable, "YES", `${table}.${row.column_name} stays nullable`);
       }
       for (const table of ["saas_metrics_fx_evidence", "saas_metrics_normalization_requests"]) {
         const rel = await client.query(`select to_regclass($1) as rel`, [`public.${table}`]);
@@ -110,7 +116,10 @@ test("metric reporting columns are nullable and both evidence tables force row-l
           `select relrowsecurity, relforcerowsecurity from pg_class where oid = $1::regclass`,
           [`public.${table}`],
         );
-        assert.deepEqual([rls.rows[0].relrowsecurity, rls.rows[0].relforcerowsecurity], [true, true]);
+        assert.deepEqual(
+          [rls.rows[0].relrowsecurity, rls.rows[0].relforcerowsecurity],
+          [true, true],
+        );
       }
     } finally {
       await client.end();
@@ -137,10 +146,13 @@ test("tenant isolation holds on both evidence tables", { skip: !DB }, async () =
     await client.query("set local role openbooks_app");
     await client.query("select set_config('app.bypass_rls', 'off', true)");
     await client.query("select set_config('app.current_org', $1, true)", [orgB]);
-    const hidden = await client.query(`select id from saas_metrics_fx_evidence where org_id = $1`, [orgA]);
+    const hidden = await client.query(`select id from saas_metrics_fx_evidence where org_id = $1`, [
+      orgA,
+    ]);
     assert.equal(hidden.rows.length, 0, "org B cannot read org A FX evidence");
     const hiddenReq = await client.query(
-      `select id from saas_metrics_normalization_requests where id = $1`, [reqA],
+      `select id from saas_metrics_normalization_requests where id = $1`,
+      [reqA],
     );
     assert.equal(hiddenReq.rows.length, 0, "org B cannot read org A requests");
     await client.query("savepoint before_cross_insert");
@@ -166,7 +178,8 @@ test("tenant isolation holds on both evidence tables", { skip: !DB }, async () =
   }
 });
 
-test("metric reporting triple is all-null-or-complete with a usable shape refusal",
+test(
+  "metric reporting triple is all-null-or-complete with a usable shape refusal",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: connectionString() });
@@ -177,7 +190,10 @@ test("metric reporting triple is all-null-or-complete with a usable shape refusa
       const orgId = await seedOrg(client, "triple");
       const subId = await seedSubsidiary(client, orgId);
       const base = {
-        id: randomUUID(), org_id: orgId, subsidiary_id: subId, month: "2026-09-01",
+        id: randomUUID(),
+        org_id: orgId,
+        subsidiary_id: subId,
+        month: "2026-09-01",
       };
       const amounts = `0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'recognised', 'hash'`;
       await client.query(
@@ -254,7 +270,8 @@ test("metric reporting triple is all-null-or-complete with a usable shape refusa
         [base.id],
       );
       const stored = await client.query(
-        `select reporting_currency from saas_metrics_facts_monthly where id = $1`, [base.id],
+        `select reporting_currency from saas_metrics_facts_monthly where id = $1`,
+        [base.id],
       );
       assert.equal(stored.rows[0].reporting_currency, "USD");
       await client.query("rollback");
@@ -287,13 +304,10 @@ test("FX evidence is append-only with a remedy-naming refusal", { skip: !DB }, a
       `delete from saas_metrics_fx_evidence where id = '${evId}'`,
     ]) {
       await client.query("savepoint before_immutable");
-      await assert.rejects(
-        client.query(statement),
-        (error) => {
-          assert.match(String(error), /instead/);
-          return true;
-        },
-      );
+      await assert.rejects(client.query(statement), (error) => {
+        assert.match(String(error), /instead/);
+        return true;
+      });
       await client.query("rollback to savepoint before_immutable");
     }
     await client.query("savepoint before_shape");
@@ -338,7 +352,10 @@ test("FX evidence is append-only with a remedy-naming refusal", { skip: !DB }, a
         [orgId],
       ),
       (error) => {
-        assert.ok(["23514", "22P02"].includes(postgresCode(error)), `refused contradiction, got ${postgresCode(error)}`);
+        assert.ok(
+          ["23514", "22P02"].includes(postgresCode(error)),
+          `refused contradiction, got ${postgresCode(error)}`,
+        );
         return true;
       },
     );
@@ -352,120 +369,183 @@ test("FX evidence is append-only with a remedy-naming refusal", { skip: !DB }, a
   }
 });
 
-test("FX evidence preserves full observation provenance byte-equivalent", { skip: !DB }, async () => {
-  const client = new pg.Client({ connectionString: connectionString() });
-  await client.connect();
-  try {
-    await client.query("begin");
-    await client.query("select set_config('app.bypass_rls', 'on', true)");
-    const orgId = await seedOrg(client, "provenance");
-    // Two direct September observations whose derived rates 0.73 and 0.71
-    // average to exactly the declared envelope rate. Observation ids are
-    // pinned UUIDs so the canonical digest below is reproducible byte-for-byte.
-    const obsFirst = "00000000-0000-4000-8000-000000000001";
-    const obsMid = "00000000-0000-4000-8000-000000000002";
-    const observations = [
-      { id: obsFirst, asOf: "2026-09-01", source: "bank_of_canada", storedRate: "0.7300000000", updatedAt: "2026-09-01T00:00:00.000000Z", direction: "direct", derivedRate: "0.7300000000" },
-      { id: obsMid, asOf: "2026-09-15", source: "bank_of_canada", storedRate: "0.7100000000", updatedAt: "2026-09-15T00:00:00.000000Z", direction: "direct", derivedRate: "0.7100000000" },
-    ];
-    // Canonical digest payload key order: v, kind, from, to, scope,
-    // policy, table, rate, observations. sameCurrencyPar is returned in the
-    // selection but intentionally excluded from the digest payload.
-    const digestPayload = {
-      v: 1,
-      kind: "calendar-month-average",
-      from: "CAD",
-      to: "USD",
-      scope: { year: 2026, month: 9, monthStart: "2026-09-01", monthEnd: "2026-09-30" },
-      policy: "direct-or-inverse-spot",
-      table: "fx_rates",
-      rate: "0.7200000000",
-      observations,
-    };
-    const computedDigest = createHash("sha256").update(JSON.stringify(digestPayload), "utf8").digest("hex");
-    assert.equal(computedDigest, SELECTION_DIGEST, "canonical digest pins the exact v1 payload bytes");
-    const selection = {
-      policy: "direct-or-inverse-spot",
-      table: "fx_rates",
-      kind: "calendar-month-average",
-      year: 2026,
-      month: 9,
-      monthStart: "2026-09-01",
-      monthEnd: "2026-09-30",
-      from: "CAD",
-      to: "USD",
-      rate: "0.7200000000",
-      digest: computedDigest,
-      sameCurrencyPar: false,
-      observations,
-    };
-    const provenance = {
-      base_currency: "CAD",
-      quote_currency: "USD",
-      rate: "0.7200000000",
-      source: "bank_of_canada",
-      quoted_at: "2026-09-01T00:00:00Z",
-      inputs_hash: DIGEST_A,
-      selection,
-    };
-    const evId = randomUUID();
-    await client.query(
-      `insert into saas_metrics_fx_evidence
+test(
+  "FX evidence preserves full observation provenance byte-equivalent",
+  { skip: !DB },
+  async () => {
+    const client = new pg.Client({ connectionString: connectionString() });
+    await client.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.bypass_rls', 'on', true)");
+      const orgId = await seedOrg(client, "provenance");
+      // Two direct September observations whose derived rates 0.73 and 0.71
+      // average to exactly the declared envelope rate. Observation ids are
+      // pinned UUIDs so the canonical digest below is reproducible byte-for-byte.
+      const obsFirst = "00000000-0000-4000-8000-000000000001";
+      const obsMid = "00000000-0000-4000-8000-000000000002";
+      const observations = [
+        {
+          id: obsFirst,
+          asOf: "2026-09-01",
+          source: "bank_of_canada",
+          storedRate: "0.7300000000",
+          updatedAt: "2026-09-01T00:00:00.000000Z",
+          direction: "direct",
+          derivedRate: "0.7300000000",
+        },
+        {
+          id: obsMid,
+          asOf: "2026-09-15",
+          source: "bank_of_canada",
+          storedRate: "0.7100000000",
+          updatedAt: "2026-09-15T00:00:00.000000Z",
+          direction: "direct",
+          derivedRate: "0.7100000000",
+        },
+      ];
+      // Canonical digest payload key order: v, kind, from, to, scope,
+      // policy, table, rate, observations. sameCurrencyPar is returned in the
+      // selection but intentionally excluded from the digest payload.
+      const digestPayload = {
+        v: 1,
+        kind: "calendar-month-average",
+        from: "CAD",
+        to: "USD",
+        scope: { year: 2026, month: 9, monthStart: "2026-09-01", monthEnd: "2026-09-30" },
+        policy: "direct-or-inverse-spot",
+        table: "fx_rates",
+        rate: "0.7200000000",
+        observations,
+      };
+      const computedDigest = createHash("sha256")
+        .update(JSON.stringify(digestPayload), "utf8")
+        .digest("hex");
+      assert.equal(
+        computedDigest,
+        SELECTION_DIGEST,
+        "canonical digest pins the exact v1 payload bytes",
+      );
+      const selection = {
+        policy: "direct-or-inverse-spot",
+        table: "fx_rates",
+        kind: "calendar-month-average",
+        year: 2026,
+        month: 9,
+        monthStart: "2026-09-01",
+        monthEnd: "2026-09-30",
+        from: "CAD",
+        to: "USD",
+        rate: "0.7200000000",
+        digest: computedDigest,
+        sameCurrencyPar: false,
+        observations,
+      };
+      const provenance = {
+        base_currency: "CAD",
+        quote_currency: "USD",
+        rate: "0.7200000000",
+        source: "bank_of_canada",
+        quoted_at: "2026-09-01T00:00:00Z",
+        inputs_hash: DIGEST_A,
+        selection,
+      };
+      const evId = randomUUID();
+      await client.query(
+        `insert into saas_metrics_fx_evidence
          (id, org_id, month, base_currency, quote_currency, rate, source, quoted_at, evidence, inputs_hash)
        values ($1, $2, '2026-09-01', 'CAD', 'USD', 0.72, 'bank_of_canada', '2026-09-01T00:00:00Z', $3, '${DIGEST_A}')`,
-      [evId, orgId, JSON.stringify(provenance)],
-    );
-    const stored = await client.query(
-      `select base_currency, quote_currency, rate, source, quoted_at, inputs_hash, evidence
+        [evId, orgId, JSON.stringify(provenance)],
+      );
+      const stored = await client.query(
+        `select base_currency, quote_currency, rate, source, quoted_at, inputs_hash, evidence
          from saas_metrics_fx_evidence where id = $1`,
-      [evId],
-    );
-    assert.equal(stored.rows.length, 1);
-    assert.deepEqual(stored.rows[0].evidence, provenance, "full provenance round-trips without loss");
-    assert.deepEqual(stored.rows[0].evidence.selection, selection, "selection round-trips byte-equivalent");
-    assert.equal(stored.rows[0].evidence.selection.observations.length, 2);
-    assert.equal(stored.rows[0].evidence.selection.observations[0].id, obsFirst);
-    assert.equal(stored.rows[0].evidence.selection.observations[1].id, obsMid);
-    assert.equal(stored.rows[0].base_currency, stored.rows[0].evidence.base_currency);
-    assert.equal(stored.rows[0].quote_currency, stored.rows[0].evidence.quote_currency);
-    assert.equal(stored.rows[0].source, stored.rows[0].evidence.source);
-    assert.equal(stored.rows[0].inputs_hash, stored.rows[0].evidence.inputs_hash);
-    assert.equal(Number(stored.rows[0].rate), Number(stored.rows[0].evidence.rate));
-    await client.query("rollback");
-  } catch (error) {
-    await client.query("rollback").catch(() => undefined);
-    throw error;
-  } finally {
-    await client.end();
-  }
-});
-
-test("normalization storage requires native Flow authority for every approver identity", { skip: !DB }, async () => {
-  const client = new pg.Client({ connectionString: connectionString() });
-  await client.connect();
-  try {
-    await client.query("begin");
-    await client.query("select set_config('app.bypass_rls', 'on', true)");
-    const orgId = await seedOrg(client, "native-authority");
-    const request = await pendingRequest(client, orgId, "2026-09-01");
-    const other = await seedUser(client, orgId, "reviewer");
-    const audit = async () => (await client.query(`select action,actor_id,changes from audit_log
-      where table_name='saas_metrics_normalization_requests' and row_id=$1 order by id`, [request.id])).rows;
-    const beforeAudit = await audit();
-    assert.deepEqual(beforeAudit.map(row => row.action), ["saas_normalization_requested"]);
-    for (const actor of [request.requester, other]) {
-      await client.query("savepoint before_unrouted_decision");
-      await assert.rejects(client.query(`update saas_metrics_normalization_requests
-        set status='approved',approved_by=$1,approved_at=now() where org_id=$2 and id=$3`,
-      [actor, orgId, request.id]), /Complete native tenant Flow routing/);
-      await client.query("rollback to savepoint before_unrouted_decision");
+        [evId],
+      );
+      assert.equal(stored.rows.length, 1);
+      assert.deepEqual(
+        stored.rows[0].evidence,
+        provenance,
+        "full provenance round-trips without loss",
+      );
+      assert.deepEqual(
+        stored.rows[0].evidence.selection,
+        selection,
+        "selection round-trips byte-equivalent",
+      );
+      assert.equal(stored.rows[0].evidence.selection.observations.length, 2);
+      assert.equal(stored.rows[0].evidence.selection.observations[0].id, obsFirst);
+      assert.equal(stored.rows[0].evidence.selection.observations[1].id, obsMid);
+      assert.equal(stored.rows[0].base_currency, stored.rows[0].evidence.base_currency);
+      assert.equal(stored.rows[0].quote_currency, stored.rows[0].evidence.quote_currency);
+      assert.equal(stored.rows[0].source, stored.rows[0].evidence.source);
+      assert.equal(stored.rows[0].inputs_hash, stored.rows[0].evidence.inputs_hash);
+      assert.equal(Number(stored.rows[0].rate), Number(stored.rows[0].evidence.rate));
+      await client.query("rollback");
+    } catch (error) {
+      await client.query("rollback").catch(() => undefined);
+      throw error;
+    } finally {
+      await client.end();
     }
-    assert.deepEqual((await client.query(`select status,approved_by,approved_at
-      from saas_metrics_normalization_requests where org_id=$1 and id=$2`, [orgId,request.id])).rows,
-    [{ status: "pending", approved_by: null, approved_at: null }]);
-    assert.deepEqual(await audit(), beforeAudit, "refused direct decisions append no approval evidence");
-  } finally {
-    await client.query("rollback");
-    await client.end();
-  }
-});
+  },
+);
+
+test(
+  "normalization storage requires native Flow authority for every approver identity",
+  { skip: !DB },
+  async () => {
+    const client = new pg.Client({ connectionString: connectionString() });
+    await client.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.bypass_rls', 'on', true)");
+      const orgId = await seedOrg(client, "native-authority");
+      const request = await pendingRequest(client, orgId, "2026-09-01");
+      const other = await seedUser(client, orgId, "reviewer");
+      const audit = async () =>
+        (
+          await client.query(
+            `select action,actor_id,changes from audit_log
+      where table_name='saas_metrics_normalization_requests' and row_id=$1 order by id`,
+            [request.id],
+          )
+        ).rows;
+      const beforeAudit = await audit();
+      assert.deepEqual(
+        beforeAudit.map((row) => row.action),
+        ["saas_normalization_requested"],
+      );
+      for (const actor of [request.requester, other]) {
+        await client.query("savepoint before_unrouted_decision");
+        await assert.rejects(
+          client.query(
+            `update saas_metrics_normalization_requests
+        set status='approved',approved_by=$1,approved_at=now() where org_id=$2 and id=$3`,
+            [actor, orgId, request.id],
+          ),
+          /Complete native tenant Flow routing/,
+        );
+        await client.query("rollback to savepoint before_unrouted_decision");
+      }
+      assert.deepEqual(
+        (
+          await client.query(
+            `select status,approved_by,approved_at
+      from saas_metrics_normalization_requests where org_id=$1 and id=$2`,
+            [orgId, request.id],
+          )
+        ).rows,
+        [{ status: "pending", approved_by: null, approved_at: null }],
+      );
+      assert.deepEqual(
+        await audit(),
+        beforeAudit,
+        "refused direct decisions append no approval evidence",
+      );
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);

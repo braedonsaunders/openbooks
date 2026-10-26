@@ -38,10 +38,15 @@ export type BriefingRole = "owner" | "controller" | "ap_clerk" | "ar_clerk";
 
 /** Role shapes the briefing's focus. Clerks see their lane; stewards see all. */
 export function briefingRole(authz: Authz): BriefingRole {
-  if (authz.user.isSuperAdmin || can(authz, "admin.ai.manage") || can(authz, "admin.setup.manage")) {
+  if (
+    authz.user.isSuperAdmin ||
+    can(authz, "admin.ai.manage") ||
+    can(authz, "admin.setup.manage")
+  ) {
     return "owner";
   }
-  const readsLedger = can(authz, "gl.read") || can(authz, "reports.read") || can(authz, "budgets.read");
+  const readsLedger =
+    can(authz, "gl.read") || can(authz, "reports.read") || can(authz, "budgets.read");
   const readsAp = can(authz, "ap.read");
   const readsAr = can(authz, "ar.read");
   if (readsAp && !readsLedger && !readsAr) return "ap_clerk";
@@ -78,7 +83,9 @@ export function briefingReadAuthz(authz: Authz): Authz {
   };
 }
 
-export async function loadBriefing(authz: Authz): Promise<{ briefing: CachedBriefing | null; aiEnabled: boolean; role: BriefingRole }> {
+export async function loadBriefing(
+  authz: Authz,
+): Promise<{ briefing: CachedBriefing | null; aiEnabled: boolean; role: BriefingRole }> {
   const role = briefingRole(authz);
   const aiConfig = await getOrgAiConfig(authz.user.orgId);
   const aiEnabled = getModel(aiConfig, "smart") !== null;
@@ -87,9 +94,11 @@ export async function loadBriefing(authz: Authz): Promise<{ briefing: CachedBrie
   const match = conversations.find((c) => c.title === briefingTitle(today));
   if (!match) return { briefing: null, aiEnabled, role };
   const messages = await recentMessages(authz, match.id);
-  const last = [...messages].reverse().find(
-    (m) => m.role === "assistant" && (m.data as { kind?: unknown } | null)?.kind === "briefing",
-  );
+  const last = [...messages]
+    .reverse()
+    .find(
+      (m) => m.role === "assistant" && (m.data as { kind?: unknown } | null)?.kind === "briefing",
+    );
   if (!last) return { briefing: null, aiEnabled, role };
   return {
     briefing: {
@@ -123,7 +132,8 @@ export async function generateBriefing(authz: Authz): Promise<CachedBriefing> {
   const readAuthz = briefingReadAuthz(authz);
   const inbox = await loadAgentInbox(readAuthz, { limit: 10 });
   const org = await db.execute<{ base_currency: string; name: string }>(
-    sql`select base_currency, name from orgs where id = ${authz.user.orgId}`, "objects",
+    sql`select base_currency, name from orgs where id = ${authz.user.orgId}`,
+    "objects",
   );
   const system =
     assistantSystemPrompt({
@@ -142,7 +152,9 @@ export async function generateBriefing(authz: Authz): Promise<CachedBriefing> {
     `Write today's briefing for ${today}.`,
     `Open findings by rank (materiality, confidence, evidence):`,
     ...inbox.rows.map(findingLine),
-    inbox.total > inbox.rows.length ? `…and ${inbox.total - inbox.rows.length} more in /agents.` : ``,
+    inbox.total > inbox.rows.length
+      ? `…and ${inbox.total - inbox.rows.length} more in /agents.`
+      : ``,
     `Use read tools (cash_position, list_open_items, aging) for the cash position and due items the snapshot lacks, then write the briefing.`,
   ]
     .filter(Boolean)
@@ -172,7 +184,8 @@ export async function sendBriefingEmail(
 ): Promise<{ emailed: boolean; emailError?: string }> {
   try {
     const org = await db.execute<{ name: string }>(
-      sql`select name from orgs where id = ${authz.user.orgId}`, "objects",
+      sql`select name from orgs where id = ${authz.user.orgId}`,
+      "objects",
     );
     const [{ enqueueEmail, newEmailIntentKey }] = await Promise.all([import("@openbooks/jobs")]);
     const { flowNotificationEmail } = await import("@openbooks/emails");

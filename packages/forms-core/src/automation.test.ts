@@ -3,8 +3,8 @@
 // Planner + lint tests for the pure flow-graph core and OpenBooks
 // trigger/action vocabulary.
 
-import { test, describe } from 'node:test'
-import assert from 'node:assert/strict'
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
 import {
   automationGraphSchema,
   flowReadiness,
@@ -23,29 +23,29 @@ import {
   type AutomationNode,
   type TriggerData,
   type TriggerEvent,
-} from './automation'
-import type { FlowSubjectProfile } from './flow-subjects'
-import type { EvalContext } from './evaluator'
+} from "./automation";
+import type { FlowSubjectProfile } from "./flow-subjects";
+import type { EvalContext } from "./evaluator";
 
-const emptyCtx: EvalContext = { values: {}, rows: {} }
+const emptyCtx: EvalContext = { values: {}, rows: {} };
 
 function notify(title: string): ActionData {
-  return { action: 'notify', to: [{ type: 'submitter' }], title }
+  return { action: "notify", to: [{ type: "submitter" }], title };
 }
 
-function schedGraphWith(data: AutomationGraph['nodes'][number]['data']): AutomationGraph {
+function schedGraphWith(data: AutomationGraph["nodes"][number]["data"]): AutomationGraph {
   return {
     schemaVersion: 1,
     nodes: [
       {
-        id: 'trigger',
+        id: "trigger",
         position: { x: 0, y: 0 },
-        data: { kind: 'trigger', trigger: { trigger: 'scheduled', cron: '* * * * *' } },
+        data: { kind: "trigger", trigger: { trigger: "scheduled", cron: "* * * * *" } },
       },
-      { id: 'node', position: { x: 100, y: 0 }, data },
+      { id: "node", position: { x: 100, y: 0 }, data },
     ],
-    edges: [{ id: 'edge', source: 'trigger', target: 'node', sourceHandle: 'next' }],
-  }
+    edges: [{ id: "edge", source: "trigger", target: "node", sourceHandle: "next" }],
+  };
 }
 
 /**
@@ -54,20 +54,20 @@ function schedGraphWith(data: AutomationGraph['nodes'][number]['data']): Automat
  * collected notification titles.
  */
 function graphOf(triggers: Array<{ trigger: TriggerData; title: string }>): AutomationGraph {
-  const nodes: AutomationGraph['nodes'] = []
-  const edges: AutomationGraph['edges'] = []
+  const nodes: AutomationGraph["nodes"] = [];
+  const edges: AutomationGraph["edges"] = [];
   triggers.forEach(({ trigger, title }, i) => {
-    const tId = `t${i}`
-    const aId = `a${i}`
-    nodes.push({ id: tId, position: { x: 0, y: i * 100 }, data: { kind: 'trigger', trigger } })
+    const tId = `t${i}`;
+    const aId = `a${i}`;
+    nodes.push({ id: tId, position: { x: 0, y: i * 100 }, data: { kind: "trigger", trigger } });
     nodes.push({
       id: aId,
       position: { x: 200, y: i * 100 },
-      data: { kind: 'action', action: notify(title) },
-    })
-    edges.push({ id: `e${i}`, source: tId, target: aId, sourceHandle: 'next' })
-  })
-  return { schemaVersion: 1, nodes, edges }
+      data: { kind: "action", action: notify(title) },
+    });
+    edges.push({ id: `e${i}`, source: tId, target: aId, sourceHandle: "next" });
+  });
+  return { schemaVersion: 1, nodes, edges };
 }
 
 function titles(
@@ -77,724 +77,780 @@ function titles(
   opts?: { triggerNodeIds?: string[] },
 ): string[] {
   return planAutomation(graph, event, ctx, opts).actions.flatMap((a) =>
-    a.action === 'notify' ? [a.title] : [],
-  )
+    a.action === "notify" ? [a.title] : [],
+  );
 }
 
 // --- Schemas -----------------------------------------------------------------
 
-describe('graph schema', () => {
-  test('parses a full trigger→condition→gate→action graph', () => {
+describe("graph schema", () => {
+  test("parses a full trigger→condition→gate→action graph", () => {
     const graph: AutomationGraph = {
       schemaVersion: 1,
       nodes: [
         {
-          id: 't',
+          id: "t",
           position: { x: 0, y: 0 },
-          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+          data: { kind: "trigger", trigger: { trigger: "on_submit" } },
         },
         {
-          id: 'c',
+          id: "c",
           position: { x: 100, y: 0 },
-          data: { kind: 'condition', rule: { op: 'gt', field: 'total', value: 1000 } },
+          data: { kind: "condition", rule: { op: "gt", field: "total", value: 1000 } },
         },
         {
-          id: 'g',
+          id: "g",
           position: { x: 200, y: 0 },
           data: {
-            kind: 'gate',
+            kind: "gate",
             gate: {
-              title: 'Manager approval',
-              assignees: [{ type: 'supervisor' }, { type: 'role', role: 'controller' }],
-              mode: 'any',
+              title: "Manager approval",
+              assignees: [{ type: "supervisor" }, { type: "role", role: "controller" }],
+              mode: "any",
               reminderAfterHours: 24,
               escalateAfterHours: 72,
-              escalateTo: { type: 'role', role: 'admin' },
+              escalateTo: { type: "role", role: "admin" },
             },
           },
         },
         {
-          id: 'a',
+          id: "a",
           position: { x: 300, y: 0 },
-          data: { kind: 'action', action: { action: 'change_status', to: 'approved' } },
+          data: { kind: "action", action: { action: "change_status", to: "approved" } },
         },
       ],
       edges: [
-        { id: 'e1', source: 't', target: 'c', sourceHandle: 'next' },
-        { id: 'e2', source: 'c', target: 'g', sourceHandle: 'then' },
-        { id: 'e3', source: 'g', target: 'a', sourceHandle: 'approve' },
+        { id: "e1", source: "t", target: "c", sourceHandle: "next" },
+        { id: "e2", source: "c", target: "g", sourceHandle: "then" },
+        { id: "e3", source: "g", target: "a", sourceHandle: "approve" },
       ],
-    }
-    assert.deepEqual(automationGraphSchema.parse(graph), graph)
-  })
+    };
+    assert.deepEqual(automationGraphSchema.parse(graph), graph);
+  });
 
-  test('a gate requires at least one assignee', () => {
-    assert.throws(() =>
-      gateDataSchema.parse({ title: 'Approval', assignees: [], mode: 'all' }),
-    )
-  })
+  test("a gate requires at least one assignee", () => {
+    assert.throws(() => gateDataSchema.parse({ title: "Approval", assignees: [], mode: "all" }));
+  });
 
-  test('gate preventSelfApproval is optional and backward-compatible', () => {
-    const base = { title: 'Approval', assignees: [{ type: 'supervisor' }], mode: 'any' }
+  test("gate preventSelfApproval is optional and backward-compatible", () => {
+    const base = { title: "Approval", assignees: [{ type: "supervisor" }], mode: "any" };
     // Existing graphs (no flag) still parse, and the flag stays absent.
-    assert.equal(gateDataSchema.parse(base).preventSelfApproval, undefined)
+    assert.equal(gateDataSchema.parse(base).preventSelfApproval, undefined);
     assert.equal(
       gateDataSchema.parse({ ...base, preventSelfApproval: true }).preventSelfApproval,
       true,
-    )
-    assert.throws(() => gateDataSchema.parse({ ...base, preventSelfApproval: 'yes' }))
-  })
+    );
+    assert.throws(() => gateDataSchema.parse({ ...base, preventSelfApproval: "yes" }));
+  });
 
-  test('manual triggers preserve all record-button controls', () => {
+  test("manual triggers preserve all record-button controls", () => {
     const graph = graphOf([
       {
         trigger: {
-          trigger: 'manual',
-          buttonId: 'approve_exception',
-          label: 'Approve exception',
-          confirm: 'Approve this exception?',
-          requirePermission: 'transactions.vendor_bills.approve',
-          showIf: { op: 'eq', field: 'status', value: 'pending_approval' },
+          trigger: "manual",
+          buttonId: "approve_exception",
+          label: "Approve exception",
+          confirm: "Approve this exception?",
+          requirePermission: "transactions.vendor_bills.approve",
+          showIf: { op: "eq", field: "status", value: "pending_approval" },
         },
-        title: 'approved',
+        title: "approved",
       },
-    ])
-    const parsed = automationGraphSchema.parse(graph)
-    const trigger = parsed.nodes[0]?.data
-    assert.equal(trigger?.kind, 'trigger')
-    assert.deepEqual(trigger?.kind === 'trigger' ? trigger.trigger : null, {
-      trigger: 'manual',
-      buttonId: 'approve_exception',
-      label: 'Approve exception',
-      confirm: 'Approve this exception?',
-      requirePermission: 'transactions.vendor_bills.approve',
-      showIf: { op: 'eq', field: 'status', value: 'pending_approval' },
-    })
-  })
-})
+    ]);
+    const parsed = automationGraphSchema.parse(graph);
+    const trigger = parsed.nodes[0]?.data;
+    assert.equal(trigger?.kind, "trigger");
+    assert.deepEqual(trigger?.kind === "trigger" ? trigger.trigger : null, {
+      trigger: "manual",
+      buttonId: "approve_exception",
+      label: "Approve exception",
+      confirm: "Approve this exception?",
+      requirePermission: "transactions.vendor_bills.approve",
+      showIf: { op: "eq", field: "status", value: "pending_approval" },
+    });
+  });
+});
 
 // --- {{field}} interpolation ---------------------------------------------------
 
-describe('graph subject scope (legal-entity admission)', () => {
-  const ENTITY_A = '11111111-1111-4111-8111-111111111111'
-  const ENTITY_B = '22222222-2222-4222-8222-222222222222'
+describe("graph subject scope (legal-entity admission)", () => {
+  const ENTITY_A = "11111111-1111-4111-8111-111111111111";
+  const ENTITY_B = "22222222-2222-4222-8222-222222222222";
   const scopedGraph = (subsidiaryIds: string[]): AutomationGraph => ({
     schemaVersion: 1,
     subjectScope: { subsidiaryIds },
     nodes: [
-      { id: 't', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
       {
-        id: 'g', position: { x: 100, y: 0 },
-        data: { kind: 'gate', gate: { title: 'Approval', assignees: [{ type: 'role', role: 'admin' }], mode: 'any' } },
+        id: "t",
+        position: { x: 0, y: 0 },
+        data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+      },
+      {
+        id: "g",
+        position: { x: 100, y: 0 },
+        data: {
+          kind: "gate",
+          gate: { title: "Approval", assignees: [{ type: "role", role: "admin" }], mode: "any" },
+        },
       },
     ],
-    edges: [{ id: 'e1', source: 't', target: 'g', sourceHandle: 'next' }],
-  })
+    edges: [{ id: "e1", source: "t", target: "g", sourceHandle: "next" }],
+  });
 
-  test('schema round-trips the scope and canonicalizes uuid case', () => {
-    const parsed = automationGraphSchema.parse(scopedGraph([ENTITY_A.toUpperCase()]))
-    assert.deepEqual(parsed.subjectScope, { subsidiaryIds: [ENTITY_A] })
+  test("schema round-trips the scope and canonicalizes uuid case", () => {
+    const parsed = automationGraphSchema.parse(scopedGraph([ENTITY_A.toUpperCase()]));
+    assert.deepEqual(parsed.subjectScope, { subsidiaryIds: [ENTITY_A] });
     // Absent scope stays absent: organization-wide is the only unscoped spelling.
-    const unscoped = automationGraphSchema.parse({ schemaVersion: 1, nodes: [], edges: [] })
-    assert.equal(unscoped.subjectScope, undefined)
-  })
+    const unscoped = automationGraphSchema.parse({ schemaVersion: 1, nodes: [], edges: [] });
+    assert.equal(unscoped.subjectScope, undefined);
+  });
 
-  test('schema refuses empty, repeated, case-variant and non-uuid scopes', () => {
-    assert.throws(() => automationGraphSchema.parse(scopedGraph([])))
-    assert.throws(() => automationGraphSchema.parse(scopedGraph([ENTITY_A, ENTITY_A])))
-    assert.throws(() => automationGraphSchema.parse(scopedGraph([ENTITY_A, ENTITY_A.toUpperCase()])))
-    assert.throws(() => automationGraphSchema.parse(scopedGraph(['not-a-uuid'])))
-    assert.throws(() => automationGraphSchema.parse(scopedGraph(Array.from({ length: 101 }, (_, i) =>
-      `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`))))
-  })
+  test("schema refuses empty, repeated, case-variant and non-uuid scopes", () => {
+    assert.throws(() => automationGraphSchema.parse(scopedGraph([])));
+    assert.throws(() => automationGraphSchema.parse(scopedGraph([ENTITY_A, ENTITY_A])));
+    assert.throws(() =>
+      automationGraphSchema.parse(scopedGraph([ENTITY_A, ENTITY_A.toUpperCase()])),
+    );
+    assert.throws(() => automationGraphSchema.parse(scopedGraph(["not-a-uuid"])));
+    assert.throws(() =>
+      automationGraphSchema.parse(
+        scopedGraph(
+          Array.from(
+            { length: 101 },
+            (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`,
+          ),
+        ),
+      ),
+    );
+  });
 
-  test('absent scope admits every subject, including an ownerless one', () => {
-    assert.equal(flowSubjectAdmission(undefined, ENTITY_A), 'admitted')
-    assert.equal(flowSubjectAdmission(null, null), 'admitted')
-    const unscopedGraph: AutomationGraph = { schemaVersion: 1, nodes: [], edges: [] }
-    assert.equal(graphSubjectAdmission(unscopedGraph, undefined), 'admitted')
-  })
+  test("absent scope admits every subject, including an ownerless one", () => {
+    assert.equal(flowSubjectAdmission(undefined, ENTITY_A), "admitted");
+    assert.equal(flowSubjectAdmission(null, null), "admitted");
+    const unscopedGraph: AutomationGraph = { schemaVersion: 1, nodes: [], edges: [] };
+    assert.equal(graphSubjectAdmission(unscopedGraph, undefined), "admitted");
+  });
 
-  test('scoped admission admits only the listed entities', () => {
-    const scope = { subsidiaryIds: [ENTITY_A, ENTITY_B] }
-    assert.equal(flowSubjectAdmission(scope, ENTITY_A), 'admitted')
-    assert.equal(flowSubjectAdmission(scope, ENTITY_B.toUpperCase()), 'admitted')
-    assert.equal(flowSubjectAdmission(scope, '33333333-3333-4333-8333-333333333333'), 'out-of-scope')
-  })
+  test("scoped admission admits only the listed entities", () => {
+    const scope = { subsidiaryIds: [ENTITY_A, ENTITY_B] };
+    assert.equal(flowSubjectAdmission(scope, ENTITY_A), "admitted");
+    assert.equal(flowSubjectAdmission(scope, ENTITY_B.toUpperCase()), "admitted");
+    assert.equal(
+      flowSubjectAdmission(scope, "33333333-3333-4333-8333-333333333333"),
+      "out-of-scope",
+    );
+  });
 
-  test('missing, empty or unknown identity is unresolved, never admitted or out-of-scope', () => {
-    const scope = { subsidiaryIds: [ENTITY_A] }
-    for (const identity of [null, undefined, '', '   ', 0, false, {}, []]) {
-      assert.equal(flowSubjectAdmission(scope, identity), 'unresolved', JSON.stringify(identity))
+  test("missing, empty or unknown identity is unresolved, never admitted or out-of-scope", () => {
+    const scope = { subsidiaryIds: [ENTITY_A] };
+    for (const identity of [null, undefined, "", "   ", 0, false, {}, []]) {
+      assert.equal(flowSubjectAdmission(scope, identity), "unresolved", JSON.stringify(identity));
     }
-  })
+  });
 
-  test('lint refuses a scoped scheduled trigger without record selection', () => {
-    const graph = schedGraphWith({ kind: 'action', action: notify('Hi') })
-    graph.subjectScope = { subsidiaryIds: [ENTITY_A] }
-    const errors = lintAutomationGraph(graph, new Set())
-    assert.ok(errors.some((e) => /legal-entity-limited flow cannot run on a schedule without selecting records/.test(e)), errors.join('; '))
+  test("lint refuses a scoped scheduled trigger without record selection", () => {
+    const graph = schedGraphWith({ kind: "action", action: notify("Hi") });
+    graph.subjectScope = { subsidiaryIds: [ENTITY_A] };
+    const errors = lintAutomationGraph(graph, new Set());
+    assert.ok(
+      errors.some((e) =>
+        /legal-entity-limited flow cannot run on a schedule without selecting records/.test(e),
+      ),
+      errors.join("; "),
+    );
     const withSelect: AutomationGraph = {
       schemaVersion: 1,
       subjectScope: { subsidiaryIds: [ENTITY_A] },
       nodes: [
         {
-          id: 'trigger', position: { x: 0, y: 0 },
-          data: { kind: 'trigger', trigger: { trigger: 'scheduled', cron: '* * * * *', select: { limit: 10 } } },
+          id: "trigger",
+          position: { x: 0, y: 0 },
+          data: {
+            kind: "trigger",
+            trigger: { trigger: "scheduled", cron: "* * * * *", select: { limit: 10 } },
+          },
         },
-        { id: 'node', position: { x: 100, y: 0 }, data: { kind: 'action', action: notify('Hi') } },
+        { id: "node", position: { x: 100, y: 0 }, data: { kind: "action", action: notify("Hi") } },
       ],
-      edges: [{ id: 'edge', source: 'trigger', target: 'node', sourceHandle: 'next' }],
-    }
-    assert.ok(!lintAutomationGraph(withSelect, new Set()).some((e) => /legal-entity/.test(e)))
-  })
+      edges: [{ id: "edge", source: "trigger", target: "node", sourceHandle: "next" }],
+    };
+    assert.ok(!lintAutomationGraph(withSelect, new Set()).some((e) => /legal-entity/.test(e)));
+  });
 
-  test('lint refuses empty and duplicated scopes on unparsed graphs', () => {
-    const empty = scopedGraph([ENTITY_A])
-    empty.subjectScope = { subsidiaryIds: [] }
-    assert.ok(lintAutomationGraph(empty, new Set()).some((e) => /names none/.test(e)))
-    const duplicated = scopedGraph([ENTITY_A, ENTITY_A])
-    assert.ok(lintAutomationGraph(duplicated, new Set()).some((e) => /more than once/.test(e)))
-  })
-})
+  test("lint refuses empty and duplicated scopes on unparsed graphs", () => {
+    const empty = scopedGraph([ENTITY_A]);
+    empty.subjectScope = { subsidiaryIds: [] };
+    assert.ok(lintAutomationGraph(empty, new Set()).some((e) => /names none/.test(e)));
+    const duplicated = scopedGraph([ENTITY_A, ENTITY_A]);
+    assert.ok(lintAutomationGraph(duplicated, new Set()).some((e) => /more than once/.test(e)));
+  });
+});
 
-describe('interpolateTemplate', () => {
-  test('substitutes header values and blanks unknown fields', () => {
-    const ctx: EvalContext = { values: { docNumber: 'INV-042', total: 1250.5 }, rows: {} }
+describe("interpolateTemplate", () => {
+  test("substitutes header values and blanks unknown fields", () => {
+    const ctx: EvalContext = { values: { docNumber: "INV-042", total: 1250.5 }, rows: {} };
     assert.equal(
-      interpolateTemplate('Invoice {{docNumber}} for {{ total }} ({{missing}})', ctx),
-      'Invoice INV-042 for 1250.5 ()',
-    )
-  })
-})
+      interpolateTemplate("Invoice {{docNumber}} for {{ total }} ({{missing}})", ctx),
+      "Invoice INV-042 for 1250.5 ()",
+    );
+  });
+});
 
 // --- Engine planning -----------------------------------------------------------
 
-describe('planAutomation', () => {
-  test('plans EVERY on_field_value trigger whose rule passes, not just the first', () => {
+describe("planAutomation", () => {
+  test("plans EVERY on_field_value trigger whose rule passes, not just the first", () => {
     const graph = graphOf([
       {
-        trigger: { trigger: 'on_field_value', rule: { op: 'eq', field: 'a', value: 'no' } },
-        title: 'first',
+        trigger: { trigger: "on_field_value", rule: { op: "eq", field: "a", value: "no" } },
+        title: "first",
       },
       {
-        trigger: { trigger: 'on_field_value', rule: { op: 'eq', field: 'a', value: 'yes' } },
-        title: 'second',
+        trigger: { trigger: "on_field_value", rule: { op: "eq", field: "a", value: "yes" } },
+        title: "second",
       },
-    ])
-    const ctx: EvalContext = { values: { a: 'yes' }, rows: {} }
+    ]);
+    const ctx: EvalContext = { values: { a: "yes" }, rows: {} };
     // The FIRST trigger's rule fails; the second must still fire.
-    assert.deepEqual(titles(graph, { kind: 'on_field_value' }, ctx), ['second'])
-  })
+    assert.deepEqual(titles(graph, { kind: "on_field_value" }, ctx), ["second"]);
+  });
 
-  test('collects branches from multiple satisfied triggers', () => {
+  test("collects branches from multiple satisfied triggers", () => {
     const graph = graphOf([
-      { trigger: { trigger: 'on_submit' }, title: 'one' },
-      { trigger: { trigger: 'on_submit' }, title: 'two' },
-    ])
-    assert.deepEqual(titles(graph, { kind: 'on_submit' }, emptyCtx).sort(), ['one', 'two'])
-  })
+      { trigger: { trigger: "on_submit" }, title: "one" },
+      { trigger: { trigger: "on_submit" }, title: "two" },
+    ]);
+    assert.deepEqual(titles(graph, { kind: "on_submit" }, emptyCtx).sort(), ["one", "two"]);
+  });
 
-  test('status_change honors the trigger `to` and `from` filters', () => {
+  test("status_change honors the trigger `to` and `from` filters", () => {
     const graph = graphOf([
       {
-        trigger: { trigger: 'status_change', from: 'pending_approval', to: 'approved' },
-        title: 'reviewed_approve',
+        trigger: { trigger: "status_change", from: "pending_approval", to: "approved" },
+        title: "reviewed_approve",
       },
-      { trigger: { trigger: 'status_change', to: 'approved' }, title: 'any_approve' },
-      { trigger: { trigger: 'status_change' }, title: 'every_transition' },
-    ])
+      { trigger: { trigger: "status_change", to: "approved" }, title: "any_approve" },
+      { trigger: { trigger: "status_change" }, title: "every_transition" },
+    ]);
     // draft → approved: the from-scoped trigger must NOT fire; the others do.
     assert.deepEqual(
-      titles(graph, { kind: 'status_change', from: 'draft', to: 'approved' }, emptyCtx).sort(),
-      ['any_approve', 'every_transition'],
-    )
+      titles(graph, { kind: "status_change", from: "draft", to: "approved" }, emptyCtx).sort(),
+      ["any_approve", "every_transition"],
+    );
     // pending_approval → approved: all three fire.
     assert.deepEqual(
       titles(
         graph,
-        { kind: 'status_change', from: 'pending_approval', to: 'approved' },
+        { kind: "status_change", from: "pending_approval", to: "approved" },
         emptyCtx,
       ).sort(),
-      ['any_approve', 'every_transition', 'reviewed_approve'],
-    )
+      ["any_approve", "every_transition", "reviewed_approve"],
+    );
     // → rejected: only the unfiltered trigger fires.
-    assert.deepEqual(titles(graph, { kind: 'status_change', to: 'rejected' }, emptyCtx), [
-      'every_transition',
-    ])
-  })
+    assert.deepEqual(titles(graph, { kind: "status_change", to: "rejected" }, emptyCtx), [
+      "every_transition",
+    ]);
+  });
 
-  test('on_update plans like a plain lifecycle trigger and carries edit data on the event', () => {
+  test("on_update plans like a plain lifecycle trigger and carries edit data on the event", () => {
     const graph = graphOf([
-      { trigger: { trigger: 'on_update' }, title: 'edited' },
-      { trigger: { trigger: 'on_submit' }, title: 'submitted' },
-    ])
+      { trigger: { trigger: "on_update" }, title: "edited" },
+      { trigger: { trigger: "on_submit" }, title: "submitted" },
+    ]);
     // Only the on_update trigger fires for the event; the extra event fields
     // (previousTotal/totalChanged, surfaced as eval values by the engine) do
     // not affect trigger matching.
     assert.deepEqual(
-      titles(graph, { kind: 'on_update', previousTotal: '100.00', totalChanged: true }, emptyCtx),
-      ['edited'],
-    )
+      titles(graph, { kind: "on_update", previousTotal: "100.00", totalChanged: true }, emptyCtx),
+      ["edited"],
+    );
     // Conditions downstream can gate on the injected values.
     const conditional: AutomationGraph = {
       schemaVersion: 1,
       nodes: [
         {
-          id: 't',
+          id: "t",
           position: { x: 0, y: 0 },
-          data: { kind: 'trigger', trigger: { trigger: 'on_update' } },
+          data: { kind: "trigger", trigger: { trigger: "on_update" } },
         },
         {
-          id: 'c',
+          id: "c",
           position: { x: 100, y: 0 },
-          data: { kind: 'condition', rule: { op: 'eq', field: 'totalChanged', value: true } },
+          data: { kind: "condition", rule: { op: "eq", field: "totalChanged", value: true } },
         },
-        { id: 'a', position: { x: 200, y: 0 }, data: { kind: 'action', action: notify('material') } },
+        {
+          id: "a",
+          position: { x: 200, y: 0 },
+          data: { kind: "action", action: notify("material") },
+        },
       ],
       edges: [
-        { id: 'e1', source: 't', target: 'c', sourceHandle: 'next' },
-        { id: 'e2', source: 'c', target: 'a', sourceHandle: 'then' },
+        { id: "e1", source: "t", target: "c", sourceHandle: "next" },
+        { id: "e2", source: "c", target: "a", sourceHandle: "then" },
       ],
-    }
+    };
     const fires = planAutomation(
       conditional,
-      { kind: 'on_update' },
+      { kind: "on_update" },
       { values: { totalChanged: true }, rows: {} },
-    )
-    assert.deepEqual(fires.actionNodes.map((a) => a.nodeId), ['a'])
+    );
+    assert.deepEqual(
+      fires.actionNodes.map((a) => a.nodeId),
+      ["a"],
+    );
     const skips = planAutomation(
       conditional,
-      { kind: 'on_update' },
+      { kind: "on_update" },
       { values: { totalChanged: false }, rows: {} },
-    )
-    assert.deepEqual(skips.actionNodes, [])
-  })
+    );
+    assert.deepEqual(skips.actionNodes, []);
+  });
 
-  test('manual planning targets a single button by id', () => {
+  test("manual planning targets a single button by id", () => {
     const graph = graphOf([
-      { trigger: { trigger: 'manual', buttonId: 'b1', label: 'One' }, title: 'one' },
-      { trigger: { trigger: 'manual', buttonId: 'b2', label: 'Two' }, title: 'two' },
-    ])
-    assert.deepEqual(titles(graph, { kind: 'manual', buttonId: 'b2' }, emptyCtx), ['two'])
-  })
+      { trigger: { trigger: "manual", buttonId: "b1", label: "One" }, title: "one" },
+      { trigger: { trigger: "manual", buttonId: "b2", label: "Two" }, title: "two" },
+    ]);
+    assert.deepEqual(titles(graph, { kind: "manual", buttonId: "b2" }, emptyCtx), ["two"]);
+  });
 
-  test('scheduled planning targets only trigger nodes that are due', () => {
+  test("scheduled planning targets only trigger nodes that are due", () => {
     const graph = graphOf([
-      { trigger: { trigger: 'scheduled', cron: '0 8 * * *' }, title: 'daily' },
-      { trigger: { trigger: 'scheduled', cron: '0 8 * * 1' }, title: 'weekly' },
-    ])
-    assert.deepEqual(titles(graph, { kind: 'scheduled' }, emptyCtx, { triggerNodeIds: ['t1'] }), [
-      'weekly',
-    ])
-  })
+      { trigger: { trigger: "scheduled", cron: "0 8 * * *" }, title: "daily" },
+      { trigger: { trigger: "scheduled", cron: "0 8 * * 1" }, title: "weekly" },
+    ]);
+    assert.deepEqual(titles(graph, { kind: "scheduled" }, emptyCtx, { triggerNodeIds: ["t1"] }), [
+      "weekly",
+    ]);
+  });
 
-  test('conditions branch then/else and gates pause the walk', () => {
+  test("conditions branch then/else and gates pause the walk", () => {
     const graph: AutomationGraph = {
       schemaVersion: 1,
       nodes: [
         {
-          id: 't',
+          id: "t",
           position: { x: 0, y: 0 },
-          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+          data: { kind: "trigger", trigger: { trigger: "on_submit" } },
         },
         {
-          id: 'c',
+          id: "c",
           position: { x: 100, y: 0 },
-          data: { kind: 'condition', rule: { op: 'gt', field: 'total', value: 1000 } },
+          data: { kind: "condition", rule: { op: "gt", field: "total", value: 1000 } },
         },
         {
-          id: 'g',
+          id: "g",
           position: { x: 200, y: 0 },
           data: {
-            kind: 'gate',
-            gate: { title: 'Approval', assignees: [{ type: 'supervisor' }], mode: 'any' },
+            kind: "gate",
+            gate: { title: "Approval", assignees: [{ type: "supervisor" }], mode: "any" },
           },
         },
-        { id: 'small', position: { x: 200, y: 100 }, data: { kind: 'action', action: notify('small') } },
         {
-          id: 'after',
+          id: "small",
+          position: { x: 200, y: 100 },
+          data: { kind: "action", action: notify("small") },
+        },
+        {
+          id: "after",
           position: { x: 300, y: 0 },
-          data: { kind: 'action', action: { action: 'change_status', to: 'approved' } },
+          data: { kind: "action", action: { action: "change_status", to: "approved" } },
         },
       ],
       edges: [
-        { id: 'e1', source: 't', target: 'c', sourceHandle: 'next' },
-        { id: 'e2', source: 'c', target: 'g', sourceHandle: 'then' },
-        { id: 'e3', source: 'c', target: 'small', sourceHandle: 'else' },
-        { id: 'e4', source: 'g', target: 'after', sourceHandle: 'approve' },
+        { id: "e1", source: "t", target: "c", sourceHandle: "next" },
+        { id: "e2", source: "c", target: "g", sourceHandle: "then" },
+        { id: "e3", source: "c", target: "small", sourceHandle: "else" },
+        { id: "e4", source: "g", target: "after", sourceHandle: "approve" },
       ],
-    }
+    };
 
     // Over threshold: reach the gate, pause — the approve branch is NOT planned.
-    const big = planAutomation(graph, { kind: 'on_submit' }, { values: { total: 5000 }, rows: {} })
-    assert.deepEqual(big.gates.map((g) => g.nodeId), ['g'])
-    assert.deepEqual(big.actions, [])
+    const big = planAutomation(graph, { kind: "on_submit" }, { values: { total: 5000 }, rows: {} });
+    assert.deepEqual(
+      big.gates.map((g) => g.nodeId),
+      ["g"],
+    );
+    assert.deepEqual(big.actions, []);
 
     // Under threshold: the else branch runs, no gate.
-    const small = planAutomation(graph, { kind: 'on_submit' }, { values: { total: 10 }, rows: {} })
-    assert.deepEqual(small.gates, [])
-    assert.deepEqual(small.actionNodes.map((a) => a.nodeId), ['small'])
+    const small = planAutomation(graph, { kind: "on_submit" }, { values: { total: 10 }, rows: {} });
+    assert.deepEqual(small.gates, []);
+    assert.deepEqual(
+      small.actionNodes.map((a) => a.nodeId),
+      ["small"],
+    );
 
     // Human decision resumes the approve branch.
-    const resumed = planFromGate(graph, 'g', 'approve', emptyCtx)
-    assert.deepEqual(resumed.actionNodes.map((a) => a.nodeId), ['after'])
+    const resumed = planFromGate(graph, "g", "approve", emptyCtx);
+    assert.deepEqual(
+      resumed.actionNodes.map((a) => a.nodeId),
+      ["after"],
+    );
     // The reject branch has no edges → empty plan.
-    const rejected = planFromGate(graph, 'g', 'reject', emptyCtx)
-    assert.deepEqual(rejected.actions, [])
-    assert.deepEqual(rejected.gates, [])
-  })
+    const rejected = planFromGate(graph, "g", "reject", emptyCtx);
+    assert.deepEqual(rejected.actions, []);
+    assert.deepEqual(rejected.gates, []);
+  });
 
-  test('cyclic graphs terminate (visited set)', () => {
+  test("cyclic graphs terminate (visited set)", () => {
     const graph: AutomationGraph = {
       schemaVersion: 1,
       nodes: [
         {
-          id: 't',
+          id: "t",
           position: { x: 0, y: 0 },
-          data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
+          data: { kind: "trigger", trigger: { trigger: "on_create" } },
         },
-        { id: 'a', position: { x: 100, y: 0 }, data: { kind: 'action', action: notify('once') } },
-        { id: 'b', position: { x: 200, y: 0 }, data: { kind: 'action', action: notify('twice') } },
+        { id: "a", position: { x: 100, y: 0 }, data: { kind: "action", action: notify("once") } },
+        { id: "b", position: { x: 200, y: 0 }, data: { kind: "action", action: notify("twice") } },
       ],
       edges: [
-        { id: 'e1', source: 't', target: 'a', sourceHandle: 'next' },
-        { id: 'e2', source: 'a', target: 'b', sourceHandle: 'next' },
-        { id: 'e3', source: 'b', target: 'a', sourceHandle: 'next' }, // cycle
+        { id: "e1", source: "t", target: "a", sourceHandle: "next" },
+        { id: "e2", source: "a", target: "b", sourceHandle: "next" },
+        { id: "e3", source: "b", target: "a", sourceHandle: "next" }, // cycle
       ],
-    }
-    assert.deepEqual(titles(graph, { kind: 'on_create' }, emptyCtx), ['once', 'twice'])
-  })
-})
+    };
+    assert.deepEqual(titles(graph, { kind: "on_create" }, emptyCtx), ["once", "twice"]);
+  });
+});
 
 // --- Worker-trigger compatibility lint ------------------------------------------
 
-describe('lintWorkerTriggerCompatibility', () => {
-  test('allows worker-safe notifications and emails', () => {
+describe("lintWorkerTriggerCompatibility", () => {
+  test("allows worker-safe notifications and emails", () => {
     assert.deepEqual(
       lintWorkerTriggerCompatibility(
-        schedGraphWith({ kind: 'action', action: notify('Reminder') }),
+        schedGraphWith({ kind: "action", action: notify("Reminder") }),
       ),
       [],
-    )
+    );
     assert.deepEqual(
       lintWorkerTriggerCompatibility(
         schedGraphWith({
-          kind: 'action',
+          kind: "action",
           action: {
-            action: 'send_email',
-            to: [{ type: 'role', role: 'controller' }],
-            subject: 'Weekly digest',
-            body: 'Totals: {{total}}',
+            action: "send_email",
+            to: [{ type: "role", role: "controller" }],
+            subject: "Weekly digest",
+            body: "Totals: {{total}}",
           },
         }),
       ),
       [],
-    )
-  })
+    );
+  });
 
-  test('rejects worker trigger branches that cannot execute in the worker', () => {
+  test("rejects worker trigger branches that cannot execute in the worker", () => {
     for (const action of [
-      { action: 'set_field', field: 'memo', value: { kind: 'literal', value: 'x' } },
-      { action: 'change_status', to: 'approved' },
-      { action: 'post_document' },
+      { action: "set_field", field: "memo", value: { kind: "literal", value: "x" } },
+      { action: "change_status", to: "approved" },
+      { action: "post_document" },
     ] as const satisfies readonly ActionData[]) {
       assert.ok(
-        lintWorkerTriggerCompatibility(schedGraphWith({ kind: 'action', action })).includes(
+        lintWorkerTriggerCompatibility(schedGraphWith({ kind: "action", action })).includes(
           `Trigger trigger: "scheduled" runs in the worker and cannot execute "${action.action}".`,
         ),
         `expected ${action.action} to be rejected`,
-      )
+      );
     }
-  })
+  });
 
-  test('scheduled + record select widens the safe set to set_field only', () => {
-    const withSelect = (data: AutomationGraph['nodes'][number]['data']): AutomationGraph => ({
+  test("scheduled + record select widens the safe set to set_field only", () => {
+    const withSelect = (data: AutomationGraph["nodes"][number]["data"]): AutomationGraph => ({
       schemaVersion: 1,
       nodes: [
         {
-          id: 'trigger',
+          id: "trigger",
           position: { x: 0, y: 0 },
           data: {
-            kind: 'trigger',
+            kind: "trigger",
             trigger: {
-              trigger: 'scheduled',
-              cron: '*/30 * * * *',
-              select: { rule: { op: 'eq', field: 'status', value: 'approved' }, limit: 100 },
+              trigger: "scheduled",
+              cron: "*/30 * * * *",
+              select: { rule: { op: "eq", field: "status", value: "approved" }, limit: 100 },
             },
           },
         },
-        { id: 'node', position: { x: 100, y: 0 }, data },
+        { id: "node", position: { x: 100, y: 0 }, data },
       ],
-      edges: [{ id: 'edge', source: 'trigger', target: 'node', sourceHandle: 'next' }],
-    })
+      edges: [{ id: "edge", source: "trigger", target: "node", sourceHandle: "next" }],
+    });
     // set_field is legal WITH a record select (the EFT sent-latch pattern)…
     assert.deepEqual(
       lintWorkerTriggerCompatibility(
         withSelect({
-          kind: 'action',
-          action: { action: 'set_field', field: 'memo', value: { kind: 'literal', value: 'sent' } },
+          kind: "action",
+          action: { action: "set_field", field: "memo", value: { kind: "literal", value: "sent" } },
         }),
       ),
       [],
-    )
+    );
     // …but status pipelines stay rejected even with a record in hand.
     assert.ok(
       lintWorkerTriggerCompatibility(
-        withSelect({ kind: 'action', action: { action: 'change_status', to: 'approved' } }),
+        withSelect({ kind: "action", action: { action: "change_status", to: "approved" } }),
       ).length > 0,
-    )
-  })
+    );
+  });
 
-  test('lock_record parses and is rejected from scheduled branches', () => {
+  test("lock_record parses and is rejected from scheduled branches", () => {
     const graph = schedGraphWith({
-      kind: 'action',
-      action: { action: 'lock_record', reason: 'approved — locked', exemptRoles: ['controller'] },
-    })
-    assert.ok(automationGraphSchema.safeParse(graph).success)
+      kind: "action",
+      action: { action: "lock_record", reason: "approved — locked", exemptRoles: ["controller"] },
+    });
+    assert.ok(automationGraphSchema.safeParse(graph).success);
     assert.ok(
       lintWorkerTriggerCompatibility(graph).includes(
         'Trigger trigger: "scheduled" runs in the worker and cannot execute "lock_record".',
       ),
-    )
-  })
+    );
+  });
 
-  test('send_email attachPdf parses', () => {
+  test("send_email attachPdf parses", () => {
     const parsed = automationGraphSchema.safeParse(
       schedGraphWith({
-        kind: 'action',
+        kind: "action",
         action: {
-          action: 'send_email',
-          to: [{ type: 'email', email: 'ap@example.com' }],
-          subject: 'Remittance {{documentNumber}}',
-          body: 'Attached.',
+          action: "send_email",
+          to: [{ type: "email", email: "ap@example.com" }],
+          subject: "Remittance {{documentNumber}}",
+          body: "Attached.",
           attachPdf: true,
         },
       }),
-    )
-    assert.ok(parsed.success)
-  })
+    );
+    assert.ok(parsed.success);
+  });
 
-  test('rejects gates reachable from a scheduled trigger', () => {
+  test("rejects gates reachable from a scheduled trigger", () => {
     assert.ok(
       lintWorkerTriggerCompatibility(
         schedGraphWith({
-          kind: 'gate',
-          gate: { title: 'Approval', assignees: [{ type: 'submitter' }], mode: 'any' },
+          kind: "gate",
+          gate: { title: "Approval", assignees: [{ type: "submitter" }], mode: "any" },
         }),
       ).includes(
         'Trigger trigger: "scheduled" runs in the worker and cannot pause for approval gates.',
       ),
-    )
-  })
-})
+    );
+  });
+});
 
 // --- Structural / profile lint ----------------------------------------------------
 
 const invoiceProfile: FlowSubjectProfile = {
-  subjectKind: 'invoice',
-  label: 'Invoice',
-  triggers: ['on_create', 'on_submit', 'after_post', 'status_change', 'on_field_value', 'manual'],
-  actions: ['send_email', 'notify', 'set_field', 'change_status', 'post_document'],
+  subjectKind: "invoice",
+  label: "Invoice",
+  triggers: ["on_create", "on_submit", "after_post", "status_change", "on_field_value", "manual"],
+  actions: ["send_email", "notify", "set_field", "change_status", "post_document"],
   statuses: [
-    { value: 'draft', label: 'Draft' },
-    { value: 'pending_approval', label: 'Pending approval' },
-    { value: 'approved', label: 'Approved' },
+    { value: "draft", label: "Draft" },
+    { value: "pending_approval", label: "Pending approval" },
+    { value: "approved", label: "Approved" },
   ],
   fields: [
-    { key: 'total', label: 'Total', type: 'number' },
-    { key: 'memo', label: 'Memo', type: 'text', writable: true },
+    { key: "total", label: "Total", type: "number" },
+    { key: "memo", label: "Memo", type: "text", writable: true },
   ],
-}
-const invoiceFieldIds = new Set(invoiceProfile.fields.map((f) => f.key))
+};
+const invoiceFieldIds = new Set(invoiceProfile.fields.map((f) => f.key));
 
-describe('lintAutomationGraph', () => {
-  test('flags missing trigger, dangling edges, and unreachable nodes', () => {
+describe("lintAutomationGraph", () => {
+  test("flags missing trigger, dangling edges, and unreachable nodes", () => {
     const errors = lintAutomationGraph(
       {
         schemaVersion: 1,
-        nodes: [{ id: 'a', position: { x: 0, y: 0 }, data: { kind: 'action', action: notify('x') } }],
-        edges: [{ id: 'e', source: 'ghost', target: 'a' }],
+        nodes: [
+          { id: "a", position: { x: 0, y: 0 }, data: { kind: "action", action: notify("x") } },
+        ],
+        edges: [{ id: "e", source: "ghost", target: "a" }],
       },
       invoiceFieldIds,
-    )
-    assert.ok(errors.includes('Edge e: unknown source node'))
-    assert.ok(errors.includes('Flow has no trigger — add a trigger node to start it.'))
+    );
+    assert.ok(errors.includes("Edge e: unknown source node"));
+    assert.ok(errors.includes("Flow has no trigger — add a trigger node to start it."));
 
     const unreachable = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [
           {
-            id: 't',
+            id: "t",
             position: { x: 0, y: 0 },
-            data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+            data: { kind: "trigger", trigger: { trigger: "on_submit" } },
           },
-          { id: 'orphan', position: { x: 0, y: 100 }, data: { kind: 'action', action: notify('x') } },
+          {
+            id: "orphan",
+            position: { x: 0, y: 100 },
+            data: { kind: "action", action: notify("x") },
+          },
         ],
         edges: [],
       },
       invoiceFieldIds,
-    )
-    assert.ok(unreachable.includes('Node orphan: unreachable — not connected to any trigger.'))
-  })
+    );
+    assert.ok(unreachable.includes("Node orphan: unreachable — not connected to any trigger."));
+  });
 
-  test('validates the graph against a subject profile', () => {
+  test("validates the graph against a subject profile", () => {
     const errors = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [
           {
-            id: 't',
+            id: "t",
             position: { x: 0, y: 0 },
             // before_void is not in the invoice profile's trigger list.
-            data: { kind: 'trigger', trigger: { trigger: 'before_void' } },
+            data: { kind: "trigger", trigger: { trigger: "before_void" } },
           },
           {
-            id: 'a1',
+            id: "a1",
             position: { x: 100, y: 0 },
             // 'voided' is not a known invoice status.
-            data: { kind: 'action', action: { action: 'change_status', to: 'voided' } },
+            data: { kind: "action", action: { action: "change_status", to: "voided" } },
           },
           {
-            id: 'a2',
+            id: "a2",
             position: { x: 200, y: 0 },
             // total exists but is not writable.
             data: {
-              kind: 'action',
-              action: { action: 'set_field', field: 'total', value: { kind: 'literal', value: 0 } },
+              kind: "action",
+              action: { action: "set_field", field: "total", value: { kind: "literal", value: 0 } },
             },
           },
           {
-            id: 'a3',
+            id: "a3",
             position: { x: 300, y: 0 },
             // lock_record is not in the invoice profile's action list.
             data: {
-              kind: 'action',
-              action: { action: 'lock_record' },
+              kind: "action",
+              action: { action: "lock_record" },
             },
           },
         ],
         edges: [
-          { id: 'e1', source: 't', target: 'a1' },
-          { id: 'e2', source: 'a1', target: 'a2' },
-          { id: 'e3', source: 'a2', target: 'a3' },
+          { id: "e1", source: "t", target: "a1" },
+          { id: "e2", source: "a1", target: "a2" },
+          { id: "e3", source: "a2", target: "a3" },
         ],
       },
       invoiceFieldIds,
       invoiceProfile,
-    )
-    assert.ok(errors.includes('Trigger t: "before_void" is not available for Invoice.'))
-    assert.ok(errors.includes('Action a1: unknown destination status "voided".'))
-    assert.ok(errors.includes('Action a2: field "total" is not writable by flows.'))
-    assert.ok(errors.includes('Action a3: "lock_record" is not available for Invoice.'))
-  })
+    );
+    assert.ok(errors.includes('Trigger t: "before_void" is not available for Invoice.'));
+    assert.ok(errors.includes('Action a1: unknown destination status "voided".'));
+    assert.ok(errors.includes('Action a2: field "total" is not writable by flows.'));
+    assert.ok(errors.includes('Action a3: "lock_record" is not available for Invoice.'));
+  });
 
-  test('names a trigger with no outgoing step, and stays silent once wired', () => {
+  test("names a trigger with no outgoing step, and stays silent once wired", () => {
     const trigger = {
-      id: 't',
+      id: "t",
       position: { x: 0, y: 0 },
-      data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
-    } as const
+      data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+    } as const;
     const action = {
-      id: 'a',
+      id: "a",
       position: { x: 100, y: 0 },
-      data: { kind: 'action', action: notify('x') },
-    } as const
+      data: { kind: "action", action: notify("x") },
+    } as const;
     const unwired = lintAutomationGraph(
       { schemaVersion: 1, nodes: [trigger, action], edges: [] },
       invoiceFieldIds,
-    )
+    );
     assert.ok(
-      unwired.includes('Trigger t has no outgoing step — connect it to the first step or the flow never runs.'),
-      `the lint must name the missing edge, got: ${unwired.join(' | ')}`,
-    )
+      unwired.includes(
+        "Trigger t has no outgoing step — connect it to the first step or the flow never runs.",
+      ),
+      `the lint must name the missing edge, got: ${unwired.join(" | ")}`,
+    );
     const wired = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [trigger, action],
-        edges: [{ id: 'e', source: 't', target: 'a', sourceHandle: 'next' }],
+        edges: [{ id: "e", source: "t", target: "a", sourceHandle: "next" }],
       },
       invoiceFieldIds,
-    )
+    );
     assert.ok(
-      wired.every((error) => !error.includes('has no outgoing step')),
-      `a wired trigger must not be flagged, got: ${wired.join(' | ')}`,
-    )
+      wired.every((error) => !error.includes("has no outgoing step")),
+      `a wired trigger must not be flagged, got: ${wired.join(" | ")}`,
+    );
     // A terminal action with no outgoing edge is a legitimate end of run.
     const terminal = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [trigger, action],
-        edges: [{ id: 'e', source: 't', target: 'a', sourceHandle: 'next' }],
+        edges: [{ id: "e", source: "t", target: "a", sourceHandle: "next" }],
       },
       invoiceFieldIds,
-    )
+    );
     assert.ok(
-      terminal.every((error) => !error.includes('Action a')),
-      `a terminal action must not be flagged, got: ${terminal.join(' | ')}`,
-    )
-  })
+      terminal.every((error) => !error.includes("Action a")),
+      `a terminal action must not be flagged, got: ${terminal.join(" | ")}`,
+    );
+  });
 
-  test('flags unknown fields in conditions, on_field_value rules, and set_field', () => {
+  test("flags unknown fields in conditions, on_field_value rules, and set_field", () => {
     const errors = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [
           {
-            id: 't',
+            id: "t",
             position: { x: 0, y: 0 },
             data: {
-              kind: 'trigger',
-              trigger: { trigger: 'on_field_value', rule: { op: 'isSet', field: 'nope' } },
+              kind: "trigger",
+              trigger: { trigger: "on_field_value", rule: { op: "isSet", field: "nope" } },
             },
           },
           {
-            id: 'c',
+            id: "c",
             position: { x: 100, y: 0 },
-            data: { kind: 'condition', rule: { op: 'eq', field: 'missing', value: 1 } },
+            data: { kind: "condition", rule: { op: "eq", field: "missing", value: 1 } },
           },
           {
-            id: 'a',
+            id: "a",
             position: { x: 200, y: 0 },
             data: {
-              kind: 'action',
-              action: { action: 'set_field', field: 'ghost', value: { kind: 'literal', value: 1 } },
+              kind: "action",
+              action: { action: "set_field", field: "ghost", value: { kind: "literal", value: 1 } },
             },
           },
         ],
         edges: [
-          { id: 'e1', source: 't', target: 'c' },
-          { id: 'e2', source: 'c', target: 'a', sourceHandle: 'then' },
+          { id: "e1", source: "t", target: "c" },
+          { id: "e2", source: "c", target: "a", sourceHandle: "then" },
         ],
       },
       invoiceFieldIds,
-    )
-    assert.ok(errors.includes('Trigger t: references unknown field "nope"'))
-    assert.ok(errors.includes('Condition c: references unknown field "missing"'))
-    assert.ok(errors.includes('Action a: set_field targets unknown field "ghost"'))
-  })
+    );
+    assert.ok(errors.includes('Trigger t: references unknown field "nope"'));
+    assert.ok(errors.includes('Condition c: references unknown field "missing"'));
+    assert.ok(errors.includes('Action a: set_field targets unknown field "ghost"'));
+  });
 
-  test('names triggers the subject lifecycle can never emit', () => {
+  test("names triggers the subject lifecycle can never emit", () => {
     const postTrigger = {
-      id: 't-post',
+      id: "t-post",
       position: { x: 0, y: 0 },
-      data: { kind: 'trigger', trigger: { trigger: 'before_post' } },
-    } as const
+      data: { kind: "trigger", trigger: { trigger: "before_post" } },
+    } as const;
     const createTrigger = {
-      id: 't-create',
+      id: "t-create",
       position: { x: 0, y: 100 },
-      data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
-    } as const
+      data: { kind: "trigger", trigger: { trigger: "on_create" } },
+    } as const;
     const action = {
-      id: 'a',
+      id: "a",
       position: { x: 200, y: 0 },
-      data: { kind: 'action', action: notify('x') },
-    } as const
+      data: { kind: "action", action: notify("x") },
+    } as const;
     const edges = [
-      { id: 'e1', source: 't-post', target: 'a', sourceHandle: 'next' },
-      { id: 'e2', source: 't-create', target: 'a', sourceHandle: 'next' },
-    ] as const
+      { id: "e1", source: "t-post", target: "a", sourceHandle: "next" },
+      { id: "e2", source: "t-create", target: "a", sourceHandle: "next" },
+    ] as const;
     // A subject that never posts and lives outside the document writers:
     // both triggers are dead, and the warning names the node and the cause.
     const dead = lintAutomationGraph(
@@ -802,236 +858,357 @@ describe('lintAutomationGraph', () => {
       invoiceFieldIds,
       {
         ...invoiceProfile,
-        label: 'Estimate',
+        label: "Estimate",
         // Offered by the vocabulary so only the never-fire rule can object.
-        triggers: [...invoiceProfile.triggers, 'before_post', 'on_create'],
-        actions: invoiceProfile.actions.filter((action) => action !== 'post_document'),
+        triggers: [...invoiceProfile.triggers, "before_post", "on_create"],
+        actions: invoiceProfile.actions.filter((action) => action !== "post_document"),
         orderRecord: true,
       },
-    )
+    );
     assert.ok(
-      dead.includes('Trigger t-post: "before_post" never fires for Estimate — these records never post. Gate their approval with "on_submit" instead.'),
-      `posting triggers must be named, got: ${dead.join(' | ')}`,
-    )
+      dead.includes(
+        'Trigger t-post: "before_post" never fires for Estimate — these records never post. Gate their approval with "on_submit" instead.',
+      ),
+      `posting triggers must be named, got: ${dead.join(" | ")}`,
+    );
     assert.ok(
-      dead.includes('Trigger t-create: "on_create" never fires for Estimate — orders are created and edited through the order pipeline. Gate Issue with "on_submit" instead.'),
-      `create triggers must be named, got: ${dead.join(' | ')}`,
-    )
+      dead.includes(
+        'Trigger t-create: "on_create" never fires for Estimate — orders are created and edited through the order pipeline. Gate Issue with "on_submit" instead.',
+      ),
+      `create triggers must be named, got: ${dead.join(" | ")}`,
+    );
     // A posting subject with a document-writer lifecycle stays silent.
     const live = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [postTrigger, action],
-        edges: [{ id: 'e1', source: 't-post', target: 'a', sourceHandle: 'next' }],
+        edges: [{ id: "e1", source: "t-post", target: "a", sourceHandle: "next" }],
       },
       invoiceFieldIds,
       invoiceProfile,
-    )
+    );
     assert.ok(
-      live.every((error) => !error.includes('never fires')),
-      `fireable triggers must not be flagged, got: ${live.join(' | ')}`,
-    )
-  })
-})
+      live.every((error) => !error.includes("never fires")),
+      `fireable triggers must not be flagged, got: ${live.join(" | ")}`,
+    );
+  });
+});
 
 describe("zero-gate submission graphs", () => {
   const graph: AutomationGraph = {
     schemaVersion: 1,
-    nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }],
+    nodes: [
+      {
+        id: "submit",
+        position: { x: 0, y: 0 },
+        data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+      },
+    ],
     edges: [],
   };
   test("a submission trigger may finish without any approval gate or second policy switch", () => {
-    const profile: FlowSubjectProfile = { subjectKind: 'example', label: 'Example', triggers: ['on_submit'], actions: [], fields: [], statuses: [] };
+    const profile: FlowSubjectProfile = {
+      subjectKind: "example",
+      label: "Example",
+      triggers: ["on_submit"],
+      actions: [],
+      fields: [],
+      statuses: [],
+    };
     assert.deepEqual(lintAutomationGraph(graph, new Set(), profile), []);
-    assert.deepEqual(planAutomation(graph, { kind: 'on_submit' }, emptyCtx), {
+    assert.deepEqual(planAutomation(graph, { kind: "on_submit" }, emptyCtx), {
       actions: [],
       actionNodes: [],
       gates: [],
     });
   });
-  test("graph admission rejects a second approval policy switch",()=>{
-    assert.equal(automationGraphSchema.safeParse({...graph,ungatedOutcome:"apply"}).success,false);
+  test("graph admission rejects a second approval policy switch", () => {
+    assert.equal(
+      automationGraphSchema.safeParse({ ...graph, ungatedOutcome: "apply" }).success,
+      false,
+    );
   });
 });
 
-describe('flow designer integrity', () => {
+describe("flow designer integrity", () => {
   const triggerNode = (id: string, trigger: TriggerData): AutomationNode => ({
     id,
     position: { x: 0, y: 0 },
-    data: { kind: 'trigger', trigger },
-  })
+    data: { kind: "trigger", trigger },
+  });
   const actionNode = (id: string): AutomationNode => ({
     id,
     position: { x: 200, y: 0 },
-    data: { kind: 'action', action: notify('x') },
-  })
+    data: { kind: "action", action: notify("x") },
+  });
 
-  test('a graph with more than one trigger is refused, naming every trigger', () => {
+  test("a graph with more than one trigger is refused, naming every trigger", () => {
     const graph: AutomationGraph = {
       schemaVersion: 1,
       nodes: [
-        triggerNode('t1', { trigger: 'on_submit' }),
-        triggerNode('t2', { trigger: 'manual', buttonId: 'btn_1', label: 'Run flow' }),
-        actionNode('a'),
+        triggerNode("t1", { trigger: "on_submit" }),
+        triggerNode("t2", { trigger: "manual", buttonId: "btn_1", label: "Run flow" }),
+        actionNode("a"),
       ],
       edges: [
-        { id: 'e1', source: 't1', target: 'a', sourceHandle: 'next' },
-        { id: 'e2', source: 't2', target: 'a', sourceHandle: 'next' },
+        { id: "e1", source: "t1", target: "a", sourceHandle: "next" },
+        { id: "e2", source: "t2", target: "a", sourceHandle: "next" },
       ],
-    }
-    const errors = lintAutomationGraph(graph, new Set())
-    const refusal = errors.find((e) => /exactly one trigger/.test(e))
-    assert.ok(refusal, `expected a single-trigger refusal, got: ${errors.join(' | ')}`)
+    };
+    const errors = lintAutomationGraph(graph, new Set());
+    const refusal = errors.find((e) => /exactly one trigger/.test(e));
+    assert.ok(refusal, `expected a single-trigger refusal, got: ${errors.join(" | ")}`);
     assert.ok(
       refusal.includes('Trigger "on_submit"') && refusal.includes('Trigger "manual"'),
       `the refusal must name every trigger by kind, got: ${refusal}`,
-    )
+    );
     assert.ok(
-      !/t1|t2/.test(refusal.replace(/Trigger/g, '')),
+      !/t1|t2/.test(refusal.replace(/Trigger/g, "")),
       `no storage id may appear in the refusal, got: ${refusal}`,
-    )
+    );
     // One trigger stays silent.
     const single = lintAutomationGraph(
-      { schemaVersion: 1, nodes: [triggerNode('t1', { trigger: 'on_submit' }), actionNode('a')], edges: [{ id: 'e1', source: 't1', target: 'a', sourceHandle: 'next' }] },
+      {
+        schemaVersion: 1,
+        nodes: [triggerNode("t1", { trigger: "on_submit" }), actionNode("a")],
+        edges: [{ id: "e1", source: "t1", target: "a", sourceHandle: "next" }],
+      },
       new Set(),
-    )
-    assert.ok(single.every((e) => !/exactly one trigger/.test(e)))
-  })
+    );
+    assert.ok(single.every((e) => !/exactly one trigger/.test(e)));
+  });
 
-  test('duplicate identical condition and approval nodes are flagged by label', () => {
-    const rule = { op: 'isSet', field: 'total' } as const
+  test("duplicate identical condition and approval nodes are flagged by label", () => {
+    const rule = { op: "isSet", field: "total" } as const;
     const graph: AutomationGraph = {
       schemaVersion: 1,
       nodes: [
-        triggerNode('t', { trigger: 'on_submit' }),
-        { id: 'c1', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Big orders', rule: { ...rule } } },
-        { id: 'c2', position: { x: 100, y: 100 }, data: { kind: 'condition', label: 'Big orders', rule: { ...rule } } },
+        triggerNode("t", { trigger: "on_submit" }),
         {
-          id: 'g1',
-          position: { x: 200, y: 0 },
-          data: { kind: 'gate', gate: { title: 'Manager sign-off', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' } },
+          id: "c1",
+          position: { x: 100, y: 0 },
+          data: { kind: "condition", label: "Big orders", rule: { ...rule } },
         },
         {
-          id: 'g2',
+          id: "c2",
+          position: { x: 100, y: 100 },
+          data: { kind: "condition", label: "Big orders", rule: { ...rule } },
+        },
+        {
+          id: "g1",
+          position: { x: 200, y: 0 },
+          data: {
+            kind: "gate",
+            gate: {
+              title: "Manager sign-off",
+              assignees: [{ type: "role", role: "approver" }],
+              mode: "any",
+            },
+          },
+        },
+        {
+          id: "g2",
           position: { x: 200, y: 100 },
-          data: { kind: 'gate', gate: { title: 'Manager sign-off', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' } },
+          data: {
+            kind: "gate",
+            gate: {
+              title: "Manager sign-off",
+              assignees: [{ type: "role", role: "approver" }],
+              mode: "any",
+            },
+          },
         },
       ],
       edges: [
-        { id: 'e1', source: 't', target: 'c1', sourceHandle: 'next' },
-        { id: 'e2', source: 'c1', target: 'g1', sourceHandle: 'then' },
-        { id: 'e3', source: 't', target: 'c2', sourceHandle: 'next' },
-        { id: 'e4', source: 'c2', target: 'g2', sourceHandle: 'then' },
+        { id: "e1", source: "t", target: "c1", sourceHandle: "next" },
+        { id: "e2", source: "c1", target: "g1", sourceHandle: "then" },
+        { id: "e3", source: "t", target: "c2", sourceHandle: "next" },
+        { id: "e4", source: "c2", target: "g2", sourceHandle: "then" },
       ],
-    }
-    const errors = lintAutomationGraph(graph, new Set(['total']))
-    const duplicates = errors.filter((e) => /duplicates/.test(e))
-    assert.equal(duplicates.length, 2, `expected a condition and a gate duplicate, got: ${errors.join(' | ')}`)
+    };
+    const errors = lintAutomationGraph(graph, new Set(["total"]));
+    const duplicates = errors.filter((e) => /duplicates/.test(e));
+    assert.equal(
+      duplicates.length,
+      2,
+      `expected a condition and a gate duplicate, got: ${errors.join(" | ")}`,
+    );
     assert.ok(
-      duplicates.every((d) => /Condition "Big orders"/.test(d) || /Approval "Manager sign-off"/.test(d)),
-      `duplicates name labels, got: ${duplicates.join(' | ')}`,
-    )
+      duplicates.every(
+        (d) => /Condition "Big orders"/.test(d) || /Approval "Manager sign-off"/.test(d),
+      ),
+      `duplicates name labels, got: ${duplicates.join(" | ")}`,
+    );
     // Distinct payloads stay silent.
     const distinct = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [
-          triggerNode('t', { trigger: 'on_submit' }),
-          { id: 'c1', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Big', rule: { op: 'gt', field: 'total', value: 100 } } },
-          { id: 'c2', position: { x: 100, y: 100 }, data: { kind: 'condition', label: 'Small', rule: { op: 'lt', field: 'total', value: 10 } } },
+          triggerNode("t", { trigger: "on_submit" }),
+          {
+            id: "c1",
+            position: { x: 100, y: 0 },
+            data: {
+              kind: "condition",
+              label: "Big",
+              rule: { op: "gt", field: "total", value: 100 },
+            },
+          },
+          {
+            id: "c2",
+            position: { x: 100, y: 100 },
+            data: {
+              kind: "condition",
+              label: "Small",
+              rule: { op: "lt", field: "total", value: 10 },
+            },
+          },
         ],
         edges: [
-          { id: 'e1', source: 't', target: 'c1', sourceHandle: 'next' },
-          { id: 'e2', source: 't', target: 'c2', sourceHandle: 'next' },
+          { id: "e1", source: "t", target: "c1", sourceHandle: "next" },
+          { id: "e2", source: "t", target: "c2", sourceHandle: "next" },
         ],
       },
-      new Set(['total']),
-    )
-    assert.ok(distinct.every((e) => !/duplicates/.test(e)))
-  })
+      new Set(["total"]),
+    );
+    assert.ok(distinct.every((e) => !/duplicates/.test(e)));
+  });
 
-  test('empty condition and on_field_value rules are refused as incomplete', () => {
-    assert.equal(logicRuleIsEmpty({ op: 'and', rules: [] }), true)
-    assert.equal(logicRuleIsEmpty({ op: 'or', rules: [] }), true)
-    assert.equal(logicRuleIsEmpty({ op: 'not', rule: { op: 'and', rules: [] } }), true)
-    assert.equal(logicRuleIsEmpty({ op: 'isSet', field: 'total' }), false)
-    assert.equal(logicRuleIsEmpty({ op: 'and', rules: [{ op: 'isSet', field: 'total' }] }), false)
+  test("empty condition and on_field_value rules are refused as incomplete", () => {
+    assert.equal(logicRuleIsEmpty({ op: "and", rules: [] }), true);
+    assert.equal(logicRuleIsEmpty({ op: "or", rules: [] }), true);
+    assert.equal(logicRuleIsEmpty({ op: "not", rule: { op: "and", rules: [] } }), true);
+    assert.equal(logicRuleIsEmpty({ op: "isSet", field: "total" }), false);
+    assert.equal(logicRuleIsEmpty({ op: "and", rules: [{ op: "isSet", field: "total" }] }), false);
     const errors = lintAutomationGraph(
       {
         schemaVersion: 1,
         nodes: [
-          triggerNode('t', { trigger: 'on_field_value', rule: { op: 'and', rules: [] } }),
-          { id: 'c', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Total check', rule: { op: 'or', rules: [] } } },
+          triggerNode("t", { trigger: "on_field_value", rule: { op: "and", rules: [] } }),
+          {
+            id: "c",
+            position: { x: 100, y: 0 },
+            data: { kind: "condition", label: "Total check", rule: { op: "or", rules: [] } },
+          },
         ],
-        edges: [{ id: 'e1', source: 't', target: 'c', sourceHandle: 'next' }],
+        edges: [{ id: "e1", source: "t", target: "c", sourceHandle: "next" }],
       },
-      new Set(['total']),
-    )
-    const empty = errors.filter((e) => /empty rule/.test(e))
-    assert.equal(empty.length, 2, `expected both empty rules refused, got: ${errors.join(' | ')}`)
-    assert.ok(empty.some((e) => e.includes('Condition "Total check"')), `condition named by label, got: ${empty.join(' | ')}`)
-  })
+      new Set(["total"]),
+    );
+    const empty = errors.filter((e) => /empty rule/.test(e));
+    assert.equal(empty.length, 2, `expected both empty rules refused, got: ${errors.join(" | ")}`);
+    assert.ok(
+      empty.some((e) => e.includes('Condition "Total check"')),
+      `condition named by label, got: ${empty.join(" | ")}`,
+    );
+  });
 
-  test('node display names carry kind plus label, never a storage id', () => {
+  test("node display names carry kind plus label, never a storage id", () => {
     assert.equal(
-      nodeDisplayName(triggerNode('t_9f2c', { trigger: 'on_submit' })),
+      nodeDisplayName(triggerNode("t_9f2c", { trigger: "on_submit" })),
       'Trigger "on_submit"',
-    )
+    );
     assert.equal(
-      nodeDisplayName({ id: 'c_1', position: { x: 0, y: 0 }, data: { kind: 'condition', label: 'Big orders', rule: { op: 'isSet', field: 'total' } } }),
+      nodeDisplayName({
+        id: "c_1",
+        position: { x: 0, y: 0 },
+        data: { kind: "condition", label: "Big orders", rule: { op: "isSet", field: "total" } },
+      }),
       'Condition "Big orders"',
-    )
+    );
     assert.equal(
-      nodeDisplayName({ id: 'c_2', position: { x: 0, y: 0 }, data: { kind: 'condition', rule: { op: 'isSet', field: 'total' } } }),
-      'Condition (unlabeled)',
-    )
+      nodeDisplayName({
+        id: "c_2",
+        position: { x: 0, y: 0 },
+        data: { kind: "condition", rule: { op: "isSet", field: "total" } },
+      }),
+      "Condition (unlabeled)",
+    );
     assert.equal(
-      nodeDisplayName({ id: 'g_1', position: { x: 0, y: 0 }, data: { kind: 'gate', gate: { title: 'Sign-off', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' } } }),
+      nodeDisplayName({
+        id: "g_1",
+        position: { x: 0, y: 0 },
+        data: {
+          kind: "gate",
+          gate: { title: "Sign-off", assignees: [{ type: "role", role: "approver" }], mode: "any" },
+        },
+      }),
       'Approval "Sign-off"',
-    )
-  })
+    );
+  });
 
-  test('lint messages reference only nodes and edges present in the graph', () => {
+  test("lint messages reference only nodes and edges present in the graph", () => {
     // Edges into the void, unknown fields, and every new integrity check:
     // no message may name an id the graph does not contain.
     const graph: AutomationGraph = {
       schemaVersion: 1,
       nodes: [
-        triggerNode('t1', { trigger: 'on_submit' }),
-        triggerNode('t2', { trigger: 'manual', buttonId: 'btn_1', label: 'Run' }),
-        { id: 'c1', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Same', rule: { op: 'isSet', field: 'total' } } },
-        { id: 'c2', position: { x: 100, y: 100 }, data: { kind: 'condition', label: 'Same', rule: { op: 'isSet', field: 'total' } } },
-        { id: 'c3', position: { x: 100, y: 200 }, data: { kind: 'condition', rule: { op: 'and', rules: [] } } },
+        triggerNode("t1", { trigger: "on_submit" }),
+        triggerNode("t2", { trigger: "manual", buttonId: "btn_1", label: "Run" }),
+        {
+          id: "c1",
+          position: { x: 100, y: 0 },
+          data: { kind: "condition", label: "Same", rule: { op: "isSet", field: "total" } },
+        },
+        {
+          id: "c2",
+          position: { x: 100, y: 100 },
+          data: { kind: "condition", label: "Same", rule: { op: "isSet", field: "total" } },
+        },
+        {
+          id: "c3",
+          position: { x: 100, y: 200 },
+          data: { kind: "condition", rule: { op: "and", rules: [] } },
+        },
       ],
       edges: [
-        { id: 'e1', source: 't1', target: 'c1', sourceHandle: 'next' },
-        { id: 'e2', source: 'ghost', target: 'c2', sourceHandle: 'next' },
-        { id: 'e3', source: 't2', target: 'vanished', sourceHandle: 'next' },
+        { id: "e1", source: "t1", target: "c1", sourceHandle: "next" },
+        { id: "e2", source: "ghost", target: "c2", sourceHandle: "next" },
+        { id: "e3", source: "t2", target: "vanished", sourceHandle: "next" },
       ],
-    }
-    const ids = new Set([...graph.nodes.map((n) => n.id), ...graph.edges.map((e) => e.id)])
+    };
+    const ids = new Set([...graph.nodes.map((n) => n.id), ...graph.edges.map((e) => e.id)]);
     // Trigger/action vocabulary also carries underscores (on_submit,
     // set_field) — those name kinds, never nodes, so they are allowed.
     const vocab = new Set([
-      'on_create', 'on_update', 'on_submit', 'before_post', 'after_post', 'before_void',
-      'status_change', 'on_field_value', 'scheduled', 'manual',
-      'send_email', 'notify', 'set_field', 'change_status', 'post_document',
-      'lock_record', 'unlock_record', 'distribute_schedule', 'send_board_schedule',
-    ])
-    const errors = lintAutomationGraph(graph, new Set(['total']))
-    assert.ok(errors.length > 0, 'the hostile graph must produce errors')
+      "on_create",
+      "on_update",
+      "on_submit",
+      "before_post",
+      "after_post",
+      "before_void",
+      "status_change",
+      "on_field_value",
+      "scheduled",
+      "manual",
+      "send_email",
+      "notify",
+      "set_field",
+      "change_status",
+      "post_document",
+      "lock_record",
+      "unlock_record",
+      "distribute_schedule",
+      "send_board_schedule",
+    ]);
+    const errors = lintAutomationGraph(graph, new Set(["total"]));
+    assert.ok(errors.length > 0, "the hostile graph must produce errors");
     const stray = errors.filter((message) => {
-      const tokens = message.match(/[\w-]+_[\w-]+/g) ?? []
-      return tokens.some((token) => !ids.has(token) && !vocab.has(token))
-    })
-    assert.deepEqual(stray, [], `messages must not name ids outside the graph, got: ${stray.join(' | ')}`)
-  })
+      const tokens = message.match(/[\w-]+_[\w-]+/g) ?? [];
+      return tokens.some((token) => !ids.has(token) && !vocab.has(token));
+    });
+    assert.deepEqual(
+      stray,
+      [],
+      `messages must not name ids outside the graph, got: ${stray.join(" | ")}`,
+    );
+  });
 
-  test('flow readiness shares one vocabulary for disabled, incomplete, and ready', () => {
-    assert.deepEqual(flowReadiness(false, ['anything']), { state: 'disabled' })
-    assert.deepEqual(flowReadiness(true, []), { state: 'ready' })
-    assert.deepEqual(flowReadiness(true, ['a', 'b']), { state: 'incomplete', reasons: ['a', 'b'] })
+  test("flow readiness shares one vocabulary for disabled, incomplete, and ready", () => {
+    assert.deepEqual(flowReadiness(false, ["anything"]), { state: "disabled" });
+    assert.deepEqual(flowReadiness(true, []), { state: "ready" });
+    assert.deepEqual(flowReadiness(true, ["a", "b"]), { state: "incomplete", reasons: ["a", "b"] });
     // Disabled wins over errors: a disabled flow never runs, whatever it carries.
-    assert.deepEqual(flowReadiness(false, []), { state: 'disabled' })
-  })
-})
+    assert.deepEqual(flowReadiness(false, []), { state: "disabled" });
+  });
+});

@@ -1,4 +1,4 @@
-import type { ReportEntity } from './entities'
+import type { ReportEntity } from "./entities";
 
 // Revenue recovery reads the collection subledger directly: every invoice
 // the automatic-collection engine has ever charged, with the first decline's
@@ -9,20 +9,20 @@ import type { ReportEntity } from './entities'
 // least one collection attempt; a recovery is a success at a later schedule
 // position than the first failure, so same-tick fallback charges count.
 const shared = {
-  category: 'orders' as const,
-  featureKey: 'autopay',
-  requiredPermission: 'documents.manage',
-  subsidiaryScope: { column: 'd.subsidiary_id' },
-  currencyColumn: 'currency',
-} as const
+  category: "orders" as const,
+  featureKey: "autopay",
+  requiredPermission: "documents.manage",
+  subsidiaryScope: { column: "d.subsidiary_id" },
+  currencyColumn: "currency",
+} as const;
 
 export const RECOVERY_REPORT_ENTITIES: ReportEntity[] = [
   {
     ...shared,
-    key: 'collection_recovery',
-    label: 'Collection recovery',
+    key: "collection_recovery",
+    label: "Collection recovery",
     description:
-      'One row per automatically charged invoice: attempts, first decline and recovery path.',
+      "One row per automatically charged invoice: attempts, first decline and recovery path.",
     from: `documents d
       join (select distinct org_id, invoice_id from collection_attempts) has
         on has.org_id = d.org_id and has.invoice_id = d.id
@@ -53,38 +53,75 @@ export const RECOVERY_REPORT_ENTITIES: ReportEntity[] = [
            and a.retry_position > s.first_failed_position
          order by a.retry_position limit 1
       ) r on true`,
-    orgColumn: 'd.org_id',
-    defaultPeriodField: 'first_attempt_day',
-    defaultSort: { column: 'first_attempt_day', direction: 'desc' },
+    orgColumn: "d.org_id",
+    defaultPeriodField: "first_attempt_day",
+    defaultSort: { column: "first_attempt_day", direction: "desc" },
     columns: [
-      { key: 'invoice', label: 'Invoice', kind: 'text', expr: 'd.document_number' },
-      { key: 'customer', label: 'Customer', kind: 'text', expr: 'p.display_name' },
-      { key: 'invoice_day', label: 'Invoice day', kind: 'date', expr: 'd.document_date::date' },
-      { key: 'due_day', label: 'Due day', kind: 'date', expr: 'd.due_date::date' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
-      { key: 'invoice_total', label: 'Invoice total', kind: 'money', expr: 'd.total', txnCurrency: true },
-      { key: 'attempts', label: 'Attempts', kind: 'number', expr: 's.attempts' },
-      { key: 'failed_attempts', label: 'Failed attempts', kind: 'number', expr: 's.failed_attempts' },
+      { key: "invoice", label: "Invoice", kind: "text", expr: "d.document_number" },
+      { key: "customer", label: "Customer", kind: "text", expr: "p.display_name" },
+      { key: "invoice_day", label: "Invoice day", kind: "date", expr: "d.document_date::date" },
+      { key: "due_day", label: "Due day", kind: "date", expr: "d.due_date::date" },
+      { key: "currency", label: "Currency", kind: "text", expr: "d.currency" },
       {
-        key: 'first_decline_class', label: 'First decline class', kind: 'enum', expr: 'f.first_decline_kind',
-        options: ['hard', 'soft', 'insufficient_funds', 'needs_authentication'],
+        key: "invoice_total",
+        label: "Invoice total",
+        kind: "money",
+        expr: "d.total",
+        txnCurrency: true,
       },
-      { key: 'provider', label: 'Provider', kind: 'text', expr: 'coalesce(f.first_provider, s.last_provider)' },
+      { key: "attempts", label: "Attempts", kind: "number", expr: "s.attempts" },
       {
-        key: 'recovered', label: 'Recovered', kind: 'number',
-        expr: '(case when r.recovered_amount is null then 0 else 1 end)',
-      },
-      {
-        key: 'recovered_via', label: 'Recovered via', kind: 'enum', expr: 'r.recovered_via',
-        options: ['primary', 'backup'],
+        key: "failed_attempts",
+        label: "Failed attempts",
+        kind: "number",
+        expr: "s.failed_attempts",
       },
       {
-        key: 'recovered_amount', label: 'Recovered amount', kind: 'money',
-        expr: 'coalesce(r.recovered_amount, 0)', txnCurrency: true,
+        key: "first_decline_class",
+        label: "First decline class",
+        kind: "enum",
+        expr: "f.first_decline_kind",
+        options: ["hard", "soft", "insufficient_funds", "needs_authentication"],
       },
-      { key: 'recovered_day', label: 'Recovered day', kind: 'date', expr: 'r.recovered_day' },
-      { key: 'days_to_recover', label: 'Days to recover', kind: 'number', expr: '(r.recovered_day - f.first_failed_day)' },
-      { key: 'first_attempt_day', label: 'First attempt day', kind: 'date', expr: 's.first_attempt_day' },
+      {
+        key: "provider",
+        label: "Provider",
+        kind: "text",
+        expr: "coalesce(f.first_provider, s.last_provider)",
+      },
+      {
+        key: "recovered",
+        label: "Recovered",
+        kind: "number",
+        expr: "(case when r.recovered_amount is null then 0 else 1 end)",
+      },
+      {
+        key: "recovered_via",
+        label: "Recovered via",
+        kind: "enum",
+        expr: "r.recovered_via",
+        options: ["primary", "backup"],
+      },
+      {
+        key: "recovered_amount",
+        label: "Recovered amount",
+        kind: "money",
+        expr: "coalesce(r.recovered_amount, 0)",
+        txnCurrency: true,
+      },
+      { key: "recovered_day", label: "Recovered day", kind: "date", expr: "r.recovered_day" },
+      {
+        key: "days_to_recover",
+        label: "Days to recover",
+        kind: "number",
+        expr: "(r.recovered_day - f.first_failed_day)",
+      },
+      {
+        key: "first_attempt_day",
+        label: "First attempt day",
+        kind: "date",
+        expr: "s.first_attempt_day",
+      },
     ],
   },
-]
+];

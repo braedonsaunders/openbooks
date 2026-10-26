@@ -12,7 +12,7 @@ import {
   timestamp,
   unique,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
@@ -54,7 +54,33 @@ export const taxCodes = pgTable(
     recoverablePercent: money("recoverable_percent").notNull().default("100"),
     /** EN 16931 VAT category (UNTDID 5305) stated on e-invoices for lines with this code. */
     einvoiceEffectiveFrom: date("einvoice_effective_from"),
-    einvoiceCategory: text("einvoice_category", { enum: ["S", "Z", "E", "AE", "K", "G", "O", "L", "M", "SR", "SRCA-S", "SRCA-C", "ZR", "ES33", "ESN33", "DS", "OS", "NA", "NG", "SRRC", "SROVR-RS", "SROVR-LVG", "SRLVG"] }),
+    einvoiceCategory: text("einvoice_category", {
+      enum: [
+        "S",
+        "Z",
+        "E",
+        "AE",
+        "K",
+        "G",
+        "O",
+        "L",
+        "M",
+        "SR",
+        "SRCA-S",
+        "SRCA-C",
+        "ZR",
+        "ES33",
+        "ESN33",
+        "DS",
+        "OS",
+        "NA",
+        "NG",
+        "SRRC",
+        "SROVR-RS",
+        "SROVR-LVG",
+        "SRLVG",
+      ],
+    }),
     /** VATEX exemption reason code (BT-121) for exempting categories. */
     einvoiceExemptionReasonCode: text("einvoice_exemption_reason_code"),
     /** Statutory exemption or reverse-charge wording (BT-120). */
@@ -133,9 +159,7 @@ export const documentLineTaxComponents = pgTable(
       enum: ["standard", "withholding", "reverse_charge"],
     }).notNull(),
     priceIncludesTax: boolean("price_includes_tax").notNull().default(false),
-    compoundOnPrevious: boolean("compound_on_previous")
-      .notNull()
-      .default(false),
+    compoundOnPrevious: boolean("compound_on_previous").notNull().default(false),
     roundingScale: integer("rounding_scale").notNull().default(2),
     /**
      * Who collects this component's tax: the merchant (posts the liability)
@@ -155,19 +179,13 @@ export const documentLineTaxComponents = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("document_line_tax_components_line_sequence").on(
-      t.documentLineId,
-      t.sequence,
-    ),
+    uniqueIndex("document_line_tax_components_line_sequence").on(t.documentLineId, t.sequence),
     index("document_line_tax_components_code").on(t.orgId, t.taxCodeId),
     check(
       "document_line_tax_components_recovery_crossfoot",
       sql`${t.recoverableAmount} + ${t.nonrecoverableAmount} = ${t.taxAmount}`,
     ),
-    check(
-      "document_line_tax_components_rounding_scale",
-      sql`${t.roundingScale} between 0 and 4`,
-    ),
+    check("document_line_tax_components_rounding_scale", sql`${t.roundingScale} between 0 and 4`),
   ],
 );
 
@@ -195,9 +213,7 @@ export const taxProviderTransactions = pgTable(
       .notNull()
       .default("pending"),
     attempts: integer("attempts").notNull().default(0),
-    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     lastError: text("last_error"),
     /** Set by the document void path; the scan voids the committed provider transaction. */
     voidRequestedAt: timestamp("void_requested_at", { withTimezone: true }),
@@ -208,11 +224,7 @@ export const taxProviderTransactions = pgTable(
   },
   (t) => [
     uniqueIndex("tax_provider_transactions_org_id_id_unique").on(t.orgId, t.id),
-    unique("tax_provider_transactions_document_unique").on(
-      t.documentId,
-      t.provider,
-      t.kind,
-    ),
+    unique("tax_provider_transactions_document_unique").on(t.documentId, t.provider, t.kind),
     index("tax_provider_transactions_scan").on(t.status, t.nextAttemptAt),
   ],
 );
@@ -305,12 +317,7 @@ export const partyTaxIds = pgTable(
   },
   (t) => [
     uniqueIndex("party_tax_ids_org_id_id_unique").on(t.orgId, t.id),
-    unique("party_tax_ids_identity_unique").on(
-      t.orgId,
-      t.partyId,
-      t.scheme,
-      t.value,
-    ),
+    unique("party_tax_ids_identity_unique").on(t.orgId, t.partyId, t.scheme, t.value),
     index("party_tax_ids_org_party").on(t.orgId, t.partyId),
   ],
 );
@@ -338,14 +345,10 @@ export const documentSupplyEvidence = pgTable(
     countryCode: text("country_code").notNull(),
     source: text("source").notNull(),
     observedOn: date("observed_on"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by"),
   },
-  (t) => [
-    index("document_supply_evidence_org_document").on(t.orgId, t.documentId),
-  ],
+  (t) => [index("document_supply_evidence_org_document").on(t.orgId, t.documentId)],
 );
 
 /**
@@ -357,9 +360,7 @@ export const marketplaceNexusStateRules = pgTable(
   "marketplace_nexus_state_rules",
   {
     state: text("state").primaryKey(),
-    includeInThreshold: boolean("include_in_threshold")
-      .notNull()
-      .default(true),
+    includeInThreshold: boolean("include_in_threshold").notNull().default(true),
     needsReview: boolean("needs_review").notNull().default(true),
     /** The cited source of a verified rule (publication or statute). */
     source: text("source").notNull().default(""),
@@ -390,14 +391,8 @@ export const taxAuthorityConnections = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("tax_authority_connections_org_id_id_unique").on(
-      t.orgId,
-      t.id,
-    ),
-    unique("tax_authority_connections_org_authority_unique").on(
-      t.orgId,
-      t.authority,
-    ),
+    uniqueIndex("tax_authority_connections_org_id_id_unique").on(t.orgId, t.id),
+    unique("tax_authority_connections_org_authority_unique").on(t.orgId, t.authority),
   ],
 );
 

@@ -1,7 +1,15 @@
-import { seedEnabledPayrollConfiguration } from '../../testing/fixtures.ts';
+import { seedEnabledPayrollConfiguration } from "../../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../../testing/fixtures.ts";
 /**
  * AU STP finalisation: the populated declaration, reconciled to committed runs.
@@ -51,21 +59,29 @@ test(
       const paygPayable = await account("2310", "PAYG withholding payable", "liability_current");
       const superPayable = await account("2320", "Superannuation payable", "liability_current");
       await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            wagesTo: "expense",
-            countries: ["AU"],
-          });
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        countries: ["AU"],
+      });
 
       await seedPayrollComponents(org.orgId, actorId, "AU");
       await setPackSlotAccount(org.orgId, actorId, "AU", "payg", paygPayable);
       await setPackSlotAccount(org.orgId, actorId, "AU", "super", superPayable);
-      for (const region of ["NSW", "VIC"]) await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp", region,
-        filingAccountId: null, taxYear: 2027, values: { rate: "0" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
-      });
+      for (const region of ["NSW", "VIC"])
+        await upsertStatutoryRate({
+          orgId: org.orgId,
+          actorId,
+          rates: AU_PACK_RATES,
+          rateKey: "au_workers_comp",
+          region,
+          filingAccountId: null,
+          taxYear: 2027,
+          values: { rate: "0" },
+          sourceCitation: "Test rate notice",
+          reason: "test fixture rate",
+        });
 
       const auSubId = randomUUID();
       await db.execute(sql`
@@ -75,12 +91,23 @@ test(
                 '{}'::jsonb, false, true, '{}'::jsonb)`);
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Fortnightly AU', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-        payDateOffsetDays: 3, subsidiaryId: auSubId,
+        name: "Fortnightly AU",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
+        payDateOffsetDays: 3,
+        subsidiaryId: auSubId,
       });
-      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, subsidiaryId: auSubId,
-        country: "AU", factKey: "payroll_tax_position", effectiveFrom: "2026-07-01",
-        value: "below_threshold_ungrouped", changeReason: "test employer below every state threshold" });
+      await upsertPayrollEmployerFact({
+        orgId: org.orgId,
+        actorId,
+        subsidiaryId: auSubId,
+        country: "AU",
+        factKey: "payroll_tax_position",
+        effectiveFrom: "2026-07-01",
+        value: "below_threshold_ungrouped",
+        changeReason: "test employer below every state threshold",
+      });
 
       const overtimeTypeId = randomUUID();
       await db.execute(sql`
@@ -94,10 +121,15 @@ test(
         });
         const employmentId = await seedWorkerEmployment(org.orgId, employeeId, auSubId);
         await seedPayrollWage(org.orgId, employeeId, actorId, {
-          currency: 'AUD', rate: '30', basis: 'hour', effectiveFrom: '2026-07-01',
+          currency: "AUD",
+          rate: "30",
+          basis: "hour",
+          effectiveFrom: "2026-07-01",
         });
         await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-          country: 'AU', province: province, payBasis: 'hourly',
+          country: "AU",
+          province: province,
+          payBasis: "hourly",
         });
 
         await db.execute(sql`
@@ -125,11 +157,19 @@ test(
       const melbourneId = await seedEmployee("Melbourne Worker", "VIC");
 
       const timeEntry = async (
-        employeeId: string, workedOn: string, hours: number, timeTypeId: string | null,
+        employeeId: string,
+        workedOn: string,
+        hours: number,
+        timeTypeId: string | null,
       ) => {
         await seedPayrollTime(org.orgId, employeeId, actorId, {
-          workedOn: workedOn, hours: hours, timeTypeId: timeTypeId, status: 'approved', isBillable: false,
-          billingStatus: 'unbilled', costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: hours,
+          timeTypeId: timeTypeId,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       };
       // Run 1 (2026-07-05 – 18): Sydney 80h regular + 10h overtime, Melbourne 80h.
@@ -152,43 +192,57 @@ test(
       const filing = auPackFilings().yearEnd.find((entry) => entry.key === "stp_finalisation")!;
 
       const run1 = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       assert.deepEqual(
-        (await calculatePayRun({ orgId: org.orgId, documentId: run1.documentId, actorId })).errors, [],
+        (await calculatePayRun({ orgId: org.orgId, documentId: run1.documentId, actorId })).errors,
+        [],
       );
 
       // A year with calculated-but-uncommitted work has nothing to declare.
-      await assert.rejects(
-        filing.population(org.orgId, 2027),
-        (error: unknown) => {
-          assert.ok(error instanceof PayrollPackError);
-          assert.match((error as Error).message, /no committed AU pay runs/);
-          return true;
-        },
-      );
+      await assert.rejects(filing.population(org.orgId, 2027), (error: unknown) => {
+        assert.ok(error instanceof PayrollPackError);
+        assert.match((error as Error).message, /no committed AU pay runs/);
+        return true;
+      });
 
       await commitPayRun({ orgId: org.orgId, documentId: run1.documentId, actorId });
       const run2 = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-19", periodEnd: "2026-08-01",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-19",
+        periodEnd: "2026-08-01",
       });
       assert.deepEqual(
-        (await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId })).errors, [],
+        (await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId })).errors,
+        [],
       );
       await commitPayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
       const run3 = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-08-02", periodEnd: "2026-08-15",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-08-02",
+        periodEnd: "2026-08-15",
       });
       assert.deepEqual(
-        (await calculatePayRun({ orgId: org.orgId, documentId: run3.documentId, actorId })).errors, [],
+        (await calculatePayRun({ orgId: org.orgId, documentId: run3.documentId, actorId })).errors,
+        [],
       );
 
-      const committed = (await db.execute<{ count: string }>(sql`
+      const committed = (
+        await db.execute<{ count: string }>(
+          sql`
         select count(*)::text as count from pay_runs
-         where org_id = ${org.orgId} and run_status = 'committed'`, "objects"))[0]!.count;
+         where org_id = ${org.orgId} and run_status = 'committed'`,
+          "objects",
+        )
+      )[0]!.count;
       assert.equal(committed, "2", "exactly two runs committed — the third stays a draft");
 
       // The tie-out: hand-derived engine figures, to the cent.
@@ -208,8 +262,13 @@ test(
           sacrifice: money(sydney.sacrifice as string),
         },
         {
-          gross: money("5250"), overtime: money("450"), bonuses: money("0"),
-          paidLeave: money("0"), payg: money("954"), sg: money("630"), sacrifice: money("0"),
+          gross: money("5250"),
+          overtime: money("450"),
+          bonuses: money("0"),
+          paidLeave: money("0"),
+          payg: money("954"),
+          sg: money("630"),
+          sacrifice: money("0"),
         },
         "Sydney: 2850 + 2400 gross, 450 overtime, 550 + 404 PAYG, 342 + 288 SG",
       );
@@ -228,7 +287,8 @@ test(
       // case sums, not the population's per-stub correlated subqueries) over
       // the same committed stubs must agree to the cent — and must not see
       // the draft run's $2400-per-employee either.
-      const check = (await db.execute<Record<string, unknown>>(sql`
+      const check = await db.execute<Record<string, unknown>>(
+        sql`
         select s.employee_party_id,
                sum(case when l.kind = 'earning' then l.amount else 0 end) as gross,
                sum(case when l.kind = 'earning' and pc.system_key = 'overtime'
@@ -245,7 +305,9 @@ test(
           left join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.tax_year = 2027 and s.country = 'AU'
          group by s.employee_party_id
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(check.length, 2);
       for (const row of check) {
         const populated = byId.get(String(row.employee_party_id))!;
@@ -260,11 +322,14 @@ test(
 
       // parseRowId round-trips every emitted row and refuses foreign ones.
       for (const row of data.rows) {
+        assert.deepEqual(filing.parseRowId(row.rowId as string), {
+          employees: [row.rowId],
+          accounts: [],
+        });
         assert.deepEqual(
+          parseStpFinalisationRowId(row.rowId as string),
           filing.parseRowId(row.rowId as string),
-          { employees: [row.rowId], accounts: [] },
         );
-        assert.deepEqual(parseStpFinalisationRowId(row.rowId as string), filing.parseRowId(row.rowId as string));
       }
       assert.equal(filing.parseRowId("not-a-uuid"), null);
       assert.equal(filing.parseRowId(`${sydneyId}:${melbourneId}`), null);
@@ -279,9 +344,15 @@ test(
       assert.equal(money(box.get("SG")!), money("630"));
       assert.equal(
         money(box.get("GROSS-STP")!),
-        money(stpReportableGross({
-          gross: "5250", overtime: "450", bonusesCommissions: "0", paidLeave: "0", allowances: "0",
-        })),
+        money(
+          stpReportableGross({
+            gross: "5250",
+            overtime: "450",
+            bonusesCommissions: "0",
+            paidLeave: "0",
+            allowances: "0",
+          }),
+        ),
         "STP-reportable gross is the total less separately-itemised overtime",
       );
       await assert.rejects(

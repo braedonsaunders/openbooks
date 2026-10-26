@@ -1,38 +1,45 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 registerHooks({
   resolve(specifier, _context, next) {
-    return next(specifier)
+    return next(specifier);
   },
-})
+});
 
-const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
-const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { voidReportDocument } = await import('../../testing/document-void.ts')
-const { vendorData } = await import('./vendor-data')
-const { projectVendorDashboard } = await import('./overview-projection')
-const { withAnalyticsRead } = await import('./read-context')
-import type { Authz } from '../authz'
+const { sql } = await import("drizzle-orm");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
+const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { voidReportDocument } = await import("../../testing/document-void.ts");
+const { vendorData } = await import("./vendor-data");
+const { projectVendorDashboard } = await import("./overview-projection");
+const { withAnalyticsRead } = await import("./read-context");
+import type { Authz } from "../authz";
 
-const D = '2026-07-14'
-const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
+const D = "2026-07-14";
+const P = { from: "2026-07-01", to: "2026-07-31", label: "July 2026" };
 
-test('vendor ledger aggregation preserves tiny-line totals, live labels and role/subsidiary boundaries', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  await assertDedicatedFixtureDatabase()
-  const { org } = await seedTwoCurrencySpend()
-  try {
-    await withBypass(async () => {
-      for (const [party, amount] of [[org.vendorId, '0.0001'], [org.customerId, '50']] as const) {
-        const entry = randomUUID()
-        await db.execute(sql`insert into journal_entries
+test(
+  "vendor ledger aggregation preserves tiny-line totals, live labels and role/subsidiary boundaries",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    await assertDedicatedFixtureDatabase();
+    const { org } = await seedTwoCurrencySpend();
+    try {
+      await withBypass(async () => {
+        for (const [party, amount] of [
+          [org.vendorId, "0.0001"],
+          [org.customerId, "50"],
+        ] as const) {
+          const entry = randomUUID();
+          await db.execute(sql`insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entry}, ${D}, ${org.periodId}, 'draft', 'manual')`)
-        await db.execute(sql`insert into journal_lines
+          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entry}, ${D}, ${org.periodId}, 'draft', 'manual')`);
+          await db.execute(sql`insert into journal_lines
           (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate)
           select gen_random_uuid(), ${org.orgId}, ${entry}, n * 2 + leg.line_offset,
             leg.account_id, ${org.subsidiaryId}, ${party}, leg.amount, 'CAD', leg.amount, 1
@@ -40,160 +47,249 @@ test('vendor ledger aggregation preserves tiny-line totals, live labels and role
           cross join lateral (values
             (-1, ${org.accounts.cogs}::uuid, ${amount}::numeric),
             (0, ${org.accounts.bank}::uuid, -${amount}::numeric)
-          ) leg(line_offset, account_id, amount)`)
-        await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
-      }
-    })
-    await pinClock('2026-07-15', () => withOrgContext(org.orgId, async () => {
-      const full = await vendorData(P, org.orgId, null)
-      assert.equal(full.totals.spend, '235.0020')
-      assert.equal(full.rows.find(row => row.id === org.vendorId)?.spend, '100.0020')
-      assert.equal(full.rows.some(row => row.id === org.customerId), false)
-      const scoped = await vendorData(P, org.orgId, new Set([org.subsidiaryId]))
-      assert.equal(scoped.totals.spend, '100.0020')
-      assert.equal(scoped.monthly.find(row => row.month === '2026-07')?.spend, '100.0020')
-      const renamed = await withBypass(() => db.execute(sql`update parties set display_name='Renamed supplier'
-        where id=${org.vendorId} and org_id=${org.orgId} returning id`, 'objects'))
-      assert.equal(renamed.length, 1)
-      const fresh = await vendorData(P, org.orgId, new Set([org.subsidiaryId]))
-      assert.equal(fresh.rows.find(row => row.id === org.vendorId)?.name, 'Renamed supplier')
-      assert.equal(fresh.totals.spend, scoped.totals.spend)
-    }))
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+          ) leg(line_offset, account_id, amount)`);
+          await db.execute(
+            sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`,
+          );
+        }
+      });
+      await pinClock("2026-07-15", () =>
+        withOrgContext(org.orgId, async () => {
+          const full = await vendorData(P, org.orgId, null);
+          assert.equal(full.totals.spend, "235.0020");
+          assert.equal(full.rows.find((row) => row.id === org.vendorId)?.spend, "100.0020");
+          assert.equal(
+            full.rows.some((row) => row.id === org.customerId),
+            false,
+          );
+          const scoped = await vendorData(P, org.orgId, new Set([org.subsidiaryId]));
+          assert.equal(scoped.totals.spend, "100.0020");
+          assert.equal(scoped.monthly.find((row) => row.month === "2026-07")?.spend, "100.0020");
+          const renamed = await withBypass(() =>
+            db.execute(
+              sql`update parties set display_name='Renamed supplier'
+        where id=${org.vendorId} and org_id=${org.orgId} returning id`,
+              "objects",
+            ),
+          );
+          assert.equal(renamed.length, 1);
+          const fresh = await vendorData(P, org.orgId, new Set([org.subsidiaryId]));
+          assert.equal(fresh.rows.find((row) => row.id === org.vendorId)?.name, "Renamed supplier");
+          assert.equal(fresh.totals.spend, scoped.totals.spend);
+        }),
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test('vendor overview bounds chart rows without changing translated portfolio totals or detail reads', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  await assertDedicatedFixtureDatabase()
-  const { org } = await seedTwoCurrencySpend()
-  try {
-    await withBypass(async () => {
-      for (let i = 0; i < 11; i++) {
-        const vendor = randomUUID()
-        const entry = randomUUID()
-        await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-          values (${vendor}, ${org.orgId}, 'vendor', ${`Supplier ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`)
-        await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
-          values (${randomUUID()}, ${org.orgId}, ${vendor})`)
-        await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`SUPPLIER-${i}`}, ${D}, ${org.periodId}, 'draft', 'manual')`)
-        await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate)
+test(
+  "vendor overview bounds chart rows without changing translated portfolio totals or detail reads",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    await assertDedicatedFixtureDatabase();
+    const { org } = await seedTwoCurrencySpend();
+    try {
+      await withBypass(async () => {
+        for (let i = 0; i < 11; i++) {
+          const vendor = randomUUID();
+          const entry = randomUUID();
+          await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+          values (${vendor}, ${org.orgId}, 'vendor', ${`Supplier ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
+          await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
+          values (${randomUUID()}, ${org.orgId}, ${vendor})`);
+          await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`SUPPLIER-${i}`}, ${D}, ${org.periodId}, 'draft', 'manual')`);
+          await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate)
           values (${randomUUID()}, ${org.orgId}, ${entry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${vendor}, 1, 'CAD', 1, 1),
-                 (${randomUUID()}, ${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${vendor}, -1, 'CAD', -1, 1)`)
-        await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
-      }
-    })
-    await pinClock('2026-07-15', () => withOrgContext(org.orgId, async () => {
-      const full = await vendorData(P, org.orgId, null)
-      assert.equal(full.rows.length, 13)
-      assert.equal(full.totals.spend, '246.0000')
-      assert.equal(full.totals.priorSpend, '130.0000')
-      const authz = { user: { orgId: org.orgId }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as Authz
-      const read = { authz, slug: 'vendor-performance', projection: 'tab' as const, tab: 'overview', locale: 'en', revision: 'test', observedAt: Date.now() }
-      const overview = await withAnalyticsRead(read, async () => projectVendorDashboard(full))
-      assert.deepEqual(overview.rows, full.rows.slice(0, 10))
-      assert.deepEqual({ ...overview, rows: full.rows }, full, 'every portfolio figure, breakdown and month retains the complete translated population')
-      assert.equal(full.rows.length, 13, 'projection cannot mutate the source used by other readers')
-      assert.strictEqual(projectVendorDashboard(full), full, 'direct readers retain all vendors')
-      for (const tab of ['payment', 'scorecard', 'matrix', 'vendors', 'configuration']) {
-        assert.strictEqual(await withAnalyticsRead({ ...read, tab }, async () => projectVendorDashboard(full)), full)
-      }
-      const { registerQueryObserver } = await import('@openbooks/engine/platform/query-observer')
-      for (const tab of ['overview', 'payment', 'scorecard', 'matrix', 'vendors']) {
-        const statements: string[] = []
-        const close = registerQueryObserver(statement => statements.push(statement))
-        let selected
-        try {
-          selected = await await withAnalyticsRead({ ...read, tab, revision: randomUUID() }, () => vendorData(P, org.orgId, null))
-        } finally { close() }
-        const needsTrend = tab === 'overview'
-        assert.deepEqual(selected, { ...full, monthly: needsTrend ? full.monthly : [] },
-          `${tab} retains every live scoped vendor and portfolio figure`)
-        assert.equal(statements.filter(statement => statement.includes('as bucket,')).length, needsTrend ? 1 : 0,
-          `${tab} reads the twelve-month ledger only when its trend is displayed`)
-      }
-      const summary = await await withAnalyticsRead({ ...read, projection: 'summary', revision: randomUUID() },
-        () => vendorData(P, org.orgId, null))
-      assert.deepEqual(summary.monthly, full.monthly, 'hub sparklines retain the complete translated trend')
-      assert.strictEqual(await withAnalyticsRead({ ...read, projection: 'summary' }, async () => projectVendorDashboard(full)), full)
-      assert.strictEqual(await withAnalyticsRead({ ...read, slug: 'customer-intelligence' }, async () => projectVendorDashboard(full)), full)
-      const empty = await vendorData(P, org.orgId, new Set())
-      const emptyOverview = await withAnalyticsRead(read, async () => projectVendorDashboard(empty))
-      assert.deepEqual(emptyOverview, empty, 'an empty subsidiary lens remains empty')
-    }))
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+                 (${randomUUID()}, ${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${vendor}, -1, 'CAD', -1, 1)`);
+          await db.execute(
+            sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`,
+          );
+        }
+      });
+      await pinClock("2026-07-15", () =>
+        withOrgContext(org.orgId, async () => {
+          const full = await vendorData(P, org.orgId, null);
+          assert.equal(full.rows.length, 13);
+          assert.equal(full.totals.spend, "246.0000");
+          assert.equal(full.totals.priorSpend, "130.0000");
+          const authz = {
+            user: { orgId: org.orgId },
+            permissions: new Set(["reports.read"]),
+            allowedSubsidiaryIds: null,
+          } as Authz;
+          const read = {
+            authz,
+            slug: "vendor-performance",
+            projection: "tab" as const,
+            tab: "overview",
+            locale: "en",
+            revision: "test",
+            observedAt: Date.now(),
+          };
+          const overview = await withAnalyticsRead(read, async () => projectVendorDashboard(full));
+          assert.deepEqual(overview.rows, full.rows.slice(0, 10));
+          assert.deepEqual(
+            { ...overview, rows: full.rows },
+            full,
+            "every portfolio figure, breakdown and month retains the complete translated population",
+          );
+          assert.equal(
+            full.rows.length,
+            13,
+            "projection cannot mutate the source used by other readers",
+          );
+          assert.strictEqual(
+            projectVendorDashboard(full),
+            full,
+            "direct readers retain all vendors",
+          );
+          for (const tab of ["payment", "scorecard", "matrix", "vendors", "configuration"]) {
+            assert.strictEqual(
+              await withAnalyticsRead({ ...read, tab }, async () => projectVendorDashboard(full)),
+              full,
+            );
+          }
+          const { registerQueryObserver } =
+            await import("@openbooks/engine/platform/query-observer");
+          for (const tab of ["overview", "payment", "scorecard", "matrix", "vendors"]) {
+            const statements: string[] = [];
+            const close = registerQueryObserver((statement) => statements.push(statement));
+            let selected;
+            try {
+              selected = await await withAnalyticsRead(
+                { ...read, tab, revision: randomUUID() },
+                () => vendorData(P, org.orgId, null),
+              );
+            } finally {
+              close();
+            }
+            const needsTrend = tab === "overview";
+            assert.deepEqual(
+              selected,
+              { ...full, monthly: needsTrend ? full.monthly : [] },
+              `${tab} retains every live scoped vendor and portfolio figure`,
+            );
+            assert.equal(
+              statements.filter((statement) => statement.includes("as bucket,")).length,
+              needsTrend ? 1 : 0,
+              `${tab} reads the twelve-month ledger only when its trend is displayed`,
+            );
+          }
+          const summary = await await withAnalyticsRead(
+            { ...read, projection: "summary", revision: randomUUID() },
+            () => vendorData(P, org.orgId, null),
+          );
+          assert.deepEqual(
+            summary.monthly,
+            full.monthly,
+            "hub sparklines retain the complete translated trend",
+          );
+          assert.strictEqual(
+            await withAnalyticsRead({ ...read, projection: "summary" }, async () =>
+              projectVendorDashboard(full),
+            ),
+            full,
+          );
+          assert.strictEqual(
+            await withAnalyticsRead({ ...read, slug: "customer-intelligence" }, async () =>
+              projectVendorDashboard(full),
+            ),
+            full,
+          );
+          const empty = await vendorData(P, org.orgId, new Set());
+          const emptyOverview = await withAnalyticsRead(read, async () =>
+            projectVendorDashboard(empty),
+          );
+          assert.deepEqual(emptyOverview, empty, "an empty subsidiary lens remains empty");
+        }),
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 async function seedTwoCurrencySpend() {
-  const org = await withBypass(() => createScratchOrg())
-  const usSub = randomUUID()
-  const usVend = randomUUID()
-  let cadBillDocumentId = ''
+  const org = await withBypass(() => createScratchOrg());
+  const usSub = randomUUID();
+  const usVend = randomUUID();
+  let cadBillDocumentId = "";
   await withBypass(async () => {
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-      values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
+      values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${usVend}, ${org.orgId}, 'vendor', 'US Vendor', ${usSub}, true, '{}'::jsonb)`)
+      values (${usVend}, ${org.orgId}, 'vendor', 'US Vendor', ${usSub}, true, '{}'::jsonb)`);
     await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
       values (${randomUUID()}, ${org.orgId}, ${usVend}),
-             (${randomUUID()}, ${org.orgId}, ${org.vendorId})`)
-    await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
+             (${randomUUID()}, ${org.orgId}, ${org.vendorId})`);
+    await db.execute(
+      sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`,
+    );
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual'),
-             (${org.orgId},'USD','CAD','2025-07-14','spot',1.3,'manual')`)
-    const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, 'objects')
-    const calRow0 = calRow[0]
-    if (!calRow0) throw new Error('scratch period has no fiscal calendar')
-    const cal = String(calRow0.fiscal_calendar_id)
-    const priorPeriod = randomUUID()
+             (${org.orgId},'USD','CAD','2025-07-14','spot',1.3,'manual')`);
+    const calRow = await db.execute(
+      sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
+      "objects",
+    );
+    const calRow0 = calRow[0];
+    if (!calRow0) throw new Error("scratch period has no fiscal calendar");
+    const cal = String(calRow0.fiscal_calendar_id);
+    const priorPeriod = randomUUID();
     await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      values (${priorPeriod}, ${org.orgId}, 2025, 7, '2025-07', '2025-07-01', '2025-07-31', false, ${cal})`)
+      values (${priorPeriod}, ${org.orgId}, 2025, 7, '2025-07', '2025-07-01', '2025-07-31', false, ${cal})`);
     // Bills post expense legs with the vendor party: CAD 100 (Main, July),
     // USD 100 (US, July), USD 100 (US, prior July).
     const bills = [
-      ['BILL-CAD', org.subsidiaryId, org.vendorId, 'CAD', '100', '1', D, org.periodId, null],
-      ['BILL-USD', usSub, usVend, 'USD', '100', '1', D, org.periodId, '2026-07-10'],
-      ['BILL-PRIOR', usSub, usVend, 'USD', '100', '1', '2025-07-15', priorPeriod, null],
-    ] as const
-    let usBillLine = ''
+      ["BILL-CAD", org.subsidiaryId, org.vendorId, "CAD", "100", "1", D, org.periodId, null],
+      ["BILL-USD", usSub, usVend, "USD", "100", "1", D, org.periodId, "2026-07-10"],
+      ["BILL-PRIOR", usSub, usVend, "USD", "100", "1", "2025-07-15", priorPeriod, null],
+    ] as const;
+    let usBillLine = "";
     // Timeliness runs from the bill document's own due date: the line-level
     // due rides null here so the document date is what the loader must read.
     for (const [num, sub, party, cur, total, fx, date, period, due] of bills) {
-      const docId = randomUUID()
-      const entryId = randomUUID()
-      const lineId = randomUUID()
-      if (num === 'BILL-USD') usBillLine = lineId
-      if (num === 'BILL-CAD') cadBillDocumentId = docId
+      const docId = randomUUID();
+      const entryId = randomUUID();
+      const lineId = randomUUID();
+      if (num === "BILL-USD") usBillLine = lineId;
+      if (num === "BILL-CAD") cadBillDocumentId = docId;
       await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, due_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
-        values (${docId}, ${org.orgId}, 'vendor_bill', ${num}, ${party}, ${sub}, ${date}, ${date}, ${due}, ${cur}, ${fx}, 'draft', ${total}, 0, ${total}, ${total})`)
+        values (${docId}, ${org.orgId}, 'vendor_bill', ${num}, ${party}, ${sub}, ${date}, ${date}, ${due}, ${cur}, ${fx}, 'draft', ${total}, 0, ${total}, ${total})`);
       await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
-        values (${entryId}, ${org.orgId}, ${org.bookId}, ${sub}, ${num}, ${date}, ${period}, 'draft', 'manual', ${docId})`)
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${sub}, ${num}, ${date}, ${period}, 'draft', 'manual', ${docId})`);
       await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, due_date, is_open_item, amount, currency, txn_amount, fx_rate)
-        values (${lineId}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${sub}, ${party}, null, true, ${'-' + total}, ${cur}, ${'-' + total}, ${fx}),
-               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${sub}, ${party}, null, false, ${total}, ${cur}, ${total}, ${fx})`)
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
-      await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${period} where id=${docId}`)
+        values (${lineId}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${sub}, ${party}, null, true, ${"-" + total}, ${cur}, ${"-" + total}, ${fx}),
+               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${sub}, ${party}, null, false, ${total}, ${cur}, ${total}, ${fx})`);
+      await db.execute(
+        sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`,
+      );
+      await db.execute(
+        sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${period} where id=${docId}`,
+      );
     }
     // Fully pay the USD bill late (due 07-10, paid 07-14): the late-spend leg
     // is USD-functional and must translate too.
-    const payEntry = randomUUID()
-    const payLine = randomUUID()
+    const payEntry = randomUUID();
+    const payLine = randomUUID();
     await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-      values (${payEntry}, ${org.orgId}, ${org.bookId}, ${usSub}, 'PAY-USD', ${D}, ${org.periodId}, 'draft', 'manual')`)
+      values (${payEntry}, ${org.orgId}, ${org.bookId}, ${usSub}, 'PAY-USD', ${D}, ${org.periodId}, 'draft', 'manual')`);
     await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
       values (${payLine}, ${org.orgId}, ${payEntry}, 1, ${org.accounts.ap}, ${usSub}, ${usVend}, true, '100', 'USD', '100', 1),
-             (${randomUUID()}, ${org.orgId}, ${payEntry}, 2, ${org.accounts.bank}, ${usSub}, ${usVend}, false, '-100', 'USD', '-100', 1)`)
-    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${payEntry}`)
+             (${randomUUID()}, ${org.orgId}, ${payEntry}, 2, ${org.accounts.bank}, ${usSub}, ${usVend}, false, '-100', 'USD', '-100', 1)`);
+    await db.execute(
+      sql`update journal_entries set status='posted', posted_at=now() where id=${payEntry}`,
+    );
     await db.execute(sql`insert into applications (id, org_id, from_line_id, to_line_id, amount, source_amount,
       source_transaction_amount, source_transaction_currency, target_transaction_amount, target_transaction_currency,
       settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on, created_by)
       values (${randomUUID()}, ${org.orgId}, ${payLine}, ${usBillLine}, 100, 100, 100, 'USD', 100, 'USD',
-        1, 'same_currency', 'same transaction currency', ${D}, ${org.orgId})`)
-  })
-  return { org, usVend, cadBillDocumentId }
+        1, 'same_currency', 'same transaction currency', ${D}, ${org.orgId})`);
+  });
+  return { org, usVend, cadBillDocumentId };
 }
 
 /**
@@ -201,30 +297,38 @@ async function seedTwoCurrencySpend() {
  * in a USD subsidiary is 135 CAD of spend (130 at its own prior-year rate),
  * and late-paid USD legs translate the same way — not 100 everywhere.
  */
-test('vendor performance translates every spend functional to presentation', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, usVend, cadBillDocumentId } = await seedTwoCurrencySpend()
-  try {
-    await voidReportDocument(org.orgId, cadBillDocumentId, '2026-08-05')
-    await pinClock('2026-07-15', async () => {
-      await withOrgContext(org.orgId, async () => {
-        const data = await vendorData(P, org.orgId, null)
-        const usRow = data.rows.find((r) => r.id === usVend)!
-        const cadRow = data.rows.find((r) => r.id === org.vendorId)!
-        assert.equal(usRow.spend, "135.0000")
-        assert.equal(usRow.priorSpend, "130.0000")
-        assert.equal(usRow.lateSpend, "135.0000")
-        assert.equal(usRow.bills, 1, 'a bill voided after the report cutoff remains in July activity')
-        assert.equal(cadRow.bills, 1, 'the voided CAD bill also remains in July activity')
-        assert.equal(data.totals.spend, "235.0000")
-        assert.equal(data.totals.priorSpend, "130.0000")
-        assert.equal(data.totals.lateSpend, "135.0000")
-        assert.equal(data.monthly.find((m) => m.month === '2026-07')?.spend, "235.0000")
-      })
-    })
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "vendor performance translates every spend functional to presentation",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, usVend, cadBillDocumentId } = await seedTwoCurrencySpend();
+    try {
+      await voidReportDocument(org.orgId, cadBillDocumentId, "2026-08-05");
+      await pinClock("2026-07-15", async () => {
+        await withOrgContext(org.orgId, async () => {
+          const data = await vendorData(P, org.orgId, null);
+          const usRow = data.rows.find((r) => r.id === usVend)!;
+          const cadRow = data.rows.find((r) => r.id === org.vendorId)!;
+          assert.equal(usRow.spend, "135.0000");
+          assert.equal(usRow.priorSpend, "130.0000");
+          assert.equal(usRow.lateSpend, "135.0000");
+          assert.equal(
+            usRow.bills,
+            1,
+            "a bill voided after the report cutoff remains in July activity",
+          );
+          assert.equal(cadRow.bills, 1, "the voided CAD bill also remains in July activity");
+          assert.equal(data.totals.spend, "235.0000");
+          assert.equal(data.totals.priorSpend, "130.0000");
+          assert.equal(data.totals.lateSpend, "135.0000");
+          assert.equal(data.monthly.find((m) => m.month === "2026-07")?.spend, "235.0000");
+        });
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * A journal AP line carries its own due date with no linked vendor bill
@@ -232,60 +336,72 @@ test('vendor performance translates every spend functional to presentation', { s
  * line's date, not the absent bill's. Paid 07-12 against a line due 07-05
  * is one late bill with late spend — never an undated exclusion.
  */
-test('vendor performance reads the open item due date without a bill', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    await withBypass(async () => {
-      await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
-        values (${randomUUID()}, ${org.orgId}, ${org.vendorId})`)
-      const billEntry = randomUUID()
-      const billLine = randomUUID()
-      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${billEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEN-1', '2026-07-01', ${org.periodId}, 'draft', 'manual')`)
-      await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, due_date, is_open_item, amount, currency, txn_amount, fx_rate)
+test(
+  "vendor performance reads the open item due date without a bill",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await withBypass(async () => {
+        await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
+        values (${randomUUID()}, ${org.orgId}, ${org.vendorId})`);
+        const billEntry = randomUUID();
+        const billLine = randomUUID();
+        await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${billEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEN-1', '2026-07-01', ${org.periodId}, 'draft', 'manual')`);
+        await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, due_date, is_open_item, amount, currency, txn_amount, fx_rate)
         values (${billLine}, ${org.orgId}, ${billEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${org.vendorId}, '2026-07-05', true, '-100', 'CAD', '-100', 1),
-               (${randomUUID()}, ${org.orgId}, ${billEntry}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.vendorId}, null, false, '100', 'CAD', '100', 1)`)
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${billEntry}`)
-      const payEntry = randomUUID()
-      const payLine = randomUUID()
-      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${payEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEN-PAY-1', '2026-07-12', ${org.periodId}, 'draft', 'manual')`)
-      await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+               (${randomUUID()}, ${org.orgId}, ${billEntry}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.vendorId}, null, false, '100', 'CAD', '100', 1)`);
+        await db.execute(
+          sql`update journal_entries set status='posted', posted_at=now() where id=${billEntry}`,
+        );
+        const payEntry = randomUUID();
+        const payLine = randomUUID();
+        await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${payEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEN-PAY-1', '2026-07-12', ${org.periodId}, 'draft', 'manual')`);
+        await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
         values (${payLine}, ${org.orgId}, ${payEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${org.vendorId}, true, '100', 'CAD', '100', 1),
-               (${randomUUID()}, ${org.orgId}, ${payEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.vendorId}, false, '-100', 'CAD', '-100', 1)`)
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${payEntry}`)
-      await db.execute(sql`insert into applications (id, org_id, from_line_id, to_line_id, amount, source_amount,
+               (${randomUUID()}, ${org.orgId}, ${payEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.vendorId}, false, '-100', 'CAD', '-100', 1)`);
+        await db.execute(
+          sql`update journal_entries set status='posted', posted_at=now() where id=${payEntry}`,
+        );
+        await db.execute(sql`insert into applications (id, org_id, from_line_id, to_line_id, amount, source_amount,
         source_transaction_amount, source_transaction_currency, target_transaction_amount, target_transaction_currency,
         settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on, created_by)
         values (${randomUUID()}, ${org.orgId}, ${payLine}, ${billLine}, 100, 100, 100, 'CAD', 100, 'CAD',
-          1, 'same_currency', 'same transaction currency', '2026-07-12', ${org.orgId})`)
-    })
-    await withOrgContext(org.orgId, async () => {
-      const data = await vendorData(P, org.orgId, null)
-      const row = data.rows.find((r) => r.id === org.vendorId)!
-      assert.ok(row, 'the opening-balance vendor is a row')
-      assert.equal(row.paidBills, 1)
-      assert.equal(row.undatedBills, 0, 'the line due date dates the bill')
-      assert.equal(row.onTimePct, 0)
-      assert.equal(row.lateSpend, "100.0000")
-    })
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('vendor performance fails closed when a functional has no spot coverage', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org } = await seedTwoCurrencySpend()
-  try {
-    await withBypass(async () => {
-      await db.execute(sql`delete from fx_rates where org_id = ${org.orgId}`)
-    })
-    await pinClock('2026-07-15', async () => {
+          1, 'same_currency', 'same transaction currency', '2026-07-12', ${org.orgId})`);
+      });
       await withOrgContext(org.orgId, async () => {
-        await assert.rejects(vendorData(P, org.orgId, null), /no spot rate for USD/)
-      })
-    })
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+        const data = await vendorData(P, org.orgId, null);
+        const row = data.rows.find((r) => r.id === org.vendorId)!;
+        assert.ok(row, "the opening-balance vendor is a row");
+        assert.equal(row.paidBills, 1);
+        assert.equal(row.undatedBills, 0, "the line due date dates the bill");
+        assert.equal(row.onTimePct, 0);
+        assert.equal(row.lateSpend, "100.0000");
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "vendor performance fails closed when a functional has no spot coverage",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org } = await seedTwoCurrencySpend();
+    try {
+      await withBypass(async () => {
+        await db.execute(sql`delete from fx_rates where org_id = ${org.orgId}`);
+      });
+      await pinClock("2026-07-15", async () => {
+        await withOrgContext(org.orgId, async () => {
+          await assert.rejects(vendorData(P, org.orgId, null), /no spot rate for USD/);
+        });
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

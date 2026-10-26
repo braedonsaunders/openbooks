@@ -21,7 +21,11 @@ function text(value: unknown): string | null {
 /** Decimal-string shop amount to exact minor units under the currency exponent. */
 export function shopMinorUnits(amount: string, currency: string): bigint {
   const code = currency.toUpperCase();
-  const exponent = ZERO_DECIMAL_CURRENCIES.has(code) ? 0 : THREE_DECIMAL_CURRENCIES.has(code) ? 3 : 2;
+  const exponent = ZERO_DECIMAL_CURRENCIES.has(code)
+    ? 0
+    : THREE_DECIMAL_CURRENCIES.has(code)
+      ? 3
+      : 2;
   const match = /^(\d+)(?:\.(\d+))?$/.exec(amount.trim());
   if (!match) {
     fail(
@@ -56,7 +60,20 @@ function addressOf(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const kept: Record<string, unknown> = {};
-  for (const key of ["first_name", "last_name", "company", "address1", "address2", "city", "province", "province_code", "country", "country_code", "zip", "phone"]) {
+  for (const key of [
+    "first_name",
+    "last_name",
+    "company",
+    "address1",
+    "address2",
+    "city",
+    "province",
+    "province_code",
+    "country",
+    "country_code",
+    "zip",
+    "phone",
+  ]) {
     if (record[key] !== undefined && record[key] !== null) kept[key] = record[key];
   }
   return Object.keys(kept).length > 0 ? kept : null;
@@ -73,7 +90,11 @@ function jurisdictionOf(title: string): string {
   return title.trim().toUpperCase();
 }
 
-function normalizeTaxLines(lines: unknown, currency: string, marketplace: boolean): ChannelOrder["lines"][number]["taxLines"] {
+function normalizeTaxLines(
+  lines: unknown,
+  currency: string,
+  marketplace: boolean,
+): ChannelOrder["lines"][number]["taxLines"] {
   if (!Array.isArray(lines)) return [];
   return lines.map((entry) => {
     const line = (entry ?? {}) as ShopifyTaxLine;
@@ -96,11 +117,18 @@ function normalizeTaxLines(lines: unknown, currency: string, marketplace: boolea
  */
 export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    fail("The Shopify order payload is not an object.", "Replay the orders/create delivery from Shopify, then ingest it again.");
+    fail(
+      "The Shopify order payload is not an object.",
+      "Replay the orders/create delivery from Shopify, then ingest it again.",
+    );
   }
   const order = payload as Record<string, unknown>;
   const externalId = text(order.id !== undefined && order.id !== null ? String(order.id) : null);
-  if (!externalId) fail("The Shopify order carries no id.", "Replay the orders/create delivery from Shopify, then ingest it again.");
+  if (!externalId)
+    fail(
+      "The Shopify order carries no id.",
+      "Replay the orders/create delivery from Shopify, then ingest it again.",
+    );
   const currency = text(order.currency)?.toUpperCase();
   if (!currency || !/^[A-Z]{3}$/.test(currency)) {
     fail(
@@ -109,20 +137,29 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
     );
   }
   const customer = (order.customer ?? {}) as Record<string, unknown>;
-  const customerAddress = addressOf(order.billing_address ?? order.shipping_address ?? customer.default_address);
+  const customerAddress = addressOf(
+    order.billing_address ?? order.shipping_address ?? customer.default_address,
+  );
   const discountCodes = Array.isArray(order.discount_codes)
-    ? (order.discount_codes as Array<Record<string, unknown>>).map((entry) => text(entry.code)).filter((code): code is string => !!code)
+    ? (order.discount_codes as Array<Record<string, unknown>>)
+        .map((entry) => text(entry.code))
+        .filter((code): code is string => !!code)
     : [];
   const gatewayNames = Array.isArray(order.payment_gateway_names)
     ? (order.payment_gateway_names as unknown[]).map((name) => String(name))
     : [];
-  const transactions = Array.isArray(order.transactions) ? (order.transactions as Array<Record<string, unknown>>) : [];
+  const transactions = Array.isArray(order.transactions)
+    ? (order.transactions as Array<Record<string, unknown>>)
+    : [];
 
   const lines: ChannelOrder["lines"] = [];
-  const lineItems = Array.isArray(order.line_items) ? (order.line_items as Array<Record<string, unknown>>) : [];
+  const lineItems = Array.isArray(order.line_items)
+    ? (order.line_items as Array<Record<string, unknown>>)
+    : [];
   for (const entry of lineItems) {
     const sku = text(entry.sku);
-    const variantId = entry.variant_id !== undefined && entry.variant_id !== null ? String(entry.variant_id) : null;
+    const variantId =
+      entry.variant_id !== undefined && entry.variant_id !== null ? String(entry.variant_id) : null;
     const quantity = Number(entry.quantity ?? 0);
     if (!Number.isInteger(quantity) || quantity <= 0) {
       fail(
@@ -131,7 +168,9 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
       );
     }
     const priceMinor = shopMinorUnits(String(entry.price ?? "0"), currency);
-    const allocations = Array.isArray(entry.discount_allocations) ? (entry.discount_allocations as Array<Record<string, unknown>>) : [];
+    const allocations = Array.isArray(entry.discount_allocations)
+      ? (entry.discount_allocations as Array<Record<string, unknown>>)
+      : [];
     let discountMinor = 0n;
     let discountCode: string | null = null;
     for (const allocation of allocations) {
@@ -139,12 +178,15 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
       const index = allocation.discount_application_index;
       if (typeof index === "number" && discountCodes[index]) discountCode = discountCodes[index]!;
     }
-    if (discountMinor === 0n && discountCodes.length > 0 && lineItems.length === 1) discountCode = discountCodes[0]!;
+    if (discountMinor === 0n && discountCodes.length > 0 && lineItems.length === 1)
+      discountCode = discountCodes[0]!;
     const taxLines = normalizeTaxLines(
       entry.tax_lines,
       currency,
       /marketplace/i.test(text((entry as Record<string, unknown>).title ?? "") ?? "") ||
-        (entry.tax_lines as ShopifyTaxLine[] | undefined)?.some((tax) => /marketplace/i.test(text(tax.title) ?? "")) === true,
+        (entry.tax_lines as ShopifyTaxLine[] | undefined)?.some((tax) =>
+          /marketplace/i.test(text(tax.title) ?? ""),
+        ) === true,
     );
     lines.push({
       sku,
@@ -161,12 +203,15 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
   }
 
   const shippingLines: ChannelOrder["shippingLines"] = [];
-  const shipLines = Array.isArray(order.shipping_lines) ? (order.shipping_lines as Array<Record<string, unknown>>) : [];
+  const shipLines = Array.isArray(order.shipping_lines)
+    ? (order.shipping_lines as Array<Record<string, unknown>>)
+    : [];
   for (const entry of shipLines) {
     const shipPrice = shopMinorUnits(String(entry.price ?? "0"), currency);
-    const shipDiscounted = entry.discounted_price === undefined || entry.discounted_price === null
-      ? shipPrice
-      : shopMinorUnits(String(entry.discounted_price), currency);
+    const shipDiscounted =
+      entry.discounted_price === undefined || entry.discounted_price === null
+        ? shipPrice
+        : shopMinorUnits(String(entry.discounted_price), currency);
     shippingLines.push({
       title: text(entry.title) ?? "Shipping",
       amountMinor: shipPrice,
@@ -183,11 +228,15 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
     for (const txn of sales) {
       const gateway = text(txn.gateway) ?? gatewayNames[0] ?? "shopify_payments";
       const receipt = (txn.receipt ?? {}) as Record<string, unknown>;
-      const giftCardId = receipt.gift_card_id !== undefined && receipt.gift_card_id !== null ? String(receipt.gift_card_id) : null;
+      const giftCardId =
+        receipt.gift_card_id !== undefined && receipt.gift_card_id !== null
+          ? String(receipt.gift_card_id)
+          : null;
       tenders.push({
         gateway,
         amountMinor: shopMinorUnits(String(txn.amount ?? "0"), currency),
-        giftCardExternalId: gateway.toLowerCase() === "gift_card" ? (giftCardId ?? String(txn.id ?? "")) : giftCardId,
+        giftCardExternalId:
+          gateway.toLowerCase() === "gift_card" ? (giftCardId ?? String(txn.id ?? "")) : giftCardId,
         authorizationRef: text(txn.authorization),
       });
     }
@@ -203,16 +252,21 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
     });
   }
 
-  const tags = typeof order.tags === "string"
-    ? order.tags.split(",").map((tag) => tag.trim()).filter((tag) => tag !== "")
-    : [];
+  const tags =
+    typeof order.tags === "string"
+      ? order.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter((tag) => tag !== "")
+      : [];
   const email = text(order.email) ?? text(customer.email);
   const firstName = text(customer.first_name);
   const lastName = text(customer.last_name);
   return {
     externalId,
     number: text(order.name) ?? `#${externalId}`,
-    customerExternalId: customer.id !== undefined && customer.id !== null ? String(customer.id) : null,
+    customerExternalId:
+      customer.id !== undefined && customer.id !== null ? String(customer.id) : null,
     customerName: firstName || lastName ? `${firstName ?? ""} ${lastName ?? ""}`.trim() : null,
     customerEmail: email,
     customerAddress,
@@ -222,7 +276,10 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
     presentmentCurrency: text(order.presentment_currency)?.toUpperCase() ?? currency,
     subtotalMinor: shopMinorUnits(String(order.subtotal_price ?? "0"), currency),
     taxMinor: shopMinorUnits(String(order.total_tax ?? "0"), currency),
-    shippingMinor: shipLines.reduce((sum, entry) => sum + shopMinorUnits(String(entry.price ?? "0"), currency), 0n),
+    shippingMinor: shipLines.reduce(
+      (sum, entry) => sum + shopMinorUnits(String(entry.price ?? "0"), currency),
+      0n,
+    ),
     discountMinor: shopMinorUnits(String(order.total_discounts ?? "0"), currency),
     totalMinor: shopMinorUnits(String(order.total_price ?? "0"), currency),
     financialStatus: text(order.financial_status) ?? "",
@@ -236,13 +293,24 @@ export function normalizeShopifyOrder(payload: unknown): ChannelOrder {
 }
 
 /** Normalize one documented Shopify refund payload against its order. */
-export function normalizeShopifyRefund(payload: unknown, orderExternalId: string, orderCurrency?: string): ChannelRefund {
+export function normalizeShopifyRefund(
+  payload: unknown,
+  orderExternalId: string,
+  orderCurrency?: string,
+): ChannelRefund {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    fail("The Shopify refund payload is not an object.", "Replay the refunds/create delivery from Shopify, then ingest it again.");
+    fail(
+      "The Shopify refund payload is not an object.",
+      "Replay the refunds/create delivery from Shopify, then ingest it again.",
+    );
   }
   const refund = payload as Record<string, unknown>;
   const refundId = text(refund.id !== undefined && refund.id !== null ? String(refund.id) : null);
-  if (!refundId) fail("The Shopify refund carries no id.", "Replay the refunds/create delivery from Shopify, then ingest it again.");
+  if (!refundId)
+    fail(
+      "The Shopify refund carries no id.",
+      "Replay the refunds/create delivery from Shopify, then ingest it again.",
+    );
   // Refund amounts are denominated in the stored order's shop currency.
   // A delivery cannot replace that evidence with a different currency.
   const currency = text(orderCurrency)?.toUpperCase();
@@ -262,7 +330,9 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
   const refundLineItems = Array.isArray(refund.refund_line_items)
     ? (refund.refund_line_items as Array<Record<string, unknown>>)
     : [];
-  const transactions = Array.isArray(refund.transactions) ? (refund.transactions as Array<Record<string, unknown>>) : [];
+  const transactions = Array.isArray(refund.transactions)
+    ? (refund.transactions as Array<Record<string, unknown>>)
+    : [];
   const adjustments = Array.isArray(refund.order_adjustments)
     ? (refund.order_adjustments as Array<Record<string, unknown>>)
     : [];
@@ -271,10 +341,14 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
     orderExternalId,
     reason: text(refund.note),
     restock: refundLineItems.some((entry) => entry.restock === true),
-    totalMinor: transactions.reduce((sum, txn) => sum + shopMinorUnits(String(txn.amount ?? "0"), currency), 0n),
+    totalMinor: transactions.reduce(
+      (sum, txn) => sum + shopMinorUnits(String(txn.amount ?? "0"), currency),
+      0n,
+    ),
     lines: refundLineItems.map((entry) => {
       const nested = (entry.line_item ?? {}) as Record<string, unknown>;
-      const rawQuantity = entry.quantity !== undefined && entry.quantity !== null ? String(entry.quantity) : "";
+      const rawQuantity =
+        entry.quantity !== undefined && entry.quantity !== null ? String(entry.quantity) : "";
       if (!/^\d+$/.test(rawQuantity.trim())) {
         fail(
           "A Shopify refund line carries an unusable quantity.",
@@ -282,7 +356,10 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
         );
       }
       const lineRestock = entry.restock === true;
-      const variantId = nested.variant_id !== undefined && nested.variant_id !== null ? String(nested.variant_id) : null;
+      const variantId =
+        nested.variant_id !== undefined && nested.variant_id !== null
+          ? String(nested.variant_id)
+          : null;
       const totalTax = entry.total_tax;
       return {
         lineExternalId: nested.id !== undefined && nested.id !== null ? String(nested.id) : null,
@@ -290,7 +367,10 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
         variantExternalId: variantId,
         quantity: rawQuantity.trim(),
         amountMinor: shopMinorUnits(String(entry.subtotal ?? "0"), currency),
-        taxMinor: totalTax === undefined || totalTax === null ? null : shopMinorUnits(String(totalTax), currency),
+        taxMinor:
+          totalTax === undefined || totalTax === null
+            ? null
+            : shopMinorUnits(String(totalTax), currency),
         restock: lineRestock,
       };
     }),
@@ -298,7 +378,10 @@ export function normalizeShopifyRefund(payload: unknown, orderExternalId: string
     // a shipping refund reverses shipping income on the refund document.
     shippingMinor: adjustments
       .filter((adjustment) => String(adjustment.kind ?? "") === "shipping_refund")
-      .reduce((sum, adjustment) => sum + shopMinorUnits(String(adjustment.amount ?? "0"), currency), 0n),
+      .reduce(
+        (sum, adjustment) => sum + shopMinorUnits(String(adjustment.amount ?? "0"), currency),
+        0n,
+      ),
     tenders: transactions.map((txn) => ({
       gateway: text(txn.gateway) ?? "shopify_payments",
       amountMinor: shopMinorUnits(String(txn.amount ?? "0"), currency),

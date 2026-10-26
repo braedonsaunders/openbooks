@@ -1,95 +1,153 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useBusinessToday } from '@/components/business-date-provider'
-import { useMoney } from '@/components/money-provider'
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { useViewerFormat } from '@/lib/viewer-format'
-import { toast } from 'sonner'
-import { Download, FileCheck2, RotateCcw, Send } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
-import { ApprovalActions } from '@/components/approval-actions'
-import { ApprovalHistory } from '@/components/approval-history'
-import { confirmDialog } from '../../../lib/confirm'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { isZero, sum } from '@openbooks/engine/money/money'
-import { DateField } from '@/components/date-field'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useBusinessToday } from "@/components/business-date-provider";
+import { useMoney } from "@/components/money-provider";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
+import { toast } from "sonner";
+import { Download, FileCheck2, RotateCcw, Send } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Drawer,
+  Input,
+  Label,
+  Select,
+  Textarea,
+  UrlDrawer,
+} from "@openbooks/ui";
+import { ApprovalActions } from "@/components/approval-actions";
+import { ApprovalHistory } from "@/components/approval-history";
+import { confirmDialog } from "../../../lib/confirm";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import { isZero, sum } from "@openbooks/engine/money/money";
+import { DateField } from "@/components/date-field";
 /**
  * Payment-run flyout: instructions, EFT readiness, and the two explicit
  * actions — CPA-005 file download (draft → exported) and posting the run's
  * payments + applications (exported → confirmed).
  */
 
-const RUN_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline' | 'default'> = {
-  confirmed: 'success',
-  generated: 'default',
-  delivered: 'default',
-  settled: 'success',
-  returned: 'warning',
-  partially_failed: 'warning',
-  rejected: 'outline',
-  rolled_back: 'outline',
-  approved: 'default',
-  pending_approval: 'warning',
-  draft: 'secondary',
-  cancelled: 'outline',
-}
+const RUN_VARIANT: Record<string, "success" | "secondary" | "warning" | "outline" | "default"> = {
+  confirmed: "success",
+  generated: "default",
+  delivered: "default",
+  settled: "success",
+  returned: "warning",
+  partially_failed: "warning",
+  rejected: "outline",
+  rolled_back: "outline",
+  approved: "default",
+  pending_approval: "warning",
+  draft: "secondary",
+  cancelled: "outline",
+};
 
-const INSTRUCTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'> = {
-  sent: 'success',
-  settled: 'success',
-  pending: 'secondary',
-  returned: 'destructive',
-  cancelled: 'outline',
-}
+const INSTRUCTION_VARIANT: Record<
+  string,
+  "success" | "secondary" | "warning" | "outline" | "destructive"
+> = {
+  sent: "success",
+  settled: "success",
+  pending: "secondary",
+  returned: "destructive",
+  cancelled: "outline",
+};
 
 // payment_instructions.status enum values with a translated display label.
-const INSTRUCTION_STATUS_KEYS = ['pending', 'approved', 'generated', 'sent', 'settled', 'returned', 'rejected', 'failed', 'reversed', 'cancelled']
+const INSTRUCTION_STATUS_KEYS = [
+  "pending",
+  "approved",
+  "generated",
+  "sent",
+  "settled",
+  "returned",
+  "rejected",
+  "failed",
+  "reversed",
+  "cancelled",
+];
 
 /** Invalid source amounts stay visible so malformed money is never hidden as zero. */
 export function hasPaymentAdjustment(discount: string, credit: string): boolean {
   const nonzero = (value: string) => {
     try {
-      return !isZero(value)
+      return !isZero(value);
     } catch {
-      return value.trim() !== ''
+      return value.trim() !== "";
     }
-  }
-  return nonzero(discount) || nonzero(credit)
+  };
+  return nonzero(discount) || nonzero(credit);
 }
 
 // payment_runs.status enum → common.status.* message keys (confirmed/exported
 // live in payments.runs.status.*; fallback: raw value).
 const RUN_STATUS_COMMON_KEY: Record<string, string> = {
-  draft: 'draft',
-  pending_approval: 'pendingApproval',
-  approved: 'approved',
-  cancelled: 'cancelled',
-}
+  draft: "draft",
+  pending_approval: "pendingApproval",
+  approved: "approved",
+  cancelled: "cancelled",
+};
 
 export interface RunBlockerClient {
-  instructionId: string
-  payee: string
-  reason: string
+  instructionId: string;
+  payee: string;
+  reason: string;
 }
 
 export interface PaymentRunClient {
-  id: string; run_number: string; status: string; scheduled_for: string | null;
-  bank_number: string | null; bank_name: string | null; currency: string
+  id: string;
+  run_number: string;
+  status: string;
+  scheduled_for: string | null;
+  bank_number: string | null;
+  bank_name: string | null;
+  currency: string;
 }
 export interface PaymentInstructionClient {
-  id: string; status: string; payee: string; document_number: string | null;
-  amount: string | number; currency: string; payment_document_id: string | null; settlement_effective_on: string | null;
-  bank_reference: string | null; return_code: string | null; return_reason: string | null
+  id: string;
+  status: string;
+  payee: string;
+  document_number: string | null;
+  amount: string | number;
+  currency: string;
+  payment_document_id: string | null;
+  settlement_effective_on: string | null;
+  bank_reference: string | null;
+  return_code: string | null;
+  return_reason: string | null;
 }
 export interface PaymentFileClient {
-  id: string; status: string; filename: string; content_hash: string; sequence_number: number;
-  payment_count: number; total_amount: string | number; currency: string
+  id: string;
+  status: string;
+  filename: string;
+  content_hash: string;
+  sequence_number: number;
+  payment_count: number;
+  total_amount: string | number;
+  currency: string;
 }
-export interface PaymentEventClient { id: string; event_type: string; actor_name: string | null; created_at: string; details: Record<string, unknown> | null }
+export interface PaymentEventClient {
+  id: string;
+  event_type: string;
+  actor_name: string | null;
+  created_at: string;
+  details: Record<string, unknown> | null;
+}
 
 /** Failure evidence stored on a posting event: the engine records the crash
  *  reason ({ error }), the per-instruction reasons ({ failures: [{ payee,
@@ -99,39 +157,46 @@ export interface PaymentEventClient { id: string; event_type: string; actor_name
 export function postingEventReason(
   event: PaymentEventClient,
   t: (
-    key: 'runDrawer.eventsDetail.postingOutcome',
+    key: "runDrawer.eventsDetail.postingOutcome",
     values: { posted: number; failed: number; pending: number },
   ) => string,
 ): string | null {
-  const details = event.details ?? {}
+  const details = event.details ?? {};
   // Per-instruction reasons first: a partially failed posting names who
   // failed and why (the same "payee (reason)" shape as the post toast), so
   // the clerk can fix and re-post after the toast dismisses.
-  const failures = details.failures
+  const failures = details.failures;
   if (Array.isArray(failures)) {
     const named = failures
       .filter(
         (failure): failure is { payee: string; error: string } =>
           !!failure &&
-          typeof failure === 'object' &&
-          typeof (failure as { payee?: unknown }).payee === 'string' &&
-          typeof (failure as { error?: unknown }).error === 'string',
+          typeof failure === "object" &&
+          typeof (failure as { payee?: unknown }).payee === "string" &&
+          typeof (failure as { error?: unknown }).error === "string",
       )
-      .map((failure) => `${failure.payee} (${failure.error})`)
-    if (named.length > 0) return named.join('; ')
+      .map((failure) => `${failure.payee} (${failure.error})`);
+    if (named.length > 0) return named.join("; ");
   }
-  const reason = details.error
-  if (typeof reason === 'string' && reason.trim()) return reason
-  if (event.event_type !== 'run_posting_failed' && event.event_type !== 'run_posting_completed') return null
-  const failed = typeof details.failureCount === 'number' ? details.failureCount : 0
-  const pending = typeof details.incompleteInstructions === 'number' ? details.incompleteInstructions : 0
-  if (failed === 0 && pending === 0) return null
-  const posted = typeof details.posted === 'number' ? details.posted : 0
-  return t('runDrawer.eventsDetail.postingOutcome', { posted, failed, pending })
+  const reason = details.error;
+  if (typeof reason === "string" && reason.trim()) return reason;
+  if (event.event_type !== "run_posting_failed" && event.event_type !== "run_posting_completed")
+    return null;
+  const failed = typeof details.failureCount === "number" ? details.failureCount : 0;
+  const pending =
+    typeof details.incompleteInstructions === "number" ? details.incompleteInstructions : 0;
+  if (failed === 0 && pending === 0) return null;
+  const posted = typeof details.posted === "number" ? details.posted : 0;
+  return t("runDrawer.eventsDetail.postingOutcome", { posted, failed, pending });
 }
 export interface PaymentRunItemClient {
-  id: string; document_number: string; party_name: string; payment_amount: string;
-  discount_amount: string; credit_amount: string; currency: string
+  id: string;
+  document_number: string;
+  party_name: string;
+  payment_amount: string;
+  discount_amount: string;
+  credit_amount: string;
+  currency: string;
 }
 
 export function RunDrawer({
@@ -145,61 +210,68 @@ export function RunDrawer({
   items,
   canApprove,
   approvalSubjectKind,
-  closeHref = '/payments?view=runs',
-  paymentBasePath = '/payments',
+  closeHref = "/payments?view=runs",
+  paymentBasePath = "/payments",
 }: {
-  run: PaymentRunClient
-  instructions: PaymentInstructionClient[]
-  eftConfigured: boolean
-  eftMissing: string[]
-  blockers: RunBlockerClient[]
-  files: PaymentFileClient[]
-  events: PaymentEventClient[]
-  items: PaymentRunItemClient[]
-  canApprove: boolean
+  run: PaymentRunClient;
+  instructions: PaymentInstructionClient[];
+  eftConfigured: boolean;
+  eftMissing: string[];
+  blockers: RunBlockerClient[];
+  files: PaymentFileClient[];
+  events: PaymentEventClient[];
+  items: PaymentRunItemClient[];
+  canApprove: boolean;
   /**
    * The run's Flows approval subject (outbound or inbound payment run), or
    * null when Flows is off for the organization and runs carry no approval.
    */
-  approvalSubjectKind: string | null
-  closeHref?: string
-  paymentBasePath?: '/payments' | '/receipts'
+  approvalSubjectKind: string | null;
+  closeHref?: string;
+  paymentBasePath?: "/payments" | "/receipts";
 }) {
-  const { dateTime } = useViewerFormat()
-  const { money } = useMoney()
-  const today = useBusinessToday()
-  const t = useTranslations('payments')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [deliverOpen, setDeliverOpen] = useState(false)
-  const [sftpServers, setSftpServers] = useState<{ id: string; name: string }[]>([])
-  const [sftpServerId, setSftpServerId] = useState('')
-  const [instructionQ, setInstructionQ] = useState('')
-  const [instructionPage, setInstructionPage] = useState(1)
-  const [decision, setDecision] = useState<{ kind: 'rollback' | 'cancel' | 'resolveDelivered' | 'resolveApproved'; fileId?: string } | null>(null)
-  const [reason, setReason] = useState('')
-  const [attestation, setAttestation] = useState('')
-  const [outcomeInstruction, setOutcomeInstruction] = useState<PaymentInstructionClient | null>(null)
-  const [outcomeStatus, setOutcomeStatus] = useState<'settled' | 'returned' | 'rejected'>('settled')
-  const [effectiveOn, setEffectiveOn] = useState(today)
-  const [bankReference, setBankReference] = useState('')
-  const [returnCode, setReturnCode] = useState('')
-  const [returnReason, setReturnReason] = useState('')
+  const { dateTime } = useViewerFormat();
+  const { money } = useMoney();
+  const today = useBusinessToday();
+  const t = useTranslations("payments");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [deliverOpen, setDeliverOpen] = useState(false);
+  const [sftpServers, setSftpServers] = useState<{ id: string; name: string }[]>([]);
+  const [sftpServerId, setSftpServerId] = useState("");
+  const [instructionQ, setInstructionQ] = useState("");
+  const [instructionPage, setInstructionPage] = useState(1);
+  const [decision, setDecision] = useState<{
+    kind: "rollback" | "cancel" | "resolveDelivered" | "resolveApproved";
+    fileId?: string;
+  } | null>(null);
+  const [reason, setReason] = useState("");
+  const [attestation, setAttestation] = useState("");
+  const [outcomeInstruction, setOutcomeInstruction] = useState<PaymentInstructionClient | null>(
+    null,
+  );
+  const [outcomeStatus, setOutcomeStatus] = useState<"settled" | "returned" | "rejected">(
+    "settled",
+  );
+  const [effectiveOn, setEffectiveOn] = useState(today);
+  const [bankReference, setBankReference] = useState("");
+  const [returnCode, setReturnCode] = useState("");
+  const [returnReason, setReturnReason] = useState("");
 
   async function openDeliver() {
-    setDeliverOpen(true)
+    setDeliverOpen(true);
     try {
-      const res = await fetch(`/api/payments/runs/${run.id}/deliver`)
+      const res = await fetch(`/api/payments/runs/${run.id}/deliver`);
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.deliverFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, t("runDrawer.toasts.deliverFailed")));
+        return;
       }
-      const data = await res.json()
-      setSftpServers(data.servers ?? [])
-      setSftpServerId(data.servers?.[0]?.id ?? '')
+      const data = await res.json();
+      setSftpServers(data.servers ?? []);
+      setSftpServerId(data.servers?.[0]?.id ?? "");
     } catch {
-      toast.error(t('runDrawer.toasts.deliverFailed'))
+      toast.error(t("runDrawer.toasts.deliverFailed"));
     }
   }
 
@@ -210,64 +282,106 @@ export function RunDrawer({
   // delivery), so the failure toast always pairs with a refresh back to
   // authoritative run state.
   function reportTransportFailed(message: string) {
-    toast.error(message)
-    router.refresh()
+    toast.error(message);
+    router.refresh();
   }
 
   async function deliver() {
-    if (!sftpServerId) return
-    setBusy(true)
+    if (!sftpServerId) return;
+    setBusy(true);
     try {
       const res = await fetch(`/api/payments/runs/${run.id}/deliver`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sftpServerId }),
-      })
+      });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.deliverFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, t("runDrawer.toasts.deliverFailed")));
+        return;
       }
-      const data = await res.json()
-      toast.success(t('runDrawer.toasts.delivered', { path: data.path }))
-      setDeliverOpen(false)
-      router.refresh()
-    } catch { reportTransportFailed(t('runDrawer.toasts.deliverFailed')) } finally { setBusy(false) }
+      const data = await res.json();
+      toast.success(t("runDrawer.toasts.delivered", { path: data.path }));
+      setDeliverOpen(false);
+      router.refresh();
+    } catch {
+      reportTransportFailed(t("runDrawer.toasts.deliverFailed"));
+    } finally {
+      setBusy(false);
+    }
   }
   const runStatusLabel = (status: string) => {
-    if (['confirmed', 'generated', 'delivered', 'settled', 'returned', 'partially_failed', 'rejected', 'rolled_back'].includes(status)) return t(`runs.status.${status}`)
-    const key = RUN_STATUS_COMMON_KEY[status]
-    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
-  }
-  const blockerByInstruction = new Map(blockers.map((b) => [b.instructionId, b.reason]))
-  const live = instructions.filter((i) => i.status !== 'cancelled')
-  const filteredInstructions = instructions.filter((i) => !instructionQ || String(i.payee).toLowerCase().includes(instructionQ.toLowerCase()) || String(i.document_number ?? '').toLowerCase().includes(instructionQ.toLowerCase()))
-  const instructionPages = Math.max(1, Math.ceil(filteredInstructions.length / 10))
-  const shownInstructions = filteredInstructions.slice((instructionPage - 1) * 10, instructionPage * 10)
-  const total = sum(live.map((i) => String(i.amount)))
-  const latestFile = files[0]
-  const hasApprovedFile = latestFile && (latestFile.status === 'approved' || latestFile.status === 'delivered')
-  const canGenerate = eftConfigured && blockers.length === 0 && run.status === 'approved'
-  const canPost = hasApprovedFile && ['generated', 'delivered', 'partially_failed'].includes(run.status)
-  const canCancel = run.status === 'draft'
+    if (
+      [
+        "confirmed",
+        "generated",
+        "delivered",
+        "settled",
+        "returned",
+        "partially_failed",
+        "rejected",
+        "rolled_back",
+      ].includes(status)
+    )
+      return t(`runs.status.${status}`);
+    const key = RUN_STATUS_COMMON_KEY[status];
+    return key ? tCommon(`status.${key}`) : status.replace("_", " ");
+  };
+  const blockerByInstruction = new Map(blockers.map((b) => [b.instructionId, b.reason]));
+  const live = instructions.filter((i) => i.status !== "cancelled");
+  const filteredInstructions = instructions.filter(
+    (i) =>
+      !instructionQ ||
+      String(i.payee).toLowerCase().includes(instructionQ.toLowerCase()) ||
+      String(i.document_number ?? "")
+        .toLowerCase()
+        .includes(instructionQ.toLowerCase()),
+  );
+  const instructionPages = Math.max(1, Math.ceil(filteredInstructions.length / 10));
+  const shownInstructions = filteredInstructions.slice(
+    (instructionPage - 1) * 10,
+    instructionPage * 10,
+  );
+  const total = sum(live.map((i) => String(i.amount)));
+  const latestFile = files[0];
+  const hasApprovedFile =
+    latestFile && (latestFile.status === "approved" || latestFile.status === "delivered");
+  const canGenerate = eftConfigured && blockers.length === 0 && run.status === "approved";
+  const canPost =
+    hasApprovedFile && ["generated", "delivered", "partially_failed"].includes(run.status);
+  const canCancel = run.status === "draft";
   // A delivered file may already be at the bank; rollback then needs the operator's typed attestation.
-  const rollbackNeedsAttestation = ['delivered', 'partially_failed'].includes(run.status) || files.some((file) => file.status === 'delivered')
+  const rollbackNeedsAttestation =
+    ["delivered", "partially_failed"].includes(run.status) ||
+    files.some((file) => file.status === "delivered");
 
   async function action(path: string, body?: Record<string, unknown>, success?: string) {
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch(`/api/payments/runs/${run.id}/${path}`, { method: 'POST', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+      const res = await fetch(`/api/payments/runs/${run.id}/${path}`, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
       // The refusal reads through the shared helper: the status is checked
       // first and message, remedy and code render instead of a bare fallback.
-      if (!res.ok) { toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.actionFailed'))); return false }
-      if (success) toast.success(success)
-      router.refresh()
-      return true
-    } catch { reportTransportFailed(t('runDrawer.toasts.actionFailed')); return false } finally { setBusy(false) }
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t("runDrawer.toasts.actionFailed")));
+        return false;
+      }
+      if (success) toast.success(success);
+      router.refresh();
+      return true;
+    } catch {
+      reportTransportFailed(t("runDrawer.toasts.actionFailed"));
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function generateFile() {
-    const ok = await action('file', undefined, t('runDrawer.toasts.fileGenerated'))
-    if (ok) router.refresh()
+    const ok = await action("file", undefined, t("runDrawer.toasts.fileGenerated"));
+    if (ok) router.refresh();
   }
 
   // Approval belongs to Flows: the submit either parks the run behind its
@@ -275,86 +389,132 @@ export function RunDrawer({
   // toast names which happened so nobody waits on an approval that is not
   // coming.
   async function submitRun() {
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch(`/api/payments/runs/${run.id}/submit`, { method: 'POST' })
+      const res = await fetch(`/api/payments/runs/${run.id}/submit`, { method: "POST" });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.actionFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, t("runDrawer.toasts.actionFailed")));
+        return;
       }
-      const data = (await res.json()) as { gated?: boolean }
-      toast.success(data.gated ? t('runDrawer.toasts.submittedForApproval') : t('runDrawer.toasts.submittedApproved'))
-      router.refresh()
-    } catch { reportTransportFailed(t('runDrawer.toasts.actionFailed')) } finally { setBusy(false) }
+      const data = (await res.json()) as { gated?: boolean };
+      toast.success(
+        data.gated
+          ? t("runDrawer.toasts.submittedForApproval")
+          : t("runDrawer.toasts.submittedApproved"),
+      );
+      router.refresh();
+    } catch {
+      reportTransportFailed(t("runDrawer.toasts.actionFailed"));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function resolveDelivery(fileId: string, outcome: 'delivered' | 'approved', resolutionReason: string) {
-    const ok = await action(`files/${fileId}/resolve-delivery`, { outcome, reason: resolutionReason }, t('runDrawer.toasts.deliveryResolved'))
-    if (ok) { setDecision(null); setReason('') }
+  async function resolveDelivery(
+    fileId: string,
+    outcome: "delivered" | "approved",
+    resolutionReason: string,
+  ) {
+    const ok = await action(
+      `files/${fileId}/resolve-delivery`,
+      { outcome, reason: resolutionReason },
+      t("runDrawer.toasts.deliveryResolved"),
+    );
+    if (ok) {
+      setDecision(null);
+      setReason("");
+    }
   }
 
   async function postRun() {
     const ok = await confirmDialog({
-      message: t('runDrawer.confirmPost', {
-        count: live.filter((i) => i.status === 'pending').length,
+      message: t("runDrawer.confirmPost", {
+        count: live.filter((i) => i.status === "pending").length,
         total: money(total, { currency: run.currency }),
       }),
-    })
-    if (!ok) return
-    setBusy(true)
+    });
+    if (!ok) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/payments/runs/${run.id}/post`, { method: 'POST' })
+      const res = await fetch(`/api/payments/runs/${run.id}/post`, { method: "POST" });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.postFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, t("runDrawer.toasts.postFailed")));
+        return;
       }
-      const data = await res.json()
+      const data = await res.json();
       if (data.failures?.length) {
         toast.error(
-          t('runDrawer.toasts.postedWithFailures', {
+          t("runDrawer.toasts.postedWithFailures", {
             count: data.posted,
-            failures: data.failures.map((f: { payee: string; error: string }) => `${f.payee} (${f.error})`).join('; '),
+            failures: data.failures
+              .map((f: { payee: string; error: string }) => `${f.payee} (${f.error})`)
+              .join("; "),
           }),
-        )
+        );
       } else {
-        toast.success(t('runDrawer.toasts.posted', { count: data.posted }))
+        toast.success(t("runDrawer.toasts.posted", { count: data.posted }));
       }
-      router.refresh()
+      router.refresh();
     } catch {
-      toast.error(t('runDrawer.toasts.postFailed'))
+      toast.error(t("runDrawer.toasts.postFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function cancelRun(cancellationReason: string) {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payments/runs/${run.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: cancellationReason }),
-      })
-      if (!res.ok) { toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.cancelFailed'))); return false }
-      toast.success(t('runDrawer.toasts.cancelled'))
-      router.refresh()
-      return true
-    } catch { reportTransportFailed(t('runDrawer.toasts.cancelFailed')); return false } finally { setBusy(false) }
+      });
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t("runDrawer.toasts.cancelFailed")));
+        return false;
+      }
+      toast.success(t("runDrawer.toasts.cancelled"));
+      router.refresh();
+      return true;
+    } catch {
+      reportTransportFailed(t("runDrawer.toasts.cancelFailed"));
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveOutcome() {
-    if (!outcomeInstruction) return
-    setBusy(true)
+    if (!outcomeInstruction) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/payments/runs/${run.id}/instructions/${outcomeInstruction.id}/settlement`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: outcomeStatus, effectiveOn, bankReference: bankReference || null, returnCode: returnCode || null, returnReason: returnReason || null }),
-      })
-      if (!res.ok) { toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.outcomeFailed'))); return }
-      toast.success(t('runDrawer.toasts.outcomeSaved'))
-      setOutcomeInstruction(null)
-      router.refresh()
-    } catch { reportTransportFailed(t('runDrawer.toasts.outcomeFailed')) } finally { setBusy(false) }
+      const res = await fetch(
+        `/api/payments/runs/${run.id}/instructions/${outcomeInstruction.id}/settlement`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: outcomeStatus,
+            effectiveOn,
+            bankReference: bankReference || null,
+            returnCode: returnCode || null,
+            returnReason: returnReason || null,
+          }),
+        },
+      );
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t("runDrawer.toasts.outcomeFailed")));
+        return;
+      }
+      toast.success(t("runDrawer.toasts.outcomeSaved"));
+      setOutcomeInstruction(null);
+      router.refresh();
+    } catch {
+      reportTransportFailed(t("runDrawer.toasts.outcomeFailed"));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -365,38 +525,106 @@ export function RunDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{run.run_number}</span>
-          <Badge variant={RUN_VARIANT[run.status] ?? 'secondary'}>{runStatusLabel(String(run.status))}</Badge>
+          <Badge variant={RUN_VARIANT[run.status] ?? "secondary"}>
+            {runStatusLabel(String(run.status))}
+          </Badge>
         </span>
       }
       description={
         run.scheduled_for
-          ? t('runDrawer.descriptionEftWithDate', {
-              bank: `${run.bank_number ?? ''} ${run.bank_name ?? ''}`.trim() || t('runDrawer.bankAccountFallback'),
+          ? t("runDrawer.descriptionEftWithDate", {
+              bank:
+                `${run.bank_number ?? ""} ${run.bank_name ?? ""}`.trim() ||
+                t("runDrawer.bankAccountFallback"),
               date: run.scheduled_for,
             })
-          : t('runDrawer.descriptionEft', {
-              bank: `${run.bank_number ?? ''} ${run.bank_name ?? ''}`.trim() || t('runDrawer.bankAccountFallback'),
+          : t("runDrawer.descriptionEft", {
+              bank:
+                `${run.bank_number ?? ""} ${run.bank_name ?? ""}`.trim() ||
+                t("runDrawer.bankAccountFallback"),
             })
       }
       headerActions={
         <>
           {canCancel ? (
-            <Button variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'cancel' }) }}>
-              {t('runDrawer.cancelRun')}
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setReason("");
+                setDecision({ kind: "cancel" });
+              }}
+            >
+              {t("runDrawer.cancelRun")}
             </Button>
           ) : null}
-          {run.status === 'draft' ? <Button disabled={busy} onClick={submitRun}>{t('runDrawer.submitRun')}</Button> : null}
-          {approvalSubjectKind && run.status === 'pending_approval' ? <ApprovalActions subjectKind={approvalSubjectKind} subjectId={run.id} /> : null}
-          {canGenerate ? <Button disabled={busy} onClick={generateFile}><FileCheck2 size={15} />{t('runDrawer.generateFile')}</Button> : null}
-          {hasApprovedFile ? <>
-            <Button variant="outline" asChild><a href={`/api/payments/runs/${run.id}/file`} download onClick={() => setTimeout(() => router.refresh(), 800)}><Download size={15} />{t('runDrawer.downloadFile')}</a></Button>
-            <Button variant="outline" disabled={busy} onClick={openDeliver}><Send size={15} />{t('runDrawer.deliverSftp')}</Button>
-          </> : null}
-          {latestFile && ['rejected', 'delivered', 'approved'].includes(latestFile.status) && ['generated', 'delivered', 'partially_failed'].includes(run.status) ? <Button variant="outline" disabled={busy} onClick={() => action(`files/${latestFile.id}/reprocess`, undefined, t('runDrawer.toasts.fileReprocessed'))}><RotateCcw size={15} />{t('runDrawer.reprocess')}</Button> : null}
-          {['approved', 'generated', 'delivered', 'partially_failed'].includes(run.status) && !live.some((i) => ['sent', 'settled', 'returned'].includes(i.status)) ? <Button variant="outline" disabled={busy} onClick={() => { setReason(''); setAttestation(''); setDecision({ kind: 'rollback' }) }}>{t('runDrawer.rollback')}</Button> : null}
+          {run.status === "draft" ? (
+            <Button disabled={busy} onClick={submitRun}>
+              {t("runDrawer.submitRun")}
+            </Button>
+          ) : null}
+          {approvalSubjectKind && run.status === "pending_approval" ? (
+            <ApprovalActions subjectKind={approvalSubjectKind} subjectId={run.id} />
+          ) : null}
+          {canGenerate ? (
+            <Button disabled={busy} onClick={generateFile}>
+              <FileCheck2 size={15} />
+              {t("runDrawer.generateFile")}
+            </Button>
+          ) : null}
+          {hasApprovedFile ? (
+            <>
+              <Button variant="outline" asChild>
+                <a
+                  href={`/api/payments/runs/${run.id}/file`}
+                  download
+                  onClick={() => setTimeout(() => router.refresh(), 800)}
+                >
+                  <Download size={15} />
+                  {t("runDrawer.downloadFile")}
+                </a>
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={openDeliver}>
+                <Send size={15} />
+                {t("runDrawer.deliverSftp")}
+              </Button>
+            </>
+          ) : null}
+          {latestFile &&
+          ["rejected", "delivered", "approved"].includes(latestFile.status) &&
+          ["generated", "delivered", "partially_failed"].includes(run.status) ? (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                action(
+                  `files/${latestFile.id}/reprocess`,
+                  undefined,
+                  t("runDrawer.toasts.fileReprocessed"),
+                )
+              }
+            >
+              <RotateCcw size={15} />
+              {t("runDrawer.reprocess")}
+            </Button>
+          ) : null}
+          {["approved", "generated", "delivered", "partially_failed"].includes(run.status) &&
+          !live.some((i) => ["sent", "settled", "returned"].includes(i.status)) ? (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setReason("");
+                setAttestation("");
+                setDecision({ kind: "rollback" });
+              }}
+            >
+              {t("runDrawer.rollback")}
+            </Button>
+          ) : null}
           {canPost ? (
             <Button disabled={busy} onClick={postRun}>
-              {busy ? tCommon('actions.posting') : t('runDrawer.postPayments')}
+              {busy ? tCommon("actions.posting") : t("runDrawer.postPayments")}
             </Button>
           ) : null}
         </>
@@ -404,10 +632,12 @@ export function RunDrawer({
       footer={
         <div className="flex w-full flex-wrap items-center gap-3">
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t.rich('runDrawer.paymentsSummary', {
+            {t.rich("runDrawer.paymentsSummary", {
               count: live.length,
               amount: money(total, { currency: run.currency }),
-              total: (chunks) => <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>,
+              total: (chunks) => (
+                <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>
+              ),
             })}
           </span>
         </div>
@@ -416,15 +646,15 @@ export function RunDrawer({
       <div className="space-y-4 p-1">
         {!eftConfigured ? (
           <Alert variant="warning">
-            <AlertTitle>{t('configuration.runNotReadyTitle')}</AlertTitle>
+            <AlertTitle>{t("configuration.runNotReadyTitle")}</AlertTitle>
             <AlertDescription>
-              {t('configuration.runNotReadyDescription', { missing: eftMissing.join(', ') })}
+              {t("configuration.runNotReadyDescription", { missing: eftMissing.join(", ") })}
             </AlertDescription>
           </Alert>
         ) : null}
-        {blockers.length > 0 && run.status !== 'cancelled' && run.status !== 'confirmed' ? (
+        {blockers.length > 0 && run.status !== "cancelled" && run.status !== "confirmed" ? (
           <Alert variant="destructive">
-            <AlertTitle>{t('runDrawer.payeesMissingBankDetails')}</AlertTitle>
+            <AlertTitle>{t("runDrawer.payeesMissingBankDetails")}</AlertTitle>
             <AlertDescription>
               <ul className="list-disc pl-5">
                 {blockers.map((b) => (
@@ -437,99 +667,444 @@ export function RunDrawer({
           </Alert>
         ) : null}
 
-        {approvalSubjectKind && run.status !== 'draft' ? <ApprovalHistory subjectKind={approvalSubjectKind} subjectId={run.id} /> : null}
+        {approvalSubjectKind && run.status !== "draft" ? (
+          <ApprovalHistory subjectKind={approvalSubjectKind} subjectId={run.id} />
+        ) : null}
 
-        {files.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.filesTitle')}</h3><div className="grid gap-2">{files.map((file) => <div key={file.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"><div><p className="text-sm font-medium">{file.filename}</p><p className="font-mono text-[11px] text-slate-500">{String(file.content_hash).slice(0, 16)}… · v{file.sequence_number}</p></div><div className="flex items-center gap-2"><span className="text-xs tabular-nums text-slate-500">{file.payment_count} · {money(file.total_amount, { currency: file.currency })}</span><Badge variant={file.status === 'approved' || file.status === 'delivered' ? 'success' : file.status === 'rejected' ? 'destructive' : file.status === 'delivery_uncertain' ? 'warning' : 'secondary'}>{t(`runDrawer.fileStatus.${file.status}`)}</Badge>{file.status === 'delivery_uncertain' && canApprove ? <><Button size="sm" variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'resolveDelivered', fileId: file.id }) }}>{t('runDrawer.resolveDelivered')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'resolveApproved', fileId: file.id }) }}>{t('runDrawer.resolveApproved')}</Button></> : null}</div></div>)}</div></section> : null}
+        {files.length ? (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("runDrawer.filesTitle")}
+            </h3>
+            <div className="grid gap-2">
+              {files.map((file) => (
+                <div
+                  key={file.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{file.filename}</p>
+                    <p className="font-mono text-[11px] text-slate-500">
+                      {String(file.content_hash).slice(0, 16)}… · v{file.sequence_number}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs tabular-nums text-slate-500">
+                      {file.payment_count} · {money(file.total_amount, { currency: file.currency })}
+                    </span>
+                    <Badge
+                      variant={
+                        file.status === "approved" || file.status === "delivered"
+                          ? "success"
+                          : file.status === "rejected"
+                            ? "destructive"
+                            : file.status === "delivery_uncertain"
+                              ? "warning"
+                              : "secondary"
+                      }
+                    >
+                      {t(`runDrawer.fileStatus.${file.status}`)}
+                    </Badge>
+                    {file.status === "delivery_uncertain" && canApprove ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            setReason("");
+                            setDecision({ kind: "resolveDelivered", fileId: file.id });
+                          }}
+                        >
+                          {t("runDrawer.resolveDelivered")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            setReason("");
+                            setDecision({ kind: "resolveApproved", fileId: file.id });
+                          }}
+                        >
+                          {t("runDrawer.resolveApproved")}
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-        {items.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.sourcesTitle')}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"><div className="flex justify-between gap-3"><span className="font-mono text-xs font-semibold">{item.document_number}</span><span className="tabular-nums">{money(item.payment_amount, { currency: item.currency })}</span></div><p className="mt-1 text-xs text-slate-500">{item.party_name}</p>{hasPaymentAdjustment(item.discount_amount, item.credit_amount) ? <p className="mt-1 text-xs text-slate-500">{t('runDrawer.adjustments', { discount: money(item.discount_amount, { currency: item.currency }), credit: money(item.credit_amount, { currency: item.currency }) })}</p> : null}</div>)}</div></section> : null}
+        {items.length ? (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("runDrawer.sourcesTitle")}
+            </h3>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"
+                >
+                  <div className="flex justify-between gap-3">
+                    <span className="font-mono text-xs font-semibold">{item.document_number}</span>
+                    <span className="tabular-nums">
+                      {money(item.payment_amount, { currency: item.currency })}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{item.party_name}</p>
+                  {hasPaymentAdjustment(item.discount_amount, item.credit_amount) ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {t("runDrawer.adjustments", {
+                        discount: money(item.discount_amount, { currency: item.currency }),
+                        credit: money(item.credit_amount, { currency: item.currency }),
+                      })}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-        <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.instructionsTitle')}</h3><Input value={instructionQ} onChange={(e) => { setInstructionQ(e.target.value); setInstructionPage(1) }} placeholder={t('runDrawer.searchInstructions')} className="max-w-64" /></div>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t("runDrawer.instructionsTitle")}
+          </h3>
+          <Input
+            value={instructionQ}
+            onChange={(e) => {
+              setInstructionQ(e.target.value);
+              setInstructionPage(1);
+            }}
+            placeholder={t("runDrawer.searchInstructions")}
+            className="max-w-64"
+          />
+        </div>
         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
           <SharedTable className="w-full text-sm">
             <SharedTableHeader>
               <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <SharedTableHead className="px-3 py-2">{t('runDrawer.columns.payee')}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{t('runDrawer.columns.payment')}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{t('runDrawer.columns.bankDetails')}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{tCommon('labels.status')}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 text-right">{tCommon('labels.amount')}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 text-right">{tCommon('labels.actions')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">
+                  {t("runDrawer.columns.payee")}
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2">
+                  {t("runDrawer.columns.payment")}
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2">
+                  {t("runDrawer.columns.bankDetails")}
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{tCommon("labels.status")}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right">
+                  {tCommon("labels.amount")}
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right">
+                  {tCommon("labels.actions")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
               {shownInstructions.map((i) => (
-                <SharedTableRow key={i.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                <SharedTableRow
+                  key={i.id}
+                  className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
+                >
                   <SharedTableCell className="px-3 py-2">{i.payee}</SharedTableCell>
                   <SharedTableCell className="px-3 py-2 font-mono text-[13px] font-semibold">
                     {i.payment_document_id ? (
                       <Link
-                        href={(`${paymentBasePath}?payment=${i.payment_document_id}`)}
+                        href={`${paymentBasePath}?payment=${i.payment_document_id}`}
                         className="text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {i.document_number}
                       </Link>
                     ) : (
-                      '—'
+                      "—"
                     )}
                   </SharedTableCell>
                   <SharedTableCell className="px-3 py-2">
-                    {i.status === 'cancelled' ? (
+                    {i.status === "cancelled" ? (
                       <span className="text-slate-400">—</span>
                     ) : blockerByInstruction.has(i.id) ? (
                       <Badge variant="warning">{blockerByInstruction.get(i.id)}</Badge>
                     ) : (
-                      <Badge variant="success">{t('runDrawer.bankApproved')}</Badge>
+                      <Badge variant="success">{t("runDrawer.bankApproved")}</Badge>
                     )}
                   </SharedTableCell>
                   <SharedTableCell className="px-3 py-2">
-                    <Badge variant={INSTRUCTION_VARIANT[i.status] ?? 'secondary'}>
+                    <Badge variant={INSTRUCTION_VARIANT[i.status] ?? "secondary"}>
                       {INSTRUCTION_STATUS_KEYS.includes(i.status)
                         ? t(`runDrawer.instructionStatus.${i.status}`)
                         : i.status}
                     </Badge>
                   </SharedTableCell>
-                  <SharedTableCell className="px-3 py-2 text-right tabular-nums">{money(i.amount, { currency: i.currency })}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2 text-right">{['sent', 'settled'].includes(i.status) ? <Button size="sm" variant="outline" onClick={() => { setOutcomeInstruction(i); setOutcomeStatus(i.status === 'settled' ? 'settled' : 'settled'); setEffectiveOn(i.settlement_effective_on ?? today); setBankReference(i.bank_reference ?? ''); setReturnCode(i.return_code ?? ''); setReturnReason(i.return_reason ?? '') }}>{t('runDrawer.recordOutcome')}</Button> : null}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-right tabular-nums">
+                    {money(i.amount, { currency: i.currency })}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-right">
+                    {["sent", "settled"].includes(i.status) ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setOutcomeInstruction(i);
+                          setOutcomeStatus(i.status === "settled" ? "settled" : "settled");
+                          setEffectiveOn(i.settlement_effective_on ?? today);
+                          setBankReference(i.bank_reference ?? "");
+                          setReturnCode(i.return_code ?? "");
+                          setReturnReason(i.return_reason ?? "");
+                        }}
+                      >
+                        {t("runDrawer.recordOutcome")}
+                      </Button>
+                    ) : null}
+                  </SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
           </SharedTable>
         </div>
-        {instructionPages > 1 ? <div className="flex items-center justify-end gap-2"><Button size="sm" variant="outline" disabled={instructionPage <= 1} onClick={() => setInstructionPage((p) => p - 1)}>{tCommon('actions.previous')}</Button><span className="text-xs text-slate-500">{instructionPage} / {instructionPages}</span><Button size="sm" variant="outline" disabled={instructionPage >= instructionPages} onClick={() => setInstructionPage((p) => p + 1)}>{tCommon('actions.next')}</Button></div> : null}
+        {instructionPages > 1 ? (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={instructionPage <= 1}
+              onClick={() => setInstructionPage((p) => p - 1)}
+            >
+              {tCommon("actions.previous")}
+            </Button>
+            <span className="text-xs text-slate-500">
+              {instructionPage} / {instructionPages}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={instructionPage >= instructionPages}
+              onClick={() => setInstructionPage((p) => p + 1)}
+            >
+              {tCommon("actions.next")}
+            </Button>
+          </div>
+        ) : null}
 
-        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t((`runDrawer.events.${event.event_type}`))}</p>{(() => { const reason = postingEventReason(event, t); return reason ? <p className="text-xs text-red-600 dark:text-red-400">{reason}</p> : null })()}<p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{dateTime(new Date(event.created_at))}</time></div>)}</div></section> : null}
+        {events.length ? (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("runDrawer.activityTitle")}
+            </h3>
+            <div className="space-y-2">
+              {events.slice(0, 10).map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"
+                >
+                  <div>
+                    <p>{t(`runDrawer.events.${event.event_type}`)}</p>
+                    {(() => {
+                      const reason = postingEventReason(event, t);
+                      return reason ? (
+                        <p className="text-xs text-red-600 dark:text-red-400">{reason}</p>
+                      ) : null;
+                    })()}
+                    <p className="text-xs text-slate-500">
+                      {event.actor_name ?? t("runDrawer.systemActor")}
+                    </p>
+                  </div>
+                  <time className="shrink-0 text-xs text-slate-500">
+                    {dateTime(new Date(event.created_at))}
+                  </time>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <Drawer
         open={deliverOpen}
         onClose={() => setDeliverOpen(false)}
         size="sm"
-        title={t('runDrawer.deliverSftp')}
-        description={t('runDrawer.deliverHint')}
+        title={t("runDrawer.deliverSftp")}
+        description={t("runDrawer.deliverHint")}
         headerActions={
           <>
-            <Button variant="outline" onClick={() => setDeliverOpen(false)}>{tCommon('actions.cancel')}</Button>
+            <Button variant="outline" onClick={() => setDeliverOpen(false)}>
+              {tCommon("actions.cancel")}
+            </Button>
             <Button disabled={busy || !sftpServerId} onClick={deliver}>
-              {busy ? tCommon('actions.sending') : t('runDrawer.deliverSftp')}
+              {busy ? tCommon("actions.sending") : t("runDrawer.deliverSftp")}
             </Button>
           </>
         }
       >
         <div className="space-y-1.5 p-1">
-          <Label>{t('runDrawer.sftpServer')}</Label>
+          <Label>{t("runDrawer.sftpServer")}</Label>
           {sftpServers.length === 0 ? (
             <p className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {t('runDrawer.noSftpServers')}
+              {t("runDrawer.noSftpServers")}
             </p>
           ) : (
             <Select value={sftpServerId} onChange={(e) => setSftpServerId(e.target.value)}>
-              {sftpServers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {sftpServers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
             </Select>
           )}
         </div>
       </Drawer>
-      <Drawer open={decision !== null} onClose={() => setDecision(null)} size="sm" title={decision?.kind === 'rollback' ? t('runDrawer.rollback') : decision?.kind === 'cancel' ? t('runDrawer.cancelRun') : decision?.kind === 'resolveDelivered' ? t('runDrawer.resolveDelivered') : t('runDrawer.resolveApproved')} description={t('runDrawer.reasonRequired')} headerActions={<><Button variant="outline" onClick={() => setDecision(null)}>{tCommon('actions.cancel')}</Button><Button variant="destructive" disabled={busy || !reason.trim() || (decision?.kind === 'rollback' && rollbackNeedsAttestation && attestation.trim() !== String(run.run_number))} onClick={async () => { if (decision?.kind === 'resolveDelivered' && decision.fileId) await resolveDelivery(decision.fileId, 'delivered', reason); else if (decision?.kind === 'resolveApproved' && decision.fileId) await resolveDelivery(decision.fileId, 'approved', reason); else if (decision?.kind === 'rollback') { const ok = await action('rollback', rollbackNeedsAttestation ? { reason, bankNotProcessedAttestation: attestation } : { reason }, t('runDrawer.toasts.rolledBack')); if (ok) { setDecision(null); setReason('') } } else if (decision?.kind === 'cancel') { const ok = await cancelRun(reason); if (ok) { setDecision(null); setReason('') } } }}>{tCommon('actions.confirm')}</Button></>}><div className="space-y-1.5 p-1"><Label>{t('runDrawer.reason')}</Label><Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} />{decision?.kind === 'rollback' && rollbackNeedsAttestation ? <div className="space-y-1.5 pt-3"><p className="text-sm text-amber-700 dark:text-amber-400">{t('runDrawer.bankAttestationHelp')}</p><Label htmlFor="run-rollback-attestation">{t('runDrawer.bankAttestationLabel', { runNumber: String(run.run_number) })}</Label><Input id="run-rollback-attestation" autoComplete="off" value={attestation} onChange={(e) => setAttestation(e.target.value)} /></div> : null}</div></Drawer>
-      <Drawer open={outcomeInstruction !== null} onClose={() => setOutcomeInstruction(null)} size="sm" title={t('runDrawer.outcome.title')} description={outcomeInstruction ? t('runDrawer.outcome.description', { payee: outcomeInstruction.payee }) : ''} headerActions={<><Button variant="outline" onClick={() => setOutcomeInstruction(null)}>{tCommon('actions.cancel')}</Button><Button disabled={busy || !effectiveOn || (outcomeStatus !== 'settled' && !returnReason.trim())} onClick={saveOutcome}>{tCommon('actions.save')}</Button></>}><div className="space-y-4 p-1"><div className="space-y-1.5"><Label>{t('runDrawer.outcome.status')}</Label><Select value={outcomeStatus} onChange={(e) => setOutcomeStatus(e.target.value as typeof outcomeStatus)}><option value="settled">{t('runDrawer.outcome.settled')}</option><option value="returned">{t('runDrawer.outcome.returned')}</option><option value="rejected">{t('runDrawer.outcome.rejected')}</option></Select></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.effectiveOn')}</Label><DateField value={effectiveOn} onChange={(value) => setEffectiveOn(value)} /></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.bankReference')}</Label><Input value={bankReference} onChange={(e) => setBankReference(e.target.value)} /></div>{outcomeStatus !== 'settled' ? <><div className="space-y-1.5"><Label>{t('runDrawer.outcome.returnCode')}</Label><Input value={returnCode} onChange={(e) => setReturnCode(e.target.value)} /></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.returnReason')}</Label><Textarea rows={3} value={returnReason} onChange={(e) => setReturnReason(e.target.value)} /></div><Alert variant="warning"><AlertDescription>{t('runDrawer.outcome.reversalWarning')}</AlertDescription></Alert></> : null}</div></Drawer>
+      <Drawer
+        open={decision !== null}
+        onClose={() => setDecision(null)}
+        size="sm"
+        title={
+          decision?.kind === "rollback"
+            ? t("runDrawer.rollback")
+            : decision?.kind === "cancel"
+              ? t("runDrawer.cancelRun")
+              : decision?.kind === "resolveDelivered"
+                ? t("runDrawer.resolveDelivered")
+                : t("runDrawer.resolveApproved")
+        }
+        description={t("runDrawer.reasonRequired")}
+        headerActions={
+          <>
+            <Button variant="outline" onClick={() => setDecision(null)}>
+              {tCommon("actions.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                busy ||
+                !reason.trim() ||
+                (decision?.kind === "rollback" &&
+                  rollbackNeedsAttestation &&
+                  attestation.trim() !== String(run.run_number))
+              }
+              onClick={async () => {
+                if (decision?.kind === "resolveDelivered" && decision.fileId)
+                  await resolveDelivery(decision.fileId, "delivered", reason);
+                else if (decision?.kind === "resolveApproved" && decision.fileId)
+                  await resolveDelivery(decision.fileId, "approved", reason);
+                else if (decision?.kind === "rollback") {
+                  const ok = await action(
+                    "rollback",
+                    rollbackNeedsAttestation
+                      ? { reason, bankNotProcessedAttestation: attestation }
+                      : { reason },
+                    t("runDrawer.toasts.rolledBack"),
+                  );
+                  if (ok) {
+                    setDecision(null);
+                    setReason("");
+                  }
+                } else if (decision?.kind === "cancel") {
+                  const ok = await cancelRun(reason);
+                  if (ok) {
+                    setDecision(null);
+                    setReason("");
+                  }
+                }
+              }}
+            >
+              {tCommon("actions.confirm")}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-1.5 p-1">
+          <Label>{t("runDrawer.reason")}</Label>
+          <Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} />
+          {decision?.kind === "rollback" && rollbackNeedsAttestation ? (
+            <div className="space-y-1.5 pt-3">
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                {t("runDrawer.bankAttestationHelp")}
+              </p>
+              <Label htmlFor="run-rollback-attestation">
+                {t("runDrawer.bankAttestationLabel", { runNumber: String(run.run_number) })}
+              </Label>
+              <Input
+                id="run-rollback-attestation"
+                autoComplete="off"
+                value={attestation}
+                onChange={(e) => setAttestation(e.target.value)}
+              />
+            </div>
+          ) : null}
+        </div>
+      </Drawer>
+      <Drawer
+        open={outcomeInstruction !== null}
+        onClose={() => setOutcomeInstruction(null)}
+        size="sm"
+        title={t("runDrawer.outcome.title")}
+        description={
+          outcomeInstruction
+            ? t("runDrawer.outcome.description", { payee: outcomeInstruction.payee })
+            : ""
+        }
+        headerActions={
+          <>
+            <Button variant="outline" onClick={() => setOutcomeInstruction(null)}>
+              {tCommon("actions.cancel")}
+            </Button>
+            <Button
+              disabled={
+                busy || !effectiveOn || (outcomeStatus !== "settled" && !returnReason.trim())
+              }
+              onClick={saveOutcome}
+            >
+              {tCommon("actions.save")}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 p-1">
+          <div className="space-y-1.5">
+            <Label>{t("runDrawer.outcome.status")}</Label>
+            <Select
+              value={outcomeStatus}
+              onChange={(e) => setOutcomeStatus(e.target.value as typeof outcomeStatus)}
+            >
+              <option value="settled">{t("runDrawer.outcome.settled")}</option>
+              <option value="returned">{t("runDrawer.outcome.returned")}</option>
+              <option value="rejected">{t("runDrawer.outcome.rejected")}</option>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t("runDrawer.outcome.effectiveOn")}</Label>
+            <DateField value={effectiveOn} onChange={(value) => setEffectiveOn(value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t("runDrawer.outcome.bankReference")}</Label>
+            <Input value={bankReference} onChange={(e) => setBankReference(e.target.value)} />
+          </div>
+          {outcomeStatus !== "settled" ? (
+            <>
+              <div className="space-y-1.5">
+                <Label>{t("runDrawer.outcome.returnCode")}</Label>
+                <Input value={returnCode} onChange={(e) => setReturnCode(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("runDrawer.outcome.returnReason")}</Label>
+                <Textarea
+                  rows={3}
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                />
+              </div>
+              <Alert variant="warning">
+                <AlertDescription>{t("runDrawer.outcome.reversalWarning")}</AlertDescription>
+              </Alert>
+            </>
+          ) : null}
+        </div>
+      </Drawer>
     </UrlDrawer>
-  )
+  );
 }

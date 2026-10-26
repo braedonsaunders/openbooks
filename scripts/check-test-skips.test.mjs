@@ -32,7 +32,10 @@ test("later", { skip: "waiting on backend" }, () => {});
     assert.deepEqual(scanFile(join(root, "engine/src/ok.integration.test.ts"), root), []);
     const findings = scanFile(join(root, "engine/src/bad.test.ts"), root);
     assert.equal(findings.length, 2);
-    assert.deepEqual(findings.map((finding) => finding.value).sort(), ['"waiting on backend"', "true"]);
+    assert.deepEqual(findings.map((finding) => finding.value).sort(), [
+      '"waiting on backend"',
+      "true",
+    ]);
     const tree = scanTree(root);
     assert.equal(tree.length, 2);
   } finally {
@@ -98,14 +101,11 @@ test("platform", { skip: process.platform !== "linux" }, async () => {});
     const findings = scanFile(join(root, "engine/src/combined.test.ts"), root);
     assert.equal(findings.length, 3, JSON.stringify(findings));
     assert.ok(findings.every((finding) => finding.kind === "skip-combined"));
-    assert.deepEqual(
-      findings.map((finding) => finding.value).sort(),
-      [
-        "!DB || !FEATURE_READY",
-        '!DB || new Date() < new Date("2026-12-02")',
-        '!DB || new Date().toISOString().slice(0, 10) < "2026-12-02" ? "annual settlement needs a December 2026 pay period to have begun"',
-      ],
-    );
+    assert.deepEqual(findings.map((finding) => finding.value).sort(), [
+      "!DB || !FEATURE_READY",
+      '!DB || new Date() < new Date("2026-12-02")',
+      '!DB || new Date().toISOString().slice(0, 10) < "2026-12-02" ? "annual settlement needs a December 2026 pay period to have begun"',
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -113,5 +113,9 @@ test("platform", { skip: process.platform !== "linux" }, async () => {});
 
 test("the live repository has no non-infra test skips", () => {
   const findings = scanTree();
-  assert.deepEqual(findings, [], `${findings.length} skip violations:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.kind}] ${finding.value}`).join("\n")}`);
+  assert.deepEqual(
+    findings,
+    [],
+    `${findings.length} skip violations:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.kind}] ${finding.value}`).join("\n")}`,
+  );
 });

@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { ApprovalActions } from '@/components/approval-actions'
+import { ApprovalActions } from "@/components/approval-actions";
 
 import { RecordTabs } from "@/components/module-home/record-tabs";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Badge,
@@ -26,21 +26,16 @@ import {
   Textarea,
   UrlDrawer,
 } from "@openbooks/ui";
-import { AsyncUrlDrawer } from '@/components/async-url-drawer'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
-import { useDirtyClose } from '@/lib/use-dirty-close'
+import { AsyncUrlDrawer } from "@/components/async-url-drawer";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { useDirtyClose } from "@/lib/use-dirty-close";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import { useTranslations } from "next-intl";
-import {
-  decimalAdd,
-  decimalCmp,
-  decimalNeg,
-  decimalSum,
-} from "../../../lib/statement-format";
+import { decimalAdd, decimalCmp, decimalNeg, decimalSum } from "../../../lib/statement-format";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { PagedTable } from "../../../components/paged-table";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 type Option = { id: string; name: string; currency?: string | null };
 type Permissions = {
@@ -88,7 +83,7 @@ type ChangeOrder = {
   number: string;
   description: string | null;
   status: string;
-  amount: string
+  amount: string;
 };
 type PayApplication = {
   id: string;
@@ -99,7 +94,7 @@ type PayApplication = {
   vendorBillStatus: string | null;
   grossThisPeriod: string;
   retainageThisPeriod: string;
-  netDue: string
+  netDue: string;
   vendorBillDocumentId: string | null;
   vendorBillNumber: string | null;
 };
@@ -140,8 +135,7 @@ type Detail = {
   paymentControls: PaymentControl[];
   retainageReleases: RetainageRelease[];
 };
-type Tab =
-  "overview" | "sov" | "changes" | "applications" | "retainage" | "controls";
+type Tab = "overview" | "sov" | "changes" | "applications" | "retainage" | "controls";
 
 function sumSubcontractAmounts(values: readonly string[]): string {
   return decimalSum(values);
@@ -162,10 +156,9 @@ async function api(payload: Record<string, unknown>, fallback: string) {
     // token is a conflict (409): carry the status so the caller can reload
     // the other editor's values instead of leaving the form on the state
     // the conflict just invalidated.
-    throw Object.assign(
-      new Error(await readApiErrorMessage(response, fallback)),
-      { status: response.status },
-    );
+    throw Object.assign(new Error(await readApiErrorMessage(response, fallback)), {
+      status: response.status,
+    });
   }
   return response.json().catch(() => ({}));
 }
@@ -186,79 +179,88 @@ export function SubcontractsWorkspace({
   multiCurrency?: boolean;
 }) {
   const { money: localizedMoney } = useMoney();
-  const router = useRouter()
-  const params = useSearchParams()
-  const search = params.toString()
+  const router = useRouter();
+  const params = useSearchParams();
+  const search = params.toString();
   const t = useTranslations("subcontracts");
-  const common = useTranslations('common')
+  const common = useTranslations("common");
   const money = useCallback(
     (value: string | number, currency?: string) =>
       localizedMoney(value, currency ? { currency } : undefined),
     [localizedMoney],
   );
-  const rawRecord = params.get('subcontract')
-  const selectedId = rawRecord && rawRecord !== 'new' ? rawRecord : null
-  const createOpen = rawRecord === 'new' && permissions.create
-  const requestedTab = params.get('tab')
-  const tab = (['overview', 'sov', 'changes', 'applications', 'retainage', 'controls'] as string[]).includes(requestedTab ?? '')
+  const rawRecord = params.get("subcontract");
+  const selectedId = rawRecord && rawRecord !== "new" ? rawRecord : null;
+  const createOpen = rawRecord === "new" && permissions.create;
+  const requestedTab = params.get("tab");
+  const tab = (
+    ["overview", "sov", "changes", "applications", "retainage", "controls"] as string[]
+  ).includes(requestedTab ?? "")
     ? (requestedTab as Tab)
-    : 'overview'
-  const closeParams = new URLSearchParams(search)
-  closeParams.delete('subcontract')
-  closeParams.delete('tab')
-  const closeQuery = closeParams.toString()
-  const closeHref = closeQuery ? `/subcontracts?${closeQuery}` : '/subcontracts'
-  const [busy, setBusy] = useState(false)
-  const [loadedDetail, setLoadedDetail] = useState<{ id: string; detail: Detail } | null>(null)
-  const [detailFailure, setDetailFailure] = useState<{ id: string; message: string } | null>(null)
-  const [retry, setRetry] = useState(0)
-  const [dirtyDetail, setDirtyDetail] = useState<{ id: string; dirty: boolean } | null>(null)
-  const detail = selectedId && loadedDetail?.id === selectedId ? loadedDetail.detail : null
-  const detailError = selectedId && detailFailure?.id === selectedId ? detailFailure.message : null
-  const invalidRecord = !!selectedId && !isUuid(selectedId)
-  const detailDirty = !!selectedId && dirtyDetail?.id === selectedId && dirtyDetail.dirty
-  const reportDetailDirty = useCallback((dirty: boolean) => {
-    if (selectedId) setDirtyDetail({ id: selectedId, dirty })
-  }, [selectedId, setDirtyDetail])
+    : "overview";
+  const closeParams = new URLSearchParams(search);
+  closeParams.delete("subcontract");
+  closeParams.delete("tab");
+  const closeQuery = closeParams.toString();
+  const closeHref = closeQuery ? `/subcontracts?${closeQuery}` : "/subcontracts";
+  const [busy, setBusy] = useState(false);
+  const [loadedDetail, setLoadedDetail] = useState<{ id: string; detail: Detail } | null>(null);
+  const [detailFailure, setDetailFailure] = useState<{ id: string; message: string } | null>(null);
+  const [retry, setRetry] = useState(0);
+  const [dirtyDetail, setDirtyDetail] = useState<{ id: string; dirty: boolean } | null>(null);
+  const detail = selectedId && loadedDetail?.id === selectedId ? loadedDetail.detail : null;
+  const detailError = selectedId && detailFailure?.id === selectedId ? detailFailure.message : null;
+  const invalidRecord = !!selectedId && !isUuid(selectedId);
+  const detailDirty = !!selectedId && dirtyDetail?.id === selectedId && dirtyDetail.dirty;
+  const reportDetailDirty = useCallback(
+    (dirty: boolean) => {
+      if (selectedId) setDirtyDetail({ id: selectedId, dirty });
+    },
+    [selectedId, setDirtyDetail],
+  );
 
   const loadDetail = useCallback(
     (id: string, signal?: AbortSignal) =>
       fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, {
-        cache: 'no-store',
+        cache: "no-store",
         ...(signal ? { signal } : {}),
       }).then(async (response) => {
-        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.detailFailed')))
-        const loaded = (await response.json()) as Detail
-        setLoadedDetail({ id, detail: loaded })
-        setDetailFailure(null)
-        setDirtyDetail(null)
-        return loaded
+        if (!response.ok)
+          throw new Error(await readApiErrorMessage(response, t("errors.detailFailed")));
+        const loaded = (await response.json()) as Detail;
+        setLoadedDetail({ id, detail: loaded });
+        setDetailFailure(null);
+        setDirtyDetail(null);
+        return loaded;
       }),
     [t, setLoadedDetail, setDetailFailure, setDirtyDetail],
-  )
+  );
 
   useEffect(() => {
-    if (!selectedId || !isUuid(selectedId)) return
-    const controller = new AbortController()
+    if (!selectedId || !isUuid(selectedId)) return;
+    const controller = new AbortController();
     void loadDetail(selectedId, controller.signal).catch((error: unknown) => {
-      if (controller.signal.aborted) return
-      setDetailFailure({ id: selectedId, message: error instanceof Error ? error.message : t('errors.detailFailed') })
-    })
-    return () => controller.abort()
-  }, [selectedId, retry, loadDetail, t])
+      if (controller.signal.aborted) return;
+      setDetailFailure({
+        id: selectedId,
+        message: error instanceof Error ? error.message : t("errors.detailFailed"),
+      });
+    });
+    return () => controller.abort();
+  }, [selectedId, retry, loadDetail, t]);
 
   const detailClose = useDirtyClose({
     dirty: detailDirty,
     busy,
     onClose: () => router.push(closeHref as never),
-    message: common('feedback.unsavedChanges'),
-    confirmLabel: common('confirm.discardChanges'),
-  })
+    message: common("feedback.unsavedChanges"),
+    confirmLabel: common("confirm.discardChanges"),
+  });
   const beforeCloseDetail = async () => {
-    const allowed = await detailClose.beforeClose()
-    if (allowed) setDirtyDetail(null)
-    return allowed
-  }
+    const allowed = await detailClose.beforeClose();
+    if (allowed) setDirtyDetail(null);
+    return allowed;
+  };
 
   const act = async (payload: Record<string, unknown>, success: string) => {
     if (busy) return null;
@@ -266,19 +268,20 @@ export function SubcontractsWorkspace({
     try {
       const result = await api(payload, t("errors.actionFailed"));
       toast.success(success);
-      router.refresh()
-      if (selectedId && isUuid(selectedId)) await loadDetail(selectedId)
+      router.refresh();
+      if (selectedId && isUuid(selectedId)) await loadDetail(selectedId);
       return result;
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("errors.actionFailed"),
-      );
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
       // A conflict means someone else saved first: reload their values so
       // the form stops editing the state the refusal just invalidated.
       if ((error as { status?: number }).status === 409 && selectedId && isUuid(selectedId)) {
         await loadDetail(selectedId).catch((reloadError: unknown) => {
-          setDetailFailure({ id: selectedId, message: reloadError instanceof Error ? reloadError.message : t('errors.detailFailed') })
-        })
+          setDetailFailure({
+            id: selectedId,
+            message: reloadError instanceof Error ? reloadError.message : t("errors.detailFailed"),
+          });
+        });
       }
       return null;
     } finally {
@@ -290,148 +293,136 @@ export function SubcontractsWorkspace({
     <>
       {createOpen ? (
         <CreateSubcontractDrawer
-        open
-        closeHref={closeHref}
-        projects={projects}
-        vendors={vendors}
-        busy={busy}
-        multiCurrency={multiCurrency}
-        onCreate={async (payload) => {
-          const result = await act(
-            { action: "createSubcontract", ...payload },
-            t("toasts.created"),
-          );
-          if (result?.id) {
-            const next = new URLSearchParams(search)
-            next.set('subcontract', String(result.id))
-            next.set('tab', 'sov')
-            router.push(`/subcontracts?${next}` as never)
-            return true
-          }
-          return false
-        }}
-      />
+          open
+          closeHref={closeHref}
+          projects={projects}
+          vendors={vendors}
+          busy={busy}
+          multiCurrency={multiCurrency}
+          onCreate={async (payload) => {
+            const result = await act(
+              { action: "createSubcontract", ...payload },
+              t("toasts.created"),
+            );
+            if (result?.id) {
+              const next = new URLSearchParams(search);
+              next.set("subcontract", String(result.id));
+              next.set("tab", "sov");
+              router.push(`/subcontracts?${next}` as never);
+              return true;
+            }
+            return false;
+          }}
+        />
       ) : null}
 
       {selectedId ? (
         <AsyncUrlDrawer
-        open
-        openKey={selectedId}
-        closeHref={closeHref}
-        beforeClose={beforeCloseDetail}
-        size="2xl"
-        title={
-          detail
-            ? `${detail.subcontract.number} · ${detail.subcontract.title}`
-            : t("register.drawerTitle")
-        }
-        description={
-          detail
-            ? `${detail.subcontract.projectName} · ${detail.subcontract.vendorName}`
-            : t("register.drawerLoading")
-        }
-        pending={!invalidRecord && !detail && !detailError}
-        error={invalidRecord ? t('errors.detailFailed') : detailError}
-        onRetry={() => {
-          setDetailFailure(null)
-          setRetry((current) => current + 1)
-        }}
-      >
+          open
+          openKey={selectedId}
+          closeHref={closeHref}
+          beforeClose={beforeCloseDetail}
+          size="2xl"
+          title={
+            detail
+              ? `${detail.subcontract.number} · ${detail.subcontract.title}`
+              : t("register.drawerTitle")
+          }
+          description={
+            detail
+              ? `${detail.subcontract.projectName} · ${detail.subcontract.vendorName}`
+              : t("register.drawerLoading")
+          }
+          pending={!invalidRecord && !detail && !detailError}
+          error={invalidRecord ? t("errors.detailFailed") : detailError}
+          onRetry={() => {
+            setDetailFailure(null);
+            setRetry((current) => current + 1);
+          }}
+        >
           {detail ? (
             <div className="space-y-5 p-1">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <StatusBadge status={detail.subcontract.status} />
-                <LifecycleActions
-                detail={detail}
-                permissions={permissions}
-                busy={busy}
-                act={act}
-              />
+                <LifecycleActions detail={detail} permissions={permissions} busy={busy} act={act} />
               </div>
               <RecordTabs
-              label={t("register.drawerTitle")}
-              tabs={(
-                [
-                  "overview",
-                  "sov",
-                  "changes",
-                  "applications",
-                  "retainage",
-                  "controls",
-                ] as Tab[]
-              ).map((key) => ({ key, label: t(`tabs.${key}`) }))}
-              active={tab}
-              onChange={(nextTab) => {
-                const next = new URLSearchParams(search)
-                next.set('tab', nextTab)
-                router.push(`/subcontracts?${next}` as never)
-              }}
-              className="border-b border-slate-200 dark:border-slate-800"
-            />
-              <div hidden={tab !== 'overview'}>
+                label={t("register.drawerTitle")}
+                tabs={(
+                  ["overview", "sov", "changes", "applications", "retainage", "controls"] as Tab[]
+                ).map((key) => ({ key, label: t(`tabs.${key}`) }))}
+                active={tab}
+                onChange={(nextTab) => {
+                  const next = new URLSearchParams(search);
+                  next.set("tab", nextTab);
+                  router.push(`/subcontracts?${next}` as never);
+                }}
+                className="border-b border-slate-200 dark:border-slate-800"
+              />
+              <div hidden={tab !== "overview"}>
                 <Overview
-                key={`${detail.subcontract.id}:${detail.subcontract.updatedAt}`}
-                detail={detail}
-                money={money}
-                canEdit={permissions.create}
-                busy={busy}
-                act={act}
-                onDirtyChange={reportDetailDirty}
-              />
+                  key={`${detail.subcontract.id}:${detail.subcontract.updatedAt}`}
+                  detail={detail}
+                  money={money}
+                  canEdit={permissions.create}
+                  busy={busy}
+                  act={act}
+                  onDirtyChange={reportDetailDirty}
+                />
               </div>
-              <div hidden={tab !== 'sov'}>
+              <div hidden={tab !== "sov"}>
                 <SovSection
-                detail={detail}
-                accounts={expenseAccounts}
-                canCreate={permissions.create}
-                busy={busy}
-                act={act}
-                money={money}
-              />
+                  detail={detail}
+                  accounts={expenseAccounts}
+                  canCreate={permissions.create}
+                  busy={busy}
+                  act={act}
+                  money={money}
+                />
               </div>
-              <div hidden={tab !== 'changes'}>
+              <div hidden={tab !== "changes"}>
                 <ChangesSection
-                detail={detail}
-                permissions={permissions}
-                busy={busy}
-                act={act}
-                money={money}
-              />
+                  detail={detail}
+                  permissions={permissions}
+                  busy={busy}
+                  act={act}
+                  money={money}
+                />
               </div>
-              <div hidden={tab !== 'applications'}>
+              <div hidden={tab !== "applications"}>
                 <ApplicationsSection
-                detail={detail}
-                permissions={permissions}
-                busy={busy}
-                act={act}
-                money={money}
-              />
+                  detail={detail}
+                  permissions={permissions}
+                  busy={busy}
+                  act={act}
+                  money={money}
+                />
               </div>
-              <div hidden={tab !== 'retainage'}>
+              <div hidden={tab !== "retainage"}>
                 <RetainageSection
-                detail={detail}
-                canPost={permissions.post}
-                busy={busy}
-                act={act}
-                money={money}
-              />
+                  detail={detail}
+                  canPost={permissions.post}
+                  busy={busy}
+                  act={act}
+                  money={money}
+                />
               </div>
-              <div hidden={tab !== 'controls'}>
+              <div hidden={tab !== "controls"}>
                 <ControlsSection
-                detail={detail}
-                parties={parties}
-                canPay={permissions.pay}
-                busy={busy}
-                act={act}
-                money={money}
-              />
+                  detail={detail}
+                  parties={parties}
+                  canPay={permissions.pay}
+                  busy={busy}
+                  act={act}
+                  money={money}
+                />
               </div>
             </div>
           ) : null}
         </AsyncUrlDrawer>
       ) : null}
     </>
-  )
+  );
 }
 
 const STATUS_NAME_KEY: Record<string, string> = {
@@ -458,9 +449,7 @@ function StatusBadge({ status }: { status: string }) {
         : "secondary";
   const key = STATUS_NAME_KEY[status];
   return (
-    <Badge variant={tone}>
-      {key ? t(`statusNames.${key}`) : status.replaceAll("_", " ")}
-    </Badge>
+    <Badge variant={tone}>{key ? t(`statusNames.${key}`) : status.replaceAll("_", " ")}</Badge>
   );
 }
 
@@ -468,9 +457,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-          {label}
-        </div>
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
         <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
       </CardContent>
     </Card>
@@ -502,21 +489,25 @@ function Overview({
   // Seeded once: the call site keys this section on the subcontract's
   // updated_at, so a 409 reload (which restamps it) remounts with the
   // other editor's values instead of saving stale terms over them.
-  const initialForm = useMemo(() => ({
-    title: s.title,
-    description: s.description || "",
-    originalCommitment: s.originalCommitment,
-    defaultRetainagePercent: s.defaultRetainagePercent,
-    startsOn: s.startsOn || "",
-    endsOn: s.endsOn || "",
-  }), [s.title, s.description, s.originalCommitment, s.defaultRetainagePercent, s.startsOn, s.endsOn]);
+  const initialForm = useMemo(
+    () => ({
+      title: s.title,
+      description: s.description || "",
+      originalCommitment: s.originalCommitment,
+      defaultRetainagePercent: s.defaultRetainagePercent,
+      startsOn: s.startsOn || "",
+      endsOn: s.endsOn || "",
+    }),
+    [s.title, s.description, s.originalCommitment, s.defaultRetainagePercent, s.startsOn, s.endsOn],
+  );
   const [form, setForm] = useState(initialForm);
-  const dirty = form.title !== initialForm.title
-    || form.description !== initialForm.description
-    || form.originalCommitment !== initialForm.originalCommitment
-    || form.defaultRetainagePercent !== initialForm.defaultRetainagePercent
-    || form.startsOn !== initialForm.startsOn
-    || form.endsOn !== initialForm.endsOn;
+  const dirty =
+    form.title !== initialForm.title ||
+    form.description !== initialForm.description ||
+    form.originalCommitment !== initialForm.originalCommitment ||
+    form.defaultRetainagePercent !== initialForm.defaultRetainagePercent ||
+    form.startsOn !== initialForm.startsOn ||
+    form.endsOn !== initialForm.endsOn;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   return (
     <div className="space-y-5">
@@ -529,31 +520,19 @@ function Overview({
           label={t("overview.revisedCommitment")}
           value={money(s.revisedCommitment, s.currency)}
         />
-        <Metric
-          label={t("overview.grossBilled")}
-          value={money(billed, s.currency)}
-        />
+        <Metric label={t("overview.grossBilled")} value={money(billed, s.currency)} />
       </div>
       <Card>
         <CardContent className="grid gap-4 p-4 sm:grid-cols-2">
           <Read label={t("overview.project")} value={s.projectName} />
           <Read label={t("overview.vendor")} value={s.vendorName} />
-          <Read
-            label={t("overview.retainage")}
-            value={`${s.defaultRetainagePercent}%`}
-          />
+          <Read label={t("overview.retainage")} value={`${s.defaultRetainagePercent}%`} />
           <Read
             label={t("overview.term")}
-            value={
-              [s.startsOn, s.endsOn].filter(Boolean).join(" – ") ||
-              t("overview.notSet")
-            }
+            value={[s.startsOn, s.endsOn].filter(Boolean).join(" – ") || t("overview.notSet")}
           />
           <div className="sm:col-span-2">
-            <Read
-              label={t("overview.description")}
-              value={s.description || "—"}
-            />
+            <Read label={t("overview.description")} value={s.description || "—"} />
           </div>
         </CardContent>
       </Card>
@@ -561,20 +540,14 @@ function Overview({
         <Card>
           <CardContent className="space-y-3 p-4">
             <div>
-              <div className="text-sm font-semibold">
-                {t("overview.editTitle")}
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                {t("overview.editHint")}
-              </div>
+              <div className="text-sm font-semibold">{t("overview.editTitle")}</div>
+              <div className="mt-1 text-xs text-slate-500">{t("overview.editHint")}</div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("overview.fieldTitle")}>
                 <Input
                   value={form.title}
-                  onChange={(event) =>
-                    setForm({ ...form, title: event.target.value })
-                  }
+                  onChange={(event) => setForm({ ...form, title: event.target.value })}
                 />
               </Field>
               <Field label={t("overview.fieldCommitment")}>
@@ -583,9 +556,7 @@ function Overview({
                   min="0"
                   step="0.01"
                   value={form.originalCommitment}
-                  onChange={(event) =>
-                    setForm({ ...form, originalCommitment: event.target.value })
-                  }
+                  onChange={(event) => setForm({ ...form, originalCommitment: event.target.value })}
                 />
               </Field>
               <Field label={t("overview.fieldRetainage")}>
@@ -605,17 +576,13 @@ function Overview({
               <Field label={t("overview.fieldStarts")}>
                 <DateField
                   value={form.startsOn}
-                  onChange={(value) =>
-                    setForm({ ...form, startsOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, startsOn: value })}
                 />
               </Field>
               <Field label={t("overview.fieldEnds")}>
                 <DateField
                   value={form.endsOn}
-                  onChange={(value) =>
-                    setForm({ ...form, endsOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, endsOn: value })}
                 />
               </Field>
               <div className="sm:col-span-2">
@@ -623,9 +590,7 @@ function Overview({
                   <Textarea
                     rows={3}
                     value={form.description}
-                    onChange={(event) =>
-                      setForm({ ...form, description: event.target.value })
-                    }
+                    onChange={(event) => setForm({ ...form, description: event.target.value })}
                   />
                 </Field>
               </div>
@@ -659,9 +624,7 @@ function Read({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-1 text-sm text-slate-900 dark:text-slate-100">
-        {value}
-      </div>
+      <div className="mt-1 text-sm text-slate-900 dark:text-slate-100">{value}</div>
     </div>
   );
 }
@@ -679,34 +642,29 @@ function LifecycleActions({
 }) {
   const t = useTranslations("subcontracts");
   const tCommon = useTranslations("common");
-  const s = detail.subcontract
+  const s = detail.subcontract;
   return (
     <div className="flex flex-wrap gap-2">
       {s.status === "draft" && permissions.create ? (
         <Button
           size="sm"
           disabled={busy}
-          onClick={() =>
-            act(
-              { action: "submitSubcontract", id: s.id },
-              t("toasts.submitted"),
-            )
-          }
+          onClick={() => act({ action: "submitSubcontract", id: s.id }, t("toasts.submitted"))}
         >
           {tCommon("actions.submit")}
         </Button>
       ) : null}
-      {s.status === 'pending_approval' ? (
+      {s.status === "pending_approval" ? (
         <ApprovalActions
           subjectKind="subcontract"
           subjectId={s.id}
           {...(permissions.create
             ? {
-                submitApprovalHref: '/api/subcontracts',
+                submitApprovalHref: "/api/subcontracts",
                 submitApprovalBody: { action: "approveSubcontract", id: s.id },
               }
             : {})}
-          submissionStatuses={['pending_approval']}
+          submissionStatuses={["pending_approval"]}
         />
       ) : null}
       {s.status === "active" && permissions.create ? (
@@ -747,8 +705,7 @@ function LifecycleActions({
           {tCommon("actions.close")}
         </Button>
       ) : null}
-      {["draft", "pending_approval"].includes(s.status) &&
-      permissions.create ? (
+      {["draft", "pending_approval"].includes(s.status) && permissions.create ? (
         <Button
           size="sm"
           variant="destructive"
@@ -764,7 +721,7 @@ function LifecycleActions({
         </Button>
       ) : null}
     </div>
-  )
+  );
 }
 
 function SovSection({
@@ -792,9 +749,7 @@ function SovSection({
     retainagePercent: "",
     expenseAccountId: "",
   });
-  const total = sumSubcontractAmounts(
-    detail.sovLines.map((line) => line.scheduledValue),
-  );
+  const total = sumSubcontractAmounts(detail.sovLines.map((line) => line.scheduledValue));
   return (
     <div className="space-y-4">
       <div className="flex justify-between text-sm">
@@ -808,9 +763,7 @@ function SovSection({
           <TableRow>
             <TableHead>{t("sov.colItem")}</TableHead>
             <TableHead>{t("sov.colDescription")}</TableHead>
-            <TableHead className="text-right">
-              {t("sov.colScheduled")}
-            </TableHead>
+            <TableHead className="text-right">{t("sov.colScheduled")}</TableHead>
             <TableHead className="text-right">{t("sov.colEarned")}</TableHead>
             <TableHead>{t("sov.colAccount")}</TableHead>
             {editable ? <TableHead /> : null}
@@ -838,10 +791,7 @@ function SovSection({
                     variant="ghost"
                     disabled={busy}
                     onClick={() =>
-                      act(
-                        { action: "removeSovLine", id: line.id },
-                        t("toasts.sovRemoved"),
-                      )
+                      act({ action: "removeSovLine", id: line.id }, t("toasts.sovRemoved"))
                     }
                   >
                     {tCommon("actions.remove")}
@@ -866,9 +816,7 @@ function SovSection({
               <Field label={t("sov.fieldDescription")}>
                 <Input
                   value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
               </Field>
               <Field label={t("sov.fieldScheduled")}>
@@ -877,9 +825,7 @@ function SovSection({
                   min="0"
                   step="0.01"
                   value={form.scheduledValue}
-                  onChange={(e) =>
-                    setForm({ ...form, scheduledValue: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, scheduledValue: e.target.value })}
                 />
               </Field>
               <Field label={t("sov.fieldRetainage")}>
@@ -888,17 +834,13 @@ function SovSection({
                   min="0"
                   max="100"
                   value={form.retainagePercent}
-                  onChange={(e) =>
-                    setForm({ ...form, retainagePercent: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, retainagePercent: e.target.value })}
                 />
               </Field>
               <Field label={t("sov.fieldAccount")}>
                 <Select
                   value={form.expenseAccountId}
-                  onChange={(e) =>
-                    setForm({ ...form, expenseAccountId: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, expenseAccountId: e.target.value })}
                 >
                   <option value="">{t("sov.vendorDefault")}</option>
                   {accounts.map((a) => (
@@ -959,10 +901,9 @@ function ChangesSection({
 
   const tCommonEmpty = useTranslations("common")("feedback.noResults");
   const tCommon = useTranslations("common");
-  const today = useBusinessToday()
+  const today = useBusinessToday();
   const allowed =
-    ["active", "substantially_complete"].includes(detail.subcontract.status) &&
-    permissions.create;
+    ["active", "substantially_complete"].includes(detail.subcontract.status) && permissions.create;
   const [form, setForm] = useState({
     number: "",
     description: "",
@@ -1009,16 +950,13 @@ function ChangesSection({
             cell: (co) => <>{money(co.amount, detail.subcontract.currency)}</>,
           },
           {
-            key: 'column-4',
-            header: tCommon('labels.actions'),
-            align: 'right',
-            className: 'space-x-2 text-right',
+            key: "column-4",
+            header: tCommon("labels.actions"),
+            align: "right",
+            className: "space-x-2 text-right",
             cell: (co) => (
               <>
-                <ApprovalActions
-                  subjectKind="subcontract_change_order"
-                  subjectId={co.id}
-                />
+                <ApprovalActions subjectKind="subcontract_change_order" subjectId={co.id} />
                 {co.status === "draft" && permissions.create ? (
                   <Button
                     size="sm"
@@ -1030,11 +968,11 @@ function ChangesSection({
                           id: co.id,
                           approvedOn: today,
                         },
-                        t('toasts.submitted'),
+                        t("toasts.submitted"),
                       )
                     }
                   >
-                    {tCommon('actions.submit')}
+                    {tCommon("actions.submit")}
                   </Button>
                 ) : null}
                 {co.status === "draft" && permissions.create ? (
@@ -1043,10 +981,7 @@ function ChangesSection({
                     variant="ghost"
                     disabled={busy}
                     onClick={() =>
-                      act(
-                        { action: "voidChangeOrder", id: co.id },
-                        t("toasts.changeVoided"),
-                      )
+                      act({ action: "voidChangeOrder", id: co.id }, t("toasts.changeVoided"))
                     }
                   >
                     {tCommon("actions.void")}
@@ -1079,9 +1014,7 @@ function ChangesSection({
               <Field label={t("changes.fieldTarget")}>
                 <Select
                   value={form.targetSovLineId}
-                  onChange={(e) =>
-                    setForm({ ...form, targetSovLineId: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, targetSovLineId: e.target.value })}
                 >
                   <option value="">{t("sov.newSovLine")}</option>
                   {detail.sovLines.map((line) => (
@@ -1094,9 +1027,7 @@ function ChangesSection({
               <Field label={t("changes.fieldDescription")}>
                 <Input
                   value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
               </Field>
             </div>
@@ -1128,7 +1059,7 @@ function ChangesSection({
         </Card>
       ) : null}
     </div>
-  )
+  );
 }
 
 function ApplicationsSection({
@@ -1157,16 +1088,11 @@ function ApplicationsSection({
     <div className="space-y-4">
       {!open &&
       permissions.create &&
-      ["active", "substantially_complete"].includes(
-        detail.subcontract.status,
-      ) ? (
+      ["active", "substantially_complete"].includes(detail.subcontract.status) ? (
         <Card>
           <CardContent className="flex flex-wrap items-end gap-3 p-4">
             <Field label={t("applications.periodEnding")}>
-              <DateField
-                value={periodEnd}
-                onChange={(value) => setPeriodEnd(value)}
-              />
+              <DateField value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
             </Field>
             <Field label={t("applications.vendorInvoice")}>
               <Input
@@ -1197,9 +1123,7 @@ function ApplicationsSection({
         <PayApplicationEditor
           key={`${open.id}:rev${open.revision}`}
           app={open}
-          lines={detail.payApplicationLines.filter(
-            (line) => line.payApplicationId === open.id,
-          )}
+          lines={detail.payApplicationLines.filter((line) => line.payApplicationId === open.id)}
           busy={busy}
           act={act}
           currency={detail.subcontract.currency}
@@ -1231,11 +1155,7 @@ function ApplicationsSection({
             header: t("applications.colStatus"),
             cell: (app) => (
               <>
-                <StatusBadge
-                  status={
-                    app.vendorBillStatus === "posted" ? "posted" : app.status
-                  }
-                />
+                <StatusBadge status={app.vendorBillStatus === "posted" ? "posted" : app.status} />
               </>
             ),
           },
@@ -1244,51 +1164,39 @@ function ApplicationsSection({
             header: t("applications.colGross"),
             align: "right",
             className: "text-right",
-            cell: (app) => (
-              <>{money(app.grossThisPeriod, detail.subcontract.currency)}</>
-            ),
+            cell: (app) => <>{money(app.grossThisPeriod, detail.subcontract.currency)}</>,
           },
           {
             key: "column-4",
             header: t("applications.colRetainage"),
             align: "right",
             className: "text-right",
-            cell: (app) => (
-              <>{money(app.retainageThisPeriod, detail.subcontract.currency)}</>
-            ),
+            cell: (app) => <>{money(app.retainageThisPeriod, detail.subcontract.currency)}</>,
           },
           {
             key: "column-5",
             header: t("applications.colNetDue"),
             align: "right",
             className: "text-right",
-            cell: (app) => (
-              <>{money(app.netDue, detail.subcontract.currency)}</>
-            ),
+            cell: (app) => <>{money(app.netDue, detail.subcontract.currency)}</>,
           },
           {
-            key: 'column-6',
-            header: tCommon('labels.actions'),
-            align: 'right',
-            className: 'space-x-2 text-right',
+            key: "column-6",
+            header: tCommon("labels.actions"),
+            align: "right",
+            className: "space-x-2 text-right",
             cell: (app) => (
               <>
-                <ApprovalActions
-                  subjectKind="vendor_pay_application"
-                  subjectId={app.id}
-                />
-                {app.status === 'submitted' && permissions.create ? (
+                <ApprovalActions subjectKind="vendor_pay_application" subjectId={app.id} />
+                {app.status === "submitted" && permissions.create ? (
                   <Button
                     size="sm"
                     disabled={busy}
                     onClick={() =>
-                      act(
-                        { action: "approvePayApplication", id: app.id },
-                        t('toasts.submitted'),
-                      )
+                      act({ action: "approvePayApplication", id: app.id }, t("toasts.submitted"))
                     }
                   >
-                    {tCommon('actions.submit')}
+                    {tCommon("actions.submit")}
                   </Button>
                 ) : null}
                 {app.status === "approved" && permissions.post ? (
@@ -1296,10 +1204,7 @@ function ApplicationsSection({
                     size="sm"
                     disabled={busy}
                     onClick={() =>
-                      act(
-                        { action: "createVendorBill", id: app.id },
-                        t("toasts.billCreated"),
-                      )
+                      act({ action: "createVendorBill", id: app.id }, t("toasts.billCreated"))
                     }
                   >
                     {t("applications.createBill")}
@@ -1312,17 +1217,13 @@ function ApplicationsSection({
                     </Link>
                   </Button>
                 ) : null}
-                {["draft", "submitted", "approved"].includes(app.status) &&
-                permissions.create ? (
+                {["draft", "submitted", "approved"].includes(app.status) && permissions.create ? (
                   <Button
                     size="sm"
                     variant="ghost"
                     disabled={busy}
                     onClick={() =>
-                      act(
-                        { action: "voidPayApplication", id: app.id },
-                        t("toasts.appVoided"),
-                      )
+                      act({ action: "voidPayApplication", id: app.id }, t("toasts.appVoided"))
                     }
                   >
                     {tCommon("actions.void")}
@@ -1334,7 +1235,7 @@ function ApplicationsSection({
         ]}
       />
     </div>
-  )
+  );
 }
 
 function PayApplicationEditor({
@@ -1357,9 +1258,7 @@ function PayApplicationEditor({
   // Seeded once: the call site keys this editor on the pay-application
   // revision, so a 409 reload (which bumps the revision) remounts with the
   // other editor's values instead of saving stale numbers over them.
-  const [values, setValues] = useState<
-    Record<string, { work: string; stored: string }>
-  >(() =>
+  const [values, setValues] = useState<Record<string, { work: string; stored: string }>>(() =>
     Object.fromEntries(
       lines.map((line) => [
         line.sovLineId,
@@ -1392,9 +1291,7 @@ function PayApplicationEditor({
             <div className="text-sm font-semibold">
               {t("applications.editorTitle", { n: app.applicationNumber })}
             </div>
-            <div className="text-xs text-slate-500">
-              {t("applications.editorHint")}
-            </div>
+            <div className="text-xs text-slate-500">{t("applications.editorHint")}</div>
           </div>
           <div className="space-x-2">
             <Button size="sm" variant="outline" disabled={busy} onClick={save}>
@@ -1422,9 +1319,7 @@ function PayApplicationEditor({
               <TableHead>
                 {t("sov.colItem")} · {t("sov.colDescription")}
               </TableHead>
-              <TableHead className="text-right">
-                {t("sov.colScheduled")}
-              </TableHead>
+              <TableHead className="text-right">{t("sov.colScheduled")}</TableHead>
               <TableHead className="text-right">{t("sov.colEarned")}</TableHead>
               <TableHead>{t("applications.colWork")}</TableHead>
               <TableHead>{t("applications.colStored")}</TableHead>
@@ -1436,12 +1331,8 @@ function PayApplicationEditor({
                 <TableCell>
                   {line.itemNo || "—"} · {line.description}
                 </TableCell>
-                <TableCell className="text-right">
-                  {money(line.scheduledValue, currency)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {money(line.previousEarned, currency)}
-                </TableCell>
+                <TableCell className="text-right">{money(line.scheduledValue, currency)}</TableCell>
+                <TableCell className="text-right">{money(line.previousEarned, currency)}</TableCell>
                 <TableCell>
                   <Input
                     type="number"
@@ -1543,10 +1434,7 @@ function RetainageSection({
               />
             </Field>
             <Field label={t("retainage.billDate")}>
-              <DateField
-                value={periodEnd}
-                onChange={(value) => setPeriodEnd(value)}
-              />
+              <DateField value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
             </Field>
             <Button
               disabled={busy || !amount}
@@ -1586,9 +1474,7 @@ function RetainageSection({
             header: t("retainage.colAmount"),
             align: "right",
             className: "text-right",
-            cell: (release) => (
-              <>{money(release.amount, detail.subcontract.currency)}</>
-            ),
+            cell: (release) => <>{money(release.amount, detail.subcontract.currency)}</>,
           },
           {
             key: "column-2",
@@ -1741,36 +1627,24 @@ function ControlsSection({
         <Card>
           <CardContent className="space-y-3 p-4">
             <div>
-              <div className="text-sm font-semibold">
-                {t("controls.addTitle")}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {t("controls.addHint")}
-              </div>
+              <div className="text-sm font-semibold">{t("controls.addTitle")}</div>
+              <div className="text-xs text-muted-foreground">{t("controls.addHint")}</div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("controls.fieldType")}>
                 <Select
                   value={form.controlType}
-                  onChange={(e) =>
-                    setForm({ ...form, controlType: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, controlType: e.target.value })}
                 >
-                  <option value="payment_hold">
-                    {t("controls.holdOption")}
-                  </option>
-                  <option value="joint_check">
-                    {t("controls.jointOption")}
-                  </option>
+                  <option value="payment_hold">{t("controls.holdOption")}</option>
+                  <option value="joint_check">{t("controls.jointOption")}</option>
                 </Select>
               </Field>
               {form.controlType === "joint_check" ? (
                 <Field label={t("controls.jointPayee")}>
                   <Select
                     value={form.jointPayeePartyId}
-                    onChange={(e) =>
-                      setForm({ ...form, jointPayeePartyId: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, jointPayeePartyId: e.target.value })}
                   >
                     <option value="">{t("controls.selectPayee")}</option>
                     {parties.map((p: Option) => (
@@ -1793,25 +1667,19 @@ function ControlsSection({
                   min="0"
                   step="0.01"
                   value={form.amountLimit}
-                  onChange={(e) =>
-                    setForm({ ...form, amountLimit: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, amountLimit: e.target.value })}
                 />
               </Field>
               <Field label={t("controls.fieldEffective")}>
                 <DateField
                   value={form.effectiveOn}
-                  onChange={(value) =>
-                    setForm({ ...form, effectiveOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, effectiveOn: value })}
                 />
               </Field>
               <Field label={t("controls.fieldExpires")}>
                 <DateField
                   value={form.expiresOn}
-                  onChange={(value) =>
-                    setForm({ ...form, expiresOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, expiresOn: value })}
                 />
               </Field>
             </div>
@@ -1828,9 +1696,7 @@ function ControlsSection({
                     subcontractId: detail.subcontract.id,
                     ...form,
                     jointPayeePartyId:
-                      form.controlType === "joint_check"
-                        ? form.jointPayeePartyId
-                        : null,
+                      form.controlType === "joint_check" ? form.jointPayeePartyId : null,
                     amountLimit: form.amountLimit || null,
                     expiresOn: form.expiresOn || null,
                   },
@@ -1887,13 +1753,7 @@ function ControlsSection({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
@@ -1921,7 +1781,7 @@ function CreateSubcontractDrawer({
 }) {
   const t = useTranslations("subcontracts");
   const tCommon = useTranslations("common");
-  const router = useRouter()
+  const router = useRouter();
   const initialForm = {
     projectId: "",
     vendorId: "",
@@ -1933,24 +1793,26 @@ function CreateSubcontractDrawer({
     defaultRetainagePercent: "10",
     startsOn: "",
     endsOn: "",
-  }
+  };
   const [form, setForm] = useState(initialForm);
-  const dirty = Object.keys(initialForm).some((key) => form[key as keyof typeof form] !== initialForm[key as keyof typeof initialForm])
+  const dirty = Object.keys(initialForm).some(
+    (key) => form[key as keyof typeof form] !== initialForm[key as keyof typeof initialForm],
+  );
   const closeGuard = useDirtyClose({
     dirty,
     busy,
     onClose: () => {
-      setForm(initialForm)
-      router.push(closeHref as never)
+      setForm(initialForm);
+      router.push(closeHref as never);
     },
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
   const beforeClose = async () => {
-    const allowed = await closeGuard.beforeClose()
-    if (allowed) setForm(initialForm)
-    return allowed
-  }
+    const allowed = await closeGuard.beforeClose();
+    if (allowed) setForm(initialForm);
+    return allowed;
+  };
   const vendorCurrency = useMemo(
     () => vendors.find((v) => v.id === form.vendorId)?.currency || "",
     [vendors, form.vendorId],
@@ -1981,13 +1843,11 @@ function CreateSubcontractDrawer({
               const { currency, ...fields } = form;
               const created = await onCreate({
                 ...fields,
-                ...(multiCurrency
-                  ? { currency: currency || vendorCurrency || null }
-                  : {}),
+                ...(multiCurrency ? { currency: currency || vendorCurrency || null } : {}),
                 startsOn: form.startsOn || null,
                 endsOn: form.endsOn || null,
               });
-              if (created) setForm(initialForm)
+              if (created) setForm(initialForm);
             }}
           >
             {tCommon("actions.create")}
@@ -2029,10 +1889,7 @@ function CreateSubcontractDrawer({
           />
         </Field>
         <Field label={t("create.titleField")}>
-          <Input
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
+          <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </Field>
         <Field label={t("create.commitment")}>
           <Input
@@ -2040,9 +1897,7 @@ function CreateSubcontractDrawer({
             min="0"
             step="0.01"
             value={form.originalCommitment}
-            onChange={(e) =>
-              setForm({ ...form, originalCommitment: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, originalCommitment: e.target.value })}
           />
         </Field>
         <Field label={t("create.retainage")}>
@@ -2051,9 +1906,7 @@ function CreateSubcontractDrawer({
             min="0"
             max="100"
             value={form.defaultRetainagePercent}
-            onChange={(e) =>
-              setForm({ ...form, defaultRetainagePercent: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, defaultRetainagePercent: e.target.value })}
           />
         </Field>
         {multiCurrency ? (
@@ -2062,9 +1915,7 @@ function CreateSubcontractDrawer({
               maxLength={3}
               placeholder={vendorCurrency || t("create.orgCurrency")}
               value={form.currency}
-              onChange={(e) =>
-                setForm({ ...form, currency: e.target.value.toUpperCase() })
-              }
+              onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
             />
           </Field>
         ) : null}
@@ -2085,9 +1936,7 @@ function CreateSubcontractDrawer({
             <Textarea
               rows={4}
               value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </Field>
         </div>

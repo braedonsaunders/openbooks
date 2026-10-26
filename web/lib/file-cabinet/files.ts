@@ -1,26 +1,56 @@
-import type { FileViewer } from '@openbooks/engine/records/file-cabinet-access'
-import { createCabinetFile } from '@openbooks/engine/platform/file-ingestion'
+import type { FileViewer } from "@openbooks/engine/records/file-cabinet-access";
+import { createCabinetFile } from "@openbooks/engine/platform/file-ingestion";
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
-import 'server-only'
-import { enqueueCabinetCleanup, deriveFileType } from './shared'
-import { type FolderNode, type FileMeta, type FileDetail, type FileVersion, type FileAttachmentLink } from './types'
-import { deriveExtension, resolveReadScope, visibleFolderPredicate, visibleFilePredicate, recordTargetVisiblePredicate, recordScopeFilePredicate, liveFilePredicate, visibleFileRowPredicate, recordScopeFolderPredicate } from '@openbooks/engine/records/file-cabinet-access'
-import { type FileMutationAudit, viewerFileGate, viewerFolderGate, lockCabinetAuthorization, runMutation } from './mutation'
-import { createHash } from 'node:crypto'
-import { sql, type SQL } from 'drizzle-orm'
-import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
-import { activeStorageKind, deleteS3Blobs, enqueueStorageCleanupStandalone, fileCabinetObjectKey, getS3Blob, putS3Blob, refuseMaskedStorageKind } from '../file-storage'
-import { recordFileEvent } from '../file-audit'
+import "server-only";
+import { enqueueCabinetCleanup, deriveFileType } from "./shared";
+import {
+  type FolderNode,
+  type FileMeta,
+  type FileDetail,
+  type FileVersion,
+  type FileAttachmentLink,
+} from "./types";
+import {
+  deriveExtension,
+  resolveReadScope,
+  visibleFolderPredicate,
+  visibleFilePredicate,
+  recordTargetVisiblePredicate,
+  recordScopeFilePredicate,
+  liveFilePredicate,
+  visibleFileRowPredicate,
+  recordScopeFolderPredicate,
+} from "@openbooks/engine/records/file-cabinet-access";
+import {
+  type FileMutationAudit,
+  viewerFileGate,
+  viewerFolderGate,
+  lockCabinetAuthorization,
+  runMutation,
+} from "./mutation";
+import { createHash } from "node:crypto";
+import { sql, type SQL } from "drizzle-orm";
+import { db, inDbTransaction, type SqlExecutor } from "@openbooks/engine/platform/db";
+import {
+  activeStorageKind,
+  deleteS3Blobs,
+  enqueueStorageCleanupStandalone,
+  fileCabinetObjectKey,
+  getS3Blob,
+  putS3Blob,
+  refuseMaskedStorageKind,
+} from "../file-storage";
+import { recordFileEvent } from "../file-audit";
 
 // --- file CRUD --------------------------------------------------------------
 
 export interface ListFilesOptions {
-  folderId?: string
-  q?: string
-  sort?: string
-  dir?: 'asc' | 'desc'
-  limit?: number
-  offset?: number
+  folderId?: string;
+  q?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
 }
 
 export async function listFiles(
@@ -29,21 +59,22 @@ export async function listFiles(
   opts: ListFilesOptions = {},
 ): Promise<{ files: FileMeta[]; total: number }> {
   const sortColumn =
-    opts.sort === 'size'
+    opts.sort === "size"
       ? sql`fi.size_bytes`
-      : opts.sort === 'created'
+      : opts.sort === "created"
         ? sql`fi.created_at`
-        : sql`fi.name`
-  const dir = opts.dir === 'asc' ? sql`asc` : sql`desc`
+        : sql`fi.name`;
+  const dir = opts.dir === "asc" ? sql`asc` : sql`desc`;
 
-  const scope = await resolveReadScope(orgId, viewer)
-  const whereParts = [visibleFileRowPredicate(orgId, viewer, scope)]
-  if (opts.folderId) whereParts.push(sql`fi.folder_id = ${opts.folderId}`)
-  if (opts.q) whereParts.push(sql`fi.name ilike ${'%' + opts.q + '%'}`)
-  const where = sql.join(whereParts, sql` and `)
+  const scope = await resolveReadScope(orgId, viewer);
+  const whereParts = [visibleFileRowPredicate(orgId, viewer, scope)];
+  if (opts.folderId) whereParts.push(sql`fi.folder_id = ${opts.folderId}`);
+  if (opts.q) whereParts.push(sql`fi.name ilike ${"%" + opts.q + "%"}`);
+  const where = sql.join(whereParts, sql` and `);
 
   const [rows, count] = await Promise.all([
-    db.execute(sql`
+    db.execute(
+      sql`
       select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
              fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
              fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
@@ -63,12 +94,17 @@ export async function listFiles(
        where ${where}
        order by ${sortColumn} ${dir} nulls last
        limit ${opts.limit ?? 50} offset ${opts.offset ?? 0}
-    `, 'objects'),
-    db.execute(sql`select count(*) as n from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where ${where}`, 'objects'),
-  ])
-  const files = rows as FileMeta[]
-  const total = Number(count[0]?.n ?? 0)
-  return { files, total }
+    `,
+      "objects",
+    ),
+    db.execute(
+      sql`select count(*) as n from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where ${where}`,
+      "objects",
+    ),
+  ]);
+  const files = rows as FileMeta[];
+  const total = Number(count[0]?.n ?? 0);
+  return { files, total };
 }
 
 /**
@@ -84,27 +120,27 @@ export async function listFiles(
  * folder/file listing without loading either side in full.
  */
 export interface FolderContents {
-  folders: FolderNode[]
-  files: FileMeta[]
-  folderTotal: number
-  fileTotal: number
-  total: number
+  folders: FolderNode[];
+  files: FileMeta[];
+  folderTotal: number;
+  fileTotal: number;
+  total: number;
 }
 
 export async function listFolderContents(
   orgId: string,
   viewer: FileViewer,
   opts: {
-    parentId?: string
-    q?: string
-    sort?: string
-    dir?: 'asc' | 'desc'
-    limit?: number
-    offset?: number
+    parentId?: string;
+    q?: string;
+    sort?: string;
+    dir?: "asc" | "desc";
+    limit?: number;
+    offset?: number;
   } = {},
 ): Promise<FolderContents> {
-  const limit = opts.limit ?? 50
-  const offset = opts.offset ?? 0
+  const limit = opts.limit ?? 50;
+  const offset = opts.offset ?? 0;
 
   // Search spans the whole cabinet — no folder rows, just matching files.
   if (opts.q) {
@@ -114,35 +150,39 @@ export async function listFolderContents(
       dir: opts.dir,
       limit,
       offset,
-    })
-    return { folders: [], files, folderTotal: 0, fileTotal: total, total }
+    });
+    return { folders: [], files, folderTotal: 0, fileTotal: total, total };
   }
 
-  const scope = await resolveReadScope(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer);
   const parentPred = opts.parentId
     ? sql`f.parent_folder_id = ${opts.parentId}`
-    : sql`f.parent_folder_id is null`
+    : sql`f.parent_folder_id is null`;
   // Folder rows carry the same scoping as the tree: hidden ancestors never
   // leak through parentId, and childCount stays within the viewer's scope.
   const rowParentVisible = sql`${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)}
-    and ${recordScopeFolderPredicate(orgId, viewer, sql`f.parent_folder_id`)}`
+    and ${recordScopeFolderPredicate(orgId, viewer, sql`f.parent_folder_id`)}`;
   const childVisible = sql`${visibleFolderPredicate(scope.hiddenFolderIds, sql`c.id`)}
-    and ${recordScopeFolderPredicate(orgId, viewer, sql`c.id`)}`
-  const fileVisible = visibleFileRowPredicate(orgId, viewer, scope)
+    and ${recordScopeFolderPredicate(orgId, viewer, sql`c.id`)}`;
+  const fileVisible = visibleFileRowPredicate(orgId, viewer, scope);
 
   // Folder count first — it anchors the combined pagination math.
-  const folderCount = (await db.execute<{ n: number }>(sql`
+  const folderCount = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n
       from folders f
      where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
        and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
        and ${recordScopeFolderPredicate(orgId, viewer, sql`f.id`)}
-  `, 'objects'))
-  const folderTotal = folderCount[0]?.n ?? 0
+  `,
+    "objects",
+  );
+  const folderTotal = folderCount[0]?.n ?? 0;
 
   const folders =
     offset < folderTotal
-      ? (await db.execute<FolderNode>(sql`
+      ? await db.execute<FolderNode>(
+          sql`
           select f.id, f.name,
                  case when ${rowParentVisible} then f.parent_folder_id end as "parentId",
                  f.is_system as "isSystem",
@@ -161,38 +201,45 @@ export async function listFolderContents(
              and ${recordScopeFolderPredicate(orgId, viewer, sql`f.id`)}
            order by f.is_system desc, f.name asc
            limit ${limit} offset ${offset}
-        `, 'objects'))
-      : []
+        `,
+          "objects",
+        )
+      : [];
 
   // Files live in a real folder only; the virtual root shows folders alone.
-  let files: FileMeta[] = []
-  let fileTotal = 0
+  let files: FileMeta[] = [];
+  let fileTotal = 0;
   if (opts.parentId) {
-    const filesReturnable = limit - folders.length
-    const filesOffset = Math.max(0, offset - folderTotal)
+    const filesReturnable = limit - folders.length;
+    const filesOffset = Math.max(0, offset - folderTotal);
     const { files: rows, total } = await listFiles(orgId, viewer, {
       folderId: opts.parentId,
       sort: opts.sort,
       dir: opts.dir,
       limit: Math.max(filesReturnable, 0),
       offset: filesOffset,
-    })
-    fileTotal = total
-    files = filesReturnable > 0 ? rows : []
+    });
+    fileTotal = total;
+    files = filesReturnable > 0 ? rows : [];
   }
 
-  return { folders, files, folderTotal, fileTotal, total: folderTotal + fileTotal }
+  return { folders, files, folderTotal, fileTotal, total: folderTotal + fileTotal };
 }
 
-export async function getFile(orgId: string, id: string, viewer: FileViewer): Promise<FileDetail | null> {
-  const scope = await resolveReadScope(orgId, viewer)
+export async function getFile(
+  orgId: string,
+  id: string,
+  viewer: FileViewer,
+): Promise<FileDetail | null> {
+  const scope = await resolveReadScope(orgId, viewer);
   const attachmentTargetVisible = recordTargetVisiblePredicate(
     orgId,
     viewer.allowedSubsidiaryIds,
     sql`fa.target_table`,
     sql`fa.target_id`,
-  )
-  const meta = (await db.execute(sql`
+  );
+  const meta = await db.execute(
+    sql`
     select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
            fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
            fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
@@ -214,11 +261,14 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
      where fi.id = ${id} and ${liveFilePredicate(orgId)}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
        and ${recordScopeFilePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
-  `, 'objects'))
-  const f = meta[0]
-  if (!f) return null
+  `,
+    "objects",
+  );
+  const f = meta[0];
+  if (!f) return null;
 
-  const versions = await db.execute(sql`
+  const versions = await db.execute(
+    sql`
       select fv.id, fv.version_number as "versionNumber", fv.size_bytes as "sizeBytes",
              fv.content_type as "contentType", fv.content_hash as "contentHash",
              fv.created_at as "createdAt", fv.created_by as "createdBy"
@@ -226,49 +276,62 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
         join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
        where fv.file_id = ${id}
        order by fv.version_number desc
-    `, 'objects')
-  const versionCount = versions.length
+    `,
+    "objects",
+  );
+  const versionCount = versions.length;
   return {
     ...f,
     versionCount,
     versions: versions as unknown as FileVersion[],
     attachments: f.attachments as FileAttachmentLink[],
-  } as FileDetail
+  } as FileDetail;
 }
 
 /** Create a cabinet file through the native writer after locking its viewer gate. */
 export async function createFile(input: {
-  orgId: string
-  folderId: string
-  filename: string
-  contentType: string
-  bytes: Buffer
-  createdBy: string | null
-  sourceSystem?: string
-  sourceId?: string
-  auditReason?: string
-  audit?: FileMutationAudit
+  orgId: string;
+  folderId: string;
+  filename: string;
+  contentType: string;
+  bytes: Buffer;
+  createdBy: string | null;
+  sourceSystem?: string;
+  sourceId?: string;
+  auditReason?: string;
+  audit?: FileMutationAudit;
 }): Promise<FileMeta> {
-  let staged: { versionId: string; fileId: string } | null = null
-  return runMutation(input.audit?.executor, (tx) => createCabinetFile({
-    ...input,
-    executor: tx,
-    auditActorId: input.audit?.actorId,
-    authorizeFolder: async () => {
-      if (!(await viewerFolderGate(tx, input.orgId, input.audit, input.folderId, 'editor'))) {
-        throw new Error('createFile refused: caller lacks editor access to the destination folder')
-      }
-    },
-    onStagedS3: (value) => { staged = value },
-  }), input.audit?.viewer ? input.orgId : undefined).catch(async (error) => {
+  let staged: { versionId: string; fileId: string } | null = null;
+  return runMutation(
+    input.audit?.executor,
+    (tx) =>
+      createCabinetFile({
+        ...input,
+        executor: tx,
+        auditActorId: input.audit?.actorId,
+        authorizeFolder: async () => {
+          if (!(await viewerFolderGate(tx, input.orgId, input.audit, input.folderId, "editor"))) {
+            throw new Error(
+              "createFile refused: caller lacks editor access to the destination folder",
+            );
+          }
+        },
+        onStagedS3: (value) => {
+          staged = value;
+        },
+      }),
+    input.audit?.viewer ? input.orgId : undefined,
+  ).catch(async (error) => {
     if (staged && !input.audit?.executor) {
       await enqueueStorageCleanupStandalone({
-        orgId: input.orgId, objectKey: fileCabinetObjectKey(staged.versionId),
-        ownerKind: 'file_version', ownerId: staged.fileId,
-      })
+        orgId: input.orgId,
+        objectKey: fileCabinetObjectKey(staged.versionId),
+        ownerKind: "file_version",
+        ownerId: staged.fileId,
+      });
     }
-    throw error
-  })
+    throw error;
+  });
 }
 
 /**
@@ -276,28 +339,31 @@ export async function createFile(input: {
  * blob, and points current_version_id at it. The old version is preserved.
  */
 export async function replaceFile(input: {
-  orgId: string
-  fileId: string
-  filename: string
-  contentType: string
-  bytes: Buffer
-  updatedBy: string
-  audit?: FileMutationAudit
+  orgId: string;
+  fileId: string;
+  filename: string;
+  contentType: string;
+  bytes: Buffer;
+  updatedBy: string;
+  audit?: FileMutationAudit;
 }): Promise<boolean> {
   // The S3 put below cannot roll back with the row transaction. Track the
   // staged version so the catch below records a durable cleanup intent
   // instead of stranding the object. Nested callers (executor passed)
   // compensate at their outer boundary.
-  let staged: { versionId: string; fileId: string } | null = null
-  return runMutation(input.audit?.executor, async (tx) => {
-    const contentHash = createHash('sha256').update(input.bytes).digest('hex')
-    const current = (await tx.execute<{
-      vid: string | null
-      max_ver: number | null
-      name: string
-      contentType: string
-      sizeBytes: number
-    }>(sql`
+  let staged: { versionId: string; fileId: string } | null = null;
+  return runMutation(
+    input.audit?.executor,
+    async (tx) => {
+      const contentHash = createHash("sha256").update(input.bytes).digest("hex");
+      const current = await tx.execute<{
+        vid: string | null;
+        max_ver: number | null;
+        name: string;
+        contentType: string;
+        sizeBytes: number;
+      }>(
+        sql`
       select current_version_id as vid, fi.name, fi.content_type as "contentType", fi.size_bytes as "sizeBytes", (
         select max(fv.version_number) from file_versions fv
         join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
@@ -306,37 +372,46 @@ export async function replaceFile(input: {
         from files fi where fi.id = ${input.fileId} and fi.org_id = ${input.orgId}
           and not exists (select 1 from ap_capture_items ci where ci.file_id = fi.id and ci.org_id = ${input.orgId})
         for update
-    `, 'objects'))
-    if (current.length === 0) return false
-    if (!(await viewerFileGate(tx, input.orgId, input.audit, input.fileId, 'editor'))) return false
-    // Retained evidence keeps its pinned bytes: a new version would fork the
-    // cabinet-visible file away from the immutable artifact readers serve.
-    const retained = (await tx.execute(sql`
+    `,
+        "objects",
+      );
+      if (current.length === 0) return false;
+      if (!(await viewerFileGate(tx, input.orgId, input.audit, input.fileId, "editor")))
+        return false;
+      // Retained evidence keeps its pinned bytes: a new version would fork the
+      // cabinet-visible file away from the immutable artifact readers serve.
+      const retained = await tx.execute(
+        sql`
       select 1 from files fi
        where fi.id = ${input.fileId} and fi.org_id = ${input.orgId}
          and ${retainedFileEvidence(input.orgId, sql`fi.id`)}
        limit 1
-    `, 'objects'))
-    if (retained.length > 0) return false
-    const nextVer = (current[0]!.max_ver ?? 0) + 1
-    const kind = activeStorageKind()
+    `,
+        "objects",
+      );
+      if (retained.length > 0) return false;
+      const nextVer = (current[0]!.max_ver ?? 0) + 1;
+      const kind = activeStorageKind();
 
-    const verIns = (await tx.execute<{ id: string }>(sql`
+      const verIns = await tx.execute<{ id: string }>(
+        sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                   content_hash, created_by, created_at)
       values (${input.fileId}, ${nextVer}, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash},
               ${input.updatedBy}, now())
       returning id
-    `, 'objects'))
-    const versionId = verIns[0]!.id
+    `,
+        "objects",
+      );
+      const versionId = verIns[0]!.id;
 
-    if (kind === 's3') await putS3Blob(versionId, input.bytes, input.contentType)
-    if (kind === 's3') staged = { versionId, fileId: input.fileId }
-    else
-      await tx.execute(sql`
+      if (kind === "s3") await putS3Blob(versionId, input.bytes, input.contentType);
+      if (kind === "s3") staged = { versionId, fileId: input.fileId };
+      else
+        await tx.execute(sql`
         insert into file_blobs (version_id, bytes) values (${versionId}, ${input.bytes})
-      `)
-    await tx.execute(sql`
+      `);
+      await tx.execute(sql`
       update files set current_version_id = ${versionId},
                        name = ${input.filename},
                        extension = ${deriveExtension(input.filename)},
@@ -346,45 +421,47 @@ export async function replaceFile(input: {
                        content_hash = ${contentHash},
                        updated_by = ${input.updatedBy}, updated_at = now()
        where id = ${input.fileId} and org_id = ${input.orgId}
-    `)
-    if (input.audit) {
-      await recordFileEvent({
-        orgId: input.orgId,
-        actorId: input.audit.actorId,
-        table: 'files',
-        rowId: input.fileId,
-        action: 'replace',
-        changes: {
-          before: {
-            name: current[0]!.name,
-            contentType: current[0]!.contentType,
-            sizeBytes: current[0]!.sizeBytes,
-            currentVersionId: current[0]!.vid,
-            versionNumber: current[0]!.max_ver,
+    `);
+      if (input.audit) {
+        await recordFileEvent({
+          orgId: input.orgId,
+          actorId: input.audit.actorId,
+          table: "files",
+          rowId: input.fileId,
+          action: "replace",
+          changes: {
+            before: {
+              name: current[0]!.name,
+              contentType: current[0]!.contentType,
+              sizeBytes: current[0]!.sizeBytes,
+              currentVersionId: current[0]!.vid,
+              versionNumber: current[0]!.max_ver,
+            },
+            after: {
+              name: input.filename,
+              contentType: input.contentType,
+              sizeBytes: input.bytes.length,
+              currentVersionId: versionId,
+              versionNumber: nextVer,
+            },
           },
-          after: {
-            name: input.filename,
-            contentType: input.contentType,
-            sizeBytes: input.bytes.length,
-            currentVersionId: versionId,
-            versionNumber: nextVer,
-          },
-        },
-        executor: tx,
-      })
-    }
-    return true
-  }, input.audit?.viewer ? input.orgId : undefined).catch(async (error) => {
+          executor: tx,
+        });
+      }
+      return true;
+    },
+    input.audit?.viewer ? input.orgId : undefined,
+  ).catch(async (error) => {
     if (staged && !input.audit?.executor) {
       await enqueueStorageCleanupStandalone({
         orgId: input.orgId,
         objectKey: fileCabinetObjectKey(staged.versionId),
-        ownerKind: 'file_version',
+        ownerKind: "file_version",
         ownerId: staged.fileId,
-      })
+      });
     }
-    throw error
-  })
+    throw error;
+  });
 }
 export async function renameFile(
   orgId: string,
@@ -394,39 +471,49 @@ export async function renameFile(
   audit?: FileMutationAudit,
 ): Promise<boolean> {
   if (!audit) {
-    const r = (await db.execute<{ id: string }>(sql`
+    const r = await db.execute<{ id: string }>(
+      sql`
       update files set name = ${name}, extension = ${deriveExtension(name)},
                        updated_by = ${updatedBy}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
       returning id
-    `, 'objects'))
-    return r.length > 0
+    `,
+      "objects",
+    );
+    return r.length > 0;
   }
-  return runMutation(audit.executor, async (tx) => {
-    const prev = (await tx.execute<{ id: string; name: string }>(sql`
+  return runMutation(
+    audit.executor,
+    async (tx) => {
+      const prev = await tx.execute<{ id: string; name: string }>(
+        sql`
       select id, name from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
       for update
-    `, 'objects'))
-    if (prev.length === 0) return false
-    if (!(await viewerFileGate(tx, orgId, audit, id, 'editor'))) return false
-    await tx.execute(sql`
+    `,
+        "objects",
+      );
+      if (prev.length === 0) return false;
+      if (!(await viewerFileGate(tx, orgId, audit, id, "editor"))) return false;
+      await tx.execute(sql`
       update files set name = ${name}, extension = ${deriveExtension(name)},
                        updated_by = ${updatedBy}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
-    `)
-    await recordFileEvent({
-      orgId,
-      actorId: audit.actorId,
-      table: 'files',
-      rowId: id,
-      action: 'rename',
-      changes: { from: prev[0]!.name, to: name },
-      executor: tx,
-    })
-    return true
-  }, audit.viewer ? orgId : undefined)
+    `);
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: "files",
+        rowId: id,
+        action: "rename",
+        changes: { from: prev[0]!.name, to: name },
+        executor: tx,
+      });
+      return true;
+    },
+    audit.viewer ? orgId : undefined,
+  );
 }
 
 export async function moveFile(
@@ -438,45 +525,55 @@ export async function moveFile(
 ): Promise<boolean> {
   if (!audit) {
     // Destination folder must exist inside this org (blocks cross-org moves).
-    const r = (await db.execute<{ id: string }>(sql`
+    const r = await db.execute<{ id: string }>(
+      sql`
       update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
          and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
       returning id
-    `, 'objects'))
-    return r.length > 0
+    `,
+      "objects",
+    );
+    return r.length > 0;
   }
-  return runMutation(audit.executor, async (tx) => {
-    const prev = (await tx.execute<{ id: string; folderId: string }>(sql`
+  return runMutation(
+    audit.executor,
+    async (tx) => {
+      const prev = await tx.execute<{ id: string; folderId: string }>(
+        sql`
       select id, folder_id as "folderId" from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
         and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
       for update
-    `, 'objects'))
-    if (prev.length === 0) return false
-    if (!(await viewerFileGate(tx, orgId, audit, id, 'editor'))) return false
-    if (!(await viewerFolderGate(tx, orgId, audit, folderId, 'editor'))) return false
-    await tx.execute(sql`
+    `,
+        "objects",
+      );
+      if (prev.length === 0) return false;
+      if (!(await viewerFileGate(tx, orgId, audit, id, "editor"))) return false;
+      if (!(await viewerFolderGate(tx, orgId, audit, folderId, "editor"))) return false;
+      await tx.execute(sql`
       update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
-    `)
-    await recordFileEvent({
-      orgId,
-      actorId: audit.actorId,
-      table: 'files',
-      rowId: id,
-      action: 'move',
-      changes: {
-        before: { folderId: prev[0]!.folderId },
-        after: { folderId },
-        fromFolderId: prev[0]!.folderId,
-        toFolderId: folderId,
-      },
-      executor: tx,
-    })
-    return true
-  }, audit.viewer ? orgId : undefined)
+    `);
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: "files",
+        rowId: id,
+        action: "move",
+        changes: {
+          before: { folderId: prev[0]!.folderId },
+          after: { folderId },
+          fromFolderId: prev[0]!.folderId,
+          toFolderId: folderId,
+        },
+        executor: tx,
+      });
+      return true;
+    },
+    audit.viewer ? orgId : undefined,
+  );
 }
 
 /**
@@ -489,42 +586,54 @@ export async function deleteFile(
   audit?: FileMutationAudit,
 ): Promise<boolean> {
   const trash = async (exec: SqlExecutor): Promise<boolean> => {
-    const r = (await exec.execute<{ id: string }>(sql`
+    const r = await exec.execute<{ id: string }>(
+      sql`
       update files set is_inactive = true, updated_at = now()
        where id = ${id} and org_id = ${orgId} and not is_inactive
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
          and not ${retainedFileEvidence(orgId, sql`files.id`)}
       returning id
-    `, 'objects'))
-    return r.length > 0
-  }
-  if (!audit) return trash(db)
-  return runMutation(audit.executor, async (tx) => {
-    const before = (await tx.execute<{ id: string; isInactive: boolean }>(sql`
+    `,
+      "objects",
+    );
+    return r.length > 0;
+  };
+  if (!audit) return trash(db);
+  return runMutation(
+    audit.executor,
+    async (tx) => {
+      const before = (
+        await tx.execute<{ id: string; isInactive: boolean }>(
+          sql`
       select id, is_inactive as "isInactive"
         from files
        where id = ${id} and org_id = ${orgId} and not is_inactive
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
        for update
-    `, 'objects'))[0]
-    if (!before) return false
-    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return false
-    if (!(await trash(tx))) return false
-    await recordFileEvent({
-      orgId,
-      actorId: audit.actorId,
-      table: 'files',
-      rowId: id,
-      action: 'delete',
-      changes: {
-        permanent: false,
-        before: { id, isInactive: before.isInactive },
-        after: { id, isInactive: true },
-      },
-      executor: tx,
-    })
-    return true
-  }, audit.viewer ? orgId : undefined)
+    `,
+          "objects",
+        )
+      )[0];
+      if (!before) return false;
+      if (!(await viewerFileGate(tx, orgId, audit, id, "manager"))) return false;
+      if (!(await trash(tx))) return false;
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: "files",
+        rowId: id,
+        action: "delete",
+        changes: {
+          permanent: false,
+          before: { id, isInactive: before.isInactive },
+          after: { id, isInactive: true },
+        },
+        executor: tx,
+      });
+      return true;
+    },
+    audit.viewer ? orgId : undefined,
+  );
 }
 
 /** Restore a trashed file and its attributable before/after evidence atomically. */
@@ -533,35 +642,45 @@ export async function restoreFile(
   id: string,
   audit?: FileMutationAudit,
 ): Promise<boolean> {
-  return runMutation(audit?.executor, async (tx) => {
-    const before = (await tx.execute<{ id: string; isInactive: boolean }>(sql`
+  return runMutation(
+    audit?.executor,
+    async (tx) => {
+      const before = (
+        await tx.execute<{ id: string; isInactive: boolean }>(
+          sql`
       select id, is_inactive as "isInactive"
         from files
        where id = ${id} and org_id = ${orgId} and is_inactive
        for update
-    `, 'objects'))[0]
-    if (!before) return false
-    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager', { includeInactive: true }))) return false
-    await tx.execute(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      if (!before) return false;
+      if (!(await viewerFileGate(tx, orgId, audit, id, "manager", { includeInactive: true })))
+        return false;
+      await tx.execute(sql`
       update files set is_inactive = false, updated_at = now()
        where id = ${id} and org_id = ${orgId}
-    `)
-    if (audit) {
-      await recordFileEvent({
-        orgId,
-        actorId: audit.actorId,
-        table: 'files',
-        rowId: id,
-        action: 'restore',
-        changes: {
-          before: { id, isInactive: before.isInactive },
-          after: { id, isInactive: false },
-        },
-        executor: tx,
-      })
-    }
-    return true
-  }, audit?.viewer ? orgId : undefined)
+    `);
+      if (audit) {
+        await recordFileEvent({
+          orgId,
+          actorId: audit.actorId,
+          table: "files",
+          rowId: id,
+          action: "restore",
+          changes: {
+            before: { id, isInactive: before.isInactive },
+            after: { id, isInactive: false },
+          },
+          executor: tx,
+        });
+      }
+      return true;
+    },
+    audit?.viewer ? orgId : undefined,
+  );
 }
 
 /**
@@ -569,15 +688,15 @@ export async function restoreFile(
  * metadata, the version inventory, and attachment links — never blob bytes.
  */
 interface PurgedFileEvidence {
-  file: { id: string; folderId: string; name: string; contentType: string; sizeBytes: number }
+  file: { id: string; folderId: string; name: string; contentType: string; sizeBytes: number };
   versions: Array<{
-    id: string
-    versionNumber: number
-    sizeBytes: number
-    contentType: string
-    contentHash: string | null
-  }>
-  attachments: Array<{ targetTable: string; targetId: string }>
+    id: string;
+    versionNumber: number;
+    sizeBytes: number;
+    contentType: string;
+    contentHash: string | null;
+  }>;
+  attachments: Array<{ targetTable: string; targetId: string }>;
 }
 
 /**
@@ -596,7 +715,7 @@ const HRM_DOCUMENT_RETAINED: SQL = sql`(
   d.status not in ('deleted', 'voided')
   or d.legal_hold
   or d.retain_until is not null
-)`
+)`;
 
 export const RETAINED_ATTACHMENT: SQL = sql`(
   (fa.target_table = 'documents' and exists (
@@ -611,7 +730,7 @@ export const RETAINED_ATTACHMENT: SQL = sql`(
   or (fa.target_table = 'hrm_documents' and exists (
     select 1 from hrm_documents d
      where d.id = fa.target_id and d.org_id = fa.org_id and ${HRM_DOCUMENT_RETAINED}))
-)`
+)`;
 
 /**
  * Files that are retained evidence no cabinet verb may hide or destroy:
@@ -664,7 +783,7 @@ export function retainedFileEvidence(orgId: string, fileId: SQL): SQL {
       select 1 from expense_receipt_captures rc
        where rc.file_id = ${fileId} and rc.org_id = ${orgId} and rc.document_id is not null
          and rc.status in ('extracting', 'extracted', 'confirmed'))
-  )`
+  )`;
 }
 
 /**
@@ -673,12 +792,15 @@ export function retainedFileEvidence(orgId: string, fileId: SQL): SQL {
  * read only selects the message and may race the mutation's snapshot.
  */
 export async function isRetainedFileEvidence(orgId: string, id: string): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     select 1 from files fi
      where fi.id = ${id} and fi.org_id = ${orgId} and ${retainedFileEvidence(orgId, sql`fi.id`)}
      limit 1
-  `, 'objects'))
-  return r.length > 0
+  `,
+    "objects",
+  );
+  return r.length > 0;
 }
 
 /** Lock the mutable record row whose lifecycle controls evidence retention. */
@@ -688,25 +810,38 @@ export async function lockRetainedAttachmentTarget(
   targetTable: string,
   targetId: string,
 ): Promise<void> {
-  if (targetTable === 'documents') {
-    await exec.execute(sql`select id from documents where id = ${targetId} and org_id = ${orgId} for update`)
-  } else if (targetTable === 'compliance_records') {
-    await exec.execute(sql`select id from compliance_records where id = ${targetId} and org_id = ${orgId} for update`)
-  } else if (targetTable === 'fixed_assets') {
-    await exec.execute(sql`select id from fixed_assets where id = ${targetId} and org_id = ${orgId} for update`)
+  if (targetTable === "documents") {
+    await exec.execute(
+      sql`select id from documents where id = ${targetId} and org_id = ${orgId} for update`,
+    );
+  } else if (targetTable === "compliance_records") {
+    await exec.execute(
+      sql`select id from compliance_records where id = ${targetId} and org_id = ${orgId} for update`,
+    );
+  } else if (targetTable === "fixed_assets") {
+    await exec.execute(
+      sql`select id from fixed_assets where id = ${targetId} and org_id = ${orgId} for update`,
+    );
   }
 }
 
 /** Lock every currently linked retention owner before rechecking the predicate. */
-async function lockFileAttachmentTargets(exec: SqlExecutor, orgId: string, fileId: string): Promise<void> {
-  const targets = await exec.execute<{ targetTable: string; targetId: string }>(sql`
+async function lockFileAttachmentTargets(
+  exec: SqlExecutor,
+  orgId: string,
+  fileId: string,
+): Promise<void> {
+  const targets = await exec.execute<{ targetTable: string; targetId: string }>(
+    sql`
     select target_table as "targetTable", target_id as "targetId"
       from file_attachments
      where org_id = ${orgId} and file_id = ${fileId}
      order by target_table, target_id
-  `, 'objects')
+  `,
+    "objects",
+  );
   for (const target of targets) {
-    await lockRetainedAttachmentTarget(exec, orgId, target.targetTable, target.targetId)
+    await lockRetainedAttachmentTarget(exec, orgId, target.targetTable, target.targetId);
   }
 }
 
@@ -715,24 +850,33 @@ async function capturePurgeEvidence(
   orgId: string,
   id: string,
 ): Promise<PurgedFileEvidence> {
-  const meta = (await exec.execute<PurgedFileEvidence['file']>(sql`
+  const meta = await exec.execute<PurgedFileEvidence["file"]>(
+    sql`
     select id, folder_id as "folderId", name, content_type as "contentType", size_bytes as "sizeBytes"
       from files where id = ${id} and org_id = ${orgId}
-  `, 'objects'))
-  const versions = (await exec.execute<PurgedFileEvidence['versions'][number]>(sql`
+  `,
+    "objects",
+  );
+  const versions = await exec.execute<PurgedFileEvidence["versions"][number]>(
+    sql`
     select fv.id, fv.version_number as "versionNumber", fv.size_bytes as "sizeBytes",
            fv.content_type as "contentType", fv.content_hash as "contentHash"
       from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
      where fv.file_id = ${id}
      order by fv.version_number
-  `, 'objects'))
-  const attachments = (await exec.execute<PurgedFileEvidence['attachments'][number]>(sql`
+  `,
+    "objects",
+  );
+  const attachments = await exec.execute<PurgedFileEvidence["attachments"][number]>(
+    sql`
     select target_table as "targetTable", target_id as "targetId"
       from file_attachments where file_id = ${id} and org_id = ${orgId}
      order by created_at
-  `, 'objects'))
-  return { file: meta[0]!, versions, attachments }
+  `,
+    "objects",
+  );
+  return { file: meta[0]!, versions, attachments };
 }
 
 /**
@@ -753,7 +897,7 @@ async function capturePurgeEvidence(
  * link/version/blob/file rows are durably gone — so an audit failure leaves
  * both metadata and external blobs untouched and retryable.
  */
-export type PurgeFileOutcome = 'purged' | 'not_found' | 'forbidden' | 'retained'
+export type PurgeFileOutcome = "purged" | "not_found" | "forbidden" | "retained";
 
 export async function purgeFile(
   orgId: string,
@@ -761,68 +905,83 @@ export async function purgeFile(
   audit?: FileMutationAudit,
 ): Promise<PurgeFileOutcome> {
   const deleted = await inDbTransaction(async (tx) => {
-    if (audit?.viewer) await lockCabinetAuthorization(tx, orgId)
-    const owned = (await tx.execute<{ id: string }>(sql`
+    if (audit?.viewer) await lockCabinetAuthorization(tx, orgId);
+    const owned = await tx.execute<{ id: string }>(
+      sql`
       select id from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
       for update
-    `, 'objects'))
-    if (owned.length === 0) return { outcome: 'not_found' as const }
-    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return { outcome: 'forbidden' as const }
-    await lockFileAttachmentTargets(tx, orgId, id)
-    const material = (await tx.execute(sql`
+    `,
+      "objects",
+    );
+    if (owned.length === 0) return { outcome: "not_found" as const };
+    if (!(await viewerFileGate(tx, orgId, audit, id, "manager")))
+      return { outcome: "forbidden" as const };
+    await lockFileAttachmentTargets(tx, orgId, id);
+    const material = await tx.execute(
+      sql`
       select fa.id
         from file_attachments fa
        where fa.file_id = ${id} and fa.org_id = ${orgId}
          and ${RETAINED_ATTACHMENT}
        limit 1
-    `, 'objects'))
+    `,
+      "objects",
+    );
     // Pinned references with no attachment row (payment artifacts, HRM
     // documents, mandate proofs) dangle the same way when bytes are purged.
-    const pinned = (await tx.execute(sql`
+    const pinned = await tx.execute(
+      sql`
       select 1 from files fi
        where fi.id = ${id} and fi.org_id = ${orgId} and ${retainedFileEvidence(orgId, sql`fi.id`)}
        limit 1
-    `, 'objects'))
-    if (material.length > 0 || pinned.length > 0) return { outcome: 'retained' as const }
-    const s3Versions = (await tx.execute<{ id: string; file_id: string }>(sql`
+    `,
+      "objects",
+    );
+    if (material.length > 0 || pinned.length > 0) return { outcome: "retained" as const };
+    const s3Versions = await tx.execute<{ id: string; file_id: string }>(
+      sql`
       select fv.id, fv.file_id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
       where fv.file_id = ${id} and fv.storage_kind = 's3'
-    `, 'objects'))
-    const evidence = audit ? await capturePurgeEvidence(tx, orgId, id) : null
+    `,
+      "objects",
+    );
+    const evidence = audit ? await capturePurgeEvidence(tx, orgId, id) : null;
     await tx.execute(sql`
       delete from file_blobs where version_id in (
         select fv.id from file_versions fv
         join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
         where fv.file_id = ${id}
       )
-    `)
-    await tx.execute(sql`delete from file_attachments where file_id = ${id} and org_id = ${orgId}`)
-    await tx.execute(sql`update files set current_version_id = null where id = ${id} and org_id = ${orgId}`)
+    `);
+    await tx.execute(sql`delete from file_attachments where file_id = ${id} and org_id = ${orgId}`);
+    await tx.execute(
+      sql`update files set current_version_id = null where id = ${id} and org_id = ${orgId}`,
+    );
     await tx.execute(sql`
       delete from file_versions fv
       using files fi
       where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${id}
-    `)
-    await tx.execute(sql`delete from files where id = ${id} and org_id = ${orgId}`)
-    await enqueueCabinetCleanup(tx, orgId, s3Versions)
+    `);
+    await tx.execute(sql`delete from files where id = ${id} and org_id = ${orgId}`);
+    await enqueueCabinetCleanup(tx, orgId, s3Versions);
     if (audit && evidence) {
       await recordFileEvent({
         orgId,
         actorId: audit.actorId,
-        table: 'files',
+        table: "files",
         rowId: id,
-        action: 'purge',
+        action: "purge",
         changes: { permanent: true, before: evidence },
         executor: tx,
-      })
+      });
     }
-    return { outcome: 'purged' as const, s3VersionIds: s3Versions.map((v) => v.id) }
-  })
-  if (deleted.outcome !== 'purged') return deleted.outcome
-  await deleteS3Blobs(deleted.s3VersionIds)
-  return 'purged'
+    return { outcome: "purged" as const, s3VersionIds: s3Versions.map((v) => v.id) };
+  });
+  if (deleted.outcome !== "purged") return deleted.outcome;
+  await deleteS3Blobs(deleted.s3VersionIds);
+  return "purged";
 }
 
 /** Fetch bytes for download (current version). Org-scoped. Reads dispatch on
@@ -833,8 +992,15 @@ export async function getFileBlob(
   viewer: FileViewer,
   versionId?: string,
 ): Promise<{ filename: string; contentType: string; bytes: Buffer; versionId: string } | null> {
-  const scope = await resolveReadScope(orgId, viewer)
-  const r = (await db.execute<{ name: string; contentType: string; versionId: string; storageKind: string; bytes: Buffer | null }>(sql`
+  const scope = await resolveReadScope(orgId, viewer);
+  const r = await db.execute<{
+    name: string;
+    contentType: string;
+    versionId: string;
+    storageKind: string;
+    bytes: Buffer | null;
+  }>(
+    sql`
     select fi.name, fv.content_type as "contentType", fv.id as "versionId",
            fv.storage_kind as "storageKind", fb.bytes
       from files fi
@@ -846,15 +1012,17 @@ export async function getFileBlob(
      where fi.id = ${id} and ${liveFilePredicate(orgId)}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
        and ${recordScopeFilePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
-  `, 'objects'))
-  if (r.length === 0) return null
-  const row = r[0]!
+  `,
+    "objects",
+  );
+  if (r.length === 0) return null;
+  const row = r[0]!;
   // Masked-clone tombstone: refuse by name BEFORE any byte fetch, so a
   // tombstoned row can never fall through to the bytea/S3 branches below.
-  refuseMaskedStorageKind(row.storageKind)
-  const bytes = row.storageKind === 's3' ? await getS3Blob(row.versionId) : row.bytes
-  if (!bytes) return null
+  refuseMaskedStorageKind(row.storageKind);
+  const bytes = row.storageKind === "s3" ? await getS3Blob(row.versionId) : row.bytes;
+  if (!bytes) return null;
   // The resolved version id is an immutable validator: a file_versions row's
   // bytes never change (append-only versioning), so it doubles as a strong ETag.
-  return { filename: row.name, contentType: row.contentType, bytes, versionId: row.versionId }
+  return { filename: row.name, contentType: row.contentType, bytes, versionId: row.versionId };
 }

@@ -1,8 +1,8 @@
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
-const retainDevelopmentCompilation = process.env.NODE_ENV === "development"
-  && process.env.OPENBOOKS_DEV_KEEP_COMPILE_CACHE === "1";
+const retainDevelopmentCompilation =
+  process.env.NODE_ENV === "development" && process.env.OPENBOOKS_DEV_KEEP_COMPILE_CACHE === "1";
 
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -23,7 +23,9 @@ function productionDeploymentId() {
     const commit = execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
       cwd: dirname(fileURLToPath(import.meta.url)),
       stdio: ["ignore", "pipe", "ignore"],
-    }).toString().trim();
+    })
+      .toString()
+      .trim();
     if (/^[0-9a-f]{12}$/.test(commit)) return (process.env.NEXT_DEPLOYMENT_ID = commit);
   } catch {
     // Builds from an exported tree have no repository; fall through to a stamp.
@@ -108,7 +110,10 @@ const config = {
   allowedDevOrigins: [
     "127.0.0.1",
     "localhost",
-    ...(process.env.OPENBOOKS_DEV_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean),
+    ...(process.env.OPENBOOKS_DEV_ORIGINS || "")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   ],
   transpilePackages: ["@openbooks/engine", "@openbooks/schema"],
   serverExternalPackages: [

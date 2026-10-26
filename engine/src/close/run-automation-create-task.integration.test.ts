@@ -20,13 +20,16 @@ async function seedCreateTaskRule(args: {
   name: string;
   config: Record<string, unknown>;
 }): Promise<string> {
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into close_automation_rules
       (org_id, name, trigger, action, conditions, config, is_active)
     values (${args.orgId}, ${args.name}, 'run_started', 'create_task',
             '{}'::jsonb, ${JSON.stringify(args.config)}::jsonb, true)
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return inserted[0]!.id;
 }
 
@@ -43,7 +46,8 @@ async function withProbe(
       where id = ${fixture.orgId}
     `);
     const defaults = await ensureCloseDefaults(fixture.orgId, actors.adminId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
@@ -51,7 +55,9 @@ async function withProbe(
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     await fn(fixture, actors, inserted[0]!.id);
   } finally {
     await dropScratchOrg(fixture.orgId);
@@ -63,13 +69,16 @@ async function executionStatus(
   ruleId: string,
   eventKey: string,
 ): Promise<{ status: string; error: string | null }> {
-  const result = (await db.execute<{
+  const result = await db.execute<{
     status: string;
     error: string | null;
-  }>(sql`
+  }>(
+    sql`
     select status, error from close_automation_executions
      where org_id = ${orgId} and rule_id = ${ruleId} and event_key = ${eventKey}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return result[0]!;
 }
 
@@ -112,17 +121,20 @@ test(
       // Exactly one row survives, with the FIRST rule's configuration: the
       // conflicting configuration was refused, never overwritten.
       const rows = await db.execute<{
-          title: string;
-          description: string | null;
-          workstream: string;
-          evidence_required: boolean;
-          status: string;
-          completed_at: Date | null;
-        }>(sql`
+        title: string;
+        description: string | null;
+        workstream: string;
+        evidence_required: boolean;
+        status: string;
+        completed_at: Date | null;
+      }>(
+        sql`
         select title, description, workstream, evidence_required, status, completed_at
           from close_run_tasks
          where org_id = ${fixture.orgId} and run_id = ${runId} and key = ${key}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.title, "Shared title A");
       assert.equal(rows[0]!.description, "A controls");
@@ -167,15 +179,23 @@ test(
       });
       assert.deepEqual(second, { completed: 1, failed: 0 });
 
-      const count = (await db.execute<{ n: number }>(sql`
+      const count = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from close_run_tasks
          where org_id = ${fixture.orgId} and run_id = ${runId} and key = ${key}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(count, 1);
-      const executions = await db.execute<{ status: string }>(sql`
+      const executions = await db.execute<{ status: string }>(
+        sql`
         select status from close_automation_executions
          where org_id = ${fixture.orgId} and rule_id = ${ruleId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(executions.length, 2);
       assert.ok(executions.every((execution) => execution.status === "completed"));
     });
@@ -215,16 +235,19 @@ test(
 
       // The computed survivor is unchanged — no overwrite, no completion.
       const rows = await db.execute<{
-          title: string;
-          task_type: string;
-          completion_mode: string;
-          status: string;
-          completed_at: Date | null;
-        }>(sql`
+        title: string;
+        task_type: string;
+        completion_mode: string;
+        status: string;
+        completed_at: Date | null;
+      }>(
+        sql`
         select title, task_type, completion_mode, status, completed_at
           from close_run_tasks
          where org_id = ${fixture.orgId} and run_id = ${runId} and key = ${key}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.title, "Computed title");
       assert.equal(rows[0]!.task_type, "system");

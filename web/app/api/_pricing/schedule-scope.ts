@@ -1,4 +1,4 @@
-import { assertUnrestrictedScope } from '@openbooks/engine/organization/scope'
+import { assertUnrestrictedScope } from "@openbooks/engine/organization/scope";
 
 /** Price-level schedules govern every subsidiary; customer schedules stay customer-scoped. */
 export function assertScheduleScope(
@@ -6,6 +6,6 @@ export function assertScheduleScope(
   ...customerIds: Array<string | null>
 ): void {
   if (customerIds.some((customerId) => customerId === null)) {
-    assertUnrestrictedScope(allowedSubsidiaryIds)
+    assertUnrestrictedScope(allowedSubsidiaryIds);
   }
 }

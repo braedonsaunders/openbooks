@@ -51,7 +51,9 @@ export function fundFeatureOff(): NonprofitError {
   });
 }
 
-export function fundPostingRefusal(input: Omit<NonprofitRefusalInput, "status"> & { status?: NonprofitStatus }): NonprofitPostingError {
+export function fundPostingRefusal(
+  input: Omit<NonprofitRefusalInput, "status"> & { status?: NonprofitStatus },
+): NonprofitPostingError {
   const { status = 422, ...rest } = input;
   return new NonprofitPostingError({ ...rest, status });
 }

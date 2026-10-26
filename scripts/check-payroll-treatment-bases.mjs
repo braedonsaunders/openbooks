@@ -85,8 +85,8 @@ export function checkPackDirectory(dir, allowlist = TREATMENT_ALLOWLIST) {
   const reason = allowlist[name];
   if (reason === undefined) {
     findings.push(
-      `${name}/pack.ts declares assessedOn "taxable_income" but no engine source consumes a `
-      + `treatment-driven reduction (deduction("…") or reducedBases) — add the consumption or an allowlist reason`,
+      `${name}/pack.ts declares assessedOn "taxable_income" but no engine source consumes a ` +
+        `treatment-driven reduction (deduction("…") or reducedBases) — add the consumption or an allowlist reason`,
     );
   } else if (typeof reason !== "string" || reason.trim() === "") {
     findings.push(`${name} is allowlisted without a reason — allowlist entries carry a reason`);
@@ -129,5 +129,7 @@ if (invoked) {
     for (const finding of findings) console.error(`check-payroll-treatment-bases: ${finding}`);
     process.exit(1);
   }
-  console.log("check-payroll-treatment-bases: every taxable_income component consumes a treatment-driven reduction");
+  console.log(
+    "check-payroll-treatment-bases: every taxable_income component consumes a treatment-driven reduction",
+  );
 }

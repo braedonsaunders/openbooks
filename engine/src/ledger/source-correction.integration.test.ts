@@ -13,47 +13,106 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("source correction refuses transaction-currency over-allocation before changing settlement evidence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Settlement Controller", "admin");
-  try {
-    const post = (entryNumber: string, amount: string, txnAmount: string, fxRate: string) => postEntry(db, {
-      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
-      entryNumber, postingDate: org.date, periodId: org.periodId, origin: "manual", actorId,
-      currency: "USD", lines: [
-        { accountId: org.accounts.ap, partyId: org.vendorId, isOpenItem: true, amount, txnAmount, fxRate },
-        { accountId: org.accounts.bank, amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`,
-          txnAmount: txnAmount.startsWith("-") ? txnAmount.slice(1) : `-${txnAmount}`, fxRate },
-      ],
-    });
-    const source = await post("FX-PAYMENT", "125.0000", "100.0000", "1.25");
-    const target = await post("FX-PAYABLE", "-125.0000", "-100.0000", "1.25");
-    // The corrected rate preserves functional capacity but reduces USD
-    // capacity: 100 USD of settlement cannot fit onto an 80 USD payment.
-    const replacement = await post("FX-PAYMENT-CORRECTED", "125.0000", "80.0000", "1.5625");
-    const application = (await db.insert(schema.applications).values({
-      orgId: org.orgId, fromLineId: source.lines[0]!.id, toLineId: target.lines[0]!.id,
-      amount: "125.0000", sourceAmount: "125.0000",
-      sourceTransactionAmount: "100.0000", sourceTransactionCurrency: "USD",
-      targetTransactionAmount: "100.0000", targetTransactionCurrency: "USD",
-      settlementRate: "1", settlementRateSource: "same_currency",
-      settlementRateReference: "USD payment against USD payable", appliedOn: org.date,
-      createdBy: actorId, updatedBy: actorId,
-    }).returning())[0]!;
-    const existing = await db.select().from(schema.journalLines).where(eq(schema.journalLines.entryId, source.entryId));
-    const replacementLines = await db.select().from(schema.journalLines).where(eq(schema.journalLines.entryId, replacement.entryId));
-    await assert.rejects(db.transaction(tx => transferCorrectionApplications(tx, {
-      orgId: org.orgId, documentId: randomUUID(), documentNumber: "FX-PAYMENT",
-      existing, replacementLines, activeApplications: [application], actorId,
-      requestId: randomUUID(), reason: "Correct the payment exchange-rate evidence",
-    })), (error: unknown) => error instanceof PostingError
-      && /FX-PAYMENT.*transaction amount.*unapply the settlements before correcting/.test(error.message));
-    const retained = await db.select().from(schema.applications).where(eq(schema.applications.orgId, org.orgId));
-    assert.deepEqual(retained, [application]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "source correction refuses transaction-currency over-allocation before changing settlement evidence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Settlement Controller", "admin");
+    try {
+      const post = (entryNumber: string, amount: string, txnAmount: string, fxRate: string) =>
+        postEntry(db, {
+          orgId: org.orgId,
+          bookId: org.bookId,
+          subsidiaryId: org.subsidiaryId,
+          entryNumber,
+          postingDate: org.date,
+          periodId: org.periodId,
+          origin: "manual",
+          actorId,
+          currency: "USD",
+          lines: [
+            {
+              accountId: org.accounts.ap,
+              partyId: org.vendorId,
+              isOpenItem: true,
+              amount,
+              txnAmount,
+              fxRate,
+            },
+            {
+              accountId: org.accounts.bank,
+              amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`,
+              txnAmount: txnAmount.startsWith("-") ? txnAmount.slice(1) : `-${txnAmount}`,
+              fxRate,
+            },
+          ],
+        });
+      const source = await post("FX-PAYMENT", "125.0000", "100.0000", "1.25");
+      const target = await post("FX-PAYABLE", "-125.0000", "-100.0000", "1.25");
+      // The corrected rate preserves functional capacity but reduces USD
+      // capacity: 100 USD of settlement cannot fit onto an 80 USD payment.
+      const replacement = await post("FX-PAYMENT-CORRECTED", "125.0000", "80.0000", "1.5625");
+      const application = (
+        await db
+          .insert(schema.applications)
+          .values({
+            orgId: org.orgId,
+            fromLineId: source.lines[0]!.id,
+            toLineId: target.lines[0]!.id,
+            amount: "125.0000",
+            sourceAmount: "125.0000",
+            sourceTransactionAmount: "100.0000",
+            sourceTransactionCurrency: "USD",
+            targetTransactionAmount: "100.0000",
+            targetTransactionCurrency: "USD",
+            settlementRate: "1",
+            settlementRateSource: "same_currency",
+            settlementRateReference: "USD payment against USD payable",
+            appliedOn: org.date,
+            createdBy: actorId,
+            updatedBy: actorId,
+          })
+          .returning()
+      )[0]!;
+      const existing = await db
+        .select()
+        .from(schema.journalLines)
+        .where(eq(schema.journalLines.entryId, source.entryId));
+      const replacementLines = await db
+        .select()
+        .from(schema.journalLines)
+        .where(eq(schema.journalLines.entryId, replacement.entryId));
+      await assert.rejects(
+        db.transaction((tx) =>
+          transferCorrectionApplications(tx, {
+            orgId: org.orgId,
+            documentId: randomUUID(),
+            documentNumber: "FX-PAYMENT",
+            existing,
+            replacementLines,
+            activeApplications: [application],
+            actorId,
+            requestId: randomUUID(),
+            reason: "Correct the payment exchange-rate evidence",
+          }),
+        ),
+        (error: unknown) =>
+          error instanceof PostingError &&
+          /FX-PAYMENT.*transaction amount.*unapply the settlements before correcting/.test(
+            error.message,
+          ),
+      );
+      const retained = await db
+        .select()
+        .from(schema.applications)
+        .where(eq(schema.applications.orgId, org.orgId));
+      assert.deepEqual(retained, [application]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "authorized source correction retains an idempotent original-reversal-replacement ledger chain",
@@ -114,11 +173,14 @@ test(
       const originalEntryId = await postDocument(documentId, deps, {
         audit: { actorId, source: "test" },
       });
-      const originalOpenLine = (await db.execute<{ id: string }>(sql`
+      const originalOpenLine = await db.execute<{ id: string }>(
+        sql`
         select id
           from journal_lines
          where entry_id = ${originalEntryId} and is_open_item
-      `, "objects"));
+      `,
+        "objects",
+      );
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -186,18 +248,19 @@ test(
       assert.equal(first.changed, true);
       assert.ok(first.entryId);
 
-      const chain = (await db.execute<{
-          posted_entry_id: string;
-          original_status: string;
-          original_period_id: string;
-          reversal_entry_id: string;
-          reversal_status: string;
-          reversal_period_id: string;
-          reverses_entry_id: string;
-          replacement_status: string;
-          replacement_period_id: string;
-          replacement_posting_date: string;
-        }>(sql`
+      const chain = await db.execute<{
+        posted_entry_id: string;
+        original_status: string;
+        original_period_id: string;
+        reversal_entry_id: string;
+        reversal_status: string;
+        reversal_period_id: string;
+        reverses_entry_id: string;
+        replacement_status: string;
+        replacement_period_id: string;
+        replacement_posting_date: string;
+      }>(
+        sql`
         select document.posted_entry_id,
                original.status as original_status,
                original.period_id as original_period_id,
@@ -215,7 +278,9 @@ test(
           join journal_entries replacement
             on replacement.id = document.posted_entry_id
          where document.id = ${documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(chain, [
         {
           posted_entry_id: first.entryId,
@@ -231,7 +296,8 @@ test(
         },
       ]);
 
-      const byPeriod = (await db.execute<{ period_id: string; account_id: string; amount: string }>(sql`
+      const byPeriod = await db.execute<{ period_id: string; account_id: string; amount: string }>(
+        sql`
         select entry.period_id, line.account_id, sum(line.amount)::text as amount
           from journal_entries entry
           join journal_lines line on line.entry_id = entry.id
@@ -240,7 +306,9 @@ test(
          )
          group by entry.period_id, line.account_id
          order by entry.period_id, line.account_id
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(
         byPeriod.filter((row) => row.period_id === org.periodId),
         [
@@ -264,14 +332,15 @@ test(
         ].sort((left, right) => left.account_id.localeCompare(right.account_id)),
       );
 
-      const audit = (await db.execute<{
-          mode: string;
-          original_entry_id: string;
-          reversal_entry_id: string;
-          replacement_entry_id: string;
-          actor_id: string;
-          request_id: string;
-        }>(sql`
+      const audit = await db.execute<{
+        mode: string;
+        original_entry_id: string;
+        reversal_entry_id: string;
+        replacement_entry_id: string;
+        actor_id: string;
+        request_id: string;
+      }>(
+        sql`
         select changes->>'mode' as mode,
                changes->>'originalEntryId' as original_entry_id,
                changes->>'reversalEntryId' as reversal_entry_id,
@@ -281,7 +350,9 @@ test(
          where org_id = ${org.orgId}
            and row_id = ${documentId}
            and changes->>'mode' = 'append_only_source_correction'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(audit, [
         {
           mode: "append_only_source_correction",
@@ -293,12 +364,13 @@ test(
         },
       ]);
 
-      const applications = (await db.execute<{
-          id: string;
-          unapplied: boolean;
-          from_entry_id: string;
-          to_entry_id: string;
-        }>(sql`
+      const applications = await db.execute<{
+        id: string;
+        unapplied: boolean;
+        from_entry_id: string;
+        to_entry_id: string;
+      }>(
+        sql`
         select application.id, application.unapplied_at is not null as unapplied,
                from_line.entry_id as from_entry_id,
                to_line.entry_id as to_entry_id
@@ -312,7 +384,9 @@ test(
               and application.from_line_id = ${settlementLineId}
             )
          order by application.created_at, application.id
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(applications.length, 2);
       assert.deepEqual(applications[0], {
         id: applicationId,
@@ -337,11 +411,14 @@ test(
         });
       });
       assert.deepEqual(retry, { entryId: first.entryId, changed: false });
-      const count = await db.execute(sql`
+      const count = await db.execute(
+        sql`
         select count(*)::int as entries
           from journal_entries
          where source_document_id = ${documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal((count[0] as { entries: number }).entries, 3);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -397,11 +474,14 @@ test(
       const originalEntryId = await postDocument(documentId, deps, {
         audit: { actorId, source: "test" },
       });
-      const originalOpenLine = (await db.execute<{ id: string }>(sql`
+      const originalOpenLine = await db.execute<{ id: string }>(
+        sql`
         select id
           from journal_lines
          where entry_id = ${originalEntryId} and is_open_item
-      `, "objects"));
+      `,
+        "objects",
+      );
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -470,20 +550,22 @@ test(
             reason: "Source corrects the billed amount below its payment",
           });
         }),
-        (error: unknown) =>
-          error instanceof PostingError && /unapply/i.test(error.message),
+        (error: unknown) => error instanceof PostingError && /unapply/i.test(error.message),
       );
 
-      const aftermath = (await db.execute<{
+      const aftermath = await db.execute<{
         entries: number;
         original_status: string;
         posted_entry_id: string;
-      }>(sql`
+      }>(
+        sql`
         select (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
                (select status from journal_entries where id = ${originalEntryId}) as original_status,
                (select posted_entry_id from documents where id = ${documentId}) as posted_entry_id
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(aftermath, [
         {
           entries: 1,
@@ -502,11 +584,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const actorId = await createScratchUser(
-      org.orgId,
-      "Connector Replay Controller",
-      "admin",
-    );
+    const actorId = await createScratchUser(org.orgId, "Connector Replay Controller", "admin");
     const documentId = randomUUID();
     const ordinaryDocumentId = randomUUID();
     const connectionId = randomUUID();
@@ -585,9 +663,7 @@ test(
       `);
 
       const corrected = await db.transaction(async (tx) => {
-        await tx.execute(
-          sql`select set_config('app.current_org', ${org.orgId}, true)`,
-        );
+        await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
         await tx.execute(sql`set local openbooks.amend = on`);
         await tx.execute(sql`set local openbooks.migration = on`);
         await tx.execute(sql`
@@ -608,13 +684,16 @@ test(
       assert.equal(corrected.changed, true);
       assert.ok(corrected.entryId);
 
-      const locks = (await db.execute<{ module: string; state: string; reason: string }>(sql`
+      const locks = await db.execute<{ module: string; state: string; reason: string }>(
+        sql`
         select module, state, reason
           from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and module in ('ap', 'gl')
          order by module
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(locks, [
         {
           module: "ap",
@@ -627,14 +706,17 @@ test(
           reason: "Controller-completed month close",
         },
       ]);
-      const replayAudit = (await db.execute<{ mode: string; locks_preserved: boolean }>(sql`
+      const replayAudit = await db.execute<{ mode: string; locks_preserved: boolean }>(
+        sql`
         select changes->'historicalReplay'->>'mode' as mode,
                (changes->'historicalReplay'->>'periodLocksPreserved')::boolean
                  as locks_preserved
           from audit_log
          where org_id = ${org.orgId} and row_id = ${documentId}
            and changes->>'mode' = 'append_only_source_correction'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(replayAudit, [
         {
           mode: "authenticated_connector_historical_replay",
@@ -642,7 +724,12 @@ test(
         },
       ]);
 
-      const beforeFailedReplay = (await db.execute<{ amount: string; entries: number; cogs_total: string }>(sql`
+      const beforeFailedReplay = await db.execute<{
+        amount: string;
+        entries: number;
+        cogs_total: string;
+      }>(
+        sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -654,12 +741,12 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       await assert.rejects(
         db.transaction(async (tx) => {
-          await tx.execute(
-            sql`select set_config('app.current_org', ${org.orgId}, true)`,
-          );
+          await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
           await tx.execute(sql`set local openbooks.amend = on`);
           await tx.execute(sql`set local openbooks.migration = on`);
           await tx.execute(sql`
@@ -679,7 +766,12 @@ test(
         }),
         /not authorized by the active sync run/,
       );
-      const afterFailedReplay = (await db.execute<{ amount: string; entries: number; cogs_total: string }>(sql`
+      const afterFailedReplay = await db.execute<{
+        amount: string;
+        entries: number;
+        cogs_total: string;
+      }>(
+        sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -691,13 +783,13 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(afterFailedReplay, beforeFailedReplay);
 
       const convergedRetry = await db.transaction(async (tx) => {
-        await tx.execute(
-          sql`select set_config('app.current_org', ${org.orgId}, true)`,
-        );
+        await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
         await tx.execute(sql`set local openbooks.amend = on`);
         await tx.execute(sql`set local openbooks.migration = on`);
         await tx.execute(sql`
@@ -716,7 +808,12 @@ test(
         });
       });
       assert.equal(convergedRetry.changed, true);
-      const afterConvergedRetry = (await db.execute<{ amount: string; entries: number; cogs_total: string }>(sql`
+      const afterConvergedRetry = await db.execute<{
+        amount: string;
+        entries: number;
+        cogs_total: string;
+      }>(
+        sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -728,7 +825,9 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(afterConvergedRetry, [
         { amount: "130.0000", entries: 5, cogs_total: "130.0000" },
       ]);
@@ -769,11 +868,14 @@ test(
         /closed for this period/,
       );
 
-      const chain = await db.execute(sql`
+      const chain = await db.execute(
+        sql`
         select count(*)::int as entries
           from journal_entries
          where source_document_id = ${documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal((chain[0] as { entries: number }).entries, 5);
       assert.notEqual(corrected.entryId, originalEntryId);
     } finally {

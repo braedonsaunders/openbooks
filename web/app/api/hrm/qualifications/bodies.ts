@@ -8,7 +8,8 @@ import { isUuid } from "../../../../lib/list-params";
  * engine service owns the full contract.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = (field: string) => civilDateInput(`${field} must be a real YYYY-MM-DD calendar date`);
+const civilDate = (field: string) =>
+  civilDateInput(`${field} must be a real YYYY-MM-DD calendar date`);
 const text255 = z.string().trim().min(1).max(255);
 
 export const createQualificationTypeBody = z.object({
@@ -81,4 +82,11 @@ export const declareCategoryBody = z.object({
   category: text255,
 });
 
-export const qualificationStatusFilter = z.enum(["valid", "expiring", "expired", "revoked", "pending_verification", "not_yet_effective"]);
+export const qualificationStatusFilter = z.enum([
+  "valid",
+  "expiring",
+  "expired",
+  "revoked",
+  "pending_verification",
+  "not_yet_effective",
+]);

@@ -7,15 +7,8 @@ import { getFlowAdapter } from "../flows/registry.ts";
 import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { openProcessInTx } from "../hrm/processes.ts";
 import { automationsFeatureOn } from "./services.ts";
-import {
-  assertWritableField,
-  loadSubjectSnapshot,
-  registryEntity,
-} from "./registry.ts";
-import {
-  evaluateAutomation,
-  type SubjectSnapshot,
-} from "./evaluate.ts";
+import { assertWritableField, loadSubjectSnapshot, registryEntity } from "./registry.ts";
+import { evaluateAutomation, type SubjectSnapshot } from "./evaluate.ts";
 import { renderAutomationEmailTemplate } from "./email-templates.ts";
 import {
   parseAutomationActions,
@@ -79,13 +72,19 @@ export type AutomationRunResult = {
 
 export class AutomationExecuteError extends Error {}
 
-export async function loadAutomation(orgId: string, automationId: string): Promise<AutomationRow | null> {
-  const rows = await db.execute<AutomationRow>(sql`
+export async function loadAutomation(
+  orgId: string,
+  automationId: string,
+): Promise<AutomationRow | null> {
+  const rows = await db.execute<AutomationRow>(
+    sql`
     select id, org_id as "orgId", name, status, trigger, rules, conditions, actions, version
       from automations
      where org_id = ${orgId} and id = ${automationId}
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
@@ -133,13 +132,16 @@ export async function resolveActionRecipients(
   if (to === "manager") {
     const managerId = subject?.fields["manager_employment_id"];
     if (typeof managerId !== "string" || !managerId) return [];
-    const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       select u.id
         from users u
         join worker_employments e on e.org_id = u.org_id and e.worker_party_id = u.party_id
        where u.org_id = ${orgId} and e.id = ${managerId} and u.is_active
        limit 5
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((r) => r.id);
   }
   if (to.startsWith("role:")) {
@@ -149,18 +151,24 @@ export async function resolveActionRecipients(
         "action recipient 'role:' names no role — use 'role:<key>' with an org role key, a user id, 'manager', or 'initiator'",
       );
     }
-    const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       select u.id
         from users u
         join role_assignments a on a.org_id = u.org_id and a.user_id = u.id
         join app_roles r on r.org_id = a.org_id and r.id = a.role_id and r.key = ${key}
        where u.org_id = ${orgId} and u.is_active
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((r) => r.id);
   }
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from users where org_id = ${orgId} and id = ${to} and is_active limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new AutomationExecuteError(
       `action recipient '${to}' resolves to no active user in this org — use a user id, 'role:<key>', 'manager', or 'initiator'`,
@@ -199,20 +207,22 @@ async function runActionLive(
       return `notify→${users.length}`;
     }
     case "create_task": {
-      const users = action.ownerKind === "person" && action.owner
-        ? await resolveActionRecipients(orgId, action.owner, subject, initiatorUserId)
-        : action.ownerKind === "role" && action.owner
-          ? await resolveActionRecipients(orgId, `role:${action.owner}`, subject, initiatorUserId)
-          : await resolveActionRecipients(
-            orgId,
-            action.ownerKind === "manager" ? "manager" : "initiator",
-            subject,
-            initiatorUserId,
-          );
+      const users =
+        action.ownerKind === "person" && action.owner
+          ? await resolveActionRecipients(orgId, action.owner, subject, initiatorUserId)
+          : action.ownerKind === "role" && action.owner
+            ? await resolveActionRecipients(orgId, `role:${action.owner}`, subject, initiatorUserId)
+            : await resolveActionRecipients(
+                orgId,
+                action.ownerKind === "manager" ? "manager" : "initiator",
+                subject,
+                initiatorUserId,
+              );
       if (users.length === 0) return "skipped: no owner resolved";
-      const due = action.dueOffsetDays > 0
-        ? ` Due in ${action.dueOffsetDays} day${action.dueOffsetDays === 1 ? "" : "s"}.`
-        : "";
+      const due =
+        action.dueOffsetDays > 0
+          ? ` Due in ${action.dueOffsetDays} day${action.dueOffsetDays === 1 ? "" : "s"}.`
+          : "";
       await db.insert(schema.notifications).values(
         users.map((userId) => ({
           orgId,
@@ -233,9 +243,12 @@ async function runActionLive(
       if (users.length === 0) return "skipped: no recipients resolved";
       // Postgres array literal (the `{a,b}` house shape): a raw JS array
       // bind casts a scalar to uuid[] and every send_email run fails.
-      const emails = await db.execute<{ email: string }>(sql`
+      const emails = await db.execute<{ email: string }>(
+        sql`
         select email from users where org_id = ${orgId} and id = any(${`{${users.join(",")}}`}::uuid[])
-      `, "objects");
+      `,
+        "objects",
+      );
       const to = emails.map((r) => r.email);
       if (to.length === 0) return "skipped: no recipient emails";
       // The key resolves through the closed registry (unknown keys refuse
@@ -246,12 +259,19 @@ async function runActionLive(
         automationName,
         subjectEntity: subject?.entity ?? null,
       });
-      const orgRows = await db.execute<{ name: string }>(sql`
+      const orgRows = await db.execute<{ name: string }>(
+        sql`
         select name from orgs where id = ${orgId} limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const brand = orgRows[0]?.name ?? "OpenBooks";
       const { flowNotificationEmail } = await import("@openbooks/emails");
-      const mail = flowNotificationEmail({ orgName: brand, subject: draft.subject, body: draft.body });
+      const mail = flowNotificationEmail({
+        orgName: brand,
+        subject: draft.subject,
+        body: draft.body,
+      });
       await enqueueFlowEmail({
         orgId,
         runId,
@@ -280,9 +300,14 @@ async function runActionLive(
         );
       }
       if (!subjectId) {
-        throw new AutomationExecuteError("update_field needs a subject — manual runs without a subject refuse field writes");
+        throw new AutomationExecuteError(
+          "update_field needs a subject — manual runs without a subject refuse field writes",
+        );
       }
-      await adapter.setField(subjectId, action.field, action.value ?? null, { orgId, userId: initiatorUserId });
+      await adapter.setField(subjectId, action.field, action.value ?? null, {
+        orgId,
+        userId: initiatorUserId,
+      });
       return `update_field:${action.entity}.${action.field}`;
     }
     case "start_process": {
@@ -306,7 +331,16 @@ async function runActionLive(
       return `process started`;
     }
     case "webhook": {
-      return await runWebhookAction(orgId, runId, index, action, subject, subjectId, automationName, automationId);
+      return await runWebhookAction(
+        orgId,
+        runId,
+        index,
+        action,
+        subject,
+        subjectId,
+        automationName,
+        automationId,
+      );
     }
     case "start_flow":
     case "approve_step":
@@ -336,7 +370,7 @@ async function runWebhookAction(
   if (!(await orgFeatureEnabled(orgId, "outboundWebhooks"))) {
     throw new AutomationExecuteError(
       `webhook action to endpoint '${action.endpointKey}' cannot run: outbound webhooks are switched off ` +
-      `for this organization — enable them in Company Settings → Features, then run again`,
+        `for this organization — enable them in Company Settings → Features, then run again`,
     );
   }
   const { resolveAutomationEndpoint } = await import("../webhooks/endpoints.ts");
@@ -347,7 +381,7 @@ async function runWebhookAction(
   } catch (error) {
     throw new AutomationExecuteError(
       `webhook action to endpoint '${action.endpointKey}' cannot run: ` +
-      `${error instanceof Error ? error.message : String(error)}`,
+        `${error instanceof Error ? error.message : String(error)}`,
     );
   }
   const enqueued = await enqueueTargetedDelivery(db, {
@@ -369,7 +403,7 @@ async function runWebhookAction(
   if (!enqueued) {
     throw new AutomationExecuteError(
       `webhook action to endpoint '${action.endpointKey}' cannot run: outbound webhooks are switched off ` +
-      `for this organization — enable them in Company Settings → Features, then run again`,
+        `for this organization — enable them in Company Settings → Features, then run again`,
     );
   }
   return `webhook→${action.endpointKey}`;
@@ -392,7 +426,9 @@ async function runDeferredAction(
       `${unsupportedAutomationActionRefusal(action)} — edit the automation to remove the action, then re-enable it`,
     );
   }
-  throw new AutomationExecuteError(`action kind '${(action as { kind: string }).kind}' is not executable yet — remove it and save again`);
+  throw new AutomationExecuteError(
+    `action kind '${(action as { kind: string }).kind}' is not executable yet — remove it and save again`,
+  );
 }
 
 /**
@@ -429,7 +465,9 @@ export async function executeAutomation(input: {
   return withOrg(input.orgId, async () => {
     const automation = await loadAutomation(input.orgId, input.automationId);
     if (!automation) {
-      throw new AutomationExecuteError("automation not found — it may have been deleted; reload the list and try again");
+      throw new AutomationExecuteError(
+        "automation not found — it may have been deleted; reload the list and try again",
+      );
     }
     if (mode === "live" && automation.status !== "enabled") {
       throw new AutomationExecuteError(
@@ -447,7 +485,12 @@ export async function executeAutomation(input: {
           `unknown automation entity '${input.subjectEntity}' — use one the registry declares`,
         );
       }
-      subject = await loadSubjectSnapshot(input.orgId, input.subjectEntity, input.subjectId, input.previous ?? null);
+      subject = await loadSubjectSnapshot(
+        input.orgId,
+        input.subjectEntity,
+        input.subjectId,
+        input.previous ?? null,
+      );
       // Subject scope: a subject whose snapshot carries subsidiary lineage
       // outside the actor's scope answers exactly like a deleted record —
       // the same gone-refusal in live mode, the same subject-less steps in
@@ -465,12 +508,14 @@ export async function executeAutomation(input: {
         }
       }
       if (!subject && mode === "live") {
-        throw new AutomationExecuteError("the automation subject is gone — the record was deleted; nothing fired");
+        throw new AutomationExecuteError(
+          "the automation subject is gone — the record was deleted; nothing fired",
+        );
       }
     }
 
-    const fingerprint = input.fingerprint
-      ?? fingerprintFor(automation.trigger, input.triggerPayload ?? {});
+    const fingerprint =
+      input.fingerprint ?? fingerprintFor(automation.trigger, input.triggerPayload ?? {});
     const subjectKind = input.subjectEntity ?? null;
     const subjectId = input.subjectId ?? null;
 
@@ -495,19 +540,23 @@ export async function executeAutomation(input: {
     // returned, so a re-fire never double-runs.
     const lockKey = `${input.orgId}:${input.automationId}:${subjectKind ?? ""}:${subjectId ?? ""}:${fingerprint}`;
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
-    const duplicate = await db.execute<{ id: string; status: string }>(sql`
+    const duplicate = await db.execute<{ id: string; status: string }>(
+      sql`
       select id, status from automation_runs
        where org_id = ${input.orgId} and automation_id = ${input.automationId}
          and subject_kind is not distinct from ${subjectKind}::text
          and subject_id is not distinct from ${subjectId}::uuid
          and trigger_fingerprint = ${fingerprint}
        limit 1
-    `, "objects");
+    `,
+      "objects",
+    );
     if (duplicate[0]) {
       const row = duplicate[0];
       return { runId: row.id, status: row.status, steps: [], replayed: true };
     }
-    const claimed = await db.execute<{ id: string }>(sql`
+    const claimed = await db.execute<{ id: string }>(
+      sql`
       insert into automation_runs
         (org_id, automation_id, version, trigger_payload, subject_kind, subject_id, status, started_at, trigger_fingerprint, created_by)
       values (${input.orgId}, ${input.automationId}, ${automation.version},
@@ -516,16 +565,21 @@ export async function executeAutomation(input: {
       -- A concurrent identical trigger reuses the existing run selected below.
       on conflict (org_id, automation_id, subject_kind, subject_id, trigger_fingerprint) do nothing
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (claimed.length === 0) {
-      const existing = await db.execute<{ id: string; status: string }>(sql`
+      const existing = await db.execute<{ id: string; status: string }>(
+        sql`
         select id, status from automation_runs
          where org_id = ${input.orgId} and automation_id = ${input.automationId}
            and subject_kind is not distinct from ${subjectKind}::text
            and subject_id is not distinct from ${subjectId}::uuid
            and trigger_fingerprint = ${fingerprint}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = existing[0];
       if (!row) {
         throw new AutomationExecuteError("the run claim raced and vanished — retry the run");
@@ -557,7 +611,17 @@ export async function executeAutomation(input: {
         let i = 0;
         for (const action of actions) {
           i += 1;
-          const output = await runActionLive(input.orgId, runId, i, action, subject, subjectId, input.actorId, automation.name, input.automationId);
+          const output = await runActionLive(
+            input.orgId,
+            runId,
+            i,
+            action,
+            subject,
+            subjectId,
+            input.actorId,
+            automation.name,
+            input.automationId,
+          );
           steps.push({ index: i, kind: action.kind, status: "succeeded", output });
         }
       });
@@ -589,7 +653,10 @@ export async function executeAutomation(input: {
       return {
         runId,
         status: "failed",
-        steps: [...steps, { index: steps.length + 1, kind: "run", status: "failed" as const, error: message }],
+        steps: [
+          ...steps,
+          { index: steps.length + 1, kind: "run", status: "failed" as const, error: message },
+        ],
       };
     }
 
@@ -631,7 +698,8 @@ async function simulateSteps(
           index: i,
           kind: action.kind,
           status: "failed" as const,
-          error: `webhook action to endpoint '${action.endpointKey}' cannot run: outbound webhooks are switched off ` +
+          error:
+            `webhook action to endpoint '${action.endpointKey}' cannot run: outbound webhooks are switched off ` +
             `for this organization — enable them in Company Settings → Features, then run again`,
         });
         continue;
@@ -644,27 +712,48 @@ async function simulateSteps(
           index: i,
           kind: action.kind,
           status: "failed" as const,
-          error: `webhook action to endpoint '${action.endpointKey}' cannot run: ` +
+          error:
+            `webhook action to endpoint '${action.endpointKey}' cannot run: ` +
             `${error instanceof Error ? error.message : String(error)}`,
         });
         continue;
       }
-      steps.push({ index: i, kind: action.kind, status: "simulated" as const, output: "no writes in simulate mode" });
+      steps.push({
+        index: i,
+        kind: action.kind,
+        status: "simulated" as const,
+        output: "no writes in simulate mode",
+      });
       continue;
     }
     if (action.kind === "update_field") {
       try {
         assertWritableField(action.entity, action.field);
       } catch (e) {
-        steps.push({ index: i, kind: action.kind, status: "failed" as const, error: e instanceof Error ? e.message : String(e) });
+        steps.push({
+          index: i,
+          kind: action.kind,
+          status: "failed" as const,
+          error: e instanceof Error ? e.message : String(e),
+        });
         continue;
       }
     }
     if ((action.kind === "start_process" || action.kind === "update_field") && !subject) {
-      steps.push({ index: i, kind: action.kind, status: "skipped" as const, output: "needs a subject — pick one and simulate again" });
+      steps.push({
+        index: i,
+        kind: action.kind,
+        status: "skipped" as const,
+        output: "needs a subject — pick one and simulate again",
+      });
       continue;
     }
-    steps.push({ index: i, kind: action.kind, status: "simulated" as const, output: "no writes in simulate mode" });
+    steps.push({
+      index: i,
+      kind: action.kind,
+      status: "simulated" as const,
+      output: "no writes in simulate mode",
+    });
   }
   return steps;
 }

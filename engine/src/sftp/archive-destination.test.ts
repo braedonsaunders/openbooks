@@ -31,19 +31,35 @@ function localBackend(): SftpBackend {
 function s3BackendOverFake(): { backend: SftpBackend; objects: Map<string, { bytes: Buffer }> } {
   const fake = createFakeS3();
   setSftpS3ClientForTests(fake.client);
-  return { backend: s3Backend(BUCKET, ROOT, ORG), objects: fake.objects as Map<string, { bytes: Buffer }> };
+  return {
+    backend: s3Backend(BUCKET, ROOT, ORG),
+    objects: fake.objects as Map<string, { bytes: Buffer }>,
+  };
 }
 
 test("archive destinations are dated, content-hashed generations", () => {
-  const first = archiveDestination("inbound", "statement.ofx", Buffer.from("day-one"), "2026-09-23");
+  const first = archiveDestination(
+    "inbound",
+    "statement.ofx",
+    Buffer.from("day-one"),
+    "2026-09-23",
+  );
   assert.match(first, /^inbound\/processed\/2026-09-23\/statement\.[0-9a-f]{12}\.ofx$/);
   // Same name, different bytes: a different generation — yesterday's archive
   // is never the destination again.
-  const second = archiveDestination("inbound", "statement.ofx", Buffer.from("day-two"), "2026-09-23");
+  const second = archiveDestination(
+    "inbound",
+    "statement.ofx",
+    Buffer.from("day-two"),
+    "2026-09-23",
+  );
   assert.notEqual(second, first);
   assert.match(second, /^inbound\/processed\/2026-09-23\/statement\.[0-9a-f]{12}\.ofx$/);
   // Same bytes: the same first generation (the selector numbers it on demand).
-  assert.equal(archiveDestination("inbound", "statement.ofx", Buffer.from("day-one"), "2026-09-23"), first);
+  assert.equal(
+    archiveDestination("inbound", "statement.ofx", Buffer.from("day-one"), "2026-09-23"),
+    first,
+  );
   // Numbered generations keep stem, hash, and extension recognizable.
   assert.match(
     archiveDestination("inbound", "statement.ofx", Buffer.from("day-one"), "2026-09-23", 2),
@@ -59,11 +75,21 @@ test("archive destinations are dated, content-hashed generations", () => {
 /** Two same-named source files with distinct bytes must both survive archiving. */
 async function consumesDistinctSameNamedFiles(backend: SftpBackend): Promise<void> {
   await backend.write("inbound/statement.ofx", Buffer.from("day-one"));
-  const first = await archiveConsumedFile(backend, "inbound", "statement.ofx", Buffer.from("day-one"));
+  const first = await archiveConsumedFile(
+    backend,
+    "inbound",
+    "statement.ofx",
+    Buffer.from("day-one"),
+  );
   await backend.rename("inbound/statement.ofx", first);
 
   await backend.write("inbound/statement.ofx", Buffer.from("day-two"));
-  const second = await archiveConsumedFile(backend, "inbound", "statement.ofx", Buffer.from("day-two"));
+  const second = await archiveConsumedFile(
+    backend,
+    "inbound",
+    "statement.ofx",
+    Buffer.from("day-two"),
+  );
   await backend.rename("inbound/statement.ofx", second);
 
   assert.notEqual(second, first, "distinct bytes must not archive onto the same generation");
@@ -74,11 +100,21 @@ async function consumesDistinctSameNamedFiles(backend: SftpBackend): Promise<voi
 /** Re-importing identical bytes numbers a new generation instead of replacing. */
 async function reimportKeepsBothGenerations(backend: SftpBackend): Promise<void> {
   await backend.write("inbound/replay.ofx", Buffer.from("same-bytes"));
-  const first = await archiveConsumedFile(backend, "inbound", "replay.ofx", Buffer.from("same-bytes"));
+  const first = await archiveConsumedFile(
+    backend,
+    "inbound",
+    "replay.ofx",
+    Buffer.from("same-bytes"),
+  );
   await backend.rename("inbound/replay.ofx", first);
 
   await backend.write("inbound/replay.ofx", Buffer.from("same-bytes"));
-  const second = await archiveConsumedFile(backend, "inbound", "replay.ofx", Buffer.from("same-bytes"));
+  const second = await archiveConsumedFile(
+    backend,
+    "inbound",
+    "replay.ofx",
+    Buffer.from("same-bytes"),
+  );
   await backend.rename("inbound/replay.ofx", second);
 
   assert.notEqual(second, first);

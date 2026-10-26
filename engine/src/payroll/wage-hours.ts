@@ -55,7 +55,7 @@ export async function loadWageTimeEntries(
   if (input.employeePartyIds.length === 0) return [];
   const periodStart = periodDay(input.periodStart);
   const periodEnd = periodDay(input.periodEnd);
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     id: string;
     employee_party_id: string;
     worked_on: string;
@@ -71,7 +71,8 @@ export async function loadWageTimeEntries(
     item_account_id: string | null;
     item_account_number: string | null;
     item_account_name: string | null;
-  }>(sql`
+  }>(
+    sql`
     select te.id, te.employee_party_id, te.hours, te.worked_on, te.project_id, te.department_id, te.time_type_id, te.item_id,
            coalesce(tt.classification, 'regular') as classification,
            coalesce(tt.cost_multiplier, 1) as multiplier, coalesce(tt.name, 'Regular') as type_name,
@@ -88,7 +89,9 @@ export async function loadWageTimeEntries(
        and te.worked_on between ${periodStart} and ${periodEnd}
        and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${input.documentId})
        and coalesce(tt.exclude_from_wages, false) = false
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: String(row.id),
     employeePartyId: String(row.employee_party_id),
@@ -111,7 +114,9 @@ export async function loadWageTimeEntries(
 }
 
 /** Approved wage hours per employee, for roster previews that sum rather than price. */
-export function sumWageHoursByEmployee(rows: readonly Pick<WageTimeEntry, "employeePartyId" | "hours">[]): Map<string, string> {
+export function sumWageHoursByEmployee(
+  rows: readonly Pick<WageTimeEntry, "employeePartyId" | "hours">[],
+): Map<string, string> {
   const byEmployee = new Map<string, string[]>();
   for (const row of rows) {
     const bucket = byEmployee.get(row.employeePartyId);

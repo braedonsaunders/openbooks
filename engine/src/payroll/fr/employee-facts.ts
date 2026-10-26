@@ -33,10 +33,10 @@ export const FR_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     producer: {
       kind: "none",
       notes:
-        "No channel exists yet: the contract type needs a profile column (migration) or an "
-        + "employment-contract certificate field, neither of which this change ships. Until then "
-        + "absent is accepted as a CDI — the es_contrato_temporal precedent — so a CDD case with "
-        + "no declared flag prices no CPF-CDD rather than refusing without remedy.",
+        "No channel exists yet: the contract type needs a profile column (migration) or an " +
+        "employment-contract certificate field, neither of which this change ships. Until then " +
+        "absent is accepted as a CDI — the es_contrato_temporal precedent — so a CDD case with " +
+        "no declared flag prices no CPF-CDD rather than refusing without remedy.",
     },
   },
   {
@@ -49,13 +49,14 @@ export const FR_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     producer: {
       kind: "derivation",
       derivation: "FR payroll period hours",
-      notes: "Resolved for each period from the effective work schedule or approved time entries, then validated through resolveEmployeeFact.",
+      notes:
+        "Resolved for each period from the effective work schedule or approved time entries, then validated through resolveEmployeeFact.",
     },
   },
   employeeRecordDateFact(
     "hired_on",
-    "The monthly social-security ceiling accrues only from the month of hire (Urssaf "
-    + "régularisation progressive du plafond); an unknown hire date would accrue it from January.",
+    "The monthly social-security ceiling accrues only from the month of hire (Urssaf " +
+      "régularisation progressive du plafond); an unknown hire date would accrue it from January.",
   ),
   employeeRecordDateFact(
     "terminated_on",

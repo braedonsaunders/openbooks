@@ -22,23 +22,27 @@ function dispositionOf(contentType: string): string {
 }
 
 test("xml is served as attachment, never inline on the app origin", () => {
-  for (const type of ["application/xml", "text/xml", "Application/XML", "text/xml; charset=utf-8"]) {
+  for (const type of [
+    "application/xml",
+    "text/xml",
+    "Application/XML",
+    "text/xml; charset=utf-8",
+  ]) {
     const disposition = dispositionOf(type);
-    assert.ok(
-      disposition.startsWith("attachment"),
-      `${type} must download, got: ${disposition}`,
-    );
+    assert.ok(disposition.startsWith("attachment"), `${type} must download, got: ${disposition}`);
   }
   assert.equal(isActiveContentType("application/xml"), true);
   assert.equal(isActiveContentType("text/xml"), true);
 });
 
 test("svg, html and xhtml download even though the cabinet never stores them", () => {
-  for (const type of ["image/svg+xml", "text/html", "application/xhtml+xml", "application/atom+xml"]) {
-    assert.ok(
-      dispositionOf(type).startsWith("attachment"),
-      `${type} must download`,
-    );
+  for (const type of [
+    "image/svg+xml",
+    "text/html",
+    "application/xhtml+xml",
+    "application/atom+xml",
+  ]) {
+    assert.ok(dispositionOf(type).startsWith("attachment"), `${type} must download`);
   }
 });
 
@@ -53,10 +57,7 @@ test("inert preview types stay inline", () => {
     "application/json",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ]) {
-    assert.ok(
-      dispositionOf(type).startsWith("inline"),
-      `${type} must preview inline`,
-    );
+    assert.ok(dispositionOf(type).startsWith("inline"), `${type} must preview inline`);
   }
 });
 

@@ -25,21 +25,60 @@ const fs = requireFromRoot("node:fs");
 
 const BRAND_TYPES = new Set(["Money", "Rate", "Quantity"]);
 const BRAND_MAKERS = new Set([
-  "parseMoney", "parseRate", "parseQuantity",
-  "addMoney", "subMoney", "sumMoney", "negMoney",
-  "mulMoney", "divMoney", "mulMoneyRate", "divMoneyRate",
+  "parseMoney",
+  "parseRate",
+  "parseQuantity",
+  "addMoney",
+  "subMoney",
+  "sumMoney",
+  "negMoney",
+  "mulMoney",
+  "divMoney",
+  "mulMoneyRate",
+  "divMoneyRate",
 ]);
 // Exact-decimal calls whose string/bigint result must never cross Number().
 const MONEY_ARITHMETIC = new Set([
   ...BRAND_MAKERS,
-  "add", "sum", "mul", "div", "mulDecimal", "mulDecimalFactors", "mulPercent",
-  "mulRatio", "prorateDays", "normalizeMoney", "normalizeDecimal", "roundMoney",
-  "formatMoney", "allocateLargestRemainder", "divideMoney", "divRate", "mulRate",
-  "toUnits", "fromUnits", "fixedDecimal", "subscriptionComponentTotal",
+  "add",
+  "sum",
+  "mul",
+  "div",
+  "mulDecimal",
+  "mulDecimalFactors",
+  "mulPercent",
+  "mulRatio",
+  "prorateDays",
+  "normalizeMoney",
+  "normalizeDecimal",
+  "roundMoney",
+  "formatMoney",
+  "allocateLargestRemainder",
+  "divideMoney",
+  "divRate",
+  "mulRate",
+  "toUnits",
+  "fromUnits",
+  "fixedDecimal",
+  "subscriptionComponentTotal",
 ]);
 const MONEY_FIELDS = new Set([
-  "amount", "balance", "rate", "wage", "cost", "price", "debit", "credit",
-  "total", "tax", "gross", "net", "revenue", "expense", "payment", "quantity",
+  "amount",
+  "balance",
+  "rate",
+  "wage",
+  "cost",
+  "price",
+  "debit",
+  "credit",
+  "total",
+  "tax",
+  "gross",
+  "net",
+  "revenue",
+  "expense",
+  "payment",
+  "quantity",
 ]);
 
 function repoRoot() {
@@ -48,8 +87,12 @@ function repoRoot() {
 
 function propertyName(node) {
   if (ts.isPropertyAccessExpression(node)) return node.name.text.toLowerCase();
-  if (ts.isElementAccessExpression(node) && node.argumentExpression &&
-      (ts.isStringLiteral(node.argumentExpression) || ts.isNoSubstitutionTemplateLiteral(node.argumentExpression))) {
+  if (
+    ts.isElementAccessExpression(node) &&
+    node.argumentExpression &&
+    (ts.isStringLiteral(node.argumentExpression) ||
+      ts.isNoSubstitutionTemplateLiteral(node.argumentExpression))
+  ) {
     return node.argumentExpression.text.toLowerCase();
   }
   return null;
@@ -60,7 +103,11 @@ function typeMentionsBrand(typeNode) {
   let found = false;
   function visit(node) {
     if (found) return;
-    if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && BRAND_TYPES.has(node.typeName.text)) {
+    if (
+      ts.isTypeReferenceNode(node) &&
+      ts.isIdentifier(node.typeName) &&
+      BRAND_TYPES.has(node.typeName.text)
+    ) {
       found = true;
       return;
     }
@@ -72,8 +119,11 @@ function typeMentionsBrand(typeNode) {
 
 /** True when an expression is a call to a brand maker or branded function. */
 function isBrandedCall(node, brandedFunctions) {
-  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-    (BRAND_MAKERS.has(node.expression.text) || brandedFunctions.has(node.expression.text));
+  return (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    (BRAND_MAKERS.has(node.expression.text) || brandedFunctions.has(node.expression.text))
+  );
 }
 
 export function scanMoneyBrandViolations(source, path = "<source>") {
@@ -84,7 +134,11 @@ export function scanMoneyBrandViolations(source, path = "<source>") {
   const heuristicViolations = [];
 
   function collect(node) {
-    if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && node.name && ts.isIdentifier(node.name)) {
+    if (
+      (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+      node.name &&
+      ts.isIdentifier(node.name)
+    ) {
       if (typeMentionsBrand(node.type)) brandedNames.add(node.name.text);
       if (node.initializer) {
         if (isBrandedCall(node.initializer, brandedFunctions)) brandedNames.add(node.name.text);
@@ -96,9 +150,14 @@ export function scanMoneyBrandViolations(source, path = "<source>") {
     if (ts.isFunctionDeclaration(node) && node.name && typeMentionsBrand(node.type)) {
       brandedFunctions.add(node.name.text);
     }
-    if (ts.isVariableDeclaration(node) && node.name && ts.isIdentifier(node.name) && node.initializer &&
-        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) &&
-        typeMentionsBrand(node.initializer.type)) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.name &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) &&
+      typeMentionsBrand(node.initializer.type)
+    ) {
       brandedFunctions.add(node.name.text);
     }
     ts.forEachChild(node, collect);
@@ -106,8 +165,11 @@ export function scanMoneyBrandViolations(source, path = "<source>") {
   collect(file);
 
   function isMoneyCall(node) {
-    return ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-      (MONEY_ARITHMETIC.has(node.expression.text) || brandedFunctions.has(node.expression.text));
+    return (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (MONEY_ARITHMETIC.has(node.expression.text) || brandedFunctions.has(node.expression.text))
+    );
   }
 
   function checkConversion(argument, kind) {
@@ -126,8 +188,14 @@ export function scanMoneyBrandViolations(source, path = "<source>") {
       heuristicViolations.push({ ...at, detail: "exact-decimal arithmetic result" });
       return;
     }
-    if (ts.isIdentifier(argument) || ts.isPropertyAccessExpression(argument) || ts.isElementAccessExpression(argument)) {
-      const field = ts.isIdentifier(argument) ? argument.text.toLowerCase() : propertyName(argument);
+    if (
+      ts.isIdentifier(argument) ||
+      ts.isPropertyAccessExpression(argument) ||
+      ts.isElementAccessExpression(argument)
+    ) {
+      const field = ts.isIdentifier(argument)
+        ? argument.text.toLowerCase()
+        : propertyName(argument);
       const callee = ts.isIdentifier(argument) && MONEY_ARITHMETIC.has(argument.text);
       if (callee || (field && MONEY_FIELDS.has(field))) {
         heuristicViolations.push({ ...at, detail: `money-shaped field ${field ?? argument.text}` });
@@ -136,8 +204,13 @@ export function scanMoneyBrandViolations(source, path = "<source>") {
   }
 
   function visit(node) {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-        (node.expression.text === "Number" || node.expression.text === "parseFloat" || node.expression.text === "parseInt")) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === "Number" ||
+        node.expression.text === "parseFloat" ||
+        node.expression.text === "parseInt")
+    ) {
       checkConversion(node.arguments[0], node.expression.text);
     }
     if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.PlusToken) {
@@ -152,15 +225,31 @@ export function scanMoneyBrandViolations(source, path = "<source>") {
 export function readBaseline(root) {
   const raw = fs.readFileSync(join(root, "scripts", "money-brand-baseline.json"), "utf8");
   const ceiling = JSON.parse(raw).ceiling;
-  if (!Number.isInteger(ceiling) || ceiling < 0) throw new Error("money-brand baseline ceiling must be a non-negative integer");
+  if (!Number.isInteger(ceiling) || ceiling < 0)
+    throw new Error("money-brand baseline ceiling must be a non-negative integer");
   return ceiling;
 }
 
 function discoverSources() {
-  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "engine/src/**/*.ts", "packages/*/src/**/*.ts"], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  }).split("\0").filter(Boolean).filter((f) => !/\.test\.ts$/.test(f) && /\.tsx?$/.test(f));
+  return execFileSync(
+    "git",
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "engine/src/**/*.ts",
+      "packages/*/src/**/*.ts",
+    ],
+    {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  )
+    .split("\0")
+    .filter(Boolean)
+    .filter((f) => !/\.test\.ts$/.test(f) && /\.tsx?$/.test(f));
 }
 
 export function main() {
@@ -177,21 +266,29 @@ export function main() {
   }
   let failed = false;
   if (brandViolations.length) {
-    console.error("FAIL: branded Money/Rate/Quantity values must never cross Number(); stay in engine/src/money/brands.ts:");
-    for (const v of brandViolations) console.error(`  ${v.path}:${v.line} (${v.kind} on ${v.detail})`);
+    console.error(
+      "FAIL: branded Money/Rate/Quantity values must never cross Number(); stay in engine/src/money/brands.ts:",
+    );
+    for (const v of brandViolations)
+      console.error(`  ${v.path}:${v.line} (${v.kind} on ${v.detail})`);
     failed = true;
   }
   const ceiling = readBaseline(root);
   if (heuristicCount > ceiling) {
-    console.error(`FAIL: money-shaped Number() crossings rose to ${heuristicCount}, above the ${ceiling} baseline; convert a site to the brands boundary and lower scripts/money-brand-baseline.json:`);
-    for (const v of heuristicSites) console.error(`  ${v.path}:${v.line} (${v.kind} on ${v.detail})`);
+    console.error(
+      `FAIL: money-shaped Number() crossings rose to ${heuristicCount}, above the ${ceiling} baseline; convert a site to the brands boundary and lower scripts/money-brand-baseline.json:`,
+    );
+    for (const v of heuristicSites)
+      console.error(`  ${v.path}:${v.line} (${v.kind} on ${v.detail})`);
     failed = true;
   }
   if (failed) {
     process.exitCode = 1;
     return;
   }
-  console.log(`PASS: no branded money→Number conversions; heuristic crossings ${heuristicCount} within baseline ${ceiling}.`);
+  console.log(
+    `PASS: no branded money→Number conversions; heuristic crossings ${heuristicCount} within baseline ${ceiling}.`,
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

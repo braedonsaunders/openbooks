@@ -6,7 +6,8 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __journalToasts: { kind: string; message: string }[] | undefined;
-  var __journalRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __journalRouter:
+    { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 // A journal's Save and Post share one revision fence: Post fences on the
@@ -68,8 +69,28 @@ const REVISION_SAVED = "2026-09-17T12:00:02.000000Z";
 const REVISION_POSTED = "2026-09-17T12:00:05.000000Z";
 
 const BALANCED_LINES = [
-  { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
-  { account_id: "a2", amount: "-100.00", description: "leg two", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  {
+    account_id: "a1",
+    amount: "100.00",
+    description: "leg one",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
+  {
+    account_id: "a2",
+    amount: "-100.00",
+    description: "leg two",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
 ];
 
 const DRAFT_DOC = () => ({
@@ -90,7 +111,9 @@ function installFetch(responder: Responder) {
   const prior = globalThis.fetch;
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     calls.push({ url, init });
     if (url.includes("/api/flows/record-state")) {
       return Response.json({
@@ -103,7 +126,12 @@ function installFetch(responder: Responder) {
     }
     return (await responder(url, init)) ?? Response.json({});
   }) as typeof fetch;
-  return { calls, restore: () => { globalThis.fetch = prior; } };
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = prior;
+    },
+  };
 }
 
 function freshGlobals() {
@@ -125,7 +153,10 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-async function mountJournal(doc: Record<string, unknown>, options: { initialMode?: "edit" | "view"; createMode?: boolean } = {}) {
+async function mountJournal(
+  doc: Record<string, unknown>,
+  options: { initialMode?: "edit" | "view"; createMode?: boolean } = {},
+) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -181,7 +212,11 @@ test("a post fences on the save's revision and shows Posted even when the list p
     }
     if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) {
       return Response.json({
-        doc: { ...doc, updated_at: posted ? REVISION_POSTED : REVISION_SAVED, status: posted ? "posted" : "draft" },
+        doc: {
+          ...doc,
+          updated_at: posted ? REVISION_POSTED : REVISION_SAVED,
+          status: posted ? "posted" : "draft",
+        },
         lines: BALANCED_LINES,
       });
     }
@@ -207,7 +242,11 @@ test("a post fences on the save's revision and shows Posted even when the list p
     REVISION_SAVED,
     "Post must fence on the revision the save returned",
   );
-  assert.match(document.body.textContent ?? "", /Posted/, "the header reports the posted status from the post's own read");
+  assert.match(
+    document.body.textContent ?? "",
+    /Posted/,
+    "the header reports the posted status from the post's own read",
+  );
   assert.equal(buttonsNamed("Post").length, 0, "a posted journal no longer offers Post");
 });
 
@@ -221,7 +260,12 @@ test("a post refused for a stale revision pins the reason and leaves the draft a
     }
     if (url === "/api/journals/actions" && init?.method === "POST") {
       postBody = JSON.parse(String(init.body)) as Record<string, unknown>;
-      return Response.json({ error: "this document changed after you opened it; reload and review the latest revision" }, { status: 409 });
+      return Response.json(
+        {
+          error: "this document changed after you opened it; reload and review the latest revision",
+        },
+        { status: 409 },
+      );
     }
     return null;
   });
@@ -232,11 +276,19 @@ test("a post refused for a stale revision pins the reason and leaves the draft a
   await click(buttonsNamed("Actions")[0]!);
   await click(buttonsNamed("Post")[0]!);
 
-  assert.equal((postBody as Record<string, unknown> | null)?.expectedUpdatedAt, REVISION_DRAFT, "the post fences on the editor's revision");
+  assert.equal(
+    (postBody as Record<string, unknown> | null)?.expectedUpdatedAt,
+    REVISION_DRAFT,
+    "the post fences on the editor's revision",
+  );
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the refused post pins an alert on the record");
   assert.match(alert.textContent ?? "", /changed after you opened it/);
-  assert.match(document.body.textContent ?? "", /Draft/, "a refused post leaves the journal a draft");
+  assert.match(
+    document.body.textContent ?? "",
+    /Draft/,
+    "a refused post leaves the journal a draft",
+  );
   assert.doesNotMatch(document.body.textContent ?? "", /\bPosted\b/);
 });
 
@@ -260,7 +312,11 @@ test("a save answered without a revision token is refused visibly and keeps the 
 
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "an unconfirmed save must pin an alert, not fail silently");
-  assert.doesNotMatch(alert.textContent ?? "", /DOCUMENT_REVISION_REQUIRED/, "the alert carries operator copy, not the internal code");
+  assert.doesNotMatch(
+    alert.textContent ?? "",
+    /DOCUMENT_REVISION_REQUIRED/,
+    "the alert carries operator copy, not the internal code",
+  );
   assert.ok(buttonsNamed("Save")[0], "the editor stays open so the operator can retry");
 });
 
@@ -269,16 +325,31 @@ test("a new journal the server does not confirm stays in the editor with a visib
   const pushed: string[] = [];
   const replaced: string[] = [];
   globalThis.__journalRouter = {
-    push(url: string) { pushed.push(url); },
-    replace(url: string) { replaced.push(url); },
+    push(url: string) {
+      pushed.push(url);
+    },
+    replace(url: string) {
+      replaced.push(url);
+    },
     refresh() {},
   };
   const net = installFetch((url, init) => {
-    if (url === "/api/journals" && init?.method === "POST") return Response.json({}, { status: 201 });
+    if (url === "/api/journals" && init?.method === "POST")
+      return Response.json({}, { status: 201 });
     return null;
   });
   t.after(net.restore);
-  const blank = { id: "", kind: "journal", status: "draft", document_number: null, currency: "USD", updated_at: "", document_date: "2026-09-17", memo: "", total: "0.00" };
+  const blank = {
+    id: "",
+    kind: "journal",
+    status: "draft",
+    document_number: null,
+    currency: "USD",
+    updated_at: "",
+    document_date: "2026-09-17",
+    memo: "",
+    total: "0.00",
+  };
   const drawer = await mountJournal(blank, { createMode: true });
   t.after(drawer.unmount);
 
@@ -295,6 +366,10 @@ test("revision ordering compares counters numerically and timestamps chronologic
   assert.equal(revisionIsOlder("9", "10"), true, "counter 9 precedes counter 10");
   assert.equal(revisionIsOlder("10", "9"), false, "a text comparison would invert this");
   assert.equal(revisionIsOlder("7", "7"), false, "an equal token is not older");
-  assert.equal(revisionIsOlder(REVISION_DRAFT, REVISION_POSTED), true, "timestamps compare chronologically");
+  assert.equal(
+    revisionIsOlder(REVISION_DRAFT, REVISION_POSTED),
+    true,
+    "timestamps compare chronologically",
+  );
   assert.equal(revisionIsOlder(REVISION_POSTED, REVISION_DRAFT), false);
 });

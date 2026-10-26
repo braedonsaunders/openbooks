@@ -1,18 +1,27 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { Badge, EmptyState } from '@openbooks/ui'
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Badge, EmptyState } from "@openbooks/ui";
 
-export type RegisterPickerEntry = { id: string; code: string; name: string; openSessionId: string | null; openedBy: string | null }
+export type RegisterPickerEntry = {
+  id: string;
+  code: string;
+  name: string;
+  openSessionId: string | null;
+  openedBy: string | null;
+};
 
 /** Choose the register to sell from; each card shows whether its drawer is open. */
 export function RegisterPicker(props: { registers: RegisterPickerEntry[]; canManage: boolean }) {
-  const t = useTranslations('pos')
+  const t = useTranslations("pos");
   return (
     <div className="space-y-4">
       {props.registers.length === 0 ? (
-        <EmptyState title={t('picker.emptyTitle')} description={props.canManage ? t('picker.emptyManage') : t('picker.emptyAsk')} />
+        <EmptyState
+          title={t("picker.emptyTitle")}
+          description={props.canManage ? t("picker.emptyManage") : t("picker.emptyAsk")}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {props.registers.map((register) => (
@@ -23,14 +32,20 @@ export function RegisterPicker(props: { registers: RegisterPickerEntry[]; canMan
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-lg font-semibold">{register.name}</span>
-                <Badge variant={register.openSessionId ? 'success' : 'outline'}>{register.openSessionId ? t('picker.open') : t('picker.closed')}</Badge>
+                <Badge variant={register.openSessionId ? "success" : "outline"}>
+                  {register.openSessionId ? t("picker.open") : t("picker.closed")}
+                </Badge>
               </div>
               <p className="text-sm text-slate-500">{register.code}</p>
-              {register.openedBy ? <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t('picker.openedBy', { name: register.openedBy })}</p> : null}
+              {register.openedBy ? (
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                  {t("picker.openedBy", { name: register.openedBy })}
+                </p>
+              ) : null}
             </Link>
           ))}
         </div>
       )}
     </div>
-  )
+  );
 }

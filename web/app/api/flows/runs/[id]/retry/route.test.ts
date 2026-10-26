@@ -32,9 +32,7 @@ const retryState: RetryState = {
   engineCtx: [],
   mode: { kind: "ok" },
 };
-(
-  globalThis as typeof globalThis & Record<symbol, unknown>
-)[stateKey] = retryState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = retryState;
 
 const mockSources = new Map<string, string>([
   [
@@ -148,8 +146,8 @@ registerHooks({
   },
 });
 
-const flow_retryUrl = './route.ts?flow-retry'
-const { POST } = (await import(flow_retryUrl)) as typeof import('./route.ts');
+const flow_retryUrl = "./route.ts?flow-retry";
+const { POST } = (await import(flow_retryUrl)) as typeof import("./route.ts");
 const RUN_ID = "019f0000-0000-4000-8000-000000000001";
 const SUBJECT_SUBSIDIARY = "sub-hidden";
 const NOT_FOUND = { error: "not_found" };
@@ -167,10 +165,9 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
 }
 
 function post(id: string) {
-  return POST(
-    new Request("http://localhost:4800/api/flows/runs/retry", { method: "POST" }),
-    { params: Promise.resolve({ id }) },
-  );
+  return POST(new Request("http://localhost:4800/api/flows/runs/retry", { method: "POST" }), {
+    params: Promise.resolve({ id }),
+  });
 }
 
 /** The retry route refuses a non-uuid run id without touching the engine. */

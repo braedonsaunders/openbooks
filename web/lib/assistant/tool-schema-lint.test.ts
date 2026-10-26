@@ -131,12 +131,22 @@ type Violation = { tool: string; path: string; message: string };
  * accept arbitrary segment values, and the declaring tools are open-world —
  * a maxLength there would invent a product limit that does not exist.
  */
-function walk(node: unknown, tool: string, path: string, inOpenMap: boolean, out: Violation[]): void {
+function walk(
+  node: unknown,
+  tool: string,
+  path: string,
+  inOpenMap: boolean,
+  out: Violation[],
+): void {
   const record = asRecord(node);
   if (!record) return;
   const type = record.type;
   if (record.format !== undefined) {
-    out.push({ tool, path, message: `format ${JSON.stringify(record.format)} is rejected by strict providers; use pattern` });
+    out.push({
+      tool,
+      path,
+      message: `format ${JSON.stringify(record.format)} is rejected by strict providers; use pattern`,
+    });
   }
   if (typeof record.pattern === "string") {
     const complaint = re2Complaint(record.pattern);
@@ -151,7 +161,8 @@ function walk(node: unknown, tool: string, path: string, inOpenMap: boolean, out
       typeof record.pattern === "string" ||
       Array.isArray(record.enum) ||
       record.const !== undefined;
-    if (!bounded) out.push({ tool, path, message: "unbounded string: add maxLength, pattern, or enum" });
+    if (!bounded)
+      out.push({ tool, path, message: "unbounded string: add maxLength, pattern, or enum" });
   }
   if (type === "array" && typeof record.maxItems !== "number") {
     out.push({ tool, path, message: "unbounded array: add .max()" });
@@ -183,7 +194,11 @@ function lintCatalog(): Violation[] {
   const seen = new Set<string>();
   for (const entry of CATALOG) {
     if (seen.has(entry.name)) {
-      violations.push({ tool: entry.name, path: "$", message: "duplicate tool name across the assistant/application catalogs" });
+      violations.push({
+        tool: entry.name,
+        path: "$",
+        message: "duplicate tool name across the assistant/application catalogs",
+      });
       continue;
     }
     seen.add(entry.name);
@@ -191,16 +206,28 @@ function lintCatalog(): Violation[] {
     try {
       schema = toJsonSchema(entry.schema);
     } catch (error) {
-      violations.push({ tool: entry.name, path: "$", message: `zod→JSON Schema conversion throws: ${String(error).slice(0, 200)}` });
+      violations.push({
+        tool: entry.name,
+        path: "$",
+        message: `zod→JSON Schema conversion throws: ${String(error).slice(0, 200)}`,
+      });
       continue;
     }
     if (schema.type !== "object" || !asRecord(schema.properties)) {
-      violations.push({ tool: entry.name, path: "$", message: "tool root must be an object schema with properties" });
+      violations.push({
+        tool: entry.name,
+        path: "$",
+        message: "tool root must be an object schema with properties",
+      });
       continue;
     }
     for (const [key, value] of Object.entries(schema.properties as Record<string, unknown>)) {
       if (!described(value)) {
-        violations.push({ tool: entry.name, path: `$.${key}`, message: "top-level property has no description" });
+        violations.push({
+          tool: entry.name,
+          path: `$.${key}`,
+          message: "top-level property has no description",
+        });
       }
     }
     walk(schema, entry.name, "$", false, violations);
@@ -214,7 +241,9 @@ test("every tool converts to strict-provider JSON Schema without violations", ()
     violations.length,
     0,
     `${violations.length} schema violations; first: ${
-      violations[0] ? `${violations[0].tool} ${violations[0].path}: ${violations[0].message}` : "none"
+      violations[0]
+        ? `${violations[0].tool} ${violations[0].path}: ${violations[0].message}`
+        : "none"
     }`,
   );
 });
@@ -229,7 +258,10 @@ test("shared schema atoms emit exactly the provider-safe patterns (no flag-depen
     "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
   );
   const date = toJsonSchema(z.object({ on: sharedAtoms.dateInput }));
-  assert.equal((asRecord(date.properties)?.on as Record<string, unknown>).pattern, "^\\d{4}-\\d{2}-\\d{2}$");
+  assert.equal(
+    (asRecord(date.properties)?.on as Record<string, unknown>).pattern,
+    "^\\d{4}-\\d{2}-\\d{2}$",
+  );
 });
 
 test("the RE2 pattern guard catches the historical failure classes", () => {

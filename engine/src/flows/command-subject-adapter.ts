@@ -35,9 +35,7 @@ interface CommandSubjectDefinition {
 const identifiers = /^[a-z_][a-z0-9_]*$/;
 
 /** Shared adapter for native approval commands whose owning module retains the lifecycle writer. */
-export function defineCommandSubject(
-  config: CommandSubjectDefinition,
-): FlowSubjectAdapter {
+export function defineCommandSubject(config: CommandSubjectDefinition): FlowSubjectAdapter {
   for (const name of [
     config.table,
     config.statusColumn,
@@ -45,9 +43,7 @@ export function defineCommandSubject(
     ...config.fields.map((f) => f.column),
   ])
     if (!identifiers.test(name))
-      throw new Error(
-        "Approval subject identifiers must be static SQL identifiers.",
-      );
+      throw new Error("Approval subject identifiers must be static SQL identifiers.");
   const profile: FlowSubjectProfile = {
     subjectKind: config.kind,
     label: config.label,
@@ -68,17 +64,22 @@ export function defineCommandSubject(
         ? sql`s.${sql.identifier(field.column)}::text`
         : sql`s.${sql.identifier(field.column)}`,
     ]);
-    const row = (await db.execute<{
+    const row = (
+      await db.execute<{
         status: string;
         maker: string | null;
         facts: Record<string, unknown>;
         fingerprint: string;
         makers: string[] | null;
-      }>(sql`
+      }>(
+        sql`
    select (${config.statusSql ?? sql`s.${sql.identifier(config.statusColumn)}`})::text as status,s.${sql.identifier(config.makerColumn ?? "created_by")} as maker,
     jsonb_build_object(${sql.join(pairs, sql`, `)}) as facts,${config.makerIds ?? sql`null::text[]`} as makers,
     ${config.fingerprint ?? sql`public.flow_command_record_fingerprint(to_jsonb(s),${config.integrity ?? sql`null`})`} as fingerprint
-   from ${sql.identifier(config.table)} s where s.id=${id} and (${config.where ?? sql`true`})`, "objects"))[0];
+   from ${sql.identifier(config.table)} s where s.id=${id} and (${config.where ?? sql`true`})`,
+        "objects",
+      )
+    )[0];
     return row
       ? {
           values: {
@@ -103,13 +104,15 @@ export function defineCommandSubject(
     ...(config.decisionPermissions
       ? {
           async decisionPermission(id: string, actorId: string) {
-            const row = (await db.execute<{ org_id: string }>(
-                sql`select org_id from ${sql.identifier(config.table)} where id=${id}`, "objects",
-              ))[0];
+            const row = (
+              await db.execute<{ org_id: string }>(
+                sql`select org_id from ${sql.identifier(config.table)} where id=${id}`,
+                "objects",
+              )
+            )[0];
             if (!row) return null;
             for (const permission of config.decisionPermissions!)
-              if (await actorHasPermission(db, row.org_id, actorId, permission))
-                return permission;
+              if (await actorHasPermission(db, row.org_id, actorId, permission)) return permission;
             return null;
           },
         }
@@ -128,9 +131,7 @@ export function defineCommandSubject(
       );
     },
     async setField() {
-      throw new FlowDispatchError(
-        "Withdraw the pending command before changing its terms.",
-      );
+      throw new FlowDispatchError("Withdraw the pending command before changing its terms.");
     },
     async releaseApproval(subjectId, outcome, ctx, detail, run) {
       const command = run?.dispatchValues?.command;

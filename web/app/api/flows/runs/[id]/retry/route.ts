@@ -1,18 +1,17 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { retryFlowRun, FlowRetryError } from '@openbooks/engine/flows/module'
-import { loadFlowSubjectSubsidiary } from '../../../_lib'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
-import { guardSubsidiaryScope } from '../../../../../../lib/authz'
-import { isUuid } from '../../../../../../lib/list-params'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { retryFlowRun, FlowRetryError } from "@openbooks/engine/flows/module";
+import { loadFlowSubjectSubsidiary } from "../../../_lib";
+import { guardFeaturePermission } from "../../../../../../lib/feature-gates";
+import { guardSubsidiaryScope } from "../../../../../../lib/authz";
+import { isUuid } from "../../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Re-drive a FAILED flow run after its failure cause is fixed — a gate that
@@ -26,24 +25,34 @@ export const runtime = 'nodejs'
  * record-state / decide / manual before the engine may re-drive the run.
  */
 async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('flows.manage', 'flows')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
+  const gate = await guardFeaturePermission("flows.manage", "flows");
+  if (gate instanceof NextResponse) return gate;
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
 
-  const orgId = gate.user.orgId
-  const run = (await db.execute<{ subjectKind: string; subjectId: string }>(sql`
+  const orgId = gate.user.orgId;
+  const run = (
+    await db.execute<{ subjectKind: string; subjectId: string }>(
+      sql`
     select subject_kind as "subjectKind", subject_id as "subjectId"
       from flow_runs
      where id = ${id} and org_id = ${orgId}
-  `, 'objects'))[0]
-  if (!run) return notFound("record")
+  `,
+      "objects",
+    )
+  )[0];
+  if (!run) return notFound("record");
 
   const subsidiaryDenied = guardSubsidiaryScope(
     gate,
-    await loadFlowSubjectSubsidiary(run.subjectKind, run.subjectId, orgId, gate.allowedSubsidiaryIds),
-  )
-  if (subsidiaryDenied) return subsidiaryDenied
+    await loadFlowSubjectSubsidiary(
+      run.subjectKind,
+      run.subjectId,
+      orgId,
+      gate.allowedSubsidiaryIds,
+    ),
+  );
+  if (subsidiaryDenied) return subsidiaryDenied;
 
   try {
     // Same scope-in-dispatch contract as the manual route:
@@ -53,20 +62,21 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: str
       orgId,
       userId: gate.user.id,
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    })
-    return NextResponse.json(result)
+    });
+    return NextResponse.json(result);
   } catch (e) {
     if (e instanceof FlowRetryError) {
-      const status = /not found/.test(e.message) ? 404 : 422
-      return apiErrorResponse(e, { safeStatus: status })
+      const status = /not found/.test(e.message) ? 404 : 422;
+      return apiErrorResponse(e, { safeStatus: status });
     }
-    throw e
+    throw e;
   }
 }
 
 export const POST = defineRoute({
   permission: "flows.manage",
   feature: "flows",
-  params: z.object({ "id": z.string() }),
-  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params }) =>
+    legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
 });

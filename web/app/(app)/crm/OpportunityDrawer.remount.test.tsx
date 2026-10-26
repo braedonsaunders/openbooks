@@ -9,14 +9,21 @@ import type { WidgetRenderer } from "../../../components/viewspec/widget-props";
 // rendering the component directly would bypass the wiring under test.
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/crm/opportunities?view=list", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/crm/opportunities?view=list",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -81,7 +88,9 @@ function titleInput(): string | null {
   // UrlDrawer portals to document.body, so the form lives outside the mount host.
   const inputs = [...document.querySelectorAll("input")];
   // The title field is the first free-text input in the drawer form.
-  const first = inputs.find((el) => el.getAttribute("type") !== "number" && el.getAttribute("type") !== "date");
+  const first = inputs.find(
+    (el) => el.getAttribute("type") !== "number" && el.getAttribute("type") !== "date",
+  );
   return first ? (first as HTMLInputElement).value : null;
 }
 
@@ -95,9 +104,13 @@ test("opening a second opportunity resets the drawer form to the new record", as
         <BusinessDateProvider today="2026-09-17">{element}</BusinessDateProvider>
       </NextIntlClientProvider>,
     );
-  const renderer = RECORDS_WIDGETS["opportunity-drawer"] as (props: Record<string, unknown>) => React.ReactNode;
+  const renderer = RECORDS_WIDGETS["opportunity-drawer"] as (
+    props: Record<string, unknown>,
+  ) => React.ReactNode;
   await act(async () => {
-    renderDrawer(renderer({ drawer: { remountKey: "aaa", ...opportunityDrawerProps("aaa", "Alpha") } }));
+    renderDrawer(
+      renderer({ drawer: { remountKey: "aaa", ...opportunityDrawerProps("aaa", "Alpha") } }),
+    );
     await tick();
   });
   await tick();
@@ -111,7 +124,9 @@ test("opening a second opportunity resets the drawer form to the new record", as
   // Same slot, different record — exactly what the page renders when the
   // `opportunity` search param changes without a full navigation.
   await act(async () => {
-    renderDrawer(renderer({ drawer: { remountKey: "bbb", ...opportunityDrawerProps("bbb", "Beta") } }));
+    renderDrawer(
+      renderer({ drawer: { remountKey: "bbb", ...opportunityDrawerProps("bbb", "Beta") } }),
+    );
     await tick();
   });
   await tick();
@@ -134,11 +149,7 @@ test("every record drawer keys its element by the open record id", () => {
       OPERATIONS_WIDGETS["vendor-compliance-drawer"],
       { remountKey: "vendor-1" },
     ],
-    [
-      "lien-waiver-drawer",
-      OPERATIONS_WIDGETS["lien-waiver-drawer"],
-      { remountKey: "waiver-1" },
-    ],
+    ["lien-waiver-drawer", OPERATIONS_WIDGETS["lien-waiver-drawer"], { remountKey: "waiver-1" }],
   ];
   for (const [name, renderer, drawer] of cases) {
     const element = renderer({ drawer });

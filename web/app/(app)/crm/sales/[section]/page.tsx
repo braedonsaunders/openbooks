@@ -12,8 +12,7 @@ export default async function SalesSection({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { section } = await params;
-  if (!["representatives", "teams", "quotas", "territories"].includes(section))
-    notFound();
+  if (!["representatives", "teams", "quotas", "territories"].includes(section)) notFound();
   const sp = await searchParams;
   const data = await loadSalesWorkspace(section as SalesPage, sp);
   return (

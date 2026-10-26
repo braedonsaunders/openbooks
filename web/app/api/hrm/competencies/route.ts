@@ -7,10 +7,7 @@ import {
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { HrmPerformanceError } from "@openbooks/engine/hrm/performance/errors";
 import { performanceErrorResponse } from "../review-cycles/_lib";
-import {
-  addCompetencyLevelBody,
-  createCompetencyBody,
-} from "../competency-frameworks/bodies";
+import { addCompetencyLevelBody, createCompetencyBody } from "../competency-frameworks/bodies";
 import { z } from "zod";
 /**
  * Competencies and their ranked levels. POST with a frameworkId creates

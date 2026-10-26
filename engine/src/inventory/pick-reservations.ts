@@ -132,7 +132,8 @@ export async function activePickReservations(
   orgId: string,
   filter: PickReservationFilter = {},
 ): Promise<PickReservation[]> {
-  const rows = await runner.execute<ReservationRow>(sql`
+  const rows = await runner.execute<ReservationRow>(
+    sql`
     with ${pickReservationsCte(orgId)}
     select pick_list_id, pick_list_number, pick_list_status, pick_line_id, sales_order_line_id,
            item_id, bin_id, lot_id, serial_id, unit, subsidiary_id, quantity::text as quantity, reserved::text as reserved
@@ -145,7 +146,9 @@ export async function activePickReservations(
        ${filter.releasedOnly ? sql`and pick_list_status = 'approved'` : sql``}
        ${filter.excludePickListId ? sql`and pick_list_id <> ${filter.excludePickListId}` : sql``}
      order by pick_list_number, pick_line_id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     pickListId: row.pick_list_id,
     pickListNumber: row.pick_list_number,

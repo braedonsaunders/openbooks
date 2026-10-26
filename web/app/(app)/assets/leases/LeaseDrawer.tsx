@@ -32,7 +32,7 @@ import {
 } from "@openbooks/engine/platform/financial-change-labels";
 import type { LeasePayload, LeaseDisplay } from "./_lib";
 import { enumLabel } from "@/lib/enum-label";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 type Option = { value: string; label: string };
 const frequencyMonths: Record<string, number> = {
   monthly: 1,
@@ -57,13 +57,7 @@ async function request(url: string, body: unknown, fallback: string) {
     skipped?: number;
   };
 }
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
@@ -80,10 +74,7 @@ export function NewLeaseButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button
-        onClick={() => setOpen(true)}
-        variant={parent ? "outline" : "default"}
-      >
+      <Button onClick={() => setOpen(true)} variant={parent ? "outline" : "default"}>
         {parent ? t("leases.addSeparate") : t("leases.newLease")}
       </Button>
       {open ? (
@@ -126,8 +117,7 @@ function LeaseCreateForm({
   ] as const;
   const [f, setF] = useState<Record<string, string>>({
     subsidiaryId:
-      parent?.subsidiary_id ??
-      (subsidiaries.length === 1 ? subsidiaries[0]!.value : ""),
+      parent?.subsidiary_id ?? (subsidiaries.length === 1 ? subsidiaries[0]!.value : ""),
     commencementOn: today,
     termPeriods: "12",
     paymentFrequency: "monthly",
@@ -140,7 +130,8 @@ function LeaseCreateForm({
   const [flags, setFlags] = useState<Record<string, boolean>>({}),
     [busy, setBusy] = useState(false);
   const [initialForm] = useState(f);
-  const dirty = JSON.stringify(f) !== JSON.stringify(initialForm) || Object.values(flags).some(Boolean);
+  const dirty =
+    JSON.stringify(f) !== JSON.stringify(initialForm) || Object.values(flags).some(Boolean);
   const closeGuard = useDirtyClose({
     dirty,
     busy,
@@ -149,33 +140,25 @@ function LeaseCreateForm({
     confirmLabel: tCommon("confirm.discardChanges"),
   });
   const [requestKey] = useState(() => crypto.randomUUID());
-  const set = (key: string, value: string) =>
-    setF((old) => ({ ...old, [key]: value }));
+  const set = (key: string, value: string) => setF((old) => ({ ...old, [key]: value }));
   async function save() {
     setBusy(true);
     try {
       const classificationInputs = {
         transfersOwnership: !!flags.transfersOwnership,
-        purchaseOptionReasonablyCertain:
-          !!flags.purchaseOptionReasonablyCertain,
+        purchaseOptionReasonablyCertain: !!flags.purchaseOptionReasonablyCertain,
         specializedAsset: !!flags.specializedAsset,
         ...(f.economicLifeMonths
           ? {
-              leaseTermMonths:
-                Number(f.termPeriods) *
-                (frequencyMonths[f.paymentFrequency!] ?? 1),
+              leaseTermMonths: Number(f.termPeriods) * (frequencyMonths[f.paymentFrequency!] ?? 1),
               economicLifeMonths: Number(f.economicLifeMonths),
             }
           : {}),
         ...(f.pvOfPayments && f.fairValue
           ? { pvOfPayments: f.pvOfPayments, fairValue: f.fairValue }
           : {}),
-        ...(f.termThresholdPercent
-          ? { termThresholdPercent: f.termThresholdPercent }
-          : {}),
-        ...(f.pvThresholdPercent
-          ? { pvThresholdPercent: f.pvThresholdPercent }
-          : {}),
+        ...(f.termThresholdPercent ? { termThresholdPercent: f.termThresholdPercent } : {}),
+        ...(f.pvThresholdPercent ? { pvThresholdPercent: f.pvThresholdPercent } : {}),
       };
       const agreement = {
         subsidiaryId: f.subsidiaryId,
@@ -193,26 +176,28 @@ function LeaseCreateForm({
         prepayments: f.prepayments,
         incentives: f.incentives,
         costClearingAccountId: f.costClearingAccountId || undefined,
-        accounts: Object.fromEntries(
-          accountFields.map(([key]) => [key, f[key]]),
-        ),
+        accounts: Object.fromEntries(accountFields.map(([key]) => [key, f[key]])),
       };
       const result = parent
-        ? await request(`/api/leases/${parent.id}/changes`, {
-            operation: "separate_lease",
-            effectiveOn: f.commencementOn,
-            reason: f.reason,
-            assessment: f.assessment,
-            idempotencyKey: requestKey,
-            scopeReductionPercent: "0",
-            settlementPayment: "0",
-            gainLossAccountId: f.leaseExpense,
-            separateLease: {
-              additionalRightOfUse: !!flags.additionalRightOfUse,
-              commensurateStandalonePrice: !!flags.commensurateStandalonePrice,
-              agreement,
+        ? await request(
+            `/api/leases/${parent.id}/changes`,
+            {
+              operation: "separate_lease",
+              effectiveOn: f.commencementOn,
+              reason: f.reason,
+              assessment: f.assessment,
+              idempotencyKey: requestKey,
+              scopeReductionPercent: "0",
+              settlementPayment: "0",
+              gainLossAccountId: f.leaseExpense,
+              separateLease: {
+                additionalRightOfUse: !!flags.additionalRightOfUse,
+                commensurateStandalonePrice: !!flags.commensurateStandalonePrice,
+                agreement,
+              },
             },
-          }, t("leases.saveFailed"))
+            t("leases.saveFailed"),
+          )
         : await request("/api/leases", agreement, t("leases.saveFailed"));
       close();
       router.push(
@@ -284,10 +269,7 @@ function LeaseCreateForm({
             </Select>
           </Field>
           <Field label={t("leases.fieldTiming")}>
-            <Select
-              value={f.paymentTiming}
-              onChange={(e) => set("paymentTiming", e.target.value)}
-            >
+            <Select value={f.paymentTiming} onChange={(e) => set("paymentTiming", e.target.value)}>
               {timings.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -297,10 +279,7 @@ function LeaseCreateForm({
           </Field>
         </div>
         <Field label={t("leases.fieldExemption")}>
-          <Select
-            value={f.exemption ?? ""}
-            onChange={(e) => set("exemption", e.target.value)}
-          >
+          <Select value={f.exemption ?? ""} onChange={(e) => set("exemption", e.target.value)}>
             {[
               { value: "", label: t("leases.exemptNone") },
               { value: "short_term", label: t("leases.exemptShortTerm") },
@@ -320,10 +299,7 @@ function LeaseCreateForm({
           {(
             [
               ["transfersOwnership", t("leases.evictTransfers")],
-              [
-                "purchaseOptionReasonablyCertain",
-                t("leases.evictPurchaseCertain"),
-              ],
+              ["purchaseOptionReasonablyCertain", t("leases.evictPurchaseCertain")],
               ["specializedAsset", t("leases.evictSpecialized")],
             ] as const
           ).map(([key, label]) => (
@@ -331,9 +307,7 @@ function LeaseCreateForm({
               <input
                 type="checkbox"
                 checked={!!flags[key]}
-                onChange={(e) =>
-                  setFlags((old) => ({ ...old, [key]: e.target.checked }))
-                }
+                onChange={(e) => setFlags((old) => ({ ...old, [key]: e.target.checked }))}
               />
               {label}
             </label>
@@ -369,12 +343,8 @@ function LeaseCreateForm({
           ))}
         </div>
         <fieldset className="space-y-2">
-          <legend className="font-medium">
-            {t("leases.costTitle")}
-          </legend>
-          <p className="text-sm">
-            {t("leases.costHint")}
-          </p>
+          <legend className="font-medium">{t("leases.costTitle")}</legend>
+          <p className="text-sm">{t("leases.costHint")}</p>
           {(
             [
               ["initialDirectCosts", t("leases.costInitial")],
@@ -403,10 +373,7 @@ function LeaseCreateForm({
         {parent ? (
           <>
             <Field label={t("leases.fieldReason")}>
-              <Textarea
-                value={f.reason ?? ""}
-                onChange={(e) => set("reason", e.target.value)}
-              />
+              <Textarea value={f.reason ?? ""} onChange={(e) => set("reason", e.target.value)} />
             </Field>
             <Field label={t("leases.fieldAssessment")}>
               <Textarea
@@ -417,19 +384,14 @@ function LeaseCreateForm({
             {(
               [
                 ["additionalRightOfUse", t("leases.addsRight")],
-                [
-                  "commensurateStandalonePrice",
-                  t("leases.commensurate"),
-                ],
+                ["commensurateStandalonePrice", t("leases.commensurate")],
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="flex gap-2">
                 <input
                   type="checkbox"
                   checked={!!flags[key]}
-                  onChange={(e) =>
-                    setFlags((old) => ({ ...old, [key]: e.target.checked }))
-                  }
+                  onChange={(e) => setFlags((old) => ({ ...old, [key]: e.target.checked }))}
                 />
                 {label}
               </label>
@@ -448,13 +410,7 @@ function LeaseCreateForm({
     </Drawer>
   );
 }
-function ChangeLease({
-  lease,
-  accounts,
-}: {
-  lease: LeaseDisplay;
-  accounts: Option[];
-}) {
+function ChangeLease({ lease, accounts }: { lease: LeaseDisplay; accounts: Option[] }) {
   const today = useBusinessToday();
   const t = useTranslations("assets");
   const tCommon = useTranslations("common");
@@ -486,13 +442,23 @@ function ChangeLease({
 
   // Start the form from the given lease with a fresh idempotency key.
   function resetToLease() {
-    setOriginalProposal(JSON.stringify({
-      operation: "modification", date: today, reason: "", assessment: "",
-      payment: lease.payment_amount, periods: String(lease.term_periods),
-      rate: lease.annual_discount_rate_percent, timing: lease.payment_timing,
-      frequency: lease.payment_frequency, scope: "0", settlement: "0",
-      gainAccount: "", criteria: lease.classification_inputs ?? {},
-    }));
+    setOriginalProposal(
+      JSON.stringify({
+        operation: "modification",
+        date: today,
+        reason: "",
+        assessment: "",
+        payment: lease.payment_amount,
+        periods: String(lease.term_periods),
+        rate: lease.annual_discount_rate_percent,
+        timing: lease.payment_timing,
+        frequency: lease.payment_frequency,
+        scope: "0",
+        settlement: "0",
+        gainAccount: "",
+        criteria: lease.classification_inputs ?? {},
+      }),
+    );
     setOperation("modification");
     setDate(today);
     setReason("");
@@ -520,13 +486,23 @@ function ChangeLease({
     resetToLease();
     setOpen(true);
   }
-  const [criteria, setCriteria] = useState<Record<string, unknown>>(
-    lease.classification_inputs,
-  );
-  const proposalSnapshot = () => JSON.stringify({
-    operation, date, reason, assessment, payment, periods, rate, timing,
-    frequency, scope, settlement, gainAccount, criteria,
-  });
+  const [criteria, setCriteria] = useState<Record<string, unknown>>(lease.classification_inputs);
+  const proposalSnapshot = () =>
+    JSON.stringify({
+      operation,
+      date,
+      reason,
+      assessment,
+      payment,
+      periods,
+      rate,
+      timing,
+      frequency,
+      scope,
+      settlement,
+      gainAccount,
+      criteria,
+    });
   const [originalProposal, setOriginalProposal] = useState<string | null>(null);
   const dirty = originalProposal !== null && proposalSnapshot() !== originalProposal;
   const closeGuard = useDirtyClose({
@@ -553,28 +529,32 @@ function ChangeLease({
       if (classificationInputs.economicLifeMonths != null) {
         classificationInputs.economicLifeMonths = Number(classificationInputs.economicLifeMonths);
       }
-      const result = await request(`/api/leases/${lease.id}/changes`, {
-        operation,
-        effectiveOn: date,
-        reason,
-        assessment,
-        idempotencyKey: key,
-        scopeReductionPercent: operation === "termination" ? "100" : scope,
-        settlementPayment: settlement,
-        gainLossAccountId: gainAccount,
-        ...(operation !== "termination"
-          ? {
-              remainingTerms: {
-                periods: Number(periods),
-                payment,
-                paymentFrequency: frequency,
-                paymentTiming: timing,
-                annualRatePercent: rate,
-                classificationInputs,
-              },
-            }
-          : {}),
-      }, t("leases.changeFailed"));
+      const result = await request(
+        `/api/leases/${lease.id}/changes`,
+        {
+          operation,
+          effectiveOn: date,
+          reason,
+          assessment,
+          idempotencyKey: key,
+          scopeReductionPercent: operation === "termination" ? "100" : scope,
+          settlementPayment: settlement,
+          gainLossAccountId: gainAccount,
+          ...(operation !== "termination"
+            ? {
+                remainingTerms: {
+                  periods: Number(periods),
+                  payment,
+                  paymentFrequency: frequency,
+                  paymentTiming: timing,
+                  annualRatePercent: rate,
+                  classificationInputs,
+                },
+              }
+            : {}),
+        },
+        t("leases.changeFailed"),
+      );
       router.push(`/accounting/changes?change=${result.changeId}`);
       router.refresh();
       setOpen(false);
@@ -596,10 +576,7 @@ function ChangeLease({
     >
       <fieldset disabled={busy} className="max-h-[75vh] w-96 space-y-3 overflow-y-auto p-4">
         <Field label={t("leases.changeType")}>
-          <Select
-            value={operation}
-            onChange={(e) => setOperation(e.target.value)}
-          >
+          <Select value={operation} onChange={(e) => setOperation(e.target.value)}>
             {[
               { value: "modification", label: t("leases.opModification") },
               { value: "remeasurement", label: t("leases.opRemeasurement") },
@@ -612,33 +589,21 @@ function ChangeLease({
           </Select>
         </Field>
         <Field label={t("leases.fieldEffectiveDate")}>
-          <DateField
-            value={date}
-            onChange={(value) => setDate(value)}
-          />
+          <DateField value={date} onChange={(value) => setDate(value)} />
         </Field>
         {operation !== "termination" ? (
           <>
             <Field label={t("leases.fieldRemainingPeriods")}>
-              <Input
-                value={periods}
-                onChange={(e) => setPeriods(e.target.value)}
-              />
+              <Input value={periods} onChange={(e) => setPeriods(e.target.value)} />
             </Field>
             <Field label={t("leases.fieldRevisedPayment")}>
-              <Input
-                value={payment}
-                onChange={(e) => setPayment(e.target.value)}
-              />
+              <Input value={payment} onChange={(e) => setPayment(e.target.value)} />
             </Field>
             <Field label={t("leases.fieldRate")}>
               <Input value={rate} onChange={(e) => setRate(e.target.value)} />
             </Field>
             <Field label={t("leases.fieldFrequency")}>
-              <Select
-                value={frequency}
-                onChange={(e) => setFrequency(e.target.value)}
-              >
+              <Select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
                 {frequencies.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -647,10 +612,7 @@ function ChangeLease({
               </Select>
             </Field>
             <Field label={t("leases.fieldTiming")}>
-              <Select
-                value={timing}
-                onChange={(e) => setTiming(e.target.value)}
-              >
+              <Select value={timing} onChange={(e) => setTiming(e.target.value)}>
                 {timings.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -661,14 +623,8 @@ function ChangeLease({
             {(
               [
                 ["transfersOwnership", t("leases.evictTransfers")],
-                [
-                  "purchaseOptionReasonablyCertain",
-                  t("leases.evictPurchaseChange"),
-                ],
-                [
-                  "specializedAsset",
-                  t("leases.evictSpecializedChange"),
-                ],
+                ["purchaseOptionReasonablyCertain", t("leases.evictPurchaseChange")],
+                ["specializedAsset", t("leases.evictSpecializedChange")],
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm">
@@ -706,19 +662,13 @@ function ChangeLease({
             ))}
             {operation === "modification" ? (
               <Field label={t("leases.fieldScopeRemoved")}>
-                <Input
-                  value={scope}
-                  onChange={(e) => setScope(e.target.value)}
-                />
+                <Input value={scope} onChange={(e) => setScope(e.target.value)} />
               </Field>
             ) : null}
           </>
         ) : null}
         <Field label={t("leases.fieldSettlement")}>
-          <Input
-            value={settlement}
-            onChange={(e) => setSettlement(e.target.value)}
-          />
+          <Input value={settlement} onChange={(e) => setSettlement(e.target.value)} />
         </Field>
         <Field label={t("leases.fieldGainAccount")}>
           <SearchSelect
@@ -729,20 +679,12 @@ function ChangeLease({
           />
         </Field>
         <Field label={t("leases.fieldReason")}>
-          <Textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
         <Field label={t("leases.fieldAssessmentChange")}>
-          <Textarea
-            value={assessment}
-            onChange={(e) => setAssessment(e.target.value)}
-          />
+          <Textarea value={assessment} onChange={(e) => setAssessment(e.target.value)} />
         </Field>
-        <p className="text-xs">
-          {t("leases.proposalHint")}
-        </p>
+        <p className="text-xs">{t("leases.proposalHint")}</p>
         <Button disabled={busy} onClick={propose}>
           {t("leases.createProposal")}
         </Button>
@@ -799,31 +741,53 @@ export function LeaseDrawer({
     >
       <div className="space-y-5">
         <div className="flex gap-3">
-          <Badge>{enumLabel(l.status, {
-            draft: t("leases.statusDraft"),
-            active: t("leases.statusActive"),
-            terminated: t("leases.statusTerminated"),
-            complete: t("leases.statusComplete"),
-          }, tCommon("labels.unknownValue"))}</Badge>
+          <Badge>
+            {enumLabel(
+              l.status,
+              {
+                draft: t("leases.statusDraft"),
+                active: t("leases.statusActive"),
+                terminated: t("leases.statusTerminated"),
+                complete: t("leases.statusComplete"),
+              },
+              tCommon("labels.unknownValue"),
+            )}
+          </Badge>
           <span>
-            {t("leases.revision")} {l.revision} · {enumLabel(l.classification, {
-              finance: t("leases.classFinance"),
-              operating: t("leases.classOperating"),
-            }, tCommon("labels.unknownValue"))} · {enumLabel(l.payment_timing, {
-              advance: t("leases.timeAdvance"),
-              arrears: t("leases.timeArrears"),
-            }, tCommon("labels.unknownValue"))}
+            {t("leases.revision")} {l.revision} ·{" "}
+            {enumLabel(
+              l.classification,
+              {
+                finance: t("leases.classFinance"),
+                operating: t("leases.classOperating"),
+              },
+              tCommon("labels.unknownValue"),
+            )}{" "}
+            ·{" "}
+            {enumLabel(
+              l.payment_timing,
+              {
+                advance: t("leases.timeAdvance"),
+                arrears: t("leases.timeArrears"),
+              },
+              tCommon("labels.unknownValue"),
+            )}
           </span>
         </div>
         <dl className="grid grid-cols-2 gap-3">
           <div>
             <dt>{t("leases.summaryPayment")}</dt>
             <dd>
-              {money(l.payment_amount)} / {enumLabel(l.payment_frequency, {
-                monthly: t("leases.freqMonthly"),
-                quarterly: t("leases.freqQuarterly"),
-                annual: t("leases.freqAnnual"),
-              }, tCommon("labels.unknownValue"))}
+              {money(l.payment_amount)} /{" "}
+              {enumLabel(
+                l.payment_frequency,
+                {
+                  monthly: t("leases.freqMonthly"),
+                  quarterly: t("leases.freqQuarterly"),
+                  annual: t("leases.freqAnnual"),
+                },
+                tCommon("labels.unknownValue"),
+              )}
             </dd>
           </div>
           <div>
@@ -832,19 +796,11 @@ export function LeaseDrawer({
           </div>
           <div>
             <dt>{t("leases.summaryLiability")}</dt>
-            <dd>
-              {l.initial_liability
-                ? money(l.initial_liability)
-                : t("leases.notCommenced")}
-            </dd>
+            <dd>{l.initial_liability ? money(l.initial_liability) : t("leases.notCommenced")}</dd>
           </div>
           <div>
             <dt>{t("leases.summaryRou")}</dt>
-            <dd>
-              {l.initial_rou_asset
-                ? money(l.initial_rou_asset)
-                : t("leases.notCommenced")}
-            </dd>
+            <dd>{l.initial_rou_asset ? money(l.initial_rou_asset) : t("leases.notCommenced")}</dd>
           </div>
         </dl>
         {canManage ? (
@@ -865,11 +821,7 @@ export function LeaseDrawer({
                   {t("leases.postThroughDate")}
                 </Button>
                 <ChangeLease lease={l} accounts={accounts} />
-                <NewLeaseButton
-                  parent={l}
-                  accounts={accounts}
-                  subsidiaries={subsidiaries}
-                />
+                <NewLeaseButton parent={l} accounts={accounts} subsidiaries={subsidiaries} />
               </>
             ) : null}
           </div>
@@ -915,10 +867,7 @@ export function LeaseDrawer({
           <h3 className="font-semibold">{t("leases.eventsTitle")}</h3>
           {payload.changes.map((c) => (
             <p key={c.id}>
-              <Link
-                className="underline"
-                href={`/accounting/changes?change=${c.id}`}
-              >
+              <Link className="underline" href={`/accounting/changes?change=${c.id}`}>
                 {c.effective_on} · {financialChangeEventLabel(c.operation)} ·{" "}
                 {financialChangeStatusLabel(c.status)}
               </Link>{" "}

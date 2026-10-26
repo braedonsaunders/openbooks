@@ -10,20 +10,20 @@
 
 /** English seed name → drawer.assignment.roles catalog subkey. */
 export const SEEDED_ROLE_NAMES: Record<string, string> = {
-  Administrator: 'administrator',
-  Accountant: 'accountant',
-  Approver: 'approver',
-  Controller: 'controller',
-  Viewer: 'viewer',
-  'Sales Manager': 'salesManager',
-  'Sales Representative': 'salesRepresentative',
-  Production: 'production',
-  Buyer: 'buyer',
-  Cashier: 'cashier',
-  'Project Coordinator': 'projectCoordinator',
-  'Service Dispatcher': 'serviceDispatcher',
-  'Field Technician': 'fieldTechnician',
-}
+  Administrator: "administrator",
+  Accountant: "accountant",
+  Approver: "approver",
+  Controller: "controller",
+  Viewer: "viewer",
+  "Sales Manager": "salesManager",
+  "Sales Representative": "salesRepresentative",
+  Production: "production",
+  Buyer: "buyer",
+  Cashier: "cashier",
+  "Project Coordinator": "projectCoordinator",
+  "Service Dispatcher": "serviceDispatcher",
+  "Field Technician": "fieldTechnician",
+};
 
 /**
  * Description for a role as shown in pickers and the roles admin. A built-in
@@ -35,11 +35,14 @@ export function displayRoleDescription(
   role: { key: string; isBuiltIn: boolean; description: string | null },
   builtInDescription: (key: string) => string | null,
 ): string | null {
-  if (role.isBuiltIn) return builtInDescription(role.key) ?? role.description
-  return role.description
+  if (role.isBuiltIn) return builtInDescription(role.key) ?? role.description;
+  return role.description;
 }
 
-export function displayRoleName(storedName: string, translatedByKey: (key: string) => string): string {
-  const key = SEEDED_ROLE_NAMES[storedName]
-  return key ? translatedByKey(key) : storedName
+export function displayRoleName(
+  storedName: string,
+  translatedByKey: (key: string) => string,
+): string {
+  const key = SEEDED_ROLE_NAMES[storedName];
+  return key ? translatedByKey(key) : storedName;
 }

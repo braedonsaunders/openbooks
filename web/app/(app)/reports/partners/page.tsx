@@ -1,8 +1,8 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { requireStatementAccess } from '../../../../lib/report-authz'
-import { loadPartners, partnersSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { requireStatementAccess } from "../../../../lib/report-authz";
+import { loadPartners, partnersSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * The partner ageing report. The page is a loader and a spec: `./view.ts`
@@ -17,11 +17,11 @@ export const dynamic = 'force-dynamic'
 export default async function Partners({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
+  const sp = await searchParams;
   // The statement's own read grant (ledger, receivables or payables), beyond reports.read.
-  await requireStatementAccess('partners', sp)
-  const data = await loadPartners(sp)
-  return <ModuleView spec={partnersSpec(data)} data={data} searchParams={sp} trusted />
+  await requireStatementAccess("partners", sp);
+  const data = await loadPartners(sp);
+  return <ModuleView spec={partnersSpec(data)} data={data} searchParams={sp} trusted />;
 }

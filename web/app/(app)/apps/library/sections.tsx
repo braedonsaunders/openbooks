@@ -1,6 +1,6 @@
-import { Library } from 'lucide-react'
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@openbooks/ui'
-import { InstallListingButton } from './InstallListingButton'
+import { Library } from "lucide-react";
+import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@openbooks/ui";
+import { InstallListingButton } from "./InstallListingButton";
 
 /**
  * Shared presentational cells for /apps/library, used by the native page and
@@ -24,14 +24,14 @@ export function ListingCard({
   current,
   canInstall = true,
 }: {
-  listingId: string
-  listingKey: string
-  name: string
-  versionLine: string
-  description: string
-  installed: boolean
-  current: boolean
-  canInstall?: boolean
+  listingId: string;
+  listingKey: string;
+  name: string;
+  versionLine: string;
+  description: string;
+  installed: boolean;
+  current: boolean;
+  canInstall?: boolean;
 }) {
   return (
     <Card className="flex h-full flex-col">
@@ -58,7 +58,7 @@ export function ListingCard({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 /**
@@ -72,5 +72,5 @@ export function LibraryEmptyIcon() {
     <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
       <Library size={21} aria-hidden />
     </span>
-  )
+  );
 }

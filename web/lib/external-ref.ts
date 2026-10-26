@@ -1,1 +1,1 @@
-export * from '@openbooks/engine/records/external-ref'
+export * from "@openbooks/engine/records/external-ref";

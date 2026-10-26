@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -22,7 +22,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -72,11 +80,18 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
   const prior = globalThis.fetch;
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     calls.push({ url, init });
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
-  return { calls, restore: () => { globalThis.fetch = prior; } };
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = prior;
+    },
+  };
 }
 
 function blankCreateDoc() {
@@ -98,10 +113,15 @@ function blankCreateDoc() {
   };
 }
 
-async function mountCreate({ shortcuts = false, persistedStatus }: { shortcuts?: boolean; persistedStatus?: 'draft' | 'approved' } = {}) {
+async function mountCreate({
+  shortcuts = false,
+  persistedStatus,
+}: { shortcuts?: boolean; persistedStatus?: "draft" | "approved" } = {}) {
   const pushed: string[] = [];
   globalThis.__drawerRouter = {
-    push(url: string) { pushed.push(url); },
+    push(url: string) {
+      pushed.push(url);
+    },
     refresh() {},
   };
   globalThis.__drawerToasts = [];
@@ -114,39 +134,57 @@ async function mountCreate({ shortcuts = false, persistedStatus }: { shortcuts?:
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <OptionalShortcuts enabled={shortcuts}>
-          <DocumentDrawer
-            payload={{
-              doc: persistedStatus ? { ...blankCreateDoc(), id: '11111111-1111-4111-8111-111111111111', status: persistedStatus,
-                document_number: 'INV-00001', updated_at: '2026-09-17T12:00:00.000000Z' } : blankCreateDoc(),
-              lines: [
+            <DocumentDrawer
+              payload={{
+                doc: persistedStatus
+                  ? {
+                      ...blankCreateDoc(),
+                      id: "11111111-1111-4111-8111-111111111111",
+                      status: persistedStatus,
+                      document_number: "INV-00001",
+                      updated_at: "2026-09-17T12:00:00.000000Z",
+                    }
+                  : blankCreateDoc(),
+                lines: [
+                  {
+                    id: "",
+                    account_id: "income-1",
+                    item_id: null,
+                    description: "Services",
+                    quantity: "1",
+                    unit_price: "100",
+                    amount: "100.00",
+                  },
+                ],
+              }}
+              config={DOC_KINDS["customer_invoice"]!}
+              basePath="/ar/invoices"
+              parties={[]}
+              accounts={[]}
+              taxCodes={[]}
+              taxGroups={[]}
+              cards={[]}
+              bankAccounts={[]}
+              departments={[]}
+              projects={[]}
+              locations={[]}
+              classes={[]}
+              items={[]}
+              subsidiaries={[]}
+              headerDefs={[]}
+              lineDefs={[]}
+              canCreate
+              canPost
+              createMode={persistedStatus === undefined}
+              initialMode="edit"
+              layout={
                 {
-                  id: "", account_id: "income-1", item_id: null, description: "Services",
-                  quantity: "1", unit_price: "100", amount: "100.00",
-                },
-              ],
-            }}
-            config={DOC_KINDS["customer_invoice"]!}
-            basePath="/ar/invoices"
-            parties={[]}
-            accounts={[]}
-            taxCodes={[]}
-            taxGroups={[]}
-            cards={[]}
-            bankAccounts={[]}
-            departments={[]}
-            projects={[]}
-            locations={[]}
-            classes={[]}
-            items={[]}
-            subsidiaries={[]}
-            headerDefs={[]}
-            lineDefs={[]}
-            canCreate
-            canPost
-            createMode={persistedStatus === undefined}
-            initialMode="edit"
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "submit", visible: true }] } as never}
-          />
+                  header: { groups: [] },
+                  lines: { columns: [] },
+                  actions: [{ key: "submit", visible: true }],
+                } as never
+              }
+            />
           </OptionalShortcuts>
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -163,8 +201,8 @@ function OptionalShortcuts({ enabled, children }: { enabled: boolean; children: 
 }
 
 function saveButton(): HTMLButtonElement {
-  const buttons = [...document.querySelectorAll("button")].filter(
-    (b) => ["Save", "Save draft"].includes(b.textContent?.trim() ?? ""),
+  const buttons = [...document.querySelectorAll("button")].filter((b) =>
+    ["Save", "Save draft"].includes(b.textContent?.trim() ?? ""),
   );
   assert.equal(buttons.length, 1, `exactly one Save button must render (saw ${buttons.length})`);
   return buttons[0] as HTMLButtonElement;
@@ -178,9 +216,17 @@ test("create save lands on the persisted record in view mode with a saved toast"
       if (url === "/api/documents") {
         return Response.json({
           doc: {
-            id: savedId, kind: "customer_invoice", status: "draft", document_number: "INV-00004",
-            currency: "USD", party_id: PARTY_ID, updated_at: "2026-09-17T12:00:01.000000Z",
-            document_date: "2026-09-17", subtotal: "100.00", tax_total: "0.00", total: "100.00",
+            id: savedId,
+            kind: "customer_invoice",
+            status: "draft",
+            document_number: "INV-00004",
+            currency: "USD",
+            party_id: PARTY_ID,
+            updated_at: "2026-09-17T12:00:01.000000Z",
+            document_date: "2026-09-17",
+            subtotal: "100.00",
+            tax_total: "0.00",
+            total: "100.00",
           },
           lines: [],
         });
@@ -207,7 +253,11 @@ test("create save lands on the persisted record in view mode with a saved toast"
     calls.some((call) => call.url === "/api/documents" && call.init?.method === "POST"),
     "create save must POST the collection once",
   );
-  assert.deepEqual(pushed, [`/ar/invoices?doc=${savedId}`], "create save must land on the record in view mode, not back in edit mode");
+  assert.deepEqual(
+    pushed,
+    [`/ar/invoices?doc=${savedId}`],
+    "create save must land on the record in view mode, not back in edit mode",
+  );
   assert.ok(
     (globalThis.__drawerToasts ?? []).some(
       (toast) => toast.kind === "success" && toast.message.includes("INV-00004"),
@@ -243,7 +293,10 @@ test("a possible duplicate warns with the existing number and cancelling keeps t
   });
   await tick();
   await tick();
-  const dialogs = (globalThis.__confirmCalls ?? []) as { title?: unknown; confirmLabel?: unknown }[];
+  const dialogs = (globalThis.__confirmCalls ?? []) as {
+    title?: unknown;
+    confirmLabel?: unknown;
+  }[];
   assert.equal(dialogs.length, 1, "a match must raise the duplicate confirm");
   assert.equal(dialogs[0]?.title, "Possible duplicate");
   assert.equal(dialogs[0]?.confirmLabel, "Save anyway");
@@ -292,7 +345,11 @@ test("a throwing pre-save dialog pins a visible error and releases Save", async 
   );
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "a preamble failure must pin an alert, not only toast");
-  assert.match(alert.textContent ?? "", /Action failed/, "with no server reason the alert falls back to localized copy");
+  assert.match(
+    alert.textContent ?? "",
+    /Action failed/,
+    "with no server reason the alert falls back to localized copy",
+  );
   assert.ok(
     (globalThis.__drawerToasts ?? []).some((toast) => toast.kind === "error"),
     "a preamble failure must toast as an error",
@@ -334,7 +391,11 @@ test("a failed create POST pins the server reason and releases Save", async (t) 
   assert.deepEqual(pushed, [], "a failed create must not navigate anywhere");
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "a failed create must pin an alert");
-  assert.match(alert.textContent ?? "", /Revenue account is inactive/, "the alert must carry the typed reason");
+  assert.match(
+    alert.textContent ?? "",
+    /Revenue account is inactive/,
+    "the alert must carry the typed reason",
+  );
   assert.ok(
     (globalThis.__drawerToasts ?? []).some(
       (toast) => toast.kind === "error" && /Revenue account is inactive/.test(toast.message),
@@ -350,9 +411,17 @@ test("edit-save of a draft lands in view mode with Submit and a saved toast", as
     if (url === `/api/documents/${docId}` && init?.method === "PATCH") {
       return Response.json({
         doc: {
-          id: docId, kind: "customer_invoice", status: "draft", document_number: "INV-00004",
-          currency: "USD", party_id: PARTY_ID, updated_at: "2026-09-17T12:00:01.000000Z",
-          document_date: "2026-09-17", subtotal: "100.00", tax_total: "0.00", total: "100.00",
+          id: docId,
+          kind: "customer_invoice",
+          status: "draft",
+          document_number: "INV-00004",
+          currency: "USD",
+          party_id: PARTY_ID,
+          updated_at: "2026-09-17T12:00:01.000000Z",
+          document_date: "2026-09-17",
+          subtotal: "100.00",
+          tax_total: "0.00",
+          total: "100.00",
         },
         lines: [],
       });
@@ -380,8 +449,13 @@ test("edit-save of a draft lands in view mode with Submit and a saved toast", as
               doc,
               lines: [
                 {
-                  id: "", account_id: "income-1", item_id: null, description: "Services",
-                  quantity: "1", unit_price: "100", amount: "100.00",
+                  id: "",
+                  account_id: "income-1",
+                  item_id: null,
+                  description: "Services",
+                  quantity: "1",
+                  unit_price: "100",
+                  amount: "100.00",
                 },
               ],
             }}
@@ -404,7 +478,13 @@ test("edit-save of a draft lands in view mode with Submit and a saved toast", as
             canCreate
             canPost
             initialMode="edit"
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "submit", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "submit", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -430,7 +510,9 @@ test("edit-save of a draft lands in view mode with Submit and a saved toast", as
     !body.includes("Editing — Save to apply changes."),
     "a saved draft must leave edit mode",
   );
-  const actionsMenu = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Actions"));
+  const actionsMenu = [...document.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Actions"),
+  );
   assert.ok(actionsMenu, "Actions menu must render");
   await act(async () => {
     actionsMenu.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -438,7 +520,9 @@ test("edit-save of a draft lands in view mode with Submit and a saved toast", as
   });
   await tick();
   assert.ok(
-    [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Submit for approval"),
+    [...document.querySelectorAll("button")].some(
+      (b) => b.textContent?.trim() === "Submit for approval",
+    ),
     "Submit must be available without a second save",
   );
   assert.ok(
@@ -458,15 +542,32 @@ test("edit-save of a draft lands in view mode with Submit and a saved toast", as
 test("edit-save of a cash sale lands in view mode with tenders intact and a saved toast", async (t) => {
   const docId = randomUUID();
   const tenderTable = [
-    { position: 1, kind: "cash", methodLabel: null, accountId: "till-1", amount: "10.00", currency: "USD", reference: null, externalRef: null },
+    {
+      position: 1,
+      kind: "cash",
+      methodLabel: null,
+      accountId: "till-1",
+      amount: "10.00",
+      currency: "USD",
+      reference: null,
+      externalRef: null,
+    },
   ];
   const restore = scriptFetch((url, init) => {
     if (url === `/api/documents/${docId}` && init?.method === "PATCH") {
       return Response.json({
         doc: {
-          id: docId, kind: "cash_sale", status: "draft", document_number: "CS-00007",
-          currency: "USD", party_id: null, updated_at: "2026-10-05T12:00:01.000000Z",
-          document_date: "2026-10-05", subtotal: "10.00", tax_total: "0.00", total: "10.00",
+          id: docId,
+          kind: "cash_sale",
+          status: "draft",
+          document_number: "CS-00007",
+          currency: "USD",
+          party_id: null,
+          updated_at: "2026-10-05T12:00:01.000000Z",
+          document_date: "2026-10-05",
+          subtotal: "10.00",
+          tax_total: "0.00",
+          total: "10.00",
           custom: {},
         },
         lines: [],
@@ -488,9 +589,17 @@ test("edit-save of a cash sale lands in view mode with tenders intact and a save
           <DocumentDrawer
             payload={{
               doc: {
-                id: docId, kind: "cash_sale", status: "draft", document_number: null,
-                currency: "USD", party_id: null, updated_at: "2026-10-05T12:00:00.000000Z",
-                document_date: "2026-10-05", subtotal: "10.00", tax_total: "0.00", total: "10.00",
+                id: docId,
+                kind: "cash_sale",
+                status: "draft",
+                document_number: null,
+                currency: "USD",
+                party_id: null,
+                updated_at: "2026-10-05T12:00:00.000000Z",
+                document_date: "2026-10-05",
+                subtotal: "10.00",
+                tax_total: "0.00",
+                total: "10.00",
                 custom: {},
               },
               lines: [],
@@ -515,7 +624,13 @@ test("edit-save of a cash sale lands in view mode with tenders intact and a save
             canCreate
             canPost
             initialMode="edit"
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "post", visible: true }],
+              } as never
+            }
             tenderAccounts={[{ id: "till-1", number: "1000", name: "Till" }]}
           />
         </MoneyProvider>
@@ -551,10 +666,14 @@ test("edit-save of a cash sale lands in view mode with tenders intact and a save
   const dialog = document.querySelector('[role="dialog"]');
   assert.ok(dialog, "the cash-sale record must own one dialog");
   const tab = [...dialog.querySelectorAll("button")].find(
-    (node) => node.hasAttribute("aria-pressed") && node.textContent?.trim() === messages.ar.tenders.title,
+    (node) =>
+      node.hasAttribute("aria-pressed") && node.textContent?.trim() === messages.ar.tenders.title,
   );
   assert.ok(tab, "the Tenders tab must stay reachable after save");
-  await act(async () => { tab.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); await tick(); });
+  await act(async () => {
+    tab.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
   await tick();
   assert.ok(
     (dialog.textContent ?? "").includes(messages.ar.tenders.balanced),
@@ -572,9 +691,17 @@ test("confirming the duplicate warning saves anyway", async (t) => {
       if (url === "/api/documents") {
         return Response.json({
           doc: {
-            id: savedId, kind: "customer_invoice", status: "draft", document_number: "INV-00004",
-            currency: "USD", party_id: PARTY_ID, updated_at: "2026-09-17T12:00:01.000000Z",
-            document_date: "2026-09-17", subtotal: "100.00", tax_total: "0.00", total: "100.00",
+            id: savedId,
+            kind: "customer_invoice",
+            status: "draft",
+            document_number: "INV-00004",
+            currency: "USD",
+            party_id: PARTY_ID,
+            updated_at: "2026-09-17T12:00:01.000000Z",
+            document_date: "2026-09-17",
+            subtotal: "100.00",
+            tax_total: "0.00",
+            total: "100.00",
           },
           lines: [],
         });
@@ -607,9 +734,17 @@ test("confirming the duplicate warning saves anyway", async (t) => {
 function savedDocumentResponse(id: string) {
   return Response.json({
     doc: {
-      id, kind: "customer_invoice", status: "draft", document_number: "INV-00005",
-      currency: "USD", party_id: PARTY_ID, updated_at: "2026-09-17T12:00:01.000000Z",
-      document_date: "2026-09-17", subtotal: "100.00", tax_total: "0.00", total: "100.00",
+      id,
+      kind: "customer_invoice",
+      status: "draft",
+      document_number: "INV-00005",
+      currency: "USD",
+      party_id: PARTY_ID,
+      updated_at: "2026-09-17T12:00:01.000000Z",
+      document_date: "2026-09-17",
+      subtotal: "100.00",
+      tax_total: "0.00",
+      total: "100.00",
     },
     lines: [],
   });
@@ -618,7 +753,16 @@ function savedDocumentResponse(id: string) {
 async function pressChord(code: string) {
   const target = document.querySelector('[role="dialog"]') ?? document.body;
   await act(async () => {
-    target.dispatchEvent(new window.KeyboardEvent("keydown", { code, key: code.slice(3).toLowerCase(), ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
+    target.dispatchEvent(
+      new window.KeyboardEvent("keydown", {
+        code,
+        key: code.slice(3).toLowerCase(),
+        ctrlKey: true,
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
     await tick();
   });
   await tick();
@@ -641,10 +785,17 @@ test("save and new from a create form opens a fresh form that cannot replay the 
   });
   await pressChord("KeyS");
   await pressChord("KeyS");
-  const creates = calls.filter((call) => call.url === "/api/documents" && call.init?.method === "POST");
+  const creates = calls.filter(
+    (call) => call.url === "/api/documents" && call.init?.method === "POST",
+  );
   assert.equal(creates.length, 2, "each Save and new writes exactly one record");
-  const keys = creates.map((call) => (call.init?.headers as Record<string, string>)["Idempotency-Key"]);
-  assert.ok(keys[0] && keys[1] && keys[0] !== keys[1], "the fresh form carries a new idempotency key, so the second save is a new record");
+  const keys = creates.map(
+    (call) => (call.init?.headers as Record<string, string>)["Idempotency-Key"],
+  );
+  assert.ok(
+    keys[0] && keys[1] && keys[0] !== keys[1],
+    "the fresh form carries a new idempotency key, so the second save is a new record",
+  );
   assert.deepEqual(pushed, [
     "/ar/invoices?doc=new&kind=customer_invoice&mode=edit",
     "/ar/invoices?doc=new&kind=customer_invoice&mode=edit",
@@ -669,60 +820,100 @@ test("save and close lands on the list instead of the record", async (t) => {
   assert.deepEqual(pushed, ["/ar/invoices"]);
 });
 
-for (const status of ['draft', 'approved'] as const) {
+for (const status of ["draft", "approved"] as const) {
   test(`save and post follows the server-acknowledged ${status} through its remaining lifecycle`, async (t) => {
-    const id = '11111111-1111-4111-8111-111111111111'
-    const actions: string[] = []
-    const saved = { ...blankCreateDoc(), id, status, document_number: 'INV-00001', updated_at: '2026-09-17T12:00:01.000000Z' }
+    const id = "11111111-1111-4111-8111-111111111111";
+    const actions: string[] = [];
+    const saved = {
+      ...blankCreateDoc(),
+      id,
+      status,
+      document_number: "INV-00001",
+      updated_at: "2026-09-17T12:00:01.000000Z",
+    };
     const transport = scriptFetch((url, init) => {
-      if (url === `/api/documents/${id}` && init?.method === 'PATCH') return Response.json({ doc: saved, lines: [] })
-      if (url === '/api/documents/actions') {
-        actions.push(JSON.parse(String(init?.body)).action)
-        return Response.json({ ok: true })
+      if (url === `/api/documents/${id}` && init?.method === "PATCH")
+        return Response.json({ doc: saved, lines: [] });
+      if (url === "/api/documents/actions") {
+        actions.push(JSON.parse(String(init?.body)).action);
+        return Response.json({ ok: true });
       }
-      return null
-    })
-    t.after(transport.restore)
-    const { host, root } = await mountCreate({ persistedStatus: 'draft' })
-    t.after(async () => { await act(async () => root.unmount()); host.remove() })
-    const post = [...document.querySelectorAll('button')].find((button) => ['Post', 'Post & new'].includes(button.textContent?.trim() ?? ''))
-    assert.ok(post)
-    await act(async () => { post.click(); await tick(); await tick() })
-    assert.deepEqual(actions, ['post'])
-  })
+      return null;
+    });
+    t.after(transport.restore);
+    const { host, root } = await mountCreate({ persistedStatus: "draft" });
+    t.after(async () => {
+      await act(async () => root.unmount());
+      host.remove();
+    });
+    const post = [...document.querySelectorAll("button")].find((button) =>
+      ["Post", "Post & new"].includes(button.textContent?.trim() ?? ""),
+    );
+    assert.ok(post);
+    await act(async () => {
+      post.click();
+      await tick();
+      await tick();
+    });
+    assert.deepEqual(actions, ["post"]);
+  });
 }
 
-test('save and post remains exclusive while the saved document is being posted', async (t) => {
-  const originalFetch = globalThis.fetch
-  const id = '11111111-1111-4111-8111-111111111111'
-  let release: ((response: Response) => void) | undefined
-  let creates = 0
-  const actions: string[] = []
+test("save and post remains exclusive while the saved document is being posted", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const id = "11111111-1111-4111-8111-111111111111";
+  let release: ((response: Response) => void) | undefined;
+  let creates = 0;
+  const actions: string[] = [];
   globalThis.fetch = async (input, init) => {
-    const url = String(input)
-    if (url === '/api/documents' && init?.method === 'POST') {
-      creates += 1
-      return Response.json({ doc: { ...blankCreateDoc(), id, status: 'draft', document_number: 'INV-00001' }, lines: [] })
+    const url = String(input);
+    if (url === "/api/documents" && init?.method === "POST") {
+      creates += 1;
+      return Response.json({
+        doc: { ...blankCreateDoc(), id, status: "draft", document_number: "INV-00001" },
+        lines: [],
+      });
     }
-    if (url === '/api/documents/actions') {
-      const action = JSON.parse(String(init?.body)).action as string
-      actions.push(action)
-      if (action === 'post') return new Promise<Response>((resolve) => { release = resolve })
-      return Response.json({ ok: true })
+    if (url === "/api/documents/actions") {
+      const action = JSON.parse(String(init?.body)).action as string;
+      actions.push(action);
+      if (action === "post")
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      return Response.json({ ok: true });
     }
-    return Response.json({})
-  }
-  t.after(() => { globalThis.fetch = originalFetch })
-  const { host, root } = await mountCreate()
-  t.after(async () => { await act(async () => root.unmount()); host.remove() })
-  const post = [...document.querySelectorAll('button')].find((button) => ['Post', 'Post & new'].includes(button.textContent?.trim() ?? ''))
-  assert.ok(post)
-  await act(async () => { post.click(); await tick(); await tick() })
-  assert.ok(release)
-  assert.equal(post.disabled, true, 'the posting command keeps the form busy')
-  await act(async () => { post.click(); await tick() })
-  assert.equal(creates, 1)
-  assert.deepEqual(actions, ['post'])
-  await act(async () => { release!(Response.json({ ok: true })); await tick(); await tick() })
-  assert.deepEqual(actions, ['post'])
-})
+    return Response.json({});
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const { host, root } = await mountCreate();
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  const post = [...document.querySelectorAll("button")].find((button) =>
+    ["Post", "Post & new"].includes(button.textContent?.trim() ?? ""),
+  );
+  assert.ok(post);
+  await act(async () => {
+    post.click();
+    await tick();
+    await tick();
+  });
+  assert.ok(release);
+  assert.equal(post.disabled, true, "the posting command keeps the form busy");
+  await act(async () => {
+    post.click();
+    await tick();
+  });
+  assert.equal(creates, 1);
+  assert.deepEqual(actions, ["post"]);
+  await act(async () => {
+    release!(Response.json({ ok: true }));
+    await tick();
+    await tick();
+  });
+  assert.deepEqual(actions, ["post"]);
+});

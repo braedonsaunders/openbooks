@@ -8,7 +8,10 @@ import { stubModules } from "../../../testing/stub-modules";
 // missing grant) saw no reason. The named refusal must render like the
 // sibling sections do.
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/parties?party=party-1", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/parties?party=party-1",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
@@ -41,10 +44,13 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 test("a refused pulse load renders the named refusal", async (t) => {
   const realFetch = globalThis.fetch;
   (globalThis as Record<string, unknown>).fetch = async () =>
-    new Response(JSON.stringify({ error: "Pulse needs the customer role — start tracking first" }), {
-      status: 422,
-      headers: { "content-type": "application/json" },
-    });
+    new Response(
+      JSON.stringify({ error: "Pulse needs the customer role — start tracking first" }),
+      {
+        status: 422,
+        headers: { "content-type": "application/json" },
+      },
+    );
   t.after(() => {
     (globalThis as Record<string, unknown>).fetch = realFetch;
   });

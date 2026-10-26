@@ -52,12 +52,15 @@ const MAX_BACKOFF_SECONDS = 1800;
 const DRAIN_BATCH_LIMIT = 100;
 
 function assertIntent(intent: StorageCleanupIntent): void {
-  if (!intent.orgId?.trim()) throw new Error("storage cleanup intent needs an org id — refusing an unscoped delete");
-  if (!intent.objectKey?.includes("/")) throw new Error("storage cleanup intent needs a namespaced object key — refusing a bare id");
+  if (!intent.orgId?.trim())
+    throw new Error("storage cleanup intent needs an org id — refusing an unscoped delete");
+  if (!intent.objectKey?.includes("/"))
+    throw new Error("storage cleanup intent needs a namespaced object key — refusing a bare id");
   if (!(STORAGE_CLEANUP_OWNER_KINDS as readonly string[]).includes(intent.ownerKind)) {
     throw new Error(`storage cleanup intent has unknown owner kind ${intent.ownerKind}`);
   }
-  if (!intent.ownerId?.trim()) throw new Error("storage cleanup intent needs an owner id for triage");
+  if (!intent.ownerId?.trim())
+    throw new Error("storage cleanup intent needs an owner id for triage");
 }
 
 /**
@@ -116,14 +119,16 @@ const EMAIL_ATTACHMENTS_PREFIX = emailAttachmentsKeyPrefix;
 async function deleteCleanupObject(objectKey: string): Promise<void> {
   if (objectKey.startsWith(FILE_CABINET_PREFIX)) {
     const versionId = objectKey.slice(FILE_CABINET_PREFIX.length);
-    if (!/^[A-Za-z0-9_.-]{1,160}$/.test(versionId)) throw new Error(`refusing to delete malformed cabinet key ${objectKey}`);
+    if (!/^[A-Za-z0-9_.-]{1,160}$/.test(versionId))
+      throw new Error(`refusing to delete malformed cabinet key ${objectKey}`);
     // Confirms every key internally; throws FileBlobDeleteError when unconfirmed.
     await deleteS3Blobs([versionId]);
     return;
   }
   if (objectKey.startsWith(EMAIL_ATTACHMENTS_PREFIX)) {
     const id = objectKey.slice(EMAIL_ATTACHMENTS_PREFIX.length);
-    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error(`refusing to delete malformed staging key ${objectKey}`);
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id))
+      throw new Error(`refusing to delete malformed staging key ${objectKey}`);
     const result = await getS3Client().send(
       new DeleteObjectsCommand({
         Bucket: s3Bucket(),
@@ -157,7 +162,9 @@ export interface StorageCleanupDrainSummary {
  * duty registry records per-duty failure, and every intent stays visible
  * with its last_error for operators.
  */
-export async function drainStorageCleanupOutbox(limit: number = DRAIN_BATCH_LIMIT): Promise<StorageCleanupDrainSummary> {
+export async function drainStorageCleanupOutbox(
+  limit: number = DRAIN_BATCH_LIMIT,
+): Promise<StorageCleanupDrainSummary> {
   const summary: StorageCleanupDrainSummary = { claimed: 0, deleted: 0, deferred: 0 };
   // bypass: scheduler-tick — the drain claims due cleanup intents across every organization.
   await withBypassContext(async () => {
@@ -167,7 +174,8 @@ export async function drainStorageCleanupOutbox(limit: number = DRAIN_BATCH_LIMI
       owner_kind: string;
       owner_id: string;
       attempts: number;
-    }>(sql`
+    }>(
+      sql`
       update storage_cleanup_outbox
          set claimed_at = now(),
              next_attempt_at = now() + make_interval(secs => ${CLAIM_LEASE_SECONDS}),
@@ -181,7 +189,9 @@ export async function drainStorageCleanupOutbox(limit: number = DRAIN_BATCH_LIMI
           for update skip locked
        )
        returning id, object_key, owner_kind, owner_id, attempts
-    `, "objects");
+    `,
+      "objects",
+    );
     summary.claimed = due.length;
     for (const row of due) {
       try {

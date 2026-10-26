@@ -23,9 +23,18 @@ test("detectContentType recognizes source receipt signatures", () => {
 });
 
 test("unknown source files are preserved as inert downloads without trusting their extension", () => {
-  assert.equal(detectContentType(Buffer.from("not an image"), "payload.exe"), "application/octet-stream");
-  assert.equal(detectContentType(Buffer.from("not an image"), "spoofed.pdf"), "application/octet-stream");
-  assert.equal(detectContentType(Buffer.from([0x50, 0x4b, 3, 4]), "budget.xlsx"), "application/octet-stream");
+  assert.equal(
+    detectContentType(Buffer.from("not an image"), "payload.exe"),
+    "application/octet-stream",
+  );
+  assert.equal(
+    detectContentType(Buffer.from("not an image"), "spoofed.pdf"),
+    "application/octet-stream",
+  );
+  assert.equal(
+    detectContentType(Buffer.from([0x50, 0x4b, 3, 4]), "budget.xlsx"),
+    "application/octet-stream",
+  );
 });
 
 test("normalizeAttachmentBytes removes the bounded CPOW envelope from wrapped PDFs", () => {
@@ -35,7 +44,10 @@ test("normalizeAttachmentBytes removes the bounded CPOW envelope from wrapped PD
   assert.equal(detectContentType(normalized, "invoice.pdf"), "application/pdf");
   const ordinary = Buffer.from("%PDF-1.7\nbody");
   assert.strictEqual(normalizeAttachmentBytes(ordinary), ordinary);
-  assert.equal(normalizeAttachmentBytes(Buffer.from("%PDFfileName=missing-real-header")).toString(), "%PDFfileName=missing-real-header");
+  assert.equal(
+    normalizeAttachmentBytes(Buffer.from("%PDFfileName=missing-real-header")).toString(),
+    "%PDFfileName=missing-real-header",
+  );
 });
 
 test("safeFilename strips paths and control characters", () => {
@@ -49,17 +61,11 @@ test("attachment imports preserve only an explicit actor and never invent an adm
   assert.equal(normalizeImportActorId(actorId), actorId);
   assert.equal(normalizeImportActorId(undefined), null);
   assert.equal(normalizeImportActorId(""), null);
-  assert.throws(
-    () => normalizeImportActorId("worker"),
-    /actorId must be a valid user id/,
-  );
+  assert.throws(() => normalizeImportActorId("worker"), /actorId must be a valid user id/);
 });
 
 test("targeted attachment retries normalize ids and retain only requested links", () => {
-  assert.deepEqual(
-    normalizeSourceFileIds([" 405107 ", "59411", "405107"]),
-    ["59411", "405107"],
-  );
+  assert.deepEqual(normalizeSourceFileIds([" 405107 ", "59411", "405107"]), ["59411", "405107"]);
   assert.throws(
     () => normalizeSourceFileIds(["59411", "not-a-file"]),
     /source file ids must be numeric/,
@@ -70,13 +76,10 @@ test("targeted attachment retries normalize ids and retain only requested links"
     ["405107", new Set(["document-b", "document-c"])],
     ["999999", new Set(["document-d"])],
   ]);
-  assert.deepEqual(
-    Array.from(selectRequestedAttachmentFiles(inventory, ["405107", "59411"])),
-    [
-      ["59411", new Set(["document-a"])],
-      ["405107", new Set(["document-b", "document-c"])],
-    ],
-  );
+  assert.deepEqual(Array.from(selectRequestedAttachmentFiles(inventory, ["405107", "59411"])), [
+    ["59411", new Set(["document-a"])],
+    ["405107", new Set(["document-b", "document-c"])],
+  ]);
   assert.throws(
     () => selectRequestedAttachmentFiles(inventory, ["123456"]),
     /not attached to an imported transaction/,
@@ -84,54 +87,134 @@ test("targeted attachment retries normalize ids and retain only requested links"
 });
 
 test("expenseReportFileIds reads and deduplicates standard REST receipt references", () => {
-  assert.deepEqual(expenseReportFileIds({
-    expense: {
-      items: [
-        { expmediaitem: { id: "33057" } },
-        { expmediaitem: { id: "33057" } },
-        { expmediaitem: { id: 33058 } },
-        { expmediaitem: null },
-      ],
-    },
-  }), ["33057", "33058"]);
+  assert.deepEqual(
+    expenseReportFileIds({
+      expense: {
+        items: [
+          { expmediaitem: { id: "33057" } },
+          { expmediaitem: { id: "33057" } },
+          { expmediaitem: { id: 33058 } },
+          { expmediaitem: null },
+        ],
+      },
+    }),
+    ["33057", "33058"],
+  );
   assert.deepEqual(expenseReportFileIds({ expense: { items: [] } }), []);
 });
 
 test("decodeBridgeAttachment validates identity, encoding, and decoded size", () => {
   const bytes = Buffer.from("%PDF-1.7");
-  const decoded = decodeBridgeAttachment({
-    ok: true,
-    file: {
-      id: "406564",
-      name: "invoice.pdf",
-      size: bytes.length,
-      encoding: "base64",
-      contents: bytes.toString("base64"),
+  const decoded = decodeBridgeAttachment(
+    {
+      ok: true,
+      file: {
+        id: "406564",
+        name: "invoice.pdf",
+        size: bytes.length,
+        encoding: "base64",
+        contents: bytes.toString("base64"),
+      },
     },
-  }, "406564");
+    "406564",
+  );
   assert.equal(decoded.source.name, "invoice.pdf");
   assert.deepEqual(decoded.bytes, bytes);
 
   assert.throws(() => decodeBridgeAttachment({ ok: false, error: "denied" }, "406564"), /denied/);
-  assert.throws(() => decodeBridgeAttachment({
-    ok: true,
-    file: { id: "999", name: "invoice.pdf", size: bytes.length, encoding: "base64", contents: bytes.toString("base64") },
-  }, "406564"), /wrong file/);
-  assert.throws(() => decodeBridgeAttachment({
-    ok: true,
-    file: { id: "406564", name: "invoice.pdf", size: bytes.length + 1, encoding: "base64", contents: bytes.toString("base64") },
-  }, "406564"), /size mismatch/);
+  assert.throws(
+    () =>
+      decodeBridgeAttachment(
+        {
+          ok: true,
+          file: {
+            id: "999",
+            name: "invoice.pdf",
+            size: bytes.length,
+            encoding: "base64",
+            contents: bytes.toString("base64"),
+          },
+        },
+        "406564",
+      ),
+    /wrong file/,
+  );
+  assert.throws(
+    () =>
+      decodeBridgeAttachment(
+        {
+          ok: true,
+          file: {
+            id: "406564",
+            name: "invoice.pdf",
+            size: bytes.length + 1,
+            encoding: "base64",
+            contents: bytes.toString("base64"),
+          },
+        },
+        "406564",
+      ),
+    /size mismatch/,
+  );
 });
-
 
 test("attachment mirrors download new, changed and legacy files but skip verified unchanged versions", () => {
   const sourceModifiedMs = Date.parse("2026-10-08T09:00:00Z");
-  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: null, currentVersionReady: false }), true);
-  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: null, currentVersionReady: true }), true);
-  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs - 1000, currentVersionReady: true }), true);
-  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs, currentVersionReady: true }), false);
-  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs, currentVersionReady: false }), true);
+  assert.equal(
+    attachmentNeedsDownload({
+      sourceModifiedMs,
+      storedModifiedMs: null,
+      currentVersionReady: false,
+    }),
+    true,
+  );
+  assert.equal(
+    attachmentNeedsDownload({
+      sourceModifiedMs,
+      storedModifiedMs: null,
+      currentVersionReady: true,
+    }),
+    true,
+  );
+  assert.equal(
+    attachmentNeedsDownload({
+      sourceModifiedMs,
+      storedModifiedMs: sourceModifiedMs - 1000,
+      currentVersionReady: true,
+    }),
+    true,
+  );
+  assert.equal(
+    attachmentNeedsDownload({
+      sourceModifiedMs,
+      storedModifiedMs: sourceModifiedMs,
+      currentVersionReady: true,
+    }),
+    false,
+  );
+  assert.equal(
+    attachmentNeedsDownload({
+      sourceModifiedMs,
+      storedModifiedMs: sourceModifiedMs,
+      currentVersionReady: false,
+    }),
+    true,
+  );
   // No source marker: import once, then keep the held version.
-  assert.equal(attachmentNeedsDownload({ sourceModifiedMs: null, storedModifiedMs: null, currentVersionReady: false }), true);
-  assert.equal(attachmentNeedsDownload({ sourceModifiedMs: null, storedModifiedMs: sourceModifiedMs, currentVersionReady: true }), false);
+  assert.equal(
+    attachmentNeedsDownload({
+      sourceModifiedMs: null,
+      storedModifiedMs: null,
+      currentVersionReady: false,
+    }),
+    true,
+  );
+  assert.equal(
+    attachmentNeedsDownload({
+      sourceModifiedMs: null,
+      storedModifiedMs: sourceModifiedMs,
+      currentVersionReady: true,
+    }),
+    false,
+  );
 });

@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   currentRequestOrgResolver,
   db,
@@ -138,7 +134,10 @@ test(
           "a matched-but-unverified key must not record a connection",
         );
         await dbResolver.loginSucceeded!(byKey);
-        assert.ok(await lastConnectedAt(s.serverB), "a verified key login records last_connected_at");
+        assert.ok(
+          await lastConnectedAt(s.serverB),
+          "a verified key login records last_connected_at",
+        );
 
         const touchedA = await lastConnectedAt(s.serverA);
         const touchedB = await lastConnectedAt(s.serverB);
@@ -284,7 +283,11 @@ test(
   { skip: !DB },
   async () => {
     const s = await seedTwoTenants();
-    const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: dbResolver });
+    const server = await startSftpServer({
+      port: 0,
+      hostKey: generateHostKey(),
+      resolve: dbResolver,
+    });
     try {
       await withoutAmbientScope(async () => {
         // Invalid password: rejected, nothing recorded.
@@ -295,9 +298,15 @@ test(
         assert.equal(await lastConnectedAt(s.serverA), null);
 
         // Valid password: accepted and exactly its row recorded.
-        const passwordClient = await sshConnect(server.port, { username: s.usernameA, password: s.passwordA });
+        const passwordClient = await sshConnect(server.port, {
+          username: s.usernameA,
+          password: s.passwordA,
+        });
         passwordClient.end();
-        assert.ok(await lastConnectedAt(s.serverA), "a verified password login updates exactly its row");
+        assert.ok(
+          await lastConnectedAt(s.serverA),
+          "a verified password login updates exactly its row",
+        );
         assert.equal(await lastConnectedAt(s.serverB), null);
 
         // Bad signature: the unsigned probe is accepted but the signed

@@ -34,7 +34,11 @@ const callbackUrl = "https://openbooks.example/channels/shopify/in";
 
 /** Every topic the fake already has, reported the way the API reports it. */
 const existingSubs = [
-  { id: "gid://shopify/WebhookSubscription/1", topic: "PRODUCTS_CREATE", uri: "https://other.example/hook" },
+  {
+    id: "gid://shopify/WebhookSubscription/1",
+    topic: "PRODUCTS_CREATE",
+    uri: "https://other.example/hook",
+  },
 ];
 
 function validationError(message: string): Response {
@@ -60,7 +64,11 @@ function strictTransport(calls: RecordedCall[]): typeof fetch {
     }
     if (query.includes("inventoryLevel(locationId:")) {
       return Response.json({
-        data: { inventoryItem: { inventoryLevel: { quantities: [{ quantity: 4, updatedAt: "2026-10-01T00:00:00Z" }] } } },
+        data: {
+          inventoryItem: {
+            inventoryLevel: { quantities: [{ quantity: 4, updatedAt: "2026-10-01T00:00:00Z" }] },
+          },
+        },
       });
     }
     if (query.includes("inventorySetQuantities(")) {
@@ -77,16 +85,31 @@ function strictTransport(calls: RecordedCall[]): typeof fetch {
       if (!("changeFromQuantity" in line)) {
         return validationError("InventoryQuantityInput requires 'changeFromQuantity'");
       }
-      if (input.name !== "available" || input.reason !== "correction" || typeof input.referenceDocumentUri !== "string") {
-        return validationError("InventorySetQuantitiesInput needs name, reason and referenceDocumentUri");
+      if (
+        input.name !== "available" ||
+        input.reason !== "correction" ||
+        typeof input.referenceDocumentUri !== "string"
+      ) {
+        return validationError(
+          "InventorySetQuantitiesInput needs name, reason and referenceDocumentUri",
+        );
       }
       if (line.changeFromQuantity !== null && line.changeFromQuantity !== 4) {
         return Response.json({
-          data: { inventorySetQuantities: { userErrors: [{ field: [], message: "change from quantity stale" }] } },
+          data: {
+            inventorySetQuantities: {
+              userErrors: [{ field: [], message: "change from quantity stale" }],
+            },
+          },
         });
       }
       return Response.json({
-        data: { inventorySetQuantities: { inventoryAdjustmentGroup: { id: "gid://shopify/InventoryAdjustmentGroup/1" }, userErrors: [] } },
+        data: {
+          inventorySetQuantities: {
+            inventoryAdjustmentGroup: { id: "gid://shopify/InventoryAdjustmentGroup/1" },
+            userErrors: [],
+          },
+        },
       });
     }
     if (query.includes("productVariantsBulkUpdate(")) {
@@ -96,7 +119,10 @@ function strictTransport(calls: RecordedCall[]): typeof fetch {
       }
       return Response.json({
         data: {
-          productVariantsBulkUpdate: { productVariants: variants.map((v) => ({ id: v.id })), userErrors: [] },
+          productVariantsBulkUpdate: {
+            productVariants: variants.map((v) => ({ id: v.id })),
+            userErrors: [],
+          },
         },
       });
     }
@@ -108,7 +134,12 @@ function strictTransport(calls: RecordedCall[]): typeof fetch {
         return validationError("fulfillmentCreate takes FulfillmentInput");
       }
       return Response.json({
-        data: { fulfillmentCreate: { fulfillment: { id: "gid://shopify/Fulfillment/55", status: "SUCCESS" }, userErrors: [] } },
+        data: {
+          fulfillmentCreate: {
+            fulfillment: { id: "gid://shopify/Fulfillment/55", status: "SUCCESS" },
+            userErrors: [],
+          },
+        },
       });
     }
     if (query.includes("fulfillmentOrders(")) {
@@ -167,7 +198,9 @@ function strictTransport(calls: RecordedCall[]): typeof fetch {
     }
     if (query.includes("balanceTransactions")) {
       if (query.includes("sourceOrderId")) {
-        return validationError("Field 'sourceOrderId' doesn't exist on type 'ShopifyPaymentsBalanceTransaction'");
+        return validationError(
+          "Field 'sourceOrderId' doesn't exist on type 'ShopifyPaymentsBalanceTransaction'",
+        );
       }
       return Response.json({
         data: {
@@ -203,7 +236,12 @@ function strictTransport(calls: RecordedCall[]): typeof fetch {
         return validationError("WebhookSubscriptionInput takes the delivery address as 'uri'");
       }
       return Response.json({
-        data: { webhookSubscriptionCreate: { webhookSubscription: { id: "gid://shopify/WebhookSubscription/9" }, userErrors: [] } },
+        data: {
+          webhookSubscriptionCreate: {
+            webhookSubscription: { id: "gid://shopify/WebhookSubscription/9" },
+            userErrors: [],
+          },
+        },
       });
     }
     if (query.includes("webhookSubscriptions(")) {
@@ -235,7 +273,9 @@ function strictTransport(calls: RecordedCall[]): typeof fetch {
       return Response.json({
         data: {
           orders: {
-            edges: [{ node: { totalPriceSet: { shopMoney: { amount: "68.86", currencyCode: "USD" } } } }],
+            edges: [
+              { node: { totalPriceSet: { shopMoney: { amount: "68.86", currencyCode: "USD" } } } },
+            ],
             pageInfo: { hasNextPage: false, endCursor: null },
           },
         },
@@ -261,7 +301,11 @@ test("every call pins a supported Admin API version, overridable per channel", (
   const heldBack = contractClient([], "2025-10");
   assert.equal(heldBack.endpoint, "https://contract.myshopify.com/admin/api/2025-10/graphql.json");
   const malformed = contractClient([], "latest");
-  assert.equal(malformed.endpoint, pinned.endpoint, "a malformed override falls back to the pin, never to an unversioned URL");
+  assert.equal(
+    malformed.endpoint,
+    pinned.endpoint,
+    "a malformed override falls back to the pin, never to an unversioned URL",
+  );
 });
 
 test("inventory set sends the documented compare-and-swap field, always present", async () => {
@@ -276,7 +320,8 @@ test("inventory set sends the documented compare-and-swap field, always present"
   });
   const set = calls.find((call) => call.query.includes("inventorySetQuantities("));
   assert.ok(set, "expected the set mutation");
-  const line = ((set.variables.input as { quantities: Record<string, unknown>[] }).quantities[0] ?? {}) as Record<string, unknown>;
+  const line = ((set.variables.input as { quantities: Record<string, unknown>[] }).quantities[0] ??
+    {}) as Record<string, unknown>;
   assert.equal(line.changeFromQuantity, 4);
   assert.ok(!("compareQuantity" in line), "the removed field must not travel");
 
@@ -289,8 +334,12 @@ test("inventory set sends the documented compare-and-swap field, always present"
     referenceUri: "gid://openbooks/channel-inventory/1",
   });
   const skippedSet = skipped.find((call) => call.query.includes("inventorySetQuantities("));
-  const skippedLine = ((skippedSet!.variables.input as { quantities: Record<string, unknown>[] }).quantities[0] ?? {}) as Record<string, unknown>;
-  assert.ok("changeFromQuantity" in skippedLine, "the field is mandatory even when the check is skipped");
+  const skippedLine = ((skippedSet!.variables.input as { quantities: Record<string, unknown>[] })
+    .quantities[0] ?? {}) as Record<string, unknown>;
+  assert.ok(
+    "changeFromQuantity" in skippedLine,
+    "the field is mandatory even when the check is skipped",
+  );
   assert.equal(skippedLine.changeFromQuantity, null);
 
   const stale = await setShopifyAvailable(client, {
@@ -326,14 +375,26 @@ test("sellable policy updates through the bulk mutation, never the removed one",
   const continued: RecordedCall[] = [];
   await setVariantSellablePolicy(contractClient(continued), variantGid, false);
   const continuedBulk = continued.find((call) => call.query.includes("productVariantsBulkUpdate("));
-  assert.deepEqual((continuedBulk!.variables.variants as { inventoryPolicy: string }[]).map((v) => v.inventoryPolicy), ["CONTINUE"]);
+  assert.deepEqual(
+    (continuedBulk!.variables.variants as { inventoryPolicy: string }[]).map(
+      (v) => v.inventoryPolicy,
+    ),
+    ["CONTINUE"],
+  );
 });
 
 test("fulfilment creation pairs fulfillmentCreate with FulfillmentInput", async () => {
   const calls: RecordedCall[] = [];
   const created = await createShopifyFulfillment(contractClient(calls), {
     orderRestId: "7001",
-    lines: [{ fulfillmentOrderId: "gid://shopify/FulfillmentOrder/10", items: [{ fulfillmentOrderLineId: "gid://shopify/FulfillmentOrderLineItem/100", quantity: 3 }] }],
+    lines: [
+      {
+        fulfillmentOrderId: "gid://shopify/FulfillmentOrder/10",
+        items: [
+          { fulfillmentOrderLineId: "gid://shopify/FulfillmentOrderLineItem/100", quantity: 3 },
+        ],
+      },
+    ],
     trackingNumber: "1Z999",
     trackingUrl: null,
     carrierName: "UPS",
@@ -343,7 +404,11 @@ test("fulfilment creation pairs fulfillmentCreate with FulfillmentInput", async 
   const mutation = calls.find((call) => call.query.includes("fulfillmentCreate("));
   assert.ok(mutation, "expected the fulfilment mutation");
   const input = mutation.variables.fulfillment as Record<string, unknown>;
-  assert.deepEqual(Object.keys(input).sort(), ["lineItemsByFulfillmentOrder", "notifyCustomer", "trackingInfo"]);
+  assert.deepEqual(Object.keys(input).sort(), [
+    "lineItemsByFulfillmentOrder",
+    "notifyCustomer",
+    "trackingInfo",
+  ]);
   assert.equal(input.notifyCustomer, true);
   assert.deepEqual(input.trackingInfo, { number: "1Z999", company: "UPS" });
 });
@@ -369,7 +434,10 @@ test("payout pull reads the source order through the associated reference", asyn
   assert.equal((charge.meta as Record<string, unknown>).sourceOrderId, "gid://shopify/Order/2001");
   const txQuery = calls.find((call) => call.query.includes("balanceTransactions"));
   assert.ok(txQuery, "expected the balance-transactions query");
-  assert.ok(txQuery.query.includes("associatedOrder"), "the source order travels as associatedOrder");
+  assert.ok(
+    txQuery.query.includes("associatedOrder"),
+    "the source order travels as associatedOrder",
+  );
 });
 
 test("subscriptions subscribe exactly the handled topics over the documented shapes", async () => {
@@ -380,13 +448,20 @@ test("subscriptions subscribe exactly the handled topics over the documented sha
   const creates = calls.filter((call) => call.query.includes("webhookSubscriptionCreate"));
   assert.equal(creates.length, SHOPIFY_WEBHOOK_TOPICS.length);
   for (const create of creates) {
-    assert.match(String(create.variables.topic ?? ""), /^[A-Z_]+$/, "topic travels as the enum, not the REST path");
+    assert.match(
+      String(create.variables.topic ?? ""),
+      /^[A-Z_]+$/,
+      "topic travels as the enum, not the REST path",
+    );
     const sub = create.variables.webhookSubscription as Record<string, unknown>;
     assert.equal(sub.uri, callbackUrl);
     assert.equal(sub.format, "JSON");
   }
   const list = calls.find((call) => call.query.includes("webhookSubscriptions("));
-  assert.ok(list && list.query.includes("uri"), "reconciliation reads the documented address field");
+  assert.ok(
+    list && list.query.includes("uri"),
+    "reconciliation reads the documented address field",
+  );
 });
 
 test("subscription topics normalize both ways the API reports them", () => {

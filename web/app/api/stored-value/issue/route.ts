@@ -1,33 +1,35 @@
-import { z } from 'zod'
-import { NextResponse } from 'next/server'
-import { withOrgTransaction } from '@openbooks/engine/platform/db'
-import { toUnits } from '@openbooks/engine/money/money'
-import { issueStoredValue } from '@openbooks/engine/stored-value/accounts'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { exactMoney, isoDate, uuidId } from '@/lib/api/json'
+import { z } from "zod";
+import { NextResponse } from "next/server";
+import { withOrgTransaction } from "@openbooks/engine/platform/db";
+import { toUnits } from "@openbooks/engine/money/money";
+import { issueStoredValue } from "@openbooks/engine/stored-value/accounts";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { exactMoney, isoDate, uuidId } from "@/lib/api/json";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * POST /api/stored-value/issue — mint a code with a starting balance. The
  * plaintext code returns exactly once; only its salted digest is stored.
  */
 export const POST = defineRoute({
-  permission: 'stored_value.manage',
-  feature: 'storedValue',
-  body: z.object({
-    programId: uuidId,
-    amount: exactMoney(),
-    currency: z.string().regex(/^[A-Z]{3}$/),
-    customerPartyId: uuidId.nullable().optional(),
-    subsidiaryId: uuidId.nullable().optional(),
-    expiresOn: isoDate().nullable().optional(),
-    debitAccountId: uuidId,
-    postingDate: isoDate().optional(),
-    memo: z.string().trim().max(1000).nullable().optional(),
-    idempotencyKey: z.string().min(8).max(120),
-  }).strict(),
+  permission: "stored_value.manage",
+  feature: "storedValue",
+  body: z
+    .object({
+      programId: uuidId,
+      amount: exactMoney(),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      customerPartyId: uuidId.nullable().optional(),
+      subsidiaryId: uuidId.nullable().optional(),
+      expiresOn: isoDate().nullable().optional(),
+      debitAccountId: uuidId,
+      postingDate: isoDate().optional(),
+      memo: z.string().trim().max(1000).nullable().optional(),
+      idempotencyKey: z.string().min(8).max(120),
+    })
+    .strict(),
   handler: async ({ authz, body }) => {
     try {
       const result = await withOrgTransaction(authz.user.orgId, () =>
@@ -49,10 +51,10 @@ export const POST = defineRoute({
           idempotencyKey: body.idempotencyKey,
           actorId: authz.user.id,
         }),
-      )
-      return NextResponse.json(result, { status: 201 })
+      );
+      return NextResponse.json(result, { status: 201 });
     } catch (error) {
-      return apiErrorResponse(error)
+      return apiErrorResponse(error);
     }
   },
-})
+});

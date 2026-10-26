@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
-import { stubModules } from '../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __runTestRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -10,7 +10,10 @@ declare global {
 }
 
 // jsdom first: the builder reads browser globals at render.
-await bootJsdomEnvironment({ url: "http://localhost:4800/payments?view=runs&newRun=1", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/payments?view=runs&newRun=1",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
@@ -45,7 +48,7 @@ function bill(open = "2500.00") {
     reference_number: null,
     open,
     currency: "USD",
-    bank_state: 'approved' as 'approved' | 'pending' | 'undated' | 'missing',
+    bank_state: "approved" as "approved" | "pending" | "undated" | "missing",
   };
 }
 
@@ -88,17 +91,17 @@ async function mountBuilder(selectedBills = [bill()]) {
   return { host, root };
 }
 
-test('selected bill total retains exact ledger precision beyond JavaScript safe integers', async (t) => {
-  const { host, root } = await mountBuilder([bill('9007199254740992.0000'), bill('1.0000')])
+test("selected bill total retains exact ledger precision beyond JavaScript safe integers", async (t) => {
+  const { host, root } = await mountBuilder([bill("9007199254740992.0000"), bill("1.0000")]);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
 
-  const total = document.querySelector('strong')
-  assert.ok(total, 'the selected amount is emphasized in the summary')
-  assert.match(total.textContent ?? '', /9,007,199,254,740,993\.00/)
-})
+  const total = document.querySelector("strong");
+  assert.ok(total, "the selected amount is emphasized in the summary");
+  assert.match(total.textContent ?? "", /9,007,199,254,740,993\.00/);
+});
 
 async function chooseProfile() {
   // Open the bank-profile dropdown and pick the only profile. The menu
@@ -144,7 +147,10 @@ test("a duplicate-in-draft rejection persists as a form-level alert", async (t) 
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push(`${(init?.method ?? "GET").toUpperCase()} ${String(input)}`);
-    return Response.json({ error: "BILL-00003 is already in draft run RUN-00001" }, { status: 422 });
+    return Response.json(
+      { error: "BILL-00003 is already in draft run RUN-00001" },
+      { status: 422 },
+    );
   }) as typeof fetch;
   const { host, root } = await mountBuilder();
   t.after(async () => {
@@ -157,7 +163,10 @@ test("a duplicate-in-draft rejection persists as a form-level alert", async (t) 
   await chooseProfile();
   await clickCreate();
   await tick();
-  assert.ok(calls.some((call) => call.startsWith("POST ")), "the blocked create must reach the API");
+  assert.ok(
+    calls.some((call) => call.startsWith("POST ")),
+    "the blocked create must reach the API",
+  );
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the rejection must persist as a form-level alert");
   assert.match(alert.textContent ?? "", /already in draft run/i);
@@ -169,15 +178,17 @@ test("a duplicate-in-draft rejection persists as a form-level alert", async (t) 
   assert.equal(create.disabled, false, "the button must release after the rejection");
 });
 
-test('a payee whose approval has no date names the state and the re-approval remedy', async (t) => {
-  const undated = { ...bill(), bank_state: 'undated' as const }
-  const { host, root } = await mountBuilder([undated])
+test("a payee whose approval has no date names the state and the re-approval remedy", async (t) => {
+  const undated = { ...bill(), bank_state: "undated" as const };
+  const { host, root } = await mountBuilder([undated]);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
 
-  const badge = [...document.querySelectorAll('div')].find((el) => el.textContent?.trim() === 'no approval date')
-  assert.ok(badge, 'the undated payee shows its own state instead of a generic missing label')
-  assert.match(badge.getAttribute('title') ?? '', /save them again to re-approve/)
-})
+  const badge = [...document.querySelectorAll("div")].find(
+    (el) => el.textContent?.trim() === "no approval date",
+  );
+  assert.ok(badge, "the undated payee shows its own state instead of a generic missing label");
+  assert.match(badge.getAttribute("title") ?? "", /save them again to re-approve/);
+});

@@ -1,197 +1,290 @@
-'use client'
+"use client";
 
-import { useMemo, useState } from 'react'
-import { useFormatter, useLocale, useTranslations } from 'next-intl'
-import { Badge, Drawer, cn } from '@openbooks/ui'
-import { Braces, Clock3, Database, Fingerprint, History, UserRound } from 'lucide-react'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
-import { auditEventDiffs, type AuditDiffRow } from '../../../../lib/audit-diff'
-import { auditActionLabel } from '../../../../lib/audit-action-label'
-import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
-import { AsyncUrlDrawer } from '../../../../components/async-url-drawer'
-import { auditRecordText } from './AuditRows'
+import { useMemo, useState } from "react";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { Badge, Drawer, cn } from "@openbooks/ui";
+import { Braces, Clock3, Database, Fingerprint, History, UserRound } from "lucide-react";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { auditEventDiffs, type AuditDiffRow } from "../../../../lib/audit-diff";
+import { auditActionLabel } from "../../../../lib/audit-action-label";
+import { DrawerTabStrip } from "../../../../components/drawer-tab-strip";
+import { AsyncUrlDrawer } from "../../../../components/async-url-drawer";
+import { auditRecordText } from "./AuditRows";
 
-export { auditEventDiffs } from '../../../../lib/audit-diff'
+export { auditEventDiffs } from "../../../../lib/audit-diff";
 
 export type AuditEvent = {
-  id: string
-  rowId: string
-  at: string
-  actorName: string | null
-  action: string
-  recordType: string
+  id: string;
+  rowId: string;
+  at: string;
+  actorName: string | null;
+  action: string;
+  recordType: string;
   /** The record's display label (number, code, name or date), when its family has one. */
-  recordLabel?: { label: string | null; on: string | null } | null
-  requestId: string | null
-  changes: unknown
-}
+  recordLabel?: { label: string | null; on: string | null } | null;
+  requestId: string | null;
+  changes: unknown;
+};
 
-type JsonObject = Record<string, unknown>
-type DrawerTab = 'changes' | 'before' | 'after'
+type JsonObject = Record<string, unknown>;
+type DrawerTab = "changes" | "before" | "after";
 
-const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'destructive' | 'outline'> = {
-  insert: 'success',
-  update: 'secondary',
-  delete: 'destructive',
-  post: 'success',
-  void: 'warning',
-  approve: 'success',
-  reject: 'destructive',
-}
+const ACTION_VARIANT: Record<
+  string,
+  "success" | "secondary" | "warning" | "destructive" | "outline"
+> = {
+  insert: "success",
+  update: "secondary",
+  delete: "destructive",
+  post: "success",
+  void: "warning",
+  approve: "success",
+  reject: "destructive",
+};
 
-const CONTEXT_KEYS = new Set(['source', 'mode', 'reason'])
-const ACRONYMS = new Set(['api', 'fx', 'gl', 'id', 'url'])
+const CONTEXT_KEYS = new Set(["source", "mode", "reason"]);
+const ACRONYMS = new Set(["api", "fx", "gl", "id", "url"]);
 
 function isObject(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function humanize(value: string): string {
   return value
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_.-]+/g, ' ')
-    .split(' ')
-    .map((word) => ACRONYMS.has(word.toLowerCase()) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_.-]+/g, " ")
+    .split(" ")
+    .map((word) =>
+      ACRONYMS.has(word.toLowerCase())
+        ? word.toUpperCase()
+        : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(" ");
 }
 
 function formatPath(path: string): string {
-  return path.split('.').map(humanize).join(' › ')
+  return path.split(".").map(humanize).join(" › ");
 }
 
-function itemTitle(value: unknown, index: number, fallback: string, lineLabel: (line: string) => string): string {
-  if (!isObject(value)) return `${fallback} ${index + 1}`
-  if (typeof value.description === 'string' && value.description.length > 0) return value.description
-  if (typeof value.line_number === 'string' || typeof value.line_number === 'number') return lineLabel(String(value.line_number))
-  const identifyingValue = value.name ?? value.document_number ?? value.entry_number ?? value.id
-  return typeof identifyingValue === 'string' && identifyingValue.length > 0
+function itemTitle(
+  value: unknown,
+  index: number,
+  fallback: string,
+  lineLabel: (line: string) => string,
+): string {
+  if (!isObject(value)) return `${fallback} ${index + 1}`;
+  if (typeof value.description === "string" && value.description.length > 0)
+    return value.description;
+  if (typeof value.line_number === "string" || typeof value.line_number === "number")
+    return lineLabel(String(value.line_number));
+  const identifyingValue = value.name ?? value.document_number ?? value.entry_number ?? value.id;
+  return typeof identifyingValue === "string" && identifyingValue.length > 0
     ? identifyingValue
-    : `${fallback} ${index + 1}`
+    : `${fallback} ${index + 1}`;
 }
 
 function CompactValue({ value, exactNumbers = false }: { value: unknown; exactNumbers?: boolean }) {
-  const t = useTranslations('admin.audit.drawer')
-  const format = useFormatter()
-  if (value === null || value === undefined) return <span className="text-slate-400">{t('notSet')}</span>
-  if (Array.isArray(value)) return <span className="text-slate-500 dark:text-slate-400">{t('itemCount', { count: value.length })}</span>
-  if (isObject(value)) return <span className="text-slate-500 dark:text-slate-400">{t('propertyCount', { count: Object.keys(value).length })}</span>
-  if (typeof value === 'boolean') return <Badge variant={value ? 'success' : 'outline'}>{value ? t('yes') : t('no')}</Badge>
-  if (typeof value === 'number') return <span className="tabular-nums">{exactNumbers ? String(value) : format.number(value, { maximumFractionDigits: 4 })}</span>
-  const text = String(value)
-  return <span className={cn('break-words', isUuid(text) && 'font-mono text-xs text-slate-600 dark:text-slate-300')}>{text}</span>
-}
-
-function JsonCollectionItem({ item, index, total, depth, exactNumbers }: {
-  item: unknown; index: number; total: number; depth: number; exactNumbers: boolean
-}) {
-  const t = useTranslations('admin.audit.drawer')
-  const [expanded, setExpanded] = useState(false)
+  const t = useTranslations("admin.audit.drawer");
+  const format = useFormatter();
+  if (value === null || value === undefined)
+    return <span className="text-slate-400">{t("notSet")}</span>;
+  if (Array.isArray(value))
+    return (
+      <span className="text-slate-500 dark:text-slate-400">
+        {t("itemCount", { count: value.length })}
+      </span>
+    );
+  if (isObject(value))
+    return (
+      <span className="text-slate-500 dark:text-slate-400">
+        {t("propertyCount", { count: Object.keys(value).length })}
+      </span>
+    );
+  if (typeof value === "boolean")
+    return <Badge variant={value ? "success" : "outline"}>{value ? t("yes") : t("no")}</Badge>;
+  if (typeof value === "number")
+    return (
+      <span className="tabular-nums">
+        {exactNumbers ? String(value) : format.number(value, { maximumFractionDigits: 4 })}
+      </span>
+    );
+  const text = String(value);
   return (
-    <details onToggle={(event) => setExpanded(event.currentTarget.open)}
-      className="group overflow-hidden rounded-lg border border-slate-200 bg-white open:shadow-sm dark:border-slate-800 dark:bg-slate-950/30">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 marker:hidden hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60">
-        <span className="truncate">{itemTitle(item, index, t('item'), (line) => t('lineItem', { line }))}</span>
-        <span className="shrink-0 text-xs font-normal text-slate-400">{t('itemPosition', { current: index + 1, total })}</span>
-      </summary>
-      {expanded ? <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-        <JsonValue value={item} depth={depth + 1} exactNumbers={exactNumbers} />
-      </div> : null}
-    </details>
-  )
+    <span
+      className={cn(
+        "break-words",
+        isUuid(text) && "font-mono text-xs text-slate-600 dark:text-slate-300",
+      )}
+    >
+      {text}
+    </span>
+  );
 }
 
-export function JsonValue({ value, depth = 0, exactNumbers = false }: { value: unknown; depth?: number; exactNumbers?: boolean }) {
-  const t = useTranslations('admin.audit.drawer')
-  if (!Array.isArray(value) && !isObject(value)) return <CompactValue value={value} exactNumbers={exactNumbers} />
+function JsonCollectionItem({
+  item,
+  index,
+  total,
+  depth,
+  exactNumbers,
+}: {
+  item: unknown;
+  index: number;
+  total: number;
+  depth: number;
+  exactNumbers: boolean;
+}) {
+  const t = useTranslations("admin.audit.drawer");
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <details
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="group overflow-hidden rounded-lg border border-slate-200 bg-white open:shadow-sm dark:border-slate-800 dark:bg-slate-950/30"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 marker:hidden hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60">
+        <span className="truncate">
+          {itemTitle(item, index, t("item"), (line) => t("lineItem", { line }))}
+        </span>
+        <span className="shrink-0 text-xs font-normal text-slate-400">
+          {t("itemPosition", { current: index + 1, total })}
+        </span>
+      </summary>
+      {expanded ? (
+        <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+          <JsonValue value={item} depth={depth + 1} exactNumbers={exactNumbers} />
+        </div>
+      ) : null}
+    </details>
+  );
+}
+
+export function JsonValue({
+  value,
+  depth = 0,
+  exactNumbers = false,
+}: {
+  value: unknown;
+  depth?: number;
+  exactNumbers?: boolean;
+}) {
+  const t = useTranslations("admin.audit.drawer");
+  if (!Array.isArray(value) && !isObject(value))
+    return <CompactValue value={value} exactNumbers={exactNumbers} />;
 
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-slate-400">{t('emptyCollection')}</span>
+    if (value.length === 0) return <span className="text-slate-400">{t("emptyCollection")}</span>;
     if (value.every((item) => !isObject(item) && !Array.isArray(item))) {
       return (
         <div className="flex flex-wrap gap-1.5">
           {value.map((item, index) => (
-            <span key={index} className="rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">
+            <span
+              key={index}
+              className="rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800"
+            >
               <CompactValue value={item} exactNumbers={exactNumbers} />
             </span>
           ))}
         </div>
-      )
+      );
     }
     return (
       <div className="space-y-2">
         {value.map((item, index) => (
-          <JsonCollectionItem key={index} item={item} index={index} total={value.length} depth={depth} exactNumbers={exactNumbers} />
+          <JsonCollectionItem
+            key={index}
+            item={item}
+            index={index}
+            total={value.length}
+            depth={depth}
+            exactNumbers={exactNumbers}
+          />
         ))}
       </div>
-    )
+    );
   }
 
-  const entries = Object.entries(value)
-  if (entries.length === 0) return <span className="text-slate-400">{t('emptyCollection')}</span>
+  const entries = Object.entries(value);
+  if (entries.length === 0) return <span className="text-slate-400">{t("emptyCollection")}</span>;
   return (
     <dl className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/30">
       {entries.map(([key, entry], index) => (
         <div
           key={key}
           className={cn(
-            'grid gap-1.5 px-3 py-2.5 sm:grid-cols-[minmax(9rem,0.32fr)_minmax(0,1fr)] sm:gap-4',
-            index > 0 && 'border-t border-slate-100 dark:border-slate-800',
+            "grid gap-1.5 px-3 py-2.5 sm:grid-cols-[minmax(9rem,0.32fr)_minmax(0,1fr)] sm:gap-4",
+            index > 0 && "border-t border-slate-100 dark:border-slate-800",
           )}
         >
-          <dt className="text-xs font-medium tracking-wide text-slate-500 dark:text-slate-400">{humanize(key)}</dt>
+          <dt className="text-xs font-medium tracking-wide text-slate-500 dark:text-slate-400">
+            {humanize(key)}
+          </dt>
           <dd className="min-w-0 text-sm text-slate-800 dark:text-slate-200">
             <JsonValue value={entry} depth={depth + 1} exactNumbers={exactNumbers} />
           </dd>
         </div>
       ))}
     </dl>
-  )
+  );
 }
 
 function DiffList({ rows }: { rows: AuditDiffRow[] }) {
-  const t = useTranslations('admin.audit.drawer')
+  const t = useTranslations("admin.audit.drawer");
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-        {t('noDifferences')}
+        {t("noDifferences")}
       </div>
-    )
+    );
   }
 
-  const grouped = new Map<string, AuditDiffRow[]>()
+  const grouped = new Map<string, AuditDiffRow[]>();
   for (const row of rows) {
-    const group = row.path.split('.')[0] || 'event'
-    const groupRows = grouped.get(group)
-    if (groupRows) groupRows.push(row)
-    else grouped.set(group, [row])
+    const group = row.path.split(".")[0] || "event";
+    const groupRows = grouped.get(group);
+    if (groupRows) groupRows.push(row);
+    else grouped.set(group, [row]);
   }
   return (
     <div className="space-y-3">
       {[...grouped.entries()].map(([group, groupRows]) => (
-        <details key={group} open className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <details
+          key={group}
+          open
+          className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+        >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-50 px-4 py-3 marker:hidden dark:bg-slate-800/50">
-            <span className="font-medium text-slate-800 dark:text-slate-100">{humanize(group)}</span>
-            <Badge variant="secondary">{t('changeCount', { count: groupRows.length })}</Badge>
+            <span className="font-medium text-slate-800 dark:text-slate-100">
+              {humanize(group)}
+            </span>
+            <Badge variant="secondary">{t("changeCount", { count: groupRows.length })}</Badge>
           </summary>
           <div className="border-t border-slate-200 dark:border-slate-800">
             <div className="hidden grid-cols-[minmax(10rem,0.6fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4 bg-slate-50/60 px-4 py-2 text-[11px] font-medium tracking-wide text-slate-500 uppercase sm:grid dark:bg-slate-950/20 dark:text-slate-400">
-              <span>{t('field')}</span><span>{t('before')}</span><span>{t('after')}</span>
+              <span>{t("field")}</span>
+              <span>{t("before")}</span>
+              <span>{t("after")}</span>
             </div>
             {groupRows.map((row, index) => (
               <div
                 key={row.path}
                 className={cn(
-                  'grid gap-2 px-4 py-3 text-sm sm:grid-cols-[minmax(10rem,0.6fr)_minmax(0,1fr)_minmax(0,1fr)] sm:gap-4',
-                  index > 0 && 'border-t border-slate-100 dark:border-slate-800',
+                  "grid gap-2 px-4 py-3 text-sm sm:grid-cols-[minmax(10rem,0.6fr)_minmax(0,1fr)_minmax(0,1fr)] sm:gap-4",
+                  index > 0 && "border-t border-slate-100 dark:border-slate-800",
                 )}
               >
-                <div className="font-medium text-slate-700 dark:text-slate-200">{formatPath(row.path)}</div>
+                <div className="font-medium text-slate-700 dark:text-slate-200">
+                  {formatPath(row.path)}
+                </div>
                 <div className="min-w-0 rounded-md bg-red-50/70 px-2.5 py-1.5 text-slate-700 dark:bg-red-950/20 dark:text-slate-300">
-                  <span className="mb-1 block text-[10px] font-medium tracking-wide text-red-500 uppercase sm:hidden">{t('before')}</span>
+                  <span className="mb-1 block text-[10px] font-medium tracking-wide text-red-500 uppercase sm:hidden">
+                    {t("before")}
+                  </span>
                   <CompactValue value={row.before} />
                 </div>
                 <div className="min-w-0 rounded-md bg-emerald-50/70 px-2.5 py-1.5 text-slate-700 dark:bg-emerald-950/20 dark:text-slate-300">
-                  <span className="mb-1 block text-[10px] font-medium tracking-wide text-emerald-600 uppercase sm:hidden">{t('after')}</span>
+                  <span className="mb-1 block text-[10px] font-medium tracking-wide text-emerald-600 uppercase sm:hidden">
+                    {t("after")}
+                  </span>
                   <CompactValue value={row.after} />
                 </div>
               </div>
@@ -200,115 +293,182 @@ function DiffList({ rows }: { rows: AuditDiffRow[] }) {
         </details>
       ))}
     </div>
-  )
+  );
 }
 
-function MetadataCard({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+function MetadataCard({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">{icon}{label}</div>
-      <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{children}</div>
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+        {icon}
+        {label}
+      </div>
+      <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+        {children}
+      </div>
     </div>
-  )
+  );
 }
 
 type AuditEventDrawerProps =
-  | { event: AuditEvent | null; closeHref: string; eventId: string; error?: string | null; onRetry?: () => void; onClose?: never; stacked?: never }
-  | { event: AuditEvent; onClose: () => void; stacked?: boolean; closeHref?: never }
+  | {
+      event: AuditEvent | null;
+      closeHref: string;
+      eventId: string;
+      error?: string | null;
+      onRetry?: () => void;
+      onClose?: never;
+      stacked?: never;
+    }
+  | { event: AuditEvent; onClose: () => void; stacked?: boolean; closeHref?: never };
 
 export function AuditEventDrawer(props: AuditEventDrawerProps) {
-  const { event } = props
-  const t = useTranslations('admin.audit')
-  const format = useFormatter()
-  const locale = useLocale()
-  const changes = useMemo(() => isObject(event?.changes) ? event.changes : {}, [event])
-  const hasBefore = Object.hasOwn(changes, 'before')
-  const hasAfter = Object.hasOwn(changes, 'after')
-  const tabs: DrawerTab[] = ['changes', ...(hasBefore ? ['before' as const] : []), ...(hasAfter ? ['after' as const] : [])]
-  const [activeTab, setActiveTab] = useState<DrawerTab>('changes')
-  const when = event ? format.dateTime(new Date(event.at), { dateStyle: 'long', timeStyle: 'medium' }) : ''
-  const recordText = event ? auditRecordText(event.recordLabel ?? null, locale) : null
-  const actionLabel = event ? auditActionLabel(t as never, event.action, humanize) : ''
-  const actor = event?.actorName ?? t('systemActor')
-  const context = Object.fromEntries(Object.entries(changes).filter(([key]) => CONTEXT_KEYS.has(key)))
+  const { event } = props;
+  const t = useTranslations("admin.audit");
+  const format = useFormatter();
+  const locale = useLocale();
+  const changes = useMemo(() => (isObject(event?.changes) ? event.changes : {}), [event]);
+  const hasBefore = Object.hasOwn(changes, "before");
+  const hasAfter = Object.hasOwn(changes, "after");
+  const tabs: DrawerTab[] = [
+    "changes",
+    ...(hasBefore ? ["before" as const] : []),
+    ...(hasAfter ? ["after" as const] : []),
+  ];
+  const [activeTab, setActiveTab] = useState<DrawerTab>("changes");
+  const when = event
+    ? format.dateTime(new Date(event.at), { dateStyle: "long", timeStyle: "medium" })
+    : "";
+  const recordText = event ? auditRecordText(event.recordLabel ?? null, locale) : null;
+  const actionLabel = event ? auditActionLabel(t as never, event.action, humanize) : "";
+  const actor = event?.actorName ?? t("systemActor");
+  const context = Object.fromEntries(
+    Object.entries(changes).filter(([key]) => CONTEXT_KEYS.has(key)),
+  );
 
-  const diffs = useMemo(() => auditEventDiffs(changes), [changes])
+  const diffs = useMemo(() => auditEventDiffs(changes), [changes]);
 
-  const details = Object.fromEntries(Object.entries(changes).filter(([key, value]) => (
-    !CONTEXT_KEYS.has(key)
-    && key !== 'before'
-    && key !== 'after'
-    && !(!hasBefore && !hasAfter && Array.isArray(value) && value.length === 2)
-  )))
+  const details = Object.fromEntries(
+    Object.entries(changes).filter(
+      ([key, value]) =>
+        !CONTEXT_KEYS.has(key) &&
+        key !== "before" &&
+        key !== "after" &&
+        !(!hasBefore && !hasAfter && Array.isArray(value) && value.length === 2),
+    ),
+  );
 
   const title = event ? (
     <span className="flex flex-wrap items-center gap-2.5">
       <span>{humanize(event.recordType)}</span>
-      <Badge variant={ACTION_VARIANT[event.action] ?? 'secondary'}>{actionLabel}</Badge>
+      <Badge variant={ACTION_VARIANT[event.action] ?? "secondary"}>{actionLabel}</Badge>
     </span>
-  ) : t('title')
-  const subtabs = event ? <DrawerTabStrip tabs={tabs.map((tab) => ({ key: tab, label: t(`drawer.tabs.${tab}`) }))} activeKey={activeTab} onSelect={setActiveTab} ariaLabel={t('drawer.tabsAria')} /> : undefined
+  ) : (
+    t("title")
+  );
+  const subtabs = event ? (
+    <DrawerTabStrip
+      tabs={tabs.map((tab) => ({ key: tab, label: t(`drawer.tabs.${tab}`) }))}
+      activeKey={activeTab}
+      onSelect={setActiveTab}
+      ariaLabel={t("drawer.tabsAria")}
+    />
+  ) : undefined;
   const content = event ? (
-      <div className="space-y-6 pb-2">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetadataCard icon={<Clock3 size={14} aria-hidden />} label={t('drawer.when')}>{when}</MetadataCard>
-          <MetadataCard icon={<UserRound size={14} aria-hidden />} label={t('drawer.actor')}>{actor}</MetadataCard>
-          <MetadataCard icon={<Database size={14} aria-hidden />} label={t('drawer.recordType')}>{humanize(event.recordType)}</MetadataCard>
-          <MetadataCard icon={<Fingerprint size={14} aria-hidden />} label={t('drawer.reference')}>
-            {recordText ? <span className="block truncate" title={recordText}>{recordText}</span> : null}
-            <span className="font-mono text-xs">{event.rowId}</span>
-          </MetadataCard>
-        </div>
+    <div className="space-y-6 pb-2">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetadataCard icon={<Clock3 size={14} aria-hidden />} label={t("drawer.when")}>
+          {when}
+        </MetadataCard>
+        <MetadataCard icon={<UserRound size={14} aria-hidden />} label={t("drawer.actor")}>
+          {actor}
+        </MetadataCard>
+        <MetadataCard icon={<Database size={14} aria-hidden />} label={t("drawer.recordType")}>
+          {humanize(event.recordType)}
+        </MetadataCard>
+        <MetadataCard icon={<Fingerprint size={14} aria-hidden />} label={t("drawer.reference")}>
+          {recordText ? (
+            <span className="block truncate" title={recordText}>
+              {recordText}
+            </span>
+          ) : null}
+          <span className="font-mono text-xs">{event.rowId}</span>
+        </MetadataCard>
+      </div>
 
-        {activeTab === 'changes' ? (
-          <>
+      {activeTab === "changes" ? (
+        <>
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <History size={17} className="text-teal-600 dark:text-teal-400" aria-hidden />
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("drawer.changedFields")}
+              </h3>
+            </div>
+            <DiffList rows={diffs} />
+          </section>
+
+          {Object.keys(context).length > 0 || Object.keys(details).length > 0 ? (
             <section className="space-y-3">
               <div className="flex items-center gap-2">
-                <History size={17} className="text-teal-600 dark:text-teal-400" aria-hidden />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.changedFields')}</h3>
+                <Braces size={17} className="text-teal-600 dark:text-teal-400" aria-hidden />
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {t("drawer.eventContext")}
+                </h3>
               </div>
-              <DiffList rows={diffs} />
+              <JsonValue value={{ ...context, ...details }} />
             </section>
+          ) : null}
 
-            {Object.keys(context).length > 0 || Object.keys(details).length > 0 ? (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Braces size={17} className="text-teal-600 dark:text-teal-400" aria-hidden />
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.eventContext')}</h3>
-                </div>
-                <JsonValue value={{ ...context, ...details }} />
-              </section>
-            ) : null}
-
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.technicalDetails')}</h3>
-              <JsonValue value={{ eventId: event.id, requestId: event.requestId }} />
-            </section>
-          </>
-        ) : null}
-
-        {activeTab === 'before' ? (
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.beforeSnapshot')}</h3>
-            <JsonValue value={changes.before} />
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("drawer.technicalDetails")}
+            </h3>
+            <JsonValue value={{ eventId: event.id, requestId: event.requestId }} />
           </section>
-        ) : null}
+        </>
+      ) : null}
 
-        {activeTab === 'after' ? (
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.afterSnapshot')}</h3>
-            {changes.after === null ? (
-              <div className="rounded-xl border border-dashed border-red-300 bg-red-50/50 px-4 py-10 text-center dark:border-red-900 dark:bg-red-950/20">
-                <p className="font-medium text-red-800 dark:text-red-200">{t('drawer.recordRemoved')}</p>
-                <p className="mt-1 text-sm text-red-600 dark:text-red-300">{t('drawer.recordRemovedDescription')}</p>
-              </div>
-            ) : <JsonValue value={changes.after} />}
-          </section>
-        ) : null}
-      </div>
-  ) : null
+      {activeTab === "before" ? (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t("drawer.beforeSnapshot")}
+          </h3>
+          <JsonValue value={changes.before} />
+        </section>
+      ) : null}
 
-  if (typeof props.closeHref === 'string') {
+      {activeTab === "after" ? (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t("drawer.afterSnapshot")}
+          </h3>
+          {changes.after === null ? (
+            <div className="rounded-xl border border-dashed border-red-300 bg-red-50/50 px-4 py-10 text-center dark:border-red-900 dark:bg-red-950/20">
+              <p className="font-medium text-red-800 dark:text-red-200">
+                {t("drawer.recordRemoved")}
+              </p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-300">
+                {t("drawer.recordRemovedDescription")}
+              </p>
+            </div>
+          ) : (
+            <JsonValue value={changes.after} />
+          )}
+        </section>
+      ) : null}
+    </div>
+  ) : null;
+
+  if (typeof props.closeHref === "string") {
     return (
       <AsyncUrlDrawer
         open
@@ -319,12 +479,12 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
         closeHref={props.closeHref}
         size="2xl"
         title={title}
-        description={event ? t('drawer.description', { actor, when }) : undefined}
+        description={event ? t("drawer.description", { actor, when }) : undefined}
         subtabs={subtabs}
       >
         {content}
       </AsyncUrlDrawer>
-    )
+    );
   }
 
   return (
@@ -334,10 +494,10 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
       stacked={props.stacked}
       size="2xl"
       title={title}
-      description={t('drawer.description', { actor, when })}
+      description={t("drawer.description", { actor, when })}
       subtabs={subtabs}
     >
       {content}
     </Drawer>
-  )
+  );
 }

@@ -3,10 +3,7 @@ import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { roundMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
-import {
-  entitlementPlans,
-  type Executor,
-} from "./entitlements-db.ts";
+import { entitlementPlans, type Executor } from "./entitlements-db.ts";
 import { type EntitlementPlan } from "./entitlements-types.ts";
 
 /* ------------------------------------------------------------------ */
@@ -52,7 +49,6 @@ export interface EntitlementOpeningRow {
   dates: Record<string, string>;
   /** planId → the committed run that froze it, where one has. */
   locked: Record<string, EntitlementOpeningLock>;
-
 }
 
 export interface EntitlementOpeningsResult {
@@ -73,7 +69,9 @@ export interface EntitlementOpeningsResult {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function assertMovementDate(value: unknown): string {
-  const date = String(value ?? "").trim().slice(0, 10);
+  const date = String(value ?? "")
+    .trim()
+    .slice(0, 10);
   if (!ISO_DATE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
     throw new PayrollError(`"${String(value)}" is not a date (YYYY-MM-DD)`);
   }
@@ -95,7 +93,13 @@ export async function entitlementOpeningLocks(
   executor: Executor = db,
   employeePartyIds?: readonly string[],
 ): Promise<Map<string, EntitlementOpeningLock>> {
-  const r = (await executor.execute<{ plan_id: string; employee_party_id: string; document_number: string | null; pay_date: string }>(sql`
+  const r = await executor.execute<{
+    plan_id: string;
+    employee_party_id: string;
+    document_number: string | null;
+    pay_date: string;
+  }>(
+    sql`
     select distinct on (l.plan_id, l.employee_party_id)
            l.plan_id, l.employee_party_id, d.document_number, s.pay_date::text as pay_date
       from entitlement_ledger l
@@ -106,7 +110,9 @@ export async function entitlementOpeningLocks(
      where l.org_id = ${orgId} and l.kind = 'opening' and r.run_status = 'committed'
        ${employeePartyIds === undefined ? sql`` : sql`and l.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
      order by l.plan_id, l.employee_party_id, s.pay_date
-  `, "objects"));
+  `,
+    "objects",
+  );
   return new Map(
     r.map((row) => [
       `${row.plan_id}:${row.employee_party_id}`,
@@ -127,7 +133,12 @@ export async function entitlementOpeningBlocks(
   executor: Executor = db,
   employeePartyIds?: readonly string[],
 ): Promise<Map<string, EntitlementOpeningLock>> {
-  const r = (await executor.execute<{ employee_party_id: string; document_number: string | null; pay_date: string }>(sql`
+  const r = await executor.execute<{
+    employee_party_id: string;
+    document_number: string | null;
+    pay_date: string;
+  }>(
+    sql`
     select distinct on (s.employee_party_id)
            s.employee_party_id, d.document_number, s.pay_date::text as pay_date
       from pay_stubs s
@@ -136,7 +147,9 @@ export async function entitlementOpeningBlocks(
      where s.org_id = ${orgId} and r.run_status = 'committed' and s.pay_date >= ${asOf}
        ${employeePartyIds === undefined ? sql`` : sql`and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
      order by s.employee_party_id, s.pay_date
-  `, "objects"));
+  `,
+    "objects",
+  );
   return new Map(
     r.map((row) => [
       row.employee_party_id,
@@ -159,20 +172,28 @@ export async function entitlementOpenings(
   const asOf = opts.asOf ? assertMovementDate(opts.asOf) : await businessToday(orgId);
   const plans = await entitlementPlans(orgId);
 
-  const people = (await db.execute<Record<string, unknown>>(sql`
+  const people = await db.execute<Record<string, unknown>>(
+    sql`
     select p.id as employee_party_id, p.display_name as employee_name, er.employee_number
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.is_active and p.is_active
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
 
-  const openings = (await db.execute<{ plan_id: string; employee_party_id: string; amount: string; movement_date: string }>(sql`
+  const openings = await db.execute<{
+    plan_id: string;
+    employee_party_id: string;
+    amount: string;
+    movement_date: string;
+  }>(sql`
     select plan_id, employee_party_id, amount::text as amount, movement_date::text as movement_date
       from entitlement_ledger
      where org_id = ${orgId} and kind = 'opening'
-  `));
+  `);
   const byEmployee = new Map<string, typeof openings.rows>();
   for (const row of openings.rows) {
     byEmployee.set(row.employee_party_id, [...(byEmployee.get(row.employee_party_id) ?? []), row]);

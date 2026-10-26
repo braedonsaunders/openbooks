@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import {
-  automationGraphSchema,
-  type AutomationGraph,
-} from "@openbooks/forms-core";
+import { automationGraphSchema, type AutomationGraph } from "@openbooks/forms-core";
 import { db, pinnedTransactionExecutor } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -38,14 +35,16 @@ export async function requireCompletedSubmissionRouting(input: {
     );
   }
   await lockApprovalSubject(input.orgId, input.subjectKind, input.subjectId);
-  const row = (await db.execute<{
+  const row = (
+    await db.execute<{
       flow_id: string;
       created_by: string | null;
       context: Record<string, unknown>;
       graph: unknown;
       submission_id: string;
       policy: FlowSubmissionPolicy;
-    }>(sql`
+    }>(
+      sql`
     select r.flow_id, r.created_by, r.context, r.context->'submissionPolicy'->'graph' as graph,
       receipt.id as submission_id, receipt.policy
       from flow_runs r join flow_submissions receipt on receipt.org_id=r.org_id
@@ -62,7 +61,10 @@ export async function requireCompletedSubmissionRouting(input: {
          and other.subject_kind=r.subject_kind and other.subject_id=r.subject_id
          and other.trigger='on_submit' and other.id<>r.id and other.status in ('running','waiting','failed'))
      for share of r
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const graph = automationGraphSchema.safeParse(row?.graph);
   const context = row?.context;
   const proof = context?.submissionRouting;
@@ -84,9 +86,7 @@ export async function requireCompletedSubmissionRouting(input: {
   }
   const routing = proof as Record<string, unknown>;
   const submission = policy as Record<string, unknown>;
-  const digest = createHash("sha256")
-    .update(canonicalJson(graph.data))
-    .digest("hex");
+  const digest = createHash("sha256").update(canonicalJson(graph.data)).digest("hex");
   if (
     routing.version !== 1 ||
     routing.runId !== input.runId ||

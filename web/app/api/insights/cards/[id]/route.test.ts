@@ -1,78 +1,81 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.insight-card-route-test')
-const CARD_ID = '00000000-0000-4000-8000-00000000c001'
-const STORED_REVISION = '2026-08-24T12:00:00.300001Z'
-const NEXT_REVISION = '2026-08-24T12:00:00.300002Z'
+const stateKey = Symbol.for("openbooks.insight-card-route-test");
+const CARD_ID = "00000000-0000-4000-8000-00000000c001";
+const STORED_REVISION = "2026-08-24T12:00:00.300001Z";
+const NEXT_REVISION = "2026-08-24T12:00:00.300002Z";
 
 interface DbCall {
-  text: string
+  text: string;
 }
 interface Card {
-  id: string
-  name: string
-  description: string | null
-  query: unknown
-  viz_type: 'bar'
-  viz_settings: Record<string, unknown>
-  status: 'draft'
-  allowed_roles: string[] | null
-  updated_at: string
+  id: string;
+  name: string;
+  description: string | null;
+  query: unknown;
+  viz_type: "bar";
+  viz_settings: Record<string, unknown>;
+  status: "draft";
+  allowed_roles: string[] | null;
+  updated_at: string;
 }
 interface RouteState {
-  calls: DbCall[]
-  card: Card
-  currentRevision: string
-  updateSucceeds: boolean
-  deniedSource: string | null
+  calls: DbCall[];
+  card: Card;
+  currentRevision: string;
+  updateSucceeds: boolean;
+  deniedSource: string | null;
 }
 
 const routeState: RouteState = {
   calls: [],
   card: {
     id: CARD_ID,
-    name: 'Original card',
+    name: "Original card",
     description: null,
-    query: { source: 'ledger_lines' },
-    viz_type: 'bar',
+    query: { source: "ledger_lines" },
+    viz_type: "bar",
     viz_settings: {},
-    status: 'draft',
+    status: "draft",
     allowed_roles: null,
     updated_at: STORED_REVISION,
   },
   currentRevision: STORED_REVISION,
   updateSucceeds: true,
   deniedSource: null,
-}
+};
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
 
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextCard = sqlText
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextCard = sqlText;
 
 const mockSources = new Map<string, string>([
-  ['mock:mutations', `
+  [
+    "mock:mutations",
+    `
     import { db } from '@openbooks/engine/platform/db'
     export async function mutateInsight(_authz, _table, _id, _action, work) {
       return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
     }
-  `],
+  `,
+  ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.insight-card-route-test')]
       const sqlText = globalThis.openbooksSqlTextCard
@@ -97,7 +100,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       export async function guardPermission(permission) {
         if (permission === 'insights.read' || permission === 'insights.create') {
@@ -108,7 +111,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:insights-lib',
+    "mock:insights-lib",
     `
       const state = globalThis[Symbol.for('openbooks.insight-card-route-test')]
       export function isVizType(value) { return ['table', 'bar', 'line', 'area', 'pie'].includes(value) }
@@ -122,109 +125,118 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/insight-mutations', 'mock:mutations'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../_lib', 'mock:insights-lib'],
-])
+  ["@/lib/insight-mutations", "mock:mutations"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../_lib", "mock:insights-lib"],
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = new URL('./route.ts?insight-card-occ-test', import.meta.url).href
-const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = new URL("./route.ts?insight-card-occ-test", import.meta.url).href;
+const { GET, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset() {
-  routeState.calls.length = 0
-  routeState.currentRevision = STORED_REVISION
-  routeState.updateSucceeds = true
-  routeState.deniedSource = null
+  routeState.calls.length = 0;
+  routeState.currentRevision = STORED_REVISION;
+  routeState.updateSucceeds = true;
+  routeState.deniedSource = null;
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/insights/cards/${CARD_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: CARD_ID }) },
-  )
+  );
 }
 
 function get(): Promise<Response> {
   return GET(new Request(`http://openbooks.test/api/insights/cards/${CARD_ID}`), {
     params: Promise.resolve({ id: CARD_ID }),
-  })
+  });
 }
 
-test('PATCH requires a revision token before writing', async () => {
-  reset()
-  const response = await patch({ name: 'missing token' })
-  assert.equal(response.status, 409)
+test("PATCH requires a revision token before writing", async () => {
+  reset();
+  const response = await patch({ name: "missing token" });
+  assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), {
-    error: 'the card revision is required; reload and review the latest revision',
-  })
-  assert.equal(routeState.calls.filter((call) => call.text.includes('update insight_cards')).length, 0)
-})
+    error: "the card revision is required; reload and review the latest revision",
+  });
+  assert.equal(
+    routeState.calls.filter((call) => call.text.includes("update insight_cards")).length,
+    0,
+  );
+});
 
-test('PATCH rejects a stale revision without overwriting the newer card', async () => {
-  reset()
-  routeState.updateSucceeds = false
+test("PATCH rejects a stale revision without overwriting the newer card", async () => {
+  reset();
+  routeState.updateSucceeds = false;
   const response = await patch({
-    name: 'stale save',
-    expectedUpdatedAt: '2026-08-24T12:00:00.300000Z',
-  })
-  assert.equal(response.status, 409)
+    name: "stale save",
+    expectedUpdatedAt: "2026-08-24T12:00:00.300000Z",
+  });
+  assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), {
-    error: 'this card changed after you opened it; reload and review the latest revision',
-  })
-  assert.equal(routeState.calls.filter((call) => call.text.includes('update insight_cards')).length, 1)
-})
+    error: "this card changed after you opened it; reload and review the latest revision",
+  });
+  assert.equal(
+    routeState.calls.filter((call) => call.text.includes("update insight_cards")).length,
+    1,
+  );
+});
 
-test('PATCH writes under an exact revision and returns the next revision', async () => {
-  reset()
-  routeState.currentRevision = NEXT_REVISION
+test("PATCH writes under an exact revision and returns the next revision", async () => {
+  reset();
+  routeState.currentRevision = NEXT_REVISION;
   const response = await patch({
-    name: 'newer save',
+    name: "newer save",
     expectedUpdatedAt: STORED_REVISION,
-  })
-  assert.equal(response.status, 200)
-  assert.equal((await response.json()).updated_at, NEXT_REVISION)
-  const update = routeState.calls.find((call) => call.text.includes('update insight_cards'))
-  assert.ok(update)
-  assert.match(update.text, /updated_at = greatest\(/)
-  assert.match(update.text, /expectedUpdatedAt|timestamptz/)
-})
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).updated_at, NEXT_REVISION);
+  const update = routeState.calls.find((call) => call.text.includes("update insight_cards"));
+  assert.ok(update);
+  assert.match(update.text, /updated_at = greatest\(/);
+  assert.match(update.text, /expectedUpdatedAt|timestamptz/);
+});
 
-test('PATCH refuses a replacement source the caller cannot access', async () => {
-  reset()
-  routeState.deniedSource = 'pay_stubs'
+test("PATCH refuses a replacement source the caller cannot access", async () => {
+  reset();
+  routeState.deniedSource = "pay_stubs";
   const response = await patch({
-    query: { source: 'pay_stubs' },
+    query: { source: "pay_stubs" },
     expectedUpdatedAt: STORED_REVISION,
-  })
-  assert.equal(response.status, 403)
-  assert.equal(routeState.calls.filter((call) => call.text.includes('update insight_cards')).length, 0)
-})
+  });
+  assert.equal(response.status, 403);
+  assert.equal(
+    routeState.calls.filter((call) => call.text.includes("update insight_cards")).length,
+    0,
+  );
+});
 
-test('GET exposes an exact revision token for the next save', async () => {
-  reset()
-  const response = await get()
-  assert.equal(response.status, 200)
-  assert.equal((await response.json()).updated_at, STORED_REVISION)
-})
+test("GET exposes an exact revision token for the next save", async () => {
+  reset();
+  const response = await get();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).updated_at, STORED_REVISION);
+});

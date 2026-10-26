@@ -1,4 +1,7 @@
-import { seedCanadianFilingAccountForTest, qualifyCanadianOpeningForTest } from "./filing-test-fixtures.ts";
+import {
+  seedCanadianFilingAccountForTest,
+  qualifyCanadianOpeningForTest,
+} from "./filing-test-fixtures.ts";
 import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -16,14 +19,23 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions, seedVacationTerms } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
+  seedVacationTerms,
+} from "../testing/fixtures.ts";
 
 /** Integration wiring for synthetic CA-pack employer-aggregate declarations. */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Threshold shape: 10% past a 1,000 allowance, org-wide, on the EHT slot. */
-function thresholdLevy(overrides: Partial<PayrollEmployerAggregateLevy> = {}): PayrollEmployerAggregateLevy {
+function thresholdLevy(
+  overrides: Partial<PayrollEmployerAggregateLevy> = {},
+): PayrollEmployerAggregateLevy {
   return {
     key: "synth_threshold",
     label: "Synthetic threshold levy",
@@ -82,12 +94,20 @@ async function seedHarness(orgId: string, actorId: string): Promise<{ ehtPayable
   const vacationPayable = await account("2320", "Vacation payable", "liability_current");
   const ehtPayable = await account("2340", "EHT payable", "liability_current");
   await seedPayrollAccountingConfiguration(orgId, {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }
-      });
+    wageExpenseAccountId: wageExpense,
+    burdenExpenseAccountId: burdenExpense,
+    netPayAccountId: netPayable,
+    wagesTo: "expense",
+    slotAccounts: {
+      CA: {
+        cpp: craPayable,
+        ei: craPayable,
+        qpip: craPayable,
+        income_tax: craPayable,
+        vacation: vacationPayable,
+      },
+    },
+  });
   await seedPayrollComponents(orgId, actorId, "CA");
   await seedOntarioEhtFixture(orgId, actorId);
   await setPackSlotAccount(orgId, actorId, "CA", "eht", ehtPayable);
@@ -105,7 +125,12 @@ async function makeSchedule(orgId: string, actorId: string, name = "Biweekly"): 
 }
 
 async function makeEmployee(
-  orgId: string, subsidiaryId: string, actorId: string, scheduleId: string, name: string, hourlyRate: string,
+  orgId: string,
+  subsidiaryId: string,
+  actorId: string,
+  scheduleId: string,
+  name: string,
+  hourlyRate: string,
 ): Promise<string> {
   const employeeId = randomUUID();
   await db.execute(sql`
@@ -130,7 +155,11 @@ async function makeEmployee(
 }
 
 async function postHours(
-  orgId: string, actorId: string, employeeId: string, workedOn: string, hours: string,
+  orgId: string,
+  actorId: string,
+  employeeId: string,
+  workedOn: string,
+  hours: string,
 ): Promise<void> {
   await db.execute(sql`
     insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
@@ -139,13 +168,19 @@ async function postHours(
             'unbilled', 'actual', ${actorId}, ${actorId})`);
 }
 
-async function stubFactors(orgId: string, documentId: string): Promise<Record<string, Record<string, string>>> {
-  const rows = (await db.execute<{ employee: string; factors: Record<string, string> }>(sql`
+async function stubFactors(
+  orgId: string,
+  documentId: string,
+): Promise<Record<string, Record<string, string>>> {
+  const rows = await db.execute<{ employee: string; factors: Record<string, string> }>(
+    sql`
     select p.display_name as employee, s.factors
       from pay_stubs s
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Object.fromEntries(rows.map((row) => [row.employee, row.factors]));
 }
 
@@ -158,31 +193,63 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
-      const empB = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Bob Base", "50");
+      const empA = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Amy Aggregate",
+        "50",
+      );
+      const empB = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Bob Base",
+        "50",
+      );
       // $1,000 each: the first stub prices nothing (allowance 1,000), the
       // second prices the 1,000 above it at 10%.
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       await postHours(org.orgId, actorId, empB, "2026-07-06", "20");
-      const employees = (await db.execute<{ id: string; display_name: string }>(sql`
+      const employees = await db.execute<{ id: string; display_name: string }>(
+        sql`
         select id, display_name from parties where org_id = ${org.orgId} and kind = 'person'
-      `, "objects"));
+      `,
+        "objects",
+      );
       await withDeclarations([thresholdLevy()], async () => {
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
-        const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const result = await calculatePayRun({
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
+        });
         assert.deepEqual(result.errors, []);
         const factors = await stubFactors(org.orgId, run.documentId);
-        const amounts = [factors["Amy Aggregate"]!["SYNTH"] ?? "0", factors["Bob Base"]!["SYNTH"] ?? "0"]
-          .sort((a, b) => Number(a) - Number(b));
+        const amounts = [
+          factors["Amy Aggregate"]!["SYNTH"] ?? "0",
+          factors["Bob Base"]!["SYNTH"] ?? "0",
+        ].sort((a, b) => Number(a) - Number(b));
         // One stub prices the whole excess; the other prices nothing but
         // still stamps its base (its SYNTH_EARN is what sequences the room).
         assert.equal(cmp(amounts[0]!, "0"), 0);
         assert.equal(cmp(amounts[1]!, "100"), 0);
-        const earns = [factors["Amy Aggregate"]!["SYNTH_EARN"] ?? "0", factors["Bob Base"]!["SYNTH_EARN"] ?? "0"];
-        assert.ok(earns.every((e) => cmp(e, "1000") === 0), "both stubs stamp the full base");
+        const earns = [
+          factors["Amy Aggregate"]!["SYNTH_EARN"] ?? "0",
+          factors["Bob Base"]!["SYNTH_EARN"] ?? "0",
+        ];
+        assert.ok(
+          earns.every((e) => cmp(e, "1000") === 0),
+          "both stubs stamp the full base",
+        );
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
         // A later run prices from the committed total: 2,000 of base used,
@@ -196,12 +263,15 @@ test(
         await commitPayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
 
         // The year reconciles: 10% of (2,500 − 1,000).
-        const total = (await db.execute<{ total: string }>(sql`
+        const total = await db.execute<{ total: string }>(
+          sql`
           select coalesce(sum((s.factors->>'SYNTH')::numeric), 0)::text as total
             from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${org.orgId} and s.tax_year = 2026 and r.run_status = 'committed'
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(cmp(total[0]!.total, "150"), 0);
       });
     } finally {
@@ -220,29 +290,56 @@ test(
       await seedHarness(org.orgId, actorId);
       const scheduleA = await makeSchedule(org.orgId, actorId, "Biweekly A");
       const scheduleB = await makeSchedule(org.orgId, actorId, "Biweekly B");
-      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleA, "Amy Aggregate", "40");
-      const empB = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleB, "Bob Base", "40");
+      const empA = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleA,
+        "Amy Aggregate",
+        "40",
+      );
+      const empB = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleB,
+        "Bob Base",
+        "40",
+      );
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       await postHours(org.orgId, actorId, empB, "2026-07-06", "20");
       await withDeclarations([thresholdLevy()], async () => {
         const runA = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleA,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleA,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
         const runB = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleB,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleB,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
         // Both calculate against empty room: $800 each prices nothing.
         for (const run of [runA, runB]) {
-          const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+          const result = await calculatePayRun({
+            orgId: org.orgId,
+            documentId: run.documentId,
+            actorId,
+          });
           assert.deepEqual(result.errors, []);
         }
         await commitPayRun({ orgId: org.orgId, documentId: runA.documentId, actorId });
         // The rosters share no employee, so the `ytd` arm stays silent — but
         // run B's calculation predates run A's consumption of the room.
         const staleness = await payRunStaleness(org.orgId, runB.documentId);
-        assert.ok(staleness.reasons.includes("employerLevyYtd"), `got ${staleness.reasons.join(",")}`);
+        assert.ok(
+          staleness.reasons.includes("employerLevyYtd"),
+          `got ${staleness.reasons.join(",")}`,
+        );
         assert.ok(!staleness.reasons.includes("ytd"), "no shared employee, no ytd reason");
         await assert.rejects(
           commitPayRun({ orgId: org.orgId, documentId: runB.documentId, actorId }),
@@ -254,12 +351,15 @@ test(
         const factors = await stubFactors(org.orgId, runB.documentId);
         assert.equal(cmp(factors["Bob Base"]!["SYNTH"] ?? "?", "60"), 0);
         await commitPayRun({ orgId: org.orgId, documentId: runB.documentId, actorId });
-        const total = (await db.execute<{ total: string }>(sql`
+        const total = await db.execute<{ total: string }>(
+          sql`
           select coalesce(sum((s.factors->>'SYNTH')::numeric), 0)::text as total
             from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${org.orgId} and s.tax_year = 2026 and r.run_status = 'committed'
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(cmp(total[0]!.total, "60"), 0);
       });
     } finally {
@@ -277,37 +377,55 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empA = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Amy Aggregate",
+        "50",
+      );
       await postHours(org.orgId, actorId, empA, "2026-07-06", "10");
       await withDeclarations([thresholdLevy()], async () => {
         // A carry-in for a levy nobody declares is refused, not shelved.
         await assert.rejects(
           saveEmployerLevyOpening({
-            orgId: org.orgId, actorId, taxYear: 2026,
+            orgId: org.orgId,
+            actorId,
+            taxYear: 2026,
             rows: [{ country: "CA", levyKey: "nope", region: null, baseYtd: "100" }],
           }),
           /not declared by the CA pack/,
         );
         const saved = await saveEmployerLevyOpening({
-          orgId: org.orgId, actorId, taxYear: 2026,
+          orgId: org.orgId,
+          actorId,
+          taxYear: 2026,
           rows: [{ country: "CA", levyKey: "synth_threshold", region: null, baseYtd: "1500" }],
         });
         assert.deepEqual([saved.created, saved.updated, saved.deleted], [1, 0, 0]);
         // A zero row deletes the carry-in instead of storing zeros.
         const cleared = await saveEmployerLevyOpening({
-          orgId: org.orgId, actorId, taxYear: 2026,
+          orgId: org.orgId,
+          actorId,
+          taxYear: 2026,
           rows: [{ country: "CA", levyKey: "synth_threshold", region: null, baseYtd: "0" }],
         });
         assert.deepEqual([cleared.created, cleared.updated, cleared.deleted], [0, 0, 1]);
         await saveEmployerLevyOpening({
-          orgId: org.orgId, actorId, taxYear: 2026,
+          orgId: org.orgId,
+          actorId,
+          taxYear: 2026,
           rows: [{ country: "CA", levyKey: "synth_threshold", region: null, baseYtd: "1500" }],
         });
 
         // The stub prices from the carry-in: (1,500 + 500 − 1,000) at 10%.
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
         await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
         const factors = await stubFactors(org.orgId, run.documentId);
@@ -317,7 +435,9 @@ test(
         // Committed room locks the carry-in: void the run to change it.
         await assert.rejects(
           saveEmployerLevyOpening({
-            orgId: org.orgId, actorId, taxYear: 2026,
+            orgId: org.orgId,
+            actorId,
+            taxYear: 2026,
             rows: [{ country: "CA", levyKey: "synth_threshold", region: null, baseYtd: "999" }],
           }),
           /void that run/,
@@ -338,7 +458,14 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empA = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Amy Aggregate",
+        "50",
+      );
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       const capLevy = thresholdLevy({
         key: "synth_cap",
@@ -351,30 +478,57 @@ test(
       await withDeclarations([capLevy], async () => {
         // 1,500 carried in: the first 1,000 prices 500 of headroom at 10%.
         await saveOpeningBalances({
-          orgId: org.orgId, actorId, taxYear: 2026,
+          orgId: org.orgId,
+          actorId,
+          taxYear: 2026,
           rows: [{ employeePartyId: empA, amounts: { wcbAssessableYtd: "1500" } }],
         });
-        await grantScratchPermissions(org.orgId, actorId, ['payroll.run', 'payroll.read']);
+        await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "payroll.read"]);
         const filingAccountId = await seedCanadianFilingAccountForTest(org.orgId, actorId, {
-          subsidiaryId: org.subsidiaryId, accountNumber: '123456789RP0001', name: 'CRA payroll registration',
-          effectiveFrom: '2026-01-01', eiEmployerMultiplier: '1.4',
+          subsidiaryId: org.subsidiaryId,
+          accountNumber: "123456789RP0001",
+          name: "CRA payroll registration",
+          effectiveFrom: "2026-01-01",
+          eiEmployerMultiplier: "1.4",
         });
         await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
           where org_id=${org.orgId} and employee_party_id=${empA}`);
-        await qualifyCanadianOpeningForTest({ orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId,
-          employeePartyId: empA, taxYear: 2026, filingAccountId, province: 'ON',
-          coverageStart: '2026-01-01', coverageEnd: '2026-06-30', amounts: { wcbAssessableYtd: '1500' },
-          reportableBases: { cpp: '0', ei: '0', qpip: '0' },
+        await qualifyCanadianOpeningForTest({
+          orgId: org.orgId,
+          actorId,
+          subsidiaryId: org.subsidiaryId,
+          employeePartyId: empA,
+          taxYear: 2026,
+          filingAccountId,
+          province: "ON",
+          coverageStart: "2026-01-01",
+          coverageEnd: "2026-06-30",
+          amounts: { wcbAssessableYtd: "1500" },
+          reportableBases: { cpp: "0", ei: "0", qpip: "0" },
           levyAllocations: [
-            ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
-              ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: region === 'ON' ? '1500' : '0' })),
-            ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
-            { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
+            ...["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"].map(
+              (region) => ({
+                programKey: "ca_wcb",
+                region,
+                federalAccountId: null,
+                amount: region === "ON" ? "1500" : "0",
+              }),
+            ),
+            ...["BC", "MB", "NL", "ON"].map((region) => ({
+              programKey: "ca_eht",
+              region,
+              federalAccountId: null,
+              amount: "0",
+            })),
+            { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
           ],
         });
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
         await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
         const factors = await stubFactors(org.orgId, run.documentId);
@@ -404,7 +558,14 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empA = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Amy Aggregate",
+        "50",
+      );
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       await postHours(org.orgId, actorId, empA, "2026-07-20", "20");
       await postHours(org.orgId, actorId, empA, "2026-08-03", "20");
@@ -415,33 +576,44 @@ test(
         { periodStart: "2026-08-02", periodEnd: "2026-08-15" },
       ];
       let window = 0;
-      const freshRun = async () => createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        ...windows[window++ % windows.length]!,
-      });
+      const freshRun = async () =>
+        createPayRun({
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          ...windows[window++ % windows.length]!,
+        });
 
       // "B" is the pack's non-periodic factor: reusing it would accumulate
       // two levies into one year-to-date. The wiring refusal surfaces as a
       // stub error (which blocks the commit below), not a thrown rejection.
-      await withDeclarations([thresholdLevy({
-        key: "colliding", factorKey: "B", allowance: { kind: "none" },
-      })], async () => {
-        const run = await freshRun();
-        const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        assert.equal(result.errors.length, 1);
-        assert.match(
-          result.errors[0]!.message,
-          /collides with the CA pack's statutory factors/,
-        );
-        // The commit refuses and the colliding figures move nowhere. It now
-        // refuses on the refusal itself — naming the employee and the reason,
-        // and demanding either a fix or an explicit acknowledgement — rather
-        // than on the downstream symptom that no stub materialized.
-        await assert.rejects(
-          commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
-          /1 in-scope employee was refused at calculation.*collides with the CA pack's statutory factors/s,
-        );
-      });
+      await withDeclarations(
+        [
+          thresholdLevy({
+            key: "colliding",
+            factorKey: "B",
+            allowance: { kind: "none" },
+          }),
+        ],
+        async () => {
+          const run = await freshRun();
+          const result = await calculatePayRun({
+            orgId: org.orgId,
+            documentId: run.documentId,
+            actorId,
+          });
+          assert.equal(result.errors.length, 1);
+          assert.match(result.errors[0]!.message, /collides with the CA pack's statutory factors/);
+          // The commit refuses and the colliding figures move nowhere. It now
+          // refuses on the refusal itself — naming the employee and the reason,
+          // and demanding either a fix or an explicit acknowledgement — rather
+          // than on the downstream symptom that no stub materialized.
+          await assert.rejects(
+            commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
+            /1 in-scope employee was refused at calculation.*collides with the CA pack's statutory factors/s,
+          );
+        },
+      );
 
       // A levy pointed at a deduction-sensitive component would drift across
       // the fixpoint: refused at wiring, by levy name. Proven by calling the
@@ -451,93 +623,139 @@ test(
       const slots = caPack().statutorySlots;
       const taxedSlot = {
         key: "synth_tax_slot",
-        components: [{
-          code: "SYNTH-TAX", name: "Synthetic", systemKey: "synth_tax",
-          kind: "employer_contribution", sequence: 999,
-          assessedOn: "taxable_income", remittance: "external",
-        }],
+        components: [
+          {
+            code: "SYNTH-TAX",
+            name: "Synthetic",
+            systemKey: "synth_tax",
+            kind: "employer_contribution",
+            sequence: 999,
+            assessedOn: "taxable_income",
+            remittance: "external",
+          },
+        ],
       } as const;
-      (caPack() as { statutorySlots: readonly unknown[] }).statutorySlots = [
-        ...slots, taxedSlot,
-      ];
+      (caPack() as { statutorySlots: readonly unknown[] }).statutorySlots = [...slots, taxedSlot];
       try {
-        await withDeclarations([thresholdLevy({
-          key: "mispointed", systemKey: "synth_tax", factorKey: "MIS",
-          allowance: { kind: "none" },
-        })], async () => {
-          await db.transaction(async (tx) => {
-            await assert.rejects(
-              assessStubAggregateLevies({
-                tx, orgId: org.orgId, documentId: randomUUID(), employeePartyId: empA,
-                taxYear: 2026, country: "CA", region: "ON",
-                gross: "1000", taxableGross: "1000", lines: [],
-                pushStatutory: () => {},
-              }),
-              /must ride an earnings-assessed/,
-            );
-          });
-        });
+        await withDeclarations(
+          [
+            thresholdLevy({
+              key: "mispointed",
+              systemKey: "synth_tax",
+              factorKey: "MIS",
+              allowance: { kind: "none" },
+            }),
+          ],
+          async () => {
+            await db.transaction(async (tx) => {
+              await assert.rejects(
+                assessStubAggregateLevies({
+                  tx,
+                  orgId: org.orgId,
+                  documentId: randomUUID(),
+                  employeePartyId: empA,
+                  taxYear: 2026,
+                  country: "CA",
+                  region: "ON",
+                  gross: "1000",
+                  taxableGross: "1000",
+                  lines: [],
+                  pushStatutory: () => {},
+                }),
+                /must ride an earnings-assessed/,
+              );
+            });
+          },
+        );
       } finally {
         caPack().statutorySlots = slots;
       }
 
       // An opening key the pack never declared is a refusal, not a query
       // against a column that does not exist.
-      await withDeclarations([thresholdLevy({
-        key: "badopening", factorKey: "BAD",
-        allowance: { kind: "per_employee_cap", amount: "2000" },
-        employeeOpeningFieldKey: "nope",
-      })], async () => {
-        const run = await freshRun();
-        const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        assert.equal(result.errors.length, 1);
-        assert.match(result.errors[0]!.message, /declares no such year-to-date field/);
-      });
+      await withDeclarations(
+        [
+          thresholdLevy({
+            key: "badopening",
+            factorKey: "BAD",
+            allowance: { kind: "per_employee_cap", amount: "2000" },
+            employeeOpeningFieldKey: "nope",
+          }),
+        ],
+        async () => {
+          const run = await freshRun();
+          const result = await calculatePayRun({
+            orgId: org.orgId,
+            documentId: run.documentId,
+            actorId,
+          });
+          assert.equal(result.errors.length, 1);
+          assert.match(result.errors[0]!.message, /declares no such year-to-date field/);
+        },
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
   },
 );
 
-test(
-  "annual-timing levies accrue nothing on a real run",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    try {
-      await seedHarness(org.orgId, actorId);
-      const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
-      await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
-      await withDeclarations([thresholdLevy({
-        key: "synth_annual",
-        description: "Synthetic annual levy",
-        timing: "annual",
-        factorKey: "ANN",
-        offset: { kind: "tenant_spend", slotKey: "spend", amountField: "amount" },
-      })], async () => {
+test("annual-timing levies accrue nothing on a real run", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  try {
+    await seedHarness(org.orgId, actorId);
+    const scheduleId = await makeSchedule(org.orgId, actorId);
+    const empA = await makeEmployee(
+      org.orgId,
+      org.subsidiaryId,
+      actorId,
+      scheduleId,
+      "Amy Aggregate",
+      "50",
+    );
+    await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
+    await withDeclarations(
+      [
+        thresholdLevy({
+          key: "synth_annual",
+          description: "Synthetic annual levy",
+          timing: "annual",
+          factorKey: "ANN",
+          offset: { kind: "tenant_spend", slotKey: "spend", amountField: "amount" },
+        }),
+      ],
+      async () => {
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
-        const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const result = await calculatePayRun({
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
+        });
         assert.deepEqual(result.errors, []);
         const factors = await stubFactors(org.orgId, run.documentId);
         assert.ok(!("ANN" in (factors["Amy Aggregate"] ?? {})), "no annual factor on the stub");
-        const lines = (await db.execute<{ description: string }>(sql`
+        const lines = await db.execute<{ description: string }>(
+          sql`
           select l.description from pay_stub_lines l
             join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
            where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.ok(
           lines.every((l) => l.description !== "Synthetic annual levy"),
           "no annual levy line on the stub",
         );
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      });
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+      },
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});

@@ -15,7 +15,10 @@ import { waPackCoversYear, waPfmlWithholding } from "./states/wa.ts";
 import { payrollPack } from "../packs.ts";
 import { upsertStatutoryRate } from "../statutory-rates.ts";
 import {
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../../testing/fixtures.ts";
 import { seedUsSuiAccount, seedUsEinAccount } from "../filing-test-fixtures.ts";
 
@@ -56,7 +59,10 @@ interface Fixture {
 }
 
 async function waPayrollOrg(year = 2026): Promise<Fixture> {
-  const dates = year === 2025 ? DATES_2025 : { payDate: PAY_DATE, periodStart: PERIOD_START, periodEnd: PERIOD_END };
+  const dates =
+    year === 2025
+      ? DATES_2025
+      : { payDate: PAY_DATE, periodStart: PERIOD_START, periodEnd: PERIOD_END };
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const account = async (number: string, name: string, type: string) => {
@@ -97,18 +103,35 @@ async function waPayrollOrg(year = 2026): Promise<Fixture> {
   const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
   for (const state of ["WA", "CA", "OH"]) {
     const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state, {
-      federalAccountId: einAccountId, subsidiaryId, effectiveFrom: `${year}-01-01`, effectiveTo: null,
+      federalAccountId: einAccountId,
+      subsidiaryId,
+      effectiveFrom: `${year}-01-01`,
+      effectiveTo: null,
       sourceReference: `${state} original employer registration`,
     });
     await upsertStatutoryRate({
-      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-      region: state, filingAccountId, taxYear: year, values: { rate: "0.03", wageBase: "7000" },
-      sourceCitation: "Test rate notice", reason: "test fixture rate",
+      orgId: org.orgId,
+      actorId,
+      rates: US_PACK_RATES,
+      rateKey: "us_sui",
+      region: state,
+      filingAccountId,
+      taxYear: year,
+      values: { rate: "0.03", wageBase: "7000" },
+      sourceCitation: "Test rate notice",
+      reason: "test fixture rate",
     });
     await upsertStatutoryRate({
-      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-      region: state, filingAccountId: null, taxYear: year, values: { rate: "0.006" },
-      sourceCitation: "Test rate notice", reason: "test fixture rate",
+      orgId: org.orgId,
+      actorId,
+      rates: US_PACK_RATES,
+      rateKey: "us_futa",
+      region: state,
+      filingAccountId: null,
+      taxYear: year,
+      values: { rate: "0.006" },
+      sourceCitation: "Test rate notice",
+      reason: "test fixture rate",
     });
   }
   const scheduleId = randomUUID();
@@ -122,8 +145,12 @@ async function waPayrollOrg(year = 2026): Promise<Fixture> {
 }
 
 async function waEmployee(
-  fx: Fixture, name: string, state: string, residence?: string,
-  annualSalary = "52000", year = 2026,
+  fx: Fixture,
+  name: string,
+  state: string,
+  residence?: string,
+  annualSalary = "52000",
+  year = 2026,
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
@@ -138,7 +165,10 @@ async function waEmployee(
             ${fx.actorId}, ${fx.actorId})`);
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, state, {
-    federalAccountId: fx.einAccountId, subsidiaryId: fx.subsidiaryId, effectiveFrom: `${year}-01-01`, effectiveTo: null,
+    federalAccountId: fx.einAccountId,
+    subsidiaryId: fx.subsidiaryId,
+    effectiveFrom: `${year}-01-01`,
+    effectiveTo: null,
     sourceReference: `${state} original employer registration`,
   });
   await db.execute(sql`
@@ -172,30 +202,53 @@ async function slotDetails(orgId: string, documentId: string): Promise<string[]>
  * lines. Refusals fail the test — a priced run prices cleanly.
  */
 async function priceWashingtonRun(
-  fx: Fixture, employerSize: "fifty_or_more" | "fewer_than_fifty", year: number,
+  fx: Fixture,
+  employerSize: "fifty_or_more" | "fewer_than_fifty",
+  year: number,
 ): Promise<{ system_key: string | null; amount: string }[]> {
   await upsertPayrollEmployerFact({
-    orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: fx.subsidiaryId, country: "US",
-    factKey: "wa_pfml_employer_size", effectiveFrom: `${year}-01-01`,
-    value: employerSize, changeReason: "recorded employer size",
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    subsidiaryId: fx.subsidiaryId,
+    country: "US",
+    factKey: "wa_pfml_employer_size",
+    effectiveFrom: `${year}-01-01`,
+    value: employerSize,
+    changeReason: "recorded employer size",
   });
-  const payable = (await db.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${fx.orgId} and number = '2330'`, "objects"))[0]!.id;
+  const payable = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from accounts where org_id = ${fx.orgId} and number = '2330'`,
+      "objects",
+    )
+  )[0]!.id;
   await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_pfml", payable);
   await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_cares", payable);
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart: fx.periodStart, periodEnd: fx.periodEnd, payDate: fx.payDate,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart: fx.periodStart,
+    periodEnd: fx.periodEnd,
+    payDate: fx.payDate,
   });
-  const result = await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+  const result = await calculatePayRun({
+    orgId: fx.orgId,
+    documentId: run.documentId,
+    actorId: fx.actorId,
+  });
   assert.deepEqual(result.errors, []);
   assert.equal(result.employees, 1);
-  return await db.execute<{ system_key: string | null; amount: string }>(sql`
+  return await db.execute<{ system_key: string | null; amount: string }>(
+    sql`
     select c.system_key, l.amount::text as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-     where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`, "objects");
+     where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`,
+    "objects",
+  );
 }
 
 describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
@@ -204,8 +257,12 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
     try {
       await waEmployee(fx, "Wally WA", "WA");
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END, payDate: PAY_DATE,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        payDate: PAY_DATE,
       });
       const details = await slotDetails(fx.orgId, run.documentId);
       assert.ok(details.includes("US · wa_pfml"), `demands the PFML mapping: ${details}`);
@@ -213,10 +270,14 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       // fit/fica/futa/suta are mapped in this fixture, so they clear: the
       // mapping-independent demand shape (SUI/FUTA still demanded of a
       // Washington employer) is pinned below without any mapping.
-      assert.ok(!details.some((detail) => detail.includes("state_income_tax")),
-        `never demands a state income tax Washington does not levy: ${details}`);
-      assert.ok(!details.some((detail) => detail.includes("local_income_tax")),
-        `never demands a local income tax Tacoma does not levy: ${details}`);
+      assert.ok(
+        !details.some((detail) => detail.includes("state_income_tax")),
+        `never demands a state income tax Washington does not levy: ${details}`,
+      );
+      assert.ok(
+        !details.some((detail) => detail.includes("local_income_tax")),
+        `never demands a local income tax Tacoma does not levy: ${details}`,
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -228,11 +289,18 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       await waEmployee(fx, "Cally CA", "CA");
       await waEmployee(fx, "Ollie OH", "OH");
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END, payDate: PAY_DATE,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        payDate: PAY_DATE,
       });
       const details = await slotDetails(fx.orgId, run.documentId);
-      assert.ok(details.includes("US · state_income_tax"), `demands SIT for California: ${details}`);
+      assert.ok(
+        details.includes("US · state_income_tax"),
+        `demands SIT for California: ${details}`,
+      );
       assert.ok(details.includes("US · local_income_tax"), `demands LIT for Ohio: ${details}`);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -244,14 +312,22 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
     try {
       await waEmployee(fx, "Rita Crossborder", "WA", "CA");
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END, payDate: PAY_DATE,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        payDate: PAY_DATE,
       });
       const details = await slotDetails(fx.orgId, run.documentId);
-      assert.ok(details.includes("US · state_income_tax"),
-        `a California resident owes California tax with no California work region: ${details}`);
-      assert.ok(!details.some((detail) => detail.includes("local_income_tax")),
-        `no local levy applies to either end: ${details}`);
+      assert.ok(
+        details.includes("US · state_income_tax"),
+        `a California resident owes California tax with no California work region: ${details}`,
+      );
+      assert.ok(
+        !details.some((detail) => detail.includes("local_income_tax")),
+        `no local levy applies to either end: ${details}`,
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -269,7 +345,10 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       assert.ok(!waKeys.includes("local_income_tax"), waKeys.join(","));
       const oh = await packSlotState(fx.orgId, ["US"], new Map([["US", new Set(["OH"])]]));
       const ohKeys = oh.find((pack) => pack.country === "US")!.slots.map((slot) => slot.key);
-      assert.ok(ohKeys.includes("state_income_tax") && ohKeys.includes("local_income_tax"), ohKeys.join(","));
+      assert.ok(
+        ohKeys.includes("state_income_tax") && ohKeys.includes("local_income_tax"),
+        ohKeys.join(","),
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -280,28 +359,49 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
     try {
       await waEmployee(fx, "Wally WA", "WA");
       await upsertPayrollEmployerFact({
-        orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: fx.subsidiaryId, country: "US",
-        factKey: "wa_pfml_employer_size", effectiveFrom: "2026-01-01",
-        value: "fifty_or_more", changeReason: "fifty-plus employer",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        subsidiaryId: fx.subsidiaryId,
+        country: "US",
+        factKey: "wa_pfml_employer_size",
+        effectiveFrom: "2026-01-01",
+        value: "fifty_or_more",
+        changeReason: "fifty-plus employer",
       });
-      const payable = (await db.execute<{ id: string }>(sql`
-        select id from accounts where org_id = ${fx.orgId} and number = '2330'`, "objects"))[0]!.id;
+      const payable = (
+        await db.execute<{ id: string }>(
+          sql`
+        select id from accounts where org_id = ${fx.orgId} and number = '2330'`,
+          "objects",
+        )
+      )[0]!.id;
       await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_pfml", payable);
       await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_cares", payable);
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END, payDate: PAY_DATE,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        payDate: PAY_DATE,
       });
-      const result = await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+      const result = await calculatePayRun({
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
+      });
       assert.equal(result.employees, 1);
       assert.deepEqual(result.errors, []);
       // $2,000 of wages: PFML totals $22.60 (1.13%), split $16.14/$6.46; Cares $11.60 (0.58%).
-      const lines = await db.execute<{ system_key: string | null; amount: string }>(sql`
+      const lines = await db.execute<{ system_key: string | null; amount: string }>(
+        sql`
         select c.system_key, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-         where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`, "objects");
+         where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`,
+        "objects",
+      );
       const amount = (key: string) => lines.find((line) => line.system_key === key)?.amount;
       assert.equal(amount("wa_pfml_employee"), "16.1400");
       assert.equal(amount("wa_pfml_employer"), "6.4600");
@@ -373,24 +473,38 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
     const fx = await waPayrollOrg();
     try {
       await upsertStatutoryRate({
-        orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES, rateKey: "us_wa_pfml",
-        region: "WA", filingAccountId: null, taxYear: 2027,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_wa_pfml",
+        region: "WA",
+        filingAccountId: null,
+        taxYear: 2027,
         values: {
-          totalRate: "0.01", employeeShare: "0.70", employerShare: "0.30",
-          wageBase: "180000", caresRate: "0.0058",
+          totalRate: "0.01",
+          employeeShare: "0.70",
+          employerShare: "0.30",
+          wageBase: "180000",
+          caresRate: "0.0058",
         },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       const config = await usPayrollConfig(fx.orgId, 2027, "2027-03-15");
       const entered = config.waBackfill("WA");
       assert.deepEqual(entered, {
-        totalRate: "0.0100", employeeShare: "0.7000", employerShare: "0.3000",
-        wageBase: "180000.00", caresRate: "0.0058",
+        totalRate: "0.0100",
+        employeeShare: "0.7000",
+        employerShare: "0.3000",
+        wageBase: "180000.00",
+        caresRate: "0.0058",
       });
       assert.ok(!waPackCoversYear(2027));
       const pfml = waPfmlWithholding("2027-03-15", "10000.00", "0", "fifty_or_more", {
-        pfmlTotalRate: entered!.totalRate, pfmlEmployeeShare: entered!.employeeShare,
-        pfmlEmployerShare: entered!.employerShare, pfmlWageBase: entered!.wageBase,
+        pfmlTotalRate: entered!.totalRate,
+        pfmlEmployeeShare: entered!.employeeShare,
+        pfmlEmployerShare: entered!.employerShare,
+        pfmlWageBase: entered!.wageBase,
         caresRate: entered!.caresRate,
       });
       assert.equal(pfml.total, "100.0000");
@@ -414,15 +528,27 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       const pack = payrollPack("US");
       assert.ok(pack.waivedRateSlots);
       const covered = await pack.waivedRateSlots!(db, {
-        orgId: fx.orgId, subsidiaryId: fx.subsidiaryId, region: "WA", filingAccountId: null, payDate: "2026-07-21",
+        orgId: fx.orgId,
+        subsidiaryId: fx.subsidiaryId,
+        region: "WA",
+        filingAccountId: null,
+        payDate: "2026-07-21",
       });
       assert.ok(covered.includes("us_wa_pfml"));
       const uncovered = await pack.waivedRateSlots!(db, {
-        orgId: fx.orgId, subsidiaryId: fx.subsidiaryId, region: "WA", filingAccountId: null, payDate: "2027-03-15",
+        orgId: fx.orgId,
+        subsidiaryId: fx.subsidiaryId,
+        region: "WA",
+        filingAccountId: null,
+        payDate: "2027-03-15",
       });
       assert.ok(!uncovered.includes("us_wa_pfml"));
       const otherState = await pack.waivedRateSlots!(db, {
-        orgId: fx.orgId, subsidiaryId: fx.subsidiaryId, region: "CA", filingAccountId: null, payDate: "2026-07-21",
+        orgId: fx.orgId,
+        subsidiaryId: fx.subsidiaryId,
+        region: "CA",
+        filingAccountId: null,
+        payDate: "2026-07-21",
       });
       assert.ok(!otherState.includes("us_wa_pfml"));
     } finally {
@@ -435,10 +561,18 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
     try {
       await waEmployee(fx, "Wally WA", "WA");
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END, payDate: PAY_DATE,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        payDate: PAY_DATE,
       });
-      const result = await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+      const result = await calculatePayRun({
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
+      });
       assert.equal(result.employees, 0);
       assert.equal(result.errors.length, 1);
       assert.match(result.errors[0]!.message, /wa_pfml_employer_size/);

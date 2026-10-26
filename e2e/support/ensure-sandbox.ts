@@ -22,19 +22,30 @@ async function main(): Promise<void> {
   const email = (process.env.E2E_EMAIL ?? "e2e@openbooks.test").toLowerCase();
   if (!dbUrl) throw new Error("OPENBOOKS_DB_URL is required");
   if (/10\.0\.0\.85/.test(dbUrl)) throw new Error("refusing to seed: production database");
-  if (!/localhost|127\.0\.0\.1|openbooks_e2e/.test(dbUrl)) throw new Error("refusing to seed: unexpected database");
+  if (!/localhost|127\.0\.0\.1|openbooks_e2e/.test(dbUrl))
+    throw new Error("refusing to seed: unexpected database");
   installEngineSeams();
 
   // bypass: cross-org-by-design — the test login is resolved before any organization scope exists.
-  const admin = await withBypassContext(async () => (await db.execute<{ id: string; orgId: string; orgName: string }>(sql`
+  const admin = await withBypassContext(
+    async () =>
+      (
+        await db.execute<{ id: string; orgId: string; orgName: string }>(
+          sql`
     select u.id, u.org_id as "orgId", o.name as "orgName"
       from users u join orgs o on o.id = u.org_id
      where lower(u.email) = ${email} and u.is_active and o.env_kind = 'production'
-     order by u.created_at limit 1`, "objects"))[0]);
+     order by u.created_at limit 1`,
+          "objects",
+        )
+      )[0],
+  );
   if (!admin) throw new Error(`no active production user ${email}`);
 
   const sandbox = await withOrgContext(admin.orgId, async () => {
-    const existing = (await listSandboxes(admin.orgId)).find((row) => row.name === SANDBOX_NAME && row.status === "ready");
+    const existing = (await listSandboxes(admin.orgId)).find(
+      (row) => row.name === SANDBOX_NAME && row.status === "ready",
+    );
     if (existing) return { orgId: existing.orgId };
     const created = await createSandbox({
       productionOrgId: admin.orgId,
@@ -47,12 +58,14 @@ async function main(): Promise<void> {
     return { orgId: created.sandboxOrgId };
   });
 
-  console.log(JSON.stringify({
-    productionOrgId: admin.orgId,
-    productionName: admin.orgName,
-    sandboxOrgId: sandbox.orgId,
-    sandboxName: SANDBOX_NAME,
-  }));
+  console.log(
+    JSON.stringify({
+      productionOrgId: admin.orgId,
+      productionName: admin.orgName,
+      sandboxOrgId: sandbox.orgId,
+      sandboxName: SANDBOX_NAME,
+    }),
+  );
 }
 
 main()

@@ -31,7 +31,10 @@ test("every engine file status has a RunDrawer label in every locale", () => {
         "string",
         `${locale}/payments.json runDrawer.fileStatus.${status} is missing — the RunDrawer crashes on files in this state`,
       );
-      assert.ok((label as string).trim().length > 0, `${locale} fileStatus.${status} must not be blank`);
+      assert.ok(
+        (label as string).trim().length > 0,
+        `${locale} fileStatus.${status} must not be blank`,
+      );
     }
   }
 });
@@ -41,11 +44,17 @@ test("the derived list covers every file state the engine can write", () => {
   const modeled = (paymentFiles.status as unknown as { enumValues?: string[] }).enumValues ?? [];
   assert.ok(modeled.length > 0, "expected the drizzle file status enum to be introspectable");
   for (const status of modeled) {
-    assert.ok(engineStatuses.has(status), `PAYMENT_FILE_STATUSES must cover the modeled file state '${status}'`);
+    assert.ok(
+      engineStatuses.has(status),
+      `PAYMENT_FILE_STATUSES must cover the modeled file state '${status}'`,
+    );
   }
   // Delivery claims move rows through lease states the persisted schema
   // enum never contains, yet operations still write them (claim + park).
   for (const status of ["delivering", "delivery_uncertain"]) {
-    assert.ok(engineStatuses.has(status), `PAYMENT_FILE_STATUSES must retain the engine-written transient state '${status}'`);
+    assert.ok(
+      engineStatuses.has(status),
+      `PAYMENT_FILE_STATUSES must retain the engine-written transient state '${status}'`,
+    );
   }
 });

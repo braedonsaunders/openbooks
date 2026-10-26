@@ -89,7 +89,9 @@ export function previewInputFor(args: {
   publishedBy: string;
 }): PreviewAllocationRunOptions {
   if (!args.publishedBy.trim()) {
-    throw new Error(`allocation rule ${args.ruleId} has no publisher to attribute the unattended run to`);
+    throw new Error(
+      `allocation rule ${args.ruleId} has no publisher to attribute the unattended run to`,
+    );
   }
   return {
     orgId: args.orgId,
@@ -123,10 +125,9 @@ type DueCandidate = {
  * the explicit rerun path. Orgs with the allocations feature off
  * are skipped outright. Returns the number of newly enqueued rows.
  */
-export async function ensureAllocationRunOutboxRows(
-  executor: SqlExecutor = db,
-): Promise<number> {
-  const due = await executor.execute<DueCandidate>(sql`
+export async function ensureAllocationRunOutboxRows(executor: SqlExecutor = db): Promise<number> {
+  const due = await executor.execute<DueCandidate>(
+    sql`
     select o.id as org_id, o.settings->'features' as features,
            r.id as rule_id, v.id as version_id, p.id as period_id, b.id as book_id
       from allocation_rule_versions v
@@ -151,7 +152,9 @@ export async function ensureAllocationRunOutboxRows(
           where run.org_id = v.org_id and run.rule_id = r.id
             and run.period_id = p.id and run.book_id = b.id
             and run.status in ('previewed', 'pending_approval', 'posted', 'reversed'))
-  `, "objects");
+  `,
+    "objects",
+  );
   let enqueued = 0;
   for (const candidate of due) {
     if (!featureEnabled(candidate.features ?? {}, "allocations")) continue;
@@ -194,9 +197,11 @@ type OccurrenceVersion = {
  * rule, or a switched-off feature skips quietly — the schedule legitimately
  * went away, so there is nothing to retry.
  */
-export async function processAllocationRunOutboxRow(
-  row: { id: string; org_id: string | null; payload: unknown },
-): Promise<{ outcome: "ran" | "skipped"; note: string }> {
+export async function processAllocationRunOutboxRow(row: {
+  id: string;
+  org_id: string | null;
+  payload: unknown;
+}): Promise<{ outcome: "ran" | "skipped"; note: string }> {
   if (!row.org_id) return { outcome: "skipped", note: "allocation occurrence has no org" };
   const payload = (row.payload ?? {}) as {
     ruleId?: unknown;
@@ -212,13 +217,20 @@ export async function processAllocationRunOutboxRow(
   ) {
     throw new Error("allocation_run payload requires ruleId, versionId, periodId, and bookId");
   }
-  const org = (await db.execute<{ settings: { features?: Record<string, boolean> } | null }>(sql`
+  const org = (
+    await db.execute<{ settings: { features?: Record<string, boolean> } | null }>(
+      sql`
       select settings from orgs where id = ${row.org_id}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!featureEnabled(org?.settings?.features ?? {}, "allocations")) {
     return { outcome: "skipped", note: "allocations feature is off" };
   }
-  const occurrence = (await db.execute<OccurrenceVersion>(sql`
+  const occurrence = (
+    await db.execute<OccurrenceVersion>(
+      sql`
       select v.id as version_id, v.run_policy, v.published_by, r.mode, r.is_active
         from allocation_rules r
         left join allocation_rule_versions v
@@ -227,12 +239,20 @@ export async function processAllocationRunOutboxRow(
        where r.id = ${payload.ruleId} and r.org_id = ${row.org_id}
          and v.effective_from <= p.ends_on
          and (v.effective_to is null or v.effective_to >= p.starts_on)
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!occurrence?.version_id || occurrence.mode !== "period" || !occurrence.is_active) {
-    return { outcome: "skipped", note: "rule or scheduled version is gone, retired, or not effective for the period" };
+    return {
+      outcome: "skipped",
+      note: "rule or scheduled version is gone, retired, or not effective for the period",
+    };
   }
   if (!occurrence.published_by) {
-    throw new Error(`allocation rule ${payload.ruleId} has no publisher to attribute the unattended run to`);
+    throw new Error(
+      `allocation rule ${payload.ruleId} has no publisher to attribute the unattended run to`,
+    );
   }
   const preview = previewInputFor({
     orgId: row.org_id,
@@ -285,18 +305,21 @@ async function postPreviewedOccurrence(args: {
   reason: string;
   eventSource: "api" | "schedule" | "close_automation";
 }): Promise<AllocationRunRecord> {
-  const run = (await db.execute<{ id: string }>(sql`
+  const run = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from allocation_runs
        where org_id = ${args.orgId} and rule_id = ${args.ruleId}
          and version_id = ${args.versionId}
          and period_id = ${args.periodId} and book_id = ${args.bookId}
          and status = 'previewed'
        order by created_at desc limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!run) {
-    throw new Error(
-      "auto_post found no persisted previewed run for the occurrence",
-    );
+    throw new Error("auto_post found no persisted previewed run for the occurrence");
   }
   return postAllocationRun(run.id, args.actorId, args.reason, {
     eventSource: args.eventSource,
@@ -320,7 +343,8 @@ async function resolveRulePublisher(
   ruleId: string,
   periodId: string,
 ): Promise<{ versionId: string; publishedBy: string }> {
-  const rows = await db.execute<{ id: string; published_by: string | null }>(sql`
+  const rows = await db.execute<{ id: string; published_by: string | null }>(
+    sql`
       select v.id, v.published_by
         from allocation_rule_versions v
         join allocation_rules r on r.id = v.rule_id and r.org_id = v.org_id
@@ -330,13 +354,17 @@ async function resolveRulePublisher(
          and (v.effective_to is null or v.effective_to >= p.starts_on)
        order by (v.id = r.current_version_id) desc, v.version_no desc
        limit 1
-    `, "objects");
+    `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new Error(`run_allocation rule has no published version: ${ruleId}`);
   }
   const publisher = rows[0]?.published_by;
   if (!publisher) {
-    throw new Error(`allocation rule ${ruleId} has no publisher to attribute the unattended run to`);
+    throw new Error(
+      `allocation rule ${ruleId} has no publisher to attribute the unattended run to`,
+    );
   }
   return { versionId: rows[0]!.id, publishedBy: publisher };
 }
@@ -357,36 +385,47 @@ export async function runAllocationCloseAction(args: {
   orgId: string;
   runId: string;
   config: unknown;
-  commitStage: (
-    stageKey: string,
-    effect: (tx: SqlExecutor) => Promise<void>,
-  ) => Promise<boolean>;
+  commitStage: (stageKey: string, effect: (tx: SqlExecutor) => Promise<void>) => Promise<boolean>;
 }): Promise<{ previewed: number; posted: number }> {
   const { ruleIds, post } = parseRunAllocationConfig(args.config);
-  const org = (await db.execute<{ settings: { features?: Record<string, boolean> } | null }>(sql`
+  const org = (
+    await db.execute<{ settings: { features?: Record<string, boolean> } | null }>(
+      sql`
       select settings from orgs where id = ${args.orgId}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!featureEnabled(org?.settings?.features ?? {}, "allocations")) {
     throw new Error("run_allocation requires the allocations feature");
   }
-  const run = (await db.execute<{ period_id: string; book_id: string }>(sql`
+  const run = (
+    await db.execute<{ period_id: string; book_id: string }>(
+      sql`
       select period_id, book_id from close_runs
        where id = ${args.runId} and org_id = ${args.orgId}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!run) throw new Error("close run not found");
   let rules: CloseAllocationRule[];
   if (ruleIds === "all") {
-    rules = await db.execute<CloseAllocationRule>(sql`
+    rules = await db.execute<CloseAllocationRule>(
+      sql`
         select r.id, r.sort_order
           from allocation_rules r
           join allocation_rule_versions v
             on v.id = r.current_version_id and v.org_id = r.org_id and v.status = 'published'
          where r.org_id = ${args.orgId} and r.mode = 'period' and r.is_active
          order by r.sort_order, r.key
-      `, "objects");
+      `,
+      "objects",
+    );
   } else {
     const wanted = [...new Set(ruleIds)];
-    const found = await db.execute<CloseAllocationRule & { mode: string; is_active: boolean }>(sql`
+    const found = await db.execute<CloseAllocationRule & { mode: string; is_active: boolean }>(
+      sql`
         select r.id, r.sort_order, r.mode, r.is_active
           from allocation_rules r
          where r.org_id = ${args.orgId}
@@ -394,7 +433,9 @@ export async function runAllocationCloseAction(args: {
              wanted.map((id) => sql`${id}::uuid`),
              sql`, `,
            )})
-      `, "objects");
+      `,
+      "objects",
+    );
     const seen = new Set(found.map((item) => item.id));
     for (const id of wanted) {
       if (!seen.has(id)) throw new Error(`run_allocation rule not found: ${id}`);

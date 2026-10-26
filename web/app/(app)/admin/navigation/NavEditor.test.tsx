@@ -10,7 +10,12 @@ import test from "node:test";
 // Only routing, toasts and the network are doubled. React, next-intl and
 // the REAL English catalog run.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/navigation", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/navigation",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 declare global {
   var __navToasts: { kind: string; message: string }[] | undefined;
@@ -19,10 +24,12 @@ declare global {
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return{push(){},refresh(){globalThis.__navRefreshed=(globalThis.__navRefreshed??0)+1},replace(){},prefetch(){}}}export function usePathname(){return '/admin/navigation'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return{push(){},refresh(){globalThis.__navRefreshed=(globalThis.__navRefreshed??0)+1},replace(){},prefetch(){}}}export function usePathname(){return '/admin/navigation'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -71,10 +78,14 @@ async function mountEditor() {
 }
 
 function saveButton(host: HTMLElement): HTMLButtonElement {
-  const found = [...host.querySelectorAll("button")].find((b) =>
-    (b.textContent ?? "").includes("Save navigation") || (b.textContent ?? "").includes("Saving"),
+  const found = [...host.querySelectorAll("button")].find(
+    (b) =>
+      (b.textContent ?? "").includes("Save navigation") || (b.textContent ?? "").includes("Saving"),
   ) as HTMLButtonElement | undefined;
-  assert.ok(found, `expected a save button in ${JSON.stringify((host.textContent ?? "").slice(0, 200))}`);
+  assert.ok(
+    found,
+    `expected a save button in ${JSON.stringify((host.textContent ?? "").slice(0, 200))}`,
+  );
   return found;
 }
 
@@ -108,7 +119,11 @@ for (const [name, respond, releaseMessage] of [
       });
 
       const errors = errorToasts();
-      assert.equal(errors.length, 1, `exactly one error toast must render, saw ${JSON.stringify(errors)}`);
+      assert.equal(
+        errors.length,
+        1,
+        `exactly one error toast must render, saw ${JSON.stringify(errors)}`,
+      );
       assert.match(errors[0]!, /Could not save/);
 
       const after = saveButton(host);
@@ -123,33 +138,62 @@ for (const [name, respond, releaseMessage] of [
   });
 }
 
-test('local detail views can be promoted to the main menu and returned without hiding their page tabs', async () => {
+test("local detail views can be promoted to the main menu and returned without hiding their page tabs", async () => {
   const priorFetch = globalThis.fetch;
   const saved: ReturnType<typeof defaultNavConfig>[] = [];
   globalThis.fetch = (async (_input, init) => {
-    saved.push((JSON.parse(String(init?.body)) as { config: ReturnType<typeof defaultNavConfig> }).config);
-    return Response.json({ revision: '2026-10-01T00:00:00Z' });
+    saved.push(
+      (JSON.parse(String(init?.body)) as { config: ReturnType<typeof defaultNavConfig> }).config,
+    );
+    return Response.json({ revision: "2026-10-01T00:00:00Z" });
   }) as typeof fetch;
   const { host, root } = await mountEditor();
-  const row = () => [...host.querySelectorAll('li')].find((element) => element.textContent?.includes('hrm-performance-calibration'))!;
-  const visibilityButton = () => row().querySelector<HTMLButtonElement>('button[aria-label="Show item"], button[aria-label="Hide item"]')!;
+  const row = () =>
+    [...host.querySelectorAll("li")].find((element) =>
+      element.textContent?.includes("hrm-performance-calibration"),
+    )!;
+  const visibilityButton = () =>
+    row().querySelector<HTMLButtonElement>(
+      'button[aria-label="Show item"], button[aria-label="Hide item"]',
+    )!;
   const savedItem = () => {
-    const item = saved.at(-1)!.groups.flatMap((group) => group.items).find((entry) => entry.kind === 'module' && entry.moduleKey === 'hrm-performance-calibration');
-    assert.ok(item && item.kind === 'module');
+    const item = saved
+      .at(-1)!
+      .groups.flatMap((group) => group.items)
+      .find(
+        (entry) => entry.kind === "module" && entry.moduleKey === "hrm-performance-calibration",
+      );
+    assert.ok(item && item.kind === "module");
     return item;
   };
   try {
-    assert.equal(visibilityButton().getAttribute('aria-label'), 'Show item');
-    await act(async () => { visibilityButton().click(); await tick(); });
-    assert.equal(visibilityButton().getAttribute('aria-label'), 'Hide item');
-    await act(async () => { saveButton(host).click(); await tick(); });
-    assert.equal(savedItem().placement, 'custom');
+    assert.equal(visibilityButton().getAttribute("aria-label"), "Show item");
+    await act(async () => {
+      visibilityButton().click();
+      await tick();
+    });
+    assert.equal(visibilityButton().getAttribute("aria-label"), "Hide item");
+    await act(async () => {
+      saveButton(host).click();
+      await tick();
+    });
+    assert.equal(savedItem().placement, "custom");
     assert.equal(savedItem().hidden, false);
-    await act(async () => { visibilityButton().click(); await tick(); });
-    await act(async () => { saveButton(host).click(); await tick(); });
-    assert.equal(visibilityButton().getAttribute('aria-label'), 'Show item');
+    await act(async () => {
+      visibilityButton().click();
+      await tick();
+    });
+    await act(async () => {
+      saveButton(host).click();
+      await tick();
+    });
+    assert.equal(visibilityButton().getAttribute("aria-label"), "Show item");
     assert.equal(savedItem().placement, undefined);
-    assert.equal(savedItem().hidden, false, 'returning to local navigation must retain the local tab');
+    assert.equal(
+      savedItem().hidden,
+      false,
+      "returning to local navigation must retain the local tab",
+    );
   } finally {
     globalThis.fetch = priorFetch;
     await act(async () => root.unmount());

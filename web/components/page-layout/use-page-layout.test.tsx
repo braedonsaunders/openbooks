@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 // LAYOUT1: two tabs race whole-layout saves with inverted commit order — the
 // tab whose request commits second must 409, merge to the union, and retry,
@@ -95,7 +95,9 @@ function Probe({ id }: { id: string }) {
   );
 }
 
-async function mountProbe(id: string): Promise<{ container: HTMLElement; unmount: () => Promise<void> }> {
+async function mountProbe(
+  id: string,
+): Promise<{ container: HTMLElement; unmount: () => Promise<void> }> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);

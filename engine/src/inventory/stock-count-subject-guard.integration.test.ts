@@ -42,9 +42,12 @@ test("storage refuses a duplicate count subject even past the engine", { skip: !
         assert.fail("the unique guard must refuse a direct duplicate subject by name");
       },
     );
-    const [lines] = await db.execute<{ n: number }>(sql`
+    const [lines] = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from stock_count_lines
-       where org_id = ${org.orgId} and stock_count_id = ${count.id}`, 'objects');
+       where org_id = ${org.orgId} and stock_count_id = ${count.id}`,
+      "objects",
+    );
     assert.equal(lines?.n, 1, "the count keeps its single line");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -55,10 +55,20 @@ export async function replaceFamilyOptions(
       }
     }
 
-    const matchedCurrentIds = new Set(normalized.flatMap((option) => (option.id ? [option.id] : [])));
+    const matchedCurrentIds = new Set(
+      normalized.flatMap((option) => (option.id ? [option.id] : [])),
+    );
     for (const option of current) {
       if (matchedCurrentIds.has(option.id)) continue;
-      const renamedTo = normalized.find((candidate) => candidate.id === null && candidate.name !== option.name && sameValueSet(candidate.values.map((entry) => entry.value), option.values));
+      const renamedTo = normalized.find(
+        (candidate) =>
+          candidate.id === null &&
+          candidate.name !== option.name &&
+          sameValueSet(
+            candidate.values.map((entry) => entry.value),
+            option.values,
+          ),
+      );
       if (renamedTo) {
         throw new ItemFamilyError(
           `option ${option.name} cannot be renamed by removing and re-adding it`,
@@ -107,10 +117,14 @@ export async function replaceFamilyOptions(
         }
       }
       const removed = before.values.filter(
-        (value) => !afterValues.has(value) && !renames.some((rename) => rename.optionName === before.name && rename.from === value),
+        (value) =>
+          !afterValues.has(value) &&
+          !renames.some((rename) => rename.optionName === before.name && rename.from === value),
       );
       for (const value of removed) {
-        const usedBy = variants.filter((variant) => (variant.option_values ?? {})[before.name] === value);
+        const usedBy = variants.filter(
+          (variant) => (variant.option_values ?? {})[before.name] === value,
+        );
         if (usedBy.length > 0) {
           throw new ItemFamilyError(
             `value ${value} of option ${before.name} is used by ${usedBy.length} variant${usedBy.length === 1 ? "" : "s"} (${variantCodes(usedBy)}); deactivate the variants instead of removing the value`,
@@ -136,7 +150,9 @@ export async function replaceFamilyOptions(
     }
 
     // Apply: delete removed options, update kept ones, insert added ones.
-    const removedIds = current.filter((option) => !matchedCurrentIds.has(option.id)).map((option) => option.id);
+    const removedIds = current
+      .filter((option) => !matchedCurrentIds.has(option.id))
+      .map((option) => option.id);
     if (removedIds.length > 0) {
       const deleted = await tx.execute<never>(sql`
         delete from item_family_options
@@ -156,15 +172,21 @@ export async function replaceFamilyOptions(
              set position = ${position}, name = ${option.name}, "values" = ${textArrayLiteral(valueList)}::text[],
                  updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and family_id = ${familyId} and id = ${option.id}`);
-        if ((updated.rowCount ?? 0) !== 1) throw new InventoryError(`family option ${option.name} update matched no row`);
+        if ((updated.rowCount ?? 0) !== 1)
+          throw new InventoryError(`family option ${option.name} update matched no row`);
         finalOptions.push({ id: option.id, name: option.name, position, values: valueList });
       } else {
-        const inserted = (await tx.execute<{ id: string }>(sql`
+        const inserted = (
+          await tx.execute<{ id: string }>(
+            sql`
           insert into item_family_options
             (org_id, family_id, position, name, "values", created_by, updated_by)
           values
             (${orgId}, ${familyId}, ${position}, ${option.name}, ${textArrayLiteral(valueList)}::text[], ${actorId}, ${actorId})
-          returning id`, "objects"))[0];
+          returning id`,
+            "objects",
+          )
+        )[0];
         if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
         finalOptions.push({ id: inserted.id, name: option.name, position, values: valueList });
       }
@@ -208,7 +230,10 @@ export async function replaceFamilyOptions(
                set name = ${nextName}, option_values = ${nextValues}::jsonb,
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${variant.id}`);
-          if ((updated.rowCount ?? 0) !== 1) throw new InventoryError(`variant ${variant.code ?? variant.name} rename matched no row`);
+          if ((updated.rowCount ?? 0) !== 1)
+            throw new InventoryError(
+              `variant ${variant.code ?? variant.name} rename matched no row`,
+            );
           renamedVariants.push({ id: variant.id, name: nextName });
           if (valuesChanged && !nameChanged) {
             await writeFamilyAudit(tx, orgId, actorId, "items", variant.id, "update", {

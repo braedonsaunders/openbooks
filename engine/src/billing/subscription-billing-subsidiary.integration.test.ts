@@ -11,7 +11,12 @@ import {
   SubscriptionError,
 } from "./subscription-billing.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -25,7 +30,10 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * active subsidiary only); the root remains solely the null-customer
  * (org-wide) fallback.
  */
-async function seedBranchCustomer(org: ScratchOrg, name: string): Promise<{ customerId: string; branchId: string }> {
+async function seedBranchCustomer(
+  org: ScratchOrg,
+  name: string,
+): Promise<{ customerId: string; branchId: string }> {
   const branchId = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -72,12 +80,20 @@ async function seedSubscription(
   return subscriptionId;
 }
 
-async function invoiceSubsidiary(orgId: string, invoiceId: string): Promise<{ subsidiaryId: string | null; orgId: string }> {
-  const row = (await db.execute<{ subsidiaryId: string | null; orgId: string }>(sql`
+async function invoiceSubsidiary(
+  orgId: string,
+  invoiceId: string,
+): Promise<{ subsidiaryId: string | null; orgId: string }> {
+  const row = (
+    await db.execute<{ subsidiaryId: string | null; orgId: string }>(
+      sql`
     select d.subsidiary_id as "subsidiaryId", sub.org_id as "orgId"
       from documents d left join subsidiaries sub on sub.id = d.subsidiary_id
      where d.id = ${invoiceId} and d.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   assert.ok(row, "the billed invoice must exist");
   return { subsidiaryId: row.subsidiaryId, orgId: row.orgId ?? orgId };
 }
@@ -98,12 +114,20 @@ test(
 
       const branchGen = await billSubscriptionNow(org.orgId, branchSub, { actorId }, null);
       const branchInvoice = await invoiceSubsidiary(org.orgId, branchGen.invoiceId);
-      assert.equal(branchInvoice.subsidiaryId, branch.branchId, "customer B's invoice must carry branch B, not the root");
+      assert.equal(
+        branchInvoice.subsidiaryId,
+        branch.branchId,
+        "customer B's invoice must carry branch B, not the root",
+      );
       assert.equal(branchInvoice.orgId, org.orgId, "no cross-org entity may leak onto the invoice");
 
       const rootGen = await billSubscriptionNow(org.orgId, rootSub, { actorId }, null);
       const rootInvoice = await invoiceSubsidiary(org.orgId, rootGen.invoiceId);
-      assert.equal(rootInvoice.subsidiaryId, org.subsidiaryId, "a null-entity (org-wide) customer keeps the root fallback");
+      assert.equal(
+        rootInvoice.subsidiaryId,
+        org.subsidiaryId,
+        "a null-entity (org-wide) customer keeps the root fallback",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -124,9 +148,14 @@ test(
       const run = await runDueSubscriptions(org.date);
       assert.equal(run.failed, 0);
       assert.equal(run.billed, 1);
-      const invoiceId = (await db.execute<{ id: string }>(sql`
+      const invoiceId = (
+        await db.execute<{ id: string }>(
+          sql`
         select last_invoice_id as "id" from subscriptions where id = ${subscriptionId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       assert.equal(
         (await invoiceSubsidiary(org.orgId, invoiceId)).subsidiaryId,
         branch.branchId,
@@ -138,58 +167,59 @@ test(
   },
 );
 
-test(
-  "change-subscription proration carries the customer's own entity",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const planId = await seedPlan(org, actorId);
-      const branch = await seedBranchCustomer(org, "Branch B Churn");
-      const subscriptionId = await seedSubscription(org, actorId, planId, branch.customerId, {
-        startOn: "2026-07-01",
-        nextBillOn: "2026-08-01",
-      });
+test("change-subscription proration carries the customer's own entity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+    const planId = await seedPlan(org, actorId);
+    const branch = await seedBranchCustomer(org, "Branch B Churn");
+    const subscriptionId = await seedSubscription(org, actorId, planId, branch.customerId, {
+      startOn: "2026-07-01",
+      nextBillOn: "2026-08-01",
+    });
 
-      const changed = await changeSubscription(org.orgId, subscriptionId, { quantity: "2" }, "2026-07-15", { actorId }, null);
-      assert.ok(changed.invoiceId, "the upgrade must cut a proration invoice");
-      assert.equal(
-        (await invoiceSubsidiary(org.orgId, changed.invoiceId!)).subsidiaryId,
-        branch.branchId,
-        "the proration invoice must carry branch B, not the root",
-      );
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+    const changed = await changeSubscription(
+      org.orgId,
+      subscriptionId,
+      { quantity: "2" },
+      "2026-07-15",
+      { actorId },
+      null,
+    );
+    assert.ok(changed.invoiceId, "the upgrade must cut a proration invoice");
+    assert.equal(
+      (await invoiceSubsidiary(org.orgId, changed.invoiceId!)).subsidiaryId,
+      branch.branchId,
+      "the proration invoice must carry branch B, not the root",
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
-test(
-  "first-period proration carries the customer's own entity",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const planId = await seedPlan(org, actorId);
-      const branch = await seedBranchCustomer(org, "Branch B Starter");
-      const subscriptionId = await seedSubscription(org, actorId, planId, branch.customerId, {
-        startOn: "2026-07-10",
-        nextBillOn: "2026-07-10",
-      });
+test("first-period proration carries the customer's own entity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+    const planId = await seedPlan(org, actorId);
+    const branch = await seedBranchCustomer(org, "Branch B Starter");
+    const subscriptionId = await seedSubscription(org, actorId, planId, branch.customerId, {
+      startOn: "2026-07-10",
+      nextBillOn: "2026-07-10",
+    });
 
-      const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId });
-      assert.equal(
-        (await invoiceSubsidiary(org.orgId, gen.invoiceId)).subsidiaryId,
-        branch.branchId,
-        "the first-period invoice must carry branch B, not the root",
-      );
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+    const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", {
+      actorId,
+    });
+    assert.equal(
+      (await invoiceSubsidiary(org.orgId, gen.invoiceId)).subsidiaryId,
+      branch.branchId,
+      "the first-period invoice must carry branch B, not the root",
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 test(
   "first proration refuses a customer rehomed after subscription commit",
@@ -197,11 +227,32 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actorId = await createScratchUser(org.orgId, "Billing", "admin"), plan = await seedPlan(org, actorId), branch = await seedBranchCustomer(org, "Rehomed Starter");
-      const subscriptionId = await seedSubscription(org, actorId, plan, org.customerId, { startOn: "2026-07-10", nextBillOn: "2026-07-10" });
-      await db.execute(sql`update parties set subsidiary_id = ${branch.branchId} where id = ${org.customerId} and org_id = ${org.orgId}`);
-      await assert.rejects(prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", { actorId, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), ScopeNotFoundError);
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`, "objects"))[0]!.n, 0);
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin"),
+        plan = await seedPlan(org, actorId),
+        branch = await seedBranchCustomer(org, "Rehomed Starter");
+      const subscriptionId = await seedSubscription(org, actorId, plan, org.customerId, {
+        startOn: "2026-07-10",
+        nextBillOn: "2026-07-10",
+      });
+      await db.execute(
+        sql`update parties set subsidiary_id = ${branch.branchId} where id = ${org.customerId} and org_id = ${org.orgId}`,
+      );
+      await assert.rejects(
+        prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", {
+          actorId,
+          allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+        }),
+        ScopeNotFoundError,
+      );
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`,
+            "objects",
+          )
+        )[0]!.n,
+        0,
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -226,18 +277,30 @@ test(
         nextBillOn: "2026-07-10",
       });
 
-      const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", { actorId });
+      const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", {
+        actorId,
+      });
       assert.equal(gen.amount, "70.9677", "22 of 31 days are charged");
-      const total = (await db.execute<{ total: string }>(sql`
+      const total = (
+        await db.execute<{ total: string }>(
+          sql`
         select total from documents where id = ${gen.invoiceId} and org_id = ${org.orgId}
-      `, "objects"))[0]!.total;
+      `,
+          "objects",
+        )
+      )[0]!.total;
       assert.equal(total, "70.9677");
       // The cycle continues on the period the stub was priced against: the
       // next full invoice covers Aug 1 → Sep 1, not Aug 1 → Sep 10.
-      const cycle = (await db.execute<{ nextBillOn: string; anchorDay: number }>(sql`
+      const cycle = (
+        await db.execute<{ nextBillOn: string; anchorDay: number }>(
+          sql`
         select next_bill_on::text as "nextBillOn", anchor_day as "anchorDay"
           from subscriptions where id = ${subscriptionId} and org_id = ${org.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(cycle, { nextBillOn: "2026-08-01", anchorDay: 1 });
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -245,46 +308,47 @@ test(
   },
 );
 
-test(
-  "concurrent first-period prorations bill exactly once",
-  { skip: !DB },
-  async () => {
-    // A double-click on a first-period proration: both serialize on the
-    // subscription row lock inside prorateFirstInvoice. The winner cuts the
-    // invoice and records it; the loser observes the winner's committed
-    // invoice evidence and refuses instead of cutting a second invoice.
-    const org = await createScratchOrg();
-    try {
-      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const planId = await seedPlan(org, actorId);
-      const subscriptionId = await seedSubscription(org, actorId, planId, org.customerId, {
-        startOn: "2026-07-10",
-        nextBillOn: "2026-07-10",
-      });
+test("concurrent first-period prorations bill exactly once", { skip: !DB }, async () => {
+  // A double-click on a first-period proration: both serialize on the
+  // subscription row lock inside prorateFirstInvoice. The winner cuts the
+  // invoice and records it; the loser observes the winner's committed
+  // invoice evidence and refuses instead of cutting a second invoice.
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+    const planId = await seedPlan(org, actorId);
+    const subscriptionId = await seedSubscription(org, actorId, planId, org.customerId, {
+      startOn: "2026-07-10",
+      nextBillOn: "2026-07-10",
+    });
 
-      const outcomes = await Promise.allSettled([
-        prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
-        prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
-      ]);
-      const won = outcomes.filter((outcome) => outcome.status === "fulfilled");
-      const refused = outcomes.filter((outcome) => outcome.status === "rejected");
-      assert.equal(won.length, 1, "exactly one proration bills");
-      assert.equal(refused.length, 1, "the twin refuses instead of double-billing");
-      const refusal = (refused[0] as PromiseRejectedResult).reason;
-      assert.ok(
-        refusal instanceof SubscriptionError && /already been prorated/.test(refusal.message),
-        `the twin names the single-fire guard, got: ${String(refusal)}`,
-      );
-      const invoices = (await db.execute<{ n: number }>(sql`
+    const outcomes = await Promise.allSettled([
+      prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
+      prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
+    ]);
+    const won = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const refused = outcomes.filter((outcome) => outcome.status === "rejected");
+    assert.equal(won.length, 1, "exactly one proration bills");
+    assert.equal(refused.length, 1, "the twin refuses instead of double-billing");
+    const refusal = (refused[0] as PromiseRejectedResult).reason;
+    assert.ok(
+      refusal instanceof SubscriptionError && /already been prorated/.test(refusal.message),
+      `the twin names the single-fire guard, got: ${String(refusal)}`,
+    );
+    const invoices = (
+      await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-      `, "objects"))[0]!.n;
-      assert.equal(invoices, 1, "exactly one first-period invoice exists");
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+      `,
+        "objects",
+      )
+    )[0]!.n;
+    assert.equal(invoices, 1, "exactly one first-period invoice exists");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 test(
   "an inactive customer entity refuses by name with zero mutations — never the root",
@@ -296,11 +360,18 @@ test(
       const planId = await seedPlan(org, actorId);
       const branch = await seedBranchCustomer(org, "Branch B Dormant");
       const subscriptionId = await seedSubscription(org, actorId, planId, branch.customerId);
-      await db.execute(sql`update subsidiaries set is_active = false where id = ${branch.branchId}`);
-      const before = (await db.execute<{ n: number }>(sql`
+      await db.execute(
+        sql`update subsidiaries set is_active = false where id = ${branch.branchId}`,
+      );
+      const before = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind in ('customer_invoice', 'customer_credit')
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
 
       await assert.rejects(
         billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null),
@@ -311,11 +382,20 @@ test(
         "must refuse by name and point at the party-record remedy",
       );
 
-      const after = (await db.execute<{ n: number }>(sql`
+      const after = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind in ('customer_invoice', 'customer_credit')
-      `, "objects"))[0]!.n;
-      assert.equal(after, Number(before), "no invoice may be cut to the root for an untrusted entity");
+      `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(
+        after,
+        Number(before),
+        "no invoice may be cut to the root for an untrusted entity",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

@@ -2,7 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "@openbooks/engine/tax-returns/return";
+import {
+  computeTaxReturn,
+  filterTaxReturnFormsByFeatures,
+  TaxReturnError,
+} from "@openbooks/engine/tax-returns/return";
 import { can } from "../authz";
 import { isDocKindEnabled } from "../documents.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -26,14 +30,24 @@ const listTaxReturnForms: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
-    const rows = (await db.execute<{ code: string; name: string; country: string | null; submission_channel: string; is_active: boolean; registrations: number }>(sql`
+    const rows = await db.execute<{
+      code: string;
+      name: string;
+      country: string | null;
+      submission_channel: string;
+      is_active: boolean;
+      registrations: number;
+    }>(
+      sql`
       select f.code, f.name, f.country, f.submission_channel, f.is_active,
              (select count(*)::int from tax_registrations r
                where r.org_id = f.org_id and r.return_form_code = f.code) as registrations
         from tax_return_forms f
        where f.org_id = ${authz.user.orgId}
        order by f.is_active desc, f.country, f.code
-    `, "objects"));
+    `,
+      "objects",
+    );
     const visibleRows = await filterTaxReturnFormsByFeatures(authz.user.orgId, rows);
     return {
       ok: true,
@@ -103,7 +117,8 @@ const taxReturn: AssistantToolDef = {
         },
       };
     } catch (error) {
-      if (error instanceof TaxReturnError) return { ok: false, error: `tax_return: ${error.message}` };
+      if (error instanceof TaxReturnError)
+        return { ok: false, error: `tax_return: ${error.message}` };
       throw error;
     }
   },
@@ -128,9 +143,17 @@ const documentsMissingTaxCode: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["ar.read", "cash_sales.read", "ap.read", "expenses.read"] },
   inputSchema: z.object({
-    kinds: z.array(z.string().max(40)).max(6).optional()
-      .describe("Subset of customer_invoice, customer_credit, cash_sale, cash_refund, vendor_bill, vendor_credit, expense_report, card_charge; default all the caller may read"),
-    status: z.enum(["posted", "approved", "pending_approval", "draft"]).optional().describe("Default posted"),
+    kinds: z
+      .array(z.string().max(40))
+      .max(6)
+      .optional()
+      .describe(
+        "Subset of customer_invoice, customer_credit, cash_sale, cash_refund, vendor_bill, vendor_credit, expense_report, card_charge; default all the caller may read",
+      ),
+    status: z
+      .enum(["posted", "approved", "pending_approval", "draft"])
+      .optional()
+      .describe("Default posted"),
     ...rangeInputFields,
     limit: z.number().int().min(1).max(100).optional().describe("Default 25 documents"),
   }),
@@ -149,7 +172,10 @@ const documentsMissingTaxCode: AssistantToolDef = {
     const status = a.status ?? "posted";
     const limit = Math.min(a.limit ?? 25, 100);
     const scope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds);
-    const kindSet = sql.join(kinds.map((k) => sql`${k}`), sql`, `);
+    const kindSet = sql.join(
+      kinds.map((k) => sql`${k}`),
+      sql`, `,
+    );
     const where = sql`
       d.org_id = ${authz.user.orgId}
       and d.kind in (${kindSet})
@@ -157,7 +183,8 @@ const documentsMissingTaxCode: AssistantToolDef = {
       and d.document_date between ${range.from} and ${range.to}
       ${scope}
     `;
-    const docs = (await db.execute<Record<string, unknown>>(sql`
+    const docs = await db.execute<Record<string, unknown>>(
+      sql`
       with hits as (
         select d.id, d.kind, d.document_number, d.document_date, d.status, d.total, d.party_id,
                count(dl.id)::int as untaxed_lines,
@@ -173,8 +200,11 @@ const documentsMissingTaxCode: AssistantToolDef = {
         left join parties p on p.id = h.party_id and p.org_id = ${authz.user.orgId}
        order by h.untaxed_amount desc, h.document_date desc
        limit ${limit}
-    `, "objects"));
-    const byKind = (await db.execute<Record<string, unknown>>(sql`
+    `,
+      "objects",
+    );
+    const byKind = await db.execute<Record<string, unknown>>(
+      sql`
       select d.kind, count(distinct d.id)::int as documents, coalesce(sum(dl.amount), 0) as untaxed_amount
         from documents d
         join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
@@ -182,7 +212,9 @@ const documentsMissingTaxCode: AssistantToolDef = {
          and dl.tax_code_id is null and dl.amount <> 0
        group by d.kind
        order by d.kind
-    `, "objects"));
+    `,
+      "objects",
+    );
     const total = Number(docs[0]?.total_docs ?? 0);
     return {
       ok: true,
@@ -195,7 +227,11 @@ const documentsMissingTaxCode: AssistantToolDef = {
         totalDocuments: total,
         returned: docs.length,
         truncated: total > docs.length,
-        byKind: byKind.map((r) => ({ kind: r.kind, documents: r.documents, untaxedAmount: money(r.untaxed_amount) })),
+        byKind: byKind.map((r) => ({
+          kind: r.kind,
+          documents: r.documents,
+          untaxedAmount: money(r.untaxed_amount),
+        })),
         documents: docs.map((r) => ({
           id: r.id,
           kind: r.kind,
@@ -212,4 +248,8 @@ const documentsMissingTaxCode: AssistantToolDef = {
   },
 };
 
-export const TAX_TOOLS: AssistantToolDef[] = [listTaxReturnForms, taxReturn, documentsMissingTaxCode];
+export const TAX_TOOLS: AssistantToolDef[] = [
+  listTaxReturnForms,
+  taxReturn,
+  documentsMissingTaxCode,
+];

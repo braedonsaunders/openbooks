@@ -44,7 +44,10 @@ function normalizeCategory(value: string | null): string | null {
 }
 
 /** Whether a rule is in force for a line's entity and posting date. */
-export function ruleInForce(rule: CapitalizationRule, line: Pick<ProposalSourceLine, "subsidiaryId" | "postingDate">): boolean {
+export function ruleInForce(
+  rule: CapitalizationRule,
+  line: Pick<ProposalSourceLine, "subsidiaryId" | "postingDate">,
+): boolean {
   if (!rule.isActive) return false;
   if (rule.subsidiaryId !== null && rule.subsidiaryId !== line.subsidiaryId) return false;
   if (line.postingDate < rule.effectiveFrom) return false;
@@ -80,11 +83,13 @@ export function matchCapitalizationRule(
   if (cmp(line.amount, "0") <= 0) return null;
   const candidates = rules
     .filter((rule) => ruleInForce(rule, line) && ruleMatches(rule, line))
-    .sort((a, b) =>
-      SPECIFICITY[a.matchKind] - SPECIFICITY[b.matchKind]
-      || Number(b.subsidiaryId !== null) - Number(a.subsidiaryId !== null)
-      || b.effectiveFrom.localeCompare(a.effectiveFrom)
-      || a.id.localeCompare(b.id));
+    .sort(
+      (a, b) =>
+        SPECIFICITY[a.matchKind] - SPECIFICITY[b.matchKind] ||
+        Number(b.subsidiaryId !== null) - Number(a.subsidiaryId !== null) ||
+        b.effectiveFrom.localeCompare(a.effectiveFrom) ||
+        a.id.localeCompare(b.id),
+    );
   const winner = candidates[0] ?? null;
   if (!winner) return null;
   return cmp(line.amount, winner.minimumAmount) >= 0 ? winner : null;

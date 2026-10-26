@@ -1,123 +1,145 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
-    if (context.parentURL?.includes('/schema/src/') && /^\.{1,2}\//.test(specifier) && !/\.[cm]?tsx?$/.test(specifier)) {
-      return nextResolve(new URL(`${specifier}.ts`, context.parentURL).href, context)
+    if (
+      context.parentURL?.includes("/schema/src/") &&
+      /^\.{1,2}\//.test(specifier) &&
+      !/\.[cm]?tsx?$/.test(specifier)
+    ) {
+      return nextResolve(new URL(`${specifier}.ts`, context.parentURL).href, context);
     }
     const engineUrl = resolveEngineSpecifier(specifier);
     if (engineUrl) return nextResolve(engineUrl, context);
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
-})
+});
 
-const { db, withBypass } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { loadAccount } = await import('./_lib.ts')
+const { db, withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { loadAccount } = await import("./_lib.ts");
 
-test('URL drawer account reads hide out-of-scope subsidiaries and retain shared chart accounts', async () => {
-  const scratch = await withBypass(() => createScratchOrg())
+test("URL drawer account reads hide out-of-scope subsidiaries and retain shared chart accounts", async () => {
+  const scratch = await withBypass(() => createScratchOrg());
   try {
-    const hiddenSubsidiary = randomUUID()
-    const hiddenAccount = randomUUID()
-    const sharedAccount = randomUUID(), hiddenParent = randomUUID(), visibleChild = randomUUID()
+    const hiddenSubsidiary = randomUUID();
+    const hiddenAccount = randomUUID();
+    const sharedAccount = randomUUID(),
+      hiddenParent = randomUUID(),
+      visibleChild = randomUUID();
     await withBypass(async () => {
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden Drawer Entity', 'CAD', 'CA')
-      `)
+      `);
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, subsidiary_id, parent_id, is_summary, is_active)
         values (${hiddenAccount}, ${scratch.orgId}, '1096', 'Hidden subsidiary account', 'asset_bank', ${hiddenSubsidiary}, null, false, true),
                (${sharedAccount}, ${scratch.orgId}, '1097', 'Shared chart account', 'expense', null, null, false, true),
                (${hiddenParent}, ${scratch.orgId}, '1098', 'Hidden parent', 'asset_other', ${hiddenSubsidiary}, null, true, true), (${visibleChild}, ${scratch.orgId}, '1099', 'Visible child of hidden parent', 'asset_other', ${scratch.subsidiaryId}, ${hiddenParent}, false, true)
-      `)
-    })
+      `);
+    });
 
-    const restricted = new Set([scratch.subsidiaryId])
-    assert.deepEqual(await Promise.all([loadAccount(hiddenAccount, scratch.orgId, restricted), loadAccount(hiddenAccount, scratch.orgId, new Set())]), [null, null])
-    assert.equal((await loadAccount(hiddenAccount, scratch.orgId, null))?.account.id, hiddenAccount)
-    assert.equal((await loadAccount(visibleChild, scratch.orgId, restricted))?.parentName, null)
+    const restricted = new Set([scratch.subsidiaryId]);
+    assert.deepEqual(
+      await Promise.all([
+        loadAccount(hiddenAccount, scratch.orgId, restricted),
+        loadAccount(hiddenAccount, scratch.orgId, new Set()),
+      ]),
+      [null, null],
+    );
+    assert.equal(
+      (await loadAccount(hiddenAccount, scratch.orgId, null))?.account.id,
+      hiddenAccount,
+    );
+    assert.equal((await loadAccount(visibleChild, scratch.orgId, restricted))?.parentName, null);
   } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
+    await withBypass(() => dropScratchOrg(scratch.orgId));
   }
-})
+});
 
-test('shared account drawer child counts omit subsidiary-owned children outside the caller scope', async () => {
-  const scratch = await withBypass(() => createScratchOrg())
+test("shared account drawer child counts omit subsidiary-owned children outside the caller scope", async () => {
+  const scratch = await withBypass(() => createScratchOrg());
   try {
-    const hiddenSubsidiary = randomUUID()
-    const sharedParent = randomUUID()
-    const visibleChild = randomUUID()
-    const hiddenChild = randomUUID()
+    const hiddenSubsidiary = randomUUID();
+    const sharedParent = randomUUID();
+    const visibleChild = randomUUID();
+    const hiddenChild = randomUUID();
     await withBypass(async () => {
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden child entity', 'CAD', 'CA')
-      `)
+      `);
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, subsidiary_id, parent_id, is_summary, is_active)
         values (${sharedParent}, ${scratch.orgId}, '1094', 'Shared summary', 'asset_other', null, null, true, true),
                (${visibleChild}, ${scratch.orgId}, '1095', 'Visible child account', 'asset_other', ${scratch.subsidiaryId}, ${sharedParent}, false, true),
                (${hiddenChild}, ${scratch.orgId}, '1093', 'Hidden child account', 'asset_other', ${hiddenSubsidiary}, ${sharedParent}, false, true)
-      `)
-    })
+      `);
+    });
 
-    const unrestricted = await loadAccount(sharedParent, scratch.orgId, null)
-    const restricted = await loadAccount(sharedParent, scratch.orgId, new Set([scratch.subsidiaryId]))
-    assert.equal(unrestricted?.childCount, 2)
-    assert.equal(unrestricted?.activeChildCount, 2)
-    assert.equal(restricted?.childCount, 1)
-    assert.equal(restricted?.activeChildCount, 1)
+    const unrestricted = await loadAccount(sharedParent, scratch.orgId, null);
+    const restricted = await loadAccount(
+      sharedParent,
+      scratch.orgId,
+      new Set([scratch.subsidiaryId]),
+    );
+    assert.equal(unrestricted?.childCount, 2);
+    assert.equal(unrestricted?.activeChildCount, 2);
+    assert.equal(restricted?.childCount, 1);
+    assert.equal(restricted?.activeChildCount, 1);
   } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
+    await withBypass(() => dropScratchOrg(scratch.orgId));
   }
-})
+});
 
-test('shared account drawer transaction flag only reflects journal lines in caller scope', async () => {
-  const scratch = await withBypass(() => createScratchOrg())
+test("shared account drawer transaction flag only reflects journal lines in caller scope", async () => {
+  const scratch = await withBypass(() => createScratchOrg());
   try {
-    const hiddenSubsidiary = randomUUID()
-    const sharedAccount = randomUUID()
-    const entryId = randomUUID()
-    const lineId = randomUUID()
-    const offsetLineId = randomUUID()
+    const hiddenSubsidiary = randomUUID();
+    const sharedAccount = randomUUID();
+    const entryId = randomUUID();
+    const lineId = randomUUID();
+    const offsetLineId = randomUUID();
     await withBypass(async () => {
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden activity entity', 'CAD', 'CA')
-      `)
+      `);
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
         values (${sharedAccount}, ${scratch.orgId}, '1098', 'Shared activity account', 'expense', null, false, true)
-      `)
+      `);
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, entry_number, posting_date, period_id, status, subsidiary_id)
         values
           (${entryId}, ${scratch.orgId}, ${scratch.bookId}, ${`SCOPE-${entryId.slice(0, 8)}`},
            ${scratch.date}, ${scratch.periodId}, 'draft', ${hiddenSubsidiary})
-      `)
+      `);
       await db.execute(sql`
         insert into journal_lines
           (id, org_id, entry_id, line_number, account_id, amount, currency, txn_amount, fx_rate, subsidiary_id)
         values
           (${lineId}, ${scratch.orgId}, ${entryId}, 1, ${sharedAccount}, 10, 'CAD', 10, 1, ${hiddenSubsidiary}),
           (${offsetLineId}, ${scratch.orgId}, ${entryId}, 2, ${scratch.accounts.revenue}, -10, 'CAD', -10, 1, ${hiddenSubsidiary})
-      `)
-    })
+      `);
+    });
 
-    const restricted = await loadAccount(sharedAccount, scratch.orgId, new Set([scratch.subsidiaryId]))
-    const unrestricted = await loadAccount(sharedAccount, scratch.orgId, null)
-    assert.equal(restricted?.hasTransactions, false)
-    assert.equal(unrestricted?.hasTransactions, true)
+    const restricted = await loadAccount(
+      sharedAccount,
+      scratch.orgId,
+      new Set([scratch.subsidiaryId]),
+    );
+    const unrestricted = await loadAccount(sharedAccount, scratch.orgId, null);
+    assert.equal(restricted?.hasTransactions, false);
+    assert.equal(unrestricted?.hasTransactions, true);
   } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
+    await withBypass(() => dropScratchOrg(scratch.orgId));
   }
-})
+});

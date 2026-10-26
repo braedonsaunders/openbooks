@@ -1,20 +1,20 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../testing/stub-modules";
+import test from "node:test";
 
 // POST /api/items/[id]/rates writes org-wide project billing rates under items.manage. A
 // subsidiary-scoped caller gets the named org-wide-policy refusal before the item lookup, the
 // feature checks, or any write; an unrestricted caller proceeds past the guard.
 interface RatesState {
-  restricted: boolean
-  dbCalls: number
+  restricted: boolean;
+  dbCalls: number;
 }
 
-const stateKey = Symbol.for('openbooks.item-rates-scope-test')
-const ratesState: RatesState = { restricted: false, dbCalls: 0 }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = ratesState
+const stateKey = Symbol.for("openbooks.item-rates-scope-test");
+const ratesState: RatesState = { restricted: false, dbCalls: 0 };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = ratesState;
 
-const ITEM_ID = '00000000-0000-4000-8000-00000000c101'
+const ITEM_ID = "00000000-0000-4000-8000-00000000c101";
 
 stubModules({
   navigation: false,
@@ -53,43 +53,45 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?item-rates-scope-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?item-rates-scope-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function post(): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/items/${ITEM_ID}/rates`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        effectiveFrom: '2026-01-01',
-        baseUnit: 'hour',
-        pricingPolicy: 'lowest_cost',
-        tiers: [{ unitCode: 'hr', unitName: 'Hour', baseQuantity: '1', costRate: '50', billRate: '125' }],
+        effectiveFrom: "2026-01-01",
+        baseUnit: "hour",
+        pricingPolicy: "lowest_cost",
+        tiers: [
+          { unitCode: "hr", unitName: "Hour", baseQuantity: "1", costRate: "50", billRate: "125" },
+        ],
       }),
     }),
     { params: Promise.resolve({ id: ITEM_ID }) },
-  )
+  );
 }
 
 function reset(restricted: boolean): void {
-  ratesState.restricted = restricted
-  ratesState.dbCalls = 0
+  ratesState.restricted = restricted;
+  ratesState.dbCalls = 0;
 }
 
-test('POST by a scoped caller is refused before the item lookup or any write', async () => {
-  reset(true)
-  const response = await post()
-  assert.equal(response.status, 403)
-  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
-  assert.equal(ratesState.dbCalls, 0)
-})
+test("POST by a scoped caller is refused before the item lookup or any write", async () => {
+  reset(true);
+  const response = await post();
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.equal(ratesState.dbCalls, 0);
+});
 
-test('POST by an unrestricted caller proceeds past the guard', async () => {
-  reset(false)
-  const response = await post()
-  assert.notEqual(response.status, 403)
-  assert.ok(ratesState.dbCalls > 0)
-})
+test("POST by an unrestricted caller proceeds past the guard", async () => {
+  reset(false);
+  const response = await post();
+  assert.notEqual(response.status, 403);
+  assert.ok(ratesState.dbCalls > 0);
+});

@@ -153,7 +153,8 @@ async function constructionFeatureRefused(orgId: string): Promise<ToolResult | n
 
 async function performanceFeatureRefused(orgId: string): Promise<ToolResult | null> {
   if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
-  if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, "hrmPerformance")))
+    return { ok: false, error: HRM_FEATURE_OFF };
   return null;
 }
 
@@ -172,7 +173,9 @@ const hrmHeadcount: AssistantToolDef = {
   tier: "module",
   inputSchema: z.object({
     asOf: dateInput.optional().describe("Headcount as of this date; defaults to today"),
-    period: periodPresetInput.optional().describe("Fiscal-calendar preset; the headcount is taken as of the preset's end date"),
+    period: periodPresetInput
+      .optional()
+      .describe("Fiscal-calendar preset; the headcount is taken as of the preset's end date"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -227,8 +230,14 @@ const hrmEmploymentAsOf: AssistantToolDef = {
   feature: "hrm",
   tier: "module",
   inputSchema: z.object({
-    employmentId: uuidInput.optional().describe("Employment to resolve; pass one of employmentId or partyId"),
-    partyId: uuidInput.optional().describe("Worker party; resolves to its employment, refusing when none or several are visible"),
+    employmentId: uuidInput
+      .optional()
+      .describe("Employment to resolve; pass one of employmentId or partyId"),
+    partyId: uuidInput
+      .optional()
+      .describe(
+        "Worker party; resolves to its employment, refusing when none or several are visible",
+      ),
     asOf: dateInput.optional().describe("Effective date to resolve; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
@@ -289,7 +298,14 @@ const hrmEmploymentAsOf: AssistantToolDef = {
 };
 
 /** 0185 lifecycle statuses: the CHECK the change-request table enforces. */
-const changeRequestStatuses = ["draft", "pending_approval", "approved", "rejected", "withdrawn", "applied"] as const;
+const changeRequestStatuses = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "withdrawn",
+  "applied",
+] as const;
 
 /** Stable employment identities in the caller's scope for the org-wide list. */
 async function visibleEmploymentIds(
@@ -300,14 +316,17 @@ async function visibleEmploymentIds(
   // Identity enumeration only: a null employer is invisible (authorization
   // refuses such subjects, so the list twin excludes them rather than
   // leaking their ids). Versions and requests come from the loader below.
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id::text as id
       from worker_employments
      where org_id = ${orgId}
        and employer_subsidiary_id is not null
        ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, allowedSubsidiaryIds)}
      order by id
-     limit ${max + 1}`, "objects");
+     limit ${max + 1}`,
+    "objects",
+  );
   return { ids: rows.slice(0, max).map((row) => row.id), truncated: rows.length > max };
 }
 
@@ -320,14 +339,26 @@ const hrmChangeRequests: AssistantToolDef = {
   feature: "hrm",
   tier: "module",
   inputSchema: z.object({
-    employmentId: uuidInput.optional().describe("One employment's requests; omit for every visible employment"),
+    employmentId: uuidInput
+      .optional()
+      .describe("One employment's requests; omit for every visible employment"),
     status: z.enum(changeRequestStatuses).optional().describe("Keep only this lifecycle status"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum requests to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum requests to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
     if (gated) return gated;
-    const a = raw as { employmentId?: string; status?: (typeof changeRequestStatuses)[number]; limit?: number };
+    const a = raw as {
+      employmentId?: string;
+      status?: (typeof changeRequestStatuses)[number];
+      limit?: number;
+    };
     const limit = Math.min(a.limit ?? 50, 200);
     try {
       // A named employment is authorized per record inside the loader, so a
@@ -396,23 +427,36 @@ const hrmChangeRequests: AssistantToolDef = {
       }
       // Newest first across employments (created_at is microsecond UTC text,
       // so lexicographic order is chronological; id breaks ties deterministically).
-      collected.sort((x, y) => (y.createdAt < x.createdAt ? -1 : y.createdAt > x.createdAt ? 1 : x.id < y.id ? -1 : 1));
+      collected.sort((x, y) =>
+        y.createdAt < x.createdAt ? -1 : y.createdAt > x.createdAt ? 1 : x.id < y.id ? -1 : 1,
+      );
       // HR-16 begin: the applied event's verb (0227) resolves from the
       // employment_changes rows the loader already authorized, labels only —
       // one batched read, never per-row, and never the request table itself.
-      const appliedIds = [...new Set(collected.map((row) => row.appliedEmploymentChangeId).filter((id): id is string => id !== null))];
+      const appliedIds = [
+        ...new Set(
+          collected
+            .map((row) => row.appliedEmploymentChangeId)
+            .filter((id): id is string => id !== null),
+        ),
+      ];
       const verbByChange = new Map<string, string>();
       if (appliedIds.length > 0) {
-        const verbs = await db.execute<{ id: string; verb: string }>(sql`
+        const verbs = await db.execute<{ id: string; verb: string }>(
+          sql`
           select id::text as id, verb from employment_changes
            where org_id = ${authz.user.orgId}::uuid and id = any(${sql.param(appliedIds)}::uuid[])
-        `, "objects");
+        `,
+          "objects",
+        );
         for (const v of verbs) verbByChange.set(v.id, v.verb);
       }
       const page = compactRows(
         collected.map(({ appliedEmploymentChangeId, ...row }) => ({
           ...row,
-          appliedVerb: appliedEmploymentChangeId ? (verbByChange.get(appliedEmploymentChangeId) ?? null) : null,
+          appliedVerb: appliedEmploymentChangeId
+            ? (verbByChange.get(appliedEmploymentChangeId) ?? null)
+            : null,
         })),
         { limit },
       );
@@ -444,7 +488,9 @@ const hrmPositionsAsOf: AssistantToolDef = {
   tier: "module",
   inputSchema: z.object({
     asOf: dateInput.optional().describe("Vacancy as of this date; defaults to today"),
-    period: periodPresetInput.optional().describe("Fiscal-calendar preset; the vacancy is taken as of the preset's end date"),
+    period: periodPresetInput
+      .optional()
+      .describe("Fiscal-calendar preset; the vacancy is taken as of the preset's end date"),
     status: z
       .enum(["planned", "open", "filled", "frozen", "closed"])
       .optional()
@@ -524,7 +570,13 @@ const hrmProcesses: AssistantToolDef = {
     processId: uuidInput.optional().describe("One checklist in full; omit for the segment list"),
     segment: z.enum(processSegments).optional().describe("List segment (default open)"),
     employmentId: uuidInput.optional().describe("Keep only this employment's checklists"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum checklists to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum checklists to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -579,9 +631,10 @@ const hrmProcesses: AssistantToolDef = {
         actorId: authz.user.id,
         segment: a.segment ?? "open",
       });
-      const kept = (a.employmentId
-        ? processes.filter((process) => process.employmentId === a.employmentId)
-        : processes
+      const kept = (
+        a.employmentId
+          ? processes.filter((process) => process.employmentId === a.employmentId)
+          : processes
       ).map((process) => ({
         // Explicit projection: the worker party id stays in the record
         // read, so a future list column cannot ride this tool silently.
@@ -615,7 +668,14 @@ const hrmProcesses: AssistantToolDef = {
   },
 };
 
-const leaveRequestStatuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"] as const;
+const leaveRequestStatuses = [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+  "withdrawn",
+  "cancelled",
+] as const;
 
 const hrmLeave: AssistantToolDef = {
   name: "hrm_leave",
@@ -626,11 +686,22 @@ const hrmLeave: AssistantToolDef = {
   feature: "hrm",
   tier: "module",
   inputSchema: z.object({
-    employmentId: uuidInput.optional().describe("One employment's requests and balances; omit for every visible employment"),
+    employmentId: uuidInput
+      .optional()
+      .describe("One employment's requests and balances; omit for every visible employment"),
     status: z.enum(leaveRequestStatuses).optional().describe("Keep only this lifecycle status"),
-    includeBalances: z.boolean().optional().describe("Include TIME balances per leave type (single employment only)"),
+    includeBalances: z
+      .boolean()
+      .optional()
+      .describe("Include TIME balances per leave type (single employment only)"),
     asOf: dateInput.optional().describe("Balance date; defaults to today"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum requests to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum requests to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -681,20 +752,24 @@ const hrmLeave: AssistantToolDef = {
         }
       }
       // Newest start first across employments (id breaks ties deterministically).
-      collected.sort((x, y) => (y.startsOn < x.startsOn ? -1 : y.startsOn > x.startsOn ? 1 : x.id < y.id ? -1 : 1));
+      collected.sort((x, y) =>
+        y.startsOn < x.startsOn ? -1 : y.startsOn > x.startsOn ? 1 : x.id < y.id ? -1 : 1,
+      );
       const page = compactRows(collected, { limit });
       // TIME balances are single-employment only: org-wide balances would
       // sum incommensurable policies into a precise-looking wrong number.
       // VALUE (payroll banks) is never read here — payroll tools own it.
-      let balances: {
-        leaveTypeCode: string;
-        balance: string | null;
-        unlimited: boolean;
-        earned: string | null;
-        carried: string;
-        taken: string;
-        serviceStartUnknown: boolean;
-      }[] | null = null;
+      let balances:
+        | {
+            leaveTypeCode: string;
+            balance: string | null;
+            unlimited: boolean;
+            earned: string | null;
+            carried: string;
+            taken: string;
+            serviceStartUnknown: boolean;
+          }[]
+        | null = null;
       if (a.includeBalances) {
         if (!a.employmentId) return { ok: false, error: "balances_need_employment" };
         const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
@@ -744,14 +819,29 @@ const hrmRecruiting: AssistantToolDef = {
   feature: "hrm",
   tier: "module",
   inputSchema: z.object({
-    requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
+    requisitionId: uuidInput
+      .optional()
+      .describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
     segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum openings to return (default 50)"),
     // Depth reads (names and states only, never PII). Each refuses by
     // name while Recruiting is off.
-    interviewId: uuidInput.optional().describe("Scorecard summary for one interview: per-attribute aggregates, counts, and missing seats by name"),
+    interviewId: uuidInput
+      .optional()
+      .describe(
+        "Scorecard summary for one interview: per-attribute aggregates, counts, and missing seats by name",
+      ),
     offerId: uuidInput.optional().describe("One offer's signature state and version count"),
-    includePostings: z.boolean().optional().describe("Include board posting status beside a requisitionId detail"),
+    includePostings: z
+      .boolean()
+      .optional()
+      .describe("Include board posting status beside a requisitionId detail"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -769,9 +859,7 @@ const hrmRecruiting: AssistantToolDef = {
       // HR-18 begin: scorecard summary (aggregate only, names of missing
       // seats — private notes never ride this shape).
       if (a.interviewId) {
-        const { scorecardSummary } = await import(
-          "@openbooks/engine/hrm/recruiting/scorecards"
-        );
+        const { scorecardSummary } = await import("@openbooks/engine/hrm/recruiting/scorecards");
         const summary = await scorecardSummary({
           orgId: authz.user.orgId,
           actorId: authz.user.id,
@@ -782,9 +870,8 @@ const hrmRecruiting: AssistantToolDef = {
       // HR-18 end
       // HR-18 begin: offer signature state (state only, never the letter).
       if (a.offerId) {
-        const { offerSignatureState } = await import(
-          "@openbooks/engine/hrm/recruiting/offers-signing"
-        );
+        const { offerSignatureState } =
+          await import("@openbooks/engine/hrm/recruiting/offers-signing");
         const state = await offerSignatureState({
           orgId: authz.user.orgId,
           actorId: authz.user.id,
@@ -893,7 +980,13 @@ const hrmPerformanceCycles: AssistantToolDef = {
   inputSchema: z.object({
     cycleId: uuidInput.optional().describe("One cycle in full; omit for the cycle list"),
     status: z.enum(cycleStatuses).optional().describe("Keep only this cycle status"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum cycles to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum cycles to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -987,7 +1080,10 @@ const hrmTurnover: AssistantToolDef = {
     const a = raw as { departmentId?: string; periods?: { start: string; end: string }[] };
     try {
       if (!a.periods) {
-        const overview = await getRetentionOverview({ orgId: authz.user.orgId, actorId: authz.user.id });
+        const overview = await getRetentionOverview({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+        });
         const trailing = overview.trailingTwelveMonths;
         return {
           ok: true,
@@ -1038,21 +1134,36 @@ const hrmTurnover: AssistantToolDef = {
   },
 };
 
-const enrollmentStatuses = ['elected', 'waived', 'pending_approval', 'active', 'ended', 'cancelled'] as const;
+const enrollmentStatuses = [
+  "elected",
+  "waived",
+  "pending_approval",
+  "active",
+  "ended",
+  "cancelled",
+] as const;
 
 const hrmBenefits: AssistantToolDef = {
-  name: 'hrm_benefits',
+  name: "hrm_benefits",
   description:
-    'Benefit enrollment windows and elections for one employment (or every visible employment): window, program, eligibility class, status, and effective contribution elections with their declared units. Read-only.',
-  category: 'search',
-  gate: { mode: 'anyOf', perms: ['hrm.benefits.read'] },
-  feature: 'hrm',
-  tier: 'module',
+    "Benefit enrollment windows and elections for one employment (or every visible employment): window, program, eligibility class, status, and effective contribution elections with their declared units. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.benefits.read"] },
+  feature: "hrm",
+  tier: "module",
   inputSchema: z.object({
-    employmentId: uuidInput.optional().describe("One employment's elections; omit for every visible employment"),
-    windowId: uuidInput.optional().describe('Keep only this enrollment window'),
-    status: z.enum(enrollmentStatuses).optional().describe('Keep only this lifecycle status'),
-    limit: z.number().int().min(1).max(200).optional().describe('Maximum elections to return (default 50)'),
+    employmentId: uuidInput
+      .optional()
+      .describe("One employment's elections; omit for every visible employment"),
+    windowId: uuidInput.optional().describe("Keep only this enrollment window"),
+    status: z.enum(enrollmentStatuses).optional().describe("Keep only this lifecycle status"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum elections to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -1117,7 +1228,7 @@ const hrmBenefits: AssistantToolDef = {
             status: window.status,
           })),
           elections: page.items,
-          href: '/hrm/benefits',
+          href: "/hrm/benefits",
         },
       };
     } catch (error) {
@@ -1165,43 +1276,43 @@ const hrmMe: AssistantToolDef = {
           })),
           reviews: {
             cycles: reviews.cycles.map((group) => ({
-                  name: group.name,
-                  status: group.status,
-                  selfOwed: group.mySelf
-                    ? { status: group.mySelf.status, dueOn: group.mySelf.selfDueOn }
-                    : null,
-                  shared: group.sharedWithMe.map((shared) => ({
-                    status: shared.status,
-                    overallRating: shared.overallRating,
-                  })),
-                })),
-                goals: reviews.goals.map((goal) => ({
-                  title: goal.title,
-                  status: goal.status,
-                  progressPercent: goal.progressPercent,
-                })),
-                href: "/me/reviews",
-              },
+              name: group.name,
+              status: group.status,
+              selfOwed: group.mySelf
+                ? { status: group.mySelf.status, dueOn: group.mySelf.selfDueOn }
+                : null,
+              shared: group.sharedWithMe.map((shared) => ({
+                status: shared.status,
+                overallRating: shared.overallRating,
+              })),
+            })),
+            goals: reviews.goals.map((goal) => ({
+              title: goal.title,
+              status: goal.status,
+              progressPercent: goal.progressPercent,
+            })),
+            href: "/me/reviews",
+          },
           benefits: {
-                elections: benefits.elections.map((election) => ({
-                  planCode: election.planCode,
-                  planName: election.planName,
-                  coverageLabel: election.coverageLabel,
-                  status: election.status,
-                  contributions: election.contributions,
-                  currency: election.currency,
-                })),
-                openWindows: benefits.openWindows.map((window) => ({
-                  name: window.name,
-                  kind: window.kind,
-                  closesOn: window.closesOn,
-                })),
-                dependents: benefits.dependents.map((dependent) => ({
-                  displayName: dependent.displayName,
-                  relationship: dependent.relationship,
-                })),
-                href: "/me/benefits",
-              },
+            elections: benefits.elections.map((election) => ({
+              planCode: election.planCode,
+              planName: election.planName,
+              coverageLabel: election.coverageLabel,
+              status: election.status,
+              contributions: election.contributions,
+              currency: election.currency,
+            })),
+            openWindows: benefits.openWindows.map((window) => ({
+              name: window.name,
+              kind: window.kind,
+              closesOn: window.closesOn,
+            })),
+            dependents: benefits.dependents.map((dependent) => ({
+              displayName: dependent.displayName,
+              relationship: dependent.relationship,
+            })),
+            href: "/me/benefits",
+          },
           href: "/me",
         },
       };
@@ -1210,7 +1321,6 @@ const hrmMe: AssistantToolDef = {
     }
   },
 };
-
 
 // HR-15 begin: the caller's own inbox items (own scope only, core surface).
 const inboxItems: AssistantToolDef = {
@@ -1221,11 +1331,23 @@ const inboxItems: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["hrm.self.read"] },
   tier: "module",
   inputSchema: z.object({
-    filter: z.enum(["all", "approvals", "my_tasks", "signatures", "notices", "overdue"]).optional().describe("Keep only this inbox filter (default all)"),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum items to return (default 20)"),
+    filter: z
+      .enum(["all", "approvals", "my_tasks", "signatures", "notices", "overdue"])
+      .optional()
+      .describe("Keep only this inbox filter (default all)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum items to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { filter?: "all" | "approvals" | "my_tasks" | "signatures" | "notices" | "overdue"; limit?: number };
+    const a = raw as {
+      filter?: "all" | "approvals" | "my_tasks" | "signatures" | "notices" | "overdue";
+      limit?: number;
+    };
     const limit = Math.min(a.limit ?? 20, 50);
     try {
       // No subject parameter exists to forge: the read scopes by the login,
@@ -1236,14 +1358,24 @@ const inboxItems: AssistantToolDef = {
         a.filter === undefined || a.filter === "all" || a.filter === "overdue"
           ? undefined
           : a.filter === "approvals"
-            ? (['flows_approval', 'expense_report'] as const)
+            ? (["flows_approval", "expense_report"] as const)
             : a.filter === "my_tasks"
-              ? (['hrm_process_step', 'hrm_leave_request', 'hrm_change_request', 'hrm_review', 'hrm_benefit_enrollment_window', 'hrm_qualification_alert', 'timesheet_week'] as const)
+              ? ([
+                  "hrm_process_step",
+                  "hrm_leave_request",
+                  "hrm_change_request",
+                  "hrm_review",
+                  "hrm_benefit_enrollment_window",
+                  "hrm_qualification_alert",
+                  "timesheet_week",
+                ] as const)
               : a.filter === "signatures"
-                ? (['field_ticket_signature', 'document_signature'] as const)
-                : (['notification'] as const);
+                ? (["field_ticket_signature", "document_signature"] as const)
+                : (["notification"] as const);
       const items = await listInbox(ctx, kinds ? { kinds: [...kinds] } : undefined);
-      const kept = (a.filter === "overdue" ? items.filter((item) => item.priority === "overdue") : items).slice(0, limit);
+      const kept = (
+        a.filter === "overdue" ? items.filter((item) => item.priority === "overdue") : items
+      ).slice(0, limit);
       return {
         ok: true,
         data: {
@@ -1276,12 +1408,27 @@ const hrmComplianceFindings: AssistantToolDef = {
   feature: "hrmConstructionCompliance",
   tier: "module",
   inputSchema: z.object({
-    status: z.enum(["open", "acknowledged", "resolved"]).optional().describe("Keep only this lifecycle status"),
+    status: z
+      .enum(["open", "acknowledged", "resolved"])
+      .optional()
+      .describe("Keep only this lifecycle status"),
     kind: z
-      .enum(["ratio_breach", "missing_rate", "class_unresolved", "registration_missing", "fringe_mismatch"])
+      .enum([
+        "ratio_breach",
+        "missing_rate",
+        "class_unresolved",
+        "registration_missing",
+        "fringe_mismatch",
+      ])
       .optional()
       .describe("Keep only this finding kind"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum findings to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum findings to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await constructionFeatureRefused(authz.user.orgId);
@@ -1289,7 +1436,9 @@ const hrmComplianceFindings: AssistantToolDef = {
     const a = raw as { status?: string; kind?: string; limit?: number };
     try {
       const findings = await listFindings(db, authz.user.orgId, authz.user.id, a.status ?? null);
-      const kept = (a.kind ? findings.filter((finding) => finding.kind === a.kind) : findings).slice(0, Math.min(a.limit ?? 50, 200));
+      const kept = (
+        a.kind ? findings.filter((finding) => finding.kind === a.kind) : findings
+      ).slice(0, Math.min(a.limit ?? 50, 200));
       return {
         ok: true,
         data: {
@@ -1321,7 +1470,13 @@ const hrmCertifiedPayroll: AssistantToolDef = {
   tier: "module",
   inputSchema: z.object({
     projectId: uuidInput.optional().describe("Keep only this project's runs"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum runs to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum runs to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await constructionFeatureRefused(authz.user.orgId);
@@ -1363,11 +1518,14 @@ const hrmCompensation: AssistantToolDef = {
   feature: "hrmCompensation",
   tier: "module",
   inputSchema: z.object({
-    employmentId: uuidInput.optional().describe("One employment's band placement; omit for bands and rounds only"),
+    employmentId: uuidInput
+      .optional()
+      .describe("One employment's band placement; omit for bands and rounds only"),
     asOf: dateInput.optional().describe("Placement as of this date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation")))
+      return { ok: false, error: HRM_FEATURE_OFF };
     const a = raw as { employmentId?: string; asOf?: string };
     try {
       const { listPayBands } = await import("@openbooks/engine/hrm/compensation/bands");
@@ -1388,12 +1546,17 @@ const hrmCompensation: AssistantToolDef = {
         ),
         listPlans({ orgId: authz.user.orgId, actorId: authz.user.id }),
       ]);
-      let placement: { employmentId: string; placement: string; compaRatio: string | null } | null = null;
+      let placement: { employmentId: string; placement: string; compaRatio: string | null } | null =
+        null;
       if (a.employmentId) {
         try {
           const { compaRatioFor } = await import("@openbooks/engine/hrm/compensation/bands");
           const placed = await compaRatioFor(authz.user.orgId, authz.user.id, a.employmentId, asOf);
-          placement = { employmentId: a.employmentId, placement: placed.band ? placed.placement : "no_band", compaRatio: placed.compaRatio };
+          placement = {
+            employmentId: a.employmentId,
+            placement: placed.band ? placed.placement : "no_band",
+            compaRatio: placed.compaRatio,
+          };
         } catch (error) {
           return hrmRefusal(error);
         }
@@ -1402,8 +1565,20 @@ const hrmCompensation: AssistantToolDef = {
         ok: true,
         data: {
           asOf,
-          bands: bands.map((b) => ({ levelId: b.levelId, currency: b.currency, basis: b.basis, min: b.min, target: b.target, max: b.max })),
-          cycles: cycles.map((c) => ({ id: c.id, name: c.name, status: c.status, effectiveOn: c.effectiveOn })),
+          bands: bands.map((b) => ({
+            levelId: b.levelId,
+            currency: b.currency,
+            basis: b.basis,
+            min: b.min,
+            target: b.target,
+            max: b.max,
+          })),
+          cycles: cycles.map((c) => ({
+            id: c.id,
+            name: c.name,
+            status: c.status,
+            effectiveOn: c.effectiveOn,
+          })),
           plans: plans.map((p) => ({ id: p.id, name: p.name, status: p.status })),
           placement,
           href: "/hrm/compensation",
@@ -1426,11 +1601,14 @@ const hrmPayEquity: AssistantToolDef = {
   inputSchema: z.object({}),
   execute: async (raw, authz): Promise<ToolResult> => {
     void raw;
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation")))
+      return { ok: false, error: HRM_FEATURE_OFF };
     try {
-      const { latestGapSnapshot } = await import("@openbooks/engine/hrm/compensation/pay-transparency");
+      const { latestGapSnapshot } =
+        await import("@openbooks/engine/hrm/compensation/pay-transparency");
       const snapshot = await latestGapSnapshot({ orgId: authz.user.orgId, actorId: authz.user.id });
-      if (!snapshot) return { ok: true, data: { snapshot: null, href: "/hrm/compensation/equity" } };
+      if (!snapshot)
+        return { ok: true, data: { snapshot: null, href: "/hrm/compensation/equity" } };
       return {
         ok: true,
         data: {
@@ -1470,8 +1648,17 @@ const automationsStatus: AssistantToolDef = {
   feature: "automations",
   tier: "module",
   inputSchema: z.object({
-    status: z.enum(["queued", "running", "succeeded", "failed", "skipped_no_match", "simulated"]).optional().describe("Keep only runs in this status"),
-    limit: z.number().int().min(1).max(100).optional().describe("Maximum runs to return (default 25)"),
+    status: z
+      .enum(["queued", "running", "succeeded", "failed", "skipped_no_match", "simulated"])
+      .optional()
+      .describe("Keep only runs in this status"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe("Maximum runs to return (default 25)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "automations"))) {
@@ -1483,14 +1670,15 @@ const automationsStatus: AssistantToolDef = {
       const { listAutomations } = await import("@openbooks/engine/automations/services");
       const automations = await listAutomations(authz.user.orgId, authz.user.id);
       const runs = await db.execute<{
-          id: string;
-          automationId: string;
-          status: string;
-          version: number;
-          subjectKind: string | null;
-          error: unknown;
-          createdAt: string;
-        }>(sql`
+        id: string;
+        automationId: string;
+        status: string;
+        version: number;
+        subjectKind: string | null;
+        error: unknown;
+        createdAt: string;
+      }>(
+        sql`
           select r.id::text as id, r.automation_id::text as "automationId", r.status,
                  r.version, r.subject_kind as "subjectKind", r.error,
                  to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt"
@@ -1498,7 +1686,9 @@ const automationsStatus: AssistantToolDef = {
            where r.org_id = ${authz.user.orgId}::uuid
              and (${a.status ?? null}::text is null or r.status = ${a.status ?? null}::text)
            order by r.created_at desc limit ${limit}
-        `, "objects");
+        `,
+        "objects",
+      );
       return {
         ok: true,
         data: {
@@ -1518,12 +1708,14 @@ const automationsStatus: AssistantToolDef = {
     } catch (error) {
       // Automation service refusals (permission, missing recipe) surface
       // with their message intact — hrmRefusal only maps HRM reads.
-      return { ok: false, error: error instanceof Error ? error.message : "automations_status_failed" };
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "automations_status_failed",
+      };
     }
   },
 };
 // HR-16 end
-
 
 // HR-14 begin: certification register and dispatch-readiness reads
 // (0225). Both reuse the canonical qualification services behind the
@@ -1543,21 +1735,39 @@ const hrmQualifications: AssistantToolDef = {
     employmentId: uuidInput.optional().describe("Keep only this employment's qualifications"),
     typeId: uuidInput.optional().describe("Keep only this qualification type"),
     status: z
-      .enum(["valid", "revoked", "pending_verification", "expiring", "expired", "not_yet_effective"])
+      .enum([
+        "valid",
+        "revoked",
+        "pending_verification",
+        "expiring",
+        "expired",
+        "not_yet_effective",
+      ])
       .optional()
-      .describe("Keep only this read status (expiring/expired/not_yet_effective are projected at read)"),
+      .describe(
+        "Keep only this read status (expiring/expired/not_yet_effective are projected at read)",
+      ),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications")))
+      return { ok: false, error: HRM_FEATURE_OFF };
     const a = raw as { employmentId?: string; typeId?: string; status?: string };
     try {
-      const { listQualifications } = await import("@openbooks/engine/hrm/qualifications/qualifications");
+      const { listQualifications } =
+        await import("@openbooks/engine/hrm/qualifications/qualifications");
       const held = await listQualifications(db, {
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         employmentId: a.employmentId,
         typeId: a.typeId,
-        status: a.status as "valid" | "revoked" | "pending_verification" | "expiring" | "expired" | "not_yet_effective" | undefined,
+        status: a.status as
+          | "valid"
+          | "revoked"
+          | "pending_verification"
+          | "expiring"
+          | "expired"
+          | "not_yet_effective"
+          | undefined,
       });
       return {
         ok: true,
@@ -1594,13 +1804,24 @@ const hrmDispatchCheck: AssistantToolDef = {
   tier: "module",
   inputSchema: z.object({
     employmentId: uuidInput.optional().describe("Worker employment to check"),
-    subjectKind: z.enum(["project", "equipment", "position", "classification"]).optional().describe("What the worker would be assigned to"),
-    subjectId: uuidInput.optional().describe("Id of the project, equipment, position, or classification"),
+    subjectKind: z
+      .enum(["project", "equipment", "position", "classification"])
+      .optional()
+      .describe("What the worker would be assigned to"),
+    subjectId: uuidInput
+      .optional()
+      .describe("Id of the project, equipment, position, or classification"),
     on: dateInput.optional().describe("Check as of this date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications"))) return { ok: false, error: HRM_FEATURE_OFF };
-    const a = raw as { employmentId?: string; subjectKind?: string; subjectId?: string; on?: string };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications")))
+      return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as {
+      employmentId?: string;
+      subjectKind?: string;
+      subjectId?: string;
+      on?: string;
+    };
     if (!a.employmentId) return { ok: false, error: "employment_required" };
     if (!a.subjectKind || !a.subjectId) return { ok: false, error: "subject_required" };
     try {
@@ -1652,18 +1873,28 @@ const hrmDocuments: AssistantToolDef = {
   tier: "module",
   inputSchema: z.object({
     status: z
-      .enum(["draft", "sent", "viewed", "partially_signed", "signed", "acknowledged", "declined", "voided", "expired"])
+      .enum([
+        "draft",
+        "sent",
+        "viewed",
+        "partially_signed",
+        "signed",
+        "acknowledged",
+        "declined",
+        "voided",
+        "expired",
+      ])
       .optional()
       .describe("Keep only this document status"),
     categoryKey: z.string().max(64).optional().describe("Keep only this declared category key"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDocuments"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDocuments")))
+      return { ok: false, error: HRM_FEATURE_OFF };
     const a = raw as { status?: string; categoryKey?: string };
     try {
-      const { listDocuments, listOwnDocuments } = await import(
-        "@openbooks/engine/hrm/documents/documents"
-      );
+      const { listDocuments, listOwnDocuments } =
+        await import("@openbooks/engine/hrm/documents/documents");
       const manages = await import("@openbooks/engine/organization/actor-permissions").then((m) =>
         m.actorHasPermission(db, authz.user.orgId, authz.user.id, "hrm.documents.read"),
       );
@@ -1677,7 +1908,9 @@ const hrmDocuments: AssistantToolDef = {
         : (
             await listOwnDocuments({ orgId: authz.user.orgId, actorId: authz.user.id })
           ).documents.filter(
-            (d) => (!a.status || d.status === a.status) && (!a.categoryKey || d.categoryKey === a.categoryKey),
+            (d) =>
+              (!a.status || d.status === a.status) &&
+              (!a.categoryKey || d.categoryKey === a.categoryKey),
           );
       return {
         ok: true,
@@ -1713,7 +1946,8 @@ const hrmSurveyResults: AssistantToolDef = {
     surveyId: uuidInput.describe("Survey to read aggregate results for"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmSurveys"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmSurveys")))
+      return { ok: false, error: HRM_FEATURE_OFF };
     const a = raw as { surveyId?: string };
     if (!a.surveyId) return { ok: false, error: "survey_required" };
     try {
@@ -1755,14 +1989,25 @@ const hrmOrgChart: AssistantToolDef = {
   tier: "module",
   inputSchema: z.object({
     asOf: dateInput.optional().describe("Read the tree as of this date; defaults to today"),
-    search: z.string().max(200).optional().describe("Keep directory entries matching this name, title, or department"),
-    page: z.number().int().positive().optional().describe("Directory page to read; continue with directoryNextPage"),
+    search: z
+      .string()
+      .max(200)
+      .optional()
+      .describe("Keep directory entries matching this name, title, or department"),
+    page: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Directory page to read; continue with directoryNextPage"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
-      const a = raw as { asOf?: string; search?: string; page?: number };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrm")))
+      return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { asOf?: string; search?: string; page?: number };
     try {
-      const { loadDirectory, loadOrgChart } = await import("@openbooks/engine/hrm/org-chart/operations");
+      const { loadDirectory, loadOrgChart } =
+        await import("@openbooks/engine/hrm/org-chart/operations");
       const { businessToday } = await import("@openbooks/engine/platform/business-date/module");
       const asOf = a.asOf ?? (await businessToday(authz.user.orgId));
       const [chart, directory] = await Promise.all([
@@ -1785,9 +2030,8 @@ const hrmOrgChart: AssistantToolDef = {
           roots: chart.roots,
           directory: directory.entries,
           directoryTotal: directory.totalCount,
-          directoryNextPage: directory.page * directory.pageSize < directory.totalCount
-            ? directory.page + 1
-            : null,
+          directoryNextPage:
+            directory.page * directory.pageSize < directory.totalCount ? directory.page + 1 : null,
           href: "/hrm/org-chart",
         },
       };
@@ -1817,17 +2061,25 @@ const hrmOneOnOnes: AssistantToolDef = {
   inputSchema: z.object({
     employmentId: uuidInput.optional().describe("Keep only meetings touching this employment"),
     status: z.enum(oneOnOneStatuses).optional().describe("Keep only this meeting status"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum meetings to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum meetings to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await performanceFeatureRefused(authz.user.orgId);
     if (gated) return gated;
-    const a = raw as { employmentId?: string; status?: (typeof oneOnOneStatuses)[number]; limit?: number };
+    const a = raw as {
+      employmentId?: string;
+      status?: (typeof oneOnOneStatuses)[number];
+      limit?: number;
+    };
     const limit = Math.min(a.limit ?? 50, 200);
     try {
-      const { listOneOnOnes } = await import(
-        "@openbooks/engine/hrm/performance/one-on-ones"
-      );
+      const { listOneOnOnes } = await import("@openbooks/engine/hrm/performance/one-on-ones");
       const ones = await listOneOnOnes({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -1867,12 +2119,22 @@ const hrmFeedback: AssistantToolDef = {
   inputSchema: z.object({
     subjectEmploymentId: uuidInput.optional().describe("Keep only feedback about this employment"),
     kind: z.enum(feedbackKinds).optional().describe("Keep only this feedback kind"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum rows to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await performanceFeatureRefused(authz.user.orgId);
     if (gated) return gated;
-    const a = raw as { subjectEmploymentId?: string; kind?: (typeof feedbackKinds)[number]; limit?: number };
+    const a = raw as {
+      subjectEmploymentId?: string;
+      kind?: (typeof feedbackKinds)[number];
+      limit?: number;
+    };
     const limit = Math.min(a.limit ?? 50, 200);
     try {
       const { listFeedback } = await import("@openbooks/engine/hrm/performance/feedback");
@@ -1921,9 +2183,8 @@ const hrmCalibration: AssistantToolDef = {
     if (gated) return gated;
     const a = raw as { sessionId?: string; cycleId?: string };
     try {
-      const { getCalibrationSession, listCalibrationSessions } = await import(
-        "@openbooks/engine/hrm/performance/calibration"
-      );
+      const { getCalibrationSession, listCalibrationSessions } =
+        await import("@openbooks/engine/hrm/performance/calibration");
       if (a.sessionId) {
         const session = await getCalibrationSession({
           orgId: authz.user.orgId,
@@ -1942,7 +2203,10 @@ const hrmCalibration: AssistantToolDef = {
               calibratedRating: entry.calibratedRating,
               potentialKey: entry.potentialKey,
             })),
-            missing: session.missing.map((missing) => ({ status: missing.status, reason: missing.reason })),
+            missing: session.missing.map((missing) => ({
+              status: missing.status,
+              reason: missing.reason,
+            })),
             href: "/hrm/performance?tab=calibration",
           },
         };
@@ -1970,10 +2234,34 @@ const hrmCalibration: AssistantToolDef = {
 };
 
 // HR-15: the core own-scope inbox tool rides after every slice tool.
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, hrmDocuments, hrmSurveyResults, hrmOrgChart];
+export const HRM_TOOLS: AssistantToolDef[] = [
+  hrmHeadcount,
+  hrmEmploymentAsOf,
+  hrmChangeRequests,
+  hrmPositionsAsOf,
+  hrmProcesses,
+  hrmLeave,
+  hrmRecruiting,
+  hrmPerformanceCycles,
+  hrmTurnover,
+  hrmBenefits,
+  hrmMe,
+  automationsStatus,
+  hrmComplianceFindings,
+  hrmCertifiedPayroll,
+  hrmCompensation,
+  hrmPayEquity,
+  hrmQualifications,
+  hrmDispatchCheck,
+  hrmOneOnOnes,
+  hrmFeedback,
+  hrmCalibration,
+  hrmDocuments,
+  hrmSurveyResults,
+  hrmOrgChart,
+];
 // HR-15: the core own-scope inbox tool rides after every slice tool.
 HRM_TOOLS.push(inboxItems);
-
 
 // HR-12 end
 // HR-21 begin: AI rails tools. Every capability is a TOOL or a DETERMINISTIC
@@ -2001,7 +2289,8 @@ async function aiModuleFeatureRefused(
   orgId: string,
   key: keyof typeof AI_MODULE_FEATURE_OFF,
 ): Promise<ToolResult | null> {
-  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: AI_MODULE_FEATURE_OFF[key] };
+  if (!(await isFeatureEnabled(orgId, key)))
+    return { ok: false, error: AI_MODULE_FEATURE_OFF[key] };
   return null;
 }
 
@@ -2075,18 +2364,63 @@ const payrollAnomalies: AssistantToolDef = {
   featureAnyOf: ["timeTracking"],
   tier: "module",
   inputSchema: z.object({
-    action: z.enum(anomalyActions).describe("scan a period, list flags, transition one flag, or recompute baselines"),
-    periodFrom: dateInput.optional().describe("Scan/list period start (scan requires periodFrom and periodTo)"),
+    action: z
+      .enum(anomalyActions)
+      .describe("scan a period, list flags, transition one flag, or recompute baselines"),
+    periodFrom: dateInput
+      .optional()
+      .describe("Scan/list period start (scan requires periodFrom and periodTo)"),
     periodTo: dateInput.optional().describe("Scan/list period end"),
-    severity: z.enum(["info", "warn", "block"]).optional().describe("List filter: keep only this severity"),
-    kind: z.enum(["terminated_with_pay", "duplicate_bank", "retro_spike", "net_pay_spike", "zero_hours_with_pay", "hours_spike", "missing_rate", "expired_rate", "prevailing_wage_missing", "apprentice_ratio_breach", "benefit_input_orphan", "leave_input_orphan", "negative_balance", "duplicate_entry", "geofence_outside", "unrounded", "custom"]).optional().describe("List filter: keep only this anomaly kind"),
-    status: z.enum(["open", "acknowledged", "resolved", "false_positive"]).optional().describe("List filter (default open)"),
+    severity: z
+      .enum(["info", "warn", "block"])
+      .optional()
+      .describe("List filter: keep only this severity"),
+    kind: z
+      .enum([
+        "terminated_with_pay",
+        "duplicate_bank",
+        "retro_spike",
+        "net_pay_spike",
+        "zero_hours_with_pay",
+        "hours_spike",
+        "missing_rate",
+        "expired_rate",
+        "prevailing_wage_missing",
+        "apprentice_ratio_breach",
+        "benefit_input_orphan",
+        "leave_input_orphan",
+        "negative_balance",
+        "duplicate_entry",
+        "geofence_outside",
+        "unrounded",
+        "custom",
+      ])
+      .optional()
+      .describe("List filter: keep only this anomaly kind"),
+    status: z
+      .enum(["open", "acknowledged", "resolved", "false_positive"])
+      .optional()
+      .describe("List filter (default open)"),
     employmentId: uuidInput.optional().describe("Keep only this employment's flags"),
     timeOnly: z.boolean().optional().describe("Scan timesheet-side rules only"),
     flagId: uuidInput.optional().describe("Transition target flag"),
-    to: z.enum(["acknowledged", "resolved", "false_positive"]).optional().describe("Transition target status"),
-    reason: z.string().min(1).max(500).optional().describe("Transition reason — required, the sentence the audit needs"),
-    windowPeriods: z.number().int().min(2).max(24).optional().describe("Baseline recompute window (default 6)"),
+    to: z
+      .enum(["acknowledged", "resolved", "false_positive"])
+      .optional()
+      .describe("Transition target status"),
+    reason: z
+      .string()
+      .min(1)
+      .max(500)
+      .optional()
+      .describe("Transition reason — required, the sentence the audit needs"),
+    windowPeriods: z
+      .number()
+      .int()
+      .min(2)
+      .max(24)
+      .optional()
+      .describe("Baseline recompute window (default 6)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
@@ -2105,9 +2439,14 @@ const payrollAnomalies: AssistantToolDef = {
     };
     // Payroll checks ride Payroll, timesheet checks ride Time tracking;
     // list and transition gate per flag family inside the service.
-    const featureKey = a.action === "scan"
-      ? a.timeOnly === true ? "timeTracking" : "payroll"
-      : a.action === "compute_baselines" ? "payroll" : null;
+    const featureKey =
+      a.action === "scan"
+        ? a.timeOnly === true
+          ? "timeTracking"
+          : "payroll"
+        : a.action === "compute_baselines"
+          ? "payroll"
+          : null;
     if (featureKey) {
       const gated = await aiModuleFeatureRefused(authz.user.orgId, featureKey);
       if (gated) return gated;
@@ -2115,7 +2454,8 @@ const payrollAnomalies: AssistantToolDef = {
     try {
       const ai = await import("@openbooks/engine/hrm/ai/anomalies");
       if (a.action === "scan") {
-        if (!a.periodFrom || !a.periodTo) return { ok: false, error: "periodFrom and periodTo are required to scan" };
+        if (!a.periodFrom || !a.periodTo)
+          return { ok: false, error: "periodFrom and periodTo are required to scan" };
         const summary = await ai.scanAnomalies(db, {
           orgId: authz.user.orgId,
           actorId: authz.user.id,
@@ -2150,7 +2490,10 @@ const payrollAnomalies: AssistantToolDef = {
           outcome: "shown",
           model: "payroll-anomalies-tool",
         });
-        return { ok: true, data: { total: flags.length, flags: flags.slice(0, 50), href: "/payroll/anomalies" } };
+        return {
+          ok: true,
+          data: { total: flags.length, flags: flags.slice(0, 50), href: "/payroll/anomalies" },
+        };
       }
       if (a.action === "transition") {
         if (!a.flagId || !a.to || !a.reason) {
@@ -2192,7 +2535,13 @@ const aiDraft: AssistantToolDef = {
   category: "read",
   gate: {
     mode: "anyOf",
-    perms: ["hrm.self.read", "hrm.performance.manage", "hrm.recruiting.read", "hrm.recruiting.manage", "hrm.process.read"],
+    perms: [
+      "hrm.self.read",
+      "hrm.performance.manage",
+      "hrm.recruiting.read",
+      "hrm.recruiting.manage",
+      "hrm.process.read",
+    ],
   },
   feature: "hrm",
   tier: "module",
@@ -2239,9 +2588,17 @@ const nlReport: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   tier: "module",
   inputSchema: z.object({
-    action: z.enum(["preview", "save"]).describe("Run once as a preview, or validate, save the draft and preview"),
+    action: z
+      .enum(["preview", "save"])
+      .describe("Run once as a preview, or validate, save the draft and preview"),
     question: z.string().min(1).max(1000).describe("The question in plain language"),
-    definitionJson: z.string().min(1).max(20000).describe("Candidate report definition as JSON (entity, mode, columns, breakouts, measures, filters, sorts, limit)"),
+    definitionJson: z
+      .string()
+      .min(1)
+      .max(20000)
+      .describe(
+        "Candidate report definition as JSON (entity, mode, columns, breakouts, measures, filters, sorts, limit)",
+      ),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { action: "preview" | "save"; question: string; definitionJson: string };
@@ -2249,7 +2606,10 @@ const nlReport: AssistantToolDef = {
     try {
       candidate = JSON.parse(a.definitionJson);
     } catch {
-      return { ok: false, error: "definitionJson must parse as JSON — resend the definition as JSON text" };
+      return {
+        ok: false,
+        error: "definitionJson must parse as JSON — resend the definition as JSON text",
+      };
     }
     try {
       const { REPORT_ENTITY_MAP } = await import("@openbooks/reports");
@@ -2272,16 +2632,20 @@ const nlReport: AssistantToolDef = {
         return { ok: false, error: "forbidden" };
       }
       const { executeReport } = await import("../custom-reports");
-      const preview = await executeReport(authz.user.orgId, {
-        entity: definition.entity,
-        mode: definition.mode,
-        columns: definition.columns,
-        breakouts: definition.breakouts,
-        measures: definition.measures,
-        filters: definition.filters as { combinator: "and" | "or"; rules: never[] } | null,
-        sorts: definition.sorts,
-        limit: definition.limit,
-      }, 5);
+      const preview = await executeReport(
+        authz.user.orgId,
+        {
+          entity: definition.entity,
+          mode: definition.mode,
+          columns: definition.columns,
+          breakouts: definition.breakouts,
+          measures: definition.measures,
+          filters: definition.filters as { combinator: "and" | "or"; rules: never[] } | null,
+          sorts: definition.sorts,
+          limit: definition.limit,
+        },
+        5,
+      );
       const rows = preview.groups.flatMap((g) => g.rows.slice(0, 5)).slice(0, 5);
       if (a.action === "preview") {
         const { logDecision } = await import("@openbooks/engine/hrm/ai/governance");
@@ -2315,7 +2679,12 @@ const nlReport: AssistantToolDef = {
       });
       return {
         ok: true,
-        data: { draftId: saved.draftId, definition: saved.definition, previewRows: rows, href: "/reports" },
+        data: {
+          draftId: saved.draftId,
+          definition: saved.definition,
+          previewRows: rows,
+          href: "/reports",
+        },
         note: "Draft saved — save it as a view from the report builder.",
       };
     } catch (error) {

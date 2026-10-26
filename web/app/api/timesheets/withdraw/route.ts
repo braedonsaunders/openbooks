@@ -46,21 +46,18 @@ interface Body {
  */
 export const POST = defineRoute({
   authorize: authorizeTimeWorkspace("time.manage"),
-  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
+  feature: {
+    none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target.",
+  },
   body: postBodySchema0,
   handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
     const body = routeBody as Body;
-    if (!body.employee || !isUuid(body.employee))
-      return bad("Invalid employee");
+    if (!body.employee || !isUuid(body.employee)) return bad("Invalid employee");
     if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
-    const ownedEmployee = await pinTimekeeper(
-      orgId,
-      body.employee,
-      gate.allowedSubsidiaryIds,
-    );
+    const ownedEmployee = await pinTimekeeper(orgId, body.employee, gate.allowedSubsidiaryIds);
     if (!ownedEmployee) return bad("Employee not found");
     // Withdrawal is the submitter's own recall: managers send weeks back
     // through reject, exactly as submitters submit only their own weeks.
@@ -72,17 +69,18 @@ export const POST = defineRoute({
     // Fast path only: the authoritative state check happens under the header
     // lock inside the transaction, where a concurrent approval's commit is
     // visible and the loser is refused instead of auditing a phantom recall.
-    const before = await loadWeek(
-      orgId,
-      ownedEmployee,
-      week,
-      gate.allowedSubsidiaryIds,
-    );
-    if (before.status !== "submitted")
-      return bad(withdrawRefusal(before.status));
+    const before = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds);
+    if (before.status !== "submitted") return bad(withdrawRefusal(before.status));
 
     return withOrgTransaction(orgId, async () => {
-      await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.manage", workFamily: timeWorkFamily(workspaceRequest) });
+      await lockSharedTimeAuthority(db, orgId, user.id, {
+        employeeId: ownedEmployee,
+        from: days[0]!,
+        through: days[6]!,
+        requestedScope: gate.allowedSubsidiaryIds,
+        permission: "time.manage",
+        workFamily: timeWorkFamily(workspaceRequest),
+      });
       // Lock the header FIRST — the same order approval uses (header, then
       // entries) — so a concurrent approval cannot deadlock against this
       // recall. The locked status is the authoritative state check: the
@@ -90,13 +88,18 @@ export const POST = defineRoute({
       // passed it before the winner committed observes the decided status
       // here and is refused instead of writing a second 'withdrawn' audit
       // over a week that is no longer submitted.
-      const header = (await db.execute<{ id: string; status: string }>(sql`
+      const header = (
+        await db.execute<{ id: string; status: string }>(
+          sql`
       select id, status from timesheet_weeks
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and week_start = ${week}::date
        for update
-    `, "objects"))[0];
+    `,
+          "objects",
+        )
+      )[0];
       if (!header || header.status !== "submitted") {
         return bad(withdrawRefusal(header?.status));
       }
@@ -122,13 +125,18 @@ export const POST = defineRoute({
       // Cancel the week's open approval runs through the native Flow path in
       // this same transaction: a recalled week must not keep gates waiting
       // on approvers, and terminal runs (decided, failed) are never touched.
-      const openRuns = (await db.execute<{ id: string }>(sql`
+      const openRuns = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from flow_runs
        where org_id = ${orgId}
          and subject_kind = ${TIMESHEET_WEEK_SUBJECT_KIND}
          and subject_id = ${header.id}
          and status in ('running', 'waiting')
-    `, "objects")).map((row) => row.id);
+    `,
+          "objects",
+        )
+      ).map((row) => row.id);
       await cancelDispatchRuns(orgId, openRuns, { actorId: user.id });
 
       // Durable recall evidence, part of the same atomic unit: withdrawing a
@@ -137,16 +145,14 @@ export const POST = defineRoute({
       // audit failure rolls the withdrawal back with it.
       await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify(
-        {
-          event: "withdrawn",
-          actor: { kind: "user", userId: user.id },
-          before: { status: header.status },
-          after: { status: "draft" },
-          weekStart: week,
-          cancelledRuns: openRuns,
-        },
-      )}::jsonb, ${user.id})
+      values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
+        event: "withdrawn",
+        actor: { kind: "user", userId: user.id },
+        before: { status: header.status },
+        after: { status: "draft" },
+        weekStart: week,
+        cancelledRuns: openRuns,
+      })}::jsonb, ${user.id})
     `);
 
       return NextResponse.json(

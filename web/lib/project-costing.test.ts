@@ -1,111 +1,112 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { add, mul, mulRate, neg } from '@openbooks/engine/money/money'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { add, mul, mulRate, neg } from "@openbooks/engine/money/money";
 
 // The scripted database below models the two SQL rollups with transaction- and
 // functional-currency fixture values. A query that omits its document FX rate
 // therefore returns the old, unconverted result and fails the assertions.
 
 interface OrderFixture {
-  kind: 'purchase_order' | 'sales_order'
-  quantity: string
-  quantityBilled: string
-  unitPrice: string
-  fxRate: string
+  kind: "purchase_order" | "sales_order";
+  quantity: string;
+  quantityBilled: string;
+  unitPrice: string;
+  fxRate: string;
 }
 
 interface CostFixture {
-  kind: 'project_charge' | 'vendor_bill'
-  amount: string
-  billAmount?: string
-  costMultiplier?: string
-  fxRate: string
+  kind: "project_charge" | "vendor_bill";
+  amount: string;
+  billAmount?: string;
+  costMultiplier?: string;
+  fxRate: string;
 }
 
 interface ProjectCostingHarness {
-  queries: string[]
-  orders: OrderFixture[]
-  costs: CostFixture[]
+  queries: string[];
+  orders: OrderFixture[];
+  costs: CostFixture[];
 }
 
-const stateKey = Symbol.for('openbooks.project-costing-fx-test')
+const stateKey = Symbol.for("openbooks.project-costing-fx-test");
 const harness: ProjectCostingHarness = {
   queries: [],
   orders: [
     {
-      kind: 'purchase_order',
-      quantity: '2.0000',
-      quantityBilled: '0.5000',
-      unitPrice: '100.1250',
-      fxRate: '1.2000000000',
+      kind: "purchase_order",
+      quantity: "2.0000",
+      quantityBilled: "0.5000",
+      unitPrice: "100.1250",
+      fxRate: "1.2000000000",
     },
     {
-      kind: 'sales_order',
-      quantity: '3.0000',
-      quantityBilled: '1.0000',
-      unitPrice: '45.6789',
-      fxRate: '0.8750000000',
+      kind: "sales_order",
+      quantity: "3.0000",
+      quantityBilled: "1.0000",
+      unitPrice: "45.6789",
+      fxRate: "0.8750000000",
     },
   ],
   costs: [
     {
-      kind: 'project_charge',
-      amount: '12.3456',
-      billAmount: '12.3456',
-      fxRate: '1.2000000000',
+      kind: "project_charge",
+      amount: "12.3456",
+      billAmount: "12.3456",
+      fxRate: "1.2000000000",
     },
     {
-      kind: 'vendor_bill',
-      amount: '20.0000',
-      costMultiplier: '1.1500',
-      fxRate: '0.8750000000',
+      kind: "vendor_bill",
+      amount: "20.0000",
+      costMultiplier: "1.1500",
+      fxRate: "0.8750000000",
     },
   ],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = harness
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = harness;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).projectCostingSqlText = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).projectCostingSqlText = sqlText;
 
 function sumMoney(values: string[]): string {
-  return values.reduce((total, value) => add(total, value), '0.0000')
+  return values.reduce((total, value) => add(total, value), "0.0000");
 }
 
 function orderAmount(order: OrderFixture, convert: boolean): string {
-  const remainder = add(order.quantity, neg(order.quantityBilled))
-  const transactionAmount = mul(remainder, order.unitPrice)
-  return convert ? mulRate(transactionAmount, order.fxRate) : transactionAmount
+  const remainder = add(order.quantity, neg(order.quantityBilled));
+  const transactionAmount = mul(remainder, order.unitPrice);
+  return convert ? mulRate(transactionAmount, order.fxRate) : transactionAmount;
 }
 
 function costAmounts(cost: CostFixture, convert: boolean): { revenue: string; cost: string } {
-  const fx = (amount: string) => convert ? mulRate(amount, cost.fxRate) : amount
-  const amount = cost.kind === 'project_charge'
-    ? (cost.billAmount ?? '0.0000')
-    : mul(cost.amount, cost.costMultiplier ?? '1.0000')
-  return { revenue: fx(amount), cost: fx(cost.amount) }
+  const fx = (amount: string) => (convert ? mulRate(amount, cost.fxRate) : amount);
+  const amount =
+    cost.kind === "project_charge"
+      ? (cost.billAmount ?? "0.0000")
+      : mul(cost.amount, cost.costMultiplier ?? "1.0000");
+  return { revenue: fx(amount), cost: fx(cost.amount) };
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).projectCostingFx = {
+(globalThis as typeof globalThis & Record<string, unknown>).projectCostingFx = {
   sumMoney,
   orderAmount,
   costAmounts,
-}
+};
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const harness = globalThis[Symbol.for('openbooks.project-costing-fx-test')]
       const sqlText = globalThis.projectCostingSqlText
@@ -170,52 +171,58 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:subcontract-commitments', 'export async function directSubcontractOpenCommitment() { return "0.0000" }'],
-])
+  [
+    "mock:subcontract-commitments",
+    'export async function directSubcontractOpenCommitment() { return "0.0000" }',
+  ],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === './subcontract-commitments') {
-      return { url: 'mock:subcontract-commitments', shortCircuit: true }
+    if (specifier === "@openbooks/engine/platform/db")
+      return { url: "mock:db", shortCircuit: true };
+    if (specifier === "./subcontract-commitments") {
+      return { url: "mock:subcontract-commitments", shortCircuit: true };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const projectCostingUrl = './project-costing.ts?project-costing-fx-test'
-const { projectCostSummary, projectUnbilled } = await import(projectCostingUrl) as typeof import('./project-costing.ts')
-hooks.deregister()
+const projectCostingUrl = "./project-costing.ts?project-costing-fx-test";
+const { projectCostSummary, projectUnbilled } = (await import(
+  projectCostingUrl
+)) as typeof import("./project-costing.ts");
+hooks.deregister();
 
 function resetHarness(): void {
-  harness.queries.length = 0
+  harness.queries.length = 0;
 }
 
-test('committed order remainders are translated with each document FX rate', async () => {
-  resetHarness()
-  const summary = await projectCostSummary('org-1', 'project-1')
+test("committed order remainders are translated with each document FX rate", async () => {
+  resetHarness();
+  const summary = await projectCostSummary("org-1", "project-1");
 
   assert.deepEqual(summary.committed, {
-    cost: '180.2250',
-    revenue: '79.9381',
-  })
+    cost: "180.2250",
+    revenue: "79.9381",
+  });
   // The hand-computed committed totals above already fail when the query
   // omits its FX rate (the fixture models conversion on the rate's
   // presence). What values cannot discriminate is float coercion, so the
   // generated query keeps a negative guard for it.
-  const query = harness.queries.find((text) => text.includes('committed_cost'))
-  assert.ok(query)
-  assert.doesNotMatch(query, /Number\(|parseFloat\(|parseInt\(/)
-})
+  const query = harness.queries.find((text) => text.includes("committed_cost"));
+  assert.ok(query);
+  assert.doesNotMatch(query, /Number\(|parseFloat\(|parseInt\(/);
+});
 
-test('unbilled document revenue and cost are translated with each document FX rate', async () => {
-  resetHarness()
-  const unbilled = await projectUnbilled('org-1', 'project-1')
+test("unbilled document revenue and cost are translated with each document FX rate", async () => {
+  resetHarness();
+  const unbilled = await projectUnbilled("org-1", "project-1");
 
   assert.deepEqual(
     {
@@ -224,17 +231,15 @@ test('unbilled document revenue and cost are translated with each document FX ra
       costLineCount: unbilled.costLineCount,
     },
     {
-      revenue: '34.9397',
-      cost: '32.3147',
+      revenue: "34.9397",
+      cost: "32.3147",
       costLineCount: 2,
     },
-  )
+  );
   // Same split as the committed test: the hand-computed unbilled totals fail
   // when the query omits its FX rate; only float coercion keeps a negative
   // guard on the generated query.
-  const query = harness.queries.find((text) => text.includes('billed_by_line_id'))
-  assert.ok(query)
-  assert.doesNotMatch(query, /Number\(|parseFloat\(|parseInt\(/)
-})
-
-
+  const query = harness.queries.find((text) => text.includes("billed_by_line_id"));
+  assert.ok(query);
+  assert.doesNotMatch(query, /Number\(|parseFloat\(|parseInt\(/);
+});

@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import {
-  normalizeVatId,
-  VatValidationError,
-  boundAuthorityExcerpt,
-} from "./vat-validation.ts";
+import { normalizeVatId, VatValidationError, boundAuthorityExcerpt } from "./vat-validation.ts";
 
 describe("normalizeVatId", () => {
   test("VIES numbers shed spaces and dots, uppercased", () => {

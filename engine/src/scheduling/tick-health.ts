@@ -57,12 +57,23 @@ let health: SchedulerTickHealth = {
 
 /** A copy of this process's tick health (never the live object). */
 export function getSchedulerTickHealth(): SchedulerTickHealth {
-  return { ...health, lastDutyFailures: [...health.lastDutyFailures], lastSectionFailures: [...health.lastSectionFailures] };
+  return {
+    ...health,
+    lastDutyFailures: [...health.lastDutyFailures],
+    lastSectionFailures: [...health.lastSectionFailures],
+  };
 }
 
 /** Test seam: reset this process's tick health. Production never calls this. */
 export function resetSchedulerTickHealth(): void {
-  health = { overlapSkips: 0, consecutiveSkips: 0, lastTickAt: null, lastTickOk: null, lastDutyFailures: [], lastSectionFailures: [] };
+  health = {
+    overlapSkips: 0,
+    consecutiveSkips: 0,
+    lastTickAt: null,
+    lastTickOk: null,
+    lastDutyFailures: [],
+    lastSectionFailures: [],
+  };
 }
 
 /**
@@ -122,9 +133,17 @@ export async function publishSchedulerTickHealth(): Promise<void> {
   try {
     const connection = tickHealthConnection();
     if (!connection) return;
-    await connection.set(SCHEDULER_TICK_HEALTH_KEY, JSON.stringify(getSchedulerTickHealth()), "EX", SCHEDULER_TICK_HEALTH_TTL_SECONDS);
+    await connection.set(
+      SCHEDULER_TICK_HEALTH_KEY,
+      JSON.stringify(getSchedulerTickHealth()),
+      "EX",
+      SCHEDULER_TICK_HEALTH_TTL_SECONDS,
+    );
   } catch (error) {
-    console.warn("[scheduler] tick-health publish failed:", error instanceof Error ? error.message : error);
+    console.warn(
+      "[scheduler] tick-health publish failed:",
+      error instanceof Error ? error.message : error,
+    );
   }
 }
 
@@ -156,9 +175,9 @@ export async function readSchedulerTickHealth(): Promise<SchedulerTickHealth | n
       // empty rather than refusing the whole health read.
       lastSectionFailures: Array.isArray(parsed.lastSectionFailures)
         ? parsed.lastSectionFailures.filter(
-          (entry): entry is SchedulerDutyFailure =>
-            typeof entry?.key === "string" && typeof entry?.error === "string",
-        )
+            (entry): entry is SchedulerDutyFailure =>
+              typeof entry?.key === "string" && typeof entry?.error === "string",
+          )
         : [],
     };
   } catch {

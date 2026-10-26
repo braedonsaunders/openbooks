@@ -56,11 +56,14 @@ test("parseJsonBody rejects malformed JSON with 400", async () => {
 
 test("parseJsonBody rejects non-object and array payloads with 400", async () => {
   for (const bad of ["null", "[1,2]", '"text"', "42"]) {
-    const parsed = await parseJsonBody(new Request("http://localhost", {
-      method: "POST",
-      body: bad,
-      headers: { "content-type": "application/json" },
-    }), z.object({}));
+    const parsed = await parseJsonBody(
+      new Request("http://localhost", {
+        method: "POST",
+        body: bad,
+        headers: { "content-type": "application/json" },
+      }),
+      z.object({}),
+    );
     assert.equal(parsed.ok, false);
     if (!parsed.ok) {
       assert.equal(parsed.response.status, 400);
@@ -79,7 +82,10 @@ test("parseJsonBody reports schema failures with issues and honors an explicit 4
   assert.equal(parsed.ok, false);
   if (!parsed.ok) {
     assert.equal(parsed.response.status, 400);
-    const body = (await parsed.response.json()) as { error: string; issues: { path: string; message: string }[] };
+    const body = (await parsed.response.json()) as {
+      error: string;
+      issues: { path: string; message: string }[];
+    };
     assert.equal(body.error, "decision required");
     assert.deepEqual(
       body.issues.map((i) => ({ path: i.path, message: i.message })),
@@ -89,7 +95,9 @@ test("parseJsonBody reports schema failures with issues and honors an explicit 4
       ],
     );
   }
-  const optedIn = await parseJsonBody(jsonRequest({ reason: "way too long" }), schema, { status: 422 });
+  const optedIn = await parseJsonBody(jsonRequest({ reason: "way too long" }), schema, {
+    status: 422,
+  });
   assert.equal(optedIn.ok, false);
   if (!optedIn.ok) {
     assert.equal(optedIn.response.status, 422);
@@ -198,13 +206,21 @@ test("exactMoney accepts decimal strings and refuses JSON numbers to preserve pr
   assert.throws(() => exactMoneySchema().parse(true));
   assert.throws(
     () => exactMoneySchema("a decimal string or minor-unit integer is required").parse(100.5),
-    (e: unknown) => e instanceof z.ZodError && e.issues[0]?.message === "a decimal string or minor-unit integer is required",
+    (e: unknown) =>
+      e instanceof z.ZodError &&
+      e.issues[0]?.message === "a decimal string or minor-unit integer is required",
   );
 });
 
 test("uuidId accepts only canonical uuids", () => {
-  assert.equal(uuidId.parse("01890a5d-ac96-774b-bcce-b302099a8057"), "01890a5d-ac96-774b-bcce-b302099a8057");
-  assert.equal(uuidId.parse("db76ccd6-d8a3-ead7-42d2-6279dd4ea029"), "db76ccd6-d8a3-ead7-42d2-6279dd4ea029");
+  assert.equal(
+    uuidId.parse("01890a5d-ac96-774b-bcce-b302099a8057"),
+    "01890a5d-ac96-774b-bcce-b302099a8057",
+  );
+  assert.equal(
+    uuidId.parse("db76ccd6-d8a3-ead7-42d2-6279dd4ea029"),
+    "db76ccd6-d8a3-ead7-42d2-6279dd4ea029",
+  );
   assert.throws(() => uuidId.parse("not-a-uuid"));
   assert.throws(() => uuidId.parse(""));
   assert.throws(() => uuidId.parse(123));
@@ -240,17 +256,13 @@ test("isoDate accepts only real YYYY-MM-DD calendar dates", () => {
     "2026-2-28",
     "28/02/2026",
   ]) {
-    assert.throws(
-      () => isoDate().parse(invalid),
-      `${invalid} must be rejected`,
-    );
+    assert.throws(() => isoDate().parse(invalid), `${invalid} must be rejected`);
   }
 
   assert.throws(
     () => isoDate("A valid effective date is required").parse("2026-02-29"),
     (e: unknown) =>
-      e instanceof z.ZodError &&
-      e.issues[0]?.message === "A valid effective date is required",
+      e instanceof z.ZodError && e.issues[0]?.message === "A valid effective date is required",
   );
 });
 

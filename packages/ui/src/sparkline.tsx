@@ -1,6 +1,6 @@
-import * as React from 'react'
-import { useTranslations } from 'next-intl'
-import { cn } from './utils'
+import * as React from "react";
+import { useTranslations } from "next-intl";
+import { cn } from "./utils";
 
 /**
  * Tiny inline-SVG sparkline. Renders a polyline path from the given numeric
@@ -14,50 +14,50 @@ import { cn } from './utils'
  * compliance climbing → tone="good".
  */
 
-export type SparklineTone = 'up' | 'down' | 'good' | 'bad' | 'neutral'
+export type SparklineTone = "up" | "down" | "good" | "bad" | "neutral";
 
 type SparklineProps = {
   /** Numeric series — must contain at least 2 points to draw a line. */
-  points: number[]
+  points: number[];
   /** Hardcoded visual tone (overridden by `auto` when set). */
-  tone?: SparklineTone
+  tone?: SparklineTone;
   /**
    * If true, derive the tone from the first→last direction. `goodWhenRising`
    * controls which direction is "good". Defaults to direction-only colors.
    */
-  auto?: boolean
-  goodWhenRising?: boolean
+  auto?: boolean;
+  goodWhenRising?: boolean;
   /** Show small filled dots at the min and max points. */
-  dots?: boolean
+  dots?: boolean;
   /** Explicit stroke color (CSS color); overrides tone. */
-  stroke?: string
+  stroke?: string;
   /** Add a soft area fill under the line. */
-  area?: boolean
+  area?: boolean;
   /** Stroke width in pixels (in the 100x32 viewBox). */
-  strokeWidth?: number
-  className?: string
-  ariaLabel?: string
-}
+  strokeWidth?: number;
+  className?: string;
+  ariaLabel?: string;
+};
 
 const TONE_STROKE: Record<SparklineTone, string> = {
-  up: 'rgb(220 38 38)', // red-600 (e.g. incidents up = bad)
-  down: 'rgb(22 163 74)', // green-600 (e.g. incidents down = good)
-  good: 'rgb(22 163 74)', // green-600
-  bad: 'rgb(220 38 38)', // red-600
-  neutral: 'rgb(100 116 139)', // slate-500
-}
+  up: "rgb(220 38 38)", // red-600 (e.g. incidents up = bad)
+  down: "rgb(22 163 74)", // green-600 (e.g. incidents down = good)
+  good: "rgb(22 163 74)", // green-600
+  bad: "rgb(220 38 38)", // red-600
+  neutral: "rgb(100 116 139)", // slate-500
+};
 
 const TONE_FILL: Record<SparklineTone, string> = {
-  up: 'rgba(220, 38, 38, 0.10)',
-  down: 'rgba(22, 163, 74, 0.10)',
-  good: 'rgba(22, 163, 74, 0.10)',
-  bad: 'rgba(220, 38, 38, 0.10)',
-  neutral: 'rgba(100, 116, 139, 0.10)',
-}
+  up: "rgba(220, 38, 38, 0.10)",
+  down: "rgba(22, 163, 74, 0.10)",
+  good: "rgba(22, 163, 74, 0.10)",
+  bad: "rgba(220, 38, 38, 0.10)",
+  neutral: "rgba(100, 116, 139, 0.10)",
+};
 
 export function Sparkline({
   points,
-  tone = 'neutral',
+  tone = "neutral",
   auto,
   goodWhenRising = true,
   dots = false,
@@ -67,19 +67,19 @@ export function Sparkline({
   className,
   ariaLabel,
 }: SparklineProps) {
-  const t = useTranslations('ui.sparkline')
+  const t = useTranslations("ui.sparkline");
   // Derive effective tone if auto requested.
   const resolvedTone: SparklineTone = React.useMemo(() => {
-    if (!auto || points.length < 2) return tone
-    const first = points[0]!
-    const last = points[points.length - 1]!
-    if (last === first) return 'neutral'
-    const rising = last > first
-    return rising ? (goodWhenRising ? 'good' : 'bad') : goodWhenRising ? 'bad' : 'good'
-  }, [auto, goodWhenRising, points, tone])
+    if (!auto || points.length < 2) return tone;
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    if (last === first) return "neutral";
+    const rising = last > first;
+    return rising ? (goodWhenRising ? "good" : "bad") : goodWhenRising ? "bad" : "good";
+  }, [auto, goodWhenRising, points, tone]);
 
-  const strokeColor = stroke ?? TONE_STROKE[resolvedTone]
-  const fillColor = TONE_FILL[resolvedTone]
+  const strokeColor = stroke ?? TONE_STROKE[resolvedTone];
+  const fillColor = TONE_FILL[resolvedTone];
 
   // Empty / single-point cases — render an unobtrusive baseline.
   if (points.length < 2) {
@@ -88,8 +88,8 @@ export function Sparkline({
         viewBox="0 0 100 32"
         preserveAspectRatio="none"
         role="img"
-        aria-label={ariaLabel ?? t('noTrend')}
-        className={cn('block', className)}
+        aria-label={ariaLabel ?? t("noTrend")}
+        className={cn("block", className)}
       >
         <line
           x1={0}
@@ -101,37 +101,37 @@ export function Sparkline({
           strokeDasharray="3,3"
         />
       </svg>
-    )
+    );
   }
 
   // Normalize the series into the 100×32 viewBox. We pin min/max to the
   // top and bottom of the box with a 2px padding so the stroke isn't clipped.
-  const min = Math.min(...points)
-  const max = Math.max(...points)
-  const range = max - min || 1
-  const VB_W = 100
-  const VB_H = 32
-  const PAD_Y = 3
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const VB_W = 100;
+  const VB_H = 32;
+  const PAD_Y = 3;
 
-  const minIdx = points.indexOf(min)
-  const maxIdx = points.indexOf(max)
+  const minIdx = points.indexOf(min);
+  const maxIdx = points.indexOf(max);
 
   const coords = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * VB_W
-    const y = VB_H - PAD_Y - ((p - min) / range) * (VB_H - PAD_Y * 2)
-    return [x, y] as const
-  })
+    const x = (i / (points.length - 1)) * VB_W;
+    const y = VB_H - PAD_Y - ((p - min) / range) * (VB_H - PAD_Y * 2);
+    return [x, y] as const;
+  });
 
-  const pathD = 'M ' + coords.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(' L ')
-  const areaD = pathD + ` L ${VB_W} ${VB_H} L 0 ${VB_H} Z` // close path to baseline for the fill
+  const pathD = "M " + coords.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(" L ");
+  const areaD = pathD + ` L ${VB_W} ${VB_H} L 0 ${VB_H} Z`; // close path to baseline for the fill
 
   const label =
     ariaLabel ??
-    t('trend', {
+    t("trend", {
       count: points.length,
       first: points[0]!,
       last: points[points.length - 1]!,
-    })
+    });
 
   return (
     <svg
@@ -139,7 +139,7 @@ export function Sparkline({
       preserveAspectRatio="none"
       role="img"
       aria-label={label}
-      className={cn('block overflow-visible', className)}
+      className={cn("block overflow-visible", className)}
     >
       {area ? <path d={areaD} fill={fillColor} stroke="none" /> : null}
       <path
@@ -155,7 +155,7 @@ export function Sparkline({
         ? [minIdx, maxIdx]
             .filter((i, idx, arr) => arr.indexOf(i) === idx)
             .map((i) => {
-              const [x, y] = coords[i]!
+              const [x, y] = coords[i]!;
               return (
                 <circle
                   key={`dot-${i}`}
@@ -166,9 +166,9 @@ export function Sparkline({
                   stroke="white"
                   strokeWidth={0.75}
                 />
-              )
+              );
             })
         : null}
     </svg>
-  )
+  );
 }

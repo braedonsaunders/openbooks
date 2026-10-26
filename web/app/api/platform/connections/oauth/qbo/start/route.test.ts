@@ -7,7 +7,9 @@ process.env.OPENBOOKS_DATA_KEY ??=
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
 const stateKey = Symbol.for("openbooks.qbo-oauth-start-test");
-const state = { secrets: sealJson({ clientId: "qbo-client" }, { orgId: "org-1", purpose: "connection.secrets" }) };
+const state = {
+  secrets: sealJson({ clientId: "qbo-client" }, { orgId: "org-1", purpose: "connection.secrets" }),
+};
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
@@ -58,12 +60,13 @@ const hooks = registerHooks({
   },
 });
 
-const qbo_oauth_startUrl = './route.ts?qbo-oauth-start'
-const { GET } = (await import(qbo_oauth_startUrl)) as typeof import('./route.ts');
-const qbo_oauth_start_flowUrl = '../../_flow.ts?qbo-oauth-start-flow'
-const { CONNECTION_OAUTH_COOKIE } = (await import(qbo_oauth_start_flowUrl)) as typeof import('../../_flow.ts');
-test.after(() => hooks.deregister())
-
+const qbo_oauth_startUrl = "./route.ts?qbo-oauth-start";
+const { GET } = (await import(qbo_oauth_startUrl)) as typeof import("./route.ts");
+const qbo_oauth_start_flowUrl = "../../_flow.ts?qbo-oauth-start-flow";
+const { CONNECTION_OAUTH_COOKIE } = (await import(
+  qbo_oauth_start_flowUrl
+)) as typeof import("../../_flow.ts");
+test.after(() => hooks.deregister());
 
 function cookieMap(response: Response): Map<string, string> {
   const raw =
@@ -81,9 +84,12 @@ function cookieMap(response: Response): Map<string, string> {
 
 test("QBO start pins redirect_uri to appBaseUrl, not the request Host", async () => {
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/oauth/qbo/start?connectionId=conn-1", {
-      headers: { host: "evil.example", "x-forwarded-host": "evil.example" },
-    }),
+    new Request(
+      "https://evil.example/api/platform/connections/oauth/qbo/start?connectionId=conn-1",
+      {
+        headers: { host: "evil.example", "x-forwarded-host": "evil.example" },
+      },
+    ),
   );
   const location = new URL(res.headers.get("location") ?? "");
   assert.equal(
@@ -94,10 +100,15 @@ test("QBO start pins redirect_uri to appBaseUrl, not the request Host", async ()
 
 test("QBO start mints a one-time nonce in sealed state and the CSRF cookie", async () => {
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/oauth/qbo/start?connectionId=conn-1"),
+    new Request(
+      "https://evil.example/api/platform/connections/oauth/qbo/start?connectionId=conn-1",
+    ),
   );
   const location = new URL(res.headers.get("location") ?? "");
-  const payload = unsealJson<{ nonce?: string }>(location.searchParams.get("state")!, { orgId: "system", purpose: "connection.oauth.state" });
+  const payload = unsealJson<{ nonce?: string }>(location.searchParams.get("state")!, {
+    orgId: "system",
+    purpose: "connection.oauth.state",
+  });
   assert.ok((payload?.nonce?.length ?? 0) >= 16);
   assert.equal(cookieMap(res).get(CONNECTION_OAUTH_COOKIE), payload?.nonce);
 });

@@ -1,15 +1,14 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const { installApp, runBridgeMethod } = await import('./store')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
+const { installApp, runBridgeMethod } = await import("./store");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
-const DB = !!env.OPENBOOKS_DB_URL
+const DB = !!env.OPENBOOKS_DB_URL;
 
 /**
  * Through-stack regression proofs for App backend invocation atomicity
@@ -19,38 +18,38 @@ const DB = !!env.OPENBOOKS_DB_URL
  * write cannot strip committed effects of their provenance.
  */
 
-const CUSTOM_TYPE_KEY = 'invproof'
+const CUSTOM_TYPE_KEY = "invproof";
 
 type Fixture = {
-  org: Awaited<ReturnType<typeof createScratchOrg>>
-  actorId: string
-  user: Parameters<typeof runBridgeMethod>[0]['user']
-}
+  org: Awaited<ReturnType<typeof createScratchOrg>>;
+  actorId: string;
+  user: Parameters<typeof runBridgeMethod>[0]["user"];
+};
 
 async function makeFixture(): Promise<Fixture> {
   return await withBypass(async () => {
-    const org = await createScratchOrg()
-    const { adminId } = await seedFlowActors(org.orgId)
+    const org = await createScratchOrg();
+    const { adminId } = await seedFlowActors(org.orgId);
     // Published custom record type so platform.create has something real to do.
     await db.execute(sql`
       insert into custom_record_types (org_id, key, name, plural_name, fields, status, created_by, updated_by)
       values (${org.orgId}, ${CUSTOM_TYPE_KEY}, 'Invocation Proof', 'Invocation Proofs',
-              ${JSON.stringify([{ id: 'main', fields: [{ id: 'name', type: 'text', label: 'Name' }] }])}::jsonb,
-              'published', ${adminId}, ${adminId})`)
+              ${JSON.stringify([{ id: "main", fields: [{ id: "name", type: "text", label: "Name" }] }])}::jsonb,
+              'published', ${adminId}, ${adminId})`);
     const user = {
       id: adminId,
-      email: 'invocations@scratch.test',
-      name: 'Invocation Caller',
-      roles: [{ key: 'admin', name: 'Admin' }],
+      email: "invocations@scratch.test",
+      name: "Invocation Caller",
+      roles: [{ key: "admin", name: "Admin" }],
       orgId: org.orgId,
-      envKind: 'production' as const,
+      envKind: "production" as const,
       productionOrgId: org.orgId,
       isSuperAdmin: false,
       homeUserId: adminId,
       homeOrgId: org.orgId,
-    }
-    return { org, actorId: adminId, user }
-  })
+    };
+    return { org, actorId: adminId, user };
+  });
 }
 
 async function installProofApp(
@@ -58,26 +57,26 @@ async function installProofApp(
   handlerSource: string,
   identity?: { key?: string; version?: string },
 ): Promise<string> {
-  const suffix = randomUUID().slice(0, 8)
+  const suffix = randomUUID().slice(0, 8);
   const manifest = {
     key: identity?.key ?? `invproof-${suffix}`,
-    name: 'Invocation Proof App',
-    version: identity?.version ?? '1.0.0',
-    description: '',
-    permissions: ['gl.post', 'records.read', 'records.create'],
-    frontend: { entry: 'frontend/index.html' },
-    endpoints: [{ name: 'financial', file: 'backend/financial.js', method: 'POST' }],
-  }
+    name: "Invocation Proof App",
+    version: identity?.version ?? "1.0.0",
+    description: "",
+    permissions: ["gl.post", "records.read", "records.create"],
+    frontend: { entry: "frontend/index.html" },
+    endpoints: [{ name: "financial", file: "backend/financial.js", method: "POST" }],
+  };
   await withBypass(() =>
     installApp(fx.org.orgId, fx.actorId, {
       manifest,
       files: [
-        { path: 'frontend/index.html', content: '<html><body>proof</body></html>' },
-        { path: 'backend/financial.js', content: handlerSource },
+        { path: "frontend/index.html", content: "<html><body>proof</body></html>" },
+        { path: "backend/financial.js", content: handlerSource },
       ],
     }),
-  )
-  return manifest.key
+  );
+  return manifest.key;
 }
 
 function callBridge(
@@ -97,17 +96,21 @@ function callBridge(
       orgId: fx.org.orgId,
       user: fx.user,
       key: appKey,
-      method: 'callBackend',
+      method: "callBackend",
       payload,
       invocationKey: invocationKey ?? randomUUID(),
       userCan: () => true,
       allowedSubsidiaryIds: null,
     }),
-  )
+  );
 }
 
 /** One sandboxed backend doing journal + platform + KV writes. */
-function financialHandler(opts: { post: boolean; thenThrow?: boolean; spinAfterPost?: boolean }): string {
+function financialHandler(opts: {
+  post: boolean;
+  thenThrow?: boolean;
+  spinAfterPost?: boolean;
+}): string {
   return `function handler(request) {
   var journalInput = {
     documentDate: request.body.documentDate,
@@ -117,450 +120,509 @@ function financialHandler(opts: { post: boolean; thenThrow?: boolean; spinAfterP
       { accountCode: '5000', amount: '-' + request.body.amount }
     ]
   };
-  var j = ob.journal.create(journalInput, { post: ${opts.post ? 'true' : 'false'} });
-${opts.spinAfterPost ? '  while (true) {}' : ''}
+  var j = ob.journal.create(journalInput, { post: ${opts.post ? "true" : "false"} });
+${opts.spinAfterPost ? "  while (true) {}" : ""}
   var r = ob.platform.create('${CUSTOM_TYPE_KEY}', { name: request.body.recordName || 'Invoked' });
   ob.storage.set('proof-key-' + request.body.amount, j.documentNumber);
-${opts.thenThrow ? "  throw new Error('boom after posting');\n" : ''}
+${opts.thenThrow ? "  throw new Error('boom after posting');\n" : ""}
   return { journal: j.documentNumber, posted: j.entryId !== undefined, recordId: String(r.id) };
 }
-`
+`;
 }
 
 const committedCounts = async (
   orgId: string,
 ): Promise<{ documents: number; entries: number; records: number; storage: number }> => {
   const r = await withOrgContext(orgId, () =>
-    db.execute<{ documents: string; entries: string; records: string; storage: string }>(sql`
+    db.execute<{ documents: string; entries: string; records: string; storage: string }>(
+      sql`
       select
         (select count(*)::text from documents where org_id = ${orgId}) as documents,
         (select count(*)::text from journal_entries where org_id = ${orgId}) as entries,
         (select count(*)::text from custom_records where org_id = ${orgId}) as records,
-        (select count(*)::text from app_storage where org_id = ${orgId}) as storage`, 'objects'),
-  )
-  const row = r[0]!
+        (select count(*)::text from app_storage where org_id = ${orgId}) as storage`,
+      "objects",
+    ),
+  );
+  const row = r[0]!;
   return {
     documents: Number(row.documents),
     entries: Number(row.entries),
     records: Number(row.records),
     storage: Number(row.storage),
-  }
-}
+  };
+};
 
 const appRuns = async (orgId: string) =>
   await withOrgContext(orgId, () =>
-      db.execute<{
-        endpoint: string;
-        status: string;
-        errorMessage: string | null;
-        logs: string[];
-        units: number;
-      }>(sql`
+    db.execute<{
+      endpoint: string;
+      status: string;
+      errorMessage: string | null;
+      logs: string[];
+      units: number;
+    }>(
+      sql`
         select endpoint, status, error_message as "errorMessage", logs, units
           from app_runs where org_id = ${orgId}
-         order by at`, 'objects'),
-    )
+         order by at`,
+      "objects",
+    ),
+  );
 
 test(
-  'repeated platform schema, list, and get reads receive independent invocation identities',
+  "repeated platform schema, list, and get reads receive independent invocation identities",
   { skip: !DB },
   async () => {
-    const fx = await makeFixture()
+    const fx = await makeFixture();
     try {
-      const appKey = await installProofApp(fx, financialHandler({ post: false }))
+      const appKey = await installProofApp(fx, financialHandler({ post: false }));
       for (const [method, payload] of [
-        ['platform.schema', {}],
-        ['platform.list', { typeKey: CUSTOM_TYPE_KEY }],
-        ['platform.get', { typeKey: CUSTOM_TYPE_KEY, id: randomUUID() }],
+        ["platform.schema", {}],
+        ["platform.list", { typeKey: CUSTOM_TYPE_KEY }],
+        ["platform.get", { typeKey: CUSTOM_TYPE_KEY, id: randomUUID() }],
       ] as const) {
-        const invoke = () => withOrgContext(fx.org.orgId, () => runBridgeMethod({
-          orgId: fx.org.orgId,
-          user: fx.user,
-          key: appKey,
-          method,
-          payload,
-          userCan: () => true,
-          allowedSubsidiaryIds: null,
-        }))
-        const first = await invoke()
-        const repeated = await invoke()
-        assert.equal(first.ok, true, `${method} should return a result`)
-        assert.deepEqual(repeated, first, `${method} should return the same unchanged data`)
+        const invoke = () =>
+          withOrgContext(fx.org.orgId, () =>
+            runBridgeMethod({
+              orgId: fx.org.orgId,
+              user: fx.user,
+              key: appKey,
+              method,
+              payload,
+              userCan: () => true,
+              allowedSubsidiaryIds: null,
+            }),
+          );
+        const first = await invoke();
+        const repeated = await invoke();
+        assert.equal(first.ok, true, `${method} should return a result`);
+        assert.deepEqual(repeated, first, `${method} should return the same unchanged data`);
       }
 
-      const claims = await withOrgContext(fx.org.orgId, () => db.execute<{
-        operation: string
-        count: string
-      }>(sql`
+      const claims = await withOrgContext(fx.org.orgId, () =>
+        db.execute<{
+          operation: string;
+          count: string;
+        }>(
+          sql`
         select operation, count(*)::text as count
           from application_idempotency_keys
          where org_id = ${fx.org.orgId} and source = 'app'
            and operation in ('apps.platform_schema', 'apps.platform_list', 'apps.platform_get')
          group by operation
          order by operation
-      `, 'objects'))
+      `,
+          "objects",
+        ),
+      );
       assert.deepEqual(claims, [
-        { operation: 'apps.platform_get', count: '2' },
-        { operation: 'apps.platform_list', count: '2' },
-        { operation: 'apps.platform_schema', count: '2' },
-      ])
+        { operation: "apps.platform_get", count: "2" },
+        { operation: "apps.platform_list", count: "2" },
+        { operation: "apps.platform_schema", count: "2" },
+      ]);
     } finally {
-      await dropScratchOrg(fx.org.orgId)
+      await dropScratchOrg(fx.org.orgId);
     }
   },
-)
+);
 
 test(
-  'a successful multi-write backend commits journal, platform record, KV, and audit atomically',
+  "a successful multi-write backend commits journal, platform record, KV, and audit atomically",
   { skip: !DB },
   async () => {
-    const fx = await makeFixture()
+    const fx = await makeFixture();
     try {
-      const appKey = await installProofApp(fx, financialHandler({ post: false }))
+      const appKey = await installProofApp(fx, financialHandler({ post: false }));
       const res = await callBridge(fx, appKey, {
-        endpoint: 'financial',
-        payload: { documentDate: fx.org.date, amount: '25.00' },
-      })
-      assert.equal(res.ok, true)
-      const body = (res.result as { body?: { journal?: string } } | null)?.body
-      assert.match(String(body?.journal ?? ''), /^JE-\d+$/)
+        endpoint: "financial",
+        payload: { documentDate: fx.org.date, amount: "25.00" },
+      });
+      assert.equal(res.ok, true);
+      const body = (res.result as { body?: { journal?: string } } | null)?.body;
+      assert.match(String(body?.journal ?? ""), /^JE-\d+$/);
 
-      const counts = await committedCounts(fx.org.orgId)
-      assert.deepEqual(counts, { documents: 1, entries: 0, records: 1, storage: 1 })
+      const counts = await committedCounts(fx.org.orgId);
+      assert.deepEqual(counts, { documents: 1, entries: 0, records: 1, storage: 1 });
 
-      const runs = await appRuns(fx.org.orgId)
-      assert.deepEqual(runs.map((r) => [r.endpoint, r.status]), [['financial', 'ok']])
-      assert.ok(runs[0]!.units > 0)
+      const runs = await appRuns(fx.org.orgId);
+      assert.deepEqual(
+        runs.map((r) => [r.endpoint, r.status]),
+        [["financial", "ok"]],
+      );
+      assert.ok(runs[0]!.units > 0);
     } finally {
-      await dropScratchOrg(fx.org.orgId)
+      await dropScratchOrg(fx.org.orgId);
     }
   },
-)
+);
 
-test(
-  'the App bridge hides custom records outside their role audience',
-  { skip: !DB },
-  async () => {
-    const fx = await makeFixture()
-    const typeKey = 'private-bridge'
-    const typeId = randomUUID()
-    const recordId = randomUUID()
-    try {
-      await withOrgContext(fx.org.orgId, async () => {
-        await db.execute(sql`
+test("the App bridge hides custom records outside their role audience", { skip: !DB }, async () => {
+  const fx = await makeFixture();
+  const typeKey = "private-bridge";
+  const typeId = randomUUID();
+  const recordId = randomUUID();
+  try {
+    await withOrgContext(fx.org.orgId, async () => {
+      await db.execute(sql`
           insert into custom_record_types
             (id, org_id, key, name, plural_name, fields, status, allowed_roles, created_by, updated_by)
           values
             (${typeId}, ${fx.org.orgId}, ${typeKey}, 'Private Bridge', 'Private Bridges',
-             ${JSON.stringify([{ id: 'main', title: 'Details', fields: [{ id: 'secret', type: 'text', label: 'Secret' }] }])}::jsonb,
+             ${JSON.stringify([{ id: "main", title: "Details", fields: [{ id: "secret", type: "text", label: "Secret" }] }])}::jsonb,
              'published', '["private-role"]'::jsonb, ${fx.actorId}, ${fx.actorId})
-        `)
-        await db.execute(sql`
+        `);
+      await db.execute(sql`
           insert into custom_records
             (id, org_id, type_id, type_key, record_number, status, data, search_text, created_by, updated_by)
           values
             (${recordId}, ${fx.org.orgId}, ${typeId}, ${typeKey}, 'PRIVATE-BRIDGE-1', 'active',
              '{"secret":"classified"}'::jsonb, 'private-bridge-1 classified', ${fx.actorId}, ${fx.actorId})
-        `)
-      })
-      const appKey = await installProofApp(fx, financialHandler({ post: false }))
-      const restrictedUser = { ...fx.user, roles: [{ key: 'ordinary-role', name: 'Ordinary role' }] }
-      const listed = await withOrgContext(fx.org.orgId, () =>
-        runBridgeMethod({
-          orgId: fx.org.orgId,
-          user: restrictedUser,
-          key: appKey,
-          method: 'records.list',
-          payload: { typeKey },
-          userCan: (permission) => permission === 'records.read',
-          allowedSubsidiaryIds: null,
-        }),
-      )
-      assert.equal(listed.ok, true)
-      assert.deepEqual(listed.result, [])
-      const fetched = await withOrgContext(fx.org.orgId, () => runBridgeMethod({
+        `);
+    });
+    const appKey = await installProofApp(fx, financialHandler({ post: false }));
+    const restrictedUser = { ...fx.user, roles: [{ key: "ordinary-role", name: "Ordinary role" }] };
+    const listed = await withOrgContext(fx.org.orgId, () =>
+      runBridgeMethod({
         orgId: fx.org.orgId,
         user: restrictedUser,
         key: appKey,
-        method: 'records.get',
-        payload: { typeKey, id: recordId },
-        userCan: (permission) => permission === 'records.read',
+        method: "records.list",
+        payload: { typeKey },
+        userCan: (permission) => permission === "records.read",
         allowedSubsidiaryIds: null,
-      }))
-      assert.equal(fetched.ok, true)
-      assert.equal(fetched.result, null)
-    } finally {
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+      }),
+    );
+    assert.equal(listed.ok, true);
+    assert.deepEqual(listed.result, []);
+    const fetched = await withOrgContext(fx.org.orgId, () =>
+      runBridgeMethod({
+        orgId: fx.org.orgId,
+        user: restrictedUser,
+        key: appKey,
+        method: "records.get",
+        payload: { typeKey, id: recordId },
+        userCan: (permission) => permission === "records.read",
+        allowedSubsidiaryIds: null,
+      }),
+    );
+    assert.equal(fetched.ok, true);
+    assert.equal(fetched.result, null);
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
 test(
-  'a backend that posts a ledger entry then throws leaves ZERO durable effects; retry cannot duplicate',
+  "a backend that posts a ledger entry then throws leaves ZERO durable effects; retry cannot duplicate",
   { skip: !DB },
   async () => {
-    const fx = await makeFixture()
+    const fx = await makeFixture();
     try {
       // Same stable app identity across versions, so upgrading the bundle
       // does not change the app row — only its active version id.
-      const appKey = `invproof-${randomUUID().slice(0, 8)}`
+      const appKey = `invproof-${randomUUID().slice(0, 8)}`;
       await installProofApp(fx, financialHandler({ post: true, thenThrow: true }), {
         key: appKey,
-        version: '1.0.0',
-      })
+        version: "1.0.0",
+      });
       const payload = {
-        endpoint: 'financial',
-        payload: { documentDate: fx.org.date, amount: '25.00', recordName: 'Doomed' },
-      }
+        endpoint: "financial",
+        payload: { documentDate: fx.org.date, amount: "25.00", recordName: "Doomed" },
+      };
 
-      const refused = await callBridge(fx, appKey, payload)
-      assert.equal(refused.ok, false)
-      assert.match(String(refused.error ?? ''), /boom after posting/)
+      const refused = await callBridge(fx, appKey, payload);
+      assert.equal(refused.ok, false);
+      assert.match(String(refused.error ?? ""), /boom after posting/);
       assert.deepEqual(await committedCounts(fx.org.orgId), {
         documents: 0,
         entries: 0,
         records: 0,
         storage: 0,
-      })
-      const refusals = await appRuns(fx.org.orgId)
-      assert.deepEqual(refusals.map((r) => [r.status]), [['error']])
-      assert.match(String(refusals[0]!.errorMessage ?? ''), /boom after posting/)
+      });
+      const refusals = await appRuns(fx.org.orgId);
+      assert.deepEqual(
+        refusals.map((r) => [r.status]),
+        [["error"]],
+      );
+      assert.match(String(refusals[0]!.errorMessage ?? ""), /boom after posting/);
       // The failed attempt's identity persists as UNCOMPLETED evidence: it
       // proves nothing durable happened and is what the retry takes over.
       const refusedClaims = await withOrgContext(fx.org.orgId, () =>
-        db.execute<{ n: string; completedAt: Date | null }>(sql`
+        db.execute<{ n: string; completedAt: Date | null }>(
+          sql`
           select count(*)::text as n, min(completed_at)::timestamptz as "completedAt"
-            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`, 'objects'),
-      )
-      assert.equal(Number(refusedClaims[0]!.n), 1)
-      assert.equal(refusedClaims[0]!.completedAt, null)
+            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`,
+          "objects",
+        ),
+      );
+      assert.equal(Number(refusedClaims[0]!.n), 1);
+      assert.equal(refusedClaims[0]!.completedAt, null);
 
       // Recovery ships a FIXED bundle on the same app: zero effects survived
       // the failed invocation, so the corrected execution posts exactly one
       // ledger entry under its own claimed identity — nothing duplicated.
       await installProofApp(fx, financialHandler({ post: true }), {
         key: appKey,
-        version: '1.0.1',
-      })
-      const recovered = await callBridge(fx, appKey, payload)
-      assert.equal(recovered.ok, true)
-      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 1)
-      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.records), 1)
-      const takeover = await appRuns(fx.org.orgId)
-      assert.deepEqual(takeover.map((r) => r.status), ['error', 'ok'])
+        version: "1.0.1",
+      });
+      const recovered = await callBridge(fx, appKey, payload);
+      assert.equal(recovered.ok, true);
+      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 1);
+      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.records), 1);
+      const takeover = await appRuns(fx.org.orgId);
+      assert.deepEqual(
+        takeover.map((r) => r.status),
+        ["error", "ok"],
+      );
       const claimsAfterRecovery = await withOrgContext(fx.org.orgId, () =>
-        db.execute<{ total: string; done: string }>(sql`
+        db.execute<{ total: string; done: string }>(
+          sql`
           select count(*)::text as total,
                  (count(*) filter (where completed_at is not null))::text as done
-            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`, 'objects'),
-      )
-      assert.deepEqual(claimsAfterRecovery[0], { total: '2', done: '1' })
+            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(claimsAfterRecovery[0], { total: "2", done: "1" });
     } finally {
-      await dropScratchOrg(fx.org.orgId)
+      await dropScratchOrg(fx.org.orgId);
     }
   },
-)
+);
 
 test(
-  'a backend that posts and then spins until its deadline is rolled back wholesale',
+  "a backend that posts and then spins until its deadline is rolled back wholesale",
   { skip: !DB },
   async () => {
-    const fx = await makeFixture()
+    const fx = await makeFixture();
     try {
-      const appKey = await installProofApp(fx, financialHandler({ post: true, spinAfterPost: true }))
-      const startedAt = Date.now()
+      const appKey = await installProofApp(
+        fx,
+        financialHandler({ post: true, spinAfterPost: true }),
+      );
+      const startedAt = Date.now();
       const timedOut = await callBridge(fx, appKey, {
-        endpoint: 'financial',
-        payload: { documentDate: fx.org.date, amount: '25.00' },
-      })
-      assert.ok(Date.now() - startedAt >= 2500, 'expected the deadline to be reached')
-      assert.equal(timedOut.ok, false)
+        endpoint: "financial",
+        payload: { documentDate: fx.org.date, amount: "25.00" },
+      });
+      assert.ok(Date.now() - startedAt >= 2500, "expected the deadline to be reached");
+      assert.equal(timedOut.ok, false);
       assert.deepEqual(await committedCounts(fx.org.orgId), {
         documents: 0,
         entries: 0,
         records: 0,
         storage: 0,
-      })
-      const runs = await appRuns(fx.org.orgId)
-      assert.deepEqual(runs.map((r) => [r.status]), [['timeout']])
+      });
+      const runs = await appRuns(fx.org.orgId);
+      assert.deepEqual(
+        runs.map((r) => [r.status]),
+        [["timeout"]],
+      );
       // The timed-out attempt also leaves its uncompleted identity behind.
       const timeoutClaims = await withBypass(() =>
-        db.execute<{ open: string }>(sql`
+        db.execute<{ open: string }>(
+          sql`
           select count(*)::text as open from application_idempotency_keys
-           where org_id = ${fx.org.orgId} and source = 'app' and completed_at is null`, 'objects'),
-      )
-      assert.equal(Number(timeoutClaims[0]!.open), 1)
+           where org_id = ${fx.org.orgId} and source = 'app' and completed_at is null`,
+          "objects",
+        ),
+      );
+      assert.equal(Number(timeoutClaims[0]!.open), 1);
     } finally {
-      await dropScratchOrg(fx.org.orgId)
+      await dropScratchOrg(fx.org.orgId);
     }
   },
-)
+);
 
 test(
-  'an identical lost-result retry replays the stored outcome without duplicating the posting',
+  "an identical lost-result retry replays the stored outcome without duplicating the posting",
   { skip: !DB },
   async () => {
-    const fx = await makeFixture()
+    const fx = await makeFixture();
     try {
-      const appKey = await installProofApp(fx, financialHandler({ post: true }))
-      const requestPayload = { documentDate: fx.org.date, amount: '25.00' }
+      const appKey = await installProofApp(fx, financialHandler({ post: true }));
+      const requestPayload = { documentDate: fx.org.date, amount: "25.00" };
       // The lost result is retried with the SAME caller key: one action,
       // one execution, replayed response.
-      const retryKey = randomUUID()
+      const retryKey = randomUUID();
 
-      const first = await callBridge(fx, appKey, { endpoint: 'financial', payload: requestPayload }, retryKey)
-      assert.equal(first.ok, true)
-      const firstJournal = String((first.result as { body?: { journal?: string } }).body?.journal)
-      assert.match(firstJournal, /^JE-/)
+      const first = await callBridge(
+        fx,
+        appKey,
+        { endpoint: "financial", payload: requestPayload },
+        retryKey,
+      );
+      assert.equal(first.ok, true);
+      const firstJournal = String((first.result as { body?: { journal?: string } }).body?.journal);
+      assert.match(firstJournal, /^JE-/);
 
-      const second = await callBridge(fx, appKey, { endpoint: 'financial', payload: requestPayload }, retryKey)
-      assert.equal(second.ok, true)
-      assert.deepEqual(second.result, first.result)
+      const second = await callBridge(
+        fx,
+        appKey,
+        { endpoint: "financial", payload: requestPayload },
+        retryKey,
+      );
+      assert.equal(second.ok, true);
+      assert.deepEqual(second.result, first.result);
 
       assert.deepEqual(await committedCounts(fx.org.orgId), {
         documents: 1,
         entries: 1,
         records: 1,
         storage: 1,
-      })
+      });
 
       // The claim identity is namespaced by app and version inside the
       // stored key, so the test pins the observable property instead: one
       // claim row for the operation after an execution plus its replay.
       const claims = await withOrgContext(fx.org.orgId, () =>
-        db.execute<{ n: string }>(sql`
+        db.execute<{ n: string }>(
+          sql`
           select count(*)::text as n from application_idempotency_keys
            where org_id = ${fx.org.orgId} and source = 'app'
-             and operation = 'apps.call_backend.financial'`, 'objects'),
-      )
-      assert.equal(Number(claims[0]!.n), 1)
+             and operation = 'apps.call_backend.financial'`,
+          "objects",
+        ),
+      );
+      assert.equal(Number(claims[0]!.n), 1);
 
       // The replay attempt is itself audited, distinctly marked.
-      const runs = await appRuns(fx.org.orgId)
-      assert.equal(runs.length, 2)
-      assert.match(JSON.stringify(runs[1]!.logs), /replayed/)
+      const runs = await appRuns(fx.org.orgId);
+      assert.equal(runs.length, 2);
+      assert.match(JSON.stringify(runs[1]!.logs), /replayed/);
 
       // A distinct action carries its own key and executes independently —
       // identical repeats are independent invocations, never replays.
-      const variant = await callBridge(fx, appKey, {
-        endpoint: 'financial',
-        payload: { ...requestPayload, amount: '40.00' },
-      }, randomUUID())
-      assert.equal(variant.ok, true)
-      const secondJournal = String((variant.result as { body?: { journal?: string } }).body?.journal)
-      assert.notEqual(secondJournal, firstJournal)
-      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 2)
+      const variant = await callBridge(
+        fx,
+        appKey,
+        {
+          endpoint: "financial",
+          payload: { ...requestPayload, amount: "40.00" },
+        },
+        randomUUID(),
+      );
+      assert.equal(variant.ok, true);
+      const secondJournal = String(
+        (variant.result as { body?: { journal?: string } }).body?.journal,
+      );
+      assert.notEqual(secondJournal, firstJournal);
+      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 2);
     } finally {
-      await dropScratchOrg(fx.org.orgId)
+      await dropScratchOrg(fx.org.orgId);
     }
   },
-)
+);
 
 test(
-  'two intentional platform.create calls with identical bodies but different keys create two records; the same key replays',
+  "two intentional platform.create calls with identical bodies but different keys create two records; the same key replays",
   { skip: !DB },
   async () => {
-    const fx = await makeFixture()
+    const fx = await makeFixture();
     try {
-      const appKey = await installProofApp(fx, financialHandler({ post: false }))
-      const create = (invocationKey: string | undefined, body: unknown = { name: 'Repeat' }) =>
+      const appKey = await installProofApp(fx, financialHandler({ post: false }));
+      const create = (invocationKey: string | undefined, body: unknown = { name: "Repeat" }) =>
         withOrgContext(fx.org.orgId, () =>
           runBridgeMethod({
             orgId: fx.org.orgId,
             user: fx.user,
             key: appKey,
-            method: 'platform.create',
+            method: "platform.create",
             payload: { typeKey: CUSTOM_TYPE_KEY, body },
             invocationKey,
             userCan: () => true,
             allowedSubsidiaryIds: null,
           }),
-        )
-      const keyA = randomUUID()
-      const keyB = randomUUID()
-      const first = await create(keyA)
-      assert.equal(first.ok, true)
+        );
+      const keyA = randomUUID();
+      const keyB = randomUUID();
+      const first = await create(keyA);
+      assert.equal(first.ok, true);
       // Same key, same body: a retried action replays the stored response.
-      const retry = await create(keyA)
-      assert.equal(retry.ok, true)
-      assert.deepEqual(retry.result, first.result)
+      const retry = await create(keyA);
+      assert.equal(retry.ok, true);
+      assert.deepEqual(retry.result, first.result);
       // Same body, different key: an intentional repeat executes independently.
-      const repeat = await create(keyB)
-      assert.equal(repeat.ok, true)
-      assert.notDeepEqual(repeat.result, first.result)
+      const repeat = await create(keyB);
+      assert.equal(repeat.ok, true);
+      assert.notDeepEqual(repeat.result, first.result);
       const records = await withOrgContext(fx.org.orgId, () =>
-        db.execute<{ n: string }>(sql`select count(*)::text as n from custom_records
-           where org_id = ${fx.org.orgId} and type_key = ${CUSTOM_TYPE_KEY}`, 'objects'),
-      )
-      assert.equal(Number(records[0]!.n), 2)
+        db.execute<{ n: string }>(
+          sql`select count(*)::text as n from custom_records
+           where org_id = ${fx.org.orgId} and type_key = ${CUSTOM_TYPE_KEY}`,
+          "objects",
+        ),
+      );
+      assert.equal(Number(records[0]!.n), 2);
 
       // Same key with a different body is key reuse, not a retry: 409.
-      const mismatch = await create(keyA, { name: 'Different' })
-      assert.equal(mismatch.ok, false)
-      if (mismatch.ok) throw new Error('unreachable')
-      assert.equal(mismatch.status, 409)
+      const mismatch = await create(keyA, { name: "Different" });
+      assert.equal(mismatch.ok, false);
+      if (mismatch.ok) throw new Error("unreachable");
+      assert.equal(mismatch.status, 409);
 
       // A write with no key at all is refused by name before anything runs.
-      const keyless = await create(undefined)
-      assert.equal(keyless.ok, false)
-      if (keyless.ok) throw new Error('unreachable')
-      assert.equal(keyless.status, 400)
-      assert.match(keyless.error, /invocationKey/)
+      const keyless = await create(undefined);
+      assert.equal(keyless.ok, false);
+      if (keyless.ok) throw new Error("unreachable");
+      assert.equal(keyless.status, 400);
+      assert.match(keyless.error, /invocationKey/);
     } finally {
-      await dropScratchOrg(fx.org.orgId)
+      await dropScratchOrg(fx.org.orgId);
     }
   },
-)
+);
 
 test(
-  'forcing app_runs unavailability refuses the whole invocation instead of committing unaudited effects',
+  "forcing app_runs unavailability refuses the whole invocation instead of committing unaudited effects",
   { skip: !DB },
   async () => {
-    const fx = await makeFixture()
+    const fx = await makeFixture();
     try {
-      const appKey = await installProofApp(fx, financialHandler({ post: true }))
+      const appKey = await installProofApp(fx, financialHandler({ post: true }));
       const payload = {
-        endpoint: 'financial',
-        payload: { documentDate: fx.org.date, amount: '25.00' },
-      }
+        endpoint: "financial",
+        payload: { documentDate: fx.org.date, amount: "25.00" },
+      };
       // One action retried: the recovery takes over the refused attempt's
       // uncompleted claim instead of starting a second identity.
-      const actionKey = randomUUID()
-      const triggerName = 'app_runs_fail_closed_bridge'
+      const actionKey = randomUUID();
+      const triggerName = "app_runs_fail_closed_bridge";
       await withBypass(async () => {
         await db.execute(sql`
           create or replace function fail_bridge_run_audit() returns trigger language plpgsql as $fn$
           begin
             raise exception 'app_runs unavailable';
           end
-          $fn$`)
+          $fn$`);
         await db.execute(sql`
           create trigger ${sql.raw(triggerName)}
             before insert on app_runs
             for each row when (new.org_id = ${sql.raw("'" + fx.org.orgId + "'")}::uuid)
-            execute function fail_bridge_run_audit()`)
-      })
+            execute function fail_bridge_run_audit()`);
+      });
       try {
-        const refused = await callBridge(fx, appKey, payload, actionKey)
-        assert.equal(refused.ok, false)
-        assert.match(String(refused.error ?? ''), /app_runs unavailable/)
+        const refused = await callBridge(fx, appKey, payload, actionKey);
+        assert.equal(refused.ok, false);
+        assert.match(String(refused.error ?? ""), /app_runs unavailable/);
         assert.deepEqual(await committedCounts(fx.org.orgId), {
           documents: 0,
           entries: 0,
           records: 0,
           storage: 0,
-        })
+        });
       } finally {
         await withBypass(async () => {
-          await db.execute(sql`drop trigger if exists ${sql.raw(triggerName)} on app_runs`)
-        })
+          await db.execute(sql`drop trigger if exists ${sql.raw(triggerName)} on app_runs`);
+        });
       }
       // Once evidence can be persisted again, the very same identity succeeds.
-      const recovered = await callBridge(fx, appKey, payload, actionKey)
-      assert.equal(recovered.ok, true)
-      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 1)
+      const recovered = await callBridge(fx, appKey, payload, actionKey);
+      assert.equal(recovered.ok, true);
+      assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 1);
     } finally {
-      await dropScratchOrg(fx.org.orgId)
+      await dropScratchOrg(fx.org.orgId);
     }
   },
-)
+);

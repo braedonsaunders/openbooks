@@ -41,10 +41,20 @@ const OPT_OUT = /source-path:\s*synthetic/;
 export function trackedSources(root = ROOT) {
   // Tracked plus untracked-but-not-ignored, so a file that is new in the
   // working tree is checked before it is committed, not after.
-  return execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root, maxBuffer: 1 << 27 })
+  return execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
+    cwd: root,
+    maxBuffer: 1 << 27,
+  })
     .toString("utf8")
     .split("\0")
-    .filter((f) => f && SCOPE.test(f) && SOURCE.test(f) && !f.includes("/node_modules/") && existsSync(join(root, f)));
+    .filter(
+      (f) =>
+        f &&
+        SCOPE.test(f) &&
+        SOURCE.test(f) &&
+        !f.includes("/node_modules/") &&
+        existsSync(join(root, f)),
+    );
 }
 
 const lineAt = (source, index) => source.slice(0, index).split("\n").length;
@@ -107,15 +117,19 @@ export function analyze(root = ROOT) {
       checked += 1;
       const abs = join(root, target);
       if (existsSync(abs)) return;
-      problems.push(`${file}:${line}: ${shape} "${target}" does not exist. The file it names has moved or been deleted; point the reference at its current path (see scripts/engine-modules/moves.json for the engine module move), or mark a deliberately synthetic path with \`// source-path: synthetic\`.`);
+      problems.push(
+        `${file}:${line}: ${shape} "${target}" does not exist. The file it names has moved or been deleted; point the reference at its current path (see scripts/engine-modules/moves.json for the engine module move), or mark a deliberately synthetic path with \`// source-path: synthetic\`.`,
+      );
     };
-    for (const ref of segmentReferences(source)) report(ref.index, ref.path, "segment-assembled path");
+    for (const ref of segmentReferences(source))
+      report(ref.index, ref.path, "segment-assembled path");
     for (const m of source.matchAll(NEW_URL_RE)) {
       const spec = m[2].replace(/[?#].*$/, "");
       if (spec.includes("${")) continue;
       report(m.index, posix.normalize(posix.join(posix.dirname(file), spec)), "new URL() path");
     }
-    for (const m of source.matchAll(ESCAPED_RE)) report(m.index, `engine/src/${m[1].replace(/\\\//g, "/")}.${m[2]}`, "escaped regex path");
+    for (const m of source.matchAll(ESCAPED_RE))
+      report(m.index, `engine/src/${m[1].replace(/\\\//g, "/")}.${m[2]}`, "escaped regex path");
   }
   return { problems, checked };
 }

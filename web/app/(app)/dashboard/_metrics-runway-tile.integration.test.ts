@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -15,7 +15,6 @@ import test from "node:test";
 // gl.read (sees today's balance) but must never see the projection.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a
     // second db pool without the test bypass). Pin them to this checkout —
@@ -31,7 +30,8 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { toUnits } = await import("@openbooks/engine/money/money");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
 const { MissingExchangeRateError } = await import("@/lib/fx-presentation.ts");
 const { cashPosition } = await import("@/lib/cash/cash-position.ts");
@@ -49,10 +49,16 @@ const RUNWAY_IDS = ["kpi-cash-runway"] as const;
 function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Runway Watcher", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Runway Watcher",
+      orgId,
       roles: [{ key: "staff", name: "staff" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(permissions),
     allowedSubsidiaryIds: null,
@@ -60,12 +66,18 @@ function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
 }
 
 function throwingReaders(calls: string[]): DashboardMoneyReaders {
-  const unused = () => { throw new Error("unreachable in this test"); };
+  const unused = () => {
+    throw new Error("unreachable in this test");
+  };
   return {
     bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],
     openItems: (async () => []) as DashboardMoneyReaders["openItems"],
-    paymentStats: (async () => { throw new Error("paymentStats must not run here"); }) as DashboardMoneyReaders["paymentStats"],
-    profitAndLoss: (async () => { throw new Error("profitAndLoss must not run here"); }) as DashboardMoneyReaders["profitAndLoss"],
+    paymentStats: (async () => {
+      throw new Error("paymentStats must not run here");
+    }) as DashboardMoneyReaders["paymentStats"],
+    profitAndLoss: (async () => {
+      throw new Error("profitAndLoss must not run here");
+    }) as DashboardMoneyReaders["profitAndLoss"],
     cashPosition: (async () => {
       calls.push("cashPosition");
       return unused() as never;
@@ -82,8 +94,13 @@ test("runway tile ties the banking cash page on the same org", { skip: !DB }, as
   try {
     const may = randomUUID();
     await withBypass(async () => {
-      const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`, "objects"))[0]!.fiscal_calendar_id;
+      const cal = (
+        await db.execute<{ fiscal_calendar_id: string }>(
+          sql`
+        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`,
+          "objects",
+        )
+      )[0]!.fiscal_calendar_id;
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${may},${org.orgId},2026,5,'2026-05','2026-05-01','2026-05-31',false,${cal})`);
     });
@@ -96,7 +113,9 @@ test("runway tile ties the banking cash page on the same org", { skip: !DB }, as
       await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
         values(${randomUUID()},${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},'5000','CAD','5000','1'),
               (${randomUUID()},${org.orgId},${entry},2,${org.accounts.adjustment},${org.subsidiaryId},'-5000','CAD','-5000','1')`);
-      await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+      await db.execute(
+        sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`,
+      );
     });
     const doc = randomUUID();
     const billEntry = randomUUID();
@@ -109,19 +128,36 @@ test("runway tile ties the banking cash page on the same org", { skip: !DB }, as
       await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,due_date,is_open_item)
         values(${billLine},${org.orgId},${billEntry},1,${org.accounts.ap},${org.subsidiaryId},'-700','CAD','-700','1',${org.vendorId},'2026-05-27',true),
               (${randomUUID()},${org.orgId},${billEntry},2,${org.accounts.adjustment},${org.subsidiaryId},'700','CAD','700','1',null,'2026-05-27',false)`);
-      await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${billEntry}`);
-      await db.execute(sql`update documents set status='posted',posted_entry_id=${billEntry},posting_period_id=${may} where id=${doc}`);
+      await db.execute(
+        sql`update journal_entries set status='posted',posted_at=now() where id=${billEntry}`,
+      );
+      await db.execute(
+        sql`update documents set status='posted',posted_entry_id=${billEntry},posting_period_id=${may} where id=${doc}`,
+      );
     });
 
     const actor = await withBypass(() => createScratchUser(org.orgId, "Runway Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "banking.read"]);
+    const authz = authzFor(org.orgId, actor as unknown as string, [
+      "dashboard.read",
+      "banking.read",
+    ]);
     assert.equal(canSeeWidget(authz, "kpi-cash-runway"), true);
     // gl.read alone sees today's balance but never the projection.
-    assert.equal(canSeeWidget(authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "gl.read"]), "kpi-cash-runway"), false);
+    assert.equal(
+      canSeeWidget(
+        authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "gl.read"]),
+        "kpi-cash-runway",
+      ),
+      false,
+    );
     const metrics = await pinClock(TODAY, () =>
       withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...RUNWAY_IDS])),
     );
-    assert.equal(toUnits(metrics.projectedCash ?? "0"), toUnits("4300"), "5000 cash minus the 700 bill");
+    assert.equal(
+      toUnits(metrics.projectedCash ?? "0"),
+      toUnits("4300"),
+      "5000 cash minus the 700 bill",
+    );
     assert.equal(toUnits(metrics.lowestCash ?? "0"), toUnits("4300"));
     assert.equal(metrics.runwayStatus, "healthy");
 
@@ -129,11 +165,19 @@ test("runway tile ties the banking cash page on the same org", { skip: !DB }, as
     // a fixed 8 here would compare two different horizons once the org
     // changes its default.
     const cfg = await withOrgContext(org.orgId, () => analyticsConfig(org.orgId, "cashflow"));
-    const horizon = cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks;
+    const horizon =
+      cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks;
     const caution = cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks;
     const position = await pinClock(TODAY, () =>
       withOrgContext(org.orgId, () =>
-        cashPosition(org.orgId, horizon, { weeklyCap: "0.0000", restrictToSafe: false, runwayCautionWeeks: caution }, undefined, undefined, null),
+        cashPosition(
+          org.orgId,
+          horizon,
+          { weeklyCap: "0.0000", restrictToSafe: false, runwayCautionWeeks: caution },
+          undefined,
+          undefined,
+          null,
+        ),
       ),
     );
     assert.equal(metrics.runwayWeeks, position.runwayWeeks, "runway ties the banking page");
@@ -150,10 +194,15 @@ test("blocked FX rates refuse into nulls; anything else still throws", { skip: !
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Runway Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "banking.read"]);
+    const authz = authzFor(org.orgId, actor as unknown as string, [
+      "dashboard.read",
+      "banking.read",
+    ]);
     const refusing: DashboardMoneyReaders = {
       ...throwingReaders([]),
-      cashPosition: (async () => { throw new MissingExchangeRateError("USD", "CAD", "2026-07-15"); }) as DashboardMoneyReaders["cashPosition"],
+      cashPosition: (async () => {
+        throw new MissingExchangeRateError("USD", "CAD", "2026-07-15");
+      }) as DashboardMoneyReaders["cashPosition"],
     };
     const nulled = await pinClock(TODAY, () =>
       withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...RUNWAY_IDS], refusing)),
@@ -166,10 +215,14 @@ test("blocked FX rates refuse into nulls; anything else still throws", { skip: !
 
     const exploding: DashboardMoneyReaders = {
       ...throwingReaders([]),
-      cashPosition: (async () => { throw new Error("ledger is on fire"); }) as DashboardMoneyReaders["cashPosition"],
+      cashPosition: (async () => {
+        throw new Error("ledger is on fire");
+      }) as DashboardMoneyReaders["cashPosition"],
     };
     await assert.rejects(
-      pinClock(TODAY, () => withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...RUNWAY_IDS], exploding))),
+      pinClock(TODAY, () =>
+        withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...RUNWAY_IDS], exploding)),
+      ),
       /ledger is on fire/,
       "an unexpected position failure must not masquerade as no-data",
     );
@@ -182,7 +235,13 @@ test("runway readers never run without banking.read", { skip: !DB }, async () =>
   const org = await withBypass(() => createScratchOrg());
   try {
     const deniedId = await withBypass(() => createScratchUser(org.orgId, "No Banking", "staff"));
-    const denied = authzFor(org.orgId, deniedId as unknown as string, ["dashboard.read", "gl.read", "ar.read", "ap.read", "reports.read"]);
+    const denied = authzFor(org.orgId, deniedId as unknown as string, [
+      "dashboard.read",
+      "gl.read",
+      "ar.read",
+      "ap.read",
+      "reports.read",
+    ]);
     assert.equal(canSeeWidget(denied, "kpi-cash-runway"), false);
     const calls: string[] = [];
     const readers = throwingReaders(calls);

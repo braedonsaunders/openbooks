@@ -79,7 +79,13 @@ export function BomRevisionDiffTable({
                 ))}
                 <TableCell>
                   <Badge
-                    variant={row.kind === "unchanged" ? "secondary" : row.kind === "removed" ? "destructive" : "default"}
+                    variant={
+                      row.kind === "unchanged"
+                        ? "secondary"
+                        : row.kind === "removed"
+                          ? "destructive"
+                          : "default"
+                    }
                   >
                     {row.kindLabel}
                   </Badge>

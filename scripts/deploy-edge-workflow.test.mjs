@@ -20,7 +20,10 @@ test("edge publishing follows an explicitly requested full suite, not routine st
   assert.match(deployWorkflow, /github\.event\.workflow_run\.event == 'workflow_dispatch'/);
   assert.match(deployWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/);
   assert.match(deployWorkflow, /github\.event\.workflow_run\.head_branch == 'main'/);
-  assert.match(deployWorkflow, /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/);
+  assert.match(
+    deployWorkflow,
+    /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/,
+  );
   assert.doesNotMatch(deployWorkflow, /github\.event\.workflow_run\.event == 'push'/);
 });
 
@@ -90,11 +93,7 @@ function assertExactPublishRunDataflow(source) {
     "the dispatch receipt must have exactly one assignment",
   );
   const responseIndex = dispatchStep.indexOf('dispatch_response="$(');
-  assert.notEqual(
-    responseIndex,
-    -1,
-    "the dispatch receipt must be captured in the dispatch step",
-  );
+  assert.notEqual(responseIndex, -1, "the dispatch receipt must be captured in the dispatch step");
   assert.match(
     dispatchStep,
     /dispatch_response="\$\(\n\s+gh api \\\n\s+--method POST \\\n/,
@@ -121,10 +120,7 @@ function assertExactPublishRunDataflow(source) {
     "the dispatch receipt's workflow_run_id must bind publish_run_id",
   );
   assert.equal(
-    occurrenceCount(
-      dispatchStep,
-      'echo "run_id=${publish_run_id}" >> "$GITHUB_OUTPUT"',
-    ),
+    occurrenceCount(dispatchStep, 'echo "run_id=${publish_run_id}" >> "$GITHUB_OUTPUT"'),
     1,
     "publish_run_id must become the publish step's run_id output",
   );
@@ -134,10 +130,7 @@ function assertExactPublishRunDataflow(source) {
     "run_id must have exactly one output write",
   );
   assert.equal(
-    occurrenceCount(
-      waitStep,
-      "PUBLISH_RUN_ID: ${{ steps.publish.outputs.run_id }}",
-    ),
+    occurrenceCount(waitStep, "PUBLISH_RUN_ID: ${{ steps.publish.outputs.run_id }}"),
     1,
     "the wait step must consume only the dispatch receipt output",
   );
@@ -196,8 +189,8 @@ test("edge deployment dispatches and watches the publish run for the tested comm
 test("the exact publish receipt cannot be rebound before the watch", () => {
   const mutations = [
     [
-      ".workflow_run_id | select(type == \"number\" and . > 0)",
-      ".id | select(type == \"number\" and . > 0)",
+      '.workflow_run_id | select(type == "number" and . > 0)',
+      '.id | select(type == "number" and . > 0)',
     ],
     [
       'echo "run_id=${publish_run_id}" >> "$GITHUB_OUTPUT"',
@@ -213,10 +206,7 @@ test("the exact publish receipt cannot be rebound before the watch", () => {
       'echo "run_id=${publish_run_id}" >> "$GITHUB_OUTPUT"\n' +
         '          echo "run_id=${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"',
     ],
-    [
-      "PUBLISH_RUN_ID: ${{ steps.publish.outputs.run_id }}",
-      "PUBLISH_RUN_ID: ${{ github.run_id }}",
-    ],
+    ["PUBLISH_RUN_ID: ${{ steps.publish.outputs.run_id }}", "PUBLISH_RUN_ID: ${{ github.run_id }}"],
     [
       'echo "Watching exact publish run ${PUBLISH_RUN_ID} for ${VERSION}."',
       'echo "Watching exact publish run ${PUBLISH_RUN_ID} for ${VERSION}."\n' +
@@ -269,10 +259,7 @@ test("manual container publishes validate and check out one pinned source commit
     publishWorkflow,
     "uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
   );
-  const pinnedCheckoutCount = occurrenceCount(
-    publishWorkflow,
-    "ref: ${{ env.SOURCE_COMMIT }}",
-  );
+  const pinnedCheckoutCount = occurrenceCount(publishWorkflow, "ref: ${{ env.SOURCE_COMMIT }}");
 
   assert.equal(checkoutCount, 3, "all three publish jobs should check out source");
   assert.equal(
@@ -281,10 +268,7 @@ test("manual container publishes validate and check out one pinned source commit
     "every publish-workflow checkout must use the pinned source commit",
   );
   assert.equal(
-    occurrenceCount(
-      publishWorkflow,
-      "org.opencontainers.image.revision=${{ env.SOURCE_COMMIT }}",
-    ),
+    occurrenceCount(publishWorkflow, "org.opencontainers.image.revision=${{ env.SOURCE_COMMIT }}"),
     2,
     "candidate and release metadata must identify the pinned source commit",
   );
@@ -292,23 +276,29 @@ test("manual container publishes validate and check out one pinned source commit
 
 test("container verification runs the deployment workflow contract test", () => {
   assert.equal(
-    occurrenceCount(
-      publishWorkflow,
-      "run: node --test scripts/deploy-edge-workflow.test.mjs",
-    ),
+    occurrenceCount(publishWorkflow, "run: node --test scripts/deploy-edge-workflow.test.mjs"),
     1,
     "the publish verification gate must execute this regression suite",
   );
 });
 
-
 test("publisher reuses static checks and executes focused financial release checks", () => {
-  const scripts = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts;
+  const scripts = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ).scripts;
   const checks = scripts["verify:release:checks"].split(" && ");
   // verify:release is the full gate (it runs `npm test`); the suite-free
   // policy subset it must track is verify:release:quick.
-  assert.deepEqual(checks, scripts["verify:release:quick"].split(" && ").filter(command =>
-    command !== "npm run typecheck --workspaces --if-present" && command !== "npm -w web run build"));
+  assert.deepEqual(
+    checks,
+    scripts["verify:release:quick"]
+      .split(" && ")
+      .filter(
+        (command) =>
+          command !== "npm run typecheck --workspaces --if-present" &&
+          command !== "npm -w web run build",
+      ),
+  );
   const merge = readFileSync(new URL("../.github/workflows/test.yml", import.meta.url), "utf8");
   assert.match(merge, /npm run typecheck --workspaces --if-present/);
   assert.match(merge, /npm run build -w web/);
@@ -319,15 +309,23 @@ test("publisher reuses static checks and executes focused financial release chec
   assert.doesNotMatch(publishWorkflow, /select\(\.name == "full-verification"\)/);
 });
 
-
 test("native builds scan both architectures before assembling the attested release", () => {
   assert.match(publishWorkflow, /arch: amd64\n\s+platform: linux\/amd64\n\s+runner: ubuntu-latest/);
-  assert.match(publishWorkflow, /arch: arm64\n\s+platform: linux\/arm64\n\s+runner: ubuntu-24.04-arm/);
+  assert.match(
+    publishWorkflow,
+    /arch: arm64\n\s+platform: linux\/arm64\n\s+runner: ubuntu-24.04-arm/,
+  );
   assert.doesNotMatch(publishWorkflow, /setup-qemu-action/);
   assert.match(publishWorkflow, /TRIVY_PLATFORM: \$\{\{ matrix.platform \}\}/);
   assert.match(publishWorkflow, /needs: \[verify, container-security\]/);
-  assert.ok(publishWorkflow.indexOf('Scan the native image') < publishWorkflow.indexOf('Record the scanned immutable image'));
-  assert.match(publishWorkflow, /scanned-image-manifest.mjs verify scanned-images merged-manifest.json/);
+  assert.ok(
+    publishWorkflow.indexOf("Scan the native image") <
+      publishWorkflow.indexOf("Record the scanned immutable image"),
+  );
+  assert.match(
+    publishWorkflow,
+    /scanned-image-manifest.mjs verify scanned-images merged-manifest.json/,
+  );
   assert.match(publishWorkflow, /subject-digest: \$\{\{ steps.merge.outputs.digest \}\}/);
   assert.match(publishWorkflow, /push-to-registry: true/);
 });

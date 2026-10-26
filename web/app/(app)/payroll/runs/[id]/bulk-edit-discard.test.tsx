@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import { bootJsdomEnvironment } from "../../../../../testing/jsdom-env";
 
 // BulkEditDrawer closed silently on a half-typed adjustment — Cancel,
 // the X button, Esc and the backdrop all dropped the typed component, amount
@@ -8,54 +8,57 @@ import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
 // confirmDiscard pattern: a clean drawer still closes without prompting, and
 // declining keeps the drawer open with the typed work intact). Mounts the
 // real drawer under jsdom and drives the close paths with a scripted confirm.
-await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/runs/doc-1', matchMediaMatches: false })
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/payroll/runs/doc-1",
+  matchMediaMatches: false,
+});
 
-const script = { confirmResult: false, confirmCalls: 0, closed: 0 }
-Object.assign(globalThis, { __bulkDiscard: script })
+const script = { confirmResult: false, confirmCalls: 0, closed: 0 };
+Object.assign(globalThis, { __bulkDiscard: script });
 
 // The confirm double stays suffix-wired: shared components import it through
 // several relative spellings plus `@/`, which one exact key cannot name.
-const { registerHooks: registerConfirmHook } = await import('node:module')
+const { registerHooks: registerConfirmHook } = await import("node:module");
 registerConfirmHook({
   resolve(specifier, context, next) {
-    if (specifier.endsWith('/lib/confirm')) {
+    if (specifier.endsWith("/lib/confirm")) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function confirmDialog(){const s=globalThis.__bulkDiscard;s.confirmCalls++;return s.confirmResult}',
-      }
+        url: "data:text/javascript,export async function confirmDialog(){const s=globalThis.__bulkDiscard;s.confirmCalls++;return s.confirmResult}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../../messages/en')).default
-const { BulkEditDrawer } = await import('./RunWizard')
+});
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../../messages/en")).default;
+const { BulkEditDrawer } = await import("./RunWizard");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const components = [
-  { id: 'comp-bonus', name: 'Bonus', kind: 'earning' },
-  { id: 'comp-tax', name: 'Extra tax', kind: 'deduction' },
-] as unknown as Parameters<typeof BulkEditDrawer>[0]['components']
+  { id: "comp-bonus", name: "Bonus", kind: "earning" },
+  { id: "comp-tax", name: "Extra tax", kind: "deduction" },
+] as unknown as Parameters<typeof BulkEditDrawer>[0]["components"];
 
 async function mount(t: TestContext): Promise<void> {
-  script.confirmResult = false
-  script.confirmCalls = 0
-  script.closed = 0
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+  script.confirmResult = false;
+  script.confirmCalls = 0;
+  script.closed = 0;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const child of [...document.body.children]) child.remove()
-  })
+      rootHandle.unmount();
+    });
+    host.remove();
+    for (const child of [...document.body.children]) child.remove();
+  });
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -64,84 +67,84 @@ async function mount(t: TestContext): Promise<void> {
           components={components}
           busy={false}
           onClose={() => {
-            script.closed++
+            script.closed++;
           }}
           onApply={async () => {}}
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 function amountInput(): HTMLInputElement {
-  const input = document.querySelector('input[aria-label="Amount"]') as HTMLInputElement | null
-  assert.ok(input, 'the amount field must render')
-  return input
+  const input = document.querySelector('input[aria-label="Amount"]') as HTMLInputElement | null;
+  assert.ok(input, "the amount field must render");
+  return input;
 }
 
 function cancelButton(): HTMLButtonElement {
-  const button = [...document.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === 'Cancel',
-  ) as HTMLButtonElement | undefined
-  assert.ok(button, 'the Cancel button must render')
-  return button
+  const button = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Cancel",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(button, "the Cancel button must render");
+  return button;
 }
 
 function closeButton(): HTMLButtonElement {
-  const button = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null
-  assert.ok(button, 'the drawer X button must render')
-  return button
+  const button = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
+  assert.ok(button, "the drawer X button must render");
+  return button;
 }
 
 async function typeAmount(value: string): Promise<void> {
-  const input = amountInput()
+  const input = amountInput();
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-    setter?.call(input, value)
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-    await tick()
-  })
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+    await tick();
+  });
 }
 
 async function click(button: HTMLButtonElement): Promise<void> {
   await act(async () => {
-    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
 }
 
-test('a dirty drawer asks before closing and keeps the typed work on decline', async (t) => {
-  await mount(t)
-  await typeAmount('100')
-  await click(cancelButton())
-  assert.equal(script.confirmCalls, 1, 'closing a dirty drawer must ask first')
-  assert.equal(script.closed, 0, 'declining the confirm must keep the drawer open')
-  assert.equal(amountInput().value, '100', 'the typed amount must survive the declined close')
-})
+test("a dirty drawer asks before closing and keeps the typed work on decline", async (t) => {
+  await mount(t);
+  await typeAmount("100");
+  await click(cancelButton());
+  assert.equal(script.confirmCalls, 1, "closing a dirty drawer must ask first");
+  assert.equal(script.closed, 0, "declining the confirm must keep the drawer open");
+  assert.equal(amountInput().value, "100", "the typed amount must survive the declined close");
+});
 
-test('accepting the confirm closes the dirty drawer', async (t) => {
-  await mount(t)
-  await typeAmount('100')
-  script.confirmResult = true
-  await click(cancelButton())
-  assert.equal(script.confirmCalls, 1, 'closing a dirty drawer must ask first')
-  assert.equal(script.closed, 1, 'accepting the confirm must close the drawer')
-})
+test("accepting the confirm closes the dirty drawer", async (t) => {
+  await mount(t);
+  await typeAmount("100");
+  script.confirmResult = true;
+  await click(cancelButton());
+  assert.equal(script.confirmCalls, 1, "closing a dirty drawer must ask first");
+  assert.equal(script.closed, 1, "accepting the confirm must close the drawer");
+});
 
-test('a clean drawer closes without asking', async (t) => {
-  await mount(t)
-  await click(cancelButton())
-  assert.equal(script.confirmCalls, 0, 'closing a clean drawer must not prompt')
-  assert.equal(script.closed, 1, 'a clean drawer must close')
-})
+test("a clean drawer closes without asking", async (t) => {
+  await mount(t);
+  await click(cancelButton());
+  assert.equal(script.confirmCalls, 0, "closing a clean drawer must not prompt");
+  assert.equal(script.closed, 1, "a clean drawer must close");
+});
 
-test('the X button asks too — every close path funnels through the guard', async (t) => {
-  await mount(t)
-  await typeAmount('100')
-  await click(closeButton())
-  assert.equal(script.confirmCalls, 1, 'the X button on a dirty drawer must ask first')
-  assert.equal(script.closed, 0, 'declining the confirm must keep the drawer open')
-})
+test("the X button asks too — every close path funnels through the guard", async (t) => {
+  await mount(t);
+  await typeAmount("100");
+  await click(closeButton());
+  assert.equal(script.confirmCalls, 1, "the X button on a dirty drawer must ask first");
+  assert.equal(script.closed, 0, "declining the confirm must keep the drawer open");
+});

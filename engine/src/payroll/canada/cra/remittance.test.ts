@@ -8,9 +8,7 @@ import {
   remittanceScheduleInForce,
   type PayrollRemittanceSchedule,
 } from "../../packs.ts";
-import {
-  scheduledRemittanceDueDateExplained,
-} from "../../remittance.ts";
+import { scheduledRemittanceDueDateExplained } from "../../remittance.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./remittance.ts";
 
 /**
@@ -162,9 +160,11 @@ test("a CRA schedule citing no source is refused — every rule must be verifiab
 test("a CRA schedule counting no positive working days is refused", () => {
   const bad: PayrollRemittanceSchedule = {
     ...CRA,
-    frequencies: CRA.frequencies.map((band) => band.frequency === "accelerated_2"
-      ? { ...band, due: { kind: "quarter_month_working_days", workingDays: 0 } }
-      : band),
+    frequencies: CRA.frequencies.map((band) =>
+      band.frequency === "accelerated_2"
+        ? { ...band, due: { kind: "quarter_month_working_days", workingDays: 0 } }
+        : band,
+    ),
   };
   assert.throws(
     () => allRemittanceSchedules({ CA: { ...payrollPack("CA"), remittanceSchedules: [bad] } }),
@@ -176,12 +176,14 @@ test("a CRA schedule with an unknown due-date rule kind is refused", () => {
   const bad: PayrollRemittanceSchedule = {
     ...CRA,
     vendorSettingsKey: "craRemittancePartyId",
-    frequencies: [{
-      frequency: "regular",
-      label: "Regular",
-      due: { kind: "fortnightly" } as never,
-      rule: "every fortnight",
-    }],
+    frequencies: [
+      {
+        frequency: "regular",
+        label: "Regular",
+        due: { kind: "fortnightly" } as never,
+        rule: "every fortnight",
+      },
+    ],
   };
   assert.throws(
     () => allRemittanceSchedules({ CA: { ...payrollPack("CA"), remittanceSchedules: [bad] } }),

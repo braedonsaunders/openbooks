@@ -98,7 +98,11 @@ function ordered(components: NettingComponent[]): NettingComponent[] {
 }
 
 /** Clear up to `amount` (positive units) across components in order; returns units cleared per key. */
-function clearInOrder(components: NettingComponent[], remaining: Map<string, bigint>, amount: bigint): Map<string, bigint> {
+function clearInOrder(
+  components: NettingComponent[],
+  remaining: Map<string, bigint>,
+  amount: bigint,
+): Map<string, bigint> {
   const cleared = new Map<string, bigint>();
   let left = amount;
   for (const component of components) {
@@ -110,7 +114,8 @@ function clearInOrder(components: NettingComponent[], remaining: Map<string, big
     remaining.set(component.key, open > 0n ? open - take : open + take);
     left -= take;
   }
-  if (left !== 0n) throw new NettingMathError("netting allocation exceeded the open amounts it was computed from");
+  if (left !== 0n)
+    throw new NettingMathError("netting allocation exceeded the open amounts it was computed from");
   return cleared;
 }
 
@@ -119,13 +124,20 @@ function clearInOrder(components: NettingComponent[], remaining: Map<string, big
  * transaction amount settled; settling the whole open amount releases the
  * whole carrying amount, so no rounding tail is left behind.
  */
-export function carryingForSettlement(openCarrying: string, openTransaction: string, settled: string): string {
+export function carryingForSettlement(
+  openCarrying: string,
+  openTransaction: string,
+  settled: string,
+): string {
   const openT = abs(toUnits(openTransaction));
   const settledT = abs(toUnits(settled));
   if (settledT === 0n) return "0.0000";
   if (settledT > openT) throw new NettingMathError("a settlement cannot exceed the open amount");
   const carrying = toUnits(openCarrying);
-  const magnitude = settledT === openT ? abs(carrying) : toUnits(mulRatio(fromUnits(abs(carrying)), settledT, openT));
+  const magnitude =
+    settledT === openT
+      ? abs(carrying)
+      : toUnits(mulRatio(fromUnits(abs(carrying)), settledT, openT));
   const signed = toUnits(settled) < 0n ? -magnitude : magnitude;
   return fromUnits(signed);
 }
@@ -160,19 +172,26 @@ export function allocatePairNetting(input: {
       throw new NettingMathError("a netting component identity must occur only once");
     }
     if (component.pairId !== input.pairId || component.currency !== input.currency) {
-      throw new NettingMathError("a netting component does not belong to the pair and currency being allocated");
+      throw new NettingMathError(
+        "a netting component does not belong to the pair and currency being allocated",
+      );
     }
-    if (component.subsidiaryId !== input.fromSubsidiaryId && component.subsidiaryId !== input.toSubsidiaryId) {
+    if (
+      component.subsidiaryId !== input.fromSubsidiaryId &&
+      component.subsidiaryId !== input.toSubsidiaryId
+    ) {
       throw new NettingMathError("a netting component belongs to neither entity of the pair");
     }
-    const counterparty = component.subsidiaryId === input.fromSubsidiaryId
-      ? input.toSubsidiaryId : input.fromSubsidiaryId;
+    const counterparty =
+      component.subsidiaryId === input.fromSubsidiaryId
+        ? input.toSubsidiaryId
+        : input.fromSubsidiaryId;
     if (component.counterpartySubsidiaryId !== counterparty) {
       throw new NettingMathError("a netting component must identify the other entity of its pair");
     }
     const open = toUnits(component.openTransaction);
     const carrying = toUnits(component.openCarrying);
-    if (open !== 0n && carrying !== 0n && (open < 0n) !== (carrying < 0n)) {
+    if (open !== 0n && carrying !== 0n && open < 0n !== carrying < 0n) {
       throw new NettingMathError(
         `${component.component === "open_item" ? "open item" : "intercompany position"} ${component.key} carries a functional amount of the opposite sign to its transaction amount`,
       );
@@ -180,7 +199,12 @@ export function allocatePairNetting(input: {
     remaining.set(component.key, open);
   }
   const sideOf = (subsidiaryId: string) =>
-    ordered(input.components.filter((component) => component.subsidiaryId === subsidiaryId && toUnits(component.openTransaction) !== 0n));
+    ordered(
+      input.components.filter(
+        (component) =>
+          component.subsidiaryId === subsidiaryId && toUnits(component.openTransaction) !== 0n,
+      ),
+    );
   const nettedBy = new Map<string, bigint>();
   const cashBy = new Map<string, bigint>();
   const nets = new Map<string, bigint>();
@@ -212,7 +236,8 @@ export function allocatePairNetting(input: {
     const amount = abs(cashToFrom);
     const receiverOpen = sideOf(receiver).filter((c) => (remaining.get(c.key) ?? 0n) > 0n);
     const payerOpen = sideOf(payer).filter((c) => (remaining.get(c.key) ?? 0n) < 0n);
-    for (const [key, units] of clearInOrder(receiverOpen, remaining, amount)) cashBy.set(key, units);
+    for (const [key, units] of clearInOrder(receiverOpen, remaining, amount))
+      cashBy.set(key, units);
     for (const [key, units] of clearInOrder(payerOpen, remaining, amount)) cashBy.set(key, -units);
   }
 
@@ -223,9 +248,10 @@ export function allocatePairNetting(input: {
     const cleared = netted + cash;
     const rate = input.rateFor(component.subsidiaryId);
     const clearedText = fromUnits(cleared);
-    const carryingCleared = cleared === 0n
-      ? "0.0000"
-      : carryingForSettlement(component.openCarrying, component.openTransaction, clearedText);
+    const carryingCleared =
+      cleared === 0n
+        ? "0.0000"
+        : carryingForSettlement(component.openCarrying, component.openTransaction, clearedText);
     const spotCleared = spotTranslation(clearedText, rate);
     allocations.push({
       ...component,
@@ -259,7 +285,9 @@ const ONE = 10_000n;
 function rateText(units: bigint): string {
   const whole = units / RATE_SCALE;
   if (whole.toString().length > 9) {
-    throw new NettingMathError("a carrying-rate translation exceeds the ledger's exchange-rate range");
+    throw new NettingMathError(
+      "a carrying-rate translation exceeds the ledger's exchange-rate range",
+    );
   }
   return `${whole}.${(units % RATE_SCALE).toString().padStart(10, "0")}`;
 }
@@ -286,8 +314,10 @@ export function carryingRateLines(txnAmount: string, functionalAmount: string): 
   const t = toUnits(txnAmount);
   const f = toUnits(functionalAmount);
   if (t === 0n) throw new NettingMathError("a translated line needs a non-zero transaction amount");
-  if (f === 0n || (t < 0n) !== (f < 0n)) {
-    throw new NettingMathError("a carrying amount must be non-zero and share the sign of its transaction amount");
+  if (f === 0n || t < 0n !== f < 0n) {
+    throw new NettingMathError(
+      "a carrying amount must be non-zero and share the sign of its transaction amount",
+    );
   }
   const sign = t < 0n ? -1n : 1n;
   const tAbs = abs(t);
@@ -295,9 +325,16 @@ export function carryingRateLines(txnAmount: string, functionalAmount: string): 
   const translate = (units: bigint, rateUnits: bigint) => roundDiv(units * rateUnits, RATE_SCALE);
   const single = roundDiv(fAbs * RATE_SCALE, tAbs);
   if (single > 0n && translate(tAbs, single) === fAbs) {
-    return [{ txnAmount: fromUnits(sign * tAbs), fxRate: rateText(single), amount: fromUnits(sign * fAbs) }];
+    return [
+      {
+        txnAmount: fromUnits(sign * tAbs),
+        fxRate: rateText(single),
+        amount: fromUnits(sign * fAbs),
+      },
+    ];
   }
-  if (tAbs <= ONE) throw new NettingMathError("a carrying amount cannot be represented at ledger precision");
+  if (tAbs <= ONE)
+    throw new NettingMathError("a carrying amount cannot be represented at ledger precision");
   const bodyTxn = tAbs - ONE;
   const bodyAmount = translate(bodyTxn, single);
   const tailAmount = fAbs - bodyAmount;
@@ -308,7 +345,15 @@ export function carryingRateLines(txnAmount: string, functionalAmount: string): 
   // reproduces that amount exactly (the rate has at most four decimals).
   const tailRate = tailAmount * (RATE_SCALE / ONE);
   return [
-    { txnAmount: fromUnits(sign * bodyTxn), fxRate: rateText(single), amount: fromUnits(sign * bodyAmount) },
-    { txnAmount: fromUnits(sign * ONE), fxRate: rateText(tailRate), amount: fromUnits(sign * tailAmount) },
+    {
+      txnAmount: fromUnits(sign * bodyTxn),
+      fxRate: rateText(single),
+      amount: fromUnits(sign * bodyAmount),
+    },
+    {
+      txnAmount: fromUnits(sign * ONE),
+      fxRate: rateText(tailRate),
+      amount: fromUnits(sign * tailAmount),
+    },
   ];
 }

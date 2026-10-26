@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { definitionHash, validateRuleVersion, type RuleVersionValidationContext } from "./validate.ts";
+import {
+  definitionHash,
+  validateRuleVersion,
+  type RuleVersionValidationContext,
+} from "./validate.ts";
 import type { AllocationRuleTarget, AllocationRuleVersion } from "./types.ts";
 
 function version(over: Partial<AllocationRuleVersion> = {}): AllocationRuleVersion {
@@ -40,7 +44,15 @@ function version(over: Partial<AllocationRuleVersion> = {}): AllocationRuleVersi
 }
 
 function ctx(over: Partial<RuleVersionValidationContext> = {}): RuleVersionValidationContext {
-  return { orgId: "org-1", ruleId: "rule-1", mode: "period", publishedVersions: [], activePostingBookIds: [], periods: [], ...over };
+  return {
+    orgId: "org-1",
+    ruleId: "rule-1",
+    mode: "period",
+    publishedVersions: [],
+    activePostingBookIds: [],
+    periods: [],
+    ...over,
+  };
 }
 
 const JAN_FEB = [
@@ -49,11 +61,19 @@ const JAN_FEB = [
 ];
 
 function tgt(over: Partial<AllocationRuleTarget> = {}): AllocationRuleTarget {
-  return { id: `t-${over.sequence ?? 1}`, sequence: over.sequence ?? 1, fixedPercent: "100", ...over };
+  return {
+    id: `t-${over.sequence ?? 1}`,
+    sequence: over.sequence ?? 1,
+    fixedPercent: "100",
+    ...over,
+  };
 }
 
-const codes = (v: AllocationRuleVersion, t: AllocationRuleTarget[], c: RuleVersionValidationContext): string[] =>
-  validateRuleVersion(v, t, c).map((p) => p.code);
+const codes = (
+  v: AllocationRuleVersion,
+  t: AllocationRuleTarget[],
+  c: RuleVersionValidationContext,
+): string[] => validateRuleVersion(v, t, c).map((p) => p.code);
 
 test("a well-formed fixed_percent version validates clean", () => {
   const problems = validateRuleVersion(
@@ -65,9 +85,21 @@ test("a well-formed fixed_percent version validates clean", () => {
 });
 
 test("dynamic minWeight accepts only exact non-negative decimal values", () => {
-  const dynamic = version({ targetKind: "dynamic", dynamicTarget: { dimension: "department", minWeight: "0x10" } });
+  const dynamic = version({
+    targetKind: "dynamic",
+    dynamicTarget: { dimension: "department", minWeight: "0x10" },
+  });
   assert.ok(codes(dynamic, [], ctx()).includes("dynamic_min_weight"));
-  assert.ok(!codes(version({ targetKind: "dynamic", dynamicTarget: { dimension: "department", minWeight: "16.25" } }), [], ctx()).includes("dynamic_min_weight"));
+  assert.ok(
+    !codes(
+      version({
+        targetKind: "dynamic",
+        dynamicTarget: { dimension: "department", minWeight: "16.25" },
+      }),
+      [],
+      ctx(),
+    ).includes("dynamic_min_weight"),
+  );
 });
 
 test("definitionHash is stable across target insert order and key order", () => {
@@ -97,18 +129,31 @@ test("definitionHash is stable across target insert order and key order", () => 
   assert.equal(definitionHash(fwd, [a]), definitionHash(rev, [a]));
   // Any definition change moves the hash.
   assert.notEqual(definitionHash(v, [a, b]), definitionHash(v, [{ ...a, fixedPercent: "61" }, b]));
-  assert.notEqual(definitionHash(v, [a, b]), definitionHash({ ...v, impact: "net_zero_pair" }, [a, b]));
+  assert.notEqual(
+    definitionHash(v, [a, b]),
+    definitionHash({ ...v, impact: "net_zero_pair" }, [a, b]),
+  );
 });
 
 test("definitionHash survives a numeric round-trip (30 vs 30.0000)", () => {
   const v = version();
-  const h1 = definitionHash(v, [tgt({ sequence: 1, fixedPercent: "30" }), tgt({ sequence: 2, fixedPercent: "70" })]);
-  const h2 = definitionHash(v, [tgt({ sequence: 1, fixedPercent: "30.0000" }), tgt({ sequence: 2, fixedPercent: "70.0000" })]);
+  const h1 = definitionHash(v, [
+    tgt({ sequence: 1, fixedPercent: "30" }),
+    tgt({ sequence: 2, fixedPercent: "70" }),
+  ]);
+  const h2 = definitionHash(v, [
+    tgt({ sequence: 1, fixedPercent: "30.0000" }),
+    tgt({ sequence: 2, fixedPercent: "70.0000" }),
+  ]);
   assert.equal(h1, h2);
 });
 
 test("fixed_percent grids are validated, never silently short", () => {
-  assert.ok(codes(version(), [tgt({ sequence: 1, fixedPercent: "30" })], ctx()).includes("fixed_percent_sum"));
+  assert.ok(
+    codes(version(), [tgt({ sequence: 1, fixedPercent: "30" })], ctx()).includes(
+      "fixed_percent_sum",
+    ),
+  );
   assert.ok(
     codes(
       version(),
@@ -117,19 +162,35 @@ test("fixed_percent grids are validated, never silently short", () => {
     ).includes("fixed_percent_sum"),
   );
   assert.ok(
-    codes(version(), [tgt({ sequence: 1, fixedPercent: "40", isRemainder: true }), tgt({ sequence: 2, isRemainder: true })], ctx()).includes(
-      "remainder_count",
+    codes(
+      version(),
+      [
+        tgt({ sequence: 1, fixedPercent: "40", isRemainder: true }),
+        tgt({ sequence: 2, isRemainder: true }),
+      ],
+      ctx(),
+    ).includes("remainder_count"),
+  );
+  assert.ok(
+    codes(version(), [tgt({ sequence: 1, fixedPercent: null })], ctx()).includes(
+      "fixed_percent_missing",
     ),
   );
   assert.ok(
-    codes(version(), [tgt({ sequence: 1, fixedPercent: null })], ctx()).includes("fixed_percent_missing"),
-  );
-  assert.ok(
-    codes(version(), [tgt({ sequence: 1, fixedPercent: "101" })], ctx()).includes("fixed_percent_range"),
+    codes(version(), [tgt({ sequence: 1, fixedPercent: "101" })], ctx()).includes(
+      "fixed_percent_range",
+    ),
   );
   // Remainder completing the grid is clean.
   assert.deepEqual(
-    codes(version(), [tgt({ sequence: 1, fixedPercent: "30" }), tgt({ sequence: 2, fixedPercent: null, isRemainder: true })], ctx()),
+    codes(
+      version(),
+      [
+        tgt({ sequence: 1, fixedPercent: "30" }),
+        tgt({ sequence: 2, fixedPercent: null, isRemainder: true }),
+      ],
+      ctx(),
+    ),
     [],
   );
 });
@@ -148,11 +209,17 @@ test("entry mode needs an apply policy and a target population", () => {
 });
 
 test("period mode needs a source measure and a usable basis", () => {
-  assert.ok(codes(version({ basisKind: "driver", driverId: null }), [tgt()], ctx()).includes("driver_missing"));
+  assert.ok(
+    codes(version({ basisKind: "driver", driverId: null }), [tgt()], ctx()).includes(
+      "driver_missing",
+    ),
+  );
   // Stepped execution exists in no runner, so no tier shape — however
   // well-formed — is publishable. Both spellings refuse by name.
   assert.ok(
-    codes(version({ basisKind: "stepped", basisConfig: {} }), [tgt()], ctx()).includes("stepped_basis"),
+    codes(version({ basisKind: "stepped", basisConfig: {} }), [tgt()], ctx()).includes(
+      "stepped_basis",
+    ),
   );
   assert.deepEqual(
     codes(
@@ -181,26 +248,48 @@ test("driver basis needs a known driver whose dimension matches the targets", ()
   const v = version({ basisKind: "driver", driverId: "drv-1" });
   assert.ok(codes(v, [tgt()], ctx({ driver: null })).includes("driver_unknown"));
   const deptDriver = { id: "drv-1", dimension: "department", isActive: true };
-  assert.ok(codes(v, [tgt({ departmentId: null })], ctx({ driver: deptDriver })).includes("driver_dimension"));
+  assert.ok(
+    codes(v, [tgt({ departmentId: null })], ctx({ driver: deptDriver })).includes(
+      "driver_dimension",
+    ),
+  );
   assert.deepEqual(codes(v, [tgt({ departmentId: "d1" })], ctx({ driver: deptDriver })), []);
   // Dynamic targets must resolve along the driver's dimension.
-  const dyn = version({ basisKind: "driver", driverId: "drv-1", targetKind: "dynamic", dynamicTarget: { dimension: "location" } });
+  const dyn = version({
+    basisKind: "driver",
+    driverId: "drv-1",
+    targetKind: "dynamic",
+    dynamicTarget: { dimension: "location" },
+  });
   assert.ok(codes(dyn, [], ctx({ driver: deptDriver })).includes("driver_dimension"));
   assert.deepEqual(
     codes({ ...dyn, dynamicTarget: { dimension: "department" } }, [], ctx({ driver: deptDriver })),
     [],
   );
-  assert.ok(codes(v, [tgt({ departmentId: "d1" })], ctx({ driver: { ...deptDriver, isActive: false } })).includes("driver_inactive"));
+  assert.ok(
+    codes(
+      v,
+      [tgt({ departmentId: "d1" })],
+      ctx({ driver: { ...deptDriver, isActive: false } }),
+    ).includes("driver_inactive"),
+  );
 });
 
 test("impact and offset must cohere", () => {
   assert.ok(
-    codes(version({ impact: "net_zero_pair", offsetAccountId: "acct-1" }), [tgt()], ctx()).includes("offset_impact"),
+    codes(version({ impact: "net_zero_pair", offsetAccountId: "acct-1" }), [tgt()], ctx()).includes(
+      "offset_impact",
+    ),
   );
   assert.ok(
-    codes(version({ impact: "report_only", offsetAccountId: "acct-1" }), [tgt()], ctx()).includes("offset_impact"),
+    codes(version({ impact: "report_only", offsetAccountId: "acct-1" }), [tgt()], ctx()).includes(
+      "offset_impact",
+    ),
   );
-  assert.deepEqual(codes(version({ impact: "reclass", offsetAccountId: "acct-1" }), [tgt()], ctx()), []);
+  assert.deepEqual(
+    codes(version({ impact: "reclass", offsetAccountId: "acct-1" }), [tgt()], ctx()),
+    [],
+  );
 });
 
 test("explicit residual policy needs a residual target that exists", () => {
@@ -216,17 +305,35 @@ test("published effective windows of one rule must not overlap", () => {
   const sib = { id: "sib-1", effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30" };
   const c = ctx({ publishedVersions: [sib] });
   // Touching on the boundary day still overlaps (closed intervals).
-  assert.ok(codes(version({ effectiveFrom: "2026-06-30" }), [tgt()], c).includes("effective_overlap"));
-  assert.ok(codes(version({ effectiveFrom: "2026-01-15", effectiveTo: "2026-02-01" }), [tgt()], c).includes("effective_overlap"));
+  assert.ok(
+    codes(version({ effectiveFrom: "2026-06-30" }), [tgt()], c).includes("effective_overlap"),
+  );
+  assert.ok(
+    codes(version({ effectiveFrom: "2026-01-15", effectiveTo: "2026-02-01" }), [tgt()], c).includes(
+      "effective_overlap",
+    ),
+  );
   assert.deepEqual(codes(version({ effectiveFrom: "2026-07-01" }), [tgt()], c), []);
   // Open-ended siblings overlap everything after their start.
-  const open = ctx({ publishedVersions: [{ id: "sib-2", effectiveFrom: "2026-01-01", effectiveTo: null }] });
-  assert.ok(codes(version({ effectiveFrom: "2027-01-01" }), [tgt()], open).includes("effective_overlap"));
+  const open = ctx({
+    publishedVersions: [{ id: "sib-2", effectiveFrom: "2026-01-01", effectiveTo: null }],
+  });
+  assert.ok(
+    codes(version({ effectiveFrom: "2027-01-01" }), [tgt()], open).includes("effective_overlap"),
+  );
   // The version never overlaps itself.
-  const self = ctx({ publishedVersions: [{ id: "version-1", effectiveFrom: "2026-01-01", effectiveTo: null }] });
+  const self = ctx({
+    publishedVersions: [{ id: "version-1", effectiveFrom: "2026-01-01", effectiveTo: null }],
+  });
   assert.deepEqual(codes(version({ effectiveFrom: "2026-03-01" }), [tgt()], self), []);
   // Inverted windows are refused outright.
-  assert.ok(codes(version({ effectiveFrom: "2026-05-01", effectiveTo: "2026-04-01" }), [tgt()], ctx()).includes("effective_window"));
+  assert.ok(
+    codes(
+      version({ effectiveFrom: "2026-05-01", effectiveTo: "2026-04-01" }),
+      [tgt()],
+      ctx(),
+    ).includes("effective_window"),
+  );
 });
 
 test("simultaneous solving is refused: the kernel executes sequentially only", () => {
@@ -252,7 +359,10 @@ test("net_zero_pair refuses explicit targets naming an account at publish", () =
     [tgt({ sequence: 1, fixedPercent: "100", targetAccountId: "account-1" })],
     ctx(),
   );
-  assert.ok(problems.some((p) => p.code === "net_zero_account"), JSON.stringify(problems));
+  assert.ok(
+    problems.some((p) => p.code === "net_zero_account"),
+    JSON.stringify(problems),
+  );
 });
 
 test("net_zero_pair refuses a dynamic targetAccountId at publish", () => {
@@ -265,7 +375,10 @@ test("net_zero_pair refuses a dynamic targetAccountId at publish", () => {
     [],
     ctx(),
   );
-  assert.ok(problems.some((p) => p.code === "net_zero_account"), JSON.stringify(problems));
+  assert.ok(
+    problems.some((p) => p.code === "net_zero_account"),
+    JSON.stringify(problems),
+  );
 });
 
 test("period-mode effective dates proven mid-period refuse with the boundary suggestion", () => {
@@ -279,7 +392,9 @@ test("period-mode effective dates proven mid-period refuse with the boundary sug
   const to = validateRuleVersion(
     version({ effectiveFrom: "2026-01-01", effectiveTo: "2026-01-14" }),
     [tgt()],
-    ctx({ periods: [{ label: "P12 FY2025", startsOn: "2025-12-01", endsOn: "2025-12-31" }, ...JAN_FEB] }),
+    ctx({
+      periods: [{ label: "P12 FY2025", startsOn: "2025-12-01", endsOn: "2025-12-31" }, ...JAN_FEB],
+    }),
   );
   const flaggedTo = to.find((p) => p.code === "effective_boundary");
   assert.ok(flaggedTo, `expected an effective_boundary problem, got ${JSON.stringify(to)}`);
@@ -291,7 +406,10 @@ test("period-mode effective dates proven mid-period refuse with the boundary sug
 test("period-mode boundary-aligned dates publish, unknown-calendar dates pass to the run-time check", () => {
   const c = ctx({ periods: JAN_FEB });
   assert.deepEqual(codes(version({ effectiveFrom: "2026-02-01" }), [tgt()], c), []);
-  assert.deepEqual(codes(version({ effectiveFrom: "2026-01-01", effectiveTo: "2026-01-31" }), [tgt()], c), []);
+  assert.deepEqual(
+    codes(version({ effectiveFrom: "2026-01-01", effectiveTo: "2026-01-31" }), [tgt()], c),
+    [],
+  );
   // Outside every known period: not provably mid-period, so publish passes
   // and the run-time crossing refusal stands guard instead.
   assert.deepEqual(codes(version({ effectiveFrom: "2026-05-01" }), [tgt()], c), []);
@@ -308,14 +426,23 @@ test("non-period modes never face the boundary proof", () => {
 });
 
 test("malformed dates report effective_window without a boundary echo", () => {
-  const problems = validateRuleVersion(version({ effectiveFrom: "not-a-date" }), [tgt()], ctx({ periods: JAN_FEB }));
-  assert.ok(problems.some((p) => p.code === "effective_window"), JSON.stringify(problems));
+  const problems = validateRuleVersion(
+    version({ effectiveFrom: "not-a-date" }),
+    [tgt()],
+    ctx({ periods: JAN_FEB }),
+  );
+  assert.ok(
+    problems.some((p) => p.code === "effective_window"),
+    JSON.stringify(problems),
+  );
   assert.ok(!problems.some((p) => p.code === "effective_boundary"), JSON.stringify(problems));
 });
 
-
 test("definitionHash refuses unreadable or over-precision amounts instead of fingerprinting them", () => {
   for (const value of ["1,234", "12,34", "1.00001", "invalid"]) {
-    assert.throws(() => definitionHash(version(), [tgt({ fixedPercent: value })]), /invalid decimal/);
+    assert.throws(
+      () => definitionHash(version(), [tgt({ fixedPercent: value })]),
+      /invalid decimal/,
+    );
   }
 });

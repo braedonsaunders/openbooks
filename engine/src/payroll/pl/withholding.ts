@@ -37,9 +37,9 @@ export const PL_WITHHOLDING: PayrollPackWithholding = {
       // ever runs. Revisit if one is ever declared.
       subRegionConflictRule: "work_only",
       citation:
-        "Ustawa o podatku dochodowym od osób fizycznych, art. 32 (zaliczki) "
-        + "i art. 27 ust. 1 (skala); ustawa o systemie ubezpieczeń "
-        + "społecznych, art. 16 i 22 (składki ZUS)",
+        "Ustawa o podatku dochodowym od osób fizycznych, art. 32 (zaliczki) " +
+        "i art. 27 ust. 1 (skala); ustawa o systemie ubezpieczeń " +
+        "społecznych, art. 16 i 22 (składki ZUS)",
     },
   ],
 };

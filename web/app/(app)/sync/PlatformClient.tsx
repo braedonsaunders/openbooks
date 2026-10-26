@@ -21,9 +21,20 @@ import {
 } from "lucide-react";
 import { MIGRATION_WORKSPACE_HREF } from "@/lib/migration/links";
 import Link from "next/link";
-import { ConnectionMappingWorkspace, ConnectionSyncContent, type MappingDrafts } from "./ConnectionContent";
+import {
+  ConnectionMappingWorkspace,
+  ConnectionSyncContent,
+  type MappingDrafts,
+} from "./ConnectionContent";
 import { decodeEntityMappings } from "@openbooks/engine/sync/entity-mapping-contract";
-import { connectorSettings, resolveSyncSelection, validateStructuredConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/sync/connection-settings";
+import {
+  connectorSettings,
+  resolveSyncSelection,
+  validateStructuredConnectionMappings,
+  type MappingGroup,
+  type SyncCapabilities,
+  type SyncContentKey,
+} from "@openbooks/engine/sync/connection-settings";
 import { RecordTabs } from "@/components/module-home/record-tabs";
 import { readApiErrorMessage, refusalMessageFromBody } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
@@ -52,12 +63,7 @@ import {
  * refuses these with 400 OAUTH_IDENTITY_REFUSED, so the edit drawer strips
  * them on prefill and on save instead of round-tripping them.
  */
-const CALLBACK_OWNED_CONFIG_KEYS = new Set([
-  "realmId",
-  "tenantId",
-  "companyId",
-  "companyName",
-]);
+const CALLBACK_OWNED_CONFIG_KEYS = new Set(["realmId", "tenantId", "companyId", "companyName"]);
 
 interface FieldSpec {
   key: string;
@@ -165,9 +171,26 @@ interface Run {
       projectPeriods?: { checked?: number; matches?: number } | null;
     };
     excludedPopulations?: SyncContentKey[];
-    attachments?: { sourceFiles: number; sourceLinks: number; createdFiles: number; newVersions: number; skippedUnchanged: number; failures: number };
-    operationalRecords?: { disabledFeatures: string[]; crm?: { accounts: number; opportunities: number }; fixedAssets?: { target: { assets: number } } };
-    projectFinancials?: { sourceProjects: number; changedProjects: number; sourceTimeEntries: number; exactTimeEntries: number; changedTimeEntries: number };
+    attachments?: {
+      sourceFiles: number;
+      sourceLinks: number;
+      createdFiles: number;
+      newVersions: number;
+      skippedUnchanged: number;
+      failures: number;
+    };
+    operationalRecords?: {
+      disabledFeatures: string[];
+      crm?: { accounts: number; opportunities: number };
+      fixedAssets?: { target: { assets: number } };
+    };
+    projectFinancials?: {
+      sourceProjects: number;
+      changedProjects: number;
+      sourceTimeEntries: number;
+      exactTimeEntries: number;
+      changedTimeEntries: number;
+    };
     sourceFiles?: number;
     sourceLinks?: number;
     createdFiles?: number;
@@ -213,29 +236,34 @@ interface Payload {
   canManage?: boolean;
 }
 
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> =
-  {
-    active: "success",
-    paused: "secondary",
-    error: "destructive",
-    unconfigured: "secondary",
-  };
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> = {
+  active: "success",
+  paused: "secondary",
+  error: "destructive",
+  unconfigured: "secondary",
+};
 
 function subscribeSyncNavigation(onChange: () => void): () => void {
   window.addEventListener("popstate", onChange);
   return () => window.removeEventListener("popstate", onChange);
 }
 function readSyncTab(): "connections" | "history" {
-  return new URLSearchParams(window.location.search).get("tab") === "history" ? "history" : "connections";
+  return new URLSearchParams(window.location.search).get("tab") === "history"
+    ? "history"
+    : "connections";
 }
 
 export function PlatformClient() {
   const { dateTime, number } = useViewerFormat();
-  const fmt = (ts: string | null) => ts ? dateTime(new Date(ts)) : "—";
+  const fmt = (ts: string | null) => (ts ? dateTime(new Date(ts)) : "—");
   const t = useTranslations("sync");
   const tHub = useTranslations("admin.hub");
   const tCommon = useTranslations("common");
-  const activeTab = useSyncExternalStore(subscribeSyncNavigation, readSyncTab, () => "connections" as const);
+  const activeTab = useSyncExternalStore(
+    subscribeSyncNavigation,
+    readSyncTab,
+    () => "connections" as const,
+  );
   const actionMenu = useContextMenu();
   const [actionConnection, setActionConnection] = useState<Connection | null>(null);
   function selectTab(tab: "connections" | "history") {
@@ -253,9 +281,10 @@ export function PlatformClient() {
   // and a transport failure offers a retry instead of spinning forever.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // `${id}:${action}`
-  const [drawer, setDrawer] = useState<{ editing: Connection | null; presetSource?: string } | null>(
-    null,
-  );
+  const [drawer, setDrawer] = useState<{
+    editing: Connection | null;
+    presetSource?: string;
+  } | null>(null);
   // The GET payload says whether the caller may reconfigure connections
   // (admin.setup.manage). A missing flag — a stale cached payload — reads
   // as manageable; the API still refuses run-only callers, so the worst
@@ -265,8 +294,13 @@ export function PlatformClient() {
   // connection for that source once the manifest has loaded. Read once at
   // mount; closing or saving the drawer consumes it.
   const [connectRequest, setConnectRequest] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("connect"));
-  const openDrawer = drawer ?? (connectRequest && data && canManage ? { editing: null, presetSource: connectRequest } : null);
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("connect"),
+  );
+  const openDrawer =
+    drawer ??
+    (connectRequest && data && canManage ? { editing: null, presetSource: connectRequest } : null);
   const closeDrawer = () => {
     setDrawer(null);
     if (connectRequest) {
@@ -291,7 +325,9 @@ export function PlatformClient() {
         // the named grant ("missing permission: sync.run") and lands in
         // the error panel below, never in the empty state.
         if (!res.ok) {
-          setLoadError(await readApiErrorMessage(res, t("toast.loadFailed", { status: res.status })));
+          setLoadError(
+            await readApiErrorMessage(res, t("toast.loadFailed", { status: res.status })),
+          );
           setLoading(false);
           return;
         }
@@ -345,12 +381,10 @@ export function PlatformClient() {
   // otherwise fall back to the raw value (e.g. a kind added server-side first).
   const statusLabel = (s: string) =>
     t.has(`connections.status.${s}`) ? t(`connections.status.${s}`) : s;
-  const kindLabel = (k: string) =>
-    t.has(`runs.kind.${k}`) ? t(`runs.kind.${k}`) : k;
+  const kindLabel = (k: string) => (t.has(`runs.kind.${k}`) ? t(`runs.kind.${k}`) : k);
   const sourceLabel = (s: string) =>
     data?.sourceTypes.find((st) => st.source === s)?.displayName ?? s;
-  const runStatusLabel = (s: string) =>
-    t.has(`runs.status.${s}`) ? t(`runs.status.${s}`) : s;
+  const runStatusLabel = (s: string) => (t.has(`runs.status.${s}`) ? t(`runs.status.${s}`) : s);
 
   function runResult(r: Run): string {
     if (r.status !== "ok" || !r.stats) return r.errorMessage ?? "";
@@ -405,29 +439,53 @@ export function PlatformClient() {
           }),
         );
       }
-      const blockers =
-        (s.sourceUnbuildable ?? 0) +
-        (s.actionableSourceDeletions?.length ?? 0);
+      const blockers = (s.sourceUnbuildable ?? 0) + (s.actionableSourceDeletions?.length ?? 0);
       if (blockers > 0) {
         parts.push(t("runs.stats.preflightBlockers", { count: blockers }));
       }
-      if (s.settlementObservation?.nonpostingRefs.length) parts.push(t("runs.stats.nonpostingSettlements", {
-      count: s.settlementObservation.nonpostingRefs.length,
-    }));
-    if (s.attachments) parts.push(t("runs.stats.incrementalAttachments", {
-      created: s.attachments.createdFiles, changed: s.attachments.newVersions, skipped: s.attachments.skippedUnchanged,
-    }));
-    if (s.projectFinancials) parts.push(t("runs.stats.projectFinancials", {
-      projects: s.projectFinancials.sourceProjects, projectChanges: s.projectFinancials.changedProjects,
-      source: s.projectFinancials.sourceTimeEntries, exact: s.projectFinancials.exactTimeEntries,
-      changed: s.projectFinancials.changedTimeEntries,
-    }));
-    if (s.operationalRecords?.crm) parts.push(t("runs.stats.crm", { accounts: s.operationalRecords.crm.accounts, opportunities: s.operationalRecords.crm.opportunities }));
-    if (s.operationalRecords?.fixedAssets) parts.push(t("runs.stats.fixedAssets", { count: s.operationalRecords.fixedAssets.target.assets }));
-    for (const feature of s.operationalRecords?.disabledFeatures ?? []) {
-      parts.push(t("runs.stats.featureDisabled", { feature: t.has(`runs.features.${feature}`) ? t(`runs.features.${feature}`) : feature }));
-    }
-    return parts.join(" · ");
+      if (s.settlementObservation?.nonpostingRefs.length)
+        parts.push(
+          t("runs.stats.nonpostingSettlements", {
+            count: s.settlementObservation.nonpostingRefs.length,
+          }),
+        );
+      if (s.attachments)
+        parts.push(
+          t("runs.stats.incrementalAttachments", {
+            created: s.attachments.createdFiles,
+            changed: s.attachments.newVersions,
+            skipped: s.attachments.skippedUnchanged,
+          }),
+        );
+      if (s.projectFinancials)
+        parts.push(
+          t("runs.stats.projectFinancials", {
+            projects: s.projectFinancials.sourceProjects,
+            projectChanges: s.projectFinancials.changedProjects,
+            source: s.projectFinancials.sourceTimeEntries,
+            exact: s.projectFinancials.exactTimeEntries,
+            changed: s.projectFinancials.changedTimeEntries,
+          }),
+        );
+      if (s.operationalRecords?.crm)
+        parts.push(
+          t("runs.stats.crm", {
+            accounts: s.operationalRecords.crm.accounts,
+            opportunities: s.operationalRecords.crm.opportunities,
+          }),
+        );
+      if (s.operationalRecords?.fixedAssets)
+        parts.push(
+          t("runs.stats.fixedAssets", { count: s.operationalRecords.fixedAssets.target.assets }),
+        );
+      for (const feature of s.operationalRecords?.disabledFeatures ?? []) {
+        parts.push(
+          t("runs.stats.featureDisabled", {
+            feature: t.has(`runs.features.${feature}`) ? t(`runs.features.${feature}`) : feature,
+          }),
+        );
+      }
+      return parts.join(" · ");
     }
     const parts = [
       t("runs.stats.docs", {
@@ -437,13 +495,9 @@ export function PlatformClient() {
       }),
     ];
     if ((s.applications?.inserted ?? 0) > 0)
-      parts.push(
-        t("runs.stats.applied", { count: s.applications?.inserted ?? 0 }),
-      );
+      parts.push(t("runs.stats.applied", { count: s.applications?.inserted ?? 0 }));
     if ((s.partyMerges?.length ?? 0) > 0)
-      parts.push(
-        t("runs.stats.partyMerges", { count: s.partyMerges?.length ?? 0 }),
-      );
+      parts.push(t("runs.stats.partyMerges", { count: s.partyMerges?.length ?? 0 }));
     if ((s.partyHolds?.length ?? 0) > 0)
       parts.push(t("runs.stats.partyHolds", { count: s.partyHolds?.length ?? 0 }));
     let tb = t("runs.stats.tb", {
@@ -474,21 +528,49 @@ export function PlatformClient() {
           checked: s.projectPeriods.checked ?? 0,
         }),
       );
-    if (s.settlementObservation?.nonpostingRefs.length) parts.push(t("runs.stats.nonpostingSettlements", {
-      count: s.settlementObservation.nonpostingRefs.length,
-    }));
-    if (s.attachments) parts.push(t("runs.stats.incrementalAttachments", {
-      created: s.attachments.createdFiles, changed: s.attachments.newVersions, skipped: s.attachments.skippedUnchanged,
-    }));
-    if (s.projectFinancials) parts.push(t("runs.stats.projectFinancials", {
-      projects: s.projectFinancials.sourceProjects, projectChanges: s.projectFinancials.changedProjects,
-      source: s.projectFinancials.sourceTimeEntries, exact: s.projectFinancials.exactTimeEntries,
-      changed: s.projectFinancials.changedTimeEntries,
-    }));
-    if (s.operationalRecords?.crm) parts.push(t("runs.stats.crm", { accounts: s.operationalRecords.crm.accounts, opportunities: s.operationalRecords.crm.opportunities }));
-    if (s.operationalRecords?.fixedAssets) parts.push(t("runs.stats.fixedAssets", { count: s.operationalRecords.fixedAssets.target.assets }));
-    for (const feature of s.operationalRecords?.disabledFeatures ?? []) parts.push(t("runs.stats.featureDisabled", { feature: t(`drawer.syncContent.labels.${feature}`) }));
-    for (const key of s.excludedPopulations ?? []) parts.push(t("runs.stats.contentExcluded", { content: t(`drawer.syncContent.labels.${key}`) }));
+    if (s.settlementObservation?.nonpostingRefs.length)
+      parts.push(
+        t("runs.stats.nonpostingSettlements", {
+          count: s.settlementObservation.nonpostingRefs.length,
+        }),
+      );
+    if (s.attachments)
+      parts.push(
+        t("runs.stats.incrementalAttachments", {
+          created: s.attachments.createdFiles,
+          changed: s.attachments.newVersions,
+          skipped: s.attachments.skippedUnchanged,
+        }),
+      );
+    if (s.projectFinancials)
+      parts.push(
+        t("runs.stats.projectFinancials", {
+          projects: s.projectFinancials.sourceProjects,
+          projectChanges: s.projectFinancials.changedProjects,
+          source: s.projectFinancials.sourceTimeEntries,
+          exact: s.projectFinancials.exactTimeEntries,
+          changed: s.projectFinancials.changedTimeEntries,
+        }),
+      );
+    if (s.operationalRecords?.crm)
+      parts.push(
+        t("runs.stats.crm", {
+          accounts: s.operationalRecords.crm.accounts,
+          opportunities: s.operationalRecords.crm.opportunities,
+        }),
+      );
+    if (s.operationalRecords?.fixedAssets)
+      parts.push(
+        t("runs.stats.fixedAssets", { count: s.operationalRecords.fixedAssets.target.assets }),
+      );
+    for (const feature of s.operationalRecords?.disabledFeatures ?? [])
+      parts.push(
+        t("runs.stats.featureDisabled", { feature: t(`drawer.syncContent.labels.${feature}`) }),
+      );
+    for (const key of s.excludedPopulations ?? [])
+      parts.push(
+        t("runs.stats.contentExcluded", { content: t(`drawer.syncContent.labels.${key}`) }),
+      );
     return parts.join(" · ");
   }
 
@@ -564,11 +646,7 @@ export function PlatformClient() {
       cell: (r) => (
         <Badge
           variant={
-            r.status === "ok"
-              ? "success"
-              : r.status === "failed"
-                ? "destructive"
-                : "secondary"
+            r.status === "ok" ? "success" : r.status === "failed" ? "destructive" : "secondary"
           }
         >
           {runStatusLabel(r.status)}
@@ -592,12 +670,7 @@ export function PlatformClient() {
 
   async function run(
     conn: Connection,
-    mode:
-      | "full_migration"
-      | "preflight"
-      | "mirror"
-      | "project_financials"
-      | "attachments",
+    mode: "full_migration" | "preflight" | "mirror" | "project_financials" | "attachments",
   ) {
     const key = `${conn.id}:${mode}`;
     setBusy(key);
@@ -606,11 +679,11 @@ export function PlatformClient() {
         ? t("toast.queuingMigration")
         : mode === "preflight"
           ? t("toast.queuingPreflight")
-        : mode === "project_financials"
-          ? t("toast.queuingProjectFinancials")
-        : mode === "attachments"
-          ? t("toast.queuingAttachments")
-          : t("toast.queuingMirror"),
+          : mode === "project_financials"
+            ? t("toast.queuingProjectFinancials")
+            : mode === "attachments"
+              ? t("toast.queuingAttachments")
+              : t("toast.queuingMirror"),
     );
     try {
       const res = await fetch(`/api/platform/connections/${conn.id}/run`, {
@@ -624,25 +697,19 @@ export function PlatformClient() {
       if (!res.ok) {
         const errorBody = (await res.json().catch(() => null)) as { errorCode?: unknown } | null;
         const key =
-          typeof errorBody?.errorCode === "string"
-            ? `toast.runErrors.${errorBody.errorCode}`
-            : "";
-        throw new Error(
-          key && t.has(key)
-            ? t(key)
-            : t("toast.runFailed", { status: res.status }),
-        );
+          typeof errorBody?.errorCode === "string" ? `toast.runErrors.${errorBody.errorCode}` : "";
+        throw new Error(key && t.has(key) ? t(key) : t("toast.runFailed", { status: res.status }));
       }
       toast.success(
         mode === "full_migration"
           ? t("toast.migrationQueued")
           : mode === "preflight"
             ? t("toast.preflightQueued")
-          : mode === "project_financials"
-            ? t("toast.projectFinancialsQueued")
-          : mode === "attachments"
-            ? t("toast.attachmentsQueued")
-            : t("toast.mirrorQueued"),
+            : mode === "project_financials"
+              ? t("toast.projectFinancialsQueued")
+              : mode === "attachments"
+                ? t("toast.attachmentsQueued")
+                : t("toast.mirrorQueued"),
         { id: tid },
       );
       setTimeout(() => void load(), 800);
@@ -664,7 +731,10 @@ export function PlatformClient() {
       // The status is checked before the body is parsed: a refusal (404/409/
       // 422) or a non-JSON error body (a 500 page, a gateway) must surface
       // the failure, never a SyntaxError from res.json().
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("toast.testFailed", { error: t("toast.unknownError") })));
+      if (!res.ok)
+        throw new Error(
+          await readApiErrorMessage(res, t("toast.testFailed", { error: t("toast.unknownError") })),
+        );
       const body = (await res.json().catch(() => null)) as {
         ok?: unknown;
         detail?: unknown;
@@ -750,33 +820,84 @@ export function PlatformClient() {
     }
   }
 
-  const connectionActions: ContextMenuEntry[] = actionConnection ? (() => {
-    const c = data?.connections.find((connection) => connection.id === actionConnection.id);
-    if (!c) return [];
-    const blocked = busy !== null || (data?.runs ?? []).some((r) => r.connectionId === c.id && r.status === "running");
-    const items: ContextMenuEntry[] = [
-      { key: "test", label: t("actions.test"), icon: FlaskConical, disabled: busy !== null, onSelect: () => void test(c) },
-      { key: "preflight", label: t("actions.preflight"), icon: BookOpen, disabled: blocked || c.status === "unconfigured", onSelect: () => void run(c, "preflight") },
-      { key: "migration", label: t("actions.runMigration"), icon: Play, disabled: blocked || c.status === "unconfigured", onSelect: () => void run(c, "full_migration") },
-    ];
-    if (c.authKind === "oauth2") items.push({ key: "reconnect", label: t("actions.reconnect"), icon: Plug,
-      onSelect: () => { window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, "_blank"); } });
-    if (c.source === "qbd") items.push({ key: "qwc", label: t("actions.downloadQwc"), icon: Download,
-      onSelect: () => {
-        const download = document.createElement("a");
-        download.href = `/api/platform/connections/${c.id}/qwc`;
-        download.download = "";
-        document.body.append(download);
-        download.click();
-        download.remove();
-      } });
-    if (canManage) items.push(
-      { key: "management", separator: true },
-      { key: "edit", label: t("actions.edit"), icon: Pencil, disabled: busy !== null, onSelect: () => setDrawer({ editing: c }) },
-      { key: "remove", label: t("actions.remove", { name: c.displayName }), icon: Trash2, danger: true, disabled: blocked, onSelect: () => void remove(c) },
-    );
-    return items;
-  })() : [];
+  const connectionActions: ContextMenuEntry[] = actionConnection
+    ? (() => {
+        const c = data?.connections.find((connection) => connection.id === actionConnection.id);
+        if (!c) return [];
+        const blocked =
+          busy !== null ||
+          (data?.runs ?? []).some((r) => r.connectionId === c.id && r.status === "running");
+        const items: ContextMenuEntry[] = [
+          {
+            key: "test",
+            label: t("actions.test"),
+            icon: FlaskConical,
+            disabled: busy !== null,
+            onSelect: () => void test(c),
+          },
+          {
+            key: "preflight",
+            label: t("actions.preflight"),
+            icon: BookOpen,
+            disabled: blocked || c.status === "unconfigured",
+            onSelect: () => void run(c, "preflight"),
+          },
+          {
+            key: "migration",
+            label: t("actions.runMigration"),
+            icon: Play,
+            disabled: blocked || c.status === "unconfigured",
+            onSelect: () => void run(c, "full_migration"),
+          },
+        ];
+        if (c.authKind === "oauth2")
+          items.push({
+            key: "reconnect",
+            label: t("actions.reconnect"),
+            icon: Plug,
+            onSelect: () => {
+              window.open(
+                `/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`,
+                "_blank",
+              );
+            },
+          });
+        if (c.source === "qbd")
+          items.push({
+            key: "qwc",
+            label: t("actions.downloadQwc"),
+            icon: Download,
+            onSelect: () => {
+              const download = document.createElement("a");
+              download.href = `/api/platform/connections/${c.id}/qwc`;
+              download.download = "";
+              document.body.append(download);
+              download.click();
+              download.remove();
+            },
+          });
+        if (canManage)
+          items.push(
+            { key: "management", separator: true },
+            {
+              key: "edit",
+              label: t("actions.edit"),
+              icon: Pencil,
+              disabled: busy !== null,
+              onSelect: () => setDrawer({ editing: c }),
+            },
+            {
+              key: "remove",
+              label: t("actions.remove", { name: c.displayName }),
+              icon: Trash2,
+              danger: true,
+              disabled: blocked,
+              onSelect: () => void remove(c),
+            },
+          );
+        return items;
+      })()
+    : [];
 
   return (
     <ListPageLayout
@@ -785,205 +906,259 @@ export function PlatformClient() {
           back={{ href: "/admin", label: tHub("title") }}
           title={t("title")}
           description={t("description")}
-          actions={canManage ? (
-            <div className="flex items-center gap-2">
-              <Button asChild variant="outline">
-                <Link href={MIGRATION_WORKSPACE_HREF}>
-                  <Sparkles size={15} /> {t("migrationAssistant.entry.sync")}
-                </Link>
-              </Button>
-              <Button onClick={() => setDrawer({ editing: null })}>
-                <Plus size={15} /> {t("connections.add")}
-              </Button>
-            </div>
-          ) : undefined}
+          actions={
+            canManage ? (
+              <div className="flex items-center gap-2">
+                <Button asChild variant="outline">
+                  <Link href={MIGRATION_WORKSPACE_HREF}>
+                    <Sparkles size={15} /> {t("migrationAssistant.entry.sync")}
+                  </Link>
+                </Button>
+                <Button onClick={() => setDrawer({ editing: null })}>
+                  <Plus size={15} /> {t("connections.add")}
+                </Button>
+              </div>
+            ) : undefined
+          }
         />
       }
     >
-      <RecordTabs label={t("title")} active={activeTab} onChange={selectTab}
-        tabs={[{ key: "connections", label: t("connections.heading") }, { key: "history", label: t("runs.history") }]}>
-      {loading ? (
-        <p className="mt-4 text-sm text-slate-500">
-          {t("connections.loading")}
-        </p>
-      ) : loadError ? (
-        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
-          <Plug className="mx-auto mb-2 text-slate-400" size={22} />
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            {loadError}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={retryLoad}
-          >
-            {tCommon("actions.retry")}
-          </Button>
-        </div>
-      ) : activeTab === "history" ? (
-        <div className="mt-4"><PagedTable source="sync_runs" rows={data?.runs ?? []} columns={runColumns} pageSize={15} searchable
-          rowKey={(r) => r.id} empty={<p className="text-sm text-slate-500">{t("runs.empty")}</p>} /></div>
-      ) : !data || data.connections.length === 0 ? (
-        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
-          <Plug className="mx-auto mb-2 text-slate-400" size={22} />
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            {t("connections.empty.title")}
-          </p>
-          <p className="text-xs text-slate-500">
-            {t("connections.empty.hint")}
-          </p>
-        </div>
-      ) : (
-        <div className="mt-4 space-y-3">
-          {data.connections.map((c) => (
-            <div
-              key={c.id}
-              className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0 space-y-2">
-                  <span className="block text-base font-semibold text-slate-800 dark:text-slate-100">
-                    {c.displayName}
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{sourceLabel(c.source)}</Badge>
-                  <Badge variant={STATUS_VARIANT[c.status] ?? "secondary"}>
-                    {statusLabel(c.status)}
-                  </Badge>
-                  {c.mirrorEnabled ? (
-                    <Badge variant="success">
-                      {t("connections.mirrorBadge", {
-                        schedule: c.mirrorSchedule,
-                      })}
-                    </Badge>
-                  ) : null}
+      <RecordTabs
+        label={t("title")}
+        active={activeTab}
+        onChange={selectTab}
+        tabs={[
+          { key: "connections", label: t("connections.heading") },
+          { key: "history", label: t("runs.history") },
+        ]}
+      >
+        {loading ? (
+          <p className="mt-4 text-sm text-slate-500">{t("connections.loading")}</p>
+        ) : loadError ? (
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+            <Plug className="mx-auto mb-2 text-slate-400" size={22} />
+            <p className="text-sm text-slate-600 dark:text-slate-300">{loadError}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={retryLoad}>
+              {tCommon("actions.retry")}
+            </Button>
+          </div>
+        ) : activeTab === "history" ? (
+          <div className="mt-4">
+            <PagedTable
+              source="sync_runs"
+              rows={data?.runs ?? []}
+              columns={runColumns}
+              pageSize={15}
+              searchable
+              rowKey={(r) => r.id}
+              empty={<p className="text-sm text-slate-500">{t("runs.empty")}</p>}
+            />
+          </div>
+        ) : !data || data.connections.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+            <Plug className="mx-auto mb-2 text-slate-400" size={22} />
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {t("connections.empty.title")}
+            </p>
+            <p className="text-xs text-slate-500">{t("connections.empty.hint")}</p>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {data.connections.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 space-y-2">
+                    <span className="block text-base font-semibold text-slate-800 dark:text-slate-100">
+                      {c.displayName}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{sourceLabel(c.source)}</Badge>
+                      <Badge variant={STATUS_VARIANT[c.status] ?? "secondary"}>
+                        {statusLabel(c.status)}
+                      </Badge>
+                      {c.mirrorEnabled ? (
+                        <Badge variant="success">
+                          {t("connections.mirrorBadge", {
+                            schedule: c.mirrorSchedule,
+                          })}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {c.authKind === "oauth2" && c.status !== "active" ? (
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          window.open(
+                            `/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`,
+                            "_blank",
+                          )
+                        }
+                      >
+                        <Plug size={14} /> {t("actions.connect")}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        disabled={
+                          busy !== null ||
+                          data.runs.some(
+                            (r) => r.connectionId === c.id && r.status === "running",
+                          ) ||
+                          c.status === "unconfigured"
+                        }
+                        onClick={() => void run(c, "mirror")}
+                      >
+                        <RefreshCw size={14} /> {t("actions.syncNow")}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={t("actions.more", { name: c.displayName })}
+                      aria-haspopup="menu"
+                      aria-expanded={actionMenu.open && actionConnection?.id === c.id}
+                      onClick={(event) => {
+                        setActionConnection(c);
+                        actionMenu.openBelow(event.currentTarget);
+                      }}
+                    >
+                      <MoreHorizontal size={18} />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {c.authKind === "oauth2" && c.status !== "active" ? (
-                    <Button size="sm" onClick={() => window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, "_blank")}>
-                      <Plug size={14} /> {t("actions.connect")}
-                    </Button>
-                  ) : (
-                    <Button size="sm" disabled={busy !== null || data.runs.some((r) => r.connectionId === c.id && r.status === "running") || c.status === "unconfigured"}
-                      onClick={() => void run(c, "mirror")}>
-                      <RefreshCw size={14} /> {t("actions.syncNow")}
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="sm" aria-label={t("actions.more", { name: c.displayName })} aria-haspopup="menu"
-                    aria-expanded={actionMenu.open && actionConnection?.id === c.id}
-                    onClick={(event) => { setActionConnection(c); actionMenu.openBelow(event.currentTarget); }}>
-                    <MoreHorizontal size={18} />
-                  </Button>
+                <div className="mt-2 text-xs text-slate-500">
+                  {t("connections.lastRun", {
+                    lastRun: fmt(c.lastRunAt),
+                    cursor: fmt(c.cursor),
+                  })}
+                  {c.lastError ? <span className="text-red-500"> · {c.lastError}</span> : null}
                 </div>
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                {t("connections.lastRun", {
-                  lastRun: fmt(c.lastRunAt),
-                  cursor: fmt(c.cursor),
-                })}
-                {c.lastError ? (
-                  <span className="text-red-500"> · {c.lastError}</span>
-                ) : null}
-              </div>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                <span>
-                  {t("connections.mirrorHealth")}:{" "}
-                  {c.runHealth?.mirror?.status
-                    ? runStatusLabel(c.runHealth.mirror.status)
-                    : "—"}
-                  {c.runHealth?.mirror?.finishedAt
-                    ? ` · ${fmt(c.runHealth.mirror.finishedAt)}`
-                    : ""}
-                </span>
-                {c.source === "netsuite" ? (
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                   <span>
-                    {t("connections.attachmentHealth")}:{" "}
-                    {c.runHealth?.attachments?.status
-                      ? runStatusLabel(c.runHealth.attachments.status)
-                      : "—"}
-                    {c.runHealth?.attachments?.finishedAt
-                      ? ` · ${fmt(c.runHealth.attachments.finishedAt)}`
+                    {t("connections.mirrorHealth")}:{" "}
+                    {c.runHealth?.mirror?.status ? runStatusLabel(c.runHealth.mirror.status) : "—"}
+                    {c.runHealth?.mirror?.finishedAt
+                      ? ` · ${fmt(c.runHealth.mirror.finishedAt)}`
                       : ""}
                   </span>
-                ) : null}
-              </div>
-              {c.source === "netsuite" ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{t("connections.incrementalHint")}</p> : null}
-              {canManage ? (
-                <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-                  <Label htmlFor={`schedule-${c.id}`} className="text-xs">{t("connections.schedule")}</Label>
-                  <Select id={`schedule-${c.id}`} className="h-8 w-auto text-xs" value={c.mirrorSchedule}
-                    disabled={busy !== null} onChange={(event) => void setMirrorSchedule(c, event.target.value)}>
-                    {!["hourly", "every_6_hours", "daily", "weekly"].includes(c.mirrorSchedule) ? <option value={c.mirrorSchedule}>{c.mirrorSchedule}</option> : null}
-                    {["hourly", "every_6_hours", "daily", "weekly"].map((schedule) => <option key={schedule} value={schedule}>{t(`connections.schedules.${schedule}`)}</option>)}
-                  </Select>
-                  <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void toggleMirror(c)}>
-                    {c.mirrorEnabled ? t("actions.pauseMirror") : t("actions.enableMirror")}
-                  </Button>
-                </div>
-              ) : null}
-              {(c.unresolvedSourceDeletions?.length ?? 0) > 0 ? (
-                <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-800 dark:bg-amber-950/20">
-                  <p className="font-medium text-amber-900 dark:text-amber-200">
-                    {t("connections.sourceDeletions")}
-                  </p>
-                  <p className="mt-1 text-amber-800 dark:text-amber-300">
-                    {t("connections.sourceDeletionHint")}
-                  </p>
-                  <p className="mt-2 text-amber-800 dark:text-amber-300">
-                    {t("connections.sourceDeletionCount", {
-                      count: c.unresolvedSourceDeletions?.length ?? 0,
-                    })}
-                  </p>
-                  <Button
-                    className="mt-2"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy !== null}
-                    onClick={() => void run(c, "mirror")}
-                  >
-                    {t("actions.retryMirror")}
-                  </Button>
-                </div>
-              ) : null}
-              {c.source === "qbd" ? (
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                  <span>
-                    {c.qbdStatus?.heartbeat
-                      ? t("qbd.lastContact", {
-                          time: fmt(c.qbdStatus.heartbeat),
-                        })
-                      : t("qbd.notConnected")}
-                  </span>
-                  {c.qbdStatus?.captureStatus ? (
+                  {c.source === "netsuite" ? (
                     <span>
-                      {t("qbd.capture", {
-                        status: t.has(
-                          `qbd.captureStatus.${c.qbdStatus.captureStatus}`,
-                        )
-                          ? t(`qbd.captureStatus.${c.qbdStatus.captureStatus}`)
-                          : c.qbdStatus.captureStatus,
-                        completed: c.qbdStatus.captureProgress?.completed ?? 0,
-                        total: c.qbdStatus.captureProgress?.total ?? 0,
-                      })}
+                      {t("connections.attachmentHealth")}:{" "}
+                      {c.runHealth?.attachments?.status
+                        ? runStatusLabel(c.runHealth.attachments.status)
+                        : "—"}
+                      {c.runHealth?.attachments?.finishedAt
+                        ? ` · ${fmt(c.runHealth.attachments.finishedAt)}`
+                        : ""}
                     </span>
                   ) : null}
-                  <Link
-                    href="/docs/quickbooks-desktop-connector"
-                    className="inline-flex items-center gap-1 text-sky-700 hover:underline dark:text-sky-300"
-                  >
-                    <BookOpen size={12} /> {t("qbd.documentation")}
-                  </Link>
                 </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
-
+                {c.source === "netsuite" ? (
+                  <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                    {t("connections.incrementalHint")}
+                  </p>
+                ) : null}
+                {canManage ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                    <Label htmlFor={`schedule-${c.id}`} className="text-xs">
+                      {t("connections.schedule")}
+                    </Label>
+                    <Select
+                      id={`schedule-${c.id}`}
+                      className="h-8 w-auto text-xs"
+                      value={c.mirrorSchedule}
+                      disabled={busy !== null}
+                      onChange={(event) => void setMirrorSchedule(c, event.target.value)}
+                    >
+                      {!["hourly", "every_6_hours", "daily", "weekly"].includes(
+                        c.mirrorSchedule,
+                      ) ? (
+                        <option value={c.mirrorSchedule}>{c.mirrorSchedule}</option>
+                      ) : null}
+                      {["hourly", "every_6_hours", "daily", "weekly"].map((schedule) => (
+                        <option key={schedule} value={schedule}>
+                          {t(`connections.schedules.${schedule}`)}
+                        </option>
+                      ))}
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy !== null}
+                      onClick={() => void toggleMirror(c)}
+                    >
+                      {c.mirrorEnabled ? t("actions.pauseMirror") : t("actions.enableMirror")}
+                    </Button>
+                  </div>
+                ) : null}
+                {(c.unresolvedSourceDeletions?.length ?? 0) > 0 ? (
+                  <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-800 dark:bg-amber-950/20">
+                    <p className="font-medium text-amber-900 dark:text-amber-200">
+                      {t("connections.sourceDeletions")}
+                    </p>
+                    <p className="mt-1 text-amber-800 dark:text-amber-300">
+                      {t("connections.sourceDeletionHint")}
+                    </p>
+                    <p className="mt-2 text-amber-800 dark:text-amber-300">
+                      {t("connections.sourceDeletionCount", {
+                        count: c.unresolvedSourceDeletions?.length ?? 0,
+                      })}
+                    </p>
+                    <Button
+                      className="mt-2"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy !== null}
+                      onClick={() => void run(c, "mirror")}
+                    >
+                      {t("actions.retryMirror")}
+                    </Button>
+                  </div>
+                ) : null}
+                {c.source === "qbd" ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <span>
+                      {c.qbdStatus?.heartbeat
+                        ? t("qbd.lastContact", {
+                            time: fmt(c.qbdStatus.heartbeat),
+                          })
+                        : t("qbd.notConnected")}
+                    </span>
+                    {c.qbdStatus?.captureStatus ? (
+                      <span>
+                        {t("qbd.capture", {
+                          status: t.has(`qbd.captureStatus.${c.qbdStatus.captureStatus}`)
+                            ? t(`qbd.captureStatus.${c.qbdStatus.captureStatus}`)
+                            : c.qbdStatus.captureStatus,
+                          completed: c.qbdStatus.captureProgress?.completed ?? 0,
+                          total: c.qbdStatus.captureProgress?.total ?? 0,
+                        })}
+                      </span>
+                    ) : null}
+                    <Link
+                      href="/docs/quickbooks-desktop-connector"
+                      className="inline-flex items-center gap-1 text-sky-700 hover:underline dark:text-sky-300"
+                    >
+                      <BookOpen size={12} /> {t("qbd.documentation")}
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </RecordTabs>
-      <ContextMenu open={actionMenu.open} position={actionMenu.position} onClose={actionMenu.close} items={connectionActions} />
+      <ContextMenu
+        open={actionMenu.open}
+        position={actionMenu.position}
+        onClose={actionMenu.close}
+        items={connectionActions}
+      />
 
       {data ? (
         <ConnectionDrawer
@@ -1092,10 +1267,7 @@ function OauthSetupBox({
   );
 }
 
-function configOptions(
-  f: FieldSpec,
-  currencies: Currency[],
-): { value: string; label: string }[] {
+function configOptions(f: FieldSpec, currencies: Currency[]): { value: string; label: string }[] {
   if (f.optionsSource === "currencies")
     return currencies.map((c) => ({
       value: c.code,
@@ -1134,9 +1306,9 @@ export function ConnectionDrawer({
   const [postedChangePolicy, setPostedChangePolicy] = useState<
     "review_required" | "append_only_automatic"
   >("review_required");
-  const [outOfPeriodDatePolicy, setOutOfPeriodDatePolicy] = useState<
-    "refuse" | "period_boundary"
-  >("refuse");
+  const [outOfPeriodDatePolicy, setOutOfPeriodDatePolicy] = useState<"refuse" | "period_boundary">(
+    "refuse",
+  );
   const [saving, setSaving] = useState(false);
 
   // Prefill from the edited connection (or clear for a fresh add) on open,
@@ -1145,27 +1317,35 @@ export function ConnectionDrawer({
   const [prevDrawerKeys, setPrevDrawerKeys] = useState(() => ({ open, editing }));
   if (prevDrawerKeys.open !== open || prevDrawerKeys.editing !== editing) {
     setPrevDrawerKeys({ open, editing });
-    if (open) { setDrawerTab("general"); setMappingDrafts({}); setEntityMappingPending(false); }
+    if (open) {
+      setDrawerTab("general");
+      setMappingDrafts({});
+      setEntityMappingPending(false);
+    }
     if (!open) {
       // retain the form while closed
     } else if (editing) {
       setSource(editing.source);
       setDisplayName(editing.displayName);
       const savedConfig = Object.fromEntries(
-          Object.entries(editing.config ?? {})
-            // Callback-owned OAuth identity (realmId, tenantId, companyId,
-            // companyName) is written by the Connect flow and refused on
-            // PATCH (OAUTH_IDENTITY_REFUSED) — it never enters the form.
-            .filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k))
-            .map(([k, v]) => [k, v ?? ""]),
-        );
+        Object.entries(editing.config ?? {})
+          // Callback-owned OAuth identity (realmId, tenantId, companyId,
+          // companyName) is written by the Connect flow and refused on
+          // PATCH (OAUTH_IDENTITY_REFUSED) — it never enters the form.
+          .filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k))
+          .map(([k, v]) => [k, v ?? ""]),
+      );
       savedConfig.entityMappings = decodeEntityMappings(editing.config?.entityMappings);
       setConfig(savedConfig);
       setSecrets({});
       setPostedChangePolicy(editing.postedChangePolicy);
       setOutOfPeriodDatePolicy(editing.outOfPeriodDatePolicy);
     } else {
-      setSource(presetSource && sourceTypes.some((type) => type.source === presetSource) ? presetSource : "");
+      setSource(
+        presetSource && sourceTypes.some((type) => type.source === presetSource)
+          ? presetSource
+          : "",
+      );
       setDisplayName("");
       setConfig({});
       setSecrets({});
@@ -1194,20 +1374,23 @@ export function ConnectionDrawer({
     if (!def) return;
     setSaving(true);
     try {
-      const provided = Object.fromEntries(
-        Object.entries(secrets).filter(([, v]) => v !== ""),
-      );
+      const provided = Object.fromEntries(Object.entries(secrets).filter(([, v]) => v !== ""));
       // Defense in depth beside the prefill filter: callback-owned OAuth
       // identity never leaves this drawer, so an edit of a connected OAuth
       // connection cannot trip OAUTH_IDENTITY_REFUSED.
-      if (entityMappingPending || Object.values(mappingDrafts).some((draft) => draft.source || draft.target)) {
+      if (
+        entityMappingPending ||
+        Object.values(mappingDrafts).some((draft) => draft.source || draft.target)
+      ) {
         setDrawerTab("mappings");
         throw new Error(t("drawer.mappings.finishDraft"));
       }
       validateStructuredConnectionMappings(config.entityMappings, mappingGroups);
       const selection = resolveSyncSelection(config.syncOptions, syncCapabilities);
       const editableConfig = Object.fromEntries(
-        Object.entries({ ...config, syncOptions: selection }).filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k)),
+        Object.entries({ ...config, syncOptions: selection }).filter(
+          ([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k),
+        ),
       );
       const res = editing
         ? await fetch(`/api/platform/connections/${editing.id}`, {
@@ -1256,11 +1439,7 @@ export function ConnectionDrawer({
           </Button>
           {def ? (
             <Button disabled={saving} onClick={save}>
-              {saving
-                ? t("drawer.saving")
-                : editing
-                  ? t("drawer.saveChanges")
-                  : t("drawer.create")}
+              {saving ? t("drawer.saving") : editing ? t("drawer.saveChanges") : t("drawer.create")}
             </Button>
           ) : null}
         </div>
@@ -1293,176 +1472,200 @@ export function ConnectionDrawer({
         </div>
 
         {def ? (
-          <RecordTabs label={t("drawer.tabsLabel")} active={drawerTab} onChange={setDrawerTab}
+          <RecordTabs
+            label={t("drawer.tabsLabel")}
+            active={drawerTab}
+            onChange={setDrawerTab}
             tabs={[
               { key: "general", label: t("drawer.tabs.general") },
               { key: "content", label: t("drawer.tabs.content") },
               { key: "mappings", label: t("drawer.tabs.mappings") },
-            ]}>
+            ]}
+          >
             <div className="pt-4">
-            {drawerTab === "general" ? <div className="space-y-4">
-            {!editing ? (
-              <p className="text-xs text-slate-500">{blurb}</p>
-            ) : null}
-            {def.authKind === "oauth2" && def.oauthSetup ? (
-              <OauthSetupBox source={def.source} setup={def.oauthSetup} />
-            ) : null}
-            {def.source === "qbd" ? (
-              <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs text-slate-600 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-slate-300">
-                <p className="font-medium text-sky-800 dark:text-sky-300">
-                  {t("qbd.setupTitle")}
-                </p>
-                <p className="mt-1">{t("qbd.setupHint")}</p>
-              </div>
-            ) : null}
-            {def.source === "netsuite" ? (
-              <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs text-slate-600 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-slate-300">
-                <p className="font-medium text-sky-800 dark:text-sky-300">
-                  {t("netsuite.setupTitle")}
-                </p>
-                <p className="mt-1">{t("netsuite.setupHint")}</p>
-                <Link
-                  href="/docs/netsuite-extraction-bridge"
-                  className="mt-2 inline-flex items-center gap-1 font-medium text-sky-700 hover:underline dark:text-sky-300"
-                >
-                  <BookOpen size={13} /> {t("netsuite.documentation")}
-                </Link>
-              </div>
-            ) : null}
-            <div>
-              <Label>{t("drawer.name")}</Label>
-              <Input
-                value={displayName}
-                placeholder={def.displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-            </div>
-
-            {editing ? (
-              <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/40">
-                <Label>{t("drawer.postedChanges.label")}</Label>
-                <Select
-                  value={postedChangePolicy}
-                  onChange={(event) =>
-                    setPostedChangePolicy(
-                      event.target.value as
-                        | "review_required"
-                        | "append_only_automatic",
-                    )
-                  }
-                >
-                  <option value="review_required">
-                    {t("drawer.postedChanges.review")}
-                  </option>
-                  <option value="append_only_automatic">
-                    {t("drawer.postedChanges.automatic")}
-                  </option>
-                </Select>
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  {t("drawer.postedChanges.help")}
-                </p>
-                <div className="mt-3">
-                  <Label>{t("drawer.outOfPeriodDates.label")}</Label>
-                </div>
-                <Select
-                  value={outOfPeriodDatePolicy}
-                  onChange={(event) =>
-                    setOutOfPeriodDatePolicy(
-                      event.target.value as "refuse" | "period_boundary",
-                    )
-                  }
-                >
-                  <option value="refuse">{t("drawer.outOfPeriodDates.refuse")}</option>
-                  <option value="period_boundary">
-                    {t("drawer.outOfPeriodDates.periodBoundary")}
-                  </option>
-                </Select>
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  {t("drawer.outOfPeriodDates.help")}
-                </p>
-              </div>
-            ) : null}
-
-            {def.configFields.filter((f) => f.kind !== "sync-options" && f.kind !== "entity-mappings").map((f) => (
-              <div key={f.key}>
-                <Label>
-                  {fieldLabel(f)}
-                  {f.required ? " *" : ""}
-                </Label>
-                {f.kind === "select" ? (
-                  <Select
-                    value={String(config[f.key] ?? "")}
-                    onChange={(e) =>
-                      setConfig((c) => ({ ...c, [f.key]: e.target.value }))
-                    }
-                  >
-                    <option value="">{t("drawer.select")}</option>
-                    {configOptions(f, currencies).map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {def &&
-                        t.has(`sources.${def.source}.options.${o.value}`)
-                          ? t(`sources.${def.source}.options.${o.value}`)
-                          : o.label}
-                      </option>
-                    ))}
-                  </Select>
-                ) : f.kind === "textarea" ? (
-                  <p role="alert" className="text-sm text-amber-700">{t("drawer.structuredRequired")}</p>
-                ) : (
-                  <Input
-                    value={String(config[f.key] ?? "")}
-                    placeholder={f.placeholder}
-                    onChange={(e) =>
-                      setConfig((c) => ({ ...c, [f.key]: e.target.value }))
-                    }
-                  />
-                )}
-                {fieldHelp(f) ? (
-                  <p className="mt-1 text-xs text-slate-400">{fieldHelp(f)}</p>
-                ) : null}
-              </div>
-            ))}
-
-            {def.secretFields.length > 0 ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/40 dark:bg-amber-900/10">
-                <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-                  {t("drawer.credentials")}
-                </p>
-                <div className="space-y-3">
-                  {def.secretFields.map((f) => (
-                    <div key={f.key}>
-                      <Label>
-                        {fieldLabel(f)}
-                        {f.required && !editing ? " *" : ""}
-                      </Label>
-                      <Input
-                        type="password"
-                        autoComplete="off"
-                        placeholder={
-                          editing ? t("drawer.keepCurrent") : undefined
-                        }
-                        value={secrets[f.key] ?? ""}
-                        onChange={(e) =>
-                          setSecrets((s) => ({ ...s, [f.key]: e.target.value }))
-                        }
-                      />
-                      {fieldHelp(f) ? (
-                        <p className="mt-1 text-xs text-slate-400">
-                          {fieldHelp(f)}
-                        </p>
-                      ) : null}
+              {drawerTab === "general" ? (
+                <div className="space-y-4">
+                  {!editing ? <p className="text-xs text-slate-500">{blurb}</p> : null}
+                  {def.authKind === "oauth2" && def.oauthSetup ? (
+                    <OauthSetupBox source={def.source} setup={def.oauthSetup} />
+                  ) : null}
+                  {def.source === "qbd" ? (
+                    <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs text-slate-600 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-slate-300">
+                      <p className="font-medium text-sky-800 dark:text-sky-300">
+                        {t("qbd.setupTitle")}
+                      </p>
+                      <p className="mt-1">{t("qbd.setupHint")}</p>
                     </div>
-                  ))}
+                  ) : null}
+                  {def.source === "netsuite" ? (
+                    <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs text-slate-600 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-slate-300">
+                      <p className="font-medium text-sky-800 dark:text-sky-300">
+                        {t("netsuite.setupTitle")}
+                      </p>
+                      <p className="mt-1">{t("netsuite.setupHint")}</p>
+                      <Link
+                        href="/docs/netsuite-extraction-bridge"
+                        className="mt-2 inline-flex items-center gap-1 font-medium text-sky-700 hover:underline dark:text-sky-300"
+                      >
+                        <BookOpen size={13} /> {t("netsuite.documentation")}
+                      </Link>
+                    </div>
+                  ) : null}
+                  <div>
+                    <Label>{t("drawer.name")}</Label>
+                    <Input
+                      value={displayName}
+                      placeholder={def.displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                    />
+                  </div>
+
+                  {editing ? (
+                    <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                      <Label>{t("drawer.postedChanges.label")}</Label>
+                      <Select
+                        value={postedChangePolicy}
+                        onChange={(event) =>
+                          setPostedChangePolicy(
+                            event.target.value as "review_required" | "append_only_automatic",
+                          )
+                        }
+                      >
+                        <option value="review_required">{t("drawer.postedChanges.review")}</option>
+                        <option value="append_only_automatic">
+                          {t("drawer.postedChanges.automatic")}
+                        </option>
+                      </Select>
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        {t("drawer.postedChanges.help")}
+                      </p>
+                      <div className="mt-3">
+                        <Label>{t("drawer.outOfPeriodDates.label")}</Label>
+                      </div>
+                      <Select
+                        value={outOfPeriodDatePolicy}
+                        onChange={(event) =>
+                          setOutOfPeriodDatePolicy(
+                            event.target.value as "refuse" | "period_boundary",
+                          )
+                        }
+                      >
+                        <option value="refuse">{t("drawer.outOfPeriodDates.refuse")}</option>
+                        <option value="period_boundary">
+                          {t("drawer.outOfPeriodDates.periodBoundary")}
+                        </option>
+                      </Select>
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        {t("drawer.outOfPeriodDates.help")}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {def.configFields
+                    .filter((f) => f.kind !== "sync-options" && f.kind !== "entity-mappings")
+                    .map((f) => (
+                      <div key={f.key}>
+                        <Label>
+                          {fieldLabel(f)}
+                          {f.required ? " *" : ""}
+                        </Label>
+                        {f.kind === "select" ? (
+                          <Select
+                            value={String(config[f.key] ?? "")}
+                            onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}
+                          >
+                            <option value="">{t("drawer.select")}</option>
+                            {configOptions(f, currencies).map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {def && t.has(`sources.${def.source}.options.${o.value}`)
+                                  ? t(`sources.${def.source}.options.${o.value}`)
+                                  : o.label}
+                              </option>
+                            ))}
+                          </Select>
+                        ) : f.kind === "textarea" ? (
+                          <p role="alert" className="text-sm text-amber-700">
+                            {t("drawer.structuredRequired")}
+                          </p>
+                        ) : (
+                          <Input
+                            value={String(config[f.key] ?? "")}
+                            placeholder={f.placeholder}
+                            onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}
+                          />
+                        )}
+                        {fieldHelp(f) ? (
+                          <p className="mt-1 text-xs text-slate-400">{fieldHelp(f)}</p>
+                        ) : null}
+                      </div>
+                    ))}
+
+                  {def.secretFields.length > 0 ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/40 dark:bg-amber-900/10">
+                      <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                        {t("drawer.credentials")}
+                      </p>
+                      <div className="space-y-3">
+                        {def.secretFields.map((f) => (
+                          <div key={f.key}>
+                            <Label>
+                              {fieldLabel(f)}
+                              {f.required && !editing ? " *" : ""}
+                            </Label>
+                            <Input
+                              type="password"
+                              autoComplete="off"
+                              placeholder={editing ? t("drawer.keepCurrent") : undefined}
+                              value={secrets[f.key] ?? ""}
+                              onChange={(e) =>
+                                setSecrets((s) => ({ ...s, [f.key]: e.target.value }))
+                              }
+                            />
+                            {fieldHelp(f) ? (
+                              <p className="mt-1 text-xs text-slate-400">{fieldHelp(f)}</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
+              ) : drawerTab === "content" ? (
+                <ConnectionSyncContent
+                  capabilities={syncCapabilities}
+                  value={config.syncOptions}
+                  attachmentUnavailableReason={
+                    def.attachmentUnavailableReason ?? settings.attachmentUnavailableReason
+                  }
+                  onChange={(value) => setConfig((config) => ({ ...config, syncOptions: value }))}
+                />
+              ) : null}
+              <div hidden={drawerTab !== "mappings"}>
+                <ConnectionMappingWorkspace
+                  key={`${source}:${editing?.id ?? "new"}:${open ? "open" : "closed"}`}
+                  connectionId={editing?.id}
+                  groups={mappingGroups}
+                  value={decodeEntityMappings(config.entityMappings).sourceOptions}
+                  entityValue={config.entityMappings}
+                  drafts={mappingDrafts}
+                  onDraftChange={(key, draft) =>
+                    setMappingDrafts((drafts) => ({ ...drafts, [key]: draft }))
+                  }
+                  onChange={(value) =>
+                    setConfig((config) => ({
+                      ...config,
+                      entityMappings: {
+                        ...decodeEntityMappings(config.entityMappings),
+                        sourceOptions: value,
+                      },
+                    }))
+                  }
+                  onEntityChange={(value) =>
+                    setConfig((config) => ({ ...config, entityMappings: value }))
+                  }
+                  onPendingChange={setEntityMappingPending}
+                />
               </div>
-            ) : null}
-            </div> : drawerTab === "content" ? <ConnectionSyncContent capabilities={syncCapabilities} value={config.syncOptions} attachmentUnavailableReason={def.attachmentUnavailableReason ?? settings.attachmentUnavailableReason}
-              onChange={(value) => setConfig((config) => ({ ...config, syncOptions: value }))} />
-              : null}
-              <div hidden={drawerTab !== "mappings"}><ConnectionMappingWorkspace key={`${source}:${editing?.id ?? 'new'}:${open ? 'open' : 'closed'}`} connectionId={editing?.id} groups={mappingGroups} value={decodeEntityMappings(config.entityMappings).sourceOptions} entityValue={config.entityMappings} drafts={mappingDrafts}
-                onDraftChange={(key, draft) => setMappingDrafts((drafts) => ({ ...drafts, [key]: draft }))}
-                onChange={(value) => setConfig((config) => ({ ...config, entityMappings: { ...decodeEntityMappings(config.entityMappings), sourceOptions: value } }))}
-                onEntityChange={(value) => setConfig((config) => ({ ...config, entityMappings: value }))} onPendingChange={setEntityMappingPending} /></div>
             </div>
           </RecordTabs>
         ) : null}

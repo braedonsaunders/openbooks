@@ -1,7 +1,7 @@
-import Link from 'next/link'
-import { BookOpenText } from 'lucide-react'
-import { Badge, cn } from '@openbooks/ui'
-import { AccountRegisterLink } from '../../../components/account-register-link'
+import Link from "next/link";
+import { BookOpenText } from "lucide-react";
+import { Badge, cn } from "@openbooks/ui";
+import { AccountRegisterLink } from "../../../components/account-register-link";
 
 /**
  * The account cell of the flat search results: number gutter, name link, an
@@ -17,12 +17,12 @@ export function AccountNameCell({
   inactiveLabel,
   parentPath,
 }: {
-  number: string
-  name: string
-  href: string
-  isSummary: boolean
-  inactiveLabel: string | null
-  parentPath: string | null
+  number: string;
+  name: string;
+  href: string;
+  isSummary: boolean;
+  inactiveLabel: string | null;
+  parentPath: string | null;
 }) {
   return (
     <div className="flex min-w-0 items-start">
@@ -32,15 +32,24 @@ export function AccountNameCell({
       <div className="min-w-0">
         <Link
           href={href as never}
-          className={cn('hover:text-teal-700 hover:underline dark:hover:text-teal-300', isSummary && 'font-semibold')}
+          className={cn(
+            "hover:text-teal-700 hover:underline dark:hover:text-teal-300",
+            isSummary && "font-semibold",
+          )}
         >
           {name}
         </Link>
-        {inactiveLabel ? <Badge variant="outline" className="ml-2">{inactiveLabel}</Badge> : null}
-        {parentPath ? <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">{parentPath}</p> : null}
+        {inactiveLabel ? (
+          <Badge variant="outline" className="ml-2">
+            {inactiveLabel}
+          </Badge>
+        ) : null}
+        {parentPath ? (
+          <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">{parentPath}</p>
+        ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 /** The register shortcut at the end of an account row. */
@@ -49,9 +58,9 @@ export function AccountRegisterCell({
   ariaLabel,
   title,
 }: {
-  accountId: string
-  ariaLabel: string
-  title: string
+  accountId: string;
+  ariaLabel: string;
+  title: string;
 }) {
   return (
     <AccountRegisterLink
@@ -62,5 +71,5 @@ export function AccountRegisterCell({
     >
       <BookOpenText size={15} />
     </AccountRegisterLink>
-  )
+  );
 }

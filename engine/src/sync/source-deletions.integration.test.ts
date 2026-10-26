@@ -8,15 +8,8 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
 import { postPaymentWithApplications } from "../payments/payment-posting.ts";
 import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
-import {
-  mirrorSourceDeletion,
-  resolveSourceDeletion,
-} from "./source-deletions.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { mirrorSourceDeletion, resolveSourceDeletion } from "./source-deletions.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -66,13 +59,23 @@ test(
         },
       });
 
-      const invoiceEntryId = (await db.execute<{ id: string }>(sql`
+      const invoiceEntryId = (
+        await db.execute<{ id: string }>(
+          sql`
         select posted_entry_id as id from documents where id = ${documentId} and org_id = ${org.orgId}
-      `, "objects"))[0]!.id;
-      const invoiceArLineId = (await db.execute<{ id: string }>(sql`
+      `,
+          "objects",
+        )
+      )[0]!.id;
+      const invoiceArLineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from journal_lines
          where org_id = ${org.orgId} and entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const paymentEntryId = randomUUID();
       await db.execute(sql`
         insert into journal_entries
@@ -86,11 +89,18 @@ test(
         values (${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.customerId}, '100', 'CAD', '100', '1', false),
                (${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, '-100', 'CAD', '-100', '1', true)
       `);
-      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${paymentEntryId}`);
-      const paymentArLineId = (await db.execute<{ id: string }>(sql`
+      await db.execute(
+        sql`update journal_entries set status = 'posted', posted_at = now() where id = ${paymentEntryId}`,
+      );
+      const paymentArLineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from journal_lines
          where org_id = ${org.orgId} and entry_id = ${paymentEntryId} and account_id = ${org.accounts.ar}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const applicationId = randomUUID();
       await db.execute(sql`
         insert into applications
@@ -110,17 +120,18 @@ test(
       });
       assert.deepEqual(result, { documentId, deleted: true });
 
-      const evidence = (await db.execute<{
-          document_status: string;
-          open_balance: string | null;
-          original_status: string;
-          reversal_in_original_period: boolean;
-          sales_reversal_uses_journal_date: boolean;
-          reversal_count: number;
-          reversal_total: string;
-          void_evidence_complete: boolean;
-          audited_reversal_count: number;
-        }>(sql`
+      const evidence = await db.execute<{
+        document_status: string;
+        open_balance: string | null;
+        original_status: string;
+        reversal_in_original_period: boolean;
+        sales_reversal_uses_journal_date: boolean;
+        reversal_count: number;
+        reversal_total: string;
+        void_evidence_complete: boolean;
+        audited_reversal_count: number;
+      }>(
+        sql`
         select d.status as document_status, d.open_balance::text,
                original.status as original_status,
                bool_and(reversal.period_id = original.period_id) as reversal_in_original_period,
@@ -155,7 +166,9 @@ test(
             on reversal_line.entry_id = reversal.id
          where d.id = ${documentId}
          group by d.status, d.open_balance, original.status
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(evidence[0], {
         document_status: "voided",
         open_balance: null,
@@ -168,21 +181,30 @@ test(
         audited_reversal_count: 1,
       });
 
-      const settlement = (await db.execute<{
-        id: string;
-        from_line_id: string;
-        to_line_id: string;
-        unapplied: boolean;
-      }>(sql`
+      const settlement = (
+        await db.execute<{
+          id: string;
+          from_line_id: string;
+          to_line_id: string;
+          unapplied: boolean;
+        }>(
+          sql`
         select id, from_line_id, to_line_id, unapplied_at is not null as unapplied
           from applications where org_id = ${org.orgId} and id = ${applicationId}
-      `, "objects"))[0];
-      assert.deepEqual(settlement, {
-        id: applicationId,
-        from_line_id: paymentArLineId,
-        to_line_id: invoiceArLineId,
-        unapplied: true,
-      }, "source deletion releases but preserves the original settlement evidence");
+      `,
+          "objects",
+        )
+      )[0];
+      assert.deepEqual(
+        settlement,
+        {
+          id: applicationId,
+          from_line_id: paymentArLineId,
+          to_line_id: invoiceArLineId,
+          unapplied: true,
+        },
+        "source deletion releases but preserves the original settlement evidence",
+      );
 
       const repeat = await mirrorSourceDeletion({
         orgId: org.orgId,
@@ -191,13 +213,16 @@ test(
         connectionId,
       });
       assert.deepEqual(repeat, { documentId, deleted: false });
-      const reversalCount = (await db.execute<{ count: number }>(sql`
+      const reversalCount = await db.execute<{ count: number }>(
+        sql`
         select count(*)::int as count
           from journal_entries
          where reverses_entry_id = (
            select posted_entry_id from documents where id = ${documentId}
          )
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(reversalCount[0]?.count, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -240,44 +265,83 @@ test(
           (org_id, document_id, line_number, account_id, quantity, unit_price,
            amount, tax_amount, tax_input_amount)
         values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '1000', '1000', '0', '0')`);
-      await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
-      await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-      const invoiceLineId = (await db.execute<{ id: string }>(sql`
+      await db.execute(
+        sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`,
+      );
+      await postDocument(invoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      const invoiceLineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select line.id
           from documents document
           join journal_lines line on line.org_id = document.org_id and line.entry_id = document.posted_entry_id
          where document.org_id = ${org.orgId} and document.id = ${invoiceId}
-           and line.account_id = ${org.accounts.ar}`, "objects"))[0]!.id;
+           and line.account_id = ${org.accounts.ar}`,
+          "objects",
+        )
+      )[0]!.id;
 
       const payment = await createPaymentDocument({
-        orgId: org.orgId, kind: "customer_payment", createdBy: userId, allowedSubsidiaryIds: null,
-        partyId: org.customerId, bankAccountId: org.accounts.bank, documentDate: org.date,
-        subsidiaryId: org.subsidiaryId, currency: "EUR",
+        orgId: org.orgId,
+        kind: "customer_payment",
+        createdBy: userId,
+        allowedSubsidiaryIds: null,
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        documentDate: org.date,
+        subsidiaryId: org.subsidiaryId,
+        currency: "EUR",
       });
       const allocations = [sameCurrencyAllocation(invoiceLineId, "1000")];
-      await updateDraftPayment(payment.id, {
-        allocations,
-        explicitFx: {
-          rate: "1.115", source: "Bank confirmation",
-          reason: "Rate evidenced on the bank settlement confirmation",
-          fromCurrency: "EUR", toCurrency: "CAD", rateDate: org.date,
+      await updateDraftPayment(
+        payment.id,
+        {
+          allocations,
+          explicitFx: {
+            rate: "1.115",
+            source: "Bank confirmation",
+            reason: "Rate evidenced on the bank settlement confirmation",
+            fromCurrency: "EUR",
+            toCurrency: "CAD",
+            rateDate: org.date,
+          },
         },
-      }, userId, org.orgId, { allowedSubsidiaryIds: null });
+        userId,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      );
       const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, userId);
       assert.equal(submission.gated, false);
       await postPaymentWithApplications(payment.id, allocations, userId, "api");
-      const application = (await db.execute<{ id: string; fx_id: string | null }>(sql`
+      const application = (
+        await db.execute<{ id: string; fx_id: string | null }>(
+          sql`
         select id, fx_gain_loss_entry_id as fx_id
           from applications
-         where org_id = ${org.orgId} and to_line_id = ${invoiceLineId} and unapplied_at is null`, "objects"))[0]!;
+         where org_id = ${org.orgId} and to_line_id = ${invoiceLineId} and unapplied_at is null`,
+          "objects",
+        )
+      )[0]!;
       assert.ok(application.fx_id, "settlement created realized FX evidence");
 
-      const result = await mirrorSourceDeletion({ orgId: org.orgId, source: "netsuite", sourceRef, connectionId });
+      const result = await mirrorSourceDeletion({
+        orgId: org.orgId,
+        source: "netsuite",
+        sourceRef,
+        connectionId,
+      });
       assert.deepEqual(result, { documentId: invoiceId, deleted: true });
-      const lifecycle = (await db.execute<{
-        fx_status: string; fx_origin: string; fx_reversal_count: number;
-        fx_reversal_origin: string | null; application_unapplied: boolean;
-      }>(sql`
+      const lifecycle = (
+        await db.execute<{
+          fx_status: string;
+          fx_origin: string;
+          fx_reversal_count: number;
+          fx_reversal_origin: string | null;
+          application_unapplied: boolean;
+        }>(
+          sql`
         select fx.status as fx_status, fx.origin as fx_origin,
                (select count(*)::int from journal_entries reversal
                  where reversal.org_id = fx.org_id and reversal.reverses_entry_id = fx.id) as fx_reversal_count,
@@ -287,10 +351,16 @@ test(
           from journal_entries fx
           join applications application on application.org_id = fx.org_id
                                         and application.fx_gain_loss_entry_id = fx.id
-         where fx.org_id = ${org.orgId} and fx.id = ${application.fx_id}`, "objects"))[0]!;
+         where fx.org_id = ${org.orgId} and fx.id = ${application.fx_id}`,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(lifecycle, {
-        fx_status: "reversed", fx_origin: "fx_settlement", fx_reversal_count: 1,
-        fx_reversal_origin: "fx_settlement", application_unapplied: true,
+        fx_status: "reversed",
+        fx_origin: "fx_settlement",
+        fx_reversal_count: 1,
+        fx_reversal_origin: "fx_settlement",
+        application_unapplied: true,
       });
     } finally {
       await dropScratchOrg(org.orgId);
@@ -327,7 +397,9 @@ test(
            amount, tax_amount, tax_input_amount)
         values (${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, 1, 10, 10, 0, 0)
       `);
-      await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+      await db.execute(
+        sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+      );
       const entryId = await postDocument(documentId, {
         control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
       });
@@ -337,17 +409,29 @@ test(
         "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
         [org.orgId],
       );
-      await blocker.query("select id from journal_lines where org_id = $1 and entry_id = $2 order by id for update", [org.orgId, entryId]);
-      const blockerPid = (await blocker.query("select pg_backend_pid() as pid")).rows[0]!.pid as number;
-      mirror = mirrorSourceDeletion({ orgId: org.orgId, source: "netsuite", sourceRef, connectionId });
+      await blocker.query(
+        "select id from journal_lines where org_id = $1 and entry_id = $2 order by id for update",
+        [org.orgId, entryId],
+      );
+      const blockerPid = (await blocker.query("select pg_backend_pid() as pid")).rows[0]!
+        .pid as number;
+      mirror = mirrorSourceDeletion({
+        orgId: org.orgId,
+        source: "netsuite",
+        sourceRef,
+        connectionId,
+      });
 
       let contended = false;
       for (let attempt = 0; attempt < 150 && !contended; attempt += 1) {
-        const waiting = await db.execute(sql`
+        const waiting = await db.execute(
+          sql`
           select pid from pg_stat_activity
            where datname = current_database()
              and ${blockerPid} = any(pg_blocking_pids(pid))
-        `, "objects");
+        `,
+          "objects",
+        );
         contended = waiting.length > 0;
         if (!contended) await new Promise((resolve) => setTimeout(resolve, 20));
       }
@@ -355,12 +439,17 @@ test(
 
       await blocker.query("commit");
       assert.deepEqual(await mirror, { documentId, deleted: true });
-      const state = (await db.execute<{ status: string; entryStatus: string }>(sql`
+      const state = (
+        await db.execute<{ status: string; entryStatus: string }>(
+          sql`
         select document.status, entry.status as "entryStatus"
           from documents document
           join journal_entries entry on entry.id = document.posted_entry_id and entry.org_id = document.org_id
          where document.org_id = ${org.orgId} and document.id = ${documentId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       assert.deepEqual(state, { status: "voided", entryStatus: "reversed" });
     } finally {
       if (mirror) await mirror.catch(() => undefined);
@@ -380,8 +469,14 @@ test(
       const connectionId = randomUUID();
       const documentId = randomUUID();
       const sourceRef = `inactive-actor-${randomUUID()}`;
-      const actorId = await createScratchUser(org.orgId, "Inactive source-deletion actor", "viewer");
-      await db.execute(sql`update users set is_active = false where org_id = ${org.orgId} and id = ${actorId}`);
+      const actorId = await createScratchUser(
+        org.orgId,
+        "Inactive source-deletion actor",
+        "viewer",
+      );
+      await db.execute(
+        sql`update users set is_active = false where org_id = ${org.orgId} and id = ${actorId}`,
+      );
       await db.execute(sql`
         insert into connections (id, org_id, source, display_name, status)
         values (${connectionId}, ${org.orgId}, 'netsuite', 'Inactive-actor test', 'active')
@@ -404,14 +499,20 @@ test(
           actorId,
         }),
         (error: unknown) =>
-          error instanceof Error && error.message === "resolution actor is not an active organization user",
+          error instanceof Error &&
+          error.message === "resolution actor is not an active organization user",
       );
-      const state = (await db.execute<{ status: string; resolutions: number }>(sql`
+      const state = (
+        await db.execute<{ status: string; resolutions: number }>(
+          sql`
         select d.status,
                (select count(*)::int from source_deletion_resolutions r
                  where r.org_id = d.org_id and r.connection_id = ${connectionId} and r.source_ref = ${sourceRef}) as resolutions
           from documents d where d.org_id = ${org.orgId} and d.id = ${documentId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       assert.deepEqual(state, { status: "approved", resolutions: 0 });
     } finally {
       await dropScratchOrg(org.orgId);
@@ -478,11 +579,12 @@ test(
         reversalEntryId: null,
       });
 
-      const evidence = (await db.execute<{
-          document_audits: number;
-          resolution_audits: number;
-          voided_documents: number;
-        }>(sql`
+      const evidence = await db.execute<{
+        document_audits: number;
+        resolution_audits: number;
+        voided_documents: number;
+      }>(
+        sql`
         select
           count(*) filter (
             where a.table_name = 'documents'
@@ -503,7 +605,9 @@ test(
           ) as voided_documents
           from audit_log a
          where a.org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(evidence[0], {
         document_audits: 2,
         resolution_audits: 1,
@@ -585,17 +689,19 @@ test(
             actorId,
           }),
         (error: unknown) =>
-          error instanceof Error &&
-          /the imported document no longer exists/.test(error.message),
+          error instanceof Error && /the imported document no longer exists/.test(error.message),
       );
 
-      const statuses = await db.execute<{ id: string; status: string }>(sql`
+      const statuses = await db.execute<{ id: string; status: string }>(
+        sql`
           select id, status
             from documents
            where org_id = ${org.orgId}
              and id in (${documentA}, ${documentB})
            order by document_number
-        `, "objects");
+        `,
+        "objects",
+      );
       assert.deepEqual(statuses, [
         { id: documentA, status: "voided" },
         { id: documentB, status: "approved" },
@@ -658,13 +764,16 @@ test(
       });
       assert.deepEqual(ambiguous, { documentId: null, deleted: false });
 
-      const statuses = await db.execute<{ id: string; status: string }>(sql`
+      const statuses = await db.execute<{ id: string; status: string }>(
+        sql`
           select id, status
             from documents
            where org_id = ${org.orgId}
              and id in (${legacyDocument}, ${staleDocument})
            order by document_number
-        `, "objects");
+        `,
+        "objects",
+      );
       assert.deepEqual(statuses, [
         { id: legacyDocument, status: "voided" },
         { id: staleDocument, status: "approved" },
@@ -722,11 +831,14 @@ test(
       await resolve(orgA, actorA, "second look");
       await resolve(orgB, actorB, "other tenant");
 
-      const rows = await db.execute<{ orgId: string; note: string | null; n: number }>(sql`
+      const rows = await db.execute<{ orgId: string; note: string | null; n: number }>(
+        sql`
         select org_id as "orgId", note, count(*)::int as n
           from source_deletion_resolutions
          where source_ref = ${sharedRef}
-         group by org_id, note`, "objects");
+         group by org_id, note`,
+        "objects",
+      );
       assert.deepEqual(
         rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [

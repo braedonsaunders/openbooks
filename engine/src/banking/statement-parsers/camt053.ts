@@ -1,8 +1,12 @@
 /** camt.053 statement parsing. Split from banking.ts (pure moves only). */
-import { BankingError, type ParsedStatementLine, type ParsedStatement, type StatementSourceContent } from "../banking-core"
-import { decodeStatementSourceText } from "../statement-encoding"
-import { decodeOfxEntities, assertRealDate, normalizeAmount } from "./shared"
-
+import {
+  BankingError,
+  type ParsedStatementLine,
+  type ParsedStatement,
+  type StatementSourceContent,
+} from "../banking-core";
+import { decodeStatementSourceText } from "../statement-encoding";
+import { decodeOfxEntities, assertRealDate, normalizeAmount } from "./shared";
 
 // ---------------------------------------------------------------------------
 // International statement formats: CAMT.053 (ISO 20022), BAI2, MT940
@@ -13,7 +17,9 @@ function xmlTag(block: string, tag: string): string | undefined {
   return m ? decodeOfxEntities(m[1]!.trim()) : undefined;
 }
 function xmlTags(block: string, tag: string): string[] {
-  return [...block.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "gi"))].map((m) => m[1]!);
+  return [...block.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "gi"))].map(
+    (m) => m[1]!,
+  );
 }
 
 /**
@@ -26,7 +32,9 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
   const text = decodeStatementSourceText(source, "camt053");
   const statements = xmlTags(text, "Stmt");
   if (statements.length > 1) {
-    throw new BankingError("CAMT.053 contains multiple statements. Export and import each statement separately so every account, date window and closing balance is preserved.");
+    throw new BankingError(
+      "CAMT.053 contains multiple statements. Export and import each statement separately so every account, date window and closing balance is preserved.",
+    );
   }
   const stmt = statements[0] ?? text;
   // Account currency is scoped to Acct; nested FX currencies are unrelated.
@@ -34,7 +42,10 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
   const acceptCurrency = (block: string) => {
     const tag = block.match(/<Amt\b([^>]*)>/i);
     const value = tag?.[1]?.match(/\bCcy\s*=\s*["']([A-Za-z]{3})["']/i)?.[1]?.toUpperCase();
-    if (value && currency && value !== currency) throw new BankingError("CAMT.053: entry or balance currency differs from the statement account");
+    if (value && currency && value !== currency)
+      throw new BankingError(
+        "CAMT.053: entry or balance currency differs from the statement account",
+      );
     if (value) currency = value;
   };
   const lines: ParsedStatementLine[] = [];
@@ -57,13 +68,15 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
       xmlTag(txDtls, "Nm") ??
       null;
     const ref =
-      xmlTag(txDtls, "EndToEndId") ?? xmlTag(txDtls, "TxId") ?? xmlTag(txDtls, "AcctSvcrRef") ?? null;
+      xmlTag(txDtls, "EndToEndId") ??
+      xmlTag(txDtls, "TxId") ??
+      xmlTag(txDtls, "AcctSvcrRef") ??
+      null;
     // Dedupe identity must be the bank's per-entry reference: the
     // originator-set EndToEndId is reused on every execution of a standing
     // order or recurring collection, so keying by it silently drops every
     // execution after the first at import.
-    const bankRef =
-      xmlTag(ntry, "AcctSvcrRef") ?? xmlTag(txDtls, "TxId") ?? null;
+    const bankRef = xmlTag(ntry, "AcctSvcrRef") ?? xmlTag(txDtls, "TxId") ?? null;
     lines.push({
       postedOn: assertRealDate(iso[1]!, iso[2]!, iso[3]!, `CAMT.053 date "${dt}"`),
       amount: signed,
@@ -100,7 +113,8 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
     if (cd?.toUpperCase() === "CLBD") {
       const amt = xmlTag(bal, "Amt");
       const ind = (xmlTag(bal, "CdtDbtInd") ?? "CRDT").toUpperCase();
-      if (amt) closingBalance = normalizeAmount((ind === "DBIT" ? "-" : "") + amt, "CAMT.053 balance");
+      if (amt)
+        closingBalance = normalizeAmount((ind === "DBIT" ? "-" : "") + amt, "CAMT.053 balance");
       const bd = xmlTag(bal, "Dt")?.replace(/^<(?:Dt|DtTm)\b[^>]*>\s*/i, "");
       const m = bd?.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (m) statementDate = assertRealDate(m[1]!, m[2]!, m[3]!, "CAMT.053 balance date");

@@ -14,7 +14,11 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { isDocKindEnabled } from "@/lib/documents";
 import { notFound } from "@/lib/api/responses";
 import { RecurringError } from "@openbooks/engine/billing/recurring";
-import { readScheduleForPreview, readTemplateSummary, resolveTemplateDocument } from "@/lib/recurring/preview-reads";
+import {
+  readScheduleForPreview,
+  readTemplateSummary,
+  resolveTemplateDocument,
+} from "@/lib/recurring/preview-reads";
 
 export const runtime = "nodejs";
 
@@ -43,7 +47,9 @@ class RecurringInputRefusal extends Error {
  */
 export const GET = defineRoute({
   permission: "documents.manage",
-  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
+  feature: {
+    none: "Recurring schedules are governed by document permissions and template kind availability.",
+  },
   handler: async ({ request, authz }) => {
     const url = new URL(request.url);
     const get = (key: string): string | null => {
@@ -63,14 +69,24 @@ export const GET = defineRoute({
     let maxOccurrences: number | null = null;
     let skippedRunOns: string[] = [];
     if (scheduleId) {
-      const row = await readScheduleForPreview({ orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }, scheduleId);
+      const row = await readScheduleForPreview(
+        { orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+        scheduleId,
+      );
       if (!row) return notFound("record");
       ({ templateId, cadence, cron, nextRunOn, endsOn, anchorDay } = row);
       runCount = Number(row.runCount);
       maxOccurrences = row.maxOccurrences == null ? null : Number(row.maxOccurrences);
       skippedRunOns = [...new Set(row.skippedRunOns ?? [])].sort();
     } else {
-      const cadences = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"] as const;
+      const cadences = [
+        "weekly",
+        "biweekly",
+        "monthly",
+        "quarterly",
+        "annually",
+        "custom_cron",
+      ] as const;
       const rawCadence = get("cadence") ?? "monthly";
       if (!(cadences as readonly string[]).includes(rawCadence)) {
         return NextResponse.json({ error: "invalid cadence" }, { status: 400 });
@@ -82,11 +98,17 @@ export const GET = defineRoute({
       }
       nextRunOn = get("nextRunOn") ?? asOf;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(nextRunOn)) {
-        return NextResponse.json({ error: "nextRunOn must be a calendar date (YYYY-MM-DD)" }, { status: 400 });
+        return NextResponse.json(
+          { error: "nextRunOn must be a calendar date (YYYY-MM-DD)" },
+          { status: 400 },
+        );
       }
       endsOn = get("endsOn");
       if (endsOn && !/^\d{4}-\d{2}-\d{2}$/.test(endsOn)) {
-        return NextResponse.json({ error: "endsOn must be a calendar date (YYYY-MM-DD)" }, { status: 400 });
+        return NextResponse.json(
+          { error: "endsOn must be a calendar date (YYYY-MM-DD)" },
+          { status: 400 },
+        );
       }
       if (endsOn && endsOn < nextRunOn) {
         return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });
@@ -94,7 +116,10 @@ export const GET = defineRoute({
       const templateDocumentId = get("templateDocumentId");
       const templateDocumentNumber = get("templateDocumentNumber");
       if (!templateDocumentId && !templateDocumentNumber) {
-        return NextResponse.json({ error: "a template document or schedule is required" }, { status: 400 });
+        return NextResponse.json(
+          { error: "a template document or schedule is required" },
+          { status: 400 },
+        );
       }
       const resolvedTemplate = await resolveTemplateDocument(
         { orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
@@ -108,13 +133,19 @@ export const GET = defineRoute({
       // exactly as the stored row would behave.
       const draftMax = get("maxOccurrences");
       if (draftMax !== null && (!/^\d+$/.test(draftMax) || Number(draftMax) < 1)) {
-        return NextResponse.json({ error: "maxOccurrences must be a positive integer" }, { status: 400 });
+        return NextResponse.json(
+          { error: "maxOccurrences must be a positive integer" },
+          { status: 400 },
+        );
       }
       maxOccurrences = draftMax === null ? null : Number(draftMax);
       skippedRunOns = [];
       for (const raw of url.searchParams.getAll("skippedRunOn")) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-          return NextResponse.json({ error: `skipped date ${raw} must be a calendar date (YYYY-MM-DD)` }, { status: 400 });
+          return NextResponse.json(
+            { error: `skipped date ${raw} must be a calendar date (YYYY-MM-DD)` },
+            { status: 400 },
+          );
         }
         skippedRunOns.push(raw);
       }
@@ -125,25 +156,38 @@ export const GET = defineRoute({
     try {
       preview = pendingOccurrences(
         {
-          cadence, cron, nextRunOn, endsOn, anchorDay, skippedRunOns,
+          cadence,
+          cron,
+          nextRunOn,
+          endsOn,
+          anchorDay,
+          skippedRunOns,
           remaining: remainingOccurrences(maxOccurrences, runCount),
         },
         asOf,
       );
     } catch (e) {
-      if (e instanceof RecurringError) return apiErrorResponse(new RecurringInputRefusal(e.message));
+      if (e instanceof RecurringError)
+        return apiErrorResponse(new RecurringInputRefusal(e.message));
       return apiErrorResponse(e);
     }
     const template = await readTemplateSummary(authz.user.orgId, templateId);
-    if (!template || !(await isDocKindEnabled(authz.user.orgId, template.kind))) return notFound("record");
+    if (!template || !(await isDocKindEnabled(authz.user.orgId, template.kind)))
+      return notFound("record");
     let estimatedTotal = "0";
     for (const _date of preview.occurrences) estimatedTotal = add(estimatedTotal, template.total);
     // The next run's resolved template text for live preview. An invalid
     // stored cadence refuses here rather than serving a misleading sample.
-    let sample: { occurrenceOn: string; description: string | null; memo: string | null } | null = null;
+    let sample: { occurrenceOn: string; description: string | null; memo: string | null } | null =
+      null;
     try {
       sample = scheduleId
-        ? await previewRunTokens(db, authz.user.orgId, { scheduleId }, { locale: get("locale") ?? undefined })
+        ? await previewRunTokens(
+            db,
+            authz.user.orgId,
+            { scheduleId },
+            { locale: get("locale") ?? undefined },
+          )
         : await previewRunTokens(
             db,
             authz.user.orgId,
@@ -151,7 +195,8 @@ export const GET = defineRoute({
             { locale: get("locale") ?? undefined },
           );
     } catch (e) {
-      if (e instanceof RecurringError) return apiErrorResponse(new RecurringInputRefusal(e.message));
+      if (e instanceof RecurringError)
+        return apiErrorResponse(new RecurringInputRefusal(e.message));
       return apiErrorResponse(e);
     }
     return NextResponse.json({

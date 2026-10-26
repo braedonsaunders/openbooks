@@ -51,7 +51,11 @@ class XeroRedirectRefused extends Error {}
  * surfaces the real 3xx response (not a browser-style opaque one), so any
  * redirect with a Location is refused outright rather than followed.
  */
-async function xeroFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
+async function xeroFetch(
+  url: string | URL,
+  init: RequestInit = {},
+  transport: typeof fetch = guardedFetch,
+): Promise<Response> {
   const res = await transport(url, { ...init, redirect: "manual" });
   const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
   if (location !== null) {
@@ -83,7 +87,11 @@ function basicAuth(app: XeroApp): string {
   return "Basic " + Buffer.from(`${app.clientId}:${app.clientSecret}`).toString("base64");
 }
 
-interface TokenResponse { access_token: string; refresh_token: string; expires_in: number }
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
 
 function toTokens(r: TokenResponse): XeroTokens {
   return {
@@ -93,32 +101,68 @@ function toTokens(r: TokenResponse): XeroTokens {
   };
 }
 
-export async function exchangeCode(app: XeroApp, code: string, transport: typeof fetch = guardedFetch): Promise<XeroTokens> {
-  const res = await xeroFetch(TOKEN_URL, {
-    method: "POST",
-    headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: app.redirectUri }),
-  }, transport);
-  if (!res.ok) throw new Error(`Xero token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+export async function exchangeCode(
+  app: XeroApp,
+  code: string,
+  transport: typeof fetch = guardedFetch,
+): Promise<XeroTokens> {
+  const res = await xeroFetch(
+    TOKEN_URL,
+    {
+      method: "POST",
+      headers: {
+        Authorization: basicAuth(app),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: app.redirectUri,
+      }),
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(`Xero token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
 
-export async function refreshTokens(app: XeroApp, refreshToken: string, transport: typeof fetch = guardedFetch): Promise<XeroTokens> {
-  const res = await xeroFetch(TOKEN_URL, {
-    method: "POST",
-    headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
-  }, transport);
-  if (!res.ok) throw new Error(`Xero token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+export async function refreshTokens(
+  app: XeroApp,
+  refreshToken: string,
+  transport: typeof fetch = guardedFetch,
+): Promise<XeroTokens> {
+  const res = await xeroFetch(
+    TOKEN_URL,
+    {
+      method: "POST",
+      headers: {
+        Authorization: basicAuth(app),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(`Xero token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
 
 /** The tenants this token pair is authorized for (post-consent handshake). */
-export async function listConnections(accessToken: string, transport: typeof fetch = guardedFetch): Promise<{ tenantId: string; tenantName: string }[]> {
-  const res = await xeroFetch("https://api.xero.com/connections", {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-  }, transport);
-  if (!res.ok) throw new Error(`Xero connections HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+export async function listConnections(
+  accessToken: string,
+  transport: typeof fetch = guardedFetch,
+): Promise<{ tenantId: string; tenantName: string }[]> {
+  const res = await xeroFetch(
+    "https://api.xero.com/connections",
+    {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(`Xero connections HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const rows = (await res.json()) as { tenantId: string; tenantName?: string }[];
   return rows.map((r) => ({ tenantId: r.tenantId, tenantName: r.tenantName ?? r.tenantId }));
 }
@@ -149,7 +193,8 @@ export class XeroClient {
   private async accessToken(): Promise<string> {
     if (new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
       const consumed = this.tokens;
-      const refresh = (refreshToken: string) => refreshTokens(this.app, refreshToken, this.transport);
+      const refresh = (refreshToken: string) =>
+        refreshTokens(this.app, refreshToken, this.transport);
       this.tokens = this.onRefresh
         ? await this.onRefresh(consumed, refresh)
         : await refresh(consumed.refreshToken);
@@ -164,7 +209,12 @@ export class XeroClient {
    * 4xx errors surface immediately, and so do redirect refusals — they are a
    * deterministic answer from the origin, not a flaky network.
    */
-  private async send(method: string, url: URL, headers: Record<string, string>, body?: unknown): Promise<Response> {
+  private async send(
+    method: string,
+    url: URL,
+    headers: Record<string, string>,
+    body?: unknown,
+  ): Promise<Response> {
     const TIMEOUT_MS = 30_000;
     const MAX_ATTEMPTS = 4;
     let lastErr: unknown;
@@ -172,15 +222,21 @@ export class XeroClient {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       try {
-        const res = await xeroFetch(url, {
-          method,
-          headers,
-          body: body === undefined ? undefined : JSON.stringify(body),
-          signal: ctrl.signal,
-        }, this.transport);
+        const res = await xeroFetch(
+          url,
+          {
+            method,
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+            signal: ctrl.signal,
+          },
+          this.transport,
+        );
         if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS) {
           const retryAfter = Number(res.headers.get("Retry-After"));
-          await new Promise((r) => setTimeout(r, retryAfter > 0 ? retryAfter * 1000 : attempt * 2000));
+          await new Promise((r) =>
+            setTimeout(r, retryAfter > 0 ? retryAfter * 1000 : attempt * 2000),
+          );
           continue;
         }
         return res;
@@ -192,10 +248,16 @@ export class XeroClient {
         clearTimeout(timer);
       }
     }
-    throw new Error(`Xero ${method} ${url.pathname} failed after ${MAX_ATTEMPTS} attempts: ${String(lastErr)}`);
+    throw new Error(
+      `Xero ${method} ${url.pathname} failed after ${MAX_ATTEMPTS} attempts: ${String(lastErr)}`,
+    );
   }
 
-  async get<T>(path: string, params: Record<string, string> = {}, modifiedSince?: Date | null): Promise<T> {
+  async get<T>(
+    path: string,
+    params: Record<string, string> = {},
+    modifiedSince?: Date | null,
+  ): Promise<T> {
     const token = await this.accessToken();
     const url = new URL(`${API}/${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -206,30 +268,50 @@ export class XeroClient {
     };
     if (modifiedSince) headers["If-Modified-Since"] = modifiedSince.toISOString();
     const res = await this.send("GET", url, headers);
-    if (!res.ok) throw new Error(`Xero ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok)
+      throw new Error(`Xero ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return (await res.json()) as T;
   }
 
   async attachmentContent(path: string, contentType: string): Promise<Buffer> {
-    if (!/^(Invoices|CreditNotes|BankTransactions|BankTransfers|ManualJournals|PurchaseOrders)\/[a-z0-9-]+\/Attachments\//i.test(path)) throw new Error("Xero attachment must belong to a supported transaction");
-    if (!/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(contentType)) throw new Error("Xero attachment content type is invalid");
+    if (
+      !/^(Invoices|CreditNotes|BankTransactions|BankTransfers|ManualJournals|PurchaseOrders)\/[a-z0-9-]+\/Attachments\//i.test(
+        path,
+      )
+    )
+      throw new Error("Xero attachment must belong to a supported transaction");
+    if (!/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(contentType))
+      throw new Error("Xero attachment content type is invalid");
     const token = await this.accessToken();
     const response = await this.send("GET", new URL(`${API}/${path}`), {
-      Authorization: `Bearer ${token}`, "xero-tenant-id": this.tenantId, Accept: contentType,
+      Authorization: `Bearer ${token}`,
+      "xero-tenant-id": this.tenantId,
+      Accept: contentType,
     });
-    if (!response.ok) throw new Error(`Xero attachment HTTP ${response.status}; reconnect with attachment read access and retry`);
+    if (!response.ok)
+      throw new Error(
+        `Xero attachment HTTP ${response.status}; reconnect with attachment read access and retry`,
+      );
     return Buffer.from(await response.arrayBuffer());
   }
 
   /** Page through a list endpoint (?page=N, 100/page). `key` = response array. */
-  async listAll<T>(path: string, key: string, params: Record<string, string> = {}, modifiedSince?: Date | null): Promise<T[]> {
+  async listAll<T>(
+    path: string,
+    key: string,
+    params: Record<string, string> = {},
+    modifiedSince?: Date | null,
+  ): Promise<T[]> {
     const out: T[] = [];
     for (let page = 1; ; page++) {
-      const data = await this.get<Record<string, T[]>>(path, { ...params, page: String(page) }, modifiedSince);
+      const data = await this.get<Record<string, T[]>>(
+        path,
+        { ...params, page: String(page) },
+        modifiedSince,
+      );
       const rows = data[key] ?? [];
       out.push(...rows);
       if (rows.length < 100) return out;
     }
   }
-
 }

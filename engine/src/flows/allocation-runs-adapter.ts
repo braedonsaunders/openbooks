@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { allocationScopeVisible } from "../organization/allocation-scope.ts";
@@ -103,7 +99,8 @@ type AllocationRunRow = {
 
 /** The run with its rule + version + period + book for flow conditions. */
 async function loadRun(subjectId: string): Promise<AllocationRunRow | null> {
-  const result = await db.execute<AllocationRunRow>(sql`
+  const result = await db.execute<AllocationRunRow>(
+    sql`
     select r.org_id, r.status,
            r.source_total::text, r.allocated_total::text,
            (select count(*)::int
@@ -121,145 +118,148 @@ async function loadRun(subjectId: string): Promise<AllocationRunRow | null> {
       left join accounting_books b
         on b.id = r.book_id and b.org_id = r.org_id
      where r.id = ${subjectId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
-export const allocationRunsFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: ALLOCATION_RUN_SUBJECT_KIND,
-    permissions: {
-      read: "allocations.read",
-      edit: "allocations.manage",
-      approve: "allocations.approve",
-    },
-    scope: {
-      via: "custom",
-      // Allocation visibility depends on the full stored computation (pin
-      // plus every source, target, and line), not just the run pin.
-      async subsidiaryOf(orgId, ids, allowed, lock) {
-        const runs = await db.execute<{
-            id: string;
-            subsidiaryId: string | null;
-            computation: unknown;
-          }>(sql`
+export const allocationRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: ALLOCATION_RUN_SUBJECT_KIND,
+  permissions: {
+    read: "allocations.read",
+    edit: "allocations.manage",
+    approve: "allocations.approve",
+  },
+  scope: {
+    via: "custom",
+    // Allocation visibility depends on the full stored computation (pin
+    // plus every source, target, and line), not just the run pin.
+    async subsidiaryOf(orgId, ids, allowed, lock) {
+      const runs = await db.execute<{
+        id: string;
+        subsidiaryId: string | null;
+        computation: unknown;
+      }>(
+        sql`
         select id, subsidiary_id as "subsidiaryId", computation from allocation_runs
          where org_id = ${orgId}
            and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
          ${lock ? sql`for share` : sql``}
-      `, "objects");
-        return new Map(
-          runs.map((run) => [
-            run.id,
-            allocationScopeVisible(allowed, run.subsidiaryId, run.computation)
-              ? run.subsidiaryId
-              : null,
-          ]),
-        );
+      `,
+        "objects",
+      );
+      return new Map(
+        runs.map((run) => [
+          run.id,
+          allocationScopeVisible(allowed, run.subsidiaryId, run.computation)
+            ? run.subsidiaryId
+            : null,
+        ]),
+      );
+    },
+  },
+  profile: allocationRunSubjectProfile,
+  // Nothing on a run is a flow-writable header field: the stored computation
+  // is the thing being approved, and a flow must not rewrite it.
+  // releaseApproval below delegates to the registered engine handler:
+  // allocation runs release inside the engine (see releaseViaHandler).
+  releaseViaHandler: true,
+
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const run = await loadRun(subjectId);
+    if (!run) return null;
+    return {
+      values: {
+        id: subjectId,
+        ruleId: run.rule_id,
+        ruleKey: run.rule_key,
+        fingerprint: run.fingerprint,
+        ruleName: run.rule_name,
+        versionId: run.version_id,
+        definitionHash: run.definition_hash,
+        periodId: run.period_id,
+        // The stored name stays the condition/template value authors match on;
+        // the canonical label titles the subject in notifications.
+        periodName: run.period_name,
+        periodLabel: run.period_label,
+        fiscalYear: run.fiscal_year,
+        bookId: run.book_id,
+        bookCode: run.book_code,
+        status: run.status,
+        sourceTotal: run.source_total,
+        allocatedTotal: run.allocated_total,
+        targetCount: run.target_count,
+        triggerKind: run.trigger_kind,
+        requestedBy: run.requested_by,
       },
-    },
-    profile: allocationRunSubjectProfile,
-    // Nothing on a run is a flow-writable header field: the stored computation
-    // is the thing being approved, and a flow must not rewrite it.
-    // releaseApproval below delegates to the registered engine handler:
-    // allocation runs release inside the engine (see releaseViaHandler).
-    releaseViaHandler: true,
+      submitterUserId: run.requested_by,
+    };
+  },
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const run = await loadRun(subjectId);
-      if (!run) return null;
-      return {
-        values: {
-          id: subjectId,
-          ruleId: run.rule_id,
-          ruleKey: run.rule_key,
-          fingerprint: run.fingerprint,
-          ruleName: run.rule_name,
-          versionId: run.version_id,
-          definitionHash: run.definition_hash,
-          periodId: run.period_id,
-          // The stored name stays the condition/template value authors match on;
-          // the canonical label titles the subject in notifications.
-          periodName: run.period_name,
-          periodLabel: run.period_label,
-          fiscalYear: run.fiscal_year,
-          bookId: run.book_id,
-          bookCode: run.book_code,
-          status: run.status,
-          sourceTotal: run.source_total,
-          allocatedTotal: run.allocated_total,
-          targetCount: run.target_count,
-          triggerKind: run.trigger_kind,
-          requestedBy: run.requested_by,
-        },
-        submitterUserId: run.requested_by,
-      };
-    },
+  label(subjectId: string, values: Record<string, unknown>): string {
+    const rule = values.ruleName ?? values.ruleKey ?? "Allocation";
+    const periodText = values.periodLabel ?? values.periodName;
+    const period = periodText ? ` — ${String(periodText)}` : "";
+    return `${String(rule)}${period}` || subjectId;
+  },
 
-    label(subjectId: string, values: Record<string, unknown>): string {
-      const rule = values.ruleName ?? values.ruleKey ?? "Allocation";
-      const periodText = values.periodLabel ?? values.periodName;
-      const period = periodText ? ` — ${String(periodText)}` : "";
-      return `${String(rule)}${period}` || subjectId;
-    },
+  deepLink(): string {
+    return "/admin/setup/allocations?tab=runs";
+  },
 
-    deepLink(): string {
-      return "/admin/setup/allocations?tab=runs";
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    return (await loadRun(subjectId))?.status ?? null;
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      return (await loadRun(subjectId))?.status ?? null;
-    },
+  async changeStatus(): Promise<void> {
+    throw new Error("allocation run status is released by the approval engine, not a flow action");
+  },
 
-    async changeStatus(): Promise<void> {
+  async releaseApproval(
+    subjectId: string,
+    outcome: "approved" | "rejected",
+    ctx: FlowExecCtx,
+    detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
+  ): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: ALLOCATION_RUN_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      approvalRunId: run?.id,
+      ctx,
+    });
+  },
+
+  async setField(): Promise<void> {
+    throw new Error("allocation run fields are not writable by flows; edit the rule version");
+  },
+
+  /** Recent runs awaiting a decision, for scheduled fan-out (reminders). */
+  async findCandidateIds(limit: number): Promise<string[]> {
+    // The explicit org_id predicate is the tenant boundary — NOT the RLS
+    // GUCs withOrg pins on its own client: pooled sibling connections (and
+    // any bypass-ambient resolver, e.g. the test harness's) can otherwise
+    // see every tenant. Fails closed when no ambient tenant is active.
+    // (Parity with the documents and timesheet adapters.)
+    const orgId = ambientTenantOrgId();
+    if (!orgId) {
       throw new Error(
-        "allocation run status is released by the approval engine, not a flow action",
+        `findCandidateIds for "${ALLOCATION_RUN_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
       );
-    },
-
-    async releaseApproval(
-      subjectId: string,
-      outcome: "approved" | "rejected",
-      ctx: FlowExecCtx,
-      detail?: { comment?: string | null },
-      run?: { id: string; dispatchValues: Record<string, unknown> | null },
-    ): Promise<void> {
-      await releaseFlowApproval({
-        subjectKind: ALLOCATION_RUN_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        comment: detail?.comment,
-        approvalRunId: run?.id,
-        ctx,
-      });
-    },
-
-    async setField(): Promise<void> {
-      throw new Error(
-        "allocation run fields are not writable by flows; edit the rule version",
-      );
-    },
-
-    /** Recent runs awaiting a decision, for scheduled fan-out (reminders). */
-    async findCandidateIds(limit: number): Promise<string[]> {
-      // The explicit org_id predicate is the tenant boundary — NOT the RLS
-      // GUCs withOrg pins on its own client: pooled sibling connections (and
-      // any bypass-ambient resolver, e.g. the test harness's) can otherwise
-      // see every tenant. Fails closed when no ambient tenant is active.
-      // (Parity with the documents and timesheet adapters.)
-      const orgId = ambientTenantOrgId();
-      if (!orgId) {
-        throw new Error(
-          `findCandidateIds for "${ALLOCATION_RUN_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
-        );
-      }
-      const result = await db.execute<{ id: string }>(sql`
+    }
+    const result = await db.execute<{ id: string }>(
+      sql`
       select id::text as id from allocation_runs
        where org_id = ${orgId}
          and status = 'pending_approval'
        order by created_at desc
        limit ${limit}
-    `, "objects");
-      return result.map((row) => row.id);
-    },
-  });
+    `,
+      "objects",
+    );
+    return result.map((row) => row.id);
+  },
+});

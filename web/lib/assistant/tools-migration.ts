@@ -24,7 +24,10 @@ import { uuidInput } from "./tools-shared";
 
 const migrationAdmin = (authz: Authz): ToolResult | null =>
   authz.allowedSubsidiaryIds !== null
-    ? { ok: false, error: "Migration planning is organization-wide and needs unrestricted subsidiary access." }
+    ? {
+        ok: false,
+        error: "Migration planning is organization-wide and needs unrestricted subsidiary access.",
+      }
     : null;
 
 /** The connector-independent sequence a migration loads master data and open items in. */
@@ -64,7 +67,11 @@ const getMigrationPlanTool: AssistantToolDef = {
         plan: journey.plan,
         currentStage: current?.key ?? null,
         stages: journey.stages,
-        readiness: { profileReady: journey.facts.profileReady, foundationReady: journey.facts.foundationReady, bookStart: journey.facts.bookStart },
+        readiness: {
+          profileReady: journey.facts.profileReady,
+          foundationReady: journey.facts.foundationReady,
+          bookStart: journey.facts.bookStart,
+        },
         counts: journey.facts.counts,
         connections: journey.facts.connections,
         selectedConnectionId: journey.facts.connection?.id ?? null,
@@ -92,14 +99,21 @@ const listMigrationSourcesTool: AssistantToolDef = {
         authKind: type.authKind,
         preparation: type.blurb,
         oauthSteps: type.oauthSetup?.steps ?? [],
-        portal: type.oauthSetup ? { url: type.oauthSetup.portalUrl, label: type.oauthSetup.portalLabel } : null,
-        settings: type.configFields.map((field) => ({ label: field.label, required: field.required === true, help: field.help ?? null })),
+        portal: type.oauthSetup
+          ? { url: type.oauthSetup.portalUrl, label: type.oauthSetup.portalLabel }
+          : null,
+        settings: type.configFields.map((field) => ({
+          label: field.label,
+          required: field.required === true,
+          help: field.help ?? null,
+        })),
         credentials: type.secretFields.map((field) => field.label),
         connectHref: connectSourceHref(type.source),
       })),
       spreadsheet: {
         key: "spreadsheet",
-        description: "Any other system: export lists and balances to CSV or Excel, then import them with the templates from list_import_templates.",
+        description:
+          "Any other system: export lists and balances to CSV or Excel, then import them with the templates from list_import_templates.",
         templatesHref: "/data/import",
       },
       note: "Credentials are entered only in the connection form behind connectHref, where they are sealed; they never pass through this conversation.",
@@ -120,8 +134,15 @@ const listImportTemplatesTool: AssistantToolDef = {
     const { resource } = raw as { resource?: string };
     if (resource) {
       const found = await getResource(authz.user.orgId, resource, authz.allowedSubsidiaryIds);
-      if (!found || !found.descriptor.supportsImport || !can(authz, found.descriptor.writePermission)) {
-        return { ok: false, error: `No importable resource "${resource}" is available to you — call list_import_templates without a resource for the list.` };
+      if (
+        !found ||
+        !found.descriptor.supportsImport ||
+        !can(authz, found.descriptor.writePermission)
+      ) {
+        return {
+          ok: false,
+          error: `No importable resource "${resource}" is available to you — call list_import_templates without a resource for the list.`,
+        };
       }
       return {
         ok: true,
@@ -137,14 +158,17 @@ const listImportTemplatesTool: AssistantToolDef = {
         },
       };
     }
-    const all = (await listResources(authz.user.orgId)).filter((descriptor) => descriptor.supportsImport && can(authz, descriptor.writePermission));
+    const all = (await listResources(authz.user.orgId)).filter(
+      (descriptor) => descriptor.supportsImport && can(authz, descriptor.writePermission),
+    );
     const keys = new Set(all.map((descriptor) => descriptor.key));
     return {
       ok: true,
       data: {
         importHref: "/data/import",
         recommendedOrder: RECOMMENDED_IMPORT_ORDER.filter((key) => keys.has(key)),
-        openingTrialBalance: "Opening balances are not a template: stage the trial-balance file, then use preview_opening_balances and draft_opening_balances.",
+        openingTrialBalance:
+          "Opening balances are not a template: stage the trial-balance file, then use preview_opening_balances and draft_opening_balances.",
         resources: all.map((descriptor) => ({
           key: descriptor.key,
           label: descriptor.label,
@@ -163,7 +187,8 @@ function compactRow(row: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) {
     if (key.startsWith("__")) continue;
-    out[key] = typeof value === "string" && value.length > MAX_CELL ? `${value.slice(0, MAX_CELL)}…` : value;
+    out[key] =
+      typeof value === "string" && value.length > MAX_CELL ? `${value.slice(0, MAX_CELL)}…` : value;
   }
   return out;
 }
@@ -176,22 +201,45 @@ const inspectImportFileTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["data.import"] },
   inputSchema: z.object({
     transferId: uuidInput,
-    rankResources: z.boolean().optional().describe("Rank importable resources against the columns (default true while the file is unvalidated)"),
+    rankResources: z
+      .boolean()
+      .optional()
+      .describe(
+        "Rank importable resources against the columns (default true while the file is unvalidated)",
+      ),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const { transferId, rankResources: rank } = raw as { transferId: string; rankResources?: boolean };
+    const { transferId, rankResources: rank } = raw as {
+      transferId: string;
+      rankResources?: boolean;
+    };
     try {
       const job = await loadTransfer(authz.user.orgId, transferId);
       await transferAuthority(job, authz);
-      if (job.kind !== "import") return { ok: false, error: "That transfer is an export, not an import file." };
-      const staged = ["mapping", "previewing", "ready", "committing", "completed"].includes(job.state);
+      if (job.kind !== "import")
+        return { ok: false, error: "That transfer is an export, not an import file." };
+      const staged = ["mapping", "previewing", "ready", "committing", "completed"].includes(
+        job.state,
+      );
       let candidates: ReturnType<typeof rankResources> = [];
       if (staged && (rank ?? !["ready", "committing", "completed"].includes(job.state))) {
-        const descriptors = (await listResources(authz.user.orgId)).filter((descriptor) => descriptor.supportsImport && can(authz, descriptor.writePermission));
+        const descriptors = (await listResources(authz.user.orgId)).filter(
+          (descriptor) => descriptor.supportsImport && can(authz, descriptor.writePermission),
+        );
         const resolved: ResourceCandidate[] = [];
         for (const descriptor of descriptors) {
-          const resource = await getResource(authz.user.orgId, descriptor.key, authz.allowedSubsidiaryIds);
-          if (resource) resolved.push({ key: descriptor.key, label: descriptor.label, group: descriptor.group, fields: await resource.fields() });
+          const resource = await getResource(
+            authz.user.orgId,
+            descriptor.key,
+            authz.allowedSubsidiaryIds,
+          );
+          if (resource)
+            resolved.push({
+              key: descriptor.key,
+              label: descriptor.label,
+              group: descriptor.group,
+              fields: await resource.fields(),
+            });
         }
         candidates = rankResources(job.headers, resolved, 5);
       }
@@ -208,14 +256,33 @@ const inspectImportFileTool: AssistantToolDef = {
           sample: job.sample.slice(0, SAMPLE_ROWS).map(compactRow),
           error: job.error,
           mapping: job.options.mapping ?? null,
-          preview: job.state === "ready" || job.state === "previewing" || job.state === "committing" || job.state === "completed"
-            ? { created: job.preview.created, updated: job.preview.updated, failed: job.preview.failed, errors: job.preview.errors.slice(0, 20), warnings: (job.preview.warnings ?? []).slice(0, 10) }
-            : null,
-          outcome: job.state === "completed" || job.state === "committing" ? { created: job.outcome.created, updated: job.outcome.updated, failed: job.outcome.failed } : null,
+          preview:
+            job.state === "ready" ||
+            job.state === "previewing" ||
+            job.state === "committing" ||
+            job.state === "completed"
+              ? {
+                  created: job.preview.created,
+                  updated: job.preview.updated,
+                  failed: job.preview.failed,
+                  errors: job.preview.errors.slice(0, 20),
+                  warnings: (job.preview.warnings ?? []).slice(0, 10),
+                }
+              : null,
+          outcome:
+            job.state === "completed" || job.state === "committing"
+              ? {
+                  created: job.outcome.created,
+                  updated: job.outcome.updated,
+                  failed: job.outcome.failed,
+                }
+              : null,
           approvalHash: job.state === "ready" && job.preview.failed === 0 ? job.approvalHash : null,
           candidates,
           href: `/data/import?transfer=${job.id}`,
-          note: staged ? undefined : "The file is still uploading or being read; inspect it again shortly.",
+          note: staged
+            ? undefined
+            : "The file is still uploading or being read; inspect it again shortly.",
         },
       };
     } catch (error) {
@@ -233,24 +300,55 @@ const previewOpeningBalancesTool: AssistantToolDef = {
   gate: { mode: "allOf", perms: ["admin.setup.manage", "gl.post", "data.import"] },
   inputSchema: z.object({
     transferId: uuidInput,
-    columns: z.object({
-      account: z.string().min(1).max(200),
-      debit: z.string().min(1).max(200).optional(),
-      credit: z.string().min(1).max(200).optional(),
-      amount: z.string().min(1).max(200).optional().describe("One signed, debit-positive column instead of debit/credit"),
-      description: z.string().min(1).max(200).optional(),
-    }).describe("Which file columns hold the account and the amounts, as inspect_import_file named them"),
-    excludeRows: z.array(z.number().int().positive()).max(200).optional().describe("Row numbers to leave out, e.g. a totals row"),
-    documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("The day before the cutover date"),
+    columns: z
+      .object({
+        account: z.string().min(1).max(200),
+        debit: z.string().min(1).max(200).optional(),
+        credit: z.string().min(1).max(200).optional(),
+        amount: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("One signed, debit-positive column instead of debit/credit"),
+        description: z.string().min(1).max(200).optional(),
+      })
+      .describe(
+        "Which file columns hold the account and the amounts, as inspect_import_file named them",
+      ),
+    excludeRows: z
+      .array(z.number().int().positive())
+      .max(200)
+      .optional()
+      .describe("Row numbers to leave out, e.g. a totals row"),
+    documentDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .describe("The day before the cutover date"),
     balancingAccountId: uuidInput.optional(),
-    accountRemap: z.array(z.object({
-      from: z.string().min(1).max(200).describe("Account cell text exactly as it appears in the file"),
-      toAccountId: uuidInput,
-    })).max(50).optional().describe("Re-point rows to another account, e.g. the AR/AP control lines to the opening clearing account"),
+    accountRemap: z
+      .array(
+        z.object({
+          from: z
+            .string()
+            .min(1)
+            .max(200)
+            .describe("Account cell text exactly as it appears in the file"),
+          toAccountId: uuidInput,
+        }),
+      )
+      .max(50)
+      .optional()
+      .describe(
+        "Re-point rows to another account, e.g. the AR/AP control lines to the opening clearing account",
+      ),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     try {
-      const preview = await previewOpeningBalances(authz, raw as Parameters<typeof previewOpeningBalances>[1]);
+      const preview = await previewOpeningBalances(
+        authz,
+        raw as Parameters<typeof previewOpeningBalances>[1],
+      );
       return {
         ok: true,
         data: {
@@ -261,7 +359,9 @@ const previewOpeningBalancesTool: AssistantToolDef = {
           difference: preview.net,
           balancingLine: preview.balancingLine,
           skippedZeroRows: preview.skippedZeroRows,
-          firstLines: preview.lines.slice(0, 12).map((line) => ({ row: line.rowNo, account: line.accountLabel, amount: line.amount })),
+          firstLines: preview.lines
+            .slice(0, 12)
+            .map((line) => ({ row: line.rowNo, account: line.accountLabel, amount: line.amount })),
         },
       };
     } catch (error) {
@@ -292,7 +392,12 @@ const runCutoverChecksTool: AssistantToolDef = {
         path: journey.plan.path,
         cutoverDate: journey.plan.cutoverDate,
         goLive: journey.plan.goLive,
-        readyToGoLive: journey.plan.path !== null && journey.plan.path !== "mirror" && checks.length > 0 && blockers.length === 0 && !journey.plan.goLive,
+        readyToGoLive:
+          journey.plan.path !== null &&
+          journey.plan.path !== "mirror" &&
+          checks.length > 0 &&
+          blockers.length === 0 &&
+          !journey.plan.goLive,
         blockers: blockers.map((check) => check.key),
         checks,
         measuredAt: journey.measuredAt,

@@ -20,8 +20,7 @@ export const GET = defineRoute({
   feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     try {
-      const includeInactive =
-        new URL(req.url).searchParams.get("includeInactive") === "1";
+      const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
       const rules = await listRetentionRules({
         orgId: gate.user.orgId,
         actorId: gate.user.id,

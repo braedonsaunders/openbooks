@@ -11,175 +11,275 @@ import {
   updatePaymentBankProfile,
 } from "./operations.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  grantScratchPermissions,
+} from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-test("concurrent bank-profile secret rotations preserve both fields and audit the locked state", { skip: !DB }, async () => {
-  const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
-  process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Profile operator", "admin"));
-    await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
-    await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
-    const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+test(
+  "concurrent bank-profile secret rotations preserve both fields and audit the locked state",
+  { skip: !DB },
+  async () => {
+    const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
+    process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Profile operator", "admin"),
+      );
+      await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
+      await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
+      const format = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ id: string }>(
+            sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'WIRE'
-    `, "objects")))[0]!;
-    const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
-      name: "Rotation profile",
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      paymentFormatId: format.id,
-      currency: "CAD",
-      originatorSecrets: { initial: "present" },
-    }));
+    `,
+            "objects",
+          ),
+        )
+      )[0]!;
+      const profile = await withOrgContext(org.orgId, () =>
+        createPaymentBankProfile(org.orgId, actorId, {
+          name: "Rotation profile",
+          bankAccountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          paymentFormatId: format.id,
+          currency: "CAD",
+          originatorSecrets: { initial: "present" },
+        }),
+      );
 
-    await Promise.all([
-      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
-        name: "Rotation A",
-        originatorSecrets: { credentialA: "value-a" },
-      })),
-      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
-        name: "Rotation B",
-        originatorSecrets: { credentialB: "value-b" },
-      })),
-    ]);
+      await Promise.all([
+        withOrgContext(org.orgId, () =>
+          updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+            name: "Rotation A",
+            originatorSecrets: { credentialA: "value-a" },
+          }),
+        ),
+        withOrgContext(org.orgId, () =>
+          updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+            name: "Rotation B",
+            originatorSecrets: { credentialB: "value-b" },
+          }),
+        ),
+      ]);
 
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ originator_secrets_encrypted: string | null; name: string }>(sql`
+      const stored = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ originator_secrets_encrypted: string | null; name: string }>(
+            sql`
       select originator_secrets_encrypted, name from payment_bank_profiles
        where id = ${profile.id} and org_id = ${org.orgId}
-    `, "objects")))[0]!;
-    assert.deepEqual(unsealJson(stored.originator_secrets_encrypted!, { orgId: org.orgId, purpose: "payment.originator.secrets" }), {
-      initial: "present",
-      credentialA: "value-a",
-      credentialB: "value-b",
-    });
+    `,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.deepEqual(
+        unsealJson(stored.originator_secrets_encrypted!, {
+          orgId: org.orgId,
+          purpose: "payment.originator.secrets",
+        }),
+        {
+          initial: "present",
+          credentialA: "value-a",
+          credentialB: "value-b",
+        },
+      );
 
-    const audit = await withOrgContext(org.orgId, () => db.execute<{ changes: { before: { name: string }; after: { name: string } } }>(sql`
+      const audit = await withOrgContext(org.orgId, () =>
+        db.execute<{ changes: { before: { name: string }; after: { name: string } } }>(
+          sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'payment_bank_profiles'
          and row_id = ${profile.id} and action = 'update'
-    `, "objects"));
-    assert.equal(audit.length, 2, "each rotation must have an audit record");
-    assert.ok(
-      audit.some(({ changes }) => changes.before.name === "Rotation A" || changes.before.name === "Rotation B"),
-      "the later audit before-image must include the earlier committed profile edit",
-    );
-    assert.ok(stored.name === "Rotation A" || stored.name === "Rotation B");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-    if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
-    else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
-  }
-});
+    `,
+          "objects",
+        ),
+      );
+      assert.equal(audit.length, 2, "each rotation must have an audit record");
+      assert.ok(
+        audit.some(
+          ({ changes }) =>
+            changes.before.name === "Rotation A" || changes.before.name === "Rotation B",
+        ),
+        "the later audit before-image must include the earlier committed profile edit",
+      );
+      assert.ok(stored.name === "Rotation A" || stored.name === "Rotation B");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+      if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+      else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
+    }
+  },
+);
 
-test("CPA profile creation and secret updates refuse malformed transaction-code overrides", { skip: !DB }, async () => {
-  const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
-  process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "CPA profile operator", "admin"));
-    await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
-    await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
-    const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+test(
+  "CPA profile creation and secret updates refuse malformed transaction-code overrides",
+  { skip: !DB },
+  async () => {
+    const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
+    process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "CPA profile operator", "admin"),
+      );
+      await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
+      await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
+      const format = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ id: string }>(
+            sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'CPA005'
-    `, "objects")))[0]!;
-    const profileInput = {
-      name: "CPA transaction code profile",
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      paymentFormatId: format.id,
-      currency: "CAD",
-    };
-    await assert.rejects(
-      withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
-        ...profileInput,
-        originatorSecrets: { transactionCode: "46x" },
-      })),
-      /CPA-005 transaction code override must be three digits/,
-    );
-    const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
-      ...profileInput,
-      originatorSecrets: { transactionCode: "460" },
-    }));
-    await assert.rejects(
-      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
-        originatorSecrets: { transactionCode: "4" },
-      })),
-      /CPA-005 transaction code override must be three digits/,
-    );
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+    `,
+            "objects",
+          ),
+        )
+      )[0]!;
+      const profileInput = {
+        name: "CPA transaction code profile",
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        paymentFormatId: format.id,
+        currency: "CAD",
+      };
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          createPaymentBankProfile(org.orgId, actorId, {
+            ...profileInput,
+            originatorSecrets: { transactionCode: "46x" },
+          }),
+        ),
+        /CPA-005 transaction code override must be three digits/,
+      );
+      const profile = await withOrgContext(org.orgId, () =>
+        createPaymentBankProfile(org.orgId, actorId, {
+          ...profileInput,
+          originatorSecrets: { transactionCode: "460" },
+        }),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+            originatorSecrets: { transactionCode: "4" },
+          }),
+        ),
+        /CPA-005 transaction code override must be three digits/,
+      );
+      const stored = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ originator_secrets_encrypted: string | null }>(
+            sql`
       select originator_secrets_encrypted from payment_bank_profiles
        where id = ${profile.id} and org_id = ${org.orgId}
-    `, "objects")))[0]!;
-    assert.equal(stored.originator_secrets_encrypted == null ? undefined : unsealJson<{ transactionCode?: string }>(stored.originator_secrets_encrypted, { orgId: org.orgId, purpose: "payment.originator.secrets" }).transactionCode, "460");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-    if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
-    else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
-  }
-});
+    `,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.equal(
+        stored.originator_secrets_encrypted == null
+          ? undefined
+          : unsealJson<{ transactionCode?: string }>(stored.originator_secrets_encrypted, {
+              orgId: org.orgId,
+              purpose: "payment.originator.secrets",
+            }).transactionCode,
+        "460",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+      if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+      else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
+    }
+  },
+);
 
-test("NACHA profile saves refuse incomplete originator configuration by field", { skip: !DB }, async () => {
-  const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
-  process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "NACHA profile operator", "admin"));
-    await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
-    await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
-    const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+test(
+  "NACHA profile saves refuse incomplete originator configuration by field",
+  { skip: !DB },
+  async () => {
+    const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
+    process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "NACHA profile operator", "admin"),
+      );
+      await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
+      await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
+      const format = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ id: string }>(
+            sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'NACHA-CREDIT'
-    `, "objects")))[0]!;
-    const profileInput = {
-      name: "NACHA originator profile",
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      paymentFormatId: format.id,
-      currency: "USD",
-      country: "US",
-      originatorSecrets: {
-        odfiRouting: "021000021",
-        immediateDestination: " 021000021",
-        immediateOrigin: "1123456789",
-        destinationName: "BANK OF EXAMPLE",
-        originName: "EXAMPLE CONSTRUCTION",
-        companyName: "EXAMPLE CONST",
-        companyId: "1123456789",
-      },
-    };
-    // Empty originator configuration never saves: every missing field is named.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
-        ...profileInput,
-        country: null,
-        originatorSecrets: {},
-      })),
-      /NACHA originator configuration is incomplete: odfiRouting, immediateDestination, immediateOrigin, destinationName, originName, companyName, companyId, country \(2-letter ISO code\)/,
-    );
-    // A well-formed routing with a bad check digit names the field.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
-        ...profileInput,
-        originatorSecrets: { ...profileInput.originatorSecrets, odfiRouting: "021000029" },
-      })),
-      /odfiRouting \(check digit mismatch\)/,
-    );
-    const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, profileInput));
-    // Clearing the country afterwards refuses the same way.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
-        country: null,
-      })),
-      /country \(2-letter ISO code\)/,
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-    if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
-    else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
-  }
-});
+    `,
+            "objects",
+          ),
+        )
+      )[0]!;
+      const profileInput = {
+        name: "NACHA originator profile",
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        paymentFormatId: format.id,
+        currency: "USD",
+        country: "US",
+        originatorSecrets: {
+          odfiRouting: "021000021",
+          immediateDestination: " 021000021",
+          immediateOrigin: "1123456789",
+          destinationName: "BANK OF EXAMPLE",
+          originName: "EXAMPLE CONSTRUCTION",
+          companyName: "EXAMPLE CONST",
+          companyId: "1123456789",
+        },
+      };
+      // Empty originator configuration never saves: every missing field is named.
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          createPaymentBankProfile(org.orgId, actorId, {
+            ...profileInput,
+            country: null,
+            originatorSecrets: {},
+          }),
+        ),
+        /NACHA originator configuration is incomplete: odfiRouting, immediateDestination, immediateOrigin, destinationName, originName, companyName, companyId, country \(2-letter ISO code\)/,
+      );
+      // A well-formed routing with a bad check digit names the field.
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          createPaymentBankProfile(org.orgId, actorId, {
+            ...profileInput,
+            originatorSecrets: { ...profileInput.originatorSecrets, odfiRouting: "021000029" },
+          }),
+        ),
+        /odfiRouting \(check digit mismatch\)/,
+      );
+      const profile = await withOrgContext(org.orgId, () =>
+        createPaymentBankProfile(org.orgId, actorId, profileInput),
+      );
+      // Clearing the country afterwards refuses the same way.
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+            country: null,
+          }),
+        ),
+        /country \(2-letter ISO code\)/,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+      if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+      else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
+    }
+  },
+);
 
 test(
   "a returned payment instruction cannot be relabelled settled while a sent instruction still can",
@@ -230,8 +330,8 @@ test(
           }),
         ),
         (error: unknown) =>
-          error instanceof PaymentError
-          && error.message === "a returned or reversed payment instruction cannot be settled",
+          error instanceof PaymentError &&
+          error.message === "a returned or reversed payment instruction cannot be settled",
       );
 
       await assert.rejects(
@@ -246,25 +346,32 @@ test(
           }),
         ),
         (error: unknown) =>
-          error instanceof PaymentError
-          && error.message === "a returned or reversed payment instruction cannot be settled",
+          error instanceof PaymentError &&
+          error.message === "a returned or reversed payment instruction cannot be settled",
       );
 
-      const afterRefusals = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          returned_status: string;
-          reversed_status: string;
-          returned_settlement_count: number;
-          reversed_settlement_count: number;
-          run_status: string;
-        }>(sql`
+      const afterRefusals = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              returned_status: string;
+              reversed_status: string;
+              returned_settlement_count: number;
+              reversed_settlement_count: number;
+              run_status: string;
+            }>(
+              sql`
           select
             (select status from payment_instructions where id = ${returnedInstructionId}) as returned_status,
             (select status from payment_instructions where id = ${reversedInstructionId}) as reversed_status,
             (select count(*)::int from payment_settlements where payment_instruction_id = ${returnedInstructionId}) as returned_settlement_count,
             (select count(*)::int from payment_settlements where payment_instruction_id = ${reversedInstructionId}) as reversed_settlement_count,
             (select status from payment_runs where id = ${runId}) as run_status
-        `, "objects"))[0],
+        `,
+              "objects",
+            )
+          )[0],
       );
       assert.deepEqual(afterRefusals, {
         returned_status: "returned",
@@ -284,17 +391,24 @@ test(
           bankReference: "normal-settlement",
         }),
       );
-      const afterHappyPath = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          instruction_status: string;
-          settlement_status: string;
-          run_status: string;
-        }>(sql`
+      const afterHappyPath = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              instruction_status: string;
+              settlement_status: string;
+              run_status: string;
+            }>(
+              sql`
           select
             (select status from payment_instructions where id = ${sentInstructionId}) as instruction_status,
             (select status from payment_settlements where payment_instruction_id = ${sentInstructionId}) as settlement_status,
             (select status from payment_runs where id = ${runId}) as run_status
-        `, "objects"))[0],
+        `,
+              "objects",
+            )
+          )[0],
       );
       assert.deepEqual(afterHappyPath, {
         instruction_status: "settled",
@@ -369,22 +483,31 @@ test(
           }),
         ),
         (error: unknown) =>
-          error instanceof PaymentError
-          && error.message === "bank statement line does not belong to the payment run's bank account",
+          error instanceof PaymentError &&
+          error.message === "bank statement line does not belong to the payment run's bank account",
       );
 
-      const state = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{ instruction_status: string; settlements: number }>(sql`
+      const state = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ instruction_status: string; settlements: number }>(
+              sql`
           select
             (select status from payment_instructions where id = ${instructionId}) as instruction_status,
             (select count(*)::int from payment_settlements where payment_instruction_id = ${instructionId}) as settlements
-        `, "objects"))[0],
+        `,
+              "objects",
+            )
+          )[0],
       );
       assert.deepEqual(state, { instruction_status: "sent", settlements: 0 });
     } finally {
-      await withBypass(() => db.execute(sql`
+      await withBypass(() =>
+        db.execute(sql`
         delete from payment_settlements where payment_instruction_id = ${instructionId}
-      `));
+      `),
+      );
       await withBypass(() => dropScratchOrg(foreignOrg.orgId));
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -407,8 +530,12 @@ test(
     const runB = randomUUID();
     const instructionB = randomUUID();
     try {
-      const actorA = await withBypass(() => createScratchUser(orgA.orgId, "Settlement operator A", "admin"));
-      const actorB = await withBypass(() => createScratchUser(orgB.orgId, "Settlement operator B", "admin"));
+      const actorA = await withBypass(() =>
+        createScratchUser(orgA.orgId, "Settlement operator A", "admin"),
+      );
+      const actorB = await withBypass(() =>
+        createScratchUser(orgB.orgId, "Settlement operator B", "admin"),
+      );
       for (const [org, actor, runId, instructionId] of [
         [orgA, actorA, runA, instructionA],
         [orgB, actorB, runB, instructionB],
@@ -433,20 +560,28 @@ test(
 
       const settle = (org: typeof orgA, actor: string, instructionId: string, ref: string) =>
         recordPaymentSettlement({
-          instructionId, orgId: org.orgId, userId: actor,
-          status: "settled", effectiveOn: org.date, bankReference: ref,
+          instructionId,
+          orgId: org.orgId,
+          userId: actor,
+          status: "settled",
+          effectiveOn: org.date,
+          bankReference: ref,
         });
       await settle(orgA, actorA, instructionA, "ref-A1");
       await settle(orgA, actorA, instructionA, "ref-A2");
       await settle(orgB, actorB, instructionB, "ref-B");
 
-      const rows = await withBypass(async () =>
-        await db.execute<{ orgId: string; reference: string | null; count: number }>(sql`
+      const rows = await withBypass(
+        async () =>
+          await db.execute<{ orgId: string; reference: string | null; count: number }>(
+            sql`
           select org_id as "orgId", bank_reference as "reference", count(*)::int as "count"
             from payment_settlements
            where payment_instruction_id in (${instructionA}, ${instructionB})
            group by org_id, bank_reference
-           order by org_id`, "objects"),
+           order by org_id`,
+            "objects",
+          ),
       );
       const sortedRows = [...rows].sort((a, b) => a.orgId.localeCompare(b.orgId));
       const expectedRows = [
@@ -455,8 +590,10 @@ test(
       ].sort((a, b) => a.orgId.localeCompare(b.orgId));
       assert.deepEqual(sortedRows, expectedRows);
     } finally {
-      await withBypass(() => db.execute(sql`
-        delete from payment_settlements where payment_instruction_id in (${instructionA}, ${instructionB})`));
+      await withBypass(() =>
+        db.execute(sql`
+        delete from payment_settlements where payment_instruction_id in (${instructionA}, ${instructionB})`),
+      );
       await withBypass(() => dropScratchOrg(orgB.orgId));
       await withBypass(() => dropScratchOrg(orgA.orgId));
     }
@@ -476,8 +613,13 @@ test(
       await ensureBuiltInPaymentFormats(orgA.orgId, null);
       await ensureBuiltInPaymentFormats(orgB.orgId, null);
       const count = async (orgId: string) =>
-        (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from payment_formats where org_id = ${orgId}`, "objects"))[0]!.n;
+        (
+          await db.execute<{ n: number }>(
+            sql`
+          select count(*)::int as n from payment_formats where org_id = ${orgId}`,
+            "objects",
+          )
+        )[0]!.n;
       const first = await count(orgA.orgId);
       assert.ok(first > 0, "built-ins land on first ensure");
       await ensureBuiltInPaymentFormats(orgA.orgId, null);

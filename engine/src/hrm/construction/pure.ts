@@ -1,5 +1,8 @@
 import { HrmConstructionError } from "./errors.ts";
-import { compareDecimal as compareExactDecimals, parseExactDecimal } from "../../money/exact-decimal.ts";
+import {
+  compareDecimal as compareExactDecimals,
+  parseExactDecimal,
+} from "../../money/exact-decimal.ts";
 import { add, mulRatio, neg, toUnits } from "../../money/money.ts";
 
 /**
@@ -97,7 +100,10 @@ export function applyReciprocity(
  * still throws; only the silent truncation is gone.
  */
 export function compareDecimal(a: string, b: string): number {
-  for (const [label, value] of [["first", a], ["second", b]] as const) {
+  for (const [label, value] of [
+    ["first", a],
+    ["second", b],
+  ] as const) {
     if (parseExactDecimal(value) === null) {
       throw new HrmConstructionError(
         `cannot compare rate ${JSON.stringify(value)} (${label} value) — re-enter both bases as plain decimals`,
@@ -123,7 +129,12 @@ export interface DistanceBracket {
  */
 export function perDiemAmountForDay(
   basis: PerDiemBasis,
-  rules: { amount?: string; brackets?: readonly DistanceBracket[]; min_hours?: number; amount_for_hours?: string },
+  rules: {
+    amount?: string;
+    brackets?: readonly DistanceBracket[];
+    min_hours?: number;
+    amount_for_hours?: string;
+  },
   inputs: { distanceKm?: number | null; hours?: string | null },
 ): string {
   if (basis === "flat_daily") {
@@ -178,7 +189,8 @@ export function applyWeeklyRule(
   workedDays?: number,
 ): readonly string[] {
   if (!weeklyRule) return dailyAmounts;
-  const worked = workedDays ?? dailyAmounts.filter((amount) => compareDecimal(amount, "0") > 0).length;
+  const worked =
+    workedDays ?? dailyAmounts.filter((amount) => compareDecimal(amount, "0") > 0).length;
   if (worked < weeklyRule.worked_days) return dailyAmounts;
   if (dailyAmounts.length === 0 || weeklyRule.paid_days <= dailyAmounts.length) return dailyAmounts;
   const extra = weeklyRule.paid_days - dailyAmounts.length;
@@ -194,15 +206,19 @@ export function allocateDailyPerDiem(
   if (rows.length === 0) return [];
   const hours = rows.map((row) => {
     const units = toUnits(row.hours);
-    if (units <= 0n) throw new HrmConstructionError("Approved project-day hours must be positive before allocating a daily per-diem.");
+    if (units <= 0n)
+      throw new HrmConstructionError(
+        "Approved project-day hours must be positive before allocating a daily per-diem.",
+      );
     return units;
   });
   const totalHours = hours.reduce((total, units) => total + units, 0n);
   let allocated = "0.0000";
   return rows.map((row, index) => {
-    const share = index === rows.length - 1
-      ? add(amount, neg(allocated))
-      : mulRatio(amount, hours[index]!, totalHours);
+    const share =
+      index === rows.length - 1
+        ? add(amount, neg(allocated))
+        : mulRatio(amount, hours[index]!, totalHours);
     allocated = add(allocated, share);
     return { ...row, amount: share };
   });

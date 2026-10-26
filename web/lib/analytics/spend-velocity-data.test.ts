@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { getSpendVelocityComparisonWindows, moneyCagr, monthsToCliffFor, priorYearCapFor, velocityAndAcceleration } = await import(
-  "./spend-velocity-data.ts"
-);
+const {
+  getSpendVelocityComparisonWindows,
+  moneyCagr,
+  monthsToCliffFor,
+  priorYearCapFor,
+  velocityAndAcceleration,
+} = await import("./spend-velocity-data.ts");
 
 const fiscalPeriods = [
   { fiscalYear: 2026, periodNumber: 1, name: "P1", from: "2026-02-01", to: "2026-03-01" },
@@ -20,50 +24,96 @@ const fiscalPeriods = [
  * must never compare its short span against whole prior periods.
  */
 test("comparison windows snap, anchor, or shift by declared coverage", () => {
-  const cases: Array<{ name: string; from: string; to: string; periods?: typeof fiscalPeriods; want: object }> = [
+  const cases: Array<{
+    name: string;
+    from: string;
+    to: string;
+    periods?: typeof fiscalPeriods;
+    want: object;
+  }> = [
     {
       name: "calendar month",
       from: "2026-01-01",
       to: "2026-01-31",
-      want: { periodDays: 31, priorFrom: "2025-12-01", priorTo: "2025-12-31", twoBackFrom: "2025-10-31", twoBackTo: "2025-11-30" },
+      want: {
+        periodDays: 31,
+        priorFrom: "2025-12-01",
+        priorTo: "2025-12-31",
+        twoBackFrom: "2025-10-31",
+        twoBackTo: "2025-11-30",
+      },
     },
     {
       name: "one-day period",
       from: "2026-02-14",
       to: "2026-02-14",
-      want: { periodDays: 1, priorFrom: "2026-02-13", priorTo: "2026-02-13", twoBackFrom: "2026-02-12", twoBackTo: "2026-02-12" },
+      want: {
+        periodDays: 1,
+        priorFrom: "2026-02-13",
+        priorTo: "2026-02-13",
+        twoBackFrom: "2026-02-12",
+        twoBackTo: "2026-02-12",
+      },
     },
     {
       name: "aligned period",
       from: "2026-03-30",
       to: "2026-04-26",
       periods: fiscalPeriods,
-      want: { periodDays: 28, priorFrom: "2026-03-02", priorTo: "2026-03-29", twoBackFrom: "2026-02-01", twoBackTo: "2026-03-01" },
+      want: {
+        periodDays: 28,
+        priorFrom: "2026-03-02",
+        priorTo: "2026-03-29",
+        twoBackFrom: "2026-02-01",
+        twoBackTo: "2026-03-01",
+      },
     },
     {
       name: "period-to-date",
       from: "2026-03-30",
       to: "2026-04-10",
       periods: fiscalPeriods,
-      want: { periodDays: 12, priorFrom: "2026-03-02", priorTo: "2026-03-13", twoBackFrom: "2026-02-18", twoBackTo: "2026-03-01" },
+      want: {
+        periodDays: 12,
+        priorFrom: "2026-03-02",
+        priorTo: "2026-03-13",
+        twoBackFrom: "2026-02-18",
+        twoBackTo: "2026-03-01",
+      },
     },
     {
       name: "two-period run with one declared period behind",
       from: "2026-03-02",
       to: "2026-04-26",
       periods: fiscalPeriods,
-      want: { periodDays: 56, priorFrom: "2026-01-05", priorTo: "2026-03-01", twoBackFrom: "2025-11-10", twoBackTo: "2026-01-04" },
+      want: {
+        periodDays: 56,
+        priorFrom: "2026-01-05",
+        priorTo: "2026-03-01",
+        twoBackFrom: "2025-11-10",
+        twoBackTo: "2026-01-04",
+      },
     },
     {
       name: "mid-period window with no preceding run",
       from: "2026-03-10",
       to: "2026-04-10",
       periods: fiscalPeriods,
-      want: { periodDays: 32, priorFrom: "2026-02-06", priorTo: "2026-03-09", twoBackFrom: "2026-01-05", twoBackTo: "2026-02-05" },
+      want: {
+        periodDays: 32,
+        priorFrom: "2026-02-06",
+        priorTo: "2026-03-09",
+        twoBackFrom: "2026-01-05",
+        twoBackTo: "2026-02-05",
+      },
     },
   ];
   for (const c of cases) {
-    assert.deepEqual(getSpendVelocityComparisonWindows(c.from, c.to, c.periods ?? []), c.want, c.name);
+    assert.deepEqual(
+      getSpendVelocityComparisonWindows(c.from, c.to, c.periods ?? []),
+      c.want,
+      c.name,
+    );
   }
 });
 
@@ -78,22 +128,48 @@ test("a period-to-date report caps the matched prior-year bucket at the same off
     ...fiscalPeriods,
   ];
   // Eleven days into P3 (03-30..04-10) caps prior P3 eleven days in (03-31..04-11).
-  assert.deepEqual(priorYearCapFor(withPrior, true, "2026-04-10"), { bucket: "2025-03-31", date: "2025-04-11" });
+  assert.deepEqual(priorYearCapFor(withPrior, true, "2026-04-10"), {
+    bucket: "2025-03-31",
+    date: "2025-04-11",
+  });
   // A report ending on the bucket boundary compares whole with whole.
   assert.equal(priorYearCapFor(withPrior, true, "2026-04-26"), null);
   // P2 has no prior-year match in this calendar: YoY stays unknown, no cap.
   assert.equal(priorYearCapFor(fiscalPeriods, true, "2026-03-10"), null);
   // Calendar mode caps the same month a year earlier at the same day offset.
-  assert.deepEqual(priorYearCapFor([], false, "2026-04-10"), { bucket: "2025-04", date: "2025-04-10" });
+  assert.deepEqual(priorYearCapFor([], false, "2026-04-10"), {
+    bucket: "2025-04",
+    date: "2025-04-10",
+  });
   assert.equal(priorYearCapFor([], false, "2026-04-30"), null);
 });
 
 test("measured series score velocity, acceleration and trend from disjoint halves", () => {
-  const cases: Array<{ name: string; amounts: number[]; want: { velocity: number | null; acceleration: number | null; trend: string } }> = [
-    { name: "flat", amounts: [200, 200, 200, 200, 200, 200], want: { velocity: 0, acceleration: 0, trend: "stable" } },
-    { name: "repeating", amounts: [100, 200, 100, 200], want: { velocity: 26, acceleration: 0, trend: "high" } },
-    { name: "rising", amounts: [100, 100, 100, 200, 300, 500], want: { velocity: 38, acceleration: 58.1, trend: "accelerating" } },
-    { name: "falling", amounts: [500, 300, 200, 100, 100, 100], want: { velocity: -27.5, acceleration: 36.8, trend: "declining" } },
+  const cases: Array<{
+    name: string;
+    amounts: number[];
+    want: { velocity: number | null; acceleration: number | null; trend: string };
+  }> = [
+    {
+      name: "flat",
+      amounts: [200, 200, 200, 200, 200, 200],
+      want: { velocity: 0, acceleration: 0, trend: "stable" },
+    },
+    {
+      name: "repeating",
+      amounts: [100, 200, 100, 200],
+      want: { velocity: 26, acceleration: 0, trend: "high" },
+    },
+    {
+      name: "rising",
+      amounts: [100, 100, 100, 200, 300, 500],
+      want: { velocity: 38, acceleration: 58.1, trend: "accelerating" },
+    },
+    {
+      name: "falling",
+      amounts: [500, 300, 200, 100, 100, 100],
+      want: { velocity: -27.5, acceleration: 36.8, trend: "declining" },
+    },
   ];
   for (const c of cases) {
     assert.deepEqual(velocityAndAcceleration(c.amounts), c.want, c.name);
@@ -136,9 +212,21 @@ test("months to cliff compounds the measured gap to the breached ratio", () => {
 
 test("too little history measures nothing instead of a flat zero", () => {
   const engine = { velocityHighThreshold: 15, velocityMediumThreshold: 5, minBaseAmount: "" };
-  assert.deepEqual(velocityAndAcceleration([], engine), { velocity: null, acceleration: null, trend: "stable" });
-  assert.deepEqual(velocityAndAcceleration([0, 0], engine), { velocity: null, acceleration: null, trend: "stable" });
-  assert.deepEqual(velocityAndAcceleration([5], engine), { velocity: null, acceleration: null, trend: "new" });
+  assert.deepEqual(velocityAndAcceleration([], engine), {
+    velocity: null,
+    acceleration: null,
+    trend: "stable",
+  });
+  assert.deepEqual(velocityAndAcceleration([0, 0], engine), {
+    velocity: null,
+    acceleration: null,
+    trend: "stable",
+  });
+  assert.deepEqual(velocityAndAcceleration([5], engine), {
+    velocity: null,
+    acceleration: null,
+    trend: "new",
+  });
 });
 
 test("an unset minimum base scores dust series from their first month", () => {

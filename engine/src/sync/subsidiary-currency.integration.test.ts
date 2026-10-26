@@ -25,9 +25,14 @@ import { stubMigrationSource as source } from "./integration-seeds.ts";
 const DB = !!env.OPENBOOKS_DB_URL;
 
 async function currencyOf(orgId: string, ref: string): Promise<string | null> {
-  const [row] = await withOrg(orgId, () => db.execute<{ base_currency: string }>(sql`
+  const [row] = await withOrg(orgId, () =>
+    db.execute<{ base_currency: string }>(
+      sql`
     select base_currency from subsidiaries
-     where org_id = ${orgId} and custom->>'migrationTest' = ${ref}`, "objects"));
+     where org_id = ${orgId} and custom->>'migrationTest' = ${ref}`,
+      "objects",
+    ),
+  );
   return row?.base_currency ?? null;
 }
 
@@ -42,8 +47,15 @@ test(
         {
           resource: "subsidiaries",
           records: [
-            { sourceRef: "SUB-PARENT", fields: { name: "Parent", baseCurrency: "CAD", country: "CA" } },
-            { sourceRef: "SUB-FX", parentRef: "SUB-PARENT", fields: { name: childName, baseCurrency: childCurrency, country: "CA" } },
+            {
+              sourceRef: "SUB-PARENT",
+              fields: { name: "Parent", baseCurrency: "CAD", country: "CA" },
+            },
+            {
+              sourceRef: "SUB-FX",
+              parentRef: "SUB-PARENT",
+              fields: { name: childName, baseCurrency: childCurrency, country: "CA" },
+            },
           ],
         },
       ];
@@ -66,9 +78,14 @@ test(
         /SUB-FX.*CAD → USD/,
         "the held change names the source ref and both currencies",
       );
-      const [renamed] = await withOrg(org.orgId, () => db.execute<{ name: string }>(sql`
+      const [renamed] = await withOrg(org.orgId, () =>
+        db.execute<{ name: string }>(
+          sql`
         select name from subsidiaries
-         where org_id = ${org.orgId} and custom->>'migrationTest' = 'SUB-FX'`, "objects"));
+         where org_id = ${org.orgId} and custom->>'migrationTest' = 'SUB-FX'`,
+          "objects",
+        ),
+      );
       assert.equal(
         renamed?.name,
         "Fx Sub Renamed",
@@ -85,27 +102,26 @@ test(
   },
 );
 
-test(
-  "first load adopts the source currency onto the reused root",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const src = source();
-      const stats = await withOrg(org.orgId, () =>
-        loadEntities(src, org.orgId, null, undefined, undefined, [
-          {
-            resource: "subsidiaries",
-            records: [
-              { sourceRef: "SUB-ROOT", fields: { name: "Root Co", baseCurrency: "USD", country: "US" } },
-            ],
-          },
-        ]),
-      );
-      assert.equal(await currencyOf(org.orgId, "SUB-ROOT"), "USD");
-      assert.equal(stats.subsidiaries?.failed ?? 0, 0);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("first load adopts the source currency onto the reused root", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const src = source();
+    const stats = await withOrg(org.orgId, () =>
+      loadEntities(src, org.orgId, null, undefined, undefined, [
+        {
+          resource: "subsidiaries",
+          records: [
+            {
+              sourceRef: "SUB-ROOT",
+              fields: { name: "Root Co", baseCurrency: "USD", country: "US" },
+            },
+          ],
+        },
+      ]),
+    );
+    assert.equal(await currencyOf(org.orgId, "SUB-ROOT"), "USD");
+    assert.equal(stats.subsidiaries?.failed ?? 0, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

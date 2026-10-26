@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionWarehouses: DocArticle = {
-  slug: 'distribution-warehouses',
-  title: 'Warehouses and Putaway',
-  category: 'transactions',
+  slug: "distribution-warehouses",
+  title: "Warehouses and Putaway",
+  category: "transactions",
   order: 8,
   summary:
-    'Give each warehouse a name, an address and a lifecycle that every stock movement respects, and let ordered putaway rules decide which bin received stock goes to.',
-  updated: '2026-09-27',
-  keywords: ['warehouse', 'bin', 'zone', 'staging', 'putaway', 'suspend', 'retire', 'distribution', 'tie-out'],
-  related: ['purchasing-workflow', 'sales-workflow'],
+    "Give each warehouse a name, an address and a lifecycle that every stock movement respects, and let ordered putaway rules decide which bin received stock goes to.",
+  updated: "2026-09-27",
+  keywords: [
+    "warehouse",
+    "bin",
+    "zone",
+    "staging",
+    "putaway",
+    "suspend",
+    "retire",
+    "distribution",
+    "tie-out",
+  ],
+  related: ["purchasing-workflow", "sales-workflow"],
   body: `# Warehouses and Putaway
 
 A warehouse is a stock location of kind **warehouse**. Its zones, bins and
@@ -81,4 +91,4 @@ stock held outside every warehouse, beside the posted balance of the
 inventory control accounts. The difference should be zero; open the control
 balance to see the ledger lines behind it.
 `,
-}
+};

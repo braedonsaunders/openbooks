@@ -7,12 +7,14 @@ import {
   submitChangeRequest,
   type ChangeRequestDTO,
 } from "../change-requests.ts";
-import { actorPartyOf, assertHrmFeatureOn, ownEmploymentOrHireRemedy, SelfServiceError } from "./actor.ts";
-import { escapeHtml } from "../recruiting/depth.ts";
 import {
-  bankChangeProposalSchema,
-  type BankChangeProposal,
-} from "./bank-schema.ts";
+  actorPartyOf,
+  assertHrmFeatureOn,
+  ownEmploymentOrHireRemedy,
+  SelfServiceError,
+} from "./actor.ts";
+import { escapeHtml } from "../recruiting/depth.ts";
+import { bankChangeProposalSchema, type BankChangeProposal } from "./bank-schema.ts";
 import { inputGuards } from "../input-guards.ts";
 
 /**
@@ -42,7 +44,9 @@ import { inputGuards } from "../input-guards.ts";
  * path, which the flows module owns.
  */
 
-const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
+const { requireOrgId, requireActorId, requireId } = inputGuards(
+  (message) => new SelfServiceError("REFUSED", message),
+);
 
 function requireBankReason(reason: unknown): string {
   if (typeof reason !== "string" || reason.trim().length < 5 || reason.trim().length > 500) {
@@ -64,7 +68,9 @@ export function validateBankChange(raw: unknown): BankChangeProposal {
   if (!parsed.success) {
     const fields = parsed.error.issues
       .map((issue) =>
-        issue.path.length > 0 ? `${issue.path.map(String).join(".")}: ${issue.message}` : issue.message,
+        issue.path.length > 0
+          ? `${issue.path.map(String).join(".")}: ${issue.message}`
+          : issue.message,
       )
       .join("; ");
     throw new SelfServiceError("REFUSED", `bank change refused: ${fields}`);
@@ -136,12 +142,17 @@ async function workerContact(
   exec: SqlExecutor,
   args: { orgId: string; employmentId: string },
 ): Promise<{ name: string; email: string | null }> {
-  const row = (await exec.execute<{ name: string; email: string | null }>(sql`
+  const row = (
+    await exec.execute<{ name: string; email: string | null }>(
+      sql`
     select p.display_name as name, p.email as email
       from parties p
       join worker_employments e on e.org_id = p.org_id and e.worker_party_id = p.id
      where e.org_id = ${args.orgId} and e.id = ${args.employmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return { name: row?.name ?? "employee", email: row?.email ?? null };
 }
 
@@ -159,7 +170,10 @@ export async function fileBankDetailsChange(
   // this row pays exactly like a natively filed one. Last-four echo
   // follows the native rule (trailing four of the trimmed number).
   const accountNumber = bank.accountNumber.trim();
-  const sealedAccount = sealSecret(accountNumber, { orgId, purpose: "payment.counterparty.account" });
+  const sealedAccount = sealSecret(accountNumber, {
+    orgId,
+    purpose: "payment.counterparty.account",
+  });
   const accountLastFour = accountNumber.slice(-4);
   const result = await withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId, actorId);
@@ -209,7 +223,13 @@ export async function fileBankDetailsChange(
   });
   try {
     await notify(
-      { orgId, to: staged.notice.to, subject: staged.notice.subject, html: staged.notice.html, text: staged.notice.text },
+      {
+        orgId,
+        to: staged.notice.to,
+        subject: staged.notice.subject,
+        html: staged.notice.html,
+        text: staged.notice.text,
+      },
       { jobId: staged.jobId },
     );
     return { request: result.request, applied: true, notified: true };
@@ -251,7 +271,8 @@ export async function listOwnBankAccounts(query: {
       lastFour: string | null;
       approvalStatus: string;
       isActive: boolean;
-    }>(sql`
+    }>(
+      sql`
       select id::text as id, bank_name as "bankName", country, currency,
              account_last_four as "lastFour", approval_status as "approvalStatus",
              is_active as "isActive"
@@ -259,7 +280,9 @@ export async function listOwnBankAccounts(query: {
        where org_id = ${orgId} and party_id = ${partyId} and retired_at is null
        order by is_active desc, created_at desc, id
        limit 25
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((row) => ({
       id: row.id,
       bankName: row.bankName,

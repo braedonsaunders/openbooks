@@ -1,15 +1,18 @@
-import { getTranslations } from 'next-intl/server'
-import { Alert } from '@openbooks/ui'
+import { getTranslations } from "next-intl/server";
+import { Alert } from "@openbooks/ui";
 import {
   observedHolidays,
   statutoryHolidayPayRule,
   type ObservedHoliday,
-} from '@openbooks/engine/payroll/holidays'
-import { declaredJurisdictions } from '@openbooks/engine/payroll/packs'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { ListFilterSelect } from '../../../../../components/list-filter-select'
-import { pickString } from '../../../../../lib/list-params'
-import { ObservedHolidayTable, observedHolidayLabels } from '../../../../../components/payroll-observed-holidays'
+} from "@openbooks/engine/payroll/holidays";
+import { declaredJurisdictions } from "@openbooks/engine/payroll/packs";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { ListFilterSelect } from "../../../../../components/list-filter-select";
+import { pickString } from "../../../../../lib/list-params";
+import {
+  ObservedHolidayTable,
+  observedHolidayLabels,
+} from "../../../../../components/payroll-observed-holidays";
 
 /**
  * The resolved statutory holiday calendar: the country pack's declared days and
@@ -27,49 +30,51 @@ import { ObservedHolidayTable, observedHolidayLabels } from '../../../../../comp
  * refuses rather than pay zero.
  */
 
-const BASE_PATH = '/admin/setup/payroll'
+const BASE_PATH = "/admin/setup/payroll";
 
 export async function HolidayCalendarSection({
   orgId,
   searchParams: sp,
 }: {
-  orgId: string
-  searchParams: Record<string, string | string[] | undefined>
+  orgId: string;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const t = await getTranslations('payroll.settingsPage')
-  const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
+  const t = await getTranslations("payroll.settingsPage");
+  const label = (key: string, fallback: string) =>
+    t.has(key as never) ? t(key as never) : fallback;
 
-  const jurisdictions = declaredJurisdictions()
-  const jurisdiction = selectedHolidayJurisdiction(sp)
-  const thisYear = Number((await businessToday(orgId)).slice(0, 4))
-  const year = Number(pickString(sp.year) ?? thisYear)
+  const jurisdictions = declaredJurisdictions();
+  const jurisdiction = selectedHolidayJurisdiction(sp);
+  const thisYear = Number((await businessToday(orgId)).slice(0, 4));
+  const year = Number(pickString(sp.year) ?? thisYear);
 
-  let holidays: ObservedHoliday[] = []
-  let failure: string | null = null
-  let payRule: ReturnType<typeof statutoryHolidayPayRule> | undefined
+  let holidays: ObservedHoliday[] = [];
+  let failure: string | null = null;
+  let payRule: ReturnType<typeof statutoryHolidayPayRule> | undefined;
   try {
-    if (jurisdiction) holidays = await observedHolidays(orgId, jurisdiction, `${year}-01-01`, `${year}-12-31`)
+    if (jurisdiction)
+      holidays = await observedHolidays(orgId, jurisdiction, `${year}-01-01`, `${year}-12-31`);
     // Holiday-pay formulas are effective-dated (Prince Edward Island's changed
     // mid-2026), so the rule shown is the one in force at the END of the year
     // being viewed — the one that governs the next holiday, not a rule that has
     // already been repealed.
-    if (jurisdiction) payRule = statutoryHolidayPayRule(jurisdiction, `${year}-12-31`)
+    if (jurisdiction) payRule = statutoryHolidayPayRule(jurisdiction, `${year}-12-31`);
   } catch (error) {
-    failure = error instanceof Error ? error.message : String(error)
+    failure = error instanceof Error ? error.message : String(error);
   }
 
-  const declaration = jurisdictions.find((entry) => entry.key === jurisdiction)
+  const declaration = jurisdictions.find((entry) => entry.key === jurisdiction);
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {label('holidayCalendar.title', 'Statutory holiday calendar')}
+          {label("holidayCalendar.title", "Statutory holiday calendar")}
         </h2>
         <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
           {label(
-            'holidayCalendar.description',
-            'The days this jurisdiction observes, with your own elections applied. Statutory days come from the country pack and cannot be switched off; optional and company days are configured on the Holidays tab.',
+            "holidayCalendar.description",
+            "The days this jurisdiction observes, with your own elections applied. Statutory days come from the country pack and cannot be switched off; optional and company days are configured on the Holidays tab.",
           )}
         </p>
       </div>
@@ -79,16 +84,16 @@ export async function HolidayCalendarSection({
           basePath={BASE_PATH}
           currentParams={sp}
           paramKey="jurisdiction"
-          label={label('holidayCalendar.jurisdiction', 'Jurisdiction')}
-          allLabel={label('holidayCalendar.jurisdiction', 'Jurisdiction')}
+          label={label("holidayCalendar.jurisdiction", "Jurisdiction")}
+          allLabel={label("holidayCalendar.jurisdiction", "Jurisdiction")}
           options={jurisdictions.map((entry) => ({ value: entry.key, label: entry.name }))}
         />
         <ListFilterSelect
           basePath={BASE_PATH}
           currentParams={sp}
           paramKey="year"
-          label={label('holidayCalendar.year', 'Year')}
-          allLabel={label('holidayCalendar.year', 'Year')}
+          label={label("holidayCalendar.year", "Year")}
+          allLabel={label("holidayCalendar.year", "Year")}
           options={[-1, 0, 1, 2].map((offset) => ({
             value: String(thisYear + offset),
             label: String(thisYear + offset),
@@ -98,7 +103,7 @@ export async function HolidayCalendarSection({
 
       {declaration ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {label('holidayCalendar.citation', 'Source')}: {declaration.citation}
+          {label("holidayCalendar.citation", "Source")}: {declaration.citation}
         </p>
       ) : null}
 
@@ -108,21 +113,26 @@ export async function HolidayCalendarSection({
       {failure ? <Alert variant="destructive">{failure}</Alert> : null}
 
       {!failure && !jurisdiction ? (
-        <Alert>{label('holidayCalendar.selectJurisdiction', 'Select a jurisdiction to view its statutory holidays.')}</Alert>
+        <Alert>
+          {label(
+            "holidayCalendar.selectJurisdiction",
+            "Select a jurisdiction to view its statutory holidays.",
+          )}
+        </Alert>
       ) : null}
 
       {!failure && jurisdiction && payRule === null ? (
         <Alert>
           {label(
-            'holidayCalendar.noMandate',
-            'This jurisdiction mandates no statutory holiday pay, so the calendar drives closures and working-day arithmetic only. Days off may still be paid under your own policy.',
+            "holidayCalendar.noMandate",
+            "This jurisdiction mandates no statutory holiday pay, so the calendar drives closures and working-day arithmetic only. Days off may still be paid under your own policy.",
           )}
         </Alert>
       ) : null}
       {!failure && payRule ? (
         <Alert variant="info">
           <div className="font-medium">
-            {label('holidayCalendar.payRule', 'How a day’s holiday pay is computed')}
+            {label("holidayCalendar.payRule", "How a day’s holiday pay is computed")}
           </div>
           <div className="mt-1">{describeBasis(payRule, label)}</div>
           <div className="mt-1 text-xs">{payRule.citation}</div>
@@ -133,11 +143,13 @@ export async function HolidayCalendarSection({
         <ObservedHolidayTable holidays={holidays} labels={observedHolidayLabels(label)} />
       ) : null}
     </div>
-  )
+  );
 }
 
-export function selectedHolidayJurisdiction(searchParams: Record<string, string | string[] | undefined>): string | null {
-  return pickString(searchParams.jurisdiction) ?? null
+export function selectedHolidayJurisdiction(
+  searchParams: Record<string, string | string[] | undefined>,
+): string | null {
+  return pickString(searchParams.jurisdiction) ?? null;
 }
 
 /** The formula, worded the way the statute words it. */
@@ -149,61 +161,83 @@ function describeBasis(
   // it normally pays, and the fallback the same statute names for an employee
   // with no normal day. Describing only one would make the screen disagree with
   // half the pay runs it explains.
-  if (rule.basis.kind === 'normal_day') {
-    const standard = rule.basis.minWeeklyHours !== undefined
-      ? label('holidayCalendar.normalDayStandardHours', 'for employees working at least '
-        + `${rule.basis.minWeeklyHours} hours a week, `)
-      : ''
-    const normalDay = `${standard}${label('holidayCalendar.normalDay', 'the wages of one normal working '
-      + 'day, from the employee\u2019s recorded work schedule')}. `
+  if (rule.basis.kind === "normal_day") {
+    const standard =
+      rule.basis.minWeeklyHours !== undefined
+        ? label(
+            "holidayCalendar.normalDayStandardHours",
+            "for employees working at least " + `${rule.basis.minWeeklyHours} hours a week, `,
+          )
+        : "";
+    const normalDay = `${standard}${label(
+      "holidayCalendar.normalDay",
+      "the wages of one normal working " + "day, from the employee\u2019s recorded work schedule",
+    )}. `;
     // An Act that writes no varying-hours formula (it leaves the rate to an
     // inspector) has no fallback arm; the engine refuses those employees by name.
     if (rule.basis.whenIrregular === undefined) {
-      return normalDay + label('holidayCalendar.normalDayNoFallback', 'The Act states no formula for '
-        + 'employees without a normal working day, so their holiday pay is refused by name rather than priced.')
+      return (
+        normalDay +
+        label(
+          "holidayCalendar.normalDayNoFallback",
+          "The Act states no formula for " +
+            "employees without a normal working day, so their holiday pay is refused by name rather than priced.",
+        )
+      );
     }
-    return normalDay
-      + `${label('holidayCalendar.normalDayOtherwise', 'Otherwise')}: `
-      + describeBasis({ ...rule, basis: rule.basis.whenIrregular }, label)
+    return (
+      normalDay +
+      `${label("holidayCalendar.normalDayOtherwise", "Otherwise")}: ` +
+      describeBasis({ ...rule, basis: rule.basis.whenIrregular }, label)
+    );
   }
-  const { basis } = rule
+  const { basis } = rule;
   // Where the window ENDS is a statutory difference of up to six days of
   // earnings, so the screen must not say "before the holiday" for a rule that
   // counts to the week before it.
-  const before = rule.lookbackEnds.kind === 'week_before'
-    ? label('holidayCalendar.beforeTheWeek', 'before the week of the holiday')
-    : label('holidayCalendar.beforeTheDay', 'before the holiday')
+  const before =
+    rule.lookbackEnds.kind === "week_before"
+      ? label("holidayCalendar.beforeTheWeek", "before the week of the holiday")
+      : label("holidayCalendar.beforeTheDay", "before the holiday");
   const included = [
-    label('holidayCalendar.regularWages', 'regular wages'),
-    rule.include.overtime ? label('holidayCalendar.overtime', 'overtime') : null,
-    rule.include.vacationPay ? label('holidayCalendar.vacationPay', 'vacation pay') : null,
-    rule.include.holidayPay ? label('holidayCalendar.priorHolidayPay', 'earlier holiday pay') : null,
-  ].filter(Boolean).join(', ')
+    label("holidayCalendar.regularWages", "regular wages"),
+    rule.include.overtime ? label("holidayCalendar.overtime", "overtime") : null,
+    rule.include.vacationPay ? label("holidayCalendar.vacationPay", "vacation pay") : null,
+    rule.include.holidayPay
+      ? label("holidayCalendar.priorHolidayPay", "earlier holiday pay")
+      : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
-  if (basis.kind === 'fixed_divisor') {
-    const main = `${included} over the ${basis.lookbackWeeks} weeks ${before}, ÷ ${basis.divisor}`
+  if (basis.kind === "fixed_divisor") {
+    const main = `${included} over the ${basis.lookbackWeeks} weeks ${before}, ÷ ${basis.divisor}`;
     return basis.commission
-      ? `${main}. Commission earners with ${basis.commission.minWeeksEmployed}+ weeks of service: `
-        + `${basis.commission.lookbackWeeks} weeks ÷ ${basis.commission.divisor}.`
-      : `${main}.`
+      ? `${main}. Commission earners with ${basis.commission.minWeeksEmployed}+ weeks of service: ` +
+          `${basis.commission.lookbackWeeks} weeks ÷ ${basis.commission.divisor}.`
+      : `${main}.`;
   }
-  if (basis.kind === 'percent_of_earnings') {
-    return `${basis.percent}% of ${included} over the ${basis.lookbackWeeks} weeks ${before}.`
+  if (basis.kind === "percent_of_earnings") {
+    return `${basis.percent}% of ${included} over the ${basis.lookbackWeeks} weeks ${before}.`;
   }
-  if (basis.kind === 'average_hours_day') {
-    return `current hourly rate × average hours worked per day over the ${basis.lookbackWeeks} weeks ${before}.`
+  if (basis.kind === "average_hours_day") {
+    return `current hourly rate × average hours worked per day over the ${basis.lookbackWeeks} weeks ${before}.`;
   }
-  const window = basis.lookbackDays !== undefined
-    ? `${basis.lookbackDays} calendar days`
-    : `${basis.lookbackWeeks ?? 4} weeks`
+  const window =
+    basis.lookbackDays !== undefined
+      ? `${basis.lookbackDays} calendar days`
+      : `${basis.lookbackWeeks ?? 4} weeks`;
   // The denominator is the statute's own sentence, not "days worked" for
   // everyone: British Columbia divides by the days the employee worked OR
   // EARNED WAGES, which counts paid vacation and other paid holidays in.
-  const counted = basis.counting === 'worked'
-    ? label('holidayCalendar.daysWorked', 'days worked in it')
-    : basis.counting === 'worked_or_earned_wages'
-      ? label('holidayCalendar.daysWorkedOrEarned', 'days worked or on which wages were earned')
-      : label('holidayCalendar.daysEntitledToPay',
-        'days the employee was paid, or entitled to be paid, for')
-  return `${included} over the ${window} ${before}, ÷ the number of ${counted}.`
+  const counted =
+    basis.counting === "worked"
+      ? label("holidayCalendar.daysWorked", "days worked in it")
+      : basis.counting === "worked_or_earned_wages"
+        ? label("holidayCalendar.daysWorkedOrEarned", "days worked or on which wages were earned")
+        : label(
+            "holidayCalendar.daysEntitledToPay",
+            "days the employee was paid, or entitled to be paid, for",
+          );
+  return `${included} over the ${window} ${before}, ÷ the number of ${counted}.`;
 }

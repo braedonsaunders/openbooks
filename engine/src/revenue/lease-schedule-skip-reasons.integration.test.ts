@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
-import {
-  commenceLease,
-  createLeaseAgreement,
-  postDueLeaseSchedules,
-} from "./leases.ts";
+import { commenceLease, createLeaseAgreement, postDueLeaseSchedules } from "./leases.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -27,11 +23,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function seedLeaseAccounts(org: ScratchOrg) {
-  const mk = async (
-    number: string,
-    name: string,
-    type: string,
-  ): Promise<string> => {
+  const mk = async (number: string, name: string, type: string): Promise<string> => {
     const id = randomUUID();
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable,
@@ -51,8 +43,13 @@ async function seedLeaseAccounts(org: ScratchOrg) {
 }
 
 async function seedAugust(org: ScratchOrg): Promise<void> {
-  const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
+  const cal = (
+    await db.execute<{ id: string }>(
+      sql`
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into accounting_periods
       (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -60,8 +57,11 @@ async function seedAugust(org: ScratchOrg): Promise<void> {
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects");
+  const r = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -117,11 +117,7 @@ test(
         "refusal carries the period gate's own message verbatim",
       );
       assert.match(problem, new RegExp(org.bookId), "refusal names the book");
-      assert.match(
-        problem,
-        new RegExp(org.subsidiaryId),
-        "refusal names the legal entity",
-      );
+      assert.match(problem, new RegExp(org.subsidiaryId), "refusal names the legal entity");
 
       // Zero mutations for the closed line: no journals, no timestamps.
       const after = await journalCount(org.orgId);
@@ -130,15 +126,20 @@ test(
         2,
         "only the open August line posts (payment + amortization); the closed July line writes nothing",
       );
-      const july = (await db.execute<{
+      const july = (
+        await db.execute<{
           payment_posted_at: string | null;
           accrual_posted_at: string | null;
           payment_entry_id: string | null;
           amortization_entry_id: string | null;
-        }>(sql`
+        }>(
+          sql`
         select payment_posted_at::text, accrual_posted_at::text, payment_entry_id, amortization_entry_id
           from lease_agreement_schedule_lines
-         where org_id = ${org.orgId} and lease_id = ${leaseId} and sequence = 1`, "objects"))[0]!;
+         where org_id = ${org.orgId} and lease_id = ${leaseId} and sequence = 1`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(july.payment_posted_at, null);
       assert.equal(july.accrual_posted_at, null);
       assert.equal(july.payment_entry_id, null);
@@ -149,37 +150,33 @@ test(
   },
 );
 
-test(
-  "a replay with nothing due is silent: no error, no problem",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const accounts = await seedLeaseAccounts(org);
-      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-        subsidiaryId: org.subsidiaryId,
-        leaseNumber: "L-SKIP-2",
-        commencementOn: "2026-07-01",
-        termPeriods: 1,
-        paymentFrequency: "monthly",
-        paymentAmount: "1000",
-        annualDiscountRatePercent: "6",
-        classificationInputs: { transfersOwnership: true },
-        accounts,
-      });
-      await commenceLease(org.orgId, leaseId, null);
-      const first = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
-      assert.equal(first.posted, 1, `July must post, got ${JSON.stringify(first)}`);
-      assert.deepEqual(first.problems, []);
+test("a replay with nothing due is silent: no error, no problem", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+      subsidiaryId: org.subsidiaryId,
+      leaseNumber: "L-SKIP-2",
+      commencementOn: "2026-07-01",
+      termPeriods: 1,
+      paymentFrequency: "monthly",
+      paymentAmount: "1000",
+      annualDiscountRatePercent: "6",
+      classificationInputs: { transfersOwnership: true },
+      accounts,
+    });
+    await commenceLease(org.orgId, leaseId, null);
+    const first = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+    assert.equal(first.posted, 1, `July must post, got ${JSON.stringify(first)}`);
+    assert.deepEqual(first.problems, []);
 
-      // Nothing is due anymore: a replay is a silent no-op, not a refusal.
-      const replay = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
-      assert.equal(replay.posted, 0);
-      assert.equal(replay.skipped, 0);
-      assert.deepEqual(replay.problems, []);
-      assert.deepEqual(replay.entries, []);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    // Nothing is due anymore: a replay is a silent no-op, not a refusal.
+    const replay = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+    assert.equal(replay.posted, 0);
+    assert.equal(replay.skipped, 0);
+    assert.deepEqual(replay.problems, []);
+    assert.deepEqual(replay.entries, []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

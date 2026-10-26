@@ -7,7 +7,6 @@ import {
   parseAgentFindingsParams,
 } from "./agent-findings.ts";
 
-
 // The list source is the workbench's single URL ↔ inbox contract: every
 // filter the shared filter components can set must parse here, and the
 // paging/sort must reach loadAgentInbox — never a second parse in the page.
@@ -57,7 +56,9 @@ test("packs filter to known keys and drop junk", () => {
 });
 
 test("severity and status accept only inbox literals", () => {
-  assert.deepEqual(parseAgentFindingsParams({ severity: "critical" }).filters.severities, ["critical"]);
+  assert.deepEqual(parseAgentFindingsParams({ severity: "critical" }).filters.severities, [
+    "critical",
+  ]);
   assert.equal(parseAgentFindingsParams({ severity: "nope" }).filters.severities, undefined);
   assert.deepEqual(parseAgentFindingsParams({ status: "resolved" }).filters.statuses, ["resolved"]);
   assert.equal(parseAgentFindingsParams({ status: "nope" }).filters.statuses, undefined);

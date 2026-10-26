@@ -26,15 +26,9 @@ const _hooks = registerHooks({
         url: "data:text/javascript,export const db={execute:async(_query, mode)=>Promise.resolve({rows:[]}).then((result) => (mode === 'objects' ? result.rows : result))};export const ambientTenantOrgId=()=>null;export const currentRequestOrgResolver=()=>null;export const registerRequestOrgResolver=()=>{};export const withBypass=fn=>fn();export const withBypassContext=fn=>fn()",
       };
     if (specifier === "@/lib/api/json")
-      return next(
-        new URL("../../../../../lib/api/json.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../lib/api/json.ts", import.meta.url).href, context);
     if (specifier === "@/lib/list-params")
-      return next(
-        new URL("../../../../../lib/list-params.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../lib/list-params.ts", import.meta.url).href, context);
     return next(specifier, context);
   },
   load(url, context, next) {

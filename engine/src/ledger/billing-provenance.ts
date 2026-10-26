@@ -2,8 +2,14 @@ import { sql } from "drizzle-orm";
 import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 import { type SqlExecutor } from "../platform/db.ts";
 import { UUID_RE } from "../platform/uuid.ts";
-import { laterProgressApplicationNumbers, laterProgressApplicationsRefusal } from "../projects/construction-billing.ts";
-import { laterVendorApplicationNumbers, laterVendorApplicationsRefusal } from "../projects/subcontracts.ts";
+import {
+  laterProgressApplicationNumbers,
+  laterProgressApplicationsRefusal,
+} from "../projects/construction-billing.ts";
+import {
+  laterVendorApplicationNumbers,
+  laterVendorApplicationsRefusal,
+} from "../projects/subcontracts.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -26,20 +32,38 @@ export class BillingReleaseRefusedError extends Error {}
  * uses, and the project lock application creation takes — so no later draw can
  * be created between this check and the release.
  */
-async function assertCustomerDrawReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
-  const draws = await tx.execute<{ project_id: string; application_number: number }>(sql`
+async function assertCustomerDrawReleasable(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  const draws = await tx.execute<{ project_id: string; application_number: number }>(
+    sql`
     select project_id, application_number from pay_applications
      where org_id = ${orgId} and invoice_document_id = ${documentId}
        and kind = 'progress' and status in ('invoiced', 'posted')
      order by application_number
      for update
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const draw of draws) {
-    await tx.execute(sql`select 1 from projects where org_id = ${orgId} and id = ${draw.project_id} for update`);
-    const later = await laterProgressApplicationNumbers(tx, orgId, draw.project_id, Number(draw.application_number));
+    await tx.execute(
+      sql`select 1 from projects where org_id = ${orgId} and id = ${draw.project_id} for update`,
+    );
+    const later = await laterProgressApplicationNumbers(
+      tx,
+      orgId,
+      draw.project_id,
+      Number(draw.application_number),
+    );
     if (later.length) {
       throw new BillingReleaseRefusedError(
-        laterProgressApplicationsRefusal(Number(draw.application_number), later, "return to approved"),
+        laterProgressApplicationsRefusal(
+          Number(draw.application_number),
+          later,
+          "return to approved",
+        ),
       );
     }
   }
@@ -48,19 +72,37 @@ async function assertCustomerDrawReleasable(tx: SqlExecutor, orgId: string, docu
 /** Vendor-side counterpart: a billed subcontract draw cannot return to
  * approved while a later non-void draw on the same subcontract carries its
  * earned-to-date forward. Draw rows, then the subcontract row. */
-async function assertVendorDrawReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
-  const draws = await tx.execute<{ subcontract_id: string; application_number: number }>(sql`
+async function assertVendorDrawReleasable(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  const draws = await tx.execute<{ subcontract_id: string; application_number: number }>(
+    sql`
     select subcontract_id, application_number from vendor_pay_applications
      where org_id = ${orgId} and vendor_bill_document_id = ${documentId} and status = 'billed'
      order by application_number
      for update
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const draw of draws) {
-    await tx.execute(sql`select 1 from subcontracts where org_id = ${orgId} and id = ${draw.subcontract_id} for update`);
-    const later = await laterVendorApplicationNumbers(tx, orgId, draw.subcontract_id, Number(draw.application_number));
+    await tx.execute(
+      sql`select 1 from subcontracts where org_id = ${orgId} and id = ${draw.subcontract_id} for update`,
+    );
+    const later = await laterVendorApplicationNumbers(
+      tx,
+      orgId,
+      draw.subcontract_id,
+      Number(draw.application_number),
+    );
     if (later.length) {
       throw new BillingReleaseRefusedError(
-        laterVendorApplicationsRefusal(Number(draw.application_number), later, "return to approved"),
+        laterVendorApplicationsRefusal(
+          Number(draw.application_number),
+          later,
+          "return to approved",
+        ),
       );
     }
   }
@@ -72,7 +114,11 @@ async function assertVendorDrawReleasable(tx: SqlExecutor, orgId: string, docume
  * effect so the refusal names the later draws; the release functions below
  * repeat it under their own locks as the backstop.
  */
-export async function assertBillingReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
+export async function assertBillingReleasable(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
   await assertCustomerDrawReleasable(tx, orgId, documentId);
   await assertVendorDrawReleasable(tx, orgId, documentId);
 }
@@ -88,7 +134,9 @@ export async function liveInvoicesBillingDocument(
   orgId: string,
   documentId: string,
 ): Promise<string[]> {
-  return (await runner.execute<{ document_number: string }>(sql`
+  return (
+    await runner.execute<{ document_number: string }>(
+      sql`
     select distinct invoice.document_number
       from document_lines source
       join document_lines billed on billed.org_id = source.org_id and billed.id = source.billed_by_line_id
@@ -97,7 +145,10 @@ export async function liveInvoicesBillingDocument(
        -- Live entries only: a voided invoice has released what it billed.
        and invoice.status <> 'voided'
      order by invoice.document_number
-  `, "objects")).map((row) => row.document_number);
+  `,
+      "objects",
+    )
+  ).map((row) => row.document_number);
 }
 
 /** The operator remedy for voiding a cost that an invoice still bills. */
@@ -124,24 +175,35 @@ export async function releaseBillingProvenance(
   audit: { actorId: string | null; reason: string },
 ): Promise<void> {
   await assertCustomerDrawReleasable(tx, orgId, documentId);
-  const retainer = (await tx.execute<{
-    id: string;
-    state: string;
-    obligation_id: string | null;
-    invoice_document_id: string;
-  }>(sql`
+  const retainer = (
+    await tx.execute<{
+      id: string;
+      state: string;
+      obligation_id: string | null;
+      invoice_document_id: string;
+    }>(
+      sql`
     select id, state, obligation_id, invoice_document_id
       from res_retainers
      where org_id = ${orgId} and invoice_document_id = ${documentId}
      for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (retainer) {
-    const postedDrawdown = (await tx.execute<{ id: string }>(sql`
+    const postedDrawdown = (
+      await tx.execute<{ id: string }>(
+        sql`
       select id from res_retainer_drawdowns
        where org_id = ${orgId} and retainer_id = ${retainer.id} and state = 'posted'
        limit 1
-    `, "objects"))[0];
-    if (postedDrawdown) throw new Error("retainer invoice provenance cannot be released while a drawdown is posted");
+    `,
+        "objects",
+      )
+    )[0];
+    if (postedDrawdown)
+      throw new Error("retainer invoice provenance cannot be released while a drawdown is posted");
     const nextState = retainer.state === "active" ? "draft" : retainer.state;
     const released = await tx.execute<{ id: string }>(sql`
       update res_retainers
@@ -158,7 +220,11 @@ export async function releaseBillingProvenance(
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'res_retainers', ${retainer.id}, 'update',
         ${JSON.stringify({
-          before: { invoiceDocumentId: retainer.invoice_document_id, obligationId: retainer.obligation_id, state: retainer.state },
+          before: {
+            invoiceDocumentId: retainer.invoice_document_id,
+            obligationId: retainer.obligation_id,
+            state: retainer.state,
+          },
           after: { invoiceDocumentId: null, obligationId: null, state: nextState },
           reason: audit.reason,
         })}::jsonb, ${audit.actorId})
@@ -189,9 +255,12 @@ export async function releaseBillingProvenance(
         'reason', ${audit.reason}::text), ${audit.actorId}::uuid
     from released
   `);
-  const lineRes = (await tx.execute<{ id: string }>(sql`
+  const lineRes = await tx.execute<{ id: string }>(
+    sql`
     select id from document_lines where document_id = ${documentId} and org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const lineIds = lineRes.map((r) => r.id);
   if (lineIds.length > 0) {
     const idArr = `{${lineIds.join(",")}}`;
@@ -351,11 +420,18 @@ export async function releaseVendorRetainageProvenance(
   documentId: string,
   audit: { actorId: string | null; reason: string },
 ): Promise<void> {
-  const guarded = (await tx.execute<{ kind: string; status: string }>(sql`
+  const guarded = (
+    await tx.execute<{ kind: string; status: string }>(
+      sql`
     select kind, status from documents where org_id = ${orgId} and id = ${documentId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!guarded || guarded.kind !== "vendor_bill" || guarded.status !== "draft") {
-    throw new Error("a vendor retainage release reservation can only be released for a draft vendor bill");
+    throw new Error(
+      "a vendor retainage release reservation can only be released for a draft vendor bill",
+    );
   }
   await tx.execute(sql`
     with released as (
@@ -372,7 +448,6 @@ export async function releaseVendorRetainageProvenance(
     from released
   `);
 }
-
 
 /**
  * Restore the billed-quantity advances a converted or captured child consumed
@@ -404,20 +479,33 @@ export async function releaseConvertedOrderQuantities(
   childDocumentId: string,
   audit: { actorId: string | null; reason: string; source: string },
 ): Promise<void> {
-  const child = (await tx.execute<{ id: string; kind: string }>(sql`
+  const child = (
+    await tx.execute<{ id: string; kind: string }>(
+      sql`
     select id, kind from documents where org_id = ${orgId} and id = ${childDocumentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!child) return;
-  const lines = await tx.execute<{ id: string; quantity: string; custom: unknown }>(sql`
+  const lines = await tx.execute<{ id: string; quantity: string; custom: unknown }>(
+    sql`
     select id, quantity::text, custom from document_lines
      where org_id = ${orgId} and document_id = ${child.id}
      order by line_number
-  `, "objects");
+  `,
+    "objects",
+  );
 
   // direction 'down' walks back an advance that added to the billed counter
   // (a conversion cover or a bill); 'up' walks back one that subtracted (a
   // vendor credit). The magnitude travels verbatim — see the header note.
-  type Restore = { sourceLineId: string; claimedDocumentId: string | null; direction: "down" | "up"; magnitude: string };
+  type Restore = {
+    sourceLineId: string;
+    claimedDocumentId: string | null;
+    direction: "down" | "up";
+    magnitude: string;
+  };
   const restores: Restore[] = [];
   const QUANTITY_RE = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
   for (const line of lines) {
@@ -427,9 +515,15 @@ export async function releaseConvertedOrderQuantities(
     };
     const conv = custom.convertedFrom;
     if (conv && typeof conv === "object") {
-      if (typeof conv.lineId !== "string" || !UUID_RE.test(conv.lineId) ||
-          typeof conv.quantity !== "string" || !QUANTITY_RE.test(conv.quantity)) {
-        throw new Error("a converted line carries unreadable billing provenance — reconcile it before voiding or deleting");
+      if (
+        typeof conv.lineId !== "string" ||
+        !UUID_RE.test(conv.lineId) ||
+        typeof conv.quantity !== "string" ||
+        !QUANTITY_RE.test(conv.quantity)
+      ) {
+        throw new Error(
+          "a converted line carries unreadable billing provenance — reconcile it before voiding or deleting",
+        );
       }
       restores.push({
         sourceLineId: conv.lineId,
@@ -442,9 +536,14 @@ export async function releaseConvertedOrderQuantities(
     }
     const poLineId = custom.apCaptureEvidence?.purchaseOrderLineId;
     if (typeof poLineId === "string") {
-      if (!UUID_RE.test(poLineId) || (child.kind !== "vendor_bill" && child.kind !== "vendor_credit") ||
-          !QUANTITY_RE.test(line.quantity)) {
-        throw new Error("a captured bill line carries unreadable billing provenance — reconcile it before voiding or deleting");
+      if (
+        !UUID_RE.test(poLineId) ||
+        (child.kind !== "vendor_bill" && child.kind !== "vendor_credit") ||
+        !QUANTITY_RE.test(line.quantity)
+      ) {
+        throw new Error(
+          "a captured bill line carries unreadable billing provenance — reconcile it before voiding or deleting",
+        );
       }
       restores.push({
         sourceLineId: poLineId,
@@ -472,38 +571,55 @@ export async function releaseConvertedOrderQuantities(
   // the lines and waits on the header (SQLSTATE 40P01). Nothing read
   // here is trusted; every property is re-validated under the locks
   // below.
-  const discovered = await tx.execute<{ id: string; document_id: string }>(sql`
+  const discovered = await tx.execute<{ id: string; document_id: string }>(
+    sql`
     select l.id, l.document_id
       from document_lines l
       join documents d on d.id = l.document_id and d.org_id = l.org_id
      where l.org_id = ${orgId} and l.id = any(${idArr}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   if (discovered.length !== byLine.size) {
-    throw new Error("a source order line for this document is missing — reconcile it before voiding or deleting");
+    throw new Error(
+      "a source order line for this document is missing — reconcile it before voiding or deleting",
+    );
   }
   const candidateDocIds = [...new Set(discovered.map((row) => row.document_id))].sort();
 
   // Lock the source headers in canonical id order before their lines (the
   // order-cycle lock order), then restore each line under the same ceiling
   // rules the advance faced.
-  const headers = await tx.execute<{ id: string; status: string; document_number: string }>(sql`
+  const headers = await tx.execute<{ id: string; status: string; document_number: string }>(
+    sql`
     select id, status, document_number from documents
      where org_id = ${orgId} and id = any(${`{${candidateDocIds.join(",")}}`}::uuid[])
      order by id
      for update
-  `, "objects");
+  `,
+    "objects",
+  );
   if (headers.length !== candidateDocIds.length) {
-    throw new Error("a source order for this document is missing — reconcile it before voiding or deleting");
+    throw new Error(
+      "a source order for this document is missing — reconcile it before voiding or deleting",
+    );
   }
   // Re-read and lock the actual source lines UNDER the held header locks.
   // The discovery above ran unlocked, so a line that moved to an order
   // whose header is not held here refuses instead of restoring against
   // an unlocked source.
   const sources = await tx.execute<{
-    id: string; document_id: string; document_kind: string; document_status: string;
-    quantity: string; quantity_billed: string; quantity_fulfilled: string;
-    item_id: string | null; item_kind: string | null;
-  }>(sql`
+    id: string;
+    document_id: string;
+    document_kind: string;
+    document_status: string;
+    quantity: string;
+    quantity_billed: string;
+    quantity_fulfilled: string;
+    item_id: string | null;
+    item_kind: string | null;
+  }>(
+    sql`
     select l.id, l.document_id, d.kind as document_kind, d.status as document_status,
            l.quantity::text, l.quantity_billed::text, l.quantity_fulfilled::text,
            l.item_id, i.kind as item_kind
@@ -513,21 +629,35 @@ export async function releaseConvertedOrderQuantities(
      where l.org_id = ${orgId} and l.id = any(${idArr}::uuid[])
      order by l.document_id, l.id
      for update of l
-  `, "objects");
+  `,
+    "objects",
+  );
   if (sources.length !== byLine.size) {
-    throw new Error("a source order line for this document is missing — reconcile it before voiding or deleting");
+    throw new Error(
+      "a source order line for this document is missing — reconcile it before voiding or deleting",
+    );
   }
   const heldHeaderIds = new Set(headers.map((header) => header.id));
   for (const source of sources) {
     if (!heldHeaderIds.has(source.document_id)) {
-      throw new Error("a source order line moved while it was being voided or deleted — reconcile it before voiding or deleting");
+      throw new Error(
+        "a source order line moved while it was being voided or deleted — reconcile it before voiding or deleting",
+      );
     }
-    if (source.document_kind !== "quote" && source.document_kind !== "sales_order" && source.document_kind !== "purchase_order") {
-      throw new Error("a converted line does not point at an order line — reconcile it before voiding or deleting");
+    if (
+      source.document_kind !== "quote" &&
+      source.document_kind !== "sales_order" &&
+      source.document_kind !== "purchase_order"
+    ) {
+      throw new Error(
+        "a converted line does not point at an order line — reconcile it before voiding or deleting",
+      );
     }
     for (const restore of byLine.get(source.id)!) {
       if (restore.claimedDocumentId !== null && restore.claimedDocumentId !== source.document_id) {
-        throw new Error("a converted line does not point at its own order — reconcile it before voiding or deleting");
+        throw new Error(
+          "a converted line does not point at its own order — reconcile it before voiding or deleting",
+        );
       }
     }
   }
@@ -537,17 +667,26 @@ export async function releaseConvertedOrderQuantities(
   // its lines are valid against the purchase order that owns the PO line.
   const sourceDocIds = [...new Set(sources.map((source) => source.document_id))].sort();
   for (const sourceDocId of sourceDocIds) {
-    const edge = (await tx.execute<{ link_type: string }>(sql`
+    const edge = (
+      await tx.execute<{ link_type: string }>(
+        sql`
       select link_type from document_links
        where org_id = ${orgId} and from_document_id = ${sourceDocId} and to_document_id = ${child.id}
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const edgeOk = edge && (edge.link_type === "bills" || edge.link_type === "created_from");
     const apOnly = sources
       .filter((source) => source.document_id === sourceDocId)
-      .every((source) => byLine.get(source.id)!.every((restore) => restore.claimedDocumentId === null));
+      .every((source) =>
+        byLine.get(source.id)!.every((restore) => restore.claimedDocumentId === null),
+      );
     if (!edgeOk && !apOnly) {
-      throw new Error("this document has no conversion provenance on its source order — reconcile it before voiding or deleting");
+      throw new Error(
+        "this document has no conversion provenance on its source order — reconcile it before voiding or deleting",
+      );
     }
   }
 
@@ -556,13 +695,19 @@ export async function releaseConvertedOrderQuantities(
   // that left the draft/approved lifecycle refuses with its number named.
   for (const header of headers) {
     if (header.status !== "approved" && header.status !== "draft") {
-      throw new Error(`${header.document_number} is ${header.status} — resolve it before voiding or deleting this document`);
+      throw new Error(
+        `${header.document_number} is ${header.status} — resolve it before voiding or deleting this document`,
+      );
     }
   }
-  const beforeSnapshots = new Map<string, Awaited<ReturnType<typeof captureTransactionAuditSnapshot>>>();
+  const beforeSnapshots = new Map<
+    string,
+    Awaited<ReturnType<typeof captureTransactionAuditSnapshot>>
+  >();
   for (const header of headers) {
     const snapshot = await captureTransactionAuditSnapshot(tx, header.id, orgId);
-    if (!snapshot) throw new Error("a source order disappeared while it was being voided or deleted");
+    if (!snapshot)
+      throw new Error("a source order disappeared while it was being voided or deleted");
     beforeSnapshots.set(header.id, snapshot);
   }
   // Approved lines are storage-immutable (migration 0034): restoring the
@@ -572,22 +717,31 @@ export async function releaseConvertedOrderQuantities(
   for (const header of headers) {
     let reopened = header.status === "draft";
     if (!reopened) {
-      reopened = !!(await tx.execute<{ id: string }>(sql`
+      reopened = !!(
+        await tx.execute<{ id: string }>(
+          sql`
         update documents set status = 'draft', updated_at = now(), updated_by = ${audit.actorId}
          where id = ${header.id} and org_id = ${orgId} and status = 'approved'
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!reopened) throw new Error("a source order changed while it was being voided or deleted");
     }
     for (const source of sources.filter((row) => row.document_id === header.id)) {
       for (const restore of byLine.get(source.id)!) {
         // A walk-back can only retreat a prior advance; a walk-up (an AP
         // credit unwind) faces the same ceilings a fresh bill would.
-        const receiptGoverned = source.item_id !== null && lineRequiresReceipt(source.item_kind ?? null);
-        const step = restore.direction === "down"
-          ? sql`quantity_billed - ${restore.magnitude}::numeric`
-          : sql`quantity_billed + ${restore.magnitude}::numeric`;
-        const restored = (await tx.execute<{ id: string }>(sql`
+        const receiptGoverned =
+          source.item_id !== null && lineRequiresReceipt(source.item_kind ?? null);
+        const step =
+          restore.direction === "down"
+            ? sql`quantity_billed - ${restore.magnitude}::numeric`
+            : sql`quantity_billed + ${restore.magnitude}::numeric`;
+        const restored = (
+          await tx.execute<{ id: string }>(
+            sql`
           update document_lines
              set quantity_billed = ${step},
                  updated_at = now(), updated_by = ${audit.actorId}
@@ -596,7 +750,10 @@ export async function releaseConvertedOrderQuantities(
              ${restore.direction === "down" ? sql`` : sql`and ${step} <= quantity`}
              ${restore.direction === "up" && receiptGoverned ? sql`and ${step} <= quantity_fulfilled` : sql``}
           returning id
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (!restored) {
           throw new Error(
             `reversing this document would overdraw the billed quantity on ${header.document_number} — reverse the later billing documents first`,
@@ -605,11 +762,16 @@ export async function releaseConvertedOrderQuantities(
       }
     }
     if (header.status === "approved") {
-      const restored = (await tx.execute<{ id: string }>(sql`
+      const restored = (
+        await tx.execute<{ id: string }>(
+          sql`
         update documents set status = 'approved', updated_at = now(), updated_by = ${audit.actorId}
          where id = ${header.id} and org_id = ${orgId} and status = 'draft'
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!restored) throw new Error("a source order changed while it was being voided or deleted");
     }
   }

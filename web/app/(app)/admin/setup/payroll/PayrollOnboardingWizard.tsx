@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { motion, useReducedMotion } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,11 +17,11 @@ import {
   Loader2,
   PartyPopper,
   Sparkles,
-} from 'lucide-react'
-import { cn, Input, Label, Select } from '@openbooks/ui'
-import { WizardShell } from '../wizard/WizardShell'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
-import { DateField } from '../../../../../components/date-field'
+} from "lucide-react";
+import { cn, Input, Label, Select } from "@openbooks/ui";
+import { WizardShell } from "../wizard/WizardShell";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
+import { DateField } from "../../../../../components/date-field";
 
 /**
  * Payroll onboarding wizard — the module's first-run flow, composed on the
@@ -34,40 +34,50 @@ import { DateField } from '../../../../../components/date-field'
  * readiness can never disagree about what is still missing.
  */
 
-type Step = 'packs' | 'accounts' | 'schedule' | 'vendors' | 'rails' | 'review' | 'applying' | 'done'
+type Step =
+  "packs" | "accounts" | "schedule" | "vendors" | "rails" | "review" | "applying" | "done";
 
-const STEP_ORDER: Step[] = ['packs', 'accounts', 'schedule', 'vendors', 'rails', 'review', 'applying', 'done']
+const STEP_ORDER: Step[] = [
+  "packs",
+  "accounts",
+  "schedule",
+  "vendors",
+  "rails",
+  "review",
+  "applying",
+  "done",
+];
 
 interface SetupCheck {
-  code: string
-  severity: 'blocker' | 'warning'
-  ok: boolean
-  detail?: string
-  href?: string
+  code: string;
+  severity: "blocker" | "warning";
+  ok: boolean;
+  detail?: string;
+  href?: string;
 }
 
 /** GET /api/payroll/settings — the wizard's whole world, refetched per step. */
 interface SettingsPayload {
-  settings: Record<string, unknown>
-  packs: { country: string; name: string; slots: { key: string; accountId: string | null }[] }[]
-  paymentMethods: { eftFallbackToCheque: boolean }
-  installable: string[]
+  settings: Record<string, unknown>;
+  packs: { country: string; name: string; slots: { key: string; accountId: string | null }[] }[];
+  paymentMethods: { eftFallbackToCheque: boolean };
+  installable: string[];
   /** Installable packs as (country, name) pairs — what the buttons show. */
-  installablePacks: { country: string; name: string }[]
-  accounts: { id: string; label: string }[]
-  vendors: { id: string; label: string }[]
-  setup: { installedCountries: string[]; checks: SetupCheck[]; blockers: number; warnings: number }
+  installablePacks: { country: string; name: string }[];
+  accounts: { id: string; label: string }[];
+  vendors: { id: string; label: string }[];
+  setup: { installedCountries: string[]; checks: SetupCheck[]; blockers: number; warnings: number };
 }
 
 /** Countries → their pack's declared statutory remittance vendor settings keys. */
-export type VendorKeysByCountry = Record<string, string[]>
+export type VendorKeysByCountry = Record<string, string[]>;
 
 const FREQUENCY_PERIODS: Record<string, number> = {
   weekly: 52,
   biweekly: 26,
   semi_monthly: 24,
   monthly: 12,
-}
+};
 
 /**
  * Pack display strings. The locale wins where a `settingsPage.packs.<key>`
@@ -77,203 +87,231 @@ const FREQUENCY_PERIODS: Record<string, number> = {
  * as "GB"/"DE"/"FR", so there is no map here.
  */
 function packTitle(
-  tSettings: ReturnType<typeof useTranslations<'payroll.settingsPage'>>,
+  tSettings: ReturnType<typeof useTranslations<"payroll.settingsPage">>,
   code: string,
   name: string,
 ): string {
-  const key = `packs.${code.toLowerCase()}.title`
-  return tSettings.has(key as never) ? tSettings(key as never) : name
+  const key = `packs.${code.toLowerCase()}.title`;
+  return tSettings.has(key as never) ? tSettings(key as never) : name;
 }
 
 function packDescription(
-  tSettings: ReturnType<typeof useTranslations<'payroll.settingsPage'>>,
+  tSettings: ReturnType<typeof useTranslations<"payroll.settingsPage">>,
   code: string,
 ): string {
-  const key = `packs.${code.toLowerCase()}.description`
-  return tSettings.has(key as never) ? tSettings(key as never) : ''
+  const key = `packs.${code.toLowerCase()}.description`;
+  return tSettings.has(key as never) ? tSettings(key as never) : "";
 }
 
 function packAccountsTitle(
-  tSettings: ReturnType<typeof useTranslations<'payroll.settingsPage'>>,
+  tSettings: ReturnType<typeof useTranslations<"payroll.settingsPage">>,
   code: string,
   name: string,
 ): string {
-  const key = `packAccounts.${code}.title`
-  return tSettings.has(key as never) ? tSettings(key as never) : name
+  const key = `packAccounts.${code}.title`;
+  return tSettings.has(key as never) ? tSettings(key as never) : name;
 }
 
 export function PayrollOnboardingWizard(props: {
-  onClose: () => void
-  vendorKeysByCountry: VendorKeysByCountry
-  frequencies: { value: string; labelKey: string }[]
+  onClose: () => void;
+  vendorKeysByCountry: VendorKeysByCountry;
+  frequencies: { value: string; labelKey: string }[];
   /** Whether the viewer may create registry entities (the pay schedule). */
-  canManageEntities: boolean
+  canManageEntities: boolean;
   /** Existing active pay schedules, for the keep-or-create step. */
-  schedules: { id: string; name: string }[]
+  schedules: { id: string; name: string }[];
   /** Active legal entities, for the schedule's paying-entity step. */
-  subsidiaries: { id: string; name: string }[]
-  bankProfiles: { id: string; name: string; format: string; configured: boolean }[]
+  subsidiaries: { id: string; name: string }[];
+  bankProfiles: { id: string; name: string; format: string; configured: boolean }[];
 }) {
-  const t = useTranslations('payroll.setupWizard')
-  const tSettings = useTranslations('payroll.settingsPage')
-  const tPayroll = useTranslations('payroll')
-  const tOptions = useTranslations('admin.setup')
-  const router = useRouter()
-  const reduceMotion = useReducedMotion()
+  const t = useTranslations("payroll.setupWizard");
+  const tSettings = useTranslations("payroll.settingsPage");
+  const tPayroll = useTranslations("payroll");
+  const tOptions = useTranslations("admin.setup");
+  const router = useRouter();
+  const reduceMotion = useReducedMotion();
 
-  const [data, setData] = useState<SettingsPayload | null>(null)
-  const [stepIdx, setStepIdx] = useState(0)
-  const [busy, setBusy] = useState(false)
-  const [transitioning, setTransitioning] = useState(false)
-  const stepTransitionLocked = useRef(false)
+  const [data, setData] = useState<SettingsPayload | null>(null);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
+  const stepTransitionLocked = useRef(false);
 
   // ─── Per-step form state ────────────────────────────────────────────────
-  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(() => new Set())
-  const [wageExpenseAccountId, setWageExpenseAccountId] = useState('')
-  const [netPayAccountId, setNetPayAccountId] = useState('')
-  const [slotAccounts, setSlotAccounts] = useState<Record<string, Record<string, string>>>({})
-  const [scheduleMode, setScheduleMode] = useState<'keep' | 'create'>('keep')
-  const [scheduleName, setScheduleName] = useState('')
-  const [scheduleSubsidiaryId, setScheduleSubsidiaryId] = useState('')
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(() => new Set());
+  const [wageExpenseAccountId, setWageExpenseAccountId] = useState("");
+  const [netPayAccountId, setNetPayAccountId] = useState("");
+  const [slotAccounts, setSlotAccounts] = useState<Record<string, Record<string, string>>>({});
+  const [scheduleMode, setScheduleMode] = useState<"keep" | "create">("keep");
+  const [scheduleName, setScheduleName] = useState("");
+  const [scheduleSubsidiaryId, setScheduleSubsidiaryId] = useState("");
   // A schedule with no subsidiary pays from the root entity. With more than
   // one legal entity that silence mints runs frozen to the wrong paying
   // entity and currency — so a multi-entity tenant must choose here. A
   // single-entity tenant keeps the root default without being asked.
-  const multiEntity = props.subsidiaries.length > 1
-  const [frequency, setFrequency] = useState('biweekly')
-  const [periodsPerYear, setPeriodsPerYear] = useState(String(FREQUENCY_PERIODS.biweekly))
-  const [anchorPeriodEnd, setAnchorPeriodEnd] = useState('')
-  const [createdSchedule, setCreatedSchedule] = useState<{ id: string; name: string } | null>(null)
+  const multiEntity = props.subsidiaries.length > 1;
+  const [frequency, setFrequency] = useState("biweekly");
+  const [periodsPerYear, setPeriodsPerYear] = useState(String(FREQUENCY_PERIODS.biweekly));
+  const [anchorPeriodEnd, setAnchorPeriodEnd] = useState("");
+  const [createdSchedule, setCreatedSchedule] = useState<{ id: string; name: string } | null>(null);
   // Stable idempotency key for the one pay-schedule create attempt (the
   // generic SetupDrawer's pattern): minted once and preserved across Next-
   // click retries, so retrying an ambiguous failure replays the same create
   // instead of minting a duplicate schedule. The generic setup API refuses
   // the create outright without a UUID key.
-  const scheduleRequestId = useRef<string | null>(null)
-  const [vendorChoices, setVendorChoices] = useState<Record<string, string>>({})
-  const [eftFallbackToCheque, setEftFallbackToCheque] = useState(true)
+  const scheduleRequestId = useRef<string | null>(null);
+  const [vendorChoices, setVendorChoices] = useState<Record<string, string>>({});
+  const [eftFallbackToCheque, setEftFallbackToCheque] = useState(true);
 
   // ─── Data loading — everything comes from the settings API ─────────────
   async function reload(): Promise<SettingsPayload> {
-    const res = await fetch('/api/payroll/settings')
+    const res = await fetch("/api/payroll/settings");
     // The status is checked before the body is parsed: a non-JSON error body
     // must surface the failure, never a SyntaxError from res.json().
-    if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to load payroll settings'))
-    const payload = (await res.json()) as SettingsPayload
-    setData(payload)
-    return payload
+    if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed to load payroll settings"));
+    const payload = (await res.json()) as SettingsPayload;
+    setData(payload);
+    return payload;
   }
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     void (async () => {
       try {
-        const payload = await reload()
-        if (cancelled) return
+        const payload = await reload();
+        if (cancelled) return;
         // Seed the form state from the org's live configuration.
-        setSelectedCountries(new Set(payload.setup.installedCountries))
-        setWageExpenseAccountId(String(payload.settings.wageExpenseAccountId ?? ''))
-        setNetPayAccountId(String(payload.settings.netPayAccountId ?? ''))
-        setSlotAccounts(Object.fromEntries(payload.packs.map((pack) => [
-          pack.country,
-          Object.fromEntries(pack.slots.map((slot) => [slot.key, slot.accountId ?? ''])),
-        ])))
-        setVendorChoices(Object.fromEntries(
-          Object.values(props.vendorKeysByCountry).flat().map((key) => [
-            key, String(payload.settings[key] ?? ''),
-          ]),
-        ))
-        setEftFallbackToCheque(payload.paymentMethods.eftFallbackToCheque)
-        setScheduleMode(props.schedules.length > 0 ? 'keep' : 'create')
+        setSelectedCountries(new Set(payload.setup.installedCountries));
+        setWageExpenseAccountId(String(payload.settings.wageExpenseAccountId ?? ""));
+        setNetPayAccountId(String(payload.settings.netPayAccountId ?? ""));
+        setSlotAccounts(
+          Object.fromEntries(
+            payload.packs.map((pack) => [
+              pack.country,
+              Object.fromEntries(pack.slots.map((slot) => [slot.key, slot.accountId ?? ""])),
+            ]),
+          ),
+        );
+        setVendorChoices(
+          Object.fromEntries(
+            Object.values(props.vendorKeysByCountry)
+              .flat()
+              .map((key) => [key, String(payload.settings[key] ?? "")]),
+          ),
+        );
+        setEftFallbackToCheque(payload.paymentMethods.eftFallbackToCheque);
+        setScheduleMode(props.schedules.length > 0 ? "keep" : "create");
       } catch (e) {
-        toast.error((e as Error).message)
-        props.onClose()
+        toast.error((e as Error).message);
+        props.onClose();
       }
-    })()
-    return () => { cancelled = true }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   // ─── Step list — derived from the readiness check → step mapping ────────
   const vendorKeys = useMemo(
     () => [...selectedCountries].flatMap((country) => props.vendorKeysByCountry[country] ?? []),
     [props.vendorKeysByCountry, selectedCountries],
-  )
+  );
   const steps = useMemo<Step[]>(
-    () => STEP_ORDER.filter((step) => step !== 'vendors' || vendorKeys.length > 0),
+    () => STEP_ORDER.filter((step) => step !== "vendors" || vendorKeys.length > 0),
     [vendorKeys],
-  )
-  const step = steps[stepIdx]!
+  );
+  const step = steps[stepIdx]!;
 
-  const hasSchedule = props.schedules.length > 0 || createdSchedule !== null
-    || (data?.setup.checks.some((c) => c.code === 'setup.schedule' && c.ok) ?? false)
+  const hasSchedule =
+    props.schedules.length > 0 ||
+    createdSchedule !== null ||
+    (data?.setup.checks.some((c) => c.code === "setup.schedule" && c.ok) ?? false);
 
   // ─── Navigation (same double-click guard as the org SetupWizard) ────────
   function moveStep(delta: -1 | 1) {
-    if (stepTransitionLocked.current) return
-    stepTransitionLocked.current = true
-    setTransitioning(true)
-    setStepIdx((current) => Math.max(0, Math.min(steps.indexOf('review'), current + delta)))
-    window.setTimeout(() => {
-      stepTransitionLocked.current = false
-      setTransitioning(false)
-    }, reduceMotion ? 120 : 300)
+    if (stepTransitionLocked.current) return;
+    stepTransitionLocked.current = true;
+    setTransitioning(true);
+    setStepIdx((current) => Math.max(0, Math.min(steps.indexOf("review"), current + delta)));
+    window.setTimeout(
+      () => {
+        stepTransitionLocked.current = false;
+        setTransitioning(false);
+      },
+      reduceMotion ? 120 : 300,
+    );
   }
 
   // ─── Writes — one per step, all through the existing settings APIs ──────
 
   async function commitStep(current: Step): Promise<void> {
-    if (!data) return
-    if (current === 'packs') {
-      const installed = new Set(data.setup.installedCountries)
+    if (!data) return;
+    if (current === "packs") {
+      const installed = new Set(data.setup.installedCountries);
       for (const country of selectedCountries) {
-        if (installed.has(country)) continue
-        const res = await fetch('/api/payroll/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'install-pack', country }),
-        })
+        if (installed.has(country)) continue;
+        const res = await fetch("/api/payroll/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "install-pack", country }),
+        });
         // The status is checked before the body is parsed: a non-JSON error
         // body must surface the failure, never a SyntaxError from res.json().
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, `failed to install the ${country} payroll pack`))
+        if (!res.ok)
+          throw new Error(
+            await readApiErrorMessage(res, `failed to install the ${country} payroll pack`),
+          );
       }
-      const payload = await reload()
+      const payload = await reload();
       // A just-installed pack's slots become editable on the next step.
-      setSlotAccounts((currentSlots) => Object.fromEntries(payload.packs.map((pack) => [
-        pack.country,
-        Object.fromEntries(pack.slots.map((slot) => [
-          slot.key,
-          currentSlots[pack.country]?.[slot.key] ?? slot.accountId ?? '',
-        ])),
-      ])))
-      return
+      setSlotAccounts((currentSlots) =>
+        Object.fromEntries(
+          payload.packs.map((pack) => [
+            pack.country,
+            Object.fromEntries(
+              pack.slots.map((slot) => [
+                slot.key,
+                currentSlots[pack.country]?.[slot.key] ?? slot.accountId ?? "",
+              ]),
+            ),
+          ]),
+        ),
+      );
+      return;
     }
-    if (current === 'accounts') {
-      const res = await fetch('/api/payroll/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+    if (current === "accounts") {
+      const res = await fetch("/api/payroll/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           wageExpenseAccountId: wageExpenseAccountId || null,
           netPayAccountId: netPayAccountId || null,
-          slotAccounts: Object.fromEntries(Object.entries(slotAccounts).map(([country, slots]) => [
-            country,
-            Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
-          ])),
+          slotAccounts: Object.fromEntries(
+            Object.entries(slotAccounts).map(([country, slots]) => [
+              country,
+              Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
+            ]),
+          ),
         }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not save payroll accounts'))
-      await reload()
-      return
+      });
+      if (!res.ok)
+        throw new Error(await readApiErrorMessage(res, "Could not save payroll accounts"));
+      await reload();
+      return;
     }
-    if (current === 'schedule') {
-      if (scheduleMode === 'keep' || createdSchedule) return
+    if (current === "schedule") {
+      if (scheduleMode === "keep" || createdSchedule) return;
       if (multiEntity && !scheduleSubsidiaryId) {
-        throw new Error(t('schedule.subsidiaryRequired'))
+        throw new Error(t("schedule.subsidiaryRequired"));
       }
-      if (!scheduleRequestId.current) scheduleRequestId.current = crypto.randomUUID()
-      const res = await fetch('/api/admin/setup/pay-schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': scheduleRequestId.current },
+      if (!scheduleRequestId.current) scheduleRequestId.current = crypto.randomUUID();
+      const res = await fetch("/api/admin/setup/pay-schedules", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": scheduleRequestId.current,
+        },
         body: JSON.stringify({
           name: scheduleName.trim(),
           frequency,
@@ -285,157 +323,167 @@ export function PayrollOnboardingWizard(props: {
           // only subsidiary without being asked. The API refuses a missing
           // subsidiary in a multi-entity tenant either way.
           subsidiaryId: multiEntity
-            ? (scheduleSubsidiaryId || null)
-            : (props.subsidiaries[0]?.id || null),
+            ? scheduleSubsidiaryId || null
+            : props.subsidiaries[0]?.id || null,
           isDefault: props.schedules.length === 0,
           isActive: true,
         }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not create the pay schedule'))
-      const j = await res.json()
-      setCreatedSchedule({ id: String(j.id ?? ''), name: scheduleName.trim() })
-      await reload()
-      return
+      });
+      if (!res.ok)
+        throw new Error(await readApiErrorMessage(res, "Could not create the pay schedule"));
+      const j = await res.json();
+      setCreatedSchedule({ id: String(j.id ?? ""), name: scheduleName.trim() });
+      await reload();
+      return;
     }
-    if (current === 'vendors') {
-      const res = await fetch('/api/payroll/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.fromEntries(
-          vendorKeys.map((key) => [key, vendorChoices[key] || null]),
-        )),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not save remittance vendors'))
-      await reload()
-      return
+    if (current === "vendors") {
+      const res = await fetch("/api/payroll/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          Object.fromEntries(vendorKeys.map((key) => [key, vendorChoices[key] || null])),
+        ),
+      });
+      if (!res.ok)
+        throw new Error(await readApiErrorMessage(res, "Could not save remittance vendors"));
+      await reload();
+      return;
     }
-    if (current === 'rails') {
-      const res = await fetch('/api/payroll/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+    if (current === "rails") {
+      const res = await fetch("/api/payroll/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ eftFallbackToCheque }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not save payment settings'))
-      await reload()
-      return
+      });
+      if (!res.ok)
+        throw new Error(await readApiErrorMessage(res, "Could not save payment settings"));
+      await reload();
+      return;
     }
   }
 
   async function next() {
-    if (busy || stepTransitionLocked.current) return
-    setBusy(true)
+    if (busy || stepTransitionLocked.current) return;
+    setBusy(true);
     try {
-      await commitStep(step)
-      moveStep(1)
+      await commitStep(step);
+      moveStep(1);
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   function back() {
-    if (stepIdx > 0) moveStep(-1)
+    if (stepIdx > 0) moveStep(-1);
   }
 
   /** Finish: re-run the statutory component seed for every installed pack. */
   async function apply() {
-    if (busy || stepTransitionLocked.current || !data) return
-    setBusy(true)
-    setStepIdx(steps.indexOf('applying'))
+    if (busy || stepTransitionLocked.current || !data) return;
+    setBusy(true);
+    setStepIdx(steps.indexOf("applying"));
     try {
       for (const country of selectedCountries) {
-        const res = await fetch('/api/payroll/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'seed-components', country }),
-        })
+        const res = await fetch("/api/payroll/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "seed-components", country }),
+        });
         // The status is checked before the body is parsed (see reload above).
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, `failed to seed the ${country} payroll components`))
+        if (!res.ok)
+          throw new Error(
+            await readApiErrorMessage(res, `failed to seed the ${country} payroll components`),
+          );
       }
-      setStepIdx(steps.indexOf('done'))
+      setStepIdx(steps.indexOf("done"));
       setTimeout(() => {
-        props.onClose()
-        router.refresh()
-      }, 2000)
+        props.onClose();
+        router.refresh();
+      }, 2000);
     } catch (e) {
-      toast.error((e as Error).message)
-      setStepIdx(steps.indexOf('review'))
+      toast.error((e as Error).message);
+      setStepIdx(steps.indexOf("review"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   const canNext =
-    step === 'packs'
+    step === "packs"
       ? selectedCountries.size > 0
-      : step === 'schedule'
-        ? scheduleMode === 'keep'
+      : step === "schedule"
+        ? scheduleMode === "keep"
           ? hasSchedule
-          : Boolean(createdSchedule)
-            || Boolean(scheduleName.trim() && frequency && Number(periodsPerYear) > 0 && anchorPeriodEnd
-              && (!multiEntity || scheduleSubsidiaryId))
-        : true
+          : Boolean(createdSchedule) ||
+            Boolean(
+              scheduleName.trim() &&
+              frequency &&
+              Number(periodsPerYear) > 0 &&
+              anchorPeriodEnd &&
+              (!multiEntity || scheduleSubsidiaryId),
+            )
+        : true;
 
-  const progressSteps = steps.slice(0, steps.indexOf('applying'))
+  const progressSteps = steps.slice(0, steps.indexOf("applying"));
 
   /** Localize a readiness check the same way the run wizard does. */
   const checkLabel = (check: SetupCheck): string => {
     // A vendor check's detail carries the settings key; show its field label.
-    const detail = check.code === 'setup.remittanceVendor'
-      ? (() => {
-          const [country = '', key = ''] = (check.detail ?? '').split(' · ')
-          return tSettings.has(`fields.${key}` as never)
-            ? `${country} · ${tSettings(`fields.${key}` as never)}`
-            : (check.detail ?? '')
-        })()
-      : (check.detail ?? '')
+    const detail =
+      check.code === "setup.remittanceVendor"
+        ? (() => {
+            const [country = "", key = ""] = (check.detail ?? "").split(" · ");
+            return tSettings.has(`fields.${key}` as never)
+              ? `${country} · ${tSettings(`fields.${key}` as never)}`
+              : (check.detail ?? "");
+          })()
+        : (check.detail ?? "");
     return tPayroll.has(`wizard.readiness.codes.${check.code}` as never)
       ? tPayroll(`wizard.readiness.codes.${check.code}`, { count: 0, detail })
-      // The statutory-table and statutory-rate checks compose a complete
-      // sentence in `detail` from the pack's own declaration (the year and pack
-      // whose tables are missing, the levy and region nobody configured), so
-      // showing it beats showing a raw code on the screen that decides whether
-      // payroll is safe to run.
-      : (detail || check.code)
-  }
-  const accountPicker = (
-    id: string,
-    value: string,
-    onChange: (next: string) => void,
-  ) => (
+      : // The statutory-table and statutory-rate checks compose a complete
+        // sentence in `detail` from the pack's own declaration (the year and pack
+        // whose tables are missing, the levy and region nobody configured), so
+        // showing it beats showing a raw code on the screen that decides whether
+        // payroll is safe to run.
+        detail || check.code;
+  };
+  const accountPicker = (id: string, value: string, onChange: (next: string) => void) => (
     <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">—</option>
       {(data?.accounts ?? []).map((account) => (
-        <option key={account.id} value={account.id}>{account.label}</option>
+        <option key={account.id} value={account.id}>
+          {account.label}
+        </option>
       ))}
     </Select>
-  )
+  );
 
   return (
     <WizardShell
       testId="payroll-setup-wizard"
-      dialogLabel={t('cta.title')}
-      stepKey={data ? step : 'loading'}
+      dialogLabel={t("cta.title")}
+      stepKey={data ? step : "loading"}
       progress={
-        data && stepIdx < steps.indexOf('applying')
+        data && stepIdx < steps.indexOf("applying")
           ? { index: stepIdx, total: progressSteps.length }
           : null
       }
       skip={
-        !busy && step !== 'applying' && step !== 'done'
-          ? { label: t('close'), onClick: props.onClose, disabled: transitioning }
+        !busy && step !== "applying" && step !== "done"
+          ? { label: t("close"), onClick: props.onClose, disabled: transitioning }
           : null
       }
       footer={
-        data && stepIdx < steps.indexOf('applying')
+        data && stepIdx < steps.indexOf("applying")
           ? {
               back:
                 stepIdx > 0
                   ? {
                       label: (
                         <>
-                          <ArrowLeft size={16} /> {t('back')}
+                          <ArrowLeft size={16} /> {t("back")}
                         </>
                       ),
                       onClick: back,
@@ -443,11 +491,11 @@ export function PayrollOnboardingWizard(props: {
                     }
                   : null,
               primary:
-                step === 'review'
+                step === "review"
                   ? {
                       label: (
                         <>
-                          <Sparkles size={16} /> {t('finish')}
+                          <Sparkles size={16} /> {t("finish")}
                         </>
                       ),
                       onClick: apply,
@@ -456,7 +504,7 @@ export function PayrollOnboardingWizard(props: {
                   : {
                       label: (
                         <>
-                          {t('next')} <ArrowRight size={16} />
+                          {t("next")} <ArrowRight size={16} />
                         </>
                       ),
                       onClick: next,
@@ -468,38 +516,50 @@ export function PayrollOnboardingWizard(props: {
     >
       {!data && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+          >
             <Loader2 className="text-teal-500" size={40} />
           </motion.div>
         </div>
       )}
-      {data && step === 'packs' && (
-        <StepFrame title={t('packs.title')} description={t('packs.description')}>
+      {data && step === "packs" && (
+        <StepFrame title={t("packs.title")} description={t("packs.description")}>
           <div className="grid gap-3 sm:grid-cols-2">
             {data.installablePacks.map(({ country, name }) => {
-              const selected = selectedCountries.has(country)
-              const installed = data.setup.installedCountries.includes(country)
+              const selected = selectedCountries.has(country);
+              const installed = data.setup.installedCountries.includes(country);
               return (
                 <button
                   key={country}
                   type="button"
                   aria-pressed={selected}
                   disabled={installed}
-                  onClick={() => setSelectedCountries((current) => {
-                    const nextSet = new Set(current)
-                    if (nextSet.has(country)) nextSet.delete(country)
-                    else nextSet.add(country)
-                    return nextSet
-                  })}
+                  onClick={() =>
+                    setSelectedCountries((current) => {
+                      const nextSet = new Set(current);
+                      if (nextSet.has(country)) nextSet.delete(country);
+                      else nextSet.add(country);
+                      return nextSet;
+                    })
+                  }
                   className={cn(
-                    'relative flex items-start gap-3 rounded-xl border p-4 text-left transition-colors',
+                    "relative flex items-start gap-3 rounded-xl border p-4 text-left transition-colors",
                     selected
-                      ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/20 dark:border-teal-400 dark:bg-teal-950/40'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60',
-                    installed && 'cursor-default',
+                      ? "border-teal-500 bg-teal-50 ring-2 ring-teal-500/20 dark:border-teal-400 dark:bg-teal-950/40"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60",
+                    installed && "cursor-default",
                   )}
                 >
-                  <span className={cn('rounded-lg p-2', selected ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>
+                  <span
+                    className={cn(
+                      "rounded-lg p-2",
+                      selected
+                        ? "bg-teal-600 text-white"
+                        : "bg-slate-100 text-slate-400 dark:bg-slate-800",
+                    )}
+                  >
                     <Globe2 size={18} />
                   </span>
                   <span className="min-w-0">
@@ -511,7 +571,7 @@ export function PayrollOnboardingWizard(props: {
                     </span>
                     {installed && (
                       <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-medium text-teal-700 dark:bg-teal-900/60 dark:text-teal-300">
-                        <Check size={11} strokeWidth={3} /> {tSettings('packs.installed')}
+                        <Check size={11} strokeWidth={3} /> {tSettings("packs.installed")}
                       </span>
                     )}
                   </span>
@@ -521,63 +581,69 @@ export function PayrollOnboardingWizard(props: {
                     </span>
                   )}
                 </button>
-              )
+              );
             })}
           </div>
           <p className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-            {t('packs.note')}
+            {t("packs.note")}
           </p>
         </StepFrame>
       )}
-      {data && step === 'accounts' && (
-        <StepFrame title={t('accounts.title')} description={t('accounts.description')}>
+      {data && step === "accounts" && (
+        <StepFrame title={t("accounts.title")} description={t("accounts.description")}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="pw-wage-expense" help={t('accounts.wageExpenseHelp')}>
-                {tSettings('fields.wageExpenseAccountId')}
+              <Label htmlFor="pw-wage-expense" help={t("accounts.wageExpenseHelp")}>
+                {tSettings("fields.wageExpenseAccountId")}
               </Label>
-              {accountPicker('pw-wage-expense', wageExpenseAccountId, setWageExpenseAccountId)}
+              {accountPicker("pw-wage-expense", wageExpenseAccountId, setWageExpenseAccountId)}
             </div>
             <div>
-              <Label htmlFor="pw-net-pay" help={t('accounts.netPayHelp')}>
-                {tSettings('fields.netPayAccountId')}
+              <Label htmlFor="pw-net-pay" help={t("accounts.netPayHelp")}>
+                {tSettings("fields.netPayAccountId")}
               </Label>
-              {accountPicker('pw-net-pay', netPayAccountId, setNetPayAccountId)}
+              {accountPicker("pw-net-pay", netPayAccountId, setNetPayAccountId)}
             </div>
           </div>
-          {data.packs.filter((pack) => selectedCountries.has(pack.country)).map((pack) => (
-            <fieldset key={pack.country} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-              <legend className="px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                {packAccountsTitle(tSettings, pack.country, pack.name)}
-              </legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {pack.slots.map((slot) => (
-                  <div key={slot.key}>
-                    <Label
-                      htmlFor={`pw-slot-${pack.country}-${slot.key}`}
-                      help={t('accounts.slotHelp')}
-                    >
-                      {tSettings.has(`packAccounts.${pack.country}.slots.${slot.key}` as never)
-                        ? tSettings(`packAccounts.${pack.country}.slots.${slot.key}` as never)
-                        : slot.key}
-                    </Label>
-                    {accountPicker(
-                      `pw-slot-${pack.country}-${slot.key}`,
-                      slotAccounts[pack.country]?.[slot.key] ?? '',
-                      (nextValue) => setSlotAccounts((current) => ({
-                        ...current,
-                        [pack.country]: { ...current[pack.country], [slot.key]: nextValue },
-                      })),
-                    )}
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-          ))}
+          {data.packs
+            .filter((pack) => selectedCountries.has(pack.country))
+            .map((pack) => (
+              <fieldset
+                key={pack.country}
+                className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700"
+              >
+                <legend className="px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {packAccountsTitle(tSettings, pack.country, pack.name)}
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {pack.slots.map((slot) => (
+                    <div key={slot.key}>
+                      <Label
+                        htmlFor={`pw-slot-${pack.country}-${slot.key}`}
+                        help={t("accounts.slotHelp")}
+                      >
+                        {tSettings.has(`packAccounts.${pack.country}.slots.${slot.key}` as never)
+                          ? tSettings(`packAccounts.${pack.country}.slots.${slot.key}` as never)
+                          : slot.key}
+                      </Label>
+                      {accountPicker(
+                        `pw-slot-${pack.country}-${slot.key}`,
+                        slotAccounts[pack.country]?.[slot.key] ?? "",
+                        (nextValue) =>
+                          setSlotAccounts((current) => ({
+                            ...current,
+                            [pack.country]: { ...current[pack.country], [slot.key]: nextValue },
+                          })),
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
         </StepFrame>
       )}
-      {data && step === 'schedule' && (
-        <StepFrame title={t('schedule.title')} description={t('schedule.description')}>
+      {data && step === "schedule" && (
+        <StepFrame title={t("schedule.title")} description={t("schedule.description")}>
           {props.schedules.length > 0 && (
             <div className="space-y-2">
               {props.schedules.map((schedule) => (
@@ -592,44 +658,45 @@ export function PayrollOnboardingWizard(props: {
               <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                 <input
                   type="checkbox"
-                  checked={scheduleMode === 'create'}
-                  onChange={(e) => setScheduleMode(e.target.checked ? 'create' : 'keep')}
+                  checked={scheduleMode === "create"}
+                  onChange={(e) => setScheduleMode(e.target.checked ? "create" : "keep")}
                   className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
                 />
-                {t('schedule.addAnother')}
+                {t("schedule.addAnother")}
               </label>
             </div>
           )}
           {createdSchedule && (
             <p className="flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
-              <CheckCircle2 size={15} /> {t('schedule.created', { name: createdSchedule.name })}
+              <CheckCircle2 size={15} /> {t("schedule.created", { name: createdSchedule.name })}
             </p>
           )}
-          {scheduleMode === 'create' && !createdSchedule && (
-            props.canManageEntities ? (
+          {scheduleMode === "create" &&
+            !createdSchedule &&
+            (props.canManageEntities ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="pw-schedule-name" help={t('schedule.nameHelp')}>
-                    {t('schedule.name')}
+                  <Label htmlFor="pw-schedule-name" help={t("schedule.nameHelp")}>
+                    {t("schedule.name")}
                   </Label>
                   <Input
                     id="pw-schedule-name"
                     value={scheduleName}
                     onChange={(e) => setScheduleName(e.target.value)}
-                    placeholder={t('schedule.namePlaceholder')}
+                    placeholder={t("schedule.namePlaceholder")}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="pw-schedule-frequency" help={t('schedule.frequencyHelp')}>
-                    {t('schedule.frequency')}
+                  <Label htmlFor="pw-schedule-frequency" help={t("schedule.frequencyHelp")}>
+                    {t("schedule.frequency")}
                   </Label>
                   <Select
                     id="pw-schedule-frequency"
                     value={frequency}
                     onChange={(e) => {
-                      setFrequency(e.target.value)
-                      const periods = FREQUENCY_PERIODS[e.target.value]
-                      if (periods) setPeriodsPerYear(String(periods))
+                      setFrequency(e.target.value);
+                      const periods = FREQUENCY_PERIODS[e.target.value];
+                      if (periods) setPeriodsPerYear(String(periods));
                     }}
                   >
                     {props.frequencies.map((option) => (
@@ -640,8 +707,8 @@ export function PayrollOnboardingWizard(props: {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="pw-schedule-periods" help={t('schedule.periodsHelp')}>
-                    {t('schedule.periods')}
+                  <Label htmlFor="pw-schedule-periods" help={t("schedule.periodsHelp")}>
+                    {t("schedule.periods")}
                   </Label>
                   <Input
                     id="pw-schedule-periods"
@@ -651,8 +718,8 @@ export function PayrollOnboardingWizard(props: {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="pw-schedule-anchor" help={t('schedule.anchorHelp')}>
-                    {t('schedule.anchor')}
+                  <Label htmlFor="pw-schedule-anchor" help={t("schedule.anchorHelp")}>
+                    {t("schedule.anchor")}
                   </Label>
                   <DateField
                     id="pw-schedule-anchor"
@@ -662,17 +729,19 @@ export function PayrollOnboardingWizard(props: {
                 </div>
                 {multiEntity && (
                   <div>
-                    <Label htmlFor="pw-schedule-subsidiary" help={t('schedule.subsidiaryHelp')}>
-                      {t('schedule.subsidiary')}
+                    <Label htmlFor="pw-schedule-subsidiary" help={t("schedule.subsidiaryHelp")}>
+                      {t("schedule.subsidiary")}
                     </Label>
                     <Select
                       id="pw-schedule-subsidiary"
                       value={scheduleSubsidiaryId}
                       onChange={(e) => setScheduleSubsidiaryId(e.target.value)}
                     >
-                      <option value="">{t('schedule.subsidiaryRequired')}</option>
+                      <option value="">{t("schedule.subsidiaryRequired")}</option>
                       {props.subsidiaries.map((subsidiary) => (
-                        <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name}</option>
+                        <option key={subsidiary.id} value={subsidiary.id}>
+                          {subsidiary.name}
+                        </option>
                       ))}
                     </Select>
                   </div>
@@ -680,40 +749,45 @@ export function PayrollOnboardingWizard(props: {
               </div>
             ) : (
               <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                {t('schedule.noPermission')}
+                {t("schedule.noPermission")}
               </p>
-            )
-          )}
+            ))}
         </StepFrame>
       )}
-      {data && step === 'vendors' && (
-        <StepFrame title={t('vendors.title')} description={t('vendors.description')}>
+      {data && step === "vendors" && (
+        <StepFrame title={t("vendors.title")} description={t("vendors.description")}>
           <div className="grid gap-3 sm:grid-cols-2">
             {vendorKeys.map((key) => (
               <div key={key}>
-                <Label htmlFor={`pw-vendor-${key}`} help={t('vendors.help')}>
-                  {tSettings.has(`fields.${key}` as never) ? tSettings(`fields.${key}` as never) : key}
+                <Label htmlFor={`pw-vendor-${key}`} help={t("vendors.help")}>
+                  {tSettings.has(`fields.${key}` as never)
+                    ? tSettings(`fields.${key}` as never)
+                    : key}
                 </Label>
                 <Select
                   id={`pw-vendor-${key}`}
-                  value={vendorChoices[key] ?? ''}
-                  onChange={(e) => setVendorChoices((current) => ({ ...current, [key]: e.target.value }))}
+                  value={vendorChoices[key] ?? ""}
+                  onChange={(e) =>
+                    setVendorChoices((current) => ({ ...current, [key]: e.target.value }))
+                  }
                 >
                   <option value="">—</option>
                   {data.vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.label}
+                    </option>
                   ))}
                 </Select>
               </div>
             ))}
           </div>
           <p className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-            {t('vendors.note')}
+            {t("vendors.note")}
           </p>
         </StepFrame>
       )}
-      {data && step === 'rails' && (
-        <StepFrame title={t('rails.title')} description={t('rails.description')}>
+      {data && step === "rails" && (
+        <StepFrame title={t("rails.title")} description={t("rails.description")}>
           <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input
               type="checkbox"
@@ -722,59 +796,77 @@ export function PayrollOnboardingWizard(props: {
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
             />
             <span>
-              {tSettings('paymentMethods.fallback')}
+              {tSettings("paymentMethods.fallback")}
               <span className="block text-xs text-slate-500 dark:text-slate-400">
                 {eftFallbackToCheque
-                  ? tSettings('paymentMethods.fallbackOn')
-                  : tSettings('paymentMethods.fallbackOff')}
+                  ? tSettings("paymentMethods.fallbackOn")
+                  : tSettings("paymentMethods.fallbackOff")}
               </span>
             </span>
           </label>
           <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/40">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('rails.eftTitle')}</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {t("rails.eftTitle")}
+            </p>
             {props.bankProfiles.length === 0 ? (
-              <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('rails.eftNone')}</p>
+              <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                {t("rails.eftNone")}
+              </p>
             ) : (
               <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-200">
                 {props.bankProfiles.map((profile) => (
                   <li key={profile.id} className="flex items-center gap-2">
                     {profile.configured ? (
-                      <CheckCircle2 size={15} className="shrink-0 text-teal-600 dark:text-teal-400" />
+                      <CheckCircle2
+                        size={15}
+                        className="shrink-0 text-teal-600 dark:text-teal-400"
+                      />
                     ) : (
-                      <CircleAlert size={15} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                      <CircleAlert
+                        size={15}
+                        className="shrink-0 text-amber-600 dark:text-amber-400"
+                      />
                     )}
                     <span className="min-w-0 truncate">{profile.name}</span>
                     <span className="text-xs uppercase text-slate-400">{profile.format}</span>
                     {!profile.configured && (
-                      <span className="text-xs text-amber-600 dark:text-amber-400">{t('rails.needsConfig')}</span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400">
+                        {t("rails.needsConfig")}
+                      </span>
                     )}
                   </li>
                 ))}
               </ul>
             )}
             <Link
-              href={'/admin/setup/payment-operations' as never}
+              href={"/admin/setup/payment-operations" as never}
               className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
             >
-              {t('rails.manageProfiles')} <ArrowUpRight size={13} />
+              {t("rails.manageProfiles")} <ArrowUpRight size={13} />
             </Link>
           </div>
         </StepFrame>
       )}
-      {data && step === 'review' && (
-        <StepFrame title={t('review.title')} description={t('review.description')}>
+      {data && step === "review" && (
+        <StepFrame title={t("review.title")} description={t("review.description")}>
           <div className="space-y-2 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
             <div className="flex items-center justify-between py-1">
-              <span className="text-sm text-slate-500 dark:text-slate-400">{t('review.packsLabel')}</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                {t("review.packsLabel")}
+              </span>
               <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                {[...selectedCountries].sort().join(', ') || '—'}
+                {[...selectedCountries].sort().join(", ") || "—"}
               </span>
             </div>
             <div className="flex items-center justify-between py-1">
-              <span className="text-sm text-slate-500 dark:text-slate-400">{t('review.scheduleLabel')}</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                {t("review.scheduleLabel")}
+              </span>
               <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                {[...props.schedules.map((s) => s.name), ...(createdSchedule ? [createdSchedule.name] : [])]
-                  .join(', ') || '—'}
+                {[
+                  ...props.schedules.map((s) => s.name),
+                  ...(createdSchedule ? [createdSchedule.name] : []),
+                ].join(", ") || "—"}
               </span>
             </div>
           </div>
@@ -783,67 +875,89 @@ export function PayrollOnboardingWizard(props: {
           {data.setup.checks.some((check) => !check.ok) ? (
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                {t('review.remainingTitle')}
+                {t("review.remainingTitle")}
               </p>
               <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
-                {data.setup.checks.filter((check) => !check.ok).map((check, index) => (
-                  <li key={`${check.code}-${index}`} className="flex items-start gap-2.5 px-4 py-2.5 text-sm">
-                    <CircleAlert
-                      size={16}
-                      className={cn(
-                        'mt-0.5 shrink-0',
-                        check.severity === 'blocker'
-                          ? 'text-red-600 dark:text-red-400'
-                          : 'text-amber-600 dark:text-amber-400',
-                      )}
-                    />
-                    <span className="min-w-0 flex-1 font-medium text-slate-900 dark:text-slate-100">
-                      {checkLabel(check)}
-                    </span>
-                  </li>
-                ))}
+                {data.setup.checks
+                  .filter((check) => !check.ok)
+                  .map((check, index) => (
+                    <li
+                      key={`${check.code}-${index}`}
+                      className="flex items-start gap-2.5 px-4 py-2.5 text-sm"
+                    >
+                      <CircleAlert
+                        size={16}
+                        className={cn(
+                          "mt-0.5 shrink-0",
+                          check.severity === "blocker"
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-amber-600 dark:text-amber-400",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 font-medium text-slate-900 dark:text-slate-100">
+                        {checkLabel(check)}
+                      </span>
+                    </li>
+                  ))}
               </ul>
             </div>
           ) : (
             <p className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
-              <CheckCircle2 size={16} /> {t('review.allClear')}
+              <CheckCircle2 size={16} /> {t("review.allClear")}
             </p>
           )}
-          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('review.seedNote')}</p>
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            {t("review.seedNote")}
+          </p>
         </StepFrame>
       )}
-      {data && step === 'applying' && (
+      {data && step === "applying" && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+          >
             <Loader2 className="text-teal-500" size={48} />
           </motion.div>
-          <h2 className="mt-6 text-lg font-semibold text-slate-900 dark:text-slate-100">{t('applying.title')}</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('applying.description')}</p>
+          <h2 className="mt-6 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {t("applying.title")}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {t("applying.description")}
+          </p>
         </div>
       )}
-      {data && step === 'done' && (
+      {data && step === "done" && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 12 }}>
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 12 }}
+          >
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-green-500 shadow-lg shadow-teal-500/30">
               <PartyPopper className="text-white" size={36} />
             </div>
           </motion.div>
-          <h2 className="mt-6 text-2xl font-bold text-slate-900 dark:text-slate-100">{t('done.title')}</h2>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t('done.description')}</p>
+          <h2 className="mt-6 text-2xl font-bold text-slate-900 dark:text-slate-100">
+            {t("done.title")}
+          </h2>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t("done.description")}</p>
         </div>
       )}
     </WizardShell>
-  )
+  );
 }
 
 function StepFrame(props: { title: string; description: string; children: React.ReactNode }) {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{props.title}</h2>
+        <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          {props.title}
+        </h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{props.description}</p>
       </div>
       {props.children}
     </div>
-  )
+  );
 }

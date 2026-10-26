@@ -71,7 +71,10 @@ test("the SUI rate is declared per FILING ACCOUNT, and FUTA per region", () => {
   assert.equal(statutoryRateSlot("CA", "ca_eht").scope, "region");
   // Four provinces levy an employer health tax; the pre-scoping blob could hold
   // one rate, which could only ever describe one of them.
-  assert.deepEqual([...statutoryRateSlot("CA", "ca_eht").regions ?? []], ["BC", "MB", "NL", "ON"]);
+  assert.deepEqual(
+    [...(statutoryRateSlot("CA", "ca_eht").regions ?? [])],
+    ["BC", "MB", "NL", "ON"],
+  );
 });
 
 test("the QC health services fund is declared per region, sector-classified, QC-only", () => {
@@ -82,26 +85,34 @@ test("the QC health services fund is declared per region, sector-classified, QC-
   // only. The rate field is retained unrequired for reference, never priced.
   const hsf = statutoryRateSlot("CA", "ca_hsf");
   assert.equal(hsf.scope, "region");
-  assert.deepEqual([...hsf.regions ?? []], ["QC"]);
+  assert.deepEqual([...(hsf.regions ?? [])], ["QC"]);
   assert.deepEqual([...hsf.systemKeys], ["hsf"]);
-  assert.deepEqual(hsf.fields.map((field) => field.key), ["rate", "sectorOther", "sectorPublic", "sectorPrimaryManufacturing", "sectorExempt2026"]);
-  // The 2026 publication's other-sector rate, pasted: 1.65 × earnings.
   assert.deepEqual(
-    canonicalStatutoryRateValues(hsf, { rate: "1.65" }),
-    { rate: "1.6500" },
+    hsf.fields.map((field) => field.key),
+    ["rate", "sectorOther", "sectorPublic", "sectorPrimaryManufacturing", "sectorExempt2026"],
   );
+  // The 2026 publication's other-sector rate, pasted: 1.65 × earnings.
+  assert.deepEqual(canonicalStatutoryRateValues(hsf, { rate: "1.65" }), { rate: "1.6500" });
   assert.match(
     statutoryRateProblem({
-      rates: CA_PACK_RATES, regions: payrollPack("CA").regions,
-      rateKey: "ca_hsf", region: "ON", taxYear: 2026, filingAccountId: null,
+      rates: CA_PACK_RATES,
+      regions: payrollPack("CA").regions,
+      rateKey: "ca_hsf",
+      region: "ON",
+      taxYear: 2026,
+      filingAccountId: null,
     }) ?? "",
     /not levied in ON/,
     "an HSF rate belongs to QC employment, never to another province",
   );
   assert.equal(
     statutoryRateProblem({
-      rates: CA_PACK_RATES, regions: payrollPack("CA").regions,
-      rateKey: "ca_hsf", region: "QC", taxYear: 2026, filingAccountId: null,
+      rates: CA_PACK_RATES,
+      regions: payrollPack("CA").regions,
+      rateKey: "ca_hsf",
+      region: "QC",
+      taxYear: 2026,
+      filingAccountId: null,
     }),
     null,
   );
@@ -111,27 +122,45 @@ test("Canadian EHT must be explicitly configured in each province before payroll
   const missing = buildResolution({ country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [] });
   for (const region of ["BC", "MB", "NL", "ON"]) {
     assert.throws(
-      () => assertConfiguredStatutoryRates(missing, { region, filingAccountId: null }, "Alex Employee"),
+      () =>
+        assertConfiguredStatutoryRates(missing, { region, filingAccountId: null }, "Alex Employee"),
       /Alex Employee: no Employer health tax is configured for .* in 2026 — nothing is being accrued for it/,
       `an unconfigured ${region} levy refuses by name`,
     );
   }
   assert.doesNotThrow(
-    () => assertConfiguredStatutoryRates(missing, { region: "AB", filingAccountId: null }, "Alex Employee"),
+    () =>
+      assertConfiguredStatutoryRates(
+        missing,
+        { region: "AB", filingAccountId: null },
+        "Alex Employee",
+      ),
     "a province outside the EHT statute list is not required to configure EHT",
   );
   assert.throws(
-    () => assertConfiguredStatutoryRates(missing, { region: "QC", filingAccountId: null }, "Alex Employee"),
+    () =>
+      assertConfiguredStatutoryRates(
+        missing,
+        { region: "QC", filingAccountId: null },
+        "Alex Employee",
+      ),
     /Alex Employee: no Health services fund is configured for QC in 2026/,
     "the existing Québec HSF refusal remains part of the levy class",
   );
 
   const explicitlyNil = buildResolution({
-    country: "CA", taxYear: 2026, pack: CA_PACK_RATES,
+    country: "CA",
+    taxYear: 2026,
+    pack: CA_PACK_RATES,
     rows: [row({ rateKey: "ca_eht", region: "ON", values: { rate: "0", annualExemption: "0" } })],
   });
   assert.doesNotThrow(
-    () => assertConfiguredStatutoryRates(explicitlyNil, { region: "ON", filingAccountId: null }, "Alex Employee"),
+    () =>
+      assertConfiguredStatutoryRates(
+        explicitlyNil,
+        { region: "ON", filingAccountId: null },
+        "Alex Employee",
+      ),
     "a declared zero rate is an explicit configuration, not an absent answer",
   );
 });
@@ -147,13 +176,16 @@ test("an undeclared pack or slot is refused by name, never defaulted", () => {
 
 test("declared field scales and ranges are enforced, and unknown keys refused", () => {
   const sui = statutoryRateSlot("US", "us_sui");
-  assert.deepEqual(
-    canonicalStatutoryRateValues(sui, { rate: "0.027", wageBase: "9000" }),
-    { rate: "0.0270", wageBase: "9000.00" },
-  );
+  assert.deepEqual(canonicalStatutoryRateValues(sui, { rate: "0.027", wageBase: "9000" }), {
+    rate: "0.0270",
+    wageBase: "9000.00",
+  });
   // A percent typed into a decimal-rate field is the classic payroll-rate
   // defect: 2.7 instead of 0.027 is a hundred times the premium.
-  assert.throws(() => canonicalStatutoryRateValues(sui, { rate: "2.7", wageBase: "9000" }), /between 0 and 0.2/);
+  assert.throws(
+    () => canonicalStatutoryRateValues(sui, { rate: "2.7", wageBase: "9000" }),
+    /between 0 and 0.2/,
+  );
   assert.throws(
     () => canonicalStatutoryRateValues(sui, { rate: "0.02755555", wageBase: "9000" }),
     /precision/,
@@ -161,14 +193,18 @@ test("declared field scales and ranges are enforced, and unknown keys refused", 
   );
   assert.throws(() => canonicalStatutoryRateValues(sui, { rate: "0.027" }), /required/);
   assert.throws(
-    () => canonicalStatutoryRateValues(sui, { rate: "0.027", wageBase: "9000", surcharge: "0.001" }),
+    () =>
+      canonicalStatutoryRateValues(sui, { rate: "0.027", wageBase: "9000", surcharge: "0.001" }),
     /declares no "surcharge" value/,
     "a number an operator typed is never quietly dropped",
   );
   // The EHT rate is a PERCENT because that is how a province publishes it; the
   // kinds are never converted into each other.
   assert.deepEqual(
-    canonicalStatutoryRateValues(statutoryRateSlot("CA", "ca_eht"), { rate: "1.95", annualExemption: "1000000" }),
+    canonicalStatutoryRateValues(statutoryRateSlot("CA", "ca_eht"), {
+      rate: "1.95",
+      annualExemption: "1000000",
+    }),
     { rate: "1.9500", annualExemption: "1000000.00" },
   );
 });
@@ -181,20 +217,21 @@ test("flag fields store employer facts as true/false, never coerced", () => {
     key: "synthetic_class",
     label: "Synthetic class",
     scope: "org",
-    fields: [{
-      key: "exempt", label: "Exempt class", kind: "flag",
-      decimals: 0, min: "false", max: "true", required: false,
-      help: "synthetic",
-    }],
+    fields: [
+      {
+        key: "exempt",
+        label: "Exempt class",
+        kind: "flag",
+        decimals: 0,
+        min: "false",
+        max: "true",
+        required: false,
+        help: "synthetic",
+      },
+    ],
   } as const;
-  assert.deepEqual(
-    canonicalStatutoryRateValues(slot, { exempt: true }),
-    { exempt: "true" },
-  );
-  assert.deepEqual(
-    canonicalStatutoryRateValues(slot, { exempt: "false" }),
-    { exempt: "false" },
-  );
+  assert.deepEqual(canonicalStatutoryRateValues(slot, { exempt: true }), { exempt: "true" });
+  assert.deepEqual(canonicalStatutoryRateValues(slot, { exempt: "false" }), { exempt: "false" });
   // "yes", 1 and "True" are all refused: a coerced class flag levies the
   // wrong employers, so only the canonical pair (and real booleans) pass.
   for (const raw of ["yes", "1", "True", "FALSE", "0"]) {
@@ -208,12 +245,12 @@ test("flag fields store employer facts as true/false, never coerced", () => {
 
 test("scope is enforced at the write boundary the pack declaration owns", () => {
   const base = {
-    rates: US_PACK_RATES, regions: payrollPack("US").regions,
-    taxYear: 2026, filingAccountId: null,
+    rates: US_PACK_RATES,
+    regions: payrollPack("US").regions,
+    taxYear: 2026,
+    filingAccountId: null,
   };
-  assert.equal(
-    statutoryRateProblem({ ...base, rateKey: "us_futa", region: "MI" }), null,
-  );
+  assert.equal(statutoryRateProblem({ ...base, rateKey: "us_futa", region: "MI" }), null);
   assert.match(
     statutoryRateProblem({ ...base, rateKey: "us_futa", region: null }) ?? "",
     /varies by state/,
@@ -223,14 +260,22 @@ test("scope is enforced at the write boundary the pack declaration owns", () => 
     /unknown US state/,
   );
   assert.match(
-    statutoryRateProblem({ ...base, rateKey: "us_futa", region: "MI", filingAccountId: randomUUID() }) ?? "",
+    statutoryRateProblem({
+      ...base,
+      rateKey: "us_futa",
+      region: "MI",
+      filingAccountId: randomUUID(),
+    }) ?? "",
     /not assigned per filing account/,
     "FUTA has no per-account rate — accepting one would create a value nothing reads",
   );
   assert.match(
     statutoryRateProblem({
-      rates: US_PACK_RATES, regions: payrollPack("US").regions,
-      rateKey: "us_sui", region: "MI", taxYear: 2026,
+      rates: US_PACK_RATES,
+      regions: payrollPack("US").regions,
+      rateKey: "us_sui",
+      region: "MI",
+      taxYear: 2026,
       filingAccountId: randomUUID(),
       account: { country: "US", programType: "us_ein", stateCode: null },
     }) ?? "",
@@ -239,8 +284,12 @@ test("scope is enforced at the write boundary the pack declaration owns", () => 
   );
   assert.match(
     statutoryRateProblem({
-      rates: CA_PACK_RATES, regions: payrollPack("CA").regions,
-      rateKey: "ca_eht", region: "AB", taxYear: 2026, filingAccountId: null,
+      rates: CA_PACK_RATES,
+      regions: payrollPack("CA").regions,
+      rateKey: "ca_eht",
+      region: "AB",
+      taxYear: 2026,
+      filingAccountId: null,
     }) ?? "",
     /not levied in AB/,
   );
@@ -255,9 +304,15 @@ test("scope is enforced at the write boundary the pack declaration owns", () => 
 /* ------------------------------------------------------------------ */
 
 const row = (over: Partial<StatutoryRateRow>): StatutoryRateRow => ({
-  id: randomUUID(), country: "US", rateKey: "us_sui", region: "MI",
-  filingAccountId: null, taxYear: 2026, values: { rate: "0.0270", wageBase: "9500.00" },
-  sourceCitation: "Test rate notice", reason: "test fixture rate",
+  id: randomUUID(),
+  country: "US",
+  rateKey: "us_sui",
+  region: "MI",
+  filingAccountId: null,
+  taxYear: 2026,
+  values: { rate: "0.0270", wageBase: "9500.00" },
+  sourceCitation: "Test rate notice",
+  reason: "test fixture rate",
   supersededOn: null,
   ...over,
 });
@@ -266,7 +321,9 @@ test("an account-specific rate beats the region-wide one; the region-wide one is
   const ein1 = randomUUID();
   const ein2 = randomUUID();
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES,
+    country: "US",
+    taxYear: 2026,
+    pack: US_PACK_RATES,
     rows: [
       row({ filingAccountId: null, values: { rate: "0.0270", wageBase: "9500.00" } }),
       row({ filingAccountId: ein1, values: { rate: "0.0106", wageBase: "9500.00" } }),
@@ -275,9 +332,18 @@ test("an account-specific rate beats the region-wide one; the region-wide one is
   });
   // The defect this test exists for: ONE employer, ONE state, TWO registered
   // accounts, two experience rates. An org-level blob could hold one of them.
-  assert.equal(resolution.resolve("us_sui", { region: "MI", filingAccountId: ein1 })!.values.rate, "0.0106");
-  assert.equal(resolution.resolve("us_sui", { region: "MI", filingAccountId: ein2 })!.values.rate, "0.0630");
-  assert.equal(resolution.resolve("us_sui", { region: "MI", filingAccountId: ein1 })!.source, "account");
+  assert.equal(
+    resolution.resolve("us_sui", { region: "MI", filingAccountId: ein1 })!.values.rate,
+    "0.0106",
+  );
+  assert.equal(
+    resolution.resolve("us_sui", { region: "MI", filingAccountId: ein2 })!.values.rate,
+    "0.0630",
+  );
+  assert.equal(
+    resolution.resolve("us_sui", { region: "MI", filingAccountId: ein1 })!.source,
+    "account",
+  );
   // An employee under no account (or an account with no rate of its own) uses
   // the region-wide value — the single-account employer's whole configuration.
   const wide = resolution.resolve("us_sui", { region: "MI", filingAccountId: null })!;
@@ -290,7 +356,9 @@ test("an account-specific rate beats the region-wide one; the region-wide one is
 
 test("FUTA resolves per state, so one payroll can carry two effective rates", () => {
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES,
+    country: "US",
+    taxYear: 2026,
+    pack: US_PACK_RATES,
     rows: [
       row({ rateKey: "us_futa", region: "MI", values: { rate: "0.0090" } }),
       row({ rateKey: "us_futa", region: "TX", values: { rate: "0.0060" } }),
@@ -308,7 +376,9 @@ test("FUTA resolves per state, so one payroll can carry two effective rates", ()
 
 test("missing scoped rows stay missing instead of reading organization settings", () => {
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES,
+    country: "US",
+    taxYear: 2026,
+    pack: US_PACK_RATES,
     rows: [row({ rateKey: "us_futa", region: "MI", values: { rate: "0.0090" } })],
   });
   assert.equal(resolution.values("us_futa", { region: "MI" })!.rate, "0.0090");
@@ -317,7 +387,10 @@ test("missing scoped rows stay missing instead of reading organization settings"
 
 test("nothing configured is reported by name, never accrued as zero in silence", () => {
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [],
+    country: "US",
+    taxYear: 2026,
+    pack: US_PACK_RATES,
+    rows: [],
   });
   const account = randomUUID();
   const missing = unconfiguredStatutoryRates(resolution, [
@@ -343,7 +416,12 @@ interface UsFixture {
 async function seedTwoAccountEmployer(): Promise<UsFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const account = async (number: string, name: string, programType: string, state: string | null) => {
+  const account = async (
+    number: string,
+    name: string,
+    programType: string,
+    state: string | null,
+  ) => {
     const id = randomUUID();
     await db.execute(sql`
       insert into payroll_filing_accounts
@@ -353,14 +431,34 @@ async function seedTwoAccountEmployer(): Promise<UsFixture> {
               ${state}, false, true, ${actorId}, ${actorId})`);
     return id;
   };
-  await db.execute(sql`update subsidiaries set country='US' where org_id=${org.orgId} and id=${org.subsidiaryId}`);
-  const ein1 = await account("38-1234567/MI-001", "Northshore Drywall — MI SUI", "us_state_sui", "MI");
-  const ein2 = await account("38-7654321/MI-002", "Lakeside Mechanical — MI SUI", "us_state_sui", "MI");
-  for (const [filingAccountId,number] of [[ein1,"38-1234567"],[ein2,"38-7654321"]] as const) {
-    const federalAccountId = await seedUsEinAccount(org.orgId,actorId,org.subsidiaryId,number);
-    await seedUsSuiAccount(org.orgId,actorId,"MI",{filingAccountId,federalAccountId,
-      subsidiaryId:org.subsidiaryId,effectiveFrom:"2026-01-01",effectiveTo:null,
-      sourceReference:"Original Michigan employer registration"});
+  await db.execute(
+    sql`update subsidiaries set country='US' where org_id=${org.orgId} and id=${org.subsidiaryId}`,
+  );
+  const ein1 = await account(
+    "38-1234567/MI-001",
+    "Northshore Drywall — MI SUI",
+    "us_state_sui",
+    "MI",
+  );
+  const ein2 = await account(
+    "38-7654321/MI-002",
+    "Lakeside Mechanical — MI SUI",
+    "us_state_sui",
+    "MI",
+  );
+  for (const [filingAccountId, number] of [
+    [ein1, "38-1234567"],
+    [ein2, "38-7654321"],
+  ] as const) {
+    const federalAccountId = await seedUsEinAccount(org.orgId, actorId, org.subsidiaryId, number);
+    await seedUsSuiAccount(org.orgId, actorId, "MI", {
+      filingAccountId,
+      federalAccountId,
+      subsidiaryId: org.subsidiaryId,
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+      sourceReference: "Original Michigan employer registration",
+    });
   }
   return { orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId, ein1, ein2 };
 }
@@ -375,23 +473,45 @@ test(
       // of these two saves overwrote the first and every employee of both
       // divisions was assessed at whichever rate was entered last.
       await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-        region: "MI", filingAccountId: fixture.ein1, taxYear: 2026,
+        orgId: fixture.orgId,
+        actorId: fixture.actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_sui",
+        region: "MI",
+        filingAccountId: fixture.ein1,
+        taxYear: 2026,
         values: { rate: "0.0106", wageBase: "9500" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-        region: "MI", filingAccountId: fixture.ein2, taxYear: 2026,
+        orgId: fixture.orgId,
+        actorId: fixture.actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_sui",
+        region: "MI",
+        filingAccountId: fixture.ein2,
+        taxYear: 2026,
         values: { rate: "0.0630", wageBase: "9500" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       // FUTA on the same employer, differing by state in the same payroll.
-      for (const [state, rate] of [["MI", "0.009"], ["TX", "0.006"]] as const) {
+      for (const [state, rate] of [
+        ["MI", "0.009"],
+        ["TX", "0.006"],
+      ] as const) {
         await upsertStatutoryRate({
-          orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-          region: state, filingAccountId: null, taxYear: 2026, values: { rate },
-          sourceCitation: "Test rate notice", reason: "test fixture rate",
+          orgId: fixture.orgId,
+          actorId: fixture.actorId,
+          rates: US_PACK_RATES,
+          rateKey: "us_futa",
+          region: state,
+          filingAccountId: null,
+          taxYear: 2026,
+          values: { rate },
+          sourceCitation: "Test rate notice",
+          reason: "test fixture rate",
         });
       }
 
@@ -412,17 +532,25 @@ test(
       // while the live read answers the replacement. Two CURRENT rows for one
       // scope point would make the resolution ambiguous.
       await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-        region: "MI", filingAccountId: fixture.ein1, taxYear: 2026,
+        orgId: fixture.orgId,
+        actorId: fixture.actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_sui",
+        region: "MI",
+        filingAccountId: fixture.ein1,
+        taxYear: 2026,
         values: { rate: "0.0115", wageBase: "9500" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       const rows = await listStatutoryRates(fixture.orgId, { country: "US", taxYear: 2026 });
       assert.equal(rows.filter((r) => r.rateKey === "us_sui").length, 2);
       assert.ok(rows.every((r) => r.supersededOn === null));
-      const history = await listStatutoryRates(
-        fixture.orgId, { country: "US", taxYear: 2026, includeSuperseded: true },
-      );
+      const history = await listStatutoryRates(fixture.orgId, {
+        country: "US",
+        taxYear: 2026,
+        includeSuperseded: true,
+      });
       const ein1History = history.filter(
         (r) => r.rateKey === "us_sui" && r.filingAccountId === fixture.ein1,
       );
@@ -434,21 +562,33 @@ test(
         "the superseded row keeps the prior values it already paid under",
       );
       const again = await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026);
-      assert.equal(again.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 })!.rate, "0.0115");
-      assert.equal(again.values("us_sui", { region: "MI", filingAccountId: fixture.ein2 })!.rate, "0.0630");
+      assert.equal(
+        again.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 })!.rate,
+        "0.0115",
+      );
+      assert.equal(
+        again.values("us_sui", { region: "MI", filingAccountId: fixture.ein2 })!.rate,
+        "0.0630",
+      );
 
       // A rate is assigned FOR A YEAR: next year's resolution does not inherit
       // this year's experience rate, and the gap is reported.
       const nextYear = await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2027);
-      assert.equal(nextYear.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 }), null);
+      assert.equal(
+        nextYear.values("us_sui", { region: "MI", filingAccountId: fixture.ein1 }),
+        null,
+      );
 
       // Every write is audited with before/after — a statutory rate change is
       // material configuration. The re-save is two entries: the stamp on the
       // old row and the insert of its successor, never a rewrite.
-      const audit = (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
+      const audit = await db.execute<{ action: string; changes: Record<string, unknown> }>(
+        sql`
         select action, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'payroll_statutory_rates'
-         order by at`, "objects"));
+         order by at`,
+        "objects",
+      );
       assert.equal(audit.filter((r) => r.action === "insert").length, 5);
       assert.equal(audit.filter((r) => r.action === "update").length, 0);
       const supersede = audit.find((r) => r.action === "supersede")!;
@@ -473,34 +613,55 @@ test(
           begin raise exception 'injected statutory-rate audit failure'; end $$`);
         // CREATE TRIGGER is a utility statement: its WHEN clause cannot use
         // bind parameters, so the scratch org id is interpolated literally.
-        await db.execute(sql.raw(
-          `create trigger statutory_rate_audit_failure before insert on audit_log\n`
-          + `  for each row when (new.org_id = '${fixture.orgId}'::uuid\n`
-          + `    and new.table_name = 'payroll_statutory_rates')\n`
-          + "  execute function statutory_rate_audit_failure()",
-        ));
+        await db.execute(
+          sql.raw(
+            `create trigger statutory_rate_audit_failure before insert on audit_log\n` +
+              `  for each row when (new.org_id = '${fixture.orgId}'::uuid\n` +
+              `    and new.table_name = 'payroll_statutory_rates')\n` +
+              "  execute function statutory_rate_audit_failure()",
+          ),
+        );
         triggerInstalled = true;
 
         await assert.rejects(
-          () => upsertStatutoryRate({
-            orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-            region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
-            sourceCitation: "Test rate notice", reason: "test fixture rate",
-          }),
+          () =>
+            upsertStatutoryRate({
+              orgId: fixture.orgId,
+              actorId: fixture.actorId,
+              rates: US_PACK_RATES,
+              rateKey: "us_futa",
+              region: "MI",
+              filingAccountId: null,
+              taxYear: 2026,
+              values: { rate: "0.009" },
+              sourceCitation: "Test rate notice",
+              reason: "test fixture rate",
+            }),
           (error: unknown) => errorChainMatches(error, /injected statutory-rate audit failure/),
         );
         // The audit insert is in the same transaction as the rate insert: an
         // outage leaves neither half committed.
-        assert.deepEqual(await listStatutoryRates(fixture.orgId, { country: "US", taxYear: 2026 }), []);
+        assert.deepEqual(
+          await listStatutoryRates(fixture.orgId, { country: "US", taxYear: 2026 }),
+          [],
+        );
       } finally {
-        if (triggerInstalled) await db.execute(sql`drop trigger statutory_rate_audit_failure on audit_log`);
+        if (triggerInstalled)
+          await db.execute(sql`drop trigger statutory_rate_audit_failure on audit_log`);
         await db.execute(sql`drop function if exists statutory_rate_audit_failure()`);
       }
 
       const saved = await upsertStatutoryRate({
-        orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: fixture.orgId,
+        actorId: fixture.actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_futa",
+        region: "MI",
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { rate: "0.009" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       // A Remove request retires the open row — it stamps superseded_on and
       // writes no successor — rather than deleting anything. The row and its
@@ -508,12 +669,18 @@ test(
       // unconfigured.
       assert.equal(await deleteStatutoryRate(fixture.orgId, fixture.actorId, saved.id), true);
       assert.equal(
-        (await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" }),
+        (await resolveStatutoryRates(fixture.orgId, US_PACK_RATES, 2026)).values("us_futa", {
+          region: "MI",
+        }),
         null,
       );
-      const retired = (await listStatutoryRates(
-        fixture.orgId, { country: "US", taxYear: 2026, includeSuperseded: true },
-      )).find((r) => r.id === saved.id)!;
+      const retired = (
+        await listStatutoryRates(fixture.orgId, {
+          country: "US",
+          taxYear: 2026,
+          includeSuperseded: true,
+        })
+      ).find((r) => r.id === saved.id)!;
       assert.ok(retired.supersededOn !== null);
       assert.equal(retired.values.rate, "0.0090");
       // Retiring twice is a no-op success; an unknown id is still false, so
@@ -538,9 +705,16 @@ test(
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const first = await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
-        region: null, filingAccountId: null, taxYear: 2026, values: { amount: "10500" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: GB_PACK_RATES,
+        rateKey: "gb_employment_allowance",
+        region: null,
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { amount: "10500" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       assert.deepEqual(first.values, { amount: "10500.00" });
       const listed = await listStatutoryRates(org.orgId, { country: "GB", taxYear: 2026 });
@@ -552,23 +726,29 @@ test(
       // inserts its successor — a new id, never a rewritten row, and never a
       // duplicate current row.
       const second = await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
-        region: null, filingAccountId: null, taxYear: 2026, values: { amount: "8000" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: GB_PACK_RATES,
+        rateKey: "gb_employment_allowance",
+        region: null,
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { amount: "8000" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       assert.notEqual(second.id, first.id);
       const relisted = await listStatutoryRates(org.orgId, { country: "GB", taxYear: 2026 });
       assert.equal(relisted.length, 1);
       assert.equal(relisted[0]!.id, second.id);
       assert.deepEqual(relisted[0]!.values, { amount: "8000.00" });
-      const fullHistory = await listStatutoryRates(
-        org.orgId, { country: "GB", taxYear: 2026, includeSuperseded: true },
-      );
+      const fullHistory = await listStatutoryRates(org.orgId, {
+        country: "GB",
+        taxYear: 2026,
+        includeSuperseded: true,
+      });
       assert.equal(fullHistory.length, 2);
-      assert.deepEqual(
-        fullHistory.find((r) => r.id === first.id)!.values,
-        { amount: "10500.00" },
-      );
+      assert.deepEqual(fullHistory.find((r) => r.id === first.id)!.values, { amount: "10500.00" });
 
       // And the engine prices from what was saved — never from a stale zero.
       const resolution = await resolveStatutoryRates(org.orgId, GB_PACK_RATES, 2026);
@@ -589,8 +769,14 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const base = {
-      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-      region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+      orgId: org.orgId,
+      actorId,
+      rates: US_PACK_RATES,
+      rateKey: "us_futa",
+      region: "MI",
+      filingAccountId: null,
+      taxYear: 2026,
+      values: { rate: "0.006" },
     };
     await assert.rejects(
       upsertStatutoryRate({ ...base, sourceCitation: "  ", reason: "credit-reduction state" }),
@@ -610,10 +796,13 @@ test(
       assert.equal(listed!.id, saved.id);
       assert.equal(listed!.sourceCitation, "USDOL credit-reduction table");
       assert.equal(listed!.reason, "credit-reduction state");
-      const audit = (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
+      const audit = await db.execute<{ action: string; changes: Record<string, unknown> }>(
+        sql`
         select action, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'payroll_statutory_rates'
-           and row_id = ${saved.id} and action = 'insert'`, "objects"));
+           and row_id = ${saved.id} and action = 'insert'`,
+        "objects",
+      );
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.changes.sourceCitation, "USDOL credit-reduction table");
       assert.equal(audit[0]!.changes.reason, "credit-reduction state");
@@ -638,17 +827,23 @@ test(
     try {
       const gbSlot = GB_PACK_RATES.slots.find((slot) => slot.key === "gb_employment_allowance")!;
       assert.match(
-        rateScopePointProblem(gbSlot, { region: "ENG", subRegion: null, filingAccountId: null }) ?? "",
+        rateScopePointProblem(gbSlot, { region: "ENG", subRegion: null, filingAccountId: null }) ??
+          "",
         /org-wide/,
       );
       const futaSlot = US_PACK_RATES.slots.find((slot) => slot.key === "us_futa")!;
       assert.match(
-        rateScopePointProblem(futaSlot, { region: null, subRegion: null, filingAccountId: null }) ?? "",
+        rateScopePointProblem(futaSlot, { region: null, subRegion: null, filingAccountId: null }) ??
+          "",
         /name the region/,
       );
       const ehtSlot = CA_PACK_RATES.slots.find((slot) => slot.key === "ca_eht")!;
       assert.match(
-        rateScopePointProblem(ehtSlot, { region: "ON", subRegion: "TORONTO", filingAccountId: null }) ?? "",
+        rateScopePointProblem(ehtSlot, {
+          region: "ON",
+          subRegion: "TORONTO",
+          filingAccountId: null,
+        }) ?? "",
         /sub-jurisdiction/,
       );
       const suiSlot = US_PACK_RATES.slots.find((slot) => slot.key === "us_sui")!;
@@ -659,37 +854,68 @@ test(
 
       const accountId = randomUUID();
       await assert.rejects(
-        () => upsertStatutoryRate({
-          orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
-          region: "ENG", filingAccountId: null, taxYear: 2026, values: { amount: "10500" },
-          sourceCitation: "Test rate notice", reason: "test fixture rate",
-        }),
+        () =>
+          upsertStatutoryRate({
+            orgId: org.orgId,
+            actorId,
+            rates: GB_PACK_RATES,
+            rateKey: "gb_employment_allowance",
+            region: "ENG",
+            filingAccountId: null,
+            taxYear: 2026,
+            values: { amount: "10500" },
+            sourceCitation: "Test rate notice",
+            reason: "test fixture rate",
+          }),
         /org-wide/,
       );
       await assert.rejects(
-        () => upsertStatutoryRate({
-          orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-          region: null, filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
-          sourceCitation: "Test rate notice", reason: "test fixture rate",
-        }),
+        () =>
+          upsertStatutoryRate({
+            orgId: org.orgId,
+            actorId,
+            rates: US_PACK_RATES,
+            rateKey: "us_futa",
+            region: null,
+            filingAccountId: null,
+            taxYear: 2026,
+            values: { rate: "0.006" },
+            sourceCitation: "Test rate notice",
+            reason: "test fixture rate",
+          }),
         /name the region/,
       );
       await assert.rejects(
-        () => upsertStatutoryRate({
-          orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
-          region: "ON", subRegion: "TORONTO", filingAccountId: null, taxYear: 2026,
-          values: { rate: "1.95", annualExemption: "1000000" },
-          sourceCitation: "Test rate notice", reason: "test fixture rate",
-        }),
+        () =>
+          upsertStatutoryRate({
+            orgId: org.orgId,
+            actorId,
+            rates: CA_PACK_RATES,
+            rateKey: "ca_eht",
+            region: "ON",
+            subRegion: "TORONTO",
+            filingAccountId: null,
+            taxYear: 2026,
+            values: { rate: "1.95", annualExemption: "1000000" },
+            sourceCitation: "Test rate notice",
+            reason: "test fixture rate",
+          }),
         /sub-jurisdiction/,
       );
       await assert.rejects(
-        () => upsertStatutoryRate({
-          orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
-          region: "ON", filingAccountId: accountId, taxYear: 2026,
-          values: { rate: "1.95", annualExemption: "1000000" },
-          sourceCitation: "Test rate notice", reason: "test fixture rate",
-        }),
+        () =>
+          upsertStatutoryRate({
+            orgId: org.orgId,
+            actorId,
+            rates: CA_PACK_RATES,
+            rateKey: "ca_eht",
+            region: "ON",
+            filingAccountId: accountId,
+            taxYear: 2026,
+            values: { rate: "1.95", annualExemption: "1000000" },
+            sourceCitation: "Test rate notice",
+            reason: "test fixture rate",
+          }),
         /per filing account/,
       );
       // Every refusal above wrote nothing: a refused save leaves no
@@ -713,9 +939,16 @@ test(
     let triggerInstalled = false;
     try {
       await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_futa",
+        region: "MI",
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { rate: "0.006" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       try {
         // A BEFORE UPDATE trigger that returns NULL skips the update while
@@ -723,38 +956,60 @@ test(
         await db.execute(sql`
           create or replace function skip_statutory_rate_update() returns trigger language plpgsql as $$
           begin return null; end $$`);
-        await db.execute(sql.raw(
-          `create trigger skip_statutory_rate_update before update on payroll_statutory_rates\n`
-          + `  for each row when (new.org_id = '${org.orgId}'::uuid)\n`
-          + "  execute function skip_statutory_rate_update()",
-        ));
+        await db.execute(
+          sql.raw(
+            `create trigger skip_statutory_rate_update before update on payroll_statutory_rates\n` +
+              `  for each row when (new.org_id = '${org.orgId}'::uuid)\n` +
+              "  execute function skip_statutory_rate_update()",
+          ),
+        );
         triggerInstalled = true;
         await assert.rejects(
-          () => upsertStatutoryRate({
-            orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-            region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
-            sourceCitation: "Test rate notice", reason: "test fixture rate",
-          }),
+          () =>
+            upsertStatutoryRate({
+              orgId: org.orgId,
+              actorId,
+              rates: US_PACK_RATES,
+              rateKey: "us_futa",
+              region: "MI",
+              filingAccountId: null,
+              taxYear: 2026,
+              values: { rate: "0.009" },
+              sourceCitation: "Test rate notice",
+              reason: "test fixture rate",
+            }),
           /matched no row/,
         );
         // The failed update changed nothing: the stored value is still the
         // first save, and the audit carries no update for the lost write.
         assert.equal(
-          (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" })?.rate,
+          (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", {
+            region: "MI",
+          })?.rate,
           "0.0060",
         );
       } finally {
-        if (triggerInstalled) await db.execute(sql`drop trigger skip_statutory_rate_update on payroll_statutory_rates`);
+        if (triggerInstalled)
+          await db.execute(sql`drop trigger skip_statutory_rate_update on payroll_statutory_rates`);
         await db.execute(sql`drop function if exists skip_statutory_rate_update()`);
       }
       // With the interference gone the same save lands normally.
       await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-        region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_futa",
+        region: "MI",
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { rate: "0.009" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       assert.equal(
-        (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" })?.rate,
+        (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", {
+          region: "MI",
+        })?.rate,
         "0.0090",
       );
     } finally {
@@ -789,16 +1044,32 @@ test(
 
       const actorId = (await seedFlowActors(org.orgId)).adminId;
       const saved = await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-        region: "MI", filingAccountId: null, taxYear: 2026,
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_sui",
+        region: "MI",
+        filingAccountId: null,
+        taxYear: 2026,
         values: { rate: "0.031", wageBase: "9500" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       const configured = await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026);
-      assert.deepEqual(configured.values("us_sui", { region: "MI", filingAccountId: null }), saved.values);
-      assert.notEqual(saved.values.rate, "0.027", "the unaudited blob cannot override the scoped row");
+      assert.deepEqual(
+        configured.values("us_sui", { region: "MI", filingAccountId: null }),
+        saved.values,
+      );
+      assert.notEqual(
+        saved.values.rate,
+        "0.027",
+        "the unaudited blob cannot override the scoped row",
+      );
       assert.equal(configured.values("us_futa", { region: "MI" }), null);
-      assert.deepEqual((await listStatutoryRates(org.orgId)).map((row) => row.id), [saved.id]);
+      assert.deepEqual(
+        (await listStatutoryRates(org.orgId)).map((row) => row.id),
+        [saved.id],
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -852,8 +1123,8 @@ test(
       assert.ok(gaps.length > 0, "the operator must see the levy nobody configured before payday");
       assert.ok(
         gaps.every((item) => item.severity === "warning"),
-        "an employer with no registration in a state owes nothing there — refusing the whole "
-        + "payroll over a levy that may not apply would be wrong",
+        "an employer with no registration in a state owes nothing there — refusing the whole " +
+          "payroll over a levy that may not apply would be wrong",
       );
       assert.ok(
         gaps.some((item) => (item.detail ?? "").includes("TX")),

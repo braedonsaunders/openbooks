@@ -1,28 +1,25 @@
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { applicationContextFromSession } from '@/lib/application/context'
-import { requireExtensionAuthor } from '@/lib/application/extensions'
-import { ApplicationError } from '@/lib/application/errors'
-import { PAGE_REGISTRY } from '@/lib/page-registry'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { applicationContextFromSession } from "@/lib/application/context";
+import { requireExtensionAuthor } from "@/lib/application/extensions";
+import { ApplicationError } from "@/lib/application/errors";
+import { PAGE_REGISTRY } from "@/lib/page-registry";
 
 export const GET = defineRoute({
-  permission: 'apps.manage',
-  feature: 'apps',
+  permission: "apps.manage",
+  feature: "apps",
   handler: async ({ authz: routeAuthz }) => {
     const gate = routeAuthz;
     try {
-        await requireExtensionAuthor(
-          applicationContextFromSession(gate, 'api', crypto.randomUUID()),
-        )
-        return NextResponse.json(
-          { routes: Object.keys(PAGE_REGISTRY).sort() },
-          { headers: { 'Cache-Control': 'no-store' } },
-        )
-      } catch (error) {
-        if (error instanceof ApplicationError)
-          return apiErrorResponse(error)
-        throw error
-      }
+      await requireExtensionAuthor(applicationContextFromSession(gate, "api", crypto.randomUUID()));
+      return NextResponse.json(
+        { routes: Object.keys(PAGE_REGISTRY).sort() },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    } catch (error) {
+      if (error instanceof ApplicationError) return apiErrorResponse(error);
+      throw error;
+    }
   },
 });

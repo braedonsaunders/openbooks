@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getFlowAdapter } from '@openbooks/engine/flows/registry'
-import { moduleDrawerHref } from './txn-links'
+import { getFlowAdapter } from "@openbooks/engine/flows/registry";
+import { moduleDrawerHref } from "./txn-links";
 
 /**
  * The URL that opens an approval subject's native record, or null when the
@@ -15,8 +15,8 @@ export function approvalRecordHref(
   kind: string | null | undefined,
   id: string | null | undefined,
 ): string | null {
-  if (!kind || !id) return null
-  const adapter = getFlowAdapter(kind)
-  if (adapter && adapter.scope.via !== 'document') return adapter.deepLink(id)
-  return moduleDrawerHref(kind, id) ?? adapter?.deepLink(id) ?? null
+  if (!kind || !id) return null;
+  const adapter = getFlowAdapter(kind);
+  if (adapter && adapter.scope.via !== "document") return adapter.deepLink(id);
+  return moduleDrawerHref(kind, id) ?? adapter?.deepLink(id) ?? null;
 }

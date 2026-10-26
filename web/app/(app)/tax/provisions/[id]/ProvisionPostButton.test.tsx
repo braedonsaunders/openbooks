@@ -75,7 +75,10 @@ test("a refused post renders the named refusal with its remedy", async () => {
   const text = await clickPost(
     async () =>
       new Response(
-        JSON.stringify({ error: "provision run run-1 is posted", remedy: "use the current run run-2" }),
+        JSON.stringify({
+          error: "provision run run-1 is posted",
+          remedy: "use the current run run-2",
+        }),
         { status: 422, headers: { "content-type": "application/json" } },
       ),
   );

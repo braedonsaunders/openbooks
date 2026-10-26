@@ -95,13 +95,16 @@ export function PropertyManagementWorkspace({
     const suffix = next.toString();
     return suffix ? `${pathname}?${suffix}` : pathname;
   };
-  const setUrlState = (updates: Record<string, string | null>, history: "push" | "replace" = "push") => {
+  const setUrlState = (
+    updates: Record<string, string | null>,
+    history: "push" | "replace" = "push",
+  ) => {
     const href = hrefFor(updates);
     if (history === "replace") window.history.replaceState(window.history.state, "", href);
     else window.history.pushState(window.history.state, "", href);
   };
   const tabParam = searchParams.get("tab");
-  const tab = TABS.includes(tabParam as Tab) ? tabParam as Tab : initialTab;
+  const tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : initialTab;
   const propertyParam = searchParams.get("property");
   const unitParam = searchParams.get("unit");
   const leaseParam = searchParams.get("lease");
@@ -112,19 +115,31 @@ export function PropertyManagementWorkspace({
   const selectedUnit = data.units.find((unit) => unit.id === selectedUnitId) ?? null;
   const selectedLease = data.leases.find((lease) => lease.id === selectedLeaseId) ?? null;
   const selectedPool = data.camPools.find((pool) => pool.id === camParam) ?? null;
-  const selectedPropertyId = propertyParam && propertyParam !== "new"
-    ? propertyParam
-    : selectedUnit?.propertyId ?? selectedLease?.propertyId ?? null;
-  const selectedProperty = data.properties.find((property) => property.id === selectedPropertyId) ?? null;
+  const selectedPropertyId =
+    propertyParam && propertyParam !== "new"
+      ? propertyParam
+      : (selectedUnit?.propertyId ?? selectedLease?.propertyId ?? null);
+  const selectedProperty =
+    data.properties.find((property) => property.id === selectedPropertyId) ?? null;
   const createProperty = propertyParam === "new" && permissions.manage;
   const unitPropertyId = unitParam === "new" && permissions.manage ? selectedPropertyId : null;
   const createLease = leaseParam === "new" && permissions.manage;
-  const createCam = permissions.manage && (camParam === "new" || !!selectedPool && camAction !== "reopen");
-  const camEditorPool = createCam && camParam !== "new" ? selectedPool ?? undefined : undefined;
-  const camPropertyId = camParam === "new" ? selectedPropertyId ?? undefined : camEditorPool?.propertyId;
-  const reopenCamPoolId = permissions.account && camAction === "reopen" && selectedPool ? selectedPool.id : null;
+  const createCam =
+    permissions.manage && (camParam === "new" || (!!selectedPool && camAction !== "reopen"));
+  const camEditorPool = createCam && camParam !== "new" ? (selectedPool ?? undefined) : undefined;
+  const camPropertyId =
+    camParam === "new" ? (selectedPropertyId ?? undefined) : camEditorPool?.propertyId;
+  const reopenCamPoolId =
+    permissions.account && camAction === "reopen" && selectedPool ? selectedPool.id : null;
   const propertyInitialTab = searchParams.get("propertyTab") ?? "overview";
-  const closePropertyHref = hrefFor({ property: null, propertyTab: null, unit: null, lease: null, cam: null, camAction: null });
+  const closePropertyHref = hrefFor({
+    property: null,
+    propertyTab: null,
+    unit: null,
+    lease: null,
+    cam: null,
+    camAction: null,
+  });
   const closeUnitHref = hrefFor({ unit: null });
   const closeLeaseHref = hrefFor({ lease: null });
   const closeCamHref = hrefFor({ cam: null, camAction: null });
@@ -132,9 +147,15 @@ export function PropertyManagementWorkspace({
   const closeUnitCreate = () => setUrlState({ unit: null }, "replace");
   const closeLeaseDrawer = () => setUrlState({ lease: null }, "replace");
   const closeCamDrawer = () => setUrlState({ cam: null, camAction: null }, "replace");
-  const openProperty = (id: string) => setUrlState({
-    property: id, propertyTab: "overview", unit: null, lease: null, cam: null, camAction: null,
-  });
+  const openProperty = (id: string) =>
+    setUrlState({
+      property: id,
+      propertyTab: "overview",
+      unit: null,
+      lease: null,
+      cam: null,
+      camAction: null,
+    });
   const openUnit = (id: string) => {
     const unit = data.units.find((row) => row.id === id);
     if (!unit) return;
@@ -143,12 +164,24 @@ export function PropertyManagementWorkspace({
   const openLease = (id: string) => {
     const lease = data.leases.find((row) => row.id === id);
     if (!lease) return;
-    setUrlState({ property: lease.propertyId, unit: lease.unitId ?? null, lease: id, cam: null, camAction: null });
+    setUrlState({
+      property: lease.propertyId,
+      unit: lease.unitId ?? null,
+      lease: id,
+      cam: null,
+      camAction: null,
+    });
   };
-  const addUnit = () => selectedProperty && setUrlState({ unit: "new", lease: null, cam: null, camAction: null });
-  const addLease = (unitId?: string | null) => selectedProperty && setUrlState({
-    unit: unitId ?? null, lease: "new", cam: null, camAction: null,
-  });
+  const addUnit = () =>
+    selectedProperty && setUrlState({ unit: "new", lease: null, cam: null, camAction: null });
+  const addLease = (unitId?: string | null) =>
+    selectedProperty &&
+    setUrlState({
+      unit: unitId ?? null,
+      lease: "new",
+      cam: null,
+      camAction: null,
+    });
   const addCam = () => setUrlState({ cam: "new", camAction: null });
   const editCam = (pool: CamPool) => setUrlState({ cam: pool.id, camAction: null });
   const reopenCam = (pool: CamPool) => setUrlState({ cam: pool.id, camAction: "reopen" });
@@ -184,12 +217,7 @@ export function PropertyManagementWorkspace({
           onOpen={openProperty}
         />
       ) : tab === "rentRoll" ? (
-        <RentRollTable
-          data={data}
-          money={money}
-          onOpenUnit={openUnit}
-          onOpenLease={openLease}
-        />
+        <RentRollTable data={data} money={money} onOpenUnit={openUnit} onOpenLease={openLease} />
       ) : tab === "cam" ? (
         <CamTable
           data={data}
@@ -203,9 +231,16 @@ export function PropertyManagementWorkspace({
       ) : (
         <DepositReconciliationWorkspace
           money={money}
-          onOpenProperty={(propertyId: string) => setUrlState({
-            property: propertyId, propertyTab: "deposits", unit: null, lease: null, cam: null, camAction: null,
-          })}
+          onOpenProperty={(propertyId: string) =>
+            setUrlState({
+              property: propertyId,
+              propertyTab: "deposits",
+              unit: null,
+              lease: null,
+              cam: null,
+              camAction: null,
+            })
+          }
         />
       )}
 
@@ -229,12 +264,8 @@ export function PropertyManagementWorkspace({
       <PropertyDetailDrawer
         key={`${selectedProperty?.id ?? "property-detail"}:${propertyInitialTab}`}
         property={selectedProperty}
-        units={data.units.filter(
-          (unit) => unit.propertyId === selectedProperty?.id,
-        )}
-        leases={data.leases.filter(
-          (lease) => lease.propertyId === selectedProperty?.id,
-        )}
+        units={data.units.filter((unit) => unit.propertyId === selectedProperty?.id)}
+        leases={data.leases.filter((lease) => lease.propertyId === selectedProperty?.id)}
         options={options}
         permissions={permissions}
         customization={customization}
@@ -262,7 +293,18 @@ export function PropertyManagementWorkspace({
             { action: "deleteProperty", propertyId: selectedProperty.id },
             t("toasts.propertyDeleted"),
           );
-          if (result) setUrlState({ property: null, propertyTab: null, unit: null, lease: null, cam: null, camAction: null }, "replace");
+          if (result)
+            setUrlState(
+              {
+                property: null,
+                propertyTab: null,
+                unit: null,
+                lease: null,
+                cam: null,
+                camAction: null,
+              },
+              "replace",
+            );
           return result;
         }}
       />
@@ -272,10 +314,7 @@ export function PropertyManagementWorkspace({
         onClose={closeUnitCreate}
         busy={busy}
         onSave={async (payload: ActionPayload) => {
-          const result = await act(
-            { action: "createUnit", ...payload },
-            t("toasts.unitAdded"),
-          );
+          const result = await act({ action: "createUnit", ...payload }, t("toasts.unitAdded"));
           if (result) closeUnitCreate();
         }}
       />
@@ -313,10 +352,7 @@ export function PropertyManagementWorkspace({
         tenants={options.tenants}
         busy={busy}
         onSave={async (payload: ActionPayload) => {
-          const result = await act(
-            { action: "createLease", ...payload },
-            t("toasts.leaseCreated"),
-          );
+          const result = await act({ action: "createLease", ...payload }, t("toasts.leaseCreated"));
           if (result?.id) {
             setUrlState({ lease: result.id }, "replace");
           }

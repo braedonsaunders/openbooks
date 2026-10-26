@@ -12,7 +12,15 @@ interface RouteState {
   listed: string[];
   got: Array<{ typeKey: string; id: string }>;
 }
-const routeState: RouteState = { created: [], full: [], replaced: [], issued: [], converted: [], listed: [], got: [] };
+const routeState: RouteState = {
+  created: [],
+  full: [],
+  replaced: [],
+  issued: [],
+  converted: [],
+  listed: [],
+  got: [],
+};
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
@@ -111,7 +119,14 @@ const hooks = registerHooks({
   },
 });
 
-const { v1CreateOrder, v1ConvertOrder, v1ListOrders, v1GetOrder, v1ReplaceOrderLines, v1IssueOrder } = await import("./v1-orders.ts");
+const {
+  v1CreateOrder,
+  v1ConvertOrder,
+  v1ListOrders,
+  v1GetOrder,
+  v1ReplaceOrderLines,
+  v1IssueOrder,
+} = await import("./v1-orders.ts");
 hooks.deregister();
 
 test("v1CreateOrder maps the record key to the order-cycle kind", async () => {
@@ -126,7 +141,9 @@ test("v1CreateOrder maps the record key to the order-cycle kind", async () => {
   );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { id: "order-1", documentNumber: "Q-1" });
-  assert.deepEqual(routeState.created, [{ kind: "quote", idempotencyKey: "key-1", subsidiaryId: null }]);
+  assert.deepEqual(routeState.created, [
+    { kind: "quote", idempotencyKey: "key-1", subsidiaryId: null },
+  ]);
 });
 
 test("v1CreateOrder maps purchase-orders to purchase_order", async () => {
@@ -152,25 +169,28 @@ test("v1CreateOrder forwards an explicit subsidiaryId", async () => {
     }),
     "purchase-orders",
   );
-  assert.deepEqual(routeState.created, [{
-    kind: "purchase_order",
-    idempotencyKey: "key-sub",
-    subsidiaryId: "11111111-1111-4111-8111-111111111111",
-  }]);
+  assert.deepEqual(routeState.created, [
+    {
+      kind: "purchase_order",
+      idempotencyKey: "key-sub",
+      subsidiaryId: "11111111-1111-4111-8111-111111111111",
+    },
+  ]);
 });
 
 test("v1ConvertOrder refuses a missing targetKind with the allowed targets", async () => {
   routeState.converted = [];
   await assert.rejects(
-    () => v1ConvertOrder(
-      new Request("http://openbooks.test/api/v1/quotes/q1/convert", {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": "key-3" },
-        body: "{}",
-      }),
-      "quotes",
-      "q1",
-    ),
+    () =>
+      v1ConvertOrder(
+        new Request("http://openbooks.test/api/v1/quotes/q1/convert", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": "key-3" },
+          body: "{}",
+        }),
+        "quotes",
+        "q1",
+      ),
     /sales_order or customer_invoice/,
   );
   assert.equal(routeState.converted.length, 0);
@@ -188,14 +208,16 @@ test("v1ConvertOrder forwards the path id and targetKind", async () => {
     "q1",
   );
   assert.equal(response.status, 201);
-  assert.deepEqual(routeState.converted, [{
-    documentId: "q1",
-    targetKind: "sales_order",
-    expectedUpdatedAt: "rev-1",
-    creditOverrideReason: undefined,
-    idempotencyKey: "key-4",
-    expectedKind: "quote",
-  }]);
+  assert.deepEqual(routeState.converted, [
+    {
+      documentId: "q1",
+      targetKind: "sales_order",
+      expectedUpdatedAt: "rev-1",
+      creditOverrideReason: undefined,
+      idempotencyKey: "key-4",
+      expectedKind: "quote",
+    },
+  ]);
 });
 
 test("v1ConvertOrder binds the route kind so a sibling-kind id cannot convert", async () => {
@@ -276,12 +298,14 @@ test("v1ReplaceOrderLines forwards the path id and revision token", async () => 
     "so-1",
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.replaced, [{
-    documentId: "so-1",
-    expectedUpdatedAt: "42",
-    lines: [],
-    shippingLines: undefined,
-  }]);
+  assert.deepEqual(routeState.replaced, [
+    {
+      documentId: "so-1",
+      expectedUpdatedAt: "42",
+      lines: [],
+      shippingLines: undefined,
+    },
+  ]);
 });
 
 test("v1IssueOrder forwards the path id and revision token", async () => {
@@ -296,18 +320,24 @@ test("v1IssueOrder forwards the path id and revision token", async () => {
     "so-1",
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.issued, [{
-    documentId: "so-1",
-    expectedUpdatedAt: "43",
-    creditOverrideReason: undefined,
-  }]);
+  assert.deepEqual(routeState.issued, [
+    {
+      documentId: "so-1",
+      expectedUpdatedAt: "43",
+      creditOverrideReason: undefined,
+    },
+  ]);
 });
 
 test("v1ListOrders and v1GetOrder bind the record type", async () => {
   routeState.listed = [];
   routeState.got = [];
   await v1ListOrders(new Request("http://openbooks.test/api/v1/sales-orders"), "sales-orders");
-  await v1GetOrder(new Request("http://openbooks.test/api/v1/sales-orders/so-1"), "sales-orders", "so-1");
+  await v1GetOrder(
+    new Request("http://openbooks.test/api/v1/sales-orders/so-1"),
+    "sales-orders",
+    "so-1",
+  );
   assert.deepEqual(routeState.listed, ["sales-orders"]);
   assert.deepEqual(routeState.got, [{ typeKey: "sales-orders", id: "so-1" }]);
 });

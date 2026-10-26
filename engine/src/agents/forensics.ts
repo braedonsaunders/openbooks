@@ -88,7 +88,8 @@ export async function forensicsFindings(
   if (weekendPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(weekendPolicy, agentThreshold);
     const from = addCalendarDays(today, -weekendPolicy.parameters.lookbackDays!);
-    const rows = (await db.execute<SpendDoc & { day_of_week: number }>(sql`
+    const rows = await db.execute<SpendDoc & { day_of_week: number }>(
+      sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
              d.total::text as total, d.party_id, coalesce(p.display_name, '') as party_name,
              extract(dow from coalesce(d.document_date, d.posting_date))::int as day_of_week
@@ -101,12 +102,24 @@ export async function forensicsFindings(
          and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
          and abs(coalesce(d.total, 0)) >= ${threshold}::numeric
        order by abs(d.total) desc limit 25
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const row of rows) {
       const materiality = moneyAbs(row.total);
-      findings.push(itemFinding("forensic_weekend_postings", `forensic-weekend:${row.id}`, row, materiality, threshold, weekendPolicy.parameters.criticalMaterialityMultiple, {
-        dayOfWeek: row.day_of_week === 0 ? "sunday" : "saturday",
-      }));
+      findings.push(
+        itemFinding(
+          "forensic_weekend_postings",
+          `forensic-weekend:${row.id}`,
+          row,
+          materiality,
+          threshold,
+          weekendPolicy.parameters.criticalMaterialityMultiple,
+          {
+            dayOfWeek: row.day_of_week === 0 ? "sunday" : "saturday",
+          },
+        ),
+      );
     }
   }
 
@@ -114,7 +127,8 @@ export async function forensicsFindings(
   if (roundPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(roundPolicy, agentThreshold);
     const from = addCalendarDays(today, -roundPolicy.parameters.lookbackDays!);
-    const rows = (await db.execute<SpendDoc>(sql`
+    const rows = await db.execute<SpendDoc>(
+      sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
              d.total::text as total, d.party_id, coalesce(p.display_name, '') as party_name
         from documents d
@@ -128,10 +142,22 @@ export async function forensicsFindings(
          and trunc(abs(coalesce(d.total, 0)))::bigint % 1000 = 0
          and abs(coalesce(d.total, 0)) >= ${threshold}::numeric
        order by abs(d.total) desc limit 25
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const row of rows) {
       const materiality = moneyAbs(row.total);
-      findings.push(itemFinding("forensic_round_dollar", `forensic-round-dollar:${row.id}`, row, materiality, threshold, roundPolicy.parameters.criticalMaterialityMultiple, {}));
+      findings.push(
+        itemFinding(
+          "forensic_round_dollar",
+          `forensic-round-dollar:${row.id}`,
+          row,
+          materiality,
+          threshold,
+          roundPolicy.parameters.criticalMaterialityMultiple,
+          {},
+        ),
+      );
     }
   }
 
@@ -139,7 +165,8 @@ export async function forensicsFindings(
   if (trapPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(trapPolicy, agentThreshold);
     const from = addCalendarDays(today, -trapPolicy.parameters.lookbackDays!);
-    const rows = (await db.execute<SpendDoc & { trap: string }>(sql`
+    const rows = await db.execute<SpendDoc & { trap: string }>(
+      sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
              d.total::text as total, d.party_id, coalesce(p.display_name, '') as party_name,
              case when trunc(abs(coalesce(d.total, 0)))::bigint % 10000 = 9999 then '9999'
@@ -155,12 +182,24 @@ export async function forensicsFindings(
          and round((abs(coalesce(d.total, 0)) - trunc(abs(coalesce(d.total, 0)))) * 100) in (0, 99)
          and abs(coalesce(d.total, 0)) >= ${threshold}::numeric
        order by abs(d.total) desc limit 25
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const row of rows) {
       const materiality = moneyAbs(row.total);
-      findings.push(itemFinding("forensic_threshold_trap", `forensic-threshold-trap:${row.id}`, row, materiality, threshold, trapPolicy.parameters.criticalMaterialityMultiple, {
-        trap: row.trap,
-      }));
+      findings.push(
+        itemFinding(
+          "forensic_threshold_trap",
+          `forensic-threshold-trap:${row.id}`,
+          row,
+          materiality,
+          threshold,
+          trapPolicy.parameters.criticalMaterialityMultiple,
+          {
+            trap: row.trap,
+          },
+        ),
+      );
     }
   }
 
@@ -168,20 +207,21 @@ export async function forensicsFindings(
   if (duplicatePolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(duplicatePolicy, agentThreshold);
     const from = addCalendarDays(today, -duplicatePolicy.parameters.lookbackDays!);
-    const pairs = (await db.execute<{
-        id1: string;
-        num1: string | null;
-        date1: string;
-        id2: string;
-        num2: string | null;
-        date2: string;
-        kind: string;
-        amount: string;
-        party_id: string;
-        party_name: string;
-        days_between: number;
-        same_memo: boolean;
-      }>(sql`
+    const pairs = await db.execute<{
+      id1: string;
+      num1: string | null;
+      date1: string;
+      id2: string;
+      num2: string | null;
+      date2: string;
+      kind: string;
+      amount: string;
+      party_id: string;
+      party_name: string;
+      days_between: number;
+      same_memo: boolean;
+    }>(
+      sql`
       with cand as materialized (
         select d.id, d.document_number, d.kind, d.party_id, d.memo, abs(d.total) as amt,
                coalesce(d.document_date, d.posting_date) as ddate
@@ -205,14 +245,20 @@ export async function forensicsFindings(
         left join parties p on p.id = d1.party_id and p.org_id = ${orgId}
        where abs(d2.ddate - d1.ddate) <= ${duplicatePolicy.parameters.duplicateDays!}
        order by d1.amt desc limit 25
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const pair of pairs) {
       const materiality = moneyAbs(pair.amount);
       findings.push({
         agentKey: "forensics",
         findingType: "forensic_duplicate_bills",
         fingerprint: `forensic-duplicate:${pair.id1}:${pair.id2}`,
-        severity: classifyForensicItem({ materiality, threshold, criticalMaterialityMultiple: duplicatePolicy.parameters.criticalMaterialityMultiple }),
+        severity: classifyForensicItem({
+          materiality,
+          threshold,
+          criticalMaterialityMultiple: duplicatePolicy.parameters.criticalMaterialityMultiple,
+        }),
         confidence: "1.0000",
         materiality,
         subjectType: "document",
@@ -234,13 +280,23 @@ export async function forensicsFindings(
             kind: "document",
             sourceType: "document",
             sourceId: pair.id1,
-            data: { documentNumber: pair.num1, kind: pair.kind, date: pair.date1, amount: pair.amount },
+            data: {
+              documentNumber: pair.num1,
+              kind: pair.kind,
+              date: pair.date1,
+              amount: pair.amount,
+            },
           },
           {
             kind: "document",
             sourceType: "document",
             sourceId: pair.id2,
-            data: { documentNumber: pair.num2, kind: pair.kind, date: pair.date2, amount: pair.amount },
+            data: {
+              documentNumber: pair.num2,
+              kind: pair.kind,
+              date: pair.date2,
+              amount: pair.amount,
+            },
           },
         ],
       });

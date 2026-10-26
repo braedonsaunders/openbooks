@@ -40,9 +40,7 @@ export function resolveReportPeriodField(
   entity: ReportEntity,
   plan: ReportCustomQuery,
 ): string | null {
-  const dateColumns = new Set(
-    entity.columns.filter((c) => c.kind === "date").map((c) => c.key),
-  );
+  const dateColumns = new Set(entity.columns.filter((c) => c.kind === "date").map((c) => c.key));
   let found: string | null = null;
   const walk = (node: ReportRuleGroup | undefined): void => {
     for (const r of node?.rules ?? []) {

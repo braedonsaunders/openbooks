@@ -21,7 +21,10 @@ function passesGate(authz: Authz, gate: PermissionRule): boolean {
 /** True when the tool's optional feature (if any) is on for the org. When no
  *  feature state is supplied the feature check is skipped — callers that own
  *  a turn resolve the state once and pass it. */
-export function toolFeatureEnabled(tool: AssistantToolDef, features: FeatureState | null | undefined): boolean {
+export function toolFeatureEnabled(
+  tool: AssistantToolDef,
+  features: FeatureState | null | undefined,
+): boolean {
   const keys = [tool.feature, ...(tool.featureAnyOf ?? [])].filter((k): k is string => !!k);
   if (keys.length === 0 || !features) return true;
   return keys.some((key) => featureEnabled(features, key));
@@ -29,7 +32,11 @@ export function toolFeatureEnabled(tool: AssistantToolDef, features: FeatureStat
 
 /** A tool is runnable iff the user holds assistant.use, plus assistant.write
  *  for write tools, plus the tool's own gate, plus its feature being on. */
-export function canRunTool(authz: Authz, tool: AssistantToolDef, features?: FeatureState | null): boolean {
+export function canRunTool(
+  authz: Authz,
+  tool: AssistantToolDef,
+  features?: FeatureState | null,
+): boolean {
   if (!can(authz, "assistant.use")) return false;
   if (tool.category === "write" && !can(authz, "assistant.write")) return false;
   if (!toolFeatureEnabled(tool, features)) return false;

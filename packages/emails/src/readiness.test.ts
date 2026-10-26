@@ -15,7 +15,10 @@ test("an organization that has not enabled delivery is refused with a remedy it 
   assert.equal(block.state, "unconfigured");
   const parts = emailDeliveryBlockedParts(block);
   assert.equal(parts.summary, "Email delivery is not enabled for this organization.");
-  assert.ok(parts.remedy.includes(EMAIL_SETUP_LOCATION), "the remedy names the page the organization can open");
+  assert.ok(
+    parts.remedy.includes(EMAIL_SETUP_LOCATION),
+    "the remedy names the page the organization can open",
+  );
   assert.equal(emailDeliveryBlockedMessage(block), `${parts.summary} ${parts.remedy}`);
 });
 
@@ -24,7 +27,9 @@ test("a configured but unusable credential surfaces its engine reason and a re-e
     state: "unusable",
     reason: "the stored provider credential could not be unsealed with the current data key",
   };
-  const parts = emailDeliveryBlockedParts(block as Exclude<EmailTransportResolution, { state: "ready" }>);
+  const parts = emailDeliveryBlockedParts(
+    block as Exclude<EmailTransportResolution, { state: "ready" }>,
+  );
   assert.equal(
     parts.summary,
     "Email delivery cannot send: the stored provider credential could not be unsealed with the current data key.",
@@ -35,11 +40,19 @@ test("a configured but unusable credential surfaces its engine reason and a re-e
 test("refusal copy never points at a page or setting that does not exist", () => {
   const blocks: Array<Exclude<EmailTransportResolution, { state: "ready" }>> = [
     { state: "unconfigured" },
-    { state: "unusable", reason: "the stored email configuration is missing its sending credential or sender identity" },
+    {
+      state: "unusable",
+      reason: "the stored email configuration is missing its sending credential or sender identity",
+    },
   ];
   for (const block of blocks) {
     const message = emailDeliveryBlockedMessage(block);
-    for (const invented of ["Settings → Email", "Company Settings → Email", "Administration → Email", "Set up email delivery"]) {
+    for (const invented of [
+      "Settings → Email",
+      "Company Settings → Email",
+      "Administration → Email",
+      "Set up email delivery",
+    ]) {
       assert.ok(!message.includes(invented), `"${invented}" is not a real location: ${message}`);
     }
     assert.ok(message.includes("Admin → Email"), message);
@@ -48,11 +61,17 @@ test("refusal copy never points at a page or setting that does not exist", () =>
 
 test("readiness exposes only the state and reason, and ready means a send may be attempted", () => {
   assert.deepEqual(emailDeliveryReadiness({ state: "unconfigured" }), { state: "unconfigured" });
-  assert.deepEqual(emailDeliveryReadiness({ state: "unusable", reason: "r" }), { state: "unusable", reason: "r" });
+  assert.deepEqual(emailDeliveryReadiness({ state: "unusable", reason: "r" }), {
+    state: "unusable",
+    reason: "r",
+  });
   const ready = emailDeliveryReadiness({
     state: "ready",
     transport: { provider: "resend", apiKey: "re_secret", from: "a@example.com" },
   });
   assert.deepEqual(ready, { state: "ready" });
-  assert.ok(!JSON.stringify(ready).includes("re_secret"), "readiness must never carry transport secrets");
+  assert.ok(
+    !JSON.stringify(ready).includes("re_secret"),
+    "readiness must never carry transport secrets",
+  );
 });

@@ -4,19 +4,22 @@
  * provider-authoritative line tax, the calculation snapshot writer, and the
  * document-number delegate. Callers supply the organization explicitly.
  */
-import { resolveCanadianGoodsTaxes, type GoodsTaxSnapshot } from '../tax/goods-selection.ts'
-import type { BillLineInput } from './document-input.ts'
-import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '../platform/db.ts'
-import { allocateDocumentNumber } from '../records/numbering.ts'
-import { persistLineTaxComponents as persistEngineLineTaxComponents, requireEffectiveRateRow } from '../tax/persist.ts'
-import { cmp, add, isZero, sum } from '../money/money.ts'
+import { resolveCanadianGoodsTaxes, type GoodsTaxSnapshot } from "../tax/goods-selection.ts";
+import type { BillLineInput } from "./document-input.ts";
+import { sql } from "drizzle-orm";
+import { db, type SqlExecutor } from "../platform/db.ts";
+import { allocateDocumentNumber } from "../records/numbering.ts";
+import {
+  persistLineTaxComponents as persistEngineLineTaxComponents,
+  requireEffectiveRateRow,
+} from "../tax/persist.ts";
+import { cmp, add, isZero, sum } from "../money/money.ts";
 import {
   computeLineTaxes,
   type ComputedTaxComponent,
   type TaxCalculationType,
   type TaxComponentConfig,
-} from '../tax/tax.ts'
+} from "../tax/tax.ts";
 import {
   quoteExternalTax,
   readTaxRateProviderConfig,
@@ -27,36 +30,41 @@ import {
   type ProviderDocumentKind,
   type TaxQuoteRequest,
   type TaxQuoteResult,
-} from '../tax/rate-providers.ts'
-import { businessToday } from '../platform/business-date.ts'
+} from "../tax/rate-providers.ts";
+import { businessToday } from "../platform/business-date.ts";
 
 /** One tax_codes row (or left-joined group member) as the profile loader reads it. */
 interface TaxCodeProfileRow extends Record<string, unknown> {
-  id: string | null
-  code: string | null
-  effective_rate: string | null
-  recoverable_percent: string | null
-  calculation_type: TaxCalculationType | null
-  price_includes_tax: boolean | null
-  compound_on_previous: boolean | null
-  rounding_scale: number | null
-  collected_account_id: string | null
-  paid_account_id: string | null
-  withholding_account_id: string | null
+  id: string | null;
+  code: string | null;
+  effective_rate: string | null;
+  recoverable_percent: string | null;
+  calculation_type: TaxCalculationType | null;
+  price_includes_tax: boolean | null;
+  compound_on_previous: boolean | null;
+  rounding_scale: number | null;
+  collected_account_id: string | null;
+  paid_account_id: string | null;
+  withholding_account_id: string | null;
 }
 
 export interface TaxProfiles {
-  codes: Map<string, TaxComponentConfig[]>
-  groups: Map<string, TaxComponentConfig[]>
+  codes: Map<string, TaxComponentConfig[]>;
+  groups: Map<string, TaxComponentConfig[]>;
 }
 
 /**
  * Effective, ordered tax profiles for a transaction date: exactly the codes
  * and groups a document dated `asOfDate` can be taxed with.
  */
-export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string, exec: SqlExecutor = db): Promise<TaxProfiles> {
-  const date = asOfDate ?? await businessToday(resolvedOrgId)
-  const codeRows = (await exec.execute<TaxCodeProfileRow>(sql`
+export async function taxProfileMap(
+  resolvedOrgId: string,
+  asOfDate?: string,
+  exec: SqlExecutor = db,
+): Promise<TaxProfiles> {
+  const date = asOfDate ?? (await businessToday(resolvedOrgId));
+  const codeRows = await exec.execute<TaxCodeProfileRow>(
+    sql`
     select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.price_includes_tax, tc.compound_on_previous,
@@ -69,8 +77,14 @@ export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string, ex
            and (effective_to is null or effective_to >= ${date})
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active
-  `, 'objects'))
-  const config = (row: TaxCodeProfileRow, sequence: number, inclusive?: boolean): TaxComponentConfig => ({
+  `,
+    "objects",
+  );
+  const config = (
+    row: TaxCodeProfileRow,
+    sequence: number,
+    inclusive?: boolean,
+  ): TaxComponentConfig => ({
     taxCodeId: String(row.id),
     code: String(row.code),
     sequence,
@@ -86,15 +100,18 @@ export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string, ex
     collectedAccountId: row.collected_account_id,
     paidAccountId: row.paid_account_id,
     withholdingAccountId: row.withholding_account_id,
-  })
+  });
   // A map may contain unrelated setup still awaiting its first rate. Omit
   // unusable profiles here; computeBillTotals refuses one only when selected.
   // A real zero-percent row remains usable.
-  const codes = new Map<string, TaxComponentConfig[]>(codeRows
-    .filter((row) => row.effective_rate != null)
-    .map((row) => [String(row.id), [config(row, 1)]]))
+  const codes = new Map<string, TaxComponentConfig[]>(
+    codeRows
+      .filter((row) => row.effective_rate != null)
+      .map((row) => [String(row.id), [config(row, 1)]]),
+  );
 
-  const groupRows = (await exec.execute<TaxCodeProfileRow>(sql`
+  const groupRows = await exec.execute<TaxCodeProfileRow>(
+    sql`
     select tg.id as group_id, tg.price_includes_tax as group_inclusive,
            tgm.sequence, tc.id, tc.code, tc.is_active as code_active, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
@@ -110,23 +127,25 @@ export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string, ex
          order by effective_from desc limit 1) tr on true
      where tg.org_id = ${resolvedOrgId} and tg.is_active
      order by tg.id, tgm.sequence
-  `, 'objects'))
-  const groups = new Map<string, TaxComponentConfig[]>()
-  const unusableGroups = new Set<string>()
+  `,
+    "objects",
+  );
+  const groups = new Map<string, TaxComponentConfig[]>();
+  const unusableGroups = new Set<string>();
   for (const row of groupRows) {
-    const id = String(row.group_id)
+    const id = String(row.group_id);
     if (row.code_active !== true || row.effective_rate == null) {
-      unusableGroups.add(id)
-      continue
+      unusableGroups.add(id);
+      continue;
     }
-    const members = groups.get(id) ?? []
-    members.push(config(row, Number(row.sequence), Boolean(row.group_inclusive)))
-    groups.set(id, members)
+    const members = groups.get(id) ?? [];
+    members.push(config(row, Number(row.sequence), Boolean(row.group_inclusive)));
+    groups.set(id, members);
   }
   // Never turn a composite tax into a smaller tax by dropping an inactive,
   // missing or lapsed member. The entire selected group must be usable.
-  for (const id of unusableGroups) groups.delete(id)
-  return { codes, groups }
+  for (const id of unusableGroups) groups.delete(id);
+  return { codes, groups };
 }
 
 /** Pre-tax lines → per-line tax + document totals. Honors manual overrides. */
@@ -135,89 +154,91 @@ export function computeBillTotals(lines: BillLineInput[], profiles: TaxProfiles)
     // Provider evidence is minted by this module, never accepted from an API
     // caller. Strip the internal sidecar before carrying user line fields
     // forward into the persisted document shape.
-    const line = { ...l }
-    delete line.providerQuote
-    if (line.taxCodeId && line.taxGroupId) throw new Error('select either a tax code or a tax group, not both')
+    const line = { ...l };
+    delete line.providerQuote;
+    if (line.taxCodeId && line.taxGroupId)
+      throw new Error("select either a tax code or a tax group, not both");
     const config = line.taxGroupId
       ? profiles.groups.get(line.taxGroupId)
       : line.taxCodeId
         ? profiles.codes.get(line.taxCodeId)
-        : []
-    if ((line.taxCodeId || line.taxGroupId) && !config) throw new Error('selected tax profile is inactive or has no effective rate')
-    if(line.taxOverridden && !config?.length && cmp(line.taxAmount ?? '0','0')!==0)throw new Error('Select a tax profile before overriding a nonzero tax amount so the collected-tax account is explicit')
+        : [];
+    if ((line.taxCodeId || line.taxGroupId) && !config)
+      throw new Error("selected tax profile is inactive or has no effective rate");
+    if (line.taxOverridden && !config?.length && cmp(line.taxAmount ?? "0", "0") !== 0)
+      throw new Error(
+        "Select a tax profile before overriding a nonzero tax amount so the collected-tax account is explicit",
+      );
     const result = computeLineTaxes(line.amount, config ?? [], {
       overridden: line.taxOverridden,
       taxAmount: line.taxAmount,
-    })
+    });
     return {
       ...line,
       amount: result.netAmount,
       taxInputAmount: result.inputAmount,
       taxAmount: result.taxTotal,
-      taxOverridden: result.overridden || (line.taxOverridden===true && !config?.length),
+      taxOverridden: result.overridden || (line.taxOverridden === true && !config?.length),
       taxComponents: result.components,
       nativeGoodsTax: undefined as GoodsTaxSnapshot | undefined,
-    }
-  })
-  const subtotal = sum(computed.map((l) => l.amount))
-  const taxTotal = sum(computed.map((l) => l.taxAmount))
-  return { lines: computed, subtotal, taxTotal, total: add(subtotal, taxTotal) }
+    };
+  });
+  const subtotal = sum(computed.map((l) => l.amount));
+  const taxTotal = sum(computed.map((l) => l.taxAmount));
+  return { lines: computed, subtotal, taxTotal, total: add(subtotal, taxTotal) };
 }
 
 export interface ProviderBillTotalsOptions {
-  orgId: string
-  kind: string
-  currency: string
-  documentDate: string
-  partyId?: string | null
-  subsidiaryId?: string | null
+  orgId: string;
+  kind: string;
+  currency: string;
+  documentDate: string;
+  partyId?: string | null;
+  subsidiaryId?: string | null;
   /**
    * Document-level tax location override (documents.custom.taxProviderAddresses):
    * a side set here wins over the resolved snapshot for that side only, so an
    * explicit document location is quoted exactly as posting will replay it.
    */
-  canadianGoodsTax?: unknown
+  canadianGoodsTax?: unknown;
   taxProviderAddresses?: {
-    shipFrom?: Record<string, string | null>
-    shipTo?: Record<string, string | null>
-  } | null
+    shipFrom?: Record<string, string | null>;
+    shipTo?: Record<string, string | null>;
+  } | null;
   /**
    * Test-only local-stub switch, threaded to the provider fetch: lets tests
    * point the provider at a loopback stub. Never set by production callers
    * (document writers, the settings route).
    */
-  allowPrivateEndpoints?: boolean
+  allowPrivateEndpoints?: boolean;
 }
 
 const PROVIDER_DOCUMENT_KINDS = new Set([
-  'customer_invoice',
-  'customer_credit',
-  'vendor_bill',
-  'vendor_credit',
-])
+  "customer_invoice",
+  "customer_credit",
+  "vendor_bill",
+  "vendor_credit",
+]);
 
-const ADDRESS_KEYS = ['line1', 'city', 'region', 'postalCode', 'country'] as const
+const ADDRESS_KEYS = ["line1", "city", "region", "postalCode", "country"] as const;
 
 /** Shape-check a document-level address override; anything else refuses. */
-function overrideAddress(
-  value: unknown,
-  side: string,
-): Record<string, string | null> | null {
-  if (value == null) return null
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`document tax location override ${side} must be an address object`)
+function overrideAddress(value: unknown, side: string): Record<string, string | null> | null {
+  if (value == null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`document tax location override ${side} must be an address object`);
   }
-  const cleaned: Record<string, string | null> = {}
+  const cleaned: Record<string, string | null> = {};
   for (const [key, entry] of Object.entries(value)) {
     if (!(ADDRESS_KEYS as readonly string[]).includes(key)) {
-      throw new Error(`document tax location override ${side} has an unknown field "${key}"`)
+      throw new Error(`document tax location override ${side} has an unknown field "${key}"`);
     }
-    if (entry != null && typeof entry !== 'string') {
-      throw new Error(`document tax location override ${side} field "${key}" must be text`)
+    if (entry != null && typeof entry !== "string") {
+      throw new Error(`document tax location override ${side} field "${key}" must be text`);
     }
-    cleaned[key] = entry ?? null
+    cleaned[key] = entry ?? null;
   }
-  return Object.keys(cleaned).length ? cleaned : null
+  return Object.keys(cleaned).length ? cleaned : null;
 }
 
 /**
@@ -231,20 +252,20 @@ function overrideAddress(
 async function providerRequestAddresses(
   options: ProviderBillTotalsOptions,
 ): Promise<{ shipFrom: Address; shipTo: Address }> {
-  const isPurchase = options.kind === 'vendor_bill' || options.kind === 'vendor_credit'
+  const isPurchase = options.kind === "vendor_bill" || options.kind === "vendor_credit";
   const counterparty = await resolveCounterpartyTaxAddress(
     options.orgId,
     options.partyId,
-    isPurchase ? 'vendor' : 'customer',
-  )
-  const entity = await resolveEntityTaxAddress(options.orgId, options.subsidiaryId)
-  let shipFrom: Address = isPurchase ? counterparty : entity.address
-  let shipTo: Address = isPurchase ? entity.address : counterparty
-  const customFrom = overrideAddress(options.taxProviderAddresses?.shipFrom, 'shipFrom')
-  const customTo = overrideAddress(options.taxProviderAddresses?.shipTo, 'shipTo')
-  if (customFrom) shipFrom = customFrom
-  if (customTo) shipTo = customTo
-  return { shipFrom, shipTo }
+    isPurchase ? "vendor" : "customer",
+  );
+  const entity = await resolveEntityTaxAddress(options.orgId, options.subsidiaryId);
+  let shipFrom: Address = isPurchase ? counterparty : entity.address;
+  let shipTo: Address = isPurchase ? entity.address : counterparty;
+  const customFrom = overrideAddress(options.taxProviderAddresses?.shipFrom, "shipFrom");
+  const customTo = overrideAddress(options.taxProviderAddresses?.shipTo, "shipTo");
+  if (customFrom) shipFrom = customFrom;
+  if (customTo) shipTo = customTo;
+  return { shipFrom, shipTo };
 }
 
 /**
@@ -257,35 +278,61 @@ export async function computeBillTotalsWithProvider(
   profiles: TaxProfiles,
   options: ProviderBillTotalsOptions,
 ) {
-  const native=await resolveCanadianGoodsTaxes(options.orgId,{kind:options.kind,subsidiaryId:options.subsidiaryId,documentDate:options.documentDate,currency:options.currency,selection:options.canadianGoodsTax},lines)
-  const local = computeBillTotals(lines, profiles)
-  for(const [index,selected] of native) {
-    const line=local.lines[index]!
-    local.lines[index]={...line,amount:selected.computed.netAmount,taxInputAmount:selected.computed.inputAmount,taxAmount:selected.computed.taxTotal,taxOverridden:false,taxComponents:selected.computed.components,nativeGoodsTax:selected.snapshot}
+  const native = await resolveCanadianGoodsTaxes(
+    options.orgId,
+    {
+      kind: options.kind,
+      subsidiaryId: options.subsidiaryId,
+      documentDate: options.documentDate,
+      currency: options.currency,
+      selection: options.canadianGoodsTax,
+    },
+    lines,
+  );
+  const local = computeBillTotals(lines, profiles);
+  for (const [index, selected] of native) {
+    const line = local.lines[index]!;
+    local.lines[index] = {
+      ...line,
+      amount: selected.computed.netAmount,
+      taxInputAmount: selected.computed.inputAmount,
+      taxAmount: selected.computed.taxTotal,
+      taxOverridden: false,
+      taxComponents: selected.computed.components,
+      nativeGoodsTax: selected.snapshot,
+    };
   }
-  if(native.size) {local.subtotal=sum(local.lines.map(line=>line.amount));local.taxTotal=sum(local.lines.map(line=>line.taxAmount));local.total=add(local.subtotal,local.taxTotal)}
-  if (!PROVIDER_DOCUMENT_KINDS.has(options.kind)) return local
-  const provider = await readTaxRateProviderConfig(options.orgId)
-  if (!provider?.isEnabled || !provider.preferProvider || provider.provider === 'manual') return local
+  if (native.size) {
+    local.subtotal = sum(local.lines.map((line) => line.amount));
+    local.taxTotal = sum(local.lines.map((line) => line.taxAmount));
+    local.total = add(local.subtotal, local.taxTotal);
+  }
+  if (!PROVIDER_DOCUMENT_KINDS.has(options.kind)) return local;
+  const provider = await readTaxRateProviderConfig(options.orgId);
+  if (!provider?.isEnabled || !provider.preferProvider || provider.provider === "manual")
+    return local;
 
-  const { shipFrom, shipTo } = await providerRequestAddresses(options)
-  const resolved = [] as typeof local.lines
+  const { shipFrom, shipTo } = await providerRequestAddresses(options);
+  const resolved = [] as typeof local.lines;
   for (const line of local.lines) {
     if (line.nativeGoodsTax || (!line.taxCodeId && !line.taxGroupId)) {
-      resolved.push(line)
-      continue
+      resolved.push(line);
+      continue;
     }
     const config = line.taxGroupId
       ? profiles.groups.get(line.taxGroupId)
       : line.taxCodeId
         ? profiles.codes.get(line.taxCodeId)
-        : []
-    if (!config?.length) throw new Error('selected tax profile is inactive or has no effective rate')
+        : [];
+    if (!config?.length)
+      throw new Error("selected tax profile is inactive or has no effective rate");
     // A provider quotes tax on a net taxable amount. Sending a tax-inclusive
     // gross would tax the tax, and the posting check would then refuse the
     // document on every recalculation.
     if (config.some((component) => component.priceIncludesTax)) {
-      throw new Error('the external tax provider quotes net prices; enter this line net of tax, or choose a tax code or group that does not include tax in the price')
+      throw new Error(
+        "the external tax provider quotes net prices; enter this line net of tax, or choose a tax code or group that does not include tax in the price",
+      );
     }
     const request: TaxQuoteRequest = {
       taxableAmount: line.taxInputAmount,
@@ -302,24 +349,24 @@ export async function computeBillTotalsWithProvider(
       counterpartyCode: options.partyId ?? undefined,
       itemCode: line.custom?.taxItemCode == null ? null : String(line.custom.taxItemCode),
       quotedOn: options.documentDate,
-    }
-    let quote: TaxQuoteResult & { quoteId: string | null }
+    };
+    let quote: TaxQuoteResult & { quoteId: string | null };
     try {
       quote = await quoteExternalTax(options.orgId, request, null, {
         persist: false,
         config: provider,
         ...(options.allowPrivateEndpoints ? { allowPrivateEndpoints: true } : {}),
-      })
+      });
     } catch (error) {
       throw new Error(
         `configured tax provider ${provider.provider} failed for line: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      );
     }
     // Book the provider's per-jurisdiction amounts under their mapped tax
     // codes — never the local profile's split with a residual stuffed onto
     // the last component. A jurisdiction the mapping does not name refuses
     // here, before approval, instead of posting under the wrong code.
-    let taxComponents: typeof line.taxComponents
+    let taxComponents: typeof line.taxComponents;
     if (quote.components.length > 0) {
       try {
         taxComponents = await resolveProviderTaxComponents(
@@ -327,11 +374,11 @@ export async function computeBillTotalsWithProvider(
           request.taxableAmount,
           quote,
           provider.settings,
-        )
+        );
       } catch (error) {
         throw new Error(
           `configured tax provider ${provider.provider} failed for line: ${error instanceof Error ? error.message : String(error)}`,
-        )
+        );
       }
     } else if (isZero(quote.taxAmount)) {
       // A genuinely-nil quote (zero headline, no components) keeps the local
@@ -339,12 +386,12 @@ export async function computeBillTotalsWithProvider(
       const calculated = computeLineTaxes(request.taxableAmount, config, {
         overridden: true,
         taxAmount: quote.taxAmount,
-      })
-      taxComponents = calculated.components
+      });
+      taxComponents = calculated.components;
     } else {
       throw new Error(
         `configured tax provider ${provider.provider} returned tax ${quote.taxAmount} with no components — recalculate the draft`,
-      )
+      );
     }
     resolved.push({
       ...line,
@@ -354,14 +401,14 @@ export async function computeBillTotalsWithProvider(
       taxOverridden: true,
       taxComponents,
       providerQuote: { providerConfigId: provider.id, request, result: quote },
-    })
+    });
   }
-  const subtotal = sum(resolved.map((line) => line.amount))
-  const taxTotal = sum(resolved.map((line) => line.taxAmount))
-  return { lines: resolved, subtotal, taxTotal, total: add(subtotal, taxTotal) }
+  const subtotal = sum(resolved.map((line) => line.amount));
+  const taxTotal = sum(resolved.map((line) => line.taxAmount));
+  return { lines: resolved, subtotal, taxTotal, total: add(subtotal, taxTotal) };
 }
 
-type SqlRunner = SqlExecutor
+type SqlRunner = SqlExecutor;
 
 /**
  * Persist the immutable calculation snapshot immediately after its document
@@ -373,13 +420,19 @@ type SqlRunner = SqlExecutor
 export async function persistLineTaxComponents(
   runner: SqlRunner,
   args: {
-    orgId: string
-    documentLineId: string
-    components: ComputedTaxComponent[]
-    actorId: string | null
+    orgId: string;
+    documentLineId: string;
+    components: ComputedTaxComponent[];
+    actorId: string | null;
   },
 ): Promise<void> {
-  await persistEngineLineTaxComponents(args.orgId, args.documentLineId, args.components, args.actorId, runner)
+  await persistEngineLineTaxComponents(
+    args.orgId,
+    args.documentLineId,
+    args.components,
+    args.actorId,
+    runner,
+  );
 }
 
 /**
@@ -390,16 +443,23 @@ export async function persistLineTaxComponents(
  * sequence because document numbers are organization-wide identities — every
  * generator shares the single org-wide counter per kind.
  */
-export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null) {
+export async function nextDocumentNumber(
+  orgId: string,
+  kind: string,
+  prefix: string,
+  subsidiaryId?: string | null,
+) {
   if (subsidiaryId != null) {
-    const subsidiary = await db.execute<{ id: string }>(sql`
+    const subsidiary = await db.execute<{ id: string }>(
+      sql`
       select id
         from subsidiaries
        where id = ${subsidiaryId} and org_id = ${orgId}
        limit 1
-    `, 'objects')
-    if (!subsidiary[0]) throw new Error('subsidiary does not belong to organization')
+    `,
+      "objects",
+    );
+    if (!subsidiary[0]) throw new Error("subsidiary does not belong to organization");
   }
-  return allocateDocumentNumber(db, orgId, kind, prefix)
+  return allocateDocumentNumber(db, orgId, kind, prefix);
 }
-

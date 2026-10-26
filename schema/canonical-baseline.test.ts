@@ -66,10 +66,7 @@ test("every effective sandbox-wipe guard reads the GUC the wipe source sets", ()
   const effectiveWipeBodies = new Map(
     [...effectiveFunctions].filter(([, body]) => body.includes("sandbox_wipe")),
   );
-  assert.ok(
-    effectiveWipeBodies.size > 0,
-    "expected wipe-honoring guards in the effective catalog",
-  );
+  assert.ok(effectiveWipeBodies.size > 0, "expected wipe-honoring guards in the effective catalog");
   for (const [functionName, body] of effectiveWipeBodies) {
     assert.doesNotMatch(body, /app\.sandbox_wipe/, `${functionName} retains the drifted GUC`);
     if (functionName === "openbooks_sandbox_wipe_allowed") {

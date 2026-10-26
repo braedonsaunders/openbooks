@@ -22,7 +22,15 @@ import {
 } from "./ssrf-guard.ts";
 
 const PUBLIC_V4 = ["8.8.8.8", "1.1.1.1", "93.184.216.34", "192.0.0.9", "192.0.0.10"];
-const PUBLIC_V6 = ["2606:4700:4700::1111", "2001:4860:4860::8888", "64:ff9b::808:808", "2001:1::1", "2001:1::2", "2001:1::3", "2001:4:112::1"];
+const PUBLIC_V6 = [
+  "2606:4700:4700::1111",
+  "2001:4860:4860::8888",
+  "64:ff9b::808:808",
+  "2001:1::1",
+  "2001:1::2",
+  "2001:1::3",
+  "2001:4:112::1",
+];
 const PRIVATE = [
   "10.0.0.1",
   "172.16.0.1",
@@ -75,15 +83,21 @@ test("public unicast passes, every special range fails", () => {
 });
 
 test("every IANA special-purpose registry entry has an explicit address decision", () => {
-  const registryEntries = [...IPV4_SPECIAL_PURPOSE, ...IPV6_SPECIAL_PURPOSE]
-    .filter((entry) => entry.registry.startsWith("IPv"));
-  assert.equal(registryEntries.length, 51, "conformance set must cover every published IANA registry row");
+  const registryEntries = [...IPV4_SPECIAL_PURPOSE, ...IPV6_SPECIAL_PURPOSE].filter((entry) =>
+    entry.registry.startsWith("IPv"),
+  );
+  assert.equal(
+    registryEntries.length,
+    51,
+    "conformance set must cover every published IANA registry row",
+  );
   for (const entry of registryEntries) {
     // The globally reachable NAT64 prefix translates the embedded IPv4
     // destination, so use a public translated address for its conformance row.
-    const networkAddress = entry.cidr === "64:ff9b::/96"
-      ? "64:ff9b::808:808"
-      : entry.cidr.slice(0, entry.cidr.indexOf("/"));
+    const networkAddress =
+      entry.cidr === "64:ff9b::/96"
+        ? "64:ff9b::808:808"
+        : entry.cidr.slice(0, entry.cidr.indexOf("/"));
     assert.equal(
       isPublicUnicastAddress(networkAddress),
       entry.globallyReachable,
@@ -96,7 +110,11 @@ test("every IANA special-purpose registry entry has an explicit address decision
     ["192.175.48.1", "AS112 service"],
     ["2620:4f:8000::1", "AS112-v6"],
   ] as const) {
-    assert.equal(isPublicUnicastAddress(address), true, `${reason} is explicitly globally reachable`);
+    assert.equal(
+      isPublicUnicastAddress(address),
+      true,
+      `${reason} is explicitly globally reachable`,
+    );
   }
 });
 
@@ -215,60 +233,75 @@ test("guardedFetch pins the request to the public address checked before a DNS r
   let socketAddress = "";
   const response = Readable.from([]) as IncomingMessage;
   Object.assign(response, { statusCode: 200, statusMessage: "OK", headers: {} });
-  const result = await guardedFetch("https://rebind.example/resource", {}, {
-    lookup: async () => {
-      dnsReads++;
-      return dnsReads === 1 ? ["93.184.216.34"] : ["10.0.0.7"];
+  const result = await guardedFetch(
+    "https://rebind.example/resource",
+    {},
+    {
+      lookup: async () => {
+        dnsReads++;
+        return dnsReads === 1 ? ["93.184.216.34"] : ["10.0.0.7"];
+      },
+      request: (_url, options, onResponse) => {
+        options.lookup!("rebind.example", {}, (error, address) => {
+          if (error) throw error;
+          socketAddress = Array.isArray(address) ? address[0]!.address : address;
+        });
+        queueMicrotask(() => onResponse(response));
+        const fakeRequest = Object.assign(new EventEmitter(), {
+          write: () => true,
+          end: () => undefined as unknown as ClientRequest,
+        }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
+        return fakeRequest;
+      },
     },
-    request: (_url, options, onResponse) => {
-      options.lookup!("rebind.example", {}, (error, address) => {
-        if (error) throw error;
-        socketAddress = Array.isArray(address) ? address[0]!.address : address;
-      });
-      queueMicrotask(() => onResponse(response));
-      const fakeRequest = Object.assign(new EventEmitter(), {
-        write: () => true,
-        end: () => undefined as unknown as ClientRequest,
-      }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
-      return fakeRequest;
-    },
-  });
+  );
 
   assert.equal(result.status, 200);
   assert.equal(dnsReads, 1, "connection must not re-resolve the hostname");
-  assert.equal(socketAddress, "93.184.216.34", "socket lookup must use the address that passed validation");
+  assert.equal(
+    socketAddress,
+    "93.184.216.34",
+    "socket lookup must use the address that passed validation",
+  );
 });
 
-for (const [pinned, family] of [["93.184.216.34", 4], ["2606:4700:4700::1111", 6]] as const) {
+for (const [pinned, family] of [
+  ["93.184.216.34", 4],
+  ["2606:4700:4700::1111", 6],
+] as const) {
   for (const all of [false, true]) {
     test(`guardedFetch preserves the verified IPv${family} address when socket lookup all=${all}`, async () => {
       let dnsReads = 0;
       let callbacks = 0;
       const response = Readable.from([]) as IncomingMessage;
       Object.assign(response, { statusCode: 200, statusMessage: "OK", headers: {} });
-      const result = await guardedFetch("https://connector.example/resource", {}, {
-        lookup: async () => {
-          dnsReads += 1;
-          return dnsReads === 1 ? [pinned, "1.1.1.1"] : ["10.0.0.7"];
+      const result = await guardedFetch(
+        "https://connector.example/resource",
+        {},
+        {
+          lookup: async () => {
+            dnsReads += 1;
+            return dnsReads === 1 ? [pinned, "1.1.1.1"] : ["10.0.0.7"];
+          },
+          request: (_url, options, onResponse) => {
+            options.lookup!("connector.example", { all }, (error, address, resolvedFamily) => {
+              callbacks += 1;
+              assert.equal(error, null);
+              if (all) {
+                assert.deepEqual(address, [{ address: pinned, family }]);
+              } else {
+                assert.equal(address, pinned);
+                assert.equal(resolvedFamily, family);
+              }
+            });
+            queueMicrotask(() => onResponse(response));
+            return Object.assign(new EventEmitter(), {
+              write: () => true,
+              end: () => undefined as unknown as ClientRequest,
+            }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
+          },
         },
-        request: (_url, options, onResponse) => {
-          options.lookup!("connector.example", { all }, (error, address, resolvedFamily) => {
-            callbacks += 1;
-            assert.equal(error, null);
-            if (all) {
-              assert.deepEqual(address, [{ address: pinned, family }]);
-            } else {
-              assert.equal(address, pinned);
-              assert.equal(resolvedFamily, family);
-            }
-          });
-          queueMicrotask(() => onResponse(response));
-          return Object.assign(new EventEmitter(), {
-            write: () => true,
-            end: () => undefined as unknown as ClientRequest,
-          }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
-        },
-      });
+      );
       assert.equal(result.status, 200);
       assert.equal(callbacks, 1, "the socket must receive exactly one lookup result");
       assert.equal(dnsReads, 1, "the socket must not resolve an unverified replacement address");
@@ -283,16 +316,23 @@ for (const [label, headers, chunks] of [
   test(`guardedFetch refuses ${label} beyond the response limit instead of buffering it`, async () => {
     const response = Readable.from([...chunks]) as IncomingMessage;
     Object.assign(response, { statusCode: 200, statusMessage: "OK", headers });
-    await assert.rejects(guardedFetch("https://connector.example/large", {}, {
-      maxResponseBytes: 10,
-      lookup: async () => ["93.184.216.34"],
-      request: (_url, _options, onResponse) => {
-        queueMicrotask(() => onResponse(response));
-        return Object.assign(new EventEmitter(), {
-          write: () => true,
-          end: () => undefined as unknown as ClientRequest,
-        }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
-      },
-    }), /limited to 10 bytes|larger than 10 bytes/);
+    await assert.rejects(
+      guardedFetch(
+        "https://connector.example/large",
+        {},
+        {
+          maxResponseBytes: 10,
+          lookup: async () => ["93.184.216.34"],
+          request: (_url, _options, onResponse) => {
+            queueMicrotask(() => onResponse(response));
+            return Object.assign(new EventEmitter(), {
+              write: () => true,
+              end: () => undefined as unknown as ClientRequest,
+            }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
+          },
+        },
+      ),
+      /limited to 10 bytes|larger than 10 bytes/,
+    );
   });
 }

@@ -44,17 +44,27 @@ export interface DeliveryResult {
 }
 
 async function partyName(orgId: string, partyId: string): Promise<string | null> {
-  const row = (await db.execute<{ name: string }>(sql`
+  const row = (
+    await db.execute<{ name: string }>(
+      sql`
     select coalesce(display_name, legal_name, 'Unnamed') as name
       from parties where org_id = ${orgId} and id = ${partyId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.name ?? null;
 }
 
 async function orgName(orgId: string): Promise<string> {
-  const row = (await db.execute<{ name: string }>(sql`
+  const row = (
+    await db.execute<{ name: string }>(
+      sql`
     select name from orgs where id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.name ?? "Your organization";
 }
 
@@ -73,7 +83,10 @@ async function sendEmail(args: {
   }
   const transport = delivery.transport;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(args.to)) {
-    return { sent: false, skippedReason: "no valid recipient email — the signing link below still works" };
+    return {
+      sent: false,
+      skippedReason: "no valid recipient email — the signing link below still works",
+    };
   }
   const logId = await insertEmailLog({
     orgId: args.orgId,
@@ -92,7 +105,13 @@ async function sendEmail(args: {
     const outcome = await sendVia(
       transport,
       { to: args.to, subject: args.subject, html: args.html, text: args.text },
-      { deliveryKey: deriveEmailDeliveryKey({ orgId: args.orgId, scope: `direct:${logId}`, to: args.to }) },
+      {
+        deliveryKey: deriveEmailDeliveryKey({
+          orgId: args.orgId,
+          scope: `direct:${logId}`,
+          to: args.to,
+        }),
+      },
     );
     if (outcome.kind === "sent") {
       await markEmailSent(args.orgId, logId, outcome.providerMessageId);
@@ -101,7 +120,10 @@ async function sendEmail(args: {
     // Uncertain acceptance is fail-closed and named, never retried blind:
     // the link below still works and the log carries the reason.
     await markEmailUncertain(args.orgId, logId, outcome.reason);
-    return { sent: false, skippedReason: `email acceptance is uncertain (${outcome.reason}) — the link below still works` };
+    return {
+      sent: false,
+      skippedReason: `email acceptance is uncertain (${outcome.reason}) — the link below still works`,
+    };
   } catch (e) {
     await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e));
     return { sent: false, skippedReason: "email send threw — the link below still works" };
@@ -151,14 +173,21 @@ export async function deliverSignatureInvitations(args: {
         orgId: args.orgId,
         userId: recipient.userId,
         kind: args.reminder ? "hrm.document.reminder" : "hrm.document.signature",
-        title: args.reminder ? `Reminder: sign ${args.docTitle}` : `Signature requested: ${args.docTitle}`,
+        title: args.reminder
+          ? `Reminder: sign ${args.docTitle}`
+          : `Signature requested: ${args.docTitle}`,
         body: `${org} asks you to sign ${args.docTitle}. Open the document to review and sign.${emailed ? "" : " The signing link is with HR."}`,
         href: `/me/documents`,
         actorId: args.actorId,
       });
       notified = true;
     }
-    results.push({ partyId: recipient.partyId, notified, emailed, emailSkippedReason: emailed ? null : skipped });
+    results.push({
+      partyId: recipient.partyId,
+      notified,
+      emailed,
+      emailSkippedReason: emailed ? null : skipped,
+    });
   }
   return results;
 }
@@ -214,7 +243,12 @@ export async function deliverSurveyInvitations(args: {
       });
       notified = true;
     }
-    results.push({ partyId: recipient.partyId, notified, emailed, emailSkippedReason: emailed ? null : skipped });
+    results.push({
+      partyId: recipient.partyId,
+      notified,
+      emailed,
+      emailSkippedReason: emailed ? null : skipped,
+    });
   }
   return results;
 }

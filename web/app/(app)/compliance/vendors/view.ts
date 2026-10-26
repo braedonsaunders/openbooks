@@ -1,12 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { FORM_TYPES } from '@openbooks/engine/compliance/information-returns'
-import { can, requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { FORM_TYPES } from "@openbooks/engine/compliance/information-returns";
+import { can, requirePermission } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
 import {
   loadComplianceClasses,
   loadComplianceMatrix,
@@ -15,11 +21,11 @@ import {
   complianceSubsidiaryFilter,
   requireComplianceFeature,
   type ComplianceMatrix,
-} from '../../../../lib/compliance'
-import { loadRequirementPolicies } from '@openbooks/engine/compliance/compliance'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { complianceTabs } from '../tabs'
+} from "../../../../lib/compliance";
+import { loadRequirementPolicies } from "@openbooks/engine/compliance/compliance";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { complianceTabs } from "../tabs";
 
 /**
  * The subcontractor compliance matrix, split into a loader and a spec.
@@ -36,61 +42,65 @@ import { complianceTabs } from '../tabs'
  */
 
 export interface ComplianceVendorsData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof complianceTabs>>
-  filters: Record<string, unknown>
-  emptyTitle: string
-  emptyDescription: string
-  isEmpty: boolean
-  hasRows: boolean
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof complianceTabs>>;
+  filters: Record<string, unknown>;
+  emptyTitle: string;
+  emptyDescription: string;
+  isEmpty: boolean;
+  hasRows: boolean;
   matrix: {
-    rows: ComplianceMatrix['rows']
-    columns: ComplianceMatrix['policies']
-    classId: string | null
-    stateFilter: string | null
-    labels: Record<string, unknown>
-  }
-  drawerOpen: boolean
-  drawerProps: Record<string, unknown> | null
+    rows: ComplianceMatrix["rows"];
+    columns: ComplianceMatrix["policies"];
+    classId: string | null;
+    stateFilter: string | null;
+    labels: Record<string, unknown>;
+  };
+  drawerOpen: boolean;
+  drawerProps: Record<string, unknown> | null;
 }
 
 export async function loadComplianceVendors(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ComplianceVendorsData> {
-  const authz = await requirePermission('compliance.read')
-  const orgId = authz.user.orgId
-  await requireComplianceFeature(orgId)
-  const t = await getTranslations('compliance')
-  const { money } = await getMoneyFormatter()
-  const requestedClassId = pickString(sp.class)
-  const requestedVendorId = pickString(sp.vendor)
-  const classId = requestedClassId && isUuid(requestedClassId) ? requestedClassId : null
-  const stateFilter = pickString(sp.state) ?? null
-  const openVendor = requestedVendorId && isUuid(requestedVendorId) ? requestedVendorId : null
+  const authz = await requirePermission("compliance.read");
+  const orgId = authz.user.orgId;
+  await requireComplianceFeature(orgId);
+  const t = await getTranslations("compliance");
+  const { money } = await getMoneyFormatter();
+  const requestedClassId = pickString(sp.class);
+  const requestedVendorId = pickString(sp.vendor);
+  const classId = requestedClassId && isUuid(requestedClassId) ? requestedClassId : null;
+  const stateFilter = pickString(sp.state) ?? null;
+  const openVendor = requestedVendorId && isUuid(requestedVendorId) ? requestedVendorId : null;
 
   const [matrix, projectsEnabled, informationReturnsEnabled] = await Promise.all([
     loadComplianceMatrix({
       orgId,
       classId,
       states:
-        stateFilter === 'attention'
-          ? ['missing', 'expired', 'insufficient', 'awaiting_verification', 'rejected']
-          : stateFilter === 'expiring'
-            ? ['expiring']
+        stateFilter === "attention"
+          ? ["missing", "expired", "insufficient", "awaiting_verification", "rejected"]
+          : stateFilter === "expiring"
+            ? ["expiring"]
             : undefined,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     }),
-    isFeatureEnabled(orgId, 'projects'),
-    isFeatureEnabled(orgId, 'informationReturns'),
-  ])
-  const tabs = await complianceTabs('/compliance/vendors', { projectsEnabled, informationReturnsEnabled })
+    isFeatureEnabled(orgId, "projects"),
+    isFeatureEnabled(orgId, "informationReturns"),
+  ]);
+  const tabs = await complianceTabs("/compliance/vendors", {
+    projectsEnabled,
+    informationReturnsEnabled,
+  });
 
   // The drawer's data loads only when a vendor is actually open.
   const drawerData = openVendor
     ? await (async () => {
         const [vendor, certificates, exceptions, policies, classes, projects] = await Promise.all([
-          db.execute<Record<string, unknown>>(sql`
+          db.execute<Record<string, unknown>>(
+            sql`
             select p.id, p.display_name as name, p.legal_name as "legalName",
                    vr.compliance_class_id as "complianceClassId",
                    vr.information_return_form as "informationReturnForm",
@@ -102,19 +112,24 @@ export async function loadComplianceVendors(
               from parties p
               join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
              where p.org_id = ${orgId} and p.id = ${openVendor}
-               ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}`, 'objects'),
+               ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}`,
+            "objects",
+          ),
           loadVendorCertificates(orgId, openVendor, authz.allowedSubsidiaryIds),
           loadVendorWaivers(orgId, openVendor, authz.allowedSubsidiaryIds),
           loadRequirementPolicies(orgId),
           loadComplianceClasses(orgId),
-          db.execute<{ id: string; label: string }>(sql`
+          db.execute<{ id: string; label: string }>(
+            sql`
             select id, coalesce(code || ' · ' || name, name) as label from projects
              where org_id = ${orgId} and is_active
                ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-             order by code nulls last, name limit 500`, 'objects'),
-        ])
-        const row = vendor[0]
-        if (!row) return null
+             order by code nulls last, name limit 500`,
+            "objects",
+          ),
+        ]);
+        const row = vendor[0];
+        if (!row) return null;
         return {
           vendor: row as never,
           certificates,
@@ -123,22 +138,22 @@ export async function loadComplianceVendors(
           classes,
           projects,
           status: matrix.rows.find((r) => r.partyId === openVendor) ?? null,
-        }
+        };
       })()
-    : null
+    : null;
 
   const closeHref = `/compliance/vendors?${new URLSearchParams({
     ...(classId ? { class: classId } : {}),
     ...(stateFilter ? { state: stateFilter } : {}),
-  })}`
+  })}`;
 
   return {
-    title: t('vendors.title'),
-    description: t('vendors.description'),
+    title: t("vendors.title"),
+    description: t("vendors.description"),
     tabs,
     filters: { classes: matrix.classes, classId, state: stateFilter },
-    emptyTitle: t('vendors.empty.title'),
-    emptyDescription: t('vendors.empty.description'),
+    emptyTitle: t("vendors.empty.title"),
+    emptyDescription: t("vendors.empty.description"),
     isEmpty: matrix.rows.length === 0,
     hasRows: matrix.rows.length > 0,
     matrix: {
@@ -149,14 +164,14 @@ export async function loadComplianceVendors(
       // Label lookups are resolved here so the component takes strings rather
       // than a translator, keeping it free of request-scoped context.
       labels: {
-        vendor: t('vendors.columns.vendor'),
-        class: t('vendors.columns.class'),
-        status: t('vendors.columns.status'),
-        exposure: t('vendors.columns.exposure'),
+        vendor: t("vendors.columns.vendor"),
+        class: t("vendors.columns.class"),
+        status: t("vendors.columns.status"),
+        exposure: t("vendors.columns.exposure"),
         states: Object.fromEntries(
-          [...new Set(matrix.rows.flatMap((r) => [r.overall, ...r.findings.map((f) => f.state)]))].map(
-            (state) => [state, t(`states.${state}`)],
-          ),
+          [
+            ...new Set(matrix.rows.flatMap((r) => [r.overall, ...r.findings.map((f) => f.state)])),
+          ].map((state) => [state, t(`states.${state}`)]),
         ),
         reasons: Object.fromEntries(
           [...new Set(matrix.rows.flatMap((r) => r.findings.flatMap((f) => f.reasons)))].map(
@@ -175,35 +190,35 @@ export async function loadComplianceVendors(
           data: drawerData,
           closeHref,
           formTypes: [...FORM_TYPES],
-          canManage: can(authz, 'compliance.manage'),
-          canVerify: can(authz, 'compliance.verify'),
-          canWaive: can(authz, 'compliance.waive'),
+          canManage: can(authz, "compliance.manage"),
+          canVerify: can(authz, "compliance.verify"),
+          canWaive: can(authz, "compliance.waive"),
         }
       : null,
-  }
+  };
 }
 
-const f = ref<ComplianceVendorsData>()
+const f = ref<ComplianceVendorsData>();
 
 export function complianceVendorsSpec(data: ComplianceVendorsData): PageSpec {
   return page({
-    route: '/compliance/vendors',
-    layout: 'list',
+    route: "/compliance/vendors",
+    layout: "list",
     header: [
-      pageHeader({ title: f('title'), description: f('description') }),
-      widgetBlock('module-home-tabs', { tabs: data.tabs }),
+      pageHeader({ title: f("title"), description: f("description") }),
+      widgetBlock("module-home-tabs", { tabs: data.tabs }),
     ],
     body: [
-      widgetBlock('matrix-filters', data.filters),
+      widgetBlock("matrix-filters", data.filters),
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.emptyTitle,
           description: data.emptyDescription,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
-      { ...widgetBlock('compliance-matrix', data.matrix), when: f('hasRows') },
-      widgetBlock('vendor-compliance-drawer', { drawer: data.drawerProps }, f('drawerOpen')),
+      { ...widgetBlock("compliance-matrix", data.matrix), when: f("hasRows") },
+      widgetBlock("vendor-compliance-drawer", { drawer: data.drawerProps }, f("drawerOpen")),
     ],
-  })
+  });
 }

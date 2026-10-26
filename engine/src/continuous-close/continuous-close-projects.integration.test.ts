@@ -70,7 +70,9 @@ test(
         values (${org.orgId}, 'projects', 'project_negative_margin', '1', ${fingerprint}, 'warning', '{"margin": "100.0000"}'::jsonb)`);
 
       const findings = await scan(org.orgId);
-      const margins = findings.filter((finding) => finding.findingType === "project_negative_margin");
+      const margins = findings.filter(
+        (finding) => finding.findingType === "project_negative_margin",
+      );
       assert.equal(margins.length, 1, `one negative-margin finding, got ${fingerprints(findings)}`);
       const only = margins[0]!;
       assert.equal(only.fingerprint, fingerprint);
@@ -119,7 +121,9 @@ test(
 
       // Cost 800 + committed 1000 past the approved 500 budget: overrun 1300.
       const findings = await scan(org.orgId);
-      const overruns = findings.filter((finding) => finding.findingType === "project_budget_overrun");
+      const overruns = findings.filter(
+        (finding) => finding.findingType === "project_budget_overrun",
+      );
       assert.equal(overruns.length, 1, `one overrun finding, got ${fingerprints(findings)}`);
       assert.equal(overruns[0]!.fingerprint, `project-budget-overrun:${projectId}`);
       assert.equal(overruns[0]!.materiality, "1300.0000");
@@ -191,23 +195,19 @@ test(
   },
 );
 
-test(
-  "project scans stay inside the requesting org",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    const other = await createScratchOrg();
-    try {
-      await seedProjectWithPostedCost(org, "ISOLATION-SEED", "800.0000");
-      const findings = await scan(org.orgId);
-      assert.ok(
-        findings.some((finding) => finding.findingType === "project_negative_margin"),
-        "the seeded org flags its loss-maker",
-      );
-      assert.deepEqual(await scan(other.orgId), [], "a clean org scans clean");
-    } finally {
-      await dropScratchOrg(org.orgId);
-      await dropScratchOrg(other.orgId);
-    }
-  },
-);
+test("project scans stay inside the requesting org", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    await seedProjectWithPostedCost(org, "ISOLATION-SEED", "800.0000");
+    const findings = await scan(org.orgId);
+    assert.ok(
+      findings.some((finding) => finding.findingType === "project_negative_margin"),
+      "the seeded org flags its loss-maker",
+    );
+    assert.deepEqual(await scan(other.orgId), [], "a clean org scans clean");
+  } finally {
+    await dropScratchOrg(org.orgId);
+    await dropScratchOrg(other.orgId);
+  }
+});

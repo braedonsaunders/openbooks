@@ -1,5 +1,5 @@
-import { REPORT_AS_OF } from './report-as-of'
-import type { ReportEntity } from './entities'
+import { REPORT_AS_OF } from "./report-as-of";
+import type { ReportEntity } from "./entities";
 
 // Workforce reports over the HRM employment foundation (0184) and the
 // employment change-request ledger (0185).
@@ -27,110 +27,179 @@ import type { ReportEntity } from './entities'
 // bound server-side to the org business day exactly like the entitlement
 // limit resolution; it is never CURRENT_DATE.
 
-const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
-const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
-const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
-const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
-const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
-const HRM_PERFORMANCE_READ_PERMISSION = 'hrm.performance.read'
-const HRM_RETENTION_READ_PERMISSION = 'hrm.retention.read'
-const HRM_BENEFITS_READ_PERMISSION = 'hrm.benefits.read'
-const HRM_COMPENSATION_READ_PERMISSION = 'hrm.compensation.read'
-const HRM_COMPENSATION_FEATURE_KEY = 'hrmCompensation'
-export const HRM_FEATURE_KEY = 'hrm'
+const HRM_EMPLOYMENT_READ_PERMISSION = "hrm.employment.read";
+const HRM_POSITION_READ_PERMISSION = "hrm.position.read";
+const HRM_PROCESS_READ_PERMISSION = "hrm.process.read";
+const HRM_LEAVE_READ_PERMISSION = "hrm.leave.read";
+const HRM_RECRUITING_READ_PERMISSION = "hrm.recruiting.read";
+const HRM_PERFORMANCE_READ_PERMISSION = "hrm.performance.read";
+const HRM_RETENTION_READ_PERMISSION = "hrm.retention.read";
+const HRM_BENEFITS_READ_PERMISSION = "hrm.benefits.read";
+const HRM_COMPENSATION_READ_PERMISSION = "hrm.compensation.read";
+const HRM_COMPENSATION_FEATURE_KEY = "hrmCompensation";
+export const HRM_FEATURE_KEY = "hrm";
 
-const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
+const HRM_POSITION_STATUSES = ["planned", "open", "filled", "frozen", "closed"] as const;
 
-const HRM_EMPLOYMENT_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
+const HRM_EMPLOYMENT_STATUSES = [
+  "offered",
+  "active",
+  "on_leave",
+  "suspended",
+  "terminated",
+] as const;
 const HRM_REQUEST_STATUSES = [
-  'draft',
-  'pending_approval',
-  'approved',
-  'rejected',
-  'withdrawn',
-  'applied',
-] as const
-const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment', 'profile_change'] as const
+  "draft",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "withdrawn",
+  "applied",
+] as const;
+const HRM_REQUEST_KINDS = [
+  "hire",
+  "status_change",
+  "assignment_change",
+  "termination",
+  "position_assignment",
+  "profile_change",
+] as const;
 
-const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
-const HRM_ENROLLMENT_STATUSES = ['elected', 'waived', 'pending_approval', 'active', 'ended', 'cancelled'] as const
+const HRM_ABSENCE_SOURCES = ["request", "recorded"] as const;
+const HRM_ENROLLMENT_STATUSES = [
+  "elected",
+  "waived",
+  "pending_approval",
+  "active",
+  "ended",
+  "cancelled",
+] as const;
 
-const HRM_REQUISITION_STATUSES = ['draft', 'open', 'on_hold', 'filled', 'cancelled'] as const
-const HRM_APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as const
+const HRM_REQUISITION_STATUSES = ["draft", "open", "on_hold", "filled", "cancelled"] as const;
+const HRM_APPLICATION_STATUSES = ["active", "rejected", "withdrawn", "hired"] as const;
 
 // HR-18 begin: recruiting-depth vocabularies (0229) — the commercial offer
 // statuses stay the 0195 vocabulary; signature_status rides beside it.
-const HRM_SLOT_KINDS = ['proposed', 'booked', 'declined'] as const
-const HRM_OFFER_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'withdrawn', 'expired'] as const
-const HRM_OFFER_SIGNATURE_STATUSES = ['unsigned', 'sent', 'viewed', 'signed', 'declined', 'voided'] as const
-const HRM_POSTING_STATUSES = ['draft', 'published', 'paused', 'closed', 'error'] as const
+const HRM_SLOT_KINDS = ["proposed", "booked", "declined"] as const;
+const HRM_OFFER_STATUSES = [
+  "draft",
+  "sent",
+  "accepted",
+  "declined",
+  "withdrawn",
+  "expired",
+] as const;
+const HRM_OFFER_SIGNATURE_STATUSES = [
+  "unsigned",
+  "sent",
+  "viewed",
+  "signed",
+  "declined",
+  "voided",
+] as const;
+const HRM_POSTING_STATUSES = ["draft", "published", "paused", "closed", "error"] as const;
 // HR-18 end
 
-const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
-const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
+const HRM_PROCESS_KINDS = ["onboarding", "offboarding", "transfer"] as const;
+const HRM_PROCESS_STATUSES = ["open", "completed", "cancelled"] as const;
 
 // HR-16 begin: automation + reason-code report entities (0226/0227).
-const AUTOMATIONS_READ_PERMISSION = 'automations.read'
-const AUTOMATIONS_FEATURE_KEY = 'automations'
+const AUTOMATIONS_READ_PERMISSION = "automations.read";
+const AUTOMATIONS_FEATURE_KEY = "automations";
 
-const AUTOMATION_STATUSES = ['draft', 'enabled', 'disabled', 'error'] as const
-const AUTOMATION_TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
-const AUTOMATION_RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped_no_match', 'simulated'] as const
+const AUTOMATION_STATUSES = ["draft", "enabled", "disabled", "error"] as const;
+const AUTOMATION_TRIGGER_KINDS = [
+  "schedule",
+  "date_relative",
+  "field_change",
+  "event",
+  "document",
+  "manual",
+] as const;
+const AUTOMATION_RUN_STATUSES = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped_no_match",
+  "simulated",
+] as const;
 // HR-16 end
-const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
-const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
-const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
+const HRM_STEP_STATUSES = ["pending", "done", "skipped"] as const;
+const HRM_STEP_OWNERS = ["manager", "hr", "employee", "named_party"] as const;
+const HRM_STEP_EVIDENCE = ["none", "acknowledgement", "attachment"] as const;
 
 // HR-12 begin
-const HRM_COMP_LINE_STATUSES = ['pending', 'proposed', 'approved', 'rejected', 'pushed'] as const
-const HRM_PLAN_LINE_KINDS = ['create', 'backfill', 'change', 'terminate'] as const
-const HRM_PLAN_LINE_STATUSES = ['proposed', 'approved', 'rejected', 'opened', 'filled', 'cancelled'] as const
+const HRM_COMP_LINE_STATUSES = ["pending", "proposed", "approved", "rejected", "pushed"] as const;
+const HRM_PLAN_LINE_KINDS = ["create", "backfill", "change", "terminate"] as const;
+const HRM_PLAN_LINE_STATUSES = [
+  "proposed",
+  "approved",
+  "rejected",
+  "opened",
+  "filled",
+  "cancelled",
+] as const;
 // HR-12 end
 // HR-14 begin: certification register and alert queue report entities (0225).
-const HRM_CERTIFICATIONS_READ_PERMISSION = 'hrm.certifications.read'
-const HRM_CERTIFICATIONS_FEATURE_KEY = 'hrmCertifications'
+const HRM_CERTIFICATIONS_READ_PERMISSION = "hrm.certifications.read";
+const HRM_CERTIFICATIONS_FEATURE_KEY = "hrmCertifications";
 
-const HRM_QUALIFICATION_STATUSES = ['valid', 'revoked', 'pending_verification'] as const
-const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
+const HRM_QUALIFICATION_STATUSES = ["valid", "revoked", "pending_verification"] as const;
+const HRM_ALERT_CHANNELS = ["inbox", "email"] as const;
 // HR-14 end
 // HR-19 begin: documents, signers, retention actions, survey results, org
 // chart report entities (0230).
-const HRM_DOCUMENTS_READ_PERMISSION = 'hrm.documents.read'
-export const HRM_DOCUMENTS_FEATURE_KEY = 'hrmDocuments'
-const HRM_SURVEYS_MANAGE_PERMISSION = 'hrm.surveys.manage'
-export const HRM_SURVEYS_FEATURE_KEY = 'hrmSurveys'
-const HRM_ORG_CHART_FEATURE_KEY = 'hrm'
+const HRM_DOCUMENTS_READ_PERMISSION = "hrm.documents.read";
+export const HRM_DOCUMENTS_FEATURE_KEY = "hrmDocuments";
+const HRM_SURVEYS_MANAGE_PERMISSION = "hrm.surveys.manage";
+export const HRM_SURVEYS_FEATURE_KEY = "hrmSurveys";
+const HRM_ORG_CHART_FEATURE_KEY = "hrm";
 
 const HRM_DOCUMENT_STATUSES = [
-  'draft', 'sent', 'viewed', 'partially_signed', 'signed', 'acknowledged', 'declined', 'voided', 'expired',
-] as const
-const HRM_SIGNER_STATUSES = ['pending', 'viewed', 'signed', 'declined'] as const
-const HRM_RETENTION_ACTIONS = ['delete', 'anonymize'] as const
-const HRM_SURVEY_KINDS = ['engagement', 'pulse', 'onboarding', 'exit', 'custom'] as const
-const HRM_SURVEY_ANONYMITY = ['anonymous', 'confidential', 'named'] as const
-const HRM_SURVEY_STATUSES = ['draft', 'open', 'closed'] as const
+  "draft",
+  "sent",
+  "viewed",
+  "partially_signed",
+  "signed",
+  "acknowledged",
+  "declined",
+  "voided",
+  "expired",
+] as const;
+const HRM_SIGNER_STATUSES = ["pending", "viewed", "signed", "declined"] as const;
+const HRM_RETENTION_ACTIONS = ["delete", "anonymize"] as const;
+const HRM_SURVEY_KINDS = ["engagement", "pulse", "onboarding", "exit", "custom"] as const;
+const HRM_SURVEY_ANONYMITY = ["anonymous", "confidential", "named"] as const;
+const HRM_SURVEY_STATUSES = ["draft", "open", "closed"] as const;
 // HR-19 end
-const HRM_REVIEW_KINDS = ['self', 'manager', 'peer'] as const
-const HRM_REVIEW_STATUSES = ['pending', 'submitted', 'calibrated', 'shared', 'acknowledged'] as const
-const HRM_GOAL_STATUSES = ['active', 'achieved', 'missed', 'cancelled'] as const
+const HRM_REVIEW_KINDS = ["self", "manager", "peer"] as const;
+const HRM_REVIEW_STATUSES = [
+  "pending",
+  "submitted",
+  "calibrated",
+  "shared",
+  "acknowledged",
+] as const;
+const HRM_GOAL_STATUSES = ["active", "achieved", "missed", "cancelled"] as const;
 const HRM_EXIT_REASONS = [
-  'resignation',
-  'retirement',
-  'end_of_contract',
-  'dismissal',
-  'redundancy',
-  'mutual',
-  'death',
-  'other',
-] as const
+  "resignation",
+  "retirement",
+  "end_of_contract",
+  "dismissal",
+  "redundancy",
+  "mutual",
+  "death",
+  "other",
+] as const;
 
 export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   {
-    key: 'hrm_headcount',
-    label: 'Headcount',
-    category: 'hrm',
+    key: "hrm_headcount",
+    label: "Headcount",
+    category: "hrm",
     description:
-      'One row per employer subsidiary and department: employments in service at the report as-of date, with full-time-equivalent totals from the effective primary assignment. Requires the HRM employment permission.',
+      "One row per employer subsidiary and department: employments in service at the report as-of date, with full-time-equivalent totals from the effective primary assignment. Requires the HRM employment permission.",
     // One row per in-service employment, grouped by employer subsidiary and
     // the effective primary assignment's department. The status predicate is
     // HEADCOUNT_STATUSES from the headcount service (active, on_leave):
@@ -162,11 +231,11 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   GROUP BY e.org_id, e.employer_subsidiary_id, pa.department_id) hc
   JOIN subsidiaries sub ON sub.id = hc.employer_subsidiary_id AND sub.org_id = hc.org_id
   LEFT JOIN departments dep ON dep.id = hc.department_id AND dep.org_id = hc.org_id`,
-    orgColumn: 'hc.org_id',
+    orgColumn: "hc.org_id",
     // The employer subsidiary is the legal-entity boundary: the executor
     // clamps this to the reader's allowlist, so a restricted reader counts
     // only their own subsidiaries.
-    subsidiaryScope: { column: 'hc.employer_subsidiary_id' },
+    subsidiaryScope: { column: "hc.employer_subsidiary_id" },
     requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // No fiscal window: the as-of date is the sentinel bound to the org
@@ -174,21 +243,25 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // column would silently re-window a point-in-time statement.
     defaultPeriodField: null,
     columns: [
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'headcount', label: 'Headcount', kind: 'number', expr: 'hc.headcount' },
-      { key: 'fte_total', label: 'FTE total', kind: 'number', expr: 'hc.fte_total' },
-      { key: 'subsidiary_id', label: 'Subsidiary (id)', kind: 'uuid', expr: 'hc.employer_subsidiary_id' },
-      { key: 'department_id', label: 'Department (id)', kind: 'uuid', expr: 'hc.department_id' },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "headcount", label: "Headcount", kind: "number", expr: "hc.headcount" },
+      { key: "fte_total", label: "FTE total", kind: "number", expr: "hc.fte_total" },
+      {
+        key: "subsidiary_id",
+        label: "Subsidiary (id)",
+        kind: "uuid",
+        expr: "hc.employer_subsidiary_id",
+      },
+      { key: "department_id", label: "Department (id)", kind: "uuid", expr: "hc.department_id" },
     ],
-    defaultSort: { column: 'subsidiary', direction: 'asc' },
+    defaultSort: { column: "subsidiary", direction: "asc" },
   },
   {
-    key: 'hrm_employment_history',
-    label: 'Employment history',
-    category: 'hrm',
-    description:
-      'Employment versions — person, status, dates and reasons.',
+    key: "hrm_employment_history",
+    label: "Employment history",
+    category: "hrm",
+    description: "Employment versions — person, status, dates and reasons.",
     // Full version history, not an as-of snapshot: every version row reads
     // back, live or superseded. The change reason is the linked aggregate
     // employment_changes evidence (closed_by_change_id); live versions carry
@@ -198,34 +271,50 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = ev.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = ev.org_id
       LEFT JOIN employment_changes c ON c.id = ev.closed_by_change_id AND c.org_id = ev.org_id`,
-    orgColumn: 'ev.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "ev.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // The period picker narrows versions by effective start; point-in-service
     // queries add an explicit effective_to rule alongside it.
-    defaultPeriodField: 'effective_from',
+    defaultPeriodField: "effective_from",
     columns: [
-      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'ev.status', options: HRM_EMPLOYMENT_STATUSES },
-      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'ev.effective_from' },
-      { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'ev.effective_to' },
-      { key: 'recorded_at', label: 'Recorded at', kind: 'timestamp', expr: 'ev.recorded_at' },
-      { key: 'recorded_until', label: 'Recorded until', kind: 'timestamp', expr: 'ev.recorded_until' },
-      { key: 'version_no', label: 'Version', kind: 'number', identifier: true, expr: 'ev.version_no' },
-      { key: 'change_reason', label: 'Change reason', kind: 'text', expr: 'c.reason' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'ev.employment_id' },
-      { key: 'worker_id', label: 'Person (id)', kind: 'uuid', expr: 'e.worker_party_id' },
+      { key: "person", label: "Person", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "ev.status",
+        options: HRM_EMPLOYMENT_STATUSES,
+      },
+      { key: "effective_from", label: "Effective from", kind: "date", expr: "ev.effective_from" },
+      { key: "effective_to", label: "Effective to", kind: "date", expr: "ev.effective_to" },
+      { key: "recorded_at", label: "Recorded at", kind: "timestamp", expr: "ev.recorded_at" },
+      {
+        key: "recorded_until",
+        label: "Recorded until",
+        kind: "timestamp",
+        expr: "ev.recorded_until",
+      },
+      {
+        key: "version_no",
+        label: "Version",
+        kind: "number",
+        identifier: true,
+        expr: "ev.version_no",
+      },
+      { key: "change_reason", label: "Change reason", kind: "text", expr: "c.reason" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "ev.employment_id" },
+      { key: "worker_id", label: "Person (id)", kind: "uuid", expr: "e.worker_party_id" },
     ],
-    defaultSort: { column: 'effective_from', direction: 'desc' },
+    defaultSort: { column: "effective_from", direction: "desc" },
   },
   {
-    key: 'hrm_change_requests',
-    label: 'Change requests',
-    category: 'hrm',
-    description:
-      'Change requests — status, kind, requester and decision.',
+    key: "hrm_change_requests",
+    label: "Change requests",
+    category: "hrm",
+    description: "Change requests — status, kind, requester and decision.",
     // The 0185 register: kind is the frozen proposal's kind
     // (payload->>'kind'); the requester is the submission actor, NULL for
     // drafts withdrawn before submission, which never fabricate one. The
@@ -242,47 +331,63 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
         SELECT min((g ->> 'decided_at')::timestamptz) AS decided_at
           FROM jsonb_array_elements(r.decision_snapshot -> 'gates') AS g
       ) dec ON TRUE`,
-    orgColumn: 'r.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "r.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // The register timeline is creation: drafts carry a NULL submitted_at, so
     // windowing on submission would silently drop them from their own register.
-    defaultPeriodField: 'created_at',
+    defaultPeriodField: "created_at",
     columns: [
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: HRM_REQUEST_STATUSES },
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: `(r.payload ->> 'kind')`, options: HRM_REQUEST_KINDS },
-      { key: 'employment', label: 'Employment', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'requested_by', label: 'Requested by', kind: 'text', expr: 's.name' },
-      { key: 'submitted_at', label: 'Submitted at', kind: 'timestamp', expr: 'r.submitted_at' },
-      { key: 'decided_at', label: 'Decided at', kind: 'timestamp', expr: 'dec.decided_at' },
-      { key: 'flow_run_id', label: 'Approval run (id)', kind: 'uuid', expr: 'r.flow_run_id' },
-      { key: 'request_revision', label: 'Request revision', kind: 'number', expr: 'r.request_revision' },
       {
-        key: 'expected_employment_revision',
-        label: 'Expected employment revision',
-        kind: 'number',
-        expr: 'r.expected_employment_revision',
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "r.status",
+        options: HRM_REQUEST_STATUSES,
       },
-      { key: 'applied_at', label: 'Applied at', kind: 'timestamp', expr: 'r.applied_at' },
-      { key: 'reason', label: 'Reason', kind: 'text', expr: 'r.reason' },
+      {
+        key: "kind",
+        label: "Kind",
+        kind: "enum",
+        expr: `(r.payload ->> 'kind')`,
+        options: HRM_REQUEST_KINDS,
+      },
+      { key: "employment", label: "Employment", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "requested_by", label: "Requested by", kind: "text", expr: "s.name" },
+      { key: "submitted_at", label: "Submitted at", kind: "timestamp", expr: "r.submitted_at" },
+      { key: "decided_at", label: "Decided at", kind: "timestamp", expr: "dec.decided_at" },
+      { key: "flow_run_id", label: "Approval run (id)", kind: "uuid", expr: "r.flow_run_id" },
+      {
+        key: "request_revision",
+        label: "Request revision",
+        kind: "number",
+        expr: "r.request_revision",
+      },
+      {
+        key: "expected_employment_revision",
+        label: "Expected employment revision",
+        kind: "number",
+        expr: "r.expected_employment_revision",
+      },
+      { key: "applied_at", label: "Applied at", kind: "timestamp", expr: "r.applied_at" },
+      { key: "reason", label: "Reason", kind: "text", expr: "r.reason" },
       // HR-16 begin: 0227 classification carried from submit onto the event.
-      { key: 'action', label: 'Action', kind: 'text', expr: 'r.action' },
-      { key: 'reason_code', label: 'Reason code', kind: 'text', expr: 'r.reason_code' },
+      { key: "action", label: "Action", kind: "text", expr: "r.action" },
+      { key: "reason_code", label: "Reason code", kind: "text", expr: "r.reason_code" },
       // HR-16 end
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
-      { key: 'id', label: 'Request (id)', kind: 'uuid', expr: 'r.id' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "r.created_at" },
+      { key: "id", label: "Request (id)", kind: "uuid", expr: "r.id" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "r.employment_id" },
     ],
-    defaultSort: { column: 'created_at', direction: 'desc' },
+    defaultSort: { column: "created_at", direction: "desc" },
   },
   {
-    key: 'hrm_positions',
-    label: 'Positions',
-    category: 'hrm',
-    description:
-      'Established positions — code, title, status and FTE.',
+    key: "hrm_positions",
+    label: "Positions",
+    category: "hrm",
+    description: "Established positions — code, title, status and FTE.",
     // One row per position whose version covers the as-of day (half-open
     // effective containment, currently-known revisions only — the same
     // contract the vacancy read resolves through temporal.ts). Filled sums
@@ -317,11 +422,11 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
        AND av.effective_from <= ${REPORT_AS_OF}
        AND (av.effective_to IS NULL OR av.effective_to > ${REPORT_AS_OF})
   ) fill ON TRUE`,
-    orgColumn: 'p.org_id',
+    orgColumn: "p.org_id",
     // The position's employer is the legal-entity boundary: the executor
     // clamps this to the reader's allowlist, so a restricted reader sees
     // only their own establishments.
-    subsidiaryScope: { column: 'v.employer_subsidiary_id' },
+    subsidiaryScope: { column: "v.employer_subsidiary_id" },
     requiredPermission: HRM_POSITION_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // No fiscal window: the as-of date is the sentinel bound to the org
@@ -329,30 +434,35 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // column would silently re-window a point-in-time statement.
     defaultPeriodField: null,
     columns: [
-      { key: 'code', label: 'Code', kind: 'text', expr: 'p.position_code' },
-      { key: 'title', label: 'Title', kind: 'text', expr: 'v.title' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'v.status', options: HRM_POSITION_STATUSES },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'planned_fte', label: 'Planned FTE', kind: 'number', expr: 'v.planned_fte' },
-      { key: 'funded_fte', label: 'Funded FTE', kind: 'number', expr: 'fund.funded_fte' },
-      { key: 'filled_fte', label: 'Filled FTE', kind: 'number', expr: 'fill.filled_fte' },
+      { key: "code", label: "Code", kind: "text", expr: "p.position_code" },
+      { key: "title", label: "Title", kind: "text", expr: "v.title" },
       {
-        key: 'vacant_fte',
-        label: 'Vacant FTE',
-        kind: 'number',
-        expr: 'v.planned_fte - coalesce(fill.filled_fte, 0)',
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "v.status",
+        options: HRM_POSITION_STATUSES,
       },
-      { key: 'position_id', label: 'Position (id)', kind: 'uuid', expr: 'p.id' },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "planned_fte", label: "Planned FTE", kind: "number", expr: "v.planned_fte" },
+      { key: "funded_fte", label: "Funded FTE", kind: "number", expr: "fund.funded_fte" },
+      { key: "filled_fte", label: "Filled FTE", kind: "number", expr: "fill.filled_fte" },
+      {
+        key: "vacant_fte",
+        label: "Vacant FTE",
+        kind: "number",
+        expr: "v.planned_fte - coalesce(fill.filled_fte, 0)",
+      },
+      { key: "position_id", label: "Position (id)", kind: "uuid", expr: "p.id" },
     ],
-    defaultSort: { column: 'code', direction: 'asc' },
+    defaultSort: { column: "code", direction: "asc" },
   },
   {
-    key: 'hrm_processes',
-    label: 'Process checklists',
-    category: 'hrm',
-    description:
-      'Process checklist steps — owner, due date and evidence.',
+    key: "hrm_processes",
+    label: "Process checklists",
+    category: "hrm",
+    description: "Process checklist steps — owner, due date and evidence.",
     // The 0193 runtime: every row is a snapshot step copied at open time, so
     // the template join only names the checklist (LEFT: a retired template
     // row is never required for history to read). Skip reasons and done
@@ -364,38 +474,67 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = s.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = s.org_id
       LEFT JOIN hrm_process_templates t ON t.id = p.template_id AND t.org_id = s.org_id`,
-    orgColumn: 's.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "s.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_PROCESS_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // The period picker narrows steps by due date; the open register reads
     // the full checklist regardless of window.
-    defaultPeriodField: 'due_on',
+    defaultPeriodField: "due_on",
     columns: [
-      { key: 'process_kind', label: 'Process kind', kind: 'enum', expr: 'p.kind', options: HRM_PROCESS_KINDS },
-      { key: 'process_status', label: 'Process status', kind: 'enum', expr: 'p.status', options: HRM_PROCESS_STATUSES },
-      { key: 'effective_date', label: 'Effective date', kind: 'date', expr: 'p.effective_date' },
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'template', label: 'Template', kind: 'text', expr: 't.name' },
-      { key: 'step', label: 'Step', kind: 'text', expr: 's.title' },
-      { key: 'step_status', label: 'Step status', kind: 'enum', expr: 's.status', options: HRM_STEP_STATUSES },
-      { key: 'owner', label: 'Owner', kind: 'enum', expr: 's.owner_kind', options: HRM_STEP_OWNERS },
-      { key: 'due_on', label: 'Due on', kind: 'date', expr: 's.due_on' },
-      { key: 'evidence', label: 'Evidence', kind: 'enum', expr: 's.evidence_kind', options: HRM_STEP_EVIDENCE },
-      { key: 'done_at', label: 'Done at', kind: 'timestamp', expr: 's.done_at' },
-      { key: 'skip_reason', label: 'Skip reason', kind: 'text', expr: 's.skip_reason' },
-      { key: 'process_id', label: 'Process (id)', kind: 'uuid', expr: 'p.id' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'p.employment_id' },
+      {
+        key: "process_kind",
+        label: "Process kind",
+        kind: "enum",
+        expr: "p.kind",
+        options: HRM_PROCESS_KINDS,
+      },
+      {
+        key: "process_status",
+        label: "Process status",
+        kind: "enum",
+        expr: "p.status",
+        options: HRM_PROCESS_STATUSES,
+      },
+      { key: "effective_date", label: "Effective date", kind: "date", expr: "p.effective_date" },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "template", label: "Template", kind: "text", expr: "t.name" },
+      { key: "step", label: "Step", kind: "text", expr: "s.title" },
+      {
+        key: "step_status",
+        label: "Step status",
+        kind: "enum",
+        expr: "s.status",
+        options: HRM_STEP_STATUSES,
+      },
+      {
+        key: "owner",
+        label: "Owner",
+        kind: "enum",
+        expr: "s.owner_kind",
+        options: HRM_STEP_OWNERS,
+      },
+      { key: "due_on", label: "Due on", kind: "date", expr: "s.due_on" },
+      {
+        key: "evidence",
+        label: "Evidence",
+        kind: "enum",
+        expr: "s.evidence_kind",
+        options: HRM_STEP_EVIDENCE,
+      },
+      { key: "done_at", label: "Done at", kind: "timestamp", expr: "s.done_at" },
+      { key: "skip_reason", label: "Skip reason", kind: "text", expr: "s.skip_reason" },
+      { key: "process_id", label: "Process (id)", kind: "uuid", expr: "p.id" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "p.employment_id" },
     ],
-    defaultSort: { column: 'due_on', direction: 'asc' },
+    defaultSort: { column: "due_on", direction: "asc" },
   },
   {
-    key: 'hrm_leave_absences',
-    label: 'Leave absences',
-    category: 'hrm',
-    description:
-      'Absence days — person, leave type and hours.',
+    key: "hrm_leave_absences",
+    label: "Leave absences",
+    category: "hrm",
+    description: "Absence days — person, leave type and hours.",
     // One row per hrm_absences day row (request approvals and after-the-fact
     // recordings alike). The department is the primary assignment effective
     // on the absence day — the same half-open containment the calendar
@@ -415,32 +554,37 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
        AND pa.effective_from <= a.on_date
        AND (pa.effective_to IS NULL OR pa.effective_to > a.on_date)
       LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = a.org_id`,
-    orgColumn: 'a.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "a.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_LEAVE_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // The absence day is the fact: the period picker narrows on it, so a
     // request spanning a boundary splits by the fact, never by the window.
-    defaultPeriodField: 'on_date',
+    defaultPeriodField: "on_date",
     columns: [
-      { key: 'on_date', label: 'Date', kind: 'date', expr: 'a.on_date' },
-      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'leave_type', label: 'Leave type', kind: 'text', expr: 't.code' },
-      { key: 'hours', label: 'Hours', kind: 'number', expr: 'a.hours' },
-      { key: 'source', label: 'Source', kind: 'enum', expr: 'a.source', options: HRM_ABSENCE_SOURCES },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'a.employment_id' },
-      { key: 'id', label: 'Absence (id)', kind: 'uuid', expr: 'a.id' },
+      { key: "on_date", label: "Date", kind: "date", expr: "a.on_date" },
+      { key: "person", label: "Person", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "leave_type", label: "Leave type", kind: "text", expr: "t.code" },
+      { key: "hours", label: "Hours", kind: "number", expr: "a.hours" },
+      {
+        key: "source",
+        label: "Source",
+        kind: "enum",
+        expr: "a.source",
+        options: HRM_ABSENCE_SOURCES,
+      },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "a.employment_id" },
+      { key: "id", label: "Absence (id)", kind: "uuid", expr: "a.id" },
     ],
-    defaultSort: { column: 'on_date', direction: 'desc' },
+    defaultSort: { column: "on_date", direction: "desc" },
   },
   {
-    key: 'hrm_requisitions',
-    label: 'Requisitions',
-    category: 'hrm',
-    description:
-      'Vacancy openings — title, status and filled count.',
+    key: "hrm_requisitions",
+    label: "Requisitions",
+    category: "hrm",
+    description: "Vacancy openings — title, status and filled count.",
     // One row per requisition with its establishment and placement. The
     // fill itself is hire-driven (filled_count moves only in the hire
     // transaction), so the register reads the stored counters, never a
@@ -449,37 +593,42 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = r.org_id
   LEFT JOIN departments dep ON dep.id = r.department_id AND dep.org_id = r.org_id
   LEFT JOIN positions p ON p.id = r.position_id AND p.org_id = r.org_id`,
-    orgColumn: 'r.org_id',
+    orgColumn: "r.org_id",
     // The opening's employer is the legal-entity boundary: the executor
     // clamps this to the reader's allowlist, so a restricted reader sees
     // only their own vacancies.
-    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    subsidiaryScope: { column: "r.employer_subsidiary_id" },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // A register, not a point-in-time statement: no as-of sentinel and no
     // implicit period — the opened_on column below carries the fact.
     defaultPeriodField: null,
     columns: [
-      { key: 'number', label: 'Number', kind: 'text', expr: 'r.requisition_number' },
-      { key: 'title', label: 'Title', kind: 'text', expr: 'r.title' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: HRM_REQUISITION_STATUSES },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'position', label: 'Position', kind: 'text', expr: 'p.position_code' },
-      { key: 'headcount', label: 'Headcount', kind: 'number', expr: 'r.headcount' },
-      { key: 'filled_count', label: 'Filled', kind: 'number', expr: 'r.filled_count' },
-      { key: 'opened_on', label: 'Opened', kind: 'date', expr: 'r.opened_on' },
-      { key: 'closed_on', label: 'Closed', kind: 'date', expr: 'r.closed_on' },
-      { key: 'requisition_id', label: 'Requisition (id)', kind: 'uuid', expr: 'r.id' },
+      { key: "number", label: "Number", kind: "text", expr: "r.requisition_number" },
+      { key: "title", label: "Title", kind: "text", expr: "r.title" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "r.status",
+        options: HRM_REQUISITION_STATUSES,
+      },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "position", label: "Position", kind: "text", expr: "p.position_code" },
+      { key: "headcount", label: "Headcount", kind: "number", expr: "r.headcount" },
+      { key: "filled_count", label: "Filled", kind: "number", expr: "r.filled_count" },
+      { key: "opened_on", label: "Opened", kind: "date", expr: "r.opened_on" },
+      { key: "closed_on", label: "Closed", kind: "date", expr: "r.closed_on" },
+      { key: "requisition_id", label: "Requisition (id)", kind: "uuid", expr: "r.id" },
     ],
-    defaultSort: { column: 'number', direction: 'asc' },
+    defaultSort: { column: "number", direction: "asc" },
   },
   {
-    key: 'hrm_applications',
-    label: 'Applications',
-    category: 'hrm',
-    description:
-      'Candidacies with funnel stage and time-to-fill.',
+    key: "hrm_applications",
+    label: "Applications",
+    category: "hrm",
+    description: "Candidacies with funnel stage and time-to-fill.",
     // One row per application on its requisition's funnel: the stage name
     // resolves through the same-org stage join, and the hire day resolves
     // through the append-only event ledger (the first hired event), never
@@ -495,36 +644,46 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       FROM hrm_application_events e
      WHERE e.org_id = a.org_id AND e.application_id = a.id AND e.kind = 'hired'
   ) hire ON TRUE`,
-    orgColumn: 'a.org_id',
+    orgColumn: "a.org_id",
     // The opening's employer is the legal-entity boundary, as above.
-    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    subsidiaryScope: { column: "r.employer_subsidiary_id" },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     defaultPeriodField: null,
     columns: [
-      { key: 'requisition_number', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
-      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
-      { key: 'stage', label: 'Stage', kind: 'text', expr: 's.name' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: HRM_APPLICATION_STATUSES },
-      { key: 'applied_on', label: 'Applied', kind: 'date', expr: 'a.applied_on' },
-      { key: 'opened_on', label: 'Requisition opened', kind: 'date', expr: 'r.opened_on' },
-      { key: 'hired_on', label: 'Hired', kind: 'date', expr: 'hire.hired_on' },
       {
-        key: 'days_to_fill',
-        label: 'Days to fill',
-        kind: 'number',
-        expr: 'hire.hired_on - r.opened_on',
+        key: "requisition_number",
+        label: "Requisition",
+        kind: "text",
+        expr: "r.requisition_number",
       },
-      { key: 'application_id', label: 'Application (id)', kind: 'uuid', expr: 'a.id' },
+      { key: "candidate", label: "Candidate", kind: "text", expr: "c.display_name" },
+      { key: "stage", label: "Stage", kind: "text", expr: "s.name" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "a.status",
+        options: HRM_APPLICATION_STATUSES,
+      },
+      { key: "applied_on", label: "Applied", kind: "date", expr: "a.applied_on" },
+      { key: "opened_on", label: "Requisition opened", kind: "date", expr: "r.opened_on" },
+      { key: "hired_on", label: "Hired", kind: "date", expr: "hire.hired_on" },
+      {
+        key: "days_to_fill",
+        label: "Days to fill",
+        kind: "number",
+        expr: "hire.hired_on - r.opened_on",
+      },
+      { key: "application_id", label: "Application (id)", kind: "uuid", expr: "a.id" },
     ],
-    defaultSort: { column: 'applied_on', direction: 'desc' },
+    defaultSort: { column: "applied_on", direction: "desc" },
   },
   {
-    key: 'hrm_reviews',
-    label: 'Reviews',
-    category: 'hrm',
-    description:
-      'Performance reviews — ratings beside calibration.',
+    key: "hrm_reviews",
+    label: "Reviews",
+    category: "hrm",
+    description: "Performance reviews — ratings beside calibration.",
     // One row per hrm_reviews assessment with its cycle period and the
     // subject's name. Calibration never overwrites: both ratings read
     // side by side with the reason. Review texts stay out of the report
@@ -535,60 +694,75 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       JOIN worker_employments e ON e.id = r.employment_id AND e.org_id = r.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = r.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = r.org_id`,
-    orgColumn: 'r.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "r.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // The cycle period end is the fact: the period picker narrows reviews
     // to the cycles that ended in the window.
-    defaultPeriodField: 'period_end_on',
+    defaultPeriodField: "period_end_on",
     columns: [
-      { key: 'cycle', label: 'Cycle', kind: 'text', expr: 'c.name' },
-      { key: 'period_end_on', label: 'Period end', kind: 'date', expr: 'c.period_end_on' },
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'r.kind', options: HRM_REVIEW_KINDS },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: HRM_REVIEW_STATUSES },
-      { key: 'overall_rating', label: 'Rating', kind: 'number', expr: 'r.overall_rating' },
-      { key: 'calibrated_rating', label: 'Calibrated rating', kind: 'number', expr: 'r.calibrated_rating' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
-      { key: 'id', label: 'Review (id)', kind: 'uuid', expr: 'r.id' },
+      { key: "cycle", label: "Cycle", kind: "text", expr: "c.name" },
+      { key: "period_end_on", label: "Period end", kind: "date", expr: "c.period_end_on" },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "kind", label: "Kind", kind: "enum", expr: "r.kind", options: HRM_REVIEW_KINDS },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "r.status",
+        options: HRM_REVIEW_STATUSES,
+      },
+      { key: "overall_rating", label: "Rating", kind: "number", expr: "r.overall_rating" },
+      {
+        key: "calibrated_rating",
+        label: "Calibrated rating",
+        kind: "number",
+        expr: "r.calibrated_rating",
+      },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "r.employment_id" },
+      { key: "id", label: "Review (id)", kind: "uuid", expr: "r.id" },
     ],
-    defaultSort: { column: 'period_end_on', direction: 'desc' },
+    defaultSort: { column: "period_end_on", direction: "desc" },
   },
   {
-    key: 'hrm_goals',
-    label: 'Goals',
-    category: 'hrm',
-    description:
-      'Performance goals — status, progress and due date.',
+    key: "hrm_goals",
+    label: "Goals",
+    category: "hrm",
+    description: "Performance goals — status, progress and due date.",
     from: `hrm_goals g
       JOIN worker_employments e ON e.id = g.employment_id AND e.org_id = g.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = g.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = g.org_id`,
-    orgColumn: 'g.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "g.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
-    defaultPeriodField: 'due_on',
+    defaultPeriodField: "due_on",
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'title', label: 'Title', kind: 'text', expr: 'g.title' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'g.status', options: HRM_GOAL_STATUSES },
-      { key: 'progress', label: 'Progress', kind: 'number', expr: 'g.progress_percent' },
-      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'g.due_on' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'g.employment_id' },
-      { key: 'id', label: 'Goal (id)', kind: 'uuid', expr: 'g.id' },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "title", label: "Title", kind: "text", expr: "g.title" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "g.status",
+        options: HRM_GOAL_STATUSES,
+      },
+      { key: "progress", label: "Progress", kind: "number", expr: "g.progress_percent" },
+      { key: "due_on", label: "Due on", kind: "date", expr: "g.due_on" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "g.employment_id" },
+      { key: "id", label: "Goal (id)", kind: "uuid", expr: "g.id" },
     ],
-    defaultSort: { column: 'due_on', direction: 'asc' },
+    defaultSort: { column: "due_on", direction: "asc" },
   },
   {
-    key: 'hrm_turnover',
-    label: 'Turnover',
-    category: 'hrm',
-    description:
-      'Leavers — tenure, exit reason and flags.',
+    key: "hrm_turnover",
+    label: "Turnover",
+    category: "hrm",
+    description: "Leavers — tenure, exit reason and flags.",
     // Leaver facts: the terminated version start is the termination date.
     // The base subquery pins the leaver set (terminated, currently
     // asserted — superseded rows are not the story); tenure runs from the
@@ -612,30 +786,50 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
           FROM worker_employment_versions
          WHERE org_id = t.org_id AND employment_id = t.employment_id
       ) f ON TRUE`,
-    orgColumn: 't.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "t.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_RETENTION_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
-    defaultPeriodField: 'terminated_on',
+    defaultPeriodField: "terminated_on",
     columns: [
-      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 't.effective_from' },
-      { key: 'tenure_days', label: 'Tenure (days)', kind: 'number', expr: `(t.effective_from - f.first_from)` },
-      { key: 'reason', label: 'Reason', kind: 'enum', expr: 'x.reason_kind', options: HRM_EXIT_REASONS },
-      { key: 'voluntary', label: 'Voluntary', kind: 'boolean', expr: 'coalesce(x.is_voluntary, false)' },
-      { key: 'regrettable', label: 'Regrettable', kind: 'boolean', expr: 'coalesce(x.is_regrettable, false)' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 't.employment_id' },
+      { key: "person", label: "Person", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "terminated_on", label: "Terminated on", kind: "date", expr: "t.effective_from" },
+      {
+        key: "tenure_days",
+        label: "Tenure (days)",
+        kind: "number",
+        expr: `(t.effective_from - f.first_from)`,
+      },
+      {
+        key: "reason",
+        label: "Reason",
+        kind: "enum",
+        expr: "x.reason_kind",
+        options: HRM_EXIT_REASONS,
+      },
+      {
+        key: "voluntary",
+        label: "Voluntary",
+        kind: "boolean",
+        expr: "coalesce(x.is_voluntary, false)",
+      },
+      {
+        key: "regrettable",
+        label: "Regrettable",
+        kind: "boolean",
+        expr: "coalesce(x.is_regrettable, false)",
+      },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "t.employment_id" },
     ],
-    defaultSort: { column: 'terminated_on', direction: 'desc' },
+    defaultSort: { column: "terminated_on", direction: "desc" },
   },
   {
-    key: 'hrm_benefit_enrollments',
-    label: 'Benefit enrolments',
-    category: 'hrm',
-    description:
-      'Benefit elections — plan, tier and amounts.',
+    key: "hrm_benefit_enrollments",
+    label: "Benefit enrolments",
+    category: "hrm",
+    description: "Benefit elections — plan, tier and amounts.",
     // One row per hrm_benefit_enrollments row with its stored amounts: a
     // later plan repricing never rewrites these figures, so SUM over a
     // period is the cost the org actually owes. The department is the
@@ -657,132 +851,161 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
        AND pa.effective_from <= e.effective_from
        AND (pa.effective_to IS NULL OR pa.effective_to > e.effective_from)
       LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = e.org_id`,
-    orgColumn: 'e.org_id',
-    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    orgColumn: "e.org_id",
+    subsidiaryScope: { column: "emp.employer_subsidiary_id" },
     requiredPermission: HRM_BENEFITS_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
     // The election start is the fact: the period picker narrows cost by
     // the month coverage began, so a mid-year election attributes to its
     // own period, never to the plan year.
-    defaultPeriodField: 'effective_from',
+    defaultPeriodField: "effective_from",
     columns: [
-      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'e.effective_from' },
-      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.code' },
-      { key: 'plan_name', label: 'Plan name', kind: 'text', expr: 'p.name' },
-      { key: 'coverage', label: 'Coverage', kind: 'text', expr: 'lvl.label' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'e.status', options: HRM_ENROLLMENT_STATUSES },
-      { key: 'employee_amount', label: 'Employee amount', kind: 'number', expr: 'e.employee_amount_per_period' },
-      { key: 'employer_amount', label: 'Employer amount', kind: 'number', expr: 'e.employer_amount_per_period' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'e.currency' },
-      { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'e.effective_to' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.employment_id' },
-      { key: 'id', label: 'Enrolment (id)', kind: 'uuid', expr: 'e.id' },
+      { key: "effective_from", label: "Effective from", kind: "date", expr: "e.effective_from" },
+      { key: "person", label: "Person", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "plan", label: "Plan", kind: "text", expr: "p.code" },
+      { key: "plan_name", label: "Plan name", kind: "text", expr: "p.name" },
+      { key: "coverage", label: "Coverage", kind: "text", expr: "lvl.label" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "e.status",
+        options: HRM_ENROLLMENT_STATUSES,
+      },
+      {
+        key: "employee_amount",
+        label: "Employee amount",
+        kind: "number",
+        expr: "e.employee_amount_per_period",
+      },
+      {
+        key: "employer_amount",
+        label: "Employer amount",
+        kind: "number",
+        expr: "e.employer_amount_per_period",
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "e.currency" },
+      { key: "effective_to", label: "Effective to", kind: "date", expr: "e.effective_to" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "e.employment_id" },
+      { key: "id", label: "Enrolment (id)", kind: "uuid", expr: "e.id" },
     ],
-    defaultSort: { column: 'effective_from', direction: 'desc' },
+    defaultSort: { column: "effective_from", direction: "desc" },
   },
   // HR-12 begin: compensation report entities — bands, cycle lines,
   // plan lines, and gap snapshots. All four sit behind the
   // compensation read grant and the hrmCompensation switch; gap
   // snapshots expose category aggregates only, never per-person pay.
   {
-    key: 'hrm_pay_bands',
-    label: 'Pay bands',
-    category: 'hrm',
-    description:
-      'Live pay bands — level, scope and min/target/max.',
+    key: "hrm_pay_bands",
+    label: "Pay bands",
+    category: "hrm",
+    description: "Live pay bands — level, scope and min/target/max.",
     from: `hrm_pay_bands b
   JOIN hrm_job_levels lvl ON lvl.id = b.level_id AND lvl.org_id = b.org_id
   LEFT JOIN hrm_job_families fam ON fam.id = b.family_id AND fam.org_id = b.org_id
   LEFT JOIN subsidiaries sub ON sub.id = b.employer_subsidiary_id AND sub.org_id = b.org_id`,
-    orgColumn: 'b.org_id',
-    subsidiaryScope: { column: 'b.employer_subsidiary_id' },
+    orgColumn: "b.org_id",
+    subsidiaryScope: { column: "b.employer_subsidiary_id" },
     requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
     featureKey: HRM_COMPENSATION_FEATURE_KEY,
     defaultPeriodField: null,
     columns: [
-      { key: 'level', label: 'Level', kind: 'text', expr: 'lvl.code' },
-      { key: 'family', label: 'Family', kind: 'text', expr: 'fam.code' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'b.currency' },
-      { key: 'basis', label: 'Basis', kind: 'text', expr: 'b.basis' },
-      { key: 'min', label: 'Min', kind: 'number', expr: 'b.min' },
-      { key: 'target', label: 'Target', kind: 'number', expr: 'b.target' },
-      { key: 'max', label: 'Max', kind: 'number', expr: 'b.max' },
-      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'b.effective_from' },
-      { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'b.effective_to' },
-      { key: 'id', label: 'Band (id)', kind: 'uuid', expr: 'b.id' },
+      { key: "level", label: "Level", kind: "text", expr: "lvl.code" },
+      { key: "family", label: "Family", kind: "text", expr: "fam.code" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "currency", label: "Currency", kind: "text", expr: "b.currency" },
+      { key: "basis", label: "Basis", kind: "text", expr: "b.basis" },
+      { key: "min", label: "Min", kind: "number", expr: "b.min" },
+      { key: "target", label: "Target", kind: "number", expr: "b.target" },
+      { key: "max", label: "Max", kind: "number", expr: "b.max" },
+      { key: "effective_from", label: "Effective from", kind: "date", expr: "b.effective_from" },
+      { key: "effective_to", label: "Effective to", kind: "date", expr: "b.effective_to" },
+      { key: "id", label: "Band (id)", kind: "uuid", expr: "b.id" },
     ],
-    defaultSort: { column: 'level', direction: 'asc' },
+    defaultSort: { column: "level", direction: "asc" },
   },
   {
-    key: 'hrm_comp_cycle_lines',
-    label: 'Merit cycle lines',
-    category: 'hrm',
-    description:
-      'Merit decisions — proposal, guideline and status.',
+    key: "hrm_comp_cycle_lines",
+    label: "Merit cycle lines",
+    category: "hrm",
+    description: "Merit decisions — proposal, guideline and status.",
     from: `hrm_comp_cycle_lines l
       JOIN hrm_comp_cycles c ON c.id = l.cycle_id AND c.org_id = l.org_id
       JOIN worker_employments emp ON emp.id = l.employment_id AND emp.org_id = l.org_id
       JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = l.org_id
       JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = l.org_id`,
-    orgColumn: 'l.org_id',
-    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    orgColumn: "l.org_id",
+    subsidiaryScope: { column: "emp.employer_subsidiary_id" },
     requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
     featureKey: HRM_COMPENSATION_FEATURE_KEY,
     defaultPeriodField: null,
     columns: [
-      { key: 'cycle', label: 'Cycle', kind: 'text', expr: 'c.name' },
-      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'current_rate', label: 'Current rate', kind: 'number', expr: 'l.current_rate' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
-      { key: 'compa_ratio', label: 'Compa-ratio', kind: 'number', expr: 'l.compa_ratio' },
-      { key: 'proposed_pct', label: 'Proposed %', kind: 'number', expr: 'l.proposed_pct' },
-      { key: 'proposed_rate', label: 'Proposed rate', kind: 'number', expr: 'l.proposed_rate' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'l.status', options: HRM_COMP_LINE_STATUSES },
-      { key: 'effective_on', label: 'Effective on', kind: 'date', expr: 'c.effective_on' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'l.employment_id' },
-      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'l.id' },
+      { key: "cycle", label: "Cycle", kind: "text", expr: "c.name" },
+      { key: "person", label: "Person", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "current_rate", label: "Current rate", kind: "number", expr: "l.current_rate" },
+      { key: "currency", label: "Currency", kind: "text", expr: "l.currency" },
+      { key: "compa_ratio", label: "Compa-ratio", kind: "number", expr: "l.compa_ratio" },
+      { key: "proposed_pct", label: "Proposed %", kind: "number", expr: "l.proposed_pct" },
+      { key: "proposed_rate", label: "Proposed rate", kind: "number", expr: "l.proposed_rate" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "l.status",
+        options: HRM_COMP_LINE_STATUSES,
+      },
+      { key: "effective_on", label: "Effective on", kind: "date", expr: "c.effective_on" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "l.employment_id" },
+      { key: "id", label: "Line (id)", kind: "uuid", expr: "l.id" },
     ],
-    defaultSort: { column: 'cycle', direction: 'asc' },
+    defaultSort: { column: "cycle", direction: "asc" },
   },
   {
-    key: 'hrm_headcount_plan_lines',
-    label: 'Headcount plan lines',
-    category: 'hrm',
-    description:
-      'Planned movements — FTE, cost and status.',
+    key: "hrm_headcount_plan_lines",
+    label: "Headcount plan lines",
+    category: "hrm",
+    description: "Planned movements — FTE, cost and status.",
     from: `hrm_headcount_plan_lines l
       JOIN hrm_headcount_plans p ON p.id = l.plan_id AND p.org_id = l.org_id
       JOIN subsidiaries sub ON sub.id = l.employer_subsidiary_id AND sub.org_id = l.org_id`,
-    orgColumn: 'l.org_id',
-    subsidiaryScope: { column: 'l.employer_subsidiary_id' },
+    orgColumn: "l.org_id",
+    subsidiaryScope: { column: "l.employer_subsidiary_id" },
     requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
     featureKey: HRM_COMPENSATION_FEATURE_KEY,
     defaultPeriodField: null,
     columns: [
-      { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.name' },
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'l.kind', options: HRM_PLAN_LINE_KINDS },
-      { key: 'title', label: 'Title', kind: 'text', expr: 'l.title' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'planned_fte', label: 'Planned FTE', kind: 'number', expr: 'l.planned_fte' },
-      { key: 'start_on', label: 'Start', kind: 'date', expr: 'l.start_on' },
-      { key: 'est_annual_cost', label: 'Est. annual cost', kind: 'number', expr: 'l.est_annual_cost' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'l.status', options: HRM_PLAN_LINE_STATUSES },
-      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'l.id' },
+      { key: "plan", label: "Plan", kind: "text", expr: "p.name" },
+      { key: "kind", label: "Kind", kind: "enum", expr: "l.kind", options: HRM_PLAN_LINE_KINDS },
+      { key: "title", label: "Title", kind: "text", expr: "l.title" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "planned_fte", label: "Planned FTE", kind: "number", expr: "l.planned_fte" },
+      { key: "start_on", label: "Start", kind: "date", expr: "l.start_on" },
+      {
+        key: "est_annual_cost",
+        label: "Est. annual cost",
+        kind: "number",
+        expr: "l.est_annual_cost",
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "l.currency" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "l.status",
+        options: HRM_PLAN_LINE_STATUSES,
+      },
+      { key: "id", label: "Line (id)", kind: "uuid", expr: "l.id" },
     ],
-    defaultSort: { column: 'plan', direction: 'asc' },
+    defaultSort: { column: "plan", direction: "asc" },
   },
   {
-    key: 'hrm_pay_gap_snapshots',
-    label: 'Pay gap snapshots',
-    category: 'hrm',
-    description:
-      'Frozen pay-gap snapshots by category — aggregates only.',
+    key: "hrm_pay_gap_snapshots",
+    label: "Pay gap snapshots",
+    category: "hrm",
+    description: "Frozen pay-gap snapshots by category — aggregates only.",
     // One row per snapshot × category: the categories jsonb expands in
     // a lateral (skipped by the join-pin rule, which only governs table
     // joins); the level join resolves the code and the subsidiary join
@@ -795,28 +1018,38 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
               method text, joint_assessment_due boolean)
       LEFT JOIN hrm_job_levels lvl ON lvl.id = c.level_id AND lvl.org_id = s.org_id
       LEFT JOIN subsidiaries sub ON sub.id = (s.scope->>'employer_subsidiary_id')::uuid AND sub.org_id = s.org_id`,
-    orgColumn: 's.org_id',
+    orgColumn: "s.org_id",
     // Snapshots are measured populations, optionally subsidiary-scoped:
     // org-wide snapshots stay visible to every permitted reader
     // (sharedNull), subsidiary ones only to that subsidiary's holders.
     subsidiaryScope: { column: `(s.scope->>'employer_subsidiary_id')::uuid`, sharedNull: true },
     requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
     featureKey: HRM_COMPENSATION_FEATURE_KEY,
-    defaultPeriodField: 'as_of',
+    defaultPeriodField: "as_of",
     columns: [
-      { key: 'as_of', label: 'As of', kind: 'date', expr: 's.as_of' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'level', label: 'Level', kind: 'text', expr: 'coalesce(lvl.code, c.level_code)' },
-      { key: 'count_a', label: 'Headcount A', kind: 'number', expr: 'c.count_a' },
-      { key: 'count_b', label: 'Headcount B', kind: 'number', expr: 'c.count_b' },
-      { key: 'mean_gap_pct', label: 'Mean gap %', kind: 'number', expr: 'c.mean_gap_pct' },
-      { key: 'median_gap_pct', label: 'Median gap %', kind: 'number', expr: 'c.median_gap_pct' },
-      { key: 'unexplained_gap_pct', label: 'Unexplained gap %', kind: 'number', expr: 'c.unexplained_gap_pct' },
-      { key: 'method', label: 'Method', kind: 'text', expr: 'c.method' },
-      { key: 'joint_assessment_due', label: 'Joint assessment due', kind: 'boolean', expr: 'c.joint_assessment_due' },
-      { key: 'id', label: 'Snapshot (id)', kind: 'uuid', expr: 's.id' },
+      { key: "as_of", label: "As of", kind: "date", expr: "s.as_of" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "level", label: "Level", kind: "text", expr: "coalesce(lvl.code, c.level_code)" },
+      { key: "count_a", label: "Headcount A", kind: "number", expr: "c.count_a" },
+      { key: "count_b", label: "Headcount B", kind: "number", expr: "c.count_b" },
+      { key: "mean_gap_pct", label: "Mean gap %", kind: "number", expr: "c.mean_gap_pct" },
+      { key: "median_gap_pct", label: "Median gap %", kind: "number", expr: "c.median_gap_pct" },
+      {
+        key: "unexplained_gap_pct",
+        label: "Unexplained gap %",
+        kind: "number",
+        expr: "c.unexplained_gap_pct",
+      },
+      { key: "method", label: "Method", kind: "text", expr: "c.method" },
+      {
+        key: "joint_assessment_due",
+        label: "Joint assessment due",
+        kind: "boolean",
+        expr: "c.joint_assessment_due",
+      },
+      { key: "id", label: "Snapshot (id)", kind: "uuid", expr: "s.id" },
     ],
-    defaultSort: { column: 'as_of', direction: 'desc' },
+    defaultSort: { column: "as_of", direction: "desc" },
   },
   // HR-12 end
   // HR-16 begin: the automation recipe register (0226) — one row per org
@@ -824,11 +1057,10 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // are platform configuration, so no subsidiary scope: visibility rides
   // the automations.read grant and the automations switch.
   {
-    key: 'automations',
-    label: 'Automations',
-    category: 'hrm',
-    description:
-      'Automation recipes — trigger, status and last run.',
+    key: "automations",
+    label: "Automations",
+    category: "hrm",
+    description: "Automation recipes — trigger, status and last run.",
     from: `automations a`,
     // Org-level configuration with no legal-entity column: the policy is
     // declared as no-clamp rather than omitted. An omitted policy makes
@@ -836,31 +1068,42 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // subsidiary allowlist, which would refuse the report to exactly the
     // scoped readers it is meant to serve.
     subsidiaryScope: null,
-    orgColumn: 'a.org_id',
+    orgColumn: "a.org_id",
     requiredPermission: AUTOMATIONS_READ_PERMISSION,
     featureKey: AUTOMATIONS_FEATURE_KEY,
-    defaultPeriodField: 'created_at',
+    defaultPeriodField: "created_at",
     columns: [
-      { key: 'name', label: 'Name', kind: 'text', expr: 'a.name' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: AUTOMATION_STATUSES },
-      { key: 'trigger_kind', label: 'Trigger', kind: 'enum', expr: `(a.trigger ->> 'kind')`, options: AUTOMATION_TRIGGER_KINDS },
-      { key: 'version', label: 'Version', kind: 'number', expr: 'a.version' },
-      { key: 'priority', label: 'Priority', kind: 'number', expr: 'a.priority' },
-      { key: 'last_run_at', label: 'Last run at', kind: 'timestamp', expr: 'a.last_run_at' },
-      { key: 'error_message', label: 'Error', kind: 'text', expr: 'a.error_message' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'a.created_at' },
-      { key: 'id', label: 'Automation (id)', kind: 'uuid', expr: 'a.id' },
+      { key: "name", label: "Name", kind: "text", expr: "a.name" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "a.status",
+        options: AUTOMATION_STATUSES,
+      },
+      {
+        key: "trigger_kind",
+        label: "Trigger",
+        kind: "enum",
+        expr: `(a.trigger ->> 'kind')`,
+        options: AUTOMATION_TRIGGER_KINDS,
+      },
+      { key: "version", label: "Version", kind: "number", expr: "a.version" },
+      { key: "priority", label: "Priority", kind: "number", expr: "a.priority" },
+      { key: "last_run_at", label: "Last run at", kind: "timestamp", expr: "a.last_run_at" },
+      { key: "error_message", label: "Error", kind: "text", expr: "a.error_message" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "a.created_at" },
+      { key: "id", label: "Automation (id)", kind: "uuid", expr: "a.id" },
     ],
-    defaultSort: { column: 'name', direction: 'asc' },
+    defaultSort: { column: "name", direction: "asc" },
   },
   // HR-16 begin: the automation run log (0226) — append-only firing
   // evidence with the executed version, subject, steps, and error.
   {
-    key: 'automation_runs',
-    label: 'Automation runs',
-    category: 'hrm',
-    description:
-      'Automation firings — subject, status and errors.',
+    key: "automation_runs",
+    label: "Automation runs",
+    category: "hrm",
+    description: "Automation firings — subject, status and errors.",
     from: `automation_runs r JOIN automations a ON a.id = r.automation_id AND a.org_id = r.org_id`,
     // Org-level configuration with no legal-entity column: the policy is
     // declared as no-clamp rather than omitted. An omitted policy makes
@@ -868,32 +1111,37 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // subsidiary allowlist, which would refuse the report to exactly the
     // scoped readers it is meant to serve.
     subsidiaryScope: null,
-    orgColumn: 'r.org_id',
+    orgColumn: "r.org_id",
     requiredPermission: AUTOMATIONS_READ_PERMISSION,
     featureKey: AUTOMATIONS_FEATURE_KEY,
-    defaultPeriodField: 'created_at',
+    defaultPeriodField: "created_at",
     columns: [
-      { key: 'automation', label: 'Automation', kind: 'text', expr: 'a.name' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: AUTOMATION_RUN_STATUSES },
-      { key: 'version', label: 'Version', kind: 'number', expr: 'r.version' },
-      { key: 'subject_kind', label: 'Subject kind', kind: 'text', expr: 'r.subject_kind' },
-      { key: 'subject_id', label: 'Subject (id)', kind: 'uuid', expr: 'r.subject_id' },
-      { key: 'started_at', label: 'Started at', kind: 'timestamp', expr: 'r.started_at' },
-      { key: 'finished_at', label: 'Finished at', kind: 'timestamp', expr: 'r.finished_at' },
-      { key: 'error', label: 'Error', kind: 'text', expr: `(r.error ->> 'message')` },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
-      { key: 'id', label: 'Run (id)', kind: 'uuid', expr: 'r.id' },
+      { key: "automation", label: "Automation", kind: "text", expr: "a.name" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "r.status",
+        options: AUTOMATION_RUN_STATUSES,
+      },
+      { key: "version", label: "Version", kind: "number", expr: "r.version" },
+      { key: "subject_kind", label: "Subject kind", kind: "text", expr: "r.subject_kind" },
+      { key: "subject_id", label: "Subject (id)", kind: "uuid", expr: "r.subject_id" },
+      { key: "started_at", label: "Started at", kind: "timestamp", expr: "r.started_at" },
+      { key: "finished_at", label: "Finished at", kind: "timestamp", expr: "r.finished_at" },
+      { key: "error", label: "Error", kind: "text", expr: `(r.error ->> 'message')` },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "r.created_at" },
+      { key: "id", label: "Run (id)", kind: "uuid", expr: "r.id" },
     ],
-    defaultSort: { column: 'created_at', direction: 'desc' },
+    defaultSort: { column: "created_at", direction: "desc" },
   },
   // The action/reason-code vocabulary (0227) — Setup-owned, read through
   // the employment grant behind the Human resources switch.
   {
-    key: 'hrm_action_reasons',
-    label: 'Action reasons',
-    category: 'hrm',
-    description:
-      'Reason codes each HR action files under.',
+    key: "hrm_action_reasons",
+    label: "Action reasons",
+    category: "hrm",
+    description: "Reason codes each HR action files under.",
     from: `hrm_action_reasons r`,
     // Org-level configuration with no legal-entity column: the policy is
     // declared as no-clamp rather than omitted. An omitted policy makes
@@ -901,20 +1149,25 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // subsidiary allowlist, which would refuse the report to exactly the
     // scoped readers it is meant to serve.
     subsidiaryScope: null,
-    orgColumn: 'r.org_id',
+    orgColumn: "r.org_id",
     requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
     featureKey: HRM_FEATURE_KEY,
-    defaultPeriodField: 'created_at',
+    defaultPeriodField: "created_at",
     columns: [
-      { key: 'action', label: 'Action', kind: 'text', expr: 'r.action' },
-      { key: 'reason_code', label: 'Code', kind: 'text', expr: 'r.reason_code' },
-      { key: 'label', label: 'Label', kind: 'text', expr: 'r.label' },
-      { key: 'requires_comment', label: 'Requires comment', kind: 'boolean', expr: 'r.requires_comment' },
-      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'r.is_active' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
-      { key: 'id', label: 'Reason (id)', kind: 'uuid', expr: 'r.id' },
+      { key: "action", label: "Action", kind: "text", expr: "r.action" },
+      { key: "reason_code", label: "Code", kind: "text", expr: "r.reason_code" },
+      { key: "label", label: "Label", kind: "text", expr: "r.label" },
+      {
+        key: "requires_comment",
+        label: "Requires comment",
+        kind: "boolean",
+        expr: "r.requires_comment",
+      },
+      { key: "is_active", label: "Active", kind: "boolean", expr: "r.is_active" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "r.created_at" },
+      { key: "id", label: "Reason (id)", kind: "uuid", expr: "r.id" },
     ],
-    defaultSort: { column: 'action', direction: 'asc' },
+    defaultSort: { column: "action", direction: "asc" },
   },
   // HR-16 end
   // HR-13 begin: construction-compliance report entities (0223/0224).
@@ -922,130 +1175,125 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // a general-business org never sees them, and the feature-off path
   // hides rather than empties.
   {
-    key: 'hrm_rate_schedule_lines',
-    label: 'Rate schedule lines',
-    category: 'hrm',
-    description:
-      'Wage schedule lines — base, fringes and multipliers.',
+    key: "hrm_rate_schedule_lines",
+    label: "Rate schedule lines",
+    category: "hrm",
+    description: "Wage schedule lines — base, fringes and multipliers.",
     from: `hrm_rate_schedule_lines l
   JOIN hrm_rate_schedules s ON s.id = l.schedule_id AND s.org_id = l.org_id
   JOIN hrm_work_classifications c ON c.id = l.classification_id AND c.org_id = l.org_id`,
-    orgColumn: 'l.org_id',
+    orgColumn: "l.org_id",
     // Org-level rate configuration: no subsidiary boundary applies, so no
     // clamp — the construction read grant and the feature switch are the
     // gates, enforced generically at every run path.
     subsidiaryScope: null,
-    requiredPermission: 'hrm.construction.read',
-    featureKey: 'hrmConstructionCompliance',
+    requiredPermission: "hrm.construction.read",
+    featureKey: "hrmConstructionCompliance",
     defaultPeriodField: null,
     columns: [
-      { key: 'schedule', label: 'Schedule', kind: 'text', expr: 's.name' },
-      { key: 'classification', label: 'Classification', kind: 'text', expr: 'c.code' },
-      { key: 'base_rate', label: 'Base rate', kind: 'number', expr: 'l.base_rate' },
-      { key: 'fringe_rate', label: 'Cash fringe', kind: 'number', expr: 'l.fringe_rate' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
-      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'l.effective_from' },
+      { key: "schedule", label: "Schedule", kind: "text", expr: "s.name" },
+      { key: "classification", label: "Classification", kind: "text", expr: "c.code" },
+      { key: "base_rate", label: "Base rate", kind: "number", expr: "l.base_rate" },
+      { key: "fringe_rate", label: "Cash fringe", kind: "number", expr: "l.fringe_rate" },
+      { key: "currency", label: "Currency", kind: "text", expr: "l.currency" },
+      { key: "effective_from", label: "Effective from", kind: "date", expr: "l.effective_from" },
     ],
-    defaultSort: { column: 'effective_from', direction: 'desc' },
+    defaultSort: { column: "effective_from", direction: "desc" },
   },
   {
-    key: 'hrm_per_diem_entries',
-    label: 'Per-diem entries',
-    category: 'hrm',
-    description:
-      'Per-diem and travel amounts per day, with status.',
+    key: "hrm_per_diem_entries",
+    label: "Per-diem entries",
+    category: "hrm",
+    description: "Per-diem and travel amounts per day, with status.",
     from: `hrm_per_diem_entries e
   JOIN hrm_per_diem_policies p ON p.id = e.policy_id AND p.org_id = e.org_id
   LEFT JOIN pay_components pc ON pc.id = p.pay_component_id AND pc.org_id = p.org_id
   JOIN worker_employments w ON w.id = e.employment_id AND w.org_id = e.org_id`,
-    orgColumn: 'e.org_id',
+    orgColumn: "e.org_id",
     // The employment's employer subsidiary is the legal-entity boundary:
     // the executor clamps this to the reader's allowlist.
-    subsidiaryScope: { column: 'w.employer_subsidiary_id' },
-    requiredPermission: 'hrm.construction.read',
-    featureKey: 'hrmConstructionCompliance',
-    defaultPeriodField: 'worked_on',
+    subsidiaryScope: { column: "w.employer_subsidiary_id" },
+    requiredPermission: "hrm.construction.read",
+    featureKey: "hrmConstructionCompliance",
+    defaultPeriodField: "worked_on",
     columns: [
-      { key: 'worked_on', label: 'Day', kind: 'date', expr: 'e.worked_on' },
-      { key: 'amount', label: 'Amount', kind: 'number', expr: 'e.amount' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'e.currency' },
-      { key: 'status', label: 'Status', kind: 'text', expr: 'e.status' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.employment_id' },
+      { key: "worked_on", label: "Day", kind: "date", expr: "e.worked_on" },
+      { key: "amount", label: "Amount", kind: "number", expr: "e.amount" },
+      { key: "currency", label: "Currency", kind: "text", expr: "e.currency" },
+      { key: "status", label: "Status", kind: "text", expr: "e.status" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "e.employment_id" },
     ],
-    defaultSort: { column: 'worked_on', direction: 'desc' },
+    defaultSort: { column: "worked_on", direction: "desc" },
   },
   {
-    key: 'hrm_comp_class_split',
-    label: 'Comp class split',
-    category: 'hrm',
-    description:
-      'Project hours priced per comp class, by day.',
+    key: "hrm_comp_class_split",
+    label: "Comp class split",
+    category: "hrm",
+    description: "Project hours priced per comp class, by day.",
     from: `hrm_comp_class_rules r
   JOIN hrm_comp_classes c ON c.id = r.comp_class_id AND c.org_id = r.org_id
   LEFT JOIN hrm_work_classifications cl ON cl.id::text = (r.match->>'classification_id') AND cl.org_id = r.org_id`,
-    orgColumn: 'r.org_id',
+    orgColumn: "r.org_id",
     // Org-level match configuration: no subsidiary boundary applies, so
     // no clamp — the construction read grant and the feature switch are
     // the gates, enforced generically at every run path.
     subsidiaryScope: null,
-    requiredPermission: 'hrm.construction.read',
-    featureKey: 'hrmConstructionCompliance',
+    requiredPermission: "hrm.construction.read",
+    featureKey: "hrmConstructionCompliance",
     defaultPeriodField: null,
     columns: [
-      { key: 'class', label: 'Class', kind: 'text', expr: 'c.code' },
-      { key: 'priority', label: 'Priority', kind: 'number', expr: 'r.priority' },
-      { key: 'rate', label: 'Rate / 100', kind: 'number', expr: 'c.rate_per_100' },
+      { key: "class", label: "Class", kind: "text", expr: "c.code" },
+      { key: "priority", label: "Priority", kind: "number", expr: "r.priority" },
+      { key: "rate", label: "Rate / 100", kind: "number", expr: "c.rate_per_100" },
     ],
-    defaultSort: { column: 'priority', direction: 'desc' },
+    defaultSort: { column: "priority", direction: "desc" },
   },
   {
-    key: 'hrm_certified_runs',
-    label: 'Certified runs',
-    category: 'hrm',
-    description:
-      'Certified payroll runs by project and week.',
+    key: "hrm_certified_runs",
+    label: "Certified runs",
+    category: "hrm",
+    description: "Certified payroll runs by project and week.",
     from: `hrm_certified_payroll_runs r
   LEFT JOIN projects p ON p.id = r.project_id AND p.org_id = r.org_id
   LEFT JOIN hrm_certified_payroll_runs a ON a.id = r.amends_run_id AND a.org_id = r.org_id`,
-    orgColumn: 'r.org_id',
+    orgColumn: "r.org_id",
     // The project's subsidiary is the legal-entity boundary: the executor
     // clamps this to the reader's allowlist. Runs on subsidiary-less
     // projects hide from restricted readers (fail closed), never leak.
-    subsidiaryScope: { column: 'p.subsidiary_id' },
-    requiredPermission: 'hrm.construction.read',
-    featureKey: 'hrmConstructionCompliance',
-    defaultPeriodField: 'week_ending',
+    subsidiaryScope: { column: "p.subsidiary_id" },
+    requiredPermission: "hrm.construction.read",
+    featureKey: "hrmConstructionCompliance",
+    defaultPeriodField: "week_ending",
     columns: [
-      { key: 'week_ending', label: 'Week ending', kind: 'date', expr: 'r.week_ending' },
-      { key: 'format_key', label: 'Format', kind: 'text', expr: 'r.format_key' },
-      { key: 'status', label: 'Status', kind: 'text', expr: 'r.status' },
-      { key: 'project_id', label: 'Project (id)', kind: 'uuid', expr: 'r.project_id' },
+      { key: "week_ending", label: "Week ending", kind: "date", expr: "r.week_ending" },
+      { key: "format_key", label: "Format", kind: "text", expr: "r.format_key" },
+      { key: "status", label: "Status", kind: "text", expr: "r.status" },
+      { key: "project_id", label: "Project (id)", kind: "uuid", expr: "r.project_id" },
     ],
-    defaultSort: { column: 'week_ending', direction: 'desc' },
+    defaultSort: { column: "week_ending", direction: "desc" },
   },
   {
-    key: 'hrm_compliance_findings',
-    label: 'Compliance findings',
-    category: 'hrm',
-    description:
-      'Pre-run flags by kind, with lifecycle status.',
+    key: "hrm_compliance_findings",
+    label: "Compliance findings",
+    category: "hrm",
+    description: "Pre-run flags by kind, with lifecycle status.",
     from: `hrm_compliance_findings f
   LEFT JOIN projects p ON p.id = f.project_id AND p.org_id = f.org_id
   LEFT JOIN worker_employments w ON w.id = f.employment_id AND w.org_id = f.org_id`,
-    orgColumn: 'f.org_id',
+    orgColumn: "f.org_id",
     // The employment's employer subsidiary is the legal-entity boundary.
     // Employment-less flags hide from restricted readers (fail closed).
-    subsidiaryScope: { column: 'w.employer_subsidiary_id' },
-    requiredPermission: 'hrm.construction.read',
-    featureKey: 'hrmConstructionCompliance',
-    defaultPeriodField: 'worked_on',
+    subsidiaryScope: { column: "w.employer_subsidiary_id" },
+    requiredPermission: "hrm.construction.read",
+    featureKey: "hrmConstructionCompliance",
+    defaultPeriodField: "worked_on",
     columns: [
-      { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
-      { key: 'worked_on', label: 'Day', kind: 'date', expr: 'f.worked_on' },
-      { key: 'status', label: 'Status', kind: 'text', expr: 'f.status' },
-      { key: 'project_id', label: 'Project (id)', kind: 'uuid', expr: 'f.project_id' },
+      { key: "kind", label: "Kind", kind: "text", expr: "f.kind" },
+      { key: "worked_on", label: "Day", kind: "date", expr: "f.worked_on" },
+      { key: "status", label: "Status", kind: "text", expr: "f.status" },
+      { key: "project_id", label: "Project (id)", kind: "uuid", expr: "f.project_id" },
     ],
-    defaultSort: { column: 'worked_on', direction: 'desc' },
+    defaultSort: { column: "worked_on", direction: "desc" },
   },
   // HR-13 end
   // HR-14 begin: certification register (one row per held qualification)
@@ -1057,70 +1305,85 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // projection either. Renewals are new rows (linked by events), so the
   // register shows every issuance; revoked rows stay visible as history.
   {
-    key: 'hrm_qualifications',
-    label: 'Qualifications',
-    category: 'hrm',
-    description:
-      'Held certifications — holder, type and expiry.',
+    key: "hrm_qualifications",
+    label: "Qualifications",
+    category: "hrm",
+    description: "Held certifications — holder, type and expiry.",
     from: `hrm_worker_qualifications q
       JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = q.org_id
       JOIN worker_employments e ON e.id = q.employment_id AND e.org_id = q.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = q.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = q.org_id`,
-    orgColumn: 'q.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "q.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_CERTIFICATIONS_READ_PERMISSION,
     featureKey: HRM_CERTIFICATIONS_FEATURE_KEY,
     // The expiry day is the fact: the period picker narrows on it, so a
     // register filtered to a window lists what lapses inside it.
-    defaultPeriodField: 'expires_on',
+    defaultPeriodField: "expires_on",
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'type_code', label: 'Type code', kind: 'text', expr: 't.code' },
-      { key: 'type_name', label: 'Type', kind: 'text', expr: 't.name' },
-      { key: 'category', label: 'Category', kind: 'text', expr: 't.category' },
-      { key: 'identifier', label: 'License no.', kind: 'text', expr: 'q.identifier' },
-      { key: 'issued_on', label: 'Issued on', kind: 'date', expr: 'q.issued_on' },
-      { key: 'expires_on', label: 'Expires on', kind: 'date', expr: 'q.expires_on' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'q.status', options: HRM_QUALIFICATION_STATUSES },
-      { key: 'verified_at', label: 'Verified at', kind: 'timestamp', expr: 'q.verified_at' },
-      { key: 'qualification_id', label: 'Qualification (id)', kind: 'uuid', expr: 'q.id' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'q.employment_id' },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "type_code", label: "Type code", kind: "text", expr: "t.code" },
+      { key: "type_name", label: "Type", kind: "text", expr: "t.name" },
+      { key: "category", label: "Category", kind: "text", expr: "t.category" },
+      { key: "identifier", label: "License no.", kind: "text", expr: "q.identifier" },
+      { key: "issued_on", label: "Issued on", kind: "date", expr: "q.issued_on" },
+      { key: "expires_on", label: "Expires on", kind: "date", expr: "q.expires_on" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "q.status",
+        options: HRM_QUALIFICATION_STATUSES,
+      },
+      { key: "verified_at", label: "Verified at", kind: "timestamp", expr: "q.verified_at" },
+      { key: "qualification_id", label: "Qualification (id)", kind: "uuid", expr: "q.id" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "q.employment_id" },
     ],
-    defaultSort: { column: 'expires_on', direction: 'asc' },
+    defaultSort: { column: "expires_on", direction: "asc" },
   },
   {
-    key: 'hrm_qualification_alerts',
-    label: 'Qualification alerts',
-    category: 'hrm',
-    description:
-      'Certification renewal alerts — sent or pending.',
+    key: "hrm_qualification_alerts",
+    label: "Qualification alerts",
+    category: "hrm",
+    description: "Certification renewal alerts — sent or pending.",
     from: `hrm_qualification_alerts a
       JOIN hrm_worker_qualifications q ON q.id = a.qualification_id AND q.org_id = a.org_id
       JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = a.org_id
       JOIN worker_employments e ON e.id = q.employment_id AND e.org_id = a.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = a.org_id`,
-    orgColumn: 'a.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "a.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_CERTIFICATIONS_READ_PERMISSION,
     featureKey: HRM_CERTIFICATIONS_FEATURE_KEY,
     // The due day is the fact: the period picker narrows on it, so the
     // queue filtered to a window lists what comes due inside it.
-    defaultPeriodField: 'due_on',
+    defaultPeriodField: "due_on",
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'type_code', label: 'Type code', kind: 'text', expr: 't.code' },
-      { key: 'type_name', label: 'Type', kind: 'text', expr: 't.name' },
-      { key: 'expires_on', label: 'Expires on', kind: 'date', expr: 'q.expires_on' },
-      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'a.due_on' },
-      { key: 'lead_days', label: 'Lead days', kind: 'number', expr: 'a.lead_days' },
-      { key: 'sent_at', label: 'Sent at', kind: 'timestamp', expr: 'a.sent_at' },
-      { key: 'channel', label: 'Channel', kind: 'enum', expr: 'a.channel', options: HRM_ALERT_CHANNELS },
-      { key: 'alert_id', label: 'Alert (id)', kind: 'uuid', expr: 'a.id' },
-      { key: 'qualification_id', label: 'Qualification (id)', kind: 'uuid', expr: 'a.qualification_id' },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "type_code", label: "Type code", kind: "text", expr: "t.code" },
+      { key: "type_name", label: "Type", kind: "text", expr: "t.name" },
+      { key: "expires_on", label: "Expires on", kind: "date", expr: "q.expires_on" },
+      { key: "due_on", label: "Due on", kind: "date", expr: "a.due_on" },
+      { key: "lead_days", label: "Lead days", kind: "number", expr: "a.lead_days" },
+      { key: "sent_at", label: "Sent at", kind: "timestamp", expr: "a.sent_at" },
+      {
+        key: "channel",
+        label: "Channel",
+        kind: "enum",
+        expr: "a.channel",
+        options: HRM_ALERT_CHANNELS,
+      },
+      { key: "alert_id", label: "Alert (id)", kind: "uuid", expr: "a.id" },
+      {
+        key: "qualification_id",
+        label: "Qualification (id)",
+        kind: "uuid",
+        expr: "a.qualification_id",
+      },
     ],
-    defaultSort: { column: 'due_on', direction: 'asc' },
+    defaultSort: { column: "due_on", direction: "asc" },
   },
   // HR-14 end
   // HR-19 begin: the document register (one row per non-deleted
@@ -1130,11 +1393,10 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // evidence never leave (role and status only); file bytes, tokens,
   // and hashes have no column at all.
   {
-    key: 'hrm_documents',
-    label: 'HR documents',
-    category: 'hrm',
-    description:
-      'HR documents — category, status and legal hold.',
+    key: "hrm_documents",
+    label: "HR documents",
+    category: "hrm",
+    description: "HR documents — category, status and legal hold.",
     from: `hrm_documents d
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
       LEFT JOIN worker_employments e ON e.id = d.employment_id AND e.org_id = d.org_id`,
@@ -1142,32 +1404,37 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // employment-linked row clamps to THAT employment's employer subsidiary;
     // employment-less rows (party-only issues, retention-anonymized
     // delinks) carry NULL and fail closed for restricted readers.
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
-    orgColumn: 'd.org_id',
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
+    orgColumn: "d.org_id",
     requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
     featureKey: HRM_DOCUMENTS_FEATURE_KEY,
     // The creation day is the fact: the period picker narrows on it, so
     // a register filtered to a window lists what HR issued inside it.
-    defaultPeriodField: 'created_at',
+    defaultPeriodField: "created_at",
     columns: [
-      { key: 'title', label: 'Title', kind: 'text', expr: 'd.title' },
-      { key: 'person', label: 'Person', kind: 'text', expr: 'p.display_name' },
-      { key: 'category', label: 'Category', kind: 'text', expr: 'd.category_key' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: HRM_DOCUMENT_STATUSES },
-      { key: 'sent_at', label: 'Sent at', kind: 'timestamp', expr: 'd.sent_at' },
-      { key: 'completed_at', label: 'Completed at', kind: 'timestamp', expr: 'd.completed_at' },
-      { key: 'expires_at', label: 'Expires at', kind: 'timestamp', expr: 'd.expires_at' },
-      { key: 'legal_hold', label: 'Legal hold', kind: 'boolean', expr: 'd.legal_hold' },
-      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 'd.id' },
+      { key: "title", label: "Title", kind: "text", expr: "d.title" },
+      { key: "person", label: "Person", kind: "text", expr: "p.display_name" },
+      { key: "category", label: "Category", kind: "text", expr: "d.category_key" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "d.status",
+        options: HRM_DOCUMENT_STATUSES,
+      },
+      { key: "sent_at", label: "Sent at", kind: "timestamp", expr: "d.sent_at" },
+      { key: "completed_at", label: "Completed at", kind: "timestamp", expr: "d.completed_at" },
+      { key: "expires_at", label: "Expires at", kind: "timestamp", expr: "d.expires_at" },
+      { key: "legal_hold", label: "Legal hold", kind: "boolean", expr: "d.legal_hold" },
+      { key: "document_id", label: "Document (id)", kind: "uuid", expr: "d.id" },
     ],
-    defaultSort: { column: 'created_at', direction: 'desc' },
+    defaultSort: { column: "created_at", direction: "desc" },
   },
   {
-    key: 'hrm_document_signers',
-    label: 'Document signers',
-    category: 'hrm',
-    description:
-      'Document signers in order, with per-signer status.',
+    key: "hrm_document_signers",
+    label: "Document signers",
+    category: "hrm",
+    description: "Document signers in order, with per-signer status.",
     from: `hrm_document_signers s
       JOIN hrm_documents d ON d.id = s.document_id AND d.org_id = s.org_id
       LEFT JOIN worker_employments e ON e.id = d.employment_id AND e.org_id = d.org_id`,
@@ -1175,20 +1442,26 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // see hrm_documents above. Employment-less documents fail closed here
     // too, so a restricted reader never reaches another subsidiary's
     // signer rows through the join.
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
-    orgColumn: 's.org_id',
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
+    orgColumn: "s.org_id",
     requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
     featureKey: HRM_DOCUMENTS_FEATURE_KEY,
-    defaultPeriodField: 'signed_at',
+    defaultPeriodField: "signed_at",
     columns: [
-      { key: 'document', label: 'Document', kind: 'text', expr: 'd.title' },
-      { key: 'ord', label: 'Order', kind: 'number', expr: 's.ord' },
-      { key: 'role', label: 'Role', kind: 'text', expr: 's.role' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 's.status', options: HRM_SIGNER_STATUSES },
-      { key: 'signed_at', label: 'Signed at', kind: 'timestamp', expr: 's.signed_at' },
-      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 's.document_id' },
+      { key: "document", label: "Document", kind: "text", expr: "d.title" },
+      { key: "ord", label: "Order", kind: "number", expr: "s.ord" },
+      { key: "role", label: "Role", kind: "text", expr: "s.role" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "s.status",
+        options: HRM_SIGNER_STATUSES,
+      },
+      { key: "signed_at", label: "Signed at", kind: "timestamp", expr: "s.signed_at" },
+      { key: "document_id", label: "Document (id)", kind: "uuid", expr: "s.document_id" },
     ],
-    defaultSort: { column: 'signed_at', direction: 'desc' },
+    defaultSort: { column: "signed_at", direction: "desc" },
   },
   // HR-19 end
   // HR-19 begin: the retention execution ledger (one row per flagged or
@@ -1197,34 +1470,39 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // Execution itself stays human-approved (HR) or scheduler-run — the
   // report never executes anything.
   {
-    key: 'hrm_retention_actions',
-    label: 'Retention actions',
-    category: 'hrm',
-    description:
-      'Retention actions — due date, execution and blocks.',
+    key: "hrm_retention_actions",
+    label: "Retention actions",
+    category: "hrm",
+    description: "Retention actions — due date, execution and blocks.",
     from: `hrm_retention_actions a
       JOIN hrm_documents d ON d.id = a.document_id AND d.org_id = a.org_id
       JOIN hrm_retention_schedules s ON s.id = a.schedule_id AND s.org_id = a.org_id
       LEFT JOIN worker_employments e ON e.id = d.employment_id AND e.org_id = d.org_id`,
     // Retention actions inherit the document's scope through its employment
     // link; see hrm_documents above. Employment-less documents fail closed.
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
-    orgColumn: 'a.org_id',
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
+    orgColumn: "a.org_id",
     requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
     featureKey: HRM_DOCUMENTS_FEATURE_KEY,
     // The due day is the fact: the period picker narrows on it, so the
     // ledger filtered to a window lists what came due inside it.
-    defaultPeriodField: 'due_on',
+    defaultPeriodField: "due_on",
     columns: [
-      { key: 'document', label: 'Document', kind: 'text', expr: 'd.title' },
-      { key: 'category', label: 'Category', kind: 'text', expr: 's.category_key' },
-      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'a.due_on' },
-      { key: 'action', label: 'Action', kind: 'enum', expr: 'a.action', options: HRM_RETENTION_ACTIONS },
-      { key: 'executed_at', label: 'Executed at', kind: 'timestamp', expr: 'a.executed_at' },
-      { key: 'blocked_reason', label: 'Blocked reason', kind: 'text', expr: 'a.blocked_reason' },
-      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 'a.document_id' },
+      { key: "document", label: "Document", kind: "text", expr: "d.title" },
+      { key: "category", label: "Category", kind: "text", expr: "s.category_key" },
+      { key: "due_on", label: "Due on", kind: "date", expr: "a.due_on" },
+      {
+        key: "action",
+        label: "Action",
+        kind: "enum",
+        expr: "a.action",
+        options: HRM_RETENTION_ACTIONS,
+      },
+      { key: "executed_at", label: "Executed at", kind: "timestamp", expr: "a.executed_at" },
+      { key: "blocked_reason", label: "Blocked reason", kind: "text", expr: "a.blocked_reason" },
+      { key: "document_id", label: "Document (id)", kind: "uuid", expr: "a.document_id" },
     ],
-    defaultSort: { column: 'due_on', direction: 'asc' },
+    defaultSort: { column: "due_on", direction: "asc" },
   },
   // HR-19 end
   // HR-19 begin: survey aggregates (one row per survey). Invitations
@@ -1233,11 +1511,10 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // report never persists a projection. Respondent links have no
   // column at all — anonymous surveys assert no link anywhere.
   {
-    key: 'hrm_survey_results',
-    label: 'Survey results',
-    category: 'hrm',
-    description:
-      'Surveys — responses, status and close date.',
+    key: "hrm_survey_results",
+    label: "Survey results",
+    category: "hrm",
+    description: "Surveys — responses, status and close date.",
     from: `hrm_surveys s
       LEFT JOIN LATERAL (
         SELECT count(*)::integer AS invitations,
@@ -1248,21 +1525,33 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // Survey aggregates are org-level by construction and suppressed below
     // the declared minimum group size; no legal-entity column exists here.
     subsidiaryScope: null,
-    orgColumn: 's.org_id',
+    orgColumn: "s.org_id",
     requiredPermission: HRM_SURVEYS_MANAGE_PERMISSION,
     featureKey: HRM_SURVEYS_FEATURE_KEY,
-    defaultPeriodField: 'closes_at',
+    defaultPeriodField: "closes_at",
     columns: [
-      { key: 'name', label: 'Name', kind: 'text', expr: 's.name' },
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: 's.kind', options: HRM_SURVEY_KINDS },
-      { key: 'anonymity', label: 'Anonymity', kind: 'enum', expr: 's.anonymity', options: HRM_SURVEY_ANONYMITY },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 's.status', options: HRM_SURVEY_STATUSES },
-      { key: 'invitations', label: 'Invitations', kind: 'number', expr: 'inv.invitations' },
-      { key: 'responded', label: 'Responded', kind: 'number', expr: 'inv.responded' },
-      { key: 'closes_at', label: 'Closes at', kind: 'timestamp', expr: 's.closes_at' },
-      { key: 'survey_id', label: 'Survey (id)', kind: 'uuid', expr: 's.id' },
+      { key: "name", label: "Name", kind: "text", expr: "s.name" },
+      { key: "kind", label: "Kind", kind: "enum", expr: "s.kind", options: HRM_SURVEY_KINDS },
+      {
+        key: "anonymity",
+        label: "Anonymity",
+        kind: "enum",
+        expr: "s.anonymity",
+        options: HRM_SURVEY_ANONYMITY,
+      },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "s.status",
+        options: HRM_SURVEY_STATUSES,
+      },
+      { key: "invitations", label: "Invitations", kind: "number", expr: "inv.invitations" },
+      { key: "responded", label: "Responded", kind: "number", expr: "inv.responded" },
+      { key: "closes_at", label: "Closes at", kind: "timestamp", expr: "s.closes_at" },
+      { key: "survey_id", label: "Survey (id)", kind: "uuid", expr: "s.id" },
     ],
-    defaultSort: { column: 'closes_at', direction: 'desc' },
+    defaultSort: { column: "closes_at", direction: "desc" },
   },
   // HR-19 end
   // HR-19 begin: the org-chart snapshot (one row per in-service
@@ -1273,11 +1562,10 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // same contract the tree read resolves through. Names, titles,
   // departments, and managers only — never pay or private fields.
   {
-    key: 'hrm_org_chart',
-    label: 'Org chart',
-    category: 'hrm',
-    description:
-      'In-service employments — name, title and manager.',
+    key: "hrm_org_chart",
+    label: "Org chart",
+    category: "hrm",
+    description: "In-service employments — name, title and manager.",
     from: `worker_employments e
       JOIN LATERAL (
         SELECT ev.status
@@ -1311,18 +1599,18 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // The chart selects from worker_employments, which carries the legal
     // entity, so it CLAMPS: unclamped it would show a subsidiary-scoped
     // reader every other subsidiary's people.
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
-    orgColumn: 'e.org_id',
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
+    orgColumn: "e.org_id",
     requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
     featureKey: HRM_ORG_CHART_FEATURE_KEY,
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'title', label: 'Title', kind: 'text', expr: 'a.job_title' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'manager', label: 'Manager', kind: 'text', expr: 'mw.display_name' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.id' },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "title", label: "Title", kind: "text", expr: "a.job_title" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "manager", label: "Manager", kind: "text", expr: "mw.display_name" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "e.id" },
     ],
-    defaultSort: { column: 'employee', direction: 'asc' },
+    defaultSort: { column: "employee", direction: "asc" },
   },
   // HR-19 end
   // Continuous-performance entities (0228). 1:1s, feedback, calibration
@@ -1334,39 +1622,37 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // retraction rows never read (the read hides both, exactly like the
   // service). Talent and succession rows are HR-only by the same gate.
   {
-    key: 'hrm_one_on_ones',
-    label: 'One-on-ones',
-    category: 'hrm',
-    description:
-      '1:1 meetings — scheduled and held dates, status.',
+    key: "hrm_one_on_ones",
+    label: "One-on-ones",
+    category: "hrm",
+    description: "1:1 meetings — scheduled and held dates, status.",
     from: `hrm_one_on_ones o
       JOIN worker_employments m ON m.id = o.manager_employment_id AND m.org_id = o.org_id
       JOIN worker_employments r ON r.id = o.report_employment_id AND r.org_id = o.org_id
       JOIN parties mp ON mp.id = m.worker_party_id AND mp.org_id = o.org_id
       JOIN parties rp ON rp.id = r.worker_party_id AND rp.org_id = o.org_id
       JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = o.org_id`,
-    orgColumn: 'o.org_id',
-    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    orgColumn: "o.org_id",
+    subsidiaryScope: { column: "r.employer_subsidiary_id" },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmPerformance',
-    defaultPeriodField: 'scheduled_at',
+    featureKey: "hrmPerformance",
+    defaultPeriodField: "scheduled_at",
     columns: [
-      { key: 'scheduled_at', label: 'Scheduled', kind: 'date', expr: 'o.scheduled_at' },
-      { key: 'held_at', label: 'Held', kind: 'date', expr: 'o.held_at' },
-      { key: 'manager', label: 'Manager', kind: 'text', expr: 'mp.display_name' },
-      { key: 'report', label: 'Report', kind: 'text', expr: 'rp.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'status', label: 'Status', kind: 'text', expr: 'o.status' },
-      { key: 'id', label: 'Meeting (id)', kind: 'uuid', expr: 'o.id' },
+      { key: "scheduled_at", label: "Scheduled", kind: "date", expr: "o.scheduled_at" },
+      { key: "held_at", label: "Held", kind: "date", expr: "o.held_at" },
+      { key: "manager", label: "Manager", kind: "text", expr: "mp.display_name" },
+      { key: "report", label: "Report", kind: "text", expr: "rp.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "status", label: "Status", kind: "text", expr: "o.status" },
+      { key: "id", label: "Meeting (id)", kind: "uuid", expr: "o.id" },
     ],
-    defaultSort: { column: 'scheduled_at', direction: 'desc' },
+    defaultSort: { column: "scheduled_at", direction: "desc" },
   },
   {
-    key: 'hrm_feedback',
-    label: 'Feedback',
-    category: 'hrm',
-    description:
-      'Praise, feedback and requests, with visibility.',
+    key: "hrm_feedback",
+    label: "Feedback",
+    category: "hrm",
+    description: "Praise, feedback and requests, with visibility.",
     // Retractions hide both rows, exactly like listFeedback: the
     // retraction rows themselves never read, and neither do the
     // originals they link.
@@ -1378,76 +1664,79 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       JOIN worker_employments e ON e.id = f.subject_employment_id AND e.org_id = f.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = f.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = f.org_id`,
-    orgColumn: 'f.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "f.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmPerformance',
-    defaultPeriodField: 'recorded_at',
+    featureKey: "hrmPerformance",
+    defaultPeriodField: "recorded_at",
     columns: [
-      { key: 'recorded_at', label: 'Recorded', kind: 'date', expr: 'f.recorded_at' },
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
-      { key: 'visibility', label: 'Visibility', kind: 'text', expr: 'f.visibility' },
-      { key: 'id', label: 'Feedback (id)', kind: 'uuid', expr: 'f.id' },
+      { key: "recorded_at", label: "Recorded", kind: "date", expr: "f.recorded_at" },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "kind", label: "Kind", kind: "text", expr: "f.kind" },
+      { key: "visibility", label: "Visibility", kind: "text", expr: "f.visibility" },
+      { key: "id", label: "Feedback (id)", kind: "uuid", expr: "f.id" },
     ],
-    defaultSort: { column: 'recorded_at', direction: 'desc' },
+    defaultSort: { column: "recorded_at", direction: "desc" },
   },
   {
-    key: 'hrm_calibration_entries',
-    label: 'Calibration entries',
-    category: 'hrm',
-    description:
-      'Calibrated reviews — proposed beside final rating.',
+    key: "hrm_calibration_entries",
+    label: "Calibration entries",
+    category: "hrm",
+    description: "Calibrated reviews — proposed beside final rating.",
     from: `hrm_calibration_entries e
       JOIN hrm_calibration_sessions s ON s.id = e.session_id AND s.org_id = e.org_id
       JOIN hrm_reviews r ON r.id = e.review_id AND r.org_id = e.org_id
       JOIN worker_employments emp ON emp.id = r.employment_id AND emp.org_id = e.org_id
       JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = e.org_id
       JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = e.org_id`,
-    orgColumn: 'e.org_id',
-    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    orgColumn: "e.org_id",
+    subsidiaryScope: { column: "emp.employer_subsidiary_id" },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmPerformance',
-    defaultPeriodField: 'decided_at',
+    featureKey: "hrmPerformance",
+    defaultPeriodField: "decided_at",
     columns: [
-      { key: 'session', label: 'Session', kind: 'text', expr: 's.name' },
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'proposed_rating', label: 'Proposed', kind: 'number', expr: 'e.proposed_rating' },
-      { key: 'calibrated_rating', label: 'Calibrated', kind: 'number', expr: 'e.calibrated_rating' },
-      { key: 'potential_key', label: 'Potential', kind: 'text', expr: 'e.potential_key' },
-      { key: 'decided_at', label: 'Decided', kind: 'date', expr: 'e.decided_at' },
-      { key: 'id', label: 'Entry (id)', kind: 'uuid', expr: 'e.id' },
+      { key: "session", label: "Session", kind: "text", expr: "s.name" },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "proposed_rating", label: "Proposed", kind: "number", expr: "e.proposed_rating" },
+      {
+        key: "calibrated_rating",
+        label: "Calibrated",
+        kind: "number",
+        expr: "e.calibrated_rating",
+      },
+      { key: "potential_key", label: "Potential", kind: "text", expr: "e.potential_key" },
+      { key: "decided_at", label: "Decided", kind: "date", expr: "e.decided_at" },
+      { key: "id", label: "Entry (id)", kind: "uuid", expr: "e.id" },
     ],
-    defaultSort: { column: 'decided_at', direction: 'desc' },
+    defaultSort: { column: "decided_at", direction: "desc" },
   },
   {
-    key: 'hrm_talent_reviews',
-    label: 'Talent reviews',
-    category: 'hrm',
-    description:
-      'Talent reviews — performance, potential and risk.',
+    key: "hrm_talent_reviews",
+    label: "Talent reviews",
+    category: "hrm",
+    description: "Talent reviews — performance, potential and risk.",
     from: `hrm_talent_reviews t
       JOIN worker_employments e ON e.id = t.employment_id AND e.org_id = t.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = t.org_id
       JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = t.org_id`,
-    orgColumn: 't.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: "t.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmPerformance',
-    defaultPeriodField: 'reviewed_at',
+    featureKey: "hrmPerformance",
+    defaultPeriodField: "reviewed_at",
     columns: [
-      { key: 'reviewed_at', label: 'Reviewed', kind: 'date', expr: 't.reviewed_at' },
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
-      { key: 'performance_key', label: 'Performance', kind: 'text', expr: 't.performance_key' },
-      { key: 'potential_key', label: 'Potential', kind: 'text', expr: 't.potential_key' },
-      { key: 'impact_of_loss', label: 'Impact of loss', kind: 'text', expr: 't.impact_of_loss' },
-      { key: 'risk_of_loss', label: 'Risk of loss', kind: 'text', expr: 't.risk_of_loss' },
-      { key: 'id', label: 'Review (id)', kind: 'uuid', expr: 't.id' },
+      { key: "reviewed_at", label: "Reviewed", kind: "date", expr: "t.reviewed_at" },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "employer", label: "Employer", kind: "text", expr: "sub.name" },
+      { key: "performance_key", label: "Performance", kind: "text", expr: "t.performance_key" },
+      { key: "potential_key", label: "Potential", kind: "text", expr: "t.potential_key" },
+      { key: "impact_of_loss", label: "Impact of loss", kind: "text", expr: "t.impact_of_loss" },
+      { key: "risk_of_loss", label: "Risk of loss", kind: "text", expr: "t.risk_of_loss" },
+      { key: "id", label: "Review (id)", kind: "uuid", expr: "t.id" },
     ],
-    defaultSort: { column: 'reviewed_at', direction: 'desc' },
+    defaultSort: { column: "reviewed_at", direction: "desc" },
   },
   // HR-18 begin: recruiting-depth report entities (0229). Scorecards read
   // interview-level aggregates with no author columns at all — the report
@@ -1457,11 +1746,10 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // through any of these (names only); slot token hashes, signed evidence
   // and offer amounts are not columns.
   {
-    key: 'hrm_scorecards',
-    label: 'Scorecards',
-    category: 'hrm',
-    description:
-      'Interviews with panel verdict aggregates.',
+    key: "hrm_scorecards",
+    label: "Scorecards",
+    category: "hrm",
+    description: "Interviews with panel verdict aggregates.",
     // One row per interview: the verdict aggregates resolve through
     // scalar laterals (the hired-on lateral on hrm_applications is the
     // house precedent), so the entity stays a detail row source with no
@@ -1485,93 +1773,102 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       FROM hrm_scorecards s
      WHERE s.org_id = i.org_id AND s.interview_id = i.id AND s.submitted_at IS NOT NULL
   ) verdicts ON TRUE`,
-    orgColumn: 'i.org_id',
+    orgColumn: "i.org_id",
     // The opening's employer is the legal-entity boundary, as above.
-    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    subsidiaryScope: { column: "r.employer_subsidiary_id" },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmRecruiting',
+    featureKey: "hrmRecruiting",
     defaultPeriodField: null,
     columns: [
-      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
-      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
-      { key: 'kind', label: 'Kind', kind: 'text', expr: 'i.kind' },
-      { key: 'scheduled_on', label: 'Scheduled', kind: 'date', expr: 'i.scheduled_at' },
-      { key: 'panel', label: 'Panel', kind: 'number', expr: 'panel.panel' },
-      { key: 'submitted', label: 'Submitted', kind: 'number', expr: 'verdicts.submitted' },
-      { key: 'strong_no', label: 'Strong no', kind: 'number', expr: 'verdicts.strong_no' },
-      { key: 'no', label: 'No', kind: 'number', expr: 'verdicts.no' },
-      { key: 'yes', label: 'Yes', kind: 'number', expr: 'verdicts.yes' },
-      { key: 'strong_yes', label: 'Strong yes', kind: 'number', expr: 'verdicts.strong_yes' },
-      { key: 'interview_id', label: 'Interview (id)', kind: 'uuid', expr: 'i.id' },
+      { key: "requisition", label: "Requisition", kind: "text", expr: "r.requisition_number" },
+      { key: "candidate", label: "Candidate", kind: "text", expr: "c.display_name" },
+      { key: "kind", label: "Kind", kind: "text", expr: "i.kind" },
+      { key: "scheduled_on", label: "Scheduled", kind: "date", expr: "i.scheduled_at" },
+      { key: "panel", label: "Panel", kind: "number", expr: "panel.panel" },
+      { key: "submitted", label: "Submitted", kind: "number", expr: "verdicts.submitted" },
+      { key: "strong_no", label: "Strong no", kind: "number", expr: "verdicts.strong_no" },
+      { key: "no", label: "No", kind: "number", expr: "verdicts.no" },
+      { key: "yes", label: "Yes", kind: "number", expr: "verdicts.yes" },
+      { key: "strong_yes", label: "Strong yes", kind: "number", expr: "verdicts.strong_yes" },
+      { key: "interview_id", label: "Interview (id)", kind: "uuid", expr: "i.id" },
     ],
-    defaultSort: { column: 'scheduled_on', direction: 'desc' },
+    defaultSort: { column: "scheduled_on", direction: "desc" },
   },
   {
-    key: 'hrm_interview_slots',
-    label: 'Interview slots',
-    category: 'hrm',
-    description:
-      'Interview slots — window, kind and status.',
+    key: "hrm_interview_slots",
+    label: "Interview slots",
+    category: "hrm",
+    description: "Interview slots — window, kind and status.",
     from: `hrm_interview_slots s
   JOIN hrm_interviews i ON i.id = s.interview_id AND i.org_id = s.org_id
   JOIN hrm_applications a ON a.id = i.application_id AND a.org_id = s.org_id
   JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = s.org_id
   JOIN hrm_candidates c ON c.id = a.candidate_id AND c.org_id = s.org_id`,
-    orgColumn: 's.org_id',
+    orgColumn: "s.org_id",
     // The opening's employer is the legal-entity boundary, as above.
-    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    subsidiaryScope: { column: "r.employer_subsidiary_id" },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmRecruiting',
-    defaultPeriodField: 'starts_at',
+    featureKey: "hrmRecruiting",
+    defaultPeriodField: "starts_at",
     columns: [
-      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
-      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: 's.kind', options: HRM_SLOT_KINDS },
-      { key: 'starts_at', label: 'Starts', kind: 'date', expr: 's.starts_at' },
-      { key: 'ends_at', label: 'Ends', kind: 'date', expr: 's.ends_at' },
-      { key: 'timezone', label: 'Timezone', kind: 'text', expr: 's.timezone' },
-      { key: 'booked_on', label: 'Booked', kind: 'date', expr: 's.booked_by_candidate_at' },
-      { key: 'slot_id', label: 'Slot (id)', kind: 'uuid', expr: 's.id' },
+      { key: "requisition", label: "Requisition", kind: "text", expr: "r.requisition_number" },
+      { key: "candidate", label: "Candidate", kind: "text", expr: "c.display_name" },
+      { key: "kind", label: "Kind", kind: "enum", expr: "s.kind", options: HRM_SLOT_KINDS },
+      { key: "starts_at", label: "Starts", kind: "date", expr: "s.starts_at" },
+      { key: "ends_at", label: "Ends", kind: "date", expr: "s.ends_at" },
+      { key: "timezone", label: "Timezone", kind: "text", expr: "s.timezone" },
+      { key: "booked_on", label: "Booked", kind: "date", expr: "s.booked_by_candidate_at" },
+      { key: "slot_id", label: "Slot (id)", kind: "uuid", expr: "s.id" },
     ],
-    defaultSort: { column: 'starts_at', direction: 'desc' },
+    defaultSort: { column: "starts_at", direction: "desc" },
   },
   {
-    key: 'hrm_offers',
-    label: 'Offers',
-    category: 'hrm',
-    description:
-      'Offers — commercial and signature status.',
+    key: "hrm_offers",
+    label: "Offers",
+    category: "hrm",
+    description: "Offers — commercial and signature status.",
     from: `hrm_offers o
   JOIN hrm_applications a ON a.id = o.application_id AND a.org_id = o.org_id
   JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = o.org_id
   JOIN hrm_candidates c ON c.id = a.candidate_id AND c.org_id = o.org_id
   JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = o.org_id`,
-    orgColumn: 'o.org_id',
+    orgColumn: "o.org_id",
     // The opening's employer is the legal-entity boundary, as above.
-    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    subsidiaryScope: { column: "r.employer_subsidiary_id" },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmRecruiting',
+    featureKey: "hrmRecruiting",
     defaultPeriodField: null,
     columns: [
-      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
-      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
-      { key: 'job_title', label: 'Job title', kind: 'text', expr: 'o.job_title' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'o.status', options: HRM_OFFER_STATUSES },
-      { key: 'signature_status', label: 'Signature', kind: 'enum', expr: 'o.signature_status', options: HRM_OFFER_SIGNATURE_STATUSES },
-      { key: 'version', label: 'Version', kind: 'number', expr: 'o.version' },
-      { key: 'sent_on', label: 'Sent', kind: 'date', expr: 'o.sent_at' },
-      { key: 'signed_on', label: 'Signed', kind: 'date', expr: 'o.signed_at' },
-      { key: 'expires_on', label: 'Expires', kind: 'date', expr: 'o.expires_on' },
-      { key: 'offer_id', label: 'Offer (id)', kind: 'uuid', expr: 'o.id' },
+      { key: "candidate", label: "Candidate", kind: "text", expr: "c.display_name" },
+      { key: "requisition", label: "Requisition", kind: "text", expr: "r.requisition_number" },
+      { key: "job_title", label: "Job title", kind: "text", expr: "o.job_title" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "o.status",
+        options: HRM_OFFER_STATUSES,
+      },
+      {
+        key: "signature_status",
+        label: "Signature",
+        kind: "enum",
+        expr: "o.signature_status",
+        options: HRM_OFFER_SIGNATURE_STATUSES,
+      },
+      { key: "version", label: "Version", kind: "number", expr: "o.version" },
+      { key: "sent_on", label: "Sent", kind: "date", expr: "o.sent_at" },
+      { key: "signed_on", label: "Signed", kind: "date", expr: "o.signed_at" },
+      { key: "expires_on", label: "Expires", kind: "date", expr: "o.expires_on" },
+      { key: "offer_id", label: "Offer (id)", kind: "uuid", expr: "o.id" },
     ],
-    defaultSort: { column: 'sent_on', direction: 'desc' },
+    defaultSort: { column: "sent_on", direction: "desc" },
   },
   {
-    key: 'hrm_postings',
-    label: 'Postings',
-    category: 'hrm',
-    description:
-      'Job-board postings — applies and dispositions.',
+    key: "hrm_postings",
+    label: "Postings",
+    category: "hrm",
+    description: "Job-board postings — applies and dispositions.",
     from: `hrm_job_postings p
   JOIN hrm_requisitions r ON r.id = p.requisition_id AND r.org_id = p.org_id
   JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = p.org_id
@@ -1585,73 +1882,82 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       FROM hrm_posting_events e
      WHERE e.org_id = p.org_id AND e.posting_id = p.id AND e.kind = 'disposition_sent'
   ) dispositions ON TRUE`,
-    orgColumn: 'p.org_id',
+    orgColumn: "p.org_id",
     // The opening's employer is the legal-entity boundary, as above.
-    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    subsidiaryScope: { column: "r.employer_subsidiary_id" },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmRecruiting',
+    featureKey: "hrmRecruiting",
     defaultPeriodField: null,
     columns: [
-      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
-      { key: 'board', label: 'Board', kind: 'text', expr: 'p.board_key' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'p.status', options: HRM_POSTING_STATUSES },
-      { key: 'published_on', label: 'Published', kind: 'date', expr: 'p.published_at' },
-      { key: 'closed_on', label: 'Closed', kind: 'date', expr: 'p.closed_at' },
-      { key: 'applies', label: 'Applies', kind: 'number', expr: 'applies.applies' },
-      { key: 'dispositions', label: 'Dispositions', kind: 'number', expr: 'dispositions.dispositions' },
-      { key: 'posting_id', label: 'Posting (id)', kind: 'uuid', expr: 'p.id' },
+      { key: "requisition", label: "Requisition", kind: "text", expr: "r.requisition_number" },
+      { key: "board", label: "Board", kind: "text", expr: "p.board_key" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "p.status",
+        options: HRM_POSTING_STATUSES,
+      },
+      { key: "published_on", label: "Published", kind: "date", expr: "p.published_at" },
+      { key: "closed_on", label: "Closed", kind: "date", expr: "p.closed_at" },
+      { key: "applies", label: "Applies", kind: "number", expr: "applies.applies" },
+      {
+        key: "dispositions",
+        label: "Dispositions",
+        kind: "number",
+        expr: "dispositions.dispositions",
+      },
+      { key: "posting_id", label: "Posting (id)", kind: "uuid", expr: "p.id" },
     ],
-    defaultSort: { column: 'published_on', direction: 'desc' },
+    defaultSort: { column: "published_on", direction: "desc" },
   },
   {
-    key: 'hrm_retention_runs',
-    label: 'Retention runs',
-    category: 'hrm',
-    description:
-      'Retention-rule evaluations with outcome counts.',
+    key: "hrm_retention_runs",
+    label: "Retention runs",
+    category: "hrm",
+    description: "Retention-rule evaluations with outcome counts.",
     from: `hrm_retention_runs r
   JOIN hrm_retention_rules u ON u.id = r.rule_id AND u.org_id = r.org_id`,
-    orgColumn: 'r.org_id',
+    orgColumn: "r.org_id",
     // Rule-level aggregates declare no subsidiary clamp (org-wide under an
     // admin-held grant), like the other configuration-faced entities.
     subsidiaryScope: null,
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmRecruiting',
-    defaultPeriodField: 'ran_at',
+    featureKey: "hrmRecruiting",
+    defaultPeriodField: "ran_at",
     columns: [
-      { key: 'rule', label: 'Rule', kind: 'text', expr: 'u.name' },
-      { key: 'ran_at', label: 'Ran', kind: 'date', expr: 'r.ran_at' },
-      { key: 'anonymized', label: 'Anonymized', kind: 'number', expr: 'r.candidates_anonymized' },
-      { key: 'deleted', label: 'Deleted', kind: 'number', expr: 'r.candidates_deleted' },
-      { key: 'extensions', label: 'Extensions', kind: 'number', expr: 'r.extensions_requested' },
-      { key: 'run_id', label: 'Run (id)', kind: 'uuid', expr: 'r.id' },
+      { key: "rule", label: "Rule", kind: "text", expr: "u.name" },
+      { key: "ran_at", label: "Ran", kind: "date", expr: "r.ran_at" },
+      { key: "anonymized", label: "Anonymized", kind: "number", expr: "r.candidates_anonymized" },
+      { key: "deleted", label: "Deleted", kind: "number", expr: "r.candidates_deleted" },
+      { key: "extensions", label: "Extensions", kind: "number", expr: "r.extensions_requested" },
+      { key: "run_id", label: "Run (id)", kind: "uuid", expr: "r.id" },
     ],
-    defaultSort: { column: 'ran_at', direction: 'desc' },
+    defaultSort: { column: "ran_at", direction: "desc" },
   },
   {
-    key: 'hrm_pool_members',
-    label: 'Pool members',
-    category: 'hrm',
-    description:
-      'Talent-pool members — pool and join date.',
+    key: "hrm_pool_members",
+    label: "Pool members",
+    category: "hrm",
+    description: "Talent-pool members — pool and join date.",
     from: `hrm_talent_pool_members m
   JOIN hrm_talent_pools p ON p.id = m.pool_id AND p.org_id = m.org_id
   JOIN hrm_candidates c ON c.id = m.candidate_id AND c.org_id = m.org_id`,
-    orgColumn: 'm.org_id',
+    orgColumn: "m.org_id",
     // Pool membership is org-wide under the recruiting grant (pools are not
     // tied to one opening until rediscovery matches them), like the other
     // candidate-faced aggregates above.
     subsidiaryScope: null,
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmRecruiting',
+    featureKey: "hrmRecruiting",
     defaultPeriodField: null,
     columns: [
-      { key: 'pool', label: 'Pool', kind: 'text', expr: 'p.name' },
-      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
-      { key: 'added_on', label: 'Added', kind: 'date', expr: 'm.added_at' },
-      { key: 'note', label: 'Note', kind: 'text', expr: 'm.note' },
+      { key: "pool", label: "Pool", kind: "text", expr: "p.name" },
+      { key: "candidate", label: "Candidate", kind: "text", expr: "c.display_name" },
+      { key: "added_on", label: "Added", kind: "date", expr: "m.added_at" },
+      { key: "note", label: "Note", kind: "text", expr: "m.note" },
     ],
-    defaultSort: { column: 'added_on', direction: 'desc' },
+    defaultSort: { column: "added_on", direction: "desc" },
   },
   // HR-18 end
   // HR-21 begin: deterministic pre-run payroll/timesheet anomaly flags.
@@ -1661,68 +1967,84 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // the deterministic fact string — never model prose, so it is safe to
   // project.
   {
-    key: 'payroll_anomaly_flags',
-    label: 'Payroll anomaly flags',
-    category: 'Payroll',
-    description:
-      'Pre-run payroll and timesheet check flags.',
+    key: "payroll_anomaly_flags",
+    label: "Payroll anomaly flags",
+    category: "Payroll",
+    description: "Pre-run payroll and timesheet check flags.",
     from: `payroll_anomaly_flags f
       LEFT JOIN worker_employments e ON e.id = f.employment_id AND e.org_id = f.org_id
       LEFT JOIN parties w ON w.id = e.worker_party_id AND w.org_id = f.org_id`,
-    orgColumn: 'f.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
-    requiredPermission: 'payroll.manage',
-    featureKey: 'payroll',
+    orgColumn: "f.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
+    requiredPermission: "payroll.manage",
+    featureKey: "payroll",
     // The period the flag was computed for is the fact: the period picker
     // narrows on it, so the queue filtered to a window lists what blocks
     // finalizing inside it.
-    defaultPeriodField: 'pay_period_from',
+    defaultPeriodField: "pay_period_from",
     columns: [
-      { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
-      { key: 'severity', label: 'Severity', kind: 'enum', expr: 'f.severity', options: ['block', 'warn', 'info'] },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'f.status', options: ['open', 'acknowledged', 'resolved', 'false_positive'] },
-      { key: 'pay_period_from', label: 'Period from', kind: 'date', expr: 'f.pay_period_from' },
-      { key: 'pay_period_to', label: 'Period to', kind: 'date', expr: 'f.pay_period_to' },
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
-      { key: 'explanation', label: 'Explanation', kind: 'text', expr: 'f.explanation' },
-      { key: 'reason', label: 'Transition reason', kind: 'text', expr: 'f.reason' },
-      { key: 'resolved_at', label: 'Resolved at', kind: 'timestamp', expr: 'f.resolved_at' },
-      { key: 'flag_id', label: 'Flag (id)', kind: 'uuid', expr: 'f.id' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'f.employment_id' },
+      { key: "kind", label: "Kind", kind: "text", expr: "f.kind" },
+      {
+        key: "severity",
+        label: "Severity",
+        kind: "enum",
+        expr: "f.severity",
+        options: ["block", "warn", "info"],
+      },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "f.status",
+        options: ["open", "acknowledged", "resolved", "false_positive"],
+      },
+      { key: "pay_period_from", label: "Period from", kind: "date", expr: "f.pay_period_from" },
+      { key: "pay_period_to", label: "Period to", kind: "date", expr: "f.pay_period_to" },
+      { key: "employee", label: "Employee", kind: "text", expr: "w.display_name" },
+      { key: "explanation", label: "Explanation", kind: "text", expr: "f.explanation" },
+      { key: "reason", label: "Transition reason", kind: "text", expr: "f.reason" },
+      { key: "resolved_at", label: "Resolved at", kind: "timestamp", expr: "f.resolved_at" },
+      { key: "flag_id", label: "Flag (id)", kind: "uuid", expr: "f.id" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "f.employment_id" },
     ],
-    defaultSort: { column: 'pay_period_from', direction: 'desc' },
+    defaultSort: { column: "pay_period_from", direction: "desc" },
   },
   // HR-21: the AI governance decision ledger. Ledger-admin scoped
   // (admin.setup.manage) with no subsidiary boundary — the ledger is
   // org-wide by design. Digests and prompts are NEVER columns: only the
   // PII-free summary, sources and outcome project.
   {
-    key: 'ai_decisions',
-    label: 'AI decisions',
-    category: 'AI governance',
-    description:
-      'AI-assisted answers — subject, sources and outcome.',
+    key: "ai_decisions",
+    label: "AI decisions",
+    category: "AI governance",
+    description: "AI-assisted answers — subject, sources and outcome.",
     from: `ai_decisions d`,
-    orgColumn: 'd.org_id',
+    orgColumn: "d.org_id",
     // Org-wide ledger by design: the no-clamp policy is declared, never
     // omitted — an omitted policy throws for subsidiary-scoped readers.
     subsidiaryScope: null,
-    requiredPermission: 'admin.setup.manage',
-    featureKey: 'aiGovernanceLedger',
-    defaultPeriodField: 'recorded_at',
+    requiredPermission: "admin.setup.manage",
+    featureKey: "aiGovernanceLedger",
+    defaultPeriodField: "recorded_at",
     columns: [
-      { key: 'recorded_at', label: 'Recorded at', kind: 'timestamp', expr: 'd.recorded_at' },
-      { key: 'capability', label: 'Capability', kind: 'text', expr: 'd.capability_key' },
-      { key: 'subject_kind', label: 'Subject kind', kind: 'text', expr: 'd.subject_kind' },
-      { key: 'subject_id', label: 'Subject (id)', kind: 'uuid', expr: 'd.subject_id' },
-      { key: 'summary', label: 'Summary', kind: 'text', expr: 'd.output_summary' },
-      { key: 'outcome', label: 'Outcome', kind: 'enum', expr: 'd.outcome', options: ['shown', 'accepted', 'edited', 'rejected', 'expired'] },
-      { key: 'reviewer_id', label: 'Reviewer (id)', kind: 'uuid', expr: 'd.human_reviewer' },
-      { key: 'reviewed_at', label: 'Reviewed at', kind: 'timestamp', expr: 'd.reviewed_at' },
-      { key: 'model', label: 'Model', kind: 'text', expr: 'd.model' },
-      { key: 'decision_id', label: 'Decision (id)', kind: 'uuid', expr: 'd.id' },
+      { key: "recorded_at", label: "Recorded at", kind: "timestamp", expr: "d.recorded_at" },
+      { key: "capability", label: "Capability", kind: "text", expr: "d.capability_key" },
+      { key: "subject_kind", label: "Subject kind", kind: "text", expr: "d.subject_kind" },
+      { key: "subject_id", label: "Subject (id)", kind: "uuid", expr: "d.subject_id" },
+      { key: "summary", label: "Summary", kind: "text", expr: "d.output_summary" },
+      {
+        key: "outcome",
+        label: "Outcome",
+        kind: "enum",
+        expr: "d.outcome",
+        options: ["shown", "accepted", "edited", "rejected", "expired"],
+      },
+      { key: "reviewer_id", label: "Reviewer (id)", kind: "uuid", expr: "d.human_reviewer" },
+      { key: "reviewed_at", label: "Reviewed at", kind: "timestamp", expr: "d.reviewed_at" },
+      { key: "model", label: "Model", kind: "text", expr: "d.model" },
+      { key: "decision_id", label: "Decision (id)", kind: "uuid", expr: "d.id" },
     ],
-    defaultSort: { column: 'recorded_at', direction: 'desc' },
+    defaultSort: { column: "recorded_at", direction: "desc" },
   },
   // HR-21: the AI capability registry mirror. Same gate as the ledger.
   // Config rows, not events — no period field (null opts out of the
@@ -1731,30 +2053,45 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // the legacy ai_capabilities.enabled column so reports cannot expose it
   // as a second source of truth.
   {
-    key: 'ai_capabilities',
-    label: 'AI capabilities',
-    category: 'AI governance',
-    description:
-      'AI capabilities — autonomy ceiling and review state.',
+    key: "ai_capabilities",
+    label: "AI capabilities",
+    category: "AI governance",
+    description: "AI capabilities — autonomy ceiling and review state.",
     from: `ai_capabilities c`,
-    orgColumn: 'c.org_id',
+    orgColumn: "c.org_id",
     // Org-wide registry mirror by design: the no-clamp policy is declared,
     // never omitted — an omitted policy throws for subsidiary-scoped readers.
     subsidiaryScope: null,
-    requiredPermission: 'admin.setup.manage',
-    featureKey: 'aiGovernanceLedger',
+    requiredPermission: "admin.setup.manage",
+    featureKey: "aiGovernanceLedger",
     defaultPeriodField: null,
     columns: [
-      { key: 'capability', label: 'Capability', kind: 'text', expr: 'c.key' },
-      { key: 'name', label: 'Name', kind: 'text', expr: 'c.name' },
-      { key: 'purpose', label: 'Purpose', kind: 'text', expr: 'c.purpose' },
-      { key: 'autonomy', label: 'Autonomy', kind: 'enum', expr: 'c.autonomy', options: ['read_only', 'draft', 'propose', 'act_with_confirmation'] },
-      { key: 'reviewer', label: 'Reviewer', kind: 'text', expr: 'c.reviewer_role' },
-      { key: 'notice_required', label: 'Notice required', kind: 'boolean', expr: 'c.notice_required' },
-      { key: 'last_reviewed_at', label: 'Last reviewed', kind: 'timestamp', expr: 'c.last_reviewed_at' },
-      { key: 'reviewed_by', label: 'Reviewed by', kind: 'text', expr: 'c.reviewed_by' },
+      { key: "capability", label: "Capability", kind: "text", expr: "c.key" },
+      { key: "name", label: "Name", kind: "text", expr: "c.name" },
+      { key: "purpose", label: "Purpose", kind: "text", expr: "c.purpose" },
+      {
+        key: "autonomy",
+        label: "Autonomy",
+        kind: "enum",
+        expr: "c.autonomy",
+        options: ["read_only", "draft", "propose", "act_with_confirmation"],
+      },
+      { key: "reviewer", label: "Reviewer", kind: "text", expr: "c.reviewer_role" },
+      {
+        key: "notice_required",
+        label: "Notice required",
+        kind: "boolean",
+        expr: "c.notice_required",
+      },
+      {
+        key: "last_reviewed_at",
+        label: "Last reviewed",
+        kind: "timestamp",
+        expr: "c.last_reviewed_at",
+      },
+      { key: "reviewed_by", label: "Reviewed by", kind: "text", expr: "c.reviewed_by" },
     ],
-    defaultSort: { column: 'capability', direction: 'asc' },
+    defaultSort: { column: "capability", direction: "asc" },
   },
   // HR-21 end
-]
+];

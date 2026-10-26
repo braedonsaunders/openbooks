@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // POST /api/admin/payment-operations/formats requires a non-empty name and a
 // non-empty formatterScript, but PATCH stored blanks: name '' via
@@ -9,31 +9,31 @@ import test from 'node:test'
 // the next payment run — renderPaymentFile throws PaymentError("custom payment
 // format has no formatter script") for custom rails with no script.
 
-const stateKey = Symbol.for('openbooks.payment-format-blank-test')
+const stateKey = Symbol.for("openbooks.payment-format-blank-test");
 interface RouteState {
-  updates: string[]
+  updates: string[];
 }
-const state: RouteState = { updates: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const state: RouteState = { updates: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextPaymentBlank = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextPaymentBlank = sqlText;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.payment-format-blank-test')]
       const sqlText = globalThis.openbooksSqlTextPaymentBlank
@@ -59,72 +59,84 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }`],
-  ['mock:features', `export async function isFeatureEnabled() { return true }`],
-  ['mock:countries', `export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }`],
-  ['mock:payment-operations', `export async function updatePaymentBankProfile() {}`],
-  ['mock:scripting', `export function computeNextRunAt() { return new Date('2026-01-01T09:00:00Z') }`],
-  ['mock:audit', `export async function auditConfigChange() {}`],
-])
+  [
+    "mock:authz",
+    `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }`,
+  ],
+  ["mock:features", `export async function isFeatureEnabled() { return true }`],
+  [
+    "mock:countries",
+    `export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }`,
+  ],
+  ["mock:payment-operations", `export async function updatePaymentBankProfile() {}`],
+  [
+    "mock:scripting",
+    `export function computeNextRunAt() { return new Date('2026-01-01T09:00:00Z') }`,
+  ],
+  ["mock:audit", `export async function auditConfigChange() {}`],
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@openbooks/engine/payments/operations', 'mock:payment-operations'],
-  ['@openbooks/engine/scripting/scripting', 'mock:scripting'],
-  ['../../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../../lib/features', 'mock:features'],
-  ['../../../../../../lib/countries', 'mock:countries'],
-  ['../../_lib', 'mock:audit'],
-])
+  ["@/lib/authz", "mock:authz"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/payments/operations", "mock:payment-operations"],
+  ["@openbooks/engine/scripting/scripting", "mock:scripting"],
+  ["../../../../../../lib/authz", "mock:authz"],
+  ["../../../../../../lib/features", "mock:features"],
+  ["../../../../../../lib/countries", "mock:countries"],
+  ["../../_lib", "mock:audit"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?payment-format-blank-test'
-const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-const FORMAT_ID = '00000000-0000-4000-8000-000000000003'
+const routeUrl = "./route.ts?payment-format-blank-test";
+const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
+const FORMAT_ID = "00000000-0000-4000-8000-000000000003";
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/admin/payment-operations/formats/${FORMAT_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-    { params: Promise.resolve({ resource: 'formats', id: FORMAT_ID }) },
-  )
+    { params: Promise.resolve({ resource: "formats", id: FORMAT_ID }) },
+  );
 }
 
-test('format PATCH refuses to null the formatter script with a blank value', async () => {
-  state.updates = []
-  const response = await patch({ formatterScript: '   ' })
-  assert.equal(response.status, 400)
-  assert.match(String((await response.json()).error), /formatterScript/)
-  assert.deepEqual(state.updates, [], 'no format write may run for a blank script')
-})
+test("format PATCH refuses to null the formatter script with a blank value", async () => {
+  state.updates = [];
+  const response = await patch({ formatterScript: "   " });
+  assert.equal(response.status, 400);
+  assert.match(String((await response.json()).error), /formatterScript/);
+  assert.deepEqual(state.updates, [], "no format write may run for a blank script");
+});
 
-test('format PATCH refuses a blank name POST would reject', async () => {
-  state.updates = []
-  const response = await patch({ name: '   ' })
-  assert.equal(response.status, 400)
-  assert.match(String((await response.json()).error), /name/)
-  assert.deepEqual(state.updates, [], 'no format write may run for a blank name')
-})
+test("format PATCH refuses a blank name POST would reject", async () => {
+  state.updates = [];
+  const response = await patch({ name: "   " });
+  assert.equal(response.status, 400);
+  assert.match(String((await response.json()).error), /name/);
+  assert.deepEqual(state.updates, [], "no format write may run for a blank name");
+});
 
-test('format PATCH still accepts a real script and a real name', async () => {
-  state.updates = []
-  const response = await patch({ name: 'Updated file', formatterScript: 'return { filename: "a", content: "b" }' })
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.updates, ['formats'])
-})
+test("format PATCH still accepts a real script and a real name", async () => {
+  state.updates = [];
+  const response = await patch({
+    name: "Updated file",
+    formatterScript: 'return { filename: "a", content: "b" }',
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.updates, ["formats"]);
+});

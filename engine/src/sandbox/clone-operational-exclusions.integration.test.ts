@@ -30,87 +30,113 @@ const NEVER_CLONED = [
   "time_kiosks",
 ] as const;
 
-test("the clone plan never copies executable scheduler work or live tokens", { skip: !DB }, async () => {
-  const catalog = await loadCatalog();
-  assert.equal(TENANT_TABLE_POLICIES.payroll_opening_program_bases, "clone:catalog-uuid-rebase");
-  assert.ok(catalog.rebaseSet.has("payroll_opening_program_bases"));
-  for (const table of NEVER_CLONED) {
-    assert.ok(!catalog.rebaseSet.has(table), `${table} must be excluded from the clone plan`);
-  }
-});
+test(
+  "the clone plan never copies executable scheduler work or live tokens",
+  { skip: !DB },
+  async () => {
+    const catalog = await loadCatalog();
+    assert.equal(TENANT_TABLE_POLICIES.payroll_opening_program_bases, "clone:catalog-uuid-rebase");
+    assert.ok(catalog.rebaseSet.has("payroll_opening_program_bases"));
+    for (const table of NEVER_CLONED) {
+      assert.ok(!catalog.rebaseSet.has(table), `${table} must be excluded from the clone plan`);
+    }
+  },
+);
 
-test("cloning a template with scheduler and token rows succeeds and copies none of them", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let created: { sandboxId: string; sandboxOrgId: string } | null = null;
-  let cloneError: unknown = null;
-  try {
-    const actorId = await createScratchUser(org.orgId, 'Operation author', 'operation_author');
-    await db.execute(sql`insert into application_idempotency_keys(org_id,actor_id,source,operation,idempotency_key,request_hash,response,completed_at)
-      values(${org.orgId},${actorId},'api','fixture.operation',${`source-operation-${randomUUID()}`},${'1'.repeat(64)},'{"sourceEnvironment":true}'::jsonb,now())`);
+test(
+  "cloning a template with scheduler and token rows succeeds and copies none of them",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let created: { sandboxId: string; sandboxOrgId: string } | null = null;
+    let cloneError: unknown = null;
+    try {
+      const actorId = await createScratchUser(org.orgId, "Operation author", "operation_author");
+      await db.execute(sql`insert into application_idempotency_keys(org_id,actor_id,source,operation,idempotency_key,request_hash,response,completed_at)
+      values(${org.orgId},${actorId},'api','fixture.operation',${`source-operation-${randomUUID()}`},${"1".repeat(64)},'{"sourceEnvironment":true}'::jsonb,now())`);
 
-    await db.execute(sql`
+      await db.execute(sql`
       insert into scheduler_outbox (id, org_id, kind, subject_id, payload, occurrence_key, status)
       values (${randomUUID()}, ${org.orgId}, 'flow_email', ${randomUUID()}, '{}'::jsonb, ${`clone-probe-${randomUUID()}`}, 'pending')
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into time_kiosks (id, org_id, name, pin_required, photo_required, device_token_hash, is_active)
       values (${randomUUID()}, ${org.orgId}, 'probe kiosk', false, false, ${`probe-token-${randomUUID()}`}, true)
     `);
-    // An in-flight document signing link: bearer-equivalent like the kiosk
-    // token above, routed by a global token_hash unique with no org
-    // predicate. The seed is only non-vacuous with a live row present.
-    const signerPartyId = randomUUID();
-    await db.execute(sql`
+      // An in-flight document signing link: bearer-equivalent like the kiosk
+      // token above, routed by a global token_hash unique with no org
+      // predicate. The seed is only non-vacuous with a live row present.
+      const signerPartyId = randomUUID();
+      await db.execute(sql`
       insert into parties (id, org_id, kind, display_name)
       values (${signerPartyId}, ${org.orgId}, 'employee', 'Probe Signer')
     `);
-    const hrmDocId = randomUUID();
-    await db.execute(sql`
+      const hrmDocId = randomUUID();
+      await db.execute(sql`
       insert into hrm_documents (id, org_id, title, category_key)
       values (${hrmDocId}, ${org.orgId}, 'Probe policy', 'policy')
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into hrm_document_signers (id, org_id, document_id, ord, signer_party_id, role, status, token_hash)
       values (${randomUUID()}, ${org.orgId}, ${hrmDocId}, 0, ${signerPartyId}, 'employee', 'pending', ${`probe-sign-token-${randomUUID()}`})
     `);
-    try {
-      created = await createSandbox({
-        productionOrgId: org.orgId,
-        name: `Clone probe ${randomUUID()}`,
-        tier: "full",
-        masked: false,
-      });
-    } catch (error) {
-      cloneError = error;
-    }
-    assert.equal(cloneError, null);
-    for (const table of NEVER_CLONED) {
-      const copied = (await db.execute<{ n: number }>(sql`
+      try {
+        created = await createSandbox({
+          productionOrgId: org.orgId,
+          name: `Clone probe ${randomUUID()}`,
+          tier: "full",
+          masked: false,
+        });
+      } catch (error) {
+        cloneError = error;
+      }
+      assert.equal(cloneError, null);
+      for (const table of NEVER_CLONED) {
+        const copied = (
+          await db.execute<{ n: number }>(
+            sql`
         select count(*)::int as n from ${sql.identifier(table)} where org_id = ${created!.sandboxOrgId}
-      `, "objects"))[0]!.n;
-      assert.equal(copied, 0, `sandbox must not carry ${table} rows`);
-    }
-    // The source rows are untouched by the clone.
-    const sourceOutbox = (await db.execute<{ n: number }>(sql`
+      `,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(copied, 0, `sandbox must not carry ${table} rows`);
+      }
+      // The source rows are untouched by the clone.
+      const sourceOutbox = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from scheduler_outbox where org_id = ${org.orgId}
-    `, "objects"))[0]!.n;
-    assert.equal(sourceOutbox, 1);
-    const sourceReceipts = (await db.execute<{n:number}>(sql`select count(*)::int as n from application_idempotency_keys where org_id=${org.orgId}`, "objects"))[0]!.n;
-    assert.equal(sourceReceipts, 1, 'the source environment retains its operation receipt');
-  } finally {
-    // A failed clone still commits its shell (org + sandbox row): remove
-    // every sandbox of the scratch org before dropping it, so the shell
-    // never masks the clone failure or strands the fixture.
-    const shells = await db.execute<{ id: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(sourceOutbox, 1);
+      const sourceReceipts = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from application_idempotency_keys where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(sourceReceipts, 1, "the source environment retains its operation receipt");
+    } finally {
+      // A failed clone still commits its shell (org + sandbox row): remove
+      // every sandbox of the scratch org before dropping it, so the shell
+      // never masks the clone failure or strands the fixture.
+      const shells = await db.execute<{ id: string }>(
+        sql`
       select id from sandboxes where production_org_id = ${org.orgId}
-    `, "objects");
-    for (const shell of shells) {
-      await deleteSandbox(shell.id).catch(() => undefined);
+    `,
+        "objects",
+      );
+      for (const shell of shells) {
+        await deleteSandbox(shell.id).catch(() => undefined);
+      }
+      if (created) await deleteSandbox(created.sandboxId).catch(() => undefined);
+      await dropScratchOrg(org.orgId);
     }
-    if (created) await deleteSandbox(created.sandboxId).catch(() => undefined);
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 test("flow run history is copied with its global dedup key cleared", { skip: !DB }, async () => {
   // OM-13-CLONE: flow_runs.occurrence_key sits in a global partial unique
@@ -138,21 +164,34 @@ test("flow run history is copied with its global dedup key cleared", { skip: !DB
       tier: "full",
       masked: false,
     });
-    const copied = (await db.execute<{ n: number; keys: (string | null)[] }>(sql`
+    const copied = (
+      await db.execute<{ n: number; keys: (string | null)[] }>(
+        sql`
       select count(*)::int as n, array_agg(occurrence_key) as keys from flow_runs where org_id = ${created.sandboxOrgId}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(copied.n, 1, "flow run history must survive the clone");
     assert.deepEqual(copied.keys, [null], "the copied run must not carry the source dedup key");
     // The source row keeps its key: the clone cleared its own copy, never
     // the template.
-    const source = (await db.execute<{ occurrence_key: string | null }>(sql`
+    const source = (
+      await db.execute<{ occurrence_key: string | null }>(
+        sql`
       select occurrence_key from flow_runs where org_id = ${org.orgId}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(source.occurrence_key, occurrenceKey);
   } finally {
-    const shells = await db.execute<{ id: string }>(sql`
+    const shells = await db.execute<{ id: string }>(
+      sql`
       select id from sandboxes where production_org_id = ${org.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const shell of shells) {
       await deleteSandbox(shell.id).catch(() => undefined);
     }

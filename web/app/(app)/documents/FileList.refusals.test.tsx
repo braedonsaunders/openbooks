@@ -14,7 +14,11 @@ declare global {
 
 // jsdom first: the list reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/documents", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/documents",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -22,7 +26,10 @@ const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return{push(){},refresh(){globalThis.__fileRefreshed=true},replace(){}}}export function usePathname(){return '/documents'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return{push(){},refresh(){globalThis.__fileRefreshed=true},replace(){}}}export function usePathname(){return '/documents'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
@@ -61,10 +68,14 @@ const { FileList } = await import("./FileList");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -81,8 +92,24 @@ async function click(el: Element) {
 }
 
 const FILES = [
-  { id: "f1", name: "a.txt", fileType: "text", sizeLabel: "1 KB", modifiedLabel: "today", versionCount: 1, folderName: null },
-  { id: "f2", name: "b.txt", fileType: "text", sizeLabel: "1 KB", modifiedLabel: "today", versionCount: 1, folderName: null },
+  {
+    id: "f1",
+    name: "a.txt",
+    fileType: "text",
+    sizeLabel: "1 KB",
+    modifiedLabel: "today",
+    versionCount: 1,
+    folderName: null,
+  },
+  {
+    id: "f2",
+    name: "b.txt",
+    fileType: "text",
+    sizeLabel: "1 KB",
+    modifiedLabel: "today",
+    versionCount: 1,
+    folderName: null,
+  },
 ];
 
 async function renderList() {
@@ -156,15 +183,28 @@ test("a partial bulk delete toasts moved + skipped, keeps the refused rows selec
     `a partial bulk must never toast success, saw ${JSON.stringify(toasts)}`,
   );
   const errors = toasts.filter((toast) => toast.kind === "error");
-  assert.equal(errors.length, 1, `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`);
-  assert.match(errors[0]?.message ?? "", /1.*skipped|skipped.*1/, "the toast must name the skipped count");
+  assert.equal(
+    errors.length,
+    1,
+    `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`,
+  );
+  assert.match(
+    errors[0]?.message ?? "",
+    /1.*skipped|skipped.*1/,
+    "the toast must name the skipped count",
+  );
   assert.match(errors[0]?.message ?? "", /forbidden/, "the toast must carry the refusal reason");
   assert.ok(
-    !/Moved 1 to Trash$/.test(errors[0]?.message ?? "") && !toasts.some((toast) => /Moved 2 to Trash/.test(toast.message)),
+    !/Moved 1 to Trash$/.test(errors[0]?.message ?? "") &&
+      !toasts.some((toast) => /Moved 2 to Trash/.test(toast.message)),
     "the partial bulk must not report full success",
   );
   const bar = document.body.textContent ?? "";
-  assert.match(bar, /1 selected/, "exactly the refused row must stay selected after the partial bulk");
+  assert.match(
+    bar,
+    /1 selected/,
+    "exactly the refused row must stay selected after the partial bulk",
+  );
   assert.equal(globalThis.__fileRefreshed, true, "the list must refresh so trashed rows disappear");
 });
 
@@ -172,7 +212,10 @@ test("a refused download names the server size remedy instead of a generic failu
   globalThis.__fileToasts = [];
   const restoreFetch = scriptFetch((url, init) => {
     if (url === "/api/file-cabinet/bulk-download" && init?.method === "POST") {
-      return Response.json({ error: "zip source exceeds 250 MB limit; reduce the selection" }, { status: 413 });
+      return Response.json(
+        { error: "zip source exceeds 250 MB limit; reduce the selection" },
+        { status: 413 },
+      );
     }
     return null;
   });
@@ -193,8 +236,16 @@ test("a refused download names the server size remedy instead of a generic failu
 
   const toasts = globalThis.__fileToasts ?? [];
   const errors = toasts.filter((toast) => toast.kind === "error");
-  assert.equal(errors.length, 1, `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`);
-  assert.match(errors[0]?.message ?? "", /250 MB.*reduce the selection/, "the toast must carry the size limit and remedy");
+  assert.equal(
+    errors.length,
+    1,
+    `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`,
+  );
+  assert.match(
+    errors[0]?.message ?? "",
+    /250 MB.*reduce the selection/,
+    "the toast must carry the size limit and remedy",
+  );
 });
 
 test("replace picker can be reopened after cancellation for the same file", async (t) => {
@@ -212,16 +263,20 @@ test("replace picker can be reopened after cancellation for the same file", asyn
   });
 
   async function requestReplace() {
-    const more = [...document.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'More actions');
+    const more = [...document.querySelectorAll("button")].find(
+      (button) => button.getAttribute("aria-label") === "More actions",
+    );
     assert.ok(more, "the file row's action menu must render");
     await click(more);
-    const replace = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Replace');
-    assert.ok(replace, 'the file menu must offer Replace');
+    const replace = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent?.trim() === "Replace",
+    );
+    assert.ok(replace, "the file menu must offer Replace");
     await click(replace);
   }
 
   await requestReplace();
-  assert.equal(opens, 1, 'the first Replace action opens the native picker');
+  assert.equal(opens, 1, "the first Replace action opens the native picker");
   await requestReplace();
-  assert.equal(opens, 2, 'cancelling the picker leaves Replace available for another attempt');
+  assert.equal(opens, 2, "cancelling the picker leaves Replace available for another attempt");
 });

@@ -5,9 +5,9 @@
  * since the worker has no user session.
  */
 export function appBaseUrl(): string {
-  return process.env.OPENBOOKS_INTERNAL_URL
-    || process.env.OPENBOOKS_APP_URL
-    || "http://localhost:4780";
+  return (
+    process.env.OPENBOOKS_INTERNAL_URL || process.env.OPENBOOKS_APP_URL || "http://localhost:4780"
+  );
 }
 
 export async function renderReportPdf(
@@ -30,11 +30,15 @@ export async function renderReportPdf(
 }
 
 /** Recheck the persisted run principal immediately before external delivery. */
-export async function authorizeReportRun(orgId: string, definitionId: string, runId: string): Promise<void> {
-  const qs = new URLSearchParams({ orgId, definitionId, runId, authorizeOnly: '1' });
+export async function authorizeReportRun(
+  orgId: string,
+  definitionId: string,
+  runId: string,
+): Promise<void> {
+  const qs = new URLSearchParams({ orgId, definitionId, runId, authorizeOnly: "1" });
   const response = await fetch(`${appBaseUrl()}/api/internal/reports/render?${qs}`, {
-    redirect: 'error',
-    headers: { 'x-internal-token': process.env.OPENBOOKS_INTERNAL_TOKEN || '' },
+    redirect: "error",
+    headers: { "x-internal-token": process.env.OPENBOOKS_INTERNAL_TOKEN || "" },
     signal: AbortSignal.timeout(60_000),
   });
   if (!response.ok) {
@@ -55,7 +59,10 @@ export async function authorizeReportRun(orgId: string, definitionId: string, ru
       // Keep the raw body: a non-JSON refusal is still the evidence.
     }
     throw new Error(
-      `Report delivery authorization failed: HTTP ${response.status}${named ? ` — ${named}` : ""}`.slice(0, 500),
+      `Report delivery authorization failed: HTTP ${response.status}${named ? ` — ${named}` : ""}`.slice(
+        0,
+        500,
+      ),
     );
   }
 }

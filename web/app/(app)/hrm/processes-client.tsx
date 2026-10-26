@@ -1,22 +1,22 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { Button, Label, SearchSelect, Textarea } from '@openbooks/ui'
-import type { ProcessDetail } from '@openbooks/engine/hrm/processes'
-import { actionableChecklistSteps } from '@openbooks/forms-core'
-import { Check, ClipboardList, Clock3, LockKeyhole } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { Button, Label, SearchSelect, Textarea } from "@openbooks/ui";
+import type { ProcessDetail } from "@openbooks/engine/hrm/processes";
+import { actionableChecklistSteps } from "@openbooks/forms-core";
+import { Check, ClipboardList, Clock3, LockKeyhole } from "lucide-react";
 import {
   BuilderSplit,
   OutlinePanel,
   OutlineRow,
   InspectorPanel,
-} from '../../../components/builder/builder-kit'
-import { ChecklistStepContent } from '../../../components/checklist-step-content'
-import { useDirtyUrlDrawer } from '../../../components/dirty-url-drawer'
-import { useAppAction } from '../../../lib/use-app-action'
+} from "../../../components/builder/builder-kit";
+import { ChecklistStepContent } from "../../../components/checklist-step-content";
+import { useDirtyUrlDrawer } from "../../../components/dirty-url-drawer";
+import { useAppAction } from "../../../lib/use-app-action";
 
 /**
  * The checklist drawer body: owners, due dates, evidence, and the
@@ -33,127 +33,130 @@ import { useAppAction } from '../../../lib/use-app-action'
  * swallowed. Civil dates travel verbatim, never through a Date.
  */
 
-type FileOption = { value: string; label: string }
+type FileOption = { value: string; label: string };
 
 export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
-  const t = useTranslations('hrm')
-  const td = useTranslations('hrm.processes.designer')
+  const t = useTranslations("hrm");
+  const td = useTranslations("hrm.processes.designer");
   const [selectedId, setSelectedId] = useState(
     actionableChecklistSteps(
       detail.steps.map((s) => ({ ...s, sourceStepId: s.sourceStepId ?? null })),
     )[0]?.id ??
       detail.steps[0]?.id ??
-      '',
-  )
-  const selected = detail.steps.find((s) => s.id === selectedId) ?? detail.steps[0]
-  const [responses, setResponses] = useState<Record<string, Record<string, unknown>>>({})
-  const [acknowledgements, setAcknowledgements] = useState<Record<string, boolean>>({})
-  const [attachments, setAttachments] = useState<Record<string, string>>({})
-  const router = useRouter()
-  const [error, setError] = useState<string | null>(null)
+      "",
+  );
+  const selected = detail.steps.find((s) => s.id === selectedId) ?? detail.steps[0];
+  const [responses, setResponses] = useState<Record<string, Record<string, unknown>>>({});
+  const [acknowledgements, setAcknowledgements] = useState<Record<string, boolean>>({});
+  const [attachments, setAttachments] = useState<Record<string, string>>({});
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
   // Shared action path: the refusal toasts through the hook and renders
   // inline, and busy always releases — a dead network can never wedge it.
-  const { busy, execute } = useAppAction()
-  const [reason, setReason] = useState('')
-  const [reasonFor, setReasonFor] = useState<{ action: 'skip' | 'cancel'; stepId?: string } | null>(
+  const { busy, execute } = useAppAction();
+  const [reason, setReason] = useState("");
+  const [reasonFor, setReasonFor] = useState<{ action: "skip" | "cancel"; stepId?: string } | null>(
     null,
-  )
-  const attachmentId = selected ? (attachments[selected.id] ?? selected.attachmentId ?? '') : ''
+  );
+  const attachmentId = selected ? (attachments[selected.id] ?? selected.attachmentId ?? "") : "";
   const setAttachmentId = (value: string) => {
-    if (selected) setAttachments((v) => ({ ...v, [selected.id]: value }))
-  }
+    if (selected) setAttachments((v) => ({ ...v, [selected.id]: value }));
+  };
   const [fileOptions, setFileOptions] = useState<{ query: string; options: FileOption[] } | null>(
     null,
-  )
+  );
   const [fileLoadError, setFileLoadError] = useState<{ query: string; message: string } | null>(
     null,
-  )
-  const [fileQuery, setFileQuery] = useState('')
+  );
+  const [fileQuery, setFileQuery] = useState("");
 
-  const normalizedFileQuery = fileQuery.trim()
+  const normalizedFileQuery = fileQuery.trim();
   // Results and failures belong to the query that produced them. This also
   // hides stale options on the render before the next effect runs.
   const visibleFileOptions =
     normalizedFileQuery.length < 2 || fileOptions?.query !== normalizedFileQuery
       ? []
-      : fileOptions.options
+      : fileOptions.options;
   const visibleFileLoadError =
-    fileLoadError?.query === normalizedFileQuery ? fileLoadError.message : null
+    fileLoadError?.query === normalizedFileQuery ? fileLoadError.message : null;
   useEffect(() => {
-    if (normalizedFileQuery.length < 2) return
-    let cancelled = false
+    if (normalizedFileQuery.length < 2) return;
+    let cancelled = false;
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
           `/api/file-cabinet/files?q=${encodeURIComponent(normalizedFileQuery)}&perPage=20`,
-        )
-        if (!res.ok) throw new Error('file search failed')
-        const data = (await res.json()) as { files?: { id: string; name?: string }[] }
-        if (!Array.isArray(data.files)) throw new Error('file search returned invalid data')
+        );
+        if (!res.ok) throw new Error("file search failed");
+        const data = (await res.json()) as { files?: { id: string; name?: string }[] };
+        if (!Array.isArray(data.files)) throw new Error("file search returned invalid data");
         if (!cancelled) {
           setFileOptions({
             query: normalizedFileQuery,
             options: data.files.map((file) => ({ value: file.id, label: file.name ?? file.id })),
-          })
-          setFileLoadError(null)
+          });
+          setFileLoadError(null);
         }
       } catch {
         if (!cancelled)
-          setFileLoadError({ query: normalizedFileQuery, message: t('processes.fileSearchFailed') })
+          setFileLoadError({
+            query: normalizedFileQuery,
+            message: t("processes.fileSearchFailed"),
+          });
       }
-    }, 250)
+    }, 250);
     return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [normalizedFileQuery, t])
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [normalizedFileQuery, t]);
 
   async function mutate(url: string, body: unknown): Promise<boolean> {
-    setError(null)
+    setError(null);
     return execute(
       () =>
         fetchAction(url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         }),
       {
-        fallbackMessage: t('processes.actionFailed'),
+        fallbackMessage: t("processes.actionFailed"),
         onOk: () => {
-          setReason('')
-          setReasonFor(null)
+          setReason("");
+          setReasonFor(null);
           if (selected) {
             setResponses((v) => {
-              const next = { ...v }
-              delete next[selected.id]
-              return next
-            })
+              const next = { ...v };
+              delete next[selected.id];
+              return next;
+            });
             setAttachments((v) => {
-              const next = { ...v }
-              delete next[selected.id]
-              return next
-            })
+              const next = { ...v };
+              delete next[selected.id];
+              return next;
+            });
             setAcknowledgements((v) => {
-              const next = { ...v }
-              delete next[selected.id]
-              return next
-            })
+              const next = { ...v };
+              delete next[selected.id];
+              return next;
+            });
           }
-          router.refresh()
+          router.refresh();
         },
         onRefused: (actionError) =>
-          setError(actionError.displayMessage(t('processes.actionFailed'))),
+          setError(actionError.displayMessage(t("processes.actionFailed"))),
       },
-    )
+    );
   }
 
-  const isOpen = detail.status === 'open'
+  const isOpen = detail.status === "open";
   useDirtyUrlDrawer(
     Object.keys(responses).length > 0 ||
       Object.keys(attachments).length > 0 ||
       Object.values(acknowledgements).some(Boolean),
     busy,
-  )
+  );
   const blocked =
     selected?.blocked === true
       ? [undefined]
@@ -161,13 +164,13 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
         ? []
         : (selected?.design?.dependencies
             .map((id) => detail.steps.find((s) => s.sourceStepId === id))
-            .filter((s) => !s || s.status === 'pending') ?? [])
+            .filter((s) => !s || s.status === "pending") ?? []);
   const locked =
     !isOpen ||
-    selected?.status !== 'pending' ||
-    selected?.approvalStatus === 'pending' ||
-    selected?.approvalStatus === 'approved'
-  const response = selected ? (responses[selected.id] ?? selected.response ?? {}) : {}
+    selected?.status !== "pending" ||
+    selected?.approvalStatus === "pending" ||
+    selected?.approvalStatus === "approved";
+  const response = selected ? (responses[selected.id] ?? selected.response ?? {}) : {};
 
   return (
     <div className="space-y-4">
@@ -181,7 +184,7 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
       ) : null}
       {detail.effectiveDate ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t('processes.progressLine', {
+          {t("processes.progressLine", {
             done: detail.progress.doneRequired,
             required: detail.progress.required,
             effective: detail.effectiveDate,
@@ -190,7 +193,7 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
       ) : null}
       <BuilderSplit
         outline={
-          <OutlinePanel title={detail.workerName || t('processes.newChecklist')}>
+          <OutlinePanel title={detail.workerName || t("processes.newChecklist")}>
             {detail.steps.map((step, index) => (
               <div key={step.id}>
                 {step.design?.section &&
@@ -203,7 +206,7 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
                 <OutlineRow
                   selected={selected?.id === step.id}
                   icon={
-                    step.status === 'done' ? (
+                    step.status === "done" ? (
                       <Check size={16} />
                     ) : step.overdue ? (
                       <Clock3 size={16} />
@@ -212,15 +215,15 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
                     )
                   }
                   label={step.title}
-                  meta={t(`processes.owners.${step.ownerKind}`) + ' · ' + step.dueOn}
+                  meta={t(`processes.owners.${step.ownerKind}`) + " · " + step.dueOn}
                   onSelect={() => {
-                    setSelectedId(step.id)
-                    setReasonFor(null)
-                    setError(null)
+                    setSelectedId(step.id);
+                    setReasonFor(null);
+                    setError(null);
                   }}
                   trailing={
                     <span
-                      className={step.overdue ? 'text-xs text-red-600' : 'text-xs text-slate-400'}
+                      className={step.overdue ? "text-xs text-red-600" : "text-xs text-slate-400"}
                     >
                       {t(`processes.stepStatus.${step.status}`)}
                     </span>
@@ -236,30 +239,30 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
             icon={<ClipboardList size={18} />}
             eyebrow={
               t(`processes.owners.${selected.ownerKind}`) +
-              ' · ' +
-              t('processes.dueOn', { date: selected.dueOn })
+              " · " +
+              t("processes.dueOn", { date: selected.dueOn })
             }
             title={selected.title}
           >
             {blocked.length ? (
               <p className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                 <LockKeyhole size={15} />
-                {td('blocked')}: {blocked.map((s) => s?.title ?? '—').join(', ')}
+                {td("blocked")}: {blocked.map((s) => s?.title ?? "—").join(", ")}
               </p>
             ) : null}
-            {selected.approvalStatus === 'pending' ? (
+            {selected.approvalStatus === "pending" ? (
               <p className="text-sm text-amber-700">
-                {td('approvalPending')} ·{' '}
+                {td("approvalPending")} ·{" "}
                 <a href="/inbox" className="underline">
-                  {td('approvalWorklist')}
+                  {td("approvalWorklist")}
                 </a>
               </p>
             ) : null}
-            {selected.approvalStatus === 'approved' ? (
-              <p className="text-sm text-teal-700">{td('approved')}</p>
+            {selected.approvalStatus === "approved" ? (
+              <p className="text-sm text-teal-700">{td("approved")}</p>
             ) : null}
-            {selected.approvalStatus === 'rejected' ? (
-              <p className="text-sm text-red-600">{td('rejected')}</p>
+            {selected.approvalStatus === "rejected" ? (
+              <p className="text-sm text-red-600">{td("rejected")}</p>
             ) : null}
             <ChecklistStepContent
               step={selected}
@@ -269,27 +272,27 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
               }
               acknowledged={
                 acknowledgements[selected.id] ??
-                (selected.status === 'done' ||
-                  selected.approvalStatus === 'approved' ||
-                  selected.approvalStatus === 'pending')
+                (selected.status === "done" ||
+                  selected.approvalStatus === "approved" ||
+                  selected.approvalStatus === "pending")
               }
               onAcknowledge={(value) =>
                 setAcknowledgements((v) => ({ ...v, [selected.id]: value }))
               }
               disabled={locked || busy}
               attachment={
-                selected.evidenceKind === 'attachment' ? (
+                selected.evidenceKind === "attachment" ? (
                   <div className="space-y-2">
-                    <Label htmlFor={`file-${selected.id}`}>{t('processes.attachmentLabel')}</Label>
+                    <Label htmlFor={`file-${selected.id}`}>{t("processes.attachmentLabel")}</Label>
                     <SearchSelect
                       id={`file-${selected.id}`}
                       value={attachmentId}
                       onChange={setAttachmentId}
                       options={visibleFileOptions}
-                      ariaLabel={t('processes.attachmentLabel')}
-                      sheetTitle={t('processes.attachmentLabel')}
+                      ariaLabel={t("processes.attachmentLabel")}
+                      sheetTitle={t("processes.attachmentLabel")}
                       clearable
-                      emptyLabel={t('processes.attachmentUnset')}
+                      emptyLabel={t("processes.attachmentUnset")}
                       disabled={locked || busy}
                       remote
                       onSearchChange={setFileQuery}
@@ -298,59 +301,56 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
                 ) : null
               }
             />
-            {isOpen && selected.status === 'pending' && selected.canComplete !== false ? (
+            {isOpen && selected.status === "pending" && selected.canComplete !== false ? (
               <div className="flex flex-wrap gap-2 border-t pt-4">
                 <Button
                   disabled={
                     busy ||
                     blocked.length > 0 ||
-                    selected.approvalStatus === 'pending' ||
-                    (selected.evidenceKind === 'acknowledgement' &&
-                      !(acknowledgements[selected.id] ?? selected.approvalStatus === 'approved')) ||
-                    (selected.evidenceKind === 'attachment' && !attachmentId)
+                    selected.approvalStatus === "pending" ||
+                    (selected.evidenceKind === "acknowledgement" &&
+                      !(acknowledgements[selected.id] ?? selected.approvalStatus === "approved")) ||
+                    (selected.evidenceKind === "attachment" && !attachmentId)
                   }
                   onClick={() =>
-                    void mutate(
-                      `/api/hrm/processes/steps/${selected.id}/${'complete'}`,
-                      {
-                        ...(selected.evidenceKind === 'attachment' ? { attachmentId } : {}),
-                        ...(selected.evidenceKind === 'acknowledgement'
-                          ? {
-                              acknowledged:
-                                acknowledgements[selected.id] ??
-                                selected.approvalStatus === 'approved',
-                            }
-                          : {}),
-                        ...(selected.design?.form ? { response } : {}),
-                      },
-                    )
+                    void mutate(`/api/hrm/processes/steps/${selected.id}/${"complete"}`, {
+                      ...(selected.evidenceKind === "attachment" ? { attachmentId } : {}),
+                      ...(selected.evidenceKind === "acknowledgement"
+                        ? {
+                            acknowledged:
+                              acknowledgements[selected.id] ??
+                              selected.approvalStatus === "approved",
+                          }
+                        : {}),
+                      ...(selected.design?.form ? { response } : {}),
+                    })
                   }
                 >
-                  {t('processes.completeStep')}
+                  {t("processes.completeStep")}
                 </Button>
                 {selected.canSkip !== false ? (
                   <Button
                     variant="ghost"
                     disabled={busy}
-                    onClick={() => setReasonFor({ action: 'skip', stepId: selected.id })}
+                    onClick={() => setReasonFor({ action: "skip", stepId: selected.id })}
                   >
-                    {t('processes.skipStep')}
+                    {t("processes.skipStep")}
                   </Button>
                 ) : null}
               </div>
             ) : null}
-            {selected.status !== 'pending' ? (
+            {selected.status !== "pending" ? (
               <div className="rounded-lg bg-slate-50 p-4 text-sm dark:bg-slate-800/50">
-                <p className="font-medium">{td('history')}</p>
+                <p className="font-medium">{td("history")}</p>
                 <p>
                   {t(`processes.stepStatus.${selected.status}`)}
-                  {selected.doneAt ? ' · ' + td('doneAt', { date: selected.doneAt }) : ''}
+                  {selected.doneAt ? " · " + td("doneAt", { date: selected.doneAt }) : ""}
                 </p>
                 {selected.doneByName ? (
                   <p className="text-xs text-slate-500">{selected.doneByName}</p>
                 ) : null}
                 {selected.skipReason ? <p>{selected.skipReason}</p> : null}
-                {isOpen && detail.steps.some((s) => s.status === 'pending') ? (
+                {isOpen && detail.steps.some((s) => s.status === "pending") ? (
                   <Button
                     className="mt-3"
                     size="sm"
@@ -359,11 +359,11 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
                       setSelectedId(
                         actionableChecklistSteps(
                           detail.steps.map((s) => ({ ...s, sourceStepId: s.sourceStepId ?? null })),
-                        )[0]?.id ?? detail.steps.find((s) => s.status === 'pending')!.id,
+                        )[0]?.id ?? detail.steps.find((s) => s.status === "pending")!.id,
                       )
                     }
                   >
-                    {td('nextStep')}
+                    {td("nextStep")}
                   </Button>
                 ) : null}
               </div>
@@ -379,24 +379,24 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
             disabled={busy || !detail.progress.allRequiredDone}
             onClick={() => void mutate(`/api/hrm/processes/${detail.id}/complete`, {})}
           >
-            {t('processes.completeProcess')}
+            {t("processes.completeProcess")}
           </Button>
           <Button
             size="sm"
             variant="ghost"
             disabled={busy}
-            onClick={() => setReasonFor({ action: 'cancel' })}
+            onClick={() => setReasonFor({ action: "cancel" })}
           >
-            {t('processes.cancelProcess')}
+            {t("processes.cancelProcess")}
           </Button>
         </div>
       ) : null}
       {reasonFor !== null ? (
         <div className="space-y-1.5 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
           <Label htmlFor="process-reason">
-            {reasonFor.action === 'cancel'
-              ? t('processes.cancelReasonLabel')
-              : t('processes.skipReasonLabel')}
+            {reasonFor.action === "cancel"
+              ? t("processes.cancelReasonLabel")
+              : t("processes.skipReasonLabel")}
           </Label>
           <Textarea
             id="process-reason"
@@ -404,9 +404,9 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
             disabled={busy}
             onChange={(event) => setReason(event.target.value)}
             placeholder={
-              reasonFor.action === 'cancel'
-                ? t('processes.cancelReasonPlaceholder')
-                : t('processes.skipReasonPlaceholder')
+              reasonFor.action === "cancel"
+                ? t("processes.cancelReasonPlaceholder")
+                : t("processes.skipReasonPlaceholder")
             }
           />
           <div className="flex gap-2">
@@ -416,21 +416,21 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
               disabled={busy || reason.trim().length === 0}
               onClick={() =>
                 void mutate(
-                  reasonFor.action === 'cancel'
+                  reasonFor.action === "cancel"
                     ? `/api/hrm/processes/${detail.id}/cancel`
                     : `/api/hrm/processes/steps/${reasonFor.stepId}/skip`,
                   { reason: reason.trim() },
                 )
               }
             >
-              {t('processes.confirmReason')}
+              {t("processes.confirmReason")}
             </Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => setReasonFor(null)}>
-              {t('processes.cancelReasonAbort')}
+              {t("processes.cancelReasonAbort")}
             </Button>
           </div>
         </div>
       ) : null}
     </div>
-  )
+  );
 }

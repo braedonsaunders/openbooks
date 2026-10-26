@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadPayrollSetup, payrollSetupSpec } from './view'
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadPayrollSetup, payrollSetupSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Payroll setup uses a family selector and one local route strip. Historical
@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic'
 export default async function PayrollSetupPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadPayrollSetup(sp)
-  return <ModuleView spec={payrollSetupSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadPayrollSetup(sp);
+  return <ModuleView spec={payrollSetupSpec(data)} data={data} searchParams={sp} trusted />;
 }

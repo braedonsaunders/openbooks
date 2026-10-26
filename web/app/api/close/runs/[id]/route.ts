@@ -1,79 +1,69 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { guardCloseScope } from '@/lib/close-scope'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { guardCloseScope } from "@/lib/close-scope";
 
-import { NextResponse } from 'next/server'
-import { requestCloseApproval } from '@openbooks/engine/close/approvals'
-import {
-  closeApprovedRun,
-  publishCloseRun,
-} from '@openbooks/engine/close/run-completion'
-import { CloseError } from '@openbooks/engine/periods/period-policy'
-import { refreshCloseRun } from '@openbooks/engine/close/run-automation'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import { isUuid } from '../../../../../lib/list-params'
-import { notFound } from '@/lib/api/responses'
+import { NextResponse } from "next/server";
+import { requestCloseApproval } from "@openbooks/engine/close/approvals";
+import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
+import { CloseError } from "@openbooks/engine/periods/period-policy";
+import { refreshCloseRun } from "@openbooks/engine/close/run-automation";
+import { guardFeaturePermission } from "../../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../../lib/features";
+import { isUuid } from "../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('refresh') }),
-  z.object({ action: z.literal('request_approval') }),
-  z.object({ action: z.literal('close') }),
+const requestBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("refresh") }),
+  z.object({ action: z.literal("request_approval") }),
+  z.object({ action: z.literal("close") }),
   z.object({
-    action: z.literal('publish'),
+    action: z.literal("publish"),
     comment: z.string().max(2000).optional(),
   }),
-])
+]);
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 export const POST = defineRoute({
-  public: 'session',
+  public: "session",
   params: z.object({ id: z.string() }),
   body: requestBodySchema,
   handler: async ({ body, params }) => {
-    const { id } = params
-    if (!isUuid(id))
-      return NextResponse.json({ error: 'invalid run id' }, { status: 400 })
+    const { id } = params;
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid run id" }, { status: 400 });
 
-    const permission = body.action === 'close' ? 'close.approve' : 'close.run'
-    const gate = await guardFeaturePermission(permission, 'continuousClose')
-    if (gate instanceof NextResponse) return gate
-    const scopeDenied = guardCloseScope(gate)
-    if (scopeDenied) return scopeDenied
-    if (
-      body.action === 'publish' &&
-      !(await isFeatureEnabled(gate.user.orgId, 'advancedClose'))
-    ) {
-      return notFound('record')
+    const permission = body.action === "close" ? "close.approve" : "close.run";
+    const gate = await guardFeaturePermission(permission, "continuousClose");
+    if (gate instanceof NextResponse) return gate;
+    const scopeDenied = guardCloseScope(gate);
+    if (scopeDenied) return scopeDenied;
+    if (body.action === "publish" && !(await isFeatureEnabled(gate.user.orgId, "advancedClose"))) {
+      return notFound("record");
     }
     try {
-      if (body.action === 'refresh') {
+      if (body.action === "refresh") {
         return NextResponse.json({
           ok: true,
           ...(await refreshCloseRun(gate.user.orgId, id, gate.user.id)),
-        })
+        });
       }
-      if (body.action === 'request_approval')
-        await requestCloseApproval(gate.user.orgId, id, gate.user.id)
-      else if (body.action === 'close')
-        await closeApprovedRun(gate.user.orgId, id, gate.user.id)
-      else if (body.action === 'publish')
-        await publishCloseRun(gate.user.orgId, id, gate.user.id, body.comment)
+      if (body.action === "request_approval")
+        await requestCloseApproval(gate.user.orgId, id, gate.user.id);
+      else if (body.action === "close") await closeApprovedRun(gate.user.orgId, id, gate.user.id);
+      else if (body.action === "publish")
+        await publishCloseRun(gate.user.orgId, id, gate.user.id, body.comment);
       else
         return NextResponse.json(
           {
-            error:
-              'action must be refresh, request_approval, close, or publish',
+            error: "action must be refresh, request_approval, close, or publish",
           },
           { status: 400 },
-        )
-      return NextResponse.json({ ok: true })
+        );
+      return NextResponse.json({ ok: true });
     } catch (error) {
-      if (error instanceof CloseError)
-        return apiErrorResponse(error, { safeStatus: 422 })
-      throw error
+      if (error instanceof CloseError) return apiErrorResponse(error, { safeStatus: 422 });
+      throw error;
     }
   },
-})
+});

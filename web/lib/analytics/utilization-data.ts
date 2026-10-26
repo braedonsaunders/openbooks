@@ -6,12 +6,16 @@ import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/money/money";
-import { loadWorkSchedules, pickWorkSchedule, scheduledHoursBetween } from "@openbooks/engine/payroll/work-schedules";
+import {
+  loadWorkSchedules,
+  pickWorkSchedule,
+  scheduledHoursBetween,
+} from "@openbooks/engine/payroll/work-schedules";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
 import { utilizationStrings, type UtilizationStrings } from "./utilization-strings";
 import { englishCatalogMessage } from "./catalog-strings";
-import { getMoneyFormatter } from '../money-server'
+import { getMoneyFormatter } from "../money-server";
 
 /**
  * Utilization (Billable IQ) — data and metrics for the Time dashboard.
@@ -81,9 +85,19 @@ export interface UtilizationData {
   period: { from: string; to: string; label: string; days: number };
   prior: { from: string; to: string };
   config: {
-    target: number; costSpike: string; minHours: number; reallocWarnPp: number; reallocActionPp: number;
-    watchBandPp: number; warnBandPp: number; anomalyDropPp: number; overtimeBillableGapPp: number;
-    titleDriftPp: number; peerOutlierSigma: number; peerSpreadWarnPp: number; peerSpreadActionPp: number;
+    target: number;
+    costSpike: string;
+    minHours: number;
+    reallocWarnPp: number;
+    reallocActionPp: number;
+    watchBandPp: number;
+    warnBandPp: number;
+    anomalyDropPp: number;
+    overtimeBillableGapPp: number;
+    titleDriftPp: number;
+    peerOutlierSigma: number;
+    peerSpreadWarnPp: number;
+    peerSpreadActionPp: number;
     peerMinCount: number;
   };
   company: {
@@ -139,7 +153,12 @@ interface RawStatRow extends Record<string, unknown> {
 
 /** One grouped scan per range.
  *  org filter is EXPLICIT (defense in depth — do not rely on ambient RLS). */
-async function fetchTimeStats(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<StatRow[]> {
+async function fetchTimeStats(
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+): Promise<StatRow[]> {
   // Cost rates are stamped in the worker's own functional (the posting
   // kernel groups labour the same way and never fuses currencies), so the
   // scan arrives per (group, functional) and each cost leg translates to
@@ -170,12 +189,23 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
     where ${source.where}
     group by 1, 2, 3, 4, 5, 6, 7
   `);
-  const ctx = await flowRates(orgId, res.rows.map((r) => ({
-    func: (r.func as string | null) ?? null, date: String(r.late ?? to).slice(0, 10),
-  })));
+  const ctx = await flowRates(
+    orgId,
+    res.rows.map((r) => ({
+      func: (r.func as string | null) ?? null,
+      date: String(r.late ?? to).slice(0, 10),
+    })),
+  );
   const merged = new Map<string, StatRow>();
   for (const r of res.rows) {
-    const key = JSON.stringify([r.employee, r.employee_name, r.department, r.department_name, r.item, r.item_name]);
+    const key = JSON.stringify([
+      r.employee,
+      r.employee_name,
+      r.department,
+      r.department_name,
+      r.item,
+      r.item_name,
+    ]);
     const prev = merged.get(key) ?? {
       employee: r.employee,
       employee_name: r.employee_name,
@@ -189,9 +219,10 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
       unrated_hours: "0",
     };
     const leg = String(r.non_billable_cost ?? 0);
-    const translated = cmp(leg, "0") === 0
-      ? "0"
-      : mulDecimal(leg, ctx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)));
+    const translated =
+      cmp(leg, "0") === 0
+        ? "0"
+        : mulDecimal(leg, ctx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)));
     prev.total_hours = add(prev.total_hours, String(r.total_hours ?? 0));
     prev.billable_hours = add(prev.billable_hours, String(r.billable_hours ?? 0));
     prev.non_billable_cost = add(prev.non_billable_cost, translated);
@@ -220,39 +251,79 @@ function calcStat(hours: string, billable: string, cost: string, unrated: string
   };
 }
 
-const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBilled: 0, nonBillableCost: "0.0000", unratedHours: "0.0000" };
+const ZERO: UStat = {
+  hours: 0,
+  billableHours: 0,
+  nonBillableHours: 0,
+  percentBilled: 0,
+  nonBillableCost: "0.0000",
+  unratedHours: "0.0000",
+};
 
 type Key = "department" | "item" | "employee";
 
 /** Build current/prior utilization groups for one reporting dimension. */
-function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number, strings: UtilizationStrings = utilizationStrings(englishCatalogMessage, "en"), overtimeByEmp?: Map<string, { scheduledHours: string; overtime: boolean }>): UGroupRow[] {
+function buildGroup(
+  curr: StatRow[],
+  prior: StatRow[],
+  key: Key,
+  titleByEmp: Map<string, string>,
+  noBillDepts: Set<string>,
+  minHours: number,
+  strings: UtilizationStrings = utilizationStrings(englishCatalogMessage, "en"),
+  overtimeByEmp?: Map<string, { scheduledHours: string; overtime: boolean }>,
+): UGroupRow[] {
   const deptName = new Map<string, string>();
-  for (const r of curr) if (r.department && r.department_name) deptName.set(r.department, r.department_name);
+  for (const r of curr)
+    if (r.department && r.department_name) deptName.set(r.department, r.department_name);
 
   const groupBy = (rows: StatRow[]) => {
     const groups = new Map<
       string,
-      { name: string; deptHours: Map<string, string>; department: string | null; hours: string; billable: string; cost: string; unrated: string }
+      {
+        name: string;
+        deptHours: Map<string, string>;
+        department: string | null;
+        hours: string;
+        billable: string;
+        cost: string;
+        unrated: string;
+      }
     >();
     for (const r of rows) {
-      const id = (key === "department" ? r.department : key === "item" ? r.item : r.employee) ?? "0";
+      const id =
+        (key === "department" ? r.department : key === "item" ? r.item : r.employee) ?? "0";
       let g = groups.get(id);
       if (!g) {
-        const name = key === "department" ? r.department_name : key === "item" ? r.item_name : r.employee_name;
-        g = { name: strings.displayGroupName(name), deptHours: new Map(), department: r.department, hours: "0", billable: "0", cost: "0", unrated: "0" };
+        const name =
+          key === "department" ? r.department_name : key === "item" ? r.item_name : r.employee_name;
+        g = {
+          name: strings.displayGroupName(name),
+          deptHours: new Map(),
+          department: r.department,
+          hours: "0",
+          billable: "0",
+          cost: "0",
+          unrated: "0",
+        };
         groups.set(id, g);
       }
       g.hours = add(g.hours, r.total_hours);
       g.billable = add(g.billable, r.billable_hours);
       g.cost = add(g.cost, r.non_billable_cost);
       g.unrated = add(g.unrated, r.unrated_hours);
-      if (key !== "department" && r.department) g.deptHours.set(r.department, add(g.deptHours.get(r.department) ?? "0", r.total_hours));
+      if (key !== "department" && r.department)
+        g.deptHours.set(r.department, add(g.deptHours.get(r.department) ?? "0", r.total_hours));
     }
     // Primary department = most hours (the departmentHours logic).
     if (key !== "department") {
       for (const g of groups.values()) {
         let max = "0";
-        for (const [dId, h] of g.deptHours) if (cmp(h, max) > 0) { max = h; g.department = dId; }
+        for (const [dId, h] of g.deptHours)
+          if (cmp(h, max) > 0) {
+            max = h;
+            g.department = dId;
+          }
       }
     }
     return groups;
@@ -270,20 +341,27 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       name: c.name,
       range,
       prior: pr,
-      deltas: { pctDelta: range.percentBilled - pr.percentBilled, costDelta: add(range.nonBillableCost, neg(pr.nonBillableCost)) },
+      deltas: {
+        pctDelta: range.percentBilled - pr.percentBilled,
+        costDelta: add(range.nonBillableCost, neg(pr.nonBillableCost)),
+      },
       meetsMinHours: range.hours >= minHours,
     };
     if (key === "employee") {
       row.title = strings.displayEmployeeTitle(titleByEmp.get(id) ?? null);
       row.departmentId = c.department ?? undefined;
-      row.departmentName = strings.displayDepartmentName((c.department && deptName.get(c.department)) || null);
+      row.departmentName = strings.displayDepartmentName(
+        (c.department && deptName.get(c.department)) || null,
+      );
       const ot = overtimeByEmp?.get(id);
       row.scheduledHours = ot?.scheduledHours ?? null;
       row.overtimeVsSchedule = ot?.overtime ?? false;
     }
     if (key === "item") {
       row.departmentId = c.department ?? undefined;
-      row.departmentName = strings.displayDepartmentName((c.department && deptName.get(c.department)) || null);
+      row.departmentName = strings.displayDepartmentName(
+        (c.department && deptName.get(c.department)) || null,
+      );
     }
     if (key === "department") row.noBillable = noBillDepts.has(id);
     rows.push({ row, cost: c.cost });
@@ -299,14 +377,18 @@ export async function utilizationData(
   allowed: ReadonlySet<string> | null,
   strings: UtilizationStrings = utilizationStrings(englishCatalogMessage, "en"),
 ): Promise<UtilizationData> {
-  if (!(await isFeatureEnabled(orgId, "timeTracking"))) throw new Error("time tracking feature is disabled");
-  const { money } = await getMoneyFormatter(orgId)
+  if (!(await isFeatureEnabled(orgId, "timeTracking")))
+    throw new Error("time tracking feature is disabled");
+  const { money } = await getMoneyFormatter(orgId);
   const cfg = await analyticsConfig(orgId, "utilization");
   // mergeConfig always materializes every default key for the dashboard.
   const targetBillablePct = cfg.targetBillablePct!;
   // Unset (or unreadable) spike threshold disables the alert: a missing
   // money amount is never treated as zero, which would alert on every cent.
-  const costSpikeThreshold = typeof cfg.costSpikeThreshold === "string" && cfg.costSpikeThreshold !== "" ? cfg.costSpikeThreshold : null;
+  const costSpikeThreshold =
+    typeof cfg.costSpikeThreshold === "string" && cfg.costSpikeThreshold !== ""
+      ? cfg.costSpikeThreshold
+      : null;
   const minHours = cfg.minHours!;
   const reallocWarnPp = cfg.reallocWarnPp!;
   const reallocActionPp = cfg.reallocActionPp!;
@@ -349,10 +431,13 @@ export async function utilizationData(
   // No-billable-expectation departments are an explicit operator attribute
   // on the department record — never inferred from hours, so a quiet
   // department cannot silently leave the company scope.
-  const noBillRows = await db.execute<{ id: string }>(sql`
+  const noBillRows = await db.execute<{ id: string }>(
+    sql`
     select id from departments
      where org_id = ${orgId} and no_billable_expectation
-  `, "objects");
+  `,
+    "objects",
+  );
   const noBillDepts = new Set(noBillRows.map((r) => r.id));
 
   // Overtime is actual hours above the employee's own work schedule for the
@@ -369,25 +454,44 @@ export async function utilizationData(
   let unscheduledCount = 0;
   if (empIds.length > 0) {
     const [roleRows, schedules] = await Promise.all([
-      db.execute<{ party_id: string; job_title: string | null; trade_id: string | null; department_id: string | null; subsidiary_id: string | null }>(sql`
+      db.execute<{
+        party_id: string;
+        job_title: string | null;
+        trade_id: string | null;
+        department_id: string | null;
+        subsidiary_id: string | null;
+      }>(
+        sql`
         select distinct on (er.party_id) er.party_id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id
           from employee_roles er
           join parties p on p.id = er.party_id and p.org_id = er.org_id
-         where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects"),
+         where er.org_id = ${orgId} and er.party_id in (${sql.join(
+           empIds.map((id) => sql`${id}::uuid`),
+           sql`, `,
+         )})`,
+        "objects",
+      ),
       loadWorkSchedules(db, orgId, allowed),
     ]);
     const keysByEmp = new Map(roleRows.map((r) => [r.party_id, r]));
     for (const id of empIds) {
       const keys = keysByEmp.get(id);
-      const schedule = pickWorkSchedule(schedules, {
-        employeePartyId: id,
-        jobTitle: keys?.job_title ?? null,
-        tradeId: keys?.trade_id ?? null,
-        departmentId: keys?.department_id ?? null,
-        subsidiaryId: keys?.subsidiary_id ?? null,
-      }, period.to);
+      const schedule = pickWorkSchedule(
+        schedules,
+        {
+          employeePartyId: id,
+          jobTitle: keys?.job_title ?? null,
+          tradeId: keys?.trade_id ?? null,
+          departmentId: keys?.department_id ?? null,
+          subsidiaryId: keys?.subsidiary_id ?? null,
+        },
+        period.to,
+      );
       const scheduled = schedule ? scheduledHoursBetween(schedule, period.from, period.to) : null;
-      if (scheduled === null || cmp(scheduled, "0") <= 0) { unscheduledCount += 1; continue; }
+      if (scheduled === null || cmp(scheduled, "0") <= 0) {
+        unscheduledCount += 1;
+        continue;
+      }
       const actual = actualByEmp.get(id) ?? "0";
       overtimeByEmp.set(id, { scheduledHours: scheduled, overtime: cmp(actual, scheduled) > 0 });
     }
@@ -398,19 +502,30 @@ export async function utilizationData(
   for (const r of curr) {
     if (!r.item_name) continue;
     let m = empItemHours.get(r.employee);
-    if (!m) { m = new Map(); empItemHours.set(r.employee, m); }
+    if (!m) {
+      m = new Map();
+      empItemHours.set(r.employee, m);
+    }
     m.set(r.item_name, add(m.get(r.item_name) ?? "0", r.total_hours));
   }
   const titleByEmp = new Map<string, string>();
   for (const [emp, m] of empItemHours) {
-    let best = "No Title", max = "0";
-    for (const [item, h] of m) if (cmp(h, max) > 0) { max = h; best = item; }
+    let best = "No Title",
+      max = "0";
+    for (const [item, h] of m)
+      if (cmp(h, max) > 0) {
+        max = h;
+        best = item;
+      }
     titleByEmp.set(emp, best);
   }
 
   // Company rollup — billable-expected departments only ().
   const companySum = (rows: StatRow[]) => {
-    let hours = "0", billable = "0", cost = "0", unrated = "0";
+    let hours = "0",
+      billable = "0",
+      cost = "0",
+      unrated = "0";
     for (const r of rows) {
       if (r.department && noBillDepts.has(r.department)) continue;
       hours = add(hours, r.total_hours);
@@ -425,7 +540,8 @@ export async function utilizationData(
       // Per CALENDAR day (inclusive range days, weekends included): the KPI
       // names the calendar-day basis, since no business calendar applies yet.
       nonBillableCostPerDay: days > 0 ? div(cost, String(days)) : "0.0000",
-      nonBillableCostPerHour: cmp(nonBillableHours, "0") > 0 ? div(cost, nonBillableHours) : "0.0000",
+      nonBillableCostPerHour:
+        cmp(nonBillableHours, "0") > 0 ? div(cost, nonBillableHours) : "0.0000",
     };
   };
   const cCompany = companySum(curr);
@@ -456,32 +572,56 @@ export async function utilizationData(
   // Rolling history: company % (excl. noBill depts) + per-dept % (all depts).
   const periods: UHistoryPeriod[] = histPlans.map((plan, i) => {
     const rows = histStats[i] ?? [];
-    let hours = "0", billable = "0";
+    let hours = "0",
+      billable = "0";
     const dept = new Map<string, { h: string; b: string }>();
     for (const r of rows) {
-      if (!(r.department && noBillDepts.has(r.department))) { hours = add(hours, r.total_hours); billable = add(billable, r.billable_hours); }
+      if (!(r.department && noBillDepts.has(r.department))) {
+        hours = add(hours, r.total_hours);
+        billable = add(billable, r.billable_hours);
+      }
       if (r.department) {
         const d = dept.get(r.department) ?? { h: "0", b: "0" };
-        d.h = add(d.h, r.total_hours); d.b = add(d.b, r.billable_hours);
+        d.h = add(d.h, r.total_hours);
+        d.b = add(d.b, r.billable_hours);
         dept.set(r.department, d);
       }
     }
     const deptPct: Record<string, number> = {};
     for (const [id, d] of dept) {
-      const h = Number(d.h), b = Number(d.b);
+      const h = Number(d.h),
+        b = Number(d.b);
       deptPct[id] = h > 0 ? (b / h) * 100 : 0;
     }
-    const h = Number(hours), b = Number(billable);
-    return { label: plan.label, start: plan.start, end: plan.end, companyPct: h > 0 ? (b / h) * 100 : 0, deptPct };
+    const h = Number(hours),
+      b = Number(billable);
+    return {
+      label: plan.label,
+      start: plan.start,
+      end: plan.end,
+      companyPct: h > 0 ? (b / h) * 100 : 0,
+      deptPct,
+    };
   });
 
   return {
     period: { ...period, days },
     prior: { from: priorFrom, to: priorTo },
     config: {
-      target: targetBillablePct, costSpike: costSpikeThreshold ?? "", minHours, reallocWarnPp, reallocActionPp,
-      watchBandPp, warnBandPp, anomalyDropPp, overtimeBillableGapPp, titleDriftPp, peerOutlierSigma,
-      peerSpreadWarnPp, peerSpreadActionPp, peerMinCount,
+      target: targetBillablePct,
+      costSpike: costSpikeThreshold ?? "",
+      minHours,
+      reallocWarnPp,
+      reallocActionPp,
+      watchBandPp,
+      warnBandPp,
+      anomalyDropPp,
+      overtimeBillableGapPp,
+      titleDriftPp,
+      peerOutlierSigma,
+      peerSpreadWarnPp,
+      peerSpreadActionPp,
+      peerMinCount,
     },
     company: {
       range: cCompany,
@@ -492,9 +632,30 @@ export async function utilizationData(
       },
       alerts,
     },
-    departments: analyticsSection('utilization', ['overview', 'intelligence', 'departments', 'titles', 'employees']) ? buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours, strings) : [],
-    items: analyticsSection('utilization', ['overview', 'items']) ? buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours, strings) : [],
-    employees: analyticsSection('utilization', ['overview', 'intelligence', 'titles', 'employees']) ? buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours, strings, overtimeByEmp) : [],
+    departments: analyticsSection("utilization", [
+      "overview",
+      "intelligence",
+      "departments",
+      "titles",
+      "employees",
+    ])
+      ? buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours, strings)
+      : [],
+    items: analyticsSection("utilization", ["overview", "items"])
+      ? buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours, strings)
+      : [],
+    employees: analyticsSection("utilization", ["overview", "intelligence", "titles", "employees"])
+      ? buildGroup(
+          curr,
+          prior,
+          "employee",
+          titleByEmp,
+          noBillDepts,
+          minHours,
+          strings,
+          overtimeByEmp,
+        )
+      : [],
     history: { periodMonths, periods },
     overtimeUnscheduled: unscheduledCount,
   };

@@ -135,12 +135,16 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
   // silent. Anchored on the org business day, never the database UTC date.
   const cutoff = addCalendarDays(await businessToday(orgId), -90);
   const [accounts, misuse, bankCredit] = await Promise.all([
-    db.execute<{ account_id: string; number: string | null; name: string; type: string }>(sql`
+    db.execute<{ account_id: string; number: string | null; name: string; type: string }>(
+      sql`
       select id as account_id, number, name, type
         from accounts
        where org_id = ${orgId} and is_active and not is_summary
-    `, "objects"),
-    db.execute<{ account_id: string; sample_doc_id: string | null }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<{ account_id: string; sample_doc_id: string | null }>(
+      sql`
       select jl.account_id, max(d.id::text) as sample_doc_id
         from journal_lines jl
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
@@ -149,13 +153,22 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
        where jl.org_id = ${orgId} and jl.is_open_item
          and a.type not in ('asset_receivable', 'liability_payable')
        group by jl.account_id
-    `, "objects"),
+    `,
+      "objects",
+    ),
     // Bank-typed accounts behave as cash in every cash reader, so one that
     // persistently carries a credit-normal balance corrupts cash everywhere
     // (for example a tax provision typed asset_bank). Reconcilable
     // accounts are managed facilities the business tracks as banks and stay
     // silent; genuine cash is debit-normal and never matches.
-    db.execute<{ account_id: string; number: string | null; name: string; type: string; balance: string }>(sql`
+    db.execute<{
+      account_id: string;
+      number: string | null;
+      name: string;
+      type: string;
+      balance: string;
+    }>(
+      sql`
       select a.id as account_id, a.number, a.name, a.type,
              coalesce(sum(l.amount), 0) as balance
         from accounts a
@@ -169,7 +182,9 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
          and coalesce(sum(l.amount) filter (where e.posting_date < ${cutoff}), 0) < 0.005
        order by abs(sum(l.amount)) desc
        limit 50
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   const misuseByAccount = new Map(misuse.map((row) => [row.account_id, row.sample_doc_id]));
   const bankCreditByAccount = new Map(bankCredit.map((row) => [row.account_id, row]));
@@ -225,7 +240,8 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
 
 async function loadDuplicateParties(orgId: string): Promise<DuplicatePartyRow[]> {
   const [byName, byTax] = await Promise.all([
-    db.execute<{ key: string; party_ids: string[]; display_names: string[]; tax_ids: string[] }>(sql`
+    db.execute<{ key: string; party_ids: string[]; display_names: string[]; tax_ids: string[] }>(
+      sql`
       select lower(regexp_replace(trim(display_name), '\\s+', ' ', 'g')) as key,
              array_agg(id) as party_ids,
              array_agg(display_name) as display_names,
@@ -236,8 +252,11 @@ async function loadDuplicateParties(orgId: string): Promise<DuplicatePartyRow[]>
       having count(*) > 1
        order by 1
        limit 50
-    `, "objects"),
-    db.execute<{ key: string; party_ids: string[]; display_names: string[] }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<{ key: string; party_ids: string[]; display_names: string[] }>(
+      sql`
       select tax_ids::text as key,
              array_agg(id) as party_ids,
              array_agg(display_name) as display_names
@@ -248,7 +267,9 @@ async function loadDuplicateParties(orgId: string): Promise<DuplicatePartyRow[]>
       having count(*) > 1
        order by 1
        limit 50
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   return [
     ...byName.map((row) => ({
@@ -269,37 +290,61 @@ async function loadDuplicateParties(orgId: string): Promise<DuplicatePartyRow[]>
 }
 
 async function loadUntaxedItems(orgId: string): Promise<UntaxedItemRow[]> {
-  const rows = (await db.execute<{ item_id: string; code: string | null; name: string; kind: string }>(sql`
+  const rows = await db.execute<{
+    item_id: string;
+    code: string | null;
+    name: string;
+    kind: string;
+  }>(
+    sql`
     select id as item_id, code, name, kind
       from items
      where org_id = ${orgId} and is_active and tax_code_id is null
      order by code nulls last, name
      limit 50
-  `, "objects"));
-  return rows.map((row) => ({ itemId: row.item_id, code: row.code, name: row.name, kind: row.kind }));
+  `,
+    "objects",
+  );
+  return rows.map((row) => ({
+    itemId: row.item_id,
+    code: row.code,
+    name: row.name,
+    kind: row.kind,
+  }));
 }
 
 async function loadUnbudgetedProjects(orgId: string): Promise<UnbudgetedProjectRow[]> {
-  const rows = (await db.execute<{ project_id: string; code: string | null; name: string }>(sql`
+  const rows = await db.execute<{ project_id: string; code: string | null; name: string }>(
+    sql`
     select p.id as project_id, p.code, p.name
       from projects p
      where p.org_id = ${orgId} and p.is_active
        and not exists (select 1 from budget_lines bl where bl.org_id = ${orgId} and bl.project_id = p.id)
      order by p.code nulls last, p.name
      limit 50
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({ projectId: row.project_id, code: row.code, name: row.name }));
 }
 
 async function loadEmptyScenarios(orgId: string): Promise<EmptyScenarioRow[]> {
-  const rows = (await db.execute<{ scenario_id: string; name: string; fiscal_year: number; status: string }>(sql`
+  const rows = await db.execute<{
+    scenario_id: string;
+    name: string;
+    fiscal_year: number;
+    status: string;
+  }>(
+    sql`
     select bs.id as scenario_id, bs.name, bs.fiscal_year, bs.status::text as status
       from budget_scenarios bs
      where bs.org_id = ${orgId} and bs.status in ('approved', 'pending_approval')
        and not exists (select 1 from budget_lines bl where bl.org_id = ${orgId} and bl.scenario_id = bs.id)
      order by bs.fiscal_year desc, bs.name
      limit 50
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     scenarioId: row.scenario_id,
     name: row.name,
@@ -309,13 +354,14 @@ async function loadEmptyScenarios(orgId: string): Promise<EmptyScenarioRow[]> {
 }
 
 async function loadUnmappedComponents(orgId: string): Promise<UnmappedComponentRow[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     component_id: string;
     code: string;
     name: string;
     kind: string;
     missing: string[];
-  }>(sql`
+  }>(
+    sql`
     select id as component_id, code, name, kind::text as kind,
            array_remove(array[
              case when kind = 'earning' and expense_account_id is null then 'expenseAccountId' end,
@@ -324,7 +370,9 @@ async function loadUnmappedComponents(orgId: string): Promise<UnmappedComponentR
            ], null) as missing
       from pay_components
      where org_id = ${orgId} and is_active and kind in ('earning', 'deduction', 'employer_contribution', 'credit')
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows
     .filter((row) => row.missing.length > 0)
     .map((row) => ({
@@ -353,7 +401,13 @@ export async function hygieneFindings(
   detectors: ContinuousCloseDetectorPolicy[],
   loaders: HygieneLoaders = productionHygieneLoaders,
 ): Promise<AgentFinding[]> {
-  if (!detectors.some((detector) => detector.enabled && (HYGIENE_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey))) {
+  if (
+    !detectors.some(
+      (detector) =>
+        detector.enabled &&
+        (HYGIENE_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey),
+    )
+  ) {
     return [];
   }
   const findings: AgentFinding[] = [];
@@ -448,7 +502,8 @@ export async function hygieneFindings(
           code: row.code,
           name: row.name,
           kind: row.kind,
-          review: "Assign the statutory tax code on the item record before it prices another document.",
+          review:
+            "Assign the statutory tax code on the item record before it prices another document.",
           href: "/items",
         },
         evidence: [
@@ -507,7 +562,8 @@ export async function hygieneFindings(
           name: row.name,
           fiscalYear: row.fiscalYear,
           status: row.status,
-          review: "Fill the scenario with budget lines or archive it so variance checks measure something real.",
+          review:
+            "Fill the scenario with budget lines or archive it so variance checks measure something real.",
           href: "/budgets",
         },
         evidence: [
@@ -538,7 +594,8 @@ export async function hygieneFindings(
           name: row.name,
           kind: row.kind,
           missing: row.missing,
-          review: "Map the missing posting accounts on the pay component (Setup → Payroll workspace, pay-components) before the next pay run.",
+          review:
+            "Map the missing posting accounts on the pay component (Setup → Payroll workspace, pay-components) before the next pay run.",
           href: "/admin/setup/payroll",
         },
         evidence: [

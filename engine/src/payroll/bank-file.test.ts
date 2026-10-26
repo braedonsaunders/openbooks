@@ -1,7 +1,16 @@
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
+  seedPayrollSchedule,
+  seedPayrollEmployeeRole,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
@@ -36,7 +45,11 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture, seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
+import {
+  seedOntarioEhtFixture,
+  seedUsSuiAccount,
+  seedUsEinAccount,
+} from "./filing-test-fixtures.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 
@@ -109,13 +122,21 @@ const cpa005Inputs = (): PayRunBankFileInputs => ({
   },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIRED", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: { institution: "004", transit: "12345" },
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIRED",
+      amount: "2500.0000",
+      employeeNumber: "EMP-0001",
+      routing: { institution: "004", transit: "12345" },
       accountNumber: "000123456789",
     },
     {
-      stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "1821.5000",
-      employeeNumber: "EMP-0002", routing: { institution: "001", transit: "00022" },
+      stubId: "s2",
+      employeePartyId: "p2",
+      employeeName: "BO SAVER",
+      amount: "1821.5000",
+      employeeNumber: "EMP-0002",
+      routing: { institution: "001", transit: "00022" },
       accountNumber: "987654321",
     },
   ],
@@ -131,7 +152,8 @@ const renderCpa005 = (inputs = cpa005Inputs(), originator = CPA005_ORIGINATOR) =
     // A record AND in every trace number, rather than a hardcoded first file.
     fileCreationNumber: 7,
     fundsDate: "2026-08-21",
-    createdAt: new Date("2026-08-14T00:00:00Z"), timeZone: "UTC",
+    createdAt: new Date("2026-08-14T00:00:00Z"),
+    timeZone: "UTC",
   });
 
 /**
@@ -144,32 +166,82 @@ const renderCpa005 = (inputs = cpa005Inputs(), originator = CPA005_ORIGINATOR) =
  * creation number (0007) + per-item sequence (000000001, 000000002).
  */
 const CPA005_SEGMENTS = [
-  "200" + "0000250000" + "026233" + "000412345" + "000123456789" +
-    "0051" + "00610" + "0007" + "000000001" + "000" +
-    "SUMMIT RIDGE".padEnd(15) + "ADA WIRED".padEnd(30) +
-    "SUMMIT RIDGE BUILDERS LTD".padEnd(30) + "0123456789" +
-    "PAY EMP-0001".padEnd(19) + "000300212" + "1234567".padEnd(12) +
-    " ".repeat(15) + " ".repeat(22) + "  " + "0".repeat(11),
-  "200" + "0000182150" + "026233" + "000100022" + "987654321".padEnd(12) +
-    "0051" + "00610" + "0007" + "000000002" + "000" +
-    "SUMMIT RIDGE".padEnd(15) + "BO SAVER".padEnd(30) +
-    "SUMMIT RIDGE BUILDERS LTD".padEnd(30) + "0123456789" +
-    "PAY EMP-0002".padEnd(19) + "000300212" + "1234567".padEnd(12) +
-    " ".repeat(15) + " ".repeat(22) + "  " + "0".repeat(11),
+  "200" +
+    "0000250000" +
+    "026233" +
+    "000412345" +
+    "000123456789" +
+    "0051" +
+    "00610" +
+    "0007" +
+    "000000001" +
+    "000" +
+    "SUMMIT RIDGE".padEnd(15) +
+    "ADA WIRED".padEnd(30) +
+    "SUMMIT RIDGE BUILDERS LTD".padEnd(30) +
+    "0123456789" +
+    "PAY EMP-0001".padEnd(19) +
+    "000300212" +
+    "1234567".padEnd(12) +
+    " ".repeat(15) +
+    " ".repeat(22) +
+    "  " +
+    "0".repeat(11),
+  "200" +
+    "0000182150" +
+    "026233" +
+    "000100022" +
+    "987654321".padEnd(12) +
+    "0051" +
+    "00610" +
+    "0007" +
+    "000000002" +
+    "000" +
+    "SUMMIT RIDGE".padEnd(15) +
+    "BO SAVER".padEnd(30) +
+    "SUMMIT RIDGE BUILDERS LTD".padEnd(30) +
+    "0123456789" +
+    "PAY EMP-0002".padEnd(19) +
+    "000300212" +
+    "1234567".padEnd(12) +
+    " ".repeat(15) +
+    " ".repeat(22) +
+    "  " +
+    "0".repeat(11),
 ];
 
-const CPA005_GOLDEN = [
-  // A: sequence literal 000000001, originator id, FCN, 0yyddd creation date
-  // (2026-08-14 = day 226), destination data centre, reserved, "CAD".
-  ("A" + "000000001" + "0123456789" + "0007" + "026226" + "00510" +
-    " ".repeat(20) + "CAD").padEnd(1464),
-  ("C" + "000000002" + "0123456789" + "0007" + CPA005_SEGMENTS.join("")).padEnd(1464),
-  // Z: no debits, credit value 432150 cents in 14, credit count 2 in 8, no
-  // error corrections.
-  ("Z" + "000000003" + "0123456789" + "0007" + "0".repeat(14) + "0".repeat(8) +
-    "00000000432150" + "00000002" + "0".repeat(14) + "0".repeat(8) +
-    "0".repeat(14) + "0".repeat(8)).padEnd(1464),
-].join("\r\n") + "\r\n";
+const CPA005_GOLDEN =
+  [
+    // A: sequence literal 000000001, originator id, FCN, 0yyddd creation date
+    // (2026-08-14 = day 226), destination data centre, reserved, "CAD".
+    (
+      "A" +
+      "000000001" +
+      "0123456789" +
+      "0007" +
+      "026226" +
+      "00510" +
+      " ".repeat(20) +
+      "CAD"
+    ).padEnd(1464),
+    ("C" + "000000002" + "0123456789" + "0007" + CPA005_SEGMENTS.join("")).padEnd(1464),
+    // Z: no debits, credit value 432150 cents in 14, credit count 2 in 8, no
+    // error corrections.
+    (
+      "Z" +
+      "000000003" +
+      "0123456789" +
+      "0007" +
+      "0".repeat(14) +
+      "0".repeat(8) +
+      "00000000432150" +
+      "00000002" +
+      "0".repeat(14) +
+      "0".repeat(8) +
+      "0".repeat(14) +
+      "0".repeat(8)
+    ).padEnd(1464),
+  ].join("\r\n") + "\r\n";
 
 test("CPA-005 golden file — byte for byte, trace numbers included", () => {
   const result = renderCpa005();
@@ -183,7 +255,9 @@ test("CPA-005 golden file — byte for byte, trace numbers included", () => {
 });
 
 test("CPA-005 record layout — every element at its Standard 005 offset", () => {
-  const records = renderCpa005().content.split("\r\n").filter((line) => line.length > 0);
+  const records = renderCpa005()
+    .content.split("\r\n")
+    .filter((line) => line.length > 0);
   assert.equal(records.length, 3, "A + one C + Z");
   for (const record of records) assert.equal(record.length, 1464);
 
@@ -191,7 +265,11 @@ test("CPA-005 record layout — every element at its Standard 005 offset", () =>
   assert.equal(records[0]![0], "A");
   assert.equal(records[0]!.slice(1, 10), "000000001", "record sequence starts at literal one");
   assert.equal(records[0]!.slice(10, 20), "0123456789", "originator id, positions 11-20");
-  assert.equal(records[0]!.slice(20, 24), "0007", "allocated file creation number, positions 21-24");
+  assert.equal(
+    records[0]!.slice(20, 24),
+    "0007",
+    "allocated file creation number, positions 21-24",
+  );
   assert.equal(records[0]!.slice(24, 30), "026226", "creation date 0yyddd, positions 25-30");
   assert.equal(records[0]!.slice(30, 35), "00510", "destination data centre, positions 31-35");
   assert.equal(records[0]!.slice(35, 55), " ".repeat(20), "reserved communication area");
@@ -208,7 +286,11 @@ test("CPA-005 record layout — every element at its Standard 005 offset", () =>
   assert.equal(first.slice(0, 3), "200", "transaction type = payroll deposit (Standard 007)");
   assert.equal(first.slice(3, 13), "0000250000", "amount, unsigned implied cents");
   assert.equal(first.slice(13, 19), "026233", "date funds available (2026-08-21 = day 233)");
-  assert.equal(first.slice(19, 28), "000412345", "payee institutional id = 0 + institution + transit");
+  assert.equal(
+    first.slice(19, 28),
+    "000412345",
+    "payee institutional id = 0 + institution + transit",
+  );
   assert.equal(first.slice(28, 40), "000123456789", "payee account number");
   // DE 12, the item trace number (segment positions 41-62): the reason this
   // format used to be off. Standard 005 Appendix 1 pp.6-7: destination data
@@ -220,9 +302,17 @@ test("CPA-005 record layout — every element at its Standard 005 offset", () =>
   assert.equal(first.slice(62, 65), "000", "stored transaction type");
   assert.equal(first.slice(65, 80), "SUMMIT RIDGE   ", "originator short name");
   assert.equal(first.slice(80, 110), "ADA WIRED".padEnd(30), "payee name");
-  assert.equal(first.slice(110, 140), "SUMMIT RIDGE BUILDERS LTD".padEnd(30), "originator long name");
+  assert.equal(
+    first.slice(110, 140),
+    "SUMMIT RIDGE BUILDERS LTD".padEnd(30),
+    "originator long name",
+  );
   assert.equal(first.slice(140, 150), "0123456789", "originating direct clearer's user id");
-  assert.equal(first.slice(150, 169), "PAY EMP-0001".padEnd(19), "cross-reference carries the employee number");
+  assert.equal(
+    first.slice(150, 169),
+    "PAY EMP-0001".padEnd(19),
+    "cross-reference carries the employee number",
+  );
   assert.equal(first.slice(169, 178), "000300212", "institutional id for returns");
   assert.equal(first.slice(178, 190), "1234567".padEnd(12), "account for returns");
   assert.equal(first.slice(190, 205), " ".repeat(15), "originator sundry information");
@@ -277,9 +367,13 @@ test("a trace-number component that cannot be proven refuses the whole file", ()
   assert.throws(
     () =>
       renderPayRunBankFile(cpa005Inputs(), {
-        orgId: "org", documentId: "doc", format: "cpa005",
-        originator: CPA005_ORIGINATOR, fundsDate: "2026-08-21",
-        createdAt: new Date("2026-08-14T00:00:00Z"), timeZone: "UTC",
+        orgId: "org",
+        documentId: "doc",
+        format: "cpa005",
+        originator: CPA005_ORIGINATOR,
+        fundsDate: "2026-08-21",
+        createdAt: new Date("2026-08-14T00:00:00Z"),
+        timeZone: "UTC",
       }),
     /allocated file creation number/,
   );
@@ -320,12 +414,21 @@ const nachaInputs = (): PayRunBankFileInputs => ({
   },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIRED", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: { aba: "011401533", accountType: "checking" }, accountNumber: "000123456789",
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIRED",
+      amount: "2500.0000",
+      employeeNumber: "EMP-0001",
+      routing: { aba: "011401533", accountType: "checking" },
+      accountNumber: "000123456789",
     },
     {
-      stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "1821.5000",
-      employeeNumber: "EMP-0002", routing: { aba: "121000248", accountType: "savings" },
+      stubId: "s2",
+      employeePartyId: "p2",
+      employeeName: "BO SAVER",
+      amount: "1821.5000",
+      employeeNumber: "EMP-0002",
+      routing: { aba: "121000248", accountType: "savings" },
       accountNumber: "987654321",
     },
   ],
@@ -354,18 +457,19 @@ const renderNacha = (inputs = nachaInputs(), originator = NACHA_ORIGINATOR) =>
  * Whitney's ACH input file structure guide. Every record is exactly 94
  * characters; the file is blocked to ten with all-nine filler records.
  */
-const NACHA_GOLDEN = [
-  "101 02100002112345678902608140930A094101JPMORGAN CHASE         SUMMIT RIDGE BUILDERS          ",
-  "5220SUMMIT RIDGE                        1123456789PPDPAYROLL         260821   1021000020000001",
-  "622011401533000123456789     0000250000EMP-0001       ADA WIRED               0021000020000001",
-  "632121000248987654321        0000182150EMP-0002       BO SAVER                0021000020000002",
-  "822000000200132401770000000000000000004321501123456789                         021000020000001",
-  "9000001000001000000020013240177000000000000000000432150                                       ",
-  "9".repeat(94),
-  "9".repeat(94),
-  "9".repeat(94),
-  "9".repeat(94),
-].join("\n") + "\n";
+const NACHA_GOLDEN =
+  [
+    "101 02100002112345678902608140930A094101JPMORGAN CHASE         SUMMIT RIDGE BUILDERS          ",
+    "5220SUMMIT RIDGE                        1123456789PPDPAYROLL         260821   1021000020000001",
+    "622011401533000123456789     0000250000EMP-0001       ADA WIRED               0021000020000001",
+    "632121000248987654321        0000182150EMP-0002       BO SAVER                0021000020000002",
+    "822000000200132401770000000000000000004321501123456789                         021000020000001",
+    "9000001000001000000020013240177000000000000000000432150                                       ",
+    "9".repeat(94),
+    "9".repeat(94),
+    "9".repeat(94),
+    "9".repeat(94),
+  ].join("\n") + "\n";
 
 test("NACHA golden file — byte for byte", () => {
   const result = renderNacha();
@@ -379,7 +483,9 @@ test("NACHA golden file — byte for byte", () => {
 });
 
 test("NACHA record layout — every field at its published offset", () => {
-  const records = renderNacha().content.split("\n").filter((line) => line.length > 0);
+  const records = renderNacha()
+    .content.split("\n")
+    .filter((line) => line.length > 0);
   assert.equal(records.length, 10, "blocked to a multiple of ten");
   for (const record of records) assert.equal(record.length, 94);
 
@@ -510,9 +616,14 @@ test("a profile that originates one format cannot render the other", () => {
       renderPayRunBankFile(
         { format: "cpa005", population: nachaInputs().population, credits: [] },
         {
-          orgId: "org", documentId: "doc", format: "cpa005",
+          orgId: "org",
+          documentId: "doc",
+          format: "cpa005",
           originator: NACHA_ORIGINATOR,
-          fileCreationNumber: 1, fundsDate: "2026-08-21", createdAt: new Date("2026-08-14T00:00:00Z"), timeZone: "UTC",
+          fileCreationNumber: 1,
+          fundsDate: "2026-08-21",
+          createdAt: new Date("2026-08-14T00:00:00Z"),
+          timeZone: "UTC",
         },
       ),
     /originates nacha, not cpa005/,
@@ -559,8 +670,15 @@ test("a sub-cent credit is refused rather than rounded into the file", () => {
 /* ------------------------------------------------------------------ */
 
 interface Fixture {
-  orgId: string; subsidiaryId: string; actorId: string; scheduleId: string; profileId: string;
-  country: "CA" | "US"; currency: "CAD" | "USD"; region: string; suiFilingAccountId: string | null;
+  orgId: string;
+  subsidiaryId: string;
+  actorId: string;
+  scheduleId: string;
+  profileId: string;
+  country: "CA" | "US";
+  currency: "CAD" | "USD";
+  region: string;
+  suiFilingAccountId: string | null;
   workerCompGroupId: string | null;
 }
 
@@ -594,12 +712,20 @@ const ORIGINATOR_SECRETS = {
 
 const RAIL_FORMAT = {
   nacha: {
-    code: "NACHA-CREDIT", name: "NACHA ACH credit", rail: "nacha_credit",
-    country: "US", currency: "USD", extension: "ach",
+    code: "NACHA-CREDIT",
+    name: "NACHA ACH credit",
+    rail: "nacha_credit",
+    country: "US",
+    currency: "USD",
+    extension: "ach",
   },
   cpa005: {
-    code: "CPA005-CREDIT", name: "CPA-005 EFT credit", rail: "cpa005_credit",
-    country: "CA", currency: "CAD", extension: "txt",
+    code: "CPA005-CREDIT",
+    name: "CPA-005 EFT credit",
+    rail: "cpa005_credit",
+    country: "CA",
+    currency: "CAD",
+    extension: "txt",
   },
 } as const;
 
@@ -636,18 +762,30 @@ async function payrollOrg(
     bank: await account(org.orgId, "1090", "Payroll funding bank", "asset_bank"),
   };
   await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: country === "CA" ? { CA: { cpp: accounts.craPayable, ei: accounts.craPayable, qpip: accounts.craPayable, income_tax: accounts.craPayable, vacation: accounts.vacationPayable } } : undefined,
-        wageExpenseAccountId: accounts.wageExpense,
-        burdenExpenseAccountId: accounts.burdenExpense,
-        netPayAccountId: accounts.netPayable,
+    slotAccounts:
+      country === "CA"
+        ? {
+            CA: {
+              cpp: accounts.craPayable,
+              ei: accounts.craPayable,
+              qpip: accounts.craPayable,
+              income_tax: accounts.craPayable,
+              vacation: accounts.vacationPayable,
+            },
+          }
+        : undefined,
+    wageExpenseAccountId: accounts.wageExpense,
+    burdenExpenseAccountId: accounts.burdenExpense,
+    netPayAccountId: accounts.netPayable,
 
-        wagesTo: "expense",
-      });
+    wagesTo: "expense",
+  });
   await seedPayrollComponents(org.orgId, actorId, country);
   if (country === "US") {
     // This rail scenario has no vacation entitlement; the declared election
     // references an explicit zero-rate program instead of an absent plan.
-    const vacation = await db.execute<{ id: string }>(sql`
+    const vacation = await db.execute<{ id: string }>(
+      sql`
       insert into entitlement_plans (org_id, code, system_key, name, unit, direction,
         accrual_method, accrual_value, payout_component_id, liability_account_id,
         cap_behavior, is_active, created_by, updated_by)
@@ -656,7 +794,9 @@ async function payrollOrg(
         'warn', true, ${actorId}, ${actorId}
       from pay_components where org_id=${org.orgId} and system_key='vacation_payout'
         and country is null and kind='earning'
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     assert.equal(vacation.length, 1, "the declared zero-rate vacation program must be created");
   }
   let workerCompGroupId: string | null = null;
@@ -669,14 +809,29 @@ async function payrollOrg(
   }
   let suiFilingAccountId: string | null = null;
   if (country === "US") {
-    const saveRate = (rateKey: string, filingAccountId: string | null, values: Record<string, unknown>) =>
+    const saveRate = (
+      rateKey: string,
+      filingAccountId: string | null,
+      values: Record<string, unknown>,
+    ) =>
       upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey, region, filingAccountId, taxYear: 2026, values,
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey,
+        region,
+        filingAccountId,
+        taxYear: 2026,
+        values,
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
     const einAccountId = await seedUsEinAccount(org.orgId, actorId, org.subsidiaryId, "12-3456789");
     suiFilingAccountId = await seedUsSuiAccount(org.orgId, actorId, region, {
-      federalAccountId: einAccountId, subsidiaryId: org.subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+      federalAccountId: einAccountId,
+      subsidiaryId: org.subsidiaryId,
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
       sourceReference: "TX original employer registration",
     });
     await saveRate("us_sui", suiFilingAccountId, { rate: "0.03", wageBase: "7000" });
@@ -688,7 +843,10 @@ async function payrollOrg(
 
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    name: "Biweekly",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
 
@@ -712,23 +870,39 @@ async function payrollOrg(
             '{}'::jsonb, true, ${actorId}, ${actorId})`);
 
   return {
-    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, profileId,
-    country, currency, region, suiFilingAccountId, workerCompGroupId,
+    orgId: org.orgId,
+    subsidiaryId: org.subsidiaryId,
+    actorId,
+    scheduleId,
+    profileId,
+    country,
+    currency,
+    region,
+    suiFilingAccountId,
+    workerCompGroupId,
   };
 }
 
-async function employee(fx: Fixture, name: string, opts: {
-  partyMethod?: "eft" | "cheque" | "card" | "cash" | "other" | null;
-  profileMethod?: "eft" | "cheque" | null;
-  /** NACHA: { aba, accountType: "checking" | "savings" }. CPA-005: { institution, transit }. */
-  bank?: Record<string, string> | null;
-  employeeNumber?: string;
-} = {}): Promise<string> {
+async function employee(
+  fx: Fixture,
+  name: string,
+  opts: {
+    partyMethod?: "eft" | "cheque" | "card" | "cash" | "other" | null;
+    profileMethod?: "eft" | "cheque" | null;
+    /** NACHA: { aba, accountType: "checking" | "savings" }. CPA-005: { institution, transit }. */
+    bank?: Record<string, string> | null;
+    employeeNumber?: string;
+  } = {},
+): Promise<string> {
   const id = randomUUID();
   await seedPayrollPerson(fx.orgId, id, name, {
     paymentMethod: opts.partyMethod ?? null,
   });
-  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), employeeNumber: opts.employeeNumber ?? null, workerCompGroupId: fx.workerCompGroupId });
+  await seedPayrollEmployeeRole(fx.orgId, id, {
+    id: randomUUID(),
+    employeeNumber: opts.employeeNumber ?? null,
+    workerCompGroupId: fx.workerCompGroupId,
+  });
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
@@ -744,27 +918,56 @@ async function employee(fx: Fixture, name: string, opts: {
               ${fx.actorId}, ${fx.actorId})`);
   }
   await seedPayrollWage(fx.orgId, id, fx.actorId, {
-    currency: fx.currency, rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
+    currency: fx.currency,
+    rate: "30",
+    basis: "hour",
+    annualHours: "2080",
+    effectiveFrom: "2026-01-01",
   });
-  await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
-    country: fx.country, province: fx.region, payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-    paymentMethod: opts.profileMethod ?? null, filingStatus: fx.country === "US" ? "single" : null,
-    filingAccountId: fx.suiFilingAccountId,
-  }, { percentFloor: fx.country === "US" ? null : "4", method: 'accrue' });
+  await seedPayrollProfile(
+    fx.orgId,
+    id,
+    employmentId,
+    fx.scheduleId,
+    fx.actorId,
+    {
+      country: fx.country,
+      province: fx.region,
+      payBasis: "hourly",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+      paymentMethod: opts.profileMethod ?? null,
+      filingStatus: fx.country === "US" ? "single" : null,
+      filingAccountId: fx.suiFilingAccountId,
+    },
+    { percentFloor: fx.country === "US" ? null : "4", method: "accrue" },
+  );
 
   if (opts.bank) {
     const canadian = "institution" in opts.bank;
-    await seedApprovedBankAccountFixture({ orgId: fx.orgId, actorId: fx.actorId, partyId: id,
-      bankName: 'Test Bank', country: canadian ? 'CA' : 'US', currency: canadian ? 'CAD' : 'USD',
-      routing: opts.bank, sealedAccount: encryptAccountNumber('000123456789', { orgId: fx.orgId }), lastFour: '6789' });
+    await seedApprovedBankAccountFixture({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      partyId: id,
+      bankName: "Test Bank",
+      country: canadian ? "CA" : "US",
+      currency: canadian ? "CAD" : "USD",
+      routing: opts.bank,
+      sealedAccount: encryptAccountNumber("000123456789", { orgId: fx.orgId }),
+      lastFour: "6789",
+    });
   }
   return id;
 }
 
 const hours = async (fx: Fixture, employeeId: string, workedOn: string, qty: string) =>
   await seedPayrollTime(fx.orgId, employeeId, fx.actorId, {
-    workedOn: workedOn, hours: qty, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-    costingBasis: 'actual',
+    workedOn: workedOn,
+    hours: qty,
+    status: "approved",
+    isBillable: false,
+    billingStatus: "unbilled",
+    costingBasis: "actual",
   });
 
 /**
@@ -775,11 +978,16 @@ const hours = async (fx: Fixture, employeeId: string, workedOn: string, qty: str
  */
 async function mixedRun(fx: Fixture) {
   const wired = await employee(fx, "Ada Wired", {
-    partyMethod: "eft", bank: { aba: "011401533", accountType: "checking" }, employeeNumber: "EMP-0001",
+    partyMethod: "eft",
+    bank: { aba: "011401533", accountType: "checking" },
+    employeeNumber: "EMP-0001",
   });
   const paper = await employee(fx, "Bo Paper", { employeeNumber: "EMP-0002" });
   const overridden = await employee(fx, "Cy Override", {
-    partyMethod: "eft", profileMethod: "cheque", bank: { aba: "121000248", accountType: "checking" }, employeeNumber: "EMP-0003",
+    partyMethod: "eft",
+    profileMethod: "cheque",
+    bank: { aba: "121000248", accountType: "checking" },
+    employeeNumber: "EMP-0003",
   });
   for (const id of [wired, paper, overridden]) {
     for (const day of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
@@ -787,11 +995,16 @@ async function mixedRun(fx: Fixture) {
     }
   }
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart: "2026-07-05", periodEnd: "2026-07-18",
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart: "2026-07-05",
+    periodEnd: "2026-07-18",
   });
   const calc = await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+    orgId: fx.orgId,
+    documentId: run.documentId,
+    actorId: fx.actorId,
   });
   assert.deepEqual(calc.errors, []);
   return { documentId: run.documentId, wired, paper, overridden };
@@ -800,7 +1013,9 @@ async function mixedRun(fx: Fixture) {
 /** The CAD twin of `mixedRun`: CA routing, and the run stays in CAD. */
 async function cpaMixedRun(fx: Fixture) {
   const wired = await employee(fx, "Ada Wired", {
-    partyMethod: "eft", bank: { institution: "004", transit: "12345" }, employeeNumber: "EMP-0001",
+    partyMethod: "eft",
+    bank: { institution: "004", transit: "12345" },
+    employeeNumber: "EMP-0001",
   });
   const paper = await employee(fx, "Bo Paper", { employeeNumber: "EMP-0002" });
   for (const id of [wired, paper]) {
@@ -809,11 +1024,16 @@ async function cpaMixedRun(fx: Fixture) {
     }
   }
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart: "2026-07-05", periodEnd: "2026-07-18",
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart: "2026-07-05",
+    periodEnd: "2026-07-18",
   });
   const calc = await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+    orgId: fx.orgId,
+    documentId: run.documentId,
+    actorId: fx.actorId,
   });
   assert.deepEqual(calc.errors, []);
   return { documentId: run.documentId, wired, paper };
@@ -828,7 +1048,10 @@ test(
     await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
 
     const artifact = await generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
     });
     // CPA-005 numbering: a 1-9999 file creation number off the artifact's own
     // number_sequences allocation; the NACHA modifier stays empty.
@@ -860,11 +1083,17 @@ test(
     const trailer = readTrailerTotals("cpa005", text);
     assert.equal(trailer.count, artifact.entryCount);
     assert.equal(trailer.totalCents, toUnits(artifact.controlTotal) / 100n);
-    const netTotal = (await db.execute<{ net: string }>(sql`
+    const netTotal = (
+      await db.execute<{ net: string }>(
+        sql`
       select net_total::text as net from pay_runs
-       where org_id = ${fx.orgId} and document_id = ${documentId}`, "objects"))[0]!.net;
+       where org_id = ${fx.orgId} and document_id = ${documentId}`,
+        "objects",
+      )
+    )[0]!.net;
     assert.equal(
-      cmp(add(artifact.controlTotal, artifact.excludedTotal), netTotal), 0,
+      cmp(add(artifact.controlTotal, artifact.excludedTotal), netTotal),
+      0,
       "file money + paper money = the run's net pay",
     );
     // The cheque employee is nowhere in the characters.
@@ -873,12 +1102,16 @@ test(
     // A replacement file gets the NEXT allocation, in its A record and in
     // every trace — the bank must never see two files under one number.
     const second = await generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
       supersedeReason: "bank rejected the first transmission",
     });
     assert.equal(second.fileCreationNumber, 2);
-    const secondText = (await releasePayRunBankFile(fx.orgId, second.id, fx.actorId))
-      .bytes.toString("utf8");
+    const secondText = (
+      await releasePayRunBankFile(fx.orgId, second.id, fx.actorId)
+    ).bytes.toString("utf8");
     const secondRecords = secondText.split("\r\n").filter((line) => line.length > 0);
     assert.equal(secondRecords[0]!.slice(20, 24), "0002");
     assert.equal(
@@ -897,33 +1130,43 @@ test(
     await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
     await assert.rejects(
       generatePayRunBankFile({
-        orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+        orgId: fx.orgId,
+        documentId,
+        actorId: fx.actorId,
+        paymentBankProfileId: fx.profileId,
       }),
       /originatingDataCentre/,
     );
   },
 );
 
-test("a run that is not committed cannot have a bank file, and says why", { skip: !DB }, async () => {
-  const fx = await payrollOrg();
-  const { documentId } = await mixedRun(fx);
+test(
+  "a run that is not committed cannot have a bank file, and says why",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg();
+    const { documentId } = await mixedRun(fx);
 
-  const before = await payRunBankFileEntitlement(fx.orgId, documentId);
-  assert.equal(before.entitled, false);
-  assert.equal(before.refusal?.code, "notCommitted");
-  assert.match(before.refusal!.reason, /commit the pay run/);
-  await assert.rejects(
-    generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
-    }),
-    /commit the pay run/,
-  );
+    const before = await payRunBankFileEntitlement(fx.orgId, documentId);
+    assert.equal(before.entitled, false);
+    assert.equal(before.refusal?.code, "notCommitted");
+    assert.match(before.refusal!.reason, /commit the pay run/);
+    await assert.rejects(
+      generatePayRunBankFile({
+        orgId: fx.orgId,
+        documentId,
+        actorId: fx.actorId,
+        paymentBankProfileId: fx.profileId,
+      }),
+      /commit the pay run/,
+    );
 
-  await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
-  const after = await payRunBankFileEntitlement(fx.orgId, documentId);
-  assert.equal(after.entitled, true);
-  assert.equal(after.refusal, null);
-});
+    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+    const after = await payRunBankFileEntitlement(fx.orgId, documentId);
+    assert.equal(after.entitled, true);
+    assert.equal(after.refusal, null);
+  },
+);
 
 test("a run already recorded as paid is refused by name", { skip: !DB }, async () => {
   const fx = await payrollOrg();
@@ -938,40 +1181,49 @@ test("a run already recorded as paid is refused by name", { skip: !DB }, async (
   assert.match(entitlement.refusal!.reason, /pay everybody a second time/);
   await assert.rejects(
     generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
     }),
     /already recorded as paid/,
   );
 });
 
-test(
-  "a released bank file refuses voiding its pay run",
-  { skip: !DB },
-  async () => {
-    const fx = await payrollOrg();
-    const { documentId } = await mixedRun(fx);
-    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
-    const artifact = await generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
-    });
+test("a released bank file refuses voiding its pay run", { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  const { documentId } = await mixedRun(fx);
+  await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+  const artifact = await generatePayRunBankFile({
+    orgId: fx.orgId,
+    documentId,
+    actorId: fx.actorId,
+    paymentBankProfileId: fx.profileId,
+  });
 
-    await releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId);
-    await assert.rejects(
-      requestDocumentVoid({
-        orgId: fx.orgId,
-        documentId,
-        actorId: fx.actorId,
-        reason: "correct the committed payroll run",
-      }),
-      new RegExp(`${artifact.fileNumber}.*record the payment or reverse it at the bank and mark the artifact`),
-    );
-    const row = (await db.execute<{ status: string; releaseCount: number }>(sql`
+  await releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId);
+  await assert.rejects(
+    requestDocumentVoid({
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      reason: "correct the committed payroll run",
+    }),
+    new RegExp(
+      `${artifact.fileNumber}.*record the payment or reverse it at the bank and mark the artifact`,
+    ),
+  );
+  const row = (
+    await db.execute<{ status: string; releaseCount: number }>(
+      sql`
       select status, release_count as "releaseCount"
         from pay_run_bank_files
-       where org_id = ${fx.orgId} and id = ${artifact.id}`, "objects"))[0]!;
-    assert.deepEqual(row, { status: "released", releaseCount: 1 });
-  },
-);
+       where org_id = ${fx.orgId} and id = ${artifact.id}`,
+      "objects",
+    )
+  )[0]!;
+  assert.deepEqual(row, { status: "released", releaseCount: 1 });
+});
 
 test(
   "bank-file generation refuses withdrawn approval after a prior entitlement read",
@@ -983,11 +1235,20 @@ test(
     assert.equal((await payRunBankFileEntitlement(fx.orgId, documentId)).entitled, true);
     await db.execute(sql`update documents set status='pending_approval'
       where org_id=${fx.orgId} and id=${documentId}`);
-    await assert.rejects(generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
-    }), /awaiting approval/);
-    assert.equal((await listPayRunBankFiles(fx.orgId, documentId)).length, 0,
-      "withdrawn approval must not leave a bank-file artifact");
+    await assert.rejects(
+      generatePayRunBankFile({
+        orgId: fx.orgId,
+        documentId,
+        actorId: fx.actorId,
+        paymentBankProfileId: fx.profileId,
+      }),
+      /awaiting approval/,
+    );
+    assert.equal(
+      (await listPayRunBankFiles(fx.orgId, documentId)).length,
+      0,
+      "withdrawn approval must not leave a bank-file artifact",
+    );
   },
 );
 
@@ -1001,67 +1262,80 @@ test("a voided run is refused by name", { skip: !DB }, async () => {
   assert.match(entitlement.refusal!.reason, /voided/);
 });
 
-test("a bank file refuses a run carrying employees outside the caller's subsidiary scope", { skip: !DB }, async () => {
-  const fx = await payrollOrg();
-  const { documentId, wired } = await mixedRun(fx);
-  // Fixture hires carry no subsidiary; pin every stub employee to the run's
-  // legal entity so the scoped caller owns the complete run first.
-  await db.execute(sql`
+test(
+  "a bank file refuses a run carrying employees outside the caller's subsidiary scope",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg();
+    const { documentId, wired } = await mixedRun(fx);
+    // Fixture hires carry no subsidiary; pin every stub employee to the run's
+    // legal entity so the scoped caller owns the complete run first.
+    await db.execute(sql`
     update parties set subsidiary_id = ${fx.subsidiaryId}
      where org_id = ${fx.orgId} and kind = 'person'`);
-  await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
-  const scoped = new Set([fx.subsidiaryId]);
-  assert.equal(
-    (await payRunBankFileEntitlement(fx.orgId, documentId, scoped)).entitled,
-    true,
-    "the scoped owner is entitled to its complete run",
-  );
+    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+    const scoped = new Set([fx.subsidiaryId]);
+    assert.equal(
+      (await payRunBankFileEntitlement(fx.orgId, documentId, scoped)).entitled,
+      true,
+      "the scoped owner is entitled to its complete run",
+    );
 
-  // Transfer the EFT employee out of scope. The run's legal entity is
-  // unchanged, so the run-subsidiary gate still passes — but the population
-  // now carries pay the caller must neither see nor instruct.
-  const hidden = randomUUID();
-  await db.execute(sql`
+    // Transfer the EFT employee out of scope. The run's legal entity is
+    // unchanged, so the run-subsidiary gate still passes — but the population
+    // now carries pay the caller must neither see nor instruct.
+    const hidden = randomUUID();
+    await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden employer', 'USD', 'US')`);
-  await db.execute(sql`
+    await db.execute(sql`
     update parties set subsidiary_id = ${hidden}
      where org_id = ${fx.orgId} and id = ${wired}`);
 
-  const entitlement = await payRunBankFileEntitlement(fx.orgId, documentId, scoped);
-  assert.equal(entitlement.entitled, false);
-  assert.equal(entitlement.refusal?.code, "notFound");
-  await assert.rejects(
-    generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
-      allowedSubsidiaryIds: scoped,
-    }),
-    /pay run not found/,
-  );
-  assert.equal(
-    (await listPayRunBankFiles(fx.orgId, documentId)).length,
-    0,
-    "a refused generate must not leave a bank-file artifact behind",
-  );
-  // Unrestricted payroll still sees and may file the complete run.
-  assert.equal((await payRunBankFileEntitlement(fx.orgId, documentId)).entitled, true);
-  const artifact = await generatePayRunBankFile({
-    orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
-  });
-  // The bytes were rendered for the complete run, so a caller who no longer
-  // owns every stub must not take them — while the unrestricted owner still
-  // releases the same artifact.
-  await assert.rejects(
-    releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId, scoped),
-    /pay run not found/,
-  );
-  assert.equal(
-    (await listPayRunBankFiles(fx.orgId, documentId))[0]!.releaseCount,
-    0,
-    "a refused release must not advance the release counters",
-  );
-  assert.equal((await releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId)).artifact.id, artifact.id);
-});
+    const entitlement = await payRunBankFileEntitlement(fx.orgId, documentId, scoped);
+    assert.equal(entitlement.entitled, false);
+    assert.equal(entitlement.refusal?.code, "notFound");
+    await assert.rejects(
+      generatePayRunBankFile({
+        orgId: fx.orgId,
+        documentId,
+        actorId: fx.actorId,
+        paymentBankProfileId: fx.profileId,
+        allowedSubsidiaryIds: scoped,
+      }),
+      /pay run not found/,
+    );
+    assert.equal(
+      (await listPayRunBankFiles(fx.orgId, documentId)).length,
+      0,
+      "a refused generate must not leave a bank-file artifact behind",
+    );
+    // Unrestricted payroll still sees and may file the complete run.
+    assert.equal((await payRunBankFileEntitlement(fx.orgId, documentId)).entitled, true);
+    const artifact = await generatePayRunBankFile({
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
+    });
+    // The bytes were rendered for the complete run, so a caller who no longer
+    // owns every stub must not take them — while the unrestricted owner still
+    // releases the same artifact.
+    await assert.rejects(
+      releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId, scoped),
+      /pay run not found/,
+    );
+    assert.equal(
+      (await listPayRunBankFiles(fx.orgId, documentId))[0]!.releaseCount,
+      0,
+      "a refused release must not advance the release counters",
+    );
+    assert.equal(
+      (await releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId)).artifact.id,
+      artifact.id,
+    );
+  },
+);
 
 test("unconfigured originator values are named, never defaulted", { skip: !DB }, async () => {
   const fx = await payrollOrg({ odfiRouting: "", companyId: "" });
@@ -1069,23 +1343,33 @@ test("unconfigured originator values are named, never defaulted", { skip: !DB },
   await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
   await assert.rejects(
     generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
     }),
     /odfiRouting[\s\S]*companyId/,
   );
 });
 
-test("an AP-shaped profile (CCD) is refused rather than reused for wages", { skip: !DB }, async () => {
-  const fx = await payrollOrg({ entryClassCode: "CCD" });
-  const { documentId } = await mixedRun(fx);
-  await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
-  await assert.rejects(
-    generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
-    }),
-    /must be PPD/,
-  );
-});
+test(
+  "an AP-shaped profile (CCD) is refused rather than reused for wages",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg({ entryClassCode: "CCD" });
+    const { documentId } = await mixedRun(fx);
+    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+    await assert.rejects(
+      generatePayRunBankFile({
+        orgId: fx.orgId,
+        documentId,
+        actorId: fx.actorId,
+        paymentBankProfileId: fx.profileId,
+      }),
+      /must be PPD/,
+    );
+  },
+);
 
 test(
   "the file carries the EFT rail only, ties to the ledger, and is immutable evidence",
@@ -1096,14 +1380,20 @@ test(
     await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
 
     const population = await payRunBankFilePopulation(fx.orgId, documentId);
-    assert.deepEqual(population.entries.map((e) => e.employeePartyId), [wired]);
+    assert.deepEqual(
+      population.entries.map((e) => e.employeePartyId),
+      [wired],
+    );
     assert.deepEqual(
       population.excludedCheque.map((e) => e.employeePartyId).sort(),
       [overridden, paper].sort(),
     );
 
     const artifact = await generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
     });
 
     // --- cheque exclusion is recorded WITH its reason ----------------------
@@ -1127,9 +1417,14 @@ test(
     // --- the control total equals the run's EFT net pay --------------------
     assert.equal(artifact.controlTotal, population.total);
     assert.equal(artifact.excludedTotal, population.excludedTotal);
-    const netTotal = (await db.execute<{ net: string }>(sql`
+    const netTotal = (
+      await db.execute<{ net: string }>(
+        sql`
       select net_total::text as net from pay_runs
-       where org_id = ${fx.orgId} and document_id = ${documentId}`, "objects"))[0]!.net;
+       where org_id = ${fx.orgId} and document_id = ${documentId}`,
+        "objects",
+      )
+    )[0]!.net;
     // money.ts, not JS numbers: 5185.20 + 455.25 is 5640.450000000001 in
     // binary floating point, and a payroll tie-out that only holds to within
     // an epsilon is not a tie-out.
@@ -1165,7 +1460,9 @@ test(
       return false;
     };
     await assert.rejects(
-      db.execute(sql`update pay_run_bank_files set control_total = '1.00' where id = ${artifact.id}`),
+      db.execute(
+        sql`update pay_run_bank_files set control_total = '1.00' where id = ${artifact.id}`,
+      ),
       dbSaid(/is immutable/),
     );
     await assert.rejects(
@@ -1184,20 +1481,29 @@ test(
     await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
 
     const first = await generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
     });
 
     // Pressing the button again with no explanation is refused: the operator
     // would otherwise hold two live files for one payday without knowing it.
     await assert.rejects(
       generatePayRunBankFile({
-        orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+        orgId: fx.orgId,
+        documentId,
+        actorId: fx.actorId,
+        paymentBankProfileId: fx.profileId,
       }),
       /pays every employee twice/,
     );
 
     const second = await generatePayRunBankFile({
-      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      orgId: fx.orgId,
+      documentId,
+      actorId: fx.actorId,
+      paymentBankProfileId: fx.profileId,
       supersedeReason: "bank rejected the first transmission",
     });
 
@@ -1233,7 +1539,10 @@ test("every release is audited, and tampered bytes are refused", { skip: !DB }, 
   const { documentId } = await mixedRun(fx);
   await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
   const artifact = await generatePayRunBankFile({
-    orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+    orgId: fx.orgId,
+    documentId,
+    actorId: fx.actorId,
+    paymentBankProfileId: fx.profileId,
   });
 
   assert.equal(artifact.releaseCount, 0);
@@ -1281,7 +1590,10 @@ test("concurrent releases receive distinct audit sequence numbers", { skip: !DB 
   const { documentId } = await mixedRun(fx);
   await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
   const artifact = await generatePayRunBankFile({
-    orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+    orgId: fx.orgId,
+    documentId,
+    actorId: fx.actorId,
+    paymentBankProfileId: fx.profileId,
   });
 
   await Promise.all([

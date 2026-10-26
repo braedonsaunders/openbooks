@@ -23,17 +23,27 @@ export async function isLegacyProvenance(
   rowId: string,
   opts?: { fallback?: boolean },
 ): Promise<boolean> {
-  const present = (await exec.execute<{ present: boolean }>(sql`
+  const present = (
+    await exec.execute<{ present: boolean }>(
+      sql`
       select to_regclass('public.upgrade_legacy_provenance') is not null as present
-    `, "objects"))[0]?.present;
+    `,
+      "objects",
+    )
+  )[0]?.present;
   if (!present) return opts?.fallback ?? false;
-  const hit = (await exec.execute<{ one: number }>(sql`
+  const hit = (
+    await exec.execute<{ one: number }>(
+      sql`
       select 1 as one
         from upgrade_legacy_provenance
        where org_id = ${orgId}
          and table_name = ${tableName}
          and row_id = ${rowId}
        limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   return !!hit;
 }

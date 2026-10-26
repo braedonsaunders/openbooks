@@ -1,25 +1,25 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { grid, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, getAuthz } from '../../../../../lib/authz'
-import { accessDeniedHref } from '../../../../../lib/gate-targets'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
+import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { grid, page, ref, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, getAuthz } from "../../../../../lib/authz";
+import { accessDeniedHref } from "../../../../../lib/gate-targets";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
 
-export type AllocationsTab = 'rules' | 'drivers' | 'runs'
+export type AllocationsTab = "rules" | "drivers" | "runs";
 
 export interface AllocationsSetupData {
-  tab: AllocationsTab
+  tab: AllocationsTab;
   /** Exactly one renders per request — the spec's tab conditions. */
-  onRules: boolean
-  onDrivers: boolean
-  onRuns: boolean
-  title: string
-  description: string
-  tabs: { key: string; href: string; label: string; active: boolean }[]
-  tabsAria: string
-  currentParams: Record<string, string | string[] | undefined>
+  onRules: boolean;
+  onDrivers: boolean;
+  onRuns: boolean;
+  title: string;
+  description: string;
+  tabs: { key: string; href: string; label: string; active: boolean }[];
+  tabsAria: string;
+  currentParams: Record<string, string | string[] | undefined>;
 }
 
 /**
@@ -31,31 +31,31 @@ export interface AllocationsSetupData {
 export async function loadAllocations(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AllocationsSetupData> {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
   // The house refusal names the primary grant (F1T-10): a reader without
   // either setup grant sees /access-denied, never a silent bounce home.
   // crm.setup.manage is the documented alternative — either one admits.
-  if (!can(authz, 'admin.setup.manage') && !can(authz, 'crm.setup.manage')) {
-    redirect(accessDeniedHref({ permission: 'admin.setup.manage' }))
+  if (!can(authz, "admin.setup.manage") && !can(authz, "crm.setup.manage")) {
+    redirect(accessDeniedHref({ permission: "admin.setup.manage" }));
   }
-  await requireFeatureEnabled(authz.user.orgId, 'allocations')
-  const t = await getTranslations('allocations')
-  const raw = typeof sp.tab === 'string' ? sp.tab : 'rules'
-  const tab: AllocationsTab = raw === 'drivers' || raw === 'runs' ? raw : 'rules'
+  await requireFeatureEnabled(authz.user.orgId, "allocations");
+  const t = await getTranslations("allocations");
+  const raw = typeof sp.tab === "string" ? sp.tab : "rules";
+  const tab: AllocationsTab = raw === "drivers" || raw === "runs" ? raw : "rules";
   const labels = {
-    rules: t('rules.tabs.rules'),
-    drivers: t('rules.tabs.drivers'),
-    runs: t('rules.tabs.runs'),
-  } as const
+    rules: t("rules.tabs.rules"),
+    drivers: t("rules.tabs.drivers"),
+    runs: t("rules.tabs.runs"),
+  } as const;
   return {
     tab,
-    onRules: tab === 'rules',
-    onDrivers: tab === 'drivers',
-    onRuns: tab === 'runs',
-    title: t('rules.title'),
-    description: t('rules.description'),
-    tabsAria: t('rules.tabsAria'),
+    onRules: tab === "rules",
+    onDrivers: tab === "drivers",
+    onRuns: tab === "runs",
+    title: t("rules.title"),
+    description: t("rules.description"),
+    tabsAria: t("rules.tabsAria"),
     tabs: (Object.keys(labels) as AllocationsTab[]).map((key) => ({
       key,
       href: `/admin/setup/allocations?tab=${key}`,
@@ -63,24 +63,24 @@ export async function loadAllocations(
       active: key === tab,
     })),
     currentParams: sp,
-  }
+  };
 }
 
-const f = ref<AllocationsSetupData>()
+const f = ref<AllocationsSetupData>();
 
 export function allocationsSpec(data: AllocationsSetupData): PageSpec {
   return page({
-    route: '/admin/setup/allocations',
+    route: "/admin/setup/allocations",
     // Bare like every setup custom page: the workspace owns the shell, the
     // native page owns its outer spacing — the [entity] precedent.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('space-y-4', [
+      grid("space-y-4", [
         // Shared chrome: h1, description, and the tab strip A7 owns. The
         // Drivers/Runs tab bodies are A8's; the strip stays here so tab order
         // never depends on which slice renders first.
-        widgetBlock('allocations-setup-header', {
+        widgetBlock("allocations-setup-header", {
           title: data.title,
           description: data.description,
           tabs: data.tabs,
@@ -89,23 +89,23 @@ export function allocationsSpec(data: AllocationsSetupData): PageSpec {
         // Rules tab: the versioned rule list with its `?rule=` drawer.
         // Org id and drawer state stay server-side in the slot.
         {
-          ...widgetBlock('allocations-rules-tab', { sp: data.currentParams }),
-          when: f('onRules'),
+          ...widgetBlock("allocations-rules-tab", { sp: data.currentParams }),
+          when: f("onRules"),
         },
         // Drivers tab: A8's island, mounted unchanged.
         {
-          ...widgetBlock('allocations-drivers-tab', {}),
-          when: f('onDrivers'),
+          ...widgetBlock("allocations-drivers-tab", {}),
+          when: f("onDrivers"),
         },
         // Runs tab: A8's island, mounted unchanged.
         {
-          ...widgetBlock('allocations-runs-tab', {}),
-          when: f('onRuns'),
+          ...widgetBlock("allocations-runs-tab", {}),
+          when: f("onRuns"),
         },
         // Rule drawer: mounted on every tab (Rules rows and the Runs period
         // deep-link both address `?rule=`); the slot renders nothing without it.
-        widgetBlock('allocations-rule-drawer', { sp: data.currentParams }),
+        widgetBlock("allocations-rule-drawer", { sp: data.currentParams }),
       ]),
     ],
-  })
+  });
 }

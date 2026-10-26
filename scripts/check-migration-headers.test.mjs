@@ -51,8 +51,15 @@ test("a bounded lock_timeout passes the zero check (the runner still owns it)", 
     scanMigrationFile("0261_bounded.sql", `${HEADER}\nSET lock_timeout = '5s';\nselect 1;`),
     [],
   );
-  for (const unbounded of ["SET lock_timeout = 0;", "SET LOCAL lock_timeout TO '0ms';", "RESET lock_timeout;"]) {
-    const findings = scanMigrationFile("0261_bounded.sql", `${HEADER}\nSET lock_timeout = '5s';\n${unbounded}\nselect 1;`);
+  for (const unbounded of [
+    "SET lock_timeout = 0;",
+    "SET LOCAL lock_timeout TO '0ms';",
+    "RESET lock_timeout;",
+  ]) {
+    const findings = scanMigrationFile(
+      "0261_bounded.sql",
+      `${HEADER}\nSET lock_timeout = '5s';\n${unbounded}\nselect 1;`,
+    );
     assert.equal(findings.length, 1, unbounded);
     assert.equal(findings[0].kind, "lock_timeout-zero", unbounded);
   }
@@ -71,21 +78,15 @@ test("set_config lock_timeout is refused at any value (the runner cannot strip i
 });
 
 test("a missing header line is refused naming the missing SET", () => {
-  const findings = scanMigrationFile(
-    "0261_no_header.sql",
-    "SET statement_timeout = 0;\nselect 1;",
-  );
+  const findings = scanMigrationFile("0261_no_header.sql", "SET statement_timeout = 0;\nselect 1;");
   const kinds = findings.map((finding) => finding.kind);
   assert.ok(!kinds.includes("lock_timeout-zero"));
-  assert.deepEqual(
-    findings.map((finding) => finding.value).sort(),
-    [
-      "SET client_encoding",
-      "SET client_min_messages",
-      "SET idle_in_transaction_session_timeout",
-      "SET standard_conforming_strings",
-    ],
-  );
+  assert.deepEqual(findings.map((finding) => finding.value).sort(), [
+    "SET client_encoding",
+    "SET client_min_messages",
+    "SET idle_in_transaction_session_timeout",
+    "SET standard_conforming_strings",
+  ]);
 });
 
 test("lock_timeout prose in comments is not code", () => {
@@ -102,7 +103,11 @@ test("the first forward migration is held to the full contract", () => {
   const findings = scanMigrationFile("0001_first.sql", `${HEADER}\nSET lock_timeout = 0;`);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].kind, "lock_timeout-zero");
-  assert.equal(scanMigrationFile("0001_first.sql", "select 1;").filter(({ kind }) => kind === "header-missing").length, 5);
+  assert.equal(
+    scanMigrationFile("0001_first.sql", "select 1;").filter(({ kind }) => kind === "header-missing")
+      .length,
+    5,
+  );
 });
 
 test("scanTree derives the file list from the directory", () => {

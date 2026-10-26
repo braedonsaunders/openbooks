@@ -105,12 +105,18 @@ type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "so
  */
 function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement>[1]) {
   const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
-  const content = [
-    "date,amount,description,bank_transaction_id",
-    ...input.lines.map((line) =>
-      [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
-    ),
-  ].join("\n") + "\n";
+  const content =
+    [
+      "date,amount,description,bank_transaction_id",
+      ...input.lines.map((line) =>
+        [
+          line.postedOn,
+          line.amount,
+          quote(line.description ?? ""),
+          line.bankTransactionId ?? "",
+        ].join(","),
+      ),
+    ].join("\n") + "\n";
   return importStatement(
     {
       ...input,
@@ -126,24 +132,37 @@ function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement
 }
 
 async function statementLineIds(orgId: string, statementId: string): Promise<string[]> {
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
      order by line_number
-  `, "objects")).map((row) => row.id);
+  `,
+      "objects",
+    )
+  ).map((row) => row.id);
 }
 
 async function matchRows(orgId: string, reconId: string) {
-  return await db.execute<{ statement_line_id: string; journal_line_id: string; group_id: string }>(sql`
+  return await db.execute<{ statement_line_id: string; journal_line_id: string; group_id: string }>(
+    sql`
     select statement_line_id, journal_line_id, group_id from reconciliation_matches
      where org_id = ${orgId} and reconciliation_id = ${reconId}
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 async function lineStatus(orgId: string, lineId: string): Promise<string> {
-  return (await db.execute<{ match_status: string }>(sql`
+  return (
+    await db.execute<{ match_status: string }>(
+      sql`
     select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}
-  `, "objects"))[0]!.match_status;
+  `,
+      "objects",
+    )
+  )[0]!.match_status;
 }
 
 test(
@@ -161,8 +180,18 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "4000", description: "Wire partner A", bankTransactionId: "wire-a" },
-            { postedOn: org.date, amount: "4000", description: "Wire partner B", bankTransactionId: "wire-b" },
+            {
+              postedOn: org.date,
+              amount: "4000",
+              description: "Wire partner A",
+              bankTransactionId: "wire-a",
+            },
+            {
+              postedOn: org.date,
+              amount: "4000",
+              description: "Wire partner B",
+              bankTransactionId: "wire-b",
+            },
           ],
         },
         ctx,
@@ -174,13 +203,21 @@ test(
       );
 
       const totals = await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [wireA!, wireB!], journalLineIds: [journal!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [wireA!, wireB!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
       assert.equal(totals.difference, "0.0000", "the grouped match clears the session");
       const rows = await matchRows(org.orgId, recon.id);
       assert.equal(rows.length, 2, "one row per grouped bank line");
-      assert.equal(new Set(rows.map((row) => row.group_id)).size, 1, "one operation writes one group");
+      assert.equal(
+        new Set(rows.map((row) => row.group_id)).size,
+        1,
+        "one operation writes one group",
+      );
       assert.equal(await lineStatus(org.orgId, wireA!), "matched");
       assert.equal(await lineStatus(org.orgId, wireB!), "matched");
 
@@ -191,10 +228,18 @@ test(
       assert.equal(await lineStatus(org.orgId, wireA!), "unmatched");
       assert.equal(await lineStatus(org.orgId, wireB!), "unmatched");
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [wireA!, wireB!], journalLineIds: [journal!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [wireA!, wireB!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
-      assert.equal((await matchRows(org.orgId, recon.id)).length, 2, "the released group re-matches");
+      assert.equal(
+        (await matchRows(org.orgId, recon.id)).length,
+        2,
+        "the released group re-matches",
+      );
 
       // The group cross-foots at sign-off as the unit it cleared as, and the
       // closed session keeps its fence.
@@ -209,100 +254,136 @@ test(
   },
 );
 
-test(
-  "one deposit clears three receipts with one shared audit group",
-  { skip: !DB },
-  async () => {
-    const { org, actor, ctx } = await setup();
-    try {
-      const receipts = await postBankJournal(org, actor, ["100.0000", "100.0000", "100.0000"], "three-receipts");
-      const imported = await importCsv(
-        {
-          accountId: org.accounts.bank,
-          source: "csv" as const,
-          statementDate: org.date,
-          currency: "CAD",
-          lines: [{ postedOn: org.date, amount: "300", description: "Batch deposit", bankTransactionId: "batch-300" }],
-        },
-        ctx,
-      );
-      const [deposit] = await statementLineIds(org.orgId, imported.statementId!);
-      const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "300" },
-        ctx,
-      );
+test("one deposit clears three receipts with one shared audit group", { skip: !DB }, async () => {
+  const { org, actor, ctx } = await setup();
+  try {
+    const receipts = await postBankJournal(
+      org,
+      actor,
+      ["100.0000", "100.0000", "100.0000"],
+      "three-receipts",
+    );
+    const imported = await importCsv(
+      {
+        accountId: org.accounts.bank,
+        source: "csv" as const,
+        statementDate: org.date,
+        currency: "CAD",
+        lines: [
+          {
+            postedOn: org.date,
+            amount: "300",
+            description: "Batch deposit",
+            bankTransactionId: "batch-300",
+          },
+        ],
+      },
+      ctx,
+    );
+    const [deposit] = await statementLineIds(org.orgId, imported.statementId!);
+    const recon = await startReconciliation(
+      { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "300" },
+      ctx,
+    );
 
-      await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [deposit!], journalLineIds: receipts },
-        ctx,
-      );
-      const rows = await matchRows(org.orgId, recon.id);
-      assert.equal(rows.length, 3, "one row per receipt leg");
-      assert.equal(new Set(rows.map((row) => row.group_id)).size, 1, "one operation writes one group");
+    await createMatch(
+      { reconciliationId: recon.id, statementLineIds: [deposit!], journalLineIds: receipts },
+      ctx,
+    );
+    const rows = await matchRows(org.orgId, recon.id);
+    assert.equal(rows.length, 3, "one row per receipt leg");
+    assert.equal(
+      new Set(rows.map((row) => row.group_id)).size,
+      1,
+      "one operation writes one group",
+    );
 
-      const audits = await db.execute<{ changes: unknown }>(sql`
+    const audits = await db.execute<{ changes: unknown }>(
+      sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'bank_statement_lines'
            and row_id = ${deposit!} and action = 'update'
          order by id
-      `, "objects");
-      assert.equal(audits.length, 1, "one audit row per grouped line");
-      const changes = audits[0]!.changes as { operation: string; groupId: string; statementLineIds: string[]; journalLineIds: string[] };
-      assert.equal(changes.operation, "match");
-      assert.equal(changes.groupId, rows[0]!.group_id, "the audit names the group");
-      assert.deepEqual(changes.statementLineIds, [deposit!]);
-      assert.deepEqual([...changes.journalLineIds].sort(), [...receipts].sort());
+      `,
+      "objects",
+    );
+    assert.equal(audits.length, 1, "one audit row per grouped line");
+    const changes = audits[0]!.changes as {
+      operation: string;
+      groupId: string;
+      statementLineIds: string[];
+      journalLineIds: string[];
+    };
+    assert.equal(changes.operation, "match");
+    assert.equal(changes.groupId, rows[0]!.group_id, "the audit names the group");
+    assert.deepEqual(changes.statementLineIds, [deposit!]);
+    assert.deepEqual([...changes.journalLineIds].sort(), [...receipts].sort());
 
-      // Unmatching the single deposit releases all three receipts.
-      await unmatchStatementLine({ reconciliationId: recon.id, statementLineId: deposit! }, ctx);
-      assert.equal((await matchRows(org.orgId, recon.id)).length, 0, "the group goes together");
-      assert.equal(await lineStatus(org.orgId, deposit!), "unmatched");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    // Unmatching the single deposit releases all three receipts.
+    await unmatchStatementLine({ reconciliationId: recon.id, statementLineId: deposit! }, ctx);
+    assert.equal((await matchRows(org.orgId, recon.id)).length, 0, "the group goes together");
+    assert.equal(await lineStatus(org.orgId, deposit!), "unmatched");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "a cent-apart group refuses naming both totals",
-  { skip: !DB },
-  async () => {
-    const { org, actor, ctx } = await setup();
-    try {
-      const [journal] = await postBankJournal(org, actor, ["7999.9900"], "cent-short");
-      const imported = await importCsv(
+test("a cent-apart group refuses naming both totals", { skip: !DB }, async () => {
+  const { org, actor, ctx } = await setup();
+  try {
+    const [journal] = await postBankJournal(org, actor, ["7999.9900"], "cent-short");
+    const imported = await importCsv(
+      {
+        accountId: org.accounts.bank,
+        source: "csv" as const,
+        statementDate: org.date,
+        currency: "CAD",
+        lines: [
+          {
+            postedOn: org.date,
+            amount: "4000",
+            description: "Wire A",
+            bankTransactionId: "cent-a",
+          },
+          {
+            postedOn: org.date,
+            amount: "4000",
+            description: "Wire B",
+            bankTransactionId: "cent-b",
+          },
+        ],
+      },
+      ctx,
+    );
+    const [wireA, wireB] = await statementLineIds(org.orgId, imported.statementId!);
+    const recon = await startReconciliation(
+      { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "8000" },
+      ctx,
+    );
+
+    await assert.rejects(
+      createMatch(
         {
-          accountId: org.accounts.bank,
-          source: "csv" as const,
-          statementDate: org.date,
-          currency: "CAD",
-          lines: [
-            { postedOn: org.date, amount: "4000", description: "Wire A", bankTransactionId: "cent-a" },
-            { postedOn: org.date, amount: "4000", description: "Wire B", bankTransactionId: "cent-b" },
-          ],
+          reconciliationId: recon.id,
+          statementLineIds: [wireA!, wireB!],
+          journalLineIds: [journal!],
         },
         ctx,
-      );
-      const [wireA, wireB] = await statementLineIds(org.orgId, imported.statementId!);
-      const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "8000" },
-        ctx,
-      );
-
-      await assert.rejects(
-        createMatch(
-          { reconciliationId: recon.id, statementLineIds: [wireA!, wireB!], journalLineIds: [journal!] },
-          ctx,
+      ),
+      (error: unknown) =>
+        error instanceof BankingError &&
+        /Selected bank lines total 8000\.0000; selected journal lines total 7999\.9900/.test(
+          error.message,
         ),
-        (error: unknown) =>
-          error instanceof BankingError
-          && /Selected bank lines total 8000\.0000; selected journal lines total 7999\.9900/.test(error.message),
-      );
-      assert.equal((await matchRows(org.orgId, recon.id)).length, 0, "a refused group writes nothing");
-      assert.equal(await lineStatus(org.orgId, wireA!), "unmatched");
-      assert.equal(await lineStatus(org.orgId, wireB!), "unmatched");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    );
+    assert.equal(
+      (await matchRows(org.orgId, recon.id)).length,
+      0,
+      "a refused group writes nothing",
+    );
+    assert.equal(await lineStatus(org.orgId, wireA!), "unmatched");
+    assert.equal(await lineStatus(org.orgId, wireB!), "unmatched");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

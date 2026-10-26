@@ -26,18 +26,25 @@ export async function resolvePostingPeriod(
   postingDate: string,
 ): Promise<{ id: string }> {
   if (doc.postingPeriodId) {
-    const window = (await runner.execute<{
-      is_adjustment: boolean;
-      fiscal_year: number;
-      window_start: string;
-      window_end: string;
-    }>(sql`
+    const window = (
+      await runner.execute<{
+        is_adjustment: boolean;
+        fiscal_year: number;
+        window_start: string;
+        window_end: string;
+      }>(
+        sql`
         select is_adjustment, fiscal_year,
                window_start::text as window_start, window_end::text as window_end
           from accounting_period_posting_window(${doc.orgId}, ${doc.postingPeriodId})
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!window) {
-      throw new PostingError(`accounting period ${doc.postingPeriodId} does not exist in this organization`);
+      throw new PostingError(
+        `accounting period ${doc.postingPeriodId} does not exist in this organization`,
+      );
     }
     if (postingDate < window.window_start || postingDate > window.window_end) {
       throw new PostingError(
@@ -46,9 +53,17 @@ export async function resolvePostingPeriod(
           : `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`,
       );
     }
-    const calendar=(await runner.execute<{matches:boolean}>(sql`select fiscal_calendar_id=public.subsidiary_posting_calendar(${doc.orgId},${doc.subsidiaryId},${postingDate}::date) as matches
-      from accounting_periods where org_id=${doc.orgId} and id=${doc.postingPeriodId}`, "objects"))[0];
-    if (!calendar?.matches) throw new PostingError("The explicit posting period does not belong to the entity's effective fiscal calendar. Select that entity's period.");
+    const calendar = (
+      await runner.execute<{ matches: boolean }>(
+        sql`select fiscal_calendar_id=public.subsidiary_posting_calendar(${doc.orgId},${doc.subsidiaryId},${postingDate}::date) as matches
+      from accounting_periods where org_id=${doc.orgId} and id=${doc.postingPeriodId}`,
+        "objects",
+      )
+    )[0];
+    if (!calendar?.matches)
+      throw new PostingError(
+        "The explicit posting period does not belong to the entity's effective fiscal calendar. Select that entity's period.",
+      );
     return { id: doc.postingPeriodId };
   }
   const period = await resolveCoveringPeriod(runner, doc.orgId, postingDate, doc.subsidiaryId);
@@ -84,10 +99,13 @@ export async function assertPayRunConsolidatedRateCoverage(
     postingDate: string;
   },
 ): Promise<void> {
-  const root = (await runner.execute<{ id: string; base_currency: string }>(sql`
+  const root = await runner.execute<{ id: string; base_currency: string }>(
+    sql`
     select id, base_currency from subsidiaries
      where org_id = ${args.orgId} and parent_id is null and is_active
-     order by created_at limit 1`, "objects"));
+     order by created_at limit 1`,
+    "objects",
+  );
   const rootBase = root[0]?.base_currency;
   if (!rootBase || args.docCurrency === rootBase) return;
   // The run subsidiary's lineage, child first — the same subsidiary→ancestor
@@ -95,14 +113,21 @@ export async function assertPayRunConsolidatedRateCoverage(
   // consolidation.ts), so a derived row exists exactly when close derived one
   // for this lineage. Currencies are data off the subsidiary rows; no
   // jurisdiction or currency is named here.
-  const chain = (await runner.execute<{ id: string; parent_id: string | null; base_currency: string }>(sql`
+  const chain = await runner.execute<{
+    id: string;
+    parent_id: string | null;
+    base_currency: string;
+  }>(
+    sql`
     with recursive chain as (
       select id, parent_id, base_currency from subsidiaries
        where org_id = ${args.orgId} and id = ${args.docSubsidiaryId}
       union all
       select p.id, p.parent_id, p.base_currency from subsidiaries p
         join chain c on p.id = c.parent_id and p.org_id = ${args.orgId}
-    ) select id, parent_id, base_currency from chain`, "objects"));
+    ) select id, parent_id, base_currency from chain`,
+    "objects",
+  );
   if (chain.length === 0) {
     throw new PostingError(`pay run subsidiary ${args.docSubsidiaryId} does not exist`);
   }
@@ -124,14 +149,22 @@ export async function assertPayRunConsolidatedRateCoverage(
   // regular period's rates, exactly as the statement engine resolves them.
   // With no regular period covering the date the kernel's own period logic
   // governs, and statements still refuse at report time.
-  const period = await resolveCoveringPeriod(runner, args.orgId, args.postingDate, args.docSubsidiaryId);
+  const period = await resolveCoveringPeriod(
+    runner,
+    args.orgId,
+    args.postingDate,
+    args.docSubsidiaryId,
+  );
   if (!period) return;
   for (const pair of pairs) {
-    const covered = (await runner.execute<{ one: number }>(sql`
+    const covered = await runner.execute<{ one: number }>(
+      sql`
       select 1 as one from consolidated_fx_rates
        where org_id = ${args.orgId} and period_id = ${period.id}
          and from_currency = ${pair.from} and to_currency = ${pair.to}
-       limit 1`, "objects"));
+       limit 1`,
+      "objects",
+    );
     if (!covered[0]) {
       throw new PostingError(
         `No consolidated exchange rates for ${pair.from} → ${pair.to} in the period ending ${period.ends_on}. Derive rates from period close first.`,

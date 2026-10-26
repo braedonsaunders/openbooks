@@ -7,20 +7,16 @@ import { useTranslations } from "next-intl";
 import { Select } from "@openbooks/ui";
 import { TrendingUp, Receipt, Target } from "lucide-react";
 import { add } from "@openbooks/engine/money";
-import type {
-  SalesRepTrend,
-  SalesMetric,
-} from "@openbooks/engine/crm/sales/contracts";
+import type { SalesRepTrend, SalesMetric } from "@openbooks/engine/crm/sales/contracts";
 import { MoneyProvider, useMoney } from "@/components/money-provider";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { toChartNumber } from "@/lib/chart-number";
 import { Panel } from "../../analytics/_ui/Panel";
 import { KpiCard } from "../../analytics/_ui/KpiCard";
 
-const TrendChart = dynamic(
-  () => import("../../analytics/_ui/charts").then((m) => m.TrendChart),
-  { ssr: false },
-);
+const TrendChart = dynamic(() => import("../../analytics/_ui/charts").then((m) => m.TrendChart), {
+  ssr: false,
+});
 
 export function SalesRepPerformance({
   trend,
@@ -30,9 +26,7 @@ export function SalesRepPerformance({
   reportHref: string;
 }) {
   const t = useTranslations("crm.sales");
-  const currencies = [
-    ...new Set(trend.points.map((point) => point.currency)),
-  ].sort();
+  const currencies = [...new Set(trend.points.map((point) => point.currency))].sort();
   const [currency, setCurrency] = useState(currencies[0] ?? "");
   return (
     <Panel
@@ -59,16 +53,11 @@ export function SalesRepPerformance({
           <PerformanceChart trend={trend} currency={currency} />
         </MoneyProvider>
       ) : (
-        <p className="py-8 text-center text-sm text-slate-500">
-          {t("noSalesHistory")}
-        </p>
+        <p className="py-8 text-center text-sm text-slate-500">{t("noSalesHistory")}</p>
       )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
         <span>{t("salesTrendBasis")}</span>
-        <Link
-          href={reportHref}
-          className="font-medium text-teal-700 dark:text-teal-300"
-        >
+        <Link href={reportHref} className="font-medium text-teal-700 dark:text-teal-300">
           {t("reviewEvidence")} →
         </Link>
       </div>
@@ -76,13 +65,7 @@ export function SalesRepPerformance({
   );
 }
 
-function PerformanceChart({
-  trend,
-  currency,
-}: {
-  trend: SalesRepTrend;
-  currency: string;
-}) {
+function PerformanceChart({ trend, currency }: { trend: SalesRepTrend; currency: string }) {
   const t = useTranslations("crm.sales");
   const { money } = useMoney();
   const { date } = useViewerFormat();
@@ -96,8 +79,7 @@ function PerformanceChart({
     name: t(metric),
     data: trend.months.map((month) =>
       toChartNumber(
-        points.find((point) => point.month === month && point.metric === metric)
-          ?.amount ?? "0",
+        points.find((point) => point.month === month && point.metric === metric)?.amount ?? "0",
       ),
     ),
   }));
@@ -118,9 +100,7 @@ function PerformanceChart({
         />
       </div>
       <TrendChart
-        labels={trend.months.map((month) =>
-          date(month, { month: "short", year: "2-digit" }),
-        )}
+        labels={trend.months.map((month) => date(month, { month: "short", year: "2-digit" }))}
         series={series}
         height={240}
         area

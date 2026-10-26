@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Label } from '@openbooks/ui'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { DateField } from '@/components/date-field'
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { Button, Drawer, Input, Label } from "@openbooks/ui";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { DateField } from "@/components/date-field";
 
 /**
  * Correct one unmatched statement line's amount, sign, date or description.
@@ -18,51 +18,51 @@ export function CorrectStatementLineDialog({
   onClose,
   onSaved,
 }: {
-  line: { id: string; posted_on: string; amount: string; description: string | null }
-  onClose: () => void
-  onSaved: () => void
+  line: { id: string; posted_on: string; amount: string; description: string | null };
+  onClose: () => void;
+  onSaved: () => void;
 }) {
-  const t = useTranslations('banking.match')
-  const tCommon = useTranslations('common')
-  const tBanking = useTranslations('banking')
-  const [amount, setAmount] = useState(line.amount)
-  const [postedOn, setPostedOn] = useState(line.posted_on)
-  const [description, setDescription] = useState(line.description ?? '')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const t = useTranslations("banking.match");
+  const tCommon = useTranslations("common");
+  const tBanking = useTranslations("banking");
+  const [amount, setAmount] = useState(line.amount);
+  const [postedOn, setPostedOn] = useState(line.posted_on);
+  const [description, setDescription] = useState(line.description ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const cleanDescription = description.trim() === '' ? null : description.trim()
+  const cleanDescription = description.trim() === "" ? null : description.trim();
   const dirty =
     amount.trim() !== line.amount ||
     postedOn !== line.posted_on ||
-    cleanDescription !== (line.description ?? null)
+    cleanDescription !== (line.description ?? null);
 
   async function save() {
-    if (!dirty || busy) return
-    setBusy(true)
-    setError(null)
+    if (!dirty || busy) return;
+    setBusy(true);
+    setError(null);
     try {
       const res = await fetch(`/api/banking/statement-lines/${line.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: 'correct',
+          action: "correct",
           amount: amount.trim(),
           postedOn,
           description: cleanDescription,
         }),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, tBanking('errors.requestFailed')))
-        return
+        setError(await readApiErrorMessage(res, tBanking("errors.requestFailed")));
+        return;
       }
-      onSaved()
+      onSaved();
     } catch {
-      setError(tBanking('errors.requestFailed'))
+      setError(tBanking("errors.requestFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -71,15 +71,15 @@ export function CorrectStatementLineDialog({
       open
       onClose={onClose}
       size="sm"
-      title={t('correctTitle')}
-      description={t('correctHint')}
+      title={t("correctTitle")}
+      description={t("correctHint")}
       headerActions={
         <>
           <Button variant="outline" disabled={busy} onClick={onClose}>
-            {tCommon('actions.cancel')}
+            {tCommon("actions.cancel")}
           </Button>
           <Button disabled={busy || !dirty} onClick={save}>
-            {t('correctLine')}
+            {t("correctLine")}
           </Button>
         </>
       }
@@ -94,43 +94,43 @@ export function CorrectStatementLineDialog({
           </p>
         ) : null}
         <div className="space-y-1.5">
-          <Label htmlFor="correct-line-amount">{tCommon('labels.amount')}</Label>
+          <Label htmlFor="correct-line-amount">{tCommon("labels.amount")}</Label>
           <Input
             id="correct-line-amount"
             disabled={busy}
             value={amount}
             inputMode="decimal"
             onChange={(e) => {
-              setAmount(e.target.value)
-              setError(null)
+              setAmount(e.target.value);
+              setError(null);
             }}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="correct-line-date">{tCommon('labels.date')}</Label>
+          <Label htmlFor="correct-line-date">{tCommon("labels.date")}</Label>
           <DateField
             id="correct-line-date"
             disabled={busy}
             value={postedOn}
             onChange={(value) => {
-              setPostedOn(value)
-              setError(null)
+              setPostedOn(value);
+              setError(null);
             }}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="correct-line-description">{tCommon('labels.description')}</Label>
+          <Label htmlFor="correct-line-description">{tCommon("labels.description")}</Label>
           <Input
             id="correct-line-description"
             disabled={busy}
             value={description}
             onChange={(e) => {
-              setDescription(e.target.value)
-              setError(null)
+              setDescription(e.target.value);
+              setError(null);
             }}
           />
         </div>
       </div>
     </Drawer>
-  )
+  );
 }

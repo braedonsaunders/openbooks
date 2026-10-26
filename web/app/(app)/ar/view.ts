@@ -1,14 +1,25 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { customerGroupTabs } from '../../../components/module-home/group-tabs'
-import { requirePermission, can } from '../../../lib/authz'
-import { analyticsConfig } from '../../../lib/analytics/config'
-import { ANALYTICS_CONFIG } from '../../../lib/analytics/config-spec'
-import { normalizeCashHorizonWeeks, normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
-import { arPosition } from '../../../lib/cash/ar-position'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { NOT_FORECAST_ROWS } from './cockpit/not-forecast'
+import { getLocale, getTranslations } from "next-intl/server";
+import { customerGroupTabs } from "../../../components/module-home/group-tabs";
+import { requirePermission, can } from "../../../lib/authz";
+import { analyticsConfig } from "../../../lib/analytics/config";
+import { ANALYTICS_CONFIG } from "../../../lib/analytics/config-spec";
+import {
+  normalizeCashHorizonWeeks,
+  normalizeMoneyValue,
+  withoutWeekEntries,
+} from "../../../lib/cash/core";
+import { arPosition } from "../../../lib/cash/ar-position";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { NOT_FORECAST_ROWS } from "./cockpit/not-forecast";
 
 /**
  * The AR cockpit, split into a loader and a spec.
@@ -22,39 +33,49 @@ import { NOT_FORECAST_ROWS } from './cockpit/not-forecast'
  */
 
 export interface ArCockpitData {
-  title: string
-  description: string
-  canCreate: boolean
-  canCollect: boolean
-  canSendStatements: boolean
-  sendStatementsHref: string
-  sendStatementsLabel: string
-  newItems: { kind: string; label: string; href?: string }[]
-  newBasePath: string
-  newTriggerLabel: string
-  tabs: unknown
-  data: unknown
+  title: string;
+  description: string;
+  canCreate: boolean;
+  canCollect: boolean;
+  canSendStatements: boolean;
+  sendStatementsHref: string;
+  sendStatementsLabel: string;
+  newItems: { kind: string; label: string; href?: string }[];
+  newBasePath: string;
+  newTriggerLabel: string;
+  tabs: unknown;
+  data: unknown;
 }
 
 export async function loadArCockpit(): Promise<ArCockpitData> {
-  const authz = await requirePermission('ar.read')
-  const canCreate = can(authz, 'ar.create')
+  const authz = await requirePermission("ar.read");
+  const canCreate = can(authz, "ar.create");
   // Navigation and configuration are independent reads; neither should wait
   // for the complete cash forecast before the page can finish loading.
   const [t, locale, cfg, tabs] = await Promise.all([
-    getTranslations('ar'),
+    getTranslations("ar"),
     getLocale(),
-    analyticsConfig(authz.user.orgId, 'cashflow'),
-    customerGroupTabs(authz, '/ar'),
-  ])
-  const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
+    analyticsConfig(authz.user.orgId, "cashflow"),
+    customerGroupTabs(authz, "/ar"),
+  ]);
+  const apSettings = {
+    weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
+    restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+  };
   // The cockpit reads the org's configured default horizon — the same
   // setting the banking cash page opens on — never a hardcoded 4 weeks.
   const horizon = normalizeCashHorizonWeeks(
     cfg.defaultHorizonWeeks,
     ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
-  )
-  const position = await arPosition(authz.user.orgId, horizon, apSettings, undefined, authz.allowedSubsidiaryIds, locale)
+  );
+  const position = await arPosition(
+    authz.user.orgId,
+    horizon,
+    apSettings,
+    undefined,
+    authz.allowedSubsidiaryIds,
+    locale,
+  );
   // The schedule bars need each week's label and amount; the week drill
   // fetches the week a reader actually opens from /api/cash/week-entries.
   // Shipping every week's transactions as well repeated the whole open-item
@@ -91,64 +112,67 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
         amount: e.amount,
       })),
     },
-  }
-
+  };
 
   return {
-    title: t('cockpit.title'),
-    description: t('cockpit.description'),
+    title: t("cockpit.title"),
+    description: t("cockpit.description"),
     canCreate,
-    canCollect: can(authz, 'ar.pay'),
+    canCollect: can(authz, "ar.pay"),
     canSendStatements: canCreate,
-    sendStatementsHref: '/reports/statements/send',
-    sendStatementsLabel: t('actions.sendStatements'),
+    sendStatementsHref: "/reports/statements/send",
+    sendStatementsLabel: t("actions.sendStatements"),
     newItems: [
-      { kind: 'customer_invoice', label: t('actions.newInvoice') },
-      { kind: 'customer_credit', label: t('actions.newCredit') },
-      ...(can(authz, 'ar.pay')
-        ? [{ kind: 'customer_payment', label: t('actions.receivePayment'), href: '/receipts?paymentNew=1&mode=edit' }]
+      { kind: "customer_invoice", label: t("actions.newInvoice") },
+      { kind: "customer_credit", label: t("actions.newCredit") },
+      ...(can(authz, "ar.pay")
+        ? [
+            {
+              kind: "customer_payment",
+              label: t("actions.receivePayment"),
+              href: "/receipts?paymentNew=1&mode=edit",
+            },
+          ]
         : []),
     ],
-    newBasePath: '/ar/invoices',
-    newTriggerLabel: t('actions.new'),
+    newBasePath: "/ar/invoices",
+    newTriggerLabel: t("actions.new"),
     tabs,
     data,
-  }
+  };
 }
 
-const f = ref<ArCockpitData>()
+const f = ref<ArCockpitData>();
 
 export function arCockpitSpec(data: ArCockpitData): PageSpec {
   return page({
-    route: '/ar',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/ar",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           widget(
-            'new-document',
+            "new-document",
             {
               items: data.newItems,
               basePath: data.newBasePath,
               triggerLabel: data.newTriggerLabel,
             },
-            f('canCreate'),
+            f("canCreate"),
           ),
           widget(
-            'link-button',
-            { href: f('sendStatementsHref'), label: f('sendStatementsLabel'), variant: 'outline' },
-            f('canSendStatements'),
+            "link-button",
+            { href: f("sendStatementsHref"), label: f("sendStatementsLabel"), variant: "outline" },
+            f("canSendStatements"),
           ),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
-    body: [
-      widgetBlock('ar-cockpit', { data: data.data, canCollect: data.canCollect }),
-    ],
-  })
+    body: [widgetBlock("ar-cockpit", { data: data.data, canCollect: data.canCollect })],
+  });
 }

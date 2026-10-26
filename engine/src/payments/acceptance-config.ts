@@ -35,8 +35,7 @@ export async function testAcceptanceConnection(
 ): Promise<{ ok: boolean; detail: string }> {
   try {
     if (provider === "stripe") {
-      if (!secrets.apiKey)
-        return { ok: false, detail: "no API key configured" };
+      if (!secrets.apiKey) return { ok: false, detail: "no API key configured" };
       const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
       const res = await fetchFn(`${base}/v1/account`, {
         method: "GET",
@@ -55,10 +54,7 @@ export async function testAcceptanceConnection(
           }
         : {
             ok: false,
-            detail:
-              typeof errorMessage === "string"
-                ? errorMessage
-                : `HTTP ${res.status}`,
+            detail: typeof errorMessage === "string" ? errorMessage : `HTTP ${res.status}`,
           };
     }
     if (provider === "adyen") {
@@ -85,19 +81,12 @@ export async function testAcceptanceConnection(
           }
         : {
             ok: false,
-            detail:
-              typeof json.message === "string"
-                ? json.message
-                : `HTTP ${res.status}`,
+            detail: typeof json.message === "string" ? json.message : `HTTP ${res.status}`,
           };
     }
     // gocardless
-    if (!secrets.apiKey)
-      return { ok: false, detail: "no access token configured" };
-    const base = resolveAcceptanceProviderApiBase(
-      "gocardless",
-      secrets.apiBase,
-    );
+    if (!secrets.apiKey) return { ok: false, detail: "no access token configured" };
+    const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
     const res = await fetchFn(`${base}/billing_requests?limit=1`, {
       method: "GET",
       redirect: "error",
@@ -141,17 +130,10 @@ export async function saveAcceptanceConfig(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
   assertUnrestrictedScope(allowedSubsidiaryIds);
-  if (
-    input.defaultBankAccountId !== undefined &&
-    input.defaultBankAccountId !== null
-  ) {
+  if (input.defaultBankAccountId !== undefined && input.defaultBankAccountId !== null) {
     await validateAcceptanceBankAccount(orgId, input.defaultBankAccountId);
   }
-  await validateConfiguredSurchargeRule(
-    orgId,
-    input.provider,
-    input.surchargeRuleId ?? null,
-  );
+  await validateConfiguredSurchargeRule(orgId, input.provider, input.surchargeRuleId ?? null);
 
   // Dispute accounts post the automated refund/dispute journals: a foreign or
   // unpostable reference must fail the save, not the first chargeback. The
@@ -164,9 +146,7 @@ export async function saveAcceptanceConfig(
       { label: "dispute-fee", id: input.defaultDisputeFeeAccountId },
     ]);
   } catch (e) {
-    throw new PaymentAcceptanceError(
-      e instanceof Error ? e.message : String(e),
-    );
+    throw new PaymentAcceptanceError(e instanceof Error ? e.message : String(e));
   }
   await db.transaction(async (tx) => {
     // Settings share the provider row with dated receipt funding policies.
@@ -182,11 +162,7 @@ export async function saveAcceptanceConfig(
     type ConfigRow = ProviderConfigRow;
     // Snapshot the stored config first so the audit row carries the real
     // before/after state; sealed secrets appear only as presence flags.
-    const existing = await loadPaymentProviderConfig<ProviderConfigRow>(
-      orgId,
-      input.provider,
-      tx,
-    );
+    const existing = await loadPaymentProviderConfig<ProviderConfigRow>(orgId, input.provider, tx);
     // Omitted keys survive UI saves (the setup form posts only the fields it
     // renders); supplied values overwrite, and the merged result passes the
     // canonical endpoint normalizer.
@@ -202,10 +178,7 @@ export async function saveAcceptanceConfig(
       }
       mergedSettings[key] = value;
     }
-    const settings = normalizeAcceptanceProviderSettings(
-      input.provider,
-      mergedSettings,
-    );
+    const settings = normalizeAcceptanceProviderSettings(input.provider, mergedSettings);
     const configView = (row: ConfigRow | null) =>
       row === null
         ? null
@@ -216,12 +189,9 @@ export async function saveAcceptanceConfig(
             defaultBankAccountId: row.default_bank_account_id,
             publishableKey: row.publishable_key ?? null,
             surchargeRuleId: row.surcharge_rule_id,
-            defaultDisputedFundsAccountId:
-              row.default_disputed_funds_account_id ?? null,
-            defaultChargebackLossAccountId:
-              row.default_chargeback_loss_account_id ?? null,
-            defaultDisputeFeeAccountId:
-              row.default_dispute_fee_account_id ?? null,
+            defaultDisputedFundsAccountId: row.default_disputed_funds_account_id ?? null,
+            defaultChargebackLossAccountId: row.default_chargeback_loss_account_id ?? null,
+            defaultDisputeFeeAccountId: row.default_dispute_fee_account_id ?? null,
             settings: row.settings,
             hasApiKey:
               row.secrets != null &&
@@ -242,13 +212,10 @@ export async function saveAcceptanceConfig(
       const prior =
         existing?.secrets == null
           ? {}
-          : unsealJson<{ apiKey?: string; webhookSecret?: string }>(
-              existing.secrets,
-              {
-                orgId,
-                purpose: "payment.provider.secrets",
-              },
-            );
+          : unsealJson<{ apiKey?: string; webhookSecret?: string }>(existing.secrets, {
+              orgId,
+              purpose: "payment.provider.secrets",
+            });
       secrets = await sealJson(
         {
           ...prior,
@@ -258,7 +225,8 @@ export async function saveAcceptanceConfig(
         { orgId, purpose: "payment.provider.secrets" },
       );
     }
-    const savedRows = await tx.execute<ConfigRow>(sql`
+    const savedRows = await tx.execute<ConfigRow>(
+      sql`
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
          publishable_key, surcharge_rule_id, settings, secrets,
@@ -301,10 +269,11 @@ export async function saveAcceptanceConfig(
                 publishable_key, surcharge_rule_id, settings, secrets,
                 default_disputed_funds_account_id, default_chargeback_loss_account_id,
                 default_dispute_fee_account_id
-    `, "objects");
+    `,
+      "objects",
+    );
     const saved = savedRows[0];
-    if (!saved)
-      throw new PaymentAcceptanceError("provider config failed to persist");
+    if (!saved) throw new PaymentAcceptanceError("provider config failed to persist");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'psp_provider_configs', ${saved.id},

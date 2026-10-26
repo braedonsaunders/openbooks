@@ -28,7 +28,8 @@ export const CA_CONSTRUCTION: PayrollPackConstruction = {
     {
       kind: "remittance_component",
       componentKey: "ccq_vacation_indemnity",
-      purpose: "Vacation and statutory-holiday indemnity remitted to the CCQ for Quebec construction employees",
+      purpose:
+        "Vacation and statutory-holiday indemnity remitted to the CCQ for Quebec construction employees",
       citation:
         "Act respecting labour relations, vocational training and workforce management in the construction industry, CQLR c R-20",
       effectiveFrom: "2026-01-01",

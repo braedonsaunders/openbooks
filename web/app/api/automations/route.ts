@@ -1,12 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createAutomation,
-  listAutomations,
-} from "@openbooks/engine/automations/services";
+import { createAutomation, listAutomations } from "@openbooks/engine/automations/services";
 import { createAutomationBody } from "./bodies";
 import { automationErrorResponse } from "./_lib";
-
 
 export const runtime = "nodejs";
 

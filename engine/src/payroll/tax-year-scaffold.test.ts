@@ -1,7 +1,15 @@
 // source-pin-contract: the generator's product is a draft edition plus runner instructions; the scratch copy proves generated editions stay isolated from the checkout.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import test, { after, before } from "node:test";
 import { payrollTaxYearSupport } from "./packs.ts";
@@ -55,15 +63,24 @@ const GENERATOR = "scripts/payroll-new-tax-year.ts";
 before(() => {
   rmSync(SCRATCH_ROOT, { recursive: true, force: true });
   mkdirSync(join(SCRATCH_ROOT, "engine"), { recursive: true });
-  cpSync(join(REPO_ROOT, "engine", "src"), join(SCRATCH_ROOT, "engine", "src"), { recursive: true });
+  cpSync(join(REPO_ROOT, "engine", "src"), join(SCRATCH_ROOT, "engine", "src"), {
+    recursive: true,
+  });
   cpSync(join(REPO_ROOT, "engine", "package.json"), join(SCRATCH_ROOT, "engine", "package.json"));
   // The generator imports the declarations through the engine package name. The
   // scratch root sits inside engine/, so without its own package.json that name
   // would self-reference the checkout's engine/package.json; a neutral manifest
   // here, plus a link to the copy, makes the name resolve to the copied sources.
-  writeFileSync(join(SCRATCH_ROOT, "package.json"), JSON.stringify({ name: "scaffold-scratch", private: true, type: "module" }));
+  writeFileSync(
+    join(SCRATCH_ROOT, "package.json"),
+    JSON.stringify({ name: "scaffold-scratch", private: true, type: "module" }),
+  );
   mkdirSync(join(SCRATCH_ROOT, "node_modules", "@openbooks"), { recursive: true });
-  symlinkSync(join(SCRATCH_ROOT, "engine"), join(SCRATCH_ROOT, "node_modules", "@openbooks", "engine"), "dir");
+  symlinkSync(
+    join(SCRATCH_ROOT, "engine"),
+    join(SCRATCH_ROOT, "node_modules", "@openbooks", "engine"),
+    "dir",
+  );
   // The generator too, at its repo-relative path. It reads the DECLARATIONS
   // from its own checkout (`../engine/src/payroll/tax-years.ts`), so the copy
   // reads the copied packs — the only way to drive it against a pack state
@@ -94,8 +111,16 @@ function runGenerator(
   const result = spawnSync(
     process.execPath,
     [
-      "--import", "tsx", GENERATOR,
-      "--country", country, "--year", String(YEAR), "--root", root, ...extra,
+      "--import",
+      "tsx",
+      GENERATOR,
+      "--country",
+      country,
+      "--year",
+      String(YEAR),
+      "--root",
+      root,
+      ...extra,
     ],
     { cwd: REPO_ROOT, encoding: "utf8" },
   );
@@ -110,8 +135,15 @@ function runCopiedGenerator(country: string): { status: number; out: string } {
   const result = spawnSync(
     process.execPath,
     [
-      "--import", "tsx", GENERATOR,
-      "--country", country, "--year", String(YEAR), "--root", SCRATCH_ROOT,
+      "--import",
+      "tsx",
+      GENERATOR,
+      "--country",
+      country,
+      "--year",
+      String(YEAR),
+      "--root",
+      SCRATCH_ROOT,
     ],
     { cwd: SCRATCH_ROOT, encoding: "utf8" },
   );
@@ -138,8 +170,15 @@ test("a published year is never overwritten by the generator", () => {
   const result = spawnSync(
     process.execPath,
     [
-      "--import", "tsx", "scripts/payroll-new-tax-year.ts",
-      "--country", "US", "--year", "2026", "--root", SCRATCH_ROOT,
+      "--import",
+      "tsx",
+      "scripts/payroll-new-tax-year.ts",
+      "--country",
+      "US",
+      "--year",
+      "2026",
+      "--root",
+      SCRATCH_ROOT,
     ],
     { cwd: REPO_ROOT, encoding: "utf8" },
   );
@@ -156,7 +195,10 @@ test("a published year is never overwritten by the generator", () => {
 test("the US scaffold produces a DRAFT module and shared-runner row instructions", async () => {
   const support = payrollTaxYearSupport("US");
   // The declared paths are repo-relative, so they land under the throwaway root.
-  assert.deepEqual(support.scaffold.files.map((file) => file.path), ["engine/src/payroll/us/rates-{year}.ts"]);
+  assert.deepEqual(
+    support.scaffold.files.map((file) => file.path),
+    ["engine/src/payroll/us/rates-{year}.ts"],
+  );
   assert.ok(support.scaffold.barrels.length > 0);
 
   const generated = runGenerator("US");
@@ -166,7 +208,10 @@ test("the US scaffold produces a DRAFT module and shared-runner row instructions
   // a hand-maintained list, so the line grows as prior-year editions land.
   // Assert 2099 is among them, not that it is alone -- pinning the whole list
   // makes this fail the day a pack gains a year that has nothing to do with it.
-  assert.match(generated.out, /wired    engine\/src\/payroll\/us\/editions\.ts → (?:[\d, ]*\b)?2099\b/);
+  assert.match(
+    generated.out,
+    /wired    engine\/src\/payroll\/us\/editions\.ts → (?:[\d, ]*\b)?2099\b/,
+  );
   // The instructions are the pack's own, in order, and they name the sources.
   assert.match(generated.out, /Pub 15-T/);
   assert.ok(generated.out.includes("GOLDENS to engine/src/payroll/us/pub15t.test.ts"));
@@ -174,14 +219,19 @@ test("the US scaffold produces a DRAFT module and shared-runner row instructions
   assert.ok(generated.out.includes("REFUSALS in engine/src/payroll/us/pub15t.test.ts"));
 
   const modulePath = scratch("engine/src/payroll/us/rates-2099.ts");
-  assert.ok(existsSync(modulePath) && !existsSync(scratch("engine/src/payroll/us/rates-2099.test.ts")));
+  assert.ok(
+    existsSync(modulePath) && !existsSync(scratch("engine/src/payroll/us/rates-2099.test.ts")),
+  );
 
   // 1. The edition is a DRAFT carrying placeholders, so nothing can withhold
   //    from it. Imported dynamically: it has never been loaded in this process.
   const edition = (await import(modulePath)) as { RATES_2099: Record<string, unknown> };
   assert.equal(edition.RATES_2099.status, "draft");
   const unfilled = unfilledPaths(edition.RATES_2099);
-  assert.ok(unfilled.length > 20, `a skeleton must placehold every figure, found ${unfilled.length}`);
+  assert.ok(
+    unfilled.length > 20,
+    `a skeleton must placehold every figure, found ${unfilled.length}`,
+  );
   assert.ok(unfilled.includes("fica.ssWageBase"));
   assert.ok(unfilled.includes("futa.grossRate"));
 
@@ -216,7 +266,11 @@ test("US, GB, IE, and SG scaffolds target their shared GOLDENS and REFUSALS tabl
 
   for (const [country, modulePattern, runner] of cases) {
     const support = payrollTaxYearSupport(country);
-    assert.deepEqual(support.scaffold.files.map((file) => file.path), [modulePattern], country);
+    assert.deepEqual(
+      support.scaffold.files.map((file) => file.path),
+      [modulePattern],
+      country,
+    );
     const generated = runGenerator(country);
     assert.equal(generated.status, 0, generated.out);
     assert.ok(generated.out.includes(`GOLDENS to ${runner}`), country);
@@ -292,8 +346,11 @@ test("a year the country published but its own-tables region has not still scaff
   assert.match(partial.out, /exists   engine\/src\/payroll\/canada\/rates-2099\.ts/); // source-path: synthetic
   assert.match(partial.out, /created  engine\/src\/payroll\/canada\/quebec\/rates-2099\.ts/); // source-path: synthetic
   assert.match(partial.out, /created  engine\/src\/payroll\/canada\/quebec\/rates-2099\.test\.ts/);
-  assert.equal(readFileSync(scratch(federalModule), "utf8"), published,
-    "a published edition is never overwritten by a generator");
+  assert.equal(
+    readFileSync(scratch(federalModule), "utf8"),
+    published,
+    "a published edition is never overwritten by a generator",
+  );
   assert.match(readFileSync(scratch(quebecModule), "utf8"), /status: "draft"/);
   assert.match(readFileSync(scratch(quebecBarrel), "utf8"), /QC_RATES_2099,/);
 

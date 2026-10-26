@@ -1,29 +1,31 @@
-import 'server-only'
-import { reportBookSelection } from '../../../../lib/report-books'
-import { resolveOrgId } from '../../../../lib/org-scope'
+import "server-only";
+import { reportBookSelection } from "../../../../lib/report-books";
+import { resolveOrgId } from "../../../../lib/org-scope";
 
-
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
+import { ref, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { cashFlow, dimensionOptions, type CashFlowSection } from "../../../../lib/reports";
+import { orgInfo } from "../../../../lib/data";
 import {
-  ref,
-  widgetBlock,
-  type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
-import { orgInfo } from '../../../../lib/data'
-import { MissingRatesError, reportSubsidiaryView, historicalTranslationBlockedNotice, statementTranslationBlockedAction, type CurrencyBasisNotice, type StatementTranslationBlockedNotice } from '../../../../lib/consolidation'
-import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { getAuthz } from '@/lib/authz'
-import { dimensionOptionsScope } from '../../../../lib/reports/filters'
-import { reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
-import type { StatementRow } from '../StatementRows'
-import { decimalCmp, decimalIsMaterial, type ExactDecimal } from '../../../../lib/statement-format'
-import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
+  MissingRatesError,
+  reportSubsidiaryView,
+  historicalTranslationBlockedNotice,
+  statementTranslationBlockedAction,
+  type CurrencyBasisNotice,
+  type StatementTranslationBlockedNotice,
+} from "../../../../lib/consolidation";
+import { ReportCurrencyBasisError } from "../../../../lib/reports/currency-basis";
+import { resolvePeriod } from "../../../../lib/periods";
+import { parseReportQuery } from "../../../../lib/report-filters";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { getAuthz } from "@/lib/authz";
+import { dimensionOptionsScope } from "../../../../lib/reports/filters";
+import { reportSubtotalRowClass, reportTotalRowClass } from "../ReportTable";
+import type { StatementRow } from "../StatementRows";
+import { decimalCmp, decimalIsMaterial, type ExactDecimal } from "../../../../lib/statement-format";
+import { statementReportSpec, stringReportParams } from "@/lib/reports/statement-report-spec";
 
 /**
  * Direct cash flow, split into a loader and a spec.
@@ -38,259 +40,283 @@ import { statementReportSpec, stringReportParams } from '@/lib/reports/statement
  * compared it; the renderer only maps that name to the red treatment.
  */
 
-const SECTION_ORDER: CashFlowSection[] = ['operating', 'investing', 'financing']
+const SECTION_ORDER: CashFlowSection[] = ["operating", "investing", "financing"];
 
-type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
+type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>;
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
 
 export interface CashFlowData {
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
-  title: string
-  backHref: string
-  backLabel: string
-  company: string
-  periodPhrase: string
-  reconciliationLabel: string
-  reconciliationStatus: string
-  reconciled: boolean
+  primaryFilter: {
+    paramKey: string;
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  } | null;
+  title: string;
+  backHref: string;
+  backLabel: string;
+  company: string;
+  periodPhrase: string;
+  reconciliationLabel: string;
+  reconciliationStatus: string;
+  reconciled: boolean;
   /** Set when translation prerequisites block the statement:
    * the native banner directs the operator to rates or retained source evidence. */
-  ratesBlocked: StatementTranslationBlockedNotice | null
+  ratesBlocked: StatementTranslationBlockedNotice | null;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /** False when either refusal is set; the paper hides with either. */
-  ratesReady: boolean
-  rows: StatementRow[]
-  dimensions: DimensionOptions
-  subsidiaries: SubsidiaryPicker
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string>
+  ratesReady: boolean;
+  rows: StatementRow[];
+  dimensions: DimensionOptions;
+  subsidiaries: SubsidiaryPicker;
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string>;
 }
 
 export async function loadCashFlow(sp: Record<string, string | undefined>): Promise<CashFlowData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const t = await getTranslations('reports.cashFlow')
-  const locale = await getLocale()
-  const tr = await getTranslations('reports')
-  const scheduleDefId = await reportScheduleAnchor('cash-flow')
-  const tb = await getTranslations('budgets')
-  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const from = period.from
-  const to = period.to
+  const { money: formatMoney } = await getMoneyFormatter();
+  const t = await getTranslations("reports.cashFlow");
+  const locale = await getLocale();
+  const tr = await getTranslations("reports");
+  const scheduleDefId = await reportScheduleAnchor("cash-flow");
+  const tb = await getTranslations("budgets");
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book);
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
+  const from = period.from;
+  const to = period.to;
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
   // Translation prerequisites render a supported remedy in the native banner;
   // the statement remains hidden until its exact basis is available.
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let cf: Awaited<ReturnType<typeof cashFlow>> | null = null
-  let ratesBlocked: StatementTranslationBlockedNotice | null = null
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let cf: Awaited<ReturnType<typeof cashFlow>> | null = null;
+  let ratesBlocked: StatementTranslationBlockedNotice | null = null;
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
-    cf = await cashFlow(from, to, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id, subView.subsidiary)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id);
+    cf = await cashFlow(
+      from,
+      to,
+      { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
+      undefined,
+      selectedBook.id,
+      subView.subsidiary,
+    );
   } catch (e) {
     // A multi-currency viewed set is a NAMED refusal, not a defect: the
     // banner carries the remedy (choose a single-currency subsidiary view)
     // and the filter-bar picker beside it offers that choice.
     if (e instanceof ReportCurrencyBasisError) {
       currencyBasisBlocked = {
-        code: 'multi-currency-basis',
-        title: tr('statement.currencyBasisBlockedTitle'),
+        code: "multi-currency-basis",
+        title: tr("statement.currencyBasisBlockedTitle"),
         description: e.message,
-      }
+      };
     } else {
       const historicalNotice = historicalTranslationBlockedNotice(e, {
-        title: tr('statement.historicalEvidenceBlockedTitle'),
-        actionLabel: tr('statement.historicalEvidenceBlockedAction'),
-      })
-      if (historicalNotice) ratesBlocked = historicalNotice
+        title: tr("statement.historicalEvidenceBlockedTitle"),
+        actionLabel: tr("statement.historicalEvidenceBlockedAction"),
+      });
+      if (historicalNotice) ratesBlocked = historicalNotice;
       else {
-        if (!(e instanceof MissingRatesError)) throw e
+        if (!(e instanceof MissingRatesError)) throw e;
         ratesBlocked = {
-          code: 'rates-not-derived',
-          title: tr('statement.ratesBlockedTitle'),
+          code: "rates-not-derived",
+          title: tr("statement.ratesBlockedTitle"),
           description: (e as Error).message,
-          deriveLabel: tr('statement.ratesBlockedAction'),
-          deriveHref: '/close',
-        }
+          deriveLabel: tr("statement.ratesBlockedAction"),
+          deriveHref: "/close",
+        };
       }
     }
   }
-  const authz = await getAuthz()
-  const optionScope = dimensionOptionsScope(subView?.subsidiary?.ids, authz?.allowedSubsidiaryIds)
-  const [opts, org] = await Promise.all([dimensionOptions(undefined, undefined, optionScope), orgInfo()])
+  const authz = await getAuthz();
+  const optionScope = dimensionOptionsScope(subView?.subsidiary?.ids, authz?.allowedSubsidiaryIds);
+  const [opts, org] = await Promise.all([
+    dimensionOptions(undefined, undefined, optionScope),
+    orgInfo(),
+  ]);
   // Resolves empty when blocked; drills only render beside the paper.
-  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids };
   // Figures present in the VIEW's currency (the context node's functional
   // currency), not the org base — a foreign-functional subsidiary view
   // states its own money. Mirrors the P&L and balance sheet.
-  const m = (v: ExactDecimal) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency })
-  const openingTo = new Date(`${from}T00:00:00Z`)
-  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
-  const openingDate = openingTo.toISOString().slice(0, 10)
+  const m = (v: ExactDecimal) =>
+    formatMoney(v, { currency: subView?.currency ?? org?.base_currency });
+  const openingTo = new Date(`${from}T00:00:00Z`);
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1);
+  const openingDate = openingTo.toISOString().slice(0, 10);
 
   const sectionLabels: Record<CashFlowSection, string> = {
-    operating: t('sections.operating'),
-    investing: t('sections.investing'),
-    financing: t('sections.financing'),
-  }
-  const sections = cf?.sections ?? []
-  const reconciled = cf !== null && !decimalIsMaterial(cf.reconciliationGap, '0.0100')
-  const hasMovements = sections.some((s) => s.lines.length > 0)
-  const toneOf = (v: ExactDecimal) => (decimalCmp(v, '0') < 0 ? ('negative' as const) : ('default' as const))
+    operating: t("sections.operating"),
+    investing: t("sections.investing"),
+    financing: t("sections.financing"),
+  };
+  const sections = cf?.sections ?? [];
+  const reconciled = cf !== null && !decimalIsMaterial(cf.reconciliationGap, "0.0100");
+  const hasMovements = sections.some((s) => s.lines.length > 0);
+  const toneOf = (v: ExactDecimal) =>
+    decimalCmp(v, "0") < 0 ? ("negative" as const) : ("default" as const);
 
-  const rows: StatementRow[] = []
+  const rows: StatementRow[] = [];
   if (!hasMovements) {
     rows.push({
-      key: 'empty',
+      key: "empty",
       span: true,
-      label: t('empty'),
-      labelClassName: 'text-center text-slate-400 italic',
-    })
+      label: t("empty"),
+      labelClassName: "text-center text-slate-400 italic",
+    });
   } else if (cf !== null) {
     // The null guard doubles as the rates-blocked gate: with no
     // derived rates there is nothing to build, and the banner replaces the
     // paper. TypeScript narrows every cf.* access below through this branch.
     for (const section of SECTION_ORDER) {
-      const s = sections.find((x) => x.section === section)!
-      const title = sectionLabels[section]
-      const subtotalLabel = t('subtotal', { section: title.toLowerCase() })
+      const s = sections.find((x) => x.section === section)!;
+      const title = sectionLabels[section];
+      const subtotalLabel = t("subtotal", { section: title.toLowerCase() });
       rows.push({
         key: `${section}-heading`,
         span: true,
         label: title,
-        labelClassName: 'pt-4 pb-1 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-300',
-      })
+        labelClassName:
+          "pt-4 pb-1 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-300",
+      });
       if (s.lines.length === 0) {
         rows.push({
           key: `${section}-none`,
           span: true,
-          label: '—',
-          labelClassName: 'pl-8 text-slate-300 italic dark:text-slate-600',
-        })
+          label: "—",
+          labelClassName: "pl-8 text-slate-300 italic dark:text-slate-600",
+        });
       } else {
         for (const l of s.lines) {
           rows.push({
             key: `${section}-${l.type}`,
             label: l.label,
-            labelClassName: 'pl-8',
+            labelClassName: "pl-8",
             value: m(l.amount),
-            valueClassName: 'text-right tabular-nums',
+            valueClassName: "text-right tabular-nums",
             tone: toneOf(l.amount),
             drill: {
-              kind: 'ledger', bookId: selectedBook.id,
+              kind: "ledger",
+              bookId: selectedBook.id,
               label: l.label,
               accountTypes: [l.type],
               from,
               to,
-              mode: 'flow',
+              mode: "flow",
               dims,
               cashOnly: true,
             },
-          })
+          });
         }
       }
       rows.push({
         key: `${section}-subtotal`,
         label: subtotalLabel,
-        labelClassName: 'font-semibold',
+        labelClassName: "font-semibold",
         value: m(s.subtotal),
-        valueClassName: 'text-right font-semibold tabular-nums',
+        valueClassName: "text-right font-semibold tabular-nums",
         tone: toneOf(s.subtotal),
         rowClassName: reportSubtotalRowClass,
         drill: {
-          kind: 'ledger', bookId: selectedBook.id,
+          kind: "ledger",
+          bookId: selectedBook.id,
           label: subtotalLabel,
           accountTypes: s.lines.map((line) => line.type),
           from,
           to,
-          mode: 'flow',
+          mode: "flow",
           dims,
           cashOnly: true,
         },
-      })
+      });
     }
     if (decimalIsMaterial(cf.fxEffectOnCash)) {
       rows.push({
-        key: 'fx-effect',
-        label: t('fxEffect'),
-        labelClassName: 'pl-8',
+        key: "fx-effect",
+        label: t("fxEffect"),
+        labelClassName: "pl-8",
         value: m(cf.fxEffectOnCash),
-        valueClassName: 'text-right tabular-nums',
+        valueClassName: "text-right tabular-nums",
         tone: toneOf(cf.fxEffectOnCash),
-      })
+      });
     }
     rows.push({
-      key: 'net-change',
-      label: t('netChange'),
-      labelClassName: 'font-bold',
+      key: "net-change",
+      label: t("netChange"),
+      labelClassName: "font-bold",
       value: m(cf.netChange),
-      valueClassName: 'text-right font-bold tabular-nums',
+      valueClassName: "text-right font-bold tabular-nums",
       tone: toneOf(cf.netChange),
       rowClassName: reportSubtotalRowClass,
       drill: {
-        kind: 'ledger', bookId: selectedBook.id,
-        label: t('netChange'),
+        kind: "ledger",
+        bookId: selectedBook.id,
+        label: t("netChange"),
         accountTypes: cf.sections.flatMap((s) => s.lines.map((line) => line.type)),
         from,
         to,
-        mode: 'flow',
+        mode: "flow",
         dims,
         cashOnly: true,
       },
-    })
+    });
     rows.push({
-      key: 'opening-cash',
-      label: t('openingCash'),
-      labelClassName: 'pl-8 text-slate-500 dark:text-slate-400',
+      key: "opening-cash",
+      label: t("openingCash"),
+      labelClassName: "pl-8 text-slate-500 dark:text-slate-400",
       value: m(cf.openingCash),
-      valueClassName: 'text-right tabular-nums text-slate-500 dark:text-slate-400',
+      valueClassName: "text-right tabular-nums text-slate-500 dark:text-slate-400",
       drill: {
-        kind: 'ledger', bookId: selectedBook.id,
-        label: t('openingCash'),
-        accountTypes: ['asset_bank'],
+        kind: "ledger",
+        bookId: selectedBook.id,
+        label: t("openingCash"),
+        accountTypes: ["asset_bank"],
         to: openingDate,
-        mode: 'balance',
+        mode: "balance",
         dims,
       },
-    })
+    });
     rows.push({
-      key: 'closing-cash',
-      label: t('closingCash'),
-      labelClassName: 'font-semibold',
+      key: "closing-cash",
+      label: t("closingCash"),
+      labelClassName: "font-semibold",
       value: m(cf.closingCash),
-      valueClassName: 'text-right font-semibold tabular-nums',
+      valueClassName: "text-right font-semibold tabular-nums",
       tone: toneOf(cf.closingCash),
       rowClassName: reportTotalRowClass,
       drill: {
-        kind: 'ledger', bookId: selectedBook.id,
-        label: t('closingCash'),
-        accountTypes: ['asset_bank'],
+        kind: "ledger",
+        bookId: selectedBook.id,
+        label: t("closingCash"),
+        accountTypes: ["asset_bank"],
         to,
-        mode: 'balance',
+        mode: "balance",
         dims,
       },
-    })
+    });
   }
 
   return {
-    title: t('title'),
-    backHref: '/reports',
-    backLabel: tr('hub.title'),
-    company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('dateRange', civilDateParams({ from, to }, locale))}`,
-    reconciliationLabel: t('reconciliation'),
-    reconciliationStatus: cf === null
-      ? ''
-      : reconciled
-        ? t('reconciled')
-        : t('offBy', { amount: m(cf.reconciliationGap) }),
+    title: t("title"),
+    backHref: "/reports",
+    backLabel: tr("hub.title"),
+    company: org?.name ?? "",
+    periodPhrase: `${selectedBook.name} · ${t("dateRange", civilDateParams({ from, to }, locale))}`,
+    reconciliationLabel: t("reconciliation"),
+    reconciliationStatus:
+      cf === null
+        ? ""
+        : reconciled
+          ? t("reconciled")
+          : t("offBy", { amount: m(cf.reconciliationGap) }),
     reconciled,
     ratesBlocked,
     currencyBasisBlocked,
@@ -298,77 +324,87 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
     rows,
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
-    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
+    primaryFilter:
+      books.length > 1
+        ? {
+            paramKey: "book",
+            label: tb("list.bookFilter"),
+            value: selectedBook.id,
+            options: books.map((book) => ({ value: book.id, label: book.name })),
+          }
+        : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringReportParams(sp),
-  }
+  };
 }
 
-const f = ref<CashFlowData>()
+const f = ref<CashFlowData>();
 
 export function cashFlowSpec(data: CashFlowData): PageSpec {
   return statementReportSpec({
-    route: '/reports/cash-flow',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
-    filters: [{
-      controls: { period: true, dimensions: true, subsidiary: true },
-      options: {
-          dimensions: f('dimensions'),
-          subsidiaries: f('subsidiaries'),
-          primaryFilter: f('primaryFilter'),
+    route: "/reports/cash-flow",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
+    filters: [
+      {
+        controls: { period: true, dimensions: true, subsidiary: true },
+        options: {
+          dimensions: f("dimensions"),
+          subsidiaries: f("subsidiaries"),
+          primaryFilter: f("primaryFilter"),
+        },
       },
-    }],
+    ],
     schedule: {
-      definitionId: data.scheduleDefId ?? '',
+      definitionId: data.scheduleDefId ?? "",
       statementParams: data.scheduleParams,
-      when: f('scheduleDefId'),
+      when: f("scheduleDefId"),
     },
-    exportMenu: { kind: 'cash-flow', params: data.exportParams },
+    exportMenu: { kind: "cash-flow", params: data.exportParams },
     headerAfterFilters: [
       {
-        ...widgetBlock('reconciliation-note', {
+        ...widgetBlock("reconciliation-note", {
           label: data.reconciliationLabel,
           status: data.reconciliationStatus,
           reconciled: data.reconciled,
         }),
         // No reconciliation to report while rates block the statement.
-        when: f('ratesReady'),
+        when: f("ratesReady"),
       },
     ],
     bodyBeforePaper: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
             href: statementTranslationBlockedAction(data.ratesBlocked).href,
             label: statementTranslationBlockedAction(data.ratesBlocked).label,
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
-      when: f('ratesReady'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
+      when: f("ratesReady"),
     },
-    blocks: [widgetBlock('statement-rows', { rows: data.rows })],
-  })
+    blocks: [widgetBlock("statement-rows", { rows: data.rows })],
+  });
 }

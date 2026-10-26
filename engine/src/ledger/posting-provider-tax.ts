@@ -1,18 +1,37 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfigForPosting, readTaxQuoteForDocumentLine, sumComponentTax, type Address, type PersistedTaxQuote } from "../tax/rate-providers.ts";
+import {
+  providerBindingMismatch,
+  providerEvidenceMismatch,
+  readTaxRateProviderConfigForPosting,
+  readTaxQuoteForDocumentLine,
+  sumComponentTax,
+  type Address,
+  type PersistedTaxQuote,
+} from "../tax/rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
-import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "../journal/posting-contracts.ts";
+import {
+  type Doc,
+  type DocLine,
+  type PostingDeps,
+  type TaxPostingComponent,
+  PostingError,
+} from "../journal/posting-contracts.ts";
 type ProviderTaxPlan = {
   line: DocLine;
   components: TaxPostingComponent[];
 };
 
 export function providerTaxDocumentKind(kind: string): boolean {
-  return kind === "customer_invoice" || kind === "customer_credit" ||
-    kind === "cash_sale" || kind === "cash_refund" ||
-    kind === "vendor_bill" || kind === "vendor_credit";
+  return (
+    kind === "customer_invoice" ||
+    kind === "customer_credit" ||
+    kind === "cash_sale" ||
+    kind === "cash_refund" ||
+    kind === "vendor_bill" ||
+    kind === "vendor_credit"
+  );
 }
 
 /** Frozen destination jurisdiction stamped on the document at posting (0265). */
@@ -76,7 +95,8 @@ export async function defaultPartyAddress(
   shipping: boolean,
 ): Promise<Address> {
   if (!partyId) return {};
-  const result = await db.execute<Record<string, unknown>>(sql`
+  const result = await db.execute<Record<string, unknown>>(
+    sql`
     select line1, city, region, postal_code as "postalCode", country
       from addresses
      where org_id = ${orgId} and party_id = ${partyId}
@@ -85,7 +105,9 @@ export async function defaultPartyAddress(
        case when ${shipping} then is_default_billing else is_default_shipping end desc,
        id asc
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   return addressFromRow(result[0]);
 }
 
@@ -112,18 +134,20 @@ function providerRequestForLine(
   };
 }
 
-export function taxConfigsFromEvidence(
-  components: TaxPostingComponent[],
-): TaxComponentConfig[] {
+export function taxConfigsFromEvidence(components: TaxPostingComponent[]): TaxComponentConfig[] {
   return components.map((component) => ({
     taxCodeId: component.taxCodeId,
     sequence: component.sequence,
     ratePercent: component.ratePercent ?? "0",
-    recoverablePercent: component.recoverablePercent ??
+    recoverablePercent:
+      component.recoverablePercent ??
       (toUnits(component.taxAmount) === 0n
         ? "100"
-        : fromUnits((toUnits(component.recoverableAmount) * 1_000_000n + toUnits(component.taxAmount) / 2n) /
-            toUnits(component.taxAmount))),
+        : fromUnits(
+            (toUnits(component.recoverableAmount) * 1_000_000n +
+              toUnits(component.taxAmount) / 2n) /
+              toUnits(component.taxAmount),
+          )),
     calculationType: component.calculationType,
     priceIncludesTax: component.priceIncludesTax ?? false,
     compoundOnPrevious: component.compoundOnPrevious ?? false,
@@ -153,7 +177,8 @@ export function documentLocationChange(
   if (!custom || typeof custom !== "object") return null;
   const raw = (custom as { taxProviderAddresses?: unknown }).taxProviderAddresses;
   if (raw == null) return null;
-  if (typeof raw !== "object" || Array.isArray(raw)) return "tax location override is not an object";
+  if (typeof raw !== "object" || Array.isArray(raw))
+    return "tax location override is not an object";
   for (const side of ["shipFrom", "shipTo"] as const) {
     const override = (raw as Record<string, unknown>)[side];
     if (override == null) continue;
@@ -162,7 +187,13 @@ export function documentLocationChange(
     }
     const coerced: Address = {};
     for (const [key, value] of Object.entries(override)) {
-      if (key !== "line1" && key !== "city" && key !== "region" && key !== "postalCode" && key !== "country") {
+      if (
+        key !== "line1" &&
+        key !== "city" &&
+        key !== "region" &&
+        key !== "postalCode" &&
+        key !== "country"
+      ) {
         return `${side} tax location override has an unknown field "${key}"`;
       }
       if (value != null && typeof value !== "string") {
@@ -199,7 +230,9 @@ export async function resolveProviderTaxPlans(
     if (!line.taxCodeId && !line.taxGroupId) continue;
     const existingComponents = deps.taxComponentsByLine?.get(line.id) ?? [];
     if (existingComponents.length === 0) {
-      throw new PostingError(`line ${line.lineNumber} has a tax profile but no calculation evidence`);
+      throw new PostingError(
+        `line ${line.lineNumber} has a tax profile but no calculation evidence`,
+      );
     }
     const persisted = await readTaxQuoteForDocumentLine(doc.orgId, line.id);
     if (!persisted) {
@@ -208,7 +241,9 @@ export async function resolveProviderTaxPlans(
       );
     }
     if (persisted.providerConfigId !== config.id || persisted.provider !== config.provider) {
-      throw new PostingError(`line ${line.lineNumber} has ambiguous tax-provider provenance; refusing to post`);
+      throw new PostingError(
+        `line ${line.lineNumber} has ambiguous tax-provider provenance; refusing to post`,
+      );
     }
     // The tax-location snapshot froze at draft approval inside the persisted
     // quote. Posting replays THAT snapshot — never the party's live default
@@ -230,7 +265,9 @@ export async function resolveProviderTaxPlans(
       !sameProviderAddress(persisted.shipFrom, request.shipFrom) ||
       !sameProviderAddress(persisted.shipTo, request.shipTo)
     ) {
-      throw new PostingError(`line ${line.lineNumber} persisted tax quote does not match the document; refusing to post`);
+      throw new PostingError(
+        `line ${line.lineNumber} persisted tax quote does not match the document; refusing to post`,
+      );
     }
     try {
       if (toUnits(persisted.taxAmount) !== toUnits(sumComponentTax(persisted.components))) {

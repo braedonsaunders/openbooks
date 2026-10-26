@@ -14,11 +14,20 @@ const createPaymentBody = z.looseObject({
   kind: z.enum(["vendor_payment", "customer_payment"]),
   partyId: z.string().nullable().optional(),
   bankAccountId: z.string().nullable().optional(),
-  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  documentDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   memo: z.string().max(2000).nullable().optional(),
   subsidiaryId: z.string().nullable().optional(),
-  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
-  fxRate: z.string().regex(/^\d+(?:\.\d{1,10})?$/).optional(),
+  currency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .optional(),
+  fxRate: z
+    .string()
+    .regex(/^\d+(?:\.\d{1,10})?$/)
+    .optional(),
 });
 
 export const runtime = "nodejs";
@@ -33,7 +42,11 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/payments", async (_auth, context) => {
     const raw = await readV1JsonObject(request);
     if (raw.kind !== "vendor_payment" && raw.kind !== "customer_payment") {
-      throw new ApplicationError("invalid_input", "kind must be vendor_payment or customer_payment", 422);
+      throw new ApplicationError(
+        "invalid_input",
+        "kind must be vendor_payment or customer_payment",
+        422,
+      );
     }
     const body = createPaymentBody.parse(raw);
     const outcome = await createPayment(context, {

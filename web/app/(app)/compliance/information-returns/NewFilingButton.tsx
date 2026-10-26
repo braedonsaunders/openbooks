@@ -1,46 +1,60 @@
-'use client'
+"use client";
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, Drawer, Input, Label, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * Open a year's filing. Creating and computing are one click here because the
  * computation is read-only and freely repeatable — the consequential steps
  * (finalize, file) live on the filing itself behind their own permission.
  */
-export function NewFilingButton({ formTypes, defaultYear }: { formTypes: string[]; defaultYear: number }) {
-  const t = useTranslations('compliance')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
-  const [form, setForm] = useState({ taxYear: String(defaultYear), formType: formTypes[0] ?? '1099-NEC' })
+export function NewFilingButton({
+  formTypes,
+  defaultYear,
+}: {
+  formTypes: string[];
+  defaultYear: number;
+}) {
+  const t = useTranslations("compliance");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [form, setForm] = useState({
+    taxYear: String(defaultYear),
+    formType: formTypes[0] ?? "1099-NEC",
+  });
 
   async function create() {
-    setError(null)
-    const res = await fetch('/api/compliance/information-returns', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    setError(null);
+    const res = await fetch("/api/compliance/information-returns", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ taxYear: Number(form.taxYear), formType: form.formType }),
-    })
+    });
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback.
     if (!res.ok) {
-      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
-      return
+      setError(await readApiErrorMessage(res, t("errors.saveFailed")));
+      return;
     }
-    const filing = (await res.json()) as { id: string }
-    setOpen(false)
-    startTransition(() => router.push(`/compliance/information-returns/${filing.id}`))
+    const filing = (await res.json()) as { id: string };
+    setOpen(false);
+    startTransition(() => router.push(`/compliance/information-returns/${filing.id}`));
   }
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>{t('informationReturns.new')}</Button>
-      <Drawer open={open} onClose={() => setOpen(false)} title={t('informationReturns.new')} size="sm">
+      <Button onClick={() => setOpen(true)}>{t("informationReturns.new")}</Button>
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title={t("informationReturns.new")}
+        size="sm"
+      >
         <div className="grid gap-3">
           {error ? (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
@@ -48,7 +62,7 @@ export function NewFilingButton({ formTypes, defaultYear }: { formTypes: string[
             </p>
           ) : null}
           <div>
-            <Label>{t('informationReturns.columns.year')}</Label>
+            <Label>{t("informationReturns.columns.year")}</Label>
             <Input
               inputMode="numeric"
               maxLength={4}
@@ -57,8 +71,11 @@ export function NewFilingButton({ formTypes, defaultYear }: { formTypes: string[
             />
           </div>
           <div>
-            <Label>{t('informationReturns.columns.form')}</Label>
-            <Select value={form.formType} onChange={(event) => setForm({ ...form, formType: event.target.value })}>
+            <Label>{t("informationReturns.columns.form")}</Label>
+            <Select
+              value={form.formType}
+              onChange={(event) => setForm({ ...form, formType: event.target.value })}
+            >
               {formTypes.map((value) => (
                 <option key={value} value={value}>
                   {value}
@@ -67,10 +84,10 @@ export function NewFilingButton({ formTypes, defaultYear }: { formTypes: string[
             </Select>
           </div>
           <Button disabled={pending} onClick={create}>
-            {t('informationReturns.create')}
+            {t("informationReturns.create")}
           </Button>
         </div>
       </Drawer>
     </>
-  )
+  );
 }

@@ -8,119 +8,118 @@
 // top of pdfkit (pure JS, no Chromium) instead of HTML + Puppeteer.
 
 /** Paper sizes a document can print on. */
-export const PDF_PAPER_SIZES = [
-  "letter",
-  "a4",
-  "legal",
-  "tabloid",
-  "4x6",
-] as const;
-export type PdfPaperSize = (typeof PDF_PAPER_SIZES)[number]
+export const PDF_PAPER_SIZES = ["letter", "a4", "legal", "tabloid", "4x6"] as const;
+export type PdfPaperSize = (typeof PDF_PAPER_SIZES)[number];
 
 /** Compact shrinks type and cell padding so more rows fit per page. */
-export const PDF_DENSITIES = ['standard', 'compact'] as const
-export type PdfDensity = (typeof PDF_DENSITIES)[number]
+export const PDF_DENSITIES = ["standard", "compact"] as const;
+export type PdfDensity = (typeof PDF_DENSITIES)[number];
 
 /** Page setup for a printed/exported document. */
 export type PdfPageSetup = {
-  paperSize: PdfPaperSize
-  orientation: 'portrait' | 'landscape'
+  paperSize: PdfPaperSize;
+  orientation: "portrait" | "landscape";
   /** Uniform page margin in millimetres. */
-  marginMm: number
-  density: PdfDensity
-}
+  marginMm: number;
+  density: PdfDensity;
+};
 
 const DEFAULT_PDF_LAYOUT: PdfPageSetup = {
-  paperSize: 'letter',
-  orientation: 'landscape',
+  paperSize: "letter",
+  orientation: "landscape",
   marginMm: 15,
-  density: 'standard',
-}
+  density: "standard",
+};
 
-export const PDF_MARGIN_MM_MIN = 5
-export const PDF_MARGIN_MM_MAX = 30
+export const PDF_MARGIN_MM_MIN = 5;
+export const PDF_MARGIN_MM_MAX = 30;
 
 /** Whitelist/clamp a partial setup into a complete, safe one. */
 export function resolvePdfPageSetup(raw: Partial<PdfPageSetup> | null | undefined): PdfPageSetup {
   const paperSize = PDF_PAPER_SIZES.includes(raw?.paperSize as never)
     ? (raw!.paperSize as PdfPaperSize)
-    : DEFAULT_PDF_LAYOUT.paperSize
-  const orientation = raw?.orientation === 'portrait' ? 'portrait' : 'landscape'
-  const m = Number(raw?.marginMm)
+    : DEFAULT_PDF_LAYOUT.paperSize;
+  const orientation = raw?.orientation === "portrait" ? "portrait" : "landscape";
+  const m = Number(raw?.marginMm);
   const marginMm = Number.isFinite(m)
     ? Math.min(Math.max(Math.round(m), PDF_MARGIN_MM_MIN), PDF_MARGIN_MM_MAX)
-    : DEFAULT_PDF_LAYOUT.marginMm
-  const density: PdfDensity = raw?.density === 'compact' ? 'compact' : 'standard'
-  return { paperSize, orientation, marginMm, density }
+    : DEFAULT_PDF_LAYOUT.marginMm;
+  const density: PdfDensity = raw?.density === "compact" ? "compact" : "standard";
+  return { paperSize, orientation, marginMm, density };
 }
 
 // --- Branding --------------------------------------------------------------
 
 export type PdfBranding = {
   /** Organisation / company name printed in the cover header. */
-  orgName: string
+  orgName: string;
   /**
    * Optional logo URL (metadata only — the engine never does network I/O).
    * Callers that want a logo in the PDF should preload it and pass
    * `logoBuffer` (a decoded image Buffer); the engine decodes `data:` URLs in
    * `logoUrl` as a convenience, but never fetches remote URLs.
    */
-  logoUrl?: string | null
+  logoUrl?: string | null;
   /** Preloaded logo image (PNG/JPEG Buffer). Wins over `logoUrl`. */
-  logoBuffer?: Buffer | null
+  logoBuffer?: Buffer | null;
   /** Brand accent colour (hex). Defaults to the openbooks teal. */
-  primaryColor?: string | null
-}
+  primaryColor?: string | null;
+};
 
-export const DEFAULT_PRIMARY_COLOR = '#0f766e'
+export const DEFAULT_PRIMARY_COLOR = "#0f766e";
 
 /** Renderer theme — density-derived sizes + colours. Built in document.ts. */
 export type PdfTheme = {
-  design?: 'classic' | 'modern'
-  colorTreatment?: 'subtle' | 'strong'
-  colorIntensity?: number
-  primary: string
-  text: string
-  muted: string
-  headerFill: string
-  headerText: string
-  headerBorder: string
-  rowBorder: string
-  zebra: string
-  empty: string
-  font: string
-  fontBold: string
-  body: number
-  h1: number
-  meta: number
-  h2: number
-  subtitle: number
-  table: number
-  cellPadX: number
-  cellPadY: number
-  groupGap: number
-}
+  design?: "classic" | "modern";
+  colorTreatment?: "subtle" | "strong";
+  colorIntensity?: number;
+  primary: string;
+  text: string;
+  muted: string;
+  headerFill: string;
+  headerText: string;
+  headerBorder: string;
+  rowBorder: string;
+  zebra: string;
+  empty: string;
+  font: string;
+  fontBold: string;
+  body: number;
+  h1: number;
+  meta: number;
+  h2: number;
+  subtitle: number;
+  table: number;
+  cellPadX: number;
+  cellPadY: number;
+  groupGap: number;
+};
 
 // --- Document body --------------------------------------------------------
 
-export type PdfSummaryItem = { label: string; value: string | number }
+export type PdfSummaryItem = { label: string; value: string | number };
 
-export type PdfColumnAlign = 'left' | 'right' | 'center'
+export type PdfColumnAlign = "left" | "right" | "center";
 
 /** Reusable, explicit visual styling; color never replaces the underlying text. */
 export type PdfCellStyle = {
-  backgroundColor?: string
-  textColor?: string
-  bold?: boolean
-}
-export type PdfCellSegment = PdfCellStyle & { text: string }
-export type PdfTableCell = string | number | null | undefined | (PdfCellStyle & {
-  text: string
-  /** Independently colored observations retain identity; oversized segments refuse instead of clipping. */
-  segments?: PdfCellSegment[]
-})
-export type PdfColumnStyle = { header?: PdfCellStyle; body?: PdfCellStyle }
-export type PdfLegendItem = { label: string; color: string }
+  backgroundColor?: string;
+  textColor?: string;
+  bold?: boolean;
+};
+export type PdfCellSegment = PdfCellStyle & { text: string };
+export type PdfTableCell =
+  | string
+  | number
+  | null
+  | undefined
+  | (PdfCellStyle & {
+      text: string;
+      /** Independently colored observations retain identity; oversized segments refuse instead of clipping. */
+      segments?: PdfCellSegment[];
+    });
+export type PdfColumnStyle = { header?: PdfCellStyle; body?: PdfCellStyle };
+export type PdfLegendItem = { label: string; color: string };
 
 export type PdfTableGroup = {
   /**
@@ -128,47 +127,47 @@ export type PdfTableGroup = {
    * = one groupBy bucket, 'summary' = the summarize-mode table. Drives whether
    * the title gets a section rule and whether an empty placeholder renders.
    */
-  kind: 'results' | 'section' | 'summary'
-  title: string
-  subtitle?: string
-  columns: string[]
-  rows: PdfTableCell[][]
-  columnStyles?: PdfColumnStyle[]
+  kind: "results" | "section" | "summary";
+  title: string;
+  subtitle?: string;
+  columns: string[];
+  rows: PdfTableCell[][];
+  columnStyles?: PdfColumnStyle[];
   /** Per-column alignment. Defaults to 'left'; callers set 'right' for money. */
-  align?: PdfColumnAlign[]
+  align?: PdfColumnAlign[];
   /** Optional proportional widths for structured grids; all columns must remain legible. */
-  columnWeights?: number[]
+  columnWeights?: number[];
   /** Exact evidence reports refuse oversized rows rather than silently truncating cells. */
   overflow?: "ellipsis" | "refuse";
-  isEmpty?: boolean
-}
+  isEmpty?: boolean;
+};
 
 export type PdfDocumentInput = {
   /** Report / document name — the cover title. */
-  title: string
+  title: string;
   /** Human label for the date range the document covers (e.g. "FY2025"). */
-  dateRangeLabel: string
+  dateRangeLabel: string;
   /** When the document was produced. A business date (a civil date carried
    *  as UTC midnight) prints as the date alone. */
-  generatedAt: Date
-  branding: PdfBranding
+  generatedAt: Date;
+  branding: PdfBranding;
   /** Key-figures band under the header. Omit to hide. */
-  summary?: PdfSummaryItem[]
+  summary?: PdfSummaryItem[];
   /** Shared presentation presets keep report styling independent of domain logic. */
-  design?: 'classic' | 'modern'
+  design?: "classic" | "modern";
   /** Exact category colors remain as accents; subtle fills blend toward white. */
-  colorTreatment?: 'subtle' | 'strong'
+  colorTreatment?: "subtle" | "strong";
   /** Percent color in a subtle fill (0–30); the accent itself is never altered. */
-  colorIntensity?: number
-  legend?: { title: string; items: PdfLegendItem[] }
-  groups: PdfTableGroup[]
-  layout: PdfPageSetup
+  colorIntensity?: number;
+  legend?: { title: string; items: PdfLegendItem[] };
+  groups: PdfTableGroup[];
+  layout: PdfPageSetup;
   /** Footer left text (defaults to "<orgName> · <title>"). */
-  footerLeft?: string
+  footerLeft?: string;
   /** Footer right text (defaults to the generated-at timestamp). */
-  footerRight?: string
+  footerRight?: string;
   /** BCP 47 locale the generated stamp prints in; omitted prints ISO. */
-  locale?: string
+  locale?: string;
   /** The footer's page numbering in the reader's language (defaults to "Page n of total"). */
-  pageLabel?: (page: number, total: number) => string
-}
+  pageLabel?: (page: number, total: number) => string;
+};

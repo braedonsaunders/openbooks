@@ -35,7 +35,12 @@ export async function listApplicationBudgets(context: ApplicationContext) {
   assertApplicationPermission(context, "budgets.read");
   if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) featureOff();
   if (context.authz.allowedSubsidiaryIds?.size === 0) return { budgets: [] };
-  return { budgets: await budgetScenarioOptions(context.authz.user.orgId, context.authz.allowedSubsidiaryIds) };
+  return {
+    budgets: await budgetScenarioOptions(
+      context.authz.user.orgId,
+      context.authz.allowedSubsidiaryIds,
+    ),
+  };
 }
 
 /** One scenario — same `loadBudgetScenario` reader as GET /api/budgets/[id]. */
@@ -44,7 +49,11 @@ export async function getApplicationBudget(context: ApplicationContext, scenario
   if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) featureOff();
   if (!isUuid(scenarioId)) throw invalidInput("budget id must be a UUID");
   if (context.authz.allowedSubsidiaryIds?.size === 0) throw notFound("budget");
-  const scenario = await loadBudgetScenario(scenarioId, context.authz.user.orgId, context.authz.allowedSubsidiaryIds);
+  const scenario = await loadBudgetScenario(
+    scenarioId,
+    context.authz.user.orgId,
+    context.authz.allowedSubsidiaryIds,
+  );
   if (!scenario) throw notFound("budget");
   return scenario;
 }
@@ -71,12 +80,15 @@ export type BudgetCellWrite = {
   note?: string | null;
 };
 
-export async function updateBudgetCells(context: ApplicationContext, input: {
-  scenarioId: string;
-  expectedRevision: number;
-  cells: BudgetCellWrite[];
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+export async function updateBudgetCells(
+  context: ApplicationContext,
+  input: {
+    scenarioId: string;
+    expectedRevision: number;
+    cells: BudgetCellWrite[];
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "budgets.manage");
   // The route 404s through guardFeaturePermission when the module is off.
   if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) throw notFound("budget");
@@ -94,18 +106,28 @@ export async function updateBudgetCells(context: ApplicationContext, input: {
   // the caller's scope, and an omitted entity resolves to the tenant root
   // inside saveBudgetCells — so a restricted caller whose scope excludes the
   // root is refused instead of silently rooted.
-  const explicit = [...new Set(
-    input.cells.map((cell) => cell.subsidiaryId ?? null).filter((id): id is string => !!id),
-  )];
+  const explicit = [
+    ...new Set(
+      input.cells.map((cell) => cell.subsidiaryId ?? null).filter((id): id is string => !!id),
+    ),
+  ];
   for (const subsidiaryId of explicit) assertSubsidiaryAccess(context, subsidiaryId);
-  if (input.cells.some((cell) => (cell.subsidiaryId ?? null) === null) && context.authz.allowedSubsidiaryIds !== null) {
-    const root = (await db.execute<{ id: string }>(sql`
+  if (
+    input.cells.some((cell) => (cell.subsidiaryId ?? null) === null) &&
+    context.authz.allowedSubsidiaryIds !== null
+  ) {
+    const root = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from subsidiaries
        where org_id = ${context.authz.user.orgId}
          and parent_id is null and is_active and not is_elimination
        order by created_at, id
        limit 1
-    `, "objects"))[0]?.id;
+    `,
+        "objects",
+      )
+    )[0]?.id;
     assertSubsidiaryAccess(context, root);
   }
   const cells: BudgetCellInput[] = input.cells.map((cell) => ({

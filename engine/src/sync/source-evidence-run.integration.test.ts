@@ -23,7 +23,12 @@ import type { NativeDocument } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-async function postEntry(org: ScratchOrg, actorId: string, bankAmount: string, label: string): Promise<string> {
+async function postEntry(
+  org: ScratchOrg,
+  actorId: string,
+  bankAmount: string,
+  label: string,
+): Promise<string> {
   return db.transaction(async (tx) => {
     const entryId = randomUUID();
     await tx.execute(sql`
@@ -45,7 +50,9 @@ async function postEntry(org: ScratchOrg, actorId: string, bankAmount: string, l
         (${org.orgId}, ${entryId}, 2, ${org.accounts.adjustment},
          ${org.subsidiaryId}, ${`-${bankAmount}`}, 'CAD', ${`-${bankAmount}`}, 1)
     `);
-    await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+    await tx.execute(
+      sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+    );
     return entryId;
   });
 }
@@ -109,25 +116,38 @@ test(
     const org = await createScratchOrg();
     try {
       const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-      await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
       const entry = await postEntry(org, actor, "308", "full");
-      await linkDocument(org, "testId", "DOC-1", entry, [{ lineRef: "L-1", accountId: org.accounts.bank }]);
+      await linkDocument(org, "testId", "DOC-1", entry, [
+        { lineRef: "L-1", accountId: org.accounts.bank },
+      ]);
       const outcome = await applySourceReconciliationEvidence({
         orgId: org.orgId,
         connector: "test-connector",
         actorId: actor,
         refKey: "testId",
         source: stubSource(undefined),
-        documents: [nativeDoc("DOC-1", [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }])],
+        documents: [
+          nativeDoc("DOC-1", [
+            { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+          ]),
+        ],
       });
       assert.equal(outcome.linesStamped, 1);
       assert.equal(outcome.refreshedLines, 0);
       assert.equal(outcome.signedOff.length, 1);
       assert.equal(outcome.signedOff[0]!.throughDate, org.date);
       assert.deepEqual(outcome.skipped, []);
-      const row = (await db.execute<{ evidence_kind: string }>(sql`
+      const row = (
+        await db.execute<{ evidence_kind: string }>(
+          sql`
         select evidence_kind from reconciliations where id = ${outcome.signedOff[0]!.reconciliationId} and org_id = ${org.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(row.evidence_kind, "source");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -142,17 +162,27 @@ test(
     const org = await createScratchOrg();
     try {
       const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-      await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
       const entry = await postEntry(org, actor, "21", "stale");
-      await linkDocument(org, "testId", "DOC-2", entry, [{ lineRef: "L-9", accountId: org.accounts.bank }]);
+      await linkDocument(org, "testId", "DOC-2", entry, [
+        { lineRef: "L-9", accountId: org.accounts.bank },
+      ]);
       // The pull predates the source-side clearing; the refresh is current truth.
       const outcome = await applySourceReconciliationEvidence({
         orgId: org.orgId,
         connector: "test-connector",
         actorId: actor,
         refKey: "testId",
-        source: stubSource([{ docRef: "DOC-2", lineRef: "L-9", cleared: true, clearedDate: org.date }]),
-        documents: [nativeDoc("DOC-2", [{ accountId: org.accounts.bank, lineRef: "L-9", cleared: false, clearedDate: null }])],
+        source: stubSource([
+          { docRef: "DOC-2", lineRef: "L-9", cleared: true, clearedDate: org.date },
+        ]),
+        documents: [
+          nativeDoc("DOC-2", [
+            { accountId: org.accounts.bank, lineRef: "L-9", cleared: false, clearedDate: null },
+          ]),
+        ],
         refreshSinceForTest: org.date,
       });
       assert.equal(outcome.refreshedLines, 1);
@@ -171,11 +201,17 @@ test(
     const org = await createScratchOrg();
     try {
       const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-      await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
       const first = await postEntry(org, actor, "100", "a");
       const second = await postEntry(org, actor, "25", "b");
-      await linkDocument(org, "testId", "DOC-A", first, [{ lineRef: "L-A", accountId: org.accounts.bank }]);
-      await linkDocument(org, "testId", "DOC-B", second, [{ lineRef: "L-B", accountId: org.accounts.bank }]);
+      await linkDocument(org, "testId", "DOC-A", first, [
+        { lineRef: "L-A", accountId: org.accounts.bank },
+      ]);
+      await linkDocument(org, "testId", "DOC-B", second, [
+        { lineRef: "L-B", accountId: org.accounts.bank },
+      ]);
       const outcome = await applySourceReconciliationEvidence({
         orgId: org.orgId,
         connector: "test-connector",
@@ -183,7 +219,9 @@ test(
         refKey: "testId",
         source: stubSource(undefined),
         documents: [
-          nativeDoc("DOC-A", [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }]),
+          nativeDoc("DOC-A", [
+            { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+          ]),
           nativeDoc("DOC-B", [{ accountId: org.accounts.bank, cleared: false, clearedDate: null }]),
         ],
       });
@@ -193,7 +231,14 @@ test(
       assert.equal(outcome.skipped[0]!.clearedLines, 1);
       assert.equal(outcome.skipped[0]!.unclearedLines, 1);
       assert.equal(
-        Number((await db.execute<{ n: string }>(sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`, "objects"))[0]!.n),
+        Number(
+          (
+            await db.execute<{ n: string }>(
+              sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]!.n,
+        ),
         0,
       );
     } finally {

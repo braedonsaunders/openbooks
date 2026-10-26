@@ -18,7 +18,13 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  *  carries a captured destination and attributes under the post-0265 ledger). */
 async function seedPostedSale(
   org: ScratchOrg,
-  opts: { subsidiaryId: string; number: string; currency: string; fxRate: string; subtotal: string },
+  opts: {
+    subsidiaryId: string;
+    number: string;
+    currency: string;
+    fxRate: string;
+    subtotal: string;
+  },
 ): Promise<void> {
   const entryId = randomUUID();
   await db.execute(sql`
@@ -52,12 +58,18 @@ async function seedTwoEntityNexusOrg(): Promise<{ org: ScratchOrg; usSub: string
     values (${randomUUID()}, ${org.orgId}, ${org.customerId}, true, 'US', 'CA')`);
   // CAD 200 sale on the root entity; USD 1000 sale on the USD entity.
   await seedPostedSale(org, {
-    subsidiaryId: org.subsidiaryId, number: "NEX-CAD", currency: "CAD",
-    fxRate: "1.0000000000", subtotal: "200.0000",
+    subsidiaryId: org.subsidiaryId,
+    number: "NEX-CAD",
+    currency: "CAD",
+    fxRate: "1.0000000000",
+    subtotal: "200.0000",
   });
   await seedPostedSale(org, {
-    subsidiaryId: usSub, number: "NEX-USD", currency: "USD",
-    fxRate: "1.0000000000", subtotal: "1000.0000",
+    subsidiaryId: usSub,
+    number: "NEX-USD",
+    currency: "USD",
+    fxRate: "1.0000000000",
+    subtotal: "1000.0000",
   });
   return { org, usSub };
 }
@@ -104,36 +116,44 @@ test("an entity ledger measures in the entity's functional currency", { skip: !D
   }
 });
 
-test("a mixed-currency entity fails closed without a declared currency", { skip: !DB }, async () => {
-  const { org, usSub } = await seedTwoEntityNexusOrg();
-  try {
-    await assert.rejects(
-      computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31", null, {
-        subsidiaryIds: [org.subsidiaryId, usSub],
-      }),
-      /spans functional currencies \(CAD and USD\)/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a mixed-currency entity fails closed without a declared currency",
+  { skip: !DB },
+  async () => {
+    const { org, usSub } = await seedTwoEntityNexusOrg();
+    try {
+      await assert.rejects(
+        computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31", null, {
+          subsidiaryIds: [org.subsidiaryId, usSub],
+        }),
+        /spans functional currencies \(CAD and USD\)/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a declared working currency converts every entity sale through one rate", { skip: !DB }, async () => {
-  const { org, usSub } = await seedTwoEntityNexusOrg();
-  try {
-    await seedUsdToCad(org.orgId);
-    const result = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31", null, {
-      subsidiaryIds: [org.subsidiaryId, usSub],
-      currency: "CAD",
-    });
-    assert.equal(result.currency, "CAD");
-    // CAD 200 raw + USD 1000 at the spot fallback (unstamped 1.0 header) × 1.35.
-    assert.equal(result.states[0]?.salesUsd, "1550.0000");
-    assert.equal(result.states[0]?.threshold.salesUsd, "675000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a declared working currency converts every entity sale through one rate",
+  { skip: !DB },
+  async () => {
+    const { org, usSub } = await seedTwoEntityNexusOrg();
+    try {
+      await seedUsdToCad(org.orgId);
+      const result = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31", null, {
+        subsidiaryIds: [org.subsidiaryId, usSub],
+        currency: "CAD",
+      });
+      assert.equal(result.currency, "CAD");
+      // CAD 200 raw + USD 1000 at the spot fallback (unstamped 1.0 header) × 1.35.
+      assert.equal(result.states[0]?.salesUsd, "1550.0000");
+      assert.equal(result.states[0]?.threshold.salesUsd, "675000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("entity scope ANDs with visibility scope", { skip: !DB }, async () => {
   const { org, usSub } = await seedTwoEntityNexusOrg();
@@ -167,17 +187,21 @@ test("threshold translation fails closed without rate coverage", { skip: !DB }, 
   }
 });
 
-test("the org-wide ledger still evaluates in USD with no evidence object", { skip: !DB }, async () => {
-  const { org } = await seedTwoEntityNexusOrg();
-  try {
-    // No entity scope, no currency: the historical org-wide USD ledger. The
-    // CAD 200 sale has no rate coverage here and must fail exactly as before —
-    // coverage gaps never silently resolve to 1.0.
-    await assert.rejects(
-      computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31"),
-      /no spot rate for CAD→USD|no \w+ rate for CAD→USD/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "the org-wide ledger still evaluates in USD with no evidence object",
+  { skip: !DB },
+  async () => {
+    const { org } = await seedTwoEntityNexusOrg();
+    try {
+      // No entity scope, no currency: the historical org-wide USD ledger. The
+      // CAD 200 sale has no rate coverage here and must fail exactly as before —
+      // coverage gaps never silently resolve to 1.0.
+      await assert.rejects(
+        computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31"),
+        /no spot rate for CAD→USD|no \w+ rate for CAD→USD/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

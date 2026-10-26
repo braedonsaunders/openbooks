@@ -8,30 +8,29 @@
 export type DocumentPermissionNamespace = "ap" | "ar" | "cash_sales" | "gl";
 
 /** Permission namespace of every drawer-registry document kind. */
-export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<
-  Record<string, DocumentPermissionNamespace>
-> = {
-  vendor_bill: "ap",
-  vendor_credit: "ap",
-  customer_invoice: "ar",
-  customer_credit: "ar",
-  // Cash sales and refunds carry their own `cash_sales.*` grants — separate
-  // from `ar.*` so till operators can sell and refund without holding the
-  // receivables book — while every helper below keeps working: the keys are
-  // derived from the namespace (`cash_sales.read`, `cash_sales.create`,
-  // `cash_sales.post`), the same hierarchical shape as every other module.
-  cash_sale: "cash_sales",
-  cash_refund: "cash_sales",
-  rma: "ar",
-  card_charge: "ap",
-  card_refund: "ap",
-  check: "ap",
-  deposit: "gl",
-  transfer: "gl",
-  project_charge: "gl",
-  internal_billing: "gl",
-  pay_run: "gl",
-};
+export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<Record<string, DocumentPermissionNamespace>> =
+  {
+    vendor_bill: "ap",
+    vendor_credit: "ap",
+    customer_invoice: "ar",
+    customer_credit: "ar",
+    // Cash sales and refunds carry their own `cash_sales.*` grants — separate
+    // from `ar.*` so till operators can sell and refund without holding the
+    // receivables book — while every helper below keeps working: the keys are
+    // derived from the namespace (`cash_sales.read`, `cash_sales.create`,
+    // `cash_sales.post`), the same hierarchical shape as every other module.
+    cash_sale: "cash_sales",
+    cash_refund: "cash_sales",
+    rma: "ar",
+    card_charge: "ap",
+    card_refund: "ap",
+    check: "ap",
+    deposit: "gl",
+    transfer: "gl",
+    project_charge: "gl",
+    internal_billing: "gl",
+    pay_run: "gl",
+  };
 
 export type DocumentKindPermissions = {
   read: string;
@@ -104,9 +103,7 @@ export function documentEditPermission(kind: string): string {
  * - pick_list / shipment: /picks and /shipments require orders.fulfill, and
  *   every fulfilment write (release, ship, void) requires it too.
  */
-const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<
-  Record<string, DocumentKindPermissions>
-> = {
+const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<Record<string, DocumentKindPermissions>> = {
   journal: { read: "gl.read", edit: "gl.post", approve: "gl.post" },
   vendor_payment: { read: "ap.pay", edit: "ap.pay", approve: "ap.pay" },
   customer_payment: { read: "ar.pay", edit: "ar.pay", approve: "ar.pay" },
@@ -149,20 +146,16 @@ const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<
  * projects.manage edit grant), other kinds through the table above, null
  * for a kind neither covers.
  */
-export function documentKindPermissions(
-  kind: string,
-): DocumentKindPermissions | null {
+export function documentKindPermissions(kind: string): DocumentKindPermissions | null {
   if (kind === "pay_run") return PAY_RUN_WORKFLOW_PERMISSIONS;
   // Return authorization governs fulfillment; its later credit has separate AR authority.
-  if (kind === "rma") return { read: "orders.fulfill", edit: "orders.fulfill", approve: "orders.fulfill" };
+  if (kind === "rma")
+    return { read: "orders.fulfill", edit: "orders.fulfill", approve: "orders.fulfill" };
   if (DOCUMENT_PERMISSION_NAMESPACE[kind]) {
     return {
       read: documentReadPermission(kind),
       edit: documentEditPermission(kind),
-      approve:
-        kind === "project_charge"
-          ? documentEditPermission(kind)
-          : postPermission(kind),
+      approve: kind === "project_charge" ? documentEditPermission(kind) : postPermission(kind),
     };
   }
   return NON_REGISTRY_DOCUMENT_PERMISSIONS[kind] ?? null;
@@ -183,9 +176,7 @@ export function documentRouteReadPermission(kind: string): string | null {
 
 /** Edit grant for a registry document kind through the generic endpoints. */
 export function documentRouteEditPermission(kind: string): string | null {
-  return DOCUMENT_PERMISSION_NAMESPACE[kind]
-    ? documentEditPermission(kind)
-    : null;
+  return DOCUMENT_PERMISSION_NAMESPACE[kind] ? documentEditPermission(kind) : null;
 }
 
 /** Decision authority is distinct from posting or paying the approved record. */
@@ -204,13 +195,9 @@ export function documentApprovalPermission(kind: string): string | null {
   )
     return "ap.approve";
   if (
-    [
-      "customer_invoice",
-      "customer_credit",
-      "customer_payment",
-      "sales_order",
-      "quote",
-    ].includes(kind)
+    ["customer_invoice", "customer_credit", "customer_payment", "sales_order", "quote"].includes(
+      kind,
+    )
   )
     return "ar.approve";
   return documentKindPermissions(kind)?.approve ?? null;

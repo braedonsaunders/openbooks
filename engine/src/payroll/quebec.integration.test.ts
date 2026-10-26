@@ -1,9 +1,17 @@
 import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
-import { seedPayrollVendorRole } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
+import { seedPayrollVendorRole } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 // Consolidated DB-test file: merged from sibling per-finding suites to
 // share one file's startup cost. Each describe block is one former file;
@@ -31,7 +39,6 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { seedCntSubjectEmployerFixture, seedHiredEmployee } from "./filing-test-fixtures.ts";
 
 describe("quebec", () => {
-
   const DB = !!process.env.OPENBOOKS_DB_URL;
 
   /**
@@ -70,17 +77,25 @@ describe("quebec", () => {
           on conflict do nothing`);
 
         await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-              wageExpenseAccountId: wageExpense,
-              burdenExpenseAccountId: burdenExpense,
-              netPayAccountId: netPayable,
+          slotAccounts: {
+            CA: {
+              cpp: craPayable,
+              ei: craPayable,
+              qpip: craPayable,
+              income_tax: craPayable,
+              vacation: vacationPayable,
+            },
+          },
+          wageExpenseAccountId: wageExpense,
+          burdenExpenseAccountId: burdenExpense,
+          netPayAccountId: netPayable,
 
-              wagesTo: "expense",
-              craRemittancePartyId: org.vendorId,
-              // The pack's regional declaration routes a QC stub's QPP/QPP2/QPIP
-              // here (TPZ-1015.R), never to the CRA vendor above.
-              rqRemittancePartyId: rqVendorId,
-            });
+          wagesTo: "expense",
+          craRemittancePartyId: org.vendorId,
+          // The pack's regional declaration routes a QC stub's QPP/QPP2/QPIP
+          // here (TPZ-1015.R), never to the CRA vendor above.
+          rqRemittancePartyId: rqVendorId,
+        });
         const filingAccountId = randomUUID();
         await db.execute(sql`insert into payroll_filing_accounts
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
@@ -89,9 +104,16 @@ describe("quebec", () => {
         // The July scenario predates the account row's creation: the standard
         // 1.4 multiple covers the pay date, recorded the way an operator with
         // the statutory rate would record it in Employer facts.
-        await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId, country: "CA",
-          factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01", value: "1.4",
-          changeReason: "Standard employer EI multiple for the declared CRA account" });
+        await upsertPayrollEmployerFact({
+          orgId: org.orgId,
+          actorId,
+          filingAccountId,
+          country: "CA",
+          factKey: "ei_employer_multiplier",
+          effectiveFrom: "2026-01-01",
+          value: "1.4",
+          changeReason: "Standard employer EI multiple for the declared CRA account",
+        });
 
         await seedPayrollComponents(org.orgId, actorId, "CA");
         // The QC slot gets its own liability account so the projection credits
@@ -117,43 +139,76 @@ describe("quebec", () => {
         await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, craPayable);
         const scheduleId = randomUUID();
         await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-          name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+          name: "Biweekly",
+          frequency: "biweekly",
+          periodsPerYear: 26,
+          anchorPeriodEnd: "2026-07-18",
           payDateOffsetDays: 3,
         });
         // QC employee: hourly, biweekly, TP-1015.3-V default credits (no claim
         // code — Québec has none).
         await seedHiredEmployee(org.orgId, actorId, {
-          scheduleId, subsidiaryId: org.subsidiaryId, name: "Jean Tremblay", country: "CA",
-          province: "QC", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
-          federalClaimCode: 1, vacationPercent: "0", vacationMethod: "accrue",
-          wcbExempt: true, wcbExemptReason: 'quebec fixture: workers-compensation coverage out of scope',
-          timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
-            .map((workedOn) => ({ workedOn })),
+          scheduleId,
+          subsidiaryId: org.subsidiaryId,
+          name: "Jean Tremblay",
+          country: "CA",
+          province: "QC",
+          payBasis: "hourly",
+          currency: "CAD",
+          rate: "30",
+          rateBasis: "hour",
+          federalClaimCode: 1,
+          vacationPercent: "0",
+          vacationMethod: "accrue",
+          wcbExempt: true,
+          wcbExemptReason: "quebec fixture: workers-compensation coverage out of scope",
+          timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"].map((workedOn) => ({
+            workedOn,
+          })),
         });
 
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
-        const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const result = await calculatePayRun({
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
+        });
         assert.equal(result.employees, 1);
         assert.deepEqual(result.errors, []);
 
-        const stubs = (await db.execute<Record<string, string>>(sql`
+        const stubs = await db.execute<Record<string, string>>(
+          sql`
           select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(stubs.length, 1);
         const stub = stubs[0]!;
         assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
         // Both engines called directly with the same facts (pay date 2026-07-21).
-        const federal = calculateT4127(assessedCanadianWages({
-          payDate: "2026-07-21", province: "QC", periodsPerYear: 26,
-          income: "2400.00", federalClaimCode: 1,
-        }));
+        const federal = calculateT4127(
+          assessedCanadianWages({
+            payDate: "2026-07-21",
+            province: "QC",
+            periodsPerYear: 26,
+            income: "2400.00",
+            federalClaimCode: 1,
+          }),
+        );
         const quebec = calculateTp1015({
-          payDate: "2026-07-21", periodsPerYear: 26,
-          income: "2400.00", qpp: federal.cpp, qpp2: federal.cpp2, pensionable: "2400.00",
+          payDate: "2026-07-21",
+          periodsPerYear: 26,
+          income: "2400.00",
+          qpp: federal.cpp,
+          qpp2: federal.cpp2,
+          pensionable: "2400.00",
         });
 
         // The stub carries BOTH factor sets: T4127's and the QC_ prefixed trace.
@@ -168,13 +223,23 @@ describe("quebec", () => {
 
         // Lines: QPP (system key cpp), EI at the QC rate, QPIP — and Québec
         // income tax as its OWN component beside the federal income tax.
-        const stubLines = (await db.execute<{ system_key: string | null; code: string; kind: string; description: string; amount: string; sequence: number }>(sql`
+        const stubLines = await db.execute<{
+          system_key: string | null;
+          code: string;
+          kind: string;
+          description: string;
+          amount: string;
+          sequence: number;
+        }>(
+          sql`
           select c.system_key, c.code, l.kind, l.description, l.amount, l.sequence
             from pay_stub_lines l
             join pay_components c on c.id = l.component_id
            where l.org_id = ${org.orgId} and l.stub_id = ${stub.id}
            order by l.sequence
-        `, "objects"));
+        `,
+          "objects",
+        );
         const line = (systemKey: string, kind: string) =>
           stubLines.find((row) => row.system_key === systemKey && row.kind === kind);
 
@@ -222,17 +287,25 @@ describe("quebec", () => {
         assert.equal(line("cnt", "employer_contribution")!.amount, "1.4400");
 
         const deductions = sum([
-          federal.totalTax, quebec.totalTax, federal.cpp, federal.cpp2, federal.ei, federal.qpip,
+          federal.totalTax,
+          quebec.totalTax,
+          federal.cpp,
+          federal.cpp2,
+          federal.ei,
+          federal.qpip,
         ]);
         assert.equal(stub.net_pay, add("2400.0000", neg(deductions)));
 
         // Commit: the GL credits the Québec liability SEPARATELY from the CRA
         // payable, from the component's own slot account.
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+        const glLines = await db.execute<{ account_id: string; amount: string }>(
+          sql`
           select account_id, amount from document_lines
            where org_id = ${org.orgId} and document_id = ${run.documentId}
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
         const qcLegs = glLines.filter((row) => row.account_id === qcPayable);
         assert.equal(qcLegs.length, 1, "one credit leg on the Québec liability account");
@@ -242,21 +315,38 @@ describe("quebec", () => {
         // shares) and the external QCTAX to the Revenu Québec vendor; the CRA
         // vendor keeps federal income tax and EI only. This is the misroute the
         // Quebec handoff flagged, fixed and held here.
-        const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
+        const groups = await payrollRemittanceSummary(org.orgId, {
+          from: "2026-07-01",
+          to: "2026-07-31",
+        });
         const rqGroup = groups.find((group) => group.partyId === rqVendorId);
         const craGroup = groups.find((group) => group.partyId === org.vendorId);
         assert.ok(rqGroup, "a Revenu Québec remittance group exists");
         assert.ok(craGroup, "a CRA remittance group exists");
         const keys = (group: typeof rqGroup) =>
           [...new Set(group!.components.map((component) => component.systemKey))].sort();
-        assert.deepEqual(keys(rqGroup), ["cnt", "cpp", "hsf", "qc_income_tax", "qpip"],
-          "QPP, QPIP, HSF, CNT and Québec tax remit to Revenu Québec");
-        assert.deepEqual(keys(craGroup), ["ei", "income_tax"],
-          "the CRA keeps federal income tax and EI — never a QC employee's QPP/QPIP");
-        assert.equal(rqGroup!.total, sum([
-          federal.cpp, federal.cppEmployer, federal.qpip, federal.qpipEmployer, quebec.totalTax,
-          "39.6000", "1.4400",
-        ]));
+        assert.deepEqual(
+          keys(rqGroup),
+          ["cnt", "cpp", "hsf", "qc_income_tax", "qpip"],
+          "QPP, QPIP, HSF, CNT and Québec tax remit to Revenu Québec",
+        );
+        assert.deepEqual(
+          keys(craGroup),
+          ["ei", "income_tax"],
+          "the CRA keeps federal income tax and EI — never a QC employee's QPP/QPIP",
+        );
+        assert.equal(
+          rqGroup!.total,
+          sum([
+            federal.cpp,
+            federal.cppEmployer,
+            federal.qpip,
+            federal.qpipEmployer,
+            quebec.totalTax,
+            "39.6000",
+            "1.4400",
+          ]),
+        );
 
         // T4's on-screen reconciliation amount is the CRA remittance only. A
         // Québec source-deduction bill is a different authority's filing and
@@ -274,8 +364,11 @@ describe("quebec", () => {
           });
         }
         const t4 = await t4Summary(org.orgId, 2026);
-        assert.equal(cmp(t4.remitted, craGroup!.total), 0,
-          "T4 remitted total includes only posted CRA bills, not Revenu Québec bills");
+        assert.equal(
+          cmp(t4.remitted, craGroup!.total),
+          0,
+          "T4 remitted total includes only posted CRA bills, not Revenu Québec bills",
+        );
 
         // Year-end: the RL-1 is a declared CA filing and its population carries
         // the committed QC stub; T4 box 22 stays FEDERAL-only by construction.
@@ -287,8 +380,11 @@ describe("quebec", () => {
         const slips = await t4Slips(org.orgId, 2026);
         assert.equal(slips.length, 1);
         assert.equal(slips[0]!.isQuebec, true);
-        assert.equal(slips[0]!.box22IncomeTax, federal.totalTax,
-          "T4 box 22 is the federal tax alone — qc_income_tax is a different system key");
+        assert.equal(
+          slips[0]!.box22IncomeTax,
+          federal.totalTax,
+          "T4 box 22 is the federal tax alone — qc_income_tax is a different system key",
+        );
         // T4 box 56 reads the stub's program factor end to end (C-12/C-13):
         // the full gross, with no pre-adoption carry-in and under the maximum.
         assert.equal(slips[0]!.box56QpipInsurable, "2400.0000");
@@ -296,20 +392,22 @@ describe("quebec", () => {
         // A distinct program base remains distinct from EI-insurable wages.
         await db.execute(sql`update pay_stubs set factors=jsonb_set(factors, '{IE_QPIP}', '"1200.0000"'::jsonb)
           where org_id=${org.orgId} and id=${stub.id}`);
-        assert.equal((await t4Slips(org.orgId, 2026))[0]!.box56QpipInsurable, '1200.0000');
-        assert.equal((await rl1Population(org.orgId, 2026)).rows[0]!.boxI, '1200.0000');
+        assert.equal((await t4Slips(org.orgId, 2026))[0]!.box56QpipInsurable, "1200.0000");
+        assert.equal((await rl1Population(org.orgId, 2026)).rows[0]!.boxI, "1200.0000");
         // Malformed retained evidence cannot disappear from a SQL aggregate
         // or acquire another program's wages through a reporting substitute.
-        for (const value of [undefined, null, '', 'unknown', [], 1200]) {
+        for (const value of [undefined, null, "", "unknown", [], 1200]) {
           const corrupted = { ...factors };
           if (value === undefined) delete corrupted.IE_QPIP;
           else (corrupted as Record<string, unknown>).IE_QPIP = value;
           await db.execute(sql`update pay_stubs set factors=${JSON.stringify(corrupted)}::jsonb
             where org_id=${org.orgId} and id=${stub.id}`);
           await assert.rejects(t4Slips(org.orgId, 2026), /program-specific QPIP wage evidence/);
-          await assert.rejects(rl1Population(org.orgId, 2026), /program-specific QPIP wage evidence/);
+          await assert.rejects(
+            rl1Population(org.orgId, 2026),
+            /program-specific QPIP wage evidence/,
+          );
         }
-
       } finally {
         await dropScratchOrgReporting(org.orgId);
       }
@@ -318,7 +416,6 @@ describe("quebec", () => {
 });
 
 describe("quebec-hsf", () => {
-
   const DB = !!process.env.OPENBOOKS_DB_URL;
 
   /**
@@ -359,17 +456,25 @@ describe("quebec-hsf", () => {
           on conflict do nothing`);
 
         await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-              wageExpenseAccountId: wageExpense,
-              burdenExpenseAccountId: burdenExpense,
-              netPayAccountId: netPayable,
+          slotAccounts: {
+            CA: {
+              cpp: craPayable,
+              ei: craPayable,
+              qpip: craPayable,
+              income_tax: craPayable,
+              vacation: vacationPayable,
+            },
+          },
+          wageExpenseAccountId: wageExpense,
+          burdenExpenseAccountId: burdenExpense,
+          netPayAccountId: netPayable,
 
-              wagesTo: "expense",
-              craRemittancePartyId: org.vendorId,
-              // The pack's regional declaration routes a QC stub's HSF here
-              // (TPZ-1015.R), never to the CRA vendor above.
-              rqRemittancePartyId: rqVendorId,
-            });
+          wagesTo: "expense",
+          craRemittancePartyId: org.vendorId,
+          // The pack's regional declaration routes a QC stub's HSF here
+          // (TPZ-1015.R), never to the CRA vendor above.
+          rqRemittancePartyId: rqVendorId,
+        });
         const filingAccountId = randomUUID();
         await db.execute(sql`insert into payroll_filing_accounts
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
@@ -378,9 +483,16 @@ describe("quebec-hsf", () => {
         // The July scenario predates the account row's creation: the standard
         // 1.4 multiple covers the pay date, recorded the way an operator with
         // the statutory rate would record it in Employer facts.
-        await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId, country: "CA",
-          factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01", value: "1.4",
-          changeReason: "Standard employer EI multiple for the declared CRA account" });
+        await upsertPayrollEmployerFact({
+          orgId: org.orgId,
+          actorId,
+          filingAccountId,
+          country: "CA",
+          factKey: "ei_employer_multiplier",
+          effectiveFrom: "2026-01-01",
+          value: "1.4",
+          changeReason: "Standard employer EI multiple for the declared CRA account",
+        });
 
         await seedPayrollComponents(org.orgId, actorId, "CA");
         await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
@@ -407,19 +519,33 @@ describe("quebec-hsf", () => {
 
         const scheduleId = randomUUID();
         await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-          name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+          name: "Biweekly",
+          frequency: "biweekly",
+          periodsPerYear: 26,
+          anchorPeriodEnd: "2026-07-18",
           payDateOffsetDays: 3,
         });
         // The QC stubs price CNT too: classify the employer (asserted nowhere in these tests).
         await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, craPayable);
         const seedEmployee = async (name: string, province: string) => {
           const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
-            scheduleId, subsidiaryId: org.subsidiaryId, name, country: "CA", province,
-            payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
-            federalClaimCode: 1, vacationPercent: "0", vacationMethod: "accrue",
-            wcbExempt: true, wcbExemptReason: 'quebec fixture: workers-compensation coverage out of scope',
-            timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
-              .map((workedOn) => ({ workedOn })),
+            scheduleId,
+            subsidiaryId: org.subsidiaryId,
+            name,
+            country: "CA",
+            province,
+            payBasis: "hourly",
+            currency: "CAD",
+            rate: "30",
+            rateBasis: "hour",
+            federalClaimCode: 1,
+            vacationPercent: "0",
+            vacationMethod: "accrue",
+            wcbExempt: true,
+            wcbExemptReason: "quebec fixture: workers-compensation coverage out of scope",
+            timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"].map(
+              (workedOn) => ({ workedOn }),
+            ),
           });
           return employeeId;
         };
@@ -427,17 +553,30 @@ describe("quebec-hsf", () => {
         const onEmployeeId = await seedEmployee("Casey Siteworker", "ON");
 
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
-        const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const result = await calculatePayRun({
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
+        });
         assert.equal(result.employees, 2);
         assert.deepEqual(result.errors, []);
 
-        const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
+        const stubs = await db.execute<{
+          employee_party_id: string;
+          factors: Record<string, string>;
+        }>(
+          sql`
           select employee_party_id, factors from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(stubs.length, 2);
         const stubFor = (employeeId: string) =>
           stubs.find((row) => row.employee_party_id === employeeId)!;
@@ -448,14 +587,23 @@ describe("quebec-hsf", () => {
         assert.equal(qcFactors.HSF_EARN, "2400.0000");
         assert.equal(qcFactors.HSF, "39.6000");
 
-        const qcLines = (await db.execute<{ system_key: string | null; kind: string; description: string; amount: string; sequence: number }>(sql`
+        const qcLines = await db.execute<{
+          system_key: string | null;
+          kind: string;
+          description: string;
+          amount: string;
+          sequence: number;
+        }>(
+          sql`
           select c.system_key, l.kind, l.description, l.amount, l.sequence
             from pay_stub_lines l
             join pay_components c on c.id = l.component_id
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
              and s.employee_party_id = ${qcEmployeeId} and c.system_key = 'hsf'
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(qcLines.length, 1);
         assert.deepEqual(
           [qcLines[0]!.sequence, qcLines[0]!.kind, qcLines[0]!.description],
@@ -467,28 +615,37 @@ describe("quebec-hsf", () => {
         const onFactors = stubFor(onEmployeeId).factors;
         assert.equal(onFactors.HSF ?? "0", "0");
         assert.equal(onFactors.HSF_EARN, "0", "the HSF basis is explicitly zero outside QC");
-        const onHsfLines = (await db.execute<{ amount: string }>(sql`
+        const onHsfLines = await db.execute<{ amount: string }>(
+          sql`
           select l.amount
             from pay_stub_lines l
             join pay_components c on c.id = l.component_id
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
              and s.employee_party_id = ${onEmployeeId} and c.system_key = 'hsf'
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(onHsfLines.length, 0);
 
         // Remittance: the pack's regional declaration sends the QC stub's HSF
         // to the Revenu Québec vendor; the CRA vendor never sees it.
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+        const glLines = await db.execute<{ account_id: string; amount: string }>(
+          sql`
           select account_id, amount from document_lines
            where org_id = ${org.orgId} and document_id = ${run.documentId}
-        `, "objects"));
+        `,
+          "objects",
+        );
         assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
         const hsfLeg = glLines.filter((row) => row.account_id === hsfPayable);
         assert.equal(sum(hsfLeg.map((row) => row.amount)), neg("39.6000"));
 
-        const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
+        const groups = await payrollRemittanceSummary(org.orgId, {
+          from: "2026-07-01",
+          to: "2026-07-31",
+        });
         const rqGroup = groups.find((group) => group.partyId === rqVendorId);
         const craGroup = groups.find((group) => group.partyId === org.vendorId);
         assert.ok(rqGroup, "a Revenu Québec remittance group exists");
@@ -508,7 +665,6 @@ describe("quebec-hsf", () => {
 });
 
 describe("qpip-employer-cap", () => {
-
   const DB = !!process.env.OPENBOOKS_DB_URL;
 
   /**
@@ -538,15 +694,23 @@ describe("qpip-employer-cap", () => {
           values (${rqVendorId}, ${org.orgId}, 'company', 'Revenu Québec', true, '{}'::jsonb)`);
         await seedPayrollVendorRole(org.orgId, rqVendorId, actorId);
         await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-              wageExpenseAccountId: wageExpense,
-              burdenExpenseAccountId: burdenExpense,
-              netPayAccountId: netPayable,
+          slotAccounts: {
+            CA: {
+              cpp: craPayable,
+              ei: craPayable,
+              qpip: craPayable,
+              income_tax: craPayable,
+              vacation: vacationPayable,
+            },
+          },
+          wageExpenseAccountId: wageExpense,
+          burdenExpenseAccountId: burdenExpense,
+          netPayAccountId: netPayable,
 
-              wagesTo: "expense",
-              craRemittancePartyId: org.vendorId,
-              rqRemittancePartyId: rqVendorId,
-            });
+          wagesTo: "expense",
+          craRemittancePartyId: org.vendorId,
+          rqRemittancePartyId: rqVendorId,
+        });
         await seedPayrollComponents(org.orgId, actorId, "CA");
         await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
         await db.execute(sql`
@@ -564,20 +728,42 @@ describe("qpip-employer-cap", () => {
                   ${actorId}, ${actorId})`);
 
         const employeeId = randomUUID();
-        await seedPayrollPerson(org.orgId, employeeId, 'Jean Tremblay');
-        const qpipEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+        await seedPayrollPerson(org.orgId, employeeId, "Jean Tremblay");
+        const qpipEmploymentId = await seedWorkerEmployment(
+          org.orgId,
+          employeeId,
+          org.subsidiaryId,
+        );
         await seedPayrollWage(org.orgId, employeeId, actorId, {
-          currency: 'CAD', rate: '5000', basis: 'hour', effectiveFrom: '2026-01-01',
+          currency: "CAD",
+          rate: "5000",
+          basis: "hour",
+          effectiveFrom: "2026-01-01",
         });
         const scheduleId = randomUUID();
         await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-          name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+          name: "Biweekly",
+          frequency: "biweekly",
+          periodsPerYear: 26,
+          anchorPeriodEnd: "2026-07-18",
           payDateOffsetDays: 3,
         });
-        await seedPayrollProfile(org.orgId, employeeId, qpipEmploymentId, scheduleId, actorId, {
-          country: 'CA', province: 'QC', payBasis: 'hourly', federalClaimCode: 1,
-          wcbExempt: true, wcbExemptReason: 'quebec fixture: workers-compensation coverage out of scope',
-        }, { percentFloor: '0', method: 'accrue' });
+        await seedPayrollProfile(
+          org.orgId,
+          employeeId,
+          qpipEmploymentId,
+          scheduleId,
+          actorId,
+          {
+            country: "CA",
+            province: "QC",
+            payBasis: "hourly",
+            federalClaimCode: 1,
+            wcbExempt: true,
+            wcbExemptReason: "quebec fixture: workers-compensation coverage out of scope",
+          },
+          { percentFloor: "0", method: "accrue" },
+        );
 
         // The QC stubs price CNT too: classify the employer (asserted nowhere in this test).
         await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, craPayable);
@@ -589,26 +775,46 @@ describe("qpip-employer-cap", () => {
         ] as const) {
           for (const workedOn of days) {
             await seedPayrollTime(org.orgId, employeeId, actorId, {
-              workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-              costingBasis: 'actual',
+              workedOn: workedOn,
+              hours: 20,
+              status: "approved",
+              isBillable: false,
+              billingStatus: "unbilled",
+              costingBasis: "actual",
             });
           }
           const run = await createPayRun({
-            orgId: org.orgId, actorId, payScheduleId: scheduleId,
-            periodStart: start, periodEnd: end,
+            orgId: org.orgId,
+            actorId,
+            payScheduleId: scheduleId,
+            periodStart: start,
+            periodEnd: end,
           });
-          const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+          const result = await calculatePayRun({
+            orgId: org.orgId,
+            documentId: run.documentId,
+            actorId,
+          });
           assert.deepEqual(result.errors, []);
-          const factors = (await db.execute<{ factors: unknown }>(sql`
+          const factors = (
+            await db.execute<{ factors: unknown }>(
+              sql`
             select factors from pay_stubs
              where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-          `, "objects"))[0]!.factors as Record<string, string>;
+          `,
+              "objects",
+            )
+          )[0]!.factors as Record<string, string>;
           employerQpip.push(factors.QPIP_ER!);
           await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
         }
 
         assert.equal(employerQpip[0], "620.0600", "first period takes the whole annual maximum");
-        assert.equal(employerQpip[1], "0.0000", "second period accrues nothing once the maximum is reached");
+        assert.equal(
+          employerQpip[1],
+          "0.0000",
+          "second period accrues nothing once the maximum is reached",
+        );
         assert.equal(
           add(employerQpip[0]!, employerQpip[1]!),
           "620.0600",

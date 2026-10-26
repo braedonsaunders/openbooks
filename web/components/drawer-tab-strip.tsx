@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import type { ReactNode } from 'react'
-import { useOwnTabBaseline, useSwitchView } from '@openbooks/ui'
+import type { ReactNode } from "react";
+import { useOwnTabBaseline, useSwitchView } from "@openbooks/ui";
 
 /**
  * A labelled group of pressed buttons for drawer panels. These panels do not
@@ -19,13 +19,13 @@ export function DrawerTabStrip<T extends string>({
   onSelect,
   ariaLabel,
 }: {
-  tabs: { key: T; label: ReactNode; count?: number; disabled?: boolean }[]
-  activeKey: T
-  onSelect: (key: T) => void
-  ariaLabel: string
+  tabs: { key: T; label: ReactNode; count?: number; disabled?: boolean }[];
+  activeKey: T;
+  onSelect: (key: T) => void;
+  ariaLabel: string;
 }) {
-  const switchView = useSwitchView()
-  const ownBaseline = useOwnTabBaseline()
+  const switchView = useSwitchView();
+  const ownBaseline = useOwnTabBaseline();
   const strip = (
     <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={ariaLabel}>
       {tabs.map((tab) => (
@@ -37,15 +37,23 @@ export function DrawerTabStrip<T extends string>({
           onClick={() => switchView(() => onSelect(tab.key))}
           className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
             activeKey === tab.key
-              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
+              ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
+              : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200"
           }`}
         >
           {tab.label}
-          {typeof tab.count === 'number' ? <span className="rounded-full bg-slate-100 px-1.5 text-xs tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400">{tab.count}</span> : null}
+          {typeof tab.count === "number" ? (
+            <span className="rounded-full bg-slate-100 px-1.5 text-xs tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              {tab.count}
+            </span>
+          ) : null}
         </button>
       ))}
     </nav>
-  )
-  return ownBaseline ? <div className="mb-4 border-b border-slate-200 dark:border-slate-800">{strip}</div> : strip
+  );
+  return ownBaseline ? (
+    <div className="mb-4 border-b border-slate-200 dark:border-slate-800">{strip}</div>
+  ) : (
+    strip
+  );
 }

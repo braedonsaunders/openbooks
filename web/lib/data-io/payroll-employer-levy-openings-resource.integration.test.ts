@@ -5,9 +5,8 @@ import test from "node:test";
 // The resource imports the `server-only` marker, which the shared test
 // preset stubs. Same dynamic-import pattern as the data-io
 // payroll-opening-balances suite.
-const { payrollEmployerLevyOpeningsResource } = (await import(
-  "./payroll-employer-levy-openings-resource.ts"
-)) as typeof import("./payroll-employer-levy-openings-resource.ts");
+const { payrollEmployerLevyOpeningsResource } =
+  (await import("./payroll-employer-levy-openings-resource.ts")) as typeof import("./payroll-employer-levy-openings-resource.ts");
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
@@ -18,7 +17,8 @@ const { setPackSlotAccount } = await import("@openbooks/engine/payroll/packs");
 const { seedPayrollComponents } = await import("@openbooks/engine/payroll/run-setup");
 const { calculatePayRun } = await import("@openbooks/engine/payroll/run-calculation");
 const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
-const { seedOntarioEhtFixture } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+const { seedOntarioEhtFixture } =
+  await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
@@ -102,7 +102,12 @@ async function seedHarness(orgId: string, actorId: string): Promise<void> {
   await setPackSlotAccount(orgId, actorId, "CA", "eht", ehtPayable);
 }
 
-async function seedWorkforce(orgId: string, actorId: string, scheduleId: string, subsidiaryId: string): Promise<string> {
+async function seedWorkforce(
+  orgId: string,
+  actorId: string,
+  scheduleId: string,
+  subsidiaryId: string,
+): Promise<string> {
   const employeeId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -119,7 +124,7 @@ async function seedWorkforce(orgId: string, actorId: string, scheduleId: string,
                                            wcb_exempt, wcb_exempt_reason, is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, ${amyEmploymentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, 'Owner excluded from workers-compensation coverage.', true, ${actorId}, ${actorId})`);
-  await seedVacationTerms(orgId, amyEmploymentId, actorId, '4', 'accrue');
+  await seedVacationTerms(orgId, amyEmploymentId, actorId, "4", "accrue");
   await db.execute(sql`
     insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
                               is_billable, billing_status, costing_basis, created_by, updated_by)
@@ -128,13 +133,19 @@ async function seedWorkforce(orgId: string, actorId: string, scheduleId: string,
   return employeeId;
 }
 
-async function stubFactors(orgId: string, documentId: string): Promise<Record<string, Record<string, string>>> {
-  const rows = (await db.execute<{ employee: string; factors: Record<string, string> }>(sql`
+async function stubFactors(
+  orgId: string,
+  documentId: string,
+): Promise<Record<string, Record<string, string>>> {
+  const rows = await db.execute<{ employee: string; factors: Record<string, string> }>(
+    sql`
     select p.display_name as employee, s.factors
       from pay_stubs s
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Object.fromEntries(rows.map((row) => [row.employee, row.factors]));
 }
 
@@ -169,10 +180,17 @@ test(
 
         // The stub prices from the imported carry-in: (1,500 + 500 − 1,000) at 10%.
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
-        const calculated = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const calculated = await calculatePayRun({
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
+        });
         assert.deepEqual(calculated.errors, []);
         const factors = await stubFactors(org.orgId, run.documentId);
         assert.equal(cmp(factors["Amy Aggregate"]!["SYNTH"] ?? "?", "50"), 0);
@@ -208,8 +226,11 @@ test(
         assert.equal(outcome.created, 0);
         assert.equal(outcome.errors.length, 1);
         assert.match(outcome.errors[0]!.message, /not declared by the CA pack/);
-        const count = (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from payroll_employer_levy_opening where org_id = ${org.orgId}`, "objects"));
+        const count = await db.execute<{ n: number }>(
+          sql`
+          select count(*)::int as n from payroll_employer_levy_opening where org_id = ${org.orgId}`,
+          "objects",
+        );
         assert.equal(count[0]!.n, 0);
       });
     } finally {
@@ -228,7 +249,13 @@ test(
       await withDeclarations([thresholdLevy()], async () => {
         const resource = payrollEmployerLevyOpeningsResource(org.orgId);
         const previewCtx = { orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null };
-        const row = (baseYtd: unknown) => ({ country: "CA", levy: "synth_threshold", region: "", taxYear: 2026, baseYtd });
+        const row = (baseYtd: unknown) => ({
+          country: "CA",
+          levy: "synth_threshold",
+          region: "",
+          taxYear: 2026,
+          baseYtd,
+        });
 
         const invalidPreview = await resource.write([row("not-money")], "insert", previewCtx);
         assert.equal(invalidPreview.failed, 1);
@@ -238,21 +265,30 @@ test(
         assert.equal(duplicate.failed, 2);
         assert.equal(duplicate.created, 0);
 
-        const inserted = await resource.write([row("100")], "insert", { ...previewCtx, dryRun: false });
+        const inserted = await resource.write([row("100")], "insert", {
+          ...previewCtx,
+          dryRun: false,
+        });
         assert.equal(inserted.created, 1);
         assert.equal(inserted.failed, 0);
 
         const insertPreview = await resource.write([row("200")], "insert", previewCtx);
         assert.equal(insertPreview.failed, 1);
         assert.equal(insertPreview.updated, 0);
-        const blockedInsert = await resource.write([row("200")], "insert", { ...previewCtx, dryRun: false });
+        const blockedInsert = await resource.write([row("200")], "insert", {
+          ...previewCtx,
+          dryRun: false,
+        });
         assert.equal(blockedInsert.failed, 1);
         assert.equal(blockedInsert.updated, 0);
 
         const upsertPreview = await resource.write([row("250")], "upsert", previewCtx);
         assert.equal(upsertPreview.failed, 0);
         assert.equal(upsertPreview.updated, 1);
-        const upserted = await resource.write([row("250")], "upsert", { ...previewCtx, dryRun: false });
+        const upserted = await resource.write([row("250")], "upsert", {
+          ...previewCtx,
+          dryRun: false,
+        });
         assert.equal(upserted.failed, 0);
         assert.equal(upserted.updated, 1);
 

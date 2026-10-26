@@ -1,7 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { readV1JsonObject, requireV1IdempotencyKey, withV1Request } from "../../../../../lib/api/v1-request";
+import {
+  readV1JsonObject,
+  requireV1IdempotencyKey,
+  withV1Request,
+} from "../../../../../lib/api/v1-request";
 import { assertApplicationPermission } from "../../../../../lib/application/context";
 import { executeIdempotent } from "../../../../../lib/application/idempotency";
 import { listSetupRecords } from "../../../../../lib/application/setup-read";
@@ -54,11 +58,19 @@ async function handleV1POST(
       operation: "setup_record.create",
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { entityKey, body },
-      execute: async () => settleWrite(await createSetupRecord(
-        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
-        entityKey,
-        body,
-      )),
+      execute: async () =>
+        settleWrite(
+          await createSetupRecord(
+            {
+              orgId: context.authz.user.orgId,
+              id: context.authz.user.id,
+              permissions: context.authz.permissions,
+              allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+            },
+            entityKey,
+            body,
+          ),
+        ),
     });
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });
@@ -66,10 +78,12 @@ async function handleV1POST(
 
 export const GET = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1GET(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const POST = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1POST(request, { params: Promise.resolve(params as never) } as never),
 });

@@ -14,30 +14,40 @@ function check(cp: Awaited<ReturnType<typeof runScenario>>, name: string) {
   return result;
 }
 
-test("saas-metrics-tieout names a fact mismatch against the independent ledger", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const month = "2026-07-01";
-  const subscriptionId = randomUUID();
-  const planId = randomUUID();
-  try {
-    await withBypassContext(async () => {
-      const plan = await db.execute<{ id: string }>(sql`
+test(
+  "saas-metrics-tieout names a fact mismatch against the independent ledger",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const month = "2026-07-01";
+    const subscriptionId = randomUUID();
+    const planId = randomUUID();
+    try {
+      await withBypassContext(async () => {
+        const plan = await db.execute<{ id: string }>(
+          sql`
         insert into subscription_plans
           (id, org_id, name, amount, currency_code, interval, interval_count)
         values (${planId}, ${org.orgId}, 'Metrics tie-out plan', '100.0000', 'CAD', 'monthly', 1)
         returning id
-      `, "objects");
-      assert.equal(plan.length, 1, "the source plan must be stored");
-      const subscription = await db.execute<{ id: string }>(sql`
+      `,
+          "objects",
+        );
+        assert.equal(plan.length, 1, "the source plan must be stored");
+        const subscription = await db.execute<{ id: string }>(
+          sql`
         insert into subscriptions
           (id, org_id, customer_id, plan_id, quantity, price_override, status,
            start_on, next_bill_on, auto_post)
         values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, '1', '100.0000',
                 'active', ${month}::date, '2026-08-15', false)
         returning id
-      `, "objects");
-      assert.equal(subscription.length, 1, "the source subscription must be stored");
-      const monthly = await db.execute<{ id: string }>(sql`
+      `,
+          "objects",
+        );
+        assert.equal(subscription.length, 1, "the source subscription must be stored");
+        const monthly = await db.execute<{ id: string }>(
+          sql`
         insert into saas_metrics_monthly
           (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
            mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
@@ -46,9 +56,12 @@ test("saas-metrics-tieout names a fact mismatch against the independent ledger",
                 ${month}::date, ${month}::date, 0, 100, 100, 0, 0, 0, 0,
                 'new', 0, 0, 'saas-metrics-red-proof')
         returning id
-      `, "objects");
-      assert.equal(monthly.length, 1, "one subscription fact must be stored");
-      const inserted = await db.execute<{ id: string }>(sql`
+      `,
+          "objects",
+        );
+        assert.equal(monthly.length, 1, "one subscription fact must be stored");
+        const inserted = await db.execute<{ id: string }>(
+          sql`
         insert into saas_metrics_facts_monthly
           (org_id, subsidiary_id, month, mrr_start, mrr_end, new_mrr, expansion_mrr,
            contraction_mrr, churned_mrr, reactivation_mrr, recognized_revenue, deferred_delta,
@@ -59,35 +72,55 @@ test("saas-metrics-tieout names a fact mismatch against the independent ledger",
                 0, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
                 0, 0, 0, 0, 0, 'billed', 'saas-metrics-red-proof')
         returning id
-      `, "objects");
-      assert.equal(inserted.length, 1, "baseline SaaS facts must be stored");
-    });
+      `,
+          "objects",
+        );
+        assert.equal(inserted.length, 1, "baseline SaaS facts must be stored");
+      });
 
-    const baseline = await runScenario(org.orgId, { at: org.date });
-    assert.equal(check(baseline, "saas-metrics-tieout").ok, true, "the consistent fact row is golden");
+      const baseline = await runScenario(org.orgId, { at: org.date });
+      assert.equal(
+        check(baseline, "saas-metrics-tieout").ok,
+        true,
+        "the consistent fact row is golden",
+      );
 
-    await withBypassContext(async () => {
-      const updated = await db.execute<{ id: string }>(sql`
+      await withBypassContext(async () => {
+        const updated = await db.execute<{ id: string }>(
+          sql`
         update saas_metrics_facts_monthly set recognized_revenue = '35.0000'
          where org_id = ${org.orgId} and subsidiary_id = ${org.subsidiaryId} and month = ${month}::date
         returning id
-      `, "objects");
-      assert.equal(updated.length, 1, "the intended subsidiary-month fact must be updated");
-    });
+      `,
+          "objects",
+        );
+        assert.equal(updated.length, 1, "the intended subsidiary-month fact must be updated");
+      });
 
-    const divergent = await runScenario(org.orgId, { at: org.date });
-    const tie = check(divergent, "saas-metrics-tieout");
-    assert.equal(tie.ok, false, `the tie-out must fail on the misstated recognized amount: ${tie.detail}`);
-    assert.match(
-      tie.detail,
-      new RegExp(`${month.slice(0, 7)} subsidiary ${org.subsidiaryId}: recognized_revenue residual 35\\.0000`),
-      "detail must name the month, subsidiary, and exact residual",
-    );
-    assert.equal(divergent.pass, false, "a diverged fact row cannot be golden");
-    for (const other of divergent.checks.filter((item) => item.name !== "saas-metrics-tieout")) {
-      assert.equal(other.ok, true, `${other.name} must stay green here — only the metrics tie-out fires`);
+      const divergent = await runScenario(org.orgId, { at: org.date });
+      const tie = check(divergent, "saas-metrics-tieout");
+      assert.equal(
+        tie.ok,
+        false,
+        `the tie-out must fail on the misstated recognized amount: ${tie.detail}`,
+      );
+      assert.match(
+        tie.detail,
+        new RegExp(
+          `${month.slice(0, 7)} subsidiary ${org.subsidiaryId}: recognized_revenue residual 35\\.0000`,
+        ),
+        "detail must name the month, subsidiary, and exact residual",
+      );
+      assert.equal(divergent.pass, false, "a diverged fact row cannot be golden");
+      for (const other of divergent.checks.filter((item) => item.name !== "saas-metrics-tieout")) {
+        assert.equal(
+          other.ok,
+          true,
+          `${other.name} must stay green here — only the metrics tie-out fires`,
+        );
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);

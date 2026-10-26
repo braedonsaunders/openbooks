@@ -5,11 +5,7 @@ import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { createPaymentDocument } from "./payment-documents.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -23,7 +19,8 @@ test(
         createScratchUser(org.orgId, "Payment poster", "admin"),
       );
       const payment = await withOrgContext(org.orgId, () =>
-        createPaymentDocument({ allowedSubsidiaryIds: null,
+        createPaymentDocument({
+          allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,
@@ -37,35 +34,32 @@ test(
 
       await assert.rejects(
         withOrgTransaction(org.orgId, async () => {
-          const released = await submitAndReleaseIfUngated(
-            "customer_payment",
-            payment.id,
-            actorId,
-          );
+          const released = await submitAndReleaseIfUngated("customer_payment", payment.id, actorId);
           assert.equal(released.autoApproved, true);
-          await postPaymentWithApplications(
-            payment.id,
-            undefined,
-            actorId,
-            "ui",
-            { deferEffects: true },
-          );
+          await postPaymentWithApplications(payment.id, undefined, actorId, "ui", {
+            deferEffects: true,
+          });
         }),
         /select at least one open item to apply/,
       );
 
-      const state = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
+      const state = await withOrgContext(
+        org.orgId,
+        async () =>
+          await db.execute<{
             status: string;
             submitted_at: string | null;
             posted_entry_id: string | null;
             entry_count: number;
-          }>(sql`
+          }>(
+            sql`
           select status, submitted_at, posted_entry_id,
                  (select count(*)::int from journal_entries
                    where source_document_id = ${payment.id}) as entry_count
             from documents where id = ${payment.id}
-        `, "objects")),
+        `,
+            "objects",
+          ),
       );
       assert.deepEqual(state[0], {
         status: "draft",

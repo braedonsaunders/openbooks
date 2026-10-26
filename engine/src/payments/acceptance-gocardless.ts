@@ -45,9 +45,21 @@ export function verifyGoCardlessWebhookDelivery(
     // while payment events reference the payment id — every payment event
     // carries the billing request so resolution can match either side.
     const alternateRef = brId && brId !== paymentId ? brId : null;
-    if (event?.resource_type === "payments" && (event.action === "confirmed" || event.action === "paid_out")) {
-      events.push({ externalRef: String(paymentId), alternateExternalRef: alternateRef, linkToken: null, status: "succeeded", raw: payload });
-    } else if (event?.resource_type === "payments" && (event.action === "failed" || event.action === "charged_back")) {
+    if (
+      event?.resource_type === "payments" &&
+      (event.action === "confirmed" || event.action === "paid_out")
+    ) {
+      events.push({
+        externalRef: String(paymentId),
+        alternateExternalRef: alternateRef,
+        linkToken: null,
+        status: "succeeded",
+        raw: payload,
+      });
+    } else if (
+      event?.resource_type === "payments" &&
+      (event.action === "failed" || event.action === "charged_back")
+    ) {
       events.push({
         externalRef: String(paymentId),
         alternateExternalRef: alternateRef,
@@ -63,7 +75,10 @@ export function verifyGoCardlessWebhookDelivery(
         refundCurrency: null,
         raw: payload,
       });
-    } else if (event?.resource_type === "mandates" && (event.action === "created" || event.action === "active")) {
+    } else if (
+      event?.resource_type === "mandates" &&
+      (event.action === "created" || event.action === "active")
+    ) {
       // A bank-debit mandate was authorised: the stored method is ready. The
       // autopay engine claims it; mandate failures arrive as cancelled and
       // stay unhandled here.
@@ -91,7 +106,12 @@ export function verifyGoCardlessWebhookDelivery(
         raw: payload,
       });
     } else if (event?.resource_type === "billing_requests" && event.action === "cancelled") {
-      events.push({ externalRef: String(brId ?? paymentId), linkToken: null, status: "cancelled", raw: payload });
+      events.push({
+        externalRef: String(brId ?? paymentId),
+        linkToken: null,
+        status: "cancelled",
+        raw: payload,
+      });
     }
   }
   return verifiedWebhook(events);
@@ -100,14 +120,19 @@ export function verifyGoCardlessWebhookDelivery(
 export const gocardlessAdapter: PaymentProviderAdapter = {
   key: "gocardless",
   async createCheckout(secrets, req, fetchFn = defaultFetch) {
-    if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
+    if (!secrets.apiKey)
+      throw new PaymentAcceptanceError("gocardless access token is not configured");
     const total = add(req.invoiceAmount, req.surchargeAmount);
     const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
     // Billing request → payment → billing request flow (hosted pages).
     const brRes = await fetchFn(`${base}/billing_requests`, {
       method: "POST",
       redirect: "error",
-      headers: { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" },
+      headers: {
+        authorization: `Bearer ${secrets.apiKey}`,
+        "content-type": "application/json",
+        "GoCardless-Version": "2015-07-06",
+      },
       body: JSON.stringify({
         billing_requests: {
           payment_request: {
@@ -122,12 +147,18 @@ export const gocardlessAdapter: PaymentProviderAdapter = {
     const br = await fetchJsonBody(brRes);
     const brId = jsonObject(br.billing_requests).id;
     if (brRes.status >= 400 || typeof brId !== "string" || !brId) {
-      throw new PaymentAcceptanceError(`gocardless billing request failed: ${jsonObject(br.error).message ?? brRes.status}`);
+      throw new PaymentAcceptanceError(
+        `gocardless billing request failed: ${jsonObject(br.error).message ?? brRes.status}`,
+      );
     }
     const flowRes = await fetchFn(`${base}/billing_request_flows`, {
       method: "POST",
       redirect: "error",
-      headers: { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" },
+      headers: {
+        authorization: `Bearer ${secrets.apiKey}`,
+        "content-type": "application/json",
+        "GoCardless-Version": "2015-07-06",
+      },
       body: JSON.stringify({
         billing_request_flows: {
           redirect_uri: req.returnUrl,
@@ -139,14 +170,21 @@ export const gocardlessAdapter: PaymentProviderAdapter = {
     const flow = await fetchJsonBody(flowRes);
     const url = jsonObject(flow.billing_request_flows).authorisation_url;
     if (flowRes.status >= 400 || typeof url !== "string" || !url) {
-      throw new PaymentAcceptanceError(`gocardless flow failed: ${jsonObject(flow.error).message ?? flowRes.status}`);
+      throw new PaymentAcceptanceError(
+        `gocardless flow failed: ${jsonObject(flow.error).message ?? flowRes.status}`,
+      );
     }
     return { redirectUrl: url, externalRef: brId };
   },
   async createSetupSession(secrets, req, fetchFn = defaultFetch) {
-    if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
+    if (!secrets.apiKey)
+      throw new PaymentAcceptanceError("gocardless access token is not configured");
     const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
-    const headers = { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" };
+    const headers = {
+      authorization: `Bearer ${secrets.apiKey}`,
+      "content-type": "application/json",
+      "GoCardless-Version": "2015-07-06",
+    };
     // Mandate-only billing request: the payer authorises direct debit without
     // any immediate charge. The pending method row holds the billing request
     // id until the mandate webhook (or the return-URL verification) replaces
@@ -165,7 +203,9 @@ export const gocardlessAdapter: PaymentProviderAdapter = {
     const br = await fetchJsonBody(brRes);
     const brId = jsonObject(br.billing_requests).id;
     if (brRes.status >= 400 || typeof brId !== "string" || !brId) {
-      throw new PaymentAcceptanceError(`gocardless mandate request failed: ${jsonObject(br.error).message ?? brRes.status}`);
+      throw new PaymentAcceptanceError(
+        `gocardless mandate request failed: ${jsonObject(br.error).message ?? brRes.status}`,
+      );
     }
     const flowRes = await fetchFn(`${base}/billing_request_flows`, {
       method: "POST",
@@ -182,12 +222,15 @@ export const gocardlessAdapter: PaymentProviderAdapter = {
     const flow = await fetchJsonBody(flowRes);
     const url = jsonObject(flow.billing_request_flows).authorisation_url;
     if (flowRes.status >= 400 || typeof url !== "string" || !url) {
-      throw new PaymentAcceptanceError(`gocardless mandate flow failed: ${jsonObject(flow.error).message ?? flowRes.status}`);
+      throw new PaymentAcceptanceError(
+        `gocardless mandate flow failed: ${jsonObject(flow.error).message ?? flowRes.status}`,
+      );
     }
     return { redirectUrl: url, externalRef: brId };
   },
   async chargeOffSession(secrets, req, fetchFn = defaultFetch) {
-    if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
+    if (!secrets.apiKey)
+      throw new PaymentAcceptanceError("gocardless access token is not configured");
     const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
     const res = await fetchFn(`${base}/payments`, {
       method: "POST",
@@ -210,29 +253,48 @@ export const gocardlessAdapter: PaymentProviderAdapter = {
     const json = await fetchJsonBody(res);
     if (res.status >= 400) {
       const code = jsonObject(json.error).code;
-      return { status: "failed", providerRef: null, declineCode: typeof code === "string" ? code : null };
+      return {
+        status: "failed",
+        providerRef: null,
+        declineCode: typeof code === "string" ? code : null,
+      };
     }
     const payment = jsonObject(json.payments);
     const id = typeof payment.id === "string" ? payment.id : "";
     // Bank debit settles asynchronously: creation only starts the collection,
     // the payment webhook settles the attempt when funds arrive or fail.
     if (payment.status === "failed" || payment.status === "cancelled") {
-      return { status: "failed", providerRef: id || null, declineCode: typeof payment.status === "string" ? payment.status : null };
+      return {
+        status: "failed",
+        providerRef: id || null,
+        declineCode: typeof payment.status === "string" ? payment.status : null,
+      };
     }
     return { status: "processing", providerRef: id };
   },
   async detachMethod(secrets, req, fetchFn = defaultFetch) {
-    if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
+    if (!secrets.apiKey)
+      throw new PaymentAcceptanceError("gocardless access token is not configured");
     const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
-    const res = await fetchFn(`${base}/mandates/${encodeURIComponent(req.providerMethodId)}/actions/cancel`, {
-      method: "POST",
-      redirect: "error",
-      headers: { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" },
-      body: JSON.stringify({}),
-    });
+    const res = await fetchFn(
+      `${base}/mandates/${encodeURIComponent(req.providerMethodId)}/actions/cancel`,
+      {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          authorization: `Bearer ${secrets.apiKey}`,
+          "content-type": "application/json",
+          "GoCardless-Version": "2015-07-06",
+        },
+        body: JSON.stringify({}),
+      },
+    );
     if (res.status === 404) return; // already cancelled: removal stays idempotent
     const json = await fetchJsonBody(res);
-    if (res.status >= 400) throw new PaymentAcceptanceError(`gocardless mandate cancel failed: ${jsonObject(json.error).message ?? res.status}`);
+    if (res.status >= 400)
+      throw new PaymentAcceptanceError(
+        `gocardless mandate cancel failed: ${jsonObject(json.error).message ?? res.status}`,
+      );
   },
   verifyWebhookDelivery: verifyGoCardlessWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {

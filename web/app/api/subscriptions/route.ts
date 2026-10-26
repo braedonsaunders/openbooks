@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
@@ -31,19 +31,99 @@ import { guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { notFound } from "@/lib/api/responses";
-const intervalSchema = z.enum(['weekly', 'monthly', 'quarterly', 'annually']);
+const intervalSchema = z.enum(["weekly", "monthly", "quarterly", "annually"]);
 const intervalCountSchema = z.union([z.number().int(), z.string().regex(/^\d+$/)]).optional();
-const POSTBodySchema1 = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('addPlan'), name: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string().optional(), currency: z.string().nullable().optional(), interval: intervalSchema, intervalCount: intervalCountSchema, incomeAccountId: uuidString().nullable().optional(), itemId: uuidString().nullable().optional(), taxCodeId: uuidString().nullable().optional() }),
-  z.object({ action: z.literal('updatePlan'), id: uuidString(), name: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string().optional(), currency: z.string().nullable().optional(), interval: intervalSchema, intervalCount: intervalCountSchema, incomeAccountId: uuidString().nullable().optional(), itemId: uuidString().nullable().optional(), taxCodeId: uuidString().nullable().optional(), isActive: z.boolean().optional() }),
-  z.object({ action: z.literal('deletePlan'), id: uuidString() }),
-  z.object({ action: z.literal('addSubscription'), customerId: uuidString(), planId: uuidString(), startOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), firstBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), prorateFirstPeriod: z.boolean().optional(), autoPost: z.boolean().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), memo: z.string().nullable().optional(), catchUp: z.object({ mode: z.enum(["post_all", "drafts", "skip", "selected"]), dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(), post: z.boolean().optional() }).optional() }),
-  z.object({ action: z.literal('changeSubscription'), id: uuidString(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional() }),
-  z.object({ action: z.literal('updateSubscription'), id: uuidString(), status: z.enum(['active', 'paused', 'canceled']).optional(), canceledOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional(), billToPartyId: uuidString().nullable().optional(), payerPartyId: uuidString().nullable().optional(), catchUp: z.object({ mode: z.enum(["post_all", "drafts", "skip", "selected"]), dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(), post: z.boolean().optional() }).optional() }),
-  z.object({ action: z.literal('billNow'), id: uuidString() }),
+const POSTBodySchema1 = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("addPlan"),
+    name: z.string().trim().min(1),
+    description: z.string().nullable().optional(),
+    amount: z.string().optional(),
+    currency: z.string().nullable().optional(),
+    interval: intervalSchema,
+    intervalCount: intervalCountSchema,
+    incomeAccountId: uuidString().nullable().optional(),
+    itemId: uuidString().nullable().optional(),
+    taxCodeId: uuidString().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal("updatePlan"),
+    id: uuidString(),
+    name: z.string().trim().min(1),
+    description: z.string().nullable().optional(),
+    amount: z.string().optional(),
+    currency: z.string().nullable().optional(),
+    interval: intervalSchema,
+    intervalCount: intervalCountSchema,
+    incomeAccountId: uuidString().nullable().optional(),
+    itemId: uuidString().nullable().optional(),
+    taxCodeId: uuidString().nullable().optional(),
+    isActive: z.boolean().optional(),
+  }),
+  z.object({ action: z.literal("deletePlan"), id: uuidString() }),
+  z.object({
+    action: z.literal("addSubscription"),
+    customerId: uuidString(),
+    planId: uuidString(),
+    startOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    firstBillOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    prorateFirstPeriod: z.boolean().optional(),
+    autoPost: z.boolean().optional(),
+    quantity: z.string().optional(),
+    priceOverride: z.string().nullable().optional(),
+    memo: z.string().nullable().optional(),
+    catchUp: z
+      .object({
+        mode: z.enum(["post_all", "drafts", "skip", "selected"]),
+        dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
+        post: z.boolean().optional(),
+      })
+      .optional(),
+  }),
+  z.object({
+    action: z.literal("changeSubscription"),
+    id: uuidString(),
+    quantity: z.string().optional(),
+    priceOverride: z.string().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal("updateSubscription"),
+    id: uuidString(),
+    status: z.enum(["active", "paused", "canceled"]).optional(),
+    canceledOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    quantity: z.string().optional(),
+    priceOverride: z.string().nullable().optional(),
+    autoPost: z.boolean().optional(),
+    nextBillOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    skipUnbilledService: z.boolean().optional(),
+    skipReason: z.string().optional(),
+    billToPartyId: uuidString().nullable().optional(),
+    payerPartyId: uuidString().nullable().optional(),
+    catchUp: z
+      .object({
+        mode: z.enum(["post_all", "drafts", "skip", "selected"]),
+        dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
+        post: z.boolean().optional(),
+      })
+      .optional(),
+  }),
+  z.object({ action: z.literal("billNow"), id: uuidString() }),
 ]);
-
-
 
 export const runtime = "nodejs";
 
@@ -72,14 +152,17 @@ async function subscriptionMrrInOrgCurrency(
     // A subscription earning nothing today needs no rate: a foreign plan with
     // no spot rate must not refuse the card for revenue that is not there.
     if (toUnits(amount) === 0n) continue;
-    const sourceCurrency = String(row.planCurrency ?? orgCurrency).trim().toUpperCase();
+    const sourceCurrency = String(row.planCurrency ?? orgCurrency)
+      .trim()
+      .toUpperCase();
     if (sourceCurrency === orgCurrency) {
       total = add(total, amount);
       continue;
     }
     let rate = rates.get(sourceCurrency);
     if (!rate) {
-      const candidates = await db.execute<{ rate: string }>(sql`
+      const candidates = await db.execute<{ rate: string }>(
+        sql`
         select rate::text from (
           select rate, as_of, 0 as priority
             from fx_rates
@@ -95,7 +178,9 @@ async function subscriptionMrrInOrgCurrency(
         ) candidates
         order by as_of desc, priority asc
         limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       rate = candidates[0]?.rate;
       if (!rate) {
         throw new SubscriptionError(
@@ -131,35 +216,38 @@ async function guardSubscriptionScope(
   authz: Authz,
   subscriptionId: unknown,
 ): Promise<NextResponse | null> {
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+  const owned = await db.execute<{ subsidiaryId: string | null }>(
+    sql`
     select c.subsidiary_id as "subsidiaryId"
       from subscriptions s
       join parties c on c.id = s.customer_id and c.org_id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${authz.user.orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!owned[0]) return notFound("record");
   return guardSubsidiaryScope(authz, owned[0].subsidiaryId, { orgWideNull: true });
 }
 
 /** Load the customer boundary before creating a subscription for it. */
-async function guardCustomerScope(
-  authz: Authz,
-  customerId: unknown,
-): Promise<NextResponse | null> {
-  const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
+async function guardCustomerScope(authz: Authz, customerId: unknown): Promise<NextResponse | null> {
+  const customer = await db.execute<{ subsidiaryId: string | null }>(
+    sql`
     select c.subsidiary_id as "subsidiaryId"
       from parties c
      where c.id = ${customerId} and c.org_id = ${authz.user.orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!customer[0]) return notFound("record");
   return guardSubsidiaryScope(authz, customer[0].subsidiaryId, { orgWideNull: true });
 }
 
 function subscriptionDate(value: unknown, label: string): string {
   if (
-    typeof value !== "string"
-    || !/^\d{4}-\d{2}-\d{2}$/.test(value)
-    || value.startsWith("0000-")
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    value.startsWith("0000-")
   ) {
     throw new SubscriptionError(`${label} must be a valid ISO date`);
   }
@@ -187,8 +275,11 @@ async function refuseInventoryPlanItem(
   if (itemId === undefined || itemId === null || itemId === "") return null;
   const nextId = String(itemId);
   if (storedItemId && nextId === storedItemId) return null;
-  const item = (await db.execute<{ kind: string }>(sql`
-    select kind from items where id = ${nextId} and org_id = ${orgId}`, "objects"));
+  const item = await db.execute<{ kind: string }>(
+    sql`
+    select kind from items where id = ${nextId} and org_id = ${orgId}`,
+    "objects",
+  );
   if (!(await isFeatureEnabled(orgId, "inventory"))) {
     if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
       return notFound("record");
@@ -208,20 +299,24 @@ async function refuseInventoryPlanItem(
  * subscriptions automatically; this is the management + bill-now surface.
  */
 export const GET = defineRoute({
-  permission: 'ar.read',
-  feature: 'subscriptionBilling',
+  permission: "ar.read",
+  feature: "subscriptionBilling",
   handler: async ({ authz: routeAuthz }) => {
     const authz = routeAuthz;
     const orgId = authz.user.orgId;
     const asOf = await businessToday(orgId);
     const [plans, subs, org] = await Promise.all([
-        db.execute(sql`
+      db.execute(
+        sql`
           select id, name, description, amount, currency_code as "currency", interval,
                  interval_count as "intervalCount", income_account_id as "incomeAccountId",
                  item_id as "itemId", tax_code_id as "taxCodeId", is_active as "isActive"
             from subscription_plans where org_id = ${orgId} order by name
-        `, "objects"),
-        db.execute(sql`
+        `,
+        "objects",
+      ),
+      db.execute(
+        sql`
           select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.quantity,
                  s.price_override as "priceOverride", s.status, s.start_on as "startOn",
                  s.next_bill_on as "nextBillOn", s.auto_post as "autoPost", s.run_count as "runCount",
@@ -245,12 +340,19 @@ export const GET = defineRoute({
            where s.org_id = ${orgId}
              ${customerSubsidiaryFilter(authz.allowedSubsidiaryIds)}
            order by s.created_at desc
-        `, "objects"),
-        db.execute<{ baseCurrency: string }>(sql`
+        `,
+        "objects",
+      ),
+      db.execute<{ baseCurrency: string }>(
+        sql`
           select base_currency as "baseCurrency" from orgs where id = ${orgId}
-        `, "objects"),
-      ]);
-    const orgCurrency = String(org[0]?.baseCurrency ?? "").trim().toUpperCase();
+        `,
+        "objects",
+      ),
+    ]);
+    const orgCurrency = String(org[0]?.baseCurrency ?? "")
+      .trim()
+      .toUpperCase();
     if (!orgCurrency) throw new SubscriptionError("organization currency is not configured");
     // Contract subscriptions earn their amended component prices, not the plan
     // price they were activated from, so MRR reads the same figure the invoices do.
@@ -277,26 +379,35 @@ export const GET = defineRoute({
       return { row: s, mrr, paidThroughOn };
     });
     const subscriptions = earning.map(({ row, mrr, paidThroughOn }) => {
-      const { startOnDate: _startOnDate, nextBillOnDate: _nextBillOnDate, guardedThrough: _guardedThrough, ...publicRow } = row;
+      const {
+        startOnDate: _startOnDate,
+        nextBillOnDate: _nextBillOnDate,
+        guardedThrough: _guardedThrough,
+        ...publicRow
+      } = row;
       return { ...publicRow, mrr, paidThroughOn };
     });
     let mrr: string;
     try {
-        mrr = await subscriptionMrrInOrgCurrency(orgId, orgCurrency, earning.map(({ row, mrr: rowMrr }) => ({
+      mrr = await subscriptionMrrInOrgCurrency(
+        orgId,
+        orgCurrency,
+        earning.map(({ row, mrr: rowMrr }) => ({
           mrr: rowMrr,
           planCurrency: row.planCurrency,
-        })));
-      } catch (e) {
-        if (e instanceof SubscriptionError) return apiErrorResponse(e);
-        throw e;
-      }
+        })),
+      );
+    } catch (e) {
+      if (e instanceof SubscriptionError) return apiErrorResponse(e);
+      throw e;
+    }
     return NextResponse.json({ plans, subscriptions, mrr });
   },
 });
 
 export const POST = defineRoute({
-  permission: 'ar.create',
-  feature: 'subscriptionBilling',
+  permission: "ar.create",
+  feature: "subscriptionBilling",
   body: POSTBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;
@@ -305,517 +416,654 @@ export const POST = defineRoute({
 
     const body = routeBody;
     try {
-        switch (body.action) {
-          case "addPlan": {
-            const unrestrictedDenied = guardUnrestrictedScope(authz);
-            if (unrestrictedDenied) return unrestrictedDenied;
-            // Plan currency is Multi-currency configuration. Turning that switch
-            // off must refuse a new write; omitted currency leaves the column
-            // unset so turning the feature back on does not invent a code.
-            if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
-              return notFound("record");
-            }
-            if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-            const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
-            const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
-            const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId);
-            if (refusedItem) return refusedItem;
-            const created = await db.transaction(async (tx) => {
-              const row = (await tx.execute<Record<string, unknown>>(sql`
+      switch (body.action) {
+        case "addPlan": {
+          const unrestrictedDenied = guardUnrestrictedScope(authz);
+          if (unrestrictedDenied) return unrestrictedDenied;
+          // Plan currency is Multi-currency configuration. Turning that switch
+          // off must refuse a new write; omitted currency leaves the column
+          // unset so turning the feature back on does not invent a code.
+          if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
+            return notFound("record");
+          }
+          if (typeof body.name !== "string" || !body.name.trim())
+            return NextResponse.json({ error: "name required" }, { status: 400 });
+          const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
+          const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
+          const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId);
+          if (refusedItem) return refusedItem;
+          const created = await db.transaction(async (tx) => {
+            const row = await tx.execute<Record<string, unknown>>(
+              sql`
                 insert into subscription_plans (org_id, name, description, amount, currency_code, interval,
                                                 interval_count, income_account_id, item_id, tax_code_id, created_by, updated_by)
                 values (${orgId}, ${body.name}, ${body.description ?? null}, ${amount},
                         ${body.currency ?? null}, ${cadence.interval}, ${cadence.intervalCount},
                         ${body.incomeAccountId ?? null}, ${body.itemId ?? null}, ${body.taxCodeId ?? null}, ${userId}, ${userId})
                 returning *
-              `, "objects"));
-              await tx.execute(sql`
+              `,
+              "objects",
+            );
+            await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
                   (${orgId}, 'subscription_plans', ${String(row[0]!.id)}, 'insert',
                    ${JSON.stringify({ after: row[0] })}::jsonb, ${userId})
               `);
-              return row[0]!;
-            });
-            return NextResponse.json({ id: ((created)).id }, { status: 201 });
+            return row[0]!;
+          });
+          return NextResponse.json({ id: created.id }, { status: 201 });
+        }
+        case "updatePlan": {
+          const unrestrictedDenied = guardUnrestrictedScope(authz);
+          if (unrestrictedDenied) return unrestrictedDenied;
+          // Plan currency is Multi-currency configuration. Turning that switch
+          // off must refuse a new write; the stored code stays so turning the
+          // feature back on restores the same currency.
+          if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
+            return notFound("record");
           }
-          case "updatePlan": {
-            const unrestrictedDenied = guardUnrestrictedScope(authz);
-            if (unrestrictedDenied) return unrestrictedDenied;
-            // Plan currency is Multi-currency configuration. Turning that switch
-            // off must refuse a new write; the stored code stays so turning the
-            // feature back on restores the same currency.
-            if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
-              return notFound("record");
-            }
-            if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-            const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
-            const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
-            const isActive = optionalBoolean(body.isActive, "active") ?? true;
-            let storedItemId: string | null | undefined;
-            if (body.itemId !== undefined) {
-              const stored = (await db.execute<{ item_id: string | null }>(sql`
-                select item_id from subscription_plans where id = ${body.id} and org_id = ${orgId}`, "objects"));
-              storedItemId = stored[0]?.item_id;
-              const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId, storedItemId);
-              if (refusedItem) return refusedItem;
-            }
-            const missingPlan = await db.transaction(async (tx) => {
-              const before = (await tx.execute<Record<string, unknown>>(sql`
+          if (typeof body.name !== "string" || !body.name.trim())
+            return NextResponse.json({ error: "name required" }, { status: 400 });
+          const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
+          const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
+          const isActive = optionalBoolean(body.isActive, "active") ?? true;
+          let storedItemId: string | null | undefined;
+          if (body.itemId !== undefined) {
+            const stored = await db.execute<{ item_id: string | null }>(
+              sql`
+                select item_id from subscription_plans where id = ${body.id} and org_id = ${orgId}`,
+              "objects",
+            );
+            storedItemId = stored[0]?.item_id;
+            const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId, storedItemId);
+            if (refusedItem) return refusedItem;
+          }
+          const missingPlan = await db.transaction(async (tx) => {
+            const before = await tx.execute<Record<string, unknown>>(
+              sql`
                 select * from subscription_plans where id = ${body.id} and org_id = ${orgId}
-              `, "objects"));
-              if (!before[0]) return true;
-              const updated = (await tx.execute<Record<string, unknown>>(sql`
+              `,
+              "objects",
+            );
+            if (!before[0]) return true;
+            const updated = await tx.execute<Record<string, unknown>>(
+              sql`
                 update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
                        amount = ${amount},
                        currency_code = ${body.currency !== undefined ? body.currency : sql`currency_code`},
                        interval = ${cadence.interval}, interval_count = ${cadence.intervalCount},
                        income_account_id = ${body.incomeAccountId ?? null},
-                       item_id = ${body.itemId !== undefined ? body.itemId ?? null : sql`item_id`},
+                       item_id = ${body.itemId !== undefined ? (body.itemId ?? null) : sql`item_id`},
                        tax_code_id = ${body.taxCodeId ?? null}, is_active = ${isActive},
                        updated_at = now(), updated_by = ${userId}
                  where id = ${body.id} and org_id = ${orgId}
                 returning *
-              `, "objects"));
-              await tx.execute(sql`
+              `,
+              "objects",
+            );
+            await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
                   (${orgId}, 'subscription_plans', ${String(body.id)}, 'update',
                    ${JSON.stringify({ before: before[0], after: updated[0] })}::jsonb, ${userId})
               `);
-              return false;
-            });
-            if (missingPlan) return notFound("record");
-            return NextResponse.json({ ok: true });
-          }
-          case "deletePlan": {
-            const unrestrictedDenied = guardUnrestrictedScope(authz);
-            if (unrestrictedDenied) return unrestrictedDenied;
-            const deleted = await db.transaction(async (tx) => {
-              // Re-check "in use" inside the transaction so a subscription created
-              // between check and delete cannot orphan onto a vanished plan.
-              const inUse = (await tx.execute(sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`, "objects"));
-              if (inUse.length) return { inUse: true as const };
-              const before = (await tx.execute<Record<string, unknown>>(sql`
+            return false;
+          });
+          if (missingPlan) return notFound("record");
+          return NextResponse.json({ ok: true });
+        }
+        case "deletePlan": {
+          const unrestrictedDenied = guardUnrestrictedScope(authz);
+          if (unrestrictedDenied) return unrestrictedDenied;
+          const deleted = await db.transaction(async (tx) => {
+            // Re-check "in use" inside the transaction so a subscription created
+            // between check and delete cannot orphan onto a vanished plan.
+            const inUse = await tx.execute(
+              sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`,
+              "objects",
+            );
+            if (inUse.length) return { inUse: true as const };
+            const before = await tx.execute<Record<string, unknown>>(
+              sql`
                 select * from subscription_plans where id = ${body.id} and org_id = ${orgId}
-              `, "objects"));
-              if (!before[0]) return { inUse: false as const };
-              await tx.execute(sql`delete from subscription_plans where id = ${body.id} and org_id = ${orgId}`);
-              await tx.execute(sql`
+              `,
+              "objects",
+            );
+            if (!before[0]) return { inUse: false as const };
+            await tx.execute(
+              sql`delete from subscription_plans where id = ${body.id} and org_id = ${orgId}`,
+            );
+            await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
                   (${orgId}, 'subscription_plans', ${String(body.id)}, 'delete',
                    ${JSON.stringify({ before: before[0] })}::jsonb, ${userId})
               `);
-              return { inUse: false as const };
-            });
-            if (deleted.inUse) {
-              return NextResponse.json({ error: "plan has subscriptions — archive it instead" }, { status: 422 });
-            }
-            return NextResponse.json({ ok: true });
+            return { inUse: false as const };
+          });
+          if (deleted.inUse) {
+            return NextResponse.json(
+              { error: "plan has subscriptions — archive it instead" },
+              { status: 422 },
+            );
           }
-          case "addSubscription": {
-            if (!body.customerId || !body.planId) return NextResponse.json({ error: "customer and plan required" }, { status: 400 });
-            const customerScopeDenied = await guardCustomerScope(authz, body.customerId);
-            if (customerScopeDenied) return customerScopeDenied;
-            const startOnInput = body.startOn === undefined || body.startOn === null || body.startOn === ""
+          return NextResponse.json({ ok: true });
+        }
+        case "addSubscription": {
+          if (!body.customerId || !body.planId)
+            return NextResponse.json({ error: "customer and plan required" }, { status: 400 });
+          const customerScopeDenied = await guardCustomerScope(authz, body.customerId);
+          if (customerScopeDenied) return customerScopeDenied;
+          const startOnInput =
+            body.startOn === undefined || body.startOn === null || body.startOn === ""
               ? await businessToday(orgId)
               : body.startOn;
-            const startOn = subscriptionDate(startOnInput, "start date");
-            // firstBillOn is when the first FULL cycle bills; if it's after the start
-            // and proration is requested, we bill the partial [start, firstBillOn] now.
-            const firstBillOnInput = body.firstBillOn === undefined || body.firstBillOn === null || body.firstBillOn === ""
+          const startOn = subscriptionDate(startOnInput, "start date");
+          // firstBillOn is when the first FULL cycle bills; if it's after the start
+          // and proration is requested, we bill the partial [start, firstBillOn] now.
+          const firstBillOnInput =
+            body.firstBillOn === undefined || body.firstBillOn === null || body.firstBillOn === ""
               ? startOn
               : body.firstBillOn;
-            const firstBillOn = subscriptionDate(firstBillOnInput, "first bill date");
-            if (firstBillOn < startOn) {
-              throw new SubscriptionError("first bill date cannot precede the start date");
-            }
-            const prorateFirstPeriod = optionalBoolean(body.prorateFirstPeriod, "prorate first period") ?? false;
-            if (prorateFirstPeriod && firstBillOn <= startOn) {
-              throw new SubscriptionError("a prorated first period requires a later first bill date");
-            }
-            // Activating into a backlog is a choice, never a side effect:
-            // two or more past-due full periods without a catch-up mode
-            // refuses with the exact period dates, so the scheduler cannot
-            // silently bulk-generate them.
-            const activationDay = await businessToday(orgId);
-            const activationPlan = firstBillOn <= activationDay
-              ? (await db.execute<{ interval: string; intervalCount: number }>(sql`
+          const firstBillOn = subscriptionDate(firstBillOnInput, "first bill date");
+          if (firstBillOn < startOn) {
+            throw new SubscriptionError("first bill date cannot precede the start date");
+          }
+          const prorateFirstPeriod =
+            optionalBoolean(body.prorateFirstPeriod, "prorate first period") ?? false;
+          if (prorateFirstPeriod && firstBillOn <= startOn) {
+            throw new SubscriptionError("a prorated first period requires a later first bill date");
+          }
+          // Activating into a backlog is a choice, never a side effect:
+          // two or more past-due full periods without a catch-up mode
+          // refuses with the exact period dates, so the scheduler cannot
+          // silently bulk-generate them.
+          const activationDay = await businessToday(orgId);
+          const activationPlan =
+            firstBillOn <= activationDay
+              ? (
+                  await db.execute<{ interval: string; intervalCount: number }>(
+                    sql`
                   select interval, interval_count as "intervalCount" from subscription_plans
-                   where id = ${body.planId} and org_id = ${orgId}`, "objects"))[0]
+                   where id = ${body.planId} and org_id = ${orgId}`,
+                    "objects",
+                  )
+                )[0]
               : undefined;
-            const activationCadence = activationPlan
-              ? normalizeSubscriptionCadence(activationPlan.interval, activationPlan.intervalCount)
-              : null;
-            const activationPending = activationCadence
-              ? pendingSubscriptionPeriods(
-                  {
-                    interval: activationCadence.interval,
-                    intervalCount: activationCadence.intervalCount,
-                    anchorDay: Number(firstBillOn.slice(8, 10)),
-                    nextBillOn: firstBillOn,
-                  },
-                  activationDay,
-                )
-              : null;
-            if (activationPending && activationPending.periods.length >= CATCH_UP_CHOICE_THRESHOLD && !body.catchUp) {
-              return NextResponse.json({
+          const activationCadence = activationPlan
+            ? normalizeSubscriptionCadence(activationPlan.interval, activationPlan.intervalCount)
+            : null;
+          const activationPending = activationCadence
+            ? pendingSubscriptionPeriods(
+                {
+                  interval: activationCadence.interval,
+                  intervalCount: activationCadence.intervalCount,
+                  anchorDay: Number(firstBillOn.slice(8, 10)),
+                  nextBillOn: firstBillOn,
+                },
+                activationDay,
+              )
+            : null;
+          if (
+            activationPending &&
+            activationPending.periods.length >= CATCH_UP_CHOICE_THRESHOLD &&
+            !body.catchUp
+          ) {
+            return NextResponse.json(
+              {
                 error: `${activationPending.periods.length} periods are already due — choose how to catch up instead of bulk-generating them`,
                 code: "catch_up_choice_required",
                 periods: activationPending.periods,
                 truncated: activationPending.truncated,
-              }, { status: 409 });
-            }
-            const autoPost = optionalBoolean(body.autoPost, "auto post") ?? false;
-            const quantity = normalizeSubscriptionMoney(body.quantity ?? "1", "quantity", "positive");
-            const priceOverride =
-              body.priceOverride != null && body.priceOverride !== ""
-                ? normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative")
-                : null;
-            const created = await db.transaction(async (tx) => {
-              // Recheck and hold the customer boundary through the INSERT. An
-              // unrestricted party rehome must serialize before or after this
-              // subscription is created, never between the scope check and write.
-              await lockCustomerForScope(tx, orgId, String(body.customerId), authz.allowedSubsidiaryIds);
-              // The billing cycle runs through the first bill date, so the anchor
-              // day is that date's day: a cycle billing Jan 31 bills Mar 31 after
-              // Feb 28, not Mar 28, and a stub ending Aug 1 keeps billing on the
-              // 1st rather than the start date's day. firstBillOn is a validated
-              // YYYY-MM-DD string (checked above).
-              const anchorDay = Number(firstBillOn.slice(8, 10));
-              if (prorateFirstPeriod) {
-                // Refuse an unpriceable stub before the subscription commits, so
-                // a refused first-period proration never leaves a subscription
-                // behind without its first invoice.
-                const plan = (await tx.execute<{ interval: string; intervalCount: number }>(sql`
+              },
+              { status: 409 },
+            );
+          }
+          const autoPost = optionalBoolean(body.autoPost, "auto post") ?? false;
+          const quantity = normalizeSubscriptionMoney(body.quantity ?? "1", "quantity", "positive");
+          const priceOverride =
+            body.priceOverride != null && body.priceOverride !== ""
+              ? normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative")
+              : null;
+          const created = await db.transaction(async (tx) => {
+            // Recheck and hold the customer boundary through the INSERT. An
+            // unrestricted party rehome must serialize before or after this
+            // subscription is created, never between the scope check and write.
+            await lockCustomerForScope(
+              tx,
+              orgId,
+              String(body.customerId),
+              authz.allowedSubsidiaryIds,
+            );
+            // The billing cycle runs through the first bill date, so the anchor
+            // day is that date's day: a cycle billing Jan 31 bills Mar 31 after
+            // Feb 28, not Mar 28, and a stub ending Aug 1 keeps billing on the
+            // 1st rather than the start date's day. firstBillOn is a validated
+            // YYYY-MM-DD string (checked above).
+            const anchorDay = Number(firstBillOn.slice(8, 10));
+            if (prorateFirstPeriod) {
+              // Refuse an unpriceable stub before the subscription commits, so
+              // a refused first-period proration never leaves a subscription
+              // behind without its first invoice.
+              const plan = (
+                await tx.execute<{ interval: string; intervalCount: number }>(
+                  sql`
                   select interval, interval_count as "intervalCount"
-                    from subscription_plans where id = ${body.planId} and org_id = ${orgId}`, "objects"))[0];
-                if (!plan) throw new SubscriptionError("billing plan not found", 404);
-                const cadence = normalizeSubscriptionCadence(plan.interval, plan.intervalCount);
-                firstPeriodStub(startOn, firstBillOn, cadence.interval, cadence.intervalCount, anchorDay);
-              }
-              const row = (await tx.execute<Record<string, unknown>>(sql`
+                    from subscription_plans where id = ${body.planId} and org_id = ${orgId}`,
+                  "objects",
+                )
+              )[0];
+              if (!plan) throw new SubscriptionError("billing plan not found", 404);
+              const cadence = normalizeSubscriptionCadence(plan.interval, plan.intervalCount);
+              firstPeriodStub(
+                startOn,
+                firstBillOn,
+                cadence.interval,
+                cadence.intervalCount,
+                anchorDay,
+              );
+            }
+            const row = await tx.execute<Record<string, unknown>>(
+              sql`
                 insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
                                            next_bill_on, current_period_start, auto_post, memo, anchor_day, created_by, updated_by)
                 values (${orgId}, ${body.customerId}, ${body.planId}, ${quantity},
                         ${priceOverride},
                         ${startOn}, ${firstBillOn}, ${startOn}, ${autoPost}, ${body.memo ?? null}, ${anchorDay}, ${userId}, ${userId})
                 returning *
-              `, "objects"));
-              await tx.execute(sql`
+              `,
+              "objects",
+            );
+            await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
                   (${orgId}, 'subscriptions', ${String(row[0]!.id)}, 'insert',
                    ${JSON.stringify({ after: row[0] })}::jsonb, ${userId})
               `);
-              return row[0]!;
+            return row[0]!;
+          });
+          const id = created.id as string;
+          let proration: unknown = null;
+          if (prorateFirstPeriod) {
+            // The authenticated caller authors the proration invoice — the
+            // subscription's own id is never an actor.
+            proration = await prorateFirstInvoice(orgId, id, firstBillOn, undefined, {
+              actorId: userId,
+              allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
             });
-            const id = ((created)).id as string;
-            let proration: unknown = null;
-            if (prorateFirstPeriod) {
-              // The authenticated caller authors the proration invoice — the
-              // subscription's own id is never an actor.
-          proration = await prorateFirstInvoice(orgId, id, firstBillOn, undefined, {
+          }
+          let catchUp: unknown = null;
+          if (body.catchUp) {
+            try {
+              catchUp = await runSubscriptionCatchUp(orgId, id, {
+                mode: body.catchUp.mode,
+                selectedPeriods: body.catchUp.dates,
+                postSelected: body.catchUp.post,
+                asOf: activationDay,
                 actorId: userId,
                 allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
               });
+            } catch (e) {
+              if (e instanceof SubscriptionError) return apiErrorResponse(e);
+              throw e;
             }
-            let catchUp: unknown = null;
-            if (body.catchUp) {
-              try {
-                catchUp = await runSubscriptionCatchUp(orgId, id, {
-                  mode: body.catchUp.mode,
-                  selectedPeriods: body.catchUp.dates,
-                  postSelected: body.catchUp.post,
-                  asOf: activationDay,
-                  actorId: userId,
-                  allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-                });
-              } catch (e) {
-                if (e instanceof SubscriptionError) return apiErrorResponse(e);
-                throw e;
-              }
-            }
-            return NextResponse.json({ id, proration, ...(catchUp ? { catchUp } : {}) }, { status: 201 });
           }
-          case "changeSubscription": {
-            const scopeDenied = await guardSubscriptionScope(authz, body.id);
-            if (scopeDenied) return scopeDenied;
-            let quantity: string | undefined;
-            if (body.quantity != null) {
-              quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
+          return NextResponse.json(
+            { id, proration, ...(catchUp ? { catchUp } : {}) },
+            { status: 201 },
+          );
+        }
+        case "changeSubscription": {
+          const scopeDenied = await guardSubscriptionScope(authz, body.id);
+          if (scopeDenied) return scopeDenied;
+          let quantity: string | undefined;
+          if (body.quantity != null) {
+            quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
+          }
+          let priceOverride: string | null | undefined;
+          if ("priceOverride" in body) {
+            if (body.priceOverride != null && body.priceOverride !== "") {
+              priceOverride = normalizeSubscriptionMoney(
+                body.priceOverride,
+                "price override",
+                "nonnegative",
+              );
+            } else {
+              priceOverride = null;
             }
-            let priceOverride: string | null | undefined;
-            if ("priceOverride" in body) {
-              if (body.priceOverride != null && body.priceOverride !== "") {
-                priceOverride = normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative");
-              } else {
-                priceOverride = null;
-              }
-            }
-        const result = await changeSubscription(orgId, String(body.id), {
+          }
+          const result = await changeSubscription(
+            orgId,
+            String(body.id),
+            {
               quantity,
               priceOverride,
-            }, undefined, { actorId: userId }, authz.allowedSubsidiaryIds);
-            return NextResponse.json(result);
-          }
-          case "updateSubscription": {
-            const scopeDenied = await guardSubscriptionScope(authz, body.id);
-            if (scopeDenied) return scopeDenied;
-            // Resuming into a backlog is a choice, never a side effect.
-            // Plain edits never trip this gate; the catch-up run recomputes
-            // from stored state, so a concurrent tick cannot bill anything
-            // the choice did not cover.
-            if (body.status === "active" && !body.catchUp) {
-              const current = (await db.execute<{
-                nextBillOn: string; interval: string; intervalCount: number; anchorDay: number;
-              }>(sql`
+            },
+            undefined,
+            { actorId: userId },
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(result);
+        }
+        case "updateSubscription": {
+          const scopeDenied = await guardSubscriptionScope(authz, body.id);
+          if (scopeDenied) return scopeDenied;
+          // Resuming into a backlog is a choice, never a side effect.
+          // Plain edits never trip this gate; the catch-up run recomputes
+          // from stored state, so a concurrent tick cannot bill anything
+          // the choice did not cover.
+          if (body.status === "active" && !body.catchUp) {
+            const current = (
+              await db.execute<{
+                nextBillOn: string;
+                interval: string;
+                intervalCount: number;
+                anchorDay: number;
+              }>(
+                sql`
                 select s.next_bill_on::text as "nextBillOn", p.interval,
                        p.interval_count as "intervalCount",
                        coalesce(s.anchor_day, extract(day from s.start_on)::int) as "anchorDay"
                   from subscriptions s
                   join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
-                 where s.id = ${body.id} and s.org_id = ${orgId} and s.status <> 'active'`, "objects"))[0];
-              if (current) {
-                const resumeDay = await businessToday(orgId);
-                const resumeCadence = normalizeSubscriptionCadence(current.interval, current.intervalCount);
-                const pending = pendingSubscriptionPeriods(
+                 where s.id = ${body.id} and s.org_id = ${orgId} and s.status <> 'active'`,
+                "objects",
+              )
+            )[0];
+            if (current) {
+              const resumeDay = await businessToday(orgId);
+              const resumeCadence = normalizeSubscriptionCadence(
+                current.interval,
+                current.intervalCount,
+              );
+              const pending = pendingSubscriptionPeriods(
+                {
+                  interval: resumeCadence.interval,
+                  intervalCount: resumeCadence.intervalCount,
+                  anchorDay: current.anchorDay,
+                  nextBillOn: current.nextBillOn,
+                },
+                resumeDay,
+              );
+              if (pending.periods.length >= CATCH_UP_CHOICE_THRESHOLD) {
+                return NextResponse.json(
                   {
-                    interval: resumeCadence.interval,
-                    intervalCount: resumeCadence.intervalCount,
-                    anchorDay: current.anchorDay,
-                    nextBillOn: current.nextBillOn,
-                  },
-                  resumeDay,
-                );
-                if (pending.periods.length >= CATCH_UP_CHOICE_THRESHOLD) {
-                  return NextResponse.json({
                     error: `${pending.periods.length} periods are already due — choose how to catch up instead of bulk-generating them`,
                     code: "catch_up_choice_required",
                     periods: pending.periods,
                     truncated: pending.truncated,
-                  }, { status: 409 });
-                }
+                  },
+                  { status: 409 },
+                );
               }
             }
-            const sets: SQL[] = [];
-            if ("status" in body) {
-              if (typeof body.status !== "string" || !["active", "paused", "canceled"].includes(body.status)) {
-                throw new SubscriptionError("invalid subscription status");
-              }
-              sets.push(sql`status = ${body.status}`);
+          }
+          const sets: SQL[] = [];
+          if ("status" in body) {
+            if (
+              typeof body.status !== "string" ||
+              !["active", "paused", "canceled"].includes(body.status)
+            ) {
+              throw new SubscriptionError("invalid subscription status");
             }
-            // A cancellation date applies only to a cancellation. Its value is
-            // resolved against the paid-through date inside the locked
-            // transaction below, where the invoiced periods are read.
-            if (body.canceledOn != null && body.status !== "canceled") {
-              throw new SubscriptionError("a cancellation date applies only when canceling the subscription");
+            sets.push(sql`status = ${body.status}`);
+          }
+          // A cancellation date applies only to a cancellation. Its value is
+          // resolved against the paid-through date inside the locked
+          // transaction below, where the invoiced periods are read.
+          if (body.canceledOn != null && body.status !== "canceled") {
+            throw new SubscriptionError(
+              "a cancellation date applies only when canceling the subscription",
+            );
+          }
+          if ("quantity" in body) {
+            const quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
+            sets.push(sql`quantity = ${quantity}`);
+          }
+          if ("priceOverride" in body) {
+            if (body.priceOverride != null && body.priceOverride !== "") {
+              const priceOverride = normalizeSubscriptionMoney(
+                body.priceOverride,
+                "price override",
+                "nonnegative",
+              );
+              sets.push(sql`price_override = ${priceOverride}`);
+            } else {
+              sets.push(sql`price_override = null`);
             }
-            if ("quantity" in body) {
-              const quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
-              sets.push(sql`quantity = ${quantity}`);
-            }
-            if ("priceOverride" in body) {
-              if (body.priceOverride != null && body.priceOverride !== "") {
-                const priceOverride = normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative");
-                sets.push(sql`price_override = ${priceOverride}`);
-              } else {
-                sets.push(sql`price_override = null`);
-              }
-            }
-            if ("autoPost" in body) {
-              const autoPost = optionalBoolean(body.autoPost, "auto post");
-              if (autoPost === undefined) throw new SubscriptionError("auto post must be a boolean");
-              sets.push(sql`auto_post = ${autoPost}`);
-            }
-            const nextBillOn = "nextBillOn" in body
-              ? subscriptionDate(body.nextBillOn, "next bill date")
-              : undefined;
-            // A forward jump past the unbilled boundary silently skips service
-            // the scheduler then never bills, so it needs an explicit opt-in
-            // plus a reason — both recorded in the audit with the skipped window.
-            const skipUnbilledService = "skipUnbilledService" in body
+          }
+          if ("autoPost" in body) {
+            const autoPost = optionalBoolean(body.autoPost, "auto post");
+            if (autoPost === undefined) throw new SubscriptionError("auto post must be a boolean");
+            sets.push(sql`auto_post = ${autoPost}`);
+          }
+          const nextBillOn =
+            "nextBillOn" in body ? subscriptionDate(body.nextBillOn, "next bill date") : undefined;
+          // A forward jump past the unbilled boundary silently skips service
+          // the scheduler then never bills, so it needs an explicit opt-in
+          // plus a reason — both recorded in the audit with the skipped window.
+          const skipUnbilledService =
+            "skipUnbilledService" in body
               ? optionalBoolean(body.skipUnbilledService, "skip unbilled service")
               : undefined;
-            let skipReason: string | undefined;
-            if ("skipReason" in body) {
-              if (typeof body.skipReason !== "string") throw new SubscriptionError("skip reason must be a string");
-              skipReason = body.skipReason;
-            }
-            if (nextBillOn !== undefined) sets.push(sql`next_bill_on = ${nextBillOn}`);
-            // Per-subscription bill-to/payer overrides: null clears back to
-            // the hierarchy (or self-billing). Each named party must be an
-            // org customer, so an override can never bill a stranger.
-            for (const field of ["billToPartyId", "payerPartyId"] as const) {
-              if (field in body) {
-                const partyId = body[field] as string | null;
-                if (partyId !== null) {
-                  const party = (await db.execute<{ id: string }>(sql`
+          let skipReason: string | undefined;
+          if ("skipReason" in body) {
+            if (typeof body.skipReason !== "string")
+              throw new SubscriptionError("skip reason must be a string");
+            skipReason = body.skipReason;
+          }
+          if (nextBillOn !== undefined) sets.push(sql`next_bill_on = ${nextBillOn}`);
+          // Per-subscription bill-to/payer overrides: null clears back to
+          // the hierarchy (or self-billing). Each named party must be an
+          // org customer, so an override can never bill a stranger.
+          for (const field of ["billToPartyId", "payerPartyId"] as const) {
+            if (field in body) {
+              const partyId = body[field] as string | null;
+              if (partyId !== null) {
+                const party = (
+                  await db.execute<{ id: string }>(
+                    sql`
                     select p.id from parties p
                      join customer_roles cr on cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
                      where p.org_id = ${orgId} and p.id = ${partyId} and p.is_active
-                     limit 1`, "objects"))[0];
-                  if (!party) {
-                    throw new SubscriptionError(
-                      `${field === "billToPartyId" ? "bill-to" : "payer"} party is not an active org customer; pick a customer or clear the override`,
-                    );
-                  }
-                  sets.push(
-                    field === "billToPartyId"
-                      ? sql`bill_to_party_id = ${partyId}`
-                      : sql`payer_party_id = ${partyId}`,
-                  );
-                } else {
-                  sets.push(
-                    field === "billToPartyId" ? sql`bill_to_party_id = null` : sql`payer_party_id = null`,
+                     limit 1`,
+                    "objects",
+                  )
+                )[0];
+                if (!party) {
+                  throw new SubscriptionError(
+                    `${field === "billToPartyId" ? "bill-to" : "payer"} party is not an active org customer; pick a customer or clear the override`,
                   );
                 }
+                sets.push(
+                  field === "billToPartyId"
+                    ? sql`bill_to_party_id = ${partyId}`
+                    : sql`payer_party_id = ${partyId}`,
+                );
+              } else {
+                sets.push(
+                  field === "billToPartyId"
+                    ? sql`bill_to_party_id = null`
+                    : sql`payer_party_id = null`,
+                );
               }
             }
-            if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-            const outcome = await db.transaction(async (tx) => {
-              await lockSubscriptionCustomerForScope(tx, orgId, String(body.id), authz.allowedSubsidiaryIds);
-              // Lock the customer above before the subscription row so a rehome
-              // cannot move the mutation out of scope. This subscription lock is
-              // shared with the billing claim so the cursor check and edit remain
-              // atomic against a concurrent tick.
-              const before = (await tx.execute<Record<string, unknown>>(sql`
+          }
+          if (!sets.length)
+            return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+          const outcome = await db.transaction(async (tx) => {
+            await lockSubscriptionCustomerForScope(
+              tx,
+              orgId,
+              String(body.id),
+              authz.allowedSubsidiaryIds,
+            );
+            // Lock the customer above before the subscription row so a rehome
+            // cannot move the mutation out of scope. This subscription lock is
+            // shared with the billing claim so the cursor check and edit remain
+            // atomic against a concurrent tick.
+            const before = await tx.execute<Record<string, unknown>>(
+              sql`
                 select * from subscriptions where id = ${body.id} and org_id = ${orgId} for update
-              `, "objects"));
-              if (!before[0]) return null;
-              const guards = (await tx.execute<{ guardedThrough: string | null }>(sql`
+              `,
+              "objects",
+            );
+            if (!before[0]) return null;
+            const guards = await tx.execute<{ guardedThrough: string | null }>(
+              sql`
                 select max(pi.period_ends_on)::text as "guardedThrough"
                   from subscription_period_invoices pi
                  where pi.org_id = ${orgId} and pi.subscription_id = ${body.id}
-              `, "objects"));
-              const guardedThrough = guards[0]?.guardedThrough ?? null;
-              if (body.status === "canceled") {
-                const today = await businessToday(orgId);
-                const billed = before[0].last_invoice_id != null || guardedThrough !== null;
-                const paidThrough = subscriptionPaidThrough({
-                  startOn: String(before[0].start_on),
-                  nextBillOn: String(before[0].next_bill_on),
-                  billed,
-                  guardedThrough,
-                });
-                // An arrears contract's current period is served but not yet
-                // invoiced, so ending it on a date would drop that invoice.
-                // Only an advance-billed subscription has a clean end date.
-                const lifecycle = (await tx.execute<{ billingTiming: string }>(sql`
+              `,
+              "objects",
+            );
+            const guardedThrough = guards[0]?.guardedThrough ?? null;
+            if (body.status === "canceled") {
+              const today = await businessToday(orgId);
+              const billed = before[0].last_invoice_id != null || guardedThrough !== null;
+              const paidThrough = subscriptionPaidThrough({
+                startOn: String(before[0].start_on),
+                nextBillOn: String(before[0].next_bill_on),
+                billed,
+                guardedThrough,
+              });
+              // An arrears contract's current period is served but not yet
+              // invoiced, so ending it on a date would drop that invoice.
+              // Only an advance-billed subscription has a clean end date.
+              const lifecycle = (
+                await tx.execute<{ billingTiming: string }>(
+                  sql`
                   select billing_timing as "billingTiming" from subscription_lifecycles
                    where org_id = ${orgId} and subscription_id = ${body.id}
-                `, "objects"))[0];
-                if (lifecycle?.billingTiming === "arrears") {
-                  if (body.canceledOn != null) {
-                    throw new SubscriptionError(
-                      "an arrears contract cannot be canceled on a chosen date yet, because its current period is invoiced only at its end. Cancel it without a date to end it today",
-                    );
-                  }
-                  sets.push(sql`canceled_on = ${today}`);
-                } else {
-                  const canceledOn = resolveSubscriptionCancellation({
-                    requestedOn: body.canceledOn == null ? null : subscriptionDate(body.canceledOn, "cancellation date"),
-                    today,
-                    paidThrough,
-                  });
-                  sets.push(sql`canceled_on = ${canceledOn}`);
+                `,
+                  "objects",
+                )
+              )[0];
+              if (lifecycle?.billingTiming === "arrears") {
+                if (body.canceledOn != null) {
+                  throw new SubscriptionError(
+                    "an arrears contract cannot be canceled on a chosen date yet, because its current period is invoiced only at its end. Cancel it without a date to end it today",
+                  );
                 }
+                sets.push(sql`canceled_on = ${today}`);
+              } else {
+                const canceledOn = resolveSubscriptionCancellation({
+                  requestedOn:
+                    body.canceledOn == null
+                      ? null
+                      : subscriptionDate(body.canceledOn, "cancellation date"),
+                  today,
+                  paidThrough,
+                });
+                sets.push(sql`canceled_on = ${canceledOn}`);
               }
-              // Resolve the cursor move against the unbilled boundary — the end
-              // of the last billed period (m47's shared helper). Rewinding into
-              // billed service or skipping forward without a reason throws a
-              // SubscriptionError, which the handler maps to a named 422.
-              let skippedWindow: { from: string; to: string } | null = null;
-              if (nextBillOn !== undefined) {
-                const resolved = resolveNextBillOnUpdate({
-                  startOn: String(before[0].start_on),
-                  currentPeriodStart: before[0].current_period_start == null
+            }
+            // Resolve the cursor move against the unbilled boundary — the end
+            // of the last billed period (m47's shared helper). Rewinding into
+            // billed service or skipping forward without a reason throws a
+            // SubscriptionError, which the handler maps to a named 422.
+            let skippedWindow: { from: string; to: string } | null = null;
+            if (nextBillOn !== undefined) {
+              const resolved = resolveNextBillOnUpdate({
+                startOn: String(before[0].start_on),
+                currentPeriodStart:
+                  before[0].current_period_start == null
                     ? null
                     : String(before[0].current_period_start),
-                  currentNextBillOn: String(before[0].next_bill_on),
-                  guardedThrough,
-                  billed: before[0].last_invoice_id != null || guardedThrough !== null,
-                  newNextBillOn: nextBillOn,
-                  skipUnbilledService,
-                  skipReason,
-                });
-                skippedWindow = resolved.skippedWindow;
-              }
-              const updated = (await tx.execute<Record<string, unknown>>(sql`
+                currentNextBillOn: String(before[0].next_bill_on),
+                guardedThrough,
+                billed: before[0].last_invoice_id != null || guardedThrough !== null,
+                newNextBillOn: nextBillOn,
+                skipUnbilledService,
+                skipReason,
+              });
+              skippedWindow = resolved.skippedWindow;
+            }
+            const updated = await tx.execute<Record<string, unknown>>(
+              sql`
                 update subscriptions set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${userId}
                  where id = ${body.id} and org_id = ${orgId}
                    ${nextBillOn === undefined ? sql`` : sql`and next_bill_on = ${before[0].next_bill_on}`}
                 returning *
-              `, "objects"));
-              // The lock + fresh validation is the primary serialization boundary.
-              // Keep the old cursor in the UPDATE predicate as a final CAS fence so
-              // a future write path that bypasses this lock cannot overwrite a bill.
-              if (!updated[0]) {
-                throw new SubscriptionError("subscription changed while it was being updated; reload and retry");
-              }
-              const changes: Record<string, unknown> = { before: before[0], after: updated[0] };
-              if (skippedWindow) {
-                changes.nextBillOnSkip = {
-                  from: skippedWindow.from,
-                  to: skippedWindow.to,
-                  reason: (skipReason ?? "").trim(),
-                };
-              }
-              await tx.execute(sql`
+              `,
+              "objects",
+            );
+            // The lock + fresh validation is the primary serialization boundary.
+            // Keep the old cursor in the UPDATE predicate as a final CAS fence so
+            // a future write path that bypasses this lock cannot overwrite a bill.
+            if (!updated[0]) {
+              throw new SubscriptionError(
+                "subscription changed while it was being updated; reload and retry",
+              );
+            }
+            const changes: Record<string, unknown> = { before: before[0], after: updated[0] };
+            if (skippedWindow) {
+              changes.nextBillOnSkip = {
+                from: skippedWindow.from,
+                to: skippedWindow.to,
+                reason: (skipReason ?? "").trim(),
+              };
+            }
+            await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
                   (${orgId}, 'subscriptions', ${String(body.id)}, 'update',
                    ${JSON.stringify(changes)}::jsonb, ${userId})
               `);
-              return { skippedWindow };
-            });
-            if (!outcome) return notFound("record");
-            let catchUp: unknown = null;
-            if (body.catchUp) {
-              try {
-                catchUp = await runSubscriptionCatchUp(orgId, String(body.id), {
-                  mode: body.catchUp.mode,
-                  selectedPeriods: body.catchUp.dates,
-                  postSelected: body.catchUp.post,
-                  actorId: userId,
-                  allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-                });
-              } catch (e) {
-                if (e instanceof SubscriptionError) return apiErrorResponse(e);
-                throw e;
-              }
-            }
-            if (outcome.skippedWindow) {
-              return NextResponse.json({
-                ok: true,
-                skippedWindow: outcome.skippedWindow,
-                skipReason: (skipReason ?? "").trim(),
-                ...(catchUp ? { catchUp } : {}),
+            return { skippedWindow };
+          });
+          if (!outcome) return notFound("record");
+          let catchUp: unknown = null;
+          if (body.catchUp) {
+            try {
+              catchUp = await runSubscriptionCatchUp(orgId, String(body.id), {
+                mode: body.catchUp.mode,
+                selectedPeriods: body.catchUp.dates,
+                postSelected: body.catchUp.post,
+                actorId: userId,
+                allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
               });
+            } catch (e) {
+              if (e instanceof SubscriptionError) return apiErrorResponse(e);
+              throw e;
             }
-            return NextResponse.json({ ok: true, ...(catchUp ? { catchUp } : {}) });
           }
-          case "billNow": {
-            const scopeDenied = await guardSubscriptionScope(authz, body.id);
-            if (scopeDenied) return scopeDenied;
-            // The authenticated caller authors the bill-now invoice — the
-            // subscription's own id is never an actor.
-        const gen = await billSubscriptionNow(orgId, String(body.id), { actorId: userId }, authz.allowedSubsidiaryIds);
-            return NextResponse.json(gen);
+          if (outcome.skippedWindow) {
+            return NextResponse.json({
+              ok: true,
+              skippedWindow: outcome.skippedWindow,
+              skipReason: (skipReason ?? "").trim(),
+              ...(catchUp ? { catchUp } : {}),
+            });
           }
-          default:
-            return NextResponse.json({ error: "unknown action" }, { status: 400 });
+          return NextResponse.json({ ok: true, ...(catchUp ? { catchUp } : {}) });
         }
-      } catch (e) {
-        if (e instanceof SubscriptionError) return apiErrorResponse(e);
-        if (e instanceof ScopeNotFoundError) return notFound("record");
-        throw e;
+        case "billNow": {
+          const scopeDenied = await guardSubscriptionScope(authz, body.id);
+          if (scopeDenied) return scopeDenied;
+          // The authenticated caller authors the bill-now invoice — the
+          // subscription's own id is never an actor.
+          const gen = await billSubscriptionNow(
+            orgId,
+            String(body.id),
+            { actorId: userId },
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(gen);
+        }
+        default:
+          return NextResponse.json({ error: "unknown action" }, { status: 400 });
       }
+    } catch (e) {
+      if (e instanceof SubscriptionError) return apiErrorResponse(e);
+      if (e instanceof ScopeNotFoundError) return notFound("record");
+      throw e;
+    }
   },
 });

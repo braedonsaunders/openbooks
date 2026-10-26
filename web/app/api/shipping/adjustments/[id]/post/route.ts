@@ -1,26 +1,29 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { db } from '@openbooks/engine/platform/database'
-import { postBillingAdjustment } from '@openbooks/engine/sales/shipping-labels'
-import { notFound } from '@/lib/api/responses'
-import { defineRoute } from '@/lib/api/route'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { db } from "@openbooks/engine/platform/database";
+import { postBillingAdjustment } from "@openbooks/engine/sales/shipping-labels";
+import { notFound } from "@/lib/api/responses";
+import { defineRoute } from "@/lib/api/route";
 
-const postParams = z.object({ id: uuidString() })
+const postParams = z.object({ id: uuidString() });
 
 /** Post one pending billing adjustment against its label. */
 export const POST = defineRoute({
-  permission: 'shipping.manage',
-  feature: 'shippingHub',
+  permission: "shipping.manage",
+  feature: "shippingHub",
   params: postParams,
   handler: async ({ authz, params: { id } }) => {
-    const posted = await db.transaction((tx) =>
-      postBillingAdjustment(tx, authz.user.orgId, authz.user.id, id, authz.allowedSubsidiaryIds),
-    ).catch((error: unknown) => {
-      if (error instanceof Error && (error as { code?: unknown }).code === 'not_found') return null
-      throw error
-    })
-    if (!posted) return notFound('adjustment', id)
-    return NextResponse.json({ posted })
+    const posted = await db
+      .transaction((tx) =>
+        postBillingAdjustment(tx, authz.user.orgId, authz.user.id, id, authz.allowedSubsidiaryIds),
+      )
+      .catch((error: unknown) => {
+        if (error instanceof Error && (error as { code?: unknown }).code === "not_found")
+          return null;
+        throw error;
+      });
+    if (!posted) return notFound("adjustment", id);
+    return NextResponse.json({ posted });
   },
-})
+});

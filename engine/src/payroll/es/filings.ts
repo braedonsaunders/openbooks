@@ -133,17 +133,17 @@ function buildEsPackFilings(): PayrollPackFilings {
         label: "Modelo 190 — Resumen anual de retenciones e ingresos a cuenta",
         cadence: "annual",
         description:
-          "Per-employee certificate of IRPF withheld on employment income (clave A, "
-          + "sin subclave): percepción íntegra and retenciones practicadas off committed "
-          + "stubs, rendered as the certificado de retenciones the employer must issue.",
+          "Per-employee certificate of IRPF withheld on employment income (clave A, " +
+          "sin subclave): percepción íntegra and retenciones practicadas off committed " +
+          "stubs, rendered as the certificado de retenciones the employer must issue.",
         emptyText: "No committed ES pay stubs for this year.",
         population: (orgId, taxYear) => es190Population(orgId, taxYear),
         parseRowId: parseEs190RowId,
         slip: { build: (orgId, taxYear, rowId) => es190Slip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the ES pack produces no Modelo 190 electronic file (diseños lógicos registro) — "
-          + "the perceptor figures are complete on screen; transmit the resumen through "
-          + "AEAT Sede directly",
+          "the ES pack produces no Modelo 190 electronic file (diseños lógicos registro) — " +
+          "the perceptor figures are complete on screen; transmit the resumen through " +
+          "AEAT Sede directly",
         // A filed 190 is corrected by re-filing the SAME return: complementaria
         // (omitted percepciones only) or sustitutiva (full replacement quoting
         // the prior justificante). Both restate figures, so this filing
@@ -155,9 +155,9 @@ function buildEsPackFilings(): PayrollPackFilings {
           formLabel: "Modelo 190 — declaración complementaria o sustitutiva",
           slip: { build: async (row) => es190CorrectionSlip(row) },
           downloadRefusal:
-            "no electronic complementaria/sustitutiva file is generated, the same gap the "
-            + "original Modelo 190 declares — the restated figures above are complete; file "
-            + "the correction with its 13-digit justificante through AEAT Sede",
+            "no electronic complementaria/sustitutiva file is generated, the same gap the " +
+            "original Modelo 190 declares — the restated figures above are complete; file " +
+            "the correction with its 13-digit justificante through AEAT Sede",
         },
       },
       {
@@ -165,17 +165,17 @@ function buildEsPackFilings(): PayrollPackFilings {
         label: "Modelo 111 — Retenciones e ingresos a cuenta (trimestral)",
         cadence: "quarterly",
         description:
-          "Quarterly IRPF withholding worksheet for ES-pack employees: perceptores, "
-          + "percepciones and retenciones per calendar quarter off committed stubs "
-          + "(casillas 01/02/03). For trimestral filers only — a monthly filer "
-          + "(gran empresa o administración obligada) files the mensual worksheet.",
+          "Quarterly IRPF withholding worksheet for ES-pack employees: perceptores, " +
+          "percepciones and retenciones per calendar quarter off committed stubs " +
+          "(casillas 01/02/03). For trimestral filers only — a monthly filer " +
+          "(gran empresa o administración obligada) files the mensual worksheet.",
         emptyText: "No committed ES pay stubs for this year.",
         population: (orgId, taxYear) => es111Population(orgId, taxYear),
         parseRowId: parseEs111RowId,
         slip: { build: (orgId, taxYear, rowId) => es111Slip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the ES pack produces no Modelo 111 electronic transmission — the quarterly "
-          + "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
+          "the ES pack produces no Modelo 111 electronic transmission — the quarterly " +
+          "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
         // The 111's correction vehicle is not transcribed to a citable
         // instruction in this tree, so no correction slip is produced here —
         // an uncited complementaria would inherit another form's mechanics.
@@ -183,10 +183,10 @@ function buildEsPackFilings(): PayrollPackFilings {
         amendment: {
           supported: false,
           refusal:
-            "a filed Modelo 111 is corrected outside the product by presenting a declaración "
-            + "complementaria through AEAT Sede — the quarter re-rendered from committed stubs "
-            + "above carries the corrected figures; OpenBooks builds no AEAT correction vehicle "
-            + "of its own",
+            "a filed Modelo 111 is corrected outside the product by presenting a declaración " +
+            "complementaria through AEAT Sede — the quarter re-rendered from committed stubs " +
+            "above carries the corrected figures; OpenBooks builds no AEAT correction vehicle " +
+            "of its own",
         },
       },
       {
@@ -194,26 +194,26 @@ function buildEsPackFilings(): PayrollPackFilings {
         label: "Modelo 111 — Retenciones e ingresos a cuenta (mensual)",
         cadence: "monthly",
         description:
-          "Monthly IRPF withholding worksheet for ES-pack employees obliged to self-assess "
-          + "monthly — grandes empresas and qualifying public administrations (annual budget "
-          + "above €6m, Instrucciones del Modelo 111): perceptores, percepciones and "
-          + "retenciones per calendar month off committed stubs (casillas 01/02/03).",
+          "Monthly IRPF withholding worksheet for ES-pack employees obliged to self-assess " +
+          "monthly — grandes empresas and qualifying public administrations (annual budget " +
+          "above €6m, Instrucciones del Modelo 111): perceptores, percepciones and " +
+          "retenciones per calendar month off committed stubs (casillas 01/02/03).",
         emptyText: "No committed ES pay stubs for this year.",
         population: (orgId, taxYear) => es111MonthlyPopulation(orgId, taxYear),
         parseRowId: parseEs111MonthlyRowId,
         slip: { build: (orgId, taxYear, rowId) => es111MonthlySlip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the ES pack produces no Modelo 111 electronic transmission — the monthly "
-          + "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
+          "the ES pack produces no Modelo 111 electronic transmission — the monthly " +
+          "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
         // Same correction posture as the trimestral worksheet: the re-computed
         // month above IS the corrected figure set.
         amendment: {
           supported: false,
           refusal:
-            "a filed Modelo 111 is corrected outside the product by presenting a declaración "
-            + "complementaria through AEAT Sede — the month re-rendered from committed stubs "
-            + "above carries the corrected figures; OpenBooks builds no AEAT correction vehicle "
-            + "of its own",
+            "a filed Modelo 111 is corrected outside the product by presenting a declaración " +
+            "complementaria through AEAT Sede — the month re-rendered from committed stubs " +
+            "above carries the corrected figures; OpenBooks builds no AEAT correction vehicle " +
+            "of its own",
         },
       },
       {
@@ -221,24 +221,24 @@ function buildEsPackFilings(): PayrollPackFilings {
         label: "Modelo 216 — Retenciones IRNR (trimestral)",
         cadence: "quarterly",
         description:
-          "Quarterly IRNR withholding worksheet for the pack's nonresident employees: "
-          + "perceptores, rentas satisfechas sujetas a IRNR and retenciones practicadas per "
-          + "calendar quarter off committed stubs carrying IRNR lines. Resident-only quarters "
-          + "file no 216.",
+          "Quarterly IRNR withholding worksheet for the pack's nonresident employees: " +
+          "perceptores, rentas satisfechas sujetas a IRNR and retenciones practicadas per " +
+          "calendar quarter off committed stubs carrying IRNR lines. Resident-only quarters " +
+          "file no 216.",
         emptyText: "No committed ES IRNR withholding for this year.",
         population: (orgId, taxYear) => es216Population(orgId, taxYear),
         parseRowId: parseEs216RowId,
         slip: { build: (orgId, taxYear, rowId) => es216Slip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the ES pack produces no Modelo 216 electronic transmission — the quarterly "
-          + "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
+          "the ES pack produces no Modelo 216 electronic transmission — the quarterly " +
+          "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
         amendment: {
           supported: false,
           refusal:
-            "a filed Modelo 216 is corrected outside the product by presenting a declaración "
-            + "complementaria through AEAT Sede — the quarter re-rendered from committed IRNR "
-            + "lines above carries the corrected figures; OpenBooks builds no AEAT correction "
-            + "vehicle of its own",
+            "a filed Modelo 216 is corrected outside the product by presenting a declaración " +
+            "complementaria through AEAT Sede — the quarter re-rendered from committed IRNR " +
+            "lines above carries the corrected figures; OpenBooks builds no AEAT correction " +
+            "vehicle of its own",
         },
       },
       {
@@ -246,24 +246,24 @@ function buildEsPackFilings(): PayrollPackFilings {
         label: "Modelo 296 — Resumen anual de retenciones IRNR",
         cadence: "annual",
         description:
-          "Annual IRNR summary, one row per nonresident perceptor: percepción íntegra and "
-          + "retenciones practicadas off committed stubs carrying IRNR lines — the same lines "
-          + "the quarterly 216 autoliquidaciones settled.",
+          "Annual IRNR summary, one row per nonresident perceptor: percepción íntegra and " +
+          "retenciones practicadas off committed stubs carrying IRNR lines — the same lines " +
+          "the quarterly 216 autoliquidaciones settled.",
         emptyText: "No committed ES IRNR withholding for this year.",
         population: (orgId, taxYear) => es296Population(orgId, taxYear),
         parseRowId: parseEs296RowId,
         slip: { build: (orgId, taxYear, rowId) => es296Slip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the ES pack produces no Modelo 296 electronic file (diseños lógicos registro) — "
-          + "the perceptor figures are complete on screen; transmit the resumen through "
-          + "AEAT Sede directly",
+          "the ES pack produces no Modelo 296 electronic file (diseños lógicos registro) — " +
+          "the perceptor figures are complete on screen; transmit the resumen through " +
+          "AEAT Sede directly",
         amendment: {
           supported: false,
           refusal:
-            "a filed Modelo 296 is corrected outside the product by presenting a declaración "
-            + "complementaria o sustitutiva through AEAT Sede — the perceptor row re-rendered "
-            + "from committed IRNR lines above carries the corrected figures; OpenBooks builds "
-            + "no AEAT correction vehicle of its own",
+            "a filed Modelo 296 is corrected outside the product by presenting a declaración " +
+            "complementaria o sustitutiva through AEAT Sede — the perceptor row re-rendered " +
+            "from committed IRNR lines above carries the corrected figures; OpenBooks builds " +
+            "no AEAT correction vehicle of its own",
         },
       },
     ],

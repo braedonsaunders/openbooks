@@ -41,8 +41,8 @@ export const JP_REFUSED_2026: readonly string[] = [
   "年末調整 year-end adjustment (no channel; never half-implemented)",
   "定時決定/随時改定 grade mechanics (the 標準報酬月額 arrives as an operator-entered fact from the JPS notice, never derived from current pay)",
   "健康保険組合-specific ceilings above the pension grades (the 協会けんぽ 50-grade ceiling is documented, not priced)",
-  "所得税徴収高計算書 remittance builder (no builder exists); 法定調書 (源泉徴収票/給与支払報告書/合計表) "
-  + "are declared in ./filings.ts and refuse population by name until 年末調整 is performed",
+  "所得税徴収高計算書 remittance builder (no builder exists); 法定調書 (源泉徴収票/給与支払報告書/合計表) " +
+    "are declared in ./filings.ts and refuse population by name until 年末調整 is performed",
   "nonresident mixed Japan/foreign-source wages and treaty/exemption cases (calculate source allocation or treaty relief in supported Japanese payroll software; do not assume the 20.42% method)",
 ];
 
@@ -54,10 +54,10 @@ export const JP_TAX_YEARS: PayrollTaxYearSupport = {
       label: JP_2026_EDITION_LABEL,
       effectiveFrom: "2026-01-01",
       citation:
-        "NTA 令和8年分 給与所得の源泉徴収税額表（月額表, 平成24年3月31日財務省告示"
-        + "第115号別表第一（令和7年4月30日財務省告示第122号改正）); JPS 厚生年金保険料額表"
-        + "（令和8年度版, 令和2年9月分～); NTA No.2511 税額表の種類と使い方 "
-        + "（令和8年4月1日現在法令等）",
+        "NTA 令和8年分 給与所得の源泉徴収税額表（月額表, 平成24年3月31日財務省告示" +
+        "第115号別表第一（令和7年4月30日財務省告示第122号改正）); JPS 厚生年金保険料額表" +
+        "（令和8年度版, 令和2年9月分～); NTA No.2511 税額表の種類と使い方 " +
+        "（令和8年4月1日現在法令等）",
       status: "published",
     },
   ],
@@ -71,25 +71,25 @@ export const JP_TAX_YEARS: PayrollTaxYearSupport = {
       {
         path: "engine/src/payroll/jp/tables-{year}.ts",
         purpose:
-          "NTA 源泉徴収税額表（月額表 甲/乙) rows and JPS 厚生年金保険料額表 grades transcribed "
-          + "from the year's NTA pamphlet Excel and JPS premium-table Excel, beside the {priorYear} edition",
+          "NTA 源泉徴収税額表（月額表 甲/乙) rows and JPS 厚生年金保険料額表 grades transcribed " +
+          "from the year's NTA pamphlet Excel and JPS premium-table Excel, beside the {priorYear} edition",
         template:
-          "export const JP_GENSEN_MONTHLY_{year} = [\n"
-          + "  // Transcribed from the NTA zeigakuhyo{year} Excel (月額表 sheet), reconciled row by row.\n"
-          + "  // Prior edition: JP_GENSEN_MONTHLY_{priorYear}.\n"
-          + "];\n",
+          "export const JP_GENSEN_MONTHLY_{year} = [\n" +
+          "  // Transcribed from the NTA zeigakuhyo{year} Excel (月額表 sheet), reconciled row by row.\n" +
+          "  // Prior edition: JP_GENSEN_MONTHLY_{priorYear}.\n" +
+          "];\n",
       },
     ],
     barrels: [],
     steps: [
-      "Fetch the year's NTA 源泉徴収税額表 Excel (publication/pamph/gensen/zeigakuhyo{year}/data/01-07.xls) "
-      + "and transcribe the 月額表 甲/乙 rows beside the {priorYear} edition.",
-      "Transcribe the year's JPS 厚生年金保険料額表 Excel (nenkin.go.jp ryogakuhyo files) — "
-      + "grades, 標準報酬月額, and 折半額.",
-      "Confirm the 協会けんぽ Tokyo rate for the year from the Tokyo branch notice; "
-      + "health rates stay tenant-declared, never pack constants.",
-      "Add the edition to JP_TAX_YEARS.editions with the NTA/JPS citations and wire "
-      + "computeJpStatutory to the tables.",
+      "Fetch the year's NTA 源泉徴収税額表 Excel (publication/pamph/gensen/zeigakuhyo{year}/data/01-07.xls) " +
+        "and transcribe the 月額表 甲/乙 rows beside the {priorYear} edition.",
+      "Transcribe the year's JPS 厚生年金保険料額表 Excel (nenkin.go.jp ryogakuhyo files) — " +
+        "grades, 標準報酬月額, and 折半額.",
+      "Confirm the 協会けんぽ Tokyo rate for the year from the Tokyo branch notice; " +
+        "health rates stay tenant-declared, never pack constants.",
+      "Add the edition to JP_TAX_YEARS.editions with the NTA/JPS citations and wire " +
+        "computeJpStatutory to the tables.",
     ],
   },
 };
@@ -124,16 +124,16 @@ export const JP_PACK_RATES: PayrollPackRates = {
           min: "0",
           max: "100",
           required: true,
-          help: "The in-force 健康保険 rate as a percent number (9.85 for 9.85%): the 協会けんぽ "
-            + "都道府県支部 rate for the employment prefecture, or the employer's 健康保険組合 rate. "
-            + "Employee and employer each pay half (折半).",
+          help:
+            "The in-force 健康保険 rate as a percent number (9.85 for 9.85%): the 協会けんぽ " +
+            "都道府県支部 rate for the employment prefecture, or the employer's 健康保険組合 rate. " +
+            "Employee and employer each pay half (折半).",
         },
       ],
-      citation:
-        "全国健康保険協会 都道府県支部保険料率 (yearly); 健康保険組合定款 (per-union rate)",
+      citation: "全国健康保険協会 都道府県支部保険料率 (yearly); 健康保険組合定款 (per-union rate)",
       variesBecause:
-        "each of the 47 協会けんぽ branches deliberates its own rate yearly and each 健康保険組合 "
-        + "sets its own; no pack constant can carry them",
+        "each of the 47 協会けんぽ branches deliberates its own rate yearly and each 健康保険組合 " +
+        "sets its own; no pack constant can carry them",
     },
   ],
 };

@@ -27,8 +27,7 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, params, body: routeBody }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid asset" }, { status: 422 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid asset" }, { status: 422 });
 
     const body = routeBody as { lineId: string; entryId: string };
     try {

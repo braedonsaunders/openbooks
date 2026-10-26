@@ -17,10 +17,14 @@ import { db, withOrgContext, withOrgTransaction, type SqlExecutor } from "../pla
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { NonprofitError, NonprofitPostingError } from "./errors.ts";
-import { reversalJournalLines, type ReversalSourceJournalLine } from "../records/reversal-journal-lines.ts";
+import {
+  reversalJournalLines,
+  type ReversalSourceJournalLine,
+} from "../records/reversal-journal-lines.ts";
 
 export type GrantSponsorKind = "government" | "foundation" | "corporate";
-export type GrantDetermination = "contribution_unconditional" | "contribution_conditional" | "exchange";
+export type GrantDetermination =
+  "contribution_unconditional" | "contribution_conditional" | "exchange";
 export type GrantStatus = "draft" | "awarded" | "active" | "closed_out" | "closed" | "void";
 export type GrantIndirectBase = "direct_costs" | "modified_total_direct";
 export type GrantDrawdownKind = "advance" | "reimbursement" | "final";
@@ -188,21 +192,31 @@ function grantFeatureOff(): NonprofitError {
   });
 }
 
-async function requireGrantFeature(orgId: string, runner: SqlExecutor, write: boolean): Promise<void> {
+async function requireGrantFeature(
+  orgId: string,
+  runner: SqlExecutor,
+  write: boolean,
+): Promise<void> {
   const enabled = write
     ? await lockAndCheckOrgFeature(runner, orgId, "grantManagement")
     : await orgFeatureEnabled(orgId, "grantManagement", runner);
   if (!enabled) throw grantFeatureOff();
 }
 
-async function withGrantWrite<T>(orgId: string, fn: (runner: SqlExecutor) => Promise<T>): Promise<T> {
+async function withGrantWrite<T>(
+  orgId: string,
+  fn: (runner: SqlExecutor) => Promise<T>,
+): Promise<T> {
   return withOrgTransaction(orgId, async () => {
     await requireGrantFeature(orgId, db, true);
     return fn(db);
   });
 }
 
-async function withGrantRead<T>(orgId: string, fn: (runner: SqlExecutor) => Promise<T>): Promise<T> {
+async function withGrantRead<T>(
+  orgId: string,
+  fn: (runner: SqlExecutor) => Promise<T>,
+): Promise<T> {
   return withOrgContext(orgId, async () => {
     await requireGrantFeature(orgId, db, false);
     return fn(db);
@@ -221,7 +235,10 @@ function parseGrantMoney(value: unknown, field: string, positive = false): Money
       field,
     });
   }
-  if ((positive && cmpMoney(parsed, "0.0000") <= 0) || (!positive && cmpMoney(parsed, "0.0000") < 0)) {
+  if (
+    (positive && cmpMoney(parsed, "0.0000") <= 0) ||
+    (!positive && cmpMoney(parsed, "0.0000") < 0)
+  ) {
     throw refusal({
       message: `${field} must be ${positive ? "greater than" : "at least"} zero.`,
       code: "grant_amount_invalid",
@@ -238,7 +255,8 @@ function parseGrantRate(value: unknown): string {
     parsed = parseRate(value ?? "0");
   } catch {
     throw refusal({
-      message: "The indirect rate must be an exact percentage with no more than ten decimal places.",
+      message:
+        "The indirect rate must be an exact percentage with no more than ten decimal places.",
       code: "grant_indirect_rate_invalid",
       remedy: "Enter a non-negative indirect percentage from the signed award terms.",
       field: "indirectRate",
@@ -324,7 +342,10 @@ function mapGrant(row: GrantRow): GrantRecord {
   };
 }
 
-function grantReportStatus(row: { dueOn: string; submittedAt: string | null }, asOf: string): GrantReportStatus {
+function grantReportStatus(
+  row: { dueOn: string; submittedAt: string | null },
+  asOf: string,
+): GrantReportStatus {
   if (row.submittedAt) return "submitted";
   return row.dueOn < asOf ? "overdue" : "upcoming";
 }
@@ -352,7 +373,10 @@ export function modifiedTotalDirectCosts(input: {
   subawardsBySubrecipient: readonly string[];
   subawardThreshold: string | null;
 }): Money {
-  let base = addMoney(parseGrantMoney(input.directCosts, "directCosts"), negMoney(parseMoney(input.excludedCosts)));
+  let base = addMoney(
+    parseGrantMoney(input.directCosts, "directCosts"),
+    negMoney(parseMoney(input.excludedCosts)),
+  );
   if (input.subawardsBySubrecipient.length === 0) return base;
   if (input.subawardThreshold === null) {
     throw refusal({
@@ -364,7 +388,8 @@ export function modifiedTotalDirectCosts(input: {
   const threshold = parseGrantMoney(input.subawardThreshold, "mtdcSubawardThreshold");
   for (const subaward of input.subawardsBySubrecipient) {
     const amount = parseMoney(subaward);
-    if (cmpMoney(amount, threshold) > 0) base = addMoney(base, negMoney(addMoney(amount, negMoney(threshold))));
+    if (cmpMoney(amount, threshold) > 0)
+      base = addMoney(base, negMoney(addMoney(amount, negMoney(threshold))));
   }
   return base;
 }
@@ -381,13 +406,22 @@ export function calculateAllowableSpend(input: {
 
 async function auditGrant(
   runner: SqlExecutor,
-  input: { orgId: string; rowId: string; action: string; actorId: string; changes: Record<string, unknown> },
+  input: {
+    orgId: string;
+    rowId: string;
+    action: string;
+    actorId: string;
+    changes: Record<string, unknown>;
+  },
 ): Promise<void> {
-  const result = await runner.execute<{ id: string }>(sql`
+  const result = await runner.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${input.orgId}, 'grants', ${input.rowId}, ${input.action}, ${JSON.stringify(input.changes)}::jsonb, ${input.actorId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (result.length !== 1) {
     throw refusal({
       message: `The grant ${input.action} was not recorded in the audit history.`,
@@ -403,9 +437,12 @@ async function validateGrantReferences(
   orgId: string,
   refs: { sponsorPartyId: string; fundId: string; allowableAccountGroupId: string },
 ): Promise<void> {
-  const sponsor = await runner.execute<{ id: string }>(sql`
+  const sponsor = await runner.execute<{ id: string }>(
+    sql`
     select id from parties where org_id = ${orgId} and id = ${refs.sponsorPartyId} for key share
-  `, "objects");
+  `,
+    "objects",
+  );
   if (sponsor.length !== 1) {
     throw refusal({
       message: "The sponsor is not a party in this organization.",
@@ -414,13 +451,16 @@ async function validateGrantReferences(
       field: "sponsorPartyId",
     });
   }
-  const fund = await runner.execute<{ id: string }>(sql`
+  const fund = await runner.execute<{ id: string }>(
+    sql`
     select f.id from funds f
     join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
     join segment_definitions sd on sd.org_id = sv.org_id and sd.id = sv.segment_id and sd.key = 'fund'
     where f.org_id = ${orgId} and f.id = ${refs.fundId} and sv.is_active
     for key share of f, sv
-  `, "objects");
+  `,
+    "objects",
+  );
   if (fund.length !== 1) {
     throw refusal({
       message: "The grant fund is not an active fund in this organization.",
@@ -429,10 +469,13 @@ async function validateGrantReferences(
       field: "fundId",
     });
   }
-  const group = await runner.execute<{ id: string }>(sql`
+  const group = await runner.execute<{ id: string }>(
+    sql`
     select id from account_groups where org_id = ${orgId} and id = ${refs.allowableAccountGroupId} and is_active
     for key share
-  `, "objects");
+  `,
+    "objects",
+  );
   if (group.length !== 1) {
     throw refusal({
       message: "The allowable-cost account group is not active in this organization.",
@@ -474,9 +517,11 @@ async function validateMtdcTerms(
   if (input.indirectBase !== "modified_total_direct") {
     if (exclusionGroupId !== null || subawardGroupId !== null || thresholdInput !== null) {
       throw refusal({
-        message: "Excluded-cost and subaward groups apply only to a grant whose indirect base is modified total direct costs.",
+        message:
+          "Excluded-cost and subaward groups apply only to a grant whose indirect base is modified total direct costs.",
         code: "grant_mtdc_config_base_invalid",
-        remedy: "Choose modified total direct costs as the indirect base, or clear the excluded-cost and subaward settings.",
+        remedy:
+          "Choose modified total direct costs as the indirect base, or clear the excluded-cost and subaward settings.",
         field: "indirectBase",
       });
     }
@@ -484,13 +529,16 @@ async function validateMtdcTerms(
   }
   if ((subawardGroupId === null) !== (thresholdInput === null)) {
     throw refusal({
-      message: "A subaward account group and the subaward amount kept in the base per subrecipient are set together.",
+      message:
+        "A subaward account group and the subaward amount kept in the base per subrecipient are set together.",
       code: "grant_mtdc_subaward_pair_invalid",
-      remedy: "Enter both the subaward account group and the per-subrecipient amount, or clear both.",
+      remedy:
+        "Enter both the subaward account group and the per-subrecipient amount, or clear both.",
       field: subawardGroupId === null ? "mtdcSubawardAccountGroupId" : "mtdcSubawardThreshold",
     });
   }
-  const subawardThreshold = thresholdInput === null ? null : parseGrantMoney(thresholdInput, "mtdcSubawardThreshold");
+  const subawardThreshold =
+    thresholdInput === null ? null : parseGrantMoney(thresholdInput, "mtdcSubawardThreshold");
   if (exclusionGroupId !== null) requireUuid(exclusionGroupId, "mtdcExclusionAccountGroupId");
   if (subawardGroupId !== null) requireUuid(subawardGroupId, "mtdcSubawardAccountGroupId");
   if (exclusionGroupId !== null && exclusionGroupId === subawardGroupId) {
@@ -506,11 +554,19 @@ async function validateMtdcTerms(
     { id: subawardGroupId, field: "mtdcSubawardAccountGroupId", label: "subaward" },
   ].filter((entry): entry is { id: string; field: string; label: string } => entry.id !== null);
   if (named.length > 0) {
-    const groups = await runner.execute<{ id: string; dimension: string; name: string; is_active: boolean }>(sql`
+    const groups = await runner.execute<{
+      id: string;
+      dimension: string;
+      name: string;
+      is_active: boolean;
+    }>(
+      sql`
       select id, dimension, name, is_active from account_groups
        where org_id = ${orgId} and id = any(${uuidArray([input.allowableAccountGroupId, ...named.map((entry) => entry.id)])}::uuid[])
        for key share
-    `, "objects");
+    `,
+      "objects",
+    );
     const byId = new Map(groups.map((row) => [row.id, row]));
     const allowableDimension = byId.get(input.allowableAccountGroupId)?.dimension;
     for (const entry of named) {
@@ -527,7 +583,8 @@ async function validateMtdcTerms(
         throw refusal({
           message: `The ${entry.label} account group "${group.name}" classifies accounts in the same dimension (${group.dimension}) as the allowable-cost group, so no allowable cost can belong to it.`,
           code: "grant_mtdc_group_dimension_conflict",
-          remedy: "Choose an account group from a different account-group dimension; create one under Setup → Account Groups if none exists.",
+          remedy:
+            "Choose an account group from a different account-group dimension; create one under Setup → Account Groups if none exists.",
           field: entry.field,
         });
       }
@@ -553,28 +610,66 @@ function validateGrantTerms(input: CreateGrantInput): {
   const name = requireText(input.name, "name");
   const sponsorPartyId = requireUuid(input.sponsorPartyId, "sponsorPartyId");
   const fundId = requireUuid(input.fundId, "fundId");
-  const allowableAccountGroupId = requireUuid(input.allowableAccountGroupId, "allowableAccountGroupId");
+  const allowableAccountGroupId = requireUuid(
+    input.allowableAccountGroupId,
+    "allowableAccountGroupId",
+  );
   if (!SPONSOR_KINDS.includes(input.sponsorKind)) {
-    throw refusal({ message: "The sponsor kind is not supported.", code: "grant_sponsor_kind_invalid", remedy: "Choose government, foundation, or corporate.", field: "sponsorKind" });
+    throw refusal({
+      message: "The sponsor kind is not supported.",
+      code: "grant_sponsor_kind_invalid",
+      remedy: "Choose government, foundation, or corporate.",
+      field: "sponsorKind",
+    });
   }
   if (!DETERMINATIONS.includes(input.determination)) {
-    throw refusal({ message: "The accounting determination is not supported.", code: "grant_determination_invalid", remedy: "Choose an unconditional contribution, a conditional contribution, or an exchange transaction.", field: "determination" });
+    throw refusal({
+      message: "The accounting determination is not supported.",
+      code: "grant_determination_invalid",
+      remedy:
+        "Choose an unconditional contribution, a conditional contribution, or an exchange transaction.",
+      field: "determination",
+    });
   }
-  if (input.determination === "contribution_conditional" && (!input.barrier?.trim() || input.rightOfReturn !== true)) {
-    throw refusal({ message: "A conditional award needs a barrier and a right of return or release.", code: "grant_conditional_terms_required", remedy: "Record the substantive barrier and the agreement's right of return before saving the award.", field: "barrier" });
+  if (
+    input.determination === "contribution_conditional" &&
+    (!input.barrier?.trim() || input.rightOfReturn !== true)
+  ) {
+    throw refusal({
+      message: "A conditional award needs a barrier and a right of return or release.",
+      code: "grant_conditional_terms_required",
+      remedy:
+        "Record the substantive barrier and the agreement's right of return before saving the award.",
+      field: "barrier",
+    });
   }
   if (input.indirectBase !== undefined && !INDIRECT_BASES.includes(input.indirectBase)) {
-    throw refusal({ message: "The indirect-cost base is not supported.", code: "grant_indirect_base_invalid", remedy: "Choose direct costs or modified total direct costs.", field: "indirectBase" });
+    throw refusal({
+      message: "The indirect-cost base is not supported.",
+      code: "grant_indirect_base_invalid",
+      remedy: "Choose direct costs or modified total direct costs.",
+      field: "indirectBase",
+    });
   }
   const periodFrom = requireDate(input.periodFrom, "periodFrom");
   const periodTo = requireDate(input.periodTo, "periodTo");
   if (periodTo < periodFrom) {
-    throw refusal({ message: "The grant end date precedes its start date.", code: "grant_period_invalid", remedy: "Set the grant end date on or after its start date.", field: "periodTo" });
+    throw refusal({
+      message: "The grant end date precedes its start date.",
+      code: "grant_period_invalid",
+      remedy: "Set the grant end date on or after its start date.",
+      field: "periodTo",
+    });
   }
   const awardAmount = parseGrantMoney(input.awardAmount, "awardAmount", true);
   const costShareAmount = parseGrantMoney(input.costShareAmount ?? "0", "costShareAmount");
   if (!input.costShareRequired && cmpMoney(costShareAmount, "0.0000") !== 0) {
-    throw refusal({ message: "A cost-share amount was supplied without a cost-share requirement.", code: "grant_cost_share_invalid", remedy: "Mark cost sharing as required or set its amount to zero.", field: "costShareAmount" });
+    throw refusal({
+      message: "A cost-share amount was supplied without a cost-share requirement.",
+      code: "grant_cost_share_invalid",
+      remedy: "Mark cost sharing as required or set its amount to zero.",
+      field: "costShareAmount",
+    });
   }
   return {
     code,
@@ -591,8 +686,14 @@ function validateGrantTerms(input: CreateGrantInput): {
   };
 }
 
-async function loadGrantById(runner: SqlExecutor, orgId: string, grantId: string, lock = false): Promise<GrantRow> {
-  const result = await runner.execute<GrantRow>(sql`
+async function loadGrantById(
+  runner: SqlExecutor,
+  orgId: string,
+  grantId: string,
+  lock = false,
+): Promise<GrantRow> {
+  const result = await runner.execute<GrantRow>(
+    sql`
     select id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
            barrier_met_at::text as barrier_met_at, barrier_evidence, right_of_return,
            award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
@@ -603,7 +704,9 @@ async function loadGrantById(runner: SqlExecutor, orgId: string, grantId: string
            created_by, updated_at::text as updated_at, updated_by
       from grants where org_id = ${orgId} and id = ${grantId}
       ${lock ? sql`for update` : sql``}
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) {
     throw refusal({
@@ -616,9 +719,15 @@ async function loadGrantById(runner: SqlExecutor, orgId: string, grantId: string
   return row;
 }
 
-async function loadCurrentGrant(runner: SqlExecutor, orgId: string, grantId: string, lock = false): Promise<GrantRow> {
+async function loadCurrentGrant(
+  runner: SqlExecutor,
+  orgId: string,
+  grantId: string,
+  lock = false,
+): Promise<GrantRow> {
   const requested = await loadGrantById(runner, orgId, grantId, lock);
-  const current = await runner.execute<GrantRow>(sql`
+  const current = await runner.execute<GrantRow>(
+    sql`
     select id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
            barrier_met_at::text as barrier_met_at, barrier_evidence, right_of_return,
            award_amount::text as award_amount, period_from::text as period_from, period_to::text as period_to,
@@ -629,7 +738,9 @@ async function loadCurrentGrant(runner: SqlExecutor, orgId: string, grantId: str
            created_by, updated_at::text as updated_at, updated_by
       from grants where org_id = ${orgId} and code = ${requested.code}
       order by version desc limit 1 ${lock ? sql`for update` : sql``}
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = current[0];
   if (!row) {
     throw refusal({
@@ -659,26 +770,39 @@ async function getPostingContext(
   postingDateInput: string,
 ): Promise<{ bookId: string; subsidiaryId: string; currency: string; periodId: string }> {
   const postingDate = requireDate(postingDateInput, "postingDate");
-  const book = await runner.execute<{ id: string }>(sql`
+  const book = await runner.execute<{ id: string }>(
+    sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
      limit 1 for share
-  `, "objects");
-  const subsidiary = await runner.execute<{ id: string; currency: string | null }>(sql`
+  `,
+    "objects",
+  );
+  const subsidiary = await runner.execute<{ id: string; currency: string | null }>(
+    sql`
     select id, nullif(trim(base_currency), '') as currency from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination and parent_id is null
      limit 1 for share
-  `, "objects");
+  `,
+    "objects",
+  );
   const period = await resolveCoveringPeriod(runner, orgId, postingDate);
   if (!book[0] || !subsidiary[0]?.currency || !period) {
     throw refusal({
-      message: "A grant posting needs an active primary book, root subsidiary currency, and covering accounting period.",
+      message:
+        "A grant posting needs an active primary book, root subsidiary currency, and covering accounting period.",
       code: "grant_posting_context_missing",
-      remedy: "Configure the primary book and subsidiary currency, then choose a date in an open accounting period.",
+      remedy:
+        "Configure the primary book and subsidiary currency, then choose a date in an open accounting period.",
       status: 409,
     });
   }
-  return { bookId: book[0].id, subsidiaryId: subsidiary[0].id, currency: subsidiary[0].currency, periodId: period.id };
+  return {
+    bookId: book[0].id,
+    subsidiaryId: subsidiary[0].id,
+    currency: subsidiary[0].currency,
+    periodId: period.id,
+  };
 }
 
 async function validatePostingAccounts(
@@ -687,11 +811,14 @@ async function validatePostingAccounts(
   slots: readonly { id: string; label: string; types: readonly string[] }[],
 ): Promise<void> {
   for (const slot of slots) {
-    const account = await runner.execute<{ id: string; type: string }>(sql`
+    const account = await runner.execute<{ id: string; type: string }>(
+      sql`
       select id, type from accounts
        where org_id = ${orgId} and id = ${slot.id} and is_active and not is_summary
        for key share
-    `, "objects");
+    `,
+      "objects",
+    );
     if (account.length !== 1 || !slot.types.includes(account[0]!.type)) {
       throw refusal({
         message: `${slot.label} must be an active posting account of the required account type in this organization.`,
@@ -707,8 +834,14 @@ function postFailure(error: unknown, grantCode: string): never {
   if (error instanceof NonprofitError) throw error;
   if (error && typeof error === "object") {
     const shape = error as { status?: unknown; code?: unknown; remedy?: unknown };
-    if (Number.isInteger(shape.status) && Number(shape.status) >= 400 && Number(shape.status) <= 499 &&
-        typeof shape.code === "string" && typeof shape.remedy === "string") throw error;
+    if (
+      Number.isInteger(shape.status) &&
+      Number(shape.status) >= 400 &&
+      Number(shape.status) <= 499 &&
+      typeof shape.code === "string" &&
+      typeof shape.remedy === "string"
+    )
+      throw error;
   }
   const detail = error instanceof Error ? error.message : String(error);
   throw new NonprofitPostingError({
@@ -739,7 +872,11 @@ async function postGrantEntry(
 ): Promise<string> {
   const context = await getPostingContext(runner, grant.org_id, input.postingDate);
   const entryNumber = await db.transaction((tx) =>
-    nextFreeEntryNumber(tx, grant.org_id, `GRANT-${grant.code}-${input.event.toUpperCase()}-V${grant.version}`),
+    nextFreeEntryNumber(
+      tx,
+      grant.org_id,
+      `GRANT-${grant.code}-${input.event.toUpperCase()}-V${grant.version}`,
+    ),
   );
   try {
     const posted = await postEntry(runner, {
@@ -778,10 +915,13 @@ async function resolveGroupMembers(
   targetGroupId: string,
   label = "allowable-cost",
 ): Promise<Map<string, string>> {
-  const target = await runner.execute<{ id: string; dimension: string; is_active: boolean }>(sql`
+  const target = await runner.execute<{ id: string; dimension: string; is_active: boolean }>(
+    sql`
     select id, dimension, is_active from account_groups
      where org_id = ${orgId} and id = ${targetGroupId} for key share
-  `, "objects");
+  `,
+    "objects",
+  );
   const targetRow = target[0];
   if (!targetRow?.is_active) {
     throw refusal({
@@ -790,29 +930,40 @@ async function resolveGroupMembers(
       remedy: "Choose an active account group from this organization's account-group setup.",
     });
   }
-  const groupsResult = await runner.execute<GroupRow>(sql`
+  const groupsResult = await runner.execute<GroupRow>(
+    sql`
     select id, dimension, name, sort_order, match, is_catch_all
       from account_groups where org_id = ${orgId} and dimension = ${targetRow.dimension} and is_active
       order by sort_order, name for share
-  `, "objects");
+  `,
+    "objects",
+  );
   const groups = groupsResult;
-  const pins = await runner.execute<{ account_id: string; group_id: string }>(sql`
+  const pins = await runner.execute<{ account_id: string; group_id: string }>(
+    sql`
     select m.account_id, m.group_id from account_group_members m
       join account_groups g on g.org_id = m.org_id and g.id = m.group_id
      where m.org_id = ${orgId} and g.dimension = ${targetRow.dimension} and g.is_active
      order by m.account_id, m.group_id for share of m
-  `, "objects");
-  const accountRows = await runner.execute<AccountRow>(sql`
+  `,
+    "objects",
+  );
+  const accountRows = await runner.execute<AccountRow>(
+    sql`
     select id, number, name, type from accounts where org_id = ${orgId} and not is_summary order by id
-  `, "objects");
+  `,
+    "objects",
+  );
   const pinByAccount = new Map<string, string>();
-  for (const pin of pins) if (!pinByAccount.has(pin.account_id)) pinByAccount.set(pin.account_id, pin.group_id);
+  for (const pin of pins)
+    if (!pinByAccount.has(pin.account_id)) pinByAccount.set(pin.account_id, pin.group_id);
   const catchAlls = groups.filter((group) => group.is_catch_all);
   if (catchAlls.length > 1) {
     throw refusal({
       message: `The ${targetRow.dimension} account groups have more than one active catch-all.`,
       code: "grant_allowable_group_ambiguous",
-      remedy: "Deactivate all but the authoritative catch-all account group, then retry the reimbursement.",
+      remedy:
+        "Deactivate all but the authoritative catch-all account group, then retry the reimbursement.",
       status: 409,
     });
   }
@@ -831,7 +982,8 @@ async function resolveGroupMembers(
       const accountTypes = Array.isArray(rule.accountTypes) ? rule.accountTypes : [];
       const prefixes = Array.isArray(rule.numberPrefixes) ? rule.numberPrefixes : [];
       if (accountTypes.length > 0 && !accountTypes.includes(account.type)) continue;
-      if (prefixes.length > 0 && !prefixes.some((prefix) => account.number?.startsWith(prefix))) continue;
+      if (prefixes.length > 0 && !prefixes.some((prefix) => account.number?.startsWith(prefix)))
+        continue;
       if (rule.namePattern) {
         const problem = accountGroupNamePatternError(rule.namePattern);
         if (problem) {
@@ -879,19 +1031,26 @@ async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<
     throw refusal({
       message: `Grant ${grant.code} applies its indirect rate to modified total direct costs, but no excluded-cost account group is configured, so its indirect cost base cannot be determined.`,
       code: "grant_mtdc_exclusions_unconfigured",
-      remedy: "Amend the grant's indirect-cost terms to choose the excluded-cost account group (equipment, capital expenditures, rental costs, patient care, tuition remission, participant support); choose an account group with no accounts if the award excludes nothing.",
+      remedy:
+        "Amend the grant's indirect-cost terms to choose the excluded-cost account group (equipment, capital expenditures, rental costs, patient care, tuition remission, participant support); choose an account group with no accounts if the award excludes nothing.",
       status: 409,
     });
   }
   const grouped = await resolveGroupMembers(runner, grant.org_id, grant.allowable_account_group_id);
   const accountIds = [...grouped].filter(([, type]) => EXPENSE_TYPES.has(type)).map(([id]) => id);
-  const defaultFund = await runner.execute<{ id: string | null }>(sql`
+  const defaultFund = await runner.execute<{ id: string | null }>(
+    sql`
     select default_value_id as id from segment_definitions
      where org_id = ${grant.org_id} and key = 'fund' and source_kind = 'custom'
-  `, "objects");
-  const primaryBook = await runner.execute<{ id: string }>(sql`
+  `,
+    "objects",
+  );
+  const primaryBook = await runner.execute<{ id: string }>(
+    sql`
     select id from accounting_books where org_id = ${grant.org_id} and is_primary and is_active and posts_gl limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!primaryBook[0]) {
     throw refusal({
       message: "The organization has no active primary posting book for grant-cost measurement.",
@@ -906,7 +1065,11 @@ async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<
       and jl.account_id = any(${uuidArray(accountIds)}::uuid[])
       and coalesce(jl.extra_dims->>'fund', ${defaultFund[0]?.id ?? null}) = ${grant.fund_id}
       and je.posting_date between ${grant.period_from}::date and ${grant.period_to}::date`;
-  const rows = accountIds.length === 0 ? [] : (await runner.execute<{ account_id: string; party_id: string | null; total: string }>(sql`
+  const rows =
+    accountIds.length === 0
+      ? []
+      : await runner.execute<{ account_id: string; party_id: string | null; total: string }>(
+          sql`
     select jl.account_id, jl.party_id, sum(jl.amount)::text as total
       from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
@@ -914,14 +1077,26 @@ async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<
      where ${scope}
      group by jl.account_id, jl.party_id
      order by jl.account_id, jl.party_id
-  `, "objects"));
+  `,
+          "objects",
+        );
   let direct = parseMoney("0");
   for (const row of rows) direct = addMoney(direct, parseMoney(row.total));
   let indirectBase = direct;
   if (mtdc) {
-    const excludedAccounts = await resolveGroupMembers(runner, grant.org_id, grant.mtdc_exclusion_account_group_id!, "excluded-cost");
+    const excludedAccounts = await resolveGroupMembers(
+      runner,
+      grant.org_id,
+      grant.mtdc_exclusion_account_group_id!,
+      "excluded-cost",
+    );
     const subawardAccounts = grant.mtdc_subaward_account_group_id
-      ? await resolveGroupMembers(runner, grant.org_id, grant.mtdc_subaward_account_group_id, "subaward")
+      ? await resolveGroupMembers(
+          runner,
+          grant.org_id,
+          grant.mtdc_subaward_account_group_id,
+          "subaward",
+        )
       : new Map<string, string>();
     let excluded = parseMoney("0");
     const subawards = new Map<string | null, Money>();
@@ -929,12 +1104,16 @@ async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<
       if (excludedAccounts.has(row.account_id)) {
         excluded = addMoney(excluded, parseMoney(row.total));
       } else if (subawardAccounts.has(row.account_id)) {
-        subawards.set(row.party_id, addMoney(subawards.get(row.party_id) ?? parseMoney("0"), parseMoney(row.total)));
+        subawards.set(
+          row.party_id,
+          addMoney(subawards.get(row.party_id) ?? parseMoney("0"), parseMoney(row.total)),
+        );
       }
     }
     const unattributed = subawards.get(null);
     if (unattributed !== undefined && cmpMoney(unattributed, "0.0000") !== 0) {
-      const entries = await runner.execute<{ entry_number: string }>(sql`
+      const entries = await runner.execute<{ entry_number: string }>(
+        sql`
         select distinct je.entry_number
           from journal_lines jl
           join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
@@ -942,13 +1121,17 @@ async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<
          where ${scope} and jl.party_id is null
            and jl.account_id = any(${uuidArray([...subawardAccounts.keys()].filter((id) => !excludedAccounts.has(id)))}::uuid[])
          order by je.entry_number limit 5
-      `, "objects");
+      `,
+        "objects",
+      );
       throw refusal({
-        message: `Grant ${grant.code} has ${unattributed} of subaward cost posted without a subrecipient` +
+        message:
+          `Grant ${grant.code} has ${unattributed} of subaward cost posted without a subrecipient` +
           `${entries.length > 0 ? ` (entries ${entries.map((row) => row.entry_number).join(", ")})` : ""}, ` +
           "so the part of each subaward that stays in the modified total direct cost base cannot be determined.",
         code: "grant_mtdc_subaward_party_missing",
-        remedy: "Reverse each named entry and re-enter its subaward cost with the subrecipient as the line's party, then retry.",
+        remedy:
+          "Reverse each named entry and re-enter its subaward cost with the subrecipient as the line's party, then retry.",
         status: 409,
       });
     }
@@ -969,14 +1152,21 @@ async function measureGrantSpend(runner: SqlExecutor, grant: GrantRow): Promise<
   return { direct, indirectBase, indirect: addMoney(allowable, negMoney(direct)), allowable };
 }
 
-async function drawdownTotals(runner: SqlExecutor, grant: GrantRow, exceptId?: string): Promise<{ all: Money; reimbursements: Money }> {
-  const result = await runner.execute<{ total_drawn: string; reimbursements: string }>(sql`
+async function drawdownTotals(
+  runner: SqlExecutor,
+  grant: GrantRow,
+  exceptId?: string,
+): Promise<{ all: Money; reimbursements: Money }> {
+  const result = await runner.execute<{ total_drawn: string; reimbursements: string }>(
+    sql`
     select coalesce(sum(d.amount), 0)::text as total_drawn,
            coalesce(sum(d.amount) filter (where d.kind in ('reimbursement', 'final')), 0)::text as reimbursements
       from grant_drawdowns d join grants g on g.org_id = d.org_id and g.id = d.grant_id
      where d.org_id = ${grant.org_id} and g.code = ${grant.code} and d.status <> 'void'
        and (${exceptId ?? null}::uuid is null or d.id <> ${exceptId ?? null}::uuid)
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     all: parseMoney(result[0]?.total_drawn ?? "0"),
     reimbursements: parseMoney(result[0]?.reimbursements ?? "0"),
@@ -1002,10 +1192,14 @@ async function fundReimbursementClaims(
   grant: GrantRow,
   exceptId?: string,
 ): Promise<FundReimbursementClaims> {
-  const fund = await runner.execute<{ code: string }>(sql`
+  const fund = await runner.execute<{ code: string }>(
+    sql`
     select sv.code from segment_values sv where sv.org_id = ${grant.org_id} and sv.id = ${grant.fund_id}
-  `, "objects");
-  const result = await runner.execute<{ code: string; amount: string }>(sql`
+  `,
+    "objects",
+  );
+  const result = await runner.execute<{ code: string; amount: string }>(
+    sql`
     select g.code, sum(d.amount)::text as amount
       from grant_drawdowns d join grants g on g.org_id = d.org_id and g.id = d.grant_id
      where d.org_id = ${grant.org_id} and g.fund_id = ${grant.fund_id}
@@ -1013,13 +1207,16 @@ async function fundReimbursementClaims(
        and (${exceptId ?? null}::uuid is null or d.id <> ${exceptId ?? null}::uuid)
      group by g.code
      order by g.code
-  `, "objects");
+  `,
+    "objects",
+  );
   let total = parseMoney("0");
   const otherGrants: { code: string; amount: Money }[] = [];
   for (const row of result) {
     const amount = parseMoney(row.amount);
     total = addMoney(total, amount);
-    if (row.code !== grant.code && cmpMoney(amount, "0.0000") !== 0) otherGrants.push({ code: row.code, amount });
+    if (row.code !== grant.code && cmpMoney(amount, "0.0000") !== 0)
+      otherGrants.push({ code: row.code, amount });
   }
   return { fundCode: fund[0]?.code ?? grant.fund_id, total, otherGrants };
 }
@@ -1033,9 +1230,12 @@ async function fundReimbursementClaims(
  * rows that merely reference the fund.
  */
 async function lockFundForReimbursement(runner: SqlExecutor, grant: GrantRow): Promise<void> {
-  const locked = await runner.execute<{ id: string }>(sql`
+  const locked = await runner.execute<{ id: string }>(
+    sql`
     select id from funds where org_id = ${grant.org_id} and id = ${grant.fund_id} for no key update
-  `, "objects");
+  `,
+    "objects",
+  );
   if (locked.length !== 1) {
     throw refusal({
       message: `Grant ${grant.code}'s fund is no longer a fund in this organization, so its costs cannot be measured.`,
@@ -1078,19 +1278,26 @@ async function requireDrawdownCapacity(
   const claims = await fundReimbursementClaims(runner, grant, exceptId);
   const remainingAllowable = addMoney(allowable, negMoney(claims.total));
   if (cmpMoney(amount, remainingAllowable) > 0) {
-    const group = await runner.execute<{ name: string }>(sql`
+    const group = await runner.execute<{ name: string }>(
+      sql`
       select name from account_groups where org_id = ${grant.org_id} and id = ${grant.allowable_account_group_id}
-    `, "objects");
+    `,
+      "objects",
+    );
     const groupName = group[0]?.name ?? "the grant's allowable-cost account group";
     const period = `${grant.period_from} to ${grant.period_to}`;
     if (claims.otherGrants.length > 0) {
-      const others = claims.otherGrants.map((other) => `${other.code} (${other.amount})`).join(", ");
+      const others = claims.otherGrants
+        .map((other) => `${other.code} (${other.amount})`)
+        .join(", ");
       throw refusal({
-        message: `Reimbursement ${amount} exceeds allowable spend remaining of ${remainingAllowable} under "${groupName}" for grant ${grant.code}. ` +
+        message:
+          `Reimbursement ${amount} exceeds allowable spend remaining of ${remainingAllowable} under "${groupName}" for grant ${grant.code}. ` +
           `Fund ${claims.fundCode} is shared with other grants, and its costs are reimbursed only once across all of them; ` +
           `reimbursements already claimed on this fund by other grants: ${others}.`,
         code: "grant_drawdown_over_allowable_spend",
-        remedy: `Reduce the reimbursement to no more than ${remainingAllowable}. If another grant's reimbursement claimed these costs in error, void that drawdown on its grant first; ` +
+        remedy:
+          `Reduce the reimbursement to no more than ${remainingAllowable}. If another grant's reimbursement claimed these costs in error, void that drawdown on its grant first; ` +
           `otherwise post further qualifying expenses to fund ${claims.fundCode} dated within ${period}.`,
       });
     }
@@ -1103,36 +1310,66 @@ async function requireDrawdownCapacity(
 }
 
 function selectedReceivable(grant: GrantRow, accounts: GrantPostingAccounts): string {
-  return grant.determination === "exchange" ? accounts.exchangeReceivableAccountId : accounts.grantsReceivableAccountId;
+  return grant.determination === "exchange"
+    ? accounts.exchangeReceivableAccountId
+    : accounts.grantsReceivableAccountId;
 }
 
 function selectedRevenue(grant: GrantRow, accounts: GrantPostingAccounts): string {
-  return grant.determination === "exchange" ? accounts.exchangeRevenueAccountId : accounts.grantRevenueAccountId;
+  return grant.determination === "exchange"
+    ? accounts.exchangeRevenueAccountId
+    : accounts.grantRevenueAccountId;
 }
 
-async function assertExchangeAccountsSeparate(grant: GrantRow, accounts: GrantPostingAccounts): Promise<void> {
-  if (grant.determination === "exchange" &&
-      (accounts.exchangeReceivableAccountId === accounts.grantsReceivableAccountId ||
-       accounts.exchangeRevenueAccountId === accounts.grantRevenueAccountId)) {
+async function assertExchangeAccountsSeparate(
+  grant: GrantRow,
+  accounts: GrantPostingAccounts,
+): Promise<void> {
+  if (
+    grant.determination === "exchange" &&
+    (accounts.exchangeReceivableAccountId === accounts.grantsReceivableAccountId ||
+      accounts.exchangeRevenueAccountId === accounts.grantRevenueAccountId)
+  ) {
     throw refusal({
-      message: "An exchange award cannot use the contribution grant receivable or grant revenue account.",
+      message:
+        "An exchange award cannot use the contribution grant receivable or grant revenue account.",
       code: "grant_exchange_account_invalid",
       remedy: "Choose the ordinary receivable and revenue accounts for exchange transactions.",
     });
   }
 }
 
-async function validateAwardAccounts(runner: SqlExecutor, grant: GrantRow, accounts: GrantPostingAccounts): Promise<void> {
+async function validateAwardAccounts(
+  runner: SqlExecutor,
+  grant: GrantRow,
+  accounts: GrantPostingAccounts,
+): Promise<void> {
   await assertExchangeAccountsSeparate(grant, accounts);
   if (grant.determination === "exchange") {
     await validatePostingAccounts(runner, grant.org_id, [
-      { id: accounts.exchangeReceivableAccountId, label: "Exchange receivable", types: ["asset_receivable"] },
-      { id: accounts.exchangeRevenueAccountId, label: "Exchange revenue", types: ["income", "income_other"] },
+      {
+        id: accounts.exchangeReceivableAccountId,
+        label: "Exchange receivable",
+        types: ["asset_receivable"],
+      },
+      {
+        id: accounts.exchangeRevenueAccountId,
+        label: "Exchange revenue",
+        types: ["income", "income_other"],
+      },
     ]);
   } else {
     await validatePostingAccounts(runner, grant.org_id, [
-      { id: accounts.grantsReceivableAccountId, label: "Grant receivable", types: ["asset_receivable"] },
-      { id: accounts.grantRevenueAccountId, label: "Grant revenue", types: ["income", "income_other"] },
+      {
+        id: accounts.grantsReceivableAccountId,
+        label: "Grant receivable",
+        types: ["asset_receivable"],
+      },
+      {
+        id: accounts.grantRevenueAccountId,
+        label: "Grant revenue",
+        types: ["income", "income_other"],
+      },
     ]);
   }
 }
@@ -1148,7 +1385,8 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRecord>
       subawardGroupId: input.mtdcSubawardAccountGroupId,
       subawardThreshold: input.mtdcSubawardThreshold,
     });
-    const inserted = await runner.execute<GrantRow>(sql`
+    const inserted = await runner.execute<GrantRow>(
+      sql`
       insert into grants
         (org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier, right_of_return,
          award_amount, period_from, period_to, indirect_rate, indirect_base, cost_share_required,
@@ -1157,7 +1395,7 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRecord>
       values
         (${input.orgId}, ${terms.code}, ${terms.name}, ${terms.sponsorPartyId}, ${input.sponsorKind},
          ${input.determination}, ${input.determination === "contribution_conditional" ? input.barrier!.trim() : null},
-         ${input.determination === "contribution_conditional" ? true : input.rightOfReturn ?? false},
+         ${input.determination === "contribution_conditional" ? true : (input.rightOfReturn ?? false)},
          ${terms.awardAmount}, ${terms.periodFrom}, ${terms.periodTo}, ${terms.indirectRate}, ${terms.indirectBase},
          ${input.costShareRequired ?? false}, ${terms.costShareAmount}, ${terms.fundId}, ${terms.allowableAccountGroupId},
          ${mtdc.exclusionGroupId}, ${mtdc.subawardGroupId}, ${mtdc.subawardThreshold},
@@ -1169,12 +1407,25 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRecord>
                 cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
                 award_entry_id, version, supersedes_id, custom,
                 mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = inserted[0];
     if (!row) {
-      throw refusal({ message: `Grant ${terms.code} was not created.`, code: "grant_write_missing", remedy: "Retry grant creation after checking the grant records.", status: 409 });
+      throw refusal({
+        message: `Grant ${terms.code} was not created.`,
+        code: "grant_write_missing",
+        remedy: "Retry grant creation after checking the grant records.",
+        status: 409,
+      });
     }
-    await auditGrant(runner, { orgId: input.orgId, rowId: row.id, action: "create", actorId: input.actorId, changes: { event: "grant_created", after: mapGrant(row) } });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: row.id,
+      action: "create",
+      actorId: input.actorId,
+      changes: { event: "grant_created", after: mapGrant(row) },
+    });
     return mapGrant(row);
   });
 }
@@ -1190,7 +1441,12 @@ export async function awardGrant(input: {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
     requireLatestVersion(grant, input.grantId);
     if (grant.status !== "draft") {
-      throw refusal({ message: `Grant ${grant.code} cannot be awarded from ${grant.status}.`, code: "grant_state_conflict", remedy: "Award the current draft version, or create a successor version for changed terms.", status: 409 });
+      throw refusal({
+        message: `Grant ${grant.code} cannot be awarded from ${grant.status}.`,
+        code: "grant_state_conflict",
+        remedy: "Award the current draft version, or create a successor version for changed terms.",
+        status: 409,
+      });
     }
     let entryId: string | null = null;
     if (grant.determination !== "contribution_conditional") {
@@ -1201,12 +1457,22 @@ export async function awardGrant(input: {
         event: "award",
         idempotencyKey: `grant-award:${grant.id}:v${grant.version}`,
         lines: [
-          { accountId: selectedReceivable(grant, input.accounts), amount: grant.award_amount, partyId: grant.sponsor_party_id, isOpenItem: false },
-          { accountId: selectedRevenue(grant, input.accounts), amount: negMoney(grant.award_amount), partyId: grant.sponsor_party_id },
+          {
+            accountId: selectedReceivable(grant, input.accounts),
+            amount: grant.award_amount,
+            partyId: grant.sponsor_party_id,
+            isOpenItem: false,
+          },
+          {
+            accountId: selectedRevenue(grant, input.accounts),
+            amount: negMoney(grant.award_amount),
+            partyId: grant.sponsor_party_id,
+          },
         ],
       });
     }
-    const updated = await runner.execute<GrantRow>(sql`
+    const updated = await runner.execute<GrantRow>(
+      sql`
       update grants set status = 'awarded', award_entry_id = ${entryId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${grant.id} and status = 'draft'
        returning id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
@@ -1216,20 +1482,49 @@ export async function awardGrant(input: {
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
                  award_entry_id, version, supersedes_id, custom,
                 mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = updated[0];
-    if (!row) throw refusal({ message: `Grant ${grant.code} was not advanced to awarded.`, code: "grant_award_write_missing", remedy: "Reload the grant and retry the award action.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_awarded", before: { status: grant.status }, after: { status: row.status, awardEntryId: row.award_entry_id } } });
+    if (!row)
+      throw refusal({
+        message: `Grant ${grant.code} was not advanced to awarded.`,
+        code: "grant_award_write_missing",
+        remedy: "Reload the grant and retry the award action.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_awarded",
+        before: { status: grant.status },
+        after: { status: row.status, awardEntryId: row.award_entry_id },
+      },
+    });
     return { grant: mapGrant(row), entryId };
   });
 }
 
-export async function activateGrant(input: { orgId: string; grantId: string; actorId: string }): Promise<GrantRecord> {
+export async function activateGrant(input: {
+  orgId: string;
+  grantId: string;
+  actorId: string;
+}): Promise<GrantRecord> {
   return withGrantWrite(input.orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
     requireLatestVersion(grant, input.grantId);
-    if (grant.status !== "awarded") throw refusal({ message: `Grant ${grant.code} cannot be activated from ${grant.status}.`, code: "grant_state_conflict", remedy: "Award the grant before activating it.", status: 409 });
-    const updated = await runner.execute<GrantRow>(sql`
+    if (grant.status !== "awarded")
+      throw refusal({
+        message: `Grant ${grant.code} cannot be activated from ${grant.status}.`,
+        code: "grant_state_conflict",
+        remedy: "Award the grant before activating it.",
+        status: 409,
+      });
+    const updated = await runner.execute<GrantRow>(
+      sql`
       update grants set status = 'active', updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${grant.id} and status = 'awarded'
        returning id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
@@ -1239,10 +1534,28 @@ export async function activateGrant(input: { orgId: string; grantId: string; act
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
                  award_entry_id, version, supersedes_id, custom,
                 mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = updated[0];
-    if (!row) throw refusal({ message: `Grant ${grant.code} was not activated.`, code: "grant_activation_write_missing", remedy: "Reload the grant and retry activation.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_activated", before: { status: grant.status }, after: { status: row.status } } });
+    if (!row)
+      throw refusal({
+        message: `Grant ${grant.code} was not activated.`,
+        code: "grant_activation_write_missing",
+        remedy: "Reload the grant and retry activation.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_activated",
+        before: { status: grant.status },
+        after: { status: row.status },
+      },
+    });
     return mapGrant(row);
   });
 }
@@ -1256,12 +1569,28 @@ export async function satisfyGrantBarrier(input: {
   return withGrantWrite(input.orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
     requireLatestVersion(grant, input.grantId);
-    if (grant.determination !== "contribution_conditional" || !["awarded", "active"].includes(grant.status)) {
-      throw refusal({ message: `Grant ${grant.code} has no satisfiable conditional barrier in its current state.`, code: "grant_barrier_state_conflict", remedy: "Record barrier evidence only for an awarded or active conditional grant.", status: 409 });
+    if (
+      grant.determination !== "contribution_conditional" ||
+      !["awarded", "active"].includes(grant.status)
+    ) {
+      throw refusal({
+        message: `Grant ${grant.code} has no satisfiable conditional barrier in its current state.`,
+        code: "grant_barrier_state_conflict",
+        remedy: "Record barrier evidence only for an awarded or active conditional grant.",
+        status: 409,
+      });
     }
-    if (grant.barrier_met_at) throw refusal({ message: `Grant ${grant.code}'s barrier is already recorded as satisfied.`, code: "grant_barrier_already_met", remedy: "Review the existing satisfaction evidence; create a new grant version if the agreement changes.", status: 409 });
+    if (grant.barrier_met_at)
+      throw refusal({
+        message: `Grant ${grant.code}'s barrier is already recorded as satisfied.`,
+        code: "grant_barrier_already_met",
+        remedy:
+          "Review the existing satisfaction evidence; create a new grant version if the agreement changes.",
+        status: 409,
+      });
     const evidence = requireText(input.evidence, "evidence");
-    const updated = await runner.execute<GrantRow>(sql`
+    const updated = await runner.execute<GrantRow>(
+      sql`
       update grants set barrier_met_at = now(), barrier_evidence = ${evidence}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${grant.id} and barrier_met_at is null
        returning id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
@@ -1271,10 +1600,28 @@ export async function satisfyGrantBarrier(input: {
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
                  award_entry_id, version, supersedes_id, custom,
                 mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = updated[0];
-    if (!row) throw refusal({ message: `Grant ${grant.code}'s barrier evidence was not recorded.`, code: "grant_barrier_write_missing", remedy: "Reload the grant and retry after confirming the barrier is still open.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_barrier_satisfied", before: { barrierMetAt: null }, after: { barrierMetAt: row.barrier_met_at, evidence: row.barrier_evidence } } });
+    if (!row)
+      throw refusal({
+        message: `Grant ${grant.code}'s barrier evidence was not recorded.`,
+        code: "grant_barrier_write_missing",
+        remedy: "Reload the grant and retry after confirming the barrier is still open.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_barrier_satisfied",
+        before: { barrierMetAt: null },
+        after: { barrierMetAt: row.barrier_met_at, evidence: row.barrier_evidence },
+      },
+    });
     return mapGrant(row);
   });
 }
@@ -1291,52 +1638,107 @@ export async function recordGrantDrawdown(input: {
 }): Promise<{ id: string; status: "paid"; entryId: string }> {
   return withGrantWrite(input.orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
-    if (grant.status !== "active") throw refusal({ message: `Grant ${grant.code} does not accept drawdowns while ${grant.status}.`, code: "grant_drawdown_state_conflict", remedy: "Activate the grant before recording a drawdown.", status: 409 });
+    if (grant.status !== "active")
+      throw refusal({
+        message: `Grant ${grant.code} does not accept drawdowns while ${grant.status}.`,
+        code: "grant_drawdown_state_conflict",
+        remedy: "Activate the grant before recording a drawdown.",
+        status: 409,
+      });
     if (!(input.kind === "advance" || input.kind === "reimbursement" || input.kind === "final")) {
-      throw refusal({ message: "The drawdown kind is not supported.", code: "grant_drawdown_kind_invalid", remedy: "Choose advance, reimbursement, or final.", field: "kind" });
+      throw refusal({
+        message: "The drawdown kind is not supported.",
+        code: "grant_drawdown_kind_invalid",
+        remedy: "Choose advance, reimbursement, or final.",
+        field: "kind",
+      });
     }
     const amount = parseGrantMoney(input.amount, "amount", true);
     let drawdownId = input.drawdownId;
     let expectedStatus: "draft" | "submitted" = "draft";
     if (drawdownId) {
-      const existing = await runner.execute<{ id: string; amount: string; kind: GrantDrawdownKind; status: GrantDrawdownStatus; grant_id: string }>(sql`
+      const existing = await runner.execute<{
+        id: string;
+        amount: string;
+        kind: GrantDrawdownKind;
+        status: GrantDrawdownStatus;
+        grant_id: string;
+      }>(
+        sql`
         select id, amount::text as amount, kind, status, grant_id from grant_drawdowns
          where org_id = ${input.orgId} and id = ${drawdownId} for update
-      `, "objects");
+      `,
+        "objects",
+      );
       const existingRow = existing[0];
-      if (!existingRow || existingRow.kind !== input.kind || existingRow.status !== "submitted" ||
-          cmpMoney(existingRow.amount, amount) !== 0) {
-        throw refusal({ message: `Drawdown ${drawdownId} is not a matching submitted request.`, code: "grant_drawdown_state_conflict", remedy: "Record payment against the matching submitted drawdown, or create a new drawdown.", status: 409 });
+      if (
+        !existingRow ||
+        existingRow.kind !== input.kind ||
+        existingRow.status !== "submitted" ||
+        cmpMoney(existingRow.amount, amount) !== 0
+      ) {
+        throw refusal({
+          message: `Drawdown ${drawdownId} is not a matching submitted request.`,
+          code: "grant_drawdown_state_conflict",
+          remedy:
+            "Record payment against the matching submitted drawdown, or create a new drawdown.",
+          status: 409,
+        });
       }
       const originalGrant = await loadGrantById(runner, input.orgId, existingRow.grant_id);
-      if (originalGrant.code !== grant.code) throw refusal({ message: `Drawdown ${drawdownId} belongs to another grant.`, code: "grant_drawdown_grant_mismatch", remedy: "Choose a submitted drawdown for the selected grant.", status: 409 });
+      if (originalGrant.code !== grant.code)
+        throw refusal({
+          message: `Drawdown ${drawdownId} belongs to another grant.`,
+          code: "grant_drawdown_grant_mismatch",
+          remedy: "Choose a submitted drawdown for the selected grant.",
+          status: 409,
+        });
       expectedStatus = "submitted";
       await requireDrawdownCapacity(runner, grant, amount, input.kind, drawdownId);
     } else {
       await requireDrawdownCapacity(runner, grant, amount, input.kind);
-      const drawdown = await runner.execute<{ id: string }>(sql`
+      const drawdown = await runner.execute<{ id: string }>(
+        sql`
         insert into grant_drawdowns (org_id, grant_id, amount, kind, status, created_by, updated_by)
         values (${input.orgId}, ${grant.id}, ${amount}, ${input.kind}, 'draft', ${input.actorId}, ${input.actorId})
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       drawdownId = drawdown[0]?.id;
-      if (!drawdownId) throw refusal({ message: `The ${input.kind} drawdown was not created.`, code: "grant_drawdown_write_missing", remedy: "Retry the drawdown after checking the grant records.", status: 409 });
+      if (!drawdownId)
+        throw refusal({
+          message: `The ${input.kind} drawdown was not created.`,
+          code: "grant_drawdown_write_missing",
+          remedy: "Retry the drawdown after checking the grant records.",
+          status: 409,
+        });
     }
 
     const conditional = grant.determination === "contribution_conditional";
     if (conditional) {
       await validatePostingAccounts(runner, input.orgId, [
         { id: input.accounts.bankAccountId, label: "Bank", types: ["asset_bank"] },
-        { id: input.accounts.refundableAdvanceAccountId, label: "Refundable advance", types: ["liability_current_other", "liability_long_term", "liability_payable"] },
+        {
+          id: input.accounts.refundableAdvanceAccountId,
+          label: "Refundable advance",
+          types: ["liability_current_other", "liability_long_term", "liability_payable"],
+        },
       ]);
     } else {
       await validatePostingAccounts(runner, input.orgId, [
         { id: input.accounts.bankAccountId, label: "Bank", types: ["asset_bank"] },
-        { id: selectedReceivable(grant, input.accounts), label: "Grant receivable", types: ["asset_receivable"] },
+        {
+          id: selectedReceivable(grant, input.accounts),
+          label: "Grant receivable",
+          types: ["asset_receivable"],
+        },
       ]);
       await assertExchangeAccountsSeparate(grant, input.accounts);
     }
-    const liabilityOrReceivable = conditional ? input.accounts.refundableAdvanceAccountId : selectedReceivable(grant, input.accounts);
+    const liabilityOrReceivable = conditional
+      ? input.accounts.refundableAdvanceAccountId
+      : selectedReceivable(grant, input.accounts);
     const entryId = await postGrantEntry(runner, grant, {
       actorId: input.actorId,
       postingDate: input.postingDate,
@@ -1344,17 +1746,37 @@ export async function recordGrantDrawdown(input: {
       idempotencyKey: `grant-drawdown:${drawdownId}`,
       lines: [
         { accountId: input.accounts.bankAccountId, amount: amount },
-        { accountId: liabilityOrReceivable, amount: negMoney(amount), partyId: grant.sponsor_party_id, isOpenItem: false },
+        {
+          accountId: liabilityOrReceivable,
+          amount: negMoney(amount),
+          partyId: grant.sponsor_party_id,
+          isOpenItem: false,
+        },
       ],
     });
-    const updated = await runner.execute<{ id: string }>(sql`
+    const updated = await runner.execute<{ id: string }>(
+      sql`
       update grant_drawdowns
          set status = 'paid', receivable_entry_id = ${entryId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${drawdownId} and status = ${expectedStatus}
        returning id
-    `, "objects");
-    if (updated.length !== 1) throw refusal({ message: `Drawdown ${drawdownId} was posted but not marked paid.`, code: "grant_drawdown_status_write_missing", remedy: "Reload the grant activity and reconcile the drawdown with its journal entry.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_drawdown_paid", drawdownId, kind: input.kind, amount, entryId } });
+    `,
+      "objects",
+    );
+    if (updated.length !== 1)
+      throw refusal({
+        message: `Drawdown ${drawdownId} was posted but not marked paid.`,
+        code: "grant_drawdown_status_write_missing",
+        remedy: "Reload the grant activity and reconcile the drawdown with its journal entry.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: { event: "grant_drawdown_paid", drawdownId, kind: input.kind, amount, entryId },
+    });
     return { id: drawdownId, status: "paid", entryId };
   });
 }
@@ -1365,46 +1787,138 @@ export async function createGrantDrawdown(input: {
   amount: string;
   kind: GrantDrawdownKind;
   actorId: string;
-}): Promise<{ id: string; grantId: string; amount: string; kind: GrantDrawdownKind; status: "draft" }> {
+}): Promise<{
+  id: string;
+  grantId: string;
+  amount: string;
+  kind: GrantDrawdownKind;
+  status: "draft";
+}> {
   return withGrantWrite(input.orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
-    if (grant.status !== "active") throw refusal({ message: `Grant ${grant.code} does not accept drawdowns while ${grant.status}.`, code: "grant_drawdown_state_conflict", remedy: "Activate the grant before recording a drawdown.", status: 409 });
-    if (!(input.kind === "advance" || input.kind === "reimbursement" || input.kind === "final")) throw refusal({ message: "The drawdown kind is not supported.", code: "grant_drawdown_kind_invalid", remedy: "Choose advance, reimbursement, or final.", field: "kind" });
+    if (grant.status !== "active")
+      throw refusal({
+        message: `Grant ${grant.code} does not accept drawdowns while ${grant.status}.`,
+        code: "grant_drawdown_state_conflict",
+        remedy: "Activate the grant before recording a drawdown.",
+        status: 409,
+      });
+    if (!(input.kind === "advance" || input.kind === "reimbursement" || input.kind === "final"))
+      throw refusal({
+        message: "The drawdown kind is not supported.",
+        code: "grant_drawdown_kind_invalid",
+        remedy: "Choose advance, reimbursement, or final.",
+        field: "kind",
+      });
     const amount = parseGrantMoney(input.amount, "amount", true);
     await requireDrawdownCapacity(runner, grant, amount, input.kind);
-    const inserted = await runner.execute<{ id: string }>(sql`
+    const inserted = await runner.execute<{ id: string }>(
+      sql`
       insert into grant_drawdowns (org_id, grant_id, amount, kind, status, created_by, updated_by)
       values (${input.orgId}, ${grant.id}, ${amount}, ${input.kind}, 'draft', ${input.actorId}, ${input.actorId}) returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     const id = inserted[0]?.id;
-    if (!id) throw refusal({ message: `The ${input.kind} drawdown was not created.`, code: "grant_drawdown_write_missing", remedy: "Retry the drawdown after checking the grant records.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_drawdown_created", drawdownId: id, kind: input.kind, amount } });
+    if (!id)
+      throw refusal({
+        message: `The ${input.kind} drawdown was not created.`,
+        code: "grant_drawdown_write_missing",
+        remedy: "Retry the drawdown after checking the grant records.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: { event: "grant_drawdown_created", drawdownId: id, kind: input.kind, amount },
+    });
     return { id, grantId: grant.id, amount, kind: input.kind, status: "draft" };
   });
 }
 
-export async function submitGrantDrawdown(input: { orgId: string; drawdownId: string; actorId: string }): Promise<{ id: string; status: "submitted" }> {
+export async function submitGrantDrawdown(input: {
+  orgId: string;
+  drawdownId: string;
+  actorId: string;
+}): Promise<{ id: string; status: "submitted" }> {
   return withGrantWrite(input.orgId, async (runner) => {
-    const found = await runner.execute<{ grant_id: string }>(sql`
+    const found = await runner.execute<{ grant_id: string }>(
+      sql`
       select grant_id from grant_drawdowns where org_id = ${input.orgId} and id = ${input.drawdownId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const drawdownGrantId = found[0]?.grant_id;
-    if (!drawdownGrantId) throw refusal({ message: "The drawdown is not in this organization.", code: "grant_drawdown_not_found", remedy: "Choose a drawdown from this organization's grant activity.", status: 409 });
+    if (!drawdownGrantId)
+      throw refusal({
+        message: "The drawdown is not in this organization.",
+        code: "grant_drawdown_not_found",
+        remedy: "Choose a drawdown from this organization's grant activity.",
+        status: 409,
+      });
     const grant = await loadCurrentGrant(runner, input.orgId, drawdownGrantId, true);
-    if (grant.status !== "active") throw refusal({ message: `Grant ${grant.code} does not accept drawdowns while ${grant.status}.`, code: "grant_drawdown_state_conflict", remedy: "Activate the grant before submitting a drawdown.", status: 409 });
-    const row = await runner.execute<{ id: string; amount: string; kind: GrantDrawdownKind; status: GrantDrawdownStatus }>(sql`
+    if (grant.status !== "active")
+      throw refusal({
+        message: `Grant ${grant.code} does not accept drawdowns while ${grant.status}.`,
+        code: "grant_drawdown_state_conflict",
+        remedy: "Activate the grant before submitting a drawdown.",
+        status: 409,
+      });
+    const row = await runner.execute<{
+      id: string;
+      amount: string;
+      kind: GrantDrawdownKind;
+      status: GrantDrawdownStatus;
+    }>(
+      sql`
       select id, amount::text as amount, kind, status from grant_drawdowns
        where org_id = ${input.orgId} and id = ${input.drawdownId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const drawdown = row[0];
-    if (!drawdown || drawdown.status !== "draft") throw refusal({ message: `Drawdown ${input.drawdownId} cannot be submitted from ${drawdown?.status ?? "missing"}.`, code: "grant_drawdown_state_conflict", remedy: "Submit a draft drawdown exactly once.", status: 409 });
-    await requireDrawdownCapacity(runner, grant, parseMoney(drawdown.amount), drawdown.kind, drawdown.id);
-    const updated = await runner.execute<{ id: string }>(sql`
+    if (!drawdown || drawdown.status !== "draft")
+      throw refusal({
+        message: `Drawdown ${input.drawdownId} cannot be submitted from ${drawdown?.status ?? "missing"}.`,
+        code: "grant_drawdown_state_conflict",
+        remedy: "Submit a draft drawdown exactly once.",
+        status: 409,
+      });
+    await requireDrawdownCapacity(
+      runner,
+      grant,
+      parseMoney(drawdown.amount),
+      drawdown.kind,
+      drawdown.id,
+    );
+    const updated = await runner.execute<{ id: string }>(
+      sql`
       update grant_drawdowns set status = 'submitted', updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${drawdown.id} and status = 'draft' returning id
-    `, "objects");
-    if (updated.length !== 1) throw refusal({ message: `Drawdown ${drawdown.id} was not submitted.`, code: "grant_drawdown_submit_write_missing", remedy: "Reload grant activity and retry the submission.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_drawdown_submitted", drawdownId: drawdown.id, kind: drawdown.kind, amount: drawdown.amount } });
+    `,
+      "objects",
+    );
+    if (updated.length !== 1)
+      throw refusal({
+        message: `Drawdown ${drawdown.id} was not submitted.`,
+        code: "grant_drawdown_submit_write_missing",
+        remedy: "Reload grant activity and retry the submission.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_drawdown_submitted",
+        drawdownId: drawdown.id,
+        kind: drawdown.kind,
+        amount: drawdown.amount,
+      },
+    });
     return { id: drawdown.id, status: "submitted" };
   });
 }
@@ -1419,29 +1933,72 @@ export async function recognizeGrantDrawdown(input: {
 }): Promise<{ id: string; status: "recognized"; entryId: string }> {
   return withGrantWrite(input.orgId, async (runner) => {
     const result = await runner.execute<{
-      id: string; grant_id: string; grant_code: string; status: GrantDrawdownStatus; kind: GrantDrawdownKind;
-      amount: string; org_id: string; sponsor_party_id: string; determination: GrantDetermination;
-      barrier: string | null; barrier_met_at: string | null; fund_id: string; version: number;
-    }>(sql`
+      id: string;
+      grant_id: string;
+      grant_code: string;
+      status: GrantDrawdownStatus;
+      kind: GrantDrawdownKind;
+      amount: string;
+      org_id: string;
+      sponsor_party_id: string;
+      determination: GrantDetermination;
+      barrier: string | null;
+      barrier_met_at: string | null;
+      fund_id: string;
+      version: number;
+    }>(
+      sql`
       select d.id, d.grant_id, g.code as grant_code, d.status, d.kind, d.amount::text as amount,
              g.org_id, g.sponsor_party_id, g.determination, g.barrier, g.barrier_met_at::text as barrier_met_at,
              g.fund_id, g.version
         from grant_drawdowns d join grants g on g.org_id = d.org_id and g.id = d.grant_id
        where d.org_id = ${input.orgId} and d.id = ${input.drawdownId} for update of d, g
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = result[0];
-    if (!row) throw refusal({ message: "The drawdown is not in this organization.", code: "grant_drawdown_not_found", remedy: "Choose a drawdown from this organization's grant activity.", status: 409 });
+    if (!row)
+      throw refusal({
+        message: "The drawdown is not in this organization.",
+        code: "grant_drawdown_not_found",
+        remedy: "Choose a drawdown from this organization's grant activity.",
+        status: 409,
+      });
     if (row.determination !== "contribution_conditional") {
-      throw refusal({ message: `Drawdown ${row.id} is not on a conditional grant.`, code: "grant_recognition_kind_invalid", remedy: "Recognize only a paid drawdown on a conditional grant after its barrier is met.", status: 409 });
+      throw refusal({
+        message: `Drawdown ${row.id} is not on a conditional grant.`,
+        code: "grant_recognition_kind_invalid",
+        remedy: "Recognize only a paid drawdown on a conditional grant after its barrier is met.",
+        status: 409,
+      });
     }
     if (!row.barrier_met_at) {
       const grant = await loadGrantById(runner, input.orgId, row.grant_id);
-      throw refusal({ message: `Grant ${row.grant_code} cannot recognize revenue while barrier stands: ${grant.barrier}.`, code: "grant_barrier_unmet", remedy: "Record barrier satisfaction and its evidence on the grant, then recognize the advance." });
+      throw refusal({
+        message: `Grant ${row.grant_code} cannot recognize revenue while barrier stands: ${grant.barrier}.`,
+        code: "grant_barrier_unmet",
+        remedy:
+          "Record barrier satisfaction and its evidence on the grant, then recognize the advance.",
+      });
     }
-    if (row.status !== "paid") throw refusal({ message: `Drawdown ${row.id} cannot be recognized from ${row.status}.`, code: "grant_drawdown_state_conflict", remedy: "Recognize a paid conditional drawdown exactly once.", status: 409 });
+    if (row.status !== "paid")
+      throw refusal({
+        message: `Drawdown ${row.id} cannot be recognized from ${row.status}.`,
+        code: "grant_drawdown_state_conflict",
+        remedy: "Recognize a paid conditional drawdown exactly once.",
+        status: 409,
+      });
     await validatePostingAccounts(runner, input.orgId, [
-      { id: input.refundableAdvanceAccountId, label: "Refundable advance", types: ["liability_current_other", "liability_long_term", "liability_payable"] },
-      { id: input.grantRevenueAccountId, label: "Grant revenue", types: ["income", "income_other"] },
+      {
+        id: input.refundableAdvanceAccountId,
+        label: "Refundable advance",
+        types: ["liability_current_other", "liability_long_term", "liability_payable"],
+      },
+      {
+        id: input.grantRevenueAccountId,
+        label: "Grant revenue",
+        types: ["income", "income_other"],
+      },
     ]);
     const grant = await loadGrantById(runner, input.orgId, row.grant_id);
     const entryId = await postGrantEntry(runner, grant, {
@@ -1450,16 +2007,44 @@ export async function recognizeGrantDrawdown(input: {
       event: "barrier recognition",
       idempotencyKey: `grant-recognition:${row.id}`,
       lines: [
-        { accountId: input.refundableAdvanceAccountId, amount: row.amount, partyId: row.sponsor_party_id },
-        { accountId: input.grantRevenueAccountId, amount: negMoney(row.amount), partyId: row.sponsor_party_id },
+        {
+          accountId: input.refundableAdvanceAccountId,
+          amount: row.amount,
+          partyId: row.sponsor_party_id,
+        },
+        {
+          accountId: input.grantRevenueAccountId,
+          amount: negMoney(row.amount),
+          partyId: row.sponsor_party_id,
+        },
       ],
     });
-    const updated = await runner.execute<{ id: string }>(sql`
+    const updated = await runner.execute<{ id: string }>(
+      sql`
       update grant_drawdowns set status = 'recognized', revenue_entry_id = ${entryId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${row.id} and status = 'paid' returning id
-    `, "objects");
-    if (updated.length !== 1) throw refusal({ message: `Drawdown ${row.id} was posted but not marked recognized.`, code: "grant_recognition_write_missing", remedy: "Reload grant activity and reconcile the drawdown with its journal entry.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: row.grant_id, action: "update", actorId: input.actorId, changes: { event: "grant_advance_recognized", drawdownId: row.id, amount: row.amount, entryId } });
+    `,
+      "objects",
+    );
+    if (updated.length !== 1)
+      throw refusal({
+        message: `Drawdown ${row.id} was posted but not marked recognized.`,
+        code: "grant_recognition_write_missing",
+        remedy: "Reload grant activity and reconcile the drawdown with its journal entry.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: row.grant_id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_advance_recognized",
+        drawdownId: row.id,
+        amount: row.amount,
+        entryId,
+      },
+    });
     return { id: row.id, status: "recognized", entryId };
   });
 }
@@ -1468,11 +2053,29 @@ export async function amendGrant(input: {
   orgId: string;
   grantId: string;
   reason: string;
-  changes: Partial<Pick<CreateGrantInput,
-    "name" | "sponsorPartyId" | "sponsorKind" | "determination" | "barrier" | "rightOfReturn" |
-    "awardAmount" | "periodFrom" | "periodTo" | "indirectRate" | "indirectBase" |
-    "costShareRequired" | "costShareAmount" | "fundId" | "allowableAccountGroupId" |
-    "mtdcExclusionAccountGroupId" | "mtdcSubawardAccountGroupId" | "mtdcSubawardThreshold">>;
+  changes: Partial<
+    Pick<
+      CreateGrantInput,
+      | "name"
+      | "sponsorPartyId"
+      | "sponsorKind"
+      | "determination"
+      | "barrier"
+      | "rightOfReturn"
+      | "awardAmount"
+      | "periodFrom"
+      | "periodTo"
+      | "indirectRate"
+      | "indirectBase"
+      | "costShareRequired"
+      | "costShareAmount"
+      | "fundId"
+      | "allowableAccountGroupId"
+      | "mtdcExclusionAccountGroupId"
+      | "mtdcSubawardAccountGroupId"
+      | "mtdcSubawardThreshold"
+    >
+  >;
   accounts: GrantPostingAccounts;
   postingDate: string;
   actorId: string;
@@ -1481,48 +2084,121 @@ export async function amendGrant(input: {
     const previous = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
     requireLatestVersion(previous, input.grantId);
     if (["closed_out", "closed", "void"].includes(previous.status)) {
-      throw refusal({ message: `Grant ${previous.code} cannot be amended while ${previous.status}.`, code: "grant_amendment_state_conflict", remedy: "Create a new grant for a separate award, or reopen the award through the approved finance process.", status: 409 });
+      throw refusal({
+        message: `Grant ${previous.code} cannot be amended while ${previous.status}.`,
+        code: "grant_amendment_state_conflict",
+        remedy:
+          "Create a new grant for a separate award, or reopen the award through the approved finance process.",
+        status: 409,
+      });
     }
     const reason = requireText(input.reason, "reason");
-    if (reason.length < 5 || reason.length > 500) throw refusal({ message: "The amendment reason must contain 5 to 500 characters.", code: "grant_amendment_reason_invalid", remedy: "Record the business reason for the amendment in 5 to 500 characters.", field: "reason" });
+    if (reason.length < 5 || reason.length > 500)
+      throw refusal({
+        message: "The amendment reason must contain 5 to 500 characters.",
+        code: "grant_amendment_reason_invalid",
+        remedy: "Record the business reason for the amendment in 5 to 500 characters.",
+        field: "reason",
+      });
     const change = input.changes;
     const next = {
       name: change.name === undefined ? previous.name : requireText(change.name, "name"),
-      sponsorPartyId: change.sponsorPartyId === undefined ? previous.sponsor_party_id : requireUuid(change.sponsorPartyId, "sponsorPartyId"),
+      sponsorPartyId:
+        change.sponsorPartyId === undefined
+          ? previous.sponsor_party_id
+          : requireUuid(change.sponsorPartyId, "sponsorPartyId"),
       sponsorKind: change.sponsorKind ?? previous.sponsor_kind,
       determination: change.determination ?? previous.determination,
       barrier: change.barrier === undefined ? previous.barrier : change.barrier?.trim() || null,
       rightOfReturn: change.rightOfReturn ?? previous.right_of_return,
-      awardAmount: change.awardAmount === undefined ? parseMoney(previous.award_amount) : parseGrantMoney(change.awardAmount, "awardAmount", true),
-      periodFrom: change.periodFrom === undefined ? previous.period_from : requireDate(change.periodFrom, "periodFrom"),
-      periodTo: change.periodTo === undefined ? previous.period_to : requireDate(change.periodTo, "periodTo"),
-      indirectRate: change.indirectRate === undefined ? previous.indirect_rate : parseGrantRate(change.indirectRate),
+      awardAmount:
+        change.awardAmount === undefined
+          ? parseMoney(previous.award_amount)
+          : parseGrantMoney(change.awardAmount, "awardAmount", true),
+      periodFrom:
+        change.periodFrom === undefined
+          ? previous.period_from
+          : requireDate(change.periodFrom, "periodFrom"),
+      periodTo:
+        change.periodTo === undefined
+          ? previous.period_to
+          : requireDate(change.periodTo, "periodTo"),
+      indirectRate:
+        change.indirectRate === undefined
+          ? previous.indirect_rate
+          : parseGrantRate(change.indirectRate),
       indirectBase: change.indirectBase ?? previous.indirect_base,
       costShareRequired: change.costShareRequired ?? previous.cost_share_required,
-      costShareAmount: change.costShareAmount === undefined ? parseMoney(previous.cost_share_amount) : parseGrantMoney(change.costShareAmount, "costShareAmount"),
+      costShareAmount:
+        change.costShareAmount === undefined
+          ? parseMoney(previous.cost_share_amount)
+          : parseGrantMoney(change.costShareAmount, "costShareAmount"),
       fundId: change.fundId === undefined ? previous.fund_id : requireUuid(change.fundId, "fundId"),
-      allowableAccountGroupId: change.allowableAccountGroupId === undefined ? previous.allowable_account_group_id : requireUuid(change.allowableAccountGroupId, "allowableAccountGroupId"),
+      allowableAccountGroupId:
+        change.allowableAccountGroupId === undefined
+          ? previous.allowable_account_group_id
+          : requireUuid(change.allowableAccountGroupId, "allowableAccountGroupId"),
     };
-    if (!SPONSOR_KINDS.includes(next.sponsorKind) || !DETERMINATIONS.includes(next.determination) || !INDIRECT_BASES.includes(next.indirectBase)) {
-      throw refusal({ message: "The amendment contains an unsupported grant option.", code: "grant_amendment_value_invalid", remedy: "Choose supported sponsor, determination, and indirect-cost values." });
+    if (
+      !SPONSOR_KINDS.includes(next.sponsorKind) ||
+      !DETERMINATIONS.includes(next.determination) ||
+      !INDIRECT_BASES.includes(next.indirectBase)
+    ) {
+      throw refusal({
+        message: "The amendment contains an unsupported grant option.",
+        code: "grant_amendment_value_invalid",
+        remedy: "Choose supported sponsor, determination, and indirect-cost values.",
+      });
     }
-    if (next.periodTo < next.periodFrom || (next.determination === "contribution_conditional" && (!next.barrier || !next.rightOfReturn))) {
-      throw refusal({ message: "The amended grant terms do not form a valid award.", code: "grant_amendment_terms_invalid", remedy: "Correct the period and conditional-award terms before saving the amendment." });
+    if (
+      next.periodTo < next.periodFrom ||
+      (next.determination === "contribution_conditional" && (!next.barrier || !next.rightOfReturn))
+    ) {
+      throw refusal({
+        message: "The amended grant terms do not form a valid award.",
+        code: "grant_amendment_terms_invalid",
+        remedy: "Correct the period and conditional-award terms before saving the amendment.",
+      });
     }
     if (!next.costShareRequired && cmpMoney(next.costShareAmount, "0.0000") !== 0) {
-      throw refusal({ message: "The amendment has a cost-share amount without a cost-share requirement.", code: "grant_cost_share_invalid", remedy: "Mark cost sharing as required or set its amount to zero.", field: "costShareAmount" });
+      throw refusal({
+        message: "The amendment has a cost-share amount without a cost-share requirement.",
+        code: "grant_cost_share_invalid",
+        remedy: "Mark cost sharing as required or set its amount to zero.",
+        field: "costShareAmount",
+      });
     }
     const currentDrawdowns = await drawdownTotals(runner, previous);
     if (cmpMoney(next.awardAmount, currentDrawdowns.all) < 0) {
       const minimum = currentDrawdowns.all;
-      throw refusal({ message: `The amended award amount ${next.awardAmount} is below its existing drawdowns of ${minimum}.`, code: "grant_amendment_below_drawdowns", remedy: "Set the amended award to at least the amount already drawn, or reverse excess drawdowns first." });
+      throw refusal({
+        message: `The amended award amount ${next.awardAmount} is below its existing drawdowns of ${minimum}.`,
+        code: "grant_amendment_below_drawdowns",
+        remedy:
+          "Set the amended award to at least the amount already drawn, or reverse excess drawdowns first.",
+      });
     }
-    const structuralChanged = next.sponsorPartyId !== previous.sponsor_party_id || next.sponsorKind !== previous.sponsor_kind ||
-      next.determination !== previous.determination || next.barrier !== previous.barrier || next.rightOfReturn !== previous.right_of_return || next.fundId !== previous.fund_id;
+    const structuralChanged =
+      next.sponsorPartyId !== previous.sponsor_party_id ||
+      next.sponsorKind !== previous.sponsor_kind ||
+      next.determination !== previous.determination ||
+      next.barrier !== previous.barrier ||
+      next.rightOfReturn !== previous.right_of_return ||
+      next.fundId !== previous.fund_id;
     if (previous.status !== "draft" && structuralChanged) {
-      throw refusal({ message: `The active terms for grant ${previous.code} cannot change its sponsor, determination, barrier, or fund.`, code: "grant_amendment_structural_conflict", remedy: "Create a separate grant for different legal terms, then reverse the original award through the grant activity.", status: 409 });
+      throw refusal({
+        message: `The active terms for grant ${previous.code} cannot change its sponsor, determination, barrier, or fund.`,
+        code: "grant_amendment_structural_conflict",
+        remedy:
+          "Create a separate grant for different legal terms, then reverse the original award through the grant activity.",
+        status: 409,
+      });
     }
-    await validateGrantReferences(runner, input.orgId, { sponsorPartyId: next.sponsorPartyId, fundId: next.fundId, allowableAccountGroupId: next.allowableAccountGroupId });
+    await validateGrantReferences(runner, input.orgId, {
+      sponsorPartyId: next.sponsorPartyId,
+      fundId: next.fundId,
+      allowableAccountGroupId: next.allowableAccountGroupId,
+    });
     // Unchanged MTDC settings carry forward only while the base stays modified
     // total direct costs; moving to the direct-cost base retires them, and the
     // amendment's before/after audit records that they were cleared.
@@ -1530,14 +2206,27 @@ export async function amendGrant(input: {
     const mtdc = await validateMtdcTerms(runner, input.orgId, {
       indirectBase: next.indirectBase,
       allowableAccountGroupId: next.allowableAccountGroupId,
-      exclusionGroupId: change.mtdcExclusionAccountGroupId !== undefined
-        ? change.mtdcExclusionAccountGroupId : keepsMtdc ? previous.mtdc_exclusion_account_group_id : null,
-      subawardGroupId: change.mtdcSubawardAccountGroupId !== undefined
-        ? change.mtdcSubawardAccountGroupId : keepsMtdc ? previous.mtdc_subaward_account_group_id : null,
-      subawardThreshold: change.mtdcSubawardThreshold !== undefined
-        ? change.mtdcSubawardThreshold : keepsMtdc ? previous.mtdc_subaward_threshold : null,
+      exclusionGroupId:
+        change.mtdcExclusionAccountGroupId !== undefined
+          ? change.mtdcExclusionAccountGroupId
+          : keepsMtdc
+            ? previous.mtdc_exclusion_account_group_id
+            : null,
+      subawardGroupId:
+        change.mtdcSubawardAccountGroupId !== undefined
+          ? change.mtdcSubawardAccountGroupId
+          : keepsMtdc
+            ? previous.mtdc_subaward_account_group_id
+            : null,
+      subawardThreshold:
+        change.mtdcSubawardThreshold !== undefined
+          ? change.mtdcSubawardThreshold
+          : keepsMtdc
+            ? previous.mtdc_subaward_threshold
+            : null,
     });
-    const inserted = await runner.execute<GrantRow>(sql`
+    const inserted = await runner.execute<GrantRow>(
+      sql`
       insert into grants
         (org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier, barrier_met_at,
          barrier_evidence, right_of_return, award_amount, period_from, period_to, indirect_rate, indirect_base,
@@ -1559,12 +2248,24 @@ export async function amendGrant(input: {
                 cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
                 award_entry_id, version, supersedes_id, custom,
                 mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
-    `, "objects");
+    `,
+      "objects",
+    );
     const created = inserted[0];
-    if (!created) throw refusal({ message: `A new version of grant ${previous.code} was not created.`, code: "grant_amendment_write_missing", remedy: "Retry the amendment after checking the grant version history.", status: 409 });
+    if (!created)
+      throw refusal({
+        message: `A new version of grant ${previous.code} was not created.`,
+        code: "grant_amendment_write_missing",
+        remedy: "Retry the amendment after checking the grant version history.",
+        status: 409,
+      });
     let adjustmentEntryId: string | null = null;
     const delta = addMoney(next.awardAmount, negMoney(previous.award_amount));
-    if (previous.status !== "draft" && previous.determination !== "contribution_conditional" && toUnits(delta) !== 0n) {
+    if (
+      previous.status !== "draft" &&
+      previous.determination !== "contribution_conditional" &&
+      toUnits(delta) !== 0n
+    ) {
       await validateAwardAccounts(runner, previous, input.accounts);
       adjustmentEntryId = await postGrantEntry(runner, created, {
         actorId: input.actorId,
@@ -1572,15 +2273,33 @@ export async function amendGrant(input: {
         event: "award amendment",
         idempotencyKey: `grant-amendment:${created.id}`,
         lines: [
-          { accountId: selectedReceivable(previous, input.accounts), amount: delta, partyId: previous.sponsor_party_id, isOpenItem: false },
-          { accountId: selectedRevenue(previous, input.accounts), amount: negMoney(delta), partyId: previous.sponsor_party_id },
+          {
+            accountId: selectedReceivable(previous, input.accounts),
+            amount: delta,
+            partyId: previous.sponsor_party_id,
+            isOpenItem: false,
+          },
+          {
+            accountId: selectedRevenue(previous, input.accounts),
+            amount: negMoney(delta),
+            partyId: previous.sponsor_party_id,
+          },
         ],
       });
-      const stamped = await runner.execute<{ id: string }>(sql`
+      const stamped = await runner.execute<{ id: string }>(
+        sql`
         update grants set award_entry_id = ${adjustmentEntryId}, updated_at = now(), updated_by = ${input.actorId}
          where org_id = ${input.orgId} and id = ${created.id} returning id
-      `, "objects");
-      if (stamped.length !== 1) throw refusal({ message: `The award adjustment for grant ${previous.code} was not linked to its version.`, code: "grant_amendment_entry_write_missing", remedy: "Reconcile the new grant version with its journal entry.", status: 409 });
+      `,
+        "objects",
+      );
+      if (stamped.length !== 1)
+        throw refusal({
+          message: `The award adjustment for grant ${previous.code} was not linked to its version.`,
+          code: "grant_amendment_entry_write_missing",
+          remedy: "Reconcile the new grant version with its journal entry.",
+          status: 409,
+        });
       created.award_entry_id = adjustmentEntryId;
     }
     await auditGrant(runner, {
@@ -1588,7 +2307,13 @@ export async function amendGrant(input: {
       rowId: created.id,
       action: "amend",
       actorId: input.actorId,
-      changes: { event: "grant_amended", reason, before: mapGrant(previous), after: mapGrant(created), adjustmentEntryId },
+      changes: {
+        event: "grant_amended",
+        reason,
+        before: mapGrant(previous),
+        after: mapGrant(created),
+        adjustmentEntryId,
+      },
     });
     return mapGrant(created);
   });
@@ -1603,15 +2328,30 @@ async function reverseGrantEntry(
   reason: string,
 ): Promise<string | null> {
   const head = await runner.execute<{
-    id: string; book_id: string; subsidiary_id: string; entry_number: string; origin: string; status: string;
-  }>(sql`
+    id: string;
+    book_id: string;
+    subsidiary_id: string;
+    entry_number: string;
+    origin: string;
+    status: string;
+  }>(
+    sql`
     select id, book_id, subsidiary_id, entry_number, origin, status
       from journal_entries where org_id = ${orgId} and id = ${entryId} for update
-  `, "objects");
+  `,
+    "objects",
+  );
   const entry = head[0];
   if (!entry || entry.status === "reversed") return null;
-  if (entry.status !== "posted") throw refusal({ message: `Grant journal entry ${entry.entry_number} is ${entry.status} and cannot be reversed.`, code: "grant_entry_state_conflict", remedy: "Reverse only a posted grant journal entry.", status: 409 });
-  const lines = await runner.execute<ReversalSourceJournalLine>(sql`
+  if (entry.status !== "posted")
+    throw refusal({
+      message: `Grant journal entry ${entry.entry_number} is ${entry.status} and cannot be reversed.`,
+      code: "grant_entry_state_conflict",
+      remedy: "Reverse only a posted grant journal entry.",
+      status: 409,
+    });
+  const lines = await runner.execute<ReversalSourceJournalLine>(
+    sql`
     select line_number as "lineNumber", account_id as "accountId", subsidiary_id as "subsidiaryId",
            amount, currency, txn_amount as "txnAmount", fx_rate as "fxRate", party_id as "partyId",
            department_id as "departmentId", project_id as "projectId", location_id as "locationId",
@@ -1619,11 +2359,30 @@ async function reverseGrantEntry(
            payment_card_id as "paymentCardId", tax_code_id as "taxCodeId", memo, quantity, unit, custom,
            contributor_kind as "contributorKind", contributor_ref as "contributorRef"
       from journal_lines where org_id = ${orgId} and entry_id = ${entryId} order by line_number
-  `, "objects");
-  if (lines.length === 0) throw refusal({ message: `Grant journal entry ${entry.entry_number} has no lines to reverse.`, code: "grant_entry_lines_missing", remedy: "Review the journal entry before voiding its grant.", status: 409 });
-  const period = await resolveCoveringPeriod(runner, orgId, requireDate(postingDate, "postingDate"));
-  if (!period) throw refusal({ message: `No accounting period covers ${postingDate}.`, code: "grant_reversal_period_missing", remedy: "Choose a reversal date in an open accounting period." });
-  const reversalNumber = await db.transaction((tx) => nextFreeEntryNumber(tx, orgId, `${entry.entry_number}-R`));
+  `,
+    "objects",
+  );
+  if (lines.length === 0)
+    throw refusal({
+      message: `Grant journal entry ${entry.entry_number} has no lines to reverse.`,
+      code: "grant_entry_lines_missing",
+      remedy: "Review the journal entry before voiding its grant.",
+      status: 409,
+    });
+  const period = await resolveCoveringPeriod(
+    runner,
+    orgId,
+    requireDate(postingDate, "postingDate"),
+  );
+  if (!period)
+    throw refusal({
+      message: `No accounting period covers ${postingDate}.`,
+      code: "grant_reversal_period_missing",
+      remedy: "Choose a reversal date in an open accounting period.",
+    });
+  const reversalNumber = await db.transaction((tx) =>
+    nextFreeEntryNumber(tx, orgId, `${entry.entry_number}-R`),
+  );
   try {
     const posted = await postEntry(runner, {
       orgId,
@@ -1638,7 +2397,12 @@ async function reverseGrantEntry(
       actorId,
       idempotencyKey: `grant-reversal:${entry.id}`,
       auditAction: "update",
-      auditChanges: { event: "grant_entry_reversed", reversedEntryId: entry.id, reason, reversalDate: postingDate },
+      auditChanges: {
+        event: "grant_entry_reversed",
+        reversedEntryId: entry.id,
+        reason,
+        reversalDate: postingDate,
+      },
       lines: reversalJournalLines(lines, { entryId: "", orgId }).map((line) => ({
         accountId: line.accountId!,
         subsidiaryId: line.subsidiaryId,
@@ -1683,12 +2447,29 @@ export async function voidGrant(input: {
   return withGrantWrite(input.orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
     requireLatestVersion(grant, input.grantId);
-    if (grant.status === "closed") throw refusal({ message: `Closed grant ${grant.code} cannot be voided.`, code: "grant_state_conflict", remedy: "Use a controlled adjusting entry after close rather than changing the closed award.", status: 409 });
+    if (grant.status === "closed")
+      throw refusal({
+        message: `Closed grant ${grant.code} cannot be voided.`,
+        code: "grant_state_conflict",
+        remedy:
+          "Use a controlled adjusting entry after close rather than changing the closed award.",
+        status: 409,
+      });
     const reason = requireText(input.reason, "reason");
-    if (reason.length < 5 || reason.length > 500) throw refusal({ message: "The void reason must contain 5 to 500 characters.", code: "grant_void_reason_invalid", remedy: "Record the business reason for the void in 5 to 500 characters.", field: "reason" });
-    const versions = await runner.execute<{ id: string }>(sql`select id from grants where org_id = ${input.orgId} and code = ${grant.code} order by version for update`, "objects");
+    if (reason.length < 5 || reason.length > 500)
+      throw refusal({
+        message: "The void reason must contain 5 to 500 characters.",
+        code: "grant_void_reason_invalid",
+        remedy: "Record the business reason for the void in 5 to 500 characters.",
+        field: "reason",
+      });
+    const versions = await runner.execute<{ id: string }>(
+      sql`select id from grants where org_id = ${input.orgId} and code = ${grant.code} order by version for update`,
+      "objects",
+    );
     const versionIds = versions.map((row) => row.id);
-    const entries = await runner.execute<{ id: string }>(sql`
+    const entries = await runner.execute<{ id: string }>(
+      sql`
       select posted.entry_id as id
         from (
         select award_entry_id as entry_id from grants where org_id = ${input.orgId} and code = ${grant.code}
@@ -1703,20 +2484,53 @@ export async function voidGrant(input: {
        where posted.entry_id is not null
        group by posted.entry_id, je.posting_date, je.created_at
        order by je.posting_date desc, je.created_at desc, posted.entry_id desc
-    `, "objects");
-    for (const row of entries) await reverseGrantEntry(runner, input.orgId, row.id, input.actorId, input.postingDate, reason);
-    const drawdownUpdates = await runner.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    );
+    for (const row of entries)
+      await reverseGrantEntry(
+        runner,
+        input.orgId,
+        row.id,
+        input.actorId,
+        input.postingDate,
+        reason,
+      );
+    const drawdownUpdates = await runner.execute<{ id: string }>(
+      sql`
       update grant_drawdowns d set status = 'void', updated_at = now(), updated_by = ${input.actorId}
        where d.org_id = ${input.orgId} and d.status <> 'void'
          and exists (select 1 from grants g where g.org_id = d.org_id and g.id = d.grant_id and g.code = ${grant.code})
        returning d.id
-    `, "objects");
-    const grantsUpdated = await runner.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    );
+    const grantsUpdated = await runner.execute<{ id: string }>(
+      sql`
       update grants set status = 'void', updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and code = ${grant.code} and status <> 'void' returning id
-    `, "objects");
-    if (grantsUpdated.length !== versionIds.length) throw refusal({ message: `Grant ${grant.code} version history was not fully voided.`, code: "grant_void_write_missing", remedy: "Reload grant activity and reconcile every version before retrying.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "void", actorId: input.actorId, changes: { event: "grant_voided", reason, reversedEntries: entries.map((row) => row.id), voidedDrawdowns: drawdownUpdates.length } });
+    `,
+      "objects",
+    );
+    if (grantsUpdated.length !== versionIds.length)
+      throw refusal({
+        message: `Grant ${grant.code} version history was not fully voided.`,
+        code: "grant_void_write_missing",
+        remedy: "Reload grant activity and reconcile every version before retrying.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "void",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_voided",
+        reason,
+        reversedEntries: entries.map((row) => row.id),
+        voidedDrawdowns: drawdownUpdates.length,
+      },
+    });
     return mapGrant({ ...grant, status: "void" });
   });
 }
@@ -1729,14 +2543,36 @@ export async function voidGrantDrawdown(input: {
   actorId: string;
 }): Promise<void> {
   await withGrantWrite(input.orgId, async (runner) => {
-    const result = await runner.execute<{ id: string; grant_id: string; grant_code: string; status: GrantDrawdownStatus; receivable_entry_id: string | null; revenue_entry_id: string | null }>(sql`
+    const result = await runner.execute<{
+      id: string;
+      grant_id: string;
+      grant_code: string;
+      status: GrantDrawdownStatus;
+      receivable_entry_id: string | null;
+      revenue_entry_id: string | null;
+    }>(
+      sql`
       select d.id, d.grant_id, g.code as grant_code, d.status, d.receivable_entry_id, d.revenue_entry_id
         from grant_drawdowns d join grants g on g.org_id = d.org_id and g.id = d.grant_id
        where d.org_id = ${input.orgId} and d.id = ${input.drawdownId} for update of d, g
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = result[0];
-    if (!row) throw refusal({ message: "The drawdown is not in this organization.", code: "grant_drawdown_not_found", remedy: "Choose a drawdown from this organization's grant activity.", status: 409 });
-    if (row.status === "void") throw refusal({ message: `Drawdown ${row.id} is already void.`, code: "grant_drawdown_state_conflict", remedy: "Review the existing void activity instead of voiding the drawdown again.", status: 409 });
+    if (!row)
+      throw refusal({
+        message: "The drawdown is not in this organization.",
+        code: "grant_drawdown_not_found",
+        remedy: "Choose a drawdown from this organization's grant activity.",
+        status: 409,
+      });
+    if (row.status === "void")
+      throw refusal({
+        message: `Drawdown ${row.id} is already void.`,
+        code: "grant_drawdown_state_conflict",
+        remedy: "Review the existing void activity instead of voiding the drawdown again.",
+        status: 409,
+      });
     const grant = await loadCurrentGrant(runner, input.orgId, row.grant_id, true);
     if (grant.status === "closed_out" || grant.status === "closed") {
       throw refusal({
@@ -1747,33 +2583,94 @@ export async function voidGrantDrawdown(input: {
       });
     }
     const reason = requireText(input.reason, "reason");
-    if (reason.length < 5 || reason.length > 500) throw refusal({ message: "The void reason must contain 5 to 500 characters.", code: "grant_void_reason_invalid", remedy: "Record the business reason for the void in 5 to 500 characters.", field: "reason" });
-    const entries = [...new Set([row.revenue_entry_id, row.receivable_entry_id].filter((id): id is string => !!id))];
-    for (const entryId of entries) await reverseGrantEntry(runner, input.orgId, entryId, input.actorId, input.postingDate, reason);
-    const updated = await runner.execute<{ id: string }>(sql`
+    if (reason.length < 5 || reason.length > 500)
+      throw refusal({
+        message: "The void reason must contain 5 to 500 characters.",
+        code: "grant_void_reason_invalid",
+        remedy: "Record the business reason for the void in 5 to 500 characters.",
+        field: "reason",
+      });
+    const entries = [
+      ...new Set(
+        [row.revenue_entry_id, row.receivable_entry_id].filter((id): id is string => !!id),
+      ),
+    ];
+    for (const entryId of entries)
+      await reverseGrantEntry(
+        runner,
+        input.orgId,
+        entryId,
+        input.actorId,
+        input.postingDate,
+        reason,
+      );
+    const updated = await runner.execute<{ id: string }>(
+      sql`
       update grant_drawdowns set status = 'void', updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${row.id} and status <> 'void' returning id
-    `, "objects");
-    if (updated.length !== 1) throw refusal({ message: `Drawdown ${row.id} was not marked void.`, code: "grant_drawdown_void_write_missing", remedy: "Reload grant activity and reconcile the drawdown with its reversal entries.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: row.grant_id, action: "update", actorId: input.actorId, changes: { event: "grant_drawdown_voided", drawdownId: row.id, reason, reversedEntries: entries } });
+    `,
+      "objects",
+    );
+    if (updated.length !== 1)
+      throw refusal({
+        message: `Drawdown ${row.id} was not marked void.`,
+        code: "grant_drawdown_void_write_missing",
+        remedy: "Reload grant activity and reconcile the drawdown with its reversal entries.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: row.grant_id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_drawdown_voided",
+        drawdownId: row.id,
+        reason,
+        reversedEntries: entries,
+      },
+    });
   });
 }
 
-async function transitionGrant(input: { orgId: string; grantId: string; actorId: string; from: GrantStatus; to: GrantStatus }): Promise<GrantRecord> {
+async function transitionGrant(input: {
+  orgId: string;
+  grantId: string;
+  actorId: string;
+  from: GrantStatus;
+  to: GrantStatus;
+}): Promise<GrantRecord> {
   return withGrantWrite(input.orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
     requireLatestVersion(grant, input.grantId);
-    if (grant.status !== input.from) throw refusal({ message: `Grant ${grant.code} cannot move from ${grant.status} to ${input.to}.`, code: "grant_state_conflict", remedy: `Move the grant through its required lifecycle state before ${input.to.replaceAll("_", " ")}.`, status: 409 });
+    if (grant.status !== input.from)
+      throw refusal({
+        message: `Grant ${grant.code} cannot move from ${grant.status} to ${input.to}.`,
+        code: "grant_state_conflict",
+        remedy: `Move the grant through its required lifecycle state before ${input.to.replaceAll("_", " ")}.`,
+        status: 409,
+      });
     if (input.to === "closed_out") {
-      const outstanding = await runner.execute<{ count: number }>(sql`
+      const outstanding = await runner.execute<{ count: number }>(
+        sql`
         select count(*)::int as count from grant_drawdowns d
           join grants g on g.org_id = d.org_id and g.id = d.grant_id
          where d.org_id = ${input.orgId} and g.code = ${grant.code}
            and g.determination = 'contribution_conditional' and d.status = 'paid'
-      `, "objects");
-      if ((outstanding[0]?.count ?? 0) > 0) throw refusal({ message: `Grant ${grant.code} has a conditional advance that has not been recognized or reversed.`, code: "grant_closeout_unrecognized_advance", remedy: "Recognize each paid advance after its barrier is met, or reverse the advance before closing out the grant.", status: 409 });
+      `,
+        "objects",
+      );
+      if ((outstanding[0]?.count ?? 0) > 0)
+        throw refusal({
+          message: `Grant ${grant.code} has a conditional advance that has not been recognized or reversed.`,
+          code: "grant_closeout_unrecognized_advance",
+          remedy:
+            "Recognize each paid advance after its barrier is met, or reverse the advance before closing out the grant.",
+          status: 409,
+        });
     }
-    const updated = await runner.execute<GrantRow>(sql`
+    const updated = await runner.execute<GrantRow>(
+      sql`
       update grants set status = ${input.to}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${grant.id} and status = ${input.from}
        returning id, org_id, code, name, sponsor_party_id, sponsor_kind, determination, barrier,
@@ -1783,63 +2680,151 @@ async function transitionGrant(input: { orgId: string; grantId: string; actorId:
                  cost_share_amount::text as cost_share_amount, fund_id, allowable_account_group_id, status,
                  award_entry_id, version, supersedes_id, custom,
                 mtdc_exclusion_account_group_id, mtdc_subaward_account_group_id, mtdc_subaward_threshold::text as mtdc_subaward_threshold
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = updated[0];
-    if (!row) throw refusal({ message: `Grant ${grant.code} was not moved to ${input.to}.`, code: "grant_status_write_missing", remedy: "Reload the grant and retry the lifecycle change.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: `grant_${input.to}`, before: { status: grant.status }, after: { status: row.status } } });
+    if (!row)
+      throw refusal({
+        message: `Grant ${grant.code} was not moved to ${input.to}.`,
+        code: "grant_status_write_missing",
+        remedy: "Reload the grant and retry the lifecycle change.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: `grant_${input.to}`,
+        before: { status: grant.status },
+        after: { status: row.status },
+      },
+    });
     return mapGrant(row);
   });
 }
 
-export function closeOutGrant(input: { orgId: string; grantId: string; actorId: string }): Promise<GrantRecord> {
+export function closeOutGrant(input: {
+  orgId: string;
+  grantId: string;
+  actorId: string;
+}): Promise<GrantRecord> {
   return transitionGrant({ ...input, from: "active", to: "closed_out" });
 }
 
-export function closeGrant(input: { orgId: string; grantId: string; actorId: string }): Promise<GrantRecord> {
+export function closeGrant(input: {
+  orgId: string;
+  grantId: string;
+  actorId: string;
+}): Promise<GrantRecord> {
   return transitionGrant({ ...input, from: "closed_out", to: "closed" });
 }
 
-export async function createGrantReport(input: GrantReportInput): Promise<{ id: string; grantId: string; title: string; dueOn: string }> {
+export async function createGrantReport(
+  input: GrantReportInput,
+): Promise<{ id: string; grantId: string; title: string; dueOn: string }> {
   return withGrantWrite(input.orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, input.orgId, input.grantId, true);
     requireLatestVersion(grant, input.grantId);
     const title = requireText(input.title, "title");
     const dueOn = requireDate(input.dueOn, "dueOn");
-    const inserted = await runner.execute<{ id: string }>(sql`
+    const inserted = await runner.execute<{ id: string }>(
+      sql`
       insert into grant_reports (org_id, grant_id, title, due_on, created_by, updated_by)
       values (${input.orgId}, ${grant.id}, ${title}, ${dueOn}, ${input.actorId}, ${input.actorId}) returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     const id = inserted[0]?.id;
-    if (!id) throw refusal({ message: `The report deadline for grant ${grant.code} was not created.`, code: "grant_report_write_missing", remedy: "Retry the deadline after checking the grant records.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_report_created", reportId: id, title, dueOn } });
+    if (!id)
+      throw refusal({
+        message: `The report deadline for grant ${grant.code} was not created.`,
+        code: "grant_report_write_missing",
+        remedy: "Retry the deadline after checking the grant records.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: { event: "grant_report_created", reportId: id, title, dueOn },
+    });
     return { id, grantId: grant.id, title, dueOn };
   });
 }
 
-export async function submitGrantReport(input: { orgId: string; reportId: string; actorId: string }): Promise<{ id: string; submittedAt: string }> {
+export async function submitGrantReport(input: {
+  orgId: string;
+  reportId: string;
+  actorId: string;
+}): Promise<{ id: string; submittedAt: string }> {
   return withGrantWrite(input.orgId, async (runner) => {
-    const report = await runner.execute<{ id: string; grant_id: string; submitted_at: string | null }>(sql`
+    const report = await runner.execute<{
+      id: string;
+      grant_id: string;
+      submitted_at: string | null;
+    }>(
+      sql`
       select id, grant_id, submitted_at::text as submitted_at from grant_reports
        where org_id = ${input.orgId} and id = ${input.reportId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = report[0];
-    if (!row) throw refusal({ message: "The grant report is not in this organization.", code: "grant_report_not_found", remedy: "Choose a report deadline from this organization's grant records.", status: 409 });
-    if (row.submitted_at) throw refusal({ message: `Grant report ${row.id} has already been submitted.`, code: "grant_report_already_submitted", remedy: "Review the existing submission time instead of submitting it again.", status: 409 });
+    if (!row)
+      throw refusal({
+        message: "The grant report is not in this organization.",
+        code: "grant_report_not_found",
+        remedy: "Choose a report deadline from this organization's grant records.",
+        status: 409,
+      });
+    if (row.submitted_at)
+      throw refusal({
+        message: `Grant report ${row.id} has already been submitted.`,
+        code: "grant_report_already_submitted",
+        remedy: "Review the existing submission time instead of submitting it again.",
+        status: 409,
+      });
     const grant = await loadGrantById(runner, input.orgId, row.grant_id);
-    const updated = await runner.execute<{ id: string; submitted_at: string }>(sql`
+    const updated = await runner.execute<{ id: string; submitted_at: string }>(
+      sql`
       update grant_reports set submitted_at = now(), submitted_by = ${input.actorId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${row.id} and submitted_at is null
        returning id, submitted_at::text as submitted_at
-    `, "objects");
+    `,
+      "objects",
+    );
     const saved = updated[0];
-    if (!saved) throw refusal({ message: `Grant report ${row.id} was not marked submitted.`, code: "grant_report_submit_write_missing", remedy: "Reload the report deadline and retry submission.", status: 409 });
-    await auditGrant(runner, { orgId: input.orgId, rowId: grant.id, action: "update", actorId: input.actorId, changes: { event: "grant_report_submitted", reportId: row.id, submittedAt: saved.submitted_at, submittedBy: input.actorId } });
+    if (!saved)
+      throw refusal({
+        message: `Grant report ${row.id} was not marked submitted.`,
+        code: "grant_report_submit_write_missing",
+        remedy: "Reload the report deadline and retry submission.",
+        status: 409,
+      });
+    await auditGrant(runner, {
+      orgId: input.orgId,
+      rowId: grant.id,
+      action: "update",
+      actorId: input.actorId,
+      changes: {
+        event: "grant_report_submitted",
+        reportId: row.id,
+        submittedAt: saved.submitted_at,
+        submittedBy: input.actorId,
+      },
+    });
     return { id: saved.id, submittedAt: saved.submitted_at };
   });
 }
 
 export async function getGrantTerms(orgId: string, grantId: string): Promise<GrantRecord> {
-  return withGrantRead(orgId, async (runner) => mapGrant(await loadCurrentGrant(runner, orgId, grantId)));
+  return withGrantRead(orgId, async (runner) =>
+    mapGrant(await loadCurrentGrant(runner, orgId, grantId)),
+  );
 }
 
 /**
@@ -1848,7 +2833,10 @@ export async function getGrantTerms(orgId: string, grantId: string): Promise<Gra
  * the refusal travels with the budget, so the drawer shows the reason and its
  * remedy instead of a figure the reimbursement path would refuse.
  */
-export async function getGrantBudget(orgId: string, grantId: string): Promise<{
+export async function getGrantBudget(
+  orgId: string,
+  grantId: string,
+): Promise<{
   awardAmount: string;
   drawnAmount: string;
   remainingAward: string;
@@ -1890,65 +2878,142 @@ export async function getGrantBudget(orgId: string, grantId: string): Promise<{
   });
 }
 
-export async function listGrantDrawdowns(orgId: string, grantId: string): Promise<{
-  id: string; grantId: string; amount: string; kind: GrantDrawdownKind; status: GrantDrawdownStatus;
-  receivableEntryId: string | null; revenueEntryId: string | null; version: number;
-}[]> {
+export async function listGrantDrawdowns(
+  orgId: string,
+  grantId: string,
+): Promise<
+  {
+    id: string;
+    grantId: string;
+    amount: string;
+    kind: GrantDrawdownKind;
+    status: GrantDrawdownStatus;
+    receivableEntryId: string | null;
+    revenueEntryId: string | null;
+    version: number;
+  }[]
+> {
   return withGrantRead(orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, orgId, grantId);
     const rows = await runner.execute<{
-      id: string; grant_id: string; amount: string; kind: GrantDrawdownKind; status: GrantDrawdownStatus;
-      receivable_entry_id: string | null; revenue_entry_id: string | null; version: number;
-    }>(sql`
+      id: string;
+      grant_id: string;
+      amount: string;
+      kind: GrantDrawdownKind;
+      status: GrantDrawdownStatus;
+      receivable_entry_id: string | null;
+      revenue_entry_id: string | null;
+      version: number;
+    }>(
+      sql`
       select d.id, d.grant_id, d.amount::text as amount, d.kind, d.status,
              d.receivable_entry_id, d.revenue_entry_id, g.version
         from grant_drawdowns d join grants g on g.org_id = d.org_id and g.id = d.grant_id
        where d.org_id = ${orgId} and g.code = ${grant.code}
        order by g.version, d.created_at, d.id
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((row) => ({
-      id: row.id, grantId: row.grant_id, amount: row.amount, kind: row.kind, status: row.status,
-      receivableEntryId: row.receivable_entry_id, revenueEntryId: row.revenue_entry_id, version: row.version,
+      id: row.id,
+      grantId: row.grant_id,
+      amount: row.amount,
+      kind: row.kind,
+      status: row.status,
+      receivableEntryId: row.receivable_entry_id,
+      revenueEntryId: row.revenue_entry_id,
+      version: row.version,
     }));
   });
 }
 
-export async function listGrantReports(orgId: string, grantId: string, asOf: string): Promise<{
-  id: string; grantId: string; title: string; dueOn: string; submittedAt: string | null;
-  submittedBy: string | null; status: GrantReportStatus; version: number;
-}[]> {
+export async function listGrantReports(
+  orgId: string,
+  grantId: string,
+  asOf: string,
+): Promise<
+  {
+    id: string;
+    grantId: string;
+    title: string;
+    dueOn: string;
+    submittedAt: string | null;
+    submittedBy: string | null;
+    status: GrantReportStatus;
+    version: number;
+  }[]
+> {
   requireDate(asOf, "asOf");
   return withGrantRead(orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, orgId, grantId);
     const result = await runner.execute<{
-      id: string; grant_id: string; title: string; due_on: string; submitted_at: string | null;
-      submitted_by: string | null; version: number;
-    }>(sql`
+      id: string;
+      grant_id: string;
+      title: string;
+      due_on: string;
+      submitted_at: string | null;
+      submitted_by: string | null;
+      version: number;
+    }>(
+      sql`
       select r.id, r.grant_id, r.title, r.due_on::text as due_on, r.submitted_at::text as submitted_at,
              r.submitted_by, g.version
         from grant_reports r join grants g on g.org_id = r.org_id and g.id = r.grant_id
        where r.org_id = ${orgId} and g.code = ${grant.code}
        order by r.due_on, r.id
-    `, "objects");
+    `,
+      "objects",
+    );
     return result.map((row) => ({
-      id: row.id, grantId: row.grant_id, title: row.title, dueOn: row.due_on,
-      submittedAt: row.submitted_at, submittedBy: row.submitted_by,
-      status: grantReportStatus({ dueOn: row.due_on, submittedAt: row.submitted_at }, asOf), version: row.version,
+      id: row.id,
+      grantId: row.grant_id,
+      title: row.title,
+      dueOn: row.due_on,
+      submittedAt: row.submitted_at,
+      submittedBy: row.submitted_by,
+      status: grantReportStatus({ dueOn: row.due_on, submittedAt: row.submitted_at }, asOf),
+      version: row.version,
     }));
   });
 }
 
-export async function listGrantActivity(orgId: string, grantId: string): Promise<{
-  journalEntries: { id: string; entryNumber: string; postingDate: string; status: string; memo: string | null; createdAt: string }[];
-  changes: { id: string; rowId: string; action: string; actorId: string | null; at: string; changes: Record<string, unknown> }[];
+export async function listGrantActivity(
+  orgId: string,
+  grantId: string,
+): Promise<{
+  journalEntries: {
+    id: string;
+    entryNumber: string;
+    postingDate: string;
+    status: string;
+    memo: string | null;
+    createdAt: string;
+  }[];
+  changes: {
+    id: string;
+    rowId: string;
+    action: string;
+    actorId: string | null;
+    at: string;
+    changes: Record<string, unknown>;
+  }[];
 }> {
   return withGrantRead(orgId, async (runner) => {
     const grant = await loadCurrentGrant(runner, orgId, grantId);
-    const versions = await runner.execute<{ id: string }>(sql`select id from grants where org_id = ${orgId} and code = ${grant.code} order by version`, "objects");
+    const versions = await runner.execute<{ id: string }>(
+      sql`select id from grants where org_id = ${orgId} and code = ${grant.code} order by version`,
+      "objects",
+    );
     const ids = versions.map((row) => row.id);
     const entries = await runner.execute<{
-      id: string; entry_number: string; posting_date: string; status: string; memo: string | null; created_at: string;
-    }>(sql`
+      id: string;
+      entry_number: string;
+      posting_date: string;
+      status: string;
+      memo: string | null;
+      created_at: string;
+    }>(
+      sql`
       with versions as (
         select id, award_entry_id from grants where org_id = ${orgId} and code = ${grant.code}
       ), tracked_entries as (
@@ -1968,23 +3033,54 @@ export async function listGrantActivity(orgId: string, grantId: string): Promise
          or je.reverses_entry_id in (select id from tracked_entries where id is not null)
        )
        order by created_at, id
-    `, "objects");
+    `,
+      "objects",
+    );
     const changes = await runner.execute<{
-      id: string; row_id: string; action: string; actor_id: string | null; at: string; changes: Record<string, unknown>;
-    }>(sql`
+      id: string;
+      row_id: string;
+      action: string;
+      actor_id: string | null;
+      at: string;
+      changes: Record<string, unknown>;
+    }>(
+      sql`
       select id, row_id, action, actor_id, at::text as at, changes
         from audit_log
        where org_id = ${orgId} and table_name = 'grants' and row_id = any(${uuidArray(ids)}::uuid[])
        order by at, id
-    `, "objects");
+    `,
+      "objects",
+    );
     return {
-      journalEntries: entries.map((row) => ({ id: row.id, entryNumber: row.entry_number, postingDate: row.posting_date, status: row.status, memo: row.memo, createdAt: row.created_at })),
-      changes: changes.map((row) => ({ id: row.id, rowId: row.row_id, action: row.action, actorId: row.actor_id, at: row.at, changes: row.changes })),
+      journalEntries: entries.map((row) => ({
+        id: row.id,
+        entryNumber: row.entry_number,
+        postingDate: row.posting_date,
+        status: row.status,
+        memo: row.memo,
+        createdAt: row.created_at,
+      })),
+      changes: changes.map((row) => ({
+        id: row.id,
+        rowId: row.row_id,
+        action: row.action,
+        actorId: row.actor_id,
+        at: row.at,
+        changes: row.changes,
+      })),
     };
   });
 }
 
-const GRANT_STATUSES: GrantStatus[] = ["draft", "awarded", "active", "closed_out", "closed", "void"];
+const GRANT_STATUSES: GrantStatus[] = [
+  "draft",
+  "awarded",
+  "active",
+  "closed_out",
+  "closed",
+  "void",
+];
 
 export interface GrantListItem {
   id: string;
@@ -2025,18 +3121,28 @@ type GrantListDataRow = {
 };
 
 // An empty page still carries the filtered count, with no fabricated grant.
-type GrantListQueryRow = (GrantListDataRow | { [K in keyof GrantListDataRow]: null }) & { total: number };
+type GrantListQueryRow = (GrantListDataRow | { [K in keyof GrantListDataRow]: null }) & {
+  total: number;
+};
 
 /**
  * Collection reader for the grant register. One row per award code at its
  * current version; org-wide, so subsidiary-restricted callers are refused at
  * the route and page boundaries, never filtered here.
  */
-export async function listGrants(input: ListGrantsInput): Promise<{ items: GrantListItem[]; total: number }> {
-  const statuses = input.status === undefined ? [] : Array.isArray(input.status) ? input.status : [input.status];
+export async function listGrants(
+  input: ListGrantsInput,
+): Promise<{ items: GrantListItem[]; total: number }> {
+  const statuses =
+    input.status === undefined ? [] : Array.isArray(input.status) ? input.status : [input.status];
   for (const status of statuses) {
     if (!GRANT_STATUSES.includes(status)) {
-      throw refusal({ message: "The grant status filter is not supported.", code: "grant_status_invalid", remedy: "Filter by a supported grant lifecycle state.", field: "status" });
+      throw refusal({
+        message: "The grant status filter is not supported.",
+        code: "grant_status_invalid",
+        remedy: "Filter by a supported grant lifecycle state.",
+        field: "status",
+      });
     }
   }
   if (input.fundId !== undefined) requireUuid(input.fundId, "fundId");
@@ -2044,7 +3150,8 @@ export async function listGrants(input: ListGrantsInput): Promise<{ items: Grant
   const offset = Math.max(Math.trunc(input.offset ?? 0), 0);
   const q = input.q?.trim() ? `%${input.q.trim()}%` : null;
   return withGrantRead(input.orgId, async (runner) => {
-    const rows = await runner.execute<GrantListQueryRow>(sql`
+    const rows = await runner.execute<GrantListQueryRow>(
+      sql`
       with scoped as (
         select distinct on (g.code)
                g.id, g.code, g.name, p.display_name as sponsor_name, g.determination, g.status,
@@ -2082,13 +3189,25 @@ export async function listGrants(input: ListGrantsInput): Promise<{ items: Grant
              null::text as fund_code, null::integer as version, null::uuid as fund_id,
              (select total from scope_total) as total
        where not exists (select 1 from page)
-    `, "objects");
+    `,
+      "objects",
+    );
     return {
-      items: rows.filter((row): row is GrantListDataRow & { total: number } => row.id !== null).map((row) => ({
-        id: row.id, code: row.code, name: row.name, sponsorName: row.sponsor_name,
-        determination: row.determination, status: row.status, awardAmount: row.award_amount,
-        periodFrom: row.period_from, periodTo: row.period_to, fundCode: row.fund_code, version: row.version,
-      })),
+      items: rows
+        .filter((row): row is GrantListDataRow & { total: number } => row.id !== null)
+        .map((row) => ({
+          id: row.id,
+          code: row.code,
+          name: row.name,
+          sponsorName: row.sponsor_name,
+          determination: row.determination,
+          status: row.status,
+          awardAmount: row.award_amount,
+          periodFrom: row.period_from,
+          periodTo: row.period_to,
+          fundCode: row.fund_code,
+          version: row.version,
+        })),
       total: rows[0]?.total ?? 0,
     };
   });

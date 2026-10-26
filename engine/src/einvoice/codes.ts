@@ -12,14 +12,26 @@
  */
 
 import type { VatCategory } from "./model.ts";
-import { INVOICE_CODES, CREDITNOTE_CODES, SG_GST_CODES, PAYMENTMEANS_CODES, VATEX_CODES, EAS_CODES, UNIT_CODES } from "./standard-codes.ts";
+import {
+  INVOICE_CODES,
+  CREDITNOTE_CODES,
+  SG_GST_CODES,
+  PAYMENTMEANS_CODES,
+  VATEX_CODES,
+  EAS_CODES,
+  UNIT_CODES,
+} from "./standard-codes.ts";
 
 // ---------------------------------------------------------------------------
 // VAT categories (UNTDID 5305, EN 16931 subset)
 // ---------------------------------------------------------------------------
 
 /** Every category EN 16931 admits, in display order, with its rule family prefix. */
-export const VAT_CATEGORIES: ReadonlyArray<{ code: VatCategory; label: string; rulePrefix: string }> = [
+export const VAT_CATEGORIES: ReadonlyArray<{
+  code: VatCategory;
+  label: string;
+  rulePrefix: string;
+}> = [
   { code: "S", label: "Standard rate", rulePrefix: "BR-S" },
   { code: "Z", label: "Zero rated goods", rulePrefix: "BR-Z" },
   { code: "E", label: "Exempt from tax", rulePrefix: "BR-E" },
@@ -28,7 +40,11 @@ export const VAT_CATEGORIES: ReadonlyArray<{ code: VatCategory; label: string; r
   { code: "G", label: "Free export item, tax not charged", rulePrefix: "BR-G" },
   { code: "O", label: "Services outside scope of tax", rulePrefix: "BR-O" },
   { code: "L", label: "Canary Islands general indirect tax (IGIC)", rulePrefix: "BR-IG" },
-  { code: "M", label: "Tax for production, services and importation in Ceuta and Melilla (IPSI)", rulePrefix: "BR-IP" },
+  {
+    code: "M",
+    label: "Tax for production, services and importation in Ceuta and Melilla (IPSI)",
+    rulePrefix: "BR-IP",
+  },
 ];
 
 export const EINVOICE_TAX_CATEGORIES: ReadonlyArray<{ code: VatCategory; label: string }> = [
@@ -49,7 +65,9 @@ export const EINVOICE_TAX_CATEGORIES: ReadonlyArray<{ code: VatCategory; label: 
   { code: "SRLVG", label: "Own supply of low-value goods" },
 ];
 
-const VAT_CATEGORY_INDEX = new Map(VAT_CATEGORIES.map((entry, index) => [entry.code as string, { ...entry, index }]));
+const VAT_CATEGORY_INDEX = new Map(
+  VAT_CATEGORIES.map((entry, index) => [entry.code as string, { ...entry, index }]),
+);
 
 export function isVatCategory(code: string): code is VatCategory {
   return VAT_CATEGORY_INDEX.has(code) || SG_GST_CODES.has(code);
@@ -66,7 +84,19 @@ export function vatCategoryOrder(code: string): number {
 }
 
 /** Categories whose VAT amount is computed from a rate; every other category carries zero VAT. */
-export const TAXED_VAT_CATEGORIES: ReadonlySet<VatCategory> = new Set<VatCategory>(["S", "L", "M", "SR", "SRCA-S", "SRCA-C", "DS", "SRRC", "SROVR-RS", "SROVR-LVG", "SRLVG"]);
+export const TAXED_VAT_CATEGORIES: ReadonlySet<VatCategory> = new Set<VatCategory>([
+  "S",
+  "L",
+  "M",
+  "SR",
+  "SRCA-S",
+  "SRCA-C",
+  "DS",
+  "SRRC",
+  "SROVR-RS",
+  "SROVR-LVG",
+  "SRLVG",
+]);
 
 // ---------------------------------------------------------------------------
 // Document type codes (UNTDID 1001)
@@ -123,11 +153,43 @@ export const CREDIT_NOTE_TYPE_CODES: readonly string[] = [...CREDITNOTE_CODES];
 /** Corrective and self-billing codes national specifications admit beside the EN 16931 classes. */
 export const SUPPLEMENTARY_INVOICE_TYPE_CODES: readonly string[] = ["384", "389"];
 
-export const XRECHNUNG_TYPE_CODES: readonly string[] = ["326", "380", "384", "389", "381", "875", "876", "877"];
+export const XRECHNUNG_TYPE_CODES: readonly string[] = [
+  "326",
+  "380",
+  "384",
+  "389",
+  "381",
+  "875",
+  "876",
+  "877",
+];
 
 export const PEPPOL_INVOICE_TYPE_CODES: readonly string[] = [
-  "71", "80", "82", "84", "102", "218", "219", "326", "331", "380", "382", "383", "386", "388", "393", "395",
-  "553", "575", "623", "780", "817", "870", "875", "876", "877",
+  "71",
+  "80",
+  "82",
+  "84",
+  "102",
+  "218",
+  "219",
+  "326",
+  "331",
+  "380",
+  "382",
+  "383",
+  "386",
+  "388",
+  "393",
+  "395",
+  "553",
+  "575",
+  "623",
+  "780",
+  "817",
+  "870",
+  "875",
+  "876",
+  "877",
 ];
 
 export const PEPPOL_CREDIT_NOTE_TYPE_CODES: readonly string[] = ["81", "83", "381", "396", "532"];
@@ -161,7 +223,7 @@ export const PAYMENT_MEANS_LABELS: Readonly<Record<string, string>> = {
   "59": "SEPA direct debit",
   "68": "Online payment service",
   "97": "Clearing between partners",
-  "ZZZ": "Mutually defined",
+  ZZZ: "Mutually defined",
 };
 
 export const CREDIT_TRANSFER_MEANS: ReadonlySet<string> = new Set(["30", "58"]);
@@ -186,25 +248,33 @@ const article151Points = ["A", "AA", "B", "C", "D", "E"];
 export const VATEX_LABELS: Readonly<Record<string, string>> = {
   "VATEX-EU-79-C": `Exempt based on article 79, point c of ${DIRECTIVE}`,
   "VATEX-EU-132": `Exempt based on article 132 of ${DIRECTIVE}`,
-  ...Object.fromEntries(article132Points.map((point) => [
-    `VATEX-EU-132-1${point}`,
-    `Exempt based on article 132, section 1 (${point.toLowerCase()}) of ${DIRECTIVE}`,
-  ])),
+  ...Object.fromEntries(
+    article132Points.map((point) => [
+      `VATEX-EU-132-1${point}`,
+      `Exempt based on article 132, section 1 (${point.toLowerCase()}) of ${DIRECTIVE}`,
+    ]),
+  ),
   "VATEX-EU-143": `Exempt based on article 143 of ${DIRECTIVE}`,
-  ...Object.fromEntries(article143Points.map((point) => [
-    `VATEX-EU-143-1${point}`,
-    `Exempt based on article 143, section 1 (${point.toLowerCase()}) of ${DIRECTIVE}`,
-  ])),
+  ...Object.fromEntries(
+    article143Points.map((point) => [
+      `VATEX-EU-143-1${point}`,
+      `Exempt based on article 143, section 1 (${point.toLowerCase()}) of ${DIRECTIVE}`,
+    ]),
+  ),
   "VATEX-EU-148": `Exempt based on article 148 of ${DIRECTIVE}`,
-  ...Object.fromEntries(article148Points.map((point) => [
-    `VATEX-EU-148-${point}`,
-    `Exempt based on article 148, section (${point.toLowerCase()}) of ${DIRECTIVE}`,
-  ])),
+  ...Object.fromEntries(
+    article148Points.map((point) => [
+      `VATEX-EU-148-${point}`,
+      `Exempt based on article 148, section (${point.toLowerCase()}) of ${DIRECTIVE}`,
+    ]),
+  ),
   "VATEX-EU-151": `Exempt based on article 151 of ${DIRECTIVE}`,
-  ...Object.fromEntries(article151Points.map((point) => [
-    `VATEX-EU-151-1${point}`,
-    `Exempt based on article 151, section 1 (${point.toLowerCase()}) of ${DIRECTIVE}`,
-  ])),
+  ...Object.fromEntries(
+    article151Points.map((point) => [
+      `VATEX-EU-151-1${point}`,
+      `Exempt based on article 151, section 1 (${point.toLowerCase()}) of ${DIRECTIVE}`,
+    ]),
+  ),
   "VATEX-EU-309": `Exempt based on article 309 of ${DIRECTIVE}`,
   "VATEX-EU-AE": "Reverse charge",
   "VATEX-EU-D": "Intra-Community acquisition from second hand means of transport",
@@ -215,7 +285,8 @@ export const VATEX_LABELS: Readonly<Record<string, string>> = {
   "VATEX-EU-J": "Intra-Community acquisition of collectors items and antiques",
   "VATEX-EU-O": "Not subject to VAT",
   "VATEX-FR-FRANCHISE": "France domestic VAT franchise in base",
-  "VATEX-FR-CNWVAT": "France domestic credit notes without VAT, due to supplier forfeit of VAT for discount",
+  "VATEX-FR-CNWVAT":
+    "France domestic credit notes without VAT, due to supplier forfeit of VAT for discount",
 };
 
 export function isKnownVatexCode(code: string): boolean {
@@ -227,14 +298,38 @@ export function isKnownVatexCode(code: string): boolean {
 // ---------------------------------------------------------------------------
 
 const VAT_NUMBER_SCHEMES: ReadonlyArray<[string, string]> = [
-  ["9922", "Andorra"], ["9923", "Albania"], ["9924", "Bosnia and Herzegovina"], ["9925", "Belgium"],
-  ["9926", "Bulgaria"], ["9927", "Switzerland"], ["9928", "Cyprus"], ["9929", "Czech Republic"],
-  ["9930", "Germany"], ["9931", "Estonia"], ["9932", "United Kingdom"], ["9933", "Greece"],
-  ["9934", "Croatia"], ["9935", "Ireland"], ["9936", "Liechtenstein"], ["9937", "Lithuania"],
-  ["9938", "Luxembourg"], ["9939", "Latvia"], ["9940", "Monaco"], ["9941", "Montenegro"],
-  ["9942", "North Macedonia"], ["9943", "Malta"], ["9944", "Netherlands"], ["9945", "Poland"],
-  ["9946", "Portugal"], ["9947", "Romania"], ["9948", "Serbia"], ["9949", "Slovenia"],
-  ["9950", "Slovakia"], ["9951", "San Marino"], ["9952", "Turkey"], ["9953", "Holy See (Vatican City State)"],
+  ["9922", "Andorra"],
+  ["9923", "Albania"],
+  ["9924", "Bosnia and Herzegovina"],
+  ["9925", "Belgium"],
+  ["9926", "Bulgaria"],
+  ["9927", "Switzerland"],
+  ["9928", "Cyprus"],
+  ["9929", "Czech Republic"],
+  ["9930", "Germany"],
+  ["9931", "Estonia"],
+  ["9932", "United Kingdom"],
+  ["9933", "Greece"],
+  ["9934", "Croatia"],
+  ["9935", "Ireland"],
+  ["9936", "Liechtenstein"],
+  ["9937", "Lithuania"],
+  ["9938", "Luxembourg"],
+  ["9939", "Latvia"],
+  ["9940", "Monaco"],
+  ["9941", "Montenegro"],
+  ["9942", "North Macedonia"],
+  ["9943", "Malta"],
+  ["9944", "Netherlands"],
+  ["9945", "Poland"],
+  ["9946", "Portugal"],
+  ["9947", "Romania"],
+  ["9948", "Serbia"],
+  ["9949", "Slovenia"],
+  ["9950", "Slovakia"],
+  ["9951", "San Marino"],
+  ["9952", "Turkey"],
+  ["9953", "Holy See (Vatican City State)"],
 ];
 
 export const EAS_LABELS: Readonly<Record<string, string>> = {
@@ -285,7 +380,9 @@ export const EAS_LABELS: Readonly<Record<string, string>> = {
   "9918": "SWIFT / BIC",
   "9919": "Kennziffer des Unternehmensregisters (Austria)",
   "9920": "Agencia Española de Administración Tributaria",
-  ...Object.fromEntries(VAT_NUMBER_SCHEMES.map(([code, country]) => [code, `${country} VAT number`])),
+  ...Object.fromEntries(
+    VAT_NUMBER_SCHEMES.map(([code, country]) => [code, `${country} VAT number`]),
+  ),
   "9957": "France VAT number",
   "9959": "Employer Identification Number (EIN, USA)",
 };

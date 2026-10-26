@@ -33,7 +33,8 @@ export default async function PayPage({ params }: { params: Promise<{ token: str
 
         {view.status === "outdated" ? (
           <div className="rounded-xl bg-amber-50 p-4 text-center text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            This payment link is out of date because the amount due changed. Request a new link from the sender.
+            This payment link is out of date because the amount due changed. Request a new link from
+            the sender.
           </div>
         ) : view.status === "paid" ? (
           <div className="rounded-xl bg-teal-50 p-4 text-center text-sm font-medium text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">
@@ -44,22 +45,34 @@ export default async function PayPage({ params }: { params: Promise<{ token: str
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-slate-500 dark:text-slate-400">Invoice amount</dt>
-                <dd className="tabular-nums text-slate-900 dark:text-white">{format(view.invoiceAmount, view.currency)}</dd>
+                <dd className="tabular-nums text-slate-900 dark:text-white">
+                  {format(view.invoiceAmount, view.currency)}
+                </dd>
               </div>
               {decimalCmp(view.surchargeAmount, "0") > 0 ? (
                 <div className="flex justify-between">
                   <dt className="text-slate-500 dark:text-slate-400">Processing fee</dt>
-                  <dd className="tabular-nums text-slate-900 dark:text-white">{format(view.surchargeAmount, view.currency)}</dd>
+                  <dd className="tabular-nums text-slate-900 dark:text-white">
+                    {format(view.surchargeAmount, view.currency)}
+                  </dd>
                 </div>
               ) : null}
               <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold dark:border-slate-700">
                 <dt className="text-slate-900 dark:text-white">Total due</dt>
-                <dd className="tabular-nums text-slate-900 dark:text-white">{format(view.totalAmount, view.currency)}</dd>
+                <dd className="tabular-nums text-slate-900 dark:text-white">
+                  {format(view.totalAmount, view.currency)}
+                </dd>
               </div>
             </dl>
             <PayButton token={token} provider={view.provider} />
             <p className="mt-4 text-center text-xs text-slate-400 dark:text-slate-500">
-              Secure checkout via {view.provider === "gocardless" ? "GoCardless" : view.provider === "adyen" ? "Adyen" : "Stripe"}.
+              Secure checkout via{" "}
+              {view.provider === "gocardless"
+                ? "GoCardless"
+                : view.provider === "adyen"
+                  ? "Adyen"
+                  : "Stripe"}
+              .
             </p>
           </>
         )}

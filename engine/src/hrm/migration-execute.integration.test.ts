@@ -16,10 +16,7 @@ import {
   type EmploymentMigrationReport,
   type PersonMigrationResult,
 } from "./migration-execute.ts";
-import {
-  fingerprintSourceRow,
-  type SourcePersonRow,
-} from "./migration-preflight.ts";
+import { fingerprintSourceRow, type SourcePersonRow } from "./migration-preflight.ts";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 
@@ -40,16 +37,24 @@ interface PersonSeed {
 
 async function mkParty(orgId: string, name: string): Promise<string> {
   return withOrg(orgId, async () => {
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into parties (org_id, kind, display_name)
-      values (${orgId}, 'person', ${name}) returning id::text as id`, "objects");
+      values (${orgId}, 'person', ${name}) returning id::text as id`,
+      "objects",
+    );
     const id = inserted[0]?.id;
     assert.ok(id, "party insert must return exactly one row");
     return id;
   });
 }
 
-function readyRow(orgId: string, subId: string, partyId: string, sourceId: string): SourcePersonRow {
+function readyRow(
+  orgId: string,
+  subId: string,
+  partyId: string,
+  sourceId: string,
+): SourcePersonRow {
   return {
     orgId,
     sourceNamespace: NS,
@@ -95,13 +100,23 @@ function readyRow(orgId: string, subId: string, partyId: string, sourceId: strin
 }
 
 /** Role-less payroll with no observation: classifier requires_review. */
-function reviewRow(orgId: string, subId: string, partyId: string, sourceId: string): SourcePersonRow {
+function reviewRow(
+  orgId: string,
+  subId: string,
+  partyId: string,
+  sourceId: string,
+): SourcePersonRow {
   const row = readyRow(orgId, subId, partyId, sourceId);
   return { ...row, role: null, observation: null };
 }
 
 /** Service dates but no current observation: ready, yet nothing to anchor. */
-function unanchoredRow(orgId: string, subId: string, partyId: string, sourceId: string): SourcePersonRow {
+function unanchoredRow(
+  orgId: string,
+  subId: string,
+  partyId: string,
+  sourceId: string,
+): SourcePersonRow {
   const row = readyRow(orgId, subId, partyId, sourceId);
   return { ...row, observation: null };
 }
@@ -125,10 +140,18 @@ interface TableCounts {
 
 async function tableCounts(orgId: string): Promise<TableCounts> {
   return withBypassContext(async () => {
-    const result = await db.execute<{ employments: string; versions: string; assignments: string; changes: string }>(sql`select (select count(*)::text from worker_employments where org_id = ${orgId}) as employments,
+    const result = await db.execute<{
+      employments: string;
+      versions: string;
+      assignments: string;
+      changes: string;
+    }>(
+      sql`select (select count(*)::text from worker_employments where org_id = ${orgId}) as employments,
                   (select count(*)::text from worker_employment_versions where org_id = ${orgId}) as versions,
                   (select count(*)::text from employment_assignments where org_id = ${orgId}) as assignments,
-                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`, "objects");
+                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`,
+      "objects",
+    );
     const row = result[0]!;
     return {
       employments: Number(row.employments),
@@ -148,7 +171,8 @@ async function scopedCount(orgId: string, table: string): Promise<number> {
   // ignore RLS and would count every org's rows as a false "leak".
   return withOrg(orgId, async () => {
     const result = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from ${sql.identifier(table)}`, "objects",
+      sql`select count(*)::int as n from ${sql.identifier(table)}`,
+      "objects",
     );
     return result[0]!.n;
   });
@@ -177,109 +201,129 @@ test("dry run writes nothing and plans would_migrate", { skip }, async () => {
   }
 });
 
-test("ready org migrates with digest-bound evidence; triggers accept without bypass", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const first = await seedPerson(org, "mig-001");
-    const secondParty = await mkParty(org.orgId, "Migration mig-002");
-    // Observation-anchored but no service start: coverage stays unknown and
-    // no hire date is invented.
-    const secondRow: SourcePersonRow = {
-      ...readyRow(org.orgId, org.subsidiaryId, secondParty, "mig-002"),
-      role: {
-        present: true,
-        isActive: true,
-        hiredOn: null,
-        terminatedOn: null,
-        dateProvenance: null,
-        countryContext: null,
-        evidenceIds: ["role-ev-mig-002"],
-      },
-      payroll: {
-        present: true,
-        isActive: true,
-        subsidiaryId: org.subsidiaryId,
-        countryContext: null,
-        evidenceIds: ["pay-ev-mig-002"],
-      },
-    };
-    const report = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({
-        orgId: org.orgId, rows: [first.row, secondRow], appliedBy: actorId,
-      }),
-    );
-    assert.equal(report.totals.migrated, 2);
-    assert.equal(report.totals.refused, 0);
-    assert.equal(report.persons.length, 2);
-    const audits = await withOrg(org.orgId, async () => {
-      const result = await db.execute<{
-        actor_id: string;
-        changes: { after: { historicalCoverage: string }; sourceReference: string };
-      }>(sql`select actor_id, changes from audit_log where org_id=${org.orgId}
-          and table_name='worker_employments' and action='insert'`, "objects");
-      return result;
-    });
-    assert.equal(audits.length, 2);
-    assert.ok(audits.every((row) => row.actor_id === actorId &&
-      row.changes.after.historicalCoverage === "unknown" &&
-      row.changes.sourceReference.startsWith("hrm-employment-migration/v1")));
-    assert.deepEqual(await tableCounts(org.orgId), {
-      employments: 2,
-      versions: 2,
-      assignments: 2,
-      changes: 2,
-    });
-    for (const person of report.persons) {
-      assert.equal(person.outcome, "migrated");
-      assert.ok(person.employmentId, "migrated persons name their employment");
-      assert.equal(person.historicalCoverage, "unknown");
-    }
-    const [known, unknown] = report.persons;
-    assert.equal(known!.serviceStart, "2022-03-14");
-    assert.equal(known!.serviceStartProvenance, "role-ev-mig-001");
-    assert.equal(unknown!.serviceStart, null);
-    assert.equal(unknown!.serviceStartProvenance, null);
+test(
+  "ready org migrates with digest-bound evidence; triggers accept without bypass",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const first = await seedPerson(org, "mig-001");
+      const secondParty = await mkParty(org.orgId, "Migration mig-002");
+      // Observation-anchored but no service start: coverage stays unknown and
+      // no hire date is invented.
+      const secondRow: SourcePersonRow = {
+        ...readyRow(org.orgId, org.subsidiaryId, secondParty, "mig-002"),
+        role: {
+          present: true,
+          isActive: true,
+          hiredOn: null,
+          terminatedOn: null,
+          dateProvenance: null,
+          countryContext: null,
+          evidenceIds: ["role-ev-mig-002"],
+        },
+        payroll: {
+          present: true,
+          isActive: true,
+          subsidiaryId: org.subsidiaryId,
+          countryContext: null,
+          evidenceIds: ["pay-ev-mig-002"],
+        },
+      };
+      const report = await withOrg(org.orgId, () =>
+        executeEmploymentMigration({
+          orgId: org.orgId,
+          rows: [first.row, secondRow],
+          appliedBy: actorId,
+        }),
+      );
+      assert.equal(report.totals.migrated, 2);
+      assert.equal(report.totals.refused, 0);
+      assert.equal(report.persons.length, 2);
+      const audits = await withOrg(org.orgId, async () => {
+        const result = await db.execute<{
+          actor_id: string;
+          changes: { after: { historicalCoverage: string }; sourceReference: string };
+        }>(
+          sql`select actor_id, changes from audit_log where org_id=${org.orgId}
+          and table_name='worker_employments' and action='insert'`,
+          "objects",
+        );
+        return result;
+      });
+      assert.equal(audits.length, 2);
+      assert.ok(
+        audits.every(
+          (row) =>
+            row.actor_id === actorId &&
+            row.changes.after.historicalCoverage === "unknown" &&
+            row.changes.sourceReference.startsWith("hrm-employment-migration/v1"),
+        ),
+      );
+      assert.deepEqual(await tableCounts(org.orgId), {
+        employments: 2,
+        versions: 2,
+        assignments: 2,
+        changes: 2,
+      });
+      for (const person of report.persons) {
+        assert.equal(person.outcome, "migrated");
+        assert.ok(person.employmentId, "migrated persons name their employment");
+        assert.equal(person.historicalCoverage, "unknown");
+      }
+      const [known, unknown] = report.persons;
+      assert.equal(known!.serviceStart, "2022-03-14");
+      assert.equal(known!.serviceStartProvenance, "role-ev-mig-001");
+      assert.equal(unknown!.serviceStart, null);
+      assert.equal(unknown!.serviceStartProvenance, null);
 
-    // The evidence columns bind the candidate digest: the recorded token
-    // parses to this run's namespace, source id, fingerprint, and version.
-    const evidence = await withBypassContext(async () => {
-      const result = await db.execute<{
+      // The evidence columns bind the candidate digest: the recorded token
+      // parses to this run's namespace, source id, fingerprint, and version.
+      const evidence = await withBypassContext(async () => {
+        const result = await db.execute<{
           employment_id: string;
           ref: string;
           reason: string;
           kind: string;
           source: string;
-        }>(sql`select employment_id::text as employment_id, recorded_source_ref as ref,
+        }>(
+          sql`select employment_id::text as employment_id, recorded_source_ref as ref,
                     reason, change_kind as kind, recorded_source as source
                from employment_changes
-              where org_id = ${org.orgId} order by recorded_at`, "objects");
-      return result;
-    });
-    assert.equal(evidence.length, 2);
-    for (const [index, row] of evidence.entries()) {
-      const person = report.persons[index]!;
-      assert.equal(row.kind, "created");
-      assert.equal(row.source, "system");
-      assert.equal(row.employment_id, person.employmentId);
-      const parsed = parseMigrationRef(row.ref);
-      assert.equal(parsed.sourceNamespace, NS);
-      assert.equal(parsed.sourceId, person.sourceId);
-      assert.equal(parsed.sourceFingerprint, person.candidateDigest);
-      assert.equal(parsed.sourceFingerprint, fingerprintSourceRow([first.row, secondRow][index]!));
-      assert.match(row.reason, new RegExp(person.candidateDigest.slice(0, 12)));
-    }
+              where org_id = ${org.orgId} order by recorded_at`,
+          "objects",
+        );
+        return result;
+      });
+      assert.equal(evidence.length, 2);
+      for (const [index, row] of evidence.entries()) {
+        const person = report.persons[index]!;
+        assert.equal(row.kind, "created");
+        assert.equal(row.source, "system");
+        assert.equal(row.employment_id, person.employmentId);
+        const parsed = parseMigrationRef(row.ref);
+        assert.equal(parsed.sourceNamespace, NS);
+        assert.equal(parsed.sourceId, person.sourceId);
+        assert.equal(parsed.sourceFingerprint, person.candidateDigest);
+        assert.equal(
+          parsed.sourceFingerprint,
+          fingerprintSourceRow([first.row, secondRow][index]!),
+        );
+        assert.match(row.reason, new RegExp(person.candidateDigest.slice(0, 12)));
+      }
 
-    // Canonical rows carry the observation-date migration, not invented dates.
-    const stored = await withBypassContext(async () => {
-      const result = await db.execute<{
+      // Canonical rows carry the observation-date migration, not invented dates.
+      const stored = await withBypassContext(async () => {
+        const result = await db.execute<{
           worker: string;
           employer: string;
           service_start: string | null;
           service_provenance: string | null;
           status: string;
           effective_from: string;
-        }>(sql`select e.worker_party_id::text as worker,
+        }>(
+          sql`select e.worker_party_id::text as worker,
                     e.employer_subsidiary_id::text as employer,
                     e.service_start::text as service_start,
                     e.service_start_provenance as service_provenance,
@@ -287,22 +331,25 @@ test("ready org migrates with digest-bound evidence; triggers accept without byp
                from worker_employments e
                join worker_employment_versions v
                  on v.org_id = e.org_id and v.employment_id = e.id
-              where e.org_id = ${org.orgId} order by e.created_at`, "objects");
-      return result;
-    });
-    assert.equal(stored.length, 2);
-    assert.equal(stored[0]!.worker, first.partyId);
-    assert.equal(stored[0]!.employer, org.subsidiaryId);
-    assert.equal(stored[0]!.service_start, "2022-03-14");
-    assert.equal(stored[0]!.service_provenance, "role-ev-mig-001");
-    assert.equal(stored[0]!.status, "active");
-    assert.equal(stored[0]!.effective_from, "2026-09-10");
-    assert.equal(stored[1]!.service_start, null);
-    assert.equal(stored[1]!.service_provenance, null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+              where e.org_id = ${org.orgId} order by e.created_at`,
+          "objects",
+        );
+        return result;
+      });
+      assert.equal(stored.length, 2);
+      assert.equal(stored[0]!.worker, first.partyId);
+      assert.equal(stored[0]!.employer, org.subsidiaryId);
+      assert.equal(stored[0]!.service_start, "2022-03-14");
+      assert.equal(stored[0]!.service_provenance, "role-ev-mig-001");
+      assert.equal(stored[0]!.status, "active");
+      assert.equal(stored[0]!.effective_from, "2026-09-10");
+      assert.equal(stored[1]!.service_start, null);
+      assert.equal(stored[1]!.service_provenance, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("re-run with the same inputs is a no-op reporting already_migrated", { skip }, async () => {
   const org = await createScratchOrg();
@@ -327,37 +374,41 @@ test("re-run with the same inputs is a no-op reporting already_migrated", { skip
   }
 });
 
-test("dry run after migration previews already_migrated, never would_migrate", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const seed = await seedPerson(org, "preview-001");
-    const preview = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row], dryRun: true }),
-    );
-    assert.equal(onlyPerson(preview).outcome, "would_migrate");
-    await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row] }),
-    );
-    const before = await tableCounts(org.orgId);
-    const again = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row], dryRun: true }),
-    );
-    const person = onlyPerson(again);
-    assert.equal(person.classification, "already_migrated");
-    assert.equal(person.outcome, "already_migrated");
-    assert.equal(again.totals.wouldMigrate, 0);
-    assert.equal(again.totals.refused, 0);
-    assert.notEqual(
-      again.reportHash,
-      preview.reportHash,
-      "the post-migration preview must not reproduce the pre-migration hash",
-    );
-    assert.deepEqual(await tableCounts(org.orgId), before);
-    assert.equal(migrationExitCode(again), 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "dry run after migration previews already_migrated, never would_migrate",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const seed = await seedPerson(org, "preview-001");
+      const preview = await withOrg(org.orgId, () =>
+        executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row], dryRun: true }),
+      );
+      assert.equal(onlyPerson(preview).outcome, "would_migrate");
+      await withOrg(org.orgId, () =>
+        executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row] }),
+      );
+      const before = await tableCounts(org.orgId);
+      const again = await withOrg(org.orgId, () =>
+        executeEmploymentMigration({ orgId: org.orgId, rows: [seed.row], dryRun: true }),
+      );
+      const person = onlyPerson(again);
+      assert.equal(person.classification, "already_migrated");
+      assert.equal(person.outcome, "already_migrated");
+      assert.equal(again.totals.wouldMigrate, 0);
+      assert.equal(again.totals.refused, 0);
+      assert.notEqual(
+        again.reportHash,
+        preview.reportHash,
+        "the post-migration preview must not reproduce the pre-migration hash",
+      );
+      assert.deepEqual(await tableCounts(org.orgId), before);
+      assert.equal(migrationExitCode(again), 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("changed inputs refuse with the diff and write nothing", { skip }, async () => {
   const org = await createScratchOrg();
@@ -396,51 +447,55 @@ test("changed inputs refuse with the diff and write nothing", { skip }, async ()
   }
 });
 
-test("requires_review refuses the whole org; partial writes only the ready subset", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const ready = await seedPerson(org, "part-001");
-    const review = await seedPerson(org, "part-002", "review");
-    const rows = [ready.row, review.row];
-    const refusal = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows }),
-    ).then(
-      () => {
-        throw new Error("mixed-org migration was expected to refuse");
-      },
-      (error: unknown) => {
-        assert.ok(error instanceof EmploymentMigrationRefusalError);
-        return error;
-      },
-    );
-    assert.equal(refusal.report.totals.refused, 1);
-    assert.deepEqual(await tableCounts(org.orgId), {
-      employments: 0,
-      versions: 0,
-      assignments: 0,
-      changes: 0,
-    });
+test(
+  "requires_review refuses the whole org; partial writes only the ready subset",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const ready = await seedPerson(org, "part-001");
+      const review = await seedPerson(org, "part-002", "review");
+      const rows = [ready.row, review.row];
+      const refusal = await withOrg(org.orgId, () =>
+        executeEmploymentMigration({ orgId: org.orgId, rows }),
+      ).then(
+        () => {
+          throw new Error("mixed-org migration was expected to refuse");
+        },
+        (error: unknown) => {
+          assert.ok(error instanceof EmploymentMigrationRefusalError);
+          return error;
+        },
+      );
+      assert.equal(refusal.report.totals.refused, 1);
+      assert.deepEqual(await tableCounts(org.orgId), {
+        employments: 0,
+        versions: 0,
+        assignments: 0,
+        changes: 0,
+      });
 
-    const partial = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows, allowPartial: true }),
-    );
-    assert.equal(partial.totals.migrated, 1);
-    assert.equal(partial.totals.refused, 1);
-    const refused = partial.persons.find((p) => p.sourceId === "part-002")!;
-    assert.equal(refused.outcome, "refused");
-    assert.equal(refused.classification, "requires_review");
-    assert.ok(refused.issues.length > 0, "refusal names the remedy");
-    assert.deepEqual(await tableCounts(org.orgId), {
-      employments: 1,
-      versions: 1,
-      assignments: 1,
-      changes: 1,
-    });
-    assert.equal(migrationExitCode(partial), 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const partial = await withOrg(org.orgId, () =>
+        executeEmploymentMigration({ orgId: org.orgId, rows, allowPartial: true }),
+      );
+      assert.equal(partial.totals.migrated, 1);
+      assert.equal(partial.totals.refused, 1);
+      const refused = partial.persons.find((p) => p.sourceId === "part-002")!;
+      assert.equal(refused.outcome, "refused");
+      assert.equal(refused.classification, "requires_review");
+      assert.ok(refused.issues.length > 0, "refusal names the remedy");
+      assert.deepEqual(await tableCounts(org.orgId), {
+        employments: 1,
+        versions: 1,
+        assignments: 1,
+        changes: 1,
+      });
+      assert.equal(migrationExitCode(partial), 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("ready without an observation is refused, never invented", { skip }, async () => {
   const org = await createScratchOrg();

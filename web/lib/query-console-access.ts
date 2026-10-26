@@ -4,5 +4,5 @@
  * subsidiary lineage, only an organization-unrestricted grant may enter it.
  */
 export function hasUnrestrictedQueryScope(allowedSubsidiaryIds: Set<string> | null): boolean {
-  return allowedSubsidiaryIds === null
+  return allowedSubsidiaryIds === null;
 }

@@ -1,13 +1,32 @@
 /** Statement import with dedupe. Split from banking.ts (pure moves only). */
-import { BankingError, statementTotalsAgree, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow, type BalanceCandidateLine } from "./banking-core"
-import { canonicalCsvMapping } from "./statement-parsers/csv"
-import { loadReconcilableAccount, lockBankAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
-import { assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./statement-parsers/shared"
-import { createHash, randomUUID } from "node:crypto"
-import { sql } from "drizzle-orm"
-import { db, schema, type SqlExecutor } from "../platform/db.ts"
-import { fromUnits, toUnits } from "../money/money.ts"
-import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
+import {
+  BankingError,
+  statementTotalsAgree,
+  type ParsedStatementLine,
+  type StatementSource,
+  BANK_STATEMENT_PARSER_VERSION,
+  type StatementSourceEvidence,
+  type BankingContext,
+  requireActorId,
+  type SkippedStatementRow,
+  type BalanceCandidateLine,
+} from "./banking-core";
+import { canonicalCsvMapping } from "./statement-parsers/csv";
+import {
+  loadReconcilableAccount,
+  lockBankAccountInScope,
+  lockReconciliationAccount,
+} from "./reconcilable-account";
+import {
+  assertRealDate,
+  detectStatementBalanceRole,
+  normalizeAmount,
+} from "./statement-parsers/shared";
+import { createHash, randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db, schema, type SqlExecutor } from "../platform/db.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 
 export function normalizeFingerprintText(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
@@ -77,20 +96,27 @@ async function partitionIdlessLines(
   // the earlier import a flag points at.
   const storedByTuple = new Map<string, StoredContentCandidate[]>();
   const idlessDates = [
-    ...new Set(
-      identified.lines.flatMap((line) => (line.bankTransactionId ? [] : [line.postedOn])),
-    ),
+    ...new Set(identified.lines.flatMap((line) => (line.bankTransactionId ? [] : [line.postedOn]))),
   ];
   if (idlessDates.length > 0) {
-    const stored = (await tx.execute<{
-      id: string; posted_on: string; amount: string; description: string | null;
-    }>(sql`
+    const stored = await tx.execute<{
+      id: string;
+      posted_on: string;
+      amount: string;
+      description: string | null;
+    }>(
+      sql`
       select l.id, l.posted_on::text as posted_on, l.amount::text as amount, l.description
         from bank_statement_lines l
        where l.org_id = ${orgId} and l.account_id = ${accountId}
-         and l.posted_on in (${sql.join(idlessDates.map((d) => sql`${d}`), sql`, `)})
+         and l.posted_on in (${sql.join(
+           idlessDates.map((d) => sql`${d}`),
+           sql`, `,
+         )})
        order by l.id
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const row of stored) {
       const key = `${row.posted_on}\0${normalizeFingerprintText(row.description)}`;
       const list = storedByTuple.get(key) ?? [];
@@ -258,9 +284,7 @@ function sourceEvidence(
     throw new BankingError("Statement parser version evidence exceeds 100 characters");
   }
   const parserVersion = requestedParserVersion ?? BANK_STATEMENT_PARSER_VERSION;
-  const csvMapping = supplied?.csvMapping
-    ? canonicalCsvMapping(supplied.csvMapping)
-    : null;
+  const csvMapping = supplied?.csvMapping ? canonicalCsvMapping(supplied.csvMapping) : null;
   if (opts.source === "csv" && !csvMapping) {
     throw new BankingError("CSV source evidence requires the column mapping used to parse it");
   }
@@ -352,7 +376,8 @@ export async function importStatement(
   }
   const validated = opts.lines.map((line, index) => {
     const dateMatch = line.postedOn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!dateMatch) throw new BankingError(`Statement line ${index + 1}: posted date must be YYYY-MM-DD`);
+    if (!dateMatch)
+      throw new BankingError(`Statement line ${index + 1}: posted date must be YYYY-MM-DD`);
     const postedOn = assertRealDate(
       dateMatch[1]!,
       dateMatch[2]!,
@@ -404,8 +429,15 @@ export async function importStatement(
   // covers only part of the statement, or a line the bank's own balance
   // leaves out. The preview and the result name the gap before and after
   // import; sign-off stays the strict gate against the typed closing.
-  const statementLinesTotal = fromUnits(transactable.reduce((sum, line) => sum + toUnits(line.amount), 0n));
-  const balanceMismatch = statementBalanceMismatch(openingBalance, closingBalance, statementLinesTotal, account.type);
+  const statementLinesTotal = fromUnits(
+    transactable.reduce((sum, line) => sum + toUnits(line.amount), 0n),
+  );
+  const balanceMismatch = statementBalanceMismatch(
+    openingBalance,
+    closingBalance,
+    statementLinesTotal,
+    account.type,
+  );
   // Prepare before opening the transaction so preview exercises the same
   // evidence limits as import and hashing/base64 work never holds the account
   // dedupe lock.
@@ -424,7 +456,13 @@ export async function importStatement(
     // bank account under a row lock inside the write transaction so a
     // concurrent subsidiary rehome cannot authorize statement rows in the
     // account's new scope using the caller's stale permission snapshot.
-    account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds, tx, true);
+    account = await loadReconcilableAccount(
+      ctx.orgId,
+      opts.accountId,
+      ctx.allowedSubsidiaryIds,
+      tx,
+      true,
+    );
     currency = (opts.currency ?? account.currency).trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) {
       throw new BankingError("Statement currency must be a three-letter ISO currency code");
@@ -436,7 +474,10 @@ export async function importStatement(
     }
     await opts.beforeWrite?.(tx);
     await opts.writeFence?.(tx);
-    const sourceAlreadyImported = Boolean((await tx.execute<{ imported: boolean }>(sql`
+    const sourceAlreadyImported = Boolean(
+      (
+        await tx.execute<{ imported: boolean }>(
+          sql`
       select exists (
         select 1
           from bank_statements
@@ -444,7 +485,11 @@ export async function importStatement(
            and account_id = ${account.id}
            and source_file_sha256 = ${evidence.sha256}
       ) as imported
-    `, "objects"))[0]?.imported);
+    `,
+          "objects",
+        )
+      )[0]?.imported,
+    );
     const ids = sourceAlreadyImported
       ? []
       : [
@@ -456,24 +501,38 @@ export async function importStatement(
         ];
     const existingIds = new Set<string>();
     if (ids.length > 0) {
-      const existing = (await tx.execute<{ id: string }>(sql`
+      const existing = await tx.execute<{ id: string }>(
+        sql`
         select bank_transaction_id as id
           from bank_statement_lines
          where org_id = ${ctx.orgId}
            and account_id = ${account.id}
-           and bank_transaction_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-      `, "objects"));
+           and bank_transaction_id in (${sql.join(
+             ids.map((id) => sql`${id}`),
+             sql`, `,
+           )})
+      `,
+        "objects",
+      );
       for (const row of existing) existingIds.add(row.id);
     }
     // ID-less lines partition by content against stored lines on this
     // account. A tuple matching a stored line is a possible duplicate: it
     // carries the earlier line as its evidence and imports only on the
     // reviewer's opt-in. Genuinely new content imports clean.
-    const partitioned =
-      await partitionIdlessLines(tx, ctx.orgId, account.id, transactable, existingIds, sourceAlreadyImported);
+    const partitioned = await partitionIdlessLines(
+      tx,
+      ctx.orgId,
+      account.id,
+      transactable,
+      existingIds,
+      sourceAlreadyImported,
+    );
     const duplicates = partitioned.duplicates;
     const possibleDuplicates = partitioned.possibleDuplicates;
-    const possibleDuplicateLines = partitioned.lines.filter((line) => line.possibleDuplicateOf !== null);
+    const possibleDuplicateLines = partitioned.lines.filter(
+      (line) => line.possibleDuplicateOf !== null,
+    );
     // Possible duplicates import only on the reviewer's explicit opt-in; by
     // default they are reported (preview) and left out of the write.
     const fresh = opts.includePossibleDuplicates
@@ -492,11 +551,16 @@ export async function importStatement(
     // refuses. This runs before the dry-run return so a preview agrees with
     // the import it previews.
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
-    const signedThrough = (await tx.execute<{ through_date: string }>(sql`
+    const signedThrough = (
+      await tx.execute<{ through_date: string }>(
+        sql`
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (signedThrough) {
       const late = fresh.filter((line) => line.postedOn <= signedThrough.through_date);
       if (late.length > 0) {
@@ -513,13 +577,19 @@ export async function importStatement(
     let openingMismatch: OpeningBalanceMismatch | null = null;
     {
       const anchor =
-        opts.statementDate ?? validated.reduce((max, line) => (line.postedOn > max ? line.postedOn : max), validated[0]!.postedOn);
+        opts.statementDate ??
+        validated.reduce(
+          (max, line) => (line.postedOn > max ? line.postedOn : max),
+          validated[0]!.postedOn,
+        );
       if (signedThrough) {
-        const prior = (await tx.execute<{
-          id: string;
-          statement_date: string;
-          closing_balance: string | null;
-        }>(sql`
+        const prior = (
+          await tx.execute<{
+            id: string;
+            statement_date: string;
+            closing_balance: string | null;
+          }>(
+            sql`
           select s.id, s.statement_date::text as statement_date, s.closing_balance::text as closing_balance
             from bank_statements s
            where s.org_id = ${ctx.orgId} and s.account_id = ${account.id}
@@ -532,7 +602,10 @@ export async function importStatement(
              )
            order by s.statement_date desc, s.imported_at desc
            limit 1
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (prior?.closing_balance) {
           suggestedOpening = {
             balance: prior.closing_balance,
@@ -565,11 +638,7 @@ export async function importStatement(
     const ordered = fresh
       .map((line, index) => ({ ...line, index }))
       .sort((a, b) =>
-        a.postedOn < b.postedOn
-          ? -1
-          : a.postedOn > b.postedOn
-            ? 1
-            : a.index - b.index,
+        a.postedOn < b.postedOn ? -1 : a.postedOn > b.postedOn ? 1 : a.index - b.index,
       );
     const statementDate = opts.statementDate ?? ordered[ordered.length - 1]!.postedOn;
     const statementDateMatch = statementDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -618,17 +687,18 @@ export async function importStatement(
     // record: the reviewer's default exclusion must be reconstructable from
     // the statement's audit row, not only from the source bytes.
     const excludedPossibleDuplicates = opts.includePossibleDuplicates ? [] : possibleDuplicateLines;
-    const auditChanges = excludedPossibleDuplicates.length === 0
-      ? evidence.changes
-      : {
-          ...evidence.changes,
-          possibleDuplicatesExcluded: excludedPossibleDuplicates.map((line) => ({
-            postedOn: line.postedOn,
-            amount: line.amount,
-            description: line.description,
-            possibleDuplicateOf: line.possibleDuplicateOf,
-          })),
-        };
+    const auditChanges =
+      excludedPossibleDuplicates.length === 0
+        ? evidence.changes
+        : {
+            ...evidence.changes,
+            possibleDuplicatesExcluded: excludedPossibleDuplicates.map((line) => ({
+              postedOn: line.postedOn,
+              amount: line.amount,
+              description: line.description,
+              possibleDuplicateOf: line.possibleDuplicateOf,
+            })),
+          };
     await tx.execute(sql`
       insert into audit_log
         (id, org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -739,58 +809,89 @@ export async function correctStatementBalances(
 ): Promise<{ openingBalance: string | null; closingBalance: string | null }> {
   const next: { openingBalance?: string | null; closingBalance?: string | null } = {};
   if (patch.openingBalance !== undefined) {
-    next.openingBalance = patch.openingBalance === null
-      ? null
-      : normalizeAmount(patch.openingBalance, "Opening balance");
+    next.openingBalance =
+      patch.openingBalance === null
+        ? null
+        : normalizeAmount(patch.openingBalance, "Opening balance");
   }
   if (patch.closingBalance !== undefined) {
-    next.closingBalance = patch.closingBalance === null
-      ? null
-      : normalizeAmount(patch.closingBalance, "Closing balance");
+    next.closingBalance =
+      patch.closingBalance === null
+        ? null
+        : normalizeAmount(patch.closingBalance, "Closing balance");
   }
   if (next.openingBalance === undefined && next.closingBalance === undefined) {
-    throw new BankingError("No balance supplied: set the opening balance, the closing balance, or both");
+    throw new BankingError(
+      "No balance supplied: set the opening balance, the closing balance, or both",
+    );
   }
-  const statement = (await db.execute<{ id: string; account_id: string }>(sql`
+  const statement = (
+    await db.execute<{ id: string; account_id: string }>(
+      sql`
     select s.id, s.account_id
       from bank_statements s
      where s.id = ${statementId} and s.org_id = ${ctx.orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!statement) throw new ScopeNotFoundError();
-  const account = await loadReconcilableAccount(ctx.orgId, statement.account_id, ctx.allowedSubsidiaryIds);
+  const account = await loadReconcilableAccount(
+    ctx.orgId,
+    statement.account_id,
+    ctx.allowedSubsidiaryIds,
+  );
   return db.transaction(async (tx) => {
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
     await lockBankAccountInScope(tx, ctx.orgId, account.id, ctx.allowedSubsidiaryIds);
-    const before = (await tx.execute<{ opening_balance: string | null; closing_balance: string | null }>(sql`
+    const before = (
+      await tx.execute<{ opening_balance: string | null; closing_balance: string | null }>(
+        sql`
       select s.opening_balance::text as opening_balance, s.closing_balance::text as closing_balance
         from bank_statements s
        where s.id = ${statementId} and s.org_id = ${ctx.orgId}
        for update
-    `, "objects"))[0]!;
-    const matched = (await tx.execute<{ count: number }>(sql`
+    `,
+        "objects",
+      )
+    )[0]!;
+    const matched = (
+      await tx.execute<{ count: number }>(
+        sql`
       select count(*)::int as count from reconciliation_matches m
        join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
        where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
-    `, "objects"))[0]!.count;
+    `,
+        "objects",
+      )
+    )[0]!.count;
     if (matched > 0) {
-      throw new BankingError(
-        `This import has ${matched} matched line(s) — unmatch them first`,
-      );
+      throw new BankingError(`This import has ${matched} matched line(s) — unmatch them first`);
     }
     // Signed-off history is immutable (the import fence): balances feed the
     // opening carry and the closing-balance check, so they must not move
     // under a closed session.
-    const signedThrough = (await tx.execute<{ through_date: string }>(sql`
+    const signedThrough = (
+      await tx.execute<{ through_date: string }>(
+        sql`
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (signedThrough) {
-      const inside = (await tx.execute<{ count: number }>(sql`
+      const inside = (
+        await tx.execute<{ count: number }>(
+          sql`
         select count(*)::int as count from bank_statement_lines l
          where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
            and l.posted_on <= ${signedThrough.through_date}
-      `, "objects"))[0]!.count;
+      `,
+          "objects",
+        )
+      )[0]!.count;
       if (inside > 0) {
         throw new BankingError(
           `This import reaches on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable`,
@@ -798,10 +899,16 @@ export async function correctStatementBalances(
       }
     }
     const after = {
-      openingBalance: next.openingBalance !== undefined ? next.openingBalance : before.opening_balance,
-      closingBalance: next.closingBalance !== undefined ? next.closingBalance : before.closing_balance,
+      openingBalance:
+        next.openingBalance !== undefined ? next.openingBalance : before.opening_balance,
+      closingBalance:
+        next.closingBalance !== undefined ? next.closingBalance : before.closing_balance,
     };
-    if (after.openingBalance === before.opening_balance && after.closingBalance === before.closing_balance) return after;
+    if (
+      after.openingBalance === before.opening_balance &&
+      after.closingBalance === before.closing_balance
+    )
+      return after;
     await tx.execute(sql`
       update bank_statements
          set opening_balance = ${after.openingBalance},
@@ -815,7 +922,10 @@ export async function correctStatementBalances(
         (${ctx.orgId}, 'bank_statements', ${statementId}, 'update',
          ${JSON.stringify({
            operation: "correct_balances",
-           before: { openingBalance: before.opening_balance, closingBalance: before.closing_balance },
+           before: {
+             openingBalance: before.opening_balance,
+             closingBalance: before.closing_balance,
+           },
            after,
          })}::jsonb,
          ${ctx.userId})
@@ -827,7 +937,8 @@ export async function deleteStatementImport(
   statementId: string,
   ctx: BankingContext,
 ): Promise<{ deletedLines: number }> {
-  const statement = (await db.execute<{
+  const statement = (
+    await db.execute<{
       id: string;
       account_id: string;
       source: string;
@@ -835,67 +946,82 @@ export async function deleteStatementImport(
       opening_balance: string | null;
       closing_balance: string | null;
       imported_at: string;
-    }>(sql`
+    }>(
+      sql`
     select s.id, s.account_id, s.source, s.statement_date::text as statement_date,
            s.opening_balance::text as opening_balance, s.closing_balance::text as closing_balance,
            s.imported_at::text as imported_at
       from bank_statements s
       join accounts a on a.id = s.account_id and a.org_id = s.org_id
      where s.id = ${statementId} and s.org_id = ${ctx.orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!statement) throw new ScopeNotFoundError();
-  const account = await loadReconcilableAccount(ctx.orgId, statement.account_id, ctx.allowedSubsidiaryIds);
+  const account = await loadReconcilableAccount(
+    ctx.orgId,
+    statement.account_id,
+    ctx.allowedSubsidiaryIds,
+  );
   return db.transaction(async (tx) => {
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
     await lockBankAccountInScope(tx, ctx.orgId, account.id, ctx.allowedSubsidiaryIds);
     const lines = await tx.execute<{
-        id: string;
-        line_number: number;
-        posted_on: string;
-        amount: string;
-        currency: string;
-        description: string | null;
-        counterparty_ref: string | null;
-        bank_transaction_id: string | null;
-        match_status: string;
-      }>(sql`
+      id: string;
+      line_number: number;
+      posted_on: string;
+      amount: string;
+      currency: string;
+      description: string | null;
+      counterparty_ref: string | null;
+      bank_transaction_id: string | null;
+      match_status: string;
+    }>(
+      sql`
       select l.id, l.line_number, l.posted_on::text as posted_on, l.amount::text as amount,
              l.currency, l.description, l.counterparty_ref, l.bank_transaction_id, l.match_status
         from bank_statement_lines l
        where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
        order by l.line_number
-    `, "objects");
+    `,
+      "objects",
+    );
     const matched = lines.filter((line) => line.match_status === "matched").length;
     if (matched > 0) {
-      throw new BankingError(
-        `This import has ${matched} matched line(s) — unmatch them first`,
-      );
+      throw new BankingError(`This import has ${matched} matched line(s) — unmatch them first`);
     }
     const excluded = lines.filter((line) => line.match_status === "excluded").length;
     if (excluded > 0) {
-      throw new BankingError(
-        `This import has ${excluded} excluded line(s) — restore them first`,
-      );
+      throw new BankingError(`This import has ${excluded} excluded line(s) — restore them first`);
     }
     // Defensive: status says unmatched only when no match rows remain, but
     // the rows are the evidence — never delete under them.
-    const matchRows = (await tx.execute<{ count: number }>(sql`
+    const matchRows = (
+      await tx.execute<{ count: number }>(
+        sql`
       select count(*)::int as count from reconciliation_matches m
        join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
        where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
-    `, "objects"))[0]!.count;
+    `,
+        "objects",
+      )
+    )[0]!.count;
     if (matchRows > 0) {
-      throw new BankingError(
-        `This import has ${matchRows} matched line(s) — unmatch them first`,
-      );
+      throw new BankingError(`This import has ${matchRows} matched line(s) — unmatch them first`);
     }
     // Signed-off history is immutable (the import fence): refuse below the
     // cutoff even with every line unmatched.
-    const signedThrough = (await tx.execute<{ through_date: string }>(sql`
+    const signedThrough = (
+      await tx.execute<{ through_date: string }>(
+        sql`
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (signedThrough && lines.some((line) => line.posted_on <= signedThrough.through_date)) {
       throw new BankingError(
         `This import reaches on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable`,
@@ -903,7 +1029,9 @@ export async function deleteStatementImport(
     }
     // Other lines' possible-duplicate pointers into this import are their
     // review evidence; nulling them from a delete would rewrite it.
-    const inboundFlags = (await tx.execute<{ count: number }>(sql`
+    const inboundFlags = (
+      await tx.execute<{ count: number }>(
+        sql`
       select count(*)::int as count from bank_statement_lines o
        where o.org_id = ${ctx.orgId}
          and o.possible_duplicate_of in (
@@ -911,7 +1039,10 @@ export async function deleteStatementImport(
             where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
          )
          and not (o.statement_id = ${statementId} and o.org_id = ${ctx.orgId})
-    `, "objects"))[0]!.count;
+    `,
+        "objects",
+      )
+    )[0]!.count;
     if (inboundFlags > 0) {
       throw new BankingError(
         `This import is flagged as a possible duplicate by ${inboundFlags} other line(s) — clear those flags first`,

@@ -7,19 +7,13 @@ import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { inputGuards } from "../input-guards.ts";
-import {
-  HrmPerformanceError,
-  isUniqueViolationOn,
-  mathRefusal,
-} from "./errors.ts";
+import { HrmPerformanceError, isUniqueViolationOn, mathRefusal } from "./errors.ts";
 import {
   validateReviewTemplateDocument,
   type ReviewTemplateDocument,
   type ReviewTemplateDocumentDTO,
 } from "./template-document.ts";
-const { requireUuid } = inputGuards(
-  (message) => new HrmPerformanceError("INVALID_INPUT", message),
-);
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function authorize(orgId: string, actorId: string, write: boolean) {
   if (!(await lockAndCheckOrgFeature(db, orgId, "hrmPerformance")))
@@ -30,8 +24,7 @@ async function authorize(orgId: string, actorId: string, write: boolean) {
   const permitted =
     (await actorHasPermission(db, orgId, actorId, "admin.setup.manage")) ||
     (await actorHasPermission(db, orgId, actorId, "hrm.performance.manage")) ||
-    (!write &&
-      (await actorHasPermission(db, orgId, actorId, "hrm.performance.read")));
+    (!write && (await actorHasPermission(db, orgId, actorId, "hrm.performance.read")));
   if (!permitted)
     throw new HrmAuthorizationError(
       "Review templates require Performance access or Setup management. Ask an administrator to grant the appropriate access.",
@@ -53,14 +46,16 @@ type Stored = {
   published: ReviewTemplateDocument | null;
   cycleCount: number;
 };
-async function read(
-  orgId: string,
-  id: string,
-): Promise<ReviewTemplateDocumentDTO> {
-  const row = (await db.execute<Stored>(sql`select t.id,t.name,t.rating_scale as "ratingScale",t.is_active as "isActive",t.revision,
+async function read(orgId: string, id: string): Promise<ReviewTemplateDocumentDTO> {
+  const row = (
+    await db.execute<Stored>(
+      sql`select t.id,t.name,t.rating_scale as "ratingScale",t.is_active as "isActive",t.revision,
     t.published_version as "publishedVersion",t.draft_document as draft,t.published_document as published,
     (select count(*)::int from hrm_review_cycles c where c.org_id=t.org_id and c.template_id=t.id) as "cycleCount"
-    from hrm_review_templates t where t.org_id=${orgId} and t.id=${id}`, "objects"))[0];
+    from hrm_review_templates t where t.org_id=${orgId} and t.id=${id}`,
+      "objects",
+    )
+  )[0];
   if (!row)
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -69,17 +64,16 @@ async function read(
   let legacy: ReviewTemplateDocument | null = null;
   if (!row.draft && !row.published) {
     const sections = await db.execute<{
-        id: string;
-        title: string;
-        kind: ReviewTemplateDocument["sections"][number]["kind"];
-        weight: string | null;
-        competencyId: string | null;
-      }>(
-        sql`select id,title,kind,weight::text as weight,competency_id as "competencyId" from hrm_review_template_sections where org_id=${orgId} and template_id=${id} order by position`, "objects",
-      );
-    const scale = mathRefusal("REFUSED", () =>
-      parseRatingScale(row.ratingScale),
+      id: string;
+      title: string;
+      kind: ReviewTemplateDocument["sections"][number]["kind"];
+      weight: string | null;
+      competencyId: string | null;
+    }>(
+      sql`select id,title,kind,weight::text as weight,competency_id as "competencyId" from hrm_review_template_sections where org_id=${orgId} and template_id=${id} order by position`,
+      "objects",
     );
+    const scale = mathRefusal("REFUSED", () => parseRatingScale(row.ratingScale));
     legacy = {
       name: row.name,
       instructions: "",
@@ -88,10 +82,11 @@ async function read(
     };
     for (const section of sections) {
       const questions = await db.execute<
-          ReviewTemplateDocument["sections"][number]["questions"][number]
-        >(
-          sql`select id,prompt,answer_kind as "answerKind",required from hrm_review_template_questions where org_id=${orgId} and section_id=${section.id} order by position`, "objects",
-        );
+        ReviewTemplateDocument["sections"][number]["questions"][number]
+      >(
+        sql`select id,prompt,answer_kind as "answerKind",required from hrm_review_template_questions where org_id=${orgId} and section_id=${section.id} order by position`,
+        "objects",
+      );
       legacy.sections.push({ ...section, questions });
     }
   }
@@ -114,8 +109,9 @@ export async function listTemplateDocuments(args: {
   return withOrgTransaction(orgId, async () => {
     await authorize(orgId, actorId, false);
     const rows = await db.execute<{ id: string }>(
-        sql`select id from hrm_review_templates where org_id=${orgId} order by name,id`, "objects",
-      );
+      sql`select id from hrm_review_templates where org_id=${orgId} order by name,id`,
+      "objects",
+    );
     return Promise.all(rows.map((row) => read(orgId, row.id)));
   });
 }
@@ -137,8 +133,9 @@ async function publishProjection(
     sql`update hrm_review_template_questions q set position=q.position+1000000 where q.org_id=${orgId} and exists(select 1 from hrm_review_template_sections s where s.org_id=q.org_id and s.id=q.section_id and s.template_id=${templateId})`,
   );
   for (const [position, section] of document.sections.entries()) {
-    const written =
-      await db.execute<Record<string, unknown>>(sql`insert into hrm_review_template_sections(id,org_id,template_id,position,title,kind,weight,competency_id,created_by,updated_by)
+    const written = await db.execute<
+      Record<string, unknown>
+    >(sql`insert into hrm_review_template_sections(id,org_id,template_id,position,title,kind,weight,competency_id,created_by,updated_by)
       values(${section.id},${orgId},${templateId},${position},${section.title},${section.kind},${section.weight ?? null}::numeric,${section.competencyId ?? null},${actorId},${actorId})
       on conflict(id) do update set position=excluded.position,title=excluded.title,kind=excluded.kind,weight=excluded.weight,competency_id=excluded.competency_id,updated_by=excluded.updated_by,updated_at=now()
       where hrm_review_template_sections.org_id=excluded.org_id and hrm_review_template_sections.template_id=excluded.template_id returning id`);
@@ -148,8 +145,9 @@ async function publishProjection(
         "A section identifier is unavailable. Recreate that section in the template editor and publish again.",
       );
     for (const [questionPosition, question] of section.questions.entries()) {
-      const written =
-        await db.execute<Record<string, unknown>>(sql`insert into hrm_review_template_questions(id,org_id,section_id,position,prompt,answer_kind,required,created_by,updated_by)
+      const written = await db.execute<
+        Record<string, unknown>
+      >(sql`insert into hrm_review_template_questions(id,org_id,section_id,position,prompt,answer_kind,required,created_by,updated_by)
         values(${question.id},${orgId},${section.id},${questionPosition},${question.prompt},${question.answerKind},${question.required},${actorId},${actorId})
         on conflict(id) do update set section_id=excluded.section_id,position=excluded.position,prompt=excluded.prompt,answer_kind=excluded.answer_kind,required=excluded.required,updated_by=excluded.updated_by,updated_at=now()
         where hrm_review_template_questions.org_id=excluded.org_id and exists(select 1 from hrm_review_template_sections s where s.org_id=hrm_review_template_questions.org_id and s.id=hrm_review_template_questions.section_id and s.template_id=${templateId}) returning id`);
@@ -161,9 +159,7 @@ async function publishProjection(
     }
   }
   const sectionIds = document.sections.map((s) => s.id),
-    questionIds = document.sections.flatMap((s) =>
-      s.questions.map((q) => q.id),
-    );
+    questionIds = document.sections.flatMap((s) => s.questions.map((q) => q.id));
   await db.execute(
     sql`delete from hrm_review_template_questions q where q.org_id=${orgId} and q.id not in (select jsonb_array_elements_text(${JSON.stringify(questionIds)}::jsonb)::uuid) and exists(select 1 from hrm_review_template_sections s where s.org_id=q.org_id and s.id=q.section_id and s.template_id=${templateId})`,
   );
@@ -180,8 +176,9 @@ export async function listTemplateCompetencies(args: {
   return withOrgTransaction(orgId, async () => {
     await authorize(orgId, actorId, false);
     return await db.execute<{ value: string; label: string }>(
-        sql`select c.id as value,c.name||' · '||f.name as label from hrm_competencies c join hrm_competency_frameworks f on f.org_id=c.org_id and f.id=c.framework_id where c.org_id=${orgId} order by f.name,c.name,c.id`, "objects",
-      );
+      sql`select c.id as value,c.name||' · '||f.name as label from hrm_competencies c join hrm_competency_frameworks f on f.org_id=c.org_id and f.id=c.framework_id where c.org_id=${orgId} order by f.name,c.name,c.id`,
+      "objects",
+    );
   });
 }
 export async function saveTemplateDocument(args: {
@@ -201,9 +198,12 @@ export async function saveTemplateDocument(args: {
       await authorize(orgId, actorId, true);
       for (const section of document.sections)
         if (section.competencyId) {
-          const found = (await db.execute(
-              sql`select 1 from hrm_competencies where org_id=${orgId} and id=${section.competencyId}`, "objects",
-            ))[0];
+          const found = (
+            await db.execute(
+              sql`select 1 from hrm_competencies where org_id=${orgId} and id=${section.competencyId}`,
+              "objects",
+            )
+          )[0];
           if (!found)
             throw new HrmPerformanceError(
               "REFUSED",
@@ -213,9 +213,12 @@ export async function saveTemplateDocument(args: {
       let id = args.id ? requireUuid(args.id, "templateId") : null;
       let before: ReviewTemplateDocumentDTO | null = null;
       if (id) {
-        const locked = (await db.execute<{ id: string }>(
-            sql`select id from hrm_review_templates where org_id=${orgId} and id=${id} for update`, "objects",
-          ))[0];
+        const locked = (
+          await db.execute<{ id: string }>(
+            sql`select id from hrm_review_templates where org_id=${orgId} and id=${id} for update`,
+            "objects",
+          )
+        )[0];
         if (!locked)
           throw new HrmPerformanceError(
             "NOT_FOUND",
@@ -240,15 +243,17 @@ export async function saveTemplateDocument(args: {
             "The template changed while saving. Reload it and retry.",
           );
       } else {
-        const row = (await db.execute<{
+        const row = (
+          await db.execute<{
             id: string;
-          }>(sql`insert into hrm_review_templates(org_id,name,draft_document,published_document,published_version,is_active,created_by,updated_by)
-        values(${orgId},${document.name},${JSON.stringify(document)}::jsonb,${args.publish ? JSON.stringify(document) : null}::jsonb,${args.publish ? 1 : 0},${args.isActive ?? true},${actorId},${actorId}) returning id`, "objects"))[0];
+          }>(
+            sql`insert into hrm_review_templates(org_id,name,draft_document,published_document,published_version,is_active,created_by,updated_by)
+        values(${orgId},${document.name},${JSON.stringify(document)}::jsonb,${args.publish ? JSON.stringify(document) : null}::jsonb,${args.publish ? 1 : 0},${args.isActive ?? true},${actorId},${actorId}) returning id`,
+            "objects",
+          )
+        )[0];
         if (!row)
-          throw new HrmPerformanceError(
-            "REFUSED",
-            "The template was not saved. Retry the save.",
-          );
+          throw new HrmPerformanceError("REFUSED", "The template was not saved. Retry the save.");
         id = row.id;
       }
       if (args.publish) await publishProjection(orgId, actorId, id, document);

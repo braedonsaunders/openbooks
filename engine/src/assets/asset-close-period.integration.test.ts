@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
-import {
-  disposeAsset,
-  remeasureAsset,
-  reverseAssetLifecycleEvent,
-} from "./asset-lifecycle.ts";
+import { disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } from "./asset-lifecycle.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -45,8 +41,11 @@ async function seedAsset(org: ScratchOrg, actorId: string, tag: string): Promise
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  const r = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -126,8 +125,13 @@ test("an assets-closed period refuses asset disposals dated inside it", { skip: 
       "a disposal into an assets-closed period must be refused",
     );
     assert.equal(await journalCount(org.orgId), before, "refused disposal left GL residue");
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`, "objects"))[0]!;
+    const status = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(status.status, "in_service", "refused disposal must not derecognize the asset");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -141,9 +145,14 @@ test("a GL-closed period refuses asset reversals dated inside it", { skip: !DB }
     const assetId = await seedAsset(org, actorId, "reve");
     // Dispose while the period is still open, then close it.
     await disposeAsset(org.orgId, assetId, { writeOff: true, date: org.date, actorId });
-    const event = (await db.execute<{ id: string }>(sql`
+    const event = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}
-       order by created_at desc limit 1`, "objects"))[0]!;
+       order by created_at desc limit 1`,
+        "objects",
+      )
+    )[0]!;
     await closeGl(org, actorId);
     const before = await journalCount(org.orgId);
     await assert.rejects(

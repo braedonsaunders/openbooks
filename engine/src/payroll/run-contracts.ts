@@ -1,4 +1,3 @@
-
 /**
  * `retro` pays, in the current period, the difference a backdated change makes
  * to periods that have ALREADY been paid (engine/src/payroll/retro.ts). Like

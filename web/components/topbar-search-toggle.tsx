@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { Search } from 'lucide-react'
-import { GlobalSearch } from './global-search'
-import type { SidebarNavGroup } from './sidebar-nav'
+import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Search } from "lucide-react";
+import { GlobalSearch } from "./global-search";
+import type { SidebarNavGroup } from "./sidebar-nav";
 
 /**
  * Topbar-mode mobile search trigger. Below lg the inline header
@@ -13,36 +13,42 @@ import type { SidebarNavGroup } from './sidebar-nav'
  * strip under the header; the desktop inline input owns lg and up, so the
  * trigger hides there. Button styling mirrors the notifications bell.
  */
-export function TopbarSearchToggle({ navGroups, recentScope }: { navGroups: readonly SidebarNavGroup[]; recentScope: string }) {
-  const t = useTranslations('shell.globalSearch')
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
+export function TopbarSearchToggle({
+  navGroups,
+  recentScope,
+}: {
+  navGroups: readonly SidebarNavGroup[];
+  recentScope: string;
+}) {
+  const t = useTranslations("shell.globalSearch");
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // Close on outside tap / Escape, mirroring the search panel itself. The
   // ref covers the toggle too, so tapping it toggles instead of instantly
   // re-closing through this handler.
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     function onDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === "Escape") setOpen(false);
     }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   return (
     <div ref={rootRef} className="shrink-0 lg:hidden">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        aria-label={t('ariaLabel')}
+        aria-label={t("ariaLabel")}
         aria-expanded={open}
         className="relative grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       >
@@ -54,5 +60,5 @@ export function TopbarSearchToggle({ navGroups, recentScope }: { navGroups: read
         </div>
       ) : null}
     </div>
-  )
+  );
 }

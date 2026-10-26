@@ -1,14 +1,14 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { stubModules, withAuthzTestSurface } from '@/testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { stubModules, withAuthzTestSurface } from "@/testing/stub-modules";
+import test from "node:test";
 
 // F3-71: activity PATCH carried no revision token, so the last writer won
 // silently. The route now requires the loader-projected expectedUpdatedAt
 // (409 when missing) and compares it against the locked row (409 when
 // stale), the same contract as the opportunity route.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __activityRevisionState: state })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __activityRevisionState: state });
 stubModules({
   navigation: true,
   authz: {
@@ -27,127 +27,165 @@ stubModules({
       export async function guardFeaturePermission() { return session(); }
     `,
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { loadActivity } = await import('../../../../../lib/crm')
-const { PATCH } = await import('./route.ts')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { loadActivity } = await import("../../../../../lib/crm");
+const { PATCH } = await import("./route.ts");
 
 async function fixture() {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
+  const org = await withBypassContext(() => createScratchOrg());
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
   const activityId = await withBypassContext(async () => {
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-       where id = ${org.orgId}`)
-    return (await db.execute<{ id: string }>(sql`
+       where id = ${org.orgId}`);
+    return (
+      await db.execute<{ id: string }>(
+        sql`
       insert into crm_activities (org_id, kind, status, subject)
       values (${org.orgId}, 'call', 'open', 'Original subject')
-      returning id`, 'objects'))[0]!.id
-  })
-  return { org, activityId }
+      returning id`,
+        "objects",
+      )
+    )[0]!.id;
+  });
+  return { org, activityId };
 }
 
 type PatchResult = {
-  status: number
-  json: { error?: unknown; activity?: { subject?: unknown; updated_at?: unknown }; thrown?: unknown } | null
-}
+  status: number;
+  json: {
+    error?: unknown;
+    activity?: { subject?: unknown; updated_at?: unknown };
+    thrown?: unknown;
+  } | null;
+};
 
 async function patch(id: string, body: unknown): Promise<PatchResult> {
   try {
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://crm.test/api/crm/activities/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://crm.test/api/crm/activities/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function revisionToken(activityId: string): Promise<string> {
   return await withOrgContext(state.orgId, async () => {
-    const loaded = await loadActivity(activityId, state.orgId, null)
-    const token = (loaded!.activity as Record<string, unknown>).updated_at
-    assert.equal(typeof token, 'string')
-    return token as string
-  })
+    const loaded = await loadActivity(activityId, state.orgId, null);
+    const token = (loaded!.activity as Record<string, unknown>).updated_at;
+    assert.equal(typeof token, "string");
+    return token as string;
+  });
 }
 
 async function subject(activityId: string): Promise<string | null> {
   return await withOrgContext(state.orgId, async () => {
-    const rows = await db.execute<{ subject: string | null }>(sql`
-      select subject from crm_activities where id = ${activityId}`, 'objects')
-    return rows[0]!.subject
-  })
+    const rows = await db.execute<{ subject: string | null }>(
+      sql`
+      select subject from crm_activities where id = ${activityId}`,
+      "objects",
+    );
+    return rows[0]!.subject;
+  });
 }
 
-test('PATCH without a revision token is refused with 409 and writes nothing', async () => {
-  const { org, activityId } = await fixture()
+test("PATCH without a revision token is refused with 409 and writes nothing", async () => {
+  const { org, activityId } = await fixture();
   try {
-    const result = await patch(activityId, { subject: 'Silent overwrite' })
-    assert.equal(result.status, 409, `expected 409, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.match(String(result.json?.error ?? ''), /revision/i)
-    assert.equal(await subject(activityId), 'Original subject')
+    const result = await patch(activityId, { subject: "Silent overwrite" });
+    assert.equal(
+      result.status,
+      409,
+      `expected 409, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.match(String(result.json?.error ?? ""), /revision/i);
+    assert.equal(await subject(activityId), "Original subject");
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH with a stale revision token is refused after a concurrent save', async () => {
-  const { org, activityId } = await fixture()
+test("PATCH with a stale revision token is refused after a concurrent save", async () => {
+  const { org, activityId } = await fixture();
   try {
-    const token = await revisionToken(activityId)
-    const first = await patch(activityId, { subject: 'First save', expectedUpdatedAt: token })
-    assert.equal(first.status, 200, JSON.stringify(first.json))
-    const second = await patch(activityId, { subject: 'Second save', expectedUpdatedAt: token })
-    assert.equal(second.status, 409, `expected 409, got ${second.status}: ${JSON.stringify(second.json)}`)
-    assert.match(String(second.json?.error ?? ''), /changed after you opened it/)
-    assert.equal(await subject(activityId), 'First save')
+    const token = await revisionToken(activityId);
+    const first = await patch(activityId, { subject: "First save", expectedUpdatedAt: token });
+    assert.equal(first.status, 200, JSON.stringify(first.json));
+    const second = await patch(activityId, { subject: "Second save", expectedUpdatedAt: token });
+    assert.equal(
+      second.status,
+      409,
+      `expected 409, got ${second.status}: ${JSON.stringify(second.json)}`,
+    );
+    assert.match(String(second.json?.error ?? ""), /changed after you opened it/);
+    assert.equal(await subject(activityId), "First save");
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH with the fresh revision token saves and rotates the token', async () => {
-  const { org, activityId } = await fixture()
+test("PATCH with the fresh revision token saves and rotates the token", async () => {
+  const { org, activityId } = await fixture();
   try {
-    const token = await revisionToken(activityId)
-    const result = await patch(activityId, { subject: 'Fresh save', expectedUpdatedAt: token })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.equal(result.json?.activity?.subject, 'Fresh save')
-    assert.notEqual(result.json?.activity?.updated_at, token)
+    const token = await revisionToken(activityId);
+    const result = await patch(activityId, { subject: "Fresh save", expectedUpdatedAt: token });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.equal(result.json?.activity?.subject, "Fresh save");
+    assert.notEqual(result.json?.activity?.updated_at, token);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH stores custom values only after validating them against the activity definitions', async () => {
-  const { org, activityId } = await fixture()
+test("PATCH stores custom values only after validating them against the activity definitions", async () => {
+  const { org, activityId } = await fixture();
   try {
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
-      values (${org.orgId}, 'crm_activities', 'channel', 'Channel', 'select', '{"options":["phone","email"]}'::jsonb)`))
-    const stored = async () => (await withBypassContext(() => db.execute<{ custom: unknown }>(sql`
-      select custom from crm_activities where id = ${activityId}`, 'objects')))[0]!.custom
+      values (${org.orgId}, 'crm_activities', 'channel', 'Channel', 'select', '{"options":["phone","email"]}'::jsonb)`),
+    );
+    const stored = async () =>
+      (
+        await withBypassContext(() =>
+          db.execute<{ custom: unknown }>(
+            sql`
+      select custom from crm_activities where id = ${activityId}`,
+            "objects",
+          ),
+        )
+      )[0]!.custom;
     for (const [custom, status, refusal] of [
-      [{ channel: 'email' }, 200, null],
-      [{ channel: 'fax' }, 422, /Channel: invalid option/],
-      [{ region: 'west' }, 422, /unknown custom field: region/],
+      [{ channel: "email" }, 200, null],
+      [{ channel: "fax" }, 422, /Channel: invalid option/],
+      [{ region: "west" }, 422, /unknown custom field: region/],
     ] as const) {
-      const result = await patch(activityId, { custom, expectedUpdatedAt: await revisionToken(activityId) })
-      assert.equal(result.status, status, JSON.stringify(result.json))
-      if (refusal) assert.match(String(result.json?.error ?? ''), refusal)
-      assert.deepEqual(await stored(), { channel: 'email' })
+      const result = await patch(activityId, {
+        custom,
+        expectedUpdatedAt: await revisionToken(activityId),
+      });
+      assert.equal(result.status, status, JSON.stringify(result.json));
+      if (refusal) assert.match(String(result.json?.error ?? ""), refusal);
+      assert.deepEqual(await stored(), { channel: "email" });
     }
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

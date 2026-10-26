@@ -34,7 +34,6 @@ import {
   TERMINAL_FAILURE_LOG_EVENT,
 } from "./terminal-failure.ts";
 
-
 test("a signal-specific endpoint alone enables telemetry and preserves its explicit path", () => {
   const cases = [
     ["traces", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"],
@@ -66,8 +65,7 @@ test("a pathless signal-specific endpoint uses the required root path", () => {
   assert.equal(
     resolveOtlpHttpEndpoint(
       {
-        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:
-          "https://collector.example?tenant=openbooks#ingest",
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "https://collector.example?tenant=openbooks#ingest",
       },
       "metrics",
     ),
@@ -78,8 +76,14 @@ test("a pathless signal-specific endpoint uses the required root path", () => {
 test("a shared endpoint alone composes the standard path for every signal", () => {
   const env = { OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example/tenant/" };
   assert.equal(telemetryEnabled(env), true);
-  assert.equal(resolveOtlpHttpEndpoint(env, "traces"), "https://collector.example/tenant/v1/traces");
-  assert.equal(resolveOtlpHttpEndpoint(env, "metrics"), "https://collector.example/tenant/v1/metrics");
+  assert.equal(
+    resolveOtlpHttpEndpoint(env, "traces"),
+    "https://collector.example/tenant/v1/traces",
+  );
+  assert.equal(
+    resolveOtlpHttpEndpoint(env, "metrics"),
+    "https://collector.example/tenant/v1/metrics",
+  );
   assert.equal(resolveOtlpHttpEndpoint(env, "logs"), "https://collector.example/tenant/v1/logs");
 
   const signalLookingBase = {
@@ -99,8 +103,7 @@ test("a shared endpoint appends to only the URL path", () => {
   assert.equal(
     resolveOtlpHttpEndpoint(
       {
-        OTEL_EXPORTER_OTLP_ENDPOINT:
-          "https://collector.example/tenant//?token=one%2Ftwo#ingest",
+        OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example/tenant//?token=one%2Ftwo#ingest",
       },
       "traces",
     ),
@@ -114,10 +117,7 @@ test("a signal-specific endpoint takes precedence over the shared endpoint", () 
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "https://metrics.collector.example/exact/",
   };
   assert.equal(telemetryEnabled(env), true);
-  assert.equal(
-    resolveOtlpHttpEndpoint(env, "metrics"),
-    "https://metrics.collector.example/exact/",
-  );
+  assert.equal(resolveOtlpHttpEndpoint(env, "metrics"), "https://metrics.collector.example/exact/");
   assert.equal(
     resolveOtlpHttpEndpoint(env, "traces"),
     "https://shared.collector.example/base/v1/traces",
@@ -147,7 +147,10 @@ const metricExporter = new InMemoryMetricExporter(AggregationTemporality.DELTA);
 const meterProvider = new MeterProvider({
   readers: [
     // Long interval: collections happen only via forceFlush in collectMetrics().
-    new PeriodicExportingMetricReader({ exporter: metricExporter, exportIntervalMillis: 3_600_000 }),
+    new PeriodicExportingMetricReader({
+      exporter: metricExporter,
+      exportIntervalMillis: 3_600_000,
+    }),
   ],
 });
 metrics.setGlobalMeterProvider(meterProvider);
@@ -162,10 +165,7 @@ async function collectMetrics(): Promise<MetricData[]> {
   return snapshot;
 }
 
-function findMetric(
-  name: string,
-  collected: MetricData[],
-): MetricData {
+function findMetric(name: string, collected: MetricData[]): MetricData {
   const metric = collected.find((candidate) => candidate.descriptor.name === name);
   assert.ok(metric, `${name} was not exported under ${TELEMETRY_SCOPE}`);
   return metric;
@@ -194,7 +194,9 @@ function histogramPoints(name: string, collected: MetricData[]): Array<DataPoint
 test("runInSpan completes a span carrying its attributes", async () => {
   const result = await runInSpan("test.success", { "openbooks.test": "ok" }, async () => 7);
   assert.equal(result, 7);
-  const span = spanExporter.getFinishedSpans().find((candidate) => candidate.name === "test.success");
+  const span = spanExporter
+    .getFinishedSpans()
+    .find((candidate) => candidate.name === "test.success");
   assert.ok(span, "success span was not exported");
   assert.equal(span.attributes["openbooks.test"], "ok");
   assert.equal(span.status.code, 0 /* UNSET */);
@@ -208,7 +210,9 @@ test("runInSpan marks failed work and records the exception without swallowing i
     }),
     /poison effect/,
   );
-  const span = spanExporter.getFinishedSpans().find((candidate) => candidate.name === "test.failure");
+  const span = spanExporter
+    .getFinishedSpans()
+    .find((candidate) => candidate.name === "test.failure");
   assert.ok(span, "failure span was not exported");
   assert.equal(span.status.code, 2 /* ERROR */);
   const exception = span.events.find((event) => event.name === "exception");

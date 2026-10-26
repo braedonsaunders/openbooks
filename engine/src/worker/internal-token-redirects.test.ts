@@ -16,13 +16,14 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
 async function close(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => error ? reject(error) : resolve());
+    server.close((error) => (error ? reject(error) : resolve()));
   });
 }
 
@@ -133,7 +134,11 @@ test("worker internal-token requests refuse every redirect class at both call si
 
     assert.equal(configuredOriginRequests.length, redirectStatuses.length * 2);
     assert.equal(redirectedOriginRequests, 0, "the redirected origin must receive zero requests");
-    assert.deepEqual(redirectedOriginTokens, [], "the redirected origin must receive zero internal-token values");
+    assert.deepEqual(
+      redirectedOriginTokens,
+      [],
+      "the redirected origin must receive zero internal-token values",
+    );
     assert.deepEqual(refusedRenderStatuses, [...redirectStatuses]);
     assert.deepEqual(redirectModes, Array(redirectStatuses.length * 2).fill("error"));
 
@@ -143,7 +148,11 @@ test("worker internal-token requests refuse every redirect class at both call si
     await tick();
 
     assert.equal(pdf.toString(), "valid-report");
-    assert.equal(schedulerErrors.length, redirectFailureCount, "the valid scheduler publish must not fail");
+    assert.equal(
+      schedulerErrors.length,
+      redirectFailureCount,
+      "the valid scheduler publish must not fail",
+    );
     assert.ok(schedulerLogs.some((line) => line.includes("published 3 rates")));
     assert.deepEqual(redirectModes.slice(-2), ["error", "error"]);
     assert.deepEqual(

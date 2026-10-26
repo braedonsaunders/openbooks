@@ -1,13 +1,13 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { cmp } from '@openbooks/engine/money/money'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { cmp } from "@openbooks/engine/money/money";
 import {
   capPreBillingSources,
   effectivePreBillingPolicy,
   pricePreBillingSource,
   sourceLinePrebillingReason,
-} from './pre-billing-policy'
+} from "./pre-billing-policy";
 import {
   type CreatePrebillInput,
   type OverheadRateRow,
@@ -22,28 +22,40 @@ import {
   refreshTotals,
   remainingContractCapacity,
   requireDate,
-} from './pre-billing-core'
+} from "./pre-billing-core";
 
 /**
  * Snapshot every eligible source through a cutoff. A project advisory lock plus
  * an active-worksheet exclusion prevents two reviewers from reserving the same
  * unbilled work concurrently.
  */
-export async function createPrebill(orgId: string, actorId: string, input: CreatePrebillInput, scope: SubsidiaryScope = null) {
-  const periodEnd = requireDate(input.periodEnd, 'Period end')
-  const periodStart = input.periodStart ? requireDate(input.periodStart, 'Period start') : null
-  if (periodStart && periodStart > periodEnd) throw new PreBillingError('Period start must be on or before period end')
+export async function createPrebill(
+  orgId: string,
+  actorId: string,
+  input: CreatePrebillInput,
+  scope: SubsidiaryScope = null,
+) {
+  const periodEnd = requireDate(input.periodEnd, "Period end");
+  const periodStart = input.periodStart ? requireDate(input.periodStart, "Period start") : null;
+  if (periodStart && periodStart > periodEnd)
+    throw new PreBillingError("Period start must be on or before period end");
 
   return db.transaction(async (tx) => {
-    await assertPreBillingEnabledTx(tx, orgId)
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`prebill:${orgId}:${input.projectId}`}, 0))`)
-    const policy = await loadProjectPolicy(tx, orgId, input.projectId, true, scope)
-    const procedureReason = sourceLinePrebillingReason(policy.invoicingProfile)
-    if (procedureReason) throw new PreBillingError(procedureReason)
-    const cutoffPolicy = effectivePreBillingPolicy(policy.versions, policy.fallbackProfile, periodEnd)
-    const remainingCap = await remainingContractCapacity(tx, orgId, policy, periodEnd)
-    if (remainingCap != null && cmp(remainingCap, '0') <= 0) {
-      throw new PreBillingError('The project has reached its not-to-exceed contract cap')
+    await assertPreBillingEnabledTx(tx, orgId);
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`prebill:${orgId}:${input.projectId}`}, 0))`,
+    );
+    const policy = await loadProjectPolicy(tx, orgId, input.projectId, true, scope);
+    const procedureReason = sourceLinePrebillingReason(policy.invoicingProfile);
+    if (procedureReason) throw new PreBillingError(procedureReason);
+    const cutoffPolicy = effectivePreBillingPolicy(
+      policy.versions,
+      policy.fallbackProfile,
+      periodEnd,
+    );
+    const remainingCap = await remainingContractCapacity(tx, orgId, policy, periodEnd);
+    if (remainingCap != null && cmp(remainingCap, "0") <= 0) {
+      throw new PreBillingError("The project has reached its not-to-exceed contract cap");
     }
 
     // The project lock above serialises source reservation, but worksheet
@@ -53,14 +65,20 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
     // the read below — the billing-request-number:{org} pattern. (The
     // feature-gate fence taken first also serialises org-wide today, but
     // numbering correctness must not depend on that coincidence.)
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`prebill-number:${orgId}`}, 0))`)
-    const numberRow = (await tx.execute<{ n: string }>(sql`
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`prebill-number:${orgId}`}, 0))`,
+    );
+    const numberRow = await tx.execute<{ n: string }>(
+      sql`
       select coalesce(max((regexp_replace(worksheet_number, '\\D', '', 'g'))::bigint), 0) as n
         from prebills
        where org_id = ${orgId} and worksheet_number ~ '^PB-[0-9]+$'
-    `, 'objects'))
-    const worksheetNumber = `PB-${(BigInt(numberRow[0]?.n ?? '0') + 1n).toString().padStart(5, '0')}`
-    const candidates = (await tx.execute<RawPreBillingSource>(sql`
+    `,
+      "objects",
+    );
+    const worksheetNumber = `PB-${(BigInt(numberRow[0]?.n ?? "0") + 1n).toString().padStart(5, "0")}`;
+    const candidates = await tx.execute<RawPreBillingSource>(
+      sql`
       with candidates as (
         select 'time_entry'::text as source_type,
                te.id as source_id,
@@ -151,9 +169,12 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
                   and worksheet.status in ('draft', 'review', 'approved', 'customer_review')
              )
        order by candidate.source_date, candidate.source_type, candidate.source_id
-    `, 'objects'))
+    `,
+      "objects",
+    );
 
-    const overheadRates = (await tx.execute<OverheadRateRow>(sql`
+    const overheadRates = await tx.execute<OverheadRateRow>(
+      sql`
       select department_id, rate_kind, rate_percent::text as rate,
              effective_from::text as effective_from, effective_to::text as effective_to
         from overhead_rates
@@ -161,41 +182,55 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
          and effective_from <= ${periodEnd}
          and (effective_to is null or ${periodStart ?? periodEnd}::date <= effective_to)
        order by effective_from, department_id nulls first, id
-    `, 'objects'))
+    `,
+      "objects",
+    );
 
     const priced = candidates.flatMap((source) => {
-      const version = effectivePreBillingPolicy(policy.versions, policy.fallbackProfile, source.source_date)
-      const calculated = pricePreBillingSource(version.financialProfile, {
-        sourceType: source.source_type,
-        sourceDate: source.source_date,
-        documentKind: source.document_kind,
-        documentStatus: source.document_status,
-        directCostAmount: source.direct_cost_amount,
-        nativeBillAmount: source.native_bill_amount,
-        quantity: source.quantity,
-        costingBasis: source.costing_basis,
-        rateEngineOverhead: rateEngineOverhead(source, version.financialProfile, overheadRates),
-      }, policy.markupPercent)
-      return calculated.eligible ? [{ ...source, ...calculated, policyVersion: version }] : []
-    })
-    const billable = capPreBillingSources(priced, remainingCap)
-    if (billable.length === 0) throw new PreBillingError('No eligible unbilled work matches this project type and cutoff')
+      const version = effectivePreBillingPolicy(
+        policy.versions,
+        policy.fallbackProfile,
+        source.source_date,
+      );
+      const calculated = pricePreBillingSource(
+        version.financialProfile,
+        {
+          sourceType: source.source_type,
+          sourceDate: source.source_date,
+          documentKind: source.document_kind,
+          documentStatus: source.document_status,
+          directCostAmount: source.direct_cost_amount,
+          nativeBillAmount: source.native_bill_amount,
+          quantity: source.quantity,
+          costingBasis: source.costing_basis,
+          rateEngineOverhead: rateEngineOverhead(source, version.financialProfile, overheadRates),
+        },
+        policy.markupPercent,
+      );
+      return calculated.eligible ? [{ ...source, ...calculated, policyVersion: version }] : [];
+    });
+    const billable = capPreBillingSources(priced, remainingCap);
+    if (billable.length === 0)
+      throw new PreBillingError("No eligible unbilled work matches this project type and cutoff");
 
     const policySnapshot = {
       projectTypeId: policy.projectTypeId,
       projectTypeKey: policy.projectTypeKey,
       projectTypeName: policy.projectTypeName,
-      billingProcedure: policy.invoicingProfile.billingProcedure ?? 'standard',
+      billingProcedure: policy.invoicingProfile.billingProcedure ?? "standard",
       lineBuilder: policy.invoicingProfile.lineBuilder,
-      billingBasis: policy.invoicingProfile.allowedBases.includes('time_selection') ? 'time_selection' : 'date_range',
+      billingBasis: policy.invoicingProfile.allowedBases.includes("time_selection")
+        ? "time_selection"
+        : "date_range",
       cutoffProfileVersionId: cutoffPolicy.id,
       cutoffProfileEffectiveFrom: cutoffPolicy.effectiveFrom,
       totalPriceMethod: cutoffPolicy.financialProfile.totalPrice.method,
       contractCap: remainingCap == null ? null : policy.contractValue,
       remainingCapAtCreation: remainingCap,
-      customerReview: policy.invoicingProfile.customerReview ?? 'optional',
-    }
-    const created = (await tx.execute<{ id: string; worksheetNumber: string }>(sql`
+      customerReview: policy.invoicingProfile.customerReview ?? "optional",
+    };
+    const created = await tx.execute<{ id: string; worksheetNumber: string }>(
+      sql`
       insert into prebills (
         org_id, project_id, worksheet_number, period_start, period_end, notes,
         status, custom, created_by, updated_by
@@ -204,10 +239,12 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
         ${input.notes?.trim() || null}, 'draft', ${JSON.stringify({ policy: policySnapshot })}::jsonb,
         ${actorId}, ${actorId}
       ) returning id, worksheet_number as "worksheetNumber"
-    `, 'objects'))
-    const prebill = created[0]!
+    `,
+      "objects",
+    );
+    const prebill = created[0]!;
 
-    let lineNumber = 1
+    let lineNumber = 1;
     for (const source of billable) {
       const pricingSnapshot = {
         projectFinancialProfileVersionId: source.policyVersion.id,
@@ -218,7 +255,7 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
         uncappedBillAmount: source.billAmount,
         directCostAmount: source.directCostAmount,
         overheadAmount: source.overheadAmount,
-      }
+      };
       await tx.execute(sql`
         insert into prebill_lines (
           org_id, prebill_id, project_id, line_number, source_type, time_entry_id,
@@ -236,11 +273,18 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
           ${JSON.stringify(pricingSnapshot)}::jsonb, 'bill',
           ${actorId}, ${actorId}
         )
-      `)
+      `);
     }
-    await refreshTotals(tx, orgId, prebill.id, actorId)
-    await appendEvent(tx, orgId, prebill.id, actorId, 'created', { sourceCount: billable.length, periodStart, periodEnd, policy: policySnapshot })
-    await audit(tx, orgId, 'prebills', prebill.id, actorId, { after: { worksheetNumber, status: 'draft', policy: policySnapshot } })
-    return { ...prebill, sourceCount: billable.length }
-  })
+    await refreshTotals(tx, orgId, prebill.id, actorId);
+    await appendEvent(tx, orgId, prebill.id, actorId, "created", {
+      sourceCount: billable.length,
+      periodStart,
+      periodEnd,
+      policy: policySnapshot,
+    });
+    await audit(tx, orgId, "prebills", prebill.id, actorId, {
+      after: { worksheetNumber, status: "draft", policy: policySnapshot },
+    });
+    return { ...prebill, sourceCount: billable.length };
+  });
 }

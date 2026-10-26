@@ -34,10 +34,15 @@ registerHooks({
           `),
       };
     }
-    if (specifier.endsWith("/lib/features") && context.parentURL?.includes("/accounting/changes/")) {
+    if (
+      specifier.endsWith("/lib/features") &&
+      context.parentURL?.includes("/accounting/changes/")
+    ) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(`export async function isFeatureEnabled(){ return true; }`),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(`export async function isFeatureEnabled(){ return true; }`),
       };
     }
     return next(specifier, context);
@@ -46,9 +51,8 @@ registerHooks({
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { authorizeChange } = await import("./_authorization.ts");
 import { NextResponse } from "next/server";
 
@@ -58,8 +62,8 @@ test("financial-change oracle: no family permission sees existing and missing id
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     state.user = { orgId: org.orgId, id: adminId };
     const changeId = randomUUID();
-    await withBypassContext(
-      () => db.execute(sql`insert into financial_changes(id,org_id,subsidiary_id,domain,subject_id,operation,effective_on,reason,idempotency_key,payload,before_state,submitted_by,created_by,updated_by)
+    await withBypassContext(() =>
+      db.execute(sql`insert into financial_changes(id,org_id,subsidiary_id,domain,subject_id,operation,effective_on,reason,idempotency_key,payload,before_state,submitted_by,created_by,updated_by)
         values (${changeId},${org.orgId},${org.subsidiaryId},'revenue',${randomUUID()},'test-op','2026-01-01','test reason',${`key-${changeId}`},'{}'::jsonb,'{}'::jsonb,${adminId},${adminId},${adminId})`),
     );
 
@@ -82,8 +86,8 @@ test("financial-change oracle: no family permission sees existing and missing id
     // Wrong-domain callers learn nothing: an ar.post-only caller sees an
     // existing lease change exactly like a missing id (uniform 404).
     const leaseId = randomUUID();
-    await withBypassContext(
-      () => db.execute(sql`insert into financial_changes(id,org_id,subsidiary_id,domain,subject_id,operation,effective_on,reason,idempotency_key,payload,before_state,submitted_by,created_by,updated_by)
+    await withBypassContext(() =>
+      db.execute(sql`insert into financial_changes(id,org_id,subsidiary_id,domain,subject_id,operation,effective_on,reason,idempotency_key,payload,before_state,submitted_by,created_by,updated_by)
         values (${leaseId},${org.orgId},${org.subsidiaryId},'lease',${randomUUID()},'test-op','2026-01-01','test reason',${`key-${leaseId}`},'{}'::jsonb,'{}'::jsonb,${adminId},${adminId},${adminId})`),
     );
     const wrongDomain = await authorizeChange(leaseId);
@@ -94,7 +98,8 @@ test("financial-change oracle: no family permission sees existing and missing id
     assert.ok(wrongDomainMissing instanceof NextResponse);
     assert.equal(wrongDomainMissing.status, 404);
     assert.deepEqual(await wrongDomainMissing.json(), { error: "change not found" });
-    const obligationId = randomUUID(), provisionId = randomUUID();
+    const obligationId = randomUUID(),
+      provisionId = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`insert into provision_obligations
         (id,org_id,subsidiary_id,book_id,name,currency,expense_account_id,liability_account_id,created_by)
@@ -102,17 +107,19 @@ test("financial-change oracle: no family permission sees existing and missing id
       await db.execute(sql`insert into financial_changes
         (id,org_id,subsidiary_id,domain,subject_id,operation,effective_on,reason,idempotency_key,payload,before_state,submitted_by,created_by,updated_by)
         values (${provisionId},${org.orgId},${org.subsidiaryId},'provision',${obligationId},'provision_assessment',${org.date},'Assess settlement claim',${`key-${provisionId}`},
-          ${JSON.stringify({requiredSubsidiaryIds:[org.subsidiaryId]})}::jsonb,'{}'::jsonb,${adminId},${adminId},${adminId})`);
+          ${JSON.stringify({ requiredSubsidiaryIds: [org.subsidiaryId] })}::jsonb,'{}'::jsonb,${adminId},${adminId},${adminId})`);
     });
     await withOrgContext(org.orgId, async () => {
       state.permissions = new Set<string>(["gl.manage"]);
       assert.ok(!((await authorizeChange(provisionId, "submit")) instanceof NextResponse));
       const cannotPost = await authorizeChange(provisionId, "apply");
-      assert.ok(cannotPost instanceof NextResponse); assert.equal(cannotPost.status, 404);
+      assert.ok(cannotPost instanceof NextResponse);
+      assert.equal(cannotPost.status, 404);
       state.permissions = new Set<string>(["gl.post"]);
       assert.ok(!((await authorizeChange(provisionId, "apply")) instanceof NextResponse));
       const cannotSubmit = await authorizeChange(provisionId, "submit");
-      assert.ok(cannotSubmit instanceof NextResponse); assert.equal(cannotSubmit.status, 404);
+      assert.ok(cannotSubmit instanceof NextResponse);
+      assert.equal(cannotSubmit.status, 404);
     });
   } finally {
     await dropScratchOrg(org.orgId);

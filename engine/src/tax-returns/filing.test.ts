@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTaxFilingSnapshot, prepareTaxFiling, sortTaxFilingAdjustments, TAX_FILING_SNAPSHOT_VERSION, type TaxFilingAdjustment } from "./filing.ts";
+import {
+  buildTaxFilingSnapshot,
+  prepareTaxFiling,
+  sortTaxFilingAdjustments,
+  TAX_FILING_SNAPSHOT_VERSION,
+  type TaxFilingAdjustment,
+} from "./filing.ts";
 import type { TaxReturnResult } from "./return.ts";
 
 const RETURN_WITH_EDITABLE_BOXES: TaxReturnResult = {
@@ -12,8 +18,22 @@ const RETURN_WITH_EDITABLE_BOXES: TaxReturnResult = {
   watermark: null,
   registrationNumber: null,
   boxes: [
-    { lineCode: "9", label: "Adjustment 9", value: "0.0000", computed: false, editable: true, pdfField: null },
-    { lineCode: "10", label: "Adjustment 10", value: "0.0000", computed: false, editable: true, pdfField: null },
+    {
+      lineCode: "9",
+      label: "Adjustment 9",
+      value: "0.0000",
+      computed: false,
+      editable: true,
+      pdfField: null,
+    },
+    {
+      lineCode: "10",
+      label: "Adjustment 10",
+      value: "0.0000",
+      computed: false,
+      editable: true,
+      pdfField: null,
+    },
   ],
   functionalCurrency: "CAD",
   subsidiaryIds: [],
@@ -86,14 +106,22 @@ test("tax filing fingerprints survive jsonb reordering of mixed-length adjustmen
 });
 
 test("tax filing fingerprints still reject changed adjustment values", () => {
-  const prepared = buildTaxFilingSnapshot(RETURN_WITH_EDITABLE_BOXES, {
-    "10": "5.00",
-    "9": "7.00",
-  }, 2);
-  const changed = buildTaxFilingSnapshot(RETURN_WITH_EDITABLE_BOXES, {
-    "9": "7.01",
-    "10": "5.00",
-  }, 2);
+  const prepared = buildTaxFilingSnapshot(
+    RETURN_WITH_EDITABLE_BOXES,
+    {
+      "10": "5.00",
+      "9": "7.00",
+    },
+    2,
+  );
+  const changed = buildTaxFilingSnapshot(
+    RETURN_WITH_EDITABLE_BOXES,
+    {
+      "9": "7.01",
+      "10": "5.00",
+    },
+    2,
+  );
 
   assert.notEqual(prepared.snapshotHash, changed.snapshotHash);
 });
@@ -111,10 +139,30 @@ test("each identity field change trips the v2 fingerprint", () => {
   const adjustments = {};
   const baseline = buildTaxFilingSnapshot(identifiedReturn(), adjustments, 2).snapshotHash;
   const variants: [string, (result: TaxReturnResult) => void][] = [
-    ["registrationNumber", (r) => { r.registrationNumber = "987654321RT0009"; }],
-    ["registrationId", (r) => { r.registrationId = "44444444-4444-4444-8444-444444444444"; }],
-    ["functionalCurrency", (r) => { r.functionalCurrency = "USD"; }],
-    ["subsidiaryIds", (r) => { r.subsidiaryIds = [SUB_A]; }],
+    [
+      "registrationNumber",
+      (r) => {
+        r.registrationNumber = "987654321RT0009";
+      },
+    ],
+    [
+      "registrationId",
+      (r) => {
+        r.registrationId = "44444444-4444-4444-8444-444444444444";
+      },
+    ],
+    [
+      "functionalCurrency",
+      (r) => {
+        r.functionalCurrency = "USD";
+      },
+    ],
+    [
+      "subsidiaryIds",
+      (r) => {
+        r.subsidiaryIds = [SUB_A];
+      },
+    ],
     [
       "translation rate",
       (r) => {
@@ -128,7 +176,9 @@ test("each identity field change trips the v2 fingerprint", () => {
     ],
     [
       "translation presentation",
-      (r) => { r.translation = { ...r.translation!, presentationCurrency: "EUR" }; },
+      (r) => {
+        r.translation = { ...r.translation!, presentationCurrency: "EUR" };
+      },
     ],
     [
       "translation dropped",
@@ -216,8 +266,14 @@ const ENTRY_ITC: TaxFilingAdjustment = {
 };
 
 test("v3 fingerprints do not depend on the order the entries were recorded", () => {
-  const forward = buildTaxFilingSnapshot(identifiedReturn(), [ENTRY_PRE_CONVERSION, ENTRY_ITC]).snapshotHash;
-  const reversed = buildTaxFilingSnapshot(identifiedReturn(), [ENTRY_ITC, ENTRY_PRE_CONVERSION]).snapshotHash;
+  const forward = buildTaxFilingSnapshot(identifiedReturn(), [
+    ENTRY_PRE_CONVERSION,
+    ENTRY_ITC,
+  ]).snapshotHash;
+  const reversed = buildTaxFilingSnapshot(identifiedReturn(), [
+    ENTRY_ITC,
+    ENTRY_PRE_CONVERSION,
+  ]).snapshotHash;
   assert.equal(forward, reversed);
 });
 
@@ -231,7 +287,8 @@ test("v3 fingerprints the reason, author, time and amount of every entry", () =>
   ];
   for (const variant of variants) {
     assert.notEqual(
-      buildTaxFilingSnapshot(identifiedReturn(), [{ ...ENTRY_PRE_CONVERSION, ...variant }]).snapshotHash,
+      buildTaxFilingSnapshot(identifiedReturn(), [{ ...ENTRY_PRE_CONVERSION, ...variant }])
+        .snapshotHash,
       baseline,
       `${Object.keys(variant)[0]} must change the v3 fingerprint`,
     );
@@ -239,16 +296,24 @@ test("v3 fingerprints the reason, author, time and amount of every entry", () =>
 });
 
 test("each snapshot version takes the adjustment shape it recorded", () => {
-  assert.throws(() => buildTaxFilingSnapshot(identifiedReturn(), [ENTRY_PRE_CONVERSION], 2), /amounts per line/);
+  assert.throws(
+    () => buildTaxFilingSnapshot(identifiedReturn(), [ENTRY_PRE_CONVERSION], 2),
+    /amounts per line/,
+  );
   assert.throws(() => buildTaxFilingSnapshot(identifiedReturn(), {}, 3), /governed entries/);
 });
 
 test("the v3 snapshot stores its entries in a deterministic order", () => {
-  const { snapshot } = buildTaxFilingSnapshot(identifiedReturn(), [ENTRY_ITC, ENTRY_PRE_CONVERSION]);
+  const { snapshot } = buildTaxFilingSnapshot(identifiedReturn(), [
+    ENTRY_ITC,
+    ENTRY_PRE_CONVERSION,
+  ]);
   assert.deepEqual(snapshot.adjustments, [ENTRY_PRE_CONVERSION, ENTRY_ITC]);
-  assert.deepEqual(sortTaxFilingAdjustments([ENTRY_ITC, ENTRY_PRE_CONVERSION]), [ENTRY_PRE_CONVERSION, ENTRY_ITC]);
+  assert.deepEqual(sortTaxFilingAdjustments([ENTRY_ITC, ENTRY_PRE_CONVERSION]), [
+    ENTRY_PRE_CONVERSION,
+    ENTRY_ITC,
+  ]);
 });
-
 
 test("v3 ordering includes the author when other entry fields match", () => {
   const secondAuthor = { ...ENTRY_PRE_CONVERSION, enteredBy: "user-2" };
@@ -275,19 +340,34 @@ test("a snapshot does not retain mutable references to its source evidence", () 
 });
 
 test("prepare refuses a return with adjustment amounts without matching evidence", async () => {
-  const result = { ...RETURN_WITH_EDITABLE_BOXES, boxes: [{ ...RETURN_WITH_EDITABLE_BOXES.boxes[0]!, value: "1.0000" }] };
-  await assert.rejects(() => prepareTaxFiling("org-1", "user-1", result, []), /without matching adjustment evidence/);
+  const result = {
+    ...RETURN_WITH_EDITABLE_BOXES,
+    boxes: [{ ...RETURN_WITH_EDITABLE_BOXES.boxes[0]!, value: "1.0000" }],
+  };
   await assert.rejects(
-    () => prepareTaxFiling("org-1", "user-1", result, [{ lineCode: "9", amount: "2", reason: "Prior-system activity" }]),
+    () => prepareTaxFiling("org-1", "user-1", result, []),
+    /without matching adjustment evidence/,
+  );
+  await assert.rejects(
+    () =>
+      prepareTaxFiling("org-1", "user-1", result, [
+        { lineCode: "9", amount: "2", reason: "Prior-system activity" },
+      ]),
     /no longer matches the entered adjustments/,
   );
 });
 
 test("prepare refuses adjustments on computed or input-backed boxes even when flagged editable", async () => {
   for (const extra of [{ computed: true }, { inputKey: "income-tax.provision" }]) {
-    const result = { ...RETURN_WITH_EDITABLE_BOXES, boxes: [{ ...RETURN_WITH_EDITABLE_BOXES.boxes[0]!, value: "1.0000", ...extra }] };
+    const result = {
+      ...RETURN_WITH_EDITABLE_BOXES,
+      boxes: [{ ...RETURN_WITH_EDITABLE_BOXES.boxes[0]!, value: "1.0000", ...extra }],
+    };
     await assert.rejects(
-      () => prepareTaxFiling("org-1", "user-1", result, [{ lineCode: "9", amount: "1", reason: "Prior-system activity" }]),
+      () =>
+        prepareTaxFiling("org-1", "user-1", result, [
+          { lineCode: "9", amount: "1", reason: "Prior-system activity" },
+        ]),
       /not an adjustment line/,
     );
   }

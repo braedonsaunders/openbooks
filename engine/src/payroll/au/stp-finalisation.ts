@@ -68,12 +68,14 @@ const num = (value: unknown): string => (value == null ? "0" : String(value));
  * with no committed AU runs via the no-stubs refusal below.
  */
 export async function auStpFinalisationRows(
-  orgId: string, taxYear: number,
+  orgId: string,
+  taxYear: number,
 ): Promise<AuStpFinalisationRow[]> {
   assertAuFinalisationYear(taxYear);
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -113,13 +115,15 @@ export async function auStpFinalisationRows(
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'AU'
      group by s.employee_party_id, p.display_name
      order by p.display_name, s.employee_party_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollPackError(
-      `AU STP finalisation for ${auFinancialYearLabel(taxYear)} (taxYear ${taxYear}): `
-      + "no committed AU pay runs — the finalisation declares year-to-date figures that were "
-      + "actually paid, so a year with nothing committed has nothing to declare. Commit and post "
-      + "the year's pay runs before finalising.",
+      `AU STP finalisation for ${auFinancialYearLabel(taxYear)} (taxYear ${taxYear}): ` +
+        "no committed AU pay runs — the finalisation declares year-to-date figures that were " +
+        "actually paid, so a year with nothing committed has nothing to declare. Commit and post " +
+        "the year's pay runs before finalising.",
     );
   }
   return rows.map((row) => ({

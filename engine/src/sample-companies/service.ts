@@ -2,13 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  pool,
-  withBypassContext,
-  withOrgContext,
-  withOrgTransaction,
-} from "../platform/db.ts";
+import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { loadCatalog } from "../sandbox/catalog.ts";
 import { autopilotRunToEnd, provisionRun, loadRun, verify } from "../sim/runner.ts";
@@ -21,7 +15,11 @@ import {
   runProvisioningStage,
 } from "./provisioning-failures.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { DEMO_DATA_VERSION, installDemoScenarios, verifyDemoScenarios } from "./install-scenarios.ts";
+import {
+  DEMO_DATA_VERSION,
+  installDemoScenarios,
+  verifyDemoScenarios,
+} from "./install-scenarios.ts";
 import { sampleCompanyFeatures } from "./features.ts";
 import { createPreviewActor } from "./preview-actor.ts";
 import { verifyAndRegisterDemoAccounting } from "./accounting.ts";
@@ -53,11 +51,7 @@ export type { SampleCompanyProvisioningStage } from "./provisioning-failures.ts"
  * No schema column is needed: the marker lives in the schemaless settings
  * document beside the existing sampleCompany metadata.
  */
-export type SampleCompanyOrgStage =
-  | "cloned"
-  | "finalized"
-  | "numbering_reconciled"
-  | "ready";
+export type SampleCompanyOrgStage = "cloned" | "finalized" | "numbering_reconciled" | "ready";
 
 const SAMPLE_COMPANY_ORG_STAGES: readonly SampleCompanyOrgStage[] = [
   "cloned",
@@ -68,8 +62,7 @@ const SAMPLE_COMPANY_ORG_STAGES: readonly SampleCompanyOrgStage[] = [
 
 function isSampleCompanyOrgStage(value: unknown): value is SampleCompanyOrgStage {
   return (
-    typeof value === "string" &&
-    (SAMPLE_COMPANY_ORG_STAGES as readonly string[]).includes(value)
+    typeof value === "string" && (SAMPLE_COMPANY_ORG_STAGES as readonly string[]).includes(value)
   );
 }
 
@@ -143,7 +136,8 @@ const TEMPLATE_MINIMUMS = {
 async function assertSampleRequestAccess(input: CreateSampleCompanyInput): Promise<void> {
   // bypass: user-keyed-lookup — decides whether this person may request a sample from an organization they may not belong to.
   const allowed = await withBypassContext(async () => {
-    const result = (await db.execute<{ allowed: boolean }>(sql`
+    const result = await db.execute<{ allowed: boolean }>(
+      sql`
       select exists (
         select 1
           from users member
@@ -175,7 +169,9 @@ async function assertSampleRequestAccess(input: CreateSampleCompanyInput): Promi
              )
            )
       ) as allowed
-    `, "objects"));
+    `,
+      "objects",
+    );
     return result[0]?.allowed === true;
   });
   if (!allowed) {
@@ -192,7 +188,8 @@ async function templateCandidates(profileId: string): Promise<Array<{ id: string
   // context below.
   // bypass: cross-org-by-design — sample templates are discovered among every organization of the installation.
   return withBypassContext(async () => {
-    const result = (await db.execute<{ id: string }>(sql`
+    const result = await db.execute<{ id: string }>(
+      sql`
       select o.id
         from orgs o
        where o.env_kind in ('production', 'sandbox', 'preview')
@@ -211,7 +208,9 @@ async function templateCandidates(profileId: string): Promise<Array<{ id: string
          and not (o.settings ? 'sampleCompany')
        order by coalesce((o.settings->'sampleTemplate'->>'enabled')::boolean, false) desc,
                 o.created_at desc
-    `, "objects"));
+    `,
+      "objects",
+    );
     return result;
   });
 }
@@ -323,9 +322,8 @@ async function prepareSampleCompanyTemplateOnce(
 export async function prepareSampleCompanyTemplate(
   industryKey: string,
 ): Promise<PrepareSampleCompanyResult> {
-  return runOperationThroughTransientDatabaseFailures(
-    `prepare ${industryKey} sample company`,
-    () => prepareSampleCompanyTemplateOnce(industryKey),
+  return runOperationThroughTransientDatabaseFailures(`prepare ${industryKey} sample company`, () =>
+    prepareSampleCompanyTemplateOnce(industryKey),
   );
 }
 
@@ -340,64 +338,109 @@ export async function prepareAllSampleCompanyTemplates(): Promise<PrepareSampleC
 }
 
 /** Install the complete native feature scenarios before a source is cloned. */
-export async function prepareIndustryDemo(industryKey: string): Promise<PrepareSampleCompanyResult> {
+export async function prepareIndustryDemo(
+  industryKey: string,
+): Promise<PrepareSampleCompanyResult> {
   const prepared = await prepareSampleCompanyTemplate(industryKey);
   await installDemoScenarios(prepared.templateOrgId, industryKey);
   const verified = await verifyDemoScenarios(prepared.templateOrgId, industryKey);
-  if (!verified.ready) throw new SampleCompanyError(`Demo coverage is incomplete: ${verified.missing.join(", ")}. Prepare the industry template again after resolving its missing native records.`);
+  if (!verified.ready)
+    throw new SampleCompanyError(
+      `Demo coverage is incomplete: ${verified.missing.join(", ")}. Prepare the industry template again after resolving its missing native records.`,
+    );
   await verifyAndRegisterDemoAccounting(prepared.templateOrgId);
   const source = await templateRowForOrg(prepared.templateOrgId);
   if (!source) throw new SampleCompanyError("The prepared master demo could not be read back.");
-  return { ...prepared, coverage: { documents: source.documents, postedEntries: source.postedEntries, parties: source.parties, periods: source.periods, adminRoles: source.adminRoles } };
+  return {
+    ...prepared,
+    coverage: {
+      documents: source.documents,
+      postedEntries: source.postedEntries,
+      parties: source.parties,
+      periods: source.periods,
+      adminRoles: source.adminRoles,
+    },
+  };
 }
 
 /** Resume a maintainer build whose durable manifest survived interruption. */
 export async function resumeSampleTemplate(runDir: string): Promise<PrepareSampleCompanyResult> {
   const { manifest } = loadRun(runDir);
   const profile = SAMPLE_COMPANY_PROFILES.find((entry) => entry.profileId === manifest.profileId);
-  if (!profile || manifest.seed !== SAMPLE_TEMPLATE_SEED) throw new SampleCompanyError("The run is not a built-in industry demo build.");
+  if (!profile || manifest.seed !== SAMPLE_TEMPLATE_SEED)
+    throw new SampleCompanyError("The run is not a built-in industry demo build.");
   const lockKey = `openbooks:sample-template:${profile.profileId}`;
   const client = await pool.connect();
   let lockHealthy = true;
-  const lockError = () => { lockHealthy = false; };
+  const lockError = () => {
+    lockHealthy = false;
+  };
   client.on("error", lockError);
   try {
     await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [lockKey]);
     const permitted = await withOrgContext(manifest.orgId, async () => {
-      const row = (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id=${manifest.orgId}`, "objects"))[0];
+      const row = (
+        await db.execute<{ settings: Record<string, unknown> }>(
+          sql`select settings from orgs where id=${manifest.orgId}`,
+          "objects",
+        )
+      )[0];
       const attempt = row?.settings.sampleTemplateAttempt as Record<string, unknown> | undefined;
-      return row?.settings.simHarness === true && row.settings.simProfile === profile.profileId && attempt?.profileId === profile.profileId && attempt?.seed === manifest.seed
-        && (attempt.runDir === undefined || (typeof attempt.runDir === "string" && resolve(attempt.runDir) === resolve(runDir)));
+      return (
+        row?.settings.simHarness === true &&
+        row.settings.simProfile === profile.profileId &&
+        attempt?.profileId === profile.profileId &&
+        attempt?.seed === manifest.seed &&
+        (attempt.runDir === undefined ||
+          (typeof attempt.runDir === "string" && resolve(attempt.runDir) === resolve(runDir)))
+      );
     });
-    if (!permitted) throw new SampleCompanyError("The interrupted company no longer matches its synthetic demo build; inspect the run and tenant before retrying.");
+    if (!permitted)
+      throw new SampleCompanyError(
+        "The interrupted company no longer matches its synthetic demo build; inspect the run and tenant before retrying.",
+      );
     // Recheck the recorded day before advancing. A crash can follow its business
     // writes but precede its end-of-day oracle; completion must never skip that check.
     const check = await verify(runDir);
-    if (!check.pass) throw new SampleCompanyError(`Demo verification failed on ${check.simDate}; resolve the reported invariants before resuming.`);
+    if (!check.pass)
+      throw new SampleCompanyError(
+        `Demo verification failed on ${check.simDate}; resolve the reported invariants before resuming.`,
+      );
     const completed = await runSimulatorThroughTransientDatabaseFailures(runDir);
-    if (completed.status !== "completed" || completed.defects.length) throw new SampleCompanyError("The resumed demo did not complete its accounting checks.");
-    if (!lockHealthy) throw new SampleCompanyError("The demo build lock was lost; retry resume before registering its source.");
+    if (completed.status !== "completed" || completed.defects.length)
+      throw new SampleCompanyError("The resumed demo did not complete its accounting checks.");
+    if (!lockHealthy)
+      throw new SampleCompanyError(
+        "The demo build lock was lost; retry resume before registering its source.",
+      );
     await markSimulationOraclePassed(manifest.orgId, profile.profileId);
     const template = await templateRowForOrg(manifest.orgId);
     if (!template) throw new SampleCompanyError("The resumed demo company could not be read back.");
     assertTemplateCoverage(template);
     await markTemplate(template, profile.profileId);
     await clearTemplateAttempt(manifest.orgId);
-    if (!lockHealthy) throw new SampleCompanyError("The demo build lock was lost during registration; run prepare for this industry before cloning its source.");
+    if (!lockHealthy)
+      throw new SampleCompanyError(
+        "The demo build lock was lost during registration; run prepare for this industry before cloning its source.",
+      );
   } finally {
     client.off("error", lockError);
-    if (lockHealthy) await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
+    if (lockHealthy)
+      await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
     client.release(lockHealthy ? undefined : new Error("demo build lock connection lost"));
   }
   return prepareIndustryDemo(profile.industryKey);
 }
 
-async function templateRowForOrg(orgId: string): Promise<(TemplateRow & { envKind: string }) | null> {
+async function templateRowForOrg(
+  orgId: string,
+): Promise<(TemplateRow & { envKind: string }) | null> {
   // Accounting content is never inspected under cross-tenant bypass. The
   // explicit organization context makes PostgreSQL RLS the authoritative
   // boundary even for maintainer-driven template preparation.
   return withOrgContext(orgId, async () => {
-    const result = (await db.execute<TemplateRow & { envKind: string }>(sql`
+    const result = await db.execute<TemplateRow & { envKind: string }>(
+      sql`
       select o.id, o.name, o.env_kind as "envKind",
              (select count(*)::int from documents d where d.org_id = o.id) as documents,
              (select count(*)::int from journal_entries j
@@ -408,7 +451,9 @@ async function templateRowForOrg(orgId: string): Promise<(TemplateRow & { envKin
              (select count(*)::int from app_roles r
                where r.org_id = o.id and r.key = 'admin') as "adminRoles"
         from orgs o where o.id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     return result[0] ?? null;
   });
 }
@@ -432,13 +477,16 @@ export async function promoteExistingSampleTemplate(
   input: PromoteExistingSampleTemplateInput,
 ): Promise<PrepareSampleCompanyResult> {
   const profile = SAMPLE_COMPANY_BY_INDUSTRY.get(input.industryKey);
-  if (!profile) throw new SampleCompanyError(`unknown sample-company industry: ${input.industryKey}`);
+  if (!profile)
+    throw new SampleCompanyError(`unknown sample-company industry: ${input.industryKey}`);
   if (!input.confirmedSampleData) {
     throw new SampleCompanyError("explicit sample-data approval is required");
   }
   const masked = input.masked ?? true;
   if (!masked && !input.confirmedSynthetic) {
-    throw new SampleCompanyError("unmasked promotion requires explicit synthetic-data confirmation");
+    throw new SampleCompanyError(
+      "unmasked promotion requires explicit synthetic-data confirmation",
+    );
   }
 
   const source = await templateRowForOrg(input.sourceOrgId);
@@ -448,19 +496,24 @@ export async function promoteExistingSampleTemplate(
   assertTemplateCoverage(source);
 
   // bypass: cross-org-by-design — creating a sandbox copies a production organization into a new one.
-  const clone = await withBypassContext(() => createSandbox({
-    productionOrgId: source.id,
-    name: `SIM · ${profile.companyName}`,
-    tier: "full",
-    masked,
-    createdBy: null,
-    lifecycleAuthority: { systemReason: "sample company promotion from approved template" },
-  }));
+  const clone = await withBypassContext(() =>
+    createSandbox({
+      productionOrgId: source.id,
+      name: `SIM · ${profile.companyName}`,
+      tier: "full",
+      masked,
+      createdBy: null,
+      lifecycleAuthority: { systemReason: "sample company promotion from approved template" },
+    }),
+  );
   await withOrgTransaction(clone.sandboxOrgId, async () => {
     await db.transaction(async (tx) => {
-      const state = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
+      const state = await tx.execute<{ settings: Record<string, unknown> }>(
+        sql`
         select settings from orgs where id = ${clone.sandboxOrgId} for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       const settings = { ...(state[0]?.settings ?? {}) };
       delete settings.sampleCompany;
       settings.simHarness = true;
@@ -518,10 +571,14 @@ export async function promoteExistingSampleTemplate(
   };
 }
 
-async function existingFor(memberUserId: string, industryKey: string): Promise<{ id: string; name: string } | null> {
+async function existingFor(
+  memberUserId: string,
+  industryKey: string,
+): Promise<{ id: string; name: string } | null> {
   // bypass: user-keyed-lookup — finds this person's sample companies across the organizations they can reach.
   return withBypassContext(async () => {
-    const result = (await db.execute<{ id: string; name: string }>(sql`
+    const result = await db.execute<{ id: string; name: string }>(
+      sql`
       select o.id, o.name
         from orgs o
         join user_org_access access
@@ -539,7 +596,9 @@ async function existingFor(memberUserId: string, industryKey: string): Promise<{
          and coalesce(o.settings->'sampleCompany'->>'provisioningStage', 'ready') = 'ready'
        order by o.created_at asc
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     return result[0] ?? null;
   });
 }
@@ -570,13 +629,14 @@ async function findPartialSampleCompany(
 ): Promise<PartialSampleCompany | null> {
   // bypass: user-keyed-lookup — finds this person's partial sample company across the organizations they can reach.
   return withBypassContext(async () => {
-    const result = (await db.execute<{
+    const result = await db.execute<{
       id: string;
       name: string;
       stage: string | null;
       templateOrgId: string | null;
       sandboxStatus: string | null;
-    }>(sql`
+    }>(
+      sql`
       select o.id, o.name,
              o.settings->'sampleCompany'->>'provisioningStage' as stage,
              o.settings->'sampleCompany'->>'templateOrgId' as "templateOrgId",
@@ -590,7 +650,9 @@ async function findPartialSampleCompany(
          and o.settings->'sampleCompany'->>'provisioningStage' <> 'ready'
        order by o.created_at asc
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = result[0];
     if (!row) return null;
     return {
@@ -635,13 +697,15 @@ function sampleCompanyBirthMarker(args: {
 
 /** Flip the provisioning marker after a stage whose own writes committed. */
 async function setSampleCompanyStage(orgId: string, stage: SampleCompanyOrgStage): Promise<void> {
-  const stamped = (await withOrgContext(orgId, () => db.execute(sql`
+  const stamped = (await withOrgContext(orgId, () =>
+    db.execute(sql`
     update orgs
        set settings = jsonb_set(settings, '{sampleCompany,provisioningStage}', to_jsonb(${stage}::text), true),
            updated_at = now()
      where id = ${orgId}
        and settings ? 'sampleCompany'
-  `)) as unknown as { rowCount?: number | null });
+  `),
+  )) as unknown as { rowCount?: number | null };
   if (stamped.rowCount !== 1) {
     throw new SampleCompanyError("sample company disappeared during provisioning");
   }
@@ -661,10 +725,14 @@ async function assertShellOrgHasNoTenantRows(orgId: string): Promise<void> {
   const catalog = await loadCatalog();
   const tables = catalog.tenantTables.filter((t) => t.hasOrgId).map((t) => t.name);
   for (const name of tables) {
-    if (!CATALOG_TABLE_NAME_RE.test(name)) throw new Error(`unexpected catalog table name: ${name}`);
+    if (!CATALOG_TABLE_NAME_RE.test(name))
+      throw new Error(`unexpected catalog table name: ${name}`);
   }
   const probes = [
-    ...tables.map((name) => `select '${name}' as t where exists (select 1 from public."${name}" where org_id = '${orgId}')`),
+    ...tables.map(
+      (name) =>
+        `select '${name}' as t where exists (select 1 from public."${name}" where org_id = '${orgId}')`,
+    ),
     `select 'app_listings' as t where exists (select 1 from public.app_listings where publisher_org_id = '${orgId}')`,
     `select 'orgs' as t where exists (select 1 from public.orgs where sandbox_of = '${orgId}')`,
   ];
@@ -676,7 +744,9 @@ async function assertShellOrgHasNoTenantRows(orgId: string): Promise<void> {
   }
   for (let offset = 0; offset < probes.length; offset += 50) {
     const batch = probes.slice(offset, offset + 50);
-    const holder = (await db.execute<{ t: string }>(sql.raw(batch.join("\nunion all\n")), "objects"))[0];
+    const holder = (
+      await db.execute<{ t: string }>(sql.raw(batch.join("\nunion all\n")), "objects")
+    )[0];
     if (holder) {
       throw new SampleCompanyError(
         `refusing to delete partial sample company ${orgId}: table ${holder.t} still holds its rows; ` +
@@ -698,12 +768,17 @@ async function assertShellOrgHasNoTenantRows(orgId: string): Promise<void> {
  */
 async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"> {
   return withOrgContext(orgId, async () => {
-    const row = (await db.execute<{ name: string; envKind: string; isSample: boolean }>(sql`
+    const row = (
+      await db.execute<{ name: string; envKind: string; isSample: boolean }>(
+        sql`
       select name, env_kind as "envKind",
              ((settings ? 'sampleCompany')
               or (settings ? 'sampleTemplatePromotion')
               or coalesce((settings->>'simHarness')::boolean, false)) as "isSample"
-        from orgs where id = ${orgId}`, "objects"))[0];
+        from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0];
     if (!row) return "gone";
     if (!row.isSample) {
       throw new SampleCompanyError(
@@ -718,8 +793,11 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
     if (row.envKind === "preview") {
       await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
     }
-    const sandboxRows = await db.execute<{ id: string }>(sql`
-      select id from sandboxes where org_id = ${orgId}`, "objects");
+    const sandboxRows = await db.execute<{ id: string }>(
+      sql`
+      select id from sandboxes where org_id = ${orgId}`,
+      "objects",
+    );
     if (sandboxRows.length === 0) {
       // C-63: the clone died between the org INSERT and the sandboxes INSERT
       // (rows that predate the one-transaction birth), or suffered outside
@@ -730,8 +808,13 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
       // with its remedy instead of deleting.
       await assertShellOrgHasNoTenantRows(orgId);
       await db.execute(sql`delete from orgs where id = ${orgId}`);
-      const remaining = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from orgs where id = ${orgId}`, "objects"))[0]!.n;
+      const remaining = (
+        await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from orgs where id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       if (remaining !== 0) {
         throw new SampleCompanyError(`partial sample company ${orgId} survived deletion`);
       }
@@ -742,9 +825,16 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
         `refusing to delete partial sample company ${orgId}: expected exactly one sandbox row, found ${sandboxRows.length}`,
       );
     }
-    await deleteSandbox(sandboxRows[0]!.id, { systemReason: "sample company cleanup requested by its owner" });
-    const remaining = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from orgs where id = ${orgId}`, "objects"))[0]!.n;
+    await deleteSandbox(sandboxRows[0]!.id, {
+      systemReason: "sample company cleanup requested by its owner",
+    });
+    const remaining = (
+      await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     if (remaining !== 0) {
       throw new SampleCompanyError(`partial sample company ${orgId} survived deletion`);
     }
@@ -756,7 +846,8 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
   const [templates, existing] = await Promise.all([
     // bypass: cross-org-by-design — sample templates are discovered among every organization of the installation.
     withBypassContext(async () => {
-      const result = (await db.execute<{ id: string; profile: string; industry: string }>(sql`
+      const result = await db.execute<{ id: string; profile: string; industry: string }>(
+        sql`
         select o.id, o.settings->'demoData'->>'industryKey' as industry, o.settings->'sampleTemplate'->>'profileId' as profile
           from orgs o
          where o.env_kind in ('production', 'sandbox', 'preview')
@@ -766,7 +857,9 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
            and o.settings->'demoData'->'accountingVerification'->>'status' = 'passed'
            and o.settings->'sampleTemplate'->>'profileId' in ${SAMPLE_COMPANY_PROFILES.map((profile) => profile.profileId)}
            and not (o.settings ? 'sampleCompany')
-      `, "objects"));
+      `,
+        "objects",
+      );
       return result;
     }).then(async (candidates) => {
       const ready = new Set<string>();
@@ -778,7 +871,8 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
     }),
     // bypass: user-keyed-lookup — finds this person's sample companies across the organizations they can reach.
     withBypassContext(async () => {
-      const result = (await db.execute<{ id: string; industry: string }>(sql`
+      const result = await db.execute<{ id: string; industry: string }>(
+        sql`
         select o.id, o.settings->'sampleCompany'->>'industryKey' as industry
           from orgs o
           join user_org_access access
@@ -787,7 +881,9 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
            and access.is_active
          where o.env_kind = 'preview'
            and o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       return new Map(result.map((row) => [row.industry, row.id]));
     }),
   ]);
@@ -832,7 +928,11 @@ export interface SampleCompanyTemplateDeps {
  * passed the oracle and registered), resumes a preserved checkpoint, or removes
  * an older attempt without a checkpoint before provisioning.
  */
-async function stampTemplateAttempt(orgId: string, profileId: string, runDir: string): Promise<void> {
+async function stampTemplateAttempt(
+  orgId: string,
+  profileId: string,
+  runDir: string,
+): Promise<void> {
   const attempt = {
     version: 1,
     profileId,
@@ -841,13 +941,15 @@ async function stampTemplateAttempt(orgId: string, profileId: string, runDir: st
     runDir,
     attemptedAt: new Date().toISOString(),
   };
-  const stamped = (await withOrgContext(orgId, () => db.execute(sql`
+  const stamped = (await withOrgContext(orgId, () =>
+    db.execute(sql`
     update orgs
        set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('sampleTemplateAttempt',
              coalesce(settings->'sampleTemplateAttempt', '{}'::jsonb) || ${JSON.stringify(attempt)}::jsonb),
            updated_at = now()
      where id = ${orgId}
-  `)) as unknown as { rowCount?: number | null });
+  `),
+  )) as unknown as { rowCount?: number | null };
   if (stamped.rowCount !== 1) {
     throw new SampleCompanyError("sample template attempt disappeared during provisioning");
   }
@@ -855,13 +957,15 @@ async function stampTemplateAttempt(orgId: string, profileId: string, runDir: st
 
 /** Drop the attempt marker once the template registers — it has converged. */
 async function clearTemplateAttempt(orgId: string): Promise<void> {
-  const cleared = (await withOrgContext(orgId, () => db.execute(sql`
+  const cleared = (await withOrgContext(orgId, () =>
+    db.execute(sql`
     update orgs
        set settings = settings - 'sampleTemplateAttempt',
            updated_at = now()
      where id = ${orgId}
        and settings ? 'sampleTemplateAttempt'
-  `)) as unknown as { rowCount?: number | null });
+  `),
+  )) as unknown as { rowCount?: number | null };
   if (cleared.rowCount !== 1) {
     throw new SampleCompanyError("sample template attempt disappeared during provisioning");
   }
@@ -881,14 +985,17 @@ async function sweepStaleTemplateAttempts(
 ): Promise<void> {
   // bypass: cross-org-by-design — stale template attempts are swept across every organization of the installation.
   const stale = await withBypassContext(async () => {
-    const result = (await db.execute<{ id: string; runDir: string | null }>(sql`
+    const result = await db.execute<{ id: string; runDir: string | null }>(
+      sql`
       select id, settings->'sampleTemplateAttempt'->>'runDir' as "runDir" from orgs
        where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}
          and settings->'sampleTemplateAttempt'->>'seed' = ${SAMPLE_TEMPLATE_SEED}
          and coalesce(settings->'sampleTemplateOracle'->>'status', '') <> 'passed'
          and coalesce(settings->'sampleTemplate'->>'enabled', 'false') <> 'true'
        order by created_at asc
-    `, "objects"));
+    `,
+      "objects",
+    );
     return result;
   });
   const stuck: string[] = [];
@@ -896,21 +1003,24 @@ async function sweepStaleTemplateAttempts(
     if (attempt.runDir) {
       throw new SampleCompanyResumeRequiredError(
         `An interrupted industry demo build exists for organization ${attempt.id}. Resume its preserved checkpoint with ` +
-        `\`node scripts/sample-companies.mjs resume --run-dir ${JSON.stringify(attempt.runDir)}\` before preparing this industry again.`,
+          `\`node scripts/sample-companies.mjs resume --run-dir ${JSON.stringify(attempt.runDir)}\` before preparing this industry again.`,
       );
     }
     try {
       await wipe(attempt.id);
     } catch (error) {
-      console.error(`[sample-company] could not remove stale template attempt ${attempt.id}`, error);
+      console.error(
+        `[sample-company] could not remove stale template attempt ${attempt.id}`,
+        error,
+      );
       stuck.push(attempt.id);
     }
   }
   if (stuck.length > 0) {
     throw new SampleCompanyPreconditionError(
       `sample template preparation for profile "${profileId}" found an incomplete previous attempt ` +
-      `(org ${stuck.join(", ")}) that could not be removed automatically; ` +
-      `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${stuck[0]}\`, then retry`,
+        `(org ${stuck.join(", ")}) that could not be removed automatically; ` +
+        `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${stuck[0]}\`, then retry`,
     );
   }
 }
@@ -933,8 +1043,8 @@ async function compensateTemplateAttempt(
     console.error(`[sample-company] could not remove failed template attempt ${orgId}`, error);
     throw new SampleCompanyPreconditionError(
       `sample template preparation for profile "${profileId}" left an incomplete attempt ` +
-      `(org ${orgId}) that could not be removed automatically; ` +
-      `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${orgId}\`, then retry`,
+        `(org ${orgId}) that could not be removed automatically; ` +
+        `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${orgId}\`, then retry`,
       { cause },
     );
   }
@@ -965,12 +1075,16 @@ export async function generateTemplate(
     try {
       const manifest = await simulate(provisioned.runDir);
       if (manifest.status !== "completed" || manifest.defects.length > 0) {
-        throw new SampleCompanyError(`sample template ${profileId} did not pass its simulator oracle`);
+        throw new SampleCompanyError(
+          `sample template ${profileId} did not pass its simulator oracle`,
+        );
       }
       await markSimulationOraclePassed(provisioned.orgId, profileId);
       const generated = await templateRowForOrg(provisioned.orgId);
       if (!generated) {
-        throw new SampleCompanyError(`sample template ${profileId} did not meet the minimum data coverage`);
+        throw new SampleCompanyError(
+          `sample template ${profileId} did not meet the minimum data coverage`,
+        );
       }
       assertTemplateCoverage(generated);
       await clearTemplateAttempt(provisioned.orgId);
@@ -980,7 +1094,7 @@ export async function generateTemplate(
         preserveCheckpoint = true;
         throw new SampleCompanyResumeRequiredError(
           `The industry demo build lost its database connection. Its checkpoint and tenant ${provisioned.orgId} are preserved. ` +
-          `Restore database access, then run \`node scripts/sample-companies.mjs resume --run-dir ${JSON.stringify(provisioned.runDir)}\`.`,
+            `Restore database access, then run \`node scripts/sample-companies.mjs resume --run-dir ${JSON.stringify(provisioned.runDir)}\`.`,
           { cause: error },
         );
       }
@@ -992,7 +1106,7 @@ export async function generateTemplate(
         preserveCheckpoint = true;
         throw new SampleCompanyResumeRequiredError(
           `The industry demo build could not complete or remove its synthetic tenant ${provisioned.orgId}. ` +
-          `Its checkpoint is preserved at ${provisioned.runDir}; restore access and use the resume command to verify the recorded accounting state before continuing.`,
+            `Its checkpoint is preserved at ${provisioned.runDir}; restore access and use the resume command to verify the recorded accounting state before continuing.`,
           { cause: cleanupError },
         );
       }
@@ -1015,10 +1129,12 @@ function isTransientDatabaseFailure(error: unknown): boolean {
       /query read timeout|connection timeout|connection terminated|server closed the connection|ETIMEDOUT|ECONNRESET|EPIPE|socket hang up/i.test(
         message,
       )
-    ) return true;
-    current = current instanceof Error && "cause" in current
-      ? (current as Error & { cause?: unknown }).cause
-      : null;
+    )
+      return true;
+    current =
+      current instanceof Error && "cause" in current
+        ? (current as Error & { cause?: unknown }).cause
+        : null;
   }
   return false;
 }
@@ -1036,8 +1152,8 @@ async function runOperationThroughTransientDatabaseFailures<T>(
       if (!isTransientDatabaseFailure(error) || attempt >= maximumAttempts) throw error;
       const delayMs = attempt * 1_000;
       console.error(
-        `[sample-company] transient database failure during ${label}; retrying `
-          + `(attempt ${attempt + 1}/${maximumAttempts})`,
+        `[sample-company] transient database failure during ${label}; retrying ` +
+          `(attempt ${attempt + 1}/${maximumAttempts})`,
       );
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
@@ -1055,8 +1171,8 @@ async function runSimulatorThroughTransientDatabaseFailures(
       if (!isTransientDatabaseFailure(error) || attempt >= maximumAttempts) throw error;
       const delayMs = attempt * 1_000;
       console.error(
-        `[sample-company] transient database failure; resuming simulator run `
-          + `(attempt ${attempt + 1}/${maximumAttempts})`,
+        `[sample-company] transient database failure; resuming simulator run ` +
+          `(attempt ${attempt + 1}/${maximumAttempts})`,
       );
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
@@ -1066,10 +1182,13 @@ async function runSimulatorThroughTransientDatabaseFailures(
 async function markSimulationOraclePassed(orgId: string, profileId: string): Promise<void> {
   await withOrgTransaction(orgId, async () => {
     await db.transaction(async (tx) => {
-      const before = (await tx.execute<{ value: unknown }>(sql`
+      const before = await tx.execute<{ value: unknown }>(
+        sql`
         select settings->'sampleTemplateOracle' as value
           from orgs where id = ${orgId} for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       const after = {
         version: 1,
         profileId,
@@ -1102,26 +1221,34 @@ async function markSimulationOraclePassed(orgId: string, profileId: string): Pro
 async function markTemplate(template: TemplateRow, profileId: string): Promise<void> {
   await withOrgTransaction(template.id, async () => {
     await db.transaction(async (tx) => {
-      const before = (await tx.execute<{ value: unknown }>(sql`
+      const before = await tx.execute<{ value: unknown }>(
+        sql`
         select settings->'sampleTemplate' as value from orgs where id = ${template.id} for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       const current = before[0]?.value;
-      const currentCoverage = current && typeof current === "object"
-        ? (current as Record<string, unknown>).coverage
-        : null;
-      const coverageMatches = currentCoverage && typeof currentCoverage === "object"
-        && Number((currentCoverage as Record<string, unknown>).documents) === template.documents
-        && Number((currentCoverage as Record<string, unknown>).postedEntries) === template.postedEntries
-        && Number((currentCoverage as Record<string, unknown>).parties) === template.parties
-        && Number((currentCoverage as Record<string, unknown>).periods) === template.periods
-        && Number((currentCoverage as Record<string, unknown>).adminRoles) === template.adminRoles;
+      const currentCoverage =
+        current && typeof current === "object"
+          ? (current as Record<string, unknown>).coverage
+          : null;
+      const coverageMatches =
+        currentCoverage &&
+        typeof currentCoverage === "object" &&
+        Number((currentCoverage as Record<string, unknown>).documents) === template.documents &&
+        Number((currentCoverage as Record<string, unknown>).postedEntries) ===
+          template.postedEntries &&
+        Number((currentCoverage as Record<string, unknown>).parties) === template.parties &&
+        Number((currentCoverage as Record<string, unknown>).periods) === template.periods &&
+        Number((currentCoverage as Record<string, unknown>).adminRoles) === template.adminRoles;
       if (
-        current
-        && typeof current === "object"
-        && (current as Record<string, unknown>).enabled === true
-        && (current as Record<string, unknown>).profileId === profileId
-        && coverageMatches
-      ) return;
+        current &&
+        typeof current === "object" &&
+        (current as Record<string, unknown>).enabled === true &&
+        (current as Record<string, unknown>).profileId === profileId &&
+        coverageMatches
+      )
+        return;
       const after = {
         enabled: true,
         profileId,
@@ -1158,21 +1285,36 @@ async function markTemplate(template: TemplateRow, profileId: string): Promise<v
 async function finalizePreview(args: FinalizeSampleCompanyArgs): Promise<void> {
   await withOrgTransaction(args.sandboxOrgId, async () => {
     await db.transaction(async (tx) => {
-      const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
+      const current = await tx.execute<{ settings: Record<string, unknown> }>(
+        sql`
         select settings from orgs where id = ${args.sandboxOrgId} for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       const row = current[0];
-      if (!row) throw new SampleCompanyError("cloned sample organization disappeared during provisioning");
+      if (!row)
+        throw new SampleCompanyError("cloned sample organization disappeared during provisioning");
 
       const birth = row.settings.sampleCompany as Record<string, unknown> | undefined;
-      if (!birth || birth.provisioningStage !== "cloned" || birth.ownerUserId !== args.input.memberUserId
-        || birth.templateOrgId !== args.templateOrgId || birth.requestedFromOrgId !== args.input.sourceOrgId
-        || birth.profileId !== args.profileId || birth.industryKey !== args.input.industryKey) {
-        throw new SampleCompanyError("sample administrator provisioning requires the matching unfinished clone");
+      if (
+        !birth ||
+        birth.provisioningStage !== "cloned" ||
+        birth.ownerUserId !== args.input.memberUserId ||
+        birth.templateOrgId !== args.templateOrgId ||
+        birth.requestedFromOrgId !== args.input.sourceOrgId ||
+        birth.profileId !== args.profileId ||
+        birth.industryKey !== args.input.industryKey
+      ) {
+        throw new SampleCompanyError(
+          "sample administrator provisioning requires the matching unfinished clone",
+        );
       }
       const actingUserId = await createPreviewActor(tx, {
-        orgId: args.sandboxOrgId, memberUserId: args.input.memberUserId, memberName: args.input.memberName,
-        sourceOrgId: args.input.sourceOrgId, templateOrgId: args.templateOrgId,
+        orgId: args.sandboxOrgId,
+        memberUserId: args.input.memberUserId,
+        memberName: args.input.memberName,
+        sourceOrgId: args.input.sourceOrgId,
+        templateOrgId: args.templateOrgId,
       });
 
       const settings = { ...(row.settings ?? {}) };
@@ -1261,9 +1403,12 @@ async function grantSampleCompanyAccess(args: {
 }): Promise<void> {
   await withOrgTransaction(args.sandboxOrgId, async () => {
     await db.transaction(async (tx) => {
-      const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
+      const current = await tx.execute<{ settings: Record<string, unknown> }>(
+        sql`
         select settings from orgs where id = ${args.sandboxOrgId} for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       const row = current[0];
       if (!row) throw new SampleCompanyError("sample company disappeared during provisioning");
       const company = (row.settings ?? {}).sampleCompany;
@@ -1342,7 +1487,9 @@ export interface CloneSampleCompanyArgs {
 
 export interface SampleCompanyProvisionDeps {
   prepareTemplate?: (industryKey: string) => Promise<PrepareSampleCompanyResult>;
-  cloneCompany?: (args: CloneSampleCompanyArgs) => Promise<{ sandboxId: string; sandboxOrgId: string }>;
+  cloneCompany?: (
+    args: CloneSampleCompanyArgs,
+  ) => Promise<{ sandboxId: string; sandboxOrgId: string }>;
   finalizeCompany?: (args: FinalizeSampleCompanyArgs) => Promise<void>;
   reconcileNumbering?: (orgId: string) => Promise<unknown>;
 }
@@ -1387,12 +1534,22 @@ export async function cloneSampleCompanyTemplate(
 /** Transport credentials and device identities are intentionally excluded by cloning.
  * Restore only inert authored examples before exposing a fully numbered copy. */
 async function restoreClonedSampleScenarios(orgId: string, industryKey: string): Promise<void> {
-  const state = await withOrgContext(orgId, async () => (await db.execute<{ version: number | null; actorId: string | null }>(sql`
+  const state = await withOrgContext(
+    orgId,
+    async () =>
+      (
+        await db.execute<{ version: number | null; actorId: string | null }>(
+          sql`
     select (settings->'demoData'->>'version')::int as version,
       settings->'sampleCompany'->>'finalizedBy' as "actorId" from orgs where id=${orgId}
-  `, "objects"))[0]);
+  `,
+          "objects",
+        )
+      )[0],
+  );
   if (state?.version === DEMO_DATA_VERSION) {
-    if (!state.actorId || !isUuid(state.actorId)) throw new SampleCompanyError("sample restoration requires its finalized local administrator");
+    if (!state.actorId || !isUuid(state.actorId))
+      throw new SampleCompanyError("sample restoration requires its finalized local administrator");
     await installDemoScenarios(orgId, industryKey, { actorId: state.actorId });
   }
 }
@@ -1418,12 +1575,12 @@ async function resumePartialSampleCompany(args: {
     );
   }
   if (stage === "cloned" || stage === "finalized") {
-    await runProvisioningStage("numbering", () =>
-      args.reconcileNumbering(args.partial.id),
-    );
+    await runProvisioningStage("numbering", () => args.reconcileNumbering(args.partial.id));
     await setSampleCompanyStage(args.partial.id, "numbering_reconciled");
   }
-  await runProvisioningStage("finalize", () => restoreClonedSampleScenarios(args.partial.id, args.input.industryKey));
+  await runProvisioningStage("finalize", () =>
+    restoreClonedSampleScenarios(args.partial.id, args.input.industryKey),
+  );
   await grantSampleCompanyAccess({
     sandboxOrgId: args.partial.id,
     memberUserId: args.input.memberUserId,
@@ -1462,7 +1619,8 @@ export async function createSampleCompany(
   deps: SampleCompanyProvisionDeps = {},
 ): Promise<CreateSampleCompanyResult> {
   const profile = SAMPLE_COMPANY_BY_INDUSTRY.get(input.industryKey);
-  if (!profile) throw new SampleCompanyError(`unknown sample-company industry: ${input.industryKey}`);
+  if (!profile)
+    throw new SampleCompanyError(`unknown sample-company industry: ${input.industryKey}`);
 
   // The API does not accept a template/source organization from the client,
   // but the domain service still enforces access so internal callers cannot
@@ -1471,25 +1629,28 @@ export async function createSampleCompany(
 
   const alreadyPrepared = await existingFor(input.memberUserId, input.industryKey);
   if (alreadyPrepared) {
-    return { orgId: alreadyPrepared.id, name: alreadyPrepared.name, created: false, templateGenerated: false };
+    return {
+      orgId: alreadyPrepared.id,
+      name: alreadyPrepared.name,
+      created: false,
+      templateGenerated: false,
+    };
   }
   // Step seams: every stage is injectable for tests; production always
   // uses the real pipeline.
-  const prepareTemplate = deps.prepareTemplate
-    ?? ((industryKey: string) => prepareIndustryDemo(industryKey));
-  const finalizeCompany = deps.finalizeCompany
-    ?? ((step: FinalizeSampleCompanyArgs) => finalizePreview(step));
-  const reconcileNumbering = deps.reconcileNumbering
-    ?? ((orgId: string) =>
-      withOrgContext(orgId, () => reconcileDocumentSequences(db, orgId)));
+  const prepareTemplate =
+    deps.prepareTemplate ?? ((industryKey: string) => prepareIndustryDemo(industryKey));
+  const finalizeCompany =
+    deps.finalizeCompany ?? ((step: FinalizeSampleCompanyArgs) => finalizePreview(step));
+  const reconcileNumbering =
+    deps.reconcileNumbering ??
+    ((orgId: string) => withOrgContext(orgId, () => reconcileDocumentSequences(db, orgId)));
   // Template preparation has its own profile-wide lock. Complete it before
   // taking the member lock so a burst of first-use requests cannot exhaust the
   // connection pool while holding one advisory lock and waiting for another.
   // OM-14: every unexpected failure below is reported by its pipeline stage
   // with a stable code and a fixed operator-facing message — never SQL text.
-  const prepared = await runProvisioningStage("template", () =>
-    prepareTemplate(input.industryKey),
-  );
+  const prepared = await runProvisioningStage("template", () => prepareTemplate(input.industryKey));
 
   const lockKey = `openbooks:sample-company:${input.memberUserId}:${input.industryKey}`;
   let lockClient = await pool.connect();
@@ -1586,7 +1747,11 @@ export async function createSampleCompany(
     const winnerBeforeFinalize = await existingFor(input.memberUserId, input.industryKey);
     if (winnerBeforeFinalize) {
       // bypass: cross-org-by-design — deleting a sandbox spans the sandbox and its production organization.
-      await withBypassContext(() => deleteSandbox(cloned.sandboxId, { systemReason: "compensate duplicate sample company provisioning" }));
+      await withBypassContext(() =>
+        deleteSandbox(cloned.sandboxId, {
+          systemReason: "compensate duplicate sample company provisioning",
+        }),
+      );
       return {
         orgId: winnerBeforeFinalize.id,
         name: winnerBeforeFinalize.name,
@@ -1607,11 +1772,11 @@ export async function createSampleCompany(
     // documents, so advance its canonical sequences past the highest cloned
     // number per kind even if the copy did not carry the reconciled counters.
     // Forward-only and idempotent — a no-op when the counters already lead.
-    await runProvisioningStage("numbering", () =>
-      reconcileNumbering(cloned.sandboxOrgId),
-    );
+    await runProvisioningStage("numbering", () => reconcileNumbering(cloned.sandboxOrgId));
     await setSampleCompanyStage(cloned.sandboxOrgId, "numbering_reconciled");
-    await runProvisioningStage("finalize", () => restoreClonedSampleScenarios(cloned.sandboxOrgId, input.industryKey));
+    await runProvisioningStage("finalize", () =>
+      restoreClonedSampleScenarios(cloned.sandboxOrgId, input.industryKey),
+    );
     // Access is granted last: only a fully reconciled company becomes ready.
     await grantSampleCompanyAccess({
       sandboxOrgId: cloned.sandboxOrgId,
@@ -1622,7 +1787,11 @@ export async function createSampleCompany(
       const winner = await existingFor(input.memberUserId, input.industryKey);
       if (winner && winner.id !== cloned.sandboxOrgId) {
         // bypass: cross-org-by-design — deleting a sandbox spans the sandbox and its production organization.
-        await withBypassContext(() => deleteSandbox(cloned.sandboxId, { systemReason: "compensate duplicate sample company provisioning" }));
+        await withBypassContext(() =>
+          deleteSandbox(cloned.sandboxId, {
+            systemReason: "compensate duplicate sample company provisioning",
+          }),
+        );
         return {
           orgId: winner.id,
           name: winner.name,
@@ -1631,7 +1800,9 @@ export async function createSampleCompany(
         };
       }
       if (!lockHealthy) {
-        throw new SampleCompanyError("sample company member lock could not be held through registration");
+        throw new SampleCompanyError(
+          "sample company member lock could not be held through registration",
+        );
       }
     }
     return {

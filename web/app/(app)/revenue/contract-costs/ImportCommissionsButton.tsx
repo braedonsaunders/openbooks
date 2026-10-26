@@ -77,7 +77,13 @@ export function ImportCommissionsButton({
 
   return (
     <>
-      <Button variant="secondary" onClick={() => { setReport(null); setOpen(true); }}>
+      <Button
+        variant="secondary"
+        onClick={() => {
+          setReport(null);
+          setOpen(true);
+        }}
+      >
         {t("import.open")}
       </Button>
       {open && (
@@ -85,7 +91,10 @@ export function ImportCommissionsButton({
           open
           onClose={() => setOpen(false)}
           title={t("import.title")}
-          description={t("import.description", { columns: COLUMNS.join(", "), currency: baseCurrency })}
+          description={t("import.description", {
+            columns: COLUMNS.join(", "),
+            currency: baseCurrency,
+          })}
         >
           <div className="space-y-4 p-4">
             <div className="space-y-1">
@@ -99,7 +108,12 @@ export function ImportCommissionsButton({
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("import.rows")}</label>
-              <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} placeholder="C-1024, 1200.00, 2026-07-15" />
+              <Textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={8}
+                placeholder="C-1024, 1200.00, 2026-07-15"
+              />
             </div>
             {report && (
               <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-400">

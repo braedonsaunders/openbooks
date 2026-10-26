@@ -29,14 +29,17 @@ import type { InboxListContext } from "./types.ts";
  * features fail closed there.
  */
 export function orgFeatureOn(ctx: InboxListContext, key: string): Promise<boolean> {
-  return memoizeForRead(ctx, `feature:${key}`, () => lockAndCheckOrgFeature(ctx.exec ?? db, ctx.orgId, key));
+  return memoizeForRead(ctx, `feature:${key}`, () =>
+    lockAndCheckOrgFeature(ctx.exec ?? db, ctx.orgId, key),
+  );
 }
 
 /** Resolve each permission through its native authority once per read. */
 export function actorPermissionOn(ctx: InboxListContext, permission: string): Promise<boolean> {
   return memoizeForRead(ctx, `permission:${permission}`, async () => {
     const read = await memoizeForRead(ctx, "actor-permission-read", async () =>
-      createActorPermissionRead(ctx.exec ?? db, ctx.orgId, ctx.actorId));
+      createActorPermissionRead(ctx.exec ?? db, ctx.orgId, ctx.actorId),
+    );
     return read(permission);
   });
 }
@@ -75,7 +78,10 @@ export function toWorklistScope(ctx: InboxListContext): WorklistScope {
   return {
     ...(scope.roles ? { roles: scope.roles } : {}),
     ...(scope.allowedSubsidiaryIds !== undefined
-      ? { allowedSubsidiaryIds: scope.allowedSubsidiaryIds === null ? null : new Set(scope.allowedSubsidiaryIds) }
+      ? {
+          allowedSubsidiaryIds:
+            scope.allowedSubsidiaryIds === null ? null : new Set(scope.allowedSubsidiaryIds),
+        }
       : {}),
   };
 }
@@ -87,7 +93,7 @@ export function toWorklistScope(ctx: InboxListContext): WorklistScope {
  * batch) each keep only their own subject kind.
  */
 export function actorPendingGates(ctx: InboxListContext): Promise<WorklistGate[]> {
-  if(ctx.approvalWorklistOwnsGates)return Promise.resolve([]);
+  if (ctx.approvalWorklistOwnsGates) return Promise.resolve([]);
   return memoizeForRead(ctx, "pending-gates", () => {
     const scope = toWorklistScope(ctx);
     return worklistGates(ctx.orgId, ctx.actorId, scope.roles, scope.allowedSubsidiaryIds);
@@ -106,9 +112,15 @@ const installedTables = new Set<string>();
 
 export async function sourceTableInstalled(table: string): Promise<boolean> {
   if (installedTables.has(table)) return true;
-  const found = (await db.execute<{ exists: boolean }>(sql`
+  const found =
+    (
+      await db.execute<{ exists: boolean }>(
+        sql`
     select to_regclass(${`public.${table}`}) is not null as exists
-  `, "objects"))[0]?.exists === true;
+  `,
+        "objects",
+      )
+    )[0]?.exists === true;
   if (found) installedTables.add(table);
   return found;
 }

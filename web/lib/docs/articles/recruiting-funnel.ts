@@ -1,15 +1,29 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const recruitingFunnel: DocArticle = {
-  slug: 'recruiting-funnel',
-  title: 'Recruiting: Requisitions, Candidates, and Hires',
-  category: 'administration',
+  slug: "recruiting-funnel",
+  title: "Recruiting: Requisitions, Candidates, and Hires",
+  category: "administration",
   order: 12,
   summary:
-    'A vacancy opens as a requisition against the headcount plan, candidates move through the hiring funnel with recorded evidence, and an accepted offer becomes the hire through the same approval path as every other employment start.',
-  updated: '2026-09-27',
-  keywords: ['recruiting', 'requisition', 'candidate', 'interview', 'offer', 'hire', 'pipeline', 'time to fill'],
-  related: ['positions-and-headcount', 'structured-interviews-offers-job-boards', 'hrm-processes', 'setup-company-group'],
+    "A vacancy opens as a requisition against the headcount plan, candidates move through the hiring funnel with recorded evidence, and an accepted offer becomes the hire through the same approval path as every other employment start.",
+  updated: "2026-09-27",
+  keywords: [
+    "recruiting",
+    "requisition",
+    "candidate",
+    "interview",
+    "offer",
+    "hire",
+    "pipeline",
+    "time to fill",
+  ],
+  related: [
+    "positions-and-headcount",
+    "structured-interviews-offers-job-boards",
+    "hrm-processes",
+    "setup-company-group",
+  ],
   body: `# Recruiting: Requisitions, Candidates, and Hires
 
 A vacancy today has no path to a hire except a manual employee record. Recruiting closes that loop: a requisition opens against a position (or a planned headcount), candidates move through a configurable pipeline with recorded events, an accepted offer becomes the hire through the same change-request and approval path every other employment start uses, and the requisition fills when its headcount is met.
@@ -46,4 +60,4 @@ Funnel configuration lives under Setup → Workforce → Pipeline Templates, wit
 
 The Requisitions and Applications workforce reports list openings with headcount versus filled, and candidacies with their funnel stage plus time-to-fill from opening to hire. The assistant read tool answers funnel questions from the same canonical read service as the tab, with candidate names only — contact details never leave through it.
 `,
-}
+};

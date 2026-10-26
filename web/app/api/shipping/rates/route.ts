@@ -1,17 +1,17 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { db } from '@openbooks/engine/platform/database'
-import { getShipmentRates } from '@openbooks/engine/sales/shipping-labels'
-import { defineRoute } from '@/lib/api/route'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { db } from "@openbooks/engine/platform/database";
+import { getShipmentRates } from "@openbooks/engine/sales/shipping-labels";
+import { defineRoute } from "@/lib/api/route";
 
 const ratesBody = z.object({
   shipmentId: uuidString(),
-  handlingUnitId:uuidString(),
+  handlingUnitId: uuidString(),
   accountId: uuidString().nullable().optional(),
   presetId: uuidString().nullable().optional(),
-  direction: z.enum(['outbound', 'return']).optional(),
-})
+  direction: z.enum(["outbound", "return"]).optional(),
+});
 
 /**
  * Ranked live carrier rates for a draft shipment. Rating never spends
@@ -19,20 +19,20 @@ const ratesBody = z.object({
  * and carries its own grant on the labels route.
  */
 export const POST = defineRoute({
-  permission: 'orders.fulfill',
-  feature: 'shippingHub',
+  permission: "orders.fulfill",
+  feature: "shippingHub",
   body: ratesBody,
   handler: async ({ authz, body }) => {
     const quote = await db.transaction((tx) =>
       getShipmentRates(tx, authz.user.orgId, authz.user.id, {
         shipmentId: body.shipmentId,
-        handlingUnitId:body.handlingUnitId,
+        handlingUnitId: body.handlingUnitId,
         accountId: body.accountId,
         presetId: body.presetId,
         direction: body.direction,
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       }),
-    )
-    return NextResponse.json({ quote })
+    );
+    return NextResponse.json({ quote });
   },
-})
+});

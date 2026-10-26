@@ -106,8 +106,9 @@ export function stripSqlComments(source) {
 }
 
 function lockTimeoutSettings(code) {
-  return [...code.matchAll(/set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*([^;\s]+)/gi)]
-    .map((match) => match[1].replace(/^'|'$/g, ""));
+  return [
+    ...code.matchAll(/set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*([^;\s]+)/gi),
+  ].map((match) => match[1].replace(/^'|'$/g, ""));
 }
 
 function isZeroTimeout(value) {

@@ -1,38 +1,41 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
-import { JOURNAL_ENTRY_TABLE, journalScopeWhere } from '../customization/entity-list-query/journal-entries'
-import { onboardingStatus } from '../onboarding'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/database";
+import {
+  JOURNAL_ENTRY_TABLE,
+  journalScopeWhere,
+} from "../customization/entity-list-query/journal-entries";
+import { onboardingStatus } from "../onboarding";
 
 /** The setup-readiness org snapshot: profile columns plus `::int` counts. */
 export type ReadinessOrgRow = {
-  name: string
-  legal_name: string | null
-  base_currency: string
-  country: string
-  settings: unknown
-  currencies: number
-  roots: number
-  accounts: number
-  books: number
-  periods: number
-  payment_terms: number
-  tax_codes: number
-  bank_accounts: number
-  posted_entries: number
-  completed_closes: number
-}
+  name: string;
+  legal_name: string | null;
+  base_currency: string;
+  country: string;
+  settings: unknown;
+  currencies: number;
+  roots: number;
+  accounts: number;
+  books: number;
+  periods: number;
+  payment_terms: number;
+  tax_codes: number;
+  bank_accounts: number;
+  posted_entries: number;
+  completed_closes: number;
+};
 
 export interface ReadinessSnapshot {
-  org: ReadinessOrgRow
-  settings: Record<string, unknown>
-  workspaceProfile: Record<string, unknown>
-  bookStart: 'fresh' | 'migrate'
+  org: ReadinessOrgRow;
+  settings: Record<string, unknown>;
+  workspaceProfile: Record<string, unknown>;
+  bookStart: "fresh" | "migrate";
   /** Company identity, chart, books, periods and AR/AP/bank control accounts. */
-  foundationReady: boolean
+  foundationReady: boolean;
   /** The setup wizard was completed and recorded a workspace profile. */
-  profileReady: boolean
+  profileReady: boolean;
 }
 
 /**
@@ -40,7 +43,8 @@ export interface ReadinessSnapshot {
  * guide and the migration workspace so both judge readiness identically.
  */
 export async function loadReadinessSnapshot(orgId: string): Promise<ReadinessSnapshot> {
-  const result = (await db.execute<ReadinessOrgRow>(sql`
+  const result = await db.execute<ReadinessOrgRow>(
+    sql`
     select o.name, o.legal_name, o.base_currency, o.country, o.settings,
       (select count(*)::int from currencies) as currencies,
       (select count(*)::int from subsidiaries s where s.org_id=o.id and s.parent_id is null) as roots,
@@ -53,14 +57,16 @@ export async function loadReadinessSnapshot(orgId: string): Promise<ReadinessSna
       (select count(*)::int from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(orgId)}) as posted_entries,
       (select count(*)::int from close_runs cr where cr.org_id=o.id and cr.status in ('closed','published')) as completed_closes
     from orgs o where o.id=${orgId}
-  `, 'objects'))
+  `,
+    "objects",
+  );
   // The authed org always exists; the zeroed fallback only keeps the guide
   // rendering degraded (rather than crashing) if it ever does not.
   const org: ReadinessOrgRow = result[0] ?? {
-    name: '',
+    name: "",
     legal_name: null,
-    base_currency: '',
-    country: '',
+    base_currency: "",
+    country: "",
     settings: {},
     currencies: 0,
     roots: 0,
@@ -72,17 +78,22 @@ export async function loadReadinessSnapshot(orgId: string): Promise<ReadinessSna
     bank_accounts: 0,
     posted_entries: 0,
     completed_closes: 0,
-  }
-  const settings = (org.settings ?? {}) as Record<string, unknown>
-  const workspaceProfile = (settings.workspaceProfile ?? {}) as Record<string, unknown>
-  const control = (settings.controlAccounts ?? {}) as Record<string, unknown>
+  };
+  const settings = (org.settings ?? {}) as Record<string, unknown>;
+  const workspaceProfile = (settings.workspaceProfile ?? {}) as Record<string, unknown>;
+  const control = (settings.controlAccounts ?? {}) as Record<string, unknown>;
   return {
     org,
     settings,
     workspaceProfile,
-    bookStart: workspaceProfile.bookStart === 'migrate' ? 'migrate' : 'fresh',
-    foundationReady: org.currencies > 0 && org.roots === 1 && org.accounts > 0
-      && org.books > 0 && org.periods > 0 && Boolean(control.ar && control.ap && control.bank),
-    profileReady: onboardingStatus(settings) === 'complete' && Boolean(settings.workspaceProfile),
-  }
+    bookStart: workspaceProfile.bookStart === "migrate" ? "migrate" : "fresh",
+    foundationReady:
+      org.currencies > 0 &&
+      org.roots === 1 &&
+      org.accounts > 0 &&
+      org.books > 0 &&
+      org.periods > 0 &&
+      Boolean(control.ar && control.ap && control.bank),
+    profileReady: onboardingStatus(settings) === "complete" && Boolean(settings.workspaceProfile),
+  };
 }

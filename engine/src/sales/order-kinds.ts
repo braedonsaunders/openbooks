@@ -5,17 +5,17 @@
  * browser without dragging the DB client into the client bundle.
  */
 
-export const ORDER_KINDS = ['quote', 'sales_order', 'purchase_order'] as const
-export type OrderKind = (typeof ORDER_KINDS)[number]
+export const ORDER_KINDS = ["quote", "sales_order", "purchase_order"] as const;
+export type OrderKind = (typeof ORDER_KINDS)[number];
 /** Immutable operational document created when stock physically leaves on a
  * sales order. It is deliberately not an ORDER_KIND: it cannot be edited or
  * converted as another commercial commitment. */
-export const SALES_FULFILLMENT_KIND = 'sales_fulfillment' as const
+export const SALES_FULFILLMENT_KIND = "sales_fulfillment" as const;
 /** Immutable operational document created when stock physically arrives on a
  * purchase order (the goods receipt). It brings the stock in at the order
  * price against received-not-billed; the vendor bill later clears that. Not
  * an ORDER_KIND: it cannot be edited or converted. */
-export const PURCHASE_RECEIPT_KIND = 'purchase_receipt' as const
+export const PURCHASE_RECEIPT_KIND = "purchase_receipt" as const;
 
 /**
  * What a given order kind is allowed to convert into.
@@ -27,15 +27,15 @@ export const CONVERSION_TARGETS: Record<
   { kind: string; labelKey: string; prefix: string; link: string }[]
 > = {
   quote: [
-    { kind: 'sales_order', labelKey: 'kinds.salesOrder', prefix: 'SO-', link: 'created_from' },
-    { kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' },
+    { kind: "sales_order", labelKey: "kinds.salesOrder", prefix: "SO-", link: "created_from" },
+    { kind: "customer_invoice", labelKey: "kinds.invoice", prefix: "INV-", link: "bills" },
   ],
   sales_order: [
-    { kind: 'sales_fulfillment', labelKey: 'kinds.fulfillment', prefix: 'SHIP-', link: 'fulfills' },
-    { kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' },
+    { kind: "sales_fulfillment", labelKey: "kinds.fulfillment", prefix: "SHIP-", link: "fulfills" },
+    { kind: "customer_invoice", labelKey: "kinds.invoice", prefix: "INV-", link: "bills" },
   ],
   purchase_order: [
-    { kind: 'purchase_receipt', labelKey: 'kinds.receipt', prefix: 'RCPT-', link: 'fulfills' },
-    { kind: 'vendor_bill', labelKey: 'kinds.bill', prefix: 'BILL-', link: 'bills' },
+    { kind: "purchase_receipt", labelKey: "kinds.receipt", prefix: "RCPT-", link: "fulfills" },
+    { kind: "vendor_bill", labelKey: "kinds.bill", prefix: "BILL-", link: "bills" },
   ],
-}
+};

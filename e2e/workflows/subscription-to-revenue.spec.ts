@@ -203,7 +203,15 @@ test.describe("subscription to revenue", () => {
     email: string,
   ): Promise<string> {
     const req = page.request;
-    const draft = ok(await api(req, baseURL, "POST", "/api/parties", { displayName: name, isActive: false, roles: { customer: { enabled: true } } }), "party create", 201);
+    const draft = ok(
+      await api(req, baseURL, "POST", "/api/parties", {
+        displayName: name,
+        isActive: false,
+        roles: { customer: { enabled: true } },
+      }),
+      "party create",
+      201,
+    );
     const id = str((draft.party as Record<string, unknown>).id);
     const current = ok(await api(req, baseURL, "GET", `/api/parties/${id}`), "party fetch");
     ok(
@@ -212,7 +220,10 @@ test.describe("subscription to revenue", () => {
         email,
         isActive: true,
         changeReason: "e2e subscription-to-revenue activation",
-        expectedUpdatedAt: str((current.party as Record<string, unknown>).updated_at, "party revision"),
+        expectedUpdatedAt: str(
+          (current.party as Record<string, unknown>).updated_at,
+          "party revision",
+        ),
       }),
       "party activate",
     );
@@ -229,7 +240,7 @@ test.describe("subscription to revenue", () => {
       // Stale ladders from an earlier attempt would fire on this attempt's
       // invoices, so they are removed through the product route first.
       const existing = ok(await api(req, origin, "GET", "/api/dunning"), "dunning list");
-      for (const p of ((existing.policies ?? []) as { id: string; name: string }[])) {
+      for (const p of (existing.policies ?? []) as { id: string; name: string }[]) {
         if (p.name.startsWith("W5")) {
           ok(await api(req, origin, "DELETE", `/api/dunning/${p.id}`), "drop stale policy");
         }
@@ -252,9 +263,14 @@ test.describe("subscription to revenue", () => {
       );
       S.deferredId = str((created.account as Record<string, unknown>).id, "deferred id");
 
-      const options = ok(await api(req, origin, "GET", "/api/forms/options?source=gl_accounts"), "accounts");
+      const options = ok(
+        await api(req, origin, "GET", "/api/forms/options?source=gl_accounts"),
+        "accounts",
+      );
       const byNumber = (n: string) =>
-        ((options.options ?? []) as { value: string; label: string }[]).find((o) => o.label.startsWith(n));
+        ((options.options ?? []) as { value: string; label: string }[]).find((o) =>
+          o.label.startsWith(n),
+        );
       S.incomeId = str(byNumber("4100")?.value, "4100");
       S.bankId = str(byNumber("1000")?.value, "1000");
 
@@ -277,15 +293,22 @@ test.describe("subscription to revenue", () => {
 
       // Service item carrying the deferred treatment.
       const createdItem = ok(
-        await api(req, origin, "POST", "/api/items", {
-          name: t("W5 Annual Support"),
-          kind: "service",
-          defaultRate: "1.00",
-          incomeAccountId: S.incomeId,
-          deferredAccountId: S.deferredId,
-          recognitionRuleId: ruleId,
-          isActive: true,
-        }, { "Idempotency-Key": crypto.randomUUID() }),
+        await api(
+          req,
+          origin,
+          "POST",
+          "/api/items",
+          {
+            name: t("W5 Annual Support"),
+            kind: "service",
+            defaultRate: "1.00",
+            incomeAccountId: S.incomeId,
+            deferredAccountId: S.deferredId,
+            recognitionRuleId: ruleId,
+            isActive: true,
+          },
+          { "Idempotency-Key": crypto.randomUUID() },
+        ),
         // A fresh item create returns 201; only an idempotent replay of a
         // seen Idempotency-Key returns 200 (web/app/api/items/route.ts).
         "item create",
@@ -341,10 +364,35 @@ test.describe("subscription to revenue", () => {
           gracePeriodDays: 0,
           minBalance: "1.00",
           stages: [
-            { sequence: 1, name: "Gentle reminder", offsetDays: 7, subjectTemplate: "Invoice {{invoice}} due", bodyTemplate: "Hi {{party}}, {{invoice}} for {{amount}} was due {{dueDate}}." },
-            { sequence: 2, name: "Firm reminder", offsetDays: 14, subjectTemplate: "Overdue {{invoice}}", bodyTemplate: "Hi {{party}}, {{invoice}} is {{daysOverdue}} days overdue." },
-            { sequence: 3, name: "Final notice", offsetDays: 30, subjectTemplate: "Final notice {{invoice}}", bodyTemplate: "Hi {{party}}, final notice for {{invoice}}." },
-            { sequence: 4, name: "Escalation", offsetDays: 60, subjectTemplate: "Escalated {{invoice}}", bodyTemplate: "Escalated {{invoice}}.", escalate: true },
+            {
+              sequence: 1,
+              name: "Gentle reminder",
+              offsetDays: 7,
+              subjectTemplate: "Invoice {{invoice}} due",
+              bodyTemplate: "Hi {{party}}, {{invoice}} for {{amount}} was due {{dueDate}}.",
+            },
+            {
+              sequence: 2,
+              name: "Firm reminder",
+              offsetDays: 14,
+              subjectTemplate: "Overdue {{invoice}}",
+              bodyTemplate: "Hi {{party}}, {{invoice}} is {{daysOverdue}} days overdue.",
+            },
+            {
+              sequence: 3,
+              name: "Final notice",
+              offsetDays: 30,
+              subjectTemplate: "Final notice {{invoice}}",
+              bodyTemplate: "Hi {{party}}, final notice for {{invoice}}.",
+            },
+            {
+              sequence: 4,
+              name: "Escalation",
+              offsetDays: 60,
+              subjectTemplate: "Escalated {{invoice}}",
+              bodyTemplate: "Escalated {{invoice}}.",
+              escalate: true,
+            },
           ],
         }),
         "dunning policy",
@@ -357,7 +405,10 @@ test.describe("subscription to revenue", () => {
       // so the term is deterministic, then posted — A through the UI drawer,
       // B through the same API routes the drawer calls.
       async function billBackdate(subId: string, docDate: string, dueDate: string) {
-        const bill = ok(await api(req, origin, "POST", "/api/subscriptions", { action: "billNow", id: subId }), "billNow");
+        const bill = ok(
+          await api(req, origin, "POST", "/api/subscriptions", { action: "billNow", id: subId }),
+          "billNow",
+        );
         expect(bill.posted).toBe(false);
         const id = str(bill.invoiceId, "invoice id");
         const current = ok(await api(req, origin, "GET", `/api/documents/${id}`), "invoice fetch");
@@ -380,12 +431,27 @@ test.describe("subscription to revenue", () => {
       const invB = await billBackdate(S.subBId, "2026-01-15", "2026-02-14");
       S.invBId = invB.id;
       S.invBNumber = invB.number;
-      ok(await api(req, origin, "POST", "/api/documents/actions", { action: "submit", documentId: S.invBId }), "B submit");
-      ok(await api(req, origin, "POST", "/api/documents/actions", { action: "post", documentId: S.invBId }), "B post");
+      ok(
+        await api(req, origin, "POST", "/api/documents/actions", {
+          action: "submit",
+          documentId: S.invBId,
+        }),
+        "B submit",
+      );
+      ok(
+        await api(req, origin, "POST", "/api/documents/actions", {
+          action: "post",
+          documentId: S.invBId,
+        }),
+        "B post",
+      );
 
       // Posted totals are exact; both carry the deferred treatment because
       // the schedule's item line survived the backdate untouched.
-      for (const [id, total] of [[S.invAId, "1000.0000"], [S.invBId, "1200.0000"]] as const) {
+      for (const [id, total] of [
+        [S.invAId, "1000.0000"],
+        [S.invBId, "1200.0000"],
+      ] as const) {
         const fetched = ok(await api(req, origin, "GET", `/api/documents/${id}`), "posted fetch");
         const doc = docOf(fetched);
         expect(str(doc.status, "status")).toBe("posted");
@@ -394,7 +460,10 @@ test.describe("subscription to revenue", () => {
 
       // Invoice list shows both open balances.
       await page.goto("/ar/invoices");
-      for (const [number, total] of [[S.invANumber, toCents("1000.00")], [S.invBNumber, toCents("1200.00")]] as const) {
+      for (const [number, total] of [
+        [S.invANumber, toCents("1000.00")],
+        [S.invBNumber, toCents("1200.00")],
+      ] as const) {
         const row = page.locator("tr", { hasText: number }).first();
         await expect(row.getByText(fmtUSD(total)).first()).toBeVisible();
       }
@@ -409,11 +478,21 @@ test.describe("subscription to revenue", () => {
       await expect(policyDrawer).toBeVisible();
       await policyDrawer.getByRole("button", { name: "Edit", exact: true }).click();
       await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true })).toHaveCount(5);
-      await expect(policyDrawer.getByRole("textbox", { name: "Days past due", exact: true })).toHaveCount(4);
-      await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true }).nth(1)).toHaveValue("Gentle reminder");
-      await expect(policyDrawer.getByRole("textbox", { name: "Days past due", exact: true }).nth(0)).toHaveValue("7");
-      await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true }).nth(4)).toHaveValue("Escalation");
-      await expect(policyDrawer.getByRole("textbox", { name: "Days past due", exact: true }).nth(3)).toHaveValue("60");
+      await expect(
+        policyDrawer.getByRole("textbox", { name: "Days past due", exact: true }),
+      ).toHaveCount(4);
+      await expect(
+        policyDrawer.getByRole("textbox", { name: "Name", exact: true }).nth(1),
+      ).toHaveValue("Gentle reminder");
+      await expect(
+        policyDrawer.getByRole("textbox", { name: "Days past due", exact: true }).nth(0),
+      ).toHaveValue("7");
+      await expect(
+        policyDrawer.getByRole("textbox", { name: "Name", exact: true }).nth(4),
+      ).toHaveValue("Escalation");
+      await expect(
+        policyDrawer.getByRole("textbox", { name: "Days past due", exact: true }).nth(3),
+      ).toHaveValue("60");
 
       S.orgId = await resolveOrgId();
       expect(S.orgId).toBeTruthy();
@@ -435,7 +514,11 @@ test.describe("subscription to revenue", () => {
       );
       expect(run.posted).toBe(2);
       expect(str(run.totalAmount, "jan total")).toBe("183.3334");
-      const byContract = new Map(((run.entries ?? []) as { contract: string; obligation: string; amount: string }[]).map((e) => [e.contract, e]));
+      const byContract = new Map(
+        ((run.entries ?? []) as { contract: string; obligation: string; amount: string }[]).map(
+          (e) => [e.contract, e],
+        ),
+      );
       // Plan A proves the residue-free split: 1000/12 opens with 83.3334.
       expect(byContract.get(S.invANumber)?.amount).toBe(A_FIRST);
       expect(byContract.get(S.invBNumber)?.amount).toBe(B_MONTH);
@@ -476,7 +559,10 @@ test.describe("subscription to revenue", () => {
     }
   });
 
-  test("paid customer is never dunned; first rung fires on the overdue invoice", async ({ browser, baseURL }) => {
+  test("paid customer is never dunned; first rung fires on the overdue invoice", async ({
+    browser,
+    baseURL,
+  }) => {
     resume();
     const { context, page } = await freshPage(browser, baseURL);
     try {
@@ -485,20 +571,32 @@ test.describe("subscription to revenue", () => {
       // Customer A pays in full before anything is overdue. Re-entry guard:
       // an already-settled invoice is left alone (a second receipt would
       // overpay it); stale unposted drafts from a dead chunk never applied.
-      const oiA = ok(await api(req, origin, "GET", `/api/payments/open-items?partyId=${S.partyAId}&side=ar`), "open items A");
+      const oiA = ok(
+        await api(req, origin, "GET", `/api/payments/open-items?partyId=${S.partyAId}&side=ar`),
+        "open items A",
+      );
       const aOpen = ((oiA.items ?? []) as { documentNumber: string; open: string }[]).find(
         (i) => i.documentNumber === S.invANumber,
       )?.open;
       if (aOpen !== undefined && aOpen !== "0.0000") {
         const sug = ok(
           await api(req, origin, "POST", "/api/payments/suggest", {
-            partyId: S.partyAId, amount: "1000.00", side: "ar", currency: "USD",
+            partyId: S.partyAId,
+            amount: "1000.00",
+            side: "ar",
+            currency: "USD",
           }),
           "suggest A",
         );
-        const draft = ok(await api(req, origin, "POST", "/api/payments/draft", { kind: "customer_payment" }), "receipt draft");
+        const draft = ok(
+          await api(req, origin, "POST", "/api/payments/draft", { kind: "customer_payment" }),
+          "receipt draft",
+        );
         S.receiptAId = str(draft.id, "receipt id");
-        const current = ok(await api(req, origin, "GET", `/api/payments/${S.receiptAId}`), "receipt fetch");
+        const current = ok(
+          await api(req, origin, "GET", `/api/payments/${S.receiptAId}`),
+          "receipt fetch",
+        );
         ok(
           await api(req, origin, "PATCH", `/api/payments/${S.receiptAId}`, {
             partyId: S.partyAId,
@@ -512,7 +610,9 @@ test.describe("subscription to revenue", () => {
         await apiPostReceipt(req, origin, S.receiptAId);
       }
       await openDrawer(page, `/ar/invoices?doc=${S.invAId}`);
-      await expect(page.locator('[role="dialog"]').first().getByText(fmtUSD(0n)).first()).toBeVisible();
+      await expect(
+        page.locator('[role="dialog"]').first().getByText(fmtUSD(0n)).first(),
+      ).toBeVisible();
 
       // Seven days past due: the ladder fires exactly rung 1 on B only.
       const first = await runDunning(S.orgId, "2026-02-21");
@@ -560,14 +660,20 @@ test.describe("subscription to revenue", () => {
     expect(log.filter((r) => r.documentNumber === S.invANumber)).toHaveLength(0);
   });
 
-  test("February and March recognition keep deferred tied to the remainder", async ({ browser, baseURL }) => {
+  test("February and March recognition keep deferred tied to the remainder", async ({
+    browser,
+    baseURL,
+  }) => {
     resume();
     const { context, page } = await freshPage(browser, baseURL);
     try {
       const req = page.request;
       const origin = baseURL!;
       for (const asOf of ["2026-02-28", "2026-03-31"]) {
-        const run = ok(await api(req, origin, "POST", "/api/revenue/run-recognition", { asOfDate: asOf }), `recognition ${asOf}`);
+        const run = ok(
+          await api(req, origin, "POST", "/api/revenue/run-recognition", { asOfDate: asOf }),
+          `recognition ${asOf}`,
+        );
         expect(run.posted).toBe(2);
         expect(str(run.totalAmount, "total")).toBe("183.3334");
       }
@@ -614,7 +720,10 @@ test.describe("subscription to revenue", () => {
     expect(bRows[2]?.amountDue).toBe("1200.0000");
   });
 
-  test("mid-term credit unwinds the unearned balance and spares earned revenue", async ({ browser, baseURL }) => {
+  test("mid-term credit unwinds the unearned balance and spares earned revenue", async ({
+    browser,
+    baseURL,
+  }) => {
     resume();
     const { context, page } = await freshPage(browser, baseURL);
     try {
@@ -624,10 +733,20 @@ test.describe("subscription to revenue", () => {
       // chunk (drafting again would double-credit), and skip seeding
       // entirely when a previous chunk already settled the invoice — ids are
       // recovered through the party-docs probe for the audit assertions.
-      const oiFirst = ok(await api(req, origin, "GET", `/api/payments/open-items?partyId=${S.partyBId}&side=ar`), "open items first");
-      const ciFirst = ok(await api(req, origin, "GET", `/api/payments/credit-items?partyId=${S.partyBId}&side=ar`), "credit items first");
-      const bOpenFirst = ((oiFirst.items ?? []) as { documentNumber: string }[]).some((i) => i.documentNumber === S.invBNumber);
-      const existingCredit = ((ciFirst.items ?? []) as { documentId: string; documentNumber: string }[])[0];
+      const oiFirst = ok(
+        await api(req, origin, "GET", `/api/payments/open-items?partyId=${S.partyBId}&side=ar`),
+        "open items first",
+      );
+      const ciFirst = ok(
+        await api(req, origin, "GET", `/api/payments/credit-items?partyId=${S.partyBId}&side=ar`),
+        "credit items first",
+      );
+      const bOpenFirst = ((oiFirst.items ?? []) as { documentNumber: string }[]).some(
+        (i) => i.documentNumber === S.invBNumber,
+      );
+      const existingCredit = (
+        (ciFirst.items ?? []) as { documentId: string; documentNumber: string }[]
+      )[0];
       let settled = false;
       if (!bOpenFirst && !existingCredit) {
         settled = true;
@@ -650,16 +769,30 @@ test.describe("subscription to revenue", () => {
       if (!settled && !existingCredit) {
         // Credit memo for the nine unearned months, booked straight to the
         // deferred account, posted through the UI drawer.
-        const draft = ok(await api(req, origin, "POST", "/api/documents/draft", { kind: "customer_credit" }), "credit draft");
+        const draft = ok(
+          await api(req, origin, "POST", "/api/documents/draft", { kind: "customer_credit" }),
+          "credit draft",
+        );
         S.creditId = str(draft.id, "credit id");
         S.creditNumber = str(draft.documentNumber, "credit number");
-        const current = ok(await api(req, origin, "GET", `/api/documents/${S.creditId}`), "credit fetch");
+        const current = ok(
+          await api(req, origin, "GET", `/api/documents/${S.creditId}`),
+          "credit fetch",
+        );
         const patched = ok(
           await api(req, origin, "PATCH", `/api/documents/${S.creditId}`, {
             expectedUpdatedAt: str(docOf(current).updated_at, "credit revision"),
             partyId: S.partyBId,
             documentDate: "2026-04-05",
-            lines: [{ accountId: S.deferredId, description: "Cancel remaining term", quantity: "1", unitPrice: B_CREDIT, amount: B_CREDIT }],
+            lines: [
+              {
+                accountId: S.deferredId,
+                description: "Cancel remaining term",
+                quantity: "1",
+                unitPrice: B_CREDIT,
+                amount: B_CREDIT,
+              },
+            ],
           }),
           "credit fill",
         );
@@ -672,49 +805,75 @@ test.describe("subscription to revenue", () => {
       // below is asserted on rendered pages).
       const oi = settled
         ? { items: [] as { documentNumber: string; lineId: string }[] }
-        : ok(await api(req, origin, "GET", `/api/payments/open-items?partyId=${S.partyBId}&side=ar`), "open items");
-      const invLine = (oi.items as { documentNumber: string; lineId: string }[]).find((i) => i.documentNumber === S.invBNumber);
+        : ok(
+            await api(req, origin, "GET", `/api/payments/open-items?partyId=${S.partyBId}&side=ar`),
+            "open items",
+          );
+      const invLine = (oi.items as { documentNumber: string; lineId: string }[]).find(
+        (i) => i.documentNumber === S.invBNumber,
+      );
       const ci = settled
         ? { items: [] as { lineId: string }[] }
-        : ok(await api(req, origin, "GET", `/api/payments/credit-items?partyId=${S.partyBId}&side=ar`), "credit items");
+        : ok(
+            await api(
+              req,
+              origin,
+              "GET",
+              `/api/payments/credit-items?partyId=${S.partyBId}&side=ar`,
+            ),
+            "credit items",
+          );
       const creditLine = (ci.items as { lineId: string }[])[0];
       if (!settled) {
         expect(str(creditLine?.lineId, "credit line")).toBeTruthy();
-      const payDraft = ok(await api(req, origin, "POST", "/api/payments/draft", { kind: "customer_payment" }), "pay draft");
-      S.receiptBId = str(payDraft.id, "pay id");
-      S.receiptBNumber = str(payDraft.documentNumber, "pay number");
-      const payCurrent = ok(await api(req, origin, "GET", `/api/payments/${S.receiptBId}`), "pay fetch");
-      ok(
-        await api(req, origin, "PATCH", `/api/payments/${S.receiptBId}`, {
-          partyId: S.partyBId,
-          bankAccountId: S.bankId,
-          documentDate: "2026-04-06",
-          expectedUpdatedAt: str(docOf(payCurrent).updated_at, "pay revision"),
-          allocations: [{
-            openLineId: str(invLine?.lineId, "invoice line"),
-            sourceTransactionAmount: B_CASH,
-            targetTransactionAmount: B_CASH,
-            settlementRate: "1",
-            settlementRateSource: "same_currency",
-            settlementRateReference: "same transaction currency",
-          }],
-          creditAllocations: [{
-            fromLineId: str(creditLine?.lineId, "credit line"),
-            toLineId: str(invLine?.lineId, "invoice line"),
-            amount: B_CREDIT,
-            sourceDocumentId: S.creditId,
-          }],
-        }),
-        "pay fill",
-      );
-      await apiPostReceipt(req, origin, S.receiptBId);
+        const payDraft = ok(
+          await api(req, origin, "POST", "/api/payments/draft", { kind: "customer_payment" }),
+          "pay draft",
+        );
+        S.receiptBId = str(payDraft.id, "pay id");
+        S.receiptBNumber = str(payDraft.documentNumber, "pay number");
+        const payCurrent = ok(
+          await api(req, origin, "GET", `/api/payments/${S.receiptBId}`),
+          "pay fetch",
+        );
+        ok(
+          await api(req, origin, "PATCH", `/api/payments/${S.receiptBId}`, {
+            partyId: S.partyBId,
+            bankAccountId: S.bankId,
+            documentDate: "2026-04-06",
+            expectedUpdatedAt: str(docOf(payCurrent).updated_at, "pay revision"),
+            allocations: [
+              {
+                openLineId: str(invLine?.lineId, "invoice line"),
+                sourceTransactionAmount: B_CASH,
+                targetTransactionAmount: B_CASH,
+                settlementRate: "1",
+                settlementRateSource: "same_currency",
+                settlementRateReference: "same transaction currency",
+              },
+            ],
+            creditAllocations: [
+              {
+                fromLineId: str(creditLine?.lineId, "credit line"),
+                toLineId: str(invLine?.lineId, "invoice line"),
+                amount: B_CREDIT,
+                sourceDocumentId: S.creditId,
+              },
+            ],
+          }),
+          "pay fill",
+        );
+        await apiPostReceipt(req, origin, S.receiptBId);
       }
 
       // The receivable is exactly gone and the credit fully consumed.
       await page.goto("/ar/invoices");
       const paidRow = page.locator("tr", { hasText: S.invBNumber }).first();
       await expect(paidRow.getByText(fmtUSD(0n)).first()).toBeVisible();
-      const ciAfter = ok(await api(req, origin, "GET", `/api/payments/credit-items?partyId=${S.partyBId}&side=ar`), "credit items after");
+      const ciAfter = ok(
+        await api(req, origin, "GET", `/api/payments/credit-items?partyId=${S.partyBId}&side=ar`),
+        "credit items after",
+      );
       expect((ciAfter.items as unknown[]).length).toBe(0);
 
       // Deferred now holds only plan A's remainder (in-test: 1649.9998-900).
@@ -746,49 +905,79 @@ test.describe("subscription to revenue", () => {
     }
   });
 
-  test("cancel stops future billing; the full term sums exactly with no double-post", async ({ browser, baseURL }) => {
+  test("cancel stops future billing; the full term sums exactly with no double-post", async ({
+    browser,
+    baseURL,
+  }) => {
     resume();
     const { context, page } = await freshPage(browser, baseURL);
     try {
       const req = page.request;
       const origin = baseURL!;
       ok(
-        await api(req, origin, "POST", "/api/subscriptions", { action: "updateSubscription", id: S.subBId, status: "canceled", canceledOn: "2027-01-01" }),
+        await api(req, origin, "POST", "/api/subscriptions", {
+          action: "updateSubscription",
+          id: S.subBId,
+          status: "canceled",
+          canceledOn: "2027-01-01",
+        }),
         "cancel B",
       );
       const subs = ok(await api(req, origin, "GET", "/api/subscriptions"), "subs after cancel");
-      expect((subs.subscriptions as { id: string; status: string }[]).find((s) => s.id === S.subBId)?.status).toBe("canceled");
+      expect(
+        (subs.subscriptions as { id: string; status: string }[]).find((s) => s.id === S.subBId)
+          ?.status,
+      ).toBe("canceled");
 
       // Billing a cancelled schedule mints nothing new: the run is refused
       // with the control's own 422 naming the remedy (pinned with zero
       // mutation by subscription-billing-canceled), and the subscription
       // still points at the last period invoice — no second document exists.
-      const rebill = await api(req, origin, "POST", "/api/subscriptions", { action: "billNow", id: S.subBId });
+      const rebill = await api(req, origin, "POST", "/api/subscriptions", {
+        action: "billNow",
+        id: S.subBId,
+      });
       expect(rebill.status).toBe(422);
-      expect(String((rebill.json as { error?: unknown } | null)?.error ?? "")).toContain("subscription is canceled");
-      const subsAfterRebill = ok(await api(req, origin, "GET", "/api/subscriptions"), "subs after refused rebill");
+      expect(String((rebill.json as { error?: unknown } | null)?.error ?? "")).toContain(
+        "subscription is canceled",
+      );
+      const subsAfterRebill = ok(
+        await api(req, origin, "GET", "/api/subscriptions"),
+        "subs after refused rebill",
+      );
       expect(
-        (subsAfterRebill.subscriptions as { id: string; lastInvoiceId: string }[]).find((s) => s.id === S.subBId)?.lastInvoiceId,
+        (subsAfterRebill.subscriptions as { id: string; lastInvoiceId: string }[]).find(
+          (s) => s.id === S.subBId,
+        )?.lastInvoiceId,
         "refused rebill leaves the last invoice untouched",
       ).toBe(S.invBId);
 
       // Plan A recognises to term end: Apr–Dec posts 749.9998, so the full
       // twelve months sum to exactly 1,000.00 — no residue in the last period.
       const full = ok(
-        await api(req, origin, "POST", "/api/revenue/run-recognition", { asOfDate: "2026-12-31", obligationId: S.oblAId }),
+        await api(req, origin, "POST", "/api/revenue/run-recognition", {
+          asOfDate: "2026-12-31",
+          obligationId: S.oblAId,
+        }),
         "full-term A",
       );
       expect(full.posted).toBe(9);
       expect(str(full.totalAmount, "full total")).toBe(A_APR_DEC);
       const again = ok(
-        await api(req, origin, "POST", "/api/revenue/run-recognition", { asOfDate: "2026-12-31", obligationId: S.oblAId }),
+        await api(req, origin, "POST", "/api/revenue/run-recognition", {
+          asOfDate: "2026-12-31",
+          obligationId: S.oblAId,
+        }),
         "full-term A re-run",
       );
       expect(again.posted).toBe(0);
 
       // Re-running an already-recognised period for B posts nothing either.
       const bAgain = ok(
-        await api(req, origin, "POST", "/api/revenue/run-recognition", { asOfDate: "2026-03-31", obligationId: S.oblBId }),
+        await api(req, origin, "POST", "/api/revenue/run-recognition", {
+          asOfDate: "2026-03-31",
+          obligationId: S.oblBId,
+        }),
         "B march re-run",
       );
       expect(bAgain.posted).toBe(0);
@@ -810,7 +999,9 @@ test.describe("subscription to revenue", () => {
       const review = page.locator('[role="dialog"]', { has: page.locator("#recognition-as-of") });
       await review.locator("#recognition-as-of").fill("2026-12-31");
       await review.getByRole("button", { name: /^preview$/i }).click();
-      await expect(review.getByText("Nothing due to recognize as of 2026-12-31")).toBeVisible({ timeout: 20000 });
+      await expect(review.getByText("Nothing due to recognize as of 2026-12-31")).toBeVisible({
+        timeout: 20000,
+      });
       await expect(review.getByText("0 lines post")).toBeVisible();
       await expect(review.getByRole("button", { name: /confirm and post/i })).toBeDisabled();
       saveState({ ...S });
@@ -819,7 +1010,10 @@ test.describe("subscription to revenue", () => {
     }
   });
 
-  test("dunning stays silent on settled balances and the year ties out", async ({ browser, baseURL }) => {
+  test("dunning stays silent on settled balances and the year ties out", async ({
+    browser,
+    baseURL,
+  }) => {
     resume();
     const { context, page } = await freshPage(browser, baseURL);
     try {
@@ -888,5 +1082,4 @@ test.describe("subscription to revenue", () => {
       await context.close();
     }
   });
-
 });

@@ -6,7 +6,9 @@ export function frAllocFamReducedEligible(
   region: string,
   filingAccountId: string | null,
 ): boolean {
-  return resolution.values("fr_allocfam", { region, filingAccountId })?.reduced_rate_eligible === "true";
+  return (
+    resolution.values("fr_allocfam", { region, filingAccountId })?.reduced_rate_eligible === "true"
+  );
 }
 
 /** France's employer rates and account-level classification facts. */
@@ -26,8 +28,13 @@ export const FR_PACK_RATES: PayrollPackRates = {
         "The caisse notifies each establishment its own AT/MP rate from its activity risk class and sinistrality — a figure no published table can supply.",
       fields: [
         {
-          key: "taux", label: "Taux AT/MP (%)", kind: "percent", decimals: 4,
-          min: "0", max: "100", required: true,
+          key: "taux",
+          label: "Taux AT/MP (%)",
+          kind: "percent",
+          decimals: 4,
+          min: "0",
+          max: "100",
+          required: true,
           help: "As a percent, as the caisse notifies it: 1.1 is 1.1%. Enter the rate notified for this establishment.",
         },
       ],
@@ -41,14 +48,19 @@ export const FR_PACK_RATES: PayrollPackRates = {
       regions: ["FR"],
       whenUnconfigured: "refuse",
       citation:
-        "URSSAF, Versement mobilité (employers with 11+ employees; rate set by the AOM) — "
-        + "https://www.urssaf.fr/accueil/employeur/cotisations/liste-cotisations/versement-mobilite.html",
+        "URSSAF, Versement mobilité (employers with 11+ employees; rate set by the AOM) — " +
+        "https://www.urssaf.fr/accueil/employeur/cotisations/liste-cotisations/versement-mobilite.html",
       variesBecause:
         "The rate is set per autorité organisatrice de la mobilité from the establishment's commune — a figure no published table can supply.",
       fields: [
         {
-          key: "taux", label: "Taux versement mobilité (%)", kind: "percent", decimals: 4,
-          min: "0", max: "100", required: true,
+          key: "taux",
+          label: "Taux versement mobilité (%)",
+          kind: "percent",
+          decimals: 4,
+          min: "0",
+          max: "100",
+          required: true,
           help: "As a percent, as the URSSAF versement-mobilité lookup returns it for this establishment's commune.",
         },
       ],
@@ -77,8 +89,7 @@ export const FR_PACK_RATES: PayrollPackRates = {
           min: "0",
           max: "1",
           required: false,
-          help:
-            "Select only when the employer is covered by an exemption/special regime listed by URSSAF; ordinary employers remain at 5.25%.",
+          help: "Select only when the employer is covered by an exemption/special regime listed by URSSAF; ordinary employers remain at 5.25%.",
         },
       ],
     },

@@ -7,7 +7,13 @@ import { Rng } from "./rng.ts";
 import { provisionOrg } from "./world.ts";
 import { getProfile } from "./profiles/index.ts";
 import { generateDay, type DayEvents } from "./generator.ts";
-import { cheapInvariants, fullInvariants, immutabilityProbe, writeDefectBundle, type InvariantResult } from "./invariants/index.ts";
+import {
+  cheapInvariants,
+  fullInvariants,
+  immutabilityProbe,
+  writeDefectBundle,
+  type InvariantResult,
+} from "./invariants/index.ts";
 import {
   newManifest,
   readManifest,
@@ -34,10 +40,19 @@ import { addCalendarDays } from "../platform/civil-date.ts";
  */
 
 function gitSha(): string | null {
-  try { return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim(); } catch { return null; }
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return null;
+  }
 }
 
-function makeContext(profileId: string, world: SimOrg, manifest: RunManifest, simDate: string): SimContext {
+function makeContext(
+  profileId: string,
+  world: SimOrg,
+  manifest: RunManifest,
+  simDate: string,
+): SimContext {
   return {
     profile: getProfile(profileId),
     world,
@@ -63,14 +78,20 @@ function persistContext(manifest: RunManifest, ctx: SimContext): void {
  * each `seq:PREFIX` counter to at least the max number already in the ledger, so
  * the next number is always free. Must run inside an org context.
  */
-async function reconcileNumberCounters(orgId: string, counters: Record<string, number>): Promise<void> {
+async function reconcileNumberCounters(
+  orgId: string,
+  counters: Record<string, number>,
+): Promise<void> {
   for (const key of Object.keys(counters)) {
     if (!key.startsWith("seq:")) continue;
     const prefix = key.slice(4);
-    const r = (await db.execute<{ mx: number }>(sql`
+    const r = await db.execute<{ mx: number }>(
+      sql`
       select coalesce(max((regexp_replace(document_number, '^.*-', ''))::int), 0) as mx
         from documents
-       where org_id = ${orgId} and document_number ~ ${`^${prefix}-[0-9]+$`}`, "objects"));
+       where org_id = ${orgId} and document_number ~ ${`^${prefix}-[0-9]+$`}`,
+      "objects",
+    );
     const dbMax = Number(r[0]?.mx ?? 0);
     if (dbMax > (counters[key] ?? 0)) counters[key] = dbMax;
   }
@@ -165,7 +186,12 @@ export async function autopilotRunToEnd(runDir: string): Promise<RunManifest> {
 }
 
 /** Halt helper: record the defect, flag the manifest, persist. */
-function halt(runDir: string, manifest: RunManifest, phase: string, result: InvariantResult): string {
+function halt(
+  runDir: string,
+  manifest: RunManifest,
+  phase: string,
+  result: InvariantResult,
+): string {
   const dir = writeDefectBundle(runDir, {
     seq: manifest.defects.length + 1,
     simDate: manifest.simDate,
@@ -176,7 +202,8 @@ function halt(runDir: string, manifest: RunManifest, phase: string, result: Inva
     failures: result.failures,
     checkpoint: result.checkpoint,
   });
-  for (const f of result.failures) manifest.defects.push({ simDate: manifest.simDate, invariant: f.invariant, dir });
+  for (const f of result.failures)
+    manifest.defects.push({ simDate: manifest.simDate, invariant: f.invariant, dir });
   manifest.status = "halted";
   writeManifest(runDir, manifest);
   return dir;
@@ -195,7 +222,11 @@ export async function dayStart(runDir: string): Promise<DayStartResult> {
   if (manifest.simDate >= manifest.endDate) {
     manifest.status = "completed";
     writeManifest(runDir, manifest);
-    return { simDate: manifest.simDate, events: { billsArrived: 0, invoicesPrepared: 0, paymentsArrived: 0 }, done: true };
+    return {
+      simDate: manifest.simDate,
+      events: { billsArrived: 0, invoicesPrepared: 0, paymentsArrived: 0 },
+      done: true,
+    };
   }
   const simDate = addCalendarDays(manifest.simDate, 1);
   manifest.status = "running";
@@ -217,7 +248,12 @@ export async function dayStart(runDir: string): Promise<DayStartResult> {
   const cheap = await withOrgContext(manifest.orgId, () => cheapInvariants(manifest.orgId));
   if (!cheap.pass) {
     const dir = halt(runDir, manifest, "day-start (generator)", cheap);
-    return { simDate, events, done: false, halted: { phase: "day-start", dir, failures: cheap.failures } };
+    return {
+      simDate,
+      events,
+      done: false,
+      halted: { phase: "day-start", dir, failures: cheap.failures },
+    };
   }
   return { simDate, events, done: false };
 }
@@ -241,7 +277,12 @@ export async function dayEnd(runDir: string): Promise<DayEndResult> {
   const cheap = await withOrgContext(manifest.orgId, () => cheapInvariants(manifest.orgId));
   if (!cheap.pass) {
     const dir = halt(runDir, manifest, "day-end (cheap)", cheap);
-    return { simDate, ranFull: false, pass: false, halted: { phase: "day-end", dir, failures: cheap.failures } };
+    return {
+      simDate,
+      ranFull: false,
+      pass: false,
+      halted: { phase: "day-end", dir, failures: cheap.failures },
+    };
   }
 
   // Prove immutability for any period newly closed by the controller persona.
@@ -256,7 +297,12 @@ export async function dayEnd(runDir: string): Promise<DayEndResult> {
     const probe = await withOrgContext(manifest.orgId, () => immutabilityProbe(world, period));
     if (!probe.pass) {
       const dir = halt(runDir, manifest, "day-end (immutability)", probe);
-      return { simDate, ranFull: false, pass: false, halted: { phase: "day-end", dir, failures: probe.failures } };
+      return {
+        simDate,
+        ranFull: false,
+        pass: false,
+        halted: { phase: "day-end", dir, failures: probe.failures },
+      };
     }
     // Coverage stamps ONLY on a probe pass, and the probe passes only when it
     // staged a real posting and matched the kernel's specific closed-period
@@ -269,16 +315,27 @@ export async function dayEnd(runDir: string): Promise<DayEndResult> {
   let ranFull = false;
   if (isMonthEnd(simDate) || newlyClosed.length > 0) {
     ranFull = true;
-    const full = await withOrgContext(manifest.orgId, () => fullInvariants(manifest.orgId, new Date().toISOString(), gitSha()));
+    const full = await withOrgContext(manifest.orgId, () =>
+      fullInvariants(manifest.orgId, new Date().toISOString(), gitSha()),
+    );
     if (full.checkpoint) {
-      manifest.lastCheckpoint = { simDate, pass: full.pass, file: join(runDir, "checkpoints", `${simDate}.json`) };
+      manifest.lastCheckpoint = {
+        simDate,
+        pass: full.pass,
+        file: join(runDir, "checkpoints", `${simDate}.json`),
+      };
       const { mkdirSync, writeFileSync } = await import("node:fs");
       mkdirSync(join(runDir, "checkpoints"), { recursive: true });
       writeFileSync(manifest.lastCheckpoint.file, JSON.stringify(full.checkpoint, null, 2));
     }
     if (!full.pass) {
       const dir = halt(runDir, manifest, "day-end (full suite)", full);
-      return { simDate, ranFull, pass: false, halted: { phase: "day-end", dir, failures: full.failures } };
+      return {
+        simDate,
+        ranFull,
+        pass: false,
+        halted: { phase: "day-end", dir, failures: full.failures },
+      };
     }
   }
 

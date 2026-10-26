@@ -1,17 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { priceItemRate, priceCappedLadder, priceLowestCost, priceSelectedRateUnit, type RateTier } from "./item-rate-pricing.ts";
+import {
+  priceItemRate,
+  priceCappedLadder,
+  priceLowestCost,
+  priceSelectedRateUnit,
+  type RateTier,
+} from "./item-rate-pricing.ts";
 
 const threeTier: RateTier[] = [
-  { id: "day", unitCode: "day", unitName: "Day", baseQuantity: "1", costRate: "0", billRate: "100" },
-  { id: "week", unitCode: "week", unitName: "Week", baseQuantity: "4", costRate: "0", billRate: "250" },
-  { id: "month", unitCode: "month", unitName: "Month", baseQuantity: "12", costRate: "0", billRate: "800" },
+  {
+    id: "day",
+    unitCode: "day",
+    unitName: "Day",
+    baseQuantity: "1",
+    costRate: "0",
+    billRate: "100",
+  },
+  {
+    id: "week",
+    unitCode: "week",
+    unitName: "Week",
+    baseQuantity: "4",
+    costRate: "0",
+    billRate: "250",
+  },
+  {
+    id: "month",
+    unitCode: "month",
+    unitName: "Month",
+    baseQuantity: "12",
+    costRate: "0",
+    billRate: "800",
+  },
 ];
 
 test("capped ladder reproduces the 1/4/12 roll-up", () => {
   const result = priceCappedLadder("15", threeTier, "bill");
   assert.equal(result.amount, "1050.0000");
-  assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity]), [["month", "1.0000"], ["week", "1.0000"]]);
+  assert.deepEqual(
+    result.components.map((c) => [c.unitCode, c.quantity]),
+    [
+      ["month", "1.0000"],
+      ["week", "1.0000"],
+    ],
+  );
 });
 
 test("capped ladder promotes the three-day and eleven-day boundary cases", () => {
@@ -25,7 +58,7 @@ test("capped ladder promotes the three-day and eleven-day boundary cases", () =>
 });
 
 test("capped ladder preserves strict greater-than promotion", () => {
-  const tiers = threeTier.map((t) => t.unitCode === "week" ? { ...t, billRate: "300" } : t);
+  const tiers = threeTier.map((t) => (t.unitCode === "week" ? { ...t, billRate: "300" } : t));
   const result = priceCappedLadder("3", tiers, "bill");
   assert.equal(result.amount, "300.0000");
   assert.equal(result.components[0]!.unitCode, "day");
@@ -45,29 +78,49 @@ test("lowest-cost pricing supports arbitrary N package units", () => {
   ];
   const result = priceLowestCost("45", tiers, "bill");
   assert.equal(result.amount, "550.0000");
-  assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity]), [["week", "1.0000"], ["hour", "5.0000"]]);
+  assert.deepEqual(
+    result.components.map((c) => [c.unitCode, c.quantity]),
+    [
+      ["week", "1.0000"],
+      ["hour", "5.0000"],
+    ],
+  );
 });
 
 test("an explicitly selected package is not promoted or decomposed", () => {
   const result = priceSelectedRateUnit("2", threeTier[1]!, "bill");
   assert.equal(result.amount, "500.0000");
-  assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity, c.rate]), [["week", "2.0000", "250"]]);
+  assert.deepEqual(
+    result.components.map((c) => [c.unitCode, c.quantity, c.rate]),
+    [["week", "2.0000", "250"]],
+  );
 });
 
 test("fractional package money rounds once without dropping small usage", () => {
-  const tier: RateTier = { unitCode: 'pack', unitName: 'Package', baseQuantity: '3', costRate: '100', billRate: '300' };
-  assert.equal(priceCappedLadder('1', [tier], 'cost').amount, '33.3333');
-  const tiny = priceCappedLadder('0.0001', [tier], 'bill');
-  assert.equal(tiny.amount, '0.0100');
+  const tier: RateTier = {
+    unitCode: "pack",
+    unitName: "Package",
+    baseQuantity: "3",
+    costRate: "100",
+    billRate: "300",
+  };
+  assert.equal(priceCappedLadder("1", [tier], "cost").amount, "33.3333");
+  const tiny = priceCappedLadder("0.0001", [tier], "bill");
+  assert.equal(tiny.amount, "0.0100");
   assert.equal(tiny.components.length, 1);
-  assert.deepEqual(tiny.components[0]!.quantityRatio, { numerator: '1', denominator: '30000' });
+  assert.deepEqual(tiny.components[0]!.quantityRatio, { numerator: "1", denominator: "30000" });
 });
-
 
 test("explicit profiles preserve base-quantity pricing and unknown costs refuse only cost calculation", () => {
   const billOnly = threeTier.map((tier) => ({ ...tier, costRate: null }));
-  assert.deepEqual(priceItemRate("3", billOnly, "bill", "explicit"), priceCappedLadder("3", billOnly, "bill"));
+  assert.deepEqual(
+    priceItemRate("3", billOnly, "bill", "explicit"),
+    priceCappedLadder("3", billOnly, "bill"),
+  );
   assert.equal(priceSelectedRateUnit("2", billOnly[1]!, "bill").amount, "500.0000");
-  assert.throws(() => priceItemRate("3", billOnly, "cost", "explicit"), /No cost rates are configured/);
+  assert.throws(
+    () => priceItemRate("3", billOnly, "cost", "explicit"),
+    /No cost rates are configured/,
+  );
   assert.equal(priceItemRate("3", threeTier, "cost", "explicit").amount, "0.0000");
 });

@@ -20,8 +20,7 @@ registerHooks({
       (specifier.endsWith("/lib/feature-gates") &&
         (context.parentURL?.includes("/api/timesheets/withdraw/") ||
           context.parentURL?.includes("/web/lib/api/route.ts"))) ||
-      (specifier === "./feature-gates" &&
-        context.parentURL?.endsWith("/web/lib/time-workspace.ts"))
+      (specifier === "./feature-gates" && context.parentURL?.endsWith("/web/lib/time-workspace.ts"))
     ) {
       return {
         shortCircuit: true,
@@ -41,14 +40,14 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import("@openbooks/engine/platform/db");
+const { db, withBypassContext, withOrgContext, withOrgTransaction } =
+  await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");
-const { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { installEngineSeams } = await import('@openbooks/engine/composition/install');
-const { routeSubjectSubmission } = await import('@openbooks/engine/flows/submission-policy');
+const { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow } =
+  await import("@openbooks/engine/testing/fixtures");
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+const { routeSubjectSubmission } = await import("@openbooks/engine/flows/submission-policy");
 installEngineSeams();
 const { POST } = await import("./withdraw/route.ts");
 
@@ -113,51 +112,105 @@ async function seedSubmittedWeek(status: "submitted" | "approved" | "draft" = "s
          '4.0000', ${status === "draft" ? "draft" : status}, null, null, false, 'actual',
          '{}'::jsonb, ${actorId}, ${actorId})
     `);
-
   });
   if (status === "submitted") {
-    await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: 'timesheet_week',
-      assignees: [{ type: 'user', userId: actorId }], mode: 'any', preventSelfApproval: false }));
-    await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId, actorId,
-      subjectKind: 'timesheet_week', subjectId: headerId, source: 'api' }));
-    runId = (await withBypassContext(() => db.execute<{ run_id: string }>(sql`select run_id from flow_gates
-      where org_id=${org.orgId} and subject_id=${headerId} and status='pending'`, "objects")))[0]!.run_id;
+    await withBypassContext(() =>
+      seedApprovalFlow(org.orgId, {
+        subjectKind: "timesheet_week",
+        assignees: [{ type: "user", userId: actorId }],
+        mode: "any",
+        preventSelfApproval: false,
+      }),
+    );
+    await withOrgTransaction(org.orgId, () =>
+      routeSubjectSubmission({
+        orgId: org.orgId,
+        actorId,
+        subjectKind: "timesheet_week",
+        subjectId: headerId,
+        source: "api",
+      }),
+    );
+    runId = (
+      await withBypassContext(() =>
+        db.execute<{ run_id: string }>(
+          sql`select run_id from flow_gates
+      where org_id=${org.orgId} and subject_id=${headerId} and status='pending'`,
+          "objects",
+        ),
+      )
+    )[0]!.run_id;
   }
   return { org, actorId, employeeId, headerId, timeEntryId, runId };
 }
 
 async function weekStatus(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => (await db.execute<{ status: string }>(sql`
+  return withOrgContext(
+    orgId,
+    async () =>
+      (
+        await db.execute<{ status: string }>(
+          sql`
       select status from timesheet_weeks where org_id = ${orgId} and id = ${headerId}
-    `, "objects"))[0]!.status);
+    `,
+          "objects",
+        )
+      )[0]!.status,
+  );
 }
 
 async function entryStatus(orgId: string, timeEntryId: string) {
-  return withOrgContext(orgId, async () => (await db.execute<{ status: string }>(sql`
+  return withOrgContext(
+    orgId,
+    async () =>
+      (
+        await db.execute<{ status: string }>(
+          sql`
       select status from time_entries where org_id = ${orgId} and id = ${timeEntryId}
-    `, "objects"))[0]!.status);
+    `,
+          "objects",
+        )
+      )[0]!.status,
+  );
 }
 
 async function runState(orgId: string, runId: string) {
   return withOrgContext(orgId, async () => ({
-    run: (await db.execute<{ status: string }>(sql`
+    run: (
+      await db.execute<{ status: string }>(
+        sql`
       select status from flow_runs where org_id = ${orgId} and id = ${runId}
-    `, "objects"))[0]!.status,
-    gate: (await db.execute<{ status: string }>(sql`
+    `,
+        "objects",
+      )
+    )[0]!.status,
+    gate: (
+      await db.execute<{ status: string }>(
+        sql`
       select status from flow_gates where org_id = ${orgId} and run_id = ${runId}
-    `, "objects"))[0]!.status,
+    `,
+        "objects",
+      )
+    )[0]!.status,
   }));
 }
 
 async function auditRows(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => await db.execute(sql`
+  return withOrgContext(
+    orgId,
+    async () =>
+      await db.execute(
+        sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'timesheet_weeks'
          and row_id = ${headerId}
        order by at, id
-    `, "objects"));
+    `,
+        "objects",
+      ),
+  );
 }
 
 async function cleanup(fixture: Awaited<ReturnType<typeof seedSubmittedWeek>>) {
@@ -169,79 +222,74 @@ async function cleanup(fixture: Awaited<ReturnType<typeof seedSubmittedWeek>>) {
   await dropScratchOrg(fixture.org.orgId);
 }
 
-test(
-  "withdrawing a submitted week returns it to draft and cancels its approval run",
-  async () => {
-    const fixture = await seedSubmittedWeek();
-    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
-    try {
-      const res = await post({ employee: fixture.employeeId, week: "2026-07-12" });
-      assert.equal(res.status, 200, await res.text());
-      assert.equal(await weekStatus(fixture.org.orgId, fixture.headerId), "draft");
-      assert.equal(await entryStatus(fixture.org.orgId, fixture.timeEntryId), "draft");
-      const gated = await runState(fixture.org.orgId, fixture.runId);
-      assert.equal(gated.gate, "cancelled", "the pending gate dies with the recall");
-      assert.equal(gated.run, "cancelled", "the waiting run dies with the recall");
-      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
-      assert.equal(rows.length, 1, "the recall leaves exactly one audit row for the week");
-      const changes = rows[0]!.changes as {
-        event: string;
-        before: { status: string };
-        after: { status: string };
-        cancelledRuns: string[];
-      };
-      assert.equal(changes.event, "withdrawn");
-      assert.equal(changes.before.status, "submitted");
-      assert.equal(changes.after.status, "draft");
-      assert.deepEqual(changes.cancelledRuns, [fixture.runId]);
-    } finally {
-      await cleanup(fixture);
-    }
-  },
-);
+test("withdrawing a submitted week returns it to draft and cancels its approval run", async () => {
+  const fixture = await seedSubmittedWeek();
+  state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+  try {
+    const res = await post({ employee: fixture.employeeId, week: "2026-07-12" });
+    assert.equal(res.status, 200, await res.text());
+    assert.equal(await weekStatus(fixture.org.orgId, fixture.headerId), "draft");
+    assert.equal(await entryStatus(fixture.org.orgId, fixture.timeEntryId), "draft");
+    const gated = await runState(fixture.org.orgId, fixture.runId);
+    assert.equal(gated.gate, "cancelled", "the pending gate dies with the recall");
+    assert.equal(gated.run, "cancelled", "the waiting run dies with the recall");
+    const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+    assert.equal(rows.length, 1, "the recall leaves exactly one audit row for the week");
+    const changes = rows[0]!.changes as {
+      event: string;
+      before: { status: string };
+      after: { status: string };
+      cancelledRuns: string[];
+    };
+    assert.equal(changes.event, "withdrawn");
+    assert.equal(changes.before.status, "submitted");
+    assert.equal(changes.after.status, "draft");
+    assert.deepEqual(changes.cancelledRuns, [fixture.runId]);
+  } finally {
+    await cleanup(fixture);
+  }
+});
 
-test(
-  "concurrent withdrawals serialize: exactly one recalls and audits",
-  async () => {
-    const fixture = await seedSubmittedWeek();
-    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
-    try {
-      const [first, second] = await Promise.all([
-        post({ employee: fixture.employeeId, week: "2026-07-12" }),
-        post({ employee: fixture.employeeId, week: "2026-07-12" }),
-      ]);
-      const statuses = [first.status, second.status].sort();
-      assert.deepEqual(statuses, [200, 422], "the replay loser must be refused under the header lock");
-      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
-      assert.equal(rows.length, 1, "the loser must not write a second 'withdrawn' audit");
-    } finally {
-      await cleanup(fixture);
-    }
-  },
-);
+test("concurrent withdrawals serialize: exactly one recalls and audits", async () => {
+  const fixture = await seedSubmittedWeek();
+  state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+  try {
+    const [first, second] = await Promise.all([
+      post({ employee: fixture.employeeId, week: "2026-07-12" }),
+      post({ employee: fixture.employeeId, week: "2026-07-12" }),
+    ]);
+    const statuses = [first.status, second.status].sort();
+    assert.deepEqual(
+      statuses,
+      [200, 422],
+      "the replay loser must be refused under the header lock",
+    );
+    const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+    assert.equal(rows.length, 1, "the loser must not write a second 'withdrawn' audit");
+  } finally {
+    await cleanup(fixture);
+  }
+});
 
-test(
-  "decided and empty weeks refuse withdrawal with no evidence",
-  async () => {
-    const decided = await seedSubmittedWeek("approved");
-    state.user = { orgId: decided.org.orgId, id: decided.actorId };
-    try {
-      const res = await post({ employee: decided.employeeId, week: "2026-07-12" });
-      assert.equal(res.status, 422, "an approved week is decided, not recallable");
-      assert.match(((await res.json()) as { error: string }).error, /already decided/);
-      assert.equal((await auditRows(decided.org.orgId, decided.headerId)).length, 0);
-    } finally {
-      await cleanup(decided);
-    }
+test("decided and empty weeks refuse withdrawal with no evidence", async () => {
+  const decided = await seedSubmittedWeek("approved");
+  state.user = { orgId: decided.org.orgId, id: decided.actorId };
+  try {
+    const res = await post({ employee: decided.employeeId, week: "2026-07-12" });
+    assert.equal(res.status, 422, "an approved week is decided, not recallable");
+    assert.match(((await res.json()) as { error: string }).error, /already decided/);
+    assert.equal((await auditRows(decided.org.orgId, decided.headerId)).length, 0);
+  } finally {
+    await cleanup(decided);
+  }
 
-    const empty = await seedSubmittedWeek("draft");
-    state.user = { orgId: empty.org.orgId, id: empty.actorId };
-    try {
-      const res = await post({ employee: empty.employeeId, week: "2026-07-12" });
-      assert.equal(res.status, 422, "a draft week has nothing to recall");
-      assert.equal((await auditRows(empty.org.orgId, empty.headerId)).length, 0);
-    } finally {
-      await cleanup(empty);
-    }
-  },
-);
+  const empty = await seedSubmittedWeek("draft");
+  state.user = { orgId: empty.org.orgId, id: empty.actorId };
+  try {
+    const res = await post({ employee: empty.employeeId, week: "2026-07-12" });
+    assert.equal(res.status, 422, "a draft week has nothing to recall");
+    assert.equal((await auditRows(empty.org.orgId, empty.headerId)).length, 0);
+  } finally {
+    await cleanup(empty);
+  }
+});

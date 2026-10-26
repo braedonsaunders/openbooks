@@ -23,7 +23,13 @@ interface RouteState {
   inTx: boolean;
   failOnText?: string;
   updateMatches: boolean;
-  authzUser: { id: string; orgId: string; envKind: "production" | "sandbox" | "preview"; homeUserId: string; homeOrgId: string };
+  authzUser: {
+    id: string;
+    orgId: string;
+    envKind: "production" | "sandbox" | "preview";
+    homeUserId: string;
+    homeOrgId: string;
+  };
   userPreference: { locale: string | null; navMode: string | null };
   requestedPreference: { locale: string | null; navMode: string | null };
 }
@@ -35,11 +41,17 @@ const state: RouteState = {
   pending: [],
   inTx: false,
   updateMatches: true,
-  authzUser: { id: USER_ID, orgId: ORG_ID, envKind: "production", homeUserId: USER_ID, homeOrgId: ORG_ID },
+  authzUser: {
+    id: USER_ID,
+    orgId: ORG_ID,
+    envKind: "production",
+    homeUserId: USER_ID,
+    homeOrgId: ORG_ID,
+  },
   userPreference: { locale: "en", navMode: "topbar" },
   requestedPreference: { locale: "en", navMode: "topbar" },
 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 /** Flatten drizzle SQL chunks into text for deterministic scripted replies. */
 function sqlText(query: unknown): string {
@@ -55,8 +67,8 @@ function sqlText(query: unknown): string {
     })
     .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextMe = sqlText;
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksMeSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextMe = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksMeSqlText = sqlText;
 
 stubModules({
   navigation: false,
@@ -139,7 +151,13 @@ function reset(): void {
   state.pending = [];
   state.inTx = false;
   state.updateMatches = true;
-  state.authzUser = { id: USER_ID, orgId: ORG_ID, envKind: "production", homeUserId: USER_ID, homeOrgId: ORG_ID };
+  state.authzUser = {
+    id: USER_ID,
+    orgId: ORG_ID,
+    envKind: "production",
+    homeUserId: USER_ID,
+    homeOrgId: ORG_ID,
+  };
   state.failOnText = undefined;
   state.userPreference = { locale: "en", navMode: "topbar" };
   state.requestedPreference = { locale: "en", navMode: "topbar" };
@@ -147,8 +165,10 @@ function reset(): void {
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   state.requestedPreference = {
-    locale: body.locale === undefined ? state.userPreference.locale : (body.locale as string | null),
-    navMode: body.navMode === undefined ? state.userPreference.navMode : (body.navMode as string | null),
+    locale:
+      body.locale === undefined ? state.userPreference.locale : (body.locale as string | null),
+    navMode:
+      body.navMode === undefined ? state.userPreference.navMode : (body.navMode as string | null),
   };
   return PATCH(
     new Request("http://openbooks.test/api/me", {
@@ -228,10 +248,14 @@ test("a missing or inactive preference identity is refused with guidance and no 
   const response = await patch({ locale: "de" });
 
   assert.equal(response.status, 409);
-  const body = await response.json() as { error: string; remedy: string };
+  const body = (await response.json()) as { error: string; remedy: string };
   assert.match(body.error, /not saved/);
   assert.match(body.remedy, /Sign in again/);
-  assert.equal(state.executed.some((text) => text.includes("insert into audit_log")), false, "no audit claims a change that did not happen");
+  assert.equal(
+    state.executed.some((text) => text.includes("insert into audit_log")),
+    false,
+    "no audit claims a change that did not happen",
+  );
   assert.deepEqual(state.committed, []);
   assert.deepEqual(state.userPreference, { locale: "en", navMode: "topbar" });
 });
@@ -239,12 +263,28 @@ test("a missing or inactive preference identity is refused with guidance and no 
 test("a switched production super-admin updates and audits the home preference row", async () => {
   reset();
   const targetOrgId = "00000000-0000-4000-8000-00000000a099";
-  state.authzUser = { id: USER_ID, orgId: targetOrgId, envKind: "production", homeUserId: USER_ID, homeOrgId: ORG_ID };
+  state.authzUser = {
+    id: USER_ID,
+    orgId: targetOrgId,
+    envKind: "production",
+    homeUserId: USER_ID,
+    homeOrgId: ORG_ID,
+  };
 
   const response = await patch({ locale: "fr" });
 
   assert.equal(response.status, 200);
   const dialect = new PgDialect();
-  assert.deepEqual(dialect.sqlToQuery(state.queries[0] as SQL).params, ["fr", USER_ID, USER_ID, ORG_ID]);
-  assert.deepEqual(dialect.sqlToQuery(state.queries[1] as SQL).params, [ORG_ID, USER_ID, JSON.stringify({ locale: "fr" }), USER_ID]);
+  assert.deepEqual(dialect.sqlToQuery(state.queries[0] as SQL).params, [
+    "fr",
+    USER_ID,
+    USER_ID,
+    ORG_ID,
+  ]);
+  assert.deepEqual(dialect.sqlToQuery(state.queries[1] as SQL).params, [
+    ORG_ID,
+    USER_ID,
+    JSON.stringify({ locale: "fr" }),
+    USER_ID,
+  ]);
 });

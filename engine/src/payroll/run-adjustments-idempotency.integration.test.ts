@@ -4,17 +4,24 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { PayRunAdjustmentIdempotencyConflict, mutatePayRunAdjustment, payRunBulkAdjustmentId } from "./run-adjustments.ts";
+import {
+  PayRunAdjustmentIdempotencyConflict,
+  mutatePayRunAdjustment,
+  payRunBulkAdjustmentId,
+} from "./run-adjustments.ts";
 import { dropScratchOrg } from "../testing/fixtures.ts";
 import { seedPayrollInputsFixture as payrollFixture } from "../testing/payroll-inputs-fixture.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const adjustmentCount = async (orgId: string, documentId: string): Promise<number> => {
-  const rows = await db.execute<{ n: string }>(sql`
+  const rows = await db.execute<{ n: string }>(
+    sql`
     select count(*)::text as n from pay_run_adjustments
      where org_id = ${orgId} and pay_run_document_id = ${documentId} and adjustment_type = 'line'
-  `, "objects");
+  `,
+    "objects",
+  );
   return Number(rows[0]!.n);
 };
 
@@ -36,35 +43,69 @@ test("replaying an adjustment add with the same key writes once", { skip: !DB },
       idempotencyKey: key,
     };
     const first = await mutatePayRunAdjustment({
-      orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId, mutation,
+      orgId: fx.orgId,
+      documentId: fx.documentId,
+      actorId: fx.actorId,
+      mutation,
     });
     assert.equal(first.changed, true);
     assert.equal(first.replayed, false);
     const second = await mutatePayRunAdjustment({
-      orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId, mutation,
+      orgId: fx.orgId,
+      documentId: fx.documentId,
+      actorId: fx.actorId,
+      mutation,
     });
     assert.equal(second.changed, false);
     assert.equal(second.replayed, true);
     assert.equal(await adjustmentCount(fx.orgId, fx.documentId), 1);
-    const events = async () => await db.execute<{
-      action: string; actor_id: string;
-      changes: { before: { amount: string } | null; after: { amount: string } | null; reason: string };
-    }>(sql`select action,actor_id,changes from audit_log
+    const events = async () =>
+      await db.execute<{
+        action: string;
+        actor_id: string;
+        changes: {
+          before: { amount: string } | null;
+          after: { amount: string } | null;
+          reason: string;
+        };
+      }>(
+        sql`select action,actor_id,changes from audit_log
       where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${key}
-      order by at,id`, "objects");
-    assert.deepEqual((await events()).map(e => [e.action, e.actor_id, e.changes.before, e.changes.after?.amount]),
-      [['insert', fx.actorId, null, '125.0000']]);
-    await mutatePayRunAdjustment({ orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId,
-      reason: 'Source identity correction', mutation: { action: 'delete', adjustmentId: key } });
+      order by at,id`,
+        "objects",
+      );
+    assert.deepEqual(
+      (await events()).map((e) => [
+        e.action,
+        e.actor_id,
+        e.changes.before,
+        e.changes.after?.amount,
+      ]),
+      [["insert", fx.actorId, null, "125.0000"]],
+    );
+    await mutatePayRunAdjustment({
+      orgId: fx.orgId,
+      documentId: fx.documentId,
+      actorId: fx.actorId,
+      reason: "Source identity correction",
+      mutation: { action: "delete", adjustmentId: key },
+    });
     assert.equal(await adjustmentCount(fx.orgId, fx.documentId), 0);
     const removed = (await events())[1]!;
-    assert.equal(removed.action, 'delete');
+    assert.equal(removed.action, "delete");
     assert.equal(removed.actor_id, fx.actorId);
-    assert.equal(removed.changes.before?.amount, '125.0000');
+    assert.equal(removed.changes.before?.amount, "125.0000");
     assert.equal(removed.changes.after, null);
-    assert.equal(removed.changes.reason, 'Source identity correction');
-    await assert.rejects(mutatePayRunAdjustment({ orgId: fx.orgId, documentId: fx.documentId,
-      actorId: fx.actorId, mutation: { action: 'delete', adjustmentId: key } }), /not found/);
+    assert.equal(removed.changes.reason, "Source identity correction");
+    await assert.rejects(
+      mutatePayRunAdjustment({
+        orgId: fx.orgId,
+        documentId: fx.documentId,
+        actorId: fx.actorId,
+        mutation: { action: "delete", adjustmentId: key },
+      }),
+      /not found/,
+    );
     assert.equal((await events()).length, 2);
   } finally {
     await dropScratchOrg(fx.orgId);
@@ -76,18 +117,28 @@ test("the same key with different details is refused, never replayed", { skip: !
   try {
     const key = randomUUID();
     await mutatePayRunAdjustment({
-      orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId,
+      orgId: fx.orgId,
+      documentId: fx.documentId,
+      actorId: fx.actorId,
       mutation: {
-        action: "add", employeePartyId: fx.employeeId, componentId: fx.componentId,
-        amount: "125.00", idempotencyKey: key,
+        action: "add",
+        employeePartyId: fx.employeeId,
+        componentId: fx.componentId,
+        amount: "125.00",
+        idempotencyKey: key,
       },
     });
     await assert.rejects(
       mutatePayRunAdjustment({
-        orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: fx.documentId,
+        actorId: fx.actorId,
         mutation: {
-          action: "add", employeePartyId: fx.employeeId, componentId: fx.componentId,
-          amount: "999.00", idempotencyKey: key,
+          action: "add",
+          employeePartyId: fx.employeeId,
+          componentId: fx.componentId,
+          amount: "999.00",
+          idempotencyKey: key,
         },
       }),
       PayRunAdjustmentIdempotencyConflict,
@@ -104,13 +155,19 @@ test("a replayed bulk batch writes each row once", { skip: !DB }, async () => {
     const batchKey = randomUUID();
     const rowId = payRunBulkAdjustmentId(batchKey, fx.employeeId);
     assert.ok(isUuid(rowId), "expected a real UUID row id");
-    const apply = () => mutatePayRunAdjustment({
-      orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId,
-      mutation: {
-        action: "add", employeePartyId: fx.employeeId, componentId: fx.componentId,
-        amount: "50.00", idempotencyKey: rowId,
-      },
-    });
+    const apply = () =>
+      mutatePayRunAdjustment({
+        orgId: fx.orgId,
+        documentId: fx.documentId,
+        actorId: fx.actorId,
+        mutation: {
+          action: "add",
+          employeePartyId: fx.employeeId,
+          componentId: fx.componentId,
+          amount: "50.00",
+          idempotencyKey: rowId,
+        },
+      });
     await apply();
     const replay = await apply();
     assert.equal(replay.replayed, true);
@@ -129,8 +186,18 @@ test("adds without a key keep legacy generated ids", { skip: !DB }, async () => 
       componentId: fx.componentId,
       amount: "10.00",
     };
-    await mutatePayRunAdjustment({ orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId, mutation });
-    await mutatePayRunAdjustment({ orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId, mutation });
+    await mutatePayRunAdjustment({
+      orgId: fx.orgId,
+      documentId: fx.documentId,
+      actorId: fx.actorId,
+      mutation,
+    });
+    await mutatePayRunAdjustment({
+      orgId: fx.orgId,
+      documentId: fx.documentId,
+      actorId: fx.actorId,
+      mutation,
+    });
     assert.equal(await adjustmentCount(fx.orgId, fx.documentId), 2);
   } finally {
     await dropScratchOrg(fx.orgId);

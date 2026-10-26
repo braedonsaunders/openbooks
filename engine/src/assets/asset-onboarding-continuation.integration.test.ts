@@ -24,8 +24,13 @@ async function seedMonthlyPeriods(
   orgId: string,
   months: { n: number; name: string; from: string; to: string }[],
 ): Promise<void> {
-  const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
+  const cal = (
+    await db.execute<{ id: string }>(
+      sql`
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   for (const m of months) {
     await db.execute(sql`
       insert into accounting_periods
@@ -75,84 +80,110 @@ async function seedOnboardedAsset(
 }
 
 async function plannedLines(orgId: string, assetId: string, bookId: string) {
-  return await db.execute<{ month: string; planned: string; posted: string | null }>(sql`
+  return await db.execute<{ month: string; planned: string; posted: string | null }>(
+    sql`
     select p.starts_on::text as month, l.planned_amount::text as planned,
            l.posted_amount::text as posted
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where s.org_id = ${orgId} and s.asset_id = ${assetId} and s.book_id = ${bookId}
-     order by p.starts_on`, "objects");
+     order by p.starts_on`,
+    "objects",
+  );
 }
 
-test("an onboarded asset continues from its opening accumulated without catch-up", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedMonthlyPeriods(org.orgId, MONTHS_2026);
-    // 55 months × 1000 through 2025-12-31 recognised in the legacy system.
-    const assetId = await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
-      amount: "55000.0000",
-      asOf: "2025-12-31",
-    });
-
-    const built = await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    // Pre-cutover months are covered by the opening figure: they must neither
-    // sit on the schedule nor wait in the skipped-months backlog.
-    for (const m of ["2021-06-01", "2025-12-01"]) {
-      assert.ok(!built.skippedMonths.includes(m), `${m} is covered by the opening figure, not skipped (${built.skippedMonths.length} skipped)`);
-    }
-    assert.ok(built.skippedMonths.includes("2027-01-01"), "post-horizon months stay skipped");
-
-    const lines = await plannedLines(org.orgId, assetId, org.bookId);
-    assert.deepEqual(
-      lines.map((l) => l.month),
-      MONTHS_2026.map((m) => m.from).concat(["2026-07-01"]).sort(),
-      "schedule holds exactly the calendared post-cutover months",
-    );
-    const january = lines.find((l) => l.month === "2026-01-01");
-    assert.ok(january, "January 2026 must carry a schedule line");
-    assert.equal(january.planned, "1000.0000", `January must be one month, not a catch-up (got ${january.planned})`);
-    const written = lines.map((l) => l.planned).reduce(add);
-    assert.equal(written, "12000.0000", `twelve post-cutover months written (got ${written})`);
-
-    // The continuation actually posts: Q1 journals, one month each.
-    const run = await runDepreciation(org.orgId, "2026-03-31", actorId, assetId);
-    assert.equal(run.posted, 3, `expected 3 postings, got ${JSON.stringify(run.problems)}`);
-    assert.equal(run.totalAmount, "3000.0000");
-
-    // Lifetime tie-out: opening + posted + remaining plan == cost − salvage.
-    const after = await plannedLines(org.orgId, assetId, org.bookId);
-    const posted = after.filter((l) => l.posted !== null).map((l) => l.posted!).reduce(add);
-    const unposted = after.filter((l) => l.posted === null).map((l) => l.planned).reduce(add);
-    assert.equal(posted, "3000.0000");
-    assert.equal(unposted, "9000.0000");
-    assert.equal(add(add("55000.0000", posted), add(unposted, "53000.0000")), "120000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("an opening beyond the depreciable basis is refused at the storage boundary", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await seedMonthlyPeriods(org.orgId, MONTHS_2026);
-    // 200000 > cost − salvage (120000): the 0156 check fails the insert.
-    // Drizzle surfaces the query, not the PG detail, so assert on the cause.
-    let cause = "";
+test(
+  "an onboarded asset continues from its opening accumulated without catch-up",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
     try {
-      await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
-        amount: "200000.0000",
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedMonthlyPeriods(org.orgId, MONTHS_2026);
+      // 55 months × 1000 through 2025-12-31 recognised in the legacy system.
+      const assetId = await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
+        amount: "55000.0000",
         asOf: "2025-12-31",
       });
-    } catch (e) {
-      cause = String((e as { cause?: unknown }).cause ?? e);
+
+      const built = await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      // Pre-cutover months are covered by the opening figure: they must neither
+      // sit on the schedule nor wait in the skipped-months backlog.
+      for (const m of ["2021-06-01", "2025-12-01"]) {
+        assert.ok(
+          !built.skippedMonths.includes(m),
+          `${m} is covered by the opening figure, not skipped (${built.skippedMonths.length} skipped)`,
+        );
+      }
+      assert.ok(built.skippedMonths.includes("2027-01-01"), "post-horizon months stay skipped");
+
+      const lines = await plannedLines(org.orgId, assetId, org.bookId);
+      assert.deepEqual(
+        lines.map((l) => l.month),
+        MONTHS_2026.map((m) => m.from)
+          .concat(["2026-07-01"])
+          .sort(),
+        "schedule holds exactly the calendared post-cutover months",
+      );
+      const january = lines.find((l) => l.month === "2026-01-01");
+      assert.ok(january, "January 2026 must carry a schedule line");
+      assert.equal(
+        january.planned,
+        "1000.0000",
+        `January must be one month, not a catch-up (got ${january.planned})`,
+      );
+      const written = lines.map((l) => l.planned).reduce(add);
+      assert.equal(written, "12000.0000", `twelve post-cutover months written (got ${written})`);
+
+      // The continuation actually posts: Q1 journals, one month each.
+      const run = await runDepreciation(org.orgId, "2026-03-31", actorId, assetId);
+      assert.equal(run.posted, 3, `expected 3 postings, got ${JSON.stringify(run.problems)}`);
+      assert.equal(run.totalAmount, "3000.0000");
+
+      // Lifetime tie-out: opening + posted + remaining plan == cost − salvage.
+      const after = await plannedLines(org.orgId, assetId, org.bookId);
+      const posted = after
+        .filter((l) => l.posted !== null)
+        .map((l) => l.posted!)
+        .reduce(add);
+      const unposted = after
+        .filter((l) => l.posted === null)
+        .map((l) => l.planned)
+        .reduce(add);
+      assert.equal(posted, "3000.0000");
+      assert.equal(unposted, "9000.0000");
+      assert.equal(add(add("55000.0000", posted), add(unposted, "53000.0000")), "120000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    assert.match(cause, /fixed_assets_opening_balances_check/);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
+
+test(
+  "an opening beyond the depreciable basis is refused at the storage boundary",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedMonthlyPeriods(org.orgId, MONTHS_2026);
+      // 200000 > cost − salvage (120000): the 0156 check fails the insert.
+      // Drizzle surfaces the query, not the PG detail, so assert on the cause.
+      let cause = "";
+      try {
+        await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
+          amount: "200000.0000",
+          asOf: "2025-12-31",
+        });
+      } catch (e) {
+        cause = String((e as { cause?: unknown }).cause ?? e);
+      }
+      assert.match(cause, /fixed_assets_opening_balances_check/);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("an opening as-of before the in-service month fails closed", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -163,7 +194,10 @@ test("an opening as-of before the in-service month fails closed", { skip: !DB },
       amount: "1000.0000",
       asOf: "2021-01-01",
     });
-    await assert.rejects(buildSchedule(assetId, org.orgId, actorId, org.bookId), /in-service|opening/i);
+    await assert.rejects(
+      buildSchedule(assetId, org.orgId, actorId, org.bookId),
+      /in-service|opening/i,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

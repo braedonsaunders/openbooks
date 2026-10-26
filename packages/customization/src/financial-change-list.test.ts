@@ -9,15 +9,7 @@ test("the accounting-event register lists the event, subject, and legal entity",
   assert.equal(meta.labelKey, "accounting.lifecycle.financial_change");
   assert.deepEqual(
     meta.listColumns.map((column) => column.key),
-    [
-      "operation",
-      "subject",
-      "domain",
-      "subsidiary",
-      "reason",
-      "effective_on",
-      "status",
-    ],
+    ["operation", "subject", "domain", "subsidiary", "reason", "effective_on", "status"],
   );
   assert.equal(meta.listColumns.find((column) => column.key === "reason")?.defaultHidden, true);
   assert.deepEqual(

@@ -123,7 +123,11 @@ export function statutoryJurisdictionKey(countryCode: string, region: string | n
   // region reads ON, and only this construction builds CA-ON. Listing keys
   // here once taught an operator to type CA-ON, which built CA-CA-ON.
   const qualifierOf = (key: string): string =>
-    (key === country ? "FEDERAL" : key.startsWith(`${country}-`) ? key.slice(country.length + 1) : key);
+    key === country
+      ? "FEDERAL"
+      : key.startsWith(`${country}-`)
+        ? key.slice(country.length + 1)
+        : key;
   const qualifiers = declarations.map((declaration) => qualifierOf(declaration.key)).join(", ");
   const transcribed = (key: string): string => {
     const declaration = declarations.find((candidate) => candidate.key === key);
@@ -141,11 +145,12 @@ export function statutoryJurisdictionKey(countryCode: string, region: string | n
     );
   }
   const requested = qualifier === "FEDERAL" ? country : `${country}-${qualifier}`;
-  if (declarations.some((declaration) => declaration.key === requested)) return transcribed(requested);
+  if (declarations.some((declaration) => declaration.key === requested))
+    return transcribed(requested);
   if (payrollJurisdictionDeclared(requested)) {
     throw new StatutoryCoverageError(
-      `"${requested}" is not an employment calendar — it moves remittance due dates and governs no working days. `
-      + `Choose one of the employment calendars the pack declares: ${qualifiers}`,
+      `"${requested}" is not an employment calendar — it moves remittance due dates and governs no working days. ` +
+        `Choose one of the employment calendars the pack declares: ${qualifiers}`,
     );
   }
   throw new StatutoryCoverageError(
@@ -173,7 +178,8 @@ async function loadVersions(
     holiday_region: string | null;
     effective_from: string | Date;
     effective_to: string | Date | null;
-  }>(sql`
+  }>(
+    sql`
     select id, subsidiary_id, week_starts_on, weekend_days, holiday_country, holiday_region,
            effective_from, effective_to
       from org_business_calendars
@@ -183,14 +189,16 @@ async function loadVersions(
        and (effective_to is null or effective_to >= ${from}::date)
        and (subsidiary_id is null or subsidiary_id = ${subsidiaryId})
      order by effective_from
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
 type BusinessCalendarRow = Awaited<ReturnType<typeof loadVersions>>[number];
 
 const dayString = (value: string | Date): string =>
-  (value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10));
+  value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
 
 function parseWeekendDays(raw: unknown): ReadonlySet<number> {
   if (!Array.isArray(raw)) throw new BusinessCalendarUnreadableError();
@@ -220,9 +228,15 @@ export interface BusinessCalendar {
 }
 
 /** The version governing one date: the subsidiary's own row where one covers it, else the org-wide row. */
-function governingVersion(versions: readonly BusinessCalendarRow[], date: string): BusinessCalendarRow | null {
-  const covering = versions.filter((row) =>
-    dayString(row.effective_from) <= date && (row.effective_to === null || dayString(row.effective_to) >= date));
+function governingVersion(
+  versions: readonly BusinessCalendarRow[],
+  date: string,
+): BusinessCalendarRow | null {
+  const covering = versions.filter(
+    (row) =>
+      dayString(row.effective_from) <= date &&
+      (row.effective_to === null || dayString(row.effective_to) >= date),
+  );
   const scoped = covering.filter((row) => row.subsidiary_id !== null);
   const fallback = covering.filter((row) => row.subsidiary_id === null);
   const pick = (candidates: readonly BusinessCalendarRow[]): BusinessCalendarRow | null => {
@@ -249,7 +263,11 @@ async function holidaysFor(
   // still see the declaration it observes. Membership answers stay exact —
   // only the considered declarations widen.
   const observed = await observedHolidays(
-    orgId, jurisdiction, addCalendarDays(from, -7), addCalendarDays(to, 7), tx,
+    orgId,
+    jurisdiction,
+    addCalendarDays(from, -7),
+    addCalendarDays(to, 7),
+    tx,
   );
   return { jurisdiction, holidays: new Set(observed.map((holiday) => holiday.date)) };
 }
@@ -266,18 +284,31 @@ async function calendarSubject(
   subsidiaryId: string | null,
 ): Promise<CalendarSubject> {
   if (subsidiaryId) {
-    const facts = (await tx.execute<{ name: string; country: string }>(sql`
+    const facts = (
+      await tx.execute<{ name: string; country: string }>(
+        sql`
       select name, country from subsidiaries where id = ${subsidiaryId} and org_id = ${orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (facts) {
       return { text: `subsidiary "${facts.name}"`, subsidiaryCountry: facts.country };
     }
     return { text: `subsidiary ${subsidiaryId}`, subsidiaryCountry: null };
   }
-  const org = (await tx.execute<{ name: string }>(sql`
+  const org = (
+    await tx.execute<{ name: string }>(
+      sql`
     select name from orgs where id = ${orgId}
-  `, "objects"))[0];
-  return { text: org ? `the organization "${org.name}"` : `the organization ${orgId}`, subsidiaryCountry: null };
+  `,
+      "objects",
+    )
+  )[0];
+  return {
+    text: org ? `the organization "${org.name}"` : `the organization ${orgId}`,
+    subsidiaryCountry: null,
+  };
 }
 
 interface ResolvedDay {
@@ -308,7 +339,10 @@ async function resolveRange(
   strict: boolean,
 ): Promise<Map<string, ResolvedDay | null>> {
   const versions = await loadVersions(tx, orgId, subsidiaryId, from, to);
-  const byVersion = new Map<string, { weekendDays: ReadonlySet<number>; jurisdiction: string | null; holidays: ReadonlySet<string> }>();
+  const byVersion = new Map<
+    string,
+    { weekendDays: ReadonlySet<number>; jurisdiction: string | null; holidays: ReadonlySet<string> }
+  >();
   const days = new Map<string, ResolvedDay | null>();
   const count = calendarDaysBetween(from, to);
   for (let offset = 0; offset <= count; offset += 1) {
@@ -319,14 +353,22 @@ async function resolveRange(
       days.set(date, null);
       continue;
     }
-    if (subject.subsidiaryCountry && version.holiday_country && version.holiday_country !== subject.subsidiaryCountry) {
-      throw new SubsidiaryCalendarMismatchError(subject.text, subject.subsidiaryCountry, version.holiday_country);
+    if (
+      subject.subsidiaryCountry &&
+      version.holiday_country &&
+      version.holiday_country !== subject.subsidiaryCountry
+    ) {
+      throw new SubsidiaryCalendarMismatchError(
+        subject.text,
+        subject.subsidiaryCountry,
+        version.holiday_country,
+      );
     }
     let resolved = byVersion.get(version.id);
     if (!resolved) {
       resolved = {
         weekendDays: parseWeekendDays(version.weekend_days),
-        ...await holidaysFor(tx, orgId, version, from, to),
+        ...(await holidaysFor(tx, orgId, version, from, to)),
       };
       byVersion.set(version.id, resolved);
     }
@@ -389,8 +431,10 @@ export async function businessCalendarFor(
   const days = await resolveRange(tx, orgId, subsidiaryId, subject, from, to, false);
   const anchor = days.get(onDate);
   if (!anchor) throw new BusinessCalendarMissingError(subject.text, onDate);
-  const isHoliday = (date: string): boolean => dayAnswer(days, subject.text, from, to, date).isHoliday;
-  const isBusinessDay = (date: string): boolean => dayAnswer(days, subject.text, from, to, date).isBusinessDay;
+  const isHoliday = (date: string): boolean =>
+    dayAnswer(days, subject.text, from, to, date).isHoliday;
+  const isBusinessDay = (date: string): boolean =>
+    dayAnswer(days, subject.text, from, to, date).isBusinessDay;
   return {
     weekStartsOn: anchor.weekStartsOn,
     weekendDays: anchor.weekendDays,

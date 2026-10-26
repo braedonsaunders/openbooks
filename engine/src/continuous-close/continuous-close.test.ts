@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyBudgetVariance, classifyPeriodPerformance, classifyUnmatchedBankActivity, nextContinuousCloseRunAt } from "./continuous-close.ts";
+import {
+  classifyBudgetVariance,
+  classifyPeriodPerformance,
+  classifyUnmatchedBankActivity,
+  nextContinuousCloseRunAt,
+} from "./continuous-close.ts";
 import {
   defaultContinuousCloseDetectors,
   effectiveDetectorMateriality,
@@ -133,7 +138,12 @@ test("detector policies default every registered control on and preserve explici
   const defaults = defaultContinuousCloseDetectors("accounting");
   assert.deepEqual(
     defaults.map((detector) => detector.detectorKey),
-    ["unmatched_bank_activity", "reconciliation_difference", "stale_accounting_documents", "stranded_background_work"],
+    [
+      "unmatched_bank_activity",
+      "reconciliation_difference",
+      "stale_accounting_documents",
+      "stranded_background_work",
+    ],
   );
   assert.deepEqual(
     enabledDetectorKeys(defaults),
@@ -151,7 +161,11 @@ test("detector policies default every registered control on and preserve explici
       },
     },
   });
-  assert.deepEqual(enabledDetectorKeys(configured), ["reconciliation_difference", "stale_accounting_documents", "stranded_background_work"]);
+  assert.deepEqual(enabledDetectorKeys(configured), [
+    "reconciliation_difference",
+    "stale_accounting_documents",
+    "stranded_background_work",
+  ]);
   assert.equal(configured[0]!.materialityThreshold, "2500.1250");
   assert.equal(effectiveDetectorMateriality(configured[0]!, "1000.0000"), "2500.1250");
   assert.equal(effectiveDetectorMateriality(configured[1]!, "1000.0000"), "1000.0000");

@@ -1,15 +1,15 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadAccounting, accountingSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadAccounting, accountingSpec } from "./view";
 // The shared attention rail — one implementation for the cockpits that use
 // it. The six-row cap is a DATA decision, so it happens here and in the
 // loader rather than hiding inside the component.
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('accounting')
-  return { title: t('home.title') }
+  const t = await getTranslations("accounting");
+  return { title: t("home.title") };
 }
 
 /**
@@ -22,10 +22,9 @@ export async function generateMetadata() {
 export default async function AccountingHomePage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = (await searchParams) ?? {}
-  const data = await loadAccounting()
-  return <ModuleView spec={accountingSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = (await searchParams) ?? {};
+  const data = await loadAccounting();
+  return <ModuleView spec={accountingSpec(data)} data={data} searchParams={sp} trusted />;
 }
-

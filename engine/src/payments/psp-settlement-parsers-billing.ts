@@ -1,7 +1,19 @@
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import { fromMinorUnits } from "./minor-units.ts";
-import { PspSettlementError, fromChargebeeMinorUnits, fromPspMinorUnits, requireChargebeeCurrency, requireFxRate, requireRecurlyCurrency, summarizeSettlement } from "./psp-settlement-core.ts";
-import type { ParsedSettlement, ParsedSettlementLine, SettlementLineKind } from "./psp-settlement-core.ts";
+import {
+  PspSettlementError,
+  fromChargebeeMinorUnits,
+  fromPspMinorUnits,
+  requireChargebeeCurrency,
+  requireFxRate,
+  requireRecurlyCurrency,
+  summarizeSettlement,
+} from "./psp-settlement-core.ts";
+import type {
+  ParsedSettlement,
+  ParsedSettlementLine,
+  SettlementLineKind,
+} from "./psp-settlement-core.ts";
 
 /**
  * Stripe balance-transaction types this importer understands. Every arm of
@@ -151,10 +163,7 @@ export function parseStripeBalanceTransactions(
     // zero-decimal currencies which arrive as whole major units. money uses
     // 4dp of major unit: 123 cents = 1.2300 → units = 12300 = cents * 100.
     const major = fromPspMinorUnits(r.amount, "Stripe amount", false, currency);
-    const fee =
-      r.fee == null
-        ? null
-        : fromPspMinorUnits(r.fee, "Stripe fee", true, currency);
+    const fee = r.fee == null ? null : fromPspMinorUnits(r.fee, "Stripe fee", true, currency);
     if (r.net != null) {
       fromPspMinorUnits(r.net, "Stripe net amount", false, currency);
     }
@@ -164,13 +173,10 @@ export function parseStripeBalanceTransactions(
     // (plus the provider id when the row carries one) so the payload can be
     // repaired field-by-field.
     const rowType = typeof r.type === "string" ? r.type : "";
-    const rowIdSuffix =
-      typeof r.id === "string" && r.id !== "" ? ` ${r.id}` : "";
+    const rowIdSuffix = typeof r.id === "string" && r.id !== "" ? ` ${r.id}` : "";
     const rowLabel = `row ${index + 1}${rowIdSuffix}`;
     if (rowType === "") {
-      throw new PspSettlementError(
-        `Stripe transaction type is required (${rowLabel})`,
-      );
+      throw new PspSettlementError(`Stripe transaction type is required (${rowLabel})`);
     }
     if (!isKnownStripeBalanceType(rowType)) {
       throw new PspSettlementError(
@@ -255,9 +261,7 @@ export function parseStripeBalanceTransactions(
       const reversal = rawFee < 0 && signedFoots;
       lines.push({
         kind: "fee",
-        amount: reversal
-          ? fromPspMinorUnits(rawFee, "Stripe fee", false, currency)
-          : fee,
+        amount: reversal ? fromPspMinorUnits(rawFee, "Stripe fee", false, currency) : fee,
         externalRef: `${r.id}_fee`,
         description: reversal ? "Stripe fee refund" : "Stripe processing fee",
         currency,
@@ -315,21 +319,24 @@ export function parseStripeBalanceTransactions(
 }
 
 /** Recurly invoices_revenue_report / transactions export subset. */
-export function parseRecurlySettlement(payload: {
-  id: string;
-  closed_at?: string;
-  currency?: string | null;
-  charge_amount?: string | number;
-  refund_amount?: string | number;
-  fee_amount?: string | number;
-  net_amount?: string | number;
-  lines?: {
-    type: string;
-    amount: string | number;
-    id?: string;
-    description?: string;
-  }[];
-}, fallbackDate?: string): ParsedSettlement {
+export function parseRecurlySettlement(
+  payload: {
+    id: string;
+    closed_at?: string;
+    currency?: string | null;
+    charge_amount?: string | number;
+    refund_amount?: string | number;
+    fee_amount?: string | number;
+    net_amount?: string | number;
+    lines?: {
+      type: string;
+      amount: string | number;
+      id?: string;
+      description?: string;
+    }[];
+  },
+  fallbackDate?: string,
+): ParsedSettlement {
   // Currency is never defaulted: a currency-less payload booked as USD would
   // silently mislabel every foreign-currency settlement. Same explicit-code
   // contract as the Stripe and Chargebee parsers.
@@ -412,25 +419,28 @@ export function parseRecurlySettlement(payload: {
  * Together they guarantee the posted bank leg equals amount_paid exactly.
  * A negative amount_paid is refused outright (the provider minimum is zero).
  */
-export function parseChargebeeSettlement(payload: {
-  id: string;
-  date?: number | string;
-  currency_code?: string;
-  total?: number;
-  amount_paid?: number;
-  amount_adjusted?: number;
-  /** Operator-surfaced provider reason for the adjustment (e.g. the
-   *  adjustment credit-note reason); carried onto the adjustment leg. */
-  adjustment_reason?: string | null;
-  credits_applied?: number;
-  line_items?: {
-    id?: string;
-    description?: string;
-    amount?: number;
-    entity_type?: string;
-  }[];
-  // taxes/fees may appear as special entity types
-}, fallbackDate?: string): ParsedSettlement {
+export function parseChargebeeSettlement(
+  payload: {
+    id: string;
+    date?: number | string;
+    currency_code?: string;
+    total?: number;
+    amount_paid?: number;
+    amount_adjusted?: number;
+    /** Operator-surfaced provider reason for the adjustment (e.g. the
+     *  adjustment credit-note reason); carried onto the adjustment leg. */
+    adjustment_reason?: string | null;
+    credits_applied?: number;
+    line_items?: {
+      id?: string;
+      description?: string;
+      amount?: number;
+      entity_type?: string;
+    }[];
+    // taxes/fees may appear as special entity types
+  },
+  fallbackDate?: string,
+): ParsedSettlement {
   // Currency is never guessed: Chargebee always sends currency_code and its
   // scaling follows its own zero-decimal contract, not the Stripe-scale table.
   const currency = requireChargebeeCurrency(payload.currency_code);
@@ -448,7 +458,12 @@ export function parseChargebeeSettlement(payload: {
   const adjusted =
     payload.amount_adjusted == null
       ? null
-      : fromChargebeeMinorUnits(payload.amount_adjusted, "Chargebee amount adjusted", true, currency);
+      : fromChargebeeMinorUnits(
+          payload.amount_adjusted,
+          "Chargebee amount adjusted",
+          true,
+          currency,
+        );
   if (payload.adjustment_reason != null && typeof payload.adjustment_reason !== "string") {
     throw new PspSettlementError("Chargebee adjustment reason must be a string");
   }
@@ -526,9 +541,7 @@ export function parseChargebeeSettlement(payload: {
     if (toUnits(total) !== explained) {
       const diff = toUnits(total) - explained;
       const tail =
-        diff > 0n
-          ? ` (${fromUnits(diff)} still due)`
-          : ` (${fromUnits(-diff)} over-applied)`;
+        diff > 0n ? ` (${fromUnits(diff)} still due)` : ` (${fromUnits(-diff)} over-applied)`;
       throw new PspSettlementError(
         `Chargebee invoice ${payload.id} does not reconcile: total ${total} != amount paid ${paid} + adjustments ${adjusted ?? fromUnits(0n)} + credits applied ${creditsApplied ?? fromUnits(0n)}${tail}`,
       );

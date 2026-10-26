@@ -37,12 +37,29 @@ const ID_C = "33333333-3333-4333-8333-333333333333";
 
 test("requisition compensation refuses a reversed exact-decimal range", () => {
   assert.throws(
-    () => requireCompensation({ min: "120000.0001", max: "120000.0000", currency: "USD", basis: "annual" }),
+    () =>
+      requireCompensation({
+        min: "120000.0001",
+        max: "120000.0000",
+        currency: "USD",
+        basis: "annual",
+      }),
     (error: unknown) => error instanceof Error && error.message.includes("minimum is no greater"),
   );
-  assert.deepEqual(requireCompensation({ min: "120000.0000", max: "120000.0001", currency: "USD", basis: "annual" }), {
-    min: "120000.0000", max: "120000.0001", currency: "USD", basis: "annual",
-  });
+  assert.deepEqual(
+    requireCompensation({
+      min: "120000.0000",
+      max: "120000.0001",
+      currency: "USD",
+      basis: "annual",
+    }),
+    {
+      min: "120000.0000",
+      max: "120000.0001",
+      currency: "USD",
+      basis: "annual",
+    },
+  );
 });
 
 test("scheduled interviews require a valid ISO instant with an explicit offset", async () => {
@@ -76,13 +93,24 @@ test("booking tokens verify for their purpose and row, and nowhere else", () => 
 test("tampered and expired tokens are refused without throwing", () => {
   const token = createRecruitingToken({ purpose: "offer", rowId: ID_A });
   const [payload, sig] = token.split(".");
-  assert.equal(verifyRecruitingToken(`${payload}.${sig!.split("").reverse().join("")}`, "offer"), null);
+  assert.equal(
+    verifyRecruitingToken(`${payload}.${sig!.split("").reverse().join("")}`, "offer"),
+    null,
+  );
   assert.equal(verifyRecruitingToken("not-a-token", "offer"), null);
   assert.equal(verifyRecruitingToken("", "offer"), null);
-  const expired = createRecruitingToken({ purpose: "book", rowId: ID_A, expiresAt: Date.now() - 1000 });
+  const expired = createRecruitingToken({
+    purpose: "book",
+    rowId: ID_A,
+    expiresAt: Date.now() - 1000,
+  });
   assert.equal(verifyRecruitingToken(expired, "book"), null);
   // Token reuse after expiry refuses by expiry, not by crash.
-  const live = createRecruitingToken({ purpose: "book", rowId: ID_A, expiresAt: Date.now() + BOOKING_TOKEN_TTL_MS });
+  const live = createRecruitingToken({
+    purpose: "book",
+    rowId: ID_A,
+    expiresAt: Date.now() + BOOKING_TOKEN_TTL_MS,
+  });
   assert.ok(verifyRecruitingToken(live, "book"));
 });
 
@@ -136,29 +164,52 @@ test("rating values order the verdicts increasingly", () => {
 
 test("availability windows must be ordered, dated, and zoned", () => {
   const windows = validateAvailabilityWindows([
-    { startsAt: "2026-10-01T09:00:00Z", endsAt: "2026-10-01T10:00:00Z", timezone: "America/Toronto" },
+    {
+      startsAt: "2026-10-01T09:00:00Z",
+      endsAt: "2026-10-01T10:00:00Z",
+      timezone: "America/Toronto",
+    },
   ]);
   assert.equal(windows.length, 1);
   assert.throws(() => validateAvailabilityWindows([]), /at least one availability window/);
   assert.throws(
     () =>
       validateAvailabilityWindows([
-        { startsAt: "2026-10-01T10:00:00Z", endsAt: "2026-10-01T09:00:00Z", timezone: "America/Toronto" },
+        {
+          startsAt: "2026-10-01T10:00:00Z",
+          endsAt: "2026-10-01T09:00:00Z",
+          timezone: "America/Toronto",
+        },
       ]),
     /ends before it starts/,
   );
   assert.throws(
-    () => validateAvailabilityWindows([{ startsAt: "2026-10-01T09:00:00Z", endsAt: "2026-10-01T10:00:00Z", timezone: "" }]),
+    () =>
+      validateAvailabilityWindows([
+        { startsAt: "2026-10-01T09:00:00Z", endsAt: "2026-10-01T10:00:00Z", timezone: "" },
+      ]),
     /needs a timezone/,
   );
   assert.throws(
-    () => validateAvailabilityWindows([{ startsAt: "2026-10-01T09:00:00Z", endsAt: "2026-10-01T10:00:00Z", timezone: "Mars/Olympus" }]),
+    () =>
+      validateAvailabilityWindows([
+        {
+          startsAt: "2026-10-01T09:00:00Z",
+          endsAt: "2026-10-01T10:00:00Z",
+          timezone: "Mars/Olympus",
+        },
+      ]),
     /invalid IANA timezone/,
   );
 });
 
 const CLAUSES: OfferClause[] = [
-  { key: "probation", label: "Probation", body: "A {{probation_months}}-month probation applies.", defaultOn: true },
+  {
+    key: "probation",
+    label: "Probation",
+    body: "A {{probation_months}}-month probation applies.",
+    defaultOn: true,
+  },
   { key: "remote", label: "Remote", body: "Remote work per policy.", defaultOn: false },
 ];
 
@@ -167,7 +218,12 @@ test("offer documents render data plus selected clauses, and refuse invented one
     bodyTemplate: "Dear {{candidate_name}}, the {{job_title}} role pays {{compensation_amount}}.",
     clauses: CLAUSES,
     selectedClauseKeys: ["probation"],
-    data: { candidate_name: "A. Candidate", job_title: "Welder", compensation_amount: "45.00", probation_months: "3" },
+    data: {
+      candidate_name: "A. Candidate",
+      job_title: "Welder",
+      compensation_amount: "45.00",
+      probation_months: "3",
+    },
   });
   assert.ok(rendered.includes("A. Candidate"));
   assert.ok(rendered.includes("3-month probation"));
@@ -198,14 +254,16 @@ test("signature evidence seals every field and encoding stays deterministic", ()
   const first = sealSignatureEvidence(args);
   assert.equal(sealSignatureEvidence(args).seal, first.seal);
   assert.equal(first.evidence.document_hash, documentHash);
-  assert.ok([
-    { signerName: "B. Candidate" },
-    { signedAt: "2026-09-21T10:00:01Z" },
-    { ipHash: "other-ip" },
-    { documentHash: hashOfferDocument("different letter") },
-    { offerId: ID_B },
-    { version: 3 },
-  ].every((change) => sealSignatureEvidence({ ...args, ...change }).seal !== first.seal));
+  assert.ok(
+    [
+      { signerName: "B. Candidate" },
+      { signedAt: "2026-09-21T10:00:01Z" },
+      { ipHash: "other-ip" },
+      { documentHash: hashOfferDocument("different letter") },
+      { offerId: ID_B },
+      { version: 3 },
+    ].every((change) => sealSignatureEvidence({ ...args, ...change }).seal !== first.seal),
+  );
 });
 
 test("array literals bind as single pg-array params", () => {
@@ -225,7 +283,10 @@ test("retention scope fails closed on unreadable scopes", () => {
   assert.equal(retentionScopeMatches({}, ["CA"]), true);
   assert.equal(retentionScopeMatches({ applies_to: "all" }, []), true);
   assert.equal(retentionScopeMatches({ applies_to: "countries", countries: ["CA"] }, ["CA"]), true);
-  assert.equal(retentionScopeMatches({ applies_to: "countries", countries: ["CA"] }, ["US"]), false);
+  assert.equal(
+    retentionScopeMatches({ applies_to: "countries", countries: ["CA"] }, ["US"]),
+    false,
+  );
   assert.equal(retentionScopeMatches({ applies_to: "provinces" }, ["CA"]), false);
   assert.equal(ANONYMIZED_DISPLAY_NAME, "Anonymized candidate");
 });

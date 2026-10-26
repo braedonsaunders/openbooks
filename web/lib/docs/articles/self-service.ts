@@ -1,15 +1,27 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const selfService: DocArticle = {
-  slug: 'self-service',
-  title: 'Your Employment Record',
-  category: 'administration',
+  slug: "self-service",
+  title: "Your Employment Record",
+  category: "administration",
   order: 12,
   summary:
-    'The Me workspace shows your employment summary, contact profile, leave, checklist steps, reviews, benefits, and — for managers — the direct-report team. Profile edits file a request HR approves before anything updates.',
-  updated: '2026-10-10',
-  keywords: ['self-service', 'me', 'profile', 'team', 'reviews', 'benefits', 'goals', 'enrollment', 'emergency contact', 'my employment', 'manager'],
-  related: ['payroll', 'hrm-processes'],
+    "The Me workspace shows your employment summary, contact profile, leave, checklist steps, reviews, benefits, and — for managers — the direct-report team. Profile edits file a request HR approves before anything updates.",
+  updated: "2026-10-10",
+  keywords: [
+    "self-service",
+    "me",
+    "profile",
+    "team",
+    "reviews",
+    "benefits",
+    "goals",
+    "enrollment",
+    "emergency contact",
+    "my employment",
+    "manager",
+  ],
+  related: ["payroll", "hrm-processes"],
   body: `# Your Employment Record
 
 The Me workspace is your own view of your employment: the summary HR holds about you, your contact profile, your leave requests and balances, the checklist steps assigned to you, and — when you manage people — your direct-report team. Every row is scoped to the person behind your login. A colleague's rows can never appear here, and a missing person link refuses with the remedy instead of showing an empty page.
@@ -62,4 +74,4 @@ Payroll, wages, and compliance never appear in the manager's drawer unless the m
 
 Workforce reports stay in the Reports module with every other report; the Me workspace adds none. The assistant read tool answers questions about your own employment summary, review cycles, and benefits from the same canonical read services as the workspace, so the numbers always agree.
 `,
-}
+};

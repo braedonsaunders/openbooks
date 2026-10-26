@@ -1,4 +1,4 @@
-import {getApplicationWorkspace} from '@openbooks/engine/hrm/recruiting'
+import { getApplicationWorkspace } from "@openbooks/engine/hrm/recruiting";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
@@ -28,17 +28,9 @@ export const PATCH = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: patchApplicationBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json(
-        { error: "invalid application" },
-        { status: 400 },
-      );
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid application" }, { status: 400 });
 
     try {
       if (body.action === "move") {
@@ -46,7 +38,7 @@ export const PATCH = defineRoute({
           orgId: gate.user.orgId,
           actorId: gate.user.id,
           applicationId: id,
-          expectedStageId:body.expectedStageId,
+          expectedStageId: body.expectedStageId,
           toStageId: body.toStageId,
           reason: body.reason,
         });
@@ -57,7 +49,7 @@ export const PATCH = defineRoute({
           orgId: gate.user.orgId,
           actorId: gate.user.id,
           applicationId: id,
-          expectedStageId:body.expectedStageId,
+          expectedStageId: body.expectedStageId,
           reason: body.reason,
         });
         return NextResponse.json({ application });
@@ -74,7 +66,21 @@ export const PATCH = defineRoute({
   },
 });
 
-export const GET=defineRoute({permission:'hrm.recruiting.read',feature:'hrmRecruiting',params:z.object({id:z.string().refine(isUuid)}),
-  handler:async({authz,params})=>{
-    try{return NextResponse.json(await getApplicationWorkspace({orgId:authz.user.orgId,actorId:authz.user.id,applicationId:params.id}))}catch(error){return recruitingErrorResponse(error)}
-  }})
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().refine(isUuid) }),
+  handler: async ({ authz, params }) => {
+    try {
+      return NextResponse.json(
+        await getApplicationWorkspace({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          applicationId: params.id,
+        }),
+      );
+    } catch (error) {
+      return recruitingErrorResponse(error);
+    }
+  },
+});

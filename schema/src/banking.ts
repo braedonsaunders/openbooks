@@ -11,7 +11,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
@@ -32,7 +32,9 @@ export const bankStatements = pgTable(
     id: id(),
     orgId: orgRef(),
     accountId: uuid("account_id").notNull(), // → accounts (reconcilable)
-    source: text("source", { enum: ["ofx", "csv", "camt053", "bai2", "mt940", "feed_api", "manual"] }).notNull(),
+    source: text("source", {
+      enum: ["ofx", "csv", "camt053", "bai2", "mt940", "feed_api", "manual"],
+    }).notNull(),
     statementDate: date("statement_date").notNull(),
     openingBalance: money("opening_balance"),
     closingBalance: money("closing_balance"),
@@ -210,7 +212,10 @@ export const reconciliationMatches = pgTable(
     index("recon_matches_journal_line").on(t.journalLineId),
     uniqueIndex("recon_matches_pair_claim").on(t.orgId, t.statementLineId, t.journalLineId),
     index("recon_matches_group").on(t.orgId, t.groupId),
-    check("reconciliation_matches_reasons_shape", sql`${t.matchReasons} is null or jsonb_typeof(${t.matchReasons}) = 'array'`),
+    check(
+      "reconciliation_matches_reasons_shape",
+      sql`${t.matchReasons} is null or jsonb_typeof(${t.matchReasons}) = 'array'`,
+    ),
   ],
 );
 
@@ -229,13 +234,35 @@ export const paymentRuns = pgTable(
     subsidiaryId: uuid("subsidiary_id"),
     sourceScheduleId: uuid("source_schedule_id"),
     parentPaymentRunId: uuid("parent_payment_run_id"),
-    method: text("method", { enum: ["eft", "ach", "sepa", "wire", "cheque", "direct_debit", "positive_pay", "custom"] }).notNull(),
-    direction: text("direction", { enum: ["outbound", "inbound"] }).notNull().default("outbound"),
-    purpose: text("purpose", { enum: ["vendor_payments", "customer_collections", "refunds", "positive_pay"] })
+    method: text("method", {
+      enum: ["eft", "ach", "sepa", "wire", "cheque", "direct_debit", "positive_pay", "custom"],
+    }).notNull(),
+    direction: text("direction", { enum: ["outbound", "inbound"] })
+      .notNull()
+      .default("outbound"),
+    purpose: text("purpose", {
+      enum: ["vendor_payments", "customer_collections", "refunds", "positive_pay"],
+    })
       .notNull()
       .default("vendor_payments"),
     currency: currencyCode("currency"),
-    status: text("status", { enum: ["draft", "pending_approval", "approved", "processing", "generated", "delivered", "partially_failed", "confirmed", "settled", "returned", "rejected", "rolled_back", "cancelled"] })
+    status: text("status", {
+      enum: [
+        "draft",
+        "pending_approval",
+        "approved",
+        "processing",
+        "generated",
+        "delivered",
+        "partially_failed",
+        "confirmed",
+        "settled",
+        "returned",
+        "rejected",
+        "rolled_back",
+        "cancelled",
+      ],
+    })
       .notNull()
       .default("draft"),
     selectionCriteria: jsonb("selection_criteria").notNull().default({}),
@@ -293,7 +320,9 @@ export const sftpServers = pgTable(
     passwordEncrypted: text("password_encrypted"),
     /** Authorized OpenSSH public keys (one per line) for key auth. */
     authorizedKeys: text("authorized_keys"),
-    backend: text("backend", { enum: ["s3", "local"] }).notNull().default("s3"),
+    backend: text("backend", { enum: ["s3", "local"] })
+      .notNull()
+      .default("s3"),
     bucket: text("bucket"),
     /**
      * Tenant-scoped root inside the app's own storage — derived at creation as
@@ -344,7 +373,20 @@ export const paymentInstructions = pgTable(
     endToEndId: text("end_to_end_id"),
     paymentReference: text("payment_reference"),
     mandateId: uuid("mandate_id"),
-    status: text("status", { enum: ["pending", "approved", "generated", "sent", "settled", "returned", "rejected", "failed", "reversed", "cancelled"] })
+    status: text("status", {
+      enum: [
+        "pending",
+        "approved",
+        "generated",
+        "sent",
+        "settled",
+        "returned",
+        "rejected",
+        "failed",
+        "reversed",
+        "cancelled",
+      ],
+    })
       .notNull()
       .default("pending"),
     remittanceEmailSentAt: timestamp("remittance_email_sent_at", { withTimezone: true }),

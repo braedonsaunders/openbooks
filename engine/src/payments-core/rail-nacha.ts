@@ -4,7 +4,12 @@ import { unsealJson } from "../platform/secrets.ts";
 import { parseIsoDate } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { paymentFormatRails } from "./rail-descriptors.ts";
-import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText, isPrintableAscii } from "./rail-text.ts";
+import {
+  ORIGINATOR_REMEDY,
+  PAYEE_NAME_REMEDY,
+  asciiRailText,
+  isPrintableAscii,
+} from "./rail-text.ts";
 
 export interface NachaSettings {
   /** ODFI 9-digit routing/ABA number (the originating bank). */
@@ -26,10 +31,18 @@ export interface NachaSettings {
 }
 
 const NACHA_REQUIRED: (keyof NachaSettings)[] = [
-  "odfiRouting", "immediateDestination", "immediateOrigin", "destinationName", "originName", "companyName", "companyId",
+  "odfiRouting",
+  "immediateDestination",
+  "immediateOrigin",
+  "destinationName",
+  "originName",
+  "companyName",
+  "companyId",
 ];
 
-export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok: true; settings: NachaSettings } | { ok: false; missing: string[] } {
+export function validateNachaSettings(
+  raw: Partial<NachaSettings> | null,
+): { ok: true; settings: NachaSettings } | { ok: false; missing: string[] } {
   const s = raw ?? {};
   const missing = NACHA_REQUIRED.filter((k) => {
     const v = s[k];
@@ -57,19 +70,32 @@ export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok:
 }
 
 export async function loadNachaSettings(orgId: string, runId?: string) {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+  const r = await db.execute<{ originator_secrets_encrypted: string | null }>(
+    sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
       left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active
-       and f.rail in (${sql.join(paymentFormatRails("nacha").map((rail) => sql`${rail}`), sql`, `)})
+       and f.rail in (${sql.join(
+         paymentFormatRails("nacha").map((rail) => sql`${rail}`),
+         sql`, `,
+       )})
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sealed = r[0]?.originator_secrets_encrypted;
-  return validateNachaSettings(sealed == null ? null : unsealJson<Partial<NachaSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" }));
+  return validateNachaSettings(
+    sealed == null
+      ? null
+      : unsealJson<Partial<NachaSettings>>(sealed, {
+          orgId,
+          purpose: "payment.originator.secrets",
+        }),
+  );
 }
 
 export interface NachaEntry {
@@ -192,7 +218,10 @@ export function buildNachaFile(opts: {
   entries: NachaEntry[];
 }): string {
   const validated = validateNachaSettings(opts.settings);
-  if (!validated.ok) throw new PaymentError(`NACHA originator settings are invalid: ${validated.missing.join(", ")}`);
+  if (!validated.ok)
+    throw new PaymentError(
+      `NACHA originator settings are invalid: ${validated.missing.join(", ")}`,
+    );
   const s = validated.settings;
   if (opts.entries.length === 0) throw new PaymentError("run has no payments to export");
   // The modifier is the bank's same-day duplicate-file key: a silent default
@@ -201,7 +230,9 @@ export function buildNachaFile(opts: {
   // it — the bytes on disk carry the allocation, never a recomputation.
   const modifier = opts.fileIdModifier ?? "";
   if (!/^[A-Z0-9]$/.test(modifier)) {
-    throw new PaymentError("NACHA file requires an allocated file ID modifier (single character A–Z, 0–9)");
+    throw new PaymentError(
+      "NACHA file requires an allocated file ID modifier (single character A–Z, 0–9)",
+    );
   }
   const sec = s.entryClassCode ?? "CCD";
   const odfi8 = s.odfiRouting.slice(0, 8);
@@ -239,7 +270,8 @@ export function buildNachaFile(opts: {
   // Names are folded to ASCII before they are cut to width: the file is
   // us-ascii and fixed-offset, so one multi-byte character would shift every
   // field after it (see rail-text.ts).
-  const originator = (value: string, field: string) => asciiRailText(value, "NACHA", field, ORIGINATOR_REMEDY);
+  const originator = (value: string, field: string) =>
+    asciiRailText(value, "NACHA", field, ORIGINATOR_REMEDY);
 
   const creation = stampParts(opts.creationDateTime);
   const creationYymmdd = creation.yymmdd;
@@ -248,23 +280,45 @@ export function buildNachaFile(opts: {
   const rows: string[] = [];
   // 1 — File Header
   rows.push(
-    "1" + "01" + nachaField(s.immediateDestination, 10, "r") + nachaField(s.immediateOrigin, 10, "r") +
-    creationYymmdd + creationHhmm + modifier + "094" + "10" + "1" +
-    nachaField(originator(s.destinationName, "immediate destination name"), 23) + nachaField(originator(s.originName, "immediate origin name"), 23) + nachaField("", 8),
+    "1" +
+      "01" +
+      nachaField(s.immediateDestination, 10, "r") +
+      nachaField(s.immediateOrigin, 10, "r") +
+      creationYymmdd +
+      creationHhmm +
+      modifier +
+      "094" +
+      "10" +
+      "1" +
+      nachaField(originator(s.destinationName, "immediate destination name"), 23) +
+      nachaField(originator(s.originName, "immediate origin name"), 23) +
+      nachaField("", 8),
   );
   // 5 — Batch Header (220 = credits only)
   rows.push(
-    "5" + "220" + nachaField(originator(s.companyName, "company name"), 16) + nachaField("", 20) + nachaField(s.companyId, 10) + sec +
-    nachaField(originator(s.entryDescription ?? "PAYMENT", "company entry description"), 10) + nachaField("", 6) + yymmdd(opts.effectiveDate, "effective date") + nachaField("", 3) +
-    "1" + odfi8 + nachaField("0000001", 7, "r", "0"),
+    "5" +
+      "220" +
+      nachaField(originator(s.companyName, "company name"), 16) +
+      nachaField("", 20) +
+      nachaField(s.companyId, 10) +
+      sec +
+      nachaField(originator(s.entryDescription ?? "PAYMENT", "company entry description"), 10) +
+      nachaField("", 6) +
+      yymmdd(opts.effectiveDate, "effective date") +
+      nachaField("", 3) +
+      "1" +
+      odfi8 +
+      nachaField("0000001", 7, "r", "0"),
   );
   // 6 — Entry Details
   let entryHash = 0n;
   let totalCredit = 0n;
   opts.entries.forEach((e, i) => {
     if (e.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
-    if (e.accountNumber.trim() === "") throw new PaymentError("payment account number must not be blank");
-    if (e.accountNumber.length > 17) throw new PaymentError("payment account number must be 17 characters or fewer");
+    if (e.accountNumber.trim() === "")
+      throw new PaymentError("payment account number must not be blank");
+    if (e.accountNumber.length > 17)
+      throw new PaymentError("payment account number must be 17 characters or fewer");
     if (!/^\d{8,9}$/.test(e.routingNumber)) {
       throw new PaymentError("payment routing number must contain eight or nine digits");
     }
@@ -278,23 +332,49 @@ export function buildNachaFile(opts: {
     totalCredit += e.amountCents;
     const trace = odfi8 + String(i + 1).padStart(7, "0");
     rows.push(
-      "6" + e.transactionCode + rt8 + checkDigit + nachaField(e.accountNumber, 17) + nachaNumeric(String(e.amountCents), 10, "payment amount") +
-      nachaField(e.individualId, 15) + nachaField(asciiRailText(e.individualName, "NACHA", "receiver name", PAYEE_NAME_REMEDY), 22) + nachaField("", 2) + "0" + trace,
+      "6" +
+        e.transactionCode +
+        rt8 +
+        checkDigit +
+        nachaField(e.accountNumber, 17) +
+        nachaNumeric(String(e.amountCents), 10, "payment amount") +
+        nachaField(e.individualId, 15) +
+        nachaField(
+          asciiRailText(e.individualName, "NACHA", "receiver name", PAYEE_NAME_REMEDY),
+          22,
+        ) +
+        nachaField("", 2) +
+        "0" +
+        trace,
     );
   });
   const hashMod = nachaNumeric((entryHash % 10_000_000_000n).toString(), 10, "entry hash");
   // 8 — Batch Control
   rows.push(
-    "8" + "220" + nachaNumeric(String(opts.entries.length), 6, "entry count") + hashMod +
-    nachaNumeric("0", 12, "debit total") + nachaNumeric(String(totalCredit), 12, "credit total") + nachaField(s.companyId, 10) +
-    nachaField("", 19) + nachaField("", 6) + odfi8 + nachaField("0000001", 7, "r", "0"),
+    "8" +
+      "220" +
+      nachaNumeric(String(opts.entries.length), 6, "entry count") +
+      hashMod +
+      nachaNumeric("0", 12, "debit total") +
+      nachaNumeric(String(totalCredit), 12, "credit total") +
+      nachaField(s.companyId, 10) +
+      nachaField("", 19) +
+      nachaField("", 6) +
+      odfi8 +
+      nachaField("0000001", 7, "r", "0"),
   );
   // 9 — File Control
   const entryCount = opts.entries.length;
   const blockCount = Math.ceil((rows.length + 1) / 10);
   rows.push(
-    "9" + nachaNumeric("1", 6, "batch count") + nachaNumeric(String(blockCount), 6, "block count") + nachaNumeric(String(entryCount), 8, "entry count") +
-    hashMod + nachaNumeric("0", 12, "debit total") + nachaNumeric(String(totalCredit), 12, "credit total") + nachaField("", 39),
+    "9" +
+      nachaNumeric("1", 6, "batch count") +
+      nachaNumeric(String(blockCount), 6, "block count") +
+      nachaNumeric(String(entryCount), 8, "entry count") +
+      hashMod +
+      nachaNumeric("0", 12, "debit total") +
+      nachaNumeric(String(totalCredit), 12, "credit total") +
+      nachaField("", 39),
   );
   // pad with 9-filler records to a full 10-record block
   while (rows.length % 10 !== 0) rows.push("9".repeat(94));

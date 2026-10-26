@@ -34,19 +34,84 @@ import { JP_PREFECTURES } from "./regions.ts";
 /** The 14 national holidays every prefecture observes. Copied per entry below. */
 const JP_KOKUMIN_NO_SHUKUJITSU: PayrollJurisdiction["holidays"] = [
   { key: "ganjitsu", name: "元日", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },
-  { key: "seijin_no_hi", name: "成人の日", rule: { kind: "nth_weekday", month: 1, weekday: 1, nth: 2 }, observance: "none" },
-  { key: "kenkoku_kinen_no_hi", name: "建国記念の日", rule: { kind: "fixed", month: 2, day: 11 }, observance: "none" },
-  { key: "tenno_tanjobi", name: "天皇誕生日", rule: { kind: "fixed", month: 2, day: 23 }, observance: "none" },
-  { key: "showa_no_hi", name: "昭和の日", rule: { kind: "fixed", month: 4, day: 29 }, observance: "none" },
-  { key: "kenpo_kinenbi", name: "憲法記念日", rule: { kind: "fixed", month: 5, day: 3 }, observance: "none" },
-  { key: "midori_no_hi", name: "みどりの日", rule: { kind: "fixed", month: 5, day: 4 }, observance: "none" },
-  { key: "kodomo_no_hi", name: "こどもの日", rule: { kind: "fixed", month: 5, day: 5 }, observance: "none" },
-  { key: "umi_no_hi", name: "海の日", rule: { kind: "nth_weekday", month: 7, weekday: 1, nth: 3 }, observance: "none" },
-  { key: "yama_no_hi", name: "山の日", rule: { kind: "fixed", month: 8, day: 11 }, observance: "none" },
-  { key: "keiro_no_hi", name: "敬老の日", rule: { kind: "nth_weekday", month: 9, weekday: 1, nth: 3 }, observance: "none" },
-  { key: "sports_no_hi", name: "スポーツの日", rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: 2 }, observance: "none" },
-  { key: "bunka_no_hi", name: "文化の日", rule: { kind: "fixed", month: 11, day: 3 }, observance: "none" },
-  { key: "kinro_kansha_no_hi", name: "勤労感謝の日", rule: { kind: "fixed", month: 11, day: 23 }, observance: "none" },
+  {
+    key: "seijin_no_hi",
+    name: "成人の日",
+    rule: { kind: "nth_weekday", month: 1, weekday: 1, nth: 2 },
+    observance: "none",
+  },
+  {
+    key: "kenkoku_kinen_no_hi",
+    name: "建国記念の日",
+    rule: { kind: "fixed", month: 2, day: 11 },
+    observance: "none",
+  },
+  {
+    key: "tenno_tanjobi",
+    name: "天皇誕生日",
+    rule: { kind: "fixed", month: 2, day: 23 },
+    observance: "none",
+  },
+  {
+    key: "showa_no_hi",
+    name: "昭和の日",
+    rule: { kind: "fixed", month: 4, day: 29 },
+    observance: "none",
+  },
+  {
+    key: "kenpo_kinenbi",
+    name: "憲法記念日",
+    rule: { kind: "fixed", month: 5, day: 3 },
+    observance: "none",
+  },
+  {
+    key: "midori_no_hi",
+    name: "みどりの日",
+    rule: { kind: "fixed", month: 5, day: 4 },
+    observance: "none",
+  },
+  {
+    key: "kodomo_no_hi",
+    name: "こどもの日",
+    rule: { kind: "fixed", month: 5, day: 5 },
+    observance: "none",
+  },
+  {
+    key: "umi_no_hi",
+    name: "海の日",
+    rule: { kind: "nth_weekday", month: 7, weekday: 1, nth: 3 },
+    observance: "none",
+  },
+  {
+    key: "yama_no_hi",
+    name: "山の日",
+    rule: { kind: "fixed", month: 8, day: 11 },
+    observance: "none",
+  },
+  {
+    key: "keiro_no_hi",
+    name: "敬老の日",
+    rule: { kind: "nth_weekday", month: 9, weekday: 1, nth: 3 },
+    observance: "none",
+  },
+  {
+    key: "sports_no_hi",
+    name: "スポーツの日",
+    rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: 2 },
+    observance: "none",
+  },
+  {
+    key: "bunka_no_hi",
+    name: "文化の日",
+    rule: { kind: "fixed", month: 11, day: 3 },
+    observance: "none",
+  },
+  {
+    key: "kinro_kansha_no_hi",
+    name: "勤労感謝の日",
+    rule: { kind: "fixed", month: 11, day: 23 },
+    observance: "none",
+  },
 ];
 
 function jpJurisdiction(code: string, name: string): PayrollJurisdiction {
@@ -63,13 +128,13 @@ function jpJurisdiction(code: string, name: string): PayrollJurisdiction {
     name: `日本 (国民の祝日) — ${name}`,
     scope: "employment",
     citation:
-      "国民の祝日に関する法律 (昭和23年法律第178号) 第2条; "
-      + "春分の日・秋分の日は官報公告のため未転記",
+      "国民の祝日に関する法律 (昭和23年法律第178号) 第2条; " +
+      "春分の日・秋分の日は官報公告のため未転記",
     holidays: [...JP_KOKUMIN_NO_SHUKUJITSU],
     holidayPay: null,
   };
 }
 
-export const JP_JURISDICTIONS: readonly PayrollJurisdiction[] = JP_PREFECTURES.map(
-  (prefecture) => jpJurisdiction(prefecture.code, prefecture.name),
+export const JP_JURISDICTIONS: readonly PayrollJurisdiction[] = JP_PREFECTURES.map((prefecture) =>
+  jpJurisdiction(prefecture.code, prefecture.name),
 );

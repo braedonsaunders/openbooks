@@ -1,7 +1,17 @@
-import { seedPostingAccount, seedEnabledPayrollConfiguration, seedPayrollAccountingConfiguration } from "./fixtures.ts";
+import {
+  seedPostingAccount,
+  seedEnabledPayrollConfiguration,
+  seedPayrollAccountingConfiguration,
+} from "./fixtures.ts";
 
 /** Canadian account classifications and native payroll posting configuration. */
-export async function seedCanadianPostingAccounts(orgId: string, options: { liabilityType?: "liability_current" | "liability_current_other"; enablePayroll?: boolean } = {}) {
+export async function seedCanadianPostingAccounts(
+  orgId: string,
+  options: {
+    liabilityType?: "liability_current" | "liability_current_other";
+    enablePayroll?: boolean;
+  } = {},
+) {
   const liability = options.liabilityType ?? "liability_current";
   const account = seedPostingAccount.bind(null, orgId);
   const wageExpense = await account("6000", "Wages expense", "expense");
@@ -9,8 +19,20 @@ export async function seedCanadianPostingAccounts(orgId: string, options: { liab
   const netPayable = await account("2300", "Wages payable", liability);
   const craPayable = await account("2310", "CRA remittances payable", liability);
   const vacationPayable = await account("2320", "Vacation payable", liability);
-  await (options.enablePayroll === false ? seedPayrollAccountingConfiguration : seedEnabledPayrollConfiguration)(orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
+  await (
+    options.enablePayroll === false
+      ? seedPayrollAccountingConfiguration
+      : seedEnabledPayrollConfiguration
+  )(orgId, {
+    slotAccounts: {
+      CA: {
+        cpp: craPayable,
+        ei: craPayable,
+        qpip: craPayable,
+        income_tax: craPayable,
+        vacation: vacationPayable,
+      },
+    },
     wageExpenseAccountId: wageExpense,
     burdenExpenseAccountId: burdenExpense,
     netPayAccountId: netPayable,
@@ -27,13 +49,24 @@ export async function seedUnionPostingAccounts(orgId: string, withDues: boolean)
   const fringeExpense = await account("6020", "Union fringes", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current");
   const craPayable = await account("2310", "CRA payable", "liability_current");
-  const duesPayable = withDues ? await account("2330", "Union dues payable", "liability_current") : null;
+  const duesPayable = withDues
+    ? await account("2330", "Union dues payable", "liability_current")
+    : null;
   const fringePayable = await account("2340", "Union fringes payable", "liability_current");
   await seedEnabledPayrollConfiguration(orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: craPayable } },
-    wageExpenseAccountId: wageExpense, burdenExpenseAccountId: fringeExpense,
+    slotAccounts: {
+      CA: {
+        cpp: craPayable,
+        ei: craPayable,
+        qpip: craPayable,
+        income_tax: craPayable,
+        vacation: craPayable,
+      },
+    },
+    wageExpenseAccountId: wageExpense,
+    burdenExpenseAccountId: fringeExpense,
     netPayAccountId: netPayable,
-     wagesTo: "expense",
+    wagesTo: "expense",
   });
   return { wageExpense, fringeExpense, netPayable, craPayable, duesPayable, fringePayable };
 }

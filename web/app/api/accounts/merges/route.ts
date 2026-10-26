@@ -12,7 +12,10 @@ export const GET = defineRoute({
   handler: async ({ request, authz }) => {
     const url = new URL(request.url);
     const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
-    const perPage = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get("perPage") ?? "50", 10) || 50));
+    const perPage = Math.min(
+      100,
+      Math.max(1, Number.parseInt(url.searchParams.get("perPage") ?? "50", 10) || 50),
+    );
     const account = url.searchParams.get("account");
     if (account && !isUuid(account)) {
       return NextResponse.json({ error: "Choose a valid account." }, { status: 422 });

@@ -30,9 +30,13 @@ export class SftpWatchFolderError extends Error {
 
 /** Canonical root-relative POSIX folder used by both configuration and scans. */
 export function normalizeSftpWatchFolder(folder: string): string {
-  const canonical = path.posix.normalize(`/${String(folder ?? "").trim()}`).replace(/^\/+|\/+$/g, "");
+  const canonical = path.posix
+    .normalize(`/${String(folder ?? "").trim()}`)
+    .replace(/^\/+|\/+$/g, "");
   if (!canonical || canonical === ".") {
-    throw new SftpWatchFolderError("an SFTP import schedule must name a folder below the server root");
+    throw new SftpWatchFolderError(
+      "an SFTP import schedule must name a folder below the server root",
+    );
   }
   return canonical;
 }
@@ -45,7 +49,12 @@ export function findSftpWatchFolderOverlap(
   const wanted = normalizeSftpWatchFolder(candidate);
   for (const schedule of schedules) {
     const existing = normalizeSftpWatchFolder(schedule.folder);
-    if (wanted !== existing && !wanted.startsWith(`${existing}/`) && !existing.startsWith(`${wanted}/`)) continue;
+    if (
+      wanted !== existing &&
+      !wanted.startsWith(`${existing}/`) &&
+      !existing.startsWith(`${wanted}/`)
+    )
+      continue;
     return { schedule };
   }
   return null;
@@ -57,6 +66,8 @@ export function sftpWatchFolderOverlapRefusal(
   overlap: SftpWatchFolderOverlap,
 ): string {
   const existing = normalizeSftpWatchFolder(overlap.schedule.folder);
-  return `SFTP import folder '${normalizeSftpWatchFolder(candidate)}' overlaps schedule '${overlap.schedule.id}' ` +
-    `for account '${overlap.schedule.accountLabel}' (folder '${existing}'); choose a separate non-overlapping folder or deactivate the other schedule`;
+  return (
+    `SFTP import folder '${normalizeSftpWatchFolder(candidate)}' overlaps schedule '${overlap.schedule.id}' ` +
+    `for account '${overlap.schedule.accountLabel}' (folder '${existing}'); choose a separate non-overlapping folder or deactivate the other schedule`
+  );
 }

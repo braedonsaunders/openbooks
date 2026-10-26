@@ -170,8 +170,8 @@ export function gbTablesForTaxYear(year: number): GbYearTables {
   if (year === GB_2025_TABLES.year) return GB_2025_TABLES;
   if (year === GB_2024_TABLES.year) return GB_2024_TABLES;
   throw new PayrollPackError(
-    `GB payroll pack has no transcribed tables for tax year ${year} — transcribed years: `
-    + "2024, 2025, 2026 (see GB_TAX_YEARS). A year without transcribed tables is refused, "
-    + "never priced from another year's tables.",
+    `GB payroll pack has no transcribed tables for tax year ${year} — transcribed years: ` +
+      "2024, 2025, 2026 (see GB_TAX_YEARS). A year without transcribed tables is refused, " +
+      "never priced from another year's tables.",
   );
 }

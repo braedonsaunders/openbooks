@@ -28,7 +28,10 @@ export type AmendmentType =
   | "change_plan";
 
 export class AdvancedSubscriptionError extends Error {
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
     super(message);
     this.name = "AdvancedSubscriptionError";
   }
@@ -52,18 +55,25 @@ async function assertEnabled(orgId: string): Promise<void> {
 /** Exact positive integer at the persisted PostgreSQL integer boundary. */
 export function subscriptionPeriodCount(value: unknown, label = "interval count"): number {
   const count = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
-  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 1 || count > 2147483647) {
+  if (
+    typeof count !== "number" ||
+    !Number.isSafeInteger(count) ||
+    count < 1 ||
+    count > 2147483647
+  ) {
     throw new AdvancedSubscriptionError(`${label} must be a positive whole number`);
   }
   return count;
 }
 
 function assertBillingTiming(value: unknown): asserts value is BillingTiming {
-  if (value !== "advance" && value !== "arrears") throw new AdvancedSubscriptionError("billing timing must be advance or arrears");
+  if (value !== "advance" && value !== "arrears")
+    throw new AdvancedSubscriptionError("billing timing must be advance or arrears");
 }
 
 function assertRenewalPolicy(value: unknown): asserts value is RenewalPolicy {
-  if (value !== "auto" && value !== "manual" && value !== "none") throw new AdvancedSubscriptionError("invalid renewal policy");
+  if (value !== "auto" && value !== "manual" && value !== "none")
+    throw new AdvancedSubscriptionError("invalid renewal policy");
 }
 
 /**
@@ -74,7 +84,12 @@ function assertRenewalPolicy(value: unknown): asserts value is RenewalPolicy {
  * inheriting the clamped day. Callers that repeat the step pass the lifecycle
  * anchor; a single step defaults to the date's own day, which is exact.
  */
-export function advanceLifecycleDate(isoDate: string, interval: Interval, intervalCount = 1, anchorDay?: number | null): string {
+export function advanceLifecycleDate(
+  isoDate: string,
+  interval: Interval,
+  intervalCount = 1,
+  anchorDay?: number | null,
+): string {
   validDate(isoDate, "billing date", true);
   const n = subscriptionPeriodCount(intervalCount);
   if (!["weekly", "monthly", "quarterly", "annually"].includes(interval)) {
@@ -166,7 +181,7 @@ export function activationBillingCursors(input: {
   if (!input.billFromUnbilledBoundary) {
     throw new AdvancedSubscriptionError(
       `term start ${input.termStartsOn} overlaps already-billed service through ${input.boundary} — ` +
-      `start the term on or after ${input.boundary}, or repeat with billFromUnbilledBoundary to bill only from ${input.boundary}`,
+        `start the term on or after ${input.boundary}, or repeat with billFromUnbilledBoundary to bill only from ${input.boundary}`,
     );
   }
   return {
@@ -207,20 +222,30 @@ export function assertPlanChangeRules(input: {
   target: PlanVersionTerms;
 }): void {
   const { pinned, target, effectiveOn } = input;
-  if (target.status !== "published") throw new AdvancedSubscriptionError("a published plan version is required to change plan");
+  if (target.status !== "published")
+    throw new AdvancedSubscriptionError("a published plan version is required to change plan");
   if (target.planId === pinned.planId) {
-    throw new AdvancedSubscriptionError("the contract is already on this plan; change its components to reprice it");
+    throw new AdvancedSubscriptionError(
+      "the contract is already on this plan; change its components to reprice it",
+    );
   }
   if (target.requiredComponents < 1) {
-    throw new AdvancedSubscriptionError("plan version has no required components — mark a component as required before changing plan to it");
+    throw new AdvancedSubscriptionError(
+      "plan version has no required components — mark a component as required before changing plan to it",
+    );
   }
   if (target.currency.toUpperCase() !== pinned.currency.toUpperCase()) {
     throw new AdvancedSubscriptionError(
       `billing currency cannot change mid-contract from ${pinned.currency} to ${target.currency}; create a new contract for the ${target.currency} plan instead`,
     );
   }
-  if (target.billingTiming !== pinned.billingTiming || target.billingTiming !== input.billingTiming) {
-    throw new AdvancedSubscriptionError("the new plan bills on a different timing; change the billing timing of the contract first, then change plan");
+  if (
+    target.billingTiming !== pinned.billingTiming ||
+    target.billingTiming !== input.billingTiming
+  ) {
+    throw new AdvancedSubscriptionError(
+      "the new plan bills on a different timing; change the billing timing of the contract first, then change plan",
+    );
   }
   if (effectiveOn < input.paidThrough) {
     throw new AdvancedSubscriptionError(
@@ -228,16 +253,24 @@ export function assertPlanChangeRules(input: {
     );
   }
   if (effectiveOn < input.termStartsOn) {
-    throw new AdvancedSubscriptionError(`effective date ${effectiveOn} precedes the contract term start ${input.termStartsOn}`);
+    throw new AdvancedSubscriptionError(
+      `effective date ${effectiveOn} precedes the contract term start ${input.termStartsOn}`,
+    );
   }
-  if (target.effectiveFrom > effectiveOn || (target.effectiveTo !== null && target.effectiveTo < effectiveOn)) {
-    throw new AdvancedSubscriptionError(`the plan version is not effective on ${effectiveOn}; choose a date inside its effective window`);
+  if (
+    target.effectiveFrom > effectiveOn ||
+    (target.effectiveTo !== null && target.effectiveTo < effectiveOn)
+  ) {
+    throw new AdvancedSubscriptionError(
+      `the plan version is not effective on ${effectiveOn}; choose a date inside its effective window`,
+    );
   }
-  const cadenceChanged = target.interval !== pinned.interval || target.intervalCount !== pinned.intervalCount;
+  const cadenceChanged =
+    target.interval !== pinned.interval || target.intervalCount !== pinned.intervalCount;
   if (cadenceChanged && (effectiveOn !== input.paidThrough || input.billingTiming !== "advance")) {
     throw new AdvancedSubscriptionError(
       `a change of billing cadence takes effect only on the paid-through date ${input.paidThrough} for an advance-billed contract; ` +
-      "change the cadence on that date, or keep the cadence and change only the components",
+        "change the cadence on that date, or keep the cadence and change only the components",
     );
   }
 }
@@ -264,10 +297,16 @@ export function planVersionInForce(input: {
   changes: PlanChangeFact[];
 }): string {
   if (input.changes.length === 0) return input.pinnedVersionId;
-  const ordered = [...input.changes].sort((left, right) => (
-    left.effectiveOn < right.effectiveOn ? -1 : left.effectiveOn > right.effectiveOn ? 1 : left.seq - right.seq
-  ));
-  const first = input.changes.reduce((earliest, change) => (change.seq < earliest.seq ? change : earliest));
+  const ordered = [...input.changes].sort((left, right) =>
+    left.effectiveOn < right.effectiveOn
+      ? -1
+      : left.effectiveOn > right.effectiveOn
+        ? 1
+        : left.seq - right.seq,
+  );
+  const first = input.changes.reduce((earliest, change) =>
+    change.seq < earliest.seq ? change : earliest,
+  );
   let current = first.fromVersionId ?? input.pinnedVersionId;
   for (const change of ordered) {
     if (change.effectiveOn > input.asOf) break;
@@ -299,24 +338,56 @@ export interface AmendmentRequest {
 }
 
 interface OwnedPlanRow extends Record<string, unknown> {
-  id: string; name: string; description: string | null; amount: string; currency: string; interval: Interval;
-  intervalCount: number; incomeAccountId: string | null; itemId: string | null; taxCodeId: string | null;
+  id: string;
+  name: string;
+  description: string | null;
+  amount: string;
+  currency: string;
+  interval: Interval;
+  intervalCount: number;
+  incomeAccountId: string | null;
+  itemId: string | null;
+  taxCodeId: string | null;
 }
 interface SubscriptionContextRow extends Record<string, unknown> {
-  id: string; customerId: string; planId: string; status: string; lifecycleId: string | null;
-  planVersionId: string | null; contractRevision: number | null; termStartsOn: string | null;
-  termEndsOn: string | null; trialEndsOn: string | null; billingTiming: BillingTiming | null;
-  renewalPolicy: RenewalPolicy | null; renewalTermMonths: number | null; renewalOn: string | null;
+  id: string;
+  customerId: string;
+  planId: string;
+  status: string;
+  lifecycleId: string | null;
+  planVersionId: string | null;
+  contractRevision: number | null;
+  termStartsOn: string | null;
+  termEndsOn: string | null;
+  trialEndsOn: string | null;
+  billingTiming: BillingTiming | null;
+  renewalPolicy: RenewalPolicy | null;
+  renewalTermMonths: number | null;
+  renewalOn: string | null;
 }
 interface PlanVersionRow extends Record<string, unknown> {
-  id: string; planId: string; interval: Interval; intervalCount: number; billingTiming: BillingTiming;
-  status: string; effectiveFrom: string; effectiveTo: string | null;
-  versionCurrency: string | null; planCurrency: string | null;
+  id: string;
+  planId: string;
+  interval: Interval;
+  intervalCount: number;
+  billingTiming: BillingTiming;
+  status: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  versionCurrency: string | null;
+  planCurrency: string | null;
 }
 interface SubscriptionComponentRow extends Record<string, unknown> {
-  componentKey: string; name: string; description: string | null; quantity: string; unitPrice: string;
-  incomeAccountId: string | null; itemId: string | null; taxCodeId: string | null;
-  effectiveFrom: string; effectiveTo: string | null;
+  componentKey: string;
+  name: string;
+  description: string | null;
+  quantity: string;
+  unitPrice: string;
+  incomeAccountId: string | null;
+  itemId: string | null;
+  taxCodeId: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
 }
 interface AmendmentReplayRow extends Record<string, unknown> {
   id: string;
@@ -324,20 +395,37 @@ interface AmendmentReplayRow extends Record<string, unknown> {
   request: Record<string, unknown>;
 }
 interface BillingPreparationRow extends Record<string, unknown> {
-  billingTiming: BillingTiming | null; termEndsOn: string | null; renewalPolicy: RenewalPolicy | null;
+  billingTiming: BillingTiming | null;
+  termEndsOn: string | null;
+  renewalPolicy: RenewalPolicy | null;
   renewalTermMonths: number | null;
 }
 interface BillingLifecycleRow extends Record<string, unknown> {
-  contractRevision: number; billingTiming: BillingTiming; currentPeriodStart: string | null;
-  nextBillOn: string; interval: Interval; intervalCount: number;
-  termStartsOn: string | null; trialEndsOn: string | null;
+  contractRevision: number;
+  billingTiming: BillingTiming;
+  currentPeriodStart: string | null;
+  nextBillOn: string;
+  interval: Interval;
+  intervalCount: number;
+  termStartsOn: string | null;
+  trialEndsOn: string | null;
 }
 
-function validDate(value: string | null | undefined, label: string, required = false): string | null {
+function validDate(
+  value: string | null | undefined,
+  label: string,
+  required = false,
+): string | null {
   if (!required && (value == null || value === "")) return null;
   const parsed = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : null;
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)
-      || value.startsWith("0000-") || !parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    value.startsWith("0000-") ||
+    !parsed ||
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== value
+  ) {
     throw new AdvancedSubscriptionError(`${label} must be an ISO date`);
   }
   return value;
@@ -354,7 +442,9 @@ function exactMoney(value: unknown, label: string): string {
   // (Kept on a local bound: the only callers are DB-backed plan writes with
   // no pure entry point to regress the shared bound through — see A-S30.)
   if (wholeDigits(exact) > 15) {
-    throw new AdvancedSubscriptionError(`${label} is out of range — at most 15 whole digits fit the ledger`);
+    throw new AdvancedSubscriptionError(
+      `${label} is out of range — at most 15 whole digits fit the ledger`,
+    );
   }
   try {
     return normalizeMoney(exact);
@@ -365,7 +455,8 @@ function exactMoney(value: unknown, label: string): string {
 
 function positiveMoney(value: string | undefined, label: string): string {
   const normalized = exactMoney(value, label);
-  if (toUnits(normalized) <= 0n) throw new AdvancedSubscriptionError(`${label} must be greater than zero`);
+  if (toUnits(normalized) <= 0n)
+    throw new AdvancedSubscriptionError(`${label} must be greater than zero`);
   return normalized;
 }
 
@@ -386,19 +477,27 @@ export function firstLifecycleBillOn(input: {
   validDate(input.termStartsOn, "term start", true);
   validDate(input.trialEndsOn, "trial end");
   assertBillingTiming(input.billingTiming);
-  const serviceStartsOn = input.trialEndsOn && input.trialEndsOn > input.termStartsOn ? input.trialEndsOn : input.termStartsOn;
+  const serviceStartsOn =
+    input.trialEndsOn && input.trialEndsOn > input.termStartsOn
+      ? input.trialEndsOn
+      : input.termStartsOn;
   const nextDate = advanceLifecycleDate(serviceStartsOn, input.interval, input.intervalCount);
   return input.billingTiming === "advance" ? serviceStartsOn : nextDate;
 }
 
 export function assertPlanVersionMutable(status: string): void {
-  if (status !== "draft") throw new AdvancedSubscriptionError("published plan versions are immutable; create a new version");
+  if (status !== "draft")
+    throw new AdvancedSubscriptionError(
+      "published plan versions are immutable; create a new version",
+    );
 }
 
 function canonicalRequest(value: unknown): string {
   return JSON.stringify(value, (_key, nested) => {
     if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-      return Object.fromEntries(Object.entries(nested).sort(([left], [right]) => left.localeCompare(right)));
+      return Object.fromEntries(
+        Object.entries(nested).sort(([left], [right]) => left.localeCompare(right)),
+      );
     }
     return nested;
   });
@@ -413,31 +512,64 @@ export function assertIdempotentReplay(
   if (existingSubscriptionId !== requestedSubscriptionId) {
     throw new AdvancedSubscriptionError("idempotency key already belongs to another subscription");
   }
-  if (existingRequest !== undefined && requestedRequest !== undefined && canonicalRequest(existingRequest) !== canonicalRequest(requestedRequest)) {
-    throw new AdvancedSubscriptionError("idempotency key already belongs to a different amendment request");
+  if (
+    existingRequest !== undefined &&
+    requestedRequest !== undefined &&
+    canonicalRequest(existingRequest) !== canonicalRequest(requestedRequest)
+  ) {
+    throw new AdvancedSubscriptionError(
+      "idempotency key already belongs to a different amendment request",
+    );
   }
 }
 
-export function assertCotermAllowed(input: { subscriptionId: string; anchorSubscriptionId: string; customerId: string; anchorCustomerId: string }): void {
-  if (input.subscriptionId === input.anchorSubscriptionId) throw new AdvancedSubscriptionError("a different anchor subscription is required");
-  if (input.customerId !== input.anchorCustomerId) throw new AdvancedSubscriptionError("co-termed subscriptions must belong to the same customer");
+export function assertCotermAllowed(input: {
+  subscriptionId: string;
+  anchorSubscriptionId: string;
+  customerId: string;
+  anchorCustomerId: string;
+}): void {
+  if (input.subscriptionId === input.anchorSubscriptionId)
+    throw new AdvancedSubscriptionError("a different anchor subscription is required");
+  if (input.customerId !== input.anchorCustomerId)
+    throw new AdvancedSubscriptionError("co-termed subscriptions must belong to the same customer");
 }
 
-export function renewalAction(input: { billingTiming: BillingTiming; dueOn: string; termEndsOn: string | null; policy: RenewalPolicy }): "bill" | "renew" | "stop" {
+export function renewalAction(input: {
+  billingTiming: BillingTiming;
+  dueOn: string;
+  termEndsOn: string | null;
+  policy: RenewalPolicy;
+}): "bill" | "renew" | "stop" {
   if (!input.termEndsOn) return "bill";
-  const beyondTerm = input.billingTiming === "advance" ? input.dueOn >= input.termEndsOn : input.dueOn > input.termEndsOn;
+  const beyondTerm =
+    input.billingTiming === "advance"
+      ? input.dueOn >= input.termEndsOn
+      : input.dueOn > input.termEndsOn;
   if (!beyondTerm) return "bill";
   return input.policy === "auto" ? "renew" : "stop";
 }
 
-export function lifecycleBillingPeriod(input: { billOn: string; serviceAnchor: string; billingTiming: BillingTiming; interval: Interval; intervalCount: number; anchorDay?: number | null }) {
+export function lifecycleBillingPeriod(input: {
+  billOn: string;
+  serviceAnchor: string;
+  billingTiming: BillingTiming;
+  interval: Interval;
+  intervalCount: number;
+  anchorDay?: number | null;
+}) {
   return input.billingTiming === "advance"
     ? {
-      periodStartsOn: input.billOn,
-      // The end re-pins the lifecycle anchor (day one of service), never the
-      // clamped bill date — otherwise month-end windows drift and lose days.
-      periodEndsOn: advanceLifecycleDate(input.billOn, input.interval, input.intervalCount, input.anchorDay ?? Number(input.billOn.slice(8, 10))),
-    }
+        periodStartsOn: input.billOn,
+        // The end re-pins the lifecycle anchor (day one of service), never the
+        // clamped bill date — otherwise month-end windows drift and lose days.
+        periodEndsOn: advanceLifecycleDate(
+          input.billOn,
+          input.interval,
+          input.intervalCount,
+          input.anchorDay ?? Number(input.billOn.slice(8, 10)),
+        ),
+      }
     : { periodStartsOn: input.serviceAnchor, periodEndsOn: input.billOn };
 }
 
@@ -447,14 +579,21 @@ export function lifecycleBillingPeriod(input: { billOn: string; serviceAnchor: s
  * term start. Durable term fields, so repeated ticks re-pin the same day
  * instead of stepping from each clamped window end.
  */
-export function lifecycleAnchorDay(input: { termStartsOn: string | null; trialEndsOn: string | null; fallback: string }): number {
-  const source = input.trialEndsOn && input.termStartsOn && input.trialEndsOn > input.termStartsOn
-    ? input.trialEndsOn
-    : (input.termStartsOn ?? input.fallback);
+export function lifecycleAnchorDay(input: {
+  termStartsOn: string | null;
+  trialEndsOn: string | null;
+  fallback: string;
+}): number {
+  const source =
+    input.trialEndsOn && input.termStartsOn && input.trialEndsOn > input.termStartsOn
+      ? input.trialEndsOn
+      : (input.termStartsOn ?? input.fallback);
   return Number(source.slice(8, 10));
 }
 
-export function subscriptionComponentTotal(lines: Array<{ quantity: string; unitPrice: string }>): Money {
+export function subscriptionComponentTotal(
+  lines: Array<{ quantity: string; unitPrice: string }>,
+): Money {
   // add/mul emit fromUnits-fixed 4dp: the component total is canonical Money.
   let total = "0.0000" as Money;
   for (const line of lines) total = add(total, mul(line.quantity, line.unitPrice)) as Money;
@@ -495,7 +634,11 @@ function toIsoDay(value: unknown): string | null {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
     const day = value.slice(0, 10);
     const parsed = new Date(`${day}T00:00:00Z`);
-    if (!day.startsWith("0000-") && !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day) {
+    if (
+      !day.startsWith("0000-") &&
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === day
+    ) {
       return day;
     }
   }
@@ -507,9 +650,11 @@ function asBillingTiming(value: unknown): BillingTiming | null {
 }
 
 function snapshotLifecycle(value: unknown): { billingTiming: unknown; termEndsOn: unknown } {
-  if (typeof value !== "object" || value === null) return { billingTiming: undefined, termEndsOn: undefined };
+  if (typeof value !== "object" || value === null)
+    return { billingTiming: undefined, termEndsOn: undefined };
   const lifecycle = (value as { lifecycle?: unknown }).lifecycle;
-  if (typeof lifecycle !== "object" || lifecycle === null) return { billingTiming: undefined, termEndsOn: undefined };
+  if (typeof lifecycle !== "object" || lifecycle === null)
+    return { billingTiming: undefined, termEndsOn: undefined };
   const record = lifecycle as Record<string, unknown>;
   return { billingTiming: record.billingTiming, termEndsOn: record.termEndsOn };
 }
@@ -570,9 +715,13 @@ export function resolveEffectiveLifecycleState(input: {
 }): { billingTiming: BillingTiming; termEndsOn: string | null } {
   const ordered = input.amendments
     .filter((amendment) => toIsoDay(amendment.effectiveOn) !== null)
-    .sort((left, right) => (
-      left.effectiveOn < right.effectiveOn ? -1 : left.effectiveOn > right.effectiveOn ? 1 : left.seq - right.seq
-    ));
+    .sort((left, right) =>
+      left.effectiveOn < right.effectiveOn
+        ? -1
+        : left.effectiveOn > right.effectiveOn
+          ? 1
+          : left.seq - right.seq,
+    );
   let base: EffectiveLifecycleAmendment | null = null;
   for (const amendment of ordered) {
     if (!base || amendment.seq < base.seq) base = amendment;
@@ -582,7 +731,12 @@ export function resolveEffectiveLifecycleState(input: {
   for (const amendment of ordered) {
     if (amendment.effectiveOn > input.asOf) break;
     if (amendment.type === "change_timing" && amendment.timing) billingTiming = amendment.timing;
-    if ((amendment.type === "change_term" || amendment.type === "renew" || amendment.type === "coterm") && amendment.termKnown) {
+    if (
+      (amendment.type === "change_term" ||
+        amendment.type === "renew" ||
+        amendment.type === "coterm") &&
+      amendment.termKnown
+    ) {
       termEndsOn = amendment.term;
     }
   }
@@ -610,7 +764,8 @@ async function effectiveLifecycleState(
   asOf: string,
   fallback: { billingTiming: BillingTiming; termEndsOn: string | null },
 ): Promise<{ billingTiming: BillingTiming; termEndsOn: string | null }> {
-  const ledger = await db.execute<AmendmentLedgerRow>(sql`
+  const ledger = await db.execute<AmendmentLedgerRow>(
+    sql`
     select amendment_type as "amendmentType", effective_on::text as "effectiveOn",
            amendment_number as "seq", request, before_snapshot as "beforeSnapshot",
            after_snapshot as "afterSnapshot"
@@ -618,29 +773,36 @@ async function effectiveLifecycleState(
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
        and amendment_type in ('change_timing', 'change_term', 'renew', 'coterm')
      order by amendment_number
-  `, "objects");
+  `,
+    "objects",
+  );
   return resolveEffectiveLifecycleState({
     asOf,
     fallbackTiming: fallback.billingTiming,
     fallbackTermEndsOn: fallback.termEndsOn,
-    amendments: ledger.map((row) => toEffectiveLifecycleAmendment({
-      type: row.amendmentType,
-      effectiveOn: toIsoDay(row.effectiveOn) ?? row.effectiveOn,
-      seq: row.seq,
-      request: row.request,
-      beforeSnapshot: row.beforeSnapshot,
-      afterSnapshot: row.afterSnapshot,
-    })),
+    amendments: ledger.map((row) =>
+      toEffectiveLifecycleAmendment({
+        type: row.amendmentType,
+        effectiveOn: toIsoDay(row.effectiveOn) ?? row.effectiveOn,
+        seq: row.seq,
+        request: row.request,
+        beforeSnapshot: row.beforeSnapshot,
+        afterSnapshot: row.afterSnapshot,
+      }),
+    ),
   });
 }
 
 async function ownedPlan(orgId: string, planId: string) {
-  const result = (await db.execute<OwnedPlanRow>(sql`
+  const result = await db.execute<OwnedPlanRow>(
+    sql`
     select id, name, description, amount, currency_code as currency, interval,
            interval_count as "intervalCount", income_account_id as "incomeAccountId",
            item_id as "itemId", tax_code_id as "taxCodeId"
       from subscription_plans where id = ${planId} and org_id = ${orgId} for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) throw new AdvancedSubscriptionError("plan not found");
   return row;
@@ -652,15 +814,22 @@ async function assertCommercialRefs(
   storedItemId?: string | null,
 ): Promise<void> {
   if (input.incomeAccountId) {
-    const row = (await db.execute(sql`select 1 from accounts where id = ${input.incomeAccountId} and org_id = ${orgId} and type in ('income','income_other') and is_active`, "objects"));
-    if (!row.length) throw new AdvancedSubscriptionError("income account does not belong to this organization");
+    const row = await db.execute(
+      sql`select 1 from accounts where id = ${input.incomeAccountId} and org_id = ${orgId} and type in ('income','income_other') and is_active`,
+      "objects",
+    );
+    if (!row.length)
+      throw new AdvancedSubscriptionError("income account does not belong to this organization");
   }
   // Stored components stay when itemId is omitted. Re-sending the stored item
   // is allowed. A new inventory / assembly / kit item is Inventory
   // configuration. A new equipment_charge item is Equipment configuration.
   if (input.itemId) {
-    const row = (await db.execute<{ kind: string }>(sql`
-      select kind from items where id = ${input.itemId} and org_id = ${orgId} and is_active`, "objects"));
+    const row = await db.execute<{ kind: string }>(
+      sql`
+      select kind from items where id = ${input.itemId} and org_id = ${orgId} and is_active`,
+      "objects",
+    );
     if (!row[0]) throw new AdvancedSubscriptionError("item does not belong to this organization");
     if (storedItemId !== input.itemId && !(await inventoryFeatureEnabled(db, orgId))) {
       if (INVENTORY_ITEM_KINDS.has(row[0].kind)) {
@@ -676,25 +845,38 @@ async function assertCommercialRefs(
     }
   }
   if (input.taxCodeId) {
-    const row = (await db.execute(sql`select 1 from tax_codes where id = ${input.taxCodeId} and org_id = ${orgId} and is_active`, "objects"));
-    if (!row.length) throw new AdvancedSubscriptionError("tax code does not belong to this organization");
+    const row = await db.execute(
+      sql`select 1 from tax_codes where id = ${input.taxCodeId} and org_id = ${orgId} and is_active`,
+      "objects",
+    );
+    if (!row.length)
+      throw new AdvancedSubscriptionError("tax code does not belong to this organization");
   }
 }
 
 /** Shared customer identities remain usable; empty visibility grants nothing. */
-function subscriptionScopeSql(orgId: string, subscriptionId: SQL, allowed?: ReadonlySet<string> | null): SQL {
+function subscriptionScopeSql(
+  orgId: string,
+  subscriptionId: SQL,
+  allowed?: ReadonlySet<string> | null,
+): SQL {
   if (allowed == null) return sql``;
   if (allowed.size === 0) return sql`and false`;
   return sql`and exists (
     select 1 from subscriptions scoped_subscription
     join parties scoped_customer on scoped_customer.id = scoped_subscription.customer_id and scoped_customer.org_id = scoped_subscription.org_id
     where scoped_subscription.id = ${subscriptionId} and scoped_subscription.org_id = ${orgId}
-      and (scoped_customer.subsidiary_id is null or scoped_customer.subsidiary_id = any(${`{${[...allowed].join(',')}}`}::uuid[]))
+      and (scoped_customer.subsidiary_id is null or scoped_customer.subsidiary_id = any(${`{${[...allowed].join(",")}}`}::uuid[]))
   )`;
 }
 
-async function subscriptionContext(orgId: string, subscriptionId: string, allowed?: ReadonlySet<string> | null) {
-  const result = (await db.execute<SubscriptionContextRow>(sql`
+async function subscriptionContext(
+  orgId: string,
+  subscriptionId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  const result = await db.execute<SubscriptionContextRow>(
+    sql`
     select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.status,
            l.id as "lifecycleId", l.plan_version_id as "planVersionId",
            l.contract_revision as "contractRevision", l.term_starts_on as "termStartsOn",
@@ -705,7 +887,9 @@ async function subscriptionContext(orgId: string, subscriptionId: string, allowe
       left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${orgId}
        ${subscriptionScopeSql(orgId, sql`s.id`, allowed)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) throw new AdvancedSubscriptionError("subscription not found", 404);
   return row;
@@ -731,11 +915,13 @@ export async function createPlanVersion(
     const billingTiming = input.billingTiming ?? "advance";
     assertBillingTiming(billingTiming);
     advanceLifecycleDate(effectiveFrom, interval, intervalCount);
-    if (!input.components.length) throw new AdvancedSubscriptionError("at least one component is required");
+    if (!input.components.length)
+      throw new AdvancedSubscriptionError("at least one component is required");
     const seen = new Set<string>();
     const components = input.components.map((component) => {
       const key = component.componentKey.trim();
-      if (!key || seen.has(key)) throw new AdvancedSubscriptionError("component keys must be unique and non-empty");
+      if (!key || seen.has(key))
+        throw new AdvancedSubscriptionError("component keys must be unique and non-empty");
       seen.add(key);
       if (!component.name.trim()) throw new AdvancedSubscriptionError("component name is required");
       return {
@@ -745,7 +931,8 @@ export async function createPlanVersion(
       };
     });
     for (const component of components) await assertCommercialRefs(orgId, component);
-    const version = (await db.execute<{ id: string }>(sql`
+    const version = await db.execute<{ id: string }>(
+      sql`
       insert into subscription_plan_versions
         (org_id, plan_id, version_number, effective_from, name, description, currency_code,
          interval, interval_count, billing_timing, change_summary, created_by, updated_by)
@@ -755,7 +942,9 @@ export async function createPlanVersion(
              ${billingTiming}, ${input.changeSummary ?? null}, ${actorId}, ${actorId}
         from subscription_plan_versions where org_id = ${orgId} and plan_id = ${input.planId}
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const versionId = version[0]!.id;
     for (const [sortOrder, component] of components.entries()) {
       await db.execute(sql`
@@ -783,35 +972,53 @@ export async function publishPlanVersion(
     // unrestricted-scope gate as creation (see createPlanVersion).
     assertUnrestrictedScope(allowedSubsidiaryIds);
     await assertEnabled(orgId);
-    const found = (await db.execute<Pick<PlanVersionRow, "id" | "planId" | "effectiveFrom" | "status"> & Record<string, unknown>>(sql`
+    const found = await db.execute<
+      Pick<PlanVersionRow, "id" | "planId" | "effectiveFrom" | "status"> & Record<string, unknown>
+    >(
+      sql`
       select id, plan_id as "planId", effective_from as "effectiveFrom", status
         from subscription_plan_versions where id = ${versionId} and org_id = ${orgId} for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const version = found[0];
     if (!version) throw new AdvancedSubscriptionError("plan version not found");
     assertPlanVersionMutable(version.status);
     await ownedPlan(orgId, version.planId);
-    const count = (await db.execute<{ n: number }>(sql`
+    const count = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from subscription_plan_version_components
        where version_id = ${versionId} and org_id = ${orgId}
-    `, "objects"));
-    if (!count[0]?.n) throw new AdvancedSubscriptionError("a published version needs at least one component");
+    `,
+      "objects",
+    );
+    if (!count[0]?.n)
+      throw new AdvancedSubscriptionError("a published version needs at least one component");
     // Activation copies only required components, so an all-optional
     // version would activate into a subscription with zero components that
     // every invoice then refuses. Refuse the catalog error here, by name,
     // instead of surfacing it at billing time.
-    const required = (await db.execute<{ n: number }>(sql`
+    const required = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from subscription_plan_version_components
        where version_id = ${versionId} and org_id = ${orgId} and not is_optional
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!required[0]?.n) {
-      throw new AdvancedSubscriptionError("a published version needs at least one required component — mark a component as required before publishing");
+      throw new AdvancedSubscriptionError(
+        "a published version needs at least one required component — mark a component as required before publishing",
+      );
     }
-    const sameDate = (await db.execute(sql`
+    const sameDate = await db.execute(
+      sql`
       select 1 from subscription_plan_versions where org_id = ${orgId} and plan_id = ${version.planId}
        and status = 'published' and effective_from = ${version.effectiveFrom} and id <> ${versionId} limit 1
-    `, "objects"));
-    if (sameDate.length) throw new AdvancedSubscriptionError("another published version already starts on that date");
+    `,
+      "objects",
+    );
+    if (sameDate.length)
+      throw new AdvancedSubscriptionError("another published version already starts on that date");
     await db.execute(sql`
       update subscription_plan_versions
          set status = 'published', published_at = now(), published_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
@@ -820,49 +1027,79 @@ export async function publishPlanVersion(
   });
 }
 
-export async function activateLifecycle(orgId: string, actorId: string, input: ActivateLifecycleInput, allowed?: ReadonlySet<string> | null): Promise<void> {
+export async function activateLifecycle(
+  orgId: string,
+  actorId: string,
+  input: ActivateLifecycleInput,
+  allowed?: ReadonlySet<string> | null,
+): Promise<void> {
   await withOrg(orgId, async () => {
     await assertEnabled(orgId);
-    await db.execute(sql`select id from subscriptions where id = ${input.subscriptionId} and org_id = ${orgId} for update`);
+    await db.execute(
+      sql`select id from subscriptions where id = ${input.subscriptionId} and org_id = ${orgId} for update`,
+    );
     const sub = await subscriptionContext(orgId, input.subscriptionId, allowed);
-    if (sub.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be activated");
-    if (sub.lifecycleId) throw new AdvancedSubscriptionError("advanced lifecycle is already active");
-    const versionResult = (await db.execute<PlanVersionRow>(sql`
+    if (sub.status === "canceled")
+      throw new AdvancedSubscriptionError("a canceled subscription cannot be activated");
+    if (sub.lifecycleId)
+      throw new AdvancedSubscriptionError("advanced lifecycle is already active");
+    const versionResult = await db.execute<PlanVersionRow>(
+      sql`
       select v.id, v.plan_id as "planId", v.interval, v.interval_count as "intervalCount", v.billing_timing as "billingTiming", v.status,
              v.effective_from as "effectiveFrom", v.effective_to as "effectiveTo",
              v.currency_code as "versionCurrency", p.currency_code as "planCurrency"
         from subscription_plan_versions v join subscription_plans p on p.id = v.plan_id and p.org_id = v.org_id
        where v.id = ${input.planVersionId} and v.org_id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const version = versionResult[0];
-    if (!version || version.status !== "published") throw new AdvancedSubscriptionError("a published plan version is required");
-    if (version.planId !== sub.planId) throw new AdvancedSubscriptionError("plan version does not belong to the subscription plan");
+    if (!version || version.status !== "published")
+      throw new AdvancedSubscriptionError("a published plan version is required");
+    if (version.planId !== sub.planId)
+      throw new AdvancedSubscriptionError("plan version does not belong to the subscription plan");
     const termStartsOn = validDate(input.termStartsOn, "term start", true)!;
     const termEndsOn = validDate(input.termEndsOn, "term end");
     const trialEndsOn = validDate(input.trialEndsOn, "trial end");
-    if (termEndsOn && termEndsOn < termStartsOn) throw new AdvancedSubscriptionError("term end cannot precede term start");
+    if (termEndsOn && termEndsOn < termStartsOn)
+      throw new AdvancedSubscriptionError("term end cannot precede term start");
     if (trialEndsOn && (trialEndsOn < termStartsOn || (termEndsOn && trialEndsOn > termEndsOn))) {
       throw new AdvancedSubscriptionError("trial must fall inside the contract term");
     }
-    if (version.effectiveFrom > termStartsOn || (version.effectiveTo && version.effectiveTo < termStartsOn)) {
-      throw new AdvancedSubscriptionError("plan version is not effective on the contract start date");
+    if (
+      version.effectiveFrom > termStartsOn ||
+      (version.effectiveTo && version.effectiveTo < termStartsOn)
+    ) {
+      throw new AdvancedSubscriptionError(
+        "plan version is not effective on the contract start date",
+      );
     }
     // Backstop for versions published before the required-component publish
     // guard: only required components are copied below, so activating a
     // version with none would leave an unbillable subscription.
-    const requiredComponents = (await db.execute<{ componentKey: string }>(sql`
+    const requiredComponents = await db.execute<{ componentKey: string }>(
+      sql`
       select component_key as "componentKey" from subscription_plan_version_components
        where org_id = ${orgId} and version_id = ${input.planVersionId} and not is_optional
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!requiredComponents.length) {
-      throw new AdvancedSubscriptionError("plan version has no required components — mark a component as required before activating");
+      throw new AdvancedSubscriptionError(
+        "plan version has no required components — mark a component as required before activating",
+      );
     }
     if (input.componentKeys) {
       const requiredKeys = new Set(requiredComponents.map((row) => row.componentKey));
       const selectedKeys = new Set(input.componentKeys);
-      if (!input.componentKeys.length || selectedKeys.size !== input.componentKeys.length ||
-          input.componentKeys.some((key) => !key.trim() || !requiredKeys.has(key))) {
-        throw new AdvancedSubscriptionError("activation component keys must be unique required components in the plan version");
+      if (
+        !input.componentKeys.length ||
+        selectedKeys.size !== input.componentKeys.length ||
+        input.componentKeys.some((key) => !key.trim() || !requiredKeys.has(key))
+      ) {
+        throw new AdvancedSubscriptionError(
+          "activation component keys must be unique required components in the plan version",
+        );
       }
     }
     // Billing posts in the pinned version's currency, so pinning a version
@@ -871,34 +1108,61 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     // instead of silently billing the old currency — or the new one.
     const effectiveCurrency = version.versionCurrency ?? version.planCurrency;
     if (effectiveCurrency) {
-      const billed = (await db.execute<{ currency: string }>(sql`
+      const billed = await db.execute<{ currency: string }>(
+        sql`
         select distinct d.currency from documents d
          where d.org_id = ${orgId}
            and (d.id = (select last_invoice_id from subscriptions where id = ${input.subscriptionId} and org_id = ${orgId})
              or d.id in (select invoice_id from subscription_period_invoices where org_id = ${orgId} and subscription_id = ${input.subscriptionId}))
-      `, "objects"));
-      const foreign = [...new Set(billed.map((row) => row.currency).filter((currency) => currency.toUpperCase() !== effectiveCurrency.toUpperCase()))];
+      `,
+        "objects",
+      );
+      const foreign = [
+        ...new Set(
+          billed
+            .map((row) => row.currency)
+            .filter((currency) => currency.toUpperCase() !== effectiveCurrency.toUpperCase()),
+        ),
+      ];
       if (foreign.length) {
         throw new AdvancedSubscriptionError(
           `subscription already has invoices in ${foreign.join(", ")} — billing currency cannot change mid-contract to ${effectiveCurrency}; ` +
-          `create a new subscription for the ${effectiveCurrency} contract instead`,
+            `create a new subscription for the ${effectiveCurrency} contract instead`,
         );
       }
     }
-    const renewalTermMonths = input.renewalTermMonths == null ? null : subscriptionPeriodCount(input.renewalTermMonths, "renewal term");
+    const renewalTermMonths =
+      input.renewalTermMonths == null
+        ? null
+        : subscriptionPeriodCount(input.renewalTermMonths, "renewal term");
     const renewalPolicy = input.renewalPolicy ?? "auto";
     assertRenewalPolicy(renewalPolicy);
-    const firstBillOn = firstLifecycleBillOn({ termStartsOn, trialEndsOn, billingTiming: version.billingTiming, interval: version.interval, intervalCount: version.intervalCount });
+    const firstBillOn = firstLifecycleBillOn({
+      termStartsOn,
+      trialEndsOn,
+      billingTiming: version.billingTiming,
+      interval: version.interval,
+      intervalCount: version.intervalCount,
+    });
     // Never rewind into posted service: the unbilled boundary is the later
     // of the subscription's own cursor (advanced atomically with every
     // billed invoice) and the latest guarded period end (bill-now invoices
     // post guards without moving the cursor).
-    const prior = (await db.execute<{ nextBillOn: string; lastInvoiceId: string | null; guardedThrough: string | null }>(sql`
+    const prior = (
+      await db.execute<{
+        nextBillOn: string;
+        lastInvoiceId: string | null;
+        guardedThrough: string | null;
+      }>(
+        sql`
       select s.next_bill_on as "nextBillOn", s.last_invoice_id as "lastInvoiceId",
              (select max(pi.period_ends_on)::text from subscription_period_invoices pi
                where pi.org_id = ${orgId} and pi.subscription_id = ${input.subscriptionId}) as "guardedThrough"
         from subscriptions s where s.id = ${input.subscriptionId} and s.org_id = ${orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const boundary = prior ? unbilledBoundary(prior.nextBillOn, prior.guardedThrough) : null;
     const billed = Boolean(prior?.lastInvoiceId ?? prior?.guardedThrough);
     const cursors = activationBillingCursors({
@@ -917,7 +1181,10 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
               ${version.billingTiming}, ${renewalPolicy}, ${renewalTermMonths}, ${termEndsOn}, ${actorId}, ${actorId})
     `);
     const componentFilter = input.componentKeys
-      ? sql`and component_key in (${sql.join(input.componentKeys.map((key) => sql`${key}`), sql`, `)})`
+      ? sql`and component_key in (${sql.join(
+          input.componentKeys.map((key) => sql`${key}`),
+          sql`, `,
+        )})`
       : sql``;
     await db.execute(sql`
       insert into subscription_components
@@ -941,18 +1208,26 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
 
 async function snapshot(orgId: string, subscriptionId: string) {
   const lifecycle = await subscriptionContext(orgId, subscriptionId);
-  if (!lifecycle.lifecycleId || !lifecycle.termStartsOn || !lifecycle.billingTiming || !lifecycle.renewalPolicy) {
+  if (
+    !lifecycle.lifecycleId ||
+    !lifecycle.termStartsOn ||
+    !lifecycle.billingTiming ||
+    !lifecycle.renewalPolicy
+  ) {
     throw new AdvancedSubscriptionError(
       "this subscription has no contract, so it cannot be amended. Activate a published plan version as its contract in Contracts first",
     );
   }
-  const components = (await db.execute<SubscriptionComponentRow>(sql`
+  const components = await db.execute<SubscriptionComponentRow>(
+    sql`
     select component_key as "componentKey", name, description, quantity, unit_price as "unitPrice",
            income_account_id as "incomeAccountId", item_id as "itemId", tax_code_id as "taxCodeId",
            effective_from as "effectiveFrom", effective_to as "effectiveTo"
       from subscription_components where org_id = ${orgId} and subscription_id = ${subscriptionId}
      order by effective_from, sort_order, component_key
-  `, "objects"));
+  `,
+    "objects",
+  );
   return { lifecycle, components };
 }
 
@@ -968,16 +1243,31 @@ export interface SystemAmendmentSource {
   detail?: Record<string, unknown>;
 }
 
-interface AmendmentCallOptions { system?: SystemAmendmentSource; allowedSubsidiaryIds?: ReadonlySet<string> | null }
+interface AmendmentCallOptions {
+  system?: SystemAmendmentSource;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
+}
 
 const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The catalog facts a plan change compares, or null when the version is not in this organization. */
-async function planVersionTerms(orgId: string, versionId: string): Promise<PlanVersionTerms | null> {
-  const row = (await db.execute<{
-    planId: string; status: string; effectiveFrom: string; effectiveTo: string | null; interval: Interval;
-    intervalCount: number; billingTiming: BillingTiming; currency: string; requiredComponents: number;
-  }>(sql`
+async function planVersionTerms(
+  orgId: string,
+  versionId: string,
+): Promise<PlanVersionTerms | null> {
+  const row = (
+    await db.execute<{
+      planId: string;
+      status: string;
+      effectiveFrom: string;
+      effectiveTo: string | null;
+      interval: Interval;
+      intervalCount: number;
+      billingTiming: BillingTiming;
+      currency: string;
+      requiredComponents: number;
+    }>(
+      sql`
     select v.plan_id as "planId", v.status, v.effective_from::text as "effectiveFrom", v.effective_to::text as "effectiveTo",
            v.interval, v.interval_count as "intervalCount", v.billing_timing as "billingTiming",
            coalesce(v.currency_code, p.currency_code) as currency,
@@ -985,7 +1275,10 @@ async function planVersionTerms(orgId: string, versionId: string): Promise<PlanV
              where c.org_id = v.org_id and c.version_id = v.id and not c.is_optional) as "requiredComponents"
       from subscription_plan_versions v join subscription_plans p on p.id = v.plan_id and p.org_id = v.org_id
      where v.id = ${versionId} and v.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return {
     ...row,
@@ -1010,21 +1303,36 @@ async function applyPlanChange(
   effectiveOn: string,
 ): Promise<void> {
   const targetId = request.planVersionId;
-  if (!targetId || !UUID_TEXT.test(targetId)) throw new AdvancedSubscriptionError("a plan version is required to change plan");
-  if (!request.reason?.trim()) throw new AdvancedSubscriptionError("a reason is required to change plan, because the change is recorded in the contract history");
+  if (!targetId || !UUID_TEXT.test(targetId))
+    throw new AdvancedSubscriptionError("a plan version is required to change plan");
+  if (!request.reason?.trim())
+    throw new AdvancedSubscriptionError(
+      "a reason is required to change plan, because the change is recorded in the contract history",
+    );
   const pinnedId = before.lifecycle.planVersionId;
   const pinned = pinnedId ? await planVersionTerms(orgId, pinnedId) : null;
-  if (!pinned) throw new AdvancedSubscriptionError("the contract's plan version is missing; repair the contract before changing plan");
+  if (!pinned)
+    throw new AdvancedSubscriptionError(
+      "the contract's plan version is missing; repair the contract before changing plan",
+    );
   const target = await planVersionTerms(orgId, targetId);
   if (!target) throw new AdvancedSubscriptionError("plan version not found", 404);
-  const timeline = (await db.execute<{
-    startOn: string; nextBillOn: string; lastInvoiceId: string | null; guardedThrough: string | null;
-  }>(sql`
+  const timeline = (
+    await db.execute<{
+      startOn: string;
+      nextBillOn: string;
+      lastInvoiceId: string | null;
+      guardedThrough: string | null;
+    }>(
+      sql`
     select s.start_on::text as "startOn", s.next_bill_on::text as "nextBillOn", s.last_invoice_id as "lastInvoiceId",
            (select max(pi.period_ends_on)::text from subscription_period_invoices pi
              where pi.org_id = s.org_id and pi.subscription_id = s.id) as "guardedThrough"
       from subscriptions s where s.id = ${request.subscriptionId} and s.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!timeline) throw new AdvancedSubscriptionError("subscription not found", 404);
   const paidThrough = subscriptionPaidThrough({
     startOn: timeline.startOn,
@@ -1042,12 +1350,15 @@ async function applyPlanChange(
   });
   // A component already scheduled to start on or after the change would be
   // cut or left empty by the re-seed, so the change is refused by name.
-  const scheduled = before.components.find((component) => component.effectiveFrom >= effectiveOn
-    && (component.effectiveTo === null || component.effectiveTo >= effectiveOn));
+  const scheduled = before.components.find(
+    (component) =>
+      component.effectiveFrom >= effectiveOn &&
+      (component.effectiveTo === null || component.effectiveTo >= effectiveOn),
+  );
   if (scheduled) {
     throw new AdvancedSubscriptionError(
       `component ${scheduled.componentKey} is already scheduled from ${scheduled.effectiveFrom}; ` +
-      `remove or change it before moving the contract to another plan on ${effectiveOn}`,
+        `remove or change it before moving the contract to another plan on ${effectiveOn}`,
     );
   }
   await db.execute(sql`
@@ -1076,9 +1387,16 @@ async function applyPlanChange(
   await refreshEntitlementSnapshot(orgId, request.subscriptionId, attributedBy);
 }
 
-export async function applyAmendment(orgId: string, actorId: string | null, request: AmendmentRequest, opts?: AmendmentCallOptions) {
-  return withOrg(orgId, async () => { await assertEnabled(orgId);
-    if (!request.idempotencyKey.trim()) throw new AdvancedSubscriptionError("idempotency key is required");
+export async function applyAmendment(
+  orgId: string,
+  actorId: string | null,
+  request: AmendmentRequest,
+  opts?: AmendmentCallOptions,
+) {
+  return withOrg(orgId, async () => {
+    await assertEnabled(orgId);
+    if (!request.idempotencyKey.trim())
+      throw new AdvancedSubscriptionError("idempotency key is required");
     // Every applied amendment names its actor on the row itself (the applied
     // status constraint refuses NULL attribution). An interactive call needs a
     // real authenticated gate user and may never borrow the engine's identity;
@@ -1090,60 +1408,114 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
     if (systemSource) {
       attributedBy = SYSTEM_ACTOR_ID;
     } else if (actorId) {
-      if (actorId === SYSTEM_ACTOR_ID) throw new AdvancedSubscriptionError("an interactive amendment cannot carry the engine system actor");
+      if (actorId === SYSTEM_ACTOR_ID)
+        throw new AdvancedSubscriptionError(
+          "an interactive amendment cannot carry the engine system actor",
+        );
       attributedBy = actorId;
     } else {
       throw new AdvancedSubscriptionError("an authenticated amendment actor is required");
     }
     const requestSnapshot = systemSource
-      ? { ...request, source: { kind: "system", origin: systemSource.origin, ...(systemSource.detail ?? {}) } }
+      ? {
+          ...request,
+          source: { kind: "system", origin: systemSource.origin, ...(systemSource.detail ?? {}) },
+        }
       : request;
-    const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`, "objects"));
+    const lock = await db.execute(
+      sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`,
+      "objects",
+    );
     if (!lock.length) throw new AdvancedSubscriptionError("subscription not found");
     await subscriptionContext(orgId, request.subscriptionId, opts?.allowedSubsidiaryIds);
-    const replay = (await db.execute<AmendmentReplayRow>(sql`
+    const replay = await db.execute<AmendmentReplayRow>(
+      sql`
       select id, subscription_id as "subscriptionId", request from subscription_amendments
        where org_id = ${orgId} and idempotency_key = ${request.idempotencyKey}
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (replay[0]) {
-      assertIdempotentReplay(replay[0].subscriptionId, request.subscriptionId, replay[0].request, requestSnapshot);
+      assertIdempotentReplay(
+        replay[0].subscriptionId,
+        request.subscriptionId,
+        replay[0].request,
+        requestSnapshot,
+      );
       return { id: replay[0].id, replayed: true };
     }
-    if (!["add_component", "remove_component", "change_component", "change_term", "change_timing", "renew", "coterm", "change_plan"].includes(request.type)) {
+    if (
+      ![
+        "add_component",
+        "remove_component",
+        "change_component",
+        "change_term",
+        "change_timing",
+        "renew",
+        "coterm",
+        "change_plan",
+      ].includes(request.type)
+    ) {
       throw new AdvancedSubscriptionError("invalid amendment type");
     }
     const effectiveOn = validDate(request.effectiveOn, "effective date", true)!;
     const before = await snapshot(orgId, request.subscriptionId);
-    if (before.lifecycle.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be amended");
+    if (before.lifecycle.status === "canceled")
+      throw new AdvancedSubscriptionError("a canceled subscription cannot be amended");
     const currentComponent = request.componentKey
-      ? before.components.find((c) => c.componentKey === request.componentKey && c.effectiveFrom <= effectiveOn && (!c.effectiveTo || c.effectiveTo >= effectiveOn))
+      ? before.components.find(
+          (c) =>
+            c.componentKey === request.componentKey &&
+            c.effectiveFrom <= effectiveOn &&
+            (!c.effectiveTo || c.effectiveTo >= effectiveOn),
+        )
       : null;
     if (["remove_component", "change_component"].includes(request.type) && !currentComponent) {
       throw new AdvancedSubscriptionError("active component not found");
     }
     // Inclusive windows cannot end before their first day. Preserve the original
     // contract history and reject an amendment that would create an empty window.
-    if (["remove_component", "change_component"].includes(request.type) && currentComponent?.effectiveFrom === effectiveOn) {
-      throw new AdvancedSubscriptionError("component changes must take effect after the current component start date");
+    if (
+      ["remove_component", "change_component"].includes(request.type) &&
+      currentComponent?.effectiveFrom === effectiveOn
+    ) {
+      throw new AdvancedSubscriptionError(
+        "component changes must take effect after the current component start date",
+      );
     }
-    const quantity = request.type === "add_component" || (request.type === "change_component" && request.quantity != null)
-      ? positiveMoney(request.quantity ?? "1", "component quantity")
-      : null;
-    const unitPrice = request.type === "add_component" || (request.type === "change_component" && request.unitPrice != null)
-      ? nonNegativeMoney(request.unitPrice, "component price")
-      : null;
+    const quantity =
+      request.type === "add_component" ||
+      (request.type === "change_component" && request.quantity != null)
+        ? positiveMoney(request.quantity ?? "1", "component quantity")
+        : null;
+    const unitPrice =
+      request.type === "add_component" ||
+      (request.type === "change_component" && request.unitPrice != null)
+        ? nonNegativeMoney(request.unitPrice, "component price")
+        : null;
     if (request.type === "add_component") {
-      if (!request.componentKey?.trim() || !request.name?.trim()) throw new AdvancedSubscriptionError("component key and name are required");
-      if (before.components.some((component) => component.componentKey === request.componentKey
-          && (!component.effectiveTo || component.effectiveTo >= effectiveOn))) {
-        throw new AdvancedSubscriptionError("component key overlaps an existing or scheduled component");
+      if (!request.componentKey?.trim() || !request.name?.trim())
+        throw new AdvancedSubscriptionError("component key and name are required");
+      if (
+        before.components.some(
+          (component) =>
+            component.componentKey === request.componentKey &&
+            (!component.effectiveTo || component.effectiveTo >= effectiveOn),
+        )
+      ) {
+        throw new AdvancedSubscriptionError(
+          "component key overlaps an existing or scheduled component",
+        );
       }
       await assertCommercialRefs(orgId, request);
     }
     if (request.type === "change_component") {
       await assertCommercialRefs(orgId, request, currentComponent?.itemId);
     }
-    if (request.type === "change_timing" && !["advance", "arrears"].includes(request.billingTiming ?? "")) {
+    if (
+      request.type === "change_timing" &&
+      !["advance", "arrears"].includes(request.billingTiming ?? "")
+    ) {
       throw new AdvancedSubscriptionError("billing timing must be advance or arrears");
     }
     if (["remove_component", "change_component"].includes(request.type)) {
@@ -1162,10 +1534,10 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
           (org_id, subscription_id, component_key, name, description, quantity, unit_price,
            income_account_id, item_id, tax_code_id, effective_from, effective_to, sort_order, created_by, updated_by)
         values (${orgId}, ${request.subscriptionId}, ${request.componentKey!}, ${request.name ?? source.name},
-                ${request.description !== undefined ? request.description : source.description ?? null},
+                ${request.description !== undefined ? request.description : (source.description ?? null)},
                 ${quantity ?? source.quantity ?? "1"}, ${unitPrice ?? source.unitPrice ?? "0"},
-                ${request.incomeAccountId !== undefined ? request.incomeAccountId : source.incomeAccountId ?? null},
-                ${request.itemId !== undefined ? request.itemId : source.itemId ?? null}, ${request.taxCodeId !== undefined ? request.taxCodeId : source.taxCodeId ?? null},
+                ${request.incomeAccountId !== undefined ? request.incomeAccountId : (source.incomeAccountId ?? null)},
+                ${request.itemId !== undefined ? request.itemId : (source.itemId ?? null)}, ${request.taxCodeId !== undefined ? request.taxCodeId : (source.taxCodeId ?? null)},
                 ${effectiveOn}, ${source.effectiveTo ?? null}, ${before.components.length}, ${attributedBy}, ${attributedBy})
       `);
     }
@@ -1173,31 +1545,60 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       const termEndsOn = validDate(request.termEndsOn, "term end");
       const termStartsOn = before.lifecycle.termStartsOn;
       if (!termStartsOn) throw new AdvancedSubscriptionError("advanced lifecycle is not active");
-      if (termEndsOn && termEndsOn < termStartsOn) throw new AdvancedSubscriptionError("term end cannot precede term start");
-      await db.execute(sql`update subscription_lifecycles set term_ends_on = ${termEndsOn}, renewal_on = ${termEndsOn}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      if (termEndsOn && termEndsOn < termStartsOn)
+        throw new AdvancedSubscriptionError("term end cannot precede term start");
+      await db.execute(
+        sql`update subscription_lifecycles set term_ends_on = ${termEndsOn}, renewal_on = ${termEndsOn}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`,
+      );
     }
     if (request.type === "change_timing") {
-      await db.execute(sql`update subscription_lifecycles set billing_timing = ${request.billingTiming!}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      await db.execute(
+        sql`update subscription_lifecycles set billing_timing = ${request.billingTiming!}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`,
+      );
     }
     if (request.type === "renew") {
-      const months = subscriptionPeriodCount(request.renewalTermMonths ?? before.lifecycle.renewalTermMonths ?? 12, "renewal term");
-      if (months < 1 || !before.lifecycle.termEndsOn) throw new AdvancedSubscriptionError("renewal requires a current term end and positive renewal term");
+      const months = subscriptionPeriodCount(
+        request.renewalTermMonths ?? before.lifecycle.renewalTermMonths ?? 12,
+        "renewal term",
+      );
+      if (months < 1 || !before.lifecycle.termEndsOn)
+        throw new AdvancedSubscriptionError(
+          "renewal requires a current term end and positive renewal term",
+        );
       const nextEnd = advanceLifecycleDate(before.lifecycle.termEndsOn, "monthly", months);
-      await db.execute(sql`update subscription_lifecycles set term_starts_on = ${before.lifecycle.termEndsOn}, term_ends_on = ${nextEnd}, renewal_on = ${nextEnd}, renewal_term_months = ${months}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      await db.execute(
+        sql`update subscription_lifecycles set term_starts_on = ${before.lifecycle.termEndsOn}, term_ends_on = ${nextEnd}, renewal_on = ${nextEnd}, renewal_term_months = ${months}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`,
+      );
     }
     if (request.type === "coterm") {
-      if (!request.anchorSubscriptionId) throw new AdvancedSubscriptionError("an anchor subscription is required");
-      const anchor = await subscriptionContext(orgId, request.anchorSubscriptionId, opts?.allowedSubsidiaryIds);
-      if (!anchor.lifecycleId || !anchor.termEndsOn) throw new AdvancedSubscriptionError("anchor subscription needs an advanced term end");
-      assertCotermAllowed({ subscriptionId: request.subscriptionId, anchorSubscriptionId: request.anchorSubscriptionId, customerId: before.lifecycle.customerId, anchorCustomerId: anchor.customerId });
-      await db.execute(sql`update subscription_lifecycles set term_ends_on = ${anchor.termEndsOn}, renewal_on = ${anchor.termEndsOn}, coterm_anchor_subscription_id = ${request.anchorSubscriptionId}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+      if (!request.anchorSubscriptionId)
+        throw new AdvancedSubscriptionError("an anchor subscription is required");
+      const anchor = await subscriptionContext(
+        orgId,
+        request.anchorSubscriptionId,
+        opts?.allowedSubsidiaryIds,
+      );
+      if (!anchor.lifecycleId || !anchor.termEndsOn)
+        throw new AdvancedSubscriptionError("anchor subscription needs an advanced term end");
+      assertCotermAllowed({
+        subscriptionId: request.subscriptionId,
+        anchorSubscriptionId: request.anchorSubscriptionId,
+        customerId: before.lifecycle.customerId,
+        anchorCustomerId: anchor.customerId,
+      });
+      await db.execute(
+        sql`update subscription_lifecycles set term_ends_on = ${anchor.termEndsOn}, renewal_on = ${anchor.termEndsOn}, coterm_anchor_subscription_id = ${request.anchorSubscriptionId}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`,
+      );
     }
     if (request.type === "change_plan") {
       await applyPlanChange(orgId, attributedBy, request, before, effectiveOn);
     }
-    await db.execute(sql`update subscription_lifecycles set contract_revision = contract_revision + 1, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+    await db.execute(
+      sql`update subscription_lifecycles set contract_revision = contract_revision + 1, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`,
+    );
     const after = await snapshot(orgId, request.subscriptionId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into subscription_amendments
         (org_id, subscription_id, amendment_number, amendment_type, effective_on, status, idempotency_key,
          reason, request, before_snapshot, after_snapshot, applied_at, applied_by, created_by, updated_by)
@@ -1206,14 +1607,20 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
              ${JSON.stringify(before)}::jsonb, ${JSON.stringify(after)}::jsonb, now(), ${attributedBy}, ${attributedBy}, ${attributedBy}
         from subscription_amendments where org_id = ${orgId} and subscription_id = ${request.subscriptionId}
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     return { id: inserted[0]!.id, replayed: false };
   });
 }
 
-export async function advancedSubscriptionWorkspace(orgId: string, allowed?: ReadonlySet<string> | null) {
+export async function advancedSubscriptionWorkspace(
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
   const [versions, lifecycles, amendments] = await Promise.all([
-    db.execute(sql`
+    db.execute(
+      sql`
       select v.id, v.plan_id as "planId", v.version_number as "versionNumber", v.status, v.effective_from as "effectiveFrom",
              v.effective_to as "effectiveTo", v.name, v.currency_code as currency, v.interval,
              v.interval_count as "intervalCount", v.billing_timing as "billingTiming", v.change_summary as "changeSummary",
@@ -1221,8 +1628,11 @@ export async function advancedSubscriptionWorkspace(orgId: string, allowed?: Rea
                'unitPrice', c.unit_price, 'isOptional', c.is_optional) order by c.sort_order) filter (where c.id is not null), '[]'::jsonb) as components
         from subscription_plan_versions v left join subscription_plan_version_components c on c.version_id = v.id and c.org_id = v.org_id
        where v.org_id = ${orgId} group by v.id order by v.plan_id, v.version_number desc
-    `, "objects"),
-    db.execute(sql`
+    `,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select l.subscription_id as "subscriptionId", l.plan_version_id as "planVersionId", l.contract_revision as "contractRevision",
              l.term_starts_on as "termStartsOn", l.term_ends_on as "termEndsOn", l.trial_ends_on as "trialEndsOn",
              l.billing_timing as "billingTiming", l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths",
@@ -1232,12 +1642,17 @@ export async function advancedSubscriptionWorkspace(orgId: string, allowed?: Rea
                filter (where c.id is not null), '[]'::jsonb) as components
         from subscription_lifecycles l left join subscription_components c on c.subscription_id = l.subscription_id and c.org_id = l.org_id
        where l.org_id = ${orgId} ${subscriptionScopeSql(orgId, sql`l.subscription_id`, allowed)} group by l.id order by l.created_at desc
-    `, "objects"),
-    db.execute(sql`
+    `,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select id, subscription_id as "subscriptionId", amendment_number as "amendmentNumber", amendment_type as "amendmentType",
              effective_on as "effectiveOn", status, reason, applied_at as "appliedAt", request
         from subscription_amendments where org_id = ${orgId} ${subscriptionScopeSql(orgId, sql`subscription_amendments.subscription_id`, allowed)} order by applied_at desc, amendment_number desc
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   return { versions, lifecycles, amendments };
 }
@@ -1252,39 +1667,67 @@ export async function advancedSubscriptionWorkspace(orgId: string, allowed?: Rea
  * creator, and never refused when an imported subscription has no author —
  * using a deterministic idempotency key.
  */
-export async function prepareAdvancedSubscriptionBilling(orgId: string, subscriptionId: string, dueOn: string): Promise<boolean> {
+export async function prepareAdvancedSubscriptionBilling(
+  orgId: string,
+  subscriptionId: string,
+  dueOn: string,
+): Promise<boolean> {
   return withOrg(orgId, async () => {
-    const result = (await db.execute<BillingPreparationRow>(sql`
+    const result = await db.execute<BillingPreparationRow>(
+      sql`
       select l.billing_timing as "billingTiming", l.term_ends_on as "termEndsOn",
              l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths"
         from subscriptions s left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
        where s.id = ${subscriptionId} and s.org_id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = result[0];
     if (!row?.billingTiming) return true;
     await assertEnabled(orgId);
     // The boundary decision uses the term and timing in force on the due
     // date: a future-dated reduction or timing change must neither stop nor
     // renew billing before its date arrives.
-    const effective = await effectiveLifecycleState(orgId, subscriptionId, dueOn, { billingTiming: row.billingTiming, termEndsOn: row.termEndsOn });
-    const action = renewalAction({ billingTiming: effective.billingTiming, dueOn, termEndsOn: effective.termEndsOn, policy: row.renewalPolicy ?? "none" });
+    const effective = await effectiveLifecycleState(orgId, subscriptionId, dueOn, {
+      billingTiming: row.billingTiming,
+      termEndsOn: row.termEndsOn,
+    });
+    const action = renewalAction({
+      billingTiming: effective.billingTiming,
+      dueOn,
+      termEndsOn: effective.termEndsOn,
+      policy: row.renewalPolicy ?? "none",
+    });
     if (action === "bill") return true;
     if (action === "stop") return false;
     if (!row.termEndsOn) return true;
     // A configured commercial-renewal workflow waits for acceptance of its
     // approved quote or order; billing never bypasses the agreed uplift.
-    if ((await db.execute(sql`select id from subscription_renewal_policies where org_id=${orgId} and subscription_id=${subscriptionId}
-      and effective_from<=${row.termEndsOn} and effective_to>=${row.termEndsOn} limit 1`, "objects"))[0]) return false;
-    await applyAmendment(orgId, null, {
-      subscriptionId,
-      type: "renew",
-      effectiveOn: row.termEndsOn,
-      renewalTermMonths: row.renewalTermMonths ?? 12,
-      idempotencyKey: `auto-renew:${subscriptionId}:${row.termEndsOn}`,
-      reason: "Automatic renewal",
-    }, {
-      system: { origin: "subscription-billing-scheduler", detail: { dueOn } },
-    });
+    if (
+      (
+        await db.execute(
+          sql`select id from subscription_renewal_policies where org_id=${orgId} and subscription_id=${subscriptionId}
+      and effective_from<=${row.termEndsOn} and effective_to>=${row.termEndsOn} limit 1`,
+          "objects",
+        )
+      )[0]
+    )
+      return false;
+    await applyAmendment(
+      orgId,
+      null,
+      {
+        subscriptionId,
+        type: "renew",
+        effectiveOn: row.termEndsOn,
+        renewalTermMonths: row.renewalTermMonths ?? 12,
+        idempotencyKey: `auto-renew:${subscriptionId}:${row.termEndsOn}`,
+        reason: "Automatic renewal",
+      },
+      {
+        system: { origin: "subscription-billing-scheduler", detail: { dueOn } },
+      },
+    );
     return true;
   });
 }
@@ -1347,10 +1790,20 @@ export function arrearsLinesForInterval(
   }
   const lines: AdvancedBillingLine[] = [];
   for (const rows of byKey.values()) {
-    const ordered = [...rows].sort((left, right) => (left.effectiveFrom < right.effectiveFrom ? -1 : left.effectiveFrom > right.effectiveFrom ? 1 : 0));
+    const ordered = [...rows].sort((left, right) =>
+      left.effectiveFrom < right.effectiveFrom
+        ? -1
+        : left.effectiveFrom > right.effectiveFrom
+          ? 1
+          : 0,
+    );
     const overlaps = ordered.flatMap((row) => {
-      const windowStartsOn = row.effectiveFrom > periodStartsOn ? row.effectiveFrom : periodStartsOn;
-      const rowEndsExclusive = row.effectiveTo === null ? periodEndsOn : isoFromCivilDayIndex(civilDayIndex(row.effectiveTo) + 1);
+      const windowStartsOn =
+        row.effectiveFrom > periodStartsOn ? row.effectiveFrom : periodStartsOn;
+      const rowEndsExclusive =
+        row.effectiveTo === null
+          ? periodEndsOn
+          : isoFromCivilDayIndex(civilDayIndex(row.effectiveTo) + 1);
       const windowEndsOn = rowEndsExclusive < periodEndsOn ? rowEndsExclusive : periodEndsOn;
       const coveredDays = civilDayIndex(windowEndsOn) - civilDayIndex(windowStartsOn);
       return coveredDays > 0 ? [{ row, windowStartsOn, windowEndsOn, coveredDays }] : [];
@@ -1386,7 +1839,12 @@ export function arrearsLinesForInterval(
 }
 
 /** Snapshot used by the invoice engine; null means single-plan billing. */
-export async function advancedBillingSnapshot(orgId: string, subscriptionId: string, billOn: string, periodStartOverride?: string | null): Promise<{
+export async function advancedBillingSnapshot(
+  orgId: string,
+  subscriptionId: string,
+  billOn: string,
+  periodStartOverride?: string | null,
+): Promise<{
   contractRevision: number;
   billingTiming: BillingTiming;
   periodStartsOn: string;
@@ -1394,7 +1852,8 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
   lines: AdvancedBillingLine[];
   total: string;
 } | null> {
-  const lifecycle = (await db.execute<BillingLifecycleRow>(sql`
+  const lifecycle = await db.execute<BillingLifecycleRow>(
+    sql`
     select l.contract_revision as "contractRevision", l.billing_timing as "billingTiming",
            s.current_period_start as "currentPeriodStart", s.next_bill_on as "nextBillOn",
            v.interval, v.interval_count as "intervalCount",
@@ -1402,12 +1861,17 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
       from subscription_lifecycles l join subscriptions s on s.id = l.subscription_id and s.org_id = l.org_id
       join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = l.org_id
      where l.org_id = ${orgId} and l.subscription_id = ${subscriptionId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = lifecycle[0];
   if (!row) return null;
   // The period is priced under the timing in force on the bill date: a
   // timing change dated after billOn must not rewrite this invoice.
-  const effective = await effectiveLifecycleState(orgId, subscriptionId, billOn, { billingTiming: row.billingTiming, termEndsOn: null });
+  const effective = await effectiveLifecycleState(orgId, subscriptionId, billOn, {
+    billingTiming: row.billingTiming,
+    termEndsOn: null,
+  });
   const serviceAnchor = periodStartOverride ?? row.currentPeriodStart ?? billOn;
   const { periodStartsOn, periodEndsOn } = lifecycleBillingPeriod({
     billOn,
@@ -1415,7 +1879,11 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
     billingTiming: effective.billingTiming,
     interval: row.interval,
     intervalCount: row.intervalCount,
-    anchorDay: lifecycleAnchorDay({ termStartsOn: row.termStartsOn, trialEndsOn: row.trialEndsOn, fallback: serviceAnchor }),
+    anchorDay: lifecycleAnchorDay({
+      termStartsOn: row.termStartsOn,
+      trialEndsOn: row.trialEndsOn,
+      fallback: serviceAnchor,
+    }),
   });
   // One fetch covers both timings: a stored window overlaps the service
   // interval exactly when it starts before the end-exclusive boundary and
@@ -1426,7 +1894,8 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
   // arrearsLinesForInterval). The in-advance path has no boundary confusion:
   // periodStartsOn is the inclusive first service day, so "active on start"
   // is the price in force when the period begins.
-  const components = (await db.execute<ComponentWindow>(sql`
+  const components = await db.execute<ComponentWindow>(
+    sql`
     select component_key as "componentKey", name as description, quantity, unit_price as "unitPrice",
            income_account_id as "incomeAccountId", item_id as "itemId", tax_code_id as "taxCodeId",
            effective_from as "effectiveFrom", effective_to as "effectiveTo"
@@ -1434,14 +1903,42 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
      where org_id = ${orgId} and subscription_id = ${subscriptionId} and effective_from < ${periodEndsOn}
        and (effective_to is null or effective_to >= ${periodStartsOn})
      order by sort_order, component_key
-  `, "objects"));
-  const lines = effective.billingTiming === "advance"
-    ? components
-      .filter((component) => component.effectiveFrom <= periodStartsOn && (component.effectiveTo === null || component.effectiveTo >= periodStartsOn))
-      .map(({ description, quantity, unitPrice, incomeAccountId, itemId, taxCodeId }): AdvancedBillingLine => ({
-        description, quantity, unitPrice, incomeAccountId, itemId, taxCodeId,
-      }))
-    : arrearsLinesForInterval(periodStartsOn, periodEndsOn, components);
+  `,
+    "objects",
+  );
+  const lines =
+    effective.billingTiming === "advance"
+      ? components
+          .filter(
+            (component) =>
+              component.effectiveFrom <= periodStartsOn &&
+              (component.effectiveTo === null || component.effectiveTo >= periodStartsOn),
+          )
+          .map(
+            ({
+              description,
+              quantity,
+              unitPrice,
+              incomeAccountId,
+              itemId,
+              taxCodeId,
+            }): AdvancedBillingLine => ({
+              description,
+              quantity,
+              unitPrice,
+              incomeAccountId,
+              itemId,
+              taxCodeId,
+            }),
+          )
+      : arrearsLinesForInterval(periodStartsOn, periodEndsOn, components);
   const total = subscriptionComponentTotal(lines);
-  return { contractRevision: row.contractRevision, billingTiming: effective.billingTiming, periodStartsOn, periodEndsOn, lines, total };
+  return {
+    contractRevision: row.contractRevision,
+    billingTiming: effective.billingTiming,
+    periodStartsOn,
+    periodEndsOn,
+    lines,
+    total,
+  };
 }

@@ -1,17 +1,24 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import { nextPeriodAfter } from "@openbooks/engine/payroll/run-calendar";
-import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/payroll/scope'
-import { uuidArray } from '@openbooks/engine/organization/subsidiaries'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import type { FinalPayCandidate, RunSchedule } from '../_ui/NewRunButton'
+import { payrollSubsidiaryScopeFilter } from "@openbooks/engine/payroll/scope";
+import { uuidArray } from "@openbooks/engine/organization/subsidiaries";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { groupTabs } from "../../../../components/module-home/group-tabs";
+import type { FinalPayCandidate, RunSchedule } from "../_ui/NewRunButton";
 
 /**
  * Pay runs, split into a loader and a spec.
@@ -32,59 +39,65 @@ import type { FinalPayCandidate, RunSchedule } from '../_ui/NewRunButton'
  */
 
 export interface PayRunsData {
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  canRun: boolean
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canRun: boolean;
   newRun: {
-    schedules: RunSchedule[]
-    finalPayCandidates: FinalPayCandidate[]
-    today: string
-  }
-  viewTabs: { href: string; label: string; active?: boolean }[]
-  openLabel: string
+    schedules: RunSchedule[];
+    finalPayCandidates: FinalPayCandidate[];
+    today: string;
+  };
+  viewTabs: { href: string; label: string; active?: boolean }[];
+  openLabel: string;
 }
 
 export async function loadPayRuns(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PayRunsData> {
-  const authz = await requirePermission('payroll.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'payroll')
-  const canRun = can(authz, 'payroll.run')
-  const t = await getTranslations('payroll')
+  const authz = await requirePermission("payroll.read");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "payroll");
+  const canRun = can(authz, "payroll.run");
+  const t = await getTranslations("payroll");
 
   const scheduleRows = canRun
-    ? (await db.execute<{
-        id: string
-        name: string
-        frequency: string
-        pay_date_offset_days: number
-        anchor_period_end: string
-        last_end: string | null
-      }>(sql`
+    ? await db.execute<{
+        id: string;
+        name: string;
+        frequency: string;
+        pay_date_offset_days: number;
+        anchor_period_end: string;
+        last_end: string | null;
+      }>(
+        sql`
         select s.id, s.name, s.frequency, s.pay_date_offset_days,
                s.anchor_period_end::text as anchor_period_end,
                max(r.period_end)::text as last_end
           from pay_schedules s
           left join pay_runs r on r.pay_schedule_id = s.id and r.org_id = s.org_id
          where s.org_id = ${orgId} and s.is_active
-           ${payrollSubsidiaryScopeFilter(sql`coalesce(s.subsidiary_id, (
+           ${payrollSubsidiaryScopeFilter(
+             sql`coalesce(s.subsidiary_id, (
              select root.id from subsidiaries root
               where root.org_id = s.org_id and root.parent_id is null and root.is_active
               order by root.created_at limit 1
-           ))`, authz.allowedSubsidiaryIds)}
+           ))`,
+             authz.allowedSubsidiaryIds,
+           )}
          group by s.id, s.name, s.frequency, s.pay_date_offset_days, s.anchor_period_end
-         order by s.name`, 'objects'))
-    : []
+         order by s.name`,
+        "objects",
+      )
+    : [];
 
   // Keep the date controls on the exact same calendar as createPayRun. The
   // client receives a canonical preview, while an untouched submit still lets
   // the server derive the period again inside its transaction.
   const schedules = scheduleRows.map((schedule) => {
-    const next = nextPeriodAfter(schedule, schedule.last_end)
-    const payDate = new Date(`${next.periodEnd}T00:00:00Z`)
-    payDate.setUTCDate(payDate.getUTCDate() + schedule.pay_date_offset_days)
+    const next = nextPeriodAfter(schedule, schedule.last_end);
+    const payDate = new Date(`${next.periodEnd}T00:00:00Z`);
+    payDate.setUTCDate(payDate.getUTCDate() + schedule.pay_date_offset_days);
     return {
       id: schedule.id,
       name: schedule.name,
@@ -93,14 +106,20 @@ export async function loadPayRuns(
       next_period_start: next.periodStart,
       next_period_end: next.periodEnd,
       next_pay_date: payDate.toISOString().slice(0, 10),
-    }
-  })
+    };
+  });
 
   // A final pay run must NAME the employees it pays (it clears every accrued
   // bank), and the engine will only calculate one for people whose employment
   // has ended — so the picker offers exactly those.
   const finalPayCandidates = canRun
-    ? (await db.execute<{ id: string; name: string; pay_schedule_id: string; terminated_on: string }>(sql`
+    ? await db.execute<{
+        id: string;
+        name: string;
+        pay_schedule_id: string;
+        terminated_on: string;
+      }>(
+        sql`
         select distinct on (prof.employee_party_id)
                prof.employee_party_id as id, p.display_name as name,
                prof.pay_schedule_id, er.terminated_on::text as terminated_on
@@ -110,56 +129,58 @@ export async function loadPayRuns(
          where prof.org_id = ${orgId} and prof.is_active and er.terminated_on is not null
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
            and prof.pay_schedule_id = any(${uuidArray(schedules.map((schedule) => schedule.id))}::uuid[])
-         order by prof.employee_party_id, er.terminated_on desc`, 'objects'))
-    : []
+         order by prof.employee_party_id, er.terminated_on desc`,
+        "objects",
+      )
+    : [];
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     currentParams: sp,
     canRun,
     newRun: {
       schedules,
       finalPayCandidates,
-      today: canRun ? await businessToday(orgId) : '',
+      today: canRun ? await businessToday(orgId) : "",
     },
-    viewTabs: await groupTabs('payroll', '/payroll/runs', { orgId }),
-    openLabel: t('list.open'),
-  }
+    viewTabs: await groupTabs("payroll", "/payroll/runs", { orgId }),
+    openLabel: t("list.open"),
+  };
 }
 
-const f = ref<PayRunsData>()
+const f = ref<PayRunsData>();
 
 export function payRunsSpec(data: PayRunsData): PageSpec {
   const newRun = {
-    widget: 'new-pay-run',
+    widget: "new-pay-run",
     props: {
       schedules: data.newRun.schedules,
       finalPayCandidates: data.newRun.finalPayCandidates,
       today: data.newRun.today,
     },
-  }
+  };
   return page({
-    route: '/payroll/runs',
-    layout: 'list',
+    route: "/payroll/runs",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
-          widget(newRun.widget, newRun.props, f('canRun')),
-          widget('module-home-tabs', { tabs: data.viewTabs }),
+          widget(newRun.widget, newRun.props, f("canRun")),
+          widget("module-home-tabs", { tabs: data.viewTabs }),
         ],
       }),
     ],
     body: [
-      widgetBlock('record-list-view', {
-        recordType: 'pay_run',
-        basePath: '/payroll/runs',
+      widgetBlock("record-list-view", {
+        recordType: "pay_run",
+        basePath: "/payroll/runs",
         sp: data.currentParams,
         emptyAction: data.canRun ? newRun : null,
       }),
     ],
-  })
+  });
 }

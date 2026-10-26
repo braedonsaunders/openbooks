@@ -1,5 +1,5 @@
-import { ModuleHomeTabs } from '@/components/module-home/tabs'
-import Link from 'next/link'
+import { ModuleHomeTabs } from "@/components/module-home/tabs";
+import Link from "next/link";
 
 /**
  * Fixed-assets adapters retained for stored PageSpecs plus the live
@@ -15,9 +15,9 @@ import Link from 'next/link'
 export function AssetsTabs({
   tabs,
 }: {
-  tabs: { key: string; href: string; label: string; active: boolean }[]
+  tabs: { key: string; href: string; label: string; active: boolean }[];
 }) {
-  return <ModuleHomeTabs tabs={tabs} />
+  return <ModuleHomeTabs tabs={tabs} />;
 }
 
 /** The documentation link in the register header actions. */
@@ -29,7 +29,7 @@ export function AssetsDocLink({ label }: { label: string }) {
     >
       {label}
     </Link>
-  )
+  );
 }
 
 /** Legacy stored-layout adapter; Equipment is now in ModuleHomeTabs. */
@@ -41,5 +41,5 @@ export function AssetsEquipmentLink({ label }: { label: string }) {
     >
       {label}
     </Link>
-  )
+  );
 }

@@ -16,55 +16,66 @@ export const POST = defineRoute({
   feature: "projects",
   body: createBody,
   handler: async ({ body, authz: gate }) => {
-  // Rate-book currency is Multi-currency configuration. Turning that
-  // switch off must refuse a new write; omitting currency keeps the
-  // org / subsidiary base so a card can still be created and stored books stay.
-  if (
-    body.currency !== undefined &&
-    !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
-  ) {
-    return NextResponse.json({ errorCode: "notFound" }, { status: 404 });
-  }
-  const org = (await db.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${gate.user.orgId}`, "objects"));
-  const currency =
-    body.currency !== undefined
-      ? String(body.currency).trim().toUpperCase()
-      : (org[0]?.base_currency ?? "");
-  if (typeof body.name !== "string" || !body.name.trim() || !/^[A-Z]{3}$/.test(currency))
-    return NextResponse.json({ errorCode: "save" }, { status: 422 });
-  const name = body.name.trim();
-  const code = `LAB-${Date.now().toString(36).toUpperCase()}`;
-  const today = await businessToday(gate.user.orgId);
-  try {
-    const id = await db.transaction(async (tx) => {
-      // A rate card writes a book and its first version in one unit: take the
-      // same advisory fence the Setup rate-book writer takes so a concurrent
-      // book edit for this organization cannot interleave with card creation.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${gate.user.orgId}`}, 0))`)
-      const book = (await tx.execute<{ id: string }>(sql`
+    // Rate-book currency is Multi-currency configuration. Turning that
+    // switch off must refuse a new write; omitting currency keeps the
+    // org / subsidiary base so a card can still be created and stored books stay.
+    if (
+      body.currency !== undefined &&
+      !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
+    ) {
+      return NextResponse.json({ errorCode: "notFound" }, { status: 404 });
+    }
+    const org = await db.execute<{ base_currency: string }>(
+      sql`
+    select base_currency from orgs where id = ${gate.user.orgId}`,
+      "objects",
+    );
+    const currency =
+      body.currency !== undefined
+        ? String(body.currency).trim().toUpperCase()
+        : (org[0]?.base_currency ?? "");
+    if (typeof body.name !== "string" || !body.name.trim() || !/^[A-Z]{3}$/.test(currency))
+      return NextResponse.json({ errorCode: "save" }, { status: 422 });
+    const name = body.name.trim();
+    const code = `LAB-${Date.now().toString(36).toUpperCase()}`;
+    const today = await businessToday(gate.user.orgId);
+    try {
+      const id = await db.transaction(async (tx) => {
+        // A rate card writes a book and its first version in one unit: take the
+        // same advisory fence the Setup rate-book writer takes so a concurrent
+        // book edit for this organization cannot interleave with card creation.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${gate.user.orgId}`}, 0))`,
+        );
+        const book = await tx.execute<{ id: string }>(
+          sql`
         insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
         values (${gate.user.orgId}, ${code}, ${name}, ${currency}, false, true, ${gate.user.id}, ${gate.user.id})
-        returning id`, "objects"));
-      const bookRow = book[0]!;
-      const version = (await tx.execute<{ id: string }>(sql`
+        returning id`,
+          "objects",
+        );
+        const bookRow = book[0]!;
+        const version = await tx.execute<{ id: string }>(
+          sql`
         insert into item_rate_versions (org_id, rate_book_id, effective_from, status, custom, created_by, updated_by)
         values (${gate.user.orgId}, ${bookRow.id}, ${today}, 'draft', '{}'::jsonb, ${gate.user.id}, ${gate.user.id})
-        returning id`, "objects"));
-      const versionRow = version[0]!;
-      await tx.execute(sql`
+        returning id`,
+          "objects",
+        );
+        const versionRow = version[0]!;
+        await tx.execute(sql`
         insert into labor_rate_version_policies (org_id, version_id, derivation_policy, created_by, updated_by)
         values (${gate.user.orgId}, ${versionRow.id}, 'explicit', ${gate.user.id}, ${gate.user.id})`);
-      await tx.execute(sql`
+        await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.user.orgId}, 'item_rate_versions', ${versionRow.id}, 'insert',
                 ${JSON.stringify({ rateBookId: bookRow.id, code, currency, effectiveFrom: today })}::jsonb,
                 ${gate.user.id})`);
-      return versionRow.id;
-    });
-    return NextResponse.json({ id }, { status: 201 });
-  } catch {
-    return NextResponse.json({ errorCode: "save" }, { status: 422 });
-  }
+        return versionRow.id;
+      });
+      return NextResponse.json({ id }, { status: 201 });
+    } catch {
+      return NextResponse.json({ errorCode: "save" }, { status: 422 });
+    }
   },
 });

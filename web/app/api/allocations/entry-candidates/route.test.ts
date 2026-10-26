@@ -8,7 +8,8 @@ import { allocationRuleVisible } from "@openbooks/engine/organization/allocation
 // rule onto the REAL engine predicate: the refusal decision under test is
 // production code, only the web-layer import is stubbed.
 const scopeVisibleKey = Symbol.for("openbooks.entry-candidates-scope-visible");
-(globalThis as typeof globalThis & Record<symbol, unknown>)[scopeVisibleKey] = allocationRuleVisible;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[scopeVisibleKey] =
+  allocationRuleVisible;
 
 // Boundary contract for GET /api/allocations/entry-candidates:
 // feature + permission gates, query validation, subsidiary scope, and the
@@ -104,7 +105,7 @@ const authzStub = `export async function guardPermission() {
 export async function getAuthz() { return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } } }
 export function guardRootSubsidiaryScope() { return null }
 export function guardUnrestrictedScope() { return null }
-`
+`;
 
 stubModules({
   navigation: false,
@@ -293,12 +294,12 @@ test("line context returns matched candidates most-specific-first with a recomme
   assert.equal(res.status, 200);
   const body = (await res.json()) as {
     rules: {
-      ruleId: string
-      ruleKey: string
-      ruleName: string
-      applyPolicy: string
-      versionId: string
-      recommended: boolean
+      ruleId: string;
+      ruleKey: string;
+      ruleName: string;
+      applyPolicy: string;
+      versionId: string;
+      recommended: boolean;
     }[];
   };
   assert.deepEqual(
@@ -333,7 +334,10 @@ test("the policy filter narrows a line context to automatic rules for apply-all"
 
 test("header context without a line returns every rule in effect", async () => {
   reset();
-  state.rules = [cannedRule("auto-rule", { policy: "automatic" }), cannedRule("manual-rule", { policy: "manual" })];
+  state.rules = [
+    cannedRule("auto-rule", { policy: "automatic" }),
+    cannedRule("manual-rule", { policy: "manual" }),
+  ];
   const res = await get("?documentKind=bill&documentDate=2026-09-01");
   assert.equal(res.status, 200);
   const body = (await res.json()) as { rules: { ruleKey: string }[] };
@@ -354,7 +358,10 @@ test("the default document date is the org business day, passed through as asOf"
     body.rules.map((r) => r.ruleKey),
     ["auto-rule"],
   );
-  const seen = state as RouteState & { lastBusinessTodayOrg?: string; lastListRequest?: { asOf?: string } };
+  const seen = state as RouteState & {
+    lastBusinessTodayOrg?: string;
+    lastListRequest?: { asOf?: string };
+  };
   assert.equal(seen.lastBusinessTodayOrg, ORG_ID);
   assert.equal(seen.lastListRequest?.asOf, "2026-07-15");
 });

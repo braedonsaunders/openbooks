@@ -6,10 +6,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  SubcontractError,
-  updateVendorPayApplicationLines,
-} from "./subcontracts.ts";
+import { SubcontractError, updateVendorPayApplicationLines } from "./subcontracts.ts";
 
 const SOV_A = "00000000-0000-4000-8000-00000000c001";
 const SOV_B = "00000000-0000-4000-8000-00000000c002";
@@ -43,7 +40,10 @@ test("missing, foreign-shaped, and empty line lists refuse without touching the 
 });
 
 test("a non-object entry refuses naming its position", async () => {
-  assert.match(await refusal({ ...base, lines: ["nope"] }), /line 1: a pay-application line object is required/);
+  assert.match(
+    await refusal({ ...base, lines: ["nope"] }),
+    /line 1: a pay-application line object is required/,
+  );
 });
 
 test("a line without a uuid identity refuses naming its position", async () => {

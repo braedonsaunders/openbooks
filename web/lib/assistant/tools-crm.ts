@@ -10,17 +10,8 @@ import {
   startOfMonth,
 } from "@openbooks/engine/platform/business-date/module";
 import { isFeatureEnabled } from "../features";
-import {
-  calculateForecast,
-  loadActivity,
-  loadCrmAccount,
-  loadOpportunity,
-} from "../crm";
-import {
-  crmActivityScope,
-  crmOpportunityScope,
-  crmSharedScope,
-} from "../crm-scope";
+import { calculateForecast, loadActivity, loadCrmAccount, loadOpportunity } from "../crm";
+import { crmActivityScope, crmOpportunityScope, crmSharedScope } from "../crm-scope";
 import { type AssistantToolDef, type ToolResult, truncateText } from "./types";
 import { dateInput, uuidInput, numberValue, capList, decimalText } from "./tools-shared";
 
@@ -56,12 +47,25 @@ const OPPORTUNITY_ROW = sql`
     left join users u on u.id = o.owner_user_id`;
 
 const searchOpportunitiesSchema = z.object({
-  query: z.string().max(100).optional().describe("Substring over title, opportunity number, or customer name"),
+  query: z
+    .string()
+    .max(100)
+    .optional()
+    .describe("Substring over title, opportunity number, or customer name"),
   statusId: uuidInput.optional().describe("One opportunity status id; omit for every status"),
   ownerUserId: uuidInput.optional().describe("Owning user id; omit for every owner"),
   salesTeamId: uuidInput.optional().describe("Sales team id; omit for every team"),
-  openOnly: z.boolean().optional().describe("True = open pipeline only (default false = open and closed)"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); aggregates always cover ALL matches"),
+  openOnly: z
+    .boolean()
+    .optional()
+    .describe("True = open pipeline only (default false = open and closed)"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); aggregates always cover ALL matches"),
 });
 
 type OpportunityFilters = {
@@ -123,13 +127,17 @@ const searchOpportunities: AssistantToolDef = {
     const filters = opportunityFilters(a);
     const scope = crmOpportunityScope(authz.allowedSubsidiaryIds);
     const [page, totals, stages] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         ${OPPORTUNITY_ROW}
          where o.org_id = ${authz.user.orgId}${filters}${scope}
          order by s.is_closed, o.expected_close_date nulls last, o.created_at desc
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select count(*)::int as count, o.currency,
                coalesce(sum(o.projected_amount), 0)::text as projected,
                coalesce(sum(o.weighted_amount), 0)::text as weighted
@@ -138,8 +146,11 @@ const searchOpportunities: AssistantToolDef = {
           left join parties p on p.id = o.party_id and p.org_id = o.org_id
          where o.org_id = ${authz.user.orgId}${filters}${scope}
          group by o.currency order by o.currency
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select s.name as status_name, s.is_closed, s.is_won, o.currency,
                count(*)::int as count,
                coalesce(sum(o.projected_amount), 0)::text as projected,
@@ -150,7 +161,9 @@ const searchOpportunities: AssistantToolDef = {
          where o.org_id = ${authz.user.orgId}${filters}${scope}
          group by s.name, s.is_closed, s.is_won, o.currency
          order by s.is_closed, s.name, o.currency
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const capped = capList(page.map(opportunityRow));
     return {
@@ -188,13 +201,19 @@ const getOpportunity: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["crm.opportunities.read"] },
   feature: "crm",
-  inputSchema: z.object({ opportunityId: uuidInput.describe("Opportunity id from search_opportunities") }),
+  inputSchema: z.object({
+    opportunityId: uuidInput.describe("Opportunity id from search_opportunities"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     const a = raw as { opportunityId: string };
     // loadOpportunity is the drawer/route loader: a record outside the
     // caller's subsidiary scope reads as missing, exactly like the route.
-    const loaded = await loadOpportunity(a.opportunityId, authz.user.orgId, authz.allowedSubsidiaryIds);
+    const loaded = await loadOpportunity(
+      a.opportunityId,
+      authz.user.orgId,
+      authz.allowedSubsidiaryIds,
+    );
     if (!loaded) return { ok: false, error: "opportunity_not_found" };
     const head = loaded.opportunity as Record<string, unknown>;
     const lines = capList(
@@ -297,9 +316,18 @@ const getOpportunity: AssistantToolDef = {
 
 const searchCrmAccountsSchema = z.object({
   query: z.string().max(100).optional().describe("Substring over the party display name"),
-  stage: z.enum(["lead", "prospect", "customer"]).optional().describe("Lifecycle stage; omit for every stage"),
+  stage: z
+    .enum(["lead", "prospect", "customer"])
+    .optional()
+    .describe("Lifecycle stage; omit for every stage"),
   ownerUserId: uuidInput.optional().describe("Owning user id; omit for every owner"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); aggregates always cover ALL matches"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); aggregates always cover ALL matches"),
 });
 
 const searchCrmAccounts: AssistantToolDef = {
@@ -325,7 +353,8 @@ const searchCrmAccounts: AssistantToolDef = {
     );
     const scope = crmSharedScope(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds);
     const [page, stages] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select cp.party_id, p.display_name, cp.lifecycle_stage,
                s.name as status_name, s.is_qualified,
                u.name as owner_name, t.name as territory_name, ls.name as lead_source_name,
@@ -339,14 +368,19 @@ const searchCrmAccounts: AssistantToolDef = {
          where cp.org_id = ${authz.user.orgId}${filters}${scope}
          order by p.display_name
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select cp.lifecycle_stage, count(*)::int as count
           from crm_account_profiles cp
           join parties p on p.id = cp.party_id and p.org_id = cp.org_id
          where cp.org_id = ${authz.user.orgId}${filters}${scope}
          group by cp.lifecycle_stage order by cp.lifecycle_stage
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const capped = capList(
       page.map((r) => ({
@@ -366,7 +400,9 @@ const searchCrmAccounts: AssistantToolDef = {
     );
     // One account list, segmented by lifecycle stage: the stage rides in as
     // the `status` chip the list already reads, not as a separate route.
-    const stageHref = a.stage ? `/entities/customers?status=${a.stage}` : "/entities/customers?status=all";
+    const stageHref = a.stage
+      ? `/entities/customers?status=${a.stage}`
+      : "/entities/customers?status=all";
     return {
       ok: true,
       data: {
@@ -374,7 +410,10 @@ const searchCrmAccounts: AssistantToolDef = {
         total: stages.reduce((n, r) => n + Number(r.count ?? 0), 0),
         truncated: capped.truncated,
         accounts: capped.items,
-        byStage: stages.map((r) => ({ lifecycleStage: r.lifecycle_stage, count: Number(r.count ?? 0) })),
+        byStage: stages.map((r) => ({
+          lifecycleStage: r.lifecycle_stage,
+          count: Number(r.count ?? 0),
+        })),
         href: stageHref,
       },
     };
@@ -442,7 +481,8 @@ const getCrmAccount: AssistantToolDef = {
           leadSourceName: profile.lead_source_name,
           industry: profile.industry,
           category: profile.category,
-          annualRevenue: profile.annual_revenue == null ? null : decimalText(profile.annual_revenue),
+          annualRevenue:
+            profile.annual_revenue == null ? null : decimalText(profile.annual_revenue),
           employeeCount: profile.employee_count,
           qualificationScore: profile.qualification_score,
           nextActionAt: profile.next_action_at,
@@ -470,7 +510,13 @@ const searchCrmActivitiesSchema = z.object({
   status: z.string().max(40).optional().describe("Activity status; omit for every status"),
   assignedUserId: uuidInput.optional().describe("Assigned user id; omit for every assignee"),
   overdueOnly: z.boolean().optional().describe("True = due before today and not completed"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); aggregates always cover ALL matches"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); aggregates always cover ALL matches"),
 });
 
 const searchCrmActivities: AssistantToolDef = {
@@ -500,7 +546,8 @@ const searchCrmActivities: AssistantToolDef = {
     );
     const scope = crmActivityScope(authz.allowedSubsidiaryIds);
     const [page, statuses] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select a.id, a.kind, a.status, a.subject, a.priority,
                a.starts_at, a.due_at, a.completed_at,
                ou.name as owner_name, au.name as assigned_name
@@ -510,13 +557,18 @@ const searchCrmActivities: AssistantToolDef = {
          where a.org_id = ${authz.user.orgId}${filters}${scope}
          order by coalesce(a.starts_at, a.due_at, a.created_at) desc
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select a.status, count(*)::int as count
           from crm_activities a
          where a.org_id = ${authz.user.orgId}${filters}${scope}
          group by a.status order by a.status
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const capped = capList(
       page.map((r) => ({
@@ -553,7 +605,9 @@ const getCrmActivity: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["crm.activities.read"] },
   feature: "crm",
-  inputSchema: z.object({ activityId: uuidInput.describe("Activity id from search_crm_activities") }),
+  inputSchema: z.object({
+    activityId: uuidInput.describe("Activity id from search_crm_activities"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     const a = raw as { activityId: string };
@@ -590,8 +644,12 @@ const getCrmActivity: AssistantToolDef = {
 };
 
 const crmForecastSchema = z.object({
-  periodStart: dateInput.optional().describe("Window start; defaults to the first of the current month"),
-  periodEnd: dateInput.optional().describe("Window end; defaults to the end of the quarter starting this month"),
+  periodStart: dateInput
+    .optional()
+    .describe("Window start; defaults to the first of the current month"),
+  periodEnd: dateInput
+    .optional()
+    .describe("Window end; defaults to the end of the quarter starting this month"),
   ownerUserId: uuidInput.optional().describe("Owning user id; omit for every owner"),
   salesTeamId: uuidInput.optional().describe("Sales team id; omit for every team"),
 });
@@ -611,7 +669,11 @@ const crmForecast: AssistantToolDef = {
     const today = await businessToday(authz.user.orgId);
     const periodStart = a.periodStart ?? startOfMonth(today);
     const periodEnd = a.periodEnd ?? addCalendarDays(addMonthsStart(startOfMonth(today), 3), -1);
-    if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) {
+    if (
+      !isIsoCalendarDate(periodStart) ||
+      !isIsoCalendarDate(periodEnd) ||
+      periodEnd < periodStart
+    ) {
       return { ok: false, error: "invalid_forecast_period" };
     }
     // calculateForecast is the route's rollup: exact NUMERIC arithmetic with
@@ -625,23 +687,29 @@ const crmForecast: AssistantToolDef = {
         salesTeamId: a.salesTeamId ?? null,
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       }),
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select q.*, u.display_name as owner_name, t.name as sales_team_name from crm_sales_quotas q
         left join parties u on u.id = q.employee_id and u.org_id=q.org_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
         where q.org_id = ${authz.user.orgId} and q.lifecycle='approved' and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
           ${a.ownerUserId ? sql`and q.employee_id = (select party_id from users where org_id=q.org_id and id=${a.ownerUserId})` : sql``}
           ${a.salesTeamId ? sql`and q.sales_team_id = ${a.salesTeamId}` : sql``}
-        order by q.period_start, coalesce(u.display_name, t.name)`, "objects"),
+        order by q.period_start, coalesce(u.display_name, t.name)`,
+        "objects",
+      ),
       // Stored snapshots aggregate the whole org without entity lineage, so
       // restricted callers never see them — the same boundary as the route.
       authz.allowedSubsidiaryIds === null
-        ? db.execute<Record<string, unknown>>(sql`
+        ? db.execute<Record<string, unknown>>(
+            sql`
           select s.*, u.name as owner_name, t.name as sales_team_name from crm_forecast_snapshots s
           left join users u on u.id = s.owner_user_id left join crm_sales_teams t on t.id = s.sales_team_id and t.org_id = s.org_id
           where s.org_id = ${authz.user.orgId} and s.period_start = ${periodStart}::date and s.period_end = ${periodEnd}::date
             ${a.ownerUserId ? sql`and s.owner_user_id = ${a.ownerUserId}` : sql``}
             ${a.salesTeamId ? sql`and s.sales_team_id = ${a.salesTeamId}` : sql``}
-          order by s.as_of desc limit 50`, "objects")
+          order by s.as_of desc limit 50`,
+            "objects",
+          )
         : Promise.resolve([] as Record<string, unknown>[]),
     ]);
     return {

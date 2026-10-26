@@ -64,10 +64,13 @@ export async function nextFreeEntryNumber(
   for (let generation = 1; generation <= 200; generation += 1) {
     const candidate = generation === 1 ? preferred : `${preferred}-${generation}`;
     await lockEntryNumber(tx, orgId, candidate);
-    const taken = await tx.execute(sql`
+    const taken = await tx.execute(
+      sql`
       select 1 from journal_entries
        where org_id = ${orgId} and entry_number = ${candidate}
-       limit 1`, "objects");
+       limit 1`,
+      "objects",
+    );
     if (taken.length === 0) return candidate;
   }
   throw new EntryNumberError(
@@ -103,10 +106,13 @@ export async function allocateEntryNumber(
 ): Promise<string> {
   const holder = async (candidate: string): Promise<string | null | undefined> => {
     await lockEntryNumber(tx, orgId, candidate);
-    const found = await tx.execute<{ source_document_id: string | null }>(sql`
+    const found = await tx.execute<{ source_document_id: string | null }>(
+      sql`
       select source_document_id from journal_entries
        where org_id = ${orgId} and entry_number = ${candidate}
-       limit 1`, "objects");
+       limit 1`,
+      "objects",
+    );
     return found.length === 0 ? undefined : found[0]!.source_document_id;
   };
 

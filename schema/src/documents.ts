@@ -18,14 +18,7 @@ import {
 import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 import { accounts } from "./coa";
-import {
-  accountingPeriods,
-  classes,
-  departments,
-  locations,
-  paymentCards,
-  projects,
-} from "./core";
+import { accountingPeriods, classes, departments, locations, paymentCards, projects } from "./core";
 import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
 import { journalEntries } from "./ledger";
@@ -117,7 +110,9 @@ export const documents = pgTable(
     subsidiaryId: uuid("subsidiary_id"),
     documentDate: date("document_date").notNull(),
     /** Journal instructions enter approval with the original document. */
-    journalMode: text("journal_mode", { enum: ["monetary", "statistical", "currency_adjustment"] }).notNull().default("monetary"),
+    journalMode: text("journal_mode", { enum: ["monetary", "statistical", "currency_adjustment"] })
+      .notNull()
+      .default("monetary"),
     journalReverseOn: date("journal_reverse_on"),
     journalFxRateExplicit: boolean("journal_fx_rate_explicit").notNull().default(false),
     postingDate: date("posting_date"),
@@ -266,7 +261,12 @@ export const documents = pgTable(
      * a kind's recent date window; both read this order directly instead of
      * sorting every document of the kind.
      */
-    index("documents_org_kind_document_date").on(t.orgId, t.kind, t.documentDate.desc().nullsLast(), t.id.desc()),
+    index("documents_org_kind_document_date").on(
+      t.orgId,
+      t.kind,
+      t.documentDate.desc().nullsLast(),
+      t.id.desc(),
+    ),
     index("documents_party").on(t.partyId),
     /**
      * "Does this party have any payable document?" — the cash cockpit asks it
@@ -275,7 +275,9 @@ export const documents = pgTable(
      */
     index("documents_org_party_payable")
       .on(t.orgId, t.partyId)
-      .where(sql`${t.voidedAt} is null and ${t.kind} in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')`),
+      .where(
+        sql`${t.voidedAt} is null and ${t.kind} in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')`,
+      ),
     index("documents_project").on(t.projectId),
     // Channel order reference: partial, so the NULL
     // channel on every native document is unconstrained.
@@ -342,10 +344,7 @@ export const documents = pgTable(
     ),
     // Product-owned Field Ticket state is relational. Reserve its old JSON key
     // so no importer or API can create a parallel source of truth.
-    check(
-      "documents_no_field_ticket_custom",
-      sql`not (${t.custom} ? 'fieldTicket')`,
-    ),
+    check("documents_no_field_ticket_custom", sql`not (${t.custom} ? 'fieldTicket')`),
     // External-reference dedupe: the pair is all or
     // nothing, and neither half may be blank.
     check(
@@ -437,7 +436,9 @@ export const documentLines = pgTable(
      * RCT): labour, materials the subcontractor supplied, or a supply
      * outside the scheme. Unset lines are classified from the item.
      */
-    withholdingTreatment: text("withholding_treatment", { enum: ["labour", "materials", "excluded"] }),
+    withholdingTreatment: text("withholding_treatment", {
+      enum: ["labour", "materials", "excluded"],
+    }),
     withholdingMaterialsCost: money("withholding_materials_cost"),
     /**
      * Marketplace facilitator collecting this line's tax (its name in
@@ -564,12 +565,16 @@ export const documentLines = pgTable(
     // These are commercial quantities, not posted money amounts: preserve the
     // same eight decimal places as quantity so partial fulfillment and billing
     // cannot silently truncate a valid order line.
-    quantityFulfilled: numeric("quantity_fulfilled", { precision: 28, scale: 8 }).notNull().default("0"),
+    quantityFulfilled: numeric("quantity_fulfilled", { precision: 28, scale: 8 })
+      .notNull()
+      .default("0"),
     quantityBilled: numeric("quantity_billed", { precision: 28, scale: 8 }).notNull().default("0"),
     /** Ordered quantity cancelled and no longer owed; the sum of the line's
      *  order_line_cancellations rows. Open quantity is quantity −
      *  quantityFulfilled − quantityCancelled. */
-    quantityCancelled: numeric("quantity_cancelled", { precision: 28, scale: 8 }).notNull().default("0"),
+    quantityCancelled: numeric("quantity_cancelled", { precision: 28, scale: 8 })
+      .notNull()
+      .default("0"),
 
     /** Stock location for an inventory item line — where a bill receives stock
      *  or an invoice/shipment issues it. Null lines fall back to the single
@@ -801,7 +806,17 @@ export const documentLinks = pgTable(
     fromDocumentId: uuid("from_document_id").notNull(),
     toDocumentId: uuid("to_document_id").notNull(),
     linkType: text("link_type", {
-      enum: ["created_from", "fulfills", "bills", "pays", "reverses", "renews", "reserves", "ships", "corrects"],
+      enum: [
+        "created_from",
+        "fulfills",
+        "bills",
+        "pays",
+        "reverses",
+        "renews",
+        "reserves",
+        "ships",
+        "corrects",
+      ],
     }).notNull(),
     /** Mandatory, immutable controller evidence for a correction edge. */
     reason: text("reason"),
@@ -895,7 +910,19 @@ export const items = pgTable(
     id: id(),
     orgId: orgRef(),
     kind: text("kind", {
-      enum: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount", "gift_card"],
+      enum: [
+        "service",
+        "non_inventory",
+        "inventory",
+        "assembly",
+        "kit",
+        "other_charge",
+        "equipment_charge",
+        "labor",
+        "absence",
+        "discount",
+        "gift_card",
+      ],
     }).notNull(),
     code: text("code"),
     name: text("name").notNull(),
@@ -981,10 +1008,14 @@ export const overheadRates = pgTable(
     orgId: orgRef(),
     departmentId: uuid("department_id"),
     category: text("category"), // Equipment / Indirect Labour / Consumables…
-    method: text("method", { enum: ["three_year_average", "live", "standard"] }).notNull().default("live"),
+    method: text("method", { enum: ["three_year_average", "live", "standard"] })
+      .notNull()
+      .default("live"),
     /** How to read `rate`: per_hour = $/labor-hour, percent = % of labor
      *  cost, per_unit = $/unit, per_machine_hour = $/machine-hour. */
-    rateKind: text("rate_kind", { enum: ["per_hour", "percent", "per_unit", "per_machine_hour"] }).notNull().default("per_hour"),
+    rateKind: text("rate_kind", { enum: ["per_hour", "percent", "per_unit", "per_machine_hour"] })
+      .notNull()
+      .default("per_hour"),
     /** The rate value — $/hour when rateKind=per_hour, a percentage when percent. */
     ratePercent: money("rate_percent").notNull(),
     /** Inclusive validity window. Windows may not overlap within one
@@ -996,7 +1027,10 @@ export const overheadRates = pgTable(
   (t) => [
     // The stored job-costing bases: the two historical kinds plus the two
     // manufacturing kinds. Any other kind is refused at storage.
-    check("overhead_rates_rate_kind_allowed", sql`${t.rateKind} in ('per_hour', 'percent', 'per_unit', 'per_machine_hour')`),
+    check(
+      "overhead_rates_rate_kind_allowed",
+      sql`${t.rateKind} in ('per_hour', 'percent', 'per_unit', 'per_machine_hour')`,
+    ),
   ],
 );
 

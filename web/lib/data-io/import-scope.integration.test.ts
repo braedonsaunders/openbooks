@@ -38,8 +38,11 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith("/lib/authz") && (context.parentURL?.includes("/api/data/import/") ||
-        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")))) {
+    if (
+      specifier.endsWith("/lib/authz") &&
+      (context.parentURL?.includes("/api/data/import/") ||
+        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -68,7 +71,15 @@ const carryIn = (mode: "preview" | "commit", employee: string) => ({
   mode,
   ...(mode === "commit" ? { idempotencyKey: randomUUID() } : {}),
   resource: "payroll-opening-balances",
-  rows: [{ employee, taxYear: "2025", pensionableYtd: "5000.00", insurableYtd: "5000.00", cppYtd: "100.00" }],
+  rows: [
+    {
+      employee,
+      taxYear: "2025",
+      pensionableYtd: "5000.00",
+      insurableYtd: "5000.00",
+      cppYtd: "100.00",
+    },
+  ],
   mapping: {
     employee: "employee",
     taxYear: "taxYear",
@@ -94,13 +105,27 @@ test(
       });
       const gate = (allowed: Set<string> | null) => ({
         user: { roles: [], orgId: fx.orgId, id: fx.actorId },
-        permissions: new Set(["data.import", "payroll.manage", "admin.setup.manage", "parties.manage"]),
+        permissions: new Set([
+          "data.import",
+          "payroll.manage",
+          "admin.setup.manage",
+          "parties.manage",
+        ]),
         allowedSubsidiaryIds: allowed,
       });
       const carryInCount = async () =>
-        Number((await withOrgContext(fx.orgId, () => db.execute<{ n: string }>(sql`
+        Number(
+          (
+            await withOrgContext(fx.orgId, () =>
+              db.execute<{ n: string }>(
+                sql`
           select count(*)::text as n from payroll_opening_balances
-           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`, "objects")))[0]!.n);
+           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`,
+                "objects",
+              ),
+            )
+          )[0]!.n,
+        );
       // The mocked session gate carries no connection scope; route calls run
       // under the org, as the middleware provides in production.
       const send = (body: Record<string, unknown>) => withOrgContext(fx.orgId, () => post(body));

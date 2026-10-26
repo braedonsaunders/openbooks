@@ -2,21 +2,26 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import ExcelJS from "exceljs";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
 const root = new URL("./", import.meta.url);
 const authState: { user: import("./auth").SessionUser | null } = { user: null };
 Object.assign(globalThis, { __definitionExportCalendarState: authState });
 
-const intlCoreUrl=import.meta.resolve("use-intl/core");
-const englishMessagesUrl=new URL("../messages/en/index.ts",import.meta.url).href;
-stubModules({navigation:false,authz:false,features:false,intl:`
+const intlCoreUrl = import.meta.resolve("use-intl/core");
+const englishMessagesUrl = new URL("../messages/en/index.ts", import.meta.url).href;
+stubModules({
+  navigation: false,
+  authz: false,
+  features: false,
+  intl: `
   import {createTranslator} from ${JSON.stringify(intlCoreUrl)};
   import messages from ${JSON.stringify(englishMessagesUrl)};
   export async function getTranslations(input){return createTranslator({locale:"en",messages,namespace:typeof input==="string"?input:input?.namespace})}
   export async function getLocale(){return "en"}
   export async function getMessages(){return messages}
-`});
+`,
+});
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -30,7 +35,10 @@ registerHooks({
         url: `data:text/javascript,export * from '${new URL("auth.ts", root).href}'; export async function currentUser() { return globalThis.__definitionExportCalendarState.user }`,
       };
     }
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/definitions/")) {
+    if (
+      specifier.endsWith("/lib/authz") &&
+      context.parentURL?.includes("/api/reports/definitions/")
+    ) {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export async function guardPermission() { return { user: globalThis.__definitionExportCalendarState.user, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } }`,
@@ -40,16 +48,15 @@ registerHooks({
   },
 });
 
-const { db, withBypassContext, withOrgTransaction } = await import(
-  "@openbooks/engine/platform/db"
-);
+const { db, withBypassContext, withOrgTransaction } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { withSimClock } = await import("@openbooks/engine/testing/platform/clock");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { builtInReportDefinitionId, executeReport, loadReportDefinition } = await import("./custom-reports.ts");
-const { salesOrderLineRemainders } = await import("@openbooks/engine/records/order-line-remainders");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { builtInReportDefinitionId, executeReport, loadReportDefinition } =
+  await import("./custom-reports.ts");
+const { salesOrderLineRemainders } =
+  await import("@openbooks/engine/records/order-line-remainders");
 const { toQuantityUnits } = await import("./order-cycle-math.ts");
 const { withReportAuthz } = await import("./report-execution-context.ts");
 const { GET } = await import("../app/api/reports/definitions/[id]/export/route.ts");
@@ -130,10 +137,9 @@ function run<T>(orgId: string, authz: import("./authz").Authz, action: () => Pro
 }
 
 function exportRequest(id: string, query: string) {
-  return GET(
-    new Request(`http://reports.test/api/reports/definitions/${id}/export?${query}`),
-    { params: Promise.resolve({ id }) },
-  );
+  return GET(new Request(`http://reports.test/api/reports/definitions/${id}/export?${query}`), {
+    params: Promise.resolve({ id }),
+  });
 }
 
 test("saved-definition export applies its built-in URL filter to real rows", async () => {
@@ -155,16 +161,18 @@ test("saved-definition export applies its built-in URL filter to real rows", asy
 test("saved-definition PDF and XLSX artifacts use the organization business day", async () => {
   const fx = await fixture();
   try {
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{timeZone}',
         to_jsonb('America/Los_Angeles'::text), true)
        where id = ${fx.org.orgId}
-    `));
+    `),
+    );
 
     const pdf = await withSimClock(BUSINESS_INSTANT, () =>
       run(fx.org.orgId, fx.authz, () => exportRequest(fx.definitionId, "format=pdf")),
     );
-    assert.equal(pdf.status, 200, pdf.status===200?undefined:await pdf.text());
+    assert.equal(pdf.status, 200, pdf.status === 200 ? undefined : await pdf.text());
     assert.match(pdf.headers.get("content-disposition") ?? "", new RegExp(BUSINESS_DAY));
     assert.match(pdf.headers.get("content-type") ?? "", /application\/pdf/);
 
@@ -187,7 +195,11 @@ test("the backorders built-in states the engine open quantity line by line", asy
   const fx = await fixture();
   try {
     const orderId = crypto.randomUUID();
-    const [partial, shipped, service] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    const [partial, shipped, service] = [
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+    ];
     await withBypassContext(async () => {
       await db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{features}', settings->'features'
@@ -203,21 +215,36 @@ test("the backorders built-in states the engine open quantity line by line", asy
         values (${partial}, ${fx.org.orgId}, ${orderId}, 1, ${fx.org.items.fifo}, '10', '3', '2', '1', '10', ${fx.org.stockLocationId}),
                (${shipped}, ${fx.org.orgId}, ${orderId}, 2, ${fx.org.items.fifo}, '5', '5', '0', '1', '5', ${fx.org.stockLocationId}),
                (${service}, ${fx.org.orgId}, ${orderId}, 3, ${fx.org.items.service}, '4', '0', '0', '1', '4', null)`);
-      await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${fx.org.orgId}`);
+      await db.execute(
+        sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${fx.org.orgId}`,
+      );
     });
-    const definitionId = await withBypassContext(() => builtInReportDefinitionId(fx.org.orgId, "backorders"));
+    const definitionId = await withBypassContext(() =>
+      builtInReportDefinitionId(fx.org.orgId, "backorders"),
+    );
     assert.ok(definitionId, "the backorders definition is available for this organization");
     const report = await run(fx.org.orgId, fx.authz, async () => {
       const definition = await loadReportDefinition(fx.org.orgId, definitionId);
       assert.ok(definition?.query);
       const columns = [...definition.query.columns!, "line_id"];
-      const result = await executeReport(fx.org.orgId, { ...definition.query, columns }, undefined, {});
+      const result = await executeReport(
+        fx.org.orgId,
+        { ...definition.query, columns },
+        undefined,
+        {},
+      );
       const [open, line] = [columns.indexOf("open_quantity"), columns.indexOf("line_id")];
-      return result.groups.flatMap((group) => group.rows.map((row) => [String(row[line]), toQuantityUnits(String(row[open]))]));
+      return result.groups.flatMap((group) =>
+        group.rows.map((row) => [String(row[line]), toQuantityUnits(String(row[open]))]),
+      );
     });
     const engine = await run(fx.org.orgId, fx.authz, () =>
-      salesOrderLineRemainders(db, fx.org.orgId, { documentId: orderId, openOnly: true }));
-    assert.deepEqual(report, engine.map((row) => [row.lineId, toQuantityUnits(row.open)]));
+      salesOrderLineRemainders(db, fx.org.orgId, { documentId: orderId, openOnly: true }),
+    );
+    assert.deepEqual(
+      report,
+      engine.map((row) => [row.lineId, toQuantityUnits(row.open)]),
+    );
     assert.deepEqual(report, [[partial, toQuantityUnits("5")]]);
   } finally {
     await release(fx);

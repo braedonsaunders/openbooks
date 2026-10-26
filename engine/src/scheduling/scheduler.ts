@@ -126,14 +126,19 @@ function asDbDate(value: Date | string): Date {
  * report false instead of silently dropping the logs. Exported for the
  * durability tests; production callers are the dispatch paths above.
  */
-export async function appendOccurrenceEvents(id: string, orgId: string, events: OccurrenceEvent[]): Promise<boolean> {
+export async function appendOccurrenceEvents(
+  id: string,
+  orgId: string,
+  events: OccurrenceEvent[],
+): Promise<boolean> {
   if (events.length === 0) return true;
   const appended = await withOrgContext(orgId, () =>
     db.execute<never>(sql`
       update script_runs
          set logs = logs || ${JSON.stringify(events)}::jsonb
        where id = ${id} and org_id = ${orgId}
-    `));
+    `),
+  );
   return (appended.rowCount ?? 0) === 1;
 }
 
@@ -153,7 +158,8 @@ async function finalizeOccurrence(
              duration_ms = ${durationMs},
              logs = logs || ${JSON.stringify([event])}::jsonb
        where id = ${id} and status in ('queued', 'dispatch_retry')
-    `));
+    `),
+  );
   return (finalized.rowCount ?? 0) === 1;
 }
 
@@ -176,7 +182,10 @@ async function finalizeOccurrence(
  * The scheduled tick stays on the row as the occurrence identity
  * (occurrenceKey) and the `scheduledFor` claim event.
  */
-export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): Promise<ClaimedOccurrence | null> {
+export async function claimDueScriptOccurrence(
+  s: DueScript,
+  now = new Date(),
+): Promise<ClaimedOccurrence | null> {
   let next: Date;
   try {
     next = computeScheduledScriptNextRunAt(s.cron, asDbDate(s.nextRunAt));
@@ -201,13 +210,16 @@ export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): 
     // cursor would write a ledger row without moving past the tick, so every
     // later pass would reclaim it again. Stay due and loud instead — the
     // occurrence is lost to no one and skipped by no one.
-    console.error(`[scheduler] script ${s.id} cron did not advance past its claimed tick; leaving it due`);
+    console.error(
+      `[scheduler] script ${s.id} cron did not advance past its claimed tick; leaving it due`,
+    );
     return null;
   }
   const occurrenceKey = scriptOccurrenceKey(s.id, s.nextRunAt);
   const scheduledForIso = asDbDate(s.nextRunAt).toISOString();
   const claimed = await withOrgContext(s.orgId, () =>
-    db.execute<{ id: string }>(sql`
+    db.execute<{ id: string }>(
+      sql`
       with advanced as (
         update user_scripts
            set next_run_at = ${next}
@@ -224,7 +236,10 @@ export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): 
              ${now}
       from advanced
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   const row = claimed[0];
   if (!row) return null;
   return { id: row.id, orgId: s.orgId, scriptId: s.id, occurrenceKey, nextRunAt: next };
@@ -251,10 +266,7 @@ export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): 
  * A terminal outcome (or a final-attempt host failure) is mirrored
  * onto the ledger row; an earlier host failure stays open for recovery.
  */
-async function dispatchScriptOccurrence(
-  occ: ClaimedOccurrence,
-  attempt: number,
-): Promise<void> {
+async function dispatchScriptOccurrence(occ: ClaimedOccurrence, attempt: number): Promise<void> {
   const jobId = attempt === 1 ? occ.occurrenceKey : `${occ.occurrenceKey}:r${attempt}`;
   let enqueued = false;
   try {
@@ -271,12 +283,18 @@ async function dispatchScriptOccurrence(
     );
     enqueued = true;
   } catch (enqueueError) {
-    const message = (enqueueError instanceof Error ? enqueueError.message : String(enqueueError)).slice(0, 1000);
+    const message = (
+      enqueueError instanceof Error ? enqueueError.message : String(enqueueError)
+    ).slice(0, 1000);
     console.error(
       `[scheduler] script ${occ.scriptId} queue unavailable (${message}) — running occurrence inline under the same identity`,
     );
     recordOutboxAttempt("scheduler_outbox", "scheduled", "failed", 0);
-    if (!(await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "dispatch_failed", error: message, attempt }]))) {
+    if (
+      !(await appendOccurrenceEvents(occ.id, occ.orgId, [
+        { event: "dispatch_failed", error: message, attempt },
+      ]))
+    ) {
       console.warn(
         `[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} left its ledger row before the dispatch-failure event landed`,
       );
@@ -286,7 +304,11 @@ async function dispatchScriptOccurrence(
     // A false return means the ledger row moved on concurrently (recovered
     // or completed while this dispatch was in flight) — name it instead of
     // dropping the event silently.
-    if (!(await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "enqueued", job: jobId, attempt }]))) {
+    if (
+      !(await appendOccurrenceEvents(occ.id, occ.orgId, [
+        { event: "enqueued", job: jobId, attempt },
+      ]))
+    ) {
       console.warn(
         `[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} left its ledger row before the enqueue event landed`,
       );
@@ -294,17 +316,19 @@ async function dispatchScriptOccurrence(
     return;
   }
   try {
-    const outcome = await withOrgContext(occ.orgId, () => runScheduledScript(occ.scriptId, occ.orgId, {
-      // The tick's own stable identity: a recovery retry of this occurrence
-      // reuses the run's journal idempotency namespace, and the run links
-      // back to this ledger row so recovery absorbs it one-to-one.
-      idempotencyScope: occ.occurrenceKey,
-      occurrenceRunId: occ.id,
-    }));
+    const outcome = await withOrgContext(occ.orgId, () =>
+      runScheduledScript(occ.scriptId, occ.orgId, {
+        // The tick's own stable identity: a recovery retry of this occurrence
+        // reuses the run's journal idempotency namespace, and the run links
+        // back to this ledger row so recovery absorbs it one-to-one.
+        idempotencyScope: occ.occurrenceKey,
+        occurrenceRunId: occ.id,
+      }),
+    );
     await finalizeOccurrence(
       occ.id,
       outcome.status,
-      outcome.status === "ok" ? null : outcome.abortReason ?? null,
+      outcome.status === "ok" ? null : (outcome.abortReason ?? null),
       outcome.durationMs,
       { event: "ran_inline", job: jobId, attempt },
     );
@@ -313,19 +337,35 @@ async function dispatchScriptOccurrence(
     // this catches host-side failures (db insert, feature gate, missing row).
     const message = (e instanceof Error ? e.message : String(e)).slice(0, 1000);
     if (attempt < MAX_OCCURRENCE_ATTEMPTS) {
-      if (!(await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "dispatch_failed", error: message, attempt }]))) {
+      if (
+        !(await appendOccurrenceEvents(occ.id, occ.orgId, [
+          { event: "dispatch_failed", error: message, attempt },
+        ]))
+      ) {
         console.warn(
           `[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} left its ledger row before the dispatch-failure event landed`,
         );
       }
-      console.error(`[scheduler] script ${occ.scriptId} dispatch failed (attempt ${attempt}); recovery will retry:`, e);
+      console.error(
+        `[scheduler] script ${occ.scriptId} dispatch failed (attempt ${attempt}); recovery will retry:`,
+        e,
+      );
       return;
     }
-    await finalizeOccurrence(occ.id, "error", `scheduled occurrence lost after final attempt: ${message}`, null, {
-      event: "lost",
-      attempt,
-    });
-    console.error(`[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} lost after final attempt:`, e);
+    await finalizeOccurrence(
+      occ.id,
+      "error",
+      `scheduled occurrence lost after final attempt: ${message}`,
+      null,
+      {
+        event: "lost",
+        attempt,
+      },
+    );
+    console.error(
+      `[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} lost after final attempt:`,
+      e,
+    );
   }
 }
 
@@ -342,7 +382,8 @@ export async function scanDueScripts(): Promise<DueScript[]> {
   // column order (trigger_point, is_active, next_run_at).
   // bypass: scheduler-tick — due scheduled scripts are found across every organization.
   const due = await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string; cron: string | null; nextRunAt: Date | string }>(sql`
+    db.execute<{ id: string; orgId: string; cron: string | null; nextRunAt: Date | string }>(
+      sql`
       select script.id, script.org_id as "orgId", script.cron, script.next_run_at as "nextRunAt"
         from user_scripts script
         join orgs organization on organization.id = script.org_id
@@ -352,7 +393,10 @@ export async function scanDueScripts(): Promise<DueScript[]> {
          and organization.env_kind = 'production'
          and organization.settings #>> '{features,scripts}' = 'true'
        order by next_run_at
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   return due.map((row) => ({ ...row, nextRunAt: asDbDate(row.nextRunAt) }));
 }
 
@@ -461,7 +505,8 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
              logs = occ.logs || ${JSON.stringify([{ event: "completed_on_worker" }])}::jsonb
         from evidence
        where occ.id = evidence.id
-    `));
+    `),
+  );
 
   // 2) An occurrence that already consumed its single retry and still shows no
   //    terminal evidence is a loss: stamp it visibly instead of retrying
@@ -477,7 +522,8 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
        where target_kind = 'scheduled_occurrence'
          and status = 'dispatch_retry'
          and at < ${staleBefore}
-    `));
+    `),
+  );
 
   // 3) Retry orphaned first attempts exactly once. The CAS on status keeps a
   //    concurrent completion (step 1 of a parallel tick) from being overwritten.
@@ -488,7 +534,8 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
   //    scheduled tick, so the legacy derivation still resolves them.
   // bypass: scheduler-tick — stale script occurrences are found for recovery across every organization.
   const stale = await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string; scriptId: string; at: Date | string; logs: unknown }>(sql`
+    db.execute<{ id: string; orgId: string; scriptId: string; at: Date | string; logs: unknown }>(
+      sql`
       select id, org_id as "orgId", script_id as "scriptId", at, logs
         from script_runs
        where target_kind = 'scheduled_occurrence'
@@ -496,7 +543,10 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
          and at < ${staleBefore}
        order by at
        limit ${RECOVERY_BATCH}
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   for (const row of stale) {
     const transitioned = await withOrgContext(row.orgId, () =>
       db.execute<never>(sql`
@@ -504,7 +554,8 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
            set status = 'dispatch_retry',
                logs = logs || ${JSON.stringify([{ event: "recover", attempt: MAX_OCCURRENCE_ATTEMPTS }])}::jsonb
          where id = ${row.id} and org_id = ${row.orgId} and status = 'queued'
-      `));
+      `),
+    );
     if (!transitioned.rowCount) continue; // evidence landed concurrently
     const claimedEvent = (Array.isArray(row.logs) ? row.logs : []).find(
       (event): event is { event: unknown; occurrence: unknown; scheduledFor: unknown } =>
@@ -517,7 +568,8 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
         ? claimedEvent.occurrence
         : scriptOccurrenceKey(row.scriptId, row.at);
     const scheduledFor =
-      typeof claimedEvent?.scheduledFor === "string" && !Number.isNaN(Date.parse(claimedEvent.scheduledFor))
+      typeof claimedEvent?.scheduledFor === "string" &&
+      !Number.isNaN(Date.parse(claimedEvent.scheduledFor))
         ? new Date(claimedEvent.scheduledFor)
         : asDbDate(row.at);
     await dispatchScriptOccurrence(
@@ -639,7 +691,8 @@ export async function tick(
       // cron cursor on flows.last_scheduled_run_at). Recovery re-fires claims
       // orphaned by a crash before runDueScheduledFlows scans new ones.
       try {
-        const { recoverLostScheduledFlows, runDueScheduledFlows } = await import("../flows/scheduled.ts");
+        const { recoverLostScheduledFlows, runDueScheduledFlows } =
+          await import("../flows/scheduled.ts");
         // bypass: scheduler-tick — the tick recovers lost scheduled-flow occurrences of every organization.
         await withBypassContext(() => recoverLostScheduledFlows());
         await runDueScheduledFlows();
@@ -675,7 +728,8 @@ export async function tick(
 
       // Period close: expire temporary reopen windows and execute deadline rules.
       try {
-        const { recloseExpiredReopens } = await import("../close/reopening.ts"), { runDueCloseAutomations } = await import("../close/run-automation.ts");
+        const { recloseExpiredReopens } = await import("../close/reopening.ts"),
+          { runDueCloseAutomations } = await import("../close/run-automation.ts");
         await recloseExpiredReopens();
         await runDueCloseAutomations();
       } catch (e) {
@@ -685,7 +739,8 @@ export async function tick(
 
       // Tenant-controlled Accounting and Finance continuous-close agents.
       try {
-        const { runDueContinuousCloseAgents } = await import("../continuous-close/continuous-close.ts");
+        const { runDueContinuousCloseAgents } =
+          await import("../continuous-close/continuous-close.ts");
         await runDueContinuousCloseAgents();
       } catch (e) {
         failSection("continuous-close", e);

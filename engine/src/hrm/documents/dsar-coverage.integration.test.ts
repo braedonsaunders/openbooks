@@ -19,7 +19,9 @@ async function catalogPersonLinkedTables(): Promise<string[]> {
   // Catalog-proven links: a foreign key to a person table on any column
   // but the tenancy link (orgs are party rows, so org_id references
   // parties without the row being about a person).
-  const fk = (await db.execute<{ table_name: string }>(sql`
+  const fk = (
+    await db.execute<{ table_name: string }>(
+      sql`
     select distinct rel.relname as table_name
       from pg_constraint k
       join pg_class rel on rel.oid = k.conrelid
@@ -29,25 +31,36 @@ async function catalogPersonLinkedTables(): Promise<string[]> {
        and k.contype = 'f'
        and k.confrelid in ('public.parties'::regclass, 'public.worker_employments'::regclass, 'public.hrm_candidates'::regclass)
        and a.attname <> 'org_id'
-  `, "objects")).map((row) => row.table_name);
+  `,
+      "objects",
+    )
+  ).map((row) => row.table_name);
   // Name safety net for person links the catalog does not constrain
   // (incumbent/manager/report/subject employments, unlinked employment ids).
-  const named = (await db.execute<{ table_name: string }>(sql`
+  const named = (
+    await db.execute<{ table_name: string }>(
+      sql`
     select distinct table_name
       from information_schema.columns
      where table_schema = 'public'
        and (column_name like '%\\_party\\_id' escape '\\'
             or column_name like '%\\_employment\\_id' escape '\\'
             or column_name in ('employment_id', 'candidate_id'))
-  `, "objects")).map((row) => row.table_name);
+  `,
+      "objects",
+    )
+  ).map((row) => row.table_name);
   return [...new Set([...fk, ...named])].sort();
 }
 
 async function catalogTables(): Promise<Set<string>> {
-  const rows = await db.execute<{ table_name: string }>(sql`
+  const rows = await db.execute<{ table_name: string }>(
+    sql`
     select table_name from information_schema.tables
      where table_schema = 'public' and table_type = 'BASE TABLE'
-  `, "objects");
+  `,
+    "objects",
+  );
   return new Set(rows.map((row) => row.table_name));
 }
 
@@ -67,15 +80,18 @@ test("every person-linked remit table has a gatherer or a reviewed exclusion", a
 });
 
 test("no gather-pending entries remain: subject data ships with its gatherer", async () => {
-  const pending = DSAR_EXCLUDED_TABLES.filter((e) => e.reason.includes("gatherer pending")).map((e) => e.table);
+  const pending = DSAR_EXCLUDED_TABLES.filter((e) => e.reason.includes("gatherer pending")).map(
+    (e) => e.table,
+  );
   assert.deepEqual(pending, [], `subject-data tables with no DSAR gatherer: ${pending.join(", ")}`);
 });
 
 test("the registry names real tables only", async () => {
   const catalog = await catalogTables();
-  const stale = [...DSAR_GATHERED_TABLES.map((entry) => entry.table), ...DSAR_EXCLUDED_TABLES.map((entry) => entry.table)].filter(
-    (table) => !catalog.has(table),
-  );
+  const stale = [
+    ...DSAR_GATHERED_TABLES.map((entry) => entry.table),
+    ...DSAR_EXCLUDED_TABLES.map((entry) => entry.table),
+  ].filter((table) => !catalog.has(table));
   assert.deepEqual(stale, [], `coverage registry entries with no such table: ${stale.join(", ")}`);
 });
 
@@ -88,5 +104,9 @@ test("gathered domains are real DSAR modules, and every module is represented", 
   const unrepresented = (DSAR_MODULES as readonly string[]).filter(
     (module) => !DSAR_GATHERED_TABLES.some((entry) => entry.domain === module),
   );
-  assert.deepEqual(unrepresented, [], `DSAR modules gathering no inventoried table: ${unrepresented.join(", ")}`);
+  assert.deepEqual(
+    unrepresented,
+    [],
+    `DSAR modules gathering no inventoried table: ${unrepresented.join(", ")}`,
+  );
 });

@@ -1,267 +1,379 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import type { Authz } from '../authz'
-import type { SessionUser } from '../auth'
-import { stubModules } from '../../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import type { Authz } from "../authz";
+import type { SessionUser } from "../auth";
+import { stubModules } from "../../testing/stub-modules.ts";
 
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-const { sql } = await import('drizzle-orm')
-const { withBypassContext, db, env, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { deleteSandbox } = await import('@openbooks/engine/sandbox/lifecycle')
-const { executeAssistantTool } = await import('./registry')
+const { sql } = await import("drizzle-orm");
+const { withBypassContext, db, env, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { deleteSandbox } = await import("@openbooks/engine/sandbox/lifecycle");
+const { executeAssistantTool } = await import("./registry");
 
 function authzFor(orgId: string, permissions: string[]): Authz {
-  const userId = randomUUID()
+  const userId = randomUUID();
   const user: SessionUser = {
-    id: userId, orgId, name: 'Ops prober', email: 'ops-prober@scratch.test',
-    roles: [], isSuperAdmin: false, envKind: 'production',
-    productionOrgId: orgId, homeOrgId: orgId, homeUserId: userId,
-  }
-  return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null }
+    id: userId,
+    orgId,
+    name: "Ops prober",
+    email: "ops-prober@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: userId,
+  };
+  return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null };
 }
 
-const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read', 'admin.setup.manage', 'admin.sandboxes.manage', 'admin.customization.manage']
+const READER = [
+  "assistant.use",
+  "data.export",
+  "data.import",
+  "gl.read",
+  "reports.read",
+  "admin.setup.manage",
+  "admin.sandboxes.manage",
+  "admin.customization.manage",
+];
 
-test('assistant data-io tools list resources and import runs', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const authz = authzFor(org.orgId, READER)
-      const resources = await executeAssistantTool(authz, 'list_data_resources', {})
-      assert.equal(resources.ok, true, JSON.stringify(resources))
-      assert.ok(resources.ok)
-      const items = (resources.data as { items: { key: string; label: string; group: string }[] }).items
-      assert.ok(items.length > 0, 'expected built-in resources')
-      assert.ok(items.every((r) => r.key && r.label && r.group))
+test(
+  "assistant data-io tools list resources and import runs",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const authz = authzFor(org.orgId, READER);
+        const resources = await executeAssistantTool(authz, "list_data_resources", {});
+        assert.equal(resources.ok, true, JSON.stringify(resources));
+        assert.ok(resources.ok);
+        const items = (resources.data as { items: { key: string; label: string; group: string }[] })
+          .items;
+        assert.ok(items.length > 0, "expected built-in resources");
+        assert.ok(items.every((r) => r.key && r.label && r.group));
 
-      const runs = await executeAssistantTool(authz, 'list_import_runs', {})
-      assert.equal(runs.ok, true, JSON.stringify(runs))
-      assert.ok(runs.ok)
-      assert.deepEqual((runs.data as { runs: unknown[] }).runs, [])
-    })
-  } finally {
-    await dropScratchOrg(org.orgId)
-  }
-})
+        const runs = await executeAssistantTool(authz, "list_import_runs", {});
+        assert.equal(runs.ok, true, JSON.stringify(runs));
+        assert.ok(runs.ok);
+        assert.deepEqual((runs.data as { runs: unknown[] }).runs, []);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('assistant sync connections list runs with last-run evidence, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => (createScratchOrg()))
-  const orgB = await withBypassContext(() => (createScratchOrg()))
-  try {
-    const connId = randomUUID()
-    await withOrgContext(orgA.orgId, async () => {
-      await db.execute(sql`insert into connections (id, org_id, source, display_name, auth_kind, status)
-        values (${connId}, ${orgA.orgId}, 'test-source', 'Test Connector', 'token', 'active')`)
-      await db.execute(sql`insert into sync_runs (org_id, connection_id, source, kind, status, error_message, triggered_by)
-        values (${orgA.orgId}, ${connId}, 'test-source', 'incremental', 'failed', 'boom', 'manual')`)
-    })
-    await withOrgContext(orgB.orgId, async () => {
-      const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_sync_connections', {})
-      assert.equal(other.ok, true, JSON.stringify(other))
-      assert.ok(other.ok)
-      assert.deepEqual((other.data as { items: unknown[] }).items, [])
-    })
-    await withOrgContext(orgA.orgId, async () => {
-      const mine = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_sync_connections', {})
-      assert.equal(mine.ok, true, JSON.stringify(mine))
-      assert.ok(mine.ok)
-      const items = (mine.data as { items: Record<string, unknown>[] }).items
-      assert.equal(items.length, 1)
-      assert.equal(items[0]!['displayName'], 'Test Connector')
-      assert.equal(items[0]!['hasSecrets'], false)
-      assert.ok(!('secrets' in items[0]!), 'credential blob must not leave the server')
-      const lastRun = items[0]!['lastRun'] as { status: string; error: string } | null
-      assert.ok(lastRun, 'expected last-run evidence')
-      assert.equal(lastRun.status, 'failed')
-      assert.equal(lastRun.error, 'boom')
-    })
-  } finally {
-    await dropScratchOrg(orgA.orgId)
-    await dropScratchOrg(orgB.orgId)
-  }
-})
+test(
+  "assistant sync connections list runs with last-run evidence, isolated per org",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
+    try {
+      const connId = randomUUID();
+      await withOrgContext(orgA.orgId, async () => {
+        await db.execute(sql`insert into connections (id, org_id, source, display_name, auth_kind, status)
+        values (${connId}, ${orgA.orgId}, 'test-source', 'Test Connector', 'token', 'active')`);
+        await db.execute(sql`insert into sync_runs (org_id, connection_id, source, kind, status, error_message, triggered_by)
+        values (${orgA.orgId}, ${connId}, 'test-source', 'incremental', 'failed', 'boom', 'manual')`);
+      });
+      await withOrgContext(orgB.orgId, async () => {
+        const other = await executeAssistantTool(
+          authzFor(orgB.orgId, READER),
+          "list_sync_connections",
+          {},
+        );
+        assert.equal(other.ok, true, JSON.stringify(other));
+        assert.ok(other.ok);
+        assert.deepEqual((other.data as { items: unknown[] }).items, []);
+      });
+      await withOrgContext(orgA.orgId, async () => {
+        const mine = await executeAssistantTool(
+          authzFor(orgA.orgId, READER),
+          "list_sync_connections",
+          {},
+        );
+        assert.equal(mine.ok, true, JSON.stringify(mine));
+        assert.ok(mine.ok);
+        const items = (mine.data as { items: Record<string, unknown>[] }).items;
+        assert.equal(items.length, 1);
+        assert.equal(items[0]!["displayName"], "Test Connector");
+        assert.equal(items[0]!["hasSecrets"], false);
+        assert.ok(!("secrets" in items[0]!), "credential blob must not leave the server");
+        const lastRun = items[0]!["lastRun"] as { status: string; error: string } | null;
+        assert.ok(lastRun, "expected last-run evidence");
+        assert.equal(lastRun.status, "failed");
+        assert.equal(lastRun.error, "boom");
+      });
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);
 
-test('assistant environments list sandboxes with refresh status, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => (createScratchOrg()))
-  const orgB = await withBypassContext(() => (createScratchOrg()))
-  const sbId = randomUUID()
-  const sbOrgId = randomUUID()
-  try {
-    await withBypassContext(() => db.execute(sql`
+test(
+  "assistant environments list sandboxes with refresh status, isolated per org",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
+    const sbId = randomUUID();
+    const sbOrgId = randomUUID();
+    try {
+      await withBypassContext(() =>
+        db.execute(sql`
       insert into orgs (id, name, base_currency, country, settings, env_kind, sandbox_of)
-      values (${sbOrgId}, 'Probe Sandbox Org', 'CAD', 'CA', '{}'::jsonb, 'sandbox', ${orgA.orgId})`))
-    await withOrgContext(orgA.orgId, async () => {
-      await db.execute(sql`insert into sandboxes (id, org_id, production_org_id, name, status)
-        values (${sbId}, ${sbOrgId}, ${orgA.orgId}, 'Probe Sandbox', 'ready')`)
-    })
-    await withOrgContext(orgB.orgId, async () => {
-      const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_environments', {})
-      assert.equal(other.ok, true, JSON.stringify(other))
-      assert.ok(other.ok)
-      assert.deepEqual((other.data as { items: unknown[] }).items, [])
-    })
-    await withOrgContext(orgA.orgId, async () => {
-      const mine = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_environments', {})
-      assert.equal(mine.ok, true, JSON.stringify(mine))
-      assert.ok(mine.ok)
-      const items = (mine.data as { items: { name: string; status: string }[] }).items
-      assert.equal(items.length, 1)
-      assert.equal(items[0]!.name, 'Probe Sandbox')
-      assert.equal(items[0]!.status, 'ready')
-      const bare = await executeAssistantTool(authzFor(orgA.orgId, ['assistant.use']), 'list_environments', {})
-      assert.deepEqual(bare, { ok: false, error: 'forbidden' })
-    })
-  } finally {
-    await deleteSandbox(sbId)
-    await dropScratchOrg(orgA.orgId)
-    await dropScratchOrg(orgB.orgId)
-  }
-})
+      values (${sbOrgId}, 'Probe Sandbox Org', 'CAD', 'CA', '{}'::jsonb, 'sandbox', ${orgA.orgId})`),
+      );
+      await withOrgContext(orgA.orgId, async () => {
+        await db.execute(sql`insert into sandboxes (id, org_id, production_org_id, name, status)
+        values (${sbId}, ${sbOrgId}, ${orgA.orgId}, 'Probe Sandbox', 'ready')`);
+      });
+      await withOrgContext(orgB.orgId, async () => {
+        const other = await executeAssistantTool(
+          authzFor(orgB.orgId, READER),
+          "list_environments",
+          {},
+        );
+        assert.equal(other.ok, true, JSON.stringify(other));
+        assert.ok(other.ok);
+        assert.deepEqual((other.data as { items: unknown[] }).items, []);
+      });
+      await withOrgContext(orgA.orgId, async () => {
+        const mine = await executeAssistantTool(
+          authzFor(orgA.orgId, READER),
+          "list_environments",
+          {},
+        );
+        assert.equal(mine.ok, true, JSON.stringify(mine));
+        assert.ok(mine.ok);
+        const items = (mine.data as { items: { name: string; status: string }[] }).items;
+        assert.equal(items.length, 1);
+        assert.equal(items[0]!.name, "Probe Sandbox");
+        assert.equal(items[0]!.status, "ready");
+        const bare = await executeAssistantTool(
+          authzFor(orgA.orgId, ["assistant.use"]),
+          "list_environments",
+          {},
+        );
+        assert.deepEqual(bare, { ok: false, error: "forbidden" });
+      });
+    } finally {
+      await deleteSandbox(sbId);
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);
 
-test('assistant pdf templates list without bodies and get truncates, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => (createScratchOrg()))
-  const orgB = await withBypassContext(() => (createScratchOrg()))
-  try {
-    const tplId = randomUUID()
-    const disabledTplId = randomUUID()
-    const bigHtml = `<div>${'x'.repeat(9000)}</div>`
-    await withOrgContext(orgA.orgId, async () => {
-      await db.execute(sql`insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html)
-        values (${tplId}, ${orgA.orgId}, 'customer_invoice', 'Probe Template', ${bigHtml}, ${bigHtml})`)
-      await db.execute(sql`insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html)
-        values (${disabledTplId}, ${orgA.orgId}, 'field_ticket', 'Disabled Field Ticket Template', '<div>hidden</div>', '<div>hidden</div>')`)
-    })
-    await withOrgContext(orgB.orgId, async () => {
-      const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_pdf_templates', {})
-      assert.equal(other.ok, true, JSON.stringify(other))
-      assert.ok(other.ok)
-      assert.deepEqual((other.data as { items: unknown[] }).items, [])
-      const missing = await executeAssistantTool(authzFor(orgB.orgId, READER), 'get_pdf_template', { id: tplId })
-      assert.deepEqual(missing, { ok: false, error: 'template_not_found' })
-    })
-    await withOrgContext(orgA.orgId, async () => {
-      const listed = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_pdf_templates', {})
-      assert.equal(listed.ok, true, JSON.stringify(listed))
-      assert.ok(listed.ok)
-      const items = (listed.data as { items: Record<string, unknown>[] }).items
-      assert.equal(items.length, 1)
-      assert.equal(items[0]!['name'], 'Probe Template')
-      assert.deepEqual(await executeAssistantTool(authzFor(orgA.orgId, READER), 'get_pdf_template', { id: disabledTplId }), { ok: false, error: 'template_not_found' })
-      assert.ok(!('sourceHtml' in items[0]!), 'list rows must not carry HTML bodies')
-      const one = await executeAssistantTool(authzFor(orgA.orgId, READER), 'get_pdf_template', { id: tplId })
-      assert.equal(one.ok, true, JSON.stringify(one))
-      assert.ok(one.ok)
-      const data = one.data as { sourceHtml: string; sourceTruncated: boolean; sourceHtmlChars: number }
-      assert.equal(data.sourceTruncated, true)
-      assert.ok(data.sourceHtml.length <= 6100, `truncated body is ${data.sourceHtml.length} chars`)
-      assert.equal(data.sourceHtmlChars, bigHtml.length)
-      const badKind = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_pdf_templates', { recordType: 'nope' })
-      assert.deepEqual(badKind, { ok: false, error: 'unknown_record_type' })
-      const bare = await executeAssistantTool(authzFor(orgA.orgId, ['assistant.use']), 'get_pdf_template', { id: tplId })
-      assert.deepEqual(bare, { ok: false, error: 'forbidden' })
-    })
-  } finally {
-    await dropScratchOrg(orgA.orgId)
-    await dropScratchOrg(orgB.orgId)
-  }
-})
+test(
+  "assistant pdf templates list without bodies and get truncates, isolated per org",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
+    try {
+      const tplId = randomUUID();
+      const disabledTplId = randomUUID();
+      const bigHtml = `<div>${"x".repeat(9000)}</div>`;
+      await withOrgContext(orgA.orgId, async () => {
+        await db.execute(sql`insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html)
+        values (${tplId}, ${orgA.orgId}, 'customer_invoice', 'Probe Template', ${bigHtml}, ${bigHtml})`);
+        await db.execute(sql`insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html)
+        values (${disabledTplId}, ${orgA.orgId}, 'field_ticket', 'Disabled Field Ticket Template', '<div>hidden</div>', '<div>hidden</div>')`);
+      });
+      await withOrgContext(orgB.orgId, async () => {
+        const other = await executeAssistantTool(
+          authzFor(orgB.orgId, READER),
+          "list_pdf_templates",
+          {},
+        );
+        assert.equal(other.ok, true, JSON.stringify(other));
+        assert.ok(other.ok);
+        assert.deepEqual((other.data as { items: unknown[] }).items, []);
+        const missing = await executeAssistantTool(
+          authzFor(orgB.orgId, READER),
+          "get_pdf_template",
+          { id: tplId },
+        );
+        assert.deepEqual(missing, { ok: false, error: "template_not_found" });
+      });
+      await withOrgContext(orgA.orgId, async () => {
+        const listed = await executeAssistantTool(
+          authzFor(orgA.orgId, READER),
+          "list_pdf_templates",
+          {},
+        );
+        assert.equal(listed.ok, true, JSON.stringify(listed));
+        assert.ok(listed.ok);
+        const items = (listed.data as { items: Record<string, unknown>[] }).items;
+        assert.equal(items.length, 1);
+        assert.equal(items[0]!["name"], "Probe Template");
+        assert.deepEqual(
+          await executeAssistantTool(authzFor(orgA.orgId, READER), "get_pdf_template", {
+            id: disabledTplId,
+          }),
+          { ok: false, error: "template_not_found" },
+        );
+        assert.ok(!("sourceHtml" in items[0]!), "list rows must not carry HTML bodies");
+        const one = await executeAssistantTool(authzFor(orgA.orgId, READER), "get_pdf_template", {
+          id: tplId,
+        });
+        assert.equal(one.ok, true, JSON.stringify(one));
+        assert.ok(one.ok);
+        const data = one.data as {
+          sourceHtml: string;
+          sourceTruncated: boolean;
+          sourceHtmlChars: number;
+        };
+        assert.equal(data.sourceTruncated, true);
+        assert.ok(
+          data.sourceHtml.length <= 6100,
+          `truncated body is ${data.sourceHtml.length} chars`,
+        );
+        assert.equal(data.sourceHtmlChars, bigHtml.length);
+        const badKind = await executeAssistantTool(
+          authzFor(orgA.orgId, READER),
+          "list_pdf_templates",
+          { recordType: "nope" },
+        );
+        assert.deepEqual(badKind, { ok: false, error: "unknown_record_type" });
+        const bare = await executeAssistantTool(
+          authzFor(orgA.orgId, ["assistant.use"]),
+          "get_pdf_template",
+          { id: tplId },
+        );
+        assert.deepEqual(bare, { ok: false, error: "forbidden" });
+      });
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);
 
-test('assistant report runs and deliveries surface with visibility filtering, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => (createScratchOrg()))
-  const orgB = await withBypassContext(() => (createScratchOrg()))
-  try {
-    const runId = randomUUID()
-    const { ensureReportDefinitions } = await import('@openbooks/engine/reports/ensure-report-definitions')
-    await withOrgContext(orgA.orgId, async () => {
-      const authz = authzFor(orgA.orgId, READER)
-      // Seed the built-in catalog (same seeding the product paths use), then
-      // borrow a feature-free statement definition for the probe rows.
-      await ensureReportDefinitions(orgA.orgId)
-      const found = await db.execute<{ id: string }>(sql`select id from report_definitions
+test(
+  "assistant report runs and deliveries surface with visibility filtering, isolated per org",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
+    try {
+      const runId = randomUUID();
+      const { ensureReportDefinitions } =
+        await import("@openbooks/engine/reports/ensure-report-definitions");
+      await withOrgContext(orgA.orgId, async () => {
+        const authz = authzFor(orgA.orgId, READER);
+        // Seed the built-in catalog (same seeding the product paths use), then
+        // borrow a feature-free statement definition for the probe rows.
+        await ensureReportDefinitions(orgA.orgId);
+        const found = await db.execute<{ id: string }>(
+          sql`select id from report_definitions
         where org_id = ${orgA.orgId} and report_type = 'statement'
           and (statement->>'kind' is null or statement->>'kind' not in ('project-profitability', 'true-cost', 'budget'))
-        limit 1`, 'objects')
-      assert.ok(found[0], 'seeded statement definitions missing')
-      const defId = found[0]!.id
-      await db.execute(sql`insert into report_runs (id, org_id, definition_id, trigger, status, row_count)
-        values (${runId}, ${orgA.orgId}, ${defId}, 'manual', 'succeeded', 7)`)
-      await db.execute(sql`insert into report_delivery_outbox (org_id, run_id, recipient, status)
-        values (${orgA.orgId}, ${runId}, 'reader@example.test', 'sent')`)
-      const runs = await executeAssistantTool(authz, 'list_report_runs', {})
-      assert.equal(runs.ok, true, JSON.stringify(runs))
-      assert.ok(runs.ok)
-      const runRows = (runs.data as { runs: Record<string, unknown>[] }).runs
-      assert.equal(runRows.length, 1)
-      assert.equal(runRows[0]!['status'], 'succeeded')
-      assert.equal(runRows[0]!['rowCount'], 7)
-      assert.ok(!('authorization_snapshot' in runRows[0]!), 'snapshot must not leave the server')
-      const deliveries = await executeAssistantTool(authz, 'list_email_deliveries', {})
-      assert.equal(deliveries.ok, true, JSON.stringify(deliveries))
-      assert.ok(deliveries.ok)
-      const delRows = (deliveries.data as { deliveries: Record<string, unknown>[] }).deliveries
-      assert.equal(delRows.length, 1)
-      assert.equal(delRows[0]!['recipient'], 'reader@example.test')
-      assert.equal(delRows[0]!['status'], 'sent')
-      const bare = await executeAssistantTool(authzFor(orgA.orgId, ['assistant.use']), 'list_report_runs', {})
-      assert.deepEqual(bare, { ok: false, error: 'forbidden' })
-    })
-    await withOrgContext(orgB.orgId, async () => {
-      const authz = authzFor(orgB.orgId, READER)
-      const runs = await executeAssistantTool(authz, 'list_report_runs', {})
-      assert.equal(runs.ok, true, JSON.stringify(runs))
-      assert.ok(runs.ok)
-      assert.deepEqual((runs.data as { runs: unknown[] }).runs, [])
-      const deliveries = await executeAssistantTool(authz, 'list_email_deliveries', {})
-      assert.equal(deliveries.ok, true, JSON.stringify(deliveries))
-      assert.ok(deliveries.ok)
-      assert.deepEqual((deliveries.data as { deliveries: unknown[] }).deliveries, [])
-    })
-  } finally {
-    await dropScratchOrg(orgA.orgId)
-    await dropScratchOrg(orgB.orgId)
-  }
-})
+        limit 1`,
+          "objects",
+        );
+        assert.ok(found[0], "seeded statement definitions missing");
+        const defId = found[0]!.id;
+        await db.execute(sql`insert into report_runs (id, org_id, definition_id, trigger, status, row_count)
+        values (${runId}, ${orgA.orgId}, ${defId}, 'manual', 'succeeded', 7)`);
+        await db.execute(sql`insert into report_delivery_outbox (org_id, run_id, recipient, status)
+        values (${orgA.orgId}, ${runId}, 'reader@example.test', 'sent')`);
+        const runs = await executeAssistantTool(authz, "list_report_runs", {});
+        assert.equal(runs.ok, true, JSON.stringify(runs));
+        assert.ok(runs.ok);
+        const runRows = (runs.data as { runs: Record<string, unknown>[] }).runs;
+        assert.equal(runRows.length, 1);
+        assert.equal(runRows[0]!["status"], "succeeded");
+        assert.equal(runRows[0]!["rowCount"], 7);
+        assert.ok(!("authorization_snapshot" in runRows[0]!), "snapshot must not leave the server");
+        const deliveries = await executeAssistantTool(authz, "list_email_deliveries", {});
+        assert.equal(deliveries.ok, true, JSON.stringify(deliveries));
+        assert.ok(deliveries.ok);
+        const delRows = (deliveries.data as { deliveries: Record<string, unknown>[] }).deliveries;
+        assert.equal(delRows.length, 1);
+        assert.equal(delRows[0]!["recipient"], "reader@example.test");
+        assert.equal(delRows[0]!["status"], "sent");
+        const bare = await executeAssistantTool(
+          authzFor(orgA.orgId, ["assistant.use"]),
+          "list_report_runs",
+          {},
+        );
+        assert.deepEqual(bare, { ok: false, error: "forbidden" });
+      });
+      await withOrgContext(orgB.orgId, async () => {
+        const authz = authzFor(orgB.orgId, READER);
+        const runs = await executeAssistantTool(authz, "list_report_runs", {});
+        assert.equal(runs.ok, true, JSON.stringify(runs));
+        assert.ok(runs.ok);
+        assert.deepEqual((runs.data as { runs: unknown[] }).runs, []);
+        const deliveries = await executeAssistantTool(authz, "list_email_deliveries", {});
+        assert.equal(deliveries.ok, true, JSON.stringify(deliveries));
+        assert.ok(deliveries.ok);
+        assert.deepEqual((deliveries.data as { deliveries: unknown[] }).deliveries, []);
+      });
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);
 
-test('assistant data-io tools refuse without their permission', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const authz = authzFor(org.orgId, ['assistant.use'])
-      assert.deepEqual(await executeAssistantTool(authz, 'list_data_resources', {}), { ok: false, error: 'forbidden' })
-      assert.deepEqual(await executeAssistantTool(authz, 'list_import_runs', {}), { ok: false, error: 'forbidden' })
-    })
-  } finally {
-    await dropScratchOrg(org.orgId)
-  }
-})
+test(
+  "assistant data-io tools refuse without their permission",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const authz = authzFor(org.orgId, ["assistant.use"]);
+        assert.deepEqual(await executeAssistantTool(authz, "list_data_resources", {}), {
+          ok: false,
+          error: "forbidden",
+        });
+        assert.deepEqual(await executeAssistantTool(authz, "list_import_runs", {}), {
+          ok: false,
+          error: "forbidden",
+        });
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('assistant import runs never leak across orgs', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => (createScratchOrg()))
-  const orgB = await withBypassContext(() => (createScratchOrg()))
+test("assistant import runs never leak across orgs", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
   try {
     await withOrgContext(orgA.orgId, async () => {
       await db.execute(sql`insert into import_jobs (org_id, resource_key, resource_label, format, status, total_rows, created_count, updated_count, failed_count)
-        values (${orgA.orgId}, 'test-resource', 'Test Resource', 'csv', 'committed', 3, 3, 0, 0)`)
-    })
+        values (${orgA.orgId}, 'test-resource', 'Test Resource', 'csv', 'committed', 3, 3, 0, 0)`);
+    });
     await withOrgContext(orgB.orgId, async () => {
-      const runs = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_import_runs', {})
-      assert.equal(runs.ok, true, JSON.stringify(runs))
-      assert.ok(runs.ok)
-      assert.deepEqual((runs.data as { runs: unknown[] }).runs, [])
-    })
+      const runs = await executeAssistantTool(authzFor(orgB.orgId, READER), "list_import_runs", {});
+      assert.equal(runs.ok, true, JSON.stringify(runs));
+      assert.ok(runs.ok);
+      assert.deepEqual((runs.data as { runs: unknown[] }).runs, []);
+    });
     await withOrgContext(orgA.orgId, async () => {
-      const runs = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_import_runs', {})
-      assert.equal(runs.ok, true, JSON.stringify(runs))
-      assert.ok(runs.ok)
-      const rows = (runs.data as { runs: { resourceKey: string; totalRows: number }[] }).runs
-      assert.equal(rows.length, 1)
-      assert.equal(rows[0]!.resourceKey, 'test-resource')
-    })
+      const runs = await executeAssistantTool(authzFor(orgA.orgId, READER), "list_import_runs", {});
+      assert.equal(runs.ok, true, JSON.stringify(runs));
+      assert.ok(runs.ok);
+      const rows = (runs.data as { runs: { resourceKey: string; totalRows: number }[] }).runs;
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.resourceKey, "test-resource");
+    });
   } finally {
-    await dropScratchOrg(orgA.orgId)
-    await dropScratchOrg(orgB.orgId)
+    await dropScratchOrg(orgA.orgId);
+    await dropScratchOrg(orgB.orgId);
   }
-})
+});

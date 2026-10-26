@@ -31,17 +31,31 @@ test("checked-in config covers the curated scope and every referenced file exist
   for (const required of REQUIRED_COVERAGE) {
     assert.ok(paths.includes(required), `config must cover ${required}`);
   }
-  assert.ok(paths.some((p) => p.startsWith("engine/src/payroll/canada/")), "config must cover canada compute paths");
-  assert.ok(paths.some((p) => p.startsWith("engine/src/payroll/us/")), "config must cover us compute paths");
+  assert.ok(
+    paths.some((p) => p.startsWith("engine/src/payroll/canada/")),
+    "config must cover canada compute paths",
+  );
+  assert.ok(
+    paths.some((p) => p.startsWith("engine/src/payroll/us/")),
+    "config must cover us compute paths",
+  );
   assert.equal(new Set(paths).size, paths.length, "no duplicate targets");
   for (const target of config.targets) {
     assert.ok(existsSync(join(REPO_ROOT, target.path)), `target exists: ${target.path}`);
     for (const testFile of target.tests) {
       assert.ok(existsSync(join(REPO_ROOT, testFile)), `mapped test exists: ${testFile}`);
     }
-    if (["engine/src/sync/applications.ts", "engine/src/assets/depreciation-schedule-build.ts"].includes(target.path)) {
+    if (
+      [
+        "engine/src/sync/applications.ts",
+        "engine/src/assets/depreciation-schedule-build.ts",
+      ].includes(target.path)
+    ) {
       assert.equal(target.needsDb, true, `${target.path} must not receive a unit-only measurement`);
-      assert.ok(target.tests.some((file) => file.endsWith('.integration.test.ts')), `${target.path} needs persisted-state coverage`);
+      assert.ok(
+        target.tests.some((file) => file.endsWith(".integration.test.ts")),
+        `${target.path} needs persisted-state coverage`,
+      );
     }
     if (target.lineRanges) {
       const lineCount = readFileSync(join(REPO_ROOT, target.path), "utf8").split("\n").length;
@@ -54,17 +68,28 @@ test("checked-in config covers the curated scope and every referenced file exist
 
 test("scoped targets carry line ranges (allocation math, stub assembly)", () => {
   const config = loadMutationConfig();
-  const payments = config.targets.find((t) => t.path === "engine/src/payments/settlement-policy.ts");
-  const payrollRun = config.targets.find((t) => t.path === "engine/src/payroll/run-earning-lines.ts");
-  assert.ok(payments?.lineRanges && payments.lineRanges.length > 0, "settlement-policy.ts scoped to allocation/application math");
-  assert.ok(payrollRun?.lineRanges && payrollRun.lineRanges.length > 0, "run-earning-lines.ts scoped to earning assembly + employer accruals");
+  const payments = config.targets.find(
+    (t) => t.path === "engine/src/payments/settlement-policy.ts",
+  );
+  const payrollRun = config.targets.find(
+    (t) => t.path === "engine/src/payroll/run-earning-lines.ts",
+  );
+  assert.ok(
+    payments?.lineRanges && payments.lineRanges.length > 0,
+    "settlement-policy.ts scoped to allocation/application math",
+  );
+  assert.ok(
+    payrollRun?.lineRanges && payrollRun.lineRanges.length > 0,
+    "run-earning-lines.ts scoped to earning assembly + employer accruals",
+  );
 });
 
 test("parseMutationConfig rejects malformed configs", () => {
   assert.throws(() => parseMutationConfig("not json"), SyntaxError);
   assert.throws(() => parseMutationConfig(JSON.stringify({ version: 2, targets: [] })), /version/);
   assert.throws(
-    () => parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "a.ts", tests: [] }] })),
+    () =>
+      parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "a.ts", tests: [] }] })),
     /non-empty/,
   );
   assert.throws(
@@ -83,7 +108,10 @@ test("parseMutationConfig rejects malformed configs", () => {
   assert.throws(
     () =>
       parseMutationConfig(
-        JSON.stringify({ version: 1, targets: [{ path: "a.ts", tests: ["a.test.ts"], lineRanges: [{ start: 0, end: 3 }] }] }),
+        JSON.stringify({
+          version: 1,
+          targets: [{ path: "a.ts", tests: ["a.test.ts"], lineRanges: [{ start: 0, end: 3 }] }],
+        }),
       ),
     /lineRanges/,
   );
@@ -96,15 +124,44 @@ test("unmapped targets fall back to same-directory tests, never the harness itse
   assert.ok(fallback.every((f) => f.startsWith("engine/src/sync/")));
   assert.ok(!fallback.some((f) => f.includes("mutation-") || f.includes("harness-selfcheck")));
   // Curated entries win over the fallback.
-  assert.deepEqual(resolveTargetTests(config, "engine/src/money/money.ts", REPO_ROOT), ["engine/src/money/money.test.ts"]);
+  assert.deepEqual(resolveTargetTests(config, "engine/src/money/money.ts", REPO_ROOT), [
+    "engine/src/money/money.test.ts",
+  ]);
 });
-
 
 test("database requirements need a code-grounded reason, never a bare exemption", () => {
   for (const reason of [undefined, "", "   "]) {
-    assert.throws(() => parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "coordinator.ts", tests: ["neighbor.test.ts"], needsDb: true, needsDbReason: reason }] })), /needsDbReason/);
+    assert.throws(
+      () =>
+        parseMutationConfig(
+          JSON.stringify({
+            version: 1,
+            targets: [
+              {
+                path: "coordinator.ts",
+                tests: ["neighbor.test.ts"],
+                needsDb: true,
+                needsDbReason: reason,
+              },
+            ],
+          }),
+        ),
+      /needsDbReason/,
+    );
   }
   const reason = "Coordinates journal writes and locked persisted source rows";
-  const config = parseMutationConfig(JSON.stringify({ version: 1, targets: [{ path: "coordinator.ts", tests: ["neighbor.test.ts"], needsDb: true, needsDbReason: reason }] }));
+  const config = parseMutationConfig(
+    JSON.stringify({
+      version: 1,
+      targets: [
+        {
+          path: "coordinator.ts",
+          tests: ["neighbor.test.ts"],
+          needsDb: true,
+          needsDbReason: reason,
+        },
+      ],
+    }),
+  );
   assert.equal(config.targets[0]?.needsDbReason, reason);
 });

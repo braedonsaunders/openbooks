@@ -72,11 +72,7 @@
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { rate6 } from "../../money/payroll-decimal.ts";
 import { PayrollPackError } from "../payroll-error.ts";
-import {
-  prsiPeriodBands,
-  ratesForPayDate,
-  type IeEditionRates,
-} from "./rates.ts";
+import { prsiPeriodBands, ratesForPayDate, type IeEditionRates } from "./rates.ts";
 import { utcDateFromParts } from "../../platform/civil-date.ts";
 
 /** Money string → bigint units (1e4 scale). */
@@ -256,12 +252,17 @@ function uscPass(
   for (const band of edition.uscBands) {
     if (remaining <= 0n) break;
     // Widths scale like cut-offs (ceiling, same convention as PAYE bands).
-    const width = band.width === null
-      ? null
-      : ceil2(roundDiv(
-        (cutoffAnnual === standardTotal ? U(band.width) : roundDiv(U(band.width) * cutoffAnnual, standardTotal)) * n,
-        p,
-      ));
+    const width =
+      band.width === null
+        ? null
+        : ceil2(
+            roundDiv(
+              (cutoffAnnual === standardTotal
+                ? U(band.width)
+                : roundDiv(U(band.width) * cutoffAnnual, standardTotal)) * n,
+              p,
+            ),
+          );
     const base = width === null || remaining < width ? remaining : width;
     charge += mulRateCents(base, band.rate);
     remaining -= base;
@@ -310,10 +311,11 @@ function fortnightByWeeks(
   weeks: readonly [bigint, bigint],
 ): { employee: bigint; employer: bigint; subclass: string } {
   const weeklyAlMax = U(prsiPeriodBands().weekly.alMax);
-  const employerFor = (slice: bigint): bigint => mulRateCents(
-    slice,
-    slice <= weeklyAlMax ? edition.prsiEmployerLowerRate : edition.prsiEmployerHigherRate,
-  );
+  const employerFor = (slice: bigint): bigint =>
+    mulRateCents(
+      slice,
+      slice <= weeklyAlMax ? edition.prsiEmployerLowerRate : edition.prsiEmployerHigherRate,
+    );
   return {
     employee: weeklyEmployeeCharge(edition, weeks[0]) + weeklyEmployeeCharge(edition, weeks[1]),
     employer: employerFor(weeks[0]) + employerFor(weeks[1]),
@@ -411,8 +413,8 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
   }
   if (input.prsiClass !== "A" && input.prsiClass !== "M") {
     fail(
-      `PRSI class ${input.prsiClass || "(unset)"} is not implemented — only Classes A and M are supported; `
-      + "determine the employee's class under DSP rules and use payroll software that computes it.",
+      `PRSI class ${input.prsiClass || "(unset)"} is not implemented — only Classes A and M are supported; ` +
+        "determine the employee's class under DSP rules and use payroll software that computes it.",
     );
   }
   if (!Number.isInteger(input.elapsedPeriods) || input.elapsedPeriods < 1) {
@@ -462,9 +464,14 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
     usc = 0n;
   } else {
     const cumulativeGross = grossYtd + reckonable;
-    const cumulativeUsc = uscPass(edition, input.periodsPerYear, input.elapsedPeriods, cumulativeGross, uscCutoffAnnual);
-    usc =
-      input.basis === "cumulative" ? cumulativeUsc - uscYtd : max0(cumulativeUsc - uscYtd);
+    const cumulativeUsc = uscPass(
+      edition,
+      input.periodsPerYear,
+      input.elapsedPeriods,
+      cumulativeGross,
+      uscCutoffAnnual,
+    );
+    usc = input.basis === "cumulative" ? cumulativeUsc - uscYtd : max0(cumulativeUsc - uscYtd);
   }
 
   // PRSI — week-one on this period only. Four-weekly payrolls have no
@@ -488,16 +495,19 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
       const raw = input.reckonablePayWeeks;
       if (raw == null) {
         fail(
-          "fortnightly PRSI cannot price without reckonable pay per week worked — "
-          + "record week 1 and week 2 reckonable pay (reckonablePayWeeks) before running payroll",
+          "fortnightly PRSI cannot price without reckonable pay per week worked — " +
+            "record week 1 and week 2 reckonable pay (reckonablePayWeeks) before running payroll",
         );
       }
-      const slices = [parseMoney(raw[0], "week 1 reckonable pay"), parseMoney(raw[1], "week 2 reckonable pay")] as const;
+      const slices = [
+        parseMoney(raw[0], "week 1 reckonable pay"),
+        parseMoney(raw[1], "week 2 reckonable pay"),
+      ] as const;
       if (slices[0] < 0n || slices[1] < 0n) fail("weekly reckonable pay must be non-negative");
       if (slices[0] + slices[1] !== reckonable) {
         fail(
-          `fortnightly week slices ${D(slices[0])} + ${D(slices[1])} do not sum to the period `
-          + `reckonable pay ${D(reckonable)} — the weeks must partition the fortnight exactly`,
+          `fortnightly week slices ${D(slices[0])} + ${D(slices[1])} do not sum to the period ` +
+            `reckonable pay ${D(reckonable)} — the weeks must partition the fortnight exactly`,
         );
       }
       weeks = slices;

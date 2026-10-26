@@ -15,14 +15,20 @@ declare global {
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/assets/equipment", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/assets/equipment",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__equipRouter}export function usePathname(){return '/assets/equipment'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__equipRouter}export function usePathname(){return '/assets/equipment'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -59,7 +65,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -88,7 +96,10 @@ function freshGlobals() {
 
 const UNIT_ID = randomUUID();
 
-function payload(revision = 0, options: { purchasePrice?: string; metrics?: Record<string, string> } = {}) {
+function payload(
+  revision = 0,
+  options: { purchasePrice?: string; metrics?: Record<string, string> } = {},
+) {
   return {
     unit: {
       id: UNIT_ID,
@@ -112,7 +123,15 @@ function payload(revision = 0, options: { purchasePrice?: string; metrics?: Reco
       capacity_unit: null,
       revision,
     },
-    metrics: { recovery: "0", billed_revenue: "0", direct_costs: "0", depreciation: "0", usage: "0", billable: "0", ...options.metrics },
+    metrics: {
+      recovery: "0",
+      billed_revenue: "0",
+      direct_costs: "0",
+      depreciation: "0",
+      usage: "0",
+      billable: "0",
+      ...options.metrics,
+    },
   };
 }
 
@@ -129,7 +148,7 @@ async function mountDrawer(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <EquipmentDrawer
-          payload={payload(revision, options)}
+            payload={payload(revision, options)}
             items={[]}
             assets={[]}
             books={[]}
@@ -160,7 +179,11 @@ test("the equipment ROI displays exact half-up decimal percentages", async (t) =
     metrics: { billed_revenue: "0.15" },
   });
   t.after(unmount);
-  assert.match(document.body.textContent ?? "", /0\.2%/, "0.15% rounds from its exact decimal value, not a binary float");
+  assert.match(
+    document.body.textContent ?? "",
+    /0\.2%/,
+    "0.15% rounds from its exact decimal value, not a binary float",
+  );
 });
 
 async function openEditAndSave() {
@@ -194,7 +217,11 @@ test("a refused delete pins the reason instead of toasting into the void", async
   await tick();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the delete refusal must pin as an alert, not vanish with the toast");
-  assert.match(alert.textContent ?? "", /Unit has time entries/, "the alert must carry the server reason");
+  assert.match(
+    alert.textContent ?? "",
+    /Unit has time entries/,
+    "the alert must carry the server reason",
+  );
 });
 
 test("a refused capitalize pins the generic copy, never a kernel code", async (t) => {
@@ -217,15 +244,26 @@ test("a refused capitalize pins the generic copy, never a kernel code", async (t
   await tick();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the capitalize refusal must pin as an alert, not vanish with the toast");
-  assert.match(alert.textContent ?? "", /Could not capitalize/, "the pin must render the translated remedy copy");
-  assert.doesNotMatch(alert.textContent ?? "", /already_capitalized/, "a kernel code must never reach the user verbatim");
+  assert.match(
+    alert.textContent ?? "",
+    /Could not capitalize/,
+    "the pin must render the translated remedy copy",
+  );
+  assert.doesNotMatch(
+    alert.textContent ?? "",
+    /already_capitalized/,
+    "a kernel code must never reach the user verbatim",
+  );
 });
 
 test("a charge-item refusal still pins translated copy and flags its field", async (t) => {
   freshGlobals();
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/equipment/${UNIT_ID}` && init?.method === "PATCH") {
-      return Response.json({ error: "charge_item_required", code: "charge_item_required" }, { status: 422 });
+      return Response.json(
+        { error: "charge_item_required", code: "charge_item_required" },
+        { status: 422 },
+      );
     }
     return null;
   });
@@ -235,7 +273,11 @@ test("a charge-item refusal still pins translated copy and flags its field", asy
   await openEditAndSave();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the charge-item refusal must pin as an alert");
-  assert.match(alert.textContent ?? "", /charge item is required/, "the pin must render the translated reason");
+  assert.match(
+    alert.textContent ?? "",
+    /charge item is required/,
+    "the pin must render the translated reason",
+  );
 });
 
 test("a dead network on save pins the fallback and releases Save", async (t) => {
@@ -252,7 +294,11 @@ test("a dead network on save pins the fallback and releases Save", async (t) => 
   const save = await openEditAndSave();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "a transport failure must still pin an alert — it cannot throw past the UI");
-  assert.match(alert.textContent ?? "", /Could not save equipment/, "with no server reason the alert falls back to localized copy");
+  assert.match(
+    alert.textContent ?? "",
+    /Could not save equipment/,
+    "with no server reason the alert falls back to localized copy",
+  );
   assert.equal(save.disabled, false, "busy must release after a transport failure");
 });
 
@@ -271,5 +317,9 @@ test("an edit sends the revision that was loaded with the unit", async (t) => {
   t.after(unmount);
   await openEditAndSave();
   assert.equal(patches.length, 1, "one save sends one optimistic-concurrency token");
-  assert.equal(patches[0]?.revision, 12, "the server must fence against the row version the operator opened");
+  assert.equal(
+    patches[0]?.revision,
+    12,
+    "the server must fence against the row version the operator opened",
+  );
 });

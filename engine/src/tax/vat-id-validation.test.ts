@@ -22,7 +22,8 @@ function stubExecutor(routes: Array<{ match: RegExp; rows: Record<string, unknow
   const queries: RecordedQuery[] = [];
   const tx = {
     execute: async (query: SQL, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const compiled = dialect.sqlToQuery(query);
       queries.push({ sql: compiled.sql, params: compiled.params });
       for (const route of routes) {
@@ -55,7 +56,12 @@ describe("validatePartyTaxId", () => {
     const { tx, queries } = stubExecutor(rowRoutes());
     const transport = (async () =>
       new Response(
-        JSON.stringify({ countryCode: "DE", vatNumber: "123456789", valid: true, consultationNumber: "W1" }),
+        JSON.stringify({
+          countryCode: "DE",
+          vatNumber: "123456789",
+          valid: true,
+          consultationNumber: "W1",
+        }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )) as typeof fetch;
     const outcome = await validatePartyTaxId(tx, "org-1", "row-1", {
@@ -78,8 +84,14 @@ describe("validatePartyTaxId", () => {
       () => validatePartyTaxId(tx, "org-1", "row-1", { transport, today: "2026-10-05" }),
       VatValidationError,
     );
-    assert.ok(queries.some((query) => /update party_tax_ids/.test(query.sql)), "the failed validation marks the row unverified");
-    assert.ok(queries.some((query) => /insert into audit_log/.test(query.sql)), "the failure state is audited");
+    assert.ok(
+      queries.some((query) => /update party_tax_ids/.test(query.sql)),
+      "the failed validation marks the row unverified",
+    );
+    assert.ok(
+      queries.some((query) => /insert into audit_log/.test(query.sql)),
+      "the failure state is audited",
+    );
   });
 
   test("a missing row refuses instead of reporting success", async () => {

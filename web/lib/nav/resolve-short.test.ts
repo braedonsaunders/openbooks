@@ -8,7 +8,9 @@ import test from "node:test";
 // modules without one render exactly as before.
 const { navPathname, resolveModuleShortLabel } = await import("./resolve.ts");
 
-const nav = (locale: string): { modules: Record<string, string>; modulesShort?: Record<string, string> } =>
+const nav = (
+  locale: string,
+): { modules: Record<string, string>; modulesShort?: Record<string, string> } =>
   JSON.parse(readFileSync(new URL(`../../messages/${locale}/nav.json`, import.meta.url), "utf8"));
 
 test("AR/AP shorts exist per locale and stay distinguishable", () => {
@@ -24,7 +26,10 @@ test("AR/AP shorts exist per locale and stay distinguishable", () => {
   }
   // The reported collision is gone: the two es shorts share no truncating prefix.
   const es = nav("es").modulesShort!;
-  assert.ok(!es.ap!.startsWith("Cuentas por") && !es.ar!.startsWith("Cuentas por"), "es shorts drop the colliding prefix");
+  assert.ok(
+    !es.ap!.startsWith("Cuentas por") && !es.ar!.startsWith("Cuentas por"),
+    "es shorts drop the colliding prefix",
+  );
 });
 
 test("Short resolution falls back without changing existing labels", () => {
@@ -58,9 +63,21 @@ test("Missing shorts fall back even when the translator echoes keys", () => {
   const throwing = (): string => {
     throw new Error("MISSING_MESSAGE");
   };
-  assert.equal(resolveModuleShortLabel(echo, "dashboard", full, true), full, "bare echo falls back");
-  assert.equal(resolveModuleShortLabel(namespacedEcho, "dashboard", full, true), full, "namespaced echo falls back");
-  assert.equal(resolveModuleShortLabel(throwing, "dashboard", full, true), full, "throws fall back");
+  assert.equal(
+    resolveModuleShortLabel(echo, "dashboard", full, true),
+    full,
+    "bare echo falls back",
+  );
+  assert.equal(
+    resolveModuleShortLabel(namespacedEcho, "dashboard", full, true),
+    full,
+    "namespaced echo falls back",
+  );
+  assert.equal(
+    resolveModuleShortLabel(throwing, "dashboard", full, true),
+    full,
+    "throws fall back",
+  );
   // The `has` gate skips the lookup silently: t must not even be called.
   let called = 0;
   const counting = (): string => {
@@ -72,7 +89,11 @@ test("Missing shorts fall back even when the translator echoes keys", () => {
     "Cuentas por cobrar",
     "has=false keeps the full label",
   );
-  assert.equal(called, 0, "absent shorts never reach the translator, so no MISSING_MESSAGE is logged");
+  assert.equal(
+    called,
+    0,
+    "absent shorts never reach the translator, so no MISSING_MESSAGE is logged",
+  );
   assert.equal(
     resolveModuleShortLabel(counting, "ar", "Cuentas por cobrar", true, () => true),
     "Por cobrar",
@@ -86,5 +107,8 @@ test("navPathname strips query and fragment so gating sees the module path", () 
   assert.equal(navPathname("/projects#summary"), "/projects");
   assert.equal(navPathname("/projects/jobs?tab=open#top"), "/projects/jobs");
   assert.equal(navPathname("/projects"), "/projects");
-  assert.equal(navPathname("https://example.com/projects?tab=jobs"), "https://example.com/projects?tab=jobs");
+  assert.equal(
+    navPathname("https://example.com/projects?tab=jobs"),
+    "https://example.com/projects?tab=jobs",
+  );
 });

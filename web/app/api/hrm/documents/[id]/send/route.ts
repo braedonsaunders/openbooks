@@ -37,13 +37,10 @@ export const POST = defineRoute({
           signerId: d.signerId,
           partyId: d.partyId,
           signUrl: `${resolveAppBaseUrl(req).replace(/\/$/, "")}/sign/${d.token}`,
-          notified:
-            results.find((r) => r.partyId === d.partyId)?.notified ?? false,
-          emailed:
-            results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
+          notified: results.find((r) => r.partyId === d.partyId)?.notified ?? false,
+          emailed: results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
           emailSkippedReason:
-            results.find((r) => r.partyId === d.partyId)?.emailSkippedReason ??
-            null,
+            results.find((r) => r.partyId === d.partyId)?.emailSkippedReason ?? null,
         })),
       });
     } catch (e) {

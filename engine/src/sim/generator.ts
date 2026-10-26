@@ -8,7 +8,15 @@ import { addCalendarDays } from "../platform/civil-date.ts";
 import { mark, nextNumber, type SimContext } from "./context.ts";
 import type { SimJob } from "./world.ts";
 import { createDraftDocument, collectibleOpenItems } from "./activities/documents.ts";
-import { isBottomUp, isLaborBased, logDailyBillableTime, monthEndLaborAndPayroll, hasJobPortfolio, logDailyCrewTime, monthEndConstructionCosts } from "./bottomup.ts";
+import {
+  isBottomUp,
+  isLaborBased,
+  logDailyBillableTime,
+  monthEndLaborAndPayroll,
+  hasJobPortfolio,
+  logDailyCrewTime,
+  monthEndConstructionCosts,
+} from "./bottomup.ts";
 import type { Rng } from "./rng.ts";
 import type { SimCustomer } from "./world.ts";
 
@@ -23,16 +31,34 @@ import type { SimCustomer } from "./world.ts";
 
 type Behavior = "onTime" | "late" | "veryLate" | "shortPay" | "delinquent";
 
-function drawBehavior(rng: Rng, c: SimCustomer): { behavior: Behavior; delayDays: number | null; payFraction: string } {
+function drawBehavior(
+  rng: Rng,
+  c: SimCustomer,
+): { behavior: Behavior; delayDays: number | null; payFraction: string } {
   const behaviors: Behavior[] = ["onTime", "late", "veryLate", "shortPay", "delinquent"];
-  const weights = [c.payment.onTime, c.payment.late, c.payment.veryLate, c.payment.shortPay, c.payment.delinquent];
+  const weights = [
+    c.payment.onTime,
+    c.payment.late,
+    c.payment.veryLate,
+    c.payment.shortPay,
+    c.payment.delinquent,
+  ];
   const behavior = rng.weighted(behaviors, weights);
   switch (behavior) {
-    case "onTime": return { behavior, delayDays: rng.int(-3, 2), payFraction: "1" };
-    case "late": return { behavior, delayDays: rng.int(3, 20), payFraction: "1" };
-    case "veryLate": return { behavior, delayDays: rng.int(25, 75), payFraction: "1" };
-    case "shortPay": return { behavior, delayDays: rng.int(3, 25), payFraction: (rng.int(80, 95) / 100).toFixed(2) };
-    case "delinquent": return { behavior, delayDays: null, payFraction: "0" };
+    case "onTime":
+      return { behavior, delayDays: rng.int(-3, 2), payFraction: "1" };
+    case "late":
+      return { behavior, delayDays: rng.int(3, 20), payFraction: "1" };
+    case "veryLate":
+      return { behavior, delayDays: rng.int(25, 75), payFraction: "1" };
+    case "shortPay":
+      return {
+        behavior,
+        delayDays: rng.int(3, 25),
+        payFraction: (rng.int(80, 95) / 100).toFixed(2),
+      };
+    case "delinquent":
+      return { behavior, delayDays: null, payFraction: "0" };
   }
 }
 
@@ -63,10 +89,12 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   // job-tagged via generateJobCostBills, so job costs never enter the ledger
   // untagged and unbillable.
   const jobCostCats = new Set(["materials", "subcontractor", "equipmentRental"]);
-  const overheadVendors = ctx.world.jobs.length > 0
-    ? ctx.world.vendors.filter((v) => !v.expenseCategories.some((c) => jobCostCats.has(c)))
-    : ctx.world.vendors;
-  const billCount = overheadVendors.length === 0 ? 0 : sampleCount(rng, ctx.profile.cadence.billsPerDay, weekend);
+  const overheadVendors =
+    ctx.world.jobs.length > 0
+      ? ctx.world.vendors.filter((v) => !v.expenseCategories.some((c) => jobCostCats.has(c)))
+      : ctx.world.vendors;
+  const billCount =
+    overheadVendors.length === 0 ? 0 : sampleCount(rng, ctx.profile.cadence.billsPerDay, weekend);
   for (let i = 0; i < billCount; i++) {
     const r = rng.stream(`bill:${i}`);
     const vendor = r.pick(overheadVendors);
@@ -82,7 +110,13 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
       currency: ctx.world.currency,
       memo: `${category} from ${vendor.name}`,
       custom: { sim: { source: "generator", category } },
-      lines: [{ accountId, description: `${category} purchase`, amount: r.money(vendor.billMin, vendor.billMax) }],
+      lines: [
+        {
+          accountId,
+          description: `${category} purchase`,
+          amount: r.money(vendor.billMin, vendor.billMax),
+        },
+      ],
     });
     events.billsArrived++;
   }
@@ -130,7 +164,13 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
         currency: ctx.world.currency,
         memo: `Work for ${customer.name}`,
         custom: { sim: { source: "generator", behavior, payFraction } },
-        lines: [{ accountId, description: `${category} work`, amount: r.money(customer.invoiceMin, customer.invoiceMax) }],
+        lines: [
+          {
+            accountId,
+            description: `${category} work`,
+            amount: r.money(customer.invoiceMin, customer.invoiceMax),
+          },
+        ],
       });
       events.invoicesPrepared++;
     }
@@ -205,13 +245,16 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
 async function postMonthlyLaborAndCogs(ctx: SimContext): Promise<void> {
   const econ = ctx.profile.economics!;
   const monthStart = `${ctx.simDate.slice(0, 7)}-01`;
-  const rev = (await db.execute<{ revenue: string }>(sql`
+  const rev = await db.execute<{ revenue: string }>(
+    sql`
     select coalesce(sum(case when kind = 'customer_invoice' then total
                              when kind = 'customer_credit'  then -total else 0 end), 0)::text as revenue
       from documents
      where org_id = ${ctx.world.orgId} and status = 'posted'
        and kind in ('customer_invoice', 'customer_credit')
-       and document_date >= ${monthStart} and document_date <= ${ctx.simDate}`, "objects"));
+       and document_date >= ${monthStart} and document_date <= ${ctx.simDate}`,
+    "objects",
+  );
   const revenue = rev[0]?.revenue ?? "0";
   if (cmp(revenue, "0") <= 0) return;
 
@@ -234,7 +277,12 @@ async function postMonthlyLaborAndCogs(ctx: SimContext): Promise<void> {
   await createScriptJournal(
     ctx.world.orgId,
     ctx.world.actors.controller,
-    { documentDate: ctx.simDate, memo: `Payroll & delivery cost — ${ctx.simDate.slice(0, 7)}`, referenceNumber: "PAYROLL", lines },
+    {
+      documentDate: ctx.simDate,
+      memo: `Payroll & delivery cost — ${ctx.simDate.slice(0, 7)}`,
+      referenceNumber: "PAYROLL",
+      lines,
+    },
     { post: true },
   );
   mark(ctx, "payroll_run");
@@ -263,15 +311,24 @@ async function generateJobCostBills(ctx: SimContext): Promise<number> {
     const perCk = job.monthlyMaterials / 4;
     if (matV.length && a.materials) {
       const amt = perCk * 0.65 * r.float(0.7, 1.3);
-      if (amt > 50) { await mkJobBill(ctx, r.pick(matV), a.materials, job, "materials", amt); count++; }
+      if (amt > 50) {
+        await mkJobBill(ctx, r.pick(matV), a.materials, job, "materials", amt);
+        count++;
+      }
     }
     if (subV.length && a.subcontractor && r.chance(0.5)) {
       const amt = perCk * 0.5 * r.float(0.6, 1.4);
-      if (amt > 50) { await mkJobBill(ctx, r.pick(subV), a.subcontractor, job, "subcontractor", amt); count++; }
+      if (amt > 50) {
+        await mkJobBill(ctx, r.pick(subV), a.subcontractor, job, "subcontractor", amt);
+        count++;
+      }
     }
     if (job.equipment && rentV.length && a.equipmentRental && r.chance(0.35)) {
       const amt = perCk * 0.3 * r.float(0.5, 1.2);
-      if (amt > 50) { await mkJobBill(ctx, r.pick(rentV), a.equipmentRental, job, "equipmentRental", amt); count++; }
+      if (amt > 50) {
+        await mkJobBill(ctx, r.pick(rentV), a.equipmentRental, job, "equipmentRental", amt);
+        count++;
+      }
     }
   }
   if (count > 0) mark(ctx, "bill_arrived");
@@ -284,13 +341,20 @@ async function generateJobCostBills(ctx: SimContext): Promise<number> {
  * to the job (project_id) and hit the Job Cost — Travel & Per Diem account, so the
  * cost is billable and reimbursable. The environment approves + reimburses them.
  */
-async function generateExpenseReports(ctx: SimContext, rng: SimContext["rng"], weekend: boolean): Promise<number> {
+async function generateExpenseReports(
+  ctx: SimContext,
+  rng: SimContext["rng"],
+  weekend: boolean,
+): Promise<number> {
   const a = ctx.world.accounts;
   if (ctx.world.jobs.length === 0 || ctx.world.employees.length === 0 || !a.jobTravel) return 0;
   const count = sampleCount(rng, ctx.profile.cadence.expenseReportsPerDay, weekend);
   const kinds: [string, number, number][] = [
-    ["Per diem", 45, 75], ["Mileage & fuel", 30, 220], ["Job-site meals (crew)", 60, 340],
-    ["Small tools & consumables", 40, 480], ["Lodging (out-of-town job)", 120, 620],
+    ["Per diem", 45, 75],
+    ["Mileage & fuel", 30, 220],
+    ["Job-site meals (crew)", 60, 340],
+    ["Small tools & consumables", 40, 480],
+    ["Lodging (out-of-town job)", 120, 620],
   ];
   const weights = ctx.world.jobs.map((j) => Math.max(1, j.crewSize));
   const totalW = weights.reduce((x, y) => x + y, 0);
@@ -301,13 +365,22 @@ async function generateExpenseReports(ctx: SimContext, rng: SimContext["rng"], w
     // Weighted job pick (crew is where the work — and the expense — is).
     let x = r.float(0, totalW);
     let idx = 0;
-    while (idx < weights.length - 1 && x > weights[idx]!) { x -= weights[idx]!; idx++; }
+    while (idx < weights.length - 1 && x > weights[idx]!) {
+      x -= weights[idx]!;
+      idx++;
+    }
     const job = ctx.world.jobs[idx]!;
     const nLines = 1 + (r.chance(0.4) ? 1 : 0);
-    const lines: { accountId: string; description: string; amount: string; projectId: string }[] = [];
+    const lines: { accountId: string; description: string; amount: string; projectId: string }[] =
+      [];
     for (let k = 0; k < nLines; k++) {
       const [label, lo, hi] = r.pick(kinds);
-      lines.push({ accountId: a.jobTravel!, description: `${label} — ${job.code}`, amount: r.money(lo, hi), projectId: job.id });
+      lines.push({
+        accountId: a.jobTravel!,
+        description: `${label} — ${job.code}`,
+        amount: r.money(lo, hi),
+        projectId: job.id,
+      });
     }
     await createDraftDocument(ctx.world, {
       kind: "expense_report",
@@ -345,6 +418,13 @@ async function mkJobBill(
     currency: ctx.world.currency,
     memo: `${category} — ${job.name}`,
     custom: { sim: { source: "generator", category, projectId: job.id } },
-    lines: [{ accountId, description: `${category} — ${job.code}`, amount: amount.toFixed(2), projectId: job.id }],
+    lines: [
+      {
+        accountId,
+        description: `${category} — ${job.code}`,
+        amount: amount.toFixed(2),
+        projectId: job.id,
+      },
+    ],
   });
 }

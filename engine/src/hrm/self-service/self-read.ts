@@ -22,7 +22,9 @@ import { inputGuards } from "../input-guards.ts";
 
 /** Shared HRM feature gate (actor.ts): audience-aware when HRM is off. */
 
-const { requireOrgId, requireActorId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
+const { requireOrgId, requireActorId } = inputGuards(
+  (message) => new SelfServiceError("REFUSED", message),
+);
 
 // --- Profile ---------------------------------------------------------------
 
@@ -85,12 +87,17 @@ export async function loadMyParty(
   orgId: string,
   partyId: string,
 ): Promise<PartyRow> {
-  const row = (await exec.execute<PartyRow>(sql`
+  const row = (
+    await exec.execute<PartyRow>(
+      sql`
     select id, display_name, email, phone,
            emergency_contact as "emergency_contact"
       from parties
      where org_id = ${orgId} and id = ${partyId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new SelfServiceError(
       "NOT_FOUND",
@@ -110,22 +117,27 @@ export async function loadMyAddress(
   orgId: string,
   partyId: string,
 ): Promise<MyAddress | null> {
-  const row = (await exec.execute<{
-    id: string;
-    label: string | null;
-    line1: string | null;
-    line2: string | null;
-    city: string | null;
-    region: string | null;
-    postal_code: string | null;
-    country: string | null;
-  }>(sql`
+  const row = (
+    await exec.execute<{
+      id: string;
+      label: string | null;
+      line1: string | null;
+      line2: string | null;
+      city: string | null;
+      region: string | null;
+      postal_code: string | null;
+      country: string | null;
+    }>(
+      sql`
     select id, label, line1, line2, city, region, postal_code, country
       from addresses
      where org_id = ${orgId} and party_id = ${partyId}
      order by is_default_billing desc, updated_at desc, id
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return {
     id: row.id,
@@ -168,7 +180,8 @@ export async function loadMyEmploymentSummaries(
   if (employmentIds.length === 0) return [];
   // Bare JS arrays interpolate as row constructors, never PostgreSQL
   // arrays: ids cross as a JSON string, exactly like the sibling reads.
-  const rows = await exec.execute<EmploymentSummaryRow>(sql`
+  const rows = await exec.execute<EmploymentSummaryRow>(
+    sql`
     with ranked as (
       select e.id as employment_id,
              v.status, v.effective_from::text as effective_from,
@@ -214,10 +227,14 @@ export async function loadMyEmploymentSummaries(
         on d.org_id = ${orgId} and d.id = pa.department_id
      where r.rn = 1
      order by r.employment_id
-  `, "objects");
+  `,
+    "objects",
+  );
   const summaries: MyEmploymentSummary[] = [];
   for (const row of rows) {
-    const managers = (await exec.execute<{ name: string }>(sql`
+    const managers = (
+      await exec.execute<{ name: string }>(
+        sql`
       select distinct p.display_name as name
         from reporting_relationships r
         join worker_employments m
@@ -231,7 +248,10 @@ export async function loadMyEmploymentSummaries(
          and r.effective_from <= ${today}::date
          and (r.effective_to is null or r.effective_to > ${today}::date)
        order by p.display_name
-    `, "objects")).map((manager) => manager.name);
+    `,
+        "objects",
+      )
+    ).map((manager) => manager.name);
     summaries.push({
       employmentId: row.employment_id,
       status: row.status,
@@ -325,7 +345,8 @@ export async function loadMySteps(
     due_on: string;
     required: boolean;
     evidence_kind: string;
-  }>(sql`
+  }>(
+    sql`
     select s.id, s.process_id::text as process_id, p.kind as process_kind,
            p.employment_id::text as employment_id,
            s.title, s.description, s.due_on::text as due_on,
@@ -343,7 +364,9 @@ export async function loadMySteps(
          or (s.owner_kind = 'named_party' and s.owner_party_id = ${partyId}::uuid)
        )
      order by s.due_on, s.id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     processId: row.process_id,
@@ -406,7 +429,8 @@ export async function loadMyRequests(
     reason: string | null;
     submitted_at: string | null;
     created_at: string;
-  }>(sql`
+  }>(
+    sql`
     select id, employment_id::text as employment_id, payload, status, reason,
            submitted_at::text as submitted_at, created_at::text as created_at
       from hrm_employment_change_requests
@@ -414,7 +438,9 @@ export async function loadMyRequests(
        and employment_id in (select jsonb_array_elements_text(${JSON.stringify([...employmentIds])}::jsonb)::uuid)
      order by created_at desc, id desc
      limit 100
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     employmentId: row.employment_id,

@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import { useTransition } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { ExternalLink } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { switchWorkspace, workspaceSwitchMessageKey } from '../../../../lib/workspace-switch'
+import { useTransition } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { ExternalLink } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import { switchWorkspace, workspaceSwitchMessageKey } from "../../../../lib/workspace-switch";
 
 /** Opens the organization as the active workspace; the server decides access. */
 export function OpenOrganizationButton({ orgId }: { orgId: string }) {
-  const tSwitch = useTranslations('shell.accountMenu')
-  const t = useTranslations('platform.tenants')
-  const [pending, start] = useTransition()
+  const tSwitch = useTranslations("shell.accountMenu");
+  const t = useTranslations("platform.tenants");
+  const [pending, start] = useTransition();
   return (
     <Button
       type="button"
@@ -21,14 +21,14 @@ export function OpenOrganizationButton({ orgId }: { orgId: string }) {
       onClick={() =>
         start(async () => {
           try {
-            await switchWorkspace(orgId)
+            await switchWorkspace(orgId);
           } catch (error) {
-            toast.error(tSwitch(workspaceSwitchMessageKey(error)))
+            toast.error(tSwitch(workspaceSwitchMessageKey(error)));
           }
         })
       }
     >
-      {t('open')} <ExternalLink size={14} />
+      {t("open")} <ExternalLink size={14} />
     </Button>
-  )
+  );
 }

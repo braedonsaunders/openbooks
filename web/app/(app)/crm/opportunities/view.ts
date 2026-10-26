@@ -1,18 +1,25 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { crmSharedScope, crmOpportunityScope } from '../../../../lib/crm-scope'
-import { can, requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
-import { loadOpportunity } from '../../../../lib/crm'
-import type { OpportunityDrawer } from '../OpportunityDrawer'
-import type { KanbanOpportunity, KanbanStatus } from '../OpportunityKanban'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { crmSharedScope, crmOpportunityScope } from "../../../../lib/crm-scope";
+import { can, requirePermission } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
+import { customerGroupTabs } from "../../../../components/module-home/group-tabs";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
+import { loadOpportunity } from "../../../../lib/crm";
+import type { OpportunityDrawer } from "../OpportunityDrawer";
+import type { KanbanOpportunity, KanbanStatus } from "../OpportunityKanban";
 
 /**
  * The opportunity list, split into a loader and a spec.
@@ -31,92 +38,96 @@ import type { KanbanOpportunity, KanbanStatus } from '../OpportunityKanban'
  *    opportunities reuses the mounted flyout in both renders.
  */
 
-type OpportunityDrawerProps = Parameters<typeof OpportunityDrawer>[0]
-type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+type OpportunityDrawerProps = Parameters<typeof OpportunityDrawer>[0];
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never;
 
 export interface OpportunitiesData {
-  title: string
-  description: string
-  newLabel: string
-  createFailed: string
-  canManage: boolean
-  viewMode: 'board' | 'list'
-  currentParams: Record<string, string | string[] | undefined>
-  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
-  drawer: OpportunityDrawerProps | null
+  title: string;
+  description: string;
+  newLabel: string;
+  createFailed: string;
+  canManage: boolean;
+  viewMode: "board" | "list";
+  currentParams: Record<string, string | string[] | undefined>;
+  tabs: Awaited<ReturnType<typeof customerGroupTabs>>;
+  drawer: OpportunityDrawerProps | null;
   board: {
-    statuses: KanbanStatus[]
-    opportunities: KanbanOpportunity[]
-    undatedOnly: boolean
-    undatedLabel: string
-    showAllLabel: string
-  } | null
+    statuses: KanbanStatus[];
+    opportunities: KanbanOpportunity[];
+    undatedOnly: boolean;
+    undatedLabel: string;
+    showAllLabel: string;
+  } | null;
 }
 
 export async function loadOpportunities(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<OpportunitiesData> {
-  const authz = await requirePermission('crm.opportunities.read')
-  const manage = can(authz, 'crm.opportunities.manage')
-  const t = await getTranslations('crm')
-  const openId = pickString(sp.opportunity)
-  const viewMode: 'board' | 'list' = pickString(sp.view) === 'board' ? 'board' : 'list'
+  const authz = await requirePermission("crm.opportunities.read");
+  const manage = can(authz, "crm.opportunities.manage");
+  const t = await getTranslations("crm");
+  const openId = pickString(sp.opportunity);
+  const viewMode: "board" | "list" = pickString(sp.view) === "board" ? "board" : "list";
   // Forecast exclusion note links here with `undated=1`: the pipeline the
   // weighted forecast cannot see is exactly the undated population. The
   // forecast carries its active owner/team scope on that link, and the board
   // honours it — otherwise the board widens to the whole org while the
   // exclusion count beside the link stays scoped. Owner wins over team,
   // mirroring the forecasts loader's exclusivity.
-  const undatedOnly = pickString(sp.undated) === '1'
-  const requestedOwner = pickString(sp.owner)
-  const requestedTeam = pickString(sp.team)
-  const boardOwnerUserId = requestedOwner && isUuid(requestedOwner) ? requestedOwner : null
+  const undatedOnly = pickString(sp.undated) === "1";
+  const requestedOwner = pickString(sp.owner);
+  const requestedTeam = pickString(sp.team);
+  const boardOwnerUserId = requestedOwner && isUuid(requestedOwner) ? requestedOwner : null;
   const boardSalesTeamId =
-    !boardOwnerUserId && requestedTeam && isUuid(requestedTeam) ? requestedTeam : null
+    !boardOwnerUserId && requestedTeam && isUuid(requestedTeam) ? requestedTeam : null;
 
-  let board: OpportunitiesData['board'] = null
-  if (viewMode === 'board') {
-    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
+  let board: OpportunitiesData["board"] = null;
+  if (viewMode === "board") {
+    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
     const [statusesResult, opportunitiesResult] = await Promise.all([
       db.execute<{
-        id: string
-        key: string
-        name: string
-        sequence: number
-        probability: number
-        default_forecast_category: string
-        is_closed: boolean
-        is_won: boolean
-      }>(sql`
+        id: string;
+        key: string;
+        name: string;
+        sequence: number;
+        probability: number;
+        default_forecast_category: string;
+        is_closed: boolean;
+        is_won: boolean;
+      }>(
+        sql`
         select id, key, name, sequence, probability, default_forecast_category, is_closed, is_won
           from crm_opportunity_statuses
          where org_id = ${authz.user.orgId} and is_active
-         order by sequence`, 'objects'),
+         order by sequence`,
+        "objects",
+      ),
       db.execute<{
-        id: string
-        opportunity_number: string
-        title: string
-        party_id: string | null
-        party_name: string | null
-        primary_contact_id: string | null
-        contact_name: string | null
-        owner_user_id: string | null
-        owner_name: string | null
-        sales_team_name: string | null
-        status_id: string
-        forecast_category: string
-        probability: number
-        currency: string
-        projected_amount: string
-        weighted_amount: string
-        expected_close_date: string | null
-        next_step: string | null
-        win_loss_reason: string | null
-        updated_at: string
-        revision_token: string
-        last_activity_at: string | null
-        lines_count: number
-      }>(sql`
+        id: string;
+        opportunity_number: string;
+        title: string;
+        party_id: string | null;
+        party_name: string | null;
+        primary_contact_id: string | null;
+        contact_name: string | null;
+        owner_user_id: string | null;
+        owner_name: string | null;
+        sales_team_name: string | null;
+        status_id: string;
+        forecast_category: string;
+        probability: number;
+        currency: string;
+        projected_amount: string;
+        weighted_amount: string;
+        expected_close_date: string | null;
+        next_step: string | null;
+        win_loss_reason: string | null;
+        updated_at: string;
+        revision_token: string;
+        last_activity_at: string | null;
+        lines_count: number;
+      }>(
+        sql`
         select o.id, o.opportunity_number, o.title, o.party_id, p.display_name as party_name,
                o.primary_contact_id, c.name as contact_name, o.owner_user_id, u.name as owner_name,
                st.name as sales_team_name, o.status_id,
@@ -140,8 +151,10 @@ export async function loadOpportunities(
            ${boardOwnerUserId ? sql`and o.owner_user_id = ${boardOwnerUserId}` : sql``}
            ${boardSalesTeamId ? sql`and o.sales_team_id = ${boardSalesTeamId}` : sql``}
          order by o.expected_close_date nulls last, o.created_at desc
-    `, 'objects'),
-    ])
+    `,
+        "objects",
+      ),
+    ]);
 
     const kanbanStatuses: KanbanStatus[] = statusesResult.map((row) => ({
       id: row.id,
@@ -152,12 +165,13 @@ export async function loadOpportunities(
       defaultForecastCategory: row.default_forecast_category,
       isClosed: row.is_closed,
       isWon: row.is_won,
-    }))
+    }));
 
     const kanbanOpportunities: KanbanOpportunity[] = opportunitiesResult.map((row) => {
-      const activeTimestamp = row.last_activity_at || row.updated_at
-      const isStagnant =
-        activeTimestamp ? new Date(activeTimestamp).getTime() < fourteenDaysAgo : false
+      const activeTimestamp = row.last_activity_at || row.updated_at;
+      const isStagnant = activeTimestamp
+        ? new Date(activeTimestamp).getTime() < fourteenDaysAgo
+        : false;
 
       return {
         id: row.id,
@@ -174,42 +188,72 @@ export async function loadOpportunities(
         forecastCategory: row.forecast_category,
         probability: row.probability,
         currency: row.currency,
-        projectedAmount: row.projected_amount ?? '0',
-        weightedAmount: row.weighted_amount ?? '0',
+        projectedAmount: row.projected_amount ?? "0",
+        weightedAmount: row.weighted_amount ?? "0",
         expectedCloseDate: row.expected_close_date,
         nextStep: row.next_step,
         winLossReason: row.win_loss_reason,
         updatedAt: row.revision_token || row.updated_at,
         isStagnant,
         linesCount: row.lines_count ?? 0,
-      }
-    })
+      };
+    });
 
     board = {
       statuses: kanbanStatuses,
       opportunities: kanbanOpportunities,
       undatedOnly,
-      undatedLabel: t('opportunities.undatedOnly'),
-      showAllLabel: t('opportunities.showAll'),
-    }
+      undatedLabel: t("opportunities.undatedOnly"),
+      showAllLabel: t("opportunities.showAll"),
+    };
   }
 
-  let drawer: (OpportunityDrawerProps & { remountKey: string }) | null = null
+  let drawer: (OpportunityDrawerProps & { remountKey: string }) | null = null;
   if (openId && isUuid(openId)) {
     const [multiCurrency, inventoryEnabled, equipmentEnabled] = await Promise.all([
-      isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
-      isFeatureEnabled(authz.user.orgId, 'inventory'),
-      isFeatureEnabled(authz.user.orgId, 'equipment'),
-    ])
-    const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies, representatives] = await Promise.all([
+      isFeatureEnabled(authz.user.orgId, "multiCurrency"),
+      isFeatureEnabled(authz.user.orgId, "inventory"),
+      isFeatureEnabled(authz.user.orgId, "equipment"),
+    ]);
+    const [
+      open,
+      statuses,
+      owners,
+      accounts,
+      contacts,
+      teams,
+      sources,
+      items,
+      currencies,
+      representatives,
+    ] = await Promise.all([
       loadOpportunity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
-      (db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`, 'objects')),
-      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
-      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`, 'objects')),
-      (db.execute(sql`select c.id,c.party_id,c.name from contacts c left join parties p on p.id=c.party_id and p.org_id=c.org_id where c.org_id=${authz.user.orgId} and c.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by c.name`, 'objects')),
-      (db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
-      (db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
-      (db.execute(sql`
+      db.execute(
+        sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`,
+        "objects",
+      ),
+      db.execute(
+        sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`,
+        "objects",
+      ),
+      db.execute(
+        sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)} order by p.display_name`,
+        "objects",
+      ),
+      db.execute(
+        sql`select c.id,c.party_id,c.name from contacts c left join parties p on p.id=c.party_id and p.org_id=c.org_id where c.org_id=${authz.user.orgId} and c.is_active${crmSharedScope(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)} order by c.name`,
+        "objects",
+      ),
+      db.execute(
+        sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`,
+        "objects",
+      ),
+      db.execute(
+        sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`,
+        "objects",
+      ),
+      db.execute(
+        sql`
         select id, concat_ws(' · ', code, name) name from items
          where org_id = ${authz.user.orgId} and is_active
            and (
@@ -220,95 +264,103 @@ export async function loadOpportunities(
                 where org_id = ${authz.user.orgId} and opportunity_id = ${openId} and item_id is not null
              )
            )
-         order by name`, 'objects')),
+         order by name`,
+        "objects",
+      ),
       multiCurrency
-        ? db.execute<ElementOf<OpportunityDrawerProps['currencies']>>(sql`select code,name from currencies order by code`, 'objects')
+        ? db.execute<ElementOf<OpportunityDrawerProps["currencies"]>>(
+            sql`select code,name from currencies order by code`,
+            "objects",
+          )
         : Promise.resolve([]),
-      db.execute(sql`select p.id,p.display_name as name from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id where e.org_id=${authz.user.orgId} and e.is_sales_rep and e.is_active and p.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`, 'objects'),
-    ])
-    const requestedReturn = pickString(sp.drawerReturn)
-    const closeHref = requestedReturn?.startsWith('/crm/opportunities')
+      db.execute(
+        sql`select p.id,p.display_name as name from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id where e.org_id=${authz.user.orgId} and e.is_sales_rep and e.is_active and p.is_active${crmSharedScope(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)} order by p.display_name`,
+        "objects",
+      ),
+    ]);
+    const requestedReturn = pickString(sp.drawerReturn);
+    const closeHref = requestedReturn?.startsWith("/crm/opportunities")
       ? requestedReturn
-      : '/crm/opportunities'
+      : "/crm/opportunities";
     if (open) {
       drawer = {
         // Keyed by the open record: the drawer holds unsaved edits in local
         // state, so switching records must remount it rather than pour B's
         // props into A's dirty form.
         remountKey: openId,
-        data: open as unknown as OpportunityDrawerProps['data'],
-        statuses: statuses as unknown as OpportunityDrawerProps['statuses'],
-        representatives: representatives as unknown as OpportunityDrawerProps['representatives'],
-        owners: owners as unknown as OpportunityDrawerProps['owners'],
-        accounts: accounts as unknown as OpportunityDrawerProps['accounts'],
-        contacts: contacts as unknown as OpportunityDrawerProps['contacts'],
-        teams: teams as unknown as OpportunityDrawerProps['teams'],
-        sources: sources as unknown as OpportunityDrawerProps['sources'],
-        items: items as unknown as OpportunityDrawerProps['items'],
-        currencies: currencies as unknown as OpportunityDrawerProps['currencies'],
+        data: open as unknown as OpportunityDrawerProps["data"],
+        statuses: statuses as unknown as OpportunityDrawerProps["statuses"],
+        representatives: representatives as unknown as OpportunityDrawerProps["representatives"],
+        owners: owners as unknown as OpportunityDrawerProps["owners"],
+        accounts: accounts as unknown as OpportunityDrawerProps["accounts"],
+        contacts: contacts as unknown as OpportunityDrawerProps["contacts"],
+        teams: teams as unknown as OpportunityDrawerProps["teams"],
+        sources: sources as unknown as OpportunityDrawerProps["sources"],
+        items: items as unknown as OpportunityDrawerProps["items"],
+        currencies: currencies as unknown as OpportunityDrawerProps["currencies"],
         closeHref,
         canManage: manage,
         multiCurrency,
-      }
+      };
     }
   }
 
   return {
-    title: t('opportunities.title'),
-    description: t('opportunities.description'),
-    newLabel: t('opportunities.new'),
-    createFailed: t('feedback.createFailed'),
+    title: t("opportunities.title"),
+    description: t("opportunities.description"),
+    newLabel: t("opportunities.new"),
+    createFailed: t("feedback.createFailed"),
     canManage: manage,
     viewMode,
     currentParams: sp,
-    tabs: await customerGroupTabs(authz, '/crm/opportunities'),
+    tabs: await customerGroupTabs(authz, "/crm/opportunities"),
     drawer,
     board,
-  }
+  };
 }
 
-const f = ref<OpportunitiesData>()
+const f = ref<OpportunitiesData>();
 
 export function opportunitiesSpec(data: OpportunitiesData): PageSpec {
   // The native header action and the list empty action are the same
   // CrmNewButton element; the labels ride along as loader-resolved strings.
   const newOpportunity = {
-    widget: 'crm-new-button',
+    widget: "crm-new-button",
     props: {
-      apiPath: '/api/crm/opportunities/draft',
-      basePath: '/crm/opportunities',
-      param: 'opportunity',
+      apiPath: "/api/crm/opportunities/draft",
+      basePath: "/crm/opportunities",
+      param: "opportunity",
       label: data.newLabel,
       failed: data.createFailed,
     },
-  }
+  };
   const viewSwitcher = {
-    widget: 'opportunity-view-switcher',
+    widget: "opportunity-view-switcher",
     props: {
       view: data.viewMode,
     },
-  }
+  };
 
-  const isBoard = data.viewMode === 'board' && data.board
+  const isBoard = data.viewMode === "board" && data.board;
 
   return page({
-    route: '/crm/opportunities',
-    layout: 'list',
+    route: "/crm/opportunities",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
           widget(viewSwitcher.widget, viewSwitcher.props),
-          widget(newOpportunity.widget, newOpportunity.props, f('canManage')),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget(newOpportunity.widget, newOpportunity.props, f("canManage")),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
       isBoard
-        ? widgetBlock('opportunity-kanban-board', {
+        ? widgetBlock("opportunity-kanban-board", {
             statuses: data.board!.statuses,
             opportunities: data.board!.opportunities,
             undatedOnly: data.board!.undatedOnly,
@@ -316,17 +368,17 @@ export function opportunitiesSpec(data: OpportunitiesData): PageSpec {
             showAllLabel: data.board!.showAllLabel,
             canManage: data.canManage,
             drawer: data.drawer
-              ? [{ widget: 'opportunity-drawer', props: { drawer: data.drawer } }]
+              ? [{ widget: "opportunity-drawer", props: { drawer: data.drawer } }]
               : [],
           })
-        : widgetBlock('entity-list-view', {
-            recordType: 'opportunity',
+        : widgetBlock("entity-list-view", {
+            recordType: "opportunity",
             sp: data.currentParams,
             emptyAction: data.canManage ? newOpportunity : null,
             drawer: data.drawer
-              ? [{ widget: 'opportunity-drawer', props: { drawer: data.drawer } }]
+              ? [{ widget: "opportunity-drawer", props: { drawer: data.drawer } }]
               : [],
           }),
     ],
-  })
+  });
 }

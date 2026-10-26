@@ -19,7 +19,14 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const IMPORTED_REASON = "close.importedPeriodLockReason";
 
-async function seedUsdCash(orgId: string, subsidiaryId: string, accounts: { bank: string; clearing: string; fxGainLoss: string }, actorId: string, bookId: string, periodId: string): Promise<void> {
+async function seedUsdCash(
+  orgId: string,
+  subsidiaryId: string,
+  accounts: { bank: string; clearing: string; fxGainLoss: string },
+  actorId: string,
+  bookId: string,
+  periodId: string,
+): Promise<void> {
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
     coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${orgId}`);
   await db.execute(sql`
@@ -41,7 +48,9 @@ async function seedUsdCash(orgId: string, subsidiaryId: string, accounts: { bank
     values
       (${orgId}, ${entryId}, 1, ${accounts.bank}, ${subsidiaryId}, 136.00, 'USD', 100.00, 1.36, false),
       (${orgId}, ${entryId}, 2, ${accounts.clearing}, ${subsidiaryId}, -136.00, 'CAD', -136.00, 1, false)`);
-  await db.execute(sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`);
+  await db.execute(
+    sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`,
+  );
 }
 
 async function seedAugust(orgId: string, periodId: string): Promise<string> {
@@ -76,27 +85,50 @@ async function closeAllImported(orgId: string, periodId: string, bookId: string)
 }
 
 async function fxRevaluationEntryCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from journal_entries
-     where org_id=${orgId} and origin='fx_revaluation'`, "objects"));
+     where org_id=${orgId} and origin='fx_revaluation'`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
-test("open periods: revaluation still posts its pair (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedUsdCash(org.orgId, org.subsidiaryId, org.accounts, actorId, org.bookId, org.periodId);
-    await seedAugust(org.orgId, org.periodId);
-    const run = await withOrgContext(org.orgId, () =>
-      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]));
-    assert.equal(run.problems.length, 0, `expected no problems, got ${JSON.stringify(run.problems)}`);
-    assert.ok(run.posted.length >= 1, "expected the adjustment+reversal pair to post");
-    assert.equal(await fxRevaluationEntryCount(org.orgId), 2, "adjustment and reversal must both land");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "open periods: revaluation still posts its pair (setup can post, refusal is load-bearing)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedUsdCash(
+        org.orgId,
+        org.subsidiaryId,
+        org.accounts,
+        actorId,
+        org.bookId,
+        org.periodId,
+      );
+      await seedAugust(org.orgId, org.periodId);
+      const run = await withOrgContext(org.orgId, () =>
+        runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]),
+      );
+      assert.equal(
+        run.problems.length,
+        0,
+        `expected no problems, got ${JSON.stringify(run.problems)}`,
+      );
+      assert.ok(run.posted.length >= 1, "expected the adjustment+reversal pair to post");
+      assert.equal(
+        await fxRevaluationEntryCount(org.orgId),
+        2,
+        "adjustment and reversal must both land",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("revaluation refuses an imported lock on the adjustment period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -106,7 +138,8 @@ test("revaluation refuses an imported lock on the adjustment period", { skip: !D
     await seedAugust(org.orgId, org.periodId);
     await closeAllImported(org.orgId, org.periodId, org.bookId);
     const run = await withOrgContext(org.orgId, () =>
-      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]));
+      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]),
+    );
     assert.equal(run.posted.length, 0, "nothing may post into an imported lock");
     assert.equal(run.problems.length, 1, `one named refusal expected, got ${JSON.stringify(run)}`);
     assert.match(
@@ -114,7 +147,11 @@ test("revaluation refuses an imported lock on the adjustment period", { skip: !D
       /FX revaluation cannot post into the closed GL period/,
       `refusal must be named, got: ${run.problems[0]}`,
     );
-    assert.equal(await fxRevaluationEntryCount(org.orgId), 0, "the backstop must leave no partial pair");
+    assert.equal(
+      await fxRevaluationEntryCount(org.orgId),
+      0,
+      "the backstop must leave no partial pair",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -128,7 +165,8 @@ test("revaluation refuses an imported lock on the reversal period", { skip: !DB 
     const augustId = await seedAugust(org.orgId, org.periodId);
     await closeAllImported(org.orgId, augustId, org.bookId);
     const run = await withOrgContext(org.orgId, () =>
-      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]));
+      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]),
+    );
     assert.equal(run.posted.length, 0, "the pair is atomic: no adjustment without its reversal");
     assert.equal(run.problems.length, 1, `one named refusal expected, got ${JSON.stringify(run)}`);
     assert.match(

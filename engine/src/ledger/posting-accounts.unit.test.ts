@@ -52,7 +52,8 @@ const scripted = (
   const calls: string[] = [];
   const runner = {
     execute: async (query: Parameters<typeof db.execute>[0], mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const built = dialect.sqlToQuery(query);
       const step = steps[index];
       index += 1;
@@ -81,8 +82,7 @@ const expenseDoc = (over: Record<string, unknown> = {}): Doc =>
 const featureStep = (enabled: boolean, orgId: string): ScriptStep => ({
   sql: /settings->'features'/,
   rows: [{ features: { revenueRecognition: enabled } }],
-  check: ({ params }) =>
-    assert.ok(params.includes(orgId), "feature check is scoped to the org"),
+  check: ({ params }) => assert.ok(params.includes(orgId), "feature check is scoped to the org"),
 });
 
 test("deferral resolution stays off the database when revenue recognition is disabled", async () => {
@@ -136,7 +136,13 @@ test("tax-code control accounts map only when configured, never as null", async 
   ]);
   const { collected, paid } = await resolveTaxAccounts(s.runner, "org-1");
   assert.deepEqual([...collected], [["T1", "collect-1"]]);
-  assert.deepEqual([...paid], [["T1", "paid-1"], ["T2", "paid-2"]]);
+  assert.deepEqual(
+    [...paid],
+    [
+      ["T1", "paid-1"],
+      ["T2", "paid-2"],
+    ],
+  );
   s.assertDrained();
 });
 
@@ -186,7 +192,10 @@ test("an expense report without personal lines keeps its deps with one probe rea
 test("a personal line without a configured control posts with no receivable", async () => {
   const s = scripted([
     { sql: /settlement_type/, rows: [{ one: 1 }] },
-    { sql: /employeeReceivable/, rows: [{ raw: null, id: null, type: null, isActive: null, isSummary: null }] },
+    {
+      sql: /employeeReceivable/,
+      rows: [{ raw: null, id: null, type: null, isActive: null, isSummary: null }],
+    },
   ]);
   const out = await resolveExpenseReceivableDeps(s.runner, expenseDoc(), deps());
   assert.ok(out.control.employeeReceivable === undefined);
@@ -226,18 +235,37 @@ test("a missing, inactive, summary, mistyped, or malformed control is refused by
     },
     {
       name: "inactive",
-      row: { raw: controlId, id: controlId, type: "asset_receivable", isActive: false, isSummary: false },
+      row: {
+        raw: controlId,
+        id: controlId,
+        type: "asset_receivable",
+        isActive: false,
+        isSummary: false,
+      },
       match: /is inactive/,
     },
     {
       name: "summary",
-      row: { raw: controlId, id: controlId, type: "asset_receivable", isActive: true, isSummary: true },
+      row: {
+        raw: controlId,
+        id: controlId,
+        type: "asset_receivable",
+        isActive: true,
+        isSummary: true,
+      },
       match: /is a summary account/,
     },
     {
       name: "mistyped",
-      row: { raw: controlId, id: controlId, type: "liability_payable", isActive: true, isSummary: false },
-      match: /must be Accounts receivable or Other current asset; the selected account is Accounts payable/,
+      row: {
+        raw: controlId,
+        id: controlId,
+        type: "liability_payable",
+        isActive: true,
+        isSummary: false,
+      },
+      match:
+        /must be Accounts receivable or Other current asset; the selected account is Accounts payable/,
     },
   ];
   for (const { name, row, match } of cases) {
@@ -306,8 +334,18 @@ test("tax components group by line in sequence and keep the stored recovery rati
       sql: /document_line_tax_components/,
       rows: [
         row({ sequence: 1, tax_amount: "5.0000" }),
-        row({ sequence: 2, tax_code_id: "PST", tax_amount: "7.0000", recoverable_percent: "50.0000" }),
-        row({ document_line_id: "line-2", sequence: 1, tax_amount: "13.0000", recoverable_percent: null }),
+        row({
+          sequence: 2,
+          tax_code_id: "PST",
+          tax_amount: "7.0000",
+          recoverable_percent: "50.0000",
+        }),
+        row({
+          document_line_id: "line-2",
+          sequence: 1,
+          tax_amount: "13.0000",
+          recoverable_percent: null,
+        }),
       ],
     },
   ]);
@@ -315,12 +353,12 @@ test("tax components group by line in sequence and keep the stored recovery rati
   const first = byLine.get("line-1");
   assert.ok(first);
   assert.equal(first.length, 2);
-  assert.deepEqual(first.map((c) => c.sequence), [1, 2]);
-  // Real ledger math: the grouped components still cross-foot to 12.0000.
-  assert.equal(
-    sum(first.map((c) => c.taxAmount)),
-    "12.0000",
+  assert.deepEqual(
+    first.map((c) => c.sequence),
+    [1, 2],
   );
+  // Real ledger math: the grouped components still cross-foot to 12.0000.
+  assert.equal(sum(first.map((c) => c.taxAmount)), "12.0000");
   assert.equal(first[1]?.recoverablePercent, "50.0000");
   const second = byLine.get("line-2");
   assert.ok(second);
@@ -345,11 +383,19 @@ test("a missing required dimension names the segment and the account", async () 
       segment_names: { department: "Department" },
     },
   ];
-  const missing: KernelLine[] = [{ accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] }];
+  const missing: KernelLine[] = [
+    { accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] },
+  ];
   await assert.rejects(
-    () => validateRequiredDimensions(scripted([{ sql: /required_dimensions/, rows }]).runner, "org-1", missing),
+    () =>
+      validateRequiredDimensions(
+        scripted([{ sql: /required_dimensions/, rows }]).runner,
+        "org-1",
+        missing,
+      ),
     (e: unknown) =>
-      e instanceof PostingError && /Department is required for account 6000 · Travel/.test(e.message),
+      e instanceof PostingError &&
+      /Department is required for account 6000 · Travel/.test(e.message),
   );
   const ok = scripted([{ sql: /required_dimensions/, rows }]);
   await validateRequiredDimensions(ok.runner, "org-1", [
@@ -373,13 +419,18 @@ test("custom segments refuse by key while unknown accounts pass through", async 
       validateRequiredDimensions(scripted([{ sql: /required_dimensions/, rows }]).runner, "org-1", [
         { accountId: "acct-9", amount: "10.0000" as KernelLine["amount"] },
       ]),
-    (e: unknown) => e instanceof PostingError && /region is required for account Misc/.test(e.message),
+    (e: unknown) =>
+      e instanceof PostingError && /region is required for account Misc/.test(e.message),
   );
   const custom = scripted([{ sql: /required_dimensions/, rows }]);
   // Real ledger math on the fixture: the passing pair still balances exactly.
   assert.equal(sum(["25.0000", "-25.0000"]), "0.0000");
   await validateRequiredDimensions(custom.runner, "org-1", [
-    { accountId: "acct-9", amount: "25.0000" as KernelLine["amount"], extraDims: { region: "emea" } },
+    {
+      accountId: "acct-9",
+      amount: "25.0000" as KernelLine["amount"],
+      extraDims: { region: "emea" },
+    },
     { accountId: "acct-unknown", amount: "-25.0000" as KernelLine["amount"] },
   ]);
   custom.assertDrained();

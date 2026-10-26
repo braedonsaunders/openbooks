@@ -10,183 +10,189 @@
 // identifier is derived. Values ALWAYS bind as parameters. Pure types — no
 // runtime — safe to import from client bundles.
 
-import type { ReportAggFn, ReportBreakout, ReportFormulaFormat, ReportMeasure, ReportRuleGroup } from '@openbooks/reports'
+import type {
+  ReportAggFn,
+  ReportBreakout,
+  ReportFormulaFormat,
+  ReportMeasure,
+  ReportRuleGroup,
+} from "@openbooks/reports";
 
 // --- semantic vocabulary -----------------------------------------------------
 
 /** How a catalog field is interpreted — drives which role it can play and how
  *  it is formatted / bucketed. */
-export type SemanticType = 'date' | 'number' | 'currency' | 'category'
+export type SemanticType = "date" | "number" | "currency" | "category";
 
 /** Aggregation a measure applies. `count` is COUNT(*) and needs no field. */
-export type AggFn = ReportAggFn
+export type AggFn = ReportAggFn;
 
 /** Date bucketing applied to a temporal dimension. */
-export type DateBin = 'day' | 'week' | 'month' | 'quarter' | 'year'
+export type DateBin = "day" | "week" | "month" | "quarter" | "year";
 
 /** Filter comparison operators. Value-taking ops bind parameters; the rest are
  *  self-contained (null checks + server-clock relative-date windows). */
 export const FILTER_OPS = [
-  'eq',
-  'neq',
-  'in',
-  'not_in',
-  'gt',
-  'gte',
-  'lt',
-  'lte',
-  'contains',
-  'is_null',
-  'is_not_null',
+  "eq",
+  "neq",
+  "in",
+  "not_in",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "contains",
+  "is_null",
+  "is_not_null",
   // relative date windows, anchored to the org business day passed into compile
-  'last_n_days',
-  'this_month',
-  'this_quarter',
-  'this_year',
-  'ytd',
-] as const
-export type FilterOp = (typeof FILTER_OPS)[number]
+  "last_n_days",
+  "this_month",
+  "this_quarter",
+  "this_year",
+  "ytd",
+] as const;
+export type FilterOp = (typeof FILTER_OPS)[number];
 
 // --- query shape -------------------------------------------------------------
 
 export type QueryMeasure = Partial<ReportMeasure> & {
   /** Catalog measure key. Omitted only for `agg: 'count'` (COUNT(*)). */
-  field?: string
-  agg?: AggFn
+  field?: string;
+  agg?: AggFn;
   /** Output column key; unique within the query; whitelist-safe slug. Defaults
    *  are derived by the compiler when absent. */
-  alias?: string
+  alias?: string;
   /** Formula or measure output alias also serves as its stable reference key. */
-  key?: string
-  fn?: ReportAggFn
-  filter?: ReportRuleGroup
-  format?: ReportFormulaFormat
-}
+  key?: string;
+  fn?: ReportAggFn;
+  filter?: ReportRuleGroup;
+  format?: ReportFormulaFormat;
+};
 
 export type QueryDimension = {
   /** Catalog dimension key. */
-  field: string
+  field: string;
   /** Bucket a date dimension by calendar unit. Ignored for non-date fields. */
-  bin?: DateBin
+  bin?: DateBin;
   /** Output column key; defaults to `field` (or `field_bin`). */
-  alias?: string
-}
+  alias?: string;
+};
 
 export type QueryFilter = {
   /** Catalog field key (dimension OR measure — filters run pre-aggregation). */
-  field: string
-  op: FilterOp
+  field: string;
+  op: FilterOp;
   /** Bound as a parameter. Arrays for in/not_in; a number for last_n_days. */
-  value?: string | number | boolean | Array<string | number> | null
-}
+  value?: string | number | boolean | Array<string | number> | null;
+};
 
 export type QuerySort = {
   /** An output alias, or a dimension/measure catalog field key, to order by.
    *  Aliases win when both name a column. */
-  ref: string
-  dir: 'asc' | 'desc'
-}
+  ref: string;
+  dir: "asc" | "desc";
+};
 
 /** The complete, serializable insight query. Exactly one shape at a time:
  *  with `measures` it aggregates (grouped by `dimensions`); with neither it is
  *  a raw detail query returning the source's default columns. */
 export type InsightQuery = {
   /** Catalog source key — validated against the catalog at compile time. */
-  source: string
-  measures?: QueryMeasure[]
-  dimensions?: QueryDimension[]
-  filters?: QueryFilter[]
-  sort?: QuerySort[]
+  source: string;
+  measures?: QueryMeasure[];
+  dimensions?: QueryDimension[];
+  filters?: QueryFilter[];
+  sort?: QuerySort[];
   /** Row cap for this query (hard-capped by the executor at 10k). */
-  limit?: number | null
-}
+  limit?: number | null;
+};
 
 // --- viz spec ----------------------------------------------------------------
 
-export const INSIGHT_VIZ_TYPES = ['table', 'bar', 'line', 'area', 'pie'] as const
-export type VizType = (typeof INSIGHT_VIZ_TYPES)[number]
+export const INSIGHT_VIZ_TYPES = ["table", "bar", "line", "area", "pie"] as const;
+export type VizType = (typeof INSIGHT_VIZ_TYPES)[number];
 
 /** Per-card display settings persisted on `insight_cards.viz_settings`. */
 export type VizSettings = {
   /** Dimension alias used as the category axis (bar/line/area/pie). Defaults to
    *  the first dimension. */
-  categoryField?: string
+  categoryField?: string;
   /** Measure aliases plotted as series. Defaults to every measure. */
-  valueFields?: string[]
+  valueFields?: string[];
   /** Stack bar/area series. */
-  stacked?: boolean
+  stacked?: boolean;
   /** Draw a horizontal bar chart. */
-  horizontal?: boolean
+  horizontal?: boolean;
   /** Smooth line/area curves. */
-  smooth?: boolean
+  smooth?: boolean;
   /** Show data labels on marks. */
-  showValues?: boolean
+  showValues?: boolean;
   /** Hide the legend (single-series charts). */
-  hideLegend?: boolean
-}
+  hideLegend?: boolean;
+};
 
 /** A resolved output column, with the formatting hint the renderer honors. */
 export type ResultColumn = {
-  key: string
-  label: string
+  key: string;
+  label: string;
   /** Drives right-alignment + number/currency/date formatting. */
-  type: SemanticType | 'text'
-  role: 'dimension' | 'measure'
+  type: SemanticType | "text";
+  role: "dimension" | "measure";
   /** Fixed value vocabulary the renderer localizes — set when the source field
    *  emits a boolean, printed as the locale's yes/no. */
-  valueKind?: 'boolean'
+  valueKind?: "boolean";
   /** Formula display format, retained for table and chart renderers. */
-  format?: ReportFormulaFormat
+  format?: ReportFormulaFormat;
   /** Display precision for an explicitly formatted formula. */
-  scale?: number
+  scale?: number;
   /** The temporal bucket this dimension was binned into, when it was. The
    *  renderer needs it to label a bucket as the PERIOD it represents ("Sep
    *  2026") rather than the instant it starts on ("2026-09-01"), and to know
    *  the column is chronological rather than nominal. */
-  dateBin?: DateBin
-}
+  dateBin?: DateBin;
+};
 
 /** The executed result set. */
 export type QueryResult = {
-  columns: ResultColumn[]
-  rows: Record<string, unknown>[]
+  columns: ResultColumn[];
+  rows: Record<string, unknown>[];
   /** Undefined formula labels by output alias for each row. */
-  undefinedLabels?: Record<string, string>[]
-  rowCount: number
-  truncated: boolean
-  durationMs: number
-}
+  undefinedLabels?: Record<string, string>[];
+  rowCount: number;
+  truncated: boolean;
+  durationMs: number;
+};
 
 /** The denomination basis the compiler certified for one insight query: which
  *  money dimensions the plan blends, what already certifies each one single,
  *  and the inline census the executor enforces. The executor feeds this to
  *  the report executor's resolveDenominations — one rule, both surfaces. */
 export type InsightDenominationBasis = {
-  breakouts: ReportBreakout[]
-  measures: ReportMeasure[]
-  txnCurrencyPinned: string | null
-  baseCurrencyPinned: string | null
-  bookPinned: string | null
-  bookSingleBasis: boolean
-  baseSingleSubsidiary: boolean
+  breakouts: ReportBreakout[];
+  measures: ReportMeasure[];
+  txnCurrencyPinned: string | null;
+  baseCurrencyPinned: string | null;
+  bookPinned: string | null;
+  bookSingleBasis: boolean;
+  baseSingleSubsidiary: boolean;
   /** True when the SQL carries the inline `__denom` census for the executor
    *  to enforce; false when every blended dimension is already certified
    *  single (static pin or server clamp) or the plan blends no money. */
-  hasDenominationCensus: boolean
+  hasDenominationCensus: boolean;
   /** Census dimensions in txn/base/book order, driving enforcement. */
-  denominationDimensions: ('txn' | 'base' | 'book')[]
-}
+  denominationDimensions: ("txn" | "base" | "book")[];
+};
 
 /** The compiled, ready-to-execute SQL + the column plan (so the executor can
  *  label + type results without re-deriving them). */
 export type CompiledQuery = {
-  sql: string
-  params: unknown[]
-  columns: ResultColumn[]
+  sql: string;
+  params: unknown[];
+  columns: ResultColumn[];
   /** SQL output aliases by authored measure index, including hidden formula inputs. */
-  measureColumnKeys?: string[]
+  measureColumnKeys?: string[];
   /** The effective row cap applied to the SQL. */
-  limit: number
+  limit: number;
   /** The denomination basis for the executor to enforce. */
-  denomination: InsightDenominationBasis
-}
+  denomination: InsightDenominationBasis;
+};

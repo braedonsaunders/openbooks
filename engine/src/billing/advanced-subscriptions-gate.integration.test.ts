@@ -99,11 +99,18 @@ test("a disable racing a plan version refuses the write", { skip: !DB }, async (
     await new Promise((resolve) => setTimeout(resolve, 1000));
     release();
     const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("plan version write did not settle after the disable committed")), 30000);
+      setTimeout(
+        () => reject(new Error("plan version write did not settle after the disable committed")),
+        30000,
+      );
     });
     const result = await Promise.race([writeSettled, timeout]);
     await disableTx;
-    assert.equal(result.ok, false, "the racing disable refuses the version instead of publishing it while off");
+    assert.equal(
+      result.ok,
+      false,
+      "the racing disable refuses the version instead of publishing it while off",
+    );
     assert.match(String((result as { ok: false; error: unknown }).error), /disabled/);
   } finally {
     await dropScratchOrgReporting(org.orgId);

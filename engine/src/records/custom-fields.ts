@@ -1,17 +1,17 @@
-import { sql } from 'drizzle-orm'
-import { CUSTOM_FIELD_REFERENCE_TABLES } from '@openbooks/customization'
-import { isIsoCalendarDate as isValidIsoDate } from '../platform/business-date.ts'
-import { db } from '../platform/db.ts'
-import { normalizeMoney } from '../money/money.ts'
-import { canonicalDecimal, compareDecimal } from '../money/exact-decimal.ts'
-import { isUuid } from '../platform/uuid.ts'
-import { customFieldVisible, type CustomFieldViewer } from '@openbooks/customization'
+import { sql } from "drizzle-orm";
+import { CUSTOM_FIELD_REFERENCE_TABLES } from "@openbooks/customization";
+import { isIsoCalendarDate as isValidIsoDate } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
+import { normalizeMoney } from "../money/money.ts";
+import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { customFieldVisible, type CustomFieldViewer } from "@openbooks/customization";
 
 /** Used when a service caller has not supplied an authenticated field audience. */
 export const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = {
   roleKeys: [],
   canManageCustomFields: false,
-}
+};
 
 export {
   customFieldAudience,
@@ -21,7 +21,7 @@ export {
   visibleCustomFieldDefs,
   type CustomFieldViewer,
   type CustomFieldVisibilityDef,
-} from '@openbooks/customization'
+} from "@openbooks/customization";
 
 /**
  * Custom fields platform — header/line/entity extensions.
@@ -32,41 +32,44 @@ export {
  */
 
 export type CustomFieldDef = {
-  id: string
-  targetTable: string
-  targetKind: string | null
-  key: string
-  label: string
+  id: string;
+  targetTable: string;
+  targetKind: string | null;
+  key: string;
+  label: string;
   fieldType:
-    | 'text'
-    | 'long_text'
-    | 'number'
-    | 'currency'
-    | 'date'
-    | 'boolean'
-    | 'select'
-    | 'multi_select'
-    | 'reference'
+    | "text"
+    | "long_text"
+    | "number"
+    | "currency"
+    | "date"
+    | "boolean"
+    | "select"
+    | "multi_select"
+    | "reference";
   config: {
-    options?: string[]
-    helpText?: string
-    placeholder?: string
-    defaultValue?: unknown
-    min?: number | string
-    max?: number | string
-    showInList?: boolean
-    displayMode?: string
-    allowedRoles?: string[]
-    referenceTable?: string
-    referenceFilter?: string
-  }
-  isRequired: boolean
-  sortOrder: number
+    options?: string[];
+    helpText?: string;
+    placeholder?: string;
+    defaultValue?: unknown;
+    min?: number | string;
+    max?: number | string;
+    showInList?: boolean;
+    displayMode?: string;
+    allowedRoles?: string[];
+    referenceTable?: string;
+    referenceFilter?: string;
+  };
+  isRequired: boolean;
+  sortOrder: number;
 };
 
 /** Active definitions: the set that accepts new values and renders in forms. */
-export async function loadFieldDefs(targetTable: string, targetKind?: string): Promise<CustomFieldDef[]> {
-  return selectFieldDefs(targetTable, targetKind, true)
+export async function loadFieldDefs(
+  targetTable: string,
+  targetKind?: string,
+): Promise<CustomFieldDef[]> {
+  return selectFieldDefs(targetTable, targetKind, true);
 }
 
 /**
@@ -74,12 +77,20 @@ export async function loadFieldDefs(targetTable: string, targetKind?: string): P
  * key: a deactivated restricted field keeps its value, and the read paths must
  * keep hiding it from roles outside its audience.
  */
-export async function loadCustomFieldAccessDefs(targetTable: string, targetKind?: string): Promise<CustomFieldDef[]> {
-  return selectFieldDefs(targetTable, targetKind, false)
+export async function loadCustomFieldAccessDefs(
+  targetTable: string,
+  targetKind?: string,
+): Promise<CustomFieldDef[]> {
+  return selectFieldDefs(targetTable, targetKind, false);
 }
 
-async function selectFieldDefs(targetTable: string, targetKind: string | undefined, activeOnly: boolean): Promise<CustomFieldDef[]> {
-  const r = (await db.execute<CustomFieldDef>(sql`
+async function selectFieldDefs(
+  targetTable: string,
+  targetKind: string | undefined,
+  activeOnly: boolean,
+): Promise<CustomFieldDef[]> {
+  const r = await db.execute<CustomFieldDef>(
+    sql`
     select id, target_table as "targetTable", target_kind as "targetKind", key, label,
            field_type as "fieldType", config, is_required as "isRequired", sort_order as "sortOrder"
       from custom_field_defs
@@ -87,112 +98,114 @@ async function selectFieldDefs(targetTable: string, targetKind: string | undefin
        and (target_kind is null or target_kind = ${targetKind ?? null})
        ${activeOnly ? sql`and is_active` : sql``}
      order by sort_order, label
-  `, 'objects'))
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 export interface ValidationResult {
-  ok: boolean
-  errors: Record<string, string>
+  ok: boolean;
+  errors: Record<string, string>;
   /** Only defined keys survive; unknown keys are stripped. */
-  cleaned: Record<string, unknown>
+  cleaned: Record<string, unknown>;
 }
 
 export function validateCustomValues(
   defs: CustomFieldDef[],
   values: Record<string, unknown> | undefined | null,
 ): ValidationResult {
-  const input = values ?? {}
-  const errors: Record<string, string> = {}
-  const cleaned: Record<string, unknown> = {}
+  const input = values ?? {};
+  const errors: Record<string, string> = {};
+  const cleaned: Record<string, unknown> = {};
 
   for (const def of defs) {
-    const raw = input[def.key]
-    const empty = raw === undefined || raw === null || raw === ''
+    const raw = input[def.key];
+    const empty = raw === undefined || raw === null || raw === "";
     if (empty) {
-      if (def.isRequired) errors[def.key] = `${def.label} is required`
-      continue
+      if (def.isRequired) errors[def.key] = `${def.label} is required`;
+      continue;
     }
     switch (def.fieldType) {
-      case 'text':
-      case 'long_text':
-        cleaned[def.key] = String(raw)
-        break
-      case 'currency': {
-        const exact = canonicalDecimal(raw, 4)
+      case "text":
+      case "long_text":
+        cleaned[def.key] = String(raw);
+        break;
+      case "currency": {
+        const exact = canonicalDecimal(raw, 4);
         if (exact === null) {
-          errors[def.key] = `${def.label} must be an exact decimal`
-          break
+          errors[def.key] = `${def.label} must be an exact decimal`;
+          break;
         }
-        let amount: string
+        let amount: string;
         try {
-          amount = normalizeMoney(exact)
+          amount = normalizeMoney(exact);
         } catch {
-          errors[def.key] = `${def.label} must be an exact decimal`
-          break
+          errors[def.key] = `${def.label} must be an exact decimal`;
+          break;
         }
         if (def.config.min != null && compareDecimal(amount, String(def.config.min)) < 0) {
-          errors[def.key] = `${def.label} must be ≥ ${def.config.min}`
-          break
+          errors[def.key] = `${def.label} must be ≥ ${def.config.min}`;
+          break;
         }
         if (def.config.max != null && compareDecimal(amount, String(def.config.max)) > 0) {
-          errors[def.key] = `${def.label} must be ≤ ${def.config.max}`
-          break
+          errors[def.key] = `${def.label} must be ≤ ${def.config.max}`;
+          break;
         }
-        cleaned[def.key] = amount
-        break
+        cleaned[def.key] = amount;
+        break;
       }
-      case 'number': {
-        const exact = canonicalDecimal(raw, 4)
+      case "number": {
+        const exact = canonicalDecimal(raw, 4);
         if (exact === null) {
-          errors[def.key] = `${def.label} must be an exact decimal`
-          break
+          errors[def.key] = `${def.label} must be an exact decimal`;
+          break;
         }
         if (def.config.min != null && compareDecimal(exact, String(def.config.min)) < 0) {
-          errors[def.key] = `${def.label} must be ≥ ${def.config.min}`
-          break
+          errors[def.key] = `${def.label} must be ≥ ${def.config.min}`;
+          break;
         }
         if (def.config.max != null && compareDecimal(exact, String(def.config.max)) > 0) {
-          errors[def.key] = `${def.label} must be ≤ ${def.config.max}`
-          break
+          errors[def.key] = `${def.label} must be ≤ ${def.config.max}`;
+          break;
         }
-        cleaned[def.key] = exact
-        break
+        cleaned[def.key] = exact;
+        break;
       }
-      case 'date': {
-        if (!isValidIsoDate(raw)) errors[def.key] = `${def.label} must be a date`
-        else cleaned[def.key] = raw
-        break
+      case "date": {
+        if (!isValidIsoDate(raw)) errors[def.key] = `${def.label} must be a date`;
+        else cleaned[def.key] = raw;
+        break;
       }
-      case 'boolean':
-        if (raw === true || raw === 'true') cleaned[def.key] = true
-        else if (raw === false || raw === 'false') cleaned[def.key] = false
-        else errors[def.key] = `${def.label} must be a boolean`
-        break
-      case 'select': {
-        const opts = def.config.options ?? []
-        if (!opts.includes(String(raw))) errors[def.key] = `${def.label}: invalid option`
-        else cleaned[def.key] = raw
-        break
+      case "boolean":
+        if (raw === true || raw === "true") cleaned[def.key] = true;
+        else if (raw === false || raw === "false") cleaned[def.key] = false;
+        else errors[def.key] = `${def.label} must be a boolean`;
+        break;
+      case "select": {
+        const opts = def.config.options ?? [];
+        if (!opts.includes(String(raw))) errors[def.key] = `${def.label}: invalid option`;
+        else cleaned[def.key] = raw;
+        break;
       }
-      case 'multi_select': {
-        const opts = def.config.options ?? []
-        const arr = Array.isArray(raw) ? raw.map(String) : [String(raw)]
-        if (arr.some((v) => !opts.includes(v))) errors[def.key] = `${def.label}: invalid option`
-        else cleaned[def.key] = arr
-        break
+      case "multi_select": {
+        const opts = def.config.options ?? [];
+        const arr = Array.isArray(raw) ? raw.map(String) : [String(raw)];
+        if (arr.some((v) => !opts.includes(v))) errors[def.key] = `${def.label}: invalid option`;
+        else cleaned[def.key] = arr;
+        break;
       }
-      case 'reference': {
+      case "reference": {
         if (!isUuid(raw)) {
-          errors[def.key] = `${def.label} must be a valid record reference`
+          errors[def.key] = `${def.label} must be a valid record reference`;
         } else {
-          cleaned[def.key] = raw
+          cleaned[def.key] = raw;
         }
-        break
+        break;
       }
     }
   }
-  return { ok: Object.keys(errors).length === 0, errors, cleaned }
+  return { ok: Object.keys(errors).length === 0, errors, cleaned };
 }
 
 /**
@@ -204,12 +217,12 @@ export function unknownCustomFieldKey(
   defs: CustomFieldDef[],
   values: Record<string, unknown>,
 ): string | null {
-  return Object.keys(values).find((key) => !defs.some((def) => def.key === key)) ?? null
+  return Object.keys(values).find((key) => !defs.some((def) => def.key === key)) ?? null;
 }
 
 const REFERENCE_OWNER_TABLES: ReadonlySet<string> = new Set(
   CUSTOM_FIELD_REFERENCE_TABLES as readonly string[],
-)
+);
 
 /**
  * Tenant ownership for `reference`-type custom values. `validateCustomValues`
@@ -228,35 +241,40 @@ export async function findUnownedCustomReferences(
   defs: CustomFieldDef[],
   values: Record<string, unknown>,
 ): Promise<CustomFieldDef[]> {
-  const wanted = new Map<string, { def: CustomFieldDef; value: string }[]>()
+  const wanted = new Map<string, { def: CustomFieldDef; value: string }[]>();
   for (const def of defs) {
-    if (def.fieldType !== 'reference') continue
-    const table = def.config?.referenceTable
-    if (typeof table !== 'string' || !REFERENCE_OWNER_TABLES.has(table)) continue
-    const raw = values[def.key]
-    if (!isUuid(raw)) continue
-    const list = wanted.get(table) ?? []
-    list.push({ def, value: raw })
-    wanted.set(table, list)
+    if (def.fieldType !== "reference") continue;
+    const table = def.config?.referenceTable;
+    if (typeof table !== "string" || !REFERENCE_OWNER_TABLES.has(table)) continue;
+    const raw = values[def.key];
+    if (!isUuid(raw)) continue;
+    const list = wanted.get(table) ?? [];
+    list.push({ def, value: raw });
+    wanted.set(table, list);
   }
-  const unowned: CustomFieldDef[] = []
+  const unowned: CustomFieldDef[] = [];
   for (const [table, refs] of wanted) {
-    const ids = [...new Set(refs.map((r) => r.value))]
+    const ids = [...new Set(refs.map((r) => r.value))];
     const owned = new Set(
-      (await db.execute<{ id: string }>(sql`
+      (
+        await db.execute<{ id: string }>(
+          sql`
           select id from ${sql.raw(`"${table}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')).map((r) => r.id),
-    )
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`,
+          "objects",
+        )
+      ).map((r) => r.id),
+    );
     for (const ref of refs) {
-      if (!owned.has(ref.value)) unowned.push(ref.def)
+      if (!owned.has(ref.value)) unowned.push(ref.def);
     }
   }
-  return unowned
+  return unowned;
 }
 
 export interface HiddenCustomFieldRefusal {
-  key: string
-  message: string
+  key: string;
+  message: string;
 }
 
 /**
@@ -274,30 +292,45 @@ export function hiddenCustomFieldRefusal(
   stored: Record<string, unknown> | null,
 ): HiddenCustomFieldRefusal | null {
   for (const def of defs) {
-    if (customFieldVisible(def, viewer)) continue
-    const restricted = (message: string): HiddenCustomFieldRefusal => ({ key: def.key, message: `${def.label} ${message}` })
-    const hasSubmitted = Object.prototype.hasOwnProperty.call(submitted, def.key)
+    if (customFieldVisible(def, viewer)) continue;
+    const restricted = (message: string): HiddenCustomFieldRefusal => ({
+      key: def.key,
+      message: `${def.label} ${message}`,
+    });
+    const hasSubmitted = Object.prototype.hasOwnProperty.call(submitted, def.key);
     if (!hasSubmitted) {
-      if (stored === null && def.isRequired) return restricted('is required and restricted to other roles')
-      continue
+      if (stored === null && def.isRequired)
+        return restricted("is required and restricted to other roles");
+      continue;
     }
-    const submittedRaw = submitted[def.key]
-    const storedRaw = stored === null ? undefined : stored[def.key]
-    if (stored !== null && JSON.stringify(submittedRaw ?? null) === JSON.stringify(storedRaw ?? null)) continue
-    const next = canonicalCustomValue(def, submittedRaw)
+    const submittedRaw = submitted[def.key];
+    const storedRaw = stored === null ? undefined : stored[def.key];
+    if (
+      stored !== null &&
+      JSON.stringify(submittedRaw ?? null) === JSON.stringify(storedRaw ?? null)
+    )
+      continue;
+    const next = canonicalCustomValue(def, submittedRaw);
     if (stored === null) {
       if (next === undefined) {
-        if (def.isRequired) return restricted('is required and restricted to other roles')
-        continue
+        if (def.isRequired) return restricted("is required and restricted to other roles");
+        continue;
       }
-      return restricted('is restricted to other roles and cannot be set by your role')
+      return restricted("is restricted to other roles and cannot be set by your role");
     }
-    const current = canonicalCustomValue(def, storedRaw)
-    if (next !== undefined && current !== undefined && next.ok && current.ok && JSON.stringify(next.value) === JSON.stringify(current.value)) continue
-    if (next === undefined && current === undefined) continue
-    return restricted('is restricted to other roles and cannot be changed by your role')
+    const current = canonicalCustomValue(def, storedRaw);
+    if (
+      next !== undefined &&
+      current !== undefined &&
+      next.ok &&
+      current.ok &&
+      JSON.stringify(next.value) === JSON.stringify(current.value)
+    )
+      continue;
+    if (next === undefined && current === undefined) continue;
+    return restricted("is restricted to other roles and cannot be changed by your role");
   }
-  return null
+  return null;
 }
 
 /** Canonical stored form of one value (`undefined` when empty), or `{ ok: false }` when it is invalid. */
@@ -305,8 +338,8 @@ function canonicalCustomValue(
   def: CustomFieldDef,
   raw: unknown,
 ): { ok: true; value: unknown } | { ok: false } | undefined {
-  const result = validateCustomValues([{ ...def, isRequired: false }], { [def.key]: raw })
-  if (!result.ok) return { ok: false }
-  const value = result.cleaned[def.key]
-  return value === undefined ? undefined : { ok: true, value }
+  const result = validateCustomValues([{ ...def, isRequired: false }], { [def.key]: raw });
+  if (!result.ok) return { ok: false };
+  const value = result.cleaned[def.key];
+  return value === undefined ? undefined : { ok: true, value };
 }

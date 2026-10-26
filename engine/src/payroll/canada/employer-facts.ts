@@ -1,22 +1,26 @@
 import type { PayrollEmployerFact } from "../employer-facts.ts";
 
 export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
-  ...([
-    ['on', 'Ontario'], ['bc', 'British Columbia'], ['mb', 'Manitoba'], ['nl', 'Newfoundland and Labrador'],
-  ] as const).map(([suffix, province]) => ({
+  ...(
+    [
+      ["on", "Ontario"],
+      ["bc", "British Columbia"],
+      ["mb", "Manitoba"],
+      ["nl", "Newfoundland and Labrador"],
+    ] as const
+  ).map(([suffix, province]) => ({
     key: `eht_exemption_share_${suffix}`,
-    kind: 'decimal' as const,
+    kind: "decimal" as const,
     scale: 2,
-    min: '0',
-    max: '100000000',
+    min: "0",
+    max: "100000000",
     label: `${province} employer health tax annual exemption allocation`,
     refusalReason:
-      `associated employers share one ${province} employer health tax exemption, so the paying legal employer's `
-      + 'declared annual allocation is required before its exemption can reduce taxable remuneration',
-    legalBasis:
-      `${province} employer health tax legislation and the employer's annual exemption allocation`,
+      `associated employers share one ${province} employer health tax exemption, so the paying legal employer's ` +
+      "declared annual allocation is required before its exemption can reduce taxable remuneration",
+    legalBasis: `${province} employer health tax legislation and the employer's annual exemption allocation`,
     required: false,
-    effectivePeriod: 'calendar_year' as const,
+    effectivePeriod: "calendar_year" as const,
   })),
   {
     key: "ei_employer_multiplier",
@@ -26,11 +30,11 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     max: "1.4",
     label: "Employer EI rate multiple",
     refusalReason:
-      "the employer share prices at 1.4 times the employee premium unless the CRA approved a reduced "
-      + "rate for this payroll program account — without the account's multiple the share cannot be priced",
+      "the employer share prices at 1.4 times the employee premium unless the CRA approved a reduced " +
+      "rate for this payroll program account — without the account's multiple the share cannot be priced",
     legalBasis:
-      "CRA payroll: employers with a qualifying wage-loss replacement plan pay a CRA-approved reduced "
-      + "employer EI rate; every other employer pays 1.4 times the employee premium",
+      "CRA payroll: employers with a qualifying wage-loss replacement plan pay a CRA-approved reduced " +
+      "employer EI rate; every other employer pays 1.4 times the employee premium",
     required: false,
     effectivePeriod: "date",
     scope: "filing_account",
@@ -51,10 +55,22 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
       { value: "religious_institution", label: "Religious institution" },
       { value: "daycare_centre", label: "Daycare centre (garderie)" },
       { value: "parity_committee", label: "Parity committee (decree committee)" },
-      { value: "fabrique_or_church_trustees", label: "Fabrique / corporation of trustees for churches" },
-      { value: "charity_assisting_needy", label: "Charity assisting persons in need directly and free of charge" },
-      { value: "canada_labour_code_business", label: "Business under the Canada Labour Code (bank, airport, radio, federal undertaking)" },
-      { value: "international_organization", label: "International organization with a Québec establishment" },
+      {
+        value: "fabrique_or_church_trustees",
+        label: "Fabrique / corporation of trustees for churches",
+      },
+      {
+        value: "charity_assisting_needy",
+        label: "Charity assisting persons in need directly and free of charge",
+      },
+      {
+        value: "canada_labour_code_business",
+        label: "Business under the Canada Labour Code (bank, airport, radio, federal undertaking)",
+      },
+      {
+        value: "international_organization",
+        label: "International organization with a Québec establishment",
+      },
     ],
   },
   {
@@ -64,11 +80,11 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     min: "0",
     label: "WSDRF eligible training expenditures for the year",
     refusalReason:
-      "an employer with $2M or more of Québec payroll owes 1% of payroll less its eligible training "
-      + "expenditures, so the shortfall cannot be determined without them",
+      "an employer with $2M or more of Québec payroll owes 1% of payroll less its eligible training " +
+      "expenditures, so the shortfall cannot be determined without them",
     legalBasis:
-      "Revenu Québec, Contribution to the Workforce Skills Development and Recognition Fund (WSDRF); "
-      + "Act to promote workforce skills development and recognition",
+      "Revenu Québec, Contribution to the Workforce Skills Development and Recognition Fund (WSDRF); " +
+      "Act to promote workforce skills development and recognition",
     required: false,
     effectivePeriod: "calendar_year",
   },
@@ -77,8 +93,8 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     kind: "boolean",
     label: "WSDRF holds a valid quality certificate (certificat de qualité)",
     refusalReason:
-      "a valid quality certificate exempts the employer from the WSDRF contribution, so the summary "
-      + "cannot state the exemption without it",
+      "a valid quality certificate exempts the employer from the WSDRF contribution, so the summary " +
+      "cannot state the exemption without it",
     legalBasis:
       "Revenu Québec, Contribution to the Workforce Skills Development and Recognition Fund (WSDRF)",
     required: false,
@@ -88,8 +104,10 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     key: "work_week_start",
     kind: "choice",
     label: "Employer work-week start day",
-    refusalReason: "the Ontario and Quebec statutory holiday lookback ends at the end of the employer's selected work week",
-    legalBasis: "Employment Standards Act, 2000 (Ontario), s. 1; Act respecting labour standards (Quebec), s. 1(12)",
+    refusalReason:
+      "the Ontario and Quebec statutory holiday lookback ends at the end of the employer's selected work week",
+    legalBasis:
+      "Employment Standards Act, 2000 (Ontario), s. 1; Act respecting labour standards (Quebec), s. 1(12)",
     required: false,
     effectivePeriod: "date",
     choices: [
@@ -109,8 +127,8 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     refusalReason:
       "An employee who worked November 11 cannot be granted or denied the statutory alternate paid day without it.",
     legalBasis:
-      "Remembrance Day Act (Nova Scotia), RSNS 1989 c 396 — alternate day off with pay; "
-      + "exempt: farming, fishing, aquaculture, Christmas tree operations, forestry, industrial undertakings.",
+      "Remembrance Day Act (Nova Scotia), RSNS 1989 c 396 — alternate day off with pay; " +
+      "exempt: farming, fishing, aquaculture, Christmas tree operations, forestry, industrial undertakings.",
     // Only genuinely needed when an employee actually worked November 11:
     // an unrecorded value refuses by name in the grant, naming the Setup
     // page, rather than stopping every Canadian run.
@@ -123,7 +141,10 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
       { value: "aquaculture", label: "Aquaculture" },
       { value: "christmas_tree", label: "Christmas tree operations" },
       { value: "forestry", label: "Forestry (Labour Standards Code meaning)" },
-      { value: "industrial_undertaking", label: "Industrial undertaking (Labour Standards Code meaning)" },
+      {
+        value: "industrial_undertaking",
+        label: "Industrial undertaking (Labour Standards Code meaning)",
+      },
     ],
   },
 ];

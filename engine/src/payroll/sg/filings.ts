@@ -105,7 +105,8 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
   sgRatesForTaxYear(taxYear);
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            count(*)::int as stub_count,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -127,11 +128,13 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'SG'
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed SG pay runs for ${taxYear} — Form IR8A reports remuneration actually paid, `
-      + "so a year with nothing committed has no slip to issue",
+      `no committed SG pay runs for ${taxYear} — Form IR8A reports remuneration actually paid, ` +
+        "so a year with nothing committed has no slip to issue",
     );
   }
   // Entitlement-year source: contractual bonuses earned in
@@ -141,7 +144,8 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
   // employer must review for this-year entitlements (§9b) — never an
   // automatic addition.
   const nextYear = taxYear + 1;
-  const nextRows = (await db.execute<{ employee_party_id: unknown; next_income: unknown }>(sql`
+  const nextRows = await db.execute<{ employee_party_id: unknown; next_income: unknown }>(
+    sql`
     select s.employee_party_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -152,7 +156,9 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
                        and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${nextYear} and s.country = 'SG'
      group by s.employee_party_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const nextByEmployee = new Map<string, string>();
   for (const row of nextRows) {
     nextByEmployee.set(String(row.employee_party_id), num(row.next_income));
@@ -219,7 +225,11 @@ async function ir8aPopulation(orgId: string, taxYear: number): Promise<PayrollFi
 }
 
 /** One employee's IR8A, box for box — the form's own item letters. */
-async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function ir8aSlip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const slips = await ir8aSlips(orgId, taxYear);
   const slip = slips.find((candidate) => candidate.employeePartyId === rowId);
   if (!slip) {
@@ -243,43 +253,46 @@ async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<
     boxes: [
       {
         code: "a–d",
-        label: "Employment income — IR8A items a) to d) aggregate, taxable earnings paid through payroll",
+        label:
+          "Employment income — IR8A items a) to d) aggregate, taxable earnings paid through payroll",
         value: slip.employmentIncome,
         emphasis: true,
       },
       {
         code: "Ded(I)",
-        label: "Employee's compulsory contribution to CPF / designated pension or provident fund (Deductions I)",
+        label:
+          "Employee's compulsory contribution to CPF / designated pension or provident fund (Deductions I)",
         value: slip.employeeCpf,
       },
       {
         code: "ER-CPF",
-        label: "Employer's CPF contribution — compulsory Table-1 share priced in payroll (items d)1./d)6. scope)",
+        label:
+          "Employer's CPF contribution — compulsory Table-1 share priced in payroll (items d)1./d)6. scope)",
         value: slip.employerCpf,
       },
     ],
     notes: [
-      "This declaration serves the Auto-Inclusion Scheme: submit employment-income information to IRAS "
-      + "electronically by 1 Mar of the year after the income year; no hardcopy IR8A is issued to the "
-      + "employee (a separate statement of earnings may be given for their record). (IRAS, Reporting "
-      + "Employee Earnings (IR8A, App 8A/8B); Explanatory Notes for YA2026 §4)",
-      "Employment income above is the year's taxable earnings PAID through committed payroll. Bonuses are "
-      + "assessed in the year the employee becomes entitled and director's fees in the year the director "
-      + "becomes entitled — split this total across the form's items a), b), c) and d)1.–d)8. before "
-      + "submitting. (Explanatory Notes §§9a–d)",
-      "Employee CPF is the compulsory Table-1 share priced in payroll. Any excess or voluntary employer "
-      + "top-up paid outside payroll belongs in item d)6. by the employer. (Explanatory Notes §§9d)6., 10(I))",
-      "Not carried by payroll lines — complete from the employer's records; a blank here is unreported, "
-      + "not nil: benefits-in-kind (Appendix 8A, item d)9.), share-option gains (Appendix 8B, item d)7.), "
-      + "donations, Mosque Building Fund contributions and life-insurance premiums. (Explanatory Notes "
-      + "§§10(II)–(IV), 11)",
-      "The Skills Development Levy is the employer's levy, collected by the CPF Board on behalf of SWDA — "
-      + "not employee remuneration — and CPF contributions ride the Board's channel, not salary payment; "
-      + "neither takes an IR8A box beyond the CPF boxes above. (CPF Board, Skills Development Levy; CPF "
-      + "Board, Who should receive CPF contributions)",
-      "Commencement and cessation dates (§5) are not carried on pay stubs — verify from HR records when the "
-      + "employee joined or left during the year. Singapore levies no monthly income-tax withholding, so no "
-      + "withholding box exists on this slip. (Explanatory Notes §5; IRAS, Reporting Employee Earnings)",
+      "This declaration serves the Auto-Inclusion Scheme: submit employment-income information to IRAS " +
+        "electronically by 1 Mar of the year after the income year; no hardcopy IR8A is issued to the " +
+        "employee (a separate statement of earnings may be given for their record). (IRAS, Reporting " +
+        "Employee Earnings (IR8A, App 8A/8B); Explanatory Notes for YA2026 §4)",
+      "Employment income above is the year's taxable earnings PAID through committed payroll. Bonuses are " +
+        "assessed in the year the employee becomes entitled and director's fees in the year the director " +
+        "becomes entitled — split this total across the form's items a), b), c) and d)1.–d)8. before " +
+        "submitting. (Explanatory Notes §§9a–d)",
+      "Employee CPF is the compulsory Table-1 share priced in payroll. Any excess or voluntary employer " +
+        "top-up paid outside payroll belongs in item d)6. by the employer. (Explanatory Notes §§9d)6., 10(I))",
+      "Not carried by payroll lines — complete from the employer's records; a blank here is unreported, " +
+        "not nil: benefits-in-kind (Appendix 8A, item d)9.), share-option gains (Appendix 8B, item d)7.), " +
+        "donations, Mosque Building Fund contributions and life-insurance premiums. (Explanatory Notes " +
+        "§§10(II)–(IV), 11)",
+      "The Skills Development Levy is the employer's levy, collected by the CPF Board on behalf of SWDA — " +
+        "not employee remuneration — and CPF contributions ride the Board's channel, not salary payment; " +
+        "neither takes an IR8A box beyond the CPF boxes above. (CPF Board, Skills Development Levy; CPF " +
+        "Board, Who should receive CPF contributions)",
+      "Commencement and cessation dates (§5) are not carried on pay stubs — verify from HR records when the " +
+        "employee joined or left during the year. Singapore levies no monthly income-tax withholding, so no " +
+        "withholding box exists on this slip. (Explanatory Notes §5; IRAS, Reporting Employee Earnings)",
     ],
   };
   // Entitlement-year review pointer: bonuses earned this
@@ -287,9 +300,9 @@ async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<
   // year's stubs. Name the candidate pool so it cannot be silently omitted.
   if (slip.nextYearPaid !== "0" && slip.nextYearPaid !== "0.00") {
     (slipData.notes ??= []).push(
-      `Paid in ${taxYear + 1} through committed payroll: ${slip.nextYearPaid} — review for bonuses this employee `
-      + `became entitled to in ${taxYear} and move qualifying amounts into this year's items a)–d) before `
-      + "submitting; next-year regular pay stays in next year's return. (Explanatory Notes §9b)",
+      `Paid in ${taxYear + 1} through committed payroll: ${slip.nextYearPaid} — review for bonuses this employee ` +
+        `became entitled to in ${taxYear} and move qualifying amounts into this year's items a)–d) before ` +
+        "submitting; next-year regular pay stays in next year's return. (Explanatory Notes §9b)",
     );
   }
   return slipData;
@@ -302,11 +315,11 @@ async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<
  * software or the IRAS myTax Portal.
  */
 export const IR8A_DOWNLOAD_REFUSAL =
-  "the SG pack produces no AIS submission file — the IRAS AIS interface file specification "
-  + "is not transcribed. AIS employers submit the slip figures electronically via AIS payroll "
-  + "software or the IRAS myTax Portal by 1 Mar; employers not on AIS must instead provide each "
-  + "employee the hardcopy Form IR8A (and applicable appendices) by 1 Mar and must not submit "
-  + "those hardcopies to IRAS (IRAS, Reporting Employee Earnings)";
+  "the SG pack produces no AIS submission file — the IRAS AIS interface file specification " +
+  "is not transcribed. AIS employers submit the slip figures electronically via AIS payroll " +
+  "software or the IRAS myTax Portal by 1 Mar; employers not on AIS must instead provide each " +
+  "employee the hardcopy Form IR8A (and applicable appendices) by 1 Mar and must not submit " +
+  "those hardcopies to IRAS (IRAS, Reporting Employee Earnings)";
 
 /**
  * How a wrong IR8A is corrected, as the Notes define it (§6): AIS
@@ -317,12 +330,12 @@ export const IR8A_DOWNLOAD_REFUSAL =
  * IR8A. No in-product correction file is built for any of these.
  */
 export const IR8A_AMENDMENT_REFUSAL =
-  "a wrong IR8A is corrected by an AIS amendment submission (the differences in amount: positive "
-  + "values to add, negative values to negate, unaffected fields left blank) or a revised submission "
-  + "(the complete accurate record, overwriting all previous submissions for the employee) via IRAS — "
-  + "employers not on AIS give the employee an Additional or Revised paper IR8A instead; no in-product "
-  + "correction file is built (IRAS, Explanatory Notes for Completion of Form IR8A & Appendix 8A "
-  + "for YA2026 §6)";
+  "a wrong IR8A is corrected by an AIS amendment submission (the differences in amount: positive " +
+  "values to add, negative values to negate, unaffected fields left blank) or a revised submission " +
+  "(the complete accurate record, overwriting all previous submissions for the employee) via IRAS — " +
+  "employers not on AIS give the employee an Additional or Revised paper IR8A instead; no in-product " +
+  "correction file is built (IRAS, Explanatory Notes for Completion of Form IR8A & Appendix 8A " +
+  "for YA2026 §6)";
 
 /** Lazy for the same import-cycle reason as the CA/US pack filings. */
 let cached: PayrollYearEndFiling | null = null;
@@ -334,11 +347,11 @@ export function ir8aFiling(): PayrollYearEndFiling {
     label: "Form IR8A (Auto-Inclusion Scheme)",
     cadence: "annual",
     description:
-      "The employer's annual REPORT of each employee's employment income to IRAS "
-      + "(\"Employers are responsible for reporting the employment income of all individuals "
-      + "who have worked for them\"), pre-filled into the employee's electronic return — "
-      + "a report, not a withholding. Built from committed pay runs for the transcribed year; "
-      + "serves the Auto-Inclusion Scheme (electronic submission, no paper slip to the employee).",
+      "The employer's annual REPORT of each employee's employment income to IRAS " +
+      '("Employers are responsible for reporting the employment income of all individuals ' +
+      "who have worked for them\"), pre-filled into the employee's electronic return — " +
+      "a report, not a withholding. Built from committed pay runs for the transcribed year; " +
+      "serves the Auto-Inclusion Scheme (electronic submission, no paper slip to the employee).",
     emptyText: "No committed SG pay stubs for this year.",
     population: (orgId, taxYear) => ir8aPopulation(orgId, taxYear),
     parseRowId: parseIr8aRowId,

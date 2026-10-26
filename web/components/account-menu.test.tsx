@@ -1,19 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
-import { DEFAULT_ENTRY_PREFERENCES } from '../lib/entry-preferences.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
+import { DEFAULT_ENTRY_PREFERENCES } from "../lib/entry-preferences.ts";
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard" });
 
 window.HTMLElement.prototype.getBoundingClientRect = function () {
-  return { top: 8, left: 8, bottom: 40, right: 128, width: 120, height: 32, x: 8, y: 8, toJSON() { return {}; } };
+  return {
+    top: 8,
+    left: 8,
+    bottom: 40,
+    right: 128,
+    width: 120,
+    height: 32,
+    x: 8,
+    y: 8,
+    toJSON() {
+      return {};
+    },
+  };
 };
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const { registerHooks } = await import("node:module");
-stubModules({ navigation: { pathname: '/dashboard' }, intl: false, authz: false, features: false });
+stubModules({ navigation: { pathname: "/dashboard" }, intl: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -29,7 +41,10 @@ registerHooks({
         url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
       };
     }
-    if (specifier.endsWith("/lib/workspace-switch") || specifier.endsWith("/lib/workspace-switch.ts")) {
+    if (
+      specifier.endsWith("/lib/workspace-switch") ||
+      specifier.endsWith("/lib/workspace-switch.ts")
+    ) {
       return {
         shortCircuit: true,
         url: "data:text/javascript,export async function switchWorkspace(){};export function workspaceSwitchMessageKey(){return 'switchFailed'}",
@@ -55,7 +70,14 @@ const environments = {
   homeOrgId: "org-1",
   canManage: true,
   isSuperAdmin: true,
-  tenants: [{ productionOrgId: "org-1", productionOrgName: "Acme", envKind: "production" as const, sandboxes: [] }],
+  tenants: [
+    {
+      productionOrgId: "org-1",
+      productionOrgName: "Acme",
+      envKind: "production" as const,
+      sandboxes: [],
+    },
+  ],
 };
 
 function mount(locale = "en", messages = shell) {
@@ -110,41 +132,41 @@ test("platform workspace switcher lives in the account menu, not the header", as
     root.render(
       <NextIntlClientProvider locale="en" messages={{ shell }} timeZone="UTC">
         <MoneyProvider currency="USD">
-        <NavigationProvider>
-        <AppShell
-          account={{
-            name: "Ada Admin",
-            email: "ada@example.test",
-            roles: [{ key: "admin", name: "Admin" }],
-            localePreference: null,
-            navModePreference: null,
-            entryPreferences: DEFAULT_ENTRY_PREFERENCES,
-          }}
-          environments={{ ...environments, isSuperAdmin: true }}
-          groups={[]}
-          searchScope="org-1:user-1"
-          createPermissions={{
-            accountsReceivable: false,
-            accountsPayable: false,
-            journal: false,
-            customerPayments: false,
-            vendorPayments: false,
-            expenses: false,
-            parties: false,
-            items: false,
-            projects: false,
-            assets: false,
-            orders: false,
-          }}
-          canReadParties={false}
-          canManageParties={false}
-          canReadActivities={false}
-          canManageWages={false}
-          feedback={null}
-        >
-          {null}
-        </AppShell>
-        </NavigationProvider>
+          <NavigationProvider>
+            <AppShell
+              account={{
+                name: "Ada Admin",
+                email: "ada@example.test",
+                roles: [{ key: "admin", name: "Admin" }],
+                localePreference: null,
+                navModePreference: null,
+                entryPreferences: DEFAULT_ENTRY_PREFERENCES,
+              }}
+              environments={{ ...environments, isSuperAdmin: true }}
+              groups={[]}
+              searchScope="org-1:user-1"
+              createPermissions={{
+                accountsReceivable: false,
+                accountsPayable: false,
+                journal: false,
+                customerPayments: false,
+                vendorPayments: false,
+                expenses: false,
+                parties: false,
+                items: false,
+                projects: false,
+                assets: false,
+                orders: false,
+              }}
+              canReadParties={false}
+              canManageParties={false}
+              canReadActivities={false}
+              canManageWages={false}
+              feedback={null}
+            >
+              {null}
+            </AppShell>
+          </NavigationProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
     );
@@ -156,7 +178,9 @@ test("platform workspace switcher lives in the account menu, not the header", as
     /platform/i.test(control.textContent ?? ""),
   );
   assert.equal(headerEntry, undefined, "the header offers no platform entry of its own");
-  const trigger = header.querySelector('button[aria-label="Account menu"]') as HTMLButtonElement | null;
+  const trigger = header.querySelector(
+    'button[aria-label="Account menu"]',
+  ) as HTMLButtonElement | null;
   assert.ok(trigger, "the header keeps the account menu trigger");
   await act(async () => {
     trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -174,7 +198,9 @@ test("super-admin account menu drills into org vs platform", async (t) => {
   t.after(() => ui.unmount());
   await ui.render(true);
 
-  const trigger = ui.host.querySelector('button[aria-label="Account menu"]') as HTMLButtonElement | null;
+  const trigger = ui.host.querySelector(
+    'button[aria-label="Account menu"]',
+  ) as HTMLButtonElement | null;
   assert.ok(trigger, "account menu trigger must render");
   await act(async () => {
     trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -206,7 +232,9 @@ test("non-operators do not see the platform switcher", async (t) => {
   t.after(() => ui.unmount());
   await ui.render(false);
 
-  const trigger = ui.host.querySelector('button[aria-label="Account menu"]') as HTMLButtonElement | null;
+  const trigger = ui.host.querySelector(
+    'button[aria-label="Account menu"]',
+  ) as HTMLButtonElement | null;
   assert.ok(trigger);
   await act(async () => {
     trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -215,7 +243,9 @@ test("non-operators do not see the platform switcher", async (t) => {
   });
   assert.ok(document.querySelector('[role="dialog"]'), "account menu must open");
   assert.equal(
-    [...document.querySelectorAll("button")].some((button) => (button.textContent ?? "").includes("Platform")),
+    [...document.querySelectorAll("button")].some((button) =>
+      (button.textContent ?? "").includes("Platform"),
+    ),
     false,
   );
 });
@@ -225,21 +255,28 @@ test("account menu submenu back button uses the active locale", async (t) => {
   t.after(() => ui.unmount());
   await ui.render(false);
 
-  const trigger = ui.host.querySelector('button[aria-label="Menu du compte"]') as HTMLButtonElement | null;
+  const trigger = ui.host.querySelector(
+    'button[aria-label="Menu du compte"]',
+  ) as HTMLButtonElement | null;
   assert.ok(trigger);
   await act(async () => {
     trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await tick();
     await tick();
   });
-  const language = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Langue"));
+  const language = [...document.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Langue"),
+  );
   assert.ok(language, "the translated language submenu is available");
   await act(async () => {
     language.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await tick();
   });
 
-  assert.ok(document.querySelector('button[aria-label="Retour"]'), "back control has a French accessible name");
+  assert.ok(
+    document.querySelector('button[aria-label="Retour"]'),
+    "back control has a French accessible name",
+  );
 });
 
 test("the language menu marks the stored choice, and follows it when the server reports another", async (t) => {
@@ -248,11 +285,23 @@ test("the language menu marks the stored choice, and follows it when the server 
   await ui.render(false, "en");
   const openLanguages = async () => {
     const trigger = ui.host.querySelector('button[aria-label="Account menu"]') as HTMLButtonElement;
-    await act(async () => { trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); await tick(); await tick(); });
-    const language = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Language"))!;
-    await act(async () => { language.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); await tick(); });
+    await act(async () => {
+      trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    const language = [...document.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Language"),
+    )!;
+    await act(async () => {
+      language.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
   };
-  const checked = () => [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((row) => row.textContent?.trim());
+  const checked = () =>
+    [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((row) =>
+      row.textContent?.trim(),
+    );
   await openLanguages();
   assert.deepEqual(checked(), ["English"]);
   await ui.render(false, "de");

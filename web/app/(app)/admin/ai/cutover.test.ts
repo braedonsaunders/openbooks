@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
+import test from "node:test";
 
 /**
  * Cutover contract for the provider/agents split: the AI provider page owns
@@ -17,57 +17,64 @@ import test from 'node:test'
  * no `ai_agent_policies` statement, while sending the array persists it.
  */
 
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/ai', matchMediaMatches: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/ai",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
-const root = pathToFileURL(process.cwd() + '/').href
-const stateKey = Symbol.for('openbooks.ai-cutover-route')
-const state: { statements: unknown[] } = { statements: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const root = pathToFileURL(process.cwd() + "/").href;
+const stateKey = Symbol.for("openbooks.ai-cutover-route");
+const state: { statements: unknown[] } = { statements: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const { join } = await import('node:path')
+const { join } = await import("node:path");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
 // worktree copy so the test runs the code under test.
-const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-const { stubModules, withPlatformDbTestSurface } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/admin/ai' } })
+const worktreeUi = pathToFileURL(join(process.cwd(), "packages", "ui", "src", "index.ts")).href;
+const { stubModules, withPlatformDbTestSurface } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/admin/ai" } });
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "@openbooks/ui") {
+      return { shortCircuit: true, url: worktreeUi };
+    }
+    if (specifier === "@openbooks/engine/platform/db" || specifier.endsWith("/platform/db.ts")) {
+      return { shortCircuit: true, format: "module", url: "mock:ai-cutover-db" };
+    }
+    if (
+      specifier === "@/lib/authz" ||
+      specifier.endsWith("lib/authz") ||
+      specifier.endsWith("/authz")
+    ) {
+      return { shortCircuit: true, format: "module", url: "mock:ai-cutover-authz" };
+    }
+    if (specifier === "next/server") {
+      return { shortCircuit: true, format: "module", url: "mock:ai-cutover-next" };
+    }
+    if (specifier === "next-intl/server") {
+      return { shortCircuit: true, format: "module", url: "mock:ai-cutover-intl" };
+    }
 
-    if (specifier === '@openbooks/ui') {
-      return { shortCircuit: true, url: worktreeUi }
-    }
-    if (specifier === '@openbooks/engine/platform/db' || specifier.endsWith('/platform/db.ts')) {
-      return { shortCircuit: true, format: 'module', url: 'mock:ai-cutover-db' }
-    }
-    if (specifier === '@/lib/authz' || specifier.endsWith('lib/authz') || specifier.endsWith('/authz')) {
-      return { shortCircuit: true, format: 'module', url: 'mock:ai-cutover-authz' }
-    }
-    if (specifier === 'next/server') {
-      return { shortCircuit: true, format: 'module', url: 'mock:ai-cutover-next' }
-    }
-    if (specifier === 'next-intl/server') {
-      return { shortCircuit: true, format: 'module', url: 'mock:ai-cutover-intl' }
-    }
-
-    if (specifier === 'next/link') {
+    if (specifier === "next/link") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){const{children,...rest}=p;return globalThis.React.createElement(\'a\',rest,children)}',
-      }
+        url: "data:text/javascript,export default function Link(p){const{children,...rest}=p;return globalThis.React.createElement('a',rest,children)}",
+      };
     }
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
+      };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:ai-cutover-db') {
+    if (url === "mock:ai-cutover-db") {
       return {
-        format: 'module',
+        format: "module",
         source: withPlatformDbTestSurface(`
           const state = globalThis[Symbol.for('openbooks.ai-cutover-route')]
           // Every read returns one inert row: the upsert below reads the
@@ -105,11 +112,11 @@ registerHooks({
           export function runtimeDatabaseRoleCheckRequired() { return false }
         `),
         shortCircuit: true,
-      }
+      };
     }
-    if (url === 'mock:ai-cutover-authz') {
+    if (url === "mock:ai-cutover-authz") {
       return {
-        format: 'module',
+        format: "module",
         source: `
           const authz = {
             user: { orgId: '00000000-0000-4000-8000-00000000a001', id: '00000000-0000-4000-8000-00000000a002' },
@@ -123,11 +130,11 @@ registerHooks({
           export { guardUnrestrictedScope } from '${root}web/lib/authz.ts'
         `,
         shortCircuit: true,
-      }
+      };
     }
-    if (url === 'mock:ai-cutover-next') {
+    if (url === "mock:ai-cutover-next") {
       return {
-        format: 'module',
+        format: "module",
         source: `
           export class NextResponse extends Response {
             static json(body, init = {}) {
@@ -139,48 +146,49 @@ registerHooks({
           }
         `,
         shortCircuit: true,
-      }
+      };
     }
-    if (url === 'mock:ai-cutover-intl') {
+    if (url === "mock:ai-cutover-intl") {
       return {
-        format: 'module',
-        source: 'export async function getTranslations() { return (key) => key } export async function getLocale() { return "en" } export async function getFormatter() { return new Intl.DateTimeFormat("en") }',
+        format: "module",
+        source:
+          'export async function getTranslations() { return (key) => key } export async function getLocale() { return "en" } export async function getFormatter() { return new Intl.DateTimeFormat("en") }',
         shortCircuit: true,
-      }
+      };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
 function collectStrings(node: unknown, out: string[]): void {
-  if (node == null) return
-  if (typeof node === 'string') {
-    out.push(node)
-    return
+  if (node == null) return;
+  if (typeof node === "string") {
+    out.push(node);
+    return;
   }
-  if (typeof node !== 'object') return
+  if (typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const item of node) collectStrings(item, out)
-    return
+    for (const item of node) collectStrings(item, out);
+    return;
   }
-  const record = node as Record<string, unknown>
+  const record = node as Record<string, unknown>;
   if (Array.isArray(record.queryChunks)) {
-    collectStrings(record.queryChunks, out)
-    return
+    collectStrings(record.queryChunks, out);
+    return;
   }
-  if (typeof record.value === 'string') {
-    out.push(record.value)
-    return
+  if (typeof record.value === "string") {
+    out.push(record.value);
+    return;
   }
   for (const value of Object.values(record)) {
-    if (value && typeof value === 'object') collectStrings(value, out)
+    if (value && typeof value === "object") collectStrings(value, out);
   }
 }
 
 function statementSql(statement: unknown): string {
-  const texts: string[] = []
-  collectStrings(statement, texts)
-  return texts.join(' ')
+  const texts: string[] = [];
+  collectStrings(statement, texts);
+  return texts.join(" ");
 }
 
 /** A policy WRITE (insert/update/delete) — the post-save settings re-read
@@ -188,77 +196,86 @@ function statementSql(statement: unknown): string {
 function writesAgentPolicies(): boolean {
   return state.statements
     .map(statementSql)
-    .some((sql) => /ai_agent_policies/.test(sql) && /^\s*(insert|update|delete)\b/i.test(sql))
+    .some((sql) => /ai_agent_policies/.test(sql) && /^\s*(insert|update|delete)\b/i.test(sql));
 }
 
-const { PUT } = await import('../../../../app/api/admin/ai/route')
+const { PUT } = await import("../../../../app/api/admin/ai/route");
 
 async function putProvider(body: Record<string, unknown>): Promise<{ status: number }> {
-  state.statements.length = 0
+  state.statements.length = 0;
   const response = await PUT(
-    new Request('http://cutover.test/api/admin/ai', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://cutover.test/api/admin/ai", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
-  await response.json().catch(() => null)
-  return { status: response.status }
+  );
+  await response.json().catch(() => null);
+  return { status: response.status };
 }
 
 const PROVIDER_BODY = {
   enabled: true,
-  provider: 'anthropic',
-  modelFast: 'fast-1',
-  modelSmart: 'smart-1',
-  baseUrl: '',
-}
+  provider: "anthropic",
+  modelFast: "fast-1",
+  modelSmart: "smart-1",
+  baseUrl: "",
+};
 
-test('a provider save that omits agents leaves every pack policy untouched', async () => {
-  const { status } = await putProvider({ ...PROVIDER_BODY })
-  assert.equal(status, 200)
-  assert.ok(state.statements.length > 0, 'the provider save must still write its own settings')
-  assert.equal(writesAgentPolicies(), false, 'omitting agents must not touch ai_agent_policies')
-})
+test("a provider save that omits agents leaves every pack policy untouched", async () => {
+  const { status } = await putProvider({ ...PROVIDER_BODY });
+  assert.equal(status, 200);
+  assert.ok(state.statements.length > 0, "the provider save must still write its own settings");
+  assert.equal(writesAgentPolicies(), false, "omitting agents must not touch ai_agent_policies");
+});
 
-test('a provider save that sends agents persists the sent pack policies', async () => {
+test("a provider save that sends agents persists the sent pack policies", async () => {
   const { status } = await putProvider({
     ...PROVIDER_BODY,
-    agents: [{ agentKey: 'cash', enabled: false }],
-  })
-  assert.equal(status, 200)
-  assert.equal(writesAgentPolicies(), true, 'sent agents must reach ai_agent_policies')
-})
+    agents: [{ agentKey: "cash", enabled: false }],
+  });
+  assert.equal(status, 200);
+  assert.equal(writesAgentPolicies(), true, "sent agents must reach ai_agent_policies");
+});
 
-test('the provider loader carries provider fields only — never agent policy', async () => {
-  const { loadAdminAi, adminAiSpec } = await import('./view')
-  state.statements.length = 0
-  const data = await loadAdminAi()
-  assert.equal(state.statements.some((query) => /\b(ai_rails_settings|ai_capabilities|ai_decisions)\b/.test(statementSql(query))), false, 'provider GET must not provision workforce settings or load action/activity rows')
+test("the provider loader carries provider fields only — never agent policy", async () => {
+  const { loadAdminAi, adminAiSpec } = await import("./view");
+  state.statements.length = 0;
+  const data = await loadAdminAi();
+  assert.equal(
+    state.statements.some((query) =>
+      /\b(ai_rails_settings|ai_capabilities|ai_decisions)\b/.test(statementSql(query)),
+    ),
+    false,
+    "provider GET must not provision workforce settings or load action/activity rows",
+  );
   assert.deepEqual(Object.keys(data.initial).sort(), [
-    'baseUrl',
-    'documentCapture',
-    'enabled',
-    'hasKey',
-    'modelFast',
-    'modelSmart',
-    'provider',
-  ])
-  const specText = JSON.stringify(adminAiSpec(data))
-  assert.ok(specText.includes('ai-settings-form'))
-  assert.equal(/ai-governance-ledger|ai-rails-settings.*entityKey|setup-section/.test(specText), false)
-  assert.ok(!('agents' in data.initial), 'agent policy must not cross the provider boundary')
-  assert.ok(data.specs.length > 0, 'the loader must offer at least one provider spec')
-  const nonJson: string[] = []
+    "baseUrl",
+    "documentCapture",
+    "enabled",
+    "hasKey",
+    "modelFast",
+    "modelSmart",
+    "provider",
+  ]);
+  const specText = JSON.stringify(adminAiSpec(data));
+  assert.ok(specText.includes("ai-settings-form"));
+  assert.equal(
+    /ai-governance-ledger|ai-rails-settings.*entityKey|setup-section/.test(specText),
+    false,
+  );
+  assert.ok(!("agents" in data.initial), "agent policy must not cross the provider boundary");
+  assert.ok(data.specs.length > 0, "the loader must offer at least one provider spec");
+  const nonJson: string[] = [];
   const walk = (node: unknown, path: string): void => {
-    if (typeof node === 'function') {
-      nonJson.push(path)
-      return
+    if (typeof node === "function") {
+      nonJson.push(path);
+      return;
     }
-    if (node && typeof node === 'object') {
-      for (const [key, value] of Object.entries(node)) walk(value, `${path}.${key}`)
+    if (node && typeof node === "object") {
+      for (const [key, value] of Object.entries(node)) walk(value, `${path}.${key}`);
     }
-  }
-  for (const [index, spec] of data.specs.entries()) walk(spec, `specs[${index}]`)
-  assert.deepEqual(nonJson, [], 'provider specs must stay a serializable slice with no SDK code')
-})
+  };
+  for (const [index, spec] of data.specs.entries()) walk(spec, `specs[${index}]`);
+  assert.deepEqual(nonJson, [], "provider specs must stay a serializable slice with no SDK code");
+});

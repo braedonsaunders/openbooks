@@ -9,27 +9,31 @@
  * canonical record — belongs to no segment: it lists under All, never
  * folded into Approved, so the segment counts stay exact.
  */
-export const QUEUE_SEGMENTS = ['draft', 'submitted', 'approved', 'rejected', 'withdrawn'] as const
+export const QUEUE_SEGMENTS = ["draft", "submitted", "approved", "rejected", "withdrawn"] as const;
 
-export type QueueSegment = (typeof QUEUE_SEGMENTS)[number]
+export type QueueSegment = (typeof QUEUE_SEGMENTS)[number];
 
 /** The service request state each queue segment filters on. */
 export const QUEUE_SEGMENT_STATUS: Record<QueueSegment, string> = {
-  draft: 'draft',
-  submitted: 'pending_approval',
-  approved: 'approved',
-  rejected: 'rejected',
-  withdrawn: 'withdrawn',
-}
+  draft: "draft",
+  submitted: "pending_approval",
+  approved: "approved",
+  rejected: "rejected",
+  withdrawn: "withdrawn",
+};
 
 export interface QueueStatusRefusal {
-  readonly code: 'UNKNOWN_QUEUE_STATUS'
-  readonly message: string
+  readonly code: "UNKNOWN_QUEUE_STATUS";
+  readonly message: string;
 }
 
 export type QueueStatusResolution =
-  | { readonly ok: true; readonly segment: QueueSegment | null; readonly serviceStatus: string | null }
-  | { readonly ok: false; readonly refusal: QueueStatusRefusal }
+  | {
+      readonly ok: true;
+      readonly segment: QueueSegment | null;
+      readonly serviceStatus: string | null;
+    }
+  | { readonly ok: false; readonly refusal: QueueStatusRefusal };
 
 /**
  * Resolve the raw `status` search param. Absent means All (no service
@@ -38,28 +42,28 @@ export type QueueStatusResolution =
  * which would show a different list than the URL promises.
  */
 export function resolveQueueStatus(raw: string | null | undefined): QueueStatusResolution {
-  if (raw === null || raw === undefined || raw === '') {
-    return { ok: true, segment: null, serviceStatus: null }
+  if (raw === null || raw === undefined || raw === "") {
+    return { ok: true, segment: null, serviceStatus: null };
   }
   const segment = (QUEUE_SEGMENTS as readonly string[]).includes(raw)
     ? (raw as QueueSegment)
-    : null
+    : null;
   if (segment === null) {
     return {
       ok: false,
       refusal: {
-        code: 'UNKNOWN_QUEUE_STATUS',
-        message: `unknown change-request segment ${JSON.stringify(raw)} — filter by one of ${QUEUE_SEGMENTS.join(', ')}, or clear the filter to list every request`,
+        code: "UNKNOWN_QUEUE_STATUS",
+        message: `unknown change-request segment ${JSON.stringify(raw)} — filter by one of ${QUEUE_SEGMENTS.join(", ")}, or clear the filter to list every request`,
       },
-    }
+    };
   }
-  return { ok: true, segment, serviceStatus: QUEUE_SEGMENT_STATUS[segment] }
+  return { ok: true, segment, serviceStatus: QUEUE_SEGMENT_STATUS[segment] };
 }
 
 /** The queue segment a service request state counts toward, or null for All-only states. */
 export function segmentOfServiceStatus(status: string): QueueSegment | null {
   for (const segment of QUEUE_SEGMENTS) {
-    if (QUEUE_SEGMENT_STATUS[segment] === status) return segment
+    if (QUEUE_SEGMENT_STATUS[segment] === status) return segment;
   }
-  return null
+  return null;
 }

@@ -40,14 +40,20 @@ export interface AntiDilutionInputs {
 /** The adjusted conversion price (exact), or the unchanged price when no adjustment applies. */
 export function adjustedConversionPriceExact(inputs: AntiDilutionInputs): Rational {
   const { method, conversionPrice, newIssuePrice } = inputs;
-  if (method === "none" || compareRational(newIssuePrice, conversionPrice) >= 0) return conversionPrice;
+  if (method === "none" || compareRational(newIssuePrice, conversionPrice) >= 0)
+    return conversionPrice;
   if (method === "full_ratchet") return newIssuePrice;
-  const base = rational(method === "broad_based" ? inputs.fullyDilutedBefore : inputs.outstandingBefore);
+  const base = rational(
+    method === "broad_based" ? inputs.fullyDilutedBefore : inputs.outstandingBefore,
+  );
   if (base.numerator <= 0n) {
     throw equityError("antiDilutionBaseMissing");
   }
   const wouldHaveBought = divideRational(inputs.newMoney, conversionPrice);
-  return multiplyRational(conversionPrice, divideRational(addRational(base, wouldHaveBought), addRational(base, inputs.newShares)));
+  return multiplyRational(
+    conversionPrice,
+    divideRational(addRational(base, wouldHaveBought), addRational(base, inputs.newShares)),
+  );
 }
 
 /** The adjusted conversion price as the stored ten-place decimal (half up). */

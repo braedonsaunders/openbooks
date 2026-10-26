@@ -12,11 +12,7 @@ const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-protect-"));
 const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
-const {
-  backendFor,
-  isProtectedSftpPath,
-  setSftpS3ClientForTests,
-} = await import("./backend.ts");
+const { backendFor, isProtectedSftpPath, setSftpS3ClientForTests } = await import("./backend.ts");
 const { createFakeS3 } = await import("./fake-s3.ts");
 const { generateHostKey, startSftpServer } = await import("./server.ts");
 import type { SftpServerConfig } from "./server.ts";
@@ -35,7 +31,10 @@ const PUBLISHED_HASH = createHash("sha256").update(PUBLISHED).digest("hex");
 const S3_VARS = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"] as const;
 function pinS3Env(): Map<string, string | undefined> {
   const saved = new Map<string, string | undefined>(
-    S3_VARS.map((name) => [name, process.env[name] ?? (env as Record<string, string | undefined>)[name]]),
+    S3_VARS.map((name) => [
+      name,
+      process.env[name] ?? (env as Record<string, string | undefined>)[name],
+    ]),
   );
   for (const name of S3_VARS) process.env[name] = `test-${name.toLowerCase().replace(/_/g, "-")}`;
   return saved;
@@ -90,7 +89,11 @@ async function expectDenied(promise: Promise<unknown>, what: string): Promise<vo
     (e: unknown) => e,
   );
   assert.ok(error, `${what} must be refused`);
-  assert.equal(asStatus(error), PERMISSION_DENIED, `${what} must refuse with PERMISSION_DENIED, not another status`);
+  assert.equal(
+    asStatus(error),
+    PERMISSION_DENIED,
+    `${what} must refuse with PERMISSION_DENIED, not another status`,
+  );
 }
 
 function unlink(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
@@ -166,15 +169,26 @@ async function protectionSuite(kind: "local" | "s3"): Promise<void> {
   const fake = kind === "s3" ? createFakeS3() : null;
   if (fake) setSftpS3ClientForTests(fake.client);
   try {
-    const config: SftpServerConfig = kind === "s3"
-      ? {
-        id: `protect-${lane}`, orgId: ORG, username: `protect-${lane}`, backend: "s3",
-        bucket: "protect-bucket", rootPrefix, readOnlyDirs: ["outbound"],
-      }
-      : {
-        id: `protect-${lane}`, orgId: ORG, username: `protect-${lane}`, backend: "local",
-        bucket: null, rootPrefix, readOnlyDirs: ["outbound"],
-      };
+    const config: SftpServerConfig =
+      kind === "s3"
+        ? {
+            id: `protect-${lane}`,
+            orgId: ORG,
+            username: `protect-${lane}`,
+            backend: "s3",
+            bucket: "protect-bucket",
+            rootPrefix,
+            readOnlyDirs: ["outbound"],
+          }
+        : {
+            id: `protect-${lane}`,
+            orgId: ORG,
+            username: `protect-${lane}`,
+            backend: "local",
+            bucket: null,
+            rootPrefix,
+            readOnlyDirs: ["outbound"],
+          };
     const sessionBackend = backendFor(config);
 
     // The app's publish (import-job writes through its own backend, never a
@@ -182,21 +196,46 @@ async function protectionSuite(kind: "local" | "s3"): Promise<void> {
     await sessionBackend.write("outbound/report.csv", PUBLISHED);
     await sessionBackend.write("inbound/drop.csv", Buffer.from("statement"));
 
-    const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: passwordResolver(config) });
+    const server = await startSftpServer({
+      port: 0,
+      hostKey: generateHostKey(),
+      resolve: passwordResolver(config),
+    });
     const client = await connectPassword(server.port, config.username, "bank-pw");
     try {
       const sftp = await sftpSession(client);
 
       // RED before the fix: every one of these succeeded and rewrote or
       // removed the approved artifact while delivery evidence described it.
-      await expectDenied(open(sftp, "outbound/report.csv", "w").then((h) => close(sftp, h)), "truncate+write open");
-      await expectDenied(open(sftp, "outbound/report.csv", "a").then((h) => close(sftp, h)), "append open");
-      await expectDenied(open(sftp, "outbound/report.csv", "r+").then((h) => close(sftp, h)), "read/write open");
-      await expectDenied(open(sftp, "outbound/fresh.csv", "w").then((h) => close(sftp, h)), "create inside outbound");
+      await expectDenied(
+        open(sftp, "outbound/report.csv", "w").then((h) => close(sftp, h)),
+        "truncate+write open",
+      );
+      await expectDenied(
+        open(sftp, "outbound/report.csv", "a").then((h) => close(sftp, h)),
+        "append open",
+      );
+      await expectDenied(
+        open(sftp, "outbound/report.csv", "r+").then((h) => close(sftp, h)),
+        "read/write open",
+      );
+      await expectDenied(
+        open(sftp, "outbound/fresh.csv", "w").then((h) => close(sftp, h)),
+        "create inside outbound",
+      );
       await expectDenied(unlink(sftp, "outbound/report.csv"), "remove");
-      await expectDenied(rename(sftp, "outbound/report.csv", "outbound/renamed.csv"), "rename away");
-      await expectDenied(rename(sftp, "inbound/drop.csv", "outbound/planted.csv"), "rename into outbound");
-      await expectDenied(rename(sftp, "outbound/report.csv", "inbound/stolen.csv"), "rename out of outbound");
+      await expectDenied(
+        rename(sftp, "outbound/report.csv", "outbound/renamed.csv"),
+        "rename away",
+      );
+      await expectDenied(
+        rename(sftp, "inbound/drop.csv", "outbound/planted.csv"),
+        "rename into outbound",
+      );
+      await expectDenied(
+        rename(sftp, "outbound/report.csv", "inbound/stolen.csv"),
+        "rename out of outbound",
+      );
       await expectDenied(setstat(sftp, "outbound/report.csv"), "setstat");
 
       // Reads, stat, listing, and the inbound folder are unaffected.

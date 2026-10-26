@@ -98,9 +98,8 @@ function readInput(row: Record<string, unknown>): AllowancePayrollInput {
     currency,
     coverageDate: String(row.coverageDate).slice(0, 10),
     status,
-    consumedByRunDocumentId: row.consumedByRunDocumentId == null
-      ? null
-      : String(row.consumedByRunDocumentId),
+    consumedByRunDocumentId:
+      row.consumedByRunDocumentId == null ? null : String(row.consumedByRunDocumentId),
   };
 }
 
@@ -121,76 +120,115 @@ export async function consumeAllowancePayrollInputs(
 ): Promise<AllowancePayrollInput[]> {
   const { orgId, runDocumentId, periodStart, periodEnd, employeePartyId } = query;
   const payCurrency = query.payCurrency.trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(payCurrency)) throw new AllowancePayrollInputError(
-    "the pay run has no valid currency — set the payroll document currency and recalculate before paying approved allowances",
-  );
-  const foreign = (await exec.execute<{ id: string; consumed_by_run_document_id: string }>(sql`
+  if (!/^[A-Z]{3}$/.test(payCurrency))
+    throw new AllowancePayrollInputError(
+      "the pay run has no valid currency — set the payroll document currency and recalculate before paying approved allowances",
+    );
+  const foreign = (
+    await exec.execute<{ id: string; consumed_by_run_document_id: string }>(
+      sql`
     select id::text as id, consumed_by_run_document_id::text as consumed_by_run_document_id
       from hrm_allowance_payroll_inputs
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
        and status = 'consumed' and consumed_by_run_document_id <> ${runDocumentId}
        and coverage_date between ${periodStart}::date and ${periodEnd}::date
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (foreign) {
     throw new AllowancePayrollInputError(
       `approved allowance input ${foreign.id} is already consumed by another pay run — release or void that run before recalculating this period`,
     );
   }
-  const rows = await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(
+    sql`
     select ${INPUT_COLUMNS} from hrm_allowance_payroll_inputs
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
        and coverage_date between ${periodStart}::date and ${periodEnd}::date
-       and (status = 'pending' ${query.simulate === true
-         ? sql`or (status = 'consumed' and consumed_by_run_document_id = ${runDocumentId})`
-         : sql``})
+       and (status = 'pending' ${
+         query.simulate === true
+           ? sql`or (status = 'consumed' and consumed_by_run_document_id = ${runDocumentId})`
+           : sql``
+       })
      order by coverage_date, entry_kind, id
-  `, "objects");
+  `,
+    "objects",
+  );
   const prepared: AllowancePayrollInput[] = [];
   for (const raw of rows) {
     const candidate = readInput(raw);
-    const employment = (await exec.execute<{ worker_party_id: string }>(sql`
+    const employment = (
+      await exec.execute<{ worker_party_id: string }>(
+        sql`
       select worker_party_id::text as worker_party_id from worker_employments
        where org_id = ${orgId} and id = ${candidate.employmentId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!employment || employment.worker_party_id !== candidate.employeePartyId) {
       throw new AllowancePayrollInputError(
         `approved allowance input ${candidate.id} no longer matches its employment — void and reapprove the source entry after HR corrects the employment assignment`,
       );
     }
-    const sourceTable = candidate.entryKind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries";
-    const source = (await exec.execute<{ status: string }>(sql`
+    const sourceTable =
+      candidate.entryKind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries";
+    const source = (
+      await exec.execute<{ status: string }>(
+        sql`
       select status from ${sql.identifier(sourceTable)}
        where org_id = ${orgId} and id = ${candidate.entryId}
        for share
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (source?.status !== "approved") {
       throw new AllowancePayrollInputError(
         `approved allowance input ${candidate.id} no longer has an approved source entry — correct or reapprove the per-diem or travel entry before calculating payroll`,
       );
     }
-    const locked = (await exec.execute<Record<string, unknown>>(sql`
+    const locked = (
+      await exec.execute<Record<string, unknown>>(
+        sql`
       select ${INPUT_COLUMNS} from hrm_allowance_payroll_inputs
        where org_id = ${orgId} and id = ${candidate.id} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!locked) {
       throw new AllowancePayrollInputError(
         `approved allowance input ${candidate.id} changed while payroll was calculating — recalculate the pay run`,
       );
     }
     const input = readInput(locked);
-    if (input.entryId !== candidate.entryId || input.entryKind !== candidate.entryKind
-        || (input.status !== "pending" && !(query.simulate === true
-          && input.status === "consumed" && input.consumedByRunDocumentId === runDocumentId))) {
+    if (
+      input.entryId !== candidate.entryId ||
+      input.entryKind !== candidate.entryKind ||
+      (input.status !== "pending" &&
+        !(
+          query.simulate === true &&
+          input.status === "consumed" &&
+          input.consumedByRunDocumentId === runDocumentId
+        ))
+    ) {
       throw new AllowancePayrollInputError(
         `approved allowance input ${input.id} changed while payroll was calculating — recalculate the pay run`,
       );
     }
-    const component = (await exec.execute<{ kind: string; is_active: boolean }>(sql`
+    const component = (
+      await exec.execute<{ kind: string; is_active: boolean }>(
+        sql`
       select kind, is_active from pay_components
        where org_id = ${orgId} and id = ${input.payComponentId}
        for share
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!component?.is_active || component.kind !== "earning") {
       throw new AllowancePayrollInputError(
         `approved allowance input ${input.id} uses an inactive or non-earning component — choose an active earning component on its policy, then void, recompute and approve the entry`,
@@ -200,26 +238,36 @@ export async function consumeAllowancePayrollInputs(
   }
   if (query.simulate === true) return prepared;
   for (const input of prepared) {
-    const updated = (await exec.execute<{ id: string }>(sql`
+    const updated = (
+      await exec.execute<{ id: string }>(
+        sql`
       update hrm_allowance_payroll_inputs
          set status = 'consumed', consumed_by_run_document_id = ${runDocumentId}, updated_at = now()
        where org_id = ${orgId} and id = ${input.id} and status = 'pending'
       returning id::text as id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
       throw new AllowancePayrollInputError(
         `approved allowance input ${input.id} changed while payroll was calculating — recalculate the pay run before committing`,
       );
     }
   }
-  return prepared.map((input) => ({ ...input, status: "consumed", consumedByRunDocumentId: runDocumentId }));
+  return prepared.map((input) => ({
+    ...input,
+    status: "consumed",
+    consumedByRunDocumentId: runDocumentId,
+  }));
 }
 
 export async function releaseAllowancePayrollInputs(
   exec: SqlExecutor,
   input: { orgId: string; runDocumentId: string },
 ): Promise<number> {
-  const result = await exec.execute<{ n: string }>(sql`
+  const result = await exec.execute<{ n: string }>(
+    sql`
     with released as (
       update hrm_allowance_payroll_inputs
          set status = 'pending', consumed_by_run_document_id = null, updated_at = now()
@@ -227,7 +275,9 @@ export async function releaseAllowancePayrollInputs(
          and status = 'consumed'
       returning id
     ) select count(*)::text as n from released
-  `, "objects");
+  `,
+    "objects",
+  );
   return Number(result[0]?.n ?? "0");
 }
 
@@ -278,27 +328,39 @@ export async function allowancePayrollInputProblem(
   const scope = sql`employee_party_id in (
     select jsonb_array_elements_text(${JSON.stringify(query.employeePartyIds)}::jsonb)::uuid
   )`;
-  const pending = (await exec.execute<{ id: string }>(sql`
+  const pending = (
+    await exec.execute<{ id: string }>(
+      sql`
     select id::text as id from hrm_allowance_payroll_inputs
      where org_id = ${query.orgId} and ${scope} and status = 'pending'
        and coverage_date between ${query.periodStart}::date and ${query.periodEnd}::date
      order by coverage_date, id limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (pending) {
     return {
       code: "PENDING_ALLOWANCE_INPUTS",
       message: `approved per-diem or travel-pay input ${pending.id} was not included in this calculation — recalculate the pay run before committing`,
     };
   }
-  const voided = (await exec.execute<{ id: string }>(sql`
+  const voided = (
+    await exec.execute<{ id: string }>(
+      sql`
     select id::text as id from hrm_allowance_payroll_inputs
      where org_id = ${query.orgId} and ${scope} and status = 'voided'
        and consumed_by_run_document_id = ${query.runDocumentId}
        and coverage_date between ${query.periodStart}::date and ${query.periodEnd}::date
      order by coverage_date, id limit 1
-  `, "objects"))[0];
-  return voided ? {
-    code: "VOIDED_ALLOWANCE_INPUT",
-    message: `approved allowance input ${voided.id} was voided after calculation — recalculate the pay run before committing`,
-  } : null;
+  `,
+      "objects",
+    )
+  )[0];
+  return voided
+    ? {
+        code: "VOIDED_ALLOWANCE_INPUT",
+        message: `approved allowance input ${voided.id} was voided after calculation — recalculate the pay run before committing`,
+      }
+    : null;
 }

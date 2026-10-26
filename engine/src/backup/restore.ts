@@ -91,7 +91,9 @@ async function sha256File(path: string): Promise<string> {
   return hash.digest("hex");
 }
 
-async function closeWriteStream(stream: ReturnType<typeof createWriteStream> | null): Promise<void> {
+async function closeWriteStream(
+  stream: ReturnType<typeof createWriteStream> | null,
+): Promise<void> {
   if (!stream) return;
   stream.end();
   await once(stream, "close");
@@ -102,7 +104,9 @@ async function closeWriteStream(stream: ReturnType<typeof createWriteStream> | n
  * encrypted backup, binary gzip magic for a legacy one. Returns the line and
  * its byte length (including the newline) so callers can bound the envelope.
  */
-async function readArchiveFirstLine(archivePath: string): Promise<{ line: string; length: number }> {
+async function readArchiveFirstLine(
+  archivePath: string,
+): Promise<{ line: string; length: number }> {
   const handle = await open(archivePath, "r");
   try {
     const buf = Buffer.alloc(8192);
@@ -190,7 +194,9 @@ async function decryptBackupArchive(archivePath: string): Promise<{
   const contentKey = Buffer.from(unwrapped, "base64");
   const nonce = Buffer.from(envelope.nonce, "base64");
   if (contentKey.length !== 32 || nonce.length !== 12) {
-    throw new Error("backup encryption envelope carries an invalid key or nonce; the envelope was tampered");
+    throw new Error(
+      "backup encryption envelope carries an invalid key or nonce; the envelope was tampered",
+    );
   }
   const size = (await stat(archivePath)).size;
   if (size < headerLength + BACKUP_TAG_BYTES + 1) {
@@ -240,13 +246,16 @@ export async function inspectBackupArchive(args: {
   allowLegacyV2WithoutKeyCheck?: boolean;
 }): Promise<BackupArchiveInspection> {
   if (!args.archivePath.startsWith("/")) throw new Error("backup archive path must be absolute");
-  if (!SHA256_RE.test(args.expectedSha256)) throw new Error("expected SHA-256 must be 64 lowercase hexadecimal characters");
+  if (!SHA256_RE.test(args.expectedSha256))
+    throw new Error("expected SHA-256 must be 64 lowercase hexadecimal characters");
   if (!UUID_RE.test(args.expectedOrgId)) throw new Error("expected organization id is not a UUID");
   await mkdir(args.spoolDir, { recursive: true, mode: 0o700 });
 
   const actualSha256 = await sha256File(args.archivePath);
   if (actualSha256 !== args.expectedSha256) {
-    throw new Error(`backup SHA-256 mismatch: expected ${args.expectedSha256}, received ${actualSha256}`);
+    throw new Error(
+      `backup SHA-256 mismatch: expected ${args.expectedSha256}, received ${actualSha256}`,
+    );
   }
 
   // Encrypted archives authenticate and decrypt to a temp gzip first, so a
@@ -284,11 +293,17 @@ export async function inspectBackupArchive(args: {
         if (!plainObject(candidate) || candidate.format !== BACKUP_FORMAT) {
           throw new Error("not an OpenBooks organization backup");
         }
-        if (candidate.version !== 1 && candidate.version !== 2 && candidate.version !== BACKUP_FORMAT_VERSION) {
+        if (
+          candidate.version !== 1 &&
+          candidate.version !== 2 &&
+          candidate.version !== BACKUP_FORMAT_VERSION
+        ) {
           throw new Error(`unsupported OpenBooks backup version ${String(candidate.version)}`);
         }
         if (candidate.version === 1 && !args.allowLegacyV1) {
-          throw new Error("legacy format-v1 backup has no schema fingerprint; pass the explicit legacy override only after proving source/target schema parity");
+          throw new Error(
+            "legacy format-v1 backup has no schema fingerprint; pass the explicit legacy override only after proving source/target schema parity",
+          );
         }
         if (candidate.version === 2 && !args.allowLegacyV2WithoutKeyCheck) {
           throw new Error(
@@ -298,19 +313,25 @@ export async function inspectBackupArchive(args: {
         if (typeof candidate.orgId !== "string" || candidate.orgId !== args.expectedOrgId) {
           throw new Error("backup organization does not match --org");
         }
-        if (typeof candidate.createdAt !== "string" || !Number.isFinite(Date.parse(candidate.createdAt))) {
+        if (
+          typeof candidate.createdAt !== "string" ||
+          !Number.isFinite(Date.parse(candidate.createdAt))
+        ) {
           throw new Error("backup header has an invalid createdAt timestamp");
         }
         if (
           (candidate.version === 2 || candidate.version === BACKUP_FORMAT_VERSION) &&
           (typeof candidate.schemaSha256 !== "string" || !SHA256_RE.test(candidate.schemaSha256))
         ) {
-          throw new Error(`format-v${candidate.version} backup header has an invalid schema fingerprint`);
+          throw new Error(
+            `format-v${candidate.version} backup header has an invalid schema fingerprint`,
+          );
         }
         if (
           candidate.version === BACKUP_FORMAT_VERSION &&
           (typeof candidate.dataKeyCheck !== "string" ||
-            (!candidate.dataKeyCheck.startsWith("enc:v1:") && !candidate.dataKeyCheck.startsWith("enc:v2:")))
+            (!candidate.dataKeyCheck.startsWith("enc:v1:") &&
+              !candidate.dataKeyCheck.startsWith("enc:v2:")))
         ) {
           throw new Error("format-v3 backup header has no valid data-key verification canary");
         }
@@ -324,12 +345,21 @@ export async function inspectBackupArchive(args: {
         currentSink = null;
         const parsed: unknown = JSON.parse(line);
         const meta = plainObject(parsed) && plainObject(parsed.meta) ? parsed.meta : null;
-        if (!meta || !Array.isArray(meta.tables) || !Number.isSafeInteger(meta.totalRows) || Number(meta.totalRows) < 0) {
+        if (
+          !meta ||
+          !Array.isArray(meta.tables) ||
+          !Number.isSafeInteger(meta.totalRows) ||
+          Number(meta.totalRows) < 0
+        ) {
           throw new Error("backup footer is malformed");
         }
         const seen = new Set<string>();
         const tables = meta.tables.map((entry: unknown) => {
-          if (!plainObject(entry) || typeof entry.name !== "string" || !TABLE_NAME_RE.test(entry.name)) {
+          if (
+            !plainObject(entry) ||
+            typeof entry.name !== "string" ||
+            !TABLE_NAME_RE.test(entry.name)
+          ) {
             throw new Error("backup footer contains an invalid table name");
           }
           if (!Number.isSafeInteger(entry.rows) || Number(entry.rows) < 0) {
@@ -363,7 +393,8 @@ export async function inspectBackupArchive(args: {
       const row: unknown = JSON.parse(rawRow);
       if (!plainObject(row)) throw new Error(`backup row for ${tableName} is not an object`);
       if (tableName === "orgs") {
-        if (row.id !== header.orgId) throw new Error("backup contains a different organization root row");
+        if (row.id !== header.orgId)
+          throw new Error("backup contains a different organization root row");
         orgRows += 1;
       } else if (Object.hasOwn(row, "org_id") && row.org_id !== header.orgId) {
         throw new Error(`backup row for ${tableName} crosses the organization boundary`);
@@ -378,13 +409,16 @@ export async function inspectBackupArchive(args: {
 
   if (!header) throw new Error("backup is empty");
   if (!footer) throw new Error("backup did not complete: footer is missing");
-  if (orgRows !== 1) throw new Error(`backup must contain exactly one organization row; found ${orgRows}`);
+  if (orgRows !== 1)
+    throw new Error(`backup must contain exactly one organization row; found ${orgRows}`);
   let declaredTotal = 0;
   for (const table of footer.tables) {
     declaredTotal += table.rows;
     const actual = actualCounts.get(table.name) ?? 0;
     if (actual !== table.rows) {
-      throw new Error(`backup row count mismatch for ${table.name}: footer ${table.rows}, archive ${actual}`);
+      throw new Error(
+        `backup row count mismatch for ${table.name}: footer ${table.rows}, archive ${actual}`,
+      );
     }
     actualCounts.delete(table.name);
   }
@@ -392,7 +426,9 @@ export async function inspectBackupArchive(args: {
     throw new Error(`backup footer omits table ${actualCounts.keys().next().value}`);
   }
   if (declaredTotal !== footer.totalRows) {
-    throw new Error(`backup footer total ${footer.totalRows} does not equal table total ${declaredTotal}`);
+    throw new Error(
+      `backup footer total ${footer.totalRows} does not equal table total ${declaredTotal}`,
+    );
   }
   return {
     archivePath: args.archivePath,
@@ -406,7 +442,8 @@ export async function inspectBackupArchive(args: {
 }
 
 async function targetBackupTables(client: pg.PoolClient): Promise<string[]> {
-  const result = await client.query<{ table_name: string }>(`
+  const result = await client.query<{ table_name: string }>(
+    `
     select distinct column_row.table_name
       from information_schema.columns column_row
       join information_schema.tables table_row
@@ -418,7 +455,9 @@ async function targetBackupTables(client: pg.PoolClient): Promise<string[]> {
        and not (column_row.table_name = any($1::text[]))
     union select 'orgs'
     order by 1
-  `, [[...ORG_SCOPED_BACKUP_EXCLUSIONS]]);
+  `,
+    [[...ORG_SCOPED_BACKUP_EXCLUSIONS]],
+  );
   const present = new Set(result.rows.map((row) => row.table_name));
   for (const child of ORGLESS_BACKUP_TABLES) {
     const exists = await client.query<{ present: boolean }>(
@@ -458,7 +497,9 @@ export function assertOrgParentageRows(
       const value = row[column];
       if (value === null || value === undefined) continue;
       if (typeof value !== "string" || !UUID_RE.test(value)) {
-        throw new Error(`restore org-parentage validation failed at ${tableName}.${column}: not a uuid`);
+        throw new Error(
+          `restore org-parentage validation failed at ${tableName}.${column}: not a uuid`,
+        );
       }
       if (value !== orgId) {
         throw new Error(
@@ -471,7 +512,10 @@ export function assertOrgParentageRows(
   }
 }
 
-export async function validateOrgParentage(inspection: BackupArchiveInspection, orgId: string): Promise<void> {
+export async function validateOrgParentage(
+  inspection: BackupArchiveInspection,
+  orgId: string,
+): Promise<void> {
   const archived = new Map(inspection.tables.map((table) => [table.name, table.rows]));
   for (const tableName of Object.keys(ORG_PARENT_COLUMNS)) {
     if ((archived.get(tableName) ?? 0) === 0) continue;
@@ -487,7 +531,9 @@ export async function validateOrgParentage(inspection: BackupArchiveInspection, 
     for await (const line of lines) {
       const row: unknown = JSON.parse(line);
       if (!plainObject(row)) {
-        throw new Error(`restore org-parentage validation failed: ${tableName} has a malformed row`);
+        throw new Error(
+          `restore org-parentage validation failed: ${tableName} has a malformed row`,
+        );
       }
       batch.push(row);
       if (batch.length >= 250) flush();
@@ -517,14 +563,18 @@ async function validateDurableAuthOwnership(
         [ids, orgId],
       );
       if (new Set(owned.rows.map((row) => row.id)).size !== ids.length) {
-        throw new Error(`restore durable-auth validation failed: ${tableName} references a user outside the archived organization`);
+        throw new Error(
+          `restore durable-auth validation failed: ${tableName} references a user outside the archived organization`,
+        );
       }
       userIds = new Set<string>();
     };
     for await (const line of lines) {
       const row: unknown = JSON.parse(line);
       if (!plainObject(row) || typeof row.user_id !== "string" || !UUID_RE.test(row.user_id)) {
-        throw new Error(`restore durable-auth validation failed: ${tableName} has an invalid user_id`);
+        throw new Error(
+          `restore durable-auth validation failed: ${tableName} has an invalid user_id`,
+        );
       }
       userIds.add(row.user_id);
       if (userIds.size >= 250) await flush();
@@ -538,7 +588,11 @@ async function validateMfaMaterial(
   orgId: string,
   validateCiphertext: boolean,
 ): Promise<void> {
-  const factors = await client.query<{ user_id: string; secret_encrypted: string; recovery_code_hashes: unknown }>(
+  const factors = await client.query<{
+    user_id: string;
+    secret_encrypted: string;
+    recovery_code_hashes: unknown;
+  }>(
     `select factor.user_id, factor.secret_encrypted, factor.recovery_code_hashes
        from auth_mfa_factors factor
        join users user_row on user_row.id = factor.user_id
@@ -560,13 +614,18 @@ async function validateMfaMaterial(
     if (validateCiphertext) {
       let opens = false;
       try {
-        unsealSecret(factor.secret_encrypted, { orgId: factor.user_id, purpose: "auth.mfa.secret" });
+        unsealSecret(factor.secret_encrypted, {
+          orgId: factor.user_id,
+          purpose: "auth.mfa.secret",
+        });
         opens = true;
       } catch {
         opens = false;
       }
       if (!opens) {
-        throw new Error("restored MFA ciphertext is corrupt despite a valid backup data-key canary");
+        throw new Error(
+          "restored MFA ciphertext is corrupt despite a valid backup data-key canary",
+        );
       }
     }
   }
@@ -667,7 +726,8 @@ async function insertionOrder(
     match_type: string;
     columns: string[];
     nullable_columns: string[] | null;
-  }>(`
+  }>(
+    `
     select child.relname as table_name, constraint_row.confmatchtype as match_type,
            array_agg(column_row.attname::text order by key_row.ordinality) as columns,
            array_agg(column_row.attname::text order by key_row.ordinality)
@@ -683,12 +743,19 @@ async function insertionOrder(
        and namespace_row.nspname = 'public'
        and child.relname = any($1::text[])
      group by child.relname, constraint_row.conname, constraint_row.confmatchtype
-  `, [tableNames]);
+  `,
+    [tableNames],
+  );
   const stagedSelfReferences = new Map<string, string[]>();
   for (const reference of selfReferences.rows) {
     const nullableColumns = reference.nullable_columns ?? [];
-    if (!nullableColumns.length || (reference.match_type === "f" && nullableColumns.length !== reference.columns.length)) {
-      throw new Error(`restore cannot stage non-deferrable self-reference on ${reference.table_name}`);
+    if (
+      !nullableColumns.length ||
+      (reference.match_type === "f" && nullableColumns.length !== reference.columns.length)
+    ) {
+      throw new Error(
+        `restore cannot stage non-deferrable self-reference on ${reference.table_name}`,
+      );
     }
     stagedSelfReferences.set(reference.table_name, [
       ...new Set([...(stagedSelfReferences.get(reference.table_name) ?? []), ...nullableColumns]),
@@ -731,19 +798,23 @@ async function insertSpoolTable(
   // projections as well. Those are recomputed by the target row and can never
   // be inserted, so the insert names the storable columns explicitly instead
   // of `select *` from the populated record.
-  const storable = (await client.query<{ column_name: string }>(
-    `select column_name from information_schema.columns
+  const storable = (
+    await client.query<{ column_name: string }>(
+      `select column_name from information_schema.columns
       where table_schema = 'public' and table_name = $1 and is_generated = 'NEVER'
       order by ordinal_position`,
-    [tableName],
-  )).rows.map((row) => row.column_name);
+      [tableName],
+    )
+  ).rows.map((row) => row.column_name);
   if (!storable.length) throw new Error(`restore target ${tableName} has no storable columns`);
   for (const column of storable) {
-    if (!TABLE_NAME_RE.test(column)) throw new Error(`unsafe column name ${column} on ${tableName}`);
+    if (!TABLE_NAME_RE.test(column))
+      throw new Error(`unsafe column name ${column} on ${tableName}`);
   }
   const staged = new Set(stagedSelfReferences);
   const insertColumns = storable.filter((column) => !staged.has(column));
-  if (!insertColumns.length) throw new Error(`restore target ${tableName} has no columns available for staged insertion`);
+  if (!insertColumns.length)
+    throw new Error(`restore target ${tableName} has no columns available for staged insertion`);
   const columnList = insertColumns.map((column) => `"${column}"`).join(", ");
   const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
   let batch: string[] = [];
@@ -783,7 +854,8 @@ async function restoreStagedSelfReferences(
   expectedRows: number,
 ): Promise<void> {
   if (!columns.length || !expectedRows) return;
-  const primaryKey = await client.query<{ column_name: string }>(`
+  const primaryKey = await client.query<{ column_name: string }>(
+    `
     select usage.column_name
       from information_schema.key_column_usage usage
       join information_schema.table_constraints constraint_row
@@ -795,14 +867,20 @@ async function restoreStagedSelfReferences(
        and usage.table_name = $1
        and constraint_row.constraint_type = 'PRIMARY KEY'
      order by usage.ordinal_position
-  `, [tableName]);
+  `,
+    [tableName],
+  );
   const keyColumns = primaryKey.rows.map((row) => row.column_name);
-  if (!keyColumns.length) throw new Error(`restore target ${tableName} has no primary key for self-reference replay`);
+  if (!keyColumns.length)
+    throw new Error(`restore target ${tableName} has no primary key for self-reference replay`);
   for (const column of [...columns, ...keyColumns]) {
-    if (!TABLE_NAME_RE.test(column)) throw new Error(`unsafe column name ${column} on ${tableName}`);
+    if (!TABLE_NAME_RE.test(column))
+      throw new Error(`unsafe column name ${column} on ${tableName}`);
   }
   const setClause = columns.map((column) => `"${column}" = source."${column}"`).join(", ");
-  const keyClause = keyColumns.map((column) => `target."${column}" = source."${column}"`).join(" and ");
+  const keyClause = keyColumns
+    .map((column) => `target."${column}" = source."${column}"`)
+    .join(" and ");
   const updateSql = `update public."${tableName}" as target set ${setClause}
     from jsonb_populate_recordset(null::public."${tableName}", $1::jsonb) as source
    where ${keyClause}`;
@@ -828,7 +906,9 @@ async function restoreStagedSelfReferences(
   }
   await flush();
   if (updated !== expectedRows) {
-    throw new Error(`restore updated ${updated} ${tableName} self-references; expected ${expectedRows}`);
+    throw new Error(
+      `restore updated ${updated} ${tableName} self-references; expected ${expectedRows}`,
+    );
   }
 }
 
@@ -859,7 +939,8 @@ async function validateTenantReferences(client: pg.PoolClient, orgId: string): P
   `);
   for (const ref of refs.rows) {
     for (const value of Object.values(ref)) {
-      if (!TABLE_NAME_RE.test(value)) throw new Error("unsafe catalog identifier during restore validation");
+      if (!TABLE_NAME_RE.test(value))
+        throw new Error("unsafe catalog identifier during restore validation");
     }
     const mismatch = await client.query<{ count: string }>(
       `select count(*)::text as count
@@ -870,7 +951,9 @@ async function validateTenantReferences(client: pg.PoolClient, orgId: string): P
       [orgId],
     );
     if (mismatch.rows[0]?.count !== "0") {
-      throw new Error(`restore tenant-reference validation failed at ${ref.source_table}.${ref.source_column}`);
+      throw new Error(
+        `restore tenant-reference validation failed at ${ref.source_table}.${ref.source_column}`,
+      );
     }
   }
 }
@@ -892,7 +975,11 @@ export async function restoreOrgBackup(args: {
 }): Promise<RestoreReport> {
   const spoolDir = await mkdtemp(join(tmpdir(), "openbooks-restore-"));
   let inspection: BackupArchiveInspection | null = null;
-  const pool = new pg.Pool({ connectionString: args.connectionString, max: 1, connectionTimeoutMillis: 30_000 });
+  const pool = new pg.Pool({
+    connectionString: args.connectionString,
+    max: 1,
+    connectionTimeoutMillis: 30_000,
+  });
   try {
     inspection = await inspectBackupArchive({
       archivePath: args.archivePath,
@@ -903,10 +990,17 @@ export async function restoreOrgBackup(args: {
       allowLegacyV2WithoutKeyCheck: args.allowLegacyV2WithoutKeyCheck,
     });
     if (args.expectedRowCount !== undefined && args.expectedRowCount !== inspection.totalRows) {
-      throw new Error(`manifest row count ${args.expectedRowCount} does not match archive ${inspection.totalRows}`);
+      throw new Error(
+        `manifest row count ${args.expectedRowCount} does not match archive ${inspection.totalRows}`,
+      );
     }
-    if (args.expectedTableCount !== undefined && args.expectedTableCount !== inspection.tables.length) {
-      throw new Error(`manifest table count ${args.expectedTableCount} does not match archive ${inspection.tables.length}`);
+    if (
+      args.expectedTableCount !== undefined &&
+      args.expectedTableCount !== inspection.tables.length
+    ) {
+      throw new Error(
+        `manifest table count ${args.expectedTableCount} does not match archive ${inspection.tables.length}`,
+      );
     }
     if (inspection.header.version === BACKUP_FORMAT_VERSION) {
       // The canary is sealed under the fixed system scope (see backup.ts):
@@ -938,7 +1032,12 @@ export async function restoreOrgBackup(args: {
       ]);
       deploymentLock = true;
       const sourceTables = inspection.tables.map((table) => table.name).sort();
-      const posture = await client.query<{ current_user: string; rolsuper: boolean; unowned: string }>(`
+      const posture = await client.query<{
+        current_user: string;
+        rolsuper: boolean;
+        unowned: string;
+      }>(
+        `
         select current_user, role_row.rolsuper,
                (select count(*)::text
                   from pg_class relation
@@ -947,21 +1046,32 @@ export async function restoreOrgBackup(args: {
                    and relation.relname = any($1::text[])
                    and pg_get_userbyid(relation.relowner) <> current_user) as unowned
           from pg_roles role_row where role_row.rolname = current_user
-      `, [sourceTables]);
+      `,
+        [sourceTables],
+      );
       const role = posture.rows[0];
       if (!role || (!role.rolsuper && role.unowned !== "0")) {
-        throw new Error("restore connection must be the schema owner (or an explicitly controlled PostgreSQL superuser)");
+        throw new Error(
+          "restore connection must be the schema owner (or an explicitly controlled PostgreSQL superuser)",
+        );
       }
 
       const targetTables = await targetBackupTables(client);
       if (JSON.stringify(sourceTables) !== JSON.stringify(targetTables)) {
         const missing = targetTables.filter((table) => !sourceTables.includes(table));
         const unknown = sourceTables.filter((table) => !targetTables.includes(table));
-        throw new Error(`backup table catalog differs from target schema (missing: ${missing.join(", ") || "none"}; unknown: ${unknown.join(", ") || "none"})`);
+        throw new Error(
+          `backup table catalog differs from target schema (missing: ${missing.join(", ") || "none"}; unknown: ${unknown.join(", ") || "none"})`,
+        );
       }
       const targetSchemaSha256 = await backupSchemaFingerprint(client, targetTables);
-      if (inspection.header.version !== 1 && inspection.header.schemaSha256 !== targetSchemaSha256) {
-        throw new Error(`backup schema fingerprint ${inspection.header.schemaSha256} does not match target ${targetSchemaSha256}; restore the source version first, then upgrade`);
+      if (
+        inspection.header.version !== 1 &&
+        inspection.header.schemaSha256 !== targetSchemaSha256
+      ) {
+        throw new Error(
+          `backup schema fingerprint ${inspection.header.schemaSha256} does not match target ${targetSchemaSha256}; restore the source version first, then upgrade`,
+        );
       }
       // C-47: every archived org reference must resolve inside the archive
       // before any row is inserted — a sandbox archive whose parent is
@@ -977,8 +1087,12 @@ export async function restoreOrgBackup(args: {
       await client.query("begin");
       try {
         await client.query("set local statement_timeout = 0");
-        await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", ["openbooks:organization-restore"]);
-        await client.query("select set_config('app.current_org', '', true), set_config('app.bypass_rls', 'on', true)");
+        await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          "openbooks:organization-restore",
+        ]);
+        await client.query(
+          "select set_config('app.current_org', '', true), set_config('app.bypass_rls', 'on', true)",
+        );
         // The bypass GUC alone grants nothing since 0399: RLS policies honor
         // it only through public.app_bypass_rls_active(), which additionally
         // requires a privileged login. This connection is posture-checked
@@ -990,10 +1104,11 @@ export async function restoreOrgBackup(args: {
           "select public.app_bypass_rls_active() as active",
         );
         if (bypassEngagement.rows[0]?.active !== true) {
-          const who = (await client.query<{ login: string }>("select current_user as login")).rows[0]?.login;
+          const who = (await client.query<{ login: string }>("select current_user as login"))
+            .rows[0]?.login;
           throw new Error(
             `restore bypass did not engage for login ${who ?? "unknown"}; ` +
-            "connect as the schema owner or a BYPASSRLS login (OPENBOOKS_RESTORE_DB_URL must name an owner-grade login)",
+              "connect as the schema owner or a BYPASSRLS login (OPENBOOKS_RESTORE_DB_URL must name an owner-grade login)",
           );
         }
         // The amend flag is deliberately not set: every kernel guard that
@@ -1001,9 +1116,13 @@ export async function restoreOrgBackup(args: {
         // so it would be inert. RLS reads no amend flag either.
         await client.query("select set_config('openbooks.migration', 'on', true)");
         await client.query("set constraints all deferred");
-        const existing = await client.query<{ count: string }>("select count(*)::text as count from orgs");
+        const existing = await client.query<{ count: string }>(
+          "select count(*)::text as count from orgs",
+        );
         if (existing.rows[0]?.count !== "0" && !args.testOnlyAllowNonemptyTarget) {
-          throw new Error("restore target is not empty: organization restore requires a schema-only database with zero org rows");
+          throw new Error(
+            "restore target is not empty: organization restore requires a schema-only database with zero org rows",
+          );
         }
 
         // Historical rows cannot be replayed through state-transition triggers:
@@ -1025,7 +1144,9 @@ export async function restoreOrgBackup(args: {
           );
         }
         if (rowsRestored !== inspection.totalRows) {
-          throw new Error(`restore row total ${rowsRestored} does not match archive ${inspection.totalRows}`);
+          throw new Error(
+            `restore row total ${rowsRestored} does not match archive ${inspection.totalRows}`,
+          );
         }
         for (const [tableName, columns] of insertion.stagedSelfReferences) {
           await restoreStagedSelfReferences(
@@ -1043,7 +1164,9 @@ export async function restoreOrgBackup(args: {
         for (const tableName of [...targetTables].sort()) {
           await client.query(`alter table public."${tableName}" enable trigger user`);
         }
-        await client.query("select public.recompute_document_open_balances($1)", [args.expectedOrgId]);
+        await client.query("select public.recompute_document_open_balances($1)", [
+          args.expectedOrgId,
+        ]);
         const openBalanceDrift = await client.query<{ count: string }>(
           `select count(*)::text as count from public.documents d
             where d.org_id = $1
@@ -1053,7 +1176,9 @@ export async function restoreOrgBackup(args: {
           [args.expectedOrgId],
         );
         if (openBalanceDrift.rows[0]?.count !== "0") {
-          throw new Error("restore left document open-balance caches inconsistent with the restored ledger");
+          throw new Error(
+            "restore left document open-balance caches inconsistent with the restored ledger",
+          );
         }
         // The row triggers that maintain gl_month_activity, party_payment_stats
         // and open_item_balances were intentionally disabled during the bulk
@@ -1061,7 +1186,9 @@ export async function restoreOrgBackup(args: {
         // in expectation of a rebuild. Rebuild each aggregate explicitly for the
         // restored organization so reporting is not permanently empty.
         await client.query("select openbooks_gl_activity_rebuild($1)", [args.expectedOrgId]);
-        await client.query("select openbooks_party_payment_stats_rebuild($1)", [args.expectedOrgId]);
+        await client.query("select openbooks_party_payment_stats_rebuild($1)", [
+          args.expectedOrgId,
+        ]);
         await client.query("select openbooks_open_item_balances_rebuild($1)", [args.expectedOrgId]);
         // Redis queue state is intentionally not replayed by an organization
         // archive. A stored backup also snapshots its own backup_runs row while
@@ -1077,7 +1204,10 @@ export async function restoreOrgBackup(args: {
         interruptedBackupRunsClosed = interrupted.rowCount ?? 0;
         await validateTenantReferences(client, args.expectedOrgId);
         await validateDurableAuthOwnership(client, inspection, args.expectedOrgId);
-        sessionSecretEmailConfig = await validateSessionSecretEmailConfig(client, args.expectedOrgId);
+        sessionSecretEmailConfig = await validateSessionSecretEmailConfig(
+          client,
+          args.expectedOrgId,
+        );
         if (sourceTables.includes("auth_mfa_factors")) {
           await validateMfaMaterial(client, args.expectedOrgId, !args.resetMfaFactors);
           if (args.resetMfaFactors) {
@@ -1090,7 +1220,8 @@ export async function restoreOrgBackup(args: {
             mfaFactorsReset = reset.rowCount ?? 0;
           }
         }
-        const invalidLedger = await client.query<{ count: string }>(`
+        const invalidLedger = await client.query<{ count: string }>(
+          `
           with invalid_entry as (
             select entry.id
               from journal_entries entry
@@ -1112,12 +1243,20 @@ export async function restoreOrgBackup(args: {
             (select count(*) from invalid_entry) +
             (select count(*) from invalid_subsidiary)
           )::text as count
-        `, [args.expectedOrgId]);
+        `,
+          [args.expectedOrgId],
+        );
         if (invalidLedger.rows[0]?.count !== "0") {
-          throw new Error(`restore contains ${invalidLedger.rows[0]?.count ?? "unknown"} invalid posted journal entries`);
+          throw new Error(
+            `restore contains ${invalidLedger.rows[0]?.count ?? "unknown"} invalid posted journal entries`,
+          );
         }
-        const root = await client.query<{ count: string }>("select count(*)::text as count from orgs where id = $1", [args.expectedOrgId]);
-        if (root.rows[0]?.count !== "1") throw new Error("restored organization root validation failed");
+        const root = await client.query<{ count: string }>(
+          "select count(*)::text as count from orgs where id = $1",
+          [args.expectedOrgId],
+        );
+        if (root.rows[0]?.count !== "1")
+          throw new Error("restored organization root validation failed");
         await client.query("commit");
       } catch (error) {
         await client.query("rollback").catch(() => {});

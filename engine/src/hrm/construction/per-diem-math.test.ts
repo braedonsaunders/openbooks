@@ -17,9 +17,9 @@ test("allowanceProduct refuses more than 4 decimal places instead of slicing the
   assert.throws(
     () => allowanceProduct("1.23456", "10.0000"),
     (error: unknown) =>
-      error instanceof HrmConstructionError
-      && /beyond 4 decimal places/.test(error.message)
-      && /4-decimal/.test(error.message),
+      error instanceof HrmConstructionError &&
+      /beyond 4 decimal places/.test(error.message) &&
+      /4-decimal/.test(error.message),
   );
 });
 

@@ -39,7 +39,10 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateCount, certificateFlag, type PayrollCertificate,
+  certificateAmount,
+  certificateCount,
+  certificateFlag,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -52,7 +55,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/va.ts";
 
 /** One band of the p. 21 formula: W = base + rate × (T − over), T not over `upTo`. */
@@ -105,18 +112,20 @@ const VA_EDITIONS_BY_YEAR: Record<number, VaYearRates> = {
   [VA_RATES_2026.year]: VA_RATES_2026,
 };
 
-export const VA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Virginia Employer Withholding Instructions, Formula Method (Rev. 05/25)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Virginia Department of Taxation, Income Tax Withholding Guide for Employers, Rev. 05/25 "
-    + "(2614086), Formula for Computing Tax to be Withheld (p. 21) effective for wages paid "
-    + "after July 1, 2025 — standard deduction $8,750, E1 $930, E2 $800; John's semi-monthly "
-    + "example; Form VA-4",
-  status: "published",
-  region: "VA",
-}];
+export const VA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Virginia Employer Withholding Instructions, Formula Method (Rev. 05/25)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Virginia Department of Taxation, Income Tax Withholding Guide for Employers, Rev. 05/25 " +
+      "(2614086), Formula for Computing Tax to be Withheld (p. 21) effective for wages paid " +
+      "after July 1, 2025 — standard deduction $8,750, E1 $930, E2 $800; John's semi-monthly " +
+      "example; Form VA-4",
+    status: "published",
+    region: "VA",
+  },
+];
 
 /**
  * The annualizing divisor. The interface marks daily as 260 or 365 worked
@@ -131,7 +140,10 @@ export function vaAnnualPeriods(periodsPerYear: number, dailyPeriods: number): n
 }
 
 /** Step 2 of the p. 21 formula — annualized tax W from annualized taxable T. */
-export function vaAnnualTax(taxable: bigint, rates: VaYearRates): { tax: bigint; bandOver: string } {
+export function vaAnnualTax(
+  taxable: bigint,
+  rates: VaYearRates,
+): { tax: bigint; bandOver: string } {
   if (taxable <= 0n) return { tax: 0n, bandOver: "0" };
   for (const band of rates.formula) {
     const ceiling = band.upTo == null ? null : U(band.upTo);
@@ -140,7 +152,9 @@ export function vaAnnualTax(taxable: bigint, rates: VaYearRates): { tax: bigint;
       return { tax: U(band.base) + mulRateCents(excess, band.rate), bandOver: band.over };
     }
   }
-  throw new PayrollError(`no Virginia formula band covers annualized taxable wages of ${D(taxable)}`);
+  throw new PayrollError(
+    `no Virginia formula band covers annualized taxable wages of ${D(taxable)}`,
+  );
 }
 
 /**
@@ -166,16 +180,31 @@ function compute(
   const militarySpouseExempt = certificateFlag(input.certificate, "military_spouse_exempt");
   if (militarySpouseExempt) {
     requireMilitarySpouseEligibility(input.certificate, "Virginia", [
-      { key: "servicemember_orders_on_file", description: "the servicemember's current Virginia military orders are on file" },
-      { key: "spouse_present_solely_to_accompany", description: "the spouse is present in Virginia solely to be with the servicemember" },
-      { key: "same_nonvirginia_domicile", description: "the spouse and servicemember maintain the same domicile outside Virginia" },
-      { key: "spousal_military_id_on_file", description: "a copy of the spousal military identification card is attached" },
+      {
+        key: "servicemember_orders_on_file",
+        description: "the servicemember's current Virginia military orders are on file",
+      },
+      {
+        key: "spouse_present_solely_to_accompany",
+        description: "the spouse is present in Virginia solely to be with the servicemember",
+      },
+      {
+        key: "same_nonvirginia_domicile",
+        description: "the spouse and servicemember maintain the same domicile outside Virginia",
+      },
+      {
+        key: "spousal_military_id_on_file",
+        description: "a copy of the spousal military identification card is attached",
+      },
     ]);
   }
 
   const exempt = context.exemptResult({
-    flagKeys: ["exempt", "military_spouse_exempt"], factorKey: "VA_EXEMPT",
-    factorFormat: "decimal", statutoryTax: true, additionalWithholding: true,
+    flagKeys: ["exempt", "military_spouse_exempt"],
+    factorKey: "VA_EXEMPT",
+    factorFormat: "decimal",
+    statutoryTax: true,
+    additionalWithholding: true,
   });
   if (exempt) return exempt;
 
@@ -190,9 +219,10 @@ function compute(
   // Default ZERO exemptions — VA-4: "as if you had no exemptions."
   const e1 = certificateCount(input.certificate, "personal_exemptions") ?? 0;
   const e2 = certificateCount(input.certificate, "age_blind_exemptions") ?? 0;
-  const annualExemption = U(rates.standardDeduction)
-    + U(rates.personalExemption) * BigInt(e1)
-    + U(rates.ageBlindExemption) * BigInt(e2);
+  const annualExemption =
+    U(rates.standardDeduction) +
+    U(rates.personalExemption) * BigInt(e1) +
+    U(rates.ageBlindExemption) * BigInt(e2);
   trace("VA_ANNUAL_EXEMPTION", annualExemption);
 
   const taxable = max0(annualWages - annualExemption);
@@ -287,59 +317,65 @@ export const VA_CERTIFICATE: PayrollCertificate = {
     appliesWhen: { field: "exempt", values: ["true"] },
   },
   citation:
-    "Virginia Form VA-4 Line 3 (annual exemption filing), "
-    + "https://www.tax.virginia.gov/sites/default/files/taxforms/withholding/any/va-4-any.pdf; "
-    + "Income Tax Withholding Guide for Employers, Rev. 05/25 (2614086), "
-    + "Formula for Computing Tax to be Withheld (p. 21)",
+    "Virginia Form VA-4 Line 3 (annual exemption filing), " +
+    "https://www.tax.virginia.gov/sites/default/files/taxforms/withholding/any/va-4-any.pdf; " +
+    "Income Tax Withholding Guide for Employers, Rev. 05/25 (2614086), " +
+    "Formula for Computing Tax to be Withheld (p. 21)",
   summary:
-    "Sets Virginia withholding exemptions. \"If you do not file this form, your employer must "
-    + "withhold Virginia income tax as if you had no exemptions.\" Federal Form W-4 may not be "
-    + "substituted.",
+    'Sets Virginia withholding exemptions. "If you do not file this form, your employer must ' +
+    'withhold Virginia income tax as if you had no exemptions." Federal Form W-4 may not be ' +
+    "substituted.",
   storage: "certificate_rows",
   fields: [
     {
       key: "personal_exemptions",
       label: "Line 1(a) — Personal and dependent exemptions (E1)",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help:
-        "Personal Exemption Worksheet line 4. Worth $930 a year each in the formula. Default "
-        + "zero: no VA-4 means no exemptions.",
+        "Personal Exemption Worksheet line 4. Worth $930 a year each in the formula. Default " +
+        "zero: no VA-4 means no exemptions.",
     },
     {
       key: "age_blind_exemptions",
       label: "Line 1(b) — Age 65 and over & blind exemptions (E2)",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help: "Personal Exemption Worksheet line 7. Worth $800 a year each. Default zero.",
     },
     {
       key: "additional_per_period",
       label: "Line 2 — Additional withholding requested",
-      kind: "amount", decimals: 4, min: "0",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help:
-        "Only if the employer agrees. Added AFTER the formula — a flat dollar amount, not a "
-        + "taxable adjustment.",
+        "Only if the employer agrees. Added AFTER the formula — a flat dollar amount, not a " +
+        "taxable adjustment.",
     },
     {
       key: "exempt",
       label: "Line 3 — Not subject to Virginia withholding",
       kind: "flag",
       help:
-        "No Virginia liability last year and none expected this year; expected Virginia AGI "
-        + "below the filing threshold; daily commuter from Kentucky or the District of Columbia; "
-        + "or a domiciliary of Maryland, Pennsylvania or West Virginia whose only Virginia-source "
-        + "income is wages taxed by the state of domicile. A new VA-4 is due each calendar year "
-        + "the exemption is claimed.",
+        "No Virginia liability last year and none expected this year; expected Virginia AGI " +
+        "below the filing threshold; daily commuter from Kentucky or the District of Columbia; " +
+        "or a domiciliary of Maryland, Pennsylvania or West Virginia whose only Virginia-source " +
+        "income is wages taxed by the state of domicile. A new VA-4 is due each calendar year " +
+        "the exemption is claimed.",
     },
     {
       key: "military_spouse_exempt",
       label: "Line 4 — Military spouse (SCRA / MSRRA)",
       kind: "flag",
       help:
-        "The employee is in Virginia solely to be with a servicemember spouse stationed here "
-        + "under orders, and maintains the same domicile as the servicemember in another state. "
-        + "File VA-4 annually and attach a copy of the spousal military identification card.",
+        "The employee is in Virginia solely to be with a servicemember spouse stationed here " +
+        "under orders, and maintains the same domicile as the servicemember in another state. " +
+        "File VA-4 annually and attach a copy of the spousal military identification card.",
     },
     {
       key: "servicemember_orders_on_file",
@@ -385,6 +421,6 @@ export const VA_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Virginia Department of Taxation, Income Tax Withholding Guide for Employers, Rev. 05/25 "
-    + "(2614086), Formula Method (p. 21); Forms VA-4 and VA-4B (other-state credit)",
+    "Virginia Department of Taxation, Income Tax Withholding Guide for Employers, Rev. 05/25 " +
+    "(2614086), Formula Method (p. 21); Forms VA-4 and VA-4B (other-state credit)",
 };

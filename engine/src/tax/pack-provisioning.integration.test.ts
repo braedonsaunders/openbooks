@@ -36,13 +36,17 @@ test(
       assert.ok(first.registrationsCreated >= 2);
 
       const installed = await withOrgContext(target.orgId, async () => {
-        const jurisdictions = (await db.execute(sql`
+        const jurisdictions = (await db.execute(
+          sql`
           select code from tax_jurisdictions
            where org_id = ${target.orgId}
              and code in ('CA', 'CA-ON', 'US', 'US-NM')
            order by code
-        `, "objects")) as Array<{ code: string }>;
-        const codes = (await db.execute(sql`
+        `,
+          "objects",
+        )) as Array<{ code: string }>;
+        const codes = (await db.execute(
+          sql`
           select code.code,
                  coalesce(
                    jsonb_agg(
@@ -61,23 +65,32 @@ test(
              and code.code in ('CA-GST', 'CA-ON-HST', 'US-NM-GRT')
            group by code.id, code.code
            order by code.code
-        `, "objects")) as Array<{
+        `,
+          "objects",
+        )) as Array<{
           code: string;
           rates: Array<{ rate: string; from: string; to: string | null }>;
         }>;
-        const forms = (await db.execute(sql`
+        const forms = (await db.execute(
+          sql`
           select code from tax_return_forms
            where org_id = ${target.orgId}
              and code in ('CA_GST34', 'US_SALES_TAX_WORKPAPER')
            order by code
-        `, "objects")) as Array<{ code: string }>;
-        const manifests = (await db.execute(sql`
+        `,
+          "objects",
+        )) as Array<{ code: string }>;
+        const manifests = (await db.execute(
+          sql`
           select pack_code as "packCode", version, status
             from tax_country_pack_installations
            where org_id = ${target.orgId}
            order by pack_code
-        `, "objects")) as Array<{ packCode: string; version: string; status: string }>;
-        const registrations = (await db.execute(sql`
+        `,
+          "objects",
+        )) as Array<{ packCode: string; version: string; status: string }>;
+        const registrations = (await db.execute(
+          sql`
           select jurisdiction.code, registration.is_active as "isActive",
                  registration.return_form_code as "returnFormCode"
             from tax_registrations registration
@@ -87,12 +100,20 @@ test(
            where registration.org_id = ${target.orgId}
              and jurisdiction.code in ('CA', 'US-NM')
            order by jurisdiction.code
-        `, "objects")) as Array<{ code: string; isActive: boolean; returnFormCode: string | null }>;
+        `,
+          "objects",
+        )) as Array<{ code: string; isActive: boolean; returnFormCode: string | null }>;
         return { jurisdictions, codes, forms, manifests, registrations };
       });
 
-      assert.deepEqual(installed.jurisdictions.map((row) => row.code), ["CA", "CA-ON", "US", "US-NM"]);
-      assert.deepEqual(installed.forms.map((row) => row.code), ["CA_GST34", "US_SALES_TAX_WORKPAPER"]);
+      assert.deepEqual(
+        installed.jurisdictions.map((row) => row.code),
+        ["CA", "CA-ON", "US", "US-NM"],
+      );
+      assert.deepEqual(
+        installed.forms.map((row) => row.code),
+        ["CA_GST34", "US_SALES_TAX_WORKPAPER"],
+      );
       assert.deepEqual(installed.manifests, [
         { packCode: "CA_INDIRECT_TAX", version: "2026.07.31", status: "active" },
         { packCode: "US_INDIRECT_TAX", version: "2026.10.10", status: "active" },
@@ -101,13 +122,10 @@ test(
         { code: "CA", isActive: true, returnFormCode: "CA_GST34" },
         { code: "US-NM", isActive: false, returnFormCode: null },
       ]);
-      assert.deepEqual(
-        installed.codes.find((row) => row.code === "US-NM-GRT")?.rates,
-        [
-          { rate: "5.0000", from: "2022-07-01", to: "2023-06-30" },
-          { rate: "4.8750", from: "2023-07-01", to: null },
-        ],
-      );
+      assert.deepEqual(installed.codes.find((row) => row.code === "US-NM-GRT")?.rates, [
+        { rate: "5.0000", from: "2022-07-01", to: "2023-06-30" },
+        { rate: "4.8750", from: "2023-07-01", to: null },
+      ]);
 
       const second = await provisionTaxPacks(target.orgId, [
         "JURISDICTION:CA-ON",
@@ -165,14 +183,17 @@ test(
       );
 
       const state = await withOrgContext(target.orgId, async () => {
-        const result = await db.execute(sql`
+        const result = await db.execute(
+          sql`
           select
             (select count(*)::int from tax_codes where org_id = ${target.orgId} and code = 'US-NM-GRT') as codes,
             (select count(*)::int from tax_jurisdictions where org_id = ${target.orgId} and code in ('US', 'US-NM')) as jurisdictions,
             (select count(*)::int from tax_return_forms where org_id = ${target.orgId} and code = 'US_SALES_TAX_WORKPAPER') as forms,
             (select count(*)::int from tax_registrations where org_id = ${target.orgId}) as registrations,
             (select count(*)::int from tax_country_pack_installations where org_id = ${target.orgId}) as manifests
-        `, "objects");
+        `,
+          "objects",
+        );
         return result[0] as {
           codes: number;
           jurisdictions: number;
@@ -206,70 +227,91 @@ test(
       const pack = COUNTRY_TAX_PACKS.find((entry) => entry.code === "CA_INDIRECT_TAX");
       assert.ok(pack, "the maintained Canada pack is needed to seed valid installation evidence");
       const contentHash = countryPackHash(pack);
-      await withOrgTransaction(org.orgId, () => db.execute(sql`
+      await withOrgTransaction(org.orgId, () =>
+        db.execute(sql`
         insert into tax_country_pack_installations
           (org_id, pack_code, country, version, content_hash, manifest, installed_by)
         values
           (${org.orgId}, ${pack.code}, ${pack.country}, ${pack.version}, ${contentHash},
            ${JSON.stringify(pack)}::jsonb, ${actorId})
-      `));
-      const installation = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          id: string;
-          pack_code: string;
-          version: string;
-          content_hash: string;
-          manifest: Record<string, unknown>;
-        }>(sql`
+      `),
+      );
+      const installation = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              id: string;
+              pack_code: string;
+              version: string;
+              content_hash: string;
+              manifest: Record<string, unknown>;
+            }>(
+              sql`
           select id, pack_code, version, content_hash, manifest
             from tax_country_pack_installations
            where org_id = ${org.orgId} and status = 'active'
-        `, "objects"))[0],
+        `,
+              "objects",
+            )
+          )[0],
       );
       assert.ok(installation, "pack provisioning should persist its installation evidence");
 
       await assert.rejects(
-        withOrgTransaction(org.orgId, () => db.execute(sql`
+        withOrgTransaction(org.orgId, () =>
+          db.execute(sql`
           update tax_country_pack_installations
              set content_hash = ${"f".repeat(64)}
            where id = ${installation.id} and org_id = ${org.orgId}
-        `)),
-        (error: unknown) => hasCauseMessage(
-          error,
-          "country tax pack installation may only transition from active to superseded",
+        `),
         ),
+        (error: unknown) =>
+          hasCauseMessage(
+            error,
+            "country tax pack installation may only transition from active to superseded",
+          ),
       );
       await assert.rejects(
-        withOrgTransaction(org.orgId, () => db.execute(sql`
+        withOrgTransaction(org.orgId, () =>
+          db.execute(sql`
           delete from tax_country_pack_installations
            where id = ${installation.id} and org_id = ${org.orgId}
-        `)),
-        (error: unknown) => hasCauseMessage(
-          error,
-          "country tax pack installation evidence is immutable",
+        `),
         ),
+        (error: unknown) =>
+          hasCauseMessage(error, "country tax pack installation evidence is immutable"),
       );
 
-      await withOrgTransaction(org.orgId, () => db.execute(sql`
+      await withOrgTransaction(org.orgId, () =>
+        db.execute(sql`
         update tax_country_pack_installations
            set status = 'superseded', superseded_at = now(), superseded_by = ${actorId}
          where id = ${installation.id} and org_id = ${org.orgId}
-      `));
-      const superseded = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          pack_code: string;
-          version: string;
-          content_hash: string;
-          manifest: Record<string, unknown>;
-          superseded_by: string | null;
-          superseded_at: boolean;
-        }>(sql`
+      `),
+      );
+      const superseded = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              status: string;
+              pack_code: string;
+              version: string;
+              content_hash: string;
+              manifest: Record<string, unknown>;
+              superseded_by: string | null;
+              superseded_at: boolean;
+            }>(
+              sql`
           select status, pack_code, version, content_hash, manifest,
                  superseded_by, superseded_at is not null as superseded_at
             from tax_country_pack_installations
            where id = ${installation.id} and org_id = ${org.orgId}
-        `, "objects"))[0],
+        `,
+              "objects",
+            )
+          )[0],
       );
       assert.deepEqual(superseded, {
         status: "superseded",

@@ -24,8 +24,8 @@ function parseArgs(argv: string[]): ImportOptions {
     return [];
   });
   if (
-    argv.includes("--file-id")
-    && argv.some((value, index) => value === "--file-id" && !argv[index + 1])
+    argv.includes("--file-id") &&
+    argv.some((value, index) => value === "--file-id" && !argv[index + 1])
   ) {
     throw new Error("--file-id requires a numeric NetSuite file id");
   }
@@ -44,9 +44,14 @@ function parseArgs(argv: string[]): ImportOptions {
 
 async function run(options: ImportOptions) {
   // bypass: cross-org-by-design — the operator names the tenant by id or exact name.
-  const orgs = await withBypassContext(() => db.execute<{ id: string }>(sql`
+  const orgs = await withBypassContext(() =>
+    db.execute<{ id: string }>(
+      sql`
     select id from orgs where id::text = ${options.org} or name = ${options.org}
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   if (orgs.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
   const orgId = orgs[0]!.id;
   return withOrgContext(orgId, () => importNetSuiteAttachments({ ...options, org: orgId }));

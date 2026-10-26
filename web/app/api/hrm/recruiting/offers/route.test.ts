@@ -106,8 +106,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRecruitingOffersNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmRecruitingOffersNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -123,24 +124,27 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const collectionUrl = "./route.ts?hrm-recruiting-offers-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(collectionUrl)) as typeof import("./route.ts");
-  const itemUrl = "./[id]/route.ts?hrm-recruiting-offers-item";
-  const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(itemUrl)) as typeof import("./[id]/route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const collectionUrl = "./route.ts?hrm-recruiting-offers-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  collectionUrl
+)) as typeof import("./route.ts");
+const itemUrl = "./[id]/route.ts?hrm-recruiting-offers-item";
+const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(
+  itemUrl
+)) as typeof import("./[id]/route.ts");
+test.after(() => hooks.deregister());
 
 const APPLICATION_ID = "00000000-0000-4000-8000-000000000021";
 const SUBSIDIARY_ID = "00000000-0000-4000-8000-000000000022";
@@ -193,8 +197,22 @@ test("draft validates the terms through the real parser before the service runs"
   reset();
   const url = "http://openbooks.test/api/hrm/recruiting/offers";
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
-  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { ...validTerms, compensationBasis: "equity" }))).status, 400);
-  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { ...validTerms, compensationCurrency: "US" }))).status, 400);
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { ...validTerms, compensationBasis: "equity" }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { ...validTerms, compensationCurrency: "US" }),
+      )
+    ).status,
+    400,
+  );
   assert.deepEqual(routeState.calls, []);
   const response: Response = await collectionRoute!.POST(jsonRequest(url, "POST", validTerms));
   assert.equal(response.status, 201);
@@ -209,8 +227,24 @@ test("item routes validate ids and the action union through the real parser", as
   const get = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
   assert.equal(get.status, 200);
   assert.deepEqual(await get.json(), { offer: { id: OFFER_ID } });
-  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "sign" }), params)).status, 400);
-  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "decline" }), params)).status, 400);
+  assert.equal(
+    (
+      await itemRoute!.PATCH(
+        jsonRequest("http://openbooks.test/x", "PATCH", { action: "sign" }),
+        params,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await itemRoute!.PATCH(
+        jsonRequest("http://openbooks.test/x", "PATCH", { action: "decline" }),
+        params,
+      )
+    ).status,
+    400,
+  );
   for (const [body, fn] of [
     [{ action: "send" }, "send"],
     [{ action: "accept" }, "accept"],
@@ -218,7 +252,10 @@ test("item routes validate ids and the action union through the real parser", as
     [{ action: "withdraw", reason: "terms revised" }, "withdraw"],
   ] as const) {
     routeState.calls = [] as RouteState["calls"];
-    const response: Response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
+    const response: Response = await itemRoute!.PATCH(
+      jsonRequest("http://openbooks.test/x", "PATCH", body),
+      params,
+    );
     assert.equal(response.status, 200);
     assert.equal(routeState.calls[0]!.fn, fn);
   }
@@ -232,7 +269,9 @@ test("accepting is the hire: the route forwards to the hire transaction", async 
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { hire: { offerId: OFFER_ID } });
-  assert.deepEqual(routeState.calls, [{ fn: "accept", args: { orgId: "org-1", actorId: "user-1", offerId: OFFER_ID } }]);
+  assert.deepEqual(routeState.calls, [
+    { fn: "accept", args: { orgId: "org-1", actorId: "user-1", offerId: OFFER_ID } },
+  ]);
 });
 
 test("a service refusal delegates to the shared mapping with the error intact", async () => {

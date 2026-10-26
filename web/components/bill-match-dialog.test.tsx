@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __matchCalls: { url: string; init?: RequestInit }[] | undefined;
@@ -15,7 +15,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -61,7 +69,14 @@ const CANDIDATES = {
           unit: "lb",
           unitPrice: "6",
           billableQuantity: "2432.0000",
-          receipts: [{ id: "rcpt-1", documentNumber: "RCPT-00001", documentDate: "2025-12-01", status: "approved" }],
+          receipts: [
+            {
+              id: "rcpt-1",
+              documentNumber: "RCPT-00001",
+              documentDate: "2025-12-01",
+              status: "approved",
+            },
+          ],
         },
       ],
     },
@@ -83,7 +98,14 @@ const CANDIDATES = {
           unit: "lb",
           unitPrice: "5",
           billableQuantity: "2128.0000",
-          receipts: [{ id: "rcpt-1", documentNumber: "RCPT-00001", documentDate: "2025-12-01", status: "approved" }],
+          receipts: [
+            {
+              id: "rcpt-1",
+              documentNumber: "RCPT-00001",
+              documentDate: "2025-12-01",
+              status: "approved",
+            },
+          ],
         },
       ],
     },
@@ -93,7 +115,9 @@ const CANDIDATES = {
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     (globalThis.__matchCalls ??= []).push({ url, init });
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
@@ -102,7 +126,10 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
   };
 }
 
-async function renderDialog(t: { after: (fn: () => void | Promise<void>) => void }, onMatched: () => void) {
+async function renderDialog(
+  t: { after: (fn: () => void | Promise<void>) => void },
+  onMatched: () => void,
+) {
   globalThis.__matchCalls = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -144,7 +171,9 @@ test("the dialog links the chosen lines and reports the match", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
     if (url === "/api/documents/bill-id/bill-match") {
       if ((init?.method ?? "GET") === "POST") {
-        const body = JSON.parse(String(init?.body)) as { matches: { billLineId: string; purchaseOrderLineId: string }[] };
+        const body = JSON.parse(String(init?.body)) as {
+          matches: { billLineId: string; purchaseOrderLineId: string }[];
+        };
         assert.equal(body.matches.length, 2);
         return Response.json({ ok: true, matched: body.matches });
       }
@@ -170,7 +199,10 @@ test("a refused match stays open with the server message", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
     if (url === "/api/documents/bill-id/bill-match") {
       if ((init?.method ?? "GET") === "POST") {
-        return Response.json({ error: "purchase order PO-00002 line 1 has only 0 received and unbilled" }, { status: 422 });
+        return Response.json(
+          { error: "purchase order PO-00002 line 1 has only 0 received and unbilled" },
+          { status: 422 },
+        );
       }
       return Response.json(CANDIDATES);
     }

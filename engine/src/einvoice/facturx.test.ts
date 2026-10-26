@@ -51,7 +51,10 @@ test("a Factur-X hybrid carries the XML as an associated file with PDF/A-3 ident
 
   const doc = await PDFDocument.load(hybrid, { updateMetadata: false });
   const catalog = doc.catalog;
-  const names = catalog.lookup(PDFName.of("Names"), PDFDict).lookup(PDFName.of("EmbeddedFiles"), PDFDict).lookup(PDFName.of("Names"), PDFArray);
+  const names = catalog
+    .lookup(PDFName.of("Names"), PDFDict)
+    .lookup(PDFName.of("EmbeddedFiles"), PDFDict)
+    .lookup(PDFName.of("Names"), PDFArray);
   assert.equal(names.size(), 2);
   const fileSpec = names.lookup(1, PDFDict);
   assert.equal(fileSpec.get(PDFName.of("AFRelationship")), PDFName.of("Alternative"));
@@ -68,15 +71,26 @@ test("a Factur-X hybrid carries the XML as an associated file with PDF/A-3 ident
   const icc = intent.lookup(PDFName.of("DestOutputProfile"));
   assert.ok(icc instanceof PDFRawStream);
   assert.equal(icc.dict.lookup(PDFName.of("N"), PDFNumber).asNumber(), 3);
-  assert.equal(new TextDecoder("latin1").decode(streamBytes(icc).subarray(36, 40)), "acsp", "an ICC profile signature");
+  assert.equal(
+    new TextDecoder("latin1").decode(streamBytes(icc).subarray(36, 40)),
+    "acsp",
+    "an ICC profile signature",
+  );
 
   const metadata = catalog.lookup(PDFName.of("Metadata"));
   assert.ok(metadata instanceof PDFRawStream);
-  assert.equal(metadata.dict.get(PDFName.of("Filter")), undefined, "PDF/A metadata streams are unfiltered");
+  assert.equal(
+    metadata.dict.get(PDFName.of("Filter")),
+    undefined,
+    "PDF/A metadata streams are unfiltered",
+  );
   const xmp = new TextDecoder().decode(metadata.contents);
   assert.match(xmp, /<pdfaid:part>3<\/pdfaid:part>\s*<pdfaid:conformance>B<\/pdfaid:conformance>/);
   assert.match(xmp, /<fx:ConformanceLevel>EN 16931<\/fx:ConformanceLevel>/);
-  assert.match(xmp, /<pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#<\/pdfaSchema:namespaceURI>/);
+  assert.match(
+    xmp,
+    /<pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#<\/pdfaSchema:namespaceURI>/,
+  );
   assert.match(xmp, /<rdf:li xml:lang="x-default">Invoice &amp; XML<\/rdf:li>/);
   assert.equal(doc.getProducer(), "OpenBooks");
   assert.equal(doc.getCreationDate()?.toISOString(), createdAt.toISOString());
@@ -85,21 +99,37 @@ test("a Factur-X hybrid carries the XML as an associated file with PDF/A-3 ident
   assert.equal(extracted?.fileName, "factur-x.xml");
   assert.equal(extracted?.xml, rendered.xml);
   assert.equal(parseEInvoiceXml(extracted!.xml).customizationId, EN16931_GUIDELINE);
-  assert.equal(await extractEmbeddedInvoiceXml(await onePagePdf()), null, "a plain PDF carries no invoice");
+  assert.equal(
+    await extractEmbeddedInvoiceXml(await onePagePdf()),
+    null,
+    "a plain PDF carries no invoice",
+  );
 });
 
 test("Factur-X refuses unembedded font programs before declaring PDF/A conformance", async () => {
   const doc = await PDFDocument.create();
   doc.addPage().drawText("Invoice", { font: await doc.embedFont(StandardFonts.Helvetica) });
   const bytes = await doc.save();
-  await assert.rejects(() => embedFacturX(bytes, renderEInvoiceXml(germanInvoice({ profile: "facturx" })).xml, {
-    title: "Invoice", author: "Seller", createdAt: new Date("2026-10-08T00:00:00Z"), conformanceLevel: "EN 16931",
-  }), /embedded font programs/);
+  await assert.rejects(
+    () =>
+      embedFacturX(bytes, renderEInvoiceXml(germanInvoice({ profile: "facturx" })).xml, {
+        title: "Invoice",
+        author: "Seller",
+        createdAt: new Date("2026-10-08T00:00:00Z"),
+        conformanceLevel: "EN 16931",
+      }),
+    /embedded font programs/,
+  );
 });
 
 test("re-embedding an invoice replaces its associated file instead of accumulating competing XML", async () => {
   const rendered = renderEInvoiceXml(germanInvoice({ profile: "facturx" }));
-  const meta = { title: "Invoice", author: "Seller", createdAt: new Date("2026-10-08T00:00:00Z"), conformanceLevel: "EN 16931" as const };
+  const meta = {
+    title: "Invoice",
+    author: "Seller",
+    createdAt: new Date("2026-10-08T00:00:00Z"),
+    conformanceLevel: "EN 16931" as const,
+  };
   const first = await embedFacturX(await onePagePdf(), rendered.xml, meta);
   const second = await embedFacturX(first, rendered.xml, meta);
   const doc = await PDFDocument.load(second, { updateMetadata: false });
@@ -109,7 +139,14 @@ test("re-embedding an invoice replaces its associated file instead of accumulati
 
 test("Factur-X refuses UBL and mismatched profile XML instead of relabelling them as CII", async () => {
   const pdf = await onePagePdf();
-  await assert.rejects(() => embedFacturX(pdf, renderEInvoiceXml(germanInvoice({ profile: "en16931-ubl" })).xml, {
-    title: "Invoice", author: "Seller", createdAt: new Date("2026-10-08T00:00:00Z"), conformanceLevel: "EN 16931",
-  }), /requires CII XML/);
+  await assert.rejects(
+    () =>
+      embedFacturX(pdf, renderEInvoiceXml(germanInvoice({ profile: "en16931-ubl" })).xml, {
+        title: "Invoice",
+        author: "Seller",
+        createdAt: new Date("2026-10-08T00:00:00Z"),
+        conformanceLevel: "EN 16931",
+      }),
+    /requires CII XML/,
+  );
 });

@@ -1,7 +1,12 @@
 import { db } from "../platform/db.ts";
 import { packRates, PayrollPackError, type EmployeePayrollContext } from "./packs.ts";
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
-import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
+import {
+  payrollCertificate,
+  resolveCertificate,
+  revalidateStoredCertificates,
+  type ResolvedCertificate,
+} from "./certificates.ts";
 import type { installablePackOrThrow } from "./run-stub-records.ts";
 
 /**
@@ -24,40 +29,55 @@ export async function assertPackStatutoryRatesConfigured(args: {
   displayName: string;
   statutoryRatesFor: (country: string, taxYear: number) => Promise<StatutoryRateResolution>;
 }): Promise<void> {
-  const { tx, orgId, pack, country, taxYear, province, jurisdiction, run, employeePartyId, displayName } = args;
-  const { statutoryRatesFor } = args;
-// ---- Live-but-unconfigured `refuse` slots stop the employee BY NAME -----
-// BEFORE any money is computed: a misconfiguration (rates on file, none
-// resolving for this employee's region and assigned filing account) must be
-// loud, because a silent zero still balances. The sentence is the readiness
-// detector's own — the run and the warning cannot disagree. Packs with no
-// rate declaration, or none declaring `refuse`, cost no query here.
-let packRefuses = false;
-try {
-  packRefuses = packRates(country).slots.some((slot) => slot.whenUnconfigured === "refuse");
-} catch (error) {
-  if (!(error instanceof PayrollPackError)) throw error;
-}
-if (packRefuses) {
-  const resolution = await statutoryRatesFor(country, taxYear);
-  // A pack-recorded waiver stands its slots down from the requirement (US
-  // SUI for a recorded non-contributory account, which prices no SUI).
-  // Nothing recorded waives nothing, so every other scope point keeps
-  // today's gate byte-for-byte.
-  const waived = pack.waivedRateSlots
-    ? await pack.waivedRateSlots(tx, {
-      orgId, region: province, filingAccountId: jurisdiction.filingAccountId, payDate: run.pay_date!,
-      employeePartyId, subsidiaryId: run.doc_subsidiary_id ?? null,
-    })
-    : [];
-  assertConfiguredStatutoryRates(
-    waived.length === 0
-      ? resolution
-      : { ...resolution, slots: resolution.slots.filter((slot) => !waived.includes(slot.key)) },
-    { region: province, filingAccountId: jurisdiction.filingAccountId },
+  const {
+    tx,
+    orgId,
+    pack,
+    country,
+    taxYear,
+    province,
+    jurisdiction,
+    run,
+    employeePartyId,
     displayName,
-  );
-}
+  } = args;
+  const { statutoryRatesFor } = args;
+  // ---- Live-but-unconfigured `refuse` slots stop the employee BY NAME -----
+  // BEFORE any money is computed: a misconfiguration (rates on file, none
+  // resolving for this employee's region and assigned filing account) must be
+  // loud, because a silent zero still balances. The sentence is the readiness
+  // detector's own — the run and the warning cannot disagree. Packs with no
+  // rate declaration, or none declaring `refuse`, cost no query here.
+  let packRefuses = false;
+  try {
+    packRefuses = packRates(country).slots.some((slot) => slot.whenUnconfigured === "refuse");
+  } catch (error) {
+    if (!(error instanceof PayrollPackError)) throw error;
+  }
+  if (packRefuses) {
+    const resolution = await statutoryRatesFor(country, taxYear);
+    // A pack-recorded waiver stands its slots down from the requirement (US
+    // SUI for a recorded non-contributory account, which prices no SUI).
+    // Nothing recorded waives nothing, so every other scope point keeps
+    // today's gate byte-for-byte.
+    const waived = pack.waivedRateSlots
+      ? await pack.waivedRateSlots(tx, {
+          orgId,
+          region: province,
+          filingAccountId: jurisdiction.filingAccountId,
+          payDate: run.pay_date!,
+          employeePartyId,
+          subsidiaryId: run.doc_subsidiary_id ?? null,
+        })
+      : [];
+    assertConfiguredStatutoryRates(
+      waived.length === 0
+        ? resolution
+        : { ...resolution, slots: resolution.slots.filter((slot) => !waived.includes(slot.key)) },
+      { region: province, filingAccountId: jurisdiction.filingAccountId },
+      displayName,
+    );
+  }
 }
 
 /**

@@ -204,7 +204,10 @@ export interface HoursSourceSnapshot {
   readonly periodFrom: string;
   readonly periodTo: string;
   readonly totalHours: string;
-  readonly hoursByEmployment: ReadonlyArray<{ readonly employmentId: string; readonly hours: string }>;
+  readonly hoursByEmployment: ReadonlyArray<{
+    readonly employmentId: string;
+    readonly hours: string;
+  }>;
   readonly entryIds: readonly string[];
   readonly entryCount: number;
   readonly maxApprovedAt: string | null;
@@ -283,13 +286,19 @@ export async function resolvePeriodBasis(
 ): Promise<ResolvedPeriodBasis> {
   const org = requireOrgId(orgId);
   const rows = await exec.execute<{
-    id: string; name: string; cadence: string; year_start_month: number;
-  }>(sql`
+    id: string;
+    name: string;
+    cadence: string;
+    year_start_month: number;
+  }>(
+    sql`
     select id::text as id, name, cadence, year_start_month
       from fiscal_calendars
      where org_id = ${org} and is_active and is_default
      order by id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new BenefitsError(
       "REFUSED",
@@ -332,10 +341,13 @@ async function requireProjectsExist(
   projectIds: readonly string[],
 ): Promise<void> {
   if (projectIds.length === 0) return;
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select id::text as id from projects
      where org_id = ${orgId} and id = any (${uuidList(projectIds, "project id")}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   const found = new Set(rows.map((r) => r.id));
   const missing = projectIds.filter((id) => !found.has(id));
   if (missing.length > 0) {
@@ -352,11 +364,14 @@ async function requireProjectsExist(
  * the same entity, so summing every book would double-count the base.
  */
 async function resolvePrimaryBook(exec: SqlExecutor, orgId: string): Promise<string> {
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select id::text as id from accounting_books
      where org_id = ${orgId} and is_primary and posts_gl and is_active
      order by id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new BenefitsError(
       "REFUSED",
@@ -393,10 +408,15 @@ export async function measureMoneySource(
   // authority. Resolve the actor's live ceiling at this exported boundary.
   const actorScope = await requireAggregateBenefitsRead(exec, org, actor);
   if (config.allowedSubsidiaryIds !== null && !(config.allowedSubsidiaryIds instanceof Set)) {
-    throw new BenefitsError("INVALID_INPUT", "an explicit subsidiary scope is required — resolve the actor's scope before measuring");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "an explicit subsidiary scope is required — resolve the actor's scope before measuring",
+    );
   }
-  if ((actorScope !== null && !actorScope.has(legalEntityId)) ||
-    (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId))) {
+  if (
+    (actorScope !== null && !actorScope.has(legalEntityId)) ||
+    (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId))
+  ) {
     throw new BenefitsError(
       "NOT_FOUND",
       "this legal entity is outside your scope — reload the program list; entities you cannot see are never measured",
@@ -449,10 +469,13 @@ export async function measureMoneySource(
   // Bind every named account to its actual GL type: a revenue account that
   // is not income, or a cost account that is not a cost, refuses here.
   const allAccounts = [...config.revenueAccountIds, ...config.expenseAccountIds];
-  const accountRows = await exec.execute<{ id: string; type: string; name: string }>(sql`
+  const accountRows = await exec.execute<{ id: string; type: string; name: string }>(
+    sql`
     select id::text as id, type, name from accounts
      where org_id = ${org} and id = any (${uuidList(allAccounts, "account id")}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   const typeById = new Map(accountRows.map((r) => [r.id, r]));
   for (const id of allAccounts) {
     const row = typeById.get(id);
@@ -492,10 +515,18 @@ export async function measureMoneySource(
   // One statement supplies both the totals and their evidence. Independent
   // aggregate and detail reads could observe different posting commits.
   const sourceRows = await exec.execute<{
-    entry_id: string; line_id: string; account_id: string; amount: string;
-    currency: string; subsidiary_id: string; department_id: string | null;
-    project_id: string | null; posting_date: string; posted_at: string | null;
-  }>(sql`
+    entry_id: string;
+    line_id: string;
+    account_id: string;
+    amount: string;
+    currency: string;
+    subsidiary_id: string;
+    department_id: string | null;
+    project_id: string | null;
+    posting_date: string;
+    posted_at: string | null;
+  }>(
+    sql`
     select l.entry_id::text as entry_id, l.id::text as line_id,
            l.account_id::text as account_id, l.amount::text as amount, l.currency,
            l.subsidiary_id::text as subsidiary_id,
@@ -508,20 +539,30 @@ export async function measureMoneySource(
        and l.subsidiary_id = ${legalEntityId}::uuid
        and l.account_id = any (${uuidList(allAccounts, "account id")}::uuid[])
      order by l.entry_id, l.line_number, l.id
-  `, "objects");
-  const dimensionIds = new Set(config.scope === "department" ? config.departmentIds : config.projectIds);
+  `,
+    "objects",
+  );
+  const dimensionIds = new Set(
+    config.scope === "department" ? config.departmentIds : config.projectIds,
+  );
   const lineRows = sourceRows.filter((r) => {
     if (config.scope === "company") return true;
     const dimension = config.scope === "department" ? r.department_id : r.project_id;
     if (dimension === null) {
       if (config.unassignedTime === "exclude") return false;
-      throw new BenefitsError("REFUSED", `measured posting ${r.line_id} carries no ${config.scope} — stamp that dimension on every posting in the measured accounts, narrow the accounts, or set the program to exclude unassigned time; un-shaped postings never silently leave the base`);
+      throw new BenefitsError(
+        "REFUSED",
+        `measured posting ${r.line_id} carries no ${config.scope} — stamp that dimension on every posting in the measured accounts, narrow the accounts, or set the program to exclude unassigned time; un-shaped postings never silently leave the base`,
+      );
     }
     return dimensionIds.has(dimension);
   });
   const foreign = new Set(lineRows.filter((r) => r.currency !== currency).map((r) => r.currency));
   if (foreign.size > 0) {
-    throw new BenefitsError("REFUSED", `the measured accounts post ${[...foreign].sort().join(", ")} outside the program currency ${currency} — settle in the posting currency, or move those postings out of the measured set; amounts are never converted by an invented rate`);
+    throw new BenefitsError(
+      "REFUSED",
+      `the measured accounts post ${[...foreign].sort().join(", ")} outside the program currency ${currency} — settle in the posting currency, or move those postings out of the measured set; amounts are never converted by an invented rate`,
+    );
   }
   const revenueIds = new Set(config.revenueAccountIds);
   let revenueUnits = 0n;
@@ -533,13 +574,27 @@ export async function measureMoneySource(
   }
   const valueUnits = revenueUnits - expenseUnits;
   const entryIds = [...new Set(lineRows.map((r) => r.entry_id))].sort();
-  const stamps = lineRows.map((r) => r.posted_at).filter((s): s is string => s !== null).sort();
+  const stamps = lineRows
+    .map((r) => r.posted_at)
+    .filter((s): s is string => s !== null)
+    .sort();
   const digest = createHash("sha256")
     .update(
-      lineRows.map((r) =>
-        [r.entry_id, r.line_id, r.account_id, r.amount, r.currency, r.subsidiary_id,
-          r.department_id ?? "", r.project_id ?? "", r.posting_date].join(":"),
-      ).join("|"),
+      lineRows
+        .map((r) =>
+          [
+            r.entry_id,
+            r.line_id,
+            r.account_id,
+            r.amount,
+            r.currency,
+            r.subsidiary_id,
+            r.department_id ?? "",
+            r.project_id ?? "",
+            r.posting_date,
+          ].join(":"),
+        )
+        .join("|"),
       "utf8",
     )
     .digest("hex");
@@ -562,13 +617,19 @@ export async function measureMoneySource(
     maxPostedAt: stamps.length > 0 ? stamps[stamps.length - 1]! : null,
     digest,
     postingFacts: lineRows.map((r) => ({
-      entryId: r.entry_id, lineId: r.line_id, accountId: r.account_id,
-      amount: r.amount, currency: r.currency, legalEntityId: r.subsidiary_id,
-      departmentId: r.department_id, projectId: r.project_id,
-      postingDate: r.posting_date.slice(0, 10), postedAt: r.posted_at,
+      entryId: r.entry_id,
+      lineId: r.line_id,
+      accountId: r.account_id,
+      amount: r.amount,
+      currency: r.currency,
+      legalEntityId: r.subsidiary_id,
+      departmentId: r.department_id,
+      projectId: r.project_id,
+      postingDate: r.posting_date.slice(0, 10),
+      postedAt: r.posted_at,
     })),
   };
-};
+}
 
 /**
  * Approved-hours base for one period: the metric total counts every
@@ -590,10 +651,15 @@ export async function measureApprovedHours(
   // authority. Resolve the actor's live ceiling at this exported boundary.
   const actorScope = await requireAggregateBenefitsRead(exec, org, actor);
   if (config.allowedSubsidiaryIds !== null && !(config.allowedSubsidiaryIds instanceof Set)) {
-    throw new BenefitsError("INVALID_INPUT", "an explicit subsidiary scope is required — resolve the actor's scope before measuring");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "an explicit subsidiary scope is required — resolve the actor's scope before measuring",
+    );
   }
-  if ((actorScope !== null && !actorScope.has(legalEntityId)) ||
-    (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId))) {
+  if (
+    (actorScope !== null && !actorScope.has(legalEntityId)) ||
+    (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId))
+  ) {
     throw new BenefitsError(
       "NOT_FOUND",
       "this legal entity is outside your scope — reload the program list; entities you cannot see are never measured",
@@ -623,13 +689,20 @@ export async function measureApprovedHours(
   // legal entity — the measure-time half of the same-entity proof — and
   // one party maps to exactly one member employment, so a day's hours are
   // never split or doubled across two employments of the same worker.
-  const memberRows = await exec.execute<{ id: string; worker_party_id: string; employer_subsidiary_id: string }>(sql`
+  const memberRows = await exec.execute<{
+    id: string;
+    worker_party_id: string;
+    employer_subsidiary_id: string;
+  }>(
+    sql`
     select id::text as id, worker_party_id::text as worker_party_id,
            employer_subsidiary_id::text as employer_subsidiary_id
       from worker_employments
      where org_id = ${org}
        and id = any (${uuidList(config.memberEmploymentIds, "member employment id")}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   const memberById = new Map(memberRows.map((r) => [r.id, r]));
   for (const id of config.memberEmploymentIds) {
     const row = memberById.get(id);
@@ -658,24 +731,35 @@ export async function measureApprovedHours(
     employmentByParty.set(row.worker_party_id, row.id);
   }
 
-  const workDepartmentIds = config.scope === "project" ? [...new Set(config.workDepartmentIds ?? [])] : [];
+  const workDepartmentIds =
+    config.scope === "project" ? [...new Set(config.workDepartmentIds ?? [])] : [];
   if (workDepartmentIds.length > 0) {
-    const found = (await exec.execute<{ id: string }>(sql`
+    const found = (
+      await exec.execute<{ id: string }>(
+        sql`
       select id::text as id from departments
        where org_id = ${org} and id = any (${uuidList(workDepartmentIds, "department id")}::uuid[])
-    `, "objects")).length;
+    `,
+        "objects",
+      )
+    ).length;
     if (found !== workDepartmentIds.length) {
-      throw new BenefitsError("REFUSED", "the measure narrows work to a department outside this organization — reselect the work departments; measures never cross tenants");
+      throw new BenefitsError(
+        "REFUSED",
+        "the measure narrows work to a department outside this organization — reselect the work departments; measures never cross tenants",
+      );
     }
   }
-  const workDepartmentFilter = workDepartmentIds.length > 0
-    ? sql`and t.department_id = any (${uuidList(workDepartmentIds, "department id")}::uuid[])`
-    : sql``;
-  const dimFilter = config.scope === "company"
-    ? sql`true`
-    : config.scope === "department"
-      ? sql`t.department_id = any (${uuidList(config.departmentIds, "department id")}::uuid[])`
-      : sql`t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[]) ${workDepartmentFilter}`;
+  const workDepartmentFilter =
+    workDepartmentIds.length > 0
+      ? sql`and t.department_id = any (${uuidList(workDepartmentIds, "department id")}::uuid[])`
+      : sql``;
+  const dimFilter =
+    config.scope === "company"
+      ? sql`true`
+      : config.scope === "department"
+        ? sql`t.department_id = any (${uuidList(config.departmentIds, "department id")}::uuid[])`
+        : sql`t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[]) ${workDepartmentFilter}`;
   const classifications = [...new Set(config.hourClassifications ?? [])];
   const classificationFilter = classifications.length
     ? sql`and coalesce((select tt.classification from time_types tt where tt.org_id = t.org_id and tt.id = t.time_type_id), 'regular') = any (${`{${classifications.join(",")}}`}::text[])`
@@ -684,10 +768,14 @@ export async function measureApprovedHours(
   if (config.scope !== "company" && config.unassignedTime !== "exclude") {
     const dimColumn = config.scope === "department" ? sql`t.department_id` : sql`t.project_id`;
     // Project work narrowed by department also needs the department on scoped entries.
-    const unassigned = workDepartmentIds.length > 0
-      ? sql`(${dimColumn} is null or (t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[]) and t.department_id is null))`
-      : sql`${dimColumn} is null`;
-    const unshaped = (await exec.execute<{ n: number }>(sql`
+    const unassigned =
+      workDepartmentIds.length > 0
+        ? sql`(${dimColumn} is null or (t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[]) and t.department_id is null))`
+        : sql`${dimColumn} is null`;
+    const unshaped =
+      (
+        await exec.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from time_entries t
      where t.org_id = ${org} and t.status = 'approved'
        and t.worked_on >= ${periodFrom}::date and t.worked_on <= ${periodTo}::date
@@ -700,7 +788,10 @@ export async function measureApprovedHours(
             and v.status='active' and v.recorded_until is null and v.recorded_at <= now()
             and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to > t.worked_on)
        )
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     if (unshaped > 0) {
       const dim = config.scope === "department" ? "department" : "project";
       throw new BenefitsError(
@@ -711,10 +802,17 @@ export async function measureApprovedHours(
   }
 
   const rows = await exec.execute<{
-    id: string; hours: string; employee_party_id: string; approved_at: string | null;
-    worked_on: string; department_id: string | null; project_id: string | null; approved_by: string | null;
+    id: string;
+    hours: string;
+    employee_party_id: string;
+    approved_at: string | null;
+    worked_on: string;
+    department_id: string | null;
+    project_id: string | null;
+    approved_by: string | null;
     employment_facts: HoursEmploymentFact[];
-  }>(sql`
+  }>(
+    sql`
     select t.id::text as id, t.hours::text as hours,
            t.worked_on::text as worked_on, t.department_id::text as department_id,
            t.project_id::text as project_id, t.approved_by::text as approved_by,
@@ -744,14 +842,24 @@ export async function measureApprovedHours(
             and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to > t.worked_on)
        )
      order by t.id
-  `, "objects");
+  `,
+    "objects",
+  );
 
-  const memberPeriods = new Map<string, Array<{ effectiveFrom: string; effectiveTo: string | null }>>();
+  const memberPeriods = new Map<
+    string,
+    Array<{ effectiveFrom: string; effectiveTo: string | null }>
+  >();
   for (const period of config.memberPeriods ?? []) {
     const from = requireDay(period.effectiveFrom, "membership effectiveFrom");
-    const to = period.effectiveTo === null ? null : requireDay(period.effectiveTo, "membership effectiveTo");
-    if (to !== null && to < from) throw new BenefitsError("INVALID_INPUT", "membership ends before it starts");
-    memberPeriods.set(period.employmentId, [...(memberPeriods.get(period.employmentId) ?? []), { effectiveFrom: from, effectiveTo: to }]);
+    const to =
+      period.effectiveTo === null ? null : requireDay(period.effectiveTo, "membership effectiveTo");
+    if (to !== null && to < from)
+      throw new BenefitsError("INVALID_INPUT", "membership ends before it starts");
+    memberPeriods.set(period.employmentId, [
+      ...(memberPeriods.get(period.employmentId) ?? []),
+      { effectiveFrom: from, effectiveTo: to },
+    ]);
   }
   const approvedHoursFacts: ApprovedHoursFact[] = [];
   let total = 0n;
@@ -760,7 +868,10 @@ export async function measureApprovedHours(
   let maxApprovedAt: string | null = null;
   for (const row of rows) {
     if (row.employment_facts.length !== 1) {
-      throw new BenefitsError("REFUSED", `approved time entry ${row.id} has ambiguous active employment evidence on ${row.worked_on} — correct the overlapping employment coverage before measuring; time is never assigned to an employer by guesswork`);
+      throw new BenefitsError(
+        "REFUSED",
+        `approved time entry ${row.id} has ambiguous active employment evidence on ${row.worked_on} — correct the overlapping employment coverage before measuring; time is never assigned to an employer by guesswork`,
+      );
     }
     const hours = toUnits(row.hours);
     if (hours < 0n) {
@@ -776,17 +887,29 @@ export async function measureApprovedHours(
     }
     const employmentId = employmentByParty.get(row.employee_party_id);
     const workedOn = row.worked_on.slice(0, 10);
-    const periods = employmentId === undefined ? [] : memberPeriods.get(employmentId) ?? [];
-    const attributable = employmentId !== undefined && row.employment_facts[0]!.employmentId === employmentId && (config.memberPeriods === undefined ||
-      periods.some((p) => p.effectiveFrom <= workedOn && (p.effectiveTo === null || p.effectiveTo >= workedOn)));
+    const periods = employmentId === undefined ? [] : (memberPeriods.get(employmentId) ?? []);
+    const attributable =
+      employmentId !== undefined &&
+      row.employment_facts[0]!.employmentId === employmentId &&
+      (config.memberPeriods === undefined ||
+        periods.some(
+          (p) =>
+            p.effectiveFrom <= workedOn && (p.effectiveTo === null || p.effectiveTo >= workedOn),
+        ));
     if (attributable) {
       byEmployment.set(employmentId, (byEmployment.get(employmentId) ?? 0n) + hours);
     }
     approvedHoursFacts.push({
-      entryId: row.id, employeePartyId: row.employee_party_id,
-      employmentId: attributable ? employmentId : null, workedOn, hours: row.hours,
-      departmentId: row.department_id, projectId: row.project_id,
-      approvedBy: row.approved_by, approvedAt: row.approved_at, employmentFacts: row.employment_facts,
+      entryId: row.id,
+      employeePartyId: row.employee_party_id,
+      employmentId: attributable ? employmentId : null,
+      workedOn,
+      hours: row.hours,
+      departmentId: row.department_id,
+      projectId: row.project_id,
+      approvedBy: row.approved_by,
+      approvedAt: row.approved_at,
+      employmentFacts: row.employment_facts,
     });
   }
   void actor;

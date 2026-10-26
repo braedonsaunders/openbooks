@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadCompliance, complianceSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadCompliance, complianceSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('compliance')
-  return { title: t('title') }
+  const t = await getTranslations("compliance");
+  return { title: t("title") };
 }
 
 /**
@@ -24,9 +24,9 @@ export async function generateMetadata() {
 export default async function ComplianceHomePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadCompliance(sp)
-  return <ModuleView spec={complianceSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadCompliance(sp);
+  return <ModuleView spec={complianceSpec(data)} data={data} searchParams={sp} trusted />;
 }

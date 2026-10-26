@@ -61,7 +61,10 @@ test("archive inspection authenticates counts and preserves numeric row JSON ver
     });
     assert.equal(inspected.totalRows, 2);
     assert.equal(inspected.tables.length, 3);
-    assert.match(await readFile(join(f.spool, "journal_lines.ndjson"), "utf8"), new RegExp(amount.replace(".", "\\.")));
+    assert.match(
+      await readFile(join(f.spool, "journal_lines.ndjson"), "utf8"),
+      new RegExp(amount.replace(".", "\\.")),
+    );
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }
@@ -80,7 +83,15 @@ test("archive inspection rejects a tenant-boundary violation before database acc
     }),
     `{"t":"orgs","r":{"id":"${orgId}"}}`,
     `{"t":"accounts","r":{"id":"${randomUUID()}","org_id":"${randomUUID()}"}}`,
-    JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }, { name: "accounts", rows: 1 }], totalRows: 2 } }),
+    JSON.stringify({
+      meta: {
+        tables: [
+          { name: "orgs", rows: 1 },
+          { name: "accounts", rows: 1 },
+        ],
+        totalRows: 2,
+      },
+    }),
   ]);
   try {
     await assert.rejects(
@@ -100,7 +111,12 @@ test("archive inspection rejects a tenant-boundary violation before database acc
 test("format-v1 archives require an explicit schema-risk override", async () => {
   const orgId = randomUUID();
   const f = await fixture([
-    JSON.stringify({ format: "openbooks-backup", version: 1, orgId, createdAt: "2026-08-04T12:00:00.000Z" }),
+    JSON.stringify({
+      format: "openbooks-backup",
+      version: 1,
+      orgId,
+      createdAt: "2026-08-04T12:00:00.000Z",
+    }),
     `{"t":"orgs","r":{"id":"${orgId}"}}`,
     JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }], totalRows: 1 } }),
   ]);
@@ -192,7 +208,15 @@ test("org-parentage validation refuses archives pointing outside the backup", as
     JSON.stringify(header),
     `{"t":"orgs","r":{"id":"${orgId}","sandbox_of":null}}`,
     `{"t":"change_sets","r":{"id":"${randomUUID()}","org_id":"${orgId}","sandbox_org_id":"${orgId}"}}`,
-    JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }, { name: "change_sets", rows: 1 }], totalRows: 2 } }),
+    JSON.stringify({
+      meta: {
+        tables: [
+          { name: "orgs", rows: 1 },
+          { name: "change_sets", rows: 1 },
+        ],
+        totalRows: 2,
+      },
+    }),
   ]);
   try {
     const inspected = await inspectBackupArchive({
@@ -218,7 +242,10 @@ test("org-parentage validation refuses archives pointing outside the backup", as
       expectedOrgId: orgId,
       spoolDir: dangling.spool,
     });
-    await assert.rejects(validateOrgParentage(inspected, orgId), /org-parentage validation failed at orgs\.sandbox_of/);
+    await assert.rejects(
+      validateOrgParentage(inspected, orgId),
+      /org-parentage validation failed at orgs\.sandbox_of/,
+    );
   } finally {
     await rm(dangling.root, { recursive: true, force: true });
   }
@@ -227,7 +254,15 @@ test("org-parentage validation refuses archives pointing outside the backup", as
     JSON.stringify(header),
     `{"t":"orgs","r":{"id":"${orgId}","sandbox_of":null}}`,
     `{"t":"change_sets","r":{"id":"${randomUUID()}","org_id":"${orgId}","sandbox_org_id":"${foreign}"}}`,
-    JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }, { name: "change_sets", rows: 1 }], totalRows: 2 } }),
+    JSON.stringify({
+      meta: {
+        tables: [
+          { name: "orgs", rows: 1 },
+          { name: "change_sets", rows: 1 },
+        ],
+        totalRows: 2,
+      },
+    }),
   ]);
   try {
     const inspected = await inspectBackupArchive({

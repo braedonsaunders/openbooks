@@ -33,10 +33,7 @@ export type PlannedResourcingAssignment = Omit<
 > & {
   plannedHours: string;
   booking: NonNullable<UpsertAssignmentInput["booking"]>;
-} & (
-    | { employeePartyId: string; jobTitle?: never }
-    | { employeePartyId?: never; jobTitle: string }
-  );
+} & ({ employeePartyId: string; jobTitle?: never } | { employeePartyId?: never; jobTitle: string });
 
 export interface ResourcingPlanningWorld {
   employees: readonly Pick<SimOrg["employees"][number], "id" | "name">[];
@@ -62,13 +59,20 @@ export function planResourcing(
   for (const practice of plan.practices) {
     for (const position of practice.positions) {
       for (const name of position.members) {
-        if (!employeesByName.has(name)) throw new Error(`resourcing member ${name} is not in the workforce`);
+        if (!employeesByName.has(name))
+          throw new Error(`resourcing member ${name} is not in the workforce`);
       }
     }
-    if (practice.genericDemand && !practice.positions.some((position) =>
-      position.jobTitle === practice.genericDemand!.jobTitle && position.members.length > 0
-    )) {
-      throw new Error(`generic demand title ${practice.genericDemand.jobTitle} needs named capacity in ${practice.name}`);
+    if (
+      practice.genericDemand &&
+      !practice.positions.some(
+        (position) =>
+          position.jobTitle === practice.genericDemand!.jobTitle && position.members.length > 0,
+      )
+    ) {
+      throw new Error(
+        `generic demand title ${practice.genericDemand.jobTitle} needs named capacity in ${practice.name}`,
+      );
     }
   }
 
@@ -81,7 +85,8 @@ export function planResourcing(
 
   const chooseProject = (excluded?: string): string => {
     const candidates = world.engagements.filter((engagement) => engagement.id !== excluded);
-    if (candidates.length === 0) throw new Error("soft bookings require a second active engagement");
+    if (candidates.length === 0)
+      throw new Error("soft bookings require a second active engagement");
     return candidates[rng.int(0, candidates.length - 1)]!.id;
   };
 
@@ -90,7 +95,9 @@ export function planResourcing(
     for (const practice of plan.practices) {
       const factor = practice.monthlyDemandFactors[month];
       if (factor === undefined || cmp(factor, "0") < 0) {
-        throw new Error(`resourcing demand factor is invalid for ${practice.name} in month ${month}`);
+        throw new Error(
+          `resourcing demand factor is invalid for ${practice.name} in month ${month}`,
+        );
       }
       const namedHours = mulDecimalFactors(standardWeek, [utilization, factor]);
       if (cmp(namedHours, "0") <= 0) continue;
@@ -121,7 +128,9 @@ export function planResourcing(
       }
 
       if (practice.genericDemand && cmp(factor, "1") > 0) {
-        const position = practice.positions.find((item) => item.jobTitle === practice.genericDemand!.jobTitle)!;
+        const position = practice.positions.find(
+          (item) => item.jobTitle === practice.genericDemand!.jobTitle,
+        )!;
         assignments.push({
           jobTitle: practice.genericDemand.jobTitle,
           projectId: chooseProject(),
@@ -182,7 +191,8 @@ export async function provisionResourcingPlan(ctx: ProvisionResourcingPlanContex
       for (const name of position.members) {
         const employee = employeesByName.get(name);
         if (!employee) throw new Error(`resourcing member ${name} is not in the workforce`);
-        if (assignedEmployees.has(employee.id)) throw new Error(`employee ${name} has more than one practice role`);
+        if (assignedEmployees.has(employee.id))
+          throw new Error(`employee ${name} has more than one practice role`);
         assignedEmployees.add(employee.id);
         const updated = await db.execute<{ party_id: string }>(sql`
           update employee_roles
@@ -204,21 +214,30 @@ export async function provisionResourcingPlan(ctx: ProvisionResourcingPlanContex
     throw new Error("resourcing plans require an active engagement");
   }
 
-  const capacity = (await db.execute<{ annual_hours: string | null }>(sql`
+  const capacity = (
+    await db.execute<{ annual_hours: string | null }>(
+      sql`
     select settings->'laborCosting'->>'annualHours' as annual_hours
       from orgs where id = ${ctx.world.orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!capacity?.annual_hours) {
     throw new Error("resourcing plans require the organization's labor-costing standard hours");
   }
 
-  const assignments = planResourcing(ctx.plan, {
-    employees: ctx.world.employees,
-    engagements: ctx.world.engagements,
-    window: ctx.window,
-    utilization: ctx.profile.utilization,
-    annualHours: capacity.annual_hours,
-  }, ctx.rng);
+  const assignments = planResourcing(
+    ctx.plan,
+    {
+      employees: ctx.world.employees,
+      engagements: ctx.world.engagements,
+      window: ctx.window,
+      utilization: ctx.profile.utilization,
+      annualHours: capacity.annual_hours,
+    },
+    ctx.rng,
+  );
   for (const assignment of assignments) {
     const write: UpsertAssignmentInput = {
       ...assignment,

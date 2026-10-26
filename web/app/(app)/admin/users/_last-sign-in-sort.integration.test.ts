@@ -24,7 +24,6 @@ const mockIntl = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/admin/users/")) {
       return { url: "mock:admin-users-sort-authz", shortCircuit: true };
     }
@@ -58,9 +57,8 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { loadAdminUsers } = await import("./view.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 
@@ -69,10 +67,16 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 function authzFor(orgId: string, userId: string): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Sort Admin", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Sort Admin",
+      orgId,
       roles: [{ key: "admin", name: "admin" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(["admin.users.manage"]),
     allowedSubsidiaryIds: null,
@@ -80,30 +84,46 @@ function authzFor(orgId: string, userId: string): Authz {
 }
 
 for (const dir of ["desc", "asc"] as const) {
-  test(`users sort=last_sign_in orders by recency with nulls last (${dir})`, { skip: !DB }, async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      // Names deliberately anti-correlate with recency so a silent fallback
-      // to name ordering cannot pass: name-asc would read Amy, Mid, Zed.
-      const amy = (await withBypass(() => createScratchUser(org.orgId, "Amy", "viewer"))) as unknown as string;
-      const mid = (await withBypass(() => createScratchUser(org.orgId, "Mid", "viewer"))) as unknown as string;
-      const zed = (await withBypass(() => createScratchUser(org.orgId, "Zed", "viewer"))) as unknown as string;
-      await withBypass(async () => {
-        await db.execute(sql`update users set last_login_at = '2026-01-01T00:00:00Z' where id = ${amy}`);
-        await db.execute(sql`update users set last_login_at = '2026-06-01T00:00:00Z' where id = ${zed}`);
-      });
-      const admin = (await withBypass(() => createScratchUser(org.orgId, "Sort Admin", "admin"))) as unknown as string;
-      state.authz = authzFor(org.orgId, admin);
-      const data = await withOrgContext(org.orgId, () =>
-        loadAdminUsers({ sort: "last_sign_in", dir }),
-      );
-      const dated = data.users.filter((u) => u.lastSignIn !== "—").map((u) => u.name);
-      const tailed = data.users.slice(-1)[0]!;
-      assert.deepEqual(dated, dir === "desc" ? ["Zed", "Amy"] : ["Amy", "Zed"]);
-      assert.equal(tailed.lastSignIn, "—", "never-signed-in rows sort last in both directions");
-      assert.ok(tailed.id === mid || tailed.id === admin);
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  });
+  test(
+    `users sort=last_sign_in orders by recency with nulls last (${dir})`,
+    { skip: !DB },
+    async () => {
+      const org = await withBypass(() => createScratchOrg());
+      try {
+        // Names deliberately anti-correlate with recency so a silent fallback
+        // to name ordering cannot pass: name-asc would read Amy, Mid, Zed.
+        const amy = (await withBypass(() =>
+          createScratchUser(org.orgId, "Amy", "viewer"),
+        )) as unknown as string;
+        const mid = (await withBypass(() =>
+          createScratchUser(org.orgId, "Mid", "viewer"),
+        )) as unknown as string;
+        const zed = (await withBypass(() =>
+          createScratchUser(org.orgId, "Zed", "viewer"),
+        )) as unknown as string;
+        await withBypass(async () => {
+          await db.execute(
+            sql`update users set last_login_at = '2026-01-01T00:00:00Z' where id = ${amy}`,
+          );
+          await db.execute(
+            sql`update users set last_login_at = '2026-06-01T00:00:00Z' where id = ${zed}`,
+          );
+        });
+        const admin = (await withBypass(() =>
+          createScratchUser(org.orgId, "Sort Admin", "admin"),
+        )) as unknown as string;
+        state.authz = authzFor(org.orgId, admin);
+        const data = await withOrgContext(org.orgId, () =>
+          loadAdminUsers({ sort: "last_sign_in", dir }),
+        );
+        const dated = data.users.filter((u) => u.lastSignIn !== "—").map((u) => u.name);
+        const tailed = data.users.slice(-1)[0]!;
+        assert.deepEqual(dated, dir === "desc" ? ["Zed", "Amy"] : ["Amy", "Zed"]);
+        assert.equal(tailed.lastSignIn, "—", "never-signed-in rows sort last in both directions");
+        assert.ok(tailed.id === mid || tailed.id === admin);
+      } finally {
+        await withBypass(() => dropScratchOrg(org.orgId));
+      }
+    },
+  );
 }

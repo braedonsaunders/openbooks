@@ -1,35 +1,66 @@
-import { captureTransactionAuditSnapshot,recordTransactionAudit } from "@openbooks/engine/records/transaction-audit"
-import { z } from "zod"
-import { journalHeaderInstructionFields,journalLineInstructionFields } from "../journal-instructions"
-import { validateJournalInstructionLines,JournalInstructionError } from "@openbooks/engine/ledger/journal-instruction-validation"
-import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
-import { TRANSFER_BATCH_BYTES, TRANSFER_MAX_ROW_BYTES, TransferRefusal } from './transfer-contract'
-import { importRowError } from './row-error'
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "@openbooks/engine/records/transaction-audit";
+import { z } from "zod";
+import {
+  journalHeaderInstructionFields,
+  journalLineInstructionFields,
+} from "../journal-instructions";
+import {
+  validateJournalInstructionLines,
+  JournalInstructionError,
+} from "@openbooks/engine/ledger/journal-instruction-validation";
+import {
+  readExportWindow,
+  transferId,
+  transferWhere,
+  transferOrder,
+  transferLimit,
+  finishExportPage,
+} from "./export-page";
+import { TRANSFER_BATCH_BYTES, TRANSFER_MAX_ROW_BYTES, TransferRefusal } from "./transfer-contract";
+import { importRowError } from "./row-error";
 /** Transaction (document-by-kind) import/export resources. */
 
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/platform/db'
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { normalizeMoney } from '@openbooks/engine/money/money'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, schema } from "@openbooks/engine/platform/db";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "@openbooks/engine/organization/org-feature-lock";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { postDocument } from "@openbooks/engine/ledger/posting-document";
-import { applyDocumentEdit, precomputeDocumentTotalsForCreate } from "@openbooks/engine/documents/write";
+import {
+  applyDocumentEdit,
+  precomputeDocumentTotalsForCreate,
+} from "@openbooks/engine/documents/write";
 import type { DocumentLineInput } from "@openbooks/engine/ledger/document-input";
-import { loadEntryRuleByKey } from '@openbooks/engine/allocations/entry'
+import { loadEntryRuleByKey } from "@openbooks/engine/allocations/entry";
 import { controlDeps, loadDocumentEditCurrent } from "@openbooks/engine/ledger/document-service";
 import { nextDocumentNumber } from "../bills.ts";
-import { documentNumberScopeKey, documentNumberScopeSql, isPartyScopedNumberKind } from "@openbooks/engine/records/numbering";
-import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
-import { canonicalDecimal } from '../exact-decimal'
+import {
+  documentNumberScopeKey,
+  documentNumberScopeSql,
+  isPartyScopedNumberKind,
+} from "@openbooks/engine/records/numbering";
+import {
+  createPermission,
+  postPermission,
+  readPermission,
+  type DocKindConfig,
+} from "../document-kinds";
+import { canonicalDecimal } from "../exact-decimal";
 import {
   orgFeatureEnabled,
   RefResolver,
   type ReadCtx,
   type DataResource,
   type WriteCtx,
-} from './resource-core'
-import { parseImportJson } from './import-parse'
+} from "./resource-core";
+import { parseImportJson } from "./import-parse";
 import {
   CELL_PROVENANCE_KEY,
   SOURCE_COLUMNS_KEY,
@@ -38,7 +69,7 @@ import {
   type ResourceDescriptor,
   type ResourceField,
   type WriteOutcome,
-} from './types'
+} from "./types";
 // --- Transaction resources (documents by kind) --------------------------------
 
 /**
@@ -52,87 +83,103 @@ import {
  * permission — routes through postDocument. Synchronous callers retain a
  * refused draft for review; durable transfers roll back the current batch.
  */
-const journalLineSchema=()=>z.object(journalLineInstructionFields)
+const journalLineSchema = () => z.object(journalLineInstructionFields);
 
 function transactionFields(cfg: DocKindConfig): ResourceField[] {
   const fields: ResourceField[] = [
-    { key: 'documentNumber', label: 'documentNumber', kind: 'text' },
-    { key: 'documentDate', label: 'documentDate', kind: 'date', required: true },
-  ]
-  if (cfg.hasDueDate) fields.push({ key: 'dueDate', label: 'dueDate', kind: 'date' })
+    { key: "documentNumber", label: "documentNumber", kind: "text" },
+    { key: "documentDate", label: "documentDate", kind: "date", required: true },
+  ];
+  if (cfg.hasDueDate) fields.push({ key: "dueDate", label: "dueDate", kind: "date" });
   if (cfg.partyRole)
     fields.push({
-      key: 'party',
+      key: "party",
       label: cfg.partyRole,
-      kind: 'reference',
+      kind: "reference",
       required: true,
-      ref: { resource: 'parties', by: 'short_code' },
-    })
+      ref: { resource: "parties", by: "short_code" },
+    });
   // Cutover attribution: the legal entity this document belongs to. Hidden
   // unless the org runs more than one subsidiary (see fields() below); the
   // writer resolves it whenever a row carries it.
   fields.push({
-    key: 'subsidiary',
-    label: 'subsidiary',
-    kind: 'reference',
-    ref: { resource: 'subsidiaries', by: 'name' },
-  })
-  if (cfg.hasReference) fields.push({ key: 'reference', label: 'reference', kind: 'text' })
-  fields.push({ key: 'currency', label: 'currency', kind: 'text' })
-  if(cfg.kind==='journal')fields.push(
-    {key:'journalMode',label:'journalMode',kind:'text'}, {key:'journalReverseOn',label:'journalReverseOn',kind:'date'},
-    {key:'fxRate',label:'fxRate',kind:'text'}, {key:'quantity',label:'quantity',kind:'text'}, {key:'unit',label:'unit',kind:'text'},
-  )
-  fields.push({ key: 'memo', label: 'memo', kind: 'long_text' })
+    key: "subsidiary",
+    label: "subsidiary",
+    kind: "reference",
+    ref: { resource: "subsidiaries", by: "name" },
+  });
+  if (cfg.hasReference) fields.push({ key: "reference", label: "reference", kind: "text" });
+  fields.push({ key: "currency", label: "currency", kind: "text" });
+  if (cfg.kind === "journal")
+    fields.push(
+      { key: "journalMode", label: "journalMode", kind: "text" },
+      { key: "journalReverseOn", label: "journalReverseOn", kind: "date" },
+      { key: "fxRate", label: "fxRate", kind: "text" },
+      { key: "quantity", label: "quantity", kind: "text" },
+      { key: "unit", label: "unit", kind: "text" },
+    );
+  fields.push({ key: "memo", label: "memo", kind: "long_text" });
   // Single-line convenience columns (flat CSV): one line per document.
-  fields.push({ key: 'account', label: 'account', kind: 'reference', ref: { resource: 'accounts', by: 'number' } })
-  fields.push({ key: 'amount', label: 'amount', kind: 'currency' })
-  fields.push({ key: 'description', label: 'description', kind: 'text' })
-  if (cfg.hasTax) fields.push({ key: 'taxCode', label: 'taxCode', kind: 'reference', ref: { resource: 'tax-codes', by: 'code' } })
+  fields.push({
+    key: "account",
+    label: "account",
+    kind: "reference",
+    ref: { resource: "accounts", by: "number" },
+  });
+  fields.push({ key: "amount", label: "amount", kind: "currency" });
+  fields.push({ key: "description", label: "description", kind: "text" });
+  if (cfg.hasTax)
+    fields.push({
+      key: "taxCode",
+      label: "taxCode",
+      kind: "reference",
+      ref: { resource: "tax-codes", by: "code" },
+    });
   // Entry-mode distribution: one allocation rule key staged on the line. The
   // adapter resolves and stores the rule reference; the document save path
   // explodes it (gated there), so this stays import-only sugar like the
   // other flat columns and rides `lines` on export.
-  fields.push({ key: 'distributionKey', label: 'distributionKey', kind: 'text' })
+  fields.push({ key: "distributionKey", label: "distributionKey", kind: "text" });
   // Multi-line: a JSON array of { account, amount, description?, taxCode?, distributionKey? }.
-  fields.push({ key: 'lines', label: 'lines', kind: 'long_text' })
-  return fields
+  fields.push({ key: "lines", label: "lines", kind: "long_text" });
+  return fields;
 }
 
 export function transactionDescriptor(cfg: DocKindConfig): ResourceDescriptor {
   return {
     key: `txn:${cfg.kind}`,
     label: cfg.kind,
-    group: 'Transactions',
-    iconKey: cfg.family === 'ar' ? 'clipboard-check' : cfg.family === 'bank' ? 'building' : 'clipboard',
+    group: "Transactions",
+    iconKey:
+      cfg.family === "ar" ? "clipboard-check" : cfg.family === "bank" ? "building" : "clipboard",
     readPermission: readPermission(cfg.kind),
     writePermission: createPermission(cfg.kind),
     // Payroll's ledger projection is machine-built from reviewed payroll inputs.
-    supportsImport: cfg.kind !== 'pay_run',
-    naturalKey: 'documentNumber',
-    canPost: cfg.kind !== 'pay_run',
+    supportsImport: cfg.kind !== "pay_run",
+    naturalKey: "documentNumber",
+    canPost: cfg.kind !== "pay_run",
     postPermission: postPermission(cfg.kind),
-  }
+  };
 }
 
 interface TxnLineInput {
-  account?: unknown
-  amount?: unknown
-  description?: unknown
-  taxCode?: unknown
+  account?: unknown;
+  amount?: unknown;
+  description?: unknown;
+  taxCode?: unknown;
   /** Entry-mode allocation rule key staged on the line (resolved on write). */
-  distributionKey?: unknown
+  distributionKey?: unknown;
   /**
    * Legacy quantity/unitPrice slots exist for spreadsheets that tried to map
    * one convenience column onto quantity × unitPrice. Imports refuse them to
    * avoid rounding in JS numbers; callers must provide literal amounts.
    */
-  quantity?: unknown
-  unit?: unknown
-  currency?: unknown
-  fxRate?: unknown
-  eliminate?: unknown
-  unitPrice?: unknown
+  quantity?: unknown;
+  unit?: unknown;
+  currency?: unknown;
+  fxRate?: unknown;
+  eliminate?: unknown;
+  unitPrice?: unknown;
 }
 
 /**
@@ -144,10 +191,10 @@ interface TxnLineInput {
 function transactionSubsidiaryFilter(
   allowed: ReadonlySet<string> | null | undefined,
 ): ReturnType<typeof sql> {
-  if (allowed === null || allowed === undefined) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return sql` and false`
-  return sql` and d.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
+  if (allowed === null || allowed === undefined) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return sql` and false`;
+  return sql` and d.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])`;
 }
 
 // Kept in lockstep with parse.ts and the import route's reserved mapping keys.
@@ -156,23 +203,23 @@ function transactionSubsidiaryFilter(
 // mapped source header under SOURCE_COLUMNS_KEY. The nested lookup accepts rows
 // produced by the earlier metadata handoff as well.
 function objectRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function formulaDerivedField(src: Record<string, unknown>, field: string): boolean {
-  const sourceColumns = objectRecord(src[SOURCE_COLUMNS_KEY])
-  const source = typeof sourceColumns?.[field] === 'string' ? sourceColumns[field] : field
-  const direct = objectRecord(src[CELL_PROVENANCE_KEY])
-  const unmapped = objectRecord(src[UNMAPPED_COLUMNS_KEY])
-  const mapped = objectRecord(unmapped?.[CELL_PROVENANCE_KEY])
-  return direct?.[source] === 'formula' || mapped?.[source] === 'formula'
+  const sourceColumns = objectRecord(src[SOURCE_COLUMNS_KEY]);
+  const source = typeof sourceColumns?.[field] === "string" ? sourceColumns[field] : field;
+  const direct = objectRecord(src[CELL_PROVENANCE_KEY]);
+  const unmapped = objectRecord(src[UNMAPPED_COLUMNS_KEY]);
+  const mapped = objectRecord(unmapped?.[CELL_PROVENANCE_KEY]);
+  return direct?.[source] === "formula" || mapped?.[source] === "formula";
 }
 
 function fieldWasMapped(src: Record<string, unknown>, field: string): boolean {
-  const sourceColumns = objectRecord(src[SOURCE_COLUMNS_KEY])
-  return Object.prototype.hasOwnProperty.call(sourceColumns ?? {}, field)
+  const sourceColumns = objectRecord(src[SOURCE_COLUMNS_KEY]);
+  return Object.prototype.hasOwnProperty.call(sourceColumns ?? {}, field);
 }
 
 export function transactionResource(
@@ -180,7 +227,7 @@ export function transactionResource(
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): DataResource {
-  const cols = transactionFields(cfg)
+  const cols = transactionFields(cfg);
   /**
    * Export file headers: the importable fields minus the flat single-line
    * convenience inputs (import-only sugar; `lines` carries them). Derived
@@ -194,38 +241,39 @@ export function transactionResource(
    */
   const exportColumns = async (): Promise<{ key: string; label: string }[]> => {
     const [multiCurrency, multiSubsidiary] = await Promise.all([
-      orgFeatureEnabled(orgId, 'multiCurrency'),
-      orgFeatureEnabled(orgId, 'multiSubsidiary'),
-    ])
+      orgFeatureEnabled(orgId, "multiCurrency"),
+      orgFeatureEnabled(orgId, "multiSubsidiary"),
+    ]);
     return cols
       .filter(
         (f) =>
-          !['account', 'amount', 'description', 'taxCode', 'distributionKey'].includes(f.key) &&
-          (f.key !== 'currency' || multiCurrency) &&
-          (f.key !== 'subsidiary' || multiSubsidiary),
+          !["account", "amount", "description", "taxCode", "distributionKey"].includes(f.key) &&
+          (f.key !== "currency" || multiCurrency) &&
+          (f.key !== "subsidiary" || multiSubsidiary),
       )
-      .map((f) => ({ key: f.key, label: f.label }))
-  }
+      .map((f) => ({ key: f.key, label: f.label }));
+  };
   return {
     descriptor: transactionDescriptor(cfg),
     async fields() {
       const [multiCurrency, multiSubsidiary] = await Promise.all([
-        orgFeatureEnabled(orgId, 'multiCurrency'),
-        orgFeatureEnabled(orgId, 'multiSubsidiary'),
-      ])
+        orgFeatureEnabled(orgId, "multiCurrency"),
+        orgFeatureEnabled(orgId, "multiSubsidiary"),
+      ]);
       return cols.filter(
         (f) =>
-          (f.key !== 'currency' || multiCurrency) &&
-          (f.key !== 'subsidiary' || multiSubsidiary),
-      )
+          (f.key !== "currency" || multiCurrency) && (f.key !== "subsidiary" || multiSubsidiary),
+      );
     },
     async columns() {
-      return exportColumns()
+      return exportColumns();
     },
     async read(readCtx?: ReadCtx) {
-      const resolver = new RefResolver(orgId)
-      const subsidiaryScope = readCtx ? readCtx.allowedSubsidiaryIds : allowedSubsidiaryIds
-      const docs = (await readExportWindow(db, sql`
+      const resolver = new RefResolver(orgId);
+      const subsidiaryScope = readCtx ? readCtx.allowedSubsidiaryIds : allowedSubsidiaryIds;
+      const docs = (await readExportWindow(
+        db,
+        sql`
         select d.id, d.document_number, d.document_date, d.due_date, d.currency, d.memo,
                d.reference_number,d.journal_mode,d.journal_reverse_on::text,d.fx_rate::text, d.status, s.name as subsidiary${transferId(readCtx, sql`d.id`)},
                -- The importer resolves parties by short code with a display-name
@@ -238,61 +286,100 @@ export function transactionResource(
          where d.org_id = ${orgId} and d.kind = ${cfg.kind}
            ${transactionSubsidiaryFilter(subsidiaryScope)}
          ${transferWhere(readCtx, sql`d.id`)} order by ${transferOrder(readCtx, sql`d.id`, sql`d.document_date desc, d.document_number, d.id`)}
-         limit ${transferLimit(readCtx)}`, readCtx)) as {
+         limit ${transferLimit(readCtx)}`,
+        readCtx,
+      )) as {
         rows: {
-          id: string
-          document_number: string
-          document_date: string
-          due_date: string | null
-          currency: string
-          journal_mode: string; journal_reverse_on: string|null; fx_rate: string
-          memo: string | null
-          reference_number: string | null
-          status: string
-          party: string | null
-          subsidiary: string | null
-        }[]
-      }
+          id: string;
+          document_number: string;
+          document_date: string;
+          due_date: string | null;
+          currency: string;
+          journal_mode: string;
+          journal_reverse_on: string | null;
+          fx_rate: string;
+          memo: string | null;
+          reference_number: string | null;
+          status: string;
+          party: string | null;
+          subsidiary: string | null;
+        }[];
+      };
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      const includeLines = !readCtx?.page?.columns || readCtx.page.columns.includes('lines')
+      const includeLines = !readCtx?.page?.columns || readCtx.page.columns.includes("lines");
       if (includeLines && readCtx?.page && docs.rows.length) {
-        const sizes = await db.execute<{ document_id: string; bytes: string }>(sql`
+        const sizes = await db.execute<{ document_id: string; bytes: string }>(
+          sql`
           select l.document_id,sum(octet_length(jsonb_build_object('amount',l.amount::text,'description',l.description,
             'account',a.number,'taxCode',t.code,'distributionKey',ar.key,'quantity',l.quantity::text,'unit',l.unit,'currency',l.journal_currency,'fxRate',l.journal_fx_rate::text,'eliminate',l.journal_eliminate)::text)+1)::text as bytes
           from document_lines l left join accounts a on a.org_id=l.org_id and a.id=l.account_id
           left join tax_codes t on t.org_id=l.org_id and t.id=l.tax_code_id
           left join allocation_rules ar on ar.org_id=l.org_id and ar.id=l.distribution_rule_id
-          where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) group by l.document_id`, 'objects')
-        const byId = new Map(sizes.map((row) => [row.document_id, Number(row.bytes)]))
-        let bytes = 0, keep = 0
+          where l.org_id=${orgId} and l.document_id in (${sql.join(
+            docs.rows.map((doc) => sql`${doc.id}::uuid`),
+            sql`, `,
+          )}) group by l.document_id`,
+          "objects",
+        );
+        const byId = new Map(sizes.map((row) => [row.document_id, Number(row.bytes)]));
+        let bytes = 0,
+          keep = 0;
         for (const doc of docs.rows) {
-          const size = (byId.get(doc.id) ?? 2) + Buffer.byteLength(JSON.stringify(doc))
-          if (size > TRANSFER_MAX_ROW_BYTES) throw new TransferRefusal(`Document ${doc.document_number} exceeds the 4 MiB transfer record limit — deselect the Lines column and create a new export.`, 422)
-          if (keep && bytes + size > TRANSFER_BATCH_BYTES) break
-          bytes += size; keep++
+          const size = (byId.get(doc.id) ?? 2) + Buffer.byteLength(JSON.stringify(doc));
+          if (size > TRANSFER_MAX_ROW_BYTES)
+            throw new TransferRefusal(
+              `Document ${doc.document_number} exceeds the 4 MiB transfer record limit — deselect the Lines column and create a new export.`,
+              422,
+            );
+          if (keep && bytes + size > TRANSFER_BATCH_BYTES) break;
+          bytes += size;
+          keep++;
         }
-        const limited = keep < docs.rows.length
-        if (limited) docs.rows.splice(keep)
-        finishExportPage(docs.rows, transactionDescriptor(cfg).label, readCtx)
-        if (limited) readCtx.page.done = false
-      } else finishExportPage(docs.rows, transactionDescriptor(cfg).label, readCtx)
-      const rows: Record<string, CellValue>[] = []
-      const batchLines = !includeLines ? [] : readCtx?.page && docs.rows.length ? (await db.execute<{
-        document_id: string;quantity:string;unit:string|null;journal_currency:string|null;journal_fx_rate:string|null;journal_eliminate:boolean; amount: string; description: string | null; account: string | null; tax_code: string | null; distribution_key: string | null
-      }>(sql`
+        const limited = keep < docs.rows.length;
+        if (limited) docs.rows.splice(keep);
+        finishExportPage(docs.rows, transactionDescriptor(cfg).label, readCtx);
+        if (limited) readCtx.page.done = false;
+      } else finishExportPage(docs.rows, transactionDescriptor(cfg).label, readCtx);
+      const rows: Record<string, CellValue>[] = [];
+      const batchLines = !includeLines
+        ? []
+        : readCtx?.page && docs.rows.length
+          ? await db.execute<{
+              document_id: string;
+              quantity: string;
+              unit: string | null;
+              journal_currency: string | null;
+              journal_fx_rate: string | null;
+              journal_eliminate: boolean;
+              amount: string;
+              description: string | null;
+              account: string | null;
+              tax_code: string | null;
+              distribution_key: string | null;
+            }>(
+              sql`
         select l.document_id,l.amount::text as amount,l.quantity::text,l.unit,l.journal_currency,l.journal_fx_rate::text,l.journal_eliminate,l.description,a.number as account,t.code as tax_code,ar.key as distribution_key
         from document_lines l left join accounts a on a.id=l.account_id and a.org_id=l.org_id
         left join tax_codes t on t.id=l.tax_code_id and t.org_id=l.org_id
         left join allocation_rules ar on ar.id=l.distribution_rule_id and ar.org_id=l.org_id
-        where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) order by l.document_id,l.line_number`, 'objects')) : null
-      const linesByDocument = new Map<string, NonNullable<typeof batchLines>>()
+        where l.org_id=${orgId} and l.document_id in (${sql.join(
+          docs.rows.map((doc) => sql`${doc.id}::uuid`),
+          sql`, `,
+        )}) order by l.document_id,l.line_number`,
+              "objects",
+            )
+          : null;
+      const linesByDocument = new Map<string, NonNullable<typeof batchLines>>();
       for (const line of batchLines ?? []) {
-        const entries = linesByDocument.get(line.document_id) ?? []
-        entries.push(line); linesByDocument.set(line.document_id, entries)
+        const entries = linesByDocument.get(line.document_id) ?? [];
+        entries.push(line);
+        linesByDocument.set(line.document_id, entries);
       }
       for (const d of docs.rows) {
-        const lineRows = batchLines ? { rows: linesByDocument.get(d.id) ?? [] } : (await db.execute(sql`
+        const lineRows = batchLines
+          ? { rows: linesByDocument.get(d.id) ?? [] }
+          : ((await db.execute(sql`
           select l.amount,l.quantity::text,l.unit,l.journal_currency,l.journal_fx_rate::text,l.journal_eliminate, l.description, a.number as account, t.code as tax_code,
                  ar.key as distribution_key
             from document_lines l
@@ -300,15 +387,19 @@ export function transactionResource(
             left join tax_codes t on t.id = l.tax_code_id and t.org_id = l.org_id
             left join allocation_rules ar on ar.id = l.distribution_rule_id and ar.org_id = l.org_id
            where l.document_id = ${d.id} and l.org_id = ${orgId} order by l.line_number`)) as {
-          rows: {
-            amount: string
-            quantity:string;unit:string|null;journal_currency:string|null;journal_fx_rate:string|null;journal_eliminate:boolean
-            description: string | null
-            account: string | null
-            tax_code: string | null
-            distribution_key: string | null
-          }[]
-        }
+              rows: {
+                amount: string;
+                quantity: string;
+                unit: string | null;
+                journal_currency: string | null;
+                journal_fx_rate: string | null;
+                journal_eliminate: boolean;
+                description: string | null;
+                account: string | null;
+                tax_code: string | null;
+                distribution_key: string | null;
+              }[];
+            });
         rows.push({
           documentNumber: d.document_number,
           documentDate: d.document_date,
@@ -317,32 +408,48 @@ export function transactionResource(
           subsidiary: d.subsidiary,
           reference: d.reference_number,
           currency: d.currency,
-          ...(cfg.kind==='journal' ? {journalMode:d.journal_mode,journalReverseOn:d.journal_reverse_on,fxRate:d.fx_rate} : {}),
+          ...(cfg.kind === "journal"
+            ? {
+                journalMode: d.journal_mode,
+                journalReverseOn: d.journal_reverse_on,
+                fxRate: d.fx_rate,
+              }
+            : {}),
           memo: d.memo,
           status: d.status,
           lines: JSON.stringify(
             lineRows.rows.map((l) => ({
               account: l.account,
               amount: l.amount,
-              ...(cfg.kind==='journal' ? {quantity:l.quantity,unit:l.unit,currency:l.journal_currency,fxRate:l.journal_fx_rate,eliminate:l.journal_eliminate} : {}),
+              ...(cfg.kind === "journal"
+                ? {
+                    quantity: l.quantity,
+                    unit: l.unit,
+                    currency: l.journal_currency,
+                    fxRate: l.journal_fx_rate,
+                    eliminate: l.journal_eliminate,
+                  }
+                : {}),
               description: l.description,
               taxCode: l.tax_code,
               distributionKey: l.distribution_key,
             })),
           ),
-        })
+        });
       }
-      void resolver
-      const columns = await exportColumns()
-      return { fields: cols, columns, rows }
+      void resolver;
+      const columns = await exportColumns();
+      return { fields: cols, columns, rows };
     },
     async write(rows, _mode, ctx) {
-      if (cfg.kind === 'pay_run') {
-        throw new Error('Pay runs cannot be imported as ledger documents — import Pay run component inputs, then calculate and review the run in Payroll')
+      if (cfg.kind === "pay_run") {
+        throw new Error(
+          "Pay runs cannot be imported as ledger documents — import Pay run component inputs, then calculate and review the run in Payroll",
+        );
       }
-      return writeTransactions(cfg, rows, ctx)
+      return writeTransactions(cfg, rows, ctx);
     },
-  }
+  };
 }
 
 async function writeTransactions(
@@ -350,18 +457,30 @@ async function writeTransactions(
   rows: Record<string, unknown>[],
   ctx: WriteCtx,
 ): Promise<WriteOutcome> {
-  const resolver = new RefResolver(ctx.orgId)
-  const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
-  const baseCurrency = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${ctx.orgId}`, 'objects'))[0]?.base_currency ?? 'CAD'
-  const multiCurrencyOn = await orgFeatureEnabled(ctx.orgId, 'multiCurrency')
-  const multiSubsidiaryOn = await orgFeatureEnabled(ctx.orgId, 'multiSubsidiary')
+  const resolver = new RefResolver(ctx.orgId);
+  const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] };
+  const baseCurrency =
+    (
+      await db.execute<{ base_currency: string }>(
+        sql`select base_currency from orgs where id = ${ctx.orgId}`,
+        "objects",
+      )
+    )[0]?.base_currency ?? "CAD";
+  const multiCurrencyOn = await orgFeatureEnabled(ctx.orgId, "multiCurrency");
+  const multiSubsidiaryOn = await orgFeatureEnabled(ctx.orgId, "multiSubsidiary");
   // The kernel posts a NULL-subsidiary document's legs to the org root, so an
   // omitted subsidiary defaults to the root explicitly: document and GL agree,
   // and subsidiary-fenced surfaces can see the row. Exactly one root exists
   // (subsidiaries_org_root); without one the insert keeps today's NULL.
-  const rootSubsidiaryId = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${ctx.orgId} and parent_id is null limit 1`, 'objects'))[0]?.id ?? null
-  const deps = ctx.post ? await controlDeps(ctx.orgId) : null
+  const rootSubsidiaryId =
+    (
+      await db.execute<{ id: string }>(
+        sql`
+    select id from subsidiaries where org_id = ${ctx.orgId} and parent_id is null limit 1`,
+        "objects",
+      )
+    )[0]?.id ?? null;
+  const deps = ctx.post ? await controlDeps(ctx.orgId) : null;
   // Intra-file natural-key fence: documents are unique per
   // (org_id, kind, document_number) — per vendor party for vendor bills and
   // credits (documentNumberScopeKey) — and a dry-run preview writes nothing,
@@ -370,64 +489,80 @@ async function writeTransactions(
   // number: a row that fails validation leaves nothing behind, so it must not
   // poison a valid later row, and generated (anonymous) numbers never enter
   // the fence.
-  const claimedNumbers = new Set<string>()
+  const claimedNumbers = new Set<string>();
 
   for (let i = 0; i < rows.length; i++) {
-    const rowNo = i + 1
-    const src = rows[i]!
+    const rowNo = i + 1;
+    const src = rows[i]!;
     try {
       // Restating the org's own base currency is identical to omitting the
       // column (see below) — the export always emits it, so rejecting it
       // would make the system's own exports unimportable. Only a genuinely
       // foreign currency needs the multi-currency feature.
-      const incomingCurrency = String(src.currency ?? '').trim()
-      if (incomingCurrency && !multiCurrencyOn && incomingCurrency.toUpperCase() !== baseCurrency.toUpperCase()) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'currency is not available' })
-        continue
+      const incomingCurrency = String(src.currency ?? "").trim();
+      if (
+        incomingCurrency &&
+        !multiCurrencyOn &&
+        incomingCurrency.toUpperCase() !== baseCurrency.toUpperCase()
+      ) {
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: "currency is not available" });
+        continue;
       }
-      const documentDate = String(src.documentDate ?? '').trim()
+      const documentDate = String(src.documentDate ?? "").trim();
       if (!isIsoCalendarDate(documentDate)) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'documentDate must be a real YYYY-MM-DD calendar date' })
-        continue
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message: "documentDate must be a real YYYY-MM-DD calendar date",
+        });
+        continue;
       }
-      const dueDate = cfg.hasDueDate && src.dueDate ? String(src.dueDate).trim() : null
+      const dueDate = cfg.hasDueDate && src.dueDate ? String(src.dueDate).trim() : null;
       if (dueDate && !isIsoCalendarDate(dueDate)) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'dueDate must be a real YYYY-MM-DD calendar date' })
-        continue
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message: "dueDate must be a real YYYY-MM-DD calendar date",
+        });
+        continue;
       }
 
       // Party (required for AP/AR kinds).
-      let partyId: string | null = null
+      let partyId: string | null = null;
       if (cfg.partyRole) {
-        const human = src.party
+        const human = src.party;
         if (!human) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `${cfg.partyRole} is required` })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: `${cfg.partyRole} is required` });
+          continue;
         }
-        partyId = await resolver.resolveId({ resource: 'parties', by: 'short_code' }, human)
+        partyId = await resolver.resolveId({ resource: "parties", by: "short_code" }, human);
         if (!partyId) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `${cfg.partyRole} "${String(human)}" not found` })
-          continue
+          outcome.failed++;
+          outcome.errors.push({
+            row: rowNo,
+            message: `${cfg.partyRole} "${String(human)}" not found`,
+          });
+          continue;
         }
       }
 
       // Subsidiary (cutover attribution by name). Unknown names fail the row
       // closed — silently dropping the legal entity would misattribute the
       // subsidiary trial balance. Omitted means the root (see above).
-      let subsidiaryId: string | null = null
-      const subsidiaryHuman = String(src.subsidiary ?? '').trim()
-      const subsidiaryMapped = fieldWasMapped(src, 'subsidiary') || subsidiaryHuman.length > 0
+      let subsidiaryId: string | null = null;
+      const subsidiaryHuman = String(src.subsidiary ?? "").trim();
+      const subsidiaryMapped = fieldWasMapped(src, "subsidiary") || subsidiaryHuman.length > 0;
       if (subsidiaryHuman) {
-        subsidiaryId = await resolver.resolveId({ resource: 'subsidiaries', by: 'name' }, subsidiaryHuman)
+        subsidiaryId = await resolver.resolveId(
+          { resource: "subsidiaries", by: "name" },
+          subsidiaryHuman,
+        );
         if (!subsidiaryId) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `subsidiary "${subsidiaryHuman}" not found` })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: `subsidiary "${subsidiaryHuman}" not found` });
+          continue;
         }
       }
       // A file the system wrote itself always carries the row's subsidiary
@@ -435,69 +570,84 @@ async function writeTransactions(
       // org: accept it so exports round-trip. Any other explicit subsidiary
       // still needs the multi-subsidiary feature.
       if (subsidiaryMapped && !multiSubsidiaryOn && subsidiaryId !== rootSubsidiaryId) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'subsidiary field is not available while multi-subsidiary is disabled' })
-        continue
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message: "subsidiary field is not available while multi-subsidiary is disabled",
+        });
+        continue;
       }
       if (!subsidiaryId) {
-        subsidiaryId = rootSubsidiaryId
+        subsidiaryId = rootSubsidiaryId;
       }
 
       // Assemble lines (JSON `lines` wins; else the flat single-line columns).
-      const parsedLines = parseLines(src)
+      const parsedLines = parseLines(src);
       if (parsedLines.error) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: parsedLines.error })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: parsedLines.error });
+        continue;
       }
-      const rawLines = parsedLines.lines
+      const rawLines = parsedLines.lines;
       if (rawLines.length === 0) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'at least one line (account + amount) is required' })
-        continue
-      }
-      const journalHeader=cfg.kind==='journal' ? z.object(journalHeaderInstructionFields).parse({
-        journalMode:src.journalMode || undefined,journalReverseOn:src.journalReverseOn || undefined,
-        currency:src.currency || undefined,fxRate:src.fxRate || undefined,
-      }) : null
-      const hasQuantity = rawLines.some((l) => l.quantity !== undefined)
-      const hasUnitPrice = rawLines.some((l) => l.unitPrice !== undefined)
-      if ((hasQuantity && cfg.kind!=='journal') || hasUnitPrice) {
-        outcome.failed++
+        outcome.failed++;
         outcome.errors.push({
           row: rowNo,
-          message: 'quantity and unitPrice cannot be imported; provide literal line amounts',
-        })
-        continue
+          message: "at least one line (account + amount) is required",
+        });
+        continue;
+      }
+      const journalHeader =
+        cfg.kind === "journal"
+          ? z.object(journalHeaderInstructionFields).parse({
+              journalMode: src.journalMode || undefined,
+              journalReverseOn: src.journalReverseOn || undefined,
+              currency: src.currency || undefined,
+              fxRate: src.fxRate || undefined,
+            })
+          : null;
+      const hasQuantity = rawLines.some((l) => l.quantity !== undefined);
+      const hasUnitPrice = rawLines.some((l) => l.unitPrice !== undefined);
+      if ((hasQuantity && cfg.kind !== "journal") || hasUnitPrice) {
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message: "quantity and unitPrice cannot be imported; provide literal line amounts",
+        });
+        continue;
       }
       const built: {
-        accountId: string
-        amount: string
-        description: string | null
-        taxCodeId: string | null
-        distributionRuleId: string | null
-        accountType:string; instructions: z.infer<ReturnType<typeof journalLineSchema>> | null
-      }[] = []
-      let lineErr: string | null = null
+        accountId: string;
+        amount: string;
+        description: string | null;
+        taxCodeId: string | null;
+        distributionRuleId: string | null;
+        accountType: string;
+        instructions: z.infer<ReturnType<typeof journalLineSchema>> | null;
+      }[] = [];
+      let lineErr: string | null = null;
       for (const l of rawLines) {
-        const acctId = await resolver.resolveId({ resource: 'accounts', by: 'number' }, l.account)
+        const acctId = await resolver.resolveId({ resource: "accounts", by: "number" }, l.account);
         if (!acctId) {
-          lineErr = `account "${String(l.account ?? '')}" not found`
-          break
+          lineErr = `account "${String(l.account ?? "")}" not found`;
+          break;
         }
-        const amount = exactLineAmount(l.amount ?? (journalHeader?.journalMode==='statistical' ? '0' : undefined))
+        const amount = exactLineAmount(
+          l.amount ?? (journalHeader?.journalMode === "statistical" ? "0" : undefined),
+        );
         if (amount === null) {
-          lineErr = typeof l.amount === 'number'
-            ? `line amount ${String(l.amount)} arrived as a spreadsheet number, which cannot preserve exact decimals — format the amount cell as text and provide a literal decimal string`
-            : `line amount "${String(l.amount ?? '')}" must be an exact decimal string with at most 4 decimal places`
-          break
+          lineErr =
+            typeof l.amount === "number"
+              ? `line amount ${String(l.amount)} arrived as a spreadsheet number, which cannot preserve exact decimals — format the amount cell as text and provide a literal decimal string`
+              : `line amount "${String(l.amount ?? "")}" must be an exact decimal string with at most 4 decimal places`;
+          break;
         }
-        let taxCodeId: string | null = null
+        let taxCodeId: string | null = null;
         if (l.taxCode) {
-          taxCodeId = await resolver.resolveId({ resource: 'tax-codes', by: 'code' }, l.taxCode)
+          taxCodeId = await resolver.resolveId({ resource: "tax-codes", by: "code" }, l.taxCode);
           if (!taxCodeId) {
-            lineErr = `tax code "${String(l.taxCode)}" not found`
-            break
+            lineErr = `tax code "${String(l.taxCode)}" not found`;
+            break;
           }
         }
         // Entry-mode distribution staging: resolve the rule key against
@@ -506,74 +656,122 @@ async function writeTransactions(
         // behind the allocationsAtEntry gate — but an unknown key fails the
         // row closed exactly like an unknown account: silently dropping the
         // attribution would misstate the import.
-        let distributionRuleId: string | null = null
-        const rawKey = l.distributionKey
-        if (rawKey !== undefined && rawKey !== null && String(rawKey).trim() !== '') {
-          const key = String(rawKey).trim()
-          const lookup = await loadEntryRuleByKey(ctx.orgId, key, documentDate)
-          if (lookup.status === 'not_found') {
-            lineErr = `distribution key "${key}" not found`
-            break
+        let distributionRuleId: string | null = null;
+        const rawKey = l.distributionKey;
+        if (rawKey !== undefined && rawKey !== null && String(rawKey).trim() !== "") {
+          const key = String(rawKey).trim();
+          const lookup = await loadEntryRuleByKey(ctx.orgId, key, documentDate);
+          if (lookup.status === "not_found") {
+            lineErr = `distribution key "${key}" not found`;
+            break;
           }
-          if (lookup.status === 'wrong_mode') {
-            lineErr = `distribution key "${key}" is not an entry rule`
-            break
+          if (lookup.status === "wrong_mode") {
+            lineErr = `distribution key "${key}" is not an entry rule`;
+            break;
           }
-          if (lookup.status === 'inactive') {
-            lineErr = `distribution key "${key}" is not in effect on ${documentDate}`
-            break
+          if (lookup.status === "inactive") {
+            lineErr = `distribution key "${key}" is not in effect on ${documentDate}`;
+            break;
           }
-          distributionRuleId = lookup.rule.rule.id
+          distributionRuleId = lookup.rule.rule.id;
         }
-        const instructions=cfg.kind==='journal' ? journalLineSchema().parse({quantity:l.quantity,unit:l.unit,currency:l.currency,fxRate:l.fxRate,eliminate:l.eliminate}) : null
-        const accountType=cfg.kind==='journal' ? (await db.execute<{type:string}>(sql`select type from accounts where org_id=${ctx.orgId} and id=${acctId}`, 'objects'))[0]?.type ?? '' : ''
-        built.push({ accountType,instructions, accountId: acctId, amount, description: l.description ? String(l.description) : null, taxCodeId, distributionRuleId })
+        const instructions =
+          cfg.kind === "journal"
+            ? journalLineSchema().parse({
+                quantity: l.quantity,
+                unit: l.unit,
+                currency: l.currency,
+                fxRate: l.fxRate,
+                eliminate: l.eliminate,
+              })
+            : null;
+        const accountType =
+          cfg.kind === "journal"
+            ? ((
+                await db.execute<{ type: string }>(
+                  sql`select type from accounts where org_id=${ctx.orgId} and id=${acctId}`,
+                  "objects",
+                )
+              )[0]?.type ?? "")
+            : "";
+        built.push({
+          accountType,
+          instructions,
+          accountId: acctId,
+          amount,
+          description: l.description ? String(l.description) : null,
+          taxCodeId,
+          distributionRuleId,
+        });
       }
       if (lineErr) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: lineErr })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: lineErr });
+        continue;
       }
 
-      if(journalHeader)validateJournalInstructionLines(journalHeader.journalMode ?? 'monetary',journalHeader.journalReverseOn ?? null,built.map((line,index)=>({
-        line_number:index+1,type:line.accountType,amount:line.amount,quantity:line.instructions?.quantity ?? '1',unit:line.instructions?.unit ?? null,
-        journal_currency:line.instructions?.currency ?? null,journal_fx_rate:line.instructions?.fxRate ?? null,journal_eliminate:line.instructions?.eliminate ?? false,template:null,
-      })))
+      if (journalHeader)
+        validateJournalInstructionLines(
+          journalHeader.journalMode ?? "monetary",
+          journalHeader.journalReverseOn ?? null,
+          built.map((line, index) => ({
+            line_number: index + 1,
+            type: line.accountType,
+            amount: line.amount,
+            quantity: line.instructions?.quantity ?? "1",
+            unit: line.instructions?.unit ?? null,
+            journal_currency: line.instructions?.currency ?? null,
+            journal_fx_rate: line.instructions?.fxRate ?? null,
+            journal_eliminate: line.instructions?.eliminate ?? false,
+            template: null,
+          })),
+        );
       // Duplicate document number? The storage check comes first so a clash
       // with an already-posted document keeps its existing refusal; the
       // intra-file check then anticipates the clash a duplicate row would hit
       // at commit, refusing that same row once so preview and commit agree on
       // which row is refused.
-      const wantNumber = String(src.documentNumber ?? '').trim()
-      const numberSlot = wantNumber ? documentNumberScopeKey(cfg.kind, partyId, wantNumber) : null
+      const wantNumber = String(src.documentNumber ?? "").trim();
+      const numberSlot = wantNumber ? documentNumberScopeKey(cfg.kind, partyId, wantNumber) : null;
       if (numberSlot) {
-        const dup = await db.execute(sql`
-          select 1 from documents where org_id = ${ctx.orgId} and ${documentNumberScopeSql(cfg.kind, partyId, wantNumber)} limit 1`, 'objects')
+        const dup = await db.execute(
+          sql`
+          select 1 from documents where org_id = ${ctx.orgId} and ${documentNumberScopeSql(cfg.kind, partyId, wantNumber)} limit 1`,
+          "objects",
+        );
         if (dup.length > 0) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: isPartyScopedNumberKind(cfg.kind) && partyId
-            ? `document ${wantNumber} already exists for this vendor`
-            : `document ${wantNumber} already exists` })
-          continue
+          outcome.failed++;
+          outcome.errors.push({
+            row: rowNo,
+            message:
+              isPartyScopedNumberKind(cfg.kind) && partyId
+                ? `document ${wantNumber} already exists for this vendor`
+                : `document ${wantNumber} already exists`,
+          });
+          continue;
         }
         if (claimedNumbers.has(numberSlot)) {
           // The earlier row in this file holds the number; this copy is the
           // in-file duplicate, not a clash with an existing document.
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `document ${wantNumber} appears more than once in this file — keep one record per natural key, then upload the corrected file` })
-          continue
+          outcome.failed++;
+          outcome.errors.push({
+            row: rowNo,
+            message: `document ${wantNumber} appears more than once in this file — keep one record per natural key, then upload the corrected file`,
+          });
+          continue;
         }
       }
 
       if (ctx.dryRun) {
-        if (numberSlot) claimedNumbers.add(numberSlot)
-        outcome.created++
-        continue
+        if (numberSlot) claimedNumbers.add(numberSlot);
+        outcome.created++;
+        continue;
       }
 
       // Create the draft document + lines.
-      const number = wantNumber || (await nextDocumentNumber(ctx.orgId, cfg.kind, cfg.numberPrefix))
-      const currency = String(src.currency ?? '').trim() || baseCurrency
+      const number =
+        wantNumber || (await nextDocumentNumber(ctx.orgId, cfg.kind, cfg.numberPrefix));
+      const currency = String(src.currency ?? "").trim() || baseCurrency;
       // Lines are written by the same edit core the drawer and the API use,
       // so a tax-profiled line carries its calculation evidence. The
       // provider-dependent totals resolve here, before the transaction opens:
@@ -583,27 +781,29 @@ async function writeTransactions(
         amount: l.amount,
         description: l.description,
         taxCodeId: l.taxCodeId,
-        ...(l.instructions ? {quantity:l.instructions.quantity ?? "1",unit:l.instructions.unit} : {}),
-      }))
+        ...(l.instructions
+          ? { quantity: l.instructions.quantity ?? "1", unit: l.instructions.unit }
+          : {}),
+      }));
       const precomputedTotals = await precomputeDocumentTotalsForCreate(ctx.orgId, cfg.kind, {
         lines: lineInputs,
         currency,
         documentDate,
         partyId,
         subsidiaryId,
-      })
+      });
       const documentId = await db.transaction(async (tx) => {
         if (subsidiaryMapped && subsidiaryId !== rootSubsidiaryId) {
-          await acquireOrgFeatureGateLock(tx, ctx.orgId)
-          if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, 'multiSubsidiary'))) {
-            throw new Error('subsidiary field is not available while multi-subsidiary is disabled')
+          await acquireOrgFeatureGateLock(tx, ctx.orgId);
+          if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, "multiSubsidiary"))) {
+            throw new Error("subsidiary field is not available while multi-subsidiary is disabled");
           }
         }
         // Row-scoped savepoint. Under the import route's outer org transaction
         // a nested db.transaction PARTICIPATES instead of opening (and rolling
         // back) its own, so a mid-row failure must undo this row's partial
         // writes explicitly or they would ride the outer commit as an orphan.
-        await tx.execute(sql`savepoint document_import_row`)
+        await tx.execute(sql`savepoint document_import_row`);
         try {
           const [doc] = await tx
             .insert(schema.documents)
@@ -621,93 +821,142 @@ async function writeTransactions(
               currency,
               referenceNumber: cfg.hasReference && src.reference ? String(src.reference) : null,
               memo: src.memo ? String(src.memo) : null,
-              ...(journalHeader ? {journalMode:journalHeader.journalMode ?? 'monetary',journalReverseOn:journalHeader.journalReverseOn ?? null,fxRate:journalHeader.fxRate ?? '1',journalFxRateExplicit:journalHeader.fxRate!==undefined} : {}),
-              status: 'draft',
+              ...(journalHeader
+                ? {
+                    journalMode: journalHeader.journalMode ?? "monetary",
+                    journalReverseOn: journalHeader.journalReverseOn ?? null,
+                    fxRate: journalHeader.fxRate ?? "1",
+                    journalFxRateExplicit: journalHeader.fxRate !== undefined,
+                  }
+                : {}),
+              status: "draft",
               createdBy: ctx.actorId,
             })
-            .returning({ id: schema.documents.id })
-          if (!doc) throw new Error('document insert did not return an id')
+            .returning({ id: schema.documents.id });
+          if (!doc) throw new Error("document insert did not return an id");
 
           // The edit core reads the draft's own revision token inside this
           // transaction (the draft is uncommitted), then writes the lines with
           // their tax calculation, components, and document totals.
-          const current = await loadDocumentEditCurrent(doc.id, ctx.orgId, tx)
-          if (!current) throw new Error(`document ${doc.id} disappeared during import`)
+          const current = await loadDocumentEditCurrent(doc.id, ctx.orgId, tx);
+          if (!current) throw new Error(`document ${doc.id} disappeared during import`);
           await applyDocumentEdit(
             doc.id,
             current,
             { lines: lineInputs, expectedUpdatedAt: current.updatedAt },
             // Imports have never fired on_update flows; the edit core keeps that.
-            { orgId: ctx.orgId, userId: ctx.actorId, source: 'api', runFlows: false, precomputedTotals },
+            {
+              orgId: ctx.orgId,
+              userId: ctx.actorId,
+              source: "api",
+              runFlows: false,
+              precomputedTotals,
+            },
             { tx },
-          )
+          );
           // A staged entry-rule reference rides on its line; the edit core
           // carries no distribution fields, and the adapter never explodes.
           for (let idx = 0; idx < built.length; idx++) {
-            const ruleId = built[idx]!.distributionRuleId
-            if (!ruleId) continue
+            const ruleId = built[idx]!.distributionRuleId;
+            if (!ruleId) continue;
             await tx.execute(sql`
               update document_lines set distribution_rule_id = ${ruleId}
-               where org_id = ${ctx.orgId} and document_id = ${doc.id} and line_number = ${idx + 1}`)
+               where org_id = ${ctx.orgId} and document_id = ${doc.id} and line_number = ${idx + 1}`);
           }
-          if(journalHeader){
-            const before=await captureTransactionAuditSnapshot(tx,doc.id,ctx.orgId)
-            for(const [index,line] of built.entries()){
-              const instruction=line.instructions!
-              const changed=await tx.execute(sql`update document_lines set journal_currency=${instruction.currency ?? null},journal_fx_rate=${instruction.fxRate ?? null},journal_eliminate=${instruction.eliminate ?? false}
-                where org_id=${ctx.orgId} and document_id=${doc.id} and line_number=${index+1} returning id`, 'objects')
-              if(changed.length!==1)throw new Error('Journal import instruction did not match its saved line.')
+          if (journalHeader) {
+            const before = await captureTransactionAuditSnapshot(tx, doc.id, ctx.orgId);
+            for (const [index, line] of built.entries()) {
+              const instruction = line.instructions!;
+              const changed = await tx.execute(
+                sql`update document_lines set journal_currency=${instruction.currency ?? null},journal_fx_rate=${instruction.fxRate ?? null},journal_eliminate=${instruction.eliminate ?? false}
+                where org_id=${ctx.orgId} and document_id=${doc.id} and line_number=${index + 1} returning id`,
+                "objects",
+              );
+              if (changed.length !== 1)
+                throw new Error("Journal import instruction did not match its saved line.");
             }
-            const { validateJournalInstructions } = await import("@openbooks/engine/ledger/journal-instructions")
-            const totals = await validateJournalInstructions(tx,ctx.orgId,doc.id)
-            const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
-              where org_id=${ctx.orgId} and id=${doc.id} and status='draft' returning id`, 'objects')
-            if(measured.length!==1)throw new Error("The imported journal's header-currency total could not be saved.")
-            const after=await captureTransactionAuditSnapshot(tx,doc.id,ctx.orgId)
-            if(!before || !after)throw new Error('The imported journal disappeared before its instructions were audited.')
-            await recordTransactionAudit(tx,{orgId:ctx.orgId,documentId:doc.id,action:'update',actorId:ctx.actorId,source:'import',before,after})
+            const { validateJournalInstructions } =
+              await import("@openbooks/engine/ledger/journal-instructions");
+            const totals = await validateJournalInstructions(tx, ctx.orgId, doc.id);
+            const measured = await tx.execute(
+              sql`update documents set subtotal=${totals.debits},total=${totals.debits}
+              where org_id=${ctx.orgId} and id=${doc.id} and status='draft' returning id`,
+              "objects",
+            );
+            if (measured.length !== 1)
+              throw new Error("The imported journal's header-currency total could not be saved.");
+            const after = await captureTransactionAuditSnapshot(tx, doc.id, ctx.orgId);
+            if (!before || !after)
+              throw new Error(
+                "The imported journal disappeared before its instructions were audited.",
+              );
+            await recordTransactionAudit(tx, {
+              orgId: ctx.orgId,
+              documentId: doc.id,
+              action: "update",
+              actorId: ctx.actorId,
+              source: "import",
+              before,
+              after,
+            });
           }
-          await tx.execute(sql`release savepoint document_import_row`)
-          return doc.id
+          await tx.execute(sql`release savepoint document_import_row`);
+          return doc.id;
         } catch (e) {
-          await tx.execute(sql`rollback to savepoint document_import_row`)
-          await tx.execute(sql`release savepoint document_import_row`)
-          throw e
+          await tx.execute(sql`rollback to savepoint document_import_row`);
+          await tx.execute(sql`release savepoint document_import_row`);
+          throw e;
         }
-      })
+      });
 
       // The draft now owns its number — including when posting fails below and
       // the draft persists for review — so a later row claiming it fails here
       // exactly as the storage check would refuse it. An insert that throws
       // never reaches this line and reserves nothing.
-      if (numberSlot) claimedNumbers.add(numberSlot)
+      if (numberSlot) claimedNumbers.add(numberSlot);
 
       if (ctx.post && deps) {
         try {
-          if(cfg.kind==='journal'){
-            const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
-            const submitted=await submitAndReleaseIfUngated('journal',documentId,ctx.actorId)
-            if(!submitted.autoApproved)throw new Error(submitted.gated ? 'The journal requires its native Flow approval before posting.' : submitted.flowError ?? 'This entity requires an approved journal Flow.')
+          if (cfg.kind === "journal") {
+            const { submitAndReleaseIfUngated } = await import("@openbooks/engine/flows/submit");
+            const submitted = await submitAndReleaseIfUngated("journal", documentId, ctx.actorId);
+            if (!submitted.autoApproved)
+              throw new Error(
+                submitted.gated
+                  ? "The journal requires its native Flow approval before posting."
+                  : (submitted.flowError ?? "This entity requires an approved journal Flow."),
+              );
           }
-          await postDocument(documentId, deps,{audit:{actorId:ctx.actorId,source:'import'}})
+          await postDocument(documentId, deps, {
+            audit: { actorId: ctx.actorId, source: "import" },
+          });
         } catch (error) {
           // Legacy synchronous callers preserve a draft for review. Durable
           // callers roll the complete batch back, including this draft.
-          if (ctx.recordKeys) outcome.failed++
-          else outcome.created++
-          outcome.errors.push({ row: rowNo, message: ctx.recordKeys
-            ? `Posting was refused and this batch was rolled back: ${importRowError(error)}`
-            : `created draft ${number}, but posting failed; review the draft and retry` })
-          continue
+          if (ctx.recordKeys) outcome.failed++;
+          else outcome.created++;
+          outcome.errors.push({
+            row: rowNo,
+            message: ctx.recordKeys
+              ? `Posting was refused and this batch was rolled back: ${importRowError(error)}`
+              : `created draft ${number}, but posting failed; review the draft and retry`,
+          });
+          continue;
         }
       }
-      outcome.created++
+      outcome.created++;
     } catch (error) {
-      outcome.failed++
-      outcome.errors.push({ row: rowNo, message: ctx.recordKeys || error instanceof JournalInstructionError ? importRowError(error) : 'could not save this row; check its values and try again' })
+      outcome.failed++;
+      outcome.errors.push({
+        row: rowNo,
+        message:
+          ctx.recordKeys || error instanceof JournalInstructionError
+            ? importRowError(error)
+            : "could not save this row; check its values and try again",
+      });
     }
   }
-  return outcome
+  return outcome;
 }
 
 function exactLineAmount(value: unknown): string | null {
@@ -720,25 +969,25 @@ function exactLineAmount(value: unknown): string | null {
   // require literal decimal text (an XLSX amount cell formatted as text).
   // JSON and CSV amounts always arrive as strings (parseImportJson keeps
   // number-token source text), so no text path is affected.
-  if (typeof value === 'number') return null
-  if (typeof value !== 'string' || value.trim() === '') return null
-  const exact = canonicalDecimal(value, 4)
-  if (exact === null) return null
+  if (typeof value === "number") return null;
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) return null;
   try {
-    return normalizeMoney(exact)
+    return normalizeMoney(exact);
   } catch {
-    return null
+    return null;
   }
 }
 
 function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; error: string | null } {
-  const raw = src.lines
-  if (raw !== undefined && raw !== null && raw !== '') {
-    if (formulaDerivedField(src, 'lines')) {
+  const raw = src.lines;
+  if (raw !== undefined && raw !== null && raw !== "") {
+    if (formulaDerivedField(src, "lines")) {
       return {
         lines: [],
-        error: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
-      }
+        error: "lines cannot come from a spreadsheet formula; provide literal JSON text",
+      };
     }
     try {
       // parseImportJson, not JSON.parse: an unquoted number token must reach
@@ -746,30 +995,38 @@ function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; erro
       // e.g. 999999999999998.99 into the integer-valued double
       // 999999999999999 and the exact-amount boundary could no longer tell a
       // rounded token from literal input.
-      const arr = typeof raw === 'string' ? parseImportJson(raw) : raw
-      if (Array.isArray(arr)) return { lines: arr as TxnLineInput[], error: null }
+      const arr = typeof raw === "string" ? parseImportJson(raw) : raw;
+      if (Array.isArray(arr)) return { lines: arr as TxnLineInput[], error: null };
     } catch {
       /* fall through to single-line */
     }
   }
-  if (src.account && ((src.amount !== undefined && src.amount !== '') || (src.journalMode==='statistical' && src.quantity!==undefined))) {
-    if (formulaDerivedField(src, 'amount')) {
+  if (
+    src.account &&
+    ((src.amount !== undefined && src.amount !== "") ||
+      (src.journalMode === "statistical" && src.quantity !== undefined))
+  ) {
+    if (formulaDerivedField(src, "amount")) {
       return {
         lines: [],
-        error: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
-      }
+        error:
+          "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
+      };
     }
     return {
-      lines: [{
-        account: src.account,
-        amount: src.amount ?? (src.journalMode==='statistical' ? '0' : undefined),
-        quantity:src.quantity,unit:src.unit,
-        description: src.description,
-        taxCode: src.taxCode,
-        distributionKey: src.distributionKey,
-      }],
+      lines: [
+        {
+          account: src.account,
+          amount: src.amount ?? (src.journalMode === "statistical" ? "0" : undefined),
+          quantity: src.quantity,
+          unit: src.unit,
+          description: src.description,
+          taxCode: src.taxCode,
+          distributionKey: src.distributionKey,
+        },
+      ],
       error: null,
-    }
+    };
   }
-  return { lines: [], error: null }
+  return { lines: [], error: null };
 }

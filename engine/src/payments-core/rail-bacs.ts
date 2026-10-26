@@ -58,10 +58,15 @@ export interface BacsSettings {
 }
 
 const BACS_REQUIRED: (keyof BacsSettings)[] = [
-  "serviceUserNumber", "originatingSortCode", "originatingAccount", "serviceUserName",
+  "serviceUserNumber",
+  "originatingSortCode",
+  "originatingAccount",
+  "serviceUserName",
 ];
 
-export function validateBacsSettings(raw: Partial<BacsSettings> | null): { ok: true; settings: BacsSettings } | { ok: false; missing: string[] } {
+export function validateBacsSettings(
+  raw: Partial<BacsSettings> | null,
+): { ok: true; settings: BacsSettings } | { ok: false; missing: string[] } {
   const s = raw ?? {};
   const missing: string[] = BACS_REQUIRED.filter((k) => {
     const v = s[k];
@@ -73,7 +78,10 @@ export function validateBacsSettings(raw: Partial<BacsSettings> | null): { ok: t
   if (!missing.includes("originatingSortCode") && !isValidSortCode(s.originatingSortCode!)) {
     missing.push("originatingSortCode (6-digit sort code of the account the Bacs debit will draw)");
   }
-  if (!missing.includes("originatingAccount") && normalizeGbAccountNumber(s.originatingAccount!) === null) {
+  if (
+    !missing.includes("originatingAccount") &&
+    normalizeGbAccountNumber(s.originatingAccount!) === null
+  ) {
     missing.push("originatingAccount (8-digit account the Bacs debit will draw)");
   }
   if (!missing.includes("serviceUserName") && s.serviceUserName!.length > 18) {
@@ -203,8 +211,14 @@ export function buildBacsFile(run: BacsRun): string {
   }
   const s = checked.settings;
   if (run.payments.length === 0) throw new PaymentError("run has no payments to export");
-  if (!/^[0-9A-Za-z ]{6}$/.test(run.volSerial) || run.volSerial.trim() === "" || /^0+$/.test(run.volSerial)) {
-    throw new PaymentError("Bacs VOL1 serial must be 6 alphanumeric characters, right-justified, not blank or all zeros");
+  if (
+    !/^[0-9A-Za-z ]{6}$/.test(run.volSerial) ||
+    run.volSerial.trim() === "" ||
+    /^0+$/.test(run.volSerial)
+  ) {
+    throw new PaymentError(
+      "Bacs VOL1 serial must be 6 alphanumeric characters, right-justified, not blank or all zeros",
+    );
   }
   if (!/^\d{3}$/.test(run.fileNumber) || Number(run.fileNumber) === 0) {
     throw new PaymentError("Bacs UHL1 file number must be 3 digits and greater than zero");
@@ -229,7 +243,9 @@ export function buildBacsFile(run: BacsRun): string {
     const digits = String(value);
     if (value <= 0n) throw new PaymentError("payment amounts must be positive");
     if (digits.length > len) {
-      throw new PaymentError(`Bacs ${what} ${digits} pence does not fit in ${len} digits — split the pay run`);
+      throw new PaymentError(
+        `Bacs ${what} ${digits} pence does not fit in ${len} digits — split the pay run`,
+      );
     }
     return digits.padStart(len, "0");
   };
@@ -266,7 +282,8 @@ export function buildBacsFile(run: BacsRun): string {
     // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap.
     const start = utcDateFromParts(year, 0, 1).getTime();
     const day =
-      Math.floor((utcDateFromParts(year, month - 1, dayOfMonth).getTime() - start) / 86_400_000) + 1;
+      Math.floor((utcDateFromParts(year, month - 1, dayOfMonth).getTime() - start) / 86_400_000) +
+      1;
     return ` ${String(year % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
   };
 
@@ -299,7 +316,8 @@ export function buildBacsFile(run: BacsRun): string {
     " ".repeat(4) + // 48–51
     " ".repeat(28) + // 52–79
     "1"; // 80
-  if (vol1.length !== 80) throw new PaymentError("internal error: Bacs VOL1 record is not 80 characters");
+  if (vol1.length !== 80)
+    throw new PaymentError("internal error: Bacs VOL1 record is not 80 characters");
 
   // -- HDR1: header label 1 (80) ------------------------------------------
   // (2): HDR1 | 1 | file identifier 5–21 (5 "A", 6–11 SUN — the SUN position
@@ -326,14 +344,15 @@ export function buildBacsFile(run: BacsRun): string {
     "000000" + // 55–60 block count, zero-filled
     " ".repeat(13) + // 61–73 system code
     " ".repeat(7); // 74–80
-  if (hdr1.length !== 80) throw new PaymentError("internal error: Bacs HDR1 record is not 80 characters");
+  if (hdr1.length !== 80)
+    throw new PaymentError("internal error: Bacs HDR1 record is not 80 characters");
 
   // -- HDR2: header label 2 (80) ------------------------------------------
   // (2): HDR2 | 2 | "F" | "02000" block length | "00100" record length
   // (single processing day) | 35 spaces | "00" | 28 spaces.
-  const hdr2 =
-    "HDR2" + "F" + "02000" + "00100" + " ".repeat(35) + "00" + " ".repeat(28);
-  if (hdr2.length !== 80) throw new PaymentError("internal error: Bacs HDR2 record is not 80 characters");
+  const hdr2 = "HDR2" + "F" + "02000" + "00100" + " ".repeat(35) + "00" + " ".repeat(28);
+  if (hdr2.length !== 80)
+    throw new PaymentError("internal error: Bacs HDR2 record is not 80 characters");
 
   // -- UHL1: user header label 1 (80) -------------------------------------
   // (2): UHL1 | 1 | processing bYYDDD 5–10 | "999999" + 4 spaces 11–20 |
@@ -355,7 +374,8 @@ export function buildBacsFile(run: BacsRun): string {
     " ".repeat(7) + // 41–47
     " ".repeat(7) + // 48–54 audit print identifier (no sample printing)
     " ".repeat(26); // 55–80
-  if (uhl1.length !== 80) throw new PaymentError("internal error: Bacs UHL1 record is not 80 characters");
+  if (uhl1.length !== 80)
+    throw new PaymentError("internal error: Bacs UHL1 record is not 80 characters");
 
   // -- Data: Direct Credits, code 99 (100 each) -----------------------------
   // Triple-sourced offsets ((1) §5.2/§5.7, (2), (3)): dest sort 1–6, dest
@@ -379,9 +399,15 @@ export function buildBacsFile(run: BacsRun): string {
       "    " + // 32–35 free format (see note above)
       pence(p.amountCents, 11, `credit to ${p.accountName}`) + // 36–46
       userName + // 47–64
-      text(p.reference, 18, `reference for ${p.accountName}`, "Edit the reference to Latin letters without that character, then generate the file again.") + // 65–82
+      text(
+        p.reference,
+        18,
+        `reference for ${p.accountName}`,
+        "Edit the reference to Latin letters without that character, then generate the file again.",
+      ) + // 65–82
       text(p.accountName, 18, "destination account name", PAYEE_NAME_REMEDY); // 83–100
-    if (record.length !== 100) throw new PaymentError("internal error: Bacs detail record is not 100 characters");
+    if (record.length !== 100)
+      throw new PaymentError("internal error: Bacs detail record is not 100 characters");
     return record;
   });
 
@@ -403,9 +429,11 @@ export function buildBacsFile(run: BacsRun): string {
     "    " + // 32–35
     pence(total, 11, "contra total") + // 36–46
     userName + // 47–64 narrative (user's choice; the service user name)
-    "CONTRA" + " ".repeat(12) + // 65–82 contra identification
+    "CONTRA" +
+    " ".repeat(12) + // 65–82 contra identification
     userName; // 83–100 abbreviated account name (the service user name)
-  if (contra.length !== 100) throw new PaymentError("internal error: Bacs contra record is not 100 characters");
+  if (contra.length !== 100)
+    throw new PaymentError("internal error: Bacs contra record is not 100 characters");
 
   // -- EOF1/EOF2: end-of-file labels (80 each) ------------------------------
   // (2): EOF1 repeats HDR1 positions 5–80; EOF2 repeats HDR2 positions 5–80.
@@ -429,8 +457,12 @@ export function buildBacsFile(run: BacsRun): string {
     String(run.payments.length).padStart(7, "0") + // 38–44: credit count
     " ".repeat(10) + // 45–54
     " ".repeat(26); // 55–80
-  if (utl1.length !== 80) throw new PaymentError("internal error: Bacs UTL1 record is not 80 characters");
-  if (!/^\d{7}$/.test(String(run.payments.length).padStart(7, "0")) || run.payments.length > 9_999_999) {
+  if (utl1.length !== 80)
+    throw new PaymentError("internal error: Bacs UTL1 record is not 80 characters");
+  if (
+    !/^\d{7}$/.test(String(run.payments.length).padStart(7, "0")) ||
+    run.payments.length > 9_999_999
+  ) {
     throw new PaymentError("Bacs file holds at most 9,999,999 detail records");
   }
 

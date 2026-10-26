@@ -27,5 +27,7 @@ if (violations.length) {
   process.stderr.write(`${violations.join("\n")}\n`);
   process.exitCode = 1;
 } else {
-  process.stdout.write("No shape-only civil-date validation in API body schemas or HRM engine services.\n");
+  process.stdout.write(
+    "No shape-only civil-date validation in API body schemas or HRM engine services.\n",
+  );
 }

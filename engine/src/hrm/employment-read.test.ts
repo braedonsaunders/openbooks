@@ -27,7 +27,7 @@ function sqlText(query: unknown): string {
   let out = "";
   for (const c of chunks) {
     if (c && typeof c === "object" && Array.isArray((c as { value?: unknown }).value)) {
-      out += ((c as { value: string[] }).value).join("");
+      out += (c as { value: string[] }).value.join("");
     }
   }
   return out;
@@ -122,7 +122,8 @@ function emptyState(): FakeState {
 function fakeExec(state: FakeState): SqlExecutor {
   return {
     execute: (async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const text = sqlText(query);
       const params = sqlParams(query);
       state.seen.push(text);
@@ -132,7 +133,9 @@ function fakeExec(state: FakeState): SqlExecutor {
           return inMode({ rows: person ? [{ id: str(params, 1), partyId: person.partyId }] : [] });
         }
         const user = state.users.get(str(params, 0));
-        return inMode({ rows: user ? [{ isSuperAdmin: user.isSuperAdmin, isActive: user.isActive }] : [] });
+        return inMode({
+          rows: user ? [{ isSuperAdmin: user.isSuperAdmin, isActive: user.isActive }] : [],
+        });
       }
       if (/role_assignments/i.test(text)) {
         if (/subsidiary_restriction/i.test(text)) {
@@ -143,7 +146,9 @@ function fakeExec(state: FakeState): SqlExecutor {
       }
       if (/user_permission_overrides/i.test(text)) {
         const denyList = state.denies.get(str(params, 0)) ?? [];
-        return inMode({ rows: denyList.map((permission) => ({ permission, effect: "deny" as const })) });
+        return inMode({
+          rows: denyList.map((permission) => ({ permission, effect: "deny" as const })),
+        });
       }
       if (/from subsidiaries/i.test(text)) return inMode({ rows: [] });
       // Single-statement snapshot: one row with json aggregates, shaped the
@@ -151,35 +156,38 @@ function fakeExec(state: FakeState): SqlExecutor {
       if (/worker_employment_versions/i.test(text)) {
         const record = state.employments.get(`${str(params, 0)}:${str(params, 1)}`);
         const versions = state.employmentVersions.get(`${str(params, 0)}:${str(params, 1)}`) ?? [];
-        const assignments = state.assignmentVersions.get(`${str(params, 0)}:${str(params, 1)}`) ?? [];
+        const assignments =
+          state.assignmentVersions.get(`${str(params, 0)}:${str(params, 1)}`) ?? [];
         return inMode({
-          rows: [{
-            revision: record ? record.revision : null,
-            employment_versions: versions.map((v) => ({
-              id: v.id,
-              version_no: v.versionNo,
-              status: v.status,
-              effective_from: v.effectiveFrom,
-              effective_to: v.effectiveTo,
-              recorded_at: v.recordedAt,
-              recorded_until: v.recordedUntil,
-            })),
-            assignment_versions: assignments.map((v) => ({
-              id: v.id,
-              assignment_id: v.assignmentId,
-              assignment_key: v.assignmentKey,
-              version_no: v.versionNo,
-              job_title: v.jobTitle,
-              department_id: v.departmentId,
-              location_id: v.locationId,
-              fte: v.fte,
-              is_primary: v.isPrimary,
-              effective_from: v.effectiveFrom,
-              effective_to: v.effectiveTo,
-              recorded_at: v.recordedAt,
-              recorded_until: v.recordedUntil,
-            })),
-          }],
+          rows: [
+            {
+              revision: record ? record.revision : null,
+              employment_versions: versions.map((v) => ({
+                id: v.id,
+                version_no: v.versionNo,
+                status: v.status,
+                effective_from: v.effectiveFrom,
+                effective_to: v.effectiveTo,
+                recorded_at: v.recordedAt,
+                recorded_until: v.recordedUntil,
+              })),
+              assignment_versions: assignments.map((v) => ({
+                id: v.id,
+                assignment_id: v.assignmentId,
+                assignment_key: v.assignmentKey,
+                version_no: v.versionNo,
+                job_title: v.jobTitle,
+                department_id: v.departmentId,
+                location_id: v.locationId,
+                fte: v.fte,
+                is_primary: v.isPrimary,
+                effective_from: v.effectiveFrom,
+                effective_to: v.effectiveTo,
+                recorded_at: v.recordedAt,
+                recorded_until: v.recordedUntil,
+              })),
+            },
+          ],
         });
       }
       if (/for share/i.test(text)) {
@@ -190,13 +198,15 @@ function fakeExec(state: FakeState): SqlExecutor {
         const record = state.employments.get(`${str(params, 0)}:${str(params, 1)}`);
         return inMode({
           rows: record
-            ? [{
-                id: record.id,
-                orgId: record.orgId,
-                workerPartyId: record.workerPartyId,
-                employerSubsidiaryId: record.employerSubsidiaryId,
-                revision: record.revision,
-              }]
+            ? [
+                {
+                  id: record.id,
+                  orgId: record.orgId,
+                  workerPartyId: record.workerPartyId,
+                  employerSubsidiaryId: record.employerSubsidiaryId,
+                  revision: record.revision,
+                },
+              ]
             : [],
         });
       }
@@ -227,15 +237,28 @@ function seedUser(state: FakeState, grants: string[]): string {
   return id;
 }
 
-function seedEmploymentVersions(state: FakeState, employmentId: string, versions: FakeEmploymentVersion[]): void {
+function seedEmploymentVersions(
+  state: FakeState,
+  employmentId: string,
+  versions: FakeEmploymentVersion[],
+): void {
   state.employmentVersions.set(`${ORG}:${employmentId}`, versions);
 }
 
-function seedAssignmentVersions(state: FakeState, employmentId: string, versions: FakeAssignmentVersion[]): void {
+function seedAssignmentVersions(
+  state: FakeState,
+  employmentId: string,
+  versions: FakeAssignmentVersion[],
+): void {
   state.assignmentVersions.set(`${ORG}:${employmentId}`, versions);
 }
 
-function queryFor(actor: string, employmentId: string, effectiveDate = "2026-06-15", knownAt = "2026-07-01T00:00:00.000001Z"): EmploymentAsOfQuery {
+function queryFor(
+  actor: string,
+  employmentId: string,
+  effectiveDate = "2026-06-15",
+  knownAt = "2026-07-01T00:00:00.000001Z",
+): EmploymentAsOfQuery {
   return { orgId: ORG, actorId: actor, employmentId, effectiveDate, knownAt };
 }
 
@@ -280,8 +303,18 @@ test("read resolves through the real gate with exact decimals and version ids", 
   seedEmploymentVersions(state, record.id, [employmentV]);
   const slotId = randomUUID();
   const otherId = randomUUID();
-  const primary = assignmentVersion({ assignmentId: slotId, assignmentKey: "register", fte: "0.7500", isPrimary: true });
-  const secondary = assignmentVersion({ assignmentId: otherId, assignmentKey: "floor", jobTitle: "Floor", fte: "0.2500" });
+  const primary = assignmentVersion({
+    assignmentId: slotId,
+    assignmentKey: "register",
+    fte: "0.7500",
+    isPrimary: true,
+  });
+  const secondary = assignmentVersion({
+    assignmentId: otherId,
+    assignmentKey: "floor",
+    jobTitle: "Floor",
+    fte: "0.2500",
+  });
   seedAssignmentVersions(state, record.id, [primary, secondary]);
 
   const dto = await loadEmploymentAsOf(exec, queryFor(actor, record.id));
@@ -294,14 +327,20 @@ test("read resolves through the real gate with exact decimals and version ids", 
   assert.equal(dto.version.status, "active");
   assert.equal(dto.version.recordedAt, "2026-01-01T00:00:00.123456Z");
   assert.equal(dto.assignments.length, 2);
-  assert.deepEqual(dto.assignments.map((a) => a.assignmentKey), ["floor", "register"]);
+  assert.deepEqual(
+    dto.assignments.map((a) => a.assignmentKey),
+    ["floor", "register"],
+  );
   assert.equal(dto.assignments[1]?.versionId, primary.id);
   assert.equal(dto.assignments[1]?.fte, "0.7500");
   assert.equal(dto.assignments[1]?.isPrimary, true);
   assert.equal(dto.assignments[1]?.recordedAt, "2026-01-01T00:00:00.654321Z");
   // One snapshot statement serves every slot: no per-slot N+1.
   assert.equal(state.seen.filter((text) => /employment_assignment_versions/i.test(text)).length, 1);
-  assert.ok(state.seen.some((text) => /for share/i.test(text)), "aggregate stable row is locked");
+  assert.ok(
+    state.seen.some((text) => /for share/i.test(text)),
+    "aggregate stable row is locked",
+  );
 });
 
 test("no assignment versions is a legitimate empty list, not a refusal", async () => {
@@ -327,7 +366,12 @@ test("known-view semantics: a late-recorded assignment is absent before, present
   const record = seedEmployment(state);
   const actor = seedUser(state, ["hrm.employment.read"]);
   seedEmploymentVersions(state, record.id, [employmentVersion()]);
-  const late = assignmentVersion({ effectiveFrom: "2026-01-01", recordedAt: "2026-02-01T00:00:00.000001Z", recordedUntil: null, isPrimary: true });
+  const late = assignmentVersion({
+    effectiveFrom: "2026-01-01",
+    recordedAt: "2026-02-01T00:00:00.000001Z",
+    recordedUntil: null,
+    isPrimary: true,
+  });
   seedAssignmentVersions(state, record.id, [late]);
 
   const before = await loadEmploymentAsOf(
@@ -357,14 +401,24 @@ test("regression: a superseded January assignment does not fail February reads",
   const slotId = randomUUID();
   seedAssignmentVersions(state, record.id, [
     assignmentVersion({
-      assignmentId: slotId, assignmentKey: "register", versionNo: 1, isPrimary: true,
-      effectiveFrom: "2026-01-01", effectiveTo: "2026-03-01",
-      recordedAt: "2026-01-01T00:00:00.000001Z", recordedUntil: "2026-03-01T00:00:00.000001Z",
+      assignmentId: slotId,
+      assignmentKey: "register",
+      versionNo: 1,
+      isPrimary: true,
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-03-01",
+      recordedAt: "2026-01-01T00:00:00.000001Z",
+      recordedUntil: "2026-03-01T00:00:00.000001Z",
     }),
     assignmentVersion({
-      assignmentId: slotId, assignmentKey: "register", versionNo: 2, isPrimary: true,
-      effectiveFrom: "2026-03-01", effectiveTo: null,
-      recordedAt: "2026-03-01T00:00:00.000001Z", recordedUntil: null,
+      assignmentId: slotId,
+      assignmentKey: "register",
+      versionNo: 2,
+      isPrimary: true,
+      effectiveFrom: "2026-03-01",
+      effectiveTo: null,
+      recordedAt: "2026-03-01T00:00:00.000001Z",
+      recordedUntil: null,
     }),
   ]);
 
@@ -383,8 +437,20 @@ test("ambiguous assignment sets are refused: two live revisions, two primaries",
     () => {
       const slotId = randomUUID();
       return [
-        assignmentVersion({ assignmentId: slotId, assignmentKey: "a", versionNo: 1, recordedAt: "2026-01-01T00:00:00.000001Z", recordedUntil: null }),
-        assignmentVersion({ assignmentId: slotId, assignmentKey: "a", versionNo: 2, recordedAt: "2026-01-02T00:00:00.000001Z", recordedUntil: null }),
+        assignmentVersion({
+          assignmentId: slotId,
+          assignmentKey: "a",
+          versionNo: 1,
+          recordedAt: "2026-01-01T00:00:00.000001Z",
+          recordedUntil: null,
+        }),
+        assignmentVersion({
+          assignmentId: slotId,
+          assignmentKey: "a",
+          versionNo: 2,
+          recordedAt: "2026-01-02T00:00:00.000001Z",
+          recordedUntil: null,
+        }),
       ];
     },
     () => [
@@ -399,7 +465,11 @@ test("ambiguous assignment sets are refused: two live revisions, two primaries",
     const actor = seedUser(state, ["hrm.employment.read"]);
     seedEmploymentVersions(state, record.id, [employmentVersion()]);
     seedAssignmentVersions(state, record.id, build());
-    await assert.rejects(loadEmploymentAsOf(exec, queryFor(actor, record.id)), AmbiguousRevisionError, `set ${index} refuses`);
+    await assert.rejects(
+      loadEmploymentAsOf(exec, queryFor(actor, record.id)),
+      AmbiguousRevisionError,
+      `set ${index} refuses`,
+    );
   }
 });
 
@@ -425,7 +495,8 @@ test("authorization denial surfaces unchanged through the real gate", async () =
 
   await assert.rejects(
     loadEmploymentAsOf(exec, queryFor(actor, record.id)),
-    (error: unknown) => error instanceof HrmAuthorizationError && /hrm\.employment\.read/.test(error.message),
+    (error: unknown) =>
+      error instanceof HrmAuthorizationError && /hrm\.employment\.read/.test(error.message),
   );
 });
 
@@ -452,7 +523,10 @@ test("inputs are validated before the database is touched", async () => {
   };
   const base = queryFor(randomUUID(), randomUUID());
   await assert.rejects(loadEmploymentAsOf(boom, { ...base, orgId: "" }), EmploymentReadError);
-  await assert.rejects(loadEmploymentAsOf(boom, { ...base, effectiveDate: "June 15" }), InvalidCivilDateError);
+  await assert.rejects(
+    loadEmploymentAsOf(boom, { ...base, effectiveDate: "June 15" }),
+    InvalidCivilDateError,
+  );
   await assert.rejects(
     loadEmploymentAsOf(boom, { ...base, knownAt: "2026-07-01T00:00:00.000001Z\n" }),
     InvalidRecordedStampError,
@@ -479,7 +553,13 @@ test("a forked stable identity (one slot, two keys) is refused", async () => {
   const slotId = randomUUID();
   seedAssignmentVersions(state, record.id, [
     assignmentVersion({ assignmentId: slotId, assignmentKey: "a" }),
-    assignmentVersion({ assignmentId: slotId, assignmentKey: "b", versionNo: 2, recordedAt: "2026-02-01T00:00:00.000001Z", recordedUntil: null }),
+    assignmentVersion({
+      assignmentId: slotId,
+      assignmentKey: "b",
+      versionNo: 2,
+      recordedAt: "2026-02-01T00:00:00.000001Z",
+      recordedUntil: null,
+    }),
   ]);
 
   await assert.rejects(loadEmploymentAsOf(exec, queryFor(actor, record.id)), EmploymentReadError);
@@ -488,12 +568,10 @@ test("a forked stable identity (one slot, two keys) is refused", async () => {
 test("missing employment is a named refusal, not an empty DTO", () => {
   assert.throws(
     () =>
-      assembleEmploymentAsOf(
-        null,
-        [],
-        [],
-        { effectiveDate: "2026-06-15", knownAt: "2026-07-01T00:00:00.000001Z" },
-      ),
+      assembleEmploymentAsOf(null, [], [], {
+        effectiveDate: "2026-06-15",
+        knownAt: "2026-07-01T00:00:00.000001Z",
+      }),
     (error: unknown) => error instanceof EmploymentReadError && /not found/.test(error.message),
   );
 });
@@ -517,13 +595,20 @@ test("refusals are TemporalError-coded errors, never silent values", () => {
     ...overrides,
   });
   for (const fn of [
-    () => assembleEmploymentAsOf(stable, [], [], { effectiveDate: "2026-06-15", knownAt: "2026-07-01T00:00:00.000001Z" }),
+    () =>
+      assembleEmploymentAsOf(stable, [], [], {
+        effectiveDate: "2026-06-15",
+        knownAt: "2026-07-01T00:00:00.000001Z",
+      }),
     () =>
       assembleEmploymentAsOf(stable, [row({ effectiveFrom: "2026-08-01" })], [], {
         effectiveDate: "2026-06-15",
         knownAt: "2026-07-01T00:00:00.000001Z",
       }),
   ]) {
-    assert.throws(fn, (error: unknown) => error instanceof TemporalError && error.code === "NO_REVISION");
+    assert.throws(
+      fn,
+      (error: unknown) => error instanceof TemporalError && error.code === "NO_REVISION",
+    );
   }
 });

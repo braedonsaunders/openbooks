@@ -12,8 +12,7 @@ export const GET = defineRoute({
   permission: "hrm.certifications.read",
   feature: "hrmCertifications",
   handler: async ({ request: req, authz: gate }) => {
-    const includeInactive =
-      new URL(req.url).searchParams.get("includeInactive") === "1";
+    const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
     try {
       const types = await listQualificationTypes(db, {
         orgId: gate.user.orgId,

@@ -3,7 +3,11 @@ import test from "node:test";
 
 // jsdom first: the widget reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard", scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/dashboard",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 registerHooks({
@@ -15,9 +19,11 @@ registerHooks({
       // base to resolve 'react' from.
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(
-          "export default function Link(p){return globalThis.React.createElement('a',{href:typeof p.href==='string'?p.href:'#'},p.children)}",
-        ),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export default function Link(p){return globalThis.React.createElement('a',{href:typeof p.href==='string'?p.href:'#'},p.children)}",
+          ),
       };
     }
     return next(specifier, context);
@@ -65,7 +71,11 @@ async function mount() {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  const data = { asOfDate: null, baseCurrency: "USD", pendingApprovalList: APPROVALS } as unknown as DashboardMetrics;
+  const data = {
+    asOfDate: null,
+    baseCurrency: "USD",
+    pendingApprovalList: APPROVALS,
+  } as unknown as DashboardMetrics;
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">

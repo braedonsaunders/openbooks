@@ -42,16 +42,42 @@ test("employer levy adjustment evidence refuses malformed programme, group and s
   assert.equal(canonicalLevySourceKey("has space"), null);
   assert.equal(canonicalLevySourceKey(""), null);
   // WCB without its group, and EHT with one, are both unrecordable.
-  assert.equal(parseEmployerLevyAdjustmentEvidence(employerLevyAdjustmentEvidence({
-    programKey: "ca_wcb", workerCompGroupId: null, sourceKey: "source-card:1",
-    reason: "x", sourceReference: "y", requestId: REQUEST,
-  })), null);
-  assert.equal(parseEmployerLevyAdjustmentEvidence(employerLevyAdjustmentEvidence({
-    programKey: "ca_eht", workerCompGroupId: GROUP, sourceKey: "source-card:1",
-    reason: "x", sourceReference: "y", requestId: REQUEST,
-  })), null);
-  assert.equal(parseEmployerLevyAdjustmentEvidence('{"kind":"employer_levy_adjustment","programKey":"ca_eht","workerCompGroupId":null,"sourceKey":"has space","reason":"x","sourceReference":"y","requestId":"bad"}'), null);
-  assert.equal(isEmployerLevyAdjustmentEvidenceCandidate('{"kind" : "employer_levy_adjustment"'), true);
+  assert.equal(
+    parseEmployerLevyAdjustmentEvidence(
+      employerLevyAdjustmentEvidence({
+        programKey: "ca_wcb",
+        workerCompGroupId: null,
+        sourceKey: "source-card:1",
+        reason: "x",
+        sourceReference: "y",
+        requestId: REQUEST,
+      }),
+    ),
+    null,
+  );
+  assert.equal(
+    parseEmployerLevyAdjustmentEvidence(
+      employerLevyAdjustmentEvidence({
+        programKey: "ca_eht",
+        workerCompGroupId: GROUP,
+        sourceKey: "source-card:1",
+        reason: "x",
+        sourceReference: "y",
+        requestId: REQUEST,
+      }),
+    ),
+    null,
+  );
+  assert.equal(
+    parseEmployerLevyAdjustmentEvidence(
+      '{"kind":"employer_levy_adjustment","programKey":"ca_eht","workerCompGroupId":null,"sourceKey":"has space","reason":"x","sourceReference":"y","requestId":"bad"}',
+    ),
+    null,
+  );
+  assert.equal(
+    isEmployerLevyAdjustmentEvidenceCandidate('{"kind" : "employer_levy_adjustment"'),
+    true,
+  );
   assert.equal(isEmployerLevyAdjustmentEvidenceCandidate("ordinary note"), false);
 });
 

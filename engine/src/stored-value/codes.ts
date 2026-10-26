@@ -35,7 +35,9 @@ export function normalizeStoredValueCode(code: string): string {
  * digest from matching across organizations.
  */
 export function hashStoredValueCode(orgId: string, code: string): string {
-  return createHash("sha256").update(`${orgId}:${normalizeStoredValueCode(code)}`, "utf8").digest("hex");
+  return createHash("sha256")
+    .update(`${orgId}:${normalizeStoredValueCode(code)}`, "utf8")
+    .digest("hex");
 }
 
 export function codeLast4(code: string): string {

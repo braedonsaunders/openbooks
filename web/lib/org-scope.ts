@@ -1,8 +1,8 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { cache } from 'react'
-import { db } from '@openbooks/engine/platform/db'
-import { requestAuthzContext } from './authz-context'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { cache } from "react";
+import { db } from "@openbooks/engine/platform/db";
+import { requestAuthzContext } from "./authz-context";
 
 /**
  * Resolve the tenant id before querying `orgs`, which cannot be protected by
@@ -14,30 +14,33 @@ import { requestAuthzContext } from './authz-context'
  * initialized the tenant context. Trusted internal jobs pass their org id.
  */
 const requestOrgId = cache(async (): Promise<string> => {
-  const { currentUser } = await import('./auth')
-  const user = await currentUser()
-  if (!user) throw new Error('active organization is required')
-  return user.orgId
-})
+  const { currentUser } = await import("./auth");
+  const user = await currentUser();
+  if (!user) throw new Error("active organization is required");
+  return user.orgId;
+});
 
 async function requestOrgIdFromSession(): Promise<string | null> {
   try {
-    const r = await db.execute<{ org_id: string | null }>(sql`select nullif(current_setting('app.current_org', true), '') as org_id`, 'objects')
-    return r[0]?.org_id ?? null
+    const r = await db.execute<{ org_id: string | null }>(
+      sql`select nullif(current_setting('app.current_org', true), '') as org_id`,
+      "objects",
+    );
+    return r[0]?.org_id ?? null;
   } catch {
-    return null
+    return null;
   }
 }
 
 export async function resolveOrgId(orgId?: string | null): Promise<string> {
-  if (orgId) return orgId
-  const verified = requestAuthzContext()
-  if (verified) return verified.user.orgId
+  if (orgId) return orgId;
+  const verified = requestAuthzContext();
+  if (verified) return verified.user.orgId;
   try {
-    return await requestOrgId()
+    return await requestOrgId();
   } catch {
-    const sessionOrg = await requestOrgIdFromSession()
-    if (sessionOrg) return sessionOrg
-    throw new Error('active organization is required')
+    const sessionOrg = await requestOrgIdFromSession();
+    if (sessionOrg) return sessionOrg;
+    throw new Error("active organization is required");
   }
 }

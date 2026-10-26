@@ -8,19 +8,32 @@ import { resolvePostingPeriod, assertPayRunConsolidatedRateCoverage } from "./po
 
 function scripted(rows: unknown[][]) {
   const calls: { sql: string; params: unknown[] }[] = [];
-  const runner = { execute: async (query: SQL, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
-    assert.ok(calls.length < rows.length, "unexpected database query");
-    const next = rows[calls.length]!;
-    calls.push(new PgDialect().sqlToQuery(query));
-    return inMode({ rows: next });
-  } } as unknown as Pick<typeof db, "execute">;
-  return { runner, calls, done: () => assert.equal(calls.length, rows.length, "all expected database reads must occur") };
+  const runner = {
+    execute: async (query: SQL, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
+      assert.ok(calls.length < rows.length, "unexpected database query");
+      const next = rows[calls.length]!;
+      calls.push(new PgDialect().sqlToQuery(query));
+      return inMode({ rows: next });
+    },
+  } as unknown as Pick<typeof db, "execute">;
+  return {
+    runner,
+    calls,
+    done: () => assert.equal(calls.length, rows.length, "all expected database reads must occur"),
+  };
 }
-const document = (postingPeriodId: string | null): Doc => ({ orgId: "org-a", subsidiaryId: "child", postingPeriodId }) as Doc;
+const document = (postingPeriodId: string | null): Doc =>
+  ({ orgId: "org-a", subsidiaryId: "child", postingPeriodId }) as Doc;
 /** The explicit period belongs to the entity's effective posting calendar on the posting date. */
 const calendarMatches = [{ matches: true }];
-const args = { orgId: "org-a", docCurrency: "CAD", docSubsidiaryId: "child", postingDate: "2026-09-20" };
+const args = {
+  orgId: "org-a",
+  docCurrency: "CAD",
+  docSubsidiaryId: "child",
+  postingDate: "2026-09-20",
+};
 const root = [{ id: "root", base_currency: "USD" }];
 const chain = [
   { id: "child", parent_id: "middle", base_currency: "CAD" },
@@ -29,29 +42,65 @@ const chain = [
 ];
 const period = [{ id: "period-a", ends_on: "2026-09-30" }];
 
-const window = (is_adjustment: boolean, window_start: string, window_end: string) =>
-  [{ is_adjustment, period_name: is_adjustment ? "FY26 ADJ" : "2026-09", fiscal_year: 2026, window_start, window_end }];
+const window = (is_adjustment: boolean, window_start: string, window_end: string) => [
+  {
+    is_adjustment,
+    period_name: is_adjustment ? "FY26 ADJ" : "2026-09",
+    fiscal_year: 2026,
+    window_start,
+    window_end,
+  },
+];
 
 test("explicit posting period is scoped to the organization and the posting date's window; date fallback excludes adjustment periods", async () => {
   const explicit = scripted([window(false, "2026-09-01", "2026-09-30"), calendarMatches]);
-  assert.deepEqual(await resolvePostingPeriod(explicit.runner, document("override"), args.postingDate), { id: "override" });
+  assert.deepEqual(
+    await resolvePostingPeriod(explicit.runner, document("override"), args.postingDate),
+    { id: "override" },
+  );
   assert.deepEqual(explicit.calls[0]!.params, ["org-a", "override"]);
-  assert.deepEqual(explicit.calls[1]!.params, ["org-a", "child", args.postingDate, "org-a", "override"]);
+  assert.deepEqual(explicit.calls[1]!.params, [
+    "org-a",
+    "child",
+    args.postingDate,
+    "org-a",
+    "override",
+  ]);
   explicit.done();
-  const foreignCalendar = scripted([window(false, "2026-09-01", "2026-09-30"), [{ matches: false }]]);
-  await assert.rejects(resolvePostingPeriod(foreignCalendar.runner, document("override"), args.postingDate),
-    (e: unknown) => e instanceof PostingError && /does not belong to the entity's effective fiscal calendar/.test(e.message));
+  const foreignCalendar = scripted([
+    window(false, "2026-09-01", "2026-09-30"),
+    [{ matches: false }],
+  ]);
+  await assert.rejects(
+    resolvePostingPeriod(foreignCalendar.runner, document("override"), args.postingDate),
+    (e: unknown) =>
+      e instanceof PostingError &&
+      /does not belong to the entity's effective fiscal calendar/.test(e.message),
+  );
   foreignCalendar.done();
   const outside = scripted([window(false, "2026-10-01", "2026-10-31")]);
-  await assert.rejects(resolvePostingPeriod(outside.runner, document("override"), args.postingDate),
-    (e: unknown) => e instanceof PostingError && /override does not cover posting date 2026-09-20/.test(e.message));
+  await assert.rejects(
+    resolvePostingPeriod(outside.runner, document("override"), args.postingDate),
+    (e: unknown) =>
+      e instanceof PostingError &&
+      /override does not cover posting date 2026-09-20/.test(e.message),
+  );
   const dated = scripted([[{ id: "regular" }]]);
-  assert.deepEqual(await resolvePostingPeriod(dated.runner, document(null), args.postingDate), { id: "regular" });
+  assert.deepEqual(await resolvePostingPeriod(dated.runner, document(null), args.postingDate), {
+    id: "regular",
+  });
   // Date-derived resolution goes through the shared covering-period
   // resolver: org-scoped, date-windowed, restricted to the regular periods
   // of the entity's effective active posting calendar, deterministic under
   // overlaps.
-  assert.deepEqual(dated.calls[0]!.params, ["org-a", "child", args.postingDate, "org-a", args.postingDate, args.postingDate]);
+  assert.deepEqual(dated.calls[0]!.params, [
+    "org-a",
+    "child",
+    args.postingDate,
+    "org-a",
+    args.postingDate,
+    args.postingDate,
+  ]);
   assert.match(dated.calls[0]!.sql, /fc\.is_active/);
   assert.match(dated.calls[0]!.sql, /fc\.id = public\.subsidiary_posting_calendar\(/);
   assert.match(dated.calls[0]!.sql, /not p\.is_adjustment/);
@@ -64,17 +113,30 @@ test("an explicit adjustment period admits only postings dated inside its own fi
   // in another year would post into that year by date while the period
   // belongs to this one.
   const inside = scripted([window(true, "2026-01-01", "2026-12-31"), calendarMatches]);
-  assert.deepEqual(await resolvePostingPeriod(inside.runner, document("adj-13"), "2026-06-30"), { id: "adj-13" });
+  assert.deepEqual(await resolvePostingPeriod(inside.runner, document("adj-13"), "2026-06-30"), {
+    id: "adj-13",
+  });
   const outside = scripted([window(true, "2026-01-01", "2026-12-31")]);
-  await assert.rejects(resolvePostingPeriod(outside.runner, document("adj-13"), "2025-06-30"),
-    (e: unknown) => e instanceof PostingError
-      && /adjustment period FY2026 adjustment takes postings dated inside fiscal year 2026 \(2026-01-01 to 2026-12-31\), not 2025-06-30/.test(e.message));
+  await assert.rejects(
+    resolvePostingPeriod(outside.runner, document("adj-13"), "2025-06-30"),
+    (e: unknown) =>
+      e instanceof PostingError &&
+      /adjustment period FY2026 adjustment takes postings dated inside fiscal year 2026 \(2026-01-01 to 2026-12-31\), not 2025-06-30/.test(
+        e.message,
+      ),
+  );
 });
 
 test("missing override and uncovered date refuse with the applicable remedy context", async () => {
-  for (const [override, message] of [["foreign-period", /foreign-period does not exist in this organization/], [null, /no accounting period covers 2026-09-20/]] as const) {
+  for (const [override, message] of [
+    ["foreign-period", /foreign-period does not exist in this organization/],
+    [null, /no accounting period covers 2026-09-20/],
+  ] as const) {
     const io = scripted([[]]);
-    await assert.rejects(resolvePostingPeriod(io.runner, document(override), args.postingDate), (e: unknown) => e instanceof PostingError && message.test(e.message));
+    await assert.rejects(
+      resolvePostingPeriod(io.runner, document(override), args.postingDate),
+      (e: unknown) => e instanceof PostingError && message.test(e.message),
+    );
     io.done();
   }
 });
@@ -95,15 +157,26 @@ test("foreign payroll requires each differing-currency lineage pair in the posti
 
 test("missing subsidiary and missing derived pair refuse instead of inventing a rate", async () => {
   const absent = scripted([root, []]);
-  await assert.rejects(assertPayRunConsolidatedRateCoverage(absent.runner, args), /pay run subsidiary child does not exist/);
+  await assert.rejects(
+    assertPayRunConsolidatedRateCoverage(absent.runner, args),
+    /pay run subsidiary child does not exist/,
+  );
   absent.done();
   const missing = scripted([root, chain, period, []]);
-  await assert.rejects(assertPayRunConsolidatedRateCoverage(missing.runner, args), /CAD → EUR.*2026-09-30.*Derive rates from period close first/);
+  await assert.rejects(
+    assertPayRunConsolidatedRateCoverage(missing.runner, args),
+    /CAD → EUR.*2026-09-30.*Derive rates from period close first/,
+  );
   missing.done();
 });
 
 test("same-currency lineage hops require no redundant rate while other hops remain checked", async () => {
-  const io = scripted([root, chain.map(row => row.id === "child" ? { ...row, base_currency: "EUR" } : row), period, [{ one: 1 }]]);
+  const io = scripted([
+    root,
+    chain.map((row) => (row.id === "child" ? { ...row, base_currency: "EUR" } : row)),
+    period,
+    [{ one: 1 }],
+  ]);
   await assertPayRunConsolidatedRateCoverage(io.runner, { ...args, docCurrency: "EUR" });
   assert.deepEqual(io.calls[3]!.params, ["org-a", "period-a", "EUR", "USD"]);
   io.done();

@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { clockSpec, clockTitle, loadClockPage } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { clockSpec, clockTitle, loadClockPage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await clockTitle() }
+  return { title: await clockTitle() };
 }
 
 /**
@@ -15,9 +15,9 @@ export async function generateMetadata() {
 export default async function ClockPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadClockPage()
-  return <ModuleView spec={clockSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadClockPage();
+  return <ModuleView spec={clockSpec(data)} data={data} searchParams={sp} trusted />;
 }

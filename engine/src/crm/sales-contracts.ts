@@ -1,6 +1,5 @@
 export type SalesMetric = "closed_won" | "net_invoiced";
-export type SalesPage =
-  "overview" | "representatives" | "teams" | "quotas" | "territories";
+export type SalesPage = "overview" | "representatives" | "teams" | "quotas" | "territories";
 export type SalesScope = {
   orgId: string;
   actorId: string;

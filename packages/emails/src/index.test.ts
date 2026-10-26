@@ -6,7 +6,8 @@ import { buildSmtpIdentity, deriveEmailDeliveryKey, EMAIL_DELIVERY_ID_HEADER } f
 import { documentEmail, sendVia, userInvitationEmail, type EmailTransport } from "./index";
 
 const TEST_ORG = "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70";
-const testKey = (scope: string) => deriveEmailDeliveryKey({ orgId: TEST_ORG, scope, to: "dana@example.com" });
+const testKey = (scope: string) =>
+  deriveEmailDeliveryKey({ orgId: TEST_ORG, scope, to: "dana@example.com" });
 
 test("userInvitationEmail names the organization and inviter, carries the link, and states the expiry", () => {
   const url = "https://books.example.com/login/reset?token=abc&invite=1";
@@ -62,7 +63,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -95,7 +97,9 @@ test("email provider sends refuse a cross-origin redirect without delivering the
   // the exact redirect mode each request is issued with.
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const requested = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     redirectModes.push(init?.redirect);
     if (requested.host !== "api.resend.com") return originalFetch(input, init);
     requested.protocol = "http:";
@@ -118,7 +122,10 @@ test("email provider sends refuse a cross-origin redirect without delivering the
   try {
     // E09: the refusal must carry its classified cause (redirect refused),
     // not a generic 'network request failed'.
-    await assert.rejects(sendVia(transport, message, { deliveryKey: testKey("redirect-proof") }), /Resend: cross-origin redirect refused/);
+    await assert.rejects(
+      sendVia(transport, message, { deliveryKey: testKey("redirect-proof") }),
+      /Resend: cross-origin redirect refused/,
+    );
     assert.deepEqual(redirectModes, ["error"]);
     assert.equal(attackerRequests, 0, "the redirect target must never receive a request");
 
@@ -152,22 +159,40 @@ type CapturedRequest = {
   bodyText: string;
 };
 
-const PROVIDER_HOSTS = ["api.resend.com", "api.sendgrid.com", "api.mailgun.net", "api.postmarkapp.com"] as const;
+const PROVIDER_HOSTS = [
+  "api.resend.com",
+  "api.sendgrid.com",
+  "api.mailgun.net",
+  "api.postmarkapp.com",
+] as const;
 
-const CANNED_SUCCESS: Record<string, { status: number; body?: string; respondHeaders?: Record<string, string> }> = {
+const CANNED_SUCCESS: Record<
+  string,
+  { status: number; body?: string; respondHeaders?: Record<string, string> }
+> = {
   "api.resend.com": { status: 200, body: JSON.stringify({ id: "email_re" }) },
   // SendGrid answers 202 with an empty body; its message id rides a header.
   "api.sendgrid.com": { status: 202, respondHeaders: { "x-message-id": "sg_msg_1" } },
   "api.mailgun.net": { status: 200, body: JSON.stringify({ id: "<mailgun@example>" }) },
-  "api.postmarkapp.com": { status: 200, body: JSON.stringify({ ErrorCode: 0, MessageID: "postmark_x" }) },
+  "api.postmarkapp.com": {
+    status: 200,
+    body: JSON.stringify({ ErrorCode: 0, MessageID: "postmark_x" }),
+  },
 };
 
-const transportByProvider: Record<"resend" | "sendgrid" | "mailgun" | "postmark", EmailTransport> = {
-  resend: { provider: "resend", apiKey: "re_test", from: "Ops <ops@example.com>" },
-  sendgrid: { provider: "sendgrid", apiKey: "SG.test", from: "Ops <ops@example.com>" },
-  mailgun: { provider: "mailgun", apiKey: "mg-key", domain: "mg.example.com", region: "us", from: "Ops <ops@example.com>" },
-  postmark: { provider: "postmark", serverToken: "pm-token", from: "Ops <ops@example.com>" },
-};
+const transportByProvider: Record<"resend" | "sendgrid" | "mailgun" | "postmark", EmailTransport> =
+  {
+    resend: { provider: "resend", apiKey: "re_test", from: "Ops <ops@example.com>" },
+    sendgrid: { provider: "sendgrid", apiKey: "SG.test", from: "Ops <ops@example.com>" },
+    mailgun: {
+      provider: "mailgun",
+      apiKey: "mg-key",
+      domain: "mg.example.com",
+      region: "us",
+      from: "Ops <ops@example.com>",
+    },
+    postmark: { provider: "postmark", serverToken: "pm-token", from: "Ops <ops@example.com>" },
+  };
 
 type TransportScenario = {
   name: "resend" | "sendgrid" | "mailgun" | "postmark";
@@ -189,18 +214,25 @@ const SCENARIOS: TransportScenario[] = [
   },
   {
     name: "mailgun",
-    identityOf: (req) => req.bodyText.match(/"h:X-Openbooks-Delivery-Id"\r?\n\r?\n([^\r\n]+)/u)?.[1] ?? null,
+    identityOf: (req) =>
+      req.bodyText.match(/"h:X-Openbooks-Delivery-Id"\r?\n\r?\n([^\r\n]+)/u)?.[1] ?? null,
   },
   {
     name: "postmark",
     identityOf: (req) => {
-      const parsed = JSON.parse(req.bodyText || "{}") as { Headers?: Array<{ Name: string; Value: string }> };
+      const parsed = JSON.parse(req.bodyText || "{}") as {
+        Headers?: Array<{ Name: string; Value: string }>;
+      };
       return parsed.Headers?.find((h) => h.Name === EMAIL_DELIVERY_ID_HEADER)?.Value ?? null;
     },
   },
 ];
 
-function startCaptureServer(): Promise<{ server: Server; requests: CapturedRequest[]; origin: string }> {
+function startCaptureServer(): Promise<{
+  server: Server;
+  requests: CapturedRequest[];
+  origin: string;
+}> {
   return new Promise((resolve) => {
     const requests: CapturedRequest[] = [];
     const server = createServer((req, res) => {
@@ -213,7 +245,10 @@ function startCaptureServer(): Promise<{ server: Server; requests: CapturedReque
           host,
           url: req.url ?? "",
           headers: Object.fromEntries(
-            Object.entries({ ...req.headers }).map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v.join(",") : v ?? ""]),
+            Object.entries({ ...req.headers }).map(([k, v]) => [
+              k.toLowerCase(),
+              Array.isArray(v) ? v.join(",") : (v ?? ""),
+            ]),
           ),
           bodyText: Buffer.concat(chunks).toString("utf8"),
         });
@@ -223,24 +258,40 @@ function startCaptureServer(): Promise<{ server: Server; requests: CapturedReque
           res.end();
           return;
         }
-        res.writeHead(canned.status, { "content-type": "application/json", ...canned.respondHeaders });
+        res.writeHead(canned.status, {
+          "content-type": "application/json",
+          ...canned.respondHeaders,
+        });
         res.end(canned.body ?? "");
       });
     });
     server.listen(0, "127.0.0.1", () => {
-      resolve({ server, requests, origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
+      resolve({
+        server,
+        requests,
+        origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+      });
     });
   });
 }
 
 /** Redirect every known provider host onto a local capture server (or short-circuit with a TimeoutError). */
-function remapProviders(original: typeof fetch, captureOrigin: string, timeoutHosts: ReadonlySet<string> = new Set()): typeof fetch {
+function remapProviders(
+  original: typeof fetch,
+  captureOrigin: string,
+  timeoutHosts: ReadonlySet<string> = new Set(),
+): typeof fetch {
   return ((input: RequestInfo | URL, init?: RequestInit) => {
-    const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (!(PROVIDER_HOSTS as readonly string[]).includes(requested.host)) return original(input, init);
+    const requested = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (!(PROVIDER_HOSTS as readonly string[]).includes(requested.host))
+      return original(input, init);
     if (timeoutHosts.has(requested.host)) {
       void init;
-      return Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+      return Promise.reject(
+        new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+      );
     }
     const capture = new URL(captureOrigin);
     const headers = new Headers(init?.headers);
@@ -265,9 +316,18 @@ for (const scenario of SCENARIOS) {
     globalThis.fetch = remapProviders(originalFetch, capture.origin);
     try {
       const key = testKey(`identity-${scenario.name}`);
-      const message = { to: "dana@example.com", subject: "Stable identity", html: "<p>x</p>", text: "x" };
-      const first = await sendVia(transportByProvider[scenario.name], message, { deliveryKey: key });
-      const second = await sendVia(transportByProvider[scenario.name], message, { deliveryKey: key });
+      const message = {
+        to: "dana@example.com",
+        subject: "Stable identity",
+        html: "<p>x</p>",
+        text: "x",
+      };
+      const first = await sendVia(transportByProvider[scenario.name], message, {
+        deliveryKey: key,
+      });
+      const second = await sendVia(transportByProvider[scenario.name], message, {
+        deliveryKey: key,
+      });
 
       assert.equal(first.kind, "sent");
       assert.equal(second.kind, "sent");
@@ -276,8 +336,16 @@ for (const scenario of SCENARIOS) {
       assert.ok(attemptOne && attemptTwo);
       const identityOne = scenario.identityOf(attemptOne);
       assert.ok(identityOne, `${scenario.name}: attempt one carries no stable identity`);
-      assert.equal(identityOne, key, `${scenario.name}: wire identity must equal the derived delivery key`);
-      assert.equal(scenario.identityOf(attemptTwo), identityOne, `${scenario.name}: retry must reuse the same identity`);
+      assert.equal(
+        identityOne,
+        key,
+        `${scenario.name}: wire identity must equal the derived delivery key`,
+      );
+      assert.equal(
+        scenario.identityOf(attemptTwo),
+        identityOne,
+        `${scenario.name}: retry must reuse the same identity`,
+      );
     } finally {
       globalThis.fetch = originalFetch;
       await new Promise<void>((resolve) => capture.server.close(() => resolve()));
@@ -287,16 +355,31 @@ for (const scenario of SCENARIOS) {
   test(`${scenario.name}: a response deadline after transmission resolves uncertain instead of failing forward`, async () => {
     const originalFetch = globalThis.fetch;
     const capture = await startCaptureServer();
-    globalThis.fetch = remapProviders(originalFetch, capture.origin, new Set([PROVIDER_HOST_BY_SCENARIO[scenario.name]]));
+    globalThis.fetch = remapProviders(
+      originalFetch,
+      capture.origin,
+      new Set([PROVIDER_HOST_BY_SCENARIO[scenario.name]]),
+    );
     try {
       const key = testKey(`timeout-${scenario.name}`);
-      const message = { to: "dana@example.com", subject: "Timeout proof", html: "<p>x</p>", text: "x" };
-      const outcome = await sendVia(transportByProvider[scenario.name], message, { deliveryKey: key });
+      const message = {
+        to: "dana@example.com",
+        subject: "Timeout proof",
+        html: "<p>x</p>",
+        text: "x",
+      };
+      const outcome = await sendVia(transportByProvider[scenario.name], message, {
+        deliveryKey: key,
+      });
       assert.equal(outcome.kind, "uncertain", `${scenario.name}: timeout must record uncertainty`);
       if (outcome.kind === "uncertain") {
         assert.match(outcome.reason, /timed out|unresolved|confirmation/iu);
       }
-      assert.equal(capture.requests.length, 0, "an aborted attempt never hands the message to the provider server in this harness");
+      assert.equal(
+        capture.requests.length,
+        0,
+        "an aborted attempt never hands the message to the provider server in this harness",
+      );
     } finally {
       globalThis.fetch = originalFetch;
       await new Promise<void>((resolve) => capture.server.close(() => resolve()));
@@ -320,7 +403,11 @@ test("a message without attachments sends no attachments field to any JSON provi
     assert.equal(capture.requests.length, 3);
     for (const request of capture.requests) {
       const body = JSON.parse(request.bodyText) as Record<string, unknown>;
-      assert.equal("attachments" in body || "Attachments" in body, false, `${request.host} received an attachments field`);
+      assert.equal(
+        "attachments" in body || "Attachments" in body,
+        false,
+        `${request.host} received an attachments field`,
+      );
     }
   } finally {
     globalThis.fetch = originalFetch;

@@ -34,7 +34,10 @@ async function configure(org: ScratchOrg) {
 }
 
 async function postBalanced(
-  org: ScratchOrg, postingDate: string, periodId: string, ref: string,
+  org: ScratchOrg,
+  postingDate: string,
+  periodId: string,
+  ref: string,
   legs: [string, string][],
 ) {
   const entryId = randomUUID();
@@ -54,8 +57,11 @@ async function postBalanced(
 }
 
 async function seedAugustDecoy(org: ScratchOrg) {
-  const cal = await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects");
+  const cal = await db.execute<{ id: string }>(
+    sql`
+    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`,
+    "objects",
+  );
   const augPeriodId = randomUUID();
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -67,28 +73,40 @@ async function seedAugustDecoy(org: ScratchOrg) {
   ]);
 }
 
-test("labor-clearing fails on unwashed standards with the exact monthly residue", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await configure(org);
-    await postBalanced(org, org.date, org.periodId, "LAB-STD", [
-      [org.accounts.cogs, "250.0000"],
-      [org.accounts.clearing, "-250.0000"],
-    ]);
-    await seedAugustDecoy(org);
+test(
+  "labor-clearing fails on unwashed standards with the exact monthly residue",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await configure(org);
+      await postBalanced(org, org.date, org.periodId, "LAB-STD", [
+        [org.accounts.cogs, "250.0000"],
+        [org.accounts.clearing, "-250.0000"],
+      ]);
+      await seedAugustDecoy(org);
 
-    const cp = await runScenario(org.orgId, { at: org.date });
-    const labor = check(cp, "labor-clearing");
-    assert.equal(labor.ok, false, `unwashed standards MUST fail the gate: ${labor.detail}`);
-    assert.match(labor.detail, /2026-07-01 = -250\.0000/, "detail must name the worst month and exact residue");
-    assert.equal(cp.pass, false, "a diverged fixture cannot be golden");
-    for (const other of cp.checks.filter((c) => c.name !== "labor-clearing")) {
-      assert.equal(other.ok, true, `${other.name} must stay green here — only labor-clearing fires`);
+      const cp = await runScenario(org.orgId, { at: org.date });
+      const labor = check(cp, "labor-clearing");
+      assert.equal(labor.ok, false, `unwashed standards MUST fail the gate: ${labor.detail}`);
+      assert.match(
+        labor.detail,
+        /2026-07-01 = -250\.0000/,
+        "detail must name the worst month and exact residue",
+      );
+      assert.equal(cp.pass, false, "a diverged fixture cannot be golden");
+      for (const other of cp.checks.filter((c) => c.name !== "labor-clearing")) {
+        assert.equal(
+          other.ok,
+          true,
+          `${other.name} must stay green here — only labor-clearing fires`,
+        );
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 test("labor-clearing holds when payroll washes standards to zero", { skip: !DB }, async () => {
   const org = await createScratchOrg();

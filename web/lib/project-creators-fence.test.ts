@@ -1,50 +1,55 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { withPlatformDbTestSurface } from '../testing/stub-modules'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { withPlatformDbTestSurface } from "../testing/stub-modules";
 
 // Project-domain creator fence: createProjectCharge and createBillingRequest
 // gate Projects at the entry, then must recheck the gate INSIDE the write
 // transaction. A disable committing between the entry check and the insert
 // must refuse the write instead of committing a hidden charge or request.
 
-const stateKey = Symbol.for('openbooks.project-creators-fence-test')
-interface DbCall { kind: 'execute' | 'tx-execute'; text: string }
+const stateKey = Symbol.for("openbooks.project-creators-fence-test");
+interface DbCall {
+  kind: "execute" | "tx-execute";
+  text: string;
+}
 interface FenceState {
-  calls: DbCall[]
+  calls: DbCall[];
   /** Features visible to pre-transaction entry checks. */
-  entryFeatures: Record<string, boolean>
+  entryFeatures: Record<string, boolean>;
   /** Features visible to the in-transaction fenced recheck. */
-  txFeatures: Record<string, boolean>
+  txFeatures: Record<string, boolean>;
 }
 const fenceState: FenceState = {
   calls: [],
   entryFeatures: { projects: true, equipment: true, inventory: true },
   txFeatures: { projects: true },
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = fenceState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = fenceState;
 
 /** Flatten a drizzle SQL chunk into its raw text for keyword assertions. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((c) => {
-      if (typeof c === 'string') return c
-      const value = (c as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c)
-      return ''
+      if (typeof c === "string") return c;
+      const value = (c as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextCreators?: unknown }).openbooksSqlTextCreators = sqlText
+(
+  globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextCreators?: unknown }
+).openbooksSqlTextCreators = sqlText;
 
-const PROJECT_ID = '00000000-0000-4000-8000-00000000c101'
+const PROJECT_ID = "00000000-0000-4000-8000-00000000c101";
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.project-creators-fence-test')]
       const sqlText = globalThis.openbooksSqlTextCreators
@@ -111,7 +116,7 @@ const mockSources = new Map<string, string>([
       export async function withTransactionSavepoint(_runner, fn) { return fn() }
     `),
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -123,82 +128,112 @@ const hooks = registerHooks({
     // engine helpers (business clocks, type defaults) would run their reads
     // on a real connection.
     if (
-      specifier === '@openbooks/engine/platform/db' ||
-      specifier.endsWith('/platform/db.ts') ||
-      (specifier === './db.ts' && context.parentURL?.includes('/engine/src/platform/'))
+      specifier === "@openbooks/engine/platform/db" ||
+      specifier.endsWith("/platform/db.ts") ||
+      (specifier === "./db.ts" && context.parentURL?.includes("/engine/src/platform/"))
     ) {
-      return { url: 'mock:db', shortCircuit: true }
+      return { url: "mock:db", shortCircuit: true };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url);
     if (source !== undefined) {
-      return { format: 'module', source, shortCircuit: true }
+      return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
 // Query-suffixed URLs keep these module instances apart from any other
 // suite's copy; indirected through a const so tsc does not try to resolve
 // the suffixed path as a type-level module.
-const chargesUrl = './project-charges.ts?creators-fence-test'
-const requestsUrl = './billing-requests.ts?creators-fence-test'
+const chargesUrl = "./project-charges.ts?creators-fence-test";
+const requestsUrl = "./billing-requests.ts?creators-fence-test";
 const chargesModule = (await import(chargesUrl)) as unknown as {
   createProjectCharge: (
     orgId: string,
     userId: string,
     input: { projectId: string; lines: unknown[] },
     opts: { post: boolean; allowedSubsidiaryIds: Set<string> | null },
-  ) => Promise<unknown>
-  ChargeError: new (message?: string) => Error
-}
+  ) => Promise<unknown>;
+  ChargeError: new (message?: string) => Error;
+};
 const requestsModule = (await import(requestsUrl)) as unknown as {
-  createBillingRequest: (orgId: string, userId: string, input: { projectId: string }) => Promise<unknown>
-}
-hooks.deregister()
+  createBillingRequest: (
+    orgId: string,
+    userId: string,
+    input: { projectId: string },
+  ) => Promise<unknown>;
+};
+hooks.deregister();
 
 function reset(): void {
-  fenceState.calls.length = 0
-  fenceState.entryFeatures = { projects: true, equipment: true, inventory: true }
-  fenceState.txFeatures = { projects: true }
+  fenceState.calls.length = 0;
+  fenceState.entryFeatures = { projects: true, equipment: true, inventory: true };
+  fenceState.txFeatures = { projects: true };
 }
 
 function txTexts(): string[] {
-  return fenceState.calls.filter((c) => c.kind === 'tx-execute').map((c) => c.text)
+  return fenceState.calls.filter((c) => c.kind === "tx-execute").map((c) => c.text);
 }
 
-test('createProjectCharge refuses a Projects disable committed before the insert', async () => {
-  reset()
-  fenceState.txFeatures = { projects: false }
+test("createProjectCharge refuses a Projects disable committed before the insert", async () => {
+  reset();
+  fenceState.txFeatures = { projects: false };
   await assert.rejects(
-    chargesModule.createProjectCharge('org-1', 'user-1', {
-      projectId: PROJECT_ID,
-      lines: [{ itemId: '00000000-0000-4000-8000-00000000c102', quantity: '1', costRate: '10', billRate: '20' }],
-    }, { post: true, allowedSubsidiaryIds: null }),
-    (error: unknown) => error instanceof chargesModule.ChargeError && error.message === 'Projects feature is disabled',
-  )
-  const texts = txTexts()
+    chargesModule.createProjectCharge(
+      "org-1",
+      "user-1",
+      {
+        projectId: PROJECT_ID,
+        lines: [
+          {
+            itemId: "00000000-0000-4000-8000-00000000c102",
+            quantity: "1",
+            costRate: "10",
+            billRate: "20",
+          },
+        ],
+      },
+      { post: true, allowedSubsidiaryIds: null },
+    ),
+    (error: unknown) =>
+      error instanceof chargesModule.ChargeError &&
+      error.message === "Projects feature is disabled",
+  );
+  const texts = txTexts();
   // Fence and recheck are the first statements; the charge never inserts.
-  assert.ok(texts.length >= 2)
-  assert.ok(texts[0]!.includes('pg_advisory_xact_lock'), 'fence first')
-  assert.ok(texts[1]!.includes('for share') && texts[1]!.includes('from orgs'), 'fenced recheck second')
-  assert.ok(!texts.some((t) => t.includes('insert into documents')), 'a refused charge must never reach the table')
-})
+  assert.ok(texts.length >= 2);
+  assert.ok(texts[0]!.includes("pg_advisory_xact_lock"), "fence first");
+  assert.ok(
+    texts[1]!.includes("for share") && texts[1]!.includes("from orgs"),
+    "fenced recheck second",
+  );
+  assert.ok(
+    !texts.some((t) => t.includes("insert into documents")),
+    "a refused charge must never reach the table",
+  );
+});
 
-test('createBillingRequest refuses a Projects disable committed before the insert', async () => {
-  reset()
-  fenceState.txFeatures = { projects: false }
+test("createBillingRequest refuses a Projects disable committed before the insert", async () => {
+  reset();
+  fenceState.txFeatures = { projects: false };
   await assert.rejects(
-    requestsModule.createBillingRequest('org-1', 'user-1', { projectId: PROJECT_ID }),
-    (error: unknown) => error instanceof Error && error.message === 'Projects feature is disabled',
-  )
-  const texts = txTexts()
+    requestsModule.createBillingRequest("org-1", "user-1", { projectId: PROJECT_ID }),
+    (error: unknown) => error instanceof Error && error.message === "Projects feature is disabled",
+  );
+  const texts = txTexts();
   // Numbering lock, feature-gate fence, fenced recheck — then the refusal.
-  assert.ok(texts.length >= 3)
-  assert.ok(texts[0]!.includes('pg_advisory_xact_lock'), 'numbering lock first')
-  assert.ok(texts[1]!.includes('pg_advisory_xact_lock'), 'feature-gate fence second')
-  assert.ok(texts[2]!.includes('for share') && texts[2]!.includes('from orgs'), 'fenced recheck third')
-  assert.ok(!texts.some((t) => t.includes('insert into billing_requests')), 'a refused request must never reach the table')
-})
+  assert.ok(texts.length >= 3);
+  assert.ok(texts[0]!.includes("pg_advisory_xact_lock"), "numbering lock first");
+  assert.ok(texts[1]!.includes("pg_advisory_xact_lock"), "feature-gate fence second");
+  assert.ok(
+    texts[2]!.includes("for share") && texts[2]!.includes("from orgs"),
+    "fenced recheck third",
+  );
+  assert.ok(
+    !texts.some((t) => t.includes("insert into billing_requests")),
+    "a refused request must never reach the table",
+  );
+});

@@ -253,16 +253,25 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
           trigger: "manual",
         });
         if (preview.journalEntryId !== null) throw new Error("preview wrote a journal entry");
-        const posted = await postAllocationRun(preview.id, ledger.actorId, "Post the monthly sweep");
+        const posted = await postAllocationRun(
+          preview.id,
+          ledger.actorId,
+          "Post the monthly sweep",
+        );
         postedStatus = posted.status;
         if (!posted.journalEntryId) throw new Error("post wrote no journal entry");
       });
       let reversedStatus = "";
       const reverseEntry = await capture(ctx, "reverse allocation run", async () => {
         const runs = await postedRunId(ledger.orgId, ruleId);
-        const reversed = await reverseAllocationRun(runs, ledger.actorId, "Reverse the monthly sweep", {
-          reversalDate: ledger.date,
-        });
+        const reversed = await reverseAllocationRun(
+          runs,
+          ledger.actorId,
+          "Reverse the monthly sweep",
+          {
+            reversalDate: ledger.date,
+          },
+        );
         reversedStatus = reversed.status;
         if (!reversed.reversalEntryId) throw new Error("reverse wrote no reversal entry");
       });
@@ -316,12 +325,18 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
       let idempotent = false;
       let status = "";
       const rerunEntry = await capture(ctx, "re-run with unchanged inputs", async () => {
-        const result = await rerunAllocationRun(preview.id, ledger.actorId, "Re-run the monthly sweep", {
-          reversalDate: ledger.date,
-        });
+        const result = await rerunAllocationRun(
+          preview.id,
+          ledger.actorId,
+          "Re-run the monthly sweep",
+          {
+            reversalDate: ledger.date,
+          },
+        );
         idempotent = result.idempotent;
         status = result.run.status;
-        if (result.run.id !== preview.id) throw new Error("idempotent re-run returned a different run");
+        if (result.run.id !== preview.id)
+          throw new Error("idempotent re-run returned a different run");
       });
       const posted = await postedRunCount(ledger.orgId, ruleId);
       return {
@@ -347,8 +362,18 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
       let refused = false;
       try {
         assertContributorBalance([
-          { contributorKind: "rule", contributorRef: "version-1", subsidiaryId: null, amount: "100.0000" },
-          { contributorKind: "rule", contributorRef: "version-1", subsidiaryId: null, amount: "-99.9900" },
+          {
+            contributorKind: "rule",
+            contributorRef: "version-1",
+            subsidiaryId: null,
+            amount: "100.0000",
+          },
+          {
+            contributorKind: "rule",
+            contributorRef: "version-1",
+            subsidiaryId: null,
+            amount: "-99.9900",
+          },
         ]);
       } catch (error) {
         if (error instanceof PostAllocationError && error.message.includes("does not balance")) {
@@ -460,11 +485,19 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
         },
         audit,
       );
-      await publishVersion(draft.version.id, { orgId: ledger.orgId, actorId: ledger.actorId, allowedSubsidiaryIds: null });
+      await publishVersion(draft.version.id, {
+        orgId: ledger.orgId,
+        actorId: ledger.actorId,
+        allowedSubsidiaryIds: null,
+      });
       const before = await getRuleVersion(ledger.orgId, draft.version.id, null);
       const refusals: Record<string, string> = {};
       try {
-        await updateDraftVersion(draft.version.id, { orgId: ledger.orgId, memoTemplate: "changed", allowedSubsidiaryIds: null }, audit);
+        await updateDraftVersion(
+          draft.version.id,
+          { orgId: ledger.orgId, memoTemplate: "changed", allowedSubsidiaryIds: null },
+          audit,
+        );
       } catch (error) {
         if (error instanceof AllocationRuleError) refusals["definitionRefused"] = error.code;
         else throw error;
@@ -472,7 +505,11 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
       try {
         await replaceTargets(
           draft.version.id,
-          { orgId: ledger.orgId, targets: [{ targetAccountId: ctx.roles.cogs, fixedPercent: "100" }], allowedSubsidiaryIds: null },
+          {
+            orgId: ledger.orgId,
+            targets: [{ targetAccountId: ctx.roles.cogs, fixedPercent: "100" }],
+            allowedSubsidiaryIds: null,
+          },
           audit,
         );
       } catch (error) {
@@ -480,7 +517,11 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
         else throw error;
       }
       try {
-        await publishVersion(draft.version.id, { orgId: ledger.orgId, actorId: ledger.actorId, allowedSubsidiaryIds: null });
+        await publishVersion(draft.version.id, {
+          orgId: ledger.orgId,
+          actorId: ledger.actorId,
+          allowedSubsidiaryIds: null,
+        });
       } catch (error) {
         if (error instanceof AllocationRuleError) refusals["republishRefused"] = error.code;
         else throw error;
@@ -503,9 +544,15 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
 // Ledger fixtures (per-case tenants; nothing shared across cases)
 // ---------------------------------------------------------------------------
 
-async function seedDepartments(orgId: string): Promise<{ eng: string; sales: string; support: string }> {
+async function seedDepartments(
+  orgId: string,
+): Promise<{ eng: string; sales: string; support: string }> {
   const ids = { eng: randomUUID(), sales: randomUUID(), support: randomUUID() };
-  const names: Record<keyof typeof ids, string> = { eng: "Engineering", sales: "Sales", support: "Support" };
+  const names: Record<keyof typeof ids, string> = {
+    eng: "Engineering",
+    sales: "Sales",
+    support: "Support",
+  };
   for (const key of Object.keys(ids) as (keyof typeof ids)[]) {
     await db.execute(sql`
       insert into departments (id, org_id, name, is_active, custom)
@@ -594,44 +641,63 @@ async function seedAllocationSource(ctx: CaseContext, amount: string): Promise<v
     currency: "CAD",
     lines: [
       { accountId: ctx.roles.freight, amount },
-      { accountId: ctx.roles.bank, amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}` },
+      {
+        accountId: ctx.roles.bank,
+        amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`,
+      },
     ],
   });
   if (!entryId) throw new Error("source pool entry did not post");
 }
 
 async function postedRunId(orgId: string, ruleId: string): Promise<string> {
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from allocation_runs
      where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'
-     order by created_at desc limit 1`, "objects");
+     order by created_at desc limit 1`,
+    "objects",
+  );
   const id = rows[0]?.id;
   if (!id) throw new Error("no posted run found for the rule");
   return id;
 }
 
 async function postedRunCount(orgId: string, ruleId: string): Promise<number> {
-  const rows = await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(
+    sql`
     select count(*)::text as count from allocation_runs
-     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects");
+     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`,
+    "objects",
+  );
   return Number(rows[0]?.count ?? 0);
 }
 
 async function coordinateTotals(orgId: string): Promise<Map<string, string>> {
-  const rows = await db.execute<{ account_id: string; department_id: string | null; total: string }>(sql`
+  const rows = await db.execute<{
+    account_id: string;
+    department_id: string | null;
+    total: string;
+  }>(
+    sql`
     select l.account_id, l.department_id, sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id, l.department_id`, "objects");
+     group by l.account_id, l.department_id`,
+    "objects",
+  );
   return new Map(rows.map((row) => [`${row.account_id}|${row.department_id ?? ""}`, row.total]));
 }
 
 async function accountTotal(orgId: string, accountId: string): Promise<string> {
-  const rows = await db.execute<{ total: string }>(sql`
+  const rows = await db.execute<{ total: string }>(
+    sql`
     select sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-     where l.org_id = ${orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`, "objects");
+     where l.org_id = ${orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`,
+    "objects",
+  );
   return rows[0]?.total ?? "0.0000";
 }

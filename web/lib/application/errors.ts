@@ -22,10 +22,7 @@ export class ApplicationError extends Error {
   }
 }
 
-export function invalidInput(
-  message: string,
-  details?: Record<string, unknown>,
-): ApplicationError {
+export function invalidInput(message: string, details?: Record<string, unknown>): ApplicationError {
   return new ApplicationError("invalid_input", message, 422, details);
 }
 
@@ -37,9 +34,6 @@ export function notFound(resource = "record"): ApplicationError {
   return new ApplicationError("not_found", `${resource} not found`, 404);
 }
 
-export function conflict(
-  message: string,
-  details?: Record<string, unknown>,
-): ApplicationError {
+export function conflict(message: string, details?: Record<string, unknown>): ApplicationError {
   return new ApplicationError("conflict", message, 409, details);
 }

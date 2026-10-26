@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // Out-of-office delegation self-service over /api/flows/delegations. Two
 // pieces:
@@ -14,114 +14,114 @@
 // nothing (banner). The two components sync through a window event so
 // saving/ending updates the banner without a full reload.
 
-import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
-import { Button, Drawer, Label, Select } from '@openbooks/ui'
-import type { DelegateOption } from './GateActions'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { DateField } from '@/components/date-field'
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { Button, Drawer, Label, Select } from "@openbooks/ui";
+import type { DelegateOption } from "./GateActions";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { DateField } from "@/components/date-field";
 
-const CHANGED_EVENT = 'ob:delegations-changed'
+const CHANGED_EVENT = "ob:delegations-changed";
 
 interface Delegation {
-  id: string
-  toUserId: string
-  toUserName?: string | null
-  startsAt?: string | null
-  endsAt?: string | null
+  id: string;
+  toUserId: string;
+  toUserName?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
   /** 'given' = I delegated my approvals; 'received' = someone delegated to me. */
-  direction?: 'given' | 'received'
-  phase?: 'active' | 'upcoming'
+  direction?: "given" | "received";
+  phase?: "active" | "upcoming";
 }
 
 /** A delegation I gave that is in effect right now. */
 function isActiveGiven(d: Delegation, now: number): boolean {
-  if (d.direction && d.direction !== 'given') return false
-  if (d.phase) return d.phase === 'active'
-  const starts = d.startsAt ? new Date(d.startsAt).getTime() : null
-  const ends = d.endsAt ? new Date(d.endsAt).getTime() : null
-  if (starts !== null && starts > now) return false
-  if (ends !== null && ends < now) return false
-  return true
+  if (d.direction && d.direction !== "given") return false;
+  if (d.phase) return d.phase === "active";
+  const starts = d.startsAt ? new Date(d.startsAt).getTime() : null;
+  const ends = d.endsAt ? new Date(d.endsAt).getTime() : null;
+  if (starts !== null && starts > now) return false;
+  if (ends !== null && ends < now) return false;
+  return true;
 }
 
 export function OutOfOfficeButton({ users }: { users: DelegateOption[] }) {
-  const t = useTranslations('approvals.ooo')
-  const tc = useTranslations('common')
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [toUserId, setToUserId] = useState('')
-  const [from, setFrom] = useState('')
-  const [until, setUntil] = useState('')
+  const t = useTranslations("approvals.ooo");
+  const tc = useTranslations("common");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [toUserId, setToUserId] = useState("");
+  const [from, setFrom] = useState("");
+  const [until, setUntil] = useState("");
 
   async function save() {
     if (!toUserId || !from || !until || until < from) {
-      toast.error(t('invalid'))
-      return
+      toast.error(t("invalid"));
+      return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch('/api/flows/delegations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/flows/delegations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           toUserId,
           startsAt: new Date(`${from}T00:00:00Z`).toISOString(),
           endsAt: new Date(`${until}T23:59:59Z`).toISOString(),
         }),
-      })
+      });
       if (res.status === 404) {
-        toast.info(t('unavailable'))
+        toast.info(t("unavailable"));
       } else if (!res.ok) {
         // The refusal reads through the shared helper so message, remedy and
         // code render instead of a bare fallback.
-        toast.error(await readApiErrorMessage(res, t('unavailable')))
+        toast.error(await readApiErrorMessage(res, t("unavailable")));
       } else {
-        toast.success(t('saved'))
-        setOpen(false)
-        setToUserId('')
-        setFrom('')
-        setUntil('')
-        window.dispatchEvent(new Event(CHANGED_EVENT))
+        toast.success(t("saved"));
+        setOpen(false);
+        setToUserId("");
+        setFrom("");
+        setUntil("");
+        window.dispatchEvent(new Event(CHANGED_EVENT));
       }
     } catch {
-      toast.info(t('unavailable'))
+      toast.info(t("unavailable"));
     }
-    setBusy(false)
+    setBusy(false);
   }
 
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        {t('button')}
+        {t("button")}
       </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
-        title={t('title')}
-        description={t('description')}
+        title={t("title")}
+        description={t("description")}
         size="sm"
         footer={
           <>
             <Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>
-              {tc('actions.cancel')}
+              {tc("actions.cancel")}
             </Button>
             <Button disabled={busy} onClick={save}>
-              {tc('actions.save')}
+              {tc("actions.save")}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="ooo-delegate">{t('delegateTo')}</Label>
+            <Label htmlFor="ooo-delegate">{t("delegateTo")}</Label>
             <Select
               id="ooo-delegate"
               value={toUserId}
               onChange={(e) => setToUserId(e.target.value)}
             >
-              <option value="">{t('delegatePlaceholder')}</option>
+              <option value="">{t("delegatePlaceholder")}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -131,94 +131,89 @@ export function OutOfOfficeButton({ users }: { users: DelegateOption[] }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="ooo-from">{t('from')}</Label>
-              <DateField
-                id="ooo-from"
-                value={from}
-                onChange={(value) => setFrom(value)}
-              />
+              <Label htmlFor="ooo-from">{t("from")}</Label>
+              <DateField id="ooo-from" value={from} onChange={(value) => setFrom(value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ooo-until">{t('until')}</Label>
-              <DateField
-                id="ooo-until"
-                value={until}
-                onChange={(value) => setUntil(value)}
-              />
+              <Label htmlFor="ooo-until">{t("until")}</Label>
+              <DateField id="ooo-until" value={until} onChange={(value) => setUntil(value)} />
             </div>
           </div>
         </div>
       </Drawer>
     </>
-  )
+  );
 }
 
 export function DelegationBanner({ users }: { users: DelegateOption[] }) {
-  const t = useTranslations('approvals.ooo')
-  const [active, setActive] = useState<Delegation | null>(null)
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("approvals.ooo");
+  const [active, setActive] = useState<Delegation | null>(null);
+  const [busy, setBusy] = useState(false);
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   const load = useCallback(() => {
-    fetch('/api/flows/delegations')
+    fetch("/api/flows/delegations")
       .then((res) => {
-        if (!res.ok) return // 404 = endpoint not built yet — render nothing
-        return res.json().catch(() => ({})).then((data: { delegations?: Delegation[] }) => {
-          const now = Date.now()
-          setActive((data.delegations ?? []).find((d) => isActiveGiven(d, now)) ?? null)
-        })
+        if (!res.ok) return; // 404 = endpoint not built yet — render nothing
+        return res
+          .json()
+          .catch(() => ({}))
+          .then((data: { delegations?: Delegation[] }) => {
+            const now = Date.now();
+            setActive((data.delegations ?? []).find((d) => isActiveGiven(d, now)) ?? null);
+          });
       })
       .catch(() => {
         // network failure — banner stays hidden
-      })
-  }, [])
+      });
+  }, []);
 
   useEffect(() => {
-    void load()
-    const onChanged = () => void load()
-    window.addEventListener(CHANGED_EVENT, onChanged)
-    return () => window.removeEventListener(CHANGED_EVENT, onChanged)
-  }, [load])
+    void load();
+    const onChanged = () => void load();
+    window.addEventListener(CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(CHANGED_EVENT, onChanged);
+  }, [load]);
 
-  if (!active) return null
+  if (!active) return null;
 
   const name =
-    active.toUserName ?? users.find((u) => u.id === active.toUserId)?.name ?? active.toUserId
-  const date = active.endsAt ? String(active.endsAt).slice(0, 10) : '—'
+    active.toUserName ?? users.find((u) => u.id === active.toUserId)?.name ?? active.toUserId;
+  const date = active.endsAt ? String(active.endsAt).slice(0, 10) : "—";
 
   async function endNow() {
-    if (!active) return
-    setBusy(true)
+    if (!active) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/flows/delegations?id=${active.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/flows/delegations?id=${active.id}`, { method: "DELETE" });
       if (res.status === 404) {
         // Already gone (ended elsewhere or endpoint undeployed): the banner
         // describes a delegation that no longer exists, so drop it instead
         // of leaving an "End now" that 404s forever.
-        toast.info(t('unavailable'))
-        setActive(null)
+        toast.info(t("unavailable"));
+        setActive(null);
       } else if (!res.ok) {
         // The refusal reads through the shared helper so message, remedy and
         // code render instead of a bare fallback.
-        toast.error(await readApiErrorMessage(res, t('unavailable')))
+        toast.error(await readApiErrorMessage(res, t("unavailable")));
       } else {
-        toast.success(t('ended'))
-        setActive(null)
-        window.dispatchEvent(new Event(CHANGED_EVENT))
+        toast.success(t("ended"));
+        setActive(null);
+        window.dispatchEvent(new Event(CHANGED_EVENT));
       }
     } catch {
-      toast.info(t('unavailable'))
+      toast.info(t("unavailable"));
     }
-    setBusy(false)
+    setBusy(false);
   }
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
-      <span>{t('banner', { name, date })}</span>
+      <span>{t("banner", { name, date })}</span>
       <Button size="sm" variant="ghost" disabled={busy} onClick={endNow}>
-        {t('endNow')}
+        {t("endNow")}
       </Button>
     </div>
-  )
+  );
 }

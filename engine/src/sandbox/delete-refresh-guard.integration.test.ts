@@ -19,44 +19,67 @@ async function readySandbox(orgId: string) {
 }
 
 async function sandboxStatus(sandboxId: string): Promise<string | null> {
-  const row = (await db.execute<{ status: string }>(sql`
-    select status from sandboxes where id = ${sandboxId}`, "objects"))[0];
+  const row = (
+    await db.execute<{ status: string }>(
+      sql`
+    select status from sandboxes where id = ${sandboxId}`,
+      "objects",
+    )
+  )[0];
   return row?.status ?? null;
 }
 
 async function orgExists(orgId: string): Promise<boolean> {
-  const row = (await db.execute<{ id: string }>(sql`
-    select id from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return !!row;
 }
 
-test("delete refuses a sandbox with a refresh in flight instead of wiping under it", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const created = await readySandbox(org.orgId);
-  try {
-    // A refresh that marked 'refreshing' and is still cloning.
-    await db.execute(sql`update sandboxes set status = 'refreshing' where id = ${created.sandboxId}`);
-    await assert.rejects(deleteSandbox(created.sandboxId), /refreshing/);
-    assert.equal(await sandboxStatus(created.sandboxId), "refreshing");
-    assert.equal(await orgExists(created.sandboxOrgId), true);
-  } finally {
-    await db.execute(sql`update sandboxes set status = 'ready' where id = ${created.sandboxId}`);
-    await deleteSandbox(created.sandboxId).catch(() => undefined);
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "delete refuses a sandbox with a refresh in flight instead of wiping under it",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const created = await readySandbox(org.orgId);
+    try {
+      // A refresh that marked 'refreshing' and is still cloning.
+      await db.execute(
+        sql`update sandboxes set status = 'refreshing' where id = ${created.sandboxId}`,
+      );
+      await assert.rejects(deleteSandbox(created.sandboxId), /refreshing/);
+      assert.equal(await sandboxStatus(created.sandboxId), "refreshing");
+      assert.equal(await orgExists(created.sandboxOrgId), true);
+    } finally {
+      await db.execute(sql`update sandboxes set status = 'ready' where id = ${created.sandboxId}`);
+      await deleteSandbox(created.sandboxId).catch(() => undefined);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("refresh refuses a sandbox marked for deletion instead of steamrolling it to ready", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const created = await readySandbox(org.orgId);
-  try {
-    // A delete that marked 'deleting' and is still wiping.
-    await db.execute(sql`update sandboxes set status = 'deleting' where id = ${created.sandboxId}`);
-    await assert.rejects(refreshSandbox(created.sandboxId), /being deleted/);
-    assert.equal(await sandboxStatus(created.sandboxId), "deleting");
-    assert.equal(await orgExists(created.sandboxOrgId), true);
-  } finally {
-    await db.execute(sql`update sandboxes set status = 'ready' where id = ${created.sandboxId}`); await deleteSandbox(created.sandboxId).catch(() => undefined);
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "refresh refuses a sandbox marked for deletion instead of steamrolling it to ready",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const created = await readySandbox(org.orgId);
+    try {
+      // A delete that marked 'deleting' and is still wiping.
+      await db.execute(
+        sql`update sandboxes set status = 'deleting' where id = ${created.sandboxId}`,
+      );
+      await assert.rejects(refreshSandbox(created.sandboxId), /being deleted/);
+      assert.equal(await sandboxStatus(created.sandboxId), "deleting");
+      assert.equal(await orgExists(created.sandboxOrgId), true);
+    } finally {
+      await db.execute(sql`update sandboxes set status = 'ready' where id = ${created.sandboxId}`);
+      await deleteSandbox(created.sandboxId).catch(() => undefined);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

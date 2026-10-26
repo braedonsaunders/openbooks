@@ -62,24 +62,40 @@ const REFUSAL_IN_TEXT_PATTERN = /redirect\s*:\s*["'](error|manual)["']/;
 const KNOWN_UNSAFE = [];
 
 function discoverServerSources() {
-  return execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "*.ts", "*.tsx", "*.mts", "*.mjs", "*.js"],
-    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  )
-    .split("\0")
-    .filter(Boolean)
-    // web/app and web/components are the browser runtime: there, fetch redirect
-    // policy belongs to the user agent and the leak class audited here — a
-    // server replaying API secrets to a Location host — cannot occur. Server
-    // code under web/lib stays in scope. Tests, declarations, generated trees
-    // and this checker itself are out of scope.
-    .filter((file) =>
-      !/^(\.bb\/|docs\/|vendor\/|e2e\/|integrations\/|corpus\/|playwright\.config\.|web\/app\/|web\/components\/)/.test(file) &&
-      !/\.d\.tsx?$/.test(file) &&
-      !/\.test\.(t|j)sx?$/.test(file) &&
-      file !== SELF_PATH,
-    );
+  return (
+    execFileSync(
+      "git",
+      [
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        "*.ts",
+        "*.tsx",
+        "*.mts",
+        "*.mjs",
+        "*.js",
+      ],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    )
+      .split("\0")
+      .filter(Boolean)
+      // web/app and web/components are the browser runtime: there, fetch redirect
+      // policy belongs to the user agent and the leak class audited here — a
+      // server replaying API secrets to a Location host — cannot occur. Server
+      // code under web/lib stays in scope. Tests, declarations, generated trees
+      // and this checker itself are out of scope.
+      .filter(
+        (file) =>
+          !/^(\.bb\/|docs\/|vendor\/|e2e\/|integrations\/|corpus\/|playwright\.config\.|web\/app\/|web\/components\/)/.test(
+            file,
+          ) &&
+          !/\.d\.tsx?$/.test(file) &&
+          !/\.test\.(t|j)sx?$/.test(file) &&
+          file !== SELF_PATH,
+      )
+  );
 }
 
 /** One-hop resolution of a type node against this file's type aliases. */
@@ -108,7 +124,9 @@ function requiresRedirect(typeNode, aliases, depth = 0) {
   // A function type guards when any of its own parameters requires redirect —
   // e.g. FetchFn's `init: { ...; redirect: "error" }`.
   if (ts.isFunctionTypeNode(typeNode)) {
-    return typeNode.parameters.some((param) => param.type && requiresRedirect(param.type, aliases, depth + 1));
+    return typeNode.parameters.some(
+      (param) => param.type && requiresRedirect(param.type, aliases, depth + 1),
+    );
   }
   return false;
 }
@@ -146,7 +164,11 @@ function structurallyTypedRefusal(functionNode, initIdentifierText, aliases) {
 }
 
 function functionNameOf(node) {
-  if ((ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) && node.name && ts.isIdentifier(node.name)) {
+  if (
+    (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
+    node.name &&
+    ts.isIdentifier(node.name)
+  ) {
     return node.name.text;
   }
   if (
@@ -205,7 +227,8 @@ export function auditRepository(files, readSource = (file) => readFileSync(file,
 
     const aliases = new Map();
     const collectAlias = (node) => {
-      if (ts.isTypeAliasDeclaration(node) && ts.isIdentifier(node.name)) aliases.set(node.name.text, node);
+      if (ts.isTypeAliasDeclaration(node) && ts.isIdentifier(node.name))
+        aliases.set(node.name.text, node);
       ts.forEachChild(node, collectAlias);
     };
     collectAlias(sourceFile);
@@ -216,7 +239,11 @@ export function auditRepository(files, readSource = (file) => readFileSync(file,
       CREDENTIAL_PATTERN.test(sourceText.replace(/^\s*(?:\/\/|\/\*[\s\S]*?\*\/)\s*$/gm, ""));
 
     const visit = (node) => {
-      if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.expression.text !== "fetch") {
+      if (
+        !ts.isCallExpression(node) ||
+        !ts.isIdentifier(node.expression) ||
+        node.expression.text !== "fetch"
+      ) {
         ts.forEachChild(node, visit);
         return;
       }
@@ -306,14 +333,31 @@ export function auditRepository(files, readSource = (file) => readFileSync(file,
       newViolations.push(site);
     }
   }
-  const staleBaselineEntries = KNOWN_UNSAFE.filter((entry) => !matchedKeys.has(`${entry.path}::${entry.fn}`));
+  const staleBaselineEntries = KNOWN_UNSAFE.filter(
+    (entry) => !matchedKeys.has(`${entry.path}::${entry.fn}`),
+  );
 
-  return { scannedFiles, siteCount, credentialSites, guardedSurfaces, knownGaps, newViolations, staleBaselineEntries };
+  return {
+    scannedFiles,
+    siteCount,
+    credentialSites,
+    guardedSurfaces,
+    knownGaps,
+    newViolations,
+    staleBaselineEntries,
+  };
 }
 
 function main() {
-  const { scannedFiles, siteCount, credentialSites, guardedSurfaces, knownGaps, newViolations, staleBaselineEntries } =
-    auditRepository(discoverServerSources());
+  const {
+    scannedFiles,
+    siteCount,
+    credentialSites,
+    guardedSurfaces,
+    knownGaps,
+    newViolations,
+    staleBaselineEntries,
+  } = auditRepository(discoverServerSources());
 
   let failed = false;
   if (newViolations.length > 0) {
@@ -333,7 +377,9 @@ function main() {
     failed = true;
     console.error("FAIL: baseline entries no longer violate:");
     for (const entry of staleBaselineEntries) {
-      console.error(`  ${entry.path} (${entry.fn}) [${entry.findingId}]: fixed — remove from baseline`);
+      console.error(
+        `  ${entry.path} (${entry.fn}) [${entry.findingId}]: fixed — remove from baseline`,
+      );
     }
   }
   if (failed) {
@@ -346,7 +392,8 @@ function main() {
       `refuse redirects (${siteCount} fetch sites total).`,
   );
   console.log(`guarded surfaces (${guardedSurfaces.length}):`);
-  for (const surface of guardedSurfaces) console.log(`  ${surface.path}:${surface.line} (${surface.fn})`);
+  for (const surface of guardedSurfaces)
+    console.log(`  ${surface.path}:${surface.line} (${surface.fn})`);
   console.log(`known gaps — baselined, owned elsewhere (${knownGaps.length}):`);
   for (const gap of knownGaps) {
     console.log(`  ${gap.path}:${gap.line} (${gap.fn}) [${gap.findingId}] ${gap.reason}`);

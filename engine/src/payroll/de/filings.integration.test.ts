@@ -19,9 +19,7 @@ import { sealSecret } from "../../platform/secrets.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import {
-  lohnsteuerbescheinigungSlips,
-} from "./filings.ts";
+import { lohnsteuerbescheinigungSlips } from "./filings.ts";
 import { DE_PAYROLL_PACK } from "./pack.ts";
 import {
   createScratchOrg,
@@ -102,8 +100,20 @@ test(
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const wageId = await makeAccount(org.orgId, actorId, "6000", "Wages & Salaries", "expense");
-      const netId = await makeAccount(org.orgId, actorId, "2300", "Employee Payable", "liability_current_other");
-      const deductionsId = await makeAccount(org.orgId, actorId, "2110", "Payroll Deductions", "liability_current_other");
+      const netId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2300",
+        "Employee Payable",
+        "liability_current_other",
+      );
+      const deductionsId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2110",
+        "Payroll Deductions",
+        "liability_current_other",
+      );
       await db.execute(sql`
         update orgs
            set settings = jsonb_set(
@@ -150,22 +160,42 @@ test(
                 ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
 
       const maria = await makeEmployee(
-        org.orgId, org.subsidiaryId, actorId, scheduleId, "Maria Muster", "BY", "74400", "12345678901",
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Maria Muster",
+        "BY",
+        "74400",
+        "12345678901",
       );
       await fileCertificate(org.orgId, maria, actorId, "de_elstam", {
-        steuerklasse: "I", kinderfreibetrag_anzahl: "0", konfession: "rk",
+        steuerklasse: "I",
+        kinderfreibetrag_anzahl: "0",
+        konfession: "rk",
       });
       await fileCertificate(org.orgId, maria, actorId, "de_pv_nachweis", {
-        kinderlosenzuschlag: "true", abschlag_kinder: "0",
+        kinderlosenzuschlag: "true",
+        abschlag_kinder: "0",
       });
       const jan = await makeEmployee(
-        org.orgId, org.subsidiaryId, actorId, scheduleId, "Jan Beispiel", "NW", "60000", "23456789012",
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Jan Beispiel",
+        "NW",
+        "60000",
+        "23456789012",
       );
       await fileCertificate(org.orgId, jan, actorId, "de_elstam", {
-        steuerklasse: "III", kinderfreibetrag_anzahl: "2", konfession: "ev",
+        steuerklasse: "III",
+        kinderfreibetrag_anzahl: "2",
+        konfession: "ev",
       });
       await fileCertificate(org.orgId, jan, actorId, "de_pv_nachweis", {
-        kinderlosenzuschlag: "false", abschlag_kinder: "2",
+        kinderlosenzuschlag: "false",
+        abschlag_kinder: "2",
       });
 
       // January calculates: both employees refuse by name. U1/U2/U3 and the
@@ -174,26 +204,46 @@ test(
       // fully configured org (slots mapped, Zusatzbeitragssatz filed,
       // Finanzamt registered) cannot escape the refusal.
       const janRun = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-01-01", periodEnd: "2026-01-31", payDate: "2026-01-31",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-01-01",
+        periodEnd: "2026-01-31",
+        payDate: "2026-01-31",
       });
-      const janErrors = (await calculatePayRun({ orgId: org.orgId, actorId, documentId: janRun.documentId })).errors;
+      const janErrors = (
+        await calculatePayRun({ orgId: org.orgId, actorId, documentId: janRun.documentId })
+      ).errors;
       assert.equal(janErrors.length, 2);
       for (const error of janErrors) {
         assert.equal(error.kind, "refusal");
-        assert.match(error.message, /employer levies are not priced: U1.*U2.*U3.*Berufsgenossenschaft/);
+        assert.match(
+          error.message,
+          /employer levies are not priced: U1.*U2.*U3.*Berufsgenossenschaft/,
+        );
       }
       // March is calculated but left DRAFT — with nothing committable, no
       // stubs exist anywhere for the year, so the draft stays out too.
       const draft = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-03-01", periodEnd: "2026-03-31", payDate: "2026-03-31",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-03-01",
+        periodEnd: "2026-03-31",
+        payDate: "2026-03-31",
       });
-      const draftErrors = (await calculatePayRun({ orgId: org.orgId, actorId, documentId: draft.documentId })).errors;
+      const draftErrors = (
+        await calculatePayRun({ orgId: org.orgId, actorId, documentId: draft.documentId })
+      ).errors;
       assert.equal(draftErrors.length, 2);
-      const stubs = (await db.execute<{ n: string }>(sql`
+      const stubs = (
+        await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n from pay_stubs s
-         where s.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'DE'`, "objects"))[0]!.n;
+         where s.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'DE'`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(stubs, "0");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -208,7 +258,9 @@ test(
     const org = await createScratchOrg();
     const _actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const filing = DE_PAYROLL_PACK.filings().yearEnd.find((candidate) => candidate.key === "lohnsteuerbescheinigung")!;
+      const filing = DE_PAYROLL_PACK.filings().yearEnd.find(
+        (candidate) => candidate.key === "lohnsteuerbescheinigung",
+      )!;
       await assert.rejects(
         () => filing.population(org.orgId, 2026),
         (error: unknown) => {
@@ -227,10 +279,7 @@ test(
           return true;
         },
       );
-      await assert.rejects(
-        () => lohnsteuerbescheinigungSlips(org.orgId, 2025),
-        /2025/,
-      );
+      await assert.rejects(() => lohnsteuerbescheinigungSlips(org.orgId, 2025), /2025/);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

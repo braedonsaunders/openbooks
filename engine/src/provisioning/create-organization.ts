@@ -7,7 +7,11 @@ import { UNUSABLE_PASSWORD_HASH } from "../organization/pending-credential.ts";
 import { lockLoginEmail } from "../organization/login-identity.ts";
 import { provisionPayrollPackDefaults } from "../payroll/run-setup.ts";
 import { db, withBypass } from "../platform/db.ts";
-import { alignBuiltInAdministratorRole, type AdministratorRoleAlignment, upsertBuiltInRolesForOrg } from "./built-in-role-seed.ts";
+import {
+  alignBuiltInAdministratorRole,
+  type AdministratorRoleAlignment,
+  upsertBuiltInRolesForOrg,
+} from "./built-in-role-seed.ts";
 import { provisionOrganizationDefaults } from "./organization-provisioning.ts";
 
 /**
@@ -39,7 +43,13 @@ export class OrganizationProvisioningError extends Error {
   readonly code: string;
   readonly field?: string;
   readonly remedy?: string;
-  constructor(input: { message: string; status: 400 | 403 | 409; code: string; field?: string; remedy?: string }) {
+  constructor(input: {
+    message: string;
+    status: 400 | 403 | 409;
+    code: string;
+    field?: string;
+    remedy?: string;
+  }) {
     super(input.message);
     this.name = "OrganizationProvisioningError";
     this.status = input.status;
@@ -109,9 +119,12 @@ export async function insertOrganizationRecord(
   identity: OrganizationIdentity,
   actorId: string | null,
 ): Promise<string> {
-  const installed = await db.execute<{ code: string }>(sql`
+  const installed = await db.execute<{ code: string }>(
+    sql`
     select code from currencies where code = ${identity.currency}
-  `, "objects");
+  `,
+    "objects",
+  );
   if (installed.length !== 1) {
     throw new OrganizationProvisioningError({
       message: `base currency ${identity.currency} is not installed in this database`,
@@ -121,11 +134,14 @@ export async function insertOrganizationRecord(
       remedy: "Run the installation bootstrap to seed the currency registry, then retry.",
     });
   }
-  const inserted = await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into orgs (name, base_currency, country, created_by, updated_by)
     values (${identity.name}, ${identity.currency}, ${identity.country}, ${actorId}, ${actorId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   const orgId = inserted[0]?.id;
   if (inserted.length !== 1 || !orgId) throw new Error("organization insert returned no id");
   return orgId;
@@ -157,9 +173,12 @@ export async function seedOrganizationLedgerFoundation(
     -- fails loudly if the organization still has none.
     on conflict do nothing
   `);
-  const book = await db.execute<{ id: string }>(sql`
+  const book = await db.execute<{ id: string }>(
+    sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active
-  `, "objects");
+  `,
+    "objects",
+  );
   const bookId = book[0]?.id;
   if (book.length !== 1 || !bookId) {
     throw new Error(`organization ${orgId} must have exactly one active primary book`);
@@ -180,7 +199,10 @@ export async function seedOrganizationLedgerFoundation(
  * The root legal entity, mirroring the organization's name, legal name,
  * base currency and country. Every organization has exactly one.
  */
-export async function ensureRootSubsidiary(orgId: string, actorId: string | null = null): Promise<string> {
+export async function ensureRootSubsidiary(
+  orgId: string,
+  actorId: string | null = null,
+): Promise<string> {
   await db.execute(sql`
     insert into subsidiaries
       (org_id, name, legal_name, base_currency, country, created_at, updated_at, created_by, updated_by)
@@ -196,9 +218,12 @@ export async function ensureRootSubsidiary(orgId: string, actorId: string | null
     -- exists.
     on conflict do nothing
   `);
-  const root = await db.execute<{ id: string }>(sql`
+  const root = await db.execute<{ id: string }>(
+    sql`
     select id from subsidiaries where org_id = ${orgId} and parent_id is null
-  `, "objects");
+  `,
+    "objects",
+  );
   const rootId = root[0]?.id;
   if (root.length !== 1 || !rootId) {
     throw new Error(`organization ${orgId} must have exactly one root subsidiary`);
@@ -212,13 +237,20 @@ export async function ensureRootSubsidiary(orgId: string, actorId: string | null
  * as administered: the catalogue is a new-organization default, never a
  * reset.
  */
-export async function seedBuiltInRolesForNewOrganization(orgId: string): Promise<"seeded" | "preserved"> {
-  const existing = await db.execute<{ present: boolean }>(sql`
+export async function seedBuiltInRolesForNewOrganization(
+  orgId: string,
+): Promise<"seeded" | "preserved"> {
+  const existing = await db.execute<{ present: boolean }>(
+    sql`
     select exists(select 1 from app_roles where org_id = ${orgId}) as present
-  `, "objects");
+  `,
+    "objects",
+  );
   const hasRoles = existing[0]?.present;
   if (hasRoles === undefined || hasRoles === null) {
-    throw new Error(`could not determine existing roles for organization ${orgId}; refusing to seed blindly`);
+    throw new Error(
+      `could not determine existing roles for organization ${orgId}; refusing to seed blindly`,
+    );
   }
   if (hasRoles) return "preserved";
   await upsertBuiltInRolesForOrg(db, orgId, BUILT_IN_ROLES);
@@ -229,7 +261,9 @@ export async function seedBuiltInRolesForNewOrganization(orgId: string): Promise
  * Bring an existing organization's locked built-in Administrator role up to
  * the current permission catalogue (additive; audited when it changes).
  */
-export async function alignAdministratorRoleToCatalogue(orgId: string): Promise<AdministratorRoleAlignment> {
+export async function alignAdministratorRoleToCatalogue(
+  orgId: string,
+): Promise<AdministratorRoleAlignment> {
   return alignBuiltInAdministratorRole(db, orgId, BUILT_IN_ROLES.admin!.permissions);
 }
 
@@ -280,9 +314,14 @@ export interface CreatedOrganization {
  * account that was activated, deactivated or moved in the meantime.
  */
 export async function lockPendingAdministrator(orgId: string, userId: string): Promise<boolean> {
-  const row = (await db.execute<{ is_active: boolean; password_hash: string }>(sql`
+  const row = (
+    await db.execute<{ is_active: boolean; password_hash: string }>(
+      sql`
     select is_active, password_hash from users where id = ${userId} and org_id = ${orgId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return !!row && row.is_active && row.password_hash === UNUSABLE_PASSWORD_HASH;
 }
 
@@ -307,9 +346,12 @@ function normalizeEmail(value: unknown): string {
  * naming it. A retry after a lost response therefore resolves to that
  * refusal instead of a second organization.
  */
-export async function createOrganization(input: CreateOrganizationInput): Promise<CreatedOrganization> {
+export async function createOrganization(
+  input: CreateOrganizationInput,
+): Promise<CreatedOrganization> {
   const identity = validateOrganizationIdentity(input);
-  const adminName = typeof input.administrator?.name === "string" ? input.administrator.name.trim() : "";
+  const adminName =
+    typeof input.administrator?.name === "string" ? input.administrator.name.trim() : "";
   if (!adminName || adminName.length > MAX_NAME_LENGTH) {
     throw new OrganizationProvisioningError({
       message: `administrator name is required and must be at most ${MAX_NAME_LENGTH} characters`,
@@ -319,7 +361,11 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
     });
   }
   const adminEmail = normalizeEmail(input.administrator?.email);
-  if (!adminEmail || adminEmail.length > MAX_EMAIL_LENGTH || !/^[^\s@]+@[^\s@]+$/.test(adminEmail)) {
+  if (
+    !adminEmail ||
+    adminEmail.length > MAX_EMAIL_LENGTH ||
+    !/^[^\s@]+@[^\s@]+$/.test(adminEmail)
+  ) {
     throw new OrganizationProvisioningError({
       message: "administrator email must be a valid address",
       status: 400,
@@ -341,11 +387,18 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
   return withBypass(async () => {
     // One creation at a time, so the name and login-identity checks below
     // cannot both pass for two concurrent requests.
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended('openbooks:organization-create', 0))`);
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended('openbooks:organization-create', 0))`,
+    );
 
-    const actor = (await db.execute<{ id: string; is_active: boolean; is_super_admin: boolean }>(sql`
+    const actor = (
+      await db.execute<{ id: string; is_active: boolean; is_super_admin: boolean }>(
+        sql`
       select id, is_active, is_super_admin from users where id = ${input.actorId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!actor || !actor.is_active || !actor.is_super_admin) {
       throw new OrganizationProvisioningError({
         message: "only an active platform super administrator can create an organization",
@@ -355,11 +408,16 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
       });
     }
 
-    const sameName = (await db.execute<{ id: string; name: string }>(sql`
+    const sameName = (
+      await db.execute<{ id: string; name: string }>(
+        sql`
       select id, name from orgs
        where env_kind = 'production' and lower(btrim(name)) = lower(${identity.name})
        order by created_at limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (sameName) {
       throw new OrganizationProvisioningError({
         message: `an organization named "${sameName.name}" already exists`,
@@ -375,12 +433,17 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
     // A login address resolves to exactly one active home identity across
     // production organizations; a second one would lock both people out.
     await lockLoginEmail(db, adminEmail);
-    const identityTaken = (await db.execute<{ id: string }>(sql`
+    const identityTaken = (
+      await db.execute<{ id: string }>(
+        sql`
       select u.id from users u
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
        where lower(u.email) = ${adminEmail} and u.is_active
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (identityTaken) {
       throw new OrganizationProvisioningError({
         message: `${adminEmail} already signs in to another organization`,
@@ -397,31 +460,42 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
     const foundation = await seedOrganizationLedgerFoundation(orgId, actor.id);
     const structure = await provisionOrganizationStructure(orgId, actor.id);
     if (structure.roles !== "seeded") {
-      throw new Error(`new organization ${orgId} already held roles before the built-in catalogue was seeded`);
+      throw new Error(
+        `new organization ${orgId} already held roles before the built-in catalogue was seeded`,
+      );
     }
 
-    const user = await db.execute<{ id: string }>(sql`
+    const user = await db.execute<{ id: string }>(
+      sql`
       insert into users (org_id, email, name, password_hash, is_active, created_by, updated_by)
       values (${orgId}, ${adminEmail}, ${adminName}, ${UNUSABLE_PASSWORD_HASH}, true, ${actor.id}, ${actor.id})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     const userId = user[0]?.id;
     if (user.length !== 1 || !userId) throw new Error("administrator insert returned no id");
 
-    const assignment = await db.execute<{ id: string; role_id: string }>(sql`
+    const assignment = await db.execute<{ id: string; role_id: string }>(
+      sql`
       insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
       select ${orgId}::uuid, ${userId}::uuid, id, ${actor.id}::uuid, ${actor.id}::uuid
         from app_roles
        where org_id = ${orgId} and key = 'admin' and is_built_in
       returning id, role_id
-    `, "objects");
+    `,
+      "objects",
+    );
     const assignmentRow = assignment[0];
     if (assignment.length !== 1 || !assignmentRow) {
-      throw new Error("the first administrator did not receive exactly one built-in admin role assignment");
+      throw new Error(
+        "the first administrator did not receive exactly one built-in admin role assignment",
+      );
     }
 
     const audit = async (table: string, rowId: string, after: Record<string, unknown>) => {
-      const written = await db.execute<{ id: string }>(sql`
+      const written = await db.execute<{ id: string }>(
+        sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, ${table}, ${rowId}, 'insert', ${JSON.stringify({
           source: "platform_admin",
@@ -430,8 +504,11 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
           after,
         })}::jsonb, ${actor.id})
         returning id
-      `, "objects");
-      if (written.length !== 1) throw new Error(`audit evidence for ${table} ${rowId} was not written`);
+      `,
+        "objects",
+      );
+      if (written.length !== 1)
+        throw new Error(`audit evidence for ${table} ${rowId} was not written`);
     };
     await audit("orgs", orgId, {
       name: identity.name,

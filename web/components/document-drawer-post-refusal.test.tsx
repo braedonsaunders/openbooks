@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -21,7 +21,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -72,7 +80,9 @@ const SEGMENTS: never[] = [];
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -101,7 +111,10 @@ test("a closed-period Post refusal pins as a record alert and toasts", async (t)
   globalThis.__confirmVerdict = true;
   const restoreFetch = scriptFetch((url) => {
     if (url === "/api/documents/actions") {
-      return Response.json({ error: "AP is closed for this period and accounting book" }, { status: 422 });
+      return Response.json(
+        { error: "AP is closed for this period and accounting book" },
+        { status: 422 },
+      );
     }
     return null;
   });
@@ -152,7 +165,13 @@ test("a closed-period Post refusal pins as a record alert and toasts", async (t)
             segments={SEGMENTS}
             canCreate
             canPost
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "post", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -200,7 +219,8 @@ test("an unmatched-lines Post refusal offers the match dialog", async (t) => {
         {
           error: message,
           code: "BILL_LINES_UNMATCHED",
-          remedy: "Match this bill to purchase order PO-00002 (Match to purchase order), then post again",
+          remedy:
+            "Match this bill to purchase order PO-00002 (Match to purchase order), then post again",
         },
         { status: 422 },
       );
@@ -257,7 +277,13 @@ test("an unmatched-lines Post refusal offers the match dialog", async (t) => {
             segments={SEGMENTS}
             canCreate
             canPost
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "post", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -301,7 +327,8 @@ test("a typed closed-period Post refusal links the prefilled reopen form", async
     if (url === "/api/documents/actions") {
       return Response.json(
         {
-          error: "AP is closed for this period and accounting book — request a controlled reopen to post here",
+          error:
+            "AP is closed for this period and accounting book — request a controlled reopen to post here",
           code: "period-closed",
           details: {
             kind: "period-closed",
@@ -363,7 +390,13 @@ test("a typed closed-period Post refusal links the prefilled reopen form", async
             segments={SEGMENTS}
             canCreate
             canPost
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "post", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -384,8 +417,8 @@ test("a typed closed-period Post refusal links the prefilled reopen form", async
   // itself is pinned in period-closed-refusal.test.tsx; here the drawer
   // must wire the renderer beside the pinned refusal.
   const linkLabel = String(
-    (messages as { close?: { setup?: { periods?: { requestReopenLink?: string } } } })
-      .close?.setup?.periods?.requestReopenLink ?? "Request a controlled reopening",
+    (messages as { close?: { setup?: { periods?: { requestReopenLink?: string } } } }).close?.setup
+      ?.periods?.requestReopenLink ?? "Request a controlled reopening",
   );
   assert.ok(
     (document.body.textContent ?? "").includes(linkLabel),

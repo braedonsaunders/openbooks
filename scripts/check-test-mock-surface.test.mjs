@@ -16,9 +16,14 @@ import {
 
 function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), "openbooks-mock-surface-"));
-  const exports = Object.fromEntries(Object.keys(files)
-    .filter(file => file.startsWith("engine/src/") && file.endsWith(".ts"))
-    .map(file => [`./${file.slice("engine/src/".length, -3)}`, `./${file.slice("engine/".length)}`]));
+  const exports = Object.fromEntries(
+    Object.keys(files)
+      .filter((file) => file.startsWith("engine/src/") && file.endsWith(".ts"))
+      .map((file) => [
+        `./${file.slice("engine/src/".length, -3)}`,
+        `./${file.slice("engine/".length)}`,
+      ]),
+  );
   files = { "engine/package.json": JSON.stringify({ exports }), ...files };
   for (const [relative, content] of Object.entries(files)) {
     const path = join(root, relative);
@@ -51,9 +56,13 @@ export async function GET() {
 `;
 
 function mockTest(extraDbExports, wiring) {
-  return hookedTest("db", `export const db = {};
+  return hookedTest(
+    "db",
+    `export const db = {};
 export const schema = {};
-${extraDbExports}`, wiring);
+${extraDbExports}`,
+    wiring,
+  );
 }
 
 function hookedTest(name, body, wiring) {
@@ -82,16 +91,20 @@ const MAP_WIRING = `    const mocked = new Map([["@openbooks/engine/platform/db"
     if (mocked) return { url: mocked, shortCircuit: true };`;
 
 test("import parsing keeps the exported name across aliases and drops types", () => {
-  const imports = staticImports(codeOnly(`import { db as database, withBypassContext, type OrgCtx } from "db.ts";
+  const imports = staticImports(
+    codeOnly(`import { db as database, withBypassContext, type OrgCtx } from "db.ts";
 import type { Other } from "other.ts";
 const top = await import("./top.ts");
 async function load(flag) {
   if (flag) return import("./lazy.ts");
   return null;
 }
-`));
+`),
+  );
   assert.deepEqual(
-    imports.map((entry) => [entry.spec, [...entry.names].sort(), entry.dynamic]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    imports
+      .map((entry) => [entry.spec, [...entry.names].sort(), entry.dynamic])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
     [
       ["./lazy.ts", [], true],
       ["./top.ts", [], false],
@@ -124,10 +137,14 @@ const interpolated = \`prefix \${real} and \` + "tail";
 test("mock bodies unescape one template level before export extraction", async () => {
   const { unescapeTemplate } = await import("./check-test-mock-surface.mjs");
   assert.equal(unescapeTemplate("a\\`b\\${c}\\\\d\\n"), "a`b${c}\\d\n");
-  const have = moduleExports(codeOnly(unescapeTemplate(`export function sealSecret(secret) {
+  const have = moduleExports(
+    codeOnly(
+      unescapeTemplate(`export function sealSecret(secret) {
         return { ciphertext: \\\`sealed:\\\${secret}\\\`, nonce: 'nonce' }
       }
-      export function validateStoredEmailConfig(config) {}`)));
+      export function validateStoredEmailConfig(config) {}`),
+    ),
+  );
   assert.deepEqual([...have].sort(), ["sealSecret", "validateStoredEmailConfig"]);
 });
 
@@ -145,7 +162,10 @@ test("complete mock reports no gaps", () => {
   const root = fixture({
     "engine/src/platform/db.ts": DB,
     "web/lib/subs.ts": SUBS,
-    "web/app/route.test.ts": mockTest("      export function withBypassContext(fn) { return fn(); }\n      export function registerRequestOrgResolver() {}\n", MAP_WIRING),
+    "web/app/route.test.ts": mockTest(
+      "      export function withBypassContext(fn) { return fn(); }\n      export function registerRequestOrgResolver() {}\n",
+      MAP_WIRING,
+    ),
     "web/app/route.ts": ROUTE,
   });
   const result = checkFile(join(root, "web/app/route.test.ts"), root);
@@ -157,7 +177,10 @@ test("a mock missing a statically-reached export is a gap naming the importer", 
   const root = fixture({
     "engine/src/platform/db.ts": DB,
     "web/lib/subs.ts": SUBS,
-    "web/app/route.test.ts": mockTest("      export function registerRequestOrgResolver() {}\n", MAP_WIRING),
+    "web/app/route.test.ts": mockTest(
+      "      export function registerRequestOrgResolver() {}\n",
+      MAP_WIRING,
+    ),
     "web/app/route.ts": ROUTE,
   });
   const result = checkFile(join(root, "web/app/route.test.ts"), root);
@@ -168,14 +191,16 @@ test("a mock missing a statically-reached export is a gap naming the importer", 
 });
 
 test("variable SUT loads resolve through string bindings", () => {
-  const imports = staticImports(codeOnly(`const routeUrl = "./route.ts?tag";
+  const imports = staticImports(
+    codeOnly(`const routeUrl = "./route.ts?tag";
 const other = "./other.ts";
 const { GET } = await import(routeUrl);
 const missing = await import(unknownVar);
 async function later() {
   return import(other);
 }
-`));
+`),
+  );
   const bySpec = new Map(imports.map((entry) => [entry.spec, entry.dynamic]));
   // Top-level variable load always runs: static. Nested stays lazy.
   assert.equal(bySpec.get("./route.ts?tag"), false);
@@ -220,7 +245,10 @@ test("a specifier rule nested under a parentURL guard inherits the guard", () =>
   // outer guard this rule over-mocks every next-intl/server edge and forges
   // needs (getLocale) the mock never serves at runtime.
   assert.equal(matchRule(rules, "next-intl/server", "file:///x/web/lib/analytics/other.ts"), null);
-  assert.equal(matchRule(rules, "next-intl/server", "file:///x/admin/navigation/view.ts")?.mock, "nav-loader-intl");
+  assert.equal(
+    matchRule(rules, "next-intl/server", "file:///x/admin/navigation/view.ts")?.mock,
+    "nav-loader-intl",
+  );
   assert.deepEqual(rules[1].parent, { kind: "any" });
 });
 
@@ -303,14 +331,24 @@ test("||-chained parent alternatives each scope the rule", () => {
   assert.equal(rules.length, 4);
   // The merge-route importer matches through the second parent alternative:
   // without it the edge stays falsely real and forges an exposure chain.
-  assert.equal(matchRule(rules, "../../../../lib/authz", "file:///x/projects/merge/route.ts")?.mock, "authz");
-  assert.equal(matchRule(rules, "../../../../lib/authz", "file:///x/projects/duplicates/route.ts")?.mock, "authz");
-  assert.equal(matchRule(rules, "../../../../lib/projects-gate", "file:///x/projects/merge/route.ts")?.mock, "authz");
+  assert.equal(
+    matchRule(rules, "../../../../lib/authz", "file:///x/projects/merge/route.ts")?.mock,
+    "authz",
+  );
+  assert.equal(
+    matchRule(rules, "../../../../lib/authz", "file:///x/projects/duplicates/route.ts")?.mock,
+    "authz",
+  );
+  assert.equal(
+    matchRule(rules, "../../../../lib/projects-gate", "file:///x/projects/merge/route.ts")?.mock,
+    "authz",
+  );
   assert.equal(matchRule(rules, "../../../../lib/authz", "file:///x/other/route.ts"), null);
 });
 
 test("stub-factory consequences cut the edge with no mock needs", () => {
-  const rules = parseWiring(`const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) });
+  const rules =
+    parseWiring(`const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'server-only') return virtual('export {}');
@@ -331,7 +369,10 @@ test("a dynamically-reached missing export warns instead of failing", () => {
   const root = fixture({
     "engine/src/platform/db.ts": DB,
     "web/lib/subs.ts": SUBS,
-    "web/app/route.test.ts": mockTest("      export function registerRequestOrgResolver() {}\n", MAP_WIRING),
+    "web/app/route.test.ts": mockTest(
+      "      export function registerRequestOrgResolver() {}\n",
+      MAP_WIRING,
+    ),
     "web/app/route.ts": `import { db } from "@openbooks/engine/platform/db";
 export async function GET(flag) {
   if (flag) {
@@ -365,7 +406,7 @@ test("route loads", async () => {});
 `,
     "web/app/route.ts": ROUTE,
   });
-  const blocks = mockBlocks("const m = new Map([[\"mock:db\", \"export const db = {};\"]]);");
+  const blocks = mockBlocks('const m = new Map([["mock:db", "export const db = {};"]]);');
   assert.ok(blocks.has("db"));
   const result = checkFile(join(root, "web/app/route.test.ts"), root);
   assert.equal(result.unmodeled, true);
@@ -381,19 +422,24 @@ export async function parseJsonBody(request, schema) {
 }
 `;
 
-const JSON_DOUBLE_TEST = hookedTest("json", `
+const JSON_DOUBLE_TEST = hookedTest(
+  "json",
+  `
 export const jsonObject = {}
 export async function parseJsonBody(request) {
   return { ok: true, data: await request.json() }
 }
-`, `    const mocked = new Map([["@/lib/api/json", "mock:json"]]).get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };`);
+`,
+  `    const mocked = new Map([["@/lib/api/json", "mock:json"]]).get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };`,
+);
 
 const JSON_DOUBLE_ROUTE = `import { parseJsonBody } from "@/lib/api/json";
 export async function GET() { return parseJsonBody; }
 `;
 
-const MONEY_REEXPORT_TEST = hookedTest("money",
+const MONEY_REEXPORT_TEST = hookedTest(
+  "money",
   'export * from "@openbooks/engine/money/money"',
   `    const mocked = new Map([["@openbooks/engine/money/money", "mock:money"]]).get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };`,
@@ -421,7 +467,8 @@ test("a hand double of the JSON validation boundary is refused by name", () => {
 
 test("a re-export-only double of the money kernel is not a violation", () => {
   const root = fixture({
-    "engine/src/money/money.ts": "export function normalizeMoney(value) { return String(value); }\nexport function cmp(a, b) { return 0; }\n",
+    "engine/src/money/money.ts":
+      "export function normalizeMoney(value) { return String(value); }\nexport function cmp(a, b) { return 0; }\n",
     "web/app/route.test.ts": MONEY_REEXPORT_TEST,
     "web/app/route.ts": MONEY_ROUTE,
   });
@@ -434,12 +481,18 @@ test("a re-export-only double of the money kernel is not a violation", () => {
 
 test("the doubles ratchet fails a new double and flags a stale allow-list entry", () => {
   const root = doublesFixture();
-  const report = checkTree(root, new Map([["web/app/gone.test.ts", { json: "entry whose double was deleted" }]]));
+  const report = checkTree(
+    root,
+    new Map([["web/app/gone.test.ts", { json: "entry whose double was deleted" }]]),
+  );
   assert.equal(report.doubles.length, 1);
   assert.equal(report.doubles[0].file, "web/app/route.test.ts");
   assert.deepEqual(report.staleDoubles, [{ file: "web/app/gone.test.ts", spec: "json" }]);
   // The same double, allow-listed, is queued rather than failed.
-  const allowed = checkTree(root, new Map([["web/app/route.test.ts", { json: "queued conversion" }]]));
+  const allowed = checkTree(
+    root,
+    new Map([["web/app/route.test.ts", { json: "queued conversion" }]]),
+  );
   assert.deepEqual(allowed.doubles, []);
   assert.deepEqual(allowed.staleDoubles, []);
   assert.equal(allowed.allowedDoubles.length, 1);
@@ -447,8 +500,24 @@ test("the doubles ratchet fails a new double and flags a stale allow-list entry"
 
 test("the live repository has no mock-surface gaps and no unmodeled wiring", () => {
   const report = checkTree();
-  assert.deepEqual(report.gaps, [], `${report.gaps.length} mock-surface gaps:\n${report.gaps.map((gap) => `${gap.file} [mock:${gap.spec}] missing ${gap.names.join(", ")}`).join("\n")}`);
-  assert.deepEqual(report.unmodeled, [], `${report.unmodeled.length} unmodeled wirings:\n${report.unmodeled.join("\n")}`);
-  assert.deepEqual(report.doubles, [], `${report.doubles.length} hand doubles of protected surfaces:\n${report.doubles.map((double) => `${double.file} [mock:${double.spec}] ${double.names.join(", ")}`).join("\n")}`);
-  assert.deepEqual(report.staleDoubles, [], `${report.staleDoubles.length} stale allow-list entries:\n${report.staleDoubles.map((entry) => `${entry.file} [mock:${entry.spec}]`).join("\n")}`);
+  assert.deepEqual(
+    report.gaps,
+    [],
+    `${report.gaps.length} mock-surface gaps:\n${report.gaps.map((gap) => `${gap.file} [mock:${gap.spec}] missing ${gap.names.join(", ")}`).join("\n")}`,
+  );
+  assert.deepEqual(
+    report.unmodeled,
+    [],
+    `${report.unmodeled.length} unmodeled wirings:\n${report.unmodeled.join("\n")}`,
+  );
+  assert.deepEqual(
+    report.doubles,
+    [],
+    `${report.doubles.length} hand doubles of protected surfaces:\n${report.doubles.map((double) => `${double.file} [mock:${double.spec}] ${double.names.join(", ")}`).join("\n")}`,
+  );
+  assert.deepEqual(
+    report.staleDoubles,
+    [],
+    `${report.staleDoubles.length} stale allow-list entries:\n${report.staleDoubles.map((entry) => `${entry.file} [mock:${entry.spec}]`).join("\n")}`,
+  );
 });

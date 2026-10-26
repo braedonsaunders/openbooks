@@ -7,10 +7,7 @@
  * adapters whose source has not landed (qualification alerts,
  * document signatures) — they list nothing until their source exists.
  */
-import {
-  aiCapabilityReviewAdapter,
-  payrollAnomalyBlockAdapter,
-} from "./adapters/ai-rails.ts";
+import { aiCapabilityReviewAdapter, payrollAnomalyBlockAdapter } from "./adapters/ai-rails.ts";
 import { documentSignatureAdapter } from "./adapters/document-signature.ts";
 import { expenseReportAdapter } from "./adapters/expense-report.ts";
 import { fieldTicketSignatureAdapter } from "./adapters/field-ticket-signature.ts";

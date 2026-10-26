@@ -46,10 +46,12 @@ export const EMPTY_PERIOD_PRIORS: PayPeriodPriors = {
 };
 
 export function periodPriorsEmpty(priors: PayPeriodPriors): boolean {
-  return priors.pensionable === "0"
-    && priors.insurable === "0"
-    && Object.keys(priors.factors).length === 0
-    && Object.keys(priors.withheldBySystemKey).length === 0;
+  return (
+    priors.pensionable === "0" &&
+    priors.insurable === "0" &&
+    Object.keys(priors.factors).length === 0 &&
+    Object.keys(priors.withheldBySystemKey).length === 0
+  );
 }
 
 type PeriodSibling = {
@@ -93,7 +95,11 @@ export function periodRunIdentity(
   return {
     documentId: ref.documentId,
     documentNumber: ref.documentNumber ?? ref.documentId,
-    payScheduleId, periodStart, periodEnd, payDate, createdAt,
+    payScheduleId,
+    periodStart,
+    periodEnd,
+    payDate,
+    createdAt,
     runType: ref.runType,
   };
 }
@@ -111,10 +117,17 @@ export async function listPeriodSiblings(
   orgId: string,
   run: PeriodRunIdentity,
 ): Promise<PeriodSibling[]> {
-  const employer=await tx.execute<{id:string}>(sql`select subsidiary_id as id from documents
-    where org_id=${orgId} and id=${run.documentId} and kind='pay_run'`, "objects");
-  if(employer.length!==1||!employer[0]!.id)throw new PayrollError('Pay-period sequencing requires the actual legal employer of the pay run');
-  const rows = (await tx.execute<PeriodSibling>(sql`
+  const employer = await tx.execute<{ id: string }>(
+    sql`select subsidiary_id as id from documents
+    where org_id=${orgId} and id=${run.documentId} and kind='pay_run'`,
+    "objects",
+  );
+  if (employer.length !== 1 || !employer[0]!.id)
+    throw new PayrollError(
+      "Pay-period sequencing requires the actual legal employer of the pay run",
+    );
+  const rows = await tx.execute<PeriodSibling>(
+    sql`
     select r.document_id::text as document_id, d.document_number,
            r.run_type, r.run_status, d.status as doc_status,
            r.pay_date::text as pay_date, r.created_at::text as created_at
@@ -129,7 +142,9 @@ export async function listPeriodSiblings(
        and r.run_status <> 'voided'
        and d.status <> 'voided'
      order by r.pay_date, r.created_at, d.document_number
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -157,18 +172,18 @@ export async function assertPeriodSequence(
   for (const earlier of siblings.slice(0, selfIndex)) {
     if (earlier.run_status !== "committed") {
       throw new PayrollError(
-        `pay run ${run.documentNumber} cannot ${verb} while ${earlier.document_number} `
-        + `(${earlier.run_type}) for the same period is still ${earlier.run_status} — `
-        + `commit ${earlier.document_number} first (or discard it), so the period builds in pay-date order`,
+        `pay run ${run.documentNumber} cannot ${verb} while ${earlier.document_number} ` +
+          `(${earlier.run_type}) for the same period is still ${earlier.run_status} — ` +
+          `commit ${earlier.document_number} first (or discard it), so the period builds in pay-date order`,
       );
     }
   }
   for (const later of siblings.slice(selfIndex + 1)) {
     if (later.run_status === "committed") {
       throw new PayrollError(
-        `pay run ${run.documentNumber} cannot ${verb} — ${later.document_number} `
-        + `(${later.run_type}) for the same period is already committed and was computed without this run's share — `
-        + `void ${later.document_number} and re-process the period in pay-date order`,
+        `pay run ${run.documentNumber} cannot ${verb} — ${later.document_number} ` +
+          `(${later.run_type}) for the same period is already committed and was computed without this run's share — ` +
+          `void ${later.document_number} and re-process the period in pay-date order`,
       );
     }
   }
@@ -188,17 +203,19 @@ export async function loadPeriodPriors(
   documentId: string,
 ): Promise<Map<string, PayPeriodPriors>> {
   const selfIndex = siblings.findIndex((s) => s.document_id === documentId);
-  const earlier = siblings.slice(0, selfIndex < 0 ? 0 : selfIndex)
+  const earlier = siblings
+    .slice(0, selfIndex < 0 ? 0 : selfIndex)
     .filter((s) => s.run_status === "committed")
     .map((s) => s.document_id);
   const priors = new Map<string, PayPeriodPriors>();
   if (earlier.length === 0) return priors;
-  const byEmployee = (await tx.execute<{
+  const byEmployee = await tx.execute<{
     employee_party_id: string;
     pensionable: string;
     insurable: string;
     factors: Record<string, string | number> | null;
-  }>(sql`
+  }>(
+    sql`
     select s.employee_party_id::text as employee_party_id,
            sum(s.pensionable_earnings)::text as pensionable,
            sum(s.insurable_earnings)::text as insurable,
@@ -207,7 +224,9 @@ export async function loadPeriodPriors(
      where s.org_id = ${orgId}
        and s.pay_run_document_id = any(${`{${earlier.join(",")}}`}::uuid[])
      group by s.employee_party_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   // Factors arrive per stub (one JSON object per earlier run) and sum in
   // application code: the key set is the pack's own trace vocabulary, which
   // SQL must not enumerate.
@@ -216,14 +235,21 @@ export async function loadPeriodPriors(
     const perStub = Object.values(
       (row.factors ?? {}) as unknown as Record<string, Record<string, string | number>>,
     );
-    stubFactors.set(row.employee_party_id, perStub.map((factors) =>
-      Object.fromEntries(Object.entries(factors ?? {}).map(([key, value]) => [key, String(value)]))));
+    stubFactors.set(
+      row.employee_party_id,
+      perStub.map((factors) =>
+        Object.fromEntries(
+          Object.entries(factors ?? {}).map(([key, value]) => [key, String(value)]),
+        ),
+      ),
+    );
   }
-  const withheld = (await tx.execute<{
+  const withheld = await tx.execute<{
     employee_party_id: string;
     system_key: string;
     amount: string;
-  }>(sql`
+  }>(
+    sql`
     select s.employee_party_id::text as employee_party_id,
            c.system_key,
            sum(l.amount)::text as amount
@@ -234,7 +260,9 @@ export async function loadPeriodPriors(
        and s.pay_run_document_id = any(${`{${earlier.join(",")}}`}::uuid[])
        and c.system_key is not null
      group by s.employee_party_id, c.system_key
-  `, "objects"));
+  `,
+    "objects",
+  );
   const withheldByEmployee = new Map<string, Record<string, string>>();
   for (const row of withheld) {
     const entry = withheldByEmployee.get(row.employee_party_id) ?? {};
@@ -277,8 +305,8 @@ export function assertSupplementalSupported(
   if (runType !== "supplemental" && !hasPriors) return;
   if (!pack.supplementalPayTreatment) {
     throw new PayrollError(
-      `supplemental-period payroll is not supported for ${country} — the payroll pack `
-      + "does not declare supplemental-period treatment",
+      `supplemental-period payroll is not supported for ${country} — the payroll pack ` +
+        "does not declare supplemental-period treatment",
     );
   }
 }
@@ -298,14 +326,20 @@ export async function supplementalTaxMethodForOrg(
   pack: PayrollCountryPack,
 ): Promise<SupplementalTaxMethod> {
   const treatment = pack.supplementalPayTreatment!;
-  const stored = (await tx.execute<{ method: string | null }>(sql`
+  const stored =
+    (
+      await tx.execute<{ method: string | null }>(
+        sql`
     select settings#>>'{payroll,supplementalTaxMethod}' as method from orgs where id = ${orgId}
-  `, "objects"))[0]?.method ?? null;
+  `,
+        "objects",
+      )
+    )[0]?.method ?? null;
   if (stored == null || stored === "") return treatment.defaultTaxMethod;
   if (!(treatment.taxMethods as readonly string[]).includes(stored)) {
     throw new PayrollError(
-      `unknown supplemental tax method "${stored}" — choose one of ${treatment.taxMethods.join(", ")} `
-      + "in payroll settings",
+      `unknown supplemental tax method "${stored}" — choose one of ${treatment.taxMethods.join(", ")} ` +
+        "in payroll settings",
     );
   }
   return stored as SupplementalTaxMethod;

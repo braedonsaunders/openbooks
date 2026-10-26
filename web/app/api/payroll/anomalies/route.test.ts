@@ -6,45 +6,69 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const stateKey = Symbol.for("openbooks.payroll-anomaly-post-route-test");
 interface RouteState {
-  authz: { user: { orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null;
+  authz: {
+    user: { orgId: string; id: string };
+    permissions: Set<string>;
+    allowedSubsidiaryIds: Set<string> | null;
+  } | null;
   features: Record<string, boolean>;
   scans: Array<Record<string, unknown>>;
   baselines: Array<Record<string, unknown>>;
 }
 const state: RouteState = { authz: null, features: {}, scans: [], baselines: [] };
-;(globalThis as Record<symbol, unknown>)[stateKey] = state;
+(globalThis as Record<symbol, unknown>)[stateKey] = state;
 
 const mocks = new Map<string, string>([
-  ["mock:authz", `
+  [
+    "mock:authz",
+    `
     const state = globalThis[Symbol.for("openbooks.payroll-anomaly-post-route-test")];
     export async function getAuthz() { return state.authz; }
     export function can(authz, permission) { return authz.permissions.has("*") || authz.permissions.has(permission); }
-  `],
-  ["mock:features", `
+  `,
+  ],
+  [
+    "mock:features",
+    `
     const state = globalThis[Symbol.for("openbooks.payroll-anomaly-post-route-test")];
     export async function isFeatureEnabled(_orgId, feature) { return state.features[feature] === true; }
-  `],
-  ["mock:anomalies", `
+  `,
+  ],
+  [
+    "mock:anomalies",
+    `
     const state = globalThis[Symbol.for("openbooks.payroll-anomaly-post-route-test")];
     export async function listFlags() { return []; }
     export async function runAnomalyScan(input) { state.scans.push(input); return { created: 0 }; }
     export async function computeAnomalyBaselines(input) { state.baselines.push(input); return { computed: 0 }; }
-  `],
-  ["mock:ai-rails", `
+  `,
+  ],
+  [
+    "mock:ai-rails",
+    `
     export function aiRailsErrorResponse(error) { return Response.json({ error: error.message }, { status: 422 }); }
-  `],
-  ["mock:responses", `
+  `,
+  ],
+  [
+    "mock:responses",
+    `
     export function notFound() { return Response.json({ error: "not_found" }, { status: 404 }); }
-  `],
-  ["mock:preview-invalidation", `
+  `,
+  ],
+  [
+    "mock:preview-invalidation",
+    `
     export async function invalidateAnalyticsPreviews() {}
-  `],
+  `,
+  ],
 ]);
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const realRouteUrl = pathToFileURL(join(testDir, "../../../../lib/api/route.ts")).href;
 const realJsonUrl = pathToFileURL(join(testDir, "../../../../lib/api/json.ts")).href;
-const realTemporalUrl = pathToFileURL(join(testDir, "../../../../../engine/src/hrm/temporal.ts")).href;
+const realTemporalUrl = pathToFileURL(
+  join(testDir, "../../../../../engine/src/hrm/temporal.ts"),
+).href;
 const modules = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/features", "mock:features"],
@@ -55,17 +79,21 @@ const modules = new Map<string, string>([
 ]);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return { shortCircuit: true, format: "module", url: "data:text/javascript,export%20{}" };
+    if (specifier === "server-only")
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export%20{}" };
     if (specifier === "@/lib/api/route") return { shortCircuit: true, url: realRouteUrl };
     if (specifier === "@/lib/api/json") return { shortCircuit: true, url: realJsonUrl };
-    if (specifier === "@openbooks/engine/hrm/temporal") return { shortCircuit: true, url: realTemporalUrl };
+    if (specifier === "@openbooks/engine/hrm/temporal")
+      return { shortCircuit: true, url: realTemporalUrl };
     const mock = modules.get(specifier);
     if (mock) return { shortCircuit: true, format: "module", url: mock };
     return nextResolve(specifier, context);
   },
   load(url, _context, nextLoad) {
     const source = mocks.get(url);
-    return source === undefined ? nextLoad(url, _context) : { shortCircuit: true, format: "module", source };
+    return source === undefined
+      ? nextLoad(url, _context)
+      : { shortCircuit: true, format: "module", source };
   },
 });
 
@@ -85,11 +113,13 @@ function setup(permissions: string[], features: Record<string, boolean>) {
 }
 
 function post(body: unknown) {
-  return POST(new Request("http://openbooks.test/api/payroll/anomalies", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }));
+  return POST(
+    new Request("http://openbooks.test/api/payroll/anomalies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
 }
 
 test("an unrestricted time approver can run a time-only scan without Payroll", async () => {
@@ -97,7 +127,10 @@ test("an unrestricted time approver can run a time-only scan without Payroll", a
   const response = await post({ timeOnly: true, periodFrom: "2026-05-01", periodTo: "2026-05-31" });
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual(state.scans[0], {
-    orgId: "org-1", actorId: "user-1", periodFrom: "2026-05-01", periodTo: "2026-05-31",
+    orgId: "org-1",
+    actorId: "user-1",
+    periodFrom: "2026-05-01",
+    periodTo: "2026-05-31",
     options: { timeOnly: true },
   });
 });

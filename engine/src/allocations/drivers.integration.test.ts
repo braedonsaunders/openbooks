@@ -42,7 +42,9 @@ function makeDriver(orgId: string, overrides: Partial<AllocationDriver> = {}): A
 
 async function makeDept(orgId: string, name: string): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into departments (id, org_id, name) values (${id}, ${orgId}, ${name})`);
+  await db.execute(
+    sql`insert into departments (id, org_id, name) values (${id}, ${orgId}, ${name})`,
+  );
   return id;
 }
 
@@ -115,22 +117,44 @@ test("drivers: statistical_journal sums quantity by department for the period", 
   try {
     const deptA = await makeDept(org.orgId, "Dept A");
     const deptB = await makeDept(org.orgId, "Dept B");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA, quantity: "10", unit: "hours" },
-      { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
-      { accountId: org.accounts.adjustment, amount: "200", departmentId: deptB, quantity: "30", unit: "hours" },
-      { accountId: org.accounts.clearing, amount: "-200", departmentId: deptB },
-    ], "stat");
+    await postBalanced(
+      org,
+      [
+        {
+          accountId: org.accounts.adjustment,
+          amount: "100",
+          departmentId: deptA,
+          quantity: "10",
+          unit: "hours",
+        },
+        { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
+        {
+          accountId: org.accounts.adjustment,
+          amount: "200",
+          departmentId: deptB,
+          quantity: "30",
+          unit: "hours",
+        },
+        { accountId: org.accounts.clearing, amount: "-200", departmentId: deptB },
+      ],
+      "stat",
+    );
     const resolver = createDriverResolver();
     const vector = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "statistical_journal", config: { unit: "hours" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "statistical_journal",
+        config: { unit: "hours" },
+      }),
       asOf: { periodId: org.periodId },
     });
     assert.deepEqual(vectorObject(vector), { [deptA]: "10.0000", [deptB]: "30.0000" });
     const filtered = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "statistical_journal", config: { unit: "hours" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "statistical_journal",
+        config: { unit: "hours" },
+      }),
       asOf: { periodId: org.periodId },
       exclude: [deptA],
     });
@@ -149,14 +173,24 @@ test("drivers: gl_activity defaults to the primary book unless given", async () 
       values (${taxBookId}, ${org.orgId}, 'tax', 'Tax book', false, true, true)
     `);
     const deptA = await makeDept(org.orgId, "Dept A");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
-    ], "gl-primary");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "999", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-999", departmentId: deptA },
-    ], "gl-tax", undefined, taxBookId);
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
+      ],
+      "gl-primary",
+    );
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "999", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-999", departmentId: deptA },
+      ],
+      "gl-tax",
+      undefined,
+      taxBookId,
+    );
     const resolver = createDriverResolver();
     const scope = { accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] } };
     const primary = await resolver.resolve({
@@ -181,14 +215,23 @@ test("drivers: gl_activity defaults to the primary book unless given", async () 
 test("drivers: gl_balance aggregates by subsidiary through the month rollup", async () => {
   const org = await createScratchOrg();
   try {
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "1000" },
-      { accountId: org.accounts.clearing, amount: "-1000" },
-    ], "gl-bal-june", "2026-06-10");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100" },
-      { accountId: org.accounts.clearing, amount: "-100" },
-    ], "gl-bal-july");
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "1000" },
+        { accountId: org.accounts.clearing, amount: "-1000" },
+      ],
+      "gl-bal-june",
+      "2026-06-10",
+    );
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "100" },
+        { accountId: org.accounts.clearing, amount: "-100" },
+      ],
+      "gl-bal-july",
+    );
     const resolver = createDriverResolver();
     const vector = await resolver.resolve({
       orgId: org.orgId,
@@ -209,11 +252,27 @@ test("drivers: statistical_journal honours unit + accountIds filters and the as-
   const org = await createScratchOrg();
   try {
     const deptA = await makeDept(org.orgId, "Dept A");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA, quantity: "10", unit: "hours" },
-      { accountId: org.accounts.freight, amount: "50", departmentId: deptA, quantity: "7", unit: "tonnes" },
-      { accountId: org.accounts.clearing, amount: "-150", departmentId: deptA },
-    ], "stat-unit");
+    await postBalanced(
+      org,
+      [
+        {
+          accountId: org.accounts.adjustment,
+          amount: "100",
+          departmentId: deptA,
+          quantity: "10",
+          unit: "hours",
+        },
+        {
+          accountId: org.accounts.freight,
+          amount: "50",
+          departmentId: deptA,
+          quantity: "7",
+          unit: "tonnes",
+        },
+        { accountId: org.accounts.clearing, amount: "-150", departmentId: deptA },
+      ],
+      "stat-unit",
+    );
     const resolver = createDriverResolver();
     const byUnit = await resolver.resolve({
       orgId: org.orgId,
@@ -226,7 +285,10 @@ test("drivers: statistical_journal honours unit + accountIds filters and the as-
     assert.deepEqual(vectorObject(byUnit), { [deptA]: "10.0000" });
     const otherMonth = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "statistical_journal", config: { unit: "hours" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "statistical_journal",
+        config: { unit: "hours" },
+      }),
       asOf: { date: "2026-06-10" },
     });
     assert.deepEqual(vectorObject(otherMonth), {});
@@ -250,12 +312,28 @@ test("drivers: statistical_journal groups by extra segment values", async () => 
       values (${regionA}, ${org.orgId}, ${segmentId}, 'North'),
              (${regionB}, ${org.orgId}, ${segmentId}, 'South')
     `);
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", quantity: "5", unit: "sqft", extraDims: { region: regionA } },
-      { accountId: org.accounts.clearing, amount: "-100" },
-      { accountId: org.accounts.adjustment, amount: "100", quantity: "15", unit: "sqft", extraDims: { region: regionB } },
-      { accountId: org.accounts.clearing, amount: "-100" },
-    ], "stat-extra");
+    await postBalanced(
+      org,
+      [
+        {
+          accountId: org.accounts.adjustment,
+          amount: "100",
+          quantity: "5",
+          unit: "sqft",
+          extraDims: { region: regionA },
+        },
+        { accountId: org.accounts.clearing, amount: "-100" },
+        {
+          accountId: org.accounts.adjustment,
+          amount: "100",
+          quantity: "15",
+          unit: "sqft",
+          extraDims: { region: regionB },
+        },
+        { accountId: org.accounts.clearing, amount: "-100" },
+      ],
+      "stat-extra",
+    );
     const resolver = createDriverResolver();
     const vector = await resolver.resolve({
       orgId: org.orgId,
@@ -290,10 +368,16 @@ test("drivers: manual reads values effective on the as-of date", async () => {
       config: {},
     });
     await createDriverValue(org.orgId, actor, driver.id, {
-      dimensionValueId: deptA, effectiveFrom: "2026-07-01", effectiveTo: "2026-07-31", value: "60",
+      dimensionValueId: deptA,
+      effectiveFrom: "2026-07-01",
+      effectiveTo: "2026-07-31",
+      value: "60",
     });
     await createDriverValue(org.orgId, actor, driver.id, {
-      dimensionValueId: deptB, effectiveFrom: "2026-07-01", effectiveTo: null, value: "40",
+      dimensionValueId: deptB,
+      effectiveFrom: "2026-07-01",
+      effectiveTo: null,
+      value: "40",
     });
     const resolver = createDriverResolver();
     const inWindow = await resolver.resolve({
@@ -333,11 +417,17 @@ test("drivers: manual values reject overlapping windows per dimension value", as
       config: {},
     });
     const first = await createDriverValue(org.orgId, actor, driver.id, {
-      dimensionValueId: deptA, effectiveFrom: "2026-07-01", effectiveTo: "2026-07-31", value: "60",
+      dimensionValueId: deptA,
+      effectiveFrom: "2026-07-01",
+      effectiveTo: "2026-07-31",
+      value: "60",
     });
     await assert.rejects(
       createDriverValue(org.orgId, actor, driver.id, {
-        dimensionValueId: deptA, effectiveFrom: "2026-07-15", effectiveTo: "2026-08-15", value: "10",
+        dimensionValueId: deptA,
+        effectiveFrom: "2026-07-15",
+        effectiveTo: "2026-08-15",
+        value: "10",
       }),
       /overlap/,
     );
@@ -367,12 +457,16 @@ test("drivers: gl_activity sums signed activity over an account scope", async ()
   try {
     const deptA = await makeDept(org.orgId, "Dept A");
     const deptB = await makeDept(org.orgId, "Dept B");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
-      { accountId: org.accounts.adjustment, amount: "-25", departmentId: deptB },
-      { accountId: org.accounts.clearing, amount: "25", departmentId: deptB },
-    ], "gl-act");
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
+        { accountId: org.accounts.adjustment, amount: "-25", departmentId: deptB },
+        { accountId: org.accounts.clearing, amount: "25", departmentId: deptB },
+      ],
+      "gl-act",
+    );
     const resolver = createDriverResolver();
     const vector = await resolver.resolve({
       orgId: org.orgId,
@@ -452,7 +546,9 @@ test("drivers: gl_activity honours account-group scope and rule-lineage exclusio
         (${randomUUID()}, ${org.orgId}, 'period', ${ruleId}, ${versionId}, 'hash-x', ${runId}, ${producedLineId}, 50)
     `);
     const resolver = createDriverResolver();
-    const scope = { accountScope: { kind: "account_group", dimension: "cost_pool", groupKey: "pool_a" } } as const;
+    const scope = {
+      accountScope: { kind: "account_group", dimension: "cost_pool", groupKey: "pool_a" },
+    } as const;
     const excludedRequest: DriverResolveOptions = {
       orgId: org.orgId,
       driver: makeDriver(org.orgId, { sourceKind: "gl_activity", config: scope }),
@@ -476,9 +572,12 @@ test("drivers: gl_balance accumulates through the period end", async () => {
   const org = await createScratchOrg();
   try {
     const deptA = await makeDept(org.orgId, "Dept A");
-    const calendar = (await db.execute<{ fiscal_calendar_id: string }>(
-      sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects",
-    ))[0]?.fiscal_calendar_id;
+    const calendar = (
+      await db.execute<{ fiscal_calendar_id: string }>(
+        sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
+        "objects",
+      )
+    )[0]?.fiscal_calendar_id;
     assert.ok(calendar);
     const junePeriodId = randomUUID();
     await db.execute(sql`
@@ -486,14 +585,23 @@ test("drivers: gl_balance accumulates through the period end", async () => {
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${junePeriodId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${calendar})
     `);
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "1000", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-1000", departmentId: deptA },
-    ], "gl-june", "2026-06-10");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
-    ], "gl-july");
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "1000", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-1000", departmentId: deptA },
+      ],
+      "gl-june",
+      "2026-06-10",
+    );
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
+      ],
+      "gl-july",
+    );
     const resolver = createDriverResolver();
     const scope = { accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] } };
     const balance = await resolver.resolve({
@@ -516,10 +624,14 @@ test("drivers: gl_balance accumulates through the period end", async () => {
 test("drivers: gl_activity aggregates by subsidiary through the month rollup", async () => {
   const org = await createScratchOrg();
   try {
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "300" },
-      { accountId: org.accounts.clearing, amount: "-300" },
-    ], "gl-sub");
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "300" },
+        { accountId: org.accounts.clearing, amount: "-300" },
+      ],
+      "gl-sub",
+    );
     const resolver = createDriverResolver();
     const vector = await resolver.resolve({
       orgId: org.orgId,
@@ -602,13 +714,19 @@ test("drivers: native labor/billed hours read approved time only", async () => {
     const resolver = createDriverResolver();
     const labor = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "native_measure", config: { measure: "labor_hours" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "native_measure",
+        config: { measure: "labor_hours" },
+      }),
       asOf: { periodId: org.periodId },
     });
     assert.deepEqual(vectorObject(labor), { [deptA]: "8.0000" });
     const billed = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "native_measure", config: { measure: "billed_hours" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "native_measure",
+        config: { measure: "billed_hours" },
+      }),
       asOf: { periodId: org.periodId },
     });
     assert.deepEqual(vectorObject(billed), { [deptA]: "6.0000" });
@@ -630,30 +748,43 @@ test("drivers: native labor_cost, revenue, and direct_cost read the GL vocabular
              (${salesId}, ${org.orgId}, 'Sales Test', 'income'),
              (${cogsId}, ${org.orgId}, 'Direct Test', 'cogs')
     `);
-    await postBalanced(org, [
-      { accountId: wagesId, amount: "500", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-500", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "2000", departmentId: deptA },
-      { accountId: salesId, amount: "-2000", departmentId: deptA },
-      { accountId: cogsId, amount: "700", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-700", departmentId: deptA },
-    ], "gl-vocab");
+    await postBalanced(
+      org,
+      [
+        { accountId: wagesId, amount: "500", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-500", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "2000", departmentId: deptA },
+        { accountId: salesId, amount: "-2000", departmentId: deptA },
+        { accountId: cogsId, amount: "700", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-700", departmentId: deptA },
+      ],
+      "gl-vocab",
+    );
     const resolver = createDriverResolver();
     const labor = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "native_measure", config: { measure: "labor_cost" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "native_measure",
+        config: { measure: "labor_cost" },
+      }),
       asOf: { periodId: org.periodId },
     });
     assert.deepEqual(vectorObject(labor), { [deptA]: "500.0000" });
     const revenue = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "native_measure", config: { measure: "revenue" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "native_measure",
+        config: { measure: "revenue" },
+      }),
       asOf: { periodId: org.periodId },
     });
     assert.deepEqual(vectorObject(revenue), { [deptA]: "2000.0000" });
     const direct = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "native_measure", config: { measure: "direct_cost" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "native_measure",
+        config: { measure: "direct_cost" },
+      }),
       asOf: { periodId: org.periodId },
     });
     assert.deepEqual(vectorObject(direct), { [deptA]: "700.0000" });
@@ -786,7 +917,12 @@ test("drivers: report_definition injects the period and runs under the actor", a
     });
     assert.deepEqual(vectorObject(vector), { [deptA]: "12.5000" });
     assert.equal(seen.length, 1);
-    const call = seen[0] as { from: string; to: string; actorId: string; params: Record<string, unknown> };
+    const call = seen[0] as {
+      from: string;
+      to: string;
+      actorId: string;
+      params: Record<string, unknown>;
+    };
     assert.deepEqual({ from: call.from, to: call.to }, { from: "2026-07-01", to: "2026-07-31" });
     assert.equal(call.actorId, actor);
     assert.deepEqual(call.params, { mode: "x" });
@@ -823,7 +959,13 @@ test("drivers: period_activity refuses a report with no date field instead of we
     });
     await assert.rejects(
       previewDriverVector(
-        { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor, allowedSubsidiaryIds: null },
+        {
+          orgId: org.orgId,
+          driverId: driver.id,
+          asOf: { periodId: org.periodId },
+          actorId: actor,
+          allowedSubsidiaryIds: null,
+        },
         { reportRunner: { runReport: runDriverReport } },
       ),
       /period_activity/,
@@ -858,13 +1000,16 @@ test("drivers: preview echoes the report temporal contract the runner enforced",
       config: { reportDefinitionId: randomUUID(), dimensionColumn: "d", valueColumn: "v" },
     });
     const preview = await previewDriverVector(
-      { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor, allowedSubsidiaryIds: null },
+      {
+        orgId: org.orgId,
+        driverId: driver.id,
+        asOf: { periodId: org.periodId },
+        actorId: actor,
+        allowedSubsidiaryIds: null,
+      },
       deps,
     );
-    assert.deepEqual(
-      (preview as unknown as { temporal?: unknown }).temporal,
-      temporal,
-    );
+    assert.deepEqual((preview as unknown as { temporal?: unknown }).temporal, temporal);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -925,12 +1070,23 @@ test("drivers: preview returns sorted entries plus the total", async () => {
       config: {},
     });
     await createDriverValue(org.orgId, actor, driver.id, {
-      dimensionValueId: deptB, effectiveFrom: "2026-07-01", effectiveTo: null, value: "25",
+      dimensionValueId: deptB,
+      effectiveFrom: "2026-07-01",
+      effectiveTo: null,
+      value: "25",
     });
     await createDriverValue(org.orgId, actor, driver.id, {
-      dimensionValueId: deptA, effectiveFrom: "2026-07-01", effectiveTo: null, value: "75",
+      dimensionValueId: deptA,
+      effectiveFrom: "2026-07-01",
+      effectiveTo: null,
+      value: "75",
     });
-    const preview = await previewDriverVector({ orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, allowedSubsidiaryIds: null });
+    const preview = await previewDriverVector({
+      orgId: org.orgId,
+      driverId: driver.id,
+      asOf: { periodId: org.periodId },
+      allowedSubsidiaryIds: null,
+    });
     assert.deepEqual(preview.from, "2026-07-01");
     assert.deepEqual(preview.to, "2026-07-31");
     assert.deepEqual(preview.vector, [
@@ -942,7 +1098,8 @@ test("drivers: preview returns sorted entries plus the total", async () => {
       orgId: org.orgId,
       driverId: driver.id,
       asOf: { periodId: org.periodId },
-      include: [deptA], allowedSubsidiaryIds: null,
+      include: [deptA],
+      allowedSubsidiaryIds: null,
     });
     assert.deepEqual(scoped.vector, [{ key: deptA, value: "75.0000" }]);
     assert.equal(scoped.total, "75.0000");
@@ -960,18 +1117,47 @@ test("drivers: statistical_journal respects the subsidiary scope", async () => {
       values (${sub2}, ${org.orgId}, ${org.subsidiaryId}, 'Branch', 'CAD', 'CA')
     `);
     const deptA = await makeDept(org.orgId, "Dept A");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA, quantity: "10", unit: "hours" },
-      { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
-    ], "stat-home");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA, quantity: "99", unit: "hours", subsidiaryId: sub2 },
-      { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA, subsidiaryId: sub2 },
-    ], "stat-branch");
+    await postBalanced(
+      org,
+      [
+        {
+          accountId: org.accounts.adjustment,
+          amount: "100",
+          departmentId: deptA,
+          quantity: "10",
+          unit: "hours",
+        },
+        { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
+      ],
+      "stat-home",
+    );
+    await postBalanced(
+      org,
+      [
+        {
+          accountId: org.accounts.adjustment,
+          amount: "100",
+          departmentId: deptA,
+          quantity: "99",
+          unit: "hours",
+          subsidiaryId: sub2,
+        },
+        {
+          accountId: org.accounts.clearing,
+          amount: "-100",
+          departmentId: deptA,
+          subsidiaryId: sub2,
+        },
+      ],
+      "stat-branch",
+    );
     const resolver = createDriverResolver();
     const scoped = await resolver.resolve({
       orgId: org.orgId,
-      driver: makeDriver(org.orgId, { sourceKind: "statistical_journal", config: { unit: "hours" } }),
+      driver: makeDriver(org.orgId, {
+        sourceKind: "statistical_journal",
+        config: { unit: "hours" },
+      }),
       asOf: { periodId: org.periodId },
       subsidiaryId: org.subsidiaryId,
     });
@@ -988,10 +1174,14 @@ test("drivers: preview resolves an admin-created gl driver end to end", async ()
   try {
     const actor = await createScratchUser(org.orgId, "Driver owner", "admin");
     const deptA = await makeDept(org.orgId, "Dept A");
-    await postBalanced(org, [
-      { accountId: org.accounts.adjustment, amount: "400", departmentId: deptA },
-      { accountId: org.accounts.clearing, amount: "-400", departmentId: deptA },
-    ], "gl-e2e");
+    await postBalanced(
+      org,
+      [
+        { accountId: org.accounts.adjustment, amount: "400", departmentId: deptA },
+        { accountId: org.accounts.clearing, amount: "-400", departmentId: deptA },
+      ],
+      "gl-e2e",
+    );
     const created = await createDriver(org.orgId, actor, {
       key: `e2e-${randomUUID().slice(0, 8)}`,
       name: "E2E driver",

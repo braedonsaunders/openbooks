@@ -15,9 +15,8 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // document header/line-ref fences.
 const { createRecord, updateRecord } = await import("./writers.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -36,10 +35,38 @@ const resolved: ResolvedApiType = {
 // Mirrors the live registry output for these columns (pgTypeToOpenApi:
 // uuid → "string (uuid)").
 const fields: ApiField[] = [
-  { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
-  { name: "name", type: "string", required: true, writable: true, description: null, custom: false },
-  { name: "income_account_id", type: "string (uuid)", required: false, writable: true, description: null, custom: false },
-  { name: "recognition_rule_id", type: "string (uuid)", required: false, writable: true, description: null, custom: false },
+  {
+    name: "kind",
+    type: "string",
+    required: true,
+    writable: true,
+    description: null,
+    custom: false,
+  },
+  {
+    name: "name",
+    type: "string",
+    required: true,
+    writable: true,
+    description: null,
+    custom: false,
+  },
+  {
+    name: "income_account_id",
+    type: "string (uuid)",
+    required: false,
+    writable: true,
+    description: null,
+    custom: false,
+  },
+  {
+    name: "recognition_rule_id",
+    type: "string (uuid)",
+    required: false,
+    writable: true,
+    description: null,
+    custom: false,
+  },
 ];
 
 function userFor(orgId: string, actorId: string) {
@@ -67,21 +94,42 @@ test(
     const user = userFor(orgA.orgId, actorId);
     try {
       const itemId = randomUUID();
-      await withBypass(() => db.execute(sql`
+      await withBypass(() =>
+        db.execute(sql`
         insert into items (id, org_id, kind, name, created_by, updated_by)
         values (${itemId}, ${orgA.orgId}, 'service', 'Native ref item', ${actorId}, ${actorId})
-      `));
-      interface StoredRefs { income: string | null; rule: string | null }
+      `),
+      );
+      interface StoredRefs {
+        income: string | null;
+        rule: string | null;
+      }
       const stored = async (): Promise<StoredRefs | undefined> =>
-        (await withBypass(() => db.execute<StoredRefs>(
-          sql`select income_account_id as income, recognition_rule_id as rule from items where id = ${itemId}`, "objects",
-        )))[0];
+        (
+          await withBypass(() =>
+            db.execute<StoredRefs>(
+              sql`select income_account_id as income, recognition_rule_id as rule from items where id = ${itemId}`,
+              "objects",
+            ),
+          )
+        )[0];
 
       // Malformed uuid fails closed with a typed field error, never SQL text.
       const malformed = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, { income_account_id: "not-a-uuid" }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { income_account_id: "not-a-uuid" },
+          { allowedSubsidiaryIds: null },
+        ),
       );
-      assert.equal(malformed.status, 422, `expected 422, got ${malformed.status}: ${JSON.stringify(malformed.body)}`);
+      assert.equal(
+        malformed.status,
+        422,
+        `expected 422, got ${malformed.status}: ${JSON.stringify(malformed.body)}`,
+      );
       const malformedBody = malformed.body as { fieldErrors?: { field: string }[] };
       assert.ok(
         (malformedBody.fieldErrors ?? []).some((e) => e.field === "income_account_id"),
@@ -90,7 +138,14 @@ test(
 
       // Foreign-org id behind a composite FK: tenant-opaque 404, nothing stored.
       const foreignComposite = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, { income_account_id: orgB.accounts.revenue }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { income_account_id: orgB.accounts.revenue },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         foreignComposite.status,
@@ -101,7 +156,14 @@ test(
 
       // Foreign-org id behind a tenant-incoherent single-column FK: 404, nothing stored.
       const foreignSingle = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, { recognition_rule_id: orgB.recognitionRuleId }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { recognition_rule_id: orgB.recognitionRuleId },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         foreignSingle.status,
@@ -112,11 +174,17 @@ test(
 
       // CREATE with a foreign single-column reference fails the same way.
       const refusedCreate = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          kind: "service",
-          name: "Foreign native ref item",
-          recognition_rule_id: orgB.recognitionRuleId,
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            kind: "service",
+            name: "Foreign native ref item",
+            recognition_rule_id: orgB.recognitionRuleId,
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         refusedCreate.status,
@@ -126,12 +194,23 @@ test(
 
       // Own-org references still save on both paths.
       const okUpdate = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, {
-          income_account_id: orgA.accounts.revenue,
-          recognition_rule_id: orgA.recognitionRuleId,
-        }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          {
+            income_account_id: orgA.accounts.revenue,
+            recognition_rule_id: orgA.recognitionRuleId,
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
-      assert.equal(okUpdate.status, 200, `expected 200, got ${okUpdate.status}: ${JSON.stringify(okUpdate.body)}`);
+      assert.equal(
+        okUpdate.status,
+        200,
+        `expected 200, got ${okUpdate.status}: ${JSON.stringify(okUpdate.body)}`,
+      );
       const after = await stored();
       assert.equal(after?.income, orgA.accounts.revenue);
       assert.equal(after?.rule, orgA.recognitionRuleId);

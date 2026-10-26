@@ -35,14 +35,13 @@ test("a quantity Shopify cannot hold is refused by name instead of truncated", (
 });
 
 test("push decisions never overwrite an outside change and skip converged pairs", () => {
-  assert.deepEqual(
-    decidePushOutcome({ computed: 7, live: 7, pushed: 4, lastShopify: 4 }),
-    { action: "converged" },
-  );
-  assert.deepEqual(
-    decidePushOutcome({ computed: 7, live: 4, pushed: 4, lastShopify: 4 }),
-    { action: "push", compareQuantity: 4 },
-  );
+  assert.deepEqual(decidePushOutcome({ computed: 7, live: 7, pushed: 4, lastShopify: 4 }), {
+    action: "converged",
+  });
+  assert.deepEqual(decidePushOutcome({ computed: 7, live: 4, pushed: 4, lastShopify: 4 }), {
+    action: "push",
+    compareQuantity: 4,
+  });
   assert.deepEqual(
     decidePushOutcome({ computed: 7, live: null, pushed: null, lastShopify: null }),
     { action: "push", compareQuantity: null },

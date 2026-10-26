@@ -1,4 +1,8 @@
-import { DemandPlanningError, markBuySuggestionConverted, type DemandPlanningRefusalCode } from "@openbooks/engine/inventory";
+import {
+  DemandPlanningError,
+  markBuySuggestionConverted,
+  type DemandPlanningRefusalCode,
+} from "@openbooks/engine/inventory";
 import { db } from "@openbooks/engine/platform/database";
 import { createOrderDraft } from "@/lib/order-cycle";
 import { applyOrderEdit, OrderEditError } from "@/lib/order-draft-edit";
@@ -28,7 +32,9 @@ interface BuyConvertAuth {
  * everything else becomes the generic order-edit refusal.
  */
 function planningRefusalCode(code: unknown): DemandPlanningRefusalCode {
-  return code === "vendor_required" || code === "transfer_locations_required" || code === "orders_disabled"
+  return code === "vendor_required" ||
+    code === "transfer_locations_required" ||
+    code === "orders_disabled"
     ? code
     : "order_edit_refused";
 }
@@ -47,55 +53,91 @@ export async function convertBuyGroup(
   const draftId = args.lines[0]!.suggestionId;
   let draft: Awaited<ReturnType<typeof createOrderDraft>>;
   try {
-    draft = await createOrderDraft(auth.user.orgId, auth.user.id, "purchase_order", draftId, args.subsidiaryId);
+    draft = await createOrderDraft(
+      auth.user.orgId,
+      auth.user.id,
+      "purchase_order",
+      draftId,
+      args.subsidiaryId,
+    );
   } catch (error) {
     if (error instanceof Error && error.message === "Orders feature is disabled") {
-      throw new DemandPlanningError("Orders are disabled.", "orders_disabled", "turn on Orders in Company Settings → Features", 409);
+      throw new DemandPlanningError(
+        "Orders are disabled.",
+        "orders_disabled",
+        "turn on Orders in Company Settings → Features",
+        409,
+      );
     }
     throw error;
   }
   if (!draft.replayed) {
-    const revision = (await db.execute<{ updated_at: string }>(orderEditServices.platform.sql`
+    const revision = (
+      await db.execute<{ updated_at: string }>(
+        orderEditServices.platform.sql`
       select ${orderEditServices.platform.documentRevisionCounterSql(orderEditServices.platform.sql`revision_seq`)} as updated_at
         from documents where org_id=${auth.user.orgId} and id=${draft.id} and kind='purchase_order'
-    `, "objects"))[0]?.updated_at;
+    `,
+        "objects",
+      )
+    )[0]?.updated_at;
     if (!revision) throw new Error("The purchase order draft revision could not be read.");
     try {
-      const edited = await applyOrderEdit({
-        orgId: auth.user.orgId,
-        userId: auth.user.id,
-        user: auth.user,
-        allowedSubsidiaryIds: auth.allowedSubsidiaryIds,
-        permissions: auth.permissions,
-        services: orderEditServices,
-      }, { kind: "purchase_order", readPerm: "purchase_orders.read", createPerm: "purchase_orders.create" }, draft.id, {
-        expectedUpdatedAt: revision,
-        partyId: args.supplierId,
-        dueDate: args.dueDate,
-        lines: args.lines.map((line) => ({
-          itemId: line.itemId,
-          quantity: line.quantity,
-          unit: line.unit,
-          stockLocationId: line.stockLocationId,
-          description: `${line.itemLabel} for ${line.runNumber}`,
-        })),
-      });
+      const edited = await applyOrderEdit(
+        {
+          orgId: auth.user.orgId,
+          userId: auth.user.id,
+          user: auth.user,
+          allowedSubsidiaryIds: auth.allowedSubsidiaryIds,
+          permissions: auth.permissions,
+          services: orderEditServices,
+        },
+        {
+          kind: "purchase_order",
+          readPerm: "purchase_orders.read",
+          createPerm: "purchase_orders.create",
+        },
+        draft.id,
+        {
+          expectedUpdatedAt: revision,
+          partyId: args.supplierId,
+          dueDate: args.dueDate,
+          lines: args.lines.map((line) => ({
+            itemId: line.itemId,
+            quantity: line.quantity,
+            unit: line.unit,
+            stockLocationId: line.stockLocationId,
+            description: `${line.itemLabel} for ${line.runNumber}`,
+          })),
+        },
+      );
       if (!edited.ok) {
-        const refusal = await edited.json() as { error?: unknown; code?: unknown; remedy?: unknown };
+        const refusal = (await edited.json()) as {
+          error?: unknown;
+          code?: unknown;
+          remedy?: unknown;
+        };
         throw new DemandPlanningError(
           typeof refusal.error === "string" ? refusal.error : "Purchase order edit was refused.",
           planningRefusalCode(refusal.code),
-          typeof refusal.remedy === "string" ? refusal.remedy : "correct the purchase order and retry",
+          typeof refusal.remedy === "string"
+            ? refusal.remedy
+            : "correct the purchase order and retry",
           edited.status as 400 | 404 | 409 | 422,
         );
       }
     } catch (error) {
       if (error instanceof OrderEditError) {
-        const refusal = typeof error.body === "object" && error.body !== null ? error.body as { code?: unknown; remedy?: unknown } : {};
+        const refusal =
+          typeof error.body === "object" && error.body !== null
+            ? (error.body as { code?: unknown; remedy?: unknown })
+            : {};
         throw new DemandPlanningError(
           error.message,
           planningRefusalCode(refusal.code),
-          typeof refusal.remedy === "string" ? refusal.remedy : "correct the purchase order and retry",
+          typeof refusal.remedy === "string"
+            ? refusal.remedy
+            : "correct the purchase order and retry",
           error.status as 400 | 404 | 409 | 422,
         );
       }
@@ -103,7 +145,17 @@ export async function convertBuyGroup(
     }
   }
   for (const line of args.lines) {
-    await markBuySuggestionConverted(db, auth.user.orgId, auth.user.id, line.suggestionId, draft.id);
+    await markBuySuggestionConverted(
+      db,
+      auth.user.orgId,
+      auth.user.id,
+      line.suggestionId,
+      draft.id,
+    );
   }
-  return { id: draft.id, suggestionIds: args.lines.map((line) => line.suggestionId), replayed: draft.replayed };
+  return {
+    id: draft.id,
+    suggestionIds: args.lines.map((line) => line.suggestionId),
+    replayed: draft.replayed,
+  };
 }

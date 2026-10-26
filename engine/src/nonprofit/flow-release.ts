@@ -3,9 +3,7 @@ import type { FlowApprovalReleaseArgs } from "../flows/approval-release-hook.ts"
 import { NonprofitError } from "./errors.ts";
 import { releaseFundReleaseApproval } from "./releases.ts";
 
-export async function releaseFundReleaseFlowApproval(
-  args: FlowApprovalReleaseArgs,
-): Promise<void> {
+export async function releaseFundReleaseFlowApproval(args: FlowApprovalReleaseArgs): Promise<void> {
   if (args.subjectKind !== FUND_RELEASE_SUBJECT_KIND) {
     throw new NonprofitError({
       message: `The flow release handler cannot process subject kind "${args.subjectKind}".`,

@@ -10,10 +10,9 @@ import { intlServerStubSource, stubModules } from "../../../../testing/stub-modu
 // translations ride the REAL en
 // catalog, and the loader, refusal builder, and engine person reads are
 // all real.
-const hrmCatalog = JSON.parse(readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8")) as Record<
-  string,
-  Record<string, unknown>
->;
+const hrmCatalog = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+) as Record<string, Record<string, unknown>>;
 (globalThis as Record<string, unknown>).__myCompCatalogs = { hrm: hrmCatalog };
 
 stubModules({
@@ -72,7 +71,11 @@ registerIoHooks({
     }
     // NOTE: web/lib siblings import this as a relative './features', so
     // match the relative spellings as well as the absolute one.
-    if (specifier.endsWith("/lib/features") || specifier === "./features" || specifier === "../features") {
+    if (
+      specifier.endsWith("/lib/features") ||
+      specifier === "./features" ||
+      specifier === "../features"
+    ) {
       // Re-export the real module and override only the two switches the
       // loader reads; every other export stays the product code.
       const realFeatures = new URL("file://" + process.cwd() + "/web/lib/features.ts").href;
@@ -97,12 +100,22 @@ const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorizat
 
 const NOT_LINKED = hrmCatalog.myComp?.notLinked as string;
 const NO_EMPLOYMENT = hrmCatalog.myComp?.noEmployment as string;
-assert.ok(typeof NOT_LINKED === "string" && NOT_LINKED.length > 0, "the en catalog carries the no-link copy");
-assert.ok(typeof NO_EMPLOYMENT === "string" && NO_EMPLOYMENT.length > 0, "the en catalog carries the no-employment copy");
+assert.ok(
+  typeof NOT_LINKED === "string" && NOT_LINKED.length > 0,
+  "the en catalog carries the no-link copy",
+);
+assert.ok(
+  typeof NO_EMPLOYMENT === "string" && NO_EMPLOYMENT.length > 0,
+  "the en catalog carries the no-employment copy",
+);
 assert.notEqual(NO_EMPLOYMENT, NOT_LINKED, "the two refusals are distinct copy");
 
 function authz() {
-  return { user: { id: "user-1", orgId: "org-1" }, permissions: new Set<string>(), allowedSubsidiaryIds: null } as never;
+  return {
+    user: { id: "user-1", orgId: "org-1" },
+    permissions: new Set<string>(),
+    allowedSubsidiaryIds: null,
+  } as never;
 }
 
 function planDb(plan: { rows: unknown[] }[]): void {
@@ -111,7 +124,11 @@ function planDb(plan: { rows: unknown[] }[]): void {
 
 test("an unlinked login resolves null (the page shows the no-link refusal)", async () => {
   planDb([{ rows: [{ id: "user-1", partyId: null }] }]);
-  assert.equal(await loadMyCompensation(authz()), null, "no person linked means no data, never a guessed row");
+  assert.equal(
+    await loadMyCompensation(authz()),
+    null,
+    "no person linked means no data, never a guessed row",
+  );
 });
 
 test("a linked login with no employment gets the no-employment refusal, never the no-link copy", async () => {
@@ -122,19 +139,31 @@ test("a linked login with no employment gets the no-employment refusal, never th
   const data = await loadMyCompensation(authz());
   assert.ok(data !== null, "the loader carries the refusal as page state, not a 404 null");
   assert.equal(data.refusal?.message, NO_EMPLOYMENT, "the remedy names creating the employment");
-  assert.notEqual(data.refusal?.message, NOT_LINKED, "nobody is told to link a person that is already linked");
+  assert.notEqual(
+    data.refusal?.message,
+    NOT_LINKED,
+    "nobody is told to link a person that is already linked",
+  );
   assert.equal(data.canRequest, false, "nothing can be filed without an employment");
 });
 
 test("a missing user row throws instead of collapsing into the no-link refusal", async () => {
   planDb([{ rows: [] }]);
-  await assert.rejects(loadMyCompensation(authz()), HrmAuthorizationError, "an unestablished identity is an error, never a refusal");
+  await assert.rejects(
+    loadMyCompensation(authz()),
+    HrmAuthorizationError,
+    "an unestablished identity is an error, never a refusal",
+  );
 });
 
 test("the refusal builder names each cause distinctly", async () => {
   planDb([]);
   const linked = await myCompRefusal(authz(), "no-employment");
-  assert.equal(linked.refusal?.message, NO_EMPLOYMENT, "explicit cause resolves the employment copy");
+  assert.equal(
+    linked.refusal?.message,
+    NO_EMPLOYMENT,
+    "explicit cause resolves the employment copy",
+  );
   const unlinked = await myCompRefusal(authz());
   assert.equal(unlinked.refusal?.message, NOT_LINKED, "the default stays the link-person copy");
 });

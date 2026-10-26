@@ -71,7 +71,10 @@ function measured(overrides: Partial<IncentiveMeasured> = {}): IncentiveMeasured
   };
 }
 
-function member(employmentId: string, overrides: Partial<BenefitProgramMember> = {}): BenefitProgramMember {
+function member(
+  employmentId: string,
+  overrides: Partial<BenefitProgramMember> = {},
+): BenefitProgramMember {
   return {
     id: `member-${employmentId}`,
     programId: "program-1",
@@ -91,7 +94,15 @@ function calc(input: Partial<ComputeIncentiveInput> = {}) {
   return computeIncentiveAwards({
     program: program(),
     measured: measured(),
-    shares: [{ employmentId: "emp-a", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null }],
+    shares: [
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+    ],
     periodBasis: CALENDAR,
     minorUnits: 2,
     ...input,
@@ -102,24 +113,69 @@ const refuses = async (fn: () => unknown, pattern: RegExp) =>
   (await refusal(Promise.resolve().then(fn), BenefitsError, pattern)).message;
 
 test("hourly incentives value approved member hours once at the registered currency precision", async () => {
-  const hourly = program({ valuation: "per_unit", metric: "approved_hours", allocation: "hours", percentRate: null, fixedAmount: "0.3333", frequency: "manual" });
-  const input: ComputeIncentiveInput = { program: hourly, periodBasis: CALENDAR, minorUnits: 2,
-    measured: measured({ metric: "approved_hours", currency: null, value: "20", periodFrom: "2026-07-01", periodTo: "2026-07-31" }),
+  const hourly = program({
+    valuation: "per_unit",
+    metric: "approved_hours",
+    allocation: "hours",
+    percentRate: null,
+    fixedAmount: "0.3333",
+    frequency: "manual",
+  });
+  const input: ComputeIncentiveInput = {
+    program: hourly,
+    periodBasis: CALENDAR,
+    minorUnits: 2,
+    measured: measured({
+      metric: "approved_hours",
+      currency: null,
+      value: "20",
+      periodFrom: "2026-07-01",
+      periodTo: "2026-07-31",
+    }),
     shares: [
-      { employmentId: "emp-b", weight: null, hours: "3", effectiveFrom: "2026-07-10", effectiveTo: null },
-      { employmentId: "emp-a", weight: null, hours: "1.5", effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-zero", weight: null, hours: "0", effectiveFrom: "2026-01-01", effectiveTo: null },
-    ] };
+      {
+        employmentId: "emp-b",
+        weight: null,
+        hours: "3",
+        effectiveFrom: "2026-07-10",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: "1.5",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-zero",
+        weight: null,
+        hours: "0",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+    ],
+  };
   const result = computeIncentiveAwards(input);
-  assert.deepEqual(result.recipients.map(r => [r.employmentId, r.value]), [["emp-a", "0.5000"], ["emp-b", "1.0000"]]);
+  assert.deepEqual(
+    result.recipients.map((r) => [r.employmentId, r.value]),
+    [
+      ["emp-a", "0.5000"],
+      ["emp-b", "1.0000"],
+    ],
+  );
   assert.equal(result.totalAwarded, "1.5000");
   assert.equal(result.excludedZero.length, 1);
-  assert.deepEqual(computeIncentiveAwards({ ...input, shares: [...input.shares].reverse() }), result);
+  assert.deepEqual(
+    computeIncentiveAwards({ ...input, shares: [...input.shares].reverse() }),
+    result,
+  );
   assert.equal(computeIncentiveAwards({ ...input, minorUnits: 0 }).totalAwarded, "1.0000");
   assert.equal(computeIncentiveAwards({ ...input, minorUnits: 3 }).totalAwarded, "1.5000");
   assert.equal(computeIncentiveAwards({ ...input, minorUnits: 4 }).totalAwarded, "1.4999");
   const capped = computeIncentiveAwards({ ...input, program: { ...hourly, capAmount: "0.75" } });
-  assert.equal(capped.totalAwarded, "1.2500"); assert.equal(capped.recipients[1]!.capped, true);
+  assert.equal(capped.totalAwarded, "1.2500");
+  assert.equal(capped.recipients[1]!.capped, true);
   assert.match(result.recipients[1]!.explanation, /3\.0000 approved hours.*0\.3333.*1\.0000/);
   for (const [patch, message] of [
     [{ program: { ...hourly, allocation: "equal" } }, /hours allocation/],
@@ -139,13 +195,21 @@ test("hourly incentives value approved member hours once at the registered curre
 const invalidComputations: [string, Partial<ComputeIncentiveInput>, RegExp[]][] = [
   [
     "a fixed program without a fixed amount refuses by name",
-    { program: program({ valuation: "fixed", fixedAmount: null, frequency: "manual" }), measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }) },
+    {
+      program: program({ valuation: "fixed", fixedAmount: null, frequency: "manual" }),
+      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
+    },
     [/names no fixed amount/],
   ],
   [
     "a measured loss refuses instead of sharing the loss",
     { measured: measured({ value: "-500.0000" }) },
-    [/loss \(-500\.0000\)/, /2026-01-01\.\.2026-03-31/, /program QPS does not support automatic loss sharing/, /review the source measure or settle a period with a nonnegative measured value/],
+    [
+      /loss \(-500\.0000\)/,
+      /2026-01-01\.\.2026-03-31/,
+      /program QPS does not support automatic loss sharing/,
+      /review the source measure or settle a period with a nonnegative measured value/,
+    ],
   ],
   [
     "a budget overrun refuses with both figures",
@@ -154,7 +218,14 @@ const invalidComputations: [string, Partial<ComputeIncentiveInput>, RegExp[]][] 
   ],
   [
     "a pool without a size refuses instead of guessing one",
-    { program: program({ valuation: "pool", percentRate: null, fixedAmount: null, budgetAmount: null }) },
+    {
+      program: program({
+        valuation: "pool",
+        percentRate: null,
+        fixedAmount: null,
+        budgetAmount: null,
+      }),
+    },
     [/size the pool/],
   ],
   [
@@ -169,7 +240,10 @@ const invalidComputations: [string, Partial<ComputeIncentiveInput>, RegExp[]][] 
   ],
   [
     "nonexistent calendar dates refuse instead of entering a comparison",
-    { program: program({ frequency: "manual" }), measured: measured({ periodFrom: "2026-02-30", periodTo: "2026-03-01" }) },
+    {
+      program: program({ frequency: "manual" }),
+      measured: measured({ periodFrom: "2026-02-30", periodTo: "2026-03-01" }),
+    },
     [/not a real calendar date/],
   ],
 ];
@@ -183,9 +257,27 @@ for (const [name, input, patterns] of invalidComputations) {
 test("percent awards split the pool equally and preserve every cent", () => {
   const result = calc({
     shares: [
-      { employmentId: "emp-c", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-a", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-b", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-c",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-b",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   });
   assert.equal(result.poolValue, "1000.0000");
@@ -205,8 +297,20 @@ test("caps bind per recipient and the leftover is reported, never re-apportioned
   const result = calc({
     program: program({ capAmount: "300.0000" }),
     shares: [
-      { employmentId: "emp-a", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-b", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-b",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   });
   assert.deepEqual(
@@ -224,8 +328,20 @@ test("fixed awards pay every eligible member the configured amount", () => {
     program: program({ valuation: "fixed", fixedAmount: "250.0000", frequency: "manual" }),
     measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
     shares: [
-      { employmentId: "emp-a", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-b", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-b",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   });
   assert.equal(result.totalAwarded, "500.0000");
@@ -235,10 +351,28 @@ test("fixed awards pay every eligible member the configured amount", () => {
 test("hours allocation splits by approved time and refuses missing evidence", async () => {
   const result = calc({
     program: program({ allocation: "hours", frequency: "manual", metric: "approved_hours" }),
-    measured: measured({ metric: "approved_hours", value: "120.0000", currency: null, periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
+    measured: measured({
+      metric: "approved_hours",
+      value: "120.0000",
+      currency: null,
+      periodFrom: "2026-02-01",
+      periodTo: "2026-02-28",
+    }),
     shares: [
-      { employmentId: "emp-a", weight: null, hours: "90.0000", effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-b", weight: null, hours: "30.0000", effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: "90.0000",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-b",
+        weight: null,
+        hours: "30.0000",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   });
   const byId = new Map(result.recipients.map((r) => [r.employmentId, r.value]));
@@ -247,10 +381,17 @@ test("hours allocation splits by approved time and refuses missing evidence", as
   assert.equal(byId.get("emp-b"), "3.0000");
 
   await refuses(
-    () => calc({
-      program: program({ allocation: "hours", frequency: "manual", metric: "approved_hours" }),
-      measured: measured({ metric: "approved_hours", value: "120.0000", currency: null, periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
-    }),
+    () =>
+      calc({
+        program: program({ allocation: "hours", frequency: "manual", metric: "approved_hours" }),
+        measured: measured({
+          metric: "approved_hours",
+          value: "120.0000",
+          currency: null,
+          periodFrom: "2026-02-01",
+          periodTo: "2026-02-28",
+        }),
+      }),
     /emp-a.*no approved-hours evidence|approved-hours evidence.*emp-a/,
   );
 });
@@ -260,8 +401,20 @@ test("role allocation uses recorded weights and never infers from titles", async
     program: program({ allocation: "role", frequency: "manual" }),
     measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
     shares: [
-      { employmentId: "emp-foreman", weight: "3.0000", hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-hand", weight: "1.0000", hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-foreman",
+        weight: "3.0000",
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-hand",
+        weight: "1.0000",
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   });
   const byId = new Map(result.recipients.map((r) => [r.employmentId, r.value]));
@@ -270,14 +423,27 @@ test("role allocation uses recorded weights and never infers from titles", async
 
   // The refusal names the employment and the remedy: record the weight.
   const message = await refuses(
-    () => calc({
-      program: program({ allocation: "role", frequency: "manual" }),
-      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
-      shares: [
-        { employmentId: "emp-foreman", weight: "3.0000", hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-        { employmentId: "emp-hand", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      ],
-    }),
+    () =>
+      calc({
+        program: program({ allocation: "role", frequency: "manual" }),
+        measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
+        shares: [
+          {
+            employmentId: "emp-foreman",
+            weight: "3.0000",
+            hours: null,
+            effectiveFrom: "2026-01-01",
+            effectiveTo: null,
+          },
+          {
+            employmentId: "emp-hand",
+            weight: null,
+            hours: null,
+            effectiveFrom: "2026-01-01",
+            effectiveTo: null,
+          },
+        ],
+      }),
     /emp-hand/,
   );
   assert.match(message, /record the role weight/);
@@ -297,45 +463,68 @@ test("period shapes follow the measurement frequency", async () => {
   const ok: ComputeIncentiveInput = {
     program: program({ frequency: "monthly" }),
     measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
-    shares: [{ employmentId: "emp-a", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null }],
+    shares: [
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+    ],
     periodBasis: CALENDAR,
     minorUnits: 2,
   };
   assert.equal(calc(ok).recipients.length, 1);
 
   await refuses(
-    () => calc({
-      ...ok,
-      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-03-15" }),
-    }),
+    () =>
+      calc({
+        ...ok,
+        measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-03-15" }),
+      }),
     /whole months/,
   );
   await refuses(
-    () => calc({
-      program: program({ frequency: "annual" }),
-      measured: measured({ periodFrom: "2026-01-01", periodTo: "2026-06-30" }),
-    }),
+    () =>
+      calc({
+        program: program({ frequency: "annual" }),
+        measured: measured({ periodFrom: "2026-01-01", periodTo: "2026-06-30" }),
+      }),
     /whole years/,
   );
   await refuses(
-    () => calc({
-      program: program({ frequency: "quarterly" }),
-      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-04-30" }),
-    }),
+    () =>
+      calc({
+        program: program({ frequency: "quarterly" }),
+        measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-04-30" }),
+      }),
     /whole quarters/,
   );
 });
 
 test("money measures need a currency; hours measures use the program currency", async () => {
   await refuses(
-    () => calc({
-      measured: measured({ currency: null }),
-    }),
+    () =>
+      calc({
+        measured: measured({ currency: null }),
+      }),
     /needs its currency/,
   );
   const hours = calc({
-    program: program({ valuation: "fixed", fixedAmount: "50.0000", frequency: "manual", metric: "approved_hours" }),
-    measured: measured({ metric: "approved_hours", value: "40.0000", currency: null, periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
+    program: program({
+      valuation: "fixed",
+      fixedAmount: "50.0000",
+      frequency: "manual",
+      metric: "approved_hours",
+    }),
+    measured: measured({
+      metric: "approved_hours",
+      value: "40.0000",
+      currency: null,
+      periodFrom: "2026-02-01",
+      periodTo: "2026-02-28",
+    }),
   });
   assert.equal(hours.currency, "USD");
 });
@@ -379,7 +568,10 @@ test("coverage splits full-period members from partial ones without prorating", 
     "2026-02-01",
     "2026-02-28",
   );
-  assert.deepEqual(covered.map((m) => m.employmentId), ["emp-full"]);
+  assert.deepEqual(
+    covered.map((m) => m.employmentId),
+    ["emp-full"],
+  );
   assert.deepEqual(partial.map((m) => m.employmentId).sort(), ["emp-ended", "emp-mid"]);
 });
 
@@ -388,7 +580,13 @@ test("recipient explanations carry membership and share evidence", () => {
     program: program({ allocation: "role", frequency: "manual" }),
     measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
     shares: [
-      { employmentId: "emp-a", weight: "2.0000", hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-a",
+        weight: "2.0000",
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   });
   const line = result.recipients[0]!.explanation;
@@ -399,28 +597,33 @@ test("recipient explanations carry membership and share evidence", () => {
 
 test("an inverted membership span refuses with the remedy", async () => {
   await refuses(
-    async () => eligibleMembers(
-      [member("emp-bad", { effectiveFrom: "2026-03-01", effectiveTo: "2026-02-01" })],
-      "2026-01-01",
-      "2026-03-31",
-    ),
+    async () =>
+      eligibleMembers(
+        [member("emp-bad", { effectiveFrom: "2026-03-01", effectiveTo: "2026-02-01" })],
+        "2026-01-01",
+        "2026-03-31",
+      ),
     /end it on or after its start/,
   );
 });
 
 test("a duplicated employment in one apportionment refuses instead of double-paying", async () => {
   await refuses(
-    async () => apportionExactUnits(10000n, [
-      { employmentId: "emp-a", units: 1n },
-      { employmentId: "emp-a", units: 2n },
-    ]),
+    async () =>
+      apportionExactUnits(10000n, [
+        { employmentId: "emp-a", units: 1n },
+        { employmentId: "emp-a", units: 2n },
+      ]),
     /appears twice.*double-pay/,
   );
 });
 
 test("fiscal quarters follow the organization's year-start month", async () => {
   const april: IncentivePeriodBasis = {
-    kind: "fiscal", calendarName: "April FY", yearStartMonth: 4, cadence: "monthly",
+    kind: "fiscal",
+    calendarName: "April FY",
+    yearStartMonth: 4,
+    cadence: "monthly",
   };
   // Q1 of FY2026 runs April..June 2026; January..March 2026 closes FY2025.
   const q1 = calc({
@@ -436,17 +639,26 @@ test("fiscal quarters follow the organization's year-start month", async () => {
   assert.equal(q4.recipients.length, 1);
   // A February-start span is a quarter on no July fiscal year (Q3 is Jan..Mar).
   await refuses(
-    () => calc({
-      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-04-30" }),
-        periodBasis: { kind: "fiscal", calendarName: "July FY", yearStartMonth: 7, cadence: "monthly" },
-    }),
+    () =>
+      calc({
+        measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-04-30" }),
+        periodBasis: {
+          kind: "fiscal",
+          calendarName: "July FY",
+          yearStartMonth: 7,
+          cadence: "monthly",
+        },
+      }),
     /whole quarters/,
   );
 });
 
 test("fiscal years span the year-start month across calendar years", async () => {
   const april: IncentivePeriodBasis = {
-    kind: "fiscal", calendarName: "April FY", yearStartMonth: 4, cadence: "monthly",
+    kind: "fiscal",
+    calendarName: "April FY",
+    yearStartMonth: 4,
+    cadence: "monthly",
   };
   const full = calc({
     program: program({ frequency: "annual" }),
@@ -455,11 +667,12 @@ test("fiscal years span the year-start month across calendar years", async () =>
   });
   assert.equal(full.recipients.length, 1);
   await refuses(
-    () => calc({
-      program: program({ frequency: "annual" }),
-      measured: measured({ periodFrom: "2026-01-01", periodTo: "2026-12-31" }),
+    () =>
+      calc({
+        program: program({ frequency: "annual" }),
+        measured: measured({ periodFrom: "2026-01-01", periodTo: "2026-12-31" }),
         periodBasis: april,
-    }),
+      }),
     /whole years/,
   );
 });
@@ -480,9 +693,27 @@ test("a cent pool apportions nonzero-only with named zero exclusions", () => {
     program: program({ percentRate: "100", frequency: "manual" }),
     measured: measured({ value: "0.0100", periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
     shares: [
-      { employmentId: "emp-a", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-b", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-c", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-b",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-c",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   });
   // One cent cannot split three ways: one recipient, two named exclusions,
@@ -496,10 +727,27 @@ test("a cent pool apportions nonzero-only with named zero exclusions", () => {
 test("zero-decimal currencies apportion whole units", () => {
   const result = calc({
     program: program({ currency: "JPY", frequency: "manual" }),
-    measured: measured({ value: "1000.0000", currency: "JPY", periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
+    measured: measured({
+      value: "1000.0000",
+      currency: "JPY",
+      periodFrom: "2026-02-01",
+      periodTo: "2026-02-28",
+    }),
     shares: [
-      { employmentId: "emp-a", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: "emp-b", weight: null, hours: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "emp-a",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: "emp-b",
+        weight: null,
+        hours: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
     minorUnits: 0,
   });
@@ -511,16 +759,18 @@ test("zero-decimal currencies apportion whole units", () => {
 
 test("configured cash finer than payable precision refuses instead of rounding", async () => {
   await refuses(
-    () => calc({
-      program: program({ valuation: "fixed", fixedAmount: "250.0001", frequency: "manual" }),
-      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
-    }),
+    () =>
+      calc({
+        program: program({ valuation: "fixed", fixedAmount: "250.0001", frequency: "manual" }),
+        measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
+      }),
     /finer than payable precision/,
   );
   await refuses(
-    () => calc({
-      program: program({ capAmount: "300.0010" }),
-    }),
+    () =>
+      calc({
+        program: program({ capAmount: "300.0010" }),
+      }),
     /finer than payable precision/,
   );
 });
@@ -529,15 +779,18 @@ test("non-plain decimals retain their specific remedy before reaching the ledger
   // Scientific notation, over-scale fractions, symbols, and separators have
   // no plain-decimal reading and refuse; padded and signed forms normalize.
   for (const [bad, remedy] of [
-    ["1E3", /scientific notation/], ["5.00001", /at most 4 decimal places/],
-    ["$5.00", /currency symbol/], ["1,000", /ambiguous.*1000.*1\.000/],
+    ["1E3", /scientific notation/],
+    ["5.00001", /at most 4 decimal places/],
+    ["$5.00", /currency symbol/],
+    ["1,000", /ambiguous.*1000.*1\.000/],
     ["12,34", /write.*12\.34/],
   ] as const) {
     await refuses(
-      () => calc({
-        program: program({ valuation: "fixed", fixedAmount: bad, frequency: "manual" }),
-      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
-    }),
+      () =>
+        calc({
+          program: program({ valuation: "fixed", fixedAmount: bad, frequency: "manual" }),
+          measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
+        }),
       remedy,
     );
   }
@@ -545,14 +798,18 @@ test("non-plain decimals retain their specific remedy before reaching the ledger
 
 test("week-based fiscal calendars settle periodic programs on manual spans", async () => {
   const retail: IncentivePeriodBasis = {
-    kind: "fiscal", calendarName: "Retail 445", yearStartMonth: 2, cadence: "four_four_five",
+    kind: "fiscal",
+    calendarName: "Retail 445",
+    yearStartMonth: 2,
+    cadence: "four_four_five",
   };
   await refuses(
-    () => calc({
-      program: program({ frequency: "quarterly" }),
-      measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-04-30" }),
+    () =>
+      calc({
+        program: program({ frequency: "quarterly" }),
+        measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-04-30" }),
         periodBasis: retail,
-    }),
+      }),
     /no month-aligned periods.*manual span/,
   );
   // Manual spans still work on the same calendar.

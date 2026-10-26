@@ -258,10 +258,7 @@ export function containsDate(interval: EffectiveInterval, date: unknown): boolea
  * Range-overlap (&&) semantics on [start, end) bounds: adjacency is NOT
  * overlap. Mirrors daterange(from, coalesce(to, 'infinity'), '[)').
  */
-export function intervalsOverlap(
-  first: EffectiveInterval,
-  second: EffectiveInterval,
-): boolean {
+export function intervalsOverlap(first: EffectiveInterval, second: EffectiveInterval): boolean {
   const left = validatedBounds(first);
   const right = validatedBounds(second);
   return left.start < right.end && right.start < left.end;
@@ -322,12 +319,21 @@ function parseRecordedStamp(value: unknown, field: string): RecordedStamp {
   const minute = Number(match[5]);
   const second = Number(match[6]);
   if (
-    !Number.isSafeInteger(year) || year < 1 || year > 9999 ||
-    !Number.isSafeInteger(month) || month < 1 || month > 12 ||
-    !Number.isSafeInteger(day) || day < 1 || day > daysInCivilMonth(year, month) ||
-    !Number.isSafeInteger(hour) || hour > 23 ||
-    !Number.isSafeInteger(minute) || minute > 59 ||
-    !Number.isSafeInteger(second) || second > 59
+    !Number.isSafeInteger(year) ||
+    year < 1 ||
+    year > 9999 ||
+    !Number.isSafeInteger(month) ||
+    month < 1 ||
+    month > 12 ||
+    !Number.isSafeInteger(day) ||
+    day < 1 ||
+    day > daysInCivilMonth(year, month) ||
+    !Number.isSafeInteger(hour) ||
+    hour > 23 ||
+    !Number.isSafeInteger(minute) ||
+    minute > 59 ||
+    !Number.isSafeInteger(second) ||
+    second > 59
   ) {
     throw new InvalidRecordedStampError(field, value);
   }
@@ -430,8 +436,9 @@ export function resolveAsOf<P>(
   }
   if (applicable.length > 1) {
     const detail = applicable
-      .map((item) =>
-        `#${item.index} recorded [${item.revision.recordedAt}, ${item.revision.recordedUntil ?? "unbounded"})`
+      .map(
+        (item) =>
+          `#${item.index} recorded [${item.revision.recordedAt}, ${item.revision.recordedUntil ?? "unbounded"})`,
       )
       .join("; ");
     throw new AmbiguousRevisionError(

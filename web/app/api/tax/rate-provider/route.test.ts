@@ -6,27 +6,34 @@ const state = { saves: [] as unknown[][] };
 Object.assign(globalThis, { __taxRateProviderRouteTestState: state });
 
 const mocks = new Map<string, string>([
-  ["mock:authz", `
+  [
+    "mock:authz",
+    `
     export async function getAuthz() { return { user: { orgId: "org-1", id: "user-1" } }; }
     export async function guardPermission() {
       return { user: { orgId: "org-1", id: "user-1" } };
     }
     export function guardRootSubsidiaryScope() { return null; }
     export function guardUnrestrictedScope() { return null; }
-  `],
-  ["mock:rate-providers", `
+  `,
+  ],
+  [
+    "mock:rate-providers",
+    `
     const state = globalThis.__taxRateProviderRouteTestState;
     export class TaxRateProviderError extends Error {}
     export async function saveTaxRateProviderConfig(...args) { state.saves.push(args); }
     export async function readTaxRateProviderConfigView() { return null; }
     export async function quoteExternalTax() { return {}; }
     export function quoteFromRate() { return {}; }
-  `],
+  `,
+  ],
 ]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz" || specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:authz" };
+    if (specifier === "../../../../lib/authz" || specifier === "@/lib/authz")
+      return { shortCircuit: true, url: "mock:authz" };
     if (specifier === "@openbooks/engine/tax/rate-providers") {
       return { shortCircuit: true, url: "mock:rate-providers" };
     }
@@ -41,7 +48,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?tax-rate-provider-route-test";
-const { PUT } = await import(routeUrl) as typeof import("./route.ts");
+const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 after(() => hooks.deregister());
 
 function reset(): void {
@@ -49,12 +56,14 @@ function reset(): void {
 }
 
 async function put(body: unknown): Promise<{ response: Response; json: Record<string, unknown> }> {
-  const response = await PUT(new Request("http://tax.test/api/tax/rate-provider", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }));
-  return { response, json: await response.json() as Record<string, unknown> };
+  const response = await PUT(
+    new Request("http://tax.test/api/tax/rate-provider", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+  return { response, json: (await response.json()) as Record<string, unknown> };
 }
 
 test("PUT refuses an omitted revision instead of silently replacing the current provider", async () => {
@@ -68,7 +77,11 @@ test("PUT refuses an omitted revision instead of silently replacing the current 
 test("PUT accepts only explicit booleans and never coerces or defaults isEnabled", async () => {
   reset();
   for (const isEnabled of ["false", undefined]) {
-    const { response, json } = await put({ provider: "manual", isEnabled, expectedUpdatedAt: null });
+    const { response, json } = await put({
+      provider: "manual",
+      isEnabled,
+      expectedUpdatedAt: null,
+    });
     assert.equal(response.status, 422, `isEnabled ${JSON.stringify(isEnabled)} must be refused`);
     assert.match(String(json.error), /isEnabled.*boolean/);
   }
@@ -88,7 +101,10 @@ test("PUT rejects malformed credential fields instead of silently ignoring the s
   reset();
   for (const field of ["apiKey", "accountId", "licenseKey"] as const) {
     const { response, json } = await put({
-      provider: "manual", isEnabled: true, expectedUpdatedAt: null, [field]: 17,
+      provider: "manual",
+      isEnabled: true,
+      expectedUpdatedAt: null,
+      [field]: 17,
     });
     assert.equal(response.status, 422, `${field} with a number must be refused`);
     assert.ok(json.error, `${field} refusal names the request-schema error`);
@@ -99,8 +115,11 @@ test("PUT rejects malformed credential fields instead of silently ignoring the s
 test("PUT preserves absent, null, and non-empty credential values distinctly", async () => {
   reset();
   const { response } = await put({
-    provider: "manual", isEnabled: true, expectedUpdatedAt: null,
-    accountId: null, licenseKey: "license-1",
+    provider: "manual",
+    isEnabled: true,
+    expectedUpdatedAt: null,
+    accountId: null,
+    licenseKey: "license-1",
   });
   assert.equal(response.status, 200);
   const input = state.saves[0]![1] as Record<string, unknown>;

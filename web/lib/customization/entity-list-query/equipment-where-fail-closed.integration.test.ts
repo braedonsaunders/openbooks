@@ -17,8 +17,11 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type Filter = { key: string; operator: string; value?: string | null; to?: string | null };
 
 async function equipmentCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from equipment_units eu
-      where ${equipmentWhere({ ...defaultListView("equipment_unit"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from equipment_units eu
+      where ${equipmentWhere({ ...defaultListView("equipment_unit"), filters: viewFilters as never }, {}, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -27,12 +30,16 @@ test("malformed equipment filters match nothing instead of throwing", { skip: !D
   try {
     assert.ok((await equipmentCount(org.orgId)) >= 0, "baseline counts without throwing");
     assert.equal(
-      await equipmentCount(org.orgId, [{ key: "charge_item_id", operator: "eq", value: "not-a-uuid" }]),
+      await equipmentCount(org.orgId, [
+        { key: "charge_item_id", operator: "eq", value: "not-a-uuid" },
+      ]),
       0,
       "malformed charge-item filter matches nothing",
     );
     assert.equal(
-      await equipmentCount(org.orgId, [{ key: "fixed_asset_id", operator: "eq", value: "not-a-uuid" }]),
+      await equipmentCount(org.orgId, [
+        { key: "fixed_asset_id", operator: "eq", value: "not-a-uuid" },
+      ]),
       0,
       "malformed fixed-asset filter matches nothing",
     );

@@ -37,26 +37,34 @@ export async function resolveProtectionExemptFloors(args: {
     if (!declared) {
       const offered = args.classes.map((candidate) => candidate.label).join(", ");
       throw new PayrollError(
-        `${args.employeeLabel}: ${line.description} is set to protection class "${key}", which the ${args.country} `
-        + `payroll pack does not declare${offered ? ` (it declares: ${offered})` : " (it declares none)"}. `
-        + "Choose one of the pack's classes, or none, on the pay component in Payroll Setup → Components.",
+        `${args.employeeLabel}: ${line.description} is set to protection class "${key}", which the ${args.country} ` +
+          `payroll pack does not declare${offered ? ` (it declares: ${offered})` : " (it declares none)"}. ` +
+          "Choose one of the pack's classes, or none, on the pay component in Payroll Setup → Components.",
       );
     }
     if (!declared.exemptFloor) continue;
     const fact = employerFact(args.country, declared.exemptFloor.employerFactKey);
     const wage = await resolveStoredEmployerFact({
-      tx: args.tx, orgId: args.orgId, subsidiaryId: args.subsidiaryId,
-      country: args.country, factKey: fact.key, asOf: args.payDate,
+      tx: args.tx,
+      orgId: args.orgId,
+      subsidiaryId: args.subsidiaryId,
+      country: args.country,
+      factKey: fact.key,
+      asOf: args.payDate,
     });
     if (wage === null) {
       throw new PayrollError(
-        `${args.employeeLabel}: ${line.description} (${declared.label}) may not reach the protected base below `
-        + `${declared.exemptFloor.weeklyHours} × the ${fact.label.toLowerCase()} per week, and no ${fact.label.toLowerCase()} `
-        + `is recorded for ${args.payDate}. Record it in Payroll Setup → Employer facts, effective from the date `
-        + "it applies, before calculating.",
+        `${args.employeeLabel}: ${line.description} (${declared.label}) may not reach the protected base below ` +
+          `${declared.exemptFloor.weeklyHours} × the ${fact.label.toLowerCase()} per week, and no ${fact.label.toLowerCase()} ` +
+          `is recorded for ${args.payDate}. Record it in Payroll Setup → Employer facts, effective from the date ` +
+          "it applies, before calculating.",
       );
     }
-    floors[key] = protectionExemptFloor(wage, declared.exemptFloor.weeklyHours, args.periodsPerYear);
+    floors[key] = protectionExemptFloor(
+      wage,
+      declared.exemptFloor.weeklyHours,
+      args.periodsPerYear,
+    );
   }
   return floors;
 }

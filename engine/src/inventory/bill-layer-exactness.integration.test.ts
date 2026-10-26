@@ -23,19 +23,25 @@ const depsFor = (org: ScratchOrg) => ({
 });
 
 async function glBalance(org: ScratchOrg, accountId: string): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(l.amount), 0)::text as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${org.orgId} and l.account_id = ${accountId}
-       and e.status = 'posted'`, "objects"));
+       and e.status = 'posted'`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
 async function layerTotal(orgId: string, itemId: string): Promise<bigint> {
-  const rows = await db.execute<{ remaining: string; unit_cost: string }>(sql`
+  const rows = await db.execute<{ remaining: string; unit_cost: string }>(
+    sql`
     select remaining_quantity::text as remaining, unit_cost::text from cost_layers
-     where org_id = ${orgId} and item_id = ${itemId}`, "objects");
+     where org_id = ${orgId} and item_id = ${itemId}`,
+    "objects",
+  );
   return rows.reduce((sum, row) => sum + toUnits(extendCost(row.remaining, row.unit_cost)), 0n);
 }
 
@@ -94,8 +100,16 @@ test("a $100 / 3 bill line stores a 100.00 layer, not 99.9999", { skip: !DB }, a
     });
     await postDocument(billId, depsFor(org));
     assert.equal(await glBalance(org, org.accounts.invAsset), toUnits("100"), "GL debited 100.00");
-    assert.equal(await glBalance(org, org.accounts.cogs), toUnits("0"), "no phantom true-up in COGS");
-    assert.equal(await layerTotal(org.orgId, itemId), toUnits("100"), "layer total equals the GL amount exactly");
+    assert.equal(
+      await glBalance(org, org.accounts.cogs),
+      toUnits("0"),
+      "no phantom true-up in COGS",
+    );
+    assert.equal(
+      await layerTotal(org.orgId, itemId),
+      toUnits("100"),
+      "layer total equals the GL amount exactly",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -129,14 +143,16 @@ test("a goods receipt carries the order's extended amount exactly", { skip: !DB 
     // The applier joins its caller's transaction (the journal balance fence
     // sees the whole entry); post the receipt inside one like production.
     const count = await db.transaction((tx) =>
-      applyPurchaseReceiptInventory(
-        tx, org.orgId, null, documentId, org.date, org.subsidiaryId,
-      ),
+      applyPurchaseReceiptInventory(tx, org.orgId, null, documentId, org.date, org.subsidiaryId),
     );
     assert.equal(count, 1);
     assert.equal(await glBalance(org, org.accounts.invAsset), toUnits("100"));
     assert.equal(await glBalance(org, org.accounts.clearing), toUnits("-100"));
-    assert.equal(await glBalance(org, org.accounts.cogs), toUnits("0"), "no rounding penny in COGS");
+    assert.equal(
+      await glBalance(org, org.accounts.cogs),
+      toUnits("0"),
+      "no rounding penny in COGS",
+    );
     assert.equal(await layerTotal(org.orgId, org.items.fifo), toUnits("100"));
   } finally {
     await dropScratchOrg(org.orgId);

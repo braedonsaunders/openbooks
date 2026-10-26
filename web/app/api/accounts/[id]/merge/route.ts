@@ -34,11 +34,18 @@ export const GET = defineRoute({
     const target = url.searchParams.get("target") ?? "";
     const effectiveDate = url.searchParams.get("date") ?? "";
     if (!uuidString().safeParse(target).success || !isoDate.safeParse(effectiveDate).success) {
-      return NextResponse.json({ error: "Choose the surviving account and the effective date." }, { status: 422 });
+      return NextResponse.json(
+        { error: "Choose the surviving account and the effective date." },
+        { status: 422 },
+      );
     }
     try {
       return NextResponse.json(
-        await previewAccountMerge(authz.user.orgId, { sourceAccountId: id, targetAccountId: target, effectiveDate }, authz.allowedSubsidiaryIds),
+        await previewAccountMerge(
+          authz.user.orgId,
+          { sourceAccountId: id, targetAccountId: target, effectiveDate },
+          authz.allowedSubsidiaryIds,
+        ),
       );
     } catch (error) {
       if (error instanceof AccountMergeError) return apiErrorResponse(error);
@@ -62,7 +69,11 @@ export const POST = defineRoute({
   handler: async ({ authz, params: { id }, body }) => {
     if (!can(authz, "gl.post")) {
       return NextResponse.json(
-        { error: "Merging accounts posts reclass journal entries.", code: "forbidden", remedy: "Ask a user who can post journal entries to merge the accounts." },
+        {
+          error: "Merging accounts posts reclass journal entries.",
+          code: "forbidden",
+          remedy: "Ask a user who can post journal entries to merge the accounts.",
+        },
         { status: 403 },
       );
     }
@@ -77,7 +88,9 @@ export const POST = defineRoute({
         actorId: authz.user.id,
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       });
-      return NextResponse.json(outcome, { status: outcome.status === "completed" && !outcome.replayed ? 201 : 200 });
+      return NextResponse.json(outcome, {
+        status: outcome.status === "completed" && !outcome.replayed ? 201 : 200,
+      });
     } catch (error) {
       return apiErrorResponse(error);
     }

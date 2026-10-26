@@ -21,7 +21,12 @@ test("OIDC refuses private, link-local and metadata provider hosts before any re
     return Response.json({});
   };
   try {
-    for (const issuer of ["https://169.254.169.254", "https://10.0.0.5", "https://192.168.1.10", "https://[fd00::1]"]) {
+    for (const issuer of [
+      "https://169.254.169.254",
+      "https://10.0.0.5",
+      "https://192.168.1.10",
+      "https://[fd00::1]",
+    ]) {
       process.env.OPENBOOKS_OIDC_ISSUER = issuer;
       await assert.rejects(() => beginOidcAuthorization(null), /must be public unicast/);
     }
@@ -38,33 +43,55 @@ for (const stage of ["discovery", "token", "jwks"] as const) {
       process.env.OPENBOOKS_OIDC_ISSUER = issuer;
       let pulls = 0;
       let canceled = false;
-      const body = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          pulls++;
-          if (pulls <= 3) controller.enqueue(new Uint8Array(600_000));
-          else controller.close();
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            pulls++;
+            if (pulls <= 3) controller.enqueue(new Uint8Array(600_000));
+            else controller.close();
+          },
+          cancel() {
+            canceled = true;
+          },
         },
-        cancel() { canceled = true; },
-      }, { highWaterMark: 0 });
-      const headers = length === "missing" ? undefined : { "content-length": length === "understated" ? "10" : "1800000" };
+        { highWaterMark: 0 },
+      );
+      const headers =
+        length === "missing"
+          ? undefined
+          : { "content-length": length === "understated" ? "10" : "1800000" };
       const oversized = new Response(body, { headers });
       const original = globalThis.fetch;
       globalThis.fetch = async (input) => {
         const url = String(input);
-        if (url === `${issuer}/.well-known/openid-configuration`) return stage === "discovery" ? oversized : Response.json({
-          issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks`,
-        });
-        if (url === `${issuer}/token`) return stage === "token" ? oversized : Response.json({ id_token: "test-token" });
+        if (url === `${issuer}/.well-known/openid-configuration`)
+          return stage === "discovery"
+            ? oversized
+            : Response.json({
+                issuer,
+                authorization_endpoint: `${issuer}/authorize`,
+                token_endpoint: `${issuer}/token`,
+                jwks_uri: `${issuer}/jwks`,
+              });
+        if (url === `${issuer}/token`)
+          return stage === "token" ? oversized : Response.json({ id_token: "test-token" });
         if (url === `${issuer}/jwks`) return oversized;
         throw new Error("unexpected provider URL");
       };
       try {
         await assert.rejects(async () => {
           const flow = await beginOidcAuthorization(null);
-          await completeOidcAuthorization({ code: "code", state: new URL(flow.url).searchParams.get("state")!, flowCookie: flow.flowCookie });
+          await completeOidcAuthorization({
+            code: "code",
+            state: new URL(flow.url).searchParams.get("state")!,
+            flowCookie: flow.flowCookie,
+          });
         }, /too large/);
         assert.equal(canceled, true, "overflow cancels the provider stream instead of draining it");
-        assert.ok(pulls <= (length === "oversized" ? 0 : 2), "the reader stops as soon as the byte budget is exceeded");
+        assert.ok(
+          pulls <= (length === "oversized" ? 0 : 2),
+          "the reader stops as soon as the byte budget is exceeded",
+        );
         assert.equal(body.locked, false);
       } finally {
         globalThis.fetch = original;
@@ -78,7 +105,13 @@ for (const size of [1_000_000, 1_000_001]) {
   test(`OIDC discovery handles split UTF-8 at ${size} bytes`, async () => {
     const issuer = loopbackIssuer();
     process.env.OPENBOOKS_OIDC_ISSUER = issuer;
-    const metadata = { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks`, padding: "" };
+    const metadata = {
+      issuer,
+      authorization_endpoint: `${issuer}/authorize`,
+      token_endpoint: `${issuer}/token`,
+      jwks_uri: `${issuer}/jwks`,
+      padding: "",
+    };
     const paddingBytes = size - Buffer.byteLength(JSON.stringify(metadata));
     metadata.padding = "é".repeat(Math.floor(paddingBytes / 2)) + "x".repeat(paddingBytes % 2);
     const bytes = new TextEncoder().encode(JSON.stringify(metadata));
@@ -86,14 +119,19 @@ for (const size of [1_000_000, 1_000_001]) {
     const split = bytes.indexOf(0xc3) + 1;
     const chunks = [bytes.subarray(0, split), bytes.subarray(split)];
     let canceled = false;
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        const chunk = chunks.shift();
-        if (chunk) controller.enqueue(chunk);
-        else controller.close();
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          const chunk = chunks.shift();
+          if (chunk) controller.enqueue(chunk);
+          else controller.close();
+        },
+        cancel() {
+          canceled = true;
+        },
       },
-      cancel() { canceled = true; },
-    }, { highWaterMark: 0 });
+      { highWaterMark: 0 },
+    );
     const original = globalThis.fetch;
     globalThis.fetch = async () => new Response(body);
     try {

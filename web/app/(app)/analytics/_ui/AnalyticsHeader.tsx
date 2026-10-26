@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-import type { ReactNode } from 'react'
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import type { ReactNode } from "react";
 
 /**
  * Compact single-row header for analytics dashboards: an inline
@@ -11,15 +11,15 @@ import type { ReactNode } from 'react'
 export function AnalyticsHeader({
   title,
   periodLabel,
-  backHref = '/analytics',
-  backLabel = 'Analytics',
+  backHref = "/analytics",
+  backLabel = "Analytics",
   children,
 }: {
-  title: string
-  periodLabel?: string
-  backHref?: string
-  backLabel?: string
-  children?: ReactNode
+  title: string;
+  periodLabel?: string;
+  backHref?: string;
+  backLabel?: string;
+  children?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -34,12 +34,16 @@ export function AnalyticsHeader({
         <span aria-hidden className="text-slate-300 dark:text-slate-600">
           /
         </span>
-        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
+        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+          {title}
+        </h1>
         {periodLabel ? (
-          <span className="hidden shrink-0 text-xs text-slate-400 sm:inline dark:text-slate-500">· {periodLabel}</span>
+          <span className="hidden shrink-0 text-xs text-slate-400 sm:inline dark:text-slate-500">
+            · {periodLabel}
+          </span>
         ) : null}
       </div>
       {children ? <div className="shrink-0">{children}</div> : null}
     </div>
-  )
+  );
 }

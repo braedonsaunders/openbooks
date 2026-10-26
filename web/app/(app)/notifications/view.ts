@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { getFormatter, getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
+import { redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { getFormatter, getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
 import {
   grid,
   page,
@@ -13,15 +13,15 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { getAuthz } from '../../../lib/authz'
+} from "@braedonsaunders/appkit-viewspec";
+import { getAuthz } from "../../../lib/authz";
 import {
   mergeHref,
   pagedListVisibility,
   parseListParams,
   pickString,
-} from '../../../lib/list-params'
-import type { NotificationRow } from './NotificationsInbox'
+} from "../../../lib/list-params";
+import type { NotificationRow } from "./NotificationsInbox";
 
 /**
  * The in-app inbox, split into a loader and a spec.
@@ -37,112 +37,115 @@ import type { NotificationRow } from './NotificationsInbox'
  * received is a filter that only ever returns nothing.
  */
 
-const BASE = '/notifications'
+const BASE = "/notifications";
 
 // Kinds the product writes today (engine/src/flows/gates.ts, close.ts,
 // payments.ts). Anything else — a user script, an installed app — renders its
 // raw code humanized rather than a missing-message crash.
-const KNOWN_KINDS = new Set(['approval', 'flow', 'close', 'void_superseded'])
+const KNOWN_KINDS = new Set(["approval", "flow", "close", "void_superseded"]);
 
 const humanize = (value: string) =>
-  value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-type Scope = 'unread' | 'all'
+type Scope = "unread" | "all";
 
 type NotificationSource = {
-  id: string
-  kind: string
-  title: string
-  body: string | null
-  href: string | null
-  readAt: string | null
-  createdAt: string
-}
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  href: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
 
 export interface NotificationsData {
-  title: string
-  description: string
-  scopeTabs: { href: string; label: string; active: boolean }[]
-  kindLabel: string
-  kindOptions: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
-  unread: number
-  rows: NotificationRow[]
-  hasRows: boolean
-  hasScopedRows: boolean
-  isEmpty: boolean
-  emptyTitle: string
-  emptyDescription: string
-  total: number
-  currentPage: number
-  perPage: number
+  title: string;
+  description: string;
+  scopeTabs: { href: string; label: string; active: boolean }[];
+  kindLabel: string;
+  kindOptions: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  unread: number;
+  rows: NotificationRow[];
+  hasRows: boolean;
+  hasScopedRows: boolean;
+  isEmpty: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  total: number;
+  currentPage: number;
+  perPage: number;
 }
 
 export async function loadNotifications(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<NotificationsData> {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  const { id: userId, orgId } = authz.user
-  const t = await getTranslations('shell.notifications')
-  const format = await getFormatter()
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  const { id: userId, orgId } = authz.user;
+  const t = await getTranslations("shell.notifications");
+  const format = await getFormatter();
 
   const params = parseListParams(sp, {
-    sort: 'at',
-    allowedSorts: ['at'] as const,
+    sort: "at",
+    allowedSorts: ["at"] as const,
     perPage: 25,
-  })
-  const scope: Scope = pickString(sp.scope) === 'all' ? 'all' : 'unread'
-  const kind = pickString(sp.kind)
+  });
+  const scope: Scope = pickString(sp.scope) === "all" ? "all" : "unread";
+  const kind = pickString(sp.kind);
 
-  const mine = sql`org_id = ${orgId} and user_id = ${userId}`
-  const scoped = scope === 'unread' ? sql`${mine} and read_at is null` : mine
-  const filtered = kind ? sql`${scoped} and kind = ${kind}` : scoped
-  const offset = (params.page - 1) * params.perPage
+  const mine = sql`org_id = ${orgId} and user_id = ${userId}`;
+  const scoped = scope === "unread" ? sql`${mine} and read_at is null` : mine;
+  const filtered = kind ? sql`${scoped} and kind = ${kind}` : scoped;
+  const offset = (params.page - 1) * params.perPage;
 
   const [rows, counts, kinds] = await Promise.all([
-    db.execute<NotificationSource>(sql`
+    db.execute<NotificationSource>(
+      sql`
       select id, kind, title, body, href, read_at as "readAt", created_at as "createdAt"
         from notifications
        where ${filtered}
        order by created_at desc
-       limit ${params.perPage} offset ${offset}`, 'objects'),
-    db.execute<{ total: number; unread: number; scoped: number }>(sql`
+       limit ${params.perPage} offset ${offset}`,
+      "objects",
+    ),
+    db.execute<{ total: number; unread: number; scoped: number }>(
+      sql`
       select count(*)::int as total,
              count(*) filter (where read_at is null)::int as unread,
              count(*) filter (where ${filtered})::int as scoped
         from notifications
-       where ${mine}`, 'objects'),
+       where ${mine}`,
+      "objects",
+    ),
     // Chip counts follow the scope (unread vs everything) but NOT the chosen
     // kind, so switching between chips never hides the chip you came from.
-    db.execute<{ kind: string; n: number }>(sql`
+    db.execute<{ kind: string; n: number }>(
+      sql`
       select kind, count(*)::int as n
         from notifications
        where ${scoped}
        group by kind
-       order by count(*) desc, kind asc`, 'objects'),
-  ])
+       order by count(*) desc, kind asc`,
+      "objects",
+    ),
+  ]);
 
-  const unread = counts[0]?.unread ?? 0
-  const visibility = pagedListVisibility(
-    counts[0]?.scoped ?? 0,
-    rows.length,
-  )
+  const unread = counts[0]?.unread ?? 0;
+  const visibility = pagedListVisibility(counts[0]?.scoped ?? 0, rows.length);
   const kindText = (code: string) =>
-    KNOWN_KINDS.has(code) ? t(`kinds.${code}` as never) : humanize(code)
+    KNOWN_KINDS.has(code) ? t(`kinds.${code}` as never) : humanize(code);
 
   return {
-    title: t('title'),
-    description: t('description'),
-    scopeTabs: (['unread', 'all'] as const).map((value) => ({
+    title: t("title"),
+    description: t("description"),
+    scopeTabs: (["unread", "all"] as const).map((value) => ({
       href: mergeHref(BASE, sp, { scope: value, page: 1 }),
-      label:
-        value === 'unread'
-          ? t('tabs.unread', { count: unread })
-          : t('tabs.all'),
+      label: value === "unread" ? t("tabs.unread", { count: unread }) : t("tabs.all"),
       active: scope === value,
     })),
-    kindLabel: t('kindLabel'),
+    kindLabel: t("kindLabel"),
     kindOptions: kinds.map((row) => ({
       value: row.kind,
       label: kindText(row.kind),
@@ -157,45 +160,44 @@ export async function loadNotifications(
       href: row.href,
       kindLabel: kindText(row.kind),
       when: format.dateTime(new Date(row.createdAt), {
-        dateStyle: 'medium',
-        timeStyle: 'short',
+        dateStyle: "medium",
+        timeStyle: "short",
       }),
       read: row.readAt !== null,
     })),
     hasRows: visibility.hasRows,
     hasScopedRows: visibility.hasResults,
     isEmpty: visibility.isEmpty,
-    emptyTitle: scope === 'unread' ? t('emptyUnreadTitle') : t('emptyTitle'),
-    emptyDescription:
-      scope === 'unread' ? t('emptyUnreadDescription') : t('emptyDescription'),
+    emptyTitle: scope === "unread" ? t("emptyUnreadTitle") : t("emptyTitle"),
+    emptyDescription: scope === "unread" ? t("emptyUnreadDescription") : t("emptyDescription"),
     total: counts[0]?.scoped ?? 0,
     currentPage: params.page,
     perPage: params.perPage,
-  }
+  };
 }
 
-const f = ref<NotificationsData>()
+const f = ref<NotificationsData>();
 
 export function notificationsSpec(data: NotificationsData): PageSpec {
   return page({
     // A literal, not BASE: the page registry reads this route from source.
-    route: '/notifications',
-    layout: 'list',
+    route: "/notifications",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
-          widget('notifications-mark-all-read', { unread: data.unread }),
-          widget('module-home-tabs', { tabs: data.scopeTabs }),
+          widget("notifications-mark-all-read", { unread: data.unread }),
+          widget("module-home-tabs", { tabs: data.scopeTabs }),
         ],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('filter-chips', {
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("filter-chips", {
           basePath: BASE,
           currentParams: data.currentParams,
-          paramKey: 'kind',
+          paramKey: "kind",
           label: data.kindLabel,
           options: data.kindOptions,
         }),
@@ -203,28 +205,28 @@ export function notificationsSpec(data: NotificationsData): PageSpec {
     ],
     body: [
       {
-        ...widgetBlock('empty-state', {
-          icon: 'bell',
+        ...widgetBlock("empty-state", {
+          icon: "bell",
           title: data.emptyTitle,
           description: data.emptyDescription,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
         // The list owns marking-read and row navigation, which a server
         // component cannot — see ./NotificationsInbox.
-        ...widgetBlock('notifications-inbox', { rows: data.rows }),
-        when: f('hasRows'),
+        ...widgetBlock("notifications-inbox", { rows: data.rows }),
+        when: f("hasRows"),
       },
       {
         ...pagination({
           basePath: BASE,
-          total: f('total'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          total: f("total"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
         }),
-        when: f('hasScopedRows'),
+        when: f("hasScopedRows"),
       },
     ],
-  })
+  });
 }

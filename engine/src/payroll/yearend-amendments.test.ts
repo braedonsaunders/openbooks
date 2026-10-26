@@ -1,7 +1,12 @@
-import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from "../testing/fixtures.ts";
 import { recurringBenefitsRunSource } from "./benefit-plan-inputs.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollProfile, createScratchOrg, dropScratchOrgReporting, seedFlowActors,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollProfile,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
   seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
@@ -75,21 +80,48 @@ test("the delta names exactly the fields that moved, in the form's own words", (
   );
   assert.deepEqual(changes, [
     {
-      code: null, label: "Province of employment (10)",
-      previous: "ON", current: "BC", redacted: false,
+      code: null,
+      label: "Province of employment (10)",
+      previous: "ON",
+      current: "BC",
+      redacted: false,
     },
-    { code: "14", label: "Employment income", previous: "52000.00", current: "54500.00", redacted: false },
+    {
+      code: "14",
+      label: "Employment income",
+      previous: "52000.00",
+      current: "54500.00",
+      redacted: false,
+    },
   ]);
 });
 
 test("a box that started or stopped being reported is a change, not an omission", () => {
   const changes = diffReported(
-    { fields: [{ code: "55", label: "Employee's PPIP premiums", value: "412.00" }], confidential: [] },
-    { fields: [{ code: "56", label: "PPIP insurable earnings", value: "54500.00" }], confidential: [] },
+    {
+      fields: [{ code: "55", label: "Employee's PPIP premiums", value: "412.00" }],
+      confidential: [],
+    },
+    {
+      fields: [{ code: "56", label: "PPIP insurable earnings", value: "54500.00" }],
+      confidential: [],
+    },
   );
   assert.deepEqual(changes, [
-    { code: "56", label: "PPIP insurable earnings", previous: null, current: "54500.00", redacted: false },
-    { code: "55", label: "Employee's PPIP premiums", previous: "412.00", current: null, redacted: false },
+    {
+      code: "56",
+      label: "PPIP insurable earnings",
+      previous: null,
+      current: "54500.00",
+      redacted: false,
+    },
+    {
+      code: "55",
+      label: "Employee's PPIP premiums",
+      previous: "412.00",
+      current: null,
+      redacted: false,
+    },
   ]);
 });
 
@@ -156,17 +188,17 @@ test("every built-in filing declares how it is corrected — or why it is not", 
 });
 
 test("a filing that declares no amendment support is refused at registration", async () => {
-  const { registerPayrollFilings, unregisterPayrollFilings } =
-    await import("./filing-registry.ts");
+  const { registerPayrollFilings, unregisterPayrollFilings } = await import("./filing-registry.ts");
   const { PayrollPackError } = await import("./packs.ts");
   const population = async () => ({ rowKey: "id", columns: [], rows: [] });
   const base = { country: "ZQ", programTypes: [] as never[] };
 
   assert.throws(
-    () => registerPayrollFilings({
-      ...base,
-      yearEnd: [{ key: "x", label: "X", cadence: "annual", population }],
-    } as never),
+    () =>
+      registerPayrollFilings({
+        ...base,
+        yearEnd: [{ key: "x", label: "X", cadence: "annual", population }],
+      } as never),
     (error: Error) => {
       assert.ok(error instanceof PayrollPackError);
       assert.match(error.message, /declares no amendment support/);
@@ -174,43 +206,67 @@ test("a filing that declares no amendment support is refused at registration", a
     },
   );
   assert.throws(
-    () => registerPayrollFilings({
-      ...base,
-      yearEnd: [{
-        key: "x", label: "X", cadence: "annual", population,
-        amendment: { supported: false, refusal: "  " },
-      }],
-    } as never),
+    () =>
+      registerPayrollFilings({
+        ...base,
+        yearEnd: [
+          {
+            key: "x",
+            label: "X",
+            cadence: "annual",
+            population,
+            amendment: { supported: false, refusal: "  " },
+          },
+        ],
+      } as never),
     /no amendment support and no reason/,
   );
   assert.throws(
-    () => registerPayrollFilings({
-      ...base,
-      yearEnd: [{
-        key: "x", label: "X", cadence: "annual", population,
-        amendment: { supported: true, revisions: [], vehicle: "same_form" },
-      }],
-    } as never),
+    () =>
+      registerPayrollFilings({
+        ...base,
+        yearEnd: [
+          {
+            key: "x",
+            label: "X",
+            cadence: "annual",
+            population,
+            amendment: { supported: true, revisions: [], vehicle: "same_form" },
+          },
+        ],
+      } as never),
     /names no revisions/,
   );
   assert.throws(
-    () => registerPayrollFilings({
-      ...base,
-      yearEnd: [{
-        key: "x", label: "X", cadence: "annual", population,
-        amendment: { supported: true, revisions: ["amended"], vehicle: "correction_form" },
-      }],
-    } as never),
+    () =>
+      registerPayrollFilings({
+        ...base,
+        yearEnd: [
+          {
+            key: "x",
+            label: "X",
+            cadence: "annual",
+            population,
+            amendment: { supported: true, revisions: ["amended"], vehicle: "correction_form" },
+          },
+        ],
+      } as never),
     /does not name it/,
   );
   assert.throws(
-    () => registerPayrollFilings({
-      ...base,
-      yearEnd: [{
-        key: "x", label: "X", cadence: "annual", population,
-        amendment: { supported: true, revisions: ["amended"], vehicle: "same_form" },
-      }],
-    } as never),
+    () =>
+      registerPayrollFilings({
+        ...base,
+        yearEnd: [
+          {
+            key: "x",
+            label: "X",
+            cadence: "annual",
+            population,
+            amendment: { supported: true, revisions: ["amended"], vehicle: "same_form" },
+          },
+        ],
+      } as never),
     /neither a correction file nor a reason/,
   );
   unregisterPayrollFilings("ZQ");
@@ -245,7 +301,10 @@ const GOLDEN_SLIP = {
   box44UnionDues: "600.00",
   box55Qpip: "0",
   box56QpipInsurable: "0",
-  employerCpp: "3200.50", employerCpp2: "188.00", employerEi: "1167.88", stubCount: 26,
+  employerCpp: "3200.50",
+  employerCpp2: "188.00",
+  employerEi: "1167.88",
+  stubCount: 26,
   sin: "046454286",
 };
 
@@ -254,7 +313,8 @@ const GOLDEN_SUMMARY = {
   employmentIncome: "54500.00",
   employeeCpp: "3200.50",
   employeeCpp2: "188.00",
-  employerCpp: "3200.50", employerCpp2: "188.00",
+  employerCpp: "3200.50",
+  employerCpp2: "188.00",
   employeeEi: "834.20",
   employerEi: "1167.88",
   incomeTax: "9100.75",
@@ -266,16 +326,18 @@ const goldenT4 = (reportTypeCode: "O" | "A" | "C") =>
     orgId: "abcdef12-0000-4000-8000-000000000000",
     taxYear: 2026,
     transmitter: TRANSMITTER,
-    returns: [{
-      filingAccount: {
-        id: GOLDEN_SLIP.filingAccountId,
-        accountNumber: "123456789RP0002",
-        name: "Field division",
-        remitterType: "regular",
+    returns: [
+      {
+        filingAccount: {
+          id: GOLDEN_SLIP.filingAccountId,
+          accountNumber: "123456789RP0002",
+          name: "Field division",
+          remitterType: "regular",
+        },
+        slips: [GOLDEN_SLIP],
+        summary: GOLDEN_SUMMARY,
       },
-      slips: [GOLDEN_SLIP],
-      summary: GOLDEN_SUMMARY,
-    }],
+    ],
     reportTypeCode,
   });
 
@@ -341,9 +403,10 @@ const T4_AMENDED_XML = `<?xml version="1.0" encoding="UTF-8"?>
  * that the slip should never have existed, not that its figures moved — so
  * only the report-type code differs from the return that was filed.
  */
-const T4_CANCELLED_XML = T4_AMENDED_XML
-  .replace("<sbmt_ref_id>T4-2026-A-abcdef12</sbmt_ref_id>", "<sbmt_ref_id>T4-2026-C-abcdef12</sbmt_ref_id>")
-  .replace("<RPT_TCD>A</RPT_TCD>\n   <empt_incamt>", "<RPT_TCD>C</RPT_TCD>\n   <empt_incamt>")
+const T4_CANCELLED_XML = T4_AMENDED_XML.replace(
+  "<sbmt_ref_id>T4-2026-A-abcdef12</sbmt_ref_id>",
+  "<sbmt_ref_id>T4-2026-C-abcdef12</sbmt_ref_id>",
+).replace("<RPT_TCD>A</RPT_TCD>\n   <empt_incamt>", "<RPT_TCD>C</RPT_TCD>\n   <empt_incamt>");
 
 test("the amended T4 XML is byte-identical to the CRA-coded golden", () => {
   assert.equal(goldenT4("A"), T4_AMENDED_XML);
@@ -358,8 +421,10 @@ test("an ORIGINAL T4 submission is unchanged, byte for byte", () => {
   const original = goldenT4("O");
   assert.equal(
     original,
-    T4_AMENDED_XML
-      .replace("<sbmt_ref_id>T4-2026-A-abcdef12</sbmt_ref_id>", "<sbmt_ref_id>T4-2026-abcdef12</sbmt_ref_id>")
+    T4_AMENDED_XML.replace(
+      "<sbmt_ref_id>T4-2026-A-abcdef12</sbmt_ref_id>",
+      "<sbmt_ref_id>T4-2026-abcdef12</sbmt_ref_id>",
+    )
       .replaceAll("<rpt_tcd>A</rpt_tcd>", "<rpt_tcd>O</rpt_tcd>")
       .replaceAll("<RPT_TCD>A</RPT_TCD>", "<RPT_TCD>O</RPT_TCD>"),
   );
@@ -369,14 +434,18 @@ test("an ORIGINAL T4 submission is unchanged, byte for byte", () => {
       orgId: "abcdef12-0000-4000-8000-000000000000",
       taxYear: 2026,
       transmitter: TRANSMITTER,
-      returns: [{
-        filingAccount: {
-          id: GOLDEN_SLIP.filingAccountId, accountNumber: "123456789RP0002",
-          name: "Field division", remitterType: "regular",
+      returns: [
+        {
+          filingAccount: {
+            id: GOLDEN_SLIP.filingAccountId,
+            accountNumber: "123456789RP0002",
+            name: "Field division",
+            remitterType: "regular",
+          },
+          slips: [GOLDEN_SLIP],
+          summary: GOLDEN_SUMMARY,
         },
-        slips: [GOLDEN_SLIP],
-        summary: GOLDEN_SUMMARY,
-      }],
+      ],
     }),
     original,
   );
@@ -399,7 +468,8 @@ test("a snapshot round-trips back into the slip a cancellation must file", () =>
       { code: "24", label: "EI insurable earnings", value: "54500.00" },
       { code: "26", label: "CPP/QPP pensionable earnings", value: "54500.00" },
       { code: "44", label: "Union dues", value: "600.00" },
-    ], privateFacts: { employerCpp: "3200.50", employerCpp2: "188.00", employerEi: "1167.88" },
+    ],
+    privateFacts: { employerCpp: "3200.50", employerCpp2: "188.00", employerEi: "1167.88" },
   };
   const expected: Record<string, unknown> = { ...GOLDEN_SLIP };
   delete expected.sin;
@@ -413,16 +483,20 @@ test("a snapshot round-trips back into the slip a cancellation must file", () =>
 
 test("a Québec snapshot round-trips through boxes 17/17A, not 16/16A", () => {
   const rowId = "11111111-1111-4111-8111-111111111111:QC:";
-  const slip = t4SlipFromReported({
-    fields: [
-      { code: null, label: "Employee's name", value: "Jean Tremblay" },
-      { code: "14", label: "Employment income", value: "40000.00" },
-      { code: "17", label: "Employee's QPP contributions", value: "2400.00" },
-      { code: "17A", label: "Employee's second QPP contributions", value: "120.00" },
-      { code: "55", label: "Employee's PPIP premiums", value: "197.60" },
-      { code: "56", label: "PPIP insurable earnings", value: "40000.00" },
-    ], privateFacts: { employerCpp: "2400.00", employerCpp2: "120.00", employerEi: "900.00" },
-  }, rowId);
+  const slip = t4SlipFromReported(
+    {
+      fields: [
+        { code: null, label: "Employee's name", value: "Jean Tremblay" },
+        { code: "14", label: "Employment income", value: "40000.00" },
+        { code: "17", label: "Employee's QPP contributions", value: "2400.00" },
+        { code: "17A", label: "Employee's second QPP contributions", value: "120.00" },
+        { code: "55", label: "Employee's PPIP premiums", value: "197.60" },
+        { code: "56", label: "PPIP insurable earnings", value: "40000.00" },
+      ],
+      privateFacts: { employerCpp: "2400.00", employerCpp2: "120.00", employerEi: "900.00" },
+    },
+    rowId,
+  );
   assert.equal(slip.isQuebec, true);
   assert.equal(slip.box16Cpp, "2400.00");
   assert.equal(slip.box16aCpp2, "120.00");
@@ -469,11 +543,41 @@ const W2_CORRECTION: PayrollFilingCorrectionRow = {
     ],
   },
   changes: [
-    { code: "1", label: "Wages, tips, other compensation", previous: "82000.00", current: "84500.00", redacted: false },
-    { code: "3", label: "Social security wages", previous: "82000.00", current: "84500.00", redacted: false },
-    { code: "4", label: "Social security tax withheld", previous: "5084.00", current: "5239.00", redacted: false },
-    { code: "5", label: "Medicare wages and tips", previous: "82000.00", current: "84500.00", redacted: false },
-    { code: "6", label: "Medicare tax withheld", previous: "1189.00", current: "1225.25", redacted: false },
+    {
+      code: "1",
+      label: "Wages, tips, other compensation",
+      previous: "82000.00",
+      current: "84500.00",
+      redacted: false,
+    },
+    {
+      code: "3",
+      label: "Social security wages",
+      previous: "82000.00",
+      current: "84500.00",
+      redacted: false,
+    },
+    {
+      code: "4",
+      label: "Social security tax withheld",
+      previous: "5084.00",
+      current: "5239.00",
+      redacted: false,
+    },
+    {
+      code: "5",
+      label: "Medicare wages and tips",
+      previous: "82000.00",
+      current: "84500.00",
+      redacted: false,
+    },
+    {
+      code: "6",
+      label: "Medicare tax withheld",
+      previous: "1189.00",
+      current: "1225.25",
+      redacted: false,
+    },
     { code: null, label: "Social security number", previous: null, current: null, redacted: true },
   ],
 };
@@ -613,10 +717,18 @@ const Q_CORRECTION: PayrollFilingCorrectionRow = {
       { code: null, label: "Employer identification number (EIN)", value: "12-3456789" },
       { code: null, label: "Report for this quarter", value: "Q2 2026" },
       { code: "2", label: "Wages, tips, and other compensation", value: "205000.00" },
-      { code: "3", label: "Federal income tax withheld from wages, tips, and other compensation", value: "28400.00" },
+      {
+        code: "3",
+        label: "Federal income tax withheld from wages, tips, and other compensation",
+        value: "28400.00",
+      },
       { code: "5a", label: "Taxable social security wages", value: "205000.00" },
       { code: "5c", label: "Taxable Medicare wages & tips", value: "205000.00" },
-      { code: "5e", label: "Total social security and Medicare taxes (employee + employer)", value: "31365.00" },
+      {
+        code: "5e",
+        label: "Total social security and Medicare taxes (employee + employer)",
+        value: "31365.00",
+      },
     ],
     confidential: [],
   },
@@ -631,9 +743,27 @@ const Q_CORRECTION: PayrollFilingCorrectionRow = {
     boxes: [],
   },
   changes: [
-    { code: "2", label: "Wages, tips, and other compensation", previous: "205000.00", current: "207500.00", redacted: false },
-    { code: "5a", label: "Taxable social security wages", previous: "205000.00", current: "207500.00", redacted: false },
-    { code: "5e", label: "Total social security and Medicare taxes (employee + employer)", previous: "31365.00", current: "31747.50", redacted: false },
+    {
+      code: "2",
+      label: "Wages, tips, and other compensation",
+      previous: "205000.00",
+      current: "207500.00",
+      redacted: false,
+    },
+    {
+      code: "5a",
+      label: "Taxable social security wages",
+      previous: "205000.00",
+      current: "207500.00",
+      redacted: false,
+    },
+    {
+      code: "5e",
+      label: "Total social security and Medicare taxes (employee + employer)",
+      previous: "31365.00",
+      current: "31747.50",
+      redacted: false,
+    },
   ],
 };
 
@@ -770,27 +900,48 @@ async function seedT4Year(): Promise<T4Fixture> {
       'percent_of_earnings', '4.0000', null, 'warn', true, ${actorId}, ${actorId})`);
 
   const employeeId = randomUUID();
-  await seedPayrollPerson(org.orgId, employeeId, 'Grace Hopper', {
+  await seedPayrollPerson(org.orgId, employeeId, "Grace Hopper", {
     subsidiaryId: org.subsidiaryId,
   });
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    name: "Biweekly",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-    province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
-    sinEncrypted: sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" }), sinLast3: '286',
-  }, { percentFloor: '4', method: 'accrue' });
-
+  await seedPayrollProfile(
+    org.orgId,
+    employeeId,
+    employmentId,
+    scheduleId,
+    actorId,
+    {
+      province: "ON",
+      payBasis: "hourly",
+      country: "CA",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+      sinEncrypted: sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" }),
+      sinLast3: "286",
+    },
+    { percentFloor: "4", method: "accrue" },
+  );
 
   const documentId = randomUUID();
   await seedPayrollDocument(org.orgId, documentId, {
-    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: org.subsidiaryId,
-    documentDate: '2026-07-21', currency: 'CAD', status: 'draft', createdBy: actorId, updatedBy: actorId,
+    kind: "pay_run",
+    documentNumber: `PAY-${documentId.slice(0, 8)}`,
+    subsidiaryId: org.subsidiaryId,
+    documentDate: "2026-07-21",
+    currency: "CAD",
+    status: "draft",
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
@@ -799,10 +950,22 @@ async function seedT4Year(): Promise<T4Fixture> {
             2026, 'calculated', now(), ${actorId}, ${actorId})`);
 
   const stubId = randomUUID();
-  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, { country: 'CA', countrySource: 'calculation',
-    id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
-    gross: '52000.0000', netPay: '42000.0000', pensionableEarnings: '52000.0000', insurableEarnings: '52000.0000',
-    factors: { C: "3200.50", C2: "188.00", EI: "834.20" }, createdBy: actorId, updatedBy: actorId,
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+    country: "CA",
+    countrySource: "calculation",
+    id: stubId,
+    province: "ON",
+    periodsPerYear: 26,
+    payDate: "2026-07-21",
+    taxYear: 2026,
+    currency: "CAD",
+    gross: "52000.0000",
+    netPay: "42000.0000",
+    pensionableEarnings: "52000.0000",
+    insurableEarnings: "52000.0000",
+    factors: { C: "3200.50", C2: "188.00", EI: "834.20" },
+    createdBy: actorId,
+    updatedBy: actorId,
   });
 
   const earningComponentId = randomUUID();
@@ -813,8 +976,14 @@ async function seedT4Year(): Promise<T4Fixture> {
   const taxComponentId = randomUUID();
   const employerCppId = randomUUID();
   await seedPayrollComponent(org.orgId, taxComponentId, {
-    code: 'FIT', name: 'Income tax', kind: 'deduction', systemKey: 'income_tax', country: 'CA', taxable: false,
-    createdBy: actorId, updatedBy: actorId,
+    code: "FIT",
+    name: "Income tax",
+    kind: "deduction",
+    systemKey: "income_tax",
+    country: "CA",
+    taxable: false,
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   await db.execute(sql`
     insert into pay_components (id, org_id, code, name, kind, system_key, country, taxable,
@@ -829,7 +998,7 @@ async function seedT4Year(): Promise<T4Fixture> {
             ${actorId}, ${actorId}),
            (${org.orgId}, ${stubId}, ${employerCppId}, 'employer_contribution', 'Employer CPP', '3200.5000', ${actorId}, ${actorId})`);
 
-  await db.execute(sql`update pay_runs set benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db,org.orgId,documentId))}::jsonb,
+  await db.execute(sql`update pay_runs set benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db, org.orgId, documentId))}::jsonb,
     run_status='committed' where org_id=${org.orgId} and document_id=${documentId}`);
 
   return {
@@ -843,15 +1012,20 @@ async function seedT4Year(): Promise<T4Fixture> {
 }
 
 test(
-  "issue → correct the ledger → amend: the delta names exactly the changed boxes, "
-  + "and the original artifact survives byte for byte",
+  "issue → correct the ledger → amend: the delta names exactly the changed boxes, " +
+    "and the original artifact survives byte for byte",
   { skip: !DB },
   async () => {
     const fx = await seedT4Year();
     try {
       const issued = await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original", note: "Filed by Internet File Transfer",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
+        note: "Filed by Internet File Transfer",
       });
       assert.equal(issued.submission.revision, "original");
       assert.equal(issued.submission.revisionNumber, 1);
@@ -865,8 +1039,12 @@ test(
       // A second original is refused — the agency would hold two returns.
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "original",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "original",
         }),
         /has already been issued/,
       );
@@ -878,8 +1056,13 @@ test(
       assert.deepEqual(lifecycle.rows[0]!.changes, []);
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "amended",
+          rowIds: [fx.rowId],
         }),
         /nothing changed on these slips/,
       );
@@ -895,11 +1078,28 @@ test(
 
       lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(lifecycle.rows[0]!.status, "changed");
-      assert.deepEqual(lifecycle.rows[0]!.changes, [{ code: "14", label: "Employment income", previous: "52000.0000", current: "53500.0000", redacted: false }], "only box 14 moved");
+      assert.deepEqual(
+        lifecycle.rows[0]!.changes,
+        [
+          {
+            code: "14",
+            label: "Employment income",
+            previous: "52000.0000",
+            current: "53500.0000",
+            redacted: false,
+          },
+        ],
+        "only box 14 moved",
+      );
 
       const amended = await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "amended",
+        rowIds: [fx.rowId],
       });
       assert.equal(amended.submission.revision, "amended");
       assert.equal(amended.submission.revisionNumber, 2);
@@ -919,7 +1119,13 @@ test(
       assert.equal(evidence!.body, originalBytes);
       assert.match(evidence!.body, /<empt_incamt>52000\.00<\/empt_incamt>/);
       const history = await filingSubmissions(fx.orgId, "CA", "t4", 2026);
-      assert.deepEqual(history.map((s) => [s.revisionNumber, s.revision]), [[1, "original"], [2, "amended"]]);
+      assert.deepEqual(
+        history.map((s) => [s.revisionNumber, s.revision]),
+        [
+          [1, "original"],
+          [2, "amended"],
+        ],
+      );
       assert.deepEqual(
         history[0]!.slips[0]!.reported.fields.find((f) => f.code === "14"),
         { code: "14", label: "Employment income", value: "52000.0000" },
@@ -978,16 +1184,27 @@ test(
     try {
       fx = await seedT4Year();
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original", note: "Filed by Internet File Transfer",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
+        note: "Filed by Internet File Transfer",
       });
       // Production rows predate key ids: strip the stored fingerprint to the
       // bare digest a v1-era snapshot carries.
-      const slips = await db.execute<{ id: string; reported: { confidential: { label: string; fingerprint: string }[] } }>(sql`
+      const slips = await db.execute<{
+        id: string;
+        reported: { confidential: { label: string; fingerprint: string }[] };
+      }>(
+        sql`
         select sl.id::text as id, sl.reported as reported
           from payroll_filing_submission_slips sl
           join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id
-         where s.org_id = ${fx.orgId} and s.country = 'CA' and s.filing_key = 't4' and s.tax_year = 2026`, "objects");
+         where s.org_id = ${fx.orgId} and s.country = 'CA' and s.filing_key = 't4' and s.tax_year = 2026`,
+        "objects",
+      );
       assert.equal(slips.length, 1);
       const bare = slips[0]!.reported.confidential[0]!.fingerprint.replace(/^k1:/, "");
       assert.match(bare, /^[0-9a-f]{64}$/);
@@ -1016,19 +1233,32 @@ test(
       // never[] along this path, and the narrowing outlives reassignment.
       const moved = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(moved.rows[0]!.status, "changed");
-      assert.deepEqual(moved.rows[0]!.changes.map((change) => change.code), ["14"]);
+      assert.deepEqual(
+        moved.rows[0]!.changes.map((change) => change.code),
+        ["14"],
+      );
       const amended = await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "amended",
+        rowIds: [fx.rowId],
       });
       assert.equal(amended.submission.revisionNumber, 2);
 
       // The sealed columns rotate (profile re-sealed under k2, as --apply
       // does) while the snapshots still name k1. Dropping k1 then refuses by
       // name — the comparison names the key and the remedy, not a 500.
-      const profile = (await db.execute<{ sealed: string }>(sql`
+      const profile = (
+        await db.execute<{ sealed: string }>(
+          sql`
         select sin_encrypted as sealed from employee_payroll_profiles
-         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`, "objects"))[0]!.sealed;
+         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`,
+          "objects",
+        )
+      )[0]!.sealed;
       const sin = unsealSecret(profile, { orgId: fx.orgId, purpose: "payroll.employee.sin" });
       await db.execute(sql`
         update employee_payroll_profiles
@@ -1048,11 +1278,14 @@ test(
       const slipsReport = applied.find((r) => r.table === "payroll_filing_submission_slips")!;
       assert.equal(slipsReport.rows, 2, "both snapshots re-fingerprint");
       assert.equal(slipsReport.resealed, 2);
-      const after = await db.execute<{ fingerprint: string }>(sql`
+      const after = await db.execute<{ fingerprint: string }>(
+        sql`
         select jsonb_path_query_first(sl.reported, '$.confidential[*].fingerprint')::text as fingerprint
           from payroll_filing_submission_slips sl
           join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id
-         where s.org_id = ${fx.orgId}`, "objects");
+         where s.org_id = ${fx.orgId}`,
+        "objects",
+      );
       for (const row of after) assert.match(row.fingerprint, /^"k2:[0-9a-f]{64}"$/);
       useOnlyK2();
       const settled = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
@@ -1079,8 +1312,12 @@ test(
       const seen: string[][] = [];
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "original",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "original",
           authorizeRowIds: async (rowIds) => {
             seen.push([...rowIds]);
             throw new PayrollError("subsidiary scope denied for the test barrier row");
@@ -1107,14 +1344,24 @@ test(
     const fx = await seedT4Year();
     try {
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original", note: "Filed by Internet File Transfer",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
+        note: "Filed by Internet File Transfer",
       });
       const seen: string[][] = [];
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "cancelled",
+          rowIds: [fx.rowId],
           reason: "Employee belonged to another entity",
           authorizeRowIds: async (rowIds) => {
             seen.push([...rowIds]);
@@ -1142,25 +1389,23 @@ test(
     const fx = await seedT4Year();
     try {
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original", note: "Filed by Internet File Transfer",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
+        note: "Filed by Internet File Transfer",
       });
       const seen: string[][] = [];
       await assert.rejects(
-        filingLifecycle(
-          fx.orgId, "CA", "t4", 2026, undefined,
-          async (rowIds) => {
-            seen.push([...rowIds]);
-            throw new PayrollError("subsidiary scope denied for the test barrier row");
-          },
-        ),
+        filingLifecycle(fx.orgId, "CA", "t4", 2026, undefined, async (rowIds) => {
+          seen.push([...rowIds]);
+          throw new PayrollError("subsidiary scope denied for the test barrier row");
+        }),
         /subsidiary scope denied for the test barrier row/,
       );
-      assert.deepEqual(
-        seen,
-        [[fx.rowId]],
-        "the lifecycle authorized its stored plus current rows",
-      );
+      assert.deepEqual(seen, [[fx.rowId]], "the lifecycle authorized its stored plus current rows");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -1176,62 +1421,71 @@ test(
     const filingKey = `snapshot-${randomUUID()}`;
     const settingKey = `payrollSnapshot-${randomUUID()}`;
     let artifactObserved!: () => void;
-    const artifactReady = new Promise<void>((resolve) => { artifactObserved = resolve; });
+    const artifactReady = new Promise<void>((resolve) => {
+      artifactObserved = resolve;
+    });
     let releaseArtifact!: () => void;
-    const artifactRelease = new Promise<void>((resolve) => { releaseArtifact = resolve; });
+    const artifactRelease = new Promise<void>((resolve) => {
+      releaseArtifact = resolve;
+    });
 
     const readMarker = async (): Promise<string> => {
-      const result = await db.execute<{ marker: string | null }>(sql`
+      const result = await db.execute<{ marker: string | null }>(
+        sql`
         select settings->>${settingKey} as marker
           from orgs
          where id = ${fx.orgId}
-      `, "objects");
+      `,
+        "objects",
+      );
       return result[0]?.marker ?? "";
     };
 
     registerPayrollFilings({
       country,
       programTypes: [],
-      yearEnd: [{
-        key: filingKey,
-        label: "Snapshot filing",
-        cadence: "annual",
-        population: async () => ({
-          rowKey: "rowId",
-          columns: [{ key: "marker", label: "Marker" }],
-          rows: [{ rowId: "row-1", marker: await readMarker() }],
-        }),
-        // The snapshot rows are opaque markers, not subsidiary-scoped
-        // entities: nothing parses them, and the guard fails them closed.
-        parseRowId: () => null,
-        slip: {
-          build: async () => ({
-            formCode: "ZZ_SNAPSHOT",
-            formName: "Snapshot filing",
-            headerFields: [],
-            boxes: [{ code: "marker", label: "Marker", value: await readMarker() }],
+      yearEnd: [
+        {
+          key: filingKey,
+          label: "Snapshot filing",
+          cadence: "annual",
+          population: async () => ({
+            rowKey: "rowId",
+            columns: [{ key: "marker", label: "Marker" }],
+            rows: [{ rowId: "row-1", marker: await readMarker() }],
           }),
-        },
-        download: {
-          label: "Download snapshot",
-          build: async () => {
-            const marker = await readMarker();
-            artifactObserved();
-            await artifactRelease;
-            return {
-              filename: "snapshot.txt",
-              contentType: "text/plain",
-              body: marker,
-            };
+          // The snapshot rows are opaque markers, not subsidiary-scoped
+          // entities: nothing parses them, and the guard fails them closed.
+          parseRowId: () => null,
+          slip: {
+            build: async () => ({
+              formCode: "ZZ_SNAPSHOT",
+              formName: "Snapshot filing",
+              headerFields: [],
+              boxes: [{ code: "marker", label: "Marker", value: await readMarker() }],
+            }),
+          },
+          download: {
+            label: "Download snapshot",
+            build: async () => {
+              const marker = await readMarker();
+              artifactObserved();
+              await artifactRelease;
+              return {
+                filename: "snapshot.txt",
+                contentType: "text/plain",
+                body: marker,
+              };
+            },
+          },
+          amendment: {
+            supported: true,
+            revisions: ["amended"],
+            vehicle: "same_form",
+            downloadRefusal: "not used by this snapshot test",
           },
         },
-        amendment: {
-          supported: true,
-          revisions: ["amended"],
-          vehicle: "same_form",
-          downloadRefusal: "not used by this snapshot test",
-        },
-      }],
+      ],
     });
 
     try {
@@ -1282,46 +1536,51 @@ test(
     const settingKey = `payrollCorrectionSnapshot-${randomUUID()}`;
 
     const readMarker = async (): Promise<string> => {
-      const result = await db.execute<{ marker: string | null }>(sql`
+      const result = await db.execute<{ marker: string | null }>(
+        sql`
         select settings->>${settingKey} as marker
           from orgs
          where id = ${fx.orgId}
-      `, "objects");
+      `,
+        "objects",
+      );
       return result[0]?.marker ?? "";
     };
 
     registerPayrollFilings({
       country,
       programTypes: [],
-      yearEnd: [{
-        key: filingKey,
-        label: "Correction snapshot filing",
-        cadence: "annual",
-        population: async () => {
-          const marker = await readMarker();
-          return {
-            rowKey: "rowId",
-            columns: [{ key: "marker", label: "Marker" }],
-            rows: [{ rowId: "row-1", marker }],
-          };
-        },
-        // Snapshot rows are opaque markers, not subsidiary-scoped entities:
-        // nothing parses them, and the guard fails them closed.
-        parseRowId: () => null,
-        amendment: {
-          supported: true,
-          revisions: ["amended"],
-          vehicle: "same_form",
-          download: {
-            label: "Download correction snapshot",
-            build: async ({ rows }) => ({
-              filename: "correction-snapshot.txt",
-              contentType: "text/plain",
-              body: rows[0]!.current.headerFields[0]!.value,
-            }),
+      yearEnd: [
+        {
+          key: filingKey,
+          label: "Correction snapshot filing",
+          cadence: "annual",
+          population: async () => {
+            const marker = await readMarker();
+            return {
+              rowKey: "rowId",
+              columns: [{ key: "marker", label: "Marker" }],
+              rows: [{ rowId: "row-1", marker }],
+            };
+          },
+          // Snapshot rows are opaque markers, not subsidiary-scoped entities:
+          // nothing parses them, and the guard fails them closed.
+          parseRowId: () => null,
+          amendment: {
+            supported: true,
+            revisions: ["amended"],
+            vehicle: "same_form",
+            download: {
+              label: "Download correction snapshot",
+              build: async ({ rows }) => ({
+                filename: "correction-snapshot.txt",
+                contentType: "text/plain",
+                body: rows[0]!.current.headerFields[0]!.value,
+              }),
+            },
           },
         },
-      }],
+      ],
     });
 
     try {
@@ -1331,8 +1590,12 @@ test(
          where id = ${fx.orgId}
       `);
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
-        taxYear: 2026, revision: "original",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country,
+        filingKey,
+        taxYear: 2026,
+        revision: "original",
       });
 
       // The amendment is computed from B. A filing without a declared slip
@@ -1344,8 +1607,13 @@ test(
          where id = ${fx.orgId}
       `);
       const correcting = recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
-        taxYear: 2026, revision: "amended", rowIds: ["row-1"],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country,
+        filingKey,
+        taxYear: 2026,
+        revision: "amended",
+        rowIds: ["row-1"],
       });
 
       const amended = await correcting;
@@ -1368,66 +1636,75 @@ test(
     const settingKey = `payrollCorrectionRepeatableRead-${randomUUID()}`;
     let populationCalls = 0;
     let populationPaused!: () => void;
-    const populationReady = new Promise<void>((resolve) => { populationPaused = resolve; });
+    const populationReady = new Promise<void>((resolve) => {
+      populationPaused = resolve;
+    });
     let releasePopulation!: () => void;
-    const populationRelease = new Promise<void>((resolve) => { releasePopulation = resolve; });
+    const populationRelease = new Promise<void>((resolve) => {
+      releasePopulation = resolve;
+    });
 
     const readMarker = async (): Promise<string> => {
-      const result = await db.execute<{ marker: string | null }>(sql`
+      const result = await db.execute<{ marker: string | null }>(
+        sql`
         select settings->>${settingKey} as marker
           from orgs
          where id = ${fx.orgId}
-      `, "objects");
+      `,
+        "objects",
+      );
       return result[0]?.marker ?? "";
     };
 
     registerPayrollFilings({
       country,
       programTypes: [],
-      yearEnd: [{
-        key: filingKey,
-        label: "Repeatable-read correction filing",
-        cadence: "annual",
-        // Opaque marker rows, as above: nothing parses them.
-        parseRowId: () => null,
-        population: async () => {
-          populationCalls += 1;
-          // Calls 1 and 2 issue the original and validate the amendment. Pause
-          // call 3, the correction's second population read, before it reads
-          // the source marker so a concurrent commit can land in the gap.
-          if (populationCalls === 3) {
-            populationPaused();
-            await populationRelease;
-          }
-          const marker = await readMarker();
-          return {
-            rowKey: "rowId",
-            columns: [{ key: "marker", label: "Marker" }],
-            rows: [{ rowId: "row-1", marker }],
-          };
-        },
-        slip: {
-          build: async () => ({
-            formCode: "ZX_SNAPSHOT",
-            formName: "Repeatable-read correction filing",
-            headerFields: [{ label: "Marker", value: await readMarker() }],
-            boxes: [],
-          }),
-        },
-        amendment: {
-          supported: true,
-          revisions: ["amended"],
-          vehicle: "same_form",
-          download: {
-            label: "Download repeatable-read correction",
-            build: async ({ rows }) => ({
-              filename: "repeatable-read-correction.txt",
-              contentType: "text/plain",
-              body: rows[0]!.current.headerFields[0]!.value,
+      yearEnd: [
+        {
+          key: filingKey,
+          label: "Repeatable-read correction filing",
+          cadence: "annual",
+          // Opaque marker rows, as above: nothing parses them.
+          parseRowId: () => null,
+          population: async () => {
+            populationCalls += 1;
+            // Calls 1 and 2 issue the original and validate the amendment. Pause
+            // call 3, the correction's second population read, before it reads
+            // the source marker so a concurrent commit can land in the gap.
+            if (populationCalls === 3) {
+              populationPaused();
+              await populationRelease;
+            }
+            const marker = await readMarker();
+            return {
+              rowKey: "rowId",
+              columns: [{ key: "marker", label: "Marker" }],
+              rows: [{ rowId: "row-1", marker }],
+            };
+          },
+          slip: {
+            build: async () => ({
+              formCode: "ZX_SNAPSHOT",
+              formName: "Repeatable-read correction filing",
+              headerFields: [{ label: "Marker", value: await readMarker() }],
+              boxes: [],
             }),
           },
+          amendment: {
+            supported: true,
+            revisions: ["amended"],
+            vehicle: "same_form",
+            download: {
+              label: "Download repeatable-read correction",
+              build: async ({ rows }) => ({
+                filename: "repeatable-read-correction.txt",
+                contentType: "text/plain",
+                body: rows[0]!.current.headerFields[0]!.value,
+              }),
+            },
+          },
         },
-      }],
+      ],
     });
 
     try {
@@ -1437,8 +1714,12 @@ test(
          where id = ${fx.orgId}
       `);
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
-        taxYear: 2026, revision: "original",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country,
+        filingKey,
+        taxYear: 2026,
+        revision: "original",
       });
       await db.execute(sql`
         update orgs
@@ -1447,8 +1728,13 @@ test(
       `);
 
       const correcting = recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
-        taxYear: 2026, revision: "amended", rowIds: ["row-1"],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country,
+        filingKey,
+        taxYear: 2026,
+        revision: "amended",
+        rowIds: ["row-1"],
       });
       await populationReady;
       await db.execute(sql`
@@ -1476,8 +1762,12 @@ test(
     const fx = await seedT4Year();
     try {
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
       });
       await db.execute(sql`
         update employee_payroll_profiles
@@ -1486,23 +1776,26 @@ test(
 
       const lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(lifecycle.rows[0]!.status, "changed");
-      assert.deepEqual(lifecycle.rows[0]!.changes, [{
-        code: null,
-        label: "Social insurance number",
-        previous: null,
-        current: null,
-        redacted: true,
-      }]);
+      assert.deepEqual(lifecycle.rows[0]!.changes, [
+        {
+          code: null,
+          label: "Social insurance number",
+          previous: null,
+          current: null,
+          redacted: true,
+        },
+      ]);
       // The snapshot holds a fingerprint, never the number.
       const history = await filingSubmissions(fx.orgId, "CA", "t4", 2026);
       const stored = JSON.stringify(history[0]!.slips[0]!.reported);
-      assert.ok(!stored.includes("046454286"), "the issued SIN is not stored in the filing history");
+      assert.ok(
+        !stored.includes("046454286"),
+        "the issued SIN is not stored in the filing history",
+      );
 
       // The correction slip the operator reviews names the change and
       // withholds the value — neither SIN appears anywhere on the form.
-      const slip = await filingCorrectionSlip(
-        fx.orgId, "CA", "t4", 2026, fx.rowId, "amended",
-      );
+      const slip = await filingCorrectionSlip(fx.orgId, "CA", "t4", 2026, fx.rowId, "amended");
       assert.ok(
         slip.headerFields.some((f) => f.value === "changed (not displayed)"),
         "the amended slip says the SIN moved without printing it",
@@ -1511,8 +1804,13 @@ test(
       assert.ok(!JSON.stringify(slip).includes("130692544"));
 
       const amended = await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "amended",
+        rowIds: [fx.rowId],
       });
       assert.match(amended.file!.body, /<SIN>130692544<\/SIN>/, "the corrected SIN is filed");
       // Once the amendment is issued the slip is settled: asking for another
@@ -1528,15 +1826,19 @@ test(
 );
 
 test(
-  "a slip the ledger no longer produces is ABSENT, must be cancelled, and the "
-  + "cancellation files what was reported",
+  "a slip the ledger no longer produces is ABSENT, must be cancelled, and the " +
+    "cancellation files what was reported",
   { skip: !DB },
   async () => {
     const fx = await seedT4Year();
     try {
       const issued = await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
       });
 
       // The employee should never have been on this entity: the run is pulled
@@ -1551,8 +1853,13 @@ test(
       // AMENDING is refused: there is nothing to restate.
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "amended",
+          rowIds: [fx.rowId],
         }),
         /cancel them instead/,
       );
@@ -1562,22 +1869,36 @@ test(
       // eligibility was established and leaves the issued history untouched.
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId], note: "   ",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "cancelled",
+          rowIds: [fx.rowId],
+          note: "   ",
         }),
         /nonblank cancellation reason is required/,
       );
       assert.equal((await filingSubmissions(fx.orgId, "CA", "t4", 2026)).length, 1);
 
       const cancelled = await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "cancelled",
+        rowIds: [fx.rowId],
         reason: "  Employee belonged to the other entity  ",
       });
       assert.equal(cancelled.submission.revision, "cancelled");
       assert.equal(cancelled.submission.supersedesId, issued.submission.id);
       assert.equal(cancelled.submission.note, "Employee belonged to the other entity");
-      assert.match(cancelled.file!.body, /<rpt_tcd>A<\/rpt_tcd>[\s\S]*<RPT_TCD>C<\/RPT_TCD>[\s\S]*<RPT_TCD>A<\/RPT_TCD>/);
+      assert.match(
+        cancelled.file!.body,
+        /<rpt_tcd>A<\/rpt_tcd>[\s\S]*<RPT_TCD>C<\/RPT_TCD>[\s\S]*<RPT_TCD>A<\/RPT_TCD>/,
+      );
       // The CRA's instruction: a cancelled slip carries the SAME information
       // as the original — which is only possible from the snapshot, because
       // the ledger no longer holds it.
@@ -1591,7 +1912,7 @@ test(
       // Put the run back: the slip the employer withdrew is produced again,
       // and the disagreement is NAMED rather than quietly re-filed.
       await db.execute(sql`
-        update pay_runs set run_status = 'committed', benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db,fx.orgId,fx.documentId))}::jsonb
+        update pay_runs set run_status = 'committed', benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db, fx.orgId, fx.documentId))}::jsonb
          where org_id = ${fx.orgId} and document_id = ${fx.documentId}`);
       lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(lifecycle.rows[0]!.status, "resurrected");
@@ -1601,8 +1922,13 @@ test(
       // must refuse rather than send an agency-invalid amended slip.
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "amended",
+          rowIds: [fx.rowId],
         }),
         /cancelled.*additional original/,
       );
@@ -1623,8 +1949,13 @@ test(
       // correction path refuses with Revenu Québec's own reason.
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "rl1",
-          taxYear: 2026, revision: "amended", rowIds: ["anything"],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "rl1",
+          taxYear: 2026,
+          revision: "amended",
+          rowIds: ["anything"],
         }),
         (error: Error) => {
           assert.ok(error instanceof PayrollError);
@@ -1641,8 +1972,13 @@ test(
       // The ROE refuses for its own reason — the Service Canada serial number.
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "roe",
-          taxYear: 2026, revision: "amended", rowIds: [fx.employeeId],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "roe",
+          taxYear: 2026,
+          revision: "amended",
+          rowIds: [fx.employeeId],
         }),
         /serial number Service Canada assigned/,
       );
@@ -1653,13 +1989,22 @@ test(
 
       // A revision the pack does not declare is refused by name too.
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
       });
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "US", filingKey: "941",
-          taxYear: 2026, revision: "cancelled", rowIds: ["x"],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "US",
+          filingKey: "941",
+          taxYear: 2026,
+          revision: "cancelled",
+          rowIds: ["x"],
         }),
         /cannot be cancelled/,
       );
@@ -1677,26 +2022,45 @@ test(
     try {
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "amended",
+          rowIds: [fx.rowId],
         }),
         /has never been issued/,
       );
       await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-        taxYear: 2026, revision: "original",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        country: "CA",
+        filingKey: "t4",
+        taxYear: 2026,
+        revision: "original",
       });
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "cancelled", rowIds: [`${randomUUID()}:ON:`],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "cancelled",
+          rowIds: [`${randomUUID()}:ON:`],
         }),
         /were never issued/,
       );
       await assert.rejects(
         recordFilingIssue({
-          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
-          taxYear: 2026, revision: "amended", rowIds: [],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          country: "CA",
+          filingKey: "t4",
+          taxYear: 2026,
+          revision: "amended",
+          rowIds: [],
         }),
         /name the .* rows to amend/,
       );
@@ -1725,170 +2089,208 @@ async function raceFilingFixture(filingKey: string) {
   let armed = false;
   let releaseFirst!: () => void;
   let signalEntered!: () => void;
-  const entered = new Promise<void>((resolve) => { signalEntered = resolve; });
-  const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const entered = new Promise<void>((resolve) => {
+    signalEntered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
   let firstPid: number | undefined;
   const pauseFirst = async () => {
-    firstPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
+    firstPid = (
+      await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects")
+    )[0]!.pid;
     signalEntered();
     await gate;
   };
-  const marker = async (): Promise<string> => (await db.execute<{ m: string | null }>(sql`
+  const marker = async (): Promise<string> =>
+    (
+      await db.execute<{ m: string | null }>(
+        sql`
     select settings->>'zxRaceMarker' as m from orgs where id = ${org.orgId}
-  `, "objects"))[0]?.m ?? "";
+  `,
+        "objects",
+      )
+    )[0]?.m ?? "";
   registerPayrollFilings({
     country,
     programTypes: [],
-    yearEnd: [{
-      key: filingKey,
-      label: "Race filing",
-      cadence: "annual",
-      // Opaque marker rows, as above: nothing parses them.
-      parseRowId: () => null,
-      population: async () => ({
-        rowKey: "rowId",
-        columns: [{ key: "marker", label: "Marker" }],
-        rows: [{ rowId: "row-1", marker: await marker() }],
-      }),
-      slip: {
-        build: async () => ({
-          formCode: "ZX_RACE",
-          formName: "Race filing",
-          headerFields: [{ label: "Marker", value: await marker() }],
-          boxes: [],
+    yearEnd: [
+      {
+        key: filingKey,
+        label: "Race filing",
+        cadence: "annual",
+        // Opaque marker rows, as above: nothing parses them.
+        parseRowId: () => null,
+        population: async () => ({
+          rowKey: "rowId",
+          columns: [{ key: "marker", label: "Marker" }],
+          rows: [{ rowId: "row-1", marker: await marker() }],
         }),
-      },
-      download: {
-        label: "Download race original",
-        build: async () => {
-          downloadCalls += 1;
-          if (armed && downloadCalls === 1) await pauseFirst();
-          return { filename: "race.txt", contentType: "text/plain", body: await marker() };
+        slip: {
+          build: async () => ({
+            formCode: "ZX_RACE",
+            formName: "Race filing",
+            headerFields: [{ label: "Marker", value: await marker() }],
+            boxes: [],
+          }),
         },
-      },
-      amendment: {
-        supported: true,
-        revisions: ["amended"],
-        vehicle: "same_form",
         download: {
-          label: "Download race correction",
-          build: async ({ rows }) => {
-            amendCalls += 1;
-            if (armed && amendCalls === 1) await pauseFirst();
-            return {
-              filename: "race-amended.txt",
-              contentType: "text/plain",
-              body: rows[0]!.current.headerFields[0]!.value,
-            };
+          label: "Download race original",
+          build: async () => {
+            downloadCalls += 1;
+            if (armed && downloadCalls === 1) await pauseFirst();
+            return { filename: "race.txt", contentType: "text/plain", body: await marker() };
+          },
+        },
+        amendment: {
+          supported: true,
+          revisions: ["amended"],
+          vehicle: "same_form",
+          download: {
+            label: "Download race correction",
+            build: async ({ rows }) => {
+              amendCalls += 1;
+              if (armed && amendCalls === 1) await pauseFirst();
+              return {
+                filename: "race-amended.txt",
+                contentType: "text/plain",
+                body: rows[0]!.current.headerFields[0]!.value,
+              };
+            },
           },
         },
       },
-    }],
+    ],
   });
   return {
-    orgId: org.orgId, actorId, country, filingKey,
-    setMarker: (value: string) => db.execute(sql`
+    orgId: org.orgId,
+    actorId,
+    country,
+    filingKey,
+    setMarker: (value: string) =>
+      db.execute(sql`
       update orgs set settings = coalesce(settings, '{}'::jsonb)
         || ${JSON.stringify({ zxRaceMarker: value })}::jsonb
        where id = ${org.orgId}`),
-    arm: () => { armed = true; },
+    arm: () => {
+      armed = true;
+    },
     entered: Promise.race([
       entered,
-      new Promise<never>((_, reject) => setTimeout(
-        () => reject(new Error("first issue never reached its artifact build")), 15000,
-      )),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("first issue never reached its artifact build")), 15000),
+      ),
     ]),
     release: () => releaseFirst(),
     waitForContender: async () => {
       assert.ok(firstPid);
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline) {
-        const blocked = (await pool.query<{ blocked: boolean }>(
-          'select exists(select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid))) as blocked',
-          [firstPid],
-        )).rows[0]!.blocked;
+        const blocked = (
+          await pool.query<{ blocked: boolean }>(
+            "select exists(select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid))) as blocked",
+            [firstPid],
+          )
+        ).rows[0]!.blocked;
         if (blocked) return;
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 20));
       }
-      assert.fail('The competing filing request did not wait at the native source fence');
+      assert.fail("The competing filing request did not wait at the native source fence");
     },
-    done: async () => { unregisterPayrollFilings(country); await dropScratchOrgReporting(org.orgId); },
+    done: async () => {
+      unregisterPayrollFilings(country);
+      await dropScratchOrgReporting(org.orgId);
+    },
   };
 }
 
-test(
-  "concurrent original issues cannot file two competing returns",
-  { skip: !DB },
-  async () => {
-    const fx = await raceFilingFixture(`race-original-${randomUUID()}`);
-    const issue = () => recordFilingIssue({
-      orgId: fx.orgId, actorId: fx.actorId, country: fx.country, filingKey: fx.filingKey,
-      taxYear: 2026, revision: "original",
+test("concurrent original issues cannot file two competing returns", { skip: !DB }, async () => {
+  const fx = await raceFilingFixture(`race-original-${randomUUID()}`);
+  const issue = () =>
+    recordFilingIssue({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      country: fx.country,
+      filingKey: fx.filingKey,
+      taxYear: 2026,
+      revision: "original",
     });
+  try {
+    await fx.setMarker("A");
+    fx.arm();
+    // Both requests share the source-year fence; the second must wait
+    // and then refuse the already issued original without persisting it.
+    const first = issue();
+    let second: Promise<void> | undefined;
     try {
-      await fx.setMarker("A");
-      fx.arm();
-      // Both requests share the source-year fence; the second must wait
-      // and then refuse the already issued original without persisting it.
-      const first = issue();
-      let second: Promise<void> | undefined;
-      try {
-        await fx.entered;
-        second = assert.rejects(issue(), /already been issued/);
-        await fx.waitForContender();
-        fx.release();
-        assert.equal((await first).submission.revisionNumber, 1);
-        await second;
-      } finally {
-        fx.release();
-        await Promise.allSettled([first, ...(second ? [second] : [])]);
-      }
-      const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
-      assert.equal(
-        submissions.filter((s) => s.revision === "original").length,
-        1,
-        "exactly one original may exist — a second original gives the agency two competing returns",
-      );
-    } finally { fx.release(); await fx.done(); }
-  },
-);
+      await fx.entered;
+      second = assert.rejects(issue(), /already been issued/);
+      await fx.waitForContender();
+      fx.release();
+      assert.equal((await first).submission.revisionNumber, 1);
+      await second;
+    } finally {
+      fx.release();
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+    }
+    const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
+    assert.equal(
+      submissions.filter((s) => s.revision === "original").length,
+      1,
+      "exactly one original may exist — a second original gives the agency two competing returns",
+    );
+  } finally {
+    fx.release();
+    await fx.done();
+  }
+});
 
-test(
-  "concurrent corrections cannot fork the revision history",
-  { skip: !DB },
-  async () => {
-    const fx = await raceFilingFixture(`race-correction-${randomUUID()}`);
-    const amend = () => recordFilingIssue({
-      orgId: fx.orgId, actorId: fx.actorId, country: fx.country, filingKey: fx.filingKey,
-      taxYear: 2026, revision: "amended", rowIds: ["row-1"],
+test("concurrent corrections cannot fork the revision history", { skip: !DB }, async () => {
+  const fx = await raceFilingFixture(`race-correction-${randomUUID()}`);
+  const amend = () =>
+    recordFilingIssue({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      country: fx.country,
+      filingKey: fx.filingKey,
+      taxYear: 2026,
+      revision: "amended",
+      rowIds: ["row-1"],
     });
+  try {
+    await fx.setMarker("A");
+    await recordFilingIssue({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      country: fx.country,
+      filingKey: fx.filingKey,
+      taxYear: 2026,
+      revision: "original",
+    });
+    await fx.setMarker("B");
+    fx.arm();
+    const first = amend();
+    let second: Promise<void> | undefined;
     try {
-      await fx.setMarker("A");
-      await recordFilingIssue({
-        orgId: fx.orgId, actorId: fx.actorId, country: fx.country, filingKey: fx.filingKey,
-        taxYear: 2026, revision: "original",
-      });
-      await fx.setMarker("B");
-      fx.arm();
-      const first = amend();
-      let second: Promise<void> | undefined;
-      try {
-        await fx.entered;
-        second = assert.rejects(amend(), /nothing changed/);
-        await fx.waitForContender();
-        fx.release();
-        assert.equal((await first).submission.revisionNumber, 2);
-        await second;
-      } finally {
-        fx.release();
-        await Promise.allSettled([first, ...(second ? [second] : [])]);
-      }
-      const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
-      assert.equal(
-        submissions.filter((s) => s.revisionNumber === 2).length,
-        1,
-        "exactly one revision 2 may exist — two corrections superseding the same revision fork the filed truth",
-      );
-    } finally { fx.release(); await fx.done(); }
-  },
-);
+      await fx.entered;
+      second = assert.rejects(amend(), /nothing changed/);
+      await fx.waitForContender();
+      fx.release();
+      assert.equal((await first).submission.revisionNumber, 2);
+      await second;
+    } finally {
+      fx.release();
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+    }
+    const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
+    assert.equal(
+      submissions.filter((s) => s.revisionNumber === 2).length,
+      1,
+      "exactly one revision 2 may exist — two corrections superseding the same revision fork the filed truth",
+    );
+  } finally {
+    fx.release();
+    await fx.done();
+  }
+});

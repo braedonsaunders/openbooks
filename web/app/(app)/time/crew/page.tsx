@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { crewSpec, crewTitle, loadCrewPage } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { crewSpec, crewTitle, loadCrewPage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await crewTitle() }
+  return { title: await crewTitle() };
 }
 
 /**
@@ -15,9 +15,9 @@ export async function generateMetadata() {
 export default async function CrewPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadCrewPage(sp)
-  return <ModuleView spec={crewSpec(data, '/time/crew')} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadCrewPage(sp);
+  return <ModuleView spec={crewSpec(data, "/time/crew")} data={data} searchParams={sp} trusted />;
 }

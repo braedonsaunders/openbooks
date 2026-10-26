@@ -19,14 +19,17 @@ export async function assertPostingClaimLive(
   orgId: string,
   claim: PostingClaim,
 ): Promise<void> {
-  const fenced = await db.execute<{ id: string }>(sql`
+  const fenced = await db.execute<{ id: string }>(
+    sql`
     update payment_runs
        set posting_claimed_at = now()
      where id = ${runId} and org_id = ${orgId}
        and status = 'processing'
        and posting_claim_token = ${claim.token}
      returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!fenced[0]) throw new PaymentRunPostingClaimFencedError(runId);
   await db.execute(sql`
     select set_config('openbooks.payment_run_claim', ${`${runId}:${claim.token}`}, true)

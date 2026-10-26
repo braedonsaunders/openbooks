@@ -1,29 +1,29 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const projectTypes: DocArticle = {
-  slug: 'project-types',
-  title: 'Project Types',
-  category: 'projects',
+  slug: "project-types",
+  title: "Project Types",
+  category: "projects",
   order: 1,
   summary:
-    'Configure profitability, invoicing, costing, pricing, and supporting-document requirements by project class.',
-  updated: '2026-07-23',
+    "Configure profitability, invoicing, costing, pricing, and supporting-document requirements by project class.",
+  updated: "2026-07-23",
   keywords: [
-    'project type',
-    'profitability',
-    'invoicing',
-    'backup',
-    'overhead',
-    'billing method',
-    'fixed price',
-    'time and materials',
-    'cost plus',
-    'not to exceed',
-    'P&L',
-    'markup',
-    'retainage',
-    'holdback',
-    'opening balance',
+    "project type",
+    "profitability",
+    "invoicing",
+    "backup",
+    "overhead",
+    "billing method",
+    "fixed price",
+    "time and materials",
+    "cost plus",
+    "not to exceed",
+    "P&L",
+    "markup",
+    "retainage",
+    "holdback",
+    "opening balance",
   ],
   body: `# Project Types
 
@@ -258,4 +258,4 @@ by department, use the **Rate Engine** method with the **standard** rate source 
 import (or enter) your historical rates on the Overhead Rates card — effective
 dating preserves the original rates for prior periods.
 `,
-}
+};

@@ -1,7 +1,7 @@
 /** Declared employment jurisdictions. Split from packs.ts (pure moves only). */
-import { type PayrollJurisdiction } from "./pack-types"
-import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
-import { PayrollPackError } from "./payroll-error.ts"
+import { type PayrollJurisdiction } from "./pack-types";
+import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry";
+import { PayrollPackError } from "./payroll-error.ts";
 
 /** Every jurisdiction any installed pack declares, in pack order. */
 export function declaredJurisdictions(): readonly PayrollJurisdiction[] {
@@ -21,9 +21,11 @@ export function payrollJurisdiction(key: string): PayrollJurisdiction {
   const jurisdiction = declaredJurisdictions().find((j) => j.key === key);
   if (!jurisdiction) {
     throw new PayrollPackError(
-      `no payroll pack declares the statutory holiday calendar for "${key}" — `
-      + `this jurisdiction is not yet supported by any payroll pack; contact support. (Declared: `
-      + `${declaredJurisdictions().map((j) => j.key).join(", ")})`,
+      `no payroll pack declares the statutory holiday calendar for "${key}" — ` +
+        `this jurisdiction is not yet supported by any payroll pack; contact support. (Declared: ` +
+        `${declaredJurisdictions()
+          .map((j) => j.key)
+          .join(", ")})`,
     );
   }
   return jurisdiction;
@@ -85,17 +87,23 @@ export interface RecognisedHolidayOccupation {
  * province here. An employee answers with their own jurisdiction's classes
  * (or a stored answer from the country vocabulary, which stays clearable).
  */
-export function holidayOccupationClassesOf(jurisdictionKeyValue: string): readonly RecognisedHolidayOccupation[] {
+export function holidayOccupationClassesOf(
+  jurisdictionKeyValue: string,
+): readonly RecognisedHolidayOccupation[] {
   const jurisdiction = declaredJurisdictions().find((entry) => entry.key === jurisdictionKeyValue);
   const classes: RecognisedHolidayOccupation[] = [];
   for (const edition of jurisdiction?.holidayPay ?? []) {
     const rule = edition.rule;
     for (const [classKey, arm] of Object.entries(rule.occupationClasses ?? {})) {
-      if (!classes.some(entry => entry.classKey === classKey)) classes.push({ classKey, ...arm });
+      if (!classes.some((entry) => entry.classKey === classKey)) classes.push({ classKey, ...arm });
     }
     for (const value of rule.weeklyCap?.values ?? []) {
       if (!classes.some((entry) => entry.classKey === value)) {
-        classes.push({ classKey: value, label: humanizeOccupationClass(value), citation: rule.citation });
+        classes.push({
+          classKey: value,
+          label: humanizeOccupationClass(value),
+          citation: rule.citation,
+        });
       }
     }
     for (const [classKey, arm] of Object.entries(rule.excludedOccupations ?? {})) {
@@ -111,7 +119,10 @@ export function holidayOccupationClassesOf(jurisdictionKeyValue: string): readon
  *  excluded occupations always carry their own label, so only the capped and
  *  general values arrive here. */
 function humanizeOccupationClass(value: string): string {
-  return value.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+  return value
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 /**
@@ -139,18 +150,23 @@ export function labourJurisdictionProblem(
   const key = value.toUpperCase();
   const employment = employmentJurisdictionsOf(country);
   if (employment.some((jurisdiction) => jurisdiction.key === key)) return null;
-  const offered = `the ${country} payroll pack declares: `
-    + employment.map((jurisdiction) => jurisdiction.key).join(", ");
+  const offered =
+    `the ${country} payroll pack declares: ` +
+    employment.map((jurisdiction) => jurisdiction.key).join(", ");
   const declared = declaredJurisdictions().find((jurisdiction) => jurisdiction.key === key);
   if (!declared) {
     return `no payroll pack declares the labour jurisdiction "${value}" — ${offered}`;
   }
   if (declared.scope !== "employment") {
-    return `"${value}" is the ${declared.name} calendar — a ${declared.scope} calendar, which `
-      + `moves remittance due dates and governs no employee's employment standards. ${offered}`;
+    return (
+      `"${value}" is the ${declared.name} calendar — a ${declared.scope} calendar, which ` +
+      `moves remittance due dates and governs no employee's employment standards. ${offered}`
+    );
   }
-  return `"${value}" is a labour jurisdiction of another country's payroll pack, not of `
-    + `${country} — ${offered}`;
+  return (
+    `"${value}" is a labour jurisdiction of another country's payroll pack, not of ` +
+    `${country} — ${offered}`
+  );
 }
 
 /** Whether ANY pack declares the jurisdiction — the non-throwing probe the

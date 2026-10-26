@@ -18,11 +18,7 @@ export const GET = defineRoute({
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
     try {
-      const reasons = await listActionReasons(
-        gate.user.orgId,
-        gate.user.id,
-        action ?? undefined,
-      );
+      const reasons = await listActionReasons(gate.user.orgId, gate.user.id, action ?? undefined);
       return NextResponse.json({ reasons });
     } catch (e) {
       return automationErrorResponse(e);
@@ -41,9 +37,7 @@ export const POST = defineRoute({
         action: body.action,
         reasonCode: body.reasonCode,
         label: body.label,
-        ...(body.requiresComment != null
-          ? { requiresComment: body.requiresComment }
-          : {}),
+        ...(body.requiresComment != null ? { requiresComment: body.requiresComment } : {}),
         ...(body.isActive != null ? { isActive: body.isActive } : {}),
       });
       return NextResponse.json({ reason }, { status: 201 });

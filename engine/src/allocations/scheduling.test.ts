@@ -57,15 +57,16 @@ test("unattended preview input runs as the version publisher", () => {
   assert.equal(input.versionId, "version-1");
   assert.equal(input.trigger, "scheduled");
   assert.throws(
-    () => previewInputFor({
-      orgId: "org-1",
-      ruleId: "rule-1",
-      versionId: "version-1",
-      periodId: "period-1",
-      bookId: "book-1",
-      triggerKind: "close_automation",
-      publishedBy: "  ",
-    }),
+    () =>
+      previewInputFor({
+        orgId: "org-1",
+        ruleId: "rule-1",
+        versionId: "version-1",
+        periodId: "period-1",
+        bookId: "book-1",
+        triggerKind: "close_automation",
+        publishedBy: "  ",
+      }),
     /no publisher/,
   );
 });

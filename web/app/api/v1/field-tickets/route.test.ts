@@ -73,11 +73,13 @@ test("GET /api/v1/field-tickets lists through the field-tickets record type", as
 
 test("POST /api/v1/field-tickets creates through createApplicationFieldTicket", async () => {
   routeState.created = [];
-  const response = await POST(new Request("http://openbooks.test/api/v1/field-tickets", {
-    method: "POST",
-    headers: { "content-type": "application/json", "idempotency-key": "key-1" },
-    body: JSON.stringify({ projectId: "11111111-1111-4111-8111-111111111111", period: "week" }),
-  }));
+  const response = await POST(
+    new Request("http://openbooks.test/api/v1/field-tickets", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "key-1" },
+      body: JSON.stringify({ projectId: "11111111-1111-4111-8111-111111111111", period: "week" }),
+    }),
+  );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { id: "ticket-1", documentNumber: "FT-1" });
   assert.equal(routeState.created[0]?.projectId, "11111111-1111-4111-8111-111111111111");
@@ -86,12 +88,14 @@ test("POST /api/v1/field-tickets creates through createApplicationFieldTicket", 
 
 test("POST /api/v1/field-tickets refuses a missing projectId naming GET /api/v1/projects", async () => {
   routeState.created = [];
-  const response = await POST(new Request("http://openbooks.test/api/v1/field-tickets", {
-    method: "POST",
-    headers: { "content-type": "application/json", "idempotency-key": "key-1" },
-    body: "{}",
-  }));
+  const response = await POST(
+    new Request("http://openbooks.test/api/v1/field-tickets", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "key-1" },
+      body: "{}",
+    }),
+  );
   assert.equal(response.status, 422);
-  assert.match((await response.json() as { error: string }).error, /GET \/api\/v1\/projects/);
+  assert.match(((await response.json()) as { error: string }).error, /GET \/api\/v1\/projects/);
   assert.equal(routeState.created.length, 0);
 });

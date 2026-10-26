@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  assertEarningsAssessedStable,
-  dropIncomeAssessedLines,
-} from "./limits.ts";
+import { assertEarningsAssessedStable, dropIncomeAssessedLines } from "./limits.ts";
 import {
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,
@@ -66,7 +63,8 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   const incomeAssessed = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
     packStatutoryComponents(country)
       .filter((component) => component.assessedOn === "taxable_income")
-      .map((component) => `${country}/${component.code}`));
+      .map((component) => `${country}/${component.code}`),
+  );
   // Each pack's own pack.ts carries the sourcing comment for its lines:
   // GB PAYE (taxable pay after pension deductions, gb/pack.ts PAYE slot);
   // DE LST (Lohnsteuer on zu versteuerndes Einkommen) and SOLI (a surcharge
@@ -84,10 +82,28 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
   // SG contributes NOTHING here on purpose: Singapore withholds no monthly
   // income tax at all (IRAS assesses annually), so its pack declares no
   // income-tax slot — its absence from this list is that design, asserted.
-  assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT",
-    "GB/PAYE", "DE/LST", "DE/SOLI", "DE/KIST", "FR/PAS", "IE/IEPAYE", "AU/PAYG",
-    "IT/IRPEF", "IT/ADDREG", "IT/ADDCOM",
-    "NL/LH", "ES/IRPF", "JP/GENSEN", "PL/PIT", "BR/IRRF"]);
+  assert.deepEqual(incomeAssessed, [
+    "CA/TAX",
+    "CA/QCTAX",
+    "US/FIT",
+    "US/SIT",
+    "US/LIT",
+    "GB/PAYE",
+    "DE/LST",
+    "DE/SOLI",
+    "DE/KIST",
+    "FR/PAS",
+    "IE/IEPAYE",
+    "AU/PAYG",
+    "IT/IRPEF",
+    "IT/ADDREG",
+    "IT/ADDCOM",
+    "NL/LH",
+    "ES/IRPF",
+    "JP/GENSEN",
+    "PL/PIT",
+    "BR/IRRF",
+  ]);
 });
 
 test("CPP, CPP2, EI and QPIP employee and employer lines are earnings-assessed", () => {
@@ -95,17 +111,28 @@ test("CPP, CPP2, EI and QPIP employee and employer lines are earnings-assessed",
   // earnings; no factor-F / F2 / U1 deduction enters those formulas, so a
   // capped pre-tax support order cannot move them.
   for (const [systemKey, kind] of [
-    ["cpp", "deduction"], ["cpp2", "deduction"], ["ei", "deduction"], ["qpip", "deduction"],
-    ["cpp", "employer_contribution"], ["cpp2", "employer_contribution"], ["ei", "employer_contribution"],
-    ["qpip", "employer_contribution"], ["wcb", "employer_contribution"],
-    ["eht", "employer_contribution"], ["hsf", "employer_contribution"],
+    ["cpp", "deduction"],
+    ["cpp2", "deduction"],
+    ["ei", "deduction"],
+    ["qpip", "deduction"],
+    ["cpp", "employer_contribution"],
+    ["cpp2", "employer_contribution"],
+    ["ei", "employer_contribution"],
+    ["qpip", "employer_contribution"],
+    ["wcb", "employer_contribution"],
+    ["eht", "employer_contribution"],
+    ["hsf", "employer_contribution"],
   ] as const) {
     assert.equal(statutoryAssessment("CA", systemKey, kind), "earnings", `${systemKey}/${kind}`);
   }
   for (const [systemKey, kind] of [
-    ["ss", "deduction"], ["medicare", "deduction"], ["medicare_addl", "deduction"],
-    ["ss", "employer_contribution"], ["medicare", "employer_contribution"],
-    ["futa", "employer_contribution"], ["suta", "employer_contribution"],
+    ["ss", "deduction"],
+    ["medicare", "deduction"],
+    ["medicare_addl", "deduction"],
+    ["ss", "employer_contribution"],
+    ["medicare", "employer_contribution"],
+    ["futa", "employer_contribution"],
+    ["suta", "employer_contribution"],
   ] as const) {
     assert.equal(statutoryAssessment("US", systemKey, kind), "earnings", `${systemKey}/${kind}`);
   }
@@ -120,7 +147,10 @@ test("an undeclared levy stops the run rather than defaulting to a class", () =>
       assert.ok(error instanceof PayrollPackError);
       assert.match(error.message, /does not declare what uk_secondary_ni/);
       assert.match(error.message, /not supported by the CA pack; contact support/);
-      assert.ok(!error.message.includes("engine/src/"), `refusal must not name a source path:\n${error.message}`);
+      assert.ok(
+        !error.message.includes("engine/src/"),
+        `refusal must not name a source path:\n${error.message}`,
+      );
       return true;
     },
   );
@@ -134,10 +164,24 @@ test("the YTD income-tax key set derives from the pack declarations", () => {
   // pins the derivation's CONTENT: every pack's income-tax withholding is
   // present, and nothing that merely looks like a payroll tax is.
   assert.deepEqual(incomeTaxWithholdingSystemKeys(), [
-    "fit", "ie_paye", "income_tax", "irpf", "irrf", "kirchenlohnsteuer",
-    "local_income_tax", "lohnsteuer", "loonheffing", "municipal_surtax",
-    "pas", "paye", "payg_withholding", "pit", "qc_income_tax",
-    "regional_surtax", "solidaritaetszuschlag", "state_income_tax",
+    "fit",
+    "ie_paye",
+    "income_tax",
+    "irpf",
+    "irrf",
+    "kirchenlohnsteuer",
+    "local_income_tax",
+    "lohnsteuer",
+    "loonheffing",
+    "municipal_surtax",
+    "pas",
+    "paye",
+    "payg_withholding",
+    "pit",
+    "qc_income_tax",
+    "regional_surtax",
+    "solidaritaetszuschlag",
+    "state_income_tax",
   ]);
   // Employee social contributions are deductions remitted to an authority but
   // they are not income tax: CPP/EI/QPIP, NIC, PRSI, USC, ZUS, INPS, the
@@ -145,12 +189,39 @@ test("the YTD income-tax key set derives from the pack declarations", () => {
   // health, Spain's Seguridad Social, Brazil's INSS, Singapore's CPF, and US
   // Social Security / Medicare. Counting any of them overstates YTD tax.
   for (const key of [
-    "cpp", "cpp2", "ei", "qpip", "nic", "prsi", "usc",
-    "zus_emeryt", "zus_rent", "zus_chor", "zus_zdr", "inps",
-    "vieillesse", "csg", "crds", "arrco", "ceg", "cet",
-    "kv", "rv", "av", "pv", "pension", "health",
-    "ss_cc", "ss_des", "ss_for", "ss_mei", "inss", "cpf_ee",
-    "ss", "medicare", "medicare_addl",
+    "cpp",
+    "cpp2",
+    "ei",
+    "qpip",
+    "nic",
+    "prsi",
+    "usc",
+    "zus_emeryt",
+    "zus_rent",
+    "zus_chor",
+    "zus_zdr",
+    "inps",
+    "vieillesse",
+    "csg",
+    "crds",
+    "arrco",
+    "ceg",
+    "cet",
+    "kv",
+    "rv",
+    "av",
+    "pv",
+    "pension",
+    "health",
+    "ss_cc",
+    "ss_des",
+    "ss_for",
+    "ss_mei",
+    "inss",
+    "cpf_ee",
+    "ss",
+    "medicare",
+    "medicare_addl",
   ]) {
     assert.ok(!incomeTaxWithholdingSystemKeys().includes(key), `${key} is not income tax`);
   }
@@ -167,7 +238,8 @@ test("the YTD income-tax key set derives from the pack declarations", () => {
   // against the same key the withholdings carry so the remittance nets it.
   for (const key of incomeTaxWithholdingSystemKeys()) {
     const owners = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
-      packStatutoryComponents(country).filter((component) => component.systemKey === key));
+      packStatutoryComponents(country).filter((component) => component.systemKey === key),
+    );
     assert.ok(owners.length > 0, `${key} is declared by no pack`);
     assert.ok(
       owners.some((owner) => owner.kind === "deduction" && owner.assessedOn === "taxable_income"),
@@ -175,8 +247,8 @@ test("the YTD income-tax key set derives from the pack declarations", () => {
     );
     for (const owner of owners) {
       assert.ok(
-        (owner.kind === "deduction" && owner.assessedOn === "taxable_income")
-        || (owner.kind === "credit" && owner.assessedOn === "earnings"),
+        (owner.kind === "deduction" && owner.assessedOn === "taxable_income") ||
+          (owner.kind === "credit" && owner.assessedOn === "earnings"),
         `${key} owner ${owner.code} is neither the withholding nor its settlement credit`,
       );
     }
@@ -192,17 +264,60 @@ test("the register social-insurance key set derives from the pack declarations",
   // pack's employee social insurance is present, and nothing that is not
   // withheld from the employee is.
   assert.deepEqual(employeeSocialInsuranceSystemKeys(), [
-    "ae_employee", "apec", "arrco", "av", "ca_sdi_employee", "ceg", "cet",
-    "child_support", "co_famli_employee", "cpf_ee", "cpp", "cpp2", "crds", "csg", "ct_pl_employee", "ei",
-    "health", "inps", "inss", "irnr", "kv", "medicare", "medicare_addl",
-    "mn_paid_leave_employee", "nic", "or_statewide_transit_tax",
-    "pa_uc_employee", "pension", "postgraduate_loan", "prsi", "pv",
-    "qpip", "rv", "sostitutiva_premi", "sostitutiva_rinnovi",
-    "sostitutiva_turni", "ss", "ss_cc", "ss_des", "ss_for", "ss_hex_fm",
-    "ss_hex_resto", "ss_mei", "ss_solidaridad", "student_loan", "usc",
-    "vieillesse", "vt_child_care_contribution_employee", "wa_cares_employee",
-    "wa_pfml_employee", "zus_chor",
-    "zus_emeryt", "zus_rent", "zus_zdr",
+    "ae_employee",
+    "apec",
+    "arrco",
+    "av",
+    "ca_sdi_employee",
+    "ceg",
+    "cet",
+    "child_support",
+    "co_famli_employee",
+    "cpf_ee",
+    "cpp",
+    "cpp2",
+    "crds",
+    "csg",
+    "ct_pl_employee",
+    "ei",
+    "health",
+    "inps",
+    "inss",
+    "irnr",
+    "kv",
+    "medicare",
+    "medicare_addl",
+    "mn_paid_leave_employee",
+    "nic",
+    "or_statewide_transit_tax",
+    "pa_uc_employee",
+    "pension",
+    "postgraduate_loan",
+    "prsi",
+    "pv",
+    "qpip",
+    "rv",
+    "sostitutiva_premi",
+    "sostitutiva_rinnovi",
+    "sostitutiva_turni",
+    "ss",
+    "ss_cc",
+    "ss_des",
+    "ss_for",
+    "ss_hex_fm",
+    "ss_hex_resto",
+    "ss_mei",
+    "ss_solidaridad",
+    "student_loan",
+    "usc",
+    "vieillesse",
+    "vt_child_care_contribution_employee",
+    "wa_cares_employee",
+    "wa_pfml_employee",
+    "zus_chor",
+    "zus_emeryt",
+    "zus_rent",
+    "zus_zdr",
   ]);
   // QPIP is the named reason this set exists: the old register buckets
   // dropped Québec parental insurance entirely — real withheld money with
@@ -213,12 +328,18 @@ test("the register social-insurance key set derives from the pack declarations",
   // any of it here would overstate social insurance exactly as far as the
   // income-tax column would then understate it.
   for (const key of incomeTaxWithholdingSystemKeys()) {
-    assert.ok(!employeeSocialInsuranceSystemKeys().includes(key), `${key} is income tax, not social insurance`);
+    assert.ok(
+      !employeeSocialInsuranceSystemKeys().includes(key),
+      `${key} is income tax, not social insurance`,
+    );
   }
   // Employer shares accrue at employer cost and refundable credits increase
   // net — neither is withheld from the employee, so neither counts here.
   for (const key of ["ti_payout", "somma_payout", "wcb", "suta", "futa", "hsf", "sdl", "fgts"]) {
-    assert.ok(!employeeSocialInsuranceSystemKeys().includes(key), `${key} is not withheld social insurance`);
+    assert.ok(
+      !employeeSocialInsuranceSystemKeys().includes(key),
+      `${key} is not withheld social insurance`,
+    );
   }
   // Round trip: every returned key is put in the set by an earnings-assessed
   // deduction at least one pack declares — the set carries no stray key no
@@ -227,7 +348,8 @@ test("the register social-insurance key set derives from the pack declarations",
   // quantifier is "some declarant", not "every declarant".)
   for (const key of employeeSocialInsuranceSystemKeys()) {
     const declarants = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
-      packStatutoryComponents(country).filter((component) => component.systemKey === key));
+      packStatutoryComponents(country).filter((component) => component.systemKey === key),
+    );
     assert.ok(declarants.length > 0, `${key} is declared by no pack`);
     assert.ok(
       declarants.some((owner) => owner.kind === "deduction" && owner.assessedOn === "earnings"),
@@ -241,7 +363,10 @@ test("the register social-insurance key set derives from the pack declarations",
       if (component.kind !== "deduction") continue;
       const inIncome = incomeTaxWithholdingSystemKeys().includes(component.systemKey);
       const inSocial = employeeSocialInsuranceSystemKeys().includes(component.systemKey);
-      assert.ok(inIncome !== inSocial, `${country}:${component.systemKey} lands in exactly one bucket`);
+      assert.ok(
+        inIncome !== inSocial,
+        `${country}:${component.systemKey} lands in exactly one bucket`,
+      );
     }
   }
 });
@@ -263,7 +388,8 @@ test("the register EI column rule is the stated pair, inside the derived set", (
       `${key} is inside the derived social set`,
     );
     const declarants = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
-      packStatutoryComponents(country).filter((component) => component.systemKey === key));
+      packStatutoryComponents(country).filter((component) => component.systemKey === key),
+    );
     assert.ok(
       declarants.some((owner) => owner.kind === "deduction" && owner.assessedOn === "earnings"),
       `${key} has an earnings-assessed deduction declarant`,
@@ -282,10 +408,16 @@ test("a protection pass re-derives the declared income-assessed lines and nothin
   // The pipeline's rule, driven by the real CA declaration: a pre-tax support
   // order changes tax, so tax is dropped and recomputed; CPP, EI and the WCB
   // premium are assessed on earnings and stand from the first pass.
-  const line = (component: string, systemKey: string,
-                kind: "deduction" | "employer_contribution", amount: string,
-                projectId: string | null = null) => ({
-    component, amount, projectId,
+  const line = (
+    component: string,
+    systemKey: string,
+    kind: "deduction" | "employer_contribution",
+    amount: string,
+    projectId: string | null = null,
+  ) => ({
+    component,
+    amount,
+    projectId,
     assessedOn: statutoryAssessment("CA", systemKey, kind) as PayrollAssessedOn,
   });
   const firstPass = () => [
@@ -307,7 +439,12 @@ test("a protection pass re-derives the declared income-assessed lines and nothin
   lines.push(line("Income tax", "income_tax", "deduction", "347.12"));
 
   const earnings = (
-    set: readonly { component: string; amount: string; projectId: string | null; assessedOn: PayrollAssessedOn }[],
+    set: readonly {
+      component: string;
+      amount: string;
+      projectId: string | null;
+      assessedOn: PayrollAssessedOn;
+    }[],
   ) => set.filter((l) => l.assessedOn === "earnings");
   assertEarningsAssessedStable("Terry Worker", earnings(first), earnings(lines));
   assert.notEqual(
@@ -424,22 +561,22 @@ test("every installable pack names its statutory engine and declares withholding
   // own. The review UI reads these declarations, so a pack that stays silent
   // about its engine label or its employee withholding components renders
   // another country's columns.
-  const packs = Object.values(PAYROLL_COUNTRY_PACKS).filter((pack) => pack.installable)
-  assert.ok(packs.length >= 2, "expected at least the CA and US packs")
+  const packs = Object.values(PAYROLL_COUNTRY_PACKS).filter((pack) => pack.installable);
+  assert.ok(packs.length >= 2, "expected at least the CA and US packs");
   for (const pack of packs) {
     assert.ok(
       typeof pack.statutoryEngineLabel === "string" && pack.statutoryEngineLabel.length > 0,
       `${pack.country} declares no statutory engine label for the trace heading`,
-    )
+    );
     const withholding = pack.statutorySlots.flatMap((slot) =>
       slot.components.filter((component) => component.kind === "deduction"),
-    )
+    );
     assert.ok(
       withholding.length > 0,
       `${pack.country} declares no employee withholding components for the register buckets`,
-    )
+    );
     for (const component of withholding) {
-      assert.ok(component.name.length > 0, `${pack.country}/${component.code} has no bucket label`)
+      assert.ok(component.name.length > 0, `${pack.country}/${component.code} has no bucket label`);
     }
   }
 });
@@ -449,35 +586,39 @@ test("organization remittance frequency keys are unique and account schedules ca
   // schedule loads first, so the same input could change verdict when another
   // pack is installed. Account-sourced schedules must not expose a parallel
   // organization setting.
-  const owners = new Map<string, string>()
-  let filingAccountSchedules = 0
+  const owners = new Map<string, string>();
+  let filingAccountSchedules = 0;
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
     for (const schedule of pack.remittanceSchedules ?? []) {
       // Same location format allRemittanceSchedules() builds for its own
       // errors: a duplicate message must identify both schedules, not just
       // their country — "both CA and CA" tells a pack author with several
       // schedules in one country nothing about which two collide.
-      const where = `the ${country} payroll pack's remittance schedule for ${schedule.vendorSettingsKey || "(no vendor key)"}`
+      const where = `the ${country} payroll pack's remittance schedule for ${schedule.vendorSettingsKey || "(no vendor key)"}`;
       if (schedule.frequencySource === "organization") {
-        assert.ok(schedule.frequencySettingsKey, `${where} names no frequency settings key`)
-        const key = schedule.frequencySettingsKey!
-        const prior = owners.get(key)
+        assert.ok(schedule.frequencySettingsKey, `${where} names no frequency settings key`);
+        const key = schedule.frequencySettingsKey!;
+        const prior = owners.get(key);
         assert.equal(
           prior,
           undefined,
           `frequency settings key "${key}" is declared by both ${prior} and ${where}`,
-        )
-        owners.set(key, where)
+        );
+        owners.set(key, where);
       } else {
-        filingAccountSchedules += 1
-        assert.equal(schedule.frequencySettingsKey, undefined, `${where} stores no organization frequency key`)
+        filingAccountSchedules += 1;
+        assert.equal(
+          schedule.frequencySettingsKey,
+          undefined,
+          `${where} stores no organization frequency key`,
+        );
       }
     }
   }
   // Non-vacuity: an empty schedule list would pass every assertion above.
-  assert.ok(owners.size >= 1, "expected an organization-declared frequency key")
-  assert.ok(filingAccountSchedules >= 1, "expected a filing-account-declared frequency source")
-})
+  assert.ok(owners.size >= 1, "expected an organization-declared frequency key");
+  assert.ok(filingAccountSchedules >= 1, "expected a filing-account-declared frequency source");
+});
 
 test("the CA pack declares the QPIP program base under its own stub factor (C-12)", () => {
   // If the declaration goes missing, run-stub-compute stops storing IE_QPIP
@@ -511,33 +652,47 @@ test("employer-levy program keys answer the component's own scope", () => {
 test("new-component levy defaults exclude only non-taxable earnings", () => {
   assert.deepEqual(
     defaultLevyExclusionsForNewComponent({
-      kind: "earning", taxable: false, country: "CA", programExclusions: undefined,
+      kind: "earning",
+      taxable: false,
+      country: "CA",
+      programExclusions: undefined,
     }),
     ["cnt", "eht", "hsf", "wcb"],
   );
   // Taxable (or unstated) taxability defaults to assessable.
   assert.equal(
     defaultLevyExclusionsForNewComponent({
-      kind: "earning", taxable: true, country: "CA", programExclusions: undefined,
+      kind: "earning",
+      taxable: true,
+      country: "CA",
+      programExclusions: undefined,
     }),
     undefined,
   );
   assert.equal(
     defaultLevyExclusionsForNewComponent({
-      kind: "earning", country: "CA", programExclusions: undefined,
+      kind: "earning",
+      country: "CA",
+      programExclusions: undefined,
     }),
     undefined,
   );
   // An explicit list — even an empty one — is an operator's choice.
   assert.equal(
     defaultLevyExclusionsForNewComponent({
-      kind: "earning", taxable: false, country: "CA", programExclusions: [],
+      kind: "earning",
+      taxable: false,
+      country: "CA",
+      programExclusions: [],
     }),
     undefined,
   );
   assert.equal(
     defaultLevyExclusionsForNewComponent({
-      kind: "earning", taxable: false, country: "CA", programExclusions: ["qpip"],
+      kind: "earning",
+      taxable: false,
+      country: "CA",
+      programExclusions: ["qpip"],
     }),
     undefined,
   );
@@ -545,14 +700,20 @@ test("new-component levy defaults exclude only non-taxable earnings", () => {
   for (const kind of ["deduction", "employer_contribution"]) {
     assert.equal(
       defaultLevyExclusionsForNewComponent({
-        kind, taxable: false, country: "CA", programExclusions: undefined,
+        kind,
+        taxable: false,
+        country: "CA",
+        programExclusions: undefined,
       }),
       undefined,
     );
   }
   assert.equal(
     defaultLevyExclusionsForNewComponent({
-      kind: "earning", taxable: false, country: "US", programExclusions: undefined,
+      kind: "earning",
+      taxable: false,
+      country: "US",
+      programExclusions: undefined,
     }),
     undefined,
   );
@@ -563,11 +724,23 @@ test("non-taxability does not imply exclusion from an undeclared levy base", () 
   const before = pack.employerLevyPrograms;
   try {
     pack.employerLevyPrograms = [
-      { key: "gross_assessment", label: "Gross assessment", help: "Includes non-taxable earnings." },
-      { key: "taxable_assessment", label: "Taxable assessment", help: "Excludes non-taxable earnings.", nonTaxableEarningsExcludedByDefault: true },
+      {
+        key: "gross_assessment",
+        label: "Gross assessment",
+        help: "Includes non-taxable earnings.",
+      },
+      {
+        key: "taxable_assessment",
+        label: "Taxable assessment",
+        help: "Excludes non-taxable earnings.",
+        nonTaxableEarningsExcludedByDefault: true,
+      },
     ];
     assert.deepEqual(employerLevyProgramKeys("US"), ["gross_assessment", "taxable_assessment"]);
-    assert.deepEqual(defaultLevyExclusionsForNewComponent({ kind: "earning", taxable: false, country: "US" }), ["taxable_assessment"]);
+    assert.deepEqual(
+      defaultLevyExclusionsForNewComponent({ kind: "earning", taxable: false, country: "US" }),
+      ["taxable_assessment"],
+    );
   } finally {
     pack.employerLevyPrograms = before;
   }
@@ -577,13 +750,24 @@ test("every installable pack declares enough for a chooser subtitle", () => {
   const summaries = installablePayrollPackSummaries();
   assert.deepEqual(
     summaries.map((summary) => summary.country),
-    Object.values(PAYROLL_COUNTRY_PACKS).filter((pack) => pack.installable).map((pack) => pack.country),
+    Object.values(PAYROLL_COUNTRY_PACKS)
+      .filter((pack) => pack.installable)
+      .map((pack) => pack.country),
   );
   for (const summary of summaries) {
-    assert.ok(summary.statutoryComponents.length > 0, `${summary.country} names what it calculates`);
+    assert.ok(
+      summary.statutoryComponents.length > 0,
+      `${summary.country} names what it calculates`,
+    );
     assert.ok(summary.publishedTaxYears.length > 0, `${summary.country} has published tables`);
-    assert.deepEqual(summary.publishedTaxYears, [...summary.publishedTaxYears].sort((a, b) => a - b));
-    assert.ok(summary.regions.supported <= summary.regions.known, `${summary.country} coverage is a subset`);
+    assert.deepEqual(
+      summary.publishedTaxYears,
+      [...summary.publishedTaxYears].sort((a, b) => a - b),
+    );
+    assert.ok(
+      summary.regions.supported <= summary.regions.known,
+      `${summary.country} coverage is a subset`,
+    );
     assert.equal(new Set(summary.statutoryComponents).size, summary.statutoryComponents.length);
   }
 });

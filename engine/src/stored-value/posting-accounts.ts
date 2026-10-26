@@ -14,13 +14,16 @@ export async function resolveStoredValueLiabilityByLine(
   documentId: string,
   orgId: string,
 ): Promise<Map<string, string>> {
-  const rows = await runner.execute<{ line_id: string; program_id: string | null }>(sql`
+  const rows = await runner.execute<{ line_id: string; program_id: string | null }>(
+    sql`
     select dl.id as line_id, dl.custom->>'storedValueProgramId' as program_id
       from document_lines dl
       join items it on it.id = dl.item_id and it.org_id = dl.org_id
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
        and it.kind = 'gift_card'
-  `, "objects");
+  `,
+    "objects",
+  );
   const map = new Map<string, string>();
   for (const row of rows) {
     if (!row.program_id) {

@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 // the opportunity drawer's disabled "Create estimate" gave its
 // save-first reason ONLY as the button's title tooltip — invisible at rest,
@@ -9,8 +9,12 @@ import test, { type TestContext } from 'node:test'
 // UploadButton (button + hint in an inline-flex span, hint id referenced by
 // aria-describedby). When clean there is no hint and the button is enabled.
 
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/crm?opportunity=1', scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/crm?opportunity=1",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 Object.assign(globalThis, {
   __om02bTestRouter: {
@@ -20,76 +24,87 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__om02bTestRouter}export function usePathname(){return "/crm"}export function useSearchParams(){return new URLSearchParams()}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__om02bTestRouter}export function usePathname(){return "/crm"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next/link') {
+    if (specifier === "next/link") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export default function Link(p){return globalThis.React.createElement("a",{href:typeof p.href==="string"?p.href:p.href?.toString()},p.children)}',
-      }
+      };
     }
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export const toast={success(m){globalThis.__opportunityDrawerToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__opportunityDrawerToasts.push({kind:"error",message:String(m)})},info(){}};export function Toaster(){return null}',
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { OpportunityDrawer } = await import('./OpportunityDrawer')
-Object.assign(globalThis, { __opportunityDrawerToasts: [] as { kind: string; message: string }[] })
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { OpportunityDrawer } = await import("./OpportunityDrawer");
+Object.assign(globalThis, { __opportunityDrawerToasts: [] as { kind: string; message: string }[] });
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const baseOpportunity = {
-  id: 'opp-1',
-  title: 'Atlas rollout',
-  party_id: 'acct-1',
+  id: "opp-1",
+  title: "Atlas rollout",
+  party_id: "acct-1",
   primary_contact_id: null,
   owner_user_id: null,
   sales_team_id: null,
-  status_id: 'st-1',
+  status_id: "st-1",
   lead_source_id: null,
   expected_close_date: null,
-  forecast_category: 'most_likely',
+  forecast_category: "most_likely",
   probability: 50,
-  currency: 'USD',
+  currency: "USD",
   next_step: null,
   description: null,
   win_loss_reason: null,
-  opportunity_number: 'OPP-00002',
-  status_name: 'qualification',
-  updated_at: '2026-09-23T00:00:00Z',
-}
+  opportunity_number: "OPP-00002",
+  status_name: "qualification",
+  updated_at: "2026-09-23T00:00:00Z",
+};
 
-function mountDrawer(t: TestContext, options: { partyId?: string | null; accounts?: { id: string; name: string }[] } = {}) {
-  const rootHandle = createRoot(document.body)
+function mountDrawer(
+  t: TestContext,
+  options: { partyId?: string | null; accounts?: { id: string; name: string }[] } = {},
+) {
+  const rootHandle = createRoot(document.body);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    for (const node of [...document.body.children]) node.remove()
-  })
+      rootHandle.unmount();
+    });
+    for (const node of [...document.body.children]) node.remove();
+  });
   return act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <OpportunityDrawer
-          data={{ opportunity: { ...baseOpportunity, party_id: options.partyId === undefined ? baseOpportunity.party_id : options.partyId }, lines: [] }}
-          statuses={[{ id: 'st-1', name: 'qualification' }]}
-          accounts={options.accounts ?? [{ id: 'acct-1', name: 'Atlas' }]}
+          data={{
+            opportunity: {
+              ...baseOpportunity,
+              party_id: options.partyId === undefined ? baseOpportunity.party_id : options.partyId,
+            },
+            lines: [],
+          }}
+          statuses={[{ id: "st-1", name: "qualification" }]}
+          accounts={options.accounts ?? [{ id: "acct-1", name: "Atlas" }]}
           contacts={[]}
           owners={[]}
           teams={[]}
@@ -100,118 +115,146 @@ function mountDrawer(t: TestContext, options: { partyId?: string | null; account
           canManage
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 function estimateButton(): HTMLButtonElement {
-  const buttons = [...document.querySelectorAll('button')]
-  const found = buttons.find((b) => /create estimate/i.test(b.textContent ?? ''))
-  assert.ok(found, 'the Create estimate button must render')
-  return found as HTMLButtonElement
+  const buttons = [...document.querySelectorAll("button")];
+  const found = buttons.find((b) => /create estimate/i.test(b.textContent ?? ""));
+  assert.ok(found, "the Create estimate button must render");
+  return found as HTMLButtonElement;
 }
 
 async function editTitle() {
   // The title field is the drawer's first text input; a harmless unsaved edit
   // makes the drawer dirty, which is the precondition.
-  const input = document.querySelector('input:not([type="number"]):not([data-date-field]):not([type="hidden"])') as HTMLInputElement | null
-  assert.ok(input, 'the title input must render')
+  const input = document.querySelector(
+    'input:not([type="number"]):not([data-date-field]):not([type="hidden"])',
+  ) as HTMLInputElement | null;
+  assert.ok(input, "the title input must render");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-    setter.call(input, 'Atlas rollout (edited)')
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-  })
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(input, "Atlas rollout (edited)");
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
 }
 
-test('clean drawer shows no hint and an enabled estimate button', async (t) => {
-  await mountDrawer(t)
-  const button = estimateButton()
-  assert.equal(button.disabled, false, 'a saved opportunity keeps conversion enabled')
-  assert.equal(button.getAttribute('aria-describedby'), null, 'no reason is needed when conversion works')
-  assert.equal(document.getElementById('opportunity-estimate-hint'), null, 'no hint when the drawer is clean')
-})
-
-test('dirty drawer shows a visible save-first hint described by the disabled button', async (t) => {
-  await mountDrawer(t)
-  await editTitle()
-  const button = estimateButton()
-  assert.equal(button.disabled, true, 'conversion stays disabled until save')
+test("clean drawer shows no hint and an enabled estimate button", async (t) => {
+  await mountDrawer(t);
+  const button = estimateButton();
+  assert.equal(button.disabled, false, "a saved opportunity keeps conversion enabled");
   assert.equal(
-    button.getAttribute('aria-describedby'),
-    'opportunity-estimate-hint',
-    'the disabled button must describe its reason',
-  )
-  const hint = document.getElementById('opportunity-estimate-hint')
-  assert.ok(hint, 'the save-first reason must be a visible element, not a tooltip')
+    button.getAttribute("aria-describedby"),
+    null,
+    "no reason is needed when conversion works",
+  );
+  assert.equal(
+    document.getElementById("opportunity-estimate-hint"),
+    null,
+    "no hint when the drawer is clean",
+  );
+});
+
+test("dirty drawer shows a visible save-first hint described by the disabled button", async (t) => {
+  await mountDrawer(t);
+  await editTitle();
+  const button = estimateButton();
+  assert.equal(button.disabled, true, "conversion stays disabled until save");
+  assert.equal(
+    button.getAttribute("aria-describedby"),
+    "opportunity-estimate-hint",
+    "the disabled button must describe its reason",
+  );
+  const hint = document.getElementById("opportunity-estimate-hint");
+  assert.ok(hint, "the save-first reason must be a visible element, not a tooltip");
   assert.match(
-    hint.textContent ?? '',
+    hint.textContent ?? "",
     /Save this opportunity first/,
-    'the hint must name the save-first remedy',
-  )
-  assert.ok((hint.textContent ?? '').length > 0, 'the hint must carry visible text')
-})
+    "the hint must name the save-first remedy",
+  );
+  assert.ok((hint.textContent ?? "").length > 0, "the hint must carry visible text");
+});
 
-test('account-less drawer names the account remedy and links to Parties', async (t) => {
-  await mountDrawer(t, { partyId: null, accounts: [] })
-  const button = estimateButton()
-  assert.equal(button.disabled, true, 'an account is required before conversion')
-  assert.match(document.getElementById('opportunity-estimate-hint')?.textContent ?? '', /Set an account/)
-  const partiesLink = [...document.querySelectorAll('a')].find((anchor) => anchor.getAttribute('href') === '/parties')
-  assert.ok(partiesLink, 'the empty picker offers the existing Parties remedy')
-  assert.match(partiesLink.textContent ?? '', /Open Parties/)
-  assert.match(document.body.textContent ?? '', /Only tracked customers can be chosen/)
-})
-
-test('estimate refusal preserves the server reason for the operator', async (t) => {
-  const priorFetch = globalThis.fetch
-  const priorToasts = (globalThis as Record<string, unknown>).__opportunityDrawerToasts
-  ;(globalThis as Record<string, unknown>).__opportunityDrawerToasts = []
-  globalThis.fetch = (async () => Response.json({ error: 'The customer account is inactive.' }, { status: 422 })) as typeof fetch
-  t.after(() => {
-    globalThis.fetch = priorFetch
-    ;(globalThis as Record<string, unknown>).__opportunityDrawerToasts = priorToasts
-  })
-  await mountDrawer(t)
-  await act(async () => {
-    estimateButton().click()
-    await tick()
-  })
-  const toasts = (globalThis as Record<string, unknown>).__opportunityDrawerToasts as { kind: string; message: string }[]
-  assert.deepEqual(toasts, [{ kind: 'error', message: 'The customer account is inactive.' }])
-})
-
-test('a successful save re-enables estimate conversion from the visible revision', async (t) => {
-  const priorFetch = globalThis.fetch
-  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
-    assert.equal(init?.method, 'PATCH')
-    return Response.json({ opportunity: { updated_at: '2026-09-24T00:00:00Z' } })
-  }) as typeof fetch
-  t.after(() => {
-    globalThis.fetch = priorFetch
-  })
-  await mountDrawer(t)
-  await editTitle()
-  assert.equal(estimateButton().disabled, true)
-  const saveButton = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Save')
-  assert.ok(saveButton, 'the edited opportunity can be saved')
-  await act(async () => {
-    saveButton.click()
-    await tick()
-    await tick()
-  })
-  assert.equal(estimateButton().disabled, false, 'the successful save becomes the new conversion baseline')
-})
-
-test('missing expected close date exposes the forecast exclusion reason beside its field', async (t) => {
-  await mountDrawer(t)
-  const date = document.querySelector('input[data-date-field]')
-  assert.ok(date, 'the expected close date field renders')
-  assert.equal(date.getAttribute('aria-describedby'), 'expected-close-hint')
+test("account-less drawer names the account remedy and links to Parties", async (t) => {
+  await mountDrawer(t, { partyId: null, accounts: [] });
+  const button = estimateButton();
+  assert.equal(button.disabled, true, "an account is required before conversion");
   assert.match(
-    document.getElementById('expected-close-hint')?.textContent ?? '',
+    document.getElementById("opportunity-estimate-hint")?.textContent ?? "",
+    /Set an account/,
+  );
+  const partiesLink = [...document.querySelectorAll("a")].find(
+    (anchor) => anchor.getAttribute("href") === "/parties",
+  );
+  assert.ok(partiesLink, "the empty picker offers the existing Parties remedy");
+  assert.match(partiesLink.textContent ?? "", /Open Parties/);
+  assert.match(document.body.textContent ?? "", /Only tracked customers can be chosen/);
+});
+
+test("estimate refusal preserves the server reason for the operator", async (t) => {
+  const priorFetch = globalThis.fetch;
+  const priorToasts = (globalThis as Record<string, unknown>).__opportunityDrawerToasts;
+  (globalThis as Record<string, unknown>).__opportunityDrawerToasts = [];
+  globalThis.fetch = (async () =>
+    Response.json({ error: "The customer account is inactive." }, { status: 422 })) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = priorFetch;
+    (globalThis as Record<string, unknown>).__opportunityDrawerToasts = priorToasts;
+  });
+  await mountDrawer(t);
+  await act(async () => {
+    estimateButton().click();
+    await tick();
+  });
+  const toasts = (globalThis as Record<string, unknown>).__opportunityDrawerToasts as {
+    kind: string;
+    message: string;
+  }[];
+  assert.deepEqual(toasts, [{ kind: "error", message: "The customer account is inactive." }]);
+});
+
+test("a successful save re-enables estimate conversion from the visible revision", async (t) => {
+  const priorFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    assert.equal(init?.method, "PATCH");
+    return Response.json({ opportunity: { updated_at: "2026-09-24T00:00:00Z" } });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = priorFetch;
+  });
+  await mountDrawer(t);
+  await editTitle();
+  assert.equal(estimateButton().disabled, true);
+  const saveButton = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === "Save",
+  );
+  assert.ok(saveButton, "the edited opportunity can be saved");
+  await act(async () => {
+    saveButton.click();
+    await tick();
+    await tick();
+  });
+  assert.equal(
+    estimateButton().disabled,
+    false,
+    "the successful save becomes the new conversion baseline",
+  );
+});
+
+test("missing expected close date exposes the forecast exclusion reason beside its field", async (t) => {
+  await mountDrawer(t);
+  const date = document.querySelector("input[data-date-field]");
+  assert.ok(date, "the expected close date field renders");
+  assert.equal(date.getAttribute("aria-describedby"), "expected-close-hint");
+  assert.match(
+    document.getElementById("expected-close-hint")?.textContent ?? "",
     /without an expected close date are excluded from the forecast/i,
-  )
-})
+  );
+});

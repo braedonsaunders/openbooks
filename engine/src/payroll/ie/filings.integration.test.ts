@@ -102,11 +102,7 @@ async function fileRpn(
 
 // The employer-recorded PRSI class (Class A here): missing status must not
 // be priced as Class A, so the engine refuses without this certificate.
-async function filePrsiClass(
-  orgId: string,
-  employeeId: string,
-  actorId: string,
-): Promise<void> {
+async function filePrsiClass(orgId: string, employeeId: string, actorId: string): Promise<void> {
   await db.execute(sql`
     insert into employee_tax_certificates
       (org_id, employee_party_id, country, certificate_key, region, sub_region,
@@ -128,9 +124,21 @@ test(
       const org = await createScratchOrg();
       const actorId = (await seedFlowActors(org.orgId)).adminId;
       try {
-        const deductionsId = await makeAccount(org.orgId, actorId, "2110", "Payroll Deductions", "liability_current_other");
+        const deductionsId = await makeAccount(
+          org.orgId,
+          actorId,
+          "2110",
+          "Payroll Deductions",
+          "liability_current_other",
+        );
         const wageId = await makeAccount(org.orgId, actorId, "6000", "Wages & Salaries", "expense");
-        const netId = await makeAccount(org.orgId, actorId, "2300", "Employee Payable", "liability_current_other");
+        const netId = await makeAccount(
+          org.orgId,
+          actorId,
+          "2300",
+          "Employee Payable",
+          "liability_current_other",
+        );
         await db.execute(sql`
           update orgs
              set settings = jsonb_set(
@@ -160,8 +168,22 @@ test(
              subsidiary_id, is_active, created_by, updated_by)
           values (${scheduleId}, ${org.orgId}, 'IE weekly', 'weekly', 52, '2026-01-04', 0,
                   ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
-        const aoife = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Aoife Byrne", "44200");
-        const brendan = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Brendan Doyle", "31200");
+        const aoife = await makeEmployee(
+          org.orgId,
+          org.subsidiaryId,
+          actorId,
+          scheduleId,
+          "Aoife Byrne",
+          "44200",
+        );
+        const brendan = await makeEmployee(
+          org.orgId,
+          org.subsidiaryId,
+          actorId,
+          scheduleId,
+          "Brendan Doyle",
+          "31200",
+        );
         await fileRpn(org.orgId, aoife, actorId, "4000", "44000");
         await fileRpn(org.orgId, brendan, actorId, "3300", "40000");
         await filePrsiClass(org.orgId, aoife, actorId);
@@ -169,25 +191,49 @@ test(
 
         // Run 1: week of 2–8 March 2026 — pre-October PRSI edition.
         const run1 = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-03-02", periodEnd: "2026-03-08", payDate: "2026-03-08",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-03-02",
+          periodEnd: "2026-03-08",
+          payDate: "2026-03-08",
         });
-        assert.deepEqual((await calculatePayRun({ orgId: org.orgId, actorId, documentId: run1.documentId })).errors, []);
+        assert.deepEqual(
+          (await calculatePayRun({ orgId: org.orgId, actorId, documentId: run1.documentId }))
+            .errors,
+          [],
+        );
         await commitPayRun({ orgId: org.orgId, documentId: run1.documentId, actorId });
         // Run 2: week of 9–15 November 2026 — post-October PRSI edition.
         const run2 = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-11-09", periodEnd: "2026-11-15", payDate: "2026-11-15",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-11-09",
+          periodEnd: "2026-11-15",
+          payDate: "2026-11-15",
         });
-        assert.deepEqual((await calculatePayRun({ orgId: org.orgId, actorId, documentId: run2.documentId })).errors, []);
+        assert.deepEqual(
+          (await calculatePayRun({ orgId: org.orgId, actorId, documentId: run2.documentId }))
+            .errors,
+          [],
+        );
         await commitPayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
         // Run 3: calculated but NEVER committed — a draft must not appear on a
         // statutory surface. Deliberately large so inclusion cannot hide.
         const run3 = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-11-16", periodEnd: "2026-11-22", payDate: "2026-11-22",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-11-16",
+          periodEnd: "2026-11-22",
+          payDate: "2026-11-22",
         });
-        assert.deepEqual((await calculatePayRun({ orgId: org.orgId, actorId, documentId: run3.documentId })).errors, []);
+        assert.deepEqual(
+          (await calculatePayRun({ orgId: org.orgId, actorId, documentId: run3.documentId }))
+            .errors,
+          [],
+        );
 
         const rows = await iePayeReconciliation(org.orgId, 2026);
         // Two employees aggregate; the draft run contributes no third row and
@@ -201,7 +247,9 @@ test(
 
         // The October step is priced by pay date: March PRSI sits entirely in
         // the pre columns, November PRSI entirely in the post columns.
-        const march = (await db.execute<{ ee: string; er: string }>(sql`
+        const march = (
+          await db.execute<{ ee: string; er: string }>(
+            sql`
           select (select coalesce(sum(l.amount), 0) from pay_stub_lines l
                    join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                   where l.org_id = ${org.orgId} and l.stub_id = s.id and l.kind = 'deduction'
@@ -212,7 +260,10 @@ test(
                     and pc.system_key = 'prsi')::text as er
             from pay_stubs s join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run1.documentId}
-             and s.employee_party_id = ${aoife} and r.run_status = 'committed'`, "objects"))[0]!;
+             and s.employee_party_id = ${aoife} and r.run_status = 'committed'`,
+            "objects",
+          )
+        )[0]!;
         assert.equal(cmp(a.prsiEmployeePre, march.ee), 0);
         assert.equal(cmp(a.prsiEmployerPre, march.er), 0);
         assert.ok(cmp(a.prsiEmployeePost, "0") !== 0, "November PRSI posts post-October");
@@ -221,10 +272,17 @@ test(
         // different shape from the population's correlated subselects — must
         // agree to the cent on every figure, for every employee.
         type OracleRow = {
-          employee: string; gross: string; paye: string;
-          pre_ee: string; post_ee: string; pre_er: string; post_er: string; usc: string;
+          employee: string;
+          gross: string;
+          paye: string;
+          pre_ee: string;
+          post_ee: string;
+          pre_er: string;
+          post_er: string;
+          usc: string;
         };
-        const oracle = await db.execute<OracleRow>(sql`
+        const oracle = await db.execute<OracleRow>(
+          sql`
           select s.employee_party_id as employee,
                  sum(case when l.kind = 'earning' then l.amount else 0 end)::text as gross,
                  sum(case when pc.system_key = 'ie_paye' and l.kind = 'deduction'
@@ -251,9 +309,12 @@ test(
             join documents d on d.id = r.document_id and d.org_id = r.org_id
               and d.status <> 'voided'
            where l.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'IE'
-           group by s.employee_party_id`, "objects");
+           group by s.employee_party_id`,
+          "objects",
+        );
         assert.equal(oracle.length, 2, "the draft run is excluded from the oracle too");
-        const bases = await db.execute<{ employee: string; taxable: string; reckonable: string }>(sql`
+        const bases = await db.execute<{ employee: string; taxable: string; reckonable: string }>(
+          sql`
           select s.employee_party_id as employee,
                  sum(coalesce((s.factors->>'IE_TAXBASE')::numeric, 0))::text as taxable,
                  sum(s.pensionable_earnings)::text as reckonable
@@ -263,7 +324,9 @@ test(
             join documents d on d.id = r.document_id and d.org_id = r.org_id
               and d.status <> 'voided'
            where s.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'IE'
-           group by s.employee_party_id`, "objects");
+           group by s.employee_party_id`,
+          "objects",
+        );
         for (const row of rows) {
           const o = oracle.find((r) => r.employee === row.employeePartyId);
           const base = bases.find((r) => r.employee === row.employeePartyId);
@@ -279,11 +342,17 @@ test(
             [row.taxablePay, base.taxable, "taxablePay"],
             [row.reckonablePay, base.reckonable, "reckonablePay"],
           ] as const) {
-            assert.equal(cmp(actual, expected ?? "0"), 0, `${row.employeeName}.${field} ties to the runs`);
+            assert.equal(
+              cmp(actual, expected ?? "0"),
+              0,
+              `${row.employeeName}.${field} ties to the runs`,
+            );
           }
           // Every emitted row id parses back to its owner through the
           // declaration the subsidiary-scope guard reads.
-          const scope = parseIeReconciliationRowId(`${row.employeePartyId}:${row.filingAccountId ?? ""}`);
+          const scope = parseIeReconciliationRowId(
+            `${row.employeePartyId}:${row.filingAccountId ?? ""}`,
+          );
           assert.deepEqual(scope?.employees, [row.employeePartyId]);
         }
         assert.equal(parseIeReconciliationRowId("not-an-ie-row"), null);
@@ -296,14 +365,32 @@ test(
           oracle.reduce((acc, r) => add(acc, pick(r)), "0");
         const totalOf = (label: string): string =>
           data.totals?.find((t) => t.label === label)?.value ?? "missing";
-        assert.equal(cmp(totalOf("PAYE"), sum((r) => r.paye)), 0);
-        assert.equal(cmp(totalOf("USC"), sum((r) => r.usc)), 0);
+        assert.equal(
+          cmp(
+            totalOf("PAYE"),
+            sum((r) => r.paye),
+          ),
+          0,
+        );
+        assert.equal(
+          cmp(
+            totalOf("USC"),
+            sum((r) => r.usc),
+          ),
+          0,
+        );
         assert.equal(
           cmp(
             totalOf("PRSI (employee + employer)"),
             add(
-              add(sum((r) => r.pre_ee), sum((r) => r.post_ee)),
-              add(sum((r) => r.pre_er), sum((r) => r.post_er)),
+              add(
+                sum((r) => r.pre_ee),
+                sum((r) => r.post_ee),
+              ),
+              add(
+                sum((r) => r.pre_er),
+                sum((r) => r.post_er),
+              ),
             ),
           ),
           0,
@@ -316,23 +403,19 @@ test(
   },
 );
 
-test(
-  "IE reconciliation refuses an empty year by name",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    try {
-      await seedPayrollComponents(org.orgId, actorId, "IE");
-      await assert.rejects(
-        iePayeReconciliation(org.orgId, 2026),
-        /no committed IE pay stubs for tax year 2026/,
-      );
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+test("IE reconciliation refuses an empty year by name", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  try {
+    await seedPayrollComponents(org.orgId, actorId, "IE");
+    await assert.rejects(
+      iePayeReconciliation(org.orgId, 2026),
+      /no committed IE pay stubs for tax year 2026/,
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 test(
   "IE reconciliation refuses a year the pack does not publish, through the generic enumeration",

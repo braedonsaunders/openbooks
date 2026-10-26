@@ -1,12 +1,12 @@
-import { z } from 'zod'
-import { NextResponse } from 'next/server'
-import { withOrgTransaction } from '@openbooks/engine/platform/db'
-import { setStoredValueStatus } from '@openbooks/engine/stored-value/accounts'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { uuidId } from '@/lib/api/json'
+import { z } from "zod";
+import { NextResponse } from "next/server";
+import { withOrgTransaction } from "@openbooks/engine/platform/db";
+import { setStoredValueStatus } from "@openbooks/engine/stored-value/accounts";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { uuidId } from "@/lib/api/json";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * POST /api/stored-value/accounts/[id]/status — freeze, unfreeze or close.
@@ -14,15 +14,17 @@ export const runtime = 'nodejs'
  * redemption, breakage or expiry, never by closing over it.
  */
 export const POST = defineRoute({
-  permission: 'stored_value.manage',
-  feature: 'storedValue',
-  body: z.object({
-    to: z.enum(['active', 'frozen', 'closed']),
-    reason: z.string().trim().max(1000).nullable().optional(),
-  }).strict(),
+  permission: "stored_value.manage",
+  feature: "storedValue",
+  body: z
+    .object({
+      to: z.enum(["active", "frozen", "closed"]),
+      reason: z.string().trim().max(1000).nullable().optional(),
+    })
+    .strict(),
   handler: async ({ authz, body, params }) => {
     try {
-      const { id } = z.object({ id: uuidId }).parse(params)
+      const { id } = z.object({ id: uuidId }).parse(params);
       await withOrgTransaction(authz.user.orgId, () =>
         setStoredValueStatus({
           orgId: authz.user.orgId,
@@ -34,10 +36,10 @@ export const POST = defineRoute({
           reason: body.reason ?? null,
           actorId: authz.user.id,
         }),
-      )
-      return NextResponse.json({ ok: true }, { status: 200 })
+      );
+      return NextResponse.json({ ok: true }, { status: 200 });
     } catch (error) {
-      return apiErrorResponse(error)
+      return apiErrorResponse(error);
     }
   },
-})
+});

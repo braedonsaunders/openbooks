@@ -12,10 +12,19 @@ import { baselineCatalog, baselineDigest } from "./migration-baseline-catalog.mj
 const run = promisify(execFile);
 
 test("baseline adoption refuses an incomplete previous release, schema drift and concurrent clients, preserves data and audits the original ledger", async (context) => {
-  const rawUrl = process.env.OPENBOOKS_BASELINE_ADMIN_URL || process.env.OPENBOOKS_TEST_ADMIN_DB_URL || process.env.OPENBOOKS_DB_URL;
-  assert.ok(rawUrl, "the integration partition requires a disposable local PostgreSQL administrator URL");
+  const rawUrl =
+    process.env.OPENBOOKS_BASELINE_ADMIN_URL ||
+    process.env.OPENBOOKS_TEST_ADMIN_DB_URL ||
+    process.env.OPENBOOKS_DB_URL;
+  assert.ok(
+    rawUrl,
+    "the integration partition requires a disposable local PostgreSQL administrator URL",
+  );
   const url = new URL(rawUrl);
-  assert.ok(["127.0.0.1", "localhost", "[::1]"].includes(url.hostname), "adoption regression tests must never create databases on a remote host");
+  assert.ok(
+    ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname),
+    "adoption regression tests must never create databases on a remote host",
+  );
   url.pathname = "/postgres";
   const admin = new pg.Client({ connectionString: url.href });
   await admin.connect();
@@ -23,8 +32,12 @@ test("baseline adoption refuses an incomplete previous release, schema drift and
   const directory = await mkdtemp(join(tmpdir(), "openbooks-baseline-adoption-"));
   let created = false;
   context.after(async () => {
-    try { if (created) await admin.query(`drop database ${name}`); }
-    finally { await admin.end(); await rm(directory, { recursive: true, force: true }); }
+    try {
+      if (created) await admin.query(`drop database ${name}`);
+    } finally {
+      await admin.end();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
   await admin.query(`create database ${name} template template0`);
   created = true;
@@ -32,7 +45,11 @@ test("baseline adoption refuses an incomplete previous release, schema drift and
   async function withClient(work) {
     const client = new pg.Client({ connectionString: url.href });
     await client.connect();
-    try { return await work(client); } finally { await client.end(); }
+    try {
+      return await work(client);
+    } finally {
+      await client.end();
+    }
   }
   const catalog = await withClient(async (client) => {
     await client.query(`create table orgs(id uuid primary key);
@@ -60,34 +77,95 @@ test("baseline adoption refuses an incomplete previous release, schema drift and
   await mkdir(join(directory, "schema/migrations/generated"), { recursive: true });
   await mkdir(join(directory, "schema/migrations/baselines"));
   await symlink(resolve("node_modules"), join(directory, "node_modules"));
-  for (const file of ["adopt-migration-baseline.mts", "migration-baseline-catalog.mjs", "migration-baseline-plan.mjs"]) await copyFile(resolve("scripts", file), join(directory, "scripts", file));
+  for (const file of [
+    "adopt-migration-baseline.mts",
+    "migration-baseline-catalog.mjs",
+    "migration-baseline-plan.mjs",
+  ])
+    await copyFile(resolve("scripts", file), join(directory, "scripts", file));
   const baseline = "-- release schema\n";
   const filename = "baselines/alpha35.sql";
-  const upgradeFrom = [{ filename: "baselines/alpha29.sql", sha256: "a".repeat(64) }, { filename: "generated/0797_last.sql", sha256: "b".repeat(64) }];
-  const manifest = { format: 2, verified: true, filename, baselineSha256: baselineDigest(baseline), catalogSha256: baselineDigest(JSON.stringify(catalog)),
-    upgradeFromRelease: "v0.1.0-alpha.34.3", upgradeFrom,
-    covered: [{ filename: "generated/0001_baseline.sql", sha256: "c".repeat(64) }, ...upgradeFrom] };
+  const upgradeFrom = [
+    { filename: "baselines/alpha29.sql", sha256: "a".repeat(64) },
+    { filename: "generated/0797_last.sql", sha256: "b".repeat(64) },
+  ];
+  const manifest = {
+    format: 2,
+    verified: true,
+    filename,
+    baselineSha256: baselineDigest(baseline),
+    catalogSha256: baselineDigest(JSON.stringify(catalog)),
+    upgradeFromRelease: "v0.1.0-alpha.34.3",
+    upgradeFrom,
+    covered: [{ filename: "generated/0001_baseline.sql", sha256: "c".repeat(64) }, ...upgradeFrom],
+  };
   await writeFile(join(directory, "schema/migrations", filename), baseline);
-  await writeFile(join(directory, "schema/migrations", `${filename}.catalog.json`), JSON.stringify(catalog));
+  await writeFile(
+    join(directory, "schema/migrations", `${filename}.catalog.json`),
+    JSON.stringify(catalog),
+  );
   await writeFile(join(directory, "schema/migrations/baseline.json"), JSON.stringify(manifest));
-  const common = ["--import", "tsx", join(directory, "scripts/adopt-migration-baseline.mts"), "--database", name];
-  const invoke = (args) => run(process.execPath, [...common, ...args], { env: { ...process.env, OPENBOOKS_BASELINE_TARGET_URL: url.href } });
-  const apply = ["--apply", "--actor", "release operator", "--reason", "verified test reconciliation", "--backup", "restored-test-snapshot"];
+  const common = [
+    "--import",
+    "tsx",
+    join(directory, "scripts/adopt-migration-baseline.mts"),
+    "--database",
+    name,
+  ];
+  const invoke = (args) =>
+    run(process.execPath, [...common, ...args], {
+      env: { ...process.env, OPENBOOKS_BASELINE_TARGET_URL: url.href },
+    });
+  const apply = [
+    "--apply",
+    "--actor",
+    "release operator",
+    "--reason",
+    "verified test reconciliation",
+    "--backup",
+    "restored-test-snapshot",
+  ];
   // Schema equivalence alone is refused until the previous release's ledger is complete.
-  await assert.rejects(invoke(["--check"]), (error) => /has not completed v0\.1\.0-alpha\.34\.3: 1 of its migrations.*generated\/0797_last\.sql/.test(error.stderr));
-  await withClient((client) => client.query(`insert into _applied_migrations values ('generated/0797_last.sql','${"0".repeat(64)}','2026-01-02')`));
-  await assert.rejects(invoke(["--check"]), (error) => /has not completed.*recorded at another digest/.test(error.stderr));
-  await withClient((client) => client.query(`update _applied_migrations set sha256='${"b".repeat(64)}' where filename='generated/0797_last.sql'`));
-  const before = await withClient(async (client) => (await client.query("select * from _applied_migrations order by filename")).rows);
+  await assert.rejects(invoke(["--check"]), (error) =>
+    /has not completed v0\.1\.0-alpha\.34\.3: 1 of its migrations.*generated\/0797_last\.sql/.test(
+      error.stderr,
+    ),
+  );
+  await withClient((client) =>
+    client.query(
+      `insert into _applied_migrations values ('generated/0797_last.sql','${"0".repeat(64)}','2026-01-02')`,
+    ),
+  );
+  await assert.rejects(invoke(["--check"]), (error) =>
+    /has not completed.*recorded at another digest/.test(error.stderr),
+  );
+  await withClient((client) =>
+    client.query(
+      `update _applied_migrations set sha256='${"b".repeat(64)}' where filename='generated/0797_last.sql'`,
+    ),
+  );
+  const before = await withClient(
+    async (client) =>
+      (await client.query("select * from _applied_migrations order by filename")).rows,
+  );
   assert.match((await invoke(["--check"])).stdout, /VERIFIED.*no changes made/);
-  await withClient((client) => client.query("alter table financial_evidence drop constraint financial_evidence_amount_check"));
+  await withClient((client) =>
+    client.query("alter table financial_evidence drop constraint financial_evidence_amount_check"),
+  );
   await assert.rejects(invoke(apply), (error) => /differs in constraints/.test(error.stderr));
   await withClient(async (client) => {
-    assert.equal((await client.query("select count(*)::int as n from _applied_migrations")).rows[0].n, 3);
-    await client.query("alter table financial_evidence add constraint financial_evidence_amount_check check(amount>=0)");
+    assert.equal(
+      (await client.query("select count(*)::int as n from _applied_migrations")).rows[0].n,
+      3,
+    );
+    await client.query(
+      "alter table financial_evidence add constraint financial_evidence_amount_check check(amount>=0)",
+    );
   });
   await withClient(async () => {
-    await assert.rejects(invoke(apply), (error) => /other database client session/.test(error.stderr));
+    await assert.rejects(invoke(apply), (error) =>
+      /other database client session/.test(error.stderr),
+    );
   });
   assert.match((await invoke(apply)).stdout, /historical ledger and tenant data preserved/);
   assert.match((await invoke(["--check"])).stdout, /VERIFIED.*no changes made/);
@@ -95,14 +173,27 @@ test("baseline adoption refuses an incomplete previous release, schema drift and
   await withClient(async (client) => {
     const rows = (await client.query("select * from _applied_migrations order by filename")).rows;
     assert.equal(rows.length, 4);
-    assert.deepEqual(rows.filter((row) => row.filename !== filename), before);
+    assert.deepEqual(
+      rows.filter((row) => row.filename !== filename),
+      before,
+    );
     assert.equal(rows.find((row) => row.filename === filename).sha256, manifest.baselineSha256);
-    assert.equal((await client.query("select amount::text as amount from financial_evidence")).rows[0].amount, "123.45");
-    assert.deepEqual((await client.query("select settings from platform_settings")).rows[0].settings, { keep: "operator settings" });
-    const audit = (await client.query("select * from openbooks_migrations.baseline_adoptions")).rows[0];
+    assert.equal(
+      (await client.query("select amount::text as amount from financial_evidence")).rows[0].amount,
+      "123.45",
+    );
+    assert.deepEqual(
+      (await client.query("select settings from platform_settings")).rows[0].settings,
+      { keep: "operator settings" },
+    );
+    const audit = (await client.query("select * from openbooks_migrations.baseline_adoptions"))
+      .rows[0];
     assert.equal(audit.actor, "release operator");
     assert.equal(audit.backup_reference, "restored-test-snapshot");
-    assert.deepEqual(audit.previous_ledger.map((row) => [row.filename, row.sha256]), before.map((row) => [row.filename, row.sha256]));
+    assert.deepEqual(
+      audit.previous_ledger.map((row) => [row.filename, row.sha256]),
+      before.map((row) => [row.filename, row.sha256]),
+    );
     assert.equal(audit.reason, "verified test reconciliation");
   });
 });

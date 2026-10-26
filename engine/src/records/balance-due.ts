@@ -101,9 +101,11 @@ export function documentBalanceDueLateral(docAlias = "d", opts?: { base?: boolea
   return sql`
     left join lateral (
       select coalesce(sum(${appliedLegAmountExpr("a", sql`jl.id`, "transaction")}), 0) as applied
-        ${opts?.base
-          ? sql`, coalesce(sum(${appliedLegAmountExpr("a", sql`jl.id`, "base")}), 0) as applied_base`
-          : sql``}
+        ${
+          opts?.base
+            ? sql`, coalesce(sum(${appliedLegAmountExpr("a", sql`jl.id`, "base")}), 0) as applied_base`
+            : sql``
+        }
         from journal_lines jl
         join applications a on a.org_id = jl.org_id and (a.to_line_id = jl.id or a.from_line_id = jl.id) and a.unapplied_at is null
        where jl.org_id = ${d}.org_id and jl.entry_id = ${d}.posted_entry_id and jl.is_open_item

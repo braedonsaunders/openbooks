@@ -1,8 +1,6 @@
 import { toCents } from "../../money/money.ts";
 import { PayrollError } from "../error.ts";
-import type {
-  PayrollStatutoryComputeContext,
-} from "../statutory-context.ts";
+import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
   SG_2026_AW_CEILING_AT_FULL_OW,
   SG_CPF_2026_LE55,
@@ -54,9 +52,14 @@ function parseCents(value: string, what: string): bigint {
   try {
     cents = toCents(value);
   } catch {
-    throw new PayrollError(`the SG payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
+    throw new PayrollError(
+      `the SG payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`,
+    );
   }
-  if (cents < 0n) throw new PayrollError(`the SG payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
+  if (cents < 0n)
+    throw new PayrollError(
+      `the SG payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`,
+    );
   return cents;
 }
 
@@ -85,8 +88,8 @@ function d4(cents: bigint): string {
 export function sgRatesForTaxYear(year: number): 2024 | 2025 | 2026 {
   if (!(SG_TRANSCRIBED_YEARS as readonly number[]).includes(year)) {
     throw new PayrollError(
-      `the SG payroll pack has no transcribed CPF tables for ${year} — 2024, 2025 and 2026 are transcribed `
-      + "(CPF Contribution Rate Table from 1 January of each year, Table 1); no other year is",
+      `the SG payroll pack has no transcribed CPF tables for ${year} — 2024, 2025 and 2026 are transcribed ` +
+        "(CPF Contribution Rate Table from 1 January of each year, Table 1); no other year is",
     );
   }
   return year as 2024 | 2025 | 2026;
@@ -169,8 +172,15 @@ export interface SgStatutoryResult {
   sdlExact40000: bigint;
 }
 
-const STATUSES: readonly string[] = ["citizen", "spr_3rd_year", "spr_1st_year", "spr_2nd_year",
-  "spr_1st_year_full_employer", "spr_2nd_year_full_employer", "foreigner"];
+const STATUSES: readonly string[] = [
+  "citizen",
+  "spr_3rd_year",
+  "spr_1st_year",
+  "spr_2nd_year",
+  "spr_1st_year_full_employer",
+  "spr_2nd_year_full_employer",
+  "foreigner",
+];
 const AGE_BANDS: readonly string[] = ["le55", "b55_60", "b60_65", "b65_70", "gt70"];
 
 const AGE_BAND_LABELS: Record<SgAgeBand, string> = {
@@ -189,12 +199,16 @@ const AGE_BAND_LABELS: Record<SgAgeBand, string> = {
  * a fixed year's maxima would misstate the year's own Table 1. Callers pass
  * the same tables object the calculation prices from.
  */
-export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand, tables: SgYearTables): void {
+export function assertSgCovered(
+  status: SgCpfStatus,
+  ageBand: SgAgeBand,
+  tables: SgYearTables,
+): void {
   if (!STATUSES.includes(status)) {
     throw new PayrollError(
-      `the SG payroll pack cannot price CPF status "${status}" — declare "citizen", "spr_3rd_year", `
-      + `"spr_1st_year", "spr_2nd_year", "spr_1st_year_full_employer", `
-      + `"spr_2nd_year_full_employer" or "foreigner"`,
+      `the SG payroll pack cannot price CPF status "${status}" — declare "citizen", "spr_3rd_year", ` +
+        `"spr_1st_year", "spr_2nd_year", "spr_1st_year_full_employer", ` +
+        `"spr_2nd_year_full_employer" or "foreigner"`,
     );
   }
   // Foreign workers are outside CPF by statute. Their work-permit levy, if
@@ -202,16 +216,19 @@ export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand, tables:
   if (status === "foreigner") return;
   if (!AGE_BANDS.includes(ageBand)) {
     throw new PayrollError(
-      `the SG payroll pack cannot price age band "${ageBand}" — declare "le55", "b55_60", "b60_65", `
-      + `"b65_70" or "gt70"`,
+      `the SG payroll pack cannot price age band "${ageBand}" — declare "le55", "b55_60", "b60_65", ` +
+        `"b65_70" or "gt70"`,
     );
   }
-  const rates = tables.cpfByStatusAge?.[status]?.[ageBand]
-    ?? (ageBand === "le55" && (status === "citizen" || status === "spr_3rd_year") ? tables.cpfLe55 : undefined);
+  const rates =
+    tables.cpfByStatusAge?.[status]?.[ageBand] ??
+    (ageBand === "le55" && (status === "citizen" || status === "spr_3rd_year")
+      ? tables.cpfLe55
+      : undefined);
   if (!rates) {
     throw new PayrollError(
-      `the SG payroll pack has no ${tables.year} CPF rates for ${status} at "${AGE_BAND_LABELS[ageBand]}"; `
-      + "provide a CPF status and age band covered by the published, effective-dated tables",
+      `the SG payroll pack has no ${tables.year} CPF rates for ${status} at "${AGE_BAND_LABELS[ageBand]}"; ` +
+        "provide a CPF status and age band covered by the published, effective-dated tables",
     );
   }
 }
@@ -227,16 +244,21 @@ function thousandths(value: string): bigint {
 }
 
 function ratesFor(status: SgCpfStatus, ageBand: SgAgeBand, tables: SgYearTables): SgCpfBandRates {
-  const rates = tables.cpfByStatusAge?.[status]?.[ageBand]
-    ?? (ageBand === "le55" && (status === "citizen" || status === "spr_3rd_year") ? tables.cpfLe55 : undefined);
-  if (!rates) throw new PayrollError(`the SG ${tables.year} CPF table does not price ${status}/${ageBand}`);
+  const rates =
+    tables.cpfByStatusAge?.[status]?.[ageBand] ??
+    (ageBand === "le55" && (status === "citizen" || status === "spr_3rd_year")
+      ? tables.cpfLe55
+      : undefined);
+  if (!rates)
+    throw new PayrollError(`the SG ${tables.year} CPF table does not price ${status}/${ageBand}`);
   return rates;
 }
 
 export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult {
   const tables = sgTablesForTaxYear(input.taxYear);
   assertSgCovered(input.cpfStatus, input.ageBand, tables);
-  const cpfRates = input.cpfStatus === "foreigner" ? null : ratesFor(input.cpfStatus, input.ageBand, tables);
+  const cpfRates =
+    input.cpfStatus === "foreigner" ? null : ratesFor(input.cpfStatus, input.ageBand, tables);
 
   // The MOM foreign-worker levy is an employer charge outside CPF/SDL whose
   // sector/tier schedule is not transcribed. A declared Work Permit holder
@@ -246,14 +268,15 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
   // other pass prices SDL with the levy marked uncomputed on the stub.
   if (input.cpfStatus === "foreigner" && input.permitType === "work_permit") {
     throw new PayrollError(
-      "the SG payroll pack cannot price a Work Permit holder — the MOM foreign-worker levy applies "
-      + "on top of SDL and its sector/tier schedule is not transcribed. Arrange the levy outside "
-      + "payroll (MOM WP Online) or price this run in payroll software that implements the schedule",
+      "the SG payroll pack cannot price a Work Permit holder — the MOM foreign-worker levy applies " +
+        "on top of SDL and its sector/tier schedule is not transcribed. Arrange the levy outside " +
+        "payroll (MOM WP Online) or price this run in payroll software that implements the schedule",
     );
   }
-  const fwlUncomputed = input.cpfStatus === "foreigner"
-    && input.permitType !== "s_pass"
-    && input.permitType !== "employment_pass";
+  const fwlUncomputed =
+    input.cpfStatus === "foreigner" &&
+    input.permitType !== "s_pass" &&
+    input.permitType !== "employment_pass";
 
   const aw = parseCents(input.additionalWages ?? "0", "Additional Wages");
   const cpfApplicable = input.cpfStatus !== "foreigner";
@@ -264,10 +287,10 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
     // The refusal names the calling year's own at-full-OW ceiling, so a
     // mis-selected year is visible in the message, not just the tables.
     throw new PayrollError(
-      `the SG payroll pack refuses Additional Wages of $${input.additionalWages} by name — the ${tables.year} AW ceiling `
-      + `($102,000 − the year's total OW subject to CPF; ${formatDollars(tables.awCeilingAtFullOw)} at a full-OW year) depends on `
-      + "year-to-date Ordinary Wages the run does not carry, and a placeholder ceiling would silently "
-      + "misprice the CPF on every bonus",
+      `the SG payroll pack refuses Additional Wages of $${input.additionalWages} by name — the ${tables.year} AW ceiling ` +
+        `($102,000 − the year's total OW subject to CPF; ${formatDollars(tables.awCeilingAtFullOw)} at a full-OW year) depends on ` +
+        "year-to-date Ordinary Wages the run does not carry, and a placeholder ceiling would silently " +
+        "misprice the CPF on every bonus",
     );
   }
 
@@ -288,14 +311,18 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
       totalDollars = (owSubject * hundredths(cpfRates!.phaseTotalPct) + 500000n) / 1000000n;
     } else if (owSubject <= 75000n) {
       const over = owSubject - 50000n;
-      totalDollars = (owSubject * hundredths(cpfRates!.phaseTotalPct)
-        + over * thousandths(cpfRates!.phaseSlope) * 10n + 500000n) / 1000000n;
+      totalDollars =
+        (owSubject * hundredths(cpfRates!.phaseTotalPct) +
+          over * thousandths(cpfRates!.phaseSlope) * 10n +
+          500000n) /
+        1000000n;
       employeeDollars = (over * thousandths(cpfRates!.phaseSlope) * 10n) / 1000000n;
     } else {
       totalDollars = (owSubject * hundredths(cpfRates!.totalPct) + 500000n) / 1000000n;
       employeeDollars = (owSubject * hundredths(cpfRates!.employeePct)) / 1000000n;
       const maxTotal = parseCents(cpfRates!.maxTotalOw, "maximum total on OW") / 100n;
-      const maxEmployee = parseCents(cpfRates!.maxEmployeeOw, "maximum employee share on OW") / 100n;
+      const maxEmployee =
+        parseCents(cpfRates!.maxEmployeeOw, "maximum employee share on OW") / 100n;
       if (totalDollars > maxTotal) totalDollars = maxTotal;
       if (employeeDollars > maxEmployee) employeeDollars = maxEmployee;
     }
@@ -362,7 +389,8 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
 export function floorEmployerSdlTotal(exact40000: readonly bigint[]): bigint {
   let sum = 0n;
   for (const levy of exact40000) sum += levy;
-  if (sum < 0n) throw new PayrollError(`employer SDL exact levies must be non-negative, got total ${sum}`);
+  if (sum < 0n)
+    throw new PayrollError(`employer SDL exact levies must be non-negative, got total ${sum}`);
   return (sum / 40000n) * 100n;
 }
 
@@ -394,28 +422,37 @@ export const SG_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CPF_ER: "CPF — employer share",
   CPF_TOTAL: "CPF — total",
   SDL: "Skills Development Levy",
-  FWL_UNCOMPUTED: "MOM foreign-worker levy not computed — permit undeclared or another pass; arrange via MOM WP Online",
+  FWL_UNCOMPUTED:
+    "MOM foreign-worker levy not computed — permit undeclared or another pass; arrange via MOM WP Online",
 };
 
 export async function computeSgStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { region, taxYear, periodsPerYear: P, income, nonPeriodic, certificateFor, assertRegionSupported } = ctx;
+  const {
+    region,
+    taxYear,
+    periodsPerYear: P,
+    income,
+    nonPeriodic,
+    certificateFor,
+    assertRegionSupported,
+  } = ctx;
   assertRegionSupported(region);
   sgRatesForTaxYear(taxYear);
 
   if (P !== 12) {
     throw new PayrollError(
-      `the SG payroll pack cannot price ${P} periods per year — CPF contributions and the year's OW `
-      + "ceiling are per calendar month, so only 12 monthly periods compute",
+      `the SG payroll pack cannot price ${P} periods per year — CPF contributions and the year's OW ` +
+        "ceiling are per calendar month, so only 12 monthly periods compute",
     );
   }
 
   const certificate = certificateFor("sg_cpf_status");
   if (certificate === null) {
     throw new PayrollError(
-      "the SG payroll pack cannot price CPF without the sg_cpf_status certificate on file — the Table 1 "
-      + "rate is keyed on CPF status and age band, and neither is guessed from payroll data",
+      "the SG payroll pack cannot price CPF without the sg_cpf_status certificate on file — the Table 1 " +
+        "rate is keyed on CPF status and age band, and neither is guessed from payroll data",
     );
   }
   const status = (certificate.answers["cpf_status"] ?? "") as SgCpfStatus;
@@ -433,15 +470,16 @@ export async function computeSgStatutory(
   const runType = ctx.run["run_type"] ?? "regular";
   const terminatedOn = ctx.emp["terminated_on"] ?? null;
   const payDate = ctx.run["pay_date"] ?? "";
-  const ceased = runType === "termination"
-    || (terminatedOn != null && terminatedOn !== "" && (payDate === "" || terminatedOn <= payDate));
+  const ceased =
+    runType === "termination" ||
+    (terminatedOn != null && terminatedOn !== "" && (payDate === "" || terminatedOn <= payDate));
   if (status !== "citizen" && (STATUSES as readonly string[]).includes(status) && ceased) {
     throw new PayrollError(
-      `the SG payroll pack withholds all monies due to ${ctx.employeeName}: ${status} employment has ceased, `
-      + "and IRAS requires the employer to file Form IR21 and withhold all monies for tax clearance (Tax "
-      + "Clearance for Foreign & SPR Employees (IR21)) — file the IR21 with IRAS at least one month before "
-      + "cessation and pay the balance only on IRAS clearance; this pack settles no final pay and builds "
-      + "no IR21 file",
+      `the SG payroll pack withholds all monies due to ${ctx.employeeName}: ${status} employment has ceased, ` +
+        "and IRAS requires the employer to file Form IR21 and withhold all monies for tax clearance (Tax " +
+        "Clearance for Foreign & SPR Employees (IR21)) — file the IR21 with IRAS at least one month before " +
+        "cessation and pay the balance only on IRAS clearance; this pack settles no final pay and builds " +
+        "no IR21 file",
     );
   }
 
@@ -456,17 +494,31 @@ export async function computeSgStatutory(
 
   if (result.cpfApplicable) {
     ctx.pushStatutory("cpf_ee", "deduction", "CPF — employee share", d4(result.employeeCents), 110);
-    ctx.pushStatutory("cpf_er", "employer_contribution", "CPF — employer share", d4(result.employerCents), 210);
+    ctx.pushStatutory(
+      "cpf_er",
+      "employer_contribution",
+      "CPF — employer share",
+      d4(result.employerCents),
+      210,
+    );
   }
-  ctx.pushStatutory("sdl", "employer_contribution", "Skills Development Levy", d4(result.sdlCents), 220);
+  ctx.pushStatutory(
+    "sdl",
+    "employer_contribution",
+    "Skills Development Levy",
+    d4(result.sdlCents),
+    220,
+  );
 
   return {
     CPF_APPLICABLE: result.cpfApplicable ? "true" : "false",
-    ...(result.cpfApplicable ? {
-      CPF_EE: d4(result.employeeCents),
-      CPF_ER: d4(result.employerCents),
-      CPF_TOTAL: d4(result.totalCents),
-    } : {}),
+    ...(result.cpfApplicable
+      ? {
+          CPF_EE: d4(result.employeeCents),
+          CPF_ER: d4(result.employerCents),
+          CPF_TOTAL: d4(result.totalCents),
+        }
+      : {}),
     SDL: d4(result.sdlCents),
     // The MOM levy position rides the stub trace wherever it is undetermined:
     // a named marker on the calculation, never SDL-only silence.

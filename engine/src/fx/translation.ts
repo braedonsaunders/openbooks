@@ -1,6 +1,6 @@
-import { sql } from 'drizzle-orm'
-import { db } from '../platform/db.ts'
-import { mulDecimal } from '../money/money.ts'
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import { mulDecimal } from "../money/money.ts";
 
 /**
  * Presentation-currency translation for consolidated engine readers.
@@ -24,19 +24,20 @@ import { mulDecimal } from '../money/money.ts'
 /** The org's base (functional) currency — the consolidated presentation currency. */
 export async function presentationBaseCurrency(orgId: string): Promise<string> {
   const r = await db.execute(
-    sql`select base_currency as "baseCurrency" from orgs where id = ${orgId}`, 'objects',
-  )
-  const base = (r[0] as { baseCurrency?: unknown } | undefined)?.baseCurrency
-  if (typeof base !== 'string' || !base) {
-    throw new Error(`organization ${orgId} has no base currency`)
+    sql`select base_currency as "baseCurrency" from orgs where id = ${orgId}`,
+    "objects",
+  );
+  const base = (r[0] as { baseCurrency?: unknown } | undefined)?.baseCurrency;
+  if (typeof base !== "string" || !base) {
+    throw new Error(`organization ${orgId} has no base currency`);
   }
-  return base
+  return base;
 }
 
 export interface FlowTranslation {
-  base: string
+  base: string;
   /** Latest dated spot for a functional on/before a date ("1" for the base). Throws when uncovered. */
-  rateAt: (func: string | null, date: string) => string
+  rateAt: (func: string | null, date: string) => string;
 }
 
 /**
@@ -51,16 +52,17 @@ export async function flowTranslation(
   if (rows.length === 0) {
     // No legs, no translation: the identity context without touching the
     // org/rate tables, so empty scopes stay query-free.
-    return { base: '', rateAt: () => '1' }
+    return { base: "", rateAt: () => "1" };
   }
-  const base = await presentationBaseCurrency(orgId)
-  const dated = rows.filter((r) => (r.func ?? base) !== base)
-  const timelines = new Map<string, { asOf: string; rate: string }[]>()
+  const base = await presentationBaseCurrency(orgId);
+  const dated = rows.filter((r) => (r.func ?? base) !== base);
+  const timelines = new Map<string, { asOf: string; rate: string }[]>();
   if (dated.length > 0) {
-    const maxDate = dated.reduce((a, b) => (a > b.date ? a : b.date), dated[0]!.date)
-    const funcs = [...new Set(dated.map((r) => r.func as string))]
+    const maxDate = dated.reduce((a, b) => (a > b.date ? a : b.date), dated[0]!.date);
+    const funcs = [...new Set(dated.map((r) => r.func as string))];
     for (const func of funcs) {
-      const r = await db.execute<{ as_of: string; rate: string }>(sql`
+      const r = await db.execute<{ as_of: string; rate: string }>(
+        sql`
         select s.as_of::text as as_of, s.rate::text as rate from (
           select as_of, rate, 0 as priority from fx_rates
            where org_id = ${orgId} and from_currency = ${func}
@@ -73,33 +75,33 @@ export async function flowTranslation(
              and as_of <= ${maxDate}::date
         ) s
        order by s.as_of desc, s.priority asc
-      `, 'objects')
+      `,
+        "objects",
+      );
       // Direct quotes win ties (same rule as the kernel lookup): keep the
       // first row per date.
-      const seen = new Set<string>()
-      const timeline: { asOf: string; rate: string }[] = []
+      const seen = new Set<string>();
+      const timeline: { asOf: string; rate: string }[] = [];
       for (const row of r) {
-        if (seen.has(row.as_of)) continue
-        seen.add(row.as_of)
-        timeline.push({ asOf: row.as_of, rate: row.rate })
+        if (seen.has(row.as_of)) continue;
+        seen.add(row.as_of);
+        timeline.push({ asOf: row.as_of, rate: row.rate });
       }
-      timelines.set(func, timeline)
+      timelines.set(func, timeline);
     }
   }
   return {
     base,
     rateAt: (func, date) => {
-      const resolved = func ?? base
-      if (resolved === base) return '1'
-      const rate = timelines.get(resolved)!.find((t) => t.asOf <= date)?.rate
+      const resolved = func ?? base;
+      if (resolved === base) return "1";
+      const rate = timelines.get(resolved)!.find((t) => t.asOf <= date)?.rate;
       if (!rate) {
-        throw new Error(
-          `no spot rate for ${resolved}→${base} on or before ${date}`,
-        )
+        throw new Error(`no spot rate for ${resolved}→${base} on or before ${date}`);
       }
-      return rate
+      return rate;
     },
-  }
+  };
 }
 
 /**
@@ -113,5 +115,5 @@ export function translateFlowAmount(
   date: string,
   rateAt: (func: string | null, date: string) => string,
 ): string {
-  return Number(amountValue) === 0 ? '0' : mulDecimal(amountValue, rateAt(func, date))
+  return Number(amountValue) === 0 ? "0" : mulDecimal(amountValue, rateAt(func, date));
 }

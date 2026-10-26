@@ -1,14 +1,14 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
-import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { analyticsConfig } from '../../../../lib/analytics/config'
-import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
-import { cashflowData } from '../../../../lib/analytics/cashflow-data'
-import { normalizeCashHorizonWeeks, withoutWeekEntries } from '../../../../lib/cash/core'
-import type { CashflowView } from './CashflowView'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
+import { frame, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { analyticsConfig } from "../../../../lib/analytics/config";
+import { ANALYTICS_CONFIG } from "../../../../lib/analytics/config-spec";
+import { cashflowData } from "../../../../lib/analytics/cashflow-data";
+import { normalizeCashHorizonWeeks, withoutWeekEntries } from "../../../../lib/cash/core";
+import type { CashflowView } from "./CashflowView";
 
 /**
  * The cashflow dashboard, split into a loader and a spec.
@@ -30,56 +30,62 @@ import type { CashflowView } from './CashflowView'
  * is opened at full detail.
  */
 
-type CashflowProps = Parameters<typeof CashflowView>[0]
+type CashflowProps = Parameters<typeof CashflowView>[0];
 
 export interface CashflowData {
-  title: string
-  backLabel: string
-  periodLabel: string
-  horizon: number
-  data: CashflowProps['data']
+  title: string;
+  backLabel: string;
+  periodLabel: string;
+  horizon: number;
+  data: CashflowProps["data"];
 }
 
 export async function loadCashflow(sp: Record<string, string | undefined>): Promise<CashflowData> {
-  const t = await getTranslations('analytics.cashflow')
-  const authz = await requirePermission('reports.read')
-  const locale = await getLocale()
+  const t = await getTranslations("analytics.cashflow");
+  const authz = await requirePermission("reports.read");
+  const locale = await getLocale();
 
   // The dashboard opens on the org's configured default horizon when the
   // request names none — the same setting the Banking cockpit uses.
-  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
+  const cfg = await analyticsConfig(authz.user.orgId, "cashflow");
   const horizon = normalizeCashHorizonWeeks(
     sp.horizon,
     cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
-  )
+  );
 
-  const position = await cashflowData(authz.user.orgId, horizon, undefined, authz.allowedSubsidiaryIds, locale)
+  const position = await cashflowData(
+    authz.user.orgId,
+    horizon,
+    undefined,
+    authz.allowedSubsidiaryIds,
+    locale,
+  );
   // Week totals, counts and the per-counterparty aggregate travel with the
   // page; the transactions behind them do not. The week flyout fetches
   // whichever week is opened from /api/cash/week-entries, at full detail.
-  const data = { ...position, weeks: withoutWeekEntries(position.weeks) }
+  const data = { ...position, weeks: withoutWeekEntries(position.weeks) };
 
   return {
-    title: t('title'),
-    backLabel: t('backToHub'),
+    title: t("title"),
+    backLabel: t("backToHub"),
     // The native header interpolates this literally, outside next-intl.
-    periodLabel: t('asOf', civilDateParams({ date: data.asOf }, locale)),
+    periodLabel: t("asOf", civilDateParams({ date: data.asOf }, locale)),
     horizon,
     data,
-  }
+  };
 }
 
 export function cashflowSpec(data: CashflowData): PageSpec {
   return page({
-    route: '/analytics/cashflow',
-    layout: 'list',
+    route: "/analytics/cashflow",
+    layout: "list",
     header: [
       frame(
-        'analytics-header',
-        [widgetBlock('cashflow-horizon-control', { value: data.horizon })],
+        "analytics-header",
+        [widgetBlock("cashflow-horizon-control", { value: data.horizon })],
         { title: data.title, periodLabel: data.periodLabel, backLabel: data.backLabel },
       ),
     ],
-    body: [widgetBlock('cashflow-view', { data: data.data })],
-  })
+    body: [widgetBlock("cashflow-view", { data: data.data })],
+  });
 }

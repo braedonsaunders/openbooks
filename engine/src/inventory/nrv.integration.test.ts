@@ -9,35 +9,71 @@ import { issueInventory, receiveInventory } from "./movements.ts";
 import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
 import { InventoryNrvError, reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("moving-average NRV recovery excludes consumed loss after replenishment", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "ifrs");
-    const position = { itemId: org.items.movingAvg, stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId, date: org.date };
-    await receiveInventory(org.orgId, null, { ...position, quantity: "2", unitCost: "100", offsetAccountId: org.accounts.ap });
-    await writeDownInventoryToNrv(org.orgId, null, { ...position, nrvPerUnit: "50" });
-    await issueInventory(org.orgId, null, { ...position, quantity: "1", offsetAccountId: org.accounts.cogs });
-    await receiveInventory(org.orgId, null, { ...position, quantity: "1", unitCost: "10", offsetAccountId: org.accounts.ap });
-    assert.equal((await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value, "60.0000");
-    const recovery = await reverseInventoryWritedown(org.orgId, null, { ...position, nrvPerUnit: "100" });
-    assert.equal(recovery.amount, "50.0000", "only the original unit still on hand retains its 50 loss");
-    assert.equal((await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value, "110.0000");
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("110"));
-  } finally { await dropScratchOrg(org.orgId); }
-});
+test(
+  "moving-average NRV recovery excludes consumed loss after replenishment",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "ifrs");
+      const position = {
+        itemId: org.items.movingAvg,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      };
+      await receiveInventory(org.orgId, null, {
+        ...position,
+        quantity: "2",
+        unitCost: "100",
+        offsetAccountId: org.accounts.ap,
+      });
+      await writeDownInventoryToNrv(org.orgId, null, { ...position, nrvPerUnit: "50" });
+      await issueInventory(org.orgId, null, {
+        ...position,
+        quantity: "1",
+        offsetAccountId: org.accounts.cogs,
+      });
+      await receiveInventory(org.orgId, null, {
+        ...position,
+        quantity: "1",
+        unitCost: "10",
+        offsetAccountId: org.accounts.ap,
+      });
+      assert.equal(
+        (await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value,
+        "60.0000",
+      );
+      const recovery = await reverseInventoryWritedown(org.orgId, null, {
+        ...position,
+        nrvPerUnit: "100",
+      });
+      assert.equal(
+        recovery.amount,
+        "50.0000",
+        "only the original unit still on hand retains its 50 loss",
+      );
+      assert.equal(
+        (await getOnHand(org.orgId, position.itemId, position.stockLocationId)).value,
+        "110.0000",
+      );
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("110"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
-    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`, "objects"));
+  const r = await db.execute<{ bal: string }>(
+    sql`
+    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
@@ -57,7 +93,8 @@ async function nrvLayerAudit(
   stockLocationId: string,
   subsidiaryId: string,
 ): Promise<NrvLayerAudit[]> {
-  const r = await db.execute<NrvLayerAudit>(sql`
+  const r = await db.execute<NrvLayerAudit>(
+    sql`
     select layer.id,
            layer.source_movement_id as "sourceMovementId",
            layer.remaining_quantity::text as "remainingQuantity",
@@ -73,7 +110,9 @@ async function nrvLayerAudit(
        and layer.stock_location_id = ${stockLocationId}
        and layer.subsidiary_id = ${subsidiaryId}
        and layer.remaining_quantity > 0
-     order by layer.received_at, layer.id`, "objects");
+     order by layer.received_at, layer.id`,
+    "objects",
+  );
   return r;
 }
 
@@ -113,573 +152,617 @@ async function setTaxFramework(orgId: string, framework: "asc740" | "ias12"): Pr
      where id = ${orgId}`);
 }
 
-test("NRV write-down remeasures value only, keeps subledger = GL, and new basis flows to COGS", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "us_gaap");
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "100",
-      unitCost: "3",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
+test(
+  "NRV write-down remeasures value only, keeps subledger = GL, and new basis flows to COGS",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "us_gaap");
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "100",
+        unitCost: "3",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
 
-    const result = await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "2",
-    });
-    assert.equal(result.amount, "100.0000");
-    assert.equal(result.previousValue, "300.0000");
-    assert.equal(result.newValue, "200.0000");
-
-    // Quantity unchanged; value = NRV; subledger agrees with the GL.
-    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(toUnits(onHand.quantity), toUnits("100"));
-    assert.equal(toUnits(onHand.value), toUnits("200"));
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("200"));
-    assert.equal(await glBalance(org.orgId, org.accounts.adjustment), toUnits("100"));
-
-    // The written-down cost is the basis future issues consume (IAS 2.34).
-    await issueInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "10",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.cogs,
-      date: org.date,
-    });
-    const after = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(toUnits(after.quantity), toUnits("90"));
-    assert.equal(toUnits(after.value), toUnits("180")); // 90 × 2.00
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("tax-framework edits do not reinterpret the reporting policy or prior NRV evidence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "us_gaap");
-    await setTaxFramework(org.orgId, "asc740");
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "10",
-      unitCost: "3",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    const writedown = await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "2",
-    });
-    assert.equal(writedown.framework, "us_gaap");
-
-    // Income-tax presentation can change independently. The authoritative
-    // reporting policy and the framework snapshot on committed evidence stay
-    // US GAAP, so a reversal remains prohibited after the tax edit.
-    await setTaxFramework(org.orgId, "ias12");
-    assert.equal(await orgReportingFramework(org.orgId), "us_gaap");
-    const evidence = await db.execute<{ framework: string }>(sql`
-      select framework from inventory_writedowns
-       where id = ${writedown.writedownId} and org_id = ${org.orgId}`, "objects");
-    assert.equal(evidence[0]?.framework, "us_gaap");
-    await assert.rejects(
-      reverseInventoryWritedown(org.orgId, null, {
+      const result = await writeDownInventoryToNrv(org.orgId, null, {
         itemId: org.items.fifo,
         stockLocationId: org.stockLocationId,
         subsidiaryId: org.subsidiaryId,
         date: org.date,
-        nrvPerUnit: "3",
-      }),
-      /prohibited under US GAAP/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        nrvPerUnit: "2",
+      });
+      assert.equal(result.amount, "100.0000");
+      assert.equal(result.previousValue, "300.0000");
+      assert.equal(result.newValue, "200.0000");
 
-test("NRV reversal: IFRS capped at the write-down, US GAAP refused, over-reversal impossible", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "ifrs");
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "100",
-      unitCost: "3",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "2",
-    });
+      // Quantity unchanged; value = NRV; subledger agrees with the GL.
+      const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(toUnits(onHand.quantity), toUnits("100"));
+      assert.equal(toUnits(onHand.value), toUnits("200"));
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("200"));
+      assert.equal(await glBalance(org.orgId, org.accounts.adjustment), toUnits("100"));
 
-    // NRV recovers to 3.50 — ABOVE original cost. The reversal must stop at
-    // cost (release only the 100.00 written down), never above it (IAS 2.33).
-    const reversal = await reverseInventoryWritedown(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "3.50",
-    });
-    assert.equal(reversal.amount, "100.0000");
-    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(toUnits(onHand.value), toUnits("300")); // back to cost, not 350
+      // The written-down cost is the basis future issues consume (IAS 2.34).
+      await issueInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.cogs,
+        date: org.date,
+      });
+      const after = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(toUnits(after.quantity), toUnits("90"));
+      assert.equal(toUnits(after.value), toUnits("180")); // 90 × 2.00
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    // Nothing left to reverse.
-    await assert.rejects(
-      reverseInventoryWritedown(org.orgId, null, {
+test(
+  "tax-framework edits do not reinterpret the reporting policy or prior NRV evidence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "us_gaap");
+      await setTaxFramework(org.orgId, "asc740");
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "3",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      const writedown = await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "2",
+      });
+      assert.equal(writedown.framework, "us_gaap");
+
+      // Income-tax presentation can change independently. The authoritative
+      // reporting policy and the framework snapshot on committed evidence stay
+      // US GAAP, so a reversal remains prohibited after the tax edit.
+      await setTaxFramework(org.orgId, "ias12");
+      assert.equal(await orgReportingFramework(org.orgId), "us_gaap");
+      const evidence = await db.execute<{ framework: string }>(
+        sql`
+      select framework from inventory_writedowns
+       where id = ${writedown.writedownId} and org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(evidence[0]?.framework, "us_gaap");
+      await assert.rejects(
+        reverseInventoryWritedown(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+          nrvPerUnit: "3",
+        }),
+        /prohibited under US GAAP/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "NRV reversal: IFRS capped at the write-down, US GAAP refused, over-reversal impossible",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "ifrs");
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "100",
+        unitCost: "3",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "2",
+      });
+
+      // NRV recovers to 3.50 — ABOVE original cost. The reversal must stop at
+      // cost (release only the 100.00 written down), never above it (IAS 2.33).
+      const reversal = await reverseInventoryWritedown(org.orgId, null, {
         itemId: org.items.fifo,
         stockLocationId: org.stockLocationId,
         subsidiaryId: org.subsidiaryId,
         date: org.date,
         nrvPerUnit: "3.50",
-      }),
-      /no unreversed write-down/,
-    );
+      });
+      assert.equal(reversal.amount, "100.0000");
+      const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(toUnits(onHand.value), toUnits("300")); // back to cost, not 350
 
-    // The same recovery under US GAAP is refused outright.
-    await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "2.50",
-    });
-    await setFramework(org.orgId, "us_gaap");
-    await assert.rejects(
-      reverseInventoryWritedown(org.orgId, null, {
+      // Nothing left to reverse.
+      await assert.rejects(
+        reverseInventoryWritedown(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+          nrvPerUnit: "3.50",
+        }),
+        /no unreversed write-down/,
+      );
+
+      // The same recovery under US GAAP is refused outright.
+      await writeDownInventoryToNrv(org.orgId, null, {
         itemId: org.items.fifo,
         stockLocationId: org.stockLocationId,
         subsidiaryId: org.subsidiaryId,
         date: org.date,
-        nrvPerUnit: "3.00",
-      }),
-      /prohibited under US GAAP/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        nrvPerUnit: "2.50",
+      });
+      await setFramework(org.orgId, "us_gaap");
+      await assert.rejects(
+        reverseInventoryWritedown(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+          nrvPerUnit: "3.00",
+        }),
+        /prohibited under US GAAP/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("NRV reversal only restores the written-down quantity that remains after issues", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "ifrs");
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "10",
-      unitCost: "10",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "5",
-    });
-
-    // The issue consumes nine units at their written-down cost. The evidence
-    // row still has a 50.00 open balance, but only 1/10 of that loss belongs to
-    // the one unit that remains in inventory.
-    await issueInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "9",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.cogs,
-      date: org.date,
-    });
-    const beforeReversal = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    const beforeValues = valuesBySource(beforeReversal);
-    const reversal = await reverseInventoryWritedown(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "100",
-    });
-
-    assert.equal(reversal.amount, "5.0000");
-    assert.equal(reversal.previousValue, "5.0000");
-    assert.equal(reversal.newValue, "10.0000");
-    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(toUnits(onHand.quantity), toUnits("1"));
-    assert.equal(toUnits(onHand.value), toUnits("10"));
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("10"));
-    const afterReversal = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    assertLayerOriginalCostCeilings(afterReversal);
-    const afterValues = valuesBySource(afterReversal);
-    const shareTotal = [...new Set([...beforeValues.keys(), ...afterValues.keys()])].reduce(
-      (total, sourceId) => total + (afterValues.get(sourceId) ?? 0n) - (beforeValues.get(sourceId) ?? 0n),
-      0n,
-    );
-    assert.equal(shareTotal, toUnits(reversal.amount));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("NRV reversal never spends an old layer's headroom on a fresh receipt", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "ifrs");
-    const original = await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "10",
-      unitCost: "10",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "5",
-    });
-    await issueInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "9",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.cogs,
-      date: org.date,
-    });
-    const fresh = await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "1",
-      unitCost: "20",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-
-    const before = valuesBySource(
-      await nrvLayerAudit(org.orgId, org.items.fifo, org.stockLocationId, org.subsidiaryId),
-    );
-    const reversal = await reverseInventoryWritedown(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "100",
-    });
-    assert.equal(reversal.amount, "5.0000");
-
-    const afterLayers = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    assertLayerOriginalCostCeilings(afterLayers);
-    const after = valuesBySource(afterLayers);
-    assert.equal(
-      (after.get(original.movementId) ?? 0n) - (before.get(original.movementId) ?? 0n),
-      toUnits("5"),
-    );
-    assert.equal(
-      (after.get(fresh.movementId) ?? 0n) - (before.get(fresh.movementId) ?? 0n),
-      0n,
-    );
-    const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
-      (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
-      0n,
-    );
-    assert.equal(shareTotal, toUnits(reversal.amount));
-    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(toUnits(onHand.value), toUnits("30"));
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("30"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("NRV reversal apportions heterogeneous FIFO headroom without crossing any source cost", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "ifrs");
-    const low = await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "5",
-      unitCost: "6",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    const high = await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "5",
-      unitCost: "7",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "5",
-    });
-    // Force the rounding fragment's UUID ahead of both original layers. FIFO
-    // must follow receipt/fragment chronology, not the random residual id.
-    const earlyFragmentId = `00000000-${randomUUID().slice(9)}`;
-    const fragment = await db.execute(sql`
-      update cost_layers set id = ${earlyFragmentId}
-       where org_id = ${org.orgId} and source_movement_id = ${low.movementId}
-         and original_quantity = '1.0000' and remaining_quantity = '1.0000'
-       returning id`, "objects");
-    assert.equal(fragment.length, 1, "the write-down produced the rounding fragment under test");
-    // FIFO consumes the adjacent-rate fragments of the earlier $6 receipt.
-    await issueInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "2",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.cogs,
-      date: org.date,
-    });
-
-    const before = valuesBySource(
-      await nrvLayerAudit(org.orgId, org.items.fifo, org.stockLocationId, org.subsidiaryId),
-    );
-    const reversal = await reverseInventoryWritedown(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "6.25",
-    });
-    assert.equal(reversal.amount, "9.2307");
-
-    const afterLayers = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    assertLayerOriginalCostCeilings(afterLayers);
-    const after = valuesBySource(afterLayers);
-    assert.ok((after.get(low.movementId) ?? 0n) >= (before.get(low.movementId) ?? 0n));
-    assert.ok((after.get(high.movementId) ?? 0n) >= (before.get(high.movementId) ?? 0n));
-    const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
-      (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
-      0n,
-    );
-    assert.equal(shareTotal, toUnits(reversal.amount));
-    const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(toUnits(onHand.value), toUnits("50"));
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("50"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("NRV reversal preserves exact fractional shares when a layer must split for precision", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "ifrs");
-    const first = await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "3",
-      unitCost: "1",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    const second = await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "7",
-      unitCost: "1.03",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "0.55",
-    });
-    const beforeLayers = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    const before = valuesBySource(beforeLayers);
-
-    const reversal = await reverseInventoryWritedown(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "0.65",
-    });
-    assert.equal(reversal.amount, "1.0000");
-
-    const afterLayers = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    assert.ok(afterLayers.length > beforeLayers.length, "fractional share should create a rounding layer");
-    assertLayerOriginalCostCeilings(afterLayers);
-    const after = valuesBySource(afterLayers);
-    const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
-      (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
-      0n,
-    );
-    assert.equal(shareTotal, toUnits(reversal.amount));
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("6.50"));
-    const firstShare = (after.get(first.movementId) ?? 0n) - (before.get(first.movementId) ?? 0n);
-    const secondShare = (after.get(second.movementId) ?? 0n) - (before.get(second.movementId) ?? 0n);
-    assert.equal(firstShare + secondShare, toUnits(reversal.amount));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("NRV reversal fails closed when a remaining layer has no source-cost provenance", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setFramework(org.orgId, "ifrs");
-    const receipt = await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "2",
-      unitCost: "10",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.ap,
-      date: org.date,
-    });
-    await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "5",
-    });
-    // The posted movement guard permits a transition to pending, which lets
-    // this live regression model a legacy row whose immutable source cost was
-    // never captured. Reversal must refuse before touching layers or GL.
-    await db.execute(sql`
-      update inventory_movements
-         set status = 'pending', unit_cost = null
-       where id = ${receipt.movementId} and org_id = ${org.orgId}`);
-    const before = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    await assert.rejects(
-      reverseInventoryWritedown(org.orgId, null, {
-        itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId,
-        subsidiaryId: org.subsidiaryId,
-        date: org.date,
-        nrvPerUnit: "10",
-      }),
-      /original-cost provenance is unavailable/,
-    );
-    const after = await nrvLayerAudit(
-      org.orgId,
-      org.items.fifo,
-      org.stockLocationId,
-      org.subsidiaryId,
-    );
-    assert.deepEqual(after, before);
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("10"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("NRV write-down distributes exactly across uneven layers — no lost cent", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // Three layers whose values do not divide evenly: 7 @ 1.13, 11 @ 2.07, 3 @ 5.55.
-    for (const [quantity, unitCost] of [
-      ["7", "1.13"],
-      ["11", "2.07"],
-      ["3", "5.55"],
-    ] as const) {
+test(
+  "NRV reversal only restores the written-down quantity that remains after issues",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "ifrs");
       await receiveInventory(org.orgId, null, {
         itemId: org.items.fifo,
         stockLocationId: org.stockLocationId,
-        quantity,
-        unitCost,
+        quantity: "10",
+        unitCost: "10",
         subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.ap,
         date: org.date,
       });
+      await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "5",
+      });
+
+      // The issue consumes nine units at their written-down cost. The evidence
+      // row still has a 50.00 open balance, but only 1/10 of that loss belongs to
+      // the one unit that remains in inventory.
+      await issueInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "9",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.cogs,
+        date: org.date,
+      });
+      const beforeReversal = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      const beforeValues = valuesBySource(beforeReversal);
+      const reversal = await reverseInventoryWritedown(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "100",
+      });
+
+      assert.equal(reversal.amount, "5.0000");
+      assert.equal(reversal.previousValue, "5.0000");
+      assert.equal(reversal.newValue, "10.0000");
+      const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(toUnits(onHand.quantity), toUnits("1"));
+      assert.equal(toUnits(onHand.value), toUnits("10"));
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("10"));
+      const afterReversal = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      assertLayerOriginalCostCeilings(afterReversal);
+      const afterValues = valuesBySource(afterReversal);
+      const shareTotal = [...new Set([...beforeValues.keys(), ...afterValues.keys()])].reduce(
+        (total, sourceId) =>
+          total + (afterValues.get(sourceId) ?? 0n) - (beforeValues.get(sourceId) ?? 0n),
+        0n,
+      );
+      assert.equal(shareTotal, toUnits(reversal.amount));
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    const before = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    // 7.91 + 22.77 + 16.65 = 47.33 over 21 units.
-    assert.equal(toUnits(before.value), toUnits("47.33"));
+  },
+);
 
-    // NRV 1.37/unit → target 21 × 1.37 = 28.77; write-down 18.56.
-    const result = await writeDownInventoryToNrv(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
-      nrvPerUnit: "1.37",
-    });
-    assert.equal(result.amount, "18.5600");
+test(
+  "NRV reversal never spends an old layer's headroom on a fresh receipt",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "ifrs");
+      const original = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "10",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "5",
+      });
+      await issueInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "9",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.cogs,
+        date: org.date,
+      });
+      const fresh = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "1",
+        unitCost: "20",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
 
-    const after = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(toUnits(after.value), toUnits("28.77")); // exact to the hundredth of a cent
-    assert.equal(toUnits(after.quantity), toUnits("21"));
-    // Subledger and GL agree exactly after the layer arithmetic.
-    assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("28.77"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const before = valuesBySource(
+        await nrvLayerAudit(org.orgId, org.items.fifo, org.stockLocationId, org.subsidiaryId),
+      );
+      const reversal = await reverseInventoryWritedown(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "100",
+      });
+      assert.equal(reversal.amount, "5.0000");
+
+      const afterLayers = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      assertLayerOriginalCostCeilings(afterLayers);
+      const after = valuesBySource(afterLayers);
+      assert.equal(
+        (after.get(original.movementId) ?? 0n) - (before.get(original.movementId) ?? 0n),
+        toUnits("5"),
+      );
+      assert.equal((after.get(fresh.movementId) ?? 0n) - (before.get(fresh.movementId) ?? 0n), 0n);
+      const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
+        (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
+        0n,
+      );
+      assert.equal(shareTotal, toUnits(reversal.amount));
+      const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(toUnits(onHand.value), toUnits("30"));
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("30"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "NRV reversal apportions heterogeneous FIFO headroom without crossing any source cost",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "ifrs");
+      const low = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "5",
+        unitCost: "6",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      const high = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "5",
+        unitCost: "7",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "5",
+      });
+      // Force the rounding fragment's UUID ahead of both original layers. FIFO
+      // must follow receipt/fragment chronology, not the random residual id.
+      const earlyFragmentId = `00000000-${randomUUID().slice(9)}`;
+      const fragment = await db.execute(
+        sql`
+      update cost_layers set id = ${earlyFragmentId}
+       where org_id = ${org.orgId} and source_movement_id = ${low.movementId}
+         and original_quantity = '1.0000' and remaining_quantity = '1.0000'
+       returning id`,
+        "objects",
+      );
+      assert.equal(fragment.length, 1, "the write-down produced the rounding fragment under test");
+      // FIFO consumes the adjacent-rate fragments of the earlier $6 receipt.
+      await issueInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "2",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.cogs,
+        date: org.date,
+      });
+
+      const before = valuesBySource(
+        await nrvLayerAudit(org.orgId, org.items.fifo, org.stockLocationId, org.subsidiaryId),
+      );
+      const reversal = await reverseInventoryWritedown(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "6.25",
+      });
+      assert.equal(reversal.amount, "9.2307");
+
+      const afterLayers = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      assertLayerOriginalCostCeilings(afterLayers);
+      const after = valuesBySource(afterLayers);
+      assert.ok((after.get(low.movementId) ?? 0n) >= (before.get(low.movementId) ?? 0n));
+      assert.ok((after.get(high.movementId) ?? 0n) >= (before.get(high.movementId) ?? 0n));
+      const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
+        (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
+        0n,
+      );
+      assert.equal(shareTotal, toUnits(reversal.amount));
+      const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(toUnits(onHand.value), toUnits("50"));
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("50"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "NRV reversal preserves exact fractional shares when a layer must split for precision",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "ifrs");
+      const first = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "3",
+        unitCost: "1",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      const second = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "7",
+        unitCost: "1.03",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "0.55",
+      });
+      const beforeLayers = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      const before = valuesBySource(beforeLayers);
+
+      const reversal = await reverseInventoryWritedown(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "0.65",
+      });
+      assert.equal(reversal.amount, "1.0000");
+
+      const afterLayers = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      assert.ok(
+        afterLayers.length > beforeLayers.length,
+        "fractional share should create a rounding layer",
+      );
+      assertLayerOriginalCostCeilings(afterLayers);
+      const after = valuesBySource(afterLayers);
+      const shareTotal = [...new Set([...before.keys(), ...after.keys()])].reduce(
+        (total, sourceId) => total + (after.get(sourceId) ?? 0n) - (before.get(sourceId) ?? 0n),
+        0n,
+      );
+      assert.equal(shareTotal, toUnits(reversal.amount));
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("6.50"));
+      const firstShare = (after.get(first.movementId) ?? 0n) - (before.get(first.movementId) ?? 0n);
+      const secondShare =
+        (after.get(second.movementId) ?? 0n) - (before.get(second.movementId) ?? 0n);
+      assert.equal(firstShare + secondShare, toUnits(reversal.amount));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "NRV reversal fails closed when a remaining layer has no source-cost provenance",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setFramework(org.orgId, "ifrs");
+      const receipt = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "2",
+        unitCost: "10",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.ap,
+        date: org.date,
+      });
+      await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "5",
+      });
+      // The posted movement guard permits a transition to pending, which lets
+      // this live regression model a legacy row whose immutable source cost was
+      // never captured. Reversal must refuse before touching layers or GL.
+      await db.execute(sql`
+      update inventory_movements
+         set status = 'pending', unit_cost = null
+       where id = ${receipt.movementId} and org_id = ${org.orgId}`);
+      const before = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      await assert.rejects(
+        reverseInventoryWritedown(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+          nrvPerUnit: "10",
+        }),
+        /original-cost provenance is unavailable/,
+      );
+      const after = await nrvLayerAudit(
+        org.orgId,
+        org.items.fifo,
+        org.stockLocationId,
+        org.subsidiaryId,
+      );
+      assert.deepEqual(after, before);
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("10"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "NRV write-down distributes exactly across uneven layers — no lost cent",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // Three layers whose values do not divide evenly: 7 @ 1.13, 11 @ 2.07, 3 @ 5.55.
+      for (const [quantity, unitCost] of [
+        ["7", "1.13"],
+        ["11", "2.07"],
+        ["3", "5.55"],
+      ] as const) {
+        await receiveInventory(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantity,
+          unitCost,
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.ap,
+          date: org.date,
+        });
+      }
+      const before = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      // 7.91 + 22.77 + 16.65 = 47.33 over 21 units.
+      assert.equal(toUnits(before.value), toUnits("47.33"));
+
+      // NRV 1.37/unit → target 21 × 1.37 = 28.77; write-down 18.56.
+      const result = await writeDownInventoryToNrv(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        nrvPerUnit: "1.37",
+      });
+      assert.equal(result.amount, "18.5600");
+
+      const after = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(toUnits(after.value), toUnits("28.77")); // exact to the hundredth of a cent
+      assert.equal(toUnits(after.quantity), toUnits("21"));
+      // Subledger and GL agree exactly after the layer arithmetic.
+      assert.equal(await glBalance(org.orgId, org.accounts.invAsset), toUnits("28.77"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Mixed-owner revaluation: legal-entity scoping
@@ -706,12 +789,15 @@ async function entityGlBalance(
   accountId: string,
   subsidiaryId: string,
 ): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(l.amount), 0)::text as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${accountId}
-       and e.subsidiary_id = ${subsidiaryId}`, "objects"));
+       and e.subsidiary_id = ${subsidiaryId}`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
@@ -722,24 +808,30 @@ async function entityLayerValue(
   stockLocationId: string,
   subsidiaryId: string,
 ): Promise<bigint> {
-  const r = (await db.execute<{ v: string }>(sql`
+  const r = await db.execute<{ v: string }>(
+    sql`
     select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as v
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
        and stock_location_id = ${stockLocationId}
-       and subsidiary_id = ${subsidiaryId}`, "objects"));
+       and subsidiary_id = ${subsidiaryId}`,
+    "objects",
+  );
   return toUnits(r[0]!.v);
 }
 
 /** Every posted entry must balance WITHIN each legal entity. */
 async function assertEntriesBalancedPerEntity(orgId: string): Promise<void> {
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     select e.subsidiary_id, l.entry_id, sum(l.amount) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId}
      group by e.subsidiary_id, l.entry_id
-    having sum(l.amount) <> 0`, "objects"));
+    having sum(l.amount) <> 0`,
+    "objects",
+  );
   assert.equal(r.length, 0, "an entry is unbalanced inside a subsidiary");
 }
 
@@ -752,12 +844,22 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
 
     // Both entities hold the SAME item in the SAME shared warehouse.
     await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "3",
-      subsidiaryId: subA, offsetAccountId: org.accounts.clearing, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "3",
+      subsidiaryId: subA,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
     });
     await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "20", unitCost: "5",
-      subsidiaryId: subB, offsetAccountId: org.accounts.clearing, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "20",
+      unitCost: "5",
+      subsidiaryId: subB,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
     });
 
     // NRV 2.00/unit requested by A: only A (10 @ 3.00) writes down 10.00.
@@ -787,13 +889,19 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
     );
 
     // The posting journalized under the requesting owner.
-    const je = (await db.execute<{ subsidiary_id: string }>(sql`
+    const je = await db.execute<{ subsidiary_id: string }>(
+      sql`
       select subsidiary_id::text as "subsidiary_id"
-        from journal_entries where id = ${result.entities[0]!.entryId} and org_id = ${org.orgId}`, "objects"));
+        from journal_entries where id = ${result.entities[0]!.entryId} and org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(je[0]!.subsidiary_id, subA);
 
     // The unrequested owner's layers and GL are exactly as received.
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB), toUnits("100"));
+    assert.equal(
+      await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB),
+      toUnits("100"),
+    );
     assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subB), toUnits("100"));
 
     // B's own request then remeasures B alone: 20 @ 5.00 down 60.00.
@@ -809,12 +917,24 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
     assert.equal(resultB.entities[0]!.subsidiaryId, subB);
 
     // Write-down evidence rows are per requesting owner.
-    const evidence = (await db.execute<{ subsidiary_id: string; amount: string; reversed_amount: string }>(sql`
+    const evidence = await db.execute<{
+      subsidiary_id: string;
+      amount: string;
+      reversed_amount: string;
+    }>(
+      sql`
       select subsidiary_id::text as "subsidiary_id", amount::text as amount, reversed_amount::text as "reversed_amount"
         from inventory_writedowns
-       where org_id = ${org.orgId} and kind = 'writedown'`, "objects"));
+       where org_id = ${org.orgId} and kind = 'writedown'`,
+      "objects",
+    );
     assert.deepEqual(
-      new Map(evidence.map((r) => [r.subsidiary_id, { amount: r.amount, reversed_amount: r.reversed_amount }])),
+      new Map(
+        evidence.map((r) => [
+          r.subsidiary_id,
+          { amount: r.amount, reversed_amount: r.reversed_amount },
+        ]),
+      ),
       new Map([
         [subA, { amount: "10.0000", reversed_amount: "0.0000" }],
         [subB, { amount: "60.0000", reversed_amount: "0.0000" }],
@@ -824,8 +944,14 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
     // Per-entity GL exactly equals per-entity layers after the revaluation.
     assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subA), toUnits("20"));
     assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subB), toUnits("40"));
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA), toUnits("20"));
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB), toUnits("40"));
+    assert.equal(
+      await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA),
+      toUnits("20"),
+    );
+    assert.equal(
+      await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB),
+      toUnits("40"),
+    );
     assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subA), toUnits("10"));
     assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subB), toUnits("60"));
 
@@ -839,16 +965,28 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
       nrvPerUnit: "3",
     });
     assert.equal(reversalB.amount, "20.0000");
-    const reversalEntry = (await db.execute<{ subsidiary_id: string }>(sql`
+    const reversalEntry = await db.execute<{ subsidiary_id: string }>(
+      sql`
       select subsidiary_id::text as "subsidiary_id"
-        from journal_entries where id = ${reversalB.entryId} and org_id = ${org.orgId}`, "objects"));
+        from journal_entries where id = ${reversalB.entryId} and org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(reversalEntry[0]!.subsidiary_id, subB);
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA), toUnits("20"));
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB), toUnits("60"));
-    const aStillOpen = (await db.execute<{ reversed_amount: string }>(sql`
+    assert.equal(
+      await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA),
+      toUnits("20"),
+    );
+    assert.equal(
+      await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB),
+      toUnits("60"),
+    );
+    const aStillOpen = await db.execute<{ reversed_amount: string }>(
+      sql`
       select reversed_amount::text as "reversed_amount"
         from inventory_writedowns
-       where org_id = ${org.orgId} and subsidiary_id = ${subA} and kind = 'writedown'`, "objects"));
+       where org_id = ${org.orgId} and subsidiary_id = ${subA} and kind = 'writedown'`,
+      "objects",
+    );
     assert.equal(aStillOpen[0]!.reversed_amount, "0.0000");
 
     // Then A recovers — capped at its own write-down, back to cost exactly.
@@ -860,7 +998,10 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
       nrvPerUnit: "3",
     });
     assert.equal(reversalA.amount, "10.0000");
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA), toUnits("30"));
+    assert.equal(
+      await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA),
+      toUnits("30"),
+    );
     assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subA), toUnits("30"));
     await assertEntriesBalancedPerEntity(org.orgId);
   } finally {
@@ -868,28 +1009,44 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
   }
 });
 
-test("standard-cost revaluation posts one balanced entry per owning legal entity", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const subA = org.subsidiaryId;
-    const subB = await createChildSubsidiary(org);
+test(
+  "standard-cost revaluation posts one balanced entry per owning legal entity",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const subA = org.subsidiaryId;
+      const subB = await createChildSubsidiary(org);
 
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "4", unitCost: "1",
-      subsidiaryId: subA, offsetAccountId: org.accounts.clearing, date: org.date,
-    });
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
-      subsidiaryId: subB, offsetAccountId: org.accounts.clearing, date: org.date,
-    });
-    await db.execute(sql`
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "4",
+        unitCost: "1",
+        subsidiaryId: subA,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "2",
+        subsidiaryId: subB,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      await db.execute(sql`
       update item_inventory_profiles set standard_cost = '3'
        where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
 
-    // The engine dates the revaluation itself; open a period covering today.
-    const calendar = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"));
-    await db.execute(sql`
+      // The engine dates the revaluation itself; open a period covering today.
+      const calendar = await db.execute<{ id: string }>(
+        sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`,
+        "objects",
+      );
+      await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       select ${randomUUID()}, ${org.orgId},
@@ -901,95 +1058,142 @@ test("standard-cost revaluation posts one balanced entry per owning legal entity
              false, ${calendar[0]!.id}
       on conflict do nothing`);
 
-    // Standard cost 3.00: A revalues +8.00 (4 units), B +10.00 (10 units).
-    const entryIds = await db.transaction((tx) =>
-      revalueOpenLayersToStandardCost(tx, org.orgId, null, org.items.fifo, {
-        standardCost: "3",
-        assetAccountId: org.accounts.invAsset,
-        varianceAccountId: org.accounts.adjustment,
-      }));
-    assert.ok(Array.isArray(entryIds), "revaluation must report one entry per owning entity");
-    assert.equal(entryIds.length, 2);
-    assert.notEqual(entryIds[0], entryIds[1]);
+      // Standard cost 3.00: A revalues +8.00 (4 units), B +10.00 (10 units).
+      const entryIds = await db.transaction((tx) =>
+        revalueOpenLayersToStandardCost(tx, org.orgId, null, org.items.fifo, {
+          standardCost: "3",
+          assetAccountId: org.accounts.invAsset,
+          varianceAccountId: org.accounts.adjustment,
+        }),
+      );
+      assert.ok(Array.isArray(entryIds), "revaluation must report one entry per owning entity");
+      assert.equal(entryIds.length, 2);
+      assert.notEqual(entryIds[0], entryIds[1]);
 
-    const posted = (await db.execute<{ subsidiary_id: string; delta: string }>(sql`
+      const posted = await db.execute<{ subsidiary_id: string; delta: string }>(
+        sql`
       select e.subsidiary_id::text as "subsidiary_id",
              sum(case when l.account_id = ${org.accounts.invAsset} then l.amount else 0 end)::text as delta
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.id in (${entryIds[0]}, ${entryIds[1]}) and e.org_id = ${org.orgId}
-       group by e.subsidiary_id`, "objects"));
-    assert.deepEqual(
-      new Map(posted.map((r) => [r.subsidiary_id, r.delta])),
-      new Map([
-        [subA, "8.0000"],
-        [subB, "10.0000"],
-      ]),
-    );
-
-    // Per-entity GL exactly equals per-entity layers after the revaluation.
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA), toUnits("12"));
-    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB), toUnits("30"));
-    assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subA), toUnits("12"));
-    assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subB), toUnits("30"));
-    assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subA), toUnits("-8"));
-    assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subB), toUnits("-10"));
-    await assertEntriesBalancedPerEntity(org.orgId);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("NRV refuses negative and non-decimal per-unit rates with the domain error", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const position = {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId, date: org.date,
-    };
-    await receiveInventory(org.orgId, null, {
-      ...position, quantity: "2", unitCost: "100", offsetAccountId: org.accounts.ap,
-    });
-    const before = await getOnHand(org.orgId, position.itemId, position.stockLocationId);
-    // A negative rate would price the target below zero; garbage would
-    // previously escape as a bare money-parser Error that domain catchers
-    // miss. Both must fail as InventoryNrvError, before any lock or write.
-    for (const nrvPerUnit of ["-5", "-0.0001", "abc", "", "1.23456"]) {
-      const error = await writeDownInventoryToNrv(org.orgId, null, { ...position, nrvPerUnit })
-        .then(() => null, (e: unknown) => e);
-      assert.ok(
-        error instanceof InventoryNrvError,
-        `${JSON.stringify(nrvPerUnit)} must fail with InventoryNrvError, got ${String(error)}`,
+       group by e.subsidiary_id`,
+        "objects",
       );
+      assert.deepEqual(
+        new Map(posted.map((r) => [r.subsidiary_id, r.delta])),
+        new Map([
+          [subA, "8.0000"],
+          [subB, "10.0000"],
+        ]),
+      );
+
+      // Per-entity GL exactly equals per-entity layers after the revaluation.
+      assert.equal(
+        await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA),
+        toUnits("12"),
+      );
+      assert.equal(
+        await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB),
+        toUnits("30"),
+      );
+      assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subA), toUnits("12"));
+      assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subB), toUnits("30"));
+      assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subA), toUnits("-8"));
+      assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subB), toUnits("-10"));
+      await assertEntriesBalancedPerEntity(org.orgId);
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    const negative = await writeDownInventoryToNrv(org.orgId, null, { ...position, nrvPerUnit: "-5" })
-      .then(() => null, (e: unknown) => e);
-    assert.match(String((negative as Error)?.message ?? negative), /cannot be negative/);
-    const reversalError = await reverseInventoryWritedown(org.orgId, null, { ...position, nrvPerUnit: "abc" })
-      .then(() => null, (e: unknown) => e);
-    assert.ok(
-      reversalError instanceof InventoryNrvError,
-      `reversal garbage must fail with InventoryNrvError, got ${String(reversalError)}`,
-    );
-    // Refused inputs write nothing: layers and evidence are untouched.
-    assert.deepEqual(await getOnHand(org.orgId, position.itemId, position.stockLocationId), before);
-    const writedowns = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`, "objects"));
-    assert.equal(writedowns[0]!.n, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
+
+test(
+  "NRV refuses negative and non-decimal per-unit rates with the domain error",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const position = {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      };
+      await receiveInventory(org.orgId, null, {
+        ...position,
+        quantity: "2",
+        unitCost: "100",
+        offsetAccountId: org.accounts.ap,
+      });
+      const before = await getOnHand(org.orgId, position.itemId, position.stockLocationId);
+      // A negative rate would price the target below zero; garbage would
+      // previously escape as a bare money-parser Error that domain catchers
+      // miss. Both must fail as InventoryNrvError, before any lock or write.
+      for (const nrvPerUnit of ["-5", "-0.0001", "abc", "", "1.23456"]) {
+        const error = await writeDownInventoryToNrv(org.orgId, null, {
+          ...position,
+          nrvPerUnit,
+        }).then(
+          () => null,
+          (e: unknown) => e,
+        );
+        assert.ok(
+          error instanceof InventoryNrvError,
+          `${JSON.stringify(nrvPerUnit)} must fail with InventoryNrvError, got ${String(error)}`,
+        );
+      }
+      const negative = await writeDownInventoryToNrv(org.orgId, null, {
+        ...position,
+        nrvPerUnit: "-5",
+      }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      assert.match(String((negative as Error)?.message ?? negative), /cannot be negative/);
+      const reversalError = await reverseInventoryWritedown(org.orgId, null, {
+        ...position,
+        nrvPerUnit: "abc",
+      }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      assert.ok(
+        reversalError instanceof InventoryNrvError,
+        `reversal garbage must fail with InventoryNrvError, got ${String(reversalError)}`,
+      );
+      // Refused inputs write nothing: layers and evidence are untouched.
+      assert.deepEqual(
+        await getOnHand(org.orgId, position.itemId, position.stockLocationId),
+        before,
+      );
+      const writedowns = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(writedowns[0]!.n, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("an NRV write-down for an unknown entity is refused by name", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const position = {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId, date: org.date, nrvPerUnit: "50",
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      nrvPerUnit: "50",
     };
     await receiveInventory(org.orgId, null, {
-      ...position, quantity: "2", unitCost: "100", offsetAccountId: org.accounts.ap,
+      ...position,
+      quantity: "2",
+      unitCost: "100",
+      offsetAccountId: org.accounts.ap,
     });
     const before = await getOnHand(org.orgId, position.itemId, position.stockLocationId);
     // A mistyped entity must be named as missing — never silently accepted
@@ -999,8 +1203,11 @@ test("an NRV write-down for an unknown entity is refused by name", { skip: !DB }
       /subsidiary not found/,
     );
     assert.deepEqual(await getOnHand(org.orgId, position.itemId, position.stockLocationId), before);
-    const writedowns = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`, "objects"));
+    const writedowns = await db.execute<{ n: number }>(
+      sql`
+      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(writedowns[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);

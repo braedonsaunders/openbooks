@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import type { SessionUser } from "./auth";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
 // Database partition: every case here drives the real route against
 // PostgreSQL (scratch orgs, generated documents, audit rows). The unit
@@ -26,7 +26,10 @@ stubModules({ intl: true, navigation: false, authz: false, features: false });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
-      return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__recurringDeleteAuditUser.user}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__recurringDeleteAuditUser.user}",
+      };
     }
     return next(specifier, context);
   },
@@ -34,7 +37,8 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { withSimClock } = await import("@openbooks/engine/testing/platform/clock");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const detail = await import("../app/api/recurring/[id]/route");
 
 const request = (method: string) => new Request("http://audit.local/api/recurring/x", { method });
@@ -49,12 +53,13 @@ type Seed = {
 };
 
 async function seedSchedule(withOccurrence: boolean): Promise<Seed> {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   const seed = await withBypassContext(async () => {
     const actor = await createScratchUser(org.orgId, "Recurring manager", "recurring_manager");
     await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
       where org_id=${org.orgId} and key='recurring_manager'`);
-    const template = randomUUID(), schedule = randomUUID();
+    const template = randomUUID(),
+      schedule = randomUUID();
     await db.execute(sql`insert into documents (id,org_id,kind,status,document_number,document_date,currency,party_id,subsidiary_id,created_by)
       values (${template},${org.orgId},'customer_invoice','draft',${`RECUR-${schedule.slice(0, 8)}`},${org.date},'CAD',${org.customerId},${org.subsidiaryId},${actor})`);
     await db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount)
@@ -70,74 +75,146 @@ async function seedSchedule(withOccurrence: boolean): Promise<Seed> {
     }
     return { actor, template, schedule };
   });
-  state.user = { id: seed.actor, orgId: org.orgId, name: "Recurring manager", email: "recurring@scratch.test", roles: [],
-    isSuperAdmin: false, envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: seed.actor };
-  return { orgId: org.orgId, actor: seed.actor, template: seed.template, schedule: seed.schedule, date: org.date };
+  state.user = {
+    id: seed.actor,
+    orgId: org.orgId,
+    name: "Recurring manager",
+    email: "recurring@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: org.orgId,
+    homeOrgId: org.orgId,
+    homeUserId: seed.actor,
+  };
+  return {
+    orgId: org.orgId,
+    actor: seed.actor,
+    template: seed.template,
+    schedule: seed.schedule,
+    date: org.date,
+  };
 }
 
-async function auditRows(orgId: string, rowId: string): Promise<Array<{ action: string; changes: unknown }>> {
-  return await db.execute<{ action: string; changes: unknown }>(sql`select action, changes from audit_log
-    where org_id=${orgId} and table_name='recurring_schedules' and row_id=${rowId} order by at`, "objects");
+async function auditRows(
+  orgId: string,
+  rowId: string,
+): Promise<Array<{ action: string; changes: unknown }>> {
+  return await db.execute<{ action: string; changes: unknown }>(
+    sql`select action, changes from audit_log
+    where org_id=${orgId} and table_name='recurring_schedules' and row_id=${rowId} order by at`,
+    "objects",
+  );
 }
 
 test("deleting a missing schedule reports not found and writes no audit", async () => {
   const { orgId } = await seedSchedule(false);
   try {
     const missing = randomUUID();
-    const response = await withOrgContext(orgId, () => detail.DELETE(request("DELETE"), paramsFor(missing)));
+    const response = await withOrgContext(orgId, () =>
+      detail.DELETE(request("DELETE"), paramsFor(missing)),
+    );
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "not_found" });
-    assert.deepEqual(await auditRows(orgId, missing), [], "a refused delete must not invent audit history");
-  } finally { state.user = null; await dropScratchOrg(orgId); }
+    assert.deepEqual(
+      await auditRows(orgId, missing),
+      [],
+      "a refused delete must not invent audit history",
+    );
+  } finally {
+    state.user = null;
+    await dropScratchOrg(orgId);
+  }
 });
 
 test("deleting a schedule with generated documents refuses and deletes nothing", async () => {
   const { orgId, schedule, date } = await seedSchedule(true);
   try {
-    const response = await withOrgContext(orgId, () => withSimClock(`${date}T00:00:00Z`, () =>
-      detail.DELETE(request("DELETE"), paramsFor(schedule))));
+    const response = await withOrgContext(orgId, () =>
+      withSimClock(`${date}T00:00:00Z`, () =>
+        detail.DELETE(request("DELETE"), paramsFor(schedule)),
+      ),
+    );
     assert.equal(response.status, 409);
     const body = (await response.json()) as { error: string; code: string };
     assert.equal(body.code, "generated_documents_exist");
     assert.match(body.error, /generated documents exist/, "the refusal names what blocks it");
-    const remaining = (await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules
-      where org_id=${orgId} and id=${schedule}`, "objects"))[0]!.n;
+    const remaining = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from recurring_schedules
+      where org_id=${orgId} and id=${schedule}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(remaining, 1, "the refused delete removes nothing");
-    assert.deepEqual((await auditRows(orgId, schedule)).map((row) => row.action), [],
-      "the refused delete audits nothing");
-  } finally { state.user = null; await dropScratchOrg(orgId); }
+    assert.deepEqual(
+      (await auditRows(orgId, schedule)).map((row) => row.action),
+      [],
+      "the refused delete audits nothing",
+    );
+  } finally {
+    state.user = null;
+    await dropScratchOrg(orgId);
+  }
 });
 
 test("deleting a clean schedule removes it and audits the before state", async () => {
   const { orgId, schedule, date } = await seedSchedule(false);
   try {
-    const response = await withOrgContext(orgId, () => withSimClock(`${date}T00:00:00Z`, () =>
-      detail.DELETE(request("DELETE"), paramsFor(schedule))));
+    const response = await withOrgContext(orgId, () =>
+      withSimClock(`${date}T00:00:00Z`, () =>
+        detail.DELETE(request("DELETE"), paramsFor(schedule)),
+      ),
+    );
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ok: true });
-    const remaining = (await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules
-      where org_id=${orgId} and id=${schedule}`, "objects"))[0]!.n;
+    const remaining = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from recurring_schedules
+      where org_id=${orgId} and id=${schedule}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(remaining, 0, "the schedule row is gone");
     const audits = await auditRows(orgId, schedule);
     assert.equal(audits.length, 1, "exactly one audit row explains the disappearance");
     assert.equal(audits[0]!.action, "delete");
     const changes = audits[0]!.changes as { before: { auto_post: boolean }; after: null };
     assert.equal(changes.after, null);
-    assert.equal(changes.before.auto_post, false, "the audit snapshots the state this transaction deleted");
-  } finally { state.user = null; await dropScratchOrg(orgId); }
+    assert.equal(
+      changes.before.auto_post,
+      false,
+      "the audit snapshots the state this transaction deleted",
+    );
+  } finally {
+    state.user = null;
+    await dropScratchOrg(orgId);
+  }
 });
 
 test("run now attributes the generated document to the authenticated caller", async () => {
   const { orgId, actor, template, schedule, date } = await seedSchedule(false);
   try {
-    const response = await withOrgContext(orgId, () => withSimClock(`${date}T00:00:00Z`, () =>
-      detail.POST(request("POST"), paramsFor(schedule))));
+    const response = await withOrgContext(orgId, () =>
+      withSimClock(`${date}T00:00:00Z`, () => detail.POST(request("POST"), paramsFor(schedule))),
+    );
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     const generated = (await response.json()) as { documentId: string };
-    const row = (await db.execute<{ createdBy: string }>(sql`select created_by as "createdBy" from documents
-      where org_id=${orgId} and id=${generated.documentId}`, "objects"))[0]!;
-    assert.equal(row.createdBy, actor, "the run records who ran it, and the template stays untouched");
+    const row = (
+      await db.execute<{ createdBy: string }>(
+        sql`select created_by as "createdBy" from documents
+      where org_id=${orgId} and id=${generated.documentId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(
+      row.createdBy,
+      actor,
+      "the run records who ran it, and the template stays untouched",
+    );
     assert.notEqual(generated.documentId, template);
-  } finally { state.user = null; await dropScratchOrg(orgId); }
+  } finally {
+    state.user = null;
+    await dropScratchOrg(orgId);
+  }
 });
-

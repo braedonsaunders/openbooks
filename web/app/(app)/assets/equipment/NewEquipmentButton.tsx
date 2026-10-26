@@ -1,6 +1,6 @@
-'use client'
-import { useTranslations } from 'next-intl'
-import { UnsavedCreateButton } from '@/components/unsaved-create-button'
+"use client";
+import { useTranslations } from "next-intl";
+import { UnsavedCreateButton } from "@/components/unsaved-create-button";
 
 /**
  * Unsaved create (exemplar: NewAccountButton): opening New allocates no
@@ -11,16 +11,16 @@ import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 export function NewEquipmentButton({
   currentParams,
 }: {
-  currentParams?: Record<string, string | string[] | undefined>
+  currentParams?: Record<string, string | string[] | undefined>;
 }) {
-  const t = useTranslations('assets.equipment')
+  const t = useTranslations("assets.equipment");
   return (
     <UnsavedCreateButton
       base="/assets/equipment"
       param="equipmentNew"
-      clear={['equipment']}
-      label={t('new')}
+      clear={["equipment"]}
+      label={t("new")}
       currentParams={currentParams ?? {}}
     />
-  )
+  );
 }

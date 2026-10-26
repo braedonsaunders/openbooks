@@ -4,20 +4,72 @@ const DK_MOMS_2026: TaxReturnPack = {
   code: "DK_MOMS",
   name: "Momsangivelse — momsindberetning 2026",
   country: "DK",
-  jurisdiction: { code: "DK", name: "Denmark — moms territory", country: "DK", level: "country", taxType: "vat" },
+  jurisdiction: {
+    code: "DK",
+    name: "Denmark — moms territory",
+    country: "DK",
+    level: "country",
+    taxType: "vat",
+  },
   defaultFrequency: "quarterly",
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://skat.dk/en-us/businesses/vat/vat-what-to-do/how-to-file-your-vat-return",
-  watermark: "Working copy — review EU-acquisition and reverse-charge treatment, then file through TastSelv Erhverv",
+  watermark:
+    "Working copy — review EU-acquisition and reverse-charge treatment, then file through TastSelv Erhverv",
   boxes: [
-    { lineCode: "SALGSMOMS", label: "Salgsmoms — output VAT (udgående moms) on domestic sales", sign: -1, sequence: 10, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "EU_VAREKOEB_MOMS", label: "Moms af EU-varekøb — VAT on acquisitions of goods from other EU countries", sign: -1, sequence: 20 },
-    { lineCode: "UDLAND_YDELSER_MOMS", label: "Moms af ydelser købt i udlandet med omvendt betalingspligt — VAT on services purchased abroad under reverse charge", sign: -1, sequence: 30 },
-    { lineCode: "KOEBSMOMS", label: "Købsmoms — deductible input VAT (indgående moms) on purchases", sign: 1, sequence: 40, basis: "tax_paid", glMap: "purchases" },
-    { lineCode: "MOMSRESULTAT", label: "Moms til betaling eller tilgodehavende — VAT payable or refundable", sign: 1, sequence: 50, formula: "SALGSMOMS+EU_VAREKOEB_MOMS+UDLAND_YDELSER_MOMS-KOEBSMOMS" },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 60, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 70, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "SALGSMOMS",
+      label: "Salgsmoms — output VAT (udgående moms) on domestic sales",
+      sign: -1,
+      sequence: 10,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "EU_VAREKOEB_MOMS",
+      label: "Moms af EU-varekøb — VAT on acquisitions of goods from other EU countries",
+      sign: -1,
+      sequence: 20,
+    },
+    {
+      lineCode: "UDLAND_YDELSER_MOMS",
+      label:
+        "Moms af ydelser købt i udlandet med omvendt betalingspligt — VAT on services purchased abroad under reverse charge",
+      sign: -1,
+      sequence: 30,
+    },
+    {
+      lineCode: "KOEBSMOMS",
+      label: "Købsmoms — deductible input VAT (indgående moms) on purchases",
+      sign: 1,
+      sequence: 40,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
+    {
+      lineCode: "MOMSRESULTAT",
+      label: "Moms til betaling eller tilgodehavende — VAT payable or refundable",
+      sign: 1,
+      sequence: 50,
+      formula: "SALGSMOMS+EU_VAREKOEB_MOMS+UDLAND_YDELSER_MOMS-KOEBSMOMS",
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all configured rates",
+      sign: -1,
+      sequence: 60,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all configured rates",
+      sign: 1,
+      sequence: 70,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -75,31 +127,36 @@ export const DENMARK_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "skat_dk_vat_rate_25",
-      title: "skat.dk — Get started on VAT: the Danish VAT rate is generally 25% (current applicability corroboration for the tail)",
+      title:
+        "skat.dk — Get started on VAT: the Danish VAT rate is generally 25% (current applicability corroboration for the tail)",
       url: "https://skat.dk/en-us/businesses/vat/get-started-on-vat",
       asOf: "2026-09-18",
     },
     {
       id: "lov_891_1991_tillaegsmoms",
-      title: "LOV nr 891 af 21/12/1991 (Tillægsmoms på 3 pct.), retsinformation.dk ELI: § 2 nr. 3 amends § 14 »22 pct.« to »22 + 3 pct.« (effective rate 25%); § 5 Stk. 1 in force 1 January 1992, Stk. 3 applies § 2 to supplies from 1 January 1992",
+      title:
+        "LOV nr 891 af 21/12/1991 (Tillægsmoms på 3 pct.), retsinformation.dk ELI: § 2 nr. 3 amends § 14 »22 pct.« to »22 + 3 pct.« (effective rate 25%); § 5 Stk. 1 in force 1 January 1992, Stk. 3 applies § 2 to supplies from 1 January 1992",
       url: "https://www.retsinformation.dk/eli/lta/1991/891",
       asOf: "2026-09-18",
     },
     {
       id: "skat_dk_file_vat_return",
-      title: "skat.dk — How to file your VAT return: file in E-tax for businesses (TastSelv Erhverv)",
+      title:
+        "skat.dk — How to file your VAT return: file in E-tax for businesses (TastSelv Erhverv)",
       url: "https://skat.dk/en-us/businesses/vat/vat-what-to-do/how-to-file-your-vat-return",
       asOf: "2026-09-18",
     },
     {
       id: "skat_dk_vat_deadlines",
-      title: "skat.dk — VAT deadlines: monthly, quarterly, and half-yearly settlement by turnover; quarterly for newly registered businesses",
+      title:
+        "skat.dk — VAT deadlines: monthly, quarterly, and half-yearly settlement by turnover; quarterly for newly registered businesses",
       url: "https://skat.dk/en-us/businesses/vat/deadlines-filing-vat-returns-and-paying-vat",
       asOf: "2026-09-18",
     },
     {
       id: "skat_dk_vat_deductions",
-      title: "skat.dk — VAT deductions: deduct input VAT on business purchases; refund after filing the VAT return",
+      title:
+        "skat.dk — VAT deductions: deduct input VAT on business purchases; refund after filing the VAT return",
       url: "https://skat.dk/en-us/businesses/vat/vat-deductions?oid=2131494",
       asOf: "2026-09-18",
     },
@@ -113,7 +170,9 @@ export const DENMARK_TAX_PACK: CountryTaxPackDefinition = {
         name: "Denmark standard moms",
         role: "standard",
         ratePercent: "25",
-        rates: [{ ratePercent: "25", effectiveFrom: "1992-01-01", sourceId: "lov_891_1991_tillaegsmoms" }],
+        rates: [
+          { ratePercent: "25", effectiveFrom: "1992-01-01", sourceId: "lov_891_1991_tillaegsmoms" },
+        ],
       },
     ],
   },

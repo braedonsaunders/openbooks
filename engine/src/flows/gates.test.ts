@@ -33,7 +33,12 @@ test("every registered subject kind declares its grants and its scope", () => {
     const found: string[] = [];
     const permissions = adapter.permissions as FlowSubjectAdapter["permissions"] | undefined;
     if (permissions === undefined) found.push(`${kind}: permissions undeclared`);
-    else if (permissions !== null && !(["read", "edit", "approve"] as const).every((key) => typeof permissions[key] === "string" && permissions[key] !== "")) {
+    else if (
+      permissions !== null &&
+      !(["read", "edit", "approve"] as const).every(
+        (key) => typeof permissions[key] === "string" && permissions[key] !== "",
+      )
+    ) {
       found.push(`${kind}: permissions ${JSON.stringify(permissions)} are not three grants`);
     }
     if (!vias.includes((adapter.scope as { via?: string } | undefined)?.via ?? "")) {

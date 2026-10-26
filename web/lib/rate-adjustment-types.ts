@@ -1,1 +1,1 @@
-export * from '@openbooks/engine/projects/rate-adjustment-types'
+export * from "@openbooks/engine/projects/rate-adjustment-types";

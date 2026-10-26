@@ -34,7 +34,12 @@ export const ORGLESS_BACKUP_TABLES = [
  * restore rebuilds them from the re-inserted entries, lines and settlements,
  * so carrying them in the archive would double-count.
  */
-export const ORG_SCOPED_BACKUP_EXCLUSIONS = ["user_org_access", "gl_month_activity", "party_payment_stats", "open_item_balances"] as const;
+export const ORG_SCOPED_BACKUP_EXCLUSIONS = [
+  "user_org_access",
+  "gl_month_activity",
+  "party_payment_stats",
+  "open_item_balances",
+] as const;
 
 export const BACKUP_FORMAT = "openbooks-backup" as const;
 export const BACKUP_FORMAT_VERSION = 3 as const;

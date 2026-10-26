@@ -65,7 +65,10 @@ function isDimension(dimension: string): boolean {
   return KNOWN_DIMENSIONS.has(dimension) || dimension.startsWith("extra:");
 }
 
-function dimensionValueOf(target: AllocationRuleTarget, dimension: string): string | null | undefined {
+function dimensionValueOf(
+  target: AllocationRuleTarget,
+  dimension: string,
+): string | null | undefined {
   switch (dimension) {
     case "department":
       return target.departmentId;
@@ -78,7 +81,8 @@ function dimensionValueOf(target: AllocationRuleTarget, dimension: string): stri
     case "subsidiary":
       return target.subsidiaryId;
     default:
-      if (dimension.startsWith("extra:")) return target.extraDims?.[dimension.slice("extra:".length)];
+      if (dimension.startsWith("extra:"))
+        return target.extraDims?.[dimension.slice("extra:".length)];
       return undefined;
   }
 }
@@ -177,7 +181,9 @@ function periodBoundaryProblems(
   periods: PeriodBoundary[],
 ): AllocationValidationProblem[] {
   const problems: AllocationValidationProblem[] = [];
-  const sorted = [...periods].sort((a, b) => (a.startsOn < b.startsOn ? -1 : a.startsOn > b.startsOn ? 1 : 0));
+  const sorted = [...periods].sort((a, b) =>
+    a.startsOn < b.startsOn ? -1 : a.startsOn > b.startsOn ? 1 : 0,
+  );
   const starts = new Set(sorted.map((period) => period.startsOn));
   const ends = new Set(sorted.map((period) => period.endsOn));
   const containing = (date: string): PeriodBoundary | undefined =>
@@ -249,7 +255,14 @@ export function validateRuleVersion(
   }
   for (const sib of ctx.publishedVersions) {
     if (sib.id === version.id) continue;
-    if (windowsOverlap(version.effectiveFrom, version.effectiveTo ?? null, sib.effectiveFrom, sib.effectiveTo)) {
+    if (
+      windowsOverlap(
+        version.effectiveFrom,
+        version.effectiveTo ?? null,
+        sib.effectiveFrom,
+        sib.effectiveTo,
+      )
+    ) {
       problems.push({
         code: "effective_overlap",
         message: `effective window overlaps published version ${sib.id} (${sib.effectiveFrom}..${sib.effectiveTo ?? "open"})`,
@@ -284,7 +297,11 @@ export function validateRuleVersion(
   }
 
   if (ctx.mode === "entry") {
-    if (version.applyPolicy !== "automatic" && version.applyPolicy !== "suggest" && version.applyPolicy !== "manual") {
+    if (
+      version.applyPolicy !== "automatic" &&
+      version.applyPolicy !== "suggest" &&
+      version.applyPolicy !== "manual"
+    ) {
       problems.push({
         code: "apply_policy",
         message: `entry mode needs an apply policy (automatic, suggest, manual): "${version.applyPolicy}"`,
@@ -300,7 +317,11 @@ export function validateRuleVersion(
     }
   }
   if (ctx.mode === "period") {
-    if (version.sourceMeasure !== "period_activity" && version.sourceMeasure !== "period_end_balance" && version.sourceMeasure !== "ytd_activity") {
+    if (
+      version.sourceMeasure !== "period_activity" &&
+      version.sourceMeasure !== "period_end_balance" &&
+      version.sourceMeasure !== "ytd_activity"
+    ) {
       problems.push({
         code: "source_measure",
         message: `period mode needs a source measure: "${version.sourceMeasure}"`,
@@ -387,7 +408,11 @@ export function validateRuleVersion(
     problems.push(...percentProblems(targets));
   } else if (version.basisKind === "driver") {
     if (version.driverId === null || version.driverId === undefined) {
-      problems.push({ code: "driver_missing", message: "driver basis needs a driver", field: "driverId" });
+      problems.push({
+        code: "driver_missing",
+        message: "driver basis needs a driver",
+        field: "driverId",
+      });
     } else if (ctx.driver === null || ctx.driver === undefined) {
       problems.push({
         code: "driver_unknown",
@@ -396,7 +421,11 @@ export function validateRuleVersion(
       });
     } else {
       if (!ctx.driver.isActive) {
-        problems.push({ code: "driver_inactive", message: `driver "${ctx.driver.id}" is not active`, field: "driverId" });
+        problems.push({
+          code: "driver_inactive",
+          message: `driver "${ctx.driver.id}" is not active`,
+          field: "driverId",
+        });
       }
       const dimension = ctx.driver.dimension;
       if (!isDimension(dimension)) {
@@ -415,7 +444,10 @@ export function validateRuleVersion(
         }
       } else {
         for (const t of targets) {
-          if (dimensionValueOf(t, dimension) === null || dimensionValueOf(t, dimension) === undefined) {
+          if (
+            dimensionValueOf(t, dimension) === null ||
+            dimensionValueOf(t, dimension) === undefined
+          ) {
             problems.push({
               code: "driver_dimension",
               message: `target "${t.id ?? `sequence:${t.sequence}`}" carries no ${dimension} value for the driver`,
@@ -434,12 +466,17 @@ export function validateRuleVersion(
     // with the remedy, not at posting with a 500.
     problems.push({
       code: "stepped_basis",
-      message: "stepped basis is not yet runnable — republish the version with a fixed_percent or driver basis",
+      message:
+        "stepped basis is not yet runnable — republish the version with a fixed_percent or driver basis",
       field: "basisKind",
     });
   }
 
-  if (version.offsetAccountId !== null && version.offsetAccountId !== undefined && version.impact !== "reclass") {
+  if (
+    version.offsetAccountId !== null &&
+    version.offsetAccountId !== undefined &&
+    version.impact !== "reclass"
+  ) {
     problems.push({
       code: "offset_impact",
       message: `offset account only applies to reclass impact, not ${version.impact}`,
@@ -468,7 +505,8 @@ export function validateRuleVersion(
       if (dynamicAccount !== null && dynamicAccount !== undefined) {
         problems.push({
           code: "net_zero_account",
-          message: "net_zero_pair dynamic targets must use the source account, not a target account",
+          message:
+            "net_zero_pair dynamic targets must use the source account, not a target account",
           field: "dynamicTarget",
         });
       }
@@ -482,7 +520,10 @@ export function validateRuleVersion(
         message: "explicit_target residual policy needs a residual target",
         field: "residualTargetId",
       });
-    } else if (version.targetKind === "explicit" && !targets.some((t) => t.id === version.residualTargetId)) {
+    } else if (
+      version.targetKind === "explicit" &&
+      !targets.some((t) => t.id === version.residualTargetId)
+    ) {
       problems.push({
         code: "residual_target",
         message: `explicit residual target does not exist: "${version.residualTargetId}"`,
@@ -520,23 +561,34 @@ function sortedStrings(value: unknown): unknown {
  * insert order and across a numeric write/read round-trip, so publish can
  * stamp it and any later reader can recompute it from the frozen row.
  */
-export function definitionHash(version: AllocationRuleVersion, targets: AllocationRuleTarget[]): string {
-  const dimensionFilters: Record<string, unknown> = isRecord(version.dimensionFilters) ? { ...version.dimensionFilters } : {};
+export function definitionHash(
+  version: AllocationRuleVersion,
+  targets: AllocationRuleTarget[],
+): string {
+  const dimensionFilters: Record<string, unknown> = isRecord(version.dimensionFilters)
+    ? { ...version.dimensionFilters }
+    : {};
   for (const [key, value] of Object.entries(dimensionFilters)) {
     if (Array.isArray(value)) dimensionFilters[key] = sortedStrings(value);
     else if (isRecord(value)) {
       const inner: Record<string, unknown> = {};
-      for (const [ik, iv] of Object.entries(value)) inner[ik] = Array.isArray(iv) ? sortedStrings(iv) : iv;
+      for (const [ik, iv] of Object.entries(value))
+        inner[ik] = Array.isArray(iv) ? sortedStrings(iv) : iv;
       dimensionFilters[key] = inner;
     }
   }
-  const accountScope: Record<string, unknown> = isRecord(version.accountScope) ? { ...version.accountScope } : {};
-  if (Array.isArray(accountScope["accountIds"])) accountScope["accountIds"] = sortedStrings(accountScope["accountIds"]);
+  const accountScope: Record<string, unknown> = isRecord(version.accountScope)
+    ? { ...version.accountScope }
+    : {};
+  if (Array.isArray(accountScope["accountIds"]))
+    accountScope["accountIds"] = sortedStrings(accountScope["accountIds"]);
   const dynamicTarget: Record<string, unknown> = isRecord(version.dynamicTarget)
     ? { ...(version.dynamicTarget as Record<string, unknown>) }
     : {};
-  if (Array.isArray(dynamicTarget["include"])) dynamicTarget["include"] = sortedStrings(dynamicTarget["include"]);
-  if (Array.isArray(dynamicTarget["exclude"])) dynamicTarget["exclude"] = sortedStrings(dynamicTarget["exclude"]);
+  if (Array.isArray(dynamicTarget["include"]))
+    dynamicTarget["include"] = sortedStrings(dynamicTarget["include"]);
+  if (Array.isArray(dynamicTarget["exclude"]))
+    dynamicTarget["exclude"] = sortedStrings(dynamicTarget["exclude"]);
 
   const definition = {
     ruleId: version.ruleId,
@@ -545,7 +597,10 @@ export function definitionHash(version: AllocationRuleVersion, targets: Allocati
     effectiveTo: version.effectiveTo ?? null,
     bookScope: version.bookScope,
     bookIds: sortedStrings(version.bookIds ?? []),
-    documentKinds: version.documentKinds === null || version.documentKinds === undefined ? null : sortedStrings(version.documentKinds),
+    documentKinds:
+      version.documentKinds === null || version.documentKinds === undefined
+        ? null
+        : sortedStrings(version.documentKinds),
     accountScope,
     dimensionFilters,
     applyPolicy: version.applyPolicy,
@@ -583,5 +638,7 @@ export function definitionHash(version: AllocationRuleVersion, targets: Allocati
         label: t.label ?? null,
       })),
   };
-  return createHash("sha256").update(JSON.stringify(canonicalize(definition))).digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(definition)))
+    .digest("hex");
 }

@@ -1,38 +1,38 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // A bare aging export URL (no as-of, no period) once fell through to the
 // fiscal year end, so every balance landed in 90+. The export
 // must resolve bare hits through the shared aging as-of rule (screen
 // default: today), while explicit params keep their meaning.
-const TODAY = '2026-09-24'
-const agingKey = Symbol.for('openbooks.aging-export-asof-test')
+const TODAY = "2026-09-24";
+const agingKey = Symbol.for("openbooks.aging-export-asof-test");
 const agingState: {
-  asOfValues: unknown[]
-  bookThreading: Array<{ kind: string; bookId: unknown }>
-  agingOptions: Array<{ basis: unknown; reportingCurrency: unknown }>
-  featuresOn: string[]
+  asOfValues: unknown[];
+  bookThreading: Array<{ kind: string; bookId: unknown }>;
+  agingOptions: Array<{ basis: unknown; reportingCurrency: unknown }>;
+  featuresOn: string[];
   /** The reader's grants: the ledger, both subledgers and projects, never payroll. */
-  permissions: string[]
+  permissions: string[];
 } = {
   asOfValues: [],
   bookThreading: [],
   agingOptions: [],
   featuresOn: [],
-  permissions: ['gl.read', 'ar.read', 'ap.read', 'projects.read'],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[agingKey] = agingState
+  permissions: ["gl.read", "ar.read", "ap.read", "projects.read"],
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[agingKey] = agingState;
 
-const reportsIndexUrl = new URL('./reports.ts', import.meta.url).href
-const reportPdfUrl = new URL('./report-pdf.ts', import.meta.url).href
-const dbUrl = import.meta.resolve('@openbooks/engine/platform/db')
-const consolidationUrl = new URL('./consolidation.ts', import.meta.url).href
-const executionContextUrl = new URL('./report-execution-context.ts', import.meta.url).href
+const reportsIndexUrl = new URL("./reports.ts", import.meta.url).href;
+const reportPdfUrl = new URL("./report-pdf.ts", import.meta.url).href;
+const dbUrl = import.meta.resolve("@openbooks/engine/platform/db");
+const consolidationUrl = new URL("./consolidation.ts", import.meta.url).href;
+const executionContextUrl = new URL("./report-execution-context.ts", import.meta.url).href;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:execution-context',
+    "mock:execution-context",
     `
       export * from '${executionContextUrl}'
       export async function requireReportAuthz(orgId) {
@@ -42,12 +42,12 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:consolidation',
+    "mock:consolidation",
     `export * from '${consolidationUrl}'
      export async function resolveSubsidiaryView() { return {} }`,
   ],
   [
-    'mock:periods',
+    "mock:periods",
     `
       export async function resolvePeriod(preset, opts) {
         if (preset === 'today') return { from: '${TODAY}', to: '${TODAY}', label: '' }
@@ -57,7 +57,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:reports',
+    "mock:reports",
     `
       export * from '${reportsIndexUrl}'
       const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
@@ -84,7 +84,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:report-pdf',
+    "mock:report-pdf",
     `export * from '${reportPdfUrl}'
      export function agingExportData() { return { title: 'Aging', dateRangeLabel: '', summary: [], groups: [] } }
      export function generalLedgerExportData() { return { title: 'GL' } }
@@ -98,9 +98,9 @@ const mockSources = new Map<string, string>([
      export function cashFlowIndirectExportData() { return { title: 'CFI' } }`,
   ],
   [
-    'mock:db',
+    "mock:db",
     `export * from '${dbUrl}'
-     import { FEATURES } from '${new URL('../../engine/src/organization/feature-registry.ts', import.meta.url).href}'
+     import { FEATURES } from '${new URL("../../engine/src/organization/feature-registry.ts", import.meta.url).href}'
      import { PgDialect } from 'drizzle-orm/pg-core'
      const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
      export const db = { async execute(query, mode) {
@@ -126,157 +126,177 @@ const mockSources = new Map<string, string>([
        throw new Error("unexpected SQL before the reader: " + text);
      } }`,
   ],
-])
+]);
 
-const SELF_URL = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
+const SELF_URL = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['./report-execution-context', mockUrl('execution-context')],
-  ['./consolidation', mockUrl('consolidation')],
-  ['./periods', mockUrl('periods')],
-  ['./reports', mockUrl('reports')],
-  ['./report-pdf', mockUrl('report-pdf')],
-  ['@openbooks/engine/platform/db', mockUrl('db')],
-])
+  ["./report-execution-context", mockUrl("execution-context")],
+  ["./consolidation", mockUrl("consolidation")],
+  ["./periods", mockUrl("periods")],
+  ["./reports", mockUrl("reports")],
+  ["./report-pdf", mockUrl("report-pdf")],
+  ["@openbooks/engine/platform/db", mockUrl("db")],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    const resolved = nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    const resolved = nextResolve(specifier, context);
     // Feature reads use the engine's native database import. Resolve its
     // identity so the test fences the database, not the feature validator.
-    if (resolved.url === dbUrl && context.parentURL !== mockUrl('db')) return { url: mockUrl('db'), shortCircuit: true }
-    return resolved
+    if (resolved.url === dbUrl && context.parentURL !== mockUrl("db"))
+      return { url: mockUrl("db"), shortCircuit: true };
+    return resolved;
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    const name = parsed.searchParams.get('mock')
-    const source = name ? mockSources.get(`mock:${name}`) : undefined
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const parsed = new URL(url);
+    const name = parsed.searchParams.get("mock");
+    const source = name ? mockSources.get(`mock:${name}`) : undefined;
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const runUrl = './report-run.ts?aging-export-asof'
-const { resolveReport } = (await import(runUrl)) as typeof import('./report-run.ts')
-const { parseReportQuery } = (await import('./report-filters.ts')) as typeof import('./report-filters.ts')
-hooks.deregister()
+const runUrl = "./report-run.ts?aging-export-asof";
+const { resolveReport } = (await import(runUrl)) as typeof import("./report-run.ts");
+const { parseReportQuery } =
+  (await import("./report-filters.ts")) as typeof import("./report-filters.ts");
+hooks.deregister();
 
 const ctx = {
-  orgId: 'org-1',
+  orgId: "org-1",
   t: ((key: string) => key) as (key: string) => string,
-  period: { from: '2026-01-01', to: '2026-12-31', label: '' },
+  period: { from: "2026-01-01", to: "2026-12-31", label: "" },
   query: parseReportQuery(new URLSearchParams()),
-}
+};
 
-test('a bare aging export resolves its as-of to today, not the fiscal year end', async () => {
-  agingState.asOfValues = []
+test("a bare aging export resolves its as-of to today, not the fiscal year end", async () => {
+  agingState.asOfValues = [];
 
-  await resolveReport('aging', new URLSearchParams(), ctx)
+  await resolveReport("aging", new URLSearchParams(), ctx);
 
-  assert.deepEqual(agingState.asOfValues, [TODAY])
-})
+  assert.deepEqual(agingState.asOfValues, [TODAY]);
+});
 
-test('an explicit aging as-of keeps its meaning', async () => {
-  agingState.asOfValues = []
+test("an explicit aging as-of keeps its meaning", async () => {
+  agingState.asOfValues = [];
 
-  await resolveReport('aging', new URLSearchParams('asOf=2026-07-31'), ctx)
+  await resolveReport("aging", new URLSearchParams("asOf=2026-07-31"), ctx);
 
-  assert.deepEqual(agingState.asOfValues, ['2026-07-31'])
-})
+  assert.deepEqual(agingState.asOfValues, ["2026-07-31"]);
+});
 
 // The caller's default window here ends at the fiscal year end (2026-12-31),
 // a date that has not happened yet: a point-in-time statement with no period
 // of its own must be dated today instead.
-test('a bare trial-balance export is dated today, not the fiscal year end', async () => {
-  agingState.asOfValues = []
+test("a bare trial-balance export is dated today, not the fiscal year end", async () => {
+  agingState.asOfValues = [];
 
-  await resolveReport('trial-balance', new URLSearchParams(), ctx)
+  await resolveReport("trial-balance", new URLSearchParams(), ctx);
 
-  assert.deepEqual(agingState.asOfValues, [TODAY])
-})
+  assert.deepEqual(agingState.asOfValues, [TODAY]);
+});
 
-test('an explicit period or as-of keeps its meaning for a point-in-time statement', async () => {
-  agingState.asOfValues = []
+test("an explicit period or as-of keeps its meaning for a point-in-time statement", async () => {
+  agingState.asOfValues = [];
 
-  await resolveReport('trial-balance', new URLSearchParams('period=this_fiscal_year'), ctx)
-  await resolveReport('trial-balance', new URLSearchParams('asOf=2026-06-30'), ctx)
+  await resolveReport("trial-balance", new URLSearchParams("period=this_fiscal_year"), ctx);
+  await resolveReport("trial-balance", new URLSearchParams("asOf=2026-06-30"), ctx);
 
-  assert.deepEqual(agingState.asOfValues, ['2026-12-31', '2026-06-30'])
-})
+  assert.deepEqual(agingState.asOfValues, ["2026-12-31", "2026-06-30"]);
+});
 
-test('aging exports use the same validated currency selection as the screen', async () => {
-  agingState.agingOptions = []
+test("aging exports use the same validated currency selection as the screen", async () => {
+  agingState.agingOptions = [];
 
-  await resolveReport('aging', new URLSearchParams('currencyBasis=transaction&currency=EUR'), ctx)
+  await resolveReport("aging", new URLSearchParams("currencyBasis=transaction&currency=EUR"), ctx);
 
-  assert.deepEqual(agingState.agingOptions, [{ basis: 'transaction', reportingCurrency: 'EUR' }])
-})
+  assert.deepEqual(agingState.agingOptions, [{ basis: "transaction", reportingCurrency: "EUR" }]);
+});
 
-test('project profitability refuses a disabled Projects feature before reading balances', async () => {
-  agingState.featuresOn = []
-  agingState.bookThreading = []
-  await assert.rejects(resolveReport('project-profitability', new URLSearchParams(), ctx), {
-    message: 'projects feature is disabled',
-  })
-  assert.deepEqual(agingState.bookThreading, [])
-})
+test("project profitability refuses a disabled Projects feature before reading balances", async () => {
+  agingState.featuresOn = [];
+  agingState.bookThreading = [];
+  await assert.rejects(resolveReport("project-profitability", new URLSearchParams(), ctx), {
+    message: "projects feature is disabled",
+  });
+  assert.deepEqual(agingState.bookThreading, []);
+});
 
 // A secondary-book statement export must not silently mix primary-book
 // detail lines: every journal-backed detail reader receives the selected
 // book, while a bare export keeps the readers' primary-book default.
-test('statement exports thread the selected book into every journal-backed detail reader', async () => {
-  const SECONDARY = '22222222-2222-2222-8222-222222222222'
-  const PARTY = '33333333-3333-3333-8333-333333333333'
+test("statement exports thread the selected book into every journal-backed detail reader", async () => {
+  const SECONDARY = "22222222-2222-2222-8222-222222222222";
+  const PARTY = "33333333-3333-3333-8333-333333333333";
   const cases: Array<[Parameters<typeof resolveReport>[0], Record<string, string>]> = [
-    ['general-ledger', {}],
-    ['journal', {}],
-    ['registers', {}],
-    ['partner-statement', { party: PARTY }],
-    ['project-profitability', {}],
-    ['trial-balance', {}],
-    ['partners', {}],
-    ['aging', {}],
-    ['cash-flow', {}],
-    ['cash-flow-indirect', {}],
-  ]
-  agingState.featuresOn = ['projects']
+    ["general-ledger", {}],
+    ["journal", {}],
+    ["registers", {}],
+    ["partner-statement", { party: PARTY }],
+    ["project-profitability", {}],
+    ["trial-balance", {}],
+    ["partners", {}],
+    ["aging", {}],
+    ["cash-flow", {}],
+    ["cash-flow-indirect", {}],
+  ];
+  agingState.featuresOn = ["projects"];
   try {
     for (const [kind, extra] of cases) {
-      agingState.bookThreading = []
-      await resolveReport(kind, new URLSearchParams({ book: SECONDARY, ...extra }), ctx)
-      assert.deepEqual(agingState.bookThreading, [{ kind, bookId: SECONDARY }])
+      agingState.bookThreading = [];
+      await resolveReport(kind, new URLSearchParams({ book: SECONDARY, ...extra }), ctx);
+      assert.deepEqual(agingState.bookThreading, [{ kind, bookId: SECONDARY }]);
     }
   } finally {
-    agingState.featuresOn = []
+    agingState.featuresOn = [];
   }
 
-  agingState.bookThreading = []
-  await resolveReport('general-ledger', new URLSearchParams(), ctx)
-  assert.deepEqual(agingState.bookThreading, [{ kind: 'general-ledger', bookId: undefined }])
-})
+  agingState.bookThreading = [];
+  await resolveReport("general-ledger", new URLSearchParams(), ctx);
+  assert.deepEqual(agingState.bookThreading, [{ kind: "general-ledger", bookId: undefined }]);
+});
 
-test('payroll capability exports refuse a disabled feature and a reader without payroll permission', async () => {
-  agingState.featuresOn = []
-  await assert.rejects(resolveReport('payroll-support', new URLSearchParams(), ctx), /payroll feature is disabled/)
-  agingState.featuresOn = ['payroll']
+test("payroll capability exports refuse a disabled feature and a reader without payroll permission", async () => {
+  agingState.featuresOn = [];
+  await assert.rejects(
+    resolveReport("payroll-support", new URLSearchParams(), ctx),
+    /payroll feature is disabled/,
+  );
+  agingState.featuresOn = ["payroll"];
   try {
-    await assert.rejects(resolveReport('payroll-support', new URLSearchParams(), ctx), /requires payroll.read.*administrator/)
-  } finally { agingState.featuresOn = [] }
-})
-
-test('a statement export refuses a reader without the grant for the data it reads, naming that grant', async () => {
-  const granted = agingState.permissions
-  agingState.permissions = ['ar.read']
-  try {
-    agingState.bookThreading = []
-    await assert.rejects(resolveReport('trial-balance', new URLSearchParams(), ctx), /requires gl\.read.*administrator/)
-    await assert.rejects(resolveReport('aging', new URLSearchParams({ side: 'ap' }), ctx), /requires ap\.read.*administrator/)
-    assert.deepEqual(agingState.bookThreading, [], 'a refused statement never reaches its reader')
-    await resolveReport('aging', new URLSearchParams({ side: 'ar' }), ctx)
-    assert.deepEqual(agingState.bookThreading.map(({ kind }) => kind), ['aging'], 'the held receivables grant still opens AR aging')
+    await assert.rejects(
+      resolveReport("payroll-support", new URLSearchParams(), ctx),
+      /requires payroll.read.*administrator/,
+    );
   } finally {
-    agingState.permissions = granted
+    agingState.featuresOn = [];
   }
-})
+});
+
+test("a statement export refuses a reader without the grant for the data it reads, naming that grant", async () => {
+  const granted = agingState.permissions;
+  agingState.permissions = ["ar.read"];
+  try {
+    agingState.bookThreading = [];
+    await assert.rejects(
+      resolveReport("trial-balance", new URLSearchParams(), ctx),
+      /requires gl\.read.*administrator/,
+    );
+    await assert.rejects(
+      resolveReport("aging", new URLSearchParams({ side: "ap" }), ctx),
+      /requires ap\.read.*administrator/,
+    );
+    assert.deepEqual(agingState.bookThreading, [], "a refused statement never reaches its reader");
+    await resolveReport("aging", new URLSearchParams({ side: "ar" }), ctx);
+    assert.deepEqual(
+      agingState.bookThreading.map(({ kind }) => kind),
+      ["aging"],
+      "the held receivables grant still opens AR aging",
+    );
+  } finally {
+    agingState.permissions = granted;
+  }
+});

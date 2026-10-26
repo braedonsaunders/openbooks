@@ -25,40 +25,87 @@ interface PropertyFixture {
 
 async function seedFixture(): Promise<PropertyFixture> {
   const scratch = await withBypass(() => createScratchOrg());
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings,'{}'::jsonb), '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"propertyManagement": true}'::jsonb)
-     where id = ${scratch.orgId}`));
+     where id = ${scratch.orgId}`),
+  );
   const subB = randomUUID();
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${subB}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Second entity', 'CAD', 'CA')
-  `));
+  `),
+  );
   const actorId = randomUUID();
-  const common = { orgId: scratch.orgId, actorId, allowedSubsidiaryIds: null as ReadonlySet<string> | null };
-  const propA = (await withBypass(() => createManagedProperty({
-    ...common, subsidiaryId: scratch.subsidiaryId, code: "PROP-A", name: "Entity A house", propertyType: "residential",
-    rentIncomeAccountId: scratch.accounts.revenue,
-  }))).id;
-  const propB = (await withBypass(() => createManagedProperty({
-    ...common, subsidiaryId: subB, code: "PROP-B", name: "Entity B house", propertyType: "residential",
-    rentIncomeAccountId: scratch.accounts.revenue,
-  }))).id;
+  const common = {
+    orgId: scratch.orgId,
+    actorId,
+    allowedSubsidiaryIds: null as ReadonlySet<string> | null,
+  };
+  const propA = (
+    await withBypass(() =>
+      createManagedProperty({
+        ...common,
+        subsidiaryId: scratch.subsidiaryId,
+        code: "PROP-A",
+        name: "Entity A house",
+        propertyType: "residential",
+        rentIncomeAccountId: scratch.accounts.revenue,
+      }),
+    )
+  ).id;
+  const propB = (
+    await withBypass(() =>
+      createManagedProperty({
+        ...common,
+        subsidiaryId: subB,
+        code: "PROP-B",
+        name: "Entity B house",
+        propertyType: "residential",
+        rentIncomeAccountId: scratch.accounts.revenue,
+      }),
+    )
+  ).id;
   // One unit and draft lease on A, one unit on B: the scoped workspace
   // must keep every subordinate with its own entity.
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     insert into customer_roles (org_id, party_id, ar_account_id, credit_limit, currency, is_on_hold, created_by, updated_by)
-    values (${scratch.orgId}, ${scratch.customerId}, ${scratch.accounts.ar}, '0', 'CAD', false, ${actorId}, ${actorId})`));
-  const unitA = (await withBypass(() => createPropertyUnit({
-    ...common, propertyId: propA, code: "A-101",
-  }))).id;
+    values (${scratch.orgId}, ${scratch.customerId}, ${scratch.accounts.ar}, '0', 'CAD', false, ${actorId}, ${actorId})`),
+  );
+  const unitA = (
+    await withBypass(() =>
+      createPropertyUnit({
+        ...common,
+        propertyId: propA,
+        code: "A-101",
+      }),
+    )
+  ).id;
   await withBypass(() => createPropertyUnit({ ...common, propertyId: propB, code: "B-101" }));
-  await withBypass(() => createPropertyLease({
-    ...common, propertyId: propA, unitId: unitA, tenantId: scratch.customerId, leaseNumber: "L-A-1",
-    startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000", billingDay: 1,
-    paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
-    lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
-  }));
+  await withBypass(() =>
+    createPropertyLease({
+      ...common,
+      propertyId: propA,
+      unitId: unitA,
+      tenantId: scratch.customerId,
+      leaseNumber: "L-A-1",
+      startsOn: "2026-01-01",
+      endsOn: "2026-12-31",
+      baseRent: "1000",
+      billingDay: 1,
+      paymentTermsDays: 0,
+      securityDepositRequired: "0",
+      camMethod: "none",
+      lateFeeType: "none",
+      lateFeeValue: "0",
+      graceDays: 0,
+      autoInvoice: true,
+      autoPost: false,
+    }),
+  );
   return { orgId: scratch.orgId, actorId, subA: scratch.subsidiaryId, subB, propA, propB };
 }
 
@@ -76,16 +123,28 @@ test("property workspace shows a restricted caller only their own entity", async
   try {
     const scopeA = new Set([fx.subA]);
     const aOnly = await propertyManagementWorkspace(fx.orgId, scopeA);
-    assert.deepEqual(aOnly.properties.map((row) => String(row.id)), [fx.propA]);
+    assert.deepEqual(
+      aOnly.properties.map((row) => String(row.id)),
+      [fx.propA],
+    );
     assert.equal(aOnly.leases.length, 1);
     assert.equal(String(aOnly.leases[0]!.propertyId), fx.propA);
     assert.equal(String(aOnly.leases[0]!.leaseNumber), "L-A-1");
-    assert.deepEqual(aOnly.units.map((row) => String(row.code)), ["A-101"]);
+    assert.deepEqual(
+      aOnly.units.map((row) => String(row.code)),
+      ["A-101"],
+    );
     const scopeB = new Set([fx.subB]);
     const bOnly = await propertyManagementWorkspace(fx.orgId, scopeB);
-    assert.deepEqual(bOnly.properties.map((row) => String(row.id)), [fx.propB]);
+    assert.deepEqual(
+      bOnly.properties.map((row) => String(row.id)),
+      [fx.propB],
+    );
     assert.deepEqual(bOnly.leases, []);
-    assert.deepEqual(bOnly.units.map((row) => String(row.code)), ["B-101"]);
+    assert.deepEqual(
+      bOnly.units.map((row) => String(row.code)),
+      ["B-101"],
+    );
     const all = await propertyManagementWorkspace(fx.orgId, null);
     assert.equal(all.properties.length, 2);
     const none = await propertyManagementWorkspace(fx.orgId, new Set());
@@ -103,11 +162,10 @@ test("property workspace snapshot does not tear across a concurrent rehome", asy
       const client = await pool.connect();
       try {
         await client.query("select set_config('app.bypass_rls', 'on', true)");
-        await client.query("update managed_properties set subsidiary_id = $1 where id = $2 and org_id = $3", [
-          fx.subB,
-          fx.propA,
-          fx.orgId,
-        ]);
+        await client.query(
+          "update managed_properties set subsidiary_id = $1 where id = $2 and org_id = $3",
+          [fx.subB, fx.propA, fx.orgId],
+        );
       } finally {
         client.release();
       }
@@ -119,13 +177,23 @@ test("property workspace snapshot does not tear across a concurrent rehome", asy
     // carry explicit org filters and the snapshot sets its own tenant
     // context, so no bypass is needed.
     const seen = await withScopeSnapshot(fx.orgId, async () => {
-      const first = (await db.execute<{ id: string }>(sql`
+      const first = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from managed_properties where org_id = ${fx.orgId}
-          and subsidiary_id = ${fx.subA} order by id`, "objects")).map((row) => row.id);
+          and subsidiary_id = ${fx.subA} order by id`,
+          "objects",
+        )
+      ).map((row) => row.id);
       await moveMidSnapshot();
-      const second = (await db.execute<{ id: string }>(sql`
+      const second = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from managed_properties where org_id = ${fx.orgId}
-          and subsidiary_id = ${fx.subA} order by id`, "objects")).map((row) => row.id);
+          and subsidiary_id = ${fx.subA} order by id`,
+          "objects",
+        )
+      ).map((row) => row.id);
       return { first, second };
     });
     assert.deepEqual(seen.first, [fx.propA]);
@@ -143,29 +211,56 @@ test("property writes refuse out-of-scope records with the uniform not-found", a
   try {
     const scopeA = new Set([fx.subA]);
     const edit = {
-      orgId: fx.orgId, actorId: fx.actorId, allowedSubsidiaryIds: scopeA as ReadonlySet<string> | null,
-      propertyId: fx.propB, subsidiaryId: fx.subB, code: "PROP-B", name: "Renamed by A",
-      propertyType: "residential", status: "active",
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      allowedSubsidiaryIds: scopeA as ReadonlySet<string> | null,
+      propertyId: fx.propB,
+      subsidiaryId: fx.subB,
+      code: "PROP-B",
+      name: "Renamed by A",
+      propertyType: "residential",
+      status: "active",
     };
     // Two entities: a restricted caller cannot touch the other entity's
     // property even though the id is valid.
     await withBypass(() => assertScopeNotFound(updateManagedProperty(edit)));
     // Rehome race: the property moves out of scope and the locked recheck
     // refuses instead of editing another entity's record.
-    await withBypass(() => updateManagedProperty({
-      ...edit, propertyId: fx.propA, subsidiaryId: fx.subA, code: "PROP-A", name: "Entity A house",
-    }));
-    await withBypass(() => db.execute(sql`
+    await withBypass(() =>
+      updateManagedProperty({
+        ...edit,
+        propertyId: fx.propA,
+        subsidiaryId: fx.subA,
+        code: "PROP-A",
+        name: "Entity A house",
+      }),
+    );
+    await withBypass(() =>
+      db.execute(sql`
       update managed_properties set subsidiary_id = ${fx.subB}
-       where id = ${fx.propA} and org_id = ${fx.orgId}`));
-    await withBypass(() => assertScopeNotFound(updateManagedProperty({
-      ...edit, propertyId: fx.propA, code: "PROP-A", name: "Entity A house",
-    })));
+       where id = ${fx.propA} and org_id = ${fx.orgId}`),
+    );
+    await withBypass(() =>
+      assertScopeNotFound(
+        updateManagedProperty({
+          ...edit,
+          propertyId: fx.propA,
+          code: "PROP-A",
+          name: "Entity A house",
+        }),
+      ),
+    );
     // An unrestricted caller is unaffected by the move.
-    await withBypass(() => updateManagedProperty({
-      ...edit, propertyId: fx.propA, allowedSubsidiaryIds: null, subsidiaryId: fx.subB,
-      code: "PROP-A", name: "Entity A house",
-    }));
+    await withBypass(() =>
+      updateManagedProperty({
+        ...edit,
+        propertyId: fx.propA,
+        allowedSubsidiaryIds: null,
+        subsidiaryId: fx.subB,
+        code: "PROP-A",
+        name: "Entity A house",
+      }),
+    );
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId));
   }
@@ -183,27 +278,54 @@ test("property write waits out a concurrent rehome and then refuses", async () =
       // locks zero rows and the race below stops proving anything.
       await client.query("begin");
       await client.query("select set_config('app.bypass_rls', 'on', true)");
-      const held = await client.query("select id from managed_properties where id = $1 for update", [fx.propA]);
+      const held = await client.query(
+        "select id from managed_properties where id = $1 for update",
+        [fx.propA],
+      );
       assert.equal(held.rows.length, 1, "holder must pin the property row for the race");
       // The engine write starts while the lock is held: it must block on
       // the property lock rather than act on a stale subsidiary.
       let settled = false;
-      const pending = withBypass(() => updateManagedProperty({
-        orgId: fx.orgId, actorId: fx.actorId, allowedSubsidiaryIds: scopeA as ReadonlySet<string> | null,
-        propertyId: fx.propA, subsidiaryId: fx.subA, code: "PROP-A", name: "Raced rename",
-        propertyType: "residential", status: "active",
-      })).then(
-        (value) => { settled = true; return value; },
-        (reason: unknown) => { settled = true; throw reason; },
+      const pending = withBypass(() =>
+        updateManagedProperty({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          allowedSubsidiaryIds: scopeA as ReadonlySet<string> | null,
+          propertyId: fx.propA,
+          subsidiaryId: fx.subA,
+          code: "PROP-A",
+          name: "Raced rename",
+          propertyType: "residential",
+          status: "active",
+        }),
+      ).then(
+        (value) => {
+          settled = true;
+          return value;
+        },
+        (reason: unknown) => {
+          settled = true;
+          throw reason;
+        },
       );
       // Rehome behind the waiter and release it: the locked recheck must
       // observe the move and refuse.
-      await client.query("update managed_properties set subsidiary_id = $1 where id = $2", [fx.subB, fx.propA]);
+      await client.query("update managed_properties set subsidiary_id = $1 where id = $2", [
+        fx.subB,
+        fx.propA,
+      ]);
       await client.query("commit");
       await assertScopeNotFound(pending);
       assert.equal(settled, true);
-      const name = (await withBypass(() => db.execute<{ name: string }>(sql`
-        select name from managed_properties where id = ${fx.propA} and org_id = ${fx.orgId}`, "objects")))[0]!.name;
+      const name = (
+        await withBypass(() =>
+          db.execute<{ name: string }>(
+            sql`
+        select name from managed_properties where id = ${fx.propA} and org_id = ${fx.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.name;
       assert.equal(name, "Entity A house", "the refused write changed nothing");
     } finally {
       // Roll back before releasing: a pooled connection never rolls back on

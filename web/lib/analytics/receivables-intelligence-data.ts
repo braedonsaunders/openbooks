@@ -1,76 +1,186 @@
-import 'server-only'
+import "server-only";
 
-import { sql, type SQL } from 'drizzle-orm'
-import { activePostingPrimaryBookId } from '@openbooks/engine/platform/database'
-import { businessToday } from '@openbooks/engine/platform/business-date'
-import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
-import { normalizeMoney } from '@openbooks/engine/money'
-import { openItemSourceQuery } from '../cash/open-items'
-import { customerOrderCommitmentsSource } from '../customer-credit'
-import { presentationCurrency, presentationSpotRatesSql, presentationAmountSql, MissingExchangeRateError } from '../fx-presentation'
-import { analyticsConfig } from './config'
-import { analyticsQuery } from './query'
-import { analyticsSection, currentAnalyticsRead } from './read-context'
-import { cachedAnalyticsRead } from './preview-cache'
-import { receivablesRatio } from './receivables-metrics'
+import { sql, type SQL } from "drizzle-orm";
+import { activePostingPrimaryBookId } from "@openbooks/engine/platform/database";
+import { businessToday } from "@openbooks/engine/platform/business-date";
+import { addCalendarDays } from "@openbooks/engine/platform/civil-date";
+import { normalizeMoney } from "@openbooks/engine/money";
+import { openItemSourceQuery } from "../cash/open-items";
+import { customerOrderCommitmentsSource } from "../customer-credit";
+import {
+  presentationCurrency,
+  presentationSpotRatesSql,
+  presentationAmountSql,
+  MissingExchangeRateError,
+} from "../fx-presentation";
+import { analyticsConfig } from "./config";
+import { analyticsQuery } from "./query";
+import { analyticsSection, currentAnalyticsRead } from "./read-context";
+import { cachedAnalyticsRead } from "./preview-cache";
+import { receivablesRatio } from "./receivables-metrics";
 
 export interface CollectionCustomer {
-  id: string | null; name: string; gross: string; credits: string; net: string; overdue: string; severe: string
-  documents: number; overdueDocuments: number; oldestDays: number; missingTerms: string
-  recentDays: string | null; baselineDays: string | null; changeDays: string | null
-  observations: number; baselineObservations: number; onTimeShare: string | null; deteriorating: boolean
-  delivered: number; failed: number; suppressed: number; lastNotice: string | null
-  creditLimit: string | null; committed: string; unbilled: string; headroom: string | null; held: boolean; holdReason: string | null
-  history: { date: string; days: string | null }[]
+  id: string | null;
+  name: string;
+  gross: string;
+  credits: string;
+  net: string;
+  overdue: string;
+  severe: string;
+  documents: number;
+  overdueDocuments: number;
+  oldestDays: number;
+  missingTerms: string;
+  recentDays: string | null;
+  baselineDays: string | null;
+  changeDays: string | null;
+  observations: number;
+  baselineObservations: number;
+  onTimeShare: string | null;
+  deteriorating: boolean;
+  delivered: number;
+  failed: number;
+  suppressed: number;
+  lastNotice: string | null;
+  creditLimit: string | null;
+  committed: string;
+  unbilled: string;
+  headroom: string | null;
+  held: boolean;
+  holdReason: string | null;
+  history: { date: string; days: string | null }[];
 }
 export interface CollectionSummary {
-  customers: number; overdueCustomers: number; attentionCustomers: number; attention: string; overdue: string
-  deterioratingCustomers: number; deterioratingExposure: string; onTimeShare: string | null; observations: number
-  opening: string; recovered: string; recoveryShare: string | null; remaining: string; otherChange: string
-  failedExposure: string; deliveredDocuments: number; overdueDocuments: number; coverageShare: string | null
-  missingTerms: string; unassigned: string; credits: string
-  heldCustomers: number; heldExposure: string; limitCustomers: number; overLimitCustomers: number; overLimit: string
-  behavior: { index: number; amount: string; documents: number }[]
-  notices: { status: string; documents: number }[]
+  customers: number;
+  overdueCustomers: number;
+  attentionCustomers: number;
+  attention: string;
+  overdue: string;
+  deterioratingCustomers: number;
+  deterioratingExposure: string;
+  onTimeShare: string | null;
+  observations: number;
+  opening: string;
+  recovered: string;
+  recoveryShare: string | null;
+  remaining: string;
+  otherChange: string;
+  failedExposure: string;
+  deliveredDocuments: number;
+  overdueDocuments: number;
+  coverageShare: string | null;
+  missingTerms: string;
+  unassigned: string;
+  credits: string;
+  heldCustomers: number;
+  heldExposure: string;
+  limitCustomers: number;
+  overLimitCustomers: number;
+  overLimit: string;
+  behavior: { index: number; amount: string; documents: number }[];
+  notices: { status: string; documents: number }[];
 }
-export interface CollectionRecovery { index: number; opening: string; cash: string; remaining: string; other: string }
-export interface CollectionTrend { date: string; amount: string; days: string | null; documents: number }
+export interface CollectionRecovery {
+  index: number;
+  opening: string;
+  cash: string;
+  remaining: string;
+  other: string;
+}
+export interface CollectionTrend {
+  date: string;
+  amount: string;
+  days: string | null;
+  documents: number;
+}
 export interface ReceivablesIntelligence {
-  from: string; asOf: string; currency: string; currentCredit: boolean; baselineDays: number; minObservations: number
-  summary: CollectionSummary; customers: CollectionCustomer[]; customerTotal: number; customerPage: number
-  recovery: CollectionRecovery[]; trend: CollectionTrend[]
+  from: string;
+  asOf: string;
+  currency: string;
+  currentCredit: boolean;
+  baselineDays: number;
+  minObservations: number;
+  summary: CollectionSummary;
+  customers: CollectionCustomer[];
+  customerTotal: number;
+  customerPage: number;
+  recovery: CollectionRecovery[];
+  trend: CollectionTrend[];
 }
 
-const PAGE_SIZE = 24
-const moneyFields = ['gross', 'credits', 'net', 'overdue', 'severe', 'missingTerms', 'committed', 'unbilled'] as const
+const PAGE_SIZE = 24;
+const moneyFields = [
+  "gross",
+  "credits",
+  "net",
+  "overdue",
+  "severe",
+  "missingTerms",
+  "committed",
+  "unbilled",
+] as const;
 function normalizeCustomer(row: CollectionCustomer): CollectionCustomer {
-  return { ...row, ...Object.fromEntries(moneyFields.map((key) => [key, normalizeMoney(row[key])])),
-    creditLimit: row.creditLimit === null ? null : normalizeMoney(row.creditLimit), headroom: row.headroom === null ? null : normalizeMoney(row.headroom) }
+  return {
+    ...row,
+    ...Object.fromEntries(moneyFields.map((key) => [key, normalizeMoney(row[key])])),
+    creditLimit: row.creditLimit === null ? null : normalizeMoney(row.creditLimit),
+    headroom: row.headroom === null ? null : normalizeMoney(row.headroom),
+  };
 }
 
 /** A single scoped population supplies summary, customer cards and chart
  * projections. Applications retain target carrying amounts; only posted
  * customer receipts count as cash recovery or payment observations. */
-async function collectionSource(orgId: string, from: string, asOf: string, scope: ReadonlySet<string> | null, currency: string) {
+async function collectionSource(
+  orgId: string,
+  from: string,
+  asOf: string,
+  scope: ReadonlySet<string> | null,
+  currency: string,
+) {
   const [cfg, bookId, today, closing, opening] = await Promise.all([
-    analyticsConfig(orgId, 'receivables'), activePostingPrimaryBookId(orgId), businessToday(orgId),
-    openItemSourceQuery(orgId, 'ar', asOf, scope === null ? undefined : [...scope].sort()),
-    openItemSourceQuery(orgId, 'ar', addCalendarDays(from, -1), scope === null ? undefined : [...scope].sort()),
-  ])
-  const recentFrom = addCalendarDays(asOf, 1 - cfg.baselineDays)
-  const baselineFrom = addCalendarDays(recentFrom, -cfg.baselineDays)
-  const historyFrom = baselineFrom < from ? baselineFrom : from
-  const scoped = (column: SQL) => scope === null ? sql`` : sql`and ${column} = any(${`{${[...scope].sort().join(',')}}`}::uuid[])`
-  const isCurrent = asOf === today
-  const orderSource = customerOrderCommitmentsSource(orgId, scope)
-  const orderRates = presentationSpotRatesSql(orgId, currency, sql`select coalesce(o.func, ${currency}) as ccy`, sql`o.date`)
-  const rates = presentationSpotRatesSql(orgId, currency, sql`
+    analyticsConfig(orgId, "receivables"),
+    activePostingPrimaryBookId(orgId),
+    businessToday(orgId),
+    openItemSourceQuery(orgId, "ar", asOf, scope === null ? undefined : [...scope].sort()),
+    openItemSourceQuery(
+      orgId,
+      "ar",
+      addCalendarDays(from, -1),
+      scope === null ? undefined : [...scope].sort(),
+    ),
+  ]);
+  const recentFrom = addCalendarDays(asOf, 1 - cfg.baselineDays);
+  const baselineFrom = addCalendarDays(recentFrom, -cfg.baselineDays);
+  const historyFrom = baselineFrom < from ? baselineFrom : from;
+  const scoped = (column: SQL) =>
+    scope === null
+      ? sql``
+      : sql`and ${column} = any(${`{${[...scope].sort().join(",")}}`}::uuid[])`;
+  const isCurrent = asOf === today;
+  const orderSource = customerOrderCommitmentsSource(orgId, scope);
+  const orderRates = presentationSpotRatesSql(
+    orgId,
+    currency,
+    sql`select coalesce(o.func, ${currency}) as ccy`,
+    sql`o.date`,
+  );
+  const rates = presentationSpotRatesSql(
+    orgId,
+    currency,
+    sql`
     select coalesce(func, ${currency}) as ccy from closing_raw
     union select coalesce(func, ${currency}) from opening_raw
     union select coalesce(func, ${currency}) from cash_raw
-    union select credit_currency from credit_raw where credit_limit is not null`, asOf)
-  const translated = (amount: SQL, functional: SQL) => presentationAmountSql(amount, functional, currency, sql`r.rate::numeric`)
-  return { cfg, isCurrent, source: sql`
+    union select credit_currency from credit_raw where credit_limit is not null`,
+    asOf,
+  );
+  const translated = (amount: SQL, functional: SQL) =>
+    presentationAmountSql(amount, functional, currency, sql`r.rate::numeric`);
+  return {
+    cfg,
+    isCurrent,
+    source: sql`
     closing_raw as materialized (${closing}), opening_raw as materialized (${opening}),
     cash_raw as materialized (
       select x.id, x.to_line_id as line_id, target.party_id, x.applied_on::date as paid_on,
@@ -101,7 +211,7 @@ async function collectionSource(orgId: string, from: string, asOf: string, scope
       from customer_roles cr join parties p on p.id = cr.party_id and p.org_id = cr.org_id
       where cr.org_id = ${orgId} and ${isCurrent}
         and exists (select 1 from closing_raw c where c.party_id = cr.party_id)
-        ${scope === null ? sql`` : sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${[...scope].sort().join(',')}}`}::uuid[]))`}
+        ${scope === null ? sql`` : sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${[...scope].sort().join(",")}}`}::uuid[]))`}
     ), unbilled_raw as materialized (
       select o.* from (${orderSource}) o where ${isCurrent}
         and exists (select 1 from credit_raw c where c.party_id = o.party_id)
@@ -192,11 +302,18 @@ async function collectionSource(orgId: string, from: string, asOf: string, scope
       ) cc left join rates r on r.from_currency = cc.ccy
       where cc.ccy <> ${currency} and (r.rate is null or r.rate::numeric <= 0)
       union select distinct coalesce(func, ${currency}), date::date from unbilled where missing_rate
-    )` }
+    )`,
+  };
 }
 
-async function collectionSummary(source: SQL, currency: string, asOf: string): Promise<CollectionSummary> {
-  const result = await analyticsQuery<Record<string, unknown> & { missing: string[] }>(sql`with ${source}
+async function collectionSummary(
+  source: SQL,
+  currency: string,
+  asOf: string,
+): Promise<CollectionSummary> {
+  const result = await analyticsQuery<
+    Record<string, unknown> & { missing: string[] }
+  >(sql`with ${source}
     select count(*) filter (where party_id is not null)::int as customers,
            count(*) filter (where party_id is not null and overdue > 0)::int as "overdueCustomers",
            count(*) filter (where party_id is not null and (deteriorating or severe > 0 or failed_exposure > 0))::int as "attentionCustomers",
@@ -224,21 +341,64 @@ async function collectionSummary(source: SQL, currency: string, asOf: string): P
              from cash where due_date is not null and is_recent group by 1) b), '[]'::jsonb) as behavior,
            coalesce((select jsonb_agg(n order by status) from (select status, count(*)::int as documents from (select case when delivered then 'sent' when failed then 'failed' when suppressed then 'suppressed' else 'staged' end as status from document_notices) outcomes group by status) n), '[]'::jsonb) as notices,
            coalesce((select jsonb_agg(currency order by currency) from (select distinct currency from missing) currencies), '[]'::jsonb) as missing, (select min(date)::text from missing) as "missingDate"
-    from customer_facts`)
-  const row = result.rows[0]!
-  if (row.missing.length) throw new MissingExchangeRateError(row.missing[0]!, currency, String(row.missingDate ?? asOf), row.missing)
-  for (const key of ['attention', 'overdue', 'deterioratingExposure', 'opening', 'recovered', 'remaining', 'otherChange', 'failedExposure', 'missingTerms', 'unassigned', 'credits', 'heldExposure', 'overLimit']) row[key] = normalizeMoney(String(row[key]))
-  return { ...row, recoveryShare: receivablesRatio(String(row.recovered), String(row.opening)),
-    coverageShare: receivablesRatio(String(row.deliveredDocuments), String(row.overdueDocuments)) } as unknown as CollectionSummary
+    from customer_facts`);
+  const row = result.rows[0]!;
+  if (row.missing.length)
+    throw new MissingExchangeRateError(
+      row.missing[0]!,
+      currency,
+      String(row.missingDate ?? asOf),
+      row.missing,
+    );
+  for (const key of [
+    "attention",
+    "overdue",
+    "deterioratingExposure",
+    "opening",
+    "recovered",
+    "remaining",
+    "otherChange",
+    "failedExposure",
+    "missingTerms",
+    "unassigned",
+    "credits",
+    "heldExposure",
+    "overLimit",
+  ])
+    row[key] = normalizeMoney(String(row[key]));
+  return {
+    ...row,
+    recoveryShare: receivablesRatio(String(row.recovered), String(row.opening)),
+    coverageShare: receivablesRatio(String(row.deliveredDocuments), String(row.overdueDocuments)),
+  } as unknown as CollectionSummary;
 }
 
 /** Search and ranking execute against the complete authorized portfolio.
  * Only a page of customer evidence crosses the application boundary. */
-async function customerPage(source: SQL, query: string, page: number, signal: string, creditOnly: boolean) {
-  const filter = signal === 'deteriorating' ? sql`and deteriorating` : signal === 'severe' ? sql`and severe > 0`
-    : signal === 'delivery' ? sql`and (failed > 0 or suppressed > 0)` : signal === 'terms' ? sql`and missing_terms > 0`
-    : signal === 'held' ? sql`and held` : sql``
-  const result = await analyticsQuery<{ customers: CollectionCustomer[]; total: number; page: number }>(sql`with ${source},
+async function customerPage(
+  source: SQL,
+  query: string,
+  page: number,
+  signal: string,
+  creditOnly: boolean,
+) {
+  const filter =
+    signal === "deteriorating"
+      ? sql`and deteriorating`
+      : signal === "severe"
+        ? sql`and severe > 0`
+        : signal === "delivery"
+          ? sql`and (failed > 0 or suppressed > 0)`
+          : signal === "terms"
+            ? sql`and missing_terms > 0`
+            : signal === "held"
+              ? sql`and held`
+              : sql``;
+  const result = await analyticsQuery<{
+    customers: CollectionCustomer[];
+    total: number;
+    page: number;
+  }>(sql`with ${source},
     filtered as (select * from customer_facts where true ${query ? sql`and position(lower(${query}) in lower(name)) > 0` : sql``} ${filter}
       ${creditOnly ? sql`and (held or (limit_amount is not null and committed > limit_amount))` : sql``}),
     counts as (select count(*)::int as total from filtered), selected as (
@@ -251,30 +411,86 @@ async function customerPage(source: SQL, query: string, page: number, signal: st
              coalesce((select jsonb_agg(jsonb_build_object('date', h.date, 'days', h.days) order by h.date) from payment_months h where h.party_id = filtered.party_id), '[]'::jsonb) as history
       from filtered order by deteriorating desc, severe desc, failed_exposure desc, overdue desc, gross desc, party_id nulls last
       limit ${PAGE_SIZE} offset (select (least(${page}, greatest(1, ceil(total::numeric / ${PAGE_SIZE})::int)) - 1) * ${PAGE_SIZE} from counts)
-    ) select coalesce((select jsonb_agg(selected) from selected), '[]'::jsonb) as customers, (select total from counts) as total, (select least(${page}, greatest(1, ceil(total::numeric / ${PAGE_SIZE})::int)) from counts) as page`)
-  const row = result.rows[0]!
-  return { customers: row.customers.map(normalizeCustomer), total: row.total, page: row.page }
+    ) select coalesce((select jsonb_agg(selected) from selected), '[]'::jsonb) as customers, (select total from counts) as total, (select least(${page}, greatest(1, ceil(total::numeric / ${PAGE_SIZE})::int)) from counts) as page`);
+  const row = result.rows[0]!;
+  return { customers: row.customers.map(normalizeCustomer), total: row.total, page: row.page };
 }
 
-export async function receivablesIntelligenceData(orgId: string, from: string, asOf: string, scope: ReadonlySet<string> | null, filters: { customerQ?: string; customerPage?: string; signal?: string } = {}): Promise<ReceivablesIntelligence> {
-  const currency = await presentationCurrency(orgId)
-  const { source, cfg, isCurrent } = await collectionSource(orgId, from, asOf, scope, currency)
-  const read = currentAnalyticsRead()
-  const load = () => collectionSummary(source, currency, asOf)
-  const summary = read?.slug === 'receivables-intelligence' && read.authz.user.orgId === orgId
-    ? await cachedAnalyticsRead(read.authz, 'metric:collection-intelligence-v1', { from, asOf, cfg: JSON.stringify(cfg), scope: scope === null ? 'all' : [...scope].sort().join(',') }, load, { identity: read, admit: false }) : await load()
-  const page = Math.max(1, Math.min(10000, Number.parseInt(filters.customerPage ?? '1', 10) || 1))
-  const wantsCustomers = analyticsSection('receivables-intelligence', ['customers', 'behavior', 'collections', 'credit'])
-  const wantsRecovery = analyticsSection('receivables-intelligence', ['recovery'])
-  const wantsTrend = analyticsSection('receivables-intelligence', ['behavior', 'recovery', 'collections'])
+export async function receivablesIntelligenceData(
+  orgId: string,
+  from: string,
+  asOf: string,
+  scope: ReadonlySet<string> | null,
+  filters: { customerQ?: string; customerPage?: string; signal?: string } = {},
+): Promise<ReceivablesIntelligence> {
+  const currency = await presentationCurrency(orgId);
+  const { source, cfg, isCurrent } = await collectionSource(orgId, from, asOf, scope, currency);
+  const read = currentAnalyticsRead();
+  const load = () => collectionSummary(source, currency, asOf);
+  const summary =
+    read?.slug === "receivables-intelligence" && read.authz.user.orgId === orgId
+      ? await cachedAnalyticsRead(
+          read.authz,
+          "metric:collection-intelligence-v1",
+          {
+            from,
+            asOf,
+            cfg: JSON.stringify(cfg),
+            scope: scope === null ? "all" : [...scope].sort().join(","),
+          },
+          load,
+          { identity: read, admit: false },
+        )
+      : await load();
+  const page = Math.max(1, Math.min(10000, Number.parseInt(filters.customerPage ?? "1", 10) || 1));
+  const wantsCustomers = analyticsSection("receivables-intelligence", [
+    "customers",
+    "behavior",
+    "collections",
+    "credit",
+  ]);
+  const wantsRecovery = analyticsSection("receivables-intelligence", ["recovery"]);
+  const wantsTrend = analyticsSection("receivables-intelligence", [
+    "behavior",
+    "recovery",
+    "collections",
+  ]);
   const [portfolio, recovery, trend] = await Promise.all([
-    wantsCustomers ? customerPage(source, filters.customerQ?.trim().slice(0, 160) ?? '', page, filters.signal ?? '', read?.tab === 'credit') : Promise.resolve({ customers: [], total: 0, page: 1 }),
-    wantsRecovery ? analyticsQuery<CollectionRecovery>(sql`with ${source} select cohort as index, sum(opening)::text as opening, sum(cash)::text as cash, sum(remaining)::text as remaining, sum(opening - cash - remaining)::text as other from recoveries group by cohort order by cohort`).then((r) => r.rows) : Promise.resolve([]),
-    wantsTrend ? analyticsQuery<CollectionTrend>(sql`with ${source}
+    wantsCustomers
+      ? customerPage(
+          source,
+          filters.customerQ?.trim().slice(0, 160) ?? "",
+          page,
+          filters.signal ?? "",
+          read?.tab === "credit",
+        )
+      : Promise.resolve({ customers: [], total: 0, page: 1 }),
+    wantsRecovery
+      ? analyticsQuery<CollectionRecovery>(
+          sql`with ${source} select cohort as index, sum(opening)::text as opening, sum(cash)::text as cash, sum(remaining)::text as remaining, sum(opening - cash - remaining)::text as other from recoveries group by cohort order by cohort`,
+        ).then((r) => r.rows)
+      : Promise.resolve([]),
+    wantsTrend
+      ? analyticsQuery<CollectionTrend>(sql`with ${source}
       select date_trunc('month', paid_on)::date::text as date, sum(value)::text as amount,
              round(sum(value * late_days) filter (where due_date is not null) / nullif(sum(value) filter (where due_date is not null), 0), 1)::text as days,
-             count(distinct line_id)::int as documents from cash where paid_on >= ${from}::date group by 1 order by 1`).then((r) => r.rows) : Promise.resolve([]),
-  ])
-  return { from, asOf, currency, currentCredit: isCurrent, baselineDays: cfg.baselineDays, minObservations: cfg.minObservations,
-    summary, customers: portfolio.customers, customerTotal: portfolio.total, customerPage: portfolio.page, recovery, trend }
+             count(distinct line_id)::int as documents from cash where paid_on >= ${from}::date group by 1 order by 1`).then(
+          (r) => r.rows,
+        )
+      : Promise.resolve([]),
+  ]);
+  return {
+    from,
+    asOf,
+    currency,
+    currentCredit: isCurrent,
+    baselineDays: cfg.baselineDays,
+    minObservations: cfg.minObservations,
+    summary,
+    customers: portfolio.customers,
+    customerTotal: portfolio.total,
+    customerPage: portfolio.page,
+    recovery,
+    trend,
+  };
 }

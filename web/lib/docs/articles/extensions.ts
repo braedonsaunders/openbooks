@@ -1,10 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const extensions: DocArticle = {
-  slug: 'app-authoring', title: 'Build and manage apps', category: 'apps', order: 0,
-  summary: 'Create or import a package, edit its files and definitions, and activate a reviewed version.',
-  updated: '2026-10-26', related: ['app-api-reference', 'record-customization', 'mcp-control'],
-  keywords: ['modules', 'apps', 'agent', 'draft', 'native screens'],
+  slug: "app-authoring",
+  title: "Build and manage apps",
+  category: "apps",
+  order: 0,
+  summary:
+    "Create or import a package, edit its files and definitions, and activate a reviewed version.",
+  updated: "2026-10-26",
+  related: ["app-api-reference", "record-customization", "mcp-control"],
+  keywords: ["modules", "apps", "agent", "draft", "native screens"],
   body: `# Build and manage apps
 
 An app is one installed package of screens, record definitions, and optional backend actions. **Settings → Apps** is its management inventory. **Apps** is the launcher people use to open installed workspaces; it does not contain a second copy of the package.
@@ -50,4 +55,4 @@ For custom interactive experiences, a package can use the existing sandboxed HTM
 
 Page customizations, navigation entries, settings, and permission definitions belong to the same app package as its screens, records, fields, and backend actions. Every change goes through the same draft, preview, and activation flow. There is one installed version and one ownership record.
 `,
-}
+};

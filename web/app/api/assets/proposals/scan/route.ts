@@ -8,7 +8,11 @@ export const runtime = "nodejs";
 
 const body = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("scan"), from: calendarDate("from"), to: calendarDate("to") }),
-  z.strictObject({ action: z.literal("line"), journalLineId: id, categoryId: id.nullable().optional() }),
+  z.strictObject({
+    action: z.literal("line"),
+    journalLineId: id,
+    categoryId: id.nullable().optional(),
+  }),
 ]);
 
 /**
@@ -22,7 +26,13 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, body: input }) => {
     if (input.action === "scan") {
-      return NextResponse.json(await scanAssetProposals(gate.user.orgId, { from: input.from, to: input.to, actorId: gate.user.id }));
+      return NextResponse.json(
+        await scanAssetProposals(gate.user.orgId, {
+          from: input.from,
+          to: input.to,
+          actorId: gate.user.id,
+        }),
+      );
     }
     const result = await proposeJournalLine(gate.user.orgId, {
       journalLineId: input.journalLineId,

@@ -9,10 +9,18 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema } from "../platform/db.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+  uuidArray,
+} from "../organization/subsidiaries.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { sum, isZero } from "../money/money.ts";
-import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
+import {
+  assertPeriodModulesOpen,
+  CloseError,
+  periodClosedDetailsOf,
+} from "../periods/period-policy.ts";
 import { markEntryReversed, postEntry } from "./post-entry.ts";
 import { reversalPostEntryLine } from "./reversal-posting-lines.ts";
 import { PostingError } from "./posting-contracts.ts";
@@ -55,20 +63,22 @@ export interface GlLine {
  * kernel poster for labor/recognition (mirrors depreciation.ts). Runs in its
  * own transaction; returns the entry id, or null when there is nothing to post.
  */
-export async function postProjectGlEntry(opts: {
-  orgId: string;
-  actorId: string;
-  origin: string;
-  entryNumber: string;
-  postingDate: string;
-  memo: string;
-  subsidiaryId?: string | null;
-  /** Functional currency of line amounts when already resolved by the caller. */
-  currency?: string;
-  /** Target GL book; defaults to the active primary posting book. */
-  bookId?: string | null;
-  lines: GlLine[];
-} & OriginEntryRefs): Promise<string | null> {
+export async function postProjectGlEntry(
+  opts: {
+    orgId: string;
+    actorId: string;
+    origin: string;
+    entryNumber: string;
+    postingDate: string;
+    memo: string;
+    subsidiaryId?: string | null;
+    /** Functional currency of line amounts when already resolved by the caller. */
+    currency?: string;
+    /** Target GL book; defaults to the active primary posting book. */
+    bookId?: string | null;
+    lines: GlLine[];
+  } & OriginEntryRefs,
+): Promise<string | null> {
   return inDbTransaction((tx) => postProjectGlEntryWithinTransaction(tx, opts));
 }
 
@@ -87,23 +97,30 @@ export async function postProjectGlEntryWithinTransaction(
   // Strict calendar boundary: a non-day such as February 30 passes a naive
   // Date.parse guard (V8 rolls it into March) and would otherwise surface as
   // a 22008 from PostgreSQL instead of failing closed here.
-  if (!isIsoCalendarDate(postingDate)) throw new Error("postingDate must be a valid YYYY-MM-DD date");
+  if (!isIsoCalendarDate(postingDate))
+    throw new Error("postingDate must be a valid YYYY-MM-DD date");
   if (lines.length === 0) return null;
   const bal = sum(lines.map((l) => l.amount));
   if (!isZero(bal)) throw new Error(`unbalanced project GL entry (${bal})`);
 
   let bookId = opts.bookId ?? null;
   if (bookId) {
-    const override = (await tx.execute<{ id: string }>(sql`
+    const override = await tx.execute<{ id: string }>(
+      sql`
       select id from accounting_books
        where org_id = ${orgId} and id = ${bookId} and is_active and posts_gl
-       limit 1 for share`, "objects"));
+       limit 1 for share`,
+      "objects",
+    );
     if (!override[0]) throw new Error("project GL posting requires an active posting book");
   } else {
-    const book = (await tx.execute<{ id: string }>(sql`
+    const book = await tx.execute<{ id: string }>(
+      sql`
       select id from accounting_books
        where org_id = ${orgId} and is_primary and is_active and posts_gl
-       limit 1 for share`, "objects"));
+       limit 1 for share`,
+      "objects",
+    );
     bookId = book[0]?.id ?? null;
   }
   if (!bookId) throw new Error("no active primary GL book");
@@ -112,18 +129,26 @@ export async function postProjectGlEntryWithinTransaction(
   // legal entity, the one authoritative org root is the default.
   let subId = subsidiaryId;
   if (!subId) {
-    const s = (await tx.execute<{ id: string }>(sql`
+    const s = await tx.execute<{ id: string }>(
+      sql`
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
-       and parent_id is null limit 1`, "objects"));
+       and parent_id is null limit 1`,
+      "objects",
+    );
     subId = s[0]?.id ?? null;
   }
   if (!subId) throw new Error("project GL posting requires an active root subsidiary");
-  const lineSubIds = [...new Set([subId, ...lines.map((l) => l.subsidiaryId).filter((id): id is string => !!id)])];
-  const currencies = (await tx.execute<{ id: string; base_currency: string | null }>(sql`
+  const lineSubIds = [
+    ...new Set([subId, ...lines.map((l) => l.subsidiaryId).filter((id): id is string => !!id)]),
+  ];
+  const currencies = await tx.execute<{ id: string; base_currency: string | null }>(
+    sql`
     select id, nullif(trim(base_currency), '') as base_currency
       from subsidiaries
      where org_id = ${orgId} and id = any(${uuidArray(lineSubIds)}::uuid[]) and is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   const currencyBySub = new Map(currencies.map((row) => [row.id, row.base_currency]));
   for (const lineSubId of lineSubIds) {
     if (!currencyBySub.get(lineSubId)) {
@@ -132,11 +157,15 @@ export async function postProjectGlEntryWithinTransaction(
   }
   const functionalCurrencies = new Set(lineSubIds.map((lineSubId) => currencyBySub.get(lineSubId)));
   if (functionalCurrencies.size > 1) {
-    throw new Error("project GL posting requires one functional currency across all line subsidiaries");
+    throw new Error(
+      "project GL posting requires one functional currency across all line subsidiaries",
+    );
   }
   const functionalCurrency = [...functionalCurrencies][0]!;
   if (opts.currency && opts.currency !== functionalCurrency) {
-    throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
+    throw new Error(
+      `project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`,
+    );
   }
   const currency = opts.currency ?? functionalCurrency;
   // Project journals are ordinary postings: the shared covering-period
@@ -167,37 +196,53 @@ export async function postProjectGlEntryWithinTransaction(
   const accountIds = [...new Set(lines.map((line) => line.accountId))];
   await tx.execute(sql`select id from accounts where org_id=${orgId}
     and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
-  const dimensionLocks: Array<{ table: "departments" | "projects" | "locations" | "classes"; id: string }> = [];
+  const dimensionLocks: Array<{
+    table: "departments" | "projects" | "locations" | "classes";
+    id: string;
+  }> = [];
   for (const line of lines) {
     if (line.departmentId) dimensionLocks.push({ table: "departments", id: line.departmentId });
     if (line.locationId) dimensionLocks.push({ table: "locations", id: line.locationId });
     if (line.projectId) dimensionLocks.push({ table: "projects", id: line.projectId });
     if (line.classId) dimensionLocks.push({ table: "classes", id: line.classId });
   }
-  const lockProjectIds = [...new Set(dimensionLocks.filter((d) => d.table === "projects").map((d) => d.id))];
+  const lockProjectIds = [
+    ...new Set(dimensionLocks.filter((d) => d.table === "projects").map((d) => d.id)),
+  ];
   if (lockProjectIds.length) {
     await tx.execute(sql`select id from projects where org_id=${orgId}
       and id=any(${uuidArray(lockProjectIds)}::uuid[]) order by id for share`);
   }
-  const lockDepartmentIds = [...new Set(dimensionLocks.filter((d) => d.table === "departments").map((d) => d.id))];
+  const lockDepartmentIds = [
+    ...new Set(dimensionLocks.filter((d) => d.table === "departments").map((d) => d.id)),
+  ];
   if (lockDepartmentIds.length) {
     await tx.execute(sql`select id from departments where org_id=${orgId}
       and id=any(${uuidArray(lockDepartmentIds)}::uuid[]) order by id for share`);
   }
-  const lockLocationIds = [...new Set(dimensionLocks.filter((d) => d.table === "locations").map((d) => d.id))];
+  const lockLocationIds = [
+    ...new Set(dimensionLocks.filter((d) => d.table === "locations").map((d) => d.id)),
+  ];
   if (lockLocationIds.length) {
     await tx.execute(sql`select id from locations where org_id=${orgId}
       and id=any(${uuidArray(lockLocationIds)}::uuid[]) order by id for share`);
   }
-  const lockClassIds = [...new Set(dimensionLocks.filter((d) => d.table === "classes").map((d) => d.id))];
+  const lockClassIds = [
+    ...new Set(dimensionLocks.filter((d) => d.table === "classes").map((d) => d.id)),
+  ];
   if (lockClassIds.length) {
     await tx.execute(sql`select id from classes where org_id=${orgId}
       and id=any(${uuidArray(lockClassIds)}::uuid[]) order by id for share`);
   }
   const postingSubsidiaryId = subId;
-  const restrictedLines = lines.map((line) => ({ ...line, subsidiaryId: line.subsidiaryId ?? postingSubsidiaryId }));
+  const restrictedLines = lines.map((line) => ({
+    ...line,
+    subsidiaryId: line.subsidiaryId ?? postingSubsidiaryId,
+  }));
   await validateSubsidiaryRestrictions(tx, {
-    orgId, ctx: await loadSubsidiaryContext(tx, orgId), docSubsidiaryId: postingSubsidiaryId,
+    orgId,
+    ctx: await loadSubsidiaryContext(tx, orgId),
+    docSubsidiaryId: postingSubsidiaryId,
     lines: restrictedLines,
   });
   // Every legal entity's books balance on their own (the kernel enforces the
@@ -283,12 +328,11 @@ export async function reverseProjectGlEntryWithinTransaction(
   // Business-meaningful default date: the org's calendar day (not the UTC
   // day), still honouring a pinned simulation clock (clock.ts) so a reversal
   // lands in the simulated period.
-  const reversalDate =
-    reversalDateInput ?? await businessToday(orgId);
+  const reversalDate = reversalDateInput ?? (await businessToday(orgId));
   if (!isIsoCalendarDate(reversalDate)) {
     throw new Error("reversalDate must be a valid YYYY-MM-DD date");
   }
-  const head = (await tx.execute<{
+  const head = await tx.execute<{
     entry_number: string;
     book_id: string;
     subsidiary_id: string;
@@ -296,20 +340,26 @@ export async function reverseProjectGlEntryWithinTransaction(
     posting_date: string;
     origin: string;
     status: string;
-  }>(sql`
+  }>(
+    sql`
     select entry_number, book_id, subsidiary_id, period_id, posting_date, origin, status
       from journal_entries
      where id = ${entryId} and org_id = ${orgId}
-     for update`, "objects"));
+     for update`,
+    "objects",
+  );
   const h = head[0];
   if (!h) return { status: "missing", reversalId: null };
   if (h.status === "reversed") {
-    const existing = (await tx.execute<{ id: string }>(sql`
+    const existing = await tx.execute<{ id: string }>(
+      sql`
       select id
         from journal_entries
        where org_id = ${orgId} and reverses_entry_id = ${entryId}
        order by created_at, id
-       limit 1`, "objects"));
+       limit 1`,
+      "objects",
+    );
     return {
       status: "already_reversed",
       reversalId: existing[0]?.id ?? null,
@@ -321,11 +371,16 @@ export async function reverseProjectGlEntryWithinTransaction(
   // Use a named period for governed adjustment reversals; ordinary corrections
   // keep the shared covering-period resolver.
   const period: { id: string; starts_on: string; ends_on: string } | null = reversalPeriodId
-    ? (await tx.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+    ? ((
+        await tx.execute<{ id: string; starts_on: string; ends_on: string }>(
+          sql`
         select ${reversalPeriodId}::uuid as id,
                window_start::text as starts_on,
                window_end::text as ends_on
-          from accounting_period_posting_window(${orgId}, ${reversalPeriodId})`, "objects"))[0] ?? null
+          from accounting_period_posting_window(${orgId}, ${reversalPeriodId})`,
+          "objects",
+        )
+      )[0] ?? null)
     : await resolveCoveringPeriod(tx, orgId, reversalDate, h.subsidiary_id);
   if (!period) {
     throw new Error(`no accounting period covers ${reversalDate}`);
@@ -353,7 +408,9 @@ export async function reverseProjectGlEntryWithinTransaction(
     }
     throw error;
   }
-  const lines = await tx.select().from(schema.journalLines)
+  const lines = await tx
+    .select()
+    .from(schema.journalLines)
     .where(and(eq(schema.journalLines.entryId, entryId), eq(schema.journalLines.orgId, orgId)))
     .orderBy(schema.journalLines.lineNumber);
   // Preserve the exact original FX and dimensional evidence. Losing location
@@ -395,14 +452,7 @@ export async function reverseProjectGlEntry(
   reversalDate?: string,
 ): Promise<string | null> {
   const result = await inDbTransaction((tx) =>
-    reverseProjectGlEntryWithinTransaction(
-      tx,
-      orgId,
-      actorId,
-      entryId,
-      reason,
-      reversalDate,
-    )
+    reverseProjectGlEntryWithinTransaction(tx, orgId, actorId, entryId, reason, reversalDate),
   );
   return result.status === "reversed" ? result.reversalId : null;
 }

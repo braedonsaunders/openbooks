@@ -12,11 +12,7 @@ import {
   ensureBookingContract,
   runRevenueRecognition,
 } from "./recognition.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -39,9 +35,14 @@ async function disableRevenueContracts(orgId: string): Promise<void> {
 
 /** Monthly periods covering the whole multi-year deal. */
 async function seedDealPeriods(org: Org): Promise<void> {
-  const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+  const calendar = (
+    await db.execute<{ fiscal_calendar_id: string }>(
+      sql`
     select fiscal_calendar_id from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects"))[0];
+     where id = ${org.periodId} and org_id = ${org.orgId}`,
+      "objects",
+    )
+  )[0];
   assert.ok(calendar?.fiscal_calendar_id);
   for (let year = 2026; year <= 2029; year += 1) {
     for (let month = 1; month <= 12; month += 1) {
@@ -124,10 +125,13 @@ async function seedSalesOrder(
               ${`Year ${lineNumber} service`}, '1', ${line.amount}, ${line.amount},
               '0', '{}'::jsonb, '{}'::jsonb, ${adminId}, ${adminId})`);
   }
-  const approved = await db.execute<{ id: string }>(sql`
+  const approved = await db.execute<{ id: string }>(
+    sql`
     update documents set status = 'approved', updated_at = now()
      where id = ${orderId} and org_id = ${org.orgId} and status = 'draft'
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   assert.equal(approved.length, 1);
   return { orderId, lineIds };
 }
@@ -182,10 +186,16 @@ async function postOrderInvoice(
 }
 
 async function allocatedSum(orgId: string, contractId: string): Promise<string> {
-  const rows = await db.execute<{ allocated_price: string }>(sql`
+  const rows = await db.execute<{ allocated_price: string }>(
+    sql`
     select allocated_price from performance_obligations
-     where org_id = ${orgId} and contract_id = ${contractId}`, "objects");
-  return rows.reduce((sum, row) => (Number(sum) + Number(row.allocated_price)).toFixed(4), "0.0000");
+     where org_id = ${orgId} and contract_id = ${contractId}`,
+    "objects",
+  );
+  return rows.reduce(
+    (sum, row) => (Number(sum) + Number(row.allocated_price)).toFixed(4),
+    "0.0000",
+  );
 }
 
 /**
@@ -208,10 +218,18 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     // Booking creates the shell before any billing: draft, no consideration.
     const shellId = await ensureBookingContract(org.orgId, orderId, adminId);
     assert.ok(shellId);
-    const shell = (await db.execute<{
-      scope: string; status: string; total_consideration: string; source_document_id: string;
-    }>(sql`select scope, status, total_consideration::text, source_document_id
-              from revenue_contracts where id = ${shellId} and org_id = ${org.orgId}`, "objects"))[0];
+    const shell = (
+      await db.execute<{
+        scope: string;
+        status: string;
+        total_consideration: string;
+        source_document_id: string;
+      }>(
+        sql`select scope, status, total_consideration::text, source_document_id
+              from revenue_contracts where id = ${shellId} and org_id = ${org.orgId}`,
+        "objects",
+      )
+    )[0];
     assert.equal(shell?.scope, "order");
     assert.equal(shell?.status, "draft");
     assert.equal(shell?.total_consideration, "0.0000");
@@ -223,9 +241,17 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
       { itemId: setupItemId, amount: "3000" },
       { itemId: org.items.service, amount: "12000" },
     ]);
-    const contracts = await db.execute<{ id: string; status: string; total_consideration: string; modification_seq: number }>(sql`
+    const contracts = await db.execute<{
+      id: string;
+      status: string;
+      total_consideration: string;
+      modification_seq: number;
+    }>(
+      sql`
       select id, status, total_consideration::text, modification_seq from revenue_contracts
-       where org_id = ${org.orgId}`, "objects");
+       where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(contracts.length, 1);
     assert.equal(contracts[0]!.id, shellId);
     assert.equal(contracts[0]!.status, "active");
@@ -234,9 +260,17 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     // Relative-SSP pricing (setup 4000 vs annual 12000 over a 15000 bundle)
     // lands 3750/11250 and sums exactly to the billed amount.
     assert.equal(await allocatedSum(org.orgId, shellId), "15000.0000");
-    assert.equal((await db.execute<{ amount: string }>(sql`
+    assert.equal(
+      (
+        await db.execute<{ amount: string }>(
+          sql`
       select amount::text as amount from revenue_contract_billings
-       where org_id = ${org.orgId} and contract_id = ${shellId}`, "objects")).length, 1);
+       where org_id = ${org.orgId} and contract_id = ${shellId}`,
+          "objects",
+        )
+      ).length,
+      1,
+    );
 
     await runRevenueRecognition(org.orgId, "2026-07-31", adminId);
     let position = await contractPosition(db, org.orgId, shellId);
@@ -251,9 +285,16 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     await postOrderInvoice(org, adminId, orderId, "INV-Y2", "2027-07-15", [
       { itemId: org.items.service, amount: "12000" },
     ]);
-    const yearTwo = await db.execute<{ id: string; total_consideration: string; modification_seq: number }>(sql`
+    const yearTwo = await db.execute<{
+      id: string;
+      total_consideration: string;
+      modification_seq: number;
+    }>(
+      sql`
       select id, total_consideration::text, modification_seq from revenue_contracts
-       where org_id = ${org.orgId}`, "objects");
+       where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(yearTwo.length, 1);
     assert.equal(yearTwo[0]!.id, shellId);
     assert.equal(yearTwo[0]!.total_consideration, "27000.0000");
@@ -289,112 +330,172 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     await postOrderInvoice(org, adminId, order2, "INV-Y2-B", "2027-07-15", [
       { itemId: org.items.service, amount: "12000" },
     ]);
-    const scoped = await db.execute<{ scope: string }>(sql`
-      select scope from revenue_contracts where org_id = ${org.orgId} order by created_at`, "objects");
-    assert.deepEqual(scoped.map((row) => row.scope), ["order", "invoice", "invoice"]);
+    const scoped = await db.execute<{ scope: string }>(
+      sql`
+      select scope from revenue_contracts where org_id = ${org.orgId} order by created_at`,
+      "objects",
+    );
+    assert.deepEqual(
+      scoped.map((row) => row.scope),
+      ["order", "invoice", "invoice"],
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("cancelling one order billing preserves sibling recognition and uses its active fiscal calendar", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const adminId = (await seedFlowActors(org.orgId)).adminId;
-    await seedDealPeriods(org);
-    const setupItemId = await seedSetupItem(org, adminId);
-    await enableRevenueContracts(org.orgId, false);
-    const { orderId } = await seedSalesOrder(org, adminId, setupItemId, "SO-CANCEL-SCOPE");
-    const firstInvoiceId = await postOrderInvoice(org, adminId, orderId, "INV-CANCEL-Y1", "2026-07-15", [
-      { itemId: org.items.service, amount: "12000" },
-    ]);
-    const targetInvoiceId = await postOrderInvoice(org, adminId, orderId, "INV-CANCEL-Y2", "2027-07-15", [
-      { itemId: org.items.service, amount: "12000" },
-    ]);
-    const contractId = (await db.execute<{ contract_id: string }>(sql`
+test(
+  "cancelling one order billing preserves sibling recognition and uses its active fiscal calendar",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const adminId = (await seedFlowActors(org.orgId)).adminId;
+      await seedDealPeriods(org);
+      const setupItemId = await seedSetupItem(org, adminId);
+      await enableRevenueContracts(org.orgId, false);
+      const { orderId } = await seedSalesOrder(org, adminId, setupItemId, "SO-CANCEL-SCOPE");
+      const firstInvoiceId = await postOrderInvoice(
+        org,
+        adminId,
+        orderId,
+        "INV-CANCEL-Y1",
+        "2026-07-15",
+        [{ itemId: org.items.service, amount: "12000" }],
+      );
+      const targetInvoiceId = await postOrderInvoice(
+        org,
+        adminId,
+        orderId,
+        "INV-CANCEL-Y2",
+        "2027-07-15",
+        [{ itemId: org.items.service, amount: "12000" }],
+      );
+      const contractId = (
+        await db.execute<{ contract_id: string }>(
+          sql`
       select contract_id from revenue_contract_billings
-       where org_id = ${org.orgId} and document_id = ${firstInvoiceId}`, "objects"))[0]?.contract_id;
-    assert.ok(contractId);
-    assert.equal((await db.execute<{ contract_id: string }>(sql`
+       where org_id = ${org.orgId} and document_id = ${firstInvoiceId}`,
+          "objects",
+        )
+      )[0]?.contract_id;
+      assert.ok(contractId);
+      assert.equal(
+        (
+          await db.execute<{ contract_id: string }>(
+            sql`
       select contract_id from revenue_contract_billings
-       where org_id = ${org.orgId} and document_id = ${targetInvoiceId}`, "objects"))[0]?.contract_id, contractId);
+       where org_id = ${org.orgId} and document_id = ${targetInvoiceId}`,
+            "objects",
+          )
+        )[0]?.contract_id,
+        contractId,
+      );
 
-    await runRevenueRecognition(org.orgId, "2026-07-31", adminId);
-    await runRevenueRecognition(org.orgId, "2027-07-31", adminId);
+      await runRevenueRecognition(org.orgId, "2026-07-31", adminId);
+      await runRevenueRecognition(org.orgId, "2027-07-31", adminId);
 
-    // An inactive planning calendar overlaps the reversal date and begins
-    // earlier, so a date-only period lookup would select it.
-    const inactiveCalendarId = randomUUID();
-    await db.execute(sql`
+      // An inactive planning calendar overlaps the reversal date and begins
+      // earlier, so a date-only period lookup would select it.
+      const inactiveCalendarId = randomUUID();
+      await db.execute(sql`
       insert into fiscal_calendars
         (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
          adjustment_period_enabled, is_default, is_active, config)
       values (${inactiveCalendarId}, ${org.orgId}, 'Inactive planning calendar',
               'monthly', 1, 1, 'UTC', false, false, false, '{}'::jsonb)`);
-    const inactivePeriodId = randomUUID();
-    await db.execute(sql`
+      const inactivePeriodId = randomUUID();
+      await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
          starts_on, ends_on, is_adjustment, custom)
       values (${inactivePeriodId}, ${org.orgId}, ${inactiveCalendarId}, 2027, 6,
               'Inactive overlap', '2027-06-01', '2027-08-31', false, '{}'::jsonb)`);
-    const activePeriodId = (await db.execute<{ id: string }>(sql`
+      const activePeriodId = (
+        await db.execute<{ id: string }>(
+          sql`
       select p.id from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        and fc.is_default and fc.is_active
        where p.org_id = ${org.orgId} and p.starts_on <= '2027-07-31'
-         and p.ends_on >= '2027-07-31' and not p.is_adjustment`, "objects"))[0]?.id;
-    assert.ok(activePeriodId);
+         and p.ends_on >= '2027-07-31' and not p.is_adjustment`,
+          "objects",
+        )
+      )[0]?.id;
+      assert.ok(activePeriodId);
 
-    const cancelled = await cancelRevenueRecognitionForInvoice({
-      documentId: targetInvoiceId,
-      orgId: org.orgId,
-      actorId: adminId,
-      reason: "The second annual service term was cancelled",
-      reversalDate: "2027-07-31",
-      allowedSubsidiaryIds: null,
-    });
-    assert.equal(cancelled.status, "cancelled");
-    assert.ok(cancelled.recognitionReversalEntryIds.length > 0);
+      const cancelled = await cancelRevenueRecognitionForInvoice({
+        documentId: targetInvoiceId,
+        orgId: org.orgId,
+        actorId: adminId,
+        reason: "The second annual service term was cancelled",
+        reversalDate: "2027-07-31",
+        allowedSubsidiaryIds: null,
+      });
+      assert.equal(cancelled.status, "cancelled");
+      assert.ok(cancelled.recognitionReversalEntryIds.length > 0);
 
-    const obligations = await db.execute<{ document_id: string; status: string }>(sql`
+      const obligations = await db.execute<{ document_id: string; status: string }>(
+        sql`
       select line.document_id, obligation.status
         from performance_obligations obligation
         join document_lines line
           on line.id = obligation.document_line_id and line.org_id = obligation.org_id
        where obligation.org_id = ${org.orgId} and obligation.contract_id = ${contractId}
-       order by line.document_id`, "objects");
-    assert.ok(obligations.some((row) => row.document_id === firstInvoiceId && row.status !== "cancelled"));
-    assert.ok(obligations.some((row) => row.document_id === targetInvoiceId && row.status === "cancelled"));
+       order by line.document_id`,
+        "objects",
+      );
+      assert.ok(
+        obligations.some((row) => row.document_id === firstInvoiceId && row.status !== "cancelled"),
+      );
+      assert.ok(
+        obligations.some(
+          (row) => row.document_id === targetInvoiceId && row.status === "cancelled",
+        ),
+      );
 
-    const reversalIds = `{${cancelled.recognitionReversalEntryIds.join(",")}}`;
-    const reversalPeriods = await db.execute<{ period_id: string }>(sql`
+      const reversalIds = `{${cancelled.recognitionReversalEntryIds.join(",")}}`;
+      const reversalPeriods = await db.execute<{ period_id: string }>(
+        sql`
       select period_id from journal_entries
-       where org_id = ${org.orgId} and id = any(${reversalIds}::uuid[])`, "objects");
-    assert.ok(reversalPeriods.length > 0);
-    assert.ok(reversalPeriods.every((row) => row.period_id === activePeriodId));
-    assert.ok(reversalPeriods.every((row) => row.period_id !== inactivePeriodId));
+       where org_id = ${org.orgId} and id = any(${reversalIds}::uuid[])`,
+        "objects",
+      );
+      assert.ok(reversalPeriods.length > 0);
+      assert.ok(reversalPeriods.every((row) => row.period_id === activePeriodId));
+      assert.ok(reversalPeriods.every((row) => row.period_id !== inactivePeriodId));
 
-    const contract = (await db.execute<{
-      status: string; total_transaction_price: string; total_consideration: string;
-    }>(sql`select status, total_transaction_price::text, total_consideration::text
-             from revenue_contracts where id = ${contractId} and org_id = ${org.orgId}`, "objects"))[0];
-    assert.equal(contract?.status, "active");
-    assert.equal(contract?.total_transaction_price, "12000.0000");
-    assert.equal(contract?.total_consideration, "12000.0000");
-    const position = await contractPosition(db, org.orgId, contractId);
-    assert.equal(position.billed, "12000.0000");
-    assert.equal(position.recognized, "12000.0000");
-    assert.equal(position.remaining, "0.0000");
-    const invoiceStates = await db.execute<{ id: string; status: string }>(sql`
+      const contract = (
+        await db.execute<{
+          status: string;
+          total_transaction_price: string;
+          total_consideration: string;
+        }>(
+          sql`select status, total_transaction_price::text, total_consideration::text
+             from revenue_contracts where id = ${contractId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(contract?.status, "active");
+      assert.equal(contract?.total_transaction_price, "12000.0000");
+      assert.equal(contract?.total_consideration, "12000.0000");
+      const position = await contractPosition(db, org.orgId, contractId);
+      assert.equal(position.billed, "12000.0000");
+      assert.equal(position.recognized, "12000.0000");
+      assert.equal(position.remaining, "0.0000");
+      const invoiceStates = await db.execute<{ id: string; status: string }>(
+        sql`
       select id, status from documents where org_id = ${org.orgId}
-       and id in (${firstInvoiceId}, ${targetInvoiceId})`, "objects");
-    assert.equal(invoiceStates.find((row) => row.id === firstInvoiceId)?.status, "posted");
-    assert.equal(invoiceStates.find((row) => row.id === targetInvoiceId)?.status, "voided");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       and id in (${firstInvoiceId}, ${targetInvoiceId})`,
+        "objects",
+      );
+      assert.equal(invoiceStates.find((row) => row.id === firstInvoiceId)?.status, "posted");
+      assert.equal(invoiceStates.find((row) => row.id === targetInvoiceId)?.status, "voided");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * One billing document belongs to exactly one contract: an invoice that
@@ -437,8 +538,13 @@ test("scoped billing refuses an invoice billing two orders", { skip: !DB }, asyn
       /bill each order on its own invoice/,
     );
     assert.equal(
-      (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from revenue_contracts where org_id = ${org.orgId}`, "objects"))[0]!.n,
+      (
+        await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from revenue_contracts where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n,
       0,
     );
   } finally {

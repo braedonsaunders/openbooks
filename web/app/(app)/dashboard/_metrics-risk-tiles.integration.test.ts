@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
+stubModules({
+  intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}",
+});
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // Worktree node_modules is a symlink to the main checkout's install, so
@@ -44,7 +46,14 @@ function ctxFor(orgId: string): DashboardWidgetContext {
     permissions: new Set(["*"]),
     allowedSubsidiaryIds: null,
   } as unknown as Authz;
-  return { authz, orgId, today: "2026-07-15", subsidiaryIds: undefined, allowedSubsidiaryIds: null, period: async () => ({ ...P }) };
+  return {
+    authz,
+    orgId,
+    today: "2026-07-15",
+    subsidiaryIds: undefined,
+    allowedSubsidiaryIds: null,
+    period: async () => ({ ...P }),
+  };
 }
 
 async function seedDuplicateBills(orgId: string, subsidiaryId: string) {
@@ -52,7 +61,10 @@ async function seedDuplicateBills(orgId: string, subsidiaryId: string) {
   await withBypass(async () => {
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
       values (${vendorId}, ${orgId}, 'vendor', 'Double Bill Co', ${subsidiaryId}, true, '{}'::jsonb)`);
-    for (const [num, date] of [["BILL-A", "2026-07-10"], ["BILL-B", "2026-07-13"]] as const) {
+    for (const [num, date] of [
+      ["BILL-A", "2026-07-10"],
+      ["BILL-B", "2026-07-13"],
+    ] as const) {
       await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id,
           document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance, reference_number)
         values (${randomUUID()}, ${orgId}, 'vendor_bill', ${num}, ${vendorId}, ${subsidiaryId},
@@ -72,7 +84,7 @@ async function setDuplicateFloor(orgId: string) {
       where id = ${orgId}`);
     // The reader canonicalizes money to four decimals: '100.00' reads back
     // '100.0000'. Asserting the canonical form proves the floor resolved.
-    assert.equal((await analyticsConfig(orgId, 'sentinel')).duplicateMinAmount, '100.0000');
+    assert.equal((await analyticsConfig(orgId, "sentinel")).duplicateMinAmount, "100.0000");
   });
 }
 
@@ -83,76 +95,103 @@ async function setDuplicateFloor(orgId: string) {
  * confident wrong number on home, so this pins the reader against the
  * loader over a seeded duplicate pair.
  */
-test("risk widget reader returns the dashboard's own figures", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await seedDuplicateBills(org.orgId, org.subsidiaryId);
-    await setDuplicateFloor(org.orgId);
-    const ctx = ctxFor(org.orgId);
-    // The loader and the comparison share one translator: the stubbed intl
-    // resolves keys verbatim, so the excluded-source names agree in both.
-    const strings = sentinelStrings((key) => key, "en-CA");
-    const [metrics, data] = await withOrgContext(org.orgId, () => Promise.all([
-      loadRiskWidgetMetrics(ctx, () => true),
-      sentinelData(org.orgId, P, ctx.authz, strings),
-    ]));
-    const risk = metrics.forensicRisk;
-    assert.ok(risk !== null && risk !== undefined && risk.available);
-    assert.equal(risk.value.score, data.summary.overallRiskScore);
-    assert.equal(risk.value.flagged, data.summary.flaggedCount);
-    assert.equal(risk.value.value, data.summary.totalAtRisk);
-    assert.equal(risk.value.currency, data.meta.presentationCurrency);
-    // The window reads as the dashboard presents it: a custom window shows its localized bounds.
-    assert.equal(risk.value.periodLabel, "Jul 1, 2026 – Jul 31, 2026");
-    assert.deepEqual(risk.value.excluded, data.summary.excludedDetectors);
-    const dup = metrics.duplicatePayments;
-    assert.ok(dup !== null && dup !== undefined && dup.available);
-    assert.equal(dup.value.groups, 1);
-    assert.equal(dup.value.value, data.summary.totalDuplicateAmount);
-    assert.equal(dup.value.currency, data.meta.presentationCurrency);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "risk widget reader returns the dashboard's own figures",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedDuplicateBills(org.orgId, org.subsidiaryId);
+      await setDuplicateFloor(org.orgId);
+      const ctx = ctxFor(org.orgId);
+      // The loader and the comparison share one translator: the stubbed intl
+      // resolves keys verbatim, so the excluded-source names agree in both.
+      const strings = sentinelStrings((key) => key, "en-CA");
+      const [metrics, data] = await withOrgContext(org.orgId, () =>
+        Promise.all([
+          loadRiskWidgetMetrics(ctx, () => true),
+          sentinelData(org.orgId, P, ctx.authz, strings),
+        ]),
+      );
+      const risk = metrics.forensicRisk;
+      assert.ok(risk !== null && risk !== undefined && risk.available);
+      assert.equal(risk.value.score, data.summary.overallRiskScore);
+      assert.equal(risk.value.flagged, data.summary.flaggedCount);
+      assert.equal(risk.value.value, data.summary.totalAtRisk);
+      assert.equal(risk.value.currency, data.meta.presentationCurrency);
+      // The window reads as the dashboard presents it: a custom window shows its localized bounds.
+      assert.equal(risk.value.periodLabel, "Jul 1, 2026 – Jul 31, 2026");
+      assert.deepEqual(risk.value.excluded, data.summary.excludedDetectors);
+      const dup = metrics.duplicatePayments;
+      assert.ok(dup !== null && dup !== undefined && dup.available);
+      assert.equal(dup.value.groups, 1);
+      assert.equal(dup.value.value, data.summary.totalDuplicateAmount);
+      assert.equal(dup.value.currency, data.meta.presentationCurrency);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * With no duplicate floor configured the duplicate tile carries the named
  * refusal — never a zero group count — while the forensic tile still
  * reports the score it can state.
  */
-test("risk widget reader refuses the duplicate tile by name when the floor is unset", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await seedDuplicateBills(org.orgId, org.subsidiaryId);
-    const ctx = ctxFor(org.orgId);
-    const metrics = await withOrgContext(org.orgId, () => loadRiskWidgetMetrics(ctx, () => true));
-    const risk2 = metrics.forensicRisk;
-    assert.ok(risk2 !== null && risk2 !== undefined && risk2.available);
-    const dup = metrics.duplicatePayments;
-    assert.ok(dup !== null && dup !== undefined && !dup.available);
-    // The intl stub resolves keys verbatim, so the refusal must carry the
-    // duplicate-floor key — and the catalog behind that key must name the
-    // remedy, not just the problem.
-    assert.equal(dup.reason, "sentinel.forensics.duplicateFloorUnset");
-    const catalog = JSON.parse(
-      readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "messages", "en", "analytics.json"), "utf8"),
-    ) as { sentinel: { forensics: Record<string, string> } };
-    assert.match(
-      catalog.sentinel.forensics["duplicateFloorUnset"] ?? "",
-      /Sentinel → Configuration/,
-      "the refusal names where to set the floor",
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "risk widget reader refuses the duplicate tile by name when the floor is unset",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedDuplicateBills(org.orgId, org.subsidiaryId);
+      const ctx = ctxFor(org.orgId);
+      const metrics = await withOrgContext(org.orgId, () => loadRiskWidgetMetrics(ctx, () => true));
+      const risk2 = metrics.forensicRisk;
+      assert.ok(risk2 !== null && risk2 !== undefined && risk2.available);
+      const dup = metrics.duplicatePayments;
+      assert.ok(dup !== null && dup !== undefined && !dup.available);
+      // The intl stub resolves keys verbatim, so the refusal must carry the
+      // duplicate-floor key — and the catalog behind that key must name the
+      // remedy, not just the problem.
+      assert.equal(dup.reason, "sentinel.forensics.duplicateFloorUnset");
+      const catalog = JSON.parse(
+        readFileSync(
+          join(
+            dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+            "..",
+            "messages",
+            "en",
+            "analytics.json",
+          ),
+          "utf8",
+        ),
+      ) as { sentinel: { forensics: Record<string, string> } };
+      assert.match(
+        catalog.sentinel.forensics["duplicateFloorUnset"] ?? "",
+        /Sentinel → Configuration/,
+        "the refusal names where to set the floor",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("risk widget reader runs no query for an absent widget", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const metrics = await withOrgContext(org.orgId, () => loadRiskWidgetMetrics(ctxFor(org.orgId), () => false));
-    assert.deepEqual(metrics, {});
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "risk widget reader runs no query for an absent widget",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const metrics = await withOrgContext(org.orgId, () =>
+        loadRiskWidgetMetrics(ctxFor(org.orgId), () => false),
+      );
+      assert.deepEqual(metrics, {});
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

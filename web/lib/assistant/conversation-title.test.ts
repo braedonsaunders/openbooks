@@ -95,7 +95,10 @@ test("generateConversationTitle sends a bounded, vendor-neutral request", async 
   if (typeof seen.system !== "string") throw new Error("expected a string title system prompt");
   assert.match(seen.prompt, /Which vendors do we owe\?/);
   assert.match(seen.prompt, /Three vendors past 90 days/);
-  assert.doesNotMatch(seen.system, /claude|gpt|gemini|openai|anthropic|mistral|llama|grok|deepseek/i);
+  assert.doesNotMatch(
+    seen.system,
+    /claude|gpt|gemini|openai|anthropic|mistral|llama|grok|deepseek/i,
+  );
 });
 
 test("generateConversationTitle keeps the placeholder on any failure", async () => {
@@ -241,7 +244,10 @@ test("scheduleAutoTitle swallows model failure and needs no model", async () => 
 
 test("missing-metadata detection matches the memory-column shape", () => {
   assert.equal(
-    isMissingMetadataColumn({ code: "42703", message: 'column "metadata" of relation does not exist' }),
+    isMissingMetadataColumn({
+      code: "42703",
+      message: 'column "metadata" of relation does not exist',
+    }),
     true,
   );
   assert.equal(

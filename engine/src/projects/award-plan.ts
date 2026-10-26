@@ -28,7 +28,10 @@ import {
 export class AwardPlanError extends Error {
   readonly name = "AwardPlanError";
   readonly status = 422;
-  constructor(message: string, readonly field?: string) {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
     super(message);
   }
 }
@@ -125,9 +128,22 @@ export interface AwardPlan {
 
 /** Units that measure time worked in hours. */
 const HOUR_UNITS = new Set([
-  "h", "hr", "hrs", "hour", "hours", "hour(s)",
-  "manhour", "manhours", "man-hour", "man-hours", "man hour", "man hours",
-  "labor hour", "labor hours", "labour hour", "labour hours",
+  "h",
+  "hr",
+  "hrs",
+  "hour",
+  "hours",
+  "hour(s)",
+  "manhour",
+  "manhours",
+  "man-hour",
+  "man-hours",
+  "man hour",
+  "man hours",
+  "labor hour",
+  "labor hours",
+  "labour hour",
+  "labour hours",
 ]);
 
 function normalizeUnit(unit: string | null | undefined): string | null {
@@ -147,7 +163,9 @@ export function isHourUnit(unit: string | null | undefined): boolean {
  * line (else the item) is measured in an hour unit; otherwise none. Only a
  * positive quantity on a non-discount line budgets hours.
  */
-export function budgetHoursForLine(line: Pick<AwardSourceLine, "itemKind" | "unit" | "itemUnit" | "quantity" | "amount">): string {
+export function budgetHoursForLine(
+  line: Pick<AwardSourceLine, "itemKind" | "unit" | "itemUnit" | "quantity" | "amount">,
+): string {
   const quantity = dec8Units(line.quantity);
   if (quantity <= 0n || cmp(normalizeMoney(line.amount), "0") < 0) return fromDec8(0n);
   const unit = line.unit && line.unit.trim() !== "" ? line.unit : line.itemUnit;
@@ -202,7 +220,8 @@ export function defaultAwardMapping(
     tasks.push({ key, code: nextCode(), name: defaultTaskName(line), existingTaskId: null });
     mapping.push({ lineId: line.lineId, taskKey: key });
     current = key;
-    for (const discount of pending.splice(0)) mapping.push({ lineId: discount.lineId, taskKey: key });
+    for (const discount of pending.splice(0))
+      mapping.push({ lineId: discount.lineId, taskKey: key });
   }
   // Only discounts and no priced line: nothing to group them under; the plan
   // refuses them by name.
@@ -217,20 +236,27 @@ function validateTasks(tasks: AwardTaskSpec[]): void {
     if (typeof task.key !== "string" || task.key.trim() === "") {
       throw new AwardPlanError("Every task needs a key", "tasks");
     }
-    if (keys.has(task.key)) throw new AwardPlanError(`Task key ${JSON.stringify(task.key)} is used twice`, "tasks");
+    if (keys.has(task.key))
+      throw new AwardPlanError(`Task key ${JSON.stringify(task.key)} is used twice`, "tasks");
     keys.add(task.key);
     if (typeof task.name !== "string" || task.name.trim() === "") {
       throw new AwardPlanError(`Task ${task.code ?? task.key} needs a name`, "tasks");
     }
     if (task.name.trim().length > 300) {
-      throw new AwardPlanError(`Task ${task.code ?? task.key} name must be 300 characters or fewer`, "tasks");
+      throw new AwardPlanError(
+        `Task ${task.code ?? task.key} name must be 300 characters or fewer`,
+        "tasks",
+      );
     }
     if (task.code != null && task.code.trim().length > 80) {
       throw new AwardPlanError(`Task code ${task.code} must be 80 characters or fewer`, "tasks");
     }
     if (task.existingTaskId) {
       if (existing.has(task.existingTaskId)) {
-        throw new AwardPlanError("Two task groups point at the same existing task — merge them into one group", "tasks");
+        throw new AwardPlanError(
+          "Two task groups point at the same existing task — merge them into one group",
+          "tasks",
+        );
       }
       existing.add(task.existingTaskId);
     }
@@ -248,13 +274,19 @@ function lineCost(
   if (line.costAmount !== null) {
     const cost = mulRate(normalizeMoney(line.costAmount), line.fxRate);
     if (cmp(cost, "0") < 0) {
-      throw new AwardPlanError(`Quote ${lineLabel(line)} carries a negative cost — correct the quote line's cost before awarding`, "lines");
+      throw new AwardPlanError(
+        `Quote ${lineLabel(line)} carries a negative cost — correct the quote line's cost before awarding`,
+        "lines",
+      );
     }
     return { cost, source: "line" };
   }
   const quantity = dec8Units(line.quantity);
   if (line.itemDefaultCost !== null && quantity > 0n) {
-    return { cost: mulDecimal(normalizeMoney(line.itemDefaultCost), fromDec8(quantity)), source: "item" };
+    return {
+      cost: mulDecimal(normalizeMoney(line.itemDefaultCost), fromDec8(quantity)),
+      source: "item",
+    };
   }
   if (cmp(price, "0") === 0) return { cost: "0.0000", source: "none" };
   return { cost: "0.0000", source: "missing" };
@@ -269,7 +301,10 @@ function lineCost(
  */
 export function planQuoteAward(input: AwardPlanInput): AwardPlan {
   const lines = [...input.lines].sort((a, b) => a.lineNumber - b.lineNumber);
-  if (lines.length === 0) throw new AwardPlanError("The quote has no lines to budget — add its priced lines before awarding it");
+  if (lines.length === 0)
+    throw new AwardPlanError(
+      "The quote has no lines to budget — add its priced lines before awarding it",
+    );
   const byId = new Map(lines.map((line) => [line.lineId, line]));
 
   let tasks: AwardTaskSpec[];
@@ -284,7 +319,8 @@ export function planQuoteAward(input: AwardPlanInput): AwardPlan {
     }));
     mapping = input.mapping;
   } else {
-    if (input.mapping && input.mapping.length > 0) throw new AwardPlanError("Line mappings need their task groups", "tasks");
+    if (input.mapping && input.mapping.length > 0)
+      throw new AwardPlanError("Line mappings need their task groups", "tasks");
     ({ tasks, mapping } = defaultAwardMapping(lines, input.usedCodes));
   }
   validateTasks(tasks);
@@ -293,8 +329,10 @@ export function planQuoteAward(input: AwardPlanInput): AwardPlan {
   const assigned = new Map<string, string>();
   for (const entry of mapping) {
     const line = byId.get(entry.lineId);
-    if (!line) throw new AwardPlanError("A mapped line is not on this quote — reload the award", "mapping");
-    if (assigned.has(entry.lineId)) throw new AwardPlanError(`Quote ${lineLabel(line)} is mapped twice`, "mapping");
+    if (!line)
+      throw new AwardPlanError("A mapped line is not on this quote — reload the award", "mapping");
+    if (assigned.has(entry.lineId))
+      throw new AwardPlanError(`Quote ${lineLabel(line)} is mapped twice`, "mapping");
     if (!taskByKey.has(entry.taskKey)) {
       throw new AwardPlanError(
         cmp(normalizeMoney(line.amount), "0") < 0
@@ -306,34 +344,54 @@ export function planQuoteAward(input: AwardPlanInput): AwardPlan {
     assigned.set(entry.lineId, entry.taskKey);
   }
   const unmapped = lines.find((line) => !assigned.has(line.lineId));
-  if (unmapped) throw new AwardPlanError(`Quote ${lineLabel(unmapped)} is not mapped to a task`, "mapping");
+  if (unmapped)
+    throw new AwardPlanError(`Quote ${lineLabel(unmapped)} is not mapped to a task`, "mapping");
 
   const explicit = new Map<string, string>();
   for (const entry of input.lineCosts ?? []) {
     const line = byId.get(entry.lineId);
-    if (!line) throw new AwardPlanError("A supplied cost names a line that is not on this quote — reload the award", "lineCosts");
+    if (!line)
+      throw new AwardPlanError(
+        "A supplied cost names a line that is not on this quote — reload the award",
+        "lineCosts",
+      );
     let cost: string;
     try {
       cost = normalizeMoney(entry.cost);
     } catch {
-      throw new AwardPlanError(`The cost for quote ${lineLabel(line)} is not an amount`, "lineCosts");
+      throw new AwardPlanError(
+        `The cost for quote ${lineLabel(line)} is not an amount`,
+        "lineCosts",
+      );
     }
-    if (cmp(cost, "0") < 0) throw new AwardPlanError(`The cost for quote ${lineLabel(line)} cannot be negative`, "lineCosts");
+    if (cmp(cost, "0") < 0)
+      throw new AwardPlanError(
+        `The cost for quote ${lineLabel(line)} cannot be negative`,
+        "lineCosts",
+      );
     explicit.set(entry.lineId, cost);
   }
 
   // Price each line in functional currency, then spread each task's
   // discounts across its priced lines in proportion to their price.
-  const priced = lines.map((line) => ({ line, price: mulRate(normalizeMoney(line.amount), line.fxRate) }));
+  const priced = lines.map((line) => ({
+    line,
+    price: mulRate(normalizeMoney(line.amount), line.fxRate),
+  }));
   const finalPrice = new Map<string, string>();
   for (const task of tasks) {
     const members = priced.filter((p) => assigned.get(p.line.lineId) === task.key);
-    if (members.length === 0) throw new AwardPlanError(`Task ${task.code ?? task.name} has no quote lines — remove it or map a line to it`, "tasks");
+    if (members.length === 0)
+      throw new AwardPlanError(
+        `Task ${task.code ?? task.name} has no quote lines — remove it or map a line to it`,
+        "tasks",
+      );
     const positives = members.filter((p) => cmp(p.price, "0") > 0);
     const discount = members
       .filter((p) => cmp(p.price, "0") < 0)
       .reduce((acc, p) => acc + toUnits(p.price), 0n);
-    for (const p of members) finalPrice.set(p.line.lineId, cmp(p.price, "0") < 0 ? "0.0000" : p.price);
+    for (const p of members)
+      finalPrice.set(p.line.lineId, cmp(p.price, "0") < 0 ? "0.0000" : p.price);
     if (discount === 0n) continue;
     const positiveTotal = positives.reduce((acc, p) => acc + toUnits(p.price), 0n);
     if (positiveTotal + discount < 0n || positives.length === 0) {
@@ -342,24 +400,34 @@ export function planQuoteAward(input: AwardPlanInput): AwardPlan {
         "mapping",
       );
     }
-    const shares = apportion(discount, positives.map((p) => toUnits(p.price)));
-    positives.forEach((p, i) => finalPrice.set(p.line.lineId, fromUnits(toUnits(p.price) + shares[i]!)));
+    const shares = apportion(
+      discount,
+      positives.map((p) => toUnits(p.price)),
+    );
+    positives.forEach((p, i) =>
+      finalPrice.set(p.line.lineId, fromUnits(toUnits(p.price) + shares[i]!)),
+    );
   }
 
   const plannedLines: PlannedLine[] = [];
   for (const { line, price } of priced) {
     const { cost, source } = lineCost(line, price, explicit);
     const hours = budgetHoursForLine(line);
-    const unit = line.unit && line.unit.trim() !== "" ? line.unit.trim() : line.itemUnit?.trim() || null;
+    const unit =
+      line.unit && line.unit.trim() !== "" ? line.unit.trim() : line.itemUnit?.trim() || null;
     const quantity = dec8Units(line.quantity);
-    const production = input.productionQuantities === true
-      && cmp(price, "0") > 0
-      && quantity > 0n
-      && unit !== null
-      && !isHourUnit(unit)
-      && line.itemKind !== "labor";
+    const production =
+      input.productionQuantities === true &&
+      cmp(price, "0") > 0 &&
+      quantity > 0n &&
+      unit !== null &&
+      !isHourUnit(unit) &&
+      line.itemKind !== "labor";
     if (production && unit!.length > 32) {
-      throw new AwardPlanError(`Quote ${lineLabel(line)} unit "${unit}" is longer than 32 characters — shorten the unit or leave production quantities off`, "productionQuantities");
+      throw new AwardPlanError(
+        `Quote ${lineLabel(line)} unit "${unit}" is longer than 32 characters — shorten the unit or leave production quantities off`,
+        "productionQuantities",
+      );
     }
     plannedLines.push({
       lineId: line.lineId,

@@ -11,7 +11,8 @@ import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypass } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createSetupRecord, updateSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -19,13 +20,21 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedOrg() {
   const org = await withBypass(() => createScratchOrg());
   const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     update orgs set settings = settings || '{"features": {"hrm": true}}'::jsonb
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   const actor = { orgId: org.orgId, id: actorId, permissions: [] as string[] };
-  const type = await withBypass(() => createSetupRecord(actor, "leave-types", {
-    code: "VAC", name: "Vacation", paid: true, valueCrossing: "none", isActive: true,
-  }));
+  const type = await withBypass(() =>
+    createSetupRecord(actor, "leave-types", {
+      code: "VAC",
+      name: "Vacation",
+      paid: true,
+      valueCrossing: "none",
+      isActive: true,
+    }),
+  );
   assert.equal(type.status, 200, `type refused: ${JSON.stringify(type.body)}`);
   return { orgId: org.orgId, actor, typeId: String((type.body as { id?: string }).id) };
 }
@@ -42,56 +51,119 @@ function policyBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("an overlapping leave-policy create conflicts typed with the remedy, never pg text", { skip: !DB }, async () => {
-  const org = await seedOrg();
-  try {
-    const first = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
-      leaveTypeId: org.typeId, effectiveFrom: "2026-01-01",
-    })));
-    assert.equal(first.status, 200, `first policy refused: ${JSON.stringify(first.body)}`);
-    const retry = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
-      leaveTypeId: org.typeId, effectiveFrom: "2026-06-01",
-    })));
-    assert.equal(retry.status, 409);
-    assert.equal((retry.body as { code?: string }).code, "overlap");
-    // The in-transaction preflight names the conflicting policy; storage
-    // stays the race backstop with the scope wording.
-    assert.match(String((retry.body as { error?: string }).error), /Policy [0-9a-f-]{36} already covers/);
-    assert.doesNotMatch(String((retry.body as { error?: string }).error), /exclusion|conflicting key|SQLSTATE|gist/i);
-    const count = (await withBypass(() => db.execute<{ n: number }>(sql`
+test(
+  "an overlapping leave-policy create conflicts typed with the remedy, never pg text",
+  { skip: !DB },
+  async () => {
+    const org = await seedOrg();
+    try {
+      const first = await withBypass(() =>
+        createSetupRecord(
+          org.actor,
+          "leave-policies",
+          policyBody({
+            leaveTypeId: org.typeId,
+            effectiveFrom: "2026-01-01",
+          }),
+        ),
+      );
+      assert.equal(first.status, 200, `first policy refused: ${JSON.stringify(first.body)}`);
+      const retry = await withBypass(() =>
+        createSetupRecord(
+          org.actor,
+          "leave-policies",
+          policyBody({
+            leaveTypeId: org.typeId,
+            effectiveFrom: "2026-06-01",
+          }),
+        ),
+      );
+      assert.equal(retry.status, 409);
+      assert.equal((retry.body as { code?: string }).code, "overlap");
+      // The in-transaction preflight names the conflicting policy; storage
+      // stays the race backstop with the scope wording.
+      assert.match(
+        String((retry.body as { error?: string }).error),
+        /Policy [0-9a-f-]{36} already covers/,
+      );
+      assert.doesNotMatch(
+        String((retry.body as { error?: string }).error),
+        /exclusion|conflicting key|SQLSTATE|gist/i,
+      );
+      const count =
+        (
+          await withBypass(() =>
+            db.execute<{ n: number }>(
+              sql`
       select count(*)::int as n from hrm_leave_policies
        where org_id = ${org.orgId} and leave_type_id = ${org.typeId} and is_active
-    `, "objects")))[0]?.n ?? 0;
-    assert.equal(count, 1, "the refused create leaves no second window behind");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+    `,
+              "objects",
+            ),
+          )
+        )[0]?.n ?? 0;
+      assert.equal(count, 1, "the refused create leaves no second window behind");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("stretching a policy window into its neighbour conflicts typed and moves nothing", { skip: !DB }, async () => {
-  const org = await seedOrg();
-  try {
-    const first = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
-      leaveTypeId: org.typeId, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30",
-    })));
-    assert.equal(first.status, 200, `first policy refused: ${JSON.stringify(first.body)}`);
-    const second = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
-      leaveTypeId: org.typeId, effectiveFrom: "2026-07-01",
-    })));
-    assert.equal(second.status, 200, `second policy refused: ${JSON.stringify(second.body)}`);
-    const neighbourId = String((second.body as { id?: string }).id);
-    const stretched = await withBypass(() => updateSetupRecord(org.actor, "leave-policies", {
-      id: neighbourId,
-      ...policyBody({ leaveTypeId: org.typeId, effectiveFrom: "2026-06-15" }),
-    }));
-    assert.equal(stretched.status, 409);
-    assert.equal((stretched.body as { code?: string }).code, "overlap");
-    assert.match(String((stretched.body as { error?: string }).error), /Policy [0-9a-f-]{36} already covers/);
-    const kept = (await withBypass(() => db.execute<{ from: string }>(sql`
+test(
+  "stretching a policy window into its neighbour conflicts typed and moves nothing",
+  { skip: !DB },
+  async () => {
+    const org = await seedOrg();
+    try {
+      const first = await withBypass(() =>
+        createSetupRecord(
+          org.actor,
+          "leave-policies",
+          policyBody({
+            leaveTypeId: org.typeId,
+            effectiveFrom: "2026-01-01",
+            effectiveTo: "2026-06-30",
+          }),
+        ),
+      );
+      assert.equal(first.status, 200, `first policy refused: ${JSON.stringify(first.body)}`);
+      const second = await withBypass(() =>
+        createSetupRecord(
+          org.actor,
+          "leave-policies",
+          policyBody({
+            leaveTypeId: org.typeId,
+            effectiveFrom: "2026-07-01",
+          }),
+        ),
+      );
+      assert.equal(second.status, 200, `second policy refused: ${JSON.stringify(second.body)}`);
+      const neighbourId = String((second.body as { id?: string }).id);
+      const stretched = await withBypass(() =>
+        updateSetupRecord(org.actor, "leave-policies", {
+          id: neighbourId,
+          ...policyBody({ leaveTypeId: org.typeId, effectiveFrom: "2026-06-15" }),
+        }),
+      );
+      assert.equal(stretched.status, 409);
+      assert.equal((stretched.body as { code?: string }).code, "overlap");
+      assert.match(
+        String((stretched.body as { error?: string }).error),
+        /Policy [0-9a-f-]{36} already covers/,
+      );
+      const kept = (
+        await withBypass(() =>
+          db.execute<{ from: string }>(
+            sql`
       select effective_from::text as from from hrm_leave_policies where id = ${neighbourId}
-    `, "objects")))[0]?.from;
-    assert.equal(String(kept).slice(0, 10), "2026-07-01", "the refused edit moves no boundary");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+    `,
+            "objects",
+          ),
+        )
+      )[0]?.from;
+      assert.equal(String(kept).slice(0, 10), "2026-07-01", "the refused edit moves no boundary");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

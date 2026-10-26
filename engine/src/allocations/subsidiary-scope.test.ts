@@ -85,18 +85,39 @@ test("rule visibility needs every touched source and target", () => {
   assert.equal(allocationRuleVisible(new Set([SUB_B]), scoped), false);
   // A B target on A sources touches both: the A caller is refused.
   assert.equal(
-    allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [SUB_A], targetSubsidiaryIds: [SUB_B] }),
+    allocationRuleVisible(new Set([SUB_A]), {
+      sourceSubsidiaryIds: [SUB_A],
+      targetSubsidiaryIds: [SUB_B],
+    }),
     false,
   );
   // Null targets inherit the already-checked sources.
   assert.equal(
-    allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [SUB_A], targetSubsidiaryIds: [null] }),
+    allocationRuleVisible(new Set([SUB_A]), {
+      sourceSubsidiaryIds: [SUB_A],
+      targetSubsidiaryIds: [null],
+    }),
     true,
   );
   // No source filter means every source: org-wide, restricted callers never qualify.
-  assert.equal(allocationRuleVisible(new Set([SUB_A, SUB_B]), { targetSubsidiaryIds: [SUB_A] }), false);
-  assert.equal(allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [], targetSubsidiaryIds: [SUB_A] }), false);
-  assert.equal(allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [SUB_A], targetSubsidiaryIds: [] }), true);
+  assert.equal(
+    allocationRuleVisible(new Set([SUB_A, SUB_B]), { targetSubsidiaryIds: [SUB_A] }),
+    false,
+  );
+  assert.equal(
+    allocationRuleVisible(new Set([SUB_A]), {
+      sourceSubsidiaryIds: [],
+      targetSubsidiaryIds: [SUB_A],
+    }),
+    false,
+  );
+  assert.equal(
+    allocationRuleVisible(new Set([SUB_A]), {
+      sourceSubsidiaryIds: [SUB_A],
+      targetSubsidiaryIds: [],
+    }),
+    true,
+  );
   // Dynamic subsidiary targets name their entities in include; an unlisted
   // dynamic target is org-wide.
   const dynamicListed = {

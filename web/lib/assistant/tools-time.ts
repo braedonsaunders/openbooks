@@ -16,11 +16,7 @@ import {
   type TicketEntryRow,
   type TicketLineRow,
 } from "../field-tickets";
-import {
-  loadWeek,
-  pinTimekeeper,
-  weekStart,
-} from "../../app/api/timesheets/_lib";
+import { loadWeek, pinTimekeeper, weekStart } from "../../app/api/timesheets/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
 import { dateInput, uuidInput, numberValue, capList, decimalText } from "./tools-shared";
@@ -70,11 +66,20 @@ const getTimesheetWeek: AssistantToolDef = {
     const a = raw as z.infer<typeof getTimesheetWeekSchema>;
     // pinTimekeeper is the route's boundary: an out-of-scope employee
     // reads as missing, exactly like the route.
-    const owned = await pinTimekeeper(authz.user.orgId, a.employeePartyId, authz.allowedSubsidiaryIds);
+    const owned = await pinTimekeeper(
+      authz.user.orgId,
+      a.employeePartyId,
+      authz.allowedSubsidiaryIds,
+    );
     if (!owned) return { ok: false, error: "employee_not_found" };
     let payload: Awaited<ReturnType<typeof loadWeek>>;
     try {
-      payload = await loadWeek(authz.user.orgId, owned, weekStart(a.week), authz.allowedSubsidiaryIds);
+      payload = await loadWeek(
+        authz.user.orgId,
+        owned,
+        weekStart(a.week),
+        authz.allowedSubsidiaryIds,
+      );
     } catch (error) {
       if (error instanceof Error && /employee not found/i.test(error.message)) {
         return { ok: false, error: "employee_not_found" };
@@ -128,15 +133,29 @@ async function resolveTimeNames(
   projectIds: (string | null)[],
   itemIds: (string | null)[],
   timeTypeIds: (string | null)[],
-): Promise<{ projects: Map<string, string>; items: Map<string, string>; timeTypes: Map<string, string> }> {
-  const uniq = (ids: (string | null)[]) => [...new Set(ids.filter((id): id is string => !!id))].slice(0, 100);
+): Promise<{
+  projects: Map<string, string>;
+  items: Map<string, string>;
+  timeTypes: Map<string, string>;
+}> {
+  const uniq = (ids: (string | null)[]) =>
+    [...new Set(ids.filter((id): id is string => !!id))].slice(0, 100);
   const [projects, items, timeTypes] = await Promise.all([
-    db.execute<{ id: string; name: string }>(sql`
-      select id, name from projects where org_id = ${orgId} and id = any(${`{${uniq(projectIds).join(",")}}`}::uuid[])`, "objects"),
-    db.execute<{ id: string; name: string }>(sql`
-      select id, name from items where org_id = ${orgId} and id = any(${`{${uniq(itemIds).join(",")}}`}::uuid[])`, "objects"),
-    db.execute<{ id: string; name: string }>(sql`
-      select id, name from time_types where org_id = ${orgId} and id = any(${`{${uniq(timeTypeIds).join(",")}}`}::uuid[])`, "objects"),
+    db.execute<{ id: string; name: string }>(
+      sql`
+      select id, name from projects where org_id = ${orgId} and id = any(${`{${uniq(projectIds).join(",")}}`}::uuid[])`,
+      "objects",
+    ),
+    db.execute<{ id: string; name: string }>(
+      sql`
+      select id, name from items where org_id = ${orgId} and id = any(${`{${uniq(itemIds).join(",")}}`}::uuid[])`,
+      "objects",
+    ),
+    db.execute<{ id: string; name: string }>(
+      sql`
+      select id, name from time_types where org_id = ${orgId} and id = any(${`{${uniq(timeTypeIds).join(",")}}`}::uuid[])`,
+      "objects",
+    ),
   ]);
   return {
     projects: new Map(projects.map((r) => [r.id, r.name])),
@@ -147,10 +166,19 @@ async function resolveTimeNames(
 
 const searchTimesheetsSchema = z.object({
   employeePartyId: uuidInput.optional().describe("Employee party id; omit for every employee"),
-  status: z.enum(["draft", "submitted", "approved", "rejected", "empty"]).optional().describe("Week status; omit for every status"),
+  status: z
+    .enum(["draft", "submitted", "approved", "rejected", "empty"])
+    .optional()
+    .describe("Week status; omit for every status"),
   weekFrom: dateInput.optional().describe("First week start (inclusive); omit for no lower bound"),
   weekTo: dateInput.optional().describe("Last week start (inclusive); omit for no upper bound"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); aggregates always cover ALL matches"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); aggregates always cover ALL matches"),
 });
 
 const searchTimesheets: AssistantToolDef = {
@@ -167,11 +195,12 @@ const searchTimesheets: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 50, 200);
     // Employee-subsidiary boundary, mirroring pinTimekeeper: a null
     // employee subsidiary fails closed for restricted callers.
-    const scope = authz.allowedSubsidiaryIds === null
-      ? sql``
-      : authz.allowedSubsidiaryIds.size > 0
-        ? sql` and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
-        : sql` and false`;
+    const scope =
+      authz.allowedSubsidiaryIds === null
+        ? sql``
+        : authz.allowedSubsidiaryIds.size > 0
+          ? sql` and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+          : sql` and false`;
     const filters = sql.join(
       [
         a.employeePartyId ? sql` and w.employee_party_id = ${a.employeePartyId}` : sql``,
@@ -182,7 +211,8 @@ const searchTimesheets: AssistantToolDef = {
       sql``,
     );
     const [page, totals, byStatus] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select w.id, w.employee_party_id, e.display_name as employee_name,
                w.week_start::text as week_start, w.status,
                coalesce(sum(te.hours), 0)::text as total_hours,
@@ -197,8 +227,11 @@ const searchTimesheets: AssistantToolDef = {
          group by w.id, e.display_name
          order by w.week_start desc, e.display_name
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select count(distinct w.id)::int as weeks,
                coalesce(sum(te.hours), 0)::text as hours
           from timesheet_weeks w
@@ -207,14 +240,19 @@ const searchTimesheets: AssistantToolDef = {
             and te.employee_party_id = w.employee_party_id
             and te.worked_on >= w.week_start and te.worked_on < w.week_start + 7
          where w.org_id = ${authz.user.orgId}${filters}${scope}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select w.status, count(*)::int as count
           from timesheet_weeks w
           join parties e on e.id = w.employee_party_id and e.org_id = w.org_id
          where w.org_id = ${authz.user.orgId}${filters}${scope}
          group by w.status order by w.status
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const total = totals[0] ?? {};
     const capped = capList(
@@ -228,7 +266,8 @@ const searchTimesheets: AssistantToolDef = {
         entryCount: Number(r.entry_count ?? 0),
         submittedAt: r.submitted_at,
         approvedAt: r.approved_at,
-        rejectionReason: r.rejection_reason == null ? null : truncateText(String(r.rejection_reason), 200),
+        rejectionReason:
+          r.rejection_reason == null ? null : truncateText(String(r.rejection_reason), 200),
       })),
       limit,
     );
@@ -249,7 +288,9 @@ const searchTimesheets: AssistantToolDef = {
 
 const projectTimeSchema = z.object({
   projectId: uuidInput.describe("Project id"),
-  dimension: z.enum(["employee", "item", "task"]).describe("Breakdown dimension, like the project time drawer"),
+  dimension: z
+    .enum(["employee", "item", "task"])
+    .describe("Breakdown dimension, like the project time drawer"),
   dimensionId: uuidInput.optional().describe("One dimension value; omit for unassigned rows"),
   page: z.number().int().min(1).max(1000).optional().describe("Result page (default 1)"),
 });
@@ -288,8 +329,12 @@ const projectTime: AssistantToolDef = {
 
 const unbilledTimeSchema = z.object({
   projectId: uuidInput.describe("Project id"),
-  startDate: dateInput.optional().describe("Time worked on/after this date; omit for no lower bound"),
-  cutoffDate: dateInput.optional().describe("Time worked on/before this date; omit for no upper bound"),
+  startDate: dateInput
+    .optional()
+    .describe("Time worked on/after this date; omit for no lower bound"),
+  cutoffDate: dateInput
+    .optional()
+    .describe("Time worked on/before this date; omit for no upper bound"),
 });
 
 const unbilledTime: AssistantToolDef = {
@@ -309,14 +354,18 @@ const unbilledTime: AssistantToolDef = {
     // restricted caller only opens explicitly assigned projects, and an
     // unassigned project is invisible — a guessed UUID cannot reach the
     // unbilled figure.
-    const scope = authz.allowedSubsidiaryIds === null
-      ? sql``
-      : authz.allowedSubsidiaryIds.size > 0
-        ? sql` and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
-        : sql` and false`;
-    const pinned = await db.execute(sql`
+    const scope =
+      authz.allowedSubsidiaryIds === null
+        ? sql``
+        : authz.allowedSubsidiaryIds.size > 0
+          ? sql` and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+          : sql` and false`;
+    const pinned = await db.execute(
+      sql`
       select 1 from projects where id = ${a.projectId} and org_id = ${authz.user.orgId}${scope}
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!pinned[0]) return { ok: false, error: "project_not_found" };
     // projectUnbilled is the cockpit/billing-modal figure: approved billable
     // time plus billable cost lines, provenance-gated against re-billing.
@@ -340,9 +389,18 @@ const unbilledTime: AssistantToolDef = {
 };
 
 const listFieldTicketsSchema = z.object({
-  status: z.enum(["draft", "pending_approval", "approved", "voided"]).optional().describe("Ticket status; omit for every status"),
+  status: z
+    .enum(["draft", "pending_approval", "approved", "voided"])
+    .optional()
+    .describe("Ticket status; omit for every status"),
   projectId: uuidInput.optional().describe("Project id; omit for every project"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); totals always cover ALL matches"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); totals always cover ALL matches"),
 });
 
 const listFieldTickets: AssistantToolDef = {
@@ -359,11 +417,12 @@ const listFieldTickets: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 50, 200);
     // Same narrowing as GET /api/field-tickets: a restricted caller sees only
     // their subsidiaries, and a null subsidiary fails closed.
-    const scope = authz.allowedSubsidiaryIds === null
-      ? sql``
-      : authz.allowedSubsidiaryIds.size > 0
-        ? sql` and d.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
-        : sql` and false`;
+    const scope =
+      authz.allowedSubsidiaryIds === null
+        ? sql``
+        : authz.allowedSubsidiaryIds.size > 0
+          ? sql` and d.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+          : sql` and false`;
     const filters = sql.join(
       [
         a.status ? sql` and d.status = ${a.status}` : sql``,
@@ -372,7 +431,8 @@ const listFieldTickets: AssistantToolDef = {
       sql``,
     );
     const [page, byStatus] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select d.id, d.document_number, d.status, d.document_date::text as document_date, d.total,
                ft.period, ft.period_start::text as period_start,
                ft.period_end::text as period_end,
@@ -398,14 +458,19 @@ const listFieldTickets: AssistantToolDef = {
          where d.org_id = ${authz.user.orgId} and d.kind = 'field_ticket'${filters}${scope}
          order by d.document_date desc, d.created_at desc
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select d.status, count(*)::int as count
           from documents d
           join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.kind = 'field_ticket'${filters}${scope}
          group by d.status order by d.status
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const capped = capList(
       page.map((r) => ({
@@ -448,17 +513,22 @@ const getFieldTicket: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["time.read"] },
   feature: "fieldTickets",
-  inputSchema: z.object({ ticketId: uuidInput.describe("Ticket document id from list_field_tickets") }),
+  inputSchema: z.object({
+    ticketId: uuidInput.describe("Ticket document id from list_field_tickets"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await ticketFeatureOff(authz.user.orgId)) return { ok: false, error: TICKET_FEATURE_ERROR };
     const a = raw as { ticketId: string };
     // The route's scope guard first: a missing ticket, or one whose document
     // sits outside the caller's subsidiary scope (an unassigned subsidiary
     // fails closed for restricted callers), reads as not-found.
-    const owned = await db.execute<{ subsidiaryId: string | null }>(sql`
+    const owned = await db.execute<{ subsidiaryId: string | null }>(
+      sql`
       select subsidiary_id as "subsidiaryId" from documents
        where id = ${a.ticketId} and org_id = ${authz.user.orgId} and kind = 'field_ticket'
-    `, "objects");
+    `,
+      "objects",
+    );
     const subsidiaryId = owned[0]?.subsidiaryId ?? null;
     if (!owned[0] || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId)) {
       return { ok: false, error: "field_ticket_not_found" };
@@ -471,7 +541,8 @@ const getFieldTicket: AssistantToolDef = {
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       });
     } catch (error) {
-      if (error instanceof FieldTicketNotFoundError) return { ok: false, error: "field_ticket_not_found" };
+      if (error instanceof FieldTicketNotFoundError)
+        return { ok: false, error: "field_ticket_not_found" };
       throw error;
     }
     const ticket = loaded.fieldTicket;
@@ -531,12 +602,22 @@ const getFieldTicket: AssistantToolDef = {
         materials: materials.items,
         materialsTruncated: materials.truncated,
         signatures: {
-          foreman: signatures.foreman == null
-            ? null
-            : { name: signatures.foreman.name, at: signatures.foreman.at, comment: signatures.foreman.comment ?? null },
-          customer: signatures.customer == null
-            ? null
-            : { name: signatures.customer.name, at: signatures.customer.at, comment: signatures.customer.comment ?? null },
+          foreman:
+            signatures.foreman == null
+              ? null
+              : {
+                  name: signatures.foreman.name,
+                  at: signatures.foreman.at,
+                  comment: signatures.foreman.comment ?? null,
+                },
+          customer:
+            signatures.customer == null
+              ? null
+              : {
+                  name: signatures.customer.name,
+                  at: signatures.customer.at,
+                  comment: signatures.customer.comment ?? null,
+                },
         },
         href: `/field-tickets?ticket=${a.ticketId}`,
       },
@@ -550,7 +631,10 @@ const getFieldTicket: AssistantToolDef = {
 const FIELD_TIME_FEATURE_ERROR = "fieldTime_feature_disabled";
 
 const timeClockStatusSchema = z.object({
-  scope: z.enum(["own", "team"]).optional().describe("Own clock state, or the caller's team clocked-in now (needs time.read)"),
+  scope: z
+    .enum(["own", "team"])
+    .optional()
+    .describe("Own clock state, or the caller's team clocked-in now (needs time.read)"),
 });
 
 const timeClockStatus: AssistantToolDef = {
@@ -571,25 +655,39 @@ const timeClockStatus: AssistantToolDef = {
     try {
       if ((a.scope ?? "own") === "team") {
         if (!can(authz, "time.read")) {
-          return { ok: false, error: "team clock status needs time.read — own scope is available with time.clock" };
+          return {
+            ok: false,
+            error: "team clock status needs time.read — own scope is available with time.clock",
+          };
         }
         if (authz.allowedSubsidiaryIds !== null) {
-          return { ok: false, error: "team clock status is only available when access covers the whole organization" };
+          return {
+            ok: false,
+            error: "team clock status is only available when access covers the whole organization",
+          };
         }
-        const team = await teamClockedIn(authz.user.orgId, authz.user.id, await orgToday(authz.user.orgId));
+        const team = await teamClockedIn(
+          authz.user.orgId,
+          authz.user.id,
+          await orgToday(authz.user.orgId),
+        );
         return { ok: true, data: { scope: "team", clockedIn: team, href: "/time/crew" } };
       }
       const day = await myClockDay(authz.user.orgId, authz.user.id);
       return { ok: true, data: { ...day, href: "/time/clock" } };
     } catch (error) {
-      if (error instanceof Error && error.name === "FieldTimeError") return { ok: false, error: error.message };
+      if (error instanceof Error && error.name === "FieldTimeError")
+        return { ok: false, error: error.message };
       throw error;
     }
   },
 };
 
 const crewBatchesSchema = z.object({
-  status: z.enum(["draft", "submitted", "approved", "rejected", "posted"]).optional().describe("Batch status segment"),
+  status: z
+    .enum(["draft", "submitted", "approved", "rejected", "posted"])
+    .optional()
+    .describe("Batch status segment"),
   projectId: uuidInput.optional().describe("One project; omit for all projects"),
 });
 
@@ -608,13 +706,18 @@ const crewBatches: AssistantToolDef = {
     const a = raw as z.infer<typeof crewBatchesSchema>;
     const { listCrewBatches } = await import("@openbooks/engine/hrm/field-time/reads");
     try {
-      const batches = await listCrewBatches(authz.user.orgId, {
-        status: a.status ?? null,
-        projectId: a.projectId ?? null,
-      }, { actorUserId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds });
+      const batches = await listCrewBatches(
+        authz.user.orgId,
+        {
+          status: a.status ?? null,
+          projectId: a.projectId ?? null,
+        },
+        { actorUserId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+      );
       return { ok: true, data: { batches, href: "/time/crew" } };
     } catch (error) {
-      if (error instanceof Error && error.name === "FieldTimeError") return { ok: false, error: error.message };
+      if (error instanceof Error && error.name === "FieldTimeError")
+        return { ok: false, error: error.message };
       throw error;
     }
   },

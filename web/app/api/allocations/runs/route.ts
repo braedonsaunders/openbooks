@@ -1,19 +1,30 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
 import { RunQueryError, listRuns } from "@openbooks/engine/allocations/run-queries";
 
 export const runtime = "nodejs";
 
-const STATUSES = ["previewed", "pending_approval", "posted", "reversed", "failed", "superseded"] as const;
+const STATUSES = [
+  "previewed",
+  "pending_approval",
+  "posted",
+  "reversed",
+  "failed",
+  "superseded",
+] as const;
 
 /**
  * Run list (A8). `allocations.read` + the caller's subsidiary scope
  * (org-wide runs stay invisible to restricted callers).
  */
-async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyGET(
+  req: Request,
+  ctx: { params: Promise<unknown> },
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const params = new URL(req.url).searchParams;
@@ -50,7 +61,9 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
 }
 
 export const GET = defineRoute({
-  permission: "allocations.read", feature: "allocations",
+  permission: "allocations.read",
+  feature: "allocations",
 
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });

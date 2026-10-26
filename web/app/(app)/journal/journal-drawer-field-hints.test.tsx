@@ -6,7 +6,8 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __journalToasts: { kind: string; message: string }[] | undefined;
-  var __journalRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __journalRouter:
+    { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 // journal Memo and Reference sat adjacently with bare labels, so entry
@@ -66,8 +67,28 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const TOKEN = "2026-09-17T12:00:00.000000Z";
 
 const BALANCED_LINES = [
-  { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
-  { account_id: "a2", amount: "-100.00", description: "leg two", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  {
+    account_id: "a1",
+    amount: "100.00",
+    description: "leg one",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
+  {
+    account_id: "a2",
+    amount: "-100.00",
+    description: "leg two",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
 ];
 
 test("an editable journal names what belongs in Reference vs Memo", async (t) => {

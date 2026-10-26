@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
 /**
  * Live-PostgreSQL regression for vendor compliance audit integrity. The vendor compliance
@@ -21,25 +21,36 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockCompliance = `
   export async function guardComplianceFeature(_orgId) { return null }
   export async function guardInformationReturnsFeature(_orgId) { return null }
 `;
 
-stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
-    '@/lib/authz': '\n  const state = globalThis[Symbol.for(\'openbooks.compliance-vendor-audit-test\')]\n  export async function guardPermission(_permission) {\n    if (!state.authz) return new Response(null, { status: 403 })\n    return state.authz\n  }\n  export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {\n    const allowed = authz.allowedSubsidiaryIds\n    if (allowed === null) return null\n    if ((subsidiaryId === null || subsidiaryId === undefined) && opts.orgWideNull === true) return null\n    if (typeof subsidiaryId === \'string\' && allowed.has(subsidiaryId)) return null\n    return new Response(JSON.stringify({ error: \'not found\' }), { status: 404 })\n  }\n',
-  } });
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@/lib/authz":
+      "\n  const state = globalThis[Symbol.for('openbooks.compliance-vendor-audit-test')]\n  export async function guardPermission(_permission) {\n    if (!state.authz) return new Response(null, { status: 403 })\n    return state.authz\n  }\n  export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {\n    const allowed = authz.allowedSubsidiaryIds\n    if (allowed === null) return null\n    if ((subsidiaryId === null || subsidiaryId === undefined) && opts.orgWideNull === true) return null\n    if (typeof subsidiaryId === 'string' && allowed.has(subsidiaryId)) return null\n    return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })\n  }\n",
+  },
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/compliance") return { url: "mock:compliance-gate", shortCircuit: true };
+    if (specifier === "@/lib/compliance")
+      return { url: "mock:compliance-gate", shortCircuit: true };
     // Resolve this worktree's engine directly.  This keeps the route and the
     // fixture helpers on one db module even when node_modules is shared.
     if (specifier.startsWith("@openbooks/engine/")) {
       const engineRoot = new URL("../../engine/", import.meta.url);
-      return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
+      return nextResolve(
+        new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href,
+        context,
+      );
     }
     return nextResolve(specifier, context);
   },
@@ -52,11 +63,12 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "../app/api/compliance/vendors/[partyId]/route.ts?compliance-vendor-audit-test";
-const { PATCH } = (await import(routeUrl)) as typeof import("../app/api/compliance/vendors/[partyId]/route.ts");
+const { PATCH } = (await import(
+  routeUrl
+)) as typeof import("../app/api/compliance/vendors/[partyId]/route.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures",
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 hooks.deregister();
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -127,33 +139,41 @@ function patch(fixture: Fixture, body: unknown): Promise<Response> {
 
 async function roleState(fixture: Fixture): Promise<Record<string, unknown>> {
   return withOrgContext(fixture.orgId, async () => {
-    const result = await db.execute<Record<string, unknown>>(sql`
+    const result = await db.execute<Record<string, unknown>>(
+      sql`
       select id, org_id, party_id, compliance_class_id, information_return_form,
              information_return_box, tax_classification, tin_encrypted, tin_last4,
              tin_type, backup_withholding, is_t4a, is_active, created_at, created_by,
              updated_at, updated_by
         from vendor_roles
-       where org_id = ${fixture.orgId} and party_id = ${fixture.partyId}`, "objects");
+       where org_id = ${fixture.orgId} and party_id = ${fixture.partyId}`,
+      "objects",
+    );
     return result[0]!;
   });
 }
 
-async function audits(fixture: Fixture): Promise<{
-  actor_id: string;
-  at: string | Date;
-  changes: { reason: string; before: Record<string, unknown>; after: Record<string, unknown> };
-}[]> {
+async function audits(fixture: Fixture): Promise<
+  {
+    actor_id: string;
+    at: string | Date;
+    changes: { reason: string; before: Record<string, unknown>; after: Record<string, unknown> };
+  }[]
+> {
   return withOrgContext(fixture.orgId, async () => {
     const result = await db.execute<{
       actor_id: string;
       at: string | Date;
       changes: { reason: string; before: Record<string, unknown>; after: Record<string, unknown> };
-    }>(sql`
+    }>(
+      sql`
       select actor_id, at, changes
         from audit_log
        where org_id = ${fixture.orgId}
          and table_name = 'vendor_roles' and row_id = ${fixture.partyId}
-       order by at, id`, "objects");
+       order by at, id`,
+      "objects",
+    );
     return result;
   });
 }
@@ -163,7 +183,8 @@ async function installAuditFailure(actorId: string): Promise<() => Promise<void>
   const functionName = `vendor_audit_failure_${suffix}`;
   const triggerName = `vendor_audit_failure_trigger_${suffix}`;
   await withBypass(() =>
-    db.execute(sql.raw(`
+    db.execute(
+      sql.raw(`
       create function public."${functionName}"() returns trigger
       language plpgsql as $$
       begin
@@ -175,14 +196,17 @@ async function installAuditFailure(actorId: string): Promise<() => Promise<void>
       create trigger "${triggerName}"
         before insert on audit_log
         for each row execute function public."${functionName}"();
-    `)),
+    `),
+    ),
   );
   return async () => {
     await withBypass(() =>
-      db.execute(sql.raw(`
+      db.execute(
+        sql.raw(`
         drop trigger if exists "${triggerName}" on audit_log;
         drop function if exists public."${functionName}"();
-      `)),
+      `),
+      ),
     );
   };
 }

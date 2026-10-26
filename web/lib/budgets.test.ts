@@ -1,25 +1,35 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const React = await import('react')
-;(globalThis as typeof globalThis & { React: typeof React }).React = React
+const React = await import("react");
+(globalThis as typeof globalThis & { React: typeof React }).React = React;
 
-const { restoreFailedBudgetCells } = await import('../app/(app)/budgets/BudgetDrawer.tsx')
+const { restoreFailedBudgetCells } = await import("../app/(app)/budgets/BudgetDrawer.tsx");
 
-test('failed budget saves do not restore a cell superseded while the request was pending', () => {
-  const key = 'account-1|period-1|sub-1'
-  const stale = { accountId: 'account-1', periodId: 'period-1', subsidiaryId: 'sub-1', amount: '10.0000' }
-  const latest = { accountId: 'account-1', periodId: 'period-1', subsidiaryId: 'sub-1', amount: '20.0000' }
+test("failed budget saves do not restore a cell superseded while the request was pending", () => {
+  const key = "account-1|period-1|sub-1";
+  const stale = {
+    accountId: "account-1",
+    periodId: "period-1",
+    subsidiaryId: "sub-1",
+    amount: "10.0000",
+  };
+  const latest = {
+    accountId: "account-1",
+    periodId: "period-1",
+    subsidiaryId: "sub-1",
+    amount: "20.0000",
+  };
 
   assert.deepEqual(
     restoreFailedBudgetCells([{ key, cell: stale, version: 1 }], new Map([[key, 2]])),
     [],
-    'a failed request must not put stale data back over a newer queued edit',
-  )
+    "a failed request must not put stale data back over a newer queued edit",
+  );
 
   assert.deepEqual(
     restoreFailedBudgetCells([{ key, cell: latest, version: 2 }], new Map([[key, 2]])),
     [latest],
-    'a failed request still retries its cell when no newer edit exists',
-  )
-})
+    "a failed request still retries its cell when no newer edit exists",
+  );
+});

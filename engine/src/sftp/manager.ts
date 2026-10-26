@@ -1,10 +1,22 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
-import { db, withBypass, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
+import {
+  db,
+  withBypass,
+  withBypassContext,
+  withOrgContext,
+  type SqlExecutor,
+} from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sealSecret, unsealSecret } from "../platform/secrets.ts";
-import { startSftpServer, generateHostKey, type SessionLiveness, type SftpResolver, type SftpServerHandle } from "./server.ts";
+import {
+  startSftpServer,
+  generateHostKey,
+  type SessionLiveness,
+  type SftpResolver,
+  type SftpServerHandle,
+} from "./server.ts";
 import { assertSftpStorageReady } from "./backend.ts";
 
 /**
@@ -21,7 +33,8 @@ export const decryptSecret = (stored: string, orgId: string) =>
   unsealSecret(stored, { orgId, purpose: "sftp.server.secret" });
 
 function constantTimeEqual(a: string, b: string): boolean {
-  const ba = Buffer.from(a), bb = Buffer.from(b);
+  const ba = Buffer.from(a),
+    bb = Buffer.from(b);
   if (ba.length !== bb.length) return false;
   return timingSafeEqual(ba, bb);
 }
@@ -33,16 +46,29 @@ export interface DaemonConfig {
   advertisedHost: string | null;
 }
 
-type DaemonRow = { enabled: boolean; port: number; host_key: string; advertised_host: string | null };
+type DaemonRow = {
+  enabled: boolean;
+  port: number;
+  host_key: string;
+  advertised_host: string | null;
+};
 
 function asDaemonConfig(row: DaemonRow): DaemonConfig {
-  return { enabled: row.enabled, port: row.port, hostKey: row.host_key, advertisedHost: row.advertised_host };
+  return {
+    enabled: row.enabled,
+    port: row.port,
+    hostKey: row.host_key,
+    advertisedHost: row.advertised_host,
+  };
 }
 
 async function readDaemonRow(runner: SqlExecutor): Promise<DaemonRow | undefined> {
-  const r = await runner.execute<DaemonRow>(sql`
+  const r = await runner.execute<DaemonRow>(
+    sql`
     select enabled, port, host_key, advertised_host from sftp_daemon where id = 'default'
-  `, "objects");
+  `,
+    "objects",
+  );
   return r[0];
 }
 
@@ -58,11 +84,14 @@ export async function loadDaemonConfig(runner: SqlExecutor = db): Promise<Daemon
   // (`on conflict do nothing` + observe the stored row) — never return
   // the discarded in-memory secret. Operators pin hostKeyFingerprint of
   // whatever this function returns.
-  const inserted = await runner.execute<DaemonRow>(sql`
+  const inserted = await runner.execute<DaemonRow>(
+    sql`
     insert into sftp_daemon (id, enabled, port, host_key) values ('default', false, 2222, ${hostKey})
     on conflict (id) do nothing
     returning enabled, port, host_key, advertised_host
-  `, "objects");
+  `,
+    "objects",
+  );
   if (inserted[0]) return asDaemonConfig(inserted[0]);
 
   const persisted = await readDaemonRow(runner);
@@ -81,7 +110,17 @@ export function hostKeyFingerprint(hostKeyPem: string): string {
   const pub = (parsed as { getPublicSSH(): Buffer }).getPublicSSH();
   return "SHA256:" + createHash("sha256").update(pub).digest("base64").replace(/=+$/, "");
 }
-type ServerRow = { id: string; orgId: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null; updated_at: Date | string };
+type ServerRow = {
+  id: string;
+  orgId: string;
+  username: string;
+  backend: string;
+  bucket: string | null;
+  root_prefix: string;
+  password_encrypted: string | null;
+  authorized_keys: string | null;
+  updated_at: Date | string;
+};
 
 async function loadServer(username: string): Promise<ServerRow | null> {
   // Identity bootstrap over an explicitly trusted boundary. SFTP sessions
@@ -93,10 +132,13 @@ async function loadServer(username: string): Promise<ServerRow | null> {
   // makes this installation-wide resolution deterministic.
   // bypass: connector-token — an SFTP login names a globally unique username; its organization is read from that row.
   return withBypassContext(async () => {
-    const r = await db.execute<ServerRow>(sql`
+    const r = await db.execute<ServerRow>(
+      sql`
     select id, org_id as "orgId", username, backend, bucket, root_prefix, password_encrypted, authorized_keys, updated_at
       from sftp_servers where username = ${username} and is_active limit 1
-  `, "objects");
+  `,
+      "objects",
+    );
     return r[0] ?? null;
   });
 }
@@ -106,7 +148,9 @@ async function touch(row: { id: string; orgId: string; username: string }) {
   // identity: a zero-row outcome (concurrent deactivate/delete, or RLS
   // denying the row) fails the login instead of reporting success.
   await withOrgContext(row.orgId, async () => {
-    const updated = await db.execute<never>(sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`);
+    const updated = await db.execute<never>(
+      sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`,
+    );
     if (updated.rowCount !== 1) {
       throw new Error(
         `refusing SFTP login for ${JSON.stringify(row.username)}: its server row is no longer present in its organization — recreate or reactivate the server and try again`,
@@ -123,12 +167,25 @@ async function touch(row: { id: string; orgId: string; username: string }) {
  * columns already exist, and comparing ciphertext (not plaintext) keeps
  * secrets out of the session config beyond their hashes.
  */
-function sessionRevFor(row: Pick<ServerRow, "updated_at" | "password_encrypted" | "authorized_keys">): string {
+function sessionRevFor(
+  row: Pick<ServerRow, "updated_at" | "password_encrypted" | "authorized_keys">,
+): string {
   const updatedAtMs = new Date(row.updated_at).getTime();
-  const secretHash = (v: string | null) => createHash("sha256").update(v ?? "").digest("hex");
+  const secretHash = (v: string | null) =>
+    createHash("sha256")
+      .update(v ?? "")
+      .digest("hex");
   return `${updatedAtMs}:${secretHash(row.password_encrypted)}:${secretHash(row.authorized_keys)}`;
 }
-const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix, sessionRev: sessionRevFor(row) });
+const asConfig = (row: ServerRow) => ({
+  id: row.id,
+  orgId: row.orgId,
+  username: row.username,
+  backend: row.backend,
+  bucket: row.bucket,
+  rootPrefix: row.root_prefix,
+  sessionRev: sessionRevFor(row),
+});
 
 /**
  * The owning org's Bank Feeds gate for one SFTP login — the house
@@ -147,7 +204,10 @@ async function bankFeedsEnabled(orgId: string): Promise<boolean> {
   return withOrgContext(orgId, () => lockAndCheckOrgFeature(db, orgId, "bankFeeds"));
 }
 
-type SessionRow = Pick<ServerRow, "id" | "orgId" | "username" | "password_encrypted" | "authorized_keys" | "updated_at"> & { is_active: boolean };
+type SessionRow = Pick<
+  ServerRow,
+  "id" | "orgId" | "username" | "password_encrypted" | "authorized_keys" | "updated_at"
+> & { is_active: boolean };
 
 /** The live row for a held session, by stable id — no is_active filter: the fence must SEE a disabled row to name it. */
 async function loadSessionRow(id: string, orgId: string): Promise<SessionRow | null> {
@@ -155,10 +215,13 @@ async function loadSessionRow(id: string, orgId: string): Promise<SessionRow | n
   // scoped to the session's organization explicitly; unscoped, it would read
   // every held session as deleted.
   return withOrgContext(orgId, async () => {
-    const r = await db.execute<SessionRow>(sql`
+    const r = await db.execute<SessionRow>(
+      sql`
     select id, org_id as "orgId", username, is_active, updated_at, password_encrypted, authorized_keys
       from sftp_servers where id = ${id} and org_id = ${orgId} limit 1
-  `, "objects");
+  `,
+      "objects",
+    );
     return r[0] ?? null;
   });
 }
@@ -173,10 +236,13 @@ async function loadSessionRow(id: string, orgId: string): Promise<SessionRow | n
  */
 async function loadProtectedDirs(row: ServerRow): Promise<string[]> {
   const folders = await withOrgContext(row.orgId, async () => {
-    const r = await db.execute<{ folder: string }>(sql`
+    const r = await db.execute<{ folder: string }>(
+      sql`
       select distinct coalesce(nullif(btrim(sftp_folder), ''), 'outbound') as folder
         from payment_bank_profiles where sftp_server_id = ${row.id} and org_id = ${row.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     return r;
   });
   const dirs = new Set<string>(["outbound"]);
@@ -248,16 +314,28 @@ export const dbResolver: SftpResolver = {
   async checkSession(config): Promise<SessionLiveness> {
     const row = await loadSessionRow(config.id, config.orgId);
     if (!row) {
-      return { alive: false, reason: `sftp login '${config.username}' no longer exists — ask your administrator to recreate it, then reconnect` };
+      return {
+        alive: false,
+        reason: `sftp login '${config.username}' no longer exists — ask your administrator to recreate it, then reconnect`,
+      };
     }
     if (!row.is_active) {
-      return { alive: false, reason: `sftp login '${config.username}' is disabled — ask your administrator to re-enable it, then reconnect` };
+      return {
+        alive: false,
+        reason: `sftp login '${config.username}' is disabled — ask your administrator to re-enable it, then reconnect`,
+      };
     }
     if (!(await bankFeedsEnabled(config.orgId))) {
-      return { alive: false, reason: `sftp login '${config.username}' is unavailable: bank feeds is turned off for this organization — turn Bank Feeds back on under Company Settings → Features, then reconnect` };
+      return {
+        alive: false,
+        reason: `sftp login '${config.username}' is unavailable: bank feeds is turned off for this organization — turn Bank Feeds back on under Company Settings → Features, then reconnect`,
+      };
     }
     if (sessionRevFor(row) !== config.sessionRev) {
-      return { alive: false, reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key` };
+      return {
+        alive: false,
+        reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key`,
+      };
     }
     return { alive: true };
   },
@@ -269,32 +347,58 @@ export const dbResolver: SftpResolver = {
   async withMutationGuard(config, operation) {
     // bypass: cross-org-by-design — locks the installation-wide daemon row together with the login and feature it guards.
     await withBypass(async () => {
-      const daemon = (await db.execute<{ enabled: boolean }>(sql`
+      const daemon = (
+        await db.execute<{ enabled: boolean }>(
+          sql`
         select enabled from sftp_daemon where id = 'default' for share
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!daemon?.enabled) {
-        await operation({ alive: false, reason: "the SFTP daemon is disabled — ask a platform administrator to enable it, then reconnect" });
+        await operation({
+          alive: false,
+          reason:
+            "the SFTP daemon is disabled — ask a platform administrator to enable it, then reconnect",
+        });
         return;
       }
 
-      const row = (await db.execute<SessionRow>(sql`
+      const row = (
+        await db.execute<SessionRow>(
+          sql`
         select id, org_id as "orgId", username, is_active, updated_at, password_encrypted, authorized_keys
           from sftp_servers where id = ${config.id} and org_id = ${config.orgId} for share
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!row) {
-        await operation({ alive: false, reason: `sftp login '${config.username}' no longer exists — ask your administrator to recreate it, then reconnect` });
+        await operation({
+          alive: false,
+          reason: `sftp login '${config.username}' no longer exists — ask your administrator to recreate it, then reconnect`,
+        });
         return;
       }
       if (!row.is_active) {
-        await operation({ alive: false, reason: `sftp login '${config.username}' is disabled — ask your administrator to re-enable it, then reconnect` });
+        await operation({
+          alive: false,
+          reason: `sftp login '${config.username}' is disabled — ask your administrator to re-enable it, then reconnect`,
+        });
         return;
       }
       if (!(await lockAndCheckOrgFeature(db, config.orgId, "bankFeeds"))) {
-        await operation({ alive: false, reason: `sftp login '${config.username}' is unavailable: bank feeds is turned off for this organization — turn Bank Feeds back on under Company Settings → Features, then reconnect` });
+        await operation({
+          alive: false,
+          reason: `sftp login '${config.username}' is unavailable: bank feeds is turned off for this organization — turn Bank Feeds back on under Company Settings → Features, then reconnect`,
+        });
         return;
       }
       if (sessionRevFor(row) !== config.sessionRev) {
-        await operation({ alive: false, reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key` });
+        await operation({
+          alive: false,
+          reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key`,
+        });
         return;
       }
       await operation({ alive: true });
@@ -337,7 +441,9 @@ let currentPort: number | null = null;
  * the old one closes, so a failed bind (conflicting port, bad config) leaves
  * the previously working listener untouched instead of destroying it.
  */
-export async function ensureSftpServer(load: () => Promise<DaemonConfig> = loadDaemonConfig): Promise<void> {
+export async function ensureSftpServer(
+  load: () => Promise<DaemonConfig> = loadDaemonConfig,
+): Promise<void> {
   const cfg = await load();
   if (!cfg.enabled) {
     await stopSftpServer();
@@ -350,12 +456,18 @@ export async function ensureSftpServer(load: () => Promise<DaemonConfig> = loadD
   // the misconfiguration here instead of serving such a login. Disabled stays
   // silent — a fresh install configures nothing and must still boot.
   assertSftpStorageReady();
-  const replacement = await startSftpServer({ port: cfg.port, hostKey: cfg.hostKey, resolve: dbResolver });
+  const replacement = await startSftpServer({
+    port: cfg.port,
+    hostKey: cfg.hostKey,
+    resolve: dbResolver,
+  });
   const previous = handle;
   handle = replacement;
   currentPort = replacement.port;
   if (previous) await previous.close();
-  console.log(`[sftp] server listening on :${replacement.port} (${hostKeyFingerprint(cfg.hostKey)})`);
+  console.log(
+    `[sftp] server listening on :${replacement.port} (${hostKeyFingerprint(cfg.hostKey)})`,
+  );
 }
 
 /** Whether a listener is currently bound, and on which port. */
@@ -377,7 +489,11 @@ export function stopSftpServer(): Promise<void> {
  * AFTER that unit commits: binding a port the database no longer says we own
  * must never survive an audit failure.
  */
-export async function updateDaemonConfig(patch: { enabled?: boolean; port?: number; advertisedHost?: string | null }, userId: string, runner: SqlExecutor = db): Promise<DaemonConfig> {
+export async function updateDaemonConfig(
+  patch: { enabled?: boolean; port?: number; advertisedHost?: string | null },
+  userId: string,
+  runner: SqlExecutor = db,
+): Promise<DaemonConfig> {
   await loadDaemonConfig(runner); // ensure the row exists
   await runner.execute(sql`
     update sftp_daemon set
@@ -431,6 +547,10 @@ export function sftpServerAuditSnapshot(row: SftpServerAuditRow): Record<string,
 }
 
 /** Secret-free snapshot of the global daemon configuration — never the host key. */
-export function sftpDaemonConfigAuditSnapshot(cfg: { enabled: boolean; port: number; advertisedHost: string | null }): Record<string, unknown> {
+export function sftpDaemonConfigAuditSnapshot(cfg: {
+  enabled: boolean;
+  port: number;
+  advertisedHost: string | null;
+}): Record<string, unknown> {
   return { enabled: cfg.enabled, port: cfg.port, advertised_host: cfg.advertisedHost };
 }

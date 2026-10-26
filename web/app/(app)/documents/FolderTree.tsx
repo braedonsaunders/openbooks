@@ -1,76 +1,76 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
-import { ChevronRight, Folder as FolderIcon, FolderOpen } from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import { cn } from '@openbooks/ui'
-import { useState } from 'react'
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { ChevronRight, Folder as FolderIcon, FolderOpen } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { cn } from "@openbooks/ui";
+import { useState } from "react";
 
 export interface TreeFolder {
-  id: string
-  name: string
-  parentId: string | null
-  isSystem: boolean
-  systemKind: string | null
-  isPrivate: boolean
-  isInactive: boolean
-  recordTable: string | null
-  recordId: string | null
-  childCount: number
-  fileCount: number
+  id: string;
+  name: string;
+  parentId: string | null;
+  isSystem: boolean;
+  systemKind: string | null;
+  isPrivate: boolean;
+  isInactive: boolean;
+  recordTable: string | null;
+  recordId: string | null;
+  childCount: number;
+  fileCount: number;
 }
 
 export function FolderTree({
   folders,
   activeFolderId,
 }: {
-  folders: TreeFolder[]
-  activeFolderId?: string
+  folders: TreeFolder[];
+  activeFolderId?: string;
 }) {
-  const t = useTranslations('documents')
-  const pathname = usePathname()
-  const search = useSearchParams()
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const t = useTranslations("documents");
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   // Build child map
   const childrenOf = (parentId: string | null): TreeFolder[] =>
-    folders.filter((f) => f.parentId === parentId)
+    folders.filter((f) => f.parentId === parentId);
 
   // Roots: folders with no parent
-  const roots = childrenOf(null)
+  const roots = childrenOf(null);
 
   function toggle(id: string) {
     setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function buildHref(folderId: string | null): string {
-    const params = new URLSearchParams(search.toString())
-    if (folderId) params.set('fid', folderId)
-    else params.delete('fid')
-    params.delete('page')
-    const qs = params.toString()
-    return qs ? `${pathname}?${qs}` : pathname
+    const params = new URLSearchParams(search.toString());
+    if (folderId) params.set("fid", folderId);
+    else params.delete("fid");
+    params.delete("page");
+    const qs = params.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
   }
 
   function renderNode(folder: TreeFolder, depth: number): React.ReactNode {
-    const children = childrenOf(folder.id)
-    const isCollapsed = collapsed.has(folder.id)
-    const isActive = activeFolderId === folder.id
+    const children = childrenOf(folder.id);
+    const isCollapsed = collapsed.has(folder.id);
+    const isActive = activeFolderId === folder.id;
 
     return (
       <div key={folder.id}>
         <div
           className={cn(
-            'group flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors',
+            "group flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors",
             isActive
-              ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
-              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60',
+              ? "bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+              : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60",
           )}
           style={{ paddingLeft: `${depth * 12 + 6}px` }}
         >
@@ -79,11 +79,11 @@ export function FolderTree({
               type="button"
               onClick={() => toggle(folder.id)}
               className="shrink-0 text-slate-400 hover:text-slate-600 dark:text-slate-500"
-              aria-label={isCollapsed ? t('folderTree.expand') : t('folderTree.collapse')}
+              aria-label={isCollapsed ? t("folderTree.expand") : t("folderTree.collapse")}
             >
               <ChevronRight
                 size={14}
-                className={cn('transition-transform', !isCollapsed && 'rotate-90')}
+                className={cn("transition-transform", !isCollapsed && "rotate-90")}
               />
             </button>
           ) : (
@@ -111,32 +111,32 @@ export function FolderTree({
           <div>{children.map((c) => renderNode(c, depth + 1))}</div>
         ) : null}
       </div>
-    )
+    );
   }
 
-  const allHref = buildHref(null)
+  const allHref = buildHref(null);
 
   return (
     <div
       id="documents-folder-tree"
       tabIndex={-1}
-      aria-label={t('folderTree.label')}
+      aria-label={t("folderTree.label")}
       className="hidden w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50/50 p-2 outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-800 dark:bg-slate-900/30 sm:block"
     >
       <Link
         href={allHref}
         scroll={false}
         className={cn(
-          'mb-1 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm transition-colors',
+          "mb-1 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm transition-colors",
           !activeFolderId
-            ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
-            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60',
+            ? "bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+            : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60",
         )}
       >
         <FolderOpen size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
-        <span className="truncate font-medium">{t('list.allFiles')}</span>
+        <span className="truncate font-medium">{t("list.allFiles")}</span>
       </Link>
       {roots.map((r) => renderNode(r, 0))}
     </div>
-  )
+  );
 }

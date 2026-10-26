@@ -2,7 +2,9 @@ import { declaredRemittanceVendorSettingsKeys } from "./packs.ts";
 
 /** Tenant account references stored directly in organization payroll settings. */
 export const PAYROLL_ACCOUNT_SETTING_KEYS = [
-  "wageExpenseAccountId", "burdenExpenseAccountId", "netPayAccountId",
+  "wageExpenseAccountId",
+  "burdenExpenseAccountId",
+  "netPayAccountId",
 ] as const;
 
 /** Preserve policy values while translating only declared tenant identities.
@@ -15,7 +17,9 @@ export function remapPayrollSettingsReferences(
 ): Record<string, unknown> | null | undefined {
   if (value == null) return value;
   if (typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("sandbox payroll settings must be an object; correct the source payroll configuration before copying");
+    throw new Error(
+      "sandbox payroll settings must be an object; correct the source payroll configuration before copying",
+    );
   }
   const after = { ...value } as Record<string, unknown>;
   for (const [keys, ids] of [
@@ -27,7 +31,9 @@ export function remapPayrollSettingsReferences(
       if (reference == null) continue;
       const target = typeof reference === "string" ? ids.get(reference.toLowerCase()) : undefined;
       if (!target && !allowMissing) {
-        throw new Error(`sandbox payroll setting ${key} has no counterpart in the target organization; correct the source payroll account or remittance vendor selection, then refresh`);
+        throw new Error(
+          `sandbox payroll setting ${key} has no counterpart in the target organization; correct the source payroll account or remittance vendor selection, then refresh`,
+        );
       }
       after[key] = target ?? null;
     }

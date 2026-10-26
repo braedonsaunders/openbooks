@@ -85,7 +85,8 @@ function readTrackedBlobs(objectIds) {
 
   for (const objectId of uniqueObjectIds) {
     const headerEnd = output.indexOf(0x0a, offset);
-    if (headerEnd < 0) throw new Error(`git cat-file returned an incomplete header for ${objectId}`);
+    if (headerEnd < 0)
+      throw new Error(`git cat-file returned an incomplete header for ${objectId}`);
 
     const [reportedObjectId, type, sizeText] = output
       .subarray(offset, headerEnd)
@@ -163,7 +164,9 @@ for (const entry of entries) {
   }
 
   if (mode.startsWith("100") && blob.includes(0) && !isBinaryAsset(path)) {
-    violations.push(`${path}: tracked text/source blob contains NUL bytes (Git classifies it as binary)`);
+    violations.push(
+      `${path}: tracked text/source blob contains NUL bytes (Git classifies it as binary)`,
+    );
   }
 }
 

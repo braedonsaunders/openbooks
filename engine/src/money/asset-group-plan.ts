@@ -1,8 +1,5 @@
 import { add, neg } from "./money.ts";
-import {
-  accruedDepreciation,
-  type DatedDepreciation,
-} from "./depreciation-plan.ts";
+import { accruedDepreciation, type DatedDepreciation } from "./depreciation-plan.ts";
 /** An onward transfer retains the group's pre-impairment counterfactual.
  * Accumulation is a delta from the receiving frozen group basis. */
 export interface GroupAssetCounterfactual {
@@ -65,10 +62,7 @@ export function groupAssetPlan(
     plan = [...before, ...event.fullPlan];
     costDelta = add(costDelta, event.fullCostDelta ?? "0");
     salvageDelta = add(salvageDelta, event.fullSalvageDelta ?? "0");
-    basisAccumulatedDelta = add(
-      basisAccumulatedDelta,
-      event.fullAccumulatedDelta ?? "0",
-    );
+    basisAccumulatedDelta = add(basisAccumulatedDelta, event.fullAccumulatedDelta ?? "0");
     unimpairedAccumulatedDelta = add(
       unimpairedAccumulatedDelta,
       event.fullUnimpairedAccumulatedDelta ?? "0",
@@ -81,9 +75,7 @@ export function groupAssetPlan(
             ? l
             : {
                 ...l,
-                date: new Date(
-                  Date.parse(serviceFrom + "T00:00:00Z") - 86400000,
-                )
+                date: new Date(Date.parse(serviceFrom + "T00:00:00Z") - 86400000)
                   .toISOString()
                   .slice(0, 10),
                 amount: accruedDepreciation(l, serviceFrom),

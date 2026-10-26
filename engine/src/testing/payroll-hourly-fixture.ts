@@ -2,22 +2,42 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
-  seedPayrollAccountingConfiguration, seedPayrollSchedule, seedPayrollEmployeeRole,
-  seedPayrollPerson, seedPayrollProfile, seedPayrollWage, createScratchOrg,
-  seedFlowActors, seedWorkerEmployment, seedPayrollTime, grantScratchPermissions,
+  seedPayrollAccountingConfiguration,
+  seedPayrollSchedule,
+  seedPayrollEmployeeRole,
+  seedPayrollPerson,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  seedFlowActors,
+  seedWorkerEmployment,
+  seedPayrollTime,
+  grantScratchPermissions,
 } from "./fixtures.ts";
 import { seedPayrollComponents } from "../payroll/run-setup.ts";
 import { seedOntarioEhtFixture } from "../payroll/filing-test-fixtures.ts";
 
 /** Native Ontario hourly employment with explicit posting and vacation policy. */
 export interface HourlyPayrollFixture {
-  orgId: string; subsidiaryId: string; actorId: string; scheduleId: string;
-  accounts: { wageExpense: string; burdenExpense: string; netPayable: string; craPayable: string; vacationPayable: string; otherPayable: string };
+  orgId: string;
+  subsidiaryId: string;
+  actorId: string;
+  scheduleId: string;
+  accounts: {
+    wageExpense: string;
+    burdenExpense: string;
+    netPayable: string;
+    craPayable: string;
+    vacationPayable: string;
+    otherPayable: string;
+  };
 }
 
 async function account(orgId: string, number: string, name: string, type: string): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_active) values(${id},${orgId},${number},${name},${type},true)`);
+  await db.execute(
+    sql`insert into accounts(id,org_id,number,name,type,is_active) values(${id},${orgId},${number},${name},${type},true)`,
+  );
   return id;
 }
 
@@ -34,7 +54,15 @@ export async function seedHourlyPayrollOrg(): Promise<HourlyPayrollFixture> {
     otherPayable: await account(org.orgId, "2330", "Other payable", "liability_current"),
   };
   await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: accounts.craPayable, ei: accounts.craPayable, qpip: accounts.craPayable, income_tax: accounts.craPayable, vacation: accounts.vacationPayable } },
+    slotAccounts: {
+      CA: {
+        cpp: accounts.craPayable,
+        ei: accounts.craPayable,
+        qpip: accounts.craPayable,
+        income_tax: accounts.craPayable,
+        vacation: accounts.vacationPayable,
+      },
+    },
     wageExpenseAccountId: accounts.wageExpense,
     burdenExpenseAccountId: accounts.burdenExpense,
     netPayAccountId: accounts.netPayable,
@@ -45,38 +73,73 @@ export async function seedHourlyPayrollOrg(): Promise<HourlyPayrollFixture> {
   await seedOntarioEhtFixture(org.orgId, actorId);
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18',
+    name: "Weekly",
+    frequency: "weekly",
+    periodsPerYear: 52,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
   return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts };
 }
 
-export async function seedHourlyPayrollEmployee(fx: HourlyPayrollFixture, name: string, subsidiaryId: string | null = null): Promise<{ partyId: string; employmentId: string }> {
+export async function seedHourlyPayrollEmployee(
+  fx: HourlyPayrollFixture,
+  name: string,
+  subsidiaryId: string | null = null,
+): Promise<{ partyId: string; employmentId: string }> {
   const id = randomUUID();
   await seedPayrollPerson(fx.orgId, id, name, { subsidiaryId });
-  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), workerCompGroupId: null, terminatedOn: null });
+  await seedPayrollEmployeeRole(fx.orgId, id, {
+    id: randomUUID(),
+    workerCompGroupId: null,
+    terminatedOn: null,
+  });
   await seedPayrollWage(fx.orgId, id, fx.actorId, {
-    currency: "CAD", rate: "30", basis: "hour",
-    annualHours: "2080", effectiveFrom: '2026-01-01',
+    currency: "CAD",
+    rate: "30",
+    basis: "hour",
+    annualHours: "2080",
+    effectiveFrom: "2026-01-01",
   });
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   // Coverage is out of scope for the hourly suites built on this helper:
   // every hire stands explicitly exempt so the run refuses nothing, with
   // money identical either way.
-  await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
-    country: 'CA', province: 'ON', payBasis: "hourly", federalClaimCode: 1,
-    provincialClaimCode: 1, wcbExempt: true,
-    wcbExemptReason: 'hourly fixture: workers-compensation coverage out of scope',
-  }, { percentFloor: "4", method: 'accrue' });
+  await seedPayrollProfile(
+    fx.orgId,
+    id,
+    employmentId,
+    fx.scheduleId,
+    fx.actorId,
+    {
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+      wcbExempt: true,
+      wcbExemptReason: "hourly fixture: workers-compensation coverage out of scope",
+    },
+    { percentFloor: "4", method: "accrue" },
+  );
   return { partyId: id, employmentId };
 }
 
 /** Eight approved hourly earnings per declared work date. */
-export async function seedHourlyPayrollTime(fx: HourlyPayrollFixture, partyId: string, days: readonly string[]): Promise<void> {
+export async function seedHourlyPayrollTime(
+  fx: HourlyPayrollFixture,
+  partyId: string,
+  days: readonly string[],
+): Promise<void> {
   for (const day of days) {
     await seedPayrollTime(fx.orgId, partyId, fx.actorId, {
-      workedOn: day, hours: '8', projectId: null, status: 'approved', isBillable: false,
-      billingStatus: 'unbilled', costingBasis: 'actual',
+      workedOn: day,
+      hours: "8",
+      projectId: null,
+      status: "approved",
+      isBillable: false,
+      billingStatus: "unbilled",
+      costingBasis: "actual",
     });
   }
 }

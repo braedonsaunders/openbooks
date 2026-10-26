@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { tableScope } from "./subject-scope.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
@@ -98,7 +94,8 @@ type PrebillRow = {
 };
 
 async function loadPrebill(subjectId: string): Promise<PrebillRow | null> {
-  const result = await db.execute<PrebillRow>(sql`
+  const result = await db.execute<PrebillRow>(
+    sql`
     select w.id, w.worksheet_number, w.status, w.project_id,
            p.code as project_code, p.name as project_name, t.name as project_type_name,
            p.customer_id, customer.display_name as customer_name,
@@ -120,104 +117,99 @@ async function loadPrebill(subjectId: string): Promise<PrebillRow | null> {
       left join project_types t on t.id = p.project_type_id and t.org_id = p.org_id
       left join parties customer on customer.id = p.customer_id and customer.org_id = p.org_id
      where w.id = ${subjectId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
-export const prebillsFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: PREBILL_SUBJECT_KIND,
-    permissions: {
-      read: "projects.read",
-      edit: "projects.manage",
-      approve: "ar.approve",
-    },
-    scope: tableScope("project", "prebills", "project_id"),
-    profile: prebillSubjectProfile,
-    releaseViaHandler: true,
+export const prebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: PREBILL_SUBJECT_KIND,
+  permissions: {
+    read: "projects.read",
+    edit: "projects.manage",
+    approve: "ar.approve",
+  },
+  scope: tableScope("project", "prebills", "project_id"),
+  profile: prebillSubjectProfile,
+  releaseViaHandler: true,
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const row = await loadPrebill(subjectId);
-      if (!row) return null;
-      return {
-        values: {
-          id: row.id,
-          worksheetNumber: row.worksheet_number,
-          status: row.status,
-          projectId: row.project_id,
-          projectCode: row.project_code,
-          projectName: row.project_name,
-          projectTypeName: row.project_type_name,
-          customerId: row.customer_id,
-          customerName: row.customer_name,
-          periodStart: row.period_start,
-          periodEnd: row.period_end,
-          proposedBillAmount: row.proposed_bill_amount,
-          originalBillAmount: row.original_bill_amount,
-          adjustmentAmount: row.adjustment_amount,
-          writeDownAmount: row.write_down_amount,
-          costAmount: row.cost_amount,
-          lineCount: row.line_count,
-          heldLineCount: row.held_line_count,
-          createdBy: row.created_by,
-          submittedBy: row.submitted_by,
-        },
-        submitterUserId: row.submitted_by,
-        makerUserId: row.created_by,
-      };
-    },
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const row = await loadPrebill(subjectId);
+    if (!row) return null;
+    return {
+      values: {
+        id: row.id,
+        worksheetNumber: row.worksheet_number,
+        status: row.status,
+        projectId: row.project_id,
+        projectCode: row.project_code,
+        projectName: row.project_name,
+        projectTypeName: row.project_type_name,
+        customerId: row.customer_id,
+        customerName: row.customer_name,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+        proposedBillAmount: row.proposed_bill_amount,
+        originalBillAmount: row.original_bill_amount,
+        adjustmentAmount: row.adjustment_amount,
+        writeDownAmount: row.write_down_amount,
+        costAmount: row.cost_amount,
+        lineCount: row.line_count,
+        heldLineCount: row.held_line_count,
+        createdBy: row.created_by,
+        submittedBy: row.submitted_by,
+      },
+      submitterUserId: row.submitted_by,
+      makerUserId: row.created_by,
+    };
+  },
 
-    label(subjectId: string, values: Record<string, unknown>): string {
-      const number = String(values.worksheetNumber ?? subjectId);
-      const project = values.projectName
-        ? ` — ${String(values.projectName)}`
-        : "";
-      return `Pre-billing ${number}${project}`;
-    },
+  label(subjectId: string, values: Record<string, unknown>): string {
+    const number = String(values.worksheetNumber ?? subjectId);
+    const project = values.projectName ? ` — ${String(values.projectName)}` : "";
+    return `Pre-billing ${number}${project}`;
+  },
 
-    deepLink(subjectId: string): string {
-      return `/projects/pre-billing?prebill=${subjectId}`;
-    },
+  deepLink(subjectId: string): string {
+    return `/projects/pre-billing?prebill=${subjectId}`;
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      return (await loadPrebill(subjectId))?.status ?? null;
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    return (await loadPrebill(subjectId))?.status ?? null;
+  },
 
-    async changeStatus(): Promise<void> {
-      throw new Error(
-        "pre-billing status is released by the approval engine, not a flow action",
-      );
-    },
+  async changeStatus(): Promise<void> {
+    throw new Error("pre-billing status is released by the approval engine, not a flow action");
+  },
 
-    async releaseApproval(
-      subjectId: string,
-      outcome: "approved" | "rejected",
-      ctx: FlowExecCtx,
-      detail?: { comment?: string | null },
-      run?: { id: string; dispatchValues: Record<string, unknown> | null },
-    ): Promise<void> {
-      await releaseFlowApproval({
-        subjectKind: PREBILL_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        comment: detail?.comment,
-        approvalRunId: run?.id,
-        ctx,
-      });
-    },
+  async releaseApproval(
+    subjectId: string,
+    outcome: "approved" | "rejected",
+    ctx: FlowExecCtx,
+    detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
+  ): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: PREBILL_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      approvalRunId: run?.id,
+      ctx,
+    });
+  },
 
-    /**
-     * A retried flow run that now gates parks the worksheet, exactly as the
-     * first submission would have. Only a draft with lines to bill moves; a
-     * worksheet already in review is left alone, and anything else refuses so
-     * the retried run fails closed instead of gating a worksheet that cannot be
-     * released.
-     */
-    async markAwaitingApproval(
-      subjectId: string,
-      ctx: FlowExecCtx,
-    ): Promise<void> {
-      const parked = await db.execute<{ id: string }>(sql`
+  /**
+   * A retried flow run that now gates parks the worksheet, exactly as the
+   * first submission would have. Only a draft with lines to bill moves; a
+   * worksheet already in review is left alone, and anything else refuses so
+   * the retried run fails closed instead of gating a worksheet that cannot be
+   * released.
+   */
+  async markAwaitingApproval(subjectId: string, ctx: FlowExecCtx): Promise<void> {
+    const parked = await db.execute<{ id: string }>(
+      sql`
       update prebills w
          set status = 'review',
              submitted_at = coalesce(w.submitted_at, now()),
@@ -227,47 +219,50 @@ export const prebillsFlowAdapter: FlowSubjectAdapter =
          and exists (select 1 from prebill_lines l
                       where l.org_id = w.org_id and l.prebill_id = w.id and l.disposition = 'bill')
       returning w.id
-    `, "objects");
-      if (parked[0]) {
-        // The trail always names an actor: the retrying user, else whoever
-        // submitted or prepared the worksheet.
-        await db.execute(sql`
+    `,
+      "objects",
+    );
+    if (parked[0]) {
+      // The trail always names an actor: the retrying user, else whoever
+      // submitted or prepared the worksheet.
+      await db.execute(sql`
         insert into prebill_events (org_id, prebill_id, event_type, actor_id, details)
         select w.org_id, w.id, 'submitted', coalesce(${ctx.userId ?? null}::uuid, w.submitted_by, w.created_by),
                ${JSON.stringify({ source: "flow_retry" })}::jsonb
           from prebills w
          where w.id = ${subjectId} and w.org_id = ${ctx.orgId}
       `);
-        return;
-      }
-      const current = (await loadPrebill(subjectId))?.status ?? null;
-      if (current !== "review") {
-        throw new Error(
-          `pre-billing worksheet is ${current ?? "missing"}; only a submitted draft can await approval`,
-        );
-      }
-    },
-
-    async setField(): Promise<void> {
+      return;
+    }
+    const current = (await loadPrebill(subjectId))?.status ?? null;
+    if (current !== "review") {
       throw new Error(
-        "pre-billing fields are not writable by flows; edit the draft worksheet",
+        `pre-billing worksheet is ${current ?? "missing"}; only a submitted draft can await approval`,
       );
-    },
+    }
+  },
 
-    /** Worksheets awaiting a decision, for scheduled fan-out (reminders). */
-    async findCandidateIds(limit: number): Promise<string[]> {
-      const orgId = ambientTenantOrgId();
-      if (!orgId) {
-        throw new Error(
-          `findCandidateIds for "${PREBILL_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
-        );
-      }
-      const result = await db.execute<{ id: string }>(sql`
+  async setField(): Promise<void> {
+    throw new Error("pre-billing fields are not writable by flows; edit the draft worksheet");
+  },
+
+  /** Worksheets awaiting a decision, for scheduled fan-out (reminders). */
+  async findCandidateIds(limit: number): Promise<string[]> {
+    const orgId = ambientTenantOrgId();
+    if (!orgId) {
+      throw new Error(
+        `findCandidateIds for "${PREBILL_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+      );
+    }
+    const result = await db.execute<{ id: string }>(
+      sql`
       select id::text as id from prebills
        where org_id = ${orgId} and status = 'review'
        order by submitted_at desc nulls last
        limit ${limit}
-    `, "objects");
-      return result.map((row) => row.id);
-    },
-  });
+    `,
+      "objects",
+    );
+    return result.map((row) => row.id);
+  },
+});

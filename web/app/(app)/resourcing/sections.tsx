@@ -1,5 +1,5 @@
-import { TieOutTable, type TieOutLabels } from './TieOutTable'
-import type { PlanVsActualRow } from '../../../lib/resourcing/tie-out'
+import { TieOutTable, type TieOutLabels } from "./TieOutTable";
+import type { PlanVsActualRow } from "../../../lib/resourcing/tie-out";
 
 /**
  * The resourcing cockpit's tie-out section, extracted from the page.
@@ -14,16 +14,16 @@ export function TieOutSection({
   labels,
   empty,
 }: {
-  rows: PlanVsActualRow[]
-  labels: TieOutLabels
-  empty: string
+  rows: PlanVsActualRow[];
+  labels: TieOutLabels;
+  empty: string;
 }) {
   if (rows.length === 0) {
     return (
       <div className="px-6 py-16 text-center">
         <p className="text-sm text-slate-400 dark:text-slate-500">{empty}</p>
       </div>
-    )
+    );
   }
-  return <TieOutTable rows={rows} labels={labels} />
+  return <TieOutTable rows={rows} labels={labels} />;
 }

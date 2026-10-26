@@ -1,30 +1,30 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string }
-    permissions: Set<string>
-    allowedSubsidiaryIds: Set<string> | null
-  } | null
-  projectSubsidiary: string | null
-  calendarArgs: unknown[] | null
-  resourceArgs: unknown[] | null
+    user: { orgId: string; id: string };
+    permissions: Set<string>;
+    allowedSubsidiaryIds: Set<string> | null;
+  } | null;
+  projectSubsidiary: string | null;
+  calendarArgs: unknown[] | null;
+  resourceArgs: unknown[] | null;
 }
 
-const stateKey = Symbol.for('openbooks.project-schedule-route-test')
+const stateKey = Symbol.for("openbooks.project-schedule-route-test");
 const state: RouteState = {
   authz: null,
   projectSubsidiary: null,
   calendarArgs: null,
   resourceArgs: null,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:next-server',
+    "mock:next-server",
     `
       export class NextResponse extends Response {
         static json(body, init = {}) {
@@ -36,7 +36,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
       export async function guardPermission() {
@@ -46,7 +46,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:feature-gate',
+    "mock:feature-gate",
     `
       const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
       export async function guardFeaturePermission() {
@@ -56,7 +56,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       export const ambientTenantOrgId = () => null
       export const currentRequestOrgResolver = () => null
@@ -72,12 +72,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ["mock:drizzle", `export function sql(strings, ...values) { return { strings, values } }`],
   [
-    'mock:drizzle',
-    `export function sql(strings, ...values) { return { strings, values } }`,
-  ],
-  [
-    'mock:schedule',
+    "mock:schedule",
     `
       const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
       export class ScheduleError extends Error {
@@ -107,84 +104,95 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next/server') return { url: 'mock:next-server', shortCircuit: true }
+    if (specifier === "next/server") return { url: "mock:next-server", shortCircuit: true };
     // The route factory resolves its permission-and-feature gate lazily
     // through @/lib/feature-gates at request time, so the hook stays
     // registered for every request.
-    const parent = context.parentURL ?? ''
-    if (specifier === '@/lib/authz' && (parent.includes('/api/project-schedule/') || parent.includes('/lib/api/route'))) {
-      return { url: 'mock:authz', shortCircuit: true }
+    const parent = context.parentURL ?? "";
+    if (
+      specifier === "@/lib/authz" &&
+      (parent.includes("/api/project-schedule/") || parent.includes("/lib/api/route"))
+    ) {
+      return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier === '@/lib/feature-gates') return { url: 'mock:feature-gate', shortCircuit: true }
-    if (specifier === '@/lib/project-schedule') return { url: 'mock:schedule', shortCircuit: true }
-    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (specifier === "@/lib/feature-gates")
+      return { url: "mock:feature-gate", shortCircuit: true };
+    if (specifier === "@/lib/project-schedule") return { url: "mock:schedule", shortCircuit: true };
+    if (specifier === "@openbooks/engine/platform/db")
+      return { url: "mock:db", shortCircuit: true };
+    if (specifier === "drizzle-orm") return { url: "mock:drizzle", shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?project-schedule-route-regression'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?project-schedule-route-regression";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 // The factory's lazy session-gate import runs on every request, so the hook
 // must stay registered until the file's tests finish.
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 
-const ORG_ID = '00000000-0000-0000-0000-000000000010'
-const PROJECT_A = '11111111-1111-4111-8111-111111111111'
-const FOREIGN_ID = '22222222-2222-4222-8222-222222222222'
+const ORG_ID = "00000000-0000-0000-0000-000000000010";
+const PROJECT_A = "11111111-1111-4111-8111-111111111111";
+const FOREIGN_ID = "22222222-2222-4222-8222-222222222222";
 
-test('cross-project delete attempts fail closed with the authorized project boundary', async () => {
+test("cross-project delete attempts fail closed with the authorized project boundary", async () => {
   state.authz = {
-    user: { orgId: ORG_ID, id: '00000000-0000-0000-0000-000000000011' },
-    permissions: new Set(['projects.manage']),
+    user: { orgId: ORG_ID, id: "00000000-0000-0000-0000-000000000011" },
+    permissions: new Set(["projects.manage"]),
     allowedSubsidiaryIds: null,
-  }
+  };
 
-  state.calendarArgs = null
-  const calendarResponse = await POST(new Request('http://openbooks.test/api/project-schedule', {
-    method: 'POST',
-    body: JSON.stringify({ projectId: PROJECT_A, action: 'deleteCalendar', id: FOREIGN_ID }),
-  }))
-  assert.ok(calendarResponse)
-  assert.equal(calendarResponse.status, 404)
-  assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, null])
+  state.calendarArgs = null;
+  const calendarResponse = await POST(
+    new Request("http://openbooks.test/api/project-schedule", {
+      method: "POST",
+      body: JSON.stringify({ projectId: PROJECT_A, action: "deleteCalendar", id: FOREIGN_ID }),
+    }),
+  );
+  assert.ok(calendarResponse);
+  assert.equal(calendarResponse.status, 404);
+  assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, null]);
 
-  state.resourceArgs = null
-  const resourceResponse = await POST(new Request('http://openbooks.test/api/project-schedule', {
-    method: 'POST',
-    body: JSON.stringify({ projectId: PROJECT_A, action: 'deleteResource', id: FOREIGN_ID }),
-  }))
-  assert.ok(resourceResponse)
-  assert.equal(resourceResponse.status, 404)
-  assert.deepEqual(state.resourceArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, null])
-})
+  state.resourceArgs = null;
+  const resourceResponse = await POST(
+    new Request("http://openbooks.test/api/project-schedule", {
+      method: "POST",
+      body: JSON.stringify({ projectId: PROJECT_A, action: "deleteResource", id: FOREIGN_ID }),
+    }),
+  );
+  assert.ok(resourceResponse);
+  assert.equal(resourceResponse.status, 404);
+  assert.deepEqual(state.resourceArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, null]);
+});
 
-test('the route forwards the caller subsidiary scope to subordinate writes', async () => {
-  const scope = new Set(['00000000-0000-0000-0000-0000000000aa'])
+test("the route forwards the caller subsidiary scope to subordinate writes", async () => {
+  const scope = new Set(["00000000-0000-0000-0000-0000000000aa"]);
   state.authz = {
-    user: { orgId: ORG_ID, id: '00000000-0000-0000-0000-000000000011' },
-    permissions: new Set(['projects.manage']),
+    user: { orgId: ORG_ID, id: "00000000-0000-0000-0000-000000000011" },
+    permissions: new Set(["projects.manage"]),
     allowedSubsidiaryIds: scope,
-  }
+  };
   // The project sits inside the caller's lens, so the pre-read passes and
   // the service receives the exact scope to recheck under its row lock.
-  state.projectSubsidiary = '00000000-0000-0000-0000-0000000000aa'
+  state.projectSubsidiary = "00000000-0000-0000-0000-0000000000aa";
 
-  state.calendarArgs = null
-  const response = await POST(new Request('http://openbooks.test/api/project-schedule', {
-    method: 'POST',
-    body: JSON.stringify({ projectId: PROJECT_A, action: 'deleteCalendar', id: FOREIGN_ID }),
-  }))
-  assert.ok(response)
-  assert.equal(response.status, 404)
-  assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, scope])
-})
+  state.calendarArgs = null;
+  const response = await POST(
+    new Request("http://openbooks.test/api/project-schedule", {
+      method: "POST",
+      body: JSON.stringify({ projectId: PROJECT_A, action: "deleteCalendar", id: FOREIGN_ID }),
+    }),
+  );
+  assert.ok(response);
+  assert.equal(response.status, 404);
+  assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, scope]);
+});

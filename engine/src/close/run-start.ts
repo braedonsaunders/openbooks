@@ -54,15 +54,11 @@ function blueprintStepApplies(
   const bookIds = list("bookIds");
   if (bookIds.length && !bookIds.includes(context.bookId)) return false;
   const fiscalYears = list("fiscalYears").map(Number);
-  if (fiscalYears.length && !fiscalYears.includes(context.fiscalYear))
-    return false;
+  if (fiscalYears.length && !fiscalYears.includes(context.fiscalYear)) return false;
   const subsidiaries = list("subsidiaryIds").filter(
     (item): item is string => typeof item === "string",
   );
-  if (
-    subsidiaries.length &&
-    !context.subsidiaryIds.some((id) => subsidiaries.includes(id))
-  )
+  if (subsidiaries.length && !context.subsidiaryIds.some((id) => subsidiaries.includes(id)))
     return false;
   const types = list("periodTypes");
   if (types.length) {
@@ -71,11 +67,9 @@ function blueprintStepApplies(
     else {
       actual.add("month");
       if (context.periodNumber % 3 === 0) actual.add("quarter");
-      if (context.periodNumber === context.lastRegularPeriod)
-        actual.add("year");
+      if (context.periodNumber === context.lastRegularPeriod) actual.add("year");
     }
-    if (!types.some((type) => typeof type === "string" && actual.has(type)))
-      return false;
+    if (!types.some((type) => typeof type === "string" && actual.has(type))) return false;
   }
   return true;
 }
@@ -94,61 +88,76 @@ export async function startCloseRun(args: {
   const defaults = await ensureCloseDefaults(args.orgId, args.actorId);
   const closeFeatures = await defaultCloseFeatureContext(db, args.orgId);
   const blueprintId = args.blueprintId ?? defaults.blueprintId;
-  const reportingPackageId =
-    args.reportingPackageId ?? defaults.reportingPackageId;
+  const reportingPackageId = args.reportingPackageId ?? defaults.reportingPackageId;
   await assertCloseScope(db, args);
-  const periodRes = (await db.execute<{
-      id: string;
-      ends_on: string;
-      fiscal_year: number;
-      period_number: number;
-      is_adjustment: boolean;
-      last_regular_period: number;
-    }>(sql`
+  const periodRes = await db.execute<{
+    id: string;
+    ends_on: string;
+    fiscal_year: number;
+    period_number: number;
+    is_adjustment: boolean;
+    last_regular_period: number;
+  }>(
+    sql`
     select p.id, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
            (select max(p2.period_number) from accounting_periods p2
              where p2.org_id = p.org_id and p2.fiscal_calendar_id = p.fiscal_calendar_id
                and p2.fiscal_year = p.fiscal_year and not p2.is_adjustment) as last_regular_period
       from accounting_periods p
-     where p.id = ${args.periodId} and p.org_id = ${args.orgId}`, "objects"));
+     where p.id = ${args.periodId} and p.org_id = ${args.orgId}`,
+    "objects",
+  );
   const period = periodRes[0];
   if (!period) throw new CloseError("period not found");
-  const configuration = (await db.execute<{ blueprint_name: string | null; package_ok: boolean }>(sql`
+  const configuration = await db.execute<{ blueprint_name: string | null; package_ok: boolean }>(
+    sql`
     select
       (select name from close_blueprints where id = ${blueprintId} and org_id = ${args.orgId} and is_active) as blueprint_name,
       (${reportingPackageId}::uuid is null or exists(
         select 1 from close_reporting_packages where id = ${reportingPackageId} and org_id = ${args.orgId} and is_active
-      )) as package_ok`, "objects"));
-  if (!configuration[0]?.blueprint_name)
-    throw new CloseError("active close blueprint not found");
+      )) as package_ok`,
+    "objects",
+  );
+  if (!configuration[0]?.blueprint_name) throw new CloseError("active close blueprint not found");
   const systemBlueprint = configuration[0].blueprint_name === "close.defaultData.blueprint.name";
   if (!closeFeatures.advancedClose && !systemBlueprint) {
     throw new CloseError("custom close blueprints require Advanced close controls");
   }
-  if (!configuration[0]?.package_ok)
-    throw new CloseError("active reporting package not found");
+  if (!configuration[0]?.package_ok) throw new CloseError("active reporting package not found");
   // A shape-valid non-day such as February 30 would otherwise reach the
   // target_close_date DATE column and surface as a raw storage throw (HTTP 500
   // at the runs route, which only maps CloseError to 422).
   if (args.targetCloseDate !== undefined && !isIsoCalendarDate(args.targetCloseDate)) {
     throw new CloseError("target close date must be a real calendar date (YYYY-MM-DD)");
   }
-  const targetCloseDate =
-    args.targetCloseDate ?? addBusinessDays(period.ends_on, 5);
+  const targetCloseDate = args.targetCloseDate ?? addBusinessDays(period.ends_on, 5);
 
   return db
     .transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`close-start:${args.orgId}:${args.periodId}:${args.bookId}`},0))`);
-      const existing = (await tx.execute<{
-        id: string; scope: { subsidiaryIds?: string[] }; blueprint_id: string;
-        status: string; system_blueprint: boolean;
-      }>(sql`select r.id,r.scope,r.blueprint_id,r.status,
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`close-start:${args.orgId}:${args.periodId}:${args.bookId}`},0))`,
+      );
+      const existing = (
+        await tx.execute<{
+          id: string;
+          scope: { subsidiaryIds?: string[] };
+          blueprint_id: string;
+          status: string;
+          system_blueprint: boolean;
+        }>(
+          sql`select r.id,r.scope,r.blueprint_id,r.status,
           b.name='close.defaultData.blueprint.name' as system_blueprint
         from close_runs r join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
-        where r.org_id=${args.orgId} and r.period_id=${args.periodId} and r.book_id=${args.bookId} for update of r`, "objects"))[0];
+        where r.org_id=${args.orgId} and r.period_id=${args.periodId} and r.book_id=${args.bookId} for update of r`,
+          "objects",
+        )
+      )[0];
       if (existing) {
-        if (args.subsidiaryIds !== undefined &&
-            canonicalJson([...(args.subsidiaryIds ?? [])].sort()) !== canonicalJson([...(existing.scope?.subsidiaryIds ?? [])].sort()))
+        if (
+          args.subsidiaryIds !== undefined &&
+          canonicalJson([...(args.subsidiaryIds ?? [])].sort()) !==
+            canonicalJson([...(existing.scope?.subsidiaryIds ?? [])].sort())
+        )
           throw new CloseError("existing close run has a different subsidiary scope");
         if (args.blueprintId !== undefined && args.blueprintId !== existing.blueprint_id)
           throw new CloseError("existing close run has a different blueprint");
@@ -157,15 +166,23 @@ export async function startCloseRun(args: {
         // Resume the captured scope/blueprint and its assignment/evidence rows.
         // Defaults chosen for a new run must never rematerialize an old run.
         if (existing.status === "cancelled") {
-          await tx.execute(sql`update close_runs set status='in_progress',updated_at=now(),updated_by=${args.actorId} where id=${existing.id} and org_id=${args.orgId}`);
+          await tx.execute(
+            sql`update close_runs set status='in_progress',updated_at=now(),updated_by=${args.actorId} where id=${existing.id} and org_id=${args.orgId}`,
+          );
           await tx.execute(sql`insert into close_events (org_id,run_id,event_type,actor_id,payload)
-            values (${args.orgId},${existing.id},'run.resumed',${args.actorId},${JSON.stringify({scope:existing.scope,blueprintId:existing.blueprint_id})}::jsonb)`);
+            values (${args.orgId},${existing.id},'run.resumed',${args.actorId},${JSON.stringify({ scope: existing.scope, blueprintId: existing.blueprint_id })}::jsonb)`);
         }
         return existing.id;
       }
-      const fingerprint = await periodFingerprint(args.orgId,args.periodId,args.bookId,args.subsidiaryIds ?? [],
-        !systemBlueprint || !args.subsidiaryIds?.length);
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const fingerprint = await periodFingerprint(
+        args.orgId,
+        args.periodId,
+        args.bookId,
+        args.subsidiaryIds ?? [],
+        !systemBlueprint || !args.subsidiaryIds?.length,
+      );
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, data_fingerprint, last_validated_at,
@@ -176,23 +193,35 @@ export async function startCloseRun(args: {
               ${fingerprint}, now(), now(), ${args.actorId}, ${args.actorId}, ${args.actorId})
       -- A concurrent start returns no row and raises the retry-to-resume refusal below.
       on conflict (org_id, period_id, book_id) do nothing
-      returning id`, "objects"));
+      returning id`,
+        "objects",
+      );
       const runId = inserted[0]?.id;
-      if (!runId) throw new CloseError("close run was created concurrently; retry to resume its captured scope");
-      const steps = (await tx.execute<CloseBlueprintStepRow>(sql`
+      if (!runId)
+        throw new CloseError(
+          "close run was created concurrently; retry to resume its captured scope",
+        );
+      const steps = await tx.execute<CloseBlueprintStepRow>(
+        sql`
       select id, key, title, description, workstream, task_type, completion_mode,
              gate_type, due_offset_business_days, evidence_required, sort_order,
              default_owner_role_key, applicability
         from close_blueprint_steps
        where blueprint_id = ${blueprintId} and org_id = ${args.orgId}
-       order by sort_order`, "objects"));
-      if (steps.length === 0)
-        throw new CloseError("close blueprint has no steps");
+       order by sort_order`,
+        "objects",
+      );
+      if (steps.length === 0) throw new CloseError("close blueprint has no steps");
       let materializedSteps = 0;
       for (const step of steps) {
         if (systemBlueprint && !defaultCloseStepEnabled(step.key, closeFeatures)) continue;
         // These standard tasks certify group consolidation, never one entity.
-        if (systemBlueprint && args.subsidiaryIds?.length && ["intercompany-balanced", "consolidation"].includes(step.key)) continue;
+        if (
+          systemBlueprint &&
+          args.subsidiaryIds?.length &&
+          ["intercompany-balanced", "consolidation"].includes(step.key)
+        )
+          continue;
         if (
           !blueprintStepApplies(step.applicability, {
             fiscalYear: Number(period.fiscal_year),
@@ -204,26 +233,23 @@ export async function startCloseRun(args: {
           })
         )
           continue;
-        async function userForRole(
-          roleKey: string | null,
-        ): Promise<string | null> {
+        async function userForRole(roleKey: string | null): Promise<string | null> {
           if (!roleKey) return null;
-          const user = (await tx.execute<{ id: string }>(sql`
+          const user = await tx.execute<{ id: string }>(
+            sql`
           select distinct u.id from users u
             join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
             join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
            where u.org_id = ${args.orgId} and u.is_active and ar.key = ${roleKey}
            order by u.id limit 1
-        `, "objects"));
+        `,
+            "objects",
+          );
           return user[0]?.id ?? null;
         }
-        const configuredOwnerId = await userForRole(
-          step.default_owner_role_key,
-        );
+        const configuredOwnerId = await userForRole(step.default_owner_role_key);
         if (step.default_owner_role_key && !configuredOwnerId) {
-          throw new CloseError(
-            `no active user holds owner role ${step.default_owner_role_key}`,
-          );
+          throw new CloseError(`no active user holds owner role ${step.default_owner_role_key}`);
         }
         const ownerId = configuredOwnerId ?? args.actorId;
         await tx.execute(sql`

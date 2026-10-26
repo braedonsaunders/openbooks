@@ -60,13 +60,7 @@ export const PIPELINE_STAGE_KINDS = [
   "rejected",
 ] as const;
 
-export const REQUISITION_STATUSES = [
-  "draft",
-  "open",
-  "on_hold",
-  "filled",
-  "cancelled",
-] as const;
+export const REQUISITION_STATUSES = ["draft", "open", "on_hold", "filled", "cancelled"] as const;
 
 export const CANDIDATE_SOURCES = [
   "referral",
@@ -77,12 +71,7 @@ export const CANDIDATE_SOURCES = [
   "other",
 ] as const;
 
-export const APPLICATION_STATUSES = [
-  "active",
-  "rejected",
-  "withdrawn",
-  "hired",
-] as const;
+export const APPLICATION_STATUSES = ["active", "rejected", "withdrawn", "hired"] as const;
 
 export const APPLICATION_EVENT_KINDS = [
   "applied",
@@ -99,20 +88,9 @@ export const APPLICATION_EVENT_KINDS = [
   "note",
 ] as const;
 
-export const INTERVIEW_KINDS = [
-  "phone",
-  "video",
-  "onsite",
-  "panel",
-  "assessment",
-] as const;
+export const INTERVIEW_KINDS = ["phone", "video", "onsite", "panel", "assessment"] as const;
 
-export const INTERVIEW_STATUSES = [
-  "scheduled",
-  "completed",
-  "cancelled",
-  "no_show",
-] as const;
+export const INTERVIEW_STATUSES = ["scheduled", "completed", "cancelled", "no_show"] as const;
 
 export const INTERVIEW_OUTCOMES = ["advance", "hold", "reject"] as const;
 
@@ -149,9 +127,7 @@ export const requisitions = pgTable(
     compensationMax: numeric("compensation_max"),
     compensationCurrency: text("compensation_currency"),
     compensationBasis: text("compensation_basis", { enum: COMPENSATION_BASES }),
-    status: text("status", { enum: REQUISITION_STATUSES })
-      .notNull()
-      .default("draft"),
+    status: text("status", { enum: REQUISITION_STATUSES }).notNull().default("draft"),
     openedOn: date("opened_on"),
     closedOn: date("closed_on"),
     closeReason: text("close_reason"),
@@ -201,10 +177,7 @@ export const requisitions = pgTable(
     index("hrm_requisitions_manager").on(t.orgId, t.hiringManagerPartyId),
     check("hrm_requisitions_headcount", sql`${t.headcount} >= 1`),
     check("hrm_requisitions_filled_count", sql`${t.filledCount} >= 0`),
-    check(
-      "hrm_requisitions_filled_bounded",
-      sql`${t.filledCount} <= ${t.headcount}`,
-    ),
+    check("hrm_requisitions_filled_bounded", sql`${t.filledCount} <= ${t.headcount}`),
     check("hrm_requisitions_revision", sql`${t.revision} >= 1`),
   ],
 );
@@ -254,10 +227,7 @@ export const candidates = pgTable(
     }),
     uniqueIndex("hrm_candidates_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_candidates_email").on(t.orgId, t.email),
-    check(
-      "hrm_candidates_name_not_blank",
-      sql`char_length(btrim(${t.displayName})) > 0`,
-    ),
+    check("hrm_candidates_name_not_blank", sql`char_length(btrim(${t.displayName})) > 0`),
   ],
 );
 
@@ -277,9 +247,7 @@ export const applicationEvents = pgTable(
     toStageId: uuid("to_stage_id"),
     reason: text("reason"),
     actorId: uuid("actor_id"),
-    recordedAt: timestamp("recorded_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     foreignKey({
@@ -289,11 +257,7 @@ export const applicationEvents = pgTable(
     }).onDelete("cascade"),
 
     uniqueIndex("hrm_application_events_org_id_id_unique").on(t.orgId, t.id),
-    index("hrm_application_events_application").on(
-      t.orgId,
-      t.applicationId,
-      t.recordedAt,
-    ),
+    index("hrm_application_events_application").on(t.orgId, t.applicationId, t.recordedAt),
   ],
 );
 
@@ -308,9 +272,7 @@ export const interviews = pgTable(
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     durationMinutes: integer("duration_minutes"),
     location: text("location"),
-    status: text("status", { enum: INTERVIEW_STATUSES })
-      .notNull()
-      .default("scheduled"),
+    status: text("status", { enum: INTERVIEW_STATUSES }).notNull().default("scheduled"),
     outcome: text("outcome", { enum: INTERVIEW_OUTCOMES }),
     feedback: text("feedback"),
     scorecard: jsonb("scorecard"),
@@ -328,16 +290,9 @@ export const interviews = pgTable(
     }).onDelete("cascade"),
 
     uniqueIndex("hrm_interviews_org_id_id_unique").on(t.orgId, t.id),
-    index("hrm_interviews_application").on(
-      t.orgId,
-      t.applicationId,
-      t.scheduledAt,
-    ),
+    index("hrm_interviews_application").on(t.orgId, t.applicationId, t.scheduledAt),
     index("hrm_interviews_upcoming").on(t.orgId, t.status, t.scheduledAt),
-    check(
-      "hrm_interviews_duration",
-      sql`${t.durationMinutes} IS NULL OR ${t.durationMinutes} > 0`,
-    ),
+    check("hrm_interviews_duration", sql`${t.durationMinutes} IS NULL OR ${t.durationMinutes} > 0`),
   ],
 );
 
@@ -371,11 +326,7 @@ export const interviewPanel = pgTable(
       foreignColumns: [parties.orgId, parties.id],
     }),
     uniqueIndex("hrm_interview_panel_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("hrm_interview_panel_org_interview_party").on(
-      t.orgId,
-      t.interviewId,
-      t.partyId,
-    ),
+    uniqueIndex("hrm_interview_panel_org_interview_party").on(t.orgId, t.interviewId, t.partyId),
     index("hrm_interview_panel_interview").on(t.orgId, t.interviewId),
   ],
 );
@@ -454,10 +405,7 @@ export const offers = pgTable(
     index("hrm_offers_application").on(t.orgId, t.applicationId, t.status),
     index("hrm_offers_expiry").on(t.orgId, t.status, t.expiresOn),
     index("hrm_offers_signing_token").on(t.orgId, t.signingTokenHash),
-    check(
-      "hrm_offers_title_not_blank",
-      sql`char_length(btrim(${t.jobTitle})) > 0`,
-    ),
+    check("hrm_offers_title_not_blank", sql`char_length(btrim(${t.jobTitle})) > 0`),
     check("hrm_offers_compensation_amount", sql`${t.compensationAmount} > 0`),
   ],
 );

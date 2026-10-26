@@ -13,10 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import {
-  postProjectGlEntry,
-  reverseProjectGlEntry,
-} from "../../projects/recognition.ts";
+import { postProjectGlEntry, reverseProjectGlEntry } from "../../projects/recognition.ts";
 import { capture } from "../ledger-helpers.ts";
 import type { CaseContext } from "../types.ts";
 import type { ControlCase } from "../controls.ts";
@@ -86,9 +83,12 @@ export const CORRECTION_CONTROL_CASES: readonly ControlCase[] = [
           ledger.date,
         );
         if (!reversalId) throw new Error("reverse wrote no reversal entry");
-        reversedStatus = (await db.execute<{ status: string }>(
-            sql`select status from journal_entries where id = ${entryId}`, "objects",
-          ))[0]!.status;
+        reversedStatus = (
+          await db.execute<{ status: string }>(
+            sql`select status from journal_entries where id = ${entryId}`,
+            "objects",
+          )
+        )[0]!.status;
       });
       const restoredEntry = await capture(
         ctx,

@@ -1,7 +1,12 @@
 import { CloseError, CLOSE_MODULES, canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { addCalendarDays, civilDateFromParts, endOfMonth, parseIsoDate } from "../platform/business-date.ts";
+import {
+  addCalendarDays,
+  civilDateFromParts,
+  endOfMonth,
+  parseIsoDate,
+} from "../platform/business-date.ts";
 import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 
 type CalendarRow = {
@@ -32,18 +37,11 @@ function fiscalStartYear(fiscalYear: number, startMonth: number): number {
   return startMonth === 1 ? fiscalYear : fiscalYear - 1;
 }
 
-function periodName(
-  number: number,
-  fiscalYear: number,
-  adjustment = false,
-): string {
+function periodName(number: number, fiscalYear: number, adjustment = false): string {
   return canonicalPeriodLabel({ fiscalYear, periodNumber: number, adjustment });
 }
 
-function generatedPeriods(
-  calendar: CalendarRow,
-  fiscalYear: number,
-): GeneratedPeriod[] {
+function generatedPeriods(calendar: CalendarRow, fiscalYear: number): GeneratedPeriod[] {
   if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 9999) {
     throw new CloseError("fiscal year must be between 1900 and 9999");
   }
@@ -66,9 +64,7 @@ function generatedPeriods(
     const years = (calendar.config.years ?? {}) as Record<string, unknown>;
     const configured = years[String(fiscalYear)];
     if (!Array.isArray(configured) || configured.length === 0) {
-      throw new CloseError(
-        `custom calendar has no period definition for FY${fiscalYear}`,
-      );
+      throw new CloseError(`custom calendar has no period definition for FY${fiscalYear}`);
     }
     rows = configured.map((raw, index) => {
       const item = raw as Record<string, unknown>;
@@ -79,9 +75,7 @@ function generatedPeriods(
         !/^\d{4}-\d{2}-\d{2}$/.test(endsOn) ||
         startsOn > endsOn
       ) {
-        throw new CloseError(
-          `custom calendar period ${index + 1} has an invalid date range`,
-        );
+        throw new CloseError(`custom calendar period ${index + 1} has an invalid date range`);
       }
       return {
         fiscalYear,
@@ -93,11 +87,9 @@ function generatedPeriods(
       };
     });
   } else {
-    if (!calendar.anchor_date)
-      throw new CloseError("week-based calendars require an anchor date");
+    if (!calendar.anchor_date) throw new CloseError("week-based calendars require an anchor date");
     const anchorFiscalYear = Number(
-      calendar.config.anchorFiscalYear ??
-        parseIsoDate(calendar.anchor_date).getUTCFullYear(),
+      calendar.config.anchorFiscalYear ?? parseIsoDate(calendar.anchor_date).getUTCFullYear(),
     );
     const leapWeekYears = new Set(
       Array.isArray(calendar.config.leapWeekYears)
@@ -108,10 +100,7 @@ function generatedPeriods(
     const direction = fiscalYear >= anchorFiscalYear ? 1 : -1;
     for (let year = anchorFiscalYear; year !== fiscalYear; year += direction) {
       const measuredYear = direction > 0 ? year : year - 1;
-      start = addCalendarDays(
-        start,
-        direction * (leapWeekYears.has(measuredYear) ? 371 : 364),
-      );
+      start = addCalendarDays(start, direction * (leapWeekYears.has(measuredYear) ? 371 : 364));
     }
     const weeks =
       calendar.cadence === "thirteen_period"
@@ -140,10 +129,7 @@ function generatedPeriods(
     });
   }
 
-  if (
-    calendar.adjustment_period_enabled &&
-    !rows.some((row) => row.adjustment)
-  ) {
+  if (calendar.adjustment_period_enabled && !rows.some((row) => row.adjustment)) {
     const final = rows.at(-1);
     if (!final) throw new CloseError("calendar generated no periods");
     rows.push({
@@ -188,9 +174,12 @@ export async function generateAccountingPeriods(
   fiscalYear: number,
   actorId: string | null,
 ): Promise<{ created: number; updated: number; periods: GeneratedPeriod[] }> {
-  const calendarRes = (await db.execute<CalendarRow>(sql`
+  const calendarRes = await db.execute<CalendarRow>(
+    sql`
     select id, cadence, year_start_month, anchor_date, adjustment_period_enabled, config
-      from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`, "objects"));
+      from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`,
+    "objects",
+  );
   const calendar = calendarRes[0];
   if (!calendar) throw new CloseError("active fiscal calendar not found");
   // Periods that can never receive postings are stranded rows:
@@ -198,9 +187,12 @@ export async function generateAccountingPeriods(
   // Refuse to mint periods while no active default exists anywhere in the
   // org — promote one from the close calendars screen first. A default
   // living on another calendar is fine: secondary calendars stay legal.
-  const defaultRes = await db.execute(sql`
+  const defaultRes = await db.execute(
+    sql`
     select 1 from fiscal_calendars
-     where org_id = ${orgId} and is_default and is_active limit 1`, "objects");
+     where org_id = ${orgId} and is_default and is_active limit 1`,
+    "objects",
+  );
   if (!defaultRes[0])
     throw new CloseError(
       "cannot generate periods: the organization has no active default fiscal calendar, so these periods could never receive postings; save one active calendar with the default flag switched on first",
@@ -216,12 +208,16 @@ export async function generateAccountingPeriods(
     has_entries: boolean;
   };
   const loadExisting = (runner: { execute: typeof db.execute }, number: number) =>
-    runner.execute<ExistingPeriod>(sql`
+    runner
+      .execute<ExistingPeriod>(
+        sql`
       select p.id, p.name, p.starts_on, p.ends_on, p.is_adjustment,
              exists(select 1 from journal_entries e where e.period_id = p.id) as has_entries
         from accounting_periods p
        where p.org_id = ${orgId} and p.fiscal_calendar_id = ${calendarId}
-         and p.fiscal_year = ${fiscalYear} and p.period_number = ${number}`, "objects")
+         and p.fiscal_year = ${fiscalYear} and p.period_number = ${number}`,
+        "objects",
+      )
       .then((found) => found[0]);
 
   // Phase 1 — extend forward: missing months are created (with open locks)
@@ -231,15 +227,21 @@ export async function generateAccountingPeriods(
   await db.transaction(async (tx) => {
     for (const period of periods) {
       if (await loadExisting(tx, period.number)) continue;
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
         insert into accounting_periods
           (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on,
            is_adjustment, created_by, updated_by)
         values (${orgId}, ${calendarId}, ${fiscalYear}, ${period.number}, ${period.name},
                 ${period.startsOn}, ${period.endsOn}, ${period.adjustment}, ${actorId}, ${actorId})
-        returning id`, "objects"));
-      const books = (await tx.execute<{ id: string }>(sql`
-        select id from accounting_books where org_id = ${orgId} and is_active`, "objects"));
+        returning id`,
+        "objects",
+      );
+      const books = await tx.execute<{ id: string }>(
+        sql`
+        select id from accounting_books where org_id = ${orgId} and is_active`,
+        "objects",
+      );
       for (const book of books) {
         for (const module of CLOSE_MODULES) {
           await tx.execute(sql`
@@ -271,8 +273,11 @@ export async function generateAccountingPeriods(
     }
 
     if (candidates.length > 0) {
-      const books = await tx.execute<{ id: string }>(sql`
-        select id from accounting_books where org_id = ${orgId} and is_active order by id`, "objects");
+      const books = await tx.execute<{ id: string }>(
+        sql`
+        select id from accounting_books where org_id = ${orgId} and is_active order by id`,
+        "objects",
+      );
       for (const candidate of [...candidates].sort((a, b) => a.id.localeCompare(b.id))) {
         for (const book of books) {
           await periodScopeAdvisoryLock(tx, orgId, candidate.id, book.id);
@@ -293,18 +298,23 @@ export async function generateAccountingPeriods(
       const renamed = row.name !== period.name;
       if (!datesChanged && !renamed) continue;
       // Refusals name the period by its fiscal position, the label every list shows.
-      const label = canonicalPeriodLabel({ fiscalYear, periodNumber: period.number, adjustment: row.is_adjustment });
+      const label = canonicalPeriodLabel({
+        fiscalYear,
+        periodNumber: period.number,
+        adjustment: row.is_adjustment,
+      });
       if (datesChanged && row.has_entries)
-        throw new CloseError(
-          `${label} has ledger activity and its dates cannot be regenerated`,
-        );
+        throw new CloseError(`${label} has ledger activity and its dates cannot be regenerated`);
       if (datesChanged || !row.has_entries) {
-        const result = await tx.execute<{ id: string }>(sql`
+        const result = await tx.execute<{ id: string }>(
+          sql`
           update accounting_periods
              set name = ${period.name}, starts_on = ${period.startsOn}, ends_on = ${period.endsOn},
                  is_adjustment = ${period.adjustment}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.id} and org_id = ${orgId}
-          returning id`, "objects");
+          returning id`,
+          "objects",
+        );
         if (!result[0]) {
           throw new CloseError(
             `${label} disappeared while regenerating its dates; no calendar change was saved`,

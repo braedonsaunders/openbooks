@@ -1,4 +1,4 @@
-import { mergeHref } from '../list-params'
+import { mergeHref } from "../list-params";
 
 /**
  * ONE shared href helper for the HRM workspace drawers (F3-55/56/57).
@@ -18,28 +18,36 @@ import { mergeHref } from '../list-params'
  * matches the shared mergeHref's Search so loader currentParams pass
  * straight through.
  */
-export type PreservedParams = Record<string, string | string[] | undefined>
+export type PreservedParams = Record<string, string | string[] | undefined>;
 
 export function recruitingHref(
   preserved: PreservedParams,
   patch: {
-    status?: string | null
-    application?: string | null
-    requisition?: string | null
-    candidate?: string | null
-    offer?: string | null
+    status?: string | null;
+    application?: string | null;
+    requisition?: string | null;
+    candidate?: string | null;
+    offer?: string | null;
   } = {},
 ): string {
-  return mergeHref('/hrm/recruiting', preserved, patch)
+  return mergeHref("/hrm/recruiting", preserved, patch);
 }
 
 export function performanceHref(
   preserved: PreservedParams,
-  patch: { status?: string | null; cycle?: string | null; review?: string | null; exit?: string | null } = {},
+  patch: {
+    status?: string | null;
+    cycle?: string | null;
+    review?: string | null;
+    exit?: string | null;
+  } = {},
 ): string {
-  return mergeHref('/hrm/performance', preserved, patch)
+  return mergeHref("/hrm/performance", preserved, patch);
 }
 
-export function complianceHref(preserved: PreservedParams, patch: { generate?: string | null } = {}): string {
-  return mergeHref('/hrm/compliance', preserved, patch)
+export function complianceHref(
+  preserved: PreservedParams,
+  patch: { generate?: string | null } = {},
+): string {
+  return mergeHref("/hrm/compliance", preserved, patch);
 }

@@ -47,14 +47,19 @@ export async function lockCustomerRole(
   orgId: string,
   partyId: string,
 ): Promise<CustomerRoleCreditRow | undefined> {
-  return (await tx.execute<CustomerRoleCreditRow>(sql`
+  return (
+    await tx.execute<CustomerRoleCreditRow>(
+      sql`
       select id, credit_limit, currency, is_on_hold, hold_reason
         from customer_roles
        where org_id = ${orgId}
          and party_id = ${partyId}
          and is_active
        for update
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
 }
 
 export interface MixedCurrencyExposure extends Record<string, unknown> {
@@ -74,7 +79,9 @@ export async function findMixedCurrencyExposure(
   partyId: string,
   roleCurrency: string,
 ): Promise<MixedCurrencyExposure | undefined> {
-  return (await tx.execute<MixedCurrencyExposure>(sql`
+  return (
+    await tx.execute<MixedCurrencyExposure>(
+      sql`
       select exposure.kind, exposure.currency
         from documents exposure
        where exposure.org_id = ${orgId}
@@ -111,7 +118,10 @@ export async function findMixedCurrencyExposure(
          )
        order by exposure.kind, exposure.id
        limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
 }
 
 export interface CustomerExposure {
@@ -127,10 +137,12 @@ export async function measureCustomerExposure(
   partyId: string,
   roleCurrency: string,
 ): Promise<CustomerExposure> {
-  const exposure = (await tx.execute<{
+  const exposure = (
+    await tx.execute<{
       open_order_exposure: string;
       unpaid_invoice_exposure: string;
-    }>(sql`
+    }>(
+      sql`
       select
         coalesce((
           select sum(
@@ -170,7 +182,10 @@ export async function measureCustomerExposure(
              and invoice.currency = ${roleCurrency}
              and coalesce(invoice.open_balance, 0) > 0
         ), 0)::text as unpaid_invoice_exposure
-    `, "objects"))[0]!;
+    `,
+      "objects",
+    )
+  )[0]!;
   return {
     openOrderExposure: parseMoney(exposure.open_order_exposure),
     unpaidInvoiceExposure: parseMoney(exposure.unpaid_invoice_exposure),
@@ -193,7 +208,9 @@ export async function measureLinkedOrderRelief(
   invoiceId: string,
   invoiceTotal: string,
 ): Promise<Money> {
-  const linked = (await tx.execute<{ relief: string }>(sql`
+  const linked = (
+    await tx.execute<{ relief: string }>(
+      sql`
       select coalesce(sum(
         greatest(
           issued.total - coalesce((
@@ -225,7 +242,10 @@ export async function measureLinkedOrderRelief(
               and line.from_document_id = issued.id
               and line.to_document_id = ${invoiceId}
          )
-    `, "objects"))[0]!.relief;
+    `,
+      "objects",
+    )
+  )[0]!.relief;
   // The smaller of two texts is not provably canonical: parse the winner.
   return parseMoney(cmp(invoiceTotal, linked) <= 0 ? invoiceTotal : linked);
 }
@@ -236,5 +256,8 @@ export function resultingExposureAfterPosting(
   relief: string,
 ): Money {
   // add() emits fromUnits-fixed 4dp: the exposure is canonical Money.
-  return add(add(add(exposure.openOrderExposure, exposure.unpaidInvoiceExposure), invoiceTotal), neg(relief)) as Money;
+  return add(
+    add(add(exposure.openOrderExposure, exposure.unpaidInvoiceExposure), invoiceTotal),
+    neg(relief),
+  ) as Money;
 }

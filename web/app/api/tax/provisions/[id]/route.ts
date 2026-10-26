@@ -6,10 +6,13 @@ import { getProvisionRun } from "@openbooks/engine/tax-returns/income-tax-provis
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
-
 export const runtime = "nodejs";
 
-async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+async function legacyGET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const { id } = await params;
@@ -20,7 +23,9 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export const GET = defineRoute({
-  permission: "reports.read", feature: { none: "This route is governed by its permission and service authorization." },
-  params: z.object({ "id": z.string() }),
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  permission: "reports.read",
+  feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ id: z.string() }),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });

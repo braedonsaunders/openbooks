@@ -1,8 +1,8 @@
-import type { ScheduleActor } from './boards.ts';
-import type { ScheduleNotice } from './entries.ts';
+import type { ScheduleActor } from "./boards.ts";
+import type { ScheduleNotice } from "./entries.ts";
 
 export interface DistributionDispatch {
-  event: 'on_submit' | 'on_update' | 'after_post';
+  event: "on_submit" | "on_update" | "after_post";
   requestId: string;
   actor: ScheduleActor;
 }
@@ -15,7 +15,7 @@ type BoardLifecycle = (input: {
   from: string;
   through: string;
   subjectIds: readonly string[];
-  event: 'on_update' | 'after_post';
+  event: "on_update" | "after_post";
   occurrence: string;
 }) => Promise<{ message: string; remedy: string } | null>;
 type NoticeDelivery = (input: {
@@ -39,17 +39,13 @@ export function registerScheduleDistributionHooks(
 export function dispatchScheduleDistribution(input: DistributionDispatch) {
   if (!runtime.__scheduleDispatch)
     throw new Error(
-      'Schedule distribution is not available in this process. Install the native engine composition before sending.',
+      "Schedule distribution is not available in this process. Install the native engine composition before sending.",
     );
   return runtime.__scheduleDispatch(input);
 }
 /** Optional authored Flows observe committed scheduling changes in the same transaction. */
-export async function scheduleBoardLifecycle(
-  input: Parameters<BoardLifecycle>[0],
-) {
-  return runtime.__scheduleLifecycle
-    ? runtime.__scheduleLifecycle(input)
-    : null;
+export async function scheduleBoardLifecycle(input: Parameters<BoardLifecycle>[0]) {
+  return runtime.__scheduleLifecycle ? runtime.__scheduleLifecycle(input) : null;
 }
 
 export function registerScheduleNoticeDelivery(delivery: NoticeDelivery): void {

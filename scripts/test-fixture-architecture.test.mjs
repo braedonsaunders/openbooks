@@ -7,7 +7,10 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
-const fixtures = readFileSync(new URL("../engine/src/testing/fixtures.ts", import.meta.url), "utf8");
+const fixtures = readFileSync(
+  new URL("../engine/src/testing/fixtures.ts", import.meta.url),
+  "utf8",
+);
 const runner = readFileSync(new URL("./test-suite.mjs", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/test.yml", import.meta.url), "utf8");
 
@@ -30,7 +33,9 @@ test("suite harness propagates child failure and always records the owner receip
   assert.equal(childStatus, 23, "the harness must preserve a failing child exit code");
 
   const ownerFile = join(dir, "owner.mjs");
-  writeFileSync(ownerFile, `
+  writeFileSync(
+    ownerFile,
+    `
 import { createServer } from "node:net";
 const metrics = { poolSize: 4, fullBootstrap: 4, leases: 7, releases: 7, resets: 7,
   fullTeardown: 4, schemaWideVerification: 4, activeLeases: 0, leakDetections: 0 };
@@ -50,7 +55,9 @@ server.listen(0, "127.0.0.1", () => {
   const address = server.address();
   console.log("READY " + address.port);
 });
-`, "utf8");
+`,
+    "utf8",
+  );
 
   const owner = spawn(process.execPath, [ownerFile], {
     cwd: resolve(new URL("..", import.meta.url).pathname),
@@ -75,18 +82,31 @@ server.listen(0, "127.0.0.1", () => {
     owner.stdout.on("data", (chunk) => {
       output += chunk.toString();
       const match = output.match(/READY (\d+)/);
-      if (match) { clearTimeout(timeout); resolveReady(Number(match[1])); }
+      if (match) {
+        clearTimeout(timeout);
+        resolveReady(Number(match[1]));
+      }
     });
-    owner.stderr.on("data", (chunk) => { output += chunk.toString(); });
-    owner.once("error", (error) => { clearTimeout(timeout); rejectReady(error); });
+    owner.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    owner.once("error", (error) => {
+      clearTimeout(timeout);
+      rejectReady(error);
+    });
   });
   try {
-    const response = await stopFixtureOwner({
-      owner,
-      port: ready,
-      clearTimeout: () => {},
-      get output() { return output; },
-    }, { timeoutMs: 5_000 });
+    const response = await stopFixtureOwner(
+      {
+        owner,
+        port: ready,
+        clearTimeout: () => {},
+        get output() {
+          return output;
+        },
+      },
+      { timeoutMs: 5_000 },
+    );
     assert.equal(response.ok, true);
     const receiptLine = output.split("\n").find((line) => line.startsWith("[fixture-lifecycle] "));
     assert.ok(receiptLine, "owner must emit a lifecycle receipt before exit");
@@ -119,11 +139,20 @@ const CANONICAL_MARKER_PREFIX = /startsWith\("([a-z-]+)"\)/.exec(fixtures)?.[1];
 // Derive the entrypoints that actually reach the suite from package.json, so a
 // script that stops running it cannot leave this guard demanding a fixture
 // claim the job no longer needs.
-const SCRIPTS_RUNNING_SUITE = Object.entries(JSON.parse(readFileSync("package.json", "utf8")).scripts)
+const SCRIPTS_RUNNING_SUITE = Object.entries(
+  JSON.parse(readFileSync("package.json", "utf8")).scripts,
+)
   .filter(([, body]) => /npm test\b/.test(body))
   .map(([name]) => name);
 const SUITE_ENTRYPOINTS = new RegExp(
-  ["npm (?:run )?test(?![:\\w-])", "test-suite\\.mjs integration", "npm run test:integration", ...SCRIPTS_RUNNING_SUITE.map((n) => `npm run ${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![:\\w-])`)].join("|"),
+  [
+    "npm (?:run )?test(?![:\\w-])",
+    "test-suite\\.mjs integration",
+    "npm run test:integration",
+    ...SCRIPTS_RUNNING_SUITE.map(
+      (n) => `npm run ${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![:\\w-])`,
+    ),
+  ].join("|"),
 );
 
 test("every workflow job that runs the integration suite claims its database as throwaway", () => {
@@ -177,7 +206,11 @@ test("the lifecycle receipt survives an owner that exits immediately after writi
   // contract is the receipt file CI reads below; the platform discipline is
   // demonstrated directly against pipe semantics rather than trusted from the
   // owner's source.
-  assert.match(workflow, /fixture-lifecycle-receipt\.txt/, "CI must read the persisted receipt, not only the tee'd stream");
+  assert.match(
+    workflow,
+    /fixture-lifecycle-receipt\.txt/,
+    "CI must read the persisted receipt, not only the tee'd stream",
+  );
 
   // Demonstrate the underlying platform behavior rather than trusting the shape
   // of the source: fill the pipe, then compare both exit disciplines.
@@ -207,68 +240,98 @@ test("the lifecycle receipt survives an owner that exits immediately after writi
 
 const behavior = process.env.OPENBOOKS_TEST_FIXTURE_BEHAVIOR === "1";
 
-test("pool refuses shared databases even when the isolation flag is spoofed", { skip: !behavior }, async () => {
-  const { ScratchOrgPool, hasEphemeralDatabaseMarker } = await import("@openbooks/engine/testing/fixtures");
-  const store = { bootstrap: async () => ({ orgId: "unused" }), reset: async () => {}, teardown: async () => {} };
-  assert.throws(
-    () => new ScratchOrgPool({ size: 2, isolatedDatabase: false, store }),
-    /dedicated ephemeral database/,
-  );
-  assert.equal(hasEphemeralDatabaseMarker("openbooks-ci-ephemeral-real", "openbooks-ci-ephemeral-fake"), false);
-  assert.equal(hasEphemeralDatabaseMarker("openbooks-ci-ephemeral-real", undefined), false);
-  assert.equal(hasEphemeralDatabaseMarker("openbooks-ci-ephemeral-real", "openbooks-ci-ephemeral-real"), true);
-});
+test(
+  "pool refuses shared databases even when the isolation flag is spoofed",
+  { skip: !behavior },
+  async () => {
+    const { ScratchOrgPool, hasEphemeralDatabaseMarker } =
+      await import("@openbooks/engine/testing/fixtures");
+    const store = {
+      bootstrap: async () => ({ orgId: "unused" }),
+      reset: async () => {},
+      teardown: async () => {},
+    };
+    assert.throws(
+      () => new ScratchOrgPool({ size: 2, isolatedDatabase: false, store }),
+      /dedicated ephemeral database/,
+    );
+    assert.equal(
+      hasEphemeralDatabaseMarker("openbooks-ci-ephemeral-real", "openbooks-ci-ephemeral-fake"),
+      false,
+    );
+    assert.equal(hasEphemeralDatabaseMarker("openbooks-ci-ephemeral-real", undefined), false);
+    assert.equal(
+      hasEphemeralDatabaseMarker("openbooks-ci-ephemeral-real", "openbooks-ci-ephemeral-real"),
+      true,
+    );
+  },
+);
 
-test("leases reset committed state, preserve tenant isolation, and bound lifecycle work", { skip: !behavior }, async () => {
-  const { ScratchOrgPool } = await import("@openbooks/engine/testing/fixtures");
-  let next = 0;
-  const records = new Map();
-  const baselineRows = new Map([["baseline-account", "original"], ["baseline-setting", "production"]]);
-  const store = {
-    bootstrap: async () => {
-      const org = { orgId: `scratch-${++next}`, rows: new Map(baselineRows), resetCommits: 0 };
-      records.set(org.orgId, org);
-      return org;
-    },
-    reset: async (org) => {
-      // A real reset is a committed transaction; the lease cannot be
-      // reissued until this marker is durable and all rows are restored.
-      org.rows.clear();
-      for (const [key, value] of baselineRows) org.rows.set(key, value);
-      org.resetCommits += 1;
-    },
-    teardown: async (org) => {
-      assert.deepEqual(org.rows, baselineRows, "teardown must receive a clean committed slot");
-      records.delete(org.orgId);
-    },
-  };
-  const pool = new ScratchOrgPool({ size: 2, isolatedDatabase: true, store });
-  const first = await pool.lease();
-  const second = await pool.lease();
-  assert.notEqual(first.orgId, second.orgId, "leases must never share a tenant");
-  first.rows.set("baseline-account", "mutated");
-  first.rows.set("new-row", "must-disappear");
-  first.rows.delete("baseline-setting");
-  second.rows.set("other-tenant-row", "private");
-  await pool.release(first.orgId);
-  assert.equal(first.resetCommits, 1, "release waits for the committed reset");
-  assert.deepEqual(first.rows, baselineRows, "committed reset restores updates/deletes and removes inserts");
-  assert.equal(second.rows.get("other-tenant-row"), "private", "cross-tenant state is isolated");
-  const recycled = await pool.lease();
-  assert.equal(recycled.orgId, first.orgId, "clean slot is recycled");
-  assert.deepEqual(recycled.rows, baselineRows, "mutated baseline/new rows are reset before reuse");
-  await pool.release(second.orgId);
-  await pool.release(recycled.orgId);
-  await pool.close();
-  const metrics = pool.metrics;
-  assert.equal(metrics.fullBootstrap, 2);
-  assert.equal(metrics.fullTeardown, 2);
-  assert.equal(metrics.schemaWideVerification, 2);
-  assert.ok(metrics.fullBootstrap <= metrics.poolSize);
-  assert.ok(metrics.fullTeardown <= metrics.poolSize);
-  assert.ok(metrics.schemaWideVerification <= metrics.poolSize);
-  assert.equal(metrics.activeLeases, 0);
-});
+test(
+  "leases reset committed state, preserve tenant isolation, and bound lifecycle work",
+  { skip: !behavior },
+  async () => {
+    const { ScratchOrgPool } = await import("@openbooks/engine/testing/fixtures");
+    let next = 0;
+    const records = new Map();
+    const baselineRows = new Map([
+      ["baseline-account", "original"],
+      ["baseline-setting", "production"],
+    ]);
+    const store = {
+      bootstrap: async () => {
+        const org = { orgId: `scratch-${++next}`, rows: new Map(baselineRows), resetCommits: 0 };
+        records.set(org.orgId, org);
+        return org;
+      },
+      reset: async (org) => {
+        // A real reset is a committed transaction; the lease cannot be
+        // reissued until this marker is durable and all rows are restored.
+        org.rows.clear();
+        for (const [key, value] of baselineRows) org.rows.set(key, value);
+        org.resetCommits += 1;
+      },
+      teardown: async (org) => {
+        assert.deepEqual(org.rows, baselineRows, "teardown must receive a clean committed slot");
+        records.delete(org.orgId);
+      },
+    };
+    const pool = new ScratchOrgPool({ size: 2, isolatedDatabase: true, store });
+    const first = await pool.lease();
+    const second = await pool.lease();
+    assert.notEqual(first.orgId, second.orgId, "leases must never share a tenant");
+    first.rows.set("baseline-account", "mutated");
+    first.rows.set("new-row", "must-disappear");
+    first.rows.delete("baseline-setting");
+    second.rows.set("other-tenant-row", "private");
+    await pool.release(first.orgId);
+    assert.equal(first.resetCommits, 1, "release waits for the committed reset");
+    assert.deepEqual(
+      first.rows,
+      baselineRows,
+      "committed reset restores updates/deletes and removes inserts",
+    );
+    assert.equal(second.rows.get("other-tenant-row"), "private", "cross-tenant state is isolated");
+    const recycled = await pool.lease();
+    assert.equal(recycled.orgId, first.orgId, "clean slot is recycled");
+    assert.deepEqual(
+      recycled.rows,
+      baselineRows,
+      "mutated baseline/new rows are reset before reuse",
+    );
+    await pool.release(second.orgId);
+    await pool.release(recycled.orgId);
+    await pool.close();
+    const metrics = pool.metrics;
+    assert.equal(metrics.fullBootstrap, 2);
+    assert.equal(metrics.fullTeardown, 2);
+    assert.equal(metrics.schemaWideVerification, 2);
+    assert.ok(metrics.fullBootstrap <= metrics.poolSize);
+    assert.ok(metrics.fullTeardown <= metrics.poolSize);
+    assert.ok(metrics.schemaWideVerification <= metrics.poolSize);
+    assert.equal(metrics.activeLeases, 0);
+  },
+);
 
 test("leaked rows taint a slot and fail closed", { skip: !behavior }, async () => {
   const { ScratchOrgPool } = await import("@openbooks/engine/testing/fixtures");
@@ -287,258 +350,439 @@ test("leaked rows taint a slot and fail closed", { skip: !behavior }, async () =
   assert.equal(pool.metrics.activeLeases, 0);
 });
 
-test("worker lifecycle releases owner leases that legacy tests leave outstanding", { skip: !behavior }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "openbooks-fixture-worker-"));
-  const workerFile = join(dir, "worker.test.mjs");
-  const fixtureModule = new URL("../engine/src/testing/fixtures.ts", import.meta.url).href;
-  writeFileSync(workerFile, `
+test(
+  "worker lifecycle releases owner leases that legacy tests leave outstanding",
+  { skip: !behavior },
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "openbooks-fixture-worker-"));
+    const workerFile = join(dir, "worker.test.mjs");
+    const fixtureModule = new URL("../engine/src/testing/fixtures.ts", import.meta.url).href;
+    writeFileSync(
+      workerFile,
+      `
 import test from "node:test";
 import { createScratchOrg } from ${JSON.stringify(fixtureModule)};
 await createScratchOrg();
 test("legacy lease is returned by the lifecycle hook", () => {});
-`, "utf8");
-  let releaseCount = 0;
-  const owner = createServer((socket) => {
-    let buffer = "";
-    socket.on("data", (chunk) => {
-      buffer += chunk.toString();
-      const newline = buffer.indexOf("\n");
-      if (newline < 0) return;
-      const request = JSON.parse(buffer.slice(0, newline));
-      if (request.op === "lease") {
-        socket.end(JSON.stringify({ ok: true, org: { orgId: "worker-lease" } }) + "\n");
-      } else if (request.op === "release") {
-        releaseCount += 1;
-        socket.end(JSON.stringify({ ok: true }) + "\n");
-      } else {
-        socket.end(JSON.stringify({ ok: false, error: "unexpected operation" }) + "\n");
-      }
+`,
+      "utf8",
+    );
+    let releaseCount = 0;
+    const owner = createServer((socket) => {
+      let buffer = "";
+      socket.on("data", (chunk) => {
+        buffer += chunk.toString();
+        const newline = buffer.indexOf("\n");
+        if (newline < 0) return;
+        const request = JSON.parse(buffer.slice(0, newline));
+        if (request.op === "lease") {
+          socket.end(JSON.stringify({ ok: true, org: { orgId: "worker-lease" } }) + "\n");
+        } else if (request.op === "release") {
+          releaseCount += 1;
+          socket.end(JSON.stringify({ ok: true }) + "\n");
+        } else {
+          socket.end(JSON.stringify({ ok: false, error: "unexpected operation" }) + "\n");
+        }
+      });
     });
-  });
-  await new Promise((resolveReady) => owner.listen(0, "127.0.0.1", resolveReady));
-  const address = owner.address();
-  assert.ok(address && typeof address !== "string");
-  const result = await new Promise((resolveResult, rejectResult) => {
-    const child = spawn(process.execPath, [
-      "--import", "tsx",
-      "--import", "./engine/src/testing/database-bypass.ts",
-      "--import", "./scripts/test-fixture-lifecycle.mjs",
-      "--test", "--test-force-exit", workerFile,
-    ], {
-      cwd: resolve(new URL("..", import.meta.url).pathname),
-      env: {
-        ...process.env,
-        NODE_TEST_CONTEXT: undefined,
-        OPENBOOKS_DB_URL: "",
-        OPENBOOKS_TRUSTED_TEST_BYPASS: "1",
-        OPENBOOKS_TEST_FIXTURE_OWNER_PORT: String(address.port),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
+    await new Promise((resolveReady) => owner.listen(0, "127.0.0.1", resolveReady));
+    const address = owner.address();
+    assert.ok(address && typeof address !== "string");
+    const result = await new Promise((resolveResult, rejectResult) => {
+      const child = spawn(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--import",
+          "./engine/src/testing/database-bypass.ts",
+          "--import",
+          "./scripts/test-fixture-lifecycle.mjs",
+          "--test",
+          "--test-force-exit",
+          workerFile,
+        ],
+        {
+          cwd: resolve(new URL("..", import.meta.url).pathname),
+          env: {
+            ...process.env,
+            NODE_TEST_CONTEXT: undefined,
+            OPENBOOKS_DB_URL: "",
+            OPENBOOKS_TRUSTED_TEST_BYPASS: "1",
+            OPENBOOKS_TEST_FIXTURE_OWNER_PORT: String(address.port),
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk;
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk;
+      });
+      child.once("error", rejectResult);
+      child.once("close", (status) => resolveResult({ status, output }));
     });
-    let output = "";
-    child.stdout.on("data", (chunk) => { output += chunk; });
-    child.stderr.on("data", (chunk) => { output += chunk; });
-    child.once("error", rejectResult);
-    child.once("close", (status) => resolveResult({ status, output }));
-  });
-  await new Promise((resolveClose) => owner.close(resolveClose));
-  assert.equal(result.status, 0, result.output);
-  assert.equal(releaseCount, 1, "worker lifecycle must release every outstanding owner lease");
-});
+    await new Promise((resolveClose) => owner.close(resolveClose));
+    assert.equal(result.status, 0, result.output);
+    assert.equal(releaseCount, 1, "worker lifecycle must release every outstanding owner lease");
+  },
+);
 
-test("real pooled leases restore committed baseline rows and stay cross-tenant isolated", {
-  skip: !behavior || !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_TEST_DB_MARKER,
-}, async () => {
-  const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-  const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-  const { sql } = await import("drizzle-orm");
-  const { randomUUID } = await import("node:crypto");
-  const first = await createScratchOrg();
-  const second = await createScratchOrg();
-  const baseline = await withBypassContext(async () => {
-    const account = await db.execute(sql`select name,type from accounts where id = ${first.accounts.invAsset}`);
-    const org = await db.execute(sql`select settings from orgs where id = ${first.orgId}`);
-    const book = await db.execute(sql`select name from accounting_books where id = ${first.bookId}`);
-    const location = await db.execute(sql`select name from locations where id = ${first.locationId}`);
-    const stock = await db.execute(sql`select code from stock_locations where id = ${first.stockLocationId}`);
-    const secondAccount = await db.execute(sql`select name from accounts where id = ${second.accounts.invAsset}`);
-    return { account: account.rows[0].name, accountType: account.rows[0].type, settings: org.rows[0].settings, book: book.rows[0].name, location: location.rows[0].name, stock: stock.rows[0].code, secondAccount: secondAccount.rows[0].name };
-  });
-  const addedId = randomUUID();
-  await withBypassContext(() => db.transaction(async (tx) => {
-    await tx.execute(sql`update accounts set name = 'MUTATED BASELINE',type='expense' where id = ${first.accounts.invAsset}`);
-    const journal = await tx.execute(sql`insert into journal_entries(org_id,book_id,period_id,subsidiary_id,entry_number,posting_date,status)
+test(
+  "real pooled leases restore committed baseline rows and stay cross-tenant isolated",
+  {
+    skip: !behavior || !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_TEST_DB_MARKER,
+  },
+  async () => {
+    const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+    const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+    const { sql } = await import("drizzle-orm");
+    const { randomUUID } = await import("node:crypto");
+    const first = await createScratchOrg();
+    const second = await createScratchOrg();
+    const baseline = await withBypassContext(async () => {
+      const account = await db.execute(
+        sql`select name,type from accounts where id = ${first.accounts.invAsset}`,
+      );
+      const org = await db.execute(sql`select settings from orgs where id = ${first.orgId}`);
+      const book = await db.execute(
+        sql`select name from accounting_books where id = ${first.bookId}`,
+      );
+      const location = await db.execute(
+        sql`select name from locations where id = ${first.locationId}`,
+      );
+      const stock = await db.execute(
+        sql`select code from stock_locations where id = ${first.stockLocationId}`,
+      );
+      const secondAccount = await db.execute(
+        sql`select name from accounts where id = ${second.accounts.invAsset}`,
+      );
+      return {
+        account: account.rows[0].name,
+        accountType: account.rows[0].type,
+        settings: org.rows[0].settings,
+        book: book.rows[0].name,
+        location: location.rows[0].name,
+        stock: stock.rows[0].code,
+        secondAccount: secondAccount.rows[0].name,
+      };
+    });
+    const addedId = randomUUID();
+    await withBypassContext(() =>
+      db.transaction(async (tx) => {
+        await tx.execute(
+          sql`update accounts set name = 'MUTATED BASELINE',type='expense' where id = ${first.accounts.invAsset}`,
+        );
+        const journal =
+          await tx.execute(sql`insert into journal_entries(org_id,book_id,period_id,subsidiary_id,entry_number,posting_date,status)
       values(${first.orgId},${first.bookId},${first.periodId},${first.subsidiaryId},'FIXTURE-RESET','2026-07-15','draft') returning id`);
-    await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount)
+        await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount)
       values(${first.orgId},${journal.rows[0].id},1,${first.accounts.invAsset},${first.subsidiaryId},'1','CAD','1')`);
-    await tx.execute(sql`update accounting_books set name = 'MUTATED BOOK' where id = ${first.bookId}`);
-    await tx.execute(sql`update locations set name = 'MUTATED LOCATION' where id = ${first.locationId}`);
-    await tx.execute(sql`update orgs set settings = '{"leakProbe":true}'::jsonb where id = ${first.orgId}`);
-    await tx.execute(sql`delete from stock_locations where id = ${first.stockLocationId}`);
-    await tx.execute(sql`
+        await tx.execute(
+          sql`update accounting_books set name = 'MUTATED BOOK' where id = ${first.bookId}`,
+        );
+        await tx.execute(
+          sql`update locations set name = 'MUTATED LOCATION' where id = ${first.locationId}`,
+        );
+        await tx.execute(
+          sql`update orgs set settings = '{"leakProbe":true}'::jsonb where id = ${first.orgId}`,
+        );
+        await tx.execute(sql`delete from stock_locations where id = ${first.stockLocationId}`);
+        await tx.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${addedId}, ${first.orgId}, ${"9" + Date.now().toString().slice(-8)}, 'Lease-only row', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-  }));
-  await dropScratchOrg(first.orgId);
-  const recycled = await createScratchOrg();
-  assert.equal(recycled.orgId, first.orgId, "release must recycle the same bounded slot");
-  const restored = await withBypassContext(async () => {
-    const account = await db.execute(sql`select name,type from accounts where id = ${recycled.accounts.invAsset}`);
-    const org = await db.execute(sql`select settings from orgs where id = ${recycled.orgId}`);
-    const book = await db.execute(sql`select name from accounting_books where id = ${recycled.bookId}`);
-    const location = await db.execute(sql`select name from locations where id = ${recycled.locationId}`);
-    const stock = await db.execute(sql`select code from stock_locations where id = ${recycled.stockLocationId}`);
-    const added = await db.execute(sql`select count(*)::int as count from accounts where id = ${addedId}`);
-    const secondAccount = await db.execute(sql`select name from accounts where id = ${second.accounts.invAsset}`);
-    return { account: account.rows[0].name, accountType: account.rows[0].type, settings: org.rows[0].settings, book: book.rows[0].name, location: location.rows[0].name, stock: stock.rows[0].code, added: added.rows[0].count, secondAccount: secondAccount.rows[0].name };
-  });
-  assert.equal(restored.account, baseline.account, "baseline account update was restored");
-  assert.equal(restored.accountType, baseline.accountType, "account classification restores only after test journals are removed");
-  assert.deepEqual(restored.settings, baseline.settings, "baseline org settings were restored");
-  assert.equal(restored.book, baseline.book, "baseline book update was restored");
-  assert.equal(restored.location, baseline.location, "baseline location update was restored");
-  assert.equal(restored.stock, baseline.stock, "deleted baseline stock location was restored");
-  assert.equal(restored.added, 0, "lease-created rows were removed");
-  assert.equal(restored.secondAccount, baseline.secondAccount, "a different tenant was untouched");
-  await dropScratchOrg(second.orgId);
-  await dropScratchOrg(recycled.orgId);
-});
+      }),
+    );
+    await dropScratchOrg(first.orgId);
+    const recycled = await createScratchOrg();
+    assert.equal(recycled.orgId, first.orgId, "release must recycle the same bounded slot");
+    const restored = await withBypassContext(async () => {
+      const account = await db.execute(
+        sql`select name,type from accounts where id = ${recycled.accounts.invAsset}`,
+      );
+      const org = await db.execute(sql`select settings from orgs where id = ${recycled.orgId}`);
+      const book = await db.execute(
+        sql`select name from accounting_books where id = ${recycled.bookId}`,
+      );
+      const location = await db.execute(
+        sql`select name from locations where id = ${recycled.locationId}`,
+      );
+      const stock = await db.execute(
+        sql`select code from stock_locations where id = ${recycled.stockLocationId}`,
+      );
+      const added = await db.execute(
+        sql`select count(*)::int as count from accounts where id = ${addedId}`,
+      );
+      const secondAccount = await db.execute(
+        sql`select name from accounts where id = ${second.accounts.invAsset}`,
+      );
+      return {
+        account: account.rows[0].name,
+        accountType: account.rows[0].type,
+        settings: org.rows[0].settings,
+        book: book.rows[0].name,
+        location: location.rows[0].name,
+        stock: stock.rows[0].code,
+        added: added.rows[0].count,
+        secondAccount: secondAccount.rows[0].name,
+      };
+    });
+    assert.equal(restored.account, baseline.account, "baseline account update was restored");
+    assert.equal(
+      restored.accountType,
+      baseline.accountType,
+      "account classification restores only after test journals are removed",
+    );
+    assert.deepEqual(restored.settings, baseline.settings, "baseline org settings were restored");
+    assert.equal(restored.book, baseline.book, "baseline book update was restored");
+    assert.equal(restored.location, baseline.location, "baseline location update was restored");
+    assert.equal(restored.stock, baseline.stock, "deleted baseline stock location was restored");
+    assert.equal(restored.added, 0, "lease-created rows were removed");
+    assert.equal(
+      restored.secondAccount,
+      baseline.secondAccount,
+      "a different tenant was untouched",
+    );
+    await dropScratchOrg(second.orgId);
+    await dropScratchOrg(recycled.orgId);
+  },
+);
 
-test("narrowed resets mark exactly the dirtied tables and restore a pristine slot", {
-  skip: !behavior || !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_TEST_DB_MARKER,
-}, async () => {
-  const {
-    createScratchOrg,
-    createScratchUser,
-    dropScratchOrg,
-    listOrgIdTables,
-    probeScratchOrgTouchedTables,
-  } = await import("@openbooks/engine/testing/fixtures");
-  const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-  const { sql } = await import("drizzle-orm");
-  const { randomUUID } = await import("node:crypto");
+test(
+  "narrowed resets mark exactly the dirtied tables and restore a pristine slot",
+  {
+    skip: !behavior || !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_TEST_DB_MARKER,
+  },
+  async () => {
+    const {
+      createScratchOrg,
+      createScratchUser,
+      dropScratchOrg,
+      listOrgIdTables,
+      probeScratchOrgTouchedTables,
+    } = await import("@openbooks/engine/testing/fixtures");
+    const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+    const { sql } = await import("drizzle-orm");
+    const { randomUUID } = await import("node:crypto");
 
-  const org = await createScratchOrg();
-  const tables = [...new Set([...(await withBypassContext(() => listOrgIdTables())), "orgs"])];
-  const probe = (target) => withBypassContext(() => probeScratchOrgTouchedTables(target, tables));
+    const org = await createScratchOrg();
+    const tables = [...new Set([...(await withBypassContext(() => listOrgIdTables())), "orgs"])];
+    const probe = (target) => withBypassContext(() => probeScratchOrgTouchedTables(target, tables));
 
-  const fresh = await probe(org);
-  assert.deepEqual(fresh.tables, [], "a fresh slot touches nothing");
-  assert.equal(fresh.special, false, "a fresh slot holds no orphan evidence");
+    const fresh = await probe(org);
+    assert.deepEqual(fresh.tables, [], "a fresh slot touches nothing");
+    assert.equal(fresh.special, false, "a fresh slot holds no orphan evidence");
 
-  // Dirty core and tail tables, mutate two baseline rows without changing
-  // their cardinalities (the symmetric-difference path, not just the count
-  // path), delete a baseline row, and leave a password-reset row that only
-  // the special-evidence probe can see (no org_id column).
-  const docIds = [randomUUID(), randomUUID(), randomUUID()];
-  await withBypassContext(() => db.transaction(async (tx) => {
-    for (const [index, docId] of docIds.entries()) {
-      await tx.execute(sql`
+    // Dirty core and tail tables, mutate two baseline rows without changing
+    // their cardinalities (the symmetric-difference path, not just the count
+    // path), delete a baseline row, and leave a password-reset row that only
+    // the special-evidence probe can see (no org_id column).
+    const docIds = [randomUUID(), randomUUID(), randomUUID()];
+    await withBypassContext(() =>
+      db.transaction(async (tx) => {
+        for (const [index, docId] of docIds.entries()) {
+          await tx.execute(sql`
         insert into documents (id, org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total, created_by)
         values (${docId}, ${org.orgId}, 'customer_invoice', 'draft', ${`NARROW-${index}`}, '2026-07-15', 'CAD', '10.00', '0.00', '10.00', ${randomUUID()})`);
-      await tx.execute(sql`
+          await tx.execute(sql`
         insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, description,
                                     quantity, unit, unit_price, amount, tax_amount,
                                     quantity_fulfilled, quantity_billed, stock_location_id, custom)
         values (${randomUUID()}, ${org.orgId}, ${docId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, 'Probe',
                 '1', 'ea', '10', '10', '0', '0', '0', ${org.stockLocationId2}, '{}'::jsonb)`);
-    }
-    const entryId = randomUUID();
-    await tx.execute(sql`
+        }
+        const entryId = randomUUID();
+        await tx.execute(sql`
       insert into journal_entries (id, org_id, book_id, entry_number, posting_date, period_id, subsidiary_id, status, origin)
       values (${entryId}, ${org.orgId}, ${org.bookId}, 'narrow-probe', ${org.date}::date, ${org.periodId}, ${org.subsidiaryId}, 'draft', 'manual')`);
-    for (const [lineNumber, amount] of [[1, "10"], [2, "-10"]]) {
-      await tx.execute(sql`
+        for (const [lineNumber, amount] of [
+          [1, "10"],
+          [2, "-10"],
+        ]) {
+          await tx.execute(sql`
         insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, is_open_item)
         values (${org.orgId}, ${entryId}, ${lineNumber}, ${org.accounts.bank}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1, true)`);
-    }
-    await tx.execute(sql`
+        }
+        await tx.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${randomUUID()}, ${org.orgId}, 'customer', 'Narrow Probe', true, '{}'::jsonb)`);
-    await tx.execute(sql`update accounts set name = 'MUTATED BASELINE' where id = ${org.accounts.invAsset}`);
-    await tx.execute(sql`update orgs set settings = '{"narrowProbe":true}'::jsonb where id = ${org.orgId}`);
-    await tx.execute(sql`delete from stock_locations where id = ${org.stockLocationId}`);
-  }));
-  const userId = await withBypassContext(() => createScratchUser(org.orgId, "Narrow Probe", "viewer"));
-  await withBypassContext(() => db.execute(sql`
+        await tx.execute(
+          sql`update accounts set name = 'MUTATED BASELINE' where id = ${org.accounts.invAsset}`,
+        );
+        await tx.execute(
+          sql`update orgs set settings = '{"narrowProbe":true}'::jsonb where id = ${org.orgId}`,
+        );
+        await tx.execute(sql`delete from stock_locations where id = ${org.stockLocationId}`);
+      }),
+    );
+    const userId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Narrow Probe", "viewer"),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
     insert into auth_password_resets (user_id, token_hash, expires_at)
-    values (${userId}, 'probe', now() + interval '1 hour')`));
+    values (${userId}, 'probe', now() + interval '1 hour')`),
+    );
 
-  const dirtied = await probe(org);
-  assert.deepEqual(
-    [...dirtied.tables].sort(),
-    ["accounts", "app_roles", "document_lines", "documents", "journal_entries", "journal_lines", "orgs", "parties", "role_assignments", "stock_locations", "users", "warehouses"],
-    "the probe must mark exactly the dirtied tables — no more, no fewer",
-  );
-  assert.equal(dirtied.special, true, "the orphan password-reset row must trip the special-evidence probe");
+    const dirtied = await probe(org);
+    assert.deepEqual(
+      [...dirtied.tables].sort(),
+      [
+        "accounts",
+        "app_roles",
+        "document_lines",
+        "documents",
+        "journal_entries",
+        "journal_lines",
+        "orgs",
+        "parties",
+        "role_assignments",
+        "stock_locations",
+        "users",
+        "warehouses",
+      ],
+      "the probe must mark exactly the dirtied tables — no more, no fewer",
+    );
+    assert.equal(
+      dirtied.special,
+      true,
+      "the orphan password-reset row must trip the special-evidence probe",
+    );
 
-  await dropScratchOrg(org.orgId);
-  const restored = await probe(org);
-  assert.deepEqual(restored.tables, [], "the narrowed reset must leave no table dirty");
-  assert.equal(restored.special, false, "the narrowed reset must clear orphan evidence");
-  const checks = await withBypassContext(async () => {
-    const account = await db.execute(sql`select name from accounts where id = ${org.accounts.invAsset}`);
-    const settings = await db.execute(sql`select settings from orgs where id = ${org.orgId}`);
-    const stock = await db.execute(sql`select code from stock_locations where id = ${org.stockLocationId}`);
-    const docs = await db.execute(sql`select count(*)::int as count from documents where org_id = ${org.orgId} and document_number like 'NARROW-%'`);
-    const resets = await db.execute(sql`select count(*)::int as count from auth_password_resets where user_id = ${userId}`);
-    const roles = await db.execute(sql`select count(*)::int as count from users where org_id = ${org.orgId}`);
-    return {
-      account: account.rows[0].name,
-      settings: settings.rows[0].settings,
-      stock: stock.rows[0]?.code,
-      docs: docs.rows[0].count,
-      resets: resets.rows[0].count,
-      users: roles.rows[0].count,
-    };
-  });
-  assert.equal(checks.account, "Inventory Asset", "mutated baseline account was restored");
-  assert.deepEqual(checks.settings.controlAccounts.ar, org.accounts.ar, "mutated org settings were restored");
-  assert.equal(checks.stock, "MAIN", "deleted baseline stock location was reinserted");
-  assert.equal(checks.docs, 0, "test documents were removed");
-  assert.equal(checks.resets, 0, "orphan password resets were removed");
-  assert.equal(checks.users, 0, "test users were removed");
-});
+    await dropScratchOrg(org.orgId);
+    const restored = await probe(org);
+    assert.deepEqual(restored.tables, [], "the narrowed reset must leave no table dirty");
+    assert.equal(restored.special, false, "the narrowed reset must clear orphan evidence");
+    const checks = await withBypassContext(async () => {
+      const account = await db.execute(
+        sql`select name from accounts where id = ${org.accounts.invAsset}`,
+      );
+      const settings = await db.execute(sql`select settings from orgs where id = ${org.orgId}`);
+      const stock = await db.execute(
+        sql`select code from stock_locations where id = ${org.stockLocationId}`,
+      );
+      const docs = await db.execute(
+        sql`select count(*)::int as count from documents where org_id = ${org.orgId} and document_number like 'NARROW-%'`,
+      );
+      const resets = await db.execute(
+        sql`select count(*)::int as count from auth_password_resets where user_id = ${userId}`,
+      );
+      const roles = await db.execute(
+        sql`select count(*)::int as count from users where org_id = ${org.orgId}`,
+      );
+      return {
+        account: account.rows[0].name,
+        settings: settings.rows[0].settings,
+        stock: stock.rows[0]?.code,
+        docs: docs.rows[0].count,
+        resets: resets.rows[0].count,
+        users: roles.rows[0].count,
+      };
+    });
+    assert.equal(checks.account, "Inventory Asset", "mutated baseline account was restored");
+    assert.deepEqual(
+      checks.settings.controlAccounts.ar,
+      org.accounts.ar,
+      "mutated org settings were restored",
+    );
+    assert.equal(checks.stock, "MAIN", "deleted baseline stock location was reinserted");
+    assert.equal(checks.docs, 0, "test documents were removed");
+    assert.equal(checks.resets, 0, "orphan password resets were removed");
+    assert.equal(checks.users, 0, "test users were removed");
+  },
+);
 
-test("the canonical multi-file node invocation keeps lifecycle counts suite-global", { skip: !behavior }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "openbooks-fixture-probe-"));
-  const log = join(dir, "metrics.ndjson");
-  writeFileSync(log, "", "utf8");
-  const ownerScript = join(dir, "owner.mjs");
-  writeFileSync(ownerScript, `import { createServer } from "node:net"; import { appendFileSync } from "node:fs";
+test(
+  "the canonical multi-file node invocation keeps lifecycle counts suite-global",
+  { skip: !behavior },
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "openbooks-fixture-probe-"));
+    const log = join(dir, "metrics.ndjson");
+    writeFileSync(log, "", "utf8");
+    const ownerScript = join(dir, "owner.mjs");
+    writeFileSync(
+      ownerScript,
+      `import { createServer } from "node:net"; import { appendFileSync } from "node:fs";
 let claimed = false;
 const server = createServer(socket => { let buffer = ""; socket.on("data", chunk => { buffer += chunk; const newline = buffer.indexOf("\\n"); if (newline < 0) return; const request = JSON.parse(buffer.slice(0, newline)); const delta = claimed ? 0 : 4; claimed = true; appendFileSync(${JSON.stringify(log)}, JSON.stringify({ workerPid: request.workerPid, fullBootstrap: delta, fullTeardown: delta, schemaWideVerification: delta }) + "\\n"); socket.end("{\\"ok\\":true}\\n"); }); });
 server.listen(Number(process.env.OPENBOOKS_FIXTURE_PROBE_OWNER_PORT), "127.0.0.1", () => console.log("READY"));
-`, "utf8");
-  const port = 40000 + (process.pid % 20000);
-  const owner = spawn(process.execPath, [ownerScript], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, OPENBOOKS_FIXTURE_PROBE_OWNER_PORT: String(port) } });
-  await new Promise((resolveReady) => setTimeout(resolveReady, 100));
-  for (const name of ["a", "b"]) {
-    writeFileSync(join(dir, `${name}.test.mjs`), `import test from "node:test"; import { createConnection } from "node:net";
+`,
+      "utf8",
+    );
+    const port = 40000 + (process.pid % 20000);
+    const owner = spawn(process.execPath, [ownerScript], {
+      stdio: ["ignore", "pipe", "inherit"],
+      env: { ...process.env, OPENBOOKS_FIXTURE_PROBE_OWNER_PORT: String(port) },
+    });
+    await new Promise((resolveReady) => setTimeout(resolveReady, 100));
+    for (const name of ["a", "b"]) {
+      writeFileSync(
+        join(dir, `${name}.test.mjs`),
+        `import test from "node:test"; import { createConnection } from "node:net";
 const response = await new Promise((resolve, reject) => { const socket = createConnection({ host: "127.0.0.1", port: Number(process.env.OPENBOOKS_FIXTURE_PROBE_PORT) }); let data = ""; socket.on("data", chunk => data += chunk); socket.on("end", () => resolve(JSON.parse(data))); socket.on("error", reject); socket.on("connect", () => socket.end(JSON.stringify({ workerPid: process.pid }) + "\\n")); });
 test("${name}", () => { if (!response.ok) throw new Error("owner rejected lease"); });
-`, "utf8");
-  }
-  const files = [join(dir, "a.test.mjs"), join(dir, "b.test.mjs")];
-  try {
-    const result = await new Promise((resolveResult, rejectResult) => {
-      const child = spawn(process.execPath, [
-        "--import", "tsx", "--import", "./engine/src/testing/database-bypass.ts", "--test", "--test-force-exit", "--test-concurrency=1", ...files,
-      ], { cwd: resolve(new URL("..", import.meta.url).pathname), env: { ...process.env, NODE_TEST_CONTEXT: undefined, OPENBOOKS_TRUSTED_TEST_BYPASS: "1", OPENBOOKS_FIXTURE_PROBE_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
-      let output = "";
-      child.stdout.on("data", chunk => { output += chunk; });
-      child.stderr.on("data", chunk => { output += chunk; });
-      child.once("error", rejectResult);
-      child.once("close", status => resolveResult({ status, output }));
-    });
-    assert.equal(result.status, 0, result.output);
-  } finally {
-    owner.kill();
-  }
-  const rows = readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
-  assert.equal(rows.length, 2);
-  assert.equal(new Set(rows.map((row) => row.workerPid)).size, 2, "canonical runner keeps file workers isolated");
-  for (const metric of ["fullBootstrap", "fullTeardown", "schemaWideVerification"]) {
-    assert.ok(rows.reduce((sum, row) => sum + row[metric], 0) <= 4, `${metric} multiplied across workers`);
-  }
-});
+`,
+        "utf8",
+      );
+    }
+    const files = [join(dir, "a.test.mjs"), join(dir, "b.test.mjs")];
+    try {
+      const result = await new Promise((resolveResult, rejectResult) => {
+        const child = spawn(
+          process.execPath,
+          [
+            "--import",
+            "tsx",
+            "--import",
+            "./engine/src/testing/database-bypass.ts",
+            "--test",
+            "--test-force-exit",
+            "--test-concurrency=1",
+            ...files,
+          ],
+          {
+            cwd: resolve(new URL("..", import.meta.url).pathname),
+            env: {
+              ...process.env,
+              NODE_TEST_CONTEXT: undefined,
+              OPENBOOKS_TRUSTED_TEST_BYPASS: "1",
+              OPENBOOKS_FIXTURE_PROBE_PORT: String(port),
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        let output = "";
+        child.stdout.on("data", (chunk) => {
+          output += chunk;
+        });
+        child.stderr.on("data", (chunk) => {
+          output += chunk;
+        });
+        child.once("error", rejectResult);
+        child.once("close", (status) => resolveResult({ status, output }));
+      });
+      assert.equal(result.status, 0, result.output);
+    } finally {
+      owner.kill();
+    }
+    const rows = readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.equal(rows.length, 2);
+    assert.equal(
+      new Set(rows.map((row) => row.workerPid)).size,
+      2,
+      "canonical runner keeps file workers isolated",
+    );
+    for (const metric of ["fullBootstrap", "fullTeardown", "schemaWideVerification"]) {
+      assert.ok(
+        rows.reduce((sum, row) => sum + row[metric], 0) <= 4,
+        `${metric} multiplied across workers`,
+      );
+    }
+  },
+);

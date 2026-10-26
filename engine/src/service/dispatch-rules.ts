@@ -33,7 +33,12 @@ export interface AssignmentConflict {
 
 export interface TechnicianDayFacts {
   /** Live bookings the technician holds on any board that day (other than the ones being moved). */
-  readonly bookings: readonly { readonly id: string; readonly startsAt: string; readonly endsAt: string; readonly label: string }[];
+  readonly bookings: readonly {
+    readonly id: string;
+    readonly startsAt: string;
+    readonly endsAt: string;
+    readonly label: string;
+  }[];
   /** Recorded leave on the dates the booking covers. */
   readonly absences: readonly { readonly onDate: string; readonly leaveTypeName: string }[];
   /** Qualification types verified and valid over the whole booking. */
@@ -55,8 +60,13 @@ export interface AssignmentProposal {
   readonly responseDueAt: string | null;
 }
 
-function overlaps(a: { startsAt: string; endsAt: string }, b: { startsAt: string; endsAt: string }): boolean {
-  return Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
+function overlaps(
+  a: { startsAt: string; endsAt: string },
+  b: { startsAt: string; endsAt: string },
+): boolean {
+  return (
+    Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt)
+  );
 }
 
 /** Whole minutes a span lasts. */
@@ -76,53 +86,131 @@ export function hoursToMinutes(hours: string): number | null {
 }
 
 /** Every conflict the proposed booking meets, blocking first. */
-export function evaluateAssignment(proposal: AssignmentProposal, facts: TechnicianDayFacts): AssignmentConflict[] {
+export function evaluateAssignment(
+  proposal: AssignmentProposal,
+  facts: TechnicianDayFacts,
+): AssignmentConflict[] {
   const out: AssignmentConflict[] = [];
   if (!(Date.parse(proposal.endsAt) > Date.parse(proposal.startsAt))) {
-    out.push({ code: "overlap", severity: "block", message: "The booking must end after it starts.", detail: {} });
+    out.push({
+      code: "overlap",
+      severity: "block",
+      message: "The booking must end after it starts.",
+      detail: {},
+    });
     return out;
   }
   for (const booking of facts.bookings) {
     if (overlaps(proposal, booking)) {
-      out.push({ code: "overlap", severity: "block", message: `Already booked for ${booking.label}.`, detail: { bookingId: booking.id, label: booking.label, startsAt: booking.startsAt, endsAt: booking.endsAt } });
+      out.push({
+        code: "overlap",
+        severity: "block",
+        message: `Already booked for ${booking.label}.`,
+        detail: {
+          bookingId: booking.id,
+          label: booking.label,
+          startsAt: booking.startsAt,
+          endsAt: booking.endsAt,
+        },
+      });
     }
   }
   for (const absence of facts.absences) {
-    out.push({ code: "leave", severity: "block", message: `On ${absence.leaveTypeName} leave on ${absence.onDate}.`, detail: { onDate: absence.onDate, leaveType: absence.leaveTypeName } });
+    out.push({
+      code: "leave",
+      severity: "block",
+      message: `On ${absence.leaveTypeName} leave on ${absence.onDate}.`,
+      detail: { onDate: absence.onDate, leaveType: absence.leaveTypeName },
+    });
   }
   for (const required of proposal.requiredQualificationTypeIds) {
     if (!facts.qualificationTypeIds.has(required)) {
       const name = proposal.qualificationNames?.[required] ?? required;
-      out.push({ code: "qualification", severity: "block", message: `Does not hold a verified ${name} qualification for this visit.`, detail: { qualificationTypeId: required, qualification: name } });
+      out.push({
+        code: "qualification",
+        severity: "block",
+        message: `Does not hold a verified ${name} qualification for this visit.`,
+        detail: { qualificationTypeId: required, qualification: name },
+      });
     }
   }
   if (facts.scheduledDay === false) {
-    out.push({ code: "non_working_day", severity: "warn", message: "This is a day off in the person's work schedule.", detail: {} });
+    out.push({
+      code: "non_working_day",
+      severity: "warn",
+      message: "This is a day off in the person's work schedule.",
+      detail: {},
+    });
   }
-  if (facts.workingWindow && (Date.parse(proposal.startsAt) < Date.parse(facts.workingWindow.startsAt) || Date.parse(proposal.endsAt) > Date.parse(facts.workingWindow.endsAt))) {
-    out.push({ code: "outside_working_hours", severity: "warn", message: "The visit falls outside working hours.", detail: { workStartsAt: facts.workingWindow.startsAt, workEndsAt: facts.workingWindow.endsAt } });
+  if (
+    facts.workingWindow &&
+    (Date.parse(proposal.startsAt) < Date.parse(facts.workingWindow.startsAt) ||
+      Date.parse(proposal.endsAt) > Date.parse(facts.workingWindow.endsAt))
+  ) {
+    out.push({
+      code: "outside_working_hours",
+      severity: "warn",
+      message: "The visit falls outside working hours.",
+      detail: {
+        workStartsAt: facts.workingWindow.startsAt,
+        workEndsAt: facts.workingWindow.endsAt,
+      },
+    });
   }
   const capacity = facts.scheduledHours === null ? null : hoursToMinutes(facts.scheduledHours);
   if (capacity !== null && capacity > 0) {
-    const booked = facts.bookings.reduce((sum, booking) => sum + spanMinutes(booking), 0) + spanMinutes(proposal);
+    const booked =
+      facts.bookings.reduce((sum, booking) => sum + spanMinutes(booking), 0) +
+      spanMinutes(proposal);
     if (booked > capacity) {
-      out.push({ code: "over_capacity", severity: "warn", message: `Books ${booked} minutes against ${capacity} scheduled minutes.`, detail: { bookedMinutes: booked, scheduledMinutes: capacity } });
+      out.push({
+        code: "over_capacity",
+        severity: "warn",
+        message: `Books ${booked} minutes against ${capacity} scheduled minutes.`,
+        detail: { bookedMinutes: booked, scheduledMinutes: capacity },
+      });
     }
   }
-  if (proposal.arrivalWindow && (Date.parse(proposal.startsAt) < Date.parse(proposal.arrivalWindow.startsAt) || Date.parse(proposal.startsAt) > Date.parse(proposal.arrivalWindow.endsAt))) {
-    out.push({ code: "outside_arrival_window", severity: "warn", message: "The visit starts outside the arrival window promised to the customer.", detail: { windowStartsAt: proposal.arrivalWindow.startsAt, windowEndsAt: proposal.arrivalWindow.endsAt } });
+  if (
+    proposal.arrivalWindow &&
+    (Date.parse(proposal.startsAt) < Date.parse(proposal.arrivalWindow.startsAt) ||
+      Date.parse(proposal.startsAt) > Date.parse(proposal.arrivalWindow.endsAt))
+  ) {
+    out.push({
+      code: "outside_arrival_window",
+      severity: "warn",
+      message: "The visit starts outside the arrival window promised to the customer.",
+      detail: {
+        windowStartsAt: proposal.arrivalWindow.startsAt,
+        windowEndsAt: proposal.arrivalWindow.endsAt,
+      },
+    });
   }
-  if (proposal.responseDueAt && Date.parse(proposal.startsAt) > Date.parse(proposal.responseDueAt)) {
-    out.push({ code: "after_response_target", severity: "warn", message: "The visit starts after its response target.", detail: { responseDueAt: proposal.responseDueAt } });
+  if (
+    proposal.responseDueAt &&
+    Date.parse(proposal.startsAt) > Date.parse(proposal.responseDueAt)
+  ) {
+    out.push({
+      code: "after_response_target",
+      severity: "warn",
+      message: "The visit starts after its response target.",
+      detail: { responseDueAt: proposal.responseDueAt },
+    });
   }
   return out.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "block" ? -1 : 1));
 }
 
 /** Blocking conflicts refuse; warnings need an override reason. */
-export function assignmentDecision(conflicts: readonly AssignmentConflict[], overrideReason: string | null): { ok: true; warnings: AssignmentConflict[] } | { ok: false; blocking: boolean; conflicts: AssignmentConflict[] } {
+export function assignmentDecision(
+  conflicts: readonly AssignmentConflict[],
+  overrideReason: string | null,
+):
+  | { ok: true; warnings: AssignmentConflict[] }
+  | { ok: false; blocking: boolean; conflicts: AssignmentConflict[] } {
   const blocking = conflicts.filter((conflict) => conflict.severity === "block");
   if (blocking.length) return { ok: false, blocking: true, conflicts: [...conflicts] };
   const warnings = conflicts.filter((conflict) => conflict.severity === "warn");
-  if (warnings.length && !overrideReason?.trim()) return { ok: false, blocking: false, conflicts: warnings };
+  if (warnings.length && !overrideReason?.trim())
+    return { ok: false, blocking: false, conflicts: warnings };
   return { ok: true, warnings };
 }

@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
 export {
   coarseBillingMethod,
   loadProjectType,
   type ResolvedProjectType,
-} from '@openbooks/engine/projects/type'
+} from "@openbooks/engine/projects/type";

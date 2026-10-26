@@ -37,10 +37,10 @@ export const IT_TAX_YEARS: PayrollTaxYearSupport = {
       label: IT_2025_EDITION_LABEL,
       effectiveFrom: "2025-01-01",
       citation:
-        "L. 30 dicembre 2024, n. 207, art. 1 c. 2–9, 11 (GU 24G00229); "
-        + "AdE Circolare 4/E del 16 maggio 2025; AdE 730/2026 istruzioni "
-        + "(redditi 2025); CU 2026 istruzioni; INPS Circolare n. 26 del 30 "
-        + "gennaio 2025; INPS Tabella 1/2025",
+        "L. 30 dicembre 2024, n. 207, art. 1 c. 2–9, 11 (GU 24G00229); " +
+        "AdE Circolare 4/E del 16 maggio 2025; AdE 730/2026 istruzioni " +
+        "(redditi 2025); CU 2026 istruzioni; INPS Circolare n. 26 del 30 " +
+        "gennaio 2025; INPS Tabella 1/2025",
       status: "published",
     },
     {
@@ -48,13 +48,13 @@ export const IT_TAX_YEARS: PayrollTaxYearSupport = {
       label: IT_2026_EDITION_LABEL,
       effectiveFrom: "2026-01-01",
       citation:
-        "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4, 7, 10–11, 18–21 "
-        + "(GU n. 301 del 30/12/2025, S.O.); AdE IRPEF rates page "
-        + "(upd. 16/01/2026); AdE Circ. 2/E del 24 febbraio 2026 + FAQ Circ. "
-        + "3/E/2026 (2026 substitute regimes, refused); L. 207/2024 art. 1 "
-        + "c. 2–7 (standing law, no sunset); D.L. 3/2020 art. 1 as amended "
-        + "(TI); INPS Circolare n. 6 del 30 gennaio 2026; INPS Circolare "
-        + "n. 27 dell'11 marzo 2026 (FPLD 33%, massimale 122.295)",
+        "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4, 7, 10–11, 18–21 " +
+        "(GU n. 301 del 30/12/2025, S.O.); AdE IRPEF rates page " +
+        "(upd. 16/01/2026); AdE Circ. 2/E del 24 febbraio 2026 + FAQ Circ. " +
+        "3/E/2026 (2026 substitute regimes, refused); L. 207/2024 art. 1 " +
+        "c. 2–7 (standing law, no sunset); D.L. 3/2020 art. 1 as amended " +
+        "(TI); INPS Circolare n. 6 del 30 gennaio 2026; INPS Circolare " +
+        "n. 27 dell'11 marzo 2026 (FPLD 33%, massimale 122.295)",
       status: "published",
     },
   ],
@@ -68,36 +68,36 @@ export const IT_TAX_YEARS: PayrollTaxYearSupport = {
       {
         path: "engine/src/payroll/it/editions/{year}.ts",
         purpose:
-          "IRPEF scaglioni/aliquote, detrazioni phaseouts, and INPS FPLD/IVS rates transcribed "
-          + "from the year's Legge di Bilancio, AdE provvedimenti, and INPS circular",
+          "IRPEF scaglioni/aliquote, detrazioni phaseouts, and INPS FPLD/IVS rates transcribed " +
+          "from the year's Legge di Bilancio, AdE provvedimenti, and INPS circular",
         template:
-          "export const IT_EDITION_{year} = {\n"
-          + "  year: {year},\n"
-          + "  // Transcribed from the Gazzetta Ufficiale text, reconciled against the AdE rates page.\n"
-          + "  // Prior edition: IT_EDITION_{priorYear}.\n"
-          + "};\n",
+          "export const IT_EDITION_{year} = {\n" +
+          "  year: {year},\n" +
+          "  // Transcribed from the Gazzetta Ufficiale text, reconciled against the AdE rates page.\n" +
+          "  // Prior edition: IT_EDITION_{priorYear}.\n" +
+          "};\n",
       },
     ],
     barrels: [],
     steps: [
-      "Read the year's Legge di Bilancio from the Gazzetta Ufficiale (worked example for 2026: "
-      + "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4 — second IRPEF bracket 33%, benefit neutralised "
-      + "above €200,000 — plus the year's substitute regimes, which are refused by name when the "
-      + "engine has no inputs for them).",
-      "Reconcile against the AdE IRPEF rates page "
-      + "(https://www.agenziaentrate.gov.it/portale/web/english/personal-income-tax-rates-and-calculation): "
-      + "do not transcribe while its table and notes disagree (in 2026 the note governed).",
-      "Transcribe the year's INPS circular (for 2026: Circolare n. 6 del 30 gennaio 2026, plus "
-      + "Circolare n. 27 dell'11 marzo 2026 for the FPLD total and massimale) — minimali, massimali, "
-      + "and FPLD/IVS employee/employer rates. A cell no 2026 publication states is CARRIED from the "
-      + "prior Tabella with the carry labeled in the year module, never silently.",
-      "Check the year's CU istruzioni and 730 TABELLA 6 for the rounding and ratio rules (for 2026 "
-      + "both were carried pending CU 2027 / 730-2027 — re-verify on publication).",
-      "Transcribe the year's addizionale regionale deliberations and the MEF addizionale comunale "
-      + "dataset; Trento and Bolzano deliberate separately inside region 04.",
-      "Add the edition to IT_TAX_YEARS.editions with the agency citations, add the year's tables "
-      + "module plus its IT_<year>_TABLES entry, and extend the taxYear dispatch in "
-      + "computeItStatutoryWithRates.",
+      "Read the year's Legge di Bilancio from the Gazzetta Ufficiale (worked example for 2026: " +
+        "L. 30 dicembre 2025, n. 199, art. 1 c. 3–4 — second IRPEF bracket 33%, benefit neutralised " +
+        "above €200,000 — plus the year's substitute regimes, which are refused by name when the " +
+        "engine has no inputs for them).",
+      "Reconcile against the AdE IRPEF rates page " +
+        "(https://www.agenziaentrate.gov.it/portale/web/english/personal-income-tax-rates-and-calculation): " +
+        "do not transcribe while its table and notes disagree (in 2026 the note governed).",
+      "Transcribe the year's INPS circular (for 2026: Circolare n. 6 del 30 gennaio 2026, plus " +
+        "Circolare n. 27 dell'11 marzo 2026 for the FPLD total and massimale) — minimali, massimali, " +
+        "and FPLD/IVS employee/employer rates. A cell no 2026 publication states is CARRIED from the " +
+        "prior Tabella with the carry labeled in the year module, never silently.",
+      "Check the year's CU istruzioni and 730 TABELLA 6 for the rounding and ratio rules (for 2026 " +
+        "both were carried pending CU 2027 / 730-2027 — re-verify on publication).",
+      "Transcribe the year's addizionale regionale deliberations and the MEF addizionale comunale " +
+        "dataset; Trento and Bolzano deliberate separately inside region 04.",
+      "Add the edition to IT_TAX_YEARS.editions with the agency citations, add the year's tables " +
+        "module plus its IT_<year>_TABLES entry, and extend the taxYear dispatch in " +
+        "computeItStatutoryWithRates.",
     ],
   },
 };
@@ -135,8 +135,7 @@ export const IT_PACK_RATES: PayrollPackRates = {
           help: "The region's deliberated addizionale regionale rate as a percent number (1,23 for 1,23%). Follows the employee's fiscal domicile, never the workplace.",
         },
       ],
-      citation:
-        "D.Lgs. 15 dicembre 1997, n. 446; annual regional deliberations",
+      citation: "D.Lgs. 15 dicembre 1997, n. 446; annual regional deliberations",
       variesBecause:
         "each of the ~20 regions (Trento and Bolzano deliberating separately inside region 04) sets its own rate yearly; no pack constant can carry them",
     },
@@ -170,8 +169,7 @@ export const IT_PACK_RATES: PayrollPackRates = {
           help: "The comune's deliberated exemption threshold: no surtax when the IRPEF taxable income is at or below it. Leave blank when the comune deliberates none.",
         },
       ],
-      citation:
-        "D.Lgs. 28 settembre 1998, n. 360; AdE Elenco addizionale comunale 2025",
+      citation: "D.Lgs. 28 settembre 1998, n. 360; AdE Elenco addizionale comunale 2025",
       variesBecause:
         "each of the ~7,900 comuni deliberates its own rate (single or banded) and exemption yearly; the AdE Elenco alone runs to 196 pages",
     },

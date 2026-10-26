@@ -30,7 +30,12 @@ async function ensureOpenPeriod(orgId: string, periodId: string): Promise<void> 
 // no payout-to-base rate. Entries: a card charge with its processing fee, a
 // refund that returns part of the fee, and a fee entry. The payout nets to
 // 100.00 − 2.90 − 15.00 + 0.44 − 3.00 = 79.54.
-const payout = { id: "po_square_it_1", status: "PAID", arrival_date: "2026-07-10", amount_money: { amount: 7954, currency: "CAD" } };
+const payout = {
+  id: "po_square_it_1",
+  status: "PAID",
+  arrival_date: "2026-07-10",
+  amount_money: { amount: 7954, currency: "CAD" },
+};
 const entries = [
   {
     id: "pe_square_it_charge",
@@ -59,44 +64,54 @@ const entries = [
   },
 ];
 
-test("a Square payout imports idempotently and posts balanced with its bank deposit", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Square Tester", "admin");
-    await db.execute(sql`
+test(
+  "a Square payout imports idempotently and posts balanced with its bank deposit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Square Tester", "admin");
+      await db.execute(sql`
       update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
-    await ensureOpenPeriod(org.orgId, org.periodId);
-    const accounts = {
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.adjustment,
-      disputeAccountId: org.accounts.adjustment,
-      fxAccountId: org.accounts.fxGainLoss,
-      clearingAccountId: org.accounts.clearing,
-    };
-    const parsed = parseSquarePayout(payout, entries, org.date);
+      await ensureOpenPeriod(org.orgId, org.periodId);
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.adjustment,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+      };
+      const parsed = parseSquarePayout(payout, entries, org.date);
 
-    const first = await importSettlementBatch(org.orgId, userId, parsed, accounts, null);
-    assert.equal(first.created, true);
-    // Re-importing the same payout converges on the same batch instead of
-    // duplicating its deposit.
-    const again = await importSettlementBatch(org.orgId, userId, parsed, accounts, null);
-    assert.equal(again.created, false);
-    assert.equal(again.batchId, first.batchId);
+      const first = await importSettlementBatch(org.orgId, userId, parsed, accounts, null);
+      assert.equal(first.created, true);
+      // Re-importing the same payout converges on the same batch instead of
+      // duplicating its deposit.
+      const again = await importSettlementBatch(org.orgId, userId, parsed, accounts, null);
+      assert.equal(again.created, false);
+      assert.equal(again.batchId, first.batchId);
 
-    const posted = await postSettlementBatch(org.orgId, first.batchId, userId, null);
-    assert.ok(posted.entryId);
+      const posted = await postSettlementBatch(org.orgId, first.batchId, userId, null);
+      assert.ok(posted.entryId);
 
-    const lines = await db.execute<{ account_id: string; amount: string }>(sql`
+      const lines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
       select jl.account_id, jl.amount::text as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where jl.org_id = ${org.orgId} and je.id = ${posted.entryId}`, "objects");
-    const total = lines.reduce((sum, l) => sum + BigInt(Math.round(Number(l.amount) * 10_000)), 0n);
-    assert.equal(total, 0n, "the posted entry balances");
-    // The bank leg is the Square payout amount, 79.54 CAD.
-    const bankLine = lines.find((l) => l.account_id === org.accounts.bank);
-    assert.equal(bankLine?.amount, "79.5400");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where jl.org_id = ${org.orgId} and je.id = ${posted.entryId}`,
+        "objects",
+      );
+      const total = lines.reduce(
+        (sum, l) => sum + BigInt(Math.round(Number(l.amount) * 10_000)),
+        0n,
+      );
+      assert.equal(total, 0n, "the posted entry balances");
+      // The bank leg is the Square payout amount, 79.54 CAD.
+      const bankLine = lines.find((l) => l.account_id === org.accounts.bank);
+      assert.equal(bankLine?.amount, "79.5400");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

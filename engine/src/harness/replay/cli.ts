@@ -61,7 +61,13 @@ async function main(): Promise<number> {
     const name = f.name ?? `${profileId}-${seed}`;
 
     console.error(`[replay] simulating ${profileId} seed=${seed} ${startDate}..${endDate} …`);
-    const run = await provisionRun({ profileId, seed, startDate, endDate, runsRoot: join(REPO_ROOT, "engine", "sim-runs") });
+    const run = await provisionRun({
+      profileId,
+      seed,
+      startDate,
+      endDate,
+      runsRoot: join(REPO_ROOT, "engine", "sim-runs"),
+    });
     await autopilotRunToEnd(run.runDir);
     const { world, manifest } = loadRun(run.runDir);
     console.error(`[replay] simulation complete (org ${world.orgId}) — exporting…`);
@@ -71,7 +77,18 @@ async function main(): Promise<number> {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "dataset.json"), JSON.stringify(dataset, null, 2) + "\n");
     writeFileSync(join(dir, "golden.json"), JSON.stringify(golden, null, 2) + "\n");
-    console.log(JSON.stringify({ dir, events: dataset.events.length, counts: golden.counts, projects: Object.keys(golden.projects).length }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          dir,
+          events: dataset.events.length,
+          counts: golden.counts,
+          projects: Object.keys(golden.projects).length,
+        },
+        null,
+        2,
+      ),
+    );
 
     if (f["keep-org"] !== "true") {
       await resetOrg(world.orgId);
@@ -91,24 +108,38 @@ async function main(): Promise<number> {
     });
 
     console.log(`\n=== Delete-and-rebuild: ${dataset.name} ===`);
-    console.log(`events: ${report.events}  native docs: ${report.native.documents}  payments: ${report.native.payments}  journals: ${report.native.journals}`);
-    console.log(`fallbacks→GL: ${report.fallbacks.length}  hard failures: ${report.hardFailures.length}`);
-    for (const fb of report.fallbacks.slice(0, 10)) console.log(`  fallback ${fb.event} (${fb.kind}): ${fb.reason}`);
-    for (const hf of report.hardFailures.slice(0, 10)) console.log(`  HARD ${hf.event} (${hf.kind}): ${hf.error}`);
+    console.log(
+      `events: ${report.events}  native docs: ${report.native.documents}  payments: ${report.native.payments}  journals: ${report.native.journals}`,
+    );
+    console.log(
+      `fallbacks→GL: ${report.fallbacks.length}  hard failures: ${report.hardFailures.length}`,
+    );
+    for (const fb of report.fallbacks.slice(0, 10))
+      console.log(`  fallback ${fb.event} (${fb.kind}): ${fb.reason}`);
+    for (const hf of report.hardFailures.slice(0, 10))
+      console.log(`  HARD ${hf.event} (${hf.kind}): ${hf.error}`);
     const show = (label: string, diffs: typeof report.trialBalanceDiffs) => {
-      console.log(`${label}: ${diffs.length === 0 ? "EXACT MATCH" : `${diffs.length} difference(s)`}`);
+      console.log(
+        `${label}: ${diffs.length === 0 ? "EXACT MATCH" : `${diffs.length} difference(s)`}`,
+      );
       for (const d of diffs.slice(0, 20)) {
-        console.log(`  ${d.key.padEnd(28)} rebuilt=${d.openbooks.padStart(14)} golden=${d.reference.padStart(14)} delta=${d.delta}`);
+        console.log(
+          `  ${d.key.padEnd(28)} rebuilt=${d.openbooks.padStart(14)} golden=${d.reference.padStart(14)} delta=${d.delta}`,
+        );
       }
     };
     show("trial balance (rebuilt vs golden)", report.trialBalanceDiffs);
     show("open balances (rebuilt vs golden)", report.openBalanceDiffs);
     show("project cost/billed/margin (rebuilt vs golden)", report.projectDiffs);
     console.log(`native integrity: ${report.nativeIntegrity.pass ? "PASS" : "FAIL"}`);
-    for (const failure of report.nativeIntegrity.failures) console.log(`  ${failure.invariant}: ${failure.detail}`);
+    for (const failure of report.nativeIntegrity.failures)
+      console.log(`  ${failure.invariant}: ${failure.detail}`);
 
     mkdirSync(REPORT_DIR, { recursive: true });
-    const reportFile = join(REPORT_DIR, `rebuild-${dataset.name}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+    const reportFile = join(
+      REPORT_DIR,
+      `rebuild-${dataset.name}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
+    );
     writeFileSync(reportFile, JSON.stringify(report, null, 2));
     console.log(`report written: ${reportFile}`);
 
@@ -122,18 +153,25 @@ async function main(): Promise<number> {
     return report.pass ? 0 : 2;
   }
 
-  console.error("usage: build [--profile --seed --start --end --name --keep-org] | rebuild <datasetDir> [--keep]");
+  console.error(
+    "usage: build [--profile --seed --start --end --name --keep-org] | rebuild <datasetDir> [--keep]",
+  );
   return 1;
 }
 
 main()
-  .then(async (code) => { await pool.end().catch(() => {}); process.exit(code); })
+  .then(async (code) => {
+    await pool.end().catch(() => {});
+    process.exit(code);
+  })
   .catch(async (e) => {
-    console.error(e instanceof Error ? e.stack ?? e.message : e);
+    console.error(e instanceof Error ? (e.stack ?? e.message) : e);
     let cause = (e as { cause?: unknown }).cause;
     while (cause) {
       const c = cause as { message?: string; detail?: string; code?: string; cause?: unknown };
-      console.error(`  caused by: ${c.code ? `[${c.code}] ` : ""}${c.message ?? String(cause)}${c.detail ? ` — ${c.detail}` : ""}`);
+      console.error(
+        `  caused by: ${c.code ? `[${c.code}] ` : ""}${c.message ?? String(cause)}${c.detail ? ` — ${c.detail}` : ""}`,
+      );
       cause = c.cause;
     }
     await pool.end().catch(() => {});

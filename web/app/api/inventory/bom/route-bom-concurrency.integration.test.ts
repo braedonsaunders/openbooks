@@ -79,10 +79,8 @@ const routeUrl: string = "./route.ts?bom-route-concurrency-test";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, pool } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 
 async function authenticate(orgId: string, actorId: string) {
   routeState.authz = {
@@ -114,18 +112,24 @@ function recipe(assemblyItemId: string, componentItemId: string) {
 }
 
 async function bomRows(orgId: string, assemblyItemId: string) {
-  return await db.execute<{ componentItemId: string; quantityPer: string }>(sql`
+  return await db.execute<{ componentItemId: string; quantityPer: string }>(
+    sql`
     select component_item_id as "componentItemId", quantity_per::text as "quantityPer"
       from bom_components
      where org_id = ${orgId} and assembly_item_id = ${assemblyItemId}
-     order by sort_order, component_item_id`, "objects");
+     order by sort_order, component_item_id`,
+    "objects",
+  );
 }
 
 async function bomAudits(orgId: string, assemblyItemId: string) {
-  return await db.execute<{ changes: unknown }>(sql`
+  return await db.execute<{ changes: unknown }>(
+    sql`
     select changes from audit_log
      where org_id = ${orgId} and table_name = 'bom_components' and row_id = ${assemblyItemId}
-     order by id`, "objects");
+     order by id`,
+    "objects",
+  );
 }
 
 async function emptyBom(orgId: string, assemblyItemId: string) {
@@ -133,7 +137,7 @@ async function emptyBom(orgId: string, assemblyItemId: string) {
     delete from bom_components where org_id = ${orgId} and assembly_item_id = ${assemblyItemId}`);
 }
 
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 test("two concurrent empty-BOM replacements serialize: one recipe, one 409", async () => {
   const org = await createScratchOrg();
   try {
@@ -146,7 +150,11 @@ test("two concurrent empty-BOM replacements serialize: one recipe, one 409", asy
       PUT(putRequest(recipe(org.items.assembly, org.items.fifo))),
     ]);
     const statuses = [first.status, second.status].sort();
-    assert.deepEqual(statuses, [200, 409], "exactly one writer wins and the loser takes the revision conflict");
+    assert.deepEqual(
+      statuses,
+      [200, 409],
+      "exactly one writer wins and the loser takes the revision conflict",
+    );
 
     const winner = first.status === 200 ? first : second;
     const winnerComponent = first.status === 200 ? org.items.component : org.items.fifo;
@@ -155,12 +163,19 @@ test("two concurrent empty-BOM replacements serialize: one recipe, one 409", asy
     assert.ok(typeof body.version === "string" && body.version.length > 0);
 
     const rows = await bomRows(org.orgId, org.items.assembly);
-    assert.equal(rows.length, 1, "the final recipe is one complete recipe, never the union of both writers");
+    assert.equal(
+      rows.length,
+      1,
+      "the final recipe is one complete recipe, never the union of both writers",
+    );
     assert.equal(rows[0]!.componentItemId, winnerComponent);
 
     const audits = await bomAudits(org.orgId, org.items.assembly);
     assert.equal(audits.length, 1, "exactly one replacement is audited");
-    const changes = audits[0]!.changes as { before: unknown[]; after: { componentItemId: string }[] };
+    const changes = audits[0]!.changes as {
+      before: unknown[];
+      after: { componentItemId: string }[];
+    };
     assert.deepEqual(changes.before, []);
     assert.equal(changes.after.length, 1);
     assert.equal(changes.after[0]!.componentItemId, winnerComponent);
@@ -176,10 +191,12 @@ test("disabled Manufacturing refuses operation and by-product fields; disabled I
     await authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
     for (const fields of [{ operationSeq: 2 }, { isByproduct: true }]) {
-      const response = await PUT(putRequest({
-        ...recipe(org.items.assembly, org.items.component),
-        components: [{ componentItemId: org.items.component, quantityPer: "1", ...fields }],
-      }));
+      const response = await PUT(
+        putRequest({
+          ...recipe(org.items.assembly, org.items.component),
+          components: [{ componentItemId: org.items.component, quantityPer: "1", ...fields }],
+        }),
+      );
       assert.equal(response.status, 404);
       assert.deepEqual(await bomRows(org.orgId, org.items.assembly), []);
       assert.deepEqual(await bomAudits(org.orgId, org.items.assembly), []);
@@ -190,8 +207,16 @@ test("disabled Manufacturing refuses operation and by-product fields; disabled I
 
     const res = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
     assert.equal(res.status, 404);
-    assert.deepEqual(await bomRows(org.orgId, org.items.assembly), [], "the refused save stores no recipe");
-    assert.deepEqual(await bomAudits(org.orgId, org.items.assembly), [], "the refused save audits nothing");
+    assert.deepEqual(
+      await bomRows(org.orgId, org.items.assembly),
+      [],
+      "the refused save stores no recipe",
+    );
+    assert.deepEqual(
+      await bomAudits(org.orgId, org.items.assembly),
+      [],
+      "the refused save audits nothing",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -204,20 +229,47 @@ test("BOM replacement accepts adjacent effectivity windows and names overlapping
     await authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
     const base = recipe(org.items.assembly, org.items.component);
-    const first = { componentItemId: org.items.component, quantityPer: "1", effectiveFrom: "2026-01-01", effectiveTo: "2026-07-01" };
-    const second = { componentItemId: org.items.component, quantityPer: "2", effectiveFrom: "2026-07-01" };
+    const first = {
+      componentItemId: org.items.component,
+      quantityPer: "1",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-07-01",
+    };
+    const second = {
+      componentItemId: org.items.component,
+      quantityPer: "2",
+      effectiveFrom: "2026-07-01",
+    };
     const accepted = await PUT(putRequest({ ...base, components: [first, second] }));
     assert.equal(accepted.status, 200);
-    const version = (await accepted.json() as { version: string }).version;
+    const version = ((await accepted.json()) as { version: string }).version;
     assert.equal((await bomRows(org.orgId, org.items.assembly)).length, 2);
-    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
-    const detailBody = await detail.json() as { version: string; components: { effectiveFrom: string | null; effectiveTo: string | null }[] };
+    const detail = await GET(
+      new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`),
+    );
+    const detailBody = (await detail.json()) as {
+      version: string;
+      components: { effectiveFrom: string | null; effectiveTo: string | null }[];
+    };
     assert.equal(detailBody.version, version);
-    assert.deepEqual(detailBody.components.map((line) => [line.effectiveFrom, line.effectiveTo]), [["2026-01-01", "2026-07-01"], ["2026-07-01", null]]);
-    const refused = await PUT(putRequest({ ...base, expectedVersion: version, components: [
-      { ...first, effectiveTo: "2026-08-01" }, { ...second, effectiveFrom: "2026-07-01" },
-    ] }));
-    const body = await refused.json() as { error: string; componentItemId: string };
+    assert.deepEqual(
+      detailBody.components.map((line) => [line.effectiveFrom, line.effectiveTo]),
+      [
+        ["2026-01-01", "2026-07-01"],
+        ["2026-07-01", null],
+      ],
+    );
+    const refused = await PUT(
+      putRequest({
+        ...base,
+        expectedVersion: version,
+        components: [
+          { ...first, effectiveTo: "2026-08-01" },
+          { ...second, effectiveFrom: "2026-07-01" },
+        ],
+      }),
+    );
+    const body = (await refused.json()) as { error: string; componentItemId: string };
     assert.equal(refused.status, 422);
     assert.equal(body.componentItemId, org.items.component);
     assert.match(body.error, /2026-01-01.*2026-08-01.*2026-07-01/);
@@ -236,21 +288,37 @@ test("a manufacturing planner reads the revision context with every operating en
       permissions: new Set(["admin.setup.manage", "manufacturing.manage"]),
       allowedSubsidiaryIds: null,
     };
-    const elimination = (await db.execute<{ id: string }>(sql`
+    const elimination = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into subsidiaries (org_id, parent_id, name, base_currency, country, is_elimination, is_active)
       select org_id, id, 'Group eliminations', base_currency, country, true, true
         from subsidiaries where org_id = ${org.orgId} and id = ${org.subsidiaryId}
-      returning id`, "objects"))[0]!.id;
+      returning id`,
+        "objects",
+      )
+    )[0]!.id;
     const context = await GET(new Request("http://localhost/api/inventory/bom"));
     assert.equal(context.status, 200);
-    const contextBody = await context.json() as { canProposeRevision: boolean; subsidiaries: { id: string }[] };
+    const contextBody = (await context.json()) as {
+      canProposeRevision: boolean;
+      subsidiaries: { id: string }[];
+    };
     assert.equal(contextBody.canProposeRevision, true);
     const ids = contextBody.subsidiaries.map((row) => row.id);
-    assert.ok(ids.includes(org.subsidiaryId), "the operating entity is offered for a revision proposal");
+    assert.ok(
+      ids.includes(org.subsidiaryId),
+      "the operating entity is offered for a revision proposal",
+    );
     assert.ok(!ids.includes(elimination), "an elimination entity never holds a recipe revision");
-    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
+    const detail = await GET(
+      new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`),
+    );
     assert.equal(detail.status, 200);
-    assert.equal((await detail.json() as { assemblyItemId: string }).assemblyItemId, org.items.assembly);
+    assert.equal(
+      ((await detail.json()) as { assemblyItemId: string }).assemblyItemId,
+      org.items.assembly,
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);
@@ -265,12 +333,20 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     await emptyBom(org.orgId, org.items.assembly);
     const saved = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
     assert.equal(saved.status, 200);
-    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
+    const detail = await GET(
+      new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`),
+    );
     assert.equal(detail.status, 200);
-    const body = await detail.json() as {
+    const body = (await detail.json()) as {
       assemblyItemId: string;
       version: string;
-      components: { componentItemId: string; code: string | null; name: string | null; isActive: boolean | null; isCurrent: boolean }[];
+      components: {
+        componentItemId: string;
+        code: string | null;
+        name: string | null;
+        isActive: boolean | null;
+        isCurrent: boolean;
+      }[];
       validItems: { id: string; code: string | null; name: string | null }[];
     };
     assert.equal(body.assemblyItemId, org.items.assembly);
@@ -279,14 +355,20 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     assert.equal(body.components[0]!.name, "Component");
     assert.equal(body.components[0]!.isActive, true);
     assert.equal(body.components[0]!.isCurrent, true);
-    assert.ok(body.validItems.some((item) => item.id === org.items.component && item.name === "Component"));
+    assert.ok(
+      body.validItems.some((item) => item.id === org.items.component && item.name === "Component"),
+    );
     // Deactivating the component removes it from the editor's eligible
     // choices, but the stored line still names it instead of falling back
     // to its storage id.
-    await db.execute(sql`update items set is_active = false where org_id = ${org.orgId} and id = ${org.items.component}`);
-    const reread = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
+    await db.execute(
+      sql`update items set is_active = false where org_id = ${org.orgId} and id = ${org.items.component}`,
+    );
+    const reread = await GET(
+      new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`),
+    );
     assert.equal(reread.status, 200);
-    const rebody = await reread.json() as typeof body;
+    const rebody = (await reread.json()) as typeof body;
     assert.equal(rebody.components.length, 1);
     assert.equal(rebody.components[0]!.name, "Component");
     assert.equal(rebody.components[0]!.isActive, false);
@@ -302,7 +384,10 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     };
     const reader = await GET(new Request(readerUrl));
     assert.equal(reader.status, 200);
-    assert.equal((await reader.json() as { assemblyItemId: string }).assemblyItemId, org.items.assembly);
+    assert.equal(
+      ((await reader.json()) as { assemblyItemId: string }).assemblyItemId,
+      org.items.assembly,
+    );
     routeState.authz = {
       user: { orgId: org.orgId, id: actorId },
       permissions: new Set(["unrelated.hold"]),
@@ -310,7 +395,10 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     };
     const refused = await GET(new Request(readerUrl));
     assert.equal(refused.status, 403);
-    assert.equal((await refused.json() as { error: string }).error, "missing permission: items.read");
+    assert.equal(
+      ((await refused.json()) as { error: string }).error,
+      "missing permission: items.read",
+    );
     // A catalog reader cannot replace the shared recipe: the write gate
     // refuses naming its own grant before any read or write.
     routeState.authz = {
@@ -320,35 +408,44 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     };
     const readerPut = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
     assert.equal(readerPut.status, 403);
-    assert.equal((await readerPut.json() as { error: string }).error, "missing permission: admin.setup.manage");
+    assert.equal(
+      ((await readerPut.json()) as { error: string }).error,
+      "missing permission: admin.setup.manage",
+    );
     // A line bounded entirely in the past reads back not current, under the
     // same half-open window the kit explosion enforces. The component is
     // reactivated first: the save gate only accepts active inventory items.
-    await db.execute(sql`update items set is_active = true where org_id = ${org.orgId} and id = ${org.items.component}`);
+    await db.execute(
+      sql`update items set is_active = true where org_id = ${org.orgId} and id = ${org.items.component}`,
+    );
     routeState.authz = {
       user: { orgId: org.orgId, id: actorId },
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
     const rereadForVersion = await GET(new Request(readerUrl));
-    const currentVersion = (await rereadForVersion.json() as { version: string }).version;
-    const dated = await PUT(putRequest({
-      assemblyItemId: org.items.assembly,
-      expectedVersion: currentVersion,
-      reason: "Window regression probe: one line bounded in the past.",
-      components: [{
-        componentItemId: org.items.component,
-        quantityPer: "2",
-        operationSeq: null,
-        scrapPct: null,
-        isByproduct: false,
-        effectiveFrom: "2000-01-01",
-        effectiveTo: "2001-01-01",
-      }],
-    }));
+    const currentVersion = ((await rereadForVersion.json()) as { version: string }).version;
+    const dated = await PUT(
+      putRequest({
+        assemblyItemId: org.items.assembly,
+        expectedVersion: currentVersion,
+        reason: "Window regression probe: one line bounded in the past.",
+        components: [
+          {
+            componentItemId: org.items.component,
+            quantityPer: "2",
+            operationSeq: null,
+            scrapPct: null,
+            isByproduct: false,
+            effectiveFrom: "2000-01-01",
+            effectiveTo: "2001-01-01",
+          },
+        ],
+      }),
+    );
     assert.equal(dated.status, 200);
     const datedGet = await GET(new Request(readerUrl));
-    const datedBody = await datedGet.json() as {
+    const datedBody = (await datedGet.json()) as {
       components: { componentItemId: string; isCurrent: boolean }[];
     };
     assert.equal(datedBody.components.length, 1);
@@ -370,21 +467,25 @@ test("unprofiled kits offer and save commercial-only recipe components", async (
       values (${kitId}, ${org.orgId}, 'kit', 'Virtual kit', false, true, '{}'::jsonb,
               'billing', 'normal', ${org.accounts.revenue})`);
 
-    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${kitId}`));
+    const detail = await GET(
+      new Request(`http://localhost/api/inventory/bom?assemblyItemId=${kitId}`),
+    );
     assert.equal(detail.status, 200);
-    const body = await detail.json() as { validItems: { id: string }[] };
+    const body = (await detail.json()) as { validItems: { id: string }[] };
     assert.ok(body.validItems.some((item) => item.id === org.items.service));
     assert.ok(body.validItems.some((item) => item.id === org.items.component));
     assert.ok(!body.validItems.some((item) => item.id === kitId));
 
-    const saved = await PUT(putRequest({
-      assemblyItemId: kitId,
-      expectedVersion: null,
-      reason: "Add a service component to this kit",
-      components: [{ componentItemId: org.items.service, quantityPer: "1" }],
-    }));
+    const saved = await PUT(
+      putRequest({
+        assemblyItemId: kitId,
+        expectedVersion: null,
+        reason: "Add a service component to this kit",
+        components: [{ componentItemId: org.items.service, quantityPer: "1" }],
+      }),
+    );
     assert.equal(saved.status, 200);
-    assert.equal((await saved.json() as { componentCount: number }).componentCount, 1);
+    assert.equal(((await saved.json()) as { componentCount: number }).componentCount, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -401,26 +502,49 @@ test("a BOM save waits for an in-flight Inventory disable, then refuses it", asy
 
     await writer.query("begin");
     await writer.query("select set_config('app.bypass_rls','on',true)");
-    await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"inventory\":false}'::jsonb) where id=$1", [org.orgId]);
-    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    await writer.query(
+      "update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"inventory\":false}'::jsonb) where id=$1",
+      [org.orgId],
+    );
+    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+      .pid;
 
-    pending = PUT(putRequest(recipe(org.items.assembly, org.items.component)))
-      .then(async (res) => ({ status: res.status }));
+    pending = PUT(putRequest(recipe(org.items.assembly, org.items.component))).then(
+      async (res) => ({ status: res.status }),
+    );
 
     let blocked = false;
     for (let attempt = 0; attempt < 400; attempt++) {
-      const row = (await pool.query<{ blocked: boolean }>(
-        "select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked", [pid])).rows[0]!;
-      if (row.blocked) { blocked = true; break; }
+      const row = (
+        await pool.query<{ blocked: boolean }>(
+          "select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked",
+          [pid],
+        )
+      ).rows[0]!;
+      if (row.blocked) {
+        blocked = true;
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    assert.ok(blocked, "the save must wait for authoritative feature ownership instead of racing past the disable");
+    assert.ok(
+      blocked,
+      "the save must wait for authoritative feature ownership instead of racing past the disable",
+    );
     await writer.query("commit");
 
     const result = await pending;
     assert.equal(result.status, 404, "the disable that won the race refuses the save");
-    assert.deepEqual(await bomRows(org.orgId, org.items.assembly), [], "the refused save stores no recipe");
-    assert.deepEqual(await bomAudits(org.orgId, org.items.assembly), [], "the refused save audits nothing");
+    assert.deepEqual(
+      await bomRows(org.orgId, org.items.assembly),
+      [],
+      "the refused save stores no recipe",
+    );
+    assert.deepEqual(
+      await bomAudits(org.orgId, org.items.assembly),
+      [],
+      "the refused save audits nothing",
+    );
   } finally {
     await writer.query("rollback").catch(() => {});
     writer.release();
@@ -433,17 +557,17 @@ test("a subsidiary-scoped setup manager cannot replace the shared recipe", async
   // The org-wide-policy gate fires before the body parses, so no database
   // is needed to prove the refusal precedes every read and write.
   routeState.authz = {
-    user: { orgId: "00000000-0000-4000-8000-00000000b001", id: "00000000-0000-4000-8000-00000000b002" },
+    user: {
+      orgId: "00000000-0000-4000-8000-00000000b001",
+      id: "00000000-0000-4000-8000-00000000b002",
+    },
     permissions: new Set(["admin.setup.manage"]),
     allowedSubsidiaryIds: new Set(["00000000-0000-4000-8000-00000000b003"]),
   };
   try {
     const response = await PUT(
       putRequest(
-        recipe(
-          "00000000-0000-4000-8000-00000000b004",
-          "00000000-0000-4000-8000-00000000b005",
-        ),
+        recipe("00000000-0000-4000-8000-00000000b004", "00000000-0000-4000-8000-00000000b005"),
       ),
     );
     assert.equal(response.status, 403);

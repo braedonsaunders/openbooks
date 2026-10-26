@@ -1,22 +1,25 @@
-import 'server-only'
-import { createHash, randomUUID } from 'node:crypto'
-import { featureEnabled, type FeatureState } from '@openbooks/engine/organization/feature-registry'
-import type { Authz } from '../authz'
-import { can } from '../authz'
-import type { SessionUser } from '../auth'
-import { resolvedFeatureState } from '../features'
-import { permissionSetCovers } from '../permissions'
-import { canRunTool } from '../assistant/gate'
-import { signApplicationCommand, verifyApplicationCommand } from '../assistant/application-proposals'
-import type { AssistantToolDef, ToolResult } from '../assistant/types'
-import { getAppByKey, invokeAppEndpointHandler, listApps } from './store'
-import { appToolAssistantName } from './manifest'
+import "server-only";
+import { createHash, randomUUID } from "node:crypto";
+import { featureEnabled, type FeatureState } from "@openbooks/engine/organization/feature-registry";
+import type { Authz } from "../authz";
+import { can } from "../authz";
+import type { SessionUser } from "../auth";
+import { resolvedFeatureState } from "../features";
+import { permissionSetCovers } from "../permissions";
+import { canRunTool } from "../assistant/gate";
+import {
+  signApplicationCommand,
+  verifyApplicationCommand,
+} from "../assistant/application-proposals";
+import type { AssistantToolDef, ToolResult } from "../assistant/types";
+import { getAppByKey, invokeAppEndpointHandler, listApps } from "./store";
+import { appToolAssistantName } from "./manifest";
 import {
   jsonSchemaToZod,
   parseToolInput,
   renderAppToolViews,
   type AppToolView,
-} from './tool-schema'
+} from "./tool-schema";
 
 /**
  * App-declared assistant/MCP tools runtime. Installed, enabled apps may
@@ -29,9 +32,9 @@ import {
  */
 
 /** Hard cap on an app tool's response body so one call cannot blow the turn. */
-const MAX_TOOL_RESPONSE_BYTES = 64 * 1024
+const MAX_TOOL_RESPONSE_BYTES = 64 * 1024;
 
-export type AppToolInvoker = typeof invokeAppEndpointHandler
+export type AppToolInvoker = typeof invokeAppEndpointHandler;
 
 /** Rendered assistant definitions for every app tool the actor may see. */
 export async function listAppToolViews(
@@ -40,28 +43,28 @@ export async function listAppToolViews(
   features?: FeatureState | null,
   deps?: { listApps?: typeof listApps },
 ): Promise<AppToolView[]> {
-  const appsFeatureOn = !features || featureEnabled(features, 'apps')
-  if (!appsFeatureOn) return []
-  const rows = await (deps?.listApps ?? listApps)(orgId)
+  const appsFeatureOn = !features || featureEnabled(features, "apps");
+  if (!appsFeatureOn) return [];
+  const rows = await (deps?.listApps ?? listApps)(orgId);
   return renderAppToolViews(
     rows,
-    { permissions: authz.permissions, appsUse: can(authz, 'apps.use') },
+    { permissions: authz.permissions, appsUse: can(authz, "apps.use") },
     appsFeatureOn,
-  )
+  );
 }
 
 export interface RunAppToolOptions {
-  orgId: string
-  user: SessionUser
-  appKey: string
-  toolKey: string
-  input: unknown
+  orgId: string;
+  user: SessionUser;
+  appKey: string;
+  toolKey: string;
+  input: unknown;
   /** The catalog's stored declaration, forwarded by MCP and assistant callers. */
-  readOnlyTool: boolean
-  userCan: (perm: string) => boolean
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  readOnlyTool: boolean;
+  userCan: (perm: string) => boolean;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** Caller-generated invocation identity. Required: omitted keys are refused, never minted here. */
-  idempotencyKey: string
+  idempotencyKey: string;
 }
 
 /**
@@ -76,37 +79,42 @@ export async function runAppTool(
   opts: RunAppToolOptions,
   deps?: { getApp?: typeof getAppByKey; invoke?: AppToolInvoker },
 ): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
-  const idempotencyKey = typeof opts.idempotencyKey === 'string' ? opts.idempotencyKey.trim() : ''
+  const idempotencyKey = typeof opts.idempotencyKey === "string" ? opts.idempotencyKey.trim() : "";
   if (!/^[A-Za-z0-9._:-]{8,200}$/.test(idempotencyKey)) {
     return {
       ok: false,
-      error: 'idempotencyKey is required; pass a durable caller identity so a retry replays instead of mutating again',
+      error:
+        "idempotencyKey is required; pass a durable caller identity so a retry replays instead of mutating again",
       status: 400,
-    }
+    };
   }
-  if (!opts.userCan('apps.use')) return { ok: false, error: 'forbidden', status: 403 }
-  const app = await (deps?.getApp ?? getAppByKey)(opts.orgId, opts.appKey)
-  if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
-  if (app.status !== 'installed') return { ok: false, error: 'app is disabled', status: 403 }
-  const spec = app.manifest.tools?.find((t) => t.key === opts.toolKey)
-  if (!spec) return { ok: false, error: `no such tool: ${opts.toolKey}`, status: 404 }
+  if (!opts.userCan("apps.use")) return { ok: false, error: "forbidden", status: 403 };
+  const app = await (deps?.getApp ?? getAppByKey)(opts.orgId, opts.appKey);
+  if (!app || !app.manifest) return { ok: false, error: "app not found", status: 404 };
+  if (app.status !== "installed") return { ok: false, error: "app is disabled", status: 403 };
+  const spec = app.manifest.tools?.find((t) => t.key === opts.toolKey);
+  if (!spec) return { ok: false, error: `no such tool: ${opts.toolKey}`, status: 404 };
   if (opts.readOnlyTool !== spec.readOnly) {
-    return { ok: false, error: 'app tool permissions changed; refresh the tool catalog before invoking it', status: 409 }
+    return {
+      ok: false,
+      error: "app tool permissions changed; refresh the tool catalog before invoking it",
+      status: 409,
+    };
   }
-  const granted = new Set(app.grantedPermissions)
+  const granted = new Set(app.grantedPermissions);
   for (const permission of spec.requiredPermissions ?? []) {
     if (!permissionSetCovers(granted, permission) || !opts.userCan(permission)) {
-      return { ok: false, error: 'forbidden', status: 403 }
+      return { ok: false, error: "forbidden", status: 403 };
     }
   }
-  let zodSchema
+  let zodSchema;
   try {
-    zodSchema = jsonSchemaToZod(spec.inputSchema)
+    zodSchema = jsonSchemaToZod(spec.inputSchema);
   } catch {
-    return { ok: false, error: 'tool schema unavailable', status: 500 }
+    return { ok: false, error: "tool schema unavailable", status: 500 };
   }
-  const parsed = parseToolInput(zodSchema, opts.input)
-  if (!parsed.ok) return { ok: false, error: parsed.error, status: 422 }
+  const parsed = parseToolInput(zodSchema, opts.input);
+  if (!parsed.ok) return { ok: false, error: parsed.error, status: 422 };
   return (deps?.invoke ?? invokeAppEndpointHandler)({
     orgId: opts.orgId,
     user: opts.user,
@@ -119,30 +127,36 @@ export async function runAppTool(
     auditEndpoint: `tool/${opts.toolKey}`,
     readOnlyTool: spec.readOnly,
     idempotencyKey: idempotencyKey,
-  })
+  });
 }
 
 /** Execute the declaration captured by a caller-facing catalog, rejecting a stale read/write label. */
-export function runListedAppTool(input: {
-  view: Pick<AppToolView, 'appKey' | 'toolKey' | 'readOnly'>
-  orgId: string
-  user: SessionUser
-  input: unknown
-  userCan: (permission: string) => boolean
-  allowedSubsidiaryIds: ReadonlySet<string> | null
-  idempotencyKey: string
-}, deps?: { getApp?: typeof getAppByKey; invoke?: AppToolInvoker }) {
-  return runAppTool({
-    orgId: input.orgId,
-    user: input.user,
-    appKey: input.view.appKey,
-    toolKey: input.view.toolKey,
-    input: input.input,
-    readOnlyTool: input.view.readOnly,
-    userCan: input.userCan,
-    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
-    idempotencyKey: input.idempotencyKey,
-  }, deps)
+export function runListedAppTool(
+  input: {
+    view: Pick<AppToolView, "appKey" | "toolKey" | "readOnly">;
+    orgId: string;
+    user: SessionUser;
+    input: unknown;
+    userCan: (permission: string) => boolean;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+    idempotencyKey: string;
+  },
+  deps?: { getApp?: typeof getAppByKey; invoke?: AppToolInvoker },
+) {
+  return runAppTool(
+    {
+      orgId: input.orgId,
+      user: input.user,
+      appKey: input.view.appKey,
+      toolKey: input.view.toolKey,
+      input: input.input,
+      readOnlyTool: input.view.readOnly,
+      userCan: input.userCan,
+      allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+      idempotencyKey: input.idempotencyKey,
+    },
+    deps,
+  );
 }
 
 /**
@@ -155,22 +169,23 @@ export function runListedAppTool(input: {
 export function toAssistantToolDef(view: AppToolView): AssistantToolDef {
   return {
     name: view.name,
-    description: `${view.description} ${view.readOnly ? 'Read-only.' : 'Requires the user to confirm before anything changes.'}`,
-    category: view.readOnly ? 'read' : 'write',
+    description: `${view.description} ${view.readOnly ? "Read-only." : "Requires the user to confirm before anything changes."}`,
+    category: view.readOnly ? "read" : "write",
     inputSchema: view.zodSchema,
-    gate: view.requiredPermissions.length > 0
-      ? { mode: 'allOf', perms: view.requiredPermissions }
-      : { mode: 'public' },
-    feature: 'apps',
+    gate:
+      view.requiredPermissions.length > 0
+        ? { mode: "allOf", perms: view.requiredPermissions }
+        : { mode: "public" },
+    feature: "apps",
     requiresConfirmation: view.readOnly ? undefined : true,
     execute: async (args, authz): Promise<ToolResult> => {
-      const features = await resolvedFeatureState(authz.user.orgId)
-      if (!featureEnabled(features, 'apps')) return { ok: false, error: 'forbidden' }
+      const features = await resolvedFeatureState(authz.user.orgId);
+      if (!featureEnabled(features, "apps")) return { ok: false, error: "forbidden" };
       for (const permission of view.requiredPermissions) {
-        if (!can(authz, permission)) return { ok: false, error: 'forbidden' }
+        if (!can(authz, permission)) return { ok: false, error: "forbidden" };
       }
-      const parsed = parseToolInput(view.zodSchema, args)
-      if (!parsed.ok) return { ok: false, error: parsed.error }
+      const parsed = parseToolInput(view.zodSchema, args);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
       if (!view.readOnly) {
         return {
           ok: true,
@@ -181,12 +196,14 @@ export function toAssistantToolDef(view: AppToolView): AssistantToolDef {
               destructive: view.destructive,
               input: parsed.value,
               confirmToken: signApplicationCommand(view.name, parsed.value, authz, {
-                appKey: view.appKey, toolKey: view.toolKey, activeVersionId: view.activeVersionId,
+                appKey: view.appKey,
+                toolKey: view.toolKey,
+                activeVersionId: view.activeVersionId,
               }),
             },
           },
-          note: 'Awaiting explicit user confirmation. Nothing has been changed.',
-        }
+          note: "Awaiting explicit user confirmation. Nothing has been changed.",
+        };
       }
       const outcome = await runAppTool({
         orgId: authz.user.orgId,
@@ -200,15 +217,15 @@ export function toAssistantToolDef(view: AppToolView): AssistantToolDef {
         // Each chat read is a new invocation; replaying a stored lookup would
         // hide later writes. Same shape as platform.query's readInvocation nonce.
         idempotencyKey: randomUUID(),
-      })
-      if (!outcome.ok) return { ok: false, error: outcome.error }
-      const encoded = JSON.stringify(outcome.result)
+      });
+      if (!outcome.ok) return { ok: false, error: outcome.error };
+      const encoded = JSON.stringify(outcome.result);
       if (encoded.length > MAX_TOOL_RESPONSE_BYTES) {
-        return { ok: false, error: 'tool response too large; narrow the request' }
+        return { ok: false, error: "tool response too large; narrow the request" };
       }
-      return { ok: true, data: outcome.result }
+      return { ok: true, data: outcome.result };
     },
-  }
+  };
 }
 
 /**
@@ -226,22 +243,26 @@ export async function commitAppToolCommand(
   confirmToken: string,
   features?: FeatureState | null,
 ): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
-  const resolved = features ?? await resolvedFeatureState(authz.user.orgId)
-  const views = await listAppToolViews(authz.user.orgId, authz, resolved)
-  const view = views.find((v) => v.name === toolName)
-  if (!view || view.readOnly) return { ok: false, error: 'unsupported_command', status: 400 }
-  const def = toAssistantToolDef(view)
-  if (!canRunTool(authz, def, resolved)) return { ok: false, error: 'forbidden', status: 403 }
-  const parsed = parseToolInput(view.zodSchema, input)
-  if (!parsed.ok) return { ok: false, error: 'invalid_input', status: 422 }
-  if (!verifyApplicationCommand(view.name, parsed.value, confirmToken, authz, {
-    appKey: view.appKey, toolKey: view.toolKey, activeVersionId: view.activeVersionId,
-  })) {
-    return { ok: false, error: 'confirmation_expired_or_modified', status: 422 }
+  const resolved = features ?? (await resolvedFeatureState(authz.user.orgId));
+  const views = await listAppToolViews(authz.user.orgId, authz, resolved);
+  const view = views.find((v) => v.name === toolName);
+  if (!view || view.readOnly) return { ok: false, error: "unsupported_command", status: 400 };
+  const def = toAssistantToolDef(view);
+  if (!canRunTool(authz, def, resolved)) return { ok: false, error: "forbidden", status: 403 };
+  const parsed = parseToolInput(view.zodSchema, input);
+  if (!parsed.ok) return { ok: false, error: "invalid_input", status: 422 };
+  if (
+    !verifyApplicationCommand(view.name, parsed.value, confirmToken, authz, {
+      appKey: view.appKey,
+      toolKey: view.toolKey,
+      activeVersionId: view.activeVersionId,
+    })
+  ) {
+    return { ok: false, error: "confirmation_expired_or_modified", status: 422 };
   }
   // The token is the durable identity of this proposed write; committing
   // through it makes Apply idempotent across retries and double-clicks.
-  const commitKey = createHash('sha256').update(confirmToken).digest('hex')
+  const commitKey = createHash("sha256").update(confirmToken).digest("hex");
   return runAppTool({
     orgId: authz.user.orgId,
     user: authz.user,
@@ -252,7 +273,7 @@ export async function commitAppToolCommand(
     userCan: (perm) => can(authz, perm),
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     idempotencyKey: commitKey,
-  })
+  });
 }
 
-export type { AppToolView }
+export type { AppToolView };

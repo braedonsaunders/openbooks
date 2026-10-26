@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env.ts'
+import { stubModules } from "../../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env.ts";
 
 // The employment change drawer never fails silently: a local refusal names
 // the field, focuses it, and toasts; a server refusal renders its message
@@ -9,7 +9,15 @@ import { bootJsdomEnvironment } from '../../../testing/jsdom-env.ts'
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/hrm", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__crRouter}export function usePathname(){return \'/hrm\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__crRouter}export function usePathname(){return '/hrm'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 Object.assign(globalThis, {
   __crRouter: { push() {}, replace() {}, refresh() {}, back() {}, prefetch() {} },
@@ -63,7 +71,9 @@ function scriptFetch(create: Reply, submit: Reply) {
   const prior = globalThis.fetch;
   const posts: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     const method = init?.method ?? "GET";
     if (method === "POST" && url === "/api/hrm/change-requests") {
       posts.push(url);
@@ -101,8 +111,12 @@ async function mountDrawer() {
             initialRequest={null}
             initialValues={{ kind: "assignment_change" }}
             departmentOptions={[]}
-            onClose={() => { calls.closed += 1; }}
-            onSaved={() => { calls.saved += 1; }}
+            onClose={() => {
+              calls.closed += 1;
+            }}
+            onSaved={() => {
+              calls.saved += 1;
+            }}
           />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
@@ -123,7 +137,9 @@ async function mountDrawer() {
 }
 
 function buttonNamed(name: string): HTMLButtonElement {
-  const found = [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === name);
+  const found = [...document.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === name,
+  );
   assert.ok(found, `a "${name}" action must render`);
   return found as HTMLButtonElement;
 }
@@ -140,9 +156,10 @@ async function typeIntoId(id: string, value: string) {
   const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
   assert.ok(el, `the #${id} field must render`);
   await act(async () => {
-    const proto = el instanceof window.HTMLTextAreaElement
-      ? window.HTMLTextAreaElement.prototype
-      : window.HTMLInputElement.prototype;
+    const proto =
+      el instanceof window.HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
     setter.call(el, value);
     el.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -173,7 +190,10 @@ test("a blank assignment key refuses before posting, focuses the key, and toasts
   assert.equal(fetch.posts.length, 0, "a refused proposal must not post");
   const expected = "Name the assignment slot this change edits.";
   assert.ok(toastedErrors().includes(expected), "the refusal must toast");
-  assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes(expected), "the refusal must render inline");
+  assert.ok(
+    document.querySelector('[role="alert"]')?.textContent?.includes(expected),
+    "the refusal must render inline",
+  );
   assert.equal(
     (document.activeElement as HTMLElement | null)?.getAttribute("id"),
     "cr-assignment-key",
@@ -198,7 +218,10 @@ test("a server refusal on submit renders its message inline and as a toast", asy
   await typeIntoId("cr-reason", "Move to Finance");
   await click(buttonNamed("Submit for approval"));
   assert.equal(fetch.posts.length, 2, "the draft is created, then its submit is refused");
-  assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes(refusal), "the refusal must render inline");
+  assert.ok(
+    document.querySelector('[role="alert"]')?.textContent?.includes(refusal),
+    "the refusal must render inline",
+  );
   assert.ok(toastedErrors().includes(refusal), "the refusal must toast");
   assert.equal(mounted.calls.saved, 0, "a refused submit must not report a saved change");
   assert.equal(mounted.calls.closed, 0, "the drawer must stay open after a refusal");
@@ -218,7 +241,13 @@ test("a draft save that returns no request id reports a failure instead of closi
   await typeIntoId("cr-assignment-key", "primary");
   await click(buttonNamed("Save as draft"));
   const expected = "The change request could not be saved.";
-  assert.ok(toastedErrors().includes(expected), "a success without a draft id must toast a failure");
-  assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes(expected), "the failure must render inline");
+  assert.ok(
+    toastedErrors().includes(expected),
+    "a success without a draft id must toast a failure",
+  );
+  assert.ok(
+    document.querySelector('[role="alert"]')?.textContent?.includes(expected),
+    "the failure must render inline",
+  );
   assert.equal(mounted.calls.closed, 0, "the drawer must stay open");
 });

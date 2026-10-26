@@ -12,12 +12,7 @@
  */
 import { civilDateFromParts, daysInCivilMonth } from "../platform/civil-date.ts";
 
-export type FilingFrequency =
-  | "monthly"
-  | "bimonthly"
-  | "quarterly"
-  | "semiannual"
-  | "annual";
+export type FilingFrequency = "monthly" | "bimonthly" | "quarterly" | "semiannual" | "annual";
 
 /** Months covered by one return period, per frequency. */
 const MONTHS_PER_PERIOD: Record<FilingFrequency, number> = {
@@ -155,10 +150,22 @@ export function buildFilingCalendar(
       reg.effectiveFrom && reg.effectiveFrom > rangeFrom ? reg.effectiveFrom : rangeFrom;
     const effTo = reg.effectiveTo && reg.effectiveTo < rangeTo ? reg.effectiveTo : rangeTo;
     if (effFrom > effTo) continue;
-    for (const period of filingPeriods(reg.filingFrequency, effFrom, effTo, reg.filingPeriodStartMonth ?? 1)) {
+    for (const period of filingPeriods(
+      reg.filingFrequency,
+      effFrom,
+      effTo,
+      reg.filingPeriodStartMonth ?? 1,
+    )) {
       obligations.push({
         ...period,
-        ...(reg.registrationId ? {registrationId:reg.registrationId,subsidiaryId:reg.subsidiaryId ?? null,subsidiaryName:reg.subsidiaryName ?? null,registrationNumber:reg.registrationNumber} : {}),
+        ...(reg.registrationId
+          ? {
+              registrationId: reg.registrationId,
+              subsidiaryId: reg.subsidiaryId ?? null,
+              subsidiaryName: reg.subsidiaryName ?? null,
+              registrationNumber: reg.registrationNumber,
+            }
+          : {}),
         reportableFrom: period.periodStart > effFrom ? period.periodStart : effFrom,
         reportableTo: period.periodEnd < effTo ? period.periodEnd : effTo,
         jurisdictionId: reg.jurisdictionId,

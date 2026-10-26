@@ -25,31 +25,52 @@ const retainageBalances: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "projects.read", "gl.read"] },
   feature: "projects",
   inputSchema: z.object({
-    side: z.enum(["receivable", "payable"]).optional().describe("Default receivable (customer holdbacks)"),
+    side: z
+      .enum(["receivable", "payable"])
+      .optional()
+      .describe("Default receivable (customer holdbacks)"),
     asOf: dateInput.optional().describe("Default today"),
     groupBy: z.enum(["party", "project", "document"]).optional().describe("Default party"),
     limit: z.number().int().min(1).max(200).optional().describe("Default 50"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) return { ok: false, error: "projects_feature_disabled" };
-    const a = raw as { side?: "receivable" | "payable"; asOf?: string; groupBy?: "party" | "project" | "document"; limit?: number };
+    if (!(await isFeatureEnabled(authz.user.orgId, "projects")))
+      return { ok: false, error: "projects_feature_disabled" };
+    const a = raw as {
+      side?: "receivable" | "payable";
+      asOf?: string;
+      groupBy?: "party" | "project" | "document";
+      limit?: number;
+    };
     const side = a.side ?? "receivable";
     const groupBy = a.groupBy ?? "party";
     const limit = Math.min(a.limit ?? 50, 200);
     const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
     const orgId = authz.user.orgId;
     const roleKey = side === "receivable" ? "retainageReceivable" : "retainagePayable";
-    const acct = (await db.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
+    const acct = (
+      await db.execute<{ id: string; number: string | null; name: string; type: string }>(
+        sql`
       select a.id, a.number, a.name, a.type
         from orgs o
         join accounts a on a.id = nullif(o.settings->'controlAccounts'->>${roleKey}, '')::uuid and a.org_id = o.id
        where o.id = ${orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!acct) {
       return {
         ok: true,
         note: `No ${side === "receivable" ? "retainage receivable" : "retainage payable"} control account is configured (Setup → Control accounts). Retainage cannot be tracked separately until one is assigned; open invoices may still carry holdback lines.`,
-        data: { side, asOf, configured: false, total: "0.0000", rows: [], href: "/admin/setup/control-accounts" },
+        data: {
+          side,
+          asOf,
+          configured: false,
+          total: "0.0000",
+          rows: [],
+          href: "/admin/setup/control-accounts",
+        },
       };
     }
     // Receivable is debit-normal (held = positive); payable is credit-normal.
@@ -70,12 +91,18 @@ const retainageBalances: AssistantToolDef = {
        and ${excludePeriodEndJournals(sql`e.origin`)}
        ${lineScope}
     `;
-    const total = (await db.execute<{ total: string; lines: number }>(sql`
+    const total = (
+      await db.execute<{ total: string; lines: number }>(
+        sql`
       select coalesce(${signed}, 0) as total, count(*)::int as lines ${base} ${filters}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     let rows: Record<string, unknown>[];
     if (groupBy === "party") {
-      rows = await db.execute<Record<string, unknown>>(sql`
+      rows = await db.execute<Record<string, unknown>>(
+        sql`
         select p.id as party_id, p.display_name as party, coalesce(${signed}, 0) as balance, count(*)::int as lines
           ${base}
           left join parties p on p.id = l.party_id and p.org_id = l.org_id
@@ -84,9 +111,12 @@ const retainageBalances: AssistantToolDef = {
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
          limit ${limit + 1}
-      `, "objects");
+      `,
+        "objects",
+      );
     } else if (groupBy === "project") {
-      rows = await db.execute<Record<string, unknown>>(sql`
+      rows = await db.execute<Record<string, unknown>>(
+        sql`
         select pr.id as project_id, pr.name as project, pr.code as project_code, coalesce(${signed}, 0) as balance, count(*)::int as lines
           ${base}
           left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
@@ -95,9 +125,12 @@ const retainageBalances: AssistantToolDef = {
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
          limit ${limit + 1}
-      `, "objects");
+      `,
+        "objects",
+      );
     } else {
-      rows = await db.execute<Record<string, unknown>>(sql`
+      rows = await db.execute<Record<string, unknown>>(
+        sql`
         select d.id as document_id, d.kind, d.document_number, d.document_date, d.status,
                p.display_name as party, coalesce(${signed}, 0) as balance
           ${base}
@@ -108,7 +141,9 @@ const retainageBalances: AssistantToolDef = {
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
          limit ${limit + 1}
-      `, "objects");
+      `,
+        "objects",
+      );
     }
     const page = assistantListPage(rows, limit, rows.length);
     return {

@@ -16,23 +16,13 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
     const url = new URL(req.url);
     const status = url.searchParams.get("status");
-    if (
-      status !== null &&
-      status !== "draft" &&
-      status !== "open" &&
-      status !== "closed"
-    ) {
+    if (status !== null && status !== "draft" && status !== "open" && status !== "closed") {
       return NextResponse.json({ error: "unknown status" }, { status: 400 });
     }
     try {
-      const windows = await listEnrollmentWindows(
-        db,
-        gate.user.orgId,
-        gate.user.id,
-        {
-          ...(status ? { status } : {}),
-        },
-      );
+      const windows = await listEnrollmentWindows(db, gate.user.orgId, gate.user.id, {
+        ...(status ? { status } : {}),
+      });
       return NextResponse.json({ windows });
     } catch (e) {
       return benefitsErrorResponse(e);

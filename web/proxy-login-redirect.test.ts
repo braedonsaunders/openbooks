@@ -17,7 +17,11 @@ test("a sessionless page request redirects to login with its path and query carr
   assert.equal(res.status, 307);
   const location = new URL(res.headers.get("location") ?? "");
   assert.equal(location.pathname, "/login");
-  assert.deepEqual([...location.searchParams.keys()], ["next"], "the destination's query keys do not leak onto /login");
+  assert.deepEqual(
+    [...location.searchParams.keys()],
+    ["next"],
+    "the destination's query keys do not leak onto /login",
+  );
   assert.equal(location.searchParams.get("next"), "/reports/pnl?from=2026-01-01&to=2026-03-31");
 });
 

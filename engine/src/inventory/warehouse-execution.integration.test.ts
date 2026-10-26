@@ -8,21 +8,14 @@ import { createWarehouseOperator } from "../testing/warehouse-execution.ts";
 import { receiveInventory } from "./movements.ts";
 import { ensureLot, ensureSerial } from "./tracking.ts";
 import { getOnHandWith } from "./position.ts";
-import {
-  confirmExecutionTask,
-  executionTaskView,
-} from "./directed-execution.ts";
+import { confirmExecutionTask, executionTaskView } from "./directed-execution.ts";
 import {
   suggestReceiptConfirmation,
   suggestPutaway,
   suggestCountObservation,
   executeInventoryDirection,
 } from "./warehouse-directions.ts";
-import {
-  createStockCount,
-  startStockCount,
-  recordCountedQuantity,
-} from "./stock-counts.ts";
+import { createStockCount, startStockCount, recordCountedQuantity } from "./stock-counts.ts";
 import { getStockCountDetail } from "./stock-count-queries.ts";
 import { purchaseReceiptQueue } from "./receiving-queue.ts";
 
@@ -37,12 +30,8 @@ test(
     const other = await native(() => createScratchOrg());
     let scenarioError: unknown;
     try {
-      const actor = await native(() =>
-        createWarehouseOperator(org.orgId, "Receiver"),
-      );
-      const observer = await native(() =>
-        createWarehouseOperator(org.orgId, "Count observer"),
-      );
+      const actor = await native(() => createWarehouseOperator(org.orgId, "Receiver"));
+      const observer = await native(() => createWarehouseOperator(org.orgId, "Count observer"));
       const stage = randomUUID(),
         target = randomUUID(),
         wrong = randomUUID(),
@@ -75,9 +64,7 @@ test(
           sql`update documents set status='approved',subtotal='3',total='3' where org_id=${org.orgId} and id=${receipt}`,
         );
       });
-      const lot = await native(() =>
-        ensureLot(org.orgId, org.items.fifo, "SCAN-LOT", null, actor),
-      );
+      const lot = await native(() => ensureLot(org.orgId, org.items.fifo, "SCAN-LOT", null, actor));
       const serial = await native(() =>
         ensureSerial(org.orgId, org.items.fifo, "SCAN-SERIAL", null, actor),
       );
@@ -107,39 +94,23 @@ test(
         serial: "SCAN-SERIAL",
       };
       const confirm = (taskId: string, evidence = scan) =>
-        confirmExecutionTask(
-          org.orgId,
-          actor,
-          { taskId, scan: evidence },
-          (tx, task) => executeInventoryDirection(tx, org.orgId, actor, task),
+        confirmExecutionTask(org.orgId, actor, { taskId, scan: evidence }, (tx, task) =>
+          executeInventoryDirection(tx, org.orgId, actor, task),
         );
-      assert.equal(
-        (await confirm(acknowledge.id, { ...scan, bin: "SCAN-B" })).status,
-        "exception",
-      );
+      assert.equal((await confirm(acknowledge.id, { ...scan, bin: "SCAN-B" })).status, "exception");
       const before = await native(() =>
-        db.execute(
-          sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
-        ),
+        db.execute(sql`select id from inventory_movements where org_id=${org.orgId}`, "objects"),
       );
-      assert.equal(
-        before.length,
-        1,
-        "scan exception never posts another receipt",
-      );
+      assert.equal(before.length, 1, "scan exception never posts another receipt");
       assert.equal((await confirm(acknowledge.id)).status, "done");
       const replay = await confirm(acknowledge.id);
       assert.ok(replay.status === "done" && replay.replayed);
       assert.deepEqual(
-        await withOrgTransaction(org.orgId, () =>
-          purchaseReceiptQueue(db, org.orgId, new Set()),
-        ),
+        await withOrgTransaction(org.orgId, () => purchaseReceiptQueue(db, org.orgId, new Set())),
         [],
       );
       assert.deepEqual(
-        await withOrgTransaction(org.orgId, () =>
-          purchaseReceiptQueue(db, org.orgId, null),
-        ),
+        await withOrgTransaction(org.orgId, () => purchaseReceiptQueue(db, org.orgId, null)),
         [],
       );
 
@@ -160,8 +131,7 @@ test(
         [target, lot, serial],
       );
       assert.equal(
-        (await confirm(putaway.id, { ...scan, bin: "SCAN-A", quantity: "0" }))
-          .status,
+        (await confirm(putaway.id, { ...scan, bin: "SCAN-A", quantity: "0" })).status,
         "exception",
       );
       // A changed native rule refuses instead of applying an obsolete bin suggestion.
@@ -175,11 +145,14 @@ test(
         /suggest|changed|target/i,
       );
       assert.equal(
-        (await native(() =>
+        (
+          await native(() =>
             db.execute(
-              sql`select id from warehouse_scan_events where org_id=${org.orgId} and task_id=${putaway.id} and outcome='confirmed'`, "objects",
+              sql`select id from warehouse_scan_events where org_id=${org.orgId} and task_id=${putaway.id} and outcome='confirmed'`,
+              "objects",
             ),
-          )).length,
+          )
+        ).length,
         0,
         "failed transfer rolls confirmation evidence back",
       );
@@ -188,10 +161,7 @@ test(
           sql`update putaway_rules set target_location_id=${target} where org_id=${org.orgId} and warehouse_id=${org.stockLocationId}`,
         ),
       );
-      assert.equal(
-        (await confirm(putaway.id, { ...scan, bin: "SCAN-A" })).status,
-        "done",
-      );
+      assert.equal((await confirm(putaway.id, { ...scan, bin: "SCAN-A" })).status, "done");
       assert.equal(
         (
           await native(() =>
@@ -204,33 +174,34 @@ test(
         ).quantity,
         "1.0000",
       );
-      const position = (await native(() =>
+      const position = (
+        await native(() =>
           db.execute<{ current_stock_location_id: string }>(
-            sql`select current_stock_location_id from serials where org_id=${org.orgId} and id=${serial}`, "objects",
+            sql`select current_stock_location_id from serials where org_id=${org.orgId} and id=${serial}`,
+            "objects",
           ),
-        ))[0];
+        )
+      )[0];
       assert.equal(position?.current_stock_location_id, target);
-      const movementCount = (await native(() =>
-          db.execute(
-            sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
-          ),
-        )).length;
+      const movementCount = (
+        await native(() =>
+          db.execute(sql`select id from inventory_movements where org_id=${org.orgId}`, "objects"),
+        )
+      ).length;
       await confirm(putaway.id, { ...scan, bin: "SCAN-A" });
       assert.equal(
-        (await native(() =>
+        (
+          await native(() =>
             db.execute(
-              sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
+              sql`select id from inventory_movements where org_id=${org.orgId}`,
+              "objects",
             ),
-          )).length,
+          )
+        ).length,
         movementCount,
       );
       await assert.rejects(
-        confirmExecutionTask(
-          other.orgId,
-          actor,
-          { taskId: putaway.id, scan },
-          async () => ({}),
-        ),
+        confirmExecutionTask(other.orgId, actor, { taskId: putaway.id, scan }, async () => ({})),
         /not found/i,
       );
       await native(() =>
@@ -238,10 +209,7 @@ test(
           sql`update orgs set settings=jsonb_set(settings,'{features,warehousing}','false') where id=${org.orgId}`,
         ),
       );
-      await assert.rejects(
-        confirm(putaway.id, { ...scan, bin: "SCAN-A" }),
-        /Turn on warehousing/i,
-      );
+      await assert.rejects(confirm(putaway.id, { ...scan, bin: "SCAN-A" }), /Turn on warehousing/i);
       await native(() =>
         db.execute(
           sql`update orgs set settings=jsonb_set(settings,'{features,warehousing}','true') where id=${org.orgId}`,
@@ -265,9 +233,7 @@ test(
         }),
       );
       await native(() => startStockCount(org.orgId, actor, count.id));
-      const detail = await native(() =>
-        getStockCountDetail(org.orgId, count.id, null),
-      );
+      const detail = await native(() => getStockCountDetail(org.orgId, count.id, null));
       assert.equal(detail.lines[0]!.expectedQuantity, null);
       const countLine = detail.lines[0]!.id;
       await assert.rejects(
@@ -290,12 +256,9 @@ test(
         executionTaskView(db, org.orgId, actor, first.id),
       );
       assert.match(view.quantity, /^0(?:\.0+)?$/);
-      assert.ok(
-        !("expectedQuantity" in view) && !("expectedQuantity" in first.basis),
-      );
+      assert.ok(!("expectedQuantity" in view) && !("expectedQuantity" in first.basis));
       assert.equal(
-        (await confirm(first.id, { ...scan, bin: "SCAN-A", quantity: "0" }))
-          .status,
+        (await confirm(first.id, { ...scan, bin: "SCAN-A", quantity: "0" })).status,
         "done",
       );
       const second = await suggestCountObservation(org.orgId, observer, {
@@ -311,13 +274,18 @@ test(
         (tx, task) => executeInventoryDirection(tx, org.orgId, observer, task),
       );
       assert.equal(result.status, "done");
-      const counted = (await native(() =>
+      const counted = (
+        await native(() =>
           db.execute<{
             first_counted_by: string;
             second_counted_by: string;
-          }>(sql`
-      select first_counted_by,second_counted_by from stock_count_lines where org_id=${org.orgId} and id=${countLine}`, "objects"),
-        ))[0];
+          }>(
+            sql`
+      select first_counted_by,second_counted_by from stock_count_lines where org_id=${org.orgId} and id=${countLine}`,
+            "objects",
+          ),
+        )
+      )[0];
       assert.deepEqual(counted, {
         first_counted_by: actor,
         second_counted_by: observer,

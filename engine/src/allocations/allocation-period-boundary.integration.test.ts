@@ -12,12 +12,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import {
-  AllocationRuleError,
-  createDraftVersion,
-  createRule,
-  publishVersion,
-} from "./rules.ts";
+import { AllocationRuleError, createDraftVersion, createRule, publishVersion } from "./rules.ts";
 import { postAllocationRun, previewAllocationRun } from "./period-run.ts";
 import { enableAllocations, journalLineCount, seedDepartment } from "./integration-seeds.ts";
 
@@ -34,9 +29,13 @@ const AUDIT = { actorId: null, reason: "boundary test" };
 
 /** Scratch orgs open July 2026 only: add regular January + February 2026. */
 async function seedJanFeb(org: ScratchOrg): Promise<{ janId: string; febId: string }> {
-  const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!
-    .fiscal_calendar_id;
+  const cal = (
+    await db.execute<{ fiscal_calendar_id: string }>(
+      sql`
+    select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
+      "objects",
+    )
+  )[0]!.fiscal_calendar_id;
   const janId = randomUUID();
   const febId = randomUUID();
   await db.execute(sql`
@@ -137,103 +136,125 @@ async function seedDatedSource(
 }
 
 async function runCount(orgId: string): Promise<number> {
-  const rows = await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from allocation_runs where org_id = ${orgId}`, "objects");
+  const rows = await db.execute<{ count: string }>(
+    sql`
+    select count(*)::text as count from allocation_runs where org_id = ${orgId}`,
+    "objects",
+  );
   return Number(rows[0]?.count ?? 0);
 }
 
-test("a January run crossed by two versions refuses, naming both versions and the crossing date", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actor = await createScratchUser(org.orgId, "Boundary prover", "admin");
-  try {
-    await enableAllocations(org.orgId);
-    const { janId } = await seedJanFeb(org);
-    const deptA = await seedDepartment(org.orgId, "Bound A");
-    const deptB = await seedDepartment(org.orgId, "Bound B");
-    // $100 of January source before Jan 15, $100 after — the exact scenario.
-    await seedDatedSource(org, actor, [
-      { date: "2026-01-10", amount: "100.0000" },
-      { date: "2026-01-20", amount: "100.0000" },
-    ]);
-    const ruleId = await seedPublishedRule(org, `cross-${janId.slice(0, 4)}`, actor, org.accounts.adjustment, [
-      {
-        versionNo: 1,
-        from: "2026-01-01",
-        to: "2026-01-14",
-        targets: [
-          { departmentId: deptA, percent: "60.0000" },
-          { departmentId: deptB, percent: "40.0000" },
+test(
+  "a January run crossed by two versions refuses, naming both versions and the crossing date",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actor = await createScratchUser(org.orgId, "Boundary prover", "admin");
+    try {
+      await enableAllocations(org.orgId);
+      const { janId } = await seedJanFeb(org);
+      const deptA = await seedDepartment(org.orgId, "Bound A");
+      const deptB = await seedDepartment(org.orgId, "Bound B");
+      // $100 of January source before Jan 15, $100 after — the exact scenario.
+      await seedDatedSource(org, actor, [
+        { date: "2026-01-10", amount: "100.0000" },
+        { date: "2026-01-20", amount: "100.0000" },
+      ]);
+      const ruleId = await seedPublishedRule(
+        org,
+        `cross-${janId.slice(0, 4)}`,
+        actor,
+        org.accounts.adjustment,
+        [
+          {
+            versionNo: 1,
+            from: "2026-01-01",
+            to: "2026-01-14",
+            targets: [
+              { departmentId: deptA, percent: "60.0000" },
+              { departmentId: deptB, percent: "40.0000" },
+            ],
+          },
+          {
+            versionNo: 2,
+            from: "2026-01-15",
+            to: null,
+            targets: [{ departmentId: deptA, percent: "100.0000" }],
+          },
         ],
-      },
-      {
-        versionNo: 2,
-        from: "2026-01-15",
-        to: null,
-        targets: [{ departmentId: deptA, percent: "100.0000" }],
-      },
-    ]);
-    const linesBefore = await journalLineCount(org.orgId);
-    await assert.rejects(
-      previewAllocationRun({
+      );
+      const linesBefore = await journalLineCount(org.orgId);
+      await assert.rejects(
+        previewAllocationRun({
+          orgId: org.orgId,
+          ruleId,
+          periodId: janId,
+          bookId: org.bookId,
+          actorId: actor,
+          trigger: "manual",
+        }),
+        (e: unknown) => {
+          assert.ok(e instanceof Error, `expected an Error, got ${String(e)}`);
+          assert.match(e.message, /cannot run for period P01 FY2026:/);
+          assert.match(e.message, /version 1 \(2026-01-01\.\.2026-01-14\)/);
+          assert.match(e.message, /version 2 \(2026-01-15\.\.open\)/);
+          assert.match(e.message, /2026-01-15/);
+          return true;
+        },
+        "a run crossed by two versions must refuse naming both and the crossing date",
+      );
+      // Zero effect: no run row, no journal, no lineage.
+      assert.equal(await runCount(org.orgId), 0);
+      assert.equal(await journalLineCount(org.orgId), linesBefore);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a run previewed before a mid-period version appears refuses at post time",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actor = await createScratchUser(org.orgId, "Boundary prover", "admin");
+    try {
+      await enableAllocations(org.orgId);
+      const { janId } = await seedJanFeb(org);
+      const deptA = await seedDepartment(org.orgId, "Post A");
+      const deptB = await seedDepartment(org.orgId, "Post B");
+      await seedDatedSource(org, actor, [{ date: "2026-01-10", amount: "100.0000" }]);
+      // v1 alone governs January cleanly, so preview succeeds and pins v1.
+      const ruleId = await seedPublishedRule(
+        org,
+        `legacy-${janId.slice(0, 4)}`,
+        actor,
+        org.accounts.adjustment,
+        [
+          {
+            versionNo: 1,
+            from: "2026-01-01",
+            to: null,
+            targets: [
+              { departmentId: deptA, percent: "60.0000" },
+              { departmentId: deptB, percent: "40.0000" },
+            ],
+          },
+        ],
+      );
+      const preview = await previewAllocationRun({
         orgId: org.orgId,
         ruleId,
         periodId: janId,
         bookId: org.bookId,
         actorId: actor,
         trigger: "manual",
-      }),
-      (e: unknown) => {
-        assert.ok(e instanceof Error, `expected an Error, got ${String(e)}`);
-        assert.match(e.message, /cannot run for period P01 FY2026:/);
-        assert.match(e.message, /version 1 \(2026-01-01\.\.2026-01-14\)/);
-        assert.match(e.message, /version 2 \(2026-01-15\.\.open\)/);
-        assert.match(e.message, /2026-01-15/);
-        return true;
-      },
-      "a run crossed by two versions must refuse naming both and the crossing date",
-    );
-    // Zero effect: no run row, no journal, no lineage.
-    assert.equal(await runCount(org.orgId), 0);
-    assert.equal(await journalLineCount(org.orgId), linesBefore);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("a run previewed before a mid-period version appears refuses at post time", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actor = await createScratchUser(org.orgId, "Boundary prover", "admin");
-  try {
-    await enableAllocations(org.orgId);
-    const { janId } = await seedJanFeb(org);
-    const deptA = await seedDepartment(org.orgId, "Post A");
-    const deptB = await seedDepartment(org.orgId, "Post B");
-    await seedDatedSource(org, actor, [{ date: "2026-01-10", amount: "100.0000" }]);
-    // v1 alone governs January cleanly, so preview succeeds and pins v1.
-    const ruleId = await seedPublishedRule(org, `legacy-${janId.slice(0, 4)}`, actor, org.accounts.adjustment, [
-      {
-        versionNo: 1,
-        from: "2026-01-01",
-        to: null,
-        targets: [
-          { departmentId: deptA, percent: "60.0000" },
-          { departmentId: deptB, percent: "40.0000" },
-        ],
-      },
-    ]);
-    const preview = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId,
-      periodId: janId,
-      bookId: org.bookId,
-      actorId: actor,
-      trigger: "manual",
-    });
-    assert.equal(preview.status, "previewed");
-    // A mid-period v2 lands after preview (hand-published: the publish proof
-    // would refuse it today, but legacy data and backdoor writes exist).
-    const v2 = randomUUID();
-    await db.execute(sql`
+      });
+      assert.equal(preview.status, "previewed");
+      // A mid-period v2 lands after preview (hand-published: the publish proof
+      // would refuse it today, but legacy data and backdoor writes exist).
+      const v2 = randomUUID();
+      await db.execute(sql`
       insert into allocation_rule_versions
         (id, org_id, rule_id, version_no, status, effective_from, effective_to,
          book_scope, book_ids, account_scope, dimension_filters, source_measure,
@@ -247,153 +268,206 @@ test("a run previewed before a mid-period version appears refuses at post time",
          'fixed_percent', null, 'period', '{}'::jsonb,
          'explicit', '{}'::jsonb, 'reclass', 'largest_share', 'sequential',
          'manual', 0, 'late', now(), ${actor})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into allocation_rule_targets
         (id, org_id, version_id, sequence, target_account_id, department_id,
          fixed_percent, weight, is_remainder, label, custom)
       values (${randomUUID()}, ${org.orgId}, ${v2}, 1, null, ${deptA}, '100.0000', null, false, 'Late', '{}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       update allocation_rule_versions
          set status = 'published', definition_hash = 'testhash-late', published_at = now()
        where id = ${v2} and org_id = ${org.orgId}`);
-    const linesBefore = await journalLineCount(org.orgId);
-    await assert.rejects(
-      postAllocationRun(preview.id, actor, "Post monthly cost sweep"),
-      (e: unknown) => {
-        assert.ok(e instanceof Error, `expected an Error, got ${String(e)}`);
-        assert.match(e.message, /cannot run for period P01 FY2026:/);
-        assert.match(e.message, /version 2 \(2026-01-15\.\.open\)/);
-        return true;
-      },
-      "posting a run whose period has since been crossed must refuse",
-    );
-    const rows = await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from allocation_runs where id = ${preview.id}`, "objects");
-    assert.equal(rows[0]!.status, "previewed");
-    assert.equal(rows[0]!.journal_entry_id, null);
-    assert.equal(await journalLineCount(org.orgId), linesBefore);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const linesBefore = await journalLineCount(org.orgId);
+      await assert.rejects(
+        postAllocationRun(preview.id, actor, "Post monthly cost sweep"),
+        (e: unknown) => {
+          assert.ok(e instanceof Error, `expected an Error, got ${String(e)}`);
+          assert.match(e.message, /cannot run for period P01 FY2026:/);
+          assert.match(e.message, /version 2 \(2026-01-15\.\.open\)/);
+          return true;
+        },
+        "posting a run whose period has since been crossed must refuse",
+      );
+      const rows = await db.execute<{ status: string; journal_entry_id: string | null }>(
+        sql`
+      select status, journal_entry_id from allocation_runs where id = ${preview.id}`,
+        "objects",
+      );
+      assert.equal(rows[0]!.status, "previewed");
+      assert.equal(rows[0]!.journal_entry_id, null);
+      assert.equal(await journalLineCount(org.orgId), linesBefore);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("publishing a mid-period effective date refuses with the boundary suggestion", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await seedJanFeb(org);
-    const created = await createRule(
-      { orgId: org.orgId, key: `mid-${org.orgId.slice(0, 4)}`, name: "Mid", mode: "period", sortOrder: 100 },
-      AUDIT,
-    );
-    const draft = await createDraftVersion(
-      created.rule.id,
-      { allowedSubsidiaryIds: null, orgId: org.orgId, effectiveFrom: "2026-01-15", targets: [{ fixedPercent: "100" }] },
-      AUDIT,
-    );
-    await assert.rejects(
-      publishVersion(draft.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null }),
-      (e: unknown) => {
-        assert.ok(e instanceof AllocationRuleError, `expected AllocationRuleError, got ${String(e)}`);
-        assert.equal(e.code, "INVALID");
-        const flagged = (e.problems ?? []).find((p) => p.code === "effective_boundary");
-        assert.ok(flagged, `expected an effective_boundary problem, got ${JSON.stringify(e.problems)}`);
-        assert.match(flagged!.message, /must start on a period boundary/);
-        assert.match(flagged!.message, /2026-01-15 falls inside P01 FY2026/);
-        assert.match(flagged!.message, /use 2026-01-01 or 2026-02-01/);
-        return true;
-      },
-      "a mid-period effective_from must refuse with the boundary suggestion",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "publishing a mid-period effective date refuses with the boundary suggestion",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedJanFeb(org);
+      const created = await createRule(
+        {
+          orgId: org.orgId,
+          key: `mid-${org.orgId.slice(0, 4)}`,
+          name: "Mid",
+          mode: "period",
+          sortOrder: 100,
+        },
+        AUDIT,
+      );
+      const draft = await createDraftVersion(
+        created.rule.id,
+        {
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          effectiveFrom: "2026-01-15",
+          targets: [{ fixedPercent: "100" }],
+        },
+        AUDIT,
+      );
+      await assert.rejects(
+        publishVersion(draft.version.id, {
+          orgId: org.orgId,
+          ...AUDIT,
+          allowedSubsidiaryIds: null,
+        }),
+        (e: unknown) => {
+          assert.ok(
+            e instanceof AllocationRuleError,
+            `expected AllocationRuleError, got ${String(e)}`,
+          );
+          assert.equal(e.code, "INVALID");
+          const flagged = (e.problems ?? []).find((p) => p.code === "effective_boundary");
+          assert.ok(
+            flagged,
+            `expected an effective_boundary problem, got ${JSON.stringify(e.problems)}`,
+          );
+          assert.match(flagged!.message, /must start on a period boundary/);
+          assert.match(flagged!.message, /2026-01-15 falls inside P01 FY2026/);
+          assert.match(flagged!.message, /use 2026-01-01 or 2026-02-01/);
+          return true;
+        },
+        "a mid-period effective_from must refuse with the boundary suggestion",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("boundary-aligned versions publish and each run prices under its own version", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actor = await createScratchUser(org.orgId, "Boundary prover", "admin");
-  try {
-    await enableAllocations(org.orgId);
-    const { janId, febId } = await seedJanFeb(org);
-    const deptA = await seedDepartment(org.orgId, "Align A");
-    const deptB = await seedDepartment(org.orgId, "Align B");
-    await seedDatedSource(org, actor, [
-      { date: "2026-01-10", amount: "1000.0000" },
-      { date: "2026-02-10", amount: "1000.0000" },
-    ]);
-    const created = await createRule(
-      { orgId: org.orgId, key: `align-${org.orgId.slice(0, 4)}`, name: "Align", mode: "period", sortOrder: 100 },
-      AUDIT,
-    );
-    const v1 = await createDraftVersion(
-      created.rule.id,
-      {
-        allowedSubsidiaryIds: null,
+test(
+  "boundary-aligned versions publish and each run prices under its own version",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actor = await createScratchUser(org.orgId, "Boundary prover", "admin");
+    try {
+      await enableAllocations(org.orgId);
+      const { janId, febId } = await seedJanFeb(org);
+      const deptA = await seedDepartment(org.orgId, "Align A");
+      const deptB = await seedDepartment(org.orgId, "Align B");
+      await seedDatedSource(org, actor, [
+        { date: "2026-01-10", amount: "1000.0000" },
+        { date: "2026-02-10", amount: "1000.0000" },
+      ]);
+      const created = await createRule(
+        {
+          orgId: org.orgId,
+          key: `align-${org.orgId.slice(0, 4)}`,
+          name: "Align",
+          mode: "period",
+          sortOrder: 100,
+        },
+        AUDIT,
+      );
+      const v1 = await createDraftVersion(
+        created.rule.id,
+        {
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          effectiveFrom: "2026-01-01",
+          effectiveTo: "2026-01-31",
+          accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] },
+          targets: [
+            { departmentId: deptA, fixedPercent: "60" },
+            { departmentId: deptB, fixedPercent: "40" },
+          ],
+        },
+        AUDIT,
+      );
+      await publishVersion(v1.version.id, {
         orgId: org.orgId,
-        effectiveFrom: "2026-01-01",
-        effectiveTo: "2026-01-31",
-        accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] },
-        targets: [
-          { departmentId: deptA, fixedPercent: "60" },
-          { departmentId: deptB, fixedPercent: "40" },
-        ],
-      },
-      AUDIT,
-    );
-    await publishVersion(v1.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null });
-    const v2 = await createDraftVersion(
-      created.rule.id,
-      {
+        ...AUDIT,
         allowedSubsidiaryIds: null,
+      });
+      const v2 = await createDraftVersion(
+        created.rule.id,
+        {
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          effectiveFrom: "2026-02-01",
+          accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] },
+          targets: [{ departmentId: deptA, fixedPercent: "100" }],
+        },
+        AUDIT,
+      );
+      await publishVersion(v2.version.id, {
         orgId: org.orgId,
-        effectiveFrom: "2026-02-01",
-        accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] },
-        targets: [{ departmentId: deptA, fixedPercent: "100" }],
-      },
-      AUDIT,
-    );
-    await publishVersion(v2.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null });
-    const january = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId: created.rule.id,
-      periodId: janId,
-      bookId: org.bookId,
-      actorId: actor,
-      trigger: "manual",
-    });
-    const postedJan = await postAllocationRun(january.id, actor, "Post January sweep");
-    assert.equal(postedJan.status, "posted");
-    const february = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId: created.rule.id,
-      periodId: febId,
-      bookId: org.bookId,
-      actorId: actor,
-      trigger: "manual",
-    });
-    const postedFeb = await postAllocationRun(february.id, actor, "Post February sweep");
-    assert.equal(postedFeb.status, "posted");
-    // Each run priced under its own version: 60/40 in January, 100 in February.
-    const janAmounts = await db.execute<{ department_id: string | null; total: string }>(sql`
+        ...AUDIT,
+        allowedSubsidiaryIds: null,
+      });
+      const january = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId: created.rule.id,
+        periodId: janId,
+        bookId: org.bookId,
+        actorId: actor,
+        trigger: "manual",
+      });
+      const postedJan = await postAllocationRun(january.id, actor, "Post January sweep");
+      assert.equal(postedJan.status, "posted");
+      const february = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId: created.rule.id,
+        periodId: febId,
+        bookId: org.bookId,
+        actorId: actor,
+        trigger: "manual",
+      });
+      const postedFeb = await postAllocationRun(february.id, actor, "Post February sweep");
+      assert.equal(postedFeb.status, "posted");
+      // Each run priced under its own version: 60/40 in January, 100 in February.
+      const janAmounts = await db.execute<{ department_id: string | null; total: string }>(
+        sql`
       select l.department_id, sum(l.amount)::text as total
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${org.orgId} and e.id = ${postedJan.journalEntryId}
-         and l.amount > 0 group by l.department_id`, "objects");
-    const janByDept = new Map(janAmounts.map((row) => [row.department_id, row.total]));
-    assert.equal(janByDept.get(deptA), "600.0000");
-    assert.equal(janByDept.get(deptB), "400.0000");
-    const febAmounts = await db.execute<{ department_id: string | null; total: string }>(sql`
+         and l.amount > 0 group by l.department_id`,
+        "objects",
+      );
+      const janByDept = new Map(janAmounts.map((row) => [row.department_id, row.total]));
+      assert.equal(janByDept.get(deptA), "600.0000");
+      assert.equal(janByDept.get(deptB), "400.0000");
+      const febAmounts = await db.execute<{ department_id: string | null; total: string }>(
+        sql`
       select l.department_id, sum(l.amount)::text as total
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${org.orgId} and e.id = ${postedFeb.journalEntryId}
-         and l.amount > 0 group by l.department_id`, "objects");
-    assert.equal(febAmounts.length, 1);
-    assert.equal(febAmounts[0]!.department_id, deptA);
-    assert.equal(febAmounts[0]!.total, "1000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+         and l.amount > 0 group by l.department_id`,
+        "objects",
+      );
+      assert.equal(febAmounts.length, 1);
+      assert.equal(febAmounts[0]!.department_id, deptA);
+      assert.equal(febAmounts[0]!.total, "1000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("entry-mode versions keep arbitrary effective dates", { skip: !DB }, async () => {
   // A2(3): entry/post modes resolve one version for one document date — no
@@ -402,15 +476,30 @@ test("entry-mode versions keep arbitrary effective dates", { skip: !DB }, async 
   try {
     await seedJanFeb(org);
     const created = await createRule(
-      { orgId: org.orgId, key: `entry-${org.orgId.slice(0, 4)}`, name: "Entry", mode: "entry", sortOrder: 100 },
+      {
+        orgId: org.orgId,
+        key: `entry-${org.orgId.slice(0, 4)}`,
+        name: "Entry",
+        mode: "entry",
+        sortOrder: 100,
+      },
       AUDIT,
     );
     const draft = await createDraftVersion(
       created.rule.id,
-      { allowedSubsidiaryIds: null, orgId: org.orgId, effectiveFrom: "2026-01-15", targets: [{ fixedPercent: "100" }] },
+      {
+        allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        effectiveFrom: "2026-01-15",
+        targets: [{ fixedPercent: "100" }],
+      },
       AUDIT,
     );
-    const published = await publishVersion(draft.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null });
+    const published = await publishVersion(draft.version.id, {
+      orgId: org.orgId,
+      ...AUDIT,
+      allowedSubsidiaryIds: null,
+    });
     assert.equal(published.version.status, "published");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -23,7 +23,9 @@ export function cipOpenBalance(
   costs: readonly CipCostAmount[],
   capitalizations: readonly CipCapitalizationAmount[],
 ): { linked: string; capitalized: string; expensed: string; open: string } {
-  const linked = costs.filter((cost) => cost.status === "linked").reduce((sum, cost) => add(sum, cost.amount), "0");
+  const linked = costs
+    .filter((cost) => cost.status === "linked")
+    .reduce((sum, cost) => add(sum, cost.amount), "0");
   const posted = capitalizations.filter((entry) => entry.status === "posted");
   const capitalized = posted.reduce((sum, entry) => add(sum, entry.capitalizedAmount), "0");
   const expensed = posted.reduce((sum, entry) => add(sum, entry.expensedAmount), "0");
@@ -42,19 +44,25 @@ export function planCapitalization(
   openBalance: string,
   lines: readonly PlannedCapitalizationLine[],
 ): { capitalized: string; expensed: string; total: string; remaining: string } {
-  if (lines.length === 0) refuse("capitalization_lines_required", "add at least one asset, component or expense line");
+  if (lines.length === 0)
+    refuse("capitalization_lines_required", "add at least one asset, component or expense line");
   let capitalized = "0.0000";
   let expensed = "0.0000";
   lines.forEach((line, index) => {
-    if (cmp(line.amount, "0") <= 0) refuse("amount_not_positive", `line ${index + 1} amount must be greater than zero`);
+    if (cmp(line.amount, "0") <= 0)
+      refuse("amount_not_positive", `line ${index + 1} amount must be greater than zero`);
     if (line.kind === "expense") expensed = add(expensed, line.amount);
     else capitalized = add(capitalized, line.amount);
   });
   const total = add(capitalized, expensed);
   if (cmp(total, openBalance) > 0) {
-    refuse("capitalization_exceeds_balance", `the capitalization totals ${total} but only ${add(openBalance, "0")} is open in construction in progress`, {
-      remedy: "Link the remaining costs first, or reduce the amounts.",
-    });
+    refuse(
+      "capitalization_exceeds_balance",
+      `the capitalization totals ${total} but only ${add(openBalance, "0")} is open in construction in progress`,
+      {
+        remedy: "Link the remaining costs first, or reduce the amounts.",
+      },
+    );
   }
   return { capitalized, expensed, total, remaining: add(openBalance, neg(total)) };
 }
@@ -68,12 +76,19 @@ export function buildCapitalizationLines(
   lines: readonly { targetAccountId: string; amount: string; memo: string }[],
   memo: string,
 ): { accountId: string; amount: string; memo: string }[] {
-  const debits = lines.map((line) => ({ accountId: line.targetAccountId, amount: add(line.amount, "0"), memo: line.memo }));
+  const debits = lines.map((line) => ({
+    accountId: line.targetAccountId,
+    amount: add(line.amount, "0"),
+    memo: line.memo,
+  }));
   const total = debits.reduce((sum, line) => add(sum, line.amount), "0");
   if (isZero(total)) refuse("amount_not_positive", "nothing to capitalize");
   const out = [...debits, { accountId: cipAccountId, amount: neg(total), memo }];
   if (debits.some((line) => line.accountId === cipAccountId)) {
-    refuse("capitalization_target_is_cip", "a capitalization target cannot be the construction-in-progress account itself");
+    refuse(
+      "capitalization_target_is_cip",
+      "a capitalization target cannot be the construction-in-progress account itself",
+    );
   }
   return out;
 }

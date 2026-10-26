@@ -24,35 +24,28 @@ import {
 } from "../../../../../lib/report-pdf";
 import { xlsxMoneyContext } from "../../../../../lib/xlsx-money";
 import { reportCsvOptions } from "../../../../../lib/report-labels";
-import {
-  csvResponse,
-  pdfResponse,
-  safeName,
-  xlsxResponse,
-} from "../../../../../lib/export";
+import { csvResponse, pdfResponse, safeName, xlsxResponse } from "../../../../../lib/export";
 import { decimalCmp, decimalSum } from "../../../../../lib/statement-format";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { notFound } from "@/lib/api/responses";
-import { AccountingContextError, labelAccountRow, reportAccountingContext } from "../../../../../lib/reports/accounting-context";
+import {
+  AccountingContextError,
+  labelAccountRow,
+  reportAccountingContext,
+} from "../../../../../lib/reports/accounting-context";
 
 export const runtime = "nodejs";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PER_PAGE = 100;
 const MAX_EXPORT_LINES = 200_000;
-const EXPORT_FORMATS = new Set<AccountRegisterExportFormat>([
-  "pdf",
-  "xlsx",
-  "csv",
-]);
+const EXPORT_FORMATS = new Set<AccountRegisterExportFormat>(["pdf", "xlsx", "csv"]);
 
 /** Accept only real proleptic-Gregorian calendar days, not just date-shaped text. */
 function isIsoDate(value: string): boolean {
   if (!DATE.test(value) || value.startsWith("0000-")) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
-  return (
-    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
-  );
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 /**
@@ -74,8 +67,7 @@ export const GET = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),
   handler: async ({ request, authz: gate, params }) => {
-    if (!gate)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!gate) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     if (!can(gate, "gl.read") && !can(gate, "reports.read")) {
       return NextResponse.json(
         { error: "missing permission: gl.read or reports.read" },
@@ -83,8 +75,7 @@ export const GET = defineRoute({
       );
     }
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
     const query = new URL(request.url).searchParams;
     const page = Math.max(1, Math.min(100_000, Number(query.get("page")) || 1));
@@ -103,10 +94,7 @@ export const GET = defineRoute({
     let bookName: string | undefined;
     if (query.has("book")) {
       try {
-        const selection = await reportBookSelection(
-          gate.user.orgId,
-          query.get("book"),
-        );
+        const selection = await reportBookSelection(gate.user.orgId, query.get("book"));
         bookId = selection.selectedBook.id;
         bookName = `${selection.selectedBook.code} · ${selection.selectedBook.name}`;
       } catch (error) {
@@ -119,9 +107,7 @@ export const GET = defineRoute({
         return NextResponse.json({ error: "invalid_format" }, { status: 422 });
       }
       const period =
-        from || to || search
-          ? { from: from || undefined, to: to || undefined, search }
-          : undefined;
+        from || to || search ? { from: from || undefined, to: to || undefined, search } : undefined;
       const result = await accountRegister(
         gate.user.orgId,
         id,
@@ -132,10 +118,14 @@ export const GET = defineRoute({
         bookId,
         can(gate, "payroll.read"),
       );
-      if (!result.account)
-        return notFound("record");
+      if (!result.account) return notFound("record");
       try {
-        result.account = await contextualAccount(gate.user.orgId, result.account, query.get("ctx"), to || (await businessToday(gate.user.orgId)));
+        result.account = await contextualAccount(
+          gate.user.orgId,
+          result.account,
+          query.get("ctx"),
+          to || (await businessToday(gate.user.orgId)),
+        );
       } catch (error) {
         if (error instanceof AccountingContextError) return apiErrorResponse(error);
         throw error;
@@ -156,18 +146,11 @@ export const GET = defineRoute({
       // total for readers without payroll.read.
       if (
         decimalCmp(
-          decimalSum(
-            (result.lines as AccountRegisterExportLine[]).map(
-              (line) => line.amount,
-            ),
-          ),
+          decimalSum((result.lines as AccountRegisterExportLine[]).map((line) => line.amount)),
           result.balance,
         ) !== 0
       ) {
-        return NextResponse.json(
-          { error: "export_incomplete" },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: "export_incomplete" }, { status: 409 });
       }
 
       const [accountsT, commonT] = await Promise.all([
@@ -193,8 +176,7 @@ export const GET = defineRoute({
         balance: commonT("labels.balance"),
         lines: commonT("labels.lines"),
         dateRange,
-        docType: (kind) =>
-          accountRegisterDocTypeLabel(kind, commonT as unknown as Translator),
+        docType: (kind) => accountRegisterDocTypeLabel(kind, commonT as unknown as Translator),
       });
       const stamp = await businessToday(gate.user.orgId);
       const filename = safeName(
@@ -209,10 +191,7 @@ export const GET = defineRoute({
               value: bookName,
             })
           : data;
-        return csvResponse(
-          exportDataToCsv(csvData, { sectionHeader }),
-          filename,
-        );
+        return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename);
       }
       if (format === "xlsx") {
         return xlsxResponse(
@@ -245,17 +224,19 @@ export const GET = defineRoute({
       id,
       PER_PAGE,
       (page - 1) * PER_PAGE,
-      from || to || search
-        ? { from: from || undefined, to: to || undefined, search }
-        : undefined,
+      from || to || search ? { from: from || undefined, to: to || undefined, search } : undefined,
       gate.allowedSubsidiaryIds,
       bookId,
       can(gate, "payroll.read"),
     );
-    if (!result.account)
-      return notFound("record");
+    if (!result.account) return notFound("record");
     try {
-      result.account = await contextualAccount(gate.user.orgId, result.account, query.get("ctx"), to || (await businessToday(gate.user.orgId)));
+      result.account = await contextualAccount(
+        gate.user.orgId,
+        result.account,
+        query.get("ctx"),
+        to || (await businessToday(gate.user.orgId)),
+      );
     } catch (error) {
       if (error instanceof AccountingContextError) return apiErrorResponse(error);
       throw error;

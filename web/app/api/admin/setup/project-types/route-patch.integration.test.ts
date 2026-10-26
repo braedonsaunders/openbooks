@@ -21,7 +21,11 @@ registerHooks({
     // The route factory imports the gate by @/ alias at request time, from
     // web/lib/api/route.ts rather than the route directory; serve it the
     // same intended session as the route's own import.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/setup/project-types/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") &&
+        context.parentURL?.includes("/api/admin/setup/project-types/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -36,7 +40,8 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST, PATCH, DELETE } = await import("./route");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 
@@ -48,12 +53,18 @@ const patchJson = (body: unknown) =>
   });
 
 test("native project-type commands load under the React server runtime without a client router", () => {
-  const result = spawnSync(process.execPath, [
-    '--conditions=react-server', '--import=tsx', '--input-type=module',
-  ], {
-    cwd: process.cwd(), encoding: 'utf8', timeout: 30_000,
-    env: { ...process.env, TSX_TSCONFIG_PATH: fileURLToPath(new URL('../../../../../tsconfig.json', import.meta.url)) },
-    input: `
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import=tsx", "--input-type=module"],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        TSX_TSCONFIG_PATH: fileURLToPath(new URL("../../../../../tsconfig.json", import.meta.url)),
+      },
+      input: `
       import assert from 'node:assert/strict';
       import React from 'react';
       assert.equal(React.createContext, undefined, 'the native command must use the server React export');
@@ -62,7 +73,8 @@ test("native project-type commands load under the React server runtime without a
       const { pool } = await import('@openbooks/engine/platform/db');
       await pool.end();
     `,
-  });
+    },
+  );
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
@@ -75,8 +87,14 @@ const STANDARD_PROFILE = {
 
 async function typeRow(orgId: string, id: string) {
   const r = await withBypassContext(() =>
-    db.execute<{ name: string; description: string | null; is_active: boolean; sort_order: number }>(
-      sql`select name, description, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`, "objects",
+    db.execute<{
+      name: string;
+      description: string | null;
+      is_active: boolean;
+      sort_order: number;
+    }>(
+      sql`select name, description, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`,
+      "objects",
     ),
   );
   return r[0]!;
@@ -85,15 +103,22 @@ async function typeRow(orgId: string, id: string) {
 test("project-type PATCH leaves unsent fields alone and rejects a blank name", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`),
+      db.execute(
+        sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`,
+      ),
     );
-    const id = '01234567-89ab-0cde-0123-456789abcdef';
-    await withBypassContext(() => db.execute(sql`insert into project_types
+    const id = "01234567-89ab-0cde-0123-456789abcdef";
+    await withBypassContext(() =>
+      db.execute(sql`insert into project_types
       (id, org_id, key, name, description, is_active, sort_order, billing_method, invoicing_profile, backup_profile)
       values (${id}, ${org.orgId}, 'tm', 'Time and materials', 'Hourly work', false, 7,
-        'time_and_materials', ${JSON.stringify(STANDARD_PROFILE)}::jsonb, '{}'::jsonb)`));
+        'time_and_materials', ${JSON.stringify(STANDARD_PROFILE)}::jsonb, '{}'::jsonb)`),
+    );
 
     // A PATCH that only touches the billing classification must not rewrite
     // the name, description, active flag, or sort order.
@@ -112,7 +137,9 @@ test("project-type PATCH leaves unsent fields alone and rejects a blank name", a
     assert.equal((await typeRow(org.orgId, id)).name, "Time and materials");
 
     // Controls: sent fields still write.
-    const renamed = await PATCH(patchJson({ id, billingMethod: "cost_plus", name: "T&M", sortOrder: 3, isActive: true }));
+    const renamed = await PATCH(
+      patchJson({ id, billingMethod: "cost_plus", name: "T&M", sortOrder: 3, isActive: true }),
+    );
     assert.equal(renamed.status, 200, JSON.stringify(await renamed.clone().json()));
     assert.deepEqual(await typeRow(org.orgId, id), {
       name: "T&M",
@@ -129,77 +156,148 @@ test("project-type authoring preserves declared invoicing policies and refuses u
   const org = await withBypassContext(() => createScratchOrg());
   const neighbor = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
-    await withBypassContext(() => db.execute(sql`update orgs set settings = settings || '{"features":{"projects":true}}'::jsonb where id = ${org.orgId}`));
-    const itemId = '01234567-89ab-0cde-0123-456789abcdef';
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
+    await withBypassContext(() =>
+      db.execute(
+        sql`update orgs set settings = settings || '{"features":{"projects":true}}'::jsonb where id = ${org.orgId}`,
+      ),
+    );
+    const itemId = "01234567-89ab-0cde-0123-456789abcdef";
     const foreignItemId = randomUUID();
     const retiredItemId = randomUUID();
-    await withBypassContext(() => db.execute(sql`insert into items (id, org_id, kind, name, is_active) values
+    await withBypassContext(() =>
+      db.execute(sql`insert into items (id, org_id, kind, name, is_active) values
       (${itemId}, ${org.orgId}, 'service', 'Grouped labor', true),
       (${retiredItemId}, ${org.orgId}, 'service', 'Retired adjustment', false),
-      (${foreignItemId}, ${neighbor.orgId}, 'service', 'Neighbor labor', true)`));
+      (${foreignItemId}, ${neighbor.orgId}, 'service', 'Neighbor labor', true)`),
+    );
     const original = {
-      billingProcedure: 'standard', allowedBases: ['date_range'], defaultBasis: 'date_range',
-      lineBuilder: 'cost_plus', revenueAccount: 'item_income', recognition: 'percent_complete_cost',
-      markupPresentation: 'lump_sum', notToExceed: true, notToExceedItemId: itemId,
-      costSourceKinds: ['vendor_bill', 'sales_order'], rateCardLapse: 'carry_forward',
-      ticketCostScope: 'ticket_or_period', lineGrouping: 'per_item', surchargeRounding: 'down',
-      rollup: { mode: 'by_group', keepDetail: true, groups: [{ label: 'Labor', itemId, isLabor: true }] },
+      billingProcedure: "standard",
+      allowedBases: ["date_range"],
+      defaultBasis: "date_range",
+      lineBuilder: "cost_plus",
+      revenueAccount: "item_income",
+      recognition: "percent_complete_cost",
+      markupPresentation: "lump_sum",
+      notToExceed: true,
+      notToExceedItemId: itemId,
+      costSourceKinds: ["vendor_bill", "sales_order"],
+      rateCardLapse: "carry_forward",
+      ticketCostScope: "ticket_or_period",
+      lineGrouping: "per_item",
+      surchargeRounding: "down",
+      rollup: {
+        mode: "by_group",
+        keepDetail: true,
+        groups: [{ label: "Labor", itemId, isLabor: true }],
+      },
     };
-    const builtIn = BUILTIN_PROJECT_TYPES.find(type => type.key === 'cost_plus')!;
-    const created = await POST(new Request('http://audit.local/api/admin/setup/project-types', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key: 'configured_cost', name: 'Configured cost', billingMethod: 'cost_plus',
-        invoicingProfile: original, financialProfile: builtIn.financialProfile, backupProfile: builtIn.backupProfile }),
-    }));
+    const builtIn = BUILTIN_PROJECT_TYPES.find((type) => type.key === "cost_plus")!;
+    const created = await POST(
+      new Request("http://audit.local/api/admin/setup/project-types", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          key: "configured_cost",
+          name: "Configured cost",
+          billingMethod: "cost_plus",
+          invoicingProfile: original,
+          financialProfile: builtIn.financialProfile,
+          backupProfile: builtIn.backupProfile,
+        }),
+      }),
+    );
     assert.equal(created.status, 200, JSON.stringify(await created.clone().json()));
-    const { id } = await created.json() as { id: string };
-    const read = () => withBypassContext(async () => {
-      const row = await db.execute<{ invoicing_profile: unknown }>(sql`select invoicing_profile from project_types where org_id = ${org.orgId} and id = ${id}`, "objects");
-      const audits = await db.execute<{ action: string; actor_id: string; changes: { before?: { invoicing_profile: unknown; is_active?: boolean }; after: { invoicingProfile?: unknown; invoicing_profile?: unknown; is_active?: boolean } } }>(sql`
-        select action, actor_id, changes from audit_log where org_id = ${org.orgId} and table_name = 'project_types' and row_id = ${id} order by at, id`, "objects");
-      return { profile: row[0]!.invoicing_profile, audits };
-    });
+    const { id } = (await created.json()) as { id: string };
+    const read = () =>
+      withBypassContext(async () => {
+        const row = await db.execute<{ invoicing_profile: unknown }>(
+          sql`select invoicing_profile from project_types where org_id = ${org.orgId} and id = ${id}`,
+          "objects",
+        );
+        const audits = await db.execute<{
+          action: string;
+          actor_id: string;
+          changes: {
+            before?: { invoicing_profile: unknown; is_active?: boolean };
+            after: { invoicingProfile?: unknown; invoicing_profile?: unknown; is_active?: boolean };
+          };
+        }>(
+          sql`
+        select action, actor_id, changes from audit_log where org_id = ${org.orgId} and table_name = 'project_types' and row_id = ${id} order by at, id`,
+          "objects",
+        );
+        return { profile: row[0]!.invoicing_profile, audits };
+      });
     const first = await read();
     assert.deepEqual(first.profile, original);
     assert.equal(first.audits.length, 1);
     assert.equal(first.audits[0]!.actor_id, state.user.id);
     assert.deepEqual(first.audits[0]!.changes.after.invoicingProfile, original);
-    const changed = { ...original, recognition: 'as_invoiced', rateCardLapse: 'block', surchargeRounding: 'half_up' };
-    const saved = await PATCH(patchJson({ id, billingMethod: 'cost_plus', invoicingProfile: changed }));
+    const changed = {
+      ...original,
+      recognition: "as_invoiced",
+      rateCardLapse: "block",
+      surchargeRounding: "half_up",
+    };
+    const saved = await PATCH(
+      patchJson({ id, billingMethod: "cost_plus", invoicingProfile: changed }),
+    );
     assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
     const second = await read();
     assert.deepEqual(second.profile, changed);
     assert.equal(second.audits.length, 2);
-    const update = second.audits.find(audit => audit.action === 'update')!;
+    const update = second.audits.find((audit) => audit.action === "update")!;
     assert.equal(update.actor_id, state.user.id);
     assert.deepEqual(update.changes.before!.invoicing_profile, original);
     assert.deepEqual(update.changes.after.invoicing_profile, changed);
     for (const profile of [
-      { ...changed, recognition: 'unknown' }, { ...changed, rateCardLapse: 'ignore' },
-      { ...changed, rollup: { mode: 'by_group', groups: [{ label: 'Everything' }] } },
-      { ...changed, rollup: { mode: 'by_group', groups: [] } },
+      { ...changed, recognition: "unknown" },
+      { ...changed, rateCardLapse: "ignore" },
+      { ...changed, rollup: { mode: "by_group", groups: [{ label: "Everything" }] } },
+      { ...changed, rollup: { mode: "by_group", groups: [] } },
       { ...changed, unknownPolicy: true },
-      { ...changed, notToExceedItemId: foreignItemId }, { ...changed, notToExceedItemId: retiredItemId },
-      { ...changed, rollup: { ...changed.rollup, groups: [{ label: 'Labor', isLabor: true, itemId: foreignItemId }] } },
+      { ...changed, notToExceedItemId: foreignItemId },
+      { ...changed, notToExceedItemId: retiredItemId },
+      {
+        ...changed,
+        rollup: {
+          ...changed.rollup,
+          groups: [{ label: "Labor", isLabor: true, itemId: foreignItemId }],
+        },
+      },
     ]) {
-      const refused = await PATCH(patchJson({ id, billingMethod: 'cost_plus', invoicingProfile: profile }));
+      const refused = await PATCH(
+        patchJson({ id, billingMethod: "cost_plus", invoicingProfile: profile }),
+      );
       assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()));
       const body = await refused.json();
       assert.ok(body.error);
       if (profile.rollup.groups?.length === 0) assert.match(body.error, /needs at least one group/);
-      if (profile.rollup.groups?.[0]?.label === 'Everything') assert.match(body.error, /Everything.*matches every line.*give it a condition/);
-      if (profile.notToExceedItemId === foreignItemId || profile.notToExceedItemId === retiredItemId || JSON.stringify(profile.rollup).includes(foreignItemId))
+      if (profile.rollup.groups?.[0]?.label === "Everything")
+        assert.match(body.error, /Everything.*matches every line.*give it a condition/);
+      if (
+        profile.notToExceedItemId === foreignItemId ||
+        profile.notToExceedItemId === retiredItemId ||
+        JSON.stringify(profile.rollup).includes(foreignItemId)
+      )
         assert.match(body.error, /choose an active company item/);
       assert.deepEqual(await read(), second);
     }
-    const archived = await DELETE(new Request(`http://audit.local/api/admin/setup/project-types?id=${id}`, { method: 'DELETE' }));
+    const archived = await DELETE(
+      new Request(`http://audit.local/api/admin/setup/project-types?id=${id}`, {
+        method: "DELETE",
+      }),
+    );
     assert.equal(archived.status, 200, JSON.stringify(await archived.clone().json()));
     assert.equal((await typeRow(org.orgId, id)).is_active, false);
     const final = await read();
     assert.deepEqual(final.profile, changed);
     assert.equal(final.audits.length, 3);
-    const archive = final.audits.find(audit => audit.action === 'archive')!;
+    const archive = final.audits.find((audit) => audit.action === "archive")!;
     assert.equal(archive.actor_id, state.user.id);
     assert.equal(archive.changes.before!.is_active, true);
     assert.equal(archive.changes.after.is_active, false);

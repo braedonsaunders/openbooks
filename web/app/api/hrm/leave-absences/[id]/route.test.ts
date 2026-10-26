@@ -46,10 +46,7 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:features",
-    `export async function isFeatureEnabled() { return true }`,
-  ],
+  ["mock:features", `export async function isFeatureEnabled() { return true }`],
   [
     "mock:service",
     `
@@ -63,7 +60,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveAbsenceDetailRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmLeaveAbsenceDetailRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -76,7 +75,8 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '');
+    const mocked =
+      mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? "");
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -86,7 +86,9 @@ const hooks = registerHooks({
     return nextLoad(url);
   },
 });
-const detailRoute: typeof import("./route.ts") | undefined = (await import(new URL("./route.ts?hrm-leave-absence-detail", import.meta.url).href)) as typeof import("./route.ts");
+const detailRoute: typeof import("./route.ts") | undefined = (await import(
+  new URL("./route.ts?hrm-leave-absence-detail", import.meta.url).href
+)) as typeof import("./route.ts");
 test.after(() => hooks.deregister());
 
 const ABSENCE_ID = "00000000-0000-4000-8000-0000000000d1";
@@ -101,7 +103,10 @@ const ctx = { params: Promise.resolve({ id: ABSENCE_ID }) };
 
 test("GET opens the absence day behind the employment gate", async () => {
   reset();
-  const res = await detailRoute!.GET(new Request(`http://x/api/hrm/leave-absences/${ABSENCE_ID}`), ctx);
+  const res = await detailRoute!.GET(
+    new Request(`http://x/api/hrm/leave-absences/${ABSENCE_ID}`),
+    ctx,
+  );
   assert.equal(res.status, 200);
   const body = (await res.json()) as { absence: Record<string, unknown> };
   assert.equal(body.absence["id"], ABSENCE_ID);
@@ -113,7 +118,10 @@ test("GET opens the absence day behind the employment gate", async () => {
 
 test("GET admits a manage-only recorder through the same drawer", async () => {
   reset(["hrm.leave.manage"]);
-  const res = await detailRoute!.GET(new Request(`http://x/api/hrm/leave-absences/${ABSENCE_ID}`), ctx);
+  const res = await detailRoute!.GET(
+    new Request(`http://x/api/hrm/leave-absences/${ABSENCE_ID}`),
+    ctx,
+  );
   assert.equal(res.status, 200);
   assert.equal(routeState.calls.length, 1);
 });
@@ -129,8 +137,14 @@ test("GET refuses a non-uuid id with 400 before the service", async () => {
 
 test("GET maps an unknown absence to 404 with the message intact", async () => {
   reset();
-  routeState.serviceThrow = new LeaveError("NOT_FOUND", "absence not found in this organization — check the absence id");
-  const res = await detailRoute!.GET(new Request(`http://x/api/hrm/leave-absences/${ABSENCE_ID}`), ctx);
+  routeState.serviceThrow = new LeaveError(
+    "NOT_FOUND",
+    "absence not found in this organization — check the absence id",
+  );
+  const res = await detailRoute!.GET(
+    new Request(`http://x/api/hrm/leave-absences/${ABSENCE_ID}`),
+    ctx,
+  );
   assert.equal(res.status, 404);
   const body = (await res.json()) as { error: string };
   assert.match(body.error, /not found/);

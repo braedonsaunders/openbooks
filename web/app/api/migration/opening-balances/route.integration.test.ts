@@ -46,11 +46,17 @@ registerHooks({
   },
 });
 
-const { POST: previewPOST } = (await import(new URL("./preview/route.ts?migration-opening-preview", import.meta.url).href)) as typeof import("./preview/route.ts");
-const { POST: draftPOST } = (await import(new URL("./draft/route.ts?migration-opening-draft", import.meta.url).href)) as typeof import("./draft/route.ts");
+const { POST: previewPOST } = (await import(
+  new URL("./preview/route.ts?migration-opening-preview", import.meta.url).href
+)) as typeof import("./preview/route.ts");
+const { POST: draftPOST } = (await import(
+  new URL("./draft/route.ts?migration-opening-draft", import.meta.url).href
+)) as typeof import("./draft/route.ts");
 
-const { withBypassContext, withOrgTransaction, db, env } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { withBypassContext, withOrgTransaction, db, env } =
+  await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { resolveAuthzByUserId } = await import("@/lib/authz");
 const { createTransfer, loadTransfer } = await import("@/lib/data-io/transfer-store");
 const { commandTransfer, uploadTransferPart } = await import("@/lib/data-io/transfer-commands");
@@ -67,82 +73,166 @@ function postRequest(url: string, body: unknown): Request {
   });
 }
 
-test("opening-balance preview and draft run the native writer through the guided-cutover routes", { skip, timeout: 180_000 }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-    await withOrgTransaction(org.orgId, () => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`));
-    const authz = await withOrgTransaction(org.orgId, () => resolveAuthzByUserId(org.orgId, adminId));
-    assert.ok(authz);
-    routeState.authz = authz;
-    const inOrg = <T>(fn: () => Promise<T>) => withOrgTransaction(org.orgId, fn);
-    await inOrg(() => updateMigrationPlan({ orgId: org.orgId, id: adminId }, { path: "spreadsheet", sourceSystem: "spreadsheet", cutoverDate: "2026-10-01" }, "test plan"));
+test(
+  "opening-balance preview and draft run the native writer through the guided-cutover routes",
+  { skip, timeout: 180_000 },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+      await withOrgTransaction(org.orgId, () =>
+        db.execute(
+          sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`,
+        ),
+      );
+      const authz = await withOrgTransaction(org.orgId, () =>
+        resolveAuthzByUserId(org.orgId, adminId),
+      );
+      assert.ok(authz);
+      routeState.authz = authz;
+      const inOrg = <T>(fn: () => Promise<T>) => withOrgTransaction(org.orgId, fn);
+      await inOrg(() =>
+        updateMigrationPlan(
+          { orgId: org.orgId, id: adminId },
+          { path: "spreadsheet", sourceSystem: "spreadsheet", cutoverDate: "2026-10-01" },
+          "test plan",
+        ),
+      );
 
-    const numbers = await inOrg(async () => Object.fromEntries((await db.execute<{ id: string; number: string }>(sql`
-      select id, number from accounts where org_id=${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.revenue}, ${org.accounts.clearing})`, "objects")).map((row) => [row.id, row.number])));
-    const bank = numbers[org.accounts.bank]!;
-    const revenue = numbers[org.accounts.revenue]!;
-    assert.ok(bank && revenue, "fixture accounts carry numbers");
+      const numbers = await inOrg(async () =>
+        Object.fromEntries(
+          (
+            await db.execute<{ id: string; number: string }>(
+              sql`
+      select id, number from accounts where org_id=${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.revenue}, ${org.accounts.clearing})`,
+              "objects",
+            )
+          ).map((row) => [row.id, row.number]),
+        ),
+      );
+      const bank = numbers[org.accounts.bank]!;
+      const revenue = numbers[org.accounts.revenue]!;
+      assert.ok(bank && revenue, "fixture accounts carry numbers");
 
-    const stage = async (filename: string, text: string) => {
-      const bytes = Buffer.from(text);
-      let job = await inOrg(() => createTransfer(authz, { requestKey: randomUUID(), kind: "import", resource: "items", format: "csv", filename, bytes: bytes.length }));
-      job = await inOrg(() => uploadTransferPart(authz, job.id, 0, bytes));
-      job = await inOrg(() => commandTransfer(authz, job.id, { action: "finish-upload", revision: job.revision }));
-      const token = randomUUID();
-      await withOrgTransaction(org.orgId, () => db.execute(sql`update data_transfer_jobs set claim_token=${token},claim_until=now()+interval '10 minutes' where org_id=${org.orgId} and id=${job.id}`));
-      await processTransfer(org.orgId, job.id, token);
-      job = await inOrg(() => loadTransfer(org.orgId, job.id));
-      assert.equal(job.state, "mapping", job.error ?? "");
-      return job;
-    };
+      const stage = async (filename: string, text: string) => {
+        const bytes = Buffer.from(text);
+        let job = await inOrg(() =>
+          createTransfer(authz, {
+            requestKey: randomUUID(),
+            kind: "import",
+            resource: "items",
+            format: "csv",
+            filename,
+            bytes: bytes.length,
+          }),
+        );
+        job = await inOrg(() => uploadTransferPart(authz, job.id, 0, bytes));
+        job = await inOrg(() =>
+          commandTransfer(authz, job.id, { action: "finish-upload", revision: job.revision }),
+        );
+        const token = randomUUID();
+        await withOrgTransaction(org.orgId, () =>
+          db.execute(
+            sql`update data_transfer_jobs set claim_token=${token},claim_until=now()+interval '10 minutes' where org_id=${org.orgId} and id=${job.id}`,
+          ),
+        );
+        await processTransfer(org.orgId, job.id, token);
+        job = await inOrg(() => loadTransfer(org.orgId, job.id));
+        assert.equal(job.state, "mapping", job.error ?? "");
+        return job;
+      };
 
-    const columns = { account: "Account", debit: "Debit", credit: "Credit" };
-    const off = await stage("tb-off.csv", `Account,Debit,Credit\n${bank},1000.00,\n${revenue},,999.99\n`);
-    const refused = await previewPOST(postRequest("/api/migration/opening-balances/preview", {
-      transferId: off.id, columns, documentDate: "2026-09-30",
-    }));
-    assert.equal(refused.status, 422);
-    const refusedBody = await refused.json() as { error: string; issues: { rowNo: number; message: string }[] };
-    assert.match(refusedBody.error, /does not balance/);
-    assert.match(refusedBody.error, /difference 0\.0100/);
-    assert.ok(Array.isArray(refusedBody.issues), "the refusal carries its row-level issues");
+      const columns = { account: "Account", debit: "Debit", credit: "Credit" };
+      const off = await stage(
+        "tb-off.csv",
+        `Account,Debit,Credit\n${bank},1000.00,\n${revenue},,999.99\n`,
+      );
+      const refused = await previewPOST(
+        postRequest("/api/migration/opening-balances/preview", {
+          transferId: off.id,
+          columns,
+          documentDate: "2026-09-30",
+        }),
+      );
+      assert.equal(refused.status, 422);
+      const refusedBody = (await refused.json()) as {
+        error: string;
+        issues: { rowNo: number; message: string }[];
+      };
+      assert.match(refusedBody.error, /does not balance/);
+      assert.match(refusedBody.error, /difference 0\.0100/);
+      assert.ok(Array.isArray(refusedBody.issues), "the refusal carries its row-level issues");
 
-    const bad = await stage("tb-bad.csv", `Account,Debit,Credit\nNo Such Account,100.00,\n${revenue},,100.00\n`);
-    const badPreview = await previewPOST(postRequest("/api/migration/opening-balances/preview", {
-      transferId: bad.id, columns, documentDate: "2026-09-30",
-    }));
-    assert.equal(badPreview.status, 422);
-    const badBody = await badPreview.json() as { error: string; issues: { rowNo: number; message: string }[] };
-    assert.ok(badBody.issues.length > 0, "row-level refusals travel in the body");
-    assert.equal(typeof badBody.issues[0]!.rowNo, "number");
-    assert.match(badBody.issues[0]!.message, /No Such Account/);
+      const bad = await stage(
+        "tb-bad.csv",
+        `Account,Debit,Credit\nNo Such Account,100.00,\n${revenue},,100.00\n`,
+      );
+      const badPreview = await previewPOST(
+        postRequest("/api/migration/opening-balances/preview", {
+          transferId: bad.id,
+          columns,
+          documentDate: "2026-09-30",
+        }),
+      );
+      assert.equal(badPreview.status, 422);
+      const badBody = (await badPreview.json()) as {
+        error: string;
+        issues: { rowNo: number; message: string }[];
+      };
+      assert.ok(badBody.issues.length > 0, "row-level refusals travel in the body");
+      assert.equal(typeof badBody.issues[0]!.rowNo, "number");
+      assert.match(badBody.issues[0]!.message, /No Such Account/);
 
-    const job = await stage("tb.csv", `Account,Debit,Credit\n${bank},1000.00,\n${revenue},,1000.00\n`);
-    const previewed = await previewPOST(postRequest("/api/migration/opening-balances/preview", {
-      transferId: job.id, columns, documentDate: "2026-09-30",
-    }));
-    assert.equal(previewed.status, 200);
-    const previewBody = await previewed.json() as { preview: { lines: unknown[]; net: string; totalDebits: string } };
-    assert.equal(previewBody.preview.net, "0.0000");
-    assert.equal(previewBody.preview.lines.length, 2);
+      const job = await stage(
+        "tb.csv",
+        `Account,Debit,Credit\n${bank},1000.00,\n${revenue},,1000.00\n`,
+      );
+      const previewed = await previewPOST(
+        postRequest("/api/migration/opening-balances/preview", {
+          transferId: job.id,
+          columns,
+          documentDate: "2026-09-30",
+        }),
+      );
+      assert.equal(previewed.status, 200);
+      const previewBody = (await previewed.json()) as {
+        preview: { lines: unknown[]; net: string; totalDebits: string };
+      };
+      assert.equal(previewBody.preview.net, "0.0000");
+      assert.equal(previewBody.preview.lines.length, 2);
 
-    const key = `cutover-${randomUUID()}`;
-    const drafted = await draftPOST(postRequest("/api/migration/opening-balances/draft", {
-      transferId: job.id, columns, documentDate: "2026-09-30", idempotencyKey: key,
-    }));
-    assert.equal(drafted.status, 200);
-    const draftBody = await drafted.json() as { draft: { journalId: string; status: string; href: string } };
-    assert.equal(draftBody.draft.status, "draft");
-    assert.match(draftBody.draft.href, /\/journal\?journalTab=drafts&entry=/);
+      const key = `cutover-${randomUUID()}`;
+      const drafted = await draftPOST(
+        postRequest("/api/migration/opening-balances/draft", {
+          transferId: job.id,
+          columns,
+          documentDate: "2026-09-30",
+          idempotencyKey: key,
+        }),
+      );
+      assert.equal(drafted.status, 200);
+      const draftBody = (await drafted.json()) as {
+        draft: { journalId: string; status: string; href: string };
+      };
+      assert.equal(draftBody.draft.status, "draft");
+      assert.match(draftBody.draft.href, /\/journal\?journalTab=drafts&entry=/);
 
-    const replay = await draftPOST(postRequest("/api/migration/opening-balances/draft", {
-      transferId: job.id, columns, documentDate: "2026-09-30", idempotencyKey: key,
-    }));
-    assert.equal(replay.status, 200);
-    assert.equal((await replay.json() as typeof draftBody).draft.journalId, draftBody.draft.journalId);
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      const replay = await draftPOST(
+        postRequest("/api/migration/opening-balances/draft", {
+          transferId: job.id,
+          columns,
+          documentDate: "2026-09-30",
+          idempotencyKey: key,
+        }),
+      );
+      assert.equal(replay.status, 200);
+      assert.equal(
+        ((await replay.json()) as typeof draftBody).draft.journalId,
+        draftBody.draft.journalId,
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

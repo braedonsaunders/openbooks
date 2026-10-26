@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // The forecast's "view undated" link dropped the active owner/team
 // scope, widening to the whole org while the exclusion count beside it
@@ -8,35 +8,35 @@ import test from 'node:test'
 // the opportunities board must honour it. Both halves are loader-proved
 // here: the href the forecast emits, and the predicate the board issues.
 
-const OWNER = 'aaaaaaaa-1111-4111-8111-111111111111'
-const TEAM = 'bbbbbbbb-2222-4222-8222-222222222222'
+const OWNER = "aaaaaaaa-1111-4111-8111-111111111111";
+const TEAM = "bbbbbbbb-2222-4222-8222-222222222222";
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((c) => {
-      if (typeof c === 'string') return c
-      const value = (c as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c)
-      return ''
+      if (typeof c === "string") return c;
+      const value = (c as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
+      return "";
     })
-    .join('')
+    .join("");
 }
 
 // -- forecasts half -------------------------------------------------------
 
-const forecastStateKey = Symbol.for('openbooks.forecast-undated-scope-test')
+const forecastStateKey = Symbol.for("openbooks.forecast-undated-scope-test");
 interface ForecastState {
-  grants: Set<string>
+  grants: Set<string>;
 }
-const forecastState: ForecastState = { grants: new Set() }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[forecastStateKey] = forecastState
+const forecastState: ForecastState = { grants: new Set() };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[forecastStateKey] = forecastState;
 
 const forecastMocks = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.forecast-undated-scope-test')]
       export async function requirePermission() {
@@ -46,19 +46,22 @@ const forecastMocks = new Map<string, string>([
     `,
   ],
   [
-    'mock:intl',
+    "mock:intl",
     `
       export async function getLocale() { return 'en' }
       export async function getTranslations() { return (key, params) => key }
     `,
   ],
-  ['mock:db', `export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) } }`],
+  [
+    "mock:db",
+    `export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) } }`,
+  ],
   // The clock module is the only business-date import the loader needs from
   // the database (businessToday reads the org timezone); the grid math below
   // mirrors engine/src/platform/business-date.ts (UTC YYYY-MM-DD grid) so
   // the loader's default period resolves without a database.
   [
-    'mock:business-date',
+    "mock:business-date",
     `
       export async function businessToday() { return '2026-08-24' }
       const day = (iso) => {
@@ -81,7 +84,7 @@ const forecastMocks = new Map<string, string>([
     `,
   ],
   [
-    'mock:crm',
+    "mock:crm",
     `
       export async function calculateForecast() { return [] }
       export async function countUndatedForecastExcluded() { return 3 }
@@ -93,12 +96,12 @@ const forecastMocks = new Map<string, string>([
     `,
   ],
   [
-    'mock:money',
+    "mock:money",
     `export async function getMoneyFormatter() { return { money: (value) => String(value) } }`,
   ],
-  ['mock:tabs', `export async function customerGroupTabs() { return [] }`],
+  ["mock:tabs", `export async function customerGroupTabs() { return [] }`],
   [
-    'mock:viewspec',
+    "mock:viewspec",
     `
       export function badge(label) { return label }
       export function column() { return {} }
@@ -121,86 +124,85 @@ const forecastMocks = new Map<string, string>([
       export function resolvePath() { throw new Error('unexpected spec render') }
     `,
   ],
-])
+]);
 
 const forecastUrls = new Map<string, string>([
-  ['../../../../lib/authz', 'mock:authz'],
-  ['next-intl/server', 'mock:intl'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
-  ['../../../../lib/crm', 'mock:crm'],
-  ['../../../../lib/money-server', 'mock:money'],
-  ['../../../../components/module-home/group-tabs', 'mock:tabs'],
-  ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
-])
+  ["../../../../lib/authz", "mock:authz"],
+  ["next-intl/server", "mock:intl"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+  ["../../../../lib/crm", "mock:crm"],
+  ["../../../../lib/money-server", "mock:money"],
+  ["../../../../components/module-home/group-tabs", "mock:tabs"],
+  ["@braedonsaunders/appkit-viewspec", "mock:viewspec"],
+]);
 
 const forecastHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-
-    const mocked = forecastUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = forecastUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = forecastMocks.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = forecastMocks.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const viewUrl = './view.ts?forecast-undated-scope'
-const { loadForecasts } = (await import(viewUrl)) as typeof import('./view.ts')
-forecastHooks.deregister()
+const viewUrl = "./view.ts?forecast-undated-scope";
+const { loadForecasts } = (await import(viewUrl)) as typeof import("./view.ts");
+forecastHooks.deregister();
 
 // -- opportunities half ---------------------------------------------------
 
-const boardStateKey = Symbol.for('openbooks.opportunity-board-scope-test')
+const boardStateKey = Symbol.for("openbooks.opportunity-board-scope-test");
 interface BoardState {
-  queries: string[]
+  queries: string[];
 }
-const boardState: BoardState = { queries: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[boardStateKey] = boardState
+const boardState: BoardState = { queries: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[boardStateKey] = boardState;
 
 const OPP_ROW = {
-  id: 'op-1',
-  opportunity_number: 'OP-1',
-  title: 'Scoped deal',
+  id: "op-1",
+  opportunity_number: "OP-1",
+  title: "Scoped deal",
   party_id: null,
   party_name: null,
   primary_contact_id: null,
   contact_name: null,
   owner_user_id: OWNER,
-  owner_name: 'Ada',
+  owner_name: "Ada",
   sales_team_name: null,
-  status_id: 'st-1',
-  forecast_category: 'pipeline',
+  status_id: "st-1",
+  forecast_category: "pipeline",
   probability: 50,
-  currency: 'USD',
-  projected_amount: '1000',
-  weighted_amount: '500',
+  currency: "USD",
+  projected_amount: "1000",
+  weighted_amount: "500",
   expected_close_date: null,
   next_step: null,
   win_loss_reason: null,
-  updated_at: '2026-01-01T00:00:00Z',
-  revision_token: 'rev-1',
+  updated_at: "2026-01-01T00:00:00Z",
+  revision_token: "rev-1",
   last_activity_at: null,
   lines_count: 0,
-}
+};
 
 const STATUS_ROW = {
-  id: 'st-1',
-  key: 'prospecting',
-  name: 'Prospecting',
+  id: "st-1",
+  key: "prospecting",
+  name: "Prospecting",
   sequence: 1,
   probability: 10,
-  default_forecast_category: 'pipeline',
+  default_forecast_category: "pipeline",
   is_closed: false,
   is_won: false,
-}
+};
 
 const boardMocks = new Map<string, string>([
   [
-    'mock-board:authz',
+    "mock-board:authz",
     `
       export async function requirePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: ['crm.opportunities.read'] }
@@ -208,12 +210,9 @@ const boardMocks = new Map<string, string>([
       export function can() { return false }
     `,
   ],
+  ["mock-board:intl", `export async function getTranslations() { return (key) => key }`],
   [
-    'mock-board:intl',
-    `export async function getTranslations() { return (key) => key }`,
-  ],
-  [
-    'mock-board:db',
+    "mock-board:db",
     `
       const state = globalThis[Symbol.for('openbooks.opportunity-board-scope-test')]
       const sqlText = ${sqlText.toString()}
@@ -229,14 +228,17 @@ const boardMocks = new Map<string, string>([
       }
     `,
   ],
-  ['mock-board:features', `export async function isFeatureEnabled() { return false }`],
+  ["mock-board:features", `export async function isFeatureEnabled() { return false }`],
   // loadOpportunity only runs for an open drawer record; these board tests
   // never pass one, so the stub never fires — it just keeps the real CRM
   // library (and its database imports) out of the module graph.
-  ['mock-board:crm-lib', `export async function loadOpportunity() { throw new Error('unexpected drawer load') }`],
-  ['mock-board:tabs', `export async function customerGroupTabs() { return [] }`],
   [
-    'mock-board:viewspec',
+    "mock-board:crm-lib",
+    `export async function loadOpportunity() { throw new Error('unexpected drawer load') }`,
+  ],
+  ["mock-board:tabs", `export async function customerGroupTabs() { return [] }`],
+  [
+    "mock-board:viewspec",
     `
       export function page(spec) { return spec }
       export function pageHeader(header) { return header }
@@ -245,113 +247,120 @@ const boardMocks = new Map<string, string>([
       export function widgetBlock(kind, props) { return { kind, ...props } }
     `,
   ],
-])
+]);
 
 const boardUrls = new Map<string, string>([
-  ['../../../../lib/authz', 'mock-board:authz'],
-  ['next-intl/server', 'mock-board:intl'],
-  ['@openbooks/engine/platform/db', 'mock-board:db'],
-  ['../../../../lib/crm', 'mock-board:crm-lib'],
-  ['../../../../lib/features', 'mock-board:features'],
-  ['../../../../components/module-home/group-tabs', 'mock-board:tabs'],
-  ['@braedonsaunders/appkit-viewspec', 'mock-board:viewspec'],
-])
+  ["../../../../lib/authz", "mock-board:authz"],
+  ["next-intl/server", "mock-board:intl"],
+  ["@openbooks/engine/platform/db", "mock-board:db"],
+  ["../../../../lib/crm", "mock-board:crm-lib"],
+  ["../../../../lib/features", "mock-board:features"],
+  ["../../../../components/module-home/group-tabs", "mock-board:tabs"],
+  ["@braedonsaunders/appkit-viewspec", "mock-board:viewspec"],
+]);
 
 const boardHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-
-    const mocked = boardUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = boardUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = boardMocks.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = boardMocks.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const boardViewUrl = '../opportunities/view.ts?board-scope-test'
-const { loadOpportunities } = (await import(boardViewUrl)) as typeof import('../opportunities/view.ts')
-boardHooks.deregister()
+const boardViewUrl = "../opportunities/view.ts?board-scope-test";
+const { loadOpportunities } = (await import(
+  boardViewUrl
+)) as typeof import("../opportunities/view.ts");
+boardHooks.deregister();
 function forecastScope(owner: string | null, team: string | null) {
-  forecastState.grants = new Set(['crm.forecasts.read'])
-  const sp: Record<string, string> = {}
-  if (owner) sp.owner = owner
-  if (team) sp.team = team
-  return loadForecasts(sp)
+  forecastState.grants = new Set(["crm.forecasts.read"]);
+  const sp: Record<string, string> = {};
+  if (owner) sp.owner = owner;
+  if (team) sp.team = team;
+  return loadForecasts(sp);
 }
 
-test('the undated link carries the active owner scope', async () => {
-  const data = await forecastScope(OWNER, null)
-  assert.equal(data.hasExcludedUndated, true)
-  const href = new URL(data.excludedUndatedHref, 'https://app.test')
-  assert.equal(href.pathname, '/crm/opportunities')
-  assert.equal(href.searchParams.get('view'), 'board')
-  assert.equal(href.searchParams.get('undated'), '1')
-  assert.equal(href.searchParams.get('owner'), OWNER)
-})
+test("the undated link carries the active owner scope", async () => {
+  const data = await forecastScope(OWNER, null);
+  assert.equal(data.hasExcludedUndated, true);
+  const href = new URL(data.excludedUndatedHref, "https://app.test");
+  assert.equal(href.pathname, "/crm/opportunities");
+  assert.equal(href.searchParams.get("view"), "board");
+  assert.equal(href.searchParams.get("undated"), "1");
+  assert.equal(href.searchParams.get("owner"), OWNER);
+});
 
-test('the undated link carries the active team scope', async () => {
-  const data = await forecastScope(null, TEAM)
-  const href = new URL(data.excludedUndatedHref, 'https://app.test')
-  assert.equal(href.searchParams.get('team'), TEAM)
-  assert.equal(href.searchParams.get('owner'), null)
-})
+test("the undated link carries the active team scope", async () => {
+  const data = await forecastScope(null, TEAM);
+  const href = new URL(data.excludedUndatedHref, "https://app.test");
+  assert.equal(href.searchParams.get("team"), TEAM);
+  assert.equal(href.searchParams.get("owner"), null);
+});
 
-test('owner wins over team on the undated link', async () => {
-  const data = await forecastScope(OWNER, TEAM)
-  const href = new URL(data.excludedUndatedHref, 'https://app.test')
-  assert.equal(href.searchParams.get('owner'), OWNER)
-  assert.equal(href.searchParams.get('team'), null)
-})
+test("owner wins over team on the undated link", async () => {
+  const data = await forecastScope(OWNER, TEAM);
+  const href = new URL(data.excludedUndatedHref, "https://app.test");
+  assert.equal(href.searchParams.get("owner"), OWNER);
+  assert.equal(href.searchParams.get("team"), null);
+});
 
-test('the unscoped undated link stays exactly as before', async () => {
-  const data = await forecastScope(null, null)
-  assert.equal(data.excludedUndatedHref, '/crm/opportunities?view=board&undated=1')
-})
+test("the unscoped undated link stays exactly as before", async () => {
+  const data = await forecastScope(null, null);
+  assert.equal(data.excludedUndatedHref, "/crm/opportunities?view=board&undated=1");
+});
 
 function boardQuery(): string {
-  const found = boardState.queries.filter((text) => text.includes('from crm_opportunities o'))
-  assert.equal(found.length, 1, 'the board must issue exactly one opportunities query')
-  return found[0]!
+  const found = boardState.queries.filter((text) => text.includes("from crm_opportunities o"));
+  assert.equal(found.length, 1, "the board must issue exactly one opportunities query");
+  return found[0]!;
 }
 
 for (const scope of [
-  { name: 'owner', param: { owner: OWNER }, column: 'owner_user_id', id: OWNER },
-  { name: 'team', param: { team: TEAM }, column: 'sales_team_id', id: TEAM },
+  { name: "owner", param: { owner: OWNER }, column: "owner_user_id", id: OWNER },
+  { name: "team", param: { team: TEAM }, column: "sales_team_id", id: TEAM },
 ] as const) {
   test(`the board filters by the carried ${scope.name} scope`, async () => {
-    boardState.queries = []
-    await loadOpportunities({ view: 'board', undated: '1', ...scope.param })
-    const text = boardQuery()
-    assert.ok(text.includes(scope.column), `the board query must predicate on the ${scope.name}`)
-    assert.ok(text.includes(scope.id), `the board query must carry the ${scope.name} id`)
-  })
+    boardState.queries = [];
+    await loadOpportunities({ view: "board", undated: "1", ...scope.param });
+    const text = boardQuery();
+    assert.ok(text.includes(scope.column), `the board query must predicate on the ${scope.name}`);
+    assert.ok(text.includes(scope.id), `the board query must carry the ${scope.name} id`);
+  });
 }
 
-test('owner wins over team on the board', async () => {
-  boardState.queries = []
-  await loadOpportunities({ view: 'board', undated: '1', owner: OWNER, team: TEAM })
-  const text = boardQuery()
-  assert.ok(text.includes(OWNER), 'the board query must carry the owner id')
-  assert.ok(!text.includes(TEAM), 'the team scope must not widen an owner-scoped board')
-})
+test("owner wins over team on the board", async () => {
+  boardState.queries = [];
+  await loadOpportunities({ view: "board", undated: "1", owner: OWNER, team: TEAM });
+  const text = boardQuery();
+  assert.ok(text.includes(OWNER), "the board query must carry the owner id");
+  assert.ok(!text.includes(TEAM), "the team scope must not widen an owner-scoped board");
+});
 
-test('a non-uuid scope never reaches the board query', async () => {
-  boardState.queries = []
-  await loadOpportunities({ view: 'board', undated: '1', owner: 'not-a-uuid', team: 'also-bad' })
-  const text = boardQuery()
-  assert.ok(!text.includes('not-a-uuid'), 'a malformed owner must not reach the query')
-  assert.ok(!text.includes('also-bad'), 'a malformed team must not reach the query')
-})
+test("a non-uuid scope never reaches the board query", async () => {
+  boardState.queries = [];
+  await loadOpportunities({ view: "board", undated: "1", owner: "not-a-uuid", team: "also-bad" });
+  const text = boardQuery();
+  assert.ok(!text.includes("not-a-uuid"), "a malformed owner must not reach the query");
+  assert.ok(!text.includes("also-bad"), "a malformed team must not reach the query");
+});
 
-test('the unscoped board issues no owner/team predicate', async () => {
-  boardState.queries = []
-  await loadOpportunities({ view: 'board', undated: '1' })
-  const text = boardQuery()
+test("the unscoped board issues no owner/team predicate", async () => {
+  boardState.queries = [];
+  await loadOpportunities({ view: "board", undated: "1" });
+  const text = boardQuery();
   // The `and` prefix distinguishes the WHERE predicate from the select list,
   // which always projects o.owner_user_id for the kanban cards.
-  assert.ok(!text.includes('and o.owner_user_id'), 'the unscoped board must not predicate on the owner')
-  assert.ok(!text.includes('and o.sales_team_id'), 'the unscoped board must not predicate on the team')
-})
+  assert.ok(
+    !text.includes("and o.owner_user_id"),
+    "the unscoped board must not predicate on the owner",
+  );
+  assert.ok(
+    !text.includes("and o.sales_team_id"),
+    "the unscoped board must not predicate on the team",
+  );
+});

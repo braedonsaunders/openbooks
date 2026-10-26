@@ -47,15 +47,12 @@ for (const allowSelf of [false, true]) {
         });
         await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
         const gates = await db.execute<{ id: string; assignee_user_id: string }>(
-            sql`select id,assignee_user_id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, "objects",
-          );
+          sql`select id,assignee_user_id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`,
+          "objects",
+        );
         assert.deepEqual(
           new Set(gates.map((g) => g.assignee_user_id)),
-          new Set(
-            allowSelf
-              ? [actors.approver1Id, actors.approver2Id]
-              : [actors.approver2Id],
-          ),
+          new Set(allowSelf ? [actors.approver1Id, actors.approver2Id] : [actors.approver2Id]),
         );
         const actingUser = allowSelf ? actors.approver1Id : actors.approver2Id;
         const gate = gates.find((g) => g.assignee_user_id === actingUser);
@@ -66,9 +63,12 @@ for (const allowSelf of [false, true]) {
           userId: actingUser,
         });
         assert.equal(
-          (await db.execute<{ status: string }>(
-              sql`select status from documents where org_id=${org.orgId} and id=${id}`, "objects",
-            ))[0]?.status,
+          (
+            await db.execute<{ status: string }>(
+              sql`select status from documents where org_id=${org.orgId} and id=${id}`,
+              "objects",
+            )
+          )[0]?.status,
           "approved",
         );
       } finally {
@@ -105,9 +105,12 @@ test(
         createdBy: actors.submitterId,
       });
       await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
-      const gate = (await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, "objects",
-        ))[0];
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`,
+          "objects",
+        )
+      )[0];
       assert.ok(gate);
       await db.execute(
         sql`update users set party_id=${person} where org_id=${org.orgId} and id=${actors.approver1Id}`,
@@ -121,9 +124,12 @@ test(
         /own submission|self-approval/,
       );
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from flow_gates where org_id=${org.orgId} and id=${gate.id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from flow_gates where org_id=${org.orgId} and id=${gate.id}`,
+            "objects",
+          )
+        )[0]?.status,
         "pending",
       );
     } finally {

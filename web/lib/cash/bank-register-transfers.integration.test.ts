@@ -3,19 +3,21 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "@openbooks/engine/platform/db";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const { categoryWeekly } = await import("./core.ts");
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
 
 async function seedPeriod(org: ScratchOrg, year: number, month: number): Promise<string> {
-  const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+  const cal = (
+    await db.execute<{ fiscal_calendar_id: string }>(
+      sql`
     select fiscal_calendar_id from accounting_periods where id = ${org.periodId}
-  `, "objects"))[0]!.fiscal_calendar_id;
+  `,
+      "objects",
+    )
+  )[0]!.fiscal_calendar_id;
   const id = randomUUID();
   const mm = String(month).padStart(2, "0");
   const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -40,7 +42,9 @@ async function seedJournal(
     await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
       values (${org.orgId},${entry},${line},${accountId},${org.subsidiaryId},${amount},'CAD',${amount},1)`);
   }
-  await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+  await db.execute(
+    sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`,
+  );
   return entry;
 }
 
@@ -51,57 +55,123 @@ async function seedJournal(
  * left the viewed set. A transfer to an out-of-scope account keeps its leg
  * — cash really left the viewed set.
  */
-test("bank register nets internal transfers between selected banks", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const secondBank = randomUUID();
-    await withBypass(async () => {
-      await db.execute(sql`insert into accounts(id,org_id,number,name,type)
+test(
+  "bank register nets internal transfers between selected banks",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const secondBank = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`insert into accounts(id,org_id,number,name,type)
         values (${secondBank},${org.orgId},'1010','Second bank','asset_bank')`);
-      const april = await seedPeriod(org, 2026, 4);
-      await seedJournal(org, "2026-04-20", april, [[org.accounts.bank, "-120"], [org.accounts.adjustment, "120"]], null);
-      await seedJournal(org, org.date, org.periodId, [[org.accounts.bank, "-1200"], [org.accounts.adjustment, "1200"]], null);
-      const transferId = randomUUID();
-      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,fx_rate,subtotal,tax_total,total)
+        const april = await seedPeriod(org, 2026, 4);
+        await seedJournal(
+          org,
+          "2026-04-20",
+          april,
+          [
+            [org.accounts.bank, "-120"],
+            [org.accounts.adjustment, "120"],
+          ],
+          null,
+        );
+        await seedJournal(
+          org,
+          org.date,
+          org.periodId,
+          [
+            [org.accounts.bank, "-1200"],
+            [org.accounts.adjustment, "1200"],
+          ],
+          null,
+        );
+        const transferId = randomUUID();
+        await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,fx_rate,subtotal,tax_total,total)
         values (${transferId},${org.orgId},'transfer','approved','TRANSFER-1',${org.subsidiaryId},${org.date},'CAD','1',500,0,500)`);
-      const transferEntry = await seedJournal(
-        org, org.date, org.periodId,
-        [[org.accounts.bank, "-500"], [secondBank, "500"]],
-        transferId,
-      );
-      await db.execute(sql`update documents set posted_entry_id = ${transferEntry} where id = ${transferId}`);
-      // A fee-bearing transfer: bank A -100, bank B +95, fee expense +5.
-      // Only the 5 that left the selected banks counts as outflow.
-      const feeId = randomUUID();
-      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,fx_rate,subtotal,tax_total,total)
+        const transferEntry = await seedJournal(
+          org,
+          org.date,
+          org.periodId,
+          [
+            [org.accounts.bank, "-500"],
+            [secondBank, "500"],
+          ],
+          transferId,
+        );
+        await db.execute(
+          sql`update documents set posted_entry_id = ${transferEntry} where id = ${transferId}`,
+        );
+        // A fee-bearing transfer: bank A -100, bank B +95, fee expense +5.
+        // Only the 5 that left the selected banks counts as outflow.
+        const feeId = randomUUID();
+        await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,fx_rate,subtotal,tax_total,total)
         values (${feeId},${org.orgId},'transfer','approved','TRANSFER-2',${org.subsidiaryId},${org.date},'CAD','1',100,0,100)`);
-      const feeEntry = await seedJournal(
-        org, org.date, org.periodId,
-        [[org.accounts.bank, "-100"], [secondBank, "95"], [org.accounts.adjustment, "5"]],
-        feeId,
-      );
-      await db.execute(sql`update documents set posted_entry_id = ${feeEntry} where id = ${feeId}`);
-    });
-    await withOrgContext(org.orgId, async () => {
-      const category = await categoryWeekly(
-        org.orgId,
-        { id: randomUUID(), name: "Review", direction: "outflow", method: "bank_register_history", bankAccountIds: [org.accounts.bank, secondBank], historyWeeks: 12, includeJournals: true },
-        "2026-07-20",
-        ["2026-07-19", "2026-07-26", "2026-08-02", "2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30", "2026-09-06"],
-        { arWeekly: {}, apWeekly: {}, cashStart: "0.0000" },
-      );
-      // 1200 + the 5 fee remainder over 12 weeks (the April leg only
-      // establishes old books); the plain 500 transfer nets to zero instead
-      // of forecasting as spending.
-      assert.equal(category.meta.weeksUsed, 12);
-      assert.equal(category.meta.rawAverage, "100.4167");
-      assert.deepEqual(category.weekly, ["100.4167", "100.4167", "100.4167", "100.4167", "100.4167", "100.4167", "100.4167", "100.4167"]);
-      assert.equal(category.total, "803.3336");
-      assert.ok(category.breakdown.every((row) => !row.name.includes("TRANSFER-1")), "the plain transfer leaves no register row");
-      const feeRow = category.breakdown.find((row) => row.name.includes("TRANSFER-2"));
-      assert.equal(feeRow?.amount, "5.0000", "the fee remainder keeps its register row");
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+        const feeEntry = await seedJournal(
+          org,
+          org.date,
+          org.periodId,
+          [
+            [org.accounts.bank, "-100"],
+            [secondBank, "95"],
+            [org.accounts.adjustment, "5"],
+          ],
+          feeId,
+        );
+        await db.execute(
+          sql`update documents set posted_entry_id = ${feeEntry} where id = ${feeId}`,
+        );
+      });
+      await withOrgContext(org.orgId, async () => {
+        const category = await categoryWeekly(
+          org.orgId,
+          {
+            id: randomUUID(),
+            name: "Review",
+            direction: "outflow",
+            method: "bank_register_history",
+            bankAccountIds: [org.accounts.bank, secondBank],
+            historyWeeks: 12,
+            includeJournals: true,
+          },
+          "2026-07-20",
+          [
+            "2026-07-19",
+            "2026-07-26",
+            "2026-08-02",
+            "2026-08-09",
+            "2026-08-16",
+            "2026-08-23",
+            "2026-08-30",
+            "2026-09-06",
+          ],
+          { arWeekly: {}, apWeekly: {}, cashStart: "0.0000" },
+        );
+        // 1200 + the 5 fee remainder over 12 weeks (the April leg only
+        // establishes old books); the plain 500 transfer nets to zero instead
+        // of forecasting as spending.
+        assert.equal(category.meta.weeksUsed, 12);
+        assert.equal(category.meta.rawAverage, "100.4167");
+        assert.deepEqual(category.weekly, [
+          "100.4167",
+          "100.4167",
+          "100.4167",
+          "100.4167",
+          "100.4167",
+          "100.4167",
+          "100.4167",
+          "100.4167",
+        ]);
+        assert.equal(category.total, "803.3336");
+        assert.ok(
+          category.breakdown.every((row) => !row.name.includes("TRANSFER-1")),
+          "the plain transfer leaves no register row",
+        );
+        const feeRow = category.breakdown.find((row) => row.name.includes("TRANSFER-2"));
+        assert.equal(feeRow?.amount, "5.0000", "the fee remainder keeps its register row");
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

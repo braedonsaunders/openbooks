@@ -1,28 +1,28 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const scriptingEngine: DocArticle = {
-  slug: 'scripting-engine',
-  title: 'Scripting Engine',
-  category: 'apps',
+  slug: "scripting-engine",
+  title: "Scripting Engine",
+  category: "apps",
   order: 3,
   summary:
-    'Author server-side automation: trigger, scheduled, endpoint, bulk, and client scripts that run in a governed sandbox.',
-  updated: '2026-07-21',
+    "Author server-side automation: trigger, scheduled, endpoint, bulk, and client scripts that run in a governed sandbox.",
+  updated: "2026-07-21",
   keywords: [
-    'scripts',
-    'scripting',
-    'automation',
-    'trigger',
-    'before submit',
-    'before post',
-    'after post',
-    'scheduled',
-    'endpoint',
-    'bulk',
-    'client script',
-    'sandbox',
+    "scripts",
+    "scripting",
+    "automation",
+    "trigger",
+    "before submit",
+    "before post",
+    "after post",
+    "scheduled",
+    "endpoint",
+    "bulk",
+    "client script",
+    "sandbox",
   ],
-  related: ['scripting-api-reference', 'app-builder', 'record-customization', 'audit-log'],
+  related: ["scripting-api-reference", "app-builder", "record-customization", "audit-log"],
   body: `# Scripting Engine
 
 **Settings → Extend → Scripts** (route **/admin/scripts**) lets an administrator
@@ -157,32 +157,32 @@ scheduled job failed.
 For the complete host API, the available language features, and the exact
 entry-point contracts, see **Scripting API Reference**.
 `,
-}
+};
 
 export const scriptingApiReference: DocArticle = {
-  slug: 'scripting-api-reference',
-  title: 'Scripting API Reference',
-  category: 'apps',
+  slug: "scripting-api-reference",
+  title: "Scripting API Reference",
+  category: "apps",
   order: 4,
   summary:
-    'The ob host API, available language features, entry-point contracts, and governed journal writes for scripts and app backends.',
-  updated: '2026-07-21',
+    "The ob host API, available language features, entry-point contracts, and governed journal writes for scripts and app backends.",
+  updated: "2026-07-21",
   keywords: [
-    'ob',
-    'api reference',
-    'ob.query',
-    'ob.journal',
-    'ob.record',
-    'ob.search',
-    'ob.log',
-    'ob.storage',
-    'ob.records',
-    'libraries',
-    'sandbox',
-    'quickjs',
-    'governance units',
+    "ob",
+    "api reference",
+    "ob.query",
+    "ob.journal",
+    "ob.record",
+    "ob.search",
+    "ob.log",
+    "ob.storage",
+    "ob.records",
+    "libraries",
+    "sandbox",
+    "quickjs",
+    "governance units",
   ],
-  related: ['scripting-engine', 'app-builder'],
+  related: ["scripting-engine", "app-builder"],
   body: `# Scripting API Reference
 
 Scripts and app backends run in an isolated JavaScript sandbox with a single injected
@@ -335,4 +335,4 @@ have no unit budget; time, memory, and row limits govern their execution.
 Every outcome and associated log line is recorded on the run for subsequent
 diagnosis.
 `,
-}
+};

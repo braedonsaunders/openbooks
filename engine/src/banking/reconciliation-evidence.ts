@@ -59,56 +59,57 @@ interface SessionState {
   status: string | null;
 }
 
-export type ReconciliationHistoryEvent = HistoryBase & (
-  | {
-      kind: "revalidate_sign_off";
-      reason: string | null;
-      throughDate: string | null;
-      statementBalance: string | null;
-      originalSignedOffAt: string | null;
-      reviewedEntries: number | null;
-      evidenceDigest: string | null;
-    }
-  | {
-      kind: "sign_off";
-      evidenceKind: "statement" | "source";
-      throughDate: string | null;
-      currency: string | null;
-      statementBalance: string | null;
-      matchedJournalLines: number | null;
-      excludedStatementLines: number | null;
-    }
-  | {
-      kind: "withdraw_sign_off";
-      reason: string | null;
-      throughDate: string | null;
-      currency: string | null;
-      priorStatementBalance: string | null;
-      priorSignedOffAt: string | null;
-      priorSignedOffByName: string | null;
-      releasedJournalLines: number | null;
-      status: string | null;
-    }
-  | {
-      kind: "discard";
-      throughDate: string | null;
-      currency: string | null;
-      statementBalance: string | null;
-      releasedMatches: number | null;
-      releasedStatementLines: number | null;
-    }
-  | {
-      kind: "confirm_opening";
-      amount: string | null;
-      startDate: string | null;
-      reason: string | null;
-    }
-  | {
-      kind: "session_adjustment";
-      before: SessionState | null;
-      after: SessionState | null;
-    }
-);
+export type ReconciliationHistoryEvent = HistoryBase &
+  (
+    | {
+        kind: "revalidate_sign_off";
+        reason: string | null;
+        throughDate: string | null;
+        statementBalance: string | null;
+        originalSignedOffAt: string | null;
+        reviewedEntries: number | null;
+        evidenceDigest: string | null;
+      }
+    | {
+        kind: "sign_off";
+        evidenceKind: "statement" | "source";
+        throughDate: string | null;
+        currency: string | null;
+        statementBalance: string | null;
+        matchedJournalLines: number | null;
+        excludedStatementLines: number | null;
+      }
+    | {
+        kind: "withdraw_sign_off";
+        reason: string | null;
+        throughDate: string | null;
+        currency: string | null;
+        priorStatementBalance: string | null;
+        priorSignedOffAt: string | null;
+        priorSignedOffByName: string | null;
+        releasedJournalLines: number | null;
+        status: string | null;
+      }
+    | {
+        kind: "discard";
+        throughDate: string | null;
+        currency: string | null;
+        statementBalance: string | null;
+        releasedMatches: number | null;
+        releasedStatementLines: number | null;
+      }
+    | {
+        kind: "confirm_opening";
+        amount: string | null;
+        startDate: string | null;
+        reason: string | null;
+      }
+    | {
+        kind: "session_adjustment";
+        before: SessionState | null;
+        after: SessionState | null;
+      }
+  );
 
 export interface ReconciliationEvidence {
   reconciliation: {
@@ -187,7 +188,8 @@ function textValue(value: unknown): string | null {
 function payloadInstant(value: unknown): string | null {
   const text = textValue(value);
   if (text === null) return null;
-  const normalized = text.trim()
+  const normalized = text
+    .trim()
     .replace(" ", "T")
     .replace(/(\.\d{3})\d+/, "$1")
     .replace(/([+-]\d{2})$/, "$1:00");
@@ -232,10 +234,18 @@ function historyEvent(row: HistoryRow): ReconciliationHistoryEvent {
     case "revalidate_sign_off": {
       const proof = objectValue(changes.proof);
       return {
-        ...base,kind:"revalidate_sign_off",reason:textValue(changes.reason),
-        throughDate:textValue(changes.throughDate),statementBalance:moneyText(changes.statementBalance),
-        originalSignedOffAt:payloadInstant(changes.originalSignedOffAt),
-        reviewedEntries:countValue(proof.neutralBasis==='outstanding_movements' ? proof.outstandingEntries : proof.lateEntries),evidenceDigest:textValue(proof.digest),
+        ...base,
+        kind: "revalidate_sign_off",
+        reason: textValue(changes.reason),
+        throughDate: textValue(changes.throughDate),
+        statementBalance: moneyText(changes.statementBalance),
+        originalSignedOffAt: payloadInstant(changes.originalSignedOffAt),
+        reviewedEntries: countValue(
+          proof.neutralBasis === "outstanding_movements"
+            ? proof.outstandingEntries
+            : proof.lateEntries,
+        ),
+        evidenceDigest: textValue(proof.digest),
       };
     }
     case "sign_off": {
@@ -292,7 +302,13 @@ function historyEvent(row: HistoryRow): ReconciliationHistoryEvent {
  * The session's window lines, shared by the statement, excluded-line and
  * count reads so every section of the evidence describes the same lines.
  */
-function windowLinesCte(session: { orgId: string; accountId: string; currency: string; throughDate: string; windowStart: string | null }) {
+function windowLinesCte(session: {
+  orgId: string;
+  accountId: string;
+  currency: string;
+  throughDate: string;
+  windowStart: string | null;
+}) {
   return sql`window_lines as (
     select l.id, l.statement_id, l.line_number, l.posted_on, l.amount, l.description,
            l.match_status, l.exclusion_reason, l.excluded_at, l.excluded_by, l.possible_duplicate_of
@@ -314,36 +330,50 @@ export async function reconciliationEvidence(
   reconciliationId: string,
   ctx: BankingContext,
 ): Promise<ReconciliationEvidence> {
-  return withOrgTransaction(ctx.orgId, async () => {
-    const session = (await db.execute<SessionRow>(sql`
+  return withOrgTransaction(
+    ctx.orgId,
+    async () => {
+      const session = (
+        await db.execute<SessionRow>(
+          sql`
       select r.id, r.account_id, r.through_date::text as through_date, r.currency, r.status, r.evidence_kind
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
          ${subsidiaryScopeSql(ctx.allowedSubsidiaryIds, sql`a.subsidiary_id`)}
-    `, "objects"))[0];
-    // Missing and out-of-scope sessions refuse identically.
-    if (!session) throw new ScopeNotFoundError();
+    `,
+          "objects",
+        )
+      )[0];
+      // Missing and out-of-scope sessions refuse identically.
+      if (!session) throw new ScopeNotFoundError();
 
-    const windowStart = (await db.execute<{ through_date: string }>(sql`
+      const windowStart =
+        (
+          await db.execute<{ through_date: string }>(
+            sql`
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${session.account_id}
          and status = 'signed_off' and id <> ${session.id}
          and through_date < ${session.through_date}::date
        order by through_date desc, created_at desc, id desc
        limit 1
-    `, "objects"))[0]?.through_date ?? null;
+    `,
+            "objects",
+          )
+        )[0]?.through_date ?? null;
 
-    const scope = {
-      orgId: ctx.orgId,
-      accountId: session.account_id,
-      currency: session.currency,
-      throughDate: session.through_date,
-      windowStart,
-    };
-    const windowLines = windowLinesCte(scope);
+      const scope = {
+        orgId: ctx.orgId,
+        accountId: session.account_id,
+        currency: session.currency,
+        throughDate: session.through_date,
+        windowStart,
+      };
+      const windowLines = windowLinesCte(scope);
 
-    const statements = await db.execute<StatementRow>(sql`
+      const statements = await db.execute<StatementRow>(
+        sql`
       with ${windowLines},
       session_statements as (
         select distinct l.statement_id
@@ -368,9 +398,12 @@ export async function reconciliationEvidence(
        where s.org_id = ${ctx.orgId} and s.account_id = ${session.account_id}
          and (c.window_lines > 0 or exists (select 1 from session_statements ss where ss.statement_id = s.id))
        order by s.statement_date asc, s.imported_at asc, s.id asc
-    `, "objects");
+    `,
+        "objects",
+      );
 
-    const excluded = await db.execute<ExcludedRow>(sql`
+      const excluded = await db.execute<ExcludedRow>(
+        sql`
       with ${windowLines}
       select w.id, w.statement_id, w.posted_on::text as posted_on, w.amount::text as amount,
              w.description, w.exclusion_reason,
@@ -382,12 +415,15 @@ export async function reconciliationEvidence(
         left join users u on u.id = w.excluded_by and u.org_id = ${ctx.orgId}
        where w.match_status = 'excluded'
        order by w.posted_on asc, w.statement_id asc, w.line_number asc
-    `, "objects");
+    `,
+        "objects",
+      );
 
-    // Sign-offs, withdrawals, discards, confirmations and adjustments. A
-    // discard is keyed to the deleted session, so discards are matched by the
-    // account they released; the account is already scope-checked above.
-    const history = await db.execute<HistoryRow>(sql`
+      // Sign-offs, withdrawals, discards, confirmations and adjustments. A
+      // discard is keyed to the deleted session, so discards are matched by the
+      // account they released; the account is already scope-checked above.
+      const history = await db.execute<HistoryRow>(
+        sql`
       select to_char(al.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at,
              al.changes, actor.name as actor_name, prior.name as prior_signer_name
         from audit_log al
@@ -403,45 +439,50 @@ export async function reconciliationEvidence(
                and al.changes->'before'->>'accountId' = ${session.account_id}::text)
          )
        order by al.at asc, al.id asc
-    `, "objects");
+    `,
+        "objects",
+      );
 
-    return {
-      reconciliation: {
-        id: session.id,
-        accountId: session.account_id,
-        currency: session.currency,
-        throughDate: session.through_date,
-        status: session.status,
-        evidenceKind: session.evidence_kind,
-        windowStart,
-      },
-      statements: statements.map((row) => ({
-        id: row.id,
-        source: row.source,
-        statementDate: row.statement_date,
-        importedAt: row.imported_at,
-        openingBalance: moneyText(row.opening_balance),
-        closingBalance: moneyText(row.closing_balance),
-        windowLines: row.window_lines,
-        matchedLines: row.matched_lines,
-        excludedLines: row.excluded_lines,
-        unmatchedLines: row.unmatched_lines,
-        windowTotal: moneyText(row.window_total) ?? "0.0000",
-      })),
-      excludedLines: excluded.map((row) => ({
-        id: row.id,
-        statementId: row.statement_id,
-        postedOn: row.posted_on,
-        amount: moneyText(row.amount) ?? "0.0000",
-        description: row.description,
-        exclusionReason: row.exclusion_reason,
-        excludedAt: row.excluded_at,
-        excludedByName: row.excluded_by_name,
-        possibleDuplicateOf: row.dup_posted_on !== null && row.dup_amount !== null
-          ? { postedOn: row.dup_posted_on, amount: moneyText(row.dup_amount) ?? "0.0000" }
-          : null,
-      })),
-      history: history.map(historyEvent),
-    };
-  }, { readOnly: true, isolationLevel: "REPEATABLE READ" });
+      return {
+        reconciliation: {
+          id: session.id,
+          accountId: session.account_id,
+          currency: session.currency,
+          throughDate: session.through_date,
+          status: session.status,
+          evidenceKind: session.evidence_kind,
+          windowStart,
+        },
+        statements: statements.map((row) => ({
+          id: row.id,
+          source: row.source,
+          statementDate: row.statement_date,
+          importedAt: row.imported_at,
+          openingBalance: moneyText(row.opening_balance),
+          closingBalance: moneyText(row.closing_balance),
+          windowLines: row.window_lines,
+          matchedLines: row.matched_lines,
+          excludedLines: row.excluded_lines,
+          unmatchedLines: row.unmatched_lines,
+          windowTotal: moneyText(row.window_total) ?? "0.0000",
+        })),
+        excludedLines: excluded.map((row) => ({
+          id: row.id,
+          statementId: row.statement_id,
+          postedOn: row.posted_on,
+          amount: moneyText(row.amount) ?? "0.0000",
+          description: row.description,
+          exclusionReason: row.exclusion_reason,
+          excludedAt: row.excluded_at,
+          excludedByName: row.excluded_by_name,
+          possibleDuplicateOf:
+            row.dup_posted_on !== null && row.dup_amount !== null
+              ? { postedOn: row.dup_posted_on, amount: moneyText(row.dup_amount) ?? "0.0000" }
+              : null,
+        })),
+        history: history.map(historyEvent),
+      };
+    },
+    { readOnly: true, isolationLevel: "REPEATABLE READ" },
+  );
 }

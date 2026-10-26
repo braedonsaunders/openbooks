@@ -74,8 +74,18 @@ async function form941Population(orgId: string, taxYear: number): Promise<Payrol
       { key: "ssTax", label: "SS tax (both)", align: "right", money: true },
       { key: "medicareWages", label: "5c Medicare wages", align: "right", money: true },
       { key: "medicareTax", label: "5c Medicare tax (both)", align: "right", money: true },
-      { key: "additionalMedicareWages", label: "5d Additional Medicare wages", align: "right", money: true },
-      { key: "additionalMedicareTax", label: "5d Additional Medicare tax", align: "right", money: true },
+      {
+        key: "additionalMedicareWages",
+        label: "5d Additional Medicare wages",
+        align: "right",
+        money: true,
+      },
+      {
+        key: "additionalMedicareTax",
+        label: "5d Additional Medicare tax",
+        align: "right",
+        money: true,
+      },
     ],
     rows: quarters.map((quarter) => ({
       rowId: `${quarter.filingAccountId ?? ""}:${quarter.quarter}`,
@@ -124,7 +134,11 @@ async function w2Population(orgId: string, taxYear: number): Promise<PayrollFili
  * One (EIN, quarter) worksheet row as the Form 941 lines it feeds — the IRS's
  * own line numbers. Line 5e is the form's computed total of the FICA columns.
  */
-async function form941Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function form941Slip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const quarters = await form941Worksheet(orgId, taxYear);
   const quarter = quarters.find((q) => `${q.filingAccountId ?? ""}:${q.quarter}` === rowId);
   if (!quarter) {
@@ -136,16 +150,31 @@ async function form941Slip(orgId: string, taxYear: number, rowId: string): Promi
     formName: "Form 941 — Employer's Quarterly Federal Tax Return",
     formNumber: "Form 941",
     headerFields: [
-      { label: "Employer identification number (EIN)", value: account.accountNumber ?? "Unassigned" },
+      {
+        label: "Employer identification number (EIN)",
+        value: account.accountNumber ?? "Unassigned",
+      },
       { label: "Report for this quarter", value: `Q${quarter.quarter} ${taxYear}` },
     ],
     boxes: [
       { code: "2", label: "Wages, tips, and other compensation", value: quarter.wages },
-      { code: "3", label: "Federal income tax withheld from wages, tips, and other compensation", value: quarter.federalIncomeTax },
+      {
+        code: "3",
+        label: "Federal income tax withheld from wages, tips, and other compensation",
+        value: quarter.federalIncomeTax,
+      },
       { code: "5a", label: "Taxable social security wages", value: quarter.ssWages },
       { code: "5c", label: "Taxable Medicare wages & tips", value: quarter.medicareWages },
-      { code: "5d", label: "Taxable wages & tips subject to Additional Medicare Tax withholding", value: quarter.additionalMedicareWages },
-      { code: "5d tax", label: "Additional Medicare Tax (employee)", value: quarter.additionalMedicareTax },
+      {
+        code: "5d",
+        label: "Taxable wages & tips subject to Additional Medicare Tax withholding",
+        value: quarter.additionalMedicareWages,
+      },
+      {
+        code: "5d tax",
+        label: "Additional Medicare Tax (employee)",
+        value: quarter.additionalMedicareTax,
+      },
       {
         code: "5e",
         label: "Total social security and Medicare taxes (employee + employer)",
@@ -192,12 +221,16 @@ export function w2StateBoxes(
   for (const local of localLines) {
     if (cmp(local.box18LocalWages, "0") !== 0) {
       boxes.push({
-        code: "18", label: `Local wages, tips, etc. — ${local.locality}`, value: local.box18LocalWages,
+        code: "18",
+        label: `Local wages, tips, etc. — ${local.locality}`,
+        value: local.box18LocalWages,
       });
     }
     if (cmp(local.box19LocalIncomeTax, "0") !== 0) {
       boxes.push({
-        code: "19", label: `Local income tax — ${local.locality}`, value: local.box19LocalIncomeTax,
+        code: "19",
+        label: `Local income tax — ${local.locality}`,
+        value: local.box19LocalIncomeTax,
       });
     }
     boxes.push({ code: "20", label: "Locality name", value: local.locality });
@@ -206,7 +239,11 @@ export function w2StateBoxes(
 }
 
 /** One employee's W-2, box for box — the SSA/IRS printed box titles. */
-async function w2Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function w2Slip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const slips = await w2Slips(orgId, taxYear);
   const slip = slips.find((s) => `${s.employeePartyId}:${s.filingAccountId ?? ""}` === rowId);
   if (!slip) {
@@ -220,7 +257,10 @@ async function w2Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
     headerFields: [
       { label: "Employee's name", value: slip.employeeName },
       { label: "State(s) of employment", value: slip.state || "—" },
-      { label: "Employer identification number (EIN)", value: account.accountNumber ?? "Unassigned" },
+      {
+        label: "Employer identification number (EIN)",
+        value: account.accountNumber ?? "Unassigned",
+      },
       { label: "Tax year", value: String(taxYear) },
     ],
     boxes: [
@@ -231,13 +271,19 @@ async function w2Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
       { code: "5", label: "Medicare wages and tips", value: slip.box5MedicareWages },
       { code: "6", label: "Medicare tax withheld", value: slip.box6MedicareTax },
       ...(slip.box12Lines ?? []).map((line) => ({
-        code: `${line.boxCode}${line.code}`, label: line.label, value: line.value,
+        code: `${line.boxCode}${line.code}`,
+        label: line.label,
+        value: line.value,
       })),
       ...slip.stateLines.flatMap((line) =>
         w2StateBoxes(
-          line.state, line.employerStateId,
-          line.box16StateWages, line.box17StateIncomeTax, line.localLines,
-        )),
+          line.state,
+          line.employerStateId,
+          line.box16StateWages,
+          line.box17StateIncomeTax,
+          line.localLines,
+        ),
+      ),
     ],
     notes: [
       "A W-2 carries one federal wage set (boxes 1-6); each work state that withheld repeats its own boxes 15-20 group on this copy, so a mid-year mover's states are never totalled into one row.",
@@ -257,90 +303,95 @@ export function usPackFilings(): PayrollPackFilings {
 
 function buildUsPackFilings(): PayrollPackFilings {
   return {
-  country: "US",
-  programTypes: [
-    { key: "us_ein", label: "Federal employer identification number (EIN)" },
-    { key: "us_state_sui", label: "State unemployment insurance (SUI) account", requiresRegion: true },
-  ],
-  // No separationPayments mapping: the US pack declares no separation filing
-  // (there is no federal ROE equivalent), so nothing consumes one. A filing
-  // that needed it would be refused by name, not fed zeros.
-  yearEnd: [
-    {
-      key: "940",
-      label: "Form 940 annual FUTA return",
-      cadence: "annual",
-      description: "Annual federal unemployment tax return, one per EIN.",
-      population: async () => {
-        throw new PayrollError(
-          "OpenBooks does not prepare Form 940 or Schedule A. File Form 940 with the IRS using its official instructions: "
-          + "https://www.irs.gov/instructions/i940 . Before filing, reconcile the EIN's committed FUTA-taxable wages by employee and year, state Schedule A credit-reduction allocations, FUTA accruals, deposits, and prior credits against payroll and remittance records — refused by name",
-        );
+    country: "US",
+    programTypes: [
+      { key: "us_ein", label: "Federal employer identification number (EIN)" },
+      {
+        key: "us_state_sui",
+        label: "State unemployment insurance (SUI) account",
+        requiresRegion: true,
       },
-      parseRowId: () => null,
-      amendment: {
-        supported: false,
-        refusal: "OpenBooks does not prepare or amend Form 940; use the IRS Form 940 instructions and reconcile the original filing and payment records before submitting a correction.",
+    ],
+    // No separationPayments mapping: the US pack declares no separation filing
+    // (there is no federal ROE equivalent), so nothing consumes one. A filing
+    // that needed it would be refused by name, not fed zeros.
+    yearEnd: [
+      {
+        key: "940",
+        label: "Form 940 annual FUTA return",
+        cadence: "annual",
+        description: "Annual federal unemployment tax return, one per EIN.",
+        population: async () => {
+          throw new PayrollError(
+            "OpenBooks does not prepare Form 940 or Schedule A. File Form 940 with the IRS using its official instructions: " +
+              "https://www.irs.gov/instructions/i940 . Before filing, reconcile the EIN's committed FUTA-taxable wages by employee and year, state Schedule A credit-reduction allocations, FUTA accruals, deposits, and prior credits against payroll and remittance records — refused by name",
+          );
+        },
+        parseRowId: () => null,
+        amendment: {
+          supported: false,
+          refusal:
+            "OpenBooks does not prepare or amend Form 940; use the IRS Form 940 instructions and reconcile the original filing and payment records before submitting a correction.",
+        },
       },
-    },
-    {
-      key: "941",
-      label: "Form 941 quarterly worksheet",
-      cadence: "quarterly",
-      description: "Form 941 quarterly worksheet for US-pack employees, one return per EIN.",
-      emptyText: "No committed US pay stubs for this year.",
-      population: (orgId, taxYear) => form941Population(orgId, taxYear),
-      parseRowId: parse941RowId,
-      slip: { build: (orgId, taxYear, rowId) => form941Slip(orgId, taxYear, rowId) },
-      downloadRefusal:
-        "the US pack produces no Form 941 e-file — the worksheet is the source data; "
-        + "file the return with the IRS directly",
-      // A filed quarter cannot be withdrawn: the IRS has no cancellation for
-      // Form 941. It is corrected on Form 941-X, which reports the corrected
-      // amount, the amount originally reported, and the difference — so this
-      // filing declares `amended` and ONLY `amended`.
-      amendment: {
-        supported: true,
-        revisions: ["amended"],
-        vehicle: "correction_form",
-        formLabel: "Form 941-X",
-        slip: { build: async (row, _orgId, taxYear) => build941X(row, taxYear) },
+      {
+        key: "941",
+        label: "Form 941 quarterly worksheet",
+        cadence: "quarterly",
+        description: "Form 941 quarterly worksheet for US-pack employees, one return per EIN.",
+        emptyText: "No committed US pay stubs for this year.",
+        population: (orgId, taxYear) => form941Population(orgId, taxYear),
+        parseRowId: parse941RowId,
+        slip: { build: (orgId, taxYear, rowId) => form941Slip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "no electronic Form 941-X is generated, the same gap the original Form 941 declares — "
-          + "the three-column adjustment above is complete; file the adjusted return with the "
-          + "IRS directly",
+          "the US pack produces no Form 941 e-file — the worksheet is the source data; " +
+          "file the return with the IRS directly",
+        // A filed quarter cannot be withdrawn: the IRS has no cancellation for
+        // Form 941. It is corrected on Form 941-X, which reports the corrected
+        // amount, the amount originally reported, and the difference — so this
+        // filing declares `amended` and ONLY `amended`.
+        amendment: {
+          supported: true,
+          revisions: ["amended"],
+          vehicle: "correction_form",
+          formLabel: "Form 941-X",
+          slip: { build: async (row, _orgId, taxYear) => build941X(row, taxYear) },
+          downloadRefusal:
+            "no electronic Form 941-X is generated, the same gap the original Form 941 declares — " +
+            "the three-column adjustment above is complete; file the adjusted return with the " +
+            "IRS directly",
+        },
       },
-    },
-    {
-      key: "w2",
-      label: "W-2 box data",
-      cadence: "annual",
-      description: "W-2 box data for US-pack employees, filed per EIN.",
-      emptyText: "No committed US pay stubs for this year.",
-      population: (orgId, taxYear) => w2Population(orgId, taxYear),
-      parseRowId: parseW2RowId,
-      slip: { build: (orgId, taxYear, rowId) => w2Slip(orgId, taxYear, rowId) },
-      downloadRefusal:
-        "the US pack does not produce the SSA EFW2 electronic W-2 file — the box data "
-        + "is complete on screen; transmit W-2s through SSA Business Services Online",
-      // The IRS corrects a W-2 on a WHOLLY SEPARATE form, not by re-filing the
-      // W-2: Form W-2c carries both the previously reported and the correct
-      // amount for every box being corrected, transmitted on Form W-3c.
-      // Cancelling is supported because a W-2 filed in error is withdrawn the
-      // same way — a W-2c correcting the amounts to nil, since the SSA has no
-      // delete transaction for a filed W-2.
-      amendment: {
-        supported: true,
-        revisions: ["amended", "cancelled"],
-        vehicle: "correction_form",
-        formLabel: "Form W-2c",
-        slip: { build: async (row, _orgId, taxYear) => buildW2c(row, taxYear) },
+      {
+        key: "w2",
+        label: "W-2 box data",
+        cadence: "annual",
+        description: "W-2 box data for US-pack employees, filed per EIN.",
+        emptyText: "No committed US pay stubs for this year.",
+        population: (orgId, taxYear) => w2Population(orgId, taxYear),
+        parseRowId: parseW2RowId,
+        slip: { build: (orgId, taxYear, rowId) => w2Slip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "no SSA EFW2C electronic correction file is generated, the same gap the original W-2 "
-          + "declares for EFW2 — print and file the Form W-2c above with its Form W-3c, or key "
-          + "the corrections into SSA Business Services Online",
+          "the US pack does not produce the SSA EFW2 electronic W-2 file — the box data " +
+          "is complete on screen; transmit W-2s through SSA Business Services Online",
+        // The IRS corrects a W-2 on a WHOLLY SEPARATE form, not by re-filing the
+        // W-2: Form W-2c carries both the previously reported and the correct
+        // amount for every box being corrected, transmitted on Form W-3c.
+        // Cancelling is supported because a W-2 filed in error is withdrawn the
+        // same way — a W-2c correcting the amounts to nil, since the SSA has no
+        // delete transaction for a filed W-2.
+        amendment: {
+          supported: true,
+          revisions: ["amended", "cancelled"],
+          vehicle: "correction_form",
+          formLabel: "Form W-2c",
+          slip: { build: async (row, _orgId, taxYear) => buildW2c(row, taxYear) },
+          downloadRefusal:
+            "no SSA EFW2C electronic correction file is generated, the same gap the original W-2 " +
+            "declares for EFW2 — print and file the Form W-2c above with its Form W-3c, or key " +
+            "the corrections into SSA Business Services Online",
+        },
       },
-    },
-  ],
+    ],
   };
 }

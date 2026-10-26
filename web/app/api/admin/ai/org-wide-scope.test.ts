@@ -50,28 +50,46 @@ registerHooks({
 });
 
 const [setupAgent, aiAgent, ai, documentCapture] = await Promise.all([
-  import("../setup/agents/[agentKey]/route.ts"), import("./agents/[agentKey]/route.ts"), import("./route.ts"), import("./document-capture/handlers.ts"),
+  import("../setup/agents/[agentKey]/route.ts"),
+  import("./agents/[agentKey]/route.ts"),
+  import("./route.ts"),
+  import("./document-capture/handlers.ts"),
 ]);
 const params = { params: Promise.resolve({ agentKey: "continuous_close_daily" }) };
-const request = () => new Request("http://localhost/api/admin/ai", {
-  method: "PUT",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({}),
-});
+const request = () =>
+  new Request("http://localhost/api/admin/ai", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
 
 test("restricted actors cannot write any org-wide AI or setup-agent policy", async () => {
-  state.allowedSubsidiaryIds = new Set(["subsidiary-a"]); state.writes.length = 0;
+  state.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  state.writes.length = 0;
   const deleteCapture = documentCapture.createDeleteDocumentCaptureHandler(
-    async () => ({ user: { orgId: "org-1", id: "actor-1" }, allowedSubsidiaryIds: state.allowedSubsidiaryIds } as never),
-    async () => { state.writes.push("document-capture-key-delete"); },
+    async () =>
+      ({
+        user: { orgId: "org-1", id: "actor-1" },
+        allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+      }) as never,
+    async () => {
+      state.writes.push("document-capture-key-delete");
+    },
   );
   const cases: Array<[string, () => Promise<Response>]> = [
-    ["setup agent policy", () => setupAgent.PUT(request(), params)], ["AI agent policy", () => aiAgent.PUT(request(), params)],
-    ["AI settings", () => ai.PUT(request())], ["AI key deletion", () => ai.DELETE()], ["document capture key deletion", () => deleteCapture()],
+    ["setup agent policy", () => setupAgent.PUT(request(), params)],
+    ["AI agent policy", () => aiAgent.PUT(request(), params)],
+    ["AI settings", () => ai.PUT(request())],
+    ["AI key deletion", () => ai.DELETE()],
+    ["document capture key deletion", () => deleteCapture()],
   ];
   for (const [name, invoke] of cases) {
     const response = await invoke();
-    assert.deepEqual({ status: response.status, body: await response.json() }, { status: 403, body: { error: "requires unrestricted subsidiary access" } }, `${name} must refuse a subsidiary-restricted actor`);
+    assert.deepEqual(
+      { status: response.status, body: await response.json() },
+      { status: 403, body: { error: "requires unrestricted subsidiary access" } },
+      `${name} must refuse a subsidiary-restricted actor`,
+    );
   }
   assert.deepEqual(state.writes, [], "no org-wide setting or key reaches a writer");
 });

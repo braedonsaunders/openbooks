@@ -219,11 +219,14 @@ test(
            join pg_class c on c.oid = i.indexrelid
           where c.relname in ('probe_no_txn_item_a', 'probe_no_txn_item_b')`,
       );
-      assert.deepEqual(
-        first.rows.map((row) => row.name).sort(),
-        ["probe_no_txn_item_a", "probe_no_txn_item_b"],
+      assert.deepEqual(first.rows.map((row) => row.name).sort(), [
+        "probe_no_txn_item_a",
+        "probe_no_txn_item_b",
+      ]);
+      assert.ok(
+        first.rows.every((row) => row.valid),
+        "both builds must be valid",
       );
-      assert.ok(first.rows.every((row) => row.valid), "both builds must be valid");
 
       // Re-running replays the whole body idempotently (the runner's retry
       // replays after a mid-file failure, which leaves earlier statements
@@ -312,7 +315,7 @@ test("an ordinary failure still carries the file, the elapsed time, and the caus
   );
   assert.equal(
     message,
-    "[bootstrap] generated/0001_example.sql failed after 4.2s: "
-      + "duplicate key value violates unique constraint",
+    "[bootstrap] generated/0001_example.sql failed after 4.2s: " +
+      "duplicate key value violates unique constraint",
   );
 });

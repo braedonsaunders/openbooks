@@ -47,12 +47,17 @@ export async function resolveFxRateAgeLimit(
   kind: FxRateAgeKind,
   asOf: string,
 ): Promise<FxRateAgeLimit> {
-  const row = (await runner.execute<{ max_age_days: number; effective_from: string }>(sql`
+  const row = (
+    await runner.execute<{ max_age_days: number; effective_from: string }>(
+      sql`
     select max_age_days, effective_from::text as effective_from
       from fx_rate_age_policies
      where org_id = ${orgId} and rate_kind = ${kind} and effective_from <= ${asOf}
      order by effective_from desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   return row
     ? { kind, maxAgeDays: Number(row.max_age_days), effectiveFrom: row.effective_from }
     : { kind, maxAgeDays: FX_RATE_AGE_DEFAULT_DAYS, effectiveFrom: null };
@@ -73,15 +78,18 @@ export function fxRateAgeRefusal(input: {
   const { from, to, rateDate, asOf, limit } = input;
   const age = calendarDaysBetween(rateDate, asOf);
   if (age <= limit.maxAgeDays) return null;
-  const subject = limit.kind === "closing"
-    ? `the newest ${from}→${to} spot rate on or before ${asOf}`
-    : `the newest ${from}→${to} spot rate averaged into the period ending ${asOf}`;
+  const subject =
+    limit.kind === "closing"
+      ? `the newest ${from}→${to} spot rate on or before ${asOf}`
+      : `the newest ${from}→${to} spot rate averaged into the period ending ${asOf}`;
   const source = limit.effectiveFrom
     ? `the ${limit.kind} rate age policy effective ${limit.effectiveFrom}`
     : "the default when no policy is set";
-  return `${subject} is dated ${rateDate}, ${age} days old, beyond the ${limit.maxAgeDays}-day limit for ${limit.kind} `
-    + `rates (${source}). Enter or refresh the ${from}→${to} rate in Setup → Exchange Rates, or change the limit `
-    + "in Setup → FX Rate Age Policies.";
+  return (
+    `${subject} is dated ${rateDate}, ${age} days old, beyond the ${limit.maxAgeDays}-day limit for ${limit.kind} ` +
+    `rates (${source}). Enter or refresh the ${from}→${to} rate in Setup → Exchange Rates, or change the limit ` +
+    "in Setup → FX Rate Age Policies."
+  );
 }
 
 export interface FxPolicedRate {
@@ -117,7 +125,8 @@ export async function averageSpotRateWithinAgeLimit(
   toDate: string,
 ): Promise<FxPolicedRate> {
   const window = await averageSpotRateWindow(runner, orgId, from, to, fromDate, toDate);
-  if (window.rate === null || window.newestAsOf === null) return { rate: window.rate, refusal: null };
+  if (window.rate === null || window.newestAsOf === null)
+    return { rate: window.rate, refusal: null };
   const limit = await resolveFxRateAgeLimit(runner, orgId, "average", toDate);
   const refusal = fxRateAgeRefusal({ from, to, rateDate: window.newestAsOf, asOf: toDate, limit });
   return refusal ? { rate: null, refusal } : { rate: window.rate, refusal: null };

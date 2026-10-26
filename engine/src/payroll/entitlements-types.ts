@@ -20,27 +20,14 @@ export const STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY: EntitlementPlanSystemKey =
 export type EntitlementUnit = "money" | "hours";
 export type EntitlementDirection = "accrue" | "owe";
 export type EntitlementAccrualMethod =
-  | "percent_of_earnings"
-  | "per_hour_worked"
-  | "fixed_per_period"
-  | "manual";
+  "percent_of_earnings" | "per_hour_worked" | "fixed_per_period" | "manual";
 export type EntitlementCapBehavior = "warn" | "block" | "auto_payout";
 export type EntitlementMovementKind =
-  | "opening"
-  | "accrual"
-  | "bank_in"
-  | "payout"
-  | "repayment"
-  | "adjustment";
+  "opening" | "accrual" | "bank_in" | "payout" | "repayment" | "adjustment";
 
 /** Resolution order for a scoped limit row — most specific first. */
 export type EntitlementLimitScope =
-  | "employee"
-  | "job_title"
-  | "trade"
-  | "department"
-  | "subsidiary"
-  | "plan";
+  "employee" | "job_title" | "trade" | "department" | "subsidiary" | "plan";
 
 export interface EntitlementPlan {
   id: string;

@@ -1,7 +1,12 @@
-import { sql } from 'drizzle-orm'
-import { businessToday } from '../platform/business-date.ts'
-import { db } from '../platform/db.ts'
-import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type InvoicingProfile, type BackupProfile } from '@openbooks/schema'
+import { sql } from "drizzle-orm";
+import { businessToday } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
+import {
+  BUILTIN_PROJECT_TYPES,
+  type FinancialProfile,
+  type InvoicingProfile,
+  type BackupProfile,
+} from "@openbooks/schema";
 
 /**
  * The single resolver for a project's classification. A project is classified by
@@ -11,27 +16,38 @@ import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type InvoicingProfile, ty
  * coarse billing-method string re-derived inline.
  */
 export interface ResolvedProjectType {
-  id: string | null
-  key: string
-  name: string
+  id: string | null;
+  key: string;
+  name: string;
   /** Coarse classifier carried by the type (for snapshots/labels), derived here. */
-  billingMethod: 'time_and_materials' | 'fixed_price' | 'cost_plus'
-  financialProfile: FinancialProfile
-  financialProfileEffectiveFrom: string | null
-  invoicingProfile: InvoicingProfile
-  backupProfile: BackupProfile
+  billingMethod: "time_and_materials" | "fixed_price" | "cost_plus";
+  financialProfile: FinancialProfile;
+  financialProfileEffectiveFrom: string | null;
+  invoicingProfile: InvoicingProfile;
+  backupProfile: BackupProfile;
 }
 
-const byKey = new Map(BUILTIN_PROJECT_TYPES.map((t) => [t.key, t]))
+const byKey = new Map(BUILTIN_PROJECT_TYPES.map((t) => [t.key, t]));
 
 /** The coarse billing method a project type maps to (from its built-in definition). */
-export function coarseBillingMethod(key: string | null | undefined): ResolvedProjectType['billingMethod'] {
-  return (key && byKey.get(key)?.billingMethod) || 'time_and_materials'
+export function coarseBillingMethod(
+  key: string | null | undefined,
+): ResolvedProjectType["billingMethod"] {
+  return (key && byKey.get(key)?.billingMethod) || "time_and_materials";
 }
 
 function timeAndMaterials(): ResolvedProjectType {
-  const t = byKey.get('time_and_materials')!
-  return { id: null, key: t.key, name: t.name, billingMethod: t.billingMethod, financialProfile: t.financialProfile, financialProfileEffectiveFrom: null, invoicingProfile: t.invoicingProfile, backupProfile: t.backupProfile }
+  const t = byKey.get("time_and_materials")!;
+  return {
+    id: null,
+    key: t.key,
+    name: t.name,
+    billingMethod: t.billingMethod,
+    financialProfile: t.financialProfile,
+    financialProfileEffectiveFrom: null,
+    invoicingProfile: t.invoicingProfile,
+    backupProfile: t.backupProfile,
+  };
 }
 
 export async function loadProjectType(
@@ -39,11 +55,21 @@ export async function loadProjectType(
   projectId: string,
   asOf?: string,
 ): Promise<ResolvedProjectType> {
-  const effectiveAsOf = asOf ?? await businessToday(orgId)
+  const effectiveAsOf = asOf ?? (await businessToday(orgId));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveAsOf)) {
-    throw new Error('project type asOf must be YYYY-MM-DD')
+    throw new Error("project type asOf must be YYYY-MM-DD");
   }
-  const r = (await db.execute<{ id: string | null; key: string | null; name: string | null; bm: ResolvedProjectType['billingMethod'] | null; fp: FinancialProfile | null; fp_effective_from: string | null; ip: InvoicingProfile | null; bp: BackupProfile | null }>(sql`
+  const r = await db.execute<{
+    id: string | null;
+    key: string | null;
+    name: string | null;
+    bm: ResolvedProjectType["billingMethod"] | null;
+    fp: FinancialProfile | null;
+    fp_effective_from: string | null;
+    ip: InvoicingProfile | null;
+    bp: BackupProfile | null;
+  }>(
+    sql`
     select pt.id, pt.key, pt.name, pt.billing_method as bm,
            version.financial_profile as fp,
            version.effective_from::text as fp_effective_from,
@@ -61,11 +87,22 @@ export async function loadProjectType(
          limit 1
       ) version on true
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `, 'objects'))
-  const row = r[0]
+  `,
+    "objects",
+  );
+  const row = r[0];
   if (row?.id && row.fp && row.ip && row.bp) {
-    if (!row.bm) throw new Error(`project type ${row.id} is missing its billing classification`)
-    return { id: row.id, key: row.key!, name: row.name!, billingMethod: row.bm, financialProfile: row.fp, financialProfileEffectiveFrom: row.fp_effective_from, invoicingProfile: row.ip, backupProfile: row.bp }
+    if (!row.bm) throw new Error(`project type ${row.id} is missing its billing classification`);
+    return {
+      id: row.id,
+      key: row.key!,
+      name: row.name!,
+      billingMethod: row.bm,
+      financialProfile: row.fp,
+      financialProfileEffectiveFrom: row.fp_effective_from,
+      invoicingProfile: row.ip,
+      backupProfile: row.bp,
+    };
   }
-  return timeAndMaterials()
+  return timeAndMaterials();
 }

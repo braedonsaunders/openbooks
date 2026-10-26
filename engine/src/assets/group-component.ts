@@ -3,19 +3,8 @@ import {
   type GroupAssetValuation,
   type GroupAssetCounterfactual,
 } from "../money/asset-group-plan.ts";
-import {
-  splitDepreciationPlan,
-  type DatedDepreciation,
-} from "../money/depreciation-plan.ts";
-import {
-  add,
-  cmp,
-  divRate,
-  mulRate,
-  mulRatio,
-  neg,
-  toUnits,
-} from "../money/money.ts";
+import { splitDepreciationPlan, type DatedDepreciation } from "../money/depreciation-plan.ts";
+import { add, cmp, divRate, mulRate, mulRatio, neg, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { measurePartialDisposal } from "./asset-basis.ts";
 export interface GroupComponentInput {
@@ -73,8 +62,7 @@ export function transferGroupComponent(
     },
   };
 }
-const total = (lines: DatedDepreciation[]) =>
-  lines.reduce((n, l) => add(n, l.amount), "0");
+const total = (lines: DatedDepreciation[]) => lines.reduce((n, l) => add(n, l.amount), "0");
 function allocate(
   lines: DatedDepreciation[],
   numerator: bigint,
@@ -85,15 +73,9 @@ function allocate(
     ...l,
     amount: mulRatio(l.amount, numerator, denominator),
   }));
-  if (result.length)
-    result.at(-1)!.amount = add(target, neg(total(result.slice(0, -1))));
-  if (
-    result.some((l) => cmp(l.amount, "0") < 0) ||
-    cmp(total(result), target) !== 0
-  )
-    throw new Error(
-      "group component plan cannot allocate its measured remaining basis",
-    );
+  if (result.length) result.at(-1)!.amount = add(target, neg(total(result.slice(0, -1))));
+  if (result.some((l) => cmp(l.amount, "0") < 0) || cmp(total(result), target) !== 0)
+    throw new Error("group component plan cannot allocate its measured remaining basis");
   return result;
 }
 /** IAS 16 component derecognition in the original transfer denomination.
@@ -124,29 +106,15 @@ export function measureGroupComponent(args: {
       (args.identified.unimpairedRemainingPlan?.length ?? 0) > 1200 ||
       (args.identified.unimpairedRemovedPlan?.length ?? 0) > 1200)
   )
-    throw new Error(
-      "group component plans support at most 1,200 accounting periods",
-    );
+    throw new Error("group component plans support at most 1,200 accounting periods");
   const { basis, effectiveOn } = args,
-    current = groupAssetPlan(
-      basis.groupPlan,
-      args.history,
-      basis.groupUnimpaired,
-    );
+    current = groupAssetPlan(basis.groupPlan, args.history, basis.groupUnimpaired);
   const held = toUnits(args.buyerCostBefore),
     original = toUnits(args.originalBuyerCost),
     removed = toUnits(args.removedBuyerCost),
     after = held - removed;
-  if (
-    original <= 0n ||
-    held <= 0n ||
-    held > original ||
-    removed <= 0n ||
-    after < 0n
-  )
-    throw new Error(
-      "group component requires the current retained legal-book basis",
-    );
+  if (original <= 0n || held <= 0n || held > original || removed <= 0n || after < 0n)
+    throw new Error("group component requires the current retained legal-book basis");
   const share = (value: string) => mulRatio(value, held, original);
   const fullCost = add(basis.groupCost, current.costDelta),
     fullSalvage = add(basis.groupSalvage, current.salvageDelta);
@@ -193,11 +161,8 @@ export function measureGroupComponent(args: {
           `${label} must use distinct book period ends and non-negative exact amounts`,
         );
       const startsOn = p.starts_on < effectiveOn ? effectiveOn : p.starts_on;
-      if (startsOn < previous)
-        throw new Error(`${label} periods cannot overlap`);
-      previous = new Date(Date.parse(l.date + "T00:00:00Z") + 86400000)
-        .toISOString()
-        .slice(0, 10);
+      if (startsOn < previous) throw new Error(`${label} periods cannot overlap`);
+      previous = new Date(Date.parse(l.date + "T00:00:00Z") + 86400000).toISOString().slice(0, 10);
       return { startsOn, date: l.date, amount: l.amount };
     });
     if (cmp(total(plan), target) !== 0)
@@ -210,30 +175,16 @@ export function measureGroupComponent(args: {
     add(measurement.remainingCost, neg(measurement.remainingAccumulated)),
     neg(measurement.remainingSalvage),
   );
-  const removedDep = add(
-    measurement.removedCarrying,
-    neg(measurement.removedSalvage),
-  );
+  const removedDep = add(measurement.removedCarrying, neg(measurement.removedSalvage));
   const remainingPlan = identified
-    ? dated(
-        identified.remainingPlan,
-        remainingDep,
-        "Retained group depreciation",
-      )
+    ? dated(identified.remainingPlan, remainingDep, "Retained group depreciation")
     : allocate(elapsed.remaining, after, original, remainingDep);
   const removedPlan = identified
     ? args.onward
-      ? dated(
-          identified.removedPlan ?? [],
-          removedDep,
-          "Transferred component group depreciation",
-        )
+      ? dated(identified.removedPlan ?? [], removedDep, "Transferred component group depreciation")
       : []
     : allocate(elapsed.remaining, removed, original, removedDep);
-  const counterElapsed = splitDepreciationPlan(
-    current.unimpairedPlan,
-    effectiveOn,
-  );
+  const counterElapsed = splitDepreciationPlan(current.unimpairedPlan, effectiveOn);
   const fullCounterAccum = add(
     add(basis.groupAccumulated, current.unimpairedAccumulatedDelta),
     counterElapsed.accrued,
@@ -253,10 +204,7 @@ export function measureGroupComponent(args: {
     });
   let remainingCounterAccum: string, remainingCounterPlan: DatedDepreciation[];
   if (identified && priorImpairment) {
-    if (
-      identified.unimpairedAccumulated === undefined ||
-      !identified.unimpairedRemainingPlan
-    )
+    if (identified.unimpairedAccumulated === undefined || !identified.unimpairedRemainingPlan)
       throw new Error(
         "record this component's unimpaired accumulated depreciation and retained unimpaired plan to preserve the impairment-reversal ceiling",
       );
@@ -299,10 +247,7 @@ export function measureGroupComponent(args: {
       ),
     );
   }
-  const removedUnimpairedAccumulated = add(
-    counterAccum,
-    neg(remainingCounterAccum),
-  );
+  const removedUnimpairedAccumulated = add(counterAccum, neg(remainingCounterAccum));
   if (cmp(removedUnimpairedAccumulated, measurement.removedAccumulated) > 0)
     throw new Error(
       "unimpaired component evidence cannot leave a lower transferred carrying amount than the impaired group basis",
@@ -321,14 +266,8 @@ export function measureGroupComponent(args: {
             "Transferred component unimpaired group depreciation",
           )
         : removedPlan
-      : allocate(
-          counterElapsed.remaining,
-          removed,
-          original,
-          removedUnimpairedDep,
-        );
-  const full = (v: string) =>
-    after === 0n ? "0" : mulRatio(v, original, after);
+      : allocate(counterElapsed.remaining, removed, original, removedUnimpairedDep);
+  const full = (v: string) => (after === 0n ? "0" : mulRatio(v, original, after));
   const normalize = (plan: DatedDepreciation[], target: string) =>
     after === 0n ? [] : allocate(plan, original, after, full(target));
   return {
@@ -339,25 +278,15 @@ export function measureGroupComponent(args: {
     buyerDelta: "0",
     heldNumerator: add(args.buyerCostBefore, neg(args.removedBuyerCost)),
     heldDenominator: args.originalBuyerCost,
-    fullCostDelta:
-      after === 0n ? "0" : add(full(measurement.remainingCost), neg(fullCost)),
+    fullCostDelta: after === 0n ? "0" : add(full(measurement.remainingCost), neg(fullCost)),
     fullAccumulatedDelta:
-      after === 0n
-        ? "0"
-        : add(full(measurement.remainingAccumulated), neg(fullAccumulated)),
+      after === 0n ? "0" : add(full(measurement.remainingAccumulated), neg(fullAccumulated)),
     fullSalvageDelta:
-      after === 0n
-        ? "0"
-        : add(full(measurement.remainingSalvage), neg(fullSalvage)),
+      after === 0n ? "0" : add(full(measurement.remainingSalvage), neg(fullSalvage)),
     fullUnimpairedAccumulatedDelta:
-      after === 0n
-        ? "0"
-        : add(full(remainingCounterAccum), neg(fullCounterAccum)),
+      after === 0n ? "0" : add(full(remainingCounterAccum), neg(fullCounterAccum)),
     fullPlan: normalize(remainingPlan, remainingDep),
-    fullUnimpairedPlan: normalize(
-      remainingCounterPlan,
-      total(remainingCounterPlan),
-    ),
+    fullUnimpairedPlan: normalize(remainingCounterPlan, total(remainingCounterPlan)),
     removedCost: measurement.removedCost,
     removedAccumulated: measurement.removedAccumulated,
     removedSalvage: measurement.removedSalvage,

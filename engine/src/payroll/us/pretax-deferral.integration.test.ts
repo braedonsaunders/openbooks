@@ -10,11 +10,20 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions } from "../../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
+} from "../../testing/fixtures.ts";
 import { seedUsSuiAccount, seedUsEinAccount } from "../filing-test-fixtures.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { saveOpeningBalances } from "../opening-balances.ts";
-import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "../opening-employer-authority.ts";
+import {
+  qualifyOpeningEmployerAuthority,
+  readOpeningEmployerContext,
+} from "../opening-employer-authority.ts";
 import { qualifyOpeningLevySourceAuthority } from "../opening-levy-source-authority.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { form941Worksheet, w2Slips } from "../yearend.ts";
@@ -60,7 +69,7 @@ interface Fixture {
 async function usPayrollOrg(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  await grantScratchPermissions(org.orgId, actorId, ['payroll.read', 'payroll.run']);
+  await grantScratchPermissions(org.orgId, actorId, ["payroll.read", "payroll.run"]);
   const account = async (number: string, name: string, type: string) => {
     const id = randomUUID();
     await db.execute(sql`
@@ -107,7 +116,10 @@ async function usPayrollOrg(): Promise<Fixture> {
   // resolving rate still refuses by name at calculate; this fixture simply
   // does not leave it unconfigured.
   const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX", {
-    federalAccountId: einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    federalAccountId: einAccountId,
+    subsidiaryId,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
     sourceReference: "TX original employer registration",
   });
   await db.execute(sql`
@@ -132,7 +144,15 @@ async function usPayrollOrg(): Promise<Fixture> {
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, ${PERIOD_END}, 3,
             ${subsidiaryId}, true, ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, actorId, subsidiaryId, einAccountId, scheduleId, deferralPayable, suiAccountId };
+  return {
+    orgId: org.orgId,
+    actorId,
+    subsidiaryId,
+    einAccountId,
+    scheduleId,
+    deferralPayable,
+    suiAccountId,
+  };
 }
 
 async function usEmployee(fx: Fixture, name: string): Promise<string> {
@@ -188,7 +208,9 @@ async function assign401k(fx: Fixture, employeePartyId: string): Promise<void> {
                                          effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeePartyId}, ${componentId}, ${DEFERRAL}, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
-  await db.execute(sql`update pay_component_earning_classifications set statutory_reporting_category = 'us_401k_elective_deferral' where org_id = ${fx.orgId} and pay_component_id = ${componentId}`);
+  await db.execute(
+    sql`update pay_component_earning_classifications set statutory_reporting_category = 'us_401k_elective_deferral' where org_id = ${fx.orgId} and pay_component_id = ${componentId}`,
+  );
 }
 
 /** Union dues are withheld from net pay but stay in federal taxable wages. */
@@ -225,11 +247,14 @@ function expectedFit(fitWages: string): string {
 }
 
 const stubFactors = async (fx: Fixture, documentId: string, employeePartyId: string) => {
-  const r = (await db.execute<{ factors: Record<string, string> }>(sql`
+  const r = await db.execute<{ factors: Record<string, string> }>(
+    sql`
     select factors from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
        and employee_party_id = ${employeePartyId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]?.factors ?? null;
 };
 
@@ -246,11 +271,16 @@ test(
       await assignUnionDues(fx, ula);
 
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
       const result = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, []);
 
@@ -273,7 +303,8 @@ test(
       assert.equal(ulaFactors.FIT, "156.1500");
       assert.equal(ulaFactors.I, PERIOD_WAGES);
       assert.notEqual(
-        danFactors.FIT, carlFactors.FIT,
+        danFactors.FIT,
+        carlFactors.FIT,
         "the deferral must move FIT — identical figures are the defect",
       );
       // The negative: Social Security and Medicare price unreduced wages.
@@ -301,7 +332,8 @@ test(
       assert.equal(danSlip.box12Lines?.find((line) => line.code === "D")?.value, "200.0000"); // IRS 2026 W-2 instructions, Box 12: https://www.irs.gov/instructions/iw2w3
       assert.equal(ulaSlip.box1Wages, "2000.0000");
       assert.notEqual(
-        danSlip.box1Wages, carlSlip.box1Wages,
+        danSlip.box1Wages,
+        carlSlip.box1Wages,
         "Box 1 must reflect the deferral — identical figures are the defect",
       );
       assert.equal(danSlip.box3SsWages, carlSlip.box3SsWages);
@@ -332,11 +364,16 @@ test(
            and effective_from = '2026-01-01'
       `);
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
       const result = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, []);
       await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
@@ -390,11 +427,16 @@ test(
                   ${JSON.stringify({ rate, wageBase })}::jsonb, ${fx.actorId}, ${fx.actorId})`);
       }
       const firstRun = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
       const firstResult = await calculatePayRun({
-        orgId: fx.orgId, documentId: firstRun.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: firstRun.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(firstResult.errors, []);
       await commitPayRun({ orgId: fx.orgId, documentId: firstRun.documentId, actorId: fx.actorId });
@@ -404,34 +446,74 @@ test(
          where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
       // The region-wide Oregon row inserted above is the live configuration
       // for the new work state; no org-level blob is read anywhere.
-      const priorStateStub = (await db.execute<{ province: string }>(sql`
+      const priorStateStub = (
+        await db.execute<{ province: string }>(
+          sql`
         select province from pay_stubs
          where org_id = ${fx.orgId} and employee_party_id = ${employee}
-      `, "objects"))[0];
-      assert.equal(priorStateStub?.province, "TX", "the committed stub preserves the prior work state");
+      `,
+          "objects",
+        )
+      )[0];
+      assert.equal(
+        priorStateStub?.province,
+        "TX",
+        "the committed stub preserves the prior work state",
+      );
       // Year-to-date reads scope stubs to the assigned account's employer,
       // the same scoping the run's own money path passes — otherwise the
       // Texas stub the transfer rule must credit is filtered out of history.
-      const historyProbe=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
-        periodStart:PERIOD_START,periodEnd:PERIOD_END,runType:'supplemental',employeePartyIds:[employee]});
-      const stateHistory = await usEmployeeYtd({
-        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
-        documentId: historyProbe.documentId,
-      }, "OR", fx.suiAccountId);
-      assert.equal(stateHistory.suiOtherRegions, "TX", "SUI history is state-dimensioned independently of FUTA");
+      const historyProbe = await createPayRun({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        runType: "supplemental",
+        employeePartyIds: [employee],
+      });
+      const stateHistory = await usEmployeeYtd(
+        {
+          tx: db,
+          orgId: fx.orgId,
+          employeePartyId: employee,
+          taxYear: 2026,
+          documentId: historyProbe.documentId,
+        },
+        "OR",
+        fx.suiAccountId,
+      );
+      assert.equal(
+        stateHistory.suiOtherRegions,
+        "TX",
+        "SUI history is state-dimensioned independently of FUTA",
+      );
 
       // SUI-TRANSFER-CREDIT-IMPL: Oregon prices the Texas stub under its
       // aggregate transfer rule instead of refusing — the same-employer
       // wages are in the system, so the base follows them to the new state.
-      assert.equal(resolveUsSuiYtdForCoverage("OR", 2026, stateHistory, false), PERIOD_WAGES,
-        "Oregon credits prior-state same-employer wages toward its base");
+      assert.equal(
+        resolveUsSuiYtdForCoverage("OR", 2026, stateHistory, false),
+        PERIOD_WAGES,
+        "Oregon credits prior-state same-employer wages toward its base",
+      );
       assert.equal(resolveUsSuiYtdForCoverage("OR", 2026, stateHistory, true), "0");
-      const sameStateHistory = await usEmployeeYtd({
-        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
-        documentId: historyProbe.documentId,
-      }, "TX", fx.suiAccountId);
-      assert.equal(resolveUsSuiYtd("TX", 2026, sameStateHistory), PERIOD_WAGES,
-        "same-state SUI history remains usable; FUTA retains its independent aggregate");
+      const sameStateHistory = await usEmployeeYtd(
+        {
+          tx: db,
+          orgId: fx.orgId,
+          employeePartyId: employee,
+          taxYear: 2026,
+          documentId: historyProbe.documentId,
+        },
+        "TX",
+        fx.suiAccountId,
+      );
+      assert.equal(
+        resolveUsSuiYtd("TX", 2026, sameStateHistory),
+        PERIOD_WAGES,
+        "same-state SUI history remains usable; FUTA retains its independent aggregate",
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -457,25 +539,36 @@ test(
          where org_id = ${fx.orgId} and employee_party_id = ${suiOnlyExempt}`);
 
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
       const result = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, []);
       const lines = await db.execute<{
-        employee_party_id: string; system_key: string; amount: string;
-      }>(sql`
+        employee_party_id: string;
+        system_key: string;
+        amount: string;
+      }>(
+        sql`
         select s.employee_party_id, pc.system_key, coalesce(sum(l.amount), 0)::text as amount
           from pay_stubs s
           join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
           join pay_components pc on pc.org_id = l.org_id and pc.id = l.component_id
          where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind = 'employer_contribution' and pc.system_key in ('futa', 'suta')
-         group by s.employee_party_id, pc.system_key`, "objects");
+         group by s.employee_party_id, pc.system_key`,
+        "objects",
+      );
       const amount = (employee: string, systemKey: string) =>
-        lines.find((line) => line.employee_party_id === employee && line.system_key === systemKey)?.amount ?? "0";
+        lines.find((line) => line.employee_party_id === employee && line.system_key === systemKey)
+          ?.amount ?? "0";
       assert.equal(amount(futaOnlyExempt, "futa"), "0");
       assert.equal(amount(futaOnlyExempt, "suta"), "60.0000");
       assert.equal(amount(suiOnlyExempt, "futa"), "12.0000");
@@ -489,16 +582,39 @@ test(
 async function qualifyUsOpeningLevySource(
   fx: Fixture,
   employeePartyId: string,
-  allocations: readonly { programKey: string; region: string; filingAccountId: string | null; federalAccountId: string; amount: string }[],
+  allocations: readonly {
+    programKey: string;
+    region: string;
+    filingAccountId: string | null;
+    federalAccountId: string;
+    amount: string;
+  }[],
 ): Promise<void> {
   const context = await readOpeningEmployerContext({
-    orgId: fx.orgId, actorId: fx.actorId, employeePartyId, taxYear: 2026, allowedSubsidiaryIds: null,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    employeePartyId,
+    taxYear: 2026,
+    allowedSubsidiaryIds: null,
   });
-  if (!context.record) throw new Error('The US opening balance was not retained');
-  const folderId = randomUUID(), fileId = randomUUID(), versionId = randomUUID();
-  const bytes = Buffer.from(JSON.stringify({ employeePartyId, legalEmployerSubsidiaryId: fx.subsidiaryId,
-    taxYear: 2026, originalCountry: 'US', originalCurrency: 'USD', coverageStart: '2026-01-01', coverageEnd: '2026-01-01', coverageComplete: true, allocations }));
-  const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
+  if (!context.record) throw new Error("The US opening balance was not retained");
+  const folderId = randomUUID(),
+    fileId = randomUUID(),
+    versionId = randomUUID();
+  const bytes = Buffer.from(
+    JSON.stringify({
+      employeePartyId,
+      legalEmployerSubsidiaryId: fx.subsidiaryId,
+      taxYear: 2026,
+      originalCountry: "US",
+      originalCurrency: "USD",
+      coverageStart: "2026-01-01",
+      coverageEnd: "2026-01-01",
+      coverageComplete: true,
+      allocations,
+    }),
+  );
+  const sourceSha256 = createHash("sha256").update(bytes).digest("hex");
   await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
     values(${folderId},${fx.orgId},'Original US payroll opening',true,${fx.actorId},${fx.actorId},${fx.actorId})`);
   await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
@@ -506,22 +622,47 @@ async function qualifyUsOpeningLevySource(
   await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
     values(${versionId},${fileId},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId})`);
   await db.execute(sql`insert into file_blobs(version_id,bytes) values(${versionId},${bytes})`);
-  await db.execute(sql`update files set current_version_id=${versionId} where org_id=${fx.orgId} and id=${fileId}`);
+  await db.execute(
+    sql`update files set current_version_id=${versionId} where org_id=${fx.orgId} and id=${fileId}`,
+  );
   await qualifyOpeningEmployerAuthority({
-    orgId: fx.orgId, actorId: fx.actorId, openingBalanceId: context.record.id, subsidiaryId: fx.subsidiaryId,
-    expectedOpeningSha256: context.record.openingSha256, sourceFileId: fileId, sourceVersionId: versionId,
-    sourceSha256, sourceReference: 'Original US payroll opening by employee and employer',
-    reason: 'Qualify the exact original US opening source', allowedSubsidiaryIds: null,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    openingBalanceId: context.record.id,
+    subsidiaryId: fx.subsidiaryId,
+    expectedOpeningSha256: context.record.openingSha256,
+    sourceFileId: fileId,
+    sourceVersionId: versionId,
+    sourceSha256,
+    sourceReference: "Original US payroll opening by employee and employer",
+    reason: "Qualify the exact original US opening source",
+    allowedSubsidiaryIds: null,
   });
-  const expectedOpeningChildrenSha256=(await db.execute<{sha:string}>(sql`select encode(public.digest(public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year)::text,'sha256'),'hex') as sha
-    from payroll_opening_balances b where b.org_id=${fx.orgId} and b.id=${context.record.id}`, "objects"))[0]!.sha;
+  const expectedOpeningChildrenSha256 = (
+    await db.execute<{ sha: string }>(
+      sql`select encode(public.digest(public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year)::text,'sha256'),'hex') as sha
+    from payroll_opening_balances b where b.org_id=${fx.orgId} and b.id=${context.record.id}`,
+      "objects",
+    )
+  )[0]!.sha;
   await qualifyOpeningLevySourceAuthority({
     expectedOpeningChildrenSha256,
-    orgId: fx.orgId, actorId: fx.actorId, openingBalanceId: context.record.id,
-    expectedOpeningSha256: context.record.openingSha256, allocations,
-    sourceFileId: fileId, sourceVersionId: versionId, sourceSha256, sourceReference: 'Original US statutory opening country, currency and complete coverage',
-    originalCountry: 'US', originalCurrency: 'USD', coverageStart: '2026-01-01', coverageEnd: '2026-01-01', coverageComplete: true,
-    reason: 'Retain the original EIN and state SUI wage bases', allowedSubsidiaryIds: null,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    openingBalanceId: context.record.id,
+    expectedOpeningSha256: context.record.openingSha256,
+    allocations,
+    sourceFileId: fileId,
+    sourceVersionId: versionId,
+    sourceSha256,
+    sourceReference: "Original US statutory opening country, currency and complete coverage",
+    originalCountry: "US",
+    originalCurrency: "USD",
+    coverageStart: "2026-01-01",
+    coverageEnd: "2026-01-01",
+    coverageComplete: true,
+    reason: "Retain the original EIN and state SUI wage bases",
+    allowedSubsidiaryIds: null,
   });
 }
 
@@ -534,10 +675,22 @@ test(
       const employee = await usEmployee(fx, "Account mover");
       const einId = fx.einAccountId;
       const first = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: first.documentId, actorId: fx.actorId })).errors, []);
+      assert.deepEqual(
+        (
+          await calculatePayRun({
+            orgId: fx.orgId,
+            documentId: first.documentId,
+            actorId: fx.actorId,
+          })
+        ).errors,
+        [],
+      );
       await commitPayRun({ orgId: fx.orgId, documentId: first.documentId, actorId: fx.actorId });
 
       // The profile moves from the Texas state account onto the EIN: same
@@ -545,11 +698,26 @@ test(
       await db.execute(sql`
         update employee_payroll_profiles set filing_account_id = ${einId}
          where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
-      const historyProbe=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
-        periodStart:PERIOD_START,periodEnd:PERIOD_END,runType:'supplemental',employeePartyIds:[employee]});
-      const ytd = await usEmployeeYtd({
-        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026, documentId: historyProbe.documentId,
-      }, "TX", einId);
+      const historyProbe = await createPayRun({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        runType: "supplemental",
+        employeePartyIds: [employee],
+      });
+      const ytd = await usEmployeeYtd(
+        {
+          tx: db,
+          orgId: fx.orgId,
+          employeePartyId: employee,
+          taxYear: 2026,
+          documentId: historyProbe.documentId,
+        },
+        "TX",
+        einId,
+      );
       assert.equal(ytd.fica, PERIOD_WAGES);
       assert.equal(ytd.futa, PERIOD_WAGES);
       assert.equal(ytd.suiCurrentRegion, PERIOD_WAGES);
@@ -557,14 +725,33 @@ test(
 
       // Texas records the account as reimbursable: the EIN-profile run reads
       // the method from the Texas account and prices no SUI.
-      await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId, filingAccountId: fx.suiAccountId,
-        country: "US", factKey: "sui_financing_method", effectiveFrom: "2026-07-19", value: "reimbursable",
-        changeReason: "state reimbursable election" });
-      const second = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-19", periodEnd: "2026-08-01",
+      await upsertPayrollEmployerFact({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        filingAccountId: fx.suiAccountId,
+        country: "US",
+        factKey: "sui_financing_method",
+        effectiveFrom: "2026-07-19",
+        value: "reimbursable",
+        changeReason: "state reimbursable election",
       });
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: second.documentId, actorId: fx.actorId })).errors, []);
+      const second = await createPayRun({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-19",
+        periodEnd: "2026-08-01",
+      });
+      assert.deepEqual(
+        (
+          await calculatePayRun({
+            orgId: fx.orgId,
+            documentId: second.documentId,
+            actorId: fx.actorId,
+          })
+        ).errors,
+        [],
+      );
       const factors = await stubFactors(fx, second.documentId, employee);
       assert.equal(factors?.SUTA, "0.0000");
       assert.equal(factors?.SS, "124.0000");
@@ -583,28 +770,75 @@ test(
     try {
       const employee = await usEmployee(fx, "Mid-year adopter");
       const einId = fx.einAccountId;
-      const ficaWages = (amount: string) => [{
-        programKey: "us_w2_fica_wages", filingAccountId: einId, region: null, insurableYtd: amount,
-      }];
+      const ficaWages = (amount: string) => [
+        {
+          programKey: "us_w2_fica_wages",
+          filingAccountId: einId,
+          region: null,
+          insurableYtd: amount,
+        },
+      ];
       // The refusal's remedy names the column the calculation reads.
       await assert.rejects(
-        saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
-          employeePartyId: employee, amounts: { pensionableYtd: "199000", insurableYtd: "0" }, accountBases: ficaWages("199000"),
-        }] }),
+        saveOpeningBalances({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          taxYear: 2026,
+          rows: [
+            {
+              employeePartyId: employee,
+              amounts: { pensionableYtd: "199000", insurableYtd: "0" },
+              accountBases: ficaWages("199000"),
+            },
+          ],
+        }),
         /keep it in FICA wages per federal EIN for this filing account and set Pensionable \/ FICA wages to zero/,
       );
-      await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
-        employeePartyId: employee, amounts: {}, accountBases: ficaWages("199000"),
-      }] });
+      await saveOpeningBalances({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: employee,
+            amounts: {},
+            accountBases: ficaWages("199000"),
+          },
+        ],
+      });
       await qualifyUsOpeningLevySource(fx, employee, [
-        { programKey: 'us_futa', region: 'US', filingAccountId: einId, federalAccountId: einId, amount: '0' },
-        { programKey: 'us_sui', region: 'TX', filingAccountId: fx.suiAccountId, federalAccountId: einId, amount: '0' },
+        {
+          programKey: "us_futa",
+          region: "US",
+          filingAccountId: einId,
+          federalAccountId: einId,
+          amount: "0",
+        },
+        {
+          programKey: "us_sui",
+          region: "TX",
+          filingAccountId: fx.suiAccountId,
+          federalAccountId: einId,
+          amount: "0",
+        },
       ]);
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId })).errors, []);
+      assert.deepEqual(
+        (
+          await calculatePayRun({
+            orgId: fx.orgId,
+            documentId: run.documentId,
+            actorId: fx.actorId,
+          })
+        ).errors,
+        [],
+      );
       const factors = await stubFactors(fx, run.documentId, employee);
       // $199,000 carried in is past the 2026 $184,500 Social Security base:
       // no Social Security either side, Medicare on the whole $2,000, and
@@ -622,16 +856,24 @@ test(
       const w2 = slips[0]!;
       assert.equal(w2.filingAccountId, einId);
       assert.deepEqual(
-        [w2.box1Wages, w2.box2FederalIncomeTax, w2.box3SsWages, w2.box4SsTax, w2.box5MedicareWages, w2.box6MedicareTax]
-          .map(normalizeMoney),
+        [
+          w2.box1Wages,
+          w2.box2FederalIncomeTax,
+          w2.box3SsWages,
+          w2.box4SsTax,
+          w2.box5MedicareWages,
+          w2.box6MedicareTax,
+        ].map(normalizeMoney),
         // Box 3 is capped at the $184,500 base; box 5 is $199,000 + $2,000;
         // box 6 is the stub's $29.00 Medicare plus $9.00 Additional Medicare.
         ["2000.0000", "156.1500", "184500.0000", "0.0000", "201000.0000", "38.0000"],
       );
       assert.deepEqual(w2.stateLines, [], "Texas withholds no income tax: no boxes 15-17");
       const quarters = await form941Worksheet(fx.orgId, 2026);
-      assert.deepEqual(quarters.map((q) => [q.filingAccountId, q.quarter, normalizeMoney(q.medicareWages)]),
-        [[einId, 3, "2000.0000"]]);
+      assert.deepEqual(
+        quarters.map((q) => [q.filingAccountId, q.quarter, normalizeMoney(q.medicareWages)]),
+        [[einId, 3, "2000.0000"]],
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -646,31 +888,86 @@ test(
     try {
       const employee = await usEmployee(fx, "Texas adopter");
       const einId = fx.einAccountId;
-      const suiBase = [{ programKey: "us_sui", filingAccountId: fx.suiAccountId, region: "TX", insurableYtd: "6000" }];
+      const suiBase = [
+        {
+          programKey: "us_sui",
+          filingAccountId: fx.suiAccountId,
+          region: "TX",
+          insurableYtd: "6000",
+        },
+      ];
       await assert.rejects(
-        saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
-          employeePartyId: employee, amounts: {}, accountBases: suiBase, suiStates: { TX: "6000" },
-        }] }),
+        saveOpeningBalances({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          taxYear: 2026,
+          rows: [
+            {
+              employeePartyId: employee,
+              amounts: {},
+              accountBases: suiBase,
+              suiStates: { TX: "6000" },
+            },
+          ],
+        }),
         /keep it in SUI wages per state account for this filing account and set the TX state carry-in to zero/,
       );
-      await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
-        employeePartyId: employee, amounts: {}, accountBases: suiBase,
-      }] });
+      await saveOpeningBalances({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: employee,
+            amounts: {},
+            accountBases: suiBase,
+          },
+        ],
+      });
       await qualifyUsOpeningLevySource(fx, employee, [
-        { programKey: 'us_futa', region: 'US', filingAccountId: einId, federalAccountId: einId, amount: '0' },
-        { programKey: 'us_sui', region: 'TX', filingAccountId: fx.suiAccountId, federalAccountId: einId, amount: '6000' },
+        {
+          programKey: "us_futa",
+          region: "US",
+          filingAccountId: einId,
+          federalAccountId: einId,
+          amount: "0",
+        },
+        {
+          programKey: "us_sui",
+          region: "TX",
+          filingAccountId: fx.suiAccountId,
+          federalAccountId: einId,
+          amount: "6000",
+        },
       ]);
-      await assert.rejects(db.execute(sql`update payroll_opening_account_bases set insurable_ytd=0
+      await assert.rejects(
+        db.execute(sql`update payroll_opening_account_bases set insurable_ytd=0
         where org_id=${fx.orgId} and employee_party_id=${employee} and program_key='us_sui'`),
         (error: unknown) => {
-          assert.match(guardRefusalMessage(error, { includeRaisedCheckViolations: true }) ?? '', /Source-qualified statutory opening amounts must be preserved/);
+          assert.match(
+            guardRefusalMessage(error, { includeRaisedCheckViolations: true }) ?? "",
+            /Source-qualified statutory opening amounts must be preserved/,
+          );
           return true;
-        });
+        },
+      );
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId })).errors, []);
+      assert.deepEqual(
+        (
+          await calculatePayRun({
+            orgId: fx.orgId,
+            documentId: run.documentId,
+            actorId: fx.actorId,
+          })
+        ).errors,
+        [],
+      );
       // $6,000 carried in under the Texas account leaves $1,000 of the
       // $7,000 base: 3% of $1,000, not of the period's $2,000.
       assert.equal((await stubFactors(fx, run.documentId, employee))?.SUTA, "30.0000");

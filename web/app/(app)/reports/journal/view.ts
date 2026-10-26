@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
 import {
   column,
   field,
@@ -16,21 +16,26 @@ import {
   txn,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getAuthz, can } from '@/lib/authz'
-import { dimensionOptions, journalReport } from '../../../../lib/reports'
-import { dimensionOptionsScope } from '../../../../lib/reports/filters'
-import { orgInfo } from '../../../../lib/data'
-import { resolveOrgId } from '../../../../lib/org-scope'
-import { reportBookSelection } from '../../../../lib/report-books'
-import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
-import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { decimalIsZero } from '../../../../lib/statement-format'
-import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
+} from "@braedonsaunders/appkit-viewspec";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getAuthz, can } from "@/lib/authz";
+import { dimensionOptions, journalReport } from "../../../../lib/reports";
+import { dimensionOptionsScope } from "../../../../lib/reports/filters";
+import { orgInfo } from "../../../../lib/data";
+import { resolveOrgId } from "../../../../lib/org-scope";
+import { reportBookSelection } from "../../../../lib/report-books";
+import {
+  MissingRatesError,
+  reportSubsidiaryView,
+  type CurrencyBasisNotice,
+  type RatesBlockedNotice,
+} from "../../../../lib/consolidation";
+import { ReportCurrencyBasisError } from "../../../../lib/reports/currency-basis";
+import { resolvePeriod } from "../../../../lib/periods";
+import { parseReportQuery } from "../../../../lib/report-filters";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { decimalIsZero } from "../../../../lib/statement-format";
+import { statementReportSpec, stringReportParams } from "@/lib/reports/statement-report-spec";
 
 /**
  * The journal report, split into a loader and a spec.
@@ -48,166 +53,176 @@ import { statementReportSpec, stringReportParams } from '@/lib/reports/statement
  * keeps the language smaller.
  */
 
-type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
+type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>;
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
 
 interface TxnTarget {
-  kind: 'transaction'
-  entryId: string
-  docKind: string | null
-  docId: string | null
+  kind: "transaction";
+  entryId: string;
+  docKind: string | null;
+  docId: string | null;
 }
 
 export interface JournalLine {
-  key: string
-  account: string
+  key: string;
+  account: string;
   /** Not every account carries a number. */
-  accountNumber: string | null
-  accountName: string
-  detail: string
+  accountNumber: string | null;
+  accountName: string;
+  detail: string;
   /** Empty string when the side is zero — the native page renders nothing. */
-  debit: string
-  credit: string
-  txn: TxnTarget
+  debit: string;
+  credit: string;
+  txn: TxnTarget;
 }
 
 export interface JournalEntry {
-  id: string
-  entryId: string
-  docKind: string | null
-  docId: string | null
+  id: string;
+  entryId: string;
+  docKind: string | null;
+  docId: string | null;
   /** Some system entries have no assigned number. */
-  entryNumber: string | null
-  date: string
-  originLabel: string
-  memo: string | null
-  lines: JournalLine[]
+  entryNumber: string | null;
+  date: string;
+  originLabel: string;
+  memo: string | null;
+  lines: JournalLine[];
 }
 
 export interface JournalData {
-  title: string
-  backHref: string
-  backLabel: string
-  company: string
-  periodPhrase: string
-  truncated: boolean
-  truncatedLabel: string
+  title: string;
+  backHref: string;
+  backLabel: string;
+  company: string;
+  periodPhrase: string;
+  truncated: boolean;
+  truncatedLabel: string;
   /** One page of whole entries, newest first. */
-  paged: boolean
-  page: number
-  perPage: number
-  entryCount: number
-  emptyLabel: string
-  columnAccount: string
-  columnDetail: string
-  columnDebits: string
-  columnCredits: string
+  paged: boolean;
+  page: number;
+  perPage: number;
+  entryCount: number;
+  emptyLabel: string;
+  columnAccount: string;
+  columnDetail: string;
+  columnDebits: string;
+  columnCredits: string;
   /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
-  ratesBlocked: RatesBlockedNotice | null
+  ratesBlocked: RatesBlockedNotice | null;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /** False when either refusal is set; the paper hides with either. */
-  ratesReady: boolean
-  entries: JournalEntry[]
-  dimensions: DimensionOptions
-  subsidiaries: SubsidiaryPicker
+  ratesReady: boolean;
+  entries: JournalEntry[];
+  dimensions: DimensionOptions;
+  subsidiaries: SubsidiaryPicker;
   /** Only rendered when the org has more than one book. */
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string>
+  primaryFilter: {
+    paramKey: string;
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  } | null;
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string>;
 }
 
 export async function loadJournal(sp: Record<string, string | undefined>): Promise<JournalData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const tc = await getTranslations('common')
+  const { money: formatMoney } = await getMoneyFormatter();
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const tc = await getTranslations("common");
   // The book label reuses the budgets list's existing filter copy.
-  const tb = await getTranslations('budgets')
-  const scheduleDefId = await reportScheduleAnchor('journal')
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const tb = await getTranslations("budgets");
+  const scheduleDefId = await reportScheduleAnchor("journal");
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  const orgId = await resolveOrgId()
-  const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
+  const orgId = await resolveOrgId();
+  const { books, selectedBook } = await reportBookSelection(orgId, sp.book);
   // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link instead of any
   // numbers. A multi-currency viewed set refuses the same way, with the
   // subsidiary picker as its remedy. Anything else is a real defect and
   // still throws. The report runs only with a resolved subsidiary scope —
   // never scope-less.
-  const authz = await getAuthz()
-  const canSeePayroll = !!authz && can(authz, 'payroll.read')
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let ratesBlocked: RatesBlockedNotice | null = null
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
-  let journal: Awaited<ReturnType<typeof journalReport>> | null = null
+  const authz = await getAuthz();
+  const canSeePayroll = !!authz && can(authz, "payroll.read");
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let ratesBlocked: RatesBlockedNotice | null = null;
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
+  let journal: Awaited<ReturnType<typeof journalReport>> | null = null;
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id);
     journal = await journalReport(period.from, period.to, {
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       bookId: selectedBook?.id,
       canSeePayroll,
-      page: Number.parseInt(sp[JOURNAL_PAGE_PARAM] ?? '1', 10) || 1,
+      page: Number.parseInt(sp[JOURNAL_PAGE_PARAM] ?? "1", 10) || 1,
       pageSize: JOURNAL_PAGE_SIZE,
-    })
+    });
   } catch (e) {
     if (e instanceof ReportCurrencyBasisError) {
       currencyBasisBlocked = {
-        code: 'multi-currency-basis',
-        title: t('statement.currencyBasisBlockedTitle'),
+        code: "multi-currency-basis",
+        title: t("statement.currencyBasisBlockedTitle"),
         description: e.message,
-      }
+      };
     } else {
-      if (!(e instanceof MissingRatesError)) throw e
+      if (!(e instanceof MissingRatesError)) throw e;
       ratesBlocked = {
-        code: 'rates-not-derived',
-        title: t('statement.ratesBlockedTitle'),
+        code: "rates-not-derived",
+        title: t("statement.ratesBlockedTitle"),
         description: (e as Error).message,
-        deriveLabel: t('statement.ratesBlockedAction'),
-        deriveHref: '/close',
-      }
+        deriveLabel: t("statement.ratesBlockedAction"),
+        deriveHref: "/close",
+      };
     }
   }
-  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids };
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds);
   const [opts, org] = await Promise.all([
     dimensionOptions(undefined, undefined, optionScope),
     orgInfo(),
-  ])
+  ]);
   // Figures present in the VIEW's currency (the context node's functional
   // currency), not the org base — a foreign-functional subsidiary view
   // states its own money. Mirrors the P&L and balance sheet.
-  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency })
+  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency });
 
   return {
-    title: t('journal.title'),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
-    company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
+    title: t("journal.title"),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
+    company: org?.name ?? "",
+    periodPhrase: `${selectedBook.name} · ${t("pnl.dateRange", civilDateParams({ from: period.from, to: period.to }, locale))}`,
     truncated: journal?.truncated ?? false,
     paged: (journal?.paging?.entryCount ?? 0) > JOURNAL_PAGE_SIZE,
     page: journal?.paging?.page ?? 1,
     perPage: journal?.paging?.pageSize ?? JOURNAL_PAGE_SIZE,
     entryCount: journal?.paging?.entryCount ?? 0,
-    truncatedLabel: t('journal.truncated'),
-    emptyLabel: t('journal.empty'),
-    columnAccount: tc('labels.account'),
-    columnDetail: t('journal.columns.detail'),
-    columnDebits: t('trialBalance.columns.debits'),
-    columnCredits: t('trialBalance.columns.credits'),
+    truncatedLabel: t("journal.truncated"),
+    emptyLabel: t("journal.empty"),
+    columnAccount: tc("labels.account"),
+    columnDetail: t("journal.columns.detail"),
+    columnDebits: t("trialBalance.columns.debits"),
+    columnCredits: t("trialBalance.columns.credits"),
     ratesBlocked,
     currencyBasisBlocked,
     ratesReady: ratesBlocked === null && currencyBasisBlocked === null,
     entries: (journal?.entries ?? []).map((e) => {
-      const target: TxnTarget = { kind: 'transaction', entryId: e.id, docKind: e.docKind, docId: e.docId }
+      const target: TxnTarget = {
+        kind: "transaction",
+        entryId: e.id,
+        docKind: e.docKind,
+        docId: e.docId,
+      };
       return {
         id: e.id,
         entryId: e.id,
@@ -215,43 +230,45 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
         docId: e.docId,
         entryNumber: e.entryNumber,
         date: e.date,
-        originLabel: t.has(`journal.origins.${e.origin}`) ? t(`journal.origins.${e.origin}`) : t('journal.otherOrigin'),
+        originLabel: t.has(`journal.origins.${e.origin}`)
+          ? t(`journal.origins.${e.origin}`)
+          : t("journal.otherOrigin"),
         memo: e.memo,
         lines: e.lines.map((l, i) => ({
           key: String(i),
           account: l.accountName,
           accountNumber: l.accountNumber,
           accountName: l.accountName,
-          detail: [l.party, l.memo].filter(Boolean).join(' · '),
-          debit: decimalIsZero(l.debit) ? '' : m(l.debit),
-          credit: decimalIsZero(l.credit) ? '' : m(l.credit),
+          detail: [l.party, l.memo].filter(Boolean).join(" · "),
+          debit: decimalIsZero(l.debit) ? "" : m(l.debit),
+          credit: decimalIsZero(l.credit) ? "" : m(l.credit),
           txn: target,
         })),
-      }
+      };
     }),
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
     primaryFilter:
       books.length > 1
         ? {
-            paramKey: 'book',
-            label: tb('list.bookFilter'),
-            value: selectedBook?.id ?? '',
+            paramKey: "book",
+            label: tb("list.bookFilter"),
+            value: selectedBook?.id ?? "",
             options: books.map((b) => ({ value: b.id, label: b.name })),
           }
         : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringReportParams(sp),
-  }
+  };
 }
 
 /** Entries per screen; exports and schedules read the full journal. */
-const JOURNAL_PAGE_SIZE = 100
-const JOURNAL_PAGE_PARAM = 'journalPage'
+const JOURNAL_PAGE_SIZE = 100;
+const JOURNAL_PAGE_PARAM = "journalPage";
 
-const f = ref<JournalData>()
-const item = field
+const f = ref<JournalData>();
+const item = field;
 /**
  * Page-level fields referenced from INSIDE the repeat.
  *
@@ -261,111 +278,117 @@ const item = field
  * the symptom is a silently empty header cell, which the conformance harness
  * catches but a casual look at the page would not.
  */
-const rootF = rootRef<JournalData>()
+const rootF = rootRef<JournalData>();
 
 export function journalSpec(data: JournalData): PageSpec {
   return statementReportSpec({
-    route: '/reports/journal',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
-    filters: [{
-      controls: { period: true, dimensions: true, subsidiary: true },
-      options: {
-        dimensions: f('dimensions'),
-        subsidiaries: f('subsidiaries'),
-        primaryFilter: f('primaryFilter'),
+    route: "/reports/journal",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
+    filters: [
+      {
+        controls: { period: true, dimensions: true, subsidiary: true },
+        options: {
+          dimensions: f("dimensions"),
+          subsidiaries: f("subsidiaries"),
+          primaryFilter: f("primaryFilter"),
+        },
       },
-    }],
+    ],
     schedule: {
-      definitionId: data.scheduleDefId ?? '',
+      definitionId: data.scheduleDefId ?? "",
       statementParams: data.scheduleParams,
-      when: f('scheduleDefId'),
+      when: f("scheduleDefId"),
     },
-    exportMenu: { kind: 'journal', params: data.exportParams },
-    headerAfterFilters: [textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') })],
+    exportMenu: { kind: "journal", params: data.exportParams },
+    headerAfterFilters: [textBlock(f("truncatedLabel"), { tone: "warning", when: f("truncated") })],
     bodyBeforePaper: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: data.ratesBlocked?.deriveHref ?? "/close",
+            label: data.ratesBlocked?.deriveLabel ?? "",
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
       wide: true,
-      when: f('ratesReady'),
+      when: f("ratesReady"),
     },
     blocks: [
       repeat({
-        items: f('entries'),
-        itemKey: item('id'),
-        className: 'space-y-6',
-        empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
+        items: f("entries"),
+        itemKey: item("id"),
+        className: "space-y-6",
+        empty: { text: f("emptyLabel"), className: "py-8 text-center text-slate-400 italic" },
         blocks: [
           // Props are field refs, resolved against the repeat item.
-          widgetBlock('journal-entry-heading', {
-            entryId: item('entryId'),
-            docKind: item('docKind'),
-            docId: item('docId'),
-            entryNumber: item('entryNumber'),
-            date: item('date'),
-            originLabel: item('originLabel'),
-            memo: item('memo'),
+          widgetBlock("journal-entry-heading", {
+            entryId: item("entryId"),
+            docKind: item("docKind"),
+            docId: item("docId"),
+            entryNumber: item("entryNumber"),
+            date: item("date"),
+            originLabel: item("originLabel"),
+            memo: item("memo"),
           }),
           table({
-            variant: 'report',
-            rows: item('lines'),
-            rowKey: item('key'),
+            variant: "report",
+            rows: item("lines"),
+            rowKey: item("key"),
             columns: [
               column(
-                rootF('columnAccount'),
-                text(item('accountName'), {
+                rootF("columnAccount"),
+                text(item("accountName"), {
                   prefix: {
-                    field: item('accountNumber'),
-                    className: 'mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400',
+                    field: item("accountNumber"),
+                    className: "mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400",
                   },
                 }),
               ),
-              column(rootF('columnDetail'), text(item('detail')), {
-                className: 'text-slate-600 dark:text-slate-300',
+              column(rootF("columnDetail"), text(item("detail")), {
+                className: "text-slate-600 dark:text-slate-300",
               }),
-              column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-              column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
+              column(rootF("columnDebits"), txn(item("txn"), money(item("debit"))), {
+                align: "right",
+              }),
+              column(rootF("columnCredits"), txn(item("txn"), money(item("credit"))), {
+                align: "right",
+              }),
             ],
           }),
         ],
       }),
       {
         ...pagination({
-          basePath: '/reports/journal',
-          total: f('entryCount'),
-          page: f('page'),
-          perPage: f('perPage'),
+          basePath: "/reports/journal",
+          total: f("entryCount"),
+          page: f("page"),
+          perPage: f("perPage"),
           pageParamKey: JOURNAL_PAGE_PARAM,
         }),
-        when: f('paged'),
+        when: f("paged"),
       },
     ],
-  })
+  });
 }

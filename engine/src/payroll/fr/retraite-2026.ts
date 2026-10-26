@@ -39,11 +39,11 @@ export const FR_ARRCO_TRANCHES_2026 = {
   t1TopAnnual: "48060",
   t2TopAnnual: "384480",
   quote:
-    "Tranches Agirc-Arrco de l'assiette de cotisation en 2026 Tranche 1 "
-    + "Tranche 2 Limites jusqu'à 1 fois le plafond de la Sécurité sociale "
-    + "Entre 1 et 8 fois le plafond de la Sécurité sociale Mensuel en € "
-    + "entre 0 et 4 005 € entre 4 005 et 32 040 € Annuel en € entre 0 et "
-    + "48 060 € entre 48 060 € et 384 480 €",
+    "Tranches Agirc-Arrco de l'assiette de cotisation en 2026 Tranche 1 " +
+    "Tranche 2 Limites jusqu'à 1 fois le plafond de la Sécurité sociale " +
+    "Entre 1 et 8 fois le plafond de la Sécurité sociale Mensuel en € " +
+    "entre 0 et 4 005 € entre 4 005 et 32 040 € Annuel en € entre 0 et " +
+    "48 060 € entre 48 060 € et 384 480 €",
 } as const;
 
 /**
@@ -59,13 +59,19 @@ export const FR_ARRCO_TRANCHES_2026 = {
  * below — the 127 % factor is quoted for provenance, never applied.
  */
 export const FR_ARRCO_TAUX_2026 = {
-  t1: { rate: "0.0787", quote: "Taux de cotisation Agirc-Arrco appelés en 2026 2026 Taux T1 7,87%" },
-  t2: { rate: "0.2159", quote: "Taux de cotisation Agirc-Arrco appelés en 2026 2026 Taux T2 21,59%" },
+  t1: {
+    rate: "0.0787",
+    quote: "Taux de cotisation Agirc-Arrco appelés en 2026 2026 Taux T1 7,87%",
+  },
+  t2: {
+    rate: "0.2159",
+    quote: "Taux de cotisation Agirc-Arrco appelés en 2026 2026 Taux T2 21,59%",
+  },
   appelPct: "127",
   appelQuote:
-    "Le taux de cotisation appelé, ou taux effectif, correspond au taux "
-    + "contractuel de cotisation, ou taux de calcul des points, multiplié "
-    + "par un pourcentage d'appel de 127 %",
+    "Le taux de cotisation appelé, ou taux effectif, correspond au taux " +
+    "contractuel de cotisation, ou taux de calcul des points, multiplié " +
+    "par un pourcentage d'appel de 127 %",
 } as const;
 
 /**
@@ -84,11 +90,11 @@ export const FR_ARRCO_TAUX_2026 = {
  * Part patronale Total / Taux de calcul des points".
  */
 export const FR_ARRCO_SPLIT_QUOTE_2026 =
-  "Répartition des cotisations La répartition des cotisations "
-  + "Agirc-Arrco entre l'employeur et le salarié est réglementée. Les "
-  + "cotisations sont prises en charge à hauteur de 60 % par l'employeur "
-  + "et à hauteur de 40 % pour le salarié sur les tranches 1 et 2. "
-  + "Néanmoins, un accord collectif a pu modifier cette répartition";
+  "Répartition des cotisations La répartition des cotisations " +
+  "Agirc-Arrco entre l'employeur et le salarié est réglementée. Les " +
+  "cotisations sont prises en charge à hauteur de 60 % par l'employeur " +
+  "et à hauteur de 40 % pour le salarié sur les tranches 1 et 2. " +
+  "Néanmoins, un accord collectif a pu modifier cette répartition";
 
 /**
  * Contribution d'équilibre général (CEG) — created with the CET when
@@ -110,14 +116,13 @@ export const FR_CEG_2026 = {
   t1: {
     rate: "0.0215",
     quote:
-      "Tranche 1 (salaire jusqu'au plafond de la Sécurité sociale) "
-      + "CEG 0,86% 1,29% 2,15 %",
+      "Tranche 1 (salaire jusqu'au plafond de la Sécurité sociale) " + "CEG 0,86% 1,29% 2,15 %",
   },
   t2: {
     rate: "0.027",
     quote:
-      "Tranche 2 (salaire compris entre 1 et 8 fois le plafond de la "
-      + "Sécurité sociale) CEG 1,08% 1,62% 2,70%",
+      "Tranche 2 (salaire compris entre 1 et 8 fois le plafond de la " +
+      "Sécurité sociale) CEG 1,08% 1,62% 2,70%",
   },
 } as const;
 
@@ -137,11 +142,12 @@ export const FR_CEG_2026 = {
 export const FR_CET_2026 = {
   rate: "0.0035",
   quote:
-    "La CET (Contribution d'équilibre technique) s'applique à tous les "
-    + "salariés dont le salaire est supérieur au plafond de la Sécurité "
-    + "sociale. Pour ces personnes, la CET est prélevée sur les tranches "
-    + "1 et 2 au taux de 0,35 %",
-  splitQuote: "CET Assiette Tranche 1 + Tranche 2 Part salariale Part patronale Total 0,14% 0,21% 0,35%",
+    "La CET (Contribution d'équilibre technique) s'applique à tous les " +
+    "salariés dont le salaire est supérieur au plafond de la Sécurité " +
+    "sociale. Pour ces personnes, la CET est prélevée sur les tranches " +
+    "1 et 2 au taux de 0,35 %",
+  splitQuote:
+    "CET Assiette Tranche 1 + Tranche 2 Part salariale Part patronale Total 0,14% 0,21% 0,35%",
 } as const;
 
 /**
@@ -159,9 +165,9 @@ export const FR_APEC_2026 = {
   employeeRate: "0.00024",
   employerRate: "0.00036",
   quote:
-    "APEC (pour les salariés cadres) Assiette Tranche 1 + Tranche 2 "
-    + "limitée à 4 fois le plafond de la sécurité sociale Part salariale "
-    + "Part patronale Total 0,024% 0,036% 0,06%",
+    "APEC (pour les salariés cadres) Assiette Tranche 1 + Tranche 2 " +
+    "limitée à 4 fois le plafond de la sécurité sociale Part salariale " +
+    "Part patronale Total 0,024% 0,036% 0,06%",
 } as const;
 
 /** 2026 AGIRC-ARRCO tables resolve by calendar year and throw otherwise. */
@@ -173,10 +179,10 @@ export function frRetraiteYearForPayDate(payDate: string): 2026 {
   }
   if (payDate < "2026-01-01" || payDate > "2026-12-31") {
     throw new PayrollPackError(
-      `FR retraite complémentaire has no transcribed tables for pay date ${payDate}: `
-      + "the FR pack transcribes calendar 2026 only "
-      + "(AGIRC-ARRCO calcul des cotisations 2026). "
-      + "This date is not yet supported by the FR pack; contact support.",
+      `FR retraite complémentaire has no transcribed tables for pay date ${payDate}: ` +
+        "the FR pack transcribes calendar 2026 only " +
+        "(AGIRC-ARRCO calcul des cotisations 2026). " +
+        "This date is not yet supported by the FR pack; contact support.",
     );
   }
   return 2026;

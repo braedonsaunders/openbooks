@@ -6,15 +6,14 @@ import { db } from "../platform/db.ts";
 import { ensureLot, ensureSerial } from "./tracking.ts";
 import { getOnHand } from "./position.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
-import { applyInventoryReturnsForVendorCredit, parseVendorCreditInventoryReturnSelection } from "./documents-vendor-credits.ts";
+import {
+  applyInventoryReturnsForVendorCredit,
+  parseVendorCreditInventoryReturnSelection,
+} from "./documents-vendor-credits.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -61,19 +60,29 @@ async function vendorBillReceiptLine(org: ScratchOrg, itemId: string): Promise<s
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  return (await db.execute<{ balance: string }>(sql`
+  return (
+    await db.execute<{ balance: string }>(
+      sql`
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `, "objects"))[0]!.balance;
+  `,
+      "objects",
+    )
+  )[0]!.balance;
 }
 
 async function layerValue(orgId: string, itemId: string): Promise<string> {
-  return (await db.execute<{ value: string }>(sql`
+  return (
+    await db.execute<{ value: string }>(
+      sql`
     select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as value
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
-  `, "objects"))[0]!.value;
+  `,
+      "objects",
+    )
+  )[0]!.value;
 }
 
 async function createApprovedVendorReturn(
@@ -138,12 +147,14 @@ async function creditResidue(
   returns: number;
   effects: number;
 }> {
-  return (await db.execute<{
-    status: string;
-    source_entries: number;
-    returns: number;
-    effects: number;
-  }>(sql`
+  return (
+    await db.execute<{
+      status: string;
+      source_entries: number;
+      returns: number;
+      effects: number;
+    }>(
+      sql`
     select document.status,
            (select count(*)::int from journal_entries entry
              where entry.org_id = document.org_id
@@ -159,7 +170,10 @@ async function creditResidue(
                and effect.document_id = document.id) as effects
       from documents document
      where document.org_id = ${orgId} and document.id = ${documentId}
-  `, "objects")).map((row) => ({
+  `,
+      "objects",
+    )
+  ).map((row) => ({
     status: row.status,
     sourceEntries: row.source_entries,
     returns: row.returns,
@@ -193,13 +207,7 @@ test(
            set tracking = 'lot'
          where org_id = ${org.orgId} and item_id = ${org.items.fifo}
       `);
-      const lotId = await ensureLot(
-        org.orgId,
-        org.items.fifo,
-        "RETURN-LOT-1",
-        null,
-        null,
-      );
+      const lotId = await ensureLot(org.orgId, org.items.fifo, "RETURN-LOT-1", null, null);
       const receipt = await receiveInventory(org.orgId, null, {
         itemId: org.items.fifo,
         stockLocationId: org.stockLocationId,
@@ -244,20 +252,18 @@ test(
       });
       await postDocument(credit.documentId, depsFor(org));
 
-      const onHand = await getOnHand(
-        org.orgId,
-        org.items.fifo,
-        org.stockLocationId,
-      );
+      const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
       assert.equal(toUnits(onHand.quantity), toUnits("6"));
       assert.equal(toUnits(onHand.value), toUnits("12"));
-      const provenance = (await db.execute<{
-        quantity: string;
-        total_value: string;
-        lot_id: string | null;
-        consumed_quantity: string;
-        source_movement_id: string;
-      }>(sql`
+      const provenance = (
+        await db.execute<{
+          quantity: string;
+          total_value: string;
+          lot_id: string | null;
+          consumed_quantity: string;
+          source_movement_id: string;
+        }>(
+          sql`
         select returned.quantity::text, returned.total_value::text,
                returned.lot_id, consumption.quantity::text as consumed_quantity,
                layer.source_movement_id
@@ -271,24 +277,21 @@ test(
          where returned.org_id = ${org.orgId}
            and returned.document_line_id = ${credit.lineId}
            and returned.kind = 'return'
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(toUnits(provenance.quantity), toUnits("-4"));
       assert.equal(toUnits(provenance.total_value), toUnits("-8"));
       assert.equal(toUnits(provenance.consumed_quantity), toUnits("4"));
       assert.equal(provenance.lot_id, lotId);
       assert.equal(provenance.source_movement_id, receipt.movementId);
-      assert.equal(
-        toUnits(await glBalance(org.orgId, org.accounts.ap)),
-        toUnits("10"),
-      );
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("10"));
       assert.equal(
         toUnits(await glBalance(org.orgId, org.accounts.invAsset)),
         toUnits(await layerValue(org.orgId, org.items.fifo)),
       );
-      assert.equal(
-        toUnits(await glBalance(org.orgId, org.accounts.adjustment)),
-        toUnits("-2"),
-      );
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.adjustment)), toUnits("-2"));
       assert.equal(
         await applyInventoryReturnsForVendorCredit(
           org.orgId,
@@ -299,75 +302,73 @@ test(
         ),
         0,
       );
-      assert.equal(
-        (await creditResidue(org.orgId, credit.documentId)).returns,
-        1,
-      );
+      assert.equal((await creditResidue(org.orgId, credit.documentId)).returns, 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }
   },
 );
 
-test(
-  "vendor credit returns the selected serial and marks it returned",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      await db.execute(sql`
+test("vendor credit returns the selected serial and marks it returned", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
         update item_inventory_profiles
            set tracking = 'serial'
          where org_id = ${org.orgId} and item_id = ${org.items.component}
       `);
-      const serialId = await ensureSerial(
-        org.orgId,
-        org.items.component,
-        "RETURN-SERIAL-1",
-        null,
-        null,
-      );
-      const receipt = await receiveInventory(org.orgId, null, {
-        itemId: org.items.component,
-        stockLocationId: org.stockLocationId,
-        quantity: "1",
-        unitCost: "4",
-        subsidiaryId: org.subsidiaryId,
-        offsetAccountId: org.accounts.clearing,
-        date: org.date,
-        documentLineId: await vendorBillReceiptLine(org, org.items.component),
-        serialId,
-      });
-      const credit = await createApprovedVendorReturn(org, {
-        itemId: org.items.component,
-        quantity: "1",
-        unitPrice: "4",
-        amount: "4",
-        sourceReceiptMovementId: receipt.movementId,
-        serialId,
-      });
-      await postDocument(credit.documentId, depsFor(org));
-      const serial = (await db.execute<{
+    const serialId = await ensureSerial(
+      org.orgId,
+      org.items.component,
+      "RETURN-SERIAL-1",
+      null,
+      null,
+    );
+    const receipt = await receiveInventory(org.orgId, null, {
+      itemId: org.items.component,
+      stockLocationId: org.stockLocationId,
+      quantity: "1",
+      unitCost: "4",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+      documentLineId: await vendorBillReceiptLine(org, org.items.component),
+      serialId,
+    });
+    const credit = await createApprovedVendorReturn(org, {
+      itemId: org.items.component,
+      quantity: "1",
+      unitPrice: "4",
+      amount: "4",
+      sourceReceiptMovementId: receipt.movementId,
+      serialId,
+    });
+    await postDocument(credit.documentId, depsFor(org));
+    const serial = (
+      await db.execute<{
         status: string;
         current_stock_location_id: string | null;
-      }>(sql`
+      }>(
+        sql`
         select status, current_stock_location_id
           from serials
          where org_id = ${org.orgId} and id = ${serialId}
-      `, "objects"))[0]!;
-      assert.deepEqual(serial, {
-        status: "returned",
-        current_stock_location_id: null,
-      });
-      assert.equal(
-        toUnits((await getOnHand(org.orgId, org.items.component, org.stockLocationId)).quantity),
-        0n,
-      );
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `,
+        "objects",
+      )
+    )[0]!;
+    assert.deepEqual(serial, {
+      status: "returned",
+      current_stock_location_id: null,
+    });
+    assert.equal(
+      toUnits((await getOnHand(org.orgId, org.items.component, org.stockLocationId)).quantity),
+      0n,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "a concurrent vendor return and issue cannot overconsume one receipt layer",
@@ -402,32 +403,26 @@ test(
           date: org.date,
         }),
       ]);
-      assert.equal(
-        results.filter((result) => result.status === "fulfilled").length,
-        1,
-      );
-      assert.equal(
-        results.filter((result) => result.status === "rejected").length,
-        1,
-      );
-      const movements = (await db.execute<{
-        returns: number;
-        issues: number;
-      }>(sql`
+      assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+      assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+      const movements = (
+        await db.execute<{
+          returns: number;
+          issues: number;
+        }>(
+          sql`
         select count(*) filter (where kind = 'return')::int as returns,
                count(*) filter (where kind = 'issue')::int as issues
           from inventory_movements
          where org_id = ${org.orgId} and item_id = ${org.items.fifo}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(movements.returns + movements.issues, 1);
-      const onHand = await getOnHand(
-        org.orgId,
-        org.items.fifo,
-        org.stockLocationId,
-      );
+      const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
       assert.ok(
-        toUnits(onHand.quantity) === toUnits("6") ||
-          toUnits(onHand.quantity) === toUnits("3"),
+        toUnits(onHand.quantity) === toUnits("6") || toUnits(onHand.quantity) === toUnits("3"),
       );
       assert.ok(toUnits(onHand.quantity) >= 0n);
       assert.equal(

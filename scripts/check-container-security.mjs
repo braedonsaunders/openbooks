@@ -9,21 +9,50 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const compose = readFileSync(new URL("../compose.yaml", import.meta.url), "utf8");
 const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
 const example = readFileSync(new URL("../.env.compose.example", import.meta.url), "utf8");
-const databaseRuntime = readFileSync(new URL("../engine/src/platform/db.ts", import.meta.url), "utf8");
-const devDeployPath = fileURLToPath(new URL("../.github/workflows/deploy-dev.yml", import.meta.url));
+const databaseRuntime = readFileSync(
+  new URL("../engine/src/platform/db.ts", import.meta.url),
+  "utf8",
+);
+const devDeployPath = fileURLToPath(
+  new URL("../.github/workflows/deploy-dev.yml", import.meta.url),
+);
 const devDeploy = existsSync(devDeployPath) ? readFileSync(devDeployPath, "utf8") : null;
-const haBootstrap = readFileSync(new URL("../deploy/ha/base/bootstrap/bootstrap-job.yaml", import.meta.url), "utf8");
-const haApplication = readFileSync(new URL("../deploy/ha/base/runtime/application.yaml", import.meta.url), "utf8");
-const haNetworkPolicy = readFileSync(new URL("../deploy/ha/base/runtime/network-policy.yaml", import.meta.url), "utf8");
-const haBootstrapOverlay = readFileSync(new URL("../deploy/ha/bootstrap/kustomization.yaml", import.meta.url), "utf8");
-const haRuntimeOverlay = readFileSync(new URL("../deploy/ha/runtime/kustomization.yaml", import.meta.url), "utf8");
-const haImage = readFileSync(new URL("../deploy/ha/image/kustomization.yaml", import.meta.url), "utf8");
-const simCompose = readFileSync(new URL("../engine/src/sim/docker-compose.yml", import.meta.url), "utf8");
+const haBootstrap = readFileSync(
+  new URL("../deploy/ha/base/bootstrap/bootstrap-job.yaml", import.meta.url),
+  "utf8",
+);
+const haApplication = readFileSync(
+  new URL("../deploy/ha/base/runtime/application.yaml", import.meta.url),
+  "utf8",
+);
+const haNetworkPolicy = readFileSync(
+  new URL("../deploy/ha/base/runtime/network-policy.yaml", import.meta.url),
+  "utf8",
+);
+const haBootstrapOverlay = readFileSync(
+  new URL("../deploy/ha/bootstrap/kustomization.yaml", import.meta.url),
+  "utf8",
+);
+const haRuntimeOverlay = readFileSync(
+  new URL("../deploy/ha/runtime/kustomization.yaml", import.meta.url),
+  "utf8",
+);
+const haImage = readFileSync(
+  new URL("../deploy/ha/image/kustomization.yaml", import.meta.url),
+  "utf8",
+);
+const simCompose = readFileSync(
+  new URL("../engine/src/sim/docker-compose.yml", import.meta.url),
+  "utf8",
+);
 const workflowDir = join(repoRoot, ".github", "workflows");
 const workflows = readdirSync(workflowDir)
   .filter((name) => /\.ya?ml$/.test(name))
   .sort()
-  .map((name) => ({ name: `.github/workflows/${name}`, source: readFileSync(join(workflowDir, name), "utf8") }));
+  .map((name) => ({
+    name: `.github/workflows/${name}`,
+    source: readFileSync(join(workflowDir, name), "utf8"),
+  }));
 
 function requirePattern(source, pattern, message) {
   if (!pattern.test(source)) throw new Error(`container security check failed: ${message}`);
@@ -63,7 +92,9 @@ for (const { name, source } of deploymentYaml) {
       );
     }
     if (/:latest(?:@|$)/.test(value) || /\$\{[^}\r\n]+:-latest\}/.test(value)) {
-      throw new Error(`container security check failed: ${name}:${index + 1} contains a floating latest image`);
+      throw new Error(
+        `container security check failed: ${name}:${index + 1} contains a floating latest image`,
+      );
     }
   }
 }
@@ -76,7 +107,9 @@ for (const [index, line] of dockerfile.split(/\r?\n/).entries()) {
   if (!match) continue;
   const [, base, stage] = match;
   if (!localStages.has(base) && !/@sha256:[0-9a-f]{64}$/.test(base)) {
-    throw new Error(`container security check failed: Dockerfile:${index + 1} external base is not digest-pinned`);
+    throw new Error(
+      `container security check failed: Dockerfile:${index + 1} external base is not digest-pinned`,
+    );
   }
   if (stage) localStages.add(stage);
 }
@@ -97,12 +130,18 @@ requirePattern(
 
 // Validate host inputs against the tracked checkout, not ignored local files.
 // Docker still validates .dockerignore rules and the full build semantics.
-const trackedFiles = execFileSync("git", ["ls-files", "--cached", "-z"], { cwd: repoRoot, encoding: "utf8" })
-  .split("\0").filter(Boolean);
+const trackedFiles = execFileSync("git", ["ls-files", "--cached", "-z"], {
+  cwd: repoRoot,
+  encoding: "utf8",
+})
+  .split("\0")
+  .filter(Boolean);
 const matchesInput = (file, input) => {
   const normalized = posix.normalize(input.replace(/^\/+/, "")).replace(/\/$/, "");
   if (normalized === ".") return true;
-  return file.split("/").some((_, index, parts) => matchesGlob(parts.slice(0, index + 1).join("/"), normalized));
+  return file
+    .split("/")
+    .some((_, index, parts) => matchesGlob(parts.slice(0, index + 1).join("/"), normalized));
 };
 const dependencyInputs = [];
 let dependencyInstallSeen = false;
@@ -121,18 +160,34 @@ for (const line of dockerfile.replace(/\\\r?\n/g, " ").split(/\r?\n/)) {
   if (fromStage) continue;
   const paths = operands.startsWith("[") ? JSON.parse(operands) : operands.trim().split(/\s+/);
   for (const input of paths.slice(0, -1)) {
-    if (!trackedFiles.some((file) => matchesInput(file, input) && existsSync(join(repoRoot, file)))) {
-      throw new Error(`container security check failed: Dockerfile COPY input is absent from tracked context: ${input}`);
+    if (
+      !trackedFiles.some((file) => matchesInput(file, input) && existsSync(join(repoRoot, file)))
+    ) {
+      throw new Error(
+        `container security check failed: Dockerfile COPY input is absent from tracked context: ${input}`,
+      );
     }
     if (!dependencyInstallSeen) dependencyInputs.push(input);
   }
 }
-const workspacePatterns = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).workspaces;
-const workspaceManifests = trackedFiles.filter((file) => file.endsWith("/package.json")
-  && workspacePatterns.some((pattern) => matchesGlob(file.slice(0, -"/package.json".length), pattern)));
+const workspacePatterns = JSON.parse(
+  readFileSync(join(repoRoot, "package.json"), "utf8"),
+).workspaces;
+const workspaceManifests = trackedFiles.filter(
+  (file) =>
+    file.endsWith("/package.json") &&
+    workspacePatterns.some((pattern) =>
+      matchesGlob(file.slice(0, -"/package.json".length), pattern),
+    ),
+);
 for (const manifest of workspaceManifests) {
-  if (!existsSync(join(repoRoot, manifest)) || !dependencyInputs.some((input) => matchesInput(manifest, input))) {
-    throw new Error(`container security check failed: workspace manifest missing before npm ci: ${manifest}`);
+  if (
+    !existsSync(join(repoRoot, manifest)) ||
+    !dependencyInputs.some((input) => matchesInput(manifest, input))
+  ) {
+    throw new Error(
+      `container security check failed: workspace manifest missing before npm ci: ${manifest}`,
+    );
   }
 }
 
@@ -155,7 +210,9 @@ requirePattern(
   "OpenBooks application image is not an explicitly required full reference",
 );
 if (existsSync(join(repoRoot, "deploy", "ha", "kustomization.yaml"))) {
-  throw new Error("container security check failed: deploy/ha must not be directly applyable; use ordered overlays");
+  throw new Error(
+    "container security check failed: deploy/ha must not be directly applyable; use ordered overlays",
+  );
 }
 requirePattern(
   haBootstrapOverlay,
@@ -187,7 +244,10 @@ rejectPattern(
   /ghcr\.io\/braedonsaunders\/openbooks/i,
   "a historical public OpenBooks package reference remains in deployment configuration",
 );
-for (const [label, manifest] of [["bootstrap", haBootstrap], ["application", haApplication]]) {
+for (const [label, manifest] of [
+  ["bootstrap", haBootstrap],
+  ["application", haApplication],
+]) {
   requirePattern(
     manifest,
     /image:\s*example\.invalid\/openbooks@sha256:0{64}/,
@@ -230,11 +290,7 @@ requirePattern(
   /USER\s+node\s*[\r\n]+CMD\s*\["node",\s*"web\/server\.js"\]/,
   "the production image does not drop root before startup",
 );
-requirePattern(
-  example,
-  /^POSTGRES_OWNER_PASSWORD=/m,
-  "Compose example omits the owner secret",
-);
+requirePattern(example, /^POSTGRES_OWNER_PASSWORD=/m, "Compose example omits the owner secret");
 requirePattern(
   example,
   /^OPENBOOKS_DB_PASSWORD=/m,

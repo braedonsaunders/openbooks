@@ -1,49 +1,49 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // The format update must lock and snapshot inside its write transaction. The
 // scripted database below serializes transactions like PostgreSQL row locks;
 // the old route's pre-transaction db.execute snapshot is deliberately rejected
 // so this test is red against that implementation.
-const stateKey = Symbol.for('openbooks.payment-format-route-test')
+const stateKey = Symbol.for("openbooks.payment-format-route-test");
 interface AuditSnapshot {
-  before: Record<string, unknown>
-  after: Record<string, unknown>
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
 }
 interface RouteState {
-  calls: { kind: 'db' | 'tx'; text: string }[]
-  audits: AuditSnapshot[]
-  format: Record<string, unknown> | null
-  tail: Promise<void>
+  calls: { kind: "db" | "tx"; text: string }[];
+  audits: AuditSnapshot[];
+  format: Record<string, unknown> | null;
+  tail: Promise<void>;
 }
 const state: RouteState = {
   calls: [],
   audits: [],
-  format: { id: 'format-1', name: 'initial', rail: 'custom' },
+  format: { id: "format-1", name: "initial", rail: "custom" },
   tail: Promise.resolve(),
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 /** Flatten a drizzle SQL chunk into its raw text for the scripted database. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextPaymentFormat = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextPaymentFormat = sqlText;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.payment-format-route-test')]
       const sqlText = globalThis.openbooksSqlTextPaymentFormat
@@ -89,7 +89,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
@@ -97,31 +97,31 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:features',
+    "mock:features",
     `
       export async function isFeatureEnabled() { return true }
     `,
   ],
   [
-    'mock:countries',
+    "mock:countries",
     `
       export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }
     `,
   ],
   [
-    'mock:payment-operations',
+    "mock:payment-operations",
     `
       export async function updatePaymentBankProfile() {}
     `,
   ],
   [
-    'mock:scripting',
+    "mock:scripting",
     `
       export function computeNextRunAt() { return null }
     `,
   ],
   [
-    'mock:audit',
+    "mock:audit",
     `
       const state = globalThis[Symbol.for('openbooks.payment-format-route-test')]
       export async function auditConfigChange(_tx, _orgId, _table, _id, _action, changes) {
@@ -129,83 +129,87 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@openbooks/engine/payments/operations', 'mock:payment-operations'],
-  ['@openbooks/engine/scripting/scripting', 'mock:scripting'],
-  ['../../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../../lib/features', 'mock:features'],
-  ['../../../../../../lib/countries', 'mock:countries'],
-  ['../../_lib', 'mock:audit'],
-])
+  ["@/lib/authz", "mock:authz"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/payments/operations", "mock:payment-operations"],
+  ["@openbooks/engine/scripting/scripting", "mock:scripting"],
+  ["../../../../../../lib/authz", "mock:authz"],
+  ["../../../../../../lib/features", "mock:features"],
+  ["../../../../../../lib/countries", "mock:countries"],
+  ["../../_lib", "mock:audit"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?payment-format-concurrency-test'
-const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-const FORMAT_ID = '00000000-0000-4000-8000-000000000001'
+const routeUrl = "./route.ts?payment-format-concurrency-test";
+const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
+const FORMAT_ID = "00000000-0000-4000-8000-000000000001";
 
 function reset(): void {
-  state.calls = []
-  state.audits = []
-  state.format = { id: FORMAT_ID, name: 'initial', rail: 'custom' }
-  state.tail = Promise.resolve()
+  state.calls = [];
+  state.audits = [];
+  state.format = { id: FORMAT_ID, name: "initial", rail: "custom" };
+  state.tail = Promise.resolve();
 }
 
 function patch(name: string): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/admin/payment-operations/formats/${FORMAT_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ name }),
     }),
-    { params: Promise.resolve({ resource: 'formats', id: FORMAT_ID }) },
-  )
+    { params: Promise.resolve({ resource: "formats", id: FORMAT_ID }) },
+  );
 }
 
-test('concurrent format edits serialize before-state snapshots with their updates', async () => {
-  reset()
+test("concurrent format edits serialize before-state snapshots with their updates", async () => {
+  reset();
 
-  const [first, second] = await Promise.all([patch('first edit'), patch('second edit')])
+  const [first, second] = await Promise.all([patch("first edit"), patch("second edit")]);
 
-  assert.equal(first.status, 200)
-  assert.equal(second.status, 200)
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
   assert.deepEqual(
     state.audits.map(({ before, after }) => [before.name, after.name]),
     [
-      ['initial', 'first edit'],
-      ['first edit', 'second edit'],
+      ["initial", "first edit"],
+      ["first edit", "second edit"],
     ],
-    'each audit captures the row version immediately preceding its own update',
-  )
-  assert.equal(state.format?.name, 'second edit')
-  assert.equal(state.calls.some(({ kind }) => kind === 'db'), false, 'no snapshot escaped the transaction')
-  const lock = state.calls.find(({ text }) => text.includes('select * from payment_formats'))
-  assert.ok(lock)
-  assert.match(lock.text, /for update/)
-})
+    "each audit captures the row version immediately preceding its own update",
+  );
+  assert.equal(state.format?.name, "second edit");
+  assert.equal(
+    state.calls.some(({ kind }) => kind === "db"),
+    false,
+    "no snapshot escaped the transaction",
+  );
+  const lock = state.calls.find(({ text }) => text.includes("select * from payment_formats"));
+  assert.ok(lock);
+  assert.match(lock.text, /for update/);
+});
 
-test('a missing custom format keeps the read-only response', async () => {
-  reset()
-  state.format = null
+test("a missing custom format keeps the read-only response", async () => {
+  reset();
+  state.format = null;
 
-  const response = await patch('ignored')
+  const response = await patch("ignored");
 
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), { error: 'built-in payment formats are read-only' })
-  assert.equal(state.audits.length, 0)
-})
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "built-in payment formats are read-only" });
+  assert.equal(state.audits.length, 0);
+});

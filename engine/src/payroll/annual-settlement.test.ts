@@ -17,9 +17,10 @@ const CALENDAR: PayrollTaxYearDefinition = {
   namedBy: "opening_year",
 };
 
-function packWith(
-  settlement: PayrollAnnualSettlement | null,
-): Pick<PayrollCountryPack, "statutorySlots"> & {
+function packWith(settlement: PayrollAnnualSettlement | null): Pick<
+  PayrollCountryPack,
+  "statutorySlots"
+> & {
   annualSettlement?: (taxYear: number) => PayrollAnnualSettlement | null;
 } {
   return {
@@ -56,10 +57,7 @@ const DECLARATION: PayrollAnnualSettlement = {
 
 test("absent declaration resolves to no settlement — the monthly path is untouched", () => {
   assert.equal(resolveAnnualSettlement({}, 2026), null);
-  assert.equal(
-    resolveAnnualSettlement({ annualSettlement: () => null }, 2026),
-    null,
-  );
+  assert.equal(resolveAnnualSettlement({ annualSettlement: () => null }, 2026), null);
 });
 
 test("a settlement against a systemKey no slot declares is refused by name", () => {
@@ -68,15 +66,11 @@ test("a settlement against a systemKey no slot declares is refused by name", () 
     settlementSystemKey: " bahn_bonus",
   };
   assert.throws(
-    () =>
-      resolveAnnualSettlement(
-        packWith(bad) as PayrollCountryPack,
-        2026,
-      ),
+    () => resolveAnnualSettlement(packWith(bad) as PayrollCountryPack, 2026),
     (error: unknown) =>
-      error instanceof PayrollPackError
-      && /bahn_bonus/.test(error.message)
-      && /no statutory slot/.test(error.message),
+      error instanceof PayrollPackError &&
+      /bahn_bonus/.test(error.message) &&
+      /no statutory slot/.test(error.message),
   );
 });
 
@@ -119,7 +113,7 @@ test("missing-input scan is silent when everything is declared", () => {
     emp: { fact_a: "1" },
     certificateFor: (key) =>
       key === "cert_b"
-        ? ({ answers: {} }) as unknown as import("./certificates.ts").ResolvedCertificate
+        ? ({ answers: {} } as unknown as import("./certificates.ts").ResolvedCertificate)
         : null,
   });
   assert.deepEqual(missing, []);
@@ -132,8 +126,7 @@ test("settlement push refuses a negative amount — direction rides the kind", (
   });
   assert.throws(
     () => push("income_tax", "deduction", "settlement", "-1", 110),
-    (error: unknown) =>
-      error instanceof PayrollPackError && /negative/.test(error.message),
+    (error: unknown) => error instanceof PayrollPackError && /negative/.test(error.message),
   );
   assert.deepEqual(pushed, []);
 });

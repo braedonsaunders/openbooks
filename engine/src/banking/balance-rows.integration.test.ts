@@ -47,7 +47,12 @@ function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement
     [
       "date,amount,description,bank_transaction_id",
       ...input.lines.map((line) =>
-        [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
+        [
+          line.postedOn,
+          line.amount,
+          quote(line.description ?? ""),
+          line.bankTransactionId ?? "",
+        ].join(","),
       ),
     ].join("\n") + "\n";
   return importStatement(
@@ -66,7 +71,11 @@ function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement
 
 test("CSV tags a dated opening-balance row instead of importing it as a transaction", () => {
   const parsed = parseCsv(
-    ["Date,Amount,Description", "2026-11-01,3068.57,Opening balance", "2026-11-02,-45.00,Card payment"].join("\n"),
+    [
+      "Date,Amount,Description",
+      "2026-11-01,3068.57,Opening balance",
+      "2026-11-02,-45.00,Card payment",
+    ].join("\n"),
     MAPPING,
   );
   assert.equal(parsed.lines.length, 2);
@@ -194,7 +203,8 @@ async function postReceipt(org: ScratchOrg, actorId: string, amount: string): Pr
          'Receipt', 'draft', 'manual', ${actorId}, ${actorId})
     `);
     const offsetAmount = `-${amount}`;
-    const [line] = await tx.execute<{ id: string }>(sql`
+    const [line] = await tx.execute<{ id: string }>(
+      sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -204,7 +214,9 @@ async function postReceipt(org: ScratchOrg, actorId: string, amount: string): Pr
         (${randomUUID()}, ${org.orgId}, ${entryId}, 2,
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD', ${offsetAmount}, 1, 'Receipt')
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -229,8 +241,18 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "3068.57", description: "Opening balance", bankTransactionId: "opening" },
-            { postedOn: org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "receipt" },
+            {
+              postedOn: org.date,
+              amount: "3068.57",
+              description: "Opening balance",
+              bankTransactionId: "opening",
+            },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "Client receipt",
+              bankTransactionId: "receipt",
+            },
           ],
           dryRun: true,
         },
@@ -252,23 +274,43 @@ test(
           currency: "CAD",
           openingBalance: "3068.57",
           lines: [
-            { postedOn: org.date, amount: "3068.57", description: "Opening balance", bankTransactionId: "opening" },
-            { postedOn: org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "receipt" },
+            {
+              postedOn: org.date,
+              amount: "3068.57",
+              description: "Opening balance",
+              bankTransactionId: "opening",
+            },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "Client receipt",
+              bankTransactionId: "receipt",
+            },
           ],
         },
         ctx,
       );
-      const stored = (await db.execute<{ n: number }>(sql`
+      const stored = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(stored, 1, "the balance row is never written as a transaction");
       assert.equal(imported.balanceCandidates.length, 1);
 
-      const [receipt] = (await db.execute<{ id: string }>(sql`
+      const [receipt] = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `, "objects")).map((row) => row.id);
+      `,
+          "objects",
+        )
+      ).map((row) => row.id);
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100.00" },
         ctx,

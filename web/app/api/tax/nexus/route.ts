@@ -1,13 +1,13 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { computeUsNexusStatus } from '@openbooks/engine/tax-returns/us-nexus-ledger'
-import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { computeUsNexusStatus } from "@openbooks/engine/tax-returns/us-nexus-ledger";
+import { guardSubsidiaryScope } from "../../../../lib/authz";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** US economic-nexus status by state for a period: where the business has met or
  *  is approaching a sales-tax registration threshold. Thresholds are measured
@@ -17,39 +17,54 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
  *  ledger in its working currency; `currency` (+ `rateType`/`rateDate`)
  *  declares the working currency and threshold-translation policy for a
  *  mixed entity. */
-async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyGET(
+  req: Request,
+  ctx: { params: Promise<unknown> },
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
-  const p = new URL(req.url).searchParams
-  const from = p.get('from')
-  const to = p.get('to')
+  const p = new URL(req.url).searchParams;
+  const from = p.get("from");
+  const to = p.get("to");
   if (!from || !to || !DATE_RE.test(from) || !DATE_RE.test(to)) {
-    return NextResponse.json({ error: 'from and to dates (YYYY-MM-DD) are required' }, { status: 422 })
+    return NextResponse.json(
+      { error: "from and to dates (YYYY-MM-DD) are required" },
+      { status: 422 },
+    );
   }
-  const subsidiaryIds = p.getAll('subsidiary').flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean)
-  if (p.has('subsidiary') && subsidiaryIds.length === 0) {
-    return NextResponse.json({ error: 'subsidiary filter is empty' }, { status: 422 })
+  const subsidiaryIds = p
+    .getAll("subsidiary")
+    .flatMap((v) => v.split(","))
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (p.has("subsidiary") && subsidiaryIds.length === 0) {
+    return NextResponse.json({ error: "subsidiary filter is empty" }, { status: 422 });
   }
   for (const id of subsidiaryIds) {
-    const denied = guardSubsidiaryScope(gate, id)
-    if (denied) return denied
+    const denied = guardSubsidiaryScope(gate, id);
+    if (denied) return denied;
   }
-  const currency = p.get('currency')?.trim() || undefined
-  const rateType = p.get('rateType')?.trim() || undefined
-  const rateDate = p.get('rateDate')?.trim() || undefined
+  const currency = p.get("currency")?.trim() || undefined;
+  const rateType = p.get("rateType")?.trim() || undefined;
+  const rateDate = p.get("rateDate")?.trim() || undefined;
   try {
-    return NextResponse.json(await computeUsNexusStatus(gate.user.orgId, from, to, gate.allowedSubsidiaryIds, {
-      ...(subsidiaryIds.length > 0 ? { subsidiaryIds } : {}),
-      ...(currency ? { currency } : {}),
-      ...(rateType ? { rateType } : {}),
-      ...(rateDate ? { rateDate } : {}),
-    }))
+    return NextResponse.json(
+      await computeUsNexusStatus(gate.user.orgId, from, to, gate.allowedSubsidiaryIds, {
+        ...(subsidiaryIds.length > 0 ? { subsidiaryIds } : {}),
+        ...(currency ? { currency } : {}),
+        ...(rateType ? { rateType } : {}),
+        ...(rateDate ? { rateDate } : {}),
+      }),
+    );
   } catch (e: unknown) {
-    return apiErrorResponse(e, { safeStatus: 422 })
+    return apiErrorResponse(e, { safeStatus: 422 });
   }
 }
 
 export const GET = defineRoute({
-  permission: 'reports.read', feature: { none: "This route is governed by its permission and service authorization." },
+  permission: "reports.read",
+  feature: { none: "This route is governed by its permission and service authorization." },
 
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });

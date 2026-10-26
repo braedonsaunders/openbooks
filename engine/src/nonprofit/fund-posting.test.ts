@@ -38,17 +38,28 @@ function assertCellsBalance(lines: readonly FundPostingLine[]) {
 
 test("interfund legs balance two distinct funds", () => {
   const lines = [line(root, operating, "125.0000"), line(root, restricted, "-125.0000")];
-  const pairs: FundPairView[] = [{
-    fromFundId: restricted,
-    toFundId: operating,
-    dueFromAccountId: dueFrom,
-    dueToAccountId: dueTo,
-  }];
+  const pairs: FundPairView[] = [
+    {
+      fromFundId: restricted,
+      toFundId: operating,
+      dueFromAccountId: dueFrom,
+      dueToAccountId: dueTo,
+    },
+  ];
   const legs = interfundLegs(lines, pairs, fundCodes, new Map([[root, "CAD"]]));
   assert.equal(legs.length, 2);
-  assert.deepEqual(legs.map((leg) => leg.accountId), [dueFrom, dueTo]);
-  assert.deepEqual(legs.map((leg) => leg.currency), ["CAD", "CAD"]);
-  assert.deepEqual(legs.map((leg) => leg.fxRate), ["1", "1"]);
+  assert.deepEqual(
+    legs.map((leg) => leg.accountId),
+    [dueFrom, dueTo],
+  );
+  assert.deepEqual(
+    legs.map((leg) => leg.currency),
+    ["CAD", "CAD"],
+  );
+  assert.deepEqual(
+    legs.map((leg) => leg.fxRate),
+    ["1", "1"],
+  );
   assertCellsBalance([...lines, ...legs.map((leg) => ({ ...leg, fundId: leg.extraDims.fund! }))]);
 });
 
@@ -60,15 +71,31 @@ test("interfund legs balance two funds in two subsidiaries", () => {
     line(branch, restricted, "80.0000"),
   ];
   const pairs: FundPairView[] = [
-    { fromFundId: restricted, toFundId: operating, dueFromAccountId: dueFrom, dueToAccountId: dueTo },
-    { fromFundId: operating, toFundId: restricted, dueFromAccountId: dueTo, dueToAccountId: dueFrom },
+    {
+      fromFundId: restricted,
+      toFundId: operating,
+      dueFromAccountId: dueFrom,
+      dueToAccountId: dueTo,
+    },
+    {
+      fromFundId: operating,
+      toFundId: restricted,
+      dueFromAccountId: dueTo,
+      dueToAccountId: dueFrom,
+    },
   ];
   const legs = interfundLegs(
     lines,
     pairs,
     fundCodes,
-    new Map([[root, "CAD"], [branch, "USD"]]),
-    new Map([[root, "Main Office"], [branch, "Northern Office"]]),
+    new Map([
+      [root, "CAD"],
+      [branch, "USD"],
+    ]),
+    new Map([
+      [root, "Main Office"],
+      [branch, "Northern Office"],
+    ]),
   );
   assert.equal(legs.length, 4);
   assertCellsBalance([...lines, ...legs.map((leg) => ({ ...leg, fundId: leg.extraDims.fund! }))]);

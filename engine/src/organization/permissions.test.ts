@@ -28,12 +28,18 @@ import {
 test("fixed-asset capitalization and maintenance permissions are catalogued and granted by duty", () => {
   const keys: CataloguePermission[] = ["assets.capitalize", "assets.maintain"];
   for (const perm of keys) {
-    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(perm), `${perm} must be seeded so someone can hold it`);
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
+      `${perm} must be seeded so someone can hold it`,
+    );
     assert.equal(permissionLabelKey(perm), `permissions.${perm.replace(/\./g, "_")}`);
   }
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "assets");
   assert.ok(group);
-  assert.deepEqual(group.permissions.map((entry) => entry.key), ["assets.read", "assets.manage", ...keys]);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    ["assets.read", "assets.manage", ...keys],
+  );
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   for (const perm of keys) {
@@ -47,7 +53,11 @@ test("fixed-asset capitalization and maintenance permissions are catalogued and 
 });
 
 test("stored value permissions are catalogued, grouped, and split by duty", () => {
-  const keys: CataloguePermission[] = ["stored_value.read", "stored_value.manage", "stored_value.adjust"];
+  const keys: CataloguePermission[] = [
+    "stored_value.read",
+    "stored_value.manage",
+    "stored_value.adjust",
+  ];
   for (const perm of keys) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
@@ -58,7 +68,10 @@ test("stored value permissions are catalogued, grouped, and split by duty", () =
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "stored_value");
   assert.ok(group, "stored value needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.stored_value");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    keys,
+  );
 
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
@@ -68,8 +81,16 @@ test("stored value permissions are catalogued, grouped, and split by duty", () =
   }
   assert.equal(holds("accountant", "stored_value.read"), true);
   assert.equal(holds("accountant", "stored_value.manage"), true);
-  assert.equal(holds("accountant", "stored_value.adjust"), false, "adjusting balances outside documents is not an accounting duty");
-  assert.equal(holds("sales_manager", "stored_value.manage"), true, "sales managers sell and redeem gift cards");
+  assert.equal(
+    holds("accountant", "stored_value.adjust"),
+    false,
+    "adjusting balances outside documents is not an accounting duty",
+  );
+  assert.equal(
+    holds("sales_manager", "stored_value.manage"),
+    true,
+    "sales managers sell and redeem gift cards",
+  );
   assert.equal(holds("sales_manager", "stored_value.adjust"), false);
   assert.equal(holds("sales_rep", "stored_value.read"), true);
   assert.equal(holds("sales_rep", "stored_value.manage"), false);
@@ -89,8 +110,16 @@ test("usage permissions are catalogued and granted wherever invoice creation is 
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), permission);
   for (const role of BUILT_IN_ROLE_KEYS) {
     if (holds(role, "ar.create")) {
-      assert.equal(holds(role, "usage.manage"), true, `${role} must manage usage with invoice creation`);
-      assert.equal(holds(role, "usage.bill"), true, `${role} must bill usage with invoice creation`);
+      assert.equal(
+        holds(role, "usage.manage"),
+        true,
+        `${role} must manage usage with invoice creation`,
+      );
+      assert.equal(
+        holds(role, "usage.bill"),
+        true,
+        `${role} must bill usage with invoice creation`,
+      );
     } else {
       assert.equal(holds(role, "usage.manage"), false, `${role} must not manage usage`);
       assert.equal(holds(role, "usage.bill"), false, `${role} must not bill usage`);
@@ -108,17 +137,29 @@ test("usage permissions are catalogued and granted wherever invoice creation is 
  * reviews (read + approve), and the viewer only reads.
  */
 test("intercompany permissions are catalogued, grouped, and separate settlement from approval", () => {
-  const keys: CataloguePermission[] = ["intercompany.read", "intercompany.manage", "intercompany.settle", "intercompany.approve"];
+  const keys: CataloguePermission[] = [
+    "intercompany.read",
+    "intercompany.manage",
+    "intercompany.settle",
+    "intercompany.approve",
+  ];
   for (const perm of keys) {
-    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(perm), `${perm} must be seeded so someone can hold it`);
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
+      `${perm} must be seeded so someone can hold it`,
+    );
   }
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "intercompany");
   assert.ok(group, "intercompany needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.intercompany");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    keys,
+  );
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
-  for (const perm of keys) assert.equal(holds("controller", perm), true, `controller must hold ${perm}`);
+  for (const perm of keys)
+    assert.equal(holds("controller", perm), true, `controller must hold ${perm}`);
   // The accountant prepares runs and pairs documents; settlement and its
   // approval stay with the controller and the approver.
   assert.equal(holds("accountant", "intercompany.manage"), true);
@@ -132,7 +173,12 @@ test("intercompany permissions are catalogued, grouped, and separate settlement 
 });
 
 test("allocation permissions are catalogued, grouped, and granted by duty", () => {
-  const keys: CataloguePermission[] = ["allocations.read", "allocations.manage", "allocations.run", "allocations.approve"];
+  const keys: CataloguePermission[] = [
+    "allocations.read",
+    "allocations.manage",
+    "allocations.run",
+    "allocations.approve",
+  ];
   for (const perm of keys) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
@@ -143,7 +189,10 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "allocations");
   assert.ok(group, "allocations needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.allocations");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    keys,
+  );
 
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
@@ -154,7 +203,11 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
   for (const perm of ["allocations.read", "allocations.manage", "allocations.run"]) {
     assert.equal(holds("accountant", perm), true, `accountant must hold ${perm}`);
   }
-  assert.equal(holds("accountant", "allocations.approve"), false, "accountant must not approve runs");
+  assert.equal(
+    holds("accountant", "allocations.approve"),
+    false,
+    "accountant must not approve runs",
+  );
   // Approver reviews: read plus approve, never manage or run.
   assert.equal(holds("approver", "allocations.read"), true);
   assert.equal(holds("approver", "allocations.approve"), true);
@@ -164,7 +217,11 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
   // context includes its receipt; neither grant lets the approver post.
   assert.equal(holds("approver", "close.reopen"), true, "approver decides reopen requests");
   assert.equal(holds("approver", "items.read"), true, "approver reads the receipt a bill matches");
-  assert.equal(holds("approver", "periods.manage"), false, "approver must not lock or unlock periods");
+  assert.equal(
+    holds("approver", "periods.manage"),
+    false,
+    "approver must not lock or unlock periods",
+  );
   assert.equal(holds("approver", "items.post"), false, "approver must not post inventory");
   // Viewer reads; sales roles stay out of the ledger module.
   assert.equal(holds("viewer", "allocations.read"), true);
@@ -183,7 +240,11 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
  * and suspension move money and stay with finance (controller, accountant).
  */
 test("autopay permissions are catalogued, grouped, and granted by duty", () => {
-  const keys: CataloguePermission[] = ["payment_methods.read", "payment_methods.manage", "autopay.manage"];
+  const keys: CataloguePermission[] = [
+    "payment_methods.read",
+    "payment_methods.manage",
+    "autopay.manage",
+  ];
   for (const perm of keys) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
@@ -194,7 +255,10 @@ test("autopay permissions are catalogued, grouped, and granted by duty", () => {
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "autopay");
   assert.ok(group, "autopay needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.autopay");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    keys,
+  );
 
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
@@ -204,16 +268,32 @@ test("autopay permissions are catalogued, grouped, and granted by duty", () => {
     assert.equal(holds("admin", perm), true, `admin must hold ${perm}`);
   }
   assert.equal(holds("approver", "payment_methods.read"), true);
-  assert.equal(holds("approver", "payment_methods.manage"), false, "approver must not move stored methods");
+  assert.equal(
+    holds("approver", "payment_methods.manage"),
+    false,
+    "approver must not move stored methods",
+  );
   assert.equal(holds("approver", "autopay.manage"), false, "approver must not run collection");
   assert.equal(holds("viewer", "payment_methods.read"), true);
   assert.equal(holds("viewer", "autopay.manage"), false);
   for (const role of ["sales_manager", "sales_rep"]) {
-    assert.equal(holds(role, "payment_methods.read"), true, `${role} must see the method on file for support`);
-    assert.equal(holds(role, "payment_methods.manage"), false, `${role} must not move stored methods`);
+    assert.equal(
+      holds(role, "payment_methods.read"),
+      true,
+      `${role} must see the method on file for support`,
+    );
+    assert.equal(
+      holds(role, "payment_methods.manage"),
+      false,
+      `${role} must not move stored methods`,
+    );
     assert.equal(holds(role, "autopay.manage"), false, `${role} must not run collection`);
   }
-  assert.equal(holds("production", "payment_methods.read"), false, "production stays out of collections");
+  assert.equal(
+    holds("production", "payment_methods.read"),
+    false,
+    "production stays out of collections",
+  );
 });
 
 /**
@@ -224,7 +304,11 @@ test("autopay permissions are catalogued, grouped, and granted by duty", () => {
  * power, the approver reviews (read + approve), and the viewer only reads.
  */
 test("contract cost permissions are catalogued, grouped, and granted by duty", () => {
-  const keys: CataloguePermission[] = ["contract_costs.read", "contract_costs.manage", "contract_costs.approve"];
+  const keys: CataloguePermission[] = [
+    "contract_costs.read",
+    "contract_costs.manage",
+    "contract_costs.approve",
+  ];
   for (const perm of keys) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
@@ -235,7 +319,10 @@ test("contract cost permissions are catalogued, grouped, and granted by duty", (
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "contract-costs");
   assert.ok(group, "contract costs need their own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.contract-costs");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    keys,
+  );
 
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
@@ -245,14 +332,26 @@ test("contract cost permissions are catalogued, grouped, and granted by duty", (
   for (const perm of ["contract_costs.read", "contract_costs.manage"]) {
     assert.equal(holds("accountant", perm), true, `accountant must hold ${perm}`);
   }
-  assert.equal(holds("accountant", "contract_costs.approve"), false, "accountant must not approve impairment");
+  assert.equal(
+    holds("accountant", "contract_costs.approve"),
+    false,
+    "accountant must not approve impairment",
+  );
   assert.equal(holds("approver", "contract_costs.read"), true);
   assert.equal(holds("approver", "contract_costs.approve"), true);
-  assert.equal(holds("approver", "contract_costs.manage"), false, "approver must not capitalize costs");
+  assert.equal(
+    holds("approver", "contract_costs.manage"),
+    false,
+    "approver must not capitalize costs",
+  );
   assert.equal(holds("viewer", "contract_costs.read"), true);
   assert.equal(holds("viewer", "contract_costs.manage"), false);
   for (const role of ["sales_manager", "sales_rep"]) {
-    assert.equal(holds(role, "contract_costs.read"), false, `${role} must not see capitalized costs`);
+    assert.equal(
+      holds(role, "contract_costs.read"),
+      false,
+      `${role} must not see capitalized costs`,
+    );
     assert.equal(holds(role, "contract_costs.manage"), false, `${role} must not capitalize costs`);
   }
   assert.equal(holds("admin", "contract_costs.approve"), true);
@@ -334,11 +433,10 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "hrm");
   assert.ok(group, "hrm needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.hrm");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), [
-    ...keys.slice(0, 19),
-    ...selfKeys,
-    ...keys.slice(19),
-  ]);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    [...keys.slice(0, 19), ...selfKeys, ...keys.slice(19)],
+  );
 
   const holds = (role: string, perm: string) =>
     permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
@@ -382,8 +480,20 @@ test("resolveKeyScopeAuthority intersects owner permissions with exact key scope
   );
   // An invalid scope DECLARATION (malformed, empty, fully non-catalogue)
   // resolves to null — no credential.
-  for (const scopes of [undefined, null, "ar.read", [], ["*"], ["not.a.permission"], ["*", "nope"]]) {
-    assert.equal(resolveKeyScopeAuthority(new Set(["*"]), scopes), null, `scopes ${JSON.stringify(scopes)} must resolve to null`);
+  for (const scopes of [
+    undefined,
+    null,
+    "ar.read",
+    [],
+    ["*"],
+    ["not.a.permission"],
+    ["*", "nope"],
+  ]) {
+    assert.equal(
+      resolveKeyScopeAuthority(new Set(["*"]), scopes),
+      null,
+      `scopes ${JSON.stringify(scopes)} must resolve to null`,
+    );
   }
   // A VALID declaration the owner cannot use resolves to an empty set — a
   // credential conferring nothing — never null.
@@ -391,29 +501,60 @@ test("resolveKeyScopeAuthority intersects owner permissions with exact key scope
   assert.ok(inert instanceof Set, "valid-but-inert scopes must resolve to a set");
   assert.deepEqual([...inert], []);
   const nothingHeld = resolveKeyScopeAuthority(new Set(), ["ar.read"]);
-  assert.ok(nothingHeld instanceof Set, "an owner holding nothing still yields a set for valid scopes");
+  assert.ok(
+    nothingHeld instanceof Set,
+    "an owner holding nothing still yields a set for valid scopes",
+  );
   assert.deepEqual([...nothingHeld], []);
 });
 
 test("purchasing has its own grants, kept apart from the payables book", () => {
-  const keys: CataloguePermission[] = ["purchase_orders.read", "purchase_orders.create", "goods_receipts.create"];
+  const keys: CataloguePermission[] = [
+    "purchase_orders.read",
+    "purchase_orders.create",
+    "goods_receipts.create",
+  ];
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "purchasing");
   assert.ok(group, "purchasing needs its own group in the role picker");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    keys,
+  );
   assert.equal(purchaseOrderConversionPermission("purchase_receipt"), "goods_receipts.create");
-  assert.equal(purchaseOrderConversionPermission("vendor_bill"), "ap.create", "billing an order creates a payables document");
-  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  assert.equal(
+    purchaseOrderConversionPermission("vendor_bill"),
+    "ap.create",
+    "billing an order creates a payables document",
+  );
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   // Roles that could read or author purchase orders through ap.* keep that access.
   for (const role of BUILT_IN_ROLE_KEYS) {
-    if (holds(role, "ap.read")) assert.equal(holds(role, "purchase_orders.read"), true, `${role} keeps reading purchase orders`);
+    if (holds(role, "ap.read"))
+      assert.equal(
+        holds(role, "purchase_orders.read"),
+        true,
+        `${role} keeps reading purchase orders`,
+      );
     if (holds(role, "ap.create")) {
-      assert.equal(holds(role, "purchase_orders.create"), true, `${role} keeps authoring purchase orders`);
+      assert.equal(
+        holds(role, "purchase_orders.create"),
+        true,
+        `${role} keeps authoring purchase orders`,
+      );
       assert.equal(holds(role, "goods_receipts.create"), true, `${role} keeps receiving goods`);
     }
   }
   assert.equal(holds("buyer", "purchase_orders.create"), true);
   assert.equal(holds("buyer", "goods_receipts.create"), true);
-  for (const denied of ["ap.create", "ap.post", "ap.pay", "banking.read", "gl.read", "items.post"]) {
+  for (const denied of [
+    "ap.create",
+    "ap.post",
+    "ap.pay",
+    "banking.read",
+    "gl.read",
+    "items.post",
+  ]) {
     assert.equal(holds("buyer", denied), false, `a buyer holds no ${denied}`);
   }
 });
@@ -422,18 +563,31 @@ test("estimates have their own grants, kept apart from the receivables book", ()
   const keys: CataloguePermission[] = ["estimates.read", "estimates.create", "estimates.issue"];
   const group = PERMISSION_GROUPS.find((entry) => entry.key === "estimates");
   assert.ok(group, "estimates need their own group in the role picker");
-  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.deepEqual(
+    group.permissions.map((entry) => entry.key),
+    keys,
+  );
   assert.equal(ESTIMATE_PERMISSIONS.read, "estimates.read");
   assert.equal(ESTIMATE_PERMISSIONS.create, "estimates.create");
   assert.equal(ESTIMATE_PERMISSIONS.issue, "estimates.issue");
   // Minting the downstream document keeps its own book's authority: pricing
   // estimates can never mint receivables on its own.
-  assert.equal(estimateConversionPermission("customer_invoice"), "ar.create", "invoicing a quote creates a receivables document");
-  assert.equal(estimateConversionPermission("sales_order"), "ar.create", "converting a quote creates a receivables document");
-  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  assert.equal(
+    estimateConversionPermission("customer_invoice"),
+    "ar.create",
+    "invoicing a quote creates a receivables document",
+  );
+  assert.equal(
+    estimateConversionPermission("sales_order"),
+    "ar.create",
+    "converting a quote creates a receivables document",
+  );
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   // Roles that could read or price estimates through ar.* keep that access.
   for (const role of BUILT_IN_ROLE_KEYS) {
-    if (holds(role, "ar.read")) assert.equal(holds(role, "estimates.read"), true, `${role} keeps reading estimates`);
+    if (holds(role, "ar.read"))
+      assert.equal(holds(role, "estimates.read"), true, `${role} keeps reading estimates`);
     if (holds(role, "ar.create")) {
       assert.equal(holds(role, "estimates.create"), true, `${role} keeps authoring estimates`);
       assert.equal(holds(role, "estimates.issue"), true, `${role} keeps issuing estimates`);
@@ -441,7 +595,11 @@ test("estimates have their own grants, kept apart from the receivables book", ()
   }
   // A field owner prices estimates without gaining the receivables book.
   assert.equal(holds("sales_rep", "estimates.create"), true);
-  assert.equal(holds("sales_rep", "ar.create"), true, "today's sales roles keep invoicing until the grant is narrowed");
+  assert.equal(
+    holds("sales_rep", "ar.create"),
+    true,
+    "today's sales roles keep invoicing until the grant is narrowed",
+  );
   assert.equal(holds("cashier", "estimates.read"), false, "the till never sees estimates");
   assert.equal(holds("cashier", "estimates.create"), false);
   assert.equal(holds("buyer", "estimates.create"), false, "buying never prices estimates");
@@ -450,12 +608,17 @@ test("estimates have their own grants, kept apart from the receivables book", ()
 });
 
 test("people, banking and expense grants are filed under their own groups, not Administration", () => {
-  const groupOf = (key: string) => PERMISSION_GROUPS.find((group) => group.permissions.some((entry) => entry.key === key))?.key;
+  const groupOf = (key: string) =>
+    PERMISSION_GROUPS.find((group) => group.permissions.some((entry) => entry.key === key))?.key;
   assert.equal(groupOf("parties.read"), "parties");
   assert.equal(groupOf("banking.read"), "banking");
   assert.equal(groupOf("expenses.read"), "expenses");
   const listed = PERMISSION_GROUPS.flatMap((group) => group.permissions.map((entry) => entry.key));
-  assert.deepEqual([...listed].sort(), [...PERMISSION_CATALOGUE].sort(), "every catalogue key appears in exactly one group");
+  assert.deepEqual(
+    [...listed].sort(),
+    [...PERMISSION_CATALOGUE].sort(),
+    "every catalogue key appears in exactly one group",
+  );
 });
 
 test("every built-in role says what it can and cannot do", () => {
@@ -466,7 +629,8 @@ test("every built-in role says what it can and cannot do", () => {
 });
 
 test("the cashier and project coordinator roles carry no bank, ledger or payment authority", () => {
-  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   for (const role of ["cashier", "project_coordinator"]) {
     for (const denied of ["banking.read", "gl.read", "ap.pay", "ar.pay", "ar.post"]) {
       assert.equal(holds(role, denied), false, `${role} holds no ${denied}`);
@@ -476,32 +640,61 @@ test("the cashier and project coordinator roles carry no bank, ledger or payment
   assert.equal(holds("cashier", "cash_sales.deposit"), true, "drops till cash to the bank");
   assert.equal(holds("controller", "cash_sales.deposit"), true, "posts and drops with the books");
   assert.equal(holds("accountant", "cash_sales.deposit"), true, "posts and drops with the books");
-  assert.equal(holds("sales_manager", "cash_sales.deposit"), false, "drafts sales but never moves till cash");
-  assert.equal(holds("sales_rep", "cash_sales.deposit"), false, "drafts sales but never moves till cash");
+  assert.equal(
+    holds("sales_manager", "cash_sales.deposit"),
+    false,
+    "drafts sales but never moves till cash",
+  );
+  assert.equal(
+    holds("sales_rep", "cash_sales.deposit"),
+    false,
+    "drafts sales but never moves till cash",
+  );
   assert.equal(holds("project_coordinator", "cash_sales.deposit"), false, "never touches the till");
   assert.equal(holds("project_coordinator", "time.self"), true, "logs their own time");
-  assert.equal(holds("project_coordinator", "time.manage"), false, "never enters a coworker's time");
+  assert.equal(
+    holds("project_coordinator", "time.manage"),
+    false,
+    "never enters a coworker's time",
+  );
   assert.equal(holds("project_coordinator", "time.read"), false, "never reads a coworker's time");
   assert.equal(holds("project_coordinator", "projects.read"), true);
   assert.equal(holds("project_coordinator", "ar.create"), true, "drafts customer invoices");
 });
 
 test("the cashier sells and keeps the drawer at the register but cannot approve overrides or configure registers", () => {
-  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   for (const granted of ["pos.sell", "pos.refund", "pos.drawer"]) {
     assert.equal(holds("cashier", granted), true, `cashier holds ${granted}`);
   }
-  assert.equal(holds("cashier", "pos.override"), false, "price overrides and discounts need a manager");
-  assert.equal(holds("cashier", "pos.manage"), false, "register configuration stays with the books");
+  assert.equal(
+    holds("cashier", "pos.override"),
+    false,
+    "price overrides and discounts need a manager",
+  );
+  assert.equal(
+    holds("cashier", "pos.manage"),
+    false,
+    "register configuration stays with the books",
+  );
   assert.equal(holds("controller", "pos.override"), true);
   assert.equal(holds("controller", "pos.manage"), true);
   assert.equal(holds("sales_rep", "pos.sell"), false, "selling at the register is a till duty");
 });
 
 test("hourly roles enter their own time through time.self, never the supervisory time grants", () => {
-  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes("time.self"));
-  for (const role of ["production", "sales_manager", "sales_rep", "buyer", "cashier", "project_coordinator"]) {
+  for (const role of [
+    "production",
+    "sales_manager",
+    "sales_rep",
+    "buyer",
+    "cashier",
+    "project_coordinator",
+  ]) {
     assert.equal(holds(role, "time.self"), true, `${role} enters its own time`);
     assert.equal(holds(role, "time.manage"), false, `${role} does not enter coworkers' time`);
   }
@@ -511,36 +704,94 @@ test("hourly roles enter their own time through time.self, never the supervisory
 });
 
 test("employee roles file their own expense reports through expenses.self, never the org-wide expense grants", () => {
-  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
-  for (const role of ["production", "sales_manager", "sales_rep", "buyer", "cashier", "project_coordinator"]) {
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const role of [
+    "production",
+    "sales_manager",
+    "sales_rep",
+    "buyer",
+    "cashier",
+    "project_coordinator",
+  ]) {
     assert.equal(holds(role, "expenses.self"), true, `${role} files its own expense reports`);
-    assert.equal(holds(role, "expenses.read"), false, `${role} does not read coworkers' expense reports`);
-    assert.equal(holds(role, "expenses.create"), false, `${role} does not enter coworkers' expense reports`);
+    assert.equal(
+      holds(role, "expenses.read"),
+      false,
+      `${role} does not read coworkers' expense reports`,
+    );
+    assert.equal(
+      holds(role, "expenses.create"),
+      false,
+      `${role} does not enter coworkers' expense reports`,
+    );
     assert.equal(holds(role, "ap.post"), false, `${role} does not post expense reports`);
   }
-  assert.equal(holds("controller", "expenses.read"), true, "the controller keeps org-wide expense review");
-  assert.equal(holds("approver", "expenses.read"), true, "the approver opens the expense reports it decides");
-  assert.equal(holds("approver", "expenses.create"), false, "the approver cannot enter expense reports");
+  assert.equal(
+    holds("controller", "expenses.read"),
+    true,
+    "the controller keeps org-wide expense review",
+  );
+  assert.equal(
+    holds("approver", "expenses.read"),
+    true,
+    "the approver opens the expense reports it decides",
+  );
+  assert.equal(
+    holds("approver", "expenses.create"),
+    false,
+    "the approver cannot enter expense reports",
+  );
   assert.equal(holds("approver", "ap.post"), false, "the approver cannot post them");
-  assert.deepEqual(grantsConferring("expenses.read", "all"), ["expenses.read"], "only the read grant reads everyone's reports");
+  assert.deepEqual(
+    grantsConferring("expenses.read", "all"),
+    ["expenses.read"],
+    "only the read grant reads everyone's reports",
+  );
   assert.deepEqual(grantsConferring("expenses.create", "all"), ["expenses.create"]);
-  assert.deepEqual(grantsConferring("expenses.read", "own"), ["expenses.self"], "self-service reads the holder's reports");
-  assert.deepEqual(grantsConferring("expenses.create", "own"), ["expenses.self"], "self-service enters the holder's reports");
+  assert.deepEqual(
+    grantsConferring("expenses.read", "own"),
+    ["expenses.self"],
+    "self-service reads the holder's reports",
+  );
+  assert.deepEqual(
+    grantsConferring("expenses.create", "own"),
+    ["expenses.self"],
+    "self-service enters the holder's reports",
+  );
 });
 
 test("the accountant reviews bank and card reconciliations but never performs them", () => {
-  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
-  assert.equal(holds("accountant", "banking.read"), true, "the monthly review opens reconciliations");
-  assert.equal(holds("accountant", "banking.reconcile"), false, "reconciling stays with the controller");
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  assert.equal(
+    holds("accountant", "banking.read"),
+    true,
+    "the monthly review opens reconciliations",
+  );
+  assert.equal(
+    holds("accountant", "banking.reconcile"),
+    false,
+    "reconciling stays with the controller",
+  );
   assert.equal(holds("controller", "banking.reconcile"), true);
 });
 
 test("the self-service baseline is catalogue keys every built-in role holds, and time entry stays out of it", () => {
   for (const key of EMPLOYEE_SELF_SERVICE_BASELINE) {
-    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must be a catalogue key`);
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(key),
+      `${key} must be a catalogue key`,
+    );
   }
-  assert.ok(!EMPLOYEE_SELF_SERVICE_BASELINE.includes("time.self" as never), "hourly time entry is role-specific, not baseline");
-  assert.ok(!EMPLOYEE_SELF_SERVICE_BASELINE.includes("time.clock" as never), "clock-in is role-specific, not baseline");
+  assert.ok(
+    !EMPLOYEE_SELF_SERVICE_BASELINE.includes("time.self" as never),
+    "hourly time entry is role-specific, not baseline",
+  );
+  assert.ok(
+    !EMPLOYEE_SELF_SERVICE_BASELINE.includes("time.clock" as never),
+    "clock-in is role-specific, not baseline",
+  );
   for (const role of BUILT_IN_ROLE_KEYS) {
     assert.equal(
       roleHasSelfServiceBaseline(BUILT_IN_ROLES[role]!.permissions),
@@ -551,21 +802,45 @@ test("the self-service baseline is catalogue keys every built-in role holds, and
 });
 
 test("baseline detection counts wildcards and partial sets honestly", () => {
-  assert.equal(roleHasSelfServiceBaseline(["hrm.self.read", "hrm.self.request", "hrm.leave.request"]), true);
-  assert.equal(roleHasSelfServiceBaseline(new Set(["hrm.self.read", "hrm.self.request", "hrm.leave.request"])), true);
+  assert.equal(
+    roleHasSelfServiceBaseline(["hrm.self.read", "hrm.self.request", "hrm.leave.request"]),
+    true,
+  );
+  assert.equal(
+    roleHasSelfServiceBaseline(new Set(["hrm.self.read", "hrm.self.request", "hrm.leave.request"])),
+    true,
+  );
   assert.equal(roleHasSelfServiceBaseline(["*"]), true, "a full grant covers the baseline");
   assert.equal(roleHasSelfServiceBaseline(["hrm.*"]), true, "a module grant covers the baseline");
-  assert.equal(roleHasSelfServiceBaseline(["hrm.self.read", "hrm.self.request"]), false, "a missing leave grant is a broken baseline");
-  assert.equal(roleHasSelfServiceBaseline([]), false, "a custom hourly role starts with no self-service");
-  assert.equal(roleHasSelfServiceBaseline(["hrm.leave.*"]), false, "a leave-only wildcard is not the baseline");
+  assert.equal(
+    roleHasSelfServiceBaseline(["hrm.self.read", "hrm.self.request"]),
+    false,
+    "a missing leave grant is a broken baseline",
+  );
+  assert.equal(
+    roleHasSelfServiceBaseline([]),
+    false,
+    "a custom hourly role starts with no self-service",
+  );
+  assert.equal(
+    roleHasSelfServiceBaseline(["hrm.leave.*"]),
+    false,
+    "a leave-only wildcard is not the baseline",
+  );
 });
 
 test("the baseline union appends only the missing keys", () => {
-  assert.deepEqual(withSelfServiceBaseline([]), ["hrm.self.read", "hrm.self.request", "hrm.leave.request"]);
-  assert.deepEqual(
-    withSelfServiceBaseline(["ap.read", "hrm.self.request"]),
-    ["ap.read", "hrm.self.request", "hrm.self.read", "hrm.leave.request"],
-  );
+  assert.deepEqual(withSelfServiceBaseline([]), [
+    "hrm.self.read",
+    "hrm.self.request",
+    "hrm.leave.request",
+  ]);
+  assert.deepEqual(withSelfServiceBaseline(["ap.read", "hrm.self.request"]), [
+    "ap.read",
+    "hrm.self.request",
+    "hrm.self.read",
+    "hrm.leave.request",
+  ]);
   assert.deepEqual(
     withSelfServiceBaseline(["hrm.self.read", "hrm.self.request", "hrm.leave.request", "ap.read"]),
     ["hrm.self.read", "hrm.self.request", "hrm.leave.request", "ap.read"],
@@ -574,31 +849,54 @@ test("the baseline union appends only the missing keys", () => {
 });
 
 test("declared implications decide which grants open each time command", () => {
-  assert.deepEqual(grantsConferring("time.read", "all"), ["time.read", "time.manage"], "entering anyone's time reads it");
-  assert.deepEqual(grantsConferring("time.read", "own"), ["time.self", "time.clock"], "own-time grants read the holder's weeks");
-  assert.deepEqual(grantsConferring("time.manage", "own"), ["time.self"], "clocking in never enters a week");
+  assert.deepEqual(
+    grantsConferring("time.read", "all"),
+    ["time.read", "time.manage"],
+    "entering anyone's time reads it",
+  );
+  assert.deepEqual(
+    grantsConferring("time.read", "own"),
+    ["time.self", "time.clock"],
+    "own-time grants read the holder's weeks",
+  );
+  assert.deepEqual(
+    grantsConferring("time.manage", "own"),
+    ["time.self"],
+    "clocking in never enters a week",
+  );
   assert.deepEqual(grantsConferring("time.approve", "own"), [], "approval has no own-scope grant");
   for (const [key, implications] of Object.entries(PERMISSION_IMPLICATIONS)) {
-    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} is a catalogue key`);
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(key),
+      `${key} is a catalogue key`,
+    );
     for (const implied of implications ?? []) {
-      assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(implied.key), `${key} implies the catalogue key ${implied.key}`);
+      assert.ok(
+        (PERMISSION_CATALOGUE as readonly string[]).includes(implied.key),
+        `${key} implies the catalogue key ${implied.key}`,
+      );
     }
   }
 });
 
-
-
 test("independent bank sign-off review is an assignable duty that confers no reconciliation or posting authority", () => {
   const review: CataloguePermission = "banking.review_sign_off";
   assert.ok(PERMISSION_CATALOGUE.includes(review));
-  assert.ok(PERMISSION_GROUPS.find(group => group.key === "banking")?.permissions.some(permission => permission.key === review));
+  assert.ok(
+    PERMISSION_GROUPS.find((group) => group.key === "banking")?.permissions.some(
+      (permission) => permission.key === review,
+    ),
+  );
   const permissions = new Set(["banking.read", review]);
   assert.equal(permissionSetCovers(permissions, review), true);
   for (const forbidden of ["banking.reconcile", "gl.post", "ap.pay", "ar.pay", "close.reopen"]) {
     assert.equal(permissionSetCovers(permissions, forbidden), false);
   }
   for (const role of ["accountant", "viewer", "approver"]) {
-    assert.equal(permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), review), false,
-      "read-only and unrelated duties do not acquire review authority automatically");
+    assert.equal(
+      permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), review),
+      false,
+      "read-only and unrelated duties do not acquire review authority automatically",
+    );
   }
 });

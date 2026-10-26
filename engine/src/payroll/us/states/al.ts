@@ -19,7 +19,11 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, type PayrollCertificate, type ResolvedCertificate,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  type PayrollCertificate,
+  type ResolvedCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -32,7 +36,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/al.ts";
 
 export type AlExemption = "0" | "S" | "MS" | "M" | "H";
@@ -53,17 +61,19 @@ const AL_EDITIONS_BY_YEAR: Record<number, AlYearRates> = {
   [AL_RATES_2026.year]: AL_RATES_2026,
 };
 
-export const AL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "ALDOR withholding formula (booklet Revised August 2024)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for "
-    + "Employers and Withholding Agents, Revised August 2024 — formula lines 1–6, "
-    + "standard-deduction phase-out, M-2 $850 weekly example; Form A-4",
-  status: "published",
-  region: "AL",
-}];
+export const AL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "ALDOR withholding formula (booklet Revised August 2024)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Alabama Department of Revenue, Withholding Tax Tables and Instructions for " +
+      "Employers and Withholding Agents, Revised August 2024 — formula lines 1–6, " +
+      "standard-deduction phase-out, M-2 $850 weekly example; Form A-4",
+    status: "published",
+    region: "AL",
+  },
+];
 
 /** "less $X for each $step increment or part thereof of GI above the first ceiling." */
 function phasedDeduction(
@@ -124,7 +134,10 @@ function bmin(a: bigint, b: bigint): bigint {
   return a < b ? a : b;
 }
 
-export function alSupplementalFlat(supplemental: string, rates: AlYearRates = AL_RATES_2026): string {
+export function alSupplementalFlat(
+  supplemental: string,
+  rates: AlYearRates = AL_RATES_2026,
+): string {
   return D(mulRateCents(U(supplemental), rates.supplementalRate));
 }
 
@@ -135,42 +148,40 @@ export function alSupplementalFlat(supplemental: string, rates: AlYearRates = AL
  * shared by the formula carve-out and the separate-flat gate so both paths
  * enforce the identical gate.
  */
-export function alApprovedSeverance(
-  approval: ResolvedCertificate | null | undefined,
-): bigint {
+export function alApprovedSeverance(approval: ResolvedCertificate | null | undefined): bigint {
   if (!approval?.onFile) return 0n;
   if (approval.answers["aldor_approval_on_file"] !== "true") {
     throw new PayrollError(
-      "Alabama severance attestation does not certify ALDOR written approval — "
-      + "the exemption needs an employer-requested, ALDOR-approved plan; refused by name",
+      "Alabama severance attestation does not certify ALDOR written approval — " +
+        "the exemption needs an employer-requested, ALDOR-approved plan; refused by name",
     );
   }
   const rawApproved = approval.answers["approved_amount"];
   if (rawApproved == null || rawApproved === "") {
     throw new PayrollError(
-      "Alabama severance attestation is missing the approved exempt total — "
-      + "attest the ALDOR-approved amount before calculating; refused by name",
+      "Alabama severance attestation is missing the approved exempt total — " +
+        "attest the ALDOR-approved amount before calculating; refused by name",
     );
   }
   const approved = U(rawApproved);
   if (approved > U("50000")) {
     throw new PayrollError(
-      `Alabama approved severance ${D(approved)} exceeds the $50,000 program cap — `
-      + "only the first $50,000 is excludable; correct the attestation",
+      `Alabama approved severance ${D(approved)} exceeds the $50,000 program cap — ` +
+        "only the first $50,000 is excludable; correct the attestation",
     );
   }
   const rawPeriod = approval.answers["period_severance"];
   if (rawPeriod == null || rawPeriod === "") {
     throw new PayrollError(
-      "Alabama severance attestation is missing this period's severance — "
-      + "attest the period amount before calculating; refused by name",
+      "Alabama severance attestation is missing this period's severance — " +
+        "attest the period amount before calculating; refused by name",
     );
   }
   const period = U(rawPeriod);
   if (period > approved) {
     throw new PayrollError(
-      "Alabama attested period severance exceeds the approved exempt total — "
-      + "correct the attestation before calculating; refused by name",
+      "Alabama attested period severance exceeds the approved exempt total — " +
+        "correct the attestation before calculating; refused by name",
     );
   }
   return period;
@@ -187,16 +198,43 @@ function compute(
   const militarySpouseCertificate = input.supportingCertificates?.us_al_a4_ms;
   if (militarySpouseCertificate?.onFile) {
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Alabama", [
-      { key: "spouse_is_active_duty_member", description: "the employee's spouse is an active-duty military servicemember" },
-      { key: "employee_is_not_servicemember", description: "the employee is not a military servicemember" },
-      { key: "current_orders_assign_al", description: "current military orders assign the servicemember to Alabama" },
-      { key: "employee_here_to_accompany", description: "the employee is in Alabama solely to be with the servicemember" },
-      { key: "same_current_address", description: "the employee and servicemember live at the same address" },
-      { key: "employee_domicile_outside_al", description: "the employee's domicile is outside Alabama" },
-      { key: "same_domicile", description: "the employee and servicemember share the same domicile" },
-      { key: "military_id_on_file", description: "a current military spouse identification is on file" },
+      {
+        key: "spouse_is_active_duty_member",
+        description: "the employee's spouse is an active-duty military servicemember",
+      },
+      {
+        key: "employee_is_not_servicemember",
+        description: "the employee is not a military servicemember",
+      },
+      {
+        key: "current_orders_assign_al",
+        description: "current military orders assign the servicemember to Alabama",
+      },
+      {
+        key: "employee_here_to_accompany",
+        description: "the employee is in Alabama solely to be with the servicemember",
+      },
+      {
+        key: "same_current_address",
+        description: "the employee and servicemember live at the same address",
+      },
+      {
+        key: "employee_domicile_outside_al",
+        description: "the employee's domicile is outside Alabama",
+      },
+      {
+        key: "same_domicile",
+        description: "the employee and servicemember share the same domicile",
+      },
+      {
+        key: "military_id_on_file",
+        description: "a current military spouse identification is on file",
+      },
       { key: "dd2058_on_file", description: "the servicemember's DD Form 2058 is on file" },
-      { key: "recent_les_on_file", description: "a recent Leave and Earnings Statement is on file" },
+      {
+        key: "recent_les_on_file",
+        description: "a recent Leave and Earnings Statement is on file",
+      },
     ]);
     factors.AL_MILITARY_SPOUSE_EXEMPT = "1";
     return { state: "AL", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
@@ -214,9 +252,9 @@ function compute(
     const days = allocation.serviceDaysYearToDate;
     if (days == null || !Number.isInteger(days) || days < 0) {
       throw new PayrollError(
-        "Alabama withholding for a nonresident needs the approved year-to-date count of Alabama "
-        + "service days (Act 2025-334: 30 or fewer days is exempt from Alabama withholding). "
-        + "Record approved dated Alabama work before calculating — refused by name",
+        "Alabama withholding for a nonresident needs the approved year-to-date count of Alabama " +
+          "service days (Act 2025-334: 30 or fewer days is exempt from Alabama withholding). " +
+          "Record approved dated Alabama work before calculating — refused by name",
       );
     }
     trace("AL_NONRESIDENT_DAYS", BigInt(days));
@@ -234,8 +272,8 @@ function compute(
   const periodFederal = input.federalIncomeTax;
   if (periodFederal == null || periodFederal.trim() === "") {
     throw new PayrollError(
-      "Alabama withholding (ALDOR formula line 2B) requires this period's federal "
-      + "income tax withheld from the current Pub 15-T calculation. The engine will not assume $0.",
+      "Alabama withholding (ALDOR formula line 2B) requires this period's federal " +
+        "income tax withheld from the current Pub 15-T calculation. The engine will not assume $0.",
     );
   }
 
@@ -246,18 +284,21 @@ function compute(
   // stream the dispatcher, not the formula, removes it (see
   // separateFlatExclusion below): the formula only ever carves the combined
   // stream it actually prices.
-  const periodSeverance = alApprovedSeverance(input.supportingCertificates?.us_al_severance_approval);
+  const periodSeverance = alApprovedSeverance(
+    input.supportingCertificates?.us_al_severance_approval,
+  );
   const wagesTotal = U(input.wages) + U(input.supplemental ?? "0");
   if (input.supplementalPaymentTiming !== "separate" && periodSeverance > 0n) {
     if (periodSeverance > wagesTotal) {
       throw new PayrollError(
-        "Alabama attested severance exceeds this period's pay — "
-        + "correct the attestation before calculating; refused by name",
+        "Alabama attested severance exceeds this period's pay — " +
+          "correct the attestation before calculating; refused by name",
       );
     }
     trace("AL_EXEMPT_SEVERANCE", periodSeverance);
   }
-  const wages = wagesTotal - (input.supplementalPaymentTiming !== "separate" ? periodSeverance : 0n);
+  const wages =
+    wagesTotal - (input.supplementalPaymentTiming !== "separate" ? periodSeverance : 0n);
   const gi = wages * BigInt(P);
   trace("AL_GI", gi);
 
@@ -323,7 +364,8 @@ export const AL_WITHHOLDING: UsStateWithholdingEngine = {
   label: "Alabama income tax",
   certificateKey: "us_al_a4",
   supportingCertificateKeys: ["us_al_a4_ms", "us_al_severance_approval"],
-  separateFlatExclusion: (supporting) => D(alApprovedSeverance(supporting.us_al_severance_approval)),
+  separateFlatExclusion: (supporting) =>
+    D(alApprovedSeverance(supporting.us_al_severance_approval)),
   ratesModule: RATES_MODULE,
   editions: AL_TAX_YEAR_EDITIONS,
   printedPeriods: null,
@@ -349,13 +391,13 @@ export const AL_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "AL" },
   purpose: "withholding",
   citation:
-    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for "
-    + "Employers and Withholding Agents, Revised August 2024; Form A-4; Ala. Admin. "
-    + "Code r. 810-3-71-.02",
+    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for " +
+    "Employers and Withholding Agents, Revised August 2024; Form A-4; Ala. Admin. " +
+    "Code r. 810-3-71-.02",
   summary:
-    "Sets the Alabama withholding exemption (0, S, MS, M, H) and dependents. "
-    + "Federal Form W-4 is not an acceptable substitute. If an employee fails to "
-    + "furnish Form A-4, the employer withholds using zero exemptions.",
+    "Sets the Alabama withholding exemption (0, S, MS, M, H) and dependents. " +
+    "Federal Form W-4 is not an acceptable substitute. If an employee fails to " +
+    "furnish Form A-4, the employer withholds using zero exemptions.",
   storage: "certificate_rows",
   fields: [
     {
@@ -371,9 +413,9 @@ export const AL_CERTIFICATE: PayrollCertificate = {
         { value: "H", label: "H — head of family ($3,000)" },
       ],
       help:
-        "Default 0 is ALDOR's own rule when no A-4 is on file. H uses the head-of-family "
-        + "standard deduction and the 0/S/MS tax brackets. M is the only status that "
-        + "uses the doubled brackets.",
+        "Default 0 is ALDOR's own rule when no A-4 is on file. H uses the head-of-family " +
+        "standard deduction and the 0/S/MS tax brackets. M is the only status that " +
+        "uses the doubled brackets.",
     },
     {
       key: "dependents",
@@ -383,9 +425,9 @@ export const AL_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each dependent is $1,000 / $500 / $300 a year depending on annualized GI "
-        + "(≤ $50,000 / ≤ $100,000 / above). Not the spouse — M already covers both "
-        + "personal exemptions.",
+        "Each dependent is $1,000 / $500 / $300 a year depending on annualized GI " +
+        "(≤ $50,000 / ≤ $100,000 / above). Not the spouse — M already covers both " +
+        "personal exemptions.",
     },
     {
       key: "additional_per_period",
@@ -411,16 +453,66 @@ export const AL_A4_MS_CERTIFICATE: PayrollCertificate = {
     "A separate MSRRA certificate. All seven employee eligibility statements must be true, and the employer retains the current military ID, DD Form 2058, and a recent Leave and Earnings Statement.",
   storage: "certificate_rows",
   fields: [
-    { key: "spouse_is_active_duty_member", label: "Employee's spouse is an active-duty military servicemember", kind: "flag", help: "Required A4-MS condition 1." },
-    { key: "employee_is_not_servicemember", label: "Employee is not a military servicemember", kind: "flag", help: "Required A4-MS condition 2." },
-    { key: "current_orders_assign_al", label: "Current orders assign the servicemember to a military location in Alabama", kind: "flag", help: "Required A4-MS condition 3." },
-    { key: "employee_here_to_accompany", label: "Employee is in Alabama solely to be with the servicemember", kind: "flag", help: "Required A4-MS condition 4." },
-    { key: "same_current_address", label: "Employee and servicemember live at the same address", kind: "flag", help: "Required A4-MS condition 5." },
-    { key: "employee_domicile_outside_al", label: "Employee is domiciled outside Alabama", kind: "flag", help: "Required A4-MS condition 6." },
-    { key: "same_domicile", label: "Employee and servicemember share the same domicile", kind: "flag", help: "Required A4-MS condition 7." },
-    { key: "military_id_on_file", label: "Current military spouse identification is on file", kind: "flag", help: "ALDOR requires the employer to retain a clear copy of the current military spouse ID." },
-    { key: "dd2058_on_file", label: "DD Form 2058 is on file", kind: "flag", help: "ALDOR requires the servicemember's state-of-legal-residence certificate." },
-    { key: "recent_les_on_file", label: "Recent Leave and Earnings Statement is on file", kind: "flag", help: "ALDOR requires a recent servicemember LES." },
+    {
+      key: "spouse_is_active_duty_member",
+      label: "Employee's spouse is an active-duty military servicemember",
+      kind: "flag",
+      help: "Required A4-MS condition 1.",
+    },
+    {
+      key: "employee_is_not_servicemember",
+      label: "Employee is not a military servicemember",
+      kind: "flag",
+      help: "Required A4-MS condition 2.",
+    },
+    {
+      key: "current_orders_assign_al",
+      label: "Current orders assign the servicemember to a military location in Alabama",
+      kind: "flag",
+      help: "Required A4-MS condition 3.",
+    },
+    {
+      key: "employee_here_to_accompany",
+      label: "Employee is in Alabama solely to be with the servicemember",
+      kind: "flag",
+      help: "Required A4-MS condition 4.",
+    },
+    {
+      key: "same_current_address",
+      label: "Employee and servicemember live at the same address",
+      kind: "flag",
+      help: "Required A4-MS condition 5.",
+    },
+    {
+      key: "employee_domicile_outside_al",
+      label: "Employee is domiciled outside Alabama",
+      kind: "flag",
+      help: "Required A4-MS condition 6.",
+    },
+    {
+      key: "same_domicile",
+      label: "Employee and servicemember share the same domicile",
+      kind: "flag",
+      help: "Required A4-MS condition 7.",
+    },
+    {
+      key: "military_id_on_file",
+      label: "Current military spouse identification is on file",
+      kind: "flag",
+      help: "ALDOR requires the employer to retain a clear copy of the current military spouse ID.",
+    },
+    {
+      key: "dd2058_on_file",
+      label: "DD Form 2058 is on file",
+      kind: "flag",
+      help: "ALDOR requires the servicemember's state-of-legal-residence certificate.",
+    },
+    {
+      key: "recent_les_on_file",
+      label: "Recent Leave and Earnings Statement is on file",
+      kind: "flag",
+      help: "ALDOR requires a recent servicemember LES.",
+    },
   ],
 };
 
@@ -436,29 +528,36 @@ export const AL_SEVERANCE_APPROVAL_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "AL" },
   purpose: "withholding",
   citation:
-    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for "
-    + "Employers and Withholding Agents, Revised August 2024, p. 14",
+    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for " +
+    "Employers and Withholding Agents, Revised August 2024, p. 14",
   summary:
-    "The employer attests the ALDOR written approval and the approved and "
-    + "period severance amounts so only the first $50,000 of approved severance is excluded.",
+    "The employer attests the ALDOR written approval and the approved and " +
+    "period severance amounts so only the first $50,000 of approved severance is excluded.",
   storage: "certificate_rows",
   fields: [
     {
       key: "aldor_approval_on_file",
       label: "ALDOR written approval of the severance plan is on file",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "The exemption needs an employer-requested plan with ALDOR written approval.",
     },
     {
       key: "approved_amount",
       label: "ALDOR-approved exempt severance total",
-      kind: "amount", decimals: 4, min: "0.01", required: true,
+      kind: "amount",
+      decimals: 4,
+      min: "0.01",
+      required: true,
       help: "Only the first $50,000 of approved severance is excludable.",
     },
     {
       key: "period_severance",
       label: "This period's severance in the approved program",
-      kind: "amount", decimals: 4, min: "0", required: true,
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      required: true,
       help: "Must not exceed the approved total, nor this period's pay on the combined path.",
     },
   ],
@@ -479,6 +578,6 @@ export const AL_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for "
-    + "Employers and Withholding Agents (Booklet 1-26); Ala. Admin. Code r. 810-3-71-.02",
+    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for " +
+    "Employers and Withholding Agents (Booklet 1-26); Ala. Admin. Code r. 810-3-71-.02",
 };

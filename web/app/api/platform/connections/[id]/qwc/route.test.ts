@@ -49,21 +49,29 @@ const hooks = registerHooks({
   },
 });
 
-const qwc_origin_testUrl = './route.ts?qwc-origin-test'
-const { GET } = (await import(qwc_origin_testUrl)) as typeof import('./route.ts');
-test.after(() => hooks.deregister())
-
+const qwc_origin_testUrl = "./route.ts?qwc-origin-test";
+const { GET } = (await import(qwc_origin_testUrl)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 test("QWC AppURL and AppSupport pin to appBaseUrl, not the request Host", async () => {
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/qwc", {
-      headers: { host: "evil.example", "x-forwarded-host": "evil.example" },
-    }),
+    new Request(
+      "https://evil.example/api/platform/connections/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/qwc",
+      {
+        headers: { host: "evil.example", "x-forwarded-host": "evil.example" },
+      },
+    ),
     { params: Promise.resolve({ id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" }) },
   );
   assert.equal(res.status, 200);
   const xml = await res.text();
-  assert.match(xml, /<AppURL>https:\/\/books\.example\/api\/qbd\/web-connector\/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee<\/AppURL>/);
-  assert.match(xml, /<AppSupport>https:\/\/books\.example\/docs\/quickbooks-desktop-connector<\/AppSupport>/);
+  assert.match(
+    xml,
+    /<AppURL>https:\/\/books\.example\/api\/qbd\/web-connector\/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee<\/AppURL>/,
+  );
+  assert.match(
+    xml,
+    /<AppSupport>https:\/\/books\.example\/docs\/quickbooks-desktop-connector<\/AppSupport>/,
+  );
   assert.equal(xml.includes("evil.example"), false);
 });

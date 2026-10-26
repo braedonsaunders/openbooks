@@ -14,7 +14,10 @@ export const POST = defineRoute({
   body: z.strictObject({ subsidiaryId: id, ...policyFields }),
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, body: input }) => {
-    const created = await createInsurancePolicy(gate.user.orgId, input, { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) });
+    const created = await createInsurancePolicy(gate.user.orgId, input, {
+      actorId: gate.user.id,
+      allowedSubsidiaryIds: scopeOf(gate),
+    });
     return NextResponse.json(created, { status: 201 });
   },
 });

@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { confirmDialog } from '../../../../lib/confirm'
-import { useRouter } from 'next/navigation'
-import { Button, Input, Label } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import type { PerformancePageData } from './view'
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { confirmDialog } from "../../../../lib/confirm";
+import { useRouter } from "next/navigation";
+import { Button, Input, Label } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import type { PerformancePageData } from "./view";
 
-type Calibration = NonNullable<PerformancePageData['detail']>['calibration']
+type Calibration = NonNullable<PerformancePageData["detail"]>["calibration"];
 
 /**
  * The calibration island in the cycle drawer: open a draft cycle (which
@@ -20,71 +20,61 @@ export function CycleActions({
   cycleId,
   calibration,
 }: {
-  cycleId: string
-  calibration: Calibration
+  cycleId: string;
+  calibration: Calibration;
 }) {
-  const router = useRouter()
-  const t = useTranslations('hrm.talentWorkspace')
-  const [forceReason, setForceReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const t = useTranslations("hrm.talentWorkspace");
+  const [forceReason, setForceReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function act(body: Record<string, unknown>) {
     if (
-      body.action === 'close' &&
+      body.action === "close" &&
       !(await confirmDialog({
-        title: t('closeCycle'),
-        message: t('closeConfirm'),
-        confirmLabel: t('closeCycle'),
+        title: t("closeCycle"),
+        message: t("closeConfirm"),
+        confirmLabel: t("closeCycle"),
       }))
     )
-      return
-    setBusy(true)
-    setError(null)
+      return;
+    setBusy(true);
+    setError(null);
     try {
       const res = await fetch(`/api/hrm/review-cycles/${cycleId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, calibration.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, calibration.failed));
+        setBusy(false);
+        return;
       }
-      setBusy(false)
-      router.refresh()
+      setBusy(false);
+      router.refresh();
     } catch {
-      setError(calibration.failed)
-      setBusy(false)
+      setError(calibration.failed);
+      setBusy(false);
     }
   }
 
   return (
     <div className="space-y-3">
       {calibration.gapNote ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {calibration.gapNote}
-        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{calibration.gapNote}</p>
       ) : null}
       {calibration.canOpen ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            disabled={busy}
-            onClick={() => act({ action: 'open' })}
-          >
+          <Button type="button" disabled={busy} onClick={() => act({ action: "open" })}>
             {calibration.openLabel}
           </Button>
         </div>
       ) : null}
       {calibration.canMove ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            disabled={busy}
-            onClick={() => act({ action: 'to-calibrating' })}
-          >
+          <Button type="button" disabled={busy} onClick={() => act({ action: "to-calibrating" })}>
             {calibration.moveLabel}
           </Button>
         </div>
@@ -104,7 +94,7 @@ export function CycleActions({
             disabled={busy || forceReason.trim().length === 0}
             onClick={() =>
               act({
-                action: 'to-calibrating',
+                action: "to-calibrating",
                 force: true,
                 forceReason: forceReason.trim(),
               })
@@ -119,7 +109,7 @@ export function CycleActions({
           type="button"
           variant="outline"
           disabled={busy}
-          onClick={() => act({ action: 'close' })}
+          onClick={() => act({ action: "close" })}
         >
           {calibration.closeLabel}
         </Button>
@@ -130,5 +120,5 @@ export function CycleActions({
         </p>
       ) : null}
     </div>
-  )
+  );
 }

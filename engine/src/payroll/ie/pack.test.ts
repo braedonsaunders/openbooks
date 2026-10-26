@@ -1,5 +1,5 @@
-import { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
+import { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 /**
  * The Ireland pack transcribes 2026 (PAYE credits and
  * bands, Class A PRSI, standard USC), computes through compute.ts, and keeps
@@ -9,24 +9,35 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { IE_PAYROLL_PACK, requiredIeRpnAmount } from "./pack.ts";
 import { certificateAnswersProblem } from "../certificates.ts";
-import {
-  jurisdictionKey,
-  payrollJurisdictionDeclared,
-} from "../packs.ts";
+import { jurisdictionKey, payrollJurisdictionDeclared } from "../packs.ts";
 import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
-
-function ieHistoryFixture(rows:Record<string,unknown>){
-  return {execute:async(query:SQL, mode?: string)=>{
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
-    const text=new PgDialect().sqlToQuery(query).sql;
-    if(text.includes("d.kind='pay_run'"))return inMode({rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'EUR',taxYear:2026}]});
-    if(text.includes('select id from worker_employments'))return inMode({rows:[{id:'55555555-5555-4555-8555-555555555555'}]});
-    if(text.includes('select s.id from pay_stubs s'))return inMode({rows:[]});
-    if(text.includes('jsonb_array_elements_text'))return inMode({rows:[]});
-      if(text.includes('history_run_pay_date'))return inMode({rows:[rows]});
-    throw new Error('Unexpected database read outside the declared Irish employment history fixture');
-  }};
+function ieHistoryFixture(rows: Record<string, unknown>) {
+  return {
+    execute: async (query: SQL, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
+      const text = new PgDialect().sqlToQuery(query).sql;
+      if (text.includes("d.kind='pay_run'"))
+        return inMode({
+          rows: [
+            {
+              subsidiaryId: "44444444-4444-4444-8444-444444444444",
+              currency: "EUR",
+              taxYear: 2026,
+            },
+          ],
+        });
+      if (text.includes("select id from worker_employments"))
+        return inMode({ rows: [{ id: "55555555-5555-4555-8555-555555555555" }] });
+      if (text.includes("select s.id from pay_stubs s")) return inMode({ rows: [] });
+      if (text.includes("jsonb_array_elements_text")) return inMode({ rows: [] });
+      if (text.includes("history_run_pay_date")) return inMode({ rows: [rows] });
+      throw new Error(
+        "Unexpected database read outside the declared Irish employment history fixture",
+      );
+    },
+  };
 }
 describe("IE payroll pack", () => {
   it("exists, is Irish, and is installable for 2026", () => {
@@ -72,10 +83,7 @@ describe("IE payroll pack", () => {
   it("supports the single national region end to end", () => {
     assert.ok(IE_PAYROLL_PACK.regions.known.includes("IE"));
     assert.deepEqual([...IE_PAYROLL_PACK.regions.supported], ["IE"]);
-    assert.match(
-      IE_PAYROLL_PACK.regions.unsupportedReason,
-      /single national payroll region/,
-    );
+    assert.match(IE_PAYROLL_PACK.regions.unsupportedReason, /single national payroll region/);
   });
 
   it("declares the RPN certificate, not a W-4 clone", () => {
@@ -116,7 +124,9 @@ describe("IE payroll pack", () => {
     );
     assert.equal(
       certificateAnswersProblem(rpn, {
-        pay_basis: "cumulative", tax_credits_total: "0", rate_band_total: "0",
+        pay_basis: "cumulative",
+        tax_credits_total: "0",
+        rate_band_total: "0",
         usc_cutoff_total: "70044",
       }),
       null,
@@ -208,10 +218,11 @@ describe("IE payroll pack", () => {
   it("refuses a run with no pay date, and emergency basis with no RPN", async () => {
     const stub = (overrides: Record<string, unknown>) =>
       ({
-        tx: ieHistoryFixture({tax:"0",usc:"0",taxbase:"0",gross:"0"}),
+        tx: ieHistoryFixture({ tax: "0", usc: "0", taxbase: "0", gross: "0" }),
         orgId: "11111111-1111-4111-8111-111111111111",
         documentId: "22222222-2222-4222-8222-222222222222",
-        employeePartyId: "33333333-3333-4333-8333-333333333333", employmentId:"55555555-5555-4555-8555-555555555555",
+        employeePartyId: "33333333-3333-4333-8333-333333333333",
+        employmentId: "55555555-5555-4555-8555-555555555555",
         taxYear: 2026,
         region: "IE",
         run: {},
@@ -233,12 +244,15 @@ describe("IE payroll pack", () => {
       /Emergency Tax/,
     );
     await assert.rejects(
-      IE_PAYROLL_PACK.computeStatutory(stub({
-        run: { pay_date: "2026-03-15" },
-        certificateFor: (key: string) => key === "ie_rpn"
-          ? ({ onFile: true, answers: { pay_basis: "cumulative" } })
-          : ({ onFile: true, answers: { prsi_class: "A" } }),
-      })),
+      IE_PAYROLL_PACK.computeStatutory(
+        stub({
+          run: { pay_date: "2026-03-15" },
+          certificateFor: (key: string) =>
+            key === "ie_rpn"
+              ? { onFile: true, answers: { pay_basis: "cumulative" } }
+              : { onFile: true, answers: { prsi_class: "A" } },
+        }),
+      ),
       /missing its tax-credit total; obtain and file a complete RPN/,
     );
   });
@@ -246,10 +260,11 @@ describe("IE payroll pack", () => {
   it("requires the PRSI class and prices Class M with no PRSI contribution", async () => {
     const stub = (overrides: Record<string, unknown>) =>
       ({
-        tx: ieHistoryFixture({tax:"0",usc:"0",taxbase:"0",gross:"0"}),
+        tx: ieHistoryFixture({ tax: "0", usc: "0", taxbase: "0", gross: "0" }),
         orgId: "11111111-1111-4111-8111-111111111111",
         documentId: "22222222-2222-4222-8222-222222222222",
-        employeePartyId: "33333333-3333-4333-8333-333333333333", employmentId:"55555555-5555-4555-8555-555555555555",
+        employeePartyId: "33333333-3333-4333-8333-333333333333",
+        employmentId: "55555555-5555-4555-8555-555555555555",
         taxYear: 2026,
         region: "IE",
         run: {},
@@ -276,21 +291,20 @@ describe("IE payroll pack", () => {
     };
     const common = {
       run: { pay_date: "2026-03-15" },
-      certificateFor: (key: string) => key === "ie_rpn"
-        ? rpn
-        : null,
+      certificateFor: (key: string) => (key === "ie_rpn" ? rpn : null),
     };
     await assert.rejects(
       IE_PAYROLL_PACK.computeStatutory(stub(common)),
       /cannot calculate without PRSI class.*must not be priced as Class A/s,
     );
 
-    const factors = await IE_PAYROLL_PACK.computeStatutory(stub({
-      ...common,
-      certificateFor: (key: string) => key === "ie_rpn"
-        ? rpn
-        : ({ onFile: true, answers: { prsi_class: "M" } }),
-    }));
+    const factors = await IE_PAYROLL_PACK.computeStatutory(
+      stub({
+        ...common,
+        certificateFor: (key: string) =>
+          key === "ie_rpn" ? rpn : { onFile: true, answers: { prsi_class: "M" } },
+      }),
+    );
     assert.equal(factors.IE_SUBCLASS, "M");
     assert.equal(factors.IE_PRSI_EE, "0.0000");
     assert.equal(factors.IE_PRSI_ER, "0.0000");
@@ -301,15 +315,41 @@ describe("IE payroll pack", () => {
     // one week's credits (€76.92) and band (€846.16), earlier pay ignored.
     const pushed: Record<string, string> = {};
     const factors = await IE_PAYROLL_PACK.computeStatutory({
-      tx: ieHistoryFixture({tax:"3.0800",usc:"1.1600",taxbase:"400.0000",gross:"400.0000"}),
-      orgId: "11111111-1111-4111-8111-111111111111", documentId: "22222222-2222-4222-8222-222222222222", employeePartyId: "33333333-3333-4333-8333-333333333333", employmentId:"55555555-5555-4555-8555-555555555555", taxYear: 2026, region: "IE",
-      run: { pay_date: "2026-01-08" }, emp: {}, periodsPerYear: 52,
-      income: "850.00", nonPeriodic: "0", pensionable: "850.00", insurable: "850.00",
+      tx: ieHistoryFixture({
+        tax: "3.0800",
+        usc: "1.1600",
+        taxbase: "400.0000",
+        gross: "400.0000",
+      }),
+      orgId: "11111111-1111-4111-8111-111111111111",
+      documentId: "22222222-2222-4222-8222-222222222222",
+      employeePartyId: "33333333-3333-4333-8333-333333333333",
+      employmentId: "55555555-5555-4555-8555-555555555555",
+      taxYear: 2026,
+      region: "IE",
+      run: { pay_date: "2026-01-08" },
+      emp: {},
+      periodsPerYear: 52,
+      income: "850.00",
+      nonPeriodic: "0",
+      pensionable: "850.00",
+      insurable: "850.00",
       deduction: () => "0",
-      pushStatutory: (key: string, kind: string, _d: string, amount: string) => { pushed[`${key}:${kind}`] = amount; },
-      certificateFor: (key: string) => key === "ie_rpn"
-        ? { onFile: true, answers: { pay_basis: "week1", tax_credits_total: "4000", rate_band_total: "44000", usc_cutoff_total: "70044" } }
-        : { onFile: true, answers: { prsi_class: "A" } },
+      pushStatutory: (key: string, kind: string, _d: string, amount: string) => {
+        pushed[`${key}:${kind}`] = amount;
+      },
+      certificateFor: (key: string) =>
+        key === "ie_rpn"
+          ? {
+              onFile: true,
+              answers: {
+                pay_basis: "week1",
+                tax_credits_total: "4000",
+                rate_band_total: "44000",
+                usc_cutoff_total: "70044",
+              },
+            }
+          : { onFile: true, answers: { prsi_class: "A" } },
       assertRegionSupported: () => undefined,
     } as never);
     assert.equal(factors.IE_PAYE, "93.8500");

@@ -20,11 +20,13 @@ export async function committedFrRgduYearToDate(input: {
   payDate: string;
   excludeDocumentId: string;
 }): Promise<FrRgduYearToDate> {
-  const row = (await input.tx.execute<{
-    remuneration: string;
-    smic: string;
-    reduction: string;
-  }>(sql`
+  const row = (
+    await input.tx.execute<{
+      remuneration: string;
+      smic: string;
+      reduction: string;
+    }>(
+      sql`
     select round(coalesce(sum(s.gross), 0), 4)::numeric(24, 4)::text as remuneration,
            round(coalesce(sum(coalesce((s.factors->>'FR_RGDU_SMIC')::numeric, 0)), 0), 4)::numeric(24, 4)::text as smic,
            round(coalesce(sum(coalesce((s.factors->>'FR_RGDU_ADJUSTMENT')::numeric, 0)), 0), 4)::numeric(24, 4)::text as reduction
@@ -41,7 +43,10 @@ export async function committedFrRgduYearToDate(input: {
        and s.pay_date <= ${input.payDate}::date
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and d.subsidiary_id = ${input.subsidiaryId}::uuid
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row ?? { remuneration: "0", smic: "0", reduction: "0" };
 }
 
@@ -83,7 +88,9 @@ function amount(value: string, label: string): bigint {
     if (parsed < 0n) throw new Error("negative");
     return parsed;
   } catch {
-    throw new PayrollPackError(`FR RGDU ${label} must be a non-negative exact decimal amount: "${value}"`);
+    throw new PayrollPackError(
+      `FR RGDU ${label} must be a non-negative exact decimal amount: "${value}"`,
+    );
   }
 }
 
@@ -100,10 +107,7 @@ function rate(value: string, label: string): bigint {
  * Ordinary contractual hours and eligible overtime/complementary hours are
  * separate inputs because only the latter are added to the part-time ratio.
  */
-export function frRgduSmicFromHours2026(
-  ordinaryHours: string,
-  eligibleExtraHours: string,
-): string {
+export function frRgduSmicFromHours2026(ordinaryHours: string, eligibleExtraHours: string): string {
   const ordinary = amount(ordinaryHours, "ordinary hours");
   const extra = amount(eligibleExtraHours, "overtime/complementary hours");
   const base = roundDiv((ordinary + extra) * SMIC_HOURLY_UNITS, 10_000n);
@@ -147,10 +151,14 @@ export function calculateFrRgdu2026(input: FrRgdu2026Input): FrRgdu2026Result {
   try {
     effectif = toUnits(input.employerEffectif);
   } catch {
-    throw new PayrollPackError(`FR RGDU employer effectif is not an exact decimal: "${input.employerEffectif}"`);
+    throw new PayrollPackError(
+      `FR RGDU employer effectif is not an exact decimal: "${input.employerEffectif}"`,
+    );
   }
   if (effectif < 0n) {
-    throw new PayrollPackError(`FR RGDU employer effectif must be non-negative, got "${input.employerEffectif}"`);
+    throw new PayrollPackError(
+      `FR RGDU employer effectif must be non-negative, got "${input.employerEffectif}"`,
+    );
   }
   const remuneration = amount(input.remunerationYearToDate, "year-to-date remuneration");
   const smic = amount(input.smicYearToDate, "year-to-date SMIC");
@@ -159,27 +167,30 @@ export function calculateFrRgdu2026(input: FrRgdu2026Input): FrRgdu2026Result {
   const agircArrcoRate = rate(input.agircArrcoCoveredRate, "covered AGIRC-ARRCO rate");
   const actualCoveredRate = urssafRate + agircArrcoRate;
   const statutoryMaximum = effectif < 50n * 10_000n ? 39_810_000n : 40_210_000n;
-  const maximumCoefficient = actualCoveredRate < statutoryMaximum
-    ? actualCoveredRate : statutoryMaximum;
+  const maximumCoefficient =
+    actualCoveredRate < statutoryMaximum ? actualCoveredRate : statutoryMaximum;
   const tMin = maximumCoefficient < 2_000_000n ? maximumCoefficient : 2_000_000n;
   const tDelta = maximumCoefficient - tMin;
 
-  let coefficient = input.eligible && tDelta >= 0n
-    ? coefficientUnits(remuneration, smic, tMin, tDelta)
-    : 0n;
+  let coefficient =
+    input.eligible && tDelta >= 0n ? coefficientUnits(remuneration, smic, tMin, tDelta) : 0n;
   // CSS D.241-7 rounds the coefficient to four decimals before applying it.
   coefficient = roundDiv(coefficient, 10_000n) * 10_000n;
   if (coefficient > maximumCoefficient) coefficient = maximumCoefficient;
-  const target = input.eligible && remuneration < 3n * smic
-    ? roundDiv(roundDiv(remuneration * coefficient, COEFFICIENT_SCALE), CENT_UNITS) * CENT_UNITS
-    : 0n;
+  const target =
+    input.eligible && remuneration < 3n * smic
+      ? roundDiv(roundDiv(remuneration * coefficient, COEFFICIENT_SCALE), CENT_UNITS) * CENT_UNITS
+      : 0n;
   const adjustment = target - prior;
-  const cappedUrssafRate = actualCoveredRate > maximumCoefficient && actualCoveredRate > 0n
-    ? roundDiv(urssafRate * maximumCoefficient, actualCoveredRate)
-    : urssafRate;
-  const urssafAdjustment = maximumCoefficient === 0n
-    ? 0n
-    : roundDiv(roundDiv(adjustment * cappedUrssafRate, maximumCoefficient), CENT_UNITS) * CENT_UNITS;
+  const cappedUrssafRate =
+    actualCoveredRate > maximumCoefficient && actualCoveredRate > 0n
+      ? roundDiv(urssafRate * maximumCoefficient, actualCoveredRate)
+      : urssafRate;
+  const urssafAdjustment =
+    maximumCoefficient === 0n
+      ? 0n
+      : roundDiv(roundDiv(adjustment * cappedUrssafRate, maximumCoefficient), CENT_UNITS) *
+        CENT_UNITS;
   const agircArrcoAdjustment = adjustment - urssafAdjustment;
 
   return {

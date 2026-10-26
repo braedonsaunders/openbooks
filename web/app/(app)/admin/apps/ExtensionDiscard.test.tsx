@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/apps?draft=00000000-0000-4000-8000-000000000001", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/apps?draft=00000000-0000-4000-8000-000000000001",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -12,7 +16,8 @@ const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
 // Heavy children irrelevant to the footer discard flow render as null.
-const nullWidget = "data:text/javascript,export function AppPackageEditor(){return null}export function AppOverviewHero(){return null}export function LiveDirectory(){return null}";
+const nullWidget =
+  "data:text/javascript,export function AppPackageEditor(){return null}export function AppOverviewHero(){return null}export function LiveDirectory(){return null}";
 const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({ navigation: { pathname: "/admin/apps" } });
 registerHooks({
@@ -120,7 +125,9 @@ async function mount() {
 
 function discardButton(): HTMLButtonElement {
   // UrlDrawer portals to document.body, so query the whole document.
-  const found = [...document.querySelectorAll("button")].find((b) => b.textContent === "Discard draft");
+  const found = [...document.querySelectorAll("button")].find(
+    (b) => b.textContent === "Discard draft",
+  );
   assert.ok(found, "Discard draft button must render");
   return found as HTMLButtonElement;
 }

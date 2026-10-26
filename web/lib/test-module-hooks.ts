@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs'
-import type { ResolveFnOutput, ResolveHookContext } from 'node:module'
+import { existsSync } from "node:fs";
+import type { ResolveFnOutput, ResolveHookContext } from "node:module";
 
 /**
  * Resolve app modules the way the bundler does, for tests that import a page.
@@ -35,17 +35,17 @@ export function resolveAppModule(
   // imports one is asking for a side effect node cannot perform and the test
   // does not need — there is nothing to assert about CSS in a scope test.
   if (/\.(?:css|scss|sass|less|svg|png|jpe?g|gif|webp|woff2?)$/.test(specifier)) {
-    return { shortCircuit: true, url: 'data:text/javascript,export default {}' }
+    return { shortCircuit: true, url: "data:text/javascript,export default {}" };
   }
-  if (!specifier.startsWith('@/')) return null
+  if (!specifier.startsWith("@/")) return null;
 
   // `@/x` is a path, not a file: the extension is the bundler's to find. Try
   // the same candidates it does, in the same order.
-  const base = root + 'web/' + specifier.slice(2)
-  for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) {
-    if (existsSync(new URL(base + suffix))) return next(base + suffix, context)
+  const base = root + "web/" + specifier.slice(2);
+  for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
+    if (existsSync(new URL(base + suffix))) return next(base + suffix, context);
   }
   // Nothing matched — hand back the bare path so the failure names the module
   // the source actually asked for rather than a candidate this invented.
-  return next(base, context)
+  return next(base, context);
 }

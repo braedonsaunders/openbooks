@@ -19,10 +19,16 @@ export function compareAbsoluteDescending(a: ExactDecimal, b: ExactDecimal): num
   return decimalCmp(decimalAbs(b), decimalAbs(a));
 }
 
-export function decimalRatio(numerator: ExactDecimal, denominator: ExactDecimal): ExactDecimal | null {
+export function decimalRatio(
+  numerator: ExactDecimal,
+  denominator: ExactDecimal,
+): ExactDecimal | null {
   const denominatorUnits = toDecimalUnits(denominator);
   if (denominatorUnits === 0n) return null;
   const negative = denominatorUnits < 0n;
-  const ratioUnits = roundDiv(toDecimalUnits(numerator) * 10_000n, negative ? -denominatorUnits : denominatorUnits);
+  const ratioUnits = roundDiv(
+    toDecimalUnits(numerator) * 10_000n,
+    negative ? -denominatorUnits : denominatorUnits,
+  );
   return fromDecimalUnits(negative ? -ratioUnits : ratioUnits);
 }

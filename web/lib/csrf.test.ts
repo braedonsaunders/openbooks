@@ -58,19 +58,24 @@ test("cookie-session and public browser forms are NOT exempt", async () => {
 test("same-origin mutations pass the origin check", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
   assert.equal(
-    hasTrustedOrigin(post("https://books.example/api/accounts", {
-      origin: "https://books.example",
-    })),
+    hasTrustedOrigin(
+      post("https://books.example/api/accounts", {
+        origin: "https://books.example",
+      }),
+    ),
     true,
   );
   // The trusted edge supplies the public origin when its internal hop is HTTP.
   // Forwarded Host is security input only after OPENBOOKS_TRUST_PROXY.
   assert.equal(
-    hasTrustedOrigin(post("http://web:4780/api/accounts", {
-      origin: "https://books.example",
-      "x-forwarded-host": "books.example",
-      "x-forwarded-proto": "https",
-    }), { OPENBOOKS_TRUST_PROXY: "1" }),
+    hasTrustedOrigin(
+      post("http://web:4780/api/accounts", {
+        origin: "https://books.example",
+        "x-forwarded-host": "books.example",
+        "x-forwarded-proto": "https",
+      }),
+      { OPENBOOKS_TRUST_PROXY: "1" },
+    ),
     true,
   );
 });
@@ -102,9 +107,10 @@ test("the operator-declared canonical URL wins over forwarded hosts", async () =
 test("a misconfigured canonical URL fails closed instead of widening policy", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
   assert.throws(
-    () => hasTrustedOrigin(post("https://books.example/api/x", {}), {
-      OPENBOOKS_APP_URL: "not a url",
-    }),
+    () =>
+      hasTrustedOrigin(post("https://books.example/api/x", {}), {
+        OPENBOOKS_APP_URL: "not a url",
+      }),
     /OPENBOOKS_APP_URL/,
   );
 });
@@ -132,10 +138,7 @@ test("a client-supplied forwarded host is not the deployment origin when the can
   assert.equal(hasTrustedOrigin(spoofed, {}), false);
   assert.equal(hasTrustedOrigin(spoofed, { OPENBOOKS_TRUST_PROXY: "0" }), false);
   assert.equal(hasTrustedOrigin(spoofed, { OPENBOOKS_TRUST_PROXY: "false" }), false);
-  assert.equal(
-    hasTrustedOrigin(spoofed, { OPENBOOKS_APP_URL: "https://books.example" }),
-    false,
-  );
+  assert.equal(hasTrustedOrigin(spoofed, { OPENBOOKS_APP_URL: "https://books.example" }), false);
   assert.equal(
     hasTrustedOrigin(spoofed, {
       OPENBOOKS_APP_URL: "https://books.example",
@@ -146,11 +149,14 @@ test("a client-supplied forwarded host is not the deployment origin when the can
   // A same-origin browser request still passes when the request URL is the
   // known origin, even if a client also sent a foreign forwarded host.
   assert.equal(
-    hasTrustedOrigin(post("https://books.example/api/accounts", {
-      origin: "https://books.example",
-      "x-forwarded-host": "evil.example",
-      "x-forwarded-proto": "https",
-    }), {}),
+    hasTrustedOrigin(
+      post("https://books.example/api/accounts", {
+        origin: "https://books.example",
+        "x-forwarded-host": "evil.example",
+        "x-forwarded-proto": "https",
+      }),
+      {},
+    ),
     true,
   );
 });
@@ -167,14 +173,8 @@ test("the production e2e TLS proxy is unnamed CSRF-forbidden until APP_URL or TR
     "x-forwarded-proto": "https",
   });
   assert.equal(hasTrustedOrigin(login, {}), false);
-  assert.equal(
-    hasTrustedOrigin(login, { OPENBOOKS_APP_URL: "https://localhost:4780" }),
-    true,
-  );
-  assert.equal(
-    hasTrustedOrigin(login, { OPENBOOKS_TRUST_PROXY: "1" }),
-    true,
-  );
+  assert.equal(hasTrustedOrigin(login, { OPENBOOKS_APP_URL: "https://localhost:4780" }), true);
+  assert.equal(hasTrustedOrigin(login, { OPENBOOKS_TRUST_PROXY: "1" }), true);
 });
 
 test("forwarded hosts are trusted only when the operator opts in", async () => {
@@ -209,33 +209,48 @@ test("loopback literals share one trusted origin", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
   const environment = { OPENBOOKS_APP_URL: "http://localhost:4780" };
   assert.equal(
-    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
-      origin: "http://127.0.0.1:4780",
-    }), environment),
+    hasTrustedOrigin(
+      post("http://localhost:4780/api/password-reset", {
+        origin: "http://127.0.0.1:4780",
+      }),
+      environment,
+    ),
     true,
   );
   assert.equal(
-    hasTrustedOrigin(post("http://127.0.0.1:4780/api/password-reset", {
-      origin: "http://localhost:4780",
-    }), { OPENBOOKS_APP_URL: "http://127.0.0.1:4780" }),
+    hasTrustedOrigin(
+      post("http://127.0.0.1:4780/api/password-reset", {
+        origin: "http://localhost:4780",
+      }),
+      { OPENBOOKS_APP_URL: "http://127.0.0.1:4780" },
+    ),
     true,
   );
   assert.equal(
-    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
-      origin: "http://127.0.0.1:9999",
-    }), environment),
+    hasTrustedOrigin(
+      post("http://localhost:4780/api/password-reset", {
+        origin: "http://127.0.0.1:9999",
+      }),
+      environment,
+    ),
     false,
   );
   assert.equal(
-    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
-      origin: "https://127.0.0.1:4780",
-    }), environment),
+    hasTrustedOrigin(
+      post("http://localhost:4780/api/password-reset", {
+        origin: "https://127.0.0.1:4780",
+      }),
+      environment,
+    ),
     false,
   );
   assert.equal(
-    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
-      origin: "http://attacker.test",
-    }), environment),
+    hasTrustedOrigin(
+      post("http://localhost:4780/api/password-reset", {
+        origin: "http://attacker.test",
+      }),
+      environment,
+    ),
     false,
   );
 });
@@ -243,23 +258,32 @@ test("loopback literals share one trusted origin", async () => {
 test("referer anchors the decision when Origin is absent", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
   assert.equal(
-    hasTrustedOrigin(post("https://books.example/api/accounts", {
-      referer: "https://books.example/dashboard",
-    }), {}),
+    hasTrustedOrigin(
+      post("https://books.example/api/accounts", {
+        referer: "https://books.example/dashboard",
+      }),
+      {},
+    ),
     true,
   );
   // A form can suppress Referer but never Origin; a mismatched Referer with
   // no Origin is an attack signal, not a legacy client.
   assert.equal(
-    hasTrustedOrigin(post("https://books.example/api/accounts", {
-      referer: "https://evil.example/trap",
-    }), {}),
+    hasTrustedOrigin(
+      post("https://books.example/api/accounts", {
+        referer: "https://evil.example/trap",
+      }),
+      {},
+    ),
     false,
   );
   assert.equal(
-    hasTrustedOrigin(post("https://books.example/api/accounts", {
-      referer: "not a url",
-    }), {}),
+    hasTrustedOrigin(
+      post("https://books.example/api/accounts", {
+        referer: "not a url",
+      }),
+      {},
+    ),
     false,
   );
 });
@@ -267,10 +291,13 @@ test("referer anchors the decision when Origin is absent", async () => {
 test("a forged Origin cannot be rescued by a same-origin Referer", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
   assert.equal(
-    hasTrustedOrigin(post("https://books.example/api/accounts", {
-      origin: "https://evil.example",
-      referer: "https://books.example/dashboard",
-    }), {}),
+    hasTrustedOrigin(
+      post("https://books.example/api/accounts", {
+        origin: "https://evil.example",
+        referer: "https://books.example/dashboard",
+      }),
+      {},
+    ),
     false,
   );
 });
@@ -280,7 +307,10 @@ test("unsafe requests without browser-origin evidence fail closed", async () => 
   assert.equal(hasTrustedOrigin(post("https://books.example/api/login", {})), false);
   // Safe methods are never judged.
   assert.equal(
-    hasTrustedOrigin(new Request("https://books.example/", { headers: { origin: "https://evil.example" } }), {}),
+    hasTrustedOrigin(
+      new Request("https://books.example/", { headers: { origin: "https://evil.example" } }),
+      {},
+    ),
     true,
   );
 });
@@ -298,10 +328,12 @@ test("the proxy rejects a forged login mutation before public-route passthrough"
   process.env.OPENBOOKS_APP_URL = "https://books.example";
   try {
     const { proxy } = await import("../proxy.ts");
-    const response = await proxy(new NextRequest("https://books.example/api/login", {
-      method: "POST",
-      headers: { origin: "https://attacker.example" },
-    }));
+    const response = await proxy(
+      new NextRequest("https://books.example/api/login", {
+        method: "POST",
+        headers: { origin: "https://attacker.example" },
+      }),
+    );
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), {
       error: "forbidden",

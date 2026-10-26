@@ -6,39 +6,62 @@ import { lockManufacturingReadAuthority } from "./authority.ts";
 import { orderResourcesVisible } from "./resource-scope.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 
-export interface GenealogyNode { kind: "lot" | "serial"; id: string }
+export interface GenealogyNode {
+  kind: "lot" | "serial";
+  id: string;
+}
 export interface GenealogyEdge {
-  allocationBasis:"recorded"|"proportional"|"work_order";
-  componentLotNumber:string|null;componentSerialNumber:string|null;outputLotNumber:string|null;outputSerialNumber:string|null;
-  id: string; depth: number; orderId: string; orderNumber: string;
-  componentMovementId: string; outputMovementId: string;
-  componentItem: string; componentLotId: string | null; componentSerialId: string | null;
-  componentIdentity: string | null; componentQuantity: string;
-  outputItem: string; outputLotId: string | null; outputSerialId: string | null;
-  outputIdentity: string | null; outputQuantity: string;
+  allocationBasis: "recorded" | "proportional" | "work_order";
+  componentLotNumber: string | null;
+  componentSerialNumber: string | null;
+  outputLotNumber: string | null;
+  outputSerialNumber: string | null;
+  id: string;
+  depth: number;
+  orderId: string;
+  orderNumber: string;
+  componentMovementId: string;
+  outputMovementId: string;
+  componentItem: string;
+  componentLotId: string | null;
+  componentSerialId: string | null;
+  componentIdentity: string | null;
+  componentQuantity: string;
+  outputItem: string;
+  outputLotId: string | null;
+  outputSerialId: string | null;
+  outputIdentity: string | null;
+  outputQuantity: string;
 }
 
-export interface GenealogySeedChoice { value: string; label: string }
+export interface GenealogySeedChoice {
+  value: string;
+  label: string;
+}
 
 /** The seed picker and the trace reader share the same visibility fence. */
 function seedVisibility(kind: "lot" | "serial", scope: ReadonlySet<string> | null) {
   const movementColumn = kind === "lot" ? sql`movement.lot_id` : sql`movement.serial_id`;
   const ownerColumn = kind === "lot" ? sql`owner.lot_id` : sql`owner.serial_id`;
-  return sql`(${scope === null ? sql`true` : sql`exists (
+  return sql`(${
+    scope === null
+      ? sql`true`
+      : sql`exists (
       select 1 from inventory_movements movement join stock_locations stock on stock.org_id=movement.org_id and stock.id=movement.stock_location_id
       join locations location on location.org_id=stock.org_id and location.id=stock.location_id
       where movement.org_id=identity.org_id and ${movementColumn}=identity.id
       ${subsidiaryVisibleFilter(sql`movement.subsidiary_id`, scope)}
-      ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, { orgWideNull: true })})`})
+      ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, { orgWideNull: true })})`
+  })
       and not exists(select 1 from inventory_movements movement
         left join stock_locations stock on stock.org_id=movement.org_id and stock.id=movement.stock_location_id
         left join locations location on location.org_id=stock.org_id and location.id=stock.location_id
         where movement.org_id=identity.org_id and ${movementColumn}=identity.id
-          and (location.id is null or not(true ${subsidiaryVisibleFilter(sql`movement.subsidiary_id`,scope)})
-            or not(true ${subsidiaryVisibleFilter(sql`location.subsidiary_id`,scope,{orgWideNull:true})})))
+          and (location.id is null or not(true ${subsidiaryVisibleFilter(sql`movement.subsidiary_id`, scope)})
+            or not(true ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, { orgWideNull: true })})))
       and not exists(select 1 from consignment_stock owner where owner.org_id=identity.org_id
         and ${ownerColumn}=identity.id
-        and not(true ${subsidiaryVisibleFilter(sql`owner.subsidiary_id`,scope)}))`;
+        and not(true ${subsidiaryVisibleFilter(sql`owner.subsidiary_id`, scope)}))`;
 }
 
 /** Search only identities the caller could also open in a genealogy trace. */
@@ -50,23 +73,35 @@ export async function searchManufacturingGenealogySeeds(
   requestedScope: ReadonlySet<string> | null = null,
 ): Promise<GenealogySeedChoice[]> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, ["manufacturing.read", "items.read"]);
-  if (!/^(lot|serial)$/.test(input.kind)
-    || (input.selected !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.selected))
-    || (input.q !== undefined && (typeof input.q !== "string" || input.q.length > 200))) {
-    throw new ManufacturingError("Choose a lot or serial and a valid search term.", { code: "genealogy_identity_required" });
+  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, [
+    "manufacturing.read",
+    "items.read",
+  ]);
+  if (
+    !/^(lot|serial)$/.test(input.kind) ||
+    (input.selected !== undefined &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.selected)) ||
+    (input.q !== undefined && (typeof input.q !== "string" || input.q.length > 200))
+  ) {
+    throw new ManufacturingError("Choose a lot or serial and a valid search term.", {
+      code: "genealogy_identity_required",
+    });
   }
   const table = input.kind === "lot" ? sql`lots` : sql`serials`;
-  const identityColumn = input.kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
+  const identityColumn =
+    input.kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
   const pattern = "%" + (input.q ?? "").trim() + "%";
-  return await tx.execute<{ value: string; label: string }>(sql`
+  return await tx.execute<{ value: string; label: string }>(
+    sql`
     select identity.id as value, concat_ws(' · ', item.name, ${identityColumn}) as label
     from ${table} identity
     join items item on item.org_id=identity.org_id and item.id=identity.item_id
     where identity.org_id=${orgId} and ${seedVisibility(input.kind, scope)}
       and (${identityColumn} ilike ${pattern} or item.name ilike ${pattern} ${input.selected ? sql`or identity.id=${input.selected}` : sql``})
     order by ${input.selected ? sql`(identity.id=${input.selected}) desc,` : sql``} item.name,${identityColumn},identity.id
-    limit 100`, "objects");
+    limit 100`,
+    "objects",
+  );
 }
 
 /** Exact count for the genealogy directory, using the same visibility boundary
@@ -78,37 +113,70 @@ export async function countManufacturingGenealogySeeds(
   requestedScope: ReadonlySet<string> | null = null,
 ): Promise<number> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, ["manufacturing.read", "items.read"]);
-  const lots = (await tx.execute<{ count: number }>(sql`
+  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, [
+    "manufacturing.read",
+    "items.read",
+  ]);
+  const lots =
+    (
+      await tx.execute<{ count: number }>(
+        sql`
     select count(*)::int as count from lots identity
-    where identity.org_id=${orgId} and ${seedVisibility("lot", scope)}`, "objects"))[0]?.count ?? 0;
-  const serials = (await tx.execute<{ count: number }>(sql`
+    where identity.org_id=${orgId} and ${seedVisibility("lot", scope)}`,
+        "objects",
+      )
+    )[0]?.count ?? 0;
+  const serials =
+    (
+      await tx.execute<{ count: number }>(
+        sql`
     select count(*)::int as count from serials identity
-    where identity.org_id=${orgId} and ${seedVisibility("serial", scope)}`, "objects"))[0]?.count ?? 0;
+    where identity.org_id=${orgId} and ${seedVisibility("serial", scope)}`,
+        "objects",
+      )
+    )[0]?.count ?? 0;
   return lots + serials;
 }
 
 /** Receipt-batch input evidence takes precedence over legacy order associations.
  * Estimated allocations and legacy links remain explicitly distinguished from recorded inputs. */
 export async function traceManufacturingGenealogy(
-  tx: SqlExecutor, orgId: string, actorId: string,
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
   input: GenealogyNode & { direction: "forward" | "backward"; maxDepth?: number },
   requestedScope: ReadonlySet<string> | null = null,
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, ["manufacturing.read", "items.read"]);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id)
-    || !["lot", "serial"].includes(input.kind) || !["forward", "backward"].includes(input.direction)) {
-    throw new ManufacturingError("Choose a lot or serial and a trace direction.", { code: "genealogy_identity_required" });
+  const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, [
+    "manufacturing.read",
+    "items.read",
+  ]);
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id) ||
+    !["lot", "serial"].includes(input.kind) ||
+    !["forward", "backward"].includes(input.direction)
+  ) {
+    throw new ManufacturingError("Choose a lot or serial and a trace direction.", {
+      code: "genealogy_identity_required",
+    });
   }
   const depthLimit = input.maxDepth ?? 8;
   if (!Number.isInteger(depthLimit) || depthLimit < 1 || depthLimit > 32)
-    throw new ManufacturingError("Trace depth must be between 1 and 32.", { code: "genealogy_depth_invalid" });
-  const identityColumn = input.kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
-  const seed = (await tx.execute<{ id: string; label: string; itemName: string }>(sql`
+    throw new ManufacturingError("Trace depth must be between 1 and 32.", {
+      code: "genealogy_depth_invalid",
+    });
+  const identityColumn =
+    input.kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
+  const seed = (
+    await tx.execute<{ id: string; label: string; itemName: string }>(
+      sql`
     select identity.id,${identityColumn} as label,item.name as "itemName"
     from ${input.kind === "lot" ? sql`lots` : sql`serials`} identity join items item on item.org_id=identity.org_id and item.id=identity.item_id
-    where identity.org_id=${orgId} and identity.id=${input.id} and ${seedVisibility(input.kind, scope)}`, "objects"))[0];
+    where identity.org_id=${orgId} and identity.id=${input.id} and ${seedVisibility(input.kind, scope)}`,
+      "objects",
+    )
+  )[0];
   if (!seed) throw new ManufacturingNotFoundError();
   const visited = new Set<string>();
   const seenEdges = new Set<string>();
@@ -123,7 +191,8 @@ export async function traceManufacturingGenealogy(
       visited.add(key);
       const tracked = input.direction === "forward" ? "component" : "output";
       const nodeColumn = sql.raw(`${tracked}.${node.kind === "lot" ? "lot_id" : "serial_id"}`);
-      const rows = await tx.execute<Omit<GenealogyEdge, "depth">>(sql`
+      const rows = await tx.execute<Omit<GenealogyEdge, "depth">>(
+        sql`
         select coalesce(batch.allocation_basis,'work_order') as "allocationBasis",
           cl.lot_number as "componentLotNumber",cs.serial_number as "componentSerialNumber",ol.lot_number as "outputLotNumber",os.serial_number as "outputSerialNumber",
           component.id::text || ':' || output.id::text as id,work.id as "orderId",work.number as "orderNumber",
@@ -161,17 +230,29 @@ export async function traceManufacturingGenealogy(
           ${subsidiaryVisibleFilter(sql`component.subsidiary_id`, scope)} ${subsidiaryVisibleFilter(sql`output.subsidiary_id`, scope)}
           ${subsidiaryVisibleFilter(sql`cplace.subsidiary_id`, scope, { orgWideNull: true })}
           ${subsidiaryVisibleFilter(sql`oplace.subsidiary_id`, scope, { orgWideNull: true })}
-        order by work.number,component.id,output.id limit 251`, "objects");
-      if (rows.length > 250 || edges.length + rows.filter(row => !seenEdges.has(row.id)).length > 1000) {
+        order by work.number,component.id,output.id limit 251`,
+        "objects",
+      );
+      if (
+        rows.length > 250 ||
+        edges.length + rows.filter((row) => !seenEdges.has(row.id)).length > 1000
+      ) {
         truncated = true;
         break;
       }
       for (const row of rows) {
-        if (!seenEdges.has(row.id)) { edges.push({ ...row, depth }); seenEdges.add(row.id); }
+        if (!seenEdges.has(row.id)) {
+          edges.push({ ...row, depth });
+          seenEdges.add(row.id);
+        }
         const lotId = input.direction === "forward" ? row.outputLotId : row.componentLotId;
         const serialId = input.direction === "forward" ? row.outputSerialId : row.componentSerialId;
-        for (const target of [{ kind: "lot" as const, id: lotId }, { kind: "serial" as const, id: serialId }]) {
-          if (target.id && !visited.has(`${target.kind}:${target.id}`)) next.set(`${target.kind}:${target.id}`, { kind: target.kind, id: target.id });
+        for (const target of [
+          { kind: "lot" as const, id: lotId },
+          { kind: "serial" as const, id: serialId },
+        ]) {
+          if (target.id && !visited.has(`${target.kind}:${target.id}`))
+            next.set(`${target.kind}:${target.id}`, { kind: target.kind, id: target.id });
         }
       }
     }
@@ -179,5 +260,12 @@ export async function traceManufacturingGenealogy(
     frontier = [...next.values()];
     if (depth === depthLimit && frontier.length) truncated = true;
   }
-  return { seed, direction: input.direction, association: "receipt_evidence" as const, visibility: scope === null ? "organization" as const : "authorized_entities" as const, truncated, edges };
+  return {
+    seed,
+    direction: input.direction,
+    association: "receipt_evidence" as const,
+    visibility: scope === null ? ("organization" as const) : ("authorized_entities" as const),
+    truncated,
+    edges,
+  };
 }

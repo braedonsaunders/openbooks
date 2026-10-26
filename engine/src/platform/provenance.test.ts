@@ -14,15 +14,30 @@ test("source provenance rejects a borrowed environment label and refuses a dirty
   try {
     delete process.env.OPENBOOKS_SOURCE_SHA;
     delete process.env.GITHUB_SHA;
-    const git = (...args: string[]) => execFileSync("git", ["-C", directory, ...args], { encoding: "utf8" }).trim();
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", directory, ...args], { encoding: "utf8" }).trim();
     git("init", "--quiet");
-    git("-c", "user.name=Verification", "-c", "user.email=verification@example.test", "commit", "--quiet", "--allow-empty", "-m", "Initial source");
+    git(
+      "-c",
+      "user.name=Verification",
+      "-c",
+      "user.email=verification@example.test",
+      "commit",
+      "--quiet",
+      "--allow-empty",
+      "-m",
+      "Initial source",
+    );
     const head = git("rev-parse", "HEAD");
     assert.equal(sourceSha(directory), head);
     process.env.GITHUB_SHA = "b".repeat(40);
     assert.throws(() => sourceSha(directory), /does not match the checked-out full commit/);
     process.env.OPENBOOKS_SOURCE_SHA = head;
-    assert.equal(sourceSha(directory), head, "the explicitly checked-out workflow source takes precedence");
+    assert.equal(
+      sourceSha(directory),
+      head,
+      "the explicitly checked-out workflow source takes precedence",
+    );
     writeFileSync(join(directory, "changed.ts"), "export const changed = true;\n");
     assert.equal(sourceSha(directory), null, "uncommitted source cannot be labelled as HEAD");
   } finally {
@@ -50,5 +65,8 @@ test("runId is null outside CI and the run id inside it", () => {
 test("caseDigest is the sha256 of the serialized case payload", () => {
   const cases = [{ id: "a", status: "pass" }];
   assert.equal(caseDigest(cases), createHash("sha256").update(JSON.stringify(cases)).digest("hex"));
-  assert.notEqual(caseDigest([{ id: "a", status: "pass" }]), caseDigest([{ id: "a", status: "fail" }]));
+  assert.notEqual(
+    caseDigest([{ id: "a", status: "pass" }]),
+    caseDigest([{ id: "a", status: "fail" }]),
+  );
 });

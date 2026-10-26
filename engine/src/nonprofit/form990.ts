@@ -27,7 +27,8 @@ const INPUT_KEYS = [
 
 function featureOff(): NonprofitError {
   return new NonprofitError({
-    message: "Form 990 workpaper preparation is disabled; enable form990 in Company Settings → Features.",
+    message:
+      "Form 990 workpaper preparation is disabled; enable form990 in Company Settings → Features.",
     status: 422,
     code: "feature_off",
     remedy: FEATURE_REMEDY,
@@ -60,9 +61,13 @@ export async function form990ReturnInputProvider(
   request: ReturnInputProviderRequest,
 ): Promise<Readonly<Record<string, string>>> {
   if (!(await orgFeatureEnabled(request.orgId, "form990", request.runner))) throw featureOff();
-  const unknownKeys = request.keys.filter((key) => !(INPUT_KEYS as readonly string[]).includes(key));
+  const unknownKeys = request.keys.filter(
+    (key) => !(INPUT_KEYS as readonly string[]).includes(key),
+  );
   if (unknownKeys.length > 0) {
-    throw new TaxReturnError(`return input provider "form990" does not define ${unknownKeys.join(", ")}`);
+    throw new TaxReturnError(
+      `return input provider "form990" does not define ${unknownKeys.join(", ")}`,
+    );
   }
 
   const bookId = await activePostingPrimaryBookId(request.orgId, request.runner);
@@ -71,7 +76,8 @@ export async function form990ReturnInputProvider(
       message: "Form 990 inputs require an active primary posting book.",
       status: 409,
       code: "nonprofit_statement_book_missing",
-      remedy: "Set an active primary posting book in Company Settings → Accounting, then recompute the workpaper.",
+      remedy:
+        "Set an active primary posting book in Company Settings → Accounting, then recompute the workpaper.",
     });
   }
   let current: NonprofitStatements;
@@ -109,18 +115,31 @@ export async function form990ReturnInputProvider(
       message: `Form 990 inputs span functional currencies ${[...currencySet].sort().join(" and ")}.`,
       status: 422,
       code: "nonprofit_statement_currency_mismatch",
-      remedy: "Prepare the workpaper for one functional currency at a time by separating the reporting organization by currency.",
+      remedy:
+        "Prepare the workpaper for one functional currency at a time by separating the reporting organization by currency.",
     });
   }
   const currency = currencySet.values().next().value as string | undefined;
   const total = (rows: readonly { baseCurrency: string; amount: string }[]): string =>
-    rows.filter((row) => row.baseCurrency === currency).reduce((sum, row) => addMoney(sum, row.amount), ZERO_MONEY);
+    rows
+      .filter((row) => row.baseCurrency === currency)
+      .reduce((sum, row) => addMoney(sum, row.amount), ZERO_MONEY);
   const functionAmount = (key: "program" | "management_general" | "fundraising"): string =>
     total(current.functionalExpenses.totals.filter((row) => row.functionKey === key));
   const openingTotal = (key: "openingAssets" | "openingLiabilities" | "openingNetAssets"): string =>
-    total(current.cashFlows.reconciliation.map((row) => ({ baseCurrency: row.baseCurrency, amount: row[key] })));
+    total(
+      current.cashFlows.reconciliation.map((row) => ({
+        baseCurrency: row.baseCurrency,
+        amount: row[key],
+      })),
+    );
   const result: Record<string, string> = {
-    "form990.revenue.total": total(current.activities.rows.map((row) => ({ baseCurrency: row.baseCurrency, amount: row.revenue }))),
+    "form990.revenue.total": total(
+      current.activities.rows.map((row) => ({
+        baseCurrency: row.baseCurrency,
+        amount: row.revenue,
+      })),
+    ),
     "form990.expense.program": functionAmount("program"),
     "form990.expense.management_general": functionAmount("management_general"),
     "form990.expense.fundraising": functionAmount("fundraising"),
@@ -131,10 +150,19 @@ export async function form990ReturnInputProvider(
     "form990.position.net_assets.opening": openingTotal("openingNetAssets"),
     "form990.position.net_assets.ending": total(current.financialPosition.totalNetAssets),
   };
-  return Object.fromEntries(request.keys.map((key) => [key, result[key]!])) as Record<string, string>;
+  return Object.fromEntries(request.keys.map((key) => [key, result[key]!])) as Record<
+    string,
+    string
+  >;
 }
 
-function tieOut(name: string, leftReference: string, rightReference: string, left: string, right: string): Form990TieOut {
+function tieOut(
+  name: string,
+  leftReference: string,
+  rightReference: string,
+  left: string,
+  right: string,
+): Form990TieOut {
   const difference = subMoney(left, right);
   return { name, leftReference, rightReference, difference, tied: difference === ZERO_MONEY };
 }
@@ -155,22 +183,64 @@ export async function computeForm990Workpaper(
   };
   const sources = (result.inputSources ?? []).map((source) => ({
     ...source,
-    name: source.inputKey === "form990.revenue.total" ? "Statement of Activities" :
-      source.inputKey.startsWith("form990.expense.") ? "Functional Expense Statement" :
-        "Statement of Financial Position",
+    name:
+      source.inputKey === "form990.revenue.total"
+        ? "Statement of Activities"
+        : source.inputKey.startsWith("form990.expense.")
+          ? "Functional Expense Statement"
+          : "Statement of Financial Position",
   }));
   const sourceValues = new Map(sources.map((source) => [source.inputKey, source.value]));
   const functionTotal = addMoney(
-    addMoney(sourceValues.get("form990.expense.program") ?? ZERO_MONEY, sourceValues.get("form990.expense.management_general") ?? ZERO_MONEY),
+    addMoney(
+      sourceValues.get("form990.expense.program") ?? ZERO_MONEY,
+      sourceValues.get("form990.expense.management_general") ?? ZERO_MONEY,
+    ),
     sourceValues.get("form990.expense.fundraising") ?? ZERO_MONEY,
   );
   const tieOuts = [
-    tieOut("Part VIII revenue to Statement of Activities", "VIII12A", "form990.revenue.total", requireBox("VIII12A"), sourceValues.get("form990.revenue.total") ?? ZERO_MONEY),
-    tieOut("Part IX expenses to functional statement", "IX25A", "functional expense totals", requireBox("IX25A"), functionTotal),
-    tieOut("Part VIII revenue to Part I revenue", "I12", "VIII12A", requireBox("I12"), requireBox("VIII12A")),
-    tieOut("Part IX expenses to Part I expenses", "I18", "IX25A", requireBox("I18"), requireBox("IX25A")),
-    tieOut("Part X assets to liabilities and net assets at beginning of year", "X16A", "X33A", requireBox("X16A"), requireBox("X33A")),
-    tieOut("Part X assets to liabilities and net assets at end of year", "X16B", "X33B", requireBox("X16B"), requireBox("X33B")),
+    tieOut(
+      "Part VIII revenue to Statement of Activities",
+      "VIII12A",
+      "form990.revenue.total",
+      requireBox("VIII12A"),
+      sourceValues.get("form990.revenue.total") ?? ZERO_MONEY,
+    ),
+    tieOut(
+      "Part IX expenses to functional statement",
+      "IX25A",
+      "functional expense totals",
+      requireBox("IX25A"),
+      functionTotal,
+    ),
+    tieOut(
+      "Part VIII revenue to Part I revenue",
+      "I12",
+      "VIII12A",
+      requireBox("I12"),
+      requireBox("VIII12A"),
+    ),
+    tieOut(
+      "Part IX expenses to Part I expenses",
+      "I18",
+      "IX25A",
+      requireBox("I18"),
+      requireBox("IX25A"),
+    ),
+    tieOut(
+      "Part X assets to liabilities and net assets at beginning of year",
+      "X16A",
+      "X33A",
+      requireBox("X16A"),
+      requireBox("X33A"),
+    ),
+    tieOut(
+      "Part X assets to liabilities and net assets at end of year",
+      "X16B",
+      "X33B",
+      requireBox("X16B"),
+      requireBox("X33B"),
+    ),
   ];
   return { ...result, sources, tieOuts, refusals: [] };
 }

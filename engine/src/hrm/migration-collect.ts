@@ -273,9 +273,7 @@ export async function collectLegacyEmployments(
         left join pay_schedules s
           on s.org_id = p.org_id and s.id = p.pay_schedule_id
        where p.org_id = ${orgId} and p.employee_party_id in (${partyList})`);
-    const profiles = new Map(
-      profileRows.map((profile) => [profile.employee_party_id, profile]),
-    );
+    const profiles = new Map(profileRows.map((profile) => [profile.employee_party_id, profile]));
 
     const subsidiaryRows = await selectAll<SubsidiaryRecord>(sql`
       select s.id::text as id, s.is_active as is_active,
@@ -283,14 +281,12 @@ export async function collectLegacyEmployments(
         from subsidiaries s
        where s.org_id = ${orgId}
        order by s.id`);
-    const subsidiaryFacts: readonly SubsidiaryFact[] = subsidiaryRows.map(
-      (row) => ({
-        id: row.id,
-        orgId,
-        isActive: row.is_active,
-        isEliminated: row.is_elimination,
-      }),
-    );
+    const subsidiaryFacts: readonly SubsidiaryFact[] = subsidiaryRows.map((row) => ({
+      id: row.id,
+      orgId,
+      isActive: row.is_active,
+      isEliminated: row.is_elimination,
+    }));
 
     const stubRows = await selectAll<AnchorRecord>(sql`
       select s.employee_party_id::text as employee_party_id,
@@ -324,9 +320,7 @@ export async function collectLegacyEmployments(
     const stubsByParty = groupAnchors(stubRows);
     const workByParty = groupAnchors(workRows);
     const ledgerByParty = groupAnchors(ledgerRows);
-    const mappingByParty = new Map(
-      mappings.map((mapping) => [mapping.partyId, mapping]),
-    );
+    const mappingByParty = new Map(mappings.map((mapping) => [mapping.partyId, mapping]));
 
     const rows: SourcePersonRow[] = roles.map((role) => {
       const party = parties.get(role.party_id);
@@ -368,9 +362,7 @@ export async function collectLegacyEmployments(
     // downstream. Status, decider, and digest verdicts belong to the
     // classifier's report; unobservable gates throw here.
     let resolved = rows;
-    if (
-      rows.some((row) => (row.resolution?.approvalSubmissionId ?? "") !== "")
-    ) {
+    if (rows.some((row) => (row.resolution?.approvalSubmissionId ?? "") !== "")) {
       resolved = await resolveMappingApprovalSnapshots(orgId, rows);
     }
     return {
@@ -387,16 +379,13 @@ interface Anchor {
   readonly scheduleSubsidiaryId: string | null;
 }
 
-function groupAnchors(
-  rows: readonly (AnchorRecord | ActivityRecord)[],
-): Map<string, Anchor[]> {
+function groupAnchors(rows: readonly (AnchorRecord | ActivityRecord)[]): Map<string, Anchor[]> {
   const grouped = new Map<string, Anchor[]>();
   for (const row of rows) {
     const anchor: Anchor = {
       date: row.anchor_date,
       id: row.anchor_id,
-      scheduleSubsidiaryId:
-        "schedule_subsidiary_id" in row ? row.schedule_subsidiary_id : null,
+      scheduleSubsidiaryId: "schedule_subsidiary_id" in row ? row.schedule_subsidiary_id : null,
     };
     const existing = grouped.get(row.employee_party_id);
     if (existing === undefined) grouped.set(row.employee_party_id, [anchor]);
@@ -477,10 +466,7 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
   }));
   let anchorDate: string | null = null;
   for (const entry of latestPerSource) {
-    if (
-      entry.latest !== null &&
-      (anchorDate === null || entry.latest > anchorDate)
-    ) {
+    if (entry.latest !== null && (anchorDate === null || entry.latest > anchorDate)) {
       anchorDate = entry.latest;
     }
   }
@@ -559,8 +545,7 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
     partyEvidenceIds.push(`subsidiaries:${party.subsidiary_id}`);
   }
   for (const historic of historicSubsidiaryIds) {
-    if (historic !== party.subsidiary_id)
-      partyEvidenceIds.push(`subsidiaries:${historic}`);
+    if (historic !== party.subsidiary_id) partyEvidenceIds.push(`subsidiaries:${historic}`);
   }
 
   const employer: EmployerInventory = {

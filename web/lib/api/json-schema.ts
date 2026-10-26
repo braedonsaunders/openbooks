@@ -17,19 +17,20 @@ export const jsonObject = z.looseObject({}) as z.ZodType<Record<string, unknown>
  * can inspect them.
  */
 
-const EXACT_MONEY_MESSAGE = "must be a decimal string; JSON numbers are refused to preserve precision";
+const EXACT_MONEY_MESSAGE =
+  "must be a decimal string; JSON numbers are refused to preserve precision";
 
 /** Exact numeric(19,4)-scale money string ("1234.5", "-10", "0.0001"). */
 export function exactMoney(message = EXACT_MONEY_MESSAGE) {
-  return z
-    .preprocess(
-      // Absent/null amounts funnel through the same refusal as junk input,
-      // so a required-money field always fails with the caller's message.
-      (v) => (v === undefined || v === null ? "" : v),
-      z.unknown()
-        .refine((v) => toExactMoney(v) !== null, message)
-        .transform((v) => toExactMoney(v)!),
-    );
+  return z.preprocess(
+    // Absent/null amounts funnel through the same refusal as junk input,
+    // so a required-money field always fails with the caller's message.
+    (v) => (v === undefined || v === null ? "" : v),
+    z
+      .unknown()
+      .refine((v) => toExactMoney(v) !== null, message)
+      .transform((v) => toExactMoney(v)!),
+  );
 }
 
 /** Optional money on setup forms: null or a blank form value clears it; any
@@ -39,7 +40,8 @@ export function exactMoney(message = EXACT_MONEY_MESSAGE) {
 export function nullableExactMoney(message = EXACT_MONEY_MESSAGE) {
   return z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),
-    z.unknown()
+    z
+      .unknown()
       .refine((v) => v === null || toExactMoney(v) !== null, message)
       .transform((v) => (v === null ? null : toExactMoney(v)!)),
   );
@@ -79,7 +81,9 @@ export const nullableUuidId = z
 export const ISO_DATE_RE = z.regexes.date;
 
 export function isoDate(message = "must be YYYY-MM-DD") {
-  return z.string({ error: message }).regex(ISO_DATE_RE, message)
+  return z
+    .string({ error: message })
+    .regex(ISO_DATE_RE, message)
     .refine((value) => !value.startsWith("0000-"), message);
 }
 

@@ -20,17 +20,20 @@ test("a refused team read renders the remedy with decisions left to approvals", 
     tabs: TABS,
     refusal: { title: "No team", message: "ask an administrator for a linked employment" },
   } as unknown as Record<string, unknown>);
-  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes('"empty-state"'), "the refusal renders through the empty-state block");
   assert.ok(json.includes("No team"), "the refusal title reaches the page");
-  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
-  assert.ok(json.includes("\"link-button\""), "the header keeps the approvals deep link");
-  assert.ok(json.includes("\"decideInApprovals\""), "the deep link names deciding in approvals");
+  assert.ok(
+    json.includes("ask an administrator for a linked employment"),
+    "the refusal remedy reaches the page",
+  );
+  assert.ok(json.includes('"link-button"'), "the header keeps the approvals deep link");
+  assert.ok(json.includes('"decideInApprovals"'), "the deep link names deciding in approvals");
   assert.ok(!json.includes('"approve"'), "no approve widget exists on this page");
   assert.ok(!json.includes('"decline"'), "no decline widget exists on this page");
 });
 
 test("the tab strip rides the header", () => {
   const json = specJson({ tabs: TABS, refusal: null } as unknown as Record<string, unknown>);
-  assert.ok(json.includes("\"module-home-tabs\""), "the header carries the tab strip");
+  assert.ok(json.includes('"module-home-tabs"'), "the header carries the tab strip");
   assert.ok(json.includes("/me/team"), "the strip links the team surface");
 });

@@ -76,7 +76,7 @@ export function rl1TransmitterProblems(cfg: Partial<Rl1TransmitterConfig>): stri
   const problems: string[] = [];
   if (!cfg.transmitterNumber || !/^NP\d{6}$/.test(cfg.transmitterNumber)) {
     problems.push(
-      "transmitterNumber must be \"NP\" followed by six digits (register with form ED-430-V)",
+      'transmitterNumber must be "NP" followed by six digits (register with form ED-430-V)',
     );
   }
   if (!cfg.certificationNumber || !String(cfg.certificationNumber).trim()) {
@@ -86,9 +86,10 @@ export function rl1TransmitterProblems(cfg: Partial<Rl1TransmitterConfig>): stri
     problems.push("identificationNumber must be the employer's 10-digit Revenu Québec number");
   }
   if (
-    cfg.fileSequence === undefined
-    || !Number.isInteger(cfg.fileSequence)
-    || cfg.fileSequence < 1 || cfg.fileSequence > 999
+    cfg.fileSequence === undefined ||
+    !Number.isInteger(cfg.fileSequence) ||
+    cfg.fileSequence < 1 ||
+    cfg.fileSequence > 999
   ) {
     problems.push("fileSequence must be an integer from 1 to 999");
   }
@@ -106,8 +107,7 @@ export function rl1TransmitterProblems(cfg: Partial<Rl1TransmitterConfig>): stri
   if (end && !/^\d{8}$/.test(end)) {
     problems.push("slipRangeEnd must be the 8-digit last number of the series RQ assigned");
   }
-  if (start && end && /^\d{8}$/.test(start) && /^\d{8}$/.test(end)
-    && Number(end) < Number(start)) {
+  if (start && end && /^\d{8}$/.test(start) && /^\d{8}$/.test(end) && Number(end) < Number(start)) {
     problems.push("slipRangeEnd must not be lower than slipRangeStart");
   }
   return problems;
@@ -115,15 +115,18 @@ export function rl1TransmitterProblems(cfg: Partial<Rl1TransmitterConfig>): stri
 
 /** Load and validate the tenant's transmitter identity — fail-closed. */
 export async function rl1TransmitterConfig(orgId: string): Promise<Rl1TransmitterConfig> {
-  const row = (await db.execute<{ cfg: Partial<Rl1TransmitterConfig> | null }>(sql`
+  const row = await db.execute<{ cfg: Partial<Rl1TransmitterConfig> | null }>(
+    sql`
     select settings#>'{payroll,rl1Transmitter}' as cfg from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const cfg = row[0]?.cfg ?? {};
   const problems = rl1TransmitterProblems(cfg);
   if (problems.length > 0) {
     throw new PayrollError(
-      `RL-1 transmitter configuration incomplete (${problems.join("; ")}) — `
-      + "set it under Payroll setup",
+      `RL-1 transmitter configuration incomplete (${problems.join("; ")}) — ` +
+        "set it under Payroll setup",
     );
   }
   return cfg as Rl1TransmitterConfig;
@@ -162,13 +165,13 @@ export function rl1XmlFilename(
  * shown wherever the T4's download button would be.
  */
 export const RL1_XML_DOWNLOAD_REFUSAL =
-  "The RL-1 XML transmission file is not generated: Revenu Québec distributes the "
-  + "tag-level XML specification, the year's schema, and the slip-number check-digit "
-  + "algorithm only to registered software partners (Guide de préparation du relevé 1 "
-  + "en format XML; guide IN-800), so a generated file could not be validated against "
-  + "the real schema and might misstate a statutory filing. The RL-1 slip data above "
-  + "is complete — file it through Revenu Québec's online services (mandatory when "
-  + "more than 5 slips) or authorized software.";
+  "The RL-1 XML transmission file is not generated: Revenu Québec distributes the " +
+  "tag-level XML specification, the year's schema, and the slip-number check-digit " +
+  "algorithm only to registered software partners (Guide de préparation du relevé 1 " +
+  "en format XML; guide IN-800), so a generated file could not be validated against " +
+  "the real schema and might misstate a statutory filing. The RL-1 slip data above " +
+  "is complete — file it through Revenu Québec's online services (mandatory when " +
+  "more than 5 slips) or authorized software.";
 
 /**
  * Why an RL-1 cannot be AMENDED or CANCELLED here — the registry's
@@ -186,15 +189,15 @@ export const RL1_XML_DOWNLOAD_REFUSAL =
  * of record and a reassessment. So this refuses.
  */
 export const RL1_AMENDMENT_REFUSAL =
-  "An amended or cancelled RL-1 is not produced: Revenu Québec specifies the amendment code "
-  + "and the requirement that an amended slip quote the sequential number of the slip it "
-  + "replaces only in the partner-gated RL-1 XML guide and guide IN-800, which are issued to "
-  + "registered software partners on certification. A correction that failed to identify the "
-  + "slip it replaces would be accepted as a SECOND original, leaving the employee with two "
-  + "RL-1s of record — so no correction file or correction slip is generated here. Amend or "
-  + "cancel the RL-1 through Revenu Québec's online services (or authorized software), and "
-  + "correct the underlying payroll data in OpenBooks so the RL-1 box data on this page "
-  + "matches what was refiled.";
+  "An amended or cancelled RL-1 is not produced: Revenu Québec specifies the amendment code " +
+  "and the requirement that an amended slip quote the sequential number of the slip it " +
+  "replaces only in the partner-gated RL-1 XML guide and guide IN-800, which are issued to " +
+  "registered software partners on certification. A correction that failed to identify the " +
+  "slip it replaces would be accepted as a SECOND original, leaving the employee with two " +
+  "RL-1s of record — so no correction file or correction slip is generated here. Amend or " +
+  "cancel the RL-1 through Revenu Québec's online services (or authorized software), and " +
+  "correct the underlying payroll data in OpenBooks so the RL-1 box data on this page " +
+  "matches what was refiled.";
 
 /**
  * Validate everything an RL-1 transmission needs — transmitter identity,
@@ -212,11 +215,14 @@ export async function buildRl1Xml(orgId: string, taxYear: number): Promise<never
   }
 
   // SINs, unsealed and format-checked — identical failure mode to the T4.
-  const sins = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
+  const sins = await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(
+    sql`
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sinByEmployee = new Map(sins.map((row) => [row.employee_party_id, row.sin_encrypted]));
   const missingSins: string[] = [];
   for (const slip of slips) {
@@ -239,9 +245,9 @@ export async function buildRl1Xml(orgId: string, taxYear: number): Promise<never
     const capacity = Number(cfg.slipRangeEnd) - Number(cfg.slipRangeStart) + 1;
     if (capacity < slips.length) {
       throw new PayrollError(
-        `the assigned RL-1 sequential-number series (${cfg.slipRangeStart}–${cfg.slipRangeEnd}) `
-        + `holds ${capacity} numbers but ${slips.length} slips must be filed — `
-        + "request a larger series from Revenu Québec",
+        `the assigned RL-1 sequential-number series (${cfg.slipRangeStart}–${cfg.slipRangeEnd}) ` +
+          `holds ${capacity} numbers but ${slips.length} slips must be filed — ` +
+          "request a larger series from Revenu Québec",
       );
     }
   }

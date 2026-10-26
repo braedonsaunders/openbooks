@@ -5,11 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { runSync } from "./sync.ts";
-import type {
-  MigrationSource,
-  NativeChanges,
-  SourceEntity,
-} from "./source.ts";
+import type { MigrationSource, NativeChanges, SourceEntity } from "./source.ts";
 import type { NativeDocument } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -28,38 +24,42 @@ class AuditSource implements MigrationSource {
 
   nativeChanges(): Promise<NativeChanges> {
     return Promise.resolve({
-      documents: [{
-        sourceRef: "TST-AUDIT",
-        kind: "customer_invoice",
-        posting: true,
-        lifecycleStatus: "approved",
-        partyId: this.o.customerId,
-        currency: "CAD",
-        fxRate: "1",
-        documentDate: this.o.date,
-        postingDate: this.o.date,
-        postingPeriodId: this.o.periodId,
-        dueDate: this.o.date,
-        memo: null,
-        referenceNumber: null,
-        controlAccountId: null,
-        subtotal: "100",
-        total: "100",
-        lines: [{
-          accountId: this.o.accounts.revenue,
-          itemId: null,
-          quantity: "1",
-          unitPrice: "100",
-          amount: "100",
-          taxAmount: "0",
-          taxOverridden: false,
-          taxCodeId: null,
-          departmentId: null,
-          projectId: null,
-          description: "audit probe",
-          lineNumber: 1,
-        }],
-      } satisfies NativeDocument],
+      documents: [
+        {
+          sourceRef: "TST-AUDIT",
+          kind: "customer_invoice",
+          posting: true,
+          lifecycleStatus: "approved",
+          partyId: this.o.customerId,
+          currency: "CAD",
+          fxRate: "1",
+          documentDate: this.o.date,
+          postingDate: this.o.date,
+          postingPeriodId: this.o.periodId,
+          dueDate: this.o.date,
+          memo: null,
+          referenceNumber: null,
+          controlAccountId: null,
+          subtotal: "100",
+          total: "100",
+          lines: [
+            {
+              accountId: this.o.accounts.revenue,
+              itemId: null,
+              quantity: "1",
+              unitPrice: "100",
+              amount: "100",
+              taxAmount: "0",
+              taxOverridden: false,
+              taxCodeId: null,
+              departmentId: null,
+              projectId: null,
+              description: "audit probe",
+              lineNumber: 1,
+            },
+          ],
+        } satisfies NativeDocument,
+      ],
       applications: [],
       deletedRefs: [],
       syncedThrough: new Date("2026-07-20T00:00:00.000Z"),
@@ -105,17 +105,25 @@ test(
       assert.equal(result.docsFailed, 0, JSON.stringify(result.skipped));
       assert.equal(result.docsNew, 1);
 
-      const doc = (await db.execute<{ id: string }>(sql`
-          select id from documents where org_id = ${o.orgId} and custom->>'qboId' = 'TST-AUDIT'`, "objects"))[0]!;
+      const doc = (
+        await db.execute<{ id: string }>(
+          sql`
+          select id from documents where org_id = ${o.orgId} and custom->>'qboId' = 'TST-AUDIT'`,
+          "objects",
+        )
+      )[0]!;
       const rows = await db.execute<{
-          action: string;
-          actor_id: string | null;
-          changes: Record<string, unknown>;
-        }>(sql`
+        action: string;
+        actor_id: string | null;
+        changes: Record<string, unknown>;
+      }>(
+        sql`
           select action, actor_id, changes from audit_log
            where org_id = ${o.orgId} and table_name = 'documents' and row_id = ${doc.id}
            order by at, id
-        `, "objects");
+        `,
+        "objects",
+      );
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.action, "post");
       assert.equal(rows[0]!.actor_id, null);

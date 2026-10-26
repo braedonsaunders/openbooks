@@ -38,14 +38,18 @@ export async function userNavModePreference(user: PreferenceUser): Promise<NavMo
 // The shell asks for the effective mode and the stored preference in one
 // render; both read the same row once.
 const navModeSettings = cache(async (user: PreferenceUser) => {
-    const preferenceUser = preferenceUserIdentity(user);
-    // bypass: user-keyed-lookup — read the personal preference and active
-    // organization's default with explicit identities across tenant scope.
-    const r = await withBypassContext(() => db.execute<{ user_mode: unknown; org_default: unknown }>(sql`
+  const preferenceUser = preferenceUserIdentity(user);
+  // bypass: user-keyed-lookup — read the personal preference and active
+  // organization's default with explicit identities across tenant scope.
+  const r = await withBypassContext(() =>
+    db.execute<{ user_mode: unknown; org_default: unknown }>(
+      sql`
       select u.nav_mode as user_mode, o.settings ->> 'defaultNavMode' as org_default
         from users u
         left join orgs o on o.id = ${user.orgId}
-       where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active`, "objects"));
-    return r[0];
-  },
-);
+       where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active`,
+      "objects",
+    ),
+  );
+  return r[0];
+});

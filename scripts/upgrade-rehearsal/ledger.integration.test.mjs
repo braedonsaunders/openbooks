@@ -32,17 +32,26 @@ async function withScratchSchema(fn) {
         from_line_id uuid not null, to_line_id uuid not null);
     `);
     await client.query(`insert into orgs values ($1)`, [ORG]);
-    await client.query(`insert into journal_entries values ($1, $2, $3, 'posted'), ($4, $2, $3, 'posted')`, [ids(1), ORG, BOOK, ids(2)]);
-    await client.query(`insert into journal_lines values
+    await client.query(
+      `insert into journal_entries values ($1, $2, $3, 'posted'), ($4, $2, $3, 'posted')`,
+      [ids(1), ORG, BOOK, ids(2)],
+    );
+    await client.query(
+      `insert into journal_lines values
       ($1, $5, $2, $6, $7, 'USD', 100, 100, now()), ($3, $5, $2, $6, $8, 'USD', -100, -100, now()),
       ($4, $5, $9, $10, $7, 'USD', 100, 100, now()), ($11, $5, $9, $10, $8, 'USD', -100, -100, now())`,
-      [ids(11), ids(1), ids(12), ids(13), ORG, ids(90), ids(80), ids(81), ids(2), ids(91), ids(14)]);
-    await client.query(`insert into documents values
+      [ids(11), ids(1), ids(12), ids(13), ORG, ids(90), ids(80), ids(81), ids(2), ids(91), ids(14)],
+    );
+    await client.query(
+      `insert into documents values
       ($1, $3, 'customer_invoice', 'posted', 'USD', 100, 100, $4, $6, now()),
       ($2, $3, 'customer_invoice', 'posted', 'USD', 100, 100, $5, $7, now())`,
-      [ids(21), ids(22), ORG, ids(70), ids(71), ids(90), ids(91)]);
-    await client.query(`insert into applications values ($1, $3, 40, $4, $5), ($2, $3, 40, $6, $7)`,
-      [ids(31), ids(32), ORG, ids(11), ids(12), ids(13), ids(14)]);
+      [ids(21), ids(22), ORG, ids(70), ids(71), ids(90), ids(91)],
+    );
+    await client.query(
+      `insert into applications values ($1, $3, 40, $4, $5), ($2, $3, 40, $6, $7)`,
+      [ids(31), ids(32), ORG, ids(11), ids(12), ids(13), ids(14)],
+    );
     return await fn(client, schema);
   } finally {
     await client.query(`drop schema if exists ${schema} cascade`);
@@ -60,7 +69,9 @@ async function beforeAndAfter(client, schema, rewrite) {
 
 test("an untouched ledger compares clean, and a trigger-bumped updated_at is not a change", async () => {
   await withScratchSchema(async (client, schema) => {
-    const sections = await beforeAndAfter(client, schema, (c) => c.query("update documents set updated_at = now() + interval '1 day'"));
+    const sections = await beforeAndAfter(client, schema, (c) =>
+      c.query("update documents set updated_at = now() + interval '1 day'"),
+    );
     assert.deepEqual(sections, []);
   });
 });
@@ -68,8 +79,11 @@ test("an untouched ledger compares clean, and a trigger-bumped updated_at is not
 test("swapping two equal invoices' parties keeps every total yet is refused", async () => {
   await withScratchSchema(async (client, schema) => {
     const sections = await beforeAndAfter(client, schema, (c) =>
-      c.query(`update documents set party_id = case id when $1::uuid then $4::uuid else $3::uuid end where id in ($1, $2)`,
-        [ids(21), ids(22), ids(70), ids(71)]));
+      c.query(
+        `update documents set party_id = case id when $1::uuid then $4::uuid else $3::uuid end where id in ($1, $2)`,
+        [ids(21), ids(22), ids(70), ids(71)],
+      ),
+    );
     assert.deepEqual(sections, ["rowHashes.documents"]);
   });
 });
@@ -77,7 +91,8 @@ test("swapping two equal invoices' parties keeps every total yet is refused", as
 test("moving an invoice to another subsidiary keeps every total yet is refused", async () => {
   await withScratchSchema(async (client, schema) => {
     const sections = await beforeAndAfter(client, schema, (c) =>
-      c.query(`update documents set subsidiary_id = $2 where id = $1`, [ids(21), ids(91)]));
+      c.query(`update documents set subsidiary_id = $2 where id = $1`, [ids(21), ids(91)]),
+    );
     assert.deepEqual(sections, ["rowHashes.documents"]);
   });
 });
@@ -85,8 +100,11 @@ test("moving an invoice to another subsidiary keeps every total yet is refused",
 test("re-pointing two equal applications' settlement edges is refused", async () => {
   await withScratchSchema(async (client, schema) => {
     const sections = await beforeAndAfter(client, schema, (c) =>
-      c.query(`update applications set to_line_id = case id when $1::uuid then $4::uuid else $3::uuid end where id in ($1, $2)`,
-        [ids(31), ids(32), ids(12), ids(14)]));
+      c.query(
+        `update applications set to_line_id = case id when $1::uuid then $4::uuid else $3::uuid end where id in ($1, $2)`,
+        [ids(31), ids(32), ids(12), ids(14)],
+      ),
+    );
     assert.deepEqual(sections, ["rowHashes.applications"]);
   });
 });
@@ -94,7 +112,8 @@ test("re-pointing two equal applications' settlement edges is refused", async ()
 test("a line moved between subsidiaries is refused by the trial balance and the row hashes", async () => {
   await withScratchSchema(async (client, schema) => {
     const sections = await beforeAndAfter(client, schema, (c) =>
-      c.query(`update journal_lines set subsidiary_id = $2 where entry_id = $1`, [ids(1), ids(91)]));
+      c.query(`update journal_lines set subsidiary_id = $2 where entry_id = $1`, [ids(1), ids(91)]),
+    );
     assert.ok(sections.includes("trialBalance"), sections.join(", "));
     assert.ok(sections.includes("rowHashes.journal_lines"), sections.join(", "));
   });

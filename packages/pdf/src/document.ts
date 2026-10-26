@@ -8,9 +8,9 @@
 // together with their first rows. Footers are stamped after all content via
 // pdfkit's buffered-page range so the total page count is known.
 
-import { PassThrough } from 'node:stream'
-import { finished } from 'node:stream/promises'
-import PDFDocument from 'pdfkit'
+import { PassThrough } from "node:stream";
+import { finished } from "node:stream/promises";
+import PDFDocument from "pdfkit";
 import {
   DEFAULT_PRIMARY_COLOR,
   type PdfDensity,
@@ -18,10 +18,10 @@ import {
   type PdfSummaryItem,
   type PdfTableGroup,
   type PdfTheme,
-} from './types'
-import { resolvePage } from './page'
-import { drawTable } from './table'
-import { pdfColor } from './color'
+} from "./types";
+import { resolvePage } from "./page";
+import { drawTable } from "./table";
+import { pdfColor } from "./color";
 
 const STANDARD = {
   body: 10,
@@ -37,7 +37,7 @@ const STANDARD = {
   groupGap: 20,
   summaryGap: 16,
   coverRuleGap: 14,
-}
+};
 const COMPACT = {
   body: 9,
   h1: 14,
@@ -52,22 +52,22 @@ const COMPACT = {
   groupGap: 14,
   summaryGap: 12,
   coverRuleGap: 10,
-}
+};
 
 function themeFor(density: PdfDensity, primary: string): PdfTheme {
-  const s = density === 'compact' ? COMPACT : STANDARD
+  const s = density === "compact" ? COMPACT : STANDARD;
   return {
     primary,
-    text: '#111827',
-    muted: '#6b7280',
-    headerFill: '#f3f4f6',
-    headerText: '#374151',
-    headerBorder: '#d1d5db',
-    rowBorder: '#eef2f7',
-    zebra: '#f9fafb',
-    empty: '#9ca3af',
-    font: 'Helvetica',
-    fontBold: 'Helvetica-Bold',
+    text: "#111827",
+    muted: "#6b7280",
+    headerFill: "#f3f4f6",
+    headerText: "#374151",
+    headerBorder: "#d1d5db",
+    rowBorder: "#eef2f7",
+    zebra: "#f9fafb",
+    empty: "#9ca3af",
+    font: "Helvetica",
+    fontBold: "Helvetica-Bold",
     body: s.body,
     h1: s.h1,
     meta: s.meta,
@@ -77,37 +77,43 @@ function themeFor(density: PdfDensity, primary: string): PdfTheme {
     cellPadX: s.cellPadX,
     cellPadY: s.cellPadY,
     groupGap: s.groupGap,
-  }
+  };
 }
 
-const SUMMARY_GAP = 6
-const SUMMARY_MIN_CARD_W = 118
-const LOGO_H = 36
+const SUMMARY_GAP = 6;
+const SUMMARY_MIN_CARD_W = 118;
+const LOGO_H = 36;
 
 function decodeDataUrl(url: string): Buffer | null {
-  const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(url)
-  if (!m) return null
+  const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(url);
+  if (!m) return null;
   try {
-    return Buffer.from(m[1]!, 'base64')
+    return Buffer.from(m[1]!, "base64");
   } catch {
-    return null
+    return null;
   }
 }
 
 /** Render a report document to a PDF Buffer. */
 export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer> {
-  const layout = input.layout
-  const page = resolvePage(layout)
-  const primary = input.branding.primaryColor || DEFAULT_PRIMARY_COLOR
-  const theme = themeFor(layout.density, primary)
-  theme.design = input.design
-  theme.colorTreatment = input.colorTreatment ?? (input.design === 'modern' ? 'subtle' : 'strong')
-  theme.colorIntensity = input.colorIntensity ?? 8
-  if (input.design === 'modern') Object.assign(theme, {
-    text: '#1e293b', muted: '#64748b', headerFill: '#f8fafc', headerText: '#475569',
-    headerBorder: '#e2e8f0', rowBorder: '#eef2f6', zebra: '#fbfcfd',
-  })
-  const s = layout.density === 'compact' ? COMPACT : STANDARD
+  const layout = input.layout;
+  const page = resolvePage(layout);
+  const primary = input.branding.primaryColor || DEFAULT_PRIMARY_COLOR;
+  const theme = themeFor(layout.density, primary);
+  theme.design = input.design;
+  theme.colorTreatment = input.colorTreatment ?? (input.design === "modern" ? "subtle" : "strong");
+  theme.colorIntensity = input.colorIntensity ?? 8;
+  if (input.design === "modern")
+    Object.assign(theme, {
+      text: "#1e293b",
+      muted: "#64748b",
+      headerFill: "#f8fafc",
+      headerText: "#475569",
+      headerBorder: "#e2e8f0",
+      rowBorder: "#eef2f6",
+      zebra: "#fbfcfd",
+    });
+  const s = layout.density === "compact" ? COMPACT : STANDARD;
 
   const doc = new PDFDocument({
     bufferPages: true,
@@ -122,35 +128,35 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
       Title: input.title,
       Author: input.branding.orgName,
       Subject: input.dateRangeLabel,
-      Creator: 'openbooks',
+      Creator: "openbooks",
     },
-  })
+  });
 
-  const sink = new PassThrough()
-  const chunks: Buffer[] = []
-  sink.on('data', (c: Buffer | Uint8Array) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
-  doc.pipe(sink)
+  const sink = new PassThrough();
+  const chunks: Buffer[] = [];
+  sink.on("data", (c: Buffer | Uint8Array) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+  doc.pipe(sink);
 
   const completion = finished(sink);
   void completion.catch(() => {});
   try {
-  let y = page.contentTop
-  y = drawCover(doc, page, input, theme, s)
-  if (input.summary && input.summary.length > 0) {
-    y = drawSummary(doc, page, input.summary, y, theme, s)
-  }
-  if (input.legend?.items.length) y = drawLegend(doc, page, input.legend, y, theme)
+    let y = page.contentTop;
+    y = drawCover(doc, page, input, theme, s);
+    if (input.summary && input.summary.length > 0) {
+      y = drawSummary(doc, page, input.summary, y, theme, s);
+    }
+    if (input.legend?.items.length) y = drawLegend(doc, page, input.legend, y, theme);
 
-  for (const group of input.groups) {
-    y = drawGroup(doc, page, group, y, theme, s)
-  }
+    for (const group of input.groups) {
+      y = drawGroup(doc, page, group, y, theme, s);
+    }
 
-  stampFooters(doc, page, input)
-  doc.end()
+    stampFooters(doc, page, input);
+    doc.end();
     await completion;
     return Buffer.concat(chunks);
   } catch (cause) {
-    if ('destroy' in doc && typeof doc.destroy === 'function') doc.destroy();
+    if ("destroy" in doc && typeof doc.destroy === "function") doc.destroy();
     else doc.end();
     sink.destroy();
     await completion.catch(() => {});
@@ -165,78 +171,115 @@ function drawCover(
   theme: PdfTheme,
   s: typeof STANDARD,
 ): number {
-  const leftW = Math.floor(page.contentWidth * 0.6)
-  const rightW = page.contentWidth - leftW
-  const leftX = page.contentLeft
-  const rightX = page.contentLeft + leftW
-  let leftTop = page.contentTop
-  if (input.design === 'modern') {
-    doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted)
-    doc.rect(leftX, leftTop + 2, 3, 7).fill(theme.primary)
-    doc.fillColor(theme.muted).text(input.branding.orgName, leftX + 10, leftTop, { width: leftW - 10 })
-    leftTop = doc.y + 5
+  const leftW = Math.floor(page.contentWidth * 0.6);
+  const rightW = page.contentWidth - leftW;
+  const leftX = page.contentLeft;
+  const rightX = page.contentLeft + leftW;
+  let leftTop = page.contentTop;
+  if (input.design === "modern") {
+    doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted);
+    doc.rect(leftX, leftTop + 2, 3, 7).fill(theme.primary);
+    doc
+      .fillColor(theme.muted)
+      .text(input.branding.orgName, leftX + 10, leftTop, { width: leftW - 10 });
+    leftTop = doc.y + 5;
   }
 
-  const logoBuf = input.branding.logoBuffer ?? (input.branding.logoUrl ? decodeDataUrl(input.branding.logoUrl) : null)
+  const logoBuf =
+    input.branding.logoBuffer ??
+    (input.branding.logoUrl ? decodeDataUrl(input.branding.logoUrl) : null);
   if (logoBuf) {
     try {
-      doc.image(logoBuf, leftX, leftTop, { fit: [LOGO_H * 1.6, LOGO_H] })
-      leftTop += LOGO_H + 6
+      doc.image(logoBuf, leftX, leftTop, { fit: [LOGO_H * 1.6, LOGO_H] });
+      leftTop += LOGO_H + 6;
     } catch {
       // Unsupported/invalid image — skip silently; text brand still renders.
     }
   }
 
-  doc.font(input.design === 'modern' ? theme.font : theme.fontBold).fontSize(input.design === 'modern' ? theme.h1 + 4 : theme.h1).fillColor(theme.text)
-  doc.text(input.title, leftX, leftTop, { width: leftW, lineBreak: true })
-  const titleBottom = doc.y
+  doc
+    .font(input.design === "modern" ? theme.font : theme.fontBold)
+    .fontSize(input.design === "modern" ? theme.h1 + 4 : theme.h1)
+    .fillColor(theme.text);
+  doc.text(input.title, leftX, leftTop, { width: leftW, lineBreak: true });
+  const titleBottom = doc.y;
 
   // Right column: org name (bold), date range, generated — right aligned.
-  doc.font(theme.fontBold).fontSize(theme.body).fillColor(theme.text)
-  doc.text(input.design === 'modern' ? input.dateRangeLabel : input.branding.orgName, rightX, page.contentTop, {
+  doc.font(theme.fontBold).fontSize(theme.body).fillColor(theme.text);
+  doc.text(
+    input.design === "modern" ? input.dateRangeLabel : input.branding.orgName,
+    rightX,
+    page.contentTop,
+    {
+      width: rightW,
+      align: "right",
+      lineBreak: true,
+    },
+  );
+  doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted);
+  if (input.design !== "modern")
+    doc.text(input.dateRangeLabel, rightX, doc.y + 2, { width: rightW, align: "right" });
+  doc.text(formatStamp(input.generatedAt, input.locale), rightX, doc.y + 1, {
     width: rightW,
-    align: 'right',
-    lineBreak: true,
-  })
-  doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted)
-  if (input.design !== 'modern') doc.text(input.dateRangeLabel, rightX, doc.y + 2, { width: rightW, align: 'right' })
-  doc.text(formatStamp(input.generatedAt, input.locale), rightX, doc.y + 1, { width: rightW, align: 'right' })
-  const rightBottom = doc.y
+    align: "right",
+  });
+  const rightBottom = doc.y;
 
-  const headerBottom = Math.max(titleBottom, rightBottom) + s.coverRuleGap
+  const headerBottom = Math.max(titleBottom, rightBottom) + s.coverRuleGap;
   doc
     .moveTo(page.contentLeft, headerBottom)
     .lineTo(page.contentLeft + page.contentWidth, headerBottom)
-    .lineWidth(input.design === 'modern' ? 0.5 : 3)
-    .strokeColor(input.design === 'modern' ? theme.rowBorder : theme.primary)
-    .stroke()
-  return headerBottom + s.coverRuleGap
+    .lineWidth(input.design === "modern" ? 0.5 : 3)
+    .strokeColor(input.design === "modern" ? theme.rowBorder : theme.primary)
+    .stroke();
+  return headerBottom + s.coverRuleGap;
 }
 
 /** Inline color keys wrap within the printable area and retain exact labels. */
-function drawLegend(doc: InstanceType<typeof PDFDocument>, page: ReturnType<typeof resolvePage>, legend: NonNullable<PdfDocumentInput['legend']>, startY: number, theme: PdfTheme): number {
-  let y = startY
-  let x = page.contentLeft
-  let rowHeight = 0
-  if (y + theme.meta * 3 > page.contentBottom) { doc.addPage(); y = page.contentTop }
-  doc.font(theme.fontBold).fontSize(theme.meta).fillColor(theme.muted)
-  doc.text(legend.title, x, y, { width: page.contentWidth })
-  y = doc.y + 5
-  for (const item of legend.items) {
-    doc.font(theme.font).fontSize(theme.meta)
-    const width = Math.min(page.contentWidth, Math.max(56, doc.widthOfString(item.label) + 25))
-    const height = doc.heightOfString(item.label, { width: width - 23 }) + 10
-    if (height > page.contentBottom - page.contentTop) throw new RangeError('A report legend label exceeds the printable page; no label was truncated.')
-    if (x > page.contentLeft && x + width > page.contentLeft + page.contentWidth) { y += rowHeight + 5; x = page.contentLeft; rowHeight = 0 }
-    if (y + height > page.contentBottom) { doc.addPage(); y = page.contentTop; x = page.contentLeft; rowHeight = 0 }
-    const color = pdfColor(item.color, '#f1f5f9')
-    doc.rect(x, y + 5, 7, 7).fill(color)
-    doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted)
-    doc.text(item.label, x + 12, y + 4, { width: width - 16, height: height - 8, ellipsis: false })
-    x += width + 5
-    rowHeight = Math.max(rowHeight, height)
+function drawLegend(
+  doc: InstanceType<typeof PDFDocument>,
+  page: ReturnType<typeof resolvePage>,
+  legend: NonNullable<PdfDocumentInput["legend"]>,
+  startY: number,
+  theme: PdfTheme,
+): number {
+  let y = startY;
+  let x = page.contentLeft;
+  let rowHeight = 0;
+  if (y + theme.meta * 3 > page.contentBottom) {
+    doc.addPage();
+    y = page.contentTop;
   }
-  return y + rowHeight + theme.groupGap
+  doc.font(theme.fontBold).fontSize(theme.meta).fillColor(theme.muted);
+  doc.text(legend.title, x, y, { width: page.contentWidth });
+  y = doc.y + 5;
+  for (const item of legend.items) {
+    doc.font(theme.font).fontSize(theme.meta);
+    const width = Math.min(page.contentWidth, Math.max(56, doc.widthOfString(item.label) + 25));
+    const height = doc.heightOfString(item.label, { width: width - 23 }) + 10;
+    if (height > page.contentBottom - page.contentTop)
+      throw new RangeError(
+        "A report legend label exceeds the printable page; no label was truncated.",
+      );
+    if (x > page.contentLeft && x + width > page.contentLeft + page.contentWidth) {
+      y += rowHeight + 5;
+      x = page.contentLeft;
+      rowHeight = 0;
+    }
+    if (y + height > page.contentBottom) {
+      doc.addPage();
+      y = page.contentTop;
+      x = page.contentLeft;
+      rowHeight = 0;
+    }
+    const color = pdfColor(item.color, "#f1f5f9");
+    doc.rect(x, y + 5, 7, 7).fill(color);
+    doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted);
+    doc.text(item.label, x + 12, y + 4, { width: width - 16, height: height - 8, ellipsis: false });
+    x += width + 5;
+    rowHeight = Math.max(rowHeight, height);
+  }
+  return y + rowHeight + theme.groupGap;
 }
 
 function drawSummary(
@@ -247,62 +290,65 @@ function drawSummary(
   theme: PdfTheme,
   s: typeof STANDARD,
 ): number {
-  if (theme.design === 'modern') {
-    const text = summary.map(item => `${item.label}  ${item.value}`).join('    ·    ')
-    doc.font(theme.font).fontSize(theme.meta)
-    const height = doc.heightOfString(text, { width: page.contentWidth })
-    if (startY + height > page.contentBottom) { doc.addPage(); startY = page.contentTop }
-    doc.fillColor(theme.muted).text(text, page.contentLeft, startY, { width: page.contentWidth })
-    return doc.y + theme.groupGap
+  if (theme.design === "modern") {
+    const text = summary.map((item) => `${item.label}  ${item.value}`).join("    ·    ");
+    doc.font(theme.font).fontSize(theme.meta);
+    const height = doc.heightOfString(text, { width: page.contentWidth });
+    if (startY + height > page.contentBottom) {
+      doc.addPage();
+      startY = page.contentTop;
+    }
+    doc.fillColor(theme.muted).text(text, page.contentLeft, startY, { width: page.contentWidth });
+    return doc.y + theme.groupGap;
   }
-  const n = summary.length
-  const perRow = Math.max(1, Math.min(n, Math.floor(page.contentWidth / SUMMARY_MIN_CARD_W)))
-  const cardW = (page.contentWidth - SUMMARY_GAP * (perRow - 1)) / perRow
-  const padX = 9
-  const padY = 7
-  const accentW = 3
+  const n = summary.length;
+  const perRow = Math.max(1, Math.min(n, Math.floor(page.contentWidth / SUMMARY_MIN_CARD_W)));
+  const cardW = (page.contentWidth - SUMMARY_GAP * (perRow - 1)) / perRow;
+  const padX = 9;
+  const padY = 7;
+  const accentW = 3;
 
-  let y = startY
-  let rowStart = 0
+  let y = startY;
+  let rowStart = 0;
   while (rowStart < n) {
-    const rowItems = summary.slice(rowStart, rowStart + perRow)
-    let cardH = 0
+    const rowItems = summary.slice(rowStart, rowStart + perRow);
+    let cardH = 0;
     for (const item of rowItems) {
-      doc.font(theme.font).fontSize(s.summaryLabel)
-      const lh = doc.heightOfString(item.label, { width: cardW - padX * 2 - accentW })
-      doc.font(theme.fontBold).fontSize(s.summaryValue)
-      const vh = doc.heightOfString(String(item.value), { width: cardW - padX * 2 - accentW })
-      cardH = Math.max(cardH, lh + 2 + vh + padY * 2)
+      doc.font(theme.font).fontSize(s.summaryLabel);
+      const lh = doc.heightOfString(item.label, { width: cardW - padX * 2 - accentW });
+      doc.font(theme.fontBold).fontSize(s.summaryValue);
+      const vh = doc.heightOfString(String(item.value), { width: cardW - padX * 2 - accentW });
+      cardH = Math.max(cardH, lh + 2 + vh + padY * 2);
     }
     if (y + cardH > page.contentBottom) {
-      doc.addPage()
-      y = page.contentTop
+      doc.addPage();
+      y = page.contentTop;
     }
-    let x = page.contentLeft
+    let x = page.contentLeft;
     for (const item of rowItems) {
-      doc.rect(x, y, cardW, cardH).fill('#fafafa')
-      doc.rect(x, y, accentW, cardH).fill(theme.primary)
-      doc.rect(x, y, cardW, cardH).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
-      doc.font(theme.font).fontSize(s.summaryLabel).fillColor(theme.muted)
-      const labelW = cardW - padX * 2 - accentW
+      doc.rect(x, y, cardW, cardH).fill("#fafafa");
+      doc.rect(x, y, accentW, cardH).fill(theme.primary);
+      doc.rect(x, y, cardW, cardH).lineWidth(0.5).strokeColor("#e5e7eb").stroke();
+      doc.font(theme.font).fontSize(s.summaryLabel).fillColor(theme.muted);
+      const labelW = cardW - padX * 2 - accentW;
       // Measure the (possibly wrapped) label so the value never overlaps a
       // multi-line label; cardH above was sized from this same measurement.
-      const labelH = doc.heightOfString(item.label, { width: labelW })
+      const labelH = doc.heightOfString(item.label, { width: labelW });
       doc.text(item.label, x + accentW + padX, y + padY, {
         width: labelW,
         lineBreak: true,
-      })
-      doc.font(theme.fontBold).fontSize(s.summaryValue).fillColor(theme.text)
+      });
+      doc.font(theme.fontBold).fontSize(s.summaryValue).fillColor(theme.text);
       doc.text(String(item.value), x + accentW + padX, y + padY + labelH + 2, {
         width: labelW,
         lineBreak: true,
-      })
-      x += cardW + SUMMARY_GAP
+      });
+      x += cardW + SUMMARY_GAP;
     }
-    y += cardH + SUMMARY_GAP
-    rowStart += perRow
+    y += cardH + SUMMARY_GAP;
+    rowStart += perRow;
   }
-  return y + s.summaryGap - SUMMARY_GAP
+  return y + s.summaryGap - SUMMARY_GAP;
 }
 
 function drawGroup(
@@ -315,33 +361,36 @@ function drawGroup(
 ): number {
   // Keep the title with its header row: if the title + subtitle + header don't
   // fit, push the whole group to a fresh page.
-  doc.font(theme.fontBold).fontSize(theme.table)
-  const headerH = group.columns.length > 0 ? estimateHeaderHeight(doc, group, page, theme) : 0
-  const titleH = theme.h2 + 6
-  const subH = group.subtitle ? theme.subtitle + 4 : 0
+  doc.font(theme.fontBold).fontSize(theme.table);
+  const headerH = group.columns.length > 0 ? estimateHeaderHeight(doc, group, page, theme) : 0;
+  const titleH = theme.h2 + 6;
+  const subH = group.subtitle ? theme.subtitle + 4 : 0;
   if (startY + titleH + subH + headerH > page.contentBottom && startY > page.contentTop) {
-    doc.addPage()
-    startY = page.contentTop
+    doc.addPage();
+    startY = page.contentTop;
   }
 
-  let y = startY
-  doc.font(theme.design === 'modern' ? theme.font : theme.fontBold).fontSize(theme.h2).fillColor(theme.design === 'modern' ? theme.text : theme.primary)
-  doc.text(group.title, page.contentLeft, y, { width: page.contentWidth, lineBreak: true })
-  y = doc.y + 2
+  let y = startY;
+  doc
+    .font(theme.design === "modern" ? theme.font : theme.fontBold)
+    .fontSize(theme.h2)
+    .fillColor(theme.design === "modern" ? theme.text : theme.primary);
+  doc.text(group.title, page.contentLeft, y, { width: page.contentWidth, lineBreak: true });
+  y = doc.y + 2;
   doc
     .moveTo(page.contentLeft, y)
     .lineTo(page.contentLeft + page.contentWidth, y)
-    .lineWidth(theme.design === 'modern' ? 0.4 : 1)
-    .strokeColor(theme.design === 'modern' ? theme.rowBorder : '#d1d5db')
-    .stroke()
-  y += 3
+    .lineWidth(theme.design === "modern" ? 0.4 : 1)
+    .strokeColor(theme.design === "modern" ? theme.rowBorder : "#d1d5db")
+    .stroke();
+  y += 3;
   if (group.subtitle) {
-    doc.font(theme.font).fontSize(theme.subtitle).fillColor(theme.muted)
-    doc.text(group.subtitle, page.contentLeft, y, { width: page.contentWidth })
-    y = doc.y + 2
+    doc.font(theme.font).fontSize(theme.subtitle).fillColor(theme.muted);
+    doc.text(group.subtitle, page.contentLeft, y, { width: page.contentWidth });
+    y = doc.y + 2;
   }
-  y = drawTable(doc, page, group, y, theme)
-  return y + s.groupGap
+  y = drawTable(doc, page, group, y, theme);
+  return y + s.groupGap;
 }
 
 function estimateHeaderHeight(
@@ -352,12 +401,15 @@ function estimateHeaderHeight(
 ): number {
   // Cheap upper bound for the keep-with-next check: a single header line per
   // column at table size + padding.
-  doc.font(theme.fontBold).fontSize(theme.table)
-  let maxLine = 0
+  doc.font(theme.fontBold).fontSize(theme.table);
+  let maxLine = 0;
   for (const c of group.columns) {
-    maxLine = Math.max(maxLine, doc.heightOfString(c, { width: page.contentWidth / group.columns.length }))
+    maxLine = Math.max(
+      maxLine,
+      doc.heightOfString(c, { width: page.contentWidth / group.columns.length }),
+    );
   }
-  return maxLine + theme.cellPadY * 2
+  return maxLine + theme.cellPadY * 2;
 }
 
 function stampFooters(
@@ -365,43 +417,43 @@ function stampFooters(
   page: ReturnType<typeof resolvePage>,
   input: PdfDocumentInput,
 ): void {
-  const range = doc.bufferedPageRange()
-  const total = range.count
-  const footerY = Math.min(page.contentBottom + (page.margin - 10) / 2, page.height - 14)
-  const leftW = Math.floor(page.contentWidth * 0.4)
-  const centerW = Math.floor(page.contentWidth * 0.2)
-  const rightW = page.contentWidth - leftW - centerW
-  const leftText = input.footerLeft ?? `${input.branding.orgName} · ${input.title}`
-  const rightText = input.footerRight ?? formatStamp(input.generatedAt, input.locale)
-  const pageLabel = input.pageLabel ?? ((n: number, of: number) => `Page ${n} of ${of}`)
+  const range = doc.bufferedPageRange();
+  const total = range.count;
+  const footerY = Math.min(page.contentBottom + (page.margin - 10) / 2, page.height - 14);
+  const leftW = Math.floor(page.contentWidth * 0.4);
+  const centerW = Math.floor(page.contentWidth * 0.2);
+  const rightW = page.contentWidth - leftW - centerW;
+  const leftText = input.footerLeft ?? `${input.branding.orgName} · ${input.title}`;
+  const rightText = input.footerRight ?? formatStamp(input.generatedAt, input.locale);
+  const pageLabel = input.pageLabel ?? ((n: number, of: number) => `Page ${n} of ${of}`);
 
   for (let i = range.start; i < range.start + total; i++) {
-    doc.switchToPage(i)
+    doc.switchToPage(i);
     // PDFKit normally treats the bottom margin as a hard text boundary. A
     // footer intentionally lives inside that margin, so temporarily release
     // it or `text()` silently appends a new blank page while stamping.
-    const bottomMargin = doc.page.margins.bottom
-    doc.page.margins.bottom = 0
-    const n = i - range.start + 1
-    doc.font('Helvetica').fontSize(8).fillColor('#6b7280')
+    const bottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    const n = i - range.start + 1;
+    doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
     doc.text(leftText, page.contentLeft, footerY, {
       width: leftW,
-      align: 'left',
+      align: "left",
       lineBreak: false,
       ellipsis: true,
-    })
+    });
     doc.text(pageLabel(n, total), page.contentLeft + leftW, footerY, {
       width: centerW,
-      align: 'center',
+      align: "center",
       lineBreak: false,
-    })
+    });
     doc.text(rightText, page.contentLeft + leftW + centerW, footerY, {
       width: rightW,
-      align: 'right',
+      align: "right",
       lineBreak: false,
       ellipsis: true,
-    })
-    doc.page.margins.bottom = bottomMargin
+    });
+    doc.page.margins.bottom = bottomMargin;
   }
 }
 
@@ -413,10 +465,14 @@ function stampFooters(
  * one it prints ISO.
  */
 export function formatStamp(d: Date, locale?: string): string {
-  const iso = d.toISOString()
-  const civil = iso.endsWith('T00:00:00.000Z')
-  if (!locale) return civil ? iso.slice(0, 10) : iso.slice(0, 19).replace('T', ' ') + ' UTC'
+  const iso = d.toISOString();
+  const civil = iso.endsWith("T00:00:00.000Z");
+  if (!locale) return civil ? iso.slice(0, 10) : iso.slice(0, 19).replace("T", " ") + " UTC";
   return civil
-    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(d)
-    : new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC' }).format(d) + ' UTC'
+    ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(d)
+    : new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "medium",
+        timeZone: "UTC",
+      }).format(d) + " UTC";
 }

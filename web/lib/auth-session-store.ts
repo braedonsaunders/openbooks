@@ -7,11 +7,15 @@ import type { ParsedSessionToken } from "./auth-token-format";
  * Lightweight revocation lookup for the request proxy. The table is global
  * pre-tenant state, so no tenant bypass context is required.
  */
-export async function isSessionRecordActive(token: string, parsed: ParsedSessionToken): Promise<boolean> {
+export async function isSessionRecordActive(
+  token: string,
+  parsed: ParsedSessionToken,
+): Promise<boolean> {
   const hash = createHash("sha256").update(token).digest("hex");
   // bypass: identity-bootstrap — the request proxy checks session revocation before any organization scope exists.
   return withBypassContext(async () => {
-    const result = (await db.execute<{ active: boolean }>(sql`
+    const result = await db.execute<{ active: boolean }>(
+      sql`
       select exists(
         select 1
           from auth_sessions session
@@ -22,7 +26,9 @@ export async function isSessionRecordActive(token: string, parsed: ParsedSession
            and session.revoked_at is null
            and session.expires_at > now()
       ) as active
-    `, "objects"));
+    `,
+      "objects",
+    );
     return result[0]?.active === true;
   });
 }

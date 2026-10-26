@@ -87,8 +87,7 @@ export function assetPlacementMissingFields(input: {
       : (category?.defaultDepreciationMethodId ?? null);
   const lifeMonths =
     policy?.lifeMonths ?? asset.usefulLifeMonths ?? category?.defaultLifeMonths ?? null;
-  const unitsTotal =
-    policy?.unitsTotal != null ? policy.unitsTotal : asset.depreciationUnitsTotal;
+  const unitsTotal = policy?.unitsTotal != null ? policy.unitsTotal : asset.depreciationUnitsTotal;
 
   if (!isPositive(asset.acquisitionCost)) missing.push("acquisition_cost");
   if (!asset.inServiceOn) missing.push("in_service_on");
@@ -122,13 +121,18 @@ export async function assetPlacementShortfall(
   categoryId: string,
   asset: AssetPlacementAsset,
 ): Promise<AssetPlacementField[]> {
-  const categoryRow = (await runner.execute<{
+  const categoryRow = (
+    await runner.execute<{
       default_method: string | null;
       default_depreciation_method_id: string | null;
       default_life_months: number | null;
-    }>(sql`
+    }>(
+      sql`
       select default_method, default_depreciation_method_id, default_life_months
-        from asset_categories where id = ${categoryId} and org_id = ${orgId}`, "objects"))[0];
+        from asset_categories where id = ${categoryId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   const category: AssetPlacementCategory | null = categoryRow
     ? {
         defaultMethod: categoryRow.default_method,
@@ -139,16 +143,21 @@ export async function assetPlacementShortfall(
 
   const bookId = await activePostingPrimaryBookId(orgId, runner);
   const policyRow = bookId
-    ? (await runner.execute<{
+    ? (
+        await runner.execute<{
           method: string | null;
           depreciation_method_id: string | null;
           life_months: number | null;
           units_total: string | null;
-        }>(sql`
+        }>(
+          sql`
           select method, depreciation_method_id, life_months, units_total
             from depreciation_book_policies
            where org_id = ${orgId} and book_id = ${bookId} and category_id = ${categoryId}
-           limit 1`, "objects"))[0]
+           limit 1`,
+          "objects",
+        )
+      )[0]
     : undefined;
   const policy: AssetPlacementPolicy | null = policyRow
     ? {

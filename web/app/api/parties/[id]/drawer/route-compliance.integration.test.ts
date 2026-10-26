@@ -13,10 +13,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __drawerComplianceState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -31,7 +37,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET } = await import("./route.ts");
 
 async function fixture(featureOn: boolean): Promise<{ orgId: string; partyId: string }> {
@@ -40,14 +47,20 @@ async function fixture(featureOn: boolean): Promise<{ orgId: string; partyId: st
   state.orgId = org.orgId;
   state.actorId = actorId;
   const partyId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-    values (${partyId},${org.orgId},'company','Overlay vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${partyId},${org.orgId},'company','Overlay vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
-    values (${org.orgId}, ${partyId}, true, ${actorId}, ${actorId})`));
+    values (${org.orgId}, ${partyId}, true, ${actorId}, ${actorId})`),
+  );
   if (featureOn) {
-    await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-      coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true,"informationReturns":true}'::jsonb) where id=${org.orgId}`));
+    await withBypassContext(() =>
+      db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+      coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true,"informationReturns":true}'::jsonb) where id=${org.orgId}`),
+    );
   }
   return { orgId: org.orgId, partyId };
 }
@@ -89,7 +102,12 @@ test("the overlay drawer payload omits compliance when the feature is off", asyn
   try {
     const res = await get(partyId, "vendor");
     assert.equal(res.status, 200);
-    const body = (await res.json()) as { complianceEnabled: unknown; compliance: unknown; informationReturnsEnabled: unknown; taxIdentity: unknown };
+    const body = (await res.json()) as {
+      complianceEnabled: unknown;
+      compliance: unknown;
+      informationReturnsEnabled: unknown;
+      taxIdentity: unknown;
+    };
     assert.equal(body.complianceEnabled, false);
     assert.equal(body.compliance, null);
     assert.equal(body.informationReturnsEnabled, false);
@@ -106,12 +124,22 @@ test("the overlay drawer's record type follows the party's actual role", async (
     assert.equal(vendor.recordType, "vendor", "a vendor company customizes the vendor form");
 
     const bareId = randomUUID();
-    await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-      values (${bareId},${orgId},'company','Roleless company',null,true,'{}'::jsonb)`));
+    await withBypassContext(() =>
+      db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+      values (${bareId},${orgId},'company','Roleless company',null,true,'{}'::jsonb)`),
+    );
     const res = await get(bareId);
     assert.equal(res.status, 200);
-    const bare = (await res.json()) as { recordType: unknown; forms: unknown; canReadBenefits: unknown };
-    assert.equal(bare.recordType, null, "a company with no role never resolves to the employee form");
+    const bare = (await res.json()) as {
+      recordType: unknown;
+      forms: unknown;
+      canReadBenefits: unknown;
+    };
+    assert.equal(
+      bare.recordType,
+      null,
+      "a company with no role never resolves to the employee form",
+    );
     assert.deepEqual(bare.forms, []);
     assert.equal(bare.canReadBenefits, false);
   } finally {

@@ -1,44 +1,47 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { lockScopeRows, subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
-import { normalizeMoney } from '@openbooks/engine/money/money'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { lockScopeRows, subsidiaryScopeAllows } from "@openbooks/engine/organization/scope";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 
-export type ProjectTimeDimension = 'employee' | 'item' | 'task'
+export type ProjectTimeDimension = "employee" | "item" | "task";
 
 export interface ProjectTimeEntryDetail {
-  id: string
-  workedOn: string
-  workRegion: string | null
-  workSubregion: string | null
-  employeeName: string
-  itemName: string
-  taskName: string
-  timeTypeName: string
-  hours: string
-  billable: boolean
-  cost: string
-  bill: string
-  memo: string | null
-  fieldTicketNumber: string | null
+  id: string;
+  workedOn: string;
+  workRegion: string | null;
+  workSubregion: string | null;
+  employeeName: string;
+  itemName: string;
+  taskName: string;
+  timeTypeName: string;
+  hours: string;
+  billable: boolean;
+  cost: string;
+  bill: string;
+  memo: string | null;
+  fieldTicketNumber: string | null;
 }
 
 export interface ProjectTimeEntryPage {
-  entries: ProjectTimeEntryDetail[]
-  page: number
-  pageSize: number
-  totalPages: number
+  entries: ProjectTimeEntryDetail[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
   totals: {
-    entries: number
-    hours: string
-    cost: string
-    bill: string
-  }
+    entries: number;
+    hours: string;
+    cost: string;
+    bill: string;
+  };
 }
 
 export class ProjectTimeDetailError extends Error {
-  constructor(message: string, readonly status = 404) {
-    super(message)
+  constructor(
+    message: string,
+    readonly status = 404,
+  ) {
+    super(message);
   }
 }
 
@@ -51,29 +54,30 @@ export class ProjectTimeDetailError extends Error {
  * memos are redacted rather than suppressing the financial record itself.
  */
 export async function loadProjectTimeEntryPage(args: {
-  orgId: string
-  projectId: string
+  orgId: string;
+  projectId: string;
   /** Null means unrestricted; a non-null set is the caller's subsidiary scope. */
-  allowedSubsidiaryIds: ReadonlySet<string> | null
-  dimension: ProjectTimeDimension
-  dimensionId: string | null
-  page: number
-  pageSize?: number
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  dimension: ProjectTimeDimension;
+  dimensionId: string | null;
+  page: number;
+  pageSize?: number;
 }): Promise<ProjectTimeEntryPage> {
-  const pageSize = Math.min(Math.max(args.pageSize ?? 100, 1), 200)
-  const page = Number.isSafeInteger(args.page) && args.page > 0 ? args.page : 1
-  const offset = (page - 1) * pageSize
+  const pageSize = Math.min(Math.max(args.pageSize ?? 100, 1), 200);
+  const page = Number.isSafeInteger(args.page) && args.page > 0 ? args.page : 1;
+  const offset = (page - 1) * pageSize;
 
   // Projects lists use a strict subsidiary predicate: restricted callers may
   // only open projects explicitly assigned to one of their allowed entities;
   // an unassigned project is not visible to a restricted caller. Keep this
   // direct-by-id loader on the same boundary so a guessed UUID cannot bypass
   // the list scope and expose approved labor, rates, or private job notes.
-  const subsidiaryFilter = args.allowedSubsidiaryIds === null
-    ? sql``
-    : args.allowedSubsidiaryIds.size > 0
-      ? sql` and subsidiary_id = any(${`{${[...args.allowedSubsidiaryIds].join(',')}}`}::uuid[])`
-      : sql` and false`
+  const subsidiaryFilter =
+    args.allowedSubsidiaryIds === null
+      ? sql``
+      : args.allowedSubsidiaryIds.size > 0
+        ? sql` and subsidiary_id = any(${`{${[...args.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+        : sql` and false`;
   // One transaction for the scope gate and both time reads, locking the
   // project row first (READ COMMITTED, like loadAsset): a concurrent project
   // rehome blocks on the lock instead of authorizing the summary and then
@@ -82,47 +86,64 @@ export async function loadProjectTimeEntryPage(args: {
   // read that meets a concurrent update errors with 40001 instead of
   // waiting.)
   const [summaryResult, entryResult] = await withOrgTransaction(args.orgId, async () => {
-    const project = await db.execute(sql`
+    const project = await db.execute(
+      sql`
       select 1 from projects
        where id = ${args.projectId}
          and org_id = ${args.orgId}
          ${subsidiaryFilter}
          for share
-    `, 'objects')
-    if (!project[0]) throw new ProjectTimeDetailError('Project not found')
+    `,
+      "objects",
+    );
+    if (!project[0]) throw new ProjectTimeDetailError("Project not found");
 
-    const employeeIds = (await db.execute<{ id: string }>(sql`
+    const employeeIds = (
+      await db.execute<{ id: string }>(
+        sql`
       select distinct employee_party_id as id from time_entries
        where org_id = ${args.orgId} and project_id = ${args.projectId}
          and status = 'approved' and employee_party_id is not null
        order by employee_party_id
-    `, 'objects')).map((row) => row.id)
+    `,
+        "objects",
+      )
+    ).map((row) => row.id);
     const employees = await lockScopeRows(
       db,
       args.orgId,
-      employeeIds.map((id) => ({ kind: 'party' as const, id })),
+      employeeIds.map((id) => ({ kind: "party" as const, id })),
       null,
-      'share',
+      "share",
       { orgWideNull: true },
-    )
+    );
     const visibleEmployeeIds = employees
-      .filter((employee) => subsidiaryScopeAllows(
-        args.allowedSubsidiaryIds,
-        employee.subsidiaryId,
-        { orgWideNull: true },
-      ))
-      .map((employee) => employee.id)
-    const employeeScopeFilter = args.allowedSubsidiaryIds === null
-      ? sql``
-      : sql`and (te.employee_party_id is null or te.employee_party_id = any(${`{${visibleEmployeeIds.join(',')}}`}::uuid[]))`
+      .filter((employee) =>
+        subsidiaryScopeAllows(args.allowedSubsidiaryIds, employee.subsidiaryId, {
+          orgWideNull: true,
+        }),
+      )
+      .map((employee) => employee.id);
+    const employeeScopeFilter =
+      args.allowedSubsidiaryIds === null
+        ? sql``
+        : sql`and (te.employee_party_id is null or te.employee_party_id = any(${`{${visibleEmployeeIds.join(",")}}`}::uuid[]))`;
 
-    const dimensionFilter = args.dimension === 'employee'
-      ? (args.dimensionId ? sql`te.employee_party_id = ${args.dimensionId}` : sql`te.employee_party_id is null`)
-      : args.dimension === 'item'
-        ? (args.dimensionId ? sql`te.item_id = ${args.dimensionId}` : sql`te.item_id is null`)
-        : (args.dimensionId ? sql`te.project_task_id = ${args.dimensionId}` : sql`te.project_task_id is null`)
+    const dimensionFilter =
+      args.dimension === "employee"
+        ? args.dimensionId
+          ? sql`te.employee_party_id = ${args.dimensionId}`
+          : sql`te.employee_party_id is null`
+        : args.dimension === "item"
+          ? args.dimensionId
+            ? sql`te.item_id = ${args.dimensionId}`
+            : sql`te.item_id is null`
+          : args.dimensionId
+            ? sql`te.project_task_id = ${args.dimensionId}`
+            : sql`te.project_task_id is null`;
 
-    const summary = await db.execute(sql`
+    const summary = await db.execute(
+      sql`
       select count(*)::int as entries,
              coalesce(sum(te.hours), 0)::text as hours,
              coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0)::text as cost,
@@ -133,8 +154,11 @@ export async function loadProjectTimeEntryPage(args: {
          and te.status = 'approved'
          ${employeeScopeFilter}
          and ${dimensionFilter}
-    `, 'objects')
-    const entries = await db.execute(sql`
+    `,
+      "objects",
+    );
+    const entries = await db.execute(
+      sql`
       select te.id,
              te.worked_on::text as worked_on,
              te.work_region as work_region,
@@ -169,26 +193,28 @@ export async function loadProjectTimeEntryPage(args: {
          and ${dimensionFilter}
        order by te.worked_on desc, te.id
        limit ${pageSize} offset ${offset}
-    `, 'objects')
-    return [summary, entries] as const
-  })
+    `,
+      "objects",
+    );
+    return [summary, entries] as const;
+  });
 
-  const totals = summaryResult[0] ?? {}
-  const totalEntries = Number(totals.entries ?? 0)
+  const totals = summaryResult[0] ?? {};
+  const totalEntries = Number(totals.entries ?? 0);
   return {
     entries: entryResult.map((row) => ({
       id: String(row.id),
       workedOn: String(row.worked_on),
       workRegion: row.work_region == null ? null : String(row.work_region),
       workSubregion: row.work_subregion == null ? null : String(row.work_subregion),
-      employeeName: String(row.employee_name ?? ''),
-      itemName: String(row.item_name ?? ''),
-      taskName: String(row.task_name ?? ''),
-      timeTypeName: String(row.time_type_name ?? ''),
-      hours: String(row.hours ?? '0'),
+      employeeName: String(row.employee_name ?? ""),
+      itemName: String(row.item_name ?? ""),
+      taskName: String(row.task_name ?? ""),
+      timeTypeName: String(row.time_type_name ?? ""),
+      hours: String(row.hours ?? "0"),
       billable: Boolean(row.is_billable),
-      cost: normalizeMoney(String(row.cost ?? '0')),
-      bill: normalizeMoney(String(row.bill ?? '0')),
+      cost: normalizeMoney(String(row.cost ?? "0")),
+      bill: normalizeMoney(String(row.bill ?? "0")),
       memo: row.memo == null ? null : String(row.memo),
       fieldTicketNumber: row.field_ticket_number == null ? null : String(row.field_ticket_number),
     })),
@@ -197,9 +223,9 @@ export async function loadProjectTimeEntryPage(args: {
     totalPages: Math.max(1, Math.ceil(totalEntries / pageSize)),
     totals: {
       entries: totalEntries,
-      hours: String(totals.hours ?? '0'),
-      cost: normalizeMoney(String(totals.cost ?? '0')),
-      bill: normalizeMoney(String(totals.bill ?? '0')),
+      hours: String(totals.hours ?? "0"),
+      cost: normalizeMoney(String(totals.cost ?? "0")),
+      bill: normalizeMoney(String(totals.bill ?? "0")),
     },
-  }
+  };
 }

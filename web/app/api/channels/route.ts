@@ -39,7 +39,12 @@ export const GET = defineRoute({
       businessTimeZone(orgId),
     ]);
     const channels = channelsInScope(gate, channelRows);
-    const ordersToday = await countChannelOrdersForBusinessDay(orgId, today, timeZone, gate.allowedSubsidiaryIds);
+    const ordersToday = await countChannelOrdersForBusinessDay(
+      orgId,
+      today,
+      timeZone,
+      gate.allowedSubsidiaryIds,
+    );
     return NextResponse.json({
       channels: channels.map((channel) => ({
         ...channel,

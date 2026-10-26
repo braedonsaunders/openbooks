@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button, cn } from '@openbooks/ui'
-import { PagedTable } from '../../../../../components/paged-table'
-import { useMoney } from '@/components/money-provider'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button, cn } from "@openbooks/ui";
+import { PagedTable } from "../../../../../components/paged-table";
+import { useMoney } from "@/components/money-provider";
 import {
   abs as absMoney,
   add as addMoney,
@@ -15,24 +15,24 @@ import {
   mul as mulMoney,
   neg as negMoney,
   roundMoney,
-} from '@openbooks/engine/money/money'
+} from "@openbooks/engine/money/money";
 
 export interface DriftRow {
-  id: string
-  name: string
+  id: string;
+  name: string;
   /** Exact live composite at published precision; null while the composite refuses. */
-  live: string | null
+  live: string | null;
   /** Exact published $/hr decimal string (PostgreSQL numeric text) — never a double. */
-  published: string | null
+  published: string | null;
 }
 
 const modeBtn = (active: boolean) =>
   cn(
-    'rounded-md border px-3 py-1.5 text-sm',
+    "rounded-md border px-3 py-1.5 text-sm",
     active
-      ? 'border-teal-600 bg-teal-50 font-medium text-teal-700 dark:border-teal-400 dark:bg-teal-950/50 dark:text-teal-300'
-      : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800',
-  )
+      ? "border-teal-600 bg-teal-50 font-medium text-teal-700 dark:border-teal-400 dark:bg-teal-950/50 dark:text-teal-300"
+      : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800",
+  );
 
 /**
  * Rate lifecycle — who maintains the published overhead card:
@@ -43,33 +43,33 @@ const modeBtn = (active: boolean) =>
  * incumbents make you do by hand — here it's always on screen.
  */
 export function OverheadLifecycle(props: {
-  mode: 'manual' | 'scheduled' | 'live'
-  cadence: 'monthly' | 'quarterly'
-  drift: DriftRow[]
+  mode: "manual" | "scheduled" | "live";
+  cadence: "monthly" | "quarterly";
+  drift: DriftRow[];
 }) {
-  const { money } = useMoney()
-  const t = useTranslations('admin.setup.entities.overhead-model.lifecycle')
-  const tFailure = useTranslations('admin.setup.entities.overhead-model')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState(props.mode)
-  const [cadence, setCadence] = useState(props.cadence)
+  const { money } = useMoney();
+  const t = useTranslations("admin.setup.entities.overhead-model.lifecycle");
+  const tFailure = useTranslations("admin.setup.entities.overhead-model");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState(props.mode);
+  const [cadence, setCadence] = useState(props.cadence);
 
   async function save() {
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch('/api/admin/setup/overhead', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set-lifecycle', mode, cadence }),
-      })
-      if (!res.ok) throw new Error(tFailure('errors.requestFailed'))
-      toast.success(t('saved'))
-      router.refresh()
+      const res = await fetch("/api/admin/setup/overhead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set-lifecycle", mode, cadence }),
+      });
+      if (!res.ok) throw new Error(tFailure("errors.requestFailed"));
+      toast.success(t("saved"));
+      router.refresh();
     } catch {
-      toast.error(tFailure('errors.requestFailed'))
+      toast.error(tFailure("errors.requestFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -78,40 +78,52 @@ export function OverheadLifecycle(props: {
   // decimal string end to end — the percentage is display-only, derived with
   // the shared bigint decimal helpers, never through a double.
   const driftPct = (r: DriftRow): string | null => {
-    if (r.live == null || r.published == null || cmpMoney(r.published, '0') <= 0) return null
-    return mulMoney(divMoney(addMoney(r.live, negMoney(r.published)), r.published), '100')
-  }
+    if (r.live == null || r.published == null || cmpMoney(r.published, "0") <= 0) return null;
+    return mulMoney(divMoney(addMoney(r.live, negMoney(r.published)), r.published), "100");
+  };
 
   // One decimal place for display, exact (halves away from zero).
   const driftDisplay = (pct: string): string => {
-    const rounded = roundMoney(pct, 1)
-    const trimmed = rounded.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-    return `${cmpMoney(pct, '0') > 0 ? '+' : ''}${trimmed}%`
-  }
+    const rounded = roundMoney(pct, 1);
+    const trimmed = rounded.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+    return `${cmpMoney(pct, "0") > 0 ? "+" : ""}${trimmed}%`;
+  };
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("title")}</h3>
+      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("hint")}</p>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div className="flex gap-2">
-          {(['manual', 'scheduled', 'live'] as const).map((m) => (
-            <button key={m} type="button" onClick={() => setMode(m)} className={modeBtn(mode === m)}>
+          {(["manual", "scheduled", "live"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={modeBtn(mode === m)}
+            >
               {t(`modes.${m}`)}
             </button>
           ))}
         </div>
-        {mode === 'scheduled' && (
+        {mode === "scheduled" && (
           <div className="flex gap-2">
-            {(['monthly', 'quarterly'] as const).map((c) => (
-              <button key={c} type="button" onClick={() => setCadence(c)} className={modeBtn(cadence === c)}>
+            {(["monthly", "quarterly"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCadence(c)}
+                className={modeBtn(cadence === c)}
+              >
                 {t(`cadences.${c}`)}
               </button>
             ))}
           </div>
         )}
-        <Button size="sm" onClick={save} disabled={busy}>{t('save')}</Button>
+        <Button size="sm" onClick={save} disabled={busy}>
+          {t("save")}
+        </Button>
       </div>
       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t(`modeHints.${mode}`)}</p>
 
@@ -123,19 +135,40 @@ export function OverheadLifecycle(props: {
             pageSize={10}
             empty={null}
             columns={[
-              { key: 'dept', header: t('department'), cell: (r) => r.name, search: (r) => r.name },
-              { key: 'published', header: t('published'), cell: (r) => <span className="tabular-nums">{r.published != null ? money(r.published) : '—'}</span> },
-              { key: 'live', header: t('live'), cell: (r) => <span className="tabular-nums">{r.live == null ? '—' : money(r.live)}</span> },
+              { key: "dept", header: t("department"), cell: (r) => r.name, search: (r) => r.name },
               {
-                key: 'drift',
-                header: t('drift'),
+                key: "published",
+                header: t("published"),
+                cell: (r) => (
+                  <span className="tabular-nums">
+                    {r.published != null ? money(r.published) : "—"}
+                  </span>
+                ),
+              },
+              {
+                key: "live",
+                header: t("live"),
+                cell: (r) => (
+                  <span className="tabular-nums">{r.live == null ? "—" : money(r.live)}</span>
+                ),
+              },
+              {
+                key: "drift",
+                header: t("drift"),
                 cell: (r) => {
-                  const pct = driftPct(r)
+                  const pct = driftPct(r);
                   return (
-                    <span className={cn('tabular-nums', pct != null && cmpMoney(absMoney(pct), '10') >= 0 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>
-                      {pct != null ? driftDisplay(pct) : '—'}
+                    <span
+                      className={cn(
+                        "tabular-nums",
+                        pct != null && cmpMoney(absMoney(pct), "10") >= 0
+                          ? "font-medium text-amber-600 dark:text-amber-400"
+                          : "text-slate-500 dark:text-slate-400",
+                      )}
+                    >
+                      {pct != null ? driftDisplay(pct) : "—"}
                     </span>
-                  )
+                  );
                 },
               },
             ]}
@@ -143,5 +176,5 @@ export function OverheadLifecycle(props: {
         </div>
       )}
     </section>
-  )
+  );
 }

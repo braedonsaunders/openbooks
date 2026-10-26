@@ -172,7 +172,8 @@ interface Distribution {
   unallocated: Rational;
 }
 
-const sharesOf = (shareClass: WaterfallClass): bigint => shareClass.holdings.reduce((sum, holding) => sum + holding.shares, 0n);
+const sharesOf = (shareClass: WaterfallClass): bigint =>
+  shareClass.holdings.reduce((sum, holding) => sum + holding.shares, 0n);
 
 /** A holding's preference price per share before the multiple: its own, else the class's original issue price. */
 function holdingPrice(shareClass: WaterfallClass, holding: WaterfallHolding): Rational | null {
@@ -195,24 +196,45 @@ function preferenceOf(shareClass: WaterfallClass): Rational {
 }
 
 function capOf(shareClass: WaterfallClass): Rational | null {
-  if (shareClass.participation !== "capped" || !shareClass.participationCapMultiple || !shareClass.originalIssuePrice) return null;
+  if (
+    shareClass.participation !== "capped" ||
+    !shareClass.participationCapMultiple ||
+    !shareClass.originalIssuePrice
+  )
+    return null;
   return multiplyRational(classBasis(shareClass), shareClass.participationCapMultiple);
 }
 
-const asConverted = (shareClass: WaterfallClass): Rational => multiplyRational(rational(sharesOf(shareClass)), shareClass.conversionRatio);
+const asConverted = (shareClass: WaterfallClass): Rational =>
+  multiplyRational(rational(sharesOf(shareClass)), shareClass.conversionRatio);
 
 /**
  * Common-equivalent shares each converting SAFE takes. Null when the
  * converting post-money claims leave no meaningful capitalization.
  */
-function safeConversionShares(input: WaterfallInput, converting: ReadonlySet<string>): Map<string, Rational> | null {
-  const safes = input.convertibles.filter((convertible) => convertible.kind === "safe" && convertible.cap && converting.has(convertible.securityId));
+function safeConversionShares(
+  input: WaterfallInput,
+  converting: ReadonlySet<string>,
+): Map<string, Rational> | null {
+  const safes = input.convertibles.filter(
+    (convertible) =>
+      convertible.kind === "safe" && convertible.cap && converting.has(convertible.securityId),
+  );
   const out = new Map<string, Rational>();
   if (safes.length === 0) return out;
-  const ratioByClass = new Map(input.classes.map((shareClass) => [shareClass.shareClassId, shareClass.conversionRatio]));
+  const ratioByClass = new Map(
+    input.classes.map((shareClass) => [shareClass.shareClassId, shareClass.conversionRatio]),
+  );
   const base = addRational(
     sumRational(input.classes.map(asConverted)),
-    sumRational(input.awards.map((award) => multiplyRational(rational(award.shares), ratioByClass.get(award.shareClassId) ?? rational(1n)))),
+    sumRational(
+      input.awards.map((award) =>
+        multiplyRational(
+          rational(award.shares),
+          ratioByClass.get(award.shareClassId) ?? rational(1n),
+        ),
+      ),
+    ),
   );
   if (base.numerator <= 0n) return null;
   let fixed = ZERO;
@@ -222,38 +244,75 @@ function safeConversionShares(input: WaterfallInput, converting: ReadonlySet<str
     else fixed = addRational(fixed, multiplyRational(safe.amount, divideRational(base, safe.cap!)));
   }
   if (compareRational(claim, MAX_CONVERTING_CLAIM) >= 0) return null;
-  const capitalization = divideRational(addRational(base, fixed), subtractRational(rational(1n), claim));
+  const capitalization = divideRational(
+    addRational(base, fixed),
+    subtractRational(rational(1n), claim),
+  );
   for (const safe of safes) {
-    out.set(safe.securityId, safe.postMoney
-      ? multiplyRational(divideRational(safe.amount, safe.cap!), capitalization)
-      : multiplyRational(safe.amount, divideRational(base, safe.cap!)));
+    out.set(
+      safe.securityId,
+      safe.postMoney
+        ? multiplyRational(divideRational(safe.amount, safe.cap!), capitalization)
+        : multiplyRational(safe.amount, divideRational(base, safe.cap!)),
+    );
   }
   return out;
 }
 
 /** Pay equal-ranking claims from what is available, pro rata when short. */
-function payTier(claims: readonly { id: string; amount: Rational }[], available: Rational, into: Map<string, Rational>): Rational {
+function payTier(
+  claims: readonly { id: string; amount: Rational }[],
+  available: Rational,
+  into: Map<string, Rational>,
+): Rational {
   const want = sumRational(claims.map((claim) => claim.amount));
   if (want.numerator === 0n) return available;
   const pay = minRational(available, want);
-  for (const claim of claims) into.set(claim.id, addRational(into.get(claim.id) ?? ZERO, multiplyRational(claim.amount, divideRational(pay, want))));
+  for (const claim of claims)
+    into.set(
+      claim.id,
+      addRational(
+        into.get(claim.id) ?? ZERO,
+        multiplyRational(claim.amount, divideRational(pay, want)),
+      ),
+    );
   return subtractRational(available, pay);
 }
 
-function distribute(input: WaterfallInput, afterNotes: Rational, converting: ReadonlySet<string>, notesPaid: ReadonlyMap<string, Rational>): Distribution | null {
+function distribute(
+  input: WaterfallInput,
+  afterNotes: Rational,
+  converting: ReadonlySet<string>,
+  notesPaid: ReadonlyMap<string, Rational>,
+): Distribution | null {
   const classPreference = new Map<string, Rational>();
   const classParticipation = new Map<string, Rational>();
   const convertiblePaid = new Map(notesPaid);
   const safeShares = safeConversionShares(input, converting);
   if (!safeShares) return null;
   let available = afterNotes;
-  const keeping = input.classes.filter((shareClass) => shareClass.kind === "preferred" && !converting.has(shareClass.shareClassId) && preferenceOf(shareClass).numerator > 0n);
-  const tiers = [...new Set(keeping.map((shareClass) => shareClass.seniority))].sort((a, b) => b - a);
-  const safes = input.convertibles.filter((convertible) => convertible.kind === "safe" && !safeShares.has(convertible.securityId));
+  const keeping = input.classes.filter(
+    (shareClass) =>
+      shareClass.kind === "preferred" &&
+      !converting.has(shareClass.shareClassId) &&
+      preferenceOf(shareClass).numerator > 0n,
+  );
+  const tiers = [...new Set(keeping.map((shareClass) => shareClass.seniority))].sort(
+    (a, b) => b - a,
+  );
+  const safes = input.convertibles.filter(
+    (convertible) => convertible.kind === "safe" && !safeShares.has(convertible.securityId),
+  );
   const juniorTier = tiers.length > 0 ? tiers[tiers.length - 1] : null;
   for (const tier of tiers) {
-    const claims = keeping.filter((shareClass) => shareClass.seniority === tier).map((shareClass) => ({ id: `class:${shareClass.shareClassId}`, amount: preferenceOf(shareClass) }));
-    if (tier === juniorTier) claims.push(...safes.map((safe) => ({ id: `safe:${safe.securityId}`, amount: safe.amount })));
+    const claims = keeping
+      .filter((shareClass) => shareClass.seniority === tier)
+      .map((shareClass) => ({
+        id: `class:${shareClass.shareClassId}`,
+        amount: preferenceOf(shareClass),
+      }));
+    if (tier === juniorTier)
+      claims.push(...safes.map((safe) => ({ id: `safe:${safe.securityId}`, amount: safe.amount })));
     const paid = new Map<string, Rational>();
     available = payTier(claims, available, paid);
     for (const [id, amount] of paid) {
@@ -263,14 +322,25 @@ function distribute(input: WaterfallInput, afterNotes: Rational, converting: Rea
   }
   if (juniorTier === null && safes.length > 0) {
     const paid = new Map<string, Rational>();
-    available = payTier(safes.map((safe) => ({ id: safe.securityId, amount: safe.amount })), available, paid);
+    available = payTier(
+      safes.map((safe) => ({ id: safe.securityId, amount: safe.amount })),
+      available,
+      paid,
+    );
     for (const [id, amount] of paid) convertiblePaid.set(id, amount);
   }
   // Residual participants: common, converted preferred, and participating preferred as converted.
-  const participants = input.classes.filter((shareClass) =>
-    shareClass.kind === "common" || converting.has(shareClass.shareClassId) || shareClass.participation !== "none");
-  const ratioByClass = new Map(input.classes.map((shareClass) => [shareClass.shareClassId, shareClass.conversionRatio]));
-  const awardUnits = (award: WaterfallAward): Rational => multiplyRational(rational(award.shares), ratioByClass.get(award.shareClassId) ?? rational(1n));
+  const participants = input.classes.filter(
+    (shareClass) =>
+      shareClass.kind === "common" ||
+      converting.has(shareClass.shareClassId) ||
+      shareClass.participation !== "none",
+  );
+  const ratioByClass = new Map(
+    input.classes.map((shareClass) => [shareClass.shareClassId, shareClass.conversionRatio]),
+  );
+  const awardUnits = (award: WaterfallAward): Rational =>
+    multiplyRational(rational(award.shares), ratioByClass.get(award.shareClassId) ?? rational(1n));
   const capped = new Map<string, Rational>();
   let price = ZERO;
   let inMoney: WaterfallAward[] = [];
@@ -283,13 +353,24 @@ function distribute(input: WaterfallInput, afterNotes: Rational, converting: Rea
       );
       const count = addRational(
         addRational(
-          sumRational(participants.filter((shareClass) => !capped.has(shareClass.shareClassId)).map(asConverted)),
+          sumRational(
+            participants
+              .filter((shareClass) => !capped.has(shareClass.shareClassId))
+              .map(asConverted),
+          ),
           sumRational(inMoney.map(awardUnits)),
         ),
         sumRational([...safeShares.values()]),
       );
-      price = count.numerator > 0n && compareRational(pot, ZERO) > 0 ? divideRational(pot, count) : ZERO;
-      const next = inMoney.filter((award) => compareRational(multiplyRational(price, ratioByClass.get(award.shareClassId) ?? rational(1n)), award.strike) > 0);
+      price =
+        count.numerator > 0n && compareRational(pot, ZERO) > 0 ? divideRational(pot, count) : ZERO;
+      const next = inMoney.filter(
+        (award) =>
+          compareRational(
+            multiplyRational(price, ratioByClass.get(award.shareClassId) ?? rational(1n)),
+            award.strike,
+          ) > 0,
+      );
       if (next.length === inMoney.length) break;
       inMoney = next;
     }
@@ -309,30 +390,48 @@ function distribute(input: WaterfallInput, afterNotes: Rational, converting: Rea
     if (!grew) break;
   }
   for (const shareClass of participants) {
-    classParticipation.set(shareClass.shareClassId, capped.get(shareClass.shareClassId) ?? multiplyRational(price, asConverted(shareClass)));
+    classParticipation.set(
+      shareClass.shareClassId,
+      capped.get(shareClass.shareClassId) ?? multiplyRational(price, asConverted(shareClass)),
+    );
   }
   const awardGross = new Map<string, Rational>();
-  for (const award of inMoney) awardGross.set(award.securityId, multiplyRational(price, awardUnits(award)));
-  for (const [securityId, shares] of safeShares) convertiblePaid.set(securityId, multiplyRational(price, shares));
-  const strikes = sumRational(inMoney.map((award) => multiplyRational(rational(award.shares), award.strike)));
+  for (const award of inMoney)
+    awardGross.set(award.securityId, multiplyRational(price, awardUnits(award)));
+  for (const [securityId, shares] of safeShares)
+    convertiblePaid.set(securityId, multiplyRational(price, shares));
+  const strikes = sumRational(
+    inMoney.map((award) => multiplyRational(rational(award.shares), award.strike)),
+  );
   const distributed = addRational(
-    addRational(sumRational([...classParticipation.values()]), sumRational([...awardGross.values()])),
+    addRational(
+      sumRational([...classParticipation.values()]),
+      sumRational([...awardGross.values()]),
+    ),
     sumRational([...safeShares.keys()].map((securityId) => convertiblePaid.get(securityId)!)),
   );
   const unallocated = subtractRational(addRational(available, strikes), distributed);
   return {
-    classPreference, classParticipation, awardGross, convertiblePaid, safeShares, price,
+    classPreference,
+    classParticipation,
+    awardGross,
+    convertiblePaid,
+    safeShares,
+    price,
     unallocated: compareRational(unallocated, ZERO) > 0 ? unallocated : ZERO,
   };
 }
 
 function classTotal(distribution: Distribution, shareClassId: string): Rational {
-  return addRational(distribution.classPreference.get(shareClassId) ?? ZERO, distribution.classParticipation.get(shareClassId) ?? ZERO);
+  return addRational(
+    distribution.classPreference.get(shareClassId) ?? ZERO,
+    distribution.classParticipation.get(shareClassId) ?? ZERO,
+  );
 }
 
 /** What a preferred class or a SAFE takes in a distribution. */
 function electorTotal(distribution: Distribution, id: string, safe: boolean): Rational {
-  return safe ? distribution.convertiblePaid.get(id) ?? ZERO : classTotal(distribution, id);
+  return safe ? (distribution.convertiblePaid.get(id) ?? ZERO) : classTotal(distribution, id);
 }
 
 /** Largest-remainder rounding of exact amounts to a quantum, preserving their exact total. */
@@ -341,7 +440,8 @@ function roundToTotal(amounts: readonly Rational[], quantum: Rational): bigint[]
   const units = amounts.map((amount) => divideRational(amount, quantum));
   const floors = units.map((unit) => unit.numerator / unit.denominator);
   const target = divideRational(total, quantum);
-  let remaining = target.numerator / target.denominator - floors.reduce((sum, value) => sum + value, 0n);
+  let remaining =
+    target.numerator / target.denominator - floors.reduce((sum, value) => sum + value, 0n);
   const order = units
     .map((unit, index) => ({ index, remainder: subtractRational(unit, rational(floors[index]!)) }))
     .sort((a, b) => compareRational(b.remainder, a.remainder) || a.index - b.index);
@@ -359,15 +459,25 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
   if (compareRational(input.exitValue, ZERO) < 0) {
     throw equityError("exitValueNegative", {}, { field: "exitValue" });
   }
-  if (!Number.isInteger(input.minorUnitScale) || input.minorUnitScale < 0 || input.minorUnitScale > 4) {
+  if (
+    !Number.isInteger(input.minorUnitScale) ||
+    input.minorUnitScale < 0 ||
+    input.minorUnitScale > 4
+  ) {
     throw equityError("currencyPrecisionUnsupported");
   }
   const notesPaid = new Map<string, Rational>();
   const notes = input.convertibles.filter((convertible) => convertible.kind === "note");
-  const afterNotes = payTier(notes.map((note) => ({ id: note.securityId, amount: note.amount })), input.exitValue, notesPaid);
+  const afterNotes = payTier(
+    notes.map((note) => ({ id: note.securityId, amount: note.amount })),
+    input.exitValue,
+    notesPaid,
+  );
   const candidates: { id: string; safe: boolean }[] = [
     ...input.classes
-      .filter((shareClass) => shareClass.kind === "preferred" && shareClass.participation !== "full")
+      .filter(
+        (shareClass) => shareClass.kind === "preferred" && shareClass.participation !== "full",
+      )
       .sort((a, b) => a.seniority - b.seniority || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
       .map((shareClass) => ({ id: shareClass.shareClassId, safe: false })),
     ...input.convertibles
@@ -385,7 +495,12 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
       else toggled.add(candidate.id);
       const alternative = distribute(input, afterNotes, toggled, notesPaid);
       if (!alternative) continue;
-      if (compareRational(electorTotal(alternative, candidate.id, candidate.safe), electorTotal(distribution, candidate.id, candidate.safe)) > 0) {
+      if (
+        compareRational(
+          electorTotal(alternative, candidate.id, candidate.safe),
+          electorTotal(distribution, candidate.id, candidate.safe),
+        ) > 0
+      ) {
         converting = toggled;
         distribution = alternative;
         changed = true;
@@ -407,7 +522,8 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
     if (toggled.has(candidate.id)) toggled.delete(candidate.id);
     else toggled.add(candidate.id);
     const alternative = distribute(input, afterNotes, toggled, notesPaid);
-    if (alternative) alternatives.set(candidate.id, electorTotal(alternative, candidate.id, candidate.safe));
+    if (alternative)
+      alternatives.set(candidate.id, electorTotal(alternative, candidate.id, candidate.safe));
   }
   // Exact lines: holdings by class, awards net of exercise price, convertibles, unallocated.
   const lines: { payout: WaterfallPayout | null; exact: Rational }[] = [];
@@ -418,22 +534,58 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
     const shares = sharesOf(shareClass);
     const basis = classBasis(shareClass);
     for (const holding of shareClass.holdings) {
-      const fromPreference = basis.numerator > 0n ? multiplyRational(preference, divideRational(holdingBasis(shareClass, holding), basis)) : ZERO;
-      const fromParticipation = shares > 0n ? multiplyRational(participation, rational(holding.shares, shares)) : ZERO;
-      lines.push({ payout: { securityId: holding.securityId, holderPartyId: holding.holderPartyId, kind: "share", shareClassId: shareClass.shareClassId, amount: "" }, exact: addRational(fromPreference, fromParticipation) });
+      const fromPreference =
+        basis.numerator > 0n
+          ? multiplyRational(preference, divideRational(holdingBasis(shareClass, holding), basis))
+          : ZERO;
+      const fromParticipation =
+        shares > 0n ? multiplyRational(participation, rational(holding.shares, shares)) : ZERO;
+      lines.push({
+        payout: {
+          securityId: holding.securityId,
+          holderPartyId: holding.holderPartyId,
+          kind: "share",
+          shareClassId: shareClass.shareClassId,
+          amount: "",
+        },
+        exact: addRational(fromPreference, fromParticipation),
+      });
     }
   }
   for (const award of input.awards) {
     const gross = distribution.awardGross.get(award.securityId);
-    const exact = gross ? subtractRational(gross, multiplyRational(rational(award.shares), award.strike)) : ZERO;
-    lines.push({ payout: { securityId: award.securityId, holderPartyId: award.holderPartyId, kind: "award", shareClassId: award.shareClassId, amount: "" }, exact });
+    const exact = gross
+      ? subtractRational(gross, multiplyRational(rational(award.shares), award.strike))
+      : ZERO;
+    lines.push({
+      payout: {
+        securityId: award.securityId,
+        holderPartyId: award.holderPartyId,
+        kind: "award",
+        shareClassId: award.shareClassId,
+        amount: "",
+      },
+      exact,
+    });
   }
   for (const convertible of input.convertibles) {
-    lines.push({ payout: { securityId: convertible.securityId, holderPartyId: convertible.holderPartyId, kind: convertible.kind, shareClassId: null, amount: "" }, exact: distribution.convertiblePaid.get(convertible.securityId) ?? ZERO });
+    lines.push({
+      payout: {
+        securityId: convertible.securityId,
+        holderPartyId: convertible.holderPartyId,
+        kind: convertible.kind,
+        shareClassId: null,
+        amount: "",
+      },
+      exact: distribution.convertiblePaid.get(convertible.securityId) ?? ZERO,
+    });
   }
   lines.push({ payout: null, exact: distribution.unallocated });
   const quantum = rational(1n, 10n ** BigInt(input.minorUnitScale));
-  const rounded = roundToTotal(lines.map((line) => line.exact), quantum);
+  const rounded = roundToTotal(
+    lines.map((line) => line.exact),
+    quantum,
+  );
   const toMoney = (units: bigint): string => {
     const ledger = units * 10n ** BigInt(4 - input.minorUnitScale);
     const negative = ledger < 0n;
@@ -452,10 +604,19 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
       return;
     }
     payouts.push({ ...line.payout, amount: toMoney(units) });
-    securityUnits.set(line.payout.securityId, (securityUnits.get(line.payout.securityId) ?? 0n) + units);
-    holderTotals.set(line.payout.holderPartyId, (holderTotals.get(line.payout.holderPartyId) ?? 0n) + units);
+    securityUnits.set(
+      line.payout.securityId,
+      (securityUnits.get(line.payout.securityId) ?? 0n) + units,
+    );
+    holderTotals.set(
+      line.payout.holderPartyId,
+      (holderTotals.get(line.payout.holderPartyId) ?? 0n) + units,
+    );
     if (line.payout.kind === "share" && line.payout.shareClassId) {
-      classTotals.set(line.payout.shareClassId, (classTotals.get(line.payout.shareClassId) ?? 0n) + units);
+      classTotals.set(
+        line.payout.shareClassId,
+        (classTotals.get(line.payout.shareClassId) ?? 0n) + units,
+      );
     }
   });
   const exitUnits = quantize(input.exitValue, input.minorUnitScale, "half_up");
@@ -471,13 +632,34 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
       seniority: shareClass.seniority,
       participationMode: shareClass.participation,
       converted: converting.has(shareClass.shareClassId),
-      preference: toMoney(quantize(distribution.classPreference.get(shareClass.shareClassId) ?? ZERO, input.minorUnitScale, "half_up")),
-      participation: toMoney(quantize(distribution.classParticipation.get(shareClass.shareClassId) ?? ZERO, input.minorUnitScale, "half_up")),
+      preference: toMoney(
+        quantize(
+          distribution.classPreference.get(shareClass.shareClassId) ?? ZERO,
+          input.minorUnitScale,
+          "half_up",
+        ),
+      ),
+      participation: toMoney(
+        quantize(
+          distribution.classParticipation.get(shareClass.shareClassId) ?? ZERO,
+          input.minorUnitScale,
+          "half_up",
+        ),
+      ),
       total: toMoney(units),
-      perShare: shares > 0n ? formatPrice(divideRational(classTotal(distribution, shareClass.shareClassId), rational(shares))) : "0.0000000000",
-      preferenceEntitlement: toMoney(quantize(preferenceOf(shareClass), input.minorUnitScale, "half_up")),
+      perShare:
+        shares > 0n
+          ? formatPrice(
+              divideRational(classTotal(distribution, shareClass.shareClassId), rational(shares)),
+            )
+          : "0.0000000000",
+      preferenceEntitlement: toMoney(
+        quantize(preferenceOf(shareClass), input.minorUnitScale, "half_up"),
+      ),
       participationCap: cap ? toMoney(quantize(cap, input.minorUnitScale, "half_up")) : null,
-      alternativeTotal: alternative ? toMoney(quantize(alternative, input.minorUnitScale, "half_up")) : null,
+      alternativeTotal: alternative
+        ? toMoney(quantize(alternative, input.minorUnitScale, "half_up"))
+        : null,
     };
   });
   return {
@@ -487,18 +669,29 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
     payouts,
     holders: [...holderTotals.entries()]
       .sort(([aId, a], [bId, b]) => (a === b ? (aId < bId ? -1 : 1) : a > b ? -1 : 1))
-      .map(([holderPartyId, units]) => ({ holderPartyId, amount: toMoney(units), percent: exitUnits > 0n ? formatPercent(rational(units, exitUnits)) : "0.0000" })),
-    safes: input.convertibles.filter((convertible) => convertible.kind === "safe").map((convertible) => {
-      const shares = distribution.safeShares.get(convertible.securityId);
-      const units = securityUnits.get(convertible.securityId) ?? 0n;
-      const alternative = alternatives.get(convertible.securityId);
-      return {
-        securityId: convertible.securityId, holderPartyId: convertible.holderPartyId, converted: Boolean(shares),
-        shares: shares ? formatPrice(shares) : "0.0000000000", amount: toMoney(units),
-        cashOutAmount: toMoney(quantize(convertible.amount, input.minorUnitScale, "half_up")),
-        alternativeAmount: alternative ? toMoney(quantize(alternative, input.minorUnitScale, "half_up")) : null,
-      };
-    }),
+      .map(([holderPartyId, units]) => ({
+        holderPartyId,
+        amount: toMoney(units),
+        percent: exitUnits > 0n ? formatPercent(rational(units, exitUnits)) : "0.0000",
+      })),
+    safes: input.convertibles
+      .filter((convertible) => convertible.kind === "safe")
+      .map((convertible) => {
+        const shares = distribution.safeShares.get(convertible.securityId);
+        const units = securityUnits.get(convertible.securityId) ?? 0n;
+        const alternative = alternatives.get(convertible.securityId);
+        return {
+          securityId: convertible.securityId,
+          holderPartyId: convertible.holderPartyId,
+          converted: Boolean(shares),
+          shares: shares ? formatPrice(shares) : "0.0000000000",
+          amount: toMoney(units),
+          cashOutAmount: toMoney(quantize(convertible.amount, input.minorUnitScale, "half_up")),
+          alternativeAmount: alternative
+            ? toMoney(quantize(alternative, input.minorUnitScale, "half_up"))
+            : null,
+        };
+      }),
     unallocated: toMoney(unallocatedUnits),
   };
 }

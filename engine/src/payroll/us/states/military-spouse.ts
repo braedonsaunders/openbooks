@@ -28,8 +28,8 @@ export function requireMilitarySpouseEligibility(
   const unmet = facts.filter((fact) => !certificateFlag(certificate, fact.key));
   if (unmet.length > 0) {
     throw new PayrollError(
-      `${jurisdiction} military-spouse withholding exemption requires proof that `
-      + unmet.map((fact) => fact.description).join("; "),
+      `${jurisdiction} military-spouse withholding exemption requires proof that ` +
+        unmet.map((fact) => fact.description).join("; "),
     );
   }
 }

@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -15,8 +15,8 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { loadSurveysHome, surveysAuthz } from '../../../../lib/hrm/surveys-home'
+} from "@braedonsaunders/appkit-viewspec";
+import { loadSurveysHome, surveysAuthz } from "../../../../lib/hrm/surveys-home";
 
 /**
  * Surveys tab: the register with participation % as a shared `table`
@@ -29,85 +29,81 @@ import { loadSurveysHome, surveysAuthz } from '../../../../lib/hrm/surveys-home'
  * otherwise.
  */
 
-const f = field
-const item = field
+const f = field;
+const item = field;
 
-export type SurveysPageData = NonNullable<Awaited<ReturnType<typeof loadSurveysHome>>>
+export type SurveysPageData = NonNullable<Awaited<ReturnType<typeof loadSurveysHome>>>;
 
 export function surveysSpec(data: SurveysPageData): PageSpec {
   return page({
-    route: '/hrm/surveys',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/hrm/surveys",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           widget(
-            'link-button',
-            { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
-            f('canManage'),
+            "link-button",
+            { href: f("addHref"), label: f("addLabel"), iconKey: "plus" },
+            f("canManage"),
           ),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
-      grid('flex h-full min-h-0 flex-col gap-4', [
-        widgetBlock('filter-chips', {
-          basePath: '/hrm/surveys',
+      grid("flex h-full min-h-0 flex-col gap-4", [
+        widgetBlock("filter-chips", {
+          basePath: "/hrm/surveys",
           currentParams: data.currentParams,
-          paramKey: 'status',
+          paramKey: "status",
           label: data.segmentsLabel,
           allLabel: data.allLabel,
           options: data.segmentOptions,
         }),
-        registeredListTable('hrm_surveys', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          empty: { title: f('empty') },
+        registeredListTable("hrm_surveys", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          empty: { title: f("empty") },
           columns: [
-            column(data.columns.name, link(item('name'), item('href'))),
-            column(data.columns.kind, text(item('kindLabel'))),
-            column(data.columns.anonymity, text(item('anonymityLabel'))),
-            column(
-              data.columns.participation,
-              text(item('participation'), { fallback: '—' }),
-              { align: 'right', className: 'tabular-nums' },
-            ),
-            column(
-              data.columns.closes,
-              text(item('closes'), { fallback: '—' }),
-            ),
+            column(data.columns.name, link(item("name"), item("href"))),
+            column(data.columns.kind, text(item("kindLabel"))),
+            column(data.columns.anonymity, text(item("anonymityLabel"))),
+            column(data.columns.participation, text(item("participation"), { fallback: "—" }), {
+              align: "right",
+              className: "tabular-nums",
+            }),
+            column(data.columns.closes, text(item("closes"), { fallback: "—" })),
             column(
               data.columns.status,
-              badge(item('statusLabel'), { variant: item('statusVariant') }),
+              badge(item("statusLabel"), { variant: item("statusVariant") }),
             ),
           ],
         }),
       ]),
       {
-        ...widgetBlock('hrm-surveys-drawer', { drawer: data.drawer }),
-        when: f('drawerOpen'),
+        ...widgetBlock("hrm-surveys-drawer", { drawer: data.drawer }),
+        when: f("drawerOpen"),
       },
       {
-        ...widgetBlock('hrm-surveys-author-dialog', { author: data.author }),
-        when: f('authorOpen'),
+        ...widgetBlock("hrm-surveys-author-dialog", { author: data.author }),
+        when: f("authorOpen"),
       },
     ],
-  })
+  });
 }
 
 export async function surveysTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('surveys.title')
+  const t = await getTranslations("hrm");
+  return t("surveys.title");
 }
 
 export async function loadSurveysPage(sp: Record<string, string | undefined>) {
-  const authz = await surveysAuthz()
-  if (!authz) notFound()
-  return loadSurveysHome(authz, sp)
+  const authz = await surveysAuthz();
+  if (!authz) notFound();
+  return loadSurveysHome(authz, sp);
 }

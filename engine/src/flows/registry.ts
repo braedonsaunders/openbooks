@@ -1,7 +1,4 @@
-import {
-  nativeCommandSubjects,
-  nativeCommandSubjectProfiles,
-} from "./native-command-subjects.ts";
+import { nativeCommandSubjects, nativeCommandSubjectProfiles } from "./native-command-subjects.ts";
 import {
   RECRUITING_OFFER_SUBJECT_KIND,
   recruitingOfferSubjectProfile,
@@ -62,10 +59,7 @@ import {
   benefitEnrollmentSubjectProfile,
 } from "./benefit-enrollments-adapter.ts";
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
-import {
-  benefitAwardsFlowAdapter,
-  benefitAwardSubjectProfile,
-} from "./benefit-awards-adapter.ts";
+import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import {
   FINANCIAL_CHANGE_SUBJECT_KIND,
   financialChangeSubjectProfile,
@@ -89,10 +83,7 @@ import {
   compensationAssignmentSubjectProfile,
 } from "./compensation-packages-adapter.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
-import {
-  DOCUMENT_FLOW_KINDS,
-  documentSubjectProfile,
-} from "./subject-profiles.ts";
+import { DOCUMENT_FLOW_KINDS, documentSubjectProfile } from "./subject-profiles.ts";
 import {
   BANK_ACCOUNT_SUBJECT_KIND,
   bankAccountSubjectProfile,
@@ -168,10 +159,7 @@ import {
   resourcingRequestSubjectProfile,
 } from "./resourcing-requests-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
-import {
-  hrmCompCycleFlowAdapter,
-  hrmCompCycleSubjectProfile,
-} from "./comp-cycles-adapter.ts";
+import { hrmCompCycleFlowAdapter, hrmCompCycleSubjectProfile } from "./comp-cycles-adapter.ts";
 // HR-20 begin: crew time batches approve through Flows.
 import {
   CREW_TIME_BATCH_SUBJECT_KIND,
@@ -207,70 +195,48 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
     (adapter) => adapter.subjectKind === subjectKind,
   );
   if (commandSubject) return commandSubject;
-  if (subjectKind === RECRUITING_OFFER_SUBJECT_KIND)
-    return recruitingOffersFlowAdapter;
-  if (subjectKind === METRICS_NORMALIZATION_SUBJECT_KIND)
-    return metricsNormalizationFlowAdapter;
+  if (subjectKind === RECRUITING_OFFER_SUBJECT_KIND) return recruitingOffersFlowAdapter;
+  if (subjectKind === METRICS_NORMALIZATION_SUBJECT_KIND) return metricsNormalizationFlowAdapter;
   if (subjectKind === SALES_QUOTA_SUBJECT_KIND) return salesQuotasFlowAdapter;
   if (subjectKind === STOCK_COUNT_SUBJECT_KIND) return stockCountsFlowAdapter;
-  if (subjectKind === CLOSE_REOPEN_SUBJECT_KIND)
-    return closeReopenRequestsFlowAdapter;
+  if (subjectKind === CLOSE_REOPEN_SUBJECT_KIND) return closeReopenRequestsFlowAdapter;
   if (subjectKind === "schedule_board") return scheduleBoardsFlowAdapter;
-  if (subjectKind === COMPENSATION_VERSION_SUBJECT_KIND)
-    return compensationVersionsFlowAdapter;
+  if (subjectKind === COMPENSATION_VERSION_SUBJECT_KIND) return compensationVersionsFlowAdapter;
   if (subjectKind === COMPENSATION_ASSIGNMENT_SUBJECT_KIND)
     return compensationAssignmentsFlowAdapter;
-  if (subjectKind === SCHEDULE_DISTRIBUTION_SUBJECT_KIND)
-    return scheduleDistributionsFlowAdapter;
-  if (subjectKind === SCHEDULE_REQUEST_SUBJECT_KIND)
-    return scheduleRequestsFlowAdapter;
-  if (subjectKind === SCHEDULE_PUBLICATION_SUBJECT_KIND)
-    return schedulePublicationsFlowAdapter;
+  if (subjectKind === SCHEDULE_DISTRIBUTION_SUBJECT_KIND) return scheduleDistributionsFlowAdapter;
+  if (subjectKind === SCHEDULE_REQUEST_SUBJECT_KIND) return scheduleRequestsFlowAdapter;
+  if (subjectKind === SCHEDULE_PUBLICATION_SUBJECT_KIND) return schedulePublicationsFlowAdapter;
   if (subjectKind === SERVICE_VISIT_COMPLETION_SUBJECT_KIND)
     return serviceVisitCompletionsFlowAdapter;
-  if (subjectKind === CHECKLIST_STEP_SUBJECT_KIND)
-    return checklistStepsFlowAdapter;
-  if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND)
-    return benefitEnrollmentsFlowAdapter;
-  if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND)
-    return benefitAwardsFlowAdapter;
-  if (subjectKind === FINANCIAL_CHANGE_SUBJECT_KIND)
-    return financialChangesFlowAdapter;
-  if (subjectKind === EQUITY_ACTION_SUBJECT_KIND)
-    return equityActionsFlowAdapter;
+  if (subjectKind === CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
+  if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND) return benefitEnrollmentsFlowAdapter;
+  if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
+  if (subjectKind === FINANCIAL_CHANGE_SUBJECT_KIND) return financialChangesFlowAdapter;
+  if (subjectKind === EQUITY_ACTION_SUBJECT_KIND) return equityActionsFlowAdapter;
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
-  if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND)
-    return budgetScenariosFlowAdapter;
+  if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
   if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
-  if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND)
-    return allocationRunsFlowAdapter;
+  if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND) return allocationRunsFlowAdapter;
   if (subjectKind === FUND_RELEASE_SUBJECT_KIND) return fundReleasesFlowAdapter;
   if (subjectKind === INTERCOMPANY_NETTING_RUN_SUBJECT_KIND)
     return intercompanyNettingRunsFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
   if (subjectKind === PREBILL_SUBJECT_KIND) return prebillsFlowAdapter;
-  if (subjectKind === OUTBOUND_PAYMENT_RUN_SUBJECT_KIND)
-    return outboundPaymentRunsFlowAdapter;
-  if (subjectKind === INBOUND_PAYMENT_RUN_SUBJECT_KIND)
-    return inboundPaymentRunsFlowAdapter;
-  if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND)
-    return timesheetWeeksFlowAdapter;
-  if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND)
-    return hrmChangeRequestFlowAdapter;
-  if (subjectKind === HRM_LEAVE_REQUEST_SUBJECT_KIND)
-    return hrmLeaveRequestFlowAdapter;
-  if (subjectKind === RESOURCING_REQUEST_SUBJECT_KIND)
-    return resourcingRequestFlowAdapter;
+  if (subjectKind === OUTBOUND_PAYMENT_RUN_SUBJECT_KIND) return outboundPaymentRunsFlowAdapter;
+  if (subjectKind === INBOUND_PAYMENT_RUN_SUBJECT_KIND) return inboundPaymentRunsFlowAdapter;
+  if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
+  if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND) return hrmChangeRequestFlowAdapter;
+  if (subjectKind === HRM_LEAVE_REQUEST_SUBJECT_KIND) return hrmLeaveRequestFlowAdapter;
+  if (subjectKind === RESOURCING_REQUEST_SUBJECT_KIND) return resourcingRequestFlowAdapter;
   // HR-12 begin: compensation cycles approve through Flows.
-  if (subjectKind === HRM_COMP_CYCLE_SUBJECT_KIND)
-    return hrmCompCycleFlowAdapter;
+  if (subjectKind === HRM_COMP_CYCLE_SUBJECT_KIND) return hrmCompCycleFlowAdapter;
   // HR-12 end
   // HR-20 begin: crew time batches approve through Flows.
   if (subjectKind === CREW_TIME_BATCH_SUBJECT_KIND) return crewBatchFlowAdapter;
   // HR-20 end
   if (subjectKind === WORK_ORDER_SUBJECT_KIND) return manufacturingFlowAdapter;
-  if (subjectKind === HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND)
-    return employmentMigrationFlowAdapter;
+  if (subjectKind === HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND) return employmentMigrationFlowAdapter;
   // A pay run is a document, but with payroll's own authoring vocabulary; the
   // adapter is the documents adapter with those fields layered on.
   if (subjectKind === PAY_RUN_SUBJECT_KIND) return payRunsFlowAdapter;
@@ -303,11 +269,7 @@ export function handlerReleasedSubjectKinds(): string[] {
  * across every registered subject kind's declared scope (see
  * subjectSubsidiarySql). Null where no entity is provable.
  */
-export function flowSubjectSubsidiarySql(ref: {
-  kind: SQL;
-  id: SQL;
-  org: SQL;
-}): SQL {
+export function flowSubjectSubsidiarySql(ref: { kind: SQL; id: SQL; org: SQL }): SQL {
   const kinds = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
     const scope = getFlowAdapter(subjectKind)?.scope;
     return scope ? [{ subjectKind, scope }] : [];
@@ -340,9 +302,9 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     serviceVisitCompletionSubjectProfile,
     scheduleBoardSubjectProfile,
     checklistStepSubjectProfile,
-    ...DOCUMENT_FLOW_KINDS.filter(
-      (kind) => !DEDICATED_PROFILE_KINDS.has(kind),
-    ).map((kind) => documentSubjectProfile(kind)),
+    ...DOCUMENT_FLOW_KINDS.filter((kind) => !DEDICATED_PROFILE_KINDS.has(kind)).map((kind) =>
+      documentSubjectProfile(kind),
+    ),
     compensationVersionSubjectProfile,
     compensationAssignmentSubjectProfile,
     benefitAwardSubjectProfile,
@@ -394,31 +356,34 @@ export async function flowSubjectProfileForOrg(
   orgId: string,
   subjectKind: string,
 ): Promise<FlowSubjectProfile | null> {
-  const base = listFlowSubjectProfiles().find(
-    (profile) => profile.subjectKind === subjectKind,
-  );
+  const base = listFlowSubjectProfiles().find((profile) => profile.subjectKind === subjectKind);
   if (!base) return null;
 
-  const roleResult = await db.execute<{ key: string }>(sql`
+  const roleResult = await db.execute<{ key: string }>(
+    sql`
     select key from app_roles where org_id = ${orgId} order by name
-  `, "objects");
+  `,
+    "objects",
+  );
 
   // Pay runs live in the documents table, so their custom header fields come
   // from the same catalog as every other document kind.
   const isDocumentKind =
-    DOCUMENT_FLOW_KINDS.includes(subjectKind) ||
-    subjectKind === PAY_RUN_SUBJECT_KIND;
+    DOCUMENT_FLOW_KINDS.includes(subjectKind) || subjectKind === PAY_RUN_SUBJECT_KIND;
   if (!isDocumentKind) {
     return { ...base, roles: roleResult.map((role) => role.key) };
   }
 
-  const fieldResult = await db.execute<CustomFlowFieldRow>(sql`
+  const fieldResult = await db.execute<CustomFlowFieldRow>(
+    sql`
     select key, label, field_type, config
       from custom_field_defs
      where org_id = ${orgId} and target_table = 'documents'
        and (target_kind is null or target_kind = ${subjectKind}) and is_active
      order by sort_order, label
-  `, "objects");
+  `,
+    "objects",
+  );
   const existing = new Set(base.fields.map((field) => field.key));
   const customFields = fieldResult
     .filter((field) => !existing.has(field.key))
@@ -432,8 +397,7 @@ export async function flowSubjectProfileForOrg(
             ? ("bool" as const)
             : field.field_type === "date"
               ? ("date" as const)
-              : field.field_type === "select" ||
-                  field.field_type === "multi_select"
+              : field.field_type === "select" || field.field_type === "multi_select"
                 ? ("enum" as const)
                 : ("text" as const),
       writable: true,

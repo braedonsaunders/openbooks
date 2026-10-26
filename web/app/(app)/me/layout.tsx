@@ -1,11 +1,11 @@
-import type { Metadata } from 'next'
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  manifest: '/employee-app/manifest.webmanifest',
-  appleWebApp: { capable: true, title: 'OpenBooks', statusBarStyle: 'default' },
-  icons: { apple: '/employee-app/apple-touch-icon.png' },
-}
+  manifest: "/employee-app/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "OpenBooks", statusBarStyle: "default" },
+  icons: { apple: "/employee-app/apple-touch-icon.png" },
+};
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
-  return children
+  return children;
 }

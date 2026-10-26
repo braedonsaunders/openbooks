@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import '../dashboard/_dashboard-render-harness'
+import assert from "node:assert/strict";
+import test from "node:test";
+import "../dashboard/_dashboard-render-harness";
 import {
   buttonsContaining,
   buttonsNamed,
@@ -8,52 +8,52 @@ import {
   mountDashboard,
   scriptFetch,
   tick,
-} from '../dashboard/_dashboard-render-harness'
-import type { OrderPayload } from './OrderDrawer'
+} from "../dashboard/_dashboard-render-harness";
+import type { OrderPayload } from "./OrderDrawer";
 
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see
 // the jsdom shims.
-const { OrderDrawer } = await import('./OrderDrawer')
-const messages = (await import('../../../messages/en')).default as Record<string, unknown>
-const { act } = await import('react')
+const { OrderDrawer } = await import("./OrderDrawer");
+const messages = (await import("../../../messages/en")).default as Record<string, unknown>;
+const { act } = await import("react");
 
-const PO_ID = '33333333-3333-4333-8333-333333333333'
-const LINE_ID = '88888888-8888-4888-8888-888888888888'
-const WH_ID = '77777777-7777-4777-8777-777777777777'
+const PO_ID = "33333333-3333-4333-8333-333333333333";
+const LINE_ID = "88888888-8888-4888-8888-888888888888";
+const WH_ID = "77777777-7777-4777-8777-777777777777";
 
 function approvedStockPo(): OrderPayload {
   return {
     doc: {
       id: PO_ID,
-      status: 'approved',
-      currency: 'USD',
+      status: "approved",
+      currency: "USD",
       subsidiary_id: null,
       project_id: null,
       department_id: null,
       memo: null,
       due_date: null,
-      document_date: '2026-08-01',
-      updated_at: '2026-08-01T12:00:00.123456Z',
-      subtotal: '20.00',
-      tax_total: '0',
-      total: '20.00',
-      party_id: 'vendor-1',
-      party_name: 'Acme Supplies',
-      document_number: 'PO-1001',
+      document_date: "2026-08-01",
+      updated_at: "2026-08-01T12:00:00.123456Z",
+      subtotal: "20.00",
+      tax_total: "0",
+      total: "20.00",
+      party_id: "vendor-1",
+      party_name: "Acme Supplies",
+      document_number: "PO-1001",
       extra_dims: {},
     },
     lines: [
       {
         id: LINE_ID,
-        item_id: 'item-widget',
-        account_id: 'acct-1200',
-        description: 'Widget',
-        quantity: '10',
-        quantity_fulfilled: '0',
-        quantity_cancelled: '0',
-        unit: 'ea',
-        unit_price: '2.00',
+        item_id: "item-widget",
+        account_id: "acct-1200",
+        description: "Widget",
+        quantity: "10",
+        quantity_fulfilled: "0",
+        quantity_cancelled: "0",
+        unit: "ea",
+        unit_price: "2.00",
         tax_code_id: null,
         tax_group_id: null,
         department_id: null,
@@ -63,22 +63,24 @@ function approvedStockPo(): OrderPayload {
       },
     ],
     links: [],
-  } as unknown as OrderPayload
+  } as unknown as OrderPayload;
 }
 
 function prefillOk(stockLocationId: string | null = WH_ID) {
   return Response.json({
-    receiptDate: '2026-08-01',
-    lines: [{
-      sourceLineId: LINE_ID,
-      lineNumber: 1,
-      description: 'Widget',
-      unit: 'ea',
-      unitPrice: '2.00',
-      remaining: '10',
-      stockLocationId,
-    }],
-  })
+    receiptDate: "2026-08-01",
+    lines: [
+      {
+        sourceLineId: LINE_ID,
+        lineNumber: 1,
+        description: "Widget",
+        unit: "ea",
+        unitPrice: "2.00",
+        remaining: "10",
+        stockLocationId,
+      },
+    ],
+  });
 }
 
 async function mountPo() {
@@ -86,10 +88,10 @@ async function mountPo() {
     <OrderDrawer
       order={approvedStockPo()}
       kind="purchase_order"
-      parties={[{ id: 'vendor-1', display_name: 'Acme Supplies' }]}
+      parties={[{ id: "vendor-1", display_name: "Acme Supplies" }]}
       accounts={[]}
-      items={[{ id: 'item-widget', display_name: 'Widget', has_inventory_profile: true }]}
-      stockLocations={[{ id: WH_ID, code: 'TACOMA-WH', subsidiaryId: null }]}
+      items={[{ id: "item-widget", display_name: "Widget", has_inventory_profile: true }]}
+      stockLocations={[{ id: WH_ID, code: "TACOMA-WH", subsidiaryId: null }]}
       taxCodes={[]}
       taxGroups={[]}
       departments={[]}
@@ -100,347 +102,438 @@ async function mountPo() {
       closeHref="/purchasing"
     />,
     messages,
-  )
+  );
 }
 
 function dialog(): HTMLElement | null {
   // The drawer itself is a dialog: scope to the receipt form's labelled shell.
-  return document.querySelector('[aria-label="Receive goods"]')
+  return document.querySelector('[aria-label="Receive goods"]');
 }
 
 async function openReceiptForm() {
-  const menu = buttonsNamed('Actions')[0]
-  assert.ok(menu, 'record actions must live behind the Actions menu')
-  await click(menu)
-  const convert = buttonsContaining('Convert to')[0]
-  assert.ok(convert, 'an approved PO must offer its convert targets')
-  await click(convert)
-  await tick()
-  await tick()
-  assert.ok(dialog(), 'Convert to Goods receipt opens the receipt form, not a blind receive')
+  const menu = buttonsNamed("Actions")[0];
+  assert.ok(menu, "record actions must live behind the Actions menu");
+  await click(menu);
+  const convert = buttonsContaining("Convert to")[0];
+  assert.ok(convert, "an approved PO must offer its convert targets");
+  await click(convert);
+  await tick();
+  await tick();
+  assert.ok(dialog(), "Convert to Goods receipt opens the receipt form, not a blind receive");
 }
 
 async function setQty(value: string) {
-  const input = dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null
-  assert.ok(input, 'the form offers a quantity per line')
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  const input = dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null;
+  assert.ok(input, "the form offers a quantity per line");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
-    setter.call(input, value)
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-  })
-  await tick()
+    setter.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
+  await tick();
 }
 
 async function clickFormSave() {
-  const save = [...(dialog()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.trim() === 'Save')
-  assert.ok(save, 'the form saves explicitly')
-  await click(save as HTMLButtonElement)
-  await tick()
-  await tick()
+  const save = [...(dialog()?.querySelectorAll("button") ?? [])].find(
+    (b) => b.textContent?.trim() === "Save",
+  );
+  assert.ok(save, "the form saves explicitly");
+  await click(save as HTMLButtonElement);
+  await tick();
+  await tick();
 }
 
-test('the receipt form opens prefilled from the order', async (t) => {
+test("the receipt form opens prefilled from the order", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk()
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  const date = dialog()?.querySelector('#receipt-date') as HTMLInputElement | null
-  assert.ok(date, 'the receipt date is editable')
-  assert.equal(date.value, '08/01/2026', 'the date defaults to today in the business calendar')
-  const qty = dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null
-  assert.equal(qty?.value, '10', 'each line prefills its remaining quantity')
-  assert.match(dialog()?.textContent ?? '', /10 ea remaining/, 'the form shows what is left to receive')
-  assert.match(dialog()?.textContent ?? '', /TACOMA-WH/, 'the line warehouse defaults per the entity default')
-})
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillOk();
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  const date = dialog()?.querySelector("#receipt-date") as HTMLInputElement | null;
+  assert.ok(date, "the receipt date is editable");
+  assert.equal(date.value, "08/01/2026", "the date defaults to today in the business calendar");
+  const qty = dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null;
+  assert.equal(qty?.value, "10", "each line prefills its remaining quantity");
+  assert.match(
+    dialog()?.textContent ?? "",
+    /10 ea remaining/,
+    "the form shows what is left to receive",
+  );
+  assert.match(
+    dialog()?.textContent ?? "",
+    /TACOMA-WH/,
+    "the line warehouse defaults per the entity default",
+  );
+});
 
-test('a partial receipt posts only the entered quantity with one idempotency key', async (t) => {
-  const posts: { key: string | null; body: Record<string, unknown> }[] = []
+test("a partial receipt posts only the entered quantity with one idempotency key", async (t) => {
+  const posts: { key: string | null; body: Record<string, unknown> }[] = [];
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk()
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillOk();
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
       posts.push({
-        key: (init.headers as Record<string, string>)?.['Idempotency-Key'] ?? new Headers(init.headers).get('Idempotency-Key'),
+        key:
+          (init.headers as Record<string, string>)?.["Idempotency-Key"] ??
+          new Headers(init.headers).get("Idempotency-Key"),
         body: JSON.parse(init.body as string) as Record<string, unknown>,
-      })
-      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
-    }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQty('4')
-  await clickFormSave()
-  assert.equal(posts.length, 1, 'one explicit save posts once')
-  assert.deepEqual(posts[0]!.body, {
-    receiptDate: '2026-08-01',
-    lines: [{ sourceLineId: LINE_ID, quantity: '4' }],
-  })
-  assert.ok(posts[0]!.key, 'the save carries an idempotency key so a retry never double-receives')
-  assert.deepEqual(globalThis.__dashRouter.pushes, ['/inventory'])
-})
-
-test('over-receiving is refused in the form without posting', async (t) => {
-  let posted = 0
-  const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk()
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
-      posted += 1
-      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
-    }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQty('99')
-  await clickFormSave()
-  assert.equal(posted, 0, 'an over-receipt never posts')
-  assert.match(dialog()?.textContent ?? '', /exceeds the 10 remaining/, 'the form names the ceiling')
-  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
-})
-
-test('a tolerated over-receipt posts while past-tolerance refuses naming the ceiling', async (t) => {
-  const posts: unknown[] = []
-  const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') {
+      });
       return Response.json({
-        receiptDate: '2026-08-01',
-        lines: [{
-          sourceLineId: LINE_ID,
-          lineNumber: 1,
-          description: 'Widget',
-          unit: 'ea',
-          unitPrice: '2.00',
-          remaining: '10',
-          maxReceivable: '11',
-          stockLocationId: WH_ID,
-        }],
-      })
+        kind: "purchase_receipt",
+        id: "rcpt-1",
+        documentNumber: "RCPT-00001",
+      });
     }
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
-      posts.push(JSON.parse(init.body as string))
-      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
-    }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQty('12')
-  await clickFormSave()
-  assert.equal(posts.length, 0, 'past the tolerated ceiling nothing posts')
-  assert.match(dialog()?.textContent ?? '', /tolerated maximum of 11/, 'the form names the tolerated ceiling')
-  await setQty('11')
-  await clickFormSave()
-  assert.equal(posts.length, 1, 'an over-receipt within tolerance posts')
-})
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQty("4");
+  await clickFormSave();
+  assert.equal(posts.length, 1, "one explicit save posts once");
+  assert.deepEqual(posts[0]!.body, {
+    receiptDate: "2026-08-01",
+    lines: [{ sourceLineId: LINE_ID, quantity: "4" }],
+  });
+  assert.ok(posts[0]!.key, "the save carries an idempotency key so a retry never double-receives");
+  assert.deepEqual(globalThis.__dashRouter.pushes, ["/inventory"]);
+});
 
-test('a failed save keeps the form state and retries with the same key', async (t) => {
-  const keys: (string | null)[] = []
-  let attempts = 0
+test("over-receiving is refused in the form without posting", async (t) => {
+  let posted = 0;
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk(null)
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
-      attempts += 1
-      keys.push(new Headers(init.headers).get('Idempotency-Key'))
-      if (attempts === 1) {
-        return Response.json({ error: 'line 1 is not stock and is billed on a two-way match, not received' }, { status: 422 })
-      }
-      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillOk();
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
+      posted += 1;
+      return Response.json({
+        kind: "purchase_receipt",
+        id: "rcpt-1",
+        documentNumber: "RCPT-00001",
+      });
     }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQty('4')
-  await clickFormSave()
-  assert.match(dialog()?.textContent ?? '', /line 1 is not stock/, 'the refusal shows in the form')
-  const qty = dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null
-  assert.equal(qty?.value, '4', 'the failed save keeps the entered quantities')
-  await clickFormSave()
-  assert.equal(keys.length, 2, 'retry posts again')
-  assert.equal(keys[0], keys[1], 'the retry reuses the key, so a committed first save replays instead of doubling')
-  assert.ok(keys[0], 'the key is always present')
-  assert.deepEqual(globalThis.__dashRouter.pushes, ['/inventory'])
-})
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQty("99");
+  await clickFormSave();
+  assert.equal(posted, 0, "an over-receipt never posts");
+  assert.match(
+    dialog()?.textContent ?? "",
+    /exceeds the 10 remaining/,
+    "the form names the ceiling",
+  );
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], "a refused save never navigates");
+});
 
-const LINE2_ID = '99999999-9999-4999-8999-999999999999'
+test("a tolerated over-receipt posts while past-tolerance refuses naming the ceiling", async (t) => {
+  const posts: unknown[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET") {
+      return Response.json({
+        receiptDate: "2026-08-01",
+        lines: [
+          {
+            sourceLineId: LINE_ID,
+            lineNumber: 1,
+            description: "Widget",
+            unit: "ea",
+            unitPrice: "2.00",
+            remaining: "10",
+            maxReceivable: "11",
+            stockLocationId: WH_ID,
+          },
+        ],
+      });
+    }
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
+      posts.push(JSON.parse(init.body as string));
+      return Response.json({
+        kind: "purchase_receipt",
+        id: "rcpt-1",
+        documentNumber: "RCPT-00001",
+      });
+    }
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQty("12");
+  await clickFormSave();
+  assert.equal(posts.length, 0, "past the tolerated ceiling nothing posts");
+  assert.match(
+    dialog()?.textContent ?? "",
+    /tolerated maximum of 11/,
+    "the form names the tolerated ceiling",
+  );
+  await setQty("11");
+  await clickFormSave();
+  assert.equal(posts.length, 1, "an over-receipt within tolerance posts");
+});
+
+test("a failed save keeps the form state and retries with the same key", async (t) => {
+  const keys: (string | null)[] = [];
+  let attempts = 0;
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillOk(null);
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
+      attempts += 1;
+      keys.push(new Headers(init.headers).get("Idempotency-Key"));
+      if (attempts === 1) {
+        return Response.json(
+          { error: "line 1 is not stock and is billed on a two-way match, not received" },
+          { status: 422 },
+        );
+      }
+      return Response.json({
+        kind: "purchase_receipt",
+        id: "rcpt-1",
+        documentNumber: "RCPT-00001",
+      });
+    }
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQty("4");
+  await clickFormSave();
+  assert.match(dialog()?.textContent ?? "", /line 1 is not stock/, "the refusal shows in the form");
+  const qty = dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null;
+  assert.equal(qty?.value, "4", "the failed save keeps the entered quantities");
+  await clickFormSave();
+  assert.equal(keys.length, 2, "retry posts again");
+  assert.equal(
+    keys[0],
+    keys[1],
+    "the retry reuses the key, so a committed first save replays instead of doubling",
+  );
+  assert.ok(keys[0], "the key is always present");
+  assert.deepEqual(globalThis.__dashRouter.pushes, ["/inventory"]);
+});
+
+const LINE2_ID = "99999999-9999-4999-8999-999999999999";
 
 function prefillTwoLines() {
   return Response.json({
-    receiptDate: '2026-08-01',
+    receiptDate: "2026-08-01",
     lines: [
       {
         sourceLineId: LINE_ID,
         lineNumber: 1,
-        description: 'Widget',
-        unit: 'ea',
-        unitPrice: '2.00',
-        remaining: '10',
+        description: "Widget",
+        unit: "ea",
+        unitPrice: "2.00",
+        remaining: "10",
         stockLocationId: WH_ID,
       },
       {
         sourceLineId: LINE2_ID,
         lineNumber: 2,
-        description: 'Gadget',
-        unit: 'box',
-        unitPrice: '24.00',
-        remaining: '2',
+        description: "Gadget",
+        unit: "box",
+        unitPrice: "24.00",
+        remaining: "2",
         stockLocationId: WH_ID,
       },
     ],
-  })
+  });
 }
 
 async function setQtyN(n: number, value: string) {
-  const input = dialog()?.querySelector(`[aria-label="Receive qty ${n}"]`) as HTMLInputElement | null
-  assert.ok(input, `the form offers a quantity for line ${n}`)
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  const input = dialog()?.querySelector(
+    `[aria-label="Receive qty ${n}"]`,
+  ) as HTMLInputElement | null;
+  assert.ok(input, `the form offers a quantity for line ${n}`);
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
-    setter.call(input, value)
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-  })
-  await tick()
+    setter.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
+  await tick();
 }
 
 function formAlert(): HTMLElement | null {
-  return dialog()?.querySelector<HTMLElement>('[role="alert"]') ?? null
+  return dialog()?.querySelector<HTMLElement>('[role="alert"]') ?? null;
 }
 
-test('a zero line is left out so a partial receipt posts the other line', async (t) => {
-  const posts: Record<string, unknown>[] = []
+test("a zero line is left out so a partial receipt posts the other line", async (t) => {
+  const posts: Record<string, unknown>[] = [];
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillTwoLines()
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
-      posts.push(JSON.parse(init.body as string) as Record<string, unknown>)
-      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillTwoLines();
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
+      posts.push(JSON.parse(init.body as string) as Record<string, unknown>);
+      return Response.json({
+        kind: "purchase_receipt",
+        id: "rcpt-1",
+        documentNumber: "RCPT-00001",
+      });
     }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQtyN(1, '0')
-  await clickFormSave()
-  assert.equal(posts.length, 1, 'one explicit save posts once')
-  assert.deepEqual(posts[0], {
-    receiptDate: '2026-08-01',
-    lines: [{ sourceLineId: LINE2_ID, quantity: '2' }],
-  }, 'the zero line is omitted: zero means not received now')
-  assert.deepEqual(globalThis.__dashRouter.pushes, ['/inventory'])
-})
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQtyN(1, "0");
+  await clickFormSave();
+  assert.equal(posts.length, 1, "one explicit save posts once");
+  assert.deepEqual(
+    posts[0],
+    {
+      receiptDate: "2026-08-01",
+      lines: [{ sourceLineId: LINE2_ID, quantity: "2" }],
+    },
+    "the zero line is omitted: zero means not received now",
+  );
+  assert.deepEqual(globalThis.__dashRouter.pushes, ["/inventory"]);
+});
 
-test('zero on every line refuses without posting', async (t) => {
-  let posted = 0
+test("zero on every line refuses without posting", async (t) => {
+  let posted = 0;
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillTwoLines()
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
-      posted += 1
-      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillTwoLines();
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
+      posted += 1;
+      return Response.json({
+        kind: "purchase_receipt",
+        id: "rcpt-1",
+        documentNumber: "RCPT-00001",
+      });
     }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQtyN(1, '0')
-  await setQtyN(2, '0.00')
-  await clickFormSave()
-  assert.equal(posted, 0, 'an all-zero receipt never posts')
-  assert.match(formAlert()?.textContent ?? '', /at least one line/, 'the refusal says what to enter')
-  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
-})
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQtyN(1, "0");
+  await setQtyN(2, "0.00");
+  await clickFormSave();
+  assert.equal(posted, 0, "an all-zero receipt never posts");
+  assert.match(
+    formAlert()?.textContent ?? "",
+    /at least one line/,
+    "the refusal says what to enter",
+  );
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], "a refused save never navigates");
+});
 
-test('a server refusal with a nested remedy pins message and remedy beside the form', async (t) => {
+test("a server refusal with a nested remedy pins message and remedy beside the form", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk()
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillOk();
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
       return Response.json(
         {
-          error: 'This purchase order is routed for direct vendor shipment and cannot be received into stock',
-          code: 'drop_ship_confirmation_required',
-          details: { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+          error:
+            "This purchase order is routed for direct vendor shipment and cannot be received into stock",
+          code: "drop_ship_confirmation_required",
+          details: { remedy: "Confirm the vendor shipment from the drop-ship purchase order" },
         },
         { status: 409 },
-      )
+      );
     }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQty('4')
-  await clickFormSave()
-  const text = formAlert()?.textContent ?? ''
-  assert.match(text, /direct vendor shipment/, 'the server message renders')
-  assert.match(text, /Confirm the vendor shipment/, 'the nested remedy renders beside it')
-  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
-})
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQty("4");
+  await clickFormSave();
+  const text = formAlert()?.textContent ?? "";
+  assert.match(text, /direct vendor shipment/, "the server message renders");
+  assert.match(text, /Confirm the vendor shipment/, "the nested remedy renders beside it");
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], "a refused save never navigates");
+});
 
-test('an unreadable server refusal pins the fallback, never an empty alert', async (t) => {
+test("an unreadable server refusal pins the fallback, never an empty alert", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk()
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
-      return new Response(null, { status: 500 })
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET")
+      return prefillOk();
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === "POST") {
+      return new Response(null, { status: 500 });
     }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  await setQty('4')
-  await clickFormSave()
-  const alert = formAlert()
-  assert.ok(alert, 'the refusal pins beside the form')
-  assert.match(alert?.textContent ?? '', /could not be recorded/, 'an empty body falls back to the translated copy')
-  assert.ok((alert?.textContent ?? '').trim() !== '', 'the alert is never empty')
-  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
-})
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  await setQty("4");
+  await clickFormSave();
+  const alert = formAlert();
+  assert.ok(alert, "the refusal pins beside the form");
+  assert.match(
+    alert?.textContent ?? "",
+    /could not be recorded/,
+    "an empty body falls back to the translated copy",
+  );
+  assert.ok((alert?.textContent ?? "").trim() !== "", "the alert is never empty");
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], "a refused save never navigates");
+});
 
-test('a failed prefill offers retry instead of a dead form', async (t) => {
-  let loads = 0
+test("a failed prefill offers retry instead of a dead form", async (t) => {
+  let loads = 0;
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') {
-      loads += 1
-      return loads === 1 ? Response.json({ error: 'stalled' }, { status: 500 }) : prefillOk()
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? "GET") === "GET") {
+      loads += 1;
+      return loads === 1 ? Response.json({ error: "stalled" }, { status: 500 }) : prefillOk();
     }
-    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
-    return null
-  })
-  t.after(restoreFetch)
-  const { unmount } = await mountPo()
-  t.after(unmount)
-  await openReceiptForm()
-  assert.match(dialog()?.textContent ?? '', /stalled/, 'the native prefill refusal stays visible')
-  const retry = [...(dialog()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.includes('retry'))
-  assert.ok(retry, 'the failed prefill offers retry')
-  await click(retry as HTMLButtonElement)
-  await tick()
-  await tick()
-  assert.equal((dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null)?.value, '10')
-})
+    if (url.startsWith("/api/flows/"))
+      return Response.json({ error: "no flow state" }, { status: 404 });
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPo();
+  t.after(unmount);
+  await openReceiptForm();
+  assert.match(dialog()?.textContent ?? "", /stalled/, "the native prefill refusal stays visible");
+  const retry = [...(dialog()?.querySelectorAll("button") ?? [])].find((b) =>
+    b.textContent?.includes("retry"),
+  );
+  assert.ok(retry, "the failed prefill offers retry");
+  await click(retry as HTMLButtonElement);
+  await tick();
+  await tick();
+  assert.equal(
+    (dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null)?.value,
+    "10",
+  );
+});

@@ -78,12 +78,7 @@ import { inputGuards } from "./input-guards.ts";
  */
 
 export type LeaveRequestStatus =
-  | "draft"
-  | "submitted"
-  | "approved"
-  | "rejected"
-  | "withdrawn"
-  | "cancelled";
+  "draft" | "submitted" | "approved" | "rejected" | "withdrawn" | "cancelled";
 
 export interface LeaveTypeDTO {
   readonly id: string;
@@ -131,8 +126,8 @@ export interface LeaveRequestDTO {
   readonly attachmentId: string | null;
 }
 
-const { requireOrgId, requireActorId, requireUuid } = inputGuards((message, kind) =>
-  new LeaveError(kind === "scope" ? "REFUSED" : "INVALID_INPUT", message),
+const { requireOrgId, requireActorId, requireUuid } = inputGuards(
+  (message, kind) => new LeaveError(kind === "scope" ? "REFUSED" : "INVALID_INPUT", message),
 );
 
 function requireReason(reason: unknown, what: string): string {
@@ -143,24 +138,38 @@ function requireReason(reason: unknown, what: string): string {
 }
 
 function requireCivilDate(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new LeaveError("INVALID_INPUT", `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`);
+  if (typeof value !== "string")
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`,
+    );
   try {
     parseCivilDate(value);
     return value;
   } catch {
-    throw new LeaveError("INVALID_INPUT", `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`);
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`,
+    );
   }
 }
 
 function requireHours(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new LeaveError("INVALID_INPUT", `${field} must be an exact decimal with at most 2 fraction digits`);
+  if (typeof value !== "string")
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `${field} must be an exact decimal with at most 2 fraction digits`,
+    );
   try {
     const cents = parseHoursToCents(value);
     if (cents <= 0n) throw new LeaveError("INVALID_INPUT", `${field} must be greater than zero`);
     return formatCents(cents);
   } catch (error) {
     if (error instanceof LeaveError) throw error;
-    throw new LeaveError("INVALID_INPUT", `${field} must be an exact decimal with at most 2 fraction digits`);
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `${field} must be an exact decimal with at most 2 fraction digits`,
+    );
   }
 }
 
@@ -206,13 +215,26 @@ function toTypeDTO(row: LeaveTypeRow): LeaveTypeDTO {
   };
 }
 
-async function loadLeaveType(exec: SqlExecutor, orgId: string, leaveTypeId: string): Promise<LeaveTypeRow> {
-  const row = (await exec.execute<LeaveTypeRow>(sql`
+async function loadLeaveType(
+  exec: SqlExecutor,
+  orgId: string,
+  leaveTypeId: string,
+): Promise<LeaveTypeRow> {
+  const row = (
+    await exec.execute<LeaveTypeRow>(
+      sql`
     select id, code, name, paid, value_crossing, requires_attachment, is_active
       from hrm_leave_types where org_id = ${orgId} and id = ${leaveTypeId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // Zero rows is a failure: unknown id, or an id from another organization.
-  if (!row) throw new LeaveError("NOT_FOUND", "leave type not found in this organization — check the type id");
+  if (!row)
+    throw new LeaveError(
+      "NOT_FOUND",
+      "leave type not found in this organization — check the type id",
+    );
   return row;
 }
 
@@ -232,49 +254,82 @@ export interface CreateLeaveTypeQuery {
 export async function createLeaveType(query: CreateLeaveTypeQuery): Promise<LeaveTypeDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const code = typeof query.code === "string" && query.code.trim().length > 0 ? query.code.trim() : null;
-  const name = typeof query.name === "string" && query.name.trim().length > 0 ? query.name.trim() : null;
-  if (!code) throw new LeaveError("INVALID_INPUT", "leave type carries a non-blank code — record the code");
-  if (!name) throw new LeaveError("INVALID_INPUT", "leave type carries a non-blank name — record the name");
+  const code =
+    typeof query.code === "string" && query.code.trim().length > 0 ? query.code.trim() : null;
+  const name =
+    typeof query.name === "string" && query.name.trim().length > 0 ? query.name.trim() : null;
+  if (!code)
+    throw new LeaveError("INVALID_INPUT", "leave type carries a non-blank code — record the code");
+  if (!name)
+    throw new LeaveError("INVALID_INPUT", "leave type carries a non-blank name — record the name");
   const valueCrossing = query.valueCrossing ?? "none";
   if (valueCrossing !== "none" && valueCrossing !== "payout" && valueCrossing !== "bank_in") {
-    throw new LeaveError("INVALID_INPUT", "value_crossing is one of none, payout, bank_in — there is no taken movement kind");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "value_crossing is one of none, payout, bank_in — there is no taken movement kind",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmLeaveManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId, actorId);
-    const inserted = (await db.execute<LeaveTypeRow>(sql`
+    const inserted = (
+      await db.execute<LeaveTypeRow>(
+        sql`
       insert into hrm_leave_types (org_id, code, name, paid, value_crossing, requires_attachment, created_by, updated_by)
       values (${orgId}, ${code}, ${name},
               ${query.paid ?? true}, ${valueCrossing}, ${query.requiresAttachment ?? false},
               ${actorId}, ${actorId})
       returning id, code, name, paid, value_crossing, requires_attachment, is_active
-    `, "objects"))[0];
-    if (!inserted) throw new LeaveError("REFUSED", "the leave type was not stored — no row was written; retry the request");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!inserted)
+      throw new LeaveError(
+        "REFUSED",
+        "the leave type was not stored — no row was written; retry the request",
+      );
     return toTypeDTO(inserted);
   });
 }
 
 function validateAccrualRule(rule: unknown): AccrualRule {
-  if (typeof rule !== "object" || rule === null) throw new LeaveError("INVALID_INPUT", "accrual_rule declares kind none, per_period, per_year, or unlimited — record the rule");
+  if (typeof rule !== "object" || rule === null)
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "accrual_rule declares kind none, per_period, per_year, or unlimited — record the rule",
+    );
   const record = rule as Record<string, unknown>;
   const kind = record.kind;
   if (kind !== "none" && kind !== "per_period" && kind !== "per_year" && kind !== "unlimited") {
-    throw new LeaveError("INVALID_INPUT", "accrual_rule kind is one of none, per_period, per_year, unlimited — record the rule");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "accrual_rule kind is one of none, per_period, per_year, unlimited — record the rule",
+    );
   }
   if (kind === "per_year" || kind === "per_period") {
-    if (typeof record.hours !== "string") throw new LeaveError("INVALID_INPUT", `a ${kind} accrual rule must carry hours as an exact decimal — set hours or use kind none`);
+    if (typeof record.hours !== "string")
+      throw new LeaveError(
+        "INVALID_INPUT",
+        `a ${kind} accrual rule must carry hours as an exact decimal — set hours or use kind none`,
+      );
     requireHours(record.hours, "accrual_rule.hours");
     if (kind === "per_period") {
       if (!Number.isInteger(record.periods_per_year) || (record.periods_per_year as number) <= 0) {
-        throw new LeaveError("INVALID_INPUT", "a per_period accrual rule must carry periods_per_year (a positive integer) — without it a period cannot be pro-rated");
+        throw new LeaveError(
+          "INVALID_INPUT",
+          "a per_period accrual rule must carry periods_per_year (a positive integer) — without it a period cannot be pro-rated",
+        );
       }
     }
     if (record.tiers !== undefined && record.tiers !== null) {
       validateAccrualTiers(record.tiers);
     }
   } else if (record.tiers !== undefined && record.tiers !== null) {
-    throw new LeaveError("INVALID_INPUT", `a ${kind} accrual rule carries no hours, so tiers have nothing to lift — use kind per_year or per_period for service-based tiers`);
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `a ${kind} accrual rule carries no hours, so tiers have nothing to lift — use kind per_year or per_period for service-based tiers`,
+    );
   }
   return record as unknown as AccrualRule;
 }
@@ -287,43 +342,72 @@ function validateAccrualRule(rule: unknown): AccrualRule {
  */
 function validateAccrualTiers(tiers: unknown): void {
   if (!Array.isArray(tiers) || tiers.length === 0) {
-    throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers is a non-empty list of {after_years, hours} — record the tiers or omit them");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "accrual_rule.tiers is a non-empty list of {after_years, hours} — record the tiers or omit them",
+    );
   }
   let previous = -1;
   for (const tier of tiers) {
     if (typeof tier !== "object" || tier === null) {
-      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers entries carry after_years and hours — record each tier");
+      throw new LeaveError(
+        "INVALID_INPUT",
+        "accrual_rule.tiers entries carry after_years and hours — record each tier",
+      );
     }
     const years = (tier as { after_years?: unknown }).after_years;
     const hours = (tier as { hours?: unknown }).hours;
     if (!Number.isInteger(years) || (years as number) < 1) {
-      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers after_years is a positive whole number of completed service years — record each tier's threshold");
+      throw new LeaveError(
+        "INVALID_INPUT",
+        "accrual_rule.tiers after_years is a positive whole number of completed service years — record each tier's threshold",
+      );
     }
     if (typeof hours !== "string") {
-      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers hours is an exact decimal — record each tier's hours");
+      throw new LeaveError(
+        "INVALID_INPUT",
+        "accrual_rule.tiers hours is an exact decimal — record each tier's hours",
+      );
     }
     requireHours(hours, "accrual_rule.tiers.hours");
     if ((years as number) <= previous) {
-      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers after_years ascends strictly — order the tiers by completed service years");
+      throw new LeaveError(
+        "INVALID_INPUT",
+        "accrual_rule.tiers after_years ascends strictly — order the tiers by completed service years",
+      );
     }
     previous = years as number;
   }
 }
 
 function validateCarryoverRule(rule: unknown): CarryoverRule {
-  if (typeof rule !== "object" || rule === null) throw new LeaveError("INVALID_INPUT", "carryover_rule declares kind none, carry_all, or carry_up_to — record the rule");
+  if (typeof rule !== "object" || rule === null)
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "carryover_rule declares kind none, carry_all, or carry_up_to — record the rule",
+    );
   const record = rule as Record<string, unknown>;
   const kind = record.kind;
   if (kind !== "none" && kind !== "carry_all" && kind !== "carry_up_to") {
-    throw new LeaveError("INVALID_INPUT", "carryover_rule kind is one of none, carry_all, carry_up_to — record the rule");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "carryover_rule kind is one of none, carry_all, carry_up_to — record the rule",
+    );
   }
   if (kind === "carry_up_to") {
-    if (typeof record.hours !== "string") throw new LeaveError("INVALID_INPUT", "a carry_up_to rule must carry hours — set the cap or use kind carry_all");
+    if (typeof record.hours !== "string")
+      throw new LeaveError(
+        "INVALID_INPUT",
+        "a carry_up_to rule must carry hours — set the cap or use kind carry_all",
+      );
     requireHours(record.hours, "carryover_rule.hours");
   }
   if (record.expires_after_days !== undefined && record.expires_after_days !== null) {
     if (!Number.isInteger(record.expires_after_days) || (record.expires_after_days as number) < 0) {
-      throw new LeaveError("INVALID_INPUT", "carryover expires_after_days is a non-negative integer of days — record the expiry");
+      throw new LeaveError(
+        "INVALID_INPUT",
+        "carryover expires_after_days is a non-negative integer of days — record the expiry",
+      );
     }
   }
   return record as unknown as CarryoverRule;
@@ -331,20 +415,29 @@ function validateCarryoverRule(rule: unknown): CarryoverRule {
 
 function validateAppliesTo(value: unknown): LeaveAppliesTo {
   if (typeof value !== "object" || value === null) {
-    throw new LeaveError("INVALID_INPUT", "applies_to scopes by employer_subsidiary_id and department_id, each a uuid or null for org-wide — record the scope");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "applies_to scopes by employer_subsidiary_id and department_id, each a uuid or null for org-wide — record the scope",
+    );
   }
   const record = value as Record<string, unknown>;
   for (const key of ["employer_subsidiary_id", "department_id"] as const) {
     const entry = record[key];
     if (entry !== null && entry !== undefined && !isUuid(entry)) {
-      throw new LeaveError("INVALID_INPUT", `applies_to.${key} is a uuid or null for org-wide — record the scope`);
+      throw new LeaveError(
+        "INVALID_INPUT",
+        `applies_to.${key} is a uuid or null for org-wide — record the scope`,
+      );
     }
   }
   return {
     employer_subsidiary_id: (record.employer_subsidiary_id as string | null) ?? null,
     department_id: (record.department_id as string | null) ?? null,
     employment_ids: validateAppliesIdList(record.employment_ids, "applies_to.employment_ids"),
-    classification_ids: validateAppliesIdList(record.classification_ids, "applies_to.classification_ids"),
+    classification_ids: validateAppliesIdList(
+      record.classification_ids,
+      "applies_to.classification_ids",
+    ),
   };
 }
 
@@ -356,11 +449,17 @@ function validateAppliesTo(value: unknown): LeaveAppliesTo {
 function validateAppliesIdList(value: unknown, field: string): string[] | null {
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value) || value.length === 0) {
-    throw new LeaveError("INVALID_INPUT", `${field} is a non-empty list of uuids, or null for all — record the targets`);
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `${field} is a non-empty list of uuids, or null for all — record the targets`,
+    );
   }
   for (const entry of value) {
     if (!isUuid(entry)) {
-      throw new LeaveError("INVALID_INPUT", `${field} holds uuids — ${JSON.stringify(entry)} is not a uuid; check the ids`);
+      throw new LeaveError(
+        "INVALID_INPUT",
+        `${field} holds uuids — ${JSON.stringify(entry)} is not a uuid; check the ids`,
+      );
     }
   }
   return [...new Set(value as string[])];
@@ -404,32 +503,60 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const leaveTypeId = requireUuid(query.leaveTypeId, "leaveTypeId");
-  const appliesTo = validateAppliesTo(query.appliesTo ?? { employer_subsidiary_id: null, department_id: null });
+  const appliesTo = validateAppliesTo(
+    query.appliesTo ?? { employer_subsidiary_id: null, department_id: null },
+  );
   const accrualRule = validateAccrualRule(query.accrualRule ?? { kind: "none" });
   const carryoverRule = validateCarryoverRule(query.carryoverRule ?? { kind: "none" });
   const effectiveFrom = requireCivilDate(query.effectiveFrom, "effectiveFrom");
-  const effectiveTo = query.effectiveTo === undefined || query.effectiveTo === null ? null : requireCivilDate(query.effectiveTo, "effectiveTo");
+  const effectiveTo =
+    query.effectiveTo === undefined || query.effectiveTo === null
+      ? null
+      : requireCivilDate(query.effectiveTo, "effectiveTo");
   if (effectiveTo !== null && effectiveTo < effectiveFrom) {
-    throw new LeaveError("INVALID_INPUT", `effective end ${effectiveTo} must not precede start ${effectiveFrom} — close the old policy and open a new one instead`);
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `effective end ${effectiveTo} must not precede start ${effectiveFrom} — close the old policy and open a new one instead`,
+    );
   }
   const notice = query.minimumNoticeDays ?? 0;
-  if (!Number.isInteger(notice) || (notice as number) < 0) throw new LeaveError("INVALID_INPUT", "minimum_notice_days is a non-negative integer of days — record the notice");
+  if (!Number.isInteger(notice) || (notice as number) < 0)
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "minimum_notice_days is a non-negative integer of days — record the notice",
+    );
   return withOrgTransaction(orgId, async () => {
     await requireHrmLeaveManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId, actorId);
     const type = await loadLeaveType(db, orgId, leaveTypeId);
-    if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before adding a policy`);
+    if (!type.is_active)
+      throw new LeaveError(
+        "REFUSED",
+        `leave type ${type.code} is inactive — reactivate it before adding a policy`,
+      );
     // Same-type policy writes serialize on a (org, leave type) advisory
     // lock: the loser waits for the winner's commit, then preflights
     // against the committed row instead of racing it to the storage
     // exclusion — so the second of two concurrent creates is refused by
     // name, deterministically.
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"openbooks:leave-policy:" + orgId + ":" + leaveTypeId}, 0))`);
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${"openbooks:leave-policy:" + orgId + ":" + leaveTypeId}, 0))`,
+    );
     await assertPolicyTargetsInOrg(db, orgId, appliesTo);
-    await assertNoSameSpecificityTargetOverlap(db, orgId, leaveTypeId, appliesTo, effectiveFrom, effectiveTo, null);
+    await assertNoSameSpecificityTargetOverlap(
+      db,
+      orgId,
+      leaveTypeId,
+      appliesTo,
+      effectiveFrom,
+      effectiveTo,
+      null,
+    );
     let inserted: PolicyRow | undefined;
     try {
-      inserted = (await db.execute<PolicyRow>(sql`
+      inserted = (
+        await db.execute<PolicyRow>(
+          sql`
         insert into hrm_leave_policies (org_id, leave_type_id, applies_to, accrual_rule, carryover_rule,
           minimum_notice_days, effective_from, effective_to, created_by, updated_by)
         values (${orgId}, ${leaveTypeId}, ${JSON.stringify(appliesTo)}::jsonb,
@@ -437,7 +564,10 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
                 ${notice}, ${effectiveFrom}, ${effectiveTo}, ${actorId}, ${actorId})
         returning id, leave_type_id, applies_to, accrual_rule, carryover_rule,
           minimum_notice_days, effective_from::text as effective_from, effective_to::text as effective_to, is_active
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
     } catch (error) {
       // A concurrent untargeted create landing first hits the wildcard
       // storage exclusion: name the overlap instead of leaking a PG
@@ -452,7 +582,11 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
       }
       throw error;
     }
-    if (!inserted) throw new LeaveError("REFUSED", "the leave policy was not stored — no row was written; retry the request");
+    if (!inserted)
+      throw new LeaveError(
+        "REFUSED",
+        "the leave policy was not stored — no row was written; retry the request",
+      );
     return toPolicyDTO(inserted);
   });
 }
@@ -470,14 +604,17 @@ async function assertPolicyTargetsInOrg(
   appliesTo: LeaveAppliesTo,
 ): Promise<void> {
   if (appliesTo.employment_ids !== null) {
-    const missing = await exec.execute<{ id: string }>(sql`
+    const missing = await exec.execute<{ id: string }>(
+      sql`
       select value as id
         from jsonb_array_elements_text(${JSON.stringify(appliesTo.employment_ids)}::jsonb)
        where not exists (
          select 1 from worker_employments
           where org_id = ${orgId} and id = value::uuid
        )
-    `, "objects");
+    `,
+      "objects",
+    );
     if (missing.length > 0) {
       throw new LeaveError(
         "NOT_FOUND",
@@ -486,14 +623,17 @@ async function assertPolicyTargetsInOrg(
     }
   }
   if (appliesTo.classification_ids !== null) {
-    const missing = await exec.execute<{ id: string }>(sql`
+    const missing = await exec.execute<{ id: string }>(
+      sql`
       select value as id
         from jsonb_array_elements_text(${JSON.stringify(appliesTo.classification_ids)}::jsonb)
        where not exists (
          select 1 from hrm_work_classifications
           where org_id = ${orgId} and id = value::uuid
        )
-    `, "objects");
+    `,
+      "objects",
+    );
     if (missing.length > 0) {
       throw new LeaveError(
         "NOT_FOUND",
@@ -523,14 +663,22 @@ export async function assertNoSameSpecificityTargetOverlap(
   effectiveTo: string | null,
   ignoreId: string | null,
 ): Promise<void> {
-  const rows = await exec.execute<{ id: string; applies_to: LeaveAppliesTo; effective_from: string; effective_to: string | null }>(sql`
+  const rows = await exec.execute<{
+    id: string;
+    applies_to: LeaveAppliesTo;
+    effective_from: string;
+    effective_to: string | null;
+  }>(
+    sql`
     select id, applies_to, effective_from::text as effective_from, effective_to::text as effective_to
       from hrm_leave_policies
      where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
        and effective_from <= ${effectiveTo ?? "9999-12-31"}
        and (effective_to is null or effective_to >= ${effectiveFrom})
        and (${ignoreId}::uuid is null or id <> ${ignoreId}::uuid)
-  `, "objects");
+  `,
+    "objects",
+  );
   const actives: TargetedPolicyWindow[] = rows.map((row) => ({
     id: row.id,
     employerSubsidiaryId: (row.applies_to?.employer_subsidiary_id as string | null) ?? null,
@@ -606,15 +754,28 @@ function toRequestDTO(row: RequestRow): LeaveRequestDTO {
   };
 }
 
-async function loadRequestForUpdate(exec: SqlExecutor, orgId: string, requestId: string): Promise<RequestRow> {
-  const row = (await exec.execute<RequestRow>(sql`
+async function loadRequestForUpdate(
+  exec: SqlExecutor,
+  orgId: string,
+  requestId: string,
+): Promise<RequestRow> {
+  const row = (
+    await exec.execute<RequestRow>(
+      sql`
     select ${REQUEST_COLUMNS} from hrm_leave_requests
      where org_id = ${orgId} and id = ${requestId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement — never report
   // which of the two, so existence cannot be probed across tenants).
-  if (!row) throw new LeaveError("NOT_FOUND", "leave request not found in this organization — check the request id");
+  if (!row)
+    throw new LeaveError(
+      "NOT_FOUND",
+      "leave request not found in this organization — check the request id",
+    );
   return row;
 }
 
@@ -623,9 +784,12 @@ async function assertLeaveAttachmentInOrg(
   orgId: string,
   attachmentId: string,
 ): Promise<void> {
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select id from files where org_id = ${orgId}::uuid and id = ${attachmentId}::uuid
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!rows[0]) {
     throw new LeaveError(
       "INVALID_INPUT",
@@ -646,17 +810,28 @@ async function liveEmploymentDays(
   startsOn: string,
   endsOn: string,
 ): Promise<Set<string>> {
-  const rows = await exec.execute<{ effective_from: string; effective_to: string | null; status: string }>(sql`
+  const rows = await exec.execute<{
+    effective_from: string;
+    effective_to: string | null;
+    status: string;
+  }>(
+    sql`
     select effective_from::text as effective_from, effective_to::text as effective_to, status
       from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-  `, "objects");
+  `,
+    "objects",
+  );
   const live = new Set<string>();
   for (const day of eachDayOfRange(startsOn, endsOn)) {
     for (const version of rows) {
       const to = version.effective_to ? String(version.effective_to).slice(0, 10) : null;
       const from = String(version.effective_from).slice(0, 10);
-      if ((version.status === "active" || version.status === "on_leave") && from <= day && (to === null || day < to)) {
+      if (
+        (version.status === "active" || version.status === "on_leave") &&
+        from <= day &&
+        (to === null || day < to)
+      ) {
         live.add(day);
         break;
       }
@@ -690,12 +865,15 @@ async function assertNoApprovedOverlap(
   endsOn: string,
   ignoreRequestId: string | null,
 ): Promise<void> {
-  const rows = await exec.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+  const rows = await exec.execute<{ id: string; starts_on: string; ends_on: string }>(
+    sql`
     select id, starts_on::text as starts_on, ends_on::text as ends_on
       from hrm_leave_requests
      where org_id = ${orgId} and employment_id = ${employmentId} and status = 'approved'
        and (${ignoreRequestId}::uuid is null or id <> ${ignoreRequestId}::uuid)
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const row of rows) {
     const from = String(row.starts_on).slice(0, 10);
     const to = String(row.ends_on).slice(0, 10);
@@ -826,11 +1004,21 @@ export async function fileLeaveRequest(query: FileLeaveRequestQuery): Promise<Le
   const leaveTypeId = requireUuid(query.leaveTypeId, "leaveTypeId");
   const startsOn = requireCivilDate(query.startsOn, "startsOn");
   const endsOn = requireCivilDate(query.endsOn, "endsOn");
-  if (endsOn < startsOn) throw new LeaveError("INVALID_INPUT", `effective end ${endsOn} must not precede start ${startsOn} — file the range forward`);
+  if (endsOn < startsOn)
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `effective end ${endsOn} must not precede start ${startsOn} — file the range forward`,
+    );
   const hours = requireHours(query.hours, "hours");
-  const reason = query.reason === undefined || query.reason === null ? null : requireReason(query.reason, "a leave request");
+  const reason =
+    query.reason === undefined || query.reason === null
+      ? null
+      : requireReason(query.reason, "a leave request");
   if (query.onBehalf && reason === null) {
-    throw new LeaveError("INVALID_INPUT", "filing on behalf carries a non-blank reason — record why the manager files for the worker");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "filing on behalf carries a non-blank reason — record why the manager files for the worker",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await requireFileAccess(db, orgId, actorId, employmentId, query.onBehalf === true);
@@ -856,14 +1044,23 @@ export async function fileLeaveRequest(query: FileLeaveRequestQuery): Promise<Le
     const scope = await policyScopeForEmployment(db, orgId, employmentId, startsOn);
     await assertTimeBalance(db, orgId, actorId, leaveTypeId, scope, startsOn, endsOn, hours);
     await assertNotice(db, orgId, leaveTypeId, scope, startsOn, query.onBehalf === true, reason);
-    const inserted = (await db.execute<RequestRow>(sql`
+    const inserted = (
+      await db.execute<RequestRow>(
+        sql`
       insert into hrm_leave_requests (org_id, employment_id, leave_type_id, starts_on, ends_on,
         hours, reason, status, created_by, updated_by)
       values (${orgId}, ${employmentId}, ${leaveTypeId}, ${startsOn}, ${endsOn},
         ${hours}, ${reason}, 'draft', ${actorId}, ${actorId})
       returning ${REQUEST_COLUMNS}
-    `, "objects"))[0];
-    if (!inserted) throw new LeaveError("REFUSED", "the leave request was not stored — no row was written; retry the request");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!inserted)
+      throw new LeaveError(
+        "REFUSED",
+        "the leave request was not stored — no row was written; retry the request",
+      );
     return toRequestDTO(inserted);
   });
 }
@@ -911,9 +1108,7 @@ export interface SubmitLeaveRequestQuery {
  * zero-gate policy releases immediately. All filing validations run again
  * before submission.
  */
-export async function submitLeaveRequest(
-  query: SubmitLeaveRequestQuery,
-): Promise<LeaveRequestDTO> {
+export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requestId = requireUuid(query.requestId, "requestId");
@@ -922,7 +1117,10 @@ export async function submitLeaveRequest(
     const current = await loadRequestForUpdate(db, orgId, requestId);
     const { onBehalf } = await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft") {
-      throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be submitted — only drafts submit`);
+      throw new LeaveError(
+        "BAD_STATE",
+        `a ${current.status} request cannot be submitted — only drafts submit`,
+      );
     }
     const type = await loadLeaveType(db, orgId, current.leave_type_id);
     if (!type.is_active) {
@@ -938,7 +1136,10 @@ export async function submitLeaveRequest(
       );
     }
     if (type.requires_attachment && !current.attachment_id) {
-      throw new LeaveError("REFUSED", `leave type ${type.code} requires an attachment — attach the evidence before submitting`);
+      throw new LeaveError(
+        "REFUSED",
+        `leave type ${type.code} requires an attachment — attach the evidence before submitting`,
+      );
     }
     if (current.attachment_id) await assertLeaveAttachmentInOrg(db, orgId, current.attachment_id);
     const startsOn = String(current.starts_on).slice(0, 10);
@@ -946,7 +1147,16 @@ export async function submitLeaveRequest(
     await assertLiveEmploymentRange(db, orgId, current.employment_id, startsOn, endsOn);
     await assertNoApprovedOverlap(db, orgId, current.employment_id, startsOn, endsOn, requestId);
     const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
-    await assertTimeBalance(db, orgId, actorId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
+    await assertTimeBalance(
+      db,
+      orgId,
+      actorId,
+      current.leave_type_id,
+      scope,
+      startsOn,
+      endsOn,
+      String(current.hours),
+    );
     await assertNotice(db, orgId, current.leave_type_id, scope, startsOn, onBehalf, current.reason);
 
     const routing = await routeNativeApproval({
@@ -955,15 +1165,23 @@ export async function submitLeaveRequest(
       subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
       subjectId: requestId,
     });
-    const submitted = (await db.execute<RequestRow>(sql`
+    const submitted = (
+      await db.execute<RequestRow>(
+        sql`
       update hrm_leave_requests
          set status = 'submitted', flow_instance_id = ${routing.gatingRunId},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!submitted) {
-      throw new LeaveError("BAD_STATE", "the request changed while submission was being recorded — reload it and submit again");
+      throw new LeaveError(
+        "BAD_STATE",
+        "the request changed while submission was being recorded — reload it and submit again",
+      );
     }
     if (routing.policy.kind === "ungated")
       return releaseLeaveRequest({
@@ -978,7 +1196,12 @@ export async function submitLeaveRequest(
 }
 
 /** Record the attachment a requires_attachment type demands (draft only). */
-export async function recordLeaveAttachment(query: { orgId: string; actorId: string; requestId: string; attachmentId: unknown }): Promise<LeaveRequestDTO> {
+export async function recordLeaveAttachment(query: {
+  orgId: string;
+  actorId: string;
+  requestId: string;
+  attachmentId: unknown;
+}): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requestId = requireUuid(query.requestId, "requestId");
@@ -987,16 +1210,28 @@ export async function recordLeaveAttachment(query: { orgId: string; actorId: str
     const current = await loadRequestForUpdate(db, orgId, requestId);
     await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft") {
-      throw new LeaveError("BAD_STATE", `a ${current.status} request is frozen — file a new request for a revised proposal instead`);
+      throw new LeaveError(
+        "BAD_STATE",
+        `a ${current.status} request is frozen — file a new request for a revised proposal instead`,
+      );
     }
     await assertLeaveAttachmentInOrg(db, orgId, attachmentId);
-    const updated = (await db.execute<RequestRow>(sql`
+    const updated = (
+      await db.execute<RequestRow>(
+        sql`
       update hrm_leave_requests
          set attachment_id = ${attachmentId}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
-    `, "objects"))[0];
-    if (!updated) throw new LeaveError("REFUSED", "the attachment was not recorded — no row was written; retry the request");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!updated)
+      throw new LeaveError(
+        "REFUSED",
+        "the attachment was not recorded — no row was written; retry the request",
+      );
     return toRequestDTO(updated);
   });
 }
@@ -1024,7 +1259,10 @@ export async function withdrawLeaveRequest(
     const current = await loadRequestForUpdate(db, orgId, requestId);
     await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft" && current.status !== "submitted") {
-      throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be withdrawn — cancel it instead`);
+      throw new LeaveError(
+        "BAD_STATE",
+        `a ${current.status} request cannot be withdrawn — cancel it instead`,
+      );
     }
     if (current.status === "submitted")
       await cancelNativeApprovals({
@@ -1034,14 +1272,23 @@ export async function withdrawLeaveRequest(
         subjectId: requestId,
       });
     // The withdrawal reason is audit evidence on the terminal row.
-    const withdrawn = (await db.execute<RequestRow>(sql`
+    const withdrawn = (
+      await db.execute<RequestRow>(
+        sql`
       update hrm_leave_requests
          set status = 'withdrawn', decision_reason = ${reason},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = ${current.status}
       returning ${REQUEST_COLUMNS}
-    `, "objects"))[0];
-    if (!withdrawn) throw new LeaveError("BAD_STATE", "the request changed while withdrawal was being recorded — reload it and try again");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!withdrawn)
+      throw new LeaveError(
+        "BAD_STATE",
+        "the request changed while withdrawal was being recorded — reload it and try again",
+      );
     return toRequestDTO(withdrawn);
   });
 }
@@ -1076,7 +1323,9 @@ async function committedRunCoveringDay(
   employeePartyId: string,
   day: string,
 ): Promise<CommittedRunCover | null> {
-  const row = (await exec.execute<CommittedRunCover>(sql`
+  const row = (
+    await exec.execute<CommittedRunCover>(
+      sql`
     select r.document_id as "documentId", d.document_number as "documentNumber",
            r.period_start::text as "periodStart", r.period_end::text as "periodEnd"
       from pay_runs r
@@ -1086,7 +1335,10 @@ async function committedRunCoveringDay(
      where r.org_id = ${orgId} and r.run_status = 'committed' and d.status <> 'voided'
        and r.period_start <= ${day} and r.period_end >= ${day}
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return {
     documentId: row.documentId,
@@ -1111,14 +1363,20 @@ export async function releaseLeaveRequest(
   const actorId = requireActorId(query.actorId);
   const requestId = requireUuid(query.requestId, "requestId");
   if (query.outcome !== "approved" && query.outcome !== "rejected") {
-    throw new LeaveError("INVALID_INPUT", "outcome is approved or rejected — there is no third decision");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "outcome is approved or rejected — there is no third decision",
+    );
   }
   const comment = requireReason(query.comment, `a ${query.outcome} decision`);
   return withOrgTransaction(orgId, async () => {
     await lockApprovalSubject(orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, requestId);
     const current = await loadRequestForUpdate(db, orgId, requestId);
     if (current.status !== "submitted") {
-      throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be decided — only submitted requests decide`);
+      throw new LeaveError(
+        "BAD_STATE",
+        `a ${current.status} request cannot be decided — only submitted requests decide`,
+      );
     }
     const approval = await readNativeApprovalDecision({
       orgId,
@@ -1128,13 +1386,13 @@ export async function releaseLeaveRequest(
       outcome: query.outcome,
       approvalRunId: query.approvalRunId,
     });
-    const proof = (await db.execute<{ valid: boolean }>(
-        sql`select public.flow_subject_decision_authorized(r.org_id,'hrm_leave_request',r.id,${actorId},public.leave_request_approval_fingerprint(r),${query.outcome}) as valid from hrm_leave_requests r where r.org_id=${orgId} and r.id=${requestId}`, "objects",
-      ))[0];
-    if (
-      !proof?.valid ||
-      (query.approvalRunId ? !approval : query.outcome !== "approved")
-    )
+    const proof = (
+      await db.execute<{ valid: boolean }>(
+        sql`select public.flow_subject_decision_authorized(r.org_id,'hrm_leave_request',r.id,${actorId},public.leave_request_approval_fingerprint(r),${query.outcome}) as valid from hrm_leave_requests r where r.org_id=${orgId} and r.id=${requestId}`,
+        "objects",
+      )
+    )[0];
+    if (!proof?.valid || (query.approvalRunId ? !approval : query.outcome !== "approved"))
       throw new LeaveError(
         "REFUSED",
         "Submit the current leave request through Flows and complete its configured gates before release.",
@@ -1156,8 +1414,7 @@ export async function releaseLeaveRequest(
           requireIndependentActor: true,
         });
       }
-    } else
-      await requireRequestAccess(db, orgId, actorId, current.employment_id);
+    } else await requireRequestAccess(db, orgId, actorId, current.employment_id);
     const startsOn = String(current.starts_on).slice(0, 10);
     const endsOn = String(current.ends_on).slice(0, 10);
     if (query.outcome === "approved") {
@@ -1175,35 +1432,49 @@ export async function releaseLeaveRequest(
       // request itself is excluded structurally — its absences are written
       // after this gate, so there is nothing of its own to count.
       const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
-      await assertTimeBalance(db, orgId, actorId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
+      await assertTimeBalance(
+        db,
+        orgId,
+        actorId,
+        current.leave_type_id,
+        scope,
+        startsOn,
+        endsOn,
+        String(current.hours),
+      );
     }
-    const decided = (await db.execute<RequestRow>(sql`
+    const decided = (
+      await db.execute<RequestRow>(
+        sql`
       update hrm_leave_requests
          set status = ${query.outcome}, decided_by = ${actorId}, decided_at = now(),
              decision_reason = ${comment}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'submitted'
       returning ${REQUEST_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!decided) {
-      throw new LeaveError("BAD_STATE", "the request changed while the decision was being recorded — reload it and decide again");
+      throw new LeaveError(
+        "BAD_STATE",
+        "the request changed while the decision was being recorded — reload it and decide again",
+      );
     }
     if (query.outcome === "rejected") return toRequestDTO(decided);
     try {
-      const employment = (await db.execute<{ worker_party_id: string }>(
-          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${decided.employment_id} for share`, "objects",
-        ))[0];
+      const employment = (
+        await db.execute<{ worker_party_id: string }>(
+          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${decided.employment_id} for share`,
+          "objects",
+        )
+      )[0];
       if (!employment)
         throw new LeaveError(
           "REFUSED",
           "The employment is unavailable. Reload the leave request before release.",
         );
-      await writeApprovalEffects(
-        db,
-        orgId,
-        actorId,
-        decided,
-        employment.worker_party_id,
-      );
+      await writeApprovalEffects(db, orgId, actorId, decided, employment.worker_party_id);
     } catch (error) {
       // A concurrent approval landing first hits the storage exclusion: name
       // the overlap instead of leaking a PG exclusion code. db.execute
@@ -1258,13 +1529,18 @@ async function writeApprovalEffects(
     // translated to a named refusal, never a raw 23505.
     let absence: { id: string } | undefined;
     try {
-      absence = (await exec.execute<{ id: string }>(sql`
+      absence = (
+        await exec.execute<{ id: string }>(
+          sql`
         insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
           leave_type_id, source, created_by, updated_by)
         values (${orgId}, ${request.id}, ${request.employment_id}, ${days[index]},
           ${perDay[index]}, ${request.leave_type_id}, 'request', ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new LeaveError(
@@ -1275,18 +1551,29 @@ async function writeApprovalEffects(
       throw error;
     }
     if (!absence) {
-      throw new LeaveError("REFUSED", `absence for ${days[index]} was not stored — no row was written; the decision rolled back, decide again`);
+      throw new LeaveError(
+        "REFUSED",
+        `absence for ${days[index]} was not stored — no row was written; the decision rolled back, decide again`,
+      );
     }
     if (type.value_crossing === "payout" || type.value_crossing === "bank_in") {
-      const input = (await exec.execute<{ id: string }>(sql`
+      const input = (
+        await exec.execute<{ id: string }>(
+          sql`
         insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, leave_type_id, kind,
           absence_date, hours, source_leave_request_id, status, created_by, updated_by)
         values (${orgId}, ${workerPartyId}, ${request.employment_id}, ${type.id}, ${type.value_crossing},
           ${days[index]}, ${perDay[index]}, ${request.id}, 'pending', ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!input) {
-        throw new LeaveError("REFUSED", `pay-run input for ${days[index]} was not stored — no row was written; the decision rolled back, decide again`);
+        throw new LeaveError(
+          "REFUSED",
+          `pay-run input for ${days[index]} was not stored — no row was written; the decision rolled back, decide again`,
+        );
       }
     }
   }
@@ -1315,19 +1602,34 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
     const current = await loadRequestForUpdate(db, orgId, requestId);
     await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "approved") {
-      throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be cancelled — withdraw it instead`);
+      throw new LeaveError(
+        "BAD_STATE",
+        `a ${current.status} request cannot be cancelled — withdraw it instead`,
+      );
     }
-    const inputs = await db.execute<{ id: string; status: string; consumed_by_run_document_id: string | null }>(sql`
+    const inputs = await db.execute<{
+      id: string;
+      status: string;
+      consumed_by_run_document_id: string | null;
+    }>(
+      sql`
       select id, status, consumed_by_run_document_id from hrm_payroll_inputs
        where org_id = ${orgId} and source_leave_request_id = ${requestId} and status <> 'voided'
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const input of inputs) {
       if (input.status === "consumed" && input.consumed_by_run_document_id) {
-        const run = (await db.execute<{ run_status: string; document_number: string }>(sql`
+        const run = (
+          await db.execute<{ run_status: string; document_number: string }>(
+            sql`
           select r.run_status, d.document_number from pay_runs r
             join documents d on d.id = r.document_id and d.org_id = r.org_id
            where r.org_id = ${orgId} and r.document_id = ${input.consumed_by_run_document_id}
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (run?.run_status === "committed") {
           throw new LeaveError(
             "STALE_RUN",
@@ -1340,25 +1642,47 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
     // rows carry leave_request_id NULL: the request-day unique would collide
     // with the row they reverse, and the recorded-day unique skips rows with
     // reversal_of set. Provenance is the reversal_of chain.
-    const absences = await db.execute<{ id: string; on_date: string; hours: string; leave_type_id: string }>(sql`
+    const absences = await db.execute<{
+      id: string;
+      on_date: string;
+      hours: string;
+      leave_type_id: string;
+    }>(
+      sql`
       select id, on_date::text as on_date, hours::text as hours, leave_type_id from hrm_absences
        where org_id = ${orgId} and leave_request_id = ${requestId} and reversal_of is null
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const absence of absences) {
-      const already = (await db.execute<{ n: number }>(sql`
+      const already =
+        (
+          await db.execute<{ n: number }>(
+            sql`
         select count(*)::int as n from hrm_absences
          where org_id = ${orgId} and reversal_of = ${absence.id}
-      `, "objects"))[0]?.n ?? 0;
+      `,
+            "objects",
+          )
+        )[0]?.n ?? 0;
       if (already > 0) continue;
-      const reversed = (await db.execute<{ id: string }>(sql`
+      const reversed = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
           leave_type_id, source, reversal_of, created_by, updated_by)
         values (${orgId}, null, ${current.employment_id}, ${String(absence.on_date).slice(0, 10)},
           ${`-${String(absence.hours)}`}, ${absence.leave_type_id}, 'request', ${absence.id}, ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!reversed) {
-        throw new LeaveError("REFUSED", `reversal for ${String(absence.on_date).slice(0, 10)} was not stored — no row was written; the cancellation rolled back, try again`);
+        throw new LeaveError(
+          "REFUSED",
+          `reversal for ${String(absence.on_date).slice(0, 10)} was not stored — no row was written; the cancellation rolled back, try again`,
+        );
       }
     }
     if (inputs.length > 0) {
@@ -1370,15 +1694,24 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
     // Storage owns the lifecycle shape: cancelled groups with the undecided
     // states (decided_by/decided_at NULL), so cancelling clears the approval
     // decision and records the cancel reason in decision_reason.
-    const cancelled = (await db.execute<RequestRow>(sql`
+    const cancelled = (
+      await db.execute<RequestRow>(
+        sql`
       update hrm_leave_requests
          set status = 'cancelled', decided_by = null, decided_at = null,
              decision_reason = ${reason},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'approved'
       returning ${REQUEST_COLUMNS}
-    `, "objects"))[0];
-    if (!cancelled) throw new LeaveError("BAD_STATE", "the request changed while cancellation was being recorded — reload it and try again");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!cancelled)
+      throw new LeaveError(
+        "BAD_STATE",
+        "the request changed while cancellation was being recorded — reload it and try again",
+      );
     return toRequestDTO(cancelled);
   });
 }

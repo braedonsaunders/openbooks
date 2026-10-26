@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionLabels: DocArticle = {
-  slug: 'distribution-labels',
-  title: 'Carton and Shipping Labels',
-  category: 'transactions',
+  slug: "distribution-labels",
+  title: "Carton and Shipping Labels",
+  category: "transactions",
   order: 10,
   summary:
-    'Print a 4×6 carton label for each packed carton and a shipping label with the carrier tracking barcode from a shipment.',
-  updated: '2026-09-27',
-  keywords: ['carton label', 'shipping label', 'barcode', 'Code 128', 'shipment', 'tracking'],
-  related: ['distribution-pick-ship', 'distribution-warehouses'],
+    "Print a 4×6 carton label for each packed carton and a shipping label with the carrier tracking barcode from a shipment.",
+  updated: "2026-09-27",
+  keywords: ["carton label", "shipping label", "barcode", "Code 128", "shipment", "tracking"],
+  related: ["distribution-pick-ship", "distribution-warehouses"],
   body: `# Carton and Shipping Labels
 
 Print shipment labels from the shipment drawer after Fulfillment is enabled in
@@ -40,4 +40,4 @@ paper size at **4×6 in** for label stock. In a template, use
 128 barcode; the human-readable value is printed beneath the bars. These are
 general-purpose labels and do not create carrier-certified or GS1-128 labels.
 `,
-}
+};

@@ -2,20 +2,13 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { recordPositionAssignmentEvent } from "./positions.ts";
 import { makeEffectiveInterval } from "./temporal.ts";
-import {
-  autoOpenProcessForChange,
-  processTriggerForApply,
-} from "./processes.ts";
+import { autoOpenProcessForChange, processTriggerForApply } from "./processes.ts";
 import {
   HrmChangeRequestError,
   type AssignmentChangePayload,
   type PositionAssignmentPayload,
 } from "./change-requests-payload.ts";
-import {
-  type RequestRow,
-  type ClosureElement,
-  effectiveOverlaps,
-} from "./change-requests-core.ts";
+import { type RequestRow, type ClosureElement, effectiveOverlaps } from "./change-requests-core.ts";
 import {
   insertEmploymentChange,
   linkAppliedEvidence,
@@ -47,11 +40,14 @@ export async function applyAssignmentChange(
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
   await assertAssignmentRefs(exec, { orgId, employmentId: request.employment_id, payload });
 
-  const slotRows = await exec.execute<{ id: string }>(sql`
+  const slotRows = await exec.execute<{ id: string }>(
+    sql`
     select id from employment_assignments
      where org_id = ${orgId} and employment_id = ${request.employment_id}
        and assignment_key = ${payload.assignmentKey}
-  `, "objects");
+  `,
+    "objects",
+  );
   const slotId = slotRows[0]?.id ?? null;
 
   if (slotId === null) {
@@ -177,13 +173,16 @@ export async function applyAssignmentChange(
     actorId,
   });
   for (const version of overlapping) {
-    const closed = await exec.execute(sql`
+    const closed = await exec.execute(
+      sql`
       update employment_assignment_versions
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${version.id} and recorded_until is null
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -234,7 +233,13 @@ export async function applyAssignmentChange(
     });
   }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: newRevision,
+  });
 }
 
 /**
@@ -272,10 +277,15 @@ export async function applyPositionAssignment(
   // concurrent closes and assignments on the same establishment.
   let target: { id: string; position_code: string; revision: number } | null = null;
   if (payload.positionId !== null) {
-    const found = (await exec.execute<{ id: string; position_code: string; revision: number }>(sql`
+    const found = (
+      await exec.execute<{ id: string; position_code: string; revision: number }>(
+        sql`
       select id, position_code, revision from positions
        where org_id = ${orgId} and id = ${payload.positionId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -285,11 +295,14 @@ export async function applyPositionAssignment(
     target = found;
   }
 
-  const slotRows = await exec.execute<{ id: string }>(sql`
+  const slotRows = await exec.execute<{ id: string }>(
+    sql`
     select id from employment_assignments
      where org_id = ${orgId} and employment_id = ${request.employment_id}
        and assignment_key = ${payload.assignmentKey}
-  `, "objects");
+  `,
+    "objects",
+  );
   const slotId = slotRows[0]?.id ?? null;
 
   if (slotId === null) {
@@ -310,11 +323,16 @@ export async function applyPositionAssignment(
       windowStart,
       windowEnd,
     });
-    const issuedId = (await exec.execute<{ id: string }>(sql`
+    const issuedId = (
+      await exec.execute<{ id: string }>(
+        sql`
       insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
       values (${orgId}, ${request.employment_id}, ${payload.assignmentKey}, ${actorId}, ${actorId})
       returning id
-    `, "objects"))[0]?.id;
+    `,
+        "objects",
+      )
+    )[0]?.id;
     if (!issuedId) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -352,8 +370,8 @@ export async function applyPositionAssignment(
       },
       closedVersions: [],
       reason: request.reason ?? "",
-    action: request.action ?? null,
-    reasonCode: request.reason_code ?? null,
+      action: request.action ?? null,
+      reasonCode: request.reason_code ?? null,
       actorId,
     });
     await recordPositionAssignmentEvent(exec, {
@@ -368,7 +386,13 @@ export async function applyPositionAssignment(
       positionRevision: target?.revision ?? 0,
     });
     await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-    await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+    await bumpAggregateRevision(exec, {
+      orgId,
+      actorId,
+      request,
+      expected: newRevision - 1,
+      next: newRevision,
+    });
     return;
   }
 
@@ -435,7 +459,11 @@ export async function applyPositionAssignment(
     target,
     windowStart,
     asKnown: recordedAtIso,
-    assignment: { title: base.job_title, departmentId: base.department_id, locationId: base.location_id },
+    assignment: {
+      title: base.job_title,
+      departmentId: base.department_id,
+      locationId: base.location_id,
+    },
   });
   const changeId = await insertEmploymentChange(exec, {
     orgId,
@@ -468,13 +496,16 @@ export async function applyPositionAssignment(
     actorId,
   });
   for (const version of overlapping) {
-    const closed = await exec.execute(sql`
+    const closed = await exec.execute(
+      sql`
       update employment_assignment_versions
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${version.id} and recorded_until is null
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -516,7 +547,13 @@ export async function applyPositionAssignment(
     positionRevision: target?.revision ?? 0,
   });
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: newRevision,
+  });
 }
 
 /**

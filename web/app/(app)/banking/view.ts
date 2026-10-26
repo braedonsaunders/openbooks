@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { trendWeekLabel } from '../../../lib/format'
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getLocale, getTranslations } from "next-intl/server";
+import { trendWeekLabel } from "../../../lib/format";
 import {
   grid,
   page,
@@ -13,19 +13,19 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission, can } from '../../../lib/authz'
-import { resolveNav } from '../../../lib/nav/resolve'
-import { reportSubsidiaryScope, reportSubsidiaryView } from '../../../lib/consolidation'
-import { resolveAsOf } from '../../../lib/cash/core'
-import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
-import { toChartNumber } from '../../../lib/chart-number'
-import { cmp } from '@openbooks/engine/money/money'
-import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
-import { userPageLayout } from '../../../lib/page-layout'
-import { groupTabs } from '../../../components/module-home/group-tabs'
-import type { DirectoryItem } from '../../../components/module-home/ui'
-import type { BankingAttentionItem } from './sections'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission, can } from "../../../lib/authz";
+import { resolveNav } from "../../../lib/nav/resolve";
+import { reportSubsidiaryScope, reportSubsidiaryView } from "../../../lib/consolidation";
+import { resolveAsOf } from "../../../lib/cash/core";
+import { bankingHome, type BankingAccountRow } from "../../../lib/module-home/banking";
+import { toChartNumber } from "../../../lib/chart-number";
+import { cmp } from "@openbooks/engine/money/money";
+import { MissingRatesError, type RatesBlockedNotice } from "../../../lib/consolidation";
+import { userPageLayout } from "../../../lib/page-layout";
+import { groupTabs } from "../../../components/module-home/group-tabs";
+import type { DirectoryItem } from "../../../components/module-home/ui";
+import type { BankingAttentionItem } from "./sections";
 
 /**
  * The banking cockpit, split into a loader and a spec.
@@ -64,73 +64,73 @@ import type { BankingAttentionItem } from './sections'
  */
 
 /** Statements older than this are flagged as a stale feed on the roster. */
-const STALE_STATEMENT_DAYS = 30
+const STALE_STATEMENT_DAYS = 30;
 
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
-type Tabs = Awaited<ReturnType<typeof groupTabs>>
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
+type Tabs = Awaited<ReturnType<typeof groupTabs>>;
 
 export interface BankingData {
-  title: string
-  description: string
+  title: string;
+  description: string;
   /** Set when underived consolidated rates block the workspace:
    * the page renders a typed banner with a derive link above live vitals. */
-  ratesBlocked: RatesBlockedNotice | null
-  layoutPrefs: Record<string, unknown>
-  subsidiaryPicker: SubsidiaryPicker
-  subsidiaryValue: string
-  subsidiaryLabel: string
-  tabs: Tabs
-  canReconcile: boolean
-  matchHref: string
-  matchVariant: 'default' | 'outline'
-  matchCountLabel: string
-  matchLabel: string
-  showMatchCount: boolean
-  cashLabel: string
-  cashValue: string
-  cashSub: string
-  cashTone: 'negative' | 'neutral'
-  unmatchedTone: 'warning' | 'positive'
-  cardsLabel: string
-  cardsValue: string
-  cardsSub: string
-  unmatchedLabel: string
-  unmatchedValue: string
-  unmatchedSub: string
-  unmatchedAccent: 'amber' | 'emerald'
-  openReconsLabel: string
-  openReconsValue: string
-  openReconsSub: string
-  netFlowLabel: string
-  netFlowValue: string
-  netFlowAccent: 'emerald' | 'red'
-  netFlowTone: 'positive' | 'negative'
-  rosterTitle: string
-  rosterAccounts: BankingAccountRow[]
-  totalCash: string
-  totalCards: string
-  trendTitle: string
-  trendHint: string
-  trendSeriesName: string
-  trendLabels: string[]
-  trendData: number[]
-  directoryTitle: string
-  directory: DirectoryItem[]
-  attentionTitle: string
-  attentionAllClear: string
-  attention: BankingAttentionItem[]
+  ratesBlocked: RatesBlockedNotice | null;
+  layoutPrefs: Record<string, unknown>;
+  subsidiaryPicker: SubsidiaryPicker;
+  subsidiaryValue: string;
+  subsidiaryLabel: string;
+  tabs: Tabs;
+  canReconcile: boolean;
+  matchHref: string;
+  matchVariant: "default" | "outline";
+  matchCountLabel: string;
+  matchLabel: string;
+  showMatchCount: boolean;
+  cashLabel: string;
+  cashValue: string;
+  cashSub: string;
+  cashTone: "negative" | "neutral";
+  unmatchedTone: "warning" | "positive";
+  cardsLabel: string;
+  cardsValue: string;
+  cardsSub: string;
+  unmatchedLabel: string;
+  unmatchedValue: string;
+  unmatchedSub: string;
+  unmatchedAccent: "amber" | "emerald";
+  openReconsLabel: string;
+  openReconsValue: string;
+  openReconsSub: string;
+  netFlowLabel: string;
+  netFlowValue: string;
+  netFlowAccent: "emerald" | "red";
+  netFlowTone: "positive" | "negative";
+  rosterTitle: string;
+  rosterAccounts: BankingAccountRow[];
+  totalCash: string;
+  totalCards: string;
+  trendTitle: string;
+  trendHint: string;
+  trendSeriesName: string;
+  trendLabels: string[];
+  trendData: number[];
+  directoryTitle: string;
+  directory: DirectoryItem[];
+  attentionTitle: string;
+  attentionAllClear: string;
+  attention: BankingAttentionItem[];
 }
 
 export async function loadBanking(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingData> {
-  const { moneyCompact } = await getMoneyFormatter()
-  const authz = await requirePermission('banking.read')
-  const canReconcile = can(authz, 'banking.reconcile')
-  const t = await getTranslations('banking')
-  const locale = await getLocale()
-  const tNav = await getTranslations('nav')
-  const tr = await getTranslations('reports')
+  const { moneyCompact } = await getMoneyFormatter();
+  const authz = await requirePermission("banking.read");
+  const canReconcile = can(authz, "banking.reconcile");
+  const t = await getTranslations("banking");
+  const locale = await getLocale();
+  const tNav = await getTranslations("nav");
+  const tr = await getTranslations("reports");
 
   // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link, and the workspace
@@ -139,23 +139,29 @@ export async function loadBanking(
   // rates, so it agrees with the Match picker and the per-account pages
   // even before close derives the period's rates. Anything else is a real
   // defect and still throws.
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let ratesBlocked: RatesBlockedNotice | null = null
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let ratesBlocked: RatesBlockedNotice | null = null;
   try {
-    subView = await reportSubsidiaryView(sp.sub as string | undefined, await resolveAsOf(authz.user.orgId))
+    subView = await reportSubsidiaryView(
+      sp.sub as string | undefined,
+      await resolveAsOf(authz.user.orgId),
+    );
   } catch (e) {
-    if (!(e instanceof MissingRatesError)) throw e
+    if (!(e instanceof MissingRatesError)) throw e;
     ratesBlocked = {
-      code: 'rates-not-derived',
-      title: tr('statement.ratesBlockedTitle'),
+      code: "rates-not-derived",
+      title: tr("statement.ratesBlockedTitle"),
       description: (e as Error).message,
-      deriveLabel: tr('statement.ratesBlockedAction'),
-      deriveHref: '/close',
-    }
+      deriveLabel: tr("statement.ratesBlockedAction"),
+      deriveHref: "/close",
+    };
     // The refusal carries no scope, so resolve it leniently: same
     // visibility, same picker rows (the switcher stays an escape to a
     // single-entity view), figures included.
-    const scoped = await reportSubsidiaryScope(sp.sub as string | undefined, await resolveAsOf(authz.user.orgId))
+    const scoped = await reportSubsidiaryScope(
+      sp.sub as string | undefined,
+      await resolveAsOf(authz.user.orgId),
+    );
     subView = {
       subsidiary: scoped.subsidiary,
       currency: scoped.currency,
@@ -163,7 +169,7 @@ export async function loadBanking(
       consolidated: scoped.consolidated,
       options: scoped.options,
       picker: scoped.picker,
-    }
+    };
   }
 
   const [data, rosterPrefs, navGroups] = await Promise.all([
@@ -172,192 +178,207 @@ export async function loadBanking(
       subView?.subsidiary?.ids,
       subView?.subsidiary?.includeNullSubsidiary,
     ),
-    userPageLayout(authz.user.id, 'banking-accounts'),
+    userPageLayout(authz.user.id, "banking-accounts"),
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),
       authz.user.roles.map(({ key }) => key),
       (key) => {
         try {
-          return tNav(key)
+          return tNav(key);
         } catch {
-          return ''
+          return "";
         }
       },
       (key) => {
         try {
-          return tNav.has(key)
+          return tNav.has(key);
         } catch {
-          return false
+          return false;
         }
       },
     ),
-  ])
+  ]);
 
   // The home reflects the org's OWN menu: tabs and directory come from the
   // resolved banking group, so hidden items vanish and custom labels hold.
-  const groupItems = navGroups.find((g) => g.id === 'banking')?.items ?? []
-  const subQs = sp.sub ? `?sub=${sp.sub}` : ''
-  const tabs = await groupTabs('banking', '/banking', { subQs, orgId: authz.user.orgId })
+  const groupItems = navGroups.find((g) => g.id === "banking")?.items ?? [];
+  const subQs = sp.sub ? `?sub=${sp.sub}` : "";
+  const tabs = await groupTabs("banking", "/banking", { subQs, orgId: authz.user.orgId });
 
-  const lastImportAge = daysSince(data.badges.lastImportedAt)
-  const badgeFor = (href: string): DirectoryItem['badge'] => {
+  const lastImportAge = daysSince(data.badges.lastImportedAt);
+  const badgeFor = (href: string): DirectoryItem["badge"] => {
     switch (href) {
-      case '/banking/match':
+      case "/banking/match":
         return data.unmatchedLines > 0
-          ? { value: String(data.unmatchedLines), hint: t('home.directory.matchHint'), tone: 'warning' }
-          : { value: '0', hint: t('home.directory.matchClear'), tone: 'positive' }
-      case '/banking/reconciliations':
+          ? {
+              value: String(data.unmatchedLines),
+              hint: t("home.directory.matchHint"),
+              tone: "warning",
+            }
+          : { value: "0", hint: t("home.directory.matchClear"), tone: "positive" };
+      case "/banking/reconciliations":
         return {
           value: String(data.openRecons),
-          hint: t('home.directory.reconsHint'),
-          tone: data.openRecons > 0 ? 'neutral' : 'positive',
-        }
-      case '/banking/rules':
+          hint: t("home.directory.reconsHint"),
+          tone: data.openRecons > 0 ? "neutral" : "positive",
+        };
+      case "/banking/rules":
         return {
           value: String(data.badges.activeRules),
-          hint: t('home.directory.rulesHint', { total: data.badges.totalRules }),
-        }
-      case '/banking/imports':
+          hint: t("home.directory.rulesHint", { total: data.badges.totalRules }),
+        };
+      case "/banking/imports":
         return {
           value: String(data.badges.statements),
           hint:
             data.badges.lastImportedAt === null
-              ? t('home.directory.importsNever')
-              : t('home.directory.importsHint', { days: lastImportAge ?? 0 }),
-          tone: lastImportAge !== null && lastImportAge > STALE_STATEMENT_DAYS ? 'warning' : 'neutral',
-        }
-      case '/banking/transactions':
-        return { value: String(data.badges.txns7d), hint: t('home.directory.transactionsHint') }
+              ? t("home.directory.importsNever")
+              : t("home.directory.importsHint", { days: lastImportAge ?? 0 }),
+          tone:
+            lastImportAge !== null && lastImportAge > STALE_STATEMENT_DAYS ? "warning" : "neutral",
+        };
+      case "/banking/transactions":
+        return { value: String(data.badges.txns7d), hint: t("home.directory.transactionsHint") };
       default:
-        return undefined
+        return undefined;
     }
-  }
+  };
   const directory: DirectoryItem[] = groupItems
-    .filter((i) => i.href !== '/banking' && i.href !== '/banking/cash')
-    .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }))
+    .filter((i) => i.href !== "/banking" && i.href !== "/banking/cash")
+    .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }));
 
-  const banks = data.accounts.filter((a) => a.type === 'asset_bank')
-  const cards = data.accounts.filter((a) => a.type !== 'asset_bank')
+  const banks = data.accounts.filter((a) => a.type === "asset_bank");
+  const cards = data.accounts.filter((a) => a.type !== "asset_bank");
 
   return {
-    title: t('home.title'),
-    description: t('home.description'),
+    title: t("home.title"),
+    description: t("home.description"),
     layoutPrefs: rosterPrefs as unknown as Record<string, unknown>,
     subsidiaryPicker: subView?.picker ?? [],
-    subsidiaryValue: subView?.picker.find((p) => p.id === sp.sub)?.id ?? subView?.picker[0]?.id ?? '',
+    subsidiaryValue:
+      subView?.picker.find((p) => p.id === sp.sub)?.id ?? subView?.picker[0]?.id ?? "",
     ratesBlocked,
-    subsidiaryLabel: t('home.subsidiary'),
+    subsidiaryLabel: t("home.subsidiary"),
     tabs,
     canReconcile,
-    matchHref: '/banking/match',
-    matchVariant: data.unmatchedLines > 0 ? 'default' : 'outline',
-    matchCountLabel: t('home.actions.matchCount', { count: data.unmatchedLines }),
-    matchLabel: t('home.actions.match'),
+    matchHref: "/banking/match",
+    matchVariant: data.unmatchedLines > 0 ? "default" : "outline",
+    matchCountLabel: t("home.actions.matchCount", { count: data.unmatchedLines }),
+    matchLabel: t("home.actions.match"),
     showMatchCount: data.unmatchedLines > 0,
-    cashLabel: t('home.vitals.cash'),
+    cashLabel: t("home.vitals.cash"),
     cashValue: moneyCompact(data.totalCash),
-    cashSub: t('home.vitals.accountCount', { count: banks.length }),
-    cashTone: cmp(data.totalCash, '0') < 0 ? 'negative' : 'neutral',
-    unmatchedTone: data.unmatchedLines > 0 ? 'warning' : 'positive',
-    cardsLabel: t('home.vitals.cards'),
+    cashSub: t("home.vitals.accountCount", { count: banks.length }),
+    cashTone: cmp(data.totalCash, "0") < 0 ? "negative" : "neutral",
+    unmatchedTone: data.unmatchedLines > 0 ? "warning" : "positive",
+    cardsLabel: t("home.vitals.cards"),
     cardsValue: moneyCompact(data.totalCards),
-    cardsSub: t('home.vitals.accountCount', { count: cards.length }),
-    unmatchedLabel: t('home.vitals.unmatched'),
+    cardsSub: t("home.vitals.accountCount", { count: cards.length }),
+    unmatchedLabel: t("home.vitals.unmatched"),
     unmatchedValue: data.unmatchedLines.toLocaleString(locale),
-    unmatchedSub: data.unmatchedLines > 0 ? t('home.vitals.unmatchedSub') : t('home.vitals.allMatched'),
-    unmatchedAccent: data.unmatchedLines > 0 ? 'amber' : 'emerald',
-    openReconsLabel: t('home.vitals.openRecons'),
+    unmatchedSub:
+      data.unmatchedLines > 0 ? t("home.vitals.unmatchedSub") : t("home.vitals.allMatched"),
+    unmatchedAccent: data.unmatchedLines > 0 ? "amber" : "emerald",
+    openReconsLabel: t("home.vitals.openRecons"),
     openReconsValue: data.openRecons.toLocaleString(locale),
-    openReconsSub: data.openRecons > 0 ? t('home.vitals.openReconsSub') : t('home.vitals.noneOpen'),
-    netFlowLabel: t('home.vitals.netFlow'),
+    openReconsSub: data.openRecons > 0 ? t("home.vitals.openReconsSub") : t("home.vitals.noneOpen"),
+    netFlowLabel: t("home.vitals.netFlow"),
     netFlowValue: moneyCompact(data.netFlow7d),
-    netFlowAccent: cmp(data.netFlow7d, '0') >= 0 ? 'emerald' : 'red',
-    netFlowTone: cmp(data.netFlow7d, '0') >= 0 ? 'positive' : 'negative',
-    rosterTitle: t('home.roster.title'),
+    netFlowAccent: cmp(data.netFlow7d, "0") >= 0 ? "emerald" : "red",
+    netFlowTone: cmp(data.netFlow7d, "0") >= 0 ? "positive" : "negative",
+    rosterTitle: t("home.roster.title"),
     rosterAccounts: data.accounts,
     totalCash: data.totalCash,
     totalCards: data.totalCards,
-    trendTitle: t('home.trend.title'),
-    trendHint: t('home.trend.hint'),
-    trendSeriesName: t('home.trend.series'),
+    trendTitle: t("home.trend.title"),
+    trendHint: t("home.trend.hint"),
+    trendSeriesName: t("home.trend.series"),
     trendLabels: data.trend.map((w) => trendWeekLabel(w.weekStart, locale)),
     // Real balances, so the money axis labels read as amounts; sparklines
     // without an axis keep their normalized coordinates.
     trendData: data.trend.map((w) => toChartNumber(w.balance)),
-    directoryTitle: t('home.directory.title'),
+    directoryTitle: t("home.directory.title"),
     directory,
-    attentionTitle: t('home.attention.title'),
-    attentionAllClear: t('home.attention.allClear'),
+    attentionTitle: t("home.attention.title"),
+    attentionAllClear: t("home.attention.allClear"),
     attention: needsAttention(data.accounts, t),
-  }
+  };
 }
 
-type T = Awaited<ReturnType<typeof getTranslations<'banking'>>>
+type T = Awaited<ReturnType<typeof getTranslations<"banking">>>;
 
 export function needsAttention(accounts: BankingAccountRow[], t: T): BankingAttentionItem[] {
-  const items: BankingAttentionItem[] = []
+  const items: BankingAttentionItem[] = [];
   for (const a of accounts) {
-    if (a.type === 'asset_bank' && cmp(a.balance, '0') < 0) {
-      items.push({ tone: 'negative', text: t('home.attention.negativeBalance', { account: a.name }), href: `/banking/${a.id}` })
+    if (a.type === "asset_bank" && cmp(a.balance, "0") < 0) {
+      items.push({
+        tone: "negative",
+        text: t("home.attention.negativeBalance", { account: a.name }),
+        href: `/banking/${a.id}`,
+      });
     }
   }
   for (const a of accounts) {
-    const age = daysSince(a.lastStatementDate)
+    const age = daysSince(a.lastStatementDate);
     if (a.lastStatementDate === null) {
-      items.push({ tone: 'warning', text: t('home.attention.noStatement', { account: a.name }), href: `/banking/${a.id}` })
+      items.push({
+        tone: "warning",
+        text: t("home.attention.noStatement", { account: a.name }),
+        href: `/banking/${a.id}`,
+      });
     } else if (age !== null && age > STALE_STATEMENT_DAYS) {
       items.push({
-        tone: 'warning',
-        text: t('home.attention.staleStatement', { account: a.name, days: age }),
+        tone: "warning",
+        text: t("home.attention.staleStatement", { account: a.name, days: age }),
         href: `/banking/${a.id}`,
-      })
+      });
     }
   }
   for (const a of accounts) {
     if (a.openReconciliationId) {
       items.push({
-        tone: 'neutral',
-        text: t('home.attention.openRecon', { account: a.name }),
+        tone: "neutral",
+        text: t("home.attention.openRecon", { account: a.name }),
         href: `/banking/${a.id}/reconcile/${a.openReconciliationId}`,
-      })
+      });
     }
   }
-  return items.slice(0, 6)
+  return items.slice(0, 6);
 }
 
 export function daysSince(iso: string | null): number | null {
-  if (!iso) return null
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return null
-  return Math.max(0, Math.floor((Date.now() - then) / 86_400_000))
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.max(0, Math.floor((Date.now() - then) / 86_400_000));
 }
 
-const f = ref<BankingData>()
+const f = ref<BankingData>();
 
 export function bankingSpec(data: BankingData): PageSpec {
   return page({
-    route: '/banking',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/banking",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
-          widget('subsidiary-switcher', {
+          widget("subsidiary-switcher", {
             picker: data.subsidiaryPicker,
             value: data.subsidiaryValue,
             label: data.subsidiaryLabel,
           }),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
           // Conditional PAIR (count label when unmatched, plain label when
           // clean) with a variant flip — a component, not a spec construct.
           // The `banking-match` widget renders the
           // shared Button+Link chrome over these loader-resolved strings.
           widget(
-            'banking-match',
+            "banking-match",
             {
               href: data.matchHref,
               variant: data.matchVariant,
@@ -365,90 +386,94 @@ export function bankingSpec(data: BankingData): PageSpec {
               label: data.matchLabel,
               showCount: data.showMatchCount,
             },
-            f('canReconcile'),
+            f("canReconcile"),
           ),
         ],
       }),
     ],
     body: [
-      widgetBlock('empty-state', {
-        title: data.ratesBlocked?.title ?? '',
-        description: data.ratesBlocked?.description,
-        action: 'link-button',
-        actionProps: {
-          href: data.ratesBlocked?.deriveHref ?? '/close',
-          label: data.ratesBlocked?.deriveLabel ?? '',
+      widgetBlock(
+        "empty-state",
+        {
+          title: data.ratesBlocked?.title ?? "",
+          description: data.ratesBlocked?.description,
+          action: "link-button",
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? "/close",
+            label: data.ratesBlocked?.deriveLabel ?? "",
+          },
         },
-      }, f('ratesBlocked')),
-      grid('flex h-full min-h-0 flex-col gap-4', [
+        f("ratesBlocked"),
+      ),
+      grid("flex h-full min-h-0 flex-col gap-4", [
         // Vitals strip. Every tile renders the same HomeStatTile the native
         // page renders; every tone and accent is a loader-resolved string.
         // `tone` narrows the block union to the four tones StatTile supports;
         // the cash tile's 'default' is StatTile's own default.
-        grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
+        grid("grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5", [
           statTile({
-            iconKey: 'landmark',
-            accent: 'indigo',
-            label: f('cashLabel'),
-            value: f('cashValue'),
-            sub: f('cashSub'),
-            tone: f('cashTone'),
+            iconKey: "landmark",
+            accent: "indigo",
+            label: f("cashLabel"),
+            value: f("cashValue"),
+            sub: f("cashSub"),
+            tone: f("cashTone"),
           }),
           statTile({
-            iconKey: 'credit-card',
-            accent: 'violet',
-            label: f('cardsLabel'),
-            value: f('cardsValue'),
-            sub: f('cardsSub'),
+            iconKey: "credit-card",
+            accent: "violet",
+            label: f("cardsLabel"),
+            value: f("cardsValue"),
+            sub: f("cardsSub"),
           }),
           // The native tile DOES carry a tone: warning while lines are
           // unmatched, positive once they are clear. The accent flips with it.
           statTile({
-            iconKey: 'list-checks',
-            accent: f('unmatchedAccent'),
-            label: f('unmatchedLabel'),
-            value: f('unmatchedValue'),
-            sub: f('unmatchedSub'),
-            tone: f('unmatchedTone'),
+            iconKey: "list-checks",
+            accent: f("unmatchedAccent"),
+            label: f("unmatchedLabel"),
+            value: f("unmatchedValue"),
+            sub: f("unmatchedSub"),
+            tone: f("unmatchedTone"),
           }),
           statTile({
-            iconKey: 'check-circle',
-            accent: 'teal',
-            label: f('openReconsLabel'),
-            value: f('openReconsValue'),
-            sub: f('openReconsSub'),
+            iconKey: "check-circle",
+            accent: "teal",
+            label: f("openReconsLabel"),
+            value: f("openReconsValue"),
+            sub: f("openReconsSub"),
           }),
           statTile({
-            iconKey: 'arrow-left-right',
-            accent: f('netFlowAccent'),
-            label: f('netFlowLabel'),
-            value: f('netFlowValue'),
-            tone: f('netFlowTone'),
+            iconKey: "arrow-left-right",
+            accent: f("netFlowAccent"),
+            label: f("netFlowLabel"),
+            value: f("netFlowValue"),
+            tone: f("netFlowTone"),
           }),
         ]),
 
-        grid('grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3', [
+        grid("grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3", [
           // Roster hero. The loader performs the roster's server work (the
           // user_page_layouts prefs fetch) and passes the prefs through as
           // data; the `banking-roster` widget
           // renders the shared AccountsRosterPanel over them. A widget, not
           // a slot: persistence rides the session cookie, so no capability
           // crosses the spec.
-          widgetBlock('banking-roster', {
+          widgetBlock("banking-roster", {
             accounts: data.rosterAccounts,
             totalCash: data.totalCash,
             totalCards: data.totalCards,
             layoutPrefs: data.layoutPrefs,
           }),
 
-          grid('flex min-h-0 flex-col gap-5 overflow-y-auto', [
+          grid("flex min-h-0 flex-col gap-5 overflow-y-auto", [
             panel({
-              title: f('trendTitle'),
-              iconKey: 'area-chart',
-              hint: f('trendHint'),
-              className: 'shrink-0',
+              title: f("trendTitle"),
+              iconKey: "area-chart",
+              hint: f("trendHint"),
+              className: "shrink-0",
               blocks: [
-                widgetBlock('trend-chart', {
+                widgetBlock("trend-chart", {
                   labels: data.trendLabels,
                   series: [{ name: data.trendSeriesName, data: data.trendData }],
                   height: 170,
@@ -464,19 +489,19 @@ export function bankingSpec(data: BankingData): PageSpec {
             // `directory-section` component (purchasing/sections.tsx) renders
             // exactly that wrapper-or-null pair, so it is reused, not copied —
             // no `when` needed, the empty case lives inside the component.
-            widgetBlock('directory-section', {
+            widgetBlock("directory-section", {
               items: data.directory,
               title: data.directoryTitle,
             }),
             panel({
-              title: f('attentionTitle'),
-              iconKey: 'triangle-alert',
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
+              title: f("attentionTitle"),
+              iconKey: "triangle-alert",
+              bodyClassName: "p-0",
+              className: "shrink-0",
               blocks: [
                 // The empty case lives inside the shared component, not as a
                 // negated conditional pair of blocks — see ./sections.
-                widgetBlock('banking-attention-list', {
+                widgetBlock("banking-attention-list", {
                   items: data.attention,
                   allClear: data.attentionAllClear,
                 }),
@@ -486,5 +511,5 @@ export function bankingSpec(data: BankingData): PageSpec {
         ]),
       ]),
     ],
-  })
+  });
 }

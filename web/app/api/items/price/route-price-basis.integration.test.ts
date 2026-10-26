@@ -34,10 +34,7 @@ const routeUrl = "./route.ts?items-price-basis-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -60,8 +57,13 @@ async function seedPricing(): Promise<Fixture> {
     const goldId = randomUUID();
     await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
       values (${goldId}, ${org.orgId}, 'GOLDP', 'Gold price', 'explicit', false, true)`);
-    const baseId = (await db.execute<{ id: string }>(sql`
-      select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, "objects"))[0]!.id;
+    const baseId = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from price_levels where org_id = ${org.orgId} and is_base and is_active`,
+        "objects",
+      )
+    )[0]!.id;
     const today = new Date().toISOString().slice(0, 10);
     await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
       values (${org.orgId}, ${customerId}, ${goldId}, ${today}, true)`);
@@ -71,16 +73,29 @@ async function seedPricing(): Promise<Fixture> {
         (id, org_id, item_id, price_level_id, currency, quantity_basis, effective_from, effective_to, is_active)
       values (${goldSchedule}, ${org.orgId}, ${org.items.service}, ${goldId}, 'CAD', 'line_quantity', '2026-01-01', null, true),
              (${baseSchedule}, ${org.orgId}, ${org.items.service}, ${baseId}, 'CAD', 'line_quantity', '2026-01-01', null, true)`);
-    for (const [schedule, price] of [[goldSchedule, '100'], [baseSchedule, '80']] as const) {
+    for (const [schedule, price] of [
+      [goldSchedule, "100"],
+      [baseSchedule, "80"],
+    ] as const) {
       await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
         values (${org.orgId}, ${schedule}, '1', ${price})`);
     }
-    const assignmentId = (await db.execute<{ id: string }>(sql`
+    const assignmentId = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from customer_price_level_assignments
-       where org_id = ${org.orgId} and customer_id = ${customerId}`, "objects"))[0]!.id;
+       where org_id = ${org.orgId} and customer_id = ${customerId}`,
+        "objects",
+      )
+    )[0]!.id;
     return {
-      orgId: org.orgId, actorId: "00000000-0000-0000-0000-000000000000",
-      customerId, itemId: org.items.service, goldId, assignmentId, goldScheduleId: goldSchedule,
+      orgId: org.orgId,
+      actorId: "00000000-0000-0000-0000-000000000000",
+      customerId,
+      itemId: org.items.service,
+      goldId,
+      assignmentId,
+      goldScheduleId: goldSchedule,
     };
   });
 }
@@ -97,13 +112,20 @@ async function previewResponse(
   try {
     // The route reads through RLS like production: run it inside the org
     // context, the same wrapper the order-line basis test uses.
-    return await withOrgContext(fixture.orgId, () => POST(new Request("http://localhost/api/items/price", {
-      method: "POST",
-      body: JSON.stringify({
-        itemId: fixture.itemId, customerId: fixture.customerId,
-        currency: "CAD", onDate, lineQuantity: "1",
-      }),
-    })));
+    return await withOrgContext(fixture.orgId, () =>
+      POST(
+        new Request("http://localhost/api/items/price", {
+          method: "POST",
+          body: JSON.stringify({
+            itemId: fixture.itemId,
+            customerId: fixture.customerId,
+            currency: "CAD",
+            onDate,
+            lineQuantity: "1",
+          }),
+        }),
+      ),
+    );
   } finally {
     gateState.authz = null;
   }
@@ -112,11 +134,17 @@ async function previewResponse(
 async function preview(fixture: Fixture, onDate: string) {
   const res = await previewResponse(fixture, onDate);
   assert.equal(res.status, 200);
-  return (await res.json()) as { price: {
-    unitPrice: string; source: string; scheduleId: string | null;
-    priceLevelId: string | null; priceLevelName: string | null;
-    assignmentId: string | null; resolvedAt: string;
-  } | null };
+  return (await res.json()) as {
+    price: {
+      unitPrice: string;
+      source: string;
+      scheduleId: string | null;
+      priceLevelId: string | null;
+      priceLevelName: string | null;
+      assignmentId: string | null;
+      resolvedAt: string;
+    } | null;
+  };
 }
 
 test("customer-specific price previews hide customers outside the caller's subsidiary scope", async () => {
@@ -130,70 +158,73 @@ test("customer-specific price previews hide customers outside the caller's subsi
   }
 });
 
-test(
-  "the preview carries price lineage, and falls to base after the revoke",
-  async () => {
-    const fixture = await seedPricing();
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      const before = await preview(fixture, today);
-      assert.equal(before.price?.unitPrice, '100.0000');
-      assert.equal(before.price?.source, 'customer_level');
-      assert.equal(before.price?.scheduleId, fixture.goldScheduleId);
-      assert.equal(before.price?.priceLevelId, fixture.goldId);
-      assert.equal(before.price?.assignmentId, fixture.assignmentId);
-      assert.ok(before.price?.resolvedAt);
+test("the preview carries price lineage, and falls to base after the revoke", async () => {
+  const fixture = await seedPricing();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const before = await preview(fixture, today);
+    assert.equal(before.price?.unitPrice, "100.0000");
+    assert.equal(before.price?.source, "customer_level");
+    assert.equal(before.price?.scheduleId, fixture.goldScheduleId);
+    assert.equal(before.price?.priceLevelId, fixture.goldId);
+    assert.equal(before.price?.assignmentId, fixture.assignmentId);
+    assert.ok(before.price?.resolvedAt);
 
-      await withBypassContext(async () => {
-        await db.execute(sql`update customer_price_level_assignments set is_active = false
+    await withBypassContext(async () => {
+      await db.execute(sql`update customer_price_level_assignments set is_active = false
          where org_id = ${fixture.orgId} and customer_id = ${fixture.customerId}`);
-      });
+    });
 
-      const after = await preview(fixture, today);
-      assert.equal(after.price?.unitPrice, '80.0000');
-      assert.equal(after.price?.source, 'base_level');
-    } finally {
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+    const after = await preview(fixture, today);
+    assert.equal(after.price?.unitPrice, "80.0000");
+    assert.equal(after.price?.source, "base_level");
+  } finally {
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
-test(
-  "a deactivated level ends pricing from its close with the event instant recorded",
-  async () => {
-    const fixture = await seedPricing();
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      const before = await preview(fixture, today);
-      assert.equal(before.price?.unitPrice, '100.0000');
-      assert.equal(before.price?.source, 'customer_level');
+test("a deactivated level ends pricing from its close with the event instant recorded", async () => {
+  const fixture = await seedPricing();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const before = await preview(fixture, today);
+    assert.equal(before.price?.unitPrice, "100.0000");
+    assert.equal(before.price?.source, "customer_level");
 
-      // Guard-compliant shutdown: assignment and schedule go quiet first,
-      // then the level itself closes.
-      await withBypassContext(async () => {
-        await db.execute(sql`update customer_price_level_assignments set is_active = false
+    // Guard-compliant shutdown: assignment and schedule go quiet first,
+    // then the level itself closes.
+    await withBypassContext(async () => {
+      await db.execute(sql`update customer_price_level_assignments set is_active = false
          where org_id = ${fixture.orgId} and customer_id = ${fixture.customerId}`);
-        await db.execute(sql`update item_price_schedules set is_active = false
+      await db.execute(sql`update item_price_schedules set is_active = false
          where org_id = ${fixture.orgId} and price_level_id = ${fixture.goldId}`);
-        await db.execute(sql`update price_levels set is_active = false
+      await db.execute(sql`update price_levels set is_active = false
          where org_id = ${fixture.orgId} and id = ${fixture.goldId}`);
-      });
+    });
 
-      const period = await withBypassContext(async () => (await db.execute<{
-        active_to: string | null; closed: boolean;
-      }>(sql`
+    const period = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{
+            active_to: string | null;
+            closed: boolean;
+          }>(
+            sql`
         select active_to::text as active_to, (closed_at is not null) as closed
           from price_level_activation_history
          where org_id = ${fixture.orgId} and price_level_id = ${fixture.goldId}
-         order by active_from desc limit 1`, "objects"))[0]!);
-      assert.equal(period.active_to, today);
-      assert.equal(period.closed, true);
+         order by active_from desc limit 1`,
+            "objects",
+          )
+        )[0]!,
+    );
+    assert.equal(period.active_to, today);
+    assert.equal(period.closed, true);
 
-      const after = await preview(fixture, today);
-      assert.equal(after.price?.unitPrice, '80.0000');
-      assert.equal(after.price?.source, 'base_level');
-    } finally {
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+    const after = await preview(fixture, today);
+    assert.equal(after.price?.unitPrice, "80.0000");
+    assert.equal(after.price?.source, "base_level");
+  } finally {
+    await dropScratchOrg(fixture.orgId);
+  }
+});

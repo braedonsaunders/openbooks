@@ -1,19 +1,19 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.folder-download-zip-route-test')
+const stateKey = Symbol.for("openbooks.folder-download-zip-route-test");
 const state = {
-  mode: 'ok' as 'ok' | 'limit',
-  entries: [{ id: 'file-1', path: 'Folder/file-1.bin' }],
+  mode: "ok" as "ok" | "limit",
+  entries: [{ id: "file-1", path: "Folder/file-1.bin" }],
   manifestCalls: 0,
   buildCalls: 0,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:auth-lib',
+    "mock:auth-lib",
     `
       export async function getAuthz() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
@@ -25,16 +25,10 @@ const mockSources = new Map<string, string>([
       export function fileViewer() { return { userId: 'user-1', isAdmin: false, baseline: 'viewer' } }
     `,
   ],
+  ["mock:cabinet", `export async function getFolder() { return { name: 'Folder' } }`],
+  ["mock:business-date", `export async function businessToday() { return '2026-08-31' }`],
   [
-    'mock:cabinet',
-    `export async function getFolder() { return { name: 'Folder' } }`,
-  ],
-  [
-    'mock:business-date',
-    `export async function businessToday() { return '2026-08-31' }`,
-  ],
-  [
-    'mock:file-zip',
+    "mock:file-zip",
     `
       const state = globalThis[Symbol.for('openbooks.folder-download-zip-route-test')]
       export const MAX_ZIP_FILES = 300
@@ -55,85 +49,94 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = new Map<string, string>([
-      ['../../../lib', 'mock:auth-lib'],
-      ['../../../../../../lib/file-cabinet', 'mock:cabinet'],
-      ['../../../../../../lib/file-zip', 'mock:file-zip'],
-      ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
-      ['@/lib/authz', 'mock:auth-lib'],
-    ]).get(specifier)
-    if (mocked) return { shortCircuit: true, format: 'module', url: mocked }
-    return nextResolve(specifier, _context)
+      ["../../../lib", "mock:auth-lib"],
+      ["../../../../../../lib/file-cabinet", "mock:cabinet"],
+      ["../../../../../../lib/file-zip", "mock:file-zip"],
+      ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+      ["@/lib/authz", "mock:auth-lib"],
+    ]).get(specifier);
+    if (mocked) return { shortCircuit: true, format: "module", url: mocked };
+    return nextResolve(specifier, _context);
   },
   load(url, _context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, _context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, _context);
   },
-})
+});
 
-const routeUrl = './route.ts?folder-download-zip-route-test'
-const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?folder-download-zip-route-test";
+const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  state.mode = 'ok'
-  state.entries = [{ id: 'file-1', path: 'Folder/file-1.bin' }]
-  state.manifestCalls = 0
-  state.buildCalls = 0
+  state.mode = "ok";
+  state.entries = [{ id: "file-1", path: "Folder/file-1.bin" }];
+  state.manifestCalls = 0;
+  state.buildCalls = 0;
 }
 
-const FOLDER_ID = '11111111-1111-4111-8111-111111111111'
+const FOLDER_ID = "11111111-1111-4111-8111-111111111111";
 
 function get(): Promise<Response> {
-  return GET(new Request(`http://openbooks.test/api/file-cabinet/folders/${FOLDER_ID}/download-zip`), {
-    params: Promise.resolve({ id: FOLDER_ID }),
-  })
+  return GET(
+    new Request(`http://openbooks.test/api/file-cabinet/folders/${FOLDER_ID}/download-zip`),
+    {
+      params: Promise.resolve({ id: FOLDER_ID }),
+    },
+  );
 }
 
-test('folder ZIP maps the ZIP source limit to HTTP 413', async () => {
-  reset()
-  state.mode = 'limit'
+test("folder ZIP maps the ZIP source limit to HTTP 413", async () => {
+  reset();
+  state.mode = "limit";
 
-  const response = await get()
+  const response = await get();
 
-  assert.equal(response.status, 413)
-  assert.deepEqual(await response.json(), { error: 'zip source exceeds 250 MB limit' })
-  assert.equal(state.manifestCalls, 1)
-  assert.equal(state.buildCalls, 1)
-})
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "zip source exceeds 250 MB limit" });
+  assert.equal(state.manifestCalls, 1);
+  assert.equal(state.buildCalls, 1);
+});
 
-test('folder ZIP permits a boundary-sized archive returned by buildZip', async () => {
-  reset()
+test("folder ZIP permits a boundary-sized archive returned by buildZip", async () => {
+  reset();
 
-  const response = await get()
+  const response = await get();
 
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get('content-type'), 'application/zip')
-  assert.equal(response.headers.get('content-disposition'), 'attachment; filename="Folder-2026-08-31.zip"')
-})
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/zip");
+  assert.equal(
+    response.headers.get("content-disposition"),
+    'attachment; filename="Folder-2026-08-31.zip"',
+  );
+});
 
-test('folder ZIP keeps the MAX_ZIP_FILES guard before blob work', async () => {
-  reset()
-  state.entries = Array.from({ length: 301 }, (_, index) => ({ id: `file-${index}`, path: `Folder/file-${index}.bin` }))
+test("folder ZIP keeps the MAX_ZIP_FILES guard before blob work", async () => {
+  reset();
+  state.entries = Array.from({ length: 301 }, (_, index) => ({
+    id: `file-${index}`,
+    path: `Folder/file-${index}.bin`,
+  }));
 
-  const response = await get()
+  const response = await get();
 
-  assert.equal(response.status, 413)
-  assert.match((await response.json()).error, /too many files/)
-  assert.equal(state.buildCalls, 0)
-})
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /too many files/);
+  assert.equal(state.buildCalls, 0);
+});
 
-test('folder ZIP retains its empty-folder 404 response', async () => {
-  reset()
-  state.entries = []
+test("folder ZIP retains its empty-folder 404 response", async () => {
+  reset();
+  state.entries = [];
 
-  const response = await get()
+  const response = await get();
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'folder is empty' })
-  assert.equal(state.buildCalls, 0)
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "folder is empty" });
+  assert.equal(state.buildCalls, 0);
+});

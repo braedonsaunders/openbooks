@@ -55,26 +55,46 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
   {
     key: "hrmExplainPay",
     name: "Explain my pay",
-    purpose: "Render a deterministic payslip trace (components, inputs, deductions, diff vs previous) in prose.",
-    dataScope: ["pay_stubs", "pay_stub_lines", "pay_components", "hrm_payroll_inputs", "pay_run_benefit_allocations", "labor_cost_rates"],
+    purpose:
+      "Render a deterministic payslip trace (components, inputs, deductions, diff vs previous) in prose.",
+    dataScope: [
+      "pay_stubs",
+      "pay_stub_lines",
+      "pay_components",
+      "hrm_payroll_inputs",
+      "pay_run_benefit_allocations",
+      "labor_cost_rates",
+    ],
     maxAutonomy: "read_only",
     reviewerRole: "payroll administrator",
     noticeRequired: true,
-    noticeText: "Pay explanations are generated from your payroll records. The figures come from the deterministic payroll calculation; the wording is AI-generated and the numbers govern.",
+    noticeText:
+      "Pay explanations are generated from your payroll records. The figures come from the deterministic payroll calculation; the wording is AI-generated and the numbers govern.",
     featureKey: "payroll",
-    promptLine: "hrmExplainPay (read-only): explain payslips from the deterministic trace only, citing record ids; never reveal another person's pay.",
+    promptLine:
+      "hrmExplainPay (read-only): explain payslips from the deterministic trace only, citing record ids; never reveal another person's pay.",
   },
   {
     key: "hrmPayrollAnomalies",
     name: "Payroll checks",
-    purpose: "Deterministic pre-run anomaly scan; block severity refuses the pay-run commit while open.",
-    dataScope: ["pay_stubs", "hrm_payroll_inputs", "pay_run_benefit_allocations", "party_bank_accounts", "labor_cost_rates", "payroll_anomaly_flags"],
+    purpose:
+      "Deterministic pre-run anomaly scan; block severity refuses the pay-run commit while open.",
+    dataScope: [
+      "pay_stubs",
+      "hrm_payroll_inputs",
+      "pay_run_benefit_allocations",
+      "party_bank_accounts",
+      "labor_cost_rates",
+      "payroll_anomaly_flags",
+    ],
     maxAutonomy: "propose",
     reviewerRole: "payroll administrator",
     noticeRequired: true,
-    noticeText: "Pre-run payroll checks flag unusual figures for human review. A flag is a question, never a decision: a person resolves every flag before the run is finalized.",
+    noticeText:
+      "Pre-run payroll checks flag unusual figures for human review. A flag is a question, never a decision: a person resolves every flag before the run is finalized.",
     featureKey: "payroll",
-    promptLine: "hrmPayrollAnomalies (propose): surface payroll check flags with their numbers; never clear or resolve a flag yourself.",
+    promptLine:
+      "hrmPayrollAnomalies (propose): surface payroll check flags with their numbers; never clear or resolve a flag yourself.",
   },
   {
     key: "hrmTimeAnomalies",
@@ -84,45 +104,56 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
     maxAutonomy: "propose",
     reviewerRole: "payroll administrator",
     noticeRequired: true,
-    noticeText: "Timesheet checks flag unusual entries for the approver. A flag is a question for a person, never an automated rejection.",
+    noticeText:
+      "Timesheet checks flag unusual entries for the approver. A flag is a question for a person, never an automated rejection.",
     featureKey: "timeTracking",
-    promptLine: "hrmTimeAnomalies (propose): surface timesheet flags with their numbers; approval stays with the human approver.",
+    promptLine:
+      "hrmTimeAnomalies (propose): surface timesheet flags with their numbers; approval stays with the human approver.",
   },
   {
     key: "hrmDrafting",
     name: "Evidence-grounded drafting",
-    purpose: "Draft job descriptions, reviews, onboarding plans and offer clauses from records the actor may read. Drafts never auto-submit.",
+    purpose:
+      "Draft job descriptions, reviews, onboarding plans and offer clauses from records the actor may read. Drafts never auto-submit.",
     dataScope: ["hrm_requisitions", "hrm_reviews", "hrm_processes", "hrm_requisitions:offers"],
     maxAutonomy: "draft",
     reviewerRole: "HR manager",
     noticeRequired: true,
-    noticeText: "AI drafts are starting points assembled from your records. A person reviews, edits and submits every word — nothing is filed automatically.",
+    noticeText:
+      "AI drafts are starting points assembled from your records. A person reviews, edits and submits every word — nothing is filed automatically.",
     featureKey: "hrm",
-    promptLine: "hrmDrafting (draft): draft only from the cited sources, list every source, flag biased language; never submit or file anything.",
+    promptLine:
+      "hrmDrafting (draft): draft only from the cited sources, list every source, flag biased language; never submit or file anything.",
   },
   {
     key: "hrmNlReports",
     name: "Natural-language reports",
-    purpose: "Turn a question into a validated report-engine definition (never SQL) with a preview, saved only as a view.",
+    purpose:
+      "Turn a question into a validated report-engine definition (never SQL) with a preview, saved only as a view.",
     dataScope: ["report_definitions"],
     maxAutonomy: "draft",
     reviewerRole: "system administrator",
     noticeRequired: true,
-    noticeText: "Report definitions from plain-language questions are validated against your report permissions and previewed before saving. The question is interpreted, never executed as written.",
+    noticeText:
+      "Report definitions from plain-language questions are validated against your report permissions and previewed before saving. The question is interpreted, never executed as written.",
     featureKey: null,
-    promptLine: "hrmNlReports (draft): produce report definitions inside the caller's report permissions; invalid definitions are refused, never repaired silently.",
+    promptLine:
+      "hrmNlReports (draft): produce report definitions inside the caller's report permissions; invalid definitions are refused, never repaired silently.",
   },
   {
     key: "aiGovernanceLedger",
     name: "AI governance ledger",
-    purpose: "Capability registry mirror, decision log, notice catalogue and review cadence for every AI capability.",
+    purpose:
+      "Capability registry mirror, decision log, notice catalogue and review cadence for every AI capability.",
     dataScope: ["ai_capabilities", "ai_decisions"],
     maxAutonomy: "read_only",
     reviewerRole: "system administrator",
     noticeRequired: true,
-    noticeText: "Every AI-assisted answer is logged with its sources. The ledger records that the AI helped — a person made the decision.",
+    noticeText:
+      "Every AI-assisted answer is logged with its sources. The ledger records that the AI helped — a person made the decision.",
     featureKey: "aiGovernanceLedger",
-    promptLine: "aiGovernanceLedger (read-only): every AI-assisted answer is logged with its sources; the ledger is the record.",
+    promptLine:
+      "aiGovernanceLedger (read-only): every AI-assisted answer is logged with its sources; the ledger is the record.",
   },
 ];
 

@@ -5,13 +5,13 @@ import { randomUUID } from "node:crypto";
 import test, { describe } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 import { payRunReadiness } from "./readiness.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import {
-  linkPayrollProfileEmployment, payrollProfileEmployment, resolvePayrollProfileEmploymentLinks,
+  linkPayrollProfileEmployment,
+  payrollProfileEmployment,
+  resolvePayrollProfileEmploymentLinks,
   resolveProfileLegalEmployer,
 } from "./profile-employment.ts";
 import { acceptOfferAsHire } from "../hrm/recruiting/hire.ts";
@@ -63,7 +63,12 @@ async function party(fx: Fixture, name: string, subsidiaryId: string | null): Pr
   return id;
 }
 
-async function employment(fx: Fixture, partyId: string, subsidiaryId: string, status = "active"): Promise<string> {
+async function employment(
+  fx: Fixture,
+  partyId: string,
+  subsidiaryId: string,
+  status = "active",
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
@@ -74,7 +79,12 @@ async function employment(fx: Fixture, partyId: string, subsidiaryId: string, st
   return id;
 }
 
-async function profile(fx: Fixture, tag: string, partyId: string, employmentId: string | null): Promise<string> {
+async function profile(
+  fx: Fixture,
+  tag: string,
+  partyId: string,
+  employmentId: string | null,
+): Promise<string> {
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -92,9 +102,14 @@ async function profile(fx: Fixture, tag: string, partyId: string, employmentId: 
 }
 
 async function employmentOf(fx: Fixture, partyId: string): Promise<string | null> {
-  const row = (await db.execute<{ employment_id: string | null }>(sql`
+  const row = (
+    await db.execute<{ employment_id: string | null }>(
+      sql`
     select employment_id from employee_payroll_profiles
-     where org_id = ${fx.orgId} and employee_party_id = ${partyId}`, "objects"))[0];
+     where org_id = ${fx.orgId} and employee_party_id = ${partyId}`,
+      "objects",
+    )
+  )[0];
   return row?.employment_id ?? null;
 }
 
@@ -105,8 +120,14 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       const partyId = await party(fx, "Nully Ned", null);
       assert.equal(await resolveProfileLegalEmployer(db, fx.orgId, partyId, null), null);
       const employmentId = await employment(fx, partyId, fx.rootSubsidiaryId);
-      assert.equal(await resolveProfileLegalEmployer(db, fx.orgId, partyId, null), fx.rootSubsidiaryId);
-      assert.equal(await resolveProfileLegalEmployer(db, fx.orgId, partyId, fx.rootSubsidiaryId), fx.rootSubsidiaryId);
+      assert.equal(
+        await resolveProfileLegalEmployer(db, fx.orgId, partyId, null),
+        fx.rootSubsidiaryId,
+      );
+      assert.equal(
+        await resolveProfileLegalEmployer(db, fx.orgId, partyId, fx.rootSubsidiaryId),
+        fx.rootSubsidiaryId,
+      );
       void employmentId;
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -142,10 +163,18 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       await profile(fx, "p1", partyId, null);
       // The pair the workaround refused: the employment IS hers and the
       // employer resolves from it.
-      assert.equal(await payrollProfileEmployment(db, fx.orgId, partyId, null, employmentId), employmentId);
+      assert.equal(
+        await payrollProfileEmployment(db, fx.orgId, partyId, null, employmentId),
+        employmentId,
+      );
       const result = await linkPayrollProfileEmployment({
-        orgId: fx.orgId, actorId: fx.actorId, employeePartyId: partyId, employmentId,
-        reason: "hire backfill", dryRun: false, allowedSubsidiaryIds: undefined,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        employeePartyId: partyId,
+        employmentId,
+        reason: "hire backfill",
+        dryRun: false,
+        allowedSubsidiaryIds: undefined,
       });
       assert.equal(result.changed, true);
       assert.equal(await employmentOf(fx, partyId), employmentId);
@@ -163,8 +192,11 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       const none = await party(fx, "Nojob Nora", null);
       await profile(fx, "none", none, null);
       const first = await resolvePayrollProfileEmploymentLinks({
-        orgId: fx.orgId, actorId: fx.actorId,
-        reason: "readiness resolve", dryRun: true, allowedSubsidiaryIds: undefined,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        reason: "readiness resolve",
+        dryRun: true,
+        allowedSubsidiaryIds: undefined,
       });
       assert.equal(first.linked.length, 1);
       assert.equal(first.linked[0]!.employeePartyId, solo);
@@ -174,23 +206,39 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       // A preview writes nothing.
       assert.equal(await employmentOf(fx, solo), null);
       const applied = await resolvePayrollProfileEmploymentLinks({
-        orgId: fx.orgId, actorId: fx.actorId,
-        reason: "readiness resolve", dryRun: false, allowedSubsidiaryIds: undefined,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        reason: "readiness resolve",
+        dryRun: false,
+        allowedSubsidiaryIds: undefined,
       });
       assert.equal(applied.linked.length, 1);
-      const stored = (await db.execute<{ employment_id: string | null }>(sql`
+      const stored = (
+        await db.execute<{ employment_id: string | null }>(
+          sql`
         select employment_id from employee_payroll_profiles
-         where org_id = ${fx.orgId} and employee_party_id = ${solo}`, "objects"))[0]!.employment_id;
+         where org_id = ${fx.orgId} and employee_party_id = ${solo}`,
+          "objects",
+        )
+      )[0]!.employment_id;
       assert.ok(stored);
-      const audit = (await db.execute<{ n: number }>(sql`
+      const audit = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from audit_log
          where org_id = ${fx.orgId} and table_name = 'employee_payroll_profiles'
-           and action = 'update'`, "objects"))[0]!.n;
+           and action = 'update'`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(audit, 1);
       // Second run finds nothing left to link.
       const again = await resolvePayrollProfileEmploymentLinks({
-        orgId: fx.orgId, actorId: fx.actorId,
-        reason: "readiness resolve", dryRun: false, allowedSubsidiaryIds: undefined,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        reason: "readiness resolve",
+        dryRun: false,
+        allowedSubsidiaryIds: undefined,
       });
       assert.deepEqual([again.linked.length, again.unresolved.length], [0, 1]);
     } finally {
@@ -206,44 +254,93 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       const partyId = await party(fx, "Rehire Ruby", null);
       await profile(fx, "p1", partyId, null);
       const position = await createPosition({
-        orgId: fx.orgId, actorId: fx.actorId, positionCode: "ENG-2048", title: "Engineer",
-        employerSubsidiaryId: fx.rootSubsidiaryId, plannedFte: "1.0000",
-        status: "open", effectiveFrom: "2026-07-01", reason: "open the establishment",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        positionCode: "ENG-2048",
+        title: "Engineer",
+        employerSubsidiaryId: fx.rootSubsidiaryId,
+        plannedFte: "1.0000",
+        status: "open",
+        effectiveFrom: "2026-07-01",
+        reason: "open the establishment",
       });
       const requisition = await createRequisition({
-        orgId: fx.orgId, actorId: fx.actorId, title: "Backend engineer", positionId: position.id,
-        employerSubsidiaryId: fx.rootSubsidiaryId, hiringManagerPartyId: partyId,
-        headcount: 1, targetStartOn: "2026-10-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        title: "Backend engineer",
+        positionId: position.id,
+        employerSubsidiaryId: fx.rootSubsidiaryId,
+        hiringManagerPartyId: partyId,
+        headcount: 1,
+        targetStartOn: "2026-10-01",
       });
-      const opened = await openRequisition({ orgId: fx.orgId, actorId: fx.actorId, requisitionId: requisition.id });
+      const opened = await openRequisition({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        requisitionId: requisition.id,
+      });
       const { candidate } = await createCandidate({
-        orgId: fx.orgId, actorId: fx.actorId, displayName: "Rehire Ruby",
-        email: "ruby@example.test", phone: "+1-555-0100", source: "direct",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        displayName: "Rehire Ruby",
+        email: "ruby@example.test",
+        phone: "+1-555-0100",
+        source: "direct",
       });
-      await linkCandidateParty(db, { orgId: fx.orgId, actorId: fx.actorId, candidateId: candidate.id, partyId });
+      await linkCandidateParty(db, {
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        candidateId: candidate.id,
+        partyId,
+      });
       const application = await createApplication({
-        orgId: fx.orgId, actorId: fx.actorId, requisitionId: opened.id, candidateId: candidate.id,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        requisitionId: opened.id,
+        candidateId: candidate.id,
       });
-      const funnel = await getRequisitionDetail({ orgId: fx.orgId, actorId: fx.actorId, requisitionId: opened.id });
+      const funnel = await getRequisitionDetail({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        requisitionId: opened.id,
+      });
       for (const key of ["screening", "interview", "offer"]) {
         const stage = funnel.stages.find((entry) => entry.key === key)!;
         await moveApplicationStage({
-          orgId: fx.orgId, actorId: fx.actorId, applicationId: application.id, toStageId: stage.id,
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          applicationId: application.id,
+          toStageId: stage.id,
         });
       }
       const offer = await createOffer({
-        orgId: fx.orgId, actorId: fx.actorId, applicationId: application.id,
-        employerSubsidiaryId: fx.rootSubsidiaryId, jobTitle: "Backend engineer",
-        proposedStartOn: "2026-10-01", compensationAmount: "120000",
-        compensationCurrency: "USD", compensationBasis: "annual", expiresOn: "2026-12-31",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        applicationId: application.id,
+        employerSubsidiaryId: fx.rootSubsidiaryId,
+        jobTitle: "Backend engineer",
+        proposedStartOn: "2026-10-01",
+        compensationAmount: "120000",
+        compensationCurrency: "USD",
+        compensationBasis: "annual",
+        expiresOn: "2026-12-31",
       });
       await sendOffer({ orgId: fx.orgId, actorId: fx.actorId, offerId: offer.id });
-      const hire = await acceptOfferAsHire({ orgId: fx.orgId, actorId: fx.actorId, offerId: offer.id });
+      const hire = await acceptOfferAsHire({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        offerId: offer.id,
+      });
       assert.equal(await employmentOf(fx, partyId), hire.employmentId);
-      const audit = (await db.execute<{ n: number }>(sql`
+      const audit = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from audit_log
          where org_id = ${fx.orgId} and table_name = 'employee_payroll_profiles'
-           and action = 'update'`, "objects"))[0]!.n;
+           and action = 'update'`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(audit, 1);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -257,8 +354,12 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       const employmentId = await employment(fx, partyId, fx.rootSubsidiaryId);
       const scheduleId = await profile(fx, "sched", partyId, employmentId);
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
+        payDate: "2026-07-21",
       });
       const readiness = await payRunReadiness(fx.orgId, run.documentId);
       const blockers = readiness.items.filter((item) => item.code === "employee.noEmployment");

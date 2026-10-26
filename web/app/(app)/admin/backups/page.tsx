@@ -1,8 +1,7 @@
-import { ModuleView } from "../../../../components/viewspec/module-view"
-import { loadAdminBackups, adminBackupsSpec } from "./view"
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadAdminBackups, adminBackupsSpec } from "./view";
 
 export const dynamic = "force-dynamic";
-
 
 export default async function BackupsPage({
   searchParams,

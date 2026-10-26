@@ -1,42 +1,39 @@
-import { lockApprovalSubject } from '@openbooks/engine/platform/approval-routing'
-import { completedGateDecisionPolicy } from '@openbooks/engine/flows/approval-decision-policy'
-import { applyProductionTimeCorrections } from '@openbooks/engine/manufacturing/conversion'
+import { lockApprovalSubject } from "@openbooks/engine/platform/approval-routing";
+import { completedGateDecisionPolicy } from "@openbooks/engine/flows/approval-decision-policy";
+import { applyProductionTimeCorrections } from "@openbooks/engine/manufacturing/conversion";
 import {
   lockSharedTimeAuthority,
   type TimeCommandPermission,
   type TimeWorkFamily,
-} from '@openbooks/engine/projects/time-work-target'
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { lockScopeRow } from '@openbooks/engine/organization/scope'
+} from "@openbooks/engine/projects/time-work-target";
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { lockScopeRow } from "@openbooks/engine/organization/scope";
 import {
   laborCostingSettings,
   setPrevailingWageEntryWage,
   snapshotLaborCostRates,
-} from '@openbooks/engine/projects/labor-costing/operations'
+} from "@openbooks/engine/projects/labor-costing/operations";
 // HR-13: register the prevailing-wage resolver for the snapshot hook —
 // the projects module never imports hrm, so the web approval path wires
 // the HRM implementation here. With the feature off it returns null and
 // every entry keeps the standard wage path.
-import { prevailingWageForTimeEntry } from '@openbooks/engine/hrm/construction/labor-hook'
+import { prevailingWageForTimeEntry } from "@openbooks/engine/hrm/construction/labor-hook";
 
-setPrevailingWageEntryWage(prevailingWageForTimeEntry)
-import { applyOverheadForTime } from '@openbooks/engine/allocations/overhead-post'
-import { postProjectLaborCost } from '@openbooks/engine/projects/recognition'
-import { setTimesheetWeekStatus, weekWindow } from '../app/api/timesheets/_lib'
-import { snapshotTimeBillRates } from './item-rates'
-import { isFeatureEnabled } from './features'
-import { TimeApprovalRefusal } from './time-approval-refusal'
+setPrevailingWageEntryWage(prevailingWageForTimeEntry);
+import { applyOverheadForTime } from "@openbooks/engine/allocations/overhead-post";
+import { postProjectLaborCost } from "@openbooks/engine/projects/recognition";
+import { setTimesheetWeekStatus, weekWindow } from "../app/api/timesheets/_lib";
+import { snapshotTimeBillRates } from "./item-rates";
+import { isFeatureEnabled } from "./features";
+import { TimeApprovalRefusal } from "./time-approval-refusal";
 
-export { TimeApprovalRefusal }
-export type {
-  TimeApprovalRefusalCode,
-  UncoveredTimeEntry,
-} from './time-approval-refusal'
+export { TimeApprovalRefusal };
+export type { TimeApprovalRefusalCode, UncoveredTimeEntry } from "./time-approval-refusal";
 
 /** Where the labor-costing policy lives for the wage-rate remedy. */
-export const LABOR_COSTING_SETUP_HREF = '/admin/setup/labor-costing'
+export const LABOR_COSTING_SETUP_HREF = "/admin/setup/labor-costing";
 
 /**
  * The ONE set of side-effects that fire when time becomes approved — shared by
@@ -54,60 +51,58 @@ export async function runTimeApprovalEffects(
   orgId: string,
   actorId: string,
   timeEntryIds: string[],
-  permission: TimeCommandPermission = 'time.approve',
+  permission: TimeCommandPermission = "time.approve",
 ): Promise<void> {
-  if (timeEntryIds.length === 0) return
+  if (timeEntryIds.length === 0) return;
   const targets = await db.execute<{
-      id: string
-      project_id: string | null
-      work_order_id: string | null
-    }>(sql`
-    select id,project_id,work_order_id from time_entries where org_id=${orgId} and id=any(${`{${timeEntryIds.join(',')}}`}::uuid[]) for share`, 'objects')
+    id: string;
+    project_id: string | null;
+    work_order_id: string | null;
+  }>(
+    sql`
+    select id,project_id,work_order_id from time_entries where org_id=${orgId} and id=any(${`{${timeEntryIds.join(",")}}`}::uuid[]) for share`,
+    "objects",
+  );
   if (targets.length !== new Set(timeEntryIds).size) {
     throw new TimeApprovalRefusal(
-      'One or more time entries are unavailable. Reload before approving time.',
-      'entries_unavailable',
+      "One or more time entries are unavailable. Reload before approving time.",
+      "entries_unavailable",
       409,
-      'Reload the week and try again — an entry changed while the approval was prepared.',
-    )
+      "Reload the week and try again — an entry changed while the approval was prepared.",
+    );
   }
   if (targets.some((row) => row.project_id && row.work_order_id)) {
     throw new TimeApprovalRefusal(
-      'Time must name one cost object. Split project and production time before approval.',
-      'mixed_cost_objects',
+      "Time must name one cost object. Split project and production time before approval.",
+      "mixed_cost_objects",
       422,
-      'Split the mixed lines so each names either a project or a production order, then approve again.',
-    )
+      "Split the mixed lines so each names either a project or a production order, then approve again.",
+    );
   }
-  const productionIds = targets
-    .filter((row) => row.work_order_id)
-    .map((row) => row.id)
-  const projectsEnabled = await isFeatureEnabled(orgId, 'projects')
+  const productionIds = targets.filter((row) => row.work_order_id).map((row) => row.id);
+  const projectsEnabled = await isFeatureEnabled(orgId, "projects");
   const projectIds = projectsEnabled
     ? targets.filter((row) => !row.work_order_id).map((row) => row.id)
-    : []
-  if (
-    productionIds.length &&
-    !(await isFeatureEnabled(orgId, 'manufacturing'))
-  ) {
+    : [];
+  if (productionIds.length && !(await isFeatureEnabled(orgId, "manufacturing"))) {
     throw new TimeApprovalRefusal(
-      'Manufacturing is turned off. Enable it before approving production time.',
-      'manufacturing_off',
+      "Manufacturing is turned off. Enable it before approving production time.",
+      "manufacturing_off",
       409,
-      'Turn Manufacturing back on in Company Settings → Features, then approve again.',
-    )
+      "Turn Manufacturing back on in Company Settings → Features, then approve again.",
+    );
   }
   if (!projectsEnabled && targets.some((row) => row.project_id)) {
     throw new TimeApprovalRefusal(
-      'Projects is turned off. Enable it before approving project time.',
-      'projects_off',
+      "Projects is turned off. Enable it before approving project time.",
+      "projects_off",
       409,
-      'Turn Projects back on in Company Settings → Features, then approve again.',
-    )
+      "Turn Projects back on in Company Settings → Features, then approve again.",
+    );
   }
-  if (!projectsEnabled && !productionIds.length) return
-  const settings = await laborCostingSettings(orgId)
-  await snapshotLaborCostRates(orgId, timeEntryIds, { actorId })
+  if (!projectsEnabled && !productionIds.length) return;
+  const settings = await laborCostingSettings(orgId);
+  await snapshotLaborCostRates(orgId, timeEntryIds, { actorId });
   // The snapshot stamps every entry a wage row covers and skips the rest —
   // its stamped count is not the verdict. An entry still rateless after the
   // snapshot has NO covering wage row: approving it would create approved
@@ -116,39 +111,37 @@ export async function runTimeApprovalEffects(
   // Every caller runs this inside the approval transaction before stamping
   // the header, so the refusal rolls the entry flips back with it.
   const uncovered = await db.execute<{
-      employee_name: string | null
-      worked_on: string
-      party_kind: string | null
-    }>(sql`
+    employee_name: string | null;
+    worked_on: string;
+    party_kind: string | null;
+  }>(
+    sql`
     select p.display_name as employee_name, te.worked_on::text as worked_on, p.kind as party_kind
       from time_entries te
       left join parties p on p.id = te.employee_party_id and p.org_id = te.org_id
      where te.org_id = ${orgId}
-       and te.id = any(${`{${timeEntryIds.join(',')}}`}::uuid[])
+       and te.id = any(${`{${timeEntryIds.join(",")}}`}::uuid[])
        and te.cost_rate is null
      order by p.display_name, te.worked_on
-  `, 'objects')
+  `,
+    "objects",
+  );
   if (uncovered.length > 0 && !settings.allowUnratedTime) {
     const shown = uncovered
       .slice(0, 10)
-      .map(
-        (row) =>
-          `${row.employee_name ?? 'unknown employee'} on ${row.worked_on}`,
-      )
+      .map((row) => `${row.employee_name ?? "unknown employee"} on ${row.worked_on}`);
     const more =
-      uncovered.length > shown.length
-        ? `, and ${uncovered.length - shown.length} more`
-        : ''
+      uncovered.length > shown.length ? `, and ${uncovered.length - shown.length} more` : "";
     // Partners and owners keep time as people, never as employments: their
     // remedy names the cost rate, never an employment or compensation
     // record. Employees keep the wage-row remedy.
-    const personOnly = uncovered.every((row) => row.party_kind === 'person')
+    const personOnly = uncovered.every((row) => row.party_kind === "person");
     const remedy = personOnly
-      ? 'Add a cost rate for them in Labor costing setup — they need no employment or compensation record — or allow unrated time.'
-      : 'Add a wage row covering those dates in Labor costing setup, or allow unrated time.'
+      ? "Add a cost rate for them in Labor costing setup — they need no employment or compensation record — or allow unrated time."
+      : "Add a wage row covering those dates in Labor costing setup, or allow unrated time.";
     throw new TimeApprovalRefusal(
-      `cannot approve ${uncovered.length === 1 ? 'a time entry' : `${uncovered.length} time entries`} with no covering cost rate: ${shown.join('; ')}${more} — ${remedy}`,
-      'no_covering_wage_rate',
+      `cannot approve ${uncovered.length === 1 ? "a time entry" : `${uncovered.length} time entries`} with no covering cost rate: ${shown.join("; ")}${more} — ${remedy}`,
+      "no_covering_wage_rate",
       422,
       remedy,
       {
@@ -158,39 +151,32 @@ export async function runTimeApprovalEffects(
         })),
         setupHref: LABOR_COSTING_SETUP_HREF,
       },
-    )
+    );
   }
   if (productionIds.length)
-    await applyProductionTimeCorrections(
-      db,
-      orgId,
-      actorId,
-      productionIds,
-      permission,
-    )
+    await applyProductionTimeCorrections(db, orgId, actorId, productionIds, permission);
   // Production captures payroll evidence here; its released operation owns absorption into WIP.
   // Project posting and billing receive only project-side entries, so the same hours cannot be charged twice.
   if (projectIds.length) {
-    await snapshotTimeBillRates(orgId, projectIds)
-    if (settings.mode === 'post')
-      await postProjectLaborCost(orgId, actorId, projectIds)
-    await applyOverheadForTime(orgId, actorId, projectIds)
+    await snapshotTimeBillRates(orgId, projectIds);
+    if (settings.mode === "post") await postProjectLaborCost(orgId, actorId, projectIds);
+    await applyOverheadForTime(orgId, actorId, projectIds);
   }
 }
 
 export interface ApproveSubmittedTimeEntriesOptions {
-  orgId: string
-  actorId: string
-  employeePartyId: string
-  weekStart: string
-  workFamily?: TimeWorkFamily
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  actorId: string;
+  employeePartyId: string;
+  weekStart: string;
+  workFamily?: TimeWorkFamily;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** The approver's words on a flow-gated decision: recorded on the approval
    * audit with the before/after state, never stored on the entries. */
-  comment?: string | null
+  comment?: string | null;
   /** Native routing receipt or completed gate identity; request bodies never supply this authority. */
-  submissionId?: string
-  approvalRunId?: string
+  submissionId?: string;
+  approvalRunId?: string;
 }
 
 /**
@@ -206,28 +192,31 @@ export interface ApproveSubmittedTimeEntriesOptions {
 export async function approveSubmittedTimeEntries(
   options: ApproveSubmittedTimeEntriesOptions,
 ): Promise<string[]> {
-  const days = weekWindow(options.weekStart)
-  const week = days[0]!
+  const days = weekWindow(options.weekStart);
+  const week = days[0]!;
   return withOrgTransaction(options.orgId, async () => {
-    const identity = (await db.execute<{ id: string }>(
-        sql`select id from timesheet_weeks where org_id=${options.orgId} and employee_party_id=${options.employeePartyId} and week_start=${week}::date`, 'objects',
-      ))[0]
+    const identity = (
+      await db.execute<{ id: string }>(
+        sql`select id from timesheet_weeks where org_id=${options.orgId} and employee_party_id=${options.employeePartyId} and week_start=${week}::date`,
+        "objects",
+      )
+    )[0];
     if (!identity)
       throw new TimeApprovalRefusal(
-        'Submit the current week before releasing it.',
-        'nothing_submitted',
+        "Submit the current week before releasing it.",
+        "nothing_submitted",
         422,
-        'Submit the week through its native Flow routing.',
-      )
-    await lockApprovalSubject(options.orgId, 'timesheet_week', identity.id)
+        "Submit the week through its native Flow routing.",
+      );
+    await lockApprovalSubject(options.orgId, "timesheet_week", identity.id);
     await lockSharedTimeAuthority(db, options.orgId, options.actorId, {
       employeeId: options.employeePartyId,
       from: days[0]!,
       through: days[6]!,
       requestedScope: options.allowedSubsidiaryIds,
-      permission: options.submissionId ? 'time.manage' : 'time.approve',
+      permission: options.submissionId ? "time.manage" : "time.approve",
       workFamily: options.workFamily,
-    })
+    });
     // Parties precede their dependent week headers in the canonical lock
     // order. The route's preliminary pin can go stale while this transaction
     // starts, so recheck the employee's current scope under a shared lock and
@@ -235,67 +224,78 @@ export async function approveSubmittedTimeEntries(
     await lockScopeRow(
       db,
       options.orgId,
-      'party',
+      "party",
       options.employeePartyId,
       options.allowedSubsidiaryIds,
-      'share',
-    )
+      "share",
+    );
     // The week's header owns the lifecycle: lock it first so a concurrent
     // submission cannot interleave gate creation with this approval, then
     // refuse weeks no approval may consume. The locked status is the audit
     // before-image for the approval evidence written below.
-    const header = (await db.execute<{
-        id: string
-        status: string
-        submitted_at: string
-      }>(sql`
+    const header = (
+      await db.execute<{
+        id: string;
+        status: string;
+        submitted_at: string;
+      }>(
+        sql`
       select id,status,submitted_at::text from timesheet_weeks
        where org_id = ${options.orgId}
          and employee_party_id = ${options.employeePartyId}
          and week_start = ${week}::date
        for update
-    `, 'objects'))[0]
-    if (!header || header.status !== 'submitted')
-      throw new TimeApprovalRefusal(
-        'Submit the current week before releasing it.',
-        'nothing_submitted',
-        422,
-        'Submit the week through its native Flow routing.',
+    `,
+        "objects",
       )
+    )[0];
+    if (!header || header.status !== "submitted")
+      throw new TimeApprovalRefusal(
+        "Submit the current week before releasing it.",
+        "nothing_submitted",
+        422,
+        "Submit the week through its native Flow routing.",
+      );
     if (options.submissionId) {
-      const proof = (await db.execute<{
-          allowed: boolean
-        }>(sql`select exists(select 1 from flow_submissions
+      const proof = (
+        await db.execute<{
+          allowed: boolean;
+        }>(
+          sql`select exists(select 1 from flow_submissions
         where id=${options.submissionId} and org_id=${options.orgId} and subject_kind='timesheet_week'
           and subject_id=${header.id} and actor_id=${options.actorId} and policy->>'kind'='ungated'
           and context->>'submittedAt'=${header.submitted_at}
-          and public.flow_ungated_submission_authorized(org_id,subject_kind,subject_id,actor_id)) as allowed`, 'objects'))[0]?.allowed
+          and public.flow_ungated_submission_authorized(org_id,subject_kind,subject_id,actor_id)) as allowed`,
+          "objects",
+        )
+      )[0]?.allowed;
       if (!proof)
         throw new TimeApprovalRefusal(
-          'This week has no matching ungated submission receipt.',
-          'week_owned_by_workflow',
+          "This week has no matching ungated submission receipt.",
+          "week_owned_by_workflow",
           409,
-          'Submit the current week through Flows.',
-        )
+          "Submit the current week through Flows.",
+        );
     } else {
       const proof = await completedGateDecisionPolicy(db, {
         orgId: options.orgId,
-        subjectKind: 'timesheet_week',
+        subjectKind: "timesheet_week",
         subjectId: header.id,
         approvalRunId: options.approvalRunId,
         actorId: options.actorId,
-        outcome: 'approved',
-      })
+        outcome: "approved",
+      });
       if (!proof)
         throw new TimeApprovalRefusal(
-          'The week requires its assigned native Flow decisions.',
-          'week_owned_by_workflow',
+          "The week requires its assigned native Flow decisions.",
+          "week_owned_by_workflow",
           409,
-          'Decide the assigned gates in My approvals.',
-        )
+          "Decide the assigned gates in My approvals.",
+        );
     }
 
-    const approved = await db.execute<{ id: string; substantive: boolean }>(sql`
+    const approved = await db.execute<{ id: string; substantive: boolean }>(
+      sql`
       update time_entries
          set status = 'approved',
              approved_by = ${options.actorId},
@@ -308,13 +308,13 @@ export async function approveSubmittedTimeEntries(
          and worked_on <= ${days[6]}
          and status = 'submitted'
        returning id, (hours <> 0) as substantive
-    `, 'objects')
+    `,
+      "objects",
+    );
     // Zero-hour declaration lines flip with the week but cost nothing: only
     // lines with real hours enter costing, billing and payroll effects, so a
     // leave-week declaration never demands a wage row for hours nobody worked.
-    const substantiveIds = approved
-      .filter((row) => row.substantive)
-      .map((row) => row.id)
+    const substantiveIds = approved.filter((row) => row.substantive).map((row) => row.id);
 
     // The conditional UPDATE is the claim: zero flipped rows means there was
     // nothing submitted to approve (a draft or empty week), and the header
@@ -326,26 +326,29 @@ export async function approveSubmittedTimeEntries(
     // audited, and there is no time to cost.
     const declaredNoHours =
       substantiveIds.length === 0 &&
-      header?.status === 'submitted' &&
-      ((await db.execute<{ n: number }>(sql`
+      header?.status === "submitted" &&
+      ((
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from time_entries
        where org_id = ${options.orgId} and employee_party_id = ${options.employeePartyId}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
          and hours <> 0
-    `, 'objects'))[0]?.n ?? 0) === 0
-    if (
-      substantiveIds.length === 0 &&
-      approved.length === 0 &&
-      !declaredNoHours
-    ) {
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0) === 0;
+    if (substantiveIds.length === 0 && approved.length === 0 && !declaredNoHours) {
       // Zero flips over already-approved entries is a re-approval, not an
       // unsubmitted week: name the prior approval (who/when) and the way
       // back (reopen/amend) instead of misreporting it.
-      const prior = (await db.execute<{
-          by_name: string | null
-          by_email: string | null
-          on: string | null
-        }>(sql`
+      const prior = (
+        await db.execute<{
+          by_name: string | null;
+          by_email: string | null;
+          on: string | null;
+        }>(
+          sql`
         select u.name as by_name, u.email as by_email, max(e.approved_at)::date::text as on
           from time_entries e
           left join users u on u.id = e.approved_by
@@ -357,40 +360,43 @@ export async function approveSubmittedTimeEntries(
          group by u.name, u.email
          order by max(e.approved_at) desc
          limit 1
-      `, 'objects'))[0]
-      if (prior) {
-        const who = prior.by_name ?? prior.by_email ?? 'another approver'
-        throw new TimeApprovalRefusal(
-          `week already approved by ${who}${prior.on ? ` on ${prior.on}` : ''} — reopen or amend the week to change it`,
-          'already_approved',
-          409,
-          'Reopen or amend the week to change approved hours.',
-          { approvedBy: who, approvedOn: prior.on ?? null },
+      `,
+          "objects",
         )
+      )[0];
+      if (prior) {
+        const who = prior.by_name ?? prior.by_email ?? "another approver";
+        throw new TimeApprovalRefusal(
+          `week already approved by ${who}${prior.on ? ` on ${prior.on}` : ""} — reopen or amend the week to change it`,
+          "already_approved",
+          409,
+          "Reopen or amend the week to change approved hours.",
+          { approvedBy: who, approvedOn: prior.on ?? null },
+        );
       }
       throw new TimeApprovalRefusal(
-        'no submitted entries to approve — submit the week first',
-        'nothing_submitted',
+        "no submitted entries to approve — submit the week first",
+        "nothing_submitted",
         422,
-        'Submit the week before approving it.',
-      )
+        "Submit the week before approving it.",
+      );
     }
-    const ids = approved.map((row) => row.id)
+    const ids = approved.map((row) => row.id);
     if (substantiveIds.length > 0)
       await runTimeApprovalEffects(
         options.orgId,
         options.actorId,
         substantiveIds,
-        options.submissionId ? 'time.manage' : 'time.approve',
-      )
+        options.submissionId ? "time.manage" : "time.approve",
+      );
     await setTimesheetWeekStatus(
       options.orgId,
       options.employeePartyId,
       week,
-      'approved',
+      "approved",
       options.actorId,
       null,
-    )
+    );
     // Durable approval evidence, part of the same atomic unit: the status
     // flip above throws unless exactly one header row exists for this week,
     // so a header id is known here — prefer the locked row, else read the
@@ -400,33 +406,34 @@ export async function approveSubmittedTimeEntries(
     // posted labor cost and overhead journals cannot persist.
     const headerId =
       header?.id ??
-      (await db.execute<{ id: string }>(sql`
+      (
+        await db.execute<{ id: string }>(
+          sql`
         select id from timesheet_weeks
          where org_id = ${options.orgId}
            and employee_party_id = ${options.employeePartyId}
            and week_start = ${week}::date
-      `, 'objects'))[0]?.id ??
-      null
-    if (!headerId) throw new Error('timesheet week not found')
-    const approvalComment = options.comment?.trim()
-      ? options.comment.trim()
-      : null
+      `,
+          "objects",
+        )
+      )[0]?.id ??
+      null;
+    if (!headerId) throw new Error("timesheet week not found");
+    const approvalComment = options.comment?.trim() ? options.comment.trim() : null;
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${options.orgId}, 'timesheet_weeks', ${headerId}, 'update', ${JSON.stringify(
-        {
-          event: 'approved',
-          approvalMode: options.submissionId ? 'ungated' : 'gated',
-          submissionId: options.submissionId ?? null,
-          actor: { kind: 'user', userId: options.actorId },
-          before: { status: header?.status ?? null },
-          after: { status: 'approved' },
-          entryIds: ids,
-          weekStart: week,
-          ...(approvalComment ? { reason: approvalComment } : {}),
-        },
-      )}::jsonb, ${options.actorId})
-    `)
-    return ids
-  })
+      values (${options.orgId}, 'timesheet_weeks', ${headerId}, 'update', ${JSON.stringify({
+        event: "approved",
+        approvalMode: options.submissionId ? "ungated" : "gated",
+        submissionId: options.submissionId ?? null,
+        actor: { kind: "user", userId: options.actorId },
+        before: { status: header?.status ?? null },
+        after: { status: "approved" },
+        entryIds: ids,
+        weekStart: week,
+        ...(approvalComment ? { reason: approvalComment } : {}),
+      })}::jsonb, ${options.actorId})
+    `);
+    return ids;
+  });
 }

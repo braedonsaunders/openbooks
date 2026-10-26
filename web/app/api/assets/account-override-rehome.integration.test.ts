@@ -49,9 +49,8 @@ const { PATCH } = (await import("./[id]/route.ts")) as typeof import("./[id]/rou
 
 const { db } = await import("@openbooks/engine/platform/db");
 const { documentRevisionSql } = await import("@openbooks/engine/records/revision");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures",
-);
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -118,20 +117,30 @@ async function holdAndRehomeAccount(fixture: Fixture): Promise<Client> {
     "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
     [fixture.orgId],
   );
-  await client.query("select id from accounts where org_id = $1 and id = $2 for update", [fixture.orgId, fixture.accountId]);
-  await client.query("update accounts set subsidiary_id = $1 where org_id = $2 and id = $3", [fixture.subsidiaryB, fixture.orgId, fixture.accountId]);
+  await client.query("select id from accounts where org_id = $1 and id = $2 for update", [
+    fixture.orgId,
+    fixture.accountId,
+  ]);
+  await client.query("update accounts set subsidiary_id = $1 where org_id = $2 and id = $3", [
+    fixture.subsidiaryB,
+    fixture.orgId,
+    fixture.accountId,
+  ]);
   return client;
 }
 
 async function waitForAccountShare(settled: () => boolean): Promise<void> {
   for (let waited = 0; waited < 15_000; waited += 25) {
     if (settled()) assert.fail("the asset write completed before waiting for the account row lock");
-    const blocked = await db.execute<{ n: number }>(sql`
+    const blocked = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from pg_stat_activity
        where datname = current_database() and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
          and query ilike '%from accounts a%'
-         and query ilike '%for share of a%'`, "objects");
+         and query ilike '%for share of a%'`,
+      "objects",
+    );
     if (blocked[0]?.n) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -146,31 +155,44 @@ for (const writer of writers) {
     try {
       holder = await holdAndRehomeAccount(fixture);
       let settled = false;
-      const write = writer === "POST create"
-        ? POST(new Request("http://openbooks.test/api/assets", {
-            method: "POST",
-            headers: { "content-type": "application/json", "Idempotency-Key": randomUUID() },
-            body: JSON.stringify({
-              name: "New asset",
-              categoryId: fixture.categoryId,
-              subsidiaryId: fixture.subsidiaryA,
-              acquisitionCost: "100.0000",
-              salvageValue: "0.0000",
-              acquiredOn: fixture.date,
-              assetAccountId: fixture.accountId,
-            }),
-          }))
-        : PATCH(new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              expectedUpdatedAt: (await db.execute<{ revision: string }>(sql`
+      const write =
+        writer === "POST create"
+          ? POST(
+              new Request("http://openbooks.test/api/assets", {
+                method: "POST",
+                headers: { "content-type": "application/json", "Idempotency-Key": randomUUID() },
+                body: JSON.stringify({
+                  name: "New asset",
+                  categoryId: fixture.categoryId,
+                  subsidiaryId: fixture.subsidiaryA,
+                  acquisitionCost: "100.0000",
+                  salvageValue: "0.0000",
+                  acquiredOn: fixture.date,
+                  assetAccountId: fixture.accountId,
+                }),
+              }),
+            )
+          : PATCH(
+              new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  expectedUpdatedAt: (
+                    await db.execute<{ revision: string }>(
+                      sql`
                 select ${documentRevisionSql(sql`updated_at`)} as revision
-                  from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects"))[0]!.revision,
-              assetAccountId: fixture.accountId,
-            }),
-          }), { params: Promise.resolve({ id: fixture.assetId }) });
-      const pending = write.finally(() => { settled = true; });
+                  from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`,
+                      "objects",
+                    )
+                  )[0]!.revision,
+                  assetAccountId: fixture.accountId,
+                }),
+              }),
+              { params: Promise.resolve({ id: fixture.assetId }) },
+            );
+      const pending = write.finally(() => {
+        settled = true;
+      });
       await waitForAccountShare(() => settled);
       await holder.query("commit");
       await holder.end();
@@ -181,13 +203,23 @@ for (const writer of writers) {
         (await response.json()).error,
         writer === "POST create" ? "invalid_asset_account" : "Invalid asset account",
       );
-      const stored = await db.execute<{ asset_account_id: string | null }>(sql`
-        select asset_account_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects");
-      assert.equal(stored[0]?.asset_account_id ?? null, null, "the hidden account must not be stored");
+      const stored = await db.execute<{ asset_account_id: string | null }>(
+        sql`
+        select asset_account_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`,
+        "objects",
+      );
+      assert.equal(
+        stored[0]?.asset_account_id ?? null,
+        null,
+        "the hidden account must not be stored",
+      );
       if (writer === "POST create") {
-        const created = await db.execute<{ n: number }>(sql`
+        const created = await db.execute<{ n: number }>(
+          sql`
           select count(*)::int as n from fixed_assets
-           where org_id = ${fixture.orgId} and asset_account_id = ${fixture.accountId}`, "objects");
+           where org_id = ${fixture.orgId} and asset_account_id = ${fixture.accountId}`,
+          "objects",
+        );
         assert.equal(created[0]?.n ?? 0, 0);
       }
     } finally {

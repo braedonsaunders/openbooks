@@ -1,9 +1,17 @@
 import { commitPayRun } from "./run-commit.ts";
-import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
-import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import { seedEnabledPayrollConfiguration } from "../testing/fixtures.ts";
+import { seedPayrollDocument, seedPayrollStub } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPostingAccount, seedPayrollProfile,
-  seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollSchedule,
+  seedPayrollEmployeeRole,
+  seedPayrollPerson,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -67,22 +75,33 @@ async function seedBanks(): Promise<BankFixture> {
   const craPayable = await account("2310", "CRA remittances payable", "liability_current_other");
   const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
   await seedEnabledPayrollConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
+    slotAccounts: {
+      CA: {
+        cpp: craPayable,
+        ei: craPayable,
+        qpip: craPayable,
+        income_tax: craPayable,
+        vacation: vacationPayable,
+      },
+    },
+    wageExpenseAccountId: wageExpense,
+    burdenExpenseAccountId: burdenExpense,
+    netPayAccountId: netPayable,
 
-        wagesTo: "expense",
-      });
+    wagesTo: "expense",
+  });
   await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
-  const components = (await db.execute<{ accrual_id: string; payout_id: string }>(sql`
+  const components = await db.execute<{ accrual_id: string; payout_id: string }>(
+    sql`
     select (array_agg(id order by created_at, id)
               filter (where system_key = 'vacation_accrual'))[1] as accrual_id,
            (array_agg(id order by created_at, id)
               filter (where system_key = 'vacation_payout'))[1] as payout_id
       from pay_components where org_id = ${org.orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const accrualComponentId = components[0]!.accrual_id;
   const payoutComponentId = components[0]!.payout_id;
 
@@ -108,30 +127,47 @@ async function seedBanks(): Promise<BankFixture> {
   // second one: `entitlement_plans_org_system` allows only one plan per org to
   // claim a system key, and inventing a parallel vacation plan here would test a
   // shape no tenant has.
-  const vacation = (await db.execute<{ id: string }>(sql`
+  const vacation = await db.execute<{ id: string }>(
+    sql`
     select id from entitlement_plans
      where org_id = ${org.orgId} and system_key = 'vacation'
-  `, "objects"));
+  `,
+    "objects",
+  );
   const vacationPlanId = vacation[0]!.id;
   const bankedPlanId = await plan("BANK", "Banked overtime");
   const recoupPlanId = await plan("RECOUP", "Benefit recoup", {
-    direction: "owe", method: "fixed_per_period", value: "100.0000",
+    direction: "owe",
+    method: "fixed_per_period",
+    value: "100.0000",
   });
 
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    name: "Biweekly",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
 
   const employeeName = "Terry Worker";
   const { employeeId, employmentId } = await seedEmployee(
-    { orgId: org.orgId, actorId, scheduleId, subsidiaryId: org.subsidiaryId }, { name: employeeName },
+    { orgId: org.orgId, actorId, scheduleId, subsidiaryId: org.subsidiaryId },
+    { name: employeeName },
   );
 
   return {
-    orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId, scheduleId,
-    employeeId, employmentId, employeeName, vacationPlanId, bankedPlanId, recoupPlanId,
+    orgId: org.orgId,
+    actorId,
+    subsidiaryId: org.subsidiaryId,
+    scheduleId,
+    employeeId,
+    employmentId,
+    employeeName,
+    vacationPlanId,
+    bankedPlanId,
+    recoupPlanId,
     payoutComponentId,
   };
 }
@@ -142,17 +178,38 @@ async function seedEmployee(
 ): Promise<{ employeeId: string; employmentId: string }> {
   const employeeId = randomUUID();
   await seedPayrollPerson(fx.orgId, employeeId, options.name);
-  await seedPayrollEmployeeRole(fx.orgId, employeeId, { hiredOn: options.hiredOn ?? "2016-01-06", terminatedOn: options.terminatedOn ?? null, isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId });
+  await seedPayrollEmployeeRole(fx.orgId, employeeId, {
+    hiredOn: options.hiredOn ?? "2016-01-06",
+    terminatedOn: options.terminatedOn ?? null,
+    isActive: true,
+    createdBy: fx.actorId,
+    updatedBy: fx.actorId,
+  });
   await seedPayrollWage(fx.orgId, employeeId, fx.actorId, {
-    currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2016-01-01',
+    currency: "CAD",
+    rate: "30",
+    basis: "hour",
+    effectiveFrom: "2016-01-01",
   });
   // Hires carry an HRM employment or stub calculation refuses them.
   const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
-  await seedPayrollProfile(fx.orgId, employeeId, employmentId, fx.scheduleId, fx.actorId, {
-      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
-    province: options.province ?? "ON", payBasis: 'hourly', country: 'CA', federalClaimCode: 1,
-    provincialClaimCode: 1,
-  }, { percentFloor: '4', method: 'accrue' });
+  await seedPayrollProfile(
+    fx.orgId,
+    employeeId,
+    employmentId,
+    fx.scheduleId,
+    fx.actorId,
+    {
+      wcbExempt: true,
+      wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
+      province: options.province ?? "ON",
+      payBasis: "hourly",
+      country: "CA",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+    },
+    { percentFloor: "4", method: "accrue" },
+  );
 
   return { employeeId, employmentId };
 }
@@ -160,15 +217,24 @@ async function seedEmployee(
 async function seedRun(
   fx: BankFixture,
   options: {
-    periodStart?: string; periodEnd?: string; payDate?: string;
-    runStatus?: string; runType?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    payDate?: string;
+    runStatus?: string;
+    runType?: string;
   } = {},
 ): Promise<string> {
   const documentId = randomUUID();
   const payDate = options.payDate ?? "2026-07-21";
   await seedPayrollDocument(fx.orgId, documentId, {
-    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: fx.subsidiaryId,
-    documentDate: payDate, currency: 'CAD', status: 'draft', createdBy: fx.actorId, updatedBy: fx.actorId,
+    kind: "pay_run",
+    documentNumber: `PAY-${documentId.slice(0, 8)}`,
+    subsidiaryId: fx.subsidiaryId,
+    documentDate: payDate,
+    currency: "CAD",
+    status: "draft",
+    createdBy: fx.actorId,
+    updatedBy: fx.actorId,
   });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
@@ -183,11 +249,24 @@ async function seedRun(
 /** A committed stub, which is what freezes a carry-in dated on or before it. */
 async function seedCommittedStub(fx: BankFixture, payDate: string): Promise<string> {
   const documentId = await seedRun(fx, {
-    periodStart: payDate, periodEnd: payDate, payDate, runStatus: "committed",
+    periodStart: payDate,
+    periodEnd: payDate,
+    payDate,
+    runStatus: "committed",
   });
-  await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
-    province: 'ON', periodsPerYear: 26, payDate: payDate, taxYear: 2026, currency: 'CAD', gross: '2400',
-    netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
+  await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+    country: "CA",
+    countrySource: "calculation",
+    province: "ON",
+    periodsPerYear: 26,
+    payDate: payDate,
+    taxYear: 2026,
+    currency: "CAD",
+    gross: "2400",
+    netPay: "1900",
+    factors: {},
+    createdBy: fx.actorId,
+    updatedBy: fx.actorId,
   });
   return documentId;
 }
@@ -215,11 +294,15 @@ test(
     const fx = await seedBanks();
     try {
       const saved = await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: { VAC: "6200.00", BANK: "1450.50" },
-        }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { VAC: "6200.00", BANK: "1450.50" },
+          },
+        ],
       });
       assert.equal(saved.created, 2);
       assert.deepEqual(saved.errors, []);
@@ -230,9 +313,12 @@ test(
       assert.equal(byCode.get("VAC")!.balance, "6200.0000");
       assert.equal(byCode.get("BANK")!.balance, "1450.5000");
       // The movement is an `opening`, written through the ledger, not a column.
-      const kinds = (await db.execute<{ kind: string; n: number }>(sql`
+      const kinds = await db.execute<{ kind: string; n: number }>(
+        sql`
         select kind, count(*)::int as n from entitlement_ledger
-         where org_id = ${fx.orgId} group by kind`, "objects"));
+         where org_id = ${fx.orgId} group by kind`,
+        "objects",
+      );
       assert.deepEqual(kinds, [{ kind: "opening", n: 2 }]);
 
       // A final pay must clear every accrued bank — with the carry-in in it.
@@ -240,39 +326,50 @@ test(
         update employee_roles set terminated_on = '2026-07-18'
          where org_id = ${fx.orgId} and party_id = ${fx.employeeId}`);
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
-        runType: "termination", employeePartyIds: [fx.employeeId],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
+        runType: "termination",
+        employeePartyIds: [fx.employeeId],
       });
       const result = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, []);
 
-      const payouts = (await db.execute<{ description: string; amount: string }>(sql`
+      const payouts = await db.execute<{ description: string; amount: string }>(
+        sql`
         select l.description, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id
          where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.component_id = ${fx.payoutComponentId} and l.description like '%payout%'
-         order by l.description`, "objects"));
+         order by l.description`,
+        "objects",
+      );
       const paid = new Map(payouts.map((r) => [r.description, r.amount]));
       assert.equal(
-        paid.get("Banked overtime payout (accrued balance)"), "1450.5000",
+        paid.get("Banked overtime payout (accrued balance)"),
+        "1450.5000",
         `expected the carried-in bank on the final cheque, got ${[...paid].join(", ")}`,
       );
       assert.equal(paid.get("Vacation payout (accrued balance)"), "6200.0000");
 
       // Calculated movements remain previews; committed payroll settles the bank.
       const preview = await entitlementBalances(fx.orgId, fx.employeeId, "2026-07-21");
-      assert.equal(preview.find(balance => balance.plan.code === 'VAC')!.balance, '6200.0000');
-      assert.equal(preview.find(balance => balance.plan.code === 'BANK')!.balance, '1450.5000');
+      assert.equal(preview.find((balance) => balance.plan.code === "VAC")!.balance, "6200.0000");
+      assert.equal(preview.find((balance) => balance.plan.code === "BANK")!.balance, "1450.5000");
       await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
       const after = await entitlementBalances(fx.orgId, fx.employeeId, "2026-07-21");
       for (const balance of after) {
         if (balance.plan.direction !== "accrue") continue;
         assert.equal(
-          cmp(balance.balance, "0"), 0,
+          cmp(balance.balance, "0"),
+          0,
           `${balance.plan.code} still carries ${balance.balance} after a final pay`,
         );
       }
@@ -289,32 +386,58 @@ test(
     const fx = await seedBanks();
     try {
       await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
       });
-      const opening = (await db.execute<{ before: Record<string, unknown> }>(sql`
+      const opening = (
+        await db.execute<{ before: Record<string, unknown> }>(
+          sql`
         select to_jsonb(l) || jsonb_build_object('amount', l.amount::text, 'hours', l.hours::text) as before from entitlement_ledger l
-        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`, "objects"))[0]!.before;
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`,
+          "objects",
+        )
+      )[0]!.before;
       const cleared = await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
         note: "Correct source employee identity before payroll consumes this opening",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "0" } }],
       });
       assert.equal(cleared.deleted, 1);
       assert.equal((await entitlementOpenings(fx.orgId)).entered, 0);
-      const evidence = (await db.execute<{ actor_id: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`
+      const evidence = (
+        await db.execute<{
+          actor_id: string;
+          changes: { before: unknown; after: unknown; reason: string };
+        }>(
+          sql`
         select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='entitlement_ledger'
-          and action='delete' and row_id=${fx.vacationPlanId} order by at desc limit 1`, "objects"))[0]!;
+          and action='delete' and row_id=${fx.vacationPlanId} order by at desc limit 1`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(evidence.actor_id, fx.actorId);
-      assert.deepEqual(evidence.changes.before, [opening], "clearing preserves the exact previous amount, date and source evidence");
+      assert.deepEqual(
+        evidence.changes.before,
+        [opening],
+        "clearing preserves the exact previous amount, date and source evidence",
+      );
       assert.equal(evidence.changes.after, null);
-      assert.equal(evidence.changes.reason, "Correct source employee identity before payroll consumes this opening");
+      assert.equal(
+        evidence.changes.reason,
+        "Correct source employee identity before payroll consumes this opening",
+      );
 
       // An 'owe' balance entered positive would be a CREDIT the employee never
       // had. Refused with the number to enter instead, never silently negated.
       await assert.rejects(
         saveEntitlementOpenings({
-          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          movementDate: "2026-07-01",
           rows: [{ employeePartyId: fx.employeeId, amounts: { RECOUP: "1200" } }],
         }),
         (error: unknown) => {
@@ -325,7 +448,9 @@ test(
       );
       await assert.rejects(
         saveEntitlementOpenings({
-          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          movementDate: "2026-07-01",
           rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "-100" } }],
         }),
         /cannot be negative/,
@@ -335,11 +460,14 @@ test(
 
       // An owe balance with the right sign is accepted and IS the balance.
       await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
         rows: [{ employeePartyId: fx.employeeId, amounts: { RECOUP: "-1200" } }],
       });
-      const recoup = (await entitlementBalances(fx.orgId, fx.employeeId, "2026-07-21"))
-        .find((b) => b.plan.code === "RECOUP")!;
+      const recoup = (await entitlementBalances(fx.orgId, fx.employeeId, "2026-07-21")).find(
+        (b) => b.plan.code === "RECOUP",
+      )!;
       assert.equal(recoup.balance, "-1200.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -358,7 +486,9 @@ test(
     try {
       await assert.rejects(
         saveEntitlementOpenings({
-          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          movementDate: "2026-07-01",
           rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "12,34" } }],
         }),
         (error: unknown) => {
@@ -372,16 +502,21 @@ test(
       );
       await assert.rejects(
         saveEntitlementOpenings({
-          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          movementDate: "2026-07-01",
           rows: [{ employeePartyId: fx.employeeId, amounts: { BANK: "1,234" } }],
         }),
         /is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
       );
       // All-or-nothing: the refused loads wrote no ledger movement.
       assert.equal((await entitlementOpenings(fx.orgId)).entered, 0);
-      const movements = (await db.execute<{ n: number }>(sql`
+      const movements = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from entitlement_ledger
-         where org_id = ${fx.orgId}`, "objects"));
+         where org_id = ${fx.orgId}`,
+        "objects",
+      );
       assert.equal(movements[0]!.n, 0);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -404,7 +539,9 @@ test(
     const fx = await seedBanks();
     try {
       await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
       });
       const before = await entitlementOpenings(fx.orgId);
@@ -413,11 +550,14 @@ test(
 
       // Until a run reads it, a typo is correctable — no void required.
       await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6250" } }],
       });
       assert.equal(
-        (await entitlementOpenings(fx.orgId)).rows[0]!.amounts[fx.vacationPlanId], "6250.0000",
+        (await entitlementOpenings(fx.orgId)).rows[0]!.amounts[fx.vacationPlanId],
+        "6250.0000",
       );
 
       await seedCommittedStub(fx, "2026-07-21");
@@ -427,7 +567,9 @@ test(
 
       await assert.rejects(
         saveEntitlementOpenings({
-          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          movementDate: "2026-07-01",
           rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "1" } }],
         }),
         (error: unknown) => {
@@ -437,7 +579,8 @@ test(
         },
       );
       assert.equal(
-        (await entitlementOpenings(fx.orgId)).rows[0]!.amounts[fx.vacationPlanId], "6250.0000",
+        (await entitlementOpenings(fx.orgId)).rows[0]!.amounts[fx.vacationPlanId],
+        "6250.0000",
         "a refused save must leave the carry-in exactly as it was",
       );
 
@@ -483,13 +626,17 @@ test(
       // The second load is dated after the committed stub, so BANK is a
       // legitimate new carry-in rather than history behind a paid run.
       await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
       });
       await seedCommittedStub(fx, "2026-07-21");
 
       const result = await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-08-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-08-01",
         strictLocks: false,
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "1", BANK: "200" } }],
       });
@@ -523,7 +670,9 @@ test(
 
       await assert.rejects(
         saveEntitlementOpenings({
-          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          movementDate: "2026-07-01",
           rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
         }),
         /already paid this employee on or after 2026-07-01/,
@@ -531,7 +680,9 @@ test(
 
       // Dated after the run, the same carry-in is legitimate and accepted.
       const ok = await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-22",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-22",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
       });
       assert.equal(ok.created, 1);
@@ -565,10 +716,18 @@ test(
       // person before OpenBooks — so a zero vacation bank is almost certainly
       // wrong, and now is the only cheap moment to say so.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [
-          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } },
-          { employeePartyId: nancy.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } },
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0" },
+          },
+          {
+            employeePartyId: nancy.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0" },
+          },
         ],
       });
       const warned = bankItem(await payRunReadiness(fx.orgId, documentId));
@@ -577,7 +736,9 @@ test(
         assert.equal(item.severity, "warning", "never a blocker — zero can be correct");
         assert.equal(item.href, "/payroll/opening-balances?section=entitlements");
       }
-      const warnedByPlan = new Map(warned.map((w) => [w.detail, w.employees.map((e) => e.name).sort()]));
+      const warnedByPlan = new Map(
+        warned.map((w) => [w.detail, w.employees.map((e) => e.name).sort()]),
+      );
       const both = [fx.employeeName, "Nancy Nova"].sort();
       assert.deepEqual(warnedByPlan.get("Vacation"), both);
       assert.deepEqual(warnedByPlan.get("Banked overtime"), both);
@@ -588,13 +749,20 @@ test(
 
       // Loading the carry-in settles that plan, and only that plan.
       await saveEntitlementOpenings({
-        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-07-01",
         rows: [
           { employeePartyId: fx.employeeId, amounts: { VAC: "6200" } },
           { employeePartyId: nancy.employeeId, amounts: { VAC: "6200" } },
         ],
       });
-      const settledByPlan = new Map(bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => [w.detail, w.employees.map((e) => e.name).sort()]));
+      const settledByPlan = new Map(
+        bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => [
+          w.detail,
+          w.employees.map((e) => e.name).sort(),
+        ]),
+      );
       assert.equal(settledByPlan.has("Vacation"), false);
       assert.deepEqual(settledByPlan.get("Banked overtime"), both);
       assert.deepEqual(settledByPlan.get("Benefit recoup"), both);
@@ -615,8 +783,15 @@ test(
     const fx = await seedBanks();
     try {
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0" },
+          },
+        ],
       });
       const documentId = await seedRun(fx);
       assert.ok(bankItem(await payRunReadiness(fx.orgId, documentId)).length > 0);
@@ -629,7 +804,9 @@ test(
                 'accrual', ${earlier}, ${fx.actorId}, ${fx.actorId})`);
 
       assert.deepEqual(
-        bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => w.detail).sort(),
+        bankItem(await payRunReadiness(fx.orgId, documentId))
+          .map((w) => w.detail)
+          .sort(),
         ["Banked overtime", "Benefit recoup"],
         "only the plan a committed run has moved goes quiet",
       );
@@ -645,17 +822,26 @@ test(
   async () => {
     const fx = await seedBanks();
     try {
-      const newHire = (await seedEmployee(fx, { name: "Newly Hired", hiredOn: "2026-07-06" })).employeeId;
+      const newHire = (await seedEmployee(fx, { name: "Newly Hired", hiredOn: "2026-07-06" }))
+        .employeeId;
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0" },
+          },
+        ],
       });
       const documentId = await seedRun(fx);
       const warned = bankItem(await payRunReadiness(fx.orgId, documentId));
       assert.ok(warned.length > 0);
       for (const item of warned) {
         assert.deepEqual(
-          item.employees.map((e) => e.partyId), [fx.employeeId],
+          item.employees.map((e) => e.partyId),
+          [fx.employeeId],
           "the new hire has no carry-in anywhere, so there is no evidence to act on",
         );
         assert.ok(!item.employees.some((e) => e.partyId === newHire));
@@ -666,16 +852,29 @@ test(
   },
 );
 
-test("entitlement openings expose only the native lifetime bank source", { skip: !DB }, async () => {
-  const fx = await seedBanks();
-  try {
-    await saveEntitlementOpenings({ orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-01-01",
-      rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "1250.55" } }] });
-    const saved = await entitlementOpenings(fx.orgId);
-    assert.equal(saved.rows[0]!.amounts[fx.vacationPlanId], "1250.5500");
-    assert.equal(saved.rows[0]!.dates[fx.vacationPlanId], "2026-01-01");
-    const persisted = await db.execute<{amount:string}>(sql`select amount::text as amount from entitlement_ledger
-      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`, "objects");
-    assert.deepEqual(persisted, [{ amount: "1250.5500" }]);
-  } finally { await dropScratchOrgReporting(fx.orgId); }
-});
+test(
+  "entitlement openings expose only the native lifetime bank source",
+  { skip: !DB },
+  async () => {
+    const fx = await seedBanks();
+    try {
+      await saveEntitlementOpenings({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        movementDate: "2026-01-01",
+        rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "1250.55" } }],
+      });
+      const saved = await entitlementOpenings(fx.orgId);
+      assert.equal(saved.rows[0]!.amounts[fx.vacationPlanId], "1250.5500");
+      assert.equal(saved.rows[0]!.dates[fx.vacationPlanId], "2026-01-01");
+      const persisted = await db.execute<{ amount: string }>(
+        sql`select amount::text as amount from entitlement_ledger
+      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`,
+        "objects",
+      );
+      assert.deepEqual(persisted, [{ amount: "1250.5500" }]);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);

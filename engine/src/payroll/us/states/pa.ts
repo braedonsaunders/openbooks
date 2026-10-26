@@ -61,7 +61,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/pa.ts";
 
 /**
@@ -107,8 +111,18 @@ export const PA_RATES_2026: PaYearRates = {
   philadelphia: [
     // phila.gov Tax Rate History. The 2026 calendar year spans two Philadelphia
     // rate periods; both are carried, and the pay date selects.
-    { effectiveFrom: "2025-07-01", effectiveTo: "2026-07-01", resident: "0.0374", nonresident: "0.0343" },
-    { effectiveFrom: "2026-07-01", effectiveTo: "2027-07-01", resident: "0.03735", nonresident: "0.03425" },
+    {
+      effectiveFrom: "2025-07-01",
+      effectiveTo: "2026-07-01",
+      resident: "0.0374",
+      nonresident: "0.0343",
+    },
+    {
+      effectiveFrom: "2026-07-01",
+      effectiveTo: "2027-07-01",
+      resident: "0.03735",
+      nonresident: "0.03425",
+    },
   ],
 };
 
@@ -116,16 +130,18 @@ const PA_EDITIONS_BY_YEAR: Record<number, PaYearRates> = {
   [PA_RATES_2026.year]: PA_RATES_2026,
 };
 
-export const PA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "PA PIT 3.07% (REV-415 / REV-580); Philadelphia wage tax eff. 2026-07-01",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "PA Department of Revenue, Employer Withholding (REV-415, REV-580) — flat 3.07%; "
-    + "PA DLI CY2026 employee UC withholding 0.07%; City of Philadelphia Tax Rate History",
-  status: "published",
-  region: "PA",
-}];
+export const PA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "PA PIT 3.07% (REV-415 / REV-580); Philadelphia wage tax eff. 2026-07-01",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "PA Department of Revenue, Employer Withholding (REV-415, REV-580) — flat 3.07%; " +
+      "PA DLI CY2026 employee UC withholding 0.07%; City of Philadelphia Tax Rate History",
+    status: "published",
+    region: "PA",
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Pennsylvania personal income tax
@@ -225,13 +241,15 @@ export function philadelphiaRateFor(
   basis: "resident" | "nonresident",
 ): { rate: string; effectiveFrom: string } {
   const rates = PA_STATE_ENGINE.ratesForPayDate(payDate);
-  const period = rates.philadelphia.find((entry) =>
-    payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo));
+  const period = rates.philadelphia.find(
+    (entry) =>
+      payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo),
+  );
   if (!period) {
     throw new PayrollError(
-      `no Philadelphia wage tax rate is loaded for a pay date of ${payDate} — the City revises the `
-      + `rate every 1 July and the rate is keyed to the PAY DATE (current set: phila.gov's Tax Rate History). `
-      + `This date is not yet supported by the US pack; contact support.`,
+      `no Philadelphia wage tax rate is loaded for a pay date of ${payDate} — the City revises the ` +
+        `rate every 1 July and the rate is keyed to the PAY DATE (current set: phila.gov's Tax Rate History). ` +
+        `This date is not yet supported by the US pack; contact support.`,
     );
   }
   return {
@@ -276,8 +294,8 @@ function computePhiladelphia(
     } catch (error) {
       if (error instanceof PayrollError) {
         throw new PayrollError(
-          "Philadelphia nonresident withholding needs the employee's verified share of services performed in Philadelphia; "
-          + "record approved work-location dates or HR allocation for PA/PHILADELPHIA before calculating; refused by name",
+          "Philadelphia nonresident withholding needs the employee's verified share of services performed in Philadelphia; " +
+            "record approved work-location dates or HR allocation for PA/PHILADELPHIA before calculating; refused by name",
         );
       }
       throw error;
@@ -379,12 +397,14 @@ export function localServicesTaxPerPeriod(input: {
     // exemption. Prorating it anyway would be a different tax from the one the
     // jurisdiction levied, so this refuses to guess.
     throw new PayrollError(
-      "a Local Services Tax of $10 or less a year is collected as a lump sum, not prorated per "
-      + "pay period (DCED, Local Services Tax). Record it as a one-time deduction.",
+      "a Local Services Tax of $10 or less a year is collected as a lump sum, not prorated per " +
+        "pay period (DCED, Local Services Tax). Record it as a one-time deduction.",
     );
   }
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear < 1) {
-    throw new PayrollError(`invalid pay periods per year for the Local Services Tax: ${input.periodsPerYear}`);
+    throw new PayrollError(
+      `invalid pay periods per year for the Local Services Tax: ${input.periodsPerYear}`,
+    );
   }
   // Truncate to the cent — DCED's own instruction, and the reason this does not
   // use `divIntCents`, which rounds half-up.

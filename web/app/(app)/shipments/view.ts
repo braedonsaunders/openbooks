@@ -1,15 +1,22 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { mergeHref, pickString } from '../../../lib/list-params'
-import { requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { loadFulfillmentDrawerData } from '../../../lib/fulfillment-drawer-data'
-import { warehouseGroupTabs } from '../../../components/module-home/group-tabs'
-import type { DrawerMode } from '../../../lib/drawer-mode'
-import type { FulfillmentDrawerData } from '../_fulfillment/types'
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { mergeHref, pickString } from "../../../lib/list-params";
+import { requirePermission } from "../../../lib/authz";
+import { isFeatureEnabled } from "../../../lib/features";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { loadFulfillmentDrawerData } from "../../../lib/fulfillment-drawer-data";
+import { warehouseGroupTabs } from "../../../components/module-home/group-tabs";
+import type { DrawerMode } from "../../../lib/drawer-mode";
+import type { FulfillmentDrawerData } from "../_fulfillment/types";
 
 /**
  * Shipments, split into a loader and a spec like the sales orders page.
@@ -25,69 +32,88 @@ import type { FulfillmentDrawerData } from '../_fulfillment/types'
  * before it reads anything.
  */
 
-const BASE = '/shipments'
-const PARAM = 'shipment'
+const BASE = "/shipments";
+const PARAM = "shipment";
 
-type Tabs = Awaited<ReturnType<typeof warehouseGroupTabs>>
+type Tabs = Awaited<ReturnType<typeof warehouseGroupTabs>>;
 
 export interface ShipmentsData {
-  title: string
-  description: string
-  bulkBuyLabel: string
-  showBulkBuy: boolean
-  tabs: Tabs
-  currentParams: Record<string, string | string[] | undefined>
-  drawer: (FulfillmentDrawerData & { initialMode: DrawerMode }) | null
+  title: string;
+  description: string;
+  bulkBuyLabel: string;
+  showBulkBuy: boolean;
+  tabs: Tabs;
+  currentParams: Record<string, string | string[] | undefined>;
+  drawer: (FulfillmentDrawerData & { initialMode: DrawerMode }) | null;
 }
 
-export async function loadShipments(sp: Record<string, string | string[] | undefined>): Promise<ShipmentsData> {
-  const authz = await requirePermission('orders.fulfill')
-  await requireFeatureEnabled(authz.user.orgId, 'fulfillment')
-  const t = await getTranslations('fulfillment')
-  const closeHref = mergeHref(BASE, sp, { [PARAM]: undefined, mode: undefined, form: undefined, transactionTab: undefined })
-  const openId = pickString(sp[PARAM])
+export async function loadShipments(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<ShipmentsData> {
+  const authz = await requirePermission("orders.fulfill");
+  await requireFeatureEnabled(authz.user.orgId, "fulfillment");
+  const t = await getTranslations("fulfillment");
+  const closeHref = mergeHref(BASE, sp, {
+    [PARAM]: undefined,
+    mode: undefined,
+    form: undefined,
+    transactionTab: undefined,
+  });
+  const openId = pickString(sp[PARAM]);
   const [tabs, drawer, shippingHub] = await Promise.all([
     warehouseGroupTabs(authz, BASE),
     openId
-      ? loadFulfillmentDrawerData({ authz, kind: 'shipment', id: openId, formLayoutId: pickString(sp.form), closeHref })
+      ? loadFulfillmentDrawerData({
+          authz,
+          kind: "shipment",
+          id: openId,
+          formLayoutId: pickString(sp.form),
+          closeHref,
+        })
       : null,
-    isFeatureEnabled(authz.user.orgId, 'shippingHub'),
-  ])
+    isFeatureEnabled(authz.user.orgId, "shippingHub"),
+  ]);
   return {
-    title: t('shipment.listTitle'),
-    description: t('shipment.listDescription'),
-    bulkBuyLabel: t('shipping.bulkAction'),
+    title: t("shipment.listTitle"),
+    description: t("shipment.listDescription"),
+    bulkBuyLabel: t("shipping.bulkAction"),
     showBulkBuy: shippingHub,
     tabs,
     currentParams: sp,
-    drawer: drawer ? { ...drawer, initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view' } : null,
-  }
+    drawer: drawer
+      ? { ...drawer, initialMode: pickString(sp.mode) === "edit" ? "edit" : "view" }
+      : null,
+  };
 }
 
-const f = ref<ShipmentsData>()
+const f = ref<ShipmentsData>();
 
 export function shipmentsSpec(data: ShipmentsData): PageSpec {
   return page({
-    route: '/shipments',
-    layout: 'list',
+    route: "/shipments",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
-          widget('module-home-tabs', { tabs: data.tabs }),
-          widget('link-button', { href: '/shipments/labels', label: f('bulkBuyLabel'), variant: 'outline' }, f('showBulkBuy')),
+          widget("module-home-tabs", { tabs: data.tabs }),
+          widget(
+            "link-button",
+            { href: "/shipments/labels", label: f("bulkBuyLabel"), variant: "outline" },
+            f("showBulkBuy"),
+          ),
         ],
       }),
     ],
     body: [
-      widgetBlock('record-list-view', {
-        recordType: 'shipment',
+      widgetBlock("record-list-view", {
+        recordType: "shipment",
         basePath: BASE,
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'shipment-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer ? { widget: "shipment-drawer", props: { drawer: data.drawer } } : null,
         emptyAction: null,
       }),
     ],
-  })
+  });
 }

@@ -1,27 +1,32 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const migrationAndCutover: DocArticle = {
-  slug: 'migration-and-cutover',
-  title: 'Migration and Cutover',
-  category: 'integrations',
+  slug: "migration-and-cutover",
+  title: "Migration and Cutover",
+  category: "integrations",
   order: 1,
   summary:
-    'Plan source extraction, mapping, trial loads, reconciliation, parallel operation, final delta, and cutover.',
-  updated: '2026-10-07',
+    "Plan source extraction, mapping, trial loads, reconciliation, parallel operation, final delta, and cutover.",
+  updated: "2026-10-07",
   keywords: [
-    'migration',
-    'implementation',
-    'cutover',
-    'parallel run',
-    'opening balance',
-    'history',
-    'mapping',
-    'delta',
-    'migration assistant',
-    'go live',
-    'import template',
+    "migration",
+    "implementation",
+    "cutover",
+    "parallel run",
+    "opening balance",
+    "history",
+    "mapping",
+    "delta",
+    "migration assistant",
+    "go live",
+    "import template",
   ],
-  related: ['migrate-with-a-connector', 'quick-start', 'reconciliation-before-cutover', 'data-imports'],
+  related: [
+    "migrate-with-a-connector",
+    "quick-start",
+    "reconciliation-before-cutover",
+    "data-imports",
+  ],
   body: `# Migration and Cutover
 
 A migration is complete only when users can perform their work and the new books
@@ -135,25 +140,26 @@ projects, and issued reports. Investigate differences to a documented conclusion
 Prepare a rollback decision window in advance. Rollback means returning to a
 clearly authoritative system, not entering some activity in each.
 `,
-}
+};
 
 export const reconciliationBeforeCutover: DocArticle = {
-  slug: 'reconciliation-before-cutover',
-  title: 'Reconciliation Before Cutover',
-  category: 'integrations',
+  slug: "reconciliation-before-cutover",
+  title: "Reconciliation Before Cutover",
+  category: "integrations",
   order: 2,
-  summary: 'Build the minimum evidence package that proves migrated books and subledgers before go-live.',
-  updated: '2026-07-19',
+  summary:
+    "Build the minimum evidence package that proves migrated books and subledgers before go-live.",
+  updated: "2026-07-19",
   keywords: [
-    'reconciliation',
-    'validation',
-    'trial balance',
-    'account activity',
-    'subledger',
-    'control totals',
-    'cutover gate',
+    "reconciliation",
+    "validation",
+    "trial balance",
+    "account activity",
+    "subledger",
+    "control totals",
+    "cutover gate",
   ],
-  related: ['migration-and-cutover', 'financial-reports', 'banking-and-reconciliation'],
+  related: ["migration-and-cutover", "financial-reports", "banking-and-reconciliation"],
   body: `# Reconciliation Before Cutover
 
 Do not approve cutover from a single grand total. A balanced ledger can still
@@ -206,4 +212,4 @@ Cutover is blocked while an unexplained financial difference remains, even if it
 appears immaterial. Materiality is an accounting judgment applied to an explained
 difference—not a substitute for diagnosis.
 `,
-}
+};

@@ -5,7 +5,10 @@ import type { ContinuousCloseAgentKey } from "@openbooks/engine/agents/continuou
 import { can, type Authz } from "../authz";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import type { FindingDir, FindingSort } from "../list/agent-findings";
-import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopePredicate } from "./work-item-subsidiary-scope";
+import {
+  WORK_ITEM_SUBJECT_JOIN,
+  workItemSubjectScopePredicate,
+} from "./work-item-subsidiary-scope";
 
 /**
  * Agent Workbench inbox read model. ONE resolver backs the /agents inbox, the
@@ -164,12 +167,26 @@ function inboxOrderBy(sort: FindingSort | undefined, dir: FindingDir | undefined
   return sql`${primary} ${direction} nulls last, w.last_detected_at desc, w.id`;
 }
 
-export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): Promise<AgentInbox> {
+export async function loadAgentInbox(
+  authz: Authz,
+  filters: AgentInboxFilters,
+): Promise<AgentInbox> {
   const empty: AgentInbox = {
     rows: [],
     total: 0,
     truncated: false,
-    facets: { packs: [], severities: [], statuses: [], openActive: 0, subsidiaries: [], unresolvedSubsidiary: 0, withProposals: 0, assignedToMe: 0, unassigned: 0, overdue: 0 },
+    facets: {
+      packs: [],
+      severities: [],
+      statuses: [],
+      openActive: 0,
+      subsidiaries: [],
+      unresolvedSubsidiary: 0,
+      withProposals: 0,
+      assignedToMe: 0,
+      unassigned: 0,
+      overdue: 0,
+    },
     readablePacks: [],
   };
   // Doorway mirrors the finding tools: without assistant.use nothing is
@@ -188,8 +205,14 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
 
   if (agents.length === 0) return { ...empty, readablePacks: readable };
 
-  const agentList = sql.join(agents.map((agent) => sql`${agent}`), sql`, `);
-  const statusList = sql.join(statuses.map((status) => sql`${status}`), sql`, `);
+  const agentList = sql.join(
+    agents.map((agent) => sql`${agent}`),
+    sql`, `,
+  );
+  const statusList = sql.join(
+    statuses.map((status) => sql`${status}`),
+    sql`, `,
+  );
   // Facet counts keep global scope: the free-text query filters rows only,
   // never the KPI tiles or filter-chip counts — and the status
   // facet additionally ignores the status clause so every lifecycle state
@@ -201,7 +224,14 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
   // subsidiary (above) intersects naturally.
   const whereBase = sql`w.org_id = ${authz.user.orgId}
     and w.agent_key in (${agentList})
-    ${severities.length > 0 ? sql`and w.severity in (${sql.join(severities.map((s) => sql`${s}`), sql`, `)})` : sql``}
+    ${
+      severities.length > 0
+        ? sql`and w.severity in (${sql.join(
+            severities.map((s) => sql`${s}`),
+            sql`, `,
+          )})`
+        : sql``
+    }
     ${filters.hasProposal === true ? sql`and (w.summary ? 'proposedCommand')` : sql``}
     ${filters.hasProposal === false ? sql`and not (w.summary ? 'proposedCommand')` : sql``}
     ${filters.subsidiaryId ? sql`and subj_acct.subsidiary_id = ${filters.subsidiaryId}` : sql``}
@@ -211,7 +241,9 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     ${filters.unassignedOnly ? sql`and w.assignee_user_id is null and w.assignee_role is null` : sql``}
     ${filters.overdueOnly ? sql`and w.due_at is not null and w.due_at < now() and w.status in ('open', 'in_review')` : sql``}`;
   const statusClause = sql`and w.status in (${statusList})`;
-  const queryClause = q ? sql`and (w.finding_type ilike ${`%${q}%`} or w.summary::text ilike ${`%${q}%`})` : sql``;
+  const queryClause = q
+    ? sql`and (w.finding_type ilike ${`%${q}%`} or w.summary::text ilike ${`%${q}%`})`
+    : sql``;
   const where = sql`${whereBase} ${statusClause} ${queryClause}`;
   const whereNoQuery = sql`${whereBase} ${statusClause}`;
   const whereStatusFacet = sql`${whereBase} ${queryClause}`;
@@ -223,9 +255,21 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
 
   const subjectJoin = WORK_ITEM_SUBJECT_JOIN;
 
-  const [rows, totalResult, packCounts, severityCounts, statusCounts, openActiveCount, subsidiaryCounts, proposalCount, mineCount, unassignedCount, overdueCount] =
-    await Promise.all([
-      db.execute<InboxRowRaw>(sql`
+  const [
+    rows,
+    totalResult,
+    packCounts,
+    severityCounts,
+    statusCounts,
+    openActiveCount,
+    subsidiaryCounts,
+    proposalCount,
+    mineCount,
+    unassignedCount,
+    overdueCount,
+  ] = await Promise.all([
+    db.execute<InboxRowRaw>(
+      sql`
         select w.id, w.agent_key, w.finding_type, w.severity, w.status,
                w.confidence::text as confidence, w.materiality::text as materiality,
                (w.materiality * w.confidence
@@ -243,48 +287,84 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
          where ${where}
          order by ${inboxOrderBy(filters.sort, filters.dir)}
          limit ${limit + 1} offset ${offset}
-      `, "objects"),
-      db.execute<{ n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ n: string | number }>(
+      sql`
         select count(*) as n from ai_work_items w ${subjectJoin} where ${where}
-      `, "objects"),
-      db.execute<{ agent_key: ContinuousCloseAgentKey; n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ agent_key: ContinuousCloseAgentKey; n: string | number }>(
+      sql`
         select w.agent_key, count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} group by w.agent_key
-      `, "objects"),
-      db.execute<{ severity: InboxSeverity; n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ severity: InboxSeverity; n: string | number }>(
+      sql`
         select w.severity, count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} group by w.severity
-      `, "objects"),
-      db.execute<{ status: InboxStatus; n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ status: InboxStatus; n: string | number }>(
+      sql`
         select w.status, count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereStatusFacet} group by w.status
-      `, "objects"),
-      db.execute<{ n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ n: string | number }>(
+      sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} and w.status in ('open', 'in_review')
-      `, "objects"),
-      db.execute<{ subsidiary_id: string | null; subsidiary_name: string | null; n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{
+      subsidiary_id: string | null;
+      subsidiary_name: string | null;
+      n: string | number;
+    }>(
+      sql`
         select subj_sub.id as subsidiary_id, max(subj_sub.name) as subsidiary_name, count(*) as n
           from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} group by subj_sub.id
-      `, "objects"),
-      db.execute<{ n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ n: string | number }>(
+      sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} and (w.summary ? 'proposedCommand')
-      `, "objects"),
-      db.execute<{ n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ n: string | number }>(
+      sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} and w.assignee_user_id = ${authz.user.id}
-      `, "objects"),
-      db.execute<{ n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ n: string | number }>(
+      sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} and w.assignee_user_id is null and w.assignee_role is null
-      `, "objects"),
-      db.execute<{ n: string | number }>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<{ n: string | number }>(
+      sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
          where ${whereNoQuery} and w.due_at is not null and w.due_at < now() and w.status in ('open', 'in_review')
-      `, "objects"),
-    ]);
+      `,
+      "objects",
+    ),
+  ]);
 
   const total = Number(totalResult[0]?.n ?? 0);
   const page = rows.slice(0, limit).map((row) => {
@@ -305,9 +385,17 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
       hasProposal: Boolean(row.has_proposal),
       evidenceCount: Number(row.evidence_count),
       assignee: row.assignee_user_id
-        ? { kind: "user" as const, id: String(row.assignee_user_id), name: String(row.assignee_user_name ?? "") }
+        ? {
+            kind: "user" as const,
+            id: String(row.assignee_user_id),
+            name: String(row.assignee_user_name ?? ""),
+          }
         : row.assignee_role
-          ? { kind: "role" as const, id: String(row.assignee_role), name: String(row.assignee_role_name ?? "") }
+          ? {
+              kind: "role" as const,
+              id: String(row.assignee_role),
+              name: String(row.assignee_role_name ?? ""),
+            }
           : null,
       dueAt,
       overdue:
@@ -335,10 +423,12 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
       openActive: Number(openActiveCount[0]?.n ?? 0),
       subsidiaries: subsidiaryCounts
         .filter((r) => r.subsidiary_id)
-        .map((r) => ({ id: String(r.subsidiary_id), name: String(r.subsidiary_name ?? ""), count: Number(r.n) })),
-      unresolvedSubsidiary: Number(
-        subsidiaryCounts.find((r) => !r.subsidiary_id)?.n ?? 0,
-      ),
+        .map((r) => ({
+          id: String(r.subsidiary_id),
+          name: String(r.subsidiary_name ?? ""),
+          count: Number(r.n),
+        })),
+      unresolvedSubsidiary: Number(subsidiaryCounts.find((r) => !r.subsidiary_id)?.n ?? 0),
       withProposals: Number(proposalCount[0]?.n ?? 0),
       assignedToMe: Number(mineCount[0]?.n ?? 0),
       unassigned: Number(unassignedCount[0]?.n ?? 0),

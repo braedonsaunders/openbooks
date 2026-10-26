@@ -15,10 +15,7 @@ export async function assertFinancialChangeAccess(
     feature: string;
   },
 ): Promise<void> {
-  if (
-    !args.actorId ||
-    !(await actorHasPermission(tx, args.orgId, args.actorId, args.permission))
-  )
+  if (!args.actorId || !(await actorHasPermission(tx, args.orgId, args.actorId, args.permission)))
     throw new Error(`this change requires ${args.permission}`);
   if (!(await lockAndCheckOrgFeature(tx, args.orgId, args.feature)))
     throw new Error(
@@ -26,7 +23,5 @@ export async function assertFinancialChangeAccess(
     );
   const allowed = await actorAllowedSubsidiaryIds(tx, args.orgId, args.actorId);
   if (allowed && args.subsidiaryIds.some((id) => !allowed.has(id)))
-    throw new Error(
-      "this change includes a legal entity outside your authorization",
-    );
+    throw new Error("this change includes a legal entity outside your authorization");
 }

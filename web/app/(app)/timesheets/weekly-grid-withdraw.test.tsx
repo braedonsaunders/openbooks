@@ -12,13 +12,21 @@ await bootJsdomEnvironment({
   matchMediaMatches: false,
 });
 
-const script = { refreshed: 0, withdrawBodies: [] as Record<string, unknown>[], submitBodies: [] as Record<string, unknown>[], confirms: 0, confirmNext: false };
+const script = {
+  refreshed: 0,
+  withdrawBodies: [] as Record<string, unknown>[],
+  submitBodies: [] as Record<string, unknown>[],
+  confirms: 0,
+  confirmNext: false,
+};
 Object.assign(globalThis, {
   __gridWithdraw: script,
   __gridWithdrawRouter: {
     push() {},
     replace() {},
-    refresh() { script.refreshed++; },
+    refresh() {
+      script.refreshed++;
+    },
   },
 });
 
@@ -51,14 +59,31 @@ const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (_ms = 30) => new Promise((resolve) => setTimeout(resolve, 30));
 
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 const PICKERS: React.ComponentProps<typeof WeeklyGrid>["pickers"] = {
   internalProjectIds: [],
   employees: [{ value: "emp-7", label: "Recall Worker" }],
   projects: [{ value: "proj-7", label: "DAY · Day job" }],
   items: [],
-  timeTypes: [{ value: "tt-1", label: "Regular", classification: "regular", costMultiplier: "1", isBillableDefault: true, isDefault: true }],
+  timeTypes: [
+    {
+      value: "tt-1",
+      label: "Regular",
+      classification: "regular",
+      costMultiplier: "1",
+      isBillableDefault: true,
+      isDefault: true,
+    },
+  ],
   departments: [],
 };
 
@@ -81,7 +106,9 @@ const PAYLOAD: React.ComponentProps<typeof WeeklyGrid>["payload"] = {
       immutable: true,
     },
   ],
-  planned: [], scheduled: [], leaveCover: [],
+  planned: [],
+  scheduled: [],
+  leaveCover: [],
   status: "submitted",
   hasApproved: false,
   lockReasons: [],
@@ -98,7 +125,9 @@ async function mountGrid(payload = PAYLOAD) {
   script.confirmNext = false;
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === "/api/timesheets/withdraw" && init?.method === "POST") {
       script.withdrawBodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
       return Response.json({ ...PAYLOAD, status: "draft", revision: "rev-8" });
@@ -189,37 +218,83 @@ for (const status of ["draft", "rejected", "approved"] as const) {
     const selectedId = "bdbf3a02-8fde-44b9-8925-ff93e237885f";
     const heldId = "1934fd42-65c9-40cc-bfa9-7fb46a89e313";
     const pendingEntries = [
-      { id: selectedId, updatedAt, workedOn: DAYS[1]!, hours: "1.5000", status: "draft",
-        projectId: "proj-7", itemId: null, timeTypeId: "tt-1", fieldTicketId: "ticket-1",
-        fieldTicketNumber: "FT-101", fieldTicketStatus: "approved" },
-      { id: heldId, updatedAt, workedOn: DAYS[2]!, hours: "2.0000", status: "draft",
-        projectId: "proj-7", itemId: null, timeTypeId: "tt-1", fieldTicketId: "ticket-2",
-        fieldTicketNumber: "FT-102", fieldTicketStatus: "draft" },
+      {
+        id: selectedId,
+        updatedAt,
+        workedOn: DAYS[1]!,
+        hours: "1.5000",
+        status: "draft",
+        projectId: "proj-7",
+        itemId: null,
+        timeTypeId: "tt-1",
+        fieldTicketId: "ticket-1",
+        fieldTicketNumber: "FT-101",
+        fieldTicketStatus: "approved",
+      },
+      {
+        id: heldId,
+        updatedAt,
+        workedOn: DAYS[2]!,
+        hours: "2.0000",
+        status: "draft",
+        projectId: "proj-7",
+        itemId: null,
+        timeTypeId: "tt-1",
+        fieldTicketId: "ticket-2",
+        fieldTicketNumber: "FT-102",
+        fieldTicketStatus: "draft",
+      },
     ];
-    const { cleanup } = await mountGrid({ ...PAYLOAD, status, hasApproved: true, pendingEntries,
-      rows: PAYLOAD.rows.map(row => ({ ...row, entryStatuses: ["approved"] })) });
+    const { cleanup } = await mountGrid({
+      ...PAYLOAD,
+      status,
+      hasApproved: true,
+      pendingEntries,
+      rows: PAYLOAD.rows.map((row) => ({ ...row, entryStatuses: ["approved"] })),
+    });
     t.after(cleanup);
-    const review = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find(button => /Review.*pending entries/.test(button.textContent ?? ""));
+    const review = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      /Review.*pending entries/.test(button.textContent ?? ""),
+    );
     assert.ok(review, "the week offers its pending-entry review");
-    await act(async () => { review.click(); await tick(); });
+    await act(async () => {
+      review.click();
+      await tick();
+    });
     const boxes = document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
     assert.equal(boxes.length, 3, "two pending entries and their select-all control render");
     await act(async () => boxes[1]!.click());
     const textarea = document.querySelector<HTMLTextAreaElement>("textarea")!;
     const reason = "Submit the independently reviewed service time";
     await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, reason);
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!.call(
+        textarea,
+        reason,
+      );
       textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
     });
-    const submit = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find(button => /Submit 1 selected/.test(button.textContent ?? ""));
+    const submit = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      /Submit 1 selected/.test(button.textContent ?? ""),
+    );
     assert.ok(submit, "the selected native command renders");
     assert.equal(submit.disabled, false);
-    await act(async () => { submit.click(); await tick(); });
-    assert.deepEqual(script.submitBodies, [{ employee: "emp-7", week: "2026-07-12",
-      selections: [{ id: selectedId, updatedAt }], reason }]);
+    await act(async () => {
+      submit.click();
+      await tick();
+    });
+    assert.deepEqual(script.submitBodies, [
+      {
+        employee: "emp-7",
+        week: "2026-07-12",
+        selections: [{ id: selectedId, updatedAt }],
+        reason,
+      },
+    ]);
     assert.equal(pendingEntries[1]!.status, "draft", "the unselected source is preserved");
-    assert.equal(script.withdrawBodies.length, 0, "submission does not recall or rewrite the prior approval");
+    assert.equal(
+      script.withdrawBodies.length,
+      0,
+      "submission does not recall or rewrite the prior approval",
+    );
   });
 }

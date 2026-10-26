@@ -1,9 +1,9 @@
-import Link from 'next/link'
-import { AlertTriangle, ArrowRight } from 'lucide-react'
-import { Badge, Button, cn } from '@openbooks/ui'
-import { StartRunButton } from './_ui/NewRunButton'
-import { RunStatusBadge } from './_ui/run-status'
-import { shortDateLabel } from '../../../lib/format'
+import Link from "next/link";
+import { AlertTriangle, ArrowRight } from "lucide-react";
+import { Badge, Button, cn } from "@openbooks/ui";
+import { StartRunButton } from "./_ui/NewRunButton";
+import { RunStatusBadge } from "./_ui/run-status";
+import { shortDateLabel } from "../../../lib/format";
 
 /**
  * The payroll cockpit's bespoke rail sections, extracted from the page.
@@ -20,28 +20,28 @@ import { shortDateLabel } from '../../../lib/format'
  */
 
 export type ScheduleCardAction =
-  | { kind: 'resume'; href: string; outline: boolean; label: string }
-  | { kind: 'start'; scheduleId: string }
+  | { kind: "resume"; href: string; outline: boolean; label: string }
+  | { kind: "start"; scheduleId: string };
 
 export interface ScheduleCardRow {
-  id: string
-  name: string
-  frequency: string
-  periodStart: string
-  periodEnd: string
-  payDate: string
-  employees: string
-  runStatus: 'draft' | 'calculated' | 'committed' | null
-  net: string | null
-  action: ScheduleCardAction | null
+  id: string;
+  name: string;
+  frequency: string;
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
+  employees: string;
+  runStatus: "draft" | "calculated" | "committed" | null;
+  net: string | null;
+  action: ScheduleCardAction | null;
 }
 
 export interface ScheduleCardLabels {
-  frequency: Record<string, string>
-  period: string
-  payDate: string
-  employees: string
-  net: string
+  frequency: Record<string, string>;
+  period: string;
+  payDate: string;
+  employees: string;
+  net: string;
 }
 
 /**
@@ -55,8 +55,8 @@ export function ScheduleCard({
   schedule,
   labels,
 }: {
-  schedule: ScheduleCardRow
-  labels: ScheduleCardLabels
+  schedule: ScheduleCardRow;
+  labels: ScheduleCardLabels;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5">
@@ -80,27 +80,27 @@ export function ScheduleCard({
         </dl>
       </div>
       <div className="shrink-0">
-        {schedule.action?.kind === 'resume' ? (
-          <Button variant={schedule.action.outline ? 'outline' : 'default'} size="sm" asChild>
+        {schedule.action?.kind === "resume" ? (
+          <Button variant={schedule.action.outline ? "outline" : "default"} size="sm" asChild>
             <Link href={schedule.action.href as never}>
               {schedule.action.label}
               <ArrowRight size={14} aria-hidden />
             </Link>
           </Button>
-        ) : schedule.action?.kind === 'start' ? (
+        ) : schedule.action?.kind === "start" ? (
           <StartRunButton payScheduleId={schedule.action.scheduleId} />
         ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 export interface PayrollScheduleListProps {
-  schedules: ScheduleCardRow[]
-  emptyText: string
-  showSetupLink: boolean
-  setupLabel: string
-  labels: ScheduleCardLabels
+  schedules: ScheduleCardRow[];
+  emptyText: string;
+  showSetupLink: boolean;
+  setupLabel: string;
+  labels: ScheduleCardLabels;
 }
 
 /**
@@ -122,14 +122,14 @@ export function PayrollScheduleList({
         <p>{emptyText}</p>
         {showSetupLink && (
           <Link
-            href={'/admin/setup/payroll?tab=schedules' as never}
+            href={"/admin/setup/payroll?tab=schedules" as never}
             className="font-medium text-teal-700 hover:underline dark:text-teal-300"
           >
             {setupLabel}
           </Link>
         )}
       </div>
-    )
+    );
   }
   return (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -139,28 +139,28 @@ export function PayrollScheduleList({
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 export interface PreviousRunRow {
-  periodStart: string
-  periodEnd: string
-  payDate: string
-  net: string
-  employees: string
-  posted: boolean
-  badgeLabel: string
-  href: string
-  documentNumber: string
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
+  net: string;
+  employees: string;
+  posted: boolean;
+  badgeLabel: string;
+  href: string;
+  documentNumber: string;
 }
 
 export interface PayrollPreviousRunProps {
-  run: PreviousRunRow | null
-  periodLabel: string
-  payDateLabel: string
-  netLabel: string
-  employeesLabel: string
-  noneText: string
+  run: PreviousRunRow | null;
+  periodLabel: string;
+  payDateLabel: string;
+  netLabel: string;
+  employeesLabel: string;
+  noneText: string;
 }
 
 /** The previous completed period, INCLUDING its empty state. */
@@ -173,7 +173,9 @@ export function PayrollPreviousRun({
   noneText,
 }: PayrollPreviousRunProps) {
   if (!run) {
-    return <p className="py-2 text-center text-sm text-slate-400 dark:text-slate-500">{noneText}</p>
+    return (
+      <p className="py-2 text-center text-sm text-slate-400 dark:text-slate-500">{noneText}</p>
+    );
   }
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
@@ -186,7 +188,7 @@ export function PayrollPreviousRun({
         <Fact label={employeesLabel}>{run.employees}</Fact>
       </dl>
       <div className="flex items-center gap-3">
-        <Badge variant={run.posted ? 'success' : 'default'}>{run.badgeLabel}</Badge>
+        <Badge variant={run.posted ? "success" : "default"}>{run.badgeLabel}</Badge>
         <Link
           href={run.href as never}
           className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
@@ -196,13 +198,13 @@ export function PayrollPreviousRun({
         </Link>
       </div>
     </div>
-  )
+  );
 }
 
 export interface PayrollChecklistBannerProps {
-  text: string
-  settings: string
-  openSettingsLabel: string
+  text: string;
+  settings: string;
+  openSettingsLabel: string;
 }
 
 /** The setup-checklist banner. Presence-gated by the spec; content is data. */
@@ -218,15 +220,15 @@ export function PayrollChecklistBanner({
         {text} {settings}
       </span>
       <Button asChild size="sm" variant="outline">
-        <Link href={'/admin/setup/payroll?tab=accounts' as never}>{openSettingsLabel}</Link>
+        <Link href={"/admin/setup/payroll?tab=accounts" as never}>{openSettingsLabel}</Link>
       </Button>
     </div>
-  )
+  );
 }
 
 export interface PayrollManageLinksProps {
-  paySchedulesLabel: string
-  payComponentsLabel: string
+  paySchedulesLabel: string;
+  payComponentsLabel: string;
 }
 
 /** The manage-only setup links under the directory. Presence-gated by the spec. */
@@ -237,28 +239,31 @@ export function PayrollManageLinks({
   return (
     <div className="flex items-center gap-2 px-1 text-xs">
       <Link
-        href={'/admin/setup/payroll?tab=schedules' as never}
+        href={"/admin/setup/payroll?tab=schedules" as never}
         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
       >
         {paySchedulesLabel}
       </Link>
       <span className="text-slate-300 dark:text-slate-700">·</span>
       <Link
-        href={'/admin/setup/payroll?tab=components' as never}
+        href={"/admin/setup/payroll?tab=components" as never}
         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
       >
         {payComponentsLabel}
       </Link>
     </div>
-  )
+  );
 }
 
 export function shortDate(iso: string, locale: string): string {
-  return shortDateLabel(new Date(iso + 'T00:00:00Z'), locale)
+  return shortDateLabel(new Date(iso + "T00:00:00Z"), locale);
 }
 
 /** Translator callback the pay-period label takes, so tests pin the reader without the catalog. */
-export type PayPeriodsTranslator = (key: string, params?: Record<string, string | number>) => string
+export type PayPeriodsTranslator = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
 
 /**
  * The pay-period tile label names the current tax year of every installed
@@ -273,13 +278,16 @@ export function payPeriodsLabel(
   locale: string,
   taxYears: readonly { taxYear: number }[],
 ): string {
-  const [only, ...rest] = taxYears
-  if (only !== undefined && rest.length === 0) return t('home.vitals.periodsRan', { year: only.taxYear })
-  if (taxYears.length === 0) return t('home.vitals.periodsRanNoYear')
-  const years = [...new Set(taxYears.map((pair) => pair.taxYear))].sort((a, b) => a - b)
-  return t('home.vitals.periodsRanYears', {
-    years: new Intl.ListFormat(locale, { type: 'conjunction' }).format(years.map((year) => String(year))),
-  })
+  const [only, ...rest] = taxYears;
+  if (only !== undefined && rest.length === 0)
+    return t("home.vitals.periodsRan", { year: only.taxYear });
+  if (taxYears.length === 0) return t("home.vitals.periodsRanNoYear");
+  const years = [...new Set(taxYears.map((pair) => pair.taxYear))].sort((a, b) => a - b);
+  return t("home.vitals.periodsRanYears", {
+    years: new Intl.ListFormat(locale, { type: "conjunction" }).format(
+      years.map((year) => String(year)),
+    ),
+  });
 }
 
 export function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -292,7 +300,7 @@ export function Fact({ label, children }: { label: string; children: React.React
         {children}
       </dd>
     </div>
-  )
+  );
 }
 
 export function ExceptionRow({
@@ -300,9 +308,9 @@ export function ExceptionRow({
   tone,
   text,
 }: {
-  href: string
-  tone: 'negative' | 'warning' | 'neutral'
-  text: string
+  href: string;
+  tone: "negative" | "warning" | "neutral";
+  text: string;
 }) {
   return (
     <li>
@@ -312,12 +320,16 @@ export function ExceptionRow({
       >
         <span
           className={cn(
-            'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-            tone === 'negative' ? 'bg-red-500' : tone === 'warning' ? 'bg-amber-500' : 'bg-teal-500',
+            "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+            tone === "negative"
+              ? "bg-red-500"
+              : tone === "warning"
+                ? "bg-amber-500"
+                : "bg-teal-500",
           )}
         />
         <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-300">{text}</span>
       </Link>
     </li>
-  )
+  );
 }

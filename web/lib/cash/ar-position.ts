@@ -107,9 +107,14 @@ export function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivab
   const map = new Map<string, CustomerReceivable>();
   for (const it of items) {
     const key = it.partyId ?? "__none__";
-    const cur =
-      map.get(key) ??
-      { partyId: it.partyId, partyName: it.partyName, amount: ZERO_MONEY, count: 0, overdue: ZERO_MONEY, oldestDue: null as string | null };
+    const cur = map.get(key) ?? {
+      partyId: it.partyId,
+      partyName: it.partyName,
+      amount: ZERO_MONEY,
+      count: 0,
+      overdue: ZERO_MONEY,
+      oldestDue: null as string | null,
+    };
     cur.amount = addMoney(cur.amount, it.remaining);
     cur.count += 1;
     // An unapplied credit nets into the customer's open balance above, but it
@@ -157,7 +162,17 @@ export async function arPosition(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, model, fiscalStart, fiscalCalendar] = await Promise.all([
+  const [
+    arItems,
+    apItems,
+    arStats,
+    apStats,
+    banks,
+    catConfigs,
+    model,
+    fiscalStart,
+    fiscalCalendar,
+  ] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds, orgId),
@@ -173,12 +188,28 @@ export async function arPosition(
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
-    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart, fiscalPeriods: fiscalCalendar?.periods ?? null };
-  const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
+    Object.fromEntries(
+      [...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]),
+    );
+  const catContext = {
+    arWeekly: weekTotals(ar.byWeek),
+    apWeekly: weekTotals(ap.byWeek),
+    cashStart: startingCash,
+    model,
+    subIds,
+    fiscalStartMonth: fiscalStart,
+    fiscalPeriods: fiscalCalendar?.periods ?? null,
+  };
+  const visibleConfigs = catConfigs.filter((c) =>
+    isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds),
+  );
   // A refusing category contributes zeros and names its reason; the rest of
   // the forecast still renders. Anything else still throws.
-  const categories = await Promise.all(visibleConfigs.map((c) => forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  const categories = await Promise.all(
+    visibleConfigs.map((c) =>
+      forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale),
+    ),
+  );
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,
@@ -196,7 +227,9 @@ export async function arPosition(
   const balances = collectionsBalances(arItems, grid.asOf);
 
   const weeks: ArWeek[] = grid.weekStarts.map((k, i) => {
-    const entries = (ar.byWeek.get(k) ?? []).slice().sort((a, b) => compareMoney(b.amount, a.amount));
+    const entries = (ar.byWeek.get(k) ?? [])
+      .slice()
+      .sort((a, b) => compareMoney(b.amount, a.amount));
     const w = timeline.weeks[i]!;
     return {
       weekStart: k,
@@ -214,8 +247,18 @@ export async function arPosition(
   // weekly grid can end short of it, so a cut-off-bounded schedule feeds
   // this figure instead of the grid-bounded entries (placement is
   // end-independent — widening the bound only adds days 29–30).
-  const cutoffSchedule = scheduleForecast(arItems, arStats, grid.asOf, grid.start, addDays(grid.asOf, 30), model, true);
-  const expectedNext30 = sumMoney(cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
+  const cutoffSchedule = scheduleForecast(
+    arItems,
+    arStats,
+    grid.asOf,
+    grid.start,
+    addDays(grid.asOf, 30),
+    model,
+    true,
+  );
+  const expectedNext30 = sumMoney(
+    cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount),
+  );
 
   // Collections worklist: receivables only, most overdue first, then largest.
   const worklist = chaseableEntries(ar.entries)

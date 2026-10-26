@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sum } from "../money/money.ts";
-import { PostingError, type PostingDocument, type PostingDocumentLine } from "../journal/posting-contracts.ts";
+import {
+  PostingError,
+  type PostingDocument,
+  type PostingDocumentLine,
+} from "../journal/posting-contracts.ts";
 import { projectChargeKernelLines } from "./posting-rules.ts";
 
 const COST = "11111111-1111-4111-8111-111111111111";
@@ -18,20 +22,27 @@ const doc = {
 } as unknown as PostingDocument;
 
 test("project charge balances, costs the job, and preserves equipment attribution", () => {
-  const lines = projectChargeKernelLines(doc, [{
-    accountId: COST,
-    recoveryAccountId: RECOVERY,
-    amount: "125.3750",
-    description: "Excavator usage",
-    projectId: PROJECT,
-    equipmentUnitId: EQUIPMENT,
-    extraDims: {},
-  } as unknown as PostingDocumentLine]);
+  const lines = projectChargeKernelLines(doc, [
+    {
+      accountId: COST,
+      recoveryAccountId: RECOVERY,
+      amount: "125.3750",
+      description: "Excavator usage",
+      projectId: PROJECT,
+      equipmentUnitId: EQUIPMENT,
+      extraDims: {},
+    } as unknown as PostingDocumentLine,
+  ]);
 
   assert.equal(lines.length, 2);
   assert.equal(sum(lines.map((line) => line.amount)), "0.0000");
   assert.deepEqual(
-    lines.map((line) => ({ account: line.accountId, amount: line.amount, project: line.projectId, equipment: line.equipmentUnitId })),
+    lines.map((line) => ({
+      account: line.accountId,
+      amount: line.amount,
+      project: line.projectId,
+      equipment: line.equipmentUnitId,
+    })),
     [
       { account: COST, amount: "125.3750", project: PROJECT, equipment: EQUIPMENT },
       { account: RECOVERY, amount: "-125.3750", project: null, equipment: EQUIPMENT },
@@ -40,7 +51,15 @@ test("project charge balances, costs the job, and preserves equipment attributio
 });
 
 test("project charge refuses missing or same-account recovery", () => {
-  const base = { accountId: COST, amount: "1.0000", description: null, projectId: PROJECT } as unknown as PostingDocumentLine;
+  const base = {
+    accountId: COST,
+    amount: "1.0000",
+    description: null,
+    projectId: PROJECT,
+  } as unknown as PostingDocumentLine;
   assert.throws(() => projectChargeKernelLines(doc, [base]), PostingError);
-  assert.throws(() => projectChargeKernelLines(doc, [{ ...base, recoveryAccountId: COST }]), /must be different/);
+  assert.throws(
+    () => projectChargeKernelLines(doc, [{ ...base, recoveryAccountId: COST }]),
+    /must be different/,
+  );
 });

@@ -12,7 +12,10 @@ export const createCandidateBody = z.object({
   displayName: z.string().trim().min(1).max(240),
   email: z.string().trim().min(1).max(254).nullable().optional(),
   phone: z.string().trim().min(1).max(60).nullable().optional(),
-  source: z.enum(["referral", "job_board", "agency", "direct", "internal", "other"]).nullable().optional(),
+  source: z
+    .enum(["referral", "job_board", "agency", "direct", "internal", "other"])
+    .nullable()
+    .optional(),
   sourceDetail: z.string().max(500).nullable().optional(),
   resumeAttachmentId: uuid.nullable().optional(),
   isInternal: z.boolean().optional(),

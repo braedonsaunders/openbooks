@@ -2,21 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db, orgContext } from "../../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../../testing/fixtures.ts";
-import {
-  createRequisition,
-  openRequisition,
-} from "./requisitions.ts";
-import {
-  createFeedToken,
-  listFeedPostings,
-  publishPosting,
-  resolveFeedOrg,
-} from "./postings.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
+import { createRequisition, openRequisition } from "./requisitions.ts";
+import { createFeedToken, listFeedPostings, publishPosting, resolveFeedOrg } from "./postings.ts";
 
 /**
  * Public job feed under the constrained runtime role — DB-owned, one file
@@ -62,7 +50,11 @@ test("public feed lists published postings with no ambient org scope", async () 
       employerSubsidiaryId: org.subsidiaryId,
       headcount: 1,
     });
-    const opened = await openRequisition({ orgId: org.orgId, actorId: recruiterId, requisitionId: requisition.id });
+    const opened = await openRequisition({
+      orgId: org.orgId,
+      actorId: recruiterId,
+      requisitionId: requisition.id,
+    });
     const posting = await publishPosting({
       orgId: org.orgId,
       actorId: recruiterId,
@@ -77,7 +69,11 @@ test("public feed lists published postings with no ambient org scope", async () 
     const jobs = await orgContext.run({ orgId: null, bypass: false }, () =>
       listFeedPostings(resolved),
     );
-    assert.equal(jobs.length, 1, "the public feed serves the published posting under deny-by-default RLS");
+    assert.equal(
+      jobs.length,
+      1,
+      "the public feed serves the published posting under deny-by-default RLS",
+    );
     assert.equal(jobs[0]!.postingId, posting.id);
     assert.equal(jobs[0]!.title, "Backend engineer");
     // Switching Recruiting off must stop the feed.

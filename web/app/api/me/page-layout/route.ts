@@ -18,7 +18,6 @@ const requestBodySchema = z.object({
   expectedRevision: z.string().nullable().optional(),
 });
 
-
 export const runtime = "nodejs";
 
 /** Stable page keys that accept per-user layout prefs (grow as cockpits adopt it). */
@@ -45,7 +44,9 @@ const LAYOUT_REVISION_CONFLICT =
   "this page layout changed after you opened it; the current layout is returned — merge your latest changes onto it and retry";
 
 function keys(v: unknown): string[] | undefined {
-  return Array.isArray(v) && v.length <= MAX_KEYS && v.every((k) => typeof k === "string" && k.length <= 64)
+  return Array.isArray(v) &&
+    v.length <= MAX_KEYS &&
+    v.every((k) => typeof k === "string" && k.length <= 64)
     ? (v as string[])
     : undefined;
 }
@@ -69,9 +70,7 @@ async function readCurrent(
      where org_id = ${orgId} and user_id = ${userId} and page = ${page}
      limit 1
   `;
-  const rows = (
-    await execute(forUpdate ? sql`${base} for update` : base)
-  ).rows;
+  const rows = (await execute(forUpdate ? sql`${base} for update` : base)).rows;
   const row = rows[0];
   if (!row) return { layout: {}, revision: null };
   const layout = row.layout && typeof row.layout === "object" ? row.layout : {};
@@ -98,17 +97,9 @@ async function legacyGET(req: Request) {
     return NextResponse.json({ error: "unknown page" }, { status: 400 });
   }
 
-  const current = await readCurrent(
-    (query) => db.execute(query),
-    user.orgId,
-    user.id,
-    page,
-    false,
-  );
+  const current = await readCurrent((query) => db.execute(query), user.orgId, user.id, page, false);
   return NextResponse.json(current);
 }
-
-
 
 export const GET = defineRoute({
   public: "session",
@@ -119,13 +110,9 @@ export const PUT = defineRoute({
   public: "session",
   body: requestBodySchema,
   handler: async ({ body }) => {
-
     const authz = await getAuthz();
     if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
-
-
-
 
     const page = pageParam(body?.page);
     if (!page) {
@@ -137,7 +124,10 @@ export const PUT = defineRoute({
     const expectedRevision = body.expectedRevision;
     if (expectedRevision !== null && typeof expectedRevision !== "string") {
       return NextResponse.json(
-        { error: "page layout revision must be the exact revision previously read, or null for a first save" },
+        {
+          error:
+            "page layout revision must be the exact revision previously read, or null for a first save",
+        },
         { status: 400 },
       );
     }
@@ -151,7 +141,9 @@ export const PUT = defineRoute({
     const outcome = await db.transaction(async (tx) => {
       // Row locks cannot fence a first save when no row exists yet. Serialize
       // that creation with later replacements for this exact user's page.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`page-layout:${user.orgId}:${user.id}:${page}`}, 0))`);
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`page-layout:${user.orgId}:${user.id}:${page}`}, 0))`,
+      );
       const current = await readCurrent(
         (query) => tx.execute(query),
         user.orgId,
@@ -162,7 +154,8 @@ export const PUT = defineRoute({
       if (current.revision !== expectedRevision) {
         return { kind: "conflict" as const, current };
       }
-      const written = await tx.execute<{ layout: PageLayoutPrefs; revision: string }>(sql`
+      const written = await tx.execute<{ layout: PageLayoutPrefs; revision: string }>(
+        sql`
         insert into user_page_layouts (org_id, user_id, page, layout, created_by, updated_by)
         values (${user.orgId}, ${user.id}, ${page}, ${JSON.stringify(layout)}::jsonb, ${user.id}, ${user.id})
         on conflict (org_id, user_id, page)
@@ -171,7 +164,9 @@ export const PUT = defineRoute({
           updated_by = excluded.updated_by
         where user_page_layouts.org_id = ${user.orgId}
         returning layout, ${layoutRevisionSql(sql.raw("updated_at"))} as revision
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = written[0];
       // A write that matches zero rows is a failure, not a save: the locked
       // read above rules out a concurrent deleter, so an empty returning set
@@ -195,6 +190,11 @@ export const PUT = defineRoute({
         { status: 409 },
       );
     }
-    return NextResponse.json({ ok: true, page, layout: outcome.layout, revision: outcome.revision });
+    return NextResponse.json({
+      ok: true,
+      page,
+      layout: outcome.layout,
+      revision: outcome.revision,
+    });
   },
 });

@@ -24,11 +24,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { runSync } from "./sync.ts";
-import type {
-  MigrationSource,
-  NativeChanges,
-  SourceEntity,
-} from "./source.ts";
+import type { MigrationSource, NativeChanges, SourceEntity } from "./source.ts";
 import type { NativeDocument } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -84,20 +80,22 @@ class DuplicateRefSource implements MigrationSource {
       controlAccountId: null,
       subtotal: total,
       total,
-      lines: [{
-        accountId: this.o.accounts.revenue,
-        itemId: null,
-        quantity: "1",
-        unitPrice: total,
-        amount: total,
-        taxAmount: "0",
-        taxOverridden: false,
-        taxCodeId: null,
-        departmentId: null,
-        projectId: null,
-        description: "duplicate-ref probe",
-        lineNumber: 1,
-      }],
+      lines: [
+        {
+          accountId: this.o.accounts.revenue,
+          itemId: null,
+          quantity: "1",
+          unitPrice: total,
+          amount: total,
+          taxAmount: "0",
+          taxOverridden: false,
+          taxCodeId: null,
+          departmentId: null,
+          projectId: null,
+          description: "duplicate-ref probe",
+          lineNumber: 1,
+        },
+      ],
     };
   }
 
@@ -130,9 +128,7 @@ class DuplicateRefSource implements MigrationSource {
 
 function syncOpts(o: ScratchOrg, connectionId: string, first: boolean) {
   return {
-    kind: (first ? "full_migration" : "incremental") as
-      | "full_migration"
-      | "incremental",
+    kind: (first ? "full_migration" : "incremental") as "full_migration" | "incremental",
     orgId: o.orgId,
     connectionId,
     since: first ? null : new Date("2026-07-16T00:00:00.000Z"),
@@ -163,9 +159,12 @@ test(
       `the ignored repeat must be reported, got: ${JSON.stringify(second.skipped)}`,
     );
 
-    const [doc] = await db.execute<{ total: string }>(sql`
+    const [doc] = await db.execute<{ total: string }>(
+      sql`
       select total::text as total from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`, "objects");
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`,
+      "objects",
+    );
     assert.equal(doc?.total, "100.0000", "the first occurrence wins deterministically");
   },
 );
@@ -187,9 +186,12 @@ test(
       `the ignored repeat must be reported, got: ${JSON.stringify(result.skipped)}`,
     );
 
-    const [doc] = await db.execute<{ status: string; total: string }>(sql`
+    const [doc] = await db.execute<{ status: string; total: string }>(
+      sql`
       select status, total::text as total from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`, "objects");
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`,
+      "objects",
+    );
     assert.equal(doc?.status, "posted");
     assert.equal(doc?.total, "100.0000", "the open-item truth (100) matches the kept copy");
   },

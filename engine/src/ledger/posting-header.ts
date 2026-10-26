@@ -31,7 +31,10 @@ type PostingHeader = {
  * or flow). Shape is not membership: "ZZZ" is three uppercase letters and
  * denominates nothing, so it refuses here instead of posting untranslatable units.
  */
-export async function finalizePostingHeader<T extends PostingHeader>(doc: T, migration: boolean): Promise<{ header: T; dueDateFromTerms: { dueDate: string } | null }> {
+export async function finalizePostingHeader<T extends PostingHeader>(
+  doc: T,
+  migration: boolean,
+): Promise<{ header: T; dueDateFromTerms: { dueDate: string } | null }> {
   let header = doc;
   let dueDateFromTerms: { dueDate: string } | null = null;
   if (!migration && docKindConfig(header.kind)?.dueDateFromTerms && header.dueDate == null) {

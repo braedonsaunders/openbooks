@@ -14,12 +14,17 @@ export async function documentTaxDate(
   documentDate: string,
 ): Promise<string> {
   if (!documentId) return documentDate;
-  const corrected = (await runner.execute<{ document_date: string }>(sql`
+  const corrected = (
+    await runner.execute<{ document_date: string }>(
+      sql`
     select corrected.document_date::text as document_date
       from document_links link
       join documents corrected on corrected.org_id = link.org_id and corrected.id = link.to_document_id
      where link.org_id = ${orgId} and link.from_document_id = ${documentId} and link.link_type = 'corrects'
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   return corrected?.document_date ?? documentDate;
 }
 
@@ -42,7 +47,9 @@ export async function staleTaxRateLine(
   documentId: string,
   taxDate: string,
 ): Promise<StaleTaxRateLine | undefined> {
-  return (await runner.execute<StaleTaxRateLine>(sql`
+  return (
+    await runner.execute<StaleTaxRateLine>(
+      sql`
     select dl.line_number, tc.code, c.rate_percent::text as stored, tr.rate_percent::text as effective
       from document_lines dl
       join document_line_tax_components c on c.document_line_id = dl.id and c.org_id = dl.org_id
@@ -56,5 +63,8 @@ export async function staleTaxRateLine(
        and not dl.tax_overridden and not c.overridden
        and tr.rate_percent is distinct from c.rate_percent
      order by dl.line_number, c.sequence
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
 }

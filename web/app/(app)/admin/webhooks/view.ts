@@ -1,14 +1,20 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
-import { page, pageHeader, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { FANOUT_EVENT_TYPES } from '@openbooks/engine/webhooks'
-import type { EndpointDelivery, WebhookEndpointDrawerProps } from './EndpointDrawer'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/database";
+import {
+  page,
+  pageHeader,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { FANOUT_EVENT_TYPES } from "@openbooks/engine/webhooks";
+import type { EndpointDelivery, WebhookEndpointDrawerProps } from "./EndpointDrawer";
 
 /**
  * Settings → Developers → Webhooks: subscriber endpoints for signed domain
@@ -19,25 +25,26 @@ import type { EndpointDelivery, WebhookEndpointDrawerProps } from './EndpointDra
  */
 
 export type WebhooksData = {
-  title: string
-  description: string
-  canManage: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  emptyTitle: string
-  emptyDescription: string
+  title: string;
+  description: string;
+  canManage: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  emptyTitle: string;
+  emptyDescription: string;
   drawer: {
-    endpoint: WebhookEndpointDrawerProps['endpoint']
-    closeHref: string
-    canManage: boolean
-    eventTypes: string[]
-  } | null
-}
+    endpoint: WebhookEndpointDrawerProps["endpoint"];
+    closeHref: string;
+    canManage: boolean;
+    eventTypes: string[];
+  } | null;
+};
 
 async function loadEndpoint(orgId: string, id: string) {
   // List links carry the row id, but operators also bookmark the stable
   // endpoint key: resolve either. Casting a key slug to uuid makes Postgres
   // reject the whole query, so the key branch never reaches the cast.
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute(
+    sql`
     select e.id, e.key, e.url, e.description, e.events, e.status,
            e.consecutive_failures as "consecutiveFailures",
            e.auto_disable_after as "autoDisableAfter",
@@ -51,12 +58,15 @@ async function loadEndpoint(orgId: string, id: string) {
            (select count(*)::int from webhook_deliveries d where d.org_id = e.org_id and d.endpoint_id = e.id and d.status in ('failed', 'dead')) as "failedCount"
       from webhook_endpoints e
      where e.org_id = ${orgId} and ${isUuid(id) ? sql`e.id = ${id}::uuid` : sql`e.key = ${id}`} limit 1
-  `, 'objects')) as WebhookEndpointDrawerProps['endpoint'][]
-  return rows[0] ?? null
+  `,
+    "objects",
+  )) as WebhookEndpointDrawerProps["endpoint"][];
+  return rows[0] ?? null;
 }
 
 async function loadDeliveries(orgId: string, endpointId: string) {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute(
+    sql`
     select d.id, d.status, d.attempt_count as "attemptCount",
            d.next_attempt_at as "nextAttemptAt", d.last_attempt_at as "lastAttemptAt",
            d.last_response_code as "lastResponseCode",
@@ -67,47 +77,54 @@ async function loadDeliveries(orgId: string, endpointId: string) {
       from webhook_deliveries d join webhook_events e on e.id = d.event_id and e.org_id = d.org_id
      where d.org_id = ${orgId} and d.endpoint_id = ${endpointId}::uuid
      order by d.created_at desc limit 50
-  `, 'objects')) as EndpointDelivery[]
-  return rows
+  `,
+    "objects",
+  )) as EndpointDelivery[];
+  return rows;
 }
 
 export async function loadWebhooks(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<WebhooksData> {
-  const t = await getTranslations('admin')
-  const authz = await requirePermission('webhooks.read')
-  await requireFeatureEnabled(authz.user.orgId, 'outboundWebhooks')
-  const canManage = can(authz, 'webhooks.manage')
-  const endpointParam = pickString(sp.endpoint)
-  const creating = endpointParam === 'new'
-  const endpoint = endpointParam && !creating ? await loadEndpoint(authz.user.orgId, endpointParam) : null
+  const t = await getTranslations("admin");
+  const authz = await requirePermission("webhooks.read");
+  await requireFeatureEnabled(authz.user.orgId, "outboundWebhooks");
+  const canManage = can(authz, "webhooks.manage");
+  const endpointParam = pickString(sp.endpoint);
+  const creating = endpointParam === "new";
+  const endpoint =
+    endpointParam && !creating ? await loadEndpoint(authz.user.orgId, endpointParam) : null;
   return {
-    title: t('webhooks.list.title'),
-    description: t('webhooks.list.description'),
+    title: t("webhooks.list.title"),
+    description: t("webhooks.list.description"),
     canManage,
     currentParams: sp,
-    emptyTitle: t('webhooks.list.emptyTitle'),
-    emptyDescription: t('webhooks.list.emptyDescription'),
-    drawer: endpointParam && (!creating || canManage)
-      ? {
-          endpoint: creating
-            ? null
-            : endpoint
-              ? { ...endpoint, deliveries: await loadDeliveries(authz.user.orgId, endpoint.id as string) }
-              : null,
-          closeHref: '/admin/webhooks',
-          canManage,
-          eventTypes: [...FANOUT_EVENT_TYPES],
-        }
-      : null,
-  }
+    emptyTitle: t("webhooks.list.emptyTitle"),
+    emptyDescription: t("webhooks.list.emptyDescription"),
+    drawer:
+      endpointParam && (!creating || canManage)
+        ? {
+            endpoint: creating
+              ? null
+              : endpoint
+                ? {
+                    ...endpoint,
+                    deliveries: await loadDeliveries(authz.user.orgId, endpoint.id as string),
+                  }
+                : null,
+            closeHref: "/admin/webhooks",
+            canManage,
+            eventTypes: [...FANOUT_EVENT_TYPES],
+          }
+        : null,
+  };
 }
 
 export function webhooksSpec(data: WebhooksData): PageSpec {
-  const newEndpoint = { widget: 'new-webhook-endpoint', props: {} }
+  const newEndpoint = { widget: "new-webhook-endpoint", props: {} };
   return page({
-    route: '/admin/webhooks',
-    layout: 'list',
+    route: "/admin/webhooks",
+    layout: "list",
     header: [
       pageHeader({
         title: data.title,
@@ -116,16 +133,18 @@ export function webhooksSpec(data: WebhooksData): PageSpec {
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'webhook_endpoint',
+      widgetBlock("entity-list-view", {
+        recordType: "webhook_endpoint",
         sp: data.currentParams,
         emptyAction: data.canManage ? newEndpoint : null,
         emptyTitle: data.emptyTitle,
         emptyDescription: data.emptyDescription,
         // One shell per record: the loader's drawer entry already covers
         // creation (endpoint null), so no second create entry may render.
-        drawer: data.drawer ? [{ widget: 'webhook-endpoint-drawer', props: { drawer: data.drawer } }] : [],
+        drawer: data.drawer
+          ? [{ widget: "webhook-endpoint-drawer", props: { drawer: data.drawer } }]
+          : [],
       }),
     ],
-  })
+  });
 }

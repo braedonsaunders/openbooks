@@ -1,20 +1,26 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { PayrollError } from '@openbooks/engine/payroll/error'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import { nextPeriodAfter } from "@openbooks/engine/payroll/run-calendar";
 import { payrollSettings } from "@openbooks/engine/payroll/run-setup";
-import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
-import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/payroll/readiness'
-import { packSlotState, payrollTaxYearForDate } from '@openbooks/engine/payroll/packs'
-import { add, mulDecimal } from '@openbooks/engine/money'
-import { flowRates } from '../fx-presentation'
+import {
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from "@openbooks/engine/payroll/scope";
+import {
+  installedPayrollCountries,
+  payrollPopulationRegions,
+} from "@openbooks/engine/payroll/readiness";
+import { packSlotState, payrollTaxYearForDate } from "@openbooks/engine/payroll/packs";
+import { add, mulDecimal } from "@openbooks/engine/money";
+import { flowRates } from "../fx-presentation";
 import {
   missingPayrollControlAccounts,
   type MissingPayrollControlAccount,
-} from '../payroll-setup-checklist.ts'
-import { payrollYtdMoneyAmounts } from './payroll-money.ts'
+} from "../payroll-setup-checklist.ts";
+import { payrollYtdMoneyAmounts } from "./payroll-money.ts";
 
 /**
  * Payroll module home — one light round trip for the /payroll landing cockpit:
@@ -26,93 +32,93 @@ import { payrollYtdMoneyAmounts } from './payroll-money.ts'
  */
 
 export interface ScheduleCardRun {
-  documentId: string
-  documentNumber: string
-  runStatus: 'draft' | 'calculated' | 'committed'
-  documentStatus: string
-  netTotal: string
-  employeeCount: number
+  documentId: string;
+  documentNumber: string;
+  runStatus: "draft" | "calculated" | "committed";
+  documentStatus: string;
+  netTotal: string;
+  employeeCount: number;
 }
 
 interface PayrollScheduleHomeRow extends Record<string, unknown> {
-  id: string
-  name: string
-  frequency: string
-  periods_per_year: number
-  anchor_period_end: string
-  pay_date_offset_days: number
-  is_default: boolean
-  active_employees: string
-  document_id: string | null
-  document_number: string | null
-  run_status: string | null
-  document_status: string | null
-  period_start: string | null
-  period_end: string | null
-  pay_date: string | null
-  net_total: string | null
-  employee_count: string | null
+  id: string;
+  name: string;
+  frequency: string;
+  periods_per_year: number;
+  anchor_period_end: string;
+  pay_date_offset_days: number;
+  is_default: boolean;
+  active_employees: string;
+  document_id: string | null;
+  document_number: string | null;
+  run_status: string | null;
+  document_status: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  pay_date: string | null;
+  net_total: string | null;
+  employee_count: string | null;
 }
 
 export interface PayrollScheduleCard {
-  id: string
-  name: string
-  frequency: string
-  periodsPerYear: number
-  isDefault: boolean
-  activeEmployees: number
+  id: string;
+  name: string;
+  frequency: string;
+  periodsPerYear: number;
+  isDefault: boolean;
+  activeEmployees: number;
   /** The period the smart action targets (open run, or the derived next). */
-  periodStart: string
-  periodEnd: string
-  payDate: string
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
   /** The open (unposted, unvoided) run occupying that period; null → Start. */
-  run: ScheduleCardRun | null
+  run: ScheduleCardRun | null;
 }
 
 export interface PreviousRun {
-  documentId: string
-  documentNumber: string
-  scheduleName: string | null
-  periodStart: string
-  periodEnd: string
-  payDate: string
-  netTotal: string
-  employeeCount: number
-  posted: boolean
+  documentId: string;
+  documentNumber: string;
+  scheduleName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
+  netTotal: string;
+  employeeCount: number;
+  posted: boolean;
 }
 
 export interface PackTaxYear {
   /** Installed pack country; null is the pack-less fallback (calendar year). */
-  country: string | null
-  taxYear: number
+  country: string | null;
+  taxYear: number;
 }
 
 export interface PayrollHome {
   /** One entry per installed pack; run/YTD counts cover every entry's year. */
-  taxYears: PackTaxYear[]
-  activeEmployees: number
+  taxYears: PackTaxYear[];
+  activeEmployees: number;
   /** Committed runs in the current tax year of every installed pack. */
-  runsThisYear: number
-  defaultPeriodsPerYear: number | null
-  ytdGross: string
-  ytdNet: string
-  ytdEmployerCost: string
-  nextPayDate: string | null
-  schedules: PayrollScheduleCard[]
-  previousRun: PreviousRun | null
-  inProgressRuns: number
-  totalRuns: number
+  runsThisYear: number;
+  defaultPeriodsPerYear: number | null;
+  ytdGross: string;
+  ytdNet: string;
+  ytdEmployerCost: string;
+  nextPayDate: string | null;
+  schedules: PayrollScheduleCard[];
+  previousRun: PreviousRun | null;
+  inProgressRuns: number;
+  totalRuns: number;
   exceptions: {
-    missingProfiles: { id: string; name: string }[]
-    missingProfilesTotal: number
-    missingWages: { id: string; name: string }[]
-    missingWagesTotal: number
-  }
+    missingProfiles: { id: string; name: string }[];
+    missingProfilesTotal: number;
+    missingWages: { id: string; name: string }[];
+    missingWagesTotal: number;
+  };
   /** Control accounts still unconfigured (setup checklist, pack-driven). */
-  missingSettings: MissingPayrollControlAccount[]
+  missingSettings: MissingPayrollControlAccount[];
 }
 
-const EXCEPTION_LIMIT = 6
+const EXCEPTION_LIMIT = 6;
 
 /**
  * The current (country, tax year) pair of every installed payroll pack, per
@@ -130,50 +136,56 @@ async function currentPackTaxYears(
   today: string,
 ): Promise<PackTaxYear[]> {
   try {
-    const countries = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds)
-    const pairs: PackTaxYear[] = []
+    const countries = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds);
+    const pairs: PackTaxYear[] = [];
     for (const country of countries) {
       try {
-        pairs.push({ country, taxYear: payrollTaxYearForDate(country, today).taxYear })
+        pairs.push({ country, taxYear: payrollTaxYearForDate(country, today).taxYear });
       } catch (error) {
-        if (!(error instanceof PayrollError)) throw error
+        if (!(error instanceof PayrollError)) throw error;
       }
     }
-    if (pairs.length > 0) return pairs
+    if (pairs.length > 0) return pairs;
   } catch (error) {
     // A caller who cannot read payroll settings keeps the calendar year
     // below; anything else is a real defect and still throws.
-    if (!(error instanceof PayrollError)) throw error
+    if (!(error instanceof PayrollError)) throw error;
   }
-  return [{ country: null, taxYear: Number(today.slice(0, 4)) }]
+  return [{ country: null, taxYear: Number(today.slice(0, 4)) }];
 }
 
-function scheduleScopeFilter(
-  orgId: string,
-  allowedSubsidiaryIds: PayrollSubsidiaryScope,
-): SQL {
-  if (allowedSubsidiaryIds == null) return sql``
-  const ids = [...allowedSubsidiaryIds]
-  if (ids.length === 0) return sql` and false`
+function scheduleScopeFilter(orgId: string, allowedSubsidiaryIds: PayrollSubsidiaryScope): SQL {
+  if (allowedSubsidiaryIds == null) return sql``;
+  const ids = [...allowedSubsidiaryIds];
+  if (ids.length === 0) return sql` and false`;
   return sql` and coalesce(
     s.subsidiary_id,
     (select root.id from subsidiaries root
       where root.org_id = ${orgId} and root.parent_id is null and root.is_active
       order by root.created_at limit 1)
-  ) in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+  ) in (${sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  )})`;
 }
 
 export async function payrollHome(
   orgId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayrollHome> {
-  const today = await businessToday(orgId)
+  const today = await businessToday(orgId);
   // Raw payroll settings blob (also the installed-pack marker for the
   // checklist walk below) — read up front: the tax-year resolution needs
   // the installed packs before the YTD queries are built.
-  const payrollBlob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
-    select settings->'payroll' as p from orgs where id = ${orgId}`, 'objects'))[0]?.p ?? {}
-  const taxYears = await currentPackTaxYears(orgId, payrollBlob, allowedSubsidiaryIds, today)
+  const payrollBlob =
+    (
+      await db.execute<{ p: Record<string, unknown> | null }>(
+        sql`
+    select settings->'payroll' as p from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.p ?? {};
+  const taxYears = await currentPackTaxYears(orgId, payrollBlob, allowedSubsidiaryIds, today);
   // A stub belongs to a pack's current year only as a (country, tax_year)
   // pair: GB+US in February 2027 means (GB, 2026) plus (US, 2027), so last
   // year's US stubs stay out of YTD. A stub with no country is
@@ -182,15 +194,26 @@ export async function payrollHome(
   // pre-pack year-only behaviour for orgs with no installed pack. Runs
   // carry no country, so their count uses the union of pack years — the
   // closest attribution available.
-  const yearList = sql.join([...new Set(taxYears.map((pair) => pair.taxYear))].sort((a, b) => a - b).map((year) => sql`${year}`), sql`, `)
-  const pairs = taxYears.filter((pair) => pair.country !== null)
-  const stubYearFilter = pairs.length > 0
-    ? sql`and (st.country, st.tax_year) in (${sql.join(pairs.map((pair) => sql`(${pair.country}, ${pair.taxYear})`), sql`, `)})`
-    : sql`and st.tax_year in (${yearList})`
+  const yearList = sql.join(
+    [...new Set(taxYears.map((pair) => pair.taxYear))]
+      .sort((a, b) => a - b)
+      .map((year) => sql`${year}`),
+    sql`, `,
+  );
+  const pairs = taxYears.filter((pair) => pair.country !== null);
+  const stubYearFilter =
+    pairs.length > 0
+      ? sql`and (st.country, st.tax_year) in (${sql.join(
+          pairs.map((pair) => sql`(${pair.country}, ${pair.taxYear})`),
+          sql`, `,
+        )})`
+      : sql`and st.tax_year in (${yearList})`;
 
-  const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] = (await Promise.all([
-    // Active schedules + the latest run (any state) + active-profile counts.
-    db.execute<PayrollScheduleHomeRow>(sql`
+  const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] =
+    await Promise.all([
+      // Active schedules + the latest run (any state) + active-profile counts.
+      db.execute<PayrollScheduleHomeRow>(
+        sql`
       select s.id, s.name, s.frequency, s.periods_per_year,
              s.anchor_period_end::text as anchor_period_end, s.pay_date_offset_days, s.is_default,
              coalesce(pc.n, 0) as active_employees,
@@ -214,9 +237,12 @@ export async function payrollHome(
        where s.org_id = ${orgId} and s.is_active
          ${scheduleScopeFilter(orgId, allowedSubsidiaryIds)}
        order by s.is_default desc, s.name
-    `, 'objects'),
-    // Previous completed period — the latest committed (or posted) run.
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      // Previous completed period — the latest committed (or posted) run.
+      db.execute(
+        sql`
       select r.document_id, d.document_number, d.status as document_status, sc.name as schedule_name,
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.net_total, r.employee_count
@@ -226,8 +252,11 @@ export async function payrollHome(
        where r.org_id = ${orgId} and r.run_status = 'committed'
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        order by r.pay_date desc, r.period_end desc limit 1
-    `, 'objects'),
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      db.execute(
+        sql`
       select
         (select count(*) from employee_payroll_profiles pr
           join parties p on p.id = pr.employee_party_id and p.org_id = pr.org_id
@@ -244,12 +273,15 @@ export async function payrollHome(
           join documents d on d.id = r.document_id and d.org_id = r.org_id
          where r.org_id = ${orgId}
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as total_runs
-    `, 'objects'),
-    // YTD = committed stubs in the current (country, tax year) of every
-    // installed pack (matches the engine's YTD basis), grouped by stub
-    // currency and pay date — translated below, never summed raw across
-    // currencies.
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      // YTD = committed stubs in the current (country, tax year) of every
+      // installed pack (matches the engine's YTD basis), grouped by stub
+      // currency and pay date — translated below, never summed raw across
+      // currencies.
+      db.execute(
+        sql`
       select st.currency_code as currency, st.pay_date::text as pay_date,
              coalesce(sum(st.gross), 0) as gross,
              coalesce(sum(st.net_pay), 0) as net,
@@ -260,9 +292,12 @@ export async function payrollHome(
        where st.org_id = ${orgId} ${stubYearFilter}
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        group by st.currency_code, st.pay_date::text
-    `, 'objects'),
-    // Active employees with no active payroll profile.
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      // Active employees with no active payroll profile.
+      db.execute(
+        sql`
       select p.id, p.display_name as name, count(*) over () as result_count
         from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
@@ -273,10 +308,13 @@ export async function payrollHome(
             where pr.org_id = p.org_id and pr.employee_party_id = p.id and pr.is_active)
        order by p.display_name
        limit ${EXCEPTION_LIMIT}
-    `, 'objects'),
-    // Profiled employees with no wage effective today (one-table doctrine:
-    // wages live in labor_cost_rates, employee scope).
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      // Profiled employees with no wage effective today (one-table doctrine:
+      // wages live in labor_cost_rates, employee scope).
+      db.execute(
+        sql`
       select p.id, p.display_name as name, count(*) over () as result_count
         from employee_payroll_profiles pr
         join parties p on p.id = pr.employee_party_id and p.org_id = pr.org_id
@@ -289,51 +327,55 @@ export async function payrollHome(
               and (w.effective_to is null or w.effective_to >= ${today}))
        order by p.display_name
        limit ${EXCEPTION_LIMIT}
-    `, 'objects'),
-    payrollSettings(orgId, allowedSubsidiaryIds).catch((error) => {
-      if (
-        allowedSubsidiaryIds != null
-        && error instanceof PayrollError
-        && error.message === 'payroll settings not found'
-      ) return null
-      throw error
-    }),
-    // Raw payroll settings blob: installed-pack marker for the checklist walk.
-    db.execute<{ p: Record<string, unknown> | null }>(sql`
+    `,
+        "objects",
+      ),
+      payrollSettings(orgId, allowedSubsidiaryIds).catch((error) => {
+        if (
+          allowedSubsidiaryIds != null &&
+          error instanceof PayrollError &&
+          error.message === "payroll settings not found"
+        )
+          return null;
+        throw error;
+      }),
+      // Raw payroll settings blob: installed-pack marker for the checklist walk.
+      db.execute<{ p: Record<string, unknown> | null }>(sql`
       select settings->'payroll' as p from orgs where id = ${orgId}`),
-  ]))
+    ]);
 
   const schedules: PayrollScheduleCard[] = schedulesRes.map((s) => {
     const latest = s.document_id
       ? {
           documentId: String(s.document_id),
           documentNumber: String(s.document_number),
-          runStatus: s.run_status as ScheduleCardRun['runStatus'],
+          runStatus: s.run_status as ScheduleCardRun["runStatus"],
           documentStatus: String(s.document_status),
           netTotal: String(s.net_total),
           employeeCount: Number(s.employee_count),
         }
-      : null
+      : null;
     // The latest run is "open" while its document is still draft/approved —
     // posted (and voided) runs hand the card to the next derived period.
-    const open = latest && (latest.documentStatus === 'draft' || latest.documentStatus === 'approved')
-    let periodStart: string
-    let periodEnd: string
-    let payDate: string
+    const open =
+      latest && (latest.documentStatus === "draft" || latest.documentStatus === "approved");
+    let periodStart: string;
+    let periodEnd: string;
+    let payDate: string;
     if (open && latest) {
-      periodStart = String(s.period_start)
-      periodEnd = String(s.period_end)
-      payDate = String(s.pay_date)
+      periodStart = String(s.period_start);
+      periodEnd = String(s.period_end);
+      payDate = String(s.pay_date);
     } else {
       const next = nextPeriodAfter(
         { frequency: s.frequency, anchor_period_end: s.anchor_period_end },
         s.period_end ? String(s.period_end) : null,
-      )
-      periodStart = next.periodStart
-      periodEnd = next.periodEnd
-      const end = new Date(`${periodEnd}T00:00:00Z`)
-      end.setUTCDate(end.getUTCDate() + Number(s.pay_date_offset_days))
-      payDate = end.toISOString().slice(0, 10)
+      );
+      periodStart = next.periodStart;
+      periodEnd = next.periodEnd;
+      const end = new Date(`${periodEnd}T00:00:00Z`);
+      end.setUTCDate(end.getUTCDate() + Number(s.pay_date_offset_days));
+      payDate = end.toISOString().slice(0, 10);
     }
     return {
       id: String(s.id),
@@ -346,30 +388,40 @@ export async function payrollHome(
       periodEnd,
       payDate,
       run: open ? latest : null,
-    }
-  })
+    };
+  });
 
-  const prev = prevRes[0]
-  const stats = statsRes[0] ?? {}
+  const prev = prevRes[0];
+  const stats = statsRes[0] ?? {};
   // YTD stubs translate at their pay-date spot into the presentation
   // currency — flows doctrine, same as the customer pipeline. Missing
   // coverage fails closed rather than dropping (or, worse, raw-adding) a
   // currency.
   const ytdFx = await flowRates(
     orgId,
-    ytdRes.map((r) => ({ func: (r.currency ?? null) as string | null, date: String(r.pay_date).slice(0, 10) })),
-  )
-  let ytdGross = '0'
-  let ytdNet = '0'
-  let ytdEmployerCost = '0'
+    ytdRes.map((r) => ({
+      func: (r.currency ?? null) as string | null,
+      date: String(r.pay_date).slice(0, 10),
+    })),
+  );
+  let ytdGross = "0";
+  let ytdNet = "0";
+  let ytdEmployerCost = "0";
   for (const r of ytdRes) {
-    const rate = ytdFx.rateAt((r.currency ?? null) as string | null, String(r.pay_date).slice(0, 10))
-    ytdGross = add(ytdGross, mulDecimal(String(r.gross ?? '0'), rate))
-    ytdNet = add(ytdNet, mulDecimal(String(r.net ?? '0'), rate))
-    ytdEmployerCost = add(ytdEmployerCost, mulDecimal(String(r.employer_cost ?? '0'), rate))
+    const rate = ytdFx.rateAt(
+      (r.currency ?? null) as string | null,
+      String(r.pay_date).slice(0, 10),
+    );
+    ytdGross = add(ytdGross, mulDecimal(String(r.gross ?? "0"), rate));
+    ytdNet = add(ytdNet, mulDecimal(String(r.net ?? "0"), rate));
+    ytdEmployerCost = add(ytdEmployerCost, mulDecimal(String(r.employer_cost ?? "0"), rate));
   }
-  const ytdMoney = payrollYtdMoneyAmounts({ gross: ytdGross, net: ytdNet, employer_cost: ytdEmployerCost })
-  const defaultSchedule = schedules.find((s) => s.isDefault) ?? schedules[0]
+  const ytdMoney = payrollYtdMoneyAmounts({
+    gross: ytdGross,
+    net: ytdNet,
+    employer_cost: ytdEmployerCost,
+  });
+  const defaultSchedule = schedules.find((s) => s.isDefault) ?? schedules[0];
 
   // Setup checklist: the same packSlotState walk the run
   // pre-flight performs — every statutory slot of every installed pack must
@@ -378,18 +430,22 @@ export async function payrollHome(
   // CPP/EI slots anywhere in its setup. Slots that do not apply where the
   // org's active payroll works are absent, not demanded: an Ontario-only
   // employer is never told to map Québec accounts here either.
-  let missingSettings: MissingPayrollControlAccount[] = []
+  let missingSettings: MissingPayrollControlAccount[] = [];
   if (settings) {
-    const installed = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds)
-    const regions = await payrollPopulationRegions(orgId, allowedSubsidiaryIds)
-    const states = await packSlotState(orgId, installed, regions)
+    const installed = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds);
+    const regions = await payrollPopulationRegions(orgId, allowedSubsidiaryIds);
+    const states = await packSlotState(orgId, installed, regions);
     missingSettings = missingPayrollControlAccounts({
       wageExpenseAccountId: settings.wageExpenseAccountId,
       netPayAccountId: settings.netPayAccountId,
       slots: states.flatMap((pack) =>
-        pack.slots.map((slot) => ({ country: pack.country, key: slot.key, accountId: slot.accountId })),
+        pack.slots.map((slot) => ({
+          country: pack.country,
+          key: slot.key,
+          accountId: slot.accountId,
+        })),
       ),
-    })
+    });
   }
 
   return {
@@ -415,7 +471,7 @@ export async function payrollHome(
           payDate: String(prev.pay_date),
           netTotal: String(prev.net_total),
           employeeCount: Number(prev.employee_count),
-          posted: prev.document_status === 'posted',
+          posted: prev.document_status === "posted",
         }
       : null,
     inProgressRuns: Number(stats.in_progress ?? 0),
@@ -427,5 +483,5 @@ export async function payrollHome(
       missingWagesTotal: Number(noWageRes[0]?.result_count ?? 0),
     },
     missingSettings,
-  }
+  };
 }

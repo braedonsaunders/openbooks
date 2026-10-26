@@ -39,15 +39,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
 }
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksSqlTextCrmSetup = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextCrmSetup = sqlText;
 
 const ORG_ID = "00000000-0000-4000-8000-00000000a001";
 const USER_ID = "00000000-0000-4000-8000-00000000a002";
@@ -150,13 +147,10 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return \"en\"}",
+        url: 'data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return "en"}',
       };
     }
-    if (
-      specifier === "./auth" &&
-      context.parentURL?.endsWith("/web/lib/authz.ts")
-    ) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
       return {
         shortCircuit: true,
         format: "module",
@@ -169,8 +163,7 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -224,11 +217,7 @@ const actions: Array<[string, Record<string, unknown>, string]> = [
     },
     "crm_opportunity_statuses",
   ],
-  [
-    "lead source",
-    { action: "save-lead-source", key: "web", name: "Website" },
-    "crm_lead_sources",
-  ],
+  ["lead source", { action: "save-lead-source", key: "web", name: "Website" }, "crm_lead_sources"],
   [
     "territory",
     {
@@ -281,12 +270,8 @@ for (const [label, body, table] of actions) {
     const response = await post(body);
 
     assert.equal(response.status, 200);
-    assert.ok(
-      state.committed.some((text) => text.includes(`insert into ${table}`)),
-    );
-    assert.ok(
-      state.committed.some((text) => text.includes("insert into audit_log")),
-    );
+    assert.ok(state.committed.some((text) => text.includes(`insert into ${table}`)));
+    assert.ok(state.committed.some((text) => text.includes("insert into audit_log")));
     assert.equal(state.outsideWrites.length, 0);
     assert.equal(state.auditSeenInTx, true);
   });
@@ -297,19 +282,9 @@ for (const [label, body, table] of actions) {
 
     await assert.rejects(() => post(body), /forced audit storage failure/);
 
-    assert.equal(
-      state.committed.length,
-      0,
-      "the setup write did not commit without evidence",
-    );
-    assert.equal(
-      state.outsideWrites.length,
-      0,
-      "no setup write escaped the transaction",
-    );
-    assert.ok(
-      state.executed.some((text) => text.includes(`insert into ${table}`)),
-    );
+    assert.equal(state.committed.length, 0, "the setup write did not commit without evidence");
+    assert.equal(state.outsideWrites.length, 0, "no setup write escaped the transaction");
+    assert.ok(state.executed.some((text) => text.includes(`insert into ${table}`)));
     assert.equal(state.auditSeenInTx, true);
     assert.equal(state.inTx, false);
   });

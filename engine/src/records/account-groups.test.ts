@@ -12,28 +12,65 @@ test("multiple classifications share one fresh account population while retainin
   const dialect = new PgDialect();
   let accountReads = 0;
   const orgIds: string[] = [];
-  t.mock.method(db, "execute", async (query: Parameters<typeof dialect.sqlToQuery>[0], mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
-    const compiled = dialect.sqlToQuery(query);
-    if (compiled.sql.includes("from accounts ")) {
-      accountReads++;
-      orgIds.push(String(compiled.params[0]));
-      return inMode({ rows: [
-        { id: "rent", number: "5100", name: "Rent", type: "expense" },
-        { id: "cash", number: "1000", name: "Cash", type: "asset" },
-      ] });
-    }
-    const dimension = compiled.params[0];
-    if (compiled.sql.includes("from account_group_members ")) return inMode({ rows: dimension === "cost_pool" ? [
-      { account_id: "rent", group_id: "labor", key: "direct_labor", name: "Labor", color: "#123456" },
-    ] : [] });
-    return inMode({ rows: [
-      { id: `${dimension}-expense`, dimension, key: "expense", name: "Expense", color: null,
-        sort_order: 1, match: { accountTypes: ["expense"] }, is_catch_all: false },
-      { id: `${dimension}-other`, dimension, key: "other", name: "Other", color: null,
-        sort_order: 2, match: {}, is_catch_all: true },
-    ] });
-  });
+  t.mock.method(
+    db,
+    "execute",
+    async (query: Parameters<typeof dialect.sqlToQuery>[0], mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
+      const compiled = dialect.sqlToQuery(query);
+      if (compiled.sql.includes("from accounts ")) {
+        accountReads++;
+        orgIds.push(String(compiled.params[0]));
+        return inMode({
+          rows: [
+            { id: "rent", number: "5100", name: "Rent", type: "expense" },
+            { id: "cash", number: "1000", name: "Cash", type: "asset" },
+          ],
+        });
+      }
+      const dimension = compiled.params[0];
+      if (compiled.sql.includes("from account_group_members "))
+        return inMode({
+          rows:
+            dimension === "cost_pool"
+              ? [
+                  {
+                    account_id: "rent",
+                    group_id: "labor",
+                    key: "direct_labor",
+                    name: "Labor",
+                    color: "#123456",
+                  },
+                ]
+              : [],
+        });
+      return inMode({
+        rows: [
+          {
+            id: `${dimension}-expense`,
+            dimension,
+            key: "expense",
+            name: "Expense",
+            color: null,
+            sort_order: 1,
+            match: { accountTypes: ["expense"] },
+            is_catch_all: false,
+          },
+          {
+            id: `${dimension}-other`,
+            dimension,
+            key: "other",
+            name: "Other",
+            color: null,
+            sort_order: 2,
+            match: {},
+            is_catch_all: true,
+          },
+        ],
+      });
+    },
+  );
   const first = await resolveAccountGroupDimensions(["burden", "cost_pool", "burden"], "org-1");
   assert.equal(first.size, 2);
   assert.equal(accountReads, 1);
@@ -49,14 +86,17 @@ test("multiple classifications share one fresh account population while retainin
 });
 
 test("an empty classification selection performs no account read", async (t) => {
-  t.mock.method(db, "execute", async () => { throw new Error("unexpected database read"); });
+  t.mock.method(db, "execute", async () => {
+    throw new Error("unexpected database read");
+  });
   assert.deepEqual(await resolveAccountGroupDimensions([], "org-1"), new Map());
 });
 
 test("resolveAccountGroups chooses a stable pin when legacy duplicate rows are present", async (t) => {
   const calls: unknown[] = [];
   t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     calls.push(query);
     if (calls.length === 1) {
       return inMode({
@@ -85,7 +125,9 @@ test("resolveAccountGroups chooses a stable pin when legacy duplicate rows are p
         ],
       });
     }
-    return inMode({ rows: [{ id: "account-1", number: "5000", name: "Supplies", type: "expense" }] });
+    return inMode({
+      rows: [{ id: "account-1", number: "5000", name: "Supplies", type: "expense" }],
+    });
   });
 
   const resolved = await resolveAccountGroups("cost_pool", "org-1");
@@ -96,7 +138,8 @@ test("resolveAccountGroups chooses a stable pin when legacy duplicate rows are p
 test("resolveAccountGroups still applies rules and catch-all groups without pins", async (t) => {
   let calls = 0;
   t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     calls += 1;
     if (calls === 1) {
       return inMode({
@@ -142,7 +185,8 @@ test("resolveAccountGroups still applies rules and catch-all groups without pins
 test("resolveAccountGroups refuses two active catch-alls instead of silently picking one", async (t) => {
   let calls = 0;
   t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     calls += 1;
     if (calls === 1) {
       // The U3 shape: the backfill-inserted `other` at sort_order 90 beside
@@ -174,9 +218,7 @@ test("resolveAccountGroups refuses two active catch-alls instead of silently pic
     }
     if (calls === 2) return inMode({ rows: [] });
     return inMode({
-      rows: [
-        { id: "account-1", number: "9999", name: "Zebra reserve", type: "expense" },
-      ],
+      rows: [{ id: "account-1", number: "9999", name: "Zebra reserve", type: "expense" }],
     });
   });
 
@@ -197,25 +239,17 @@ test("resolveAccountGroups refuses two active catch-alls instead of silently pic
 });
 
 test("legacy unsafe account-group patterns fail closed before classification", async (t) => {
-  assert.match(
-    accountGroupNamePatternError("(a+)+$") ?? "",
-    /catastrophic backtracking/,
-  );
-  assert.match(
-    accountGroupNamePatternError("(a|aa)+") ?? "",
-    /catastrophic backtracking/,
-  );
-  assert.match(
-    accountGroupNamePatternError("[") ?? "",
-    /valid regular expression/,
-  );
+  assert.match(accountGroupNamePatternError("(a+)+$") ?? "", /catastrophic backtracking/);
+  assert.match(accountGroupNamePatternError("(a|aa)+") ?? "", /catastrophic backtracking/);
+  assert.match(accountGroupNamePatternError("[") ?? "", /valid regular expression/);
   // These forms are used by seeded groups and must remain executable.
   assert.equal(accountGroupNamePatternError("rent|lease"), null);
   assert.equal(accountGroupNamePatternError("stat(utory)? holiday.*admin"), null);
 
   let calls = 0;
   t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     calls += 1;
     if (calls === 1) {
       return inMode({
@@ -245,9 +279,7 @@ test("legacy unsafe account-group patterns fail closed before classification", a
     }
     if (calls === 2) return inMode({ rows: [] });
     return inMode({
-      rows: [
-        { id: "account-1", number: "5000", name: "Cash", type: "asset" },
-      ],
+      rows: [{ id: "account-1", number: "5000", name: "Cash", type: "asset" }],
     });
   });
 
@@ -260,7 +292,8 @@ test("safe account-group name patterns continue to classify accounts", async (t)
 
   let calls = 0;
   t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     calls += 1;
     if (calls === 1) {
       return inMode({

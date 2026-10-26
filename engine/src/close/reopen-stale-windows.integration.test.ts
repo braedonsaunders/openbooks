@@ -1,22 +1,12 @@
-import {
-  decideReopenFixture,
-  requestReviewedReopenFixture,
-} from "../testing/close.ts";
+import { decideReopenFixture, requestReviewedReopenFixture } from "../testing/close.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
-import {
-  consumeReopenRequestsForClosedModules,
-  recloseApprovedReopen,
-} from "./reopening.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { consumeReopenRequestsForClosedModules, recloseApprovedReopen } from "./reopening.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -76,24 +66,28 @@ SELECT e.org_id,
   FROM ended AS e
 `;
 
-async function requestStatus(
-  orgId: string,
-  requestId: string,
-): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`
+async function requestStatus(orgId: string, requestId: string): Promise<string> {
+  return (
+    await db.execute<{ status: string }>(
+      sql`
     select status from close_reopen_requests where id = ${requestId} and org_id = ${orgId}
-  `, "objects"))[0]!.status;
+  `,
+      "objects",
+    )
+  )[0]!.status;
 }
 
-async function endAuditCount(
-  orgId: string,
-  requestId: string,
-): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+async function endAuditCount(orgId: string, requestId: string): Promise<number> {
+  return (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'close_reopen_requests'
        and row_id = ${requestId} and action = 'end'
-  `, "objects"))[0]!.n;
+  `,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 test(
@@ -168,29 +162,31 @@ test(
 
       await db.execute(sql.raw(RECONCILE_STALE_REOPEN_WINDOWS));
       assert.equal(await requestStatus(org.orgId, stale), "reclosed");
-      const ended = (await db.execute<{
+      const ended = (
+        await db.execute<{
           reclosed_at: string | null;
           updated_by: string | null;
-        }>(sql`
+        }>(
+          sql`
         select reclosed_at::text as reclosed_at, updated_by::text as updated_by
           from close_reopen_requests where id = ${stale} and org_id = ${org.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.ok(ended.reclosed_at, "the re-close fields are set");
-      assert.equal(
-        ended.updated_by,
-        null,
-        "a system reconciliation names no actor",
-      );
-      assert.equal(
-        await endAuditCount(org.orgId, stale),
-        1,
-        "one audit row per ended window",
-      );
-      const auditReason = (await db.execute<{ reason: string }>(sql`
+      assert.equal(ended.updated_by, null, "a system reconciliation names no actor");
+      assert.equal(await endAuditCount(org.orgId, stale), 1, "one audit row per ended window");
+      const auditReason = (
+        await db.execute<{ reason: string }>(
+          sql`
         select changes->>'reason' as reason from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
            and row_id = ${stale} and action = 'end'
-      `, "objects"))[0]!.reason;
+      `,
+          "objects",
+        )
+      )[0]!.reason;
       assert.match(auditReason, /every covered module is already closed/);
 
       // The window still guarding open AP work is untouched.
@@ -348,32 +344,17 @@ test(
         reason: "Correction work completed",
       });
       assert.deepEqual(consumed, [second.stale]);
-      assert.equal(
-        await requestStatus(second.org.orgId, second.stale),
-        "reclosed",
-      );
-      assert.equal(
-        await requestStatus(second.org.orgId, second.live),
-        "approved",
-      );
+      assert.equal(await requestStatus(second.org.orgId, second.stale), "reclosed");
+      assert.equal(await requestStatus(second.org.orgId, second.live), "approved");
 
       // The reconciliation then agrees on the identical fixtures: the
       // other stale window ends with its audit row, both live windows
       // stay approved, and nothing new happens on the consumed side.
       await db.execute(sql.raw(RECONCILE_STALE_REOPEN_WINDOWS));
-      assert.equal(
-        await requestStatus(first.org.orgId, first.stale),
-        "reclosed",
-      );
+      assert.equal(await requestStatus(first.org.orgId, first.stale), "reclosed");
       assert.equal(await endAuditCount(first.org.orgId, first.stale), 1);
-      assert.equal(
-        await requestStatus(first.org.orgId, first.live),
-        "approved",
-      );
-      assert.equal(
-        await requestStatus(second.org.orgId, second.live),
-        "approved",
-      );
+      assert.equal(await requestStatus(first.org.orgId, first.live), "approved");
+      assert.equal(await requestStatus(second.org.orgId, second.live), "approved");
       assert.equal(await endAuditCount(second.org.orgId, second.live), 0);
     } finally {
       await dropScratchOrg(first.org.orgId);

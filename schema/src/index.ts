@@ -106,7 +106,6 @@ export * from "./hrm-documents-surveys";
 export * from "./hrm-recruiting-depth";
 // HR-18 end
 
-
 export * from "./payroll-service-credit";
 export * from "./payroll-compensation";
 export * from "./payroll-holidays";
@@ -115,9 +114,9 @@ export * from "./shipping";
 export * from "./billing-import";
 export * from "./benefit-transaction-policies";
 
-export * from './inventory-controls';
+export * from "./inventory-controls";
 
-export * from './warehouse-execution';
+export * from "./warehouse-execution";
 
 export * from "./manufacturing-trace";
 export * from "./inspections";
@@ -130,8 +129,8 @@ export * from "./multibook";
 export * from "./expense-amortization";
 export * from "./asset-capitalization";
 export * from "./asset-maintenance";
-export * from './rebates';
-export * from './renewals';
+export * from "./rebates";
+export * from "./renewals";
 export * from "./financial-policies";
 export * from "./journal-instructions";
 export * from "./historical-translation";

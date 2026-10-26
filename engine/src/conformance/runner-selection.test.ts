@@ -38,9 +38,15 @@ test("an explicitly allowed empty selection still passes", async () => {
 
 test("ledger cases without a ledger context fail the run and name the not-run count", async () => {
   const report = await runCorpus(CONFORMANCE_CORPUS, { at: AT });
-  assert.ok(report.totals.skipped > 0, "the corpus must contain ledger-tier cases for this test to mean anything");
+  assert.ok(
+    report.totals.skipped > 0,
+    "the corpus must contain ledger-tier cases for this test to mean anything",
+  );
   assert.equal(report.pass, false);
-  assert.match(report.notRunReason ?? "", new RegExp(`${report.totals.skipped} ledger-tier case\\(s\\) not run`));
+  assert.match(
+    report.notRunReason ?? "",
+    new RegExp(`${report.totals.skipped} ledger-tier case\\(s\\) not run`),
+  );
   const consoleText = renderConsole(report);
   assert.match(consoleText, new RegExp(`${report.totals.skipped} not run`));
   assert.match(consoleText, /ledger-tier case\(s\) not run/);
@@ -62,17 +68,22 @@ function runCli(args: string[]): { status: number | null; output: string } {
     FORCE_COLOR: "0",
     OPENBOOKS_DB_URL: "",
     OPENBOOKS_DATA_KEY:
-      process.env.OPENBOOKS_DATA_KEY ?? "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      process.env.OPENBOOKS_DATA_KEY ??
+      "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     OPENBOOKS_TRUSTED_TEST_BYPASS: "1",
   };
   delete childEnv.NODE_TEST_CONTEXT;
   delete childEnv.NODE_TEST_WORKER_ID;
-  const run = spawnSync(process.execPath, ["--import", "tsx", "engine/src/conformance/cli.ts", ...args], {
-    cwd: REPO_ROOT,
-    env: childEnv,
-    encoding: "utf8",
-    timeout: 300_000,
-  });
+  const run = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "engine/src/conformance/cli.ts", ...args],
+    {
+      cwd: REPO_ROOT,
+      env: childEnv,
+      encoding: "utf8",
+      timeout: 300_000,
+    },
+  );
   return { status: run.status, output: `${run.stdout ?? ""}\n${run.stderr ?? ""}` };
 }
 

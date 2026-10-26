@@ -6,25 +6,29 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button, Input, SearchSelect, Select, Textarea, UrlDrawer } from "@openbooks/ui";
-import { ALL_WORKSTREAMS, Check, Chips, Field, type Option, RUN_STATUSES, SEVERITIES, TASK_STATUSES, TokenSelect, asStringArray, drawerHref, numberOrUndefined, post, pruneEmpty } from "./close-setup-shared";
+import {
+  ALL_WORKSTREAMS,
+  Check,
+  Chips,
+  Field,
+  type Option,
+  RUN_STATUSES,
+  SEVERITIES,
+  TASK_STATUSES,
+  TokenSelect,
+  asStringArray,
+  drawerHref,
+  numberOrUndefined,
+  post,
+  pruneEmpty,
+} from "./close-setup-shared";
 import type { AutomationDraft, AutomationRow, Props } from "./close-setup-types";
 
-export function AutomationDrawer({
-  row,
-  props,
-}: {
-  row?: AutomationRow;
-  props: Props;
-}) {
+export function AutomationDrawer({ row, props }: { row?: AutomationRow; props: Props }) {
   const t = useTranslations("close.setup");
   const td = useTranslations("close");
   const router = useRouter();
-  const closeHref = drawerHref(
-    props.currentParams,
-    "automation",
-    "automation",
-    null,
-  );
+  const closeHref = drawerHref(props.currentParams, "automation", "automation", null);
   const [draft, setDraft] = useState<AutomationDraft>(
     row
       ? {
@@ -157,8 +161,7 @@ export function AutomationDrawer({
                   ...draft,
                   automationAction: e.target.value,
                   config:
-                    e.target.value === "run_allocation" &&
-                    Object.keys(config).length === 0
+                    e.target.value === "run_allocation" && Object.keys(config).length === 0
                       ? { ruleIds: "all", post: false }
                       : draft.config,
                 })
@@ -186,9 +189,7 @@ export function AutomationDrawer({
             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
               {t("automationConfig.sectionConditions")}
             </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t("conditions.intro")}
-            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t("conditions.intro")}</p>
           </div>
           <Field label={t("conditions.runStatus")}>
             <Chips
@@ -230,10 +231,7 @@ export function AutomationDrawer({
               onChange={(next) => setCondList("severity", next)}
             />
           </Field>
-          <Field
-            label={t("conditions.taskKey")}
-            hint={t("conditions.taskKeyHint")}
-          >
+          <Field label={t("conditions.taskKey")} hint={t("conditions.taskKeyHint")}>
             <Input
               value={asStringArray(conditions.taskKey).join(", ")}
               onChange={(e) =>
@@ -458,9 +456,7 @@ export function AutomationDrawer({
               </p>
               <Check
                 checked={config.ruleIds === "all"}
-                onChange={(value) =>
-                  setConfig(value ? { ruleIds: "all" } : { ruleIds: [] })
-                }
+                onChange={(value) => setConfig(value ? { ruleIds: "all" } : { ruleIds: [] })}
               >
                 {t("automationConfig.allocAllRules")}
               </Check>
@@ -472,10 +468,7 @@ export function AutomationDrawer({
                   <Textarea
                     className="font-mono text-xs"
                     rows={2}
-                    value={(Array.isArray(config.ruleIds)
-                      ? config.ruleIds
-                      : []
-                    ).join(", ")}
+                    value={(Array.isArray(config.ruleIds) ? config.ruleIds : []).join(", ")}
                     onChange={(e) =>
                       setConfig({
                         ruleIds: e.target.value

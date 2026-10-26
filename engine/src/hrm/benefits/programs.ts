@@ -1,4 +1,10 @@
-import { retainedTransactionPolicyOrder, readTransactionPolicy, validateTransactionPolicy, requireTransactionPolicyStorage, type BenefitTransactionPolicy } from "./transaction-policy.ts";
+import {
+  retainedTransactionPolicyOrder,
+  readTransactionPolicy,
+  validateTransactionPolicy,
+  requireTransactionPolicyStorage,
+  type BenefitTransactionPolicy,
+} from "./transaction-policy.ts";
 import { programRevisionInForce, recordProgramRevision } from "./program-revisions.ts";
 import { requireBenefitCurrency } from "./currency-options.ts";
 import { sql } from "drizzle-orm";
@@ -92,12 +98,7 @@ const PROGRAM_COLUMNS = sql`id, code, name, family,
   revision, created_by as "createdBy", updated_by as "updatedBy"`;
 
 function asFamily(value: unknown, field: string): BenefitProgramFamily {
-  if (
-    value === "reward" ||
-    value === "allowance" ||
-    value === "incentive" ||
-    value === "custom"
-  ) {
+  if (value === "reward" || value === "allowance" || value === "incentive" || value === "custom") {
     return value;
   }
   throw new BenefitsError(
@@ -108,7 +109,10 @@ function asFamily(value: unknown, field: string): BenefitProgramFamily {
 
 function asStatus(value: unknown): BenefitProgramStatus {
   if (value === "draft" || value === "active" || value === "closed") return value;
-  throw new BenefitsError("REFUSED", "benefit program carries an unknown status — reload and retry");
+  throw new BenefitsError(
+    "REFUSED",
+    "benefit program carries an unknown status — reload and retry",
+  );
 }
 
 function asDelivery(value: unknown): BenefitDeliveryMethod {
@@ -120,7 +124,8 @@ function asDelivery(value: unknown): BenefitDeliveryMethod {
 }
 
 function asValuation(value: unknown): BenefitValuation {
-  if (value === "fixed" || value === "percent" || value === "pool" || value === "per_unit") return value;
+  if (value === "fixed" || value === "percent" || value === "pool" || value === "per_unit")
+    return value;
   throw new BenefitsError("INVALID_INPUT", "valuation is fixed, percent, pool, or per_unit");
 }
 
@@ -130,7 +135,9 @@ function asMetric(value: unknown): BenefitMetric | null {
     value === "revenue" ||
     value === "gross_profit" ||
     value === "net_profit" ||
-    value === "approved_hours" || value === "transactions" || value === "project_margin"
+    value === "approved_hours" ||
+    value === "transactions" ||
+    value === "project_margin"
   ) {
     return value;
   }
@@ -147,7 +154,8 @@ function asMetricScope(value: unknown): BenefitMetricScope | null {
 }
 
 function asAllocation(value: unknown): BenefitAllocation {
-  if (value === "equal" || value === "hours" || value === "role" || value === "responsibility") return value;
+  if (value === "equal" || value === "hours" || value === "role" || value === "responsibility")
+    return value;
   throw new BenefitsError("INVALID_INPUT", "allocation is equal, hours, role, or responsibility");
 }
 
@@ -159,7 +167,10 @@ function asUnassignedTime(value: unknown): BenefitUnassignedTime {
 function asPeriodBasis(value: unknown): BenefitPeriodBasis | null {
   if (value === null || value === undefined) return null;
   if (value === "calendar" || value === "fiscal") return value;
-  throw new BenefitsError("REFUSED", "benefit program carries an unknown period basis — reload and retry");
+  throw new BenefitsError(
+    "REFUSED",
+    "benefit program carries an unknown period basis — reload and retry",
+  );
 }
 
 function asFrequency(value: unknown): BenefitFrequency {
@@ -186,7 +197,10 @@ function canonicalAmount(value: unknown, field: string): string | null {
   }
   const canonical = normalizeMoney(exact);
   if (!fitsLedgerRange(canonical)) {
-    throw new BenefitsError("INVALID_INPUT", "the amount exceeds the ledger's 15 whole-digit limit — enter a smaller exact amount");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "the amount exceeds the ledger's 15 whole-digit limit — enter a smaller exact amount",
+    );
   }
   if (canonical.startsWith("-")) {
     throw new BenefitsError("INVALID_INPUT", `${field} is a non-negative amount in plan currency`);
@@ -201,25 +215,40 @@ interface ProgramScopeRows {
   readonly excludedProjectIds: readonly string[];
 }
 
-type ScopeRow = { department_id: string | null; project_id: string | null; customer_id: string | null; excluded: boolean };
+type ScopeRow = {
+  department_id: string | null;
+  project_id: string | null;
+  customer_id: string | null;
+  excluded: boolean;
+};
 
 async function loadProgramScopes(
   exec: SqlExecutor,
   orgId: string,
   programId: string,
 ): Promise<ProgramScopeRows> {
-  const rows = await exec.execute<ScopeRow>(sql`
+  const rows = await exec.execute<ScopeRow>(
+    sql`
       select department_id, project_id, customer_id, excluded from hrm_benefit_program_scopes
        where org_id = ${orgId} and program_id = ${programId}
        order by department_id, project_id, customer_id
-    `, "objects");
+    `,
+    "objects",
+  );
   return scopeRowsToScopes(rows);
 }
 
 function scopeRowsToScopes(rows: readonly ScopeRow[]): ProgramScopeRows {
   const pick = (key: "department_id" | "project_id" | "customer_id", excluded = false) =>
-    rows.filter((row) => row[key] !== null && row.excluded === excluded).map((row) => String(row[key]));
-  return { departmentIds: pick("department_id"), projectIds: pick("project_id"), customerIds: pick("customer_id"), excludedProjectIds: pick("project_id", true) };
+    rows
+      .filter((row) => row[key] !== null && row.excluded === excluded)
+      .map((row) => String(row[key]));
+  return {
+    departmentIds: pick("department_id"),
+    projectIds: pick("project_id"),
+    customerIds: pick("customer_id"),
+    excludedProjectIds: pick("project_id", true),
+  };
 }
 
 function asEligibility(value: unknown): "members" | "all_employees" {
@@ -227,7 +256,12 @@ function asEligibility(value: unknown): "members" | "all_employees" {
   throw new BenefitsError("INVALID_INPUT", "eligibility is members or all_employees");
 }
 
-const NO_SCOPES: ProgramScopeRows = { departmentIds: [], projectIds: [], customerIds: [], excludedProjectIds: [] };
+const NO_SCOPES: ProgramScopeRows = {
+  departmentIds: [],
+  projectIds: [],
+  customerIds: [],
+  excludedProjectIds: [],
+};
 
 function toProgram(
   row: Record<string, unknown>,
@@ -292,10 +326,15 @@ export async function getBenefitProgram(
 ): Promise<BenefitProgram> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   await assertHrmEnabled(exec, orgId);
-  const row = (await exec.execute<Record<string, unknown>>(sql`
+  const row = (
+    await exec.execute<Record<string, unknown>>(
+      sql`
       select ${PROGRAM_COLUMNS} from hrm_benefit_programs
        where org_id = ${orgId} and id = ${programId}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new BenefitsError(
       "NOT_FOUND",
@@ -339,21 +378,33 @@ export async function programPolicyInForce(
   const live = await getBenefitProgram(exec, orgId, actorId, programId);
   const revision = await programRevisionInForce(exec, orgId, programId, periodFrom, periodTo);
   if (revision === null) {
-    const sources = await exec.execute<{ accountId: string; weightBps: number | null }>(sql`
+    const sources = await exec.execute<{ accountId: string; weightBps: number | null }>(
+      sql`
       select account_id as "accountId", weight_bps as "weightBps" from hrm_benefit_program_sources
        where org_id = ${orgId} and program_id = ${programId}
        order by account_id
-    `, "objects");
+    `,
+      "objects",
+    );
     return { program: live, sources, transactionPolicy: undefined, revisionId: null };
   }
-  const row = requireOneRow(await exec.execute<Record<string, unknown>>(sql`
+  const row = requireOneRow(
+    await exec.execute<Record<string, unknown>>(
+      sql`
     select ${PROGRAM_COLUMNS} from jsonb_populate_record(null::hrm_benefit_programs, ${JSON.stringify(revision.snapshot.program)}::jsonb)
-  `, "objects"), "reading the program rules in force for the period");
+  `,
+      "objects",
+    ),
+    "reading the program rules in force for the period",
+  );
   const prior = toProgram(row, scopeRowsToScopes(revision.snapshot.scopes));
   return {
     program: { ...prior, status: live.status },
     sources: revision.snapshot.sources,
-    transactionPolicy: revision.snapshot.transactionPolicy === null ? null : retainedTransactionPolicyOrder(revision.snapshot.transactionPolicy),
+    transactionPolicy:
+      revision.snapshot.transactionPolicy === null
+        ? null
+        : retainedTransactionPolicyOrder(revision.snapshot.transactionPolicy),
     revisionId: revision.revisionId,
   };
 }
@@ -368,10 +419,16 @@ export async function listBenefitPrograms(query: {
 }): Promise<{ programs: BenefitProgram[]; total: number }> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  if (query.status !== undefined && !(BENEFIT_PROGRAM_STATUSES as readonly string[]).includes(query.status)) {
+  if (
+    query.status !== undefined &&
+    !(BENEFIT_PROGRAM_STATUSES as readonly string[]).includes(query.status)
+  ) {
     throw new BenefitsError("INVALID_INPUT", "program status filter is draft, active, or closed");
   }
-  if (query.family !== undefined && !(BENEFIT_PROGRAM_FAMILIES as readonly string[]).includes(query.family)) {
+  if (
+    query.family !== undefined &&
+    !(BENEFIT_PROGRAM_FAMILIES as readonly string[]).includes(query.family)
+  ) {
     throw new BenefitsError(
       "INVALID_INPUT",
       "program family filter is reward, allowance, incentive, or custom",
@@ -381,14 +438,21 @@ export async function listBenefitPrograms(query: {
     const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const { limit, offset } = benefitListWindow(query.limit, query.offset);
-    const total = (await db.execute<{ n: number }>(sql`
+    const total =
+      (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from hrm_benefit_programs
          where org_id = ${orgId}
            ${query.status !== undefined ? sql`and status = ${query.status}` : sql``}
            ${query.family !== undefined ? sql`and family = ${query.family}` : sql``}
            ${scope !== null ? sql`and legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
-      `, "objects"))[0]?.n ?? 0;
-    const rows = await db.execute<Record<string, unknown>>(sql`
+      `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
         select ${PROGRAM_COLUMNS} from hrm_benefit_programs
          where org_id = ${orgId}
            ${query.status !== undefined ? sql`and status = ${query.status}` : sql``}
@@ -396,7 +460,9 @@ export async function listBenefitPrograms(query: {
            ${scope !== null ? sql`and legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
          order by code
          ${limit !== null ? sql`limit ${limit} offset ${offset}` : sql`offset ${offset}`}
-      `, "objects");
+      `,
+      "objects",
+    );
     const out: BenefitProgram[] = [];
     for (const row of rows) {
       out.push(toProgram(row, await loadProgramScopes(db, orgId, String(row.id))));
@@ -411,11 +477,16 @@ async function requireLegalEntity(
   legalEntityId: string | null,
 ): Promise<void> {
   if (legalEntityId === null) return;
-  const row = (await exec.execute<{ id: string }>(sql`
+  const row = (
+    await exec.execute<{ id: string }>(
+      sql`
       select id from subsidiaries
        where org_id = ${orgId} and id = ${legalEntityId}
          and is_active and not is_elimination
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new BenefitsError(
       "REFUSED",
@@ -466,12 +537,20 @@ async function requireProgramPayComponent(
   deliveryMethod: BenefitDeliveryMethod,
 ): Promise<void> {
   if (payComponentId === null) {
-    throw new BenefitsError("REFUSED", `program ${programCode} names no pay component — link ${deliveryMethod === "external" ? "a non-cash" : "a cash"} earning component in the program; all valued benefits require their native payroll representation`);
+    throw new BenefitsError(
+      "REFUSED",
+      `program ${programCode} names no pay component — link ${deliveryMethod === "external" ? "a non-cash" : "a cash"} earning component in the program; all valued benefits require their native payroll representation`,
+    );
   }
-  const row = (await exec.execute<{ kind: string; isActive: boolean; paymentKind: string }>(sql`
+  const row = (
+    await exec.execute<{ kind: string; isActive: boolean; paymentKind: string }>(
+      sql`
       select kind, is_active as "isActive", payment_kind as "paymentKind" from pay_components
        where org_id = ${orgId} and id = ${payComponentId}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new BenefitsError(
       "REFUSED",
@@ -491,7 +570,11 @@ async function requireProgramPayComponent(
     );
   }
   const expectedKind = deliveryMethod === "external" ? "non_cash" : "cash";
-  if (row.paymentKind !== expectedKind) throw new BenefitsError("REFUSED", `program ${programCode} requires a ${expectedKind === "cash" ? "cash" : "non-cash"} earning component — provider benefits must not also pay cash, and payroll rewards must create cash entitlement`);
+  if (row.paymentKind !== expectedKind)
+    throw new BenefitsError(
+      "REFUSED",
+      `program ${programCode} requires a ${expectedKind === "cash" ? "cash" : "non-cash"} earning component — provider benefits must not also pay cash, and payroll rewards must create cash entitlement`,
+    );
 }
 
 interface ProgramRuleInput {
@@ -524,42 +607,137 @@ interface ProgramRuleInput {
 
 /** Every advertised rule must resolve: missing pieces refuse by name. */
 function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
-  const marginTerms = rules.lossPercentRate !== null || rules.projectProfitCap !== null || rules.projectLossCap !== null || rules.poolRounding !== "share" || rules.includeOpenCommitments || rules.scopeExcludedProjectIds.length > 0;
-  if (rules.hourClassifications.some((c) => !["regular", "overtime", "double_time", "other"].includes(c)) || new Set(rules.hourClassifications).size !== rules.hourClassifications.length) {
-    throw new BenefitsError("INVALID_INPUT", "Time classifications are regular, overtime, double_time or other, each chosen once.");
+  const marginTerms =
+    rules.lossPercentRate !== null ||
+    rules.projectProfitCap !== null ||
+    rules.projectLossCap !== null ||
+    rules.poolRounding !== "share" ||
+    rules.includeOpenCommitments ||
+    rules.scopeExcludedProjectIds.length > 0;
+  if (
+    rules.hourClassifications.some(
+      (c) => !["regular", "overtime", "double_time", "other"].includes(c),
+    ) ||
+    new Set(rules.hourClassifications).size !== rules.hourClassifications.length
+  ) {
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "Time classifications are regular, overtime, double_time or other, each chosen once.",
+    );
   }
-  if (rules.hourClassifications.length && rules.metric !== "approved_hours" && rules.allocation !== "hours") {
-    throw new BenefitsError("INVALID_INPUT", "Time classifications narrow approved hours — measure approved hours or allocate by hours, or clear the classifications.");
+  if (
+    rules.hourClassifications.length &&
+    rules.metric !== "approved_hours" &&
+    rules.allocation !== "hours"
+  ) {
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "Time classifications narrow approved hours — measure approved hours or allocate by hours, or clear the classifications.",
+    );
   }
   if (rules.metric !== "project_margin" && marginTerms) {
-    throw new BenefitsError("INVALID_INPUT", "Loss rates, project pool caps, pool rounding, open commitments and excluded projects apply to project-margin programs — choose that metric or clear those terms.");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "Loss rates, project pool caps, pool rounding, open commitments and excluded projects apply to project-margin programs — choose that metric or clear those terms.",
+    );
   }
   if (rules.metric === "project_margin") {
-    if (rules.family !== "incentive" || rules.valuation !== "percent" || rules.allocation !== "responsibility" || rules.metricScope !== "company" || rules.deliveryMethod !== "payroll" || rules.scopeIds.length || rules.scopeCustomerIds.length || rules.capAmount !== null || rules.thresholdAmount !== null || rules.budgetAmount !== null || !["monthly", "manual"].includes(rules.frequency)) {
-      throw new BenefitsError("INVALID_INPUT", "A project-margin incentive pays a percentage of each project's margin to its manager through payroll, measured company-wide and settled monthly or on chosen spans; use project pool caps instead of recipient caps, thresholds or budgets.");
+    if (
+      rules.family !== "incentive" ||
+      rules.valuation !== "percent" ||
+      rules.allocation !== "responsibility" ||
+      rules.metricScope !== "company" ||
+      rules.deliveryMethod !== "payroll" ||
+      rules.scopeIds.length ||
+      rules.scopeCustomerIds.length ||
+      rules.capAmount !== null ||
+      rules.thresholdAmount !== null ||
+      rules.budgetAmount !== null ||
+      !["monthly", "manual"].includes(rules.frequency)
+    ) {
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "A project-margin incentive pays a percentage of each project's margin to its manager through payroll, measured company-wide and settled monthly or on chosen spans; use project pool caps instead of recipient caps, thresholds or budgets.",
+      );
     }
-    if (rules.percentRate === null || cmp(rules.percentRate, "0") <= 0) throw new BenefitsError("INVALID_INPUT", "Configure a positive profit-share percentage before activating this program.");
-    for (const [label, value, max] of [["loss share percentage", rules.lossPercentRate, "100"], ["project profit cap", rules.projectProfitCap, null], ["project loss cap", rules.projectLossCap, null]] as const) {
-      if (value !== null && (cmp(value, "0") < 0 || (max !== null && cmp(value, max) > 0))) throw new BenefitsError("INVALID_INPUT", `The ${label} must be ${max ? "between 0 and 100" : "zero or more"}.`);
+    if (rules.percentRate === null || cmp(rules.percentRate, "0") <= 0)
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "Configure a positive profit-share percentage before activating this program.",
+      );
+    for (const [label, value, max] of [
+      ["loss share percentage", rules.lossPercentRate, "100"],
+      ["project profit cap", rules.projectProfitCap, null],
+      ["project loss cap", rules.projectLossCap, null],
+    ] as const) {
+      if (value !== null && (cmp(value, "0") < 0 || (max !== null && cmp(value, max) > 0)))
+        throw new BenefitsError(
+          "INVALID_INPUT",
+          `The ${label} must be ${max ? "between 0 and 100" : "zero or more"}.`,
+        );
     }
   } else if (rules.metric === "transactions") {
-    if (!(["incentive","custom"] as readonly string[]).includes(rules.family) || rules.metricScope !== "company" || rules.allocation !== "responsibility" || rules.deliveryMethod !== "payroll" || rules.scopeIds.length || rules.capAmount !== null || rules.thresholdAmount !== null || rules.budgetAmount !== null || !["percent","per_unit"].includes(rules.valuation)) {
-      throw new BenefitsError("INVALID_INPUT", "Transaction programs use payroll delivery, explicit transaction grouping and percent or per-unit valuation; configure ceilings in transaction rules instead of overlapping header caps, thresholds or budgets.");
+    if (
+      !(["incentive", "custom"] as readonly string[]).includes(rules.family) ||
+      rules.metricScope !== "company" ||
+      rules.allocation !== "responsibility" ||
+      rules.deliveryMethod !== "payroll" ||
+      rules.scopeIds.length ||
+      rules.capAmount !== null ||
+      rules.thresholdAmount !== null ||
+      rules.budgetAmount !== null ||
+      !["percent", "per_unit"].includes(rules.valuation)
+    ) {
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "Transaction programs use payroll delivery, explicit transaction grouping and percent or per-unit valuation; configure ceilings in transaction rules instead of overlapping header caps, thresholds or budgets.",
+      );
     }
-    if (rules.valuation === "percent" && (rules.percentRate === null || cmp(rules.percentRate,"0")<=0)) throw new BenefitsError("INVALID_INPUT","Configure a positive transaction percentage before activating this program.");
-    if (rules.valuation === "per_unit" && (rules.fixedAmount === null || cmp(rules.fixedAmount,"0")<=0)) throw new BenefitsError("INVALID_INPUT","Configure a positive amount per transaction unit before activating this program.");
+    if (
+      rules.valuation === "percent" &&
+      (rules.percentRate === null || cmp(rules.percentRate, "0") <= 0)
+    )
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "Configure a positive transaction percentage before activating this program.",
+      );
+    if (
+      rules.valuation === "per_unit" &&
+      (rules.fixedAmount === null || cmp(rules.fixedAmount, "0") <= 0)
+    )
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "Configure a positive amount per transaction unit before activating this program.",
+      );
   } else if (rules.valuation === "per_unit") {
-    if (rules.metric !== "approved_hours" || rules.allocation !== "hours" || rules.family !== "incentive" || rules.deliveryMethod !== "payroll") {
-      throw new BenefitsError("INVALID_INPUT", "An hourly incentive requires approved hours, hours allocation and payroll delivery; select those rules or configure transaction-based units instead.");
+    if (
+      rules.metric !== "approved_hours" ||
+      rules.allocation !== "hours" ||
+      rules.family !== "incentive" ||
+      rules.deliveryMethod !== "payroll"
+    ) {
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "An hourly incentive requires approved hours, hours allocation and payroll delivery; select those rules or configure transaction-based units instead.",
+      );
     }
     if (rules.fixedAmount === null || cmp(rules.fixedAmount, "0") <= 0) {
-      throw new BenefitsError("INVALID_INPUT", "Configure a positive amount per approved hour before activating this program.");
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "Configure a positive amount per approved hour before activating this program.",
+      );
     }
     if (rules.percentRate !== null) {
-      throw new BenefitsError("INVALID_INPUT", "An hourly incentive uses its amount per approved hour; clear the overlapping percentage before continuing.");
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "An hourly incentive uses its amount per approved hour; clear the overlapping percentage before continuing.",
+      );
     }
   } else if (rules.allocation === "responsibility") {
-    throw new BenefitsError("INVALID_INPUT", "Responsibility allocation requires transaction source rules; select the transactions metric before continuing.");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "Responsibility allocation requires transaction source rules; select the transactions metric before continuing.",
+    );
   }
   if (rules.valuation === "fixed" && rules.fixedAmount === null) {
     throw new BenefitsError(
@@ -567,8 +745,15 @@ function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
       `program ${code} values fixed awards but names no fixed amount — enter the per-award amount in program setup`,
     );
   }
-  if (rules.valuation === "fixed" && rules.fixedAmount !== null && cmp(rules.fixedAmount, "0") <= 0) {
-    throw new BenefitsError("REFUSED", `program ${code} needs a positive fixed reward amount — enter a positive denomination before creating or activating its payroll obligations`);
+  if (
+    rules.valuation === "fixed" &&
+    rules.fixedAmount !== null &&
+    cmp(rules.fixedAmount, "0") <= 0
+  ) {
+    throw new BenefitsError(
+      "REFUSED",
+      `program ${code} needs a positive fixed reward amount — enter a positive denomination before creating or activating its payroll obligations`,
+    );
   }
   if (rules.valuation === "percent" && rules.percentRate === null) {
     throw new BenefitsError(
@@ -609,43 +794,69 @@ function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
       `program ${code} scopes measurement without a metric — choose the metric the scope measures in program setup`,
     );
   }
-  if (rules.metricScope !== "project" && (rules.scopeCustomerIds.length > 0 || rules.scopeDepartmentIds.length > 0)) {
+  if (
+    rules.metricScope !== "project" &&
+    (rules.scopeCustomerIds.length > 0 || rules.scopeDepartmentIds.length > 0)
+  ) {
     throw new BenefitsError(
       "REFUSED",
       `program ${code} selects customers or work departments without project scope — choose project scope, or clear those selections`,
     );
   }
-  if (rules.scopeDepartmentIds.length > 0 && rules.metric !== "approved_hours" && rules.allocation !== "hours") {
+  if (
+    rules.scopeDepartmentIds.length > 0 &&
+    rules.metric !== "approved_hours" &&
+    rules.allocation !== "hours"
+  ) {
     throw new BenefitsError(
       "REFUSED",
       `program ${code} narrows project work to departments, which only approved time records — measure approved hours or allocate by hours, or clear the work departments`,
     );
   }
-  if ((rules.metricScope === null || rules.metricScope === "company") && rules.unassignedTime !== "refuse") {
+  if (
+    (rules.metricScope === null || rules.metricScope === "company") &&
+    rules.unassignedTime !== "refuse"
+  ) {
     throw new BenefitsError(
       "REFUSED",
       `program ${code} measures the whole company, so no time is outside its scope — keep unassigned time refused or choose department or project scope`,
     );
   }
-  if ((rules.metricScope === null || rules.metricScope === "company") && rules.scopeIds.length > 0) {
+  if (
+    (rules.metricScope === null || rules.metricScope === "company") &&
+    rules.scopeIds.length > 0
+  ) {
     throw new BenefitsError(
       "REFUSED",
       `program ${code} measures at company scope but names scoped entities — clear the scope list or choose department or project scope in program setup`,
     );
   }
-  if ((rules.metricScope === "department" || rules.metricScope === "project") && rules.scopeIds.length === 0 && rules.scopeCustomerIds.length === 0) {
+  if (
+    (rules.metricScope === "department" || rules.metricScope === "project") &&
+    rules.scopeIds.length === 0 &&
+    rules.scopeCustomerIds.length === 0
+  ) {
     throw new BenefitsError(
       "REFUSED",
       `program ${code} measures at ${rules.metricScope} scope but names no ${rules.metricScope === "project" ? "project or customer" : rules.metricScope} — select at least one in program setup`,
     );
   }
   if (rules.frequency === "project_complete" && rules.scopeCustomerIds.length > 0) {
-    throw new BenefitsError("REFUSED", `program ${code} pays on project completion, which settles named projects — select the projects directly rather than by customer`);
+    throw new BenefitsError(
+      "REFUSED",
+      `program ${code} pays on project completion, which settles named projects — select the projects directly rather than by customer`,
+    );
   }
   if (rules.frequency === "project_complete" && rules.metricScope !== "project") {
-    throw new BenefitsError("REFUSED", `program ${code} pays on project completion but has no project measurement scope — select project scope and its projects before using this frequency`);
+    throw new BenefitsError(
+      "REFUSED",
+      `program ${code} pays on project completion but has no project measurement scope — select project scope and its projects before using this frequency`,
+    );
   }
-  if ((rules.frequency === "quarterly" || rules.frequency === "annual") && rules.periodBasis === null) {
+  if (
+    (rules.frequency === "quarterly" || rules.frequency === "annual") &&
+    rules.periodBasis === null
+  ) {
     throw new BenefitsError(
       "REFUSED",
       `program ${code} measures ${rules.frequency} but names no period basis — choose calendar or fiscal quarters in program setup so settlement and payroll agree on the period`,
@@ -659,17 +870,31 @@ function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
   }
 }
 
-async function requireRoleMembershipWeights(exec: SqlExecutor, orgId: string, programId: string, code: string, allocation: BenefitAllocation): Promise<void> {
+async function requireRoleMembershipWeights(
+  exec: SqlExecutor,
+  orgId: string,
+  programId: string,
+  code: string,
+  allocation: BenefitAllocation,
+): Promise<void> {
   if (allocation !== "role") return;
-  const invalid = (await exec.execute<{ display_name: string | null }>(sql`
+  const invalid = (
+    await exec.execute<{ display_name: string | null }>(
+      sql`
     select p.display_name from hrm_benefit_program_members m
       join worker_employments e on e.org_id = m.org_id and e.id = m.employment_id
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
      where m.org_id = ${orgId} and m.program_id = ${programId} and (m.weight is null or m.weight <= 0)
      order by m.id limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (invalid) {
-    throw new BenefitsError("REFUSED", `program ${code} has a membership for ${invalid.display_name ?? "an employee"} without a positive allocation weight — keep equal allocation, or create a new role-weighted program and enroll members with positive weights`);
+    throw new BenefitsError(
+      "REFUSED",
+      `program ${code} has a membership for ${invalid.display_name ?? "an employee"} without a positive allocation weight — keep equal allocation, or create a new role-weighted program and enroll members with positive weights`,
+    );
   }
 }
 
@@ -683,7 +908,8 @@ async function auditProgramWrite(
   after: unknown,
   reason: string | null,
 ): Promise<void> {
-  const written = await exec.execute(sql`
+  const written = await exec.execute(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'hrm_benefit_programs', ${programId}, 'update', ${JSON.stringify({
       event,
@@ -692,7 +918,9 @@ async function auditProgramWrite(
       after,
       reason,
     })}::jsonb, ${actorId}) returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   requireOneRow(written, "recording the benefit program audit event");
 }
 
@@ -715,23 +943,50 @@ async function requireProgramSourceAccounts(
   payComponentId: string | null,
 ): Promise<void> {
   if (new Set(accountIds).size !== accountIds.length) {
-    throw new BenefitsError("INVALID_INPUT", "a measurement account is selected more than once — select each source account once");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "a measurement account is selected more than once — select each source account once",
+    );
   }
-  if (metric === "transactions" && accountIds.length) throw new BenefitsError("INVALID_INPUT","Transaction programs measure their configured native source items — clear ledger measurement accounts and use Transaction rules instead of overlapping source definitions.");
+  if (metric === "transactions" && accountIds.length)
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "Transaction programs measure their configured native source items — clear ledger measurement accounts and use Transaction rules instead of overlapping source definitions.",
+    );
   const moneyMetric = metric !== null && metric !== "approved_hours" && metric !== "transactions";
-  const ownExpense = moneyMetric && payComponentId !== null
-    ? (await exec.execute<{ expense_account_id: string | null }>(sql`
+  const ownExpense =
+    moneyMetric && payComponentId !== null
+      ? (
+          await exec.execute<{ expense_account_id: string | null }>(
+            sql`
         select expense_account_id from pay_components where org_id = ${orgId} and id = ${payComponentId}
-      `, "objects"))[0]?.expense_account_id
-    : null;
+      `,
+            "objects",
+          )
+        )[0]?.expense_account_id
+      : null;
   for (const accountId of [...new Set(accountIds.map(String))]) {
     if (ownExpense && String(ownExpense) === accountId) {
-      throw new BenefitsError("REFUSED", `program ${programCode} measures its own incentive expense — remove that account from the measure to avoid a circular payout base`);
+      throw new BenefitsError(
+        "REFUSED",
+        `program ${programCode} measures its own incentive expense — remove that account from the measure to avoid a circular payout base`,
+      );
     }
-    const row = (await exec.execute<{ id: string; type: string; is_active: boolean; is_summary: boolean; subsidiary_id: string | null }>(sql`
+    const row = (
+      await exec.execute<{
+        id: string;
+        type: string;
+        is_active: boolean;
+        is_summary: boolean;
+        subsidiary_id: string | null;
+      }>(
+        sql`
         select id, type, is_active, is_summary, subsidiary_id
           from accounts where org_id = ${orgId} and id = ${accountId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new BenefitsError(
         "REFUSED",
@@ -744,16 +999,26 @@ async function requireProgramSourceAccounts(
         `program ${programCode} names a source account that is not postable — choose an active non-summary account in program setup`,
       );
     }
-    if (legalEntityId !== null && row.subsidiary_id !== null && String(row.subsidiary_id) !== legalEntityId) {
+    if (
+      legalEntityId !== null &&
+      row.subsidiary_id !== null &&
+      String(row.subsidiary_id) !== legalEntityId
+    ) {
       throw new BenefitsError(
         "REFUSED",
         `program ${programCode} names a source account of another legal entity — choose accounts of its employing entity`,
       );
     }
     if (metric === "revenue" && row.type !== "income") {
-      throw new BenefitsError("REFUSED", `program ${programCode} measures revenue but selects a ${row.type} account — select actual income accounts; expense sources do not enter a revenue base`);
+      throw new BenefitsError(
+        "REFUSED",
+        `program ${programCode} measures revenue but selects a ${row.type} account — select actual income accounts; expense sources do not enter a revenue base`,
+      );
     }
-    if (moneyMetric && !["income", "cogs", "expense", "expense_other", "expense_deferred"].includes(row.type)) {
+    if (
+      moneyMetric &&
+      !["income", "cogs", "expense", "expense_other", "expense_deferred"].includes(row.type)
+    ) {
       throw new BenefitsError(
         "REFUSED",
         `program ${programCode} measures money (${metric}) against a ${row.type} account — money metrics use income or cost accounts; choose one in program setup`,
@@ -786,12 +1051,27 @@ async function writeProgramScopes(
   `);
   void deleted;
   for (const projectId of new Set(excludedProjectIds.map(String))) {
-    const project = (await exec.execute<{ id: string }>(sql`select id from projects where org_id = ${orgId} and id = ${projectId}`, "objects"))[0];
-    if (!project) throw new BenefitsError("REFUSED", "the program excludes a project outside this organization — choose projects of this org");
-    requireOneRow(await exec.execute(sql`
+    const project = (
+      await exec.execute<{ id: string }>(
+        sql`select id from projects where org_id = ${orgId} and id = ${projectId}`,
+        "objects",
+      )
+    )[0];
+    if (!project)
+      throw new BenefitsError(
+        "REFUSED",
+        "the program excludes a project outside this organization — choose projects of this org",
+      );
+    requireOneRow(
+      await exec.execute(
+        sql`
       insert into hrm_benefit_program_scopes (org_id, program_id, project_id, excluded, created_by, updated_by)
       values (${orgId}, ${programId}, ${projectId}, true, ${actorId}, ${actorId}) returning id
-    `, "objects"), "recording the excluded project");
+    `,
+        "objects",
+      ),
+      "recording the excluded project",
+    );
   }
   if (metricScope === null || metricScope === "company") return;
   if (metricScope === "project" && !(await lockAndCheckOrgFeature(exec, orgId, "projects"))) {
@@ -802,74 +1082,110 @@ async function writeProgramScopes(
   }
   // Department rows are the measured departments under department scope and
   // the work-department narrowing under project scope; both resolve the same way.
-  const departmentRows = metricScope === "department" ? scopeIds : metricScope === "project" ? workDepartmentIds : [];
+  const departmentRows =
+    metricScope === "department" ? scopeIds : metricScope === "project" ? workDepartmentIds : [];
   const projectRows = metricScope === "project" ? scopeIds : [];
   const unique = [
     ...[...new Set(departmentRows.map(String))].map((id) => ({ kind: "department" as const, id })),
     ...[...new Set(projectRows.map(String))].map((id) => ({ kind: "project" as const, id })),
   ];
   for (const customerId of new Set(metricScope === "project" ? customerIds.map(String) : [])) {
-    const customer = (await exec.execute<{ id: string }>(sql`
+    const customer = (
+      await exec.execute<{ id: string }>(
+        sql`
       select p.id from parties p
        where p.org_id = ${orgId} and p.id = ${customerId}
          and exists (select 1 from projects pr where pr.org_id = p.org_id and pr.customer_id = p.id)
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!customer) {
       throw new BenefitsError(
         "REFUSED",
         "the program names a customer with no projects in this organization — choose a customer whose projects the program measures",
       );
     }
-    requireOneRow(await exec.execute(sql`
+    requireOneRow(
+      await exec.execute(
+        sql`
       insert into hrm_benefit_program_scopes (org_id, program_id, customer_id, created_by, updated_by)
       values (${orgId}, ${programId}, ${customerId}, ${actorId}, ${actorId})
       returning id
-    `, "objects"), "recording program customer scope");
+    `,
+        "objects",
+      ),
+      "recording program customer scope",
+    );
   }
   for (const { kind, id: scopeId } of unique) {
     if (kind === "department") {
-      const row = (await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      const row = (
+        await exec.execute<{ id: string; subsidiary_id: string | null }>(
+          sql`
           select id, subsidiary_id from departments where org_id = ${orgId} and id = ${scopeId}
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       if (!row) {
         throw new BenefitsError(
           "REFUSED",
           "the program names a department outside this organization — choose departments of this org in program setup",
         );
       }
-      if (legalEntityId !== null && row.subsidiary_id !== null && String(row.subsidiary_id) !== legalEntityId) {
+      if (
+        legalEntityId !== null &&
+        row.subsidiary_id !== null &&
+        String(row.subsidiary_id) !== legalEntityId
+      ) {
         throw new BenefitsError(
           "REFUSED",
           `the program names a department of another legal entity — scope ${programCode} to departments of its employing entity`,
         );
       }
-      const inserted = await exec.execute(sql`
+      const inserted = await exec.execute(
+        sql`
           insert into hrm_benefit_program_scopes (org_id, program_id, department_id, created_by, updated_by)
           values (${orgId}, ${programId}, ${scopeId}, ${actorId}, ${actorId})
           returning id
-        `, "objects");
+        `,
+        "objects",
+      );
       requireOneRow(inserted, "recording program scope");
     } else {
-      const row = (await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      const row = (
+        await exec.execute<{ id: string; subsidiary_id: string | null }>(
+          sql`
           select id, subsidiary_id from projects where org_id = ${orgId} and id = ${scopeId}
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       if (!row) {
         throw new BenefitsError(
           "REFUSED",
           "the program names a project outside this organization — choose projects of this org in program setup",
         );
       }
-      if (legalEntityId !== null && row.subsidiary_id !== null && String(row.subsidiary_id) !== legalEntityId) {
+      if (
+        legalEntityId !== null &&
+        row.subsidiary_id !== null &&
+        String(row.subsidiary_id) !== legalEntityId
+      ) {
         throw new BenefitsError(
           "REFUSED",
           `the program names a project of another legal entity — scope ${programCode} to projects of its employing entity`,
         );
       }
-      const inserted = await exec.execute(sql`
+      const inserted = await exec.execute(
+        sql`
           insert into hrm_benefit_program_scopes (org_id, program_id, project_id, created_by, updated_by)
           values (${orgId}, ${programId}, ${scopeId}, ${actorId}, ${actorId})
           returning id
-        `, "objects");
+        `,
+        "objects",
+      );
       requireOneRow(inserted, "recording program scope");
     }
   }
@@ -918,7 +1234,11 @@ export interface CreateBenefitProgramQuery {
 
 function cleanCode(value: unknown, field: string): string {
   const text = typeof value === "string" ? value.trim() : "";
-  if (text.length === 0) throw new BenefitsError("INVALID_INPUT", `${field} names the program code — enter a non-blank code`);
+  if (text.length === 0)
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      `${field} names the program code — enter a non-blank code`,
+    );
   return text;
 }
 
@@ -955,14 +1275,13 @@ export async function createBenefitProgram(
   if (effectiveTo !== null && effectiveTo < effectiveFrom) {
     throw new BenefitsError("INVALID_INPUT", "effectiveTo ends on or after effectiveFrom");
   }
-  const deliveryMethod = query.deliveryMethod === undefined ? "payroll" : asDelivery(query.deliveryMethod);
+  const deliveryMethod =
+    query.deliveryMethod === undefined ? "payroll" : asDelivery(query.deliveryMethod);
   const valuation = query.valuation === undefined ? "fixed" : asValuation(query.valuation);
   const metric = query.metric === undefined ? null : asMetric(query.metric);
   const metricScope = query.metricScope === undefined ? null : asMetricScope(query.metricScope);
-  const allocation =
-    query.allocation === undefined ? "equal" : asAllocation(query.allocation);
-  const frequency =
-    query.frequency === undefined ? "manual" : asFrequency(query.frequency);
+  const allocation = query.allocation === undefined ? "equal" : asAllocation(query.allocation);
+  const frequency = query.frequency === undefined ? "manual" : asFrequency(query.frequency);
   const periodBasis = query.periodBasis === undefined ? null : asPeriodBasis(query.periodBasis);
   const paymentDelayDays = query.paymentDelayDays ?? 0;
   const rules: ProgramRuleInput = {
@@ -1009,10 +1328,19 @@ export async function createBenefitProgram(
     await requireBenefitCurrency(db, orgId, currency, legalEntityId);
     await requireProgramPayComponent(db, orgId, code, payComponentId, deliveryMethod);
     if (metric === "transactions") await requireTransactionPolicyStorage(db);
-    await requireProgramSourceAccounts(db, orgId, code, legalEntityId, metric, query.sourceAccountIds ?? [], payComponentId);
+    await requireProgramSourceAccounts(
+      db,
+      orgId,
+      code,
+      legalEntityId,
+      metric,
+      query.sourceAccountIds ?? [],
+      payComponentId,
+    );
     let insertedRows: Record<string, unknown>[];
     try {
-      insertedRows = await db.execute<Record<string, unknown>>(sql`
+      insertedRows = await db.execute<Record<string, unknown>>(
+        sql`
           insert into hrm_benefit_programs
             (org_id, code, name, family, description, legal_entity_id, currency,
              effective_from, effective_to, pay_component_id, delivery_method,
@@ -1033,7 +1361,9 @@ export async function createBenefitProgram(
                   ${asEligibility(query.eligibility ?? "members")},
                   ${actorId}, ${actorId})
           returning ${PROGRAM_COLUMNS}
-        `, "objects");
+        `,
+        "objects",
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new BenefitsError(
@@ -1045,20 +1375,43 @@ export async function createBenefitProgram(
     }
     const inserted = requireOneRow(insertedRows, "recording the benefit program");
     const insertedId = String(inserted.id);
-    await writeProgramScopes(db, orgId, actorId, insertedId, code, legalEntityId, metricScope, rules.scopeIds, rules.scopeCustomerIds, rules.scopeDepartmentIds, rules.scopeExcludedProjectIds);
+    await writeProgramScopes(
+      db,
+      orgId,
+      actorId,
+      insertedId,
+      code,
+      legalEntityId,
+      metricScope,
+      rules.scopeIds,
+      rules.scopeCustomerIds,
+      rules.scopeDepartmentIds,
+      rules.scopeExcludedProjectIds,
+    );
     const scopes = await loadProgramScopes(db, orgId, insertedId);
     const program = toProgram(inserted, scopes);
     const sources = query.sourceAccountIds ?? [];
     for (const accountId of sources) {
-      const stored = await db.execute(sql`
+      const stored = await db.execute(
+        sql`
           insert into hrm_benefit_program_sources (org_id, program_id, account_id, created_by, updated_by)
           values (${orgId}, ${program.id}, ${String(accountId)}, ${actorId}, ${actorId})
           returning id
-        `, "objects");
+        `,
+        "objects",
+      );
       requireOneRow(stored, "recording the program funding source");
     }
-    await auditProgramWrite(db, orgId, actorId, program.id, "created", null,
-      { ...program, sourceAccountIds: [...sources].sort() }, reason);
+    await auditProgramWrite(
+      db,
+      orgId,
+      actorId,
+      program.id,
+      "created",
+      null,
+      { ...program, sourceAccountIds: [...sources].sort() },
+      reason,
+    );
     return program;
   });
 }
@@ -1122,16 +1475,24 @@ export async function updateBenefitProgram(
   const programId = requireId(query.programId, "programId");
   const reason = typeof query.reason === "string" ? query.reason.trim() : "";
   if (reason.length === 0) {
-    throw new BenefitsError("INVALID_INPUT", "updating a program needs a reason — it is the revision evidence");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "updating a program needs a reason — it is the revision evidence",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const locked = (await db.execute<Record<string, unknown>>(sql`
+    const locked = (
+      await db.execute<Record<string, unknown>>(
+        sql`
         select ${PROGRAM_COLUMNS} from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1153,51 +1514,95 @@ export async function updateBenefitProgram(
       legalEntityId: query.legalEntityId === undefined ? before.legalEntityId : query.legalEntityId,
       currency: query.currency === undefined ? before.currency : String(query.currency).trim(),
       effectiveFrom:
-        query.effectiveFrom === undefined ? before.effectiveFrom : requireCivilDate(query.effectiveFrom, "effectiveFrom"),
+        query.effectiveFrom === undefined
+          ? before.effectiveFrom
+          : requireCivilDate(query.effectiveFrom, "effectiveFrom"),
       effectiveTo:
         query.effectiveTo === undefined
           ? before.effectiveTo
           : query.effectiveTo === null
             ? null
             : requireCivilDate(query.effectiveTo, "effectiveTo"),
-      payComponentId: query.payComponentId === undefined ? before.payComponentId : query.payComponentId,
-      deliveryMethod: query.deliveryMethod === undefined ? before.deliveryMethod : asDelivery(query.deliveryMethod),
+      payComponentId:
+        query.payComponentId === undefined ? before.payComponentId : query.payComponentId,
+      deliveryMethod:
+        query.deliveryMethod === undefined
+          ? before.deliveryMethod
+          : asDelivery(query.deliveryMethod),
       valuation: query.valuation === undefined ? before.valuation : asValuation(query.valuation),
       metric: query.metric === undefined ? before.metric : asMetric(query.metric),
-      metricScope: query.metricScope === undefined ? before.metricScope : asMetricScope(query.metricScope),
+      metricScope:
+        query.metricScope === undefined ? before.metricScope : asMetricScope(query.metricScope),
       scopeIds: query.scopeIds === undefined ? before.scopeIds : query.scopeIds,
-      scopeCustomerIds: query.scopeCustomerIds === undefined ? before.scopeCustomerIds : query.scopeCustomerIds,
-      scopeDepartmentIds: query.scopeDepartmentIds === undefined ? before.scopeDepartmentIds : query.scopeDepartmentIds,
-      unassignedTime: query.unassignedTime === undefined ? before.unassignedTime : asUnassignedTime(query.unassignedTime),
-      scopeExcludedProjectIds: query.scopeExcludedProjectIds === undefined ? before.scopeExcludedProjectIds : query.scopeExcludedProjectIds,
-      lossPercentRate: query.lossPercentRate === undefined ? before.lossPercentRate : canonicalAmount(query.lossPercentRate, "lossPercentRate"),
-      projectProfitCap: query.projectProfitCap === undefined ? before.projectProfitCap : canonicalAmount(query.projectProfitCap, "projectProfitCap"),
-      projectLossCap: query.projectLossCap === undefined ? before.projectLossCap : canonicalAmount(query.projectLossCap, "projectLossCap"),
+      scopeCustomerIds:
+        query.scopeCustomerIds === undefined ? before.scopeCustomerIds : query.scopeCustomerIds,
+      scopeDepartmentIds:
+        query.scopeDepartmentIds === undefined
+          ? before.scopeDepartmentIds
+          : query.scopeDepartmentIds,
+      unassignedTime:
+        query.unassignedTime === undefined
+          ? before.unassignedTime
+          : asUnassignedTime(query.unassignedTime),
+      scopeExcludedProjectIds:
+        query.scopeExcludedProjectIds === undefined
+          ? before.scopeExcludedProjectIds
+          : query.scopeExcludedProjectIds,
+      lossPercentRate:
+        query.lossPercentRate === undefined
+          ? before.lossPercentRate
+          : canonicalAmount(query.lossPercentRate, "lossPercentRate"),
+      projectProfitCap:
+        query.projectProfitCap === undefined
+          ? before.projectProfitCap
+          : canonicalAmount(query.projectProfitCap, "projectProfitCap"),
+      projectLossCap:
+        query.projectLossCap === undefined
+          ? before.projectLossCap
+          : canonicalAmount(query.projectLossCap, "projectLossCap"),
       poolRounding:
         query.poolRounding === undefined
           ? before.poolRounding
           : query.poolRounding === "pool"
             ? ("pool" as const)
             : ("share" as const),
-      includeOpenCommitments: query.includeOpenCommitments === undefined ? before.includeOpenCommitments : query.includeOpenCommitments === true,
-      hourClassifications: query.hourClassifications === undefined ? before.hourClassifications : [...query.hourClassifications],
-      eligibility: query.eligibility === undefined ? before.eligibility : asEligibility(query.eligibility),
-      allocation: query.allocation === undefined ? before.allocation : asAllocation(query.allocation),
+      includeOpenCommitments:
+        query.includeOpenCommitments === undefined
+          ? before.includeOpenCommitments
+          : query.includeOpenCommitments === true,
+      hourClassifications:
+        query.hourClassifications === undefined
+          ? before.hourClassifications
+          : [...query.hourClassifications],
+      eligibility:
+        query.eligibility === undefined ? before.eligibility : asEligibility(query.eligibility),
+      allocation:
+        query.allocation === undefined ? before.allocation : asAllocation(query.allocation),
       percentRate:
-        query.percentRate === undefined ? before.percentRate : canonicalAmount(query.percentRate, "percentRate"),
+        query.percentRate === undefined
+          ? before.percentRate
+          : canonicalAmount(query.percentRate, "percentRate"),
       fixedAmount:
-        query.fixedAmount === undefined ? before.fixedAmount : canonicalAmount(query.fixedAmount, "fixedAmount"),
+        query.fixedAmount === undefined
+          ? before.fixedAmount
+          : canonicalAmount(query.fixedAmount, "fixedAmount"),
       capAmount:
-        query.capAmount === undefined ? before.capAmount : canonicalAmount(query.capAmount, "capAmount"),
+        query.capAmount === undefined
+          ? before.capAmount
+          : canonicalAmount(query.capAmount, "capAmount"),
       budgetAmount:
-        query.budgetAmount === undefined ? before.budgetAmount : canonicalAmount(query.budgetAmount, "budgetAmount"),
+        query.budgetAmount === undefined
+          ? before.budgetAmount
+          : canonicalAmount(query.budgetAmount, "budgetAmount"),
       thresholdAmount:
         query.thresholdAmount === undefined
           ? before.thresholdAmount
           : canonicalAmount(query.thresholdAmount, "thresholdAmount"),
       frequency: query.frequency === undefined ? before.frequency : asFrequency(query.frequency),
-      periodBasis: query.periodBasis === undefined ? before.periodBasis : asPeriodBasis(query.periodBasis),
-      paymentDelayDays: query.paymentDelayDays === undefined ? before.paymentDelayDays : query.paymentDelayDays,
+      periodBasis:
+        query.periodBasis === undefined ? before.periodBasis : asPeriodBasis(query.periodBasis),
+      paymentDelayDays:
+        query.paymentDelayDays === undefined ? before.paymentDelayDays : query.paymentDelayDays,
     };
     if (!/^[A-Z]{3}$/.test(next.currency)) {
       throw new BenefitsError("INVALID_INPUT", "currency is a 3-letter ISO code in capitals");
@@ -1218,9 +1623,15 @@ export async function updateBenefitProgram(
         );
       }
       await recordProgramRevision(db, {
-        orgId, actorId, programId, reason,
+        orgId,
+        actorId,
+        programId,
+        reason,
         changeEffectiveFrom: query.changeEffectiveFrom,
-        transactionPolicy: before.metric === "transactions" ? await readTransactionPolicy(db, orgId, programId) : null,
+        transactionPolicy:
+          before.metric === "transactions"
+            ? await readTransactionPolicy(db, orgId, programId)
+            : null,
       });
     }
     if (next.effectiveTo !== null && next.effectiveTo < next.effectiveFrom) {
@@ -1256,16 +1667,36 @@ export async function updateBenefitProgram(
     await requireLegalEntity(db, orgId, next.legalEntityId);
     await requireLegalEntityVisibleToActor(db, orgId, actorId, next.legalEntityId);
     await requireBenefitCurrency(db, orgId, next.currency, next.legalEntityId);
-    await requireProgramPayComponent(db, orgId, before.code, next.payComponentId, next.deliveryMethod);
+    await requireProgramPayComponent(
+      db,
+      orgId,
+      before.code,
+      next.payComponentId,
+      next.deliveryMethod,
+    );
     await requireRoleMembershipWeights(db, orgId, programId, before.code, next.allocation);
-    const previousSourceIds = (await db.execute<{ account_id: string }>(sql`
+    const previousSourceIds = (
+      await db.execute<{ account_id: string }>(
+        sql`
       select account_id from hrm_benefit_program_sources where org_id = ${orgId} and program_id = ${programId} order by account_id
-    `, "objects")).map((row) => String(row.account_id));
+    `,
+        "objects",
+      )
+    ).map((row) => String(row.account_id));
     const selectedSourceIds = query.sourceAccountIds ?? previousSourceIds;
     if (next.metric === "transactions") await requireTransactionPolicyStorage(db);
-    await requireProgramSourceAccounts(db, orgId, before.code, next.legalEntityId, next.metric, selectedSourceIds, next.payComponentId);
+    await requireProgramSourceAccounts(
+      db,
+      orgId,
+      before.code,
+      next.legalEntityId,
+      next.metric,
+      selectedSourceIds,
+      next.payComponentId,
+    );
     const updated = requireOneRow(
-      await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(
+        sql`
           update hrm_benefit_programs
              set name = ${next.name}, description = ${next.description},
                  legal_entity_id = ${next.legalEntityId}, currency = ${next.currency},
@@ -1287,28 +1718,52 @@ export async function updateBenefitProgram(
                  revision = revision + 1, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${programId}
           returning ${PROGRAM_COLUMNS}
-        `, "objects"),
+        `,
+        "objects",
+      ),
       "updating the benefit program",
     );
-    await writeProgramScopes(db, orgId, actorId, programId, before.code, next.legalEntityId, next.metricScope, next.scopeIds, next.scopeCustomerIds, next.scopeDepartmentIds, next.scopeExcludedProjectIds);
+    await writeProgramScopes(
+      db,
+      orgId,
+      actorId,
+      programId,
+      before.code,
+      next.legalEntityId,
+      next.metricScope,
+      next.scopeIds,
+      next.scopeCustomerIds,
+      next.scopeDepartmentIds,
+      next.scopeExcludedProjectIds,
+    );
     if (query.sourceAccountIds !== undefined) {
       await db.execute(sql`
         delete from hrm_benefit_program_sources
          where org_id = ${orgId} and program_id = ${programId}
       `);
       for (const accountId of query.sourceAccountIds) {
-        const stored = await db.execute(sql`
+        const stored = await db.execute(
+          sql`
             insert into hrm_benefit_program_sources (org_id, program_id, account_id, created_by, updated_by)
             values (${orgId}, ${programId}, ${String(accountId)}, ${actorId}, ${actorId})
             returning id
-          `, "objects");
+          `,
+          "objects",
+        );
         requireOneRow(stored, "recording the program funding source");
       }
     }
     const after = toProgram(updated, await loadProgramScopes(db, orgId, programId));
-    await auditProgramWrite(db, orgId, actorId, programId, "updated",
+    await auditProgramWrite(
+      db,
+      orgId,
+      actorId,
+      programId,
+      "updated",
       { ...before, sourceAccountIds: previousSourceIds },
-      { ...after, sourceAccountIds: [...selectedSourceIds].sort() }, reason);
+      { ...after, sourceAccountIds: [...selectedSourceIds].sort() },
+      reason,
+    );
     return after;
   });
 }
@@ -1325,11 +1780,16 @@ async function setProgramStatus(
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const locked = (await db.execute<Record<string, unknown>>(sql`
+    const locked = (
+      await db.execute<Record<string, unknown>>(
+        sql`
         select ${PROGRAM_COLUMNS} from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1380,50 +1840,101 @@ async function setProgramStatus(
         paymentDelayDays: before.paymentDelayDays,
       });
       await requireBenefitCurrency(db, orgId, before.currency, before.legalEntityId);
-      await requireProgramPayComponent(db, orgId, before.code, before.payComponentId, before.deliveryMethod);
+      await requireProgramPayComponent(
+        db,
+        orgId,
+        before.code,
+        before.payComponentId,
+        before.deliveryMethod,
+      );
       await requireRoleMembershipWeights(db, orgId, programId, before.code, before.allocation);
       if (before.metric === "transactions") {
-        if (before.allocation !== "responsibility") throw new BenefitsError("REFUSED","Transaction programs allocate through dated responsibilities — select responsibility allocation before activation.");
-        const policy=await readTransactionPolicy(db,orgId,programId);
-        if (!policy) throw new BenefitsError("REFUSED","Configure transaction source items, recipient positions, dated assignments and group ceiling decisions in this program's Transaction rules before activation.");
-        await validateTransactionPolicy(db,orgId,before.legalEntityId,policy,before.currency);
+        if (before.allocation !== "responsibility")
+          throw new BenefitsError(
+            "REFUSED",
+            "Transaction programs allocate through dated responsibilities — select responsibility allocation before activation.",
+          );
+        const policy = await readTransactionPolicy(db, orgId, programId);
+        if (!policy)
+          throw new BenefitsError(
+            "REFUSED",
+            "Configure transaction source items, recipient positions, dated assignments and group ceiling decisions in this program's Transaction rules before activation.",
+          );
+        await validateTransactionPolicy(db, orgId, before.legalEntityId, policy, before.currency);
         // Recipients come from dated assignments or from roles recorded on the
         // sources; ceilings come from per-group decisions or the budget ceiling.
-        const assigned = policy.positions.some((position) => (position.recipientSource ?? "assignment") === "assignment");
-        if ((assigned && !policy.responsibilities.length) || (!policy.limits.length && (policy.capPercent ?? null) === null)) throw new BenefitsError("REFUSED","Record dated recipient responsibilities for assigned positions and explicit group ceilings or a budget ceiling in Transaction rules before activation.");
+        const assigned = policy.positions.some(
+          (position) => (position.recipientSource ?? "assignment") === "assignment",
+        );
+        if (
+          (assigned && !policy.responsibilities.length) ||
+          (!policy.limits.length && (policy.capPercent ?? null) === null)
+        )
+          throw new BenefitsError(
+            "REFUSED",
+            "Record dated recipient responsibilities for assigned positions and explicit group ceilings or a budget ceiling in Transaction rules before activation.",
+          );
       }
-      const storedAccounts = (await db.execute<{ account_id: string }>(sql`
+      const storedAccounts = (
+        await db.execute<{ account_id: string }>(
+          sql`
           select account_id from hrm_benefit_program_sources
            where org_id = ${orgId} and program_id = ${programId}
-        `, "objects")).map((row) => String(row.account_id));
-      await requireProgramSourceAccounts(db, orgId, before.code, before.legalEntityId, before.metric, storedAccounts, before.payComponentId);
+        `,
+          "objects",
+        )
+      ).map((row) => String(row.account_id));
+      await requireProgramSourceAccounts(
+        db,
+        orgId,
+        before.code,
+        before.legalEntityId,
+        before.metric,
+        storedAccounts,
+        before.payComponentId,
+      );
       const needsMeasurementAccount =
         before.family === "incentive" &&
         before.metric !== null &&
-        before.metric !== "approved_hours" && before.metric !== "transactions";
+        before.metric !== "approved_hours" &&
+        before.metric !== "transactions";
       if (needsMeasurementAccount) {
-        const shape = (await db.execute<{ income: number; costs: number }>(sql`
+        const shape = (
+          await db.execute<{ income: number; costs: number }>(
+            sql`
           select count(*) filter (where a.type = 'income')::int as income,
                  count(*) filter (where a.type in ('cogs', 'expense', 'expense_other', 'expense_deferred'))::int as costs
             from hrm_benefit_program_sources s join accounts a on a.org_id = s.org_id and a.id = s.account_id
            where s.org_id = ${orgId} and s.program_id = ${programId}
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (!shape?.income) {
-          throw new BenefitsError("REFUSED", `program ${before.code} measures ${before.metric} without an income source — select at least one actual income account before activation`);
+          throw new BenefitsError(
+            "REFUSED",
+            `program ${before.code} measures ${before.metric} without an income source — select at least one actual income account before activation`,
+          );
         }
         if (before.metric !== "revenue" && !shape.costs) {
-          throw new BenefitsError("REFUSED", `program ${before.code} measures ${before.metric} without cost sources — select the explicit cost accounts subtracted from income before activation`);
+          throw new BenefitsError(
+            "REFUSED",
+            `program ${before.code} measures ${before.metric} without cost sources — select the explicit cost accounts subtracted from income before activation`,
+          );
         }
       }
     }
     const updated = requireOneRow(
-      await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(
+        sql`
           update hrm_benefit_programs
              set status = ${to}, revision = revision + 1,
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${programId}
           returning ${PROGRAM_COLUMNS}
-        `, "objects"),
+        `,
+        "objects",
+      ),
       `${event} the benefit program`,
     );
     const after = toProgram(updated, await loadProgramScopes(db, orgId, programId));
@@ -1442,7 +1953,15 @@ export async function activateBenefitProgram(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const programId = requireId(query.programId, "programId");
-  return setProgramStatus(orgId, actorId, programId, "draft", "active", "activated", optionalProgramReason(query.reason) ?? "activation");
+  return setProgramStatus(
+    orgId,
+    actorId,
+    programId,
+    "draft",
+    "active",
+    "activated",
+    optionalProgramReason(query.reason) ?? "activation",
+  );
 }
 
 /** Active → closed. Closing preserves history; data and audit trail stay. */
@@ -1457,7 +1976,10 @@ export async function closeBenefitProgram(query: {
   const programId = requireId(query.programId, "programId");
   const reason = typeof query.reason === "string" ? query.reason.trim() : "";
   if (reason.length === 0) {
-    throw new BenefitsError("INVALID_INPUT", "closing a program needs a reason — it is the closure evidence");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "closing a program needs a reason — it is the closure evidence",
+    );
   }
   return setProgramStatus(orgId, actorId, programId, "active", "closed", "closed", reason);
 }
@@ -1493,7 +2015,8 @@ export async function listProgramMemberships(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmEnabled(db, orgId);
     await getBenefitProgram(db, orgId, actorId, programId);
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
         select id, program_id as "programId", employment_id as "employmentId",
                effective_from::text as "effectiveFrom",
                effective_to::text as "effectiveTo",
@@ -1501,7 +2024,9 @@ export async function listProgramMemberships(query: {
           from hrm_benefit_program_members
          where org_id = ${orgId} and program_id = ${programId}
          order by effective_from
-      `, "objects");
+      `,
+      "objects",
+    );
     return rows.map(toMember);
   });
 }
@@ -1530,7 +2055,10 @@ export async function addProgramMembership(query: {
       ? null
       : requireCivilDate(query.effectiveTo, "effectiveTo");
   if (effectiveTo !== null && effectiveTo < effectiveFrom) {
-    throw new BenefitsError("INVALID_INPUT", "membership effectiveTo ends on or after effectiveFrom");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "membership effectiveTo ends on or after effectiveFrom",
+    );
   }
   const weight = query.weight === undefined ? null : canonicalAmount(query.weight, "weight");
   const role =
@@ -1540,11 +2068,16 @@ export async function addProgramMembership(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
     await assertHrmEnabled(db, orgId);
-    const lockedProgram = (await db.execute(sql`
+    const lockedProgram = (
+      await db.execute(
+        sql`
         select id from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!lockedProgram) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1554,10 +2087,20 @@ export async function addProgramMembership(query: {
     const program = await getBenefitProgram(db, orgId, actorId, programId);
     const excluded = query.excluded === true;
     if (excluded && program.eligibility !== "all_employees") {
-      throw new BenefitsError("REFUSED", `program ${program.code} pays named members only — end the membership instead of excluding it, or make everyone at the employer eligible first`);
+      throw new BenefitsError(
+        "REFUSED",
+        `program ${program.code} pays named members only — end the membership instead of excluding it, or make everyone at the employer eligible first`,
+      );
     }
-    if (!excluded && program.allocation === "role" && (weight === null || BigInt(weight.replace(".", "")) <= 0n)) {
-      throw new BenefitsError("REFUSED", `program ${program.code} allocates by role weight — enter a positive membership weight before enrolling this employee`);
+    if (
+      !excluded &&
+      program.allocation === "role" &&
+      (weight === null || BigInt(weight.replace(".", "")) <= 0n)
+    ) {
+      throw new BenefitsError(
+        "REFUSED",
+        `program ${program.code} allocates by role weight — enter a positive membership weight before enrolling this employee`,
+      );
     }
     if (program.status === "closed") {
       throw new BenefitsError(
@@ -1566,10 +2109,15 @@ export async function addProgramMembership(query: {
       );
     }
     if (program.legalEntityId !== null) {
-      const employment = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+      const employment = (
+        await db.execute<{ employer_subsidiary_id: string | null }>(
+          sql`
           select employer_subsidiary_id from worker_employments
            where org_id = ${orgId} and id = ${employmentId}
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       const employmentEntity = employment?.employer_subsidiary_id ?? null;
       if (employmentEntity === null || String(employmentEntity) !== program.legalEntityId) {
         throw new BenefitsError(
@@ -1579,21 +2127,32 @@ export async function addProgramMembership(query: {
       }
     }
     if (program.family === "incentive") {
-      const settledThrough = (await db.execute<{ end_date: string | null }>(sql`
+      const settledThrough = (
+        await db.execute<{ end_date: string | null }>(
+          sql`
         select max(coalesce(period_to, period_from))::text as end_date from hrm_benefit_awards
          where org_id = ${orgId} and program_id = ${programId} and status <> 'voided'
-      `, "objects"))[0]?.end_date;
+      `,
+          "objects",
+        )
+      )[0]?.end_date;
       if (settledThrough && effectiveFrom <= settledThrough) {
-        throw new BenefitsError("REFUSED", `membership starts inside an already settled period ending ${settledThrough} — start after that period to preserve recorded allocation history`);
+        throw new BenefitsError(
+          "REFUSED",
+          `membership starts inside an already settled period ending ${settledThrough} — start after that period to preserve recorded allocation history`,
+        );
       }
     }
-    const overlap = await db.execute<{ id: string }>(sql`
+    const overlap = await db.execute<{ id: string }>(
+      sql`
         select id from hrm_benefit_program_members
          where org_id = ${orgId} and program_id = ${programId} and employment_id = ${employmentId}
            and effective_from <= ${effectiveTo ?? "9999-12-31"}::date
            and (effective_to is null or effective_to >= ${effectiveFrom}::date)
          limit 1
-      `, "objects");
+      `,
+      "objects",
+    );
     if (overlap.length > 0) {
       throw new BenefitsError(
         "REFUSED",
@@ -1601,7 +2160,8 @@ export async function addProgramMembership(query: {
       );
     }
     const inserted = requireOneRow(
-      await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(
+        sql`
           insert into hrm_benefit_program_members
             (org_id, program_id, employment_id, effective_from, effective_to,
              weight, role, excluded, created_by, updated_by)
@@ -1612,15 +2172,20 @@ export async function addProgramMembership(query: {
                     effective_from::text as "effectiveFrom",
                     effective_to::text as "effectiveTo",
                     weight::text as "weight", role, excluded
-        `, "objects"),
+        `,
+        "objects",
+      ),
       "recording program membership",
     );
-    const revisionWrite = await db.execute(sql`
+    const revisionWrite = await db.execute(
+      sql`
       update hrm_benefit_programs
          set revision = revision + 1, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${programId}
        returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     requireOneRow(revisionWrite, "advancing the benefit program membership revision");
     await auditProgramWrite(db, orgId, actorId, programId, "member_added", null, inserted, reason);
     return toMember(inserted);
@@ -1644,24 +2209,37 @@ export async function removeProgramMembership(query: {
   const membershipId = requireId(query.membershipId, "membershipId");
   const reason = typeof query.reason === "string" ? query.reason.trim() : "";
   if (reason.length === 0) {
-    throw new BenefitsError("INVALID_INPUT", "ending membership needs a reason — it is the evidence");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "ending membership needs a reason — it is the evidence",
+    );
   }
   return withOrgTransaction(orgId, async () => {
-    const membershipProgram = (await db.execute<{ program_id: string }>(sql`
+    const membershipProgram = (
+      await db.execute<{ program_id: string }>(
+        sql`
         select program_id from hrm_benefit_program_members
          where org_id = ${orgId} and id = ${membershipId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!membershipProgram) {
       throw new BenefitsError(
         "NOT_FOUND",
         "program membership not found in this organization — reload and retry",
       );
     }
-    const lockedMembershipProgram = (await db.execute(sql`
+    const lockedMembershipProgram = (
+      await db.execute(
+        sql`
         select id from hrm_benefit_programs
          where org_id = ${orgId} and id = ${membershipProgram.program_id}
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!lockedMembershipProgram) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1680,7 +2258,14 @@ export async function removeProgramMembership(query: {
         `membership ends ${endDate} but today is ${businessToday} — backdating into closed or settled periods rewrites source history; end today or later`,
       );
     }
-    const locked = (await db.execute<{ employment_id: string; program_id: string; effective_from: string; effective_to: string | null }>(sql`
+    const locked = (
+      await db.execute<{
+        employment_id: string;
+        program_id: string;
+        effective_from: string;
+        effective_to: string | null;
+      }>(
+        sql`
         select employment_id,
                program_id,
                effective_from::text as effective_from,
@@ -1688,7 +2273,10 @@ export async function removeProgramMembership(query: {
           from hrm_benefit_program_members
          where org_id = ${orgId} and id = ${membershipId}
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1709,16 +2297,25 @@ export async function removeProgramMembership(query: {
         "membership cannot end before it starts — choose an end on or after the membership start",
       );
     }
-    const awardedThrough = (await db.execute<{ end_date: string | null }>(sql`
+    const awardedThrough = (
+      await db.execute<{ end_date: string | null }>(
+        sql`
       select max(coalesce(period_to, period_from))::text as end_date from hrm_benefit_awards
        where org_id = ${orgId} and program_id = ${locked.program_id}
          and employment_id = ${locked.employment_id} and status <> 'voided'
-    `, "objects"))[0]?.end_date;
+    `,
+        "objects",
+      )
+    )[0]?.end_date;
     if (awardedThrough && endDate < awardedThrough) {
-      throw new BenefitsError("REFUSED", `membership already supports awards through ${awardedThrough} — end on or after that date to preserve their recorded eligibility`);
+      throw new BenefitsError(
+        "REFUSED",
+        `membership already supports awards through ${awardedThrough} — end on or after that date to preserve their recorded eligibility`,
+      );
     }
     const updated = requireOneRow(
-      await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(
+        sql`
           update hrm_benefit_program_members
              set effective_to = ${endDate}::date, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${membershipId}
@@ -1726,7 +2323,9 @@ export async function removeProgramMembership(query: {
                     effective_from::text as "effectiveFrom",
                     effective_to::text as "effectiveTo",
                     weight::text as "weight", role, excluded
-        `, "objects"),
+        `,
+        "objects",
+      ),
       "ending program membership",
     );
     const after = toMember(updated);
@@ -1756,16 +2355,34 @@ export async function listProgramSources(
   programId: string,
 ): Promise<ReadonlyArray<{ id: string; accountId: string; weightBps: number | null }>> {
   const program = await getBenefitProgram(exec, orgId, actorId, programId);
-  if (program.metricScope === "project" && !(await lockAndCheckOrgFeature(exec, orgId, "projects"))) {
-    throw new BenefitsError("REFUSED", "project measurement sources are unavailable while Projects is off — enable Projects under Company Settings → Features to use this program");
+  if (
+    program.metricScope === "project" &&
+    !(await lockAndCheckOrgFeature(exec, orgId, "projects"))
+  ) {
+    throw new BenefitsError(
+      "REFUSED",
+      "project measurement sources are unavailable while Projects is off — enable Projects under Company Settings → Features to use this program",
+    );
   }
-  const rows = await exec.execute<{ id: string; accountId: string; weightBps: number | null }>(sql`
+  const rows = await exec.execute<{ id: string; accountId: string; weightBps: number | null }>(
+    sql`
       select id, account_id as "accountId", weight_bps as "weightBps"
         from hrm_benefit_program_sources
        where org_id = ${orgId} and program_id = ${programId}
        order by account_id
-    `, "objects");
+    `,
+    "objects",
+  );
   return rows;
 }
 
-export { BENEFIT_ALLOCATIONS, BENEFIT_DELIVERY_METHODS, BENEFIT_FREQUENCIES, BENEFIT_METRIC_SCOPES, BENEFIT_METRICS, BENEFIT_PROGRAM_FAMILIES, BENEFIT_PROGRAM_STATUSES, BENEFIT_VALUATIONS };
+export {
+  BENEFIT_ALLOCATIONS,
+  BENEFIT_DELIVERY_METHODS,
+  BENEFIT_FREQUENCIES,
+  BENEFIT_METRIC_SCOPES,
+  BENEFIT_METRICS,
+  BENEFIT_PROGRAM_FAMILIES,
+  BENEFIT_PROGRAM_STATUSES,
+  BENEFIT_VALUATIONS,
+};

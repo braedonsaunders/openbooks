@@ -14,7 +14,11 @@ export function SetupContinueButton({ token, provider }: { token: string; provid
     setBusy(true);
     setError(null);
     try {
-      const json = await apiJson<{ redirectUrl?: string }>(`/api/pay/setup/${token}`, { method: "POST" }, t("continueFailed"));
+      const json = await apiJson<{ redirectUrl?: string }>(
+        `/api/pay/setup/${token}`,
+        { method: "POST" },
+        t("continueFailed"),
+      );
       if (!json.redirectUrl) {
         setError(t("continueFailed"));
         return;

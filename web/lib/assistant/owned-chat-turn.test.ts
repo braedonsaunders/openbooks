@@ -39,7 +39,10 @@ const TEXT = [
 ];
 
 function fakeStarter(outcome: OwnedRunOutcome, chunks: unknown[] = TEXT) {
-  return async ({ onChunk, onStreamReady }: {
+  return async ({
+    onChunk,
+    onStreamReady,
+  }: {
     signal: AbortSignal;
     onChunk: (parts: unknown[]) => void;
     onStreamReady: (s: ReadableStream<Uint8Array>) => void;

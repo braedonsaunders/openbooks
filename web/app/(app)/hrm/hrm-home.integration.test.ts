@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import test from 'node:test';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // The HRM cockpit loader's data contract, proved against the test database:
 // cross-org invisibility of every scoped leg, the subsidiary lens, the
@@ -11,51 +11,60 @@ import test from 'node:test';
 // loader feeds is proved in hrm-home.spec.test.ts.
 process.env.SESSION_SECRET ??= "t6-lane-test-secret-must-be-32+chars!!!!";
 
-const { stubModules } = await import('../../../testing/stub-modules');
-stubModules({ navigation: 'export function redirect(){throw new Error("redirect")}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return "/hrm"}export function useSearchParams(){return new URLSearchParams()}', intl: 'export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}export async function getLocale(){return "en"}' });
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function redirect(){throw new Error("redirect")}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return "/hrm"}export function useSearchParams(){return new URLSearchParams()}',
+  intl: 'export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}export async function getLocale(){return "en"}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next/server') {
+    if (specifier === "next/server") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export class NextResponse{static json(body,init){return Response.json(body,init)}}',
+        url: "data:text/javascript,export class NextResponse{static json(body,init){return Response.json(body,init)}}",
       };
     }
     return next(specifier, context);
   },
 });
 
-const { sql } = await import('drizzle-orm');
-const { db, withOrgContext, withBypassContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { loadHrmHome } = await import('../../../lib/hrm/home.ts');
-const { setFeatures } = await import('@openbooks/engine/testing/hrm');
-const { hrmViewTabGroups } = await import('../../../lib/hrm/workspace-tabs.ts');
-import type { Authz } from '../../../lib/authz.ts';
+const { sql } = await import("drizzle-orm");
+const { db, withOrgContext, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { loadHrmHome } = await import("../../../lib/hrm/home.ts");
+const { setFeatures } = await import("@openbooks/engine/testing/hrm");
+const { hrmViewTabGroups } = await import("../../../lib/hrm/workspace-tabs.ts");
+import type { Authz } from "../../../lib/authz.ts";
 
 const FULL_GRANTS = [
-  'hrm.employment.read',
-  'hrm.employment.manage',
-  'hrm.position.read',
-  'hrm.process.read',
-  'hrm.leave.read',
-  'hrm.recruiting.read',
-  'hrm.benefits.read',
-  'hrm.compensation.read',
-  'parties.read',
+  "hrm.employment.read",
+  "hrm.employment.manage",
+  "hrm.position.read",
+  "hrm.process.read",
+  "hrm.leave.read",
+  "hrm.recruiting.read",
+  "hrm.benefits.read",
+  "hrm.compensation.read",
+  "parties.read",
 ];
 
-function actor(userId: string, orgId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null): Authz {
+function actor(
+  userId: string,
+  orgId: string,
+  permissions: string[],
+  allowedSubsidiaryIds: Set<string> | null,
+): Authz {
   return {
     user: {
       id: userId,
       orgId,
-      name: 'HRM cockpit test',
+      name: "HRM cockpit test",
       email: `hrm-${userId.slice(0, 8)}@scratch.test`,
       roles: [],
       isSuperAdmin: false,
-      envKind: 'production',
+      envKind: "production",
       productionOrgId: orgId,
       homeOrgId: orgId,
       homeUserId: userId,
@@ -66,7 +75,8 @@ function actor(userId: string, orgId: string, permissions: string[], allowedSubs
 }
 
 const day = 86_400_000;
-const isoDay = (offsetDays: number): string => new Date(Date.now() + offsetDays * day).toISOString().slice(0, 10);
+const isoDay = (offsetDays: number): string =>
+  new Date(Date.now() + offsetDays * day).toISOString().slice(0, 10);
 
 async function seedParty(orgId: string, name: string): Promise<string> {
   const id = randomUUID();
@@ -77,20 +87,36 @@ async function seedParty(orgId: string, name: string): Promise<string> {
   return id;
 }
 
-async function seedEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
+async function seedEmployment(
+  orgId: string,
+  partyId: string,
+  subsidiaryId: string,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
     values (${id}, ${orgId}, ${partyId}, ${subsidiaryId})`);
   return id;
 }
 
-async function seedVersion(orgId: string, employmentId: string, status: string, from: string, to: string | null): Promise<void> {
+async function seedVersion(
+  orgId: string,
+  employmentId: string,
+  status: string,
+  from: string,
+  to: string | null,
+): Promise<void> {
   await db.execute(sql`insert into worker_employment_versions
     (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_until)
     values (${orgId}, ${employmentId}, 1, ${status}, ${from}::date, ${to === null ? null : to}::date, null)`);
 }
 
-async function seedChange(orgId: string, employmentId: string, kind: string, reason: string, actorId: string): Promise<void> {
+async function seedChange(
+  orgId: string,
+  employmentId: string,
+  kind: string,
+  reason: string,
+  actorId: string,
+): Promise<void> {
   await db.execute(sql`insert into employment_changes
     (org_id, employment_id, revision, change_kind, prior_snapshot, reason, change_txid, recorded_by)
     values (${orgId}, ${employmentId}, 1, ${kind}, '{}'::jsonb, ${reason}, 1::bigint, ${actorId})`);
@@ -99,19 +125,19 @@ async function seedChange(orgId: string, employmentId: string, kind: string, rea
 async function enableFeatures(orgId: string, ...keys: string[]): Promise<void> {
   for (const key of keys) {
     await db.execute(
-      sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${'features,' + key}, ','), 'true'::jsonb, true) where id = ${orgId}`,
+      sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${"features," + key}, ','), 'true'::jsonb, true) where id = ${orgId}`,
     );
   }
 }
 
 async function enableHrm(orgId: string): Promise<void> {
-  await enableFeatures(orgId, 'hrm');
+  await enableFeatures(orgId, "hrm");
 }
 
 async function seedRequest(orgId: string, employmentId: string, actorId: string): Promise<void> {
   await db.execute(sql`insert into hrm_employment_change_requests
     (org_id, employment_id, expected_employment_revision, payload, payload_digest, payload_schema_version, created_by)
-    values (${orgId}, ${employmentId}, 1, '{"kind":"status_change"}'::jsonb, ${'0'.repeat(64)}, '1', ${actorId})`);
+    values (${orgId}, ${employmentId}, 1, '{"kind":"status_change"}'::jsonb, ${"0".repeat(64)}, '1', ${actorId})`);
 }
 
 async function grantRole(orgId: string, roleKey: string, permissions: string[]): Promise<void> {
@@ -119,37 +145,41 @@ async function grantRole(orgId: string, roleKey: string, permissions: string[]):
     where org_id=${orgId} and key=${roleKey}`);
 }
 
-async function restrictRole(orgId: string, roleKey: string, subsidiaryIds: string[]): Promise<void> {
+async function restrictRole(
+  orgId: string,
+  roleKey: string,
+  subsidiaryIds: string[],
+): Promise<void> {
   await db.execute(
-    sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds })}::jsonb where org_id=${orgId} and key=${roleKey}`,
+    sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb where org_id=${orgId} and key=${roleKey}`,
   );
 }
 
-test('scoped legs hide another organization entirely', async (t) => {
+test("scoped legs hide another organization entirely", async (t) => {
   const orgA = await withBypassContext(() => createScratchOrg());
   const orgB = await withBypassContext(() => createScratchOrg());
   t.after(() => dropScratchOrg(orgA.orgId));
   t.after(() => dropScratchOrg(orgB.orgId));
-  let reader = '';
+  let reader = "";
   try {
     await withBypassContext(async () => {
       await enableHrm(orgA.orgId);
       await enableHrm(orgB.orgId);
-      reader = await createScratchUser(orgA.orgId, 'Reader', 't6_hrm_reader');
-      await grantRole(orgA.orgId, 't6_hrm_reader', FULL_GRANTS);
-      const partyA = await seedParty(orgA.orgId, 'Ava Alpha');
+      reader = await createScratchUser(orgA.orgId, "Reader", "t6_hrm_reader");
+      await grantRole(orgA.orgId, "t6_hrm_reader", FULL_GRANTS);
+      const partyA = await seedParty(orgA.orgId, "Ava Alpha");
       const empA = await seedEmployment(orgA.orgId, partyA, orgA.subsidiaryId);
-      await seedVersion(orgA.orgId, empA, 'active', isoDay(5), null);
-      await seedChange(orgA.orgId, empA, 'status_changed', 'promotion to senior', reader);
-      const activeParty = await seedParty(orgA.orgId, 'Current worker');
+      await seedVersion(orgA.orgId, empA, "active", isoDay(5), null);
+      await seedChange(orgA.orgId, empA, "status_changed", "promotion to senior", reader);
+      const activeParty = await seedParty(orgA.orgId, "Current worker");
       const activeEmployment = await seedEmployment(orgA.orgId, activeParty, orgA.subsidiaryId);
-      await seedVersion(orgA.orgId, activeEmployment, 'active', isoDay(-30), null);
+      await seedVersion(orgA.orgId, activeEmployment, "active", isoDay(-30), null);
 
-      const observerB = await createScratchUser(orgB.orgId, 'Observer', 't6_hrm_observer');
-      const partyB = await seedParty(orgB.orgId, 'Ben Beta');
+      const observerB = await createScratchUser(orgB.orgId, "Observer", "t6_hrm_observer");
+      const partyB = await seedParty(orgB.orgId, "Ben Beta");
       const empB = await seedEmployment(orgB.orgId, partyB, orgB.subsidiaryId);
-      await seedVersion(orgB.orgId, empB, 'active', isoDay(5), null);
-      await seedChange(orgB.orgId, empB, 'status_changed', 'other org movement', observerB);
+      await seedVersion(orgB.orgId, empB, "active", isoDay(5), null);
+      await seedChange(orgB.orgId, empB, "status_changed", "other org movement", observerB);
     });
     const data = await withOrgContext(orgA.orgId, () =>
       loadHrmHome(actor(reader, orgA.orgId, FULL_GRANTS, null)),
@@ -159,18 +189,30 @@ test('scoped legs hide another organization entirely', async (t) => {
       ...data.ends.map((row) => row.name),
       ...data.recent.map((row) => row.name),
     ];
-    assert.equal(data.headcountValue, '1', 'the headline counts the current native employment, excluding future starts');
-    assert.equal(data.trendData.length, 12, 'history includes eleven prior month ends and the current census');
-    assert.equal(data.trendData.at(-1), 1, 'the current trend point agrees with the actual native census');
-    assert.ok(names.includes('Ava Alpha'), 'the home org start must surface');
-    assert.ok(!names.includes('Ben Beta'), 'no scoped leg may leak another org');
+    assert.equal(
+      data.headcountValue,
+      "1",
+      "the headline counts the current native employment, excluding future starts",
+    );
+    assert.equal(
+      data.trendData.length,
+      12,
+      "history includes eleven prior month ends and the current census",
+    );
+    assert.equal(
+      data.trendData.at(-1),
+      1,
+      "the current trend point agrees with the actual native census",
+    );
+    assert.ok(names.includes("Ava Alpha"), "the home org start must surface");
+    assert.ok(!names.includes("Ben Beta"), "no scoped leg may leak another org");
     assert.ok(
-      data.recent.some((row) => row.reason === 'promotion to senior'),
-      'the home org change evidence must surface',
+      data.recent.some((row) => row.reason === "promotion to senior"),
+      "the home org change evidence must surface",
     );
     assert.ok(
-      !data.recent.some((row) => row.reason === 'other org movement'),
-      'the change aggregate must stay org-predicated',
+      !data.recent.some((row) => row.reason === "other org movement"),
+      "the change aggregate must stay org-predicated",
     );
   } finally {
     await dropScratchOrg(orgA.orgId);
@@ -178,58 +220,61 @@ test('scoped legs hide another organization entirely', async (t) => {
   }
 });
 
-test('the subsidiary lens narrows the version window', async (t) => {
+test("the subsidiary lens narrows the version window", async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   t.after(() => dropScratchOrg(org.orgId));
-  let reader = '';
+  let reader = "";
   try {
     await withBypassContext(async () => {
       await enableHrm(org.orgId);
-      const party = await seedParty(org.orgId, 'Lenny Lens');
+      const party = await seedParty(org.orgId, "Lenny Lens");
       const emp = await seedEmployment(org.orgId, party, org.subsidiaryId);
-      await seedVersion(org.orgId, emp, 'active', isoDay(5), null);
-      reader = await createScratchUser(org.orgId, 'Reader', 't6_hrm_lens');
-      await grantRole(org.orgId, 't6_hrm_lens', FULL_GRANTS);
+      await seedVersion(org.orgId, emp, "active", isoDay(5), null);
+      reader = await createScratchUser(org.orgId, "Reader", "t6_hrm_lens");
+      await grantRole(org.orgId, "t6_hrm_lens", FULL_GRANTS);
     });
     const wide = await withOrgContext(org.orgId, () =>
       loadHrmHome(actor(reader, org.orgId, FULL_GRANTS, null)),
     );
-    assert.ok(wide.starts.some((row) => row.name === 'Lenny Lens'), 'an unrestricted actor sees the start');
+    assert.ok(
+      wide.starts.some((row) => row.name === "Lenny Lens"),
+      "an unrestricted actor sees the start",
+    );
 
     const elsewhere = await withOrgContext(org.orgId, () =>
       loadHrmHome(actor(reader, org.orgId, FULL_GRANTS, new Set([randomUUID()]))),
     );
     assert.ok(
-      !elsewhere.starts.some((row) => row.name === 'Lenny Lens'),
-      'a lens naming no visible subsidiary hides the start',
+      !elsewhere.starts.some((row) => row.name === "Lenny Lens"),
+      "a lens naming no visible subsidiary hides the start",
     );
     assert.ok(
-      !elsewhere.ends.some((row) => row.name === 'Lenny Lens'),
-      'a lens naming no visible subsidiary hides the end',
+      !elsewhere.ends.some((row) => row.name === "Lenny Lens"),
+      "a lens naming no visible subsidiary hides the end",
     );
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test('panels resolve null without their grants, never gated links', async (t) => {
+test("panels resolve null without their grants, never gated links", async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   t.after(() => dropScratchOrg(org.orgId));
-  let reader = '';
+  let reader = "";
   try {
     await withBypassContext(async () => {
       await enableHrm(org.orgId);
-      reader = await createScratchUser(org.orgId, 'Reader', 't6_hrm_min');
-      await grantRole(org.orgId, 't6_hrm_min', ['hrm.employment.read']);
+      reader = await createScratchUser(org.orgId, "Reader", "t6_hrm_min");
+      await grantRole(org.orgId, "t6_hrm_min", ["hrm.employment.read"]);
     });
     const data = await withOrgContext(org.orgId, () =>
-      loadHrmHome(actor(reader, org.orgId, ['hrm.employment.read'], null)),
+      loadHrmHome(actor(reader, org.orgId, ["hrm.employment.read"], null)),
     );
-    assert.equal(data.positions, null, 'vacancy resolves only for the position read grant');
-    assert.equal(data.onboarding, null, 'onboarding resolves only for the process read grant');
-    assert.equal(data.leavePanel, null, 'leave resolves only for the leave read grant');
-    assert.equal(data.recruiting, null, 'recruiting resolves only for the recruiting read grant');
-    assert.equal(data.benefitsPanel, null, 'benefits resolves only for the benefits read grant');
+    assert.equal(data.positions, null, "vacancy resolves only for the position read grant");
+    assert.equal(data.onboarding, null, "onboarding resolves only for the process read grant");
+    assert.equal(data.leavePanel, null, "leave resolves only for the leave read grant");
+    assert.equal(data.recruiting, null, "recruiting resolves only for the recruiting read grant");
+    assert.equal(data.benefitsPanel, null, "benefits resolves only for the benefits read grant");
     assert.equal(data.onboardingHasActivity, false);
     assert.equal(data.leaveHasActivity, false);
     assert.equal(data.benefitsHasActivity, false);
@@ -241,68 +286,86 @@ test('panels resolve null without their grants, never gated links', async (t) =>
 
 const STRIP_GRANTS = [
   ...FULL_GRANTS,
-  'hrm.construction.read',
-  'hrm.documents.read',
-  'hrm.certifications.read',
-  'hrm.surveys.manage',
-  'hrm.process.read',
-  'hrm.position.read',
+  "hrm.construction.read",
+  "hrm.documents.read",
+  "hrm.certifications.read",
+  "hrm.surveys.manage",
+  "hrm.process.read",
+  "hrm.position.read",
 ];
 
-test('nested surfaces stay findable as view tabs, gated by the org switches', async (t) => {
+test("nested surfaces stay findable as view tabs, gated by the org switches", async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   t.after(() => dropScratchOrg(org.orgId));
-  const user = await withBypassContext(() => createScratchUser(org.orgId, 'Views', 't6_hrm_views'));
+  const user = await withBypassContext(() => createScratchUser(org.orgId, "Views", "t6_hrm_views"));
   const hrefs = async (permissions: string[]): Promise<string[]> => {
-    await withBypassContext(() => grantRole(org.orgId, 't6_hrm_views', permissions));
+    await withBypassContext(() => grantRole(org.orgId, "t6_hrm_views", permissions));
     return withOrgContext(org.orgId, async () =>
-      (await hrmViewTabGroups(actor(user, org.orgId, permissions, null))).flat().map((tab) => tab.href),
+      (await hrmViewTabGroups(actor(user, org.orgId, permissions, null)))
+        .flat()
+        .map((tab) => tab.href),
     );
   };
   try {
-    assert.deepEqual(await hrefs(STRIP_GRANTS), [], 'no view strips while the HRM switch is off');
+    assert.deepEqual(await hrefs(STRIP_GRANTS), [], "no view strips while the HRM switch is off");
 
-    await withBypassContext(() => enableFeatures(org.orgId, 'hrm', 'hrmDocuments', 'hrmCertifications', 'hrmCompensation'));
+    await withBypassContext(() =>
+      enableFeatures(org.orgId, "hrm", "hrmDocuments", "hrmCertifications", "hrmCompensation"),
+    );
     const all = await hrefs(STRIP_GRANTS);
     for (const href of [
-      '/entities/employees', '/hrm/org-chart', '/hrm/processes', '/hrm/documents', '/hrm/qualifications',
-      '/hrm/positions', '/hrm/recruiting', '/hrm/performance', '/hrm/compensation', '/hrm/benefits',
+      "/entities/employees",
+      "/hrm/org-chart",
+      "/hrm/processes",
+      "/hrm/documents",
+      "/hrm/qualifications",
+      "/hrm/positions",
+      "/hrm/recruiting",
+      "/hrm/performance",
+      "/hrm/compensation",
+      "/hrm/benefits",
     ]) {
       assert.ok(all.includes(href), `a view tab lands on ${href}`);
     }
-    assert.ok(!all.includes('/hrm/surveys'), 'Surveys hides while its switch is off');
+    assert.ok(!all.includes("/hrm/surveys"), "Surveys hides while its switch is off");
     await setFeatures(org.orgId, { hrmRecruiting: false });
-    assert.ok(!(await hrefs(STRIP_GRANTS)).some(href => href.startsWith('/hrm/recruiting')), 'every recruiting view hides when the authoritative Recruiting feature is off');
+    assert.ok(
+      !(await hrefs(STRIP_GRANTS)).some((href) => href.startsWith("/hrm/recruiting")),
+      "every recruiting view hides when the authoritative Recruiting feature is off",
+    );
     await setFeatures(org.orgId, { hrmRecruiting: true });
-    assert.ok((await hrefs(STRIP_GRANTS)).includes('/hrm/recruiting?tab=offers'), 'offers become available with the native Recruiting feature and read grant');
+    assert.ok(
+      (await hrefs(STRIP_GRANTS)).includes("/hrm/recruiting?tab=offers"),
+      "offers become available with the native Recruiting feature and read grant",
+    );
 
-    const noPositions = await hrefs(STRIP_GRANTS.filter((grant) => grant !== 'hrm.position.read'));
-    assert.ok(!noPositions.includes('/hrm/positions'), 'Positions hides without its grant');
+    const noPositions = await hrefs(STRIP_GRANTS.filter((grant) => grant !== "hrm.position.read"));
+    assert.ok(!noPositions.includes("/hrm/positions"), "Positions hides without its grant");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test('a restricted queue excludes out-of-scope requests', async (t) => {
+test("a restricted queue excludes out-of-scope requests", async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   t.after(() => dropScratchOrg(org.orgId));
-  let stranger = '';
+  let stranger = "";
   const hiddenSubsidiary = randomUUID();
   try {
     await withBypassContext(async () => {
       await enableHrm(org.orgId);
-      const party = await seedParty(org.orgId, 'Quinn Queue');
+      const party = await seedParty(org.orgId, "Quinn Queue");
       const emp = await seedEmployment(org.orgId, party, org.subsidiaryId);
-      await seedVersion(org.orgId, emp, 'active', '2026-01-01', null);
-      stranger = await createScratchUser(org.orgId, 'Stranger', 't6_hrm_stranger');
-      await grantRole(org.orgId, 't6_hrm_stranger', ['hrm.employment.read']);
-      await restrictRole(org.orgId, 't6_hrm_stranger', [hiddenSubsidiary]);
+      await seedVersion(org.orgId, emp, "active", "2026-01-01", null);
+      stranger = await createScratchUser(org.orgId, "Stranger", "t6_hrm_stranger");
+      await grantRole(org.orgId, "t6_hrm_stranger", ["hrm.employment.read"]);
+      await restrictRole(org.orgId, "t6_hrm_stranger", [hiddenSubsidiary]);
       await seedRequest(org.orgId, emp, stranger);
     });
     const data = await withOrgContext(org.orgId, () =>
-      loadHrmHome(actor(stranger, org.orgId, ['hrm.employment.read'], new Set([hiddenSubsidiary]))),
+      loadHrmHome(actor(stranger, org.orgId, ["hrm.employment.read"], new Set([hiddenSubsidiary]))),
     );
-    assert.deepEqual(data.pending, [], 'out-of-scope requests stay hidden');
+    assert.deepEqual(data.pending, [], "out-of-scope requests stay hidden");
     assert.equal(data.pendingRefusal, null);
   } finally {
     await dropScratchOrg(org.orgId);

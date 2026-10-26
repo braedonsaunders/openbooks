@@ -62,10 +62,7 @@ export {
   setSettlementLineDocument,
   settlementLineDocumentInEntity,
 } from "./psp-settlement-matching.ts";
-export type {
-  DepositTieout,
-  DepositTieoutLine,
-} from "./psp-settlement-recognition.ts";
+export type { DepositTieout, DepositTieoutLine } from "./psp-settlement-recognition.ts";
 export {
   batchDepositTieout,
   clearSettlementBatchJournal,

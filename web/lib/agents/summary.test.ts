@@ -3,7 +3,11 @@ import test from "node:test";
 import { findingSummaryLine } from "./summary";
 
 const t = (key: string, values?: Record<string, string | number>) =>
-  key === "summary.records" ? `${values?.count} records` : key === "summary.review" ? "review" : key;
+  key === "summary.records"
+    ? `${values?.count} records`
+    : key === "summary.review"
+      ? "review"
+      : key;
 
 test("finding summary line prefers account, scenario, period, count", () => {
   assert.equal(

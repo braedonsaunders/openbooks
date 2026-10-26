@@ -1,11 +1,4 @@
-import {
-  pgTable,
-  text,
-  integer,
-  boolean,
-  jsonb,
-  uniqueIndex
-} from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, orgRef, auditColumns } from "./helpers";
 
 /**
@@ -112,7 +105,17 @@ export interface FinancialProfile {
   /** Posted GL cost. */
   actualCost: CostSource;
   /** Labor cost source (payroll JE vs time-entry rate vs an account group). */
-  laborCost: { source: "in_actual_cost" | "time_rate" | "estimated_time_rate" | "payroll_je" | "account_group" | "none"; dimension?: string; groupKeys?: string[] };
+  laborCost: {
+    source:
+      | "in_actual_cost"
+      | "time_rate"
+      | "estimated_time_rate"
+      | "payroll_je"
+      | "account_group"
+      | "none";
+    dimension?: string;
+    groupKeys?: string[];
+  };
   /** Overhead applied to the job (statistical allocation — see OverheadSource). */
   overhead: OverheadSource;
   /** Open commitments: eligible document kinds and lifecycle states whose
@@ -138,9 +141,7 @@ export interface FinancialProfile {
      * include pending approval or rejected when its source ERP exposes those
      * states in project forecasts; this never approves or posts the document.
      */
-    costSourceStatuses?: Array<
-      "pending_approval" | "approved" | "posted" | "rejected"
-    >;
+    costSourceStatuses?: Array<"pending_approval" | "approved" | "posted" | "rejected">;
   };
   /** Budgeted cost. */
   costBudget: { source: "wbs_estimates" | "none" };
@@ -344,7 +345,10 @@ export const projectTypes = pgTable(
 /* ------------------------------------------------------------------ */
 
 const STANDARD_INVOICED = { docKinds: ["customer_invoice"], creditKinds: ["customer_credit"] };
-const STANDARD_COST: CostSource = { source: "account_types", accountTypes: ["expense", "cogs", "expense_other", "expense_deferred"] };
+const STANDARD_COST: CostSource = {
+  source: "account_types",
+  accountTypes: ["expense", "cogs", "expense_other", "expense_deferred"],
+};
 const STANDARD_COMMITTED = { docKinds: ["purchase_order"] };
 const STANDARD_BUDGET = { source: "wbs_estimates" as const };
 
@@ -388,7 +392,11 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       laborCost: { source: "in_actual_cost" },
       overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
-      billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
+      billableValue: {
+        includeUnbilledTime: true,
+        includeUnbilledCostLines: true,
+        timeRate: "bill_rate",
+      },
       costBudget: STANDARD_BUDGET,
       totalPrice: { method: "billable_value" },
       couldBeInvoiced: { formula: "unbilled_billable" },
@@ -403,7 +411,18 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       revenueAccount: "item_income",
       recognition: "as_invoiced",
     },
-    backupProfile: { required: true, defaultBackupType: "costed_timesheets", allowedBackupTypes: ["costed_timesheets", "timesheets_purchases", "purchases", "purchases_shop_time", "quote_only", "none"] },
+    backupProfile: {
+      required: true,
+      defaultBackupType: "costed_timesheets",
+      allowedBackupTypes: [
+        "costed_timesheets",
+        "timesheets_purchases",
+        "purchases",
+        "purchases_shop_time",
+        "quote_only",
+        "none",
+      ],
+    },
   },
   {
     key: "fixed_price",
@@ -417,7 +436,11 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       laborCost: { source: "in_actual_cost" },
       overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
-      billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
+      billableValue: {
+        includeUnbilledTime: true,
+        includeUnbilledCostLines: true,
+        timeRate: "bill_rate",
+      },
       costBudget: STANDARD_BUDGET,
       totalPrice: { method: "contract_field" },
       couldBeInvoiced: { formula: "price_minus_invoiced" },
@@ -432,7 +455,11 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       revenueAccount: "unbilled_receivable",
       recognition: "percent_complete_cost",
     },
-    backupProfile: { required: false, defaultBackupType: "none", allowedBackupTypes: ["none", "quote_only", "costed_timesheets"] },
+    backupProfile: {
+      required: false,
+      defaultBackupType: "none",
+      allowedBackupTypes: ["none", "quote_only", "costed_timesheets"],
+    },
   },
   {
     key: "cost_plus",
@@ -446,7 +473,11 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       laborCost: { source: "in_actual_cost" },
       overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
-      billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "cost_times_markup" },
+      billableValue: {
+        includeUnbilledTime: true,
+        includeUnbilledCostLines: true,
+        timeRate: "cost_times_markup",
+      },
       costBudget: STANDARD_BUDGET,
       totalPrice: { method: "cost_plus", defaultMarkupPercent: "15" },
       couldBeInvoiced: { formula: "unbilled_billable" },
@@ -461,7 +492,11 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       revenueAccount: "item_income",
       recognition: "as_invoiced",
     },
-    backupProfile: { required: true, defaultBackupType: "timesheets_purchases", allowedBackupTypes: ["timesheets_purchases", "costed_timesheets", "purchases", "none"] },
+    backupProfile: {
+      required: true,
+      defaultBackupType: "timesheets_purchases",
+      allowedBackupTypes: ["timesheets_purchases", "costed_timesheets", "purchases", "none"],
+    },
   },
   {
     key: "not_to_exceed",
@@ -475,7 +510,11 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       laborCost: { source: "in_actual_cost" },
       overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
-      billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
+      billableValue: {
+        includeUnbilledTime: true,
+        includeUnbilledCostLines: true,
+        timeRate: "bill_rate",
+      },
       costBudget: STANDARD_BUDGET,
       totalPrice: { method: "not_to_exceed" },
       couldBeInvoiced: { formula: "price_minus_invoiced" },
@@ -490,12 +529,17 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       revenueAccount: "item_income",
       recognition: "as_invoiced",
     },
-    backupProfile: { required: true, defaultBackupType: "costed_timesheets", allowedBackupTypes: ["costed_timesheets", "timesheets_purchases", "purchases", "none"] },
+    backupProfile: {
+      required: true,
+      defaultBackupType: "costed_timesheets",
+      allowedBackupTypes: ["costed_timesheets", "timesheets_purchases", "purchases", "none"],
+    },
   },
   {
     key: "schedule_of_values",
     name: "Schedule of Values",
-    description: "Bill a fixed-price contract through cumulative applications for payment, change orders, and retainage.",
+    description:
+      "Bill a fixed-price contract through cumulative applications for payment, change orders, and retainage.",
     billingMethod: "fixed_price",
     sortOrder: 50,
     financialProfile: {
@@ -504,7 +548,11 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       laborCost: { source: "in_actual_cost" },
       overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
-      billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
+      billableValue: {
+        includeUnbilledTime: true,
+        includeUnbilledCostLines: true,
+        timeRate: "bill_rate",
+      },
       costBudget: STANDARD_BUDGET,
       totalPrice: { method: "contract_field" },
       couldBeInvoiced: { formula: "price_minus_invoiced" },
@@ -519,6 +567,10 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       revenueAccount: "item_income",
       recognition: "as_invoiced",
     },
-    backupProfile: { required: false, defaultBackupType: "none", allowedBackupTypes: ["none", "quote_only"] },
+    backupProfile: {
+      required: false,
+      defaultBackupType: "none",
+      allowedBackupTypes: ["none", "quote_only"],
+    },
   },
 ];

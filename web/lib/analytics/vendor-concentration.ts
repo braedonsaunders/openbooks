@@ -25,7 +25,11 @@
 export type ConcentrationBand = "diversified" | "moderate" | "highlyConcentrated";
 
 /** Supplier-concentration bands on the 0–10000 scale (the same scale totals.hhiScaled uses). */
-export function concentrationBand(hhiScaled: number, warning: number, critical: number): ConcentrationBand {
+export function concentrationBand(
+  hhiScaled: number,
+  warning: number,
+  critical: number,
+): ConcentrationBand {
   if (hhiScaled > critical) return "highlyConcentrated";
   if (hhiScaled > warning) return "moderate";
   return "diversified";
@@ -44,7 +48,11 @@ export interface ConcentrationVerdict {
  * the exact number the card displays — so a hairline value can never land
  * the two words in different bands.
  */
-export function concentrationVerdict(hhiScaled: number, warning: number, critical: number): ConcentrationVerdict {
+export function concentrationVerdict(
+  hhiScaled: number,
+  warning: number,
+  critical: number,
+): ConcentrationVerdict {
   const band = concentrationBand(hhiScaled, warning, critical);
   switch (band) {
     case "highlyConcentrated":

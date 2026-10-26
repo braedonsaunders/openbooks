@@ -1,3 +1,3 @@
-import 'server-only'
+import "server-only";
 
-export * from '@openbooks/engine/inventory/stock-locations'
+export * from "@openbooks/engine/inventory/stock-locations";

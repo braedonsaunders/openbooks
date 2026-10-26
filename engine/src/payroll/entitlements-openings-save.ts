@@ -7,11 +7,7 @@ import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./fences.ts"
 import { cmp, neg, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { recordEntitlementMovements } from "./entitlements-stub.ts";
-import {
-  entitlementPlans,
-  resolvePlanLimit,
-  type Executor,
-} from "./entitlements-db.ts";
+import { entitlementPlans, resolvePlanLimit, type Executor } from "./entitlements-db.ts";
 import {
   assertMovementDate,
   entitlementOpeningBlocks,
@@ -119,15 +115,25 @@ export async function saveEntitlementOpenings(input: {
 }): Promise<EntitlementOpeningSaveResult> {
   const movementDate = assertMovementDate(input.movementDate);
   const result: EntitlementOpeningSaveResult = {
-    created: 0, updated: 0, deleted: 0, errors: [], warnings: [],
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    errors: [],
+    warnings: [],
   };
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
-    await requirePayrollFeature(tx, input.orgId)
+    await requirePayrollFeature(tx, input.orgId);
     // The route's preliminary check cannot protect this later write. Hold the
     // same employee rows that a rehome updates, and authorize the locked value.
-    await lockScopeRows(tx, input.orgId, input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })), input.allowedSubsidiaryIds ?? null, "share");
+    await lockScopeRows(
+      tx,
+      input.orgId,
+      input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })),
+      input.allowedSubsidiaryIds ?? null,
+      "share",
+    );
     // A bank carry-in dated in a payroll year changes that employee's run
     // inputs. Share the run calculation/commit fence so neither side can read
     // stale entitlement history and still calculate or commit.
@@ -139,8 +145,8 @@ export async function saveEntitlementOpenings(input: {
     const plans = await entitlementPlans(input.orgId, tx);
     if (plans.length === 0) {
       throw new PayrollError(
-        "this organization has no active entitlement plans, so there is no bank to carry a "
-        + "balance into — configure a plan first",
+        "this organization has no active entitlement plans, so there is no bank to carry a " +
+          "balance into — configure a plan first",
       );
     }
     const planByKey = new Map<string, EntitlementPlan>();
@@ -149,22 +155,33 @@ export async function saveEntitlementOpenings(input: {
       planByKey.set(plan.code.trim().toLowerCase(), plan);
     }
 
-    const names = (await tx.execute<{ id: string; display_name: string }>(sql`
+    const names = await tx.execute<{ id: string; display_name: string }>(
+      sql`
       select p.id, p.display_name from parties p
        where p.org_id = ${input.orgId} and p.id in (
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
          )}::jsonb) as value)
-    `, "objects"));
+    `,
+      "objects",
+    );
     const nameById = new Map(names.map((r) => [r.id, r.display_name]));
 
-    const existing = (await tx.execute<{ plan_id: string; employee_party_id: string; amount: string; before: Record<string, unknown> }>(sql`
+    const existing = await tx.execute<{
+      plan_id: string;
+      employee_party_id: string;
+      amount: string;
+      before: Record<string, unknown>;
+    }>(
+      sql`
       select plan_id, employee_party_id, amount::text as amount,
         to_jsonb(entitlement_ledger) || jsonb_build_object('amount', amount::text, 'hours', hours::text) as before
         from entitlement_ledger
        where org_id = ${input.orgId} and kind = 'opening'
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.rows.map((row) => row.employeePartyId))}::jsonb)::uuid)
-    `, "objects"));
+    `,
+      "objects",
+    );
     const storedKeys = new Set(existing.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
     const employeeIds = input.rows.map((row) => row.employeePartyId);
@@ -203,16 +220,18 @@ export async function saveEntitlementOpenings(input: {
         }
         const stored = storedKeys.has(`${plan.id}:${row.employeePartyId}`);
         if (stored && input.mode === "insert") {
-          fail(`${plan.code} carry-in already exists for this employee — choose upsert to replace it`);
+          fail(
+            `${plan.code} carry-in already exists for this employee — choose upsert to replace it`,
+          );
           continue;
         }
         const lock = locks.get(`${plan.id}:${row.employeePartyId}`);
         if (lock) {
           if (input.strictLocks !== false) {
             fail(
-              `a pay run committed on ${lock.payDate}`
-              + `${lock.documentNumber ? ` (${lock.documentNumber})` : ""} already used the `
-              + `${plan.code} carry-in; void that run before changing it`,
+              `a pay run committed on ${lock.payDate}` +
+                `${lock.documentNumber ? ` (${lock.documentNumber})` : ""} already used the ` +
+                `${plan.code} carry-in; void that run before changing it`,
             );
           } else {
             // Non-strict bulk load: the locked bank stands, but the load says
@@ -221,8 +240,9 @@ export async function saveEntitlementOpenings(input: {
             result.warnings.push({
               employeePartyId: row.employeePartyId,
               employeeName,
-              message: `${plan.code} carry-in consumed by committed run `
-                + `${lock.documentNumber ?? lock.payDate} on ${lock.payDate}; left unchanged`,
+              message:
+                `${plan.code} carry-in consumed by committed run ` +
+                `${lock.documentNumber ?? lock.payDate} on ${lock.payDate}; left unchanged`,
             });
           }
           continue;
@@ -241,15 +261,15 @@ export async function saveEntitlementOpenings(input: {
         }
         if (plan.direction === "accrue" && cmp(value, "0") < 0) {
           fail(
-            `${plan.code} is a bank the employer owes the employee, so its carry-in cannot be `
-            + "negative",
+            `${plan.code} is a bank the employer owes the employee, so its carry-in cannot be ` +
+              "negative",
           );
           continue;
         }
         if (plan.direction === "owe" && cmp(value, "0") > 0) {
           fail(
-            `${plan.code} is a balance the EMPLOYEE owes, so its carry-in must be negative `
-            + `(enter ${neg(value)} for an outstanding ${value})`,
+            `${plan.code} is a balance the EMPLOYEE owes, so its carry-in must be negative ` +
+              `(enter ${neg(value)} for an outstanding ${value})`,
           );
           continue;
         }
@@ -259,9 +279,9 @@ export async function saveEntitlementOpenings(input: {
         const block = blocks.get(row.employeePartyId);
         if (block && !stored) {
           fail(
-            `a pay run committed on ${block.payDate}`
-            + `${block.documentNumber ? ` (${block.documentNumber})` : ""} already paid this `
-            + `employee on or after ${movementDate}; date the carry-in after it, or void the run`,
+            `a pay run committed on ${block.payDate}` +
+              `${block.documentNumber ? ` (${block.documentNumber})` : ""} already paid this ` +
+              `employee on or after ${movementDate}; date the carry-in after it, or void the run`,
           );
           continue;
         }
@@ -271,14 +291,19 @@ export async function saveEntitlementOpenings(input: {
         // was configured for the future), so it is reported, never refused —
         // refusing would make an accurate liability impossible to record.
         const limit = await resolvePlanLimit(
-          tx, input.orgId, plan.id, row.employeePartyId, movementDate,
+          tx,
+          input.orgId,
+          plan.id,
+          row.employeePartyId,
+          movementDate,
         );
         if (limit?.maxBalance != null && cmp(value, limit.maxBalance) > 0) {
           result.warnings.push({
             employeePartyId: row.employeePartyId,
             employeeName,
-            message: `${plan.code} carry-in ${value} is above the ${limit.maxBalance} limit that `
-              + `resolves for this employee (${limit.scope} scope)`,
+            message:
+              `${plan.code} carry-in ${value} is above the ${limit.maxBalance} limit that ` +
+              `resolves for this employee (${limit.scope} scope)`,
           });
         }
       }
@@ -290,20 +315,38 @@ export async function saveEntitlementOpenings(input: {
     for (const row of planned) {
       for (const [planId, amount] of row.amounts) {
         const stored = storedKeys.has(`${planId}:${row.employeePartyId}`);
-        const before = existing.filter(entry => entry.plan_id === planId && entry.employee_party_id === row.employeePartyId).map(entry => entry.before);
+        const before = existing
+          .filter(
+            (entry) => entry.plan_id === planId && entry.employee_party_id === row.employeePartyId,
+          )
+          .map((entry) => entry.before);
         if (stored) {
           // The trigger permits this exactly while no committed run has read it.
-          const deleted = await tx.execute(sql`
+          const deleted = await tx.execute(
+            sql`
             delete from entitlement_ledger
              where org_id = ${input.orgId} and plan_id = ${planId}
-               and employee_party_id = ${row.employeePartyId} and kind = 'opening' returning id`, "objects");
-          if (deleted.length !== before.length) throw new PayrollError('The bank opening changed while it was being replaced — reload the bank carry-ins and try again');
+               and employee_party_id = ${row.employeePartyId} and kind = 'opening' returning id`,
+            "objects",
+          );
+          if (deleted.length !== before.length)
+            throw new PayrollError(
+              "The bank opening changed while it was being replaced — reload the bank carry-ins and try again",
+            );
         }
         if (amount === null) {
           result.deleted++;
           await auditEntitlementOpening(tx, {
-            orgId: input.orgId, actorId: input.actorId, action: "delete",
-            changes: { planId, employeePartyId: row.employeePartyId, before, after: null, reason: input.note ?? 'Clear unconsumed adoption carry-in' },
+            orgId: input.orgId,
+            actorId: input.actorId,
+            action: "delete",
+            changes: {
+              planId,
+              employeePartyId: row.employeePartyId,
+              before,
+              after: null,
+              reason: input.note ?? "Clear unconsumed adoption carry-in",
+            },
           });
           continue;
         }
@@ -312,23 +355,33 @@ export async function saveEntitlementOpenings(input: {
           orgId: input.orgId,
           actorId: input.actorId,
           payRunDocumentId: null,
-          movements: [{
-            planId,
-            employeePartyId: row.employeePartyId,
-            movementDate,
-            amount,
-            hours: null,
-            kind: "opening",
-            componentId: null,
-            note: input.note ?? "Mid-year adoption carry-in",
-          }],
+          movements: [
+            {
+              planId,
+              employeePartyId: row.employeePartyId,
+              movementDate,
+              amount,
+              hours: null,
+              kind: "opening",
+              componentId: null,
+              note: input.note ?? "Mid-year adoption carry-in",
+            },
+          ],
         });
         if (stored) result.updated++;
         else result.created++;
         await auditEntitlementOpening(tx, {
-          orgId: input.orgId, actorId: input.actorId,
+          orgId: input.orgId,
+          actorId: input.actorId,
           action: stored ? "update" : "insert",
-          changes: { planId, employeePartyId: row.employeePartyId, movementDate, before, after: amount, reason: input.note ?? 'Mid-year adoption carry-in' },
+          changes: {
+            planId,
+            employeePartyId: row.employeePartyId,
+            movementDate,
+            before,
+            after: amount,
+            reason: input.note ?? "Mid-year adoption carry-in",
+          },
         });
       }
     }
@@ -340,7 +393,8 @@ export async function saveEntitlementOpenings(input: {
 async function auditEntitlementOpening(
   runner: Executor,
   args: {
-    orgId: string; actorId: string | null;
+    orgId: string;
+    actorId: string | null;
     action: "insert" | "update" | "delete";
     changes: Record<string, unknown>;
   },

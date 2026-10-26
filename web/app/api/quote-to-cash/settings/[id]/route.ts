@@ -1,23 +1,23 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
 import {
   clearQuoteToCashSettings,
   saveQuoteToCashSettings,
-} from '@openbooks/engine/billing/quote-to-cash'
+} from "@openbooks/engine/billing/quote-to-cash";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const params = z.object({ id: z.string() })
+const params = z.object({ id: z.string() });
 
 const settingsBody = z.strictObject({
   autoActivateOnSign: z.boolean(),
-  defaultBillingTiming: z.enum(['advance', 'arrears']),
-  defaultStartRule: z.enum(['quote_date', 'first_of_next_month', 'custom']),
+  defaultBillingTiming: z.enum(["advance", "arrears"]),
+  defaultStartRule: z.enum(["quote_date", "first_of_next_month", "custom"]),
   signatureExpiryDays: z.number(),
   orderFormTemplateId: z.string().nullish(),
-})
+});
 
 /**
  * Edit and reset the quote-to-cash policy row (the Setup drawer's PATCH
@@ -25,44 +25,38 @@ const settingsBody = z.strictObject({
  * the same validated singleton upsert.
  */
 export const PATCH = defineRoute({
-  permission: 'ar.create',
-  feature: 'quoteToCash',
-  scope: 'unrestricted',
+  permission: "ar.create",
+  feature: "quoteToCash",
+  scope: "unrestricted",
   params,
   body: settingsBody,
   handler: async ({ authz, body }) => {
     try {
       return NextResponse.json({
-        settings: await saveQuoteToCashSettings(
-          authz.user.orgId,
-          authz.user.id,
-          {
-            autoActivateOnSign: body.autoActivateOnSign,
-            defaultBillingTiming: body.defaultBillingTiming,
-            defaultStartRule: body.defaultStartRule,
-            signatureExpiryDays: body.signatureExpiryDays,
-            orderFormTemplateId: body.orderFormTemplateId,
-          },
-        ),
-      })
+        settings: await saveQuoteToCashSettings(authz.user.orgId, authz.user.id, {
+          autoActivateOnSign: body.autoActivateOnSign,
+          defaultBillingTiming: body.defaultBillingTiming,
+          defaultStartRule: body.defaultStartRule,
+          signatureExpiryDays: body.signatureExpiryDays,
+          orderFormTemplateId: body.orderFormTemplateId,
+        }),
+      });
     } catch (e) {
-      return apiErrorResponse(e)
+      return apiErrorResponse(e);
     }
   },
-})
+});
 
 export const DELETE = defineRoute({
-  permission: 'ar.create',
-  feature: 'quoteToCash',
-  scope: 'unrestricted',
+  permission: "ar.create",
+  feature: "quoteToCash",
+  scope: "unrestricted",
   params,
   handler: async ({ authz }) => {
     try {
-      return NextResponse.json(
-        await clearQuoteToCashSettings(authz.user.orgId, authz.user.id),
-      )
+      return NextResponse.json(await clearQuoteToCashSettings(authz.user.orgId, authz.user.id));
     } catch (e) {
-      return apiErrorResponse(e)
+      return apiErrorResponse(e);
     }
   },
-})
+});

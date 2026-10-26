@@ -74,10 +74,13 @@ async function approvedDocument(
 }
 
 async function entryNumberOf(orgId: string, documentId: string): Promise<string> {
-  const res = await db.execute<{ entry_number: string }>(sql`
+  const res = await db.execute<{ entry_number: string }>(
+    sql`
     select e.entry_number from journal_entries e
       join documents d on d.posted_entry_id = e.id and d.org_id = e.org_id
-     where d.id = ${documentId} and d.org_id = ${orgId}`, "objects");
+     where d.id = ${documentId} and d.org_id = ${orgId}`,
+    "objects",
+  );
   return res[0]!.entry_number;
 }
 
@@ -106,9 +109,12 @@ test(
       "the colliding document must be qualified automatically, not rejected",
     );
 
-    const posted = await db.execute<{ n: number }>(sql`
+    const posted = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from documents
-       where org_id = ${o.orgId} and document_number = ${number} and status = 'posted'`, "objects");
+       where org_id = ${o.orgId} and document_number = ${number} and status = 'posted'`,
+      "objects",
+    );
     assert.equal(posted[0]!.n, 2, "no document may be lost to a source numbering clash");
   },
 );
@@ -132,9 +138,12 @@ test(
       "a document must never post twice, however its number was allocated",
     );
 
-    const entries = await db.execute<{ n: number }>(sql`
+    const entries = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${o.orgId} and source_document_id = ${billId}`, "objects");
+       where org_id = ${o.orgId} and source_document_id = ${billId}`,
+      "objects",
+    );
     assert.equal(entries[0]!.n, 1, "a document can never produce two entries");
   },
 );

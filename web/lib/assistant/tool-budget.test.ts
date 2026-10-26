@@ -33,10 +33,16 @@ function adminAuthz(): Authz {
     homeUserId: userId,
   };
   // Wildcard covers every gate (see permissionSetCovers).
-  return { user, permissions: new Set(["*", "assistant.use", "assistant.write"]), allowedSubsidiaryIds: null };
+  return {
+    user,
+    permissions: new Set(["*", "assistant.use", "assistant.write"]),
+    allowedSubsidiaryIds: null,
+  };
 }
 
-function payloadTokens(entries: { name: string; description: string; inputSchema: unknown }[]): number {
+function payloadTokens(
+  entries: { name: string; description: string; inputSchema: unknown }[],
+): number {
   let bytes = 0;
   for (const entry of entries) {
     bytes += Buffer.byteLength(
@@ -104,12 +110,31 @@ test("core tier is exactly the justified capability list", () => {
   const names = coreEntries.map((t) => t.name).sort();
   // find_tools joins this list with the meta-tool commit (b01 commit 3).
   const expected = [
-    "aging", "balance_sheet", "cash_position", "create_payment", "describe_capabilities",
-    "draft_journal_entry", "financial_periods", "find_accounts", "find_documents",
-    "find_journal_entries", "find_parties", "find_tools", "get_company_settings",
-    "get_document", "get_journal_entry", "list_features", "list_open_items",
-    "list_report_definitions", "post_payment", "profit_and_loss", "project_profitability",
-    "rank_projects", "run_report", "trial_balance", "whoami",
+    "aging",
+    "balance_sheet",
+    "cash_position",
+    "create_payment",
+    "describe_capabilities",
+    "draft_journal_entry",
+    "financial_periods",
+    "find_accounts",
+    "find_documents",
+    "find_journal_entries",
+    "find_parties",
+    "find_tools",
+    "get_company_settings",
+    "get_document",
+    "get_journal_entry",
+    "list_features",
+    "list_open_items",
+    "list_report_definitions",
+    "post_payment",
+    "profit_and_loss",
+    "project_profitability",
+    "rank_projects",
+    "run_report",
+    "trial_balance",
+    "whoami",
   ].sort();
   assert.deepEqual(names, expected);
 });

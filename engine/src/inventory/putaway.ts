@@ -43,16 +43,23 @@ export type PutawayRuleRecord = {
   capacityQuantity: string | null;
 };
 
-export async function listPutawayRules(runner: Runner, orgId: string, warehouseId: string): Promise<PutawayRuleRecord[]> {
+export async function listPutawayRules(
+  runner: Runner,
+  orgId: string,
+  warehouseId: string,
+): Promise<PutawayRuleRecord[]> {
   await assertWarehousingFeature(runner, orgId);
-  const r = await runner.execute<PutawayRuleRecord>(sql`
+  const r = await runner.execute<PutawayRuleRecord>(
+    sql`
     select r.id, r.warehouse_id as "warehouseId", r.sequence, r.item_id as "itemId", r.strategy,
            r.target_location_id as "targetLocationId", t.code as "targetCode", t.is_active as "targetActive",
            r.capacity_quantity::text as "capacityQuantity"
       from putaway_rules r
       join stock_locations t on t.id = r.target_location_id and t.org_id = r.org_id
      where r.org_id = ${orgId} and r.warehouse_id = ${warehouseId}
-     order by r.sequence`, "objects");
+     order by r.sequence`,
+    "objects",
+  );
   return r;
 }
 
@@ -71,8 +78,13 @@ export interface ResolvePutawayInput {
 }
 
 /** Active bins beneath a zone, by bin code: the candidates of an empty-bin rule. */
-async function activeBinsUnder(runner: Runner, orgId: string, zoneId: string): Promise<{ id: string; code: string }[]> {
-  return await runner.execute<{ id: string; code: string }>(sql`
+async function activeBinsUnder(
+  runner: Runner,
+  orgId: string,
+  zoneId: string,
+): Promise<{ id: string; code: string }[]> {
+  return await runner.execute<{ id: string; code: string }>(
+    sql`
     with recursive tree as (
       select id, kind, code, is_active, 0 as depth from stock_locations where org_id = ${orgId} and id = ${zoneId}
       union all
@@ -80,7 +92,9 @@ async function activeBinsUnder(runner: Runner, orgId: string, zoneId: string): P
         from stock_locations c join tree t on c.parent_id = t.id
        where c.org_id = ${orgId} and c.kind <> 'warehouse' and t.depth < 64
     )
-    select id, code from tree where kind = 'bin' and is_active and depth > 0 order by code, id`, "objects");
+    select id, code from tree where kind = 'bin' and is_active and depth > 0 order by code, id`,
+    "objects",
+  );
 }
 
 async function emptyBinUnder(
@@ -89,13 +103,16 @@ async function emptyBinUnder(
   zoneId: string,
 ): Promise<{ id: string; code: string } | null> {
   for (const bin of await activeBinsUnder(runner, orgId, zoneId)) {
-    const items = await runner.execute<{ item_id: string }>(sql`
+    const items = await runner.execute<{ item_id: string }>(
+      sql`
       select item_id from cost_layers
        where org_id = ${orgId} and stock_location_id = ${bin.id} and remaining_quantity <> 0
       union
       select item_id from inventory_provisional_costs
        where org_id = ${orgId} and stock_location_id = ${bin.id} and remaining_quantity <> 0
-      order by 1`, "objects");
+      order by 1`,
+      "objects",
+    );
     let empty = true;
     for (const { item_id } of items) {
       if (!isZero((await getOnHandWith(runner, orgId, item_id, bin.id)).quantity)) {
@@ -126,10 +143,15 @@ export async function resolvePutawayLocation(
   await assertWarehousingFeature(runner, orgId);
   const quantity = persistReceiptMoney(input.quantity, "putaway quantity");
   if (!(scaled(quantity) > 0n)) throw new InventoryError("putaway quantity must be positive");
-  const warehouse = (await runner.execute<{ code: string; status: WarehouseStatus }>(sql`
+  const warehouse = (
+    await runner.execute<{ code: string; status: WarehouseStatus }>(
+      sql`
     select sl.code, w.status from warehouses w
       join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
-     where w.org_id = ${orgId} and w.stock_location_id = ${input.warehouseId}`, "objects"))[0];
+     where w.org_id = ${orgId} and w.stock_location_id = ${input.warehouseId}`,
+      "objects",
+    )
+  )[0];
   if (!warehouse) {
     throw new WarehouseRefusal(
       "warehouse not found in this organization",
@@ -145,11 +167,17 @@ export async function resolvePutawayLocation(
       `activate ${warehouse.code} in Warehouse → Warehouses`,
     );
   }
-  const item = (await runner.execute<{ label: string }>(sql`
-    select coalesce(nullif(code, ''), name) as label from items where org_id = ${orgId} and id = ${input.itemId}`, "objects"))[0];
+  const item = (
+    await runner.execute<{ label: string }>(
+      sql`
+    select coalesce(nullif(code, ''), name) as label from items where org_id = ${orgId} and id = ${input.itemId}`,
+      "objects",
+    )
+  )[0];
   if (!item) throw new InventoryError("putaway references an item outside this organization");
-  const rules = (await listPutawayRules(runner, orgId, input.warehouseId))
-    .filter((rule) => rule.itemId === null || rule.itemId === input.itemId);
+  const rules = (await listPutawayRules(runner, orgId, input.warehouseId)).filter(
+    (rule) => rule.itemId === null || rule.itemId === input.itemId,
+  );
   const declined: string[] = [];
   for (const rule of rules) {
     const tried = `rule ${rule.sequence} (${rule.strategy} ${rule.targetCode})`;
@@ -159,7 +187,9 @@ export async function resolvePutawayLocation(
     }
     if (rule.strategy === "empty-bin") {
       if (rule.capacityQuantity !== null && !fitsCapacity("0", quantity, rule.capacityQuantity)) {
-        declined.push(`${tried}: ${quantity} exceeds the bin capacity ${capacityLabel(rule.capacityQuantity)}`);
+        declined.push(
+          `${tried}: ${quantity} exceeds the bin capacity ${capacityLabel(rule.capacityQuantity)}`,
+        );
         continue;
       }
       const bin = await emptyBinUnder(runner, orgId, rule.targetLocationId);
@@ -169,14 +199,23 @@ export async function resolvePutawayLocation(
       }
       return { stockLocationId: bin.id, code: bin.code, ruleId: rule.id, sequence: rule.sequence };
     }
-    const onHand = (await getOnHandWith(runner, orgId, input.itemId, rule.targetLocationId)).quantity;
+    const onHand = (await getOnHandWith(runner, orgId, input.itemId, rule.targetLocationId))
+      .quantity;
     if (!fitsCapacity(onHand, quantity, rule.capacityQuantity)) {
-      declined.push(`${tried}: ${onHand} on hand plus ${quantity} exceeds capacity ${capacityLabel(rule.capacityQuantity!)}`);
+      declined.push(
+        `${tried}: ${onHand} on hand plus ${quantity} exceeds capacity ${capacityLabel(rule.capacityQuantity!)}`,
+      );
       continue;
     }
-    return { stockLocationId: rule.targetLocationId, code: rule.targetCode, ruleId: rule.id, sequence: rule.sequence };
+    return {
+      stockLocationId: rule.targetLocationId,
+      code: rule.targetCode,
+      ruleId: rule.id,
+      sequence: rule.sequence,
+    };
   }
-  const why = declined.length > 0 ? `; tried ${declined.join("; ")}` : "; no rule applies to this item";
+  const why =
+    declined.length > 0 ? `; tried ${declined.join("; ")}` : "; no rule applies to this item";
   throw new WarehouseRefusal(
     `no putaway rule in ${warehouse.code} admits ${quantity} of ${item.label}${why}`,
     "putaway_unresolved",
@@ -193,10 +232,10 @@ export interface StagedStockRow {
   itemLabel: string;
   subsidiaryId: string;
   quantity: string;
-  lotId:string|null;
-  serialId:string|null;
-  lotNumber:string|null;
-  serialNumber:string|null;
+  lotId: string | null;
+  serialId: string | null;
+  lotNumber: string | null;
+  serialNumber: string | null;
 }
 
 /**
@@ -210,41 +249,81 @@ export async function listStagedStock(
   subsidiaryIds: readonly string[] | null,
 ): Promise<StagedStockRow[]> {
   await assertWarehousingFeature(runner, orgId);
-  const warehouses = await runner.execute<{ id: string; code: string }>(sql`
+  const warehouses = await runner.execute<{ id: string; code: string }>(
+    sql`
     select w.stock_location_id as id, sl.code from warehouses w
       join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
      where w.org_id = ${orgId} and w.status in ('active', 'suspended')
-     order by sl.code`, "objects");
+     order by sl.code`,
+    "objects",
+  );
   const rows: StagedStockRow[] = [];
   for (const warehouse of warehouses) {
-    const positions = (await warehousePositions(runner, orgId, warehouse.id, { kinds: ["staging"] }))
-      .filter((p) => subsidiaryIds === null || subsidiaryIds.includes(p.subsidiaryId));
+    const positions = (
+      await warehousePositions(runner, orgId, warehouse.id, { kinds: ["staging"] })
+    ).filter((p) => subsidiaryIds === null || subsidiaryIds.includes(p.subsidiaryId));
     if (positions.length === 0) continue;
-    const meta = await runner.execute<{ kind: "item" | "location"; id: string; label: string }>(sql`
+    const meta = await runner.execute<{ kind: "item" | "location"; id: string; label: string }>(
+      sql`
       select 'item' as kind, id, coalesce(nullif(code, ''), name) as label from items
-       where org_id = ${orgId} and id in (${sql.join(positions.map((p) => sql`${p.itemId}::uuid`), sql`, `)})
+       where org_id = ${orgId} and id in (${sql.join(
+         positions.map((p) => sql`${p.itemId}::uuid`),
+         sql`, `,
+       )})
       union all
       select 'location', id, code from stock_locations
-       where org_id = ${orgId} and id in (${sql.join(positions.map((p) => sql`${p.stockLocationId}::uuid`), sql`, `)})`, "objects");
+       where org_id = ${orgId} and id in (${sql.join(
+         positions.map((p) => sql`${p.stockLocationId}::uuid`),
+         sql`, `,
+       )})`,
+      "objects",
+    );
     const label = (kind: "item" | "location", id: string) =>
       meta.find((row) => row.kind === kind && row.id === id)?.label ?? id;
     for (const position of positions) {
-      const identifiers=await runner.execute<{lot_id:string|null;serial_id:string|null;lot_number:string|null;serial_number:string|null}>(sql`
+      const identifiers = await runner.execute<{
+        lot_id: string | null;
+        serial_id: string | null;
+        lot_number: string | null;
+        serial_number: string | null;
+      }>(
+        sql`
         select distinct source.lot_id,source.serial_id,lot.lot_number,serial.serial_number
         from cost_layers layer join inventory_movements source on source.org_id=layer.org_id and source.id=layer.source_movement_id
         left join lots lot on lot.org_id=source.org_id and lot.id=source.lot_id
         left join serials serial on serial.org_id=source.org_id and serial.id=source.serial_id
         where layer.org_id=${orgId} and layer.item_id=${position.itemId} and layer.stock_location_id=${position.stockLocationId}
           and layer.subsidiary_id=${position.subsidiaryId} and layer.remaining_quantity>0
-        order by source.lot_id,source.serial_id`, "objects");
-      for(const identity of identifiers) {
-        const onHand=await getOnHandWith(runner,orgId,position.itemId,position.stockLocationId,{
-          subsidiaryId:position.subsidiaryId,lotId:identity.lot_id,serialId:identity.serial_id});
-        if(!(scaled(onHand.quantity)>0n))continue;
-        rows.push({warehouseId:warehouse.id,warehouseCode:warehouse.code,stagingLocationId:position.stockLocationId,
-          stagingCode:label("location",position.stockLocationId),itemId:position.itemId,itemLabel:label("item",position.itemId),
-          subsidiaryId:position.subsidiaryId,quantity:onHand.quantity,lotId:identity.lot_id,serialId:identity.serial_id,
-          lotNumber:identity.lot_number,serialNumber:identity.serial_number});
+        order by source.lot_id,source.serial_id`,
+        "objects",
+      );
+      for (const identity of identifiers) {
+        const onHand = await getOnHandWith(
+          runner,
+          orgId,
+          position.itemId,
+          position.stockLocationId,
+          {
+            subsidiaryId: position.subsidiaryId,
+            lotId: identity.lot_id,
+            serialId: identity.serial_id,
+          },
+        );
+        if (!(scaled(onHand.quantity) > 0n)) continue;
+        rows.push({
+          warehouseId: warehouse.id,
+          warehouseCode: warehouse.code,
+          stagingLocationId: position.stockLocationId,
+          stagingCode: label("location", position.stockLocationId),
+          itemId: position.itemId,
+          itemLabel: label("item", position.itemId),
+          subsidiaryId: position.subsidiaryId,
+          quantity: onHand.quantity,
+          lotId: identity.lot_id,
+          serialId: identity.serial_id,
+          lotNumber: identity.lot_number,
+          serialNumber: identity.serial_number,
+        });
       }
     }
   }
@@ -273,18 +352,26 @@ export interface PutAwayInput {
  * so a capacity-limited bin can never be filled past its capacity by two
  * putaways at once.
  */
-async function fencePutawayTargets(tx: Runner, orgId: string, warehouseId: string, itemId: string): Promise<void> {
+async function fencePutawayTargets(
+  tx: Runner,
+  orgId: string,
+  warehouseId: string,
+  itemId: string,
+): Promise<void> {
   const targets = new Set<string>();
   for (const rule of await listPutawayRules(tx, orgId, warehouseId)) {
     if (rule.itemId !== null && rule.itemId !== itemId) continue;
     if (rule.strategy === "empty-bin") {
-      for (const bin of await activeBinsUnder(tx, orgId, rule.targetLocationId)) targets.add(bin.id);
+      for (const bin of await activeBinsUnder(tx, orgId, rule.targetLocationId))
+        targets.add(bin.id);
     } else {
       targets.add(rule.targetLocationId);
     }
   }
   for (const locationId of [...targets].sort()) {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`putaway-target:${locationId}`}, 0))`);
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`putaway-target:${locationId}`}, 0))`,
+    );
   }
 }
 
@@ -300,11 +387,18 @@ export async function putAwayStagedStock(
   orgId: string,
   actorId: string | null,
   input: PutAwayInput,
-): Promise<PutawayResolution & { fromMovementId: string; toMovementId: string; entryId: string | null }> {
+): Promise<
+  PutawayResolution & { fromMovementId: string; toMovementId: string; entryId: string | null }
+> {
   await assertWarehousingFeature(tx, orgId);
-  const staging = (await tx.execute<{ code: string; kind: string; warehouse_id: string | null }>(sql`
+  const staging = (
+    await tx.execute<{ code: string; kind: string; warehouse_id: string | null }>(
+      sql`
     select code, kind, stock_location_warehouse(${orgId}::uuid, id) as warehouse_id
-      from stock_locations where org_id = ${orgId} and id = ${input.stagingLocationId}`, "objects"))[0];
+      from stock_locations where org_id = ${orgId} and id = ${input.stagingLocationId}`,
+      "objects",
+    )
+  )[0];
   if (!staging || staging.kind !== "staging" || staging.warehouse_id !== input.warehouseId) {
     throw new WarehouseRefusal(
       "putaway moves stock out of a staging location of the chosen warehouse",
@@ -320,10 +414,18 @@ export async function putAwayStagedStock(
     warehouseId: input.warehouseId,
     subsidiaryId: input.subsidiaryId,
   });
-  if(input.expectedTargetLocationId && target.stockLocationId!==input.expectedTargetLocationId)
-    throw new InventoryError("The putaway rule now suggests a different bin; refresh the suggestion and scan that bin before moving stock");
-  await requireExecutionConfirmation(tx,orgId,{stage:"putaway",taskId:input.executionTaskId,itemId:input.itemId,
-    fromBinId:input.stagingLocationId,toBinId:target.stockLocationId,quantity:input.quantity});
+  if (input.expectedTargetLocationId && target.stockLocationId !== input.expectedTargetLocationId)
+    throw new InventoryError(
+      "The putaway rule now suggests a different bin; refresh the suggestion and scan that bin before moving stock",
+    );
+  await requireExecutionConfirmation(tx, orgId, {
+    stage: "putaway",
+    taskId: input.executionTaskId,
+    itemId: input.itemId,
+    fromBinId: input.stagingLocationId,
+    toBinId: target.stockLocationId,
+    quantity: input.quantity,
+  });
   const moved = await transferInventoryTx(tx, orgId, actorId, {
     itemId: input.itemId,
     fromStockLocationId: input.stagingLocationId,
@@ -335,5 +437,10 @@ export async function putAwayStagedStock(
     serialId: input.serialId,
     memo: `Putaway ${staging.code} → ${target.code} (rule ${target.sequence})`,
   });
-  return { ...target, fromMovementId: moved.fromMovementId, toMovementId: moved.toMovementId, entryId: moved.entryId };
+  return {
+    ...target,
+    fromMovementId: moved.fromMovementId,
+    toMovementId: moved.toMovementId,
+    entryId: moved.entryId,
+  };
 }

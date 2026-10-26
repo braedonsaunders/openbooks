@@ -2,17 +2,9 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from "@/lib/api/form-data";
 import { NextResponse } from "next/server";
-import {
-  isRetainedFileEvidence,
-  replaceFile,
-} from "../../../../../../lib/file-cabinet";
+import { isRetainedFileEvidence, replaceFile } from "../../../../../../lib/file-cabinet";
 import { isUuid } from "../../../../../../lib/list-params";
-import {
-  fileViewer,
-  isAllowedContentType,
-  MAX_BYTES,
-  requireFileAccess,
-} from "../../../lib";
+import { fileViewer, isAllowedContentType, MAX_BYTES, requireFileAccess } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
@@ -23,8 +15,7 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     // Replacing (new version) needs Editor+ on the file.
     const access = await requireFileAccess(gate, id, "editor");
     if (access) return access;
@@ -44,19 +35,12 @@ export const POST = defineRoute({
       );
     }
     if (file.size > MAX_BYTES)
-      return NextResponse.json(
-        { error: "file exceeds 25 MB limit" },
-        { status: 413 },
-      );
+      return NextResponse.json({ error: "file exceeds 25 MB limit" }, { status: 413 });
 
     const bytes = Buffer.from(await file.arrayBuffer());
     if (bytes.length > MAX_BYTES)
-      return NextResponse.json(
-        { error: "file exceeds 25 MB limit" },
-        { status: 413 },
-      );
-    if (bytes.length === 0)
-      return NextResponse.json({ error: "file is empty" }, { status: 400 });
+      return NextResponse.json({ error: "file exceeds 25 MB limit" }, { status: 413 });
+    if (bytes.length === 0) return NextResponse.json({ error: "file is empty" }, { status: 400 });
 
     const ok = await replaceFile({
       orgId: gate.user.orgId,

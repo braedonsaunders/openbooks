@@ -91,36 +91,72 @@ test("account codes are accepted in place of ids", () => {
 
 test("an unbalanced journal is refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "100" }, { accountId: B, amount: "-99.99" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: "100" },
+          { accountId: B, amount: "-99.99" },
+        ],
+      }),
     (e: Error) => e instanceof JournalWriteError && /not balanced/.test(e.message),
   );
 });
 
 test("fewer than 2 lines is refused", () => {
-  assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "0" }] }), /at least 2 lines/);
+  assert.throws(
+    () =>
+      validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "0" }] }),
+    /at least 2 lines/,
+  );
 });
 
 test("zero and non-numeric amounts are refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "0" }, { accountId: B, amount: "0" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: "0" },
+          { accountId: B, amount: "0" },
+        ],
+      }),
     /nonzero decimal/,
   );
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "abc" }, { accountId: B, amount: "-1" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: "abc" },
+          { accountId: B, amount: "-1" },
+        ],
+      }),
     /nonzero decimal/,
   );
 });
 
 test("a line without any account reference is refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ amount: "5" }, { accountId: B, amount: "-5" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [{ amount: "5" }, { accountId: B, amount: "-5" }],
+      }),
     /accountId or accountCode required/,
   );
 });
 
 test("a malformed accountId is refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: "nope", amount: "5" }, { accountId: B, amount: "-5" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: "nope", amount: "5" },
+          { accountId: B, amount: "-5" },
+        ],
+      }),
     /invalid accountId/,
   );
 });
@@ -129,11 +165,25 @@ test("malformed department/project ids are refused, never silently dropped", () 
   // A mistyped dimension used to validate to null, posting the line without
   // its dimension. Fail closed like accountId instead.
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "5", departmentId: "not-a-uuid" }, { accountId: B, amount: "-5" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: "5", departmentId: "not-a-uuid" },
+          { accountId: B, amount: "-5" },
+        ],
+      }),
     (e: Error) => e instanceof JournalWriteError && /invalid departmentId/.test(e.message),
   );
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "5", projectId: "also-bogus" }, { accountId: B, amount: "-5" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: "5", projectId: "also-bogus" },
+          { accountId: B, amount: "-5" },
+        ],
+      }),
     (e: Error) => e instanceof JournalWriteError && /invalid projectId/.test(e.message),
   );
   // Well-formed ids pass through; absent/empty stays null.
@@ -152,11 +202,24 @@ test("malformed department/project ids are refused, never silently dropped", () 
 
 test("bad dates are refused; a missing date is refused rather than defaulted to UTC today", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "07/16/2026", lines: [{ accountId: A, amount: "1" }, { accountId: B, amount: "-1" }] }),
+    () =>
+      validateJournalInput({
+        documentDate: "07/16/2026",
+        lines: [
+          { accountId: A, amount: "1" },
+          { accountId: B, amount: "-1" },
+        ],
+      }),
     /invalid documentDate/,
   );
   assert.throws(
-    () => validateJournalInput({ lines: [{ accountId: A, amount: "1" }, { accountId: B, amount: "-1" }] }),
+    () =>
+      validateJournalInput({
+        lines: [
+          { accountId: A, amount: "1" },
+          { accountId: B, amount: "-1" },
+        ],
+      }),
     /documentDate is required/,
   );
 });
@@ -165,9 +228,22 @@ test("impossible calendar dates are refused, never passed to the database", () =
   // A format-only check let "2024-02-30" through validation; the draft insert
   // then died in Postgres with a raw driver error (DrizzleQueryError, a
   // 500-class failure) instead of a named JournalWriteError.
-  for (const documentDate of ["2024-02-30", "2023-02-29", "2024-04-31", "2024-13-01", "0000-01-01"]) {
+  for (const documentDate of [
+    "2024-02-30",
+    "2023-02-29",
+    "2024-04-31",
+    "2024-13-01",
+    "0000-01-01",
+  ]) {
     assert.throws(
-      () => validateJournalInput({ documentDate, lines: [{ accountId: A, amount: "1" }, { accountId: B, amount: "-1" }] }),
+      () =>
+        validateJournalInput({
+          documentDate,
+          lines: [
+            { accountId: A, amount: "1" },
+            { accountId: B, amount: "-1" },
+          ],
+        }),
       (e: Error) => e instanceof JournalWriteError && /invalid documentDate/.test(e.message),
       `expected ${documentDate} to be refused`,
     );
@@ -188,8 +264,14 @@ test("exact decimal journal lines preserve a balanced sum", () => {
 });
 
 test("line cap is enforced", () => {
-  const lines = Array.from({ length: 201 }, (_, i) => ({ accountId: A, amount: i % 2 === 0 ? "1" : "-1" }));
-  assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines }), /too many lines/);
+  const lines = Array.from({ length: 201 }, (_, i) => ({
+    accountId: A,
+    amount: i % 2 === 0 ? "1" : "-1",
+  }));
+  assert.throws(
+    () => validateJournalInput({ documentDate: "2026-07-16", lines }),
+    /too many lines/,
+  );
 });
 
 // --- post:true atomicity + system provenance (fnd_mt97qyp4_telk90) --------
@@ -197,92 +279,54 @@ test("line cap is enforced", () => {
 // (zero documents or lines on failure); the source-text pin that used to
 // assert on createScriptJournal's body is deleted.
 
-test("a forced post:true failure commits zero documents or lines — no orphan draft", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    // The document date lands outside every accounting period, so the posting
-    // engine rejects it — AFTER submission released the draft. The old split
-    // transaction had already committed the draft by then; the atomic unit
-    // must roll everything back.
-    await assert.rejects(
-      createScriptJournal(
-        org.orgId,
-        actors.submitterId,
-        {
-          documentDate: "2031-01-15",
-          memo: "orphan probe",
-          lines: [
-            { accountId: org.accounts.bank, amount: "25" },
-            { accountId: org.accounts.adjustment, amount: "-25" },
-          ],
-        },
-        { post: true },
-      ),
-      /no accounting period covers/,
-    );
-    const r = (await db.execute<{ docs: string; lines: string; effects: string }>(sql`
+test(
+  "a forced post:true failure commits zero documents or lines — no orphan draft",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      // The document date lands outside every accounting period, so the posting
+      // engine rejects it — AFTER submission released the draft. The old split
+      // transaction had already committed the draft by then; the atomic unit
+      // must roll everything back.
+      await assert.rejects(
+        createScriptJournal(
+          org.orgId,
+          actors.submitterId,
+          {
+            documentDate: "2031-01-15",
+            memo: "orphan probe",
+            lines: [
+              { accountId: org.accounts.bank, amount: "25" },
+              { accountId: org.accounts.adjustment, amount: "-25" },
+            ],
+          },
+          { post: true },
+        ),
+        /no accounting period covers/,
+      );
+      const r = await db.execute<{ docs: string; lines: string; effects: string }>(
+        sql`
       select (select count(*) from documents where org_id = ${org.orgId})::text as docs,
              (select count(*) from document_lines where org_id = ${org.orgId})::text as lines,
-             (select count(*) from posting_effects where org_id = ${org.orgId})::text as effects`, "objects"));
-    assert.deepEqual(r[0], { docs: "0", lines: "0", effects: "0" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+             (select count(*) from posting_effects where org_id = ${org.orgId})::text as effects`,
+        "objects",
+      );
+      assert.deepEqual(r[0], { docs: "0", lines: "0", effects: "0" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an actor-less scheduled script posts under explicit system provenance", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const res = await createScriptJournal(
-      org.orgId,
-      null,
-      {
-        documentDate: org.date,
-        memo: "scheduled accrual",
-        lines: [
-          { accountId: org.accounts.deferred, amount: "40" },
-          { accountId: org.accounts.recognized, amount: "-40" },
-        ],
-      },
-      { post: true },
-    );
-    assert.ok(res.entryId, "posting returned an entry id");
-    const doc = (await db.execute<{ status: string; created_by: string | null; custom: Record<string, string> }>(sql`
-      select status::text as status, created_by::text as created_by, custom
-        from documents where id = ${res.id} and org_id = ${org.orgId}`, "objects"))[0]!;
-    assert.equal(doc.status, "posted");
-    assert.equal(doc.created_by, null);
-    assert.equal(doc.custom.actorKind, "system");
-    assert.ok(doc.custom.actorReason);
-    const entry = await db.execute(sql`
-      select id from journal_entries where id = ${res.entryId!} and org_id = ${org.orgId}`, "objects");
-    assert.equal(entry.length, 1);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-// --- fnd_mt97sc2t_null: post:true validation before any draft insert --------
-// The audited implementation committed its draft transaction FIRST and only
-// afterwards validated the actor/post request — every rejected post left an
-// orphan JE draft behind. This regression pins the audited scenario exactly:
-// a scheduled (null-actor) submission whose approval cannot route is rejected
-// with zero documents, lines, flow evidence, or ledger rows committed.
-
-test("a scheduled null-actor post:true that fails approval routing is rejected with zero drafts", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // A tenant journal-approval policy whose gate resolves from the SUBMITTER:
-    // a scheduled script submits as the system (null actor), so the gate
-    // resolves to zero assignees and the submission must fail closed.
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "journal",
-      mode: "any",
-      assignees: [{ type: "supervisor" }],
-    });
-    await assert.rejects(
-      createScriptJournal(
+test(
+  "an actor-less scheduled script posts under explicit system provenance",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const res = await createScriptJournal(
         org.orgId,
         null,
         {
@@ -294,112 +338,204 @@ test("a scheduled null-actor post:true that fails approval routing is rejected w
           ],
         },
         { post: true },
-      ),
-      /approval flow.*failed.*zero assignees/,
-    );
-    const r = (await db.execute<{ docs: string; lines: string; gates: string; runs: string }>(sql`
+      );
+      assert.ok(res.entryId, "posting returned an entry id");
+      const doc = (
+        await db.execute<{
+          status: string;
+          created_by: string | null;
+          custom: Record<string, string>;
+        }>(
+          sql`
+      select status::text as status, created_by::text as created_by, custom
+        from documents where id = ${res.id} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(doc.status, "posted");
+      assert.equal(doc.created_by, null);
+      assert.equal(doc.custom.actorKind, "system");
+      assert.ok(doc.custom.actorReason);
+      const entry = await db.execute(
+        sql`
+      select id from journal_entries where id = ${res.entryId!} and org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(entry.length, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+// --- fnd_mt97sc2t_null: post:true validation before any draft insert --------
+// The audited implementation committed its draft transaction FIRST and only
+// afterwards validated the actor/post request — every rejected post left an
+// orphan JE draft behind. This regression pins the audited scenario exactly:
+// a scheduled (null-actor) submission whose approval cannot route is rejected
+// with zero documents, lines, flow evidence, or ledger rows committed.
+
+test(
+  "a scheduled null-actor post:true that fails approval routing is rejected with zero drafts",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // A tenant journal-approval policy whose gate resolves from the SUBMITTER:
+      // a scheduled script submits as the system (null actor), so the gate
+      // resolves to zero assignees and the submission must fail closed.
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "journal",
+        mode: "any",
+        assignees: [{ type: "supervisor" }],
+      });
+      await assert.rejects(
+        createScriptJournal(
+          org.orgId,
+          null,
+          {
+            documentDate: org.date,
+            memo: "scheduled accrual",
+            lines: [
+              { accountId: org.accounts.deferred, amount: "40" },
+              { accountId: org.accounts.recognized, amount: "-40" },
+            ],
+          },
+          { post: true },
+        ),
+        /approval flow.*failed.*zero assignees/,
+      );
+      const r = await db.execute<{ docs: string; lines: string; gates: string; runs: string }>(
+        sql`
       select (select count(*) from documents where org_id = ${org.orgId})::text as docs,
              (select count(*) from document_lines where org_id = ${org.orgId})::text as lines,
              (select count(*) from flow_gates where org_id = ${org.orgId})::text as gates,
-             (select count(*) from flow_runs where org_id = ${org.orgId})::text as runs`, "objects"));
-    assert.deepEqual(r[0], { docs: "0", lines: "0", gates: "0", runs: "0" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+             (select count(*) from flow_runs where org_id = ${org.orgId})::text as runs`,
+        "objects",
+      );
+      assert.deepEqual(r[0], { docs: "0", lines: "0", gates: "0", runs: "0" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a foreign-organization line department is refused with a domain error and writes nothing", { skip: !DB }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(orgA.orgId);
-    const deptB = "33333333-3333-4333-8333-333333333333";
-    await db.execute(sql`insert into departments (id, org_id, name) values (${deptB}, ${orgB.orgId}, 'Foreign department')`);
-    // The validator shape-checks the id, but only an org-ownership lookup can
-    // refuse another tenant's department: without it the composite FK dies at
-    // the re-insert as an unhandled storage error.
-    await assert.rejects(
-      createScriptJournal(
-        orgA.orgId,
-        actors.submitterId,
-        {
-          documentDate: orgA.date,
-          memo: "foreign dept probe",
-          lines: [
-            { accountId: orgA.accounts.bank, amount: "25", departmentId: deptB },
-            { accountId: orgA.accounts.adjustment, amount: "-25" },
-          ],
-        },
-        {},
-      ),
-      (e: Error) => e instanceof JournalWriteError && /not found in this organization/.test(e.message),
-    );
-    const r = (await db.execute<{ docs: string; lines: string }>(sql`
+test(
+  "a foreign-organization line department is refused with a domain error and writes nothing",
+  { skip: !DB },
+  async () => {
+    const orgA = await createScratchOrg();
+    const orgB = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(orgA.orgId);
+      const deptB = "33333333-3333-4333-8333-333333333333";
+      await db.execute(
+        sql`insert into departments (id, org_id, name) values (${deptB}, ${orgB.orgId}, 'Foreign department')`,
+      );
+      // The validator shape-checks the id, but only an org-ownership lookup can
+      // refuse another tenant's department: without it the composite FK dies at
+      // the re-insert as an unhandled storage error.
+      await assert.rejects(
+        createScriptJournal(
+          orgA.orgId,
+          actors.submitterId,
+          {
+            documentDate: orgA.date,
+            memo: "foreign dept probe",
+            lines: [
+              { accountId: orgA.accounts.bank, amount: "25", departmentId: deptB },
+              { accountId: orgA.accounts.adjustment, amount: "-25" },
+            ],
+          },
+          {},
+        ),
+        (e: Error) =>
+          e instanceof JournalWriteError && /not found in this organization/.test(e.message),
+      );
+      const r = await db.execute<{ docs: string; lines: string }>(
+        sql`
       select (select count(*) from documents where org_id = ${orgA.orgId})::text as docs,
-             (select count(*) from document_lines where org_id = ${orgA.orgId})::text as lines`, "objects"));
-    assert.deepEqual(r[0], { docs: "0", lines: "0" });
-  } finally {
-    await dropScratchOrg(orgA.orgId);
-    await dropScratchOrg(orgB.orgId);
-  }
-});
+             (select count(*) from document_lines where org_id = ${orgA.orgId})::text as lines`,
+        "objects",
+      );
+      assert.deepEqual(r[0], { docs: "0", lines: "0" });
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);
 
-test("script journals refuse accounts and projects outside the selected subsidiary", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    const otherSubsidiaryId = randomUUID();
-    const projectId = randomUUID();
-    await db.execute(sql`
+test(
+  "script journals refuse accounts and projects outside the selected subsidiary",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      const otherSubsidiaryId = randomUUID();
+      const projectId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Entity', 'CAD', 'CA')
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       update accounts set subsidiary_id = ${otherSubsidiaryId}
        where org_id = ${org.orgId} and id = ${org.accounts.bank}
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into projects (id, org_id, subsidiary_id, name, status)
       values (${projectId}, ${org.orgId}, ${otherSubsidiaryId}, 'Other Entity Project', 'active')
     `);
-    const opts = { allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
-    const journal = (lines: Parameters<typeof validateJournalInput>[0]["lines"]) =>
-      createScriptJournal(org.orgId, actors.adminId, {
-        documentDate: org.date,
-        subsidiaryId: org.subsidiaryId,
-        memo: "subsidiary line probe",
-        lines,
-      }, opts);
+      const opts = { allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+      const journal = (lines: Parameters<typeof validateJournalInput>[0]["lines"]) =>
+        createScriptJournal(
+          org.orgId,
+          actors.adminId,
+          {
+            documentDate: org.date,
+            subsidiaryId: org.subsidiaryId,
+            memo: "subsidiary line probe",
+            lines,
+          },
+          opts,
+        );
 
-    await assert.rejects(
-      journal([
-        { accountId: org.accounts.bank, amount: "25" },
-        { accountId: org.accounts.adjustment, amount: "-25" },
-      ]),
-      /unavailable accountId/,
-    );
-    await assert.rejects(
-      journal([
-        { accountCode: "1000", amount: "25" },
-        { accountCode: "5100", amount: "-25" },
-      ]),
-      /unavailable account code/,
-    );
-    await assert.rejects(
-      journal([
-        { accountId: org.accounts.adjustment, amount: "25", projectId },
-        { accountId: org.accounts.revenue, amount: "-25" },
-      ]),
-      /project not found in this organization/,
-    );
-    const writes = (await db.execute<{ n: number }>(sql`
+      await assert.rejects(
+        journal([
+          { accountId: org.accounts.bank, amount: "25" },
+          { accountId: org.accounts.adjustment, amount: "-25" },
+        ]),
+        /unavailable accountId/,
+      );
+      await assert.rejects(
+        journal([
+          { accountCode: "1000", amount: "25" },
+          { accountCode: "5100", amount: "-25" },
+        ]),
+        /unavailable account code/,
+      );
+      await assert.rejects(
+        journal([
+          { accountId: org.accounts.adjustment, amount: "25", projectId },
+          { accountId: org.accounts.revenue, amount: "-25" },
+        ]),
+        /project not found in this organization/,
+      );
+      const writes = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'journal'
-    `, "objects"))[0]!.n;
-    assert.equal(writes, 0, "refused references write no draft");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(writes, 0, "refused references write no draft");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("every UUID segment accepts the full a-f hex range", () => {
   // Turning a class dash into a literal drops b-e from that segment's
@@ -458,7 +594,9 @@ test("journal totals past the ledger refuse by name even when every line fits", 
       }),
     (error: unknown) =>
       error instanceof JournalWriteError &&
-      /journal debit total is out of range — at most 15 whole digits fit the ledger/.test(error.message),
+      /journal debit total is out of range — at most 15 whole digits fit the ledger/.test(
+        error.message,
+      ),
   );
 });
 
@@ -482,15 +620,27 @@ test("unreadable line amounts fail closed naming the line", () => {
   // check: no malformed amount can reach posting as a zero or a guess. Each
   // refusal names the line and its cause-specific remedy through the shared
   // decimal composer (its own suite owns the remedy wording).
-  for (const bad of ["12,34", "1,234", "1.23456", "$100", "1e3", "abc", "", "   ", null, undefined]) {
+  for (const bad of [
+    "12,34",
+    "1,234",
+    "1.23456",
+    "$100",
+    "1e3",
+    "abc",
+    "",
+    "   ",
+    null,
+    undefined,
+  ]) {
     assert.throws(
-      () => validateJournalInput({
-        documentDate: "2026-07-16",
-        lines: [
-          { accountId: A, amount: bad as never },
-          { accountId: B, amount: "-100" },
-        ],
-      }),
+      () =>
+        validateJournalInput({
+          documentDate: "2026-07-16",
+          lines: [
+            { accountId: A, amount: bad as never },
+            { accountId: B, amount: "-100" },
+          ],
+        }),
       (error: unknown) =>
         error instanceof JournalWriteError && /line 1 amount /.test(error.message),
       `amount ${String(bad)}`,

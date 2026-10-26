@@ -5,10 +5,7 @@ import {
   geometryContains,
   validateDrawnGeometry,
 } from "./territory-geography.ts";
-import {
-  EMPTY_TERRITORY_GEOGRAPHY,
-  type AreaGeometry,
-} from "./sales-contracts.ts";
+import { EMPTY_TERRITORY_GEOGRAPHY, type AreaGeometry } from "./sales-contracts.ts";
 const square: AreaGeometry = {
   type: "Polygon",
   coordinates: [
@@ -74,10 +71,7 @@ test("geographic coverage fails closed without a verified location and exclusion
   const geo = { ...EMPTY_TERRITORY_GEOGRAPHY, includes: [boundary] };
   assert.equal(geographyMatches(geo, null), false);
   assert.equal(geographyMatches(geo, [5, 5]), true);
-  assert.equal(
-    geographyMatches({ ...geo, excludes: [boundary] }, [0, 5]),
-    false,
-  );
+  assert.equal(geographyMatches({ ...geo, excludes: [boundary] }, [0, 5]), false);
   assert.equal(geographyMatches(EMPTY_TERRITORY_GEOGRAPHY, null), true);
 });
 test("drawn area validation names invalid, unclosed, degenerate and crossing boundaries", () => {

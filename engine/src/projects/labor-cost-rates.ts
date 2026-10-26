@@ -43,7 +43,7 @@ export type LaborCostRateRow = {
   effectiveTo: string | null;
   notes: string | null;
   isActive: boolean;
-}
+};
 
 export const LABOR_COST_RATE_ROW_COLUMNS = sql`id, rate::text as rate, currency, basis,
        annual_hours::text as "annualHours", payroll_rate_scale as "payrollRateScale",
@@ -127,8 +127,13 @@ export async function supersedeLaborCostRate(
   if (scopeMembers.length > 1) fail("at most one wage scope member may be set");
   if (!isPayRateBasis(query.basis)) fail(`basis must be one of ${PAY_RATE_BASES.join(", ")}`);
 
-  if (query.payrollRateScale !== undefined) requirePayrollWageRounding(query.payrollRateScale, query.payrollAmountRounding ?? "dimension_group");
-  if (query.payrollAmountRounding !== undefined) requirePayrollWageRounding(query.payrollRateScale ?? 4, query.payrollAmountRounding);
+  if (query.payrollRateScale !== undefined)
+    requirePayrollWageRounding(
+      query.payrollRateScale,
+      query.payrollAmountRounding ?? "dimension_group",
+    );
+  if (query.payrollAmountRounding !== undefined)
+    requirePayrollWageRounding(query.payrollRateScale ?? 4, query.payrollAmountRounding);
 
   // Deterministic same-scope serialization BEFORE any read: a concurrent
   // start blocks here until this scope's writer commits, so two starts
@@ -136,7 +141,8 @@ export async function supersedeLaborCostRate(
   await db.execute(laborCostRateScopeLock(orgId, scope));
 
   // Exact before-state: the same-start correction and active predecessor.
-  const before = await db.execute<LaborCostRateRow>(sql`
+  const before = await db.execute<LaborCostRateRow>(
+    sql`
     select ${LABOR_COST_RATE_ROW_COLUMNS}
       from labor_cost_rates
      where org_id = ${orgId}
@@ -148,9 +154,15 @@ export async function supersedeLaborCostRate(
        and (effective_from = ${effectiveFrom}::date
             or (is_active and effective_from < ${effectiveFrom}::date
                 and (effective_to is null or effective_to >= ${effectiveFrom}::date)))
-     order by effective_from`, "objects");
+     order by effective_from`,
+    "objects",
+  );
 
-  const predecessor = await db.execute<{ payrollRateScale: number; payrollAmountRounding: PayrollAmountRounding }>(sql`
+  const predecessor = await db.execute<{
+    payrollRateScale: number;
+    payrollAmountRounding: PayrollAmountRounding;
+  }>(
+    sql`
     select payroll_rate_scale as "payrollRateScale", payroll_amount_rounding as "payrollAmountRounding"
       from labor_cost_rates
      where org_id = ${orgId} and (is_active or effective_from = ${effectiveFrom}::date)
@@ -160,7 +172,9 @@ export async function supersedeLaborCostRate(
        and department_id is not distinct from ${scope.departmentId}
        and subsidiary_id is not distinct from ${scope.subsidiaryId}
        and effective_from <= ${effectiveFrom}::date
-     order by effective_from desc limit 1 for update`, "objects");
+     order by effective_from desc limit 1 for update`,
+    "objects",
+  );
   const rounding = requirePayrollWageRounding(
     query.payrollRateScale ?? predecessor[0]?.payrollRateScale ?? 4,
     query.payrollAmountRounding ?? predecessor[0]?.payrollAmountRounding ?? "dimension_group",
@@ -182,7 +196,8 @@ export async function supersedeLaborCostRate(
   // successor: without the cap the new row overlaps the next start and
   // the overlap exclusion refuses the save. Forward starts have no
   // successor, so the cap stays open.
-  const successor = await db.execute<{ start: string }>(sql`
+  const successor = await db.execute<{ start: string }>(
+    sql`
     select min(effective_from)::text as start
       from labor_cost_rates
      where org_id = ${orgId}
@@ -192,9 +207,12 @@ export async function supersedeLaborCostRate(
        and department_id is not distinct from ${scope.departmentId}
        and subsidiary_id is not distinct from ${scope.subsidiaryId}
        and is_active
-       and effective_from > ${effectiveFrom}::date`, "objects");
+       and effective_from > ${effectiveFrom}::date`,
+    "objects",
+  );
   const successorFrom = successor[0]?.start ?? null;
-  const upserted = await db.execute<LaborCostRateRow>(sql`
+  const upserted = await db.execute<LaborCostRateRow>(
+    sql`
     insert into labor_cost_rates
       (org_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id, currency,
        rate, basis, annual_hours, payroll_rate_scale, payroll_amount_rounding, effective_from, effective_to, notes, created_by, updated_by)
@@ -217,7 +235,9 @@ export async function supersedeLaborCostRate(
                   notes = excluded.notes, is_active = true,
                   updated_at = now(), updated_by = ${actorId}
               where labor_cost_rates.org_id = ${orgId}
-    returning ${LABOR_COST_RATE_ROW_COLUMNS}`, "objects");
+    returning ${LABOR_COST_RATE_ROW_COLUMNS}`,
+    "objects",
+  );
   const after = upserted[0];
   if (!after) fail("the wage upsert matched no row — the save is refused, never a silent success");
   const corrected = before.some((row: LaborCostRateRow) => row.effectiveFrom === effectiveFrom);

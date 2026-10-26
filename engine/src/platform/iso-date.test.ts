@@ -6,7 +6,11 @@ import { isIsoCalendarDate } from "./iso-date.ts";
 function platformAccepts(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.getUTCFullYear() >= 1 && date.toISOString().slice(0, 10) === value;
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getUTCFullYear() >= 1 &&
+    date.toISOString().slice(0, 10) === value
+  );
 }
 
 test("calendar dates agree with the platform calendar across leap rules and month ends", () => {
@@ -22,9 +26,20 @@ test("calendar dates agree with the platform calendar across leap rules and mont
 });
 
 test("only the exact YYYY-MM-DD form of a string is a calendar date", () => {
-  for (const value of ["2024-02-29", "0001-01-01", "9999-12-31"]) assert.equal(isIsoCalendarDate(value), true, value);
-  for (const value of ["2023-02-29", "0000-01-01", "2024-2-01", "2024-02-01T00:00:00Z", " 2024-02-01", "20240201", "+2024-02-01", "2024-02-01\n"]) {
+  for (const value of ["2024-02-29", "0001-01-01", "9999-12-31"])
+    assert.equal(isIsoCalendarDate(value), true, value);
+  for (const value of [
+    "2023-02-29",
+    "0000-01-01",
+    "2024-2-01",
+    "2024-02-01T00:00:00Z",
+    " 2024-02-01",
+    "20240201",
+    "+2024-02-01",
+    "2024-02-01\n",
+  ]) {
     assert.equal(isIsoCalendarDate(value), false, JSON.stringify(value));
   }
-  for (const value of [null, undefined, 20240201, new Date("2024-02-01"), {}]) assert.equal(isIsoCalendarDate(value), false);
+  for (const value of [null, undefined, 20240201, new Date("2024-02-01"), {}])
+    assert.equal(isIsoCalendarDate(value), false);
 });

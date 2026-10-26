@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 /**
  * Warehouse address fields shared by the create and update routes. A blank
@@ -11,4 +11,4 @@ export const warehouseAddressBody = {
   region: z.string().max(200).nullable().optional(),
   postalCode: z.string().max(40).nullable().optional(),
   country: z.string().max(2).nullable().optional(),
-}
+};

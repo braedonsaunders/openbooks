@@ -1,1 +1,1 @@
-export * from '@openbooks/engine/projects/invoice-rollup'
+export * from "@openbooks/engine/projects/invoice-rollup";

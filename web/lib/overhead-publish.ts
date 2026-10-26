@@ -1,17 +1,17 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, inDbTransaction } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, inDbTransaction } from "@openbooks/engine/platform/db";
 import {
   overheadPublishBlockers,
   zeroOverStandardReplacements,
   type OverheadStandardRateRow,
   type OverheadZeroOverStandard,
-} from '@openbooks/engine/projects/overhead-rates'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { lockScopeRows } from '@openbooks/engine/organization/scope'
-import { compareDecimal } from '@openbooks/engine/money/decimal'
-import { syncOverheadSystemRule } from '@openbooks/engine/allocations/overhead-sync'
-import { trueCostData } from './analytics/true-cost-data'
+} from "@openbooks/engine/projects/overhead-rates";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { lockScopeRows } from "@openbooks/engine/organization/scope";
+import { compareDecimal } from "@openbooks/engine/money/decimal";
+import { syncOverheadSystemRule } from "@openbooks/engine/allocations/overhead-sync";
+import { trueCostData } from "./analytics/true-cost-data";
 
 /**
  * Publish per-department overhead $/hr rates into the effective-dated
@@ -22,8 +22,8 @@ import { trueCostData } from './analytics/true-cost-data'
  * new standard rows.
  */
 export interface PublishedRate {
-  departmentId: string
-  ratePerHour: string
+  departmentId: string;
+  ratePerHour: string;
 }
 
 /**
@@ -33,7 +33,7 @@ export interface PublishedRate {
  * generic 500; the message names the departments and the reason.
  */
 export class OverheadPublishError extends Error {
-  readonly name = 'OverheadPublishError'
+  readonly name = "OverheadPublishError";
 }
 
 /**
@@ -43,44 +43,54 @@ export class OverheadPublishError extends Error {
  * remove.
  */
 export class OverheadZeroOverStandardError extends Error {
-  readonly name = 'OverheadZeroOverStandardError'
-  readonly code = 'overhead_zero_over_standard'
-  readonly replacements: OverheadZeroOverStandard[]
+  readonly name = "OverheadZeroOverStandardError";
+  readonly code = "overhead_zero_over_standard";
+  readonly replacements: OverheadZeroOverStandard[];
 
   constructor(replacements: OverheadZeroOverStandard[]) {
     super(
-      `publishing would replace a non-zero standard rate with zero for ${replacements.map((r) => r.departmentName).join(', ')}`,
-    )
-    this.replacements = replacements
+      `publishing would replace a non-zero standard rate with zero for ${replacements.map((r) => r.departmentName).join(", ")}`,
+    );
+    this.replacements = replacements;
   }
 }
 
 export interface PublishOverheadOptions {
   /** Explicit operator confirmation that zero rates may replace non-zero standards. */
-  acknowledgeZeroOverStandard?: boolean
+  acknowledgeZeroOverStandard?: boolean;
 }
 
 export async function computeLiveOverheadRates(orgId: string): Promise<PublishedRate[]> {
-  const to = await businessToday(orgId)
-  const [y, m, d] = to.split('-').map(Number)
-  const from = `${(y ?? 0) - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-  const tc = await trueCostData(orgId, { from, to, label: 'TTM' }, null)
+  const to = await businessToday(orgId);
+  const [y, m, d] = to.split("-").map(Number);
+  const from = `${(y ?? 0) - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const tc = await trueCostData(orgId, { from, to, label: "TTM" }, null);
   // The preview derives these through the shared exact contract; the gate is
   // re-checked here (same engine module, same categories) so publication
   // refuses unsupported method combinations explicitly instead of persisting
   // a silently unit-wrong card.
   const blockers = overheadPublishBlockers(
-    tc.categories.map((c) => ({ id: c.id, name: c.name, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite })),
-  )
+    tc.categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      rateFormat: c.rateFormat,
+      includeInComposite: c.includeInComposite,
+    })),
+  );
   if (blockers.length > 0) {
-    throw new OverheadPublishError(`overhead auto-publish blocked: ${blockers.map((b) => b.reason).join('; ')}`)
+    throw new OverheadPublishError(
+      `overhead auto-publish blocked: ${blockers.map((b) => b.reason).join("; ")}`,
+    );
   }
   return tc.departments
-    .filter((d) => d.compositeValue !== null && compareDecimal(d.compositeValue, '0') > 0)
+    .filter((d) => d.compositeValue !== null && compareDecimal(d.compositeValue, "0") > 0)
     .map((d) => {
-      if (!d.compositeExact) throw new OverheadPublishError(`overhead auto-publish has no exact rate for department ${d.id}`)
-      return { departmentId: d.id, ratePerHour: d.compositeExact }
-    })
+      if (!d.compositeExact)
+        throw new OverheadPublishError(
+          `overhead auto-publish has no exact rate for department ${d.id}`,
+        );
+      return { departmentId: d.id, ratePerHour: d.compositeExact };
+    });
 }
 
 export async function publishOverheadRates(
@@ -91,9 +101,9 @@ export async function publishOverheadRates(
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
   options: PublishOverheadOptions = {},
 ): Promise<{ published: number }> {
-  let toPublish = rates ?? []
-  if (toPublish.length === 0) toPublish = await computeLiveOverheadRates(orgId)
-  if (toPublish.length === 0) return { published: 0 }
+  let toPublish = rates ?? [];
+  if (toPublish.length === 0) toPublish = await computeLiveOverheadRates(orgId);
+  if (toPublish.length === 0) return { published: 0 };
 
   // Every department's close/delete/insert AND the audit row are one atomic
   // unit: a failure on any department must leave the previous rate card fully
@@ -104,65 +114,68 @@ export async function publishOverheadRates(
     await lockScopeRows(
       tx,
       orgId,
-      toPublish.map((rate) => ({ kind: 'department', id: rate.departmentId })),
+      toPublish.map((rate) => ({ kind: "department", id: rate.departmentId })),
       allowedSubsidiaryIds,
-      'share',
-    )
+      "share",
+    );
     if (!options.acknowledgeZeroOverStandard) {
       // The standard rows this publish would close or delete: the per-hour
       // standard rows still open on or after the start date. Read inside the
       // same transaction as the writes so a concurrent publish cannot change
       // the standards between the check and the replacement.
       const touched = await tx.execute<{
-        department_id: string
-        department_name: string
-        rate_percent: string
-        effective_from: string
-        in_effect_at_start: boolean
-      }>(sql`
+        department_id: string;
+        department_name: string;
+        rate_percent: string;
+        effective_from: string;
+        in_effect_at_start: boolean;
+      }>(
+        sql`
         select r.department_id, d.name as department_name, r.rate_percent,
                r.effective_from::text as effective_from,
                (r.effective_from <= ${effectiveFrom}::date) as in_effect_at_start
           from overhead_rates r
           join departments d on d.id = r.department_id and d.org_id = r.org_id
          where r.org_id = ${orgId}
-           and r.department_id = any(${`{${[...new Set(toPublish.map((r) => r.departmentId))].join(',')}}`}::uuid[])
+           and r.department_id = any(${`{${[...new Set(toPublish.map((r) => r.departmentId))].join(",")}}`}::uuid[])
            and r.rate_kind = 'per_hour' and r.method = 'standard'
-           and (r.effective_to is null or r.effective_to >= ${effectiveFrom}::date)`, 'objects')
+           and (r.effective_to is null or r.effective_to >= ${effectiveFrom}::date)`,
+        "objects",
+      );
       const standards: OverheadStandardRateRow[] = touched.map((row) => ({
         departmentId: row.department_id,
         departmentName: row.department_name,
         ratePerHour: String(row.rate_percent),
         effectiveFrom: row.effective_from,
         inEffectAtStart: row.in_effect_at_start,
-      }))
-      const replacements = zeroOverStandardReplacements(toPublish, standards)
-      if (replacements.length > 0) throw new OverheadZeroOverStandardError(replacements)
+      }));
+      const replacements = zeroOverStandardReplacements(toPublish, standards);
+      if (replacements.length > 0) throw new OverheadZeroOverStandardError(replacements);
     }
     for (const r of toPublish) {
       await tx.execute(sql`
         update overhead_rates set effective_to = (${effectiveFrom}::date - 1)
          where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
            and (effective_to is null or effective_to >= ${effectiveFrom}::date)
-           and effective_from < ${effectiveFrom}::date`)
+           and effective_from < ${effectiveFrom}::date`);
       await tx.execute(sql`
         delete from overhead_rates
          where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
-           and effective_from >= ${effectiveFrom}::date`)
+           and effective_from >= ${effectiveFrom}::date`);
       await tx.execute(sql`
         insert into overhead_rates (org_id, department_id, category, method, rate_kind, rate_percent, effective_from, created_by, updated_by)
-        values (${orgId}, ${r.departmentId}, 'Published', 'standard', 'per_hour', ${r.ratePerHour}, ${effectiveFrom}, ${actorId}, ${actorId})`)
+        values (${orgId}, ${r.departmentId}, 'Published', 'standard', 'per_hour', ${r.ratePerHour}, ${effectiveFrom}, ${actorId}, ${actorId})`);
     }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'overhead_rates', ${orgId}, 'insert',
-              ${JSON.stringify({ publish: { effectiveFrom, rates: toPublish, actor: actorId ?? 'scheduler' } })}, ${actorId})`)
-  })
+              ${JSON.stringify({ publish: { effectiveFrom, rates: toPublish, actor: actorId ?? "scheduler" } })}, ${actorId})`);
+  });
   // Derive the kernel's system rule from the committed card (after the
   // transaction, so the sync reads the new generation; the time-approval
   // path lazy-syncs anyway, so a failure here converges on next apply).
-  await syncOverheadSystemRule(orgId, actorId)
-  return { published: toPublish.length }
+  await syncOverheadSystemRule(orgId, actorId);
+  return { published: toPublish.length };
 }
 
 /**
@@ -174,15 +187,19 @@ export async function publishOverheadRates(
  * rate" instead of a fabricated zero.
  */
 export async function currentPublishedRates(orgId: string): Promise<Map<string, string>> {
-  const today = await businessToday(orgId)
-  const r = (await db.execute<{ department_id: string | null; rate_percent: string }>(sql`
+  const today = await businessToday(orgId);
+  const r = await db.execute<{ department_id: string | null; rate_percent: string }>(
+    sql`
     select department_id, rate_percent from overhead_rates
      where org_id = ${orgId} and rate_kind = 'per_hour' and effective_from <= ${today}
-       and (effective_to is null or effective_to >= ${today})`, 'objects'))
-  const out = new Map<string, string>()
+       and (effective_to is null or effective_to >= ${today})`,
+    "objects",
+  );
+  const out = new Map<string, string>();
   for (const row of r) {
-    if (!row.department_id || row.rate_percent === null || String(row.rate_percent).trim() === '') continue
-    out.set(row.department_id, String(row.rate_percent))
+    if (!row.department_id || row.rate_percent === null || String(row.rate_percent).trim() === "")
+      continue;
+    out.set(row.department_id, String(row.rate_percent));
   }
-  return out
+  return out;
 }

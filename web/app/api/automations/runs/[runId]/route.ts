@@ -5,7 +5,6 @@ import { getAutomationRun } from "@openbooks/engine/automations/services";
 import { isUuid } from "../../../../../lib/list-params";
 import { automationErrorResponse } from "../../_lib";
 
-
 export const runtime = "nodejs";
 
 /** Run drawer: one run with its steps and error. */
@@ -18,10 +17,7 @@ export const GET = defineRoute({
 
     const { runId } = await ctx.params;
     if (!isUuid(runId))
-      return NextResponse.json(
-        { error: "run id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "run id must be a uuid" }, { status: 400 });
     try {
       const run = await getAutomationRun(
         gate.user.orgId,

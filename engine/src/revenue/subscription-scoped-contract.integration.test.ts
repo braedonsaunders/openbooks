@@ -5,11 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
 import { ensureScopedContract } from "./contract-scope.ts";
 import { portalHome } from "../portal/workspace.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -53,9 +49,14 @@ test("subscription-scoped contract reads the plan currency", { skip: !DB }, asyn
         actor,
       );
       assert.equal(first.created, true);
-      const contract = (await db.execute<{ scope: string; currency: string; subscription_id: string }>(sql`
+      const contract = (
+        await db.execute<{ scope: string; currency: string; subscription_id: string }>(
+          sql`
         select scope, currency, subscription_id from revenue_contracts
-         where id = ${first.id} and org_id = ${org.orgId}`, "objects"))[0];
+         where id = ${first.id} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(contract?.scope, "subscription");
       assert.equal(contract?.currency, "EUR");
       assert.equal(contract?.subscription_id, eurSubscription);

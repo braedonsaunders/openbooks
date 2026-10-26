@@ -1,8 +1,8 @@
-import type { ReportRunResult } from '@openbooks/reports'
-import type { PaperGroup } from '../PaperView'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
+import type { ReportRunResult } from "@openbooks/reports";
+import type { PaperGroup } from "../PaperView";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
 
-const NUMERIC_CELL = /^-?[\d,]+(\.\d+)?$/
+const NUMERIC_CELL = /^-?[\d,]+(\.\d+)?$/;
 
 /**
  * Preserve every engine-authored rendering hint while adding viewer-only
@@ -30,17 +30,19 @@ export function resultGroupsForPaper(
     align: group.align,
     totalRows: group.totalRows,
     cellLinks: group.cellLinks,
-    drills: group.kind === 'summary' && group.rowKeys && drillTarget.kind === 'custom'
-      ? group.rows.map((row, ri) => {
-          const scope = group.rowKeys?.[ri]
-          if (!scope) return row.map(() => undefined)
-          return row.map((cell) =>
-            (typeof cell === 'number' || (typeof cell === 'string' && NUMERIC_CELL.test(cell.trim())))
-              ? { ...drillTarget, filter: scope }
-              : undefined,
-          )
-        })
-      : undefined,
+    drills:
+      group.kind === "summary" && group.rowKeys && drillTarget.kind === "custom"
+        ? group.rows.map((row, ri) => {
+            const scope = group.rowKeys?.[ri];
+            if (!scope) return row.map(() => undefined);
+            return row.map((cell) =>
+              typeof cell === "number" ||
+              (typeof cell === "string" && NUMERIC_CELL.test(cell.trim()))
+                ? { ...drillTarget, filter: scope }
+                : undefined,
+            );
+          })
+        : undefined,
     isEmpty: group.isEmpty,
-  }))
+  }));
 }

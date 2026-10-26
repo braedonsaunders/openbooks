@@ -20,27 +20,32 @@ import {
   type ReportColumnKind,
   type ReportEntity,
   type ReportEntityColumn,
-} from '@openbooks/reports'
-import { buildSource, type AnalyticsSource, type CatalogField, type CatalogSource } from './semantic'
-import type { SemanticType } from './types'
+} from "@openbooks/reports";
+import {
+  buildSource,
+  type AnalyticsSource,
+  type CatalogField,
+  type CatalogSource,
+} from "./semantic";
+import type { SemanticType } from "./types";
 
 /** Columns a raw (non-aggregated) detail card shows by default. */
-const DETAIL_COLUMN_COUNT = 8
+const DETAIL_COLUMN_COUNT = 8;
 
 /** Report column kind → insights semantic type. `timestamp` narrows to `date`
  *  (the compiler's date_trunc bins cast to date either way); `uuid` stays a
  *  plain category so an id can still be grouped or filtered. */
 function semanticTypeFor(kind: ReportColumnKind): SemanticType {
   switch (kind) {
-    case 'date':
-    case 'timestamp':
-      return 'date'
-    case 'number':
-      return 'number'
-    case 'money':
-      return 'currency'
+    case "date":
+    case "timestamp":
+      return "date";
+    case "number":
+      return "number";
+    case "money":
+      return "currency";
     default:
-      return 'category'
+      return "category";
   }
 }
 
@@ -50,9 +55,9 @@ function toField(column: ReportEntityColumn): CatalogField {
     label: column.label,
     expr: column.expr,
     semanticType: semanticTypeFor(column.kind),
-    ...(column.kind === 'boolean' ? { valueKind: 'boolean' as const } : {}),
+    ...(column.kind === "boolean" ? { valueKind: "boolean" as const } : {}),
     ...(column.options?.length ? { options: column.options } : {}),
-  }
+  };
 }
 
 export function sourceFromEntity(entity: ReportEntity): CatalogSource {
@@ -77,19 +82,19 @@ export function sourceFromEntity(entity: ReportEntity): CatalogSource {
     ...(entity.bookScope ? { bookScope: entity.bookScope } : {}),
     ...(entity.currencyColumn ? { currencyColumn: entity.currencyColumn } : {}),
     ...(entity.baseCurrencyColumn ? { baseCurrencyColumn: entity.baseCurrencyColumn } : {}),
-  }
+  };
 }
 
 export const INSIGHT_SOURCES: AnalyticsSource[] = REPORT_ENTITIES.map((entity) =>
   buildSource(sourceFromEntity(entity)),
-)
+);
 
 const INSIGHT_SOURCE_MAP: Record<string, AnalyticsSource> = Object.fromEntries(
   INSIGHT_SOURCES.map((s) => [s.key, s]),
-)
+);
 
 export function getSource(key: string): AnalyticsSource | null {
-  return INSIGHT_SOURCE_MAP[key] ?? null
+  return INSIGHT_SOURCE_MAP[key] ?? null;
 }
 
 /** Apply Features-gated enum options. The insight catalog stays static. */
@@ -97,26 +102,26 @@ export function insightSourceForFeatureState(
   source: AnalyticsSource,
   features: { inventory: boolean },
 ): AnalyticsSource {
-  if (features.inventory || source.key !== 'items') return source
+  if (features.inventory || source.key !== "items") return source;
   return {
     ...source,
     fields: source.fields.map((field) => {
-      if (field.key !== 'kind' || !field.options?.length) return field
+      if (field.key !== "kind" || !field.options?.length) return field;
       return {
         ...field,
         options: field.options.filter(
           (option) => !(ITEM_INVENTORY_KIND_VALUES as readonly string[]).includes(option),
         ),
-      }
+      };
     }),
-  }
+  };
 }
 
 /** The permission a caller needs to run a query against `sourceKey`, or null
  *  when insights.read alone is enough. The query API gates on this; the studio
  *  hides sources the caller can't run. */
 export function sourcePermission(sourceKey: string): string | null {
-  return getSource(sourceKey)?.requiredPermission ?? null
+  return getSource(sourceKey)?.requiredPermission ?? null;
 }
 
 /** The sources a caller may build on, given a permission predicate. */
@@ -124,6 +129,9 @@ export function allowedSources(
   can: (permission: string) => boolean,
   featureEnabled: (key: string) => boolean = () => true,
 ): AnalyticsSource[] {
-  return INSIGHT_SOURCES.filter((s) => (!s.requiredPermission || can(s.requiredPermission)) &&
-    (!s.featureKey || featureEnabled(s.featureKey)))
+  return INSIGHT_SOURCES.filter(
+    (s) =>
+      (!s.requiredPermission || can(s.requiredPermission)) &&
+      (!s.featureKey || featureEnabled(s.featureKey)),
+  );
 }

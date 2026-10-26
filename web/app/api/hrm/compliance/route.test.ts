@@ -88,7 +88,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmComplianceRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmComplianceRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -99,7 +101,13 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "@/lib/authz" || specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -109,7 +117,8 @@ registerHooks({
     return nextLoad(url);
   },
 });
-const findingsRoute = (await import("./compliance-findings/route.ts")) as typeof import("./compliance-findings/route.ts");
+const findingsRoute =
+  (await import("./compliance-findings/route.ts")) as typeof import("./compliance-findings/route.ts");
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
@@ -122,7 +131,9 @@ function reset(): void {
 test("a missing feature flag 404s before the service runs", async () => {
   reset();
   routeState.featureOn = false;
-  const get = await findingsRoute.GET(new Request("http://openbooks.test/api/hrm/compliance/compliance-findings"));
+  const get = await findingsRoute.GET(
+    new Request("http://openbooks.test/api/hrm/compliance/compliance-findings"),
+  );
   assert.equal(get.status, 404);
   assert.deepEqual(routeState.calls, []);
 });
@@ -130,7 +141,9 @@ test("a missing feature flag 404s before the service runs", async () => {
 test("an unauthenticated caller never reaches the service", async () => {
   reset();
   routeState.gate = { status: 401 };
-  const get = await findingsRoute.GET(new Request("http://openbooks.test/api/hrm/compliance/compliance-findings"));
+  const get = await findingsRoute.GET(
+    new Request("http://openbooks.test/api/hrm/compliance/compliance-findings"),
+  );
   assert.equal(get.status, 401);
   assert.deepEqual(routeState.calls, []);
 });
@@ -141,7 +154,9 @@ test("the list reads through the service with the caller's org", async () => {
     new Request("http://openbooks.test/api/hrm/compliance/compliance-findings?status=open"),
   );
   assert.equal(get.status, 200);
-  assert.deepEqual(routeState.calls, [{ fn: "list", args: { orgId: "org-1", actorId: "user-1", status: "open" } }]);
+  assert.deepEqual(routeState.calls, [
+    { fn: "list", args: { orgId: "org-1", actorId: "user-1", status: "open" } },
+  ]);
 });
 
 test("an engine refusal maps with its message intact", async () => {

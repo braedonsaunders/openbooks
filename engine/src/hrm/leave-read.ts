@@ -1,9 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
-import {
-  entitlementBalances,
-} from "../payroll/entitlements-db.ts";
+import { entitlementBalances } from "../payroll/entitlements-db.ts";
 import {
   HrmAuthorizationError,
   loadOwnEmploymentIds,
@@ -124,14 +122,17 @@ export async function applicablePolicy(
   scope: PolicyScope,
   onDate: string,
 ): Promise<PolicyRow | null> {
-  const rows = await exec.execute<PolicyRow>(sql`
+  const rows = await exec.execute<PolicyRow>(
+    sql`
     select id, leave_type_id, applies_to, accrual_rule, carryover_rule,
            minimum_notice_days, effective_from::text as effective_from,
            effective_to::text as effective_to, is_active
       from hrm_leave_policies
      where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
        and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
-  `, "objects");
+  `,
+    "objects",
+  );
   const picked = selectPolicy(rows.map(policyToCandidate), scopeForDay(scope, onDate), onDate);
   return rows.find((row) => row.id === picked?.id) ?? null;
 }
@@ -144,7 +145,8 @@ export async function policiesInRange(
   from: string,
   to: string,
 ): Promise<PolicyRow[]> {
-  const rows = await exec.execute<PolicyRow>(sql`
+  const rows = await exec.execute<PolicyRow>(
+    sql`
     select id, leave_type_id, applies_to, accrual_rule, carryover_rule,
            minimum_notice_days, effective_from::text as effective_from,
            effective_to::text as effective_to, is_active
@@ -152,7 +154,9 @@ export async function policiesInRange(
      where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
        and effective_from <= ${to} and (effective_to is null or effective_to >= ${from})
      order by effective_from, id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -186,11 +190,14 @@ export async function absenceHoursInWindow(
   from: string,
   to: string,
 ): Promise<string> {
-  const rows = await exec.execute<{ hours: string }>(sql`
+  const rows = await exec.execute<{ hours: string }>(
+    sql`
     select hours::text as hours from hrm_absences
      where org_id = ${orgId} and employment_id = ${employmentId} and leave_type_id = ${leaveTypeId}
        and on_date >= ${from} and on_date <= ${to}
-  `, "objects");
+  `,
+    "objects",
+  );
   let total = "0";
   for (const row of rows) total = addHours(total, String(row.hours));
   return total;
@@ -209,21 +216,34 @@ export async function policyScopeForEmployment(
   employmentId: string,
   asOf: string,
 ): Promise<PolicyScope> {
-  const employment = (await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
+  const employment = (
+    await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(
+      sql`
     select worker_party_id, employer_subsidiary_id from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!employment) {
-    throw new LeaveError("NOT_FOUND", "employment not found in this organization — check the employment id");
+    throw new LeaveError(
+      "NOT_FOUND",
+      "employment not found in this organization — check the employment id",
+    );
   }
   // Primary assignment effective on the date carries the department pin.
-  const assignment = (await exec.execute<{ department_id: string | null }>(sql`
+  const assignment = (
+    await exec.execute<{ department_id: string | null }>(
+      sql`
     select department_id from employment_assignment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
        and is_primary and recorded_until is null
        and effective_from <= ${asOf} and (effective_to is null or effective_to > ${asOf})
      order by effective_from desc limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return {
     employmentId,
     employerSubsidiaryId: employment.employer_subsidiary_id,
@@ -243,13 +263,20 @@ export async function classificationWindowsForEmployment(
   orgId: string,
   employmentId: string,
 ): Promise<ClassificationWindow[]> {
-  const rows = await exec.execute<{ classification_id: string; effective_from: string; effective_to: string | null }>(sql`
+  const rows = await exec.execute<{
+    classification_id: string;
+    effective_from: string;
+    effective_to: string | null;
+  }>(
+    sql`
     select classification_id::text as classification_id,
            effective_from::text as effective_from, effective_to::text as effective_to
       from hrm_employment_classifications
      where org_id = ${orgId} and employment_id = ${employmentId}
      order by effective_from
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     classificationId: row.classification_id,
     from: String(row.effective_from).slice(0, 10),
@@ -267,12 +294,20 @@ export async function serviceStartForEmployment(
   orgId: string,
   employmentId: string,
 ): Promise<string | null> {
-  const row = (await exec.execute<{ service_start: string | null }>(sql`
+  const row = (
+    await exec.execute<{ service_start: string | null }>(
+      sql`
     select service_start::text as service_start from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
-    throw new LeaveError("NOT_FOUND", "employment not found in this organization — check the employment id");
+    throw new LeaveError(
+      "NOT_FOUND",
+      "employment not found in this organization — check the employment id",
+    );
   }
   return row.service_start ? String(row.service_start).slice(0, 10) : null;
 }
@@ -315,13 +350,38 @@ export async function timeBalanceAsOf(
   const tenure: AccrualTenure = { serviceStart };
   const policy = await applicablePolicy(exec, orgId, leaveTypeId, scope, asOf);
   if (!policy) {
-    return { kind: "time", policyId: null, earned: null, carried: "0", taken: "0", balance: null, unlimited: false, serviceStartUnknown: false };
+    return {
+      kind: "time",
+      policyId: null,
+      earned: null,
+      carried: "0",
+      taken: "0",
+      balance: null,
+      unlimited: false,
+      serviceStartUnknown: false,
+    };
   }
   const accrual = policy.accrual_rule as AccrualRule;
   if (accrual.kind === "unlimited") {
     const yearStart = accrualYearOf(asOf);
-    const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
-    return { kind: "time", policyId: policy.id, earned: null, carried: "0", taken, balance: null, unlimited: true, serviceStartUnknown: false };
+    const taken = await absenceHoursInWindow(
+      exec,
+      orgId,
+      employmentId,
+      leaveTypeId,
+      yearStart,
+      asOf,
+    );
+    return {
+      kind: "time",
+      policyId: policy.id,
+      earned: null,
+      carried: "0",
+      taken,
+      balance: null,
+      unlimited: true,
+      serviceStartUnknown: false,
+    };
   }
   // Accrual is earned per governing reign over its window: each day accrues
   // under its most-specific policy, so a mid-year successor earns the old
@@ -341,13 +401,25 @@ export async function timeBalanceAsOf(
   const priorEnd = `${priorYear}-12-31`;
   let carried = "0";
   const priorSegments = await policiesInRange(exec, orgId, leaveTypeId, priorStart, priorEnd);
-  const priorReigns: AccrualSegment[] = priorSegments.length > 0 ? withRules(priorSegments, scope, priorStart, priorEnd) : [];
+  const priorReigns: AccrualSegment[] =
+    priorSegments.length > 0 ? withRules(priorSegments, scope, priorStart, priorEnd) : [];
   if (priorSegments.length > 0) {
     const priorEarned = accrualEarnedAcrossSegments(priorReigns, priorStart, priorEnd, tenure);
     if (priorEarned !== null) {
-      const priorTaken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, priorStart, priorEnd);
+      const priorTaken = await absenceHoursInWindow(
+        exec,
+        orgId,
+        employmentId,
+        leaveTypeId,
+        priorStart,
+        priorEnd,
+      );
       const unused = subHours(priorEarned, priorTaken);
-      const boundary = selectPolicy(priorSegments.map(policyToCandidate), scopeForDay(scope, priorEnd), priorEnd);
+      const boundary = selectPolicy(
+        priorSegments.map(policyToCandidate),
+        scopeForDay(scope, priorEnd),
+        priorEnd,
+      );
       const boundaryRow = policyById(priorSegments, boundary?.id);
       if (boundaryRow) {
         carried = carryoverApplied(
@@ -415,13 +487,19 @@ export interface LeaveTypeBalance {
 
 function requireBalanceDate(value: unknown): string {
   if (typeof value !== "string") {
-    throw new LeaveError("INVALID_INPUT", "asOf must be a real YYYY-MM-DD calendar date in years 0001 through 9999");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "asOf must be a real YYYY-MM-DD calendar date in years 0001 through 9999",
+    );
   }
   try {
     parseCivilDate(value);
     return value;
   } catch {
-    throw new LeaveError("INVALID_INPUT", "asOf must be a real YYYY-MM-DD calendar date in years 0001 through 9999");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "asOf must be a real YYYY-MM-DD calendar date in years 0001 through 9999",
+    );
   }
 }
 
@@ -432,11 +510,14 @@ async function pendingRequestHours(
   leaveTypeId: string,
   asOf: string,
 ): Promise<string> {
-  const rows = await exec.execute<{ hours: string }>(sql`
+  const rows = await exec.execute<{ hours: string }>(
+    sql`
     select hours::text as hours from hrm_leave_requests
      where org_id = ${orgId} and employment_id = ${employmentId} and leave_type_id = ${leaveTypeId}
        and status in ('draft', 'submitted') and starts_on <= ${asOf}
-  `, "objects");
+  `,
+    "objects",
+  );
   let total = "0";
   for (const row of rows) total = addHours(total, String(row.hours));
   return total;
@@ -465,7 +546,8 @@ export async function leaveEmploymentBalances(
     if (!type.isActive) continue;
     const read = await timeBalanceAsOf(exec, orgId, employmentId, type.id, date);
     const pending = await pendingRequestHours(exec, orgId, employmentId, type.id, date);
-    const entitlement = read.unlimited || read.earned === null ? null : addHours(read.earned, read.carried);
+    const entitlement =
+      read.unlimited || read.earned === null ? null : addHours(read.earned, read.carried);
     out.push({
       leaveTypeId: type.id,
       code: type.code,
@@ -555,11 +637,17 @@ export type LeaveTypeSummary = {
 };
 
 /** Leave-type taxonomy for an org, in code order. Authorization rides on the caller. */
-export async function listLeaveTypes(exec: SqlExecutor, orgId: string): Promise<LeaveTypeSummary[]> {
-  const rows = await exec.execute<LeaveTypeSummary>(sql`
+export async function listLeaveTypes(
+  exec: SqlExecutor,
+  orgId: string,
+): Promise<LeaveTypeSummary[]> {
+  const rows = await exec.execute<LeaveTypeSummary>(
+    sql`
     select id, code, name, paid, value_crossing as "valueCrossing", is_active as "isActive"
       from hrm_leave_types where org_id = ${orgId} order by code
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -568,11 +656,23 @@ export async function listLeaveTypeOptions(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<{ id: string; label: string; requiresAttachment: boolean }[]> {
-  const rows = await exec.execute<{ id: string; code: string; name: string; requires_attachment: boolean }>(sql`
+  const rows = await exec.execute<{
+    id: string;
+    code: string;
+    name: string;
+    requires_attachment: boolean;
+  }>(
+    sql`
     select id, code, name, requires_attachment from hrm_leave_types
      where org_id = ${orgId} and is_active order by code limit 200
-  `, "objects");
-  return rows.map((row) => ({ id: row.id, label: `${row.code} — ${row.name}`, requiresAttachment: row.requires_attachment }));
+  `,
+    "objects",
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    label: `${row.code} — ${row.name}`,
+    requiresAttachment: row.requires_attachment,
+  }));
 }
 
 export interface LeaveFilingEmploymentOptionsQuery {
@@ -628,7 +728,8 @@ async function loadLeaveFilingEmploymentOptions(
   // filter: filtering AFTER the LIMIT lets out-of-scope rows displace
   // fileable in-scope ones and returns an empty page with results pending.
   const scopePredicate = subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
-  const page = await exec.execute<FilingOptionRow>(sql`
+  const page = await exec.execute<FilingOptionRow>(
+    sql`
     select e.id::text as "employmentId",
            e.employer_subsidiary_id::text as "employerSubsidiaryId",
            p.display_name as "personName",
@@ -652,12 +753,16 @@ async function loadLeaveFilingEmploymentOptions(
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
        ${scopePredicate}
      order by p.display_name, e.id
-     limit ${limit}`, "objects");
+     limit ${limit}`,
+    "objects",
+  );
   // The pinned draft value is read by id, never by page position: it leads
   // even when it falls outside the bounded page. An unknown or out-of-scope
   // id stays absent rather than leaking existence.
   const pinned = includeId
-    ? (await exec.execute<FilingOptionRow>(sql`
+    ? ((
+        await exec.execute<FilingOptionRow>(
+          sql`
       select e.id::text as "employmentId",
              e.employer_subsidiary_id::text as "employerSubsidiaryId",
              p.display_name as "personName",
@@ -679,9 +784,14 @@ async function loadLeaveFilingEmploymentOptions(
        where e.org_id = ${orgId}::uuid
          and e.id = ${includeId}::uuid
          and e.employer_subsidiary_id is not null
-         ${scopePredicate}`, "objects"))[0] ?? null
+         ${scopePredicate}`,
+          "objects",
+        )
+      )[0] ?? null)
     : null;
-  const rows = pinned ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)] : page;
+  const rows = pinned
+    ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)]
+    : page;
 
   return rows.slice(0, limit + (pinned ? 1 : 0)).map((row) => ({
     employmentId: row.employmentId,
@@ -734,7 +844,8 @@ export async function listOwnLeaveEmploymentOptions(query: {
     // Bare JS arrays must never be interpolated into ANY() (they bind as row
     // constructors); each id is its own parameter.
     const ids = own.map((id) => sql`${id}::uuid`);
-    const rows = await db.execute<OwnOptionRow>(sql`
+    const rows = await db.execute<OwnOptionRow>(
+      sql`
       select e.id::text as "employmentId",
              p.display_name as "personName",
              s.name as "employerName",
@@ -754,7 +865,9 @@ export async function listOwnLeaveEmploymentOptions(query: {
         ) jt on true
        where e.org_id = ${query.orgId}::uuid
          and e.id in (${sql.join(ids, sql`, `)})
-       order by p.display_name, e.id`, "objects");
+       order by p.display_name, e.id`,
+      "objects",
+    );
     return rows.map((row) => ({
       employmentId: row.employmentId,
       label: row.jobTitle
@@ -817,19 +930,36 @@ function toSummary(row: Record<string, unknown>): LeaveRequestSummary {
   };
 }
 
-async function loadSummaryRow(exec: SqlExecutor, orgId: string, requestId: string): Promise<Record<string, unknown>> {
-  const row = (await exec.execute<Record<string, unknown>>(sql`
+async function loadSummaryRow(
+  exec: SqlExecutor,
+  orgId: string,
+  requestId: string,
+): Promise<Record<string, unknown>> {
+  const row = (
+    await exec.execute<Record<string, unknown>>(
+      sql`
     select ${SUMMARY_COLUMNS} from hrm_leave_requests r
       join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
       join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
      where r.org_id = ${orgId} and r.id = ${requestId}
-  `, "objects"))[0];
-  if (!row) throw new LeaveError("NOT_FOUND", "leave request not found in this organization — check the request id");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!row)
+    throw new LeaveError(
+      "NOT_FOUND",
+      "leave request not found in this organization — check the request id",
+    );
   return row;
 }
 
 /** One request, gated on its employment — never by a caller-supplied party. */
-export async function getLeaveRequest(query: { orgId: string; actorId: string; requestId: string }): Promise<LeaveRequestSummary> {
+export async function getLeaveRequest(query: {
+  orgId: string;
+  actorId: string;
+  requestId: string;
+}): Promise<LeaveRequestSummary> {
   return withOrgTransaction(query.orgId, async () => {
     const row = await loadSummaryRow(db, query.orgId, query.requestId);
     await requireHrmLeaveRead(db, query.orgId, query.actorId, String(row.employment_id));
@@ -861,7 +991,11 @@ export async function mayReadOwnLeaveRequests(
  * caller-supplied worker — anything else refuses without saying whether the
  * id exists.
  */
-export async function getOwnLeaveRequest(query: { orgId: string; actorId: string; requestId: string }): Promise<LeaveRequestSummary> {
+export async function getOwnLeaveRequest(query: {
+  orgId: string;
+  actorId: string;
+  requestId: string;
+}): Promise<LeaveRequestSummary> {
   return withOrgTransaction(query.orgId, async () => {
     const may = await mayReadOwnLeaveRequests(db, query.orgId, query.actorId);
     if (!may) {
@@ -882,18 +1016,24 @@ export async function getOwnLeaveRequest(query: { orgId: string; actorId: string
 
 /** Requests for one employment, newest first. */
 export async function listLeaveRequests(query: {
-  orgId: string; actorId: string; employmentId: string; status?: string;
+  orgId: string;
+  actorId: string;
+  employmentId: string;
+  status?: string;
 }): Promise<LeaveRequestSummary[]> {
   return withOrgTransaction(query.orgId, async () => {
     await requireHrmLeaveRead(db, query.orgId, query.actorId, query.employmentId);
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select ${SUMMARY_COLUMNS} from hrm_leave_requests r
         join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
         join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
        where r.org_id = ${query.orgId} and r.employment_id = ${query.employmentId}
          and (${query.status ?? null}::text is null or r.status = ${query.status ?? null}::text)
        order by r.starts_on desc, r.created_at desc
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toSummary);
   });
 }
@@ -928,7 +1068,8 @@ export async function listOrgLeaveRequests(
   // requests (one statement, one subsidiary scope, one truncation signal) —
   // never a second list beside it. Reversal rows are not facts and stay
   // out; a recorded day reads as its own summary with status 'recorded'.
-  const rows = await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(
+    sql`
     select * from (
       select ${SUMMARY_COLUMNS}, r.starts_on as sort_date, r.created_at as sort_created
         from hrm_leave_requests r
@@ -953,7 +1094,9 @@ export async function listOrgLeaveRequests(
      where (${opts.status ?? null}::text is null or combined.status = ${opts.status ?? null}::text)
      order by sort_date desc, sort_created desc, id
      limit ${limit + 1}
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     requests: rows.slice(0, limit).map(toSummary),
     truncated: rows.length > limit,
@@ -965,7 +1108,10 @@ export async function listOrgLeaveRequests(
  * employee cannot read another's request — there is no employment parameter
  * to forge, only the party behind the login.
  */
-export async function myLeaveRequests(query: { orgId: string; actorId: string }): Promise<LeaveRequestSummary[]> {
+export async function myLeaveRequests(query: {
+  orgId: string;
+  actorId: string;
+}): Promise<LeaveRequestSummary[]> {
   return withOrgTransaction(query.orgId, async () => {
     const may = await mayReadOwnLeaveRequests(db, query.orgId, query.actorId);
     if (!may) {
@@ -975,14 +1121,17 @@ export async function myLeaveRequests(query: { orgId: string; actorId: string })
     }
     const own = await loadOwnEmploymentIds(db, query.orgId, query.actorId);
     if (own.length === 0) return [];
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select ${SUMMARY_COLUMNS} from hrm_leave_requests r
         join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
         join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
        where r.org_id = ${query.orgId}
          and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify(own)}::jsonb)::uuid)
        order by r.starts_on desc, r.created_at desc
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toSummary);
   });
 }

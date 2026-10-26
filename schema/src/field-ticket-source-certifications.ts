@@ -49,7 +49,9 @@ export const fieldTicketSourceCertifications = pgTable(
     attestation: text("attestation").notNull(),
     reason: text("reason").notNull(),
     referenceMap: jsonb("reference_map").$type<Record<string, unknown>>().notNull(),
-    nativeRevisionAtCertification: bigint("native_revision_at_certification", { mode: "bigint" }).notNull(),
+    nativeRevisionAtCertification: bigint("native_revision_at_certification", {
+      mode: "bigint",
+    }).notNull(),
     nativePointInTime: jsonb("native_point_in_time").$type<Record<string, unknown>>().notNull(),
     nativeFingerprintSha256: text("native_fingerprint_sha256").notNull(),
     requestId: uuid("request_id").notNull(),
@@ -59,7 +61,11 @@ export const fieldTicketSourceCertifications = pgTable(
   },
   (t) => [
     uniqueIndex("field_ticket_source_certifications_org_id_unique").on(t.orgId, t.id),
-    uniqueIndex("field_ticket_source_certifications_source_unique").on(t.orgId, t.sourceSystem, t.sourceExternalId),
+    uniqueIndex("field_ticket_source_certifications_source_unique").on(
+      t.orgId,
+      t.sourceSystem,
+      t.sourceExternalId,
+    ),
     uniqueIndex("field_ticket_source_certifications_native_unique").on(t.orgId, t.nativeDocumentId),
     uniqueIndex("field_ticket_source_certifications_request_unique").on(t.orgId, t.requestId),
     index("field_ticket_source_certifications_native").on(t.orgId, t.nativeDocumentId),

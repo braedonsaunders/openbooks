@@ -12,13 +12,7 @@ import { executeIdempotentInventoryAction } from "@openbooks/engine/inventory";
 
 const inquiry = z
   .object({
-    view: z.enum([
-      "holds",
-      "consignment",
-      "cycle_due",
-      "layers",
-      "consumptions",
-    ]),
+    view: z.enum(["holds", "consignment", "cycle_due", "layers", "consumptions"]),
     itemId: uuidId.optional(),
     stockLocationId: uuidId.optional(),
     layerId: uuidId.optional(),
@@ -32,14 +26,9 @@ export const GET = defineRoute({
   permission: "items.read",
   feature: "inventory",
   handler: async ({ request, authz }) => {
-    const parsed = inquiry.safeParse(
-      Object.fromEntries(new URL(request.url).searchParams),
-    );
+    const parsed = inquiry.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!parsed.success)
-      return NextResponse.json(
-        { error: "Invalid inventory inquiry filters" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "Invalid inventory inquiry filters" }, { status: 422 });
     try {
       return NextResponse.json(
         await inventoryInquiry(authz.user.orgId, authz.user.id, {
@@ -87,10 +76,7 @@ export const POST = defineRoute({
     try {
       value = await request.clone().json();
     } catch {
-      return NextResponse.json(
-        { error: "Inventory command must be valid JSON" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "Inventory command must be valid JSON" }, { status: 422 });
     }
     const hold =
       typeof value === "object" &&
@@ -104,17 +90,19 @@ export const POST = defineRoute({
   handler: async ({ body: input, authz }) => {
     try {
       const { idempotencyKey, operation, ...command } = input;
-      const result = await executeIdempotentInventoryAction<
-        Record<string, unknown>
-      >(authz.user.orgId, authz.user.id, {
-        operation: `inventory.${operation}`,
-        idempotencyKey,
-        request: command,
-        execute: () =>
-          input.operation === "hold"
-            ? setStockHold(authz.user.orgId, authz.user.id, input)
-            : moveConsignment(authz.user.orgId, authz.user.id, input),
-      });
+      const result = await executeIdempotentInventoryAction<Record<string, unknown>>(
+        authz.user.orgId,
+        authz.user.id,
+        {
+          operation: `inventory.${operation}`,
+          idempotencyKey,
+          request: command,
+          execute: () =>
+            input.operation === "hold"
+              ? setStockHold(authz.user.orgId, authz.user.id, input)
+              : moveConsignment(authz.user.orgId, authz.user.id, input),
+        },
+      );
       return NextResponse.json({
         ok: true,
         ...result.value,

@@ -25,7 +25,9 @@ export const POST = defineRoute({
     const outOfScope = await guardChannelOrderScope(gate, id);
     if (outOfScope) return outOfScope;
     try {
-      const outcome = await postChannelOrder(gate.user.orgId, gate.user.id, id, { forcePerOrder: true });
+      const outcome = await postChannelOrder(gate.user.orgId, gate.user.id, id, {
+        forcePerOrder: true,
+      });
       return NextResponse.json({ status: outcome.status, documentId: outcome.documentId });
     } catch (error) {
       if (error instanceof CommerceError && error.code === "channel_order_unknown") {

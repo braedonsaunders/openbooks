@@ -1,7 +1,7 @@
 /** Forward migration files above the release baseline. */
-import { readdirSync } from "node:fs"
-import { join } from "node:path"
-import { migrationsDir } from "../bootstrap-paths"
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import { migrationsDir } from "../bootstrap-paths";
 
 export function generatedMigrationFiles(
   directory: string = join(migrationsDir, "generated"),
@@ -15,9 +15,7 @@ export function generatedMigrationFiles(
   for (const file of generated) {
     const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(file);
     if (!match) {
-      throw new Error(
-        `[bootstrap] generated migration ${file} does not have a four-digit ordinal`,
-      );
+      throw new Error(`[bootstrap] generated migration ${file} does not have a four-digit ordinal`);
     }
     const ordinal = Number(match[1]);
     const duplicate = seenOrdinals.get(ordinal);

@@ -9,15 +9,18 @@
  * web/lib/customization/list-query.ts — keep the predicate in sync.
  */
 
-const SOURCE_HANDLE_PATTERN = /^[A-Za-z][A-Za-z0-9]*:[0-9a-fA-F-]{36}$/
+const SOURCE_HANDLE_PATTERN = /^[A-Za-z][A-Za-z0-9]*:[0-9a-fA-F-]{36}$/;
 
 export function isSourceHandle(value: unknown): value is string {
-  return typeof value === 'string' && SOURCE_HANDLE_PATTERN.test(value)
+  return typeof value === "string" && SOURCE_HANDLE_PATTERN.test(value);
 }
 
 export function displayDocumentNumber(documentNumber: unknown, referenceNumber: unknown): string {
-  if (!isSourceHandle(documentNumber)) return typeof documentNumber === 'string' ? documentNumber : ''
-  return typeof referenceNumber === 'string' && referenceNumber !== '' ? referenceNumber : documentNumber
+  if (!isSourceHandle(documentNumber))
+    return typeof documentNumber === "string" ? documentNumber : "";
+  return typeof referenceNumber === "string" && referenceNumber !== ""
+    ? referenceNumber
+    : documentNumber;
 }
 
 /**
@@ -31,12 +34,12 @@ export function displayDocumentNumber(documentNumber: unknown, referenceNumber: 
  * name: a renamed default is custom copy, and a non-default layout that
  * happens to share the seed name is a user record.
  */
-export const SEEDED_DEFAULT_FORM_NAME = 'Default form'
+export const SEEDED_DEFAULT_FORM_NAME = "Default form";
 
 export function displayFormName(
   name: string,
   isDefault: boolean | undefined,
   translatedDefault: string,
 ): string {
-  return isDefault === true && name === SEEDED_DEFAULT_FORM_NAME ? translatedDefault : name
+  return isDefault === true && name === SEEDED_DEFAULT_FORM_NAME ? translatedDefault : name;
 }

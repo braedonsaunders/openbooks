@@ -114,12 +114,15 @@ export type WebhookVerification =
   /** Every actionable event in the authenticated delivery, in provider order. */
   | { signatureValid: true; events: WebhookEvent[] };
 
-export type FetchFn = (url: string, init: {
-  method: string;
-  headers: Record<string, string>;
-  body?: string;
-  redirect: "error";
-}) => Promise<{ status: number; json: () => Promise<unknown> }>;
+export type FetchFn = (
+  url: string,
+  init: {
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    redirect: "error";
+  },
+) => Promise<{ status: number; json: () => Promise<unknown> }>;
 
 export interface SetupSessionRequest {
   /** Our pending method row id: stored as the provider session's client
@@ -165,7 +168,12 @@ export type OffSessionChargeOutcome =
    * The attempt records needs_authentication and keeps the link — it never
    * retries automatically.
    */
-  | { status: "requires_action"; providerRef: string | null; authUrl: string | null; declineCode: string | null };
+  | {
+      status: "requires_action";
+      providerRef: string | null;
+      authUrl: string | null;
+      declineCode: string | null;
+    };
 
 export interface DetachMethodRequest {
   providerCustomerId?: string | null;
@@ -174,21 +182,45 @@ export interface DetachMethodRequest {
 
 export interface PaymentProviderAdapter {
   key: AcceptanceProvider;
-  createCheckout(secrets: ProviderSecrets, req: CheckoutRequest, fetchFn?: FetchFn): Promise<CheckoutSession>;
+  createCheckout(
+    secrets: ProviderSecrets,
+    req: CheckoutRequest,
+    fetchFn?: FetchFn,
+  ): Promise<CheckoutSession>;
   /** Hosted setup session that tokenizes a method without charging it. */
-  createSetupSession(secrets: ProviderSecrets, req: SetupSessionRequest, fetchFn?: FetchFn): Promise<SetupSession>;
+  createSetupSession(
+    secrets: ProviderSecrets,
+    req: SetupSessionRequest,
+    fetchFn?: FetchFn,
+  ): Promise<SetupSession>;
   /** Merchant-initiated charge against a stored method (autopay attempt). */
-  chargeOffSession(secrets: ProviderSecrets, req: OffSessionChargeRequest, fetchFn?: FetchFn): Promise<OffSessionChargeOutcome>;
+  chargeOffSession(
+    secrets: ProviderSecrets,
+    req: OffSessionChargeRequest,
+    fetchFn?: FetchFn,
+  ): Promise<OffSessionChargeOutcome>;
   /** Release a stored method at the provider (local row flips separately). */
-  detachMethod(secrets: ProviderSecrets, req: DetachMethodRequest, fetchFn?: FetchFn): Promise<void>;
+  detachMethod(
+    secrets: ProviderSecrets,
+    req: DetachMethodRequest,
+    fetchFn?: FetchFn,
+  ): Promise<void>;
   /** Verify and normalize a complete delivery without conflating authentication
    *  with whether this service handles any of its event types. A signature-
    *  valid item whose fields cannot be normalized exactly is isolated — logged
    *  under PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT and skipped — so it never
    *  crashes the delivery boundary or starves its signed siblings. */
-  verifyWebhookDelivery(headers: Record<string, string | string[] | undefined>, rawBody: string, secrets: ProviderSecrets): WebhookVerification;
+  verifyWebhookDelivery(
+    headers: Record<string, string | string[] | undefined>,
+    rawBody: string,
+    secrets: ProviderSecrets,
+  ): WebhookVerification;
   /** Normalize the first actionable event in a delivery, if one exists. */
-  verifyWebhook(headers: Record<string, string | string[] | undefined>, rawBody: string, secrets: ProviderSecrets): WebhookEvent | null;
+  verifyWebhook(
+    headers: Record<string, string | string[] | undefined>,
+    rawBody: string,
+    secrets: ProviderSecrets,
+  ): WebhookEvent | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -264,10 +296,16 @@ export interface PublicPaymentPageBase {
   publishableKey: string | null;
 }
 
-export type PublicPaymentPage = PublicPaymentPageBase & (
-  | { status: "outdated" }
-  | { status: "paid" | "active"; invoiceAmount: string; surchargeAmount: string; totalAmount: string }
-);
+export type PublicPaymentPage = PublicPaymentPageBase &
+  (
+    | { status: "outdated" }
+    | {
+        status: "paid" | "active";
+        invoiceAmount: string;
+        surchargeAmount: string;
+        totalAmount: string;
+      }
+  );
 
 /**
  * Verify and route a provider webhook. The provider signature is checked
@@ -299,16 +337,16 @@ export class PaymentWebhookBatchError extends PaymentAcceptanceError {
     readonly result: ProviderWebhookResult,
     cause: unknown,
   ) {
-    super(
-      cause instanceof Error ? cause.message : "payment webhook event processing failed",
-      { cause },
-    );
+    super(cause instanceof Error ? cause.message : "payment webhook event processing failed", {
+      cause,
+    });
     this.name = "PaymentWebhookBatchError";
   }
 }
 
 export interface SettlementDiscrepancyEvidence {
-  reason: "missing_settlement_evidence" | "amount_currency_mismatch" | "collection_exceeds_open_balance";
+  reason:
+    "missing_settlement_evidence" | "amount_currency_mismatch" | "collection_exceeds_open_balance";
   provider: AcceptanceProvider;
   externalRef: string;
   reportedAmount: string | null;

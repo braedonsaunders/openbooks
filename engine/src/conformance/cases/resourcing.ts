@@ -43,11 +43,14 @@ export const RESOURCING_CASES: readonly ConformanceCase[] = [
       },
     },
     run: () => {
-      const priced = priceHoursDrawdown([
-        { id: "may-entry", workedOn: "2026-05-31", hours: "2.5000" },
-        { id: "june-entry-one", workedOn: "2026-06-01", hours: "3.2500" },
-        { id: "june-entry-two", workedOn: "2026-06-02", hours: "1.3333" },
-      ], "137.50");
+      const priced = priceHoursDrawdown(
+        [
+          { id: "may-entry", workedOn: "2026-05-31", hours: "2.5000" },
+          { id: "june-entry-one", workedOn: "2026-06-01", hours: "3.2500" },
+          { id: "june-entry-two", workedOn: "2026-06-02", hours: "1.3333" },
+        ],
+        "137.50",
+      );
       return {
         values: {
           mayEntry: priced.byEntry[0]!.amount,

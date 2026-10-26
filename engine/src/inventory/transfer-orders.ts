@@ -11,10 +11,25 @@ import {
   type SubsidiaryContext,
 } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
-import { resolveProfile, assertInventoryFeature, assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
+import {
+  resolveProfile,
+  assertInventoryFeature,
+  assertStockLocationAdmitsSubsidiary,
+} from "./profile-policy.ts";
 import { assertWarehousingFeature } from "./warehouses.ts";
-import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, persistReceiptMoney, assertInventoryDate } from "./position.ts";
+import {
+  stockLocationDim,
+  postInventoryEntry,
+  inventoryOffsetAccountProblem,
+  type JournalLineInput,
+} from "./journal.ts";
+import {
+  primaryBookId,
+  periodForDate,
+  subsidiaryCurrency,
+  persistReceiptMoney,
+  assertInventoryDate,
+} from "./position.ts";
 import { nextSequenceNumber } from "./document-numbering.ts";
 export interface TransferOrderLineInput {
   itemId: string;
@@ -58,8 +73,7 @@ export async function createTransferOrder(
   if (input.fromStockLocationId === input.toStockLocationId) {
     throw new InventoryError("transfer order needs two different locations");
   }
-  if (!input.lines?.length)
-    throw new InventoryError("transfer order needs at least one line");
+  if (!input.lines?.length) throw new InventoryError("transfer order needs at least one line");
   for (const line of input.lines) {
     if (cmp(line.quantity, "0") <= 0)
       throw new InventoryError("transfer order line quantity must be positive");
@@ -82,18 +96,33 @@ export async function createTransferOrder(
     const subCtx = await loadSubsidiaryContext(tx, orgId);
     let transitStockLocationId = input.transitStockLocationId ?? null;
     if (transitStockLocationId) {
-      await assertTransitLocationUsable(tx, orgId, subCtx, transitStockLocationId, input.subsidiaryId);
+      await assertTransitLocationUsable(
+        tx,
+        orgId,
+        subCtx,
+        transitStockLocationId,
+        input.subsidiaryId,
+      );
     } else {
-      transitStockLocationId = await defaultTransitLocationId(tx, orgId, subCtx, input.subsidiaryId, documentNumber);
+      transitStockLocationId = await defaultTransitLocationId(
+        tx,
+        orgId,
+        subCtx,
+        input.subsidiaryId,
+        documentNumber,
+      );
     }
-    const order = (await tx.execute<{ id: string }>(sql`
+    const order = await tx.execute<{ id: string }>(
+      sql`
       insert into transfer_orders
         (org_id, document_number, status, from_stock_location_id, to_stock_location_id,
          transit_stock_location_id, in_transit_account_id, subsidiary_id, ordered_on, memo, created_by, updated_by)
       values (${orgId}, ${documentNumber}, 'draft', ${input.fromStockLocationId}, ${input.toStockLocationId},
               ${transitStockLocationId}, ${input.inTransitAccountId ?? null}, ${input.subsidiaryId},
               ${input.orderedOn}, ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`, "objects"));
+      returning id`,
+      "objects",
+    );
     const id = order[0]!.id;
     for (let i = 0; i < input.lines.length; i++) {
       const line = input.lines[i]!;
@@ -123,16 +152,21 @@ async function assertInTransitAccountUsable(
   orgId: string,
   p: { inTransitAccountId: string; subsidiaryId: string; itemIds: string[] },
 ): Promise<void> {
-  const account = (await tx.execute<{
-    id: string;
-    name: string;
-    type: string;
-    isActive: boolean;
-    isSummary: boolean;
-  }>(sql`
+  const account = (
+    await tx.execute<{
+      id: string;
+      name: string;
+      type: string;
+      isActive: boolean;
+      isSummary: boolean;
+    }>(
+      sql`
     select id, name, type, is_active as "isActive", is_summary as "isSummary"
       from accounts where org_id = ${orgId} and id = ${p.inTransitAccountId}
-      for share`, "objects"))[0];
+      for share`,
+      "objects",
+    )
+  )[0];
   if (!account) {
     throw new InventoryError(
       "in-transit account is not a postable account in this organization — choose the balance-sheet asset account that holds goods in transit",
@@ -155,9 +189,12 @@ async function assertInTransitAccountUsable(
   }
   if (!account.type.startsWith("asset_")) {
     const kind =
-      account.type === "income" || account.type === "income_other" ||
-      account.type === "cogs" || account.type === "expense" ||
-      account.type === "expense_other" || account.type === "expense_deferred"
+      account.type === "income" ||
+      account.type === "income_other" ||
+      account.type === "cogs" ||
+      account.type === "expense" ||
+      account.type === "expense_other" ||
+      account.type === "expense_deferred"
         ? "a profit-and-loss account"
         : "not an asset account";
     throw new InventoryError(
@@ -218,9 +255,14 @@ async function assertTransitLocationUsable(
   transitStockLocationId: string,
   subsidiaryId: string,
 ): Promise<void> {
-  const warehouse = (await tx.execute<{ code: string | null; kind: string }>(sql`
+  const warehouse = (
+    await tx.execute<{ code: string | null; kind: string }>(
+      sql`
     select code, kind from stock_locations
-     where org_id = ${orgId} and id = ${transitStockLocationId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${transitStockLocationId}`,
+      "objects",
+    )
+  )[0];
   if (!warehouse) {
     throw new InventoryError(
       "transfer transit warehouse not found in this organization — choose an active transit warehouse",
@@ -235,7 +277,14 @@ async function assertTransitLocationUsable(
   // so creation, picker, and posting can never disagree. The ownership
   // refusal propagates unchanged: a warehouse of another legal entity is
   // an authorization failure, and its message already names the warehouse.
-  await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, transitStockLocationId, subsidiaryId, "inbound");
+  await assertStockLocationAdmitsSubsidiary(
+    tx,
+    orgId,
+    ctx,
+    transitStockLocationId,
+    subsidiaryId,
+    "inbound",
+  );
 }
 
 /**
@@ -256,12 +305,15 @@ async function defaultTransitLocationId(
     id: string;
     subsidiary_id: string | null;
     include_children: boolean;
-  }>(sql`
+  }>(
+    sql`
     select sl.id, l.subsidiary_id, l.subsidiary_include_children as "include_children"
       from stock_locations sl
       join locations l on l.id = sl.location_id and l.org_id = sl.org_id
      where sl.org_id = ${orgId} and sl.kind = 'transit' and sl.is_active
-     order by sl.created_at, sl.id`, "objects");
+     order by sl.created_at, sl.id`,
+    "objects",
+  );
   const eligible = candidates.find((candidate) =>
     restrictionAdmits(ctx, candidate.subsidiary_id, candidate.include_children, subsidiaryId),
   );
@@ -279,10 +331,13 @@ async function loadTransferOrderForUpdate(
   orgId: string,
   orderId: string,
 ): Promise<TransferOrderRow> {
-  const r = (await tx.execute<TransferOrderRow>(sql`
+  const r = await tx.execute<TransferOrderRow>(
+    sql`
     select id, status, from_stock_location_id, to_stock_location_id, transit_stock_location_id,
            in_transit_account_id, ship_journal_entry_id, subsidiary_id, document_number, ordered_on, shipped_on
-      from transfer_orders where org_id = ${orgId} and id = ${orderId} for update`, "objects"));
+      from transfer_orders where org_id = ${orgId} and id = ${orderId} for update`,
+    "objects",
+  );
   if (!r[0]) throw new InventoryError("transfer order not found");
   return r[0];
 }
@@ -296,9 +351,14 @@ async function resolveTransitLocation(
   if (order.status === "in_transit") {
     // Older shipments did not retain the resolved default. Recover their
     // actual destination from immutable paired movements, never today's default.
-    const result = (await tx.execute<{
-      line_count: number; linked_count: number; locations: number; id: string | null;
-    }>(sql`
+    const result = (
+      await tx.execute<{
+        line_count: number;
+        linked_count: number;
+        locations: number;
+        id: string | null;
+      }>(
+        sql`
       select count(*)::int as line_count, count(m.id)::int as linked_count,
              count(distinct m.stock_location_id)::int as locations,
              min(m.stock_location_id::text) as id
@@ -306,9 +366,19 @@ async function resolveTransitLocation(
         left join inventory_movements m on m.paired_movement_id=l.ship_movement_id
           and m.org_id=l.org_id and m.kind='transfer_in' and m.status='posted'
        where l.org_id=${orgId} and l.transfer_order_id=${order.id}
-    `, "objects"))[0];
-    if (!result?.id || result.line_count === 0 || result.linked_count !== result.line_count || result.locations !== 1) {
-      throw new InventoryError("transfer shipment evidence does not identify a single transit location");
+    `,
+        "objects",
+      )
+    )[0];
+    if (
+      !result?.id ||
+      result.line_count === 0 ||
+      result.linked_count !== result.line_count ||
+      result.locations !== 1
+    ) {
+      throw new InventoryError(
+        "transfer shipment evidence does not identify a single transit location",
+      );
     }
     return result.id;
   }
@@ -339,16 +409,17 @@ async function postInTransitReclass(
   const total = sum(amounts.map((a) => a.value));
   const periodId = await periodForDate(p.orgId, p.date, tx);
   if (!periodId) throw new InventoryError(`no accounting period for ${p.date}`);
-  const shipmentBook = p.direction === "receive" ? await transferShipmentBook(tx, p.orgId, p.order) : null;
-  const bookId = shipmentBook ?? await primaryBookId(p.orgId, tx);
-  const currency = await subsidiaryCurrency(
-    p.orgId,
-    p.order.subsidiary_id,
-    tx,
-  );
+  const shipmentBook =
+    p.direction === "receive" ? await transferShipmentBook(tx, p.orgId, p.order) : null;
+  const bookId = shipmentBook ?? (await primaryBookId(p.orgId, tx));
+  const currency = await subsidiaryCurrency(p.orgId, p.order.subsidiary_id, tx);
   const inTransit = p.order.in_transit_account_id;
   for (const amount of amounts) {
-    const accountProblem = inventoryOffsetAccountProblem(amount.assetAccountId, inTransit, "in-transit");
+    const accountProblem = inventoryOffsetAccountProblem(
+      amount.assetAccountId,
+      inTransit,
+      "in-transit",
+    );
     if (accountProblem) throw new InventoryError(accountProblem);
   }
   // Asset legs stay at the endpoint stock location's business location so the
@@ -362,7 +433,12 @@ async function postInTransitReclass(
   // movement or journal posts, so this re-resolution cannot fail where they
   // succeeded. A refusal propagates by name — never a silent fallback to
   // the endpoint, which would mis-attribute the in-transit leg.
-  const transitDim = await stockLocationDim(tx, p.orgId, await resolveTransitLocation(tx, p.orgId, p.order), null);
+  const transitDim = await stockLocationDim(
+    tx,
+    p.orgId,
+    await resolveTransitLocation(tx, p.orgId, p.order),
+    null,
+  );
   const lines: JournalLineInput[] =
     p.direction === "ship"
       ? [
@@ -403,16 +479,25 @@ async function postInTransitReclass(
 }
 
 /** Receipt clears its immutable shipment's book, even after a primary-book change. */
-async function transferShipmentBook(tx: Runner, orgId: string, order: TransferOrderRow): Promise<string | null> {
+async function transferShipmentBook(
+  tx: Runner,
+  orgId: string,
+  order: TransferOrderRow,
+): Promise<string | null> {
   if (!order.ship_journal_entry_id) return null;
-  const source = (await tx.execute<{ book_id: string; currency: string }>(sql`
+  const source = (
+    await tx.execute<{ book_id: string; currency: string }>(
+      sql`
     select j.book_id, min(l.currency) as currency from journal_entries j
     join journal_lines l on l.org_id=j.org_id and l.entry_id=j.id
     where j.org_id=${orgId} and j.id=${order.ship_journal_entry_id}
       -- Live entries only: a reversed shipment has no book for the receipt to clear.
       and j.subsidiary_id=${order.subsidiary_id} and j.status='posted' and j.origin='inventory'
-    group by j.book_id having count(distinct l.currency)=1`, "objects"))[0];
-  if (!source || source.currency !== await subsidiaryCurrency(orgId, order.subsidiary_id, tx)) {
+    group by j.book_id having count(distinct l.currency)=1`,
+      "objects",
+    )
+  )[0];
+  if (!source || source.currency !== (await subsidiaryCurrency(orgId, order.subsidiary_id, tx))) {
     throw new InventoryError("transfer shipment journal or functional currency is inconsistent");
   }
   return source.book_id;
@@ -430,30 +515,38 @@ export async function shipTransferOrder(
   orderId: string,
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
-  const shipDate = date ?? await businessToday(orgId);
+  const shipDate = date ?? (await businessToday(orgId));
   assertInventoryDate(shipDate, "ship date");
   return await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
     await assertWarehousingFeature(tx, orgId);
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "draft")
-      throw new InventoryError(
-        `transfer order ${order.document_number} is ${order.status}`,
-      );
-    if (shipDate < order.ordered_on) throw new InventoryError("ship date cannot precede order date");
+      throw new InventoryError(`transfer order ${order.document_number} is ${order.status}`);
+    if (shipDate < order.ordered_on)
+      throw new InventoryError("ship date cannot precede order date");
     const transitId = await resolveTransitLocation(tx, orgId, order);
-    const transit = (await tx.execute(sql`select id from stock_locations
-      where org_id=${orgId} and id=${transitId} and kind='transit' and is_active for share`, "objects"))[0];
-    if (!transit) throw new InventoryError("transfer orders require an active transit stock location");
-    const lines = (await tx.execute<{
-        id: string;
-        item_id: string;
-        quantity: string;
-        lot_id: string | null;
-        serial_id: string | null;
-      }>(sql`
+    const transit = (
+      await tx.execute(
+        sql`select id from stock_locations
+      where org_id=${orgId} and id=${transitId} and kind='transit' and is_active for share`,
+        "objects",
+      )
+    )[0];
+    if (!transit)
+      throw new InventoryError("transfer orders require an active transit stock location");
+    const lines = await tx.execute<{
+      id: string;
+      item_id: string;
+      quantity: string;
+      lot_id: string | null;
+      serial_id: string | null;
+    }>(
+      sql`
       select id, item_id, quantity, lot_id, serial_id from transfer_order_lines
-       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`, "objects"));
+       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`,
+      "objects",
+    );
     if (order.in_transit_account_id) {
       await assertInTransitAccountUsable(tx, orgId, {
         inTransitAccountId: order.in_transit_account_id,
@@ -461,8 +554,7 @@ export async function shipTransferOrder(
         itemIds: lines.map((line) => line.item_id),
       });
     }
-    const amounts: { assetAccountId: string; value: string; memo: string }[] =
-      [];
+    const amounts: { assetAccountId: string; value: string; memo: string }[] = [];
     for (const line of lines) {
       const profile = await resolveProfile(orgId, line.item_id, tx, true);
       const moved = await transferInventoryTx(tx, orgId, actorId, {
@@ -512,31 +604,32 @@ export async function receiveTransferOrder(
   orderId: string,
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
-  const receiveDate = date ?? await businessToday(orgId);
+  const receiveDate = date ?? (await businessToday(orgId));
   assertInventoryDate(receiveDate, "receive date");
   return await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
     await assertWarehousingFeature(tx, orgId);
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "in_transit")
-      throw new InventoryError(
-        `transfer order ${order.document_number} is ${order.status}`,
-      );
+      throw new InventoryError(`transfer order ${order.document_number} is ${order.status}`);
     if (!order.shipped_on || receiveDate < order.shipped_on) {
       throw new InventoryError("receive date cannot precede shipment");
     }
     const transitId = await resolveTransitLocation(tx, orgId, order);
     const postingBookId = await transferShipmentBook(tx, orgId, order);
-    const lines = (await tx.execute<{
-        id: string;
-        item_id: string;
-        quantity_shipped: string;
-        ship_movement_id: string | null;
-        lot_id: string | null;
-        serial_id: string | null;
-      }>(sql`
+    const lines = await tx.execute<{
+      id: string;
+      item_id: string;
+      quantity_shipped: string;
+      ship_movement_id: string | null;
+      lot_id: string | null;
+      serial_id: string | null;
+    }>(
+      sql`
       select id, item_id, quantity_shipped, ship_movement_id, lot_id, serial_id from transfer_order_lines
-       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`, "objects"));
+       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`,
+      "objects",
+    );
     if (order.in_transit_account_id) {
       await assertInTransitAccountUsable(tx, orgId, {
         inTransitAccountId: order.in_transit_account_id,
@@ -544,12 +637,12 @@ export async function receiveTransferOrder(
         itemIds: lines.map((line) => line.item_id),
       });
     }
-    const amounts: { assetAccountId: string; value: string; memo: string }[] =
-      [];
+    const amounts: { assetAccountId: string; value: string; memo: string }[] = [];
     for (const line of lines) {
       if (isZero(line.quantity_shipped)) continue;
       const profile = await resolveProfile(orgId, line.item_id, tx, true);
-      const shipment = await tx.execute<{ id: string; total_value: string }>(sql`
+      const shipment = await tx.execute<{ id: string; total_value: string }>(
+        sql`
         select inbound.id, inbound.total_value from inventory_movements inbound
         join inventory_movements outbound on outbound.id=inbound.paired_movement_id and outbound.org_id=inbound.org_id
         where inbound.org_id=${orgId} and outbound.id=${line.ship_movement_id}
@@ -563,8 +656,11 @@ export async function receiveTransferOrder(
           and inbound.lot_id is not distinct from ${line.lot_id}::uuid
           and inbound.serial_id is not distinct from ${line.serial_id}::uuid
           and not exists(select 1 from inventory_movements reversal where reversal.org_id=${orgId}
-            and reversal.reverses_movement_id in (inbound.id,outbound.id))`, "objects");
-      if (shipment.length !== 1) throw new InventoryError("transfer line has no intact shipment evidence");
+            and reversal.reverses_movement_id in (inbound.id,outbound.id))`,
+        "objects",
+      );
+      if (shipment.length !== 1)
+        throw new InventoryError("transfer line has no intact shipment evidence");
       const moved = await transferInventoryTx(tx, orgId, actorId, {
         itemId: line.item_id,
         fromStockLocationId: transitId,

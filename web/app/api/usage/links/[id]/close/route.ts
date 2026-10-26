@@ -11,11 +11,14 @@ export const POST = defineRoute({
   feature: "usageBilling",
   params: Params,
   body: Body,
-  handler: async ({ authz, params, body }) => Response.json(await closeSubscriptionUsageLink(
-    authz.user.orgId,
-    authz.user.id,
-    params.id,
-    body.effectiveTo,
-    authz.allowedSubsidiaryIds,
-  )),
+  handler: async ({ authz, params, body }) =>
+    Response.json(
+      await closeSubscriptionUsageLink(
+        authz.user.orgId,
+        authz.user.id,
+        params.id,
+        body.effectiveTo,
+        authz.allowedSubsidiaryIds,
+      ),
+    ),
 });

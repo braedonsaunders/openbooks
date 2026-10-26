@@ -6,9 +6,20 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
 import type { PropertyWorkspace, SaveAction } from "./types";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
-export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, closeHref, onClose, data, tenants, busy, onSave }: {
+export function LeaseDrawer({
+  open,
+  stacked,
+  initialPropertyId,
+  initialUnitId,
+  closeHref,
+  onClose,
+  data,
+  tenants,
+  busy,
+  onSave,
+}: {
   open: boolean;
   stacked?: boolean;
   initialPropertyId?: string;
@@ -48,9 +59,9 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
   // (same committed values, no extra render). Keyed on the memoized `initial`
   // (stable identity — the sibling slice's restructuring, which already folds
   // the property/unit overrides in) plus `open`.
-  const [prevFormKeys, setPrevFormKeys] = useState(() => ({ open, initial }))
+  const [prevFormKeys, setPrevFormKeys] = useState(() => ({ open, initial }));
   if (prevFormKeys.open !== open || prevFormKeys.initial !== initial) {
-    setPrevFormKeys({ open, initial })
+    setPrevFormKeys({ open, initial });
     if (open) setForm(initial);
   }
   const units = data.units.filter(
@@ -100,9 +111,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
           <Field label="Lease number">
             <Input
               value={form.leaseNumber}
-              onChange={(e) =>
-                setForm({ ...form, leaseNumber: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, leaseNumber: e.target.value })}
             />
           </Field>
           <Field label="Tenant">
@@ -121,9 +130,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
           <Field label="Property">
             <Select
               value={form.propertyId}
-              onChange={(e) =>
-                setForm({ ...form, propertyId: e.target.value, unitId: "" })
-              }
+              onChange={(e) => setForm({ ...form, propertyId: e.target.value, unitId: "" })}
             >
               <option value="">Select property</option>
               {data.properties.map((o) => (
@@ -182,9 +189,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
               type="number"
               min="0"
               value={form.securityDepositRequired}
-              onChange={(e) =>
-                setForm({ ...form, securityDepositRequired: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, securityDepositRequired: e.target.value })}
             />
           </Field>
           <Field label="Payment terms days">
@@ -192,9 +197,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
               type="number"
               min="0"
               value={form.paymentTermsDays}
-              onChange={(e) =>
-                setForm({ ...form, paymentTermsDays: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })}
             />
           </Field>
           <Field label="CAM method">
@@ -213,17 +216,13 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
               min="0"
               max="100"
               value={form.camSharePercent}
-              onChange={(e) =>
-                setForm({ ...form, camSharePercent: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, camSharePercent: e.target.value })}
             />
           </Field>
           <Field label="Late fee">
             <Select
               value={form.lateFeeType}
-              onChange={(e) =>
-                setForm({ ...form, lateFeeType: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, lateFeeType: e.target.value })}
             >
               <option value="none">None</option>
               <option value="fixed">Fixed amount</option>
@@ -235,9 +234,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
               type="number"
               min="0"
               value={form.lateFeeValue}
-              onChange={(e) =>
-                setForm({ ...form, lateFeeValue: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, lateFeeValue: e.target.value })}
             />
           </Field>
           <Field label="Grace days">
@@ -254,9 +251,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, c
             <input
               type="checkbox"
               checked={form.autoInvoice}
-              onChange={(e) =>
-                setForm({ ...form, autoInvoice: e.target.checked })
-              }
+              onChange={(e) => setForm({ ...form, autoInvoice: e.target.checked })}
             />
             Automatically invoice due charges
           </label>

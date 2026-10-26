@@ -10,11 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 /** Providers that support hosted customer payment acceptance (checkout + webhooks). */
-export const PSP_ACCEPTANCE_PROVIDERS = [
-  "stripe",
-  "adyen",
-  "gocardless",
-] as const;
+export const PSP_ACCEPTANCE_PROVIDERS = ["stripe", "adyen", "gocardless"] as const;
 
 /**
  * Hosted payment links on posted customer invoices. `token` is a 192-bit

@@ -155,9 +155,7 @@ function inspect(query: unknown): { text: string; params: unknown[] } {
   return { text: walk(chunks, true), params };
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksOrderCreateInspect = inspect;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksOrderCreateInspect = inspect;
 
 const CROSS_KEY = "00000000-0000-4000-8000-00000000b090";
 
@@ -410,7 +408,10 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
-    if (context.parentURL?.endsWith("/engine/src/ledger/document-totals.ts") && specifier === "../platform/business-date.ts") {
+    if (
+      context.parentURL?.endsWith("/engine/src/ledger/document-totals.ts") &&
+      specifier === "../platform/business-date.ts"
+    ) {
       return { url: "mock:business-date", shortCircuit: true };
     }
     const resolved = nextResolve(specifier, context);
@@ -435,7 +436,12 @@ hooks.deregister();
 const KINDS = [
   { kind: "quote", createPerm: "ar.create", numberPrefix: "EST-", path: "/api/estimates" },
   { kind: "sales_order", createPerm: "ar.create", numberPrefix: "SO-", path: "/api/sales-orders" },
-  { kind: "purchase_order", createPerm: "purchase_orders.create", numberPrefix: "PO-", path: "/api/purchase-orders" },
+  {
+    kind: "purchase_order",
+    createPerm: "purchase_orders.create",
+    numberPrefix: "PO-",
+    path: "/api/purchase-orders",
+  },
 ] as const;
 
 const KEY_A = "00000000-0000-4000-8000-000000001011";
@@ -470,7 +476,11 @@ function post(
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (key !== null) headers["Idempotency-Key"] = key;
   return POST(
-    new Request(`http://openbooks.test${path}`, { method: "POST", headers, body: JSON.stringify(body) }),
+    new Request(`http://openbooks.test${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    }),
   );
 }
 
@@ -511,8 +521,17 @@ for (const { kind, createPerm, numberPrefix, path } of KINDS) {
     assert.equal(state.audits[0]!.row_id, KEY_A);
     assert.equal(state.audits[0]!.request_id, KEY_A);
     assert.equal(state.allocations, 1);
-    assert.ok(state.queries.some((query) => query.includes("from segment_definitions")), "native dimension lookup uses the tracked database");
-    assert.ok(state.queries.some((query) => query.includes('marketplace_facilitator') && query.includes('from document_lines')), "native tax evidence resolves its just-saved tenant line");
+    assert.ok(
+      state.queries.some((query) => query.includes("from segment_definitions")),
+      "native dimension lookup uses the tracked database",
+    );
+    assert.ok(
+      state.queries.some(
+        (query) =>
+          query.includes("marketplace_facilitator") && query.includes("from document_lines"),
+      ),
+      "native tax evidence resolves its just-saved tenant line",
+    );
   });
 
   test(`${kind}: exact replay is a 200 with no second row, number, or audit`, async () => {
@@ -586,7 +605,15 @@ for (const { kind, createPerm, numberPrefix, path } of KINDS) {
     const TAX_ID = "00000000-0000-4000-8000-000000001032";
     const unknownTax = await post(POST, path, KEY_C, {
       documentDate: "2026-01-15",
-      lines: [{ accountId: ACCOUNT_ID, description: "X", quantity: "1", unitPrice: "1", taxCodeId: TAX_ID }],
+      lines: [
+        {
+          accountId: ACCOUNT_ID,
+          description: "X",
+          quantity: "1",
+          unitPrice: "1",
+          taxCodeId: TAX_ID,
+        },
+      ],
     });
     assert.equal(unknownTax.status, 422);
     assert.match(((await unknownTax.json()) as { error: string }).error, /line 1/i);
@@ -646,7 +673,11 @@ test("cross-org idempotency-key reuse is a 409, never the other org's order", as
   // The key minted a document in ANOTHER org: the same-org prior lookup
   // misses, the insert hits the id conflict, and the save refuses instead
   // of disclosing or returning the foreign row.
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const res = await post(POST, "/api/estimates", CROSS_KEY, lineBody());
   assert.equal(res.status, 409);
   assert.equal(state.docs.length, 0);
@@ -655,10 +686,16 @@ test("cross-org idempotency-key reuse is a 409, never the other org's order", as
 
 test("cross-tenant line references fail closed as 422, not a raw 500", async () => {
   reset();
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const res = await post(POST, "/api/estimates", KEY_A, {
     documentDate: "2026-01-15",
-    lines: [{ accountId: FOREIGN_ACCOUNT_ID, description: "Foreign", quantity: "1", unitPrice: "1" }],
+    lines: [
+      { accountId: FOREIGN_ACCOUNT_ID, description: "Foreign", quantity: "1", unitPrice: "1" },
+    ],
   });
   assert.equal(res.status, 422);
   assert.equal(state.docs.length, 0);
@@ -690,10 +727,22 @@ test("subsidiary write is refused when the feature is off, stored when on", asyn
 test("inventory-kind lines refuse with 404 while inventory is off", async () => {
   reset();
   state.features = { inventory: false };
-  const POST = createModule.makePOST({ kind: "sales_order", createPerm: "ar.create", numberPrefix: "SO-" });
+  const POST = createModule.makePOST({
+    kind: "sales_order",
+    createPerm: "ar.create",
+    numberPrefix: "SO-",
+  });
   const res = await post(POST, "/api/sales-orders", KEY_A, {
     documentDate: "2026-01-15",
-    lines: [{ itemId: INVENTORY_ITEM_ID, accountId: ACCOUNT_ID, description: "Stocked", quantity: "1", unitPrice: "3" }],
+    lines: [
+      {
+        itemId: INVENTORY_ITEM_ID,
+        accountId: ACCOUNT_ID,
+        description: "Stocked",
+        quantity: "1",
+        unitPrice: "3",
+      },
+    ],
   });
   assert.equal(res.status, 404);
   assert.equal(state.docs.length, 0);
@@ -701,7 +750,11 @@ test("inventory-kind lines refuse with 404 while inventory is off", async () => 
 
 test("identical retry after midnight still replays: derived values never join the match", async () => {
   reset();
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   // No documentDate supplied: the first save defaults it from the clock.
   state.today = "2026-01-15";
   const first = await post(POST, "/api/estimates", KEY_A, lineBodyNoDate());
@@ -724,7 +777,11 @@ test("identical retry after midnight still replays: derived values never join th
 test("missing org base currency refuses by name instead of inventing one", async () => {
   reset();
   state.orgMissing = true;
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const res = await post(POST, "/api/estimates", KEY_A, lineBody());
   assert.equal(res.status, 422);
   assert.match(((await res.json()) as { error: string }).error, /base currency/i);
@@ -735,7 +792,11 @@ test("missing org base currency refuses by name instead of inventing one", async
 
 test("same-key save fences on the idempotency key before allocating", async () => {
   reset();
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   assert.equal((await post(POST, "/api/estimates", KEY_A, lineBody())).status, 201);
   // Lock order: key fence, then allocation, then insert. Concurrent
   // same-key first-Saves serialize on the fence, so the loser sees the
@@ -750,7 +811,11 @@ test("same-key save fences on the idempotency key before allocating", async () =
 
 test("sequential saves allocate distinct numbers, one per save", async () => {
   reset();
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const first = (await (await post(POST, "/api/estimates", KEY_A, lineBody())).json()) as {
     doc: { document_number: string };
   };
@@ -773,7 +838,11 @@ function restrictedScope(ids: string[]): void {
 test("restricted save without a subsidiary defaults to the single allowed one", async () => {
   reset();
   restrictedScope([SUBSIDIARY_ID]);
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const res = await post(POST, "/api/estimates", KEY_A, lineBody());
   assert.equal(res.status, 201);
   assert.equal(state.docs.length, 1);
@@ -785,7 +854,11 @@ test("restricted save without a subsidiary defaults to the single allowed one", 
 test("restricted save without a subsidiary and several in scope names the remedy", async () => {
   reset();
   restrictedScope([SUBSIDIARY_ID, SUB_OTHER]);
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const res = await post(POST, "/api/estimates", KEY_A, lineBody());
   assert.equal(res.status, 422);
   assert.match(((await res.json()) as { error: string }).error, /subsidiary/i);
@@ -798,14 +871,21 @@ test("restricted save without a subsidiary and several in scope names the remedy
 test("restricted save with an out-of-scope subsidiary is refused before any write", async () => {
   reset();
   restrictedScope([SUBSIDIARY_ID]);
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const res = await post(POST, "/api/estimates", KEY_A, {
     documentDate: "2026-01-15",
     subsidiaryId: SUB_OTHER,
     lines: [{ accountId: ACCOUNT_ID, description: "Widget", quantity: "1", unitPrice: "1" }],
   });
   assert.equal(res.status, 422);
-  assert.match(((await res.json()) as { error: string }).error, /outside your visible subsidiaries/);
+  assert.match(
+    ((await res.json()) as { error: string }).error,
+    /outside your visible subsidiaries/,
+  );
   assert.equal(state.docs.length, 0);
   assert.equal(state.lines.length, 0);
   assert.equal(state.audits.length, 0);
@@ -814,7 +894,11 @@ test("restricted save with an out-of-scope subsidiary is refused before any writ
 test("restricted save with an explicit null subsidiary names the remedy", async () => {
   reset();
   restrictedScope([SUBSIDIARY_ID]);
-  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const POST = createModule.makePOST({
+    kind: "quote",
+    createPerm: "ar.create",
+    numberPrefix: "EST-",
+  });
   const res = await post(POST, "/api/estimates", KEY_A, {
     documentDate: "2026-01-15",
     subsidiaryId: null,

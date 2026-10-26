@@ -1,25 +1,30 @@
-import 'server-only'
-import { cookies } from 'next/headers'
-import { sql } from 'drizzle-orm'
-import type { EmailActor } from '@openbooks/schema'
-import { db } from '@openbooks/engine/platform/db'
-import { documentEmail, deriveEmailDeliveryKey, sendVia, emailDeliveryBlockedMessage } from '@openbooks/emails'
+import "server-only";
+import { cookies } from "next/headers";
+import { sql } from "drizzle-orm";
+import type { EmailActor } from "@openbooks/schema";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  documentEmail,
+  deriveEmailDeliveryKey,
+  sendVia,
+  emailDeliveryBlockedMessage,
+} from "@openbooks/emails";
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailUncertain,
   markEmailSent,
   resolveOrgEmailTransportDetailed,
-} from '@openbooks/engine/delivery/email-config/module'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { unsealSecret } from '@openbooks/engine/platform/secrets'
-import { appBaseUrl } from '@openbooks/engine/flows/email-tokens'
-import { verifyPdfEncryption } from '@openbooks/pdf'
-import { isFeatureEnabled } from '../features'
-import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
-import { mergeAndPrintPdf } from './render'
-import { loadRecordDesignatedTemplateName, resolvePdfTemplate } from './store'
-import { loadPdfRecordValues } from './values'
+} from "@openbooks/engine/delivery/email-config/module";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { unsealSecret } from "@openbooks/engine/platform/secrets";
+import { appBaseUrl } from "@openbooks/engine/flows/email-tokens";
+import { verifyPdfEncryption } from "@openbooks/pdf";
+import { isFeatureEnabled } from "../features";
+import { PDF_RECORD_TYPE_BY_KEY } from "./catalog";
+import { mergeAndPrintPdf } from "./render";
+import { loadRecordDesignatedTemplateName, resolvePdfTemplate } from "./store";
+import { loadPdfRecordValues } from "./values";
 
 /**
  * Email a transaction to its party with the rendered PDF attached. Reuses the
@@ -29,10 +34,10 @@ import { loadPdfRecordValues } from './values'
  */
 
 export interface RecipientInfo {
-  to: string | null
-  docTitle: string
-  reference: string
-  partyName: string | null
+  to: string | null;
+  docTitle: string;
+  reference: string;
+  partyName: string | null;
 }
 
 // Payroll PDFs can expose compensation detail under more than one record key:
@@ -40,16 +45,17 @@ export interface RecipientInfo {
 // as its voucher. Derive protection from the catalog's payroll boundary so a
 // future alias cannot quietly fall back to the generic plaintext path.
 export function isProtectedPayrollRecordType(recordType: string): boolean {
-  return PDF_RECORD_TYPE_BY_KEY[recordType]?.readPermission.startsWith('payroll.') ?? false
+  return PDF_RECORD_TYPE_BY_KEY[recordType]?.readPermission.startsWith("payroll.") ?? false;
 }
 
 async function requireEncryptedPayrollPdf(plaintext: Buffer, candidate: Buffer): Promise<Buffer> {
-  const invalidEncryption = (cause?: unknown) => new Error(
-    `payroll compensation PDF encryption must return a valid encrypted PDF`
-      + (cause ? ` (${cause instanceof Error ? cause.message : String(cause)})` : ''),
-  )
+  const invalidEncryption = (cause?: unknown) =>
+    new Error(
+      `payroll compensation PDF encryption must return a valid encrypted PDF` +
+        (cause ? ` (${cause instanceof Error ? cause.message : String(cause)})` : ""),
+    );
   if (!Buffer.isBuffer(candidate) || candidate.length === 0 || candidate.equals(plaintext)) {
-    throw invalidEncryption()
+    throw invalidEncryption();
   }
 
   try {
@@ -59,11 +65,11 @@ async function requireEncryptedPayrollPdf(plaintext: Buffer, candidate: Buffer):
     // the document only under a real security handler that rejects the empty
     // password — identity, copy, alternate-plaintext, and marker-only forgeries
     // all fail that certification and the send is refused.
-    await verifyPdfEncryption(candidate)
+    await verifyPdfEncryption(candidate);
   } catch (e) {
-    throw invalidEncryption(e)
+    throw invalidEncryption(e);
   }
-  return candidate
+  return candidate;
 }
 
 /** Default recipient + labels for the send dialog (the party's email on file). */
@@ -73,14 +79,16 @@ export async function resolveRecordRecipient(
   id: string,
   scope: ReadonlySet<string> | null,
 ): Promise<RecipientInfo | null> {
-  const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
-  if (!meta) return null
-  const record = await loadPdfRecordValues(recordType, orgId, id, scope)
-  if (!record) return null
-  const v = record.values as Record<string, unknown>
-  const to = typeof v.party_email === 'string' && v.party_email.trim() ? v.party_email.trim() : null
-  const partyName = typeof v.party_name === 'string' && v.party_name.trim() ? v.party_name.trim() : null
-  return { to, docTitle: meta.docTitle, reference: record.reference, partyName }
+  const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
+  if (!meta) return null;
+  const record = await loadPdfRecordValues(recordType, orgId, id, scope);
+  if (!record) return null;
+  const v = record.values as Record<string, unknown>;
+  const to =
+    typeof v.party_email === "string" && v.party_email.trim() ? v.party_email.trim() : null;
+  const partyName =
+    typeof v.party_name === "string" && v.party_name.trim() ? v.party_name.trim() : null;
+  return { to, docTitle: meta.docTitle, reference: record.reference, partyName };
 }
 
 /**
@@ -91,10 +99,10 @@ export async function resolveRecordRecipient(
  */
 async function hasRequestScope(): Promise<boolean> {
   try {
-    await cookies()
-    return true
+    await cookies();
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
@@ -107,13 +115,16 @@ async function hasRequestScope(): Promise<boolean> {
  */
 async function resolveDeliveryActor(): Promise<EmailActor> {
   if (!(await hasRequestScope())) {
-    return { kind: 'system', reason: 'direct document delivery ran without an interactive session' }
+    return {
+      kind: "system",
+      reason: "direct document delivery ran without an interactive session",
+    };
   }
-  const { getAuthz } = await import('../authz')
-  const userId = (await getAuthz())?.user.id
+  const { getAuthz } = await import("../authz");
+  const userId = (await getAuthz())?.user.id;
   return userId
-    ? { kind: 'user', userId }
-    : { kind: 'system', reason: 'direct document delivery had no signed-in session' }
+    ? { kind: "user", userId }
+    : { kind: "system", reason: "direct document delivery had no signed-in session" };
 }
 
 /**
@@ -131,19 +142,19 @@ export class RecordPdfSendError extends Error {
 }
 
 export async function sendRecordPdfEmail(args: {
-  recordType: string
-  orgId: string
-  id: string
-  to?: string
-  message?: string
-  templateId?: string | null
+  recordType: string;
+  orgId: string;
+  id: string;
+  to?: string;
+  message?: string;
+  templateId?: string | null;
   /**
    * The sender's subsidiary scope, enforced inside the record load (never
    * trusted from an earlier check across the await boundary). Null only for
    * the already-fenced batch paths, which gate the whole population before
    * any send.
    */
-  scope: ReadonlySet<string> | null
+  scope: ReadonlySet<string> | null;
   /**
    * Post-processing pass applied to the rendered bytes before they are
    * attached — how a confidential record (a pay stub) is emailed encrypted.
@@ -151,26 +162,28 @@ export async function sendRecordPdfEmail(args: {
    * document, and the send fails with it: nothing confidential is ever
    * downgraded to an unprotected attachment.
    */
-  encrypt?: (pdf: Buffer) => Promise<Buffer>
+  encrypt?: (pdf: Buffer) => Promise<Buffer>;
   /**
    * Further PDFs delivered with the record — an invoice's backup packet.
    * Refused for protected payroll records, whose every attachment must pass
    * the protection pass.
    */
-  extraAttachments?: Array<{ filename: string; content: Buffer }>
+  extraAttachments?: Array<{ filename: string; content: Buffer }>;
 }): Promise<{ to: string; subject: string }> {
-  const meta = PDF_RECORD_TYPE_BY_KEY[args.recordType]
-  if (!meta) throw new RecordPdfSendError('unknown record type')
+  const meta = PDF_RECORD_TYPE_BY_KEY[args.recordType];
+  if (!meta) throw new RecordPdfSendError("unknown record type");
 
   // A protected payroll attachment must leave as ciphertext or not at all.
   // Enforced before any dependency work so no caller can reach the render or
   // send path for a compensation PDF without a protection pass supplied.
-  const protectedPayrollRecord = isProtectedPayrollRecordType(args.recordType)
+  const protectedPayrollRecord = isProtectedPayrollRecordType(args.recordType);
   if (protectedPayrollRecord && !args.encrypt) {
-    throw new RecordPdfSendError('payroll compensation PDFs must be encrypted before email delivery')
+    throw new RecordPdfSendError(
+      "payroll compensation PDFs must be encrypted before email delivery",
+    );
   }
   if (protectedPayrollRecord && args.extraAttachments?.length) {
-    throw new RecordPdfSendError('payroll compensation PDFs are delivered alone')
+    throw new RecordPdfSendError("payroll compensation PDFs are delivered alone");
   }
 
   const [tpl, record, delivery, actor] = await Promise.all([
@@ -184,48 +197,62 @@ export async function sendRecordPdfEmail(args: {
     loadPdfRecordValues(args.recordType, args.orgId, args.id, args.scope),
     resolveOrgEmailTransportDetailed(args.orgId),
     resolveDeliveryActor(),
-  ])
-  if (!tpl) throw new RecordPdfSendError('no PDF template available for this record')
-  if (!record) throw new RecordPdfSendError('record not found')
-  if (delivery.state !== 'ready') throw new RecordPdfSendError(emailDeliveryBlockedMessage(delivery))
-  const transport = delivery.transport
+  ]);
+  if (!tpl) throw new RecordPdfSendError("no PDF template available for this record");
+  if (!record) throw new RecordPdfSendError("record not found");
+  if (delivery.state !== "ready")
+    throw new RecordPdfSendError(emailDeliveryBlockedMessage(delivery));
+  const transport = delivery.transport;
 
-  const v = record.values as Record<string, unknown>
-  const to = (args.to?.trim() || (typeof v.party_email === 'string' ? v.party_email : '') || '').trim()
-  if (!to) throw new RecordPdfSendError('no recipient email — add an email address to the customer or vendor first')
+  const v = record.values as Record<string, unknown>;
+  const to = (
+    args.to?.trim() ||
+    (typeof v.party_email === "string" ? v.party_email : "") ||
+    ""
+  ).trim();
+  if (!to)
+    throw new RecordPdfSendError(
+      "no recipient email — add an email address to the customer or vendor first",
+    );
 
-  const orgName = (typeof v.org_name === 'string' && v.org_name) || 'OpenBooks'
-  const partyName = typeof v.party_name === 'string' && v.party_name ? v.party_name : undefined
-  const stamp = await businessToday(args.orgId)
-  const attachmentName = `${meta.docTitle}-${record.reference}-${stamp}.pdf`.replace(/\s+/g, '-')
-  const rendered = await mergeAndPrintPdf(tpl, record.values)
+  const orgName = (typeof v.org_name === "string" && v.org_name) || "OpenBooks";
+  const partyName = typeof v.party_name === "string" && v.party_name ? v.party_name : undefined;
+  const stamp = await businessToday(args.orgId);
+  const attachmentName = `${meta.docTitle}-${record.reference}-${stamp}.pdf`.replace(/\s+/g, "-");
+  const rendered = await mergeAndPrintPdf(tpl, record.values);
   // Give post-processors a copy so they cannot mutate the plaintext baseline
   // used to verify that protected output was actually transformed.
-  const processed = args.encrypt ? await args.encrypt(Buffer.from(rendered)) : rendered
+  const processed = args.encrypt ? await args.encrypt(Buffer.from(rendered)) : rendered;
   const pdf = protectedPayrollRecord
-    // Fail closed: identity, copy, and alternate-plaintext outputs are refused
-    // here — the attachment is either verified ciphertext or there is no send.
-    ? await requireEncryptedPayrollPdf(rendered, processed)
-    : processed
+    ? // Fail closed: identity, copy, and alternate-plaintext outputs are refused
+      // here — the attachment is either verified ciphertext or there is no send.
+      await requireEncryptedPayrollPdf(rendered, processed)
+    : processed;
   // When the invoice has an active hosted payment link, include it as a
   // pay-online call-to-action. Creating the link is the opt-in; nothing is
   // attached for invoices without one. Stored links stay when the feature is
   // off — the email just omits the CTA.
-  let paymentUrl: string | undefined
-  if (args.recordType === 'customer_invoice' && (await isFeatureEnabled(args.orgId, 'onlinePayments'))) {
-    const link = (await db.execute<{ token: string | null; tokenSealed: string | null }>(sql`
+  let paymentUrl: string | undefined;
+  if (
+    args.recordType === "customer_invoice" &&
+    (await isFeatureEnabled(args.orgId, "onlinePayments"))
+  ) {
+    const link = await db.execute<{ token: string | null; tokenSealed: string | null }>(
+      sql`
       select token, token_sealed as "tokenSealed" from payment_links
        where org_id = ${args.orgId} and document_id = ${args.id} and status = 'active'
        order by created_at desc limit 1
-    `, 'objects'))
+    `,
+      "objects",
+    );
     // No link at all omits the call-to-action; a present-but-unsealable
     // token fails closed instead of mailing without it — the operator
     // reissues the link from the invoice's link panel.
-    const sealed = link[0]?.tokenSealed
+    const sealed = link[0]?.tokenSealed;
     const plain = sealed
       ? unsealSecret(sealed, { orgId: args.orgId, purpose: "payment.link.token" })
-      : (link[0]?.token ?? null)
-    if (plain) paymentUrl = `${appBaseUrl()}/pay/${plain}`
+      : (link[0]?.token ?? null);
+    if (plain) paymentUrl = `${appBaseUrl()}/pay/${plain}`;
   }
   const body = documentEmail({
     orgName,
@@ -235,7 +262,7 @@ export async function sendRecordPdfEmail(args: {
     message: args.message,
     attachmentName,
     paymentUrl,
-  })
+  });
 
   // The email_log row is the immutable evidence of this issuance: which
   // template design produced the attached PDF, pinned by id + revision +
@@ -244,8 +271,8 @@ export async function sendRecordPdfEmail(args: {
     orgId: args.orgId,
     recipients: [to],
     subject: body.subject,
-    status: 'queued',
-    categoryKey: 'document',
+    status: "queued",
+    categoryKey: "document",
     meta: {
       recordType: args.recordType,
       recordId: args.id,
@@ -254,43 +281,51 @@ export async function sendRecordPdfEmail(args: {
       templateHash: tpl.provenance.contentHash,
     },
     actor,
-  })
-  let uncertaintyRecorded = false
+  });
+  let uncertaintyRecorded = false;
   try {
-    const outcome = await sendVia(transport, {
-      to,
-      subject: body.subject,
-      html: body.html,
-      text: body.text,
-      attachments: [
-        { filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' },
-        ...(args.extraAttachments ?? []).map((attachment) => ({
-          filename: attachment.filename,
-          content: attachment.content.toString('base64'),
-          contentType: 'application/pdf',
-        })),
-      ],
-      // The log row scope keeps this direct send's identity durable and
-      // distinct from every other send to the same mailbox.
-    }, { deliveryKey: deriveEmailDeliveryKey({ orgId: args.orgId, scope: `direct:${logId}`, to }) })
-    if (outcome.kind === 'sent') {
-      await markEmailSent(args.orgId, logId, outcome.providerMessageId)
+    const outcome = await sendVia(
+      transport,
+      {
+        to,
+        subject: body.subject,
+        html: body.html,
+        text: body.text,
+        attachments: [
+          {
+            filename: attachmentName,
+            content: pdf.toString("base64"),
+            contentType: "application/pdf",
+          },
+          ...(args.extraAttachments ?? []).map((attachment) => ({
+            filename: attachment.filename,
+            content: attachment.content.toString("base64"),
+            contentType: "application/pdf",
+          })),
+        ],
+        // The log row scope keeps this direct send's identity durable and
+        // distinct from every other send to the same mailbox.
+      },
+      { deliveryKey: deriveEmailDeliveryKey({ orgId: args.orgId, scope: `direct:${logId}`, to }) },
+    );
+    if (outcome.kind === "sent") {
+      await markEmailSent(args.orgId, logId, outcome.providerMessageId);
     } else {
       // Acceptance state unknown — record it, never claim success or failure.
       // Set this before the write: an uncertain provider outcome stays unknown
       // even when the uncertainty update itself fails or has an ambiguous
       // commit result. A failed transition would misclassify the delivery.
-      uncertaintyRecorded = true
-      await markEmailUncertain(args.orgId, logId, outcome.reason)
-      throw new Error(outcome.reason)
+      uncertaintyRecorded = true;
+      await markEmailUncertain(args.orgId, logId, outcome.reason);
+      throw new Error(outcome.reason);
     }
   } catch (e) {
     // The uncertainty branch deliberately throws so callers receive an error
     // response, but its log row must remain uncertain for reconciliation.
     if (!uncertaintyRecorded) {
-      await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e))
+      await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e));
     }
-    throw e
+    throw e;
   }
-  return { to, subject: body.subject }
+  return { to, subject: body.subject };
 }

@@ -73,9 +73,13 @@ test("the residue detector fires on a real failed CONCURRENTLY build", async () 
   const probe = "probe_0261_invalid_residue";
   await db.execute(sql.raw(`DROP TABLE IF EXISTS ${table}`));
   try {
-    await db.execute(sql.raw(`CREATE TABLE ${table} (id uuid primary key, org_id uuid, item_id uuid)`));
     await db.execute(
-      sql.raw(`INSERT INTO ${table} (id, org_id, item_id) VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid())`),
+      sql.raw(`CREATE TABLE ${table} (id uuid primary key, org_id uuid, item_id uuid)`),
+    );
+    await db.execute(
+      sql.raw(
+        `INSERT INTO ${table} (id, org_id, item_id) VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid())`,
+      ),
     );
     // uuid text never parses as int, so the build fails on the row above and
     // leaves the name INVALID — the exact hazard 0261's cleanup exists for.

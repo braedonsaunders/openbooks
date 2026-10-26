@@ -116,7 +116,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmIdRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmIdRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -129,26 +130,37 @@ const mockUrls = new Map<string, string>([
   ["../../_lib", "mock:lib"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      // The real JSON boundary is pure (Request + schema → value) and runs as-is;
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "@/lib/features" || specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const idUrl = "./route.ts?hrm-changerequest-id";
-  const submitUrl = "./submit/route.ts?hrm-changerequest-submit";
-  const withdrawUrl = "./withdraw/route.ts?hrm-changerequest-withdraw";
-  const idRoute: typeof import("./route.ts") | undefined = (await import(idUrl)) as typeof import("./route.ts");
-  const submitRoute: typeof import("./submit/route.ts") | undefined = (await import(submitUrl)) as typeof import("./submit/route.ts");
-  const withdrawRoute: typeof import("./withdraw/route.ts") | undefined = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    // The real JSON boundary is pure (Request + schema → value) and runs as-is;
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "@/lib/authz" || specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "@/lib/features" || specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const idUrl = "./route.ts?hrm-changerequest-id";
+const submitUrl = "./submit/route.ts?hrm-changerequest-submit";
+const withdrawUrl = "./withdraw/route.ts?hrm-changerequest-withdraw";
+const idRoute: typeof import("./route.ts") | undefined = (await import(
+  idUrl
+)) as typeof import("./route.ts");
+const submitRoute: typeof import("./submit/route.ts") | undefined = (await import(
+  submitUrl
+)) as typeof import("./submit/route.ts");
+const withdrawRoute: typeof import("./withdraw/route.ts") | undefined = (await import(
+  withdrawUrl
+)) as typeof import("./withdraw/route.ts");
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };
@@ -163,85 +175,120 @@ function reset(): void {
 }
 
 test("record read returns the service row", async () => {
-    reset();
-    const response = await idRoute!.GET(new Request("http://openbooks.test/x"), ctx);
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { request: { id: REQUEST_ID, status: "draft" } });
-    assert.deepEqual(routeState.calls, [
-      { fn: "get", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID } },
-    ]);
-  });
+  reset();
+  const response = await idRoute!.GET(new Request("http://openbooks.test/x"), ctx);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { request: { id: REQUEST_ID, status: "draft" } });
+  assert.deepEqual(routeState.calls, [
+    { fn: "get", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID } },
+  ]);
+});
 
-  test("record routes reject non-uuid ids and honor the feature flag", async () => {
-    reset();
-    const badCtx = { params: Promise.resolve({ id: "nope" }) };
-    assert.equal((await idRoute!.GET(new Request("http://openbooks.test/x"), badCtx)).status, 400);
-    assert.equal((await submitRoute!.POST(new Request("http://openbooks.test/x", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), badCtx)).status, 400);
-    assert.deepEqual(routeState.calls, []);
-    routeState.featureOn = false;
-    assert.equal((await idRoute!.GET(new Request("http://openbooks.test/x"), ctx)).status, 404);
-    assert.equal((await withdrawRoute!.POST(new Request("http://openbooks.test/x", { method: "POST" }), ctx)).status, 404);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("record routes reject non-uuid ids and honor the feature flag", async () => {
+  reset();
+  const badCtx = { params: Promise.resolve({ id: "nope" }) };
+  assert.equal((await idRoute!.GET(new Request("http://openbooks.test/x"), badCtx)).status, 400);
+  assert.equal(
+    (
+      await submitRoute!.POST(
+        new Request("http://openbooks.test/x", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        }),
+        badCtx,
+      )
+    ).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+  routeState.featureOn = false;
+  assert.equal((await idRoute!.GET(new Request("http://openbooks.test/x"), ctx)).status, 404);
+  assert.equal(
+    (await withdrawRoute!.POST(new Request("http://openbooks.test/x", { method: "POST" }), ctx))
+      .status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("patch forwards the payload and maps refusals", async () => {
-    reset();
-    const payload = { kind: "hire", effectiveFrom: "2026-09-01" };
-    const response = await idRoute!.PATCH(
-      new Request("http://openbooks.test/x", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ payload }),
-      }),
-      ctx,
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "patch", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, payload } },
-    ]);
-    const refusal = new Error("frozen");
-    routeState.serviceThrow = refusal;
-    const mapped = await idRoute!.PATCH(
-      new Request("http://openbooks.test/x", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ payload }),
-      }),
-      ctx,
-    );
-    assert.equal(mapped.status, 409);
-    assert.deepEqual(routeState.mapped, [refusal]);
-  });
+test("patch forwards the payload and maps refusals", async () => {
+  reset();
+  const payload = { kind: "hire", effectiveFrom: "2026-09-01" };
+  const response = await idRoute!.PATCH(
+    new Request("http://openbooks.test/x", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload }),
+    }),
+    ctx,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    { fn: "patch", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, payload } },
+  ]);
+  const refusal = new Error("frozen");
+  routeState.serviceThrow = refusal;
+  const mapped = await idRoute!.PATCH(
+    new Request("http://openbooks.test/x", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload }),
+    }),
+    ctx,
+  );
+  assert.equal(mapped.status, 409);
+  assert.deepEqual(routeState.mapped, [refusal]);
+});
 
-  test("submit and withdraw forward their reasons; a withdrawal without one is refused", async () => {
-    reset();
-    const submitted = await submitRoute!.POST(
-      new Request("http://openbooks.test/x", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reason: "go" }),
-      }),
-      ctx,
-    );
-    assert.equal(submitted.status, 200);
-    assert.deepEqual(await submitted.json(), { request: { id: REQUEST_ID, status: "pending_approval" } });
-    assert.deepEqual(routeState.calls, [
-      { fn: "validateReason", args: { orgId: "org-1", reason: "go" } },
-      { fn: "submit", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "go" } },
-    ]);
-    const noReason = await withdrawRoute!.POST(new Request("http://openbooks.test/x", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), ctx);
-    assert.equal(noReason.status, 400, "withdrawal without a reason is refused at the boundary");
-    assert.equal(routeState.calls.length, 2, "the refused withdrawal never reached the service");
-    const withdrawn = await withdrawRoute!.POST(
-      new Request("http://openbooks.test/x", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: "hiring freeze" }) }),
-      ctx,
-    );
-    assert.equal(withdrawn.status, 200);
-    assert.deepEqual(await withdrawn.json(), { request: { id: REQUEST_ID, status: "withdrawn" } });
-    assert.deepEqual(routeState.calls[2], { fn: "withdraw", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "hiring freeze" } });
+test("submit and withdraw forward their reasons; a withdrawal without one is refused", async () => {
+  reset();
+  const submitted = await submitRoute!.POST(
+    new Request("http://openbooks.test/x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "go" }),
+    }),
+    ctx,
+  );
+  assert.equal(submitted.status, 200);
+  assert.deepEqual(await submitted.json(), {
+    request: { id: REQUEST_ID, status: "pending_approval" },
   });
+  assert.deepEqual(routeState.calls, [
+    { fn: "validateReason", args: { orgId: "org-1", reason: "go" } },
+    {
+      fn: "submit",
+      args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "go" },
+    },
+  ]);
+  const noReason = await withdrawRoute!.POST(
+    new Request("http://openbooks.test/x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }),
+    ctx,
+  );
+  assert.equal(noReason.status, 400, "withdrawal without a reason is refused at the boundary");
+  assert.equal(routeState.calls.length, 2, "the refused withdrawal never reached the service");
+  const withdrawn = await withdrawRoute!.POST(
+    new Request("http://openbooks.test/x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "hiring freeze" }),
+    }),
+    ctx,
+  );
+  assert.equal(withdrawn.status, 200);
+  assert.deepEqual(await withdrawn.json(), { request: { id: REQUEST_ID, status: "withdrawn" } });
+  assert.deepEqual(routeState.calls[2], {
+    fn: "withdraw",
+    args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "hiring freeze" },
+  });
+});
 
-  test("edit, submit and withdraw refuse a read-only role before the service runs", async () => {
+test("edit, submit and withdraw refuse a read-only role before the service runs", async () => {
   reset();
   routeState.perms = ["hrm.employment.read"];
   const patch = await idRoute!.PATCH(

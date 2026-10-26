@@ -1,24 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import {
-  grid,
-  page,
-  ref,
-  widgetBlock,
-  type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
-import { notFound } from 'next/navigation'
-import { isFeatureEnabled } from '@/lib/features'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { pickString } from '../../../../../lib/list-params'
-import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
-import { PAY_DERIVED_RULES_ENTITY } from '../../../../../lib/setup/payroll-derived-rules'
-import { PAYROLL_HOLIDAYS_ENTITY } from '../../../../../lib/setup/payroll-holidays'
-import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/payroll/packs'
-import { launcherDataFor, type PayrollLauncherData } from './sections'
+import { getTranslations } from "next-intl/server";
+import { grid, page, ref, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { guardRootSubsidiaryScope } from "../../../../../lib/authz";
+import { notFound } from "next/navigation";
+import { isFeatureEnabled } from "@/lib/features";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { pickString } from "../../../../../lib/list-params";
+import { SETUP_ENTITY_BY_KEY } from "../../../../../lib/setup/registry";
+import { PAY_DERIVED_RULES_ENTITY } from "../../../../../lib/setup/payroll-derived-rules";
+import { PAYROLL_HOLIDAYS_ENTITY } from "../../../../../lib/setup/payroll-holidays";
+import { PAYROLL_COUNTRY_PACKS } from "@openbooks/engine/payroll/packs";
+import { launcherDataFor, type PayrollLauncherData } from "./sections";
 
 /**
  * The payroll setup workspace, split into a loader and a spec.
@@ -56,129 +50,174 @@ import { launcherDataFor, type PayrollLauncherData } from './sections'
  */
 
 const ENTITY_BY_TAB = {
-  filing: 'payroll-filing-accounts',
-  schedules: 'pay-schedules',
-  components: 'pay-components',
-  expenses: 'pay-component-department-expenses',
-  union: 'union-agreements',
-} as const
+  filing: "payroll-filing-accounts",
+  schedules: "pay-schedules",
+  components: "pay-components",
+  expenses: "pay-component-department-expenses",
+  union: "union-agreements",
+} as const;
 
 const TABS = [
-  'packs', 'accounts', 'filing', 'schedules', 'components', 'expenses', 'union',
+  "packs",
+  "accounts",
+  "filing",
+  "schedules",
+  "components",
+  "expenses",
+  "union",
   // Employer-supplied statutory rates (experience-rated SUI, the FUTA credit
   // reduction, provincial employer health levies), at the scope the pack
   // declares each varies by.
-  'rates', 'employerFacts',
+  "rates",
+  "employerFacts",
   // The hours and days employees are normally scheduled to work — a generic
   // employment attribute (engine/src/payroll/work-schedules.ts) that several
   // jurisdictions' statutory holiday pay is computed FROM.
-  'workSchedules',
-  'derived', 'derivedPreview',
-  'compensation-packages',
+  "workSchedules",
+  "derived",
+  "derivedPreview",
+  "compensation-packages",
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
-  'holidays', 'holidayCalendar',
+  "holidays",
+  "holidayCalendar",
   // Pay rails, EFT originator profiles, and stub delivery.
-  'payday',
-] as const
-type Tab = (typeof TABS)[number]
-type EntityTab = keyof typeof ENTITY_BY_TAB
+  "payday",
+] as const;
+type Tab = (typeof TABS)[number];
+type EntityTab = keyof typeof ENTITY_BY_TAB;
 
-const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
+const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB;
 
 /** Configuration families use a picker; only the selected family has a local row. */
-const GROUPS: { key: 'foundations' | 'earnings' | 'payday'; tabs: Tab[] }[] = [
-  { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
-  { key: 'earnings', tabs: ['components', 'compensation-packages', 'expenses', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
-  { key: 'payday', tabs: ['payday'] },
-]
+const GROUPS: { key: "foundations" | "earnings" | "payday"; tabs: Tab[] }[] = [
+  {
+    key: "foundations",
+    tabs: ["packs", "accounts", "rates", "employerFacts", "schedules", "workSchedules", "filing"],
+  },
+  {
+    key: "earnings",
+    tabs: [
+      "components",
+      "compensation-packages",
+      "expenses",
+      "derived",
+      "derivedPreview",
+      "holidays",
+      "holidayCalendar",
+      "union",
+    ],
+  },
+  { key: "payday", tabs: ["payday"] },
+];
 
 export interface PayrollSetupData {
-  canConfigure: boolean
-  onCompensationPackages: boolean
-  title: string
-  description: string
-  launcher: PayrollLauncherData
-  currentParams: Record<string, string | string[] | undefined>
-  groups: { key: string; label: string; firstTab: string }[]
-  activeGroup: string
-  tabsAria: string
-  subTabs: { href: string; label: string; active: boolean }[]
-  onPacks: boolean
-  onAccounts: boolean
-  onPayday: boolean
-  onRates: boolean
-  onEmployerFacts: boolean
-  onWorkSchedules: boolean
-  onEntityTab: boolean
-  onExpenses: boolean
-  entityKey: string | null
-  onDerived: boolean
-  onDerivedPreview: boolean
-  onHolidays: boolean
-  onHolidayCalendar: boolean
+  canConfigure: boolean;
+  onCompensationPackages: boolean;
+  title: string;
+  description: string;
+  launcher: PayrollLauncherData;
+  currentParams: Record<string, string | string[] | undefined>;
+  groups: { key: string; label: string; firstTab: string }[];
+  activeGroup: string;
+  tabsAria: string;
+  subTabs: { href: string; label: string; active: boolean }[];
+  onPacks: boolean;
+  onAccounts: boolean;
+  onPayday: boolean;
+  onRates: boolean;
+  onEmployerFacts: boolean;
+  onWorkSchedules: boolean;
+  onEntityTab: boolean;
+  onExpenses: boolean;
+  entityKey: string | null;
+  onDerived: boolean;
+  onDerivedPreview: boolean;
+  onHolidays: boolean;
+  onHolidayCalendar: boolean;
 }
 
 export async function loadPayrollSetup(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PayrollSetupData> {
-  const requestedPackages = pickString(sp.tab) === 'compensation-packages'
-  const authz = await requirePermission(requestedPackages ? 'payroll.read' : 'payroll.manage')
-  if (!requestedPackages && await guardRootSubsidiaryScope(authz)) notFound()
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'payroll')
-  if (requestedPackages) await requireFeatureEnabled(orgId, 'compensationPackages')
+  const requestedPackages = pickString(sp.tab) === "compensation-packages";
+  const authz = await requirePermission(requestedPackages ? "payroll.read" : "payroll.manage");
+  if (!requestedPackages && (await guardRootSubsidiaryScope(authz))) notFound();
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "payroll");
+  if (requestedPackages) await requireFeatureEnabled(orgId, "compensationPackages");
   // A subtab backed by a registry entity only exists while that entity is
   // registered, so the workspace never links at a 404.
-  const canConfigure = can(authz, 'payroll.manage') && authz.allowedSubsidiaryIds === null
-  const packagesEnabled = await isFeatureEnabled(orgId, 'compensationPackages')
-  const available = TABS.filter((key) => (canConfigure || key === 'compensation-packages') && (key !== 'compensation-packages' || packagesEnabled) && (!isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key])))
-  const requested = pickString(sp.tab)
+  const canConfigure = can(authz, "payroll.manage") && authz.allowedSubsidiaryIds === null;
+  const packagesEnabled = await isFeatureEnabled(orgId, "compensationPackages");
+  const available = TABS.filter(
+    (key) =>
+      (canConfigure || key === "compensation-packages") &&
+      (key !== "compensation-packages" || packagesEnabled) &&
+      (!isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key])),
+  );
+  const requested = pickString(sp.tab);
   // Legacy alias: readiness slot items link `?tab=<country>` (ca, us, …);
   // those slots are mapped on the accounts tab.
   const aliased =
     requested && /^[a-z]{2}$/.test(requested) && requested.toUpperCase() in PAYROLL_COUNTRY_PACKS
-      ? 'accounts'
-      : requested
-  const tab: Tab = aliased && (available as readonly string[]).includes(aliased) ? (aliased as Tab) : 'packs'
-  const group = GROUPS.find((g) => g.tabs.includes(tab)) ?? GROUPS[0]!
-  const t = await getTranslations('payroll.settingsPage')
-  const canManageEntities = can(authz, 'admin.setup.manage')
-  const launcher: PayrollLauncherData = canConfigure ? await launcherDataFor({
-    orgId,
-    canManageEntities,
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-  }) : { missing: 0, vendorKeysByCountry: {}, frequencies: [], canManageEntities: false, schedules: [], subsidiaries: [], bankProfiles: [] }
+      ? "accounts"
+      : requested;
+  const tab: Tab =
+    aliased && (available as readonly string[]).includes(aliased) ? (aliased as Tab) : "packs";
+  const group = GROUPS.find((g) => g.tabs.includes(tab)) ?? GROUPS[0]!;
+  const t = await getTranslations("payroll.settingsPage");
+  const canManageEntities = can(authz, "admin.setup.manage");
+  const launcher: PayrollLauncherData = canConfigure
+    ? await launcherDataFor({
+        orgId,
+        canManageEntities,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      })
+    : {
+        missing: 0,
+        vendorKeysByCountry: {},
+        frequencies: [],
+        canManageEntities: false,
+        schedules: [],
+        subsidiaries: [],
+        bankProfiles: [],
+      };
 
   const tabLabel = (key: Tab, fallback: string) =>
-    t.has(`tabs.${key}` as never) ? t(`tabs.${key}` as never) : fallback
+    t.has(`tabs.${key}` as never) ? t(`tabs.${key}` as never) : fallback;
   const label = (key: Tab): string =>
-    key === 'compensation-packages' ? t('tabs.compensationPackages') : key === 'expenses'
-      ? tabLabel(key, 'Expense allocations')
-      : key === 'derived'
-      ? tabLabel(key, 'Derived Earnings')
-      : key === 'derivedPreview'
-        ? tabLabel(key, 'Rule Preview')
-        : key === 'holidays'
-          ? tabLabel(key, 'Holidays')
-          : key === 'holidayCalendar'
-            ? tabLabel(key, 'Holiday Calendar')
-            : key === 'payday'
-              ? tabLabel(key, 'Payday')
-              : key === 'rates'
-                ? tabLabel(key, 'Statutory Rates')
-                : key === 'employerFacts'
-                  ? tabLabel(key, 'Employer Facts')
-                : t(`tabs.${key}`)
+    key === "compensation-packages"
+      ? t("tabs.compensationPackages")
+      : key === "expenses"
+        ? tabLabel(key, "Expense allocations")
+        : key === "derived"
+          ? tabLabel(key, "Derived Earnings")
+          : key === "derivedPreview"
+            ? tabLabel(key, "Rule Preview")
+            : key === "holidays"
+              ? tabLabel(key, "Holidays")
+              : key === "holidayCalendar"
+                ? tabLabel(key, "Holiday Calendar")
+                : key === "payday"
+                  ? tabLabel(key, "Payday")
+                  : key === "rates"
+                    ? tabLabel(key, "Statutory Rates")
+                    : key === "employerFacts"
+                      ? tabLabel(key, "Employer Facts")
+                      : t(`tabs.${key}`);
 
-  const groups = GROUPS
-    .map((g) => ({ key: g.key, tabs: g.tabs.filter((k) => available.includes(k)) }))
-    .filter((g) => g.tabs.length > 0)
-  const subTabs = group.tabs.filter((k) => available.includes(k)).map((key) => ({
-    href: `/admin/setup/payroll?tab=${key}`,
-    label: label(key),
-    active: key === tab,
-  }))
+  const groups = GROUPS.map((g) => ({
+    key: g.key,
+    tabs: g.tabs.filter((k) => available.includes(k)),
+  })).filter((g) => g.tabs.length > 0);
+  const subTabs = group.tabs
+    .filter((k) => available.includes(k))
+    .map((key) => ({
+      href: `/admin/setup/payroll?tab=${key}`,
+      label: label(key),
+      active: key === tab,
+    }));
 
   // Registry-backed tabs resolve like the native helpers: the registered
   // descriptor wins the moment it exists. The LOADER resolves each tab to a
@@ -187,17 +226,17 @@ export async function loadPayrollSetup(
   // serves all seven registry tabs: the presence flags are mutually
   // exclusive, so exactly one `setup-section` block ever reads it.
   const entityKeyFor = (key: Tab): string | null => {
-    if (isEntityTab(key)) return ENTITY_BY_TAB[key]
-    if (key === 'derived') return PAY_DERIVED_RULES_ENTITY.key
-    if (key === 'holidays') return PAYROLL_HOLIDAYS_ENTITY.key
-    return null
-  }
+    if (isEntityTab(key)) return ENTITY_BY_TAB[key];
+    if (key === "derived") return PAY_DERIVED_RULES_ENTITY.key;
+    if (key === "holidays") return PAYROLL_HOLIDAYS_ENTITY.key;
+    return null;
+  };
 
   return {
     canConfigure,
-    onCompensationPackages: tab === 'compensation-packages',
-    title: t('title'),
-    description: t('description'),
+    onCompensationPackages: tab === "compensation-packages",
+    title: t("title"),
+    description: t("description"),
     launcher,
     currentParams: sp,
     groups: groups.map((g) => ({
@@ -206,25 +245,25 @@ export async function loadPayrollSetup(
       firstTab: g.tabs[0]!,
     })),
     activeGroup: group.key,
-    tabsAria: t('tabsAria'),
+    tabsAria: t("tabsAria"),
     subTabs,
-    onPacks: tab === 'packs',
-    onAccounts: tab === 'accounts',
-    onPayday: tab === 'payday',
-    onRates: tab === 'rates',
-    onEmployerFacts: tab === 'employerFacts',
-    onWorkSchedules: tab === 'workSchedules',
-    onEntityTab: isEntityTab(tab) && (tab !== 'expenses' || sp.view === 'departments'),
-    onExpenses: tab === 'expenses' && sp.view !== 'departments',
+    onPacks: tab === "packs",
+    onAccounts: tab === "accounts",
+    onPayday: tab === "payday",
+    onRates: tab === "rates",
+    onEmployerFacts: tab === "employerFacts",
+    onWorkSchedules: tab === "workSchedules",
+    onEntityTab: isEntityTab(tab) && (tab !== "expenses" || sp.view === "departments"),
+    onExpenses: tab === "expenses" && sp.view !== "departments",
     entityKey: entityKeyFor(tab),
-    onDerived: tab === 'derived',
-    onDerivedPreview: tab === 'derivedPreview',
-    onHolidays: tab === 'holidays',
-    onHolidayCalendar: tab === 'holidayCalendar',
-  }
+    onDerived: tab === "derived",
+    onDerivedPreview: tab === "derivedPreview",
+    onHolidays: tab === "holidays",
+    onHolidayCalendar: tab === "holidayCalendar",
+  };
 }
 
-const f = ref<PayrollSetupData>()
+const f = ref<PayrollSetupData>();
 
 /**
  * The full tab workspace. Each body block carries its own presence flag;
@@ -233,59 +272,65 @@ const f = ref<PayrollSetupData>()
  * and flags.
  */
 export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
-  const basePath = '/admin/setup/payroll'
+  const basePath = "/admin/setup/payroll";
   return page({
-    route: '/admin/setup/payroll',
+    route: "/admin/setup/payroll",
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome. The native
     // page owns its outer `<div className="space-y-5">`, so the spec places
     // the same element — the [entity] precedent.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('space-y-5', [
+      grid("space-y-5", [
         // The shared header receives loader-resolved text and the optional
         // launcher action. The banner's `missing > 0` presence lives inside
         // its shared component too.
-        widgetBlock('payroll-setup-header', {
+        widgetBlock("payroll-setup-header", {
           title: data.title,
           description: data.description,
           launcher: data.launcher,
           showLauncher: data.canConfigure,
         }),
-        { ...widgetBlock('payroll-setup-banner', { launcher: data.launcher }), when: f('canConfigure') },
+        {
+          ...widgetBlock("payroll-setup-banner", { launcher: data.launcher }),
+          when: f("canConfigure"),
+        },
         // One shared configuration-family selector and local route strip.
-        widgetBlock('payroll-setup-tabs', {
+        widgetBlock("payroll-setup-tabs", {
           groups: data.groups,
           activeGroup: data.activeGroup,
           tabsAria: data.tabsAria,
           subTabs: data.subTabs,
         }),
         // Tab bodies. Exactly one presence flag is true per render.
-        { ...widgetBlock('payroll-compensation-packages-tab', { sp: data.currentParams }), when: f('onCompensationPackages') },
         {
-          ...widgetBlock('payroll-packs-tab', {}),
-          when: f('onPacks'),
+          ...widgetBlock("payroll-compensation-packages-tab", { sp: data.currentParams }),
+          when: f("onCompensationPackages"),
         },
         {
-          ...widgetBlock('payroll-accounts-tab', {}),
-          when: f('onAccounts'),
+          ...widgetBlock("payroll-packs-tab", {}),
+          when: f("onPacks"),
         },
         {
-          ...widgetBlock('payroll-payday-tab', {}),
-          when: f('onPayday'),
+          ...widgetBlock("payroll-accounts-tab", {}),
+          when: f("onAccounts"),
         },
         {
-          ...widgetBlock('payroll-rates-tab', {}),
-          when: f('onRates'),
+          ...widgetBlock("payroll-payday-tab", {}),
+          when: f("onPayday"),
         },
         {
-          ...widgetBlock('payroll-employer-facts-tab', {}),
-          when: f('onEmployerFacts'),
+          ...widgetBlock("payroll-rates-tab", {}),
+          when: f("onRates"),
         },
         {
-          ...widgetBlock('payroll-schedules-tab', {}),
-          when: f('onWorkSchedules'),
+          ...widgetBlock("payroll-employer-facts-tab", {}),
+          when: f("onEmployerFacts"),
+        },
+        {
+          ...widgetBlock("payroll-schedules-tab", {}),
+          when: f("onWorkSchedules"),
         },
         // Registry entity tabs share the `setup-section` slot
         // (already registered): the slot re-derives org id, entry and
@@ -294,47 +339,55 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
         // the flags are mutually exclusive, so exactly one block ever reads
         // `entityKey`.
         {
-          ...widgetBlock('setup-section', {
+          ...widgetBlock("setup-section", {
             entityKey: data.entityKey,
             sp: data.currentParams,
             basePath,
           }),
-          when: f('onEntityTab'),
+          when: f("onEntityTab"),
         },
         {
-          ...widgetBlock('allocations-rules-tab', { sp: data.currentParams, basePath, payrollExpenses: true }),
-          when: f('onExpenses'),
+          ...widgetBlock("allocations-rules-tab", {
+            sp: data.currentParams,
+            basePath,
+            payrollExpenses: true,
+          }),
+          when: f("onExpenses"),
         },
         {
-          ...widgetBlock('allocations-rule-drawer', { sp: data.currentParams, basePath, payrollExpenses: true }),
-          when: f('onExpenses'),
+          ...widgetBlock("allocations-rule-drawer", {
+            sp: data.currentParams,
+            basePath,
+            payrollExpenses: true,
+          }),
+          when: f("onExpenses"),
         },
         // The derived tab's entity is not yet in the registry: same slot,
         // same session-derived lookup, key resolved by the loader.
         {
-          ...widgetBlock('setup-section', {
+          ...widgetBlock("setup-section", {
             entityKey: data.entityKey,
             sp: data.currentParams,
             basePath,
           }),
-          when: f('onDerived'),
+          when: f("onDerived"),
         },
         {
-          ...widgetBlock('payroll-derived-preview-tab', { sp: data.currentParams }),
-          when: f('onDerivedPreview'),
+          ...widgetBlock("payroll-derived-preview-tab", { sp: data.currentParams }),
+          when: f("onDerivedPreview"),
         },
         {
-          ...widgetBlock('payroll-holidays-tab', {
+          ...widgetBlock("payroll-holidays-tab", {
             sp: data.currentParams,
             basePath,
           }),
-          when: f('onHolidays'),
+          when: f("onHolidays"),
         },
         {
-          ...widgetBlock('payroll-holiday-calendar-tab', { sp: data.currentParams }),
-          when: f('onHolidayCalendar'),
+          ...widgetBlock("payroll-holiday-calendar-tab", { sp: data.currentParams }),
+          when: f("onHolidayCalendar"),
         },
       ]),
     ],
-  })
+  });
 }

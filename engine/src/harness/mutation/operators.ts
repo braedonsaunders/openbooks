@@ -167,7 +167,13 @@ function offsetToLineColumn(starts: number[], offset: number): { line: number; c
  * setParentPointers lets boundary-shift test type ancestry.
  */
 function parseSource(source: string): ts.SourceFile {
-  return ts.createSourceFile("mutation-target.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  return ts.createSourceFile(
+    "mutation-target.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
 }
 
 /** Template interpolations are real expressions but stay excluded (conservative). */
@@ -196,10 +202,23 @@ function insideType(node: ts.Node): boolean {
  * including unspaced runtime operators (`a+b`) the old text heuristic
  * could not tell apart from generics.
  */
-function mutateArithSignFlip(source: string, sourceFile: ts.SourceFile, starts: number[], push: Push): void {
+function mutateArithSignFlip(
+  source: string,
+  sourceFile: ts.SourceFile,
+  starts: number[],
+  push: Push,
+): void {
   const emit = (offset: number, ch: string, flipped: string): void => {
     const { line, column } = offsetToLineColumn(starts, offset);
-    push({ operator: "arith-sign-flip", line, column, description: `arith '${ch}' -> '${flipped}'`, start: offset, end: offset + 1, text: flipped });
+    push({
+      operator: "arith-sign-flip",
+      line,
+      column,
+      description: `arith '${ch}' -> '${flipped}'`,
+      start: offset,
+      end: offset + 1,
+      text: flipped,
+    });
   };
   const visit = (node: ts.Node): void => {
     if (ts.isBinaryExpression(node)) {
@@ -225,7 +244,8 @@ function mutateArithSignFlip(source: string, sourceFile: ts.SourceFile, starts: 
     } else if (ts.isPrefixUnaryExpression(node)) {
       if (
         (node.operator === ts.SyntaxKind.PlusToken || node.operator === ts.SyntaxKind.MinusToken) &&
-        !insideTemplate(node) && !insideType(node)
+        !insideTemplate(node) &&
+        !insideType(node)
       ) {
         const start = node.getStart(sourceFile);
         const ch = source[start]!;
@@ -289,13 +309,12 @@ const LIMIT_LINE_PATTERN =
  * them yields survivors no suite can kill. Collect their spans so the
  * line scan below can skip them; runtime literals keep existing semantics.
  */
-function collectTypeLiteralRanges(sourceFile: ts.SourceFile): Array<{ start: number; end: number }> {
+function collectTypeLiteralRanges(
+  sourceFile: ts.SourceFile,
+): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
   const visit = (node: ts.Node): void => {
-    if (
-      node.kind === ts.SyntaxKind.NumericLiteral ||
-      node.kind === ts.SyntaxKind.BigIntLiteral
-    ) {
+    if (node.kind === ts.SyntaxKind.NumericLiteral || node.kind === ts.SyntaxKind.BigIntLiteral) {
       let current: ts.Node | undefined = node.parent;
       while (current) {
         if (ts.isTypeNode(current)) {
@@ -344,9 +363,13 @@ function mutateBoundaryShift(
       const column = tokenStart + 1;
       for (const shifted of [value + 1, value - 1]) {
         push({
-          operator: "boundary-shift", line: line1, column,
+          operator: "boundary-shift",
+          line: line1,
+          column,
           description: `boundary '${token}' -> '${shifted}${suffix}'`,
-          start: absStart, end: absStart + token.length, text: `${shifted}${suffix}`,
+          start: absStart,
+          end: absStart + token.length,
+          text: `${shifted}${suffix}`,
         });
       }
     }
@@ -392,9 +415,13 @@ function mutateRoundingSwap(source: string, masked: string, starts: number[], pu
     if (!first || !rest || splitTopLevelComma(rest) >= 0) continue;
     const { line, column } = offsetToLineColumn(starts, match.index);
     push({
-      operator: "rounding-swap", line, column,
+      operator: "rounding-swap",
+      line,
+      column,
       description: "rounding 'roundDiv(a, b)' -> truncating '((a) / (b))'",
-      start: match.index, end: closeIdx + 1, text: `(( ${first} ) / ( ${rest} ))`,
+      start: match.index,
+      end: closeIdx + 1,
+      text: `(( ${first} ) / ( ${rest} ))`,
     });
   }
   // Math.round(x) -> Math.floor(x), Math.ceil(x) -> Math.floor(x).
@@ -404,9 +431,13 @@ function mutateRoundingSwap(source: string, masked: string, starts: number[], pu
     const nameIdx = match.index + match[0].indexOf(name);
     const { line, column } = offsetToLineColumn(starts, nameIdx);
     push({
-      operator: "rounding-swap", line, column,
+      operator: "rounding-swap",
+      line,
+      column,
       description: `rounding 'Math.${name}' -> 'Math.floor'`,
-      start: nameIdx, end: nameIdx + name.length, text: "floor",
+      start: nameIdx,
+      end: nameIdx + name.length,
+      text: "floor",
     });
   }
 }
@@ -464,11 +495,13 @@ function scanLoopRanges(maskedLines: string[]): Array<{ start: number; end: numb
 }
 
 const ACCUMULATOR_PATTERN = /(\+=|-=|\*=|\/=|%=|\.push\s*\()/;
-const DECLARATION_START = /^\s*(const|let|var|import|export|function|class|return|type|interface)\b/;
+const DECLARATION_START =
+  /^\s*(const|let|var|import|export|function|class|return|type|interface)\b/;
 
 function mutateDroppedAccumulator(maskedLines: string[], push: Push): void {
   const ranges = scanLoopRanges(maskedLines);
-  const inside = (lineIdx: number): boolean => ranges.some((r) => lineIdx >= r.start && lineIdx <= r.end);
+  const inside = (lineIdx: number): boolean =>
+    ranges.some((r) => lineIdx >= r.start && lineIdx <= r.end);
   for (let idx = 0; idx < maskedLines.length; idx += 1) {
     if (!inside(idx)) continue;
     const line = maskedLines[idx]!;
@@ -480,9 +513,14 @@ function mutateDroppedAccumulator(maskedLines: string[], push: Push): void {
     if (DECLARATION_START.test(line)) continue;
     const column = line.indexOf(trimmed) + 1;
     push({
-      operator: "dropped-accumulator", line: idx + 1, column,
+      operator: "dropped-accumulator",
+      line: idx + 1,
+      column,
       description: `dropped accumulator statement '${trimmed.slice(0, 72)}'`,
-      start: -1, end: -1, text: "", deleteLine: idx,
+      start: -1,
+      end: -1,
+      text: "",
+      deleteLine: idx,
     });
   }
 }
@@ -518,9 +556,12 @@ function mutateGuardNegation(
     const condition = sourceLines[idx]!.slice(openInLine + 1, closeInLine);
     if (!condition.trim()) continue;
     push({
-      operator: "guard-negation", line: idx + 1, column: openInLine + 2,
+      operator: "guard-negation",
+      line: idx + 1,
+      column: openInLine + 2,
       description: `guard negated '(${condition.trim().slice(0, 64)})'`,
-      start: lineOffsets[idx]! + openInLine + 1, end: lineOffsets[idx]! + closeInLine,
+      start: lineOffsets[idx]! + openInLine + 1,
+      end: lineOffsets[idx]! + closeInLine,
       text: `!(${condition})`,
     });
   }
@@ -552,10 +593,15 @@ function mutateEarlyReturn(maskedLines: string[], push: Push): void {
     if (header === null || !VOID_RETURN_PATTERN.test(header)) continue;
     const indent = line.match(/^\s*/)?.[0] ?? "";
     push({
-      operator: "early-return-before-write", line: idx + 1, column: 1,
+      operator: "early-return-before-write",
+      line: idx + 1,
+      column: 1,
       description: `early return before '${line.trim().slice(0, 64)}'`,
-      start: -1, end: -1, text: "",
-      insertBeforeLine: idx, insertText: `${indent}return;`,
+      start: -1,
+      end: -1,
+      text: "",
+      insertBeforeLine: idx,
+      insertText: `${indent}return;`,
     });
   }
 }
@@ -601,7 +647,10 @@ export function generateMutants(
   for (const op of MUTATION_OPERATORS) {
     const list = pending
       .filter((m) => m.operator === op)
-      .sort((a, b) => a.line - b.line || a.column - b.column || (a.description < b.description ? -1 : 1));
+      .sort(
+        (a, b) =>
+          a.line - b.line || a.column - b.column || (a.description < b.description ? -1 : 1),
+      );
     let emitted = 0;
     for (const m of list) {
       if (emitted >= maxPerOperator) break;

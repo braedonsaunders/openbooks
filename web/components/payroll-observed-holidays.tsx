@@ -1,6 +1,13 @@
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from '@openbooks/ui'
-import { Badge } from '@openbooks/ui'
-import type { ObservedHoliday } from '@openbooks/engine/payroll/holidays'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { Badge } from "@openbooks/ui";
+import type { ObservedHoliday } from "@openbooks/engine/payroll/holidays";
 
 /**
  * The observed statutory holiday table, shared by every surface that shows
@@ -9,42 +16,44 @@ import type { ObservedHoliday } from '@openbooks/engine/payroll/holidays'
  */
 
 export interface ObservedHolidayLabels {
-  date: string
-  holiday: string
-  statutoryDate: string
-  source: string
-  paid: string
-  statutory: string
-  elected: string
-  company: string
-  yes: string
-  unpaid: string
-  empty: string
+  date: string;
+  holiday: string;
+  statutoryDate: string;
+  source: string;
+  paid: string;
+  statutory: string;
+  elected: string;
+  company: string;
+  yes: string;
+  unpaid: string;
+  empty: string;
 }
 
 /** Builds the table's labels from the payroll holiday-calendar catalog keys. */
-export function observedHolidayLabels(label: (key: string, fallback: string) => string): ObservedHolidayLabels {
+export function observedHolidayLabels(
+  label: (key: string, fallback: string) => string,
+): ObservedHolidayLabels {
   return {
-    date: label('holidayCalendar.date', 'Observed'),
-    holiday: label('holidayCalendar.holiday', 'Holiday'),
-    statutoryDate: label('holidayCalendar.statutoryDate', 'Falls on'),
-    source: label('holidayCalendar.source', 'Source'),
-    paid: label('holidayCalendar.paid', 'Paid'),
-    statutory: label('holidayCalendar.statutory', 'Statutory'),
-    elected: label('holidayCalendar.elected', 'Optional — elected'),
-    company: label('holidayCalendar.company', 'Company'),
-    yes: label('holidayCalendar.yes', 'Yes'),
-    unpaid: label('holidayCalendar.unpaid', 'Unpaid closure'),
-    empty: label('holidayCalendar.empty', 'No holidays are observed in this year.'),
-  }
+    date: label("holidayCalendar.date", "Observed"),
+    holiday: label("holidayCalendar.holiday", "Holiday"),
+    statutoryDate: label("holidayCalendar.statutoryDate", "Falls on"),
+    source: label("holidayCalendar.source", "Source"),
+    paid: label("holidayCalendar.paid", "Paid"),
+    statutory: label("holidayCalendar.statutory", "Statutory"),
+    elected: label("holidayCalendar.elected", "Optional — elected"),
+    company: label("holidayCalendar.company", "Company"),
+    yes: label("holidayCalendar.yes", "Yes"),
+    unpaid: label("holidayCalendar.unpaid", "Unpaid closure"),
+    empty: label("holidayCalendar.empty", "No holidays are observed in this year."),
+  };
 }
 
 export function ObservedHolidayTable({
   holidays,
   labels,
 }: {
-  holidays: readonly ObservedHoliday[]
-  labels: ObservedHolidayLabels
+  holidays: readonly ObservedHoliday[];
+  labels: ObservedHolidayLabels;
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
@@ -66,11 +75,11 @@ export function ObservedHolidayTable({
               {/* Shown only when the observance rule MOVED the day — that
                   shift is the thing an operator most often disbelieves. */}
               <SharedTableCell className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-400">
-                {holiday.statutoryDate === holiday.date ? '' : holiday.statutoryDate}
+                {holiday.statutoryDate === holiday.date ? "" : holiday.statutoryDate}
               </SharedTableCell>
               <SharedTableCell className="px-3 py-2">
-                <Badge variant={holiday.source === 'pack' ? 'outline' : 'success'}>
-                  {holiday.source === 'pack'
+                <Badge variant={holiday.source === "pack" ? "outline" : "success"}>
+                  {holiday.source === "pack"
                     ? holiday.elected
                       ? labels.elected
                       : labels.statutory
@@ -84,7 +93,10 @@ export function ObservedHolidayTable({
           ))}
           {holidays.length === 0 ? (
             <SharedTableRow>
-              <SharedTableCell colSpan={5} className="px-3 py-6 text-center text-slate-500 dark:text-slate-400">
+              <SharedTableCell
+                colSpan={5}
+                className="px-3 py-6 text-center text-slate-500 dark:text-slate-400"
+              >
                 {labels.empty}
               </SharedTableCell>
             </SharedTableRow>
@@ -92,5 +104,5 @@ export function ObservedHolidayTable({
         </SharedTableBody>
       </SharedTable>
     </div>
-  )
+  );
 }

@@ -66,9 +66,7 @@ export function eachDayOfRange(start: string, end: string): string[] {
   parseCivilDate(start);
   parseCivilDate(end);
   if (end < start) {
-    throw new LeaveMathError(
-      `effective end ${end} must not be before start ${start}`,
-    );
+    throw new LeaveMathError(`effective end ${end} must not be before start ${start}`);
   }
   // Civil-day walk on explicit Y/M/D integer arithmetic: no Date objects,
   // no time zones. Lexicographic comparison is exact on zero-padded ISO.
@@ -88,12 +86,7 @@ export function eachDayOfRange(start: string, end: string): string[] {
 }
 
 /** Inclusive day-range overlap: shared boundary days collide. */
-export function rangesOverlap(
-  aStart: string,
-  aEnd: string,
-  bStart: string,
-  bEnd: string,
-): boolean {
+export function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
   for (const bound of [aStart, aEnd, bStart, bEnd]) parseCivilDate(bound);
   return aStart <= bEnd && bStart <= aEnd;
 }
@@ -142,32 +135,46 @@ export function requireRuleTiers(rule: AccrualRule): AccrualTier[] | null {
   const tiers = rule.tiers;
   if (tiers === undefined || tiers === null) return null;
   if (!Array.isArray(tiers) || tiers.length === 0) {
-    throw new LeaveMathError("accrual_rule.tiers is a non-empty list of {after_years, hours} — record the tiers or omit them");
+    throw new LeaveMathError(
+      "accrual_rule.tiers is a non-empty list of {after_years, hours} — record the tiers or omit them",
+    );
   }
   let previous = -1;
   for (const tier of tiers) {
     if (typeof tier !== "object" || tier === null) {
-      throw new LeaveMathError("accrual_rule.tiers entries carry after_years and hours — record each tier");
+      throw new LeaveMathError(
+        "accrual_rule.tiers entries carry after_years and hours — record each tier",
+      );
     }
     const years = (tier as AccrualTier).after_years;
     const hours = (tier as AccrualTier).hours;
     if (!Number.isInteger(years) || (years as number) < 1) {
-      throw new LeaveMathError("accrual_rule.tiers after_years is a positive whole number of completed service years — record each tier's threshold");
+      throw new LeaveMathError(
+        "accrual_rule.tiers after_years is a positive whole number of completed service years — record each tier's threshold",
+      );
     }
     if (typeof hours !== "string") {
-      throw new LeaveMathError("accrual_rule.tiers hours is an exact decimal — record each tier's hours");
+      throw new LeaveMathError(
+        "accrual_rule.tiers hours is an exact decimal — record each tier's hours",
+      );
     }
     let cents: HourCents;
     try {
       cents = parseHoursToCents(hours);
     } catch {
-      throw new LeaveMathError("accrual_rule.tiers hours is an exact decimal with at most 2 fraction digits — record each tier's hours");
+      throw new LeaveMathError(
+        "accrual_rule.tiers hours is an exact decimal with at most 2 fraction digits — record each tier's hours",
+      );
     }
     if (cents <= 0n) {
-      throw new LeaveMathError("accrual_rule.tiers hours must be greater than zero — record each tier's hours");
+      throw new LeaveMathError(
+        "accrual_rule.tiers hours must be greater than zero — record each tier's hours",
+      );
     }
     if ((years as number) <= previous) {
-      throw new LeaveMathError("accrual_rule.tiers after_years ascends strictly — order the tiers by completed service years");
+      throw new LeaveMathError(
+        "accrual_rule.tiers after_years ascends strictly — order the tiers by completed service years",
+      );
     }
     previous = years as number;
   }
@@ -242,13 +249,17 @@ export function accrualEarned(
       return null;
     case "per_year": {
       if (rule.hours == null) {
-        throw new LeaveMathError("a per_year accrual rule must carry hours — set hours or use kind none");
+        throw new LeaveMathError(
+          "a per_year accrual rule must carry hours — set hours or use kind none",
+        );
       }
       return tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, asOf);
     }
     case "per_period": {
       if (rule.hours == null) {
-        throw new LeaveMathError("a per_period accrual rule must carry hours — set hours or use kind none");
+        throw new LeaveMathError(
+          "a per_period accrual rule must carry hours — set hours or use kind none",
+        );
       }
       const perYear = rule.periods_per_year;
       if (!Number.isInteger(perYear) || (perYear as number) <= 0) {
@@ -270,7 +281,9 @@ export function accrualEarned(
       for (let slice = 1; slice <= elapsed; slice += 1) {
         const endDay = sliceEndDay(slice, yearDates.length, perYear as number);
         const vesting = yearDates[endDay - 1]!;
-        total += parseHoursToCents(tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, vesting));
+        total += parseHoursToCents(
+          tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, vesting),
+        );
       }
       return formatCents(total);
     }
@@ -333,15 +346,21 @@ export function accrualEarnedAcrossSegments(
     if (rule.kind === "none" || rule.kind === "unlimited") continue;
     if (rule.kind === "per_year") {
       if (rule.hours == null) {
-        throw new LeaveMathError("a per_year accrual rule must carry hours — set hours or use kind none");
+        throw new LeaveMathError(
+          "a per_year accrual rule must carry hours — set hours or use kind none",
+        );
       }
       if (seg.from <= asOf && (seg.to === null || seg.to >= asOf)) {
-        total += parseHoursToCents(tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, asOf));
+        total += parseHoursToCents(
+          tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, asOf),
+        );
       }
       continue;
     }
     if (rule.hours == null) {
-      throw new LeaveMathError("a per_period accrual rule must carry hours — set hours or use kind none");
+      throw new LeaveMathError(
+        "a per_period accrual rule must carry hours — set hours or use kind none",
+      );
     }
     const perYear = rule.periods_per_year;
     if (!Number.isInteger(perYear) || (perYear as number) <= 0) {
@@ -367,11 +386,14 @@ export function accrualEarnedAcrossSegments(
       while (first > 1 && sliceStartDay(first - 1, yearDays, perYear as number) >= lo) first -= 1;
       let last = Math.min(completed, Math.floor((hi * (perYear as number)) / yearDays) + 1);
       while (last >= first && sliceStartDay(last, yearDays, perYear as number) > hi) last -= 1;
-      while (last + 1 <= completed && sliceStartDay(last + 1, yearDays, perYear as number) <= hi) last += 1;
+      while (last + 1 <= completed && sliceStartDay(last + 1, yearDays, perYear as number) <= hi)
+        last += 1;
       for (let slice = Math.max(first, 1); slice <= last; slice += 1) {
         const endDay = sliceEndDay(slice, yearDays, perYear as number);
         const vesting = yearDates[endDay - 1]!;
-        total += parseHoursToCents(tieredHoursForDate(rule, rule.hours as string, serviceStart, vesting));
+        total += parseHoursToCents(
+          tieredHoursForDate(rule, rule.hours as string, serviceStart, vesting),
+        );
       }
       continue;
     }
@@ -391,7 +413,8 @@ export function accrualEarnedAcrossSegments(
     while (first > 1 && sliceStartDay(first - 1, yearDays, perYear as number) >= lo) first -= 1;
     let last = Math.min(completed, Math.floor((hi * (perYear as number)) / yearDays) + 1);
     while (last >= first && sliceStartDay(last, yearDays, perYear as number) > hi) last -= 1;
-    while (last + 1 <= completed && sliceStartDay(last + 1, yearDays, perYear as number) <= hi) last += 1;
+    while (last + 1 <= completed && sliceStartDay(last + 1, yearDays, perYear as number) <= hi)
+      last += 1;
     const count = Math.max(0, last - first + 1);
     total += parseHoursToCents(rule.hours) * BigInt(count);
   }
@@ -432,7 +455,9 @@ export function pinnedIds(ids: readonly string[] | null | undefined): readonly s
  * patterns: two policies in one class resolve by start date, so an
  * overlapping window with intersecting targets is genuinely ambiguous.
  */
-export function targetingSpecificity(window: Omit<TargetedPolicyWindow, "id" | "effectiveFrom" | "effectiveTo">): number {
+export function targetingSpecificity(
+  window: Omit<TargetedPolicyWindow, "id" | "effectiveFrom" | "effectiveTo">,
+): number {
   let score = 0;
   if (window.employerSubsidiaryId !== null) score += 2;
   if (window.departmentId !== null) score += 1;
@@ -469,7 +494,14 @@ export function findSameSpecificityConflict(
   const classScore = targetingSpecificity(candidate);
   for (const active of actives) {
     if (targetingSpecificity(active) !== classScore) continue;
-    if (!rangesOverlap(candidate.effectiveFrom, candidateEnd, active.effectiveFrom, active.effectiveTo ?? "9999-12-31")) {
+    if (
+      !rangesOverlap(
+        candidate.effectiveFrom,
+        candidateEnd,
+        active.effectiveFrom,
+        active.effectiveTo ?? "9999-12-31",
+      )
+    ) {
       continue;
     }
     if (!targetSetsIntersect(candidate.employmentIds, active.employmentIds)) continue;
@@ -551,7 +583,10 @@ export function wholePeriodsElapsed(
   // 365-day year read 366 and stole the year's last slice.
   const yearEndExclusive = addMonthsClamped(yearStart, 12);
   const cappedExclusive = asOf >= yearEndExclusive ? yearEndExclusive : addCalendarDays(asOf, 1);
-  const elapsedDays = cappedExclusive <= yearStart ? 0 : eachDayOfRange(yearStart, addCalendarDays(cappedExclusive, -1)).length;
+  const elapsedDays =
+    cappedExclusive <= yearStart
+      ? 0
+      : eachDayOfRange(yearStart, addCalendarDays(cappedExclusive, -1)).length;
   const yearDays = eachDayOfRange(yearStart, addCalendarDays(yearEndExclusive, -1)).length;
   // Slice length in days, fractional slices never credit: floor only.
   const elapsed = Math.floor((elapsedDays * periodsPerYear) / yearDays);
@@ -584,7 +619,9 @@ export function carryoverApplied(
   if (rule.kind === "carry_all") return formatCents(unused);
   // carry_up_to
   if (rule.hours == null) {
-    throw new LeaveMathError("a carry_up_to rule must carry hours — set the cap or use kind carry_all");
+    throw new LeaveMathError(
+      "a carry_up_to rule must carry hours — set the cap or use kind carry_all",
+    );
   }
   const cap = parseHoursToCents(rule.hours);
   return formatCents(unused < cap ? unused : cap);
@@ -593,13 +630,17 @@ export function carryoverApplied(
 /** Split total hours across days in exact cents: first days take the remainder. */
 export function splitHoursAcrossDays(totalHours: string, dayCount: number): string[] {
   if (!Number.isInteger(dayCount) || dayCount <= 0) {
-    throw new LeaveMathError("a day split needs a positive whole day count — split across the days of the range");
+    throw new LeaveMathError(
+      "a day split needs a positive whole day count — split across the days of the range",
+    );
   }
   const total = parseHoursToCents(totalHours);
   const n = BigInt(dayCount);
   const base = total / n;
   const remainder = total % n;
-  return Array.from({ length: dayCount }, (_, index) => formatCents(base + (BigInt(index) < remainder ? 1n : 0n)));
+  return Array.from({ length: dayCount }, (_, index) =>
+    formatCents(base + (BigInt(index) < remainder ? 1n : 0n)),
+  );
 }
 
 /**
@@ -613,7 +654,9 @@ export function timeBalance(args: {
 }): string | null {
   if (args.earned === null) return null;
   return formatCents(
-    parseHoursToCents(args.earned) + parseHoursToCents(args.carried) - parseHoursToCents(args.taken),
+    parseHoursToCents(args.earned) +
+      parseHoursToCents(args.carried) -
+      parseHoursToCents(args.taken),
   );
 }
 
@@ -666,14 +709,15 @@ export function selectPolicy<T extends PolicyCandidate>(
   for (const policy of policies) {
     if (policy.effectiveFrom > onDate) continue;
     if (policy.effectiveTo != null && policy.effectiveTo < onDate) continue;
-    const subMatch = policy.employerSubsidiaryId === null || policy.employerSubsidiaryId === scope.employerSubsidiaryId;
+    const subMatch =
+      policy.employerSubsidiaryId === null ||
+      policy.employerSubsidiaryId === scope.employerSubsidiaryId;
     const depMatch = policy.departmentId === null || policy.departmentId === scope.departmentId;
     // Empty lists read as wildcard (pinnedIds), exactly like absent keys.
     const empPins = pinnedIds(policy.employmentIds);
     const clsPins = pinnedIds(policy.classificationIds);
     const empMatch =
-      empPins === null ||
-      (scope.employmentId != null && empPins.includes(scope.employmentId));
+      empPins === null || (scope.employmentId != null && empPins.includes(scope.employmentId));
     const clsMatch =
       clsPins === null ||
       (scope.classificationIds != null &&
@@ -691,10 +735,15 @@ export function selectPolicy<T extends PolicyCandidate>(
   // returned 1 on equal effective_from, so an exact tie resolved by sort
   // internals rather than by data — two same-scope policies in force on one
   // day picked arbitrarily.
-  scored.sort((a, b) =>
-    b.score - a.score ||
-    (a.policy.effectiveFrom < b.policy.effectiveFrom ? 1 : a.policy.effectiveFrom > b.policy.effectiveFrom ? -1 : 0) ||
-    (a.policy.id < b.policy.id ? -1 : a.policy.id > b.policy.id ? 1 : 0),
+  scored.sort(
+    (a, b) =>
+      b.score - a.score ||
+      (a.policy.effectiveFrom < b.policy.effectiveFrom
+        ? 1
+        : a.policy.effectiveFrom > b.policy.effectiveFrom
+          ? -1
+          : 0) ||
+      (a.policy.id < b.policy.id ? -1 : a.policy.id > b.policy.id ? 1 : 0),
   );
   return scored[0]?.policy ?? null;
 }

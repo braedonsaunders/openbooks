@@ -6,6 +6,6 @@
  * Internal invariants stay plain Error and remain 500.
  */
 export class TaxRequestValidationError extends Error {
-  readonly name = 'TaxRequestValidationError'
-  readonly status = 422
+  readonly name = "TaxRequestValidationError";
+  readonly status = 422;
 }

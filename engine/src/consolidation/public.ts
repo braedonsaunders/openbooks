@@ -1,1 +1,10 @@
-export { NetInvestmentError,loadNetInvestmentOptions,proposeNetInvestmentReversal,applyNetInvestmentReversal,type NetInvestmentReversal,proposeNetInvestmentAssessment,applyNetInvestmentAssessment,type NetInvestmentAssessment } from './net-investment.ts'
+export {
+  NetInvestmentError,
+  loadNetInvestmentOptions,
+  proposeNetInvestmentReversal,
+  applyNetInvestmentReversal,
+  type NetInvestmentReversal,
+  proposeNetInvestmentAssessment,
+  applyNetInvestmentAssessment,
+  type NetInvestmentAssessment,
+} from "./net-investment.ts";

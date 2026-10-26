@@ -16,10 +16,7 @@ export interface DirectedTask {
   serialNumber: string | null;
   barcodeScanning: boolean;
 }
-export async function executionRequest<T>(
-  url: string,
-  body: Record<string, unknown>,
-): Promise<T> {
+export async function executionRequest<T>(url: string, body: Record<string, unknown>): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -27,18 +24,13 @@ export async function executionRequest<T>(
   });
   if (!response.ok)
     throw Object.assign(
-      new Error(
-        await readApiErrorMessage(response, "Warehouse operation was refused"),
-      ),
+      new Error(await readApiErrorMessage(response, "Warehouse operation was refused")),
       { status: response.status },
     );
   return response.json() as Promise<T>;
 }
 function isConfirmedRefusal(error: unknown): boolean {
-  const status =
-    error instanceof Error
-      ? (error as Error & { status?: number }).status
-      : undefined;
+  const status = error instanceof Error ? (error as Error & { status?: number }).status : undefined;
   return typeof status === "number" && status >= 400 && status < 500;
 }
 /** The suggestion stays visible across mismatches and transport retries; scans never edit it. */
@@ -64,22 +56,18 @@ export function useDirectedExecution(endpoint: string, onDone: () => void) {
     setBusy(true);
     setError(null);
     try {
-      const response = await executionRequest<{ task: DirectedTask }>(
-        endpoint,
-        { ...body, commandKey },
-      );
+      const response = await executionRequest<{ task: DirectedTask }>(endpoint, {
+        ...body,
+        commandKey,
+      });
       if (!response.task || typeof response.task.id !== "string")
-        throw new Error(
-          "Warehouse suggestion response was incomplete; retry the same request",
-        );
+        throw new Error("Warehouse suggestion response was incomplete; retry the same request");
       if (current === generation.current) setTask(response.task);
     } catch (cause) {
       if (current === generation.current) {
         refused.current = isConfirmedRefusal(cause);
         setError(
-          cause instanceof Error
-            ? cause.message
-            : "Warehouse suggestion could not be loaded",
+          cause instanceof Error ? cause.message : "Warehouse suggestion could not be loaded",
         );
       }
     } finally {
@@ -111,11 +99,7 @@ export function useDirectedExecution(endpoint: string, onDone: () => void) {
       onDone();
     } catch (cause) {
       refused.current = isConfirmedRefusal(cause);
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Warehouse confirmation failed",
-      );
+      setError(cause instanceof Error ? cause.message : "Warehouse confirmation failed");
     } finally {
       setBusy(false);
     }
@@ -178,15 +162,9 @@ export function DirectedExecutionForm({
       className="space-y-4"
       aria-label="Confirm warehouse suggestion"
       onKeyDown={(event) => {
-        if (
-          event.key !== "Enter" ||
-          !(event.target instanceof HTMLInputElement)
-        )
-          return;
+        if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) return;
         event.preventDefault();
-        const fields = [
-          ...event.currentTarget.querySelectorAll<HTMLInputElement>("input"),
-        ];
+        const fields = [...event.currentTarget.querySelectorAll<HTMLInputElement>("input")];
         const next = fields[fields.indexOf(event.target) + 1];
         if (next) next.focus();
         else if (!busy) confirm();
@@ -253,19 +231,13 @@ export function DirectedExecutionForm({
           {task.lotNumber ? (
             <Label>
               Scan lot
-              <Input
-                value={lot}
-                onChange={(event) => setLot(event.target.value)}
-              />
+              <Input value={lot} onChange={(event) => setLot(event.target.value)} />
             </Label>
           ) : null}
           {task.serialNumber ? (
             <Label>
               Scan serial
-              <Input
-                value={serial}
-                onChange={(event) => setSerial(event.target.value)}
-              />
+              <Input value={serial} onChange={(event) => setSerial(event.target.value)} />
             </Label>
           ) : null}
         </div>

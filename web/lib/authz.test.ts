@@ -7,26 +7,30 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { NextResponse } from "next/server";
 import { resolveEffectivePermissions } from "./permissions";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
 const apiRoot = fileURLToPath(new URL("../app/api/", import.meta.url));
 
 async function routeFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
-  const nested = await Promise.all(entries.map(async (entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return routeFiles(path);
-    return entry.isFile() && entry.name === "route.ts" ? [path] : [];
-  }));
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) return routeFiles(path);
+      return entry.isFile() && entry.name === "route.ts" ? [path] : [];
+    }),
+  );
   return nested.flat();
 }
 
 type GateMode = "allowed" | "forbidden" | "unauthorized";
-type GateResult = NextResponse | {
-  user: { id: string; orgId: string };
-  permissions: Set<string>;
-  allowedSubsidiaryIds: null;
-};
+type GateResult =
+  | NextResponse
+  | {
+      user: { id: string; orgId: string };
+      permissions: Set<string>;
+      allowedSubsidiaryIds: null;
+    };
 
 const stateKey = Symbol.for("openbooks.authz-route-contract-test");
 interface RouteState {
@@ -40,7 +44,7 @@ const allowedGate: GateResult = {
   allowedSubsidiaryIds: null,
 };
 const routeState: RouteState = { gate: allowedGate, gateCalls: [], dbCalls: 0 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
@@ -87,13 +91,22 @@ const routeAuthzSource = `
     });
   }
 `;
-stubModules({ navigation: false, intl: false, authz: { source: routeAuthzSource }, features: false, extra: {
-    '../../../lib/authz': routeAuthzSource,
-  } });
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: { source: routeAuthzSource },
+  features: false,
+  extra: {
+    "../../../lib/authz": routeAuthzSource,
+  },
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@openbooks/engine/platform/db" || specifier === "@openbooks/engine/platform/database") {
+    if (
+      specifier === "@openbooks/engine/platform/db" ||
+      specifier === "@openbooks/engine/platform/database"
+    ) {
       return { shortCircuit: true, url: "mock:db" };
     }
     return nextResolve(specifier, context);
@@ -106,9 +119,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl: string = "../app/api/dunning/route.ts?authz-route-contract";
-const { GET, POST } = (await import(routeUrl)) as typeof import(
-  "../app/api/dunning/route.ts"
-);
+const { GET, POST } = (await import(routeUrl)) as typeof import("../app/api/dunning/route.ts");
 hooks.deregister();
 
 // The route-contract cases above stub guardPermission. Those stay green if
@@ -120,7 +131,7 @@ interface BehavioralState {
   user: import("./auth").SessionUser | null;
 }
 const behavioralState: BehavioralState = { user: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[behavioralStateKey] = behavioralState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[behavioralStateKey] = behavioralState;
 
 const behavioralHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -128,7 +139,9 @@ const behavioralHooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript," + encodeURIComponent(`
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(`
           const state = globalThis[Symbol.for("openbooks.authz-behavioral-test")];
           export async function currentUser() { return state.user; }
         `),
@@ -138,7 +151,7 @@ const behavioralHooks = registerHooks({
   },
 });
 
-const behavioralUrl: string = './authz.ts?behavioral'
+const behavioralUrl: string = "./authz.ts?behavioral";
 const {
   can,
   subsidiaryScopeAllows,
@@ -149,7 +162,7 @@ const {
   guardPermission,
   assertCan,
   ForbiddenError,
-} = (await import(behavioralUrl)) as typeof import('./authz.ts');
+} = (await import(behavioralUrl)) as typeof import("./authz.ts");
 behavioralHooks.deregister();
 
 type Authz = import("./authz.ts").Authz;
@@ -178,14 +191,12 @@ function authzWith(
 }
 
 function reset(mode: GateMode): void {
-  routeState.gate = mode === "unauthorized"
-    ? NextResponse.json({ error: "unauthorized" }, { status: 401 })
-    : mode === "forbidden"
-      ? NextResponse.json(
-        { error: "missing permission: documents.manage" },
-        { status: 403 },
-      )
-      : allowedGate;
+  routeState.gate =
+    mode === "unauthorized"
+      ? NextResponse.json({ error: "unauthorized" }, { status: 401 })
+      : mode === "forbidden"
+        ? NextResponse.json({ error: "missing permission: documents.manage" }, { status: 403 })
+        : allowedGate;
   routeState.gateCalls.length = 0;
   routeState.dbCalls = 0;
 }
@@ -204,7 +215,8 @@ async function assertJsonError(
 // Complete asynchronous setup before registering tests so --test-force-exit
 // cannot finish the initial queue while later tests are still being loaded.
 test("API routes never use the redirecting page authorization gate", async () => {
-  const redirectGateImport = /import\s*\{[^}]*\brequirePermission\b[^}]*\}\s*from\s*["'][^"']*\/authz["']/s;
+  const redirectGateImport =
+    /import\s*\{[^}]*\brequirePermission\b[^}]*\}\s*from\s*["'][^"']*\/authz["']/s;
   const redirectGateCall = /(^|[^.\w])requirePermission\s*\(/m;
   const offenders: string[] = [];
   for (const file of await routeFiles(apiRoot)) {
@@ -213,7 +225,11 @@ test("API routes never use the redirecting page authorization gate", async () =>
       offenders.push(relative(apiRoot, file));
     }
   }
-  assert.deepEqual(offenders, [], "API handlers must use guardPermission and return its JSON response");
+  assert.deepEqual(
+    offenders,
+    [],
+    "API handlers must use guardPermission and return its JSON response",
+  );
 });
 
 test("a signed-out GET returns a 401 JSON response without reaching the database", async () => {
@@ -271,10 +287,12 @@ test("can() is false for a missing grant", () => {
 });
 
 test("can() is false when a deny override wins", () => {
-  const denied = authzWith(resolveEffectivePermissions({
-    rolePermissionSets: [["ap.post", "ap.read"]],
-    overrides: [{ permission: "ap.post", effect: "deny" }],
-  }));
+  const denied = authzWith(
+    resolveEffectivePermissions({
+      rolePermissionSets: [["ap.post", "ap.read"]],
+      overrides: [{ permission: "ap.post", effect: "deny" }],
+    }),
+  );
   assert.equal(can(denied, "ap.post"), false);
   assert.equal(can(denied, "ap.read"), true);
 
@@ -294,12 +312,15 @@ test("can() honors exact and wildcard grants", () => {
 
 test("assertCan throws ForbiddenError only when can() is false", () => {
   assert.doesNotThrow(() => assertCan(authzWith(["ap.post"]), "ap.post"));
-  assert.throws(() => assertCan(authzWith(["ap.read"]), "ap.post"), (err: unknown) => {
-    assert.ok(err instanceof ForbiddenError);
-    assert.equal(err.permission, "ap.post");
-    assert.equal(err.status, 403);
-    return true;
-  });
+  assert.throws(
+    () => assertCan(authzWith(["ap.read"]), "ap.post"),
+    (err: unknown) => {
+      assert.ok(err instanceof ForbiddenError);
+      assert.equal(err.permission, "ap.post");
+      assert.equal(err.status, 403);
+      return true;
+    },
+  );
 });
 
 test("subsidiaryScopeAllows fails closed on a restricted unknown or null subsidiary", () => {
@@ -365,6 +386,9 @@ test("getAuthz and guardPermission fail closed when there is no signed-in user",
   assert.equal(await getAuthz(), null);
 
   const denied = await guardPermission("ap.post");
-  assert.ok(denied instanceof NextResponse, "missing user must be a JSON response, not an Authz allow");
+  assert.ok(
+    denied instanceof NextResponse,
+    "missing user must be a JSON response, not an Authz allow",
+  );
   await assertJsonError(denied, 401, "unauthorized");
 });

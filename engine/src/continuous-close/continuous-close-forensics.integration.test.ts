@@ -65,35 +65,67 @@ test(
       const thursday = addCalendarDays(saturday, -2);
 
       const weekendId = await insertSpendDoc(org, {
-        kind: "vendor_bill", number: "FORENSIC-WKND", date: saturday, total: "1500.0000",
+        kind: "vendor_bill",
+        number: "FORENSIC-WKND",
+        date: saturday,
+        total: "1500.0000",
       });
       const roundId = await insertSpendDoc(org, {
-        kind: "vendor_bill", number: "FORENSIC-ROUND", date: friday, total: "5000.0000",
+        kind: "vendor_bill",
+        number: "FORENSIC-ROUND",
+        date: friday,
+        total: "5000.0000",
       });
       const trapId = await insertSpendDoc(org, {
-        kind: "vendor_bill", number: "FORENSIC-TRAP", date: friday, total: "1999.9900",
+        kind: "vendor_bill",
+        number: "FORENSIC-TRAP",
+        date: friday,
+        total: "1999.9900",
       });
       const dupA = await insertSpendDoc(org, {
-        kind: "vendor_bill", number: "FORENSIC-DUP-A", date: thursday, total: "1200.0000", partyId: org.vendorId,
+        kind: "vendor_bill",
+        number: "FORENSIC-DUP-A",
+        date: thursday,
+        total: "1200.0000",
+        partyId: org.vendorId,
       });
       const dupB = await insertSpendDoc(org, {
-        kind: "vendor_bill", number: "FORENSIC-DUP-B", date: friday, total: "1200.0000", partyId: org.vendorId,
+        kind: "vendor_bill",
+        number: "FORENSIC-DUP-B",
+        date: friday,
+        total: "1200.0000",
+        partyId: org.vendorId,
       });
       // Controls: a weekday ordinary amount, and a weekend pittance below
       // the materiality floor — neither may flag.
       await insertSpendDoc(org, {
-        kind: "vendor_bill", number: "FORENSIC-CLEAN", date: friday, total: "1234.5600",
+        kind: "vendor_bill",
+        number: "FORENSIC-CLEAN",
+        date: friday,
+        total: "1234.5600",
       });
       await insertSpendDoc(org, {
-        kind: "vendor_bill", number: "FORENSIC-TINY", date: saturday, total: "10.0000",
+        kind: "vendor_bill",
+        number: "FORENSIC-TINY",
+        date: saturday,
+        total: "10.0000",
       });
 
       const findings = await scan(org.orgId);
       const types = findings.map((finding) => finding.findingType);
-      assert.ok(types.includes("forensic_weekend_postings"), `weekend posting flagged, got ${types}`);
-      assert.ok(types.includes("forensic_round_dollar"), `round-dollar spend flagged, got ${types}`);
+      assert.ok(
+        types.includes("forensic_weekend_postings"),
+        `weekend posting flagged, got ${types}`,
+      );
+      assert.ok(
+        types.includes("forensic_round_dollar"),
+        `round-dollar spend flagged, got ${types}`,
+      );
       assert.ok(types.includes("forensic_threshold_trap"), `threshold trap flagged, got ${types}`);
-      assert.ok(types.includes("forensic_duplicate_bills"), `duplicate bills flagged, got ${types}`);
+      assert.ok(
+        types.includes("forensic_duplicate_bills"),
+        `duplicate bills flagged, got ${types}`,
+      );
 
       const fingerprints = findings.map((finding) => finding.fingerprint);
       assert.ok(fingerprints.includes(`forensic-weekend:${weekendId}`));
@@ -183,21 +215,20 @@ test(
   },
 );
 
-test(
-  "forensic findings never leak across orgs",
-  { skip: !DB },
-  async () => {
-    const orgA = await withBypass(() => createScratchOrg());
-    const orgB = await withBypass(() => createScratchOrg());
-    try {
-      await insertSpendDoc(orgA, {
-        kind: "vendor_bill", number: "FORENSIC-OTHER-ORG", date: lastSaturday(await businessToday(orgA.orgId)), total: "9000.0000",
-      });
-      assert.ok((await scan(orgA.orgId)).length > 0, "org A flags its own spend");
-      assert.deepEqual(await scan(orgB.orgId), [], "org B sees none of org A's spend");
-    } finally {
-      await withBypass(() => dropScratchOrg(orgA.orgId));
-      await withBypass(() => dropScratchOrg(orgB.orgId));
-    }
-  },
-);
+test("forensic findings never leak across orgs", { skip: !DB }, async () => {
+  const orgA = await withBypass(() => createScratchOrg());
+  const orgB = await withBypass(() => createScratchOrg());
+  try {
+    await insertSpendDoc(orgA, {
+      kind: "vendor_bill",
+      number: "FORENSIC-OTHER-ORG",
+      date: lastSaturday(await businessToday(orgA.orgId)),
+      total: "9000.0000",
+    });
+    assert.ok((await scan(orgA.orgId)).length > 0, "org A flags its own spend");
+    assert.deepEqual(await scan(orgB.orgId), [], "org B sees none of org A's spend");
+  } finally {
+    await withBypass(() => dropScratchOrg(orgA.orgId));
+    await withBypass(() => dropScratchOrg(orgB.orgId));
+  }
+});

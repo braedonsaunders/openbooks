@@ -1,8 +1,7 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadSalesOrders, salesOrdersSpec } from './view'
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadSalesOrders, salesOrdersSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
-
+export const dynamic = "force-dynamic";
 
 /**
  * Sales orders. The list is the universal RecordListView; this page owns the
@@ -12,9 +11,9 @@ export const dynamic = 'force-dynamic'
 export default async function SalesOrders({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadSalesOrders(sp)
-  return <ModuleView spec={salesOrdersSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadSalesOrders(sp);
+  return <ModuleView spec={salesOrdersSpec(data)} data={data} searchParams={sp} trusted />;
 }

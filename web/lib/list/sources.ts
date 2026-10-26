@@ -1,10 +1,10 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { payRunRejectedSql } from '@openbooks/engine/payroll/approval'
-import type { ListViewConfig } from '@openbooks/customization'
-import { AP_KINDS, AR_KINDS, CASH_SALE_KINDS } from '../document-kinds'
-import { subsidiaryVisibleFilter } from '../subsidiaries'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { payRunRejectedSql } from "@openbooks/engine/payroll/approval";
+import type { ListViewConfig } from "@openbooks/customization";
+import { AP_KINDS, AR_KINDS, CASH_SALE_KINDS } from "../document-kinds";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   DISPLAY_DOCUMENT_NUMBER_EXPR,
   DOCUMENT_BUILT_IN_EXPR,
@@ -18,9 +18,9 @@ import {
   invoiceServicePartyWhere,
   payRunWhere,
   type AdhocFilters,
-} from '../customization/list-query'
-import { isRecordTypeEnabled } from '../customization/gates'
-import { expenseListOwnerFilter } from '../expense-access'
+} from "../customization/list-query";
+import { isRecordTypeEnabled } from "../customization/gates";
+import { expenseListOwnerFilter } from "../expense-access";
 
 /**
  * Document-list data sources — the SQL half of the universal list page. Every
@@ -35,41 +35,41 @@ import { expenseListOwnerFilter } from '../expense-access'
  */
 export interface DocListSource {
   /** Customization record type key (must exist in RECORD_TYPES). */
-  recordType: string
+  recordType: string;
   /** Document kinds this list includes (multi-kind lists show a type badge). */
-  kinds: readonly string[]
+  kinds: readonly string[];
   /** URL param the reference cell toggles to open the drawer: /base?<param>=<id>. */
-  drawerParam: string
+  drawerParam: string;
   /** Show a DocTypeBadge beside the reference number (mixed-kind lists). */
-  multiKind?: boolean
+  multiKind?: boolean;
   /** Extra FROM joins beyond `documents d left join parties p`. Aliased freely. */
-  joins?: SQL
+  joins?: SQL;
   /** Built-in column key → SELECT expression. */
-  builtInExpr: Record<string, SQL>
+  builtInExpr: Record<string, SQL>;
   /** Sort key → ORDER BY expression. */
-  sorts: Record<string, SQL>
+  sorts: Record<string, SQL>;
   /** Always-selected extra fields (ids for drill-through links). */
-  extraSelect?: SQL
+  extraSelect?: SQL;
   /** Column key → row→href builder for entity drill-through. */
-  links?: Record<string, (row: Record<string, unknown>) => string | RelatedPartyTarget | null>
+  links?: Record<string, (row: Record<string, unknown>) => string | RelatedPartyTarget | null>;
   /** Additional record-specific quick filters beyond kind and status. */
-  quickFilters?: DocQuickFilter[]
+  quickFilters?: DocQuickFilter[];
   /** URL key for the mixed-kind picker (default `kind`). */
-  kindParamKey?: string
+  kindParamKey?: string;
   /** Render and apply the common `from` / `to` date range controls. */
-  dateRange?: boolean
+  dateRange?: boolean;
   /** Suppress the built-in document-status chips (sources whose quick filters
    *  present a richer merged status, e.g. the pay-run lifecycle). */
-  hideStatusFilter?: boolean
+  hideStatusFilter?: boolean;
   /** Applied only when neither the URL nor the saved view selects a status. */
-  defaultExcludedStatuses?: readonly string[]
+  defaultExcludedStatuses?: readonly string[];
   /**
    * Records the viewer reaches by ownership rather than an org-wide grant:
    * an extra predicate over `d` for a viewer limited to their own records,
    * null for a viewer who reads every record. Applied to the rows, counts
    * and quick-filter options alike.
    */
-  ownerScope?: (orgId: string, userId: string) => Promise<SQL | null>
+  ownerScope?: (orgId: string, userId: string) => Promise<SQL | null>;
   /** Source-specific WHERE extension for list-only aggregates. */
   where?: (
     kinds: readonly string[],
@@ -77,45 +77,47 @@ export interface DocListSource {
     adhoc: AdhocFilters,
     orgId: string,
     allowedSubsidiaryIds?: Set<string> | null,
-  ) => SQL
+  ) => SQL;
 }
 
 export interface DocQuickFilter {
-  paramKey: string
-  filterKey: string
+  paramKey: string;
+  filterKey: string;
   loadOptions?: (
     orgId: string,
     allowedSubsidiaryIds?: Set<string> | null,
     ownerFilter?: SQL | null,
-  ) => Promise<{ value: string; label: string; count?: number }[]>
-  searchSelect?: boolean
+  ) => Promise<{ value: string; label: string; count?: number }[]>;
+  searchSelect?: boolean;
 }
 
 export interface RelatedPartyTarget {
-  kind: 'party'
-  id: string
-  role: 'customer' | 'vendor' | 'employee'
+  kind: "party";
+  id: string;
+  role: "customer" | "vendor" | "employee";
 }
 
 /** party_id → vendor/customer/employee drawer href. */
-const partyLink = (role: RelatedPartyTarget['role']) => (row: Record<string, unknown>): RelatedPartyTarget | null =>
-  row.party_id ? { kind: 'party', id: String(row.party_id), role } : null
+const partyLink =
+  (role: RelatedPartyTarget["role"]) =>
+  (row: Record<string, unknown>): RelatedPartyTarget | null =>
+    row.party_id ? { kind: "party", id: String(row.party_id), role } : null;
 
 /** A standard documents list source (number/party/date/ref/total/status). */
 function documentSource(cfg: {
-  recordType: string
-  kinds: readonly string[]
-  drawerParam: string
-  multiKind?: boolean
-  defaultExcludedStatuses?: readonly string[]
-  partyRole?: RelatedPartyTarget['role']
-  builtInExpr?: Record<string, SQL>
-  joins?: SQL
-  extraSelect?: SQL
-  links?: Record<string, (row: Record<string, unknown>) => string | null>
-  quickFilters?: DocQuickFilter[]
-  where?: DocListSource['where']
-  ownerScope?: DocListSource['ownerScope']
+  recordType: string;
+  kinds: readonly string[];
+  drawerParam: string;
+  multiKind?: boolean;
+  defaultExcludedStatuses?: readonly string[];
+  partyRole?: RelatedPartyTarget["role"];
+  builtInExpr?: Record<string, SQL>;
+  joins?: SQL;
+  extraSelect?: SQL;
+  links?: Record<string, (row: Record<string, unknown>) => string | null>;
+  quickFilters?: DocQuickFilter[];
+  where?: DocListSource["where"];
+  ownerScope?: DocListSource["ownerScope"];
 }): DocListSource {
   return {
     recordType: cfg.recordType,
@@ -134,7 +136,7 @@ function documentSource(cfg: {
       ...(cfg.links ?? {}),
     },
     quickFilters: cfg.quickFilters,
-  }
+  };
 }
 
 /**
@@ -144,7 +146,10 @@ function documentSource(cfg: {
  * are the organization's warehouses; the where function keeps its stage and
  * warehouse predicates EXISTS-based so the joinless count queries stay valid.
  */
-function fulfillmentSource(recordType: 'pick_list' | 'shipment', drawerParam: string): DocListSource {
+function fulfillmentSource(
+  recordType: "pick_list" | "shipment",
+  drawerParam: string,
+): DocListSource {
   return {
     recordType,
     kinds: [recordType],
@@ -179,132 +184,164 @@ function fulfillmentSource(recordType: 'pick_list' | 'shipment', drawerParam: st
     },
     extraSelect: sql`d.party_id, fso.id as sales_order_id`,
     links: {
-      party_name: partyLink('customer'),
-      sales_order_number: (row) => (row.sales_order_id ? `/sales-orders?order=${row.sales_order_id}` : null),
+      party_name: partyLink("customer"),
+      sales_order_number: (row) =>
+        row.sales_order_id ? `/sales-orders?order=${row.sales_order_id}` : null,
     },
     where: fulfillmentWhere,
     quickFilters: [
-      { paramKey: 'stage', filterKey: 'fulfillment_stage' },
+      { paramKey: "stage", filterKey: "fulfillment_stage" },
       {
-        paramKey: 'warehouse',
-        filterKey: 'warehouse_id',
+        paramKey: "warehouse",
+        filterKey: "warehouse_id",
         loadOptions: async (orgId) => {
-          const result = await db.execute<{ value: string; label: string } & Record<string, unknown>>(sql`
+          const result = await db.execute<
+            { value: string; label: string } & Record<string, unknown>
+          >(
+            sql`
             select w.stock_location_id::text as value, concat_ws(' · ', sl.code, w.name) as label
               from warehouses w
               join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
              where w.org_id = ${orgId}
-             order by sl.code`, 'objects')
-          return result
+             order by sl.code`,
+            "objects",
+          );
+          return result;
         },
       },
     ],
-  }
+  };
 }
 
 const SOURCES: Record<string, DocListSource> = {
   vendor_bill: documentSource({
-    recordType: 'vendor_bill',
-    defaultExcludedStatuses: ['voided'],
+    recordType: "vendor_bill",
+    defaultExcludedStatuses: ["voided"],
     kinds: AP_KINDS,
-    drawerParam: 'doc',
+    drawerParam: "doc",
     multiKind: true,
-    partyRole: 'vendor',
+    partyRole: "vendor",
   }),
   customer_invoice: documentSource({
-    recordType: 'customer_invoice',
+    recordType: "customer_invoice",
     kinds: AR_KINDS,
-    drawerParam: 'doc',
+    drawerParam: "doc",
     multiKind: true,
-    partyRole: 'customer',
+    partyRole: "customer",
     // Consolidated invoices serve several children on one payer header;
     // the service-party filter finds the payer invoices carrying one
     // child's charges. Options stay empty (and the control hidden) until
     // a line actually names a service party.
     where: invoiceServicePartyWhere,
-    quickFilters: [{
-      paramKey: 'serviceParty',
-      filterKey: 'service_party_id',
-      searchSelect: true,
-      loadOptions: async (orgId, allowedSubsidiaryIds) => {
-        const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
+    quickFilters: [
+      {
+        paramKey: "serviceParty",
+        filterKey: "service_party_id",
+        searchSelect: true,
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
+          const result = await db.execute<
+            { value: string; label: string; count?: number } & Record<string, unknown>
+          >(
+            sql`
           select p.id::text as value, p.display_name as label, count(distinct d.id)::int as count
             from documents d
             join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
             join parties p on p.id = dl.service_party_id and p.org_id = d.org_id
            where d.org_id = ${orgId} and d.kind = 'customer_invoice'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
            group by p.id, p.display_name
-           order by p.display_name`, 'objects')
-        return result
+           order by p.display_name`,
+            "objects",
+          );
+          return result;
+        },
       },
-    }],
+    ],
   }),
   cash_sale: documentSource({
-    recordType: 'cash_sale',
+    recordType: "cash_sale",
     kinds: CASH_SALE_KINDS,
-    drawerParam: 'doc',
+    drawerParam: "doc",
     multiKind: true,
     // Walk-in sales name no party; named customers still drill through.
-    partyRole: 'customer',
+    partyRole: "customer",
   }),
   vendor_payment: {
-    recordType: 'vendor_payment',
-    kinds: ['vendor_payment'],
-    drawerParam: 'payment',
+    recordType: "vendor_payment",
+    kinds: ["vendor_payment"],
+    drawerParam: "payment",
     // The custom bank account (`ca`) is referenced by the funding-account exprs.
     joins: sql`left join accounts ca on ca.id = (d.custom->>'bankAccountId')::uuid and ca.org_id = d.org_id`,
     builtInExpr: PAYMENT_BUILT_IN_EXPR,
     sorts: PAYMENT_SORTS,
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
-      party_name: partyLink('vendor'),
-      bank_account: (row) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
+      party_name: partyLink("vendor"),
+      bank_account: (row) =>
+        row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null,
     },
   },
   customer_payment: {
-    recordType: 'customer_payment',
-    kinds: ['customer_payment'],
-    drawerParam: 'payment',
+    recordType: "customer_payment",
+    kinds: ["customer_payment"],
+    drawerParam: "payment",
     joins: sql`left join accounts ca on ca.id = (d.custom->>'bankAccountId')::uuid and ca.org_id = d.org_id`,
     builtInExpr: PAYMENT_BUILT_IN_EXPR,
     sorts: PAYMENT_SORTS,
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
-      party_name: partyLink('customer'),
-      bank_account: (row) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
+      party_name: partyLink("customer"),
+      bank_account: (row) =>
+        row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null,
     },
   },
   expense_report: documentSource({
-    recordType: 'expense_report',
-    kinds: ['expense_report'],
-    drawerParam: 'expense',
-    partyRole: 'employee',
+    recordType: "expense_report",
+    kinds: ["expense_report"],
+    drawerParam: "expense",
+    partyRole: "employee",
     // expenses.self lists only the viewer's own reports.
     ownerScope: expenseListOwnerFilter,
-    quickFilters: [{
-      paramKey: 'employee',
-      filterKey: 'party_id',
-      loadOptions: async (orgId, allowedSubsidiaryIds, ownerFilter) => {
-        const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
+    quickFilters: [
+      {
+        paramKey: "employee",
+        filterKey: "party_id",
+        loadOptions: async (orgId, allowedSubsidiaryIds, ownerFilter) => {
+          const result = await db.execute<
+            { value: string; label: string; count?: number } & Record<string, unknown>
+          >(
+            sql`
           select p.id::text as value, p.display_name as label, count(*)::int as count
             from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
            where d.org_id = ${orgId} and d.kind = 'expense_report'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
              ${ownerFilter ? sql`and ${ownerFilter}` : sql``}
            group by p.id, p.display_name
-           order by p.display_name`, 'objects')
-        return result
+           order by p.display_name`,
+            "objects",
+          );
+          return result;
+        },
       },
-    }],
+    ],
   }),
   // Orders — single kind, non-posting; edited via OrderDrawer (drawerParam set
   // per page's URL param). Conversion progress lives in a report, not here.
-  quote: documentSource({ recordType: 'quote', kinds: ['quote'], drawerParam: 'estimate', partyRole: 'customer' }),
-  sales_order: documentSource({ recordType: 'sales_order', kinds: ['sales_order'], drawerParam: 'order', partyRole: 'customer' }),
+  quote: documentSource({
+    recordType: "quote",
+    kinds: ["quote"],
+    drawerParam: "estimate",
+    partyRole: "customer",
+  }),
+  sales_order: documentSource({
+    recordType: "sales_order",
+    kinds: ["sales_order"],
+    drawerParam: "order",
+    partyRole: "customer",
+  }),
   field_ticket: documentSource({
-    recordType: 'field_ticket',
-    kinds: ['field_ticket'],
-    drawerParam: 'ticket',
-    partyRole: 'customer',
+    recordType: "field_ticket",
+    kinds: ["field_ticket"],
+    drawerParam: "ticket",
+    partyRole: "customer",
     joins: sql`join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
                left join projects ftproj on ftproj.id = d.project_id and ftproj.org_id = d.org_id`,
     builtInExpr: {
@@ -313,13 +350,18 @@ const SOURCES: Record<string, DocListSource> = {
       period: sql`initcap(ft.period)`,
     },
   }),
-  purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),
+  purchase_order: documentSource({
+    recordType: "purchase_order",
+    kinds: ["purchase_order"],
+    drawerParam: "order",
+    partyRole: "vendor",
+  }),
   // Internal billing: the rule and the providing side ("From") are the
   // document's identity; there is no party.
   internal_billing: documentSource({
-    recordType: 'internal_billing',
-    kinds: ['internal_billing'],
-    drawerParam: 'doc',
+    recordType: "internal_billing",
+    kinds: ["internal_billing"],
+    drawerParam: "doc",
     joins: sql`left join internal_billing_rules ibr on ibr.id = d.internal_billing_rule_id and ibr.org_id = d.org_id
                left join departments ibdept on ibdept.id = d.department_id and ibdept.org_id = d.org_id
                left join projects ibproj on ibproj.id = d.project_id and ibproj.org_id = d.org_id
@@ -331,10 +373,15 @@ const SOURCES: Record<string, DocListSource> = {
     },
   }),
   // Fulfillment — pick lists and shipments, each opened in its own drawer.
-  pick_list: fulfillmentSource('pick_list', 'pick'),
-  shipment: fulfillmentSource('shipment', 'shipment'),
+  pick_list: fulfillmentSource("pick_list", "pick"),
+  shipment: fulfillmentSource("shipment", "shipment"),
   rma: {
-    ...documentSource({ recordType: 'rma', kinds: ['rma'], drawerParam: 'doc', partyRole: 'customer' }),
+    ...documentSource({
+      recordType: "rma",
+      kinds: ["rma"],
+      drawerParam: "doc",
+      partyRole: "customer",
+    }),
     joins: sql`left join rma_documents rd on rd.document_id = d.id and rd.org_id = d.org_id
                left join documents source_doc on source_doc.id = rd.source_document_id and source_doc.org_id = rd.org_id`,
     builtInExpr: {
@@ -355,9 +402,9 @@ const SOURCES: Record<string, DocListSource> = {
   // override on the reference column. The where fn keeps its predicates
   // EXISTS-based so the joinless count queries stay valid.
   pay_run: {
-    recordType: 'pay_run',
-    kinds: ['pay_run'],
-    drawerParam: 'run',
+    recordType: "pay_run",
+    kinds: ["pay_run"],
+    drawerParam: "run",
     dateRange: true,
     joins: sql`join pay_runs pr on pr.document_id = d.id and pr.org_id = d.org_id
                left join pay_schedules ps on ps.id = pr.pay_schedule_id and ps.org_id = pr.org_id`,
@@ -395,35 +442,42 @@ const SOURCES: Record<string, DocListSource> = {
     // covers three run stages, so the built-in chip would mislead).
     hideStatusFilter: true,
     quickFilters: [
-      { paramKey: 'stage', filterKey: 'run_stage' },
+      { paramKey: "stage", filterKey: "run_stage" },
       {
-        paramKey: 'schedule',
-        filterKey: 'pay_schedule_id',
+        paramKey: "schedule",
+        filterKey: "pay_schedule_id",
         loadOptions: async (orgId, allowedSubsidiaryIds) => {
-          const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
+          const result = await db.execute<
+            { value: string; label: string; count?: number } & Record<string, unknown>
+          >(
+            sql`
             select s.id::text as value, s.name as label, count(pr.document_id)::int as count
               from pay_schedules s
               left join pay_runs pr on pr.pay_schedule_id = s.id and pr.org_id = s.org_id
              where s.org_id = ${orgId}
-               ${allowedSubsidiaryIds == null
-                 ? sql``
-                 // A schedule with no subsidiary belongs to the root subsidiary —
-                 // the same rule payrollVisibleScheduleFilter enforces everywhere
-                 // else. Null is neither org-wide nor invisible; it coalesces.
-                 : sql`and coalesce(s.subsidiary_id, (select root.id from subsidiaries root where root.org_id = ${orgId} and root.parent_id is null and root.is_active order by root.created_at limit 1)) = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[])`}
+               ${
+                 allowedSubsidiaryIds == null
+                   ? sql``
+                   : // A schedule with no subsidiary belongs to the root subsidiary —
+                     // the same rule payrollVisibleScheduleFilter enforces everywhere
+                     // else. Null is neither org-wide nor invisible; it coalesces.
+                     sql`and coalesce(s.subsidiary_id, (select root.id from subsidiaries root where root.org_id = ${orgId} and root.parent_id is null and root.is_active order by root.created_at limit 1)) = any(${`{${[...allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+               }
              group by s.id, s.name
-             order by s.name`, 'objects')
-          return result
+             order by s.name`,
+            "objects",
+          );
+          return result;
         },
       },
     ],
   },
   bank_transaction: {
-    recordType: 'bank_transaction',
-    kinds: ['card_charge', 'card_refund', 'check', 'deposit', 'transfer'],
-    drawerParam: 'doc',
+    recordType: "bank_transaction",
+    kinds: ["card_charge", "card_refund", "check", "deposit", "transfer"],
+    drawerParam: "doc",
     multiKind: true,
-    kindParamKey: 'txKind',
+    kindParamKey: "txKind",
     dateRange: true,
     joins: sql`left join lateral (
       select string_agg(distinct trim(coalesce(a.number || ' ', '') || a.name), ' · ') as names,
@@ -447,29 +501,38 @@ const SOURCES: Record<string, DocListSource> = {
       account: sql`bank_accounts.sort_name`,
     },
     where: bankTransactionWhere,
-    quickFilters: [{
-      paramKey: 'account',
-      filterKey: 'bank_account_id',
-      searchSelect: true,
-      loadOptions: async (orgId, allowedSubsidiaryIds) => {
-        const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
+    quickFilters: [
+      {
+        paramKey: "account",
+        filterKey: "bank_account_id",
+        searchSelect: true,
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
+          const result = await db.execute<
+            { value: string; label: string; count?: number } & Record<string, unknown>
+          >(
+            sql`
           select id::text as value, trim(coalesce(number || ' ', '') || name) as label
             from accounts
            where org_id=${orgId} and is_active and not is_summary and reconcilable
-             ${allowedSubsidiaryIds == null
-               ? sql``
-               : allowedSubsidiaryIds.size
-                 ? sql`and (subsidiary_id is null or subsidiary_id = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[]))`
-                 : sql`and false`}
-           order by number nulls last, name`, 'objects')
-        return result
+             ${
+               allowedSubsidiaryIds == null
+                 ? sql``
+                 : allowedSubsidiaryIds.size
+                   ? sql`and (subsidiary_id is null or subsidiary_id = any(${`{${[...allowedSubsidiaryIds].join(",")}}`}::uuid[]))`
+                   : sql`and false`
+             }
+           order by number nulls last, name`,
+            "objects",
+          );
+          return result;
+        },
       },
-    }],
+    ],
   },
-}
+};
 
 export function listSource(recordType: string): DocListSource | undefined {
-  return SOURCES[recordType]
+  return SOURCES[recordType];
 }
 
 /**
@@ -478,11 +541,14 @@ export function listSource(recordType: string): DocListSource | undefined {
  * Features switch that is off (Company Settings → Features). A list page
  * refuses on null instead of reading documents its module has hidden.
  */
-export async function enabledListSource(orgId: string, recordType: string): Promise<DocListSource | null> {
-  const source = SOURCES[recordType]
-  if (!source) return null
-  if (!(await isRecordTypeEnabled(orgId, recordType))) return null
-  return source
+export async function enabledListSource(
+  orgId: string,
+  recordType: string,
+): Promise<DocListSource | null> {
+  const source = SOURCES[recordType];
+  if (!source) return null;
+  if (!(await isRecordTypeEnabled(orgId, recordType))) return null;
+  return source;
 }
 
 /**
@@ -493,7 +559,7 @@ export async function enabledListSource(orgId: string, recordType: string): Prom
  * (and time-ordered uuid v7, matching the newest-first default), so it pins
  * every page deterministically in both directions.
  */
-export function listOrderClause(orderExpr: SQL, dir: 'asc' | 'desc'): SQL {
-  const direction = dir === 'asc' ? sql`asc` : sql`desc`
-  return sql`${orderExpr} ${direction} nulls last, d.id ${direction}`
+export function listOrderClause(orderExpr: SQL, dir: "asc" | "desc"): SQL {
+  const direction = dir === "asc" ? sql`asc` : sql`desc`;
+  return sql`${orderExpr} ${direction} nulls last, d.id ${direction}`;
 }

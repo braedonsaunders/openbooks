@@ -1,17 +1,16 @@
-import { defineRoute } from '@/lib/api/route'
-import { NextResponse } from 'next/server'
-import { fileContentDisposition } from '@/lib/export'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { filingArtifact } from '@openbooks/engine/payroll/yearend-amendments'
-import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
-import { isUuid } from '../../../../../../lib/list-params'
-import { suppliedValue } from '../../../../../../lib/payroll-decimal-refusal'
-import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../../subsidiary-scope'
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { fileContentDisposition } from "@/lib/export";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { filingArtifact } from "@openbooks/engine/payroll/yearend-amendments";
+import { orgYearEndFilings } from "@openbooks/engine/payroll/yearend";
+import { isUuid } from "../../../../../../lib/list-params";
+import { suppliedValue } from "../../../../../../lib/payroll-decimal-refusal";
+import { guardPayrollFilingData, guardPayrollFilingRowIds } from "../../../subsidiary-scope";
 import { notFound } from "@/lib/api/responses";
 
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * GET ?id= — the EXACT bytes of one issued artifact.
@@ -23,60 +22,85 @@ export const dynamic = 'force-dynamic'
  * Wage data, so payroll.read; scoped to the caller's org by the query itself.
  */
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const id = new URL(req.url).searchParams.get('id') ?? ''
+    const id = new URL(req.url).searchParams.get("id") ?? "";
     // `id` is a uuid column. A 36-character hex/dash string is not enough —
     // PostgreSQL still raises `invalid input syntax for type uuid` for values
     // a bare 36-char shape check accepted (36 hex digits, 36 dashes). Shape
     // refusals stay 422 and never bind the parameter.
     // The guard narrows `id`; the refusal reads the raw supplied text.
-    const supplied: string = id
+    const supplied: string = id;
     if (!isUuid(id)) {
-      const error = supplied.trim() === ''
-        ? 'a submission id is required'
-        : `submission id must be a UUID — "${suppliedValue(supplied)}" is not a UUID`
-      return NextResponse.json({ error }, { status: 422 })
+      const error =
+        supplied.trim() === ""
+          ? "a submission id is required"
+          : `submission id must be a UUID — "${suppliedValue(supplied)}" is not a UUID`;
+      return NextResponse.json({ error }, { status: 422 });
     }
-    const submission = (await db.execute<{
-      country: string; filing: string; taxYear: number;
-    }>(sql`
+    const submission = (
+      await db.execute<{
+        country: string;
+        filing: string;
+        taxYear: number;
+      }>(
+        sql`
       select country, filing_key as filing, tax_year as "taxYear"
         from payroll_filing_submissions
        where org_id = ${gate.user.orgId} and id = ${id}
-    `, 'objects'))[0]
-    if (!submission) return notFound("record")
-    const rows = await db.execute<{ rowId: string }>(sql`
+    `,
+        "objects",
+      )
+    )[0];
+    if (!submission) return notFound("record");
+    const rows = await db.execute<{ rowId: string }>(
+      sql`
       select row_id as "rowId"
         from payroll_filing_submission_slips
        where org_id = ${gate.user.orgId} and submission_id = ${id}
-    `, 'objects')
+    `,
+      "objects",
+    );
     const denied = await guardPayrollFilingRowIds(
-      gate, submission.country, submission.filing, rows.map((row) => row.rowId), submission.taxYear,
-    )
-    if (denied) return denied
+      gate,
+      submission.country,
+      submission.filing,
+      rows.map((row) => row.rowId),
+      submission.taxYear,
+    );
+    if (denied) return denied;
     if (rows.length === 0) {
-      const section = (await orgYearEndFilings(gate.user.orgId, submission.taxYear))
-        .find((candidate) => candidate.country === submission.country && candidate.key === submission.filing)
+      const section = (await orgYearEndFilings(gate.user.orgId, submission.taxYear)).find(
+        (candidate) =>
+          candidate.country === submission.country && candidate.key === submission.filing,
+      );
       if (section) {
-        const populationDenied = await guardPayrollFilingData(gate, submission.country, submission.filing, section.data, submission.taxYear)
-        if (populationDenied) return populationDenied
+        const populationDenied = await guardPayrollFilingData(
+          gate,
+          submission.country,
+          submission.filing,
+          section.data,
+          submission.taxYear,
+        );
+        if (populationDenied) return populationDenied;
       }
     }
-    const file = await filingArtifact(gate.user.orgId, id)
+    const file = await filingArtifact(gate.user.orgId, id);
     if (!file) {
       return NextResponse.json(
-        { error: 'that filing was recorded without an electronic file — the slip snapshots on the filing history are its record' },
+        {
+          error:
+            "that filing was recorded without an electronic file — the slip snapshots on the filing history are its record",
+        },
         { status: 404 },
-      )
+      );
     }
     return new NextResponse(file.body, {
       headers: {
-        'Content-Type': file.contentType,
-        'Content-Disposition': fileContentDisposition('attachment', file.filename),
+        "Content-Type": file.contentType,
+        "Content-Disposition": fileContentDisposition("attachment", file.filename),
       },
-    })
-
+    });
   },
-})
+});

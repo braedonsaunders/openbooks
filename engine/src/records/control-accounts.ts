@@ -15,12 +15,7 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   // Input tax may be tracked as a recoverable asset or netted through the same
   // payable control used for output tax (the standard industry charts do the
   // latter). Both retain balance-sheet semantics; P&L types remain invalid.
-  taxPaid: [
-    "asset_current_other",
-    "asset_other",
-    "liability_payable",
-    "liability_current_other",
-  ],
+  taxPaid: ["asset_current_other", "asset_other", "liability_payable", "liability_current_other"],
   employeePayable: ["liability_payable", "liability_current_other"],
   // Statutory payroll withholdings and the employer shares remitted with them
   // (PAYE, NIC, PRSI, USC — the amounts a payroll run credits to a liability
@@ -41,23 +36,13 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   // retranslated at the period's current rate. Equity only — translation
   // differences never pass through profit or loss.
   translationAdjustment: ["equity"],
-  retainagePayable: [
-    "liability_payable",
-    "liability_current_other",
-    "liability_long_term",
-  ],
+  retainagePayable: ["liability_payable", "liability_current_other", "liability_long_term"],
   // Customer-side mirror of retainagePayable: withheld progress-billing
   // amounts live in receivables until release (the engine and
   // provisioning already read/write this key, but without a policy role the
   // settings writer silently dropped it and setup showed no slot).
   retainageReceivable: ["asset_receivable", "asset_current_other"],
-  laborWip: [
-    "asset_current_other",
-    "asset_other",
-    "cogs",
-    "expense",
-    "expense_other",
-  ],
+  laborWip: ["asset_current_other", "asset_other", "cogs", "expense", "expense_other"],
   mfgWip: ["asset_current_other", "asset_other"],
   mfgMaterialUsageVariance: ["cogs", "expense", "expense_other"],
   // Labor efficiency: actual shop-floor minutes against the frozen standard,
@@ -75,11 +60,7 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   unbilledReceivable: ["asset_receivable", "asset_current_other"],
   projectRevenue: ["income", "income_other"],
   incomeTaxExpense: ["expense", "expense_other"],
-  incomeTaxPayable: [
-    "liability_payable",
-    "liability_current_other",
-    "liability_long_term",
-  ],
+  incomeTaxPayable: ["liability_payable", "liability_current_other", "liability_long_term"],
   deferredTaxAsset: ["asset_current_other", "asset_other"],
   deferredTaxLiability: ["liability_current_other", "liability_long_term"],
   valuationAllowance: ["asset_current_other", "asset_other"],
@@ -256,9 +237,7 @@ export function assertValidControlAccountMappings(
   mappings: OrgControlAccounts,
   accountRecords: readonly ControlAccountRecord[],
 ): void {
-  const accounts = new Map(
-    accountRecords.map((account) => [account.id, account]),
-  );
+  const accounts = new Map(accountRecords.map((account) => [account.id, account]));
 
   for (const role of CONTROL_ACCOUNT_ROLES) {
     const accountId = mappings[role];
@@ -301,18 +280,12 @@ export function assertValidControlAccountMappings(
 }
 
 function parseStoredControlAccounts(value: unknown): OrgControlAccounts {
-  const raw =
-    value && typeof value === "object"
-      ? (value as Record<string, unknown>)
-      : {};
+  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const mappings: OrgControlAccounts = {};
   for (const role of CONTROL_ACCOUNT_ROLES) {
     const accountId = raw[role];
-    if (accountId === undefined || accountId === null || accountId === "")
-      continue;
-    if (
-      !isUuid(accountId)
-    ) {
+    if (accountId === undefined || accountId === null || accountId === "") continue;
+    if (!isUuid(accountId)) {
       throw new ControlAccountsIncompleteError(
         `${CONTROL_ACCOUNT_ROLE_LABELS[role]} control account id is invalid`,
         { role, reason: "missing" },
@@ -332,22 +305,28 @@ export async function loadControlAccounts(
   orgId: string,
   executor: SqlExecutor = db,
 ): Promise<OrgControlAccounts> {
-  const configured = await executor.execute<{ control: unknown }>(sql`
+  const configured = await executor.execute<{ control: unknown }>(
+    sql`
     select settings->'controlAccounts' as control
       from orgs
-     where id = ${orgId}`, "objects");
+     where id = ${orgId}`,
+    "objects",
+  );
   const mappings = parseStoredControlAccounts(configured[0]?.control);
   const ids = [...new Set(Object.values(mappings))];
   if (ids.length === 0) return mappings;
 
-  const records = await executor.execute<ControlAccountRecord>(sql`
+  const records = await executor.execute<ControlAccountRecord>(
+    sql`
     select id, type, is_active as "isActive", is_summary as "isSummary"
       from accounts
      where org_id = ${orgId}
        and id in (${sql.join(
          ids.map((id) => sql`${id}`),
          sql`, `,
-       )})`, "objects");
+       )})`,
+    "objects",
+  );
   assertValidControlAccountMappings(mappings, records);
   return mappings;
 }
@@ -368,22 +347,30 @@ export async function resolveReceivedNotBilledAccount(
   orgId: string,
   itemId: string,
 ): Promise<{ accountId: string; source: "profile" | "company" } | null> {
-  const profile = (await executor.execute<{ accountId: string | null }>(sql`
+  const profile = (
+    await executor.execute<{ accountId: string | null }>(
+      sql`
     select received_not_billed_account_id as "accountId"
       from item_inventory_profiles
-     where org_id = ${orgId} and item_id = ${itemId}`, "objects"))[0]?.accountId;
+     where org_id = ${orgId} and item_id = ${itemId}`,
+      "objects",
+    )
+  )[0]?.accountId;
   if (profile) {
-    const account = (await executor.execute<ControlAccountRecord>(sql`
+    const account = (
+      await executor.execute<ControlAccountRecord>(
+        sql`
       select id, type, is_active as "isActive", is_summary as "isSummary"
         from accounts
-       where org_id = ${orgId} and id = ${profile}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${profile}`,
+        "objects",
+      )
+    )[0];
     if (account?.isActive && !account.isSummary) {
       return { accountId: account.id, source: "profile" };
     }
   }
-  const company = await loadControlAccountsForRoles(executor, orgId, [
-    "receivedNotBilled",
-  ]);
+  const company = await loadControlAccountsForRoles(executor, orgId, ["receivedNotBilled"]);
   if (company.receivedNotBilled) {
     return { accountId: company.receivedNotBilled, source: "company" };
   }
@@ -400,32 +387,40 @@ export async function loadControlAccountsForRoles(
   orgId: string,
   roles: readonly ControlAccountRole[],
 ): Promise<OrgControlAccounts> {
-  const stored = (await executor.execute<{ control: unknown }>(sql`
+  const stored = (
+    await executor.execute<{ control: unknown }>(
+      sql`
     select settings->'controlAccounts' as control
       from orgs
-     where id = ${orgId}`, "objects"))[0]?.control;
-  const raw =
-    stored && typeof stored === "object"
-      ? (stored as Record<string, unknown>)
-      : {};
+     where id = ${orgId}`,
+      "objects",
+    )
+  )[0]?.control;
+  const raw = stored && typeof stored === "object" ? (stored as Record<string, unknown>) : {};
   const mappings: OrgControlAccounts = {};
   for (const role of roles) {
     const accountId = raw[role];
     if (accountId === undefined || accountId === null || accountId === "") continue;
-    if (!isUuid(accountId)) throw new ControlAccountsIncompleteError(
-      `${CONTROL_ACCOUNT_ROLE_LABELS[role]} control account id is invalid`, { role, reason: "missing" });
+    if (!isUuid(accountId))
+      throw new ControlAccountsIncompleteError(
+        `${CONTROL_ACCOUNT_ROLE_LABELS[role]} control account id is invalid`,
+        { role, reason: "missing" },
+      );
     mappings[role] = accountId;
   }
   const ids = [...new Set(Object.values(mappings))];
   if (ids.length === 0) return mappings;
-  const records = await executor.execute<ControlAccountRecord>(sql`
+  const records = await executor.execute<ControlAccountRecord>(
+    sql`
     select id, type, is_active as "isActive", is_summary as "isSummary"
       from accounts
      where org_id = ${orgId}
        and id in (${sql.join(
          ids.map((id) => sql`${id}`),
          sql`, `,
-       )})`, "objects");
+       )})`,
+    "objects",
+  );
   assertValidControlAccountMappings(mappings, records);
   return mappings;
 }
@@ -442,9 +437,7 @@ export async function loadCompanyReceivedNotBilledAccount(
   orgId: string,
 ): Promise<string | null> {
   try {
-    const controls = await loadControlAccountsForRoles(executor, orgId, [
-      "receivedNotBilled",
-    ]);
+    const controls = await loadControlAccountsForRoles(executor, orgId, ["receivedNotBilled"]);
     return controls.receivedNotBilled ?? null;
   } catch (error) {
     if (error instanceof ControlAccountsIncompleteError) return null;

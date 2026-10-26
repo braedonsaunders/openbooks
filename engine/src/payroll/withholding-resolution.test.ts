@@ -12,15 +12,18 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  registerPayrollReciprocity, unregisterPayrollReciprocity,
-} from "./reciprocity.ts";
+import { registerPayrollReciprocity, unregisterPayrollReciprocity } from "./reciprocity.ts";
 import {
   type PayrollRegionWithholding,
   registerPayrollWithholding,
   unregisterPayrollWithholding,
 } from "./withholding-jurisdictions.ts";
-import { advisoryGaps, blockingGaps, compareRates, resolveWithholding } from "./withholding-resolution.ts";
+import {
+  advisoryGaps,
+  blockingGaps,
+  compareRates,
+  resolveWithholding,
+} from "./withholding-resolution.ts";
 
 const COUNTRY = "ZZTEST";
 
@@ -51,49 +54,79 @@ function setup(): void {
       region("WORK", {
         subRegions: [
           {
-            code: "CITY", label: "Work City tax", kind: "city",
-            reaches: ["resident", "nonresident"], rateSource: { kind: "pack" },
-            citation: "city ordinance", implemented: true,
+            code: "CITY",
+            label: "Work City tax",
+            kind: "city",
+            reaches: ["resident", "nonresident"],
+            rateSource: { kind: "pack" },
+            citation: "city ordinance",
+            implemented: true,
           },
           {
-            code: "OWNTERMS", label: "Independent City tax", kind: "city",
-            reaches: ["resident", "nonresident"], rateSource: { kind: "pack" },
-            settlesIndependently: true, citation: "separate act", implemented: true,
+            code: "OWNTERMS",
+            label: "Independent City tax",
+            kind: "city",
+            reaches: ["resident", "nonresident"],
+            rateSource: { kind: "pack" },
+            settlesIndependently: true,
+            citation: "separate act",
+            implemented: true,
           },
           {
-            code: "UNBUILT", label: "Unbuilt City tax", kind: "city",
-            reaches: ["nonresident"], rateSource: { kind: "pack" },
-            citation: "city ordinance", implemented: false,
+            code: "UNBUILT",
+            label: "Unbuilt City tax",
+            kind: "city",
+            reaches: ["nonresident"],
+            rateSource: { kind: "pack" },
+            citation: "city ordinance",
+            implemented: false,
           },
         ],
         openSubRegions: {
-          kind: "municipality", label: "Open municipality {code}",
-          codePattern: "^\\d{6}$", reaches: ["resident", "nonresident"],
+          kind: "municipality",
+          label: "Open municipality {code}",
+          codePattern: "^\\d{6}$",
+          reaches: ["resident", "nonresident"],
           rateSource: { kind: "tenant", rateKey: "zz_local" },
-          citation: "open register", implemented: true,
+          citation: "open register",
+          implemented: true,
         },
       }),
-      region("HIGHER", { subRegionConflictRule: "higher_rate",
+      region("HIGHER", {
+        subRegionConflictRule: "higher_rate",
         subRegions: [
           {
-            code: "111111", label: "Higher-rule work city", kind: "city",
-            reaches: ["nonresident"], rateSource: { kind: "tenant", rateKey: "zz_local" },
-            citation: "act", implemented: true,
+            code: "111111",
+            label: "Higher-rule work city",
+            kind: "city",
+            reaches: ["nonresident"],
+            rateSource: { kind: "tenant", rateKey: "zz_local" },
+            citation: "act",
+            implemented: true,
           },
         ],
         openSubRegions: {
-          kind: "municipality", label: "Municipality {code}",
-          codePattern: "^\\d{6}$", reaches: ["resident", "nonresident"],
+          kind: "municipality",
+          label: "Municipality {code}",
+          codePattern: "^\\d{6}$",
+          reaches: ["resident", "nonresident"],
           rateSource: { kind: "tenant", rateKey: "zz_local" },
-          citation: "act", implemented: true,
+          citation: "act",
+          implemented: true,
         },
       }),
       region("HOME", {
-        subRegions: [{
-          code: "HOMECITY", label: "Home City tax", kind: "city",
-          reaches: ["resident"], rateSource: { kind: "pack" },
-          citation: "city ordinance", implemented: true,
-        }],
+        subRegions: [
+          {
+            code: "HOMECITY",
+            label: "Home City tax",
+            kind: "city",
+            reaches: ["resident"],
+            rateSource: { kind: "pack" },
+            citation: "city ordinance",
+            implemented: true,
+          },
+        ],
       }),
       // TWIN shares WORK's open-code shape under a different region, so a test
       // can prove same-jurisdiction identity is region-qualified, not a bare
@@ -101,10 +134,13 @@ function setup(): void {
       region("TWIN", {
         subRegions: [],
         openSubRegions: {
-          kind: "municipality", label: "Twin municipality {code}",
-          codePattern: "^\\d{6}$", reaches: ["resident", "nonresident"],
+          kind: "municipality",
+          label: "Twin municipality {code}",
+          codePattern: "^\\d{6}$",
+          reaches: ["resident", "nonresident"],
           rateSource: { kind: "tenant", rateKey: "zz_local" },
-          citation: "twin register", implemented: true,
+          citation: "twin register",
+          implemented: true,
         },
       }),
       region("NOTAX", {
@@ -115,7 +151,8 @@ function setup(): void {
       region("GONE", { implemented: false, unimplementedReason: "nobody transcribed it" }),
       region("STRICT", { residentWithholding: "required", residentWithholdingImplemented: false }),
       region("CREDIT", {
-        residentWithholding: "required_net_of_credit", residentWithholdingImplemented: true,
+        residentWithholding: "required_net_of_credit",
+        residentWithholdingImplemented: true,
       }),
       region("UNKNOWN", { residentWithholding: "unknown" }),
     ],
@@ -124,14 +161,22 @@ function setup(): void {
     country: COUNTRY,
     agreements: [
       {
-        workRegion: "WORK", residenceRegion: "HOME", taxedBy: "residence",
-        certificateKey: "home_nonres", withoutCertificate: "work_region",
-        relievesSubRegionLevies: false, citation: "the agreement",
+        workRegion: "WORK",
+        residenceRegion: "HOME",
+        taxedBy: "residence",
+        certificateKey: "home_nonres",
+        withoutCertificate: "work_region",
+        relievesSubRegionLevies: false,
+        citation: "the agreement",
       },
       {
-        workRegion: "WORK", residenceRegion: "CREDIT", taxedBy: "residence",
-        certificateKey: null, withoutCertificate: "work_region",
-        relievesSubRegionLevies: true, citation: "automatic agreement",
+        workRegion: "WORK",
+        residenceRegion: "CREDIT",
+        taxedBy: "residence",
+        certificateKey: null,
+        withoutCertificate: "work_region",
+        relievesSubRegionLevies: true,
+        citation: "automatic agreement",
       },
     ],
   });
@@ -159,7 +204,10 @@ test("an unrecorded residence resolves to the work region, and SAYS SO", () => {
   assert.equal(resolved.residenceSource, "assumed");
   // Assumed, but never silently: the trace carries it so readiness can ask.
   assert.match(resolved.trace.join("\n"), /no residence region recorded/);
-  assert.deepEqual(resolved.levies.map((levy) => levy.region), ["WORK"]);
+  assert.deepEqual(
+    resolved.levies.map((levy) => levy.region),
+    ["WORK"],
+  );
   assert.equal(resolved.levies[0]!.basis, "resident");
 });
 
@@ -180,11 +228,16 @@ test("a work region is required — there is no sensible default", () => {
 
 test("reciprocity WITH the certificate moves the tax to the residence region", () => {
   const resolved = resolve({
-    workRegion: "WORK", residenceRegion: "HOME", certificatesOnFile: ["home_nonres"],
+    workRegion: "WORK",
+    residenceRegion: "HOME",
+    certificatesOnFile: ["home_nonres"],
   });
   assert.equal(resolved.reciprocityUnclaimed, false);
   const regions = resolved.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(regions.map((levy) => levy.region), ["HOME"]);
+  assert.deepEqual(
+    regions.map((levy) => levy.region),
+    ["HOME"],
+  );
   assert.equal(regions[0]!.basis, "reciprocity");
   // The authority is named, because an auditor will ask which form relieved the
   // work region and "the code said so" is not an answer.
@@ -213,7 +266,10 @@ test("reciprocity WITHOUT the certificate withholds the WORK region, loudly", ()
   const resolved = resolve({ workRegion: "WORK", residenceRegion: "HOME" });
   assert.equal(resolved.reciprocityUnclaimed, true);
   const regions = resolved.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(regions.map((levy) => levy.region), ["WORK"]);
+  assert.deepEqual(
+    regions.map((levy) => levy.region),
+    ["WORK"],
+  );
   assert.equal(regions[0]!.basis, "nonresident");
   // Advisory, not blocking: withholding the work region is right, and stopping
   // the payroll over a missing form would be wrong.
@@ -279,7 +335,10 @@ test("a residence region with a computable credit rule names the region to credi
 
 test("a residence region with no wage tax makes no claim", () => {
   const resolved = resolve({ workRegion: "WORK", residenceRegion: "NOTAX" });
-  assert.deepEqual(resolved.levies.map((levy) => levy.region), ["WORK"]);
+  assert.deepEqual(
+    resolved.levies.map((levy) => levy.region),
+    ["WORK"],
+  );
   assert.equal(resolved.gaps.length, 0);
 });
 
@@ -303,14 +362,19 @@ test("an unimplemented region blocks by NAME with the declared reason", () => {
 
 test("a work-side sub-region levy reaches nonresidents; a residence-side one residents", () => {
   const resolved = resolve({
-    workRegion: "WORK", residenceRegion: "HOME",
+    workRegion: "WORK",
+    residenceRegion: "HOME",
     certificatesOnFile: ["home_nonres"],
-    workSubRegions: ["CITY"], residenceSubRegions: ["HOMECITY"],
+    workSubRegions: ["CITY"],
+    residenceSubRegions: ["HOMECITY"],
   });
   const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
   assert.deepEqual(
     subs.map((levy) => [levy.subRegion, levy.reach, levy.side]),
-    [["HOMECITY", "resident", "residence"], ["CITY", "nonresident", "work"]],
+    [
+      ["HOMECITY", "resident", "residence"],
+      ["CITY", "nonresident", "work"],
+    ],
   );
 });
 
@@ -318,8 +382,10 @@ test("reciprocity does NOT cascade to a sub-region levy that declares it does no
   // The Philadelphia case in miniature. The state tax moved to the residence
   // region; the city tax stands, and the trace says why.
   const resolved = resolve({
-    workRegion: "WORK", residenceRegion: "HOME",
-    certificatesOnFile: ["home_nonres"], workSubRegions: ["CITY"],
+    workRegion: "WORK",
+    residenceRegion: "HOME",
+    certificatesOnFile: ["home_nonres"],
+    workSubRegions: ["CITY"],
   });
   assert.ok(resolved.levies.some((levy) => levy.subRegion === "CITY"));
   assert.match(resolved.trace.join("\n"), /does not bind a sub-region/);
@@ -327,9 +393,14 @@ test("reciprocity does NOT cascade to a sub-region levy that declares it does no
 
 test("reciprocity DOES cascade when the agreement says it reaches sub-regions", () => {
   const resolved = resolve({
-    workRegion: "WORK", residenceRegion: "CREDIT", workSubRegions: ["CITY"],
+    workRegion: "WORK",
+    residenceRegion: "CREDIT",
+    workSubRegions: ["CITY"],
   });
-  assert.equal(resolved.levies.some((levy) => levy.subRegion === "CITY"), false);
+  assert.equal(
+    resolved.levies.some((levy) => levy.subRegion === "CITY"),
+    false,
+  );
   assert.match(resolved.trace.join("\n"), /is relieved by the/);
 });
 
@@ -337,7 +408,9 @@ test("a levy that does not reach this side is skipped, not withheld", () => {
   // HOMECITY reaches residents only. Someone who WORKS there and lives
   // elsewhere owes it nothing.
   const resolved = resolve({
-    workRegion: "HOME", residenceRegion: "HOME", workSubRegions: ["HOMECITY"],
+    workRegion: "HOME",
+    residenceRegion: "HOME",
+    workSubRegions: ["HOMECITY"],
     residenceSubRegions: [],
   });
   assert.equal(resolved.levies.filter((levy) => levy.level === "sub_region").length, 0);
@@ -374,8 +447,10 @@ test("the same jurisdiction on both sides is withheld ONCE under the both-rule",
   // working in Yonkers (NYS-50-T-Y): one levy reaching the employee twice is
   // withheld once, on the resident basis — not priced twice.
   const resolved = resolve({
-    workRegion: "WORK", residenceRegion: "WORK",
-    workSubRegions: ["CITY"], residenceSubRegions: ["CITY"],
+    workRegion: "WORK",
+    residenceRegion: "WORK",
+    workSubRegions: ["CITY"],
+    residenceSubRegions: ["CITY"],
   });
   const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
   assert.deepEqual(
@@ -389,20 +464,27 @@ test("the same CODE in two regions is two levies, not one counted twice", () => 
   // Identity is region-qualified: WORK/123456 and TWIN/123456 are unrelated
   // levies that happen to share a code shape, and both are withheld.
   const resolved = resolve({
-    workRegion: "WORK", residenceRegion: "TWIN",
-    workSubRegions: ["123456"], residenceSubRegions: ["123456"],
+    workRegion: "WORK",
+    residenceRegion: "TWIN",
+    workSubRegions: ["123456"],
+    residenceSubRegions: ["123456"],
   });
   const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
   assert.deepEqual(
     subs.map((levy) => [levy.region, levy.subRegion]),
-    [["TWIN", "123456"], ["WORK", "123456"]],
+    [
+      ["TWIN", "123456"],
+      ["WORK", "123456"],
+    ],
   );
 });
 
 test("a levy declared settlesIndependently leaves the conflict comparison entirely", () => {
   const resolved = resolve({
-    workRegion: "WORK", residenceRegion: "WORK",
-    workSubRegions: ["OWNTERMS"], residenceSubRegions: ["CITY"],
+    workRegion: "WORK",
+    residenceRegion: "WORK",
+    workSubRegions: ["OWNTERMS"],
+    residenceSubRegions: ["CITY"],
   });
   assert.ok(resolved.levies.some((levy) => levy.subRegion === "OWNTERMS"));
   assert.match(resolved.trace.join("\n"), /settles independently/);
@@ -416,8 +498,10 @@ test("higher_rate picks the work-location rate when it is higher", () => {
   // DCED's own worked case: Bethlehem resident at 1.000% working in Allentown
   // at 1.280% nonresident → 1.280% is withheld.
   const resolved = resolve({
-    workRegion: "HIGHER", residenceRegion: "HIGHER",
-    workSubRegions: ["111111"], residenceSubRegions: ["222222"],
+    workRegion: "HIGHER",
+    residenceRegion: "HIGHER",
+    workSubRegions: ["111111"],
+    residenceSubRegions: ["222222"],
     subRegionRates: { "111111:nonresident": "0.0128", "222222:resident": "0.0100" },
   });
   const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
@@ -430,8 +514,10 @@ test("higher_rate picks the work-location rate when it is higher", () => {
 
 test("higher_rate keeps the residence rate when it is higher", () => {
   const resolved = resolve({
-    workRegion: "HIGHER", residenceRegion: "HIGHER",
-    workSubRegions: ["111111"], residenceSubRegions: ["222222"],
+    workRegion: "HIGHER",
+    residenceRegion: "HIGHER",
+    workSubRegions: ["111111"],
+    residenceSubRegions: ["222222"],
     subRegionRates: { "111111:nonresident": "0.0130", "222222:resident": "0.0160" },
   });
   const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
@@ -441,8 +527,10 @@ test("higher_rate keeps the residence rate when it is higher", () => {
 
 test("higher_rate with a missing rate BLOCKS rather than picking a side", () => {
   const resolved = resolve({
-    workRegion: "HIGHER", residenceRegion: "HIGHER",
-    workSubRegions: ["111111"], residenceSubRegions: ["222222"],
+    workRegion: "HIGHER",
+    residenceRegion: "HIGHER",
+    workSubRegions: ["111111"],
+    residenceSubRegions: ["222222"],
     subRegionRates: { "222222:resident": "0.0100" },
   });
   const blocking = resolved.gaps.filter((gap) => gap.severity === "blocking");
@@ -457,8 +545,10 @@ test("higher_rate compares EVERY work-side levy, not just the first", () => {
   // the comparison is against the higher work rate: the first work levy loses
   // to residence here, but the second beats it, so the second is withheld.
   const resolved = resolve({
-    workRegion: "HIGHER", residenceRegion: "HIGHER",
-    workSubRegions: ["111111", "333333"], residenceSubRegions: ["222222"],
+    workRegion: "HIGHER",
+    residenceRegion: "HIGHER",
+    workSubRegions: ["111111", "333333"],
+    residenceSubRegions: ["222222"],
     subRegionRates: {
       "111111:nonresident": "0.0050",
       "333333:nonresident": "0.0160",
@@ -475,8 +565,10 @@ test("higher_rate with a missing rate on the SECOND work levy still BLOCKS", () 
   // The maximum over the work side is unanswerable when ANY work-side rate is
   // unentered — the missing one might be the winner.
   const resolved = resolve({
-    workRegion: "HIGHER", residenceRegion: "HIGHER",
-    workSubRegions: ["111111", "333333"], residenceSubRegions: ["222222"],
+    workRegion: "HIGHER",
+    residenceRegion: "HIGHER",
+    workSubRegions: ["111111", "333333"],
+    residenceSubRegions: ["222222"],
     subRegionRates: { "111111:nonresident": "0.0050", "222222:resident": "0.0100" },
   });
   const blocking = resolved.gaps.filter((gap) => gap.severity === "blocking");

@@ -1,24 +1,24 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { sum } from '@openbooks/engine/money/money'
-import { db } from '@openbooks/engine/platform/db'
-import { balanceOf } from '@openbooks/engine/resourcing/retainers'
-import { addCalendarDays } from '@openbooks/engine/platform/business-date/module'
-import { subsidiaryVisibleFilter } from '../subsidiaries.ts'
+import { sql } from "drizzle-orm";
+import { sum } from "@openbooks/engine/money/money";
+import { db } from "@openbooks/engine/platform/db";
+import { balanceOf } from "@openbooks/engine/resourcing/retainers";
+import { addCalendarDays } from "@openbooks/engine/platform/business-date/module";
+import { subsidiaryVisibleFilter } from "../subsidiaries.ts";
 
 /** One visible retainer with its posted drawdown total, in ledger strings. */
 type RetainerKpiRow = {
-  id: string
-  currency: string
-  totalAmount: string
-  drawn: string
-  state: string
-  endsOn: string
-}
+  id: string;
+  currency: string;
+  totalAmount: string;
+  drawn: string;
+  state: string;
+  endsOn: string;
+};
 
-export type RetainerCurrencyKpi = { currency: string; balance: string; drawn: string }
-export type RetainerKpis = { perCurrency: RetainerCurrencyKpi[]; expiringCount: number }
+export type RetainerCurrencyKpi = { currency: string; balance: string; drawn: string };
+export type RetainerKpis = { perCurrency: RetainerCurrencyKpi[]; expiringCount: number };
 
 /**
  * KPI inputs for the retainers list. Balances are per currency (retainers
@@ -32,11 +32,13 @@ export async function loadRetainerKpis(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   today: string,
 ): Promise<RetainerKpis> {
-  const cutoff = addCalendarDays(today, 30)
-  const byCurrency = new Map<string, { balance: string; drawn: string }>()
-  let expiringCount = 0, after: string | null = null
+  const cutoff = addCalendarDays(today, 30);
+  const byCurrency = new Map<string, { balance: string; drawn: string }>();
+  let expiringCount = 0,
+    after: string | null = null;
   for (;;) {
-  const rows: RetainerKpiRow[] = await db.execute<RetainerKpiRow>(sql`
+    const rows: RetainerKpiRow[] = await db.execute<RetainerKpiRow>(
+      sql`
     select r.id,r.currency,
            r.total_amount::text as "totalAmount",
            coalesce(sum(d.amount) filter (where d.state = 'posted'), 0)::text as drawn,
@@ -48,22 +50,23 @@ export async function loadRetainerKpis(
      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      ${after ? sql`and r.id > ${after}::uuid` : sql``}
      group by r.id order by r.id limit 500
-  `, 'objects')
-  for (const row of rows) {
-    // The balance is the landed engine policy, never a local formula: total
-    // minus posted drawdowns for this retainer, aggregated by currency.
-    const { amount } = balanceOf(
-      { totalAmount: row.totalAmount, currency: row.currency },
-      [{ amount: row.drawn }],
-    )
-    const slot = byCurrency.get(row.currency) ?? { balance: '0', drawn: '0' }
-    slot.balance = sum([slot.balance, amount])
-    slot.drawn = sum([slot.drawn, row.drawn])
-    byCurrency.set(row.currency, slot)
-    if (row.state === 'active' && row.endsOn >= today && row.endsOn <= cutoff) expiringCount += 1
-  }
-  if (rows.length < 500) break
-  after = rows[rows.length - 1]!.id
+  `,
+      "objects",
+    );
+    for (const row of rows) {
+      // The balance is the landed engine policy, never a local formula: total
+      // minus posted drawdowns for this retainer, aggregated by currency.
+      const { amount } = balanceOf({ totalAmount: row.totalAmount, currency: row.currency }, [
+        { amount: row.drawn },
+      ]);
+      const slot = byCurrency.get(row.currency) ?? { balance: "0", drawn: "0" };
+      slot.balance = sum([slot.balance, amount]);
+      slot.drawn = sum([slot.drawn, row.drawn]);
+      byCurrency.set(row.currency, slot);
+      if (row.state === "active" && row.endsOn >= today && row.endsOn <= cutoff) expiringCount += 1;
+    }
+    if (rows.length < 500) break;
+    after = rows[rows.length - 1]!.id;
   }
   const perCurrency = [...byCurrency]
     .map(([currency, slot]) => ({
@@ -71,6 +74,6 @@ export async function loadRetainerKpis(
       balance: slot.balance,
       drawn: slot.drawn,
     }))
-    .sort((left, right) => left.currency.localeCompare(right.currency))
-  return { perCurrency, expiringCount }
+    .sort((left, right) => left.currency.localeCompare(right.currency));
+  return { perCurrency, expiringCount };
 }

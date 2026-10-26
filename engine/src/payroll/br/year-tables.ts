@@ -63,8 +63,8 @@ export function brTablesForPayDate(year: 2024 | 2025 | 2026, payDate: string): B
   }
   if (payDate < `${year}-01-01` || payDate > `${year}-12-31`) {
     throw new PayrollPackError(
-      `BR payroll: no transcribed tables for pay date ${payDate} — ${year} covers `
-      + `${year}-01-01..${year}-12-31. This date is not yet supported by the BR pack; contact support.`,
+      `BR payroll: no transcribed tables for pay date ${payDate} — ${year} covers ` +
+        `${year}-01-01..${year}-12-31. This date is not yet supported by the BR pack; contact support.`,
     );
   }
   if (year === 2024) {

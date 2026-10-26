@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { createRemittanceBill, payrollRemittanceSummary } from "./remittance.ts";
 import {
-  createRemittanceBill,
-  payrollRemittanceSummary,
-} from "./remittance.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -94,7 +96,7 @@ async function seedRqPayroll(options: {
     insert into pay_components
       (id, org_id, code, name, kind, system_key, liability_account_id,
        remittance_party_id, sequence, country, created_by, updated_by)
-    values (${componentId}, ${org.orgId}, ${options.componentCode ?? 'QPIP-1'}, ${options.componentName ?? 'QPIP'},
+    values (${componentId}, ${org.orgId}, ${options.componentCode ?? "QPIP-1"}, ${options.componentName ?? "QPIP"},
             'deduction', ${systemKey}, ${liabilityAccountId},
             ${options.externalParty === true ? rqVendorId : null}, 10, 'CA', ${actorId}, ${actorId})`);
 
@@ -144,15 +146,25 @@ async function seedRqPayroll(options: {
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
        liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
     values (${randomUUID()}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction',
-            ${options.componentName ?? 'QPIP'}, '400.0000', 10, ${liabilityAccountId}, 'commit',
+            ${options.componentName ?? "QPIP"}, '400.0000', 10, ${liabilityAccountId}, 'commit',
             ${options.externalParty === true ? rqVendorId : null}, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, actorId, accountId, craVendorId: org.vendorId, rqVendorId };
 }
 
-async function billDueDate(documentId: string): Promise<{ dueDate: string; custom: Record<string, unknown> }> {
-  const row = (await db.execute<Record<string, unknown>>(sql`
-    select due_date, custom from documents where id = ${documentId}`, "objects"))[0]!;
-  return { dueDate: String(row.due_date).slice(0, 10), custom: row.custom as Record<string, unknown> };
+async function billDueDate(
+  documentId: string,
+): Promise<{ dueDate: string; custom: Record<string, unknown> }> {
+  const row = (
+    await db.execute<Record<string, unknown>>(
+      sql`
+    select due_date, custom from documents where id = ${documentId}`,
+      "objects",
+    )
+  )[0]!;
+  return {
+    dueDate: String(row.due_date).slice(0, 10),
+    custom: row.custom as Record<string, unknown>,
+  };
 }
 
 test(
@@ -161,7 +173,10 @@ test(
   async () => {
     const fx = await seedRqPayroll({});
     try {
-      const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      const groups = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
       assert.equal(groups.length, 1);
       const group = groups[0]!;
       assert.equal(group.partyId, fx.rqVendorId);
@@ -190,7 +205,7 @@ test(
       // Stamping the 5th would remit twelve days early under the wrong
       // agency's rule — and for other closes the error points the other way.
       assert.equal(dueDate, "2026-08-17");
-      const marker = (custom.payrollRemittance as Record<string, unknown>);
+      const marker = custom.payrollRemittance as Record<string, unknown>;
       assert.deepEqual(marker.schedule, {
         vendorSettingsKey: "rqRemittancePartyId",
         authority: "Revenu Québec",
@@ -202,30 +217,29 @@ test(
   },
 );
 
-test(
-  "a configured twice-monthly RQ frequency dates the bill's halves",
-  { skip: !DB },
-  async () => {
-    const fx = await seedRqPayroll({ frequency: "twice_monthly" });
-    try {
-      const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" });
-      assert.equal(groups[0]!.schedule?.frequency, "twice_monthly");
-      assert.equal(groups[0]!.schedule?.frequencySource, "configured");
-      const bill = await createRemittanceBill(fx.orgId, fx.actorId, {
-        partyId: fx.rqVendorId,
-        from: "2026-07-01",
-        to: "2026-07-31",
-        filingAccountId: fx.accountId,
-      });
-      const { dueDate } = await billDueDate(bill.documentId);
-      // Second-half July: due the 10th of the following month (a Monday).
-      assert.equal(dueDate, "2026-08-10");
-      assert.match(groups[0]!.schedule!.rule, /16th to month end, due the 10th/);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+test("a configured twice-monthly RQ frequency dates the bill's halves", { skip: !DB }, async () => {
+  const fx = await seedRqPayroll({ frequency: "twice_monthly" });
+  try {
+    const groups = await payrollRemittanceSummary(fx.orgId, {
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+    assert.equal(groups[0]!.schedule?.frequency, "twice_monthly");
+    assert.equal(groups[0]!.schedule?.frequencySource, "configured");
+    const bill = await createRemittanceBill(fx.orgId, fx.actorId, {
+      partyId: fx.rqVendorId,
+      from: "2026-07-01",
+      to: "2026-07-31",
+      filingAccountId: fx.accountId,
+    });
+    const { dueDate } = await billDueDate(bill.documentId);
+    // Second-half July: due the 10th of the following month (a Monday).
+    assert.equal(dueDate, "2026-08-10");
+    assert.match(groups[0]!.schedule!.rule, /16th to month end, due the 10th/);
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "an external component pointed at the RQ vendor is RQ-scheduled by party",
@@ -244,7 +258,10 @@ test(
       externalParty: true,
     });
     try {
-      const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      const groups = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
       assert.equal(groups.length, 1);
       assert.deepEqual(groups[0]!.vendorKeys, []);
       assert.equal(groups[0]!.schedule?.authority, "Revenu Québec");

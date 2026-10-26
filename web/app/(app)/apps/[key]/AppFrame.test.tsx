@@ -10,8 +10,10 @@ Object.assign(globalThis, { React });
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
-const messagesEn = (await import("../../../../messages/en")).default as unknown as AbstractIntlMessages;
-const messagesDe = (await import("../../../../messages/de")).default as unknown as AbstractIntlMessages;
+const messagesEn = (await import("../../../../messages/en"))
+  .default as unknown as AbstractIntlMessages;
+const messagesDe = (await import("../../../../messages/de"))
+  .default as unknown as AbstractIntlMessages;
 const { AppFrame } = await import("./AppFrame");
 
 const CONTEXT = {
@@ -21,7 +23,11 @@ const CONTEXT = {
 
 type Posted = { ok: boolean; error?: unknown; result?: unknown };
 
-async function renderFrame(options: { locale: string; messages: AbstractIntlMessages; previewDraftId?: string }) {
+async function renderFrame(options: {
+  locale: string;
+  messages: AbstractIntlMessages;
+  previewDraftId?: string;
+}) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -57,7 +63,9 @@ async function renderFrame(options: { locale: string; messages: AbstractIntlMess
   async function handshake(proof: string | null) {
     const channel = new MessageChannel();
     channels.push(channel);
-    channel.port1.onmessage = (event: MessageEvent) => { posted.push(event.data as Posted); };
+    channel.port1.onmessage = (event: MessageEvent) => {
+      posted.push(event.data as Posted);
+    };
     await act(async () => {
       window.dispatchEvent(
         Object.assign(new window.Event("message"), {
@@ -78,7 +86,7 @@ async function renderFrame(options: { locale: string; messages: AbstractIntlMess
     proofOf,
     handshake,
     async call(method: string, channel?: MessageChannel) {
-      const bound = channel ?? await handshake(proofOf());
+      const bound = channel ?? (await handshake(proofOf()));
       await act(async () => {
         bound.port1.postMessage({ __ob: true, type: "call", id: "r1", method, payload: {} });
         await settle();
@@ -106,7 +114,10 @@ async function renderFrame(options: { locale: string; messages: AbstractIntlMess
       await act(async () => {
         root.unmount();
       });
-      for (const channel of channels) { channel.port1.close(); channel.port2.close(); }
+      for (const channel of channels) {
+        channel.port1.close();
+        channel.port2.close();
+      }
       host.remove();
     },
   };
@@ -117,7 +128,10 @@ async function renderFrame(options: { locale: string; messages: AbstractIntlMess
 // empty result and never a SyntaxError string.
 test("F4T-10: non-JSON success body refuses with the named error", async () => {
   globalThis.fetch = (async () =>
-    new Response("not json", { status: 200, headers: { "content-type": "text/html" } })) as typeof fetch;
+    new Response("not json", {
+      status: 200,
+      headers: { "content-type": "text/html" },
+    })) as typeof fetch;
   const frame = await renderFrame({ locale: "en", messages: messagesEn });
   try {
     await frame.call("records.list");
@@ -154,7 +168,11 @@ test("F4T-10: draft preview refusal renders in the operator locale", async () =>
   globalThis.fetch = (async () => {
     throw new Error("fetch must not fire for a draft preview");
   }) as typeof fetch;
-  const frame = await renderFrame({ locale: "de", messages: messagesDe, previewDraftId: "draft-1" });
+  const frame = await renderFrame({
+    locale: "de",
+    messages: messagesDe,
+    previewDraftId: "draft-1",
+  });
   try {
     await frame.call("records.list");
     assert.equal(frame.posted.length, 1, "exactly one bridge result must post");
@@ -192,7 +210,10 @@ test("bridge calls travel only over the channel bound by the document's single-u
     const bound = await frame.handshake(proof);
     await frame.call("records.list", bound);
     assert.equal(fetches, 1);
-    assert.deepEqual(frame.posted.map((result) => result.ok), [true]);
+    assert.deepEqual(
+      frame.posted.map((result) => result.ok),
+      [true],
+    );
 
     // The proof is spent: a later document presenting it binds nothing.
     const replay = await frame.handshake(proof);

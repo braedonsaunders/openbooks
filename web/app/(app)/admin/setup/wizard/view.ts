@@ -1,11 +1,16 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
-import { INDUSTRIES, canSwitchIndustry } from '../../../../../lib/industries'
-import { FEATURES, featureEnabled, featureTreeRows, resolvedFeatureState } from '../../../../../lib/features'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../lib/authz";
+import { INDUSTRIES, canSwitchIndustry } from "../../../../../lib/industries";
+import {
+  FEATURES,
+  featureEnabled,
+  featureTreeRows,
+  resolvedFeatureState,
+} from "../../../../../lib/features";
 import {
   isBookStart,
   isCloseCadence,
@@ -13,12 +18,16 @@ import {
   isMonthlyActivityLevel,
   isTaxPosition,
   isTeamSize,
-} from '../../../../../lib/workspace-profile'
-import { installablePayrollPackSummaries } from '@openbooks/engine/payroll/packs'
-import { canonicalTimeZone, countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/platform/time-zone'
-import { COUNTRY_CODES } from '../../../../../lib/countries'
-import type { SetupWizard } from './SetupWizard'
-import { setupLaunchActions, type SetupLaunchAction } from '@/lib/setup-launch-actions'
+} from "../../../../../lib/workspace-profile";
+import { installablePayrollPackSummaries } from "@openbooks/engine/payroll/packs";
+import {
+  canonicalTimeZone,
+  countryTimeZoneDirectory,
+  listCanonicalTimeZones,
+} from "@openbooks/engine/platform/time-zone";
+import { COUNTRY_CODES } from "../../../../../lib/countries";
+import type { SetupWizard } from "./SetupWizard";
+import { setupLaunchActions, type SetupLaunchAction } from "@/lib/setup-launch-actions";
 
 /**
  * The setup wizard page — used when the user re-runs the wizard from the
@@ -49,41 +58,50 @@ import { setupLaunchActions, type SetupLaunchAction } from '@/lib/setup-launch-a
  * message key can be invented.
  */
 
-type SetupWizardProps = Parameters<typeof SetupWizard>[0]
+type SetupWizardProps = Parameters<typeof SetupWizard>[0];
 
 export interface WizardData {
-  launchActions: SetupLaunchAction[]
-  open: boolean
-  industries: SetupWizardProps['industries']
-  initial: SetupWizardProps['initial']
-  canSwitchIndustry: boolean
-  isRerun: boolean
+  launchActions: SetupLaunchAction[];
+  open: boolean;
+  industries: SetupWizardProps["industries"];
+  initial: SetupWizardProps["initial"];
+  canSwitchIndustry: boolean;
+  isRerun: boolean;
   /** Installable payroll packs, in registry order — declared by the packs. */
-  payrollPacks: NonNullable<SetupWizardProps['payrollPacks']>
+  payrollPacks: NonNullable<SetupWizardProps["payrollPacks"]>;
   /** Canonical zone names for the business-time-zone picker. */
-  timeZones: string[]
+  timeZones: string[];
   /** Zones and representative zone per country. */
-  countryTimeZones: SetupWizardProps['countryTimeZones']
+  countryTimeZones: SetupWizardProps["countryTimeZones"];
   /** The feature registry tree for the pick-your-own-features step. */
-  featureRows: SetupWizardProps['featureRows']
+  featureRows: SetupWizardProps["featureRows"];
 }
 
 export async function loadWizard(): Promise<WizardData> {
   // The house refusal names admin.setup.manage (F1T-10), never a silent
   // bounce home.
-  const authz = await requirePermission('admin.setup.manage')
+  const authz = await requirePermission("admin.setup.manage");
 
-  const orgId = authz.user.orgId
+  const orgId = authz.user.orgId;
   const [org, switchable, features] = await Promise.all([
-    db.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
+    db.execute<{
+      name: string;
+      legal_name: string | null;
+      base_currency: string;
+      country: string;
+      settings: Record<string, unknown>;
+    }>(
+      sql`
       select name, legal_name, base_currency, country, settings
-        from orgs where id = ${orgId}`, 'objects'),
+        from orgs where id = ${orgId}`,
+      "objects",
+    ),
     canSwitchIndustry(orgId),
     resolvedFeatureState(orgId),
-  ])
-  const row = org[0]
-  const settings = row?.settings ?? {}
-  const storedProfile = settings.workspaceProfile as Record<string, unknown> | undefined
+  ]);
+  const row = org[0];
+  const settings = row?.settings ?? {};
+  const storedProfile = settings.workspaceProfile as Record<string, unknown> | undefined;
 
   return {
     launchActions: setupLaunchActions(authz),
@@ -94,35 +112,44 @@ export async function loadWizard(): Promise<WizardData> {
     countryTimeZones: countryTimeZoneDirectory(COUNTRY_CODES),
     featureRows: featureTreeRows(),
     initial: {
-      name: row?.name ?? '',
-      legalName: row?.legal_name ?? '',
-      country: row?.country ?? '',
-      baseCurrency: row?.base_currency ?? '',
-      fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
+      name: row?.name ?? "",
+      legalName: row?.legal_name ?? "",
+      country: row?.country ?? "",
+      baseCurrency: row?.base_currency ?? "",
+      fiscalYearStartMonth:
+        typeof settings.fiscalYearStartMonth === "number" ? settings.fiscalYearStartMonth : 1,
       timeZone: canonicalTimeZone(settings.timeZone) ?? null,
       industry: (settings.industry as string) ?? null,
-      featureSelection: storedProfile?.featureSelection === 'custom' ? 'custom' : 'industry',
+      featureSelection: storedProfile?.featureSelection === "custom" ? "custom" : "industry",
       workspaceProfile: {
-        teamSize: isTeamSize(storedProfile?.teamSize) ? storedProfile.teamSize : 'solo',
-        complexity: isComplexityLevel(storedProfile?.complexity) ? storedProfile.complexity : 'essentials',
-        bookStart: isBookStart(storedProfile?.bookStart) ? storedProfile.bookStart : 'fresh',
-        taxPosition: isTaxPosition(storedProfile?.taxPosition) ? storedProfile.taxPosition : 'unsure',
-        monthlyActivity: isMonthlyActivityLevel(storedProfile?.monthlyActivity) ? storedProfile.monthlyActivity : 'light',
-        closeCadence: isCloseCadence(storedProfile?.closeCadence) ? storedProfile.closeCadence : 'monthly',
+        teamSize: isTeamSize(storedProfile?.teamSize) ? storedProfile.teamSize : "solo",
+        complexity: isComplexityLevel(storedProfile?.complexity)
+          ? storedProfile.complexity
+          : "essentials",
+        bookStart: isBookStart(storedProfile?.bookStart) ? storedProfile.bookStart : "fresh",
+        taxPosition: isTaxPosition(storedProfile?.taxPosition)
+          ? storedProfile.taxPosition
+          : "unsure",
+        monthlyActivity: isMonthlyActivityLevel(storedProfile?.monthlyActivity)
+          ? storedProfile.monthlyActivity
+          : "light",
+        closeCadence: isCloseCadence(storedProfile?.closeCadence)
+          ? storedProfile.closeCadence
+          : "monthly",
       },
       features: {
-        inventory: featureEnabled(features, 'inventory'),
-        timeTracking: featureEnabled(features, 'timeTracking'),
-        multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
-        multiCurrency: featureEnabled(features, 'multiCurrency'),
-        projects: featureEnabled(features, 'projects'),
-        subscriptionBilling: featureEnabled(features, 'subscriptionBilling'),
-        orders: featureEnabled(features, 'orders'),
-        crm: featureEnabled(features, 'crm'),
-        bankFeeds: featureEnabled(features, 'bankFeeds'),
-        onlinePayments: featureEnabled(features, 'onlinePayments'),
-        fixedAssets: featureEnabled(features, 'fixedAssets'),
-        payroll: featureEnabled(features, 'payroll'),
+        inventory: featureEnabled(features, "inventory"),
+        timeTracking: featureEnabled(features, "timeTracking"),
+        multiSubsidiary: featureEnabled(features, "multiSubsidiary"),
+        multiCurrency: featureEnabled(features, "multiCurrency"),
+        projects: featureEnabled(features, "projects"),
+        subscriptionBilling: featureEnabled(features, "subscriptionBilling"),
+        orders: featureEnabled(features, "orders"),
+        crm: featureEnabled(features, "crm"),
+        bankFeeds: featureEnabled(features, "bankFeeds"),
+        onlinePayments: featureEnabled(features, "onlinePayments"),
+        fixedAssets: featureEnabled(features, "fixedAssets"),
+        payroll: featureEnabled(features, "payroll"),
       },
       allFeatures: Object.fromEntries(
         FEATURES.map((feature) => [feature.key, featureEnabled(features, feature.key)]),
@@ -130,12 +157,12 @@ export async function loadWizard(): Promise<WizardData> {
     },
     canSwitchIndustry: switchable,
     isRerun: true,
-  }
+  };
 }
 
 export function wizardSpec(data: WizardData): PageSpec {
   return page({
-    route: '/admin/setup/wizard',
+    route: "/admin/setup/wizard",
     // The setup workspace renders its own shell around every setup page, so
     // a second page layout would nest the chrome. And the fixed full-screen
     // scrim + centered card wrapper belongs to WizardShell itself — the
@@ -143,10 +170,10 @@ export function wizardSpec(data: WizardData): PageSpec {
     // (the bank-feeds `max-w-4xl` / features `space-y-8` precedent).
     // The `open` / `isRerun` literals travel as data (the features
     // `wizardHref` precedent) so the spec only binds already-resolved fields.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      widgetBlock('setup-wizard', {
+      widgetBlock("setup-wizard", {
         open: data.open,
         launchActions: data.launchActions,
         industries: data.industries,
@@ -159,5 +186,5 @@ export function wizardSpec(data: WizardData): PageSpec {
         featureRows: data.featureRows,
       }),
     ],
-  })
+  });
 }

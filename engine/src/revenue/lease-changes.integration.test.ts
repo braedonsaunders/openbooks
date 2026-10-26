@@ -14,16 +14,8 @@ import {
   type ScratchOrg,
   type FlowActors,
 } from "../testing/fixtures.ts";
-import {
-  createLeaseAgreement,
-  commenceLease,
-  postDueLeaseSchedules,
-} from "./leases.ts";
-import {
-  proposeLeaseChange,
-  applyLeaseChange,
-  type LeaseChangeInput,
-} from "./lease-changes.ts";
+import { createLeaseAgreement, commenceLease, postDueLeaseSchedules } from "./leases.ts";
+import { proposeLeaseChange, applyLeaseChange, type LeaseChangeInput } from "./lease-changes.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate, worklistGates } from "../flows/gates.ts";
 import { toUnits } from "../money/money.ts";
@@ -71,9 +63,7 @@ async function fixture(
       paymentAmount: "1000",
       annualDiscountRatePercent: "0",
       classificationInputs: { transfersOwnership: true },
-      accounts: accounts as unknown as Parameters<
-        typeof createLeaseAgreement
-      >[2]["accounts"],
+      accounts: accounts as unknown as Parameters<typeof createLeaseAgreement>[2]["accounts"],
     });
     await commenceLease(org.orgId, result.leaseId, actors.submitterId);
     await grantDecisionDuties(org.orgId, actors.approver1Id, ["assets.manage"]);
@@ -106,9 +96,12 @@ function input(
 }
 async function approve(org: ScratchOrg, actors: FlowActors, changeId: string) {
   await submitFinancialChange(org.orgId, changeId, actors.submitterId);
-  const gate = (await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, "objects",
-    ))[0];
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`,
+      "objects",
+    )
+  )[0];
   assert.ok(gate, "a real approval gate was created");
   await decideGate({
     gateId: gate.id,
@@ -117,9 +110,12 @@ async function approve(org: ScratchOrg, actors: FlowActors, changeId: string) {
   });
 }
 async function balance(orgId: string, accountId: string) {
-  const row = (await db.execute<{ amount: string }>(
-      sql`select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${orgId} and l.account_id=${accountId} and e.status='posted'`, "objects",
-    ))[0]!;
+  const row = (
+    await db.execute<{ amount: string }>(
+      sql`select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${orgId} and l.account_id=${accountId} and e.status='posted'`,
+      "objects",
+    )
+  )[0]!;
   return toUnits(row.amount);
 }
 test(
@@ -127,57 +123,33 @@ test(
   { skip: !DB },
   async () => {
     await fixture(async (org, actors, lease, accounts) => {
-      assert.equal(
-        await balance(org.orgId, accounts.payment!),
-        -toUnits("1000"),
-      );
-      assert.equal(
-        await balance(org.orgId, accounts.rouAsset!),
-        toUnits("3000"),
-      );
-      assert.equal(
-        await balance(org.orgId, accounts.leaseLiability!),
-        -toUnits("2000"),
-      );
+      assert.equal(await balance(org.orgId, accounts.payment!), -toUnits("1000"));
+      assert.equal(await balance(org.orgId, accounts.rouAsset!), toUnits("3000"));
+      assert.equal(await balance(org.orgId, accounts.leaseLiability!), -toUnits("2000"));
       assert.equal(await balance(org.orgId, accounts.amortizationExpense!), 0n);
       assert.equal(
         (
-          await postDueLeaseSchedules(
-            org.orgId,
-            "2026-07-15",
-            actors.submitterId,
-            { leaseId: lease },
-          )
+          await postDueLeaseSchedules(org.orgId, "2026-07-15", actors.submitterId, {
+            leaseId: lease,
+          })
         ).posted,
         0,
       );
       assert.equal(
         (
-          await postDueLeaseSchedules(
-            org.orgId,
-            "2026-07-31",
-            actors.submitterId,
-            { leaseId: lease },
-          )
+          await postDueLeaseSchedules(org.orgId, "2026-07-31", actors.submitterId, {
+            leaseId: lease,
+          })
         ).posted,
         1,
       );
-      assert.equal(
-        await balance(org.orgId, accounts.amortizationExpense!),
-        toUnits("1000"),
-      );
-      assert.equal(
-        await balance(org.orgId, accounts.payment!),
-        -toUnits("1000"),
-      );
+      assert.equal(await balance(org.orgId, accounts.amortizationExpense!), toUnits("1000"));
+      assert.equal(await balance(org.orgId, accounts.payment!), -toUnits("1000"));
       assert.equal(
         (
-          await postDueLeaseSchedules(
-            org.orgId,
-            "2026-07-31",
-            actors.submitterId,
-            { leaseId: lease },
-          )
+          await postDueLeaseSchedules(org.orgId, "2026-07-31", actors.submitterId, {
+            leaseId: lease,
+          })
         ).posted,
         0,
       );
@@ -189,9 +161,12 @@ test(
   { skip: !DB },
   async () => {
     await fixture(async (org, actors, lease, accounts) => {
-      const old = (await db.execute<{ id: string; payment_entry_id: string }>(
-          sql`select id,payment_entry_id from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} and sequence=1`, "objects",
-        ))[0]!;
+      const old = (
+        await db.execute<{ id: string; payment_entry_id: string }>(
+          sql`select id,payment_entry_id from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} and sequence=1`,
+          "objects",
+        )
+      )[0]!;
       const { changeId } = await proposeLeaseChange(
         org.orgId,
         lease,
@@ -203,39 +178,28 @@ test(
         /approval policy/,
       );
       await approve(org, actors, changeId);
-      const first = await applyLeaseChange(
-        org.orgId,
-        changeId,
-        actors.submitterId,
-      );
-      const second = await applyLeaseChange(
-        org.orgId,
-        changeId,
-        actors.submitterId,
-      );
+      const first = await applyLeaseChange(org.orgId, changeId, actors.submitterId);
+      const second = await applyLeaseChange(org.orgId, changeId, actors.submitterId);
       assert.deepEqual(second, first);
       assert.equal(await balance(org.orgId, accounts.rouAsset!), 0n);
       assert.equal(await balance(org.orgId, accounts.leaseLiability!), 0n);
-      assert.equal(
-        await balance(org.orgId, accounts.payment!),
-        -toUnits("1250"),
-      );
-      const kept = (await db.execute<{
+      assert.equal(await balance(org.orgId, accounts.payment!), -toUnits("1250"));
+      const kept = (
+        await db.execute<{
           payment_entry_id: string;
           superseded_by_change_id: string;
         }>(
-          sql`select payment_entry_id,superseded_by_change_id from lease_agreement_schedule_lines where id=${old.id}`, "objects",
-        ))[0]!;
+          sql`select payment_entry_id,superseded_by_change_id from lease_agreement_schedule_lines where id=${old.id}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(kept.payment_entry_id, old.payment_entry_id);
       assert.equal(kept.superseded_by_change_id, changeId);
       assert.equal(
         (
-          await postDueLeaseSchedules(
-            org.orgId,
-            "2026-09-30",
-            actors.submitterId,
-            { leaseId: lease },
-          )
+          await postDueLeaseSchedules(org.orgId, "2026-09-30", actors.submitterId, {
+            leaseId: lease,
+          })
         ).posted,
         0,
       );
@@ -244,20 +208,30 @@ test(
           await db.execute(
             sql`update lease_agreement_schedule_lines set payment='99' where id=${old.id}`,
           ),
-        (error: unknown) => errorChainMatches(error, /lease schedule measurements are immutable; append a revision/),
+        (error: unknown) =>
+          errorChainMatches(error, /lease schedule measurements are immutable; append a revision/),
       );
       await assert.rejects(
         async () =>
           await db.execute(
             sql`update financial_changes set reason='Rewrite approved terms' where id=${changeId}`,
           ),
-        (error: unknown) => errorChainMatches(error, /financial change proposal is immutable; create a new proposal/),
+        (error: unknown) =>
+          errorChainMatches(error, /financial change proposal is immutable; create a new proposal/),
       );
-      const preserved = (await db.execute<{ reason: string }>(sql`
+      const preserved = (
+        await db.execute<{ reason: string }>(
+          sql`
         select reason from financial_changes where org_id=${org.orgId} and id=${changeId}
-      `, "objects"))[0]!;
-      assert.equal(preserved.reason, input(accounts).reason,
-        "the refused rewrite must preserve the approved reason");
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        preserved.reason,
+        input(accounts).reason,
+        "the refused rewrite must preserve the approved reason",
+      );
     });
   },
 );
@@ -286,34 +260,22 @@ test(
         }),
       );
       await approve(org, actors, changeId);
-      const result = await applyLeaseChange(
-        org.orgId,
-        changeId,
-        actors.submitterId,
-      );
+      const result = await applyLeaseChange(org.orgId, changeId, actors.submitterId);
       assert.equal(result.newLiability, "3600.0000");
       assert.equal(result.newRou, "4600.0000");
-      assert.equal(
-        await balance(org.orgId, accounts.leaseLiability!),
-        -toUnits("3600"),
-      );
-      assert.equal(
-        await balance(org.orgId, accounts.rouAsset!),
-        toUnits("4600"),
-      );
+      assert.equal(await balance(org.orgId, accounts.leaseLiability!), -toUnits("3600"));
+      assert.equal(await balance(org.orgId, accounts.rouAsset!), toUnits("4600"));
       const rows = await db.execute<{ revision: number; superseded: boolean }>(
-          sql`select revision,superseded_by_change_id is not null as superseded from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} order by sequence`, "objects",
-        );
+        sql`select revision,superseded_by_change_id is not null as superseded from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} order by sequence`,
+        "objects",
+      );
       assert.equal(rows.length, 6);
       assert.ok(rows.slice(0, 3).every((r) => r.superseded));
       assert.ok(rows.slice(3).every((r) => r.revision === 2 && !r.superseded));
       await postDueLeaseSchedules(org.orgId, "2026-07-31", actors.submitterId, {
         leaseId: lease,
       });
-      assert.equal(
-        await balance(org.orgId, accounts.payment!),
-        -toUnits("2200"),
-      );
+      assert.equal(await balance(org.orgId, accounts.payment!), -toUnits("2200"));
     });
   },
 );
@@ -365,9 +327,12 @@ test(
       });
       assert.equal(await balance(org.orgId, accounts.rouAsset!), before);
       assert.equal(
-        (await db.execute<{ revision: number }>(
-            sql`select revision from lease_agreements where id=${lease}`, "objects",
-          ))[0]!.revision,
+        (
+          await db.execute<{ revision: number }>(
+            sql`select revision from lease_agreements where id=${lease}`,
+            "objects",
+          )
+        )[0]!.revision,
         1,
       );
     });
@@ -379,31 +344,24 @@ test(
   async () => {
     await fixture(async (org, actors, lease, accounts) => {
       await assert.rejects(
-        proposeLeaseChange(
-          org.orgId,
-          lease,
-          actors.outsiderId,
-          input(accounts),
-        ),
+        proposeLeaseChange(org.orgId, lease, actors.outsiderId, input(accounts)),
         /assets.manage/,
       );
       const other = await createScratchOrg();
       try {
         await assert.rejects(
-          proposeLeaseChange(
-            other.orgId,
-            lease,
-            actors.submitterId,
-            input(accounts),
-          ),
+          proposeLeaseChange(other.orgId, lease, actors.submitterId, input(accounts)),
           ScopeNotFoundError,
         );
       } finally {
         await dropScratchOrg(other.orgId);
       }
-      const count = (await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from financial_changes where org_id=${org.orgId}`, "objects",
-        ))[0]!.n;
+      const count = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from financial_changes where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(count, 0);
     });
   },
@@ -420,9 +378,12 @@ test(
         input(accounts),
       );
       await submitFinancialChange(org.orgId, changeId, actors.submitterId);
-      const gate = (await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, "objects",
-        ))[0]!;
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`,
+          "objects",
+        )
+      )[0]!;
       await assert.rejects(
         decideGate({
           gateId: gate.id,
@@ -431,13 +392,20 @@ test(
         }),
         /you are not an approver for this gate/,
       );
-      const pending = (await db.execute<{ status: string }>(sql`
+      const pending = (
+        await db.execute<{ status: string }>(
+          sql`
         select status from flow_gates where org_id=${org.orgId} and id=${gate.id}
-      `, "objects"))[0]!;
-      assert.equal(pending.status, "pending", "the submitter's refused decision cannot approve the gate");
-      const rows = await withOrg(org.orgId, () =>
-        worklistGates(org.orgId, actors.approver1Id),
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        pending.status,
+        "pending",
+        "the submitter's refused decision cannot approve the gate",
       );
+      const rows = await withOrg(org.orgId, () => worklistGates(org.orgId, actors.approver1Id));
       const visible = rows.find((row) => row.subjectId === changeId);
       assert.ok(visible);
       assert.equal(visible.subsidiaryId, org.subsidiaryId);
@@ -450,21 +418,11 @@ test(
   async () => {
     await fixture(async (org, actors, lease, accounts) => {
       const proposal = input(accounts),
-        first = await proposeLeaseChange(
-          org.orgId,
-          lease,
-          actors.submitterId,
-          proposal,
-        );
+        first = await proposeLeaseChange(org.orgId, lease, actors.submitterId, proposal);
       await approve(org, actors, first.changeId);
       await applyLeaseChange(org.orgId, first.changeId, actors.submitterId);
       assert.deepEqual(
-        await proposeLeaseChange(
-          org.orgId,
-          lease,
-          actors.submitterId,
-          proposal,
-        ),
+        await proposeLeaseChange(org.orgId, lease, actors.submitterId, proposal),
         first,
       );
       await assert.rejects(

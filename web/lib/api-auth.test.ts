@@ -82,12 +82,16 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "../app/api/admin/api-keys/route.ts?api-key-scopes-test";
-const { PATCH, POST } = (await import(routeUrl)) as typeof import("../app/api/admin/api-keys/route.ts");
+const { PATCH, POST } = (await import(
+  routeUrl
+)) as typeof import("../app/api/admin/api-keys/route.ts");
 // A query-suffixed literal is unresolvable to tsc (TS2307, which then leaves
 // every use untyped): hoist it into a URL constant like the route above so
 // the mock loader still isolates the module while tsc sees the real shape.
 const openApiRouteUrl = "../app/api/v1/openapi/route.ts?api-key-audit-test";
-const { GET: openApiGET } = (await import(openApiRouteUrl)) as typeof import("../app/api/v1/openapi/route.ts");
+const { GET: openApiGET } = (await import(
+  openApiRouteUrl
+)) as typeof import("../app/api/v1/openapi/route.ts");
 // api-auth.ts is server-only too; it loads under the same stubbed boundary.
 const { canApi, generateApiKey, resolveApiKeyAuth } = await import("./api-auth");
 const { validateSessionToken } = await import("./auth");
@@ -110,9 +114,17 @@ test("the canonical scope authority fails closed on empty, malformed, or non-cat
   const owner = new Set(["gl.read", "ap.pay"]);
   assert.equal(resolveKeyScopeAuthority(owner, []), null, "empty scopes authenticate nothing");
   assert.equal(resolveKeyScopeAuthority(owner, null), null, "missing scopes authenticate nothing");
-  assert.equal(resolveKeyScopeAuthority(owner, "gl.read"), null, "a non-array declaration authenticates nothing");
+  assert.equal(
+    resolveKeyScopeAuthority(owner, "gl.read"),
+    null,
+    "a non-array declaration authenticates nothing",
+  );
   assert.equal(resolveKeyScopeAuthority(owner, ["*"]), null, "a direct-write wildcard is inert");
-  assert.equal(resolveKeyScopeAuthority(owner, ["not.a.permission"]), null, "non-catalogue scopes grant nothing");
+  assert.equal(
+    resolveKeyScopeAuthority(owner, ["not.a.permission"]),
+    null,
+    "non-catalogue scopes grant nothing",
+  );
   assert.deepEqual(
     resolveKeyScopeAuthority(owner, ["gl.read", "not.a.permission"]),
     new Set(["gl.read"]),
@@ -133,7 +145,6 @@ test("POST refuses to mint a key whose scopes are omitted or empty", async () =>
   const empty = await POST(jsonRequest({ name: "Empty scopes", scopes: [] }));
   assert.equal(empty.status, 422);
   assert.match((await empty.json()).error, /at least one scope is required/);
-
 });
 
 test("PATCH refuses to clear a key's scopes to an empty set", async () => {
@@ -153,12 +164,19 @@ test("an active API key owner cannot request unknown catalogue scopes", { skip: 
   const previousActor = { ...actorState };
   try {
     actorState.orgId = org.orgId;
-    actorState.userId = await seedOwner(org.orgId, ['*']);
-    const unknown = await withOrgContext(org.orgId, () => POST(jsonRequest({ name: "Unknown scopes", scopes: ["not.a.permission"] })));
+    actorState.userId = await seedOwner(org.orgId, ["*"]);
+    const unknown = await withOrgContext(org.orgId, () =>
+      POST(jsonRequest({ name: "Unknown scopes", scopes: ["not.a.permission"] })),
+    );
     assert.equal(unknown.status, 400);
     assert.match((await unknown.json()).error, /known catalogue keys/);
-    const count = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from api_keys where org_id=${org.orgId}`, "objects"));
-    assert.equal(count[0]!.n, 0, 'an invalid authority never creates credential material');
+    const count = await withBypassContext(() =>
+      db.execute<{ n: number }>(
+        sql`select count(*)::int as n from api_keys where org_id=${org.orgId}`,
+        "objects",
+      ),
+    );
+    assert.equal(count[0]!.n, 0, "an invalid authority never creates credential material");
   } finally {
     Object.assign(actorState, previousActor);
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -187,17 +205,26 @@ function bearer(plaintext: string): Request {
   });
 }
 
-async function seedOwner(orgId: string, permissions: string[], isSuperAdmin = false): Promise<string> {
+async function seedOwner(
+  orgId: string,
+  permissions: string[],
+  isSuperAdmin = false,
+): Promise<string> {
   const userId = randomUUID();
   // File-local seed helper: stage fixture rows under the test bypass (the
   // shared createScratchUser precedent wraps call sites; a single body wrap
   // here covers every caller).
   return withBypassContext(async () => {
-    const roleId = (await db.execute(sql`
+    const roleId = (
+      await db.execute(
+        sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${orgId}, ${`api-owner-${userId.slice(0, 8)}`}, 'API Owner', false,
               ${JSON.stringify(permissions)}::jsonb)
-      returning id`, "objects"))[0]!.id as string;
+      returning id`,
+        "objects",
+      )
+    )[0]!.id as string;
     // Users activate only once they hold a role (enforce_user_active_role_assignment).
     await db.execute(sql`
       insert into users (id, org_id, email, name, password_hash, is_active)
@@ -206,7 +233,8 @@ async function seedOwner(orgId: string, permissions: string[], isSuperAdmin = fa
       insert into role_assignments (org_id, user_id, role_id)
       values (${orgId}, ${userId}, ${roleId})`);
     await db.execute(sql`update users set is_active = true where id = ${userId}`);
-    if (isSuperAdmin) await db.execute(sql`update users set is_super_admin = true where id = ${userId}`);
+    if (isSuperAdmin)
+      await db.execute(sql`update users set is_super_admin = true where id = ${userId}`);
     return userId;
   });
 }
@@ -218,95 +246,130 @@ async function insertKey(
   scopes: string,
 ): Promise<{ id: string; plaintext: string }> {
   const gen = generateApiKey();
-  const id = (await withBypassContext(() => db.execute(sql`
+  const id = (
+    await withBypassContext(() =>
+      db.execute(
+        sql`
     insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview,
                           scopes, is_active, created_by, updated_by)
     values (${orgId}, ${userId}, ${name}, ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
             ${scopes}::jsonb, true, ${userId}, ${userId})
-    returning id`, "objects")))[0]!.id as string;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id as string;
   return { id, plaintext: gen.plaintext };
 }
 
 async function waitUntilBlocked(blockerPid: number): Promise<void> {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const blocked = (await pool.query<{ blocked: boolean }>(
-      "select exists(select 1 from pg_stat_activity where $1::int = any(pg_blocking_pids(pid))) as blocked",
-      [blockerPid],
-    )).rows[0]?.blocked;
+    const blocked = (
+      await pool.query<{ blocked: boolean }>(
+        "select exists(select 1 from pg_stat_activity where $1::int = any(pg_blocking_pids(pid))) as blocked",
+        [blockerPid],
+      )
+    ).rows[0]?.blocked;
     if (blocked) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   assert.fail(`credential use did not wait on blocker backend ${blockerPid}`);
 }
 
-test("API key use is refused when revocation commits before its final credential stamp", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  const blocker = await pool.connect();
-  let held = false;
-  let pending: Promise<Awaited<ReturnType<typeof resolveApiKeyAuth>>> | undefined;
-  try {
-    const ownerId = await seedOwner(org.orgId, ["*"]);
-    const key = await insertKey(org.orgId, ownerId, "racing revoke", '["gl.read"]');
-    await blocker.query("begin");
-    held = true;
-    await blocker.query("select set_config('app.bypass_rls','on',true)");
-    await blocker.query("update api_keys set is_active=false, key_hash=$2 where id=$1", [key.id, randomBytes(32).toString("hex")]);
-    const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+test(
+  "API key use is refused when revocation commits before its final credential stamp",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const blocker = await pool.connect();
+    let held = false;
+    let pending: Promise<Awaited<ReturnType<typeof resolveApiKeyAuth>>> | undefined;
+    try {
+      const ownerId = await seedOwner(org.orgId, ["*"]);
+      const key = await insertKey(org.orgId, ownerId, "racing revoke", '["gl.read"]');
+      await blocker.query("begin");
+      held = true;
+      await blocker.query("select set_config('app.bypass_rls','on',true)");
+      await blocker.query("update api_keys set is_active=false, key_hash=$2 where id=$1", [
+        key.id,
+        randomBytes(32).toString("hex"),
+      ]);
+      const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
 
-    pending = withOrgContext(org.orgId, () => resolveApiKeyAuth(bearer(key.plaintext)));
-    await waitUntilBlocked(pid);
-    await blocker.query("commit");
-    held = false;
-    assert.equal(await pending, null, "the request must not authenticate after revoke has committed");
-  } finally {
-    if (held) await blocker.query("rollback").catch(() => undefined);
-    blocker.release();
-    if (pending) await pending.catch(() => undefined);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      pending = withOrgContext(org.orgId, () => resolveApiKeyAuth(bearer(key.plaintext)));
+      await waitUntilBlocked(pid);
+      await blocker.query("commit");
+      held = false;
+      assert.equal(
+        await pending,
+        null,
+        "the request must not authenticate after revoke has committed",
+      );
+    } finally {
+      if (held) await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      if (pending) await pending.catch(() => undefined);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("session validation is refused when revocation commits before its final liveness stamp", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  const blocker = await pool.connect();
-  const priorSecret = process.env.SESSION_SECRET;
-  const secret = randomBytes(32).toString("hex");
-  process.env.SESSION_SECRET = secret;
-  let held = false;
-  let pending: Promise<Awaited<ReturnType<typeof validateSessionToken>>> | undefined;
-  try {
-    const ownerId = await seedOwner(org.orgId, ["*"]);
-    const sessionId = randomUUID();
-    const expiresAt = new Date(Date.now() + 86_400_000);
-    const expiresEpoch = Math.floor(expiresAt.getTime() / 1000);
-    const payload = `v2.${sessionId}.${ownerId}.${expiresEpoch}`;
-    const token = `${payload}.${createHmac("sha256", secret).update(sessionSigningInput(payload)).digest("base64url")}`;
-    const hash = createHash("sha256").update(token).digest("hex");
-    await withBypassContext(() => db.execute(sql`
+test(
+  "session validation is refused when revocation commits before its final liveness stamp",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const blocker = await pool.connect();
+    const priorSecret = process.env.SESSION_SECRET;
+    const secret = randomBytes(32).toString("hex");
+    process.env.SESSION_SECRET = secret;
+    let held = false;
+    let pending: Promise<Awaited<ReturnType<typeof validateSessionToken>>> | undefined;
+    try {
+      const ownerId = await seedOwner(org.orgId, ["*"]);
+      const sessionId = randomUUID();
+      const expiresAt = new Date(Date.now() + 86_400_000);
+      const expiresEpoch = Math.floor(expiresAt.getTime() / 1000);
+      const payload = `v2.${sessionId}.${ownerId}.${expiresEpoch}`;
+      const token = `${payload}.${createHmac("sha256", secret).update(sessionSigningInput(payload)).digest("base64url")}`;
+      const hash = createHash("sha256").update(token).digest("hex");
+      await withBypassContext(() =>
+        db.execute(sql`
       insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at,last_seen_at)
-      values (${sessionId},${ownerId},${hash},'password',${expiresAt},now() - interval '10 minutes')`));
+      values (${sessionId},${ownerId},${hash},'password',${expiresAt},now() - interval '10 minutes')`),
+      );
 
-    await blocker.query("begin");
-    held = true;
-    await blocker.query("select set_config('app.bypass_rls','on',true)");
-    await blocker.query("update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=$1", [sessionId]);
-    const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+      await blocker.query("begin");
+      held = true;
+      await blocker.query("select set_config('app.bypass_rls','on',true)");
+      await blocker.query(
+        "update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=$1",
+        [sessionId],
+      );
+      const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
 
-    pending = validateSessionToken(token);
-    await waitUntilBlocked(pid);
-    await blocker.query("commit");
-    held = false;
-    assert.equal(await pending, null, "a revoked session must not validate after the revocation commits");
-  } finally {
-    if (held) await blocker.query("rollback").catch(() => undefined);
-    blocker.release();
-    if (pending) await pending.catch(() => undefined);
-    if (priorSecret === undefined) delete process.env.SESSION_SECRET;
-    else process.env.SESSION_SECRET = priorSecret;
-    await dropScratchOrg(org.orgId);
-  }
-});
+      pending = validateSessionToken(token);
+      await waitUntilBlocked(pid);
+      await blocker.query("commit");
+      held = false;
+      assert.equal(
+        await pending,
+        null,
+        "a revoked session must not validate after the revocation commits",
+      );
+    } finally {
+      if (held) await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      if (pending) await pending.catch(() => undefined);
+      if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = priorSecret;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "an explicitly narrow key grants exactly its selection against a powerful owner",
@@ -329,17 +392,32 @@ test(
       assert.equal(canApi(auth, "ap.pay"), false);
 
       // An authenticated endpoint refusal must still leave execution evidence.
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         update orgs
            set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,apiAccess}', 'true'::jsonb)
-         where id = ${org.orgId}`));
-      const denied = await withOrgContext(org.orgId, () => openApiGET(new Request("http://openbooks.test/api/v1/openapi", { headers: { authorization: `Bearer ${key.plaintext}` } })));
+         where id = ${org.orgId}`),
+      );
+      const denied = await withOrgContext(org.orgId, () =>
+        openApiGET(
+          new Request("http://openbooks.test/api/v1/openapi", {
+            headers: { authorization: `Bearer ${key.plaintext}` },
+          }),
+        ),
+      );
       assert.equal(denied.status, 403);
-      const evidence = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      const evidence = await withOrgContext(org.orgId, () =>
+        db.execute<{ count: string }>(
+          sql`
         select count(*)::text as count from api_key_events where org_id = ${org.orgId} and key_id = ${key.id}
-          and path = '/api/v1/openapi' and status_code = 403`, "objects"));
+          and path = '/api/v1/openapi' and status_code = 403`,
+          "objects",
+        ),
+      );
       assert.equal(Number(evidence[0]?.count), 1);
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
 
@@ -361,7 +439,9 @@ test(
       assert.deepEqual([...auth.permissions], []);
       assert.equal(canApi(auth, "ar.read"), false);
       assert.equal(canApi(auth, "payroll.read"), false);
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
 
@@ -379,7 +459,9 @@ test(
       assert.ok(auth, "a valid scope held through super-admin authority authenticates");
       assert.equal(auth.user.isSuperAdmin, true);
       assert.deepEqual([...auth.permissions], ["payroll.read"]);
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
 
@@ -398,8 +480,15 @@ test(
       assert.equal(minted.status, 201);
       const { id, plaintext } = (await minted.json()) as { id: string; plaintext: string };
 
-      const row = (await withOrgContext(orgId, () => db.execute(sql`
-        select scopes from api_keys where id = ${id} and org_id = ${orgId}`, "objects")))[0] as {
+      const row = (
+        await withOrgContext(orgId, () =>
+          db.execute(
+            sql`
+        select scopes from api_keys where id = ${id} and org_id = ${orgId}`,
+            "objects",
+          ),
+        )
+      )[0] as {
         scopes: string[];
       };
       // The route stores the normalized catalogue-ordered selection.
@@ -411,14 +500,22 @@ test(
 
       // A direct write can still plant a non-empty array of non-catalogue junk;
       // the resolver must grant it nothing (no wildcard, no partial credit).
-      await withBypassContext(() => db.execute(sql`update api_keys set scopes = '["*"]'::jsonb where id = ${id}`));
+      await withBypassContext(() =>
+        db.execute(sql`update api_keys set scopes = '["*"]'::jsonb where id = ${id}`),
+      );
       assert.equal(await withOrgContext(orgId, () => resolveApiKeyAuth(bearer(plaintext))), null);
 
       // And storage itself refuses to clear the key to an empty scope set.
       await assert.rejects(
-        withBypassContext(() => db.execute(sql`update api_keys set scopes = '[]'::jsonb where id = ${id} and org_id = ${orgId}`)),
+        withBypassContext(() =>
+          db.execute(
+            sql`update api_keys set scopes = '[]'::jsonb where id = ${id} and org_id = ${orgId}`,
+          ),
+        ),
         (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
       );
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   },
 );

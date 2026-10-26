@@ -1,8 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  CHECKLIST_STEP_SUBJECT_KIND,
-  type FlowSubjectProfile,
-} from "@openbooks/forms-core";
+import { CHECKLIST_STEP_SUBJECT_KIND, type FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../platform/db.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
@@ -37,7 +34,8 @@ export const checklistStepSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (await db.execute<{
+    (
+      await db.execute<{
         org_id: string;
         title: string;
         kind: string;
@@ -49,90 +47,90 @@ async function load(id: string) {
         submitted_by: string | null;
         submitted_at: string | null;
         created_by: string | null;
-      }>(sql`
+      }>(
+        sql`
     select s.org_id,s.title,p.kind,p.employment_id,e.employer_subsidiary_id,s.due_on::text,s.design,s.approval_status,s.submitted_by,s.submitted_at::text,s.created_by
     from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id
-    join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.id=${id}`, "objects"))[0] ?? null
+    join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.id=${id}`,
+        "objects",
+      )
+    )[0] ?? null
   );
 }
-export const checklistStepsFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
-    profile: checklistStepSubjectProfile,
-    permissions: {
-      read: "hrm.process.read",
-      edit: "hrm.process.manage",
-      approve: "hrm.process.manage",
-    },
-    scope: {
-      via: "custom",
-      async subsidiaryOf(orgId, ids, allowed, lock) {
-        if (lock)
-          await db.execute(
-            sql`select p.id from hrm_processes p where p.org_id=${orgId} and p.id in(select process_id from hrm_process_steps where org_id=${orgId} and id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as ids(value))) order by p.id for share`,
-          );
-        const rows = await db.execute<{ id: string; employer_subsidiary_id: string }>(
-            sql`select s.id,e.employer_subsidiary_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.org_id=${orgId} and s.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as ids(value)) ${lock ? sql`for share of s,e` : sql``}`, "objects",
-          );
-        return new Map(
-          rows
-            .filter(
-              (r) => allowed === null || allowed.has(r.employer_subsidiary_id),
-            )
-            .map((r) => [r.id, r.employer_subsidiary_id]),
+export const checklistStepsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
+  profile: checklistStepSubjectProfile,
+  permissions: {
+    read: "hrm.process.read",
+    edit: "hrm.process.manage",
+    approve: "hrm.process.manage",
+  },
+  scope: {
+    via: "custom",
+    async subsidiaryOf(orgId, ids, allowed, lock) {
+      if (lock)
+        await db.execute(
+          sql`select p.id from hrm_processes p where p.org_id=${orgId} and p.id in(select process_id from hrm_process_steps where org_id=${orgId} and id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as ids(value))) order by p.id for share`,
         );
-      },
-      worklistPredicate(allowedIdsJson) {
-        return sql`exists(select 1 from hrm_process_steps cs join hrm_processes cp on cp.org_id=cs.org_id and cp.id=cs.process_id join worker_employments ce on ce.org_id=cp.org_id and ce.id=cp.employment_id where cs.org_id=g.org_id and cs.id=g.subject_id and ce.employer_subsidiary_id in(select value::uuid from jsonb_array_elements_text(${allowedIdsJson}::jsonb) as ids(value)))`;
-      },
-    },
-    releaseViaHandler: true,
-    async loadContext(id) {
-      const s = await load(id);
-      return s
-        ? {
-            values: {
-              submittedAt: s.submitted_at,
-              title: s.title,
-              kind: s.kind,
-              employmentId: s.employment_id,
-              legalEntityId: s.employer_subsidiary_id,
-              dueOn: s.due_on,
-              section: s.design.section ?? "",
-              status: s.approval_status,
-            },
-            submitterUserId: s.submitted_by,
-            makerUserId: s.submitted_by,
-          }
-        : null;
-    },
-    async getStatus(id) {
-      return (await load(id))?.approval_status ?? null;
-    },
-    label(_id, values) {
-      return `Checklist step ${String(values.title ?? "")}`;
-    },
-    deepLink(id) {
-      return `/hrm/processes?step=${id}`;
-    },
-    async changeStatus() {
-      throw new Error(
-        "Checklist approvals resolve through their native gate decision; do not change status through a workflow action.",
+      const rows = await db.execute<{ id: string; employer_subsidiary_id: string }>(
+        sql`select s.id,e.employer_subsidiary_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.org_id=${orgId} and s.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as ids(value)) ${lock ? sql`for share of s,e` : sql``}`,
+        "objects",
+      );
+      return new Map(
+        rows
+          .filter((r) => allowed === null || allowed.has(r.employer_subsidiary_id))
+          .map((r) => [r.id, r.employer_subsidiary_id]),
       );
     },
-    async setField() {
-      throw new Error(
-        "Checklist execution snapshots cannot be edited through workflow actions.",
-      );
+    worklistPredicate(allowedIdsJson) {
+      return sql`exists(select 1 from hrm_process_steps cs join hrm_processes cp on cp.org_id=cs.org_id and cp.id=cs.process_id join worker_employments ce on ce.org_id=cp.org_id and ce.id=cp.employment_id where cs.org_id=g.org_id and cs.id=g.subject_id and ce.employer_subsidiary_id in(select value::uuid from jsonb_array_elements_text(${allowedIdsJson}::jsonb) as ids(value)))`;
     },
-    async releaseApproval(subjectId, outcome, ctx, detail, run) {
-      await releaseFlowApproval({
-        subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        ctx,
-        comment: detail?.comment,
-        approvalRunId: run?.id,
-      });
-    },
-  });
+  },
+  releaseViaHandler: true,
+  async loadContext(id) {
+    const s = await load(id);
+    return s
+      ? {
+          values: {
+            submittedAt: s.submitted_at,
+            title: s.title,
+            kind: s.kind,
+            employmentId: s.employment_id,
+            legalEntityId: s.employer_subsidiary_id,
+            dueOn: s.due_on,
+            section: s.design.section ?? "",
+            status: s.approval_status,
+          },
+          submitterUserId: s.submitted_by,
+          makerUserId: s.submitted_by,
+        }
+      : null;
+  },
+  async getStatus(id) {
+    return (await load(id))?.approval_status ?? null;
+  },
+  label(_id, values) {
+    return `Checklist step ${String(values.title ?? "")}`;
+  },
+  deepLink(id) {
+    return `/hrm/processes?step=${id}`;
+  },
+  async changeStatus() {
+    throw new Error(
+      "Checklist approvals resolve through their native gate decision; do not change status through a workflow action.",
+    );
+  },
+  async setField() {
+    throw new Error("Checklist execution snapshots cannot be edited through workflow actions.");
+  },
+  async releaseApproval(subjectId, outcome, ctx, detail, run) {
+    await releaseFlowApproval({
+      subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      ctx,
+      comment: detail?.comment,
+      approvalRunId: run?.id,
+    });
+  },
+});

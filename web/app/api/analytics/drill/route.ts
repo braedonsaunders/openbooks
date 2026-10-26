@@ -1,5 +1,5 @@
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { analyticsQueryLive as analyticsQuery } from "../../../../lib/analytics/query";
@@ -16,8 +16,11 @@ import { serializeLedgerDecimal } from "./ledger-decimal";
 import type { SQL } from "drizzle-orm";
 import { notFound } from "@/lib/api/responses";
 import { reportExpenseAccess } from "@/lib/expense-access";
-import { EXPENSE_RESTRICTED_PARTY_LABEL, expenseDocumentScope, hiddenExpenseLeg } from "@/lib/expense-report-scope";
-
+import {
+  EXPENSE_RESTRICTED_PARTY_LABEL,
+  expenseDocumentScope,
+  hiddenExpenseLeg,
+} from "@/lib/expense-report-scope";
 
 export const runtime = "nodejs";
 
@@ -44,12 +47,14 @@ async function translateLegs(
   orgId: string,
   legs: Array<{ func: unknown; date: unknown; amount: unknown }>,
 ): Promise<
-  | { ok: true; amounts: string[]; currency: string }
-  | { ok: false; response: NextResponse }
+  { ok: true; amounts: string[]; currency: string } | { ok: false; response: NextResponse }
 > {
   const asFunc = (func: unknown): string | null => (typeof func === "string" ? func : null);
   const asDate = (date: unknown): string => String(date ?? "").slice(0, 10);
-  const ratesResult = await flowRates(orgId, legs.map((l) => ({ func: asFunc(l.func), date: asDate(l.date) }))).then(
+  const ratesResult = await flowRates(
+    orgId,
+    legs.map((l) => ({ func: asFunc(l.func), date: asDate(l.date) })),
+  ).then(
     (rates) => ({ ok: true as const, rates }),
     (error: unknown) => ({ ok: false as const, error }),
   );
@@ -61,7 +66,9 @@ async function translateLegs(
   }
   const rates = ratesResult.rates;
   try {
-    const amounts = legs.map((l) => mulDecimal(String(l.amount ?? "0"), rates.rateAt(asFunc(l.func), asDate(l.date))));
+    const amounts = legs.map((l) =>
+      mulDecimal(String(l.amount ?? "0"), rates.rateAt(asFunc(l.func), asDate(l.date))),
+    );
     const currency = rates.base || (await presentationCurrency(orgId));
     return { ok: true, amounts, currency };
   } catch (error) {
@@ -85,7 +92,7 @@ async function translateLegs(
  */
 export const GET = defineRoute({
   permission: "reports.read",
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  feature: { none: "No optional feature applies to this permission-governed endpoint." },
   handler: async ({ request: req, authz: gate }) => {
     const user = gate.user;
     // Readers without payroll.read see payroll legs collapsed per
@@ -104,7 +111,7 @@ export const GET = defineRoute({
     // party drill the report is left out.
     const expenseAccess = await reportExpenseAccess(gate);
     const hiddenExpense = hiddenExpenseLeg(expenseAccess, sql`d.kind`, sql`d.party_id`);
-    const expensesHidden = expenseAccess.scope !== 'all';
+    const expensesHidden = expenseAccess.scope !== "all";
 
     const url = new URL(req.url);
     const account = url.searchParams.get("account");
@@ -112,7 +119,10 @@ export const GET = defineRoute({
     const from = url.searchParams.get("from");
     const to = url.searchParams.get("to");
     if ((!account && !party) || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
-      return NextResponse.json({ error: "account or party, plus valid from/to calendar dates (from <= to) required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "account or party, plus valid from/to calendar dates (from <= to) required" },
+        { status: 400 },
+      );
     }
     if ((account && !isUuid(account)) || (party && !isUuid(party))) {
       return notFound("record");
@@ -163,7 +173,9 @@ export const GET = defineRoute({
     // amount (summaries below aggregate the same legs, so everything ties)
     // but names no employee and shows no per-employee memo.
     const detailLegFilter = sql`${canSeePayroll ? sql`` : sql` and not (${collapseLeg})`}${expensesHidden ? sql` and not (${hiddenExpense})` : sql``}`;
-    const detailCollapseArm = canSeePayroll ? sql`` : sql`
+    const detailCollapseArm = canSeePayroll
+      ? sql``
+      : sql`
         union all
         (select max(e.posting_date)::text as date, e.id as entry_id, sum(l.amount) as amount,
           max(sub.base_currency) as func,
@@ -173,7 +185,8 @@ export const GET = defineRoute({
         ${accountWindow}
           and (${collapseLeg})
         group by e.id)`;
-    const expenseCollapseArm = expensesHidden ? sql`
+    const expenseCollapseArm = expensesHidden
+      ? sql`
         union all
         (select max(e.posting_date)::text as date, e.id as entry_id, sum(l.amount) as amount,
           max(sub.base_currency) as func,
@@ -182,16 +195,18 @@ export const GET = defineRoute({
           '' as memo
         ${accountWindow}
           and (${hiddenExpense})${canSeePayroll ? sql`` : sql` and not (${collapseLeg})`}
-        group by e.id)` : sql``;
+        group by e.id)`
+      : sql``;
     // Restricted party summaries bucket payroll legs, and legs of expense
     // reports the reader may not read, under their restricted labels instead
     // of printing employee names; amounts aggregate as usual.
-    const partyName = canSeePayroll && !expensesHidden
-      ? sql`coalesce(p.display_name, 'No party')`
-      : sql`case${canSeePayroll ? sql`` : sql` when ${collapseLeg} then ${PAYROLL_RESTRICTED_PARTY_LABEL}`}${expensesHidden ? sql` when ${hiddenExpense} then ${EXPENSE_RESTRICTED_PARTY_LABEL}` : sql``} else coalesce(p.display_name, 'No party') end`;
+    const partyName =
+      canSeePayroll && !expensesHidden
+        ? sql`coalesce(p.display_name, 'No party')`
+        : sql`case${canSeePayroll ? sql`` : sql` when ${collapseLeg} then ${PAYROLL_RESTRICTED_PARTY_LABEL}`}${expensesHidden ? sql` when ${hiddenExpense} then ${EXPENSE_RESTRICTED_PARTY_LABEL}` : sql``} else coalesce(p.display_name, 'No party') end`;
     if (account) {
       const [detail, monthly, byParty, agg] = await Promise.all([
-        (analyticsQuery(sql`
+        analyticsQuery(sql`
           select * from (
             (select e.posting_date::text as date, e.id as entry_id, l.amount,
               sub.base_currency as func,
@@ -205,35 +220,32 @@ export const GET = defineRoute({
           ) u
           order by date desc, abs(amount) desc
           limit 1000
-        `)),
-        (analyticsQuery(sql`
+        `),
+        analyticsQuery(sql`
           select to_char(e.posting_date, 'YYYY-MM') as month, sub.base_currency as func,
             sum(l.amount) as amount, max(e.posting_date)::text as late
           ${accountWindow}
           group by 1, 2 order by 1, 2
-        `)),
-        (analyticsQuery(sql`
+        `),
+        analyticsQuery(sql`
           select ${partyName} as name, sub.base_currency as func,
             sum(l.amount) as amount, count(*) as n, max(e.posting_date)::text as late
           ${accountWindow}
           group by 1, 2 order by 1, 2
-        `)),
-        (analyticsQuery(sql`
+        `),
+        analyticsQuery(sql`
           select sub.base_currency as func, count(*) as n, coalesce(sum(l.amount), 0) as amount,
             max(e.posting_date)::text as late
           ${accountWindow}
           group by 1 order by 1
-        `)),
+        `),
       ]);
-      const translated = await translateLegs(
-        user.orgId,
-        [
-          ...detail.rows.map((r) => ({ func: r.func, date: r.date, amount: r.amount })),
-          ...monthly.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
-          ...byParty.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
-          ...agg.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
-        ],
-      );
+      const translated = await translateLegs(user.orgId, [
+        ...detail.rows.map((r) => ({ func: r.func, date: r.date, amount: r.amount })),
+        ...monthly.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+        ...byParty.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+        ...agg.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+      ]);
       if (!translated.ok) return translated.response;
       const { amounts, currency } = translated;
       let cursor = 0;
@@ -269,7 +281,7 @@ export const GET = defineRoute({
         currency,
         total: serializeLedgerDecimal(total),
         count,
-        entries: ((detail.rows)).map((r, i) => ({
+        entries: detail.rows.map((r, i) => ({
           date: r.date,
           entryId: r.entry_id,
           docId: r.doc_id,
@@ -282,7 +294,11 @@ export const GET = defineRoute({
         monthly: [...monthlyMerged.entries()]
           .sort((a, b) => (a[0] < b[0] ? -1 : 1))
           .map(([month, amount]) => ({ month, amount: serializeLedgerDecimal(amount) })),
-        breakdown: partyBreakdown.map((p) => ({ name: p.name, amount: serializeLedgerDecimal(p.amount), count: p.count })),
+        breakdown: partyBreakdown.map((p) => ({
+          name: p.name,
+          amount: serializeLedgerDecimal(p.amount),
+          count: p.count,
+        })),
       });
     }
 
@@ -312,7 +328,7 @@ export const GET = defineRoute({
          and coalesce(reversal_entry.posting_date::date, d.voided_at::date) between ${from}::date and ${to}::date ${docScope} ${expenseScope}
     `;
     const [detail, monthly, byKind, agg] = await Promise.all([
-      (analyticsQuery(sql`
+      analyticsQuery(sql`
         select ${docDate}::text as date,
           d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
           e.id as entry_id, ${docLeg} as func_amount, ${docFunc} as func,
@@ -329,8 +345,8 @@ export const GET = defineRoute({
           ${postedDoc}
         order by ${docDate} desc, ${docLeg} desc
         limit 1000
-      `)),
-      (analyticsQuery(sql`
+      `),
+      analyticsQuery(sql`
         with events as (${docEvents})
         select to_char(events.event_date, 'YYYY-MM') as month, ${docFunc} as func,
           sum(${docLeg} * events.direction) as amount, max(events.event_date)::text as late
@@ -339,8 +355,8 @@ export const GET = defineRoute({
         ${docJoins}
         where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1, 2 order by 1, 2
-      `)),
-      (analyticsQuery(sql`
+      `),
+      analyticsQuery(sql`
         with events as (${docEvents})
         select d.kind as name, ${docFunc} as func, sum(${docLeg} * events.direction) as amount,
           sum(events.direction)::int as n, max(events.event_date)::text as late
@@ -349,8 +365,8 @@ export const GET = defineRoute({
         ${docJoins}
         where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1, 2 order by 1, 2
-      `)),
-      (analyticsQuery(sql`
+      `),
+      analyticsQuery(sql`
         with events as (${docEvents})
         select ${docFunc} as func, sum(events.direction)::int as n, coalesce(sum(${docLeg} * events.direction), 0) as amount,
           max(events.event_date)::text as late
@@ -359,17 +375,14 @@ export const GET = defineRoute({
         ${docJoins}
         where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1 order by 1
-      `)),
+      `),
     ]);
-    const translated = await translateLegs(
-      user.orgId,
-      [
-        ...detail.rows.map((r) => ({ func: r.func, date: r.date, amount: r.func_amount })),
-        ...monthly.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
-        ...byKind.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
-        ...agg.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
-      ],
-    );
+    const translated = await translateLegs(user.orgId, [
+      ...detail.rows.map((r) => ({ func: r.func, date: r.date, amount: r.func_amount })),
+      ...monthly.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+      ...byKind.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+      ...agg.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+    ]);
     if (!translated.ok) return translated.response;
     const { amounts, currency } = translated;
     let cursor = 0;
@@ -378,7 +391,10 @@ export const GET = defineRoute({
     const monthlyTranslated = take(monthly.rows.length);
     const kindTranslated = take(byKind.rows.length);
     const aggTranslated = take(agg.rows.length);
-    const mergeTranslated = (keys: string[], legs: string[]): Array<{ key: string; amount: string }> => {
+    const mergeTranslated = (
+      keys: string[],
+      legs: string[],
+    ): Array<{ key: string; amount: string }> => {
       const merged = new Map<string, string>();
       keys.forEach((key, i) => merged.set(key, add(merged.get(key) ?? "0", legs[i] ?? "0")));
       return [...merged.entries()].map(([key, amount]) => ({ key, amount }));
@@ -388,7 +404,9 @@ export const GET = defineRoute({
       monthlyTranslated,
     ).sort((a, b) => (a.key < b.key ? -1 : 1));
     const kindCounts = new Map<string, number>();
-    byKind.rows.forEach((r) => kindCounts.set(String(r.name), (kindCounts.get(String(r.name)) ?? 0) + Number(r.n ?? 0)));
+    byKind.rows.forEach((r) =>
+      kindCounts.set(String(r.name), (kindCounts.get(String(r.name)) ?? 0) + Number(r.n ?? 0)),
+    );
     const kindMerged = mergeTranslated(
       byKind.rows.map((r) => String(r.name)),
       kindTranslated,
@@ -406,7 +424,7 @@ export const GET = defineRoute({
       currency,
       total: serializeLedgerDecimal(total),
       count,
-      entries: ((detail.rows)).map((r, i) => ({
+      entries: detail.rows.map((r, i) => ({
         date: r.date,
         entryId: r.entry_id,
         docId: r.doc_id,
@@ -416,9 +434,15 @@ export const GET = defineRoute({
         memo: r.memo,
         amount: serializeLedgerDecimal(detailAmounts[i] ?? "0"),
       })),
-      monthly: monthlyMerged.map(({ key, amount }) => ({ month: key, amount: serializeLedgerDecimal(amount) })),
-      breakdown: kindMerged.map((k) => ({ name: k.name, amount: serializeLedgerDecimal(k.amount), count: k.count })),
+      monthly: monthlyMerged.map(({ key, amount }) => ({
+        month: key,
+        amount: serializeLedgerDecimal(amount),
+      })),
+      breakdown: kindMerged.map((k) => ({
+        name: k.name,
+        amount: serializeLedgerDecimal(k.amount),
+        count: k.count,
+      })),
     });
-
   },
-})
+});

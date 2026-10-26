@@ -1,7 +1,16 @@
 import { sql } from "drizzle-orm";
-import { isMatchableSettlementLineKind, setSettlementLineDocument, settlementLineDocumentInEntity } from "../payments/psp-settlement.ts";
+import {
+  isMatchableSettlementLineKind,
+  setSettlementLineDocument,
+  settlementLineDocumentInEntity,
+} from "../payments/psp-settlement.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
+import {
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+  withScopeSnapshot,
+} from "../organization/subsidiary-scope.ts";
 import { db } from "../platform/db.ts";
 import { CommerceError } from "./errors.ts";
 
@@ -27,13 +36,13 @@ export type PayoutSubsidiaryScope = ReadonlySet<string> | null | undefined;
 
 export type PayoutLineMatch =
   | {
-    status: "matched";
-    lineId: string;
-    documentId: string;
-    documentKind: string;
-    documentNumber: string | null;
-    via: "stored_link" | "channel_order" | "external_link";
-  }
+      status: "matched";
+      lineId: string;
+      documentId: string;
+      documentKind: string;
+      documentNumber: string | null;
+      via: "stored_link" | "channel_order" | "external_link";
+    }
   | { status: "unmatched"; lineId: string; kind: string; reason: string; remedy: string }
   | { status: "not_applicable"; lineId: string; kind: string; reason: string };
 
@@ -92,14 +101,20 @@ export async function readSettlementDocument(
   batchSubsidiaryId: string | null,
 ): Promise<LineDocumentEvidence | null> {
   if (allowedSubsidiaryIds === undefined) return null;
-  const row = (await db.execute<LineDocumentEvidence>(sql`
+  const row = (
+    await db.execute<LineDocumentEvidence>(
+      sql`
     select id, kind, document_number as "documentNumber", status, currency, total::text as total,
            subsidiary_id as "subsidiaryId" from documents
      where org_id = ${orgId} and id = ${documentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
-  if (!(await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.subsidiaryId))) return null;
+  if (!(await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.subsidiaryId)))
+    return null;
   return row;
 }
 
@@ -124,14 +139,22 @@ export async function lineExternalDocumentIds(
   provider: string,
   refs: Array<string | null | undefined>,
 ): Promise<string[]> {
-  const candidates = refs.filter((value): value is string => typeof value === "string" && value.trim() !== "");
+  const candidates = refs.filter(
+    (value): value is string => typeof value === "string" && value.trim() !== "",
+  );
   if (candidates.length === 0) return [];
-  const links = await db.execute<{ native_table: string; native_id: string }>(sql`
+  const links = await db.execute<{ native_table: string; native_id: string }>(
+    sql`
     select native_table, native_id from external_links
      where org_id = ${orgId} and provider = ${provider}
-       and external_id in (${sql.join(candidates.map((candidate) => sql`${candidate}`), sql`, `)})
+       and external_id in (${sql.join(
+         candidates.map((candidate) => sql`${candidate}`),
+         sql`, `,
+       )})
        and native_table = 'documents'
-  `, "objects");
+  `,
+    "objects",
+  );
   return [...new Set(links.map((link) => link.native_id))];
 }
 
@@ -162,13 +185,19 @@ async function sourceOrderClaimedInScope(
   if (allowedSubsidiaryIds === undefined) return false;
   const ids = orderIdCandidates(sourceOrderId);
   if (ids.length === 0) return false;
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select o.id from channel_orders o
       join sales_channels c on c.id = o.channel_id and c.org_id = o.org_id
      where o.org_id = ${orgId} and c.kind = 'shopify'
        ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}
-       and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-     limit 1`, "objects");
+       and o.external_id in (${sql.join(
+         ids.map((id) => sql`${id}`),
+         sql`, `,
+       )})
+     limit 1`,
+    "objects",
+  );
   return rows.length > 0;
 }
 
@@ -188,7 +217,8 @@ export async function findLineSourceOrders(
   if (allowedSubsidiaryIds === undefined) return [];
   const ids = orderIdCandidates(sourceOrderId);
   if (ids.length === 0) return [];
-  const rows = await db.execute<LineSourceOrder>(sql`
+  const rows = await db.execute<LineSourceOrder>(
+    sql`
     select o.id, o.channel_id as "channelId", c.subsidiary_id as "channelSubsidiaryId",
            o.external_id as "externalId",
            o.external_number as "externalNumber", o.posting_status as "postingStatus",
@@ -197,12 +227,18 @@ export async function findLineSourceOrders(
       join sales_channels c on c.id = o.channel_id and c.org_id = o.org_id
      where o.org_id = ${orgId} and c.kind = 'shopify'
        ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}
-       and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+       and o.external_id in (${sql.join(
+         ids.map((id) => sql`${id}`),
+         sql`, `,
+       )})
      order by o.id
-  `, "objects");
+  `,
+    "objects",
+  );
   const kept: LineSourceOrder[] = [];
   for (const row of rows) {
-    if (await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.channelSubsidiaryId)) kept.push(row);
+    if (await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.channelSubsidiaryId))
+      kept.push(row);
   }
   return kept;
 }
@@ -216,10 +252,15 @@ export async function findOrderSaleDocumentId(
     return order.postingDocumentId;
   }
   if (order.summaryId) {
-    const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
+    const summary = (
+      await db.execute<{ posting_document_id: string | null }>(
+        sql`
       select posting_document_id from channel_daily_summaries
        where org_id = ${orgId} and id = ${order.summaryId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     return summary?.posting_document_id ?? null;
   }
   return null;
@@ -230,12 +271,19 @@ export async function findOrderRefundDocumentIds(
   orgId: string,
   orderId: string,
 ): Promise<string[]> {
-  const events = await db.execute<{ posting_document_id: string | null }>(sql`
+  const events = await db.execute<{ posting_document_id: string | null }>(
+    sql`
     select posting_document_id from channel_order_events
      where org_id = ${orgId} and order_id = ${orderId}
        and posting_document_id is not null
-  `, "objects");
-  return [...new Set(events.map((event) => event.posting_document_id).filter((id): id is string => id !== null))];
+  `,
+    "objects",
+  );
+  return [
+    ...new Set(
+      events.map((event) => event.posting_document_id).filter((id): id is string => id !== null),
+    ),
+  ];
 }
 
 async function resolveLineDocument(
@@ -244,14 +292,24 @@ async function resolveLineDocument(
   line: SettlementLineRow,
   allowedSubsidiaryIds: PayoutSubsidiaryScope,
   batchSubsidiaryId: string | null,
-): Promise<Omit<Extract<PayoutLineMatch, { status: "matched" }>, "lineId"> | Omit<Extract<PayoutLineMatch, { status: "unmatched" }>, "lineId" | "kind"> | null> {
+): Promise<
+  | Omit<Extract<PayoutLineMatch, { status: "matched" }>, "lineId">
+  | Omit<Extract<PayoutLineMatch, { status: "unmatched" }>, "lineId" | "kind">
+  | null
+> {
   if (line.document_id) {
-    const doc = await postedDocument(orgId, line.document_id, allowedSubsidiaryIds, batchSubsidiaryId);
+    const doc = await postedDocument(
+      orgId,
+      line.document_id,
+      allowedSubsidiaryIds,
+      batchSubsidiaryId,
+    );
     if (!doc) {
       return {
         status: "unmatched",
         reason: "linked_missing",
-        remedy: "The linked reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
+        remedy:
+          "The linked reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
       };
     }
     if (doc.status !== "posted") {
@@ -291,7 +349,8 @@ async function resolveLineDocument(
       return {
         status: "unmatched",
         reason: "ambiguous_link",
-        remedy: "Several documents claim this provider reference; link the line to the right receipt manually.",
+        remedy:
+          "Several documents claim this provider reference; link the line to the right receipt manually.",
       };
     }
     if (posted.length === 1) {
@@ -316,11 +375,21 @@ async function resolveLineDocument(
     return {
       status: "unmatched",
       reason: "linked_missing",
-      remedy: "The claimed reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
+      remedy:
+        "The claimed reference is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
     };
   }
-  if (provider === "shopify_payments" && typeof meta.sourceOrderId === "string" && meta.sourceOrderId.trim() !== "") {
-    const orders = await findLineSourceOrders(orgId, meta.sourceOrderId, allowedSubsidiaryIds, batchSubsidiaryId);
+  if (
+    provider === "shopify_payments" &&
+    typeof meta.sourceOrderId === "string" &&
+    meta.sourceOrderId.trim() !== ""
+  ) {
+    const orders = await findLineSourceOrders(
+      orgId,
+      meta.sourceOrderId,
+      allowedSubsidiaryIds,
+      batchSubsidiaryId,
+    );
     if (orders.length === 0) {
       // Restricted scopes never distinguish: hidden rows answer exactly
       // like missing ones, so zero eligible orders always read unavailable
@@ -331,27 +400,31 @@ async function resolveLineDocument(
         return {
           status: "unmatched",
           reason: "order_unavailable",
-          remedy: "No eligible order in this payout's legal entity claims this reference; ask an authorized operator to review access to the order, or link the visible receipt manually.",
+          remedy:
+            "No eligible order in this payout's legal entity claims this reference; ask an authorized operator to review access to the order, or link the visible receipt manually.",
         };
       }
       if (await sourceOrderClaimedInScope(orgId, meta.sourceOrderId, allowedSubsidiaryIds)) {
         return {
           status: "unmatched",
           reason: "order_unavailable",
-          remedy: "No eligible order in this payout's legal entity claims this reference; ask an authorized operator to review access to the order, or link the visible receipt manually.",
+          remedy:
+            "No eligible order in this payout's legal entity claims this reference; ask an authorized operator to review access to the order, or link the visible receipt manually.",
         };
       }
       return {
         status: "unmatched",
         reason: "order_unknown",
-        remedy: "The storefront order has not been ingested; ingest it under Channels → Orders, or link the receipt manually.",
+        remedy:
+          "The storefront order has not been ingested; ingest it under Channels → Orders, or link the receipt manually.",
       };
     }
     if (orders.length > 1) {
       return {
         status: "unmatched",
         reason: "ambiguous_order",
-        remedy: "Several channels hold this order number; link the line to the right receipt manually.",
+        remedy:
+          "Several channels hold this order number; link the line to the right receipt manually.",
       };
     }
     const order = orders[0]!;
@@ -361,7 +434,8 @@ async function resolveLineDocument(
         return {
           status: "unmatched",
           reason: "refund_unposted",
-          remedy: "The order's refund has not posted yet; post it from the channel order, then match the payout again.",
+          remedy:
+            "The order's refund has not posted yet; post it from the channel order, then match the payout again.",
         };
       }
       // Same resolve-before-count as the external branch above: only posted
@@ -403,7 +477,8 @@ async function resolveLineDocument(
       return {
         status: "unmatched",
         reason: "refund_unavailable",
-        remedy: "The order's refunds are unavailable in this payout's legal entity; link the line to a visible posted refund in that entity, or ask an authorized operator to review access to the reference.",
+        remedy:
+          "The order's refunds are unavailable in this payout's legal entity; link the line to a visible posted refund in that entity, or ask an authorized operator to review access to the reference.",
       };
     }
     const saleDocumentId = await findOrderSaleDocumentId(orgId, {
@@ -411,7 +486,9 @@ async function resolveLineDocument(
       summaryId: order.summaryId,
     });
     if (order.postingDocumentId) {
-      const doc = saleDocumentId ? await postedDocument(orgId, saleDocumentId, allowedSubsidiaryIds, batchSubsidiaryId) : null;
+      const doc = saleDocumentId
+        ? await postedDocument(orgId, saleDocumentId, allowedSubsidiaryIds, batchSubsidiaryId)
+        : null;
       if (doc && doc.status === "posted") {
         return {
           status: "matched",
@@ -433,11 +510,17 @@ async function resolveLineDocument(
       return {
         status: "unmatched",
         reason: "document_unavailable",
-        remedy: "The channel order's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
+        remedy:
+          "The channel order's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
       };
     }
     if (saleDocumentId) {
-      const doc = await postedDocument(orgId, saleDocumentId, allowedSubsidiaryIds, batchSubsidiaryId);
+      const doc = await postedDocument(
+        orgId,
+        saleDocumentId,
+        allowedSubsidiaryIds,
+        batchSubsidiaryId,
+      );
       if (doc && doc.status === "posted") {
         return {
           status: "matched",
@@ -457,19 +540,22 @@ async function resolveLineDocument(
       return {
         status: "unmatched",
         reason: "document_unavailable",
-        remedy: "The daily summary's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
+        remedy:
+          "The daily summary's document is unavailable in this payout's legal entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
       };
     }
     return {
       status: "unmatched",
       reason: "order_unposted",
-      remedy: "The channel order has no posted document yet; post it (or its daily summary), then match the payout again.",
+      remedy:
+        "The channel order has no posted document yet; post it (or its daily summary), then match the payout again.",
     };
   }
   return {
     status: "unmatched",
     reason: "no_link",
-    remedy: "No native document claims this provider reference; link the receipt manually, or mark the line as an adjustment.",
+    remedy:
+      "No native document claims this provider reference; link the receipt manually, or mark the line as an adjustment.",
   };
 }
 
@@ -502,10 +588,15 @@ export async function matchPayoutLines(
         "Enable Banking in Company Settings → Features before matching payout lines.",
       );
     }
-    const batch = (await db.execute<{ id: string; provider: string; subsidiary_id: string | null }>(sql`
+    const batch = (
+      await db.execute<{ id: string; provider: string; subsidiary_id: string | null }>(
+        sql`
       select id, provider, subsidiary_id from psp_settlement_batches
        where org_id = ${orgId} and id = ${batchId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) {
       refuse(
         "payout_batch_missing",
@@ -514,15 +605,21 @@ export async function matchPayoutLines(
       );
     }
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
-    const lines = await db.execute<SettlementLineRow>(sql`
+    const lines = await db.execute<SettlementLineRow>(
+      sql`
       select id, kind, external_ref, description, amount::text, currency, document_id, meta
         from psp_settlement_lines
        where org_id = ${orgId} and batch_id = ${batchId}
        order by line_number
-    `, "objects");
+    `,
+      "objects",
+    );
     const resolved = [];
     for (const line of lines) {
-      resolved.push({ line, outcome: await resolveLineDocument(orgId, batch.provider, line, scope, batch.subsidiary_id) });
+      resolved.push({
+        line,
+        outcome: await resolveLineDocument(orgId, batch.provider, line, scope, batch.subsidiary_id),
+      });
     }
     return resolved;
   });
@@ -532,9 +629,20 @@ export async function matchPayoutLines(
     // interleave their row locks and report stale verdicts.
     if (!outcome || outcome.status !== "matched") {
       if (!outcome) {
-        verdicts.push({ status: "not_applicable", lineId: line.id, kind: line.kind, reason: `${line.kind} lines never link to an order` });
+        verdicts.push({
+          status: "not_applicable",
+          lineId: line.id,
+          kind: line.kind,
+          reason: `${line.kind} lines never link to an order`,
+        });
       } else {
-        verdicts.push({ status: "unmatched", lineId: line.id, kind: line.kind, reason: outcome.reason, remedy: outcome.remedy });
+        verdicts.push({
+          status: "unmatched",
+          lineId: line.id,
+          kind: line.kind,
+          reason: outcome.reason,
+          remedy: outcome.remedy,
+        });
       }
       continue;
     }
@@ -551,7 +659,10 @@ export async function matchPayoutLines(
         lineId: line.id,
         kind: line.kind,
         reason: "link_failed",
-        remedy: error instanceof Error ? error.message.slice(0, 300) : "Linking failed; link the receipt manually.",
+        remedy:
+          error instanceof Error
+            ? error.message.slice(0, 300)
+            : "Linking failed; link the receipt manually.",
       });
     }
   }

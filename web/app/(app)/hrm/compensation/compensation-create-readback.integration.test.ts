@@ -23,12 +23,18 @@ import type { SessionUser } from "../../../../lib/auth";
 const root = pathToFileURL(process.cwd() + "/").href;
 
 function catalogAt(relative: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(new URL(relative, import.meta.url), "utf8")) as Record<string, unknown>;
+  return JSON.parse(readFileSync(new URL(relative, import.meta.url), "utf8")) as Record<
+    string,
+    unknown
+  >;
 }
 
 const catalogs = {
   hrm: catalogAt("../../../../messages/en/hrm.json"),
-  routeState: (catalogAt("../../../../messages/en/shell.json").routeState ?? {}) as Record<string, unknown>,
+  routeState: (catalogAt("../../../../messages/en/shell.json").routeState ?? {}) as Record<
+    string,
+    unknown
+  >,
   admin: catalogAt("../../../../messages/en/admin.json"),
   nav: catalogAt("../../../../messages/en/nav.json"),
 };
@@ -36,14 +42,14 @@ const catalogs = {
 
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next-intl/server") {
       return {
         shortCircuit: true,
         url:
           "data:text/javascript," +
-          encodeURIComponent(intlServerStubSource(
-            `export async function getTranslations(ns) {
+          encodeURIComponent(
+            intlServerStubSource(
+              `export async function getTranslations(ns) {
               const catalogs = globalThis.__compReadbackCatalogs;
               const catalog = ns === 'shell.routeState' ? catalogs.routeState : ns === 'admin' ? catalogs.admin : ns === 'nav' ? catalogs.nav : catalogs.hrm;
               const lookup = (key) => {
@@ -61,7 +67,8 @@ registerHooks({
               };
               t.has = (key) => lookup(key) !== key;
               return t;
-            }`),
+            }`,
+            ),
           ),
       };
     }
@@ -73,11 +80,11 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createCycle, listCycles } = await import("@openbooks/engine/hrm/compensation/cycles");
-const { createPlan, listPlans } = await import("@openbooks/engine/hrm/compensation/headcount-plans");
+const { createPlan, listPlans } =
+  await import("@openbooks/engine/hrm/compensation/headcount-plans");
 const { loadCompensationHome } = await import("../../../../lib/hrm/compensation");
 
 test("the dialogs' create payloads persist and appear in the home registers", async () => {
@@ -91,10 +98,12 @@ test("the dialogs' create payloads persist and appear in the home registers", as
            set settings = coalesce(settings, '{}'::jsonb) || '{"features": {"hrm": true, "payroll": true, "hrmCompensation": true}}'::jsonb
          where id = ${org.orgId}`),
     );
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, "Compensation creator", "comp_creator"));
+    const actor = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Compensation creator", "comp_creator"),
+    );
     for (const permission of ["hrm.compensation.read", "hrm.compensation.manage"]) {
-      await withBypassContext(
-        () => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
           insert into user_permission_overrides (org_id, user_id, permission, effect)
           values (${org.orgId}, ${actor}, ${permission}, 'grant')
           on conflict (user_id, permission) do update set effect = 'grant'`),
@@ -150,10 +159,18 @@ test("the dialogs' create payloads persist and appear in the home registers", as
       assert.ok(home, "the home loader resolves for the creator");
       const cycleRow = home.cycles.find((row) => row.name === "Merit 2026");
       assert.ok(cycleRow, "the created cycle appears in the cycles register");
-      assert.equal(cycleRow.href, `/hrm/compensation/cycles/${cycle.id}`, "the register links the cycle detail");
+      assert.equal(
+        cycleRow.href,
+        `/hrm/compensation/cycles/${cycle.id}`,
+        "the register links the cycle detail",
+      );
       const planRow = home.plans.find((row) => row.name === "Headcount 2026");
       assert.ok(planRow, "the created plan appears in the plans register");
-      assert.equal(planRow.href, `/hrm/compensation/plans/${plan.id}`, "the register links the plan detail");
+      assert.equal(
+        planRow.href,
+        `/hrm/compensation/plans/${plan.id}`,
+        "the register links the plan detail",
+      );
 
       // And the dialogs the buttons open resolve with their forms against
       // the same real gates — never a refusal for this actor.

@@ -21,14 +21,8 @@ import type { NativeContext } from "./native.ts";
 
 const context = {
   accountByRef: new Map([
-    [
-      "10",
-      { id: "account-a", number: "1000", name: "Cash", type: "asset_bank" },
-    ],
-    [
-      "20",
-      { id: "account-b", number: "6000", name: "Expense", type: "expense" },
-    ],
+    ["10", { id: "account-a", number: "1000", name: "Cash", type: "asset_bank" }],
+    ["20", { id: "account-b", number: "6000", name: "Expense", type: "expense" }],
   ]),
   subsidiaryByRef: new Map([
     ["1", "sub-root"],
@@ -133,14 +127,12 @@ test("NetSuite posting transactions fail closed without an exact source period",
     nsLine("1", { mainline: "T", account: "10", netamount: "-100", subsidiary: "1" }),
     nsLine("2", { account: "20", netamount: "100", subsidiary: "1" }),
   ];
-  assert.deepEqual(
-    buildNativeFromNetSuite(context, { ...header, postingperiod: null }, lines),
-    { skip: "posting transaction has no source posting period" },
-  );
-  assert.deepEqual(
-    buildNativeFromNetSuite(context, { ...header, postingperiod: "99" }, lines),
-    { skip: "unmapped posting period 99" },
-  );
+  assert.deepEqual(buildNativeFromNetSuite(context, { ...header, postingperiod: null }, lines), {
+    skip: "posting transaction has no source posting period",
+  });
+  assert.deepEqual(buildNativeFromNetSuite(context, { ...header, postingperiod: "99" }, lines), {
+    skip: "unmapped posting period 99",
+  });
 });
 
 test("NetSuite payments preserve additional non-control GL legs", () => {
@@ -351,18 +343,9 @@ test("NetSuite commercial amounts use exact percentages and refund face value", 
   assert.equal(normalizeMarkupPercent("0.15"), "15.0000");
   assert.equal(normalizeMarkupPercent("1"), "100.0000");
   assert.equal(normalizeMarkupPercent("-0.15"), null);
-  assert.equal(
-    netSuiteBillAmount("expense_report", "1160.3100", true, "15.0000"),
-    "1334.3565",
-  );
-  assert.equal(
-    netSuiteBillAmount("card_refund", "-118.5300", true, "15.0000"),
-    "-118.5300",
-  );
-  assert.equal(
-    netSuiteBillAmount("expense_report", "1160.3100", false, "15.0000"),
-    null,
-  );
+  assert.equal(netSuiteBillAmount("expense_report", "1160.3100", true, "15.0000"), "1334.3565");
+  assert.equal(netSuiteBillAmount("card_refund", "-118.5300", true, "15.0000"), "-118.5300");
+  assert.equal(netSuiteBillAmount("expense_report", "1160.3100", false, "15.0000"), null);
 });
 
 test("NetSuite preserves source date independently from exact posting period", () => {
@@ -384,11 +367,7 @@ test("NetSuite preserves source date independently from exact posting period", (
   assert.equal(late.doc.postingDate, "2026-06-30");
   assert.equal(late.doc.postingPeriodId, "period-july");
 
-  const adjustment = buildNativeFromNetSuite(
-    context,
-    { ...header, postingperiod: "18" },
-    lines,
-  );
+  const adjustment = buildNativeFromNetSuite(context, { ...header, postingperiod: "18" }, lines);
   assert.ok(!("skip" in adjustment));
   assert.equal(adjustment.doc.documentDate, "2026-07-15");
   assert.equal(adjustment.doc.postingDate, "2026-07-15");
@@ -408,19 +387,15 @@ test("zero-value NetSuite journals remain source documents without an invented G
 });
 
 test("posting-flagged source transactions with no accounting impact are classified explicitly", () => {
-  const zero = buildNativeFromNetSuite(
-    context,
-    { ...header, ttype: "ItemShip", posting: "T" },
-    [
-      nsLine("1", {
-        mainline: "T",
-        account: null,
-        expenseaccount: null,
-        netamount: null,
-        foreignamount: null,
-      }),
-    ],
-  );
+  const zero = buildNativeFromNetSuite(context, { ...header, ttype: "ItemShip", posting: "T" }, [
+    nsLine("1", {
+      mainline: "T",
+      account: null,
+      expenseaccount: null,
+      netamount: null,
+      foreignamount: null,
+    }),
+  ]);
   assert.deepEqual(zero, { skip: "non-ledger source transaction ItemShip" });
 
   const financial = buildNativeFromNetSuite(
@@ -442,21 +417,17 @@ test("NetSuite transactions fail closed when a subsidiary was not loaded", () =>
 });
 
 test("NetSuite invoice lines preserve item, quantity, unit, rate, amount, and source identity", () => {
-  const built = buildNativeFromNetSuite(
-    context,
-    { ...header, ttype: "CustInvc" },
-    [
-      nsLine("7", {
-        account: "20",
-        item: "item-1",
-        quantity: "-2",
-        rate: "95.7",
-        units: "Hour",
-        foreignamount: "-191.4",
-        subsidiary: "1",
-      }),
-    ],
-  );
+  const built = buildNativeFromNetSuite(context, { ...header, ttype: "CustInvc" }, [
+    nsLine("7", {
+      account: "20",
+      item: "item-1",
+      quantity: "-2",
+      rate: "95.7",
+      units: "Hour",
+      foreignamount: "-191.4",
+      subsidiary: "1",
+    }),
+  ]);
   assert.ok(!("skip" in built));
   assert.deepEqual(
     {
@@ -479,14 +450,10 @@ test("NetSuite invoice lines preserve item, quantity, unit, rate, amount, and so
 });
 
 test("NetSuite sales orders normalize source credit-side detail into document direction", () => {
-  const built = buildNativeFromNetSuite(
-    context,
-    { ...header, ttype: "SalesOrd", posting: "F" },
-    [
-      nsLine("1", { account: "20", netamount: "-100", subsidiary: "1" }),
-      nsLine("2", { account: "20", netamount: "5", subsidiary: "1" }),
-    ],
-  );
+  const built = buildNativeFromNetSuite(context, { ...header, ttype: "SalesOrd", posting: "F" }, [
+    nsLine("1", { account: "20", netamount: "-100", subsidiary: "1" }),
+    nsLine("2", { account: "20", netamount: "5", subsidiary: "1" }),
+  ]);
   assert.ok(!("skip" in built));
   assert.equal(built.doc.kind, "sales_order");
   assert.deepEqual(
@@ -597,15 +564,13 @@ test("NetSuite non-zero source tax codes fail closed when they were not loaded",
 
 test("NetSuite account mappings accept explicit custom IDs without connector constants", () => {
   assert.deepEqual(
-    parseNetSuiteMappings(
-      {
-        projectForemanField: "custentity_foreman",
-        lineBillableField: "custcol_billable_override",
-        timeTypeRecord: "customrecord_time_type",
-        timeEntryFieldTicketNumberField: "custcol_field_ticket",
-        projectStatuses: { "Substantially Complete": "substantially_complete" },
-      },
-    ),
+    parseNetSuiteMappings({
+      projectForemanField: "custentity_foreman",
+      lineBillableField: "custcol_billable_override",
+      timeTypeRecord: "customrecord_time_type",
+      timeEntryFieldTicketNumberField: "custcol_field_ticket",
+      projectStatuses: { "Substantially Complete": "substantially_complete" },
+    }),
     {
       crmProbabilityField: undefined,
       projectForemanField: "custentity_foreman",
@@ -624,18 +589,9 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
       taxCodeFallbacks: undefined,
     },
   );
-  assert.throws(
-    () => parseNetSuiteMappings({"itemCategoryField":"x; DROP"}),
-    /invalid script ID/,
-  );
-  assert.throws(
-    () => parseNetSuiteMappings({"lineBillableField":"x; DROP"}),
-    /invalid script ID/,
-  );
-  assert.throws(
-    () => parseNetSuiteMappings({"projectStatuses":{"Won":"won"}}),
-    /invalid target/,
-  );
+  assert.throws(() => parseNetSuiteMappings({ itemCategoryField: "x; DROP" }), /invalid script ID/);
+  assert.throws(() => parseNetSuiteMappings({ lineBillableField: "x; DROP" }), /invalid script ID/);
+  assert.throws(() => parseNetSuiteMappings({ projectStatuses: { Won: "won" } }), /invalid target/);
 });
 
 test("NetSuite job billing types read stock unless the account maps them", () => {
@@ -644,11 +600,11 @@ test("NetSuite job billing types read stock unless the account maps them", () =>
   // says so on its own connection — the shared connector must not assume it.
   assert.equal(parseNetSuiteMappings({}).projectBillingTypes, undefined);
   assert.deepEqual(
-    parseNetSuiteMappings({"projectBillingTypes":{"fbm":"not_to_exceed"}}).projectBillingTypes,
+    parseNetSuiteMappings({ projectBillingTypes: { fbm: "not_to_exceed" } }).projectBillingTypes,
     { FBM: "not_to_exceed" },
   );
   assert.throws(
-    () => parseNetSuiteMappings({"projectBillingTypes":{"FBM":"budget_dne"}}),
+    () => parseNetSuiteMappings({ projectBillingTypes: { FBM: "budget_dne" } }),
     /invalid target/,
   );
 });
@@ -668,10 +624,7 @@ test("NetSuite line billability can use a mapped tenant field with a native fall
     }),
     /custcol_markup AS markup/,
   );
-  assert.match(
-    netSuiteLineColumns({}),
-    /tl\.isbillable/,
-  );
+  assert.match(netSuiteLineColumns({}), /tl\.isbillable/);
 });
 
 test("NetSuite high-volume streams partition every numeric ID exactly once", () => {
@@ -686,10 +639,7 @@ test("NetSuite high-volume streams partition every numeric ID exactly once", () 
 });
 
 test("NetSuite incremental watermarks use the transaction modification clock", () => {
-  assert.match(
-    NETSUITE_TRANSACTION_WATERMARK_QUERY,
-    /MAX\(lastmodifieddate\)/i,
-  );
+  assert.match(NETSUITE_TRANSACTION_WATERMARK_QUERY, /MAX\(lastmodifieddate\)/i);
   assert.doesNotMatch(NETSUITE_TRANSACTION_WATERMARK_QUERY, /SYSDATE/i);
 });
 
@@ -707,8 +657,7 @@ test("NetSuite transaction lines are ingested exactly once and conflicts fail cl
   });
   assert.deepEqual(uniqueNetSuiteTransactionLines([row, { ...row }]), [row]);
   assert.throws(
-    () =>
-      uniqueNetSuiteTransactionLines([row, { ...row, netamount: "2473.88" }]),
+    () => uniqueNetSuiteTransactionLines([row, { ...row, netamount: "2473.88" }]),
     /conflicting transaction line 4803:1/,
   );
 });
@@ -723,8 +672,7 @@ test("NetSuite application links are ingested exactly once and conflicts fail cl
   };
   assert.deepEqual(uniqueNetSuiteApplicationLinks([row, { ...row }]), [row]);
   assert.throws(
-    () =>
-      uniqueNetSuiteApplicationLinks([row, { ...row, foreignamount: "49.99" }]),
+    () => uniqueNetSuiteApplicationLinks([row, { ...row, foreignamount: "49.99" }]),
     /conflicting application link bill:0:payment:1/,
   );
 });
@@ -881,34 +829,26 @@ test("NetSuite penny-degenerate tax without a configured fallback fails closed",
 
 test("NetSuite account mappings accept sales/purchase tax code fallbacks", () => {
   assert.deepEqual(
-    parseNetSuiteMappings({"taxCodeFallbacks":{"sales":"13","purchase":"5"}})
-      .taxCodeFallbacks,
+    parseNetSuiteMappings({ taxCodeFallbacks: { sales: "13", purchase: "5" } }).taxCodeFallbacks,
     { sales: "13", purchase: "5" },
   );
   assert.deepEqual(
-    parseNetSuiteMappings({"taxCodeFallbacks":{"sales":" 2529 "}})
-      .taxCodeFallbacks,
+    parseNetSuiteMappings({ taxCodeFallbacks: { sales: " 2529 " } }).taxCodeFallbacks,
     { sales: "2529" },
   );
   assert.equal(parseNetSuiteMappings({}).taxCodeFallbacks, undefined);
   assert.throws(
-    () => parseNetSuiteMappings({"taxCodeFallbacks":{"emea":"13"}}),
+    () => parseNetSuiteMappings({ taxCodeFallbacks: { emea: "13" } }),
     /sales and\/or purchase/,
   );
+  assert.throws(() => parseNetSuiteMappings({ taxCodeFallbacks: {} }), /sales and\/or purchase/);
+  assert.throws(() => parseNetSuiteMappings({ taxCodeFallbacks: "13" }), /must be an object/);
   assert.throws(
-    () => parseNetSuiteMappings({"taxCodeFallbacks":{}}),
-    /sales and\/or purchase/,
-  );
-  assert.throws(
-    () => parseNetSuiteMappings({"taxCodeFallbacks":"13"}),
-    /must be an object/,
-  );
-  assert.throws(
-    () => parseNetSuiteMappings({"taxCodeFallbacks":{"sales":""}}),
+    () => parseNetSuiteMappings({ taxCodeFallbacks: { sales: "" } }),
     /must be a source tax-code id or rate/,
   );
   assert.throws(
-    () => parseNetSuiteMappings({"taxCodeFallbacks":{"sales":13}}),
+    () => parseNetSuiteMappings({ taxCodeFallbacks: { sales: 13 } }),
     /must be a source tax-code id or rate/,
   );
 });
@@ -1015,18 +955,13 @@ test("NetSuite link mapping states stated terms and never converts", () => {
   );
   // A display label still resolves (Canadian Dollar is a wired alias); a
   // stated-but-unresolvable value stays empty so the reconciler refuses it.
-  assert.deepEqual(
-    toSourceApplicationLinks([{ ...link, paycurrency: "Canadian Dollar" }], "USD"),
-    [{ paymentRef: "8", appliedRef: "7", amount: "100", currency: "CAD", rate: "1.2" }],
-  );
-  assert.deepEqual(
-    toSourceApplicationLinks([{ ...link, paycurrency: "Martian Credits" }], "USD"),
-    [{ paymentRef: "8", appliedRef: "7", amount: "100", currency: "", rate: "1.2" }],
-  );
-  assert.deepEqual(
-    toSourceApplicationLinks([{ ...link, foreignamount: "0" }], "USD"),
-    [],
-  );
+  assert.deepEqual(toSourceApplicationLinks([{ ...link, paycurrency: "Canadian Dollar" }], "USD"), [
+    { paymentRef: "8", appliedRef: "7", amount: "100", currency: "CAD", rate: "1.2" },
+  ]);
+  assert.deepEqual(toSourceApplicationLinks([{ ...link, paycurrency: "Martian Credits" }], "USD"), [
+    { paymentRef: "8", appliedRef: "7", amount: "100", currency: "", rate: "1.2" },
+  ]);
+  assert.deepEqual(toSourceApplicationLinks([{ ...link, foreignamount: "0" }], "USD"), []);
   assert.throws(
     () => toSourceApplicationLinks([link, { ...link, payexrate: "1.3" }], "USD"),
     /conflicting application link 7:0:8:0/,

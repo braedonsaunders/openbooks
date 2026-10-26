@@ -1,20 +1,22 @@
 /** Kernel line builders for the posting rules table: account resolution, tax lines, tender memos and settlement amounts. */
 import { add, isZero, neg } from "../money/money.ts";
 import { addMoney, negMoney, parseMoney, sumMoney, type Money } from "../money/brands.ts";
-import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "../journal/posting-contracts.ts";
+import {
+  type Doc,
+  type DocLine,
+  type KernelLine,
+  type PostingDeps,
+  type ExpenseSettlement,
+  PostingError,
+} from "../journal/posting-contracts.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
 
 export type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
 
 /** Resolve a document line's posting account before it reaches any SQL binder. */
-export function resolvedLineAccount(
-  line: DocLine,
-  resolved: unknown = line.accountId,
-): string {
+export function resolvedLineAccount(line: DocLine, resolved: unknown = line.accountId): string {
   if (typeof resolved !== "string" || resolved.length === 0) {
-    throw new PostingError(
-      `document line ${line.lineNumber} has no resolvable account`,
-    );
+    throw new PostingError(`document line ${line.lineNumber} has no resolvable account`);
   }
   return resolved;
 }
@@ -38,8 +40,7 @@ export const cardRule: RuleFn = (doc, lines, deps) => {
   const tax = purchaseTaxLines(doc, lines, deps, 1);
   const total = sumMoney([...expense, ...tax].map((l) => l.amount));
   const cardLiability = controlOverride(doc) ?? deps.cardLiabilityAccountId;
-  if (!cardLiability)
-    throw new PostingError("card_charge requires a payment card");
+  if (!cardLiability) throw new PostingError("card_charge requires a payment card");
   return [
     ...expense,
     ...tax,
@@ -115,7 +116,9 @@ export function signed(amount: string, direction: 1 | -1): Money {
  * counterparty. Non-expense kinds never call this (their lines ignore the
  * column), so an unexpected value here is always a real data fault.
  */
-export function settlementOf(line: Pick<DocLine, "lineNumber" | "settlementType">): ExpenseSettlement {
+export function settlementOf(
+  line: Pick<DocLine, "lineNumber" | "settlementType">,
+): ExpenseSettlement {
   const s: unknown = line.settlementType ?? "out_of_pocket";
   if (s === "out_of_pocket" || s === "company_paid" || s === "personal") return s;
   throw new PostingError(
@@ -190,10 +193,7 @@ export function purchaseTaxLines(
           amount: signed(component.recoverableAmount, direction),
         });
       }
-      if (
-        component.calculationType === "reverse_charge" &&
-        !isZero(component.taxAmount)
-      ) {
+      if (component.calculationType === "reverse_charge" && !isZero(component.taxAmount)) {
         out.push({
           ...common,
           accountId: assertTaxControlAccount(component, deps, "collected"),

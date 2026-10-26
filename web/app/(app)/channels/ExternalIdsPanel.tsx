@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
@@ -19,7 +19,13 @@ export interface ExternalIdentityRow {
  * item drawer's External IDs tab; unlinking always goes through the channel
  * endpoint with a reason, never the generic setup delete.
  */
-export function ExternalIdsPanel({ links, canUnlink }: { links: ExternalIdentityRow[]; canUnlink: boolean }) {
+export function ExternalIdsPanel({
+  links,
+  canUnlink,
+}: {
+  links: ExternalIdentityRow[];
+  canUnlink: boolean;
+}) {
   const t = useTranslations("channels");
   const { dateTime } = useViewerFormat();
   if (links.length === 0) {

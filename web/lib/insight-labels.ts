@@ -21,11 +21,12 @@ export async function insightLabelResolver(): Promise<InsightLabelResolver> {
   return {
     field: (sourceKey, field) => tCatalog(`catalog.columns.${sourceKey}.${field.key}`),
     count: () => t("measureLabels.count"),
-    measure: (agg, fieldLabel) => agg === 'opening' || agg === 'closing'
-      ? tCatalog("run.measureOf", { fn: tCatalog(`aggs.${agg}`), column: fieldLabel })
-      : agg === 'formula' || agg === 'count_distinct' || agg === 'latest'
-        ? tCatalog(`aggs.${agg}`)
-        : t(`measureLabels.${agg}`, { field: fieldLabel }),
+    measure: (agg, fieldLabel) =>
+      agg === "opening" || agg === "closing"
+        ? tCatalog("run.measureOf", { fn: tCatalog(`aggs.${agg}`), column: fieldLabel })
+        : agg === "formula" || agg === "count_distinct" || agg === "latest"
+          ? tCatalog(`aggs.${agg}`)
+          : t(`measureLabels.${agg}`, { field: fieldLabel }),
     binnedDimension: (fieldLabel, bin) =>
       t("measureLabels.binned", { field: fieldLabel, bin: t(`measureLabels.bins.${bin}`) }),
     undefinedFormula: () => tCatalog("run.undefinedFormula"),

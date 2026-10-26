@@ -17,7 +17,9 @@
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { mulRatio } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -30,18 +32,26 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/vt.ts";
 
 export type VtPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "annual" | "daily";
+  "weekly" | "biweekly" | "semimonthly" | "monthly" | "quarterly" | "annual" | "daily";
 
 export type VtFilingStatus = "single" | "married";
 
 const VT_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "annual",
+  "daily",
 ];
 
 interface VtBracket {
@@ -198,17 +208,19 @@ const VT_EDITIONS_BY_YEAR: Record<number, VtYearRates> = {
   [VT_RATES_2026.year]: VT_RATES_2026,
 };
 
-export const VT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "GB-1210 2026 Income Tax Withholding Instructions, Tables, and Charts",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding "
-    + "Instructions, Tables, and Charts — percentage-method tables, $103.85 "
-    + "weekly allowance, $1,800 weekly married 2-allowance example",
-  status: "published",
-  region: "VT",
-}];
+export const VT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "GB-1210 2026 Income Tax Withholding Instructions, Tables, and Charts",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding " +
+      "Instructions, Tables, and Charts — percentage-method tables, $103.85 " +
+      "weekly allowance, $1,800 weekly married 2-allowance example",
+    status: "published",
+    region: "VT",
+  },
+];
 
 export function vtPeriodTax(taxable: bigint, period: VtPeriod, married: boolean): bigint {
   if (taxable <= 0n) return 0n;
@@ -230,10 +242,16 @@ function compute(
   const published = period as VtPeriod;
   const { factors, trace } = context;
 
-  const exempt = context.exemptResult({ factorKey: "VT_EXEMPT", factorFormat: "decimal", statutoryTax: true, additionalWithholding: true });
+  const exempt = context.exemptResult({
+    factorKey: "VT_EXEMPT",
+    factorFormat: "decimal",
+    statutoryTax: true,
+    additionalWithholding: true,
+  });
   if (exempt) return exempt;
 
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as VtFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as VtFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -246,9 +264,10 @@ function compute(
 
   const periodTax = vtPeriodTax(taxable, published, married);
   const stateExtra = certificateAmount(input.certificate, "additional_per_period");
-  const extra = stateExtra == null && !(input.stateCertificateOnFile ?? input.certificate.onFile)
-    ? U(mulRatio(input.federalAdditionalPerPeriod ?? "0.0000", 3n, 10n))
-    : U(stateExtra ?? "0");
+  const extra =
+    stateExtra == null && !(input.stateCertificateOnFile ?? input.certificate.onFile)
+      ? U(mulRatio(input.federalAdditionalPerPeriod ?? "0.0000", 3n, 10n))
+      : U(stateExtra ?? "0");
   const total = periodTax + extra;
   trace("VT_WITHHELD", total);
 
@@ -311,14 +330,14 @@ export const VT_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "VT" },
   purpose: "withholding",
   citation:
-    "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding "
-    + "Instructions, Tables, and Charts; Form W-4VT; employer guidance: "
-    + "https://tax.vermont.gov/business-and-corp/withholding-tax/instructions",
+    "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding " +
+    "Instructions, Tables, and Charts; Form W-4VT; employer guidance: " +
+    "https://tax.vermont.gov/business-and-corp/withholding-tax/instructions",
   summary:
-    "Sets Vermont filing status and allowances. Civil-union partners use the "
-    + "Married table. A missing W-4VT is withheld as single with zero allowances. "
-    + "Federal allowances are not copied; without W-4VT, the employer adds "
-    + "30% of the federal W-4 additional amount.",
+    "Sets Vermont filing status and allowances. Civil-union partners use the " +
+    "Married table. A missing W-4VT is withheld as single with zero allowances. " +
+    "Federal allowances are not copied; without W-4VT, the employer adds " +
+    "30% of the federal W-4 additional amount.",
   storage: "certificate_rows",
   fields: [
     {
@@ -331,9 +350,9 @@ export const VT_CERTIFICATE: PayrollCertificate = {
         { value: "married", label: "Married or civil union" },
       ],
       help:
-        "GB-1210 prints Single and Married tables. Civil-union partners use "
-        + "the Married table. Default Single is a missing W-4VT, not an "
-        + "engine guess.",
+        "GB-1210 prints Single and Married tables. Civil-union partners use " +
+        "the Married table. Default Single is a missing W-4VT, not an " +
+        "engine guess.",
     },
     {
       key: "allowances",
@@ -343,9 +362,9 @@ export const VT_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each weekly allowance is $103.85. The booklet prints the matching "
-        + "amount on every other frequency's table. Default zero is a blank "
-        + "W-4VT.",
+        "Each weekly allowance is $103.85. The booklet prints the matching " +
+        "amount on every other frequency's table. Default zero is a blank " +
+        "W-4VT.",
     },
     {
       key: "additional_per_period",
@@ -354,16 +373,16 @@ export const VT_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A flat dollar amount requested on Form W-4VT. Added AFTER the "
-        + "percentage-method table is applied to this period's wages.",
+        "A flat dollar amount requested on Form W-4VT. Added AFTER the " +
+        "percentage-method table is applied to this period's wages.",
     },
     {
       key: "exempt",
       label: "Exempt from Vermont withholding",
       kind: "flag",
       help:
-        "A current exempt claim on W-4VT withholds zero. Dating any year-end "
-        + "lapse is certificate administration.",
+        "A current exempt claim on W-4VT withholds zero. Dating any year-end " +
+        "lapse is certificate administration.",
     },
   ],
 };
@@ -402,19 +421,25 @@ export const VT_REGION: PayrollRegionWithholding = {
       rateSource: { kind: "pack" },
       automatic: true,
       pocket: "employer",
-      statutoryComponent: { systemKey: "vt_child_care_contribution", kind: "employer_contribution" },
+      statutoryComponent: {
+        systemKey: "vt_child_care_contribution",
+        kind: "employer_contribution",
+      },
       withholdingMethod: {
         kind: "flat_rate",
-        rates: [{
-          effectiveFrom: "2024-07-01",
-          rate: "0.0044",
-          source: "Vermont Department of Taxes, Child Care Contribution 0.44% on Vermont wages from July 1, 2024 (WHT-436 instructions)",
-        }],
+        rates: [
+          {
+            effectiveFrom: "2024-07-01",
+            rate: "0.0044",
+            source:
+              "Vermont Department of Taxes, Child Care Contribution 0.44% on Vermont wages from July 1, 2024 (WHT-436 instructions)",
+          },
+        ],
       },
       implemented: true,
       citation:
-        "Vermont Department of Taxes, Child Care Contribution: 0.44% employer payroll tax on wages "
-        + "earned in Vermont from July 1, 2024 (Act 76 of 2023); Form WHT-436 Part III",
+        "Vermont Department of Taxes, Child Care Contribution: 0.44% employer payroll tax on wages " +
+        "earned in Vermont from July 1, 2024 (Act 76 of 2023); Form WHT-436 Part III",
     },
     {
       code: "CCCE",
@@ -435,12 +460,12 @@ export const VT_REGION: PayrollRegionWithholding = {
       },
       implemented: true,
       citation:
-        "Vermont Department of Taxes, Child Care Contribution: employers may withhold a maximum of "
-        + "25% of the required 0.44% contribution (0.11%) from employee wages (WHT-436 instructions)",
+        "Vermont Department of Taxes, Child Care Contribution: employers may withhold a maximum of " +
+        "25% of the required 0.44% contribution (0.11%) from employee wages (WHT-436 instructions)",
     },
   ],
   subRegionConflictRule: "both",
   citation:
-    "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding "
-    + "Instructions, Tables, and Charts; Form W-4VT",
+    "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding " +
+    "Instructions, Tables, and Charts; Form W-4VT",
 };

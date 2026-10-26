@@ -12,7 +12,11 @@ import { paymentBookId, paymentControlDeps } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { assertNoForeignRunReservation } from "./payment-queries.ts";
 import { type CreditAllocationInput, type OpenItemSide } from "./payment-contracts.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import {
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "../organization/subsidiary-scope.ts";
 
 /**
  * Standalone credit settlement: applying a posted credit memo to a posted
@@ -91,9 +95,15 @@ export async function creditSettlementState(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<CreditSettlementState | null> {
   return withOrgTransaction(orgId, async () => {
-  const line = (await db.execute<{
-    id: string; amount: string; currency: string; applied: string; kind: string;
-  }>(sql`
+    const line = (
+      await db.execute<{
+        id: string;
+        amount: string;
+        currency: string;
+        applied: string;
+        kind: string;
+      }>(
+        sql`
     select jl.id, abs(jl.txn_amount)::text as amount, jl.currency, source_document.kind,
            coalesce(ap.applied, 0)::numeric(19,4)::text as applied
       from journal_lines jl
@@ -108,12 +118,21 @@ export async function creditSettlementState(
      where jl.org_id = ${orgId} and je.source_document_id = ${documentId} and jl.is_open_item
        ${subsidiaryVisibleFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      limit 1
-  `, "objects"))[0];
-  if (!line) return null;
-  const settlements = await db.execute<{
-    application_id: string; document_id: string | null; document_number: string | null;
-    document_kind: string | null; document_date: string | null; amount: string; applied_on: string;
-  }>(sql`
+  `,
+        "objects",
+      )
+    )[0];
+    if (!line) return null;
+    const settlements = await db.execute<{
+      application_id: string;
+      document_id: string | null;
+      document_number: string | null;
+      document_kind: string | null;
+      document_date: string | null;
+      amount: string;
+      applied_on: string;
+    }>(
+      sql`
     select a.id as application_id, settled.id as document_id,
            settled.document_number, settled.kind as document_kind,
            settled.document_date::text as document_date,
@@ -129,23 +148,25 @@ export async function creditSettlementState(
        ${PAYMENT_SOURCE_KINDS.has(line.kind) ? sql`and a.settlement_rate_reference = ${UNAPPLIED_PAYMENT_APPLICATION_REFERENCE}` : sql``}
        ${subsidiaryVisibleFilter(sql`settled.subsidiary_id`, allowedSubsidiaryIds)}
      order by a.applied_on desc, a.created_at desc
-  `, "objects");
-  return {
-    lineId: line.id,
-    amount: line.amount,
-    applied: line.applied,
-    open: fromUnits(toUnits(line.amount) - toUnits(line.applied)),
-    currency: line.currency,
-    settlements: settlements.map((row) => ({
-      applicationId: row.application_id,
-      documentId: row.document_id,
-      documentNumber: row.document_number,
-      documentKind: row.document_kind,
-      documentDate: row.document_date,
-      amount: row.amount,
-      appliedOn: row.applied_on,
-    })),
-  };
+  `,
+      "objects",
+    );
+    return {
+      lineId: line.id,
+      amount: line.amount,
+      applied: line.applied,
+      open: fromUnits(toUnits(line.amount) - toUnits(line.applied)),
+      currency: line.currency,
+      settlements: settlements.map((row) => ({
+        applicationId: row.application_id,
+        documentId: row.document_id,
+        documentNumber: row.document_number,
+        documentKind: row.document_kind,
+        documentDate: row.document_date,
+        amount: row.amount,
+        appliedOn: row.applied_on,
+      })),
+    };
   });
 }
 
@@ -205,8 +226,11 @@ export async function applyStandaloneCredits(
         hashtextextended(${`credit-application:${orgId}:${input.idempotencyKey}`}, 0)
       )
     `);
-    const endpointIds = [...new Set(input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId]))];
-    const endpoints = await db.execute<EndpointRow>(sql`
+    const endpointIds = [
+      ...new Set(input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId])),
+    ];
+    const endpoints = await db.execute<EndpointRow>(
+      sql`
       select jl.id, jl.account_id, jl.subsidiary_id, je.book_id,
              endpoint_document.kind as document_kind,
              endpoint_document.subsidiary_id as document_subsidiary_id,
@@ -218,13 +242,22 @@ export async function applyStandaloneCredits(
        where jl.org_id = ${orgId} and jl.id in ${endpointIds}
        order by jl.id
        for update of jl
-    `, "objects");
+    `,
+      "objects",
+    );
     if (endpoints.length !== endpointIds.length) {
-      throw new PaymentError("a credit or open item in this settlement no longer exists; reload the credits and reselect");
+      throw new PaymentError(
+        "a credit or open item in this settlement no longer exists; reload the credits and reselect",
+      );
     }
-    if (endpoints.some((row) =>
-      !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)
-      || (row.document_subsidiary_id !== null && !subsidiaryScopeAllows(allowedSubsidiaryIds, row.document_subsidiary_id)))) {
+    if (
+      endpoints.some(
+        (row) =>
+          !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id) ||
+          (row.document_subsidiary_id !== null &&
+            !subsidiaryScopeAllows(allowedSubsidiaryIds, row.document_subsidiary_id)),
+      )
+    ) {
       throw new ScopeNotFoundError();
     }
     // The request-controlled image a retry must equal under canonical JSON.
@@ -252,14 +285,22 @@ export async function applyStandaloneCredits(
     // correct refusal arriving as an internal error instead of the named
     // 409. The row is never returned to the caller; only its org_id is.
     // bypass: cross-org-by-design — an idempotency key owned by another organization must be seen to be refused by name.
-    const priorOwner = await withBypassContext(async () =>
-      (await db.execute<{ org_id: string }>(sql`
+    const priorOwner = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ org_id: string }>(
+            sql`
         select org_id from applications where id = ${input.idempotencyKey}
-      `, "objects"))[0]?.org_id,
+      `,
+            "objects",
+          )
+        )[0]?.org_id,
     );
     if (priorOwner !== undefined) {
       if (priorOwner !== orgId) throw new CreditApplicationConflictError("foreign-key");
-      const prior = (await db.execute<{ match: unknown; result: unknown }>(sql`
+      const prior = (
+        await db.execute<{ match: unknown; result: unknown }>(
+          sql`
           select changes->'match' as match, (changes->'after'->'result') as result
             from audit_log
            where org_id = ${orgId} and table_name = 'applications'
@@ -267,15 +308,18 @@ export async function applyStandaloneCredits(
              and action = 'insert'
            order by at asc
            limit 1
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       if (
-        !prior
-        || !prior.match
-        || typeof prior.match !== "object"
-        || canonicalJson(prior.match) !== canonicalJson(matchImage)
-        || !prior.result
-        || typeof prior.result !== "object"
-        || !Array.isArray((prior.result as CreditSettlementResult).applicationIds)
+        !prior ||
+        !prior.match ||
+        typeof prior.match !== "object" ||
+        canonicalJson(prior.match) !== canonicalJson(matchImage) ||
+        !prior.result ||
+        typeof prior.result !== "object" ||
+        !Array.isArray((prior.result as CreditSettlementResult).applicationIds)
       ) {
         throw new CreditApplicationConflictError("changed-payload");
       }
@@ -284,7 +328,9 @@ export async function applyStandaloneCredits(
     // A settlement cannot predate the balances it settles: applying a credit
     // before it or its open item was posted would age and report a
     // settlement that did not yet exist.
-    const latest = endpoints.reduce((later, row) => (row.posting_date > later.posting_date ? row : later));
+    const latest = endpoints.reduce((later, row) =>
+      row.posting_date > later.posting_date ? row : later,
+    );
     if (input.appliedOn < latest.posting_date) {
       throw new PaymentError(
         `${latest.entry_number} was posted on ${latest.posting_date}; apply this credit on or after that date`,
@@ -357,9 +403,17 @@ export async function applyStandaloneCredits(
     // applied. In the functional currency the two are equal; a foreign-
     // currency credit and open item booked at different rates realize the
     // difference, posted per application so a release reverses exactly it.
-    const balances = new Map((await db.execute<{
-      id: string; amount: string; currency: string; base_currency: string; open_base: string; open_txn: string;
-    }>(sql`
+    const balances = new Map(
+      (
+        await db.execute<{
+          id: string;
+          amount: string;
+          currency: string;
+          base_currency: string;
+          open_base: string;
+          open_txn: string;
+        }>(
+          sql`
       select jl.id, jl.amount::text as amount, jl.currency, s.base_currency,
              (abs(jl.amount) - coalesce(sum(a.source_amount) filter (where a.from_line_id = jl.id), 0)
                              - coalesce(sum(a.amount) filter (where a.to_line_id = jl.id), 0))::text as open_base,
@@ -371,7 +425,11 @@ export async function applyStandaloneCredits(
           on a.org_id = jl.org_id and a.unapplied_at is null and (a.from_line_id = jl.id or a.to_line_id = jl.id)
        where jl.org_id = ${orgId} and jl.id in ${endpointIds}
        group by jl.id, s.base_currency
-    `, "objects")).map((row) => [row.id, { ...row }]));
+    `,
+          "objects",
+        )
+      ).map((row) => [row.id, { ...row }]),
+    );
     let gainLossAccountId: string | null | undefined;
 
     const applicationIds: string[] = [];
@@ -381,10 +439,22 @@ export async function applyStandaloneCredits(
       const applicationId = index === 0 ? input.idempotencyKey : randomUUID();
       const source = balances.get(credit.fromLineId)!;
       const target = balances.get(credit.toLineId)!;
-      const fromPayment = PAYMENT_SOURCE_KINDS.has(endpoints.find((row) => row.id === credit.fromLineId)?.document_kind ?? "");
-      const reference = fromPayment ? UNAPPLIED_PAYMENT_APPLICATION_REFERENCE : CREDIT_APPLICATION_REFERENCE;
-      const sourceBase = carryingAmountForSettlement(source.open_base, source.open_txn, credit.amount);
-      const targetBase = carryingAmountForSettlement(target.open_base, target.open_txn, credit.amount);
+      const fromPayment = PAYMENT_SOURCE_KINDS.has(
+        endpoints.find((row) => row.id === credit.fromLineId)?.document_kind ?? "",
+      );
+      const reference = fromPayment
+        ? UNAPPLIED_PAYMENT_APPLICATION_REFERENCE
+        : CREDIT_APPLICATION_REFERENCE;
+      const sourceBase = carryingAmountForSettlement(
+        source.open_base,
+        source.open_txn,
+        credit.amount,
+      );
+      const targetBase = carryingAmountForSettlement(
+        target.open_base,
+        target.open_txn,
+        credit.amount,
+      );
       source.open_base = fromUnits(toUnits(source.open_base) - toUnits(sourceBase));
       source.open_txn = fromUnits(toUnits(source.open_txn) - toUnits(credit.amount));
       target.open_base = fromUnits(toUnits(target.open_base) - toUnits(targetBase));
@@ -402,20 +472,30 @@ export async function applyStandaloneCredits(
           );
         }
         const memo = "Realized FX on a credit applied without cash";
-        fxEntryId = (await postEntry(db, {
-          orgId, bookId, subsidiaryId,
-          entryNumber: `CREDIT-FX-${applicationId}`,
-          postingDate: input.appliedOn, periodId: period.id, memo,
-          sourceDocumentId: credit.sourceDocumentId,
-          origin: "fx_settlement", actorId: userId, currency: source.base_currency,
-          idempotencyKey: `credit-application-fx:${applicationId}`,
-          lines: [
-            { accountId: controlAccountId, amount: adjustment, partyId: input.partyId, memo },
-            { accountId: gainLossAccountId, amount: neg(adjustment), memo },
-          ],
-        })).entryId;
+        fxEntryId = (
+          await postEntry(db, {
+            orgId,
+            bookId,
+            subsidiaryId,
+            entryNumber: `CREDIT-FX-${applicationId}`,
+            postingDate: input.appliedOn,
+            periodId: period.id,
+            memo,
+            sourceDocumentId: credit.sourceDocumentId,
+            origin: "fx_settlement",
+            actorId: userId,
+            currency: source.base_currency,
+            idempotencyKey: `credit-application-fx:${applicationId}`,
+            lines: [
+              { accountId: controlAccountId, amount: adjustment, partyId: input.partyId, memo },
+              { accountId: gainLossAccountId, amount: neg(adjustment), memo },
+            ],
+          })
+        ).entryId;
       }
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into applications
           (id, org_id, from_line_id, to_line_id, amount, source_amount,
            source_transaction_amount, source_transaction_currency,
@@ -430,7 +510,10 @@ export async function applyStandaloneCredits(
           from journal_lines jl
          where jl.id = ${credit.fromLineId} and jl.org_id = ${orgId}
          returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       // A write that matches zero rows is a failure, not a success.
       if (!inserted) {
         throw new PaymentError(
@@ -485,7 +568,10 @@ export async function applyStandaloneCredits(
                   amount: input.credits[0]!.amount,
                   appliedOn: input.appliedOn,
                   side: input.side,
-                  fromUnappliedPayment: PAYMENT_SOURCE_KINDS.has(endpoints.find((row) => row.id === input.credits[0]!.fromLineId)?.document_kind ?? ""),
+                  fromUnappliedPayment: PAYMENT_SOURCE_KINDS.has(
+                    endpoints.find((row) => row.id === input.credits[0]!.fromLineId)
+                      ?.document_kind ?? "",
+                  ),
                   result: { applicationIds, amount: settlementAmount },
                 },
               })}::jsonb,
@@ -533,7 +619,9 @@ export async function unapplyCreditSettlement(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ amount: string }> {
   return withOrgTransaction(orgId, async () => {
-    const application = (await db.execute<LiveApplicationRow>(sql`
+    const application = (
+      await db.execute<LiveApplicationRow>(
+        sql`
       select a.id, a.amount, a.source_transaction_amount::text as source_transaction_amount,
              a.applied_on::text as applied_on, a.fx_gain_loss_entry_id,
              a.settlement_rate_reference,
@@ -560,21 +648,33 @@ export async function unapplyCreditSettlement(
           on to_document.id = to_entry.source_document_id and to_document.org_id = a.org_id
        where a.org_id = ${orgId} and a.id = ${applicationId} and a.unapplied_at is null
        for update of a, from_line, to_line
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!application) {
       throw new PaymentError(
         "this settlement is not live; it was already released or never existed",
       );
     }
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, application.from_document_subsidiary_id ?? application.subsidiary_id)
-        || !subsidiaryScopeAllows(allowedSubsidiaryIds, application.to_document_subsidiary_id ?? application.subsidiary_id)) {
+    if (
+      !subsidiaryScopeAllows(
+        allowedSubsidiaryIds,
+        application.from_document_subsidiary_id ?? application.subsidiary_id,
+      ) ||
+      !subsidiaryScopeAllows(
+        allowedSubsidiaryIds,
+        application.to_document_subsidiary_id ?? application.subsidiary_id,
+      )
+    ) {
       throw new ScopeNotFoundError();
     }
     // A payment's unapplied cash applied later through this path is released
     // like a credit; the payment's own posting-time cash applications belong
     // to the payment and are released only by its void.
-    const unappliedPayment = PAYMENT_SOURCE_KINDS.has(application.from_document_kind ?? "")
-      && application.settlement_rate_reference === UNAPPLIED_PAYMENT_APPLICATION_REFERENCE;
+    const unappliedPayment =
+      PAYMENT_SOURCE_KINDS.has(application.from_document_kind ?? "") &&
+      application.settlement_rate_reference === UNAPPLIED_PAYMENT_APPLICATION_REFERENCE;
     if (
       application.from_document_kind !== "customer_credit" &&
       application.from_document_kind !== "vendor_credit" &&
@@ -588,13 +688,18 @@ export async function unapplyCreditSettlement(
     // line: a customer credit or receipt settles AR, a vendor credit or
     // payment settles AP.
     const side: OpenItemSide =
-      application.from_document_kind === "customer_credit" || application.from_document_kind === "customer_payment" ? "ar" : "ap";
+      application.from_document_kind === "customer_credit" ||
+      application.from_document_kind === "customer_payment"
+        ? "ar"
+        : "ap";
     // A credit the cash path recorded carries its evidence on that payment's
     // stored creditAllocations. Releasing it here would leave the payment — and
     // the remittance advice printed from it — claiming a credit the bill was no
     // longer reduced by. jsonb containment matches the stored element by its
     // endpoints regardless of the other keys beside them.
-    const carrier = (await db.execute<{ document_number: string }>(sql`
+    const carrier = (
+      await db.execute<{ document_number: string }>(
+        sql`
       select document_number from documents
        where org_id = ${orgId}
          and kind in ('customer_payment', 'vendor_payment')
@@ -603,7 +708,10 @@ export async function unapplyCreditSettlement(
            { fromLineId: application.from_line_id, toLineId: application.to_line_id },
          ])}::jsonb
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (carrier) {
       throw new PaymentError(
         `this credit was applied by payment ${carrier.document_number}; void that payment to release it`,
@@ -626,12 +734,17 @@ export async function unapplyCreditSettlement(
       modules: [side],
     });
 
-    const released = (await db.execute<{ id: string }>(sql`
+    const released = (
+      await db.execute<{ id: string }>(
+        sql`
       update applications
          set unapplied_at = now(), updated_at = now(), updated_by = ${userId}
        where org_id = ${orgId} and id = ${applicationId} and unapplied_at is null
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     // The row was locked above, so losing it here means a concurrent release
     // committed first; reporting {ok} would claim this actor's release.
     if (!released) {
@@ -645,28 +758,55 @@ export async function unapplyCreditSettlement(
     if (application.fx_gain_loss_entry_id) {
       // The realized FX entry is stated in the functional currency its lines
       // carry; the entry header has no currency of its own.
-      const fx = (await db.execute<{ entry_number: string; status: string; book_id: string; subsidiary_id: string; currency: string; source_document_id: string | null }>(sql`
+      const fx = (
+        await db.execute<{
+          entry_number: string;
+          status: string;
+          book_id: string;
+          subsidiary_id: string;
+          currency: string;
+          source_document_id: string | null;
+        }>(
+          sql`
         select e.entry_number, e.status, e.book_id, e.subsidiary_id, e.source_document_id,
                (select min(l.currency) from journal_lines l where l.org_id = e.org_id and l.entry_id = e.id) as currency
           from journal_entries e
          where e.org_id = ${orgId} and e.id = ${application.fx_gain_loss_entry_id}
-         for update of e`, "objects"))[0];
+         for update of e`,
+          "objects",
+        )
+      )[0];
       if (!fx || fx.status !== "posted") {
-        throw new PaymentError("this settlement's realized FX entry is no longer posted; it cannot be released");
+        throw new PaymentError(
+          "this settlement's realized FX entry is no longer posted; it cannot be released",
+        );
       }
-      const lines = await db.execute<{ account_id: string; amount: string; party_id: string | null; memo: string | null }>(sql`
+      const lines = await db.execute<{
+        account_id: string;
+        amount: string;
+        party_id: string | null;
+        memo: string | null;
+      }>(
+        sql`
         select account_id, amount::text as amount, party_id, memo
           from journal_lines
          where org_id = ${orgId} and entry_id = ${application.fx_gain_loss_entry_id}
-         order by line_number`, "objects");
+         order by line_number`,
+        "objects",
+      );
       await postEntry(db, {
-        orgId, bookId: fx.book_id, subsidiaryId: fx.subsidiary_id,
+        orgId,
+        bookId: fx.book_id,
+        subsidiaryId: fx.subsidiary_id,
         entryNumber: `${fx.entry_number}-R`,
-        postingDate: application.applied_on, periodId: period.id,
+        postingDate: application.applied_on,
+        periodId: period.id,
         memo: "Reversal of realized FX on a released credit application",
         sourceDocumentId: fx.source_document_id,
-        origin: "fx_settlement", reversesEntryId: application.fx_gain_loss_entry_id,
-        actorId: userId, currency: fx.currency,
+        origin: "fx_settlement",
+        reversesEntryId: application.fx_gain_loss_entry_id,
+        actorId: userId,
+        currency: fx.currency,
         lines: lines.map((line) => ({
           accountId: line.account_id,
           amount: neg(line.amount),
@@ -674,7 +814,11 @@ export async function unapplyCreditSettlement(
           memo: line.memo ?? undefined,
         })),
       });
-      await markEntryReversed(db, { orgId, entryId: application.fx_gain_loss_entry_id, actorId: userId });
+      await markEntryReversed(db, {
+        orgId,
+        entryId: application.fx_gain_loss_entry_id,
+        actorId: userId,
+      });
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -689,8 +833,7 @@ export async function unapplyCreditSettlement(
                   targetCarryingAmount: application.amount,
                   appliedOn: application.applied_on,
                   creditDocument: application.from_document_number,
-                  settledDocument:
-                    application.to_document_number ?? application.to_entry_number,
+                  settledDocument: application.to_document_number ?? application.to_entry_number,
                 },
                 after: null,
               })}::jsonb,

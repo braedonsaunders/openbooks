@@ -1,12 +1,12 @@
-import { queryAppRecords } from './query'
-import 'server-only'
+import { queryAppRecords } from "./query";
+import "server-only";
 
-import { sql, type SQL } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import type { AppPlatformAdapter } from '@openbooks/engine/apps/runtime'
-import type { SessionUser } from '@/lib/auth'
-import { pgTextArrayLiteral } from '@/lib/pg-array'
-import { permissionSetCovers } from '@/lib/permissions'
+import { sql, type SQL } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import type { AppPlatformAdapter } from "@openbooks/engine/apps/runtime";
+import type { SessionUser } from "@/lib/auth";
+import { pgTextArrayLiteral } from "@/lib/pg-array";
+import { permissionSetCovers } from "@/lib/permissions";
 import {
   loadApiSchema,
   resolveApiType,
@@ -14,169 +14,186 @@ import {
   type ApiOperation,
   type ApiRecordTypeSchema,
   type ResolvedApiType,
-} from '@/lib/api/schema-registry'
-import { createRecord, deleteRecord, updateRecord, type WriteResult } from '@/lib/api/writers'
+} from "@/lib/api/schema-registry";
+import { createRecord, deleteRecord, updateRecord, type WriteResult } from "@/lib/api/writers";
 import {
   documentRevisionProjection,
   normalizeDocumentRecordRevisions,
-} from '@openbooks/engine/records/document-edit-policy'
-import { isUuid } from '@/lib/list-params'
-import { inTypeAudience, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql } from '@/lib/records'
-import { customFieldViewerFor, loadCustomFieldAccessDefs } from '@/lib/custom-fields'
-import { redactRecordCustomValues } from '@/lib/custom-field-read'
+} from "@openbooks/engine/records/document-edit-policy";
+import { isUuid } from "@/lib/list-params";
+import {
+  inTypeAudience,
+  loadRecordTypeByKey,
+  recordVisibleInSubsidiaryFenceSql,
+} from "@/lib/records";
+import { customFieldViewerFor, loadCustomFieldAccessDefs } from "@/lib/custom-fields";
+import { redactRecordCustomValues } from "@/lib/custom-field-read";
 
-type PlatformOperation = ApiOperation | 'schema'
+type PlatformOperation = ApiOperation | "schema";
 
 export class AppPlatformError extends Error {
-  readonly name = 'AppPlatformError'
+  readonly name = "AppPlatformError";
   constructor(
     message: string,
     readonly status = 400,
     readonly details?: unknown,
   ) {
-    super(message)
+    super(message);
   }
 }
 
 export interface AppPlatformContext {
-  orgId: string
-  user: SessionUser
-  grantedPermissions: readonly string[]
-  userCan: (permission: string) => boolean
+  orgId: string;
+  user: SessionUser;
+  grantedPermissions: readonly string[];
+  userCan: (permission: string) => boolean;
   /** Null means unrestricted; a Set enforces the caller's subsidiary scope. */
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }
 
 type ListFilter = {
-  field: string
-  operator?: 'eq' | 'ne' | 'contains' | 'startsWith' | 'in' | 'isNull'
-  value?: unknown
-}
+  field: string;
+  operator?: "eq" | "ne" | "contains" | "startsWith" | "in" | "isNull";
+  value?: unknown;
+};
 
 type ListOptions = {
-  q?: string
-  page?: number
-  perPage?: number
-  filters?: ListFilter[]
-  sort?: { field?: string; direction?: 'asc' | 'desc' }
-}
+  q?: string;
+  page?: number;
+  perPage?: number;
+  filters?: ListFilter[];
+  sort?: { field?: string; direction?: "asc" | "desc" };
+};
 
 const CUSTOM_RECORD_BASE_FIELDS = new Set([
-  'id',
-  'record_number',
-  'status',
-  'created_at',
-  'created_by',
-  'updated_at',
-  'updated_by',
-])
+  "id",
+  "record_number",
+  "status",
+  "created_at",
+  "created_by",
+  "updated_at",
+  "updated_by",
+]);
 
 function hasAppGrant(ctx: AppPlatformContext, permission: string): boolean {
-  return permissionSetCovers(new Set(ctx.grantedPermissions), permission)
+  return permissionSetCovers(new Set(ctx.grantedPermissions), permission);
 }
 
 function canUsePermission(ctx: AppPlatformContext, permission: string): boolean {
-  return hasAppGrant(ctx, permission) && ctx.userCan(permission)
+  return hasAppGrant(ctx, permission) && ctx.userCan(permission);
 }
 
 function permissionFor(resolved: ResolvedApiType, operation: PlatformOperation): string | null {
-  if (operation === 'list' || operation === 'get') return resolved.readPermission
-  if (operation === 'create' || operation === 'update' || operation === 'delete') return resolved.writePermission
-  return null
+  if (operation === "list" || operation === "get") return resolved.readPermission;
+  if (operation === "create" || operation === "update" || operation === "delete")
+    return resolved.writePermission;
+  return null;
 }
 
 async function requireOperation(
   ctx: AppPlatformContext,
   typeKey: string,
-  operation: Exclude<PlatformOperation, 'schema'>,
+  operation: Exclude<PlatformOperation, "schema">,
 ): Promise<ResolvedApiType> {
-  const resolved = await resolveApiType(ctx.orgId, typeKey)
-  if (!resolved) throw new AppPlatformError(`unknown record type: ${typeKey}`, 404)
+  const resolved = await resolveApiType(ctx.orgId, typeKey);
+  if (!resolved) throw new AppPlatformError(`unknown record type: ${typeKey}`, 404);
   if (resolved.dynamic) {
-    const type = await loadRecordTypeByKey(ctx.orgId, resolved.key)
+    const type = await loadRecordTypeByKey(ctx.orgId, resolved.key);
     if (
       !type ||
-      type.status !== 'published' ||
-      !inTypeAudience(ctx.user.roles.map(({ key }) => key), type.allowed_roles)
+      type.status !== "published" ||
+      !inTypeAudience(
+        ctx.user.roles.map(({ key }) => key),
+        type.allowed_roles,
+      )
     ) {
-      throw new AppPlatformError(`unknown record type: ${typeKey}`, 404)
+      throw new AppPlatformError(`unknown record type: ${typeKey}`, 404);
     }
   }
   if (!resolved.operations.includes(operation)) {
-    throw new AppPlatformError(`${typeKey} does not support ${operation}`, 405)
+    throw new AppPlatformError(`${typeKey} does not support ${operation}`, 405);
   }
-  const permission = permissionFor(resolved, operation)
+  const permission = permissionFor(resolved, operation);
   if (!permission || !canUsePermission(ctx, permission)) {
-    throw new AppPlatformError(`missing permission: ${permission ?? 'operation unavailable'}`, 403)
+    throw new AppPlatformError(`missing permission: ${permission ?? "operation unavailable"}`, 403);
   }
-  return resolved
+  return resolved;
 }
 
 function exposedOperations(ctx: AppPlatformContext, type: ApiRecordTypeSchema): ApiOperation[] {
   return type.operations.filter((operation) => {
-    const permission = operation === 'list' || operation === 'get' ? type.readPermission : type.writePermission
-    return !!permission && canUsePermission(ctx, permission)
-  })
+    const permission =
+      operation === "list" || operation === "get" ? type.readPermission : type.writePermission;
+    return !!permission && canUsePermission(ctx, permission);
+  });
 }
 
 function customFieldViewer(ctx: AppPlatformContext) {
   return customFieldViewerFor({
     user: ctx.user,
-    permissions: new Set(ctx.userCan('admin.custom_fields.manage') ? ['admin.custom_fields.manage'] : []),
-  })
+    permissions: new Set(
+      ctx.userCan("admin.custom_fields.manage") ? ["admin.custom_fields.manage"] : [],
+    ),
+  });
 }
 
 async function schemaForContext(ctx: AppPlatformContext): Promise<ApiRecordTypeSchema[]> {
-  const schema = await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))
-  const visible = await Promise.all(schema.map(async (type) => {
-    if (type.dynamic) {
-      const recordType = await loadRecordTypeByKey(ctx.orgId, type.key)
-      if (
-        !recordType ||
-        recordType.status !== 'published' ||
-        !inTypeAudience(ctx.user.roles.map(({ key }) => key), recordType.allowed_roles)
-      ) return null
-    }
-    const operations = exposedOperations(ctx, type)
-    return operations.length > 0 ? { ...type, operations } : null
-  }))
-  return visible.flatMap((type) => type ? [type] : [])
+  const schema = await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx));
+  const visible = await Promise.all(
+    schema.map(async (type) => {
+      if (type.dynamic) {
+        const recordType = await loadRecordTypeByKey(ctx.orgId, type.key);
+        if (
+          !recordType ||
+          recordType.status !== "published" ||
+          !inTypeAudience(
+            ctx.user.roles.map(({ key }) => key),
+            recordType.allowed_roles,
+          )
+        )
+          return null;
+      }
+      const operations = exposedOperations(ctx, type);
+      return operations.length > 0 ? { ...type, operations } : null;
+    }),
+  );
+  return visible.flatMap((type) => (type ? [type] : []));
 }
 
 function clampInteger(value: unknown, min: number, max: number, fallback: number): number {
-  const n = Number(value)
-  return Number.isInteger(n) ? Math.min(max, Math.max(min, n)) : fallback
+  const n = Number(value);
+  return Number.isInteger(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
 
 function quoteIdentifier(identifier: string): SQL {
-  return sql.raw(`"${identifier.replace(/"/g, '""')}"`)
+  return sql.raw(`"${identifier.replace(/"/g, '""')}"`);
 }
 
 function fieldExpression(resolved: ResolvedApiType, field: ApiField | null, name: string): SQL {
   if (resolved.dynamic && !CUSTOM_RECORD_BASE_FIELDS.has(name)) {
-    const text = sql`nullif(data ->> ${name}, '')`
-    if (field?.type === 'number') return sql`(${text})::numeric`
-    if (field?.type === 'boolean') return sql`(${text})::boolean`
-    if (field?.type === 'string (date)') return sql`(${text})::date`
-    if (field?.type === 'string (date-time)') return sql`(${text})::timestamptz`
-    if (field?.type === 'string (uuid)') return sql`(${text})::uuid`
-    return text
+    const text = sql`nullif(data ->> ${name}, '')`;
+    if (field?.type === "number") return sql`(${text})::numeric`;
+    if (field?.type === "boolean") return sql`(${text})::boolean`;
+    if (field?.type === "string (date)") return sql`(${text})::date`;
+    if (field?.type === "string (date-time)") return sql`(${text})::timestamptz`;
+    if (field?.type === "string (uuid)") return sql`(${text})::uuid`;
+    return text;
   }
-  if (!resolved.dynamic && field?.custom && name.startsWith('cf_')) {
-    return sql`custom ->> ${name.slice(3)}`
+  if (!resolved.dynamic && field?.custom && name.startsWith("cf_")) {
+    return sql`custom ->> ${name.slice(3)}`;
   }
-  return quoteIdentifier(name)
+  return quoteIdentifier(name);
 }
 
 function allowedField(schema: ApiRecordTypeSchema, name: string): ApiField | null | undefined {
-  const field = schema.fields.find((candidate) => candidate.name === name)
-  if (field) return field
-  if (schema.dynamic && CUSTOM_RECORD_BASE_FIELDS.has(name)) return null
-  return undefined
+  const field = schema.fields.find((candidate) => candidate.name === name);
+  if (field) return field;
+  if (schema.dynamic && CUSTOM_RECORD_BASE_FIELDS.has(name)) return null;
+  return undefined;
 }
 
 function hasSubsidiaryField(schema: ApiRecordTypeSchema): boolean {
-  return schema.fields.some((field) => field.name === 'subsidiary_id')
+  return schema.fields.some((field) => field.name === "subsidiary_id");
 }
 
 /** Custom records store declared fields inside jsonb rather than columns. */
@@ -185,37 +202,39 @@ function subsidiaryScopeCondition(
   resolved: ResolvedApiType,
   schema: ApiRecordTypeSchema,
 ): SQL | null {
-  if (ctx.allowedSubsidiaryIds === null) return null
+  if (ctx.allowedSubsidiaryIds === null) return null;
   if (resolved.dynamic) {
-    return recordVisibleInSubsidiaryFenceSql(ctx.allowedSubsidiaryIds, hasSubsidiaryField(schema))
+    return recordVisibleInSubsidiaryFenceSql(ctx.allowedSubsidiaryIds, hasSubsidiaryField(schema));
   }
-  if (!hasSubsidiaryField(schema)) return null
-  const ids = [...ctx.allowedSubsidiaryIds]
-  return ids.length > 0
-    ? sql`subsidiary_id = any(${pgTextArrayLiteral(ids)}::uuid[])`
-    : sql`false`
+  if (!hasSubsidiaryField(schema)) return null;
+  const ids = [...ctx.allowedSubsidiaryIds];
+  return ids.length > 0 ? sql`subsidiary_id = any(${pgTextArrayLiteral(ids)}::uuid[])` : sql`false`;
 }
 
 function filterCondition(expression: SQL, filter: ListFilter, textBacked: boolean): SQL {
-  const op = filter.operator ?? 'eq'
-  if (op === 'isNull') return filter.value === false ? sql`${expression} is not null` : sql`${expression} is null`
-  if (op === 'in') {
+  const op = filter.operator ?? "eq";
+  if (op === "isNull")
+    return filter.value === false ? sql`${expression} is not null` : sql`${expression} is null`;
+  if (op === "in") {
     if (!Array.isArray(filter.value) || filter.value.length === 0 || filter.value.length > 100) {
-      throw new AppPlatformError(`filter ${filter.field}: in requires 1–100 values`)
+      throw new AppPlatformError(`filter ${filter.field}: in requires 1–100 values`);
     }
-    const values = filter.value.map((value) => (textBacked ? String(value) : value))
-    return sql`(${sql.join(values.map((value) => sql`${expression} = ${value}`), sql` or `)})`
+    const values = filter.value.map((value) => (textBacked ? String(value) : value));
+    return sql`(${sql.join(
+      values.map((value) => sql`${expression} = ${value}`),
+      sql` or `,
+    )})`;
   }
   if (filter.value === undefined || filter.value === null) {
-    throw new AppPlatformError(`filter ${filter.field}: value is required for ${op}`)
+    throw new AppPlatformError(`filter ${filter.field}: value is required for ${op}`);
   }
-  const comparable = textBacked ? String(filter.value) : filter.value
-  if (op === 'eq') return sql`${expression} = ${comparable}`
-  if (op === 'ne') return sql`${expression} <> ${comparable}`
-  const escaped = String(filter.value).replace(/[\\%_]/g, (character) => `\\${character}`)
-  if (op === 'contains') return sql`cast(${expression} as text) ilike ${`%${escaped}%`}`
-  if (op === 'startsWith') return sql`cast(${expression} as text) ilike ${`${escaped}%`}`
-  throw new AppPlatformError(`filter ${filter.field}: unknown operator ${op}`)
+  const comparable = textBacked ? String(filter.value) : filter.value;
+  if (op === "eq") return sql`${expression} = ${comparable}`;
+  if (op === "ne") return sql`${expression} <> ${comparable}`;
+  const escaped = String(filter.value).replace(/[\\%_]/g, (character) => `\\${character}`);
+  if (op === "contains") return sql`cast(${expression} as text) ilike ${`%${escaped}%`}`;
+  if (op === "startsWith") return sql`cast(${expression} as text) ilike ${`${escaped}%`}`;
+  throw new AppPlatformError(`filter ${filter.field}: unknown operator ${op}`);
 }
 
 async function listRecords(
@@ -223,199 +242,240 @@ async function listRecords(
   typeKey: string,
   rawOptions: Record<string, unknown>,
 ): Promise<unknown> {
-  const resolved = await requireOperation(ctx, typeKey, 'list')
-  const typeSchema = (await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))).find((type) => type.key === typeKey)
-  if (!typeSchema) throw new AppPlatformError(`schema unavailable for record type: ${typeKey}`, 404)
-  const options = rawOptions as ListOptions
-  const page = clampInteger(options.page, 1, 10_000, 1)
-  const perPage = clampInteger(options.perPage, 1, 100, 25)
-  const filters = Array.isArray(options.filters) ? options.filters : []
-  if (filters.length > 20) throw new AppPlatformError('a list call supports at most 20 filters')
+  const resolved = await requireOperation(ctx, typeKey, "list");
+  const typeSchema = (await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))).find(
+    (type) => type.key === typeKey,
+  );
+  if (!typeSchema)
+    throw new AppPlatformError(`schema unavailable for record type: ${typeKey}`, 404);
+  const options = rawOptions as ListOptions;
+  const page = clampInteger(options.page, 1, 10_000, 1);
+  const perPage = clampInteger(options.perPage, 1, 100, 25);
+  const filters = Array.isArray(options.filters) ? options.filters : [];
+  if (filters.length > 20) throw new AppPlatformError("a list call supports at most 20 filters");
 
-  const conditions: SQL[] = [sql`org_id = ${ctx.orgId}`]
+  const conditions: SQL[] = [sql`org_id = ${ctx.orgId}`];
   if (resolved.documentKinds) {
-    conditions.push(sql`kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])`)
+    conditions.push(sql`kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])`);
   }
-  if (resolved.dynamic) conditions.push(sql`type_key = ${resolved.key}`)
-  const subsidiaryCondition = subsidiaryScopeCondition(ctx, resolved, typeSchema)
-  if (subsidiaryCondition) conditions.push(subsidiaryCondition)
+  if (resolved.dynamic) conditions.push(sql`type_key = ${resolved.key}`);
+  const subsidiaryCondition = subsidiaryScopeCondition(ctx, resolved, typeSchema);
+  if (subsidiaryCondition) conditions.push(subsidiaryCondition);
 
-  const q = typeof options.q === 'string' ? options.q.trim().slice(0, 500) : ''
+  const q = typeof options.q === "string" ? options.q.trim().slice(0, 500) : "";
   if (q) {
-    const escaped = q.replace(/[\\%_]/g, (character) => `\\${character}`)
-    conditions.push(sql`cast(${quoteIdentifier(resolved.searchColumn)} as text) ilike ${`%${escaped}%`}`)
+    const escaped = q.replace(/[\\%_]/g, (character) => `\\${character}`);
+    conditions.push(
+      sql`cast(${quoteIdentifier(resolved.searchColumn)} as text) ilike ${`%${escaped}%`}`,
+    );
   }
 
   for (const filter of filters) {
-    if (!filter || typeof filter.field !== 'string') throw new AppPlatformError('every filter needs a field')
-    const field = allowedField(typeSchema, filter.field)
-    if (field === undefined) throw new AppPlatformError(`unknown filter field: ${filter.field}`)
-    const textBacked = (resolved.dynamic && !CUSTOM_RECORD_BASE_FIELDS.has(filter.field)) || !!field?.custom
-    conditions.push(filterCondition(fieldExpression(resolved, field, filter.field), filter, textBacked))
+    if (!filter || typeof filter.field !== "string")
+      throw new AppPlatformError("every filter needs a field");
+    const field = allowedField(typeSchema, filter.field);
+    if (field === undefined) throw new AppPlatformError(`unknown filter field: ${filter.field}`);
+    const textBacked =
+      (resolved.dynamic && !CUSTOM_RECORD_BASE_FIELDS.has(filter.field)) || !!field?.custom;
+    conditions.push(
+      filterCondition(fieldExpression(resolved, field, filter.field), filter, textBacked),
+    );
   }
 
-  const sortField = options.sort?.field || 'created_at'
-  const sortSchema = allowedField(typeSchema, sortField)
-  if (sortSchema === undefined) throw new AppPlatformError(`unknown sort field: ${sortField}`)
-  const sortExpression = fieldExpression(resolved, sortSchema, sortField)
-  const direction = options.sort?.direction === 'asc' ? sql.raw('asc') : sql.raw('desc')
-  const table = quoteIdentifier(resolved.table)
-  const where = sql.join(conditions, sql` and `)
+  const sortField = options.sort?.field || "created_at";
+  const sortSchema = allowedField(typeSchema, sortField);
+  if (sortSchema === undefined) throw new AppPlatformError(`unknown sort field: ${sortField}`);
+  const sortExpression = fieldExpression(resolved, sortSchema, sortField);
+  const direction = options.sort?.direction === "asc" ? sql.raw("asc") : sql.raw("desc");
+  const table = quoteIdentifier(resolved.table);
+  const where = sql.join(conditions, sql` and `);
 
-  const [records, count] = (await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+  const [records, count] = await Promise.all([
+    db.execute<Record<string, unknown>>(
+      sql`
       select *${documentRevisionProjection(resolved.table)} from ${table}
        where ${where}
        order by ${sortExpression} ${direction}
-       limit ${perPage} offset ${(page - 1) * perPage}`, 'objects'),
-    db.execute<{ n: string | number }>(sql`select count(*) as n from ${table} where ${where}`, 'objects'),
-  ]))
+       limit ${perPage} offset ${(page - 1) * perPage}`,
+      "objects",
+    ),
+    db.execute<{ n: string | number }>(
+      sql`select count(*) as n from ${table} where ${where}`,
+      "objects",
+    ),
+  ]);
 
-  const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0])
+  const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0]);
   return {
     records: normalizeDocumentRecordRevisions(resolved.table, records).map((row) =>
-      redactRecordCustomValues(row, definitions, customFieldViewer(ctx))),
+      redactRecordCustomValues(row, definitions, customFieldViewer(ctx)),
+    ),
     total: Number(count[0]?.n ?? 0),
     page,
     perPage,
-  }
+  };
 }
 
 async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): Promise<unknown> {
-  if (!isUuid(id)) throw new AppPlatformError('invalid record id', 400)
-  const resolved = await requireOperation(ctx, typeKey, 'get')
-  const typeSchema = (await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))).find((type) => type.key === typeKey)
+  if (!isUuid(id)) throw new AppPlatformError("invalid record id", 400);
+  const resolved = await requireOperation(ctx, typeKey, "get");
+  const typeSchema = (await loadApiSchema(ctx.orgId, null, customFieldViewer(ctx))).find(
+    (type) => type.key === typeKey,
+  );
   const subsidiaryCondition = typeSchema
     ? subsidiaryScopeCondition(ctx, resolved, typeSchema)
-    : null
-  const table = quoteIdentifier(resolved.table)
-  const result = (await db.execute<Record<string, unknown>>(sql`
+    : null;
+  const table = quoteIdentifier(resolved.table);
+  const result = await db.execute<Record<string, unknown>>(
+    sql`
     select *${documentRevisionProjection(resolved.table)} from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
        ${resolved.documentKinds ? sql`and kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])` : sql``}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${subsidiaryCondition ? sql`and ${subsidiaryCondition}` : sql``}
-     limit 1`, 'objects'))
-  const row = normalizeDocumentRecordRevisions(resolved.table, result)[0]
-  if (!row) return null
-  const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0])
-  return redactRecordCustomValues(row, definitions, customFieldViewer(ctx))
+     limit 1`,
+    "objects",
+  );
+  const row = normalizeDocumentRecordRevisions(resolved.table, result)[0];
+  if (!row) return null;
+  const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0]);
+  return redactRecordCustomValues(row, definitions, customFieldViewer(ctx));
 }
 
-async function writableFields(ctx: AppPlatformContext, resolved: ResolvedApiType): Promise<ApiField[]> {
-  if (resolved.writer.kind !== 'entity') return []
-  return (await loadApiSchema(ctx.orgId)).find((type) => type.key === resolved.key)?.fields ?? []
+async function writableFields(
+  ctx: AppPlatformContext,
+  resolved: ResolvedApiType,
+): Promise<ApiField[]> {
+  if (resolved.writer.kind !== "entity") return [];
+  return (await loadApiSchema(ctx.orgId)).find((type) => type.key === resolved.key)?.fields ?? [];
 }
 
 function unwrapWrite(result: WriteResult): unknown {
   if (result.status >= 400) {
-    const body = result.body as { error?: unknown } | null
-    throw new AppPlatformError(String(body?.error ?? 'record write failed'), result.status, result.body)
+    const body = result.body as { error?: unknown } | null;
+    throw new AppPlatformError(
+      String(body?.error ?? "record write failed"),
+      result.status,
+      result.body,
+    );
   }
-  return result.body
+  return result.body;
 }
 
 async function writeRecord(
   ctx: AppPlatformContext,
-  operation: 'create' | 'update' | 'delete',
+  operation: "create" | "update" | "delete",
   typeKey: string,
   id?: string,
   body: Record<string, unknown> = {},
 ): Promise<unknown> {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw new AppPlatformError('record body must be an object', 400)
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new AppPlatformError("record body must be an object", 400);
   }
-  const resolved = await requireOperation(ctx, typeKey, operation)
-  if (
-    resolved.writer.kind === 'document' &&
-    body.action === 'post'
-  ) {
-    const postPermission = resolved.writer.docKind === 'vendor_bill' ? 'ap.post' : 'ar.post'
+  const resolved = await requireOperation(ctx, typeKey, operation);
+  if (resolved.writer.kind === "document" && body.action === "post") {
+    const postPermission = resolved.writer.docKind === "vendor_bill" ? "ap.post" : "ar.post";
     if (!canUsePermission(ctx, postPermission)) {
-      throw new AppPlatformError(`missing permission: ${postPermission}`, 403)
+      throw new AppPlatformError(`missing permission: ${postPermission}`, 403);
     }
   }
-  await assertSubsidiaryWriteScope(ctx, resolved, typeKey, operation, id, body)
-  if (operation !== 'create' && (!id || !isUuid(id))) throw new AppPlatformError('invalid record id', 400)
+  await assertSubsidiaryWriteScope(ctx, resolved, typeKey, operation, id, body);
+  if (operation !== "create" && (!id || !isUuid(id)))
+    throw new AppPlatformError("invalid record id", 400);
   // One atomic unit per platform write. Document and custom-record creates
   // persist a draft BEFORE the edit validates; a rejected write must roll that
   // draft back (zero rows), the same all-or-nothing contract /api/v1 gets from
   // executeIdempotent's withOrgTransaction. unwrapWrite's throw is the
   // rollback trigger.
   return withOrgTransaction(ctx.orgId, async () => {
-    const fields = await writableFields(ctx, resolved)
+    const fields = await writableFields(ctx, resolved);
     const writeOptions = {
       allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
       customFieldViewer: {
         roleKeys: ctx.user.roles.map(({ key }) => key),
-        canManageCustomFields: ctx.userCan('admin.custom_fields.manage'),
+        canManageCustomFields: ctx.userCan("admin.custom_fields.manage"),
       },
-    }
-    if (operation === 'create') return unwrapWrite(await createRecord(ctx.user, resolved, fields, body, writeOptions))
-    if (operation === 'update') return unwrapWrite(await updateRecord(ctx.user, resolved, fields, id!, body, writeOptions))
-    return unwrapWrite(await deleteRecord(ctx.user, resolved, id!, writeOptions))
-  })
+    };
+    if (operation === "create")
+      return unwrapWrite(await createRecord(ctx.user, resolved, fields, body, writeOptions));
+    if (operation === "update")
+      return unwrapWrite(await updateRecord(ctx.user, resolved, fields, id!, body, writeOptions));
+    return unwrapWrite(await deleteRecord(ctx.user, resolved, id!, writeOptions));
+  });
 }
 
 async function assertSubsidiaryWriteScope(
   ctx: AppPlatformContext,
   resolved: ResolvedApiType,
   typeKey: string,
-  operation: 'create' | 'update' | 'delete',
+  operation: "create" | "update" | "delete",
   id: string | undefined,
   body: Record<string, unknown>,
 ): Promise<void> {
-  if (!ctx.allowedSubsidiaryIds) return
-  const schema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey)
-  if (!schema || (!resolved.dynamic && !schema.fields.some((field) => field.name === 'subsidiary_id'))) return
+  if (!ctx.allowedSubsidiaryIds) return;
+  const schema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey);
+  if (
+    !schema ||
+    (!resolved.dynamic && !schema.fields.some((field) => field.name === "subsidiary_id"))
+  )
+    return;
 
   const customData =
-    resolved.dynamic && body.data && typeof body.data === 'object' && !Array.isArray(body.data)
-      ? body.data as Record<string, unknown>
-      : null
+    resolved.dynamic && body.data && typeof body.data === "object" && !Array.isArray(body.data)
+      ? (body.data as Record<string, unknown>)
+      : null;
   const requested = resolved.dynamic
     ? customData?.subsidiary_id
-    : body.subsidiaryId ?? body.subsidiary_id
-  if (requested === null && operation !== 'create') {
-    throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
+    : (body.subsidiaryId ?? body.subsidiary_id);
+  if (requested === null && operation !== "create") {
+    throw new AppPlatformError("record is outside the caller subsidiary scope", 403);
   }
-  if (requested !== undefined && requested !== null && !ctx.allowedSubsidiaryIds.has(String(requested))) {
-    throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
+  if (
+    requested !== undefined &&
+    requested !== null &&
+    !ctx.allowedSubsidiaryIds.has(String(requested))
+  ) {
+    throw new AppPlatformError("record is outside the caller subsidiary scope", 403);
   }
-  if (operation === 'create') {
+  if (operation === "create") {
     if (requested === undefined || requested === null) {
-      const allowed = [...ctx.allowedSubsidiaryIds]
+      const allowed = [...ctx.allowedSubsidiaryIds];
       if (allowed.length !== 1) {
-        throw new AppPlatformError('subsidiaryId is required for this record', 422)
+        throw new AppPlatformError("subsidiaryId is required for this record", 422);
       }
       if (resolved.dynamic) {
-        body.data = { ...(customData ?? {}), subsidiary_id: allowed[0] }
-      } else if (resolved.writer.kind === 'document') {
-        body.subsidiaryId = allowed[0]
+        body.data = { ...(customData ?? {}), subsidiary_id: allowed[0] };
+      } else if (resolved.writer.kind === "document") {
+        body.subsidiaryId = allowed[0];
       } else {
-        body.subsidiary_id = allowed[0]
+        body.subsidiary_id = allowed[0];
       }
     }
-    return
+    return;
   }
-  if (!id) return
+  if (!id) return;
 
-  const table = quoteIdentifier(resolved.table)
-  const allowed = [...ctx.allowedSubsidiaryIds]
+  const table = quoteIdentifier(resolved.table);
+  const allowed = [...ctx.allowedSubsidiaryIds];
   const scopeCondition = resolved.dynamic
     ? recordVisibleInSubsidiaryFenceSql(ctx.allowedSubsidiaryIds, hasSubsidiaryField(schema))
-    : null
-  const found = (await db.execute(sql`
+    : null;
+  const found = await db.execute(
+    sql`
     select 1 from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
-       ${resolved.dynamic
-         ? sql`and ${scopeCondition ?? sql`false`}`
-         : (allowed.length > 0
-           ? sql`and subsidiary_id = any(${pgTextArrayLiteral(allowed)}::uuid[])`
-           : sql`and false`)}
-     limit 1`, 'objects'))
-  if (!found[0]) throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
+       ${
+         resolved.dynamic
+           ? sql`and ${scopeCondition ?? sql`false`}`
+           : allowed.length > 0
+             ? sql`and subsidiary_id = any(${pgTextArrayLiteral(allowed)}::uuid[])`
+             : sql`and false`
+       }
+     limit 1`,
+    "objects",
+  );
+  if (!found[0]) throw new AppPlatformError("record is outside the caller subsidiary scope", 403);
 }
 
 export function createAppPlatformAdapter(ctx: AppPlatformContext): AppPlatformAdapter {
@@ -424,8 +484,8 @@ export function createAppPlatformAdapter(ctx: AppPlatformContext): AppPlatformAd
     schema: () => schemaForContext(ctx),
     list: (typeKey, options) => listRecords(ctx, typeKey, options),
     get: (typeKey, id) => getRecord(ctx, typeKey, id),
-    create: (typeKey, body) => writeRecord(ctx, 'create', typeKey, undefined, body),
-    update: (typeKey, id, body) => writeRecord(ctx, 'update', typeKey, id, body),
-    delete: (typeKey, id) => writeRecord(ctx, 'delete', typeKey, id),
-  }
+    create: (typeKey, body) => writeRecord(ctx, "create", typeKey, undefined, body),
+    update: (typeKey, id, body) => writeRecord(ctx, "update", typeKey, id, body),
+    delete: (typeKey, id) => writeRecord(ctx, "delete", typeKey, id),
+  };
 }

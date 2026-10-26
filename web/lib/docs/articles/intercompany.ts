@@ -1,19 +1,30 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const intercompany: DocArticle = {
-  slug: 'intercompany',
-  title: 'Intercompany Transactions, Netting and Fulfillment',
-  category: 'accounting',
+  slug: "intercompany",
+  title: "Intercompany Transactions, Netting and Fulfillment",
+  category: "accounting",
   order: 7,
   summary:
-    'Representing customers and vendors, paired intercompany orders and invoices with transfer pricing, governed netting and settlement runs, bank transfers between entities, cross-subsidiary fulfillment and intercompany reconciliation.',
-  updated: '2026-10-11',
+    "Representing customers and vendors, paired intercompany orders and invoices with transfer pricing, governed netting and settlement runs, bank transfers between entities, cross-subsidiary fulfillment and intercompany reconciliation.",
+  updated: "2026-10-11",
   keywords: [
-    'intercompany', 'representing customer', 'representing vendor', 'due to', 'due from', 'pairing',
-    'transfer pricing', 'cost plus', 'netting', 'settlement', 'elimination', 'cross-subsidiary fulfillment',
-    'reconciliation', 'multi-subsidiary',
+    "intercompany",
+    "representing customer",
+    "representing vendor",
+    "due to",
+    "due from",
+    "pairing",
+    "transfer pricing",
+    "cost plus",
+    "netting",
+    "settlement",
+    "elimination",
+    "cross-subsidiary fulfillment",
+    "reconciliation",
+    "multi-subsidiary",
   ],
-  related: ['allocations', 'fixed-assets-depreciation', 'setup-accounting-group'],
+  related: ["allocations", "fixed-assets-depreciation", "setup-accounting-group"],
   body: `# Intercompany Transactions, Netting and Fulfillment
 
 When one legal entity sells to, buys from, ships for or pays another entity of
@@ -195,4 +206,4 @@ flags unreconciled pairs on its intercompany step.
 | **intercompany.settle** | Posting and reversing runs; posting and reversing transfers |
 | **intercompany.approve** | Deciding a netting run's approval gate |
 `,
-}
+};

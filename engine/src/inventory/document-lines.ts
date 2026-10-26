@@ -4,7 +4,12 @@ import { fromUnits, toUnits } from "../money/money.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { toBaseQuantity, toExactStockQuantity } from "./costing.ts";
-import { InventoryError, InventoryOwnershipError, type InventoryProfile, type Runner } from "./contracts.ts";
+import {
+  InventoryError,
+  InventoryOwnershipError,
+  type InventoryProfile,
+  type Runner,
+} from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary, assertMovementOwner } from "./profile-policy.ts";
 import { WarehouseRefusal, type StockMovementDirection } from "./warehouses.ts";
 
@@ -42,23 +47,35 @@ export interface DocumentInventoryLine {
 }
 
 /** The one active stock location, when the org has exactly one (else null). */
-async function defaultStockLocation(
-  runner: Runner,
-  orgId: string,
-): Promise<string | null> {
-  const r = (await runner.execute<{ id: string }>(sql`
-    select id from stock_locations where org_id = ${orgId} and is_active`, "objects"));
+async function defaultStockLocation(runner: Runner, orgId: string): Promise<string | null> {
+  const r = await runner.execute<{ id: string }>(
+    sql`
+    select id from stock_locations where org_id = ${orgId} and is_active`,
+    "objects",
+  );
   return r.length === 1 ? r[0]!.id : null;
 }
 
-const INBOUND_DOCUMENT_KINDS = new Set(["vendor_bill", "purchase_receipt", "customer_credit", "cash_refund"]);
-const OUTBOUND_DOCUMENT_KINDS = new Set(["customer_invoice", "cash_sale", "sales_fulfillment", "vendor_credit"]);
+const INBOUND_DOCUMENT_KINDS = new Set([
+  "vendor_bill",
+  "purchase_receipt",
+  "customer_credit",
+  "cash_refund",
+]);
+const OUTBOUND_DOCUMENT_KINDS = new Set([
+  "customer_invoice",
+  "cash_sale",
+  "sales_fulfillment",
+  "vendor_credit",
+]);
 
 /** Which way a document's stock lines move, for warehouse admission. */
 function documentStockDirection(kind: string): StockMovementDirection {
   if (INBOUND_DOCUMENT_KINDS.has(kind)) return "inbound";
   if (OUTBOUND_DOCUMENT_KINDS.has(kind)) return "outbound";
-  throw new InventoryError(`a ${kind} document does not move stock, so its lines cannot be admitted to a warehouse`);
+  throw new InventoryError(
+    `a ${kind} document does not move stock, so its lines cannot be admitted to a warehouse`,
+  );
 }
 
 /**
@@ -78,32 +95,33 @@ export async function loadDocumentInventoryLines(
   documentId: string,
 ): Promise<DocumentInventoryLine[]> {
   const fallback = await defaultStockLocation(runner, orgId);
-  const r = (await runner.execute<{
-      line_id: string;
-      line_number: number;
-      item_id: string;
-      item_name: string;
-      quantity: string;
-      unit: string | null;
-      amount: string;
-      fx_rate: string;
-      stock_location_id: string | null;
-      document_subsidiary_id: string | null;
-      document_kind: string;
-      base_unit: string;
-      unit_conversions: unknown;
-      asset_account_id: string;
-      received_not_billed_account_id: string | null;
-      adjustment_account_id: string | null;
-      variance_account_id: string | null;
-      costing_method: InventoryProfile["costingMethod"];
-      item_kind: string;
-      tracking: InventoryProfile["tracking"];
-      department_id: string | null;
-      project_id: string | null;
-      location_id: string | null;
-      custom: unknown;
-    }>(sql`
+  const r = await runner.execute<{
+    line_id: string;
+    line_number: number;
+    item_id: string;
+    item_name: string;
+    quantity: string;
+    unit: string | null;
+    amount: string;
+    fx_rate: string;
+    stock_location_id: string | null;
+    document_subsidiary_id: string | null;
+    document_kind: string;
+    base_unit: string;
+    unit_conversions: unknown;
+    asset_account_id: string;
+    received_not_billed_account_id: string | null;
+    adjustment_account_id: string | null;
+    variance_account_id: string | null;
+    costing_method: InventoryProfile["costingMethod"];
+    item_kind: string;
+    tracking: InventoryProfile["tracking"];
+    department_id: string | null;
+    project_id: string | null;
+    location_id: string | null;
+    custom: unknown;
+  }>(
+    sql`
     select dl.id as line_id, dl.line_number, dl.item_id, i.kind as item_kind,
            coalesce(nullif(i.code, ''), i.name) as item_name,
            dl.quantity, dl.unit, dl.amount, d.fx_rate::text as fx_rate,
@@ -122,7 +140,9 @@ export async function loadDocumentInventoryLines(
       join item_inventory_profiles p on p.item_id = dl.item_id and p.org_id = dl.org_id
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
        and dl.item_id is not null and dl.quantity <> 0
-     order by dl.line_number`, "objects"));
+     order by dl.line_number`,
+    "objects",
+  );
   if (r.length === 0) return [];
   const ctx = await loadSubsidiaryContext(runner, orgId);
   const subsidiaryId = r[0]!.document_subsidiary_id ?? defaultPostingSubsidiaryId(ctx);
@@ -149,7 +169,12 @@ export async function loadDocumentInventoryLines(
       );
     } catch (error) {
       if (error instanceof WarehouseRefusal) {
-        throw new WarehouseRefusal(`${lineLabel}: ${error.message}`, error.code, error.remedy, error.status);
+        throw new WarehouseRefusal(
+          `${lineLabel}: ${error.message}`,
+          error.code,
+          error.remedy,
+          error.status,
+        );
       }
       if (error instanceof InventoryOwnershipError) {
         throw new InventoryOwnershipError(`${lineLabel}: ${error.message}`);
@@ -168,10 +193,15 @@ export async function loadDocumentInventoryLines(
     // actually exists for this document kind.
     // Fulfillment can retain eight document places when conversion yields exact stored stock;
     // existing four-place postings keep their established costing arithmetic.
-    const fulfillmentQuantity = row.document_kind === "sales_fulfillment" ? canonicalDecimal(row.quantity, 8) : null;
-    const exactFulfillment = fulfillmentQuantity !== null && canonicalDecimal(fulfillmentQuantity, 4) === null;
-    const sourceQuantity = exactFulfillment ? fulfillmentQuantity : fromUnits(toUnits(row.quantity));
-    if (sourceQuantity === null) throw new InventoryError(`${lineLabel} quantity must have at most eight decimal places`);
+    const fulfillmentQuantity =
+      row.document_kind === "sales_fulfillment" ? canonicalDecimal(row.quantity, 8) : null;
+    const exactFulfillment =
+      fulfillmentQuantity !== null && canonicalDecimal(fulfillmentQuantity, 4) === null;
+    const sourceQuantity = exactFulfillment
+      ? fulfillmentQuantity
+      : fromUnits(toUnits(row.quantity));
+    if (sourceQuantity === null)
+      throw new InventoryError(`${lineLabel} quantity must have at most eight decimal places`);
     if (compareDecimal(sourceQuantity, "0") < 0) {
       throw new InventoryError(
         `${lineLabel} has a negative quantity (${row.quantity}); ${negativeLineRemedy(row.document_kind)}`,
@@ -281,11 +311,17 @@ export async function loadItemLabels(
 ): Promise<Map<string, string>> {
   const ids = [...new Set(itemIds)];
   if (ids.length === 0) return new Map();
-  const rows = await runner.execute<{ id: string; label: string }>(sql`
+  const rows = await runner.execute<{ id: string; label: string }>(
+    sql`
     select item.id, coalesce(nullif(btrim(item.code), ''), item.name) as label
       from items item
      where item.org_id = ${orgId}
-       and item.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects");
+       and item.id in (${sql.join(
+         ids.map((id) => sql`${id}::uuid`),
+         sql`, `,
+       )})`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.id, row.label]));
 }
 
@@ -300,7 +336,8 @@ export async function unprofiledInventoryLines(
   orgId: string,
   documentId: string,
 ): Promise<{ line_number: number; item_id: string }[]> {
-  return await runner.execute<{ line_number: number; item_id: string }>(sql`
+  return await runner.execute<{ line_number: number; item_id: string }>(
+    sql`
     select dl.line_number, dl.item_id
       from document_lines dl
       join items i on i.id = dl.item_id and i.org_id = dl.org_id
@@ -311,7 +348,9 @@ export async function unprofiledInventoryLines(
          select 1 from item_inventory_profiles p
           where p.item_id = dl.item_id and p.org_id = dl.org_id
        )
-     order by dl.line_number`, "objects");
+     order by dl.line_number`,
+    "objects",
+  );
 }
 
 /** Fail before the document transaction when an inventory line has no costing

@@ -12,18 +12,23 @@ import { isUuid } from "@openbooks/engine/platform/identifiers";
  */
 export function aiRailsErrorResponse(e: unknown): NextResponse {
   if (e instanceof AiRailsError) {
-    const status = e.code === "ai_invalid_input" || e.code === "ai_reason_required"
-      ? 400
-      : e.code === "ai_forbidden" || e.code === "ai_autonomy_raise_refused"
-        ? 403
-        : e.code === "ai_subject_missing" || e.code === "ai_flag_missing" || e.code === "ai_capability_missing"
-        || e.code === "ai_decision_missing"
-          ? 404
-          : e.code === "ai_feature_off" || e.code === "ai_unknown_capability" || e.code === "ai_unknown_draft_kind"
+    const status =
+      e.code === "ai_invalid_input" || e.code === "ai_reason_required"
+        ? 400
+        : e.code === "ai_forbidden" || e.code === "ai_autonomy_raise_refused"
+          ? 403
+          : e.code === "ai_subject_missing" ||
+              e.code === "ai_flag_missing" ||
+              e.code === "ai_capability_missing" ||
+              e.code === "ai_decision_missing"
             ? 404
-            : e.code === "ai_finalize_blocked" || e.code === "ai_flag_closed"
-              ? 409
-              : 422;
+            : e.code === "ai_feature_off" ||
+                e.code === "ai_unknown_capability" ||
+                e.code === "ai_unknown_draft_kind"
+              ? 404
+              : e.code === "ai_finalize_blocked" || e.code === "ai_flag_closed"
+                ? 409
+                : 422;
     return NextResponse.json({ error: e.message }, { status });
   }
   console.error("[ai-rails] endpoint failed:", e);
@@ -35,7 +40,10 @@ export async function requireAnyPerm(perms: string[]): Promise<Authz | NextRespo
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!perms.some((perm) => can(authz, perm))) {
-    return NextResponse.json({ error: `missing permission: one of ${perms.join(", ")}` }, { status: 403 });
+    return NextResponse.json(
+      { error: `missing permission: one of ${perms.join(", ")}` },
+      { status: 403 },
+    );
   }
   return authz;
 }
@@ -46,9 +54,7 @@ export function uuidParam(url: URL, name: string, required: false): string | nul
 export function uuidParam(url: URL, name: string, required: boolean): string | null | NextResponse {
   const value = url.searchParams.get(name);
   if (value === null) {
-    return required
-      ? NextResponse.json({ error: `${name} is required` }, { status: 400 })
-      : null;
+    return required ? NextResponse.json({ error: `${name} is required` }, { status: 400 }) : null;
   }
   if (!isUuid(value)) {
     return NextResponse.json({ error: `${name} must be a uuid` }, { status: 400 });

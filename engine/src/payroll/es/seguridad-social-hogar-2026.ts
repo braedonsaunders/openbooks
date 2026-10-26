@@ -113,13 +113,16 @@ export function calculateEsHogar2026(input: EsHogarInput): EsHogarResult {
   } catch {
     fail(`retribucionMensual "${input.retribucionMensual}" is not a decimal amount`);
   }
-  if (retribCents < 0n) fail(`retribucionMensual "${input.retribucionMensual}" must be non-negative`);
+  if (retribCents < 0n)
+    fail(`retribucionMensual "${input.retribucionMensual}" must be non-negative`);
   if (!Number.isInteger(input.horasMes) || input.horasMes < 1 || input.horasMes > 744) {
     fail(`horasMes "${input.horasMes}" is not an integer 1–744`);
   }
-  if (input.beneficioCc !== "alta_20"
-    && input.beneficioCc !== "familia_numerosa_45"
-    && input.beneficioCc !== "ninguno") {
+  if (
+    input.beneficioCc !== "alta_20" &&
+    input.beneficioCc !== "familia_numerosa_45" &&
+    input.beneficioCc !== "ninguno"
+  ) {
     fail(`beneficioCc "${input.beneficioCc}" is not alta_20/familia_numerosa_45/ninguno`);
   }
   let atEpRateUnits: bigint;
@@ -141,12 +144,10 @@ export function calculateEsHogar2026(input: EsHogarInput): EsHogarResult {
   const refCents = input.retribucionPorHoras
     ? roundDiv(SMI_HORA_HOGAR_CENTS * BigInt(input.horasMes), 100n)
     : roundDiv(
-      SMI_MENSUAL_CON_EXTRAS_CENTS * BigInt(Math.min(input.horasMes, JORNADA_COMPLETA_HORAS)),
-      BigInt(JORNADA_COMPLETA_HORAS),
-    );
-  const sueloBase = refCents > TOP_TRAMO_FIJO_HASTA
-    ? retribCents
-    : tramoBase(refCents, topeCents);
+        SMI_MENSUAL_CON_EXTRAS_CENTS * BigInt(Math.min(input.horasMes, JORNADA_COMPLETA_HORAS)),
+        BigInt(JORNADA_COMPLETA_HORAS),
+      );
+  const sueloBase = refCents > TOP_TRAMO_FIJO_HASTA ? retribCents : tramoBase(refCents, topeCents);
   const baseCents = (() => {
     const bandBase = tramoBase(retribCents, topeCents);
     return bandBase > sueloBase ? bandBase : sueloBase;
@@ -158,11 +159,12 @@ export function calculateEsHogar2026(input: EsHogarInput): EsHogarResult {
   // with the decimal point shifted ("4,70%" → "0.0470").
   const ccTrabajador = cuota(base, "0.0470");
   const ccEmpresaCuota = cuota(base, "0.2360");
-  const ccEmpresa = input.beneficioCc === "alta_20"
-    ? rebaja(ccEmpresaCuota, 8n, 10n)
-    : input.beneficioCc === "familia_numerosa_45"
-      ? rebaja(ccEmpresaCuota, 55n, 100n)
-      : ccEmpresaCuota;
+  const ccEmpresa =
+    input.beneficioCc === "alta_20"
+      ? rebaja(ccEmpresaCuota, 8n, 10n)
+      : input.beneficioCc === "familia_numerosa_45"
+        ? rebaja(ccEmpresaCuota, 55n, 100n)
+        : ccEmpresaCuota;
 
   const desEmpresaRate = input.contratoTemporal ? "0.0670" : "0.0550";
   const desTrabajadorRate = input.contratoTemporal ? "0.0160" : "0.0155";

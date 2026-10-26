@@ -67,11 +67,18 @@ test("POST /api/v1/approvals/decide records the decision with the idempotency ke
         "content-type": "application/json",
         "idempotency-key": "decide-key-1",
       },
-      body: JSON.stringify({ gateId: "00000000-0000-4000-8000-000000000001", decision: "approved", comment: "looks good" }),
+      body: JSON.stringify({
+        gateId: "00000000-0000-4000-8000-000000000001",
+        decision: "approved",
+        comment: "looks good",
+      }),
     }),
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { gateId: "00000000-0000-4000-8000-000000000001", decision: "approved" });
+  assert.deepEqual(await response.json(), {
+    gateId: "00000000-0000-4000-8000-000000000001",
+    decision: "approved",
+  });
   assert.deepEqual(routeState.decisions[0], {
     gateId: "00000000-0000-4000-8000-000000000001",
     decision: "approved",

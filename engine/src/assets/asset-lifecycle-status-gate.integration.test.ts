@@ -9,11 +9,7 @@ import {
   disposeAsset,
   remeasureAsset,
 } from "./asset-lifecycle.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -102,16 +98,24 @@ test(
         "remeasuring a draft asset is refused",
       );
 
-      const status = (await db.execute<{ status: string }>(sql`
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
           select status from fixed_assets where id = ${assetId} and org_id = ${org.orgId}
-        `, "objects"))[0]!.status;
+        `,
+          "objects",
+        )
+      )[0]!.status;
       assert.equal(status, "draft");
-      const journals = await db.execute(sql`
+      const journals = await db.execute(
+        sql`
           select 1 from journal_entries e
             join asset_events v on v.journal_entry_id = e.id and v.org_id = e.org_id
            where v.org_id = ${org.orgId} and v.asset_id = ${assetId}
            limit 1
-        `, "objects");
+        `,
+        "objects",
+      );
       assert.equal(journals.length, 0, "no journals or events may exist for the refused draft");
     } finally {
       await dropScratchOrg(org.orgId);

@@ -4,5 +4,5 @@ export function enumLabel<T extends string>(
   labels: Readonly<Record<T, string>>,
   unknownLabel: string,
 ): string {
-  return Object.hasOwn(labels, value) ? labels[value as T] : unknownLabel
+  return Object.hasOwn(labels, value) ? labels[value as T] : unknownLabel;
 }

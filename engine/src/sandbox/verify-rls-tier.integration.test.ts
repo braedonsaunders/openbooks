@@ -11,25 +11,45 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * legal entities and account definitions, while full copies also carry the
  * ledger. Every verified table is organization-scoped.
  */
-test("dev-tier verification set is the copied customization layer, never the ledger", { skip: !DB }, async () => {
-  const tables = await cloneTierVerificationTables("dev");
-  assert.ok(tables.length > 0, "a dev tier must verify a non-empty table set");
-  for (const ledger of ["journal_lines", "journal_entries", "accounting_periods", "documents", "pay_runs", "pay_stubs"]) {
-    assert.ok(!tables.includes(ledger), `dev tier never copies ${ledger}, so it must not be verified`);
-  }
-  assert.ok(tables.includes("subsidiaries"), "dev copies the legal-entity tree for role scope targets");
-  assert.ok(tables.includes("accounts"), "dev copies account definitions for pinned reporting classifications");
-  assert.ok(
-    tables.includes("saved_reports"),
-    "dev copies the customization layer (saved_reports is a member)",
-  );
-  for (const name of tables) {
+test(
+  "dev-tier verification set is the copied customization layer, never the ledger",
+  { skip: !DB },
+  async () => {
+    const tables = await cloneTierVerificationTables("dev");
+    assert.ok(tables.length > 0, "a dev tier must verify a non-empty table set");
+    for (const ledger of [
+      "journal_lines",
+      "journal_entries",
+      "accounting_periods",
+      "documents",
+      "pay_runs",
+      "pay_stubs",
+    ]) {
+      assert.ok(
+        !tables.includes(ledger),
+        `dev tier never copies ${ledger}, so it must not be verified`,
+      );
+    }
     assert.ok(
-      CUSTOMIZATION_LAYER.has(name) || name === "subsidiaries" || name === "accounts",
-      `dev verifies only copied customization and reference definitions: ${name}`,
+      tables.includes("subsidiaries"),
+      "dev copies the legal-entity tree for role scope targets",
     );
-  }
-});
+    assert.ok(
+      tables.includes("accounts"),
+      "dev copies account definitions for pinned reporting classifications",
+    );
+    assert.ok(
+      tables.includes("saved_reports"),
+      "dev copies the customization layer (saved_reports is a member)",
+    );
+    for (const name of tables) {
+      assert.ok(
+        CUSTOMIZATION_LAYER.has(name) || name === "subsidiaries" || name === "accounts",
+        `dev verifies only copied customization and reference definitions: ${name}`,
+      );
+    }
+  },
+);
 
 test("full-tier verification set carries the ledger", { skip: !DB }, async () => {
   const tables = await cloneTierVerificationTables("full");
@@ -68,11 +88,15 @@ test("selectCloneTables mirrors the clone plan per tier", () => {
     forceRebase: new Set<string>(),
   }));
   assert.deepEqual(
-    selectCloneTables(tables, "dev").map((table) => table.name).sort(),
+    selectCloneTables(tables, "dev")
+      .map((table) => table.name)
+      .sort(),
     ["saved_reports", "subsidiaries"],
   );
   assert.deepEqual(
-    selectCloneTables(tables, "full").map((table) => table.name).sort(),
+    selectCloneTables(tables, "full")
+      .map((table) => table.name)
+      .sort(),
     ["feature_flags", "journal_lines", "saved_reports", "subsidiaries"],
   );
   assert.deepEqual(

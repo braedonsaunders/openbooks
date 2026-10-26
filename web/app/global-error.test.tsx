@@ -8,7 +8,10 @@ const GlobalError = (await import("./global-error")).default;
 import shell from "@/messages/en/shell.json";
 
 function render(digest: string | undefined): string {
-  const error = Object.assign(new Error("root layout failure"), digest === undefined ? {} : { digest });
+  const error = Object.assign(
+    new Error("root layout failure"),
+    digest === undefined ? {} : { digest },
+  );
   return renderToStaticMarkup(<GlobalError error={error} reset={() => {}} />);
 }
 

@@ -1,30 +1,39 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import type { SessionUser } from "../auth";
 
-const { sql } = await import('drizzle-orm');
-const { withBypassContext, db, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { executeAssistantTool } = await import('./registry');
-const { installEngineSeams } = await import('@openbooks/engine/composition/install');
-const { createWorkOperator } = await import('@openbooks/engine/testing/manufacturing');
-const { createSubcontract, addSubcontractSovLine, submitSubcontract, createSubcontractChangeOrder,
-  approveSubcontractChangeOrder, createVendorPayApplication, updateVendorPayApplicationLines,
-  submitVendorPayApplication, generateVendorPayApplicationBill } = await import('@openbooks/engine/projects/subcontracts');
+const { sql } = await import("drizzle-orm");
+const { withBypassContext, db, withOrgContext, withOrgTransaction } =
+  await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { executeAssistantTool } = await import("./registry");
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+const { createWorkOperator } = await import("@openbooks/engine/testing/manufacturing");
+const {
+  createSubcontract,
+  addSubcontractSovLine,
+  submitSubcontract,
+  createSubcontractChangeOrder,
+  approveSubcontractChangeOrder,
+  createVendorPayApplication,
+  updateVendorPayApplicationLines,
+  submitVendorPayApplication,
+  generateVendorPayApplicationBill,
+} = await import("@openbooks/engine/projects/subcontracts");
 
-const PERMS = ['assistant.use', 'ap.read', 'projects.read', 'reports.read'];
+const PERMS = ["assistant.use", "ap.read", "projects.read", "reports.read"];
 
 function reader(orgId: string, subsidiaryIds: Set<string> | null, perms: string[] = PERMS) {
   const userId = randomUUID();
   const user: SessionUser = {
     id: userId,
     orgId,
-    name: 'Subcontract scope reader',
-    email: 'subcontract-scope@scratch.test',
-    roles: [{ key: 'ordinary-role', name: 'Ordinary role' }],
+    name: "Subcontract scope reader",
+    email: "subcontract-scope@scratch.test",
+    roles: [{ key: "ordinary-role", name: "Ordinary role" }],
     isSuperAdmin: false,
-    envKind: 'production',
+    envKind: "production",
     productionOrgId: orgId,
     homeOrgId: orgId,
     homeUserId: userId,
@@ -32,117 +41,192 @@ function reader(orgId: string, subsidiaryIds: Set<string> | null, perms: string[
   return { user, permissions: new Set(perms), allowedSubsidiaryIds: subsidiaryIds };
 }
 
-test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  const hidden = randomUUID();
-  const projectId = randomUUID();
-  const hiddenProjectId = randomUUID();
-  const prebillId = randomUUID();
-  try {
-    installEngineSeams();
-    const operator = await createWorkOperator(org.orgId, "Subcontract author", ["ap.create"]);
-    const contractId = await withOrgTransaction(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true,"preBilling":true}'::jsonb) where id=${org.orgId}`);
-      assert.equal((await db.execute<never>(sql`insert into vendor_roles(org_id,party_id,currency,is_active)
-        values(${org.orgId},${org.vendorId},'CAD',true)`)).rowCount,1);
-      await db.execute(sql`
+test(
+  "subcontract and wip reads: commitments, pay apps, prebills, isolation",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const hidden = randomUUID();
+    const projectId = randomUUID();
+    const hiddenProjectId = randomUUID();
+    const prebillId = randomUUID();
+    try {
+      installEngineSeams();
+      const operator = await createWorkOperator(org.orgId, "Subcontract author", ["ap.create"]);
+      const contractId = await withOrgTransaction(org.orgId, async () => {
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true,"preBilling":true}'::jsonb) where id=${org.orgId}`,
+        );
+        assert.equal(
+          (
+            await db.execute<never>(sql`insert into vendor_roles(org_id,party_id,currency,is_active)
+        values(${org.orgId},${org.vendorId},'CAD',true)`)
+          ).rowCount,
+          1,
+        );
+        await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden site','CAD','CA',true,false)
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into projects(id,org_id,name,subsidiary_id,customer_id)
         values (${projectId},${org.orgId},'Visible tower',${org.subsidiaryId},${org.customerId}),
                (${hiddenProjectId},${org.orgId},'Hidden annex',${hidden},${org.customerId})
       `);
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,retainagePayable}',to_jsonb(${org.accounts.deferred}::text)) where id=${org.orgId}`);
-      const contract = await createSubcontract({ orgId:org.orgId,userId:operator,projectId,vendorId:org.vendorId,
-        number:"SC-0001",title:"Concrete frame",originalCommitment:"10000",defaultRetainagePercent:"10" });
-      const contractId = contract.id;
-      const line = await addSubcontractSovLine({ orgId:org.orgId,userId:operator,subcontractId:contractId,
-        description:"Frame pour",scheduledValue:"10000",expenseAccountId:org.accounts.cogs,sortOrder:1 });
-      await submitSubcontract(org.orgId,operator,contractId);
-      const hiddenContract = await createSubcontract({ orgId:org.orgId,userId:operator,projectId:hiddenProjectId,
-        vendorId:org.vendorId,number:"SC-0002",title:"Hidden steel",originalCommitment:"50000",defaultRetainagePercent:"10" });
-      await addSubcontractSovLine({orgId:org.orgId,userId:operator,subcontractId:hiddenContract.id,
-        description:"Hidden steel",scheduledValue:"50000",expenseAccountId:org.accounts.cogs,sortOrder:1});
-      await submitSubcontract(org.orgId,operator,hiddenContract.id);
-      const change = await createSubcontractChangeOrder({orgId:org.orgId,userId:operator,subcontractId:contractId,
-        number:"CO-001",amount:"1000",targetSovLineId:line.id});
-      await approveSubcontractChangeOrder(org.orgId,operator,change.id,org.date);
-      const application = await createVendorPayApplication({orgId:org.orgId,userId:operator,subcontractId:contractId,periodEnd:org.date});
-      await updateVendorPayApplicationLines({orgId:org.orgId,userId:operator,payApplicationId:application.id,
-        expectedRevision:1,lines:[{sovLineId:line.id,workCompletedThisPeriod:"2000",materialsStoredCurrent:"0"}]});
-      await submitVendorPayApplication(org.orgId,operator,application.id);
-      await generateVendorPayApplicationBill(org.orgId,operator,application.id);
-      await db.execute(sql`
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,retainagePayable}',to_jsonb(${org.accounts.deferred}::text)) where id=${org.orgId}`,
+        );
+        const contract = await createSubcontract({
+          orgId: org.orgId,
+          userId: operator,
+          projectId,
+          vendorId: org.vendorId,
+          number: "SC-0001",
+          title: "Concrete frame",
+          originalCommitment: "10000",
+          defaultRetainagePercent: "10",
+        });
+        const contractId = contract.id;
+        const line = await addSubcontractSovLine({
+          orgId: org.orgId,
+          userId: operator,
+          subcontractId: contractId,
+          description: "Frame pour",
+          scheduledValue: "10000",
+          expenseAccountId: org.accounts.cogs,
+          sortOrder: 1,
+        });
+        await submitSubcontract(org.orgId, operator, contractId);
+        const hiddenContract = await createSubcontract({
+          orgId: org.orgId,
+          userId: operator,
+          projectId: hiddenProjectId,
+          vendorId: org.vendorId,
+          number: "SC-0002",
+          title: "Hidden steel",
+          originalCommitment: "50000",
+          defaultRetainagePercent: "10",
+        });
+        await addSubcontractSovLine({
+          orgId: org.orgId,
+          userId: operator,
+          subcontractId: hiddenContract.id,
+          description: "Hidden steel",
+          scheduledValue: "50000",
+          expenseAccountId: org.accounts.cogs,
+          sortOrder: 1,
+        });
+        await submitSubcontract(org.orgId, operator, hiddenContract.id);
+        const change = await createSubcontractChangeOrder({
+          orgId: org.orgId,
+          userId: operator,
+          subcontractId: contractId,
+          number: "CO-001",
+          amount: "1000",
+          targetSovLineId: line.id,
+        });
+        await approveSubcontractChangeOrder(org.orgId, operator, change.id, org.date);
+        const application = await createVendorPayApplication({
+          orgId: org.orgId,
+          userId: operator,
+          subcontractId: contractId,
+          periodEnd: org.date,
+        });
+        await updateVendorPayApplicationLines({
+          orgId: org.orgId,
+          userId: operator,
+          payApplicationId: application.id,
+          expectedRevision: 1,
+          lines: [
+            { sovLineId: line.id, workCompletedThisPeriod: "2000", materialsStoredCurrent: "0" },
+          ],
+        });
+        await submitVendorPayApplication(org.orgId, operator, application.id);
+        await generateVendorPayApplicationBill(org.orgId, operator, application.id);
+        await db.execute(sql`
         insert into prebills(id,org_id,project_id,worksheet_number,period_end,status,original_bill_amount,proposed_bill_amount,cost_amount,adjustment_amount)
         values (${prebillId},${org.orgId},${projectId},'WS-0001',${org.date},'draft','3000','2800','1500','-200'),
                (${randomUUID()},${org.orgId},${hiddenProjectId},'WS-0002',${org.date},'draft','9000','9000','4000','0')
       `);
-      return contractId;
-    });
+        return contractId;
+      });
 
-    const restricted = reader(org.orgId, new Set([org.subsidiaryId]));
-    const search = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'search_subcontracts', {}));
-    assert.equal(search.ok, true, JSON.stringify(search));
-    const searchData = (search as { ok: true; data: Record<string, unknown> }).data;
-    assert.equal(searchData.total, 1);
-    assert.equal(searchData.sumRevisedCommitment, '11000.0000');
-    assert.equal(searchData.sumBilledToDate, '2000.0000');
-    assert.equal(searchData.sumRetainageWithheld, '200.0000');
+      const restricted = reader(org.orgId, new Set([org.subsidiaryId]));
+      const search = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(restricted, "search_subcontracts", {}),
+      );
+      assert.equal(search.ok, true, JSON.stringify(search));
+      const searchData = (search as { ok: true; data: Record<string, unknown> }).data;
+      assert.equal(searchData.total, 1);
+      assert.equal(searchData.sumRevisedCommitment, "11000.0000");
+      assert.equal(searchData.sumBilledToDate, "2000.0000");
+      assert.equal(searchData.sumRetainageWithheld, "200.0000");
 
-    const get = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'get_subcontract', { id: contractId }));
-    assert.equal(get.ok, true, JSON.stringify(get));
-    const detail = (get as { ok: true; data: Record<string, unknown> }).data;
-    assert.equal((detail.subcontract as Record<string, unknown>).revisedCommitment, '11000.0000');
-    assert.equal((detail.sovLines as unknown[]).length, 1);
-    assert.equal((detail.changeOrders as unknown[]).length, 1);
-    assert.equal((detail.payApplications as unknown[]).length, 1);
+      const get = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(restricted, "get_subcontract", { id: contractId }),
+      );
+      assert.equal(get.ok, true, JSON.stringify(get));
+      const detail = (get as { ok: true; data: Record<string, unknown> }).data;
+      assert.equal((detail.subcontract as Record<string, unknown>).revisedCommitment, "11000.0000");
+      assert.equal((detail.sovLines as unknown[]).length, 1);
+      assert.equal((detail.changeOrders as unknown[]).length, 1);
+      assert.equal((detail.payApplications as unknown[]).length, 1);
 
-    const prebills = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'list_prebills', {}));
-    assert.equal(prebills.ok, true, JSON.stringify(prebills));
-    assert.equal((prebills as { ok: true; data: Record<string, unknown> }).data.total, 1);
+      const prebills = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(restricted, "list_prebills", {}),
+      );
+      assert.equal(prebills.ok, true, JSON.stringify(prebills));
+      assert.equal((prebills as { ok: true; data: Record<string, unknown> }).data.total, 1);
 
-    const prebill = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'get_prebill', { id: prebillId }));
-    assert.equal(prebill.ok, true, JSON.stringify(prebill));
-    assert.equal(
-      ((prebill as { ok: true; data: Record<string, unknown> }).data.proposedBillAmount as string),
-      '2800.0000',
-    );
+      const prebill = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(restricted, "get_prebill", { id: prebillId }),
+      );
+      assert.equal(prebill.ok, true, JSON.stringify(prebill));
+      assert.equal(
+        (prebill as { ok: true; data: Record<string, unknown> }).data.proposedBillAmount as string,
+        "2800.0000",
+      );
 
-    const analytics = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'pre_billing_analytics', { asOf: org.date }));
-    assert.equal(analytics.ok, true, JSON.stringify(analytics));
+      const analytics = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(restricted, "pre_billing_analytics", { asOf: org.date }),
+      );
+      assert.equal(analytics.ok, true, JSON.stringify(analytics));
 
-    const noperm = reader(org.orgId, null, ['assistant.use']);
-    const denied = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(noperm, 'search_subcontracts', {}));
-    assert.equal(denied.ok, false);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const noperm = reader(org.orgId, null, ["assistant.use"]);
+      const denied = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(noperm, "search_subcontracts", {}),
+      );
+      assert.equal(denied.ok, false);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('subcontract and wip reads refuse while their features are off', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  try {
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":false,"preBilling":false}'::jsonb) where id=${org.orgId}`);
-    });
-    const authz = reader(org.orgId, null);
-    const search = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, 'search_subcontracts', {}));
-    assert.equal(search.ok, false);
-    assert.equal((search as { ok: false; error: string }).error, 'subcontracts_feature_disabled');
-    const prebills = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, 'list_prebills', {}));
-    assert.equal(prebills.ok, false);
-    assert.equal((prebills as { ok: false; error: string }).error, 'preBilling_feature_disabled');
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "subcontract and wip reads refuse while their features are off",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":false,"preBilling":false}'::jsonb) where id=${org.orgId}`,
+        );
+      });
+      const authz = reader(org.orgId, null);
+      const search = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(authz, "search_subcontracts", {}),
+      );
+      assert.equal(search.ok, false);
+      assert.equal((search as { ok: false; error: string }).error, "subcontracts_feature_disabled");
+      const prebills = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(authz, "list_prebills", {}),
+      );
+      assert.equal(prebills.ok, false);
+      assert.equal((prebills as { ok: false; error: string }).error, "preBilling_feature_disabled");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

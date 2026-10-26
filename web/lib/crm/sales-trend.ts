@@ -13,10 +13,7 @@ export function salesTrendMonths(today: string): string[] {
   });
 }
 
-export function salesTrendQuery(
-  employeeId: string,
-  today: string,
-): ReportCustomQuery {
+export function salesTrendQuery(employeeId: string, today: string): ReportCustomQuery {
   return {
     entity: "sales_evidence",
     mode: "summarize",
@@ -44,10 +41,7 @@ export function salesTrendQuery(
 }
 
 /** Use native drill scopes rather than parsing localized report month labels. */
-export function salesTrendFromReport(
-  today: string,
-  report: ReportRunResult,
-): SalesRepTrend {
+export function salesTrendFromReport(today: string, report: ReportRunResult): SalesRepTrend {
   const months = salesTrendMonths(today);
   const points: SalesRepTrend["points"] = [];
   for (const group of report.groups) {
@@ -56,8 +50,7 @@ export function salesTrendFromReport(
       const date = scopes?.find((scope) => scope.field === "effective_date");
       const currency = scopes?.find((scope) => scope.field === "currency");
       const metric = scopes?.find((scope) => scope.field === "metric");
-      const amount =
-        typeof row[3] === "string" ? canonicalDecimal(row[3], 4) : null;
+      const amount = typeof row[3] === "string" ? canonicalDecimal(row[3], 4) : null;
       if (
         !date ||
         !("from" in date) ||

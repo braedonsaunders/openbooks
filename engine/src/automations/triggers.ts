@@ -75,11 +75,15 @@ export const automationRules = z.object({
   locationId: uuidString().nullish(),
   workerType: z.string().nullish(),
   positionId: uuidString().nullish(),
-  attributes: z.array(z.object({
-    key: z.string().min(1),
-    op: z.enum(["eq", "neq", "in"]),
-    value: z.unknown(),
-  })).default([]),
+  attributes: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        op: z.enum(["eq", "neq", "in"]),
+        value: z.unknown(),
+      }),
+    )
+    .default([]),
 });
 
 export type AutomationRules = z.infer<typeof automationRules>;
@@ -107,10 +111,7 @@ const conditionLeaf = z.object({
 
 export type ConditionLeaf = z.infer<typeof conditionLeaf>;
 
-export type ConditionNode =
-  | { all: ConditionNode[] }
-  | { any: ConditionNode[] }
-  | ConditionLeaf;
+export type ConditionNode = { all: ConditionNode[] } | { any: ConditionNode[] } | ConditionLeaf;
 
 const conditionNode: z.ZodType<ConditionNode> = z.lazy(() =>
   z.union([
@@ -362,7 +363,10 @@ export function assertPublishableAutomationActions(actions: AutomationAction[]):
     if (refusal) {
       throw new AutomationContractError(`${refusal} — fix the action list and save again`);
     }
-    if (action.kind === "send_email" && !(AUTOMATION_EMAIL_TEMPLATE_KEYS as readonly string[]).includes(action.templateKey)) {
+    if (
+      action.kind === "send_email" &&
+      !(AUTOMATION_EMAIL_TEMPLATE_KEYS as readonly string[]).includes(action.templateKey)
+    ) {
       throw new AutomationContractError(
         `unknown email template '${action.templateKey}' — use one of: ${AUTOMATION_EMAIL_TEMPLATE_KEYS.join(", ")} — fix the action and save again`,
       );

@@ -88,7 +88,9 @@ export const payApplications = pgTable(
     kind: text("kind", { enum: ["progress", "retainage_release"] })
       .notNull()
       .default("progress"),
-    status: text("status", { enum: ["draft", "submitted", "approved", "invoiced", "posted", "void"] })
+    status: text("status", {
+      enum: ["draft", "submitted", "approved", "invoiced", "posted", "void"],
+    })
       .notNull()
       .default("draft"),
     /** Default retainage % applied to lines without their own override. */

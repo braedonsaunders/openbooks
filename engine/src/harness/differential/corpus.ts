@@ -54,19 +54,37 @@ const ACCOUNTS: CorpusAccount[] = [
 ].map(([key, number, name, type]) => ({ key: key!, number: number!, name: name!, type: type! }));
 
 const CUSTOMERS = [
-  "Harborview Logistics", "Bluefield Manufacturing", "Cedar & Vine Hospitality", "Northgate Property Group",
-  "Summit Analytics", "Ironwood Retail Co.", "Lakeshore Medical Partners", "Vantage Engineering",
+  "Harborview Logistics",
+  "Bluefield Manufacturing",
+  "Cedar & Vine Hospitality",
+  "Northgate Property Group",
+  "Summit Analytics",
+  "Ironwood Retail Co.",
+  "Lakeshore Medical Partners",
+  "Vantage Engineering",
 ];
 const VENDORS = [
-  "Metro Office Supply", "Pinnacle Insurance Brokers", "GridWorks Utilities", "Beacon Legal LLP",
-  "Crestline Building Materials", "Apex Subcontracting", "CityWide Property Rentals", "Streamline SaaS Tools",
+  "Metro Office Supply",
+  "Pinnacle Insurance Brokers",
+  "GridWorks Utilities",
+  "Beacon Legal LLP",
+  "Crestline Building Materials",
+  "Apex Subcontracting",
+  "CityWide Property Rentals",
+  "Streamline SaaS Tools",
 ];
 const EMPLOYEES = ["Jordan Reyes", "Morgan Whitfield"];
 
 const REVENUE = ["revenueService", "revenueProduct", "revenueConsulting"];
 const EXPENSE_BY_VENDOR: Record<string, string[]> = {
-  v1: ["office"], v2: ["insurance", "prepaid"], v3: ["utilities"], v4: ["professionalFees"],
-  v5: ["materials", "cogs"], v6: ["subcontractor"], v7: ["rent"], v8: ["office", "bankFees"],
+  v1: ["office"],
+  v2: ["insurance", "prepaid"],
+  v3: ["utilities"],
+  v4: ["professionalFees"],
+  v5: ["materials", "cogs"],
+  v6: ["subcontractor"],
+  v7: ["rent"],
+  v8: ["office", "bankFees"],
 };
 
 interface OpenDoc {
@@ -76,7 +94,12 @@ interface OpenDoc {
   remaining: bigint;
 }
 
-export function generateCorpus(opts: { seed: string; startDate: string; endDate: string; name?: string }): Corpus {
+export function generateCorpus(opts: {
+  seed: string;
+  startDate: string;
+  endDate: string;
+  name?: string;
+}): Corpus {
   const rng = Rng.fromSeed(`differential:${opts.seed}`);
   const parties: CorpusParty[] = [
     ...CUSTOMERS.map((name, i) => ({ key: `c${i + 1}`, name, roles: ["customer" as const] })),
@@ -143,7 +166,10 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
     // Reverse last month's accrual on the 1st.
     if (date.endsWith("-01") && pendingAccrual !== null) {
       events.push({
-        id: nextId(), kind: "journal", date, memo: "Reverse prior-month accrual",
+        id: nextId(),
+        kind: "journal",
+        date,
+        memo: "Reverse prior-month accrual",
         lines: [
           { account: "accrued", amount: fromCents(pendingAccrual) },
           { account: "professionalFees", amount: fromCents(-pendingAccrual) },
@@ -161,9 +187,15 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       const n = r.int(1, 3);
       const id = nextId();
       events.push({
-        id, kind: "customer_invoice", date, party, dueDate: addCalendarDays(date, 30),
+        id,
+        kind: "customer_invoice",
+        date,
+        party,
+        dueDate: addCalendarDays(date, 30),
         lines: splitLines(r, total, n).map((cents, k) => ({
-          account: r.pick(REVENUE), amount: fromCents(cents), description: `Service line ${k + 1}`,
+          account: r.pick(REVENUE),
+          amount: fromCents(cents),
+          description: `Service line ${k + 1}`,
         })),
       });
       recentInvoices.push({ id, party, remaining: total });
@@ -172,16 +204,32 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       // Payment plan: full (85%), two tranches (10%), never (5%).
       const roll = r.next();
       if (roll < 0.85) {
-        schedule(arSchedule, addCalendarDays(date, r.int(8, 45)), { party, doc: id, amount: total });
+        schedule(arSchedule, addCalendarDays(date, r.int(8, 45)), {
+          party,
+          doc: id,
+          amount: total,
+        });
       } else if (roll < 0.95) {
         const first = (total * BigInt(r.int(30, 70))) / 100n;
         if (first > 0n && first < total) {
-          schedule(arSchedule, addCalendarDays(date, r.int(8, 30)), { party, doc: id, amount: first });
+          schedule(arSchedule, addCalendarDays(date, r.int(8, 30)), {
+            party,
+            doc: id,
+            amount: first,
+          });
           if (r.chance(0.6)) {
-            schedule(arSchedule, addCalendarDays(date, r.int(35, 70)), { party, doc: id, amount: total - first });
+            schedule(arSchedule, addCalendarDays(date, r.int(35, 70)), {
+              party,
+              doc: id,
+              amount: total - first,
+            });
           }
         } else {
-          schedule(arSchedule, addCalendarDays(date, r.int(8, 45)), { party, doc: id, amount: total });
+          schedule(arSchedule, addCalendarDays(date, r.int(8, 45)), {
+            party,
+            doc: id,
+            amount: total,
+          });
         }
       }
     }
@@ -193,9 +241,18 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       const credit = (target.remaining * BigInt(r.int(5, 25))) / 100n;
       if (credit > 0n) {
         events.push({
-          id: nextId(), kind: "customer_credit", date, party: target.party,
+          id: nextId(),
+          kind: "customer_credit",
+          date,
+          party: target.party,
           memo: `Adjustment re ${target.id}`,
-          lines: [{ account: r.pick(REVENUE), amount: fromCents(credit), description: "Credit adjustment" }],
+          lines: [
+            {
+              account: r.pick(REVENUE),
+              amount: fromCents(credit),
+              description: "Credit adjustment",
+            },
+          ],
         });
       }
     }
@@ -210,13 +267,22 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       const n = Math.min(accounts.length, r.int(1, 2));
       const id = nextId();
       events.push({
-        id, kind: "vendor_bill", date, party: vendorKey, dueDate: addCalendarDays(date, 30),
+        id,
+        kind: "vendor_bill",
+        date,
+        party: vendorKey,
+        dueDate: addCalendarDays(date, 30),
         lines: splitLines(r, total, n).map((cents, k) => ({
-          account: accounts[k % accounts.length]!, amount: fromCents(cents),
+          account: accounts[k % accounts.length]!,
+          amount: fromCents(cents),
         })),
       });
       if (!r.chance(0.08)) {
-        schedule(apSchedule, addCalendarDays(date, r.int(20, 40)), { party: vendorKey, doc: id, amount: total });
+        schedule(apSchedule, addCalendarDays(date, r.int(20, 40)), {
+          party: vendorKey,
+          doc: id,
+          amount: total,
+        });
       }
     }
 
@@ -227,10 +293,17 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       const total = toCents(r.money(40, 900));
       const id = nextId();
       events.push({
-        id, kind: "expense_report", date, party: emp,
+        id,
+        kind: "expense_report",
+        date,
+        party: emp,
         lines: [{ account: "travel", amount: fromCents(total), description: "Travel & per diem" }],
       });
-      schedule(apSchedule, addCalendarDays(date, r.int(5, 14)), { party: emp, doc: id, amount: total });
+      schedule(apSchedule, addCalendarDays(date, r.int(5, 14)), {
+        party: emp,
+        doc: id,
+        amount: total,
+      });
     }
 
     // --- scheduled payments, batched per party per day -----------------------
@@ -245,7 +318,10 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       for (const t of due) (byParty.get(t.party) ?? byParty.set(t.party, []).get(t.party)!).push(t);
       for (const [party, tranches] of byParty) {
         const payment: PaymentEvent = {
-          id: nextId(), kind, date, party,
+          id: nextId(),
+          kind,
+          date,
+          party,
           allocations: tranches.map((t) => ({ event: t.doc, amount: fromCents(t.amount) })),
         };
         events.push(payment);
@@ -257,7 +333,10 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       const r = day.stream("close");
       const dep = toCents(r.money(1800, 2600));
       events.push({
-        id: nextId(), kind: "journal", date, memo: "Monthly depreciation",
+        id: nextId(),
+        kind: "journal",
+        date,
+        memo: "Monthly depreciation",
         lines: [
           { account: "depreciation", amount: fromCents(dep) },
           { account: "accumDep", amount: fromCents(-dep) },
@@ -265,7 +344,10 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       });
       pendingAccrual = toCents(r.money(900, 4200));
       events.push({
-        id: nextId(), kind: "journal", date, memo: "Month-end accrual (reverses next month)",
+        id: nextId(),
+        kind: "journal",
+        date,
+        memo: "Month-end accrual (reverses next month)",
         lines: [
           { account: "professionalFees", amount: fromCents(pendingAccrual) },
           { account: "accrued", amount: fromCents(-pendingAccrual) },
@@ -273,7 +355,10 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       });
       // Rounding stress: three legs that only balance if cents are exact.
       events.push({
-        id: nextId(), kind: "journal", date, memo: "Rounding-stress reclass",
+        id: nextId(),
+        kind: "journal",
+        date,
+        memo: "Rounding-stress reclass",
         lines: [
           { account: "office", amount: "0.01" },
           { account: "bankFees", amount: "0.01" },

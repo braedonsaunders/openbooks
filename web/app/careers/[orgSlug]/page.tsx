@@ -1,12 +1,12 @@
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgContext } from '@openbooks/engine/platform/db'
-import { isFeatureEnabled } from '../../../lib/features'
-import { orgSlugFor, resolveOrgBySlug } from '../../../lib/recruiting-public'
-import { CareersApplyForm } from './CareersApplyForm'
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgContext } from "@openbooks/engine/platform/db";
+import { isFeatureEnabled } from "../../../lib/features";
+import { orgSlugFor, resolveOrgBySlug } from "../../../lib/recruiting-public";
+import { CareersApplyForm } from "./CareersApplyForm";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Internal career page — public, outside the app shell: plain, accessible,
@@ -20,25 +20,26 @@ export default async function CareersPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ orgSlug: string }>
-  searchParams: Promise<Record<string, string | undefined>>
+  params: Promise<{ orgSlug: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { orgSlug } = await params
-  const sp = await searchParams
-  const t = await getTranslations('hrm')
-  const org = await resolveOrgBySlug(decodeURIComponent(orgSlug))
-  if (!org) notFound()
-  if (!(await isFeatureEnabled(org.orgId, 'hrmRecruiting'))) notFound()
+  const { orgSlug } = await params;
+  const sp = await searchParams;
+  const t = await getTranslations("hrm");
+  const org = await resolveOrgBySlug(decodeURIComponent(orgSlug));
+  if (!org) notFound();
+  if (!(await isFeatureEnabled(org.orgId, "hrmRecruiting"))) notFound();
 
   const postings = await withOrgContext(org.orgId, async () => {
     const rows = await db.execute<{
-        postingId: string
-        requisitionNumber: string
-        title: string
-        employmentKind: string | null
-        description: string | null
-        publishedAt: string | null
-      }>(sql`
+      postingId: string;
+      requisitionNumber: string;
+      title: string;
+      employmentKind: string | null;
+      description: string | null;
+      publishedAt: string | null;
+    }>(
+      sql`
         select p.id as "postingId", r.requisition_number as "requisitionNumber",
                r.title, r.employment_kind as "employmentKind", r.description,
                p.published_at as "publishedAt"
@@ -46,21 +47,23 @@ export default async function CareersPage({
           join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
          where p.org_id = ${org.orgId} and p.status = 'published' and r.status = 'open'
          order by p.published_at desc
-      `, 'objects')
-    return rows
-  })
+      `,
+      "objects",
+    );
+    return rows;
+  });
 
-  const selected = sp.posting ? postings.find((posting) => posting.postingId === sp.posting) : null
-  if (sp.posting && !selected) notFound()
+  const selected = sp.posting ? postings.find((posting) => posting.postingId === sp.posting) : null;
+  if (sp.posting && !selected) notFound();
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl bg-white px-6 py-10">
       <p className="text-xs uppercase tracking-widest text-slate-400">
-        {t('public.careers.kicker', { org: org.name })}
+        {t("public.careers.kicker", { org: org.name })}
       </p>
-      <h1 className="mt-1 text-xl font-semibold">{t('public.careers.title')}</h1>
+      <h1 className="mt-1 text-xl font-semibold">{t("public.careers.title")}</h1>
       {postings.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-500">{t('public.careers.empty')}</p>
+        <p className="mt-4 text-sm text-slate-500">{t("public.careers.empty")}</p>
       ) : (
         <ul className="mt-6 space-y-3">
           {postings.map((posting) => (
@@ -73,13 +76,15 @@ export default async function CareersPage({
               </a>
               <p className="mt-1 text-xs text-slate-500">
                 {posting.requisitionNumber}
-                {posting.employmentKind ? ` · ${posting.employmentKind}` : ''}
-                {posting.publishedAt ? ` · ${posting.publishedAt.slice(0, 10)}` : ''}
+                {posting.employmentKind ? ` · ${posting.employmentKind}` : ""}
+                {posting.publishedAt ? ` · ${posting.publishedAt.slice(0, 10)}` : ""}
               </p>
               {selected?.postingId === posting.postingId && (
                 <>
                   {posting.description ? (
-                    <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{posting.description}</p>
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">
+                      {posting.description}
+                    </p>
                   ) : null}
                   <CareersApplyForm postingId={posting.postingId} />
                 </>
@@ -89,5 +94,5 @@ export default async function CareersPage({
         </ul>
       )}
     </main>
-  )
+  );
 }

@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button, Drawer, Input, SearchSelect, Select } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 /**
  * Capitalize a commission from the workspace: the journal preview (DR
@@ -76,7 +76,10 @@ export function CapitalizeButton({
               <label className="text-sm font-medium">{t("capitalize.contract")}</label>
               <SearchSelect
                 value={contractId}
-                options={contracts.map((c) => ({ value: c.id, label: `${c.number} · ${c.customer}` }))}
+                options={contracts.map((c) => ({
+                  value: c.id,
+                  label: `${c.number} · ${c.customer}`,
+                }))}
                 onChange={(v) => setContractId(v ?? "")}
                 ariaLabel={t("capitalize.contract")}
               />
@@ -89,8 +92,15 @@ export function CapitalizeButton({
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">{t("capitalize.amount", { currency: baseCurrency })}</label>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="1200.00" />
+              <label className="text-sm font-medium">
+                {t("capitalize.amount", { currency: baseCurrency })}
+              </label>
+              <Input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                inputMode="decimal"
+                placeholder="1200.00"
+              />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("capitalize.date")}</label>

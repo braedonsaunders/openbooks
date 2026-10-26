@@ -1,20 +1,20 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-type Scope = string[] | undefined
+type Scope = string[] | undefined;
 
 interface RouteState {
-  allowedSubsidiaryIds: Set<string> | null
-  projectsEnabled: boolean
-  syncCalls: { scope: Scope; syncedProjectIds: string[] }[]
-  runCalls: { scope: Scope; postedProjectIds: string[]; fingerprint: string | null }[]
-  runError: { kind: 'domain' | 'stale' | 'unexpected'; message: string } | null
-  syncSkipped: string | null
-  runEntries: unknown[]
+  allowedSubsidiaryIds: Set<string> | null;
+  projectsEnabled: boolean;
+  syncCalls: { scope: Scope; syncedProjectIds: string[] }[];
+  runCalls: { scope: Scope; postedProjectIds: string[]; fingerprint: string | null }[];
+  runError: { kind: "domain" | "stale" | "unexpected"; message: string } | null;
+  syncSkipped: string | null;
+  runEntries: unknown[];
 }
 
-const stateKey = Symbol.for('openbooks.recognition-route-test')
+const stateKey = Symbol.for("openbooks.recognition-route-test");
 const state: RouteState = {
   allowedSubsidiaryIds: null,
   projectsEnabled: true,
@@ -23,23 +23,23 @@ const state: RouteState = {
   runError: null,
   syncSkipped: null,
   runEntries: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const projects = [
-  { id: 'project-visible', subsidiaryId: 'subsidiary-visible' },
-  { id: 'project-hidden', subsidiaryId: 'subsidiary-hidden' },
-]
+  { id: "project-visible", subsidiaryId: "subsidiary-visible" },
+  { id: "project-hidden", subsidiaryId: "subsidiary-hidden" },
+];
 
 const mockSources = new Map<string, string>([
   // The viewer reads English; without a request store the catalog is unavailable, as outside Next.
   [
-    'next-intl-server',
+    "next-intl-server",
     `export async function getLocale() { return 'en' }
      export async function getTranslations() { throw new Error('no intl request store') }`,
   ],
   [
-    'authz',
+    "authz",
     `
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
       export async function guardPermission() {
@@ -54,7 +54,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'features',
+    "features",
     `
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
       export async function isFeatureEnabled(_orgId, feature) {
@@ -68,12 +68,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ["business-date", `export async function businessToday() { return '2026-08-31' }`],
   [
-    'business-date',
-    `export async function businessToday() { return '2026-08-31' }`,
-  ],
-  [
-    'project-revenue',
+    "project-revenue",
     `
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
       const projects = ${JSON.stringify(projects)}
@@ -87,7 +84,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'revenue-recognition',
+    "revenue-recognition",
     `
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
       const projects = ${JSON.stringify(projects)}
@@ -109,191 +106,213 @@ const mockSources = new Map<string, string>([
       export class StaleRecognitionPreviewError extends Error {}
     `,
   ],
-])
+]);
 
-const selfUrl = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${selfUrl}?recognition-mock=${name}`
+const selfUrl = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${selfUrl}?recognition-mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['../../../../lib/authz', mockUrl('authz')],
-  ['@/lib/authz', mockUrl('authz')],
-  ['../../../../lib/features', mockUrl('features')],
-  ['@/lib/feature-gates', mockUrl('features')],
-  ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
-  ['@openbooks/engine/projects/revenue', mockUrl('project-revenue')],
-  ['@openbooks/engine/revenue/recognition', mockUrl('revenue-recognition')],
-  ['next-intl/server', mockUrl('next-intl-server')],
+  ["../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["../../../../lib/features", mockUrl("features")],
+  ["@/lib/feature-gates", mockUrl("features")],
+  ["@openbooks/engine/platform/business-date/module", mockUrl("business-date")],
+  ["@openbooks/engine/projects/revenue", mockUrl("project-revenue")],
+  ["@openbooks/engine/revenue/recognition", mockUrl("revenue-recognition")],
+  ["next-intl/server", mockUrl("next-intl-server")],
   // The shared error mapper reaches the same engine module through a
   // relative specifier; it must see the same double or instanceof splits.
-  ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
-])
+  ["../../engine/src/revenue/recognition.ts", mockUrl("revenue-recognition")],
+]);
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { shortCircuit: true, url: mocked }
-    return nextResolve(specifier, _context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { shortCircuit: true, url: mocked };
+    return nextResolve(specifier, _context);
   },
   load(url, context, nextLoad) {
-    const name = new URL(url).searchParams.get('recognition-mock')
-    const source = name ? mockSources.get(name) : undefined
-    if (source !== undefined) return { shortCircuit: true, format: 'module', source }
-    return nextLoad(url, context)
+    const name = new URL(url).searchParams.get("recognition-mock");
+    const source = name ? mockSources.get(name) : undefined;
+    if (source !== undefined) return { shortCircuit: true, format: "module", source };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = new URL('./route.ts', import.meta.url).href
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = new URL("./route.ts", import.meta.url).href;
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
-  state.allowedSubsidiaryIds = allowedSubsidiaryIds
-  state.projectsEnabled = true
-  state.syncCalls.length = 0
-  state.runCalls.length = 0
-  state.runError = null
-  state.syncSkipped = null
-  state.runEntries = []
+  state.allowedSubsidiaryIds = allowedSubsidiaryIds;
+  state.projectsEnabled = true;
+  state.syncCalls.length = 0;
+  state.runCalls.length = 0;
+  state.runError = null;
+  state.syncSkipped = null;
+  state.runEntries = [];
 }
 
 function post(fingerprint?: string): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/revenue/run-recognition', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ asOfDate: '2026-08-31', ...(fingerprint ? { fingerprint } : {}) }),
+    new Request("http://openbooks.test/api/revenue/run-recognition", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ asOfDate: "2026-08-31", ...(fingerprint ? { fingerprint } : {}) }),
     }),
-  )
+  );
 }
 
-test('mixed subsidiary scope synchronizes and posts only the permitted project set', async () => {
-  reset(new Set(['subsidiary-visible']))
+test("mixed subsidiary scope synchronizes and posts only the permitted project set", async () => {
+  reset(new Set(["subsidiary-visible"]));
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.syncCalls, [{
-    scope: ['subsidiary-visible'],
-    syncedProjectIds: ['project-visible'],
-  }])
-  assert.deepEqual(state.runCalls, [{
-    scope: ['subsidiary-visible'],
-    postedProjectIds: ['project-visible'],
-    fingerprint: null,
-  }])
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.syncCalls, [
+    {
+      scope: ["subsidiary-visible"],
+      syncedProjectIds: ["project-visible"],
+    },
+  ]);
+  assert.deepEqual(state.runCalls, [
+    {
+      scope: ["subsidiary-visible"],
+      postedProjectIds: ["project-visible"],
+      fingerprint: null,
+    },
+  ]);
+});
 
-test('a restricted scope containing only another subsidiary never reaches hidden project data', async () => {
-  reset(new Set(['subsidiary-other']))
+test("a restricted scope containing only another subsidiary never reaches hidden project data", async () => {
+  reset(new Set(["subsidiary-other"]));
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.syncCalls[0]?.syncedProjectIds, [])
-  assert.deepEqual(state.runCalls[0]?.postedProjectIds, [])
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.syncCalls[0]?.syncedProjectIds, []);
+  assert.deepEqual(state.runCalls[0]?.postedProjectIds, []);
+});
 
-test('an empty restricted scope fails closed before synchronization or posting', async () => {
-  reset(new Set())
+test("an empty restricted scope fails closed before synchronization or posting", async () => {
+  reset(new Set());
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     posted: 0,
     skipped: 0,
-    totalAmount: '0',
+    totalAmount: "0",
     entries: [],
     problems: [],
-  })
-  assert.deepEqual(state.syncCalls, [])
-  assert.deepEqual(state.runCalls, [])
-})
+  });
+  assert.deepEqual(state.syncCalls, []);
+  assert.deepEqual(state.runCalls, []);
+});
 
-test('a domain refusal from the run reaches the operator as a named 422, not a 500', async () => {
-  reset(null)
-  state.runError = { kind: 'domain', message: 'January 2026: GL period closed' }
+test("a domain refusal from the run reaches the operator as a named 422, not a 500", async () => {
+  reset(null);
+  state.runError = { kind: "domain", message: "January 2026: GL period closed" };
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'January 2026: GL period closed' })
-})
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "January 2026: GL period closed" });
+});
 
-test('a stale confirmation stays a 409 naming the remedy', async () => {
-  reset(null)
-  state.runError = { kind: 'stale', message: 'the reviewed set changed' }
+test("a stale confirmation stays a 409 naming the remedy", async () => {
+  reset(null);
+  state.runError = { kind: "stale", message: "the reviewed set changed" };
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), { error: 'stale_preview' })
-})
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "stale_preview" });
+});
 
-test('a reviewed confirmation checks the fingerprint before syncing project schedules', async () => {
-  reset(new Set(['subsidiary-visible']))
+test("a reviewed confirmation checks the fingerprint before syncing project schedules", async () => {
+  reset(new Set(["subsidiary-visible"]));
 
-  const response = await post('reviewed-fingerprint')
+  const response = await post("reviewed-fingerprint");
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.syncCalls, [])
-  assert.deepEqual(state.runCalls, [{
-    scope: ['subsidiary-visible'],
-    postedProjectIds: ['project-visible'],
-    fingerprint: 'reviewed-fingerprint',
-  }])
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.syncCalls, []);
+  assert.deepEqual(state.runCalls, [
+    {
+      scope: ["subsidiary-visible"],
+      postedProjectIds: ["project-visible"],
+      fingerprint: "reviewed-fingerprint",
+    },
+  ]);
+});
 
-test('a skipped project sync surfaces as a named warning on the run result', async () => {
-  reset(null)
-  state.syncSkipped = 'project revenue sync skipped: control accounts unmapped: unbilled receivable, project revenue — map them in Company & Accounting'
+test("a skipped project sync surfaces as a named warning on the run result", async () => {
+  reset(null);
+  state.syncSkipped =
+    "project revenue sync skipped: control accounts unmapped: unbilled receivable, project revenue — map them in Company & Accounting";
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as { problems: string[] }
-  assert.deepEqual(body.problems, [state.syncSkipped])
-})
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { problems: string[] };
+  assert.deepEqual(body.problems, [state.syncSkipped]);
+});
 
-test('an unexpected run defect stays a generic 500', async () => {
-  reset(null)
-  state.runError = { kind: 'unexpected', message: 'connection terminated' }
+test("an unexpected run defect stays a generic 500", async () => {
+  reset(null);
+  state.runError = { kind: "unexpected", message: "connection terminated" };
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 500)
-  assert.deepEqual(await response.json(), { error: 'Unable to run revenue recognition.' })
-})
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "Unable to run revenue recognition." });
+});
 
-test('unrestricted access preserves organization-wide synchronization and posting', async () => {
-  reset(null)
+test("unrestricted access preserves organization-wide synchronization and posting", async () => {
+  reset(null);
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.syncCalls, [{
-    scope: undefined,
-    syncedProjectIds: ['project-visible', 'project-hidden'],
-  }])
-  assert.deepEqual(state.runCalls, [{
-    scope: undefined,
-    postedProjectIds: ['project-visible', 'project-hidden'],
-    fingerprint: null,
-  }])
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.syncCalls, [
+    {
+      scope: undefined,
+      syncedProjectIds: ["project-visible", "project-hidden"],
+    },
+  ]);
+  assert.deepEqual(state.runCalls, [
+    {
+      scope: undefined,
+      postedProjectIds: ["project-visible", "project-hidden"],
+      fingerprint: null,
+    },
+  ]);
+});
 
-test('posted entries reach the drawer with their period labelled in the viewer locale', async () => {
-  reset(null)
-  state.runEntries = [{
-    contract: 'RC-1',
-    obligation: 'Support',
-    period: 'P12 FY2025',
-    periodRef: { fiscalYear: 2025, periodNumber: 12, adjustment: false, startsOn: '2025-12-01', endsOn: '2025-12-31' },
-    amount: '100.0000',
-    entryId: 'entry-1',
-  }]
+test("posted entries reach the drawer with their period labelled in the viewer locale", async () => {
+  reset(null);
+  state.runEntries = [
+    {
+      contract: "RC-1",
+      obligation: "Support",
+      period: "P12 FY2025",
+      periodRef: {
+        fiscalYear: 2025,
+        periodNumber: 12,
+        adjustment: false,
+        startsOn: "2025-12-01",
+        endsOn: "2025-12-31",
+      },
+      amount: "100.0000",
+      entryId: "entry-1",
+    },
+  ];
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as { entries: { period: string; entryId: string }[] }
-  assert.deepEqual(body.entries.map((entry) => [entry.entryId, entry.period]), [['entry-1', 'P12 FY2025 · Dec 2025']])
-})
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { entries: { period: string; entryId: string }[] };
+  assert.deepEqual(
+    body.entries.map((entry) => [entry.entryId, entry.period]),
+    [["entry-1", "P12 FY2025 · Dec 2025"]],
+  );
+});

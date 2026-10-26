@@ -1,4 +1,4 @@
-import { defineRoute } from '@/lib/api/route';
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { authRequestContext, networkAddressEvidenceHash } from "../../../../../lib/auth-policy";
 import {
@@ -22,21 +22,21 @@ export const runtime = "nodejs";
  *   POST /api/recruiting/offer/[token]  { action: sign | decline, ... }
  */
 export const GET = defineRoute({
-  public: 'token',
+  public: "token",
   handler: async ({ request: _req, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { token: string });
     const { token } = await params;
     try {
-        const offer = await readOfferForSigning(decodeURIComponent(token));
-        return NextResponse.json({ offer });
-      } catch (e) {
-        return recruitingErrorResponse(e);
-      }
+      const offer = await readOfferForSigning(decodeURIComponent(token));
+      return NextResponse.json({ offer });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
   },
 });
 
 export const POST = defineRoute({
-  public: 'token',
+  public: "token",
   body: signOfferBody,
   handler: async ({ request: req, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { token: string });
@@ -45,19 +45,22 @@ export const POST = defineRoute({
     const body = routeBody;
     const ipHash = networkAddressEvidenceHash(authRequestContext(req));
     try {
-        if (body.action === "decline") {
-          const declined = await declineOfferSigning({ signingToken: decodeURIComponent(token), reason: body.reason });
-          return NextResponse.json({ declined });
-        }
-        const signed = await signOffer({
+      if (body.action === "decline") {
+        const declined = await declineOfferSigning({
           signingToken: decodeURIComponent(token),
-          signerName: body.signerName,
-          ipHash,
-          documentHash: body.documentHash,
+          reason: body.reason,
         });
-        return NextResponse.json({ signed });
-      } catch (e) {
-        return recruitingErrorResponse(e);
+        return NextResponse.json({ declined });
       }
+      const signed = await signOffer({
+        signingToken: decodeURIComponent(token),
+        signerName: body.signerName,
+        ipHash,
+        documentHash: body.documentHash,
+      });
+      return NextResponse.json({ signed });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
   },
 });

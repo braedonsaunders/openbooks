@@ -6,12 +6,7 @@ import { db, withOrg } from "@openbooks/engine/platform/db";
 import { can, type Authz } from "../authz";
 import { canSeeReportDefinition } from "../report-authz";
 import { canAccessReportArtifact } from "../report-execution-context";
-import {
-  agingDetail,
-  cashFlowIndirect,
-  generalLedger,
-  partnerStatement,
-} from "../reports";
+import { agingDetail, cashFlowIndirect, generalLedger, partnerStatement } from "../reports";
 import { resolveDefinitionToExportData } from "../report-run";
 import type { Translator } from "../report-pdf";
 import { parseReportQuery } from "../report-filters";
@@ -74,18 +69,33 @@ const listReportDefinitions: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
     query: z.string().max(100).optional().describe("Match definition name"),
-    reportType: z.enum(["statement", "query"]).optional().describe("Only built-in statements or only custom report-studio queries"),
-    limit: z.number().int().min(1).max(100).optional().describe("Maximum definitions to return (default 50)"),
+    reportType: z
+      .enum(["statement", "query"])
+      .optional()
+      .describe("Only built-in statements or only custom report-studio queries"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe("Maximum definitions to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { query?: string; reportType?: "statement" | "query"; limit?: number };
     const limit = Math.min(a.limit ?? 50, 100);
     const like = a.query ? `%${a.query}%` : null;
-    const rows = (await db.execute<{
-        id: string; name: string; description: string | null; kind: string;
-        report_type: string; slug: string | null; entity: string | null;
-        statement_kind: string | null;
-      }>(sql`
+    const rows = await db.execute<{
+      id: string;
+      name: string;
+      description: string | null;
+      kind: string;
+      report_type: string;
+      slug: string | null;
+      entity: string | null;
+      statement_kind: string | null;
+    }>(
+      sql`
       select id, name, description, kind, coalesce(report_type, 'query') as report_type,
              slug, query->>'entity' as entity, statement->>'kind' as statement_kind, updated_at
         from report_definitions
@@ -94,7 +104,9 @@ const listReportDefinitions: AssistantToolDef = {
          ${like ? sql`and name ilike ${like}` : sql``}
        order by updated_at desc
        limit 500
-    `, "objects"));
+    `,
+      "objects",
+    );
     const visible = [];
     for (const row of rows) {
       if (await definitionPermitted(authz, row)) visible.push(row);
@@ -146,8 +158,12 @@ const runReport: AssistantToolDef = {
   inputSchema: z.object({
     definitionId: uuidInput,
     period: periodPresetInput.optional(),
-    fromDate: dateInput.optional().describe("Custom range start; overrides the saved definition's period (pass with toDate)"),
-    toDate: dateInput.optional().describe("Custom range end; overrides the saved definition's period (pass with fromDate)"),
+    fromDate: dateInput
+      .optional()
+      .describe("Custom range start; overrides the saved definition's period (pass with toDate)"),
+    toDate: dateInput
+      .optional()
+      .describe("Custom range end; overrides the saved definition's period (pass with fromDate)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     // The generic saved-report resolver has no authorization-scope parameter;
@@ -157,11 +173,18 @@ const runReport: AssistantToolDef = {
     if (authz.allowedSubsidiaryIds !== null) return { ok: false, error: "forbidden" };
     const a = raw as RangeArgs & { definitionId: string };
     const orgId = authz.user.orgId;
-    const def = (await db.execute<{ report_type: string; entity: string | null; statement_kind: string | null }>(sql`
+    const def = await db.execute<{
+      report_type: string;
+      entity: string | null;
+      statement_kind: string | null;
+    }>(
+      sql`
       select coalesce(report_type, 'query') as report_type, query->>'entity' as entity, statement->>'kind' as statement_kind
         from report_definitions
        where id = ${a.definitionId} and org_id = ${orgId} and archived_at is null
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!def[0]) return { ok: false, error: "report_not_found" };
     if (!(await definitionPermitted(authz, def[0]))) {
       return { ok: false, error: "forbidden" };
@@ -268,7 +291,13 @@ const agingDetailTool: AssistantToolDef = {
   inputSchema: z.object({
     side: z.enum(["ar", "ap"]).describe("Detail rows for customers (ar) or vendors (ap)"),
     asOf: dateInput.optional().describe("Aging date; defaults to today"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum detail rows to return (default 100)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum detail rows to return (default 100)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { side: "ar" | "ap"; asOf?: string; limit?: number };
@@ -367,7 +396,12 @@ const partnerStatementTool: AssistantToolDef = {
     const { items: lines, truncated } = capList(r.lines);
     return {
       ok: true,
-      data: { ...r, lines, truncated, href: `/reports/partner-statement?party=${a.partyId}&side=${a.side}` },
+      data: {
+        ...r,
+        lines,
+        truncated,
+        href: `/reports/partner-statement?party=${a.partyId}&side=${a.side}`,
+      },
       note: `${r.party.name ?? "party"}: opening ${r.opening}, closing ${r.closing}`,
     };
   },
@@ -380,17 +414,31 @@ const listReportSchedules: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    definitionId: uuidInput.optional().describe("Only schedules for this report definition; omit for all"),
+    definitionId: uuidInput
+      .optional()
+      .describe("Only schedules for this report definition; omit for all"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { definitionId?: string };
-    const rows = (await db.execute<{
-      id: unknown; definition_id: unknown; definition_name: unknown; cadence: unknown;
-      day_of_week: unknown; day_of_month: unknown; hour: unknown; minute: unknown;
-      timezone: unknown; recipient_emails: unknown; next_run_at: unknown; active: unknown;
-      report_type: string | null; entity: string | null; statement_kind: string | null;
+    const rows = await db.execute<{
+      id: unknown;
+      definition_id: unknown;
+      definition_name: unknown;
+      cadence: unknown;
+      day_of_week: unknown;
+      day_of_month: unknown;
+      hour: unknown;
+      minute: unknown;
+      timezone: unknown;
+      recipient_emails: unknown;
+      next_run_at: unknown;
+      active: unknown;
+      report_type: string | null;
+      entity: string | null;
+      statement_kind: string | null;
       authorization_snapshot: unknown;
-    }>(sql`
+    }>(
+      sql`
       select s.id, s.definition_id, d.name as definition_name, s.cadence,
              s.day_of_week, s.day_of_month, s.hour, s.minute, s.timezone,
              s.recipient_emails, s.next_run_at, s.active, s.authorization_snapshot,
@@ -401,15 +449,24 @@ const listReportSchedules: AssistantToolDef = {
          ${a.definitionId ? sql`and s.definition_id = ${a.definitionId}` : sql``}
        order by s.next_run_at
        limit 200
-    `, "objects"));
+    `,
+      "objects",
+    );
     const schedules = [];
     for (const row of rows) {
-      if (!(await definitionPermitted(authz, {
-        report_type: row.report_type ?? 'query',
-        entity: row.entity,
-        statement_kind: row.statement_kind,
-      }))) continue;
-      if (row.authorization_snapshot != null && !(await canAccessReportArtifact(authz, row.authorization_snapshot))) continue;
+      if (
+        !(await definitionPermitted(authz, {
+          report_type: row.report_type ?? "query",
+          entity: row.entity,
+          statement_kind: row.statement_kind,
+        }))
+      )
+        continue;
+      if (
+        row.authorization_snapshot != null &&
+        !(await canAccessReportArtifact(authz, row.authorization_snapshot))
+      )
+        continue;
       const schedule: Record<string, unknown> = { ...row };
       delete schedule.report_type;
       delete schedule.entity;
@@ -431,17 +488,25 @@ const listReportingPackages: AssistantToolDef = {
   execute: async (_raw, authz): Promise<ToolResult> => {
     const denied = closeScopeDenied(authz);
     if (denied) return denied;
-    const rows = (await db.execute<{
-        id: string; name: string; description: string | null;
-        reports: unknown; recipients: unknown; delivery: unknown;
-        is_default: boolean; is_active: boolean;
-      }>(sql`
+    const rows = await db.execute<{
+      id: string;
+      name: string;
+      description: string | null;
+      reports: unknown;
+      recipients: unknown;
+      delivery: unknown;
+      is_default: boolean;
+      is_active: boolean;
+    }>(
+      sql`
       select id, name, description, reports, recipients, delivery, is_default, is_active
         from close_reporting_packages
        where org_id = ${authz.user.orgId}
        order by is_default desc, name
        limit 100
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -492,7 +557,11 @@ const getBudgetScenario: AssistantToolDef = {
     }
     const a = raw as { scenarioId: string };
     if (authz.allowedSubsidiaryIds?.size === 0) return { ok: false, error: "forbidden" };
-    const scenario = await loadBudgetScenario(a.scenarioId, authz.user.orgId, authz.allowedSubsidiaryIds);
+    const scenario = await loadBudgetScenario(
+      a.scenarioId,
+      authz.user.orgId,
+      authz.allowedSubsidiaryIds,
+    );
     if (!scenario) return { ok: false, error: "budget_scenario_not_found" };
     return { ok: true, data: { ...scenario, href: `/budgets?scenario=${scenario.id}` } };
   },

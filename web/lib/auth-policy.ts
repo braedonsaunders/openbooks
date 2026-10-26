@@ -33,7 +33,9 @@ export type LockoutState = {
 };
 
 /** Cookies are Secure unless the operator named a non-production environment. */
-export function secureCookiesEnabled(environment: Record<string, string | undefined> = process.env): boolean {
+export function secureCookiesEnabled(
+  environment: Record<string, string | undefined> = process.env,
+): boolean {
   if (!isNamedNonProductionEnvironment(environment)) return true;
   return /^(1|true|yes)$/i.test(environment.OPENBOOKS_COOKIE_SECURE ?? "");
 }
@@ -83,9 +85,9 @@ export function authRequestContext(
 ): AuthRequestContext {
   const trustProxy = /^(1|true|yes)$/i.test(environment.OPENBOOKS_TRUST_PROXY ?? "");
   const networkAddress = trustProxy
-    ? firstValidAddress(request.headers.get("x-forwarded-for"))
-      ?? firstValidAddress(request.headers.get("x-real-ip"))
-      ?? firstValidAddress(request.headers.get("cf-connecting-ip"))
+    ? (firstValidAddress(request.headers.get("x-forwarded-for")) ??
+      firstValidAddress(request.headers.get("x-real-ip")) ??
+      firstValidAddress(request.headers.get("cf-connecting-ip")))
     : null;
   const userAgentValue = request.headers.get("user-agent")?.trim() ?? "";
   return {
@@ -128,13 +130,12 @@ export function nextLockoutState(
   previous: { failureCount: number; lastFailedAt: Date | null } | null,
   now = new Date(),
 ): LockoutState {
-  const stale = !previous?.lastFailedAt
-    || now.getTime() - previous.lastFailedAt.getTime() > FAILURE_RESET_MS;
+  const stale =
+    !previous?.lastFailedAt || now.getTime() - previous.lastFailedAt.getTime() > FAILURE_RESET_MS;
   const failureCount = stale ? 1 : Math.max(0, previous.failureCount) + 1;
   const lockIndex = failureCount - LOCK_THRESHOLD;
-  const minutes = lockIndex >= 0
-    ? LOCK_MINUTES[Math.min(lockIndex, LOCK_MINUTES.length - 1)]!
-    : null;
+  const minutes =
+    lockIndex >= 0 ? LOCK_MINUTES[Math.min(lockIndex, LOCK_MINUTES.length - 1)]! : null;
   return {
     failureCount,
     lastFailedAt: now,

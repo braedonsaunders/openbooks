@@ -72,9 +72,9 @@ export function gbResolveTaxYear(payDate: string): number {
     if (payDate >= tables.yearStart && payDate <= tables.yearEnd) return tables.year;
   }
   throw new PayrollPackError(
-    `GB payroll pack has no transcribed tables for pay date ${payDate} — transcribed years cover `
-    + `${GB_2024_TABLES.yearStart}..${GB_2026_TABLES.yearEnd} (see GB_TAX_YEARS). A pay date outside the `
-    + "transcribed years is refused, never priced from another year's tables.",
+    `GB payroll pack has no transcribed tables for pay date ${payDate} — transcribed years cover ` +
+      `${GB_2024_TABLES.yearStart}..${GB_2026_TABLES.yearEnd} (see GB_TAX_YEARS). A pay date outside the ` +
+      "transcribed years is refused, never priced from another year's tables.",
   );
 }
 
@@ -126,7 +126,9 @@ export function gbNicThresholdsForPeriod(
   tables: GbYearTables = GB_2026_TABLES,
 ): GbNicThresholds {
   if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
-    throw new PayrollPackError(`GB NIC needs a positive integer periods-per-year, got ${periodsPerYear}`);
+    throw new PayrollPackError(
+      `GB NIC needs a positive integer periods-per-year, got ${periodsPerYear}`,
+    );
   }
   if (periodsPerYear === 52) return tables.nicWeekly;
   if (periodsPerYear === 12) return tables.nicMonthly;
@@ -161,7 +163,8 @@ export function calculateGbNic(input: {
 }): GbNicResult {
   const tables = input.tables ?? GB_2026_TABLES;
   const base = toUnits(input.earnings);
-  if (base < 0n) throw new PayrollPackError(`GB NIC needs non-negative earnings, got ${input.earnings}`);
+  if (base < 0n)
+    throw new PayrollPackError(`GB NIC needs non-negative earnings, got ${input.earnings}`);
   const t = gbNicThresholdsForPeriod(input.periodsPerYear, tables);
   const pt = toUnits(t.pt);
   const st = toUnits(t.st);
@@ -170,7 +173,8 @@ export function calculateGbNic(input: {
   const mainBase = base < pt ? 0n : (base < uel ? base : uel) - pt;
   const upperBase = base < uel ? 0n : base - uel;
   const employee = gbRoundPennyUnits(
-    applyRate(mainBase, tables.nicEmployeeMainRate) + applyRate(upperBase, tables.nicEmployeeUpperRate),
+    applyRate(mainBase, tables.nicEmployeeMainRate) +
+      applyRate(upperBase, tables.nicEmployeeUpperRate),
   );
   const employerBase = base < st ? 0n : base - st;
   const employer = gbRoundPennyUnits(applyRate(employerBase, tables.nicEmployerRate));
@@ -191,13 +195,18 @@ export function calculateGbNic(input: {
  * threshold by pay periods (flooring to a penny), then floors each loan
  * deduction to whole pounds.
  */
-const GB_STUDENT_LOAN_ANNUAL_THRESHOLDS: Readonly<Record<number, {
-  plan1: string;
-  plan2: string;
-  plan4: string;
-  plan5: string | null;
-  postgraduate: string;
-}>> = {
+const GB_STUDENT_LOAN_ANNUAL_THRESHOLDS: Readonly<
+  Record<
+    number,
+    {
+      plan1: string;
+      plan2: string;
+      plan4: string;
+      plan5: string | null;
+      postgraduate: string;
+    }
+  >
+> = {
   2024: { plan1: "24990", plan2: "27295", plan4: "31395", plan5: null, postgraduate: "21000" },
   2025: { plan1: "26065", plan2: "28470", plan4: "32745", plan5: null, postgraduate: "21000" },
   2026: { plan1: "26900", plan2: "29385", plan4: "33795", plan5: "25000", postgraduate: "21000" },
@@ -223,13 +232,15 @@ export function calculateGbLoanDeductions(input: {
   const edition = GB_STUDENT_LOAN_ANNUAL_THRESHOLDS[input.taxYear];
   if (!edition) {
     throw new PayrollPackError(
-      "GB student-loan deductions have no HMRC threshold edition for tax year " + input.taxYear
-      + "; use a payroll edition with that published year's thresholds.",
+      "GB student-loan deductions have no HMRC threshold edition for tax year " +
+        input.taxYear +
+        "; use a payroll edition with that published year's thresholds.",
     );
   }
   if (!Number.isSafeInteger(input.periodsPerYear) || input.periodsPerYear < 1) {
     throw new PayrollPackError(
-      "GB student-loan deductions need a positive periods-per-year value, got " + input.periodsPerYear,
+      "GB student-loan deductions need a positive periods-per-year value, got " +
+        input.periodsPerYear,
     );
   }
   const earnings = toUnits(input.earnings);
@@ -240,7 +251,9 @@ export function calculateGbLoanDeductions(input: {
   }
 
   const deduction = (annualThreshold: string, rate: string): string => {
-    const periodThreshold = gbFloorPennyUnits(toUnits(annualThreshold) / BigInt(input.periodsPerYear));
+    const periodThreshold = gbFloorPennyUnits(
+      toUnits(annualThreshold) / BigInt(input.periodsPerYear),
+    );
     const excess = earnings > periodThreshold ? earnings - periodThreshold : 0n;
     return fromUnits(gbFloorPoundUnits(applyRate(excess, rate)));
   };
@@ -261,21 +274,23 @@ export function calculateGbLoanDeductions(input: {
     case "plan_5":
       if (edition.plan5 === null) {
         throw new PayrollPackError(
-          "GB Plan 5 student-loan deductions did not apply in tax year " + input.taxYear + "/"
-          + (input.taxYear + 1),
+          "GB Plan 5 student-loan deductions did not apply in tax year " +
+            input.taxYear +
+            "/" +
+            (input.taxYear + 1),
         );
       }
       studentLoan = deduction(edition.plan5, "0.09");
       break;
     default:
-      throw new PayrollPackError("GB student-loan plan \"" + input.studentLoanPlan + "\" is not recognized");
+      throw new PayrollPackError(
+        'GB student-loan plan "' + input.studentLoanPlan + '" is not recognized',
+      );
   }
 
   return {
     studentLoan,
-    postgraduateLoan: input.postgraduateLoan
-      ? deduction(edition.postgraduate, "0.06")
-      : "0.0000",
+    postgraduateLoan: input.postgraduateLoan ? deduction(edition.postgraduate, "0.06") : "0.0000",
   };
 }
 
@@ -297,7 +312,7 @@ function gbBandedLiabilityUnits(
   for (const band of bands) {
     if (remaining <= 0n) break;
     const width = band.upTo == null ? null : annualUnits(band.upTo) - lower;
-    const inBand = width == null ? remaining : (remaining < width ? remaining : width);
+    const inBand = width == null ? remaining : remaining < width ? remaining : width;
     liability += applyRate(inBand, band.rate);
     remaining -= inBand;
     if (width != null) lower += width;
@@ -328,13 +343,15 @@ function gbCeilPennyQuotientUnits(num: bigint, den: bigint): bigint {
 function gbSpecPeriodGuard(periodsPerYear: number, elapsed: number): void {
   if (periodsPerYear !== 12 && periodsPerYear !== 52) {
     throw new PayrollPackError(
-      `GB PAYE runs on weekly or monthly payrolls only (periods-per-year ${periodsPerYear}): `
-      + "the software spec's tax routines are weekly/monthly tables, anything else defers to "
-      + "the CWG2 week/month mapping, which this pack has not transcribed",
+      `GB PAYE runs on weekly or monthly payrolls only (periods-per-year ${periodsPerYear}): ` +
+        "the software spec's tax routines are weekly/monthly tables, anything else defers to " +
+        "the CWG2 week/month mapping, which this pack has not transcribed",
     );
   }
   if (!Number.isInteger(elapsed) || elapsed < 1 || elapsed > periodsPerYear) {
-    throw new PayrollPackError(`GB PAYE needs an elapsed-period count within the year, got ${elapsed}`);
+    throw new PayrollPackError(
+      `GB PAYE needs an elapsed-period count within the year, got ${elapsed}`,
+    );
   }
 }
 
@@ -377,15 +394,17 @@ export function gbTablesAValueUnits(
 ): bigint {
   gbSpecPeriodGuard(periodsPerYear, elapsed);
   if (codeNumber < 0n) {
-    throw new PayrollPackError(`GB Tables-A value needs a non-negative code number, got ${codeNumber}`);
+    throw new PayrollPackError(
+      `GB Tables-A value needs a non-negative code number, got ${codeNumber}`,
+    );
   }
   if (codeNumber === 0n) return 0n;
   const quotient = (codeNumber - 1n) / 500n;
   const remainder = ((codeNumber - 1n) % 500n) + 1n;
   const remainderAnnual = (remainder * 10n + (kind === "free" ? 9n : 0n)) * 10_000n;
   const chunk = periodsPerYear === 52 ? 9_616_00n : 41_667_00n;
-  const first = gbCeilPennyQuotientUnits(remainderAnnual, BigInt(periodsPerYear))
-    + BigInt(quotient) * chunk;
+  const first =
+    gbCeilPennyQuotientUnits(remainderAnnual, BigInt(periodsPerYear)) + BigInt(quotient) * chunk;
   return first * BigInt(elapsed);
 }
 
@@ -432,8 +451,9 @@ function gbSpecTaxToDateUnits(
       const thresholdTax = (cumTax * BigInt(elapsed)) / BigInt(periodsPerYear);
       // The Cvalue ceilings the unrounded threshold, never the truncated one.
       const rawTop = cumTop * BigInt(elapsed);
-      const cvalue = ((rawTop + BigInt(periodsPerYear) * 10_000n - 1n)
-        / (BigInt(periodsPerYear) * 10_000n)) * 10_000n;
+      const cvalue =
+        ((rawTop + BigInt(periodsPerYear) * 10_000n - 1n) / (BigInt(periodsPerYear) * 10_000n)) *
+        10_000n;
       if (unUnits <= cvalue) {
         return gbFloorPennyUnits(prevThresholdTax + applyRate(tn - prevThreshold, band.rate));
       }
@@ -453,7 +473,10 @@ function gbSpecTaxToDateUnits(
  * bands. Annual semantics only (the K475/1257L annual goldens price here).
  * Welsh C-prefix codes price here too — the Welsh bands are identical.
  */
-export function gbRukLiabilityUnits(taxableUnits: bigint, tables: GbYearTables = GB_2026_TABLES): bigint {
+export function gbRukLiabilityUnits(
+  taxableUnits: bigint,
+  tables: GbYearTables = GB_2026_TABLES,
+): bigint {
   return gbBandedLiabilityUnits(tables.rukBands, taxableUnits);
 }
 
@@ -463,7 +486,10 @@ export function gbRukLiabilityUnits(taxableUnits: bigint, tables: GbYearTables =
  * UK-wide, so only the PAYE entry point below selects this table (never the
  * NIC one).
  */
-export function gbSctLiabilityUnits(taxableUnits: bigint, tables: GbYearTables = GB_2026_TABLES): bigint {
+export function gbSctLiabilityUnits(
+  taxableUnits: bigint,
+  tables: GbYearTables = GB_2026_TABLES,
+): bigint {
   return gbBandedLiabilityUnits(tables.sctBands, taxableUnits);
 }
 
@@ -480,10 +506,14 @@ export function gbTaxMonthNumber(payDate: string): number {
 /** HMRC tax-week number (1–53) for a pay date in the given year. Week 1 = 6–12 Apr. */
 export function gbTaxWeekNumber(payDate: string, yearStart: string = GB_TAX_YEAR_START): number {
   const start = utcDateFromParts(
-    Number(yearStart.slice(0, 4)), Number(yearStart.slice(5, 7)) - 1, Number(yearStart.slice(8, 10)),
+    Number(yearStart.slice(0, 4)),
+    Number(yearStart.slice(5, 7)) - 1,
+    Number(yearStart.slice(8, 10)),
   ).getTime();
   const day = utcDateFromParts(
-    Number(payDate.slice(0, 4)), Number(payDate.slice(5, 7)) - 1, Number(payDate.slice(8, 10)),
+    Number(payDate.slice(0, 4)),
+    Number(payDate.slice(5, 7)) - 1,
+    Number(payDate.slice(8, 10)),
   ).getTime();
   return Math.floor((day - start) / (7 * 86_400_000)) + 1;
 }
@@ -519,12 +549,12 @@ export function resolveGbCumulativeBasis(input: {
   if (starterDeclaration === "C" && hasStubs) return;
   if (minStubPayDate != null && minStubPayDate <= monthOneEnd) return;
   throw new PayrollPackError(
-    "GB cumulative PAYE needs the complete in-year record and it is not on file: "
-    + `no starter declaration A, no in-product stubs spanning the year start (pay date ${payDate}). `
-    + "A P45 joiner's previous pay and tax, a mid-year adopter's pre-adoption history, and a "
-    + "declaration-B starter's old-employer pay have no input channel until GB opening-YTD fields "
-    + "are allocated — operating cumulatively from zero would under-withhold. File the starter "
-    + "checklist, or wait for the opening-YTD channel.",
+    "GB cumulative PAYE needs the complete in-year record and it is not on file: " +
+      `no starter declaration A, no in-product stubs spanning the year start (pay date ${payDate}). ` +
+      "A P45 joiner's previous pay and tax, a mid-year adopter's pre-adoption history, and a " +
+      "declaration-B starter's old-employer pay have no input channel until GB opening-YTD fields " +
+      "are allocated — operating cumulatively from zero would under-withhold. File the starter " +
+      "checklist, or wait for the opening-YTD channel.",
   );
 }
 
@@ -585,9 +615,9 @@ export function calculateGbPaye(input: {
   const tables = input.tables ?? GB_2026_TABLES;
   if (periodsPerYear !== 12 && periodsPerYear !== 52) {
     throw new PayrollPackError(
-      `GB PAYE runs on weekly or monthly payrolls only (periods-per-year ${periodsPerYear}): `
-      + "the software spec's tax routines are weekly/monthly tables, anything else defers to "
-      + "the CWG2 week/month mapping, which this pack has not transcribed",
+      `GB PAYE runs on weekly or monthly payrolls only (periods-per-year ${periodsPerYear}): ` +
+        "the software spec's tax routines are weekly/monthly tables, anything else defers to " +
+        "the CWG2 week/month mapping, which this pack has not transcribed",
     );
   }
   const period = toUnits(input.periodPay);
@@ -595,8 +625,12 @@ export function calculateGbPaye(input: {
   const priorAdded = toUnits(input.priorAddedPay);
   const priorPaid = toUnits(input.priorTaxPaid);
   const gross = toUnits(input.periodGrossPay);
-  for (const [name, value] of [["period pay", period], ["prior taxable pay", priorPay],
-    ["prior added pay", priorAdded], ["period gross pay", gross]] as const) {
+  for (const [name, value] of [
+    ["period pay", period],
+    ["prior taxable pay", priorPay],
+    ["prior added pay", priorAdded],
+    ["period gross pay", gross],
+  ] as const) {
     if (value < 0n) throw new PayrollPackError(`GB PAYE needs non-negative ${name}, got ${value}`);
   }
 
@@ -626,9 +660,8 @@ export function calculateGbPaye(input: {
   const priceUnrounded = (unUnits: bigint, elapsed: number): bigint =>
     gbSpecTaxToDateUnits(unUnits, bands, periodsPerYear, elapsed);
 
-  const elapsed = periodsPerYear === 12
-    ? gbTaxMonthNumber(payDate)
-    : gbTaxWeekNumber(payDate, tables.yearStart);
+  const elapsed =
+    periodsPerYear === 12 ? gbTaxMonthNumber(payDate) : gbTaxWeekNumber(payDate, tables.yearStart);
   // Week 53 (§14) and W1/M1/X markers (§8) both price non-cumulatively on
   // the week/month-1 tables: elapsed 1, priors ignored, no carry-forward.
   const periodOnly = code.nonCumulative || elapsed > periodsPerYear;

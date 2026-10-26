@@ -1,16 +1,16 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { Badge } from '@openbooks/ui'
-import { ChangeRequestActions } from '../ChangeRequestActions'
+import { useRouter } from "next/navigation";
+import { Badge } from "@openbooks/ui";
+import { ChangeRequestActions } from "../ChangeRequestActions";
 
 /**
  * HR-16 (0227): the applied event's verb chip — renders only when the
  * loader resolved a non-apply verb; unclassified rows render nothing.
  */
 export function HrmVerbChip({ label }: { label: string | null | undefined }) {
-  if (!label) return null
-  return <Badge variant="secondary">{label}</Badge>
+  if (!label) return null;
+  return <Badge variant="secondary">{label}</Badge>;
 }
 
 /**
@@ -29,19 +29,19 @@ export function ChangeRequestRowActions({
   canManage,
   canVerb = false,
 }: {
-  requestId: string
-  requestStatus: string
-  employmentId: string
-  appliedChangeId?: string | null
-  departmentOptions: { value: string; label: string }[]
+  requestId: string;
+  requestStatus: string;
+  employmentId: string;
+  appliedChangeId?: string | null;
+  departmentOptions: { value: string; label: string }[];
   /** Loader-resolved manage grant — the queue table renders this island
    * only inside the gated actions column. */
-  canManage: boolean
+  canManage: boolean;
   /** Verb actions (Rescind/Correct) display gate: the approve grant.
    * Defaults off so older callers never gain verb buttons by omission. */
-  canVerb?: boolean
+  canVerb?: boolean;
 }) {
-  const router = useRouter()
+  const router = useRouter();
   return (
     <ChangeRequestActions
       request={{ id: requestId, status: requestStatus }}
@@ -52,5 +52,5 @@ export function ChangeRequestRowActions({
       canVerb={canVerb}
       onChanged={() => router.refresh()}
     />
-  )
+  );
 }

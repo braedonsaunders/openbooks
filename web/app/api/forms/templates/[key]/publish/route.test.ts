@@ -1,59 +1,59 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.form-template-publish-test')
+const stateKey = Symbol.for("openbooks.form-template-publish-test");
 interface AuditCall {
-  orgId: string
-  table: string
-  rowId: string
-  action: string
-  changes: Record<string, unknown>
-  actorId: string
+  orgId: string;
+  table: string;
+  rowId: string;
+  action: string;
+  changes: Record<string, unknown>;
+  actorId: string;
 }
 interface RouteState {
-  calls: string[]
-  audits: AuditCall[]
-  latest: { id: string; version: number; schema: unknown; published_at: string | null } | undefined
-  stampKept: boolean
+  calls: string[];
+  audits: AuditCall[];
+  latest: { id: string; version: number; schema: unknown; published_at: string | null } | undefined;
+  stampKept: boolean;
 }
 const PUBLISHABLE_SCHEMA = {
   schemaVersion: 1,
-  title: 'Intake',
+  title: "Intake",
   sections: [
     {
-      id: 'main',
-      title: 'Details',
-      fields: [{ id: 'name', type: 'text', label: 'Name' }],
+      id: "main",
+      title: "Details",
+      fields: [{ id: "name", type: "text", label: "Name" }],
     },
   ],
-}
+};
 const routeState: RouteState = {
   calls: [],
   audits: [],
-  latest: { id: 'version-1', version: 1, schema: PUBLISHABLE_SCHEMA, published_at: null },
+  latest: { id: "version-1", version: 1, schema: PUBLISHABLE_SCHEMA, published_at: null },
   stampKept: true,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksPublishSqlText = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksPublishSqlText = sqlText;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
@@ -61,7 +61,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:forms-lib',
+    "mock:forms-lib",
     `
       export async function getTemplateByKey() {
         return {
@@ -72,7 +72,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:audit',
+    "mock:audit",
     `
       const state = globalThis[Symbol.for('openbooks.form-template-publish-test')]
       export async function auditSetupChange(args, runner) {
@@ -82,7 +82,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.form-template-publish-test')]
       const sqlText = globalThis.openbooksPublishSqlText
@@ -116,102 +116,113 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../../../../lib/setup/audit', 'mock:audit'],
-  ['../../../_lib', 'mock:forms-lib'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../../../../lib/setup/audit", "mock:audit"],
+  ["../../../_lib", "mock:forms-lib"],
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?form-template-publish-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?form-template-publish-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  routeState.calls.length = 0
-  routeState.audits.length = 0
-  routeState.latest = { id: 'version-1', version: 1, schema: PUBLISHABLE_SCHEMA, published_at: null }
-  routeState.stampKept = true
+  routeState.calls.length = 0;
+  routeState.audits.length = 0;
+  routeState.latest = {
+    id: "version-1",
+    version: 1,
+    schema: PUBLISHABLE_SCHEMA,
+    published_at: null,
+  };
+  routeState.stampKept = true;
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/forms/templates/intake/publish', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/forms/templates/intake/publish", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-    { params: Promise.resolve({ key: 'intake' }) },
-  )
+    { params: Promise.resolve({ key: "intake" }) },
+  );
 }
 
-test('publish stamps the draft and records immutable publication evidence', async () => {
-  reset()
+test("publish stamps the draft and records immutable publication evidence", async () => {
+  reset();
 
-  const response = await post({ changelog: 'First release' })
+  const response = await post({ changelog: "First release" });
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true, version: 1 })
-  assert.ok(routeState.calls.some((text) => text.includes('update form_template_versions')))
-  assert.ok(routeState.calls.some((text) => text.includes('update form_templates')))
-  assert.equal(routeState.audits.length, 2)
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, version: 1 });
+  assert.ok(routeState.calls.some((text) => text.includes("update form_template_versions")));
+  assert.ok(routeState.calls.some((text) => text.includes("update form_templates")));
+  assert.equal(routeState.audits.length, 2);
 
-  const versionAudit = routeState.audits.find((a) => a.table === 'form_template_versions')!
-  assert.equal(versionAudit.action, 'update')
-  assert.equal(versionAudit.actorId, 'user-1')
-  assert.equal((versionAudit.changes as { event: string }).event, 'publish')
-  assert.equal((versionAudit.changes as { version: number }).version, 1)
-  assert.deepEqual((versionAudit.changes as { before: unknown }).before, { published_at: null })
-  const after = (versionAudit.changes as { after: { changelog: string; schemaHash: string } }).after
-  assert.equal(after.changelog, 'First release')
-  assert.match(after.schemaHash, /^[0-9a-f]{64}$/)
+  const versionAudit = routeState.audits.find((a) => a.table === "form_template_versions")!;
+  assert.equal(versionAudit.action, "update");
+  assert.equal(versionAudit.actorId, "user-1");
+  assert.equal((versionAudit.changes as { event: string }).event, "publish");
+  assert.equal((versionAudit.changes as { version: number }).version, 1);
+  assert.deepEqual((versionAudit.changes as { before: unknown }).before, { published_at: null });
+  const after = (versionAudit.changes as { after: { changelog: string; schemaHash: string } })
+    .after;
+  assert.equal(after.changelog, "First release");
+  assert.match(after.schemaHash, /^[0-9a-f]{64}$/);
 
-  const templateAudit = routeState.audits.find((a) => a.table === 'form_templates')!
-  assert.deepEqual((templateAudit.changes as { before: unknown }).before, { status: 'draft' })
-  assert.deepEqual((templateAudit.changes as { after: unknown }).after, { status: 'published' })
-})
+  const templateAudit = routeState.audits.find((a) => a.table === "form_templates")!;
+  assert.deepEqual((templateAudit.changes as { before: unknown }).before, { status: "draft" });
+  assert.deepEqual((templateAudit.changes as { after: unknown }).after, { status: "published" });
+});
 
-test('a lost stamp race is a 409 with no audit, not success', async () => {
-  reset()
-  routeState.stampKept = false
+test("a lost stamp race is a 409 with no audit, not success", async () => {
+  reset();
+  routeState.stampKept = false;
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 409)
-  assert.equal(routeState.audits.length, 0)
-})
+  assert.equal(response.status, 409);
+  assert.equal(routeState.audits.length, 0);
+});
 
-test('re-publishing an already-published version is a 409 with no audit', async () => {
-  reset()
-  routeState.latest = { id: 'version-1', version: 1, schema: PUBLISHABLE_SCHEMA, published_at: '2026-01-01T00:00:00Z' }
+test("re-publishing an already-published version is a 409 with no audit", async () => {
+  reset();
+  routeState.latest = {
+    id: "version-1",
+    version: 1,
+    schema: PUBLISHABLE_SCHEMA,
+    published_at: "2026-01-01T00:00:00Z",
+  };
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 409)
-  assert.equal(routeState.audits.length, 0)
-})
+  assert.equal(response.status, 409);
+  assert.equal(routeState.audits.length, 0);
+});
 
-test('a numeric changelog is a 400, never a 500', async () => {
-  reset()
+test("a numeric changelog is a 400, never a 500", async () => {
+  reset();
 
-  const response = await post({ changelog: 5 })
+  const response = await post({ changelog: 5 });
 
-  assert.equal(response.status, 400)
-  assert.equal(routeState.calls.length, 0)
-  assert.equal(routeState.audits.length, 0)
-})
+  assert.equal(response.status, 400);
+  assert.equal(routeState.calls.length, 0);
+  assert.equal(routeState.audits.length, 0);
+});

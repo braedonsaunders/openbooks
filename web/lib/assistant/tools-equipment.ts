@@ -55,7 +55,8 @@ const searchEquipment: AssistantToolDef = {
       const like = `%${a.query}%`;
       where = sql`${where} and (e.unit_number ilike ${like} or e.name ilike ${like})`;
     }
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select e.id, e.unit_number as "unitNumber", e.name, e.status,
              e.purchase_price as "purchasePrice", e.capacity_quantity as "capacityQuantity",
              e.capacity_unit as "capacityUnit", e.acquired_on as "acquiredOn",
@@ -70,8 +71,18 @@ const searchEquipment: AssistantToolDef = {
        where ${where}
        order by e.unit_number nulls last, e.name
        limit ${limit}
-    `, "objects");
-    const totals = (await db.execute<{ n: string; active: string; purchase: string; recovery: string; billable: string }>(sql`
+    `,
+      "objects",
+    );
+    const totals = (
+      await db.execute<{
+        n: string;
+        active: string;
+        purchase: string;
+        recovery: string;
+        billable: string;
+      }>(
+        sql`
       select count(*) as n,
              count(*) filter (where e.status = 'active') as active,
              coalesce(sum(e.purchase_price), 0) as purchase,
@@ -80,7 +91,10 @@ const searchEquipment: AssistantToolDef = {
         from equipment_units e
         ${chargeAggregates}
        where ${where}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,

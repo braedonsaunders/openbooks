@@ -30,7 +30,8 @@ export async function resolveApprovalRequestNotices(
   const href = adapter?.deepLink(subjectId) ?? null;
   if (!href) return 0;
   const subjectSpecific = href.includes(subjectId);
-  const resolved = await db.execute<{ id: string }>(sql`
+  const resolved = await db.execute<{ id: string }>(
+    sql`
     update notifications n
        set read_at = now(), updated_at = now()
      where n.org_id = ${orgId}
@@ -46,6 +47,8 @@ export async function resolveApprovalRequestNotices(
             and g.status = 'pending'
        )
     returning n.id
-  `, "objects");
+  `,
+    "objects",
+  );
   return resolved.length;
 }

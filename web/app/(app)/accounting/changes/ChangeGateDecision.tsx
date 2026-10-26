@@ -27,7 +27,11 @@ export function ChangeGateDecision({
 }) {
   const tc = useTranslations("common");
   if (awaitingAnother && !canAct) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">{tc("approvalFlow.awaitingAnother")}</p>;
+    return (
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {tc("approvalFlow.awaitingAnother")}
+      </p>
+    );
   }
   if (!canAct) return null;
   return (

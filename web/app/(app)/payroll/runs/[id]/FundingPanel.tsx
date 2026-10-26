@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
 /** Split from RunWizard.tsx; moved without behavior changes. */
-import { type Funding } from './run-wizard-model'
-import { HeaderFact } from './run-wizard-controls'
-import { useTranslations } from 'next-intl'
-import { cn } from '@openbooks/ui'
+import { type Funding } from "./run-wizard-model";
+import { HeaderFact } from "./run-wizard-controls";
+import { useTranslations } from "next-intl";
+import { cn } from "@openbooks/ui";
 
 /**
  * Cash required to fund the payday, beside what each bank account actually
@@ -16,38 +16,38 @@ export function FundingPanel({
   funding,
   fmt,
 }: {
-  funding: Funding
-  fmt: (v: string | number | null | undefined) => string
+  funding: Funding;
+  fmt: (v: string | number | null | undefined) => string;
 }) {
-  const t = useTranslations('payroll')
-  const days = funding.businessDaysToPayDate
-  const short = funding.accounts.length > 0 && funding.accounts.every((a) => !a.sufficient)
+  const t = useTranslations("payroll");
+  const days = funding.businessDaysToPayDate;
+  const short = funding.accounts.length > 0 && funding.accounts.every((a) => !a.sufficient);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-          {t('wizard.funding.title')}
+          {t("wizard.funding.title")}
         </h3>
         <span
           className={cn(
-            'text-xs',
+            "text-xs",
             days < 0
-              ? 'text-amber-600 dark:text-amber-400'
+              ? "text-amber-600 dark:text-amber-400"
               : days <= 2
-                ? 'text-amber-600 dark:text-amber-400'
-                : 'text-slate-500 dark:text-slate-400',
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-slate-500 dark:text-slate-400",
           )}
         >
           {days < 0
-            ? t('wizard.funding.payDatePast', { date: funding.payDate })
-            : t('wizard.funding.leadTime', { days, date: funding.payDate })}
+            ? t("wizard.funding.payDatePast", { date: funding.payDate })
+            : t("wizard.funding.leadTime", { days, date: funding.payDate })}
         </span>
       </div>
       <div className="grid gap-4 px-4 py-3 sm:grid-cols-3">
-        <HeaderFact label={t('wizard.funding.netPay')}>{fmt(funding.netPay)}</HeaderFact>
-        <HeaderFact label={t('wizard.funding.liabilities')}>{fmt(funding.liabilities)}</HeaderFact>
-        <HeaderFact label={t('wizard.funding.totalCost')}>{fmt(funding.totalCost)}</HeaderFact>
+        <HeaderFact label={t("wizard.funding.netPay")}>{fmt(funding.netPay)}</HeaderFact>
+        <HeaderFact label={t("wizard.funding.liabilities")}>{fmt(funding.liabilities)}</HeaderFact>
+        <HeaderFact label={t("wizard.funding.totalCost")}>{fmt(funding.totalCost)}</HeaderFact>
       </div>
       {/* The same net pay, split by how it leaves. A direct-deposit file is
           drawn on the payday; cheques clear when they are presented — so a
@@ -65,7 +65,7 @@ export function FundingPanel({
       {funding.accounts.length > 0 && (
         <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800">
           <p className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-            {t('wizard.funding.accounts')}
+            {t("wizard.funding.accounts")}
           </p>
           <ul className="space-y-1 text-sm">
             {funding.accounts.map((account) => (
@@ -73,10 +73,10 @@ export function FundingPanel({
                 <span className="truncate text-slate-700 dark:text-slate-200">{account.label}</span>
                 <span
                   className={cn(
-                    'tabular-nums',
+                    "tabular-nums",
                     account.sufficient
-                      ? 'text-slate-700 dark:text-slate-200'
-                      : 'font-medium text-amber-600 dark:text-amber-400',
+                      ? "text-slate-700 dark:text-slate-200"
+                      : "font-medium text-amber-600 dark:text-amber-400",
                   )}
                 >
                   {fmt(account.balance)}
@@ -86,11 +86,11 @@ export function FundingPanel({
           </ul>
           {short && (
             <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-              {t('wizard.funding.short', { amount: fmt(funding.netPay) })}
+              {t("wizard.funding.short", { amount: fmt(funding.netPay) })}
             </p>
           )}
         </div>
       )}
     </div>
-  )
+  );
 }

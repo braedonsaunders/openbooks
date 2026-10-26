@@ -23,22 +23,24 @@ import { COMPENSATION_PERCENTAGE_INPUTS } from "../compensation/percentage-input
  * per-subsidiary material, and restricted analysts need them to run their
  * own entity's comparisons.
  */
-const settingsBody = z.object({
-  comparisonAttributeKey: z.string().trim().max(120).nullable().optional(),
-  gapThresholdPct: COMPENSATION_PERCENTAGE_INPUTS.gapThresholdPct
-    .nullable()
-    .optional(),
-  responseDays: z.number().int().positive().nullable().optional(),
-  fteRounding: z
-    .enum(["up_to_whole", "nearest_tenth", "nearest_hundredth"])
-    .nullable()
-    .optional(),
-  burdenRate: z
-    .string()
-    .regex(/^\d+(\.\d+)?$/)
-    .nullable()
-    .optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+const settingsBody = z
+  .object({
+    comparisonAttributeKey: z.string().trim().max(120).nullable().optional(),
+    gapThresholdPct: COMPENSATION_PERCENTAGE_INPUTS.gapThresholdPct.nullable().optional(),
+    responseDays: z.number().int().positive().nullable().optional(),
+    fteRounding: z
+      .enum(["up_to_whole", "nearest_tenth", "nearest_hundredth"])
+      .nullable()
+      .optional(),
+    burdenRate: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/)
+      .nullable()
+      .optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
 export const GET = defineRoute({
   permission: "hrm.compensation.read",
   feature: "hrmCompensation",

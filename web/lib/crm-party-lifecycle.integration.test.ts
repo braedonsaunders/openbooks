@@ -1,136 +1,316 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-import { registerHooks } from 'node:module';
-import type { SessionUser } from './auth';
-import { stubModules } from '../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
+import type { SessionUser } from "./auth";
+import { stubModules } from "../testing/stub-modules.ts";
 const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __crmPartyLifecycleSession: session });
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__crmPartyLifecycleSession.user}' };
-  return next(specifier,context);
-}});
-const { sql } = await import('drizzle-orm');
-const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__crmPartyLifecycleSession.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
+const { db, pool, withBypassContext, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH, GET } = await import("../app/api/parties/[id]/route");
 
-const { randomUUID } = await import('node:crypto');
-const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm');
-const { POST: draft } = await import('../app/api/crm/opportunities/draft/route');
-const { PATCH: edit } = await import('../app/api/crm/opportunities/[id]/route');
-const { NextRequest } = await import('next/server');
+const { randomUUID } = await import("node:crypto");
+const { ensureCrmDefaults } = await import("@openbooks/engine/crm/crm");
+const { POST: draft } = await import("../app/api/crm/opportunities/draft/route");
+const { PATCH: edit } = await import("../app/api/crm/opportunities/[id]/route");
+const { NextRequest } = await import("next/server");
 type Fixture = Awaited<ReturnType<typeof createScratchOrg>>;
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const patchRequest = (body: unknown) => new Request('http://audit.local', {method:'PATCH',body:JSON.stringify(body)});
+const patchRequest = (body: unknown) =>
+  new Request("http://audit.local", { method: "PATCH", body: JSON.stringify(body) });
 // Opportunity saves speak the revision contract: attach the live token so
 // these assertions exercise the account-lifecycle checks, not the 409 guard.
 async function oppRev(orgId: string, id: string) {
- return (await withOrgContext(orgId, () => db.execute<{revision:string}>(sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`, 'objects')))[0]!.revision;
+  return (
+    await withOrgContext(orgId, () =>
+      db.execute<{ revision: string }>(
+        sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`,
+        "objects",
+      ),
+    )
+  )[0]!.revision;
 }
 const editRequest = async (org: Fixture, id: string, body: Record<string, unknown>) =>
- patchRequest({ ...body, expectedUpdatedAt: await oppRev(org.orgId, id) });
+  patchRequest({ ...body, expectedUpdatedAt: await oppRev(org.orgId, id) });
 async function fixture(action: (org: Fixture, open: string, closed: string) => Promise<void>) {
- const org=await withBypassContext(() => createScratchOrg());
- try {
-  const seeded=await withBypassContext(async () => {
-   const actor=await createScratchUser(org.orgId,'Lifecycle reviewer','reviewer');
-   await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
-   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":true}'::jsonb) where id=${org.orgId}`);
-   await ensureCrmDefaults(org.orgId,actor);
-   const statuses=await db.execute<{id:string;is_closed:boolean}>(sql`select id,is_closed from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_won order by is_default desc`, 'objects');
-   return {actor,open:statuses.find(s=>!s.is_closed)!.id,closed:statuses.find(s=>s.is_closed)!.id};
-  });
-  session.user={id:seeded.actor,orgId:org.orgId,name:'Reviewer',email:'reviewer@example.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:seeded.actor};
-  await action(org,seeded.open,seeded.closed);
- } finally {session.user=null;await dropScratchOrg(org.orgId);}
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const seeded = await withBypassContext(async () => {
+      const actor = await createScratchUser(org.orgId, "Lifecycle reviewer", "reviewer");
+      await db.execute(
+        sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+      );
+      await db.execute(
+        sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":true}'::jsonb) where id=${org.orgId}`,
+      );
+      await ensureCrmDefaults(org.orgId, actor);
+      const statuses = await db.execute<{ id: string; is_closed: boolean }>(
+        sql`select id,is_closed from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_won order by is_default desc`,
+        "objects",
+      );
+      return {
+        actor,
+        open: statuses.find((s) => !s.is_closed)!.id,
+        closed: statuses.find((s) => s.is_closed)!.id,
+      };
+    });
+    session.user = {
+      id: seeded.actor,
+      orgId: org.orgId,
+      name: "Reviewer",
+      email: "reviewer@example.test",
+      roles: [],
+      isSuperAdmin: false,
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: seeded.actor,
+    };
+    await action(org, seeded.open, seeded.closed);
+  } finally {
+    session.user = null;
+    await dropScratchOrg(org.orgId);
+  }
 }
-async function opportunity(org: Fixture, status: string, active=true) {
- const id=randomUUID();
- await withBypassContext(() => db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,currency,is_active)
-  values(${id},${org.orgId},${id},'Customer work',${org.customerId},${status},'CAD',${active})`));
- return id;
+async function opportunity(org: Fixture, status: string, active = true) {
+  const id = randomUUID();
+  await withBypassContext(() =>
+    db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,currency,is_active)
+  values(${id},${org.orgId},${id},'Customer work',${org.customerId},${status},'CAD',${active})`),
+  );
+  return id;
 }
 async function retirement(org: Fixture) {
- const before=await withOrgContext(org.orgId,()=>GET(new Request('http://audit.local'),params(org.customerId)));
- assert.equal(before.status,200);
- const body=await before.json();
- return patchRequest({isActive:false,changeReason:'Account retirement review',expectedUpdatedAt:body.party.updated_at});
+  const before = await withOrgContext(org.orgId, () =>
+    GET(new Request("http://audit.local"), params(org.customerId)),
+  );
+  assert.equal(before.status, 200);
+  const body = await before.json();
+  return patchRequest({
+    isActive: false,
+    changeReason: "Account retirement review",
+    expectedUpdatedAt: body.party.updated_at,
+  });
 }
 async function blockedBy(pid: number) {
- const until=Date.now()+5000;
- while(Date.now()<until){
-  const rows=await pool.query('select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid))',[pid]);
-  if(rows.rowCount) return;
-  await new Promise(resolve=>setTimeout(resolve,20));
- }
- assert.fail('the competing write did not wait on the party lock');
+  const until = Date.now() + 5000;
+  while (Date.now() < until) {
+    const rows = await pool.query(
+      "select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid))",
+      [pid],
+    );
+    if (rows.rowCount) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail("the competing write did not wait on the party lock");
 }
 
-test('party retirement refuses open opportunities without changing state or audit history', enabled, async()=>fixture(async(org,open,closed)=>{
- const id=await opportunity(org,open);
- const before=(await withOrgContext(org.orgId,()=>db.execute<{n:string}>(sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`, 'objects')))[0]!.n;
- const response=await withOrgContext(org.orgId,async()=>PATCH(await retirement(org),params(org.customerId)));
- assert.equal(response.status,422,await response.clone().text());
- assert.match((await response.json()).error,/open opportunities/i);
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`, 'objects')))[0]!.is_active,true);
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{n:string}>(sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`, 'objects')))[0]!.n,before);
- await withBypassContext(()=>db.execute(sql`update crm_opportunities set status_id=${closed} where id=${id}`));
- const accepted=await withOrgContext(org.orgId,async()=>PATCH(await retirement(org),params(org.customerId)));
- assert.equal(accepted.status,200,await accepted.clone().text());
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`, 'objects')))[0]!.is_active,false);
-}));
+test(
+  "party retirement refuses open opportunities without changing state or audit history",
+  enabled,
+  async () =>
+    fixture(async (org, open, closed) => {
+      const id = await opportunity(org, open);
+      const before = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ n: string }>(
+            sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.n;
+      const response = await withOrgContext(org.orgId, async () =>
+        PATCH(await retirement(org), params(org.customerId)),
+      );
+      assert.equal(response.status, 422, await response.clone().text());
+      assert.match((await response.json()).error, /open opportunities/i);
+      assert.equal(
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ is_active: boolean }>(
+              sql`select is_active from parties where id=${org.customerId}`,
+              "objects",
+            ),
+          )
+        )[0]!.is_active,
+        true,
+      );
+      assert.equal(
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ n: string }>(
+              sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`,
+              "objects",
+            ),
+          )
+        )[0]!.n,
+        before,
+      );
+      await withBypassContext(() =>
+        db.execute(sql`update crm_opportunities set status_id=${closed} where id=${id}`),
+      );
+      const accepted = await withOrgContext(org.orgId, async () =>
+        PATCH(await retirement(org), params(org.customerId)),
+      );
+      assert.equal(accepted.status, 200, await accepted.clone().text());
+      assert.equal(
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ is_active: boolean }>(
+              sql`select is_active from parties where id=${org.customerId}`,
+              "objects",
+            ),
+          )
+        )[0]!.is_active,
+        false,
+      );
+    }),
+);
 
-test('inactive accounts refuse new and reopened opportunities but allow closing legacy work', enabled, async()=>fixture(async(org,open,closed)=>{
- const id=await opportunity(org,open);
- await withBypassContext(()=>db.execute(sql`update parties set is_active=false where id=${org.customerId}`));
- const created=await withOrgContext(org.orgId,()=>draft(new NextRequest('http://audit.local',{method:'POST',body:JSON.stringify({partyId:org.customerId})})));
- assert.equal(created.status,422,await created.clone().text());
- const activated=await withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{isActive:true}),params(id)));
- assert.equal(activated.status,422,await activated.clone().text());
- const finished=await withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{statusId:closed,winLossReason:'Customer account retired'}),params(id)));
- assert.equal(finished.status,200,await finished.clone().text());
- const reopened=await withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{statusId:open,isActive:true}),params(id)));
- assert.equal(reopened.status,422,await reopened.clone().text());
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{status_id:string}>(sql`select status_id from crm_opportunities where id=${id}`, 'objects')))[0]!.status_id,closed);
-}));
+test(
+  "inactive accounts refuse new and reopened opportunities but allow closing legacy work",
+  enabled,
+  async () =>
+    fixture(async (org, open, closed) => {
+      const id = await opportunity(org, open);
+      await withBypassContext(() =>
+        db.execute(sql`update parties set is_active=false where id=${org.customerId}`),
+      );
+      const created = await withOrgContext(org.orgId, () =>
+        draft(
+          new NextRequest("http://audit.local", {
+            method: "POST",
+            body: JSON.stringify({ partyId: org.customerId }),
+          }),
+        ),
+      );
+      assert.equal(created.status, 422, await created.clone().text());
+      const activated = await withOrgContext(org.orgId, async () =>
+        edit(await editRequest(org, id, { isActive: true }), params(id)),
+      );
+      assert.equal(activated.status, 422, await activated.clone().text());
+      const finished = await withOrgContext(org.orgId, async () =>
+        edit(
+          await editRequest(org, id, {
+            statusId: closed,
+            winLossReason: "Customer account retired",
+          }),
+          params(id),
+        ),
+      );
+      assert.equal(finished.status, 200, await finished.clone().text());
+      const reopened = await withOrgContext(org.orgId, async () =>
+        edit(await editRequest(org, id, { statusId: open, isActive: true }), params(id)),
+      );
+      assert.equal(reopened.status, 422, await reopened.clone().text());
+      assert.equal(
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ status_id: string }>(
+              sql`select status_id from crm_opportunities where id=${id}`,
+              "objects",
+            ),
+          )
+        )[0]!.status_id,
+        closed,
+      );
+    }),
+);
 
-test('retirement rechecks open work after waiting for the account lock', enabled, async()=>fixture(async(org,open)=>{
- const request=await retirement(org);
- const client=await pool.connect();
- let pending:Promise<Response>|undefined;
- try {
-  await client.query('begin');
-  await client.query('select set_config($1,$2,true)',['app.current_org',org.orgId]);
-  const pid=(await client.query('select pg_backend_pid() as pid')).rows[0].pid as number;
-  await client.query('select id from parties where id=$1 for update',[org.customerId]);
-  pending=withOrgContext(org.orgId,()=>PATCH(request,params(org.customerId)));
-  await blockedBy(pid);
-  const id=randomUUID();
-  await withBypassContext(() => (client.query('insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,currency,is_active) values($1,$2,$7,$3,$4,$5,$6,true)',[id,org.orgId,'Concurrent open work',org.customerId,open,'CAD',id])));
-  await client.query('commit');
-  const response=await pending;
-  assert.equal(response.status,422,await response.clone().text());
-  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`, 'objects')))[0]!.is_active,true);
- } finally {await client.query('rollback');client.release();await pending?.catch(()=>{});}
-}));
+test("retirement rechecks open work after waiting for the account lock", enabled, async () =>
+  fixture(async (org, open) => {
+    const request = await retirement(org);
+    const client = await pool.connect();
+    let pending: Promise<Response> | undefined;
+    try {
+      await client.query("begin");
+      await client.query("select set_config($1,$2,true)", ["app.current_org", org.orgId]);
+      const pid = (await client.query("select pg_backend_pid() as pid")).rows[0].pid as number;
+      await client.query("select id from parties where id=$1 for update", [org.customerId]);
+      pending = withOrgContext(org.orgId, () => PATCH(request, params(org.customerId)));
+      await blockedBy(pid);
+      const id = randomUUID();
+      await withBypassContext(() =>
+        client.query(
+          "insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,currency,is_active) values($1,$2,$7,$3,$4,$5,$6,true)",
+          [id, org.orgId, "Concurrent open work", org.customerId, open, "CAD", id],
+        ),
+      );
+      await client.query("commit");
+      const response = await pending;
+      assert.equal(response.status, 422, await response.clone().text());
+      assert.equal(
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ is_active: boolean }>(
+              sql`select is_active from parties where id=${org.customerId}`,
+              "objects",
+            ),
+          )
+        )[0]!.is_active,
+        true,
+      );
+    } finally {
+      await client.query("rollback");
+      client.release();
+      await pending?.catch(() => {});
+    }
+  }),
+);
 
-test('opportunity activation rechecks account retirement after waiting for its lock', enabled, async()=>fixture(async(org,open)=>{
- const id=await opportunity(org,open,false);
- const client=await pool.connect();
- let pending:Promise<Response>|undefined;
- try {
-  await client.query('begin');
-  await client.query('select set_config($1,$2,true)',['app.current_org',org.orgId]);
-  const pid=(await client.query('select pg_backend_pid() as pid')).rows[0].pid as number;
-  await withBypassContext(() => (client.query('update parties set is_active=false where id=$1',[org.customerId])));
-  pending=withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{isActive:true}),params(id)));
-  await blockedBy(pid);
-  await client.query('commit');
-  const response=await pending;
-  assert.equal(response.status,422,await response.clone().text());
-  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from crm_opportunities where id=${id}`, 'objects')))[0]!.is_active,false);
- } finally {await client.query('rollback');client.release();await pending?.catch(()=>{});}
-}));
+test(
+  "opportunity activation rechecks account retirement after waiting for its lock",
+  enabled,
+  async () =>
+    fixture(async (org, open) => {
+      const id = await opportunity(org, open, false);
+      const client = await pool.connect();
+      let pending: Promise<Response> | undefined;
+      try {
+        await client.query("begin");
+        await client.query("select set_config($1,$2,true)", ["app.current_org", org.orgId]);
+        const pid = (await client.query("select pg_backend_pid() as pid")).rows[0].pid as number;
+        await withBypassContext(() =>
+          client.query("update parties set is_active=false where id=$1", [org.customerId]),
+        );
+        pending = withOrgContext(org.orgId, async () =>
+          edit(await editRequest(org, id, { isActive: true }), params(id)),
+        );
+        await blockedBy(pid);
+        await client.query("commit");
+        const response = await pending;
+        assert.equal(response.status, 422, await response.clone().text());
+        assert.equal(
+          (
+            await withOrgContext(org.orgId, () =>
+              db.execute<{ is_active: boolean }>(
+                sql`select is_active from crm_opportunities where id=${id}`,
+                "objects",
+              ),
+            )
+          )[0]!.is_active,
+          false,
+        );
+      } finally {
+        await client.query("rollback");
+        client.release();
+        await pending?.catch(() => {});
+      }
+    }),
+);

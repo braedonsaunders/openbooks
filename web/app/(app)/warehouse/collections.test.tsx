@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
-import { stubModules } from '../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
 
 // Warehouse collections through the shared registered lists: the tie-out
 // panel and the putaway queue render their rows with the shared table's
@@ -9,7 +9,7 @@ import { stubModules } from '../../../testing/stub-modules'
 // visible, and keep the lifecycle menu and put-away action behind their
 // respective grants.
 
-await bootJsdomEnvironment({ url: 'http://localhost:4800/warehouse' })
+await bootJsdomEnvironment({ url: "http://localhost:4800/warehouse" });
 
 Object.assign(globalThis, {
   __warehouseTestRouter: {
@@ -19,67 +19,72 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
+});
 stubModules({
   navigation: {
     source:
-      'export function useRouter(){return globalThis.__warehouseTestRouter}' +
+      "export function useRouter(){return globalThis.__warehouseTestRouter}" +
       'export function usePathname(){return "/warehouse"}' +
-      'export function useSearchParams(){return new URLSearchParams()}',
+      "export function useSearchParams(){return new URLSearchParams()}",
   },
   intl: false,
   authz: false,
   features: false,
   extra: {
-    'next/link':
+    "next/link":
       'export default function Link(p){return globalThis.React.createElement("a",{href:p.href,className:p.className},p.children)}',
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { BusinessDateProvider } = await import('../../../components/business-date-provider')
-const { WarehousesPanel } = await import('./WarehousesPanel')
-const { PutawayQueue } = await import('./PutawayQueue')
-const { NewWarehouseDrawer } = await import('./NewWarehouseDrawer')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { BusinessDateProvider } = await import("../../../components/business-date-provider");
+const { WarehousesPanel } = await import("./WarehousesPanel");
+const { PutawayQueue } = await import("./PutawayQueue");
+const { NewWarehouseDrawer } = await import("./NewWarehouseDrawer");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 async function mount(t: TestContext, node: React.ReactNode): Promise<void> {
-  const rootHandle = createRoot(document.body)
+  const rootHandle = createRoot(document.body);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    for (const child of [...document.body.children]) child.remove()
-  })
+      rootHandle.unmount();
+    });
+    for (const child of [...document.body.children]) child.remove();
+  });
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-09-23">{node}</BusinessDateProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
-const bodyText = () => document.body.textContent ?? ''
-const searchBoxes = () =>
-  [...document.querySelectorAll('input')] as HTMLInputElement[]
+const bodyText = () => document.body.textContent ?? "";
+const searchBoxes = () => [...document.querySelectorAll("input")] as HTMLInputElement[];
 
-test('the tie-out panel lists warehouses with the shared search and tie-out footer', async (t) => {
+test("the tie-out panel lists warehouses with the shared search and tie-out footer", async (t) => {
   await mount(
     t,
     <WarehousesPanel
       rows={[
-        { warehouseId: 'wh-1', code: 'WH-1', name: 'Main', status: 'active', valueLabel: '$10.00' },
-        { warehouseId: 'wh-2', code: 'WH-2', name: 'Overflow', status: 'suspended', valueLabel: '$5.00' },
-        { warehouseId: null, code: null, name: null, status: null, valueLabel: '$2.00' },
+        { warehouseId: "wh-1", code: "WH-1", name: "Main", status: "active", valueLabel: "$10.00" },
+        {
+          warehouseId: "wh-2",
+          code: "WH-2",
+          name: "Overflow",
+          status: "suspended",
+          valueLabel: "$5.00",
+        },
+        { warehouseId: null, code: null, name: null, status: null, valueLabel: "$2.00" },
       ]}
       canManage
       currentParams={{}}
@@ -89,21 +94,23 @@ test('the tie-out panel lists warehouses with the shared search and tie-out foot
       differenceLabel="$0.00"
       differenceIsZero
     />,
-  )
-  assert.match(bodyText(), /WH-1/)
-  assert.match(bodyText(), /Overflow/)
-  assert.match(bodyText(), /\$17\.00/)
+  );
+  assert.match(bodyText(), /WH-1/);
+  assert.match(bodyText(), /Overflow/);
+  assert.match(bodyText(), /\$17\.00/);
   assert.ok(
     searchBoxes().length > 0,
-    'the warehouse collection keeps the shared list search toolbar',
-  )
-})
+    "the warehouse collection keeps the shared list search toolbar",
+  );
+});
 
-test('the tie-out panel hides the lifecycle menu without the manage grant', async (t) => {
+test("the tie-out panel hides the lifecycle menu without the manage grant", async (t) => {
   await mount(
     t,
     <WarehousesPanel
-      rows={[{ warehouseId: 'wh-1', code: 'WH-1', name: 'Main', status: 'active', valueLabel: '$10.00' }]}
+      rows={[
+        { warehouseId: "wh-1", code: "WH-1", name: "Main", status: "active", valueLabel: "$10.00" },
+      ]}
       canManage={false}
       currentParams={{}}
       layerTotalLabel="$10.00"
@@ -112,45 +119,52 @@ test('the tie-out panel hides the lifecycle menu without the manage grant', asyn
       differenceLabel="$0.00"
       differenceIsZero
     />,
-  )
-  assert.match(bodyText(), /WH-1/)
+  );
+  assert.match(bodyText(), /WH-1/);
   assert.equal(
     document.querySelectorAll('button[aria-label*="WH-1"]').length,
     0,
-    'no row lifecycle menu is offered to a reader without the manage grant',
-  )
-})
+    "no row lifecycle menu is offered to a reader without the manage grant",
+  );
+});
 
-test('the putaway queue keeps its rows searchable with the action behind the posting grant', async (t) => {
+test("the putaway queue keeps its rows searchable with the action behind the posting grant", async (t) => {
   const row = {
-    warehouseId: 'wh-1',
-    warehouseCode: 'WH-1',
-    stagingLocationId: 'stage-1',
-    stagingCode: 'STAGE',
-    itemId: 'item-1',
-    itemLabel: 'Widget',
-    subsidiaryId: 'sub-1',
-    quantity: '3.0000',
-  }
-  await mount(t, <PutawayQueue rows={[{ ...row, lotId: null, serialId: null, lotNumber: null, serialNumber: null }]} canPost />)
-  assert.match(bodyText(), /STAGE/)
-  assert.match(bodyText(), /Widget/)
-  assert.ok(searchBoxes().length > 0, 'the putaway queue keeps the shared list search toolbar')
-  const action = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim())
-  assert.ok(action, 'the put-away action is offered with the posting grant')
-})
+    warehouseId: "wh-1",
+    warehouseCode: "WH-1",
+    stagingLocationId: "stage-1",
+    stagingCode: "STAGE",
+    itemId: "item-1",
+    itemLabel: "Widget",
+    subsidiaryId: "sub-1",
+    quantity: "3.0000",
+  };
+  await mount(
+    t,
+    <PutawayQueue
+      rows={[{ ...row, lotId: null, serialId: null, lotNumber: null, serialNumber: null }]}
+      canPost
+    />,
+  );
+  assert.match(bodyText(), /STAGE/);
+  assert.match(bodyText(), /Widget/);
+  assert.ok(searchBoxes().length > 0, "the putaway queue keeps the shared list search toolbar");
+  const action = [...document.querySelectorAll("button")].find((b) => b.textContent?.trim());
+  assert.ok(action, "the put-away action is offered with the posting grant");
+});
 
-test('the putaway queue names its empty state and offers no action without the posting grant', async (t) => {
-  await mount(t, <PutawayQueue rows={[]} canPost={false} />)
-  assert.ok(bodyText().length > 0, 'the queue renders its empty state instead of nothing')
+test("the putaway queue names its empty state and offers no action without the posting grant", async (t) => {
+  await mount(t, <PutawayQueue rows={[]} canPost={false} />);
+  assert.ok(bodyText().length > 0, "the queue renders its empty state instead of nothing");
   assert.equal(
-    [...document.querySelectorAll('button')].filter((b) => (b.textContent ?? '').trim().length > 0).length,
+    [...document.querySelectorAll("button")].filter((b) => (b.textContent ?? "").trim().length > 0)
+      .length,
     0,
-    'no put-away action is offered without the posting grant',
-  )
-})
+    "no put-away action is offered without the posting grant",
+  );
+});
 
-test('the empty warehouse list links the create drawer for a manager', async (t) => {
+test("the empty warehouse list links the create drawer for a manager", async (t) => {
   await mount(
     t,
     <WarehousesPanel
@@ -163,12 +177,12 @@ test('the empty warehouse list links the create drawer for a manager', async (t)
       differenceLabel="$0.00"
       differenceIsZero
     />,
-  )
-  const create = document.querySelector('a[href*="warehouseNew=1"]')
-  assert.ok(create, 'the empty state must name the next step: creating the first warehouse')
-})
+  );
+  const create = document.querySelector('a[href*="warehouseNew=1"]');
+  assert.ok(create, "the empty state must name the next step: creating the first warehouse");
+});
 
-test('the empty warehouse list offers no create link without the manage grant', async (t) => {
+test("the empty warehouse list offers no create link without the manage grant", async (t) => {
   await mount(
     t,
     <WarehousesPanel
@@ -181,37 +195,44 @@ test('the empty warehouse list offers no create link without the manage grant', 
       differenceLabel="$0.00"
       differenceIsZero
     />,
-  )
+  );
   assert.equal(
     document.querySelector('a[href*="warehouseNew=1"]'),
     null,
-    'a reader who cannot manage warehouses gets no dead-end create link',
-  )
-})
+    "a reader who cannot manage warehouses gets no dead-end create link",
+  );
+});
 
-test('the create drawer names location setup when no location exists', async (t) => {
-  await mount(t, <NewWarehouseDrawer locations={[]} closeHref="/warehouse" canManageLocations />)
-  const setup = document.querySelector('a[href="/admin/setup/locations"]')
-  assert.ok(setup, 'the empty location picker must link the next step: creating a location')
-})
+test("the create drawer names location setup when no location exists", async (t) => {
+  await mount(t, <NewWarehouseDrawer locations={[]} closeHref="/warehouse" canManageLocations />);
+  const setup = document.querySelector('a[href="/admin/setup/locations"]');
+  assert.ok(setup, "the empty location picker must link the next step: creating a location");
+});
 
-test('the create drawer keeps the note but no setup link without the setup grant', async (t) => {
-  await mount(t, <NewWarehouseDrawer locations={[]} closeHref="/warehouse" canManageLocations={false} />)
-  assert.equal(
-    document.querySelector('a[href="/admin/setup/locations"]'),
-    null,
-    'a reader who cannot manage locations gets no setup link',
-  )
-})
-
-test('the create drawer shows no location note once locations exist', async (t) => {
+test("the create drawer keeps the note but no setup link without the setup grant", async (t) => {
   await mount(
     t,
-    <NewWarehouseDrawer locations={[{ id: 'loc-1', name: 'HQ' }]} closeHref="/warehouse" canManageLocations />,
-  )
+    <NewWarehouseDrawer locations={[]} closeHref="/warehouse" canManageLocations={false} />,
+  );
   assert.equal(
     document.querySelector('a[href="/admin/setup/locations"]'),
     null,
-    'the next-step note shows only while the picker is empty',
-  )
-})
+    "a reader who cannot manage locations gets no setup link",
+  );
+});
+
+test("the create drawer shows no location note once locations exist", async (t) => {
+  await mount(
+    t,
+    <NewWarehouseDrawer
+      locations={[{ id: "loc-1", name: "HQ" }]}
+      closeHref="/warehouse"
+      canManageLocations
+    />,
+  );
+  assert.equal(
+    document.querySelector('a[href="/admin/setup/locations"]'),
+    null,
+    "the next-step note shows only while the picker is empty",
+  );
+});

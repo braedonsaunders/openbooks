@@ -32,7 +32,13 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const IMPORTED_REASON = "close.importedPeriodLockReason";
 
 /** The scratch organization's July period, stored as '2026-07'. */
-const JULY_REF = { fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: "2026-07-01", endsOn: "2026-07-31" };
+const JULY_REF = {
+  fiscalYear: 2026,
+  periodNumber: 7,
+  adjustment: false,
+  startsOn: "2026-07-01",
+  endsOn: "2026-07-31",
+};
 
 /** User-owned close, through the same lock writer the close flow uses. */
 async function closeGlForUser(org: ScratchOrg, actorId: string): Promise<void> {
@@ -69,20 +75,26 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  const r = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
-async function seedDueLine(
-  org: ScratchOrg,
-  actorId: string,
-  tag: string,
-): Promise<void> {
-  const ruleId = randomUUID(), contractId = randomUUID(), oblId = randomUUID();
-  const accounts = (await db.execute<{ deferred: string; recognized: string }>(sql`
+async function seedDueLine(org: ScratchOrg, actorId: string, tag: string): Promise<void> {
+  const ruleId = randomUUID(),
+    contractId = randomUUID(),
+    oblId = randomUUID();
+  const accounts = (
+    await db.execute<{ deferred: string; recognized: string }>(
+      sql`
     select (select id from accounts where org_id = ${org.orgId} and number = '2200') as deferred,
-           (select id from accounts where org_id = ${org.orgId} and number = '4010') as recognized`, "objects"))[0]!;
+           (select id from accounts where org_id = ${org.orgId} and number = '4010') as recognized`,
+      "objects",
+    )
+  )[0]!;
   await db.execute(sql`insert into recognition_rules
     (id,org_id,code,name,method,is_forecast,recognition_periods,start_date_source,end_date_source,period_offset,start_offset_days,initial_amount_percent,deferred_account_id,recognized_account_id,is_active)
     values (${ruleId},${org.orgId},${`F2R-${tag}`},${`F2 revenue rule ${tag}`},'straight_line_even',false,1,'contract','contract',0,0,'0',${accounts.deferred},${accounts.recognized},true)`);
@@ -98,10 +110,13 @@ async function seedDueLine(
 
 /** Provision every month covered by the service item's 12-month term. */
 async function seedRecognitionTermPeriods(org: ScratchOrg): Promise<void> {
-  const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+  const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+    sql`
     select fiscal_calendar_id
       from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
+     where id = ${org.periodId} and org_id = ${org.orgId}`,
+    "objects",
+  );
   const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
@@ -167,37 +182,53 @@ async function seedPostedRecognition(
     { audit: { actorId, source: "test" } },
   );
   const recognized = await runRevenueRecognition(org.orgId, "2026-07-31", actorId);
-  assert.equal(recognized.posted, 1, `fixture must post one July line, got ${JSON.stringify(recognized.problems)}`);
+  assert.equal(
+    recognized.posted,
+    1,
+    `fixture must post one July line, got ${JSON.stringify(recognized.problems)}`,
+  );
   return documentId;
 }
 
-test("open period: the runner still posts (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedDueLine(org, actorId, "open");
-    const preview = await previewRevenueRecognition(org.orgId, { asOfDate: "2026-07-31" });
-    assert.equal(preview.rows.length, 1);
-    assert.equal(preview.rows[0]!.periodName, "P07 FY2026");
-    assert.deepEqual(preview.rows[0]!.periodRef, JULY_REF);
-    const run = await runRevenueRecognition(org.orgId, "2026-07-31", actorId);
-    assert.equal(run.posted, 1, `expected one posting, got ${JSON.stringify(run.problems)}`);
-    // Run results and memos name the period canonically; the entry number keeps the stored name.
-    assert.equal(run.entries[0]!.period, "P07 FY2026");
-    assert.deepEqual(run.entries[0]!.periodRef, JULY_REF);
-    const posted = (await db.execute<{ entry_number: string; memo: string; line_memos: string[] }>(sql`
+test(
+  "open period: the runner still posts (setup can post, refusal is load-bearing)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedDueLine(org, actorId, "open");
+      const preview = await previewRevenueRecognition(org.orgId, { asOfDate: "2026-07-31" });
+      assert.equal(preview.rows.length, 1);
+      assert.equal(preview.rows[0]!.periodName, "P07 FY2026");
+      assert.deepEqual(preview.rows[0]!.periodRef, JULY_REF);
+      const run = await runRevenueRecognition(org.orgId, "2026-07-31", actorId);
+      assert.equal(run.posted, 1, `expected one posting, got ${JSON.stringify(run.problems)}`);
+      // Run results and memos name the period canonically; the entry number keeps the stored name.
+      assert.equal(run.entries[0]!.period, "P07 FY2026");
+      assert.deepEqual(run.entries[0]!.periodRef, JULY_REF);
+      const posted = (
+        await db.execute<{ entry_number: string; memo: string; line_memos: string[] }>(
+          sql`
       select e.entry_number, e.memo,
              (select array_agg(l.memo order by l.line_number) from journal_lines l
                where l.org_id = e.org_id and l.entry_id = e.id) as line_memos
         from journal_entries e
-       where e.org_id = ${org.orgId} and e.id = ${run.entries[0]!.entryId}`, "objects"))[0]!;
-    assert.equal(posted.memo, "Revenue recognition — F2 revenue obl open (P07 FY2026)");
-    assert.deepEqual(posted.line_memos, ["Revenue recognition P07 FY2026", "Revenue recognition P07 FY2026"]);
-    assert.match(posted.entry_number, /^REV-F2R-C-open-2026-07-/);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where e.org_id = ${org.orgId} and e.id = ${run.entries[0]!.entryId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(posted.memo, "Revenue recognition — F2 revenue obl open (P07 FY2026)");
+      assert.deepEqual(posted.line_memos, [
+        "Revenue recognition P07 FY2026",
+        "Revenue recognition P07 FY2026",
+      ]);
+      assert.match(posted.entry_number, /^REV-F2R-C-open-2026-07-/);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("runRevenueRecognition skips a user-closed GL period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -232,7 +263,11 @@ test("runRevenueRecognition skips a source-owned imported lock", { skip: !DB }, 
     await closeAllImported(org);
     const before = await journalCount(org.orgId);
     const run = await runRevenueRecognition(org.orgId, "2026-07-31", actorId);
-    assert.equal(run.posted, 0, "an imported lock must post nothing: recognition is new activity, not replay");
+    assert.equal(
+      run.posted,
+      0,
+      "an imported lock must post nothing: recognition is new activity, not replay",
+    );
     assert.ok(run.skipped >= 1, "the locked line must be skipped, not posted");
     assert.ok(
       run.problems.some((p) => /closed/i.test(p)),
@@ -252,7 +287,9 @@ test("cancellation reversal refuses a user-closed period", { skip: !DB }, async 
     await closeGlForUser(org, actorId);
     await assert.rejects(
       cancelRevenueRecognitionForInvoice({
-        documentId, orgId: org.orgId, actorId,
+        documentId,
+        orgId: org.orgId,
+        actorId,
         reason: "Gate probe: customer contract terminated",
         reversalDate: "2026-07-31",
         allowedSubsidiaryIds: null,
@@ -273,7 +310,9 @@ test("cancellation reversal refuses a source-owned imported lock", { skip: !DB }
     await closeAllImported(org);
     await assert.rejects(
       cancelRevenueRecognitionForInvoice({
-        documentId, orgId: org.orgId, actorId,
+        documentId,
+        orgId: org.orgId,
+        actorId,
         reason: "Gate probe: customer contract terminated",
         reversalDate: "2026-07-31",
         allowedSubsidiaryIds: null,

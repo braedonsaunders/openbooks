@@ -1,14 +1,23 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const quickBooksDesktopConnector: DocArticle = {
-  slug: 'quickbooks-desktop-connector',
-  title: 'QuickBooks Desktop Connector',
-  category: 'integrations',
+  slug: "quickbooks-desktop-connector",
+  title: "QuickBooks Desktop Connector",
+  category: "integrations",
   order: 3,
   summary:
-    'Install and operate the read-only QuickBooks Web Connector bridge for migrations, historical mirrors, and ledger reconciliation.',
-  updated: '2026-09-23',
-  keywords: ['QuickBooks Desktop', 'Web Connector', 'QWC', 'qbXML', 'migration', 'mirror', 'trial balance', 'Windows'],
+    "Install and operate the read-only QuickBooks Web Connector bridge for migrations, historical mirrors, and ledger reconciliation.",
+  updated: "2026-09-23",
+  keywords: [
+    "QuickBooks Desktop",
+    "Web Connector",
+    "QWC",
+    "qbXML",
+    "migration",
+    "mirror",
+    "trial balance",
+    "Windows",
+  ],
   body: `# QuickBooks Desktop Connector
 
 The QuickBooks Desktop connector is a read-only bridge built on Intuit's
@@ -153,4 +162,4 @@ for hours.
 **Trial balance or monthly activity differs** — review refused transactions and
 account mapping first. Do not cut over until both reconciliation gates pass.
 `,
-}
+};

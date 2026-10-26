@@ -10,16 +10,10 @@ import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 test("period close is a first-class configurable flow subject", () => {
   assert.equal(CLOSE_RUN_SUBJECT_KIND, "close_run");
   assert.equal(getFlowAdapter("close_run"), closeRunsFlowAdapter);
-  assert.ok(
-    listFlowSubjectProfiles().some(
-      (profile) => profile.subjectKind === "close_run",
-    ),
-  );
+  assert.ok(listFlowSubjectProfiles().some((profile) => profile.subjectKind === "close_run"));
   assert.deepEqual(closeRunSubjectProfile.triggers, ["on_submit"]);
   assert.ok(closeRunSubjectProfile.actions.includes("notify"));
-  assert.ok(
-    closeRunSubjectProfile.fields.some((field) => field.key === "periodType"),
-  );
+  assert.ok(closeRunSubjectProfile.fields.some((field) => field.key === "periodType"));
 });
 
 test("period close freezes its configurable approval policy", () => {

@@ -1,5 +1,9 @@
-import { createObligationsFromInvoice } from '../revenue/recognition-obligations.ts';
-import { accrueRebatesForDocument, assertRebateSettlementTaxBeforePosting, settleRebateForPostedDocument } from '../revenue/rebates.ts';
+import { createObligationsFromInvoice } from "../revenue/recognition-obligations.ts";
+import {
+  accrueRebatesForDocument,
+  assertRebateSettlementTaxBeforePosting,
+  settleRebateForPostedDocument,
+} from "../revenue/rebates.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { queueJournalReversal } from "./journal-reversals.ts";
 import { recordPaymentWithholdings } from "../contractor-withholding/service.ts";
@@ -14,7 +18,11 @@ import {
   withOrgContext,
   withOrgTransaction,
 } from "../platform/db.ts";
-import { PostingError, type PostingDeps, type PostDocumentOptions } from "../journal/posting-contracts.ts";
+import {
+  PostingError,
+  type PostingDeps,
+  type PostDocumentOptions,
+} from "../journal/posting-contracts.ts";
 import { assertCustomerInvoiceCredit } from "./posting-invoice-credit.ts";
 import { prepareDocumentPosting } from "./posting-prepare.ts";
 import { commitDocumentPosting } from "./posting-commit.ts";
@@ -98,16 +106,40 @@ async function restoreScriptEvidenceAfterRollback(error: unknown): Promise<void>
   }
 }
 
-export async function postDocument(documentId: string, deps: PostingDeps, options: PostDocumentOptions = {}): Promise<string> {
+export async function postDocument(
+  documentId: string,
+  deps: PostingDeps,
+  options: PostDocumentOptions = {},
+): Promise<string> {
   const runPosting = async (): Promise<{
     prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>;
     entryId: string;
   }> => {
-    const identity=(await db.execute<{org_id:string;journal_mode:string}>(sql`select org_id,journal_mode from documents where id=${documentId}`, "objects"))[0];
+    const identity = (
+      await db.execute<{ org_id: string; journal_mode: string }>(
+        sql`select org_id,journal_mode from documents where id=${documentId}`,
+        "objects",
+      )
+    )[0];
     if (identity) {
-      await lockLedgerSetupFence(db,identity.org_id,identity.journal_mode==='currency_adjustment' ? 'exclusive' : 'shared');
-      const locked=(await db.execute<{journal_mode:string}>(sql`select journal_mode from documents where org_id=${identity.org_id} and id=${documentId} for update`, "objects"))[0];
-      if (locked?.journal_mode==='currency_adjustment' && identity.journal_mode!=='currency_adjustment') throw new PostingError("The journal mode changed before posting. Reload the journal and post again.");
+      await lockLedgerSetupFence(
+        db,
+        identity.org_id,
+        identity.journal_mode === "currency_adjustment" ? "exclusive" : "shared",
+      );
+      const locked = (
+        await db.execute<{ journal_mode: string }>(
+          sql`select journal_mode from documents where org_id=${identity.org_id} and id=${documentId} for update`,
+          "objects",
+        )
+      )[0];
+      if (
+        locked?.journal_mode === "currency_adjustment" &&
+        identity.journal_mode !== "currency_adjustment"
+      )
+        throw new PostingError(
+          "The journal mode changed before posting. Reload the journal and post again.",
+        );
       await assertRebateSettlementTaxBeforePosting(identity.org_id, documentId);
     }
     const prepared = await prepareDocumentPosting(documentId, deps, options);
@@ -119,9 +151,14 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
       await assertCustomerInvoiceCredit(db, prepared.doc);
     }
     const entryId = await commitDocumentPosting(prepared, options);
-    if (prepared.doc.kind === "journal" && prepared.doc.journalReverseOn) await queueJournalReversal(db,{
-      orgId: prepared.doc.orgId, documentId, sourceEntryId: entryId, reverseOn: prepared.doc.journalReverseOn, actorId: options.audit?.actorId ?? null,
-    });
+    if (prepared.doc.kind === "journal" && prepared.doc.journalReverseOn)
+      await queueJournalReversal(db, {
+        orgId: prepared.doc.orgId,
+        documentId,
+        sourceEntryId: entryId,
+        reverseOn: prepared.doc.journalReverseOn,
+        actorId: options.audit?.actorId ?? null,
+      });
     if (prepared.amortizationRouting.size > 0) {
       // Each deferred line's schedule is created from its posted deferral
       // leg in this same unit: kernel line i posted as journal line i + 1.
@@ -135,37 +172,72 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
           actorId: options.audit?.actorId ?? null,
           routing: prepared.amortizationRouting,
           legs: prepared.kernelLines.flatMap((line, index) =>
-            line.amortizationSourceLineId ? [{ documentLineId: line.amortizationSourceLineId, journalLineNumber: index + 1 }] : []),
+            line.amortizationSourceLineId
+              ? [{ documentLineId: line.amortizationSourceLineId, journalLineNumber: index + 1 }]
+              : [],
+          ),
         });
       } catch (error) {
-        if (error instanceof AmortizationError) throw new PostingError(`${error.message} ${error.remedy}`);
+        if (error instanceof AmortizationError)
+          throw new PostingError(`${error.message} ${error.remedy}`);
         throw error;
       }
     }
-    if (prepared.doc.kind === "vendor_payment" && !deps.migration) await recordPaymentWithholdings(db, {
-      orgId: prepared.doc.orgId, paymentDocumentId: documentId, journalEntryId: entryId,
-      actorId: options.audit?.actorId ?? null,
-    });
+    if (prepared.doc.kind === "vendor_payment" && !deps.migration)
+      await recordPaymentWithholdings(db, {
+        orgId: prepared.doc.orgId,
+        paymentDocumentId: documentId,
+        journalEntryId: entryId,
+        actorId: options.audit?.actorId ?? null,
+      });
     if (!deps.migration) {
       // Stock moves with the posting, not after it: an issue the stock
       // position refuses rolls back the journal and the status flip, so a
       // posted sale always carries its cost of sales.
-      const posted = (await db.execute<{ subsidiaryId: string | null; documentNumber: string | null; postingDate: string }>(sql`
+      const posted = (
+        await db.execute<{
+          subsidiaryId: string | null;
+          documentNumber: string | null;
+          postingDate: string;
+        }>(
+          sql`
         select subsidiary_id as "subsidiaryId", document_number as "documentNumber",
                coalesce(posting_date, document_date)::text as "postingDate"
-          from documents where id = ${documentId} and org_id = ${prepared.doc.orgId}`, "objects"))[0];
+          from documents where id = ${documentId} and org_id = ${prepared.doc.orgId}`,
+          "objects",
+        )
+      )[0];
       if (!posted) throw new PostingError(`document ${documentId} is not readable after posting`);
       await applyPostedInventoryEffects(
-        { id: documentId, orgId: prepared.doc.orgId, kind: prepared.doc.kind, subsidiaryId: posted.subsidiaryId, documentNumber: posted.documentNumber },
+        {
+          id: documentId,
+          orgId: prepared.doc.orgId,
+          kind: prepared.doc.kind,
+          subsidiaryId: posted.subsidiaryId,
+          documentNumber: posted.documentNumber,
+        },
         posted.postingDate,
         entryId,
         options.audit?.actorId ?? null,
       );
     }
     if (!deps.migration) {
-      if (prepared.doc.kind==='customer_invoice'||prepared.doc.kind==='cash_sale') await createObligationsFromInvoice(documentId,prepared.doc.orgId,options.audit?.actorId??null);
-      await settleRebateForPostedDocument(prepared.doc.orgId, documentId, options.audit?.actorId ?? null);
-      await accrueRebatesForDocument(prepared.doc.orgId, documentId, options.audit?.actorId ?? null);
+      if (prepared.doc.kind === "customer_invoice" || prepared.doc.kind === "cash_sale")
+        await createObligationsFromInvoice(
+          documentId,
+          prepared.doc.orgId,
+          options.audit?.actorId ?? null,
+        );
+      await settleRebateForPostedDocument(
+        prepared.doc.orgId,
+        documentId,
+        options.audit?.actorId ?? null,
+      );
+      await accrueRebatesForDocument(
+        prepared.doc.orgId,
+        documentId,
+        options.audit?.actorId ?? null,
+      );
     }
     return { prepared, entryId };
   };

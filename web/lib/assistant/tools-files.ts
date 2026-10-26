@@ -32,7 +32,13 @@ function assistantFileViewer(authz: Authz): FileViewer {
     : can(authz, "documents.read")
       ? "viewer"
       : "none";
-  return { userId: authz.user.id, isAdmin: can(authz, "*"), baseline, canReadApCapture: can(authz, "ap.read"), allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
+  return {
+    userId: authz.user.id,
+    isAdmin: can(authz, "*"),
+    baseline,
+    canReadApCapture: can(authz, "ap.read"),
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  };
 }
 
 const listFilesTool: AssistantToolDef = {
@@ -44,7 +50,13 @@ const listFilesTool: AssistantToolDef = {
   inputSchema: z.object({
     folderId: uuidInput.optional(),
     query: z.string().max(200).optional().describe("Match file name"),
-    limit: z.number().int().min(1).max(100).optional().describe("Maximum files to return (default 25)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe("Maximum files to return (default 25)"),
     offset: z.number().int().min(0).optional().describe("Rows to skip for paging (default 0)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {

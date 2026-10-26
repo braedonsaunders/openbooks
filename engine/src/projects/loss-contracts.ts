@@ -21,11 +21,16 @@ export async function projectLossPolicyMode(
   orgId: string,
   asOfDate: string,
 ): Promise<ProjectLossPolicyMode> {
-  const row = (await runner.execute<{ mode: ProjectLossPolicyMode }>(sql`
+  const row = (
+    await runner.execute<{ mode: ProjectLossPolicyMode }>(
+      sql`
     select mode from project_loss_policies
      where org_id = ${orgId} and effective_from <= ${asOfDate}::date
      order by effective_from desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   return row?.mode ?? "off";
 }
 
@@ -53,14 +58,27 @@ export interface UnassessedLossContract {
 export async function unassessedLossContracts(
   runner: Pick<SqlExecutor, "execute">,
   orgId: string,
-  input: { periodStartsOn: string; periodEndsOn: string; bookId: string; subsidiaryIds: readonly string[] },
+  input: {
+    periodStartsOn: string;
+    periodEndsOn: string;
+    bookId: string;
+    subsidiaryIds: readonly string[];
+  },
 ): Promise<UnassessedLossContract[]> {
   if (!(await orgFeatureEnabled(orgId, "projects", runner as SqlExecutor))) return [];
   const progressOn = await orgFeatureEnabled(orgId, "projectProgress", runner as SqlExecutor);
-  const scope = input.subsidiaryIds.length > 0
-    ? sql`and owned.owner_id = any(${`{${input.subsidiaryIds.join(",")}}`}::uuid[])`
-    : sql``;
-  const projects = await runner.execute<{ id: string; code: string; name: string; subsidiary_id: string; contract_value: string }>(sql`
+  const scope =
+    input.subsidiaryIds.length > 0
+      ? sql`and owned.owner_id = any(${`{${input.subsidiaryIds.join(",")}}`}::uuid[])`
+      : sql``;
+  const projects = await runner.execute<{
+    id: string;
+    code: string;
+    name: string;
+    subsidiary_id: string;
+    contract_value: string;
+  }>(
+    sql`
     select owned.id, owned.code, owned.name, owned.owner_id as subsidiary_id, owned.contract_value::text as contract_value
       from (
         select p.id, p.org_id, p.code, p.name, p.contract_value,
@@ -79,19 +97,28 @@ export async function unassessedLossContracts(
             and obligation.subsidiary_id = owned.owner_id
             and obligation.book_id = ${input.bookId}
             and change.effective_on between ${input.periodStartsOn}::date and ${input.periodEndsOn}::date)
-     order by owned.code, owned.id`, "objects");
+     order by owned.code, owned.id`,
+    "objects",
+  );
   if (projects.length === 0) return [];
   const laborWip = (await recognitionAccounts(orgId, runner)).laborWip ?? null;
   const found: UnassessedLossContract[] = [];
   for (const project of projects) {
     const { estimatedTotal } = await projectCostEstimate(runner, orgId, {
-      projectId: project.id, subsidiaryId: project.subsidiary_id, bookId: input.bookId,
-      laborWipAccountId: laborWip, asOfDate: input.periodEndsOn, progressOn,
+      projectId: project.id,
+      subsidiaryId: project.subsidiary_id,
+      bookId: input.bookId,
+      laborWipAccountId: laborWip,
+      asOfDate: input.periodEndsOn,
+      progressOn,
     });
     if (cmp(estimatedTotal, project.contract_value) > 0) {
       found.push({
-        projectId: project.id, code: project.code, name: project.name,
-        contractValue: normalizeMoney(project.contract_value), estimatedTotalCost: estimatedTotal,
+        projectId: project.id,
+        code: project.code,
+        name: project.name,
+        contractValue: normalizeMoney(project.contract_value),
+        estimatedTotalCost: estimatedTotal,
       });
     }
   }
@@ -109,10 +136,13 @@ export async function unownedContractProjects(
   orgId: string,
 ): Promise<{ projectId: string; code: string; name: string }[]> {
   if (!(await orgFeatureEnabled(orgId, "projects", runner as SqlExecutor))) return [];
-  return await runner.execute<{ projectId: string; code: string; name: string }>(sql`
+  return await runner.execute<{ projectId: string; code: string; name: string }>(
+    sql`
     select p.id as "projectId", p.code, p.name
       from projects p
      where p.org_id = ${orgId} and p.is_active and p.contract_value > 0
        and ${recordOwnerSubsidiary(orgId, sql`p.subsidiary_id`)} is null
-     order by p.code, p.id`, "objects");
+     order by p.code, p.id`,
+    "objects",
+  );
 }

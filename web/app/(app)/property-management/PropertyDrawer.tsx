@@ -9,7 +9,27 @@ import { CustomFieldInput } from "../../../components/custom-field-input";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import type { SaveAction, WorkspaceOptions } from "./types";
 
-export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave, fixedAssetsEnabled = false, multiCurrency = false, fieldDefs = [] }: { open: boolean; closeHref: string; onClose: () => void; options: WorkspaceOptions; busy: boolean; onSave: SaveAction; fixedAssetsEnabled?: boolean; multiCurrency?: boolean; fieldDefs?: CustomFieldDefClient[] }) {
+export function PropertyDrawer({
+  open,
+  closeHref,
+  onClose,
+  options,
+  busy,
+  onSave,
+  fixedAssetsEnabled = false,
+  multiCurrency = false,
+  fieldDefs = [],
+}: {
+  open: boolean;
+  closeHref: string;
+  onClose: () => void;
+  options: WorkspaceOptions;
+  busy: boolean;
+  onSave: SaveAction;
+  fixedAssetsEnabled?: boolean;
+  multiCurrency?: boolean;
+  fieldDefs?: CustomFieldDefClient[];
+}) {
   const initial = useMemo(
     () => ({
       code: "",
@@ -79,11 +99,7 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
           </Button>
           <Button
             disabled={
-              busy ||
-              !form.code ||
-              !form.name ||
-              !form.subsidiaryId ||
-              !form.rentIncomeAccountId
+              busy || !form.code || !form.name || !form.subsidiaryId || !form.rentIncomeAccountId
             }
             onClick={submit}
           >
@@ -95,23 +111,15 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
       <div className="space-y-4 p-1">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("code")}>
-            <Input
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-            />
+            <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
           </Field>
           <Field label={tCommon("labels.name")}>
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
           <Field label={tCommon("labels.type")}>
             <Select
               value={form.propertyType}
-              onChange={(e) =>
-                setForm({ ...form, propertyType: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, propertyType: e.target.value })}
             >
               {PROPERTY_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -124,9 +132,7 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
             <Select
               value={form.subsidiaryId}
               onChange={(e) => {
-                const sub = options.subsidiaries.find(
-                  (item: Option) => item.id === e.target.value,
-                );
+                const sub = options.subsidiaries.find((item: Option) => item.id === e.target.value);
                 setForm({
                   ...form,
                   subsidiaryId: e.target.value,
@@ -155,27 +161,25 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
               ))}
             </Select>
           </Field>
-          {fixedAssetsEnabled ? <Field label={t("fixedAsset")}>
-            <Select
-              value={form.fixedAssetId}
-              onChange={(e) =>
-                setForm({ ...form, fixedAssetId: e.target.value })
-              }
-            >
-              <option value="">{t("notOwned")}</option>
-              {options.assets.map((o: Option) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </Select>
-          </Field> : null}
+          {fixedAssetsEnabled ? (
+            <Field label={t("fixedAsset")}>
+              <Select
+                value={form.fixedAssetId}
+                onChange={(e) => setForm({ ...form, fixedAssetId: e.target.value })}
+              >
+                <option value="">{t("notOwned")}</option>
+                {options.assets.map((o: Option) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           <Field label={t("rentIncomeAccount")}>
             <Select
               value={form.rentIncomeAccountId}
-              onChange={(e) =>
-                setForm({ ...form, rentIncomeAccountId: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, rentIncomeAccountId: e.target.value })}
             >
               <option value="">{t("selectAccount")}</option>
               {options.incomeAccounts.map((o: Option) => (
@@ -188,9 +192,7 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
           <Field label={t("camIncomeAccount")}>
             <Select
               value={form.camIncomeAccountId}
-              onChange={(e) =>
-                setForm({ ...form, camIncomeAccountId: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, camIncomeAccountId: e.target.value })}
             >
               <option value="">{t("selectAccount")}</option>
               {options.incomeAccounts.map((o: Option) => (
@@ -203,9 +205,7 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
           <Field label={t("depositLiability")}>
             <Select
               value={form.depositLiabilityAccountId}
-              onChange={(e) =>
-                setForm({ ...form, depositLiabilityAccountId: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, depositLiabilityAccountId: e.target.value })}
             >
               <option value="">{t("selectLiability")}</option>
               {options.liabilityAccounts.map((o: Option) => (
@@ -218,9 +218,7 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
           <Field label={t("defaultDepositBank")}>
             <Select
               value={form.defaultBankAccountId}
-              onChange={(e) =>
-                setForm({ ...form, defaultBankAccountId: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, defaultBankAccountId: e.target.value })}
             >
               <option value="">{t("selectBank")}</option>
               {options.bankAccounts.map((o: Option) => (
@@ -239,10 +237,7 @@ export function PropertyDrawer({ open, closeHref, onClose, options, busy, onSave
             />
           </Field>
           <Field label={t("city")}>
-            <Input
-              value={form.city}
-              onChange={(e) => setForm({ ...form, city: e.target.value })}
-            />
+            <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           </Field>
           <Field label={t("region")}>
             <Input

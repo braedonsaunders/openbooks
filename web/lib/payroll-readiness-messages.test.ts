@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
 
 /**
  * Every readiness code the payroll engine can emit must have a message.
@@ -19,31 +19,29 @@ import test from 'node:test'
  * a database.
  */
 
-const READINESS = join(
-  import.meta.dirname, '..', '..', 'engine', 'src', 'payroll', 'readiness.ts',
-)
-const MESSAGES = join(import.meta.dirname, '..', 'messages', 'en', 'payroll.json')
+const READINESS = join(import.meta.dirname, "..", "..", "engine", "src", "payroll", "readiness.ts");
+const MESSAGES = join(import.meta.dirname, "..", "messages", "en", "payroll.json");
 
 /** Codes passed to `flag("blocker" | "warning", "<code>", …)`, newlines allowed. */
 function emittedCodes(source: string): string[] {
-  const codes = new Set<string>()
+  const codes = new Set<string>();
   for (const match of source.matchAll(
     /flag\(\s*["'](?:blocker|warning)["']\s*,\s*["']([a-zA-Z][\w.]*)["']/g,
   )) {
-    codes.add(match[1]!)
+    codes.add(match[1]!);
   }
-  return [...codes].sort()
+  return [...codes].sort();
 }
 
 function messageAt(catalog: Record<string, unknown>, code: string): unknown {
   // next-intl resolves a dotted key by NESTING, which is exactly how the wizard
   // looks these up, so resolve them the same way here.
-  let node: unknown = catalog
-  for (const segment of ['wizard', 'readiness', 'codes', ...code.split('.')]) {
-    if (node === null || typeof node !== 'object') return undefined
-    node = (node as Record<string, unknown>)[segment]
+  let node: unknown = catalog;
+  for (const segment of ["wizard", "readiness", "codes", ...code.split(".")]) {
+    if (node === null || typeof node !== "object") return undefined;
+    node = (node as Record<string, unknown>)[segment];
   }
-  return node
+  return node;
 }
 
 /**
@@ -55,47 +53,55 @@ function messageAt(catalog: Record<string, unknown>, code: string): unknown {
  * must stay neutral ("annual statutory ceilings") and leave the specifics
  * to the linked fix screen.
  */
-const COUNTRY_PROGRAM = /\b(CPP2?|QPP|QPIP|EI|FICA|FUTA|SUTA|TD1|T4127|T4|W-2|W-4|401\(k\)|ROE|CRA|IRS)\b/
+const COUNTRY_PROGRAM =
+  /\b(CPP2?|QPP|QPIP|EI|FICA|FUTA|SUTA|TD1|T4127|T4|W-2|W-4|401\(k\)|ROE|CRA|IRS)\b/;
 
-function allMessages(node: unknown, path: string, out: Array<{ path: string; text: string }>): void {
-  if (typeof node === 'string') {
-    out.push({ path, text: node })
-    return
+function allMessages(
+  node: unknown,
+  path: string,
+  out: Array<{ path: string; text: string }>,
+): void {
+  if (typeof node === "string") {
+    out.push({ path, text: node });
+    return;
   }
-  if (node !== null && typeof node === 'object') {
+  if (node !== null && typeof node === "object") {
     for (const [key, value] of Object.entries(node)) {
-      allMessages(value, path ? `${path}.${key}` : key, out)
+      allMessages(value, path ? `${path}.${key}` : key, out);
     }
   }
 }
 
-test('no readiness message names a country-specific payroll program', () => {
-  const catalog = JSON.parse(readFileSync(MESSAGES, 'utf8')) as Record<string, unknown>
-  const found: Array<{ path: string; text: string }> = []
-  allMessages((catalog as { wizard?: unknown }).wizard, 'wizard', found)
-  const codes = found.filter((entry) => entry.path.startsWith('wizard.readiness.codes.'))
-  assert.ok(codes.length >= 15, `only ${codes.length} readiness messages were found — the scan broke`)
-  const offending = codes.filter((entry) => COUNTRY_PROGRAM.test(entry.text))
+test("no readiness message names a country-specific payroll program", () => {
+  const catalog = JSON.parse(readFileSync(MESSAGES, "utf8")) as Record<string, unknown>;
+  const found: Array<{ path: string; text: string }> = [];
+  allMessages((catalog as { wizard?: unknown }).wizard, "wizard", found);
+  const codes = found.filter((entry) => entry.path.startsWith("wizard.readiness.codes."));
+  assert.ok(
+    codes.length >= 15,
+    `only ${codes.length} readiness messages were found — the scan broke`,
+  );
+  const offending = codes.filter((entry) => COUNTRY_PROGRAM.test(entry.text));
   assert.deepEqual(
     offending.map((entry) => entry.path),
     [],
-    'these readiness messages name a country-specific program on a country-agnostic screen:\n'
-      + offending.map((entry) => `  payroll.${entry.path}: ${entry.text}`).join('\n'),
-  )
-})
+    "these readiness messages name a country-specific program on a country-agnostic screen:\n" +
+      offending.map((entry) => `  payroll.${entry.path}: ${entry.text}`).join("\n"),
+  );
+});
 
-test('every readiness code the engine emits has a message', () => {
-  const codes = emittedCodes(readFileSync(READINESS, 'utf8'))
+test("every readiness code the engine emits has a message", () => {
+  const codes = emittedCodes(readFileSync(READINESS, "utf8"));
   // A scan that silently matched nothing would pass this file vacuously.
-  assert.ok(codes.length >= 15, `only ${codes.length} readiness codes were found — the scan broke`)
-  assert.ok(codes.includes('employee.noWage'), 'the scan missed a known code')
+  assert.ok(codes.length >= 15, `only ${codes.length} readiness codes were found — the scan broke`);
+  assert.ok(codes.includes("employee.noWage"), "the scan missed a known code");
 
-  const catalog = JSON.parse(readFileSync(MESSAGES, 'utf8')) as Record<string, unknown>
-  const missing = codes.filter((code) => typeof messageAt(catalog, code) !== 'string')
+  const catalog = JSON.parse(readFileSync(MESSAGES, "utf8")) as Record<string, unknown>;
+  const missing = codes.filter((code) => typeof messageAt(catalog, code) !== "string");
   assert.deepEqual(
     missing,
     [],
-    'these readiness codes would render as raw key paths in the run wizard:\n'
-      + missing.map((code) => `  payroll.wizard.readiness.codes.${code}`).join('\n'),
-  )
-})
+    "these readiness codes would render as raw key paths in the run wizard:\n" +
+      missing.map((code) => `  payroll.wizard.readiness.codes.${code}`).join("\n"),
+  );
+});

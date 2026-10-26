@@ -44,28 +44,49 @@ test("rates are exact positive decimals and never cross binary floating point", 
   assert.equal(closingFxEvidenceRate("0.0000000001"), "0.0000000001");
   assert.equal(closingFxEvidenceRate("0"), null);
   assert.equal(closingFxEvidenceRate("-1.12"), null);
-  assert.equal(closingFxEvidenceRate("1.12345678901"), null, "eleven decimal places do not fit the stored rate");
-  assert.equal(closingFxEvidenceRate("1234567890.1"), null, "ten whole digits do not fit the stored rate");
+  assert.equal(
+    closingFxEvidenceRate("1.12345678901"),
+    null,
+    "eleven decimal places do not fit the stored rate",
+  );
+  assert.equal(
+    closingFxEvidenceRate("1234567890.1"),
+    null,
+    "ten whole digits do not fit the stored rate",
+  );
   assert.equal(closingFxEvidenceRate(1.12), null, "a JSON number is not an exact decimal");
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ rate: "1e0" })), ClosingFxEvidenceError);
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ rate: "1e0" })),
+    ClosingFxEvidenceError,
+  );
 });
 
 test("the expected current quote is required: null opens a root, an id succeeds it, omission refuses", () => {
   const omitted = request();
   delete omitted.expectedCurrentId;
   assert.throws(() => parseClosingFxRateEvidenceInput(omitted), /state the current recorded quote/);
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ expectedCurrentId: undefined })), /state the current recorded quote/);
-  assert.equal(parseClosingFxRateEvidenceInput(request({ expectedCurrentId: null })).expectedCurrentId, null);
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ expectedCurrentId: undefined })),
+    /state the current recorded quote/,
+  );
+  assert.equal(
+    parseClosingFxRateEvidenceInput(request({ expectedCurrentId: null })).expectedCurrentId,
+    null,
+  );
 });
 
 test("validated identities normalize to canonical UUID case before hashing and fencing", () => {
-  const upper = parseClosingFxRateEvidenceInput(request({
-    bookId: IDS.bookId.toUpperCase(),
-    expectedCurrentId: "66666666-6666-4666-8666-666666666666".toUpperCase(),
-  }));
+  const upper = parseClosingFxRateEvidenceInput(
+    request({
+      bookId: IDS.bookId.toUpperCase(),
+      expectedCurrentId: "66666666-6666-4666-8666-666666666666".toUpperCase(),
+    }),
+  );
   assert.equal(upper.bookId, IDS.bookId);
   assert.equal(upper.expectedCurrentId, "66666666-6666-4666-8666-666666666666");
-  const lower = parseClosingFxRateEvidenceInput(request({ expectedCurrentId: "66666666-6666-4666-8666-666666666666" }));
+  const lower = parseClosingFxRateEvidenceInput(
+    request({ expectedCurrentId: "66666666-6666-4666-8666-666666666666" }),
+  );
   assert.equal(
     closingFxEvidenceRequestSha256(upper, IDS.subsidiaryId.toUpperCase()),
     closingFxEvidenceRequestSha256(lower, IDS.subsidiaryId),
@@ -74,27 +95,53 @@ test("validated identities normalize to canonical UUID case before hashing and f
 });
 
 test("a recording names its position, currencies and audit reason or refuses", () => {
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ source: "   " })), /where the closing exchange rate came from/);
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ reason: "short" })), /why this closing rate is recorded/);
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ measurementCurrency: "EUR" })), /no exchange rate to record/);
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ bookId: "not-a-uuid" })), /valid bookId/);
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ expectedCurrentId: "current" })), /current recorded quote/);
-  assert.throws(() => parseClosingFxRateEvidenceInput(request({ rateDate: "31/07/2026" })), /final day/);
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ source: "   " })),
+    /where the closing exchange rate came from/,
+  );
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ reason: "short" })),
+    /why this closing rate is recorded/,
+  );
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ measurementCurrency: "EUR" })),
+    /no exchange rate to record/,
+  );
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ bookId: "not-a-uuid" })),
+    /valid bookId/,
+  );
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ expectedCurrentId: "current" })),
+    /current recorded quote/,
+  );
+  assert.throws(
+    () => parseClosingFxRateEvidenceInput(request({ rateDate: "31/07/2026" })),
+    /final day/,
+  );
 });
 
 test("the replay fingerprint binds the expected current quote and the actor", () => {
   const root = parseClosingFxRateEvidenceInput(request());
-  const successor = parseClosingFxRateEvidenceInput(request({
-    expectedCurrentId: "66666666-6666-4666-8666-666666666666",
-    rate: "1.1300000000",
-  }));
+  const successor = parseClosingFxRateEvidenceInput(
+    request({
+      expectedCurrentId: "66666666-6666-4666-8666-666666666666",
+      rate: "1.1300000000",
+    }),
+  );
   const actor = "77777777-7777-4777-8777-777777777777";
-  assert.notEqual(closingFxEvidenceRequestSha256(root, actor), closingFxEvidenceRequestSha256(successor, actor));
+  assert.notEqual(
+    closingFxEvidenceRequestSha256(root, actor),
+    closingFxEvidenceRequestSha256(successor, actor),
+  );
   assert.notEqual(
     closingFxEvidenceRequestSha256(root, actor),
     closingFxEvidenceRequestSha256(root, "88888888-8888-4888-8888-888888888888"),
   );
-  assert.equal(closingFxEvidenceRequestSha256(root, actor), closingFxEvidenceRequestSha256({ ...root }, actor));
+  assert.equal(
+    closingFxEvidenceRequestSha256(root, actor),
+    closingFxEvidenceRequestSha256({ ...root }, actor),
+  );
 });
 
 test("the position fence scopes one book, entity, period, account and currency", () => {
@@ -125,6 +172,12 @@ test("a quote stale in measurement currency or rate date refuses instead of repr
     createdBy: IDS.subsidiaryId,
   };
   assert.equal(staleClosingFxEvidenceRefusal(quote, "CAD", "2026-07-31"), null);
-  assert.match(staleClosingFxEvidenceRefusal(quote, "USD", "2026-07-31")!, /record a successor closing rate/);
-  assert.match(staleClosingFxEvidenceRefusal(quote, "CAD", "2026-08-31")!, /record a successor closing rate/);
+  assert.match(
+    staleClosingFxEvidenceRefusal(quote, "USD", "2026-07-31")!,
+    /record a successor closing rate/,
+  );
+  assert.match(
+    staleClosingFxEvidenceRefusal(quote, "CAD", "2026-08-31")!,
+    /record a successor closing rate/,
+  );
 });

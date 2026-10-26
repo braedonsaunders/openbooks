@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -20,7 +20,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -71,7 +79,9 @@ const SEGMENTS: never[] = [];
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -82,7 +92,10 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
 const STOCKED_ITEM = "damaged-bags-item";
 const WAREHOUSE = "warehouse-main";
 
-async function mountCreditDrawer({ stockLocationId, sources }: {
+async function mountCreditDrawer({
+  stockLocationId,
+  sources,
+}: {
   stockLocationId: string | null;
   sources: Record<string, unknown>[];
 }) {
@@ -114,9 +127,23 @@ async function mountCreditDrawer({ stockLocationId, sources }: {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <DocumentDrawer
-            payload={{ doc, lines: [
-              { id: randomUUID(), line_number: 1, account_id: randomUUID(), item_id: STOCKED_ITEM, description: "Damaged bags", quantity: "4", unit_price: "184.30", amount: "737.20", stock_location_id: stockLocationId, custom: {} },
-            ] }}
+            payload={{
+              doc,
+              lines: [
+                {
+                  id: randomUUID(),
+                  line_number: 1,
+                  account_id: randomUUID(),
+                  item_id: STOCKED_ITEM,
+                  description: "Damaged bags",
+                  quantity: "4",
+                  unit_price: "184.30",
+                  amount: "737.20",
+                  stock_location_id: stockLocationId,
+                  custom: {},
+                },
+              ],
+            }}
             config={DOC_KINDS["vendor_credit"]!}
             basePath="/ap/bills"
             recordType="vendor_credit"
@@ -174,12 +201,21 @@ test("a warehouseless stocked credit line offers the allowance with no receipts 
   const { done } = await mountCreditDrawer({ stockLocationId: null, sources: [] });
   t.after(done);
 
-  assert.match(document.body.textContent ?? "", /Returns receipt/, "the return column header renders");
+  assert.match(
+    document.body.textContent ?? "",
+    /Returns receipt/,
+    "the return column header renders",
+  );
   const select = returnCellSelect();
   const options = [...select.options].map((option) => [option.value, option.textContent?.trim()]);
-  assert.ok(options.some(([value]) => value === ""), "the unfinished choice stays selectable");
   assert.ok(
-    options.some(([value, label]) => value === "allowance" && label === "Allowance — no goods returned"),
+    options.some(([value]) => value === ""),
+    "the unfinished choice stays selectable",
+  );
+  assert.ok(
+    options.some(
+      ([value, label]) => value === "allowance" && label === "Allowance — no goods returned",
+    ),
     "the allowance (no goods returned) is offered with no receipt in the list",
   );
 });
@@ -188,18 +224,20 @@ test("a warehoused stocked credit line offers its receipt beside the allowance",
   const movementId = randomUUID();
   const { done } = await mountCreditDrawer({
     stockLocationId: WAREHOUSE,
-    sources: [{
-      movementId,
-      movedAt: "2026-09-10",
-      documentNumber: "BILL-00041",
-      remaining: "10",
-      lotId: null,
-      lotCode: null,
-      serialId: null,
-      serialCode: null,
-      itemId: STOCKED_ITEM,
-      stockLocationId: WAREHOUSE,
-    }],
+    sources: [
+      {
+        movementId,
+        movedAt: "2026-09-10",
+        documentNumber: "BILL-00041",
+        remaining: "10",
+        lotId: null,
+        lotCode: null,
+        serialId: null,
+        serialCode: null,
+        itemId: STOCKED_ITEM,
+        stockLocationId: WAREHOUSE,
+      },
+    ],
   });
   t.after(done);
 

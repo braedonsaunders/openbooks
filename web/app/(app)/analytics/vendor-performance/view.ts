@@ -1,16 +1,16 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { vendorData } from '../../../../lib/analytics/vendor-data'
-import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
-import { reportPeriodLabel } from '../../../../lib/format'
-import { projectVendorDashboard } from '../../../../lib/analytics/overview-projection'
-import { vendorStrings } from '../../../../lib/analytics/vendor-strings'
-import type { VendorView } from './VendorView'
+import { getLocale, getTranslations } from "next-intl/server";
+import { frame, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { resolvePeriod } from "../../../../lib/periods";
+import { parseReportQuery } from "../../../../lib/report-filters";
+import { vendorData } from "../../../../lib/analytics/vendor-data";
+import { analyticsFiscalPeriodPicker } from "../../../../lib/analytics/fiscal-period-options";
+import { reportPeriodLabel } from "../../../../lib/format";
+import { projectVendorDashboard } from "../../../../lib/analytics/overview-projection";
+import { vendorStrings } from "../../../../lib/analytics/vendor-strings";
+import type { VendorView } from "./VendorView";
 
 /**
  * Vendor performance, split into a loader and a spec.
@@ -30,58 +30,81 @@ import type { VendorView } from './VendorView'
  * which dates the dashboard covers.
  */
 
-type ViewProps = Parameters<typeof VendorView>[0]
+type ViewProps = Parameters<typeof VendorView>[0];
 
 export interface VendorPerformanceData {
-  title: string
-  backLabel: string
-  periodLabel: string
+  title: string;
+  backLabel: string;
+  periodLabel: string;
   /** Named fiscal periods for the shared period picker (URL-addressable). */
-  extraPeriods: { id: string; label: string; from: string; to: string }[]
-  extraPeriodsLabel: string
-  data: ViewProps['data']
-  canConfigure: boolean
+  extraPeriods: { id: string; label: string; from: string; to: string }[];
+  extraPeriodsLabel: string;
+  data: ViewProps["data"];
+  canConfigure: boolean;
 }
 
-export async function loadVendorPerformance(sp: Record<string, string | undefined>): Promise<VendorPerformanceData> {
-  const t = await getTranslations('analytics.vendor')
-  const authz = await requirePermission('reports.read')
+export async function loadVendorPerformance(
+  sp: Record<string, string | undefined>,
+): Promise<VendorPerformanceData> {
+  const t = await getTranslations("analytics.vendor");
+  const authz = await requirePermission("reports.read");
 
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, {
+    customFrom: q.from,
+    customTo: q.to,
+    orgId: authz.user.orgId,
+  });
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
-  const locale = await getLocale()
-  const [tc, picker] = await Promise.all([getTranslations('analytics'), analyticsFiscalPeriodPicker(authz.user.orgId, locale)])
+  const locale = await getLocale();
+  const [tc, picker] = await Promise.all([
+    getTranslations("analytics"),
+    analyticsFiscalPeriodPicker(authz.user.orgId, locale),
+  ]);
   // An accounting-period window reads as every period list labels it, in
   // the viewer's locale; custom windows read as their localized dates.
-  const periodLabel = reportPeriodLabel(period, locale)
-  const strings = vendorStrings((key, values) => tc(key, values), locale)
-  const data = await vendorData({ from: period.from, to: period.to, label: periodLabel }, authz.user.orgId, authz.allowedSubsidiaryIds, strings)
+  const periodLabel = reportPeriodLabel(period, locale);
+  const strings = vendorStrings((key, values) => tc(key, values), locale);
+  const data = await vendorData(
+    { from: period.from, to: period.to, label: periodLabel },
+    authz.user.orgId,
+    authz.allowedSubsidiaryIds,
+    strings,
+  );
 
   return {
-    title: t('title'),
-    backLabel: t('backToHub'),
+    title: t("title"),
+    backLabel: t("backToHub"),
     periodLabel,
     extraPeriods: picker.extraPeriods,
     extraPeriodsLabel: picker.extraPeriodsLabel,
     data: projectVendorDashboard(data),
-    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
-  }
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, "admin.setup.manage"),
+  };
 }
 
 export function vendorPerformanceSpec(data: VendorPerformanceData): PageSpec {
   return page({
-    route: '/analytics/vendor-performance',
-    layout: 'list',
+    route: "/analytics/vendor-performance",
+    layout: "list",
     header: [
-      frame('analytics-header', [widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel })], {
-        title: data.title,
-        periodLabel: data.periodLabel,
-        backLabel: data.backLabel,
-      }),
+      frame(
+        "analytics-header",
+        [
+          widgetBlock("report-period-filter", {
+            extraPeriods: data.extraPeriods,
+            extraPeriodsLabel: data.extraPeriodsLabel,
+          }),
+        ],
+        {
+          title: data.title,
+          periodLabel: data.periodLabel,
+          backLabel: data.backLabel,
+        },
+      ),
     ],
-    body: [widgetBlock('vendor-view', { data: data.data, canConfigure: data.canConfigure })],
-  })
+    body: [widgetBlock("vendor-view", { data: data.data, canConfigure: data.canConfigure })],
+  });
 }

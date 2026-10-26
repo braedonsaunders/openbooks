@@ -7,22 +7,29 @@ import { NetSuiteSource } from "./netsuite-source.ts";
 const argv = process.argv.slice(2);
 const arg = (name: string): string | null => {
   const index = argv.indexOf(name);
-  return index >= 0 ? argv[index + 1] ?? null : null;
+  return index >= 0 ? (argv[index + 1] ?? null) : null;
 };
 const orgId = arg("--org");
 const connectionId = arg("--connection");
 if (!orgId || !connectionId) {
-  throw new Error("usage: npm run sync:fixed-assets -- --org <org-id> --connection <connection-id>");
+  throw new Error(
+    "usage: npm run sync:fixed-assets -- --org <org-id> --connection <connection-id>",
+  );
 }
 
 const result = await withOrgContext(orgId, async () => {
   const connection = await getConnection(orgId, connectionId);
-  if (!connection) throw new Error(`NetSuite connection ${connectionId} not found for org ${orgId}`);
+  if (!connection)
+    throw new Error(`NetSuite connection ${connectionId} not found for org ${orgId}`);
   const source = buildSource(connection);
-  if (!(source instanceof NetSuiteSource)) throw new Error(`connection ${connectionId} is not NetSuite`);
-  const actor = (await db.execute<{ id: string }>(sql`
+  if (!(source instanceof NetSuiteSource))
+    throw new Error(`connection ${connectionId} is not NetSuite`);
+  const actor = await db.execute<{ id: string }>(
+    sql`
     select id from users where org_id = ${orgId} order by created_at limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   return syncNetSuiteFixedAssets(source, {
     orgId,
     connectionId,

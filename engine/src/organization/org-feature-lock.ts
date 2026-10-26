@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { dataDependentFeatureDefault, withDataDependentDefaults, type DataDependentFeatureKey } from "./feature-defaults.ts";
+import {
+  dataDependentFeatureDefault,
+  withDataDependentDefaults,
+  type DataDependentFeatureKey,
+} from "./feature-defaults.ts";
 import { featureEnabled, type FeatureState } from "./feature-registry.ts";
 
 /**
@@ -26,10 +30,7 @@ export function featureGateLockKey(orgId: string): string {
  * waits for the disable and then refuses on the recheck, or commits first
  * and makes the disable refuse — never both applied.
  */
-export async function acquireOrgFeatureGateLock(
-  runner: SqlExecutor,
-  orgId: string,
-): Promise<void> {
+export async function acquireOrgFeatureGateLock(runner: SqlExecutor, orgId: string): Promise<void> {
   await runner.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`,
   );
@@ -50,15 +51,19 @@ export async function lockAndCheckOrgFeature(
   orgId: string,
   key: string,
 ): Promise<boolean> {
-  const row = (await runner.execute<{ features: FeatureState | null }>(sql`
-    select settings->'features' as features from orgs where id=${orgId} for share`, "objects"))[0];
+  const row = (
+    await runner.execute<{ features: FeatureState | null }>(
+      sql`
+    select settings->'features' as features from orgs where id=${orgId} for share`,
+      "objects",
+    )
+  )[0];
   if (!row) return false;
   const stored = row.features ?? {};
-  if (
-    (key === "multiSubsidiary" || key === "multiCurrency") &&
-    typeof stored[key] !== "boolean"
-  ) {
-    if (!(await dataDependentFeatureDefault(runner, orgId, key as DataDependentFeatureKey, stored))) {
+  if ((key === "multiSubsidiary" || key === "multiCurrency") && typeof stored[key] !== "boolean") {
+    if (
+      !(await dataDependentFeatureDefault(runner, orgId, key as DataDependentFeatureKey, stored))
+    ) {
       return false;
     }
     return featureEnabled({ ...stored, [key]: true }, key);
@@ -91,13 +96,15 @@ export async function orgFeatureEnabled(
   key: string,
   executor: SqlExecutor = db,
 ): Promise<boolean> {
-  const row = (await executor.execute<{ features: FeatureState | null }>(sql`
-    select settings->'features' as features from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await executor.execute<{ features: FeatureState | null }>(
+      sql`
+    select settings->'features' as features from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   const stored = row?.features ?? {};
-  if (
-    (key === "multiSubsidiary" || key === "multiCurrency") &&
-    typeof stored[key] !== "boolean"
-  ) {
+  if ((key === "multiSubsidiary" || key === "multiCurrency") && typeof stored[key] !== "boolean") {
     return dataDependentFeatureDefault(executor, orgId, key as DataDependentFeatureKey, stored);
   }
   return featureEnabled(await withDataDependentDefaults(executor, orgId, stored, [key]), key);

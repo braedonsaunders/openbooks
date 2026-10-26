@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -20,7 +20,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -78,12 +86,19 @@ function installFetch(responder: Responder) {
   const prior = globalThis.fetch;
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     calls.push({ url, init });
     if (url.startsWith("/api/documents/duplicates?")) return Response.json({ duplicates: [] });
     return (await responder(url, init)) ?? Response.json({});
   }) as typeof fetch;
-  return { calls, restore: () => { globalThis.fetch = prior; } };
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = prior;
+    },
+  };
 }
 
 function blankCreateDoc() {
@@ -108,7 +123,9 @@ function blankCreateDoc() {
 async function mountCreate() {
   const pushed: string[] = [];
   globalThis.__drawerRouter = {
-    push(url: string) { pushed.push(url); },
+    push(url: string) {
+      pushed.push(url);
+    },
     refresh() {},
   };
   globalThis.__drawerToasts = [];
@@ -125,8 +142,13 @@ async function mountCreate() {
               doc: blankCreateDoc(),
               lines: [
                 {
-                  id: "", account_id: "income-1", item_id: null, description: "Services",
-                  quantity: "1", unit_price: "100", amount: "100.00",
+                  id: "",
+                  account_id: "income-1",
+                  item_id: null,
+                  description: "Services",
+                  quantity: "1",
+                  unit_price: "100",
+                  amount: "100.00",
                 },
               ],
             }}
@@ -150,7 +172,16 @@ async function mountCreate() {
             canPost
             createMode
             initialMode="edit"
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "submit", visible: true }, { key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [
+                  { key: "submit", visible: true },
+                  { key: "post", visible: true },
+                ],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -163,8 +194,8 @@ async function mountCreate() {
 }
 
 function saveButton(): HTMLButtonElement {
-  const buttons = [...document.querySelectorAll("button")].filter(
-    (b) => ["Save", "Save draft"].includes(b.textContent?.trim() ?? ""),
+  const buttons = [...document.querySelectorAll("button")].filter((b) =>
+    ["Save", "Save draft"].includes(b.textContent?.trim() ?? ""),
   );
   assert.equal(buttons.length, 1, `exactly one Save button must render (saw ${buttons.length})`);
   return buttons[0] as HTMLButtonElement;
@@ -190,7 +221,9 @@ function assertStaysOnForm(pushed: string[], message: RegExp) {
   assert.ok(alert, "the outcome must pin an alert on the record");
   assert.match(alert.textContent ?? "", message);
   assert.ok(
-    (globalThis.__drawerToasts ?? []).some((toast) => toast.kind === "error" && message.test(toast.message)),
+    (globalThis.__drawerToasts ?? []).some(
+      (toast) => toast.kind === "error" && message.test(toast.message),
+    ),
     "the outcome must also toast as an error",
   );
   assert.ok(
@@ -203,14 +236,19 @@ function assertStaysOnForm(pushed: string[], message: RegExp) {
 test("a server refusal of an untouched create shows its reason and keeps the form", async (t) => {
   const net = installFetch((url, init) => {
     if (url === "/api/documents" && init?.method === "POST") {
-      return Response.json({ error: "A new document needs at least one line before it can be saved." }, { status: 422 });
+      return Response.json(
+        { error: "A new document needs at least one line before it can be saved." },
+        { status: 422 },
+      );
     }
     return null;
   });
   t.after(net.restore);
   const { host, root, pushed } = await mountCreate();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await pressSave();
@@ -226,7 +264,9 @@ test("a dead connection during create keeps the entries and says the save is unc
   t.after(net.restore);
   const { host, root, pushed } = await mountCreate();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await pressSave();
@@ -241,7 +281,9 @@ test("a 2xx create response that names no record is refused, never navigated or 
   t.after(net.restore);
   const { host, root, pushed } = await mountCreate();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await pressSave();
@@ -251,14 +293,19 @@ test("a 2xx create response that names no record is refused, never navigated or 
 test("a 2xx create response with a blank record id is refused the same way", async (t) => {
   const net = installFetch((url, init) => {
     if (url === "/api/documents" && init?.method === "POST") {
-      return Response.json({ doc: { id: "", document_number: null, status: "draft" }, lines: [] }, { status: 201 });
+      return Response.json(
+        { doc: { id: "", document_number: null, status: "draft" }, lines: [] },
+        { status: 201 },
+      );
     }
     return null;
   });
   t.after(net.restore);
   const { host, root, pushed } = await mountCreate();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await pressSave();
@@ -275,12 +322,17 @@ test("a retried create after a changed payload shows the localized reload remedy
   t.after(net.restore);
   const { host, root, pushed } = await mountCreate();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   await pressSave();
   assertStaysOnForm(pushed, /already saved with different details/);
-  assert.doesNotMatch(document.querySelector('[role="alert"]')?.textContent ?? "", /document_create_conflict|invalid_idempotency_key/);
+  assert.doesNotMatch(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /document_create_conflict|invalid_idempotency_key/,
+  );
 });
 
 test("an unsaved create offers no Submit or Post before the record exists", async (t) => {
@@ -288,7 +340,9 @@ test("an unsaved create offers no Submit or Post before the record exists", asyn
   t.after(net.restore);
   const { host, root } = await mountCreate();
   t.after(async () => {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     host.remove();
   });
   const labels = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim() ?? "");

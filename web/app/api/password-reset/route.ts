@@ -6,8 +6,10 @@ import { completePasswordReset, requestPasswordReset } from "../../../lib/auth-r
 import { authRequestContext, hasExpectedOrigin } from "../../../lib/auth-policy";
 
 const requestResetBodySchema = z.object({ email: z.string().trim().min(1).max(320) });
-const completeResetBodySchema = z.object({ token: z.string().min(1).max(2048), password: z.string().min(1).max(1024) });
-
+const completeResetBodySchema = z.object({
+  token: z.string().min(1).max(2048),
+  password: z.string().min(1).max(1024),
+});
 
 export const runtime = "nodejs";
 
@@ -16,18 +18,15 @@ export const runtime = "nodejs";
  * whether the address matched an account is never observable here.
  */
 
-
 /** PUT { token, password } — consume the link and set the new password. */
-
 
 export const POST = defineRoute({
   public: "token",
   body: requestResetBodySchema,
   handler: async ({ request, body }) => {
-
-    if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!hasExpectedOrigin(request))
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     const startedAt = Date.now();
-
 
     if (typeof body.email !== "string") {
       return NextResponse.json({ error: "missing email" }, { status: 400 });
@@ -49,9 +48,8 @@ export const PUT = defineRoute({
   public: "token",
   body: completeResetBodySchema,
   handler: async ({ request, body }) => {
-
-    if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-
+    if (!hasExpectedOrigin(request))
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
     if (typeof body.token !== "string" || typeof body.password !== "string") {
       return NextResponse.json({ error: "missing fields" }, { status: 400 });

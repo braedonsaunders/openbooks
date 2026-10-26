@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { getTranslations } from "next-intl/server";
-import { AutopayError, completeSetupByToken, publicSetupPage } from "@openbooks/engine/payments/autopay";
+import {
+  AutopayError,
+  completeSetupByToken,
+  publicSetupPage,
+} from "@openbooks/engine/payments/autopay";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +14,11 @@ export const dynamic = "force-dynamic";
  * off the provider and activates it. Refreshing this page is safe: an
  * already-active method reads back as saved instead of charging anything.
  */
-export default async function PaySetupReturnPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function PaySetupReturnPage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
   const { token } = await params;
   const t = await getTranslations("payments.setup");
 
@@ -35,7 +43,9 @@ export default async function PaySetupReturnPage({ params }: { params: Promise<{
   if (!saved) {
     return (
       <SetupCard title={t("invalidTitle")}>
-        <p className="text-center text-sm text-slate-500 dark:text-slate-400">{refusal ?? t("invalidDetail")}</p>
+        <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+          {refusal ?? t("invalidDetail")}
+        </p>
       </SetupCard>
     );
   }
@@ -55,7 +65,9 @@ function SetupCard({ title, children }: { title: string; children: React.ReactNo
     <div className="grid min-h-screen place-items-center bg-gradient-to-b from-white to-slate-100 p-4 dark:from-slate-950 dark:to-slate-900">
       <div className="w-full max-w-md rounded-3xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/30">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">{title}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            {title}
+          </h1>
         </div>
         {children}
       </div>

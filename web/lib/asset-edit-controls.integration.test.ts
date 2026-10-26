@@ -1,18 +1,24 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import pg from 'pg';
-import { registerHooks } from 'node:module';
-import { buildSchedule, runDepreciation } from '@openbooks/engine/assets/depreciation';
-import { sql } from 'drizzle-orm';
-import { documentRevisionSql } from '@openbooks/engine/records/revision';
-import { db, env } from '@openbooks/engine/platform/db';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/testing/fixtures';
-import { waitForLockWaiter } from '@openbooks/engine/testing/lock-wait';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import pg from "pg";
+import { registerHooks } from "node:module";
+import { buildSchedule, runDepreciation } from "@openbooks/engine/assets/depreciation";
+import { sql } from "drizzle-orm";
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
+import { db, env } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
+import { waitForLockWaiter } from "@openbooks/engine/testing/lock-wait";
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const assetId = randomUUID(), categoryId = randomUUID();
+  const assetId = randomUUID(),
+    categoryId = randomUUID();
   await db.execute(sql`insert into asset_categories
     (id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,gain_loss_account_id,default_method,default_life_months,default_convention)
     values (${categoryId},${org.orgId},'Reversal equipment',${org.accounts.invAsset},${org.accounts.clearing},${org.accounts.adjustment},${org.accounts.adjustment},'straight_line',10,'full_month')`);
@@ -22,130 +28,314 @@ async function seedAsset(org: ScratchOrg) {
   return { actorId, assetId };
 }
 
-const state: { gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null };
+const state: {
+  gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null;
+} = { gate: null };
 Object.assign(globalThis, { __assetEditControls: state });
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier.endsWith('/lib/feature-gates') &&
-      (context.parentURL?.includes('/api/assets/') || context.parentURL?.includes('/lib/api/route'))) {
-    return { shortCircuit: true, url: 'data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetEditControls.gate}' };
-  }
-  return next(specifier, context);
-} });
-const { PATCH } = await import('../app/api/assets/[id]/route');
-const { disposeAsset, remeasureAsset } = await import('@openbooks/engine/assets/asset-lifecycle');
+registerHooks({
+  resolve(specifier, context, next) {
+    if (
+      specifier.endsWith("/lib/feature-gates") &&
+      (context.parentURL?.includes("/api/assets/") || context.parentURL?.includes("/lib/api/route"))
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetEditControls.gate}",
+      };
+    }
+    return next(specifier, context);
+  },
+});
+const { PATCH } = await import("../app/api/assets/[id]/route");
+const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/assets/asset-lifecycle");
 
-const changes = ['cost', 'category', 'subsidiary', 'asset account', 'accumulated account', 'service date', 'draft status', 'active status', 'name', 'unchanged accounts'] as const;
-for (const history of ['none', 'depreciation', 'impairment', 'disposal', 'write-off'] as const) {
+const changes = [
+  "cost",
+  "category",
+  "subsidiary",
+  "asset account",
+  "accumulated account",
+  "service date",
+  "draft status",
+  "active status",
+  "name",
+  "unchanged accounts",
+] as const;
+for (const history of ["none", "depreciation", "impairment", "disposal", "write-off"] as const) {
   for (const change of changes) {
-    test(`asset edit controls: ${history}, ${change}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-      const org = await createScratchOrg();
-      try {
-        const { actorId, assetId } = await seedAsset(org);
-        const categoryId = randomUUID(), subsidiaryId = randomUUID();
-        await db.execute(sql`insert into asset_categories (id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,gain_loss_account_id,default_method,default_life_months,default_convention)
+    test(
+      `asset edit controls: ${history}, ${change}`,
+      { skip: !process.env.OPENBOOKS_DB_URL },
+      async () => {
+        const org = await createScratchOrg();
+        try {
+          const { actorId, assetId } = await seedAsset(org);
+          const categoryId = randomUUID(),
+            subsidiaryId = randomUUID();
+          await db.execute(sql`insert into asset_categories (id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,gain_loss_account_id,default_method,default_life_months,default_convention)
           select ${categoryId},org_id,'Other category',asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,gain_loss_account_id,default_method,default_life_months,default_convention from asset_categories where org_id=${org.orgId} limit 1`);
-        await db.execute(sql`insert into subsidiaries (id,org_id,parent_id,name,base_currency,country,is_active) values (${subsidiaryId},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA',true)`);
-        state.gate = { user: { orgId:org.orgId,id:actorId }, allowedSubsidiaryIds:null };
-        if (history==='depreciation') {
-          await buildSchedule(assetId,org.orgId,actorId,org.bookId);
-          assert.equal((await runDepreciation(org.orgId,'2026-07-31',actorId,assetId)).posted,1);
-        } else if (history==='impairment') {
-          await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'800'});
-        } else if (history==='disposal' || history==='write-off') {
-          await disposeAsset(org.orgId,assetId,{actorId,date:'2026-07-31',proceeds:history==='write-off'?'0':'300',proceedsAccountId:org.accounts.bank,writeOff:history==='write-off'});
-        }
-        const snapshot = async () => await db.execute(sql`
+          await db.execute(
+            sql`insert into subsidiaries (id,org_id,parent_id,name,base_currency,country,is_active) values (${subsidiaryId},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA',true)`,
+          );
+          state.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null };
+          if (history === "depreciation") {
+            await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+            assert.equal(
+              (await runDepreciation(org.orgId, "2026-07-31", actorId, assetId)).posted,
+              1,
+            );
+          } else if (history === "impairment") {
+            await remeasureAsset(org.orgId, assetId, {
+              actorId,
+              date: "2026-07-31",
+              newCarryingValue: "800",
+            });
+          } else if (history === "disposal" || history === "write-off") {
+            await disposeAsset(org.orgId, assetId, {
+              actorId,
+              date: "2026-07-31",
+              proceeds: history === "write-off" ? "0" : "300",
+              proceedsAccountId: org.accounts.bank,
+              writeOff: history === "write-off",
+            });
+          }
+          const snapshot = async () =>
+            await db.execute(
+              sql`
           select (select jsonb_agg(to_jsonb(a) order by id) from fixed_assets a where org_id=${org.orgId}) as assets,
                  (select jsonb_agg(to_jsonb(e) order by id) from asset_events e where org_id=${org.orgId}) as events,
                  (select jsonb_agg(to_jsonb(e) order by id) from journal_entries e where org_id=${org.orgId}) as entries,
                  (select jsonb_agg(to_jsonb(l) order by id) from depreciation_schedule_lines l where org_id=${org.orgId}) as schedule_lines
-        `, 'objects');
-        const before = await snapshot();
-        const bodies: Record<typeof changes[number], Record<string,unknown>> = {
-          cost:{acquisitionCost:'2000'},category:{categoryId},subsidiary:{subsidiaryId},
-          'asset account':{assetAccountId:org.accounts.taxInput},'accumulated account':{accumulatedDepreciationAccountId:org.accounts.taxOutput},
-          'service date':{inServiceOn:'2026-07-16'},'draft status':{status:'draft'},'active status':{status:'in_service'},name:{name:'Reviewed name'},
-          'unchanged accounts':{assetAccountId:org.accounts.invAsset,accumulatedDepreciationAccountId:org.accounts.clearing,depreciationExpenseAccountId:org.accounts.adjustment},
-        };
-        const response = await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{
-          method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({...bodies[change],expectedUpdatedAt:await revision(assetId)}),
-        }),{params:Promise.resolve({id:assetId})});
-        const allowed = history==='none' || change==='name' || change==='unchanged accounts' || (change==='active status' && history!=='disposal' && history!=='write-off');
-        assert.equal(response.status,allowed?200:409,JSON.stringify(await response.json()));
-        if (!allowed) assert.deepEqual(await snapshot(),before,'refusal preserves all financial and configuration state');
-      } finally {state.gate=null;await dropScratchOrg(org.orgId)}
-    });
+        `,
+              "objects",
+            );
+          const before = await snapshot();
+          const bodies: Record<(typeof changes)[number], Record<string, unknown>> = {
+            cost: { acquisitionCost: "2000" },
+            category: { categoryId },
+            subsidiary: { subsidiaryId },
+            "asset account": { assetAccountId: org.accounts.taxInput },
+            "accumulated account": { accumulatedDepreciationAccountId: org.accounts.taxOutput },
+            "service date": { inServiceOn: "2026-07-16" },
+            "draft status": { status: "draft" },
+            "active status": { status: "in_service" },
+            name: { name: "Reviewed name" },
+            "unchanged accounts": {
+              assetAccountId: org.accounts.invAsset,
+              accumulatedDepreciationAccountId: org.accounts.clearing,
+              depreciationExpenseAccountId: org.accounts.adjustment,
+            },
+          };
+          const response = await PATCH(
+            new Request(`http://audit.local/api/assets/${assetId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...bodies[change],
+                expectedUpdatedAt: await revision(assetId),
+              }),
+            }),
+            { params: Promise.resolve({ id: assetId }) },
+          );
+          const allowed =
+            history === "none" ||
+            change === "name" ||
+            change === "unchanged accounts" ||
+            (change === "active status" && history !== "disposal" && history !== "write-off");
+          assert.equal(response.status, allowed ? 200 : 409, JSON.stringify(await response.json()));
+          if (!allowed)
+            assert.deepEqual(
+              await snapshot(),
+              before,
+              "refusal preserves all financial and configuration state",
+            );
+        } finally {
+          state.gate = null;
+          await dropScratchOrg(org.orgId);
+        }
+      },
+    );
   }
 }
 
-test('asset edit refuses a target subsidiary outside the caller scope', {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
- const org=await createScratchOrg();
- try {
-  const {actorId,assetId}=await seedAsset(org);
-  const target=randomUUID();
-  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active) values (${target},${org.orgId},${org.subsidiaryId},'Outside','CAD','CA',true)`);
-  state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:new Set([org.subsidiaryId])};
-  const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({subsidiaryId:target,expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
-  assert.equal(response.status,422);
-  assert.equal((await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from fixed_assets where id=${assetId}`, 'objects'))[0]!.subsidiary_id,org.subsidiaryId);
- } finally {state.gate=null;await dropScratchOrg(org.orgId)}
-});
-
-test('metadata save preserves the controlled impairment schedule', {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
- const org=await createScratchOrg();
- try {
-  const {actorId,assetId}=await seedAsset(org);
-  state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};
-  await db.execute(sql`update fixed_assets set useful_life_months=2 where id=${assetId}`);
-  await db.execute(sql`insert into accounting_periods(org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
-    select org_id,2026,8,'2026-08','2026-08-01','2026-08-31',false,fiscal_calendar_id from accounting_periods where org_id=${org.orgId} limit 1`);
-  await buildSchedule(assetId,org.orgId,actorId,org.bookId);
-  await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'800'});
-  const schedule=()=>db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} order by sequence`, 'objects');
-  const before=await schedule();
-  assert.deepEqual(before.map(line=>line.planned_amount),['400.0000','400.0000']);
-  const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Updated asset label',expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
-  assert.equal(response.status,200,JSON.stringify(await response.json()));
-  assert.deepEqual(await schedule(),before,'metadata edit cannot rebuild controlled valuation amounts');
- }finally{state.gate=null;await dropScratchOrg(org.orgId)}
-});
-
-  test('asset edit rechecks subsidiary scope after waiting', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test(
+  "asset edit refuses a target subsidiary outside the caller scope",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
     const org = await createScratchOrg();
-    const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
+    try {
+      const { actorId, assetId } = await seedAsset(org);
+      const target = randomUUID();
+      await db.execute(
+        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active) values (${target},${org.orgId},${org.subsidiaryId},'Outside','CAD','CA',true)`,
+      );
+      state.gate = {
+        user: { orgId: org.orgId, id: actorId },
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      };
+      const response = await PATCH(
+        new Request(`http://audit.local/api/assets/${assetId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subsidiaryId: target,
+            expectedUpdatedAt: await revision(assetId),
+          }),
+        }),
+        { params: Promise.resolve({ id: assetId }) },
+      );
+      assert.equal(response.status, 422);
+      assert.equal(
+        (
+          await db.execute<{ subsidiary_id: string }>(
+            sql`select subsidiary_id from fixed_assets where id=${assetId}`,
+            "objects",
+          )
+        )[0]!.subsidiary_id,
+        org.subsidiaryId,
+      );
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "metadata save preserves the controlled impairment schedule",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { actorId, assetId } = await seedAsset(org);
+      state.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null };
+      await db.execute(sql`update fixed_assets set useful_life_months=2 where id=${assetId}`);
+      await db.execute(sql`insert into accounting_periods(org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+    select org_id,2026,8,'2026-08','2026-08-01','2026-08-31',false,fiscal_calendar_id from accounting_periods where org_id=${org.orgId} limit 1`);
+      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      await remeasureAsset(org.orgId, assetId, {
+        actorId,
+        date: "2026-07-31",
+        newCarryingValue: "800",
+      });
+      const schedule = () =>
+        db.execute(
+          sql`select * from depreciation_schedule_lines where org_id=${org.orgId} order by sequence`,
+          "objects",
+        );
+      const before = await schedule();
+      assert.deepEqual(
+        before.map((line) => line.planned_amount),
+        ["400.0000", "400.0000"],
+      );
+      const response = await PATCH(
+        new Request(`http://audit.local/api/assets/${assetId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Updated asset label",
+            expectedUpdatedAt: await revision(assetId),
+          }),
+        }),
+        { params: Promise.resolve({ id: assetId }) },
+      );
+      assert.equal(response.status, 200, JSON.stringify(await response.json()));
+      assert.deepEqual(
+        await schedule(),
+        before,
+        "metadata edit cannot rebuild controlled valuation amounts",
+      );
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "asset edit rechecks subsidiary scope after waiting",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    const writer = new pg.Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+    });
     let connected = false;
     let pending: Promise<Response> | undefined;
     try {
       const { actorId, assetId } = await seedAsset(org);
       const outsideId = randomUUID();
-      await db.execute(sql`insert into subsidiaries (id,org_id,parent_id,name,base_currency,country,is_active) values (${outsideId},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA',true)`);
-      state.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
-      await writer.connect(); connected = true;
-      await writer.query('begin');
+      await db.execute(
+        sql`insert into subsidiaries (id,org_id,parent_id,name,base_currency,country,is_active) values (${outsideId},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA',true)`,
+      );
+      state.gate = {
+        user: { orgId: org.orgId, id: actorId },
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      };
+      await writer.connect();
+      connected = true;
+      await writer.query("begin");
       await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
-      assert.equal((await writer.query('update fixed_assets set subsidiary_id=$1 where id=$2', [outsideId,assetId])).rowCount,1,'concurrent writer must hold the asset row');
-      pending = PATCH(new Request(`http://audit.local/api/assets/${assetId}`, {
-        method:'PATCH', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name:'Outside scope edit',expectedUpdatedAt:await revision(assetId)}),
-      }), {params:Promise.resolve({id:assetId})});
+      assert.equal(
+        (
+          await writer.query("update fixed_assets set subsidiary_id=$1 where id=$2", [
+            outsideId,
+            assetId,
+          ])
+        ).rowCount,
+        1,
+        "concurrent writer must hold the asset row",
+      );
+      pending = PATCH(
+        new Request(`http://audit.local/api/assets/${assetId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Outside scope edit",
+            expectedUpdatedAt: await revision(assetId),
+          }),
+        }),
+        { params: Promise.resolve({ id: assetId }) },
+      );
       void pending.catch(() => {});
-      await waitForLockWaiter(writer, { label: 'the asset edit' });
-      await writer.query('commit');
+      await waitForLockWaiter(writer, { label: "the asset edit" });
+      await writer.query("commit");
       const response = await pending;
-      assert.equal(response.status,422);
-      assert.match((await response.json()).error,/not found|scope|permitted/);
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, 'objects')).length,0);
-      assert.equal((await db.execute(sql`select id from asset_events where org_id=${org.orgId}`, 'objects')).length,0);
-      const asset = (await db.execute<{ subsidiary_id:string; status:string }>(sql`select subsidiary_id,status from fixed_assets where id=${assetId}`, 'objects'))[0]!;
-      assert.equal(asset.subsidiary_id,outsideId);
-      assert.equal(asset.status,'in_service');
+      assert.equal(response.status, 422);
+      assert.match((await response.json()).error, /not found|scope|permitted/);
+      assert.equal(
+        (await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, "objects"))
+          .length,
+        0,
+      );
+      assert.equal(
+        (await db.execute(sql`select id from asset_events where org_id=${org.orgId}`, "objects"))
+          .length,
+        0,
+      );
+      const asset = (
+        await db.execute<{ subsidiary_id: string; status: string }>(
+          sql`select subsidiary_id,status from fixed_assets where id=${assetId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(asset.subsidiary_id, outsideId);
+      assert.equal(asset.status, "in_service");
     } finally {
-      if (connected) await writer.query('rollback').catch(() => {});
+      if (connected) await writer.query("rollback").catch(() => {});
       if (pending) await pending.catch(() => {});
       if (connected) await writer.end();
-      state.gate=null;
+      state.gate = null;
       await dropScratchOrg(org.orgId);
     }
-  });
+  },
+);
 
-async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`, 'objects'))[0]!.revision;}
+async function revision(assetId: string): Promise<string> {
+  return (
+    await db.execute<{ revision: string }>(
+      sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`,
+      "objects",
+    )
+  )[0]!.revision;
+}

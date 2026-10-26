@@ -1,15 +1,18 @@
-import 'server-only';
+import "server-only";
 import { OverheadCalculationError } from "@openbooks/engine/projects/overhead-rates";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { businessToday, parseIsoDate } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { requirePermission } from '../../../../../lib/authz'
-import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
-import { trueCostSetupData, type TrueCostSetupData } from '../../../../../lib/analytics/true-cost-setup-data'
-import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { grid, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { businessToday, parseIsoDate } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { requirePermission } from "../../../../../lib/authz";
+import { trueCostData } from "../../../../../lib/analytics/true-cost-data";
+import {
+  trueCostSetupData,
+  type TrueCostSetupData,
+} from "../../../../../lib/analytics/true-cost-setup-data";
+import { requireProjectsFeature } from "../../../../../lib/projects-gate";
+import { grid, page, ref, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
 
 /**
  * Overhead Model — the rate-engine BUILDER, lifted out of the True Cost
@@ -40,47 +43,47 @@ import { grid, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/ap
  * labels, the auto-open derivation, the guided-step derivations.
  */
 
-const VIEWS = ['model', 'rates', 'lifecycle', 'application'] as const
-export type OverheadView = (typeof VIEWS)[number]
+const VIEWS = ["model", "rates", "lifecycle", "application"] as const;
+export type OverheadView = (typeof VIEWS)[number];
 
 export interface OverheadStep {
-  n: number
+  n: number;
   /** '✓' when done, else the step number — the loader makes the decision. */
-  badge: string
-  badgeDone: boolean
-  title: string
-  desc: string
+  badge: string;
+  badgeDone: boolean;
+  title: string;
+  desc: string;
 }
 
 export interface OverheadPolicy {
-  id: string
-  name: string
-  methodLabel: string
+  id: string;
+  name: string;
+  methodLabel: string;
 }
 
 export interface OverheadData {
-  title: string
-  description: string
-  docsHref: string
-  docsLabel: string
-  analyticsHref: string
-  analyticsLabel: string
-  laborHref: string
-  laborLabel: string
+  title: string;
+  description: string;
+  docsHref: string;
+  docsLabel: string;
+  analyticsHref: string;
+  analyticsLabel: string;
+  laborHref: string;
+  laborLabel: string;
   actions: {
-    departments: { id: string; name: string; composite: string | null }[]
-    projectTypes: { id: string; name: string }[]
-    autoOpen: boolean
-  }
-  tabs: { href: string; label: string; active: boolean }[]
-  view: OverheadView
-  currentParams: Record<string, string | string[] | undefined>
-  onModel: boolean
-  onRates: boolean
-  onLifecycle: boolean
-  onApplication: boolean
-  steps: OverheadStep[]
-  policies: OverheadPolicy[]
+    departments: { id: string; name: string; composite: string | null }[];
+    projectTypes: { id: string; name: string }[];
+    autoOpen: boolean;
+  };
+  tabs: { href: string; label: string; active: boolean }[];
+  view: OverheadView;
+  currentParams: Record<string, string | string[] | undefined>;
+  onModel: boolean;
+  onRates: boolean;
+  onLifecycle: boolean;
+  onApplication: boolean;
+  steps: OverheadStep[];
+  policies: OverheadPolicy[];
   trueCost: TrueCostSetupData | null;
   refusal: string | null;
 }
@@ -88,24 +91,41 @@ export interface OverheadData {
 export async function loadOverhead(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<OverheadData> {
-  const authz = await requirePermission('admin.setup.manage')
-  await requireProjectsFeature(authz.user.orgId)
-  const t = await getTranslations('admin')
-  const rawView = typeof sp.view === 'string' ? sp.view : ''
-  const view: OverheadView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as OverheadView) : 'model'
+  const authz = await requirePermission("admin.setup.manage");
+  await requireProjectsFeature(authz.user.orgId);
+  const t = await getTranslations("admin");
+  const rawView = typeof sp.view === "string" ? sp.view : "";
+  const view: OverheadView = (VIEWS as readonly string[]).includes(rawView)
+    ? (rawView as OverheadView)
+    : "model";
 
-  const today = await businessToday(authz.user.orgId)
-  const fromDate = parseIsoDate(today)
-  fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
+  const today = await businessToday(authz.user.orgId);
+  const fromDate = parseIsoDate(today);
+  fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1);
   const from = fromDate.toISOString().slice(0, 10);
   let refusal: string | null = null;
   const [data, typesRes, cardRes] = await Promise.all([
-    trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds, undefined, { includePriorComparison: false }).catch((error: unknown) => {
-    if (!(error instanceof OverheadCalculationError)) throw error;
-    refusal = error.message;
-    return null;
-  }),
-    db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null }>(sql`
+    trueCostData(
+      authz.user.orgId,
+      { from, to: today, label: "TTM" },
+      authz.allowedSubsidiaryIds,
+      undefined,
+      { includePriorComparison: false },
+    ).catch((error: unknown) => {
+      if (!(error instanceof OverheadCalculationError)) throw error;
+      refusal = error.message;
+      return null;
+    }),
+    db.execute<{
+      id: string;
+      name: string;
+      overhead: {
+        method?: string;
+        ratePercent?: string | number;
+        ratePerHour?: string | number;
+      } | null;
+    }>(
+      sql`
     select pt.id, pt.name,
            version.financial_profile->'overhead' as overhead
       from project_types pt
@@ -120,68 +140,96 @@ export async function loadOverhead(
          limit 1
       ) version on true
      where pt.org_id = ${authz.user.orgId} and pt.is_active
-     order by pt.sort_order, pt.name`, 'objects'),
-    db.execute<{ n: number; from_date: string | null }>(sql`
+     order by pt.sort_order, pt.name`,
+      "objects",
+    ),
+    db.execute<{ n: number; from_date: string | null }>(
+      sql`
     select count(*)::int as n, min(effective_from)::text as from_date
       from overhead_rates where org_id = ${authz.user.orgId}
-       and (effective_to is null or effective_to >= ${today})`, 'objects'),
+       and (effective_to is null or effective_to >= ${today})`,
+      "objects",
+    ),
   ]);
-  const card = cardRes[0] ?? { n: 0, from_date: null }
+  const card = cardRes[0] ?? { n: 0, from_date: null };
 
-  const methodLabel = (oh: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null) => {
+  const methodLabel = (
+    oh: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null,
+  ) => {
     switch (oh?.method) {
-      case 'rate_engine': return t('setup.entities.overhead-model.methodCard')
-      case 'percent_of_labor': return t('setup.entities.overhead-model.methodPct', { rate: oh.ratePercent ?? 0 })
-      case 'per_labor_hour': return t('setup.entities.overhead-model.methodHr', { rate: Number(oh.ratePerHour ?? 0).toFixed(2) })
-      case 'posted_gl_account_group': return t('setup.entities.overhead-model.methodGl')
-      default: return t('setup.entities.overhead-model.methodNone')
+      case "rate_engine":
+        return t("setup.entities.overhead-model.methodCard");
+      case "percent_of_labor":
+        return t("setup.entities.overhead-model.methodPct", { rate: oh.ratePercent ?? 0 });
+      case "per_labor_hour":
+        return t("setup.entities.overhead-model.methodHr", {
+          rate: Number(oh.ratePerHour ?? 0).toFixed(2),
+        });
+      case "posted_gl_account_group":
+        return t("setup.entities.overhead-model.methodGl");
+      default:
+        return t("setup.entities.overhead-model.methodNone");
     }
-  }
+  };
 
   const stepDefs = data
     ? [
-    {
-      n: 1,
-      title: t('setup.entities.overhead-model.step1t'),
-      desc: t('setup.entities.overhead-model.step1d', { count: data.categories.length, unassigned: data.unassigned.length }),
-      done: data.categories.length > 0 && data.unassigned.length === 0,
-    },
-    {
-      n: 2,
-      title: t('setup.entities.overhead-model.step2t'),
-      desc: t('setup.entities.overhead-model.step2d', { rate: data.kpis.compositeRate == null ? '—' : data.kpis.compositeRate.toFixed(2) }),
-      done: (data.kpis.compositeRate ?? 0) > 0,
-    },
-    {
-      n: 3,
-      title: t('setup.entities.overhead-model.step3t'),
-      desc:
-        card.n > 0 && card.from_date
-          ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
-          : t('setup.entities.overhead-model.noRates'),
-      done: card.n > 0 && typesRes.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
-    },
-  ]
+        {
+          n: 1,
+          title: t("setup.entities.overhead-model.step1t"),
+          desc: t("setup.entities.overhead-model.step1d", {
+            count: data.categories.length,
+            unassigned: data.unassigned.length,
+          }),
+          done: data.categories.length > 0 && data.unassigned.length === 0,
+        },
+        {
+          n: 2,
+          title: t("setup.entities.overhead-model.step2t"),
+          desc: t("setup.entities.overhead-model.step2d", {
+            rate: data.kpis.compositeRate == null ? "—" : data.kpis.compositeRate.toFixed(2),
+          }),
+          done: (data.kpis.compositeRate ?? 0) > 0,
+        },
+        {
+          n: 3,
+          title: t("setup.entities.overhead-model.step3t"),
+          desc:
+            card.n > 0 && card.from_date
+              ? t("setup.entities.overhead-model.ratesActive", {
+                  count: card.n,
+                  date: card.from_date,
+                })
+              : t("setup.entities.overhead-model.noRates"),
+          done:
+            card.n > 0 && typesRes.some((r) => r.overhead?.method && r.overhead.method !== "none"),
+        },
+      ]
     : [];
 
   return {
-    title: t('setup.entities.overhead-model.title'),
-    description: t('setup.entities.overhead-model.description'),
+    title: t("setup.entities.overhead-model.title"),
+    description: t("setup.entities.overhead-model.description"),
     // Fixed docs/analytics/labor links — the same hrefs page.tsx hardcodes.
-    docsHref: '/docs/overhead-costing',
-    docsLabel: t('setup.entities.overhead-model.docs'),
-    analyticsHref: '/analytics/true-cost',
-    analyticsLabel: t('setup.entities.overhead-model.viewAnalytics'),
-    laborHref: '/admin/setup/labor-costing',
-    laborLabel: t('setup.entities.overhead-model.laborCostingLink'),
+    docsHref: "/docs/overhead-costing",
+    docsLabel: t("setup.entities.overhead-model.docs"),
+    analyticsHref: "/analytics/true-cost",
+    analyticsLabel: t("setup.entities.overhead-model.viewAnalytics"),
+    laborHref: "/admin/setup/labor-costing",
+    laborLabel: t("setup.entities.overhead-model.laborCostingLink"),
     // OverheadActions owns client state (modals, useMoney, useBusinessToday),
     // so it arrives whole: the loader resolves only its inputs.
     actions: {
-      departments: (data?.departments ?? []).map((d) => ({ id: d.id, name: d.name, composite: d.compositeValue })),
+      departments: (data?.departments ?? []).map((d) => ({
+        id: d.id,
+        name: d.name,
+        composite: d.compositeValue,
+      })),
       projectTypes: typesRes.map((r) => ({ id: r.id, name: r.name })),
       autoOpen:
         data !== null &&
-        card.n === 0 && !typesRes.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
+        card.n === 0 &&
+        !typesRes.some((r) => r.overhead?.method && r.overhead.method !== "none"),
     },
     tabs: VIEWS.map((item) => ({
       href: `/admin/setup/overhead?view=${item}`,
@@ -190,13 +238,13 @@ export async function loadOverhead(
     })),
     view,
     currentParams: sp,
-    onModel: view === 'model' && data !== null,
-    onRates: view === 'rates',
-    onLifecycle: view === 'lifecycle' && data !== null,
-    onApplication: view === 'application',
+    onModel: view === "model" && data !== null,
+    onRates: view === "rates",
+    onLifecycle: view === "lifecycle" && data !== null,
+    onApplication: view === "application",
     steps: stepDefs.map((s) => ({
       n: s.n,
-      badge: s.done ? '✓' : String(s.n),
+      badge: s.done ? "✓" : String(s.n),
       badgeDone: s.done,
       title: s.title,
       desc: s.desc,
@@ -208,26 +256,26 @@ export async function loadOverhead(
     })),
     trueCost: data === null ? null : trueCostSetupData(data),
     refusal,
-  }
+  };
 }
 
-const f = ref<OverheadData>()
+const f = ref<OverheadData>();
 
 export function overheadSpec(data: OverheadData): PageSpec {
   return page({
-    route: '/admin/setup/overhead',
+    route: "/admin/setup/overhead",
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome — the
     // [entity] precedent. The native page owns its outer
     // `<div className="space-y-4">`, so the spec places the same element.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('space-y-4', [
+      grid("space-y-4", [
         // Header row (title, description, links, actions island) plus the
         // tab strip: shared chrome, one widget. The active-vs-plain link
         // PAIR lives in the shared component.
-        widgetBlock('overhead-model-header', {
+        widgetBlock("overhead-model-header", {
           title: data.title,
           description: data.description,
           docsHref: data.docsHref,
@@ -249,34 +297,37 @@ export function overheadSpec(data: OverheadData): PageSpec {
           : []),
         // Model body. Exactly one of the four bodies renders per request.
         {
-          ...widgetBlock('overhead-model-body', {
+          ...widgetBlock("overhead-model-body", {
             steps: data.steps,
             policies: data.policies,
             trueCost: data.trueCost,
           }),
-          when: f('onModel'),
+          when: f("onModel"),
         },
         // Rates tab: drawer-capable rate card. The `?row=` drawer state and
         // the org id stay server-side in the slot.
         {
-          ...widgetBlock('overhead-rates-tab', { sp: data.currentParams }),
-          when: f('onRates'),
+          ...widgetBlock("overhead-rates-tab", { sp: data.currentParams }),
+          when: f("onRates"),
         },
         // Lifecycle tab: mode/cadence switch plus the live-vs-published drift
         // table. Share the header's department projection; configuration
         // and the published card remain session-derived in the slot.
         {
-          ...widgetBlock('overhead-lifecycle-tab', data.trueCost === null ? {} : { departments: data.actions.departments }),
-          when: f('onLifecycle'),
+          ...widgetBlock(
+            "overhead-lifecycle-tab",
+            data.trueCost === null ? {} : { departments: data.actions.departments },
+          ),
+          when: f("onLifecycle"),
         },
         // Application tab: mode switch, account picker, backfill prompt and
         // the applied-postings ledger. Same shape: the slot re-derives and
         // formats.
         {
-          ...widgetBlock('overhead-application-tab', {}),
-          when: f('onApplication'),
+          ...widgetBlock("overhead-application-tab", {}),
+          when: f("onApplication"),
         },
       ]),
     ],
-  })
+  });
 }

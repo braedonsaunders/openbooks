@@ -39,7 +39,9 @@ export function requireDate(value: unknown, field: string): string {
   try {
     return parseCivilDate(value);
   } catch {
-    throw new HrmQualificationError(`${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999.`);
+    throw new HrmQualificationError(
+      `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999.`,
+    );
   }
 }
 
@@ -72,10 +74,7 @@ export type StoredQualificationStatus = "valid" | "revoked" | "pending_verificat
 
 /** Read statuses (stored plus the three derived projections). */
 export type DerivedQualificationStatus =
-  | StoredQualificationStatus
-  | "expiring"
-  | "expired"
-  | "not_yet_effective";
+  StoredQualificationStatus | "expiring" | "expired" | "not_yet_effective";
 
 /**
  * The derived-status projection (pure, unit-tested at the boundaries).

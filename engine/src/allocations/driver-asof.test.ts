@@ -12,7 +12,8 @@ function stubRunner(opts: {
 }): Runner {
   return {
     execute: (async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const text = JSON.stringify(query);
       if (text.includes("fiscal_calendars")) {
         return inMode({ rows: opts.covering ? [opts.covering] : [] });
@@ -42,7 +43,10 @@ function runner(): Runner {
 
 test("a sweep and a posting in the same period measure the same vintage", async () => {
   // prior_period: the July sweep and a July posting both read June.
-  const sweep = await resolveDriverVintage(runner(), "org-1", "prior_period", { kind: "period", period: JULY });
+  const sweep = await resolveDriverVintage(runner(), "org-1", "prior_period", {
+    kind: "period",
+    period: JULY,
+  });
   const posting = await resolveDriverVintage(runner(), "org-1", "prior_period", {
     kind: "posting",
     postingDate: "2026-07-15",
@@ -51,7 +55,10 @@ test("a sweep and a posting in the same period measure the same vintage", async 
   assert.deepEqual(sweep, { asOf: { periodId: "jun" } });
   assert.deepEqual(posting, sweep);
   // period: both read July itself.
-  const sweepCurrent = await resolveDriverVintage(runner(), "org-1", "period", { kind: "period", period: JULY });
+  const sweepCurrent = await resolveDriverVintage(runner(), "org-1", "period", {
+    kind: "period",
+    period: JULY,
+  });
   const postingCurrent = await resolveDriverVintage(runner(), "org-1", "period", {
     kind: "posting",
     postingDate: "2026-07-15",
@@ -71,7 +78,10 @@ test("document_date at posting reads the document date, not the posting date", a
 });
 
 test("a sweep without a document reads its period end for document_date", async () => {
-  const vintage = await resolveDriverVintage(runner(), "org-1", "document_date", { kind: "period", period: JULY });
+  const vintage = await resolveDriverVintage(runner(), "org-1", "document_date", {
+    kind: "period",
+    period: JULY,
+  });
   assert.deepEqual(vintage, { asOf: { date: "2026-07-31" } });
 });
 
@@ -82,12 +92,16 @@ test("a vintage with no honest window is a refusal, never a live measure", async
     "prior_period",
     { kind: "posting", postingDate: "2026-07-15", documentDate: "2026-07-15" },
   );
-  assert.deepEqual(noPrior, { refusal: "no prior period exists for driver lookback on P07 FY2026" });
+  assert.deepEqual(noPrior, {
+    refusal: "no prior period exists for driver lookback on P07 FY2026",
+  });
   const noCover = await resolveDriverVintage(
     stubRunner({ covering: null, priorId: "jun" }),
     "org-1",
     "prior_period",
     { kind: "posting", postingDate: "2026-07-15", documentDate: "2026-07-15" },
   );
-  assert.deepEqual(noCover, { refusal: "no accounting period covers the posting date for driver lookback" });
+  assert.deepEqual(noCover, {
+    refusal: "no accounting period covers the posting date for driver lookback",
+  });
 });

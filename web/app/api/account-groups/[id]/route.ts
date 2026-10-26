@@ -1,22 +1,27 @@
-import { z } from 'zod';
-import { defineRoute } from '@/lib/api/route';
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({
-  name: z.string().min(1).optional(),
-  color: z.string().nullable().optional(),
-  match: z.object({
-    accountTypes: z.array(z.string()).optional(),
-    numberPrefixes: z.array(z.string()).optional(),
-    namePattern: z.string().optional(),
-  }).nullable().optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
-
-
+const PATCHBodySchema1 = z
+  .object({
+    name: z.string().min(1).optional(),
+    color: z.string().nullable().optional(),
+    match: z
+      .object({
+        accountTypes: z.array(z.string()).optional(),
+        numberPrefixes: z.array(z.string()).optional(),
+        namePattern: z.string().optional(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
 
 export const runtime = "nodejs";
 
@@ -118,8 +123,10 @@ function unsafeNamePattern(pattern: string): boolean {
  * the Setup → Account Groups workspace.
  */
 export const PATCH = defineRoute({
-  permission: 'admin.setup.manage',
-  feature: { none: "This always-on route is governed by admin.setup.manage; the existing route has no separate feature gate." },
+  permission: "admin.setup.manage",
+  feature: {
+    none: "This always-on route is governed by admin.setup.manage; the existing route has no separate feature gate.",
+  },
   body: PATCHBodySchema1,
   handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
@@ -129,48 +136,55 @@ export const PATCH = defineRoute({
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
 
-    const body = (routeBody) as {
-        name?: string;
-        color?: string | null;
-        match?: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string } | null;
-      };
+    const body = routeBody as {
+      name?: string;
+      color?: string | null;
+      match?: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string } | null;
+    };
     if (body.match?.namePattern) {
-        try {
-          new RegExp(body.match.namePattern, "i");
-        } catch {
-          return NextResponse.json({ error: "invalid namePattern regex" }, { status: 400 });
-        }
-        if (unsafeNamePattern(body.match.namePattern)) {
-          return NextResponse.json({ error: "unsafe namePattern regex" }, { status: 400 });
-        }
+      try {
+        new RegExp(body.match.namePattern, "i");
+      } catch {
+        return NextResponse.json({ error: "invalid namePattern regex" }, { status: 400 });
       }
+      if (unsafeNamePattern(body.match.namePattern)) {
+        return NextResponse.json({ error: "unsafe namePattern regex" }, { status: 400 });
+      }
+    }
     const sets: ReturnType<typeof sql>[] = [];
     if (body.name !== undefined) sets.push(sql`name = ${body.name}`);
     if (body.color !== undefined) sets.push(sql`color = ${body.color}`);
-    if (body.match !== undefined) sets.push(sql`match = ${JSON.stringify(body.match ?? {})}::jsonb`);
+    if (body.match !== undefined)
+      sets.push(sql`match = ${JSON.stringify(body.match ?? {})}::jsonb`);
     if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
     const updated = await db.transaction(async (tx) => {
-        // Lock and snapshot the row in the same transaction as the update so the
-        // audit evidence always describes the committed state transition, even
-        // when two classification edits arrive concurrently.
-        const current = await tx.execute<Record<string, unknown>>(sql`
+      // Lock and snapshot the row in the same transaction as the update so the
+      // audit evidence always describes the committed state transition, even
+      // when two classification edits arrive concurrently.
+      const current = await tx.execute<Record<string, unknown>>(
+        sql`
           select * from account_groups
            where id = ${id} and org_id = ${gate.user.orgId}
            for update
-        `, "objects");
-        const before = current[0];
-        if (!before) return null;
+        `,
+        "objects",
+      );
+      const before = current[0];
+      if (!before) return null;
 
-        const result = await tx.execute<Record<string, unknown>>(sql`
+      const result = await tx.execute<Record<string, unknown>>(
+        sql`
           update account_groups
              set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${gate.user.id}
            where id = ${id} and org_id = ${gate.user.orgId}
            returning *
-        `, "objects");
-        const after = result[0];
-        if (!after) return null;
+        `,
+        "objects",
+      );
+      const after = result[0];
+      if (!after) return null;
 
-        await tx.execute(sql`
+      await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values
@@ -178,8 +192,8 @@ export const PATCH = defineRoute({
              ${JSON.stringify({ before, after })}::jsonb,
              ${gate.user.id}, ${req.headers.get("x-request-id")})
         `);
-        return after;
-      });
+      return after;
+    });
     if (!updated) return notFound("record");
     return NextResponse.json({ ok: true });
   },

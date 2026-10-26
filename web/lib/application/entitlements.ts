@@ -2,7 +2,10 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
 import { db, withOrgContext } from "@openbooks/engine/platform/database";
-import { ScopeNotFoundError, subsidiaryVisibleFilter } from "@openbooks/engine/organization/authority";
+import {
+  ScopeNotFoundError,
+  subsidiaryVisibleFilter,
+} from "@openbooks/engine/organization/authority";
 import {
   EntitlementError,
   checkEntitlement,
@@ -66,14 +69,17 @@ async function resolveCustomerId(
     }
     const provider = ref.slice(0, separator);
     const externalId = ref.slice(separator + 1);
-    const matches = await db.execute<{ id: string; displayName: string }>(sql`
+    const matches = await db.execute<{ id: string; displayName: string }>(
+      sql`
       select p.id, p.display_name as "displayName"
         from external_links l
         join parties p on p.org_id = l.org_id and p.id = l.native_id::uuid
        where l.org_id = ${orgId} and l.provider = ${provider}
          and l.object_type = 'customer' and l.external_id = ${externalId}
          and l.native_table = 'parties'
-         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects");
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`,
+      "objects",
+    );
     if (matches.length === 0) {
       throw new ApplicationError(
         "not_found",
@@ -93,12 +99,20 @@ async function resolveCustomerId(
     return matches[0]!;
   }
   const raw = query.customer?.trim();
-  if (!raw) throw invalidInput("customer is required: pass a customer id, an exact customer name, or externalRef");
+  if (!raw)
+    throw invalidInput(
+      "customer is required: pass a customer id, an exact customer name, or externalRef",
+    );
   if (isUuid(raw)) {
-    const party = (await db.execute<{ id: string; displayName: string }>(sql`
+    const party = (
+      await db.execute<{ id: string; displayName: string }>(
+        sql`
       select id, display_name as "displayName" from parties
        where org_id = ${orgId} and id = ${raw}::uuid
-         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects"))[0];
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`,
+        "objects",
+      )
+    )[0];
     if (!party) {
       throw new ApplicationError(
         "not_found",
@@ -109,10 +123,13 @@ async function resolveCustomerId(
     }
     return party;
   }
-  const matches = await db.execute<{ id: string; displayName: string }>(sql`
+  const matches = await db.execute<{ id: string; displayName: string }>(
+    sql`
     select id, display_name as "displayName" from parties
      where org_id = ${orgId} and display_name = ${raw}
-       ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects");
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`,
+    "objects",
+  );
   if (matches.length === 0) {
     throw new ApplicationError(
       "not_found",
@@ -122,12 +139,9 @@ async function resolveCustomerId(
     );
   }
   if (matches.length > 1) {
-    throw new ApplicationError(
-      "conflict",
-      `${matches.length} customers are named ${raw}.`,
-      409,
-      { remedy: "Query by the customer id instead." },
-    );
+    throw new ApplicationError("conflict", `${matches.length} customers are named ${raw}.`, 409, {
+      remedy: "Query by the customer id instead.",
+    });
   }
   return matches[0]!;
 }
@@ -143,11 +157,18 @@ export async function getV1Entitlements(
   // need the advanced-subscriptions surface, refused without existence leak.
   if (!(await isFeatureEnabled(orgId, "advancedSubscriptions"))) throw notFound("record");
   const allowedSubsidiaryIds = context.authz.allowedSubsidiaryIds;
-  const customer = await withOrgContext(orgId, () => resolveCustomerId(orgId, query, allowedSubsidiaryIds));
+  const customer = await withOrgContext(orgId, () =>
+    resolveCustomerId(orgId, query, allowedSubsidiaryIds),
+  );
   if (query.feature === undefined) {
     try {
       const subscriptions = await withOrgContext(orgId, () =>
-        resolveEntitlements(orgId, { customerId: customer.id }, { at: query.at, allowedSubsidiaryIds }));
+        resolveEntitlements(
+          orgId,
+          { customerId: customer.id },
+          { at: query.at, allowedSubsidiaryIds },
+        ),
+      );
       return { customer, subscriptions, check: null };
     } catch (error) {
       mapEntitlementError(error, "customer");
@@ -157,7 +178,12 @@ export async function getV1Entitlements(
   // permission rather than riding the read.
   try {
     const subscriptions = await withOrgContext(orgId, () =>
-        resolveEntitlements(orgId, { customerId: customer.id }, { at: query.at, allowedSubsidiaryIds }));
+      resolveEntitlements(
+        orgId,
+        { customerId: customer.id },
+        { at: query.at, allowedSubsidiaryIds },
+      ),
+    );
     if (subscriptions.length === 0) {
       throw new ApplicationError(
         "not_found",
@@ -194,7 +220,8 @@ export async function getV1Entitlements(
         featureKey: query.feature ?? "",
         used: query.used,
         occurredOn: query.at,
-      }));
+      }),
+    );
     return { customer, subscriptions, check };
   } catch (error) {
     mapEntitlementError(error, "customer");

@@ -13,7 +13,9 @@ import {
  * threshold flags, masked-TIN passthrough, exclusions) without a database.
  */
 
-function recipient(overrides: Partial<RecipientComputation> & { partyId: string }): RecipientComputation {
+function recipient(
+  overrides: Partial<RecipientComputation> & { partyId: string },
+): RecipientComputation {
   const { partyId, ...rest } = overrides;
   return {
     profile: {
@@ -95,7 +97,12 @@ test("below-threshold and missing-TIN recipients keep their flags", () => {
       ],
       [
         { kind: "missing_tin", partyId: "v2", partyName: "Vendor v2", detail: "no TIN" },
-        { kind: "corporation_flagged", partyId: "v2", partyName: "Vendor v2", detail: "classified c_corp" },
+        {
+          kind: "corporation_flagged",
+          partyId: "v2",
+          partyName: "Vendor v2",
+          detail: "classified c_corp",
+        },
       ],
     ),
     new Map(),

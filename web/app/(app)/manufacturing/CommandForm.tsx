@@ -1,18 +1,12 @@
 "use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 import Link from "next/link";
 import { LineGrid } from "@/components/line-grid";
 import { cmp } from "@openbooks/engine/money/money";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Input,
-  Label,
-  Select,
-  Textarea,
-} from "@openbooks/ui";
+import { Button, Input, Label, Select, Textarea } from "@openbooks/ui";
 import { RemoteRecordChoice } from "@/components/remote-record-choice";
 import { fetchAppAction, readApiErrorMessage } from "@/lib/api-error";
 import { toast } from "sonner";
@@ -20,7 +14,7 @@ import { OperatingProfilePicker } from "@/components/operating-profile-picker";
 import type { OperatingProfileChoice } from "@openbooks/engine/organization/operating-profiles";
 import type { ManufacturingRecordData } from "@openbooks/engine/manufacturing/workspace";
 import { commandBody, type Choice, type Command, type Field } from "./commands";
-import { DateField } from '@/components/date-field';
+import { DateField } from "@/components/date-field";
 
 type Line = Record<string, string> & { key: string };
 export function CommandForm({
@@ -37,13 +31,9 @@ export function CommandForm({
   command: Command;
   initialWorkflow?: OperatingProfileChoice;
   initialDepartmentId?: string;
-  initialValues?: {producedItemId?:string;subsidiaryId?:string;quantityOrdered?:string};
+  initialValues?: { producedItemId?: string; subsidiaryId?: string; quantityOrdered?: string };
   data?: ManufacturingRecordData;
-  onSaved: (
-    result: Record<string, unknown>,
-    command: Command,
-    pending: boolean,
-  ) => Promise<void>;
+  onSaved: (result: Record<string, unknown>, command: Command, pending: boolean) => Promise<void>;
   onCancel: () => void;
   onReview: (id?: string) => void;
   onDirty?: () => void;
@@ -54,7 +44,13 @@ export function CommandForm({
     Object.fromEntries(
       command.fields.map((f) => [
         f.key,
-        (command.create && command.path==='/api/manufacturing/work-orders' && ['producedItemId','subsidiaryId','quantityOrdered'].includes(f.key) ? initialValues?.[f.key as keyof NonNullable<typeof initialValues>] : undefined) ?? f.initial ?? (f.type === "boolean" ? false : ""),
+        (command.create &&
+        command.path === "/api/manufacturing/work-orders" &&
+        ["producedItemId", "subsidiaryId", "quantityOrdered"].includes(f.key)
+          ? initialValues?.[f.key as keyof NonNullable<typeof initialValues>]
+          : undefined) ??
+          f.initial ??
+          (f.type === "boolean" ? false : ""),
       ]),
     ),
   );
@@ -62,16 +58,19 @@ export function CommandForm({
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [uncertain, setUncertain] = useState(false);
-  const [recordInputs,setRecordInputs] = useState(false);
-  const [componentRows,setComponentRows] = useState<Array<Record<string,unknown>>>([]);
+  const [recordInputs, setRecordInputs] = useState(false);
+  const [componentRows, setComponentRows] = useState<Array<Record<string, unknown>>>([]);
   const lock = useRef(false),
     requestKey = useRef<string | null>(null),
     sentBody = useRef<string | null>(null);
-  const workflowCreate = command.create === true && command.path === '/api/manufacturing/work-orders';
-  const [workflowSelection, setWorkflowSelection] = useState<OperatingProfileChoice | null>(initialWorkflow ?? null);
+  const workflowCreate =
+    command.create === true && command.path === "/api/manufacturing/work-orders";
+  const [workflowSelection, setWorkflowSelection] = useState<OperatingProfileChoice | null>(
+    initialWorkflow ?? null,
+  );
   const [workflowChoosing, setWorkflowChoosing] = useState(workflowCreate && !initialWorkflow);
-  const [workflowDepartment,setWorkflowDepartment]=useState(initialDepartmentId ?? '');
-  const tOperating = useTranslations('operatingProfiles');
+  const [workflowDepartment, setWorkflowDepartment] = useState(initialDepartmentId ?? "");
+  const tOperating = useTranslations("operatingProfiles");
   const set = (key: string, value: unknown) => {
     onDirty?.();
     setValues((v) => ({ ...v, [key]: value }));
@@ -84,8 +83,10 @@ export function CommandForm({
     return (
       <div key={f.key} className="space-y-1.5">
         <Label htmlFor={id + "-" + f.key}>
-          {t("fields." + (f.labelKey??f.key))}
-          {f.context?<span className="ml-1 text-xs font-normal text-slate-500">{f.context}</span>:null}
+          {t("fields." + (f.labelKey ?? f.key))}
+          {f.context ? (
+            <span className="ml-1 text-xs font-normal text-slate-500">{f.context}</span>
+          ) : null}
           {f.required ? " *" : ""}
         </Label>
         {f.type === "select" && remoteKind(f.key) ? (
@@ -99,7 +100,10 @@ export function CommandForm({
               f.key === "producedItemId"
                 ? t.rich("producedItemEmptyHint", {
                     action: (chunks) => (
-                      <Link className="text-teal-700 hover:underline dark:text-teal-300" href="/items">
+                      <Link
+                        className="text-teal-700 hover:underline dark:text-teal-300"
+                        href="/items"
+                      >
                         {chunks}
                       </Link>
                     ),
@@ -139,12 +143,21 @@ export function CommandForm({
                   </option>
                 ))}
             </Select>
-            {f.key === "routingId" && values.producedItemId && !(f.options ?? []).some((o) => o.parentId === values.producedItemId) ? (
+            {f.key === "routingId" &&
+            values.producedItemId &&
+            !(f.options ?? []).some((o) => o.parentId === values.producedItemId) ? (
               <p className="text-xs text-slate-500">
                 {t.rich("noActiveRoutingHint", {
-                  item: command.fields.find((field) => field.key === "producedItemId")?.options?.find((o) => o.value === values.producedItemId)?.label ?? String(values.producedItemId),
+                  item:
+                    command.fields
+                      .find((field) => field.key === "producedItemId")
+                      ?.options?.find((o) => o.value === values.producedItemId)?.label ??
+                    String(values.producedItemId),
                   action: (chunks) => (
-                    <Link className="text-teal-700 hover:underline dark:text-teal-300" href="/manufacturing/routings">
+                    <Link
+                      className="text-teal-700 hover:underline dark:text-teal-300"
+                      href="/manufacturing/routings"
+                    >
                       {chunks}
                     </Link>
                   ),
@@ -186,11 +199,7 @@ export function CommandForm({
             value={String(value ?? "")}
             type={f.type === "integer" ? "number" : "text"}
             inputMode={
-              f.type === "decimal"
-                ? "decimal"
-                : f.type === "integer"
-                  ? "numeric"
-                  : undefined
+              f.type === "decimal" ? "decimal" : f.type === "integer" ? "numeric" : undefined
             }
             min={
               f.type === "integer"
@@ -202,11 +211,7 @@ export function CommandForm({
             max={f.key === "horizonDays" ? 366 : undefined}
             step={f.type === "integer" ? 1 : undefined}
             required={f.required}
-            pattern={
-              f.type === "decimal"
-                ? "(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,4})?"
-                : undefined
-            }
+            pattern={f.type === "decimal" ? "(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,4})?" : undefined}
             disabled={busy || uncertain}
             onChange={(e) => {
               set(f.key, e.target.value);
@@ -230,25 +235,31 @@ export function CommandForm({
     try {
       for (const f of command.fields)
         if (f.required && (values[f.key] === undefined || values[f.key] === "")) {
-          fail(t("choose") + " · " + t("fields." + (f.labelKey??f.key)));
+          fail(t("choose") + " · " + t("fields." + (f.labelKey ?? f.key)));
           return;
         }
       const body = commandBody(command, values);
       if (workflowCreate) {
-        if (!workflowSelection) throw new Error(tOperating('chooseTitle'));
-        body.operatingProfile = workflowSelection.value; body.operatingDepartmentId=workflowDepartment || null;
-        if(workflowSelection.definition.physicalModel!=='process'){delete body.productionMode;delete body.campaignReference;}
+        if (!workflowSelection) throw new Error(tOperating("chooseTitle"));
+        body.operatingProfile = workflowSelection.value;
+        body.operatingDepartmentId = workflowDepartment || null;
+        if (workflowSelection.definition.physicalModel !== "process") {
+          delete body.productionMode;
+          delete body.campaignReference;
+        }
       }
-      if (command.key === 'complete' && recordInputs) {
-        if (!componentRows.length || componentRows.some(row=>!row.movementId || !row.quantity)) throw new Error(t('receiptInputs.required'));
-        body.componentSelections = componentRows.map(row=>({movementId:String(row.movementId),quantity:String(row.quantity)}));
+      if (command.key === "complete" && recordInputs) {
+        if (!componentRows.length || componentRows.some((row) => !row.movementId || !row.quantity))
+          throw new Error(t("receiptInputs.required"));
+        body.componentSelections = componentRows.map((row) => ({
+          movementId: String(row.movementId),
+          quantity: String(row.quantity),
+        }));
       }
       if (command.repeat === "issue") {
         if (!lines.length) throw new Error(t("issueLinesRequired"));
         for (const line of lines) {
-          const material = data?.sections.materials?.find(
-            (m) => m.id === line.materialId,
-          );
+          const material = data?.sections.materials?.find((m) => m.id === line.materialId);
           const policy = String(material?.tracking ?? "none");
           if (
             !line.materialId ||
@@ -258,26 +269,17 @@ export function CommandForm({
           )
             throw new Error(t("choose") + " · " + t("issueLines"));
         }
-        body.lines = lines.map(
-          ({ key: _key, materialId, quantity, lotId, serialId }) => ({
-            materialId,
-            quantity,
-            ...(lotId ? { lotId } : {}),
-            ...(serialId ? { serialId } : {}),
-          }),
-        );
+        body.lines = lines.map(({ key: _key, materialId, quantity, lotId, serialId }) => ({
+          materialId,
+          quantity,
+          ...(lotId ? { lotId } : {}),
+          ...(serialId ? { serialId } : {}),
+        }));
       }
       if (command.repeat === "tracking") {
         if (lines.length)
           body.lots = lines.map(
-            ({
-              key: _key,
-              itemId,
-              quantity,
-              lotNumber,
-              serialNumber,
-              expiresOn,
-            }) => ({
+            ({ key: _key, itemId, quantity, lotNumber, serialNumber, expiresOn }) => ({
               quantity,
               ...(itemId ? { itemId } : {}),
               ...(lotNumber ? { lotNumber } : {}),
@@ -288,8 +290,7 @@ export function CommandForm({
         const byproductValues = (command.byproducts ?? [])
           .filter(
             (b) =>
-              values["nrvUnit:" + b.itemId] !== undefined &&
-              values["nrvUnit:" + b.itemId] !== "",
+              values["nrvUnit:" + b.itemId] !== undefined && values["nrvUnit:" + b.itemId] !== "",
           )
           .map((b) => ({
             itemId: b.itemId,
@@ -306,14 +307,18 @@ export function CommandForm({
       // Every refusal reads through the shared action reader: the server's
       // message, remedy and code pin inline and toast, so no refusal shape
       // can go silent. A rejected fetch never throws past this point.
-      const action = await fetchAppAction<Record<string, unknown>>(command.path, {
-        method: command.method ?? "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(command.create ? { "Idempotency-Key": requestKey.current } : {}),
+      const action = await fetchAppAction<Record<string, unknown>>(
+        command.path,
+        {
+          method: command.method ?? "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(command.create ? { "Idempotency-Key": requestKey.current } : {}),
+          },
+          body: serialized,
         },
-        body: serialized,
-      }, { fallback: t("commandFailed") });
+        { fallback: t("commandFailed") },
+      );
       if (!action.ok) {
         const message = action.error.displayMessage(t("commandFailed"));
         if (action.error.kind === "transport") {
@@ -338,10 +343,25 @@ export function CommandForm({
       setBusy(false);
     }
   }
-  if (workflowCreate && workflowChoosing) return <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-    <OperatingProfilePicker family="production" departmentId={workflowDepartment} value={workflowSelection?.value ?? null} onChoose={(choice,department)=>{onDirty?.();setWorkflowSelection(choice);setWorkflowDepartment(department);setWorkflowChoosing(false)}} />
-    <Button variant="ghost" onClick={onCancel}>{t('cancelForm')}</Button>
-  </div>;
+  if (workflowCreate && workflowChoosing)
+    return (
+      <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+        <OperatingProfilePicker
+          family="production"
+          departmentId={workflowDepartment}
+          value={workflowSelection?.value ?? null}
+          onChoose={(choice, department) => {
+            onDirty?.();
+            setWorkflowSelection(choice);
+            setWorkflowDepartment(department);
+            setWorkflowChoosing(false);
+          }}
+        />
+        <Button variant="ghost" onClick={onCancel}>
+          {t("cancelForm")}
+        </Button>
+      </div>
+    );
   return (
     <form
       onChange={onDirty}
@@ -350,14 +370,36 @@ export function CommandForm({
       aria-busy={busy}
     >
       <h3 className="font-semibold">{t("actions." + command.key)}</h3>
-      {workflowSelection ? <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">{workflowSelection.name}</span><Button type="button" variant="ghost" size="sm" disabled={busy || uncertain} onClick={() => setWorkflowChoosing(true)}>{tOperating('change')}</Button></div> : null}
-      {command.note ? (
-        <p className="text-sm text-slate-500">{t(command.note)}</p>
+      {workflowSelection ? (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">{workflowSelection.name}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy || uncertain}
+            onClick={() => setWorkflowChoosing(true)}
+          >
+            {tOperating("change")}
+          </Button>
+        </div>
       ) : null}
+      {command.note ? <p className="text-sm text-slate-500">{t(command.note)}</p> : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        {command.fields.filter(field=>!field.section).map(control)}
+        {command.fields.filter((field) => !field.section).map(control)}
       </div>
-      {(workflowSelection?.definition.physicalModel==='process'||(data?.record.operatingProfile as {physicalModel?:string}|undefined)?.physicalModel==='process')&&command.fields.some(field=>field.section==='process')?<details className="rounded-xl border p-4"><summary className="cursor-pointer text-sm font-medium">{t('process.details')}</summary><p className="mt-3 text-xs text-slate-500">{t('process.windowNote')}</p><div className="mt-4 grid gap-4 sm:grid-cols-2">{command.fields.filter(field=>field.section==='process').map(control)}</div></details>:null}
+      {(workflowSelection?.definition.physicalModel === "process" ||
+        (data?.record.operatingProfile as { physicalModel?: string } | undefined)?.physicalModel ===
+          "process") &&
+      command.fields.some((field) => field.section === "process") ? (
+        <details className="rounded-xl border p-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("process.details")}</summary>
+          <p className="mt-3 text-xs text-slate-500">{t("process.windowNote")}</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {command.fields.filter((field) => field.section === "process").map(control)}
+          </div>
+        </details>
+      ) : null}
       {command.repeat ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -391,13 +433,9 @@ export function CommandForm({
               disabled={busy || uncertain}
               onChange={(patch) => {
                 onDirty?.();
-                setLines((v) =>
-                  v.map((x) => (x.key === line.key ? { ...x, ...patch } : x)),
-                );
+                setLines((v) => v.map((x) => (x.key === line.key ? { ...x, ...patch } : x)));
               }}
-              onRemove={() =>
-                setLines((v) => v.filter((x) => x.key !== line.key))
-              }
+              onRemove={() => setLines((v) => v.filter((x) => x.key !== line.key))}
             />
           ))}
           {command.repeat === "tracking" ? (
@@ -405,20 +443,76 @@ export function CommandForm({
           ) : null}
         </div>
       ) : null}
-      {command.key==='complete' ? <fieldset className="space-y-3 rounded-xl border p-4">
-        <legend className="px-1 text-sm font-semibold">{t('receiptInputs.title')}</legend>
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={recordInputs} disabled={busy||uncertain} onChange={event=>{setRecordInputs(event.target.checked);onDirty?.();}}/>{t('receiptInputs.capture')}</label>
-        <p className="text-xs text-slate-500">{t(recordInputs ? 'receiptInputs.recordedNote' : 'receiptInputs.estimatedNote')}</p>
-        {recordInputs ? <LineGrid rows={componentRows} onRowsChange={rows=>{setComponentRows(rows);onDirty?.();}} readOnly={busy||uncertain} emptyRow={()=>({movementId:'',quantity:''})} columns={[
-          {key:'movementId',label:t('receiptInputs.issue'),type:'search-select',required:true,width:'minmax(280px,1fr)',options:(data?.sections.issues??[]).filter(row=>row.status==='posted'&&row.liveIssue&&cmp(String(row.unassignedQty??'0'),'0')>0).map(row=>({value:row.id,label:[row.itemName,row.lotNumber,row.serialNumber,row.unassignedQty,row.unit].filter(Boolean).join(' · ')}))},
-          {key:'quantity',label:t('fields.quantity'),type:'decimal',required:true,decimalScale:4,width:'160px'},
-        ]}/> : null}
-      </fieldset> : null}
+      {command.key === "complete" ? (
+        <fieldset className="space-y-3 rounded-xl border p-4">
+          <legend className="px-1 text-sm font-semibold">{t("receiptInputs.title")}</legend>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={recordInputs}
+              disabled={busy || uncertain}
+              onChange={(event) => {
+                setRecordInputs(event.target.checked);
+                onDirty?.();
+              }}
+            />
+            {t("receiptInputs.capture")}
+          </label>
+          <p className="text-xs text-slate-500">
+            {t(recordInputs ? "receiptInputs.recordedNote" : "receiptInputs.estimatedNote")}
+          </p>
+          {recordInputs ? (
+            <LineGrid
+              rows={componentRows}
+              onRowsChange={(rows) => {
+                setComponentRows(rows);
+                onDirty?.();
+              }}
+              readOnly={busy || uncertain}
+              emptyRow={() => ({ movementId: "", quantity: "" })}
+              columns={[
+                {
+                  key: "movementId",
+                  label: t("receiptInputs.issue"),
+                  type: "search-select",
+                  required: true,
+                  width: "minmax(280px,1fr)",
+                  options: (data?.sections.issues ?? [])
+                    .filter(
+                      (row) =>
+                        row.status === "posted" &&
+                        row.liveIssue &&
+                        cmp(String(row.unassignedQty ?? "0"), "0") > 0,
+                    )
+                    .map((row) => ({
+                      value: row.id,
+                      label: [
+                        row.itemName,
+                        row.lotNumber,
+                        row.serialNumber,
+                        row.unassignedQty,
+                        row.unit,
+                      ]
+                        .filter(Boolean)
+                        .join(" · "),
+                    })),
+                },
+                {
+                  key: "quantity",
+                  label: t("fields.quantity"),
+                  type: "decimal",
+                  required: true,
+                  decimalScale: 4,
+                  width: "160px",
+                },
+              ]}
+            />
+          ) : null}
+        </fieldset>
+      ) : null}
       {command.byproducts?.length ? (
         <fieldset className="space-y-3">
-          <legend className="text-sm font-semibold">
-            {t("byproductValues")}
-          </legend>
+          <legend className="text-sm font-semibold">{t("byproductValues")}</legend>
           <p className="text-xs text-slate-500">{t("byproductNote")}</p>
           {command.byproducts.map((b) => (
             <div key={b.id} className="grid gap-3 sm:grid-cols-2">
@@ -435,9 +529,7 @@ export function CommandForm({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={id + "-reason-" + b.id}>
-                  {t("fields.reason")}
-                </Label>
+                <Label htmlFor={id + "-reason-" + b.id}>{t("fields.reason")}</Label>
                 <Input
                   id={id + "-reason-" + b.id}
                   minLength={5}
@@ -464,11 +556,7 @@ export function CommandForm({
           <Button
             type="button"
             onClick={() =>
-              onReview(
-                command.opensRecord
-                  ? (requestKey.current ?? undefined)
-                  : undefined,
-              )
+              onReview(command.opensRecord ? (requestKey.current ?? undefined) : undefined)
             }
           >
             {t("reviewRecord")}
@@ -478,12 +566,7 @@ export function CommandForm({
             {busy ? t("saving") : t("actions." + command.key)}
           </Button>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={onCancel}
-        >
+        <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
           {t("cancelForm")}
         </Button>
       </div>
@@ -510,16 +593,17 @@ function CaptureLine({
   const t = useTranslations("manufacturing"),
     id = useId();
   const [attempt, setAttempt] = useState(0);
-  const material = data?.sections.materials?.find(
-      (m) => m.id === line.materialId,
-    ),
+  const material = data?.sections.materials?.find((m) => m.id === line.materialId),
     itemId = String(material?.itemId ?? "");
   const [tracking, setTracking] = useIdentityState<{
       lots: Choice[];
       serials: Choice[];
     }>([mode, itemId, attempt], { lots: [], serials: [] }),
     [error, setError] = useIdentityState<string | null>([mode, itemId, attempt], null),
-    [loading, setLoading] = useIdentityState([mode, itemId, attempt], mode === "issue" && Boolean(itemId));
+    [loading, setLoading] = useIdentityState(
+      [mode, itemId, attempt],
+      mode === "issue" && Boolean(itemId),
+    );
   useEffect(() => {
     if (mode !== "issue" || !itemId) return;
     const controller = new AbortController();
@@ -527,14 +611,14 @@ function CaptureLine({
       signal: controller.signal,
     })
       .then(async (r) => {
-        if (!r.ok)
-          throw new Error(await readApiErrorMessage(r, t("loadFailed")));
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, t("loadFailed")));
         return r.json();
       })
-      .then((v) => { if (!controller.signal.aborted) setTracking(v) })
+      .then((v) => {
+        if (!controller.signal.aborted) setTracking(v);
+      })
       .catch((e) => {
-        if (!controller.signal.aborted)
-          setError(e instanceof Error ? e.message : t("loadFailed"));
+        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : t("loadFailed"));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -581,11 +665,7 @@ function CaptureLine({
           disabled={disabled}
           clearable={!required}
           onChange={(value) =>
-            onChange(
-              key === "lotId"
-                ? { lotId: value, serialId: "" }
-                : { serialId: value },
-            )
+            onChange(key === "lotId" ? { lotId: value, serialId: "" } : { serialId: value })
           }
         />
       ) : (
@@ -617,9 +697,7 @@ function CaptureLine({
   const policy = String(material?.tracking ?? "none");
   return (
     <fieldset className="space-y-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-950">
-      <legend className="text-xs font-semibold">
-        {t("line", { number: index + 1 })}
-      </legend>
+      <legend className="text-xs font-semibold">{t("line", { number: index + 1 })}</legend>
       <div className="grid gap-3 sm:grid-cols-2">
         {mode === "issue"
           ? choice(
@@ -653,9 +731,7 @@ function CaptureLine({
             {policy === "serial" || policy === "lot_serial"
               ? choice(
                   "serialId",
-                  tracking.serials.filter(
-                    (s) => !line.lotId || s.parentId === line.lotId,
-                  ),
+                  tracking.serials.filter((s) => !line.lotId || s.parentId === line.lotId),
                   true,
                 )
               : null}
@@ -671,22 +747,12 @@ function CaptureLine({
       {error ? (
         <div role="alert" className="text-sm text-red-600">
           {error}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setAttempt((v) => v + 1)}
-          >
+          <Button type="button" variant="outline" onClick={() => setAttempt((v) => v + 1)}>
             {t("retry")}
           </Button>
         </div>
       ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled}
-        onClick={onRemove}
-      >
+      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onRemove}>
         {t("removeLine")}
       </Button>
     </fieldset>
@@ -697,15 +763,25 @@ const remoteKind = (key: string) =>
   key === "workCenterId"
     ? "centers"
     : key === "producedItemId"
-    ? "items"
-    : key === "vendorId"
-      ? "vendors"
-      : key.endsWith("LocationId")
-        ? "locations"
-        : null;
+      ? "items"
+      : key === "vendorId"
+        ? "vendors"
+        : key.endsWith("LocationId")
+          ? "locations"
+          : null;
 
 /** The manufacturing vocabulary composes the shared remote reference control. */
-function RemoteChoice(props: Omit<Parameters<typeof RemoteRecordChoice>[0], 'labels'>) {
-  const t = useTranslations('manufacturing');
-  return <RemoteRecordChoice {...props} labels={{ choose: t('choose'), searchPlaceholder: t('searchPlaceholder'), loadFailed: t('loadFailed'), retry: t('retry') }} />;
+function RemoteChoice(props: Omit<Parameters<typeof RemoteRecordChoice>[0], "labels">) {
+  const t = useTranslations("manufacturing");
+  return (
+    <RemoteRecordChoice
+      {...props}
+      labels={{
+        choose: t("choose"),
+        searchPlaceholder: t("searchPlaceholder"),
+        loadFailed: t("loadFailed"),
+        retry: t("retry"),
+      }}
+    />
+  );
 }

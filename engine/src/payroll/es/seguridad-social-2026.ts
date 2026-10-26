@@ -165,9 +165,12 @@ export function calculateEsSeguridadSocial2026(
   // itself (mensual) or the daily base times the days in alta (diaria).
   let retrib: bigint;
   try {
-    retrib = input.retribucionMensual !== undefined
-      ? U(input.retribucionMensual)
-      : diaria ? base * BigInt(dias) : base;
+    retrib =
+      input.retribucionMensual !== undefined
+        ? U(input.retribucionMensual)
+        : diaria
+          ? base * BigInt(dias)
+          : base;
   } catch {
     fail(`retribucionMensual is not a decimal amount: "${input.retribucionMensual}"`);
   }
@@ -179,9 +182,12 @@ export function calculateEsSeguridadSocial2026(
     // the days in alta (30-day month basis); preserve 4-decimal precision.
     const desde = diaria ? roundDiv(U(tramo.desde) * BigInt(dias), 30n) : U(tramo.desde);
     if (retrib <= desde) break;
-    const hasta = tramo.hasta === null
-      ? retrib
-      : diaria ? roundDiv(U(tramo.hasta) * BigInt(dias), 30n) : U(tramo.hasta);
+    const hasta =
+      tramo.hasta === null
+        ? retrib
+        : diaria
+          ? roundDiv(U(tramo.hasta) * BigInt(dias), 30n)
+          : U(tramo.hasta);
     const slice = (retrib < hasta ? retrib : hasta) - desde;
     if (slice <= 0n) continue;
     solEe += cuota(slice, tramo.tipos.trabajador);
@@ -204,10 +210,19 @@ export function calculateEsSeguridadSocial2026(
   // a €33.62 employer charge at termination (exclusions screened by caller).
   const cortaDuracion = input.cortaDuracionAplicable === true ? U("33.62") : null;
 
-  const trabajadorTotal = cc.trabajador + des.trabajador + form.trabajador + mei.trabajador
-    + solEe + hefmEe + herEe;
-  const empresaTotal = cc.empresa + des.empresa + fogasa + form.empresa + mei.empresa
-    + solEr + hefmEr + herEr + (atEp ?? 0n) + (cortaDuracion ?? 0n);
+  const trabajadorTotal =
+    cc.trabajador + des.trabajador + form.trabajador + mei.trabajador + solEe + hefmEe + herEe;
+  const empresaTotal =
+    cc.empresa +
+    des.empresa +
+    fogasa +
+    form.empresa +
+    mei.empresa +
+    solEr +
+    hefmEr +
+    herEr +
+    (atEp ?? 0n) +
+    (cortaDuracion ?? 0n);
 
   return {
     baseContingenciasComunes: D(ccBase),
@@ -252,8 +267,8 @@ function partTimeMinima(grupo: number, horasRaw: string): bigint {
   if (horas < 0n) fail(`horasTiempoParcial must be non-negative, got "${horasRaw}"`);
   if (horas > U("744")) {
     fail(
-      `horasTiempoParcial "${horasRaw}" exceeds the 744 hours a month can hold — `
-      + "enter the hours actually worked in this month, not an annual or contract total",
+      `horasTiempoParcial "${horasRaw}" exceeds the 744 hours a month can hold — ` +
+        "enter the hours actually worked in this month, not an annual or contract total",
     );
   }
   const fila = ES_BASE_MINIMA_HORA_2026.find((entry) => entry.grupo === grupo);

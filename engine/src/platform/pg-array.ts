@@ -9,6 +9,6 @@
  */
 export function pgTextArrayLiteral(values: readonly string[]): string {
   return `{${values
-    .map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
-    .join(',')}}`
+    .map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+    .join(",")}}`;
 }

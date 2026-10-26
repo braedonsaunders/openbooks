@@ -7,7 +7,12 @@ import { add, cmp } from "../money/money.ts";
 import { es111Quarters, es111Slip, es190Slips, es190Slip } from "./es/yearend.ts";
 import { esPackFilings } from "./es/filings.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 /**
  * The ES 190/111 populations over committed pay runs.
@@ -44,9 +49,12 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
       payroll: { countries: ["ES"] },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "ES");
-  const components = await db.execute<{ id: string; code: string }>(sql`
+  const components = await db.execute<{ id: string; code: string }>(
+    sql`
     select id, code from pay_components where org_id = ${org.orgId} and code in ('BASE', 'IRPF')
-  `, "objects");
+  `,
+    "objects",
+  );
   const baseId = components.find((c) => c.code === "BASE")!.id;
   const irpfId = components.find((c) => c.code === "IRPF")!.id;
 
@@ -81,7 +89,8 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
   const brunoId = await employee("Bruno Trabajador", "08");
 
   const run = async (
-    payDate: string, status: "committed" | "calculated",
+    payDate: string,
+    status: "committed" | "calculated",
     lines: { employeeId: string; gross: string; irpf: string }[],
   ): Promise<void> => {
     const documentId = randomUUID();
@@ -113,9 +122,7 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
     { employeeId: anaId, gross: "2000.00", irpf: "270.20" },
     { employeeId: brunoId, gross: "3000.00", irpf: "500.00" },
   ]);
-  await run("2026-09-30", "committed", [
-    { employeeId: anaId, gross: "2000.00", irpf: "270.20" },
-  ]);
+  await run("2026-09-30", "committed", [{ employeeId: anaId, gross: "2000.00", irpf: "270.20" }]);
   await run("2026-05-31", "calculated", [
     { employeeId: brunoId, gross: "9999.99", irpf: "999.99" },
   ]);
@@ -142,7 +149,9 @@ test(
       assert.equal(cmp(String(bruno.percepcionIntegra), "3000.00"), 0);
       assert.equal(cmp(String(bruno.retencionesPracticadas), "500.00"), 0);
       // Tie-out by a second method: independent SQL over the same stubs.
-      const totals = (await db.execute<{ percepcion: string; retencion: string }>(sql`
+      const totals = (
+        await db.execute<{ percepcion: string; retencion: string }>(
+          sql`
         select sum(case when pc.system_key is distinct from 'irpf' and l.kind = 'earning'
                         then l.amount else 0 end)::text as percepcion,
                sum(case when pc.system_key = 'irpf' then l.amount else 0 end)::text as retencion
@@ -151,7 +160,10 @@ test(
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${fx.orgId} and s.tax_year = 2026 and s.country = 'ES'
-           and r.run_status = 'committed'`, "objects"))[0]!;
+           and r.run_status = 'committed'`,
+          "objects",
+        )
+      )[0]!;
       const slipTotal = slips.reduce((acc, s) => add(acc, s.percepcionIntegra), "0");
       const taxTotal = slips.reduce((acc, s) => add(acc, s.retencionesPracticadas), "0");
       assert.equal(slipTotal, totals.percepcion);
@@ -171,7 +183,10 @@ test(
     const fx = await seedEsFilingFixture();
     try {
       const quarters = await es111Quarters(fx.orgId, 2026);
-      assert.deepEqual(quarters.map((q) => q.quarter), [1, 3]);
+      assert.deepEqual(
+        quarters.map((q) => q.quarter),
+        [1, 3],
+      );
       const q1 = quarters[0]!;
       assert.equal(q1.perceptores, 2);
       assert.equal(cmp(String(q1.percepciones), "5000.00"), 0);
@@ -195,14 +210,20 @@ test(
       const filings = esPackFilings();
       const byKey = new Map(filings.yearEnd.map((f) => [f.key, f]));
       const data190 = await byKey.get("190")!.population(fx.orgId, 2026);
-      assert.ok(data190.rows.length > 0, 'data190.rows must emit rows for this round-trip to mean anything');
+      assert.ok(
+        data190.rows.length > 0,
+        "data190.rows must emit rows for this round-trip to mean anything",
+      );
       for (const row of data190.rows) {
         const scope = byKey.get("190")!.parseRowId(String(row.rowId));
         assert.ok(scope, `190 must parse its own row ${row.rowId}`);
         assert.equal(scope!.employees.length, 1);
       }
       const data111 = await byKey.get("111")!.population(fx.orgId, 2026);
-      assert.ok(data111.rows.length > 0, 'data111.rows must emit rows for this round-trip to mean anything');
+      assert.ok(
+        data111.rows.length > 0,
+        "data111.rows must emit rows for this round-trip to mean anything",
+      );
       for (const row of data111.rows) {
         const scope = byKey.get("111")!.parseRowId(String(row.rowId));
         assert.ok(scope, `111 must parse its own row ${row.rowId}`);
@@ -253,26 +274,34 @@ test(
         update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
           payroll: { countries: ["ES"] },
         })}::jsonb where id = ${org.orgId}`);
-      await assert.rejects(() => es190Slips(org.orgId, 2026), /no committed ES pay stubs for tax year 2026/);
-      await assert.rejects(() => es111Quarters(org.orgId, 2026), /no committed ES pay stubs for tax year 2026/);
+      await assert.rejects(
+        () => es190Slips(org.orgId, 2026),
+        /no committed ES pay stubs for tax year 2026/,
+      );
+      await assert.rejects(
+        () => es111Quarters(org.orgId, 2026),
+        /no committed ES pay stubs for tax year 2026/,
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
   },
 );
 
-test(
-  "a year the pack's tables do not cover refuses by name",
-  { skip: !DB },
-  async () => {
-    const fx = await seedEsFilingFixture();
-    try {
-      // This tree transcribes 2026 only (keep/payroll-es-priors is unmerged):
-      // 2025 must refuse rather than file off untranscribed tables.
-      await assert.rejects(() => es190Slips(fx.orgId, 2025), /2025 statutory tables are not loaded for ES/);
-      await assert.rejects(() => es111Quarters(fx.orgId, 2025), /2025 statutory tables are not loaded for ES/);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+test("a year the pack's tables do not cover refuses by name", { skip: !DB }, async () => {
+  const fx = await seedEsFilingFixture();
+  try {
+    // This tree transcribes 2026 only (keep/payroll-es-priors is unmerged):
+    // 2025 must refuse rather than file off untranscribed tables.
+    await assert.rejects(
+      () => es190Slips(fx.orgId, 2025),
+      /2025 statutory tables are not loaded for ES/,
+    );
+    await assert.rejects(
+      () => es111Quarters(fx.orgId, 2025),
+      /2025 statutory tables are not loaded for ES/,
+    );
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});

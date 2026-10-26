@@ -59,29 +59,44 @@ async function postInvoiceShipping(
   await db.execute(sql`
     update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
   await postDocument(documentId, depsFor(org));
-  const issue = (await db.execute<{ id: string }>(sql`
+  const issue = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from inventory_movements
-     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0];
+     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`,
+      "objects",
+    )
+  )[0];
   assert.ok(issue, "posting the invoice should have issued the stock");
   return { documentId, lineId, issueMovementId: issue.id };
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  return (await db.execute<{ balance: string }>(sql`
+  return (
+    await db.execute<{ balance: string }>(
+      sql`
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `, "objects"))[0]!.balance;
+  `,
+      "objects",
+    )
+  )[0]!.balance;
 }
 
 async function receiptMovements(orgId: string, documentId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+  return (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n
       from inventory_movements movement
       join document_lines line on line.id = movement.document_line_id
      where movement.org_id = ${orgId}
        and line.document_id = ${documentId}
-       and movement.kind = 'receipt'`, "objects"))[0]!.n;
+       and movement.kind = 'receipt'`,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 test(

@@ -1,10 +1,7 @@
 import { cmp } from "../money/money.ts";
 import { PayrollPackError } from "./payroll-error.ts";
 import type { PayrollCountryPack, PayrollTaxYearDefinition } from "./packs.ts";
-import type {
-  PayrollStatutoryComputeContext,
-  PushStatutoryFn,
-} from "./statutory-context.ts";
+import type { PayrollStatutoryComputeContext, PushStatutoryFn } from "./statutory-context.ts";
 
 /**
  * Annual settlement — the pack-declared year-end recomputation and its
@@ -159,9 +156,7 @@ export interface PayrollAnnualSettlement {
    * them, like the monthly pass). A zero difference pushes nothing and
    * returns its factors — the legitimate IT no-op.
    */
-  compute: (
-    ctx: PayrollAnnualSettlementContext,
-  ) => Promise<Record<string, string>>;
+  compute: (ctx: PayrollAnnualSettlementContext) => Promise<Record<string, string>>;
 }
 
 /**
@@ -170,9 +165,7 @@ export interface PayrollAnnualSettlement {
  * OPTIONAL on the pack: absent means the pack settles nothing and the
  * generic layer never calls.
  */
-export type AnnualSettlementDeclaration = (
-  taxYear: number,
-) => PayrollAnnualSettlement | null;
+export type AnnualSettlementDeclaration = (taxYear: number) => PayrollAnnualSettlement | null;
 
 function fail(message: string): never {
   throw new PayrollPackError(`annual settlement: ${message}`);
@@ -213,8 +206,8 @@ export function createSettlementPush(pushStatutory: PushStatutoryFn): PushStatut
   return (systemKey, kind, description, amount, sequence, options) => {
     if (cmp(amount, "0") < 0) {
       fail(
-        `settlement amount ${amount} for "${description}" is negative: direction rides the kind `
-        + `(a refund posts a positive "credit", a collection a positive "deduction"), never the sign`,
+        `settlement amount ${amount} for "${description}" is negative: direction rides the kind ` +
+          `(a refund posts a positive "credit", a collection a positive "deduction"), never the sign`,
       );
     }
     pushStatutory(systemKey, kind, description, amount, sequence, options);
@@ -265,8 +258,8 @@ export function resolveAnnualSettlement(
   );
   if (!owned) {
     fail(
-      `settlement "${edition.label}" settles against systemKey "${edition.settlementSystemKey}", `
-      + "which no statutory slot declares — the remittance could not see the line",
+      `settlement "${edition.label}" settles against systemKey "${edition.settlementSystemKey}", ` +
+        "which no statutory slot declares — the remittance could not see the line",
     );
   }
   return edition;

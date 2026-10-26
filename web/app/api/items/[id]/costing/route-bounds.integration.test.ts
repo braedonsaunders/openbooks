@@ -12,10 +12,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __itemCostingBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
         export async function guardFeaturePermission() {
@@ -28,7 +34,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET, PUT } = await import("./route.ts");
 
 interface Fx {
@@ -46,7 +53,9 @@ async function fixture(): Promise<Fx> {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,inventory}', 'true'::jsonb, true) where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = jsonb_set(settings, '{features,inventory}', 'true'::jsonb, true) where id = ${org.orgId}`,
+    ),
   );
   return {
     orgId: org.orgId,
@@ -58,7 +67,11 @@ async function fixture(): Promise<Fx> {
   };
 }
 
-const call = (fn: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>, itemId: string, body?: unknown) =>
+const call = (
+  fn: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>,
+  itemId: string,
+  body?: unknown,
+) =>
   withOrgContext(state.orgId, () =>
     fn(
       new Request(`http://costing.test/api/items/${itemId}/costing`, {
@@ -96,9 +109,17 @@ test("costing refuses a standard cost wider than numeric(19,4) without writing",
   const fx = await fixture();
   try {
     const before = await profile(fx);
-    const response = await call(PUT, fx.itemId, putBody(fx, before.updated_at, "99999999999999999999.99"));
+    const response = await call(
+      PUT,
+      fx.itemId,
+      putBody(fx, before.updated_at, "99999999999999999999.99"),
+    );
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
     const after = await profile(fx);
     assert.equal(after.standard_cost, before.standard_cost);
@@ -115,7 +136,10 @@ test("costing still saves an ordinary standard cost", async () => {
     const response = await call(PUT, fx.itemId, putBody(fx, before.updated_at, "12.50"));
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     const after = await profile(fx);
-    assert.ok(Number(after.standard_cost) === 12.5, `standard cost not saved: ${after.standard_cost}`);
+    assert.ok(
+      Number(after.standard_cost) === 12.5,
+      `standard cost not saved: ${after.standard_cost}`,
+    );
   } finally {
     await dropScratchOrg(fx.orgId);
   }
@@ -129,7 +153,9 @@ test("costing saves the editor's blank optional accounts and decimals as unset",
     // default stands behind the item — the company control is the fallback
     // the receipt and bill readers resolve.
     await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,receivedNotBilled}', to_jsonb(${fx.clearing}::text), true) where id = ${fx.orgId}`),
+      db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,receivedNotBilled}', to_jsonb(${fx.clearing}::text), true) where id = ${fx.orgId}`,
+      ),
     );
     // The costing editor posts every field; unset choices arrive as "".
     const response = await call(PUT, fx.itemId, {
@@ -146,10 +172,24 @@ test("costing saves the editor's blank optional accounts and decimals as unset",
     });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     const after = await profile(fx);
-    assert.ok(Number(after.standard_cost) === 118, `standard cost not saved: ${after.standard_cost}`);
-    const stored = (await withBypassContext(() => db.execute<{ received_not_billed_account_id: string | null }>(sql`
-      select received_not_billed_account_id from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`, "objects")))[0];
-    assert.equal(stored?.received_not_billed_account_id, null, "blank RNB persists as unset behind the company default");
+    assert.ok(
+      Number(after.standard_cost) === 118,
+      `standard cost not saved: ${after.standard_cost}`,
+    );
+    const stored = (
+      await withBypassContext(() =>
+        db.execute<{ received_not_billed_account_id: string | null }>(
+          sql`
+      select received_not_billed_account_id from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`,
+          "objects",
+        ),
+      )
+    )[0];
+    assert.equal(
+      stored?.received_not_billed_account_id,
+      null,
+      "blank RNB persists as unset behind the company default",
+    );
   } finally {
     await dropScratchOrg(fx.orgId);
   }
@@ -164,7 +204,11 @@ test("costing refuses a blank received-not-billed account with no company defaul
       receivedNotBilledAccountId: "",
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.match(json?.error ?? "", /costing profile/);
     assert.match(json?.error ?? "", /Company Settings/);
     const after = await profile(fx);
@@ -178,10 +222,14 @@ test("costing read names the company received-not-billed default", async () => {
   const fx = await fixture();
   try {
     await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,receivedNotBilled}', to_jsonb(${fx.clearing}::text), true) where id = ${fx.orgId}`),
+      db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,receivedNotBilled}', to_jsonb(${fx.clearing}::text), true) where id = ${fx.orgId}`,
+      ),
     );
     const response = await call(GET, fx.itemId);
-    const json = (await response.json().catch(() => null)) as { companyReceivedNotBilledAccountId?: string | null } | null;
+    const json = (await response.json().catch(() => null)) as {
+      companyReceivedNotBilledAccountId?: string | null;
+    } | null;
     assert.equal(response.status, 200, JSON.stringify(json));
     assert.equal(json?.companyReceivedNotBilledAccountId, fx.clearing);
   } finally {
@@ -195,18 +243,48 @@ test("a unit-conversion row saves through the costing section with a before/afte
     const before = await profile(fx);
     // The Unit conversions section's add-row posts the whole map; the item
     // starts with no conversions.
-    const response = await call(PUT, fx.itemId, { ...putBody(fx, before.updated_at, "12.50"), unitConversions: { box: 12 } });
+    const response = await call(PUT, fx.itemId, {
+      ...putBody(fx, before.updated_at, "12.50"),
+      unitConversions: { box: 12 },
+    });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
-    const stored = (await withBypassContext(() => db.execute<{ unit_conversions: unknown }>(sql`
-      select unit_conversions from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`, "objects")))[0];
+    const stored = (
+      await withBypassContext(() =>
+        db.execute<{ unit_conversions: unknown }>(
+          sql`
+      select unit_conversions from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`,
+          "objects",
+        ),
+      )
+    )[0];
     assert.deepEqual(stored?.unit_conversions, { box: 12 }, "the conversion row persists");
-    const audit = (await withBypassContext(() => db.execute<{ action: string; changes: { before: { unit_conversions?: Record<string, unknown> }; after: { unit_conversions?: Record<string, unknown> } } }>(sql`
+    const audit = (
+      await withBypassContext(() =>
+        db.execute<{
+          action: string;
+          changes: {
+            before: { unit_conversions?: Record<string, unknown> };
+            after: { unit_conversions?: Record<string, unknown> };
+          };
+        }>(
+          sql`
       select action, changes from audit_log
        where org_id = ${fx.orgId} and table_name = 'item_inventory_profiles' and row_id = ${fx.itemId}
-       order by at desc, id desc limit 1`, "objects")))[0];
+       order by at desc, id desc limit 1`,
+          "objects",
+        ),
+      )
+    )[0];
     assert.equal(audit?.action, "update");
-    assert.deepEqual(audit?.changes.after.unit_conversions, { box: 12 }, "the audit carries the added row");
-    assert.ok(!("box" in ((audit?.changes.before.unit_conversions ?? {}) as Record<string, unknown>)), "the audit shows the row as new");
+    assert.deepEqual(
+      audit?.changes.after.unit_conversions,
+      { box: 12 },
+      "the audit carries the added row",
+    );
+    assert.ok(
+      !("box" in ((audit?.changes.before.unit_conversions ?? {}) as Record<string, unknown>)),
+      "the audit shows the row as new",
+    );
   } finally {
     await dropScratchOrg(fx.orgId);
   }

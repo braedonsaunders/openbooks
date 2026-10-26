@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // Select — the app-wide select control. It looks and behaves like the
 // SearchSelect typeahead (anchored dropdown on desktop, bottom sheet on mobile,
@@ -13,42 +13,42 @@
 // There are intentionally NO native <select> dropdowns in the product; use this
 // (or SearchSelect / PersonSelectField for fully-custom cases) everywhere.
 
-import * as React from 'react'
-import { useTranslations } from 'next-intl'
-import { SearchSelect, type SelectOption } from './search-select'
-import { cn } from './utils'
+import * as React from "react";
+import { useTranslations } from "next-intl";
+import { SearchSelect, type SelectOption } from "./search-select";
+import { cn } from "./utils";
 
 export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   /** Greyed placeholder shown when nothing is selected (or use a leading <option value=""> ). */
-  placeholder?: string
+  placeholder?: string;
   /** Title of the mobile bottom sheet. */
-  sheetTitle?: string
-  searchPlaceholder?: string
+  sheetTitle?: string;
+  searchPlaceholder?: string;
   /** Force the in-dropdown search box on/off. Defaults to auto (shown for long lists). */
-  searchable?: boolean
+  searchable?: boolean;
   /** Extra classes for the trigger button (the visible control). */
-  triggerClassName?: string
+  triggerClassName?: string;
   /** Data-entry forms: a keyboard choice moves focus to the next field (see SearchSelect). */
-  advanceOnSelect?: boolean
+  advanceOnSelect?: boolean;
   /** ↑/↓ open the closed list; grids turn this off so arrows move between rows. */
-  arrowKeysOpen?: boolean
-}
+  arrowKeysOpen?: boolean;
+};
 
 function textOf(node: React.ReactNode): string {
-  if (node == null || node === false || node === true) return ''
-  if (typeof node === 'string' || typeof node === 'number') return String(node)
-  if (Array.isArray(node)) return node.map(textOf).join('')
+  if (node == null || node === false || node === true) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
   if (React.isValidElement(node))
-    return textOf((node.props as { children?: React.ReactNode }).children)
-  return ''
+    return textOf((node.props as { children?: React.ReactNode }).children);
+  return "";
 }
 
 type Parsed = {
-  options: SelectOption[]
-  placeholder?: string
-  clearable: boolean
-  emptyLabel?: string
-}
+  options: SelectOption[];
+  placeholder?: string;
+  clearable: boolean;
+  emptyLabel?: string;
+};
 
 // Flatten <option>/<optgroup> children into a SelectOption[] for the typeahead.
 // A leading <option value=""> becomes the placeholder (greyed); if it isn't
@@ -56,52 +56,52 @@ type Parsed = {
 // translated fallback label for an empty-labelled leading option (hooks can't
 // run here, so the component passes it in).
 function parseChildren(children: React.ReactNode, noneLabel: string): Parsed {
-  const options: SelectOption[] = []
-  let placeholder: string | undefined
-  let emptyLabel: string | undefined
-  let clearable = false
-  let seenAny = false
+  const options: SelectOption[] = [];
+  let placeholder: string | undefined;
+  let emptyLabel: string | undefined;
+  let clearable = false;
+  let seenAny = false;
 
   const pushOption = (el: React.ReactElement, group?: string) => {
     const p = el.props as {
-      value?: string | number | readonly string[]
-      children?: React.ReactNode
-      disabled?: boolean
-      hidden?: boolean
-    }
-    const label = textOf(p.children)
-    const value = p.value != null ? String(p.value) : label
-    if (value === '' && !seenAny) {
+      value?: string | number | readonly string[];
+      children?: React.ReactNode;
+      disabled?: boolean;
+      hidden?: boolean;
+    };
+    const label = textOf(p.children);
+    const value = p.value != null ? String(p.value) : label;
+    if (value === "" && !seenAny) {
       // Leading empty option = placeholder.
-      placeholder = label || undefined
-      emptyLabel = label || noneLabel
-      clearable = !p.disabled
-      seenAny = true
-      return
+      placeholder = label || undefined;
+      emptyLabel = label || noneLabel;
+      clearable = !p.disabled;
+      seenAny = true;
+      return;
     }
-    seenAny = true
-    if (p.hidden) return
-    options.push({ value, label: label || value, disabled: !!p.disabled, group })
-  }
+    seenAny = true;
+    if (p.hidden) return;
+    options.push({ value, label: label || value, disabled: !!p.disabled, group });
+  };
 
   const walk = (nodes: React.ReactNode) => {
     React.Children.forEach(nodes, (child) => {
-      if (!React.isValidElement(child)) return
+      if (!React.isValidElement(child)) return;
       if (child.type === React.Fragment) {
-        walk((child.props as { children?: React.ReactNode }).children)
-      } else if (child.type === 'optgroup') {
-        const gp = child.props as { label?: string; children?: React.ReactNode }
+        walk((child.props as { children?: React.ReactNode }).children);
+      } else if (child.type === "optgroup") {
+        const gp = child.props as { label?: string; children?: React.ReactNode };
         React.Children.forEach(gp.children, (o) => {
-          if (React.isValidElement(o) && o.type === 'option') pushOption(o, gp.label)
-        })
-      } else if (child.type === 'option') {
-        pushOption(child)
+          if (React.isValidElement(o) && o.type === "option") pushOption(o, gp.label);
+        });
+      } else if (child.type === "option") {
+        pushOption(child);
       }
-    })
-  }
-  walk(children)
+    });
+  };
+  walk(children);
 
-  return { options, placeholder, clearable, emptyLabel }
+  return { options, placeholder, clearable, emptyLabel };
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
@@ -120,37 +120,37 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
     required,
     name,
     id,
-    'aria-label': ariaLabel,
-    'aria-labelledby': ariaLabelledBy,
+    "aria-label": ariaLabel,
+    "aria-labelledby": ariaLabelledBy,
     advanceOnSelect,
     arrowKeysOpen,
     ...rest
   },
   ref,
 ) {
-  const innerRef = React.useRef<HTMLSelectElement | null>(null)
+  const innerRef = React.useRef<HTMLSelectElement | null>(null);
   const setRef = React.useCallback(
     (el: HTMLSelectElement | null) => {
-      innerRef.current = el
-      if (typeof ref === 'function') ref(el)
-      else if (ref) (ref as React.MutableRefObject<HTMLSelectElement | null>).current = el
+      innerRef.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) (ref as React.MutableRefObject<HTMLSelectElement | null>).current = el;
     },
     [ref],
-  )
+  );
 
-  const isControlled = value !== undefined
+  const isControlled = value !== undefined;
   const [uncontrolled, setUncontrolled] = React.useState(
-    defaultValue != null ? String(defaultValue) : '',
-  )
-  const current = isControlled ? String(value ?? '') : uncontrolled
+    defaultValue != null ? String(defaultValue) : "",
+  );
+  const current = isControlled ? String(value ?? "") : uncontrolled;
 
-  const tLabels = useTranslations('common.labels')
-  const noneLabel = tLabels('none')
-  const parsed = React.useMemo(() => parseChildren(children, noneLabel), [children, noneLabel])
+  const tLabels = useTranslations("common.labels");
+  const noneLabel = tLabels("none");
+  const parsed = React.useMemo(() => parseChildren(children, noneLabel), [children, noneLabel]);
 
   function handleNativeChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    if (!isControlled) setUncontrolled(e.currentTarget.value)
-    onChange?.(e)
+    if (!isControlled) setUncontrolled(e.currentTarget.value);
+    onChange?.(e);
   }
 
   // Drive the hidden native <select> so the genuine change event fires (real
@@ -160,22 +160,22 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
   // the dispatched change as a no-op and the caller's onChange never fires —
   // the selection visibly resets to the placeholder on every pick.
   function pick(v: string) {
-    const el = innerRef.current
-    if (!el) return
-    const view = (el.ownerDocument.defaultView ?? window) as typeof window
-    const setter = Object.getOwnPropertyDescriptor(view.HTMLSelectElement.prototype, 'value')?.set
-    if (setter) setter.call(el, v)
-    else el.value = v
-    el.dispatchEvent(new view.Event('change', { bubbles: true }))
+    const el = innerRef.current;
+    if (!el) return;
+    const view = (el.ownerDocument.defaultView ?? window) as typeof window;
+    const setter = Object.getOwnPropertyDescriptor(view.HTMLSelectElement.prototype, "value")?.set;
+    if (setter) setter.call(el, v);
+    else el.value = v;
+    el.dispatchEvent(new view.Event("change", { bubbles: true }));
   }
 
-  const isInvalid = rest['aria-invalid'] === true || rest['aria-invalid'] === 'true'
+  const isInvalid = rest["aria-invalid"] === true || rest["aria-invalid"] === "true";
 
   // Historically `className` styled the native <select> box itself, so callers
   // express height/text there as well as width/flex. Route it to the trigger
   // (height/text/width) and the wrapper (width/flex/layout) so both land.
   return (
-    <span className={cn('relative block w-full', className)}>
+    <span className={cn("relative block w-full", className)}>
       {/* Form/validation/onChange proxy — visually hidden, never tab-focused. */}
       <select
         {...rest}
@@ -211,6 +211,6 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         arrowKeysOpen={arrowKeysOpen}
       />
     </span>
-  )
-})
-Select.displayName = 'Select'
+  );
+});
+Select.displayName = "Select";

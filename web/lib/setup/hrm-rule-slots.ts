@@ -17,13 +17,13 @@
  * This fold runs on both paths: it strips any column that is a generated
  * slot and appends the folded jsonb columns present in the normalized body.
  */
-import type { Coerced } from './coerce'
-import { toSnake } from './registry'
-import { EQUAL_VALUE_CRITERIA_SLOTS } from './hrm-compensation'
+import type { Coerced } from "./coerce";
+import { toSnake } from "./registry";
+import { EQUAL_VALUE_CRITERIA_SLOTS } from "./hrm-compensation";
 
 interface RuleSlotEntity {
   /** Generated slot columns: readable, never written. */
-  readonly generated: readonly string[]
+  readonly generated: readonly string[];
   /** Folded body key → jsonb column. `kind: 'array'` persists a JSON
    *  array (signer roles, merge keys); the default 'object' persists a
    *  JSON object (rules, scales). `slots` names the drawer field keys
@@ -35,94 +35,107 @@ interface RuleSlotEntity {
    *  whole stored array prop (leave-policy targeting ids, service tiers):
    *  readable prefills, never written, folded back by the normalizer. */
   readonly folded: readonly {
-    key: string
-    column: string
-    kind?: 'object' | 'array'
-    slots?: readonly string[]
-    members?: readonly { slot: string; value: string }[]
-    arrays?: readonly { slot: string; prop: string }[]
-  }[]
+    key: string;
+    column: string;
+    kind?: "object" | "array";
+    slots?: readonly string[];
+    members?: readonly { slot: string; value: string }[];
+    arrays?: readonly { slot: string; prop: string }[];
+  }[];
 }
 
 export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
-  'hrm-job-levels': {
+  "hrm-job-levels": {
     // The weight inputs edit one criteria array; there are no weight columns.
     generated: [],
-    folded: [{ key: 'equalValueCriteria', column: 'equal_value_criteria', kind: 'array', slots: EQUAL_VALUE_CRITERIA_SLOTS.map(([, slot]) => slot) }],
+    folded: [
+      {
+        key: "equalValueCriteria",
+        column: "equal_value_criteria",
+        kind: "array",
+        slots: EQUAL_VALUE_CRITERIA_SLOTS.map(([, slot]) => slot),
+      },
+    ],
   },
-  'hrm-process-templates': {
-    generated: ['applies_employer_subsidiary_id', 'applies_department_id'],
-    folded: [{ key: 'appliesTo', column: 'applies_to' }],
+  "hrm-process-templates": {
+    generated: ["applies_employer_subsidiary_id", "applies_department_id"],
+    folded: [{ key: "appliesTo", column: "applies_to" }],
   },
-  'hrm-review-templates': {
+  "hrm-review-templates": {
     // No generated slot columns: the scale has no tenant-identity slots
     // to project, so the drawer fields fold straight into rating_scale.
     generated: [],
-    folded: [{ key: 'ratingScale', column: 'rating_scale', slots: ['ratingScaleMin', 'ratingScaleMax', 'ratingScaleLabels'] }],
+    folded: [
+      {
+        key: "ratingScale",
+        column: "rating_scale",
+        slots: ["ratingScaleMin", "ratingScaleMax", "ratingScaleLabels"],
+      },
+    ],
   },
-  'leave-policies': {
+  "leave-policies": {
     generated: [
-      'applies_employer_subsidiary_id',
-      'applies_department_id',
-      'accrual_kind',
-      'accrual_hours',
-      'accrual_periods_per_year',
-      'carryover_kind',
-      'carryover_hours',
-      'carryover_expires_after_days',
+      "applies_employer_subsidiary_id",
+      "applies_department_id",
+      "accrual_kind",
+      "accrual_hours",
+      "accrual_periods_per_year",
+      "carryover_kind",
+      "carryover_hours",
+      "carryover_expires_after_days",
       // Virtual slot keys with no column: the targeting pickers and the
       // tier table fold into the rule jsonb and prefill straight off it
       // (projectRuleSlotPrefills), so like the projections above they are
       // readable, never written — buildRow still emits them for absent
       // optional fields, and this list strips them from the write.
-      'applies_employment_ids',
-      'applies_classification_ids',
-      'accrual_tiers',
+      "applies_employment_ids",
+      "applies_classification_ids",
+      "accrual_tiers",
     ],
     folded: [
       {
-        key: 'appliesTo',
-        column: 'applies_to',
+        key: "appliesTo",
+        column: "applies_to",
         // The picker fields below fold into applies_to through
         // normalizeHrmLeavePolicyInput; the folded object satisfies their
         // requiredness once the normalizer runs, and buildRow skips them.
-        slots: ['appliesEmploymentIds', 'appliesClassificationIds'],
+        slots: ["appliesEmploymentIds", "appliesClassificationIds"],
         arrays: [
-          { slot: 'appliesEmploymentIds', prop: 'employment_ids' },
-          { slot: 'appliesClassificationIds', prop: 'classification_ids' },
+          { slot: "appliesEmploymentIds", prop: "employment_ids" },
+          { slot: "appliesClassificationIds", prop: "classification_ids" },
         ],
       },
       {
-        key: 'accrualRule',
-        column: 'accrual_rule',
-        slots: ['accrualTiers'],
-        arrays: [{ slot: 'accrualTiers', prop: 'tiers' }],
+        key: "accrualRule",
+        column: "accrual_rule",
+        slots: ["accrualTiers"],
+        arrays: [{ slot: "accrualTiers", prop: "tiers" }],
       },
-      { key: 'carryoverRule', column: 'carryover_rule' },
+      { key: "carryoverRule", column: "carryover_rule" },
     ],
   },
   // HR-19 begin: document templates (0230) — signer membership and merge
   // keys fold from drawer slots into jsonb arrays. No generated slot
   // columns (review-template precedent): the drawer prefills from the
   // template row itself.
-  'hrm-document-templates': {
+  "hrm-document-templates": {
     generated: [],
     folded: [
       {
-        key: 'signerRoles',
-        column: 'signer_roles',
-        kind: 'array',
+        key: "signerRoles",
+        column: "signer_roles",
+        kind: "array",
         members: [
-          { slot: 'signEmployee', value: 'employee' },
-          { slot: 'signManager', value: 'manager' },
-          { slot: 'signHr', value: 'hr' },
+          { slot: "signEmployee", value: "employee" },
+          { slot: "signManager", value: "manager" },
+          { slot: "signHr", value: "hr" },
         ],
       },
-      { key: 'mergeFields', column: 'merge_fields', kind: 'array' },
+      { key: "mergeFields", column: "merge_fields", kind: "array" },
     ],
   },
   // HR-19 end
-}
+};
 
 /**
  * Slot field keys whose folded object is present in this body. buildRow
@@ -133,14 +146,14 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
  * on the slot's own required field by name.
  */
 export function coveredSlotFields(entityKey: string, body: Record<string, unknown>): Set<string> {
-  const spec = RULE_SLOT_ENTITIES[entityKey]
-  const covered = new Set<string>()
-  if (!spec) return covered
+  const spec = RULE_SLOT_ENTITIES[entityKey];
+  const covered = new Set<string>();
+  if (!spec) return covered;
   for (const entry of spec.folded) {
-    if (body[entry.key] === undefined || (entry.slots ?? []).length === 0) continue
-    for (const slot of entry.slots ?? []) covered.add(slot)
+    if (body[entry.key] === undefined || (entry.slots ?? []).length === 0) continue;
+    for (const slot of entry.slots ?? []) covered.add(slot);
   }
-  return covered
+  return covered;
 }
 
 /**
@@ -155,44 +168,44 @@ export function applyRuleSlotColumns(
   body: Record<string, unknown>,
   cols: readonly Coerced[],
 ): { cols: Coerced[] } | { error: string } {
-  const spec = RULE_SLOT_ENTITIES[entityKey]
-  if (!spec) return { cols: [...cols] }
-  const generated = new Set(spec.generated)
-  const folded = new Set(spec.folded.map((entry) => entry.column))
-  const out = cols.filter((col) => !generated.has(col.column) && !folded.has(col.column))
+  const spec = RULE_SLOT_ENTITIES[entityKey];
+  if (!spec) return { cols: [...cols] };
+  const generated = new Set(spec.generated);
+  const folded = new Set(spec.folded.map((entry) => entry.column));
+  const out = cols.filter((col) => !generated.has(col.column) && !folded.has(col.column));
   for (const entry of spec.folded) {
-    const raw = body[entry.key]
-    if (raw === undefined) continue
-    let value: unknown = raw
-    if (typeof raw === 'string') {
+    const raw = body[entry.key];
+    if (raw === undefined) continue;
+    let value: unknown = raw;
+    if (typeof raw === "string") {
       try {
-        value = JSON.parse(raw)
+        value = JSON.parse(raw);
       } catch {
-        return { error: `${entry.key} must be valid JSON` }
+        return { error: `${entry.key} must be valid JSON` };
       }
     }
-    if (entry.kind === 'array') {
-      if (!Array.isArray(value)) return { error: `${entry.key} must be a JSON array` }
-      out.push({ column: entry.column, value })
-      continue
+    if (entry.kind === "array") {
+      if (!Array.isArray(value)) return { error: `${entry.key} must be a JSON array` };
+      out.push({ column: entry.column, value });
+      continue;
     }
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-      return { error: `${entry.key} must be a JSON object` }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return { error: `${entry.key} must be a JSON object` };
     }
-    out.push({ column: entry.column, value })
+    out.push({ column: entry.column, value });
   }
-  return { cols: out }
+  return { cols: out };
 }
 
 function storedJson(value: unknown): unknown {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     try {
-      return JSON.parse(value)
+      return JSON.parse(value);
     } catch {
-      return undefined
+      return undefined;
     }
   }
-  return value
+  return value;
 }
 
 /**
@@ -212,37 +225,37 @@ export function projectRuleSlotPrefills(
   entityKey: string,
   row: Record<string, unknown>,
 ): Record<string, unknown> {
-  const spec = RULE_SLOT_ENTITIES[entityKey]
-  if (!spec) return row
-  const out = { ...row }
+  const spec = RULE_SLOT_ENTITIES[entityKey];
+  if (!spec) return row;
+  const out = { ...row };
   for (const entry of spec.folded) {
-    const stored = storedJson(out[entry.column])
+    const stored = storedJson(out[entry.column]);
     for (const slot of entry.slots ?? []) {
-      const column = toSnake(slot)
-      if (out[column] !== undefined || !slot.startsWith(entry.key)) continue
-      const prop = slot.slice(entry.key.length)
-      const key = prop.slice(0, 1).toLowerCase() + prop.slice(1)
-      if (!key || stored === null || typeof stored !== 'object' || Array.isArray(stored)) continue
-      const value = (stored as Record<string, unknown>)[key]
-      if (value !== undefined) out[column] = value
+      const column = toSnake(slot);
+      if (out[column] !== undefined || !slot.startsWith(entry.key)) continue;
+      const prop = slot.slice(entry.key.length);
+      const key = prop.slice(0, 1).toLowerCase() + prop.slice(1);
+      if (!key || stored === null || typeof stored !== "object" || Array.isArray(stored)) continue;
+      const value = (stored as Record<string, unknown>)[key];
+      if (value !== undefined) out[column] = value;
     }
     if (Array.isArray(stored)) {
       for (const member of entry.members ?? []) {
-        const column = toSnake(member.slot)
-        if (out[column] === undefined) out[column] = stored.includes(member.value)
+        const column = toSnake(member.slot);
+        if (out[column] === undefined) out[column] = stored.includes(member.value);
       }
     }
     // Whole array props (targeting ids, service tiers): the drawer field
     // reads the stored prop straight, so clearing the control and saving
     // can never silently keep a stale stored array behind.
-    if (stored !== null && typeof stored === 'object' && !Array.isArray(stored)) {
+    if (stored !== null && typeof stored === "object" && !Array.isArray(stored)) {
       for (const array of entry.arrays ?? []) {
-        const column = toSnake(array.slot)
-        if (out[column] !== undefined) continue
-        const value = (stored as Record<string, unknown>)[array.prop]
-        if (Array.isArray(value)) out[column] = value
+        const column = toSnake(array.slot);
+        if (out[column] !== undefined) continue;
+        const value = (stored as Record<string, unknown>)[array.prop];
+        if (Array.isArray(value)) out[column] = value;
       }
     }
   }
-  return out
+  return out;
 }

@@ -141,21 +141,12 @@ test("financial cursor gate reports every independent divergence", () => {
 test("full sweeps detect vanished source records while mirrors require tombstones", () => {
   const existing = ["1", "2", "3"];
   const current = ["1", "3", "4"];
-  assert.deepEqual(
-    sourceDeletionCandidates(true, existing, current, ["3", "9"]),
-    ["2", "3"],
-  );
-  assert.deepEqual(
-    sourceDeletionCandidates(false, existing, current, ["3", "9"]),
-    ["3"],
-  );
+  assert.deepEqual(sourceDeletionCandidates(true, existing, current, ["3", "9"]), ["2", "3"]);
+  assert.deepEqual(sourceDeletionCandidates(false, existing, current, ["3", "9"]), ["3"]);
 });
 
 test("controller-resolved source deletions no longer block the cursor gate", () => {
-  assert.deepEqual(
-    unresolvedSourceDeletionCandidates(["657109", "other"], ["657109"]),
-    ["other"],
-  );
+  assert.deepEqual(unresolvedSourceDeletionCandidates(["657109", "other"], ["657109"]), ["other"]);
 });
 
 test("change detection treats an inherited line subsidiary as its header subsidiary", () => {
@@ -181,9 +172,7 @@ test("source display number is distinct from immutable source identity", () => {
     "INV4194",
   );
   assert.equal(
-    effectiveSourceDocumentNumber(
-      canonicalDocument({ sourceRef: "667706", documentNumber: "  " }),
-    ),
+    effectiveSourceDocumentNumber(canonicalDocument({ sourceRef: "667706", documentNumber: "  " })),
     "667706",
   );
 });
@@ -205,9 +194,7 @@ test("colliding source display numbers retain visible and immutable identities",
   );
 });
 
-const canonicalDocument = (
-  overrides: Partial<NativeDocument> = {},
-): NativeDocument => ({
+const canonicalDocument = (overrides: Partial<NativeDocument> = {}): NativeDocument => ({
   sourceRef: "source-1",
   kind: "customer_invoice",
   posting: true,
@@ -222,31 +209,30 @@ const canonicalDocument = (
   memo: null,
   referenceNumber: "INV-1",
   controlAccountId: "ar",
-  lines: [{
-    accountId: "income",
-    itemId: "item",
-    quantity: "1",
-    unit: "hour",
-    unitPrice: "10",
-    amount: "10",
-    taxAmount: "0",
-    taxOverridden: false,
-    taxCodeId: null,
-    departmentId: null,
-    projectId: "project",
-    description: "Labour",
-    lineNumber: 1,
-    sourceLineRef: "1",
-  }],
+  lines: [
+    {
+      accountId: "income",
+      itemId: "item",
+      quantity: "1",
+      unit: "hour",
+      unitPrice: "10",
+      amount: "10",
+      taxAmount: "0",
+      taxOverridden: false,
+      taxCodeId: null,
+      departmentId: null,
+      projectId: "project",
+      description: "Labour",
+      lineNumber: 1,
+      sourceLineRef: "1",
+    },
+  ],
   ...overrides,
 });
 
 test("change detection includes currency and exact exchange rate", () => {
   const baseline = canonicalNativeDocumentKey(canonicalDocument());
-  assert.notEqual(
-    baseline,
-    canonicalNativeDocumentKey(canonicalDocument({ currency: "USD" })),
-  );
+  assert.notEqual(baseline, canonicalNativeDocumentKey(canonicalDocument({ currency: "USD" })));
   assert.notEqual(
     baseline,
     canonicalNativeDocumentKey(canonicalDocument({ fxRate: "1.00000001" })),
@@ -257,9 +243,7 @@ test("change detection includes the exact accounting period", () => {
   const baseline = canonicalNativeDocumentKey(canonicalDocument());
   assert.notEqual(
     baseline,
-    canonicalNativeDocumentKey(
-      canonicalDocument({ postingPeriodId: "period-adjustment" }),
-    ),
+    canonicalNativeDocumentKey(canonicalDocument({ postingPeriodId: "period-adjustment" })),
   );
 });
 
@@ -268,12 +252,14 @@ test("change detection includes source commercial truth on every line", () => {
   const baselineLine = baselineDocument.lines[0]!;
   const baseline = canonicalNativeDocumentKey({
     ...baselineDocument,
-    lines: [{
-      ...baselineLine,
-      isBillable: true,
-      markupPercent: "15",
-      billAmount: "11.5",
-    }],
+    lines: [
+      {
+        ...baselineLine,
+        isBillable: true,
+        markupPercent: "15",
+        billAmount: "11.5",
+      },
+    ],
   });
   for (const line of [
     { ...baselineLine, isBillable: false, markupPercent: "15", billAmount: "11.5" },
@@ -463,35 +449,73 @@ test("change detection ignores source cleared evidence on native lines", () => {
   );
 });
 
-
 test("exact financial balances cannot hide incomplete native CRM replication", () => {
-  assert.match(syncVerificationFailures(result({ operationalRecords: {
-    disabledFeatures: [], crm: {
-      accountStatuses: 1, accounts: 1, missingParties: 1, opportunities: 0,
-      opportunityLines: 0, activities: {}, sourceNoteLinks: 0, warnings: ["Source party is missing"],
-    },
-  } })).join("; "), /CRM replication is incomplete.*Source party is missing/);
+  assert.match(
+    syncVerificationFailures(
+      result({
+        operationalRecords: {
+          disabledFeatures: [],
+          crm: {
+            accountStatuses: 1,
+            accounts: 1,
+            missingParties: 1,
+            opportunities: 0,
+            opportunityLines: 0,
+            activities: {},
+            sourceNoteLinks: 0,
+            warnings: ["Source party is missing"],
+          },
+        },
+      }),
+    ).join("; "),
+    /CRM replication is incomplete.*Source party is missing/,
+  );
 });
 
-
 test("project input parity refuses source deletions left only in the target", () => {
-  assert.match(syncVerificationFailures(result({ projectFinancials: {
-    sourceTimeEntries: 1, targetTimeEntries: 2, exactTimeEntries: 1, changedTimeEntries: 0,
-    missingTargetTimeEntries: 0, targetOnlyTimeEntries: 1, sourceProjects: 0, targetProjects: 0,
-    exactProjects: 0, changedProjects: 0, missingTargetProjects: 0, targetOnlyProjects: 0, applied: false,
-  } })).join("; "), /1 target-only time entries/);
+  assert.match(
+    syncVerificationFailures(
+      result({
+        projectFinancials: {
+          sourceTimeEntries: 1,
+          targetTimeEntries: 2,
+          exactTimeEntries: 1,
+          changedTimeEntries: 0,
+          missingTargetTimeEntries: 0,
+          targetOnlyTimeEntries: 1,
+          sourceProjects: 0,
+          targetProjects: 0,
+          exactProjects: 0,
+          changedProjects: 0,
+          missingTargetProjects: 0,
+          targetOnlyProjects: 0,
+          applied: false,
+        },
+      }),
+    ).join("; "),
+    /1 target-only time entries/,
+  );
 });
 
 test("mirror attachment scope is incremental only between recent full sweeps", () => {
   const now = new Date("2026-10-10T12:00:00Z");
   const since = new Date("2026-10-09T12:00:00Z");
   const recentSweep = new Date("2026-10-08T12:00:00Z");
-  const base = { kind: "incremental", since, lastFullSweepAt: recentSweep, now, pulledRefs: ["7", "7", "9"] };
+  const base = {
+    kind: "incremental",
+    since,
+    lastFullSweepAt: recentSweep,
+    now,
+    pulledRefs: ["7", "7", "9"],
+  };
 
   // The earlier of sweep and watermark bounds change detection; pulled refs dedupe.
   assert.deepEqual(attachmentChangesScope(base), { since: recentSweep, sourceRefs: ["7", "9"] });
   const sweptAfterWatermark = new Date("2026-10-10T00:00:00Z");
-  assert.deepEqual(attachmentChangesScope({ ...base, lastFullSweepAt: sweptAfterWatermark })?.since, since);
+  assert.deepEqual(
+    attachmentChangesScope({ ...base, lastFullSweepAt: sweptAfterWatermark })?.since,
+    since,
+  );
 
   // Full reconciliation: never swept, sweep too old, no watermark, or not a mirror.
   assert.equal(attachmentChangesScope({ ...base, lastFullSweepAt: null }), null);

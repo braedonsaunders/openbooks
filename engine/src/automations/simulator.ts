@@ -44,48 +44,58 @@ async function lastSubjectIds(
       ? sql``
       : sql`and ${entity === "leave_request" ? sql`e.employer_subsidiary_id` : sql`r.employer_subsidiary_id`} = any(${`{${[...scope].join(",")}}`}::uuid[])`;
   if (entity === "employment") {
-    const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       select r.id from worker_employments r
        where r.org_id = ${orgId}
        ${subsidiaryFilter}
        order by r.created_at desc
        limit ${limit}
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((r) => r.id);
   }
   if (entity === "leave_request") {
-    const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       select r.id from hrm_leave_requests r
       left join worker_employments e on e.org_id = r.org_id and e.id = r.employment_id
        where r.org_id = ${orgId}
        ${subsidiaryFilter}
        order by r.created_at desc
        limit ${limit}
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((r) => r.id);
   }
-  const table = entity === "timesheet_week"
-    ? "timesheet_weeks"
-    : entity === "document" || entity === "expense_report"
-      ? "documents"
-      : entity === "requisition"
-        ? "hrm_requisitions"
-        : entity === "application"
-          ? "hrm_applications"
-          : entity === "review"
-            ? "hrm_reviews"
-            : entity === "enrollment"
-              ? "hrm_benefit_enrollments"
-              : entity === "position"
-                ? "positions"
-                : null;
+  const table =
+    entity === "timesheet_week"
+      ? "timesheet_weeks"
+      : entity === "document" || entity === "expense_report"
+        ? "documents"
+        : entity === "requisition"
+          ? "hrm_requisitions"
+          : entity === "application"
+            ? "hrm_applications"
+            : entity === "review"
+              ? "hrm_reviews"
+              : entity === "enrollment"
+                ? "hrm_benefit_enrollments"
+                : entity === "position"
+                  ? "positions"
+                  : null;
   if (!table) return [];
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from ${sql.identifier(table)}
      where org_id = ${orgId}
      order by created_at desc
      limit ${limit}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((r) => r.id);
 }
 
@@ -101,7 +111,9 @@ export async function simulateAutomation(input: {
 }): Promise<SimulationResult[]> {
   const ok = await actorHasPermission(db, input.orgId, input.actorId, "automations.read");
   if (!ok) {
-    throw new Error("automation access requires the automations.read permission — ask an administrator to grant it in /admin/roles");
+    throw new Error(
+      "automation access requires the automations.read permission — ask an administrator to grant it in /admin/roles",
+    );
   }
   return withOrg(input.orgId, async () => {
     const automation = await loadAutomation(input.orgId, input.automationId);
@@ -113,9 +125,16 @@ export async function simulateAutomation(input: {
     if (input.subjectId && input.subjectEntity) {
       pairs.push({ entity: input.subjectEntity, id: input.subjectId });
     } else if (input.subjectEntity) {
-      const ids = await lastSubjectIds(input.orgId, input.subjectEntity, input.sampleSize ?? 5, input.allowedSubsidiaryIds);
+      const ids = await lastSubjectIds(
+        input.orgId,
+        input.subjectEntity,
+        input.sampleSize ?? 5,
+        input.allowedSubsidiaryIds,
+      );
       if (ids.length === 0) {
-        throw new Error(`no ${input.subjectEntity} records to simulate against — create one first, or pick a subject explicitly`);
+        throw new Error(
+          `no ${input.subjectEntity} records to simulate against — create one first, or pick a subject explicitly`,
+        );
       }
       for (const id of ids) pairs.push({ entity: input.subjectEntity, id });
     } else {

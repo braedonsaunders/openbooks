@@ -1,14 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  check,
-  date,
-  index,
-  pgTable,
-  text,
-  uniqueIndex,
-  uuid
-} from "drizzle-orm/pg-core";
+import { boolean, check, date, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
@@ -83,8 +74,12 @@ export const entitlementPlans = pgTable(
      */
     systemKey: text("system_key", { enum: ["vacation", "stat_holiday_alternate"] }),
     /** Denomination of the BALANCE. Money is the default (see doctrine). */
-    unit: text("unit", { enum: ["money", "hours"] }).notNull().default("money"),
-    direction: text("direction", { enum: ["accrue", "owe"] }).notNull().default("accrue"),
+    unit: text("unit", { enum: ["money", "hours"] })
+      .notNull()
+      .default("money"),
+    direction: text("direction", { enum: ["accrue", "owe"] })
+      .notNull()
+      .default("accrue"),
     /**
      * How each pay period's movement is produced:
      *   percent_of_earnings — accrualValue is a percent (4.0000 = 4%) of the
@@ -97,7 +92,9 @@ export const entitlementPlans = pgTable(
      */
     accrualMethod: text("accrual_method", {
       enum: ["percent_of_earnings", "per_hour_worked", "fixed_per_period", "manual"],
-    }).notNull().default("manual"),
+    })
+      .notNull()
+      .default("manual"),
     /** Percent, per-hour amount, or per-period amount — read per accrualMethod. */
     accrualValue: money("accrual_value"),
     /** Stub component the accrual (or, for 'owe', the advance) posts against. */
@@ -118,7 +115,9 @@ export const entitlementPlans = pgTable(
      */
     capBehavior: text("cap_behavior", {
       enum: ["warn", "block", "auto_payout"],
-    }).notNull().default("warn"),
+    })
+      .notNull()
+      .default("warn"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -181,7 +180,6 @@ export const entitlementPlanLimits = pgTable(
     ...auditColumns,
   },
   (t) => [
-
     index("entitlement_plan_limits_employment").on(t.orgId, t.employmentId),
     index("entitlement_plan_limits_plan").on(t.orgId, t.planId, t.effectiveFrom),
     index("entitlement_plan_limits_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
@@ -200,8 +198,14 @@ export const entitlementPlanLimits = pgTable(
       t.subsidiaryId,
       t.effectiveFrom,
     ),
-    check("entitlement_plan_limits_max_nonnegative", sql`${t.maxBalance} is null or ${t.maxBalance} >= 0`),
-    check("entitlement_plan_limits_notify_nonnegative", sql`${t.notifyBalance} is null or ${t.notifyBalance} >= 0`),
+    check(
+      "entitlement_plan_limits_max_nonnegative",
+      sql`${t.maxBalance} is null or ${t.maxBalance} >= 0`,
+    ),
+    check(
+      "entitlement_plan_limits_notify_nonnegative",
+      sql`${t.notifyBalance} is null or ${t.notifyBalance} >= 0`,
+    ),
     check(
       "entitlement_plan_limits_notify_order",
       sql`${t.maxBalance} is null or ${t.notifyBalance} is null or ${t.notifyBalance} <= ${t.maxBalance}`,

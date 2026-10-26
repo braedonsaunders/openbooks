@@ -7,7 +7,13 @@ import { fundFeatureOff, NonprofitError } from "./errors.ts";
 export type FundKind = "operating" | "restricted" | "endowment" | "plant" | "board_designated";
 export type BudgetaryControl = "off" | "advisory" | "hard";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const FUND_KINDS: readonly FundKind[] = ["operating", "restricted", "endowment", "plant", "board_designated"];
+const FUND_KINDS: readonly FundKind[] = [
+  "operating",
+  "restricted",
+  "endowment",
+  "plant",
+  "board_designated",
+];
 const CONTROL_MODES: readonly BudgetaryControl[] = ["off", "advisory", "hard"];
 
 export interface CreateFundInput {
@@ -91,12 +97,15 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
 
   return withOrgTransaction(input.orgId, async () => {
     await assertFundAccountingEnabled(input.orgId);
-    const segment = await db.execute<{ id: string; isBalancing: boolean }>(sql`
+    const segment = await db.execute<{ id: string; isBalancing: boolean }>(
+      sql`
       select id, is_balancing as "isBalancing"
         from segment_definitions
        where org_id = ${input.orgId} and key = 'fund' and source_kind = 'custom'
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const definition = segment[0];
     if (!definition || !definition.isBalancing) {
       throw new NonprofitError({
@@ -108,13 +117,16 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
     }
 
     if (input.parentId != null) {
-      const parent = await db.execute<{ id: string }>(sql`
+      const parent = await db.execute<{ id: string }>(
+        sql`
         select sv.id from segment_values sv
         join funds f on f.org_id = sv.org_id and f.id = sv.id
          where sv.org_id = ${input.orgId} and sv.segment_id = ${definition.id}
            and sv.id = ${input.parentId} and sv.is_active
          for key share
-      `, "objects");
+      `,
+        "objects",
+      );
       if (parent.length !== 1) {
         throw new NonprofitError({
           message: "The parent value is not an active fund in this organization.",
@@ -126,9 +138,12 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
       }
     }
     if (input.subsidiaryId != null) {
-      const subsidiary = await db.execute<{ id: string }>(sql`
+      const subsidiary = await db.execute<{ id: string }>(
+        sql`
         select id from subsidiaries where org_id = ${input.orgId} and id = ${input.subsidiaryId}
-      `, "objects");
+      `,
+        "objects",
+      );
       if (subsidiary.length !== 1) {
         throw new NonprofitError({
           message: "The subsidiary restriction is not in this organization.",
@@ -140,12 +155,15 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
       }
     }
 
-    const duplicate = await db.execute<{ id: string }>(sql`
+    const duplicate = await db.execute<{ id: string }>(
+      sql`
       select id from segment_values
        where org_id = ${input.orgId} and segment_id = ${definition.id}
          and code is not null and lower(code) = lower(${input.code})
        limit 1
-    `, "objects");
+    `,
+      "objects",
+    );
     if (duplicate.length > 0) {
       throw new NonprofitError({
         message: `Fund code "${input.code}" is already in use.`,
@@ -156,7 +174,8 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
       });
     }
 
-    const value = await db.execute<{ id: string }>(sql`
+    const value = await db.execute<{ id: string }>(
+      sql`
       insert into segment_values
         (org_id, segment_id, code, name, parent_id, subsidiary_id,
          subsidiary_include_children, is_active, created_by, updated_by)
@@ -167,7 +186,9 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
         ${input.actorId ?? null}, ${input.actorId ?? null}
       )
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     const valueId = value[0]?.id;
     if (!valueId) {
       throw new NonprofitError({
@@ -178,7 +199,8 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
       });
     }
 
-    const classified = await db.execute<{ id: string }>(sql`
+    const classified = await db.execute<{ id: string }>(
+      sql`
       insert into funds
         (id, org_id, kind, restriction_class, budgetary_control, custom, created_by, updated_by)
       values (
@@ -187,7 +209,9 @@ export async function createFund(input: CreateFundInput): Promise<CreatedFund> {
         ${input.actorId ?? null}, ${input.actorId ?? null}
       )
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (classified.length !== 1 || classified[0]?.id !== valueId) {
       throw new NonprofitError({
         message: `Fund "${input.code}" has no accounting classification row.`,
@@ -259,12 +283,15 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
 
   return withOrgTransaction(input.orgId, async () => {
     await assertFundAccountingEnabled(input.orgId);
-    const funds = await db.execute<{ id: string }>(sql`
+    const funds = await db.execute<{ id: string }>(
+      sql`
       select id from funds
        where org_id = ${input.orgId}
          and id = any(${uuidArray([input.fromFundId, input.toFundId])}::uuid[])
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     if (new Set(funds.map((row) => row.id)).size !== 2) {
       throw new NonprofitError({
         message: "Both funds in an interfund pair must exist in this organization.",
@@ -275,11 +302,14 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
       });
     }
 
-    const accounts = await db.execute<{ id: string }>(sql`
+    const accounts = await db.execute<{ id: string }>(
+      sql`
       select id from accounts
        where org_id = ${input.orgId}
          and id = any(${uuidArray([input.dueFromAccountId, input.dueToAccountId])}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     if (new Set(accounts.map((row) => row.id)).size !== 2) {
       throw new NonprofitError({
         message: "Both due-to and due-from accounts must exist in this organization.",
@@ -290,15 +320,27 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
       });
     }
 
-    const before = (await db.execute<{ id: string; due_from_account_id: string; due_to_account_id: string; is_active: boolean }>(sql`
+    const before =
+      (
+        await db.execute<{
+          id: string;
+          due_from_account_id: string;
+          due_to_account_id: string;
+          is_active: boolean;
+        }>(
+          sql`
       select id, due_from_account_id, due_to_account_id, is_active from fund_pairs
        where org_id = ${input.orgId} and from_fund_id = ${input.fromFundId} and to_fund_id = ${input.toFundId}
        for update
-    `, "objects"))[0] ?? null;
+    `,
+          "objects",
+        )
+      )[0] ?? null;
 
     // A directed pair is intentionally upserted; RETURNING proves that the
     // configuration write produced an observable row.
-    const result = await db.execute<{ id: string }>(sql`
+    const result = await db.execute<{ id: string }>(
+      sql`
       insert into fund_pairs
         (org_id, from_fund_id, to_fund_id, due_from_account_id, due_to_account_id,
          is_active, created_by, updated_by)
@@ -314,7 +356,9 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
             updated_at = now(),
             updated_by = excluded.updated_by
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (result.length !== 1 || !result[0]?.id) {
       throw new NonprofitError({
         message: "The interfund pair was not saved.",
@@ -323,7 +367,8 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
         remedy: "Retry saving the pair after checking the fund and account records.",
       });
     }
-    const audit = (await db.execute<{ id: string }>(sql`
+    const audit = await db.execute<{ id: string }>(
+      sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (
         ${input.orgId}, 'fund_pairs', ${result[0].id}, ${before ? "update" : "insert"},
@@ -339,7 +384,9 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
         ${input.actorId ?? null}
       )
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (audit.length !== 1 || !audit[0]?.id) {
       throw new NonprofitError({
         message: "The interfund pair audit record was not saved.",
@@ -455,7 +502,8 @@ export async function listFunds(
   const search = input.search?.trim();
   if (search) conds.push(sql`(sv.code ilike ${`%${search}%`} or sv.name ilike ${`%${search}%`})`);
   const where = sql.join(conds, sql` and `);
-  const rows = await runner.execute<FundReadRow>(sql`
+  const rows = await runner.execute<FundReadRow>(
+    sql`
     select f.id::text as id, sv.code, sv.name, f.kind,
            f.restriction_class, f.budgetary_control, sv.is_active, f.custom,
            sv.parent_id::text as parent_id, sv.subsidiary_id::text as subsidiary_id,
@@ -467,15 +515,20 @@ export async function listFunds(
      where ${where}
      order by sv.name, sv.code, sv.id
      limit ${limit} offset ${offset}
-  `, "objects");
-  const counted = await runner.execute<{ n: string }>(sql`
+  `,
+    "objects",
+  );
+  const counted = await runner.execute<{ n: string }>(
+    sql`
     select count(*) as n
       from funds f
       join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
       join segment_definitions sd on sd.org_id = f.org_id and sd.id = sv.segment_id
        and sd.key = 'fund' and sd.source_kind = 'custom'
      where ${where}
-  `, "objects");
+  `,
+    "objects",
+  );
   return { funds: rows.map(mapFundRead), total: Number(counted[0]?.n ?? 0) };
 }
 
@@ -491,7 +544,9 @@ export async function getFund(
   const runner = executor ?? db;
   if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
   if (!UUID_RE.test(input.fundId)) return null;
-  const row = (await runner.execute<FundReadRow>(sql`
+  const row = (
+    await runner.execute<FundReadRow>(
+      sql`
     select f.id::text as id, sv.code, sv.name, f.kind,
            f.restriction_class, f.budgetary_control, sv.is_active, f.custom,
            sv.parent_id::text as parent_id, sv.subsidiary_id::text as subsidiary_id,
@@ -501,6 +556,9 @@ export async function getFund(
       join segment_definitions sd on sd.org_id = f.org_id and sd.id = sv.segment_id
        and sd.key = 'fund' and sd.source_kind = 'custom'
      where f.org_id = ${input.orgId} and f.id = ${input.fundId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row ? mapFundRead(row) : null;
 }

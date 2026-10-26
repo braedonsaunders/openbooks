@@ -44,9 +44,8 @@ const { GET } = (await import("./route.ts")) as {
 };
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = (await import(
-  "@openbooks/engine/testing/fixtures"
-)) as typeof import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg } =
+  (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
 
 test("scripts delivery refuses an unauthenticated caller", async () => {
   routeState.authz = null;
@@ -59,9 +58,7 @@ test("scripts delivery answers the empty set with the feature off", async () => 
   const org = await createScratchOrg();
   try {
     routeState.authz = { user: { orgId: org.orgId, id: "00000000-0000-4000-8000-000000000001" } };
-    const res = await GET(
-      new Request("http://localhost/api/scripts/client?documentKind=transfer"),
-    );
+    const res = await GET(new Request("http://localhost/api/scripts/client?documentKind=transfer"));
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { scripts: [] });
   } finally {
@@ -90,7 +87,10 @@ test("scripts delivery never returns another organization's client source", asyn
       body.scripts.map((s) => s.name),
       ["home-client"],
     );
-    assert.equal(body.scripts.some((s) => s.source.includes("other")), false);
+    assert.equal(
+      body.scripts.some((s) => s.source.includes("other")),
+      false,
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(home.orgId);

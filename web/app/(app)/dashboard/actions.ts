@@ -1,72 +1,77 @@
-'use server'
+"use server";
 
-import { revalidatePath } from 'next/cache'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { can, getAuthz } from '@/lib/authz'
-import { NAV_MODULES } from '@/lib/nav/registry'
-import { hiddenQuickActionIdsForOrg, resolveDashboardDefault } from './_load-layout'
-import { canSeeInsightCards, canSeeWidget } from './_widget-access'
-import { resolveAllowedWidgetIds, widgetFeatureOn } from './widget-features'
-import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '@/lib/features'
+import { revalidatePath } from "next/cache";
+import { getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { can, getAuthz } from "@/lib/authz";
+import { NAV_MODULES } from "@/lib/nav/registry";
+import { hiddenQuickActionIdsForOrg, resolveDashboardDefault } from "./_load-layout";
+import { canSeeInsightCards, canSeeWidget } from "./_widget-access";
+import { resolveAllowedWidgetIds, widgetFeatureOn } from "./widget-features";
+import { featureEnabled, hiddenNavModules, resolvedFeatureState } from "@/lib/features";
 import {
   CURATED_QUICK_ACTIONS,
   mergeQuickActionsSave,
   normalizeQuickActions,
   quickActionPermitted,
   type QuickActionOption,
-} from './_quick-actions-shared'
-import { QuickActionsSchema } from './_quick-actions-input'
-import { DashboardLayoutInputSchema, filterPersistableDashboardWidgets } from './_layout-input'
-import type { DashboardLayoutData } from '@openbooks/schema'
-import { listApps } from '@/lib/apps/store'
-import { appWidgetId } from '@/lib/apps/surfaces'
-import { WIDGETS } from './_widget-registry'
-import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
+} from "./_quick-actions-shared";
+import { QuickActionsSchema } from "./_quick-actions-input";
+import { DashboardLayoutInputSchema, filterPersistableDashboardWidgets } from "./_layout-input";
+import type { DashboardLayoutData } from "@openbooks/schema";
+import { listApps } from "@/lib/apps/store";
+import { appWidgetId } from "@/lib/apps/surfaces";
+import { WIDGETS } from "./_widget-registry";
+import { loadDashboardMetrics, pruneDashboardMetrics } from "./_metrics";
 
 export async function loadDashboardWidgetPreview(widgetId: unknown) {
-  const authz = await getAuthz()
-  if (!authz || typeof widgetId !== 'string' || !Object.hasOwn(WIDGETS, widgetId) || !canSeeWidget(authz, widgetId)) {
-    return { ok: false as const }
+  const authz = await getAuthz();
+  if (
+    !authz ||
+    typeof widgetId !== "string" ||
+    !Object.hasOwn(WIDGETS, widgetId) ||
+    !canSeeWidget(authz, widgetId)
+  ) {
+    return { ok: false as const };
   }
   // A preview is a separate read: the initial palette's permission and
   // feature decisions cannot authorize a tile added later in the draft.
-  if (!(await widgetFeatureOn(authz.user.orgId, widgetId))) return { ok: false as const }
-  const locale = await getLocale()
-  const metrics = await loadDashboardMetrics(authz, [widgetId], undefined, locale)
-  return { ok: true as const, data: pruneDashboardMetrics(metrics, [widgetId]) }
+  if (!(await widgetFeatureOn(authz.user.orgId, widgetId))) return { ok: false as const };
+  const locale = await getLocale();
+  const metrics = await loadDashboardMetrics(authz, [widgetId], undefined, locale);
+  return { ok: true as const, data: pruneDashboardMetrics(metrics, [widgetId]) };
 }
 
 export async function saveDashboardLayout(input: unknown) {
-  const authz = await getAuthz()
-  if (!authz) return { ok: false as const, error: 'Not signed in' }
+  const authz = await getAuthz();
+  if (!authz) return { ok: false as const, error: "Not signed in" };
 
-  const parsed = DashboardLayoutInputSchema.safeParse(input)
-  if (!parsed.success) return { ok: false as const, error: parsed.error.message }
+  const parsed = DashboardLayoutInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.message };
 
   // The same feature-aware set the slots enforce: a feature-off tile cannot
   // be persisted, even when the caller holds its permission.
-  const allowedWidgetIds = await resolveAllowedWidgetIds(authz)
-  const allowedAppWidgetIds = can(authz, 'apps.use')
+  const allowedWidgetIds = await resolveAllowedWidgetIds(authz);
+  const allowedAppWidgetIds = can(authz, "apps.use")
     ? new Set(
         (await listApps(authz.user.orgId))
-          .filter((app) => app.status === 'installed' && app.activeVersionId)
+          .filter((app) => app.status === "installed" && app.activeVersionId)
           .map((app) => appWidgetId(app.key)),
       )
-    : new Set<string>()
+    : new Set<string>();
   const widgets = filterPersistableDashboardWidgets(parsed.data.widgets, {
     allowedWidgetIds,
     allowedAppWidgetIds,
     // Must match the resolver's insight-card visibility (insights.read OR
     // reports.read), or saving would silently drop cards the user can see.
     allowAnyInsightCardUuid: canSeeInsightCards(authz),
-  })
+  });
 
-  const dashboardDefault = await resolveDashboardDefault(authz)
-  const sourceRole = dashboardDefault.sourceKey
+  const dashboardDefault = await resolveDashboardDefault(authz);
+  const sourceRole = dashboardDefault.sourceKey;
 
-  const layout: DashboardLayoutData = { widgets }
+  const layout: DashboardLayoutData = { widgets };
 
   // The read-merge-write must run on ONE connection inside a transaction:
   // pg_advisory_xact_lock on a pooled db.execute would lock a connection the
@@ -74,15 +79,19 @@ export async function saveDashboardLayout(input: unknown) {
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${`dashboard:${authz.user.orgId}:${authz.user.id}`}, 0))
-    `)
+    `);
 
-    const existing = ((await tx.execute(sql`
+    const existing = await tx.execute(
+      sql`
       select layout from user_dashboard_layouts
        where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
        limit 1
-    `, 'objects')))
-    const existingLayout = existing[0]?.layout as DashboardLayoutData | undefined
-    if (existingLayout?.quickActions) layout.quickActions = normalizeQuickActions(existingLayout.quickActions)
+    `,
+      "objects",
+    );
+    const existingLayout = existing[0]?.layout as DashboardLayoutData | undefined;
+    if (existingLayout?.quickActions)
+      layout.quickActions = normalizeQuickActions(existingLayout.quickActions);
 
     await tx.execute(sql`
       insert into user_dashboard_layouts (id, org_id, user_id, layout, source_role, is_customised, created_at, updated_at)
@@ -90,65 +99,71 @@ export async function saveDashboardLayout(input: unknown) {
       on conflict (org_id, user_id)
       do update set layout = ${JSON.stringify(layout)}::jsonb, source_role = ${sourceRole}, is_customised = true, updated_at = now()
       where user_dashboard_layouts.org_id = ${authz.user.orgId}
-    `)
-  })
+    `);
+  });
 
-  revalidatePath('/')
-  revalidatePath('/dashboard')
-  revalidatePath('/dashboard/customize')
-  return { ok: true as const }
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/customize");
+  return { ok: true as const };
 }
 
 export async function resetDashboardLayout() {
-  const authz = await getAuthz()
-  if (!authz) return { ok: false as const, error: 'Not signed in' }
+  const authz = await getAuthz();
+  if (!authz) return { ok: false as const, error: "Not signed in" };
 
   await db.execute(sql`
     delete from user_dashboard_layouts
      where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
-  `)
+  `);
 
-  revalidatePath('/')
-  revalidatePath('/dashboard')
-  revalidatePath('/dashboard/customize')
-  return { ok: true as const }
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/customize");
+  return { ok: true as const };
 }
 
 export async function saveQuickActions(input: unknown) {
-  const authz = await getAuthz()
-  if (!authz) return { ok: false as const, error: 'Not signed in' }
+  const authz = await getAuthz();
+  if (!authz) return { ok: false as const, error: "Not signed in" };
 
-  const parsed = QuickActionsSchema.safeParse(input)
+  const parsed = QuickActionsSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid quick actions' }
+    return {
+      ok: false as const,
+      error: parsed.error.issues[0]?.message ?? "Invalid quick actions",
+    };
   }
 
-  const dashboardDefault = await resolveDashboardDefault(authz)
-  const sourceRole = dashboardDefault.sourceKey
-  const hiddenIds = new Set(await hiddenQuickActionIdsForOrg(authz.user.orgId))
-  const normalized = normalizeQuickActions(parsed.data)
-  const incoming = normalized.filter((action) => !hiddenIds.has(action.id))
+  const dashboardDefault = await resolveDashboardDefault(authz);
+  const sourceRole = dashboardDefault.sourceKey;
+  const hiddenIds = new Set(await hiddenQuickActionIdsForOrg(authz.user.orgId));
+  const normalized = normalizeQuickActions(parsed.data);
+  const incoming = normalized.filter((action) => !hiddenIds.has(action.id));
 
   // Same single-connection transactional lock as saveDashboardLayout — the
   // advisory lock is only meaningful for the statements sharing its txn.
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${`dashboard:${authz.user.orgId}:${authz.user.id}`}, 0))
-    `)
+    `);
 
-    const existing = ((await tx.execute(sql`
+    const existing = await tx.execute(
+      sql`
       select layout from user_dashboard_layouts
        where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
        limit 1
-    `, 'objects')))
-    const existingLayout = (existing[0]?.layout ?? {}) as Partial<DashboardLayoutData>
+    `,
+      "objects",
+    );
+    const existingLayout = (existing[0]?.layout ?? {}) as Partial<DashboardLayoutData>;
     const layout = mergeQuickActionsSave({
       existingWidgets: existingLayout.widgets,
       existingQuickActions: existingLayout.quickActions,
       incoming,
       hiddenIds,
       defaultWidgets: dashboardDefault.layout.widgets,
-    })
+    });
 
     await tx.execute(sql`
       insert into user_dashboard_layouts (id, org_id, user_id, layout, source_role, is_customised, created_at, updated_at)
@@ -156,33 +171,33 @@ export async function saveQuickActions(input: unknown) {
       on conflict (org_id, user_id)
       do update set layout = ${JSON.stringify(layout)}::jsonb, source_role = ${sourceRole}, is_customised = true, updated_at = now()
       where user_dashboard_layouts.org_id = ${authz.user.orgId}
-    `)
-  })
+    `);
+  });
 
-  revalidatePath('/')
-  revalidatePath('/dashboard')
-  revalidatePath('/dashboard/customize')
-  return { ok: true as const }
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/customize");
+  return { ok: true as const };
 }
 
 export async function listQuickActionOptions(): Promise<{
-  common: QuickActionOption[]
+  common: QuickActionOption[];
 }> {
-  const authz = await getAuthz()
-  if (!authz) return { common: [] }
+  const authz = await getAuthz();
+  if (!authz) return { common: [] };
 
-  const common: QuickActionOption[] = []
-  const t = await getTranslations('dashboard')
-  const tNav = await getTranslations('nav')
+  const common: QuickActionOption[] = [];
+  const t = await getTranslations("dashboard");
+  const tNav = await getTranslations("nav");
   // Module labels resolve exactly like the sidebar: the catalog translation
   // wins, the English registry label is the fallback, and a missing message
   // never throws out of the picker (MISSING_MESSAGE).
   function navLabel(moduleKey: string, fallback: string): string {
     try {
-      if (!tNav.has(`modules.${moduleKey}`)) return fallback
-      return tNav(`modules.${moduleKey}`)
+      if (!tNav.has(`modules.${moduleKey}`)) return fallback;
+      return tNav(`modules.${moduleKey}`);
     } catch {
-      return fallback
+      return fallback;
     }
   }
 
@@ -191,12 +206,12 @@ export async function listQuickActionOptions(): Promise<{
   // resolver applies (web/lib/nav/resolve.ts), so the picker can never offer
   // a navigate target whose page 404s with the feature off — including every
   // module a future FEATURES entry adds to navModules.
-  const featureState = await resolvedFeatureState(authz.user.orgId)
-  const hiddenModules = hiddenNavModules(featureState)
+  const featureState = await resolvedFeatureState(authz.user.orgId);
+  const hiddenModules = hiddenNavModules(featureState);
 
   for (const action of CURATED_QUICK_ACTIONS) {
-    if (!quickActionPermitted(action, (permission) => can(authz, permission))) continue
-    if (action.requiredFeature && !featureEnabled(featureState, action.requiredFeature)) continue
+    if (!quickActionPermitted(action, (permission) => can(authz, permission))) continue;
+    if (action.requiredFeature && !featureEnabled(featureState, action.requiredFeature)) continue;
     common.push({
       id: action.id,
       label: t(`quickActions.labels.${action.labelKey}`),
@@ -205,35 +220,35 @@ export async function listQuickActionOptions(): Promise<{
       iconKey: action.iconKey,
       tone: action.tone,
       hint: t(`quickActions.hints.${action.hintKey}`),
-    })
+    });
   }
 
   for (const mod of NAV_MODULES) {
-    if (mod.key === 'dashboard' || mod.key === 'admin') continue
-    if (mod.requiredPermission && !can(authz, mod.requiredPermission)) continue
-    if (hiddenModules.has(mod.key)) continue
+    if (mod.key === "dashboard" || mod.key === "admin") continue;
+    if (mod.requiredPermission && !can(authz, mod.requiredPermission)) continue;
+    if (hiddenModules.has(mod.key)) continue;
     common.push({
       label: navLabel(mod.key, mod.label),
       href: mod.href,
       iconKey: mod.iconKey,
-      tone: 'slate',
-      hint: t('quickActions.hints.navigate'),
-    })
+      tone: "slate",
+      hint: t("quickActions.hints.navigate"),
+    });
   }
 
-  if (can(authz, 'apps.use')) {
-    const apps = await listApps(authz.user.orgId)
+  if (can(authz, "apps.use")) {
+    const apps = await listApps(authz.user.orgId);
     for (const app of apps) {
-      if (app.status !== 'installed' || !app.activeVersionId) continue
+      if (app.status !== "installed" || !app.activeVersionId) continue;
       common.push({
         label: app.name,
         href: `/apps/${encodeURIComponent(app.key)}`,
         iconKey: app.iconKey,
-        tone: 'teal',
-        hint: t('quickActions.hints.app'),
-      })
+        tone: "teal",
+        hint: t("quickActions.hints.app"),
+      });
     }
   }
 
-  return { common }
+  return { common };
 }

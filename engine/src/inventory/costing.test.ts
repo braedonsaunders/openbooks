@@ -16,11 +16,7 @@ import {
   toExactStockQuantity,
   type CostLayer,
 } from "./costing.ts";
-import {
-  consumeOriginalCost,
-  splitOriginalCost,
-  sumOriginalCosts,
-} from "./original-cost.ts";
+import { consumeOriginalCost, splitOriginalCost, sumOriginalCosts } from "./original-cost.ts";
 import { unitCostPerQuantity } from "./costing.ts";
 import { InventoryError, ITEM_MISSING_UNIT_CONVERSION, UnitConversionError } from "./contracts.ts";
 import { getOnHand } from "./position.ts";
@@ -56,10 +52,7 @@ test("toBaseQuantity applies the item's unit conversion and refuses unknown unit
     () => toBaseQuantity("2", "crate", conv, "ea", "document line 1 (item x)"),
     /unit "crate" with no conversion to the item's base unit "ea"/,
   );
-  assert.throws(
-    () => toBaseQuantity("2", "box", { box: 0 }, "ea"),
-    /no conversion/,
-  );
+  assert.throws(() => toBaseQuantity("2", "box", { box: 0 }, "ea"), /no conversion/);
   assert.throws(
     () => toBaseQuantity("2", "box", { box: 1 / 3 }, "ea"),
     /cannot be expressed exactly/,
@@ -69,7 +62,10 @@ test("toBaseQuantity applies the item's unit conversion and refuses unknown unit
 test("a missing unit conversion refuses with the linkable item identity", () => {
   const itemId = randomUUID();
   try {
-    toBaseQuantity("2", "crate", {}, "ea", "document line 1 (item x)", { id: itemId, name: "Widget" });
+    toBaseQuantity("2", "crate", {}, "ea", "document line 1 (item x)", {
+      id: itemId,
+      name: "Widget",
+    });
     assert.fail("expected a UnitConversionError");
   } catch (error) {
     assert.ok(error instanceof UnitConversionError, "typed for the drawer link");
@@ -85,7 +81,12 @@ test("a missing unit conversion refuses with the linkable item identity", () => 
     assert.fail("expected a UnitConversionError");
   } catch (error) {
     assert.ok(error instanceof UnitConversionError);
-    assert.deepEqual((error as UnitConversionError).details, { itemId: null, itemName: null, unit: "crate", baseUnit: "ea" });
+    assert.deepEqual((error as UnitConversionError).details, {
+      itemId: null,
+      itemName: null,
+      unit: "crate",
+      baseUnit: "ea",
+    });
   }
 });
 
@@ -98,8 +99,12 @@ test("directed stock converts eight-place documents exactly and refuses unrepres
   for (const [quantity, unit, conversions] of [
     ["2.00000002", "ea", {}],
     ["0.0001", "fraction", { fraction: 0.0001 }],
-  ] as const) assert.throws(() => toExactStockQuantity(quantity, unit, conversions, "ea"),
-    (error: unknown) => error instanceof InventoryError && /cannot be stored exactly/.test(error.message));
+  ] as const)
+    assert.throws(
+      () => toExactStockQuantity(quantity, unit, conversions, "ea"),
+      (error: unknown) =>
+        error instanceof InventoryError && /cannot be stored exactly/.test(error.message),
+    );
   // Existing costing callers retain their established rounding policy.
   assert.equal(toBaseQuantity("0.0001", "fraction", { fraction: 0.0001 }, "ea"), "0.0000");
 });
@@ -220,11 +225,17 @@ test("exactCostFragments conserves quantity and value with at most two adjacent 
   // so the value splits into adjacent-rate fragments that sum back exactly.
   const frags = exactCostFragments("6", "10.0000");
   assert.ok(frags.length <= 2, `expected at most 2 fragments, got ${frags.length}`);
-  assert.equal(frags.reduce((a, f) => a + toUnits(f.quantity), 0n), toUnits("6"));
+  assert.equal(
+    frags.reduce((a, f) => a + toUnits(f.quantity), 0n),
+    toUnits("6"),
+  );
   const value = frags.reduce((a, f) => a + toUnits(extendCost(f.quantity, f.unitCost)), 0n);
   assert.equal(value, toUnits("10.0000"));
   const rates = frags.map((f) => toUnits(f.unitCost)).sort((a, b) => (a < b ? -1 : 1));
-  assert.ok(rates[rates.length - 1]! - rates[0]! <= 1n, `rates must be adjacent: ${JSON.stringify(frags)}`);
+  assert.ok(
+    rates[rates.length - 1]! - rates[0]! <= 1n,
+    `rates must be adjacent: ${JSON.stringify(frags)}`,
+  );
 });
 
 test("exactCostFragments keeps a representable source rate intact", () => {
@@ -245,7 +256,10 @@ test("exactCostFragments conserves a one-cent residual across adjacent-rate frag
   assert.equal(frags.length, 2);
   const value = frags.reduce((a, f) => a + toUnits(extendCost(f.quantity, f.unitCost)), 0n);
   assert.equal(value, toUnits("3.0100"));
-  assert.equal(frags.reduce((a, f) => a + toUnits(f.quantity), 0n), toUnits("3"));
+  assert.equal(
+    frags.reduce((a, f) => a + toUnits(f.quantity), 0n),
+    toUnits("3"),
+  );
 });
 
 test("FIFO partial-then-remainder costs exactly the full drain (layer-value reduction)", () => {
@@ -253,14 +267,27 @@ test("FIFO partial-then-remainder costs exactly the full drain (layer-value redu
     { id: "a", remaining: "3", unitCost: "1.3333" },
     { id: "b", remaining: "2", unitCost: "7.7777" },
   ];
-  const full = consumeFifo(ls.map((l) => ({ ...l })), "5", "0");
-  const first = consumeFifo(ls.map((l) => ({ ...l })), "4", "0");
+  const full = consumeFifo(
+    ls.map((l) => ({ ...l })),
+    "5",
+    "0",
+  );
+  const first = consumeFifo(
+    ls.map((l) => ({ ...l })),
+    "4",
+    "0",
+  );
   // Rebuild remainders exactly in units to avoid float parsing.
-  const rem = ls.map((l) => {
-    const c = first.consumptions.find((x) => x.layerId === l.id);
-    const taken = c ? toUnits(c.quantity) : 0n;
-    return { ...l, remaining: `${(toUnits(l.remaining) - taken) / 10_000n}.${String((toUnits(l.remaining) - taken) % 10_000n).padStart(4, "0")}` };
-  }).filter((l) => toUnits(l.remaining) > 0n);
+  const rem = ls
+    .map((l) => {
+      const c = first.consumptions.find((x) => x.layerId === l.id);
+      const taken = c ? toUnits(c.quantity) : 0n;
+      return {
+        ...l,
+        remaining: `${(toUnits(l.remaining) - taken) / 10_000n}.${String((toUnits(l.remaining) - taken) % 10_000n).padStart(4, "0")}`,
+      };
+    })
+    .filter((l) => toUnits(l.remaining) > 0n);
   const second = consumeFifo(rem, "1", "0");
   assert.equal(toUnits(first.totalCost) + toUnits(second.totalCost), toUnits(full.totalCost));
 });
@@ -283,7 +310,10 @@ test("splitOriginalCost conserves the basis and covers every carrying fragment",
   const basis = "42.5000";
   const qs = ["2.5000", "1.2500", "0.7500"];
   const out = splitOriginalCost(basis, qs);
-  assert.equal(out.reduce((a, s) => a + toUnits(s!), 0n), toUnits(basis));
+  assert.equal(
+    out.reduce((a, s) => a + toUnits(s!), 0n),
+    toUnits(basis),
+  );
   assert.ok(out.every((s) => s != null && toUnits(s) >= 0n));
 });
 
@@ -297,7 +327,12 @@ test("consumeOriginalCost relieves weighted basis and the retained balance owns 
   // An over-take is an inconsistent layer, not a 500: the refusal names the
   // layer, the quantities, and the only safe remedy.
   assert.throws(
-    () => consumeOriginalCost("10.0000", "4", "3", { itemId: "item-1", stockLocationId: "loc-1", layerId: "layer-9" }),
+    () =>
+      consumeOriginalCost("10.0000", "4", "3", {
+        itemId: "item-1",
+        stockLocationId: "loc-1",
+        layerId: "layer-9",
+      }),
     (error: unknown) => {
       assert.ok(error instanceof InventoryError);
       assert.match(error.message, /takes 4 from 3/);
@@ -331,7 +366,10 @@ test("exactCostFragments refuses unlayerable shapes by name, never a bare failur
   // A zero quantity or a negative value cannot become a cost layer. The old
   // code threw a bare Error (500 through the route catch-alls); the refusal
   // is an InventoryError (422) naming the offending inputs and the remedy.
-  for (const [quantity, value] of [["0", "10.0000"], ["3", "-0.0001"]] as const) {
+  for (const [quantity, value] of [
+    ["0", "10.0000"],
+    ["3", "-0.0001"],
+  ] as const) {
     assert.throws(
       () => exactCostFragments(quantity, value),
       (error: unknown) => {
@@ -358,17 +396,23 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Sum of posted journal_lines on an account (the GL balance). */
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(amount), 0) as bal from journal_lines
-     where org_id = ${orgId} and account_id = ${accountId}`, "objects"));
+     where org_id = ${orgId} and account_id = ${accountId}`,
+    "objects",
+  );
   return r[0]!.bal;
 }
 
 /** Σ (remaining_quantity × unit_cost) across every cost layer in the org. */
 async function totalLayerValue(orgId: string): Promise<string> {
-  const r = (await db.execute<{ v: string }>(sql`
+  const r = await db.execute<{ v: string }>(
+    sql`
     select coalesce((select sum(round(remaining_quantity * unit_cost, 4))
-                       from cost_layers where org_id = ${orgId}), 0)::text as v`, "objects"));
+                       from cost_layers where org_id = ${orgId}), 0)::text as v`,
+    "objects",
+  );
   return r[0]!.v;
 }
 
@@ -381,75 +425,102 @@ async function assertGlEqualsLayers(org: ScratchOrg): Promise<void> {
   const gl = await glBalance(org.orgId, org.accounts.invAsset);
   const layers = await totalLayerValue(org.orgId);
   assert.equal(toUnits(gl), toUnits(layers), `inventory GL ${gl} != Σ layer value ${layers}`);
-  const unbalanced = (await db.execute<{ entry_id: string; bal: string }>(sql`
+  const unbalanced = await db.execute<{ entry_id: string; bal: string }>(
+    sql`
     select entry_id, sum(amount) as bal from journal_lines
-     where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`, "objects"));
+     where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`,
+    "objects",
+  );
   assert.equal(unbalanced.length, 0, `unbalanced entries: ${JSON.stringify(unbalanced)}`);
 }
 
-test("standard costing keeps GL = Σ layers through a build, landed cost, a standard-cost revision, and a full drain", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const loc = org.stockLocationId;
-    const sub = org.subsidiaryId;
+test(
+  "standard costing keeps GL = Σ layers through a build, landed cost, a standard-cost revision, and a full drain",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const loc = org.stockLocationId;
+      const sub = org.subsidiaryId;
 
-    // A standard-cost assembly (std 3.00) built from the fixture's FIFO
-    // component, two per assembly.
-    const assembly = randomUUID();
-    await db.execute(sql`
+      // A standard-cost assembly (std 3.00) built from the fixture's FIFO
+      // component, two per assembly.
+      const assembly = randomUUID();
+      await db.execute(sql`
       insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation, income_account_id)
       values (${assembly}, ${org.orgId}, 'inventory', 'Std Assembly', false, true, '{}'::jsonb, 'billing', 'normal', ${org.accounts.revenue})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into item_inventory_profiles
         (id, org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
          variance_account_id, received_not_billed_account_id, standard_cost, base_unit, unit_conversions)
       values (${randomUUID()}, ${org.orgId}, ${assembly}, 'standard', 'none', ${org.accounts.invAsset}, ${org.accounts.cogs},
               ${org.accounts.adjustment}, ${org.accounts.adjustment}, ${org.accounts.clearing}, '3.00', 'ea', '{}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into bom_components (id, org_id, assembly_item_id, component_item_id, quantity_per, sort_order)
       values (${randomUUID()}, ${org.orgId}, ${assembly}, ${org.items.component}, '2', 0)`);
 
-    // Receipt at 1.10 actual, then build 5 assemblies: components leave at
-    // their carried cost (2×5×1.10), the finished good enters at ITS standard
-    // (5×3.00), and the 4.00 favorable difference is a build variance — never
-    // a mis-valued finished layer.
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.component, stockLocationId: loc, quantity: "20", unitCost: "1.10",
-      subsidiaryId: sub, offsetAccountId: org.accounts.clearing, date: org.date,
-    });
-    assert.equal(toUnits((await getOnHand(org.orgId, org.items.component, loc)).value), toUnits("22"));
-    await assertGlEqualsLayers(org);
+      // Receipt at 1.10 actual, then build 5 assemblies: components leave at
+      // their carried cost (2×5×1.10), the finished good enters at ITS standard
+      // (5×3.00), and the 4.00 favorable difference is a build variance — never
+      // a mis-valued finished layer.
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.component,
+        stockLocationId: loc,
+        quantity: "20",
+        unitCost: "1.10",
+        subsidiaryId: sub,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      assert.equal(
+        toUnits((await getOnHand(org.orgId, org.items.component, loc)).value),
+        toUnits("22"),
+      );
+      await assertGlEqualsLayers(org);
 
-    const build = await buildAssembly(org.orgId, null, {
-      assemblyItemId: assembly, quantity: "5", stockLocationId: loc, subsidiaryId: sub, date: org.date,
-    });
-    assert.equal(build.value, "15.0000");
-    assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).value), toUnits("15"));
-    assert.equal(toUnits((await getOnHand(org.orgId, org.items.component, loc)).value), toUnits("11"));
-    assert.equal(
-      toUnits(await glBalance(org.orgId, org.accounts.adjustment)),
-      toUnits("-4"),
-    ); // favorable build variance credited
-    await assertGlEqualsLayers(org);
+      const build = await buildAssembly(org.orgId, null, {
+        assemblyItemId: assembly,
+        quantity: "5",
+        stockLocationId: loc,
+        subsidiaryId: sub,
+        date: org.date,
+      });
+      assert.equal(build.value, "15.0000");
+      assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).value), toUnits("15"));
+      assert.equal(
+        toUnits((await getOnHand(org.orgId, org.items.component, loc)).value),
+        toUnits("11"),
+      );
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.adjustment)), toUnits("-4")); // favorable build variance credited
+      await assertGlEqualsLayers(org);
 
-    // Landed cost on the standard assembly goes to variance; its standard
-    // layer must not move by a single penny.
-    const invBeforeLanded = await glBalance(org.orgId, org.accounts.invAsset);
-    await postLandedCostVoucher(org.orgId, null, {
-      amount: "7", basis: "value", freightAccountId: org.accounts.freight,
-      subsidiaryId: sub, voucherDate: org.date,
-      targets: [{ itemId: assembly, stockLocationId: loc }],
-    });
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)) - toUnits(invBeforeLanded), 0n);
-    assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).value), toUnits("15"));
-    await assertGlEqualsLayers(org);
+      // Landed cost on the standard assembly goes to variance; its standard
+      // layer must not move by a single penny.
+      const invBeforeLanded = await glBalance(org.orgId, org.accounts.invAsset);
+      await postLandedCostVoucher(org.orgId, null, {
+        amount: "7",
+        basis: "value",
+        freightAccountId: org.accounts.freight,
+        subsidiaryId: sub,
+        voucherDate: org.date,
+        targets: [{ itemId: assembly, stockLocationId: loc }],
+      });
+      assert.equal(
+        toUnits(await glBalance(org.orgId, org.accounts.invAsset)) - toUnits(invBeforeLanded),
+        0n,
+      );
+      assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).value), toUnits("15"));
+      await assertGlEqualsLayers(org);
 
-    // Revising the standard cost (3.00 → 3.50) revalues open layers onto the
-    // new standard and books the delta atomically — what the costing-profile
-    // PUT drives for an item already costing standard.
-    const calendar = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"));
-    await db.execute(sql`
+      // Revising the standard cost (3.00 → 3.50) revalues open layers onto the
+      // new standard and books the delta atomically — what the costing-profile
+      // PUT drives for an item already costing standard.
+      const calendar = await db.execute<{ id: string }>(
+        sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`,
+        "objects",
+      );
+      await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       select ${randomUUID()}, ${org.orgId},
@@ -459,256 +530,379 @@ test("standard costing keeps GL = Σ layers through a build, landed cost, a stan
              date_trunc('month', current_date)::date,
              (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
              false, ${calendar[0]!.id}`);
-    const invBeforeRevision = await glBalance(org.orgId, org.accounts.invAsset);
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
+      const invBeforeRevision = await glBalance(org.orgId, org.accounts.invAsset);
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`
         update item_inventory_profiles set standard_cost = '3.50'
          where org_id = ${org.orgId} and item_id = ${assembly}`);
-      const entries = await revalueOpenLayersToStandardCost(tx, org.orgId, null, assembly, {
-        standardCost: "3.50",
-        assetAccountId: org.accounts.invAsset,
-        varianceAccountId: org.accounts.adjustment,
-        memo: "Standard cost revision revaluation",
+        const entries = await revalueOpenLayersToStandardCost(tx, org.orgId, null, assembly, {
+          standardCost: "3.50",
+          assetAccountId: org.accounts.invAsset,
+          varianceAccountId: org.accounts.adjustment,
+          memo: "Standard cost revision revaluation",
+        });
+        assert.ok(entries);
       });
-      assert.ok(entries);
-    });
-    assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).value), toUnits("17.5"));
-    assert.equal(
-      toUnits(await glBalance(org.orgId, org.accounts.invAsset)) - toUnits(invBeforeRevision),
-      toUnits("2.5"),
-    );
-    await assertGlEqualsLayers(org);
+      assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).value), toUnits("17.5"));
+      assert.equal(
+        toUnits(await glBalance(org.orgId, org.accounts.invAsset)) - toUnits(invBeforeRevision),
+        toUnits("2.5"),
+      );
+      await assertGlEqualsLayers(org);
 
-    // Full drain: issues relieve exactly at standard, so stock zero means the
-    // inventory GL is zero — no residual value stranded on the balance sheet.
-    await issueInventory(org.orgId, null, {
-      itemId: assembly, stockLocationId: loc, quantity: "5", subsidiaryId: sub, date: org.date,
-    });
-    await issueInventory(org.orgId, null, {
-      itemId: org.items.component, stockLocationId: loc, quantity: "10", subsidiaryId: sub, date: org.date,
-    });
-    assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).quantity), 0n);
-    assert.equal(toUnits((await getOnHand(org.orgId, org.items.component, loc)).quantity), 0n);
-    const finalGl = await glBalance(org.orgId, org.accounts.invAsset);
-    const finalLayers = await totalLayerValue(org.orgId);
-    assert.equal(toUnits(finalGl), 0n);
-    assert.equal(toUnits(finalLayers), 0n);
-    await assertGlEqualsLayers(org);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      // Full drain: issues relieve exactly at standard, so stock zero means the
+      // inventory GL is zero — no residual value stranded on the balance sheet.
+      await issueInventory(org.orgId, null, {
+        itemId: assembly,
+        stockLocationId: loc,
+        quantity: "5",
+        subsidiaryId: sub,
+        date: org.date,
+      });
+      await issueInventory(org.orgId, null, {
+        itemId: org.items.component,
+        stockLocationId: loc,
+        quantity: "10",
+        subsidiaryId: sub,
+        date: org.date,
+      });
+      assert.equal(toUnits((await getOnHand(org.orgId, assembly, loc)).quantity), 0n);
+      assert.equal(toUnits((await getOnHand(org.orgId, org.items.component, loc)).quantity), 0n);
+      const finalGl = await glBalance(org.orgId, org.accounts.invAsset);
+      const finalLayers = await totalLayerValue(org.orgId);
+      assert.equal(toUnits(finalGl), 0n);
+      assert.equal(toUnits(finalLayers), 0n);
+      await assertGlEqualsLayers(org);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("control: FIFO receipts and issues keep the same GL-to-layer equality", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const loc = org.stockLocationId;
-    const sub = org.subsidiaryId;
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: loc, quantity: "10", unitCost: "2.00",
-      subsidiaryId: sub, offsetAccountId: org.accounts.clearing, date: org.date,
-    });
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: loc, quantity: "10", unitCost: "3.00",
-      subsidiaryId: sub, offsetAccountId: org.accounts.clearing, date: org.date,
-    });
-    const issue = await issueInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: loc, quantity: "15", subsidiaryId: sub, date: org.date,
-    });
-    assert.equal(issue.value, "-35.0000");
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.cogs)), toUnits("35"));
-    await assertGlEqualsLayers(org); // 50 − 35 = 15 GL == remaining layer value
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+test(
+  "control: FIFO receipts and issues keep the same GL-to-layer equality",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const loc = org.stockLocationId;
+      const sub = org.subsidiaryId;
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: loc,
+        quantity: "10",
+        unitCost: "2.00",
+        subsidiaryId: sub,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: loc,
+        quantity: "10",
+        unitCost: "3.00",
+        subsidiaryId: sub,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      const issue = await issueInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: loc,
+        quantity: "15",
+        subsidiaryId: sub,
+        date: org.date,
+      });
+      assert.equal(issue.value, "-35.0000");
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.cogs)), toUnits("35"));
+      await assertGlEqualsLayers(org); // 50 − 35 = 15 GL == remaining layer value
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("inventory journals retain the posting actor and exact landed-cost splits retain stock ownership", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Inventory Poster", "admin");
-    const receipt = await receiveInventory(org.orgId, actorId, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "3",
-      unitCost: "1",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing,
-      date: org.date,
-    });
-    const journal = (await db.execute<{
-      created_by: string | null;
-      updated_by: string | null;
-      posted_by: string | null;
-    }>(sql`
+test(
+  "inventory journals retain the posting actor and exact landed-cost splits retain stock ownership",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Inventory Poster", "admin");
+      const receipt = await receiveInventory(org.orgId, actorId, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "3",
+        unitCost: "1",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      const journal = (
+        await db.execute<{
+          created_by: string | null;
+          updated_by: string | null;
+          posted_by: string | null;
+        }>(
+          sql`
       select created_by, updated_by, posted_by
         from journal_entries
        where id = ${receipt.entryId} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
-    assert.equal(journal.created_by, actorId);
-    assert.equal(journal.updated_by, actorId);
-    assert.equal(journal.posted_by, actorId);
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(journal.created_by, actorId);
+      assert.equal(journal.updated_by, actorId);
+      assert.equal(journal.posted_by, actorId);
 
-    // $0.01 over three units is not representable by one four-decimal rate;
-    // the deterministic one-unit rounding fragment must still carry the
-    // legal entity that owns the source layer.
-    await postLandedCostVoucher(org.orgId, actorId, {
-      amount: "0.01",
-      basis: "value",
-      freightAccountId: org.accounts.freight,
-      subsidiaryId: org.subsidiaryId,
-      voucherDate: org.date,
-      targets: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
-    });
-    const splitLayers = await db.execute<{ subsidiary_id: string; remaining_quantity: string }>(sql`
+      // $0.01 over three units is not representable by one four-decimal rate;
+      // the deterministic one-unit rounding fragment must still carry the
+      // legal entity that owns the source layer.
+      await postLandedCostVoucher(org.orgId, actorId, {
+        amount: "0.01",
+        basis: "value",
+        freightAccountId: org.accounts.freight,
+        subsidiaryId: org.subsidiaryId,
+        voucherDate: org.date,
+        targets: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+      });
+      const splitLayers = await db.execute<{ subsidiary_id: string; remaining_quantity: string }>(
+        sql`
       select subsidiary_id, remaining_quantity
         from cost_layers
        where org_id = ${org.orgId}
          and item_id = ${org.items.fifo}
          and stock_location_id = ${org.stockLocationId}
        order by remaining_quantity
-    `, "objects");
-    assert.equal(splitLayers.length, 2);
-    assert.deepEqual(new Set(splitLayers.map((layer) => layer.subsidiary_id)), new Set([org.subsidiaryId]));
-    assert.deepEqual(new Set(splitLayers.map((layer) => layer.remaining_quantity)), new Set(["1.0000", "2.0000"]));
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.equal(splitLayers.length, 2);
+      assert.deepEqual(
+        new Set(splitLayers.map((layer) => layer.subsidiary_id)),
+        new Set([org.subsidiaryId]),
+      );
+      assert.deepEqual(
+        new Set(splitLayers.map((layer) => layer.remaining_quantity)),
+        new Set(["1.0000", "2.0000"]),
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("a receipt re-reads a costing policy after a concurrent revision commits", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    let signalPolicyReady!: () => void;
-    const policyReady = new Promise<void>((resolve) => {
-      signalPolicyReady = resolve;
-    });
-    let releasePolicy!: () => void;
-    const policyReleased = new Promise<void>((resolve) => {
-      releasePolicy = resolve;
-    });
-    const policyTransaction = db.transaction(async (tx) => {
-      await tx.execute(sql`
+test(
+  "a receipt re-reads a costing policy after a concurrent revision commits",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      let signalPolicyReady!: () => void;
+      const policyReady = new Promise<void>((resolve) => {
+        signalPolicyReady = resolve;
+      });
+      let releasePolicy!: () => void;
+      const policyReleased = new Promise<void>((resolve) => {
+        releasePolicy = resolve;
+      });
+      const policyTransaction = db.transaction(async (tx) => {
+        await tx.execute(sql`
         select 1 from item_inventory_profiles
          where org_id = ${org.orgId} and item_id = ${org.items.standard}
          for update
       `);
-      await tx.execute(sql`
+        await tx.execute(sql`
         update item_inventory_profiles
            set standard_cost = '3.50'
          where org_id = ${org.orgId} and item_id = ${org.items.standard}
       `);
-      // Keep the uncommitted revision held while the receipt starts. A plain
-      // pre-transaction SELECT sees the old committed 2.00, whereas the
-      // movement's FOR SHARE waits and then observes the committed 3.50.
-      signalPolicyReady();
-      await policyReleased;
-    });
-    await policyReady;
+        // Keep the uncommitted revision held while the receipt starts. A plain
+        // pre-transaction SELECT sees the old committed 2.00, whereas the
+        // movement's FOR SHARE waits and then observes the committed 3.50.
+        signalPolicyReady();
+        await policyReleased;
+      });
+      await policyReady;
 
-    // The receipt starts while the policy row is exclusively locked. It must
-    // wait, then price itself at the committed 3.50 standard rather than the
-    // stale 2.00 snapshot a pre-transaction read would capture.
-    const receiptPromise = receiveInventory(org.orgId, null, {
-      itemId: org.items.standard,
-      stockLocationId: org.stockLocationId,
-      quantity: "1",
-      unitCost: "3.50",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing,
-      date: org.date,
-    });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    releasePolicy();
-    await policyTransaction;
-    const receipt = await receiptPromise;
-    const movement = (await db.execute<{ unit_cost: string }>(sql`
+      // The receipt starts while the policy row is exclusively locked. It must
+      // wait, then price itself at the committed 3.50 standard rather than the
+      // stale 2.00 snapshot a pre-transaction read would capture.
+      const receiptPromise = receiveInventory(org.orgId, null, {
+        itemId: org.items.standard,
+        stockLocationId: org.stockLocationId,
+        quantity: "1",
+        unitCost: "3.50",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      releasePolicy();
+      await policyTransaction;
+      const receipt = await receiptPromise;
+      const movement = (
+        await db.execute<{ unit_cost: string }>(
+          sql`
       select unit_cost
         from inventory_movements
        where id = ${receipt.movementId} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
-    assert.equal(movement.unit_cost, "3.5000");
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
-
-test("a standard issue spanning layers relieves the GL by exactly what the layers give up", { skip: !DB }, async () => {
-  // Two half-unit receipts at a 0.3333 standard each carry 0.1667. Issuing
-  // the whole unit relieves 0.3334 from the layers; pricing it as one
-  // 1 x 0.3333 multiplication would leave the GL a ten-thousandth above them.
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`update item_inventory_profiles set standard_cost='0.3333'
-      where org_id=${org.orgId} and item_id=${org.items.standard}`);
-    for (let i = 0; i < 2; i++) {
-      await receiveInventory(org.orgId, null, {
-        itemId: org.items.standard, stockLocationId: org.stockLocationId, quantity: "0.5", unitCost: "0.3333",
-        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-      });
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(movement.unit_cost, "3.5000");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
-    const issue = await issueInventory(org.orgId, null, {
-      itemId: org.items.standard, stockLocationId: org.stockLocationId, quantity: "1",
-      subsidiaryId: org.subsidiaryId, date: org.date,
-    });
-    assert.equal(toUnits(issue.value), toUnits("-0.3334"));
-    await assertGlEqualsLayers(org);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+  },
+);
 
-test("landed cost for a receipt lands on that receipt's layers, and its sold share goes to COGS", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const item = org.items.fifo, loc = org.stockLocationId;
-    const documentId = randomUUID(), lineId = randomUUID();
-    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
+test(
+  "a standard issue spanning layers relieves the GL by exactly what the layers give up",
+  { skip: !DB },
+  async () => {
+    // Two half-unit receipts at a 0.3333 standard each carry 0.1667. Issuing
+    // the whole unit relieves 0.3334 from the layers; pricing it as one
+    // 1 x 0.3333 multiplication would leave the GL a ten-thousandth above them.
+    const org = await createScratchOrg();
+    try {
+      await db.execute(sql`update item_inventory_profiles set standard_cost='0.3333'
+      where org_id=${org.orgId} and item_id=${org.items.standard}`);
+      for (let i = 0; i < 2; i++) {
+        await receiveInventory(org.orgId, null, {
+          itemId: org.items.standard,
+          stockLocationId: org.stockLocationId,
+          quantity: "0.5",
+          unitCost: "0.3333",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+        });
+      }
+      const issue = await issueInventory(org.orgId, null, {
+        itemId: org.items.standard,
+        stockLocationId: org.stockLocationId,
+        quantity: "1",
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      });
+      assert.equal(toUnits(issue.value), toUnits("-0.3334"));
+      await assertGlEqualsLayers(org);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "landed cost for a receipt lands on that receipt's layers, and its sold share goes to COGS",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const item = org.items.fifo,
+        loc = org.stockLocationId;
+      const documentId = randomUUID(),
+        lineId = randomUUID();
+      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
       values (${documentId}, ${org.orgId}, 'journal', 'draft', ${"RCV-" + documentId.slice(0, 8)}, ${org.subsidiaryId}, ${org.date}, 'CAD', '100', '0', '100')`);
-    await db.execute(sql`insert into document_lines (id, org_id, document_id, line_number, account_id, subsidiary_id, amount, quantity, unit_price, tax_amount, tax_input_amount)
+      await db.execute(sql`insert into document_lines (id, org_id, document_id, line_number, account_id, subsidiary_id, amount, quantity, unit_price, tax_amount, tax_input_amount)
       values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.invAsset}, ${org.subsidiaryId}, '100', '10', '10', '0', '0')`);
-    const receive = (documentLineId: string | null) => receiveInventory(org.orgId, null, {
-      itemId: item, stockLocationId: loc, quantity: "10", unitCost: "10", subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing, date: org.date, documentLineId,
-    });
-    const first = await receive(null);
-    const second = await receive(lineId);
-    const layer = async (movementId: string) => await db.execute<{ remaining: string; unit_cost: string }>(sql`
-      select remaining_quantity::text remaining, unit_cost::text from cost_layers where org_id=${org.orgId} and source_movement_id=${movementId}`, "objects");
-    const voucher = (amount: string) => postLandedCostVoucher(org.orgId, null, {
-      amount, basis: "value", freightAccountId: org.accounts.freight, subsidiaryId: org.subsidiaryId,
-      voucherDate: org.date, sourceDocumentLineId: lineId, targets: [{ itemId: item, stockLocationId: loc }],
-    });
-    await issueInventory(org.orgId, null, { itemId: item, stockLocationId: loc, quantity: "5", subsidiaryId: org.subsidiaryId, date: org.date });
-    // Freight on the second receipt: the first receipt's open units keep their cost.
-    await voucher("20");
-    assert.deepEqual(await layer(first.movementId), [{ remaining: "5.0000", unit_cost: "10.0000" }]);
-    assert.deepEqual(await layer(second.movementId), [{ remaining: "10.0000", unit_cost: "12.0000" }]);
-    // Half of the second receipt is sold; half of a later freight bill is COGS.
-    await issueInventory(org.orgId, null, { itemId: item, stockLocationId: loc, quantity: "10", subsidiaryId: org.subsidiaryId, date: org.date });
-    const late = await voucher("10");
-    const cogs = (await db.execute<{ amount: string }>(sql`select coalesce(sum(amount),0)::text amount from journal_lines
-      where org_id=${org.orgId} and entry_id=${late.entryId} and account_id=${org.accounts.cogs}`, "objects"))[0]!.amount;
-    assert.equal(cogs, "5.0000");
-    assert.equal((await getOnHand(org.orgId, item, loc)).value, "65.0000"); // 5 x 12 + 5
-    await assertGlEqualsLayers(org);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      const receive = (documentLineId: string | null) =>
+        receiveInventory(org.orgId, null, {
+          itemId: item,
+          stockLocationId: loc,
+          quantity: "10",
+          unitCost: "10",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+          documentLineId,
+        });
+      const first = await receive(null);
+      const second = await receive(lineId);
+      const layer = async (movementId: string) =>
+        await db.execute<{ remaining: string; unit_cost: string }>(
+          sql`
+      select remaining_quantity::text remaining, unit_cost::text from cost_layers where org_id=${org.orgId} and source_movement_id=${movementId}`,
+          "objects",
+        );
+      const voucher = (amount: string) =>
+        postLandedCostVoucher(org.orgId, null, {
+          amount,
+          basis: "value",
+          freightAccountId: org.accounts.freight,
+          subsidiaryId: org.subsidiaryId,
+          voucherDate: org.date,
+          sourceDocumentLineId: lineId,
+          targets: [{ itemId: item, stockLocationId: loc }],
+        });
+      await issueInventory(org.orgId, null, {
+        itemId: item,
+        stockLocationId: loc,
+        quantity: "5",
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      });
+      // Freight on the second receipt: the first receipt's open units keep their cost.
+      await voucher("20");
+      assert.deepEqual(await layer(first.movementId), [
+        { remaining: "5.0000", unit_cost: "10.0000" },
+      ]);
+      assert.deepEqual(await layer(second.movementId), [
+        { remaining: "10.0000", unit_cost: "12.0000" },
+      ]);
+      // Half of the second receipt is sold; half of a later freight bill is COGS.
+      await issueInventory(org.orgId, null, {
+        itemId: item,
+        stockLocationId: loc,
+        quantity: "10",
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      });
+      const late = await voucher("10");
+      const cogs = (
+        await db.execute<{ amount: string }>(
+          sql`select coalesce(sum(amount),0)::text amount from journal_lines
+      where org_id=${org.orgId} and entry_id=${late.entryId} and account_id=${org.accounts.cogs}`,
+          "objects",
+        )
+      )[0]!.amount;
+      assert.equal(cogs, "5.0000");
+      assert.equal((await getOnHand(org.orgId, item, loc)).value, "65.0000"); // 5 x 12 + 5
+      await assertGlEqualsLayers(org);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
 // A document-unit scan cannot hide a mismatch below the inventory storage scale.
-test("exact scan conversion retains eight-place quantities and the same configured unit grammar",()=>{
-  assert.equal(toExactBaseQuantity("1.00000001","ea",{},"ea"),"1.000000010000");
-  assert.equal(toExactBaseQuantity("0.00000001","BOX",{box:12},"ea"),"0.000000120000");
-  assert.notEqual(toExactBaseQuantity("1.00000001","ea",{},"ea"),toExactBaseQuantity("1.00000002","ea",{},"ea"));
-  assert.throws(()=>toExactBaseQuantity("1","crate",{},"ea"),/no conversion/);
+test("exact scan conversion retains eight-place quantities and the same configured unit grammar", () => {
+  assert.equal(toExactBaseQuantity("1.00000001", "ea", {}, "ea"), "1.000000010000");
+  assert.equal(toExactBaseQuantity("0.00000001", "BOX", { box: 12 }, "ea"), "0.000000120000");
+  assert.notEqual(
+    toExactBaseQuantity("1.00000001", "ea", {}, "ea"),
+    toExactBaseQuantity("1.00000002", "ea", {}, "ea"),
+  );
+  assert.throws(() => toExactBaseQuantity("1", "crate", {}, "ea"), /no conversion/);
 });
 
 test("standard receipt variance reconciles rounded totals for favorable and unfavorable half units", () => {
-  for (const [actual,standard] of [["10.0002","10.0001"],["10.0001","10.0002"],["0.0001","0.0000"]]) {
-    const result=receiveStandard("1.5000",actual!,standard!);
-    assert.equal(toUnits(result.inventoryValue)+toUnits(result.variance),toUnits(extendCost("1.5000",actual!)));
+  for (const [actual, standard] of [
+    ["10.0002", "10.0001"],
+    ["10.0001", "10.0002"],
+    ["0.0001", "0.0000"],
+  ]) {
+    const result = receiveStandard("1.5000", actual!, standard!);
+    assert.equal(
+      toUnits(result.inventoryValue) + toUnits(result.variance),
+      toUnits(extendCost("1.5000", actual!)),
+    );
   }
-  assert.deepEqual(receiveStandard("1.5000","10.0002","10.0001"),{inventoryValue:"15.0002",variance:"0.0001"});
+  assert.deepEqual(receiveStandard("1.5000", "10.0002", "10.0001"), {
+    inventoryValue: "15.0002",
+    variance: "0.0001",
+  });
 });

@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadBulkBuy, bulkBuySpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadBulkBuy, bulkBuySpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('fulfillment')
-  return { title: t('shipping.bulk.metaTitle') }
+  const t = await getTranslations("fulfillment");
+  return { title: t("shipping.bulk.metaTitle") };
 }
 
 /**
@@ -16,9 +16,9 @@ export async function generateMetadata() {
 export default async function BulkBuyPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = (await searchParams) ?? {}
-  const data = await loadBulkBuy(sp)
-  return <ModuleView spec={bulkBuySpec(data)} data={data} searchParams={sp} trusted />
+  const sp = (await searchParams) ?? {};
+  const data = await loadBulkBuy(sp);
+  return <ModuleView spec={bulkBuySpec(data)} data={data} searchParams={sp} trusted />;
 }

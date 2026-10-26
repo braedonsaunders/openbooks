@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  linkDependent,
-  unlinkDependent,
-} from "@openbooks/engine/hrm/benefits/dependents";
+import { linkDependent, unlinkDependent } from "@openbooks/engine/hrm/benefits/dependents";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../../benefits/_lib";
@@ -21,17 +18,10 @@ export const POST = defineRoute({
   feature: "hrm",
   params: z.object({ id: z.string().min(1) }),
   body: linkDependentBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "enrollment id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "enrollment id must be a uuid" }, { status: 400 });
 
     try {
       if (body.action === "link") {

@@ -153,9 +153,12 @@ export async function resolveRestrictionEditScopes(
   previous: SubsidiaryRestriction | null | undefined,
   next: SubsidiaryRestriction | undefined,
 ): Promise<RestrictionEditScopes> {
-  const subsidiaries = await exec.execute<SubsidiaryTreeNode>(sql`
+  const subsidiaries = await exec.execute<SubsidiaryTreeNode>(
+    sql`
     select id, parent_id as "parentId" from subsidiaries where org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     previous: restrictionSubsidiaryScope(previous, subsidiaries),
     next: restrictionSubsidiaryScope(next, subsidiaries),
@@ -187,14 +190,20 @@ export async function loadSubsidiaryGrantCoverage(
   orgId: string,
   userId: string,
 ): Promise<SubsidiaryGrantCoverage> {
-  const roles = await exec.execute<{ restriction: SubsidiaryRestriction | null }>(sql`
+  const roles = await exec.execute<{ restriction: SubsidiaryRestriction | null }>(
+    sql`
     select r.subsidiary_restriction as restriction
       from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id
      where a.user_id = ${userId} and a.org_id = ${orgId}
-  `, "objects");
-  const subsidiaries = await exec.execute<SubsidiaryTreeNode>(sql`
+  `,
+    "objects",
+  );
+  const subsidiaries = await exec.execute<SubsidiaryTreeNode>(
+    sql`
     select id, parent_id as "parentId" from subsidiaries where org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return { actorRestrictions: roles.map((row) => row.restriction), subsidiaries };
 }
 
@@ -232,7 +241,12 @@ export function grantedRestrictionWithinCoverage(
       if (isUnrestrictedRestriction(row)) return true;
       // Absent or malformed actor rows contribute nothing and never crash
       // the check: typeof-guard before touching .mode.
-      if (typeof row === "object" && row !== null && row.mode === "subtree" && typeof row.subsidiaryId === "string") {
+      if (
+        typeof row === "object" &&
+        row !== null &&
+        row.mode === "subtree" &&
+        typeof row.subsidiaryId === "string"
+      ) {
         if (expandSubsidiarySubtree(coverage.subsidiaries, row.subsidiaryId).has(root)) return true;
       }
     }
@@ -255,9 +269,7 @@ export function grantedScopeSetWithinCoverage(
 
 function actorCoverageUnion(coverage: SubsidiaryGrantCoverage): Set<string> | null | undefined {
   return unionSubsidiaryScopes(
-    coverage.actorRestrictions.map((row) =>
-      restrictionSubsidiaryScope(row, coverage.subsidiaries),
-    ),
+    coverage.actorRestrictions.map((row) => restrictionSubsidiaryScope(row, coverage.subsidiaries)),
   );
 }
 
@@ -274,10 +286,17 @@ export async function resolveRoleGrantPolicies(
   roleIds: readonly string[],
 ): Promise<RoleGrantPolicy[]> {
   if (roleIds.length === 0) return [];
-  const rows = await exec.execute<{ id: string; permissions: unknown; restriction: SubsidiaryRestriction | null }>(sql`
+  const rows = await exec.execute<{
+    id: string;
+    permissions: unknown;
+    restriction: SubsidiaryRestriction | null;
+  }>(
+    sql`
     select id, permissions, subsidiary_restriction as restriction from app_roles
      where org_id = ${orgId} and id = any(${`{${[...roleIds].join(",")}}`}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     roleId: row.id,
     permissions: Array.isArray(row.permissions)
@@ -313,23 +332,31 @@ export function unionSubsidiaryScopes(
 /** Shared role visibility policy for HTTP and engine entry points. Identity is resolved
  * across home organizations; role and entity reads retain the caller transaction. */
 export async function actorAllowedSubsidiaryIds(
-  exec: SqlExecutor, orgId: string, userId: string,
+  exec: SqlExecutor,
+  orgId: string,
+  userId: string,
 ): Promise<Set<string> | null> {
   if (!orgId) throw new Error("Subsidiary authorization requires an organization");
   const user = await actorIdentity(exec, orgId, userId);
   if (!user?.isActive) return new Set();
   if (user.isSuperAdmin) return null;
-  const roles = await exec.execute<{ restriction: SubsidiaryRestriction | null }>(sql`
+  const roles = await exec.execute<{ restriction: SubsidiaryRestriction | null }>(
+    sql`
     select r.subsidiary_restriction as restriction
       from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id
      where a.user_id = ${userId} and a.org_id = ${orgId}
-  `, "objects");
-  const restrictions = roles.map(row => row.restriction);
+  `,
+    "objects",
+  );
+  const restrictions = roles.map((row) => row.restriction);
   // Stored policies must explicitly grant unrestricted visibility.
   if (restrictions.some(isUnrestrictedRestriction)) return null;
-  const subsidiaries = await exec.execute<SubsidiaryTreeNode>(sql`
+  const subsidiaries = await exec.execute<SubsidiaryTreeNode>(
+    sql`
     select id, parent_id as "parentId" from subsidiaries where org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const allowed = new Set<string>();
   for (const restriction of restrictions) {
     const scope = restrictionSubsidiaryScope(restriction, subsidiaries);

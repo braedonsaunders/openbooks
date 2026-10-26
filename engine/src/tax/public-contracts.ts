@@ -1,1 +1,5 @@
-export { quoteGoodsPlaceOfSupply,PlaceOfSupplyError,type GoodsSupplyQuoteInput } from './place-of-supply.ts'
+export {
+  quoteGoodsPlaceOfSupply,
+  PlaceOfSupplyError,
+  type GoodsSupplyQuoteInput,
+} from "./place-of-supply.ts";

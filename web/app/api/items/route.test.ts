@@ -1,21 +1,21 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.item-create-route-test')
-const ITEM_ID = '00000000-0000-4000-8000-00000000b101'
-const ORG_ID = '00000000-0000-4000-8000-00000000b102'
-const ACTOR_ID = '00000000-0000-4000-8000-00000000b103'
+const stateKey = Symbol.for("openbooks.item-create-route-test");
+const ITEM_ID = "00000000-0000-4000-8000-00000000b101";
+const ORG_ID = "00000000-0000-4000-8000-00000000b102";
+const ACTOR_ID = "00000000-0000-4000-8000-00000000b103";
 
 interface State {
-  item: Record<string, unknown> | null
-  audits: Array<{ changes: Record<string, unknown> }>
-  calls: Array<{ text: string; inTransaction: boolean }>
-  failAudit: boolean
-  featureEnabled: boolean
-  inTransaction: boolean
+  item: Record<string, unknown> | null;
+  audits: Array<{ changes: Record<string, unknown> }>;
+  calls: Array<{ text: string; inTransaction: boolean }>;
+  failAudit: boolean;
+  featureEnabled: boolean;
+  inTransaction: boolean;
   /** Caller lens (null = unrestricted). */
-  scope: Set<string> | null
+  scope: Set<string> | null;
 }
 
 const state: State = {
@@ -26,36 +26,41 @@ const state: State = {
   featureEnabled: true,
   inTransaction: false,
   scope: null,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
-  return chunks.map((chunk) => {
-    if (typeof chunk === 'string') return chunk
-    const value = (chunk as { value?: unknown[] })?.value
-    if (Array.isArray(value)) return value.map(String).join('')
-    if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-    return ''
-  }).join('')
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
+  return chunks
+    .map((chunk) => {
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
+    })
+    .join("");
 }
 
 function sqlValues(query: unknown): unknown[] {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return []
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return [];
   return chunks.flatMap((chunk) => {
-    if (typeof chunk === 'string') return [chunk]
-    if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlValues(chunk)
-    return []
-  })
+    if (typeof chunk === "string") return [chunk];
+    if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlValues(chunk);
+    return [];
+  });
 }
 
-;(globalThis as typeof globalThis & { itemCreateSqlText?: unknown }).itemCreateSqlText = sqlText
-;(globalThis as typeof globalThis & { itemCreateSqlValues?: unknown }).itemCreateSqlValues = sqlValues
+(globalThis as typeof globalThis & { itemCreateSqlText?: unknown }).itemCreateSqlText = sqlText;
+(globalThis as typeof globalThis & { itemCreateSqlValues?: unknown }).itemCreateSqlValues =
+  sqlValues;
 
 const mockSources = new Map<string, string>([
-  ['mock:db', `
+  [
+    "mock:db",
+    `
     const state = globalThis[Symbol.for('openbooks.item-create-route-test')]
     const sqlText = globalThis.itemCreateSqlText
     const sqlValues = globalThis.itemCreateSqlValues
@@ -106,8 +111,11 @@ const mockSources = new Map<string, string>([
     export const registerRequestOrgResolver = () => {}
     export const withBypass = (fn) => fn()
     export const withBypassContext = (fn) => fn()
-  `],
-  ['mock:authz', `
+  `,
+  ],
+  [
+    "mock:authz",
+    `
     const state = globalThis[Symbol.for('openbooks.item-create-route-test')]
     export async function getAuthz() { return null }
     export async function guardPermission() {
@@ -119,152 +127,189 @@ const mockSources = new Map<string, string>([
       if (authz.allowedSubsidiaryIds === null) return null
       return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
     }
-  `],
-  ['mock:features', `export async function isFeatureEnabled() { return globalThis[Symbol.for('openbooks.item-create-route-test')].featureEnabled }`],
-  ['mock:custom-fields', `
+  `,
+  ],
+  [
+    "mock:features",
+    `export async function isFeatureEnabled() { return globalThis[Symbol.for('openbooks.item-create-route-test')].featureEnabled }`,
+  ],
+  [
+    "mock:custom-fields",
+    `
     export async function loadFieldDefs() { return [] }
     export function validateCustomValues(_defs, values) { return { ok: true, errors: {}, cleaned: values ?? {} } }
     export async function findUnownedCustomReferences() { return [] }
       export async function customFieldViewerFor() { return { roleKeys: [], canManageCustomFields: true } }
       export function hiddenCustomFieldRefusal() { return null }
       export function visibleCustomFieldDefs(defs) { return defs }
-  `],
-  ['mock:item-lib', `
+  `,
+  ],
+  [
+    "mock:item-lib",
+    `
     export async function loadItem() {
       const item = globalThis[Symbol.for('openbooks.item-create-route-test')].item
       return item ? { item: structuredClone(item), incomeAccountName: null, expenseAccountName: null, payrollCostingAccountName: null, taxCodeName: null } : null
     }
-  `],
-])
+  `,
+  ],
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../lib/features', 'mock:features'],
-  ['../../../lib/custom-fields', 'mock:custom-fields'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../lib/features", "mock:features"],
+  ["../../../lib/custom-fields", "mock:custom-fields"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === './_lib' && context.parentURL?.includes('/api/items/')) return { shortCircuit: true, url: 'mock:item-lib' }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { shortCircuit: true, url: mocked }
-    return nextResolve(specifier, context)
+    if (specifier === "./_lib" && context.parentURL?.includes("/api/items/"))
+      return { shortCircuit: true, url: "mock:item-lib" };
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { shortCircuit: true, url: mocked };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?item-create-test'
-const { POST } = await import(routeUrl) as typeof import('./route.ts')
-test.after(() => test.after(() => hooks.deregister()))
+const routeUrl = "./route.ts?item-create-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+test.after(() => test.after(() => hooks.deregister()));
 
 function reset(): void {
-  state.item = null
-  state.audits.length = 0
-  state.calls.length = 0
-  state.failAudit = false
-  state.featureEnabled = true
-  state.inTransaction = false
-  state.scope = null
+  state.item = null;
+  state.audits.length = 0;
+  state.calls.length = 0;
+  state.failAudit = false;
+  state.featureEnabled = true;
+  state.inTransaction = false;
+  state.scope = null;
 }
 
 function create(body: Record<string, unknown>, id = ITEM_ID): Promise<Response> {
-  return POST(new Request('http://openbooks.test/api/items', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'Idempotency-Key': id },
-    body: JSON.stringify(body),
-  }))
+  return POST(
+    new Request("http://openbooks.test/api/items", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": id },
+      body: JSON.stringify(body),
+    }),
+  );
 }
 
-test('POST inserts one active item and its immutable insert audit atomically', async () => {
-  reset()
-  const response = await create({ kind: 'service', name: 'Consulting', defaultRate: '125', defaultCost: '50', isActive: true })
-
-  assert.equal(response.status, 201)
-  assert.equal(state.item?.is_active, true)
-  assert.equal(state.audits.length, 1)
-  assert.equal(state.audits[0]?.changes.before, null)
-  assert.equal((state.audits[0]?.changes.after as Record<string, unknown>).id, ITEM_ID)
-  assert.ok(state.calls.every((call) => call.inTransaction), 'insert and audit share the tenant transaction')
-})
-
-test('POST rolls the item insert back when the audit cannot be written', async () => {
-  reset()
-  state.failAudit = true
-
-  await assert.rejects(() => create({ kind: 'service', name: 'Consulting' }), /audit writer unavailable/)
-  assert.equal(state.item, null)
-  assert.equal(state.audits.length, 0)
-})
-
-test('POST replay returns the original item without a second insert audit', async () => {
-  reset()
-  const body = { kind: 'service', name: 'Consulting', defaultRate: '125', defaultCost: '50', isActive: true }
-  assert.equal((await create(body)).status, 201)
-  assert.equal((await create(body)).status, 200)
-  assert.equal(state.audits.length, 1)
-})
-
-test('POST refuses an idempotency-key replay whose create payload changed', async () => {
-  reset()
-  assert.equal((await create({ kind: 'service', name: 'Consulting' })).status, 201)
-
-  const response = await create({ kind: 'service', name: 'Different item' })
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), {
-    error: 'idempotency_key_conflict',
-    code: 'idempotency_key_conflict',
-    remedy: 'Close and reopen the item form to retry with a fresh idempotency key.',
-  })
-  assert.equal(state.audits.length, 1)
-  assert.equal(state.item?.name, 'Consulting')
-})
-
-test('POST requires a well-formed idempotency key before any write', async () => {
-  reset()
-  const response = await create({ kind: 'service', name: 'Consulting' }, 'not-a-uuid')
-
-  assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), { error: 'invalid_idempotency_key' })
-  assert.equal(state.item, null)
-  assert.equal(state.calls.length, 0)
-})
-
-test('POST refuses a dangling or cross-organization account reference', async () => {
-  reset()
+test("POST inserts one active item and its immutable insert audit atomically", async () => {
+  reset();
   const response = await create({
-    kind: 'service',
-    name: 'Consulting',
-    incomeAccountId: '00000000-0000-4000-8000-00000000b999',
-  })
+    kind: "service",
+    name: "Consulting",
+    defaultRate: "125",
+    defaultCost: "50",
+    isActive: true,
+  });
 
-  assert.equal(response.status, 422)
-  assert.equal(state.item, null)
-  assert.equal(state.audits.length, 0)
-})
+  assert.equal(response.status, 201);
+  assert.equal(state.item?.is_active, true);
+  assert.equal(state.audits.length, 1);
+  assert.equal(state.audits[0]?.changes.before, null);
+  assert.equal((state.audits[0]?.changes.after as Record<string, unknown>).id, ITEM_ID);
+  assert.ok(
+    state.calls.every((call) => call.inTransaction),
+    "insert and audit share the tenant transaction",
+  );
+});
 
-test('POST refuses a newly disabled item kind without writing', async () => {
-  reset()
-  state.featureEnabled = false
-  const response = await create({ kind: 'inventory', name: 'Stocked widget' })
+test("POST rolls the item insert back when the audit cannot be written", async () => {
+  reset();
+  state.failAudit = true;
 
-  assert.equal(response.status, 404)
-  assert.equal(state.item, null)
-  assert.equal(state.audits.length, 0)
-})
+  await assert.rejects(
+    () => create({ kind: "service", name: "Consulting" }),
+    /audit writer unavailable/,
+  );
+  assert.equal(state.item, null);
+  assert.equal(state.audits.length, 0);
+});
 
-test('POST by a subsidiary-scoped catalog manager is refused before any write', async () => {
-  reset()
-  state.scope = new Set(['00000000-0000-4000-8000-00000000b021'])
-  const response = await create({ kind: 'service', name: 'Consulting', defaultRate: '125', defaultCost: '50', isActive: true })
+test("POST replay returns the original item without a second insert audit", async () => {
+  reset();
+  const body = {
+    kind: "service",
+    name: "Consulting",
+    defaultRate: "125",
+    defaultCost: "50",
+    isActive: true,
+  };
+  assert.equal((await create(body)).status, 201);
+  assert.equal((await create(body)).status, 200);
+  assert.equal(state.audits.length, 1);
+});
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
-  assert.equal(state.item, null)
-  assert.equal(state.audits.length, 0)
-  assert.equal(state.calls.length, 0)
-})
+test("POST refuses an idempotency-key replay whose create payload changed", async () => {
+  reset();
+  assert.equal((await create({ kind: "service", name: "Consulting" })).status, 201);
+
+  const response = await create({ kind: "service", name: "Different item" });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "idempotency_key_conflict",
+    code: "idempotency_key_conflict",
+    remedy: "Close and reopen the item form to retry with a fresh idempotency key.",
+  });
+  assert.equal(state.audits.length, 1);
+  assert.equal(state.item?.name, "Consulting");
+});
+
+test("POST requires a well-formed idempotency key before any write", async () => {
+  reset();
+  const response = await create({ kind: "service", name: "Consulting" }, "not-a-uuid");
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_idempotency_key" });
+  assert.equal(state.item, null);
+  assert.equal(state.calls.length, 0);
+});
+
+test("POST refuses a dangling or cross-organization account reference", async () => {
+  reset();
+  const response = await create({
+    kind: "service",
+    name: "Consulting",
+    incomeAccountId: "00000000-0000-4000-8000-00000000b999",
+  });
+
+  assert.equal(response.status, 422);
+  assert.equal(state.item, null);
+  assert.equal(state.audits.length, 0);
+});
+
+test("POST refuses a newly disabled item kind without writing", async () => {
+  reset();
+  state.featureEnabled = false;
+  const response = await create({ kind: "inventory", name: "Stocked widget" });
+
+  assert.equal(response.status, 404);
+  assert.equal(state.item, null);
+  assert.equal(state.audits.length, 0);
+});
+
+test("POST by a subsidiary-scoped catalog manager is refused before any write", async () => {
+  reset();
+  state.scope = new Set(["00000000-0000-4000-8000-00000000b021"]);
+  const response = await create({
+    kind: "service",
+    name: "Consulting",
+    defaultRate: "125",
+    defaultCost: "50",
+    isActive: true,
+  });
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.equal(state.item, null);
+  assert.equal(state.audits.length, 0);
+  assert.equal(state.calls.length, 0);
+});

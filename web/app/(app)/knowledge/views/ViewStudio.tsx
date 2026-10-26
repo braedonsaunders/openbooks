@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Download, ExternalLink, FileText, Play, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Download, ExternalLink, FileText, Play, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { Badge, Button, Input, Label, Select, UrlDrawer } from "@openbooks/ui";
 import {
   REPORT_ENTITIES,
   REPORT_ENTITY_MAP,
@@ -14,16 +14,16 @@ import {
   isOperationalColumn,
   type ReportCustomQuery,
   type ReportRunResult,
-} from '@openbooks/reports'
-import { confirmDialog } from '../../../../lib/confirm'
-import { readApiErrorMessage, refusalMessageFromBody } from '../../../../lib/api-error'
-import { RowsConfig, SortConfig, SummarizeConfig } from '../../reports/query-config'
-import { FilterTree } from '../../reports/custom/FilterTree'
-import { ResultView } from '../../reports/custom/ResultView'
-import type { ViewRow, ViewScope } from '../../../../lib/views'
-import { ReportPaper } from '../../reports/ReportPaper'
+} from "@openbooks/reports";
+import { confirmDialog } from "../../../../lib/confirm";
+import { readApiErrorMessage, refusalMessageFromBody } from "../../../../lib/api-error";
+import { RowsConfig, SortConfig, SummarizeConfig } from "../../reports/query-config";
+import { FilterTree } from "../../reports/custom/FilterTree";
+import { ResultView } from "../../reports/custom/ResultView";
+import type { ViewRow, ViewScope } from "../../../../lib/views";
+import { ReportPaper } from "../../reports/ReportPaper";
 
-const field = 'space-y-1.5'
+const field = "space-y-1.5";
 
 /**
  * The view builder flyout. Builds the SAME ReportCustomQuery plan as the report
@@ -44,236 +44,244 @@ export function ViewStudio({
   inventoryEnabled,
   createMode = false,
 }: {
-  view: ViewRow
-  canCreate: boolean
-  canAdmin: boolean
-  company: string
+  view: ViewRow;
+  canCreate: boolean;
+  canAdmin: boolean;
+  company: string;
   /** Catalog entities this user may not query (payroll wages) — hidden from
    *  the source picker, exactly as the report builder hides them. */
-  hiddenEntityKeys?: string[]
-  inventoryEnabled: boolean
-  createMode?: boolean
+  hiddenEntityKeys?: string[];
+  inventoryEnabled: boolean;
+  createMode?: boolean;
 }) {
-  const t = useTranslations('knowledge.views.studio')
-  const tb = useTranslations('reports.custom.builder')
-  const tc = useTranslations('common')
-  const tReports = useTranslations('reports')
-  const router = useRouter()
+  const t = useTranslations("knowledge.views.studio");
+  const tb = useTranslations("reports.custom.builder");
+  const tc = useTranslations("common");
+  const tReports = useTranslations("reports");
+  const router = useRouter();
   // One stable idempotency key per studio session: a double-clicked Save (or
   // a retried request) resolves to the same view instead of a duplicate.
-  const requestIdRef = useRef<string | null>(null)
+  const requestIdRef = useRef<string | null>(null);
 
-  const [name, setName] = useState(view.name)
-  const [description, setDescription] = useState(view.description ?? '')
-  const [query, setQuery] = useState<ReportCustomQuery>(view.query)
-  const [scope, setScope] = useState<ViewScope>(view.scope)
+  const [name, setName] = useState(view.name);
+  const [description, setDescription] = useState(view.description ?? "");
+  const [query, setQuery] = useState<ReportCustomQuery>(view.query);
+  const [scope, setScope] = useState<ViewScope>(view.scope);
   // Create mode edits a blank in memory with no row to be saved into: the
   // studio opens dirty, so the status never claims "All changes saved"
   // before the first explicit Save reads back its id.
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>(
-    createMode ? 'dirty' : 'saved',
-  )
-  const [preview, setPreview] = useState<ReportRunResult | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [previewing, setPreviewing] = useState(false)
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">(
+    createMode ? "dirty" : "saved",
+  );
+  const [preview, setPreview] = useState<ReportRunResult | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
-  const entity = REPORT_ENTITY_MAP[query.entity] ?? REPORT_ENTITY_MAP.ledger_lines!
-  const mode = query.mode ?? 'rows'
+  const entity = REPORT_ENTITY_MAP[query.entity] ?? REPORT_ENTITY_MAP.ledger_lines!;
+  const mode = query.mode ?? "rows";
   const patch = useCallback((next: Partial<ReportCustomQuery>) => {
-    setPreviewError(null)
-    setSaveError(null)
-    setQuery((q) => ({ ...q, ...next }))
-  }, [])
+    setPreviewError(null);
+    setSaveError(null);
+    setQuery((q) => ({ ...q, ...next }));
+  }, []);
 
   function changeEntity(key: string) {
-    const e = REPORT_ENTITY_MAP[key]
-    if (!e) return
-    setPreviewError(null)
-    setSaveError(null)
+    const e = REPORT_ENTITY_MAP[key];
+    if (!e) return;
+    setPreviewError(null);
+    setSaveError(null);
     setQuery({
       entity: key,
       mode,
       columns: defaultColumnsFor(e),
       breakouts: [],
-      measures: [{ fn: 'count', key: 'm1' }],
+      measures: [{ fn: "count", key: "m1" }],
       filters: null,
       groupBy: null,
       sorts: e.defaultSort ? [e.defaultSort] : null,
       limit: query.limit ?? 1000,
-    })
+    });
   }
 
   // --- live preview (debounced) via the shared report run route (ad-hoc) ---
-  const runPreview = useCallback(async (plan: ReportCustomQuery) => {
-    setPreviewing(true)
-    try {
-      const res = await fetch('/api/reports/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: plan }),
-      })
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res, tb('previewFailed'))
-        setPreview(null)
-        setPreviewError(message)
-        return
+  const runPreview = useCallback(
+    async (plan: ReportCustomQuery) => {
+      setPreviewing(true);
+      try {
+        const res = await fetch("/api/reports/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: plan }),
+        });
+        if (!res.ok) {
+          const message = await readApiErrorMessage(res, tb("previewFailed"));
+          setPreview(null);
+          setPreviewError(message);
+          return;
+        }
+        const data = (await res.json().catch(() => null)) as {
+          result?: ReportRunResult;
+          error?: unknown;
+        } | null;
+        if (data) {
+          setPreview(data.result ?? null);
+          setPreviewError(null);
+        } else {
+          setPreview(null);
+          setPreviewError(tb("previewFailed"));
+        }
+      } catch {
+        setPreview(null);
+        setPreviewError(tb("previewFailed"));
+      } finally {
+        setPreviewing(false);
       }
-      const data = await res.json().catch(() => null) as { result?: ReportRunResult; error?: unknown } | null
-      if (data) {
-        setPreview(data.result ?? null)
-        setPreviewError(null)
-      } else {
-        setPreview(null)
-        setPreviewError(tb('previewFailed'))
-      }
-    } catch {
-      setPreview(null)
-      setPreviewError(tb('previewFailed'))
-    } finally {
-      setPreviewing(false)
-    }
-  }, [tb])
+    },
+    [tb],
+  );
 
-  const firstPreview = useRef(true)
+  const firstPreview = useRef(true);
   useEffect(() => {
-    const timer = setTimeout(() => runPreview(query), firstPreview.current ? 0 : 500)
-    firstPreview.current = false
-    return () => clearTimeout(timer)
+    const timer = setTimeout(() => runPreview(query), firstPreview.current ? 0 : 500);
+    firstPreview.current = false;
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query]);
 
   // --- autosave (debounced PATCH) ---
-  const firstSave = useRef(true)
-  const saveChainRef = useRef(Promise.resolve())
-  const saveRevisionRef = useRef(0)
-  const mountedRef = useRef(false)
+  const firstSave = useRef(true);
+  const saveChainRef = useRef(Promise.resolve());
+  const saveRevisionRef = useRef(0);
+  const mountedRef = useRef(false);
 
   useEffect(() => {
-    mountedRef.current = true
+    mountedRef.current = true;
     return () => {
-      mountedRef.current = false
-    }
-  }, [])
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Create mode is local-only until Save: no row exists to autosave into,
     // so the debounced PATCH never arms.
     if (createMode) {
-      firstSave.current = false
-      return
+      firstSave.current = false;
+      return;
     }
     if (firstSave.current) {
-      firstSave.current = false
-      return
+      firstSave.current = false;
+      return;
     }
 
-    const revision = ++saveRevisionRef.current
-    setSaveState('dirty')
+    const revision = ++saveRevisionRef.current;
+    setSaveState("dirty");
     const timer = setTimeout(async () => {
       // PATCH requests must be serialized: aborting a fetch does not prevent a
       // server that already received it from committing, so an older request
       // can otherwise finish after a newer edit and overwrite it.
       const save = async () => {
         // A newer edit superseded this snapshot while it waited in the queue.
-        if (revision !== saveRevisionRef.current) return
-        if (mountedRef.current) setSaveState('saving')
+        if (revision !== saveRevisionRef.current) return;
+        if (mountedRef.current) setSaveState("saving");
 
         try {
           const res = await fetch(`/api/views/${view.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name, description, query, scope }),
-          })
+          });
           if (res.ok) {
             if (mountedRef.current && revision === saveRevisionRef.current) {
-              setSaveState('saved')
-              setSaveError(null)
+              setSaveState("saved");
+              setSaveError(null);
             }
-            return
+            return;
           }
-          const message = await readApiErrorMessage(res, tc('feedback.saveFailed'))
+          const message = await readApiErrorMessage(res, tc("feedback.saveFailed"));
           if (mountedRef.current && revision === saveRevisionRef.current) {
-            setSaveState('error')
-            setSaveError(message)
-            toast.error(message)
+            setSaveState("error");
+            setSaveError(message);
+            toast.error(message);
           }
         } catch {
           if (mountedRef.current && revision === saveRevisionRef.current) {
-            setSaveState('error')
-            setSaveError(tc('feedback.saveFailed'))
-            toast.error(tc('feedback.saveFailed'))
+            setSaveState("error");
+            setSaveError(tc("feedback.saveFailed"));
+            toast.error(tc("feedback.saveFailed"));
           }
         }
-      }
+      };
 
-      saveChainRef.current = saveChainRef.current.then(save, save)
-    }, 700)
-    return () => clearTimeout(timer)
+      saveChainRef.current = saveChainRef.current.then(save, save);
+    }, 700);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, query, scope])
+  }, [name, description, query, scope]);
 
-  const selectableColumns = useMemo(() => entity.columns.filter(isOperationalColumn), [entity])
+  const selectableColumns = useMemo(() => entity.columns.filter(isOperationalColumn), [entity]);
 
   async function remove() {
     if (
       !(await confirmDialog({
-        title: t('deleteConfirm'),
-        message: name.trim() || t('untitled'),
-        confirmLabel: tc('actions.delete'),
-        tone: 'danger',
+        title: t("deleteConfirm"),
+        message: name.trim() || t("untitled"),
+        confirmLabel: tc("actions.delete"),
+        tone: "danger",
       }))
     )
-      return
+      return;
     try {
-      const res = await fetch(`/api/views/${view.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/views/${view.id}`, { method: "DELETE" });
       if (res.ok) {
-        router.push('/knowledge/views')
-        router.refresh()
+        router.push("/knowledge/views");
+        router.refresh();
       } else {
         // The refusal reads through the shared helper so message, remedy and
         // code render instead of the bare `error` field.
-        const body = (await res.json().catch(() => null)) as { error?: string } | null
-        const message = refusalMessageFromBody(body, { fallback: tc('feedback.deleteFailed') }) ?? tc('feedback.deleteFailed')
-        toast.error(message)
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        const message =
+          refusalMessageFromBody(body, { fallback: tc("feedback.deleteFailed") }) ??
+          tc("feedback.deleteFailed");
+        toast.error(message);
       }
     } catch {
-      toast.error(tc('feedback.deleteFailed'))
+      toast.error(tc("feedback.deleteFailed"));
     }
   }
 
   /** Create mode only: the single idempotent POST behind explicit Save. */
-  const [creating, setCreating] = useState(false)
+  const [creating, setCreating] = useState(false);
   async function createView() {
-    setCreating(true)
-    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setCreating(true);
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
     try {
-      const res = await fetch('/api/views', {
-        method: 'POST',
+      const res = await fetch("/api/views", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': requestIdRef.current,
+          "Content-Type": "application/json",
+          "Idempotency-Key": requestIdRef.current,
         },
         body: JSON.stringify({ name: name.trim(), description: description.trim(), query, scope }),
-      })
+      });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, tc('feedback.createFailed'))
-        setSaveError(message)
-        toast.error(message)
-        return
+        const message = await readApiErrorMessage(res, tc("feedback.createFailed"));
+        setSaveError(message);
+        toast.error(message);
+        return;
       }
-      const data = (await res.json()) as { id?: unknown }
-      if (typeof data.id !== 'string' || !data.id) {
-        toast.error(tc('feedback.createFailed'))
-        return
+      const data = (await res.json()) as { id?: unknown };
+      if (typeof data.id !== "string" || !data.id) {
+        toast.error(tc("feedback.createFailed"));
+        return;
       }
-      toast.success(tb('allChangesSaved'))
-      router.replace(`/knowledge/views?view=${data.id}`)
-      router.refresh()
+      toast.success(tb("allChangesSaved"));
+      router.replace(`/knowledge/views?view=${data.id}`);
+      router.refresh();
     } catch {
-      toast.error(tc('feedback.createFailed'))
+      toast.error(tc("feedback.createFailed"));
     } finally {
-      setCreating(false)
+      setCreating(false);
     }
   }
 
@@ -284,29 +292,39 @@ export function ViewStudio({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span className="truncate">{name.trim() || t('untitled')}</span>
-          <Badge variant={scope === 'shared' ? 'secondary' : 'outline'}>{t(`scope.${scope}` as never)}</Badge>
+          <span className="truncate">{name.trim() || t("untitled")}</span>
+          <Badge variant={scope === "shared" ? "secondary" : "outline"}>
+            {t(`scope.${scope}` as never)}
+          </Badge>
         </span>
       }
-      description={canCreate && !createMode ? t('autosaveHint') : undefined}
+      description={canCreate && !createMode ? t("autosaveHint") : undefined}
       headerActions={
         createMode ? null : (
           <>
             <Button variant="outline" asChild>
-              <Link href={`/knowledge/views/${view.id}`}><ExternalLink size={15} /> {t('viewResults')}</Link>
+              <Link href={`/knowledge/views/${view.id}`}>
+                <ExternalLink size={15} /> {t("viewResults")}
+              </Link>
             </Button>
             <Button variant="outline" asChild>
-              <a href={`/api/views/${view.id}/export?format=pdf`}><FileText size={15} /> {t('exportPdf')}</a>
+              <a href={`/api/views/${view.id}/export?format=pdf`}>
+                <FileText size={15} /> {t("exportPdf")}
+              </a>
             </Button>
             <Button variant="outline" asChild>
-              <a href={`/api/views/${view.id}/export?format=xlsx`}><Download size={15} /> {t('exportXlsx')}</a>
+              <a href={`/api/views/${view.id}/export?format=xlsx`}>
+                <Download size={15} /> {t("exportXlsx")}
+              </a>
             </Button>
             <Button variant="outline" asChild>
-              <a href={`/api/views/${view.id}/export?format=csv`}><Download size={15} /> {t('exportCsv')}</a>
+              <a href={`/api/views/${view.id}/export?format=csv`}>
+                <Download size={15} /> {t("exportCsv")}
+              </a>
             </Button>
             {canAdmin ? (
               <Button variant="ghost" size="sm" onClick={remove}>
-                <Trash2 size={14} /> {tc('actions.delete')}
+                <Trash2 size={14} /> {tc("actions.delete")}
               </Button>
             ) : null}
           </>
@@ -315,13 +333,19 @@ export function ViewStudio({
       footer={
         createMode ? (
           <div className="flex w-full items-center justify-between gap-3">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{tb('unsavedChanges')}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {tb("unsavedChanges")}
+            </span>
             <div className="flex items-center gap-2">
-              <Button variant="outline" disabled={creating} onClick={() => router.push('/knowledge/views')}>
-                {tc('actions.cancel')}
+              <Button
+                variant="outline"
+                disabled={creating}
+                onClick={() => router.push("/knowledge/views")}
+              >
+                {tc("actions.cancel")}
               </Button>
               <Button disabled={creating} onClick={createView}>
-                {tc('actions.save')}
+                {tc("actions.save")}
               </Button>
             </div>
           </div>
@@ -330,24 +354,48 @@ export function ViewStudio({
     >
       <div className="space-y-5">
         <div className={field}>
-          <Label>{tb('namePlaceholder')}</Label>
-          <Input className="h-9" value={name} onChange={(e) => setName(e.target.value)} placeholder={tb('namePlaceholder')} disabled={!canCreate} />
+          <Label>{tb("namePlaceholder")}</Label>
+          <Input
+            className="h-9"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={tb("namePlaceholder")}
+            disabled={!canCreate}
+          />
           <Input
             className="h-8 text-sm"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder={tb('descriptionPlaceholder')}
+            placeholder={tb("descriptionPlaceholder")}
             disabled={!canCreate}
           />
           {canCreate ? (
             <div className="flex items-center gap-3">
-              <Label className="mb-0">{t('scopeLabel')}</Label>
-              <Select className="h-8 w-40" value={scope} onChange={(e) => setScope(e.target.value as ViewScope)} disabled={!canCreate}>
-                <option value="private">{t('scope.private')}</option>
-                <option value="shared">{t('scope.shared')}</option>
+              <Label className="mb-0">{t("scopeLabel")}</Label>
+              <Select
+                className="h-8 w-40"
+                value={scope}
+                onChange={(e) => setScope(e.target.value as ViewScope)}
+                disabled={!canCreate}
+              >
+                <option value="private">{t("scope.private")}</option>
+                <option value="shared">{t("scope.shared")}</option>
               </Select>
-              <span className={'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>
-                {saveState === 'saved' ? tb('allChangesSaved') : saveState === 'saving' ? tc('actions.saving') : saveState === 'error' ? tc('feedback.saveFailed') : tb('unsavedChanges')}
+              <span
+                className={
+                  "text-xs " +
+                  (saveState === "error"
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-slate-500 dark:text-slate-400")
+                }
+              >
+                {saveState === "saved"
+                  ? tb("allChangesSaved")
+                  : saveState === "saving"
+                    ? tc("actions.saving")
+                    : saveState === "error"
+                      ? tc("feedback.saveFailed")
+                      : tb("unsavedChanges")}
               </span>
             </div>
           ) : null}
@@ -356,8 +404,12 @@ export function ViewStudio({
         <div className="grid gap-5 lg:grid-cols-[minmax(0,360px)_1fr]">
           <div className="space-y-5">
             <div className={field}>
-              <Label>{tb('source')}</Label>
-              <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)} disabled={!canCreate}>
+              <Label>{tb("source")}</Label>
+              <Select
+                value={query.entity}
+                onChange={(e) => changeEntity(e.target.value)}
+                disabled={!canCreate}
+              >
                 {REPORT_ENTITIES.filter((e) => !hiddenEntityKeys.includes(e.key)).map((e) => (
                   <option key={e.key} value={e.key}>
                     {tReports(`catalog.entities.${e.key}.label`)}
@@ -370,35 +422,60 @@ export function ViewStudio({
             </div>
 
             <div className={field}>
-              <Label>{tb('mode')}</Label>
+              <Label>{tb("mode")}</Label>
               <div className="flex gap-2">
-                <Button type="button" variant={mode === 'rows' ? 'default' : 'outline'} size="sm" onClick={() => patch({ mode: 'rows' })} disabled={!canCreate}>
-                  {tb('detailRows')}
+                <Button
+                  type="button"
+                  variant={mode === "rows" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => patch({ mode: "rows" })}
+                  disabled={!canCreate}
+                >
+                  {tb("detailRows")}
                 </Button>
                 <Button
                   type="button"
-                  variant={mode === 'summarize' ? 'default' : 'outline'}
+                  variant={mode === "summarize" ? "default" : "outline"}
                   size="sm"
                   disabled={!canCreate}
-                  onClick={() => patch({ mode: 'summarize', measures: query.measures?.length ? query.measures : [{ fn: 'count', key: 'm1' }] })}
+                  onClick={() =>
+                    patch({
+                      mode: "summarize",
+                      measures: query.measures?.length
+                        ? query.measures
+                        : [{ fn: "count", key: "m1" }],
+                    })
+                  }
                 >
-                  {tb('summarize')}
+                  {tb("summarize")}
                 </Button>
               </div>
             </div>
 
-            {mode === 'rows' ? (
-              <RowsConfig entity={entity} query={query} patch={patch} columns={selectableColumns} disabled={!canCreate} />
+            {mode === "rows" ? (
+              <RowsConfig
+                entity={entity}
+                query={query}
+                patch={patch}
+                columns={selectableColumns}
+                disabled={!canCreate}
+              />
             ) : (
-              <SummarizeConfig entity={entity} query={query} patch={patch} inventoryEnabled={inventoryEnabled} error={previewError ?? saveError} />
+              <SummarizeConfig
+                entity={entity}
+                query={query}
+                patch={patch}
+                inventoryEnabled={inventoryEnabled}
+                error={previewError ?? saveError}
+              />
             )}
 
             <div className={field}>
-              <Label>{tc('labels.filters')}</Label>
+              <Label>{tc("labels.filters")}</Label>
               <FilterTree
                 entity={entity}
                 inventoryEnabled={inventoryEnabled}
-                group={query.filters ?? { combinator: 'and', rules: [] }}
+                group={query.filters ?? { combinator: "and", rules: [] }}
                 onChange={(g) => patch({ filters: g.rules.length ? g : null })}
               />
             </div>
@@ -406,24 +483,35 @@ export function ViewStudio({
             <SortConfig entity={entity} query={query} patch={patch} disabled={!canCreate} />
 
             <div className={field}>
-              <Label>{tb('rowLimit')}</Label>
+              <Label>{tb("rowLimit")}</Label>
               <Input
                 type="number"
                 min={1}
                 max={10000}
                 value={query.limit ?? 1000}
-                onChange={(e) => patch({ limit: Math.min(Math.max(Number(e.target.value) || 1, 1), 10000) })}
+                onChange={(e) =>
+                  patch({ limit: Math.min(Math.max(Number(e.target.value) || 1, 1), 10000) })
+                }
                 disabled={!canCreate}
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">{tb('rowLimitHint', { previewRows: 200 })}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {tb("rowLimitHint", { previewRows: 200 })}
+              </p>
             </div>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{tb('livePreview')}</h2>
-              <Button variant="outline" size="sm" disabled={previewing} onClick={() => runPreview(query)}>
-                <Play size={14} /> {previewing ? tb('running') : tc('actions.refresh')}
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {tb("livePreview")}
+              </h2>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={previewing}
+                onClick={() => runPreview(query)}
+              >
+                <Play size={14} /> {previewing ? tb("running") : tc("actions.refresh")}
               </Button>
             </div>
             {previewError ? (
@@ -436,12 +524,12 @@ export function ViewStudio({
                 title={name}
                 description={description}
                 result={preview}
-                drillTarget={{ kind: 'custom', source: 'view', id: view.id, label: name }}
+                drillTarget={{ kind: "custom", source: "view", id: view.id, label: name }}
               />
             ) : (
               <ReportPaper company={company} title={name} periodPhrase={description || undefined}>
                 <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                  {previewing ? tb('runningPreview') : tb('previewEmptyHint')}
+                  {previewing ? tb("runningPreview") : tb("previewEmptyHint")}
                 </p>
               </ReportPaper>
             )}
@@ -449,5 +537,5 @@ export function ViewStudio({
         </div>
       </div>
     </UrlDrawer>
-  )
+  );
 }

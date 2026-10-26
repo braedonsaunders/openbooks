@@ -24,23 +24,48 @@ import type { T4Slip, T4SummaryTotals } from "./yearend.ts";
  */
 
 const RP1: PayrollFilingAccount = {
-  id: "acct-1", country: "CA", programType: "ca_rp", accountNumber: "123456789RP0001",
-  name: "Head office", remitterType: "regular", subsidiaryId: null, stateCode: null,
-  isDefault: true, isActive: true,
+  id: "acct-1",
+  country: "CA",
+  programType: "ca_rp",
+  accountNumber: "123456789RP0001",
+  name: "Head office",
+  remitterType: "regular",
+  subsidiaryId: null,
+  stateCode: null,
+  isDefault: true,
+  isActive: true,
 };
 const RP2: PayrollFilingAccount = {
-  ...RP1, id: "acct-2", accountNumber: "123456789RP0002", name: "Field division",
-  remitterType: "accelerated_1", isDefault: false,
+  ...RP1,
+  id: "acct-2",
+  accountNumber: "123456789RP0002",
+  name: "Field division",
+  remitterType: "accelerated_1",
+  isDefault: false,
 };
-const ACCOUNTS = new Map([[RP1.id, RP1], [RP2.id, RP2]]);
+const ACCOUNTS = new Map([
+  [RP1.id, RP1],
+  [RP2.id, RP2],
+]);
 
 function row(overrides: Partial<RemittanceRow>): RemittanceRow {
   const base: Omit<RemittanceRow, "sliceAmount"> = {
-    component_id: "c1", code: "TAX", name: "Income tax", kind: "deduction",
-    system_key: "income_tax", country: "CA", remittance_party_id: "cra", component_party_id: null,
-    covered_party_id: null, liability_account_id: "gl-tax",
-    filing_account_id: RP1.id, filingUnknown: false, province: "ON", amount: "100.00",
-    subsidiary_id: "sub-a" as string | null, currency: "CAD",
+    component_id: "c1",
+    code: "TAX",
+    name: "Income tax",
+    kind: "deduction",
+    system_key: "income_tax",
+    country: "CA",
+    remittance_party_id: "cra",
+    component_party_id: null,
+    covered_party_id: null,
+    liability_account_id: "gl-tax",
+    filing_account_id: RP1.id,
+    filingUnknown: false,
+    province: "ON",
+    amount: "100.00",
+    subsidiary_id: "sub-a" as string | null,
+    currency: "CAD",
     ...overrides,
   };
   return { ...base, sliceAmount: overrides.sliceAmount ?? base.amount };
@@ -64,7 +89,14 @@ const group = (rows: RemittanceRow[]) =>
 test("remittance groups split one destination across its filing accounts", () => {
   const groups = group([
     row({ amount: "100.00", filing_account_id: RP1.id }),
-    row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", filing_account_id: RP1.id }),
+    row({
+      component_id: "c2",
+      code: "CPP",
+      name: "CPP",
+      system_key: "cpp",
+      amount: "40.00",
+      filing_account_id: RP1.id,
+    }),
     row({ amount: "60.00", filing_account_id: RP2.id }),
   ]);
 
@@ -82,7 +114,14 @@ test("remittance groups split one destination across its filing accounts", () =>
 test("employees on no filing account stay in one unassigned group", () => {
   const groups = group([
     row({ amount: "100.00", filing_account_id: null }),
-    row({ component_id: "c2", code: "EI", name: "EI", system_key: "ei", amount: "25.00", filing_account_id: null }),
+    row({
+      component_id: "c2",
+      code: "EI",
+      name: "EI",
+      system_key: "ei",
+      amount: "25.00",
+      filing_account_id: null,
+    }),
   ]);
   assert.equal(groups.size, 1);
   const [only] = [...groups.values()];
@@ -95,7 +134,14 @@ test("employees on no filing account stay in one unassigned group", () => {
 test("different destinations under one account remain separate groups", () => {
   const groups = group([
     row({ remittance_party_id: "cra", amount: "100.00" }),
-    row({ component_id: "c9", code: "DUES", name: "Union dues", system_key: null, remittance_party_id: "local-1", amount: "30.00" }),
+    row({
+      component_id: "c9",
+      code: "DUES",
+      name: "Union dues",
+      system_key: null,
+      remittance_party_id: "local-1",
+      amount: "30.00",
+    }),
   ]);
   assert.equal(groups.size, 2);
 });
@@ -103,7 +149,15 @@ test("different destinations under one account remain separate groups", () => {
 test("remittance groups carry their stub provinces for the due-date calendar", () => {
   const groups = group([
     row({ amount: "100.00", filing_account_id: RP1.id, province: "QC" }),
-    row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", filing_account_id: RP1.id, province: "QC" }),
+    row({
+      component_id: "c2",
+      code: "CPP",
+      name: "CPP",
+      system_key: "cpp",
+      amount: "40.00",
+      filing_account_id: RP1.id,
+      province: "QC",
+    }),
     row({ amount: "60.00", filing_account_id: RP2.id, province: "ON" }),
   ]);
   const byAccount = new Map([...groups.values()].map((g) => [g.filingAccount.accountNumber, g]));
@@ -119,7 +173,14 @@ test("one group carries one native-currency slice per legal entity", () => {
   const groups = groupRemittanceRows({
     rows: [
       row({ amount: "100.00", subsidiary_id: "sub-a" }),
-      row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", subsidiary_id: "sub-b" }),
+      row({
+        component_id: "c2",
+        code: "CPP",
+        name: "CPP",
+        system_key: "cpp",
+        amount: "40.00",
+        subsidiary_id: "sub-b",
+      }),
     ],
     contextByAccount: CONTEXT,
     filingAccounts: ACCOUNTS,
@@ -176,7 +237,14 @@ test("one component across two historical liability accounts keeps two lines", (
 test("entityless accruals stay consolidated and flag the group", () => {
   const groups = group([
     row({ amount: "100.00", subsidiary_id: "sub-a" }),
-    row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", subsidiary_id: null }),
+    row({
+      component_id: "c2",
+      code: "CPP",
+      name: "CPP",
+      system_key: "cpp",
+      amount: "40.00",
+      subsidiary_id: null,
+    }),
   ]);
   const [only] = [...groups.values()];
   assert.equal(only!.total, "140.0000", "the money stays visible in the consolidated group");
@@ -186,9 +254,7 @@ test("entityless accruals stay consolidated and flag the group", () => {
 });
 
 test("pickRemittanceSlice passes one slice through and refuses ambiguity", () => {
-  const groups = group([
-    row({ amount: "100.00", subsidiary_id: "sub-a" }),
-  ]);
+  const groups = group([row({ amount: "100.00", subsidiary_id: "sub-a" })]);
   const [sole] = [...groups.values()];
   assert.equal(pickRemittanceSlice(sole!, null).subsidiaryId, "sub-a");
   assert.equal(pickRemittanceSlice(sole!, "sub-a").subsidiaryId, "sub-a");
@@ -200,7 +266,14 @@ test("pickRemittanceSlice passes one slice through and refuses ambiguity", () =>
 
   const multi = group([
     row({ amount: "100.00", subsidiary_id: "sub-a" }),
-    row({ component_id: "c2", code: "CPP", name: "CPP", system_key: "cpp", amount: "40.00", subsidiary_id: "sub-b" }),
+    row({
+      component_id: "c2",
+      code: "CPP",
+      name: "CPP",
+      system_key: "cpp",
+      amount: "40.00",
+      subsidiary_id: "sub-b",
+    }),
   ]);
   const [both] = [...multi.values()];
   assert.equal(pickRemittanceSlice(both!, "sub-b").total, "40.0000");
@@ -240,11 +313,16 @@ test("a pack's regional calendar governs exactly the single-region payrolls", ()
 
 test("filingAccountRef labels a known account and degrades honestly", () => {
   assert.deepEqual(filingAccountRef(RP2.id, ACCOUNTS), {
-    id: "acct-2", accountNumber: "123456789RP0002", name: "Field division",
+    id: "acct-2",
+    accountNumber: "123456789RP0002",
+    name: "Field division",
     remitterType: "accelerated_1",
   });
   assert.deepEqual(filingAccountRef(null, ACCOUNTS), {
-    id: null, accountNumber: null, name: null, remitterType: null,
+    id: null,
+    accountNumber: null,
+    name: null,
+    remitterType: null,
   });
   // An archived account still names its id rather than pretending it is the
   // unassigned bucket, which would silently merge two returns.
@@ -254,23 +332,49 @@ test("filingAccountRef labels a known account and degrades honestly", () => {
 // -- T4 transmittal ---------------------------------------------------------
 
 const TRANSMITTER = {
-  bn: "999999999RP0001", transmitterNumber: "MM555555", name: "Acme Ltd",
-  contactName: "Pat Payroll", contactEmail: "pat@acme.test", contactPhone: "5555550100",
+  bn: "999999999RP0001",
+  transmitterNumber: "MM555555",
+  name: "Acme Ltd",
+  contactName: "Pat Payroll",
+  contactEmail: "pat@acme.test",
+  contactPhone: "5555550100",
 };
 
 function slip(name: string, sin: string, filingAccountId: string | null): T4Slip & { sin: string } {
   return {
-    employeePartyId: name, employeeName: name, province: "ON", isQuebec: false,
-    filingAccountId, sin,
-    box14EmploymentIncome: "50000", box16Cpp: "3000", box16aCpp2: "0", box18Ei: "800",
-    box22IncomeTax: "9000", box24EiInsurable: "50000", box26CppPensionable: "50000",
-    box44UnionDues: "0", box55Qpip: "0", box56QpipInsurable: "0", stubCount: 26, employerCpp: "3000", employerCpp2: "0", employerEi: "1120",
+    employeePartyId: name,
+    employeeName: name,
+    province: "ON",
+    isQuebec: false,
+    filingAccountId,
+    sin,
+    box14EmploymentIncome: "50000",
+    box16Cpp: "3000",
+    box16aCpp2: "0",
+    box18Ei: "800",
+    box22IncomeTax: "9000",
+    box24EiInsurable: "50000",
+    box26CppPensionable: "50000",
+    box44UnionDues: "0",
+    box55Qpip: "0",
+    box56QpipInsurable: "0",
+    stubCount: 26,
+    employerCpp: "3000",
+    employerCpp2: "0",
+    employerEi: "1120",
   };
 }
 
 const summary = (income: string): T4SummaryTotals => ({
-  slips: 1, employmentIncome: income, employeeCpp: "3000", employeeCpp2: "0",
-  employerCpp: "3000", employerCpp2: "0", employeeEi: "800", employerEi: "1120", incomeTax: "9000",
+  slips: 1,
+  employmentIncome: income,
+  employeeCpp: "3000",
+  employeeCpp2: "0",
+  employerCpp: "3000",
+  employerCpp2: "0",
+  employeeEi: "800",
+  employerEi: "1120",
+  incomeTax: "9000",
   remitted: "0",
 });
 
@@ -303,12 +407,16 @@ test("T4 XML files one return per payroll program account", () => {
 
 test("T4 XML falls back to the transmitter BN for unassigned employees", () => {
   const xml = renderT4Xml({
-    orgId: "org", taxYear: 2026, transmitter: TRANSMITTER,
-    returns: [{
-      filingAccount: filingAccountRef(null, ACCOUNTS),
-      slips: [slip("Ada Byron", "046454286", null)],
-      summary: summary("50000"),
-    }],
+    orgId: "org",
+    taxYear: 2026,
+    transmitter: TRANSMITTER,
+    returns: [
+      {
+        filingAccount: filingAccountRef(null, ACCOUNTS),
+        slips: [slip("Ada Byron", "046454286", null)],
+        summary: summary("50000"),
+      },
+    ],
   });
   assert.equal(xml.match(/<T4>/g)?.length, 1);
   assert.match(xml, /<BN>999999999RP0001<\/BN>/);
@@ -320,12 +428,16 @@ test("T4 XML formats amounts by exact decimal arithmetic, never a float round-tr
   // Number(v).toFixed(2) printed "86.61" where the statutory figure — half-up
   // from the 4-decimal money string — is "86.62".
   const xml = renderT4Xml({
-    orgId: "org", taxYear: 2026, transmitter: TRANSMITTER,
-    returns: [{
-      filingAccount: filingAccountRef(RP1.id, ACCOUNTS),
-      slips: [{ ...slip("Ada Byron", "046454286", RP1.id), box14EmploymentIncome: "86.6150" }],
-      summary: summary("86.6150"),
-    }],
+    orgId: "org",
+    taxYear: 2026,
+    transmitter: TRANSMITTER,
+    returns: [
+      {
+        filingAccount: filingAccountRef(RP1.id, ACCOUNTS),
+        slips: [{ ...slip("Ada Byron", "046454286", RP1.id), box14EmploymentIncome: "86.6150" }],
+        summary: summary("86.6150"),
+      },
+    ],
   });
   assert.match(xml, /<empt_incamt>86\.62<\/empt_incamt>/);
   assert.match(xml, /<tot_empt_incamt>86\.62<\/tot_empt_incamt>/);
@@ -336,15 +448,21 @@ test("T4 XML keeps large magnitudes exact beyond double precision", () => {
   // rounded: Number("70368744177663.985") lands on …984.375 and toFixed(2)
   // prints ".98". The bigint path rounds the exact decimal half-up to ".99".
   const xml = renderT4Xml({
-    orgId: "org", taxYear: 2026, transmitter: TRANSMITTER,
-    returns: [{
-      filingAccount: filingAccountRef(RP1.id, ACCOUNTS),
-      slips: [{
-        ...slip("Ada Byron", "046454286", RP1.id),
-        box14EmploymentIncome: "70368744177663.9850",
-      }],
-      summary: summary("70368744177663.9850"),
-    }],
+    orgId: "org",
+    taxYear: 2026,
+    transmitter: TRANSMITTER,
+    returns: [
+      {
+        filingAccount: filingAccountRef(RP1.id, ACCOUNTS),
+        slips: [
+          {
+            ...slip("Ada Byron", "046454286", RP1.id),
+            box14EmploymentIncome: "70368744177663.9850",
+          },
+        ],
+        summary: summary("70368744177663.9850"),
+      },
+    ],
   });
   assert.match(xml, /<empt_incamt>70368744177663\.99<\/empt_incamt>/);
   assert.match(xml, /<tot_empt_incamt>70368744177663\.99<\/tot_empt_incamt>/);
@@ -359,9 +477,30 @@ test("a region-scoped remittance vendor splits the group; same-vendor provinces 
   // a remittance bill never carries two lines for one component.
   const groups = groupRemittanceRows({
     rows: [
-      row({ component_id: "cpp", code: "CPP", name: "CPP", system_key: "cpp", province: "ON", amount: "40.00" }),
-      row({ component_id: "cpp", code: "CPP", name: "CPP", system_key: "cpp", province: "AB", amount: "10.00" }),
-      row({ component_id: "cpp", code: "CPP", name: "CPP", system_key: "cpp", province: "QC", amount: "25.00" }),
+      row({
+        component_id: "cpp",
+        code: "CPP",
+        name: "CPP",
+        system_key: "cpp",
+        province: "ON",
+        amount: "40.00",
+      }),
+      row({
+        component_id: "cpp",
+        code: "CPP",
+        name: "CPP",
+        system_key: "cpp",
+        province: "AB",
+        amount: "10.00",
+      }),
+      row({
+        component_id: "cpp",
+        code: "CPP",
+        name: "CPP",
+        system_key: "cpp",
+        province: "QC",
+        amount: "25.00",
+      }),
     ],
     contextByAccount: CONTEXT,
     filingAccounts: ACCOUNTS,
@@ -410,16 +549,25 @@ test("a second remittance bill for the same key is refused, naming the first", (
 test("the bill lock key scopes one destination, window, filing account and entity", () => {
   assert.equal(
     remittanceBillLockKey("org-1", {
-      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      partyId: "cra",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      filingAccountId: null,
     }),
     "payroll-remittance-bill:org-1:cra:2026-07-01:2026-07-31::",
   );
   assert.notEqual(
     remittanceBillLockKey("org-1", {
-      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: "acct-2",
+      partyId: "cra",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      filingAccountId: "acct-2",
     }),
     remittanceBillLockKey("org-1", {
-      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      partyId: "cra",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      filingAccountId: null,
     }),
     "two program accounts remit independently",
   );
@@ -427,18 +575,27 @@ test("the bill lock key scopes one destination, window, filing account and entit
   // creators for different entities proceed, while the same slice serializes.
   assert.notEqual(
     remittanceBillLockKey("org-1", {
-      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      partyId: "cra",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      filingAccountId: null,
       subsidiaryId: "sub-a",
     }),
     remittanceBillLockKey("org-1", {
-      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      partyId: "cra",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      filingAccountId: null,
       subsidiaryId: "sub-b",
     }),
     "two entities remit independently",
   );
   assert.equal(
     remittanceBillLockKey("org-1", {
-      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+      partyId: "cra",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      filingAccountId: null,
       subsidiaryId: "sub-a",
     }),
     "payroll-remittance-bill:org-1:cra:2026-07-01:2026-07-31::sub-a",
@@ -450,16 +607,19 @@ test("remittance bills number off the org's existing vendor_bill series", () => 
   // The org's current usage wins: a subsidiary-scoped series outranks the
   // org-wide row, exactly like the AP path's own numbering.
   assert.deepEqual(
-    pickRemittanceSequence([
-      { prefix: "AP-", subsidiaryId: null },
-      { prefix: "PB-", subsidiaryId: root },
-    ], root),
+    pickRemittanceSequence(
+      [
+        { prefix: "AP-", subsidiaryId: null },
+        { prefix: "PB-", subsidiaryId: root },
+      ],
+      root,
+    ),
     { prefix: "PB-", subsidiaryId: root },
   );
-  assert.deepEqual(
-    pickRemittanceSequence([{ prefix: "AP-", subsidiaryId: null }], root),
-    { prefix: "AP-", subsidiaryId: null },
-  );
+  assert.deepEqual(pickRemittanceSequence([{ prefix: "AP-", subsidiaryId: null }], root), {
+    prefix: "AP-",
+    subsidiaryId: null,
+  });
   // Another subsidiary's series never leaks, and no series at all leaves the
   // caller seeding 'BILL-' as before.
   assert.equal(pickRemittanceSequence([{ prefix: "XX-", subsidiaryId: "other" }], root), null);

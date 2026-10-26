@@ -5,39 +5,76 @@ import { PARENT_FILTER, type Catalog, type TableInfo } from "../sandbox/catalog.
 import { orderDependencyComponents } from "../sandbox/catalog-graph.ts";
 import { retirementDigest } from "./retirement-contract.ts";
 
-export const RETIREMENT_AUTH_TABLES = ["auth_login_challenges", "auth_login_events", "auth_login_state", "auth_mfa_factors", "auth_oidc_identities", "auth_password_resets", "auth_sessions"] as const;
-export function retirementPredicate(table: Pick<TableInfo, "name" | "hasOrgId">, orgId: string): SQL {
+export const RETIREMENT_AUTH_TABLES = [
+  "auth_login_challenges",
+  "auth_login_events",
+  "auth_login_state",
+  "auth_mfa_factors",
+  "auth_oidc_identities",
+  "auth_password_resets",
+  "auth_sessions",
+] as const;
+export function retirementPredicate(
+  table: Pick<TableInfo, "name" | "hasOrgId">,
+  orgId: string,
+): SQL {
   if (!isUuid(orgId)) throw new Error("Retirement predicates require an exact tenant UUID");
   if (table.name === "orgs") return sql`id=${orgId}::uuid`;
-  if ((RETIREMENT_AUTH_TABLES as readonly string[]).includes(table.name)) return sql`user_id in (select id from public.users where org_id=${orgId}::uuid)`;
+  if ((RETIREMENT_AUTH_TABLES as readonly string[]).includes(table.name))
+    return sql`user_id in (select id from public.users where org_id=${orgId}::uuid)`;
   if (table.hasOrgId) return sql`org_id=${orgId}::uuid`;
   if (PARENT_FILTER[table.name]) return sql.raw(PARENT_FILTER[table.name]!(orgId));
   throw new Error(`Tenant retirement has no ownership predicate for ${table.name}`);
 }
-export type RetirementFingerprint = { digest: string; tables: Array<{ table: string; count: string; digest: string }> };
+export type RetirementFingerprint = {
+  digest: string;
+  tables: Array<{ table: string; count: string; digest: string }>;
+};
 /** Hash native row content, including drafts, audit, configuration and global auth children; never emit personal row values. */
-export async function retirementFingerprint(catalog: Catalog, orgId: string): Promise<RetirementFingerprint> {
+export async function retirementFingerprint(
+  catalog: Catalog,
+  orgId: string,
+): Promise<RetirementFingerprint> {
   const tables: RetirementFingerprint["tables"] = [];
-  const owned = [...catalog.tenantTables.filter(t => t.name !== "orgs"), { name: "orgs", hasOrgId: false }, ...RETIREMENT_AUTH_TABLES.map(name => ({ name, hasOrgId: false }))];
+  const owned = [
+    ...catalog.tenantTables.filter((t) => t.name !== "orgs"),
+    { name: "orgs", hasOrgId: false },
+    ...RETIREMENT_AUTH_TABLES.map((name) => ({ name, hasOrgId: false })),
+  ];
   owned.sort((a, b) => a.name.localeCompare(b.name));
-  if (new Set(owned.map(table => table.name)).size !== owned.length) throw new Error("Duplicate retirement fingerprint table identity");
+  if (new Set(owned.map((table) => table.name)).size !== owned.length)
+    throw new Error("Duplicate retirement fingerprint table identity");
   // Bound statement size and round trips without changing row content, tenant
   // ownership, empty-table evidence or the established digest ordering.
   const batchSize = 32;
   for (let offset = 0; offset < owned.length; offset += batchSize) {
     const batch = owned.slice(offset, offset + batchSize);
-    const result = await db.execute<RetirementFingerprint["tables"][number]>(sql.join(batch.map(table => sql`
+    const result = await db.execute<RetirementFingerprint["tables"][number]>(
+      sql.join(
+        batch.map(
+          (table) => sql`
       select ${table.name}::text as "table",count(*)::text as count,
         encode(digest(coalesce(string_agg(row_hash,E'\n' order by row_hash),''),'sha256'),'hex') as digest
       from (select encode(digest(to_jsonb(owned_row)::text,'sha256'),'hex') as row_hash
-        from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`), sql` union all `), "objects");
-    const requested = new Set(batch.map(table => table.name));
+        from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`,
+        ),
+        sql` union all `,
+      ),
+      "objects",
+    );
+    const requested = new Set(batch.map((table) => table.name));
     const received = new Map<string, RetirementFingerprint["tables"][number]>();
     for (const row of result) {
-      if (!requested.has(row.table)) throw new Error(`Unexpected retirement fingerprint table ${row.table}`);
-      if (received.has(row.table)) throw new Error(`Duplicate retirement fingerprint for ${row.table}`);
-      if (typeof row.count !== "string" || !/^(0|[1-9][0-9]*)$/.test(row.count)
-        || typeof row.digest !== "string" || !/^[0-9a-f]{64}$/.test(row.digest)) {
+      if (!requested.has(row.table))
+        throw new Error(`Unexpected retirement fingerprint table ${row.table}`);
+      if (received.has(row.table))
+        throw new Error(`Duplicate retirement fingerprint for ${row.table}`);
+      if (
+        typeof row.count !== "string" ||
+        !/^(0|[1-9][0-9]*)$/.test(row.count) ||
+        typeof row.digest !== "string" ||
+        !/^[0-9a-f]{64}$/.test(row.digest)
+      ) {
         throw new Error(`Invalid retirement fingerprint for ${row.table}`);
       }
       received.set(row.table, row);
@@ -55,26 +92,38 @@ function errorCode(error: unknown): string | undefined {
   return item?.code ?? (item?.cause ? errorCode(item.cause) : undefined);
 }
 export interface RetirementForeignKey {
-  table: string; referencedTable: string; deleteAction: string; deferrable: boolean;
-  columns: string[]; referencedColumns: string[];
+  table: string;
+  referencedTable: string;
+  deleteAction: string;
+  deferrable: boolean;
+  columns: string[];
+  referencedColumns: string[];
 }
 
 /** Retirement cannot rely on cascades or SET NULL updates. Order every native
  * child before its parent; within deferred cycles retain all immediate actions.
  * Native row constraints still refuse cycles that need protected-row updates. */
-export function retirementDeletionOrder(names: readonly string[], foreignKeys: readonly RetirementForeignKey[]): string[] {
+export function retirementDeletionOrder(
+  names: readonly string[],
+  foreignKeys: readonly RetirementForeignKey[],
+): string[] {
   if (new Set(names).size !== names.length) throw new Error("Duplicate retirement table identity");
   const orderedNames = [...names].sort();
   const included = new Set(orderedNames);
-  const dependencies = new Map(orderedNames.map(name => [name, new Set<string>()]));
-  const indegree = new Map(orderedNames.map(name => [name, 0]));
+  const dependencies = new Map(orderedNames.map((name) => [name, new Set<string>()]));
+  const indegree = new Map(orderedNames.map((name) => [name, 0]));
   for (const edge of foreignKeys) {
-    if (edge.table === edge.referencedTable || !included.has(edge.table) || !included.has(edge.referencedTable)) continue;
+    if (
+      edge.table === edge.referencedTable ||
+      !included.has(edge.table) ||
+      !included.has(edge.referencedTable)
+    )
+      continue;
     if (dependencies.get(edge.table)!.has(edge.referencedTable)) continue;
     dependencies.get(edge.table)!.add(edge.referencedTable);
     indegree.set(edge.referencedTable, indegree.get(edge.referencedTable)! + 1);
   }
-  const queue = orderedNames.filter(name => indegree.get(name) === 0);
+  const queue = orderedNames.filter((name) => indegree.get(name) === 0);
   const order: string[] = [];
   while (queue.length) {
     const name = queue.shift()!;
@@ -85,24 +134,38 @@ export function retirementDeletionOrder(names: readonly string[], foreignKeys: r
     }
   }
   const emitted = new Set(order);
-  const tail = orderedNames.filter(name => !emitted.has(name));
+  const tail = orderedNames.filter((name) => !emitted.has(name));
   const tailSet = new Set(tail);
-  const immediate = new Map(tail.map(name => [name, new Set<string>()]));
+  const immediate = new Map(tail.map((name) => [name, new Set<string>()]));
   for (const edge of foreignKeys) {
-    if (edge.table === edge.referencedTable || !tailSet.has(edge.table) || !tailSet.has(edge.referencedTable)) continue;
+    if (
+      edge.table === edge.referencedTable ||
+      !tailSet.has(edge.table) ||
+      !tailSet.has(edge.referencedTable)
+    )
+      continue;
     // Referential actions execute immediately even on DEFERRABLE constraints.
-    if (edge.deleteAction !== "a" || !edge.deferrable) immediate.get(edge.table)!.add(edge.referencedTable);
+    if (edge.deleteAction !== "a" || !edge.deferrable)
+      immediate.get(edge.table)!.add(edge.referencedTable);
   }
   order.push(...orderDependencyComponents(tail, immediate));
-  if (order.length !== names.length || new Set(order).size !== names.length) throw new Error("Incomplete retirement deletion order");
+  if (order.length !== names.length || new Set(order).size !== names.length)
+    throw new Error("Incomplete retirement deletion order");
   return order;
 }
 
 /** Delete only owned rows. Constraint refusals are retried after their children;
  * cycles that cannot be removed without UPDATE roll back the entire target. */
-export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, options: { batchSize?: number } = {}) {
+export async function deleteRetiredTenantRows(
+  catalog: Catalog,
+  orgId: string,
+  options: { batchSize?: number } = {},
+) {
   const batchSize = options.batchSize ?? 4096;
-  if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 4096) throw new Error("Retirement deletion batches must contain between 1 and 4096 rows or journal entries");
+  if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 4096)
+    throw new Error(
+      "Retirement deletion batches must contain between 1 and 4096 rows or journal entries",
+    );
   // Statement bounds do not split the target transaction. Journal statements
   // retain complete entries so balancing and FX guards never see partial legs.
   const deleteBatches = async (table: Pick<TableInfo, "name" | "hasOrgId">, leaves: SQL[] = []) => {
@@ -110,22 +173,33 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
     let lastEntryId: string | null = null;
     for (;;) {
       const journal = table.name === "journal_lines";
-      if (journal && leaves.length) throw new Error("Journal retirement cannot split self-referencing entries");
-      const candidates: SQL = journal ? sql`
+      if (journal && leaves.length)
+        throw new Error("Journal retirement cannot split self-referencing entries");
+      const candidates: SQL = journal
+        ? sql`
         select distinct owned_row.entry_id from public.journal_lines owned_row
         where ${retirementPredicate(table, orgId)}
           ${lastEntryId ? sql`and owned_row.entry_id>${lastEntryId}::uuid` : sql``}
-        order by owned_row.entry_id limit ${batchSize}` : sql`
+        order by owned_row.entry_id limit ${batchSize}`
+        : sql`
         select owned_row.ctid from public.${sql.identifier(table.name)} owned_row
         where ${retirementPredicate(table, orgId)}
           ${leaves.length ? sql`and ${sql.join(leaves, sql` and `)}` : sql``}
         limit ${batchSize}`;
-      const result = await db.execute<{ expected: string; removed: string; nextEntryId: string | null }>(sql`
+      const result = await db.execute<{
+        expected: string;
+        removed: string;
+        nextEntryId: string | null;
+      }>(
+        sql`
         with candidates as materialized (${candidates}),
         owned_batch as materialized (
-          ${journal ? sql`select owned_row.ctid from public.journal_lines owned_row
+          ${
+            journal
+              ? sql`select owned_row.ctid from public.journal_lines owned_row
             join candidates on candidates.entry_id=owned_row.entry_id where ${retirementPredicate(table, orgId)}`
-          : sql`select ctid from candidates`}
+              : sql`select ctid from candidates`
+          }
         ), deleted as (
           delete from public.${sql.identifier(table.name)} owned_row
           where ${retirementPredicate(table, orgId)} and owned_row.ctid in (select ctid from owned_batch)
@@ -133,24 +207,34 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
         )
         select (select count(*)::text from owned_batch) as expected,
           (select count(*)::text from deleted) as removed,
-          ${journal ? sql`(select entry_id::text from candidates order by entry_id desc limit 1)` : sql`null::text`} as "nextEntryId"`, "objects");
+          ${journal ? sql`(select entry_id::text from candidates order by entry_id desc limit 1)` : sql`null::text`} as "nextEntryId"`,
+        "objects",
+      );
       const row = result[0];
-      if (result.length !== 1 || !row || typeof row.expected !== "string" || typeof row.removed !== "string"
-          || !/^(0|[1-9][0-9]*)$/.test(row.expected) || !/^(0|[1-9][0-9]*)$/.test(row.removed)
-          || row.expected !== row.removed) {
+      if (
+        result.length !== 1 ||
+        !row ||
+        typeof row.expected !== "string" ||
+        typeof row.removed !== "string" ||
+        !/^(0|[1-9][0-9]*)$/.test(row.expected) ||
+        !/^(0|[1-9][0-9]*)$/.test(row.removed) ||
+        row.expected !== row.removed
+      ) {
         throw new Error(`Retirement did not remove exactly its claimed ${table.name} batch`);
       }
       if (row.removed === "0") return removed;
       removed += BigInt(row.removed);
       if (journal) {
-        if (!isUuid(row.nextEntryId) || (lastEntryId !== null && row.nextEntryId <= lastEntryId)) throw new Error("Retirement journal batch has no advancing exact entry cursor");
+        if (!isUuid(row.nextEntryId) || (lastEntryId !== null && row.nextEntryId <= lastEntryId))
+          throw new Error("Retirement journal batch has no advancing exact entry cursor");
         lastEntryId = row.nextEntryId;
       }
     }
   };
-  const targets = catalog.tenantTables.filter(t => t.name !== "orgs");
-  const byName = new Map(targets.map(table => [table.name, table]));
-  const foreignKeys = await db.execute<RetirementForeignKey & Record<string, unknown>>(sql`
+  const targets = catalog.tenantTables.filter((t) => t.name !== "orgs");
+  const byName = new Map(targets.map((table) => [table.name, table]));
+  const foreignKeys = await db.execute<RetirementForeignKey & Record<string, unknown>>(
+    sql`
     select c.relname as table,p.relname as "referencedTable",fk.confdeltype::text as "deleteAction",fk.condeferrable as deferrable,
       array_agg(child.attname::text order by position) as columns,array_agg(parent.attname::text order by position) as "referencedColumns"
     from pg_constraint fk join pg_class c on c.oid=fk.conrelid join pg_namespace n on n.oid=c.relnamespace
@@ -159,9 +243,17 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
     join pg_attribute child on child.attrelid=fk.conrelid and child.attnum=fk.conkey[position]
     join pg_attribute parent on parent.attrelid=fk.confrelid and parent.attnum=fk.confkey[position]
     where n.nspname='public' and pn.nspname='public' and fk.contype='f'
-    group by c.relname,p.relname,fk.oid,fk.confdeltype,fk.condeferrable order by c.relname,p.relname,fk.oid`, "objects");
-  const order = retirementDeletionOrder(targets.map(table => table.name), foreignKeys);
-  const selfEdges = foreignKeys.filter(edge => edge.table === edge.referencedTable && (edge.deleteAction !== "a" || !edge.deferrable));
+    group by c.relname,p.relname,fk.oid,fk.confdeltype,fk.condeferrable order by c.relname,p.relname,fk.oid`,
+    "objects",
+  );
+  const order = retirementDeletionOrder(
+    targets.map((table) => table.name),
+    foreignKeys,
+  );
+  const selfEdges = foreignKeys.filter(
+    (edge) =>
+      edge.table === edge.referencedTable && (edge.deleteAction !== "a" || !edge.deferrable),
+  );
   const removed: Record<string, string> = {};
   for (const name of RETIREMENT_AUTH_TABLES) {
     removed[name] = String(await deleteBatches({ name, hasOrgId: false }));
@@ -172,17 +264,32 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
     const refused: string[] = [];
     for (const name of pending) {
       const table = byName.get(name)!;
-      const leaves = selfEdges.filter(edge => edge.table === name).map(edge => sql`not exists (
-        select 1 from public.${sql.identifier(name)} child where ${sql.join(edge.columns.map((column, i) =>
-          sql`child.${sql.identifier(column)}=owned_row.${sql.identifier(edge.referencedColumns[i]!)}`), sql` and `)})`);
+      const leaves = selfEdges
+        .filter((edge) => edge.table === name)
+        .map(
+          (edge) => sql`not exists (
+        select 1 from public.${sql.identifier(name)} child where ${sql.join(
+          edge.columns.map(
+            (column, i) =>
+              sql`child.${sql.identifier(column)}=owned_row.${sql.identifier(edge.referencedColumns[i]!)}`,
+          ),
+          sql` and `,
+        )})`,
+        );
       await db.execute(sql`savepoint retirement_table`);
       try {
         const count = await deleteBatches(table, leaves);
-        const remaining = await db.execute(sql`select 1 from public.${sql.identifier(name)} where ${retirementPredicate(table, orgId)} limit 1`, "objects");
+        const remaining = await db.execute(
+          sql`select 1 from public.${sql.identifier(name)} where ${retirementPredicate(table, orgId)} limit 1`,
+          "objects",
+        );
         await db.execute(sql`release savepoint retirement_table`);
         removed[name] = (BigInt(removed[name] ?? "0") + count).toString();
         if (!remaining.length) progress = true;
-        else { refused.push(name); if (count > 0n) progress = true; }
+        else {
+          refused.push(name);
+          if (count > 0n) progress = true;
+        }
       } catch (error) {
         await db.execute(sql`rollback to savepoint retirement_table`);
         await db.execute(sql`release savepoint retirement_table`);
@@ -190,11 +297,18 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
         refused.push(name);
       }
     }
-    if (!progress) throw new Error(`Retirement cannot remove native foreign-key cycles without changing protected rows: ${refused.join(", ")}. Target transaction rolled back; preserve its quarantine and recovery evidence.`);
+    if (!progress)
+      throw new Error(
+        `Retirement cannot remove native foreign-key cycles without changing protected rows: ${refused.join(", ")}. Target transaction rolled back; preserve its quarantine and recovery evidence.`,
+      );
     pending = refused;
   }
-  const result = await db.execute(sql`delete from public.orgs where id=${orgId}::uuid returning id`, "objects");
-  if (result.length !== 1) throw new Error("Retirement did not delete exactly its owned organization");
+  const result = await db.execute(
+    sql`delete from public.orgs where id=${orgId}::uuid returning id`,
+    "objects",
+  );
+  if (result.length !== 1)
+    throw new Error("Retirement did not delete exactly its owned organization");
   removed.orgs = "1";
   // Deferred guards and FK constraints must succeed before the durable receipt.
   await db.execute(sql`set constraints all immediate`);
@@ -203,34 +317,43 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
 
 /** Foreign children outside the native ownership catalog require explicit
  * classification; orphaning an unknown global record is never a teardown step. */
-export async function unclassifiedRetirementChildren(tenantTables: readonly string[]): Promise<string[]> {
+export async function unclassifiedRetirementChildren(
+  tenantTables: readonly string[],
+): Promise<string[]> {
   // Marketplace snapshots are shared publisher authority, never auth children.
   // Their target-specific dependency is checked separately before quarantine.
   const known = [...tenantTables, "orgs", "app_listings", ...RETIREMENT_AUTH_TABLES];
-  const result = await db.execute<{ table: string }>(sql`
+  const result = await db.execute<{ table: string }>(
+    sql`
     select distinct child.relname as table from pg_class child join pg_namespace n on n.oid=child.relnamespace
     where n.nspname='public' and child.relkind in ('r','p') and not child.relname=any(${sql.param(known)}::text[])
       and (exists (select 1 from pg_constraint fk join pg_class parent on parent.oid=fk.confrelid
         where fk.contype='f' and fk.conrelid=child.oid and parent.relname=any(${sql.param(known)}::text[]))
       or exists (select 1 from pg_attribute a where a.attrelid=child.oid and not a.attisdropped
         and a.atttypid='uuid'::regtype and (a.attname='user_id' or a.attname like '%_user_id')))
-    order by child.relname`, "objects");
-  return result.map(row => row.table);
+    order by child.relname`,
+    "objects",
+  );
+  return result.map((row) => row.table);
 }
 
 /** Published and withdrawn marketplace snapshots retain their publisher.
  * Withdrawal preserves the shared row and therefore cannot authorize deletion. */
 export async function retirementSharedDependencies(orgIds: readonly string[]) {
-  return await db.execute<{ table: string; orgId: string; count: string }>(sql`
+  return await db.execute<{ table: string; orgId: string; count: string }>(
+    sql`
     select 'app_listings' as table,publisher_org_id as "orgId",count(*)::text as count
     from public.app_listings where publisher_org_id=any(${sql.param([...orgIds])}::uuid[])
-    group by publisher_org_id order by publisher_org_id`, "objects");
+    group by publisher_org_id order by publisher_org_id`,
+    "objects",
+  );
 }
 
 /** Queued or leased work must be resolved through its native lifecycle before
  * quarantine, so a mixed-tenant worker cannot repeatedly claim a fenced row. */
 export async function retirementOutstandingWork(orgIds: readonly string[]) {
-  const result = await db.execute<{ table: string; orgId: string; count: string }>(sql`
+  const result = await db.execute<{ table: string; orgId: string; count: string }>(
+    sql`
     select 'storage_cleanup_outbox' as table,org_id as "orgId",count(*)::text as count from storage_cleanup_outbox where org_id=any(${sql.param([...orgIds])}::uuid[]) group by org_id
     union all select 'scheduler_outbox',org_id,count(*)::text from scheduler_outbox where org_id=any(${sql.param([...orgIds])}::uuid[]) and (status in ('pending','running') or (status='failed' and terminal_failed_at is null)) group by org_id
     union all select 'report_delivery_outbox',org_id,count(*)::text from report_delivery_outbox where org_id=any(${sql.param([...orgIds])}::uuid[]) and (status in ('pending','enqueued','sending') or (status='failed' and terminal_failed_at is null)) group by org_id
@@ -243,6 +366,8 @@ export async function retirementOutstandingWork(orgIds: readonly string[]) {
     union all select 'payment_runs',org_id,count(*)::text from payment_runs where org_id=any(${sql.param([...orgIds])}::uuid[]) and status='processing' group by org_id
     union all select 'payment_files',org_id,count(*)::text from payment_files where org_id=any(${sql.param([...orgIds])}::uuid[]) and status in ('delivering','delivery_uncertain') group by org_id
     union all select 'sftp_import_schedules',org_id,count(*)::text from sftp_import_schedules where org_id=any(${sql.param([...orgIds])}::uuid[]) and run_claim_token is not null group by org_id
-    order by 1,2`, "objects");
+    order by 1,2`,
+    "objects",
+  );
   return result;
 }

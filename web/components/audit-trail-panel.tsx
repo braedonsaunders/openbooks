@@ -1,215 +1,302 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { ChevronRight, History, Search } from 'lucide-react'
-import { Badge, Button, EmptyState, Input, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { dateTime } from '../lib/format'
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { ChevronRight, History, Search } from "lucide-react";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Input,
+  Select,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@openbooks/ui";
+import { dateTime } from "../lib/format";
 import {
   AuditEventDrawer,
   auditEventDiffs,
   type AuditEvent,
-} from '../app/(app)/admin/audit/AuditEventDrawer'
-import { hasInspectableChanges } from '../lib/audit-diff'
-import { auditActionLabel } from '../lib/audit-action-label'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
-import type { AuditRecordTable } from '@/lib/audit-record-types'
+} from "../app/(app)/admin/audit/AuditEventDrawer";
+import { hasInspectableChanges } from "../lib/audit-diff";
+import { auditActionLabel } from "../lib/audit-action-label";
+import { InteractiveTableRow } from "@/components/interactive-table-row";
+import type { AuditRecordTable } from "@/lib/audit-record-types";
 
 type AuditRow = {
-  id: string
-  action: string
-  changes: Record<string, unknown>
-  at: string
-  actor_name: string | null
-  request_id: string | null
-}
+  id: string;
+  action: string;
+  changes: Record<string, unknown>;
+  at: string;
+  actor_name: string | null;
+  request_id: string | null;
+};
 
 type AuditResponse = {
-  rows: AuditRow[]
-  total: number
-  page: number
-  perPage: number
-  actions: string[]
-  recordType: string
-}
+  rows: AuditRow[];
+  total: number;
+  page: number;
+  perPage: number;
+  actions: string[];
+  recordType: string;
+};
 
-const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'destructive'> = {
-  insert: 'success',
-  update: 'secondary',
-  delete: 'destructive',
-  post: 'success',
-  void: 'warning',
-  approve: 'success',
-  reject: 'destructive',
-}
-const KNOWN_ACTIONS = new Set(['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'])
+const ACTION_VARIANT: Record<string, "success" | "secondary" | "warning" | "destructive"> = {
+  insert: "success",
+  update: "secondary",
+  delete: "destructive",
+  post: "success",
+  void: "warning",
+  approve: "success",
+  reject: "destructive",
+};
+const KNOWN_ACTIONS = new Set(["insert", "update", "delete", "post", "void", "approve", "reject"]);
 
 function changeCount(changes: Record<string, unknown>): number {
-  return auditEventDiffs(changes).length
+  return auditEventDiffs(changes).length;
 }
 
-export function AuditTrailPanel({ table, recordId, refreshKey }: { table: AuditRecordTable; recordId: string; refreshKey?: string | number | object }) {
-  const t = useTranslations('common.auditTrail')
-  const auditT = useTranslations('admin.audit')
-  const ta = useTranslations('admin.audit')
-  const [q, setQ] = useState('')
-  const [action, setAction] = useState('')
-  const [page, setPage] = useState(1)
-  const [data, setData] = useState<AuditResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+export function AuditTrailPanel({
+  table,
+  recordId,
+  refreshKey,
+}: {
+  table: AuditRecordTable;
+  recordId: string;
+  refreshKey?: string | number | object;
+}) {
+  const t = useTranslations("common.auditTrail");
+  const auditT = useTranslations("admin.audit");
+  const ta = useTranslations("admin.audit");
+  const [q, setQ] = useState("");
+  const [action, setAction] = useState("");
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<AuditResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   // 'unavailable' is the server's uniform no-access answer (404/403): the
   // caller's role cannot read this record's history, or the record is gone.
   // Retrying cannot change it, so it gets its own body without a retry.
-  const [error, setError] = useState<'failed' | 'unavailable' | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
-  const [selected, setSelected] = useState<AuditRow | null>(null)
+  const [error, setError] = useState<"failed" | "unavailable" | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [selected, setSelected] = useState<AuditRow | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({ table, id: recordId, page: String(page) })
-      if (q.trim()) params.set('q', q.trim())
-      if (action) params.set('action', action)
-      setLoading(true)
-      setError(null)
-      fetch(`/api/audit/record?${params}`, { signal: controller.signal })
-        .then(async (response) => {
-          if (response.status === 404 || response.status === 403) {
-            setData(null)
-            setError('unavailable')
-            return
-          }
-          if (!response.ok) throw new Error('load failed')
-          setData(await response.json() as AuditResponse)
-        })
-        .catch((error) => {
-          if (error instanceof DOMException && error.name === 'AbortError') return
-          setError('failed')
-        })
-        .finally(() => setLoading(false))
-    }, q ? 200 : 0)
+    const controller = new AbortController();
+    const timer = window.setTimeout(
+      () => {
+        const params = new URLSearchParams({ table, id: recordId, page: String(page) });
+        if (q.trim()) params.set("q", q.trim());
+        if (action) params.set("action", action);
+        setLoading(true);
+        setError(null);
+        fetch(`/api/audit/record?${params}`, { signal: controller.signal })
+          .then(async (response) => {
+            if (response.status === 404 || response.status === 403) {
+              setData(null);
+              setError("unavailable");
+              return;
+            }
+            if (!response.ok) throw new Error("load failed");
+            setData((await response.json()) as AuditResponse);
+          })
+          .catch((error) => {
+            if (error instanceof DOMException && error.name === "AbortError") return;
+            setError("failed");
+          })
+          .finally(() => setLoading(false));
+      },
+      q ? 200 : 0,
+    );
     return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [action, page, q, recordId, reloadKey, table, refreshKey])
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [action, page, q, recordId, reloadKey, table, refreshKey]);
 
-  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)))
-  const actionLabel = (value: string) => KNOWN_ACTIONS.has(value)
-    ? t(`actions.${value}` as never)
-    : auditActionLabel(auditT as never, value, (code) => code.replaceAll('_', ' '))
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)));
+  const actionLabel = (value: string) =>
+    KNOWN_ACTIONS.has(value)
+      ? t(`actions.${value}` as never)
+      : auditActionLabel(auditT as never, value, (code) => code.replaceAll("_", " "));
 
   return (
     <section className="space-y-3 p-1">
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
+            size={15}
+          />
           <Input
             value={q}
-            onChange={(event) => { setQ(event.target.value); setPage(1) }}
-            placeholder={t('searchPlaceholder')}
+            onChange={(event) => {
+              setQ(event.target.value);
+              setPage(1);
+            }}
+            placeholder={t("searchPlaceholder")}
             className="pl-8"
           />
         </div>
-        <Select value={action} onChange={(event) => { setAction(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={t('actionFilter')}>
-          <option value="">{t('allActions')}</option>
-          {(data?.actions ?? []).map((value) => <option key={value} value={value}>{actionLabel(value)}</option>)}
+        <Select
+          value={action}
+          onChange={(event) => {
+            setAction(event.target.value);
+            setPage(1);
+          }}
+          className="w-auto min-w-40"
+          aria-label={t("actionFilter")}
+        >
+          <option value="">{t("allActions")}</option>
+          {(data?.actions ?? []).map((value) => (
+            <option key={value} value={value}>
+              {actionLabel(value)}
+            </option>
+          ))}
         </Select>
       </div>
 
-      {error === 'unavailable' ? (
+      {error === "unavailable" ? (
         <EmptyState
           icon={<History />}
-          title={t('unavailableTitle')}
-          description={t('unavailableDescription')}
+          title={t("unavailableTitle")}
+          description={t("unavailableDescription")}
         />
       ) : error ? (
         <EmptyState
           icon={<History />}
-          title={t('loadFailedTitle')}
-          description={t('loadFailedDescription')}
-          action={<Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>{t('retry')}</Button>}
+          title={t("loadFailedTitle")}
+          description={t("loadFailedDescription")}
+          action={
+            <Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>
+              {t("retry")}
+            </Button>
+          }
         />
       ) : loading && !data ? (
-        <div className="space-y-2">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-12 w-full" />)}</div>
+        <div className="space-y-2">
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className="h-12 w-full" />
+          ))}
+        </div>
       ) : data?.rows.length ? (
         <>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('when')}</TableHead>
-                <TableHead>{t('actor')}</TableHead>
-                <TableHead>{t('action')}</TableHead>
-                <TableHead>{t('changes')}</TableHead>
+                <TableHead>{t("when")}</TableHead>
+                <TableHead>{t("actor")}</TableHead>
+                <TableHead>{t("action")}</TableHead>
+                <TableHead>{t("changes")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.rows.map((row) => {
-                const count = changeCount(row.changes)
+                const count = changeCount(row.changes);
                 // Events with no field data (e.g. the API-synthesized Created
                 // row) must not promise a detail view — the drawer still opens
                 // with who/when/context, but the cell says so honestly.
-                const inspectable = hasInspectableChanges(row.changes)
+                const inspectable = hasInspectableChanges(row.changes);
                 return (
                   <InteractiveTableRow
                     key={row.id}
                     role="button"
                     tabIndex={0}
-                    aria-label={ta('openEventAria', {
+                    aria-label={ta("openEventAria", {
                       action: actionLabel(row.action),
-                      recordType: data.recordType.replaceAll('_', ' '),
+                      recordType: data.recordType.replaceAll("_", " "),
                       when: dateTime(row.at),
                     })}
                     onClick={() => setSelected(row)}
                     onKeyDown={(event) => {
-                      if (event.key !== 'Enter' && event.key !== ' ') return
-                      event.preventDefault()
-                      setSelected(row)
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      setSelected(row);
                     }}
                     className="cursor-pointer outline-none hover:bg-teal-50/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-teal-950/20"
                   >
                     <TableCell className="whitespace-nowrap text-xs">{dateTime(row.at)}</TableCell>
-                    <TableCell>{row.actor_name ?? <span className="text-slate-400">{t('systemActor')}</span>}</TableCell>
-                    <TableCell><Badge variant={ACTION_VARIANT[row.action] ?? 'secondary'}>{actionLabel(row.action)}</Badge></TableCell>
+                    <TableCell>
+                      {row.actor_name ?? <span className="text-slate-400">{t("systemActor")}</span>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={ACTION_VARIANT[row.action] ?? "secondary"}>
+                        {actionLabel(row.action)}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="max-w-sm">
                       <span className="flex items-center justify-between gap-2 text-sm font-medium text-teal-700 dark:text-teal-300">
-                        <span className="truncate">{typeof row.changes.reason === 'string' && row.changes.reason.trim() ? row.changes.reason : count > 0 ? t('changeCount', { count }) : inspectable ? t('viewChanges') : t('noChanges')}</span>
+                        <span className="truncate">
+                          {typeof row.changes.reason === "string" && row.changes.reason.trim()
+                            ? row.changes.reason
+                            : count > 0
+                              ? t("changeCount", { count })
+                              : inspectable
+                                ? t("viewChanges")
+                                : t("noChanges")}
+                        </span>
                         <ChevronRight size={15} aria-hidden />
                       </span>
                     </TableCell>
                   </InteractiveTableRow>
-                )
+                );
               })}
             </TableBody>
           </Table>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('pageStatus', { page: data.page, pages, total: data.total })}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {t("pageStatus", { page: data.page, pages, total: data.total })}
+            </span>
             <div className="flex gap-1">
-              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>{t('previous')}</Button>
-              <Button variant="outline" size="sm" disabled={page >= pages || loading} onClick={() => setPage((value) => Math.min(pages, value + 1))}>{t('next')}</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                {t("previous")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= pages || loading}
+                onClick={() => setPage((value) => Math.min(pages, value + 1))}
+              >
+                {t("next")}
+              </Button>
             </div>
           </div>
         </>
       ) : (
-        <EmptyState icon={<History />} title={t('emptyTitle')} description={t('emptyDescription')} />
+        <EmptyState
+          icon={<History />}
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
+        />
       )}
       {selected && data ? (
         <AuditEventDrawer
           key={selected.id}
-          event={{
-            id: selected.id,
-            rowId: recordId,
-            at: selected.at,
-            actorName: selected.actor_name,
-            action: selected.action,
-            recordType: data.recordType,
-            requestId: selected.request_id,
-            changes: selected.changes,
-          } satisfies AuditEvent}
+          event={
+            {
+              id: selected.id,
+              rowId: recordId,
+              at: selected.at,
+              actorName: selected.actor_name,
+              action: selected.action,
+              recordType: data.recordType,
+              requestId: selected.request_id,
+              changes: selected.changes,
+            } satisfies AuditEvent
+          }
           onClose={() => setSelected(null)}
           stacked
         />
       ) : null}
     </section>
-  )
+  );
 }

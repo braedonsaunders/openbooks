@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CommerceError } from "../errors.ts";
-import { normalizeShopifyOrder, normalizeShopifyRefund, rateToPercent, shopMinorUnits } from "./orders.ts";
+import {
+  normalizeShopifyOrder,
+  normalizeShopifyRefund,
+  rateToPercent,
+  shopMinorUnits,
+} from "./orders.ts";
 
 /**
  * A realistic Shopify order: two taxed lines with a discount code on the
@@ -78,8 +83,23 @@ function shopifyOrderFixture(): Record<string, unknown> {
       },
     ],
     transactions: [
-      { id: 11, kind: "sale", status: "success", gateway: "shopify_payments", amount: "63.86", authorization: "auth-1" },
-      { id: 12, kind: "sale", status: "success", gateway: "gift_card", amount: "5.00", authorization: null, receipt: { gift_card_id: 777 } },
+      {
+        id: 11,
+        kind: "sale",
+        status: "success",
+        gateway: "shopify_payments",
+        amount: "63.86",
+        authorization: "auth-1",
+      },
+      {
+        id: 12,
+        kind: "sale",
+        status: "success",
+        gateway: "gift_card",
+        amount: "5.00",
+        authorization: null,
+        receipt: { gift_card_id: 777 },
+      },
     ],
   };
 }
@@ -152,7 +172,13 @@ test("shopify refund normalizes against its order", () => {
       currency: "USD",
       created_at: "2026-07-16T09:00:00-04:00",
       refund_line_items: [
-        { quantity: 1, subtotal: "25.00", total_tax: "2.16", restock: true, line_item: { id: 1, variant_id: 808, sku: "TEE-RED-M" } },
+        {
+          quantity: 1,
+          subtotal: "25.00",
+          total_tax: "2.16",
+          restock: true,
+          line_item: { id: 1, variant_id: 808, sku: "TEE-RED-M" },
+        },
       ],
       order_adjustments: [{ kind: "shipping_refund", amount: "0.00" }],
       transactions: [{ gateway: "shopify_payments", amount: "27.16" }],
@@ -177,27 +203,36 @@ test("shopify refund normalizes against its order", () => {
 
 test("Shopify orders refuse missing currency before pricing their amounts", () => {
   const payload = { ...shopifyOrderFixture(), currency: undefined };
-  assert.throws(() => normalizeShopifyOrder(payload), (error: unknown) => {
-    assert.ok(error instanceof CommerceError);
-    assert.match(error.message, /order.*450789469.*currency/i);
-    assert.match(error.remedy, /re-sync.*replay/i);
-    return true;
-  });
+  assert.throws(
+    () => normalizeShopifyOrder(payload),
+    (error: unknown) => {
+      assert.ok(error instanceof CommerceError);
+      assert.match(error.message, /order.*450789469.*currency/i);
+      assert.match(error.remedy, /re-sync.*replay/i);
+      return true;
+    },
+  );
 });
 
 test("Shopify refunds preserve the verified order currency and refuse missing or conflicting evidence", () => {
   const payload = { id: 9002, transactions: [{ gateway: "shopify_payments", amount: "1.23" }] };
   assert.equal(normalizeShopifyRefund(payload, "450789469", "BHD").totalMinor, 1230n);
-  assert.throws(() => normalizeShopifyRefund(payload, "450789469"), (error: unknown) => {
-    assert.ok(error instanceof CommerceError);
-    assert.match(error.message, /refund.*9002.*currency/i);
-    assert.match(error.remedy, /order.*replay/i);
-    return true;
-  });
-  assert.throws(() => normalizeShopifyRefund({ ...payload, currency: "USD" }, "450789469", "BHD"), (error: unknown) => {
-    assert.ok(error instanceof CommerceError);
-    assert.match(error.message, /USD.*BHD/);
-    assert.match(error.remedy, /order.*replay/i);
-    return true;
-  });
+  assert.throws(
+    () => normalizeShopifyRefund(payload, "450789469"),
+    (error: unknown) => {
+      assert.ok(error instanceof CommerceError);
+      assert.match(error.message, /refund.*9002.*currency/i);
+      assert.match(error.remedy, /order.*replay/i);
+      return true;
+    },
+  );
+  assert.throws(
+    () => normalizeShopifyRefund({ ...payload, currency: "USD" }, "450789469", "BHD"),
+    (error: unknown) => {
+      assert.ok(error instanceof CommerceError);
+      assert.match(error.message, /USD.*BHD/);
+      assert.match(error.remedy, /order.*replay/i);
+      return true;
+    },
+  );
 });

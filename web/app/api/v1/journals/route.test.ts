@@ -66,11 +66,13 @@ test("GET /api/v1/journals lists through the journals record type", async () => 
 test("POST /api/v1/journals creates through createApplicationJournal", async () => {
   routeState.created = [];
   const key = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
-  const response = await POST(new Request("http://openbooks.test/api/v1/journals", {
-    method: "POST",
-    headers: { "content-type": "application/json", "idempotency-key": key },
-    body: JSON.stringify({ memo: "opening", lines: [] }),
-  }));
+  const response = await POST(
+    new Request("http://openbooks.test/api/v1/journals", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": key },
+      body: JSON.stringify({ memo: "opening", lines: [] }),
+    }),
+  );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { id: key });
   assert.equal(routeState.created[0]?.idempotencyKey, key);
@@ -80,11 +82,14 @@ test("POST /api/v1/journals creates through createApplicationJournal", async () 
 test("POST /api/v1/journals refuses a non-UUID Idempotency-Key before the writer", async () => {
   routeState.created = [];
   await assert.rejects(
-    () => POST(new Request("http://openbooks.test/api/v1/journals", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": "not-a-uuid" },
-      body: "{}",
-    })),
+    () =>
+      POST(
+        new Request("http://openbooks.test/api/v1/journals", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": "not-a-uuid" },
+          body: "{}",
+        }),
+      ),
     /Idempotency-Key must be a UUID/,
   );
   assert.equal(routeState.created.length, 0);

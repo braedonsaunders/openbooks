@@ -11,9 +11,15 @@ import {
   type ImportBillableCharge,
   type SourceChargeLine,
 } from "./field-ticket-import.ts";
-import { fieldTicketSourceHeaderRowSha256, parseFieldTicketSourceHeaderTsv, type FieldTicketSourceHeaderRow } from "@openbooks/engine/projects/field-ticket-source-headers";
+import {
+  fieldTicketSourceHeaderRowSha256,
+  parseFieldTicketSourceHeaderTsv,
+  type FieldTicketSourceHeaderRow,
+} from "@openbooks/engine/projects/field-ticket-source-headers";
 
-const ticket = (overrides: Partial<FieldTicketSourceHeaderRow> = {}): FieldTicketSourceHeaderRow => ({
+const ticket = (
+  overrides: Partial<FieldTicketSourceHeaderRow> = {},
+): FieldTicketSourceHeaderRow => ({
   sourceId: "9",
   number: "FT-9",
   jobRef: "JOB-1",
@@ -41,10 +47,7 @@ test("the import target must be a UUID, naming what was received", () => {
 });
 
 test("a quote in the import target refuses at parse, never in SQL", () => {
-  assert.throws(
-    () => assertImportOrgId("x' OR '1'='1"),
-    /--org must be a UUID.*--org=<uuid>/,
-  );
+  assert.throws(() => assertImportOrgId("x' OR '1'='1"), /--org must be a UUID.*--org=<uuid>/);
 });
 
 test("header TSV parsing keeps the source identity columns", () => {
@@ -73,10 +76,7 @@ test("header TSV parsing imports both ticket crew roles in the extended format",
 });
 
 test("a replay requires an exact source-system and externalId match", () => {
-  assert.equal(
-    resolveTicketIdentity(ticket(), undefined, "test-source"),
-    "create",
-  );
+  assert.equal(resolveTicketIdentity(ticket(), undefined, "test-source"), "create");
   assert.equal(
     resolveTicketIdentity(
       ticket(),
@@ -126,37 +126,100 @@ test("partial source identities cannot become exact replays", () => {
 });
 
 test("identity plans hold unsourced records and incomplete metadata without claiming adoption", () => {
-  const held = classifyTicketIdentity({ticket: ticket(), sourceSystem: "test-source",
-    existing: {id: "doc", sourceSystem: null, sourceExternalId: null}});
+  const held = classifyTicketIdentity({
+    ticket: ticket(),
+    sourceSystem: "test-source",
+    existing: { id: "doc", sourceSystem: null, sourceExternalId: null },
+  });
   assert.equal(held.action, "admission_held");
   assert.equal(held.adoptionPerformed, false);
-  assert.deepEqual(held.reasons, ["native_ticket_source_lineage_missing", "governed_native_identity_certification_required"]);
-  assert.equal(classifyTicketIdentity({ticket: ticket(), sourceSystem: "test-source",
-    existing: {id: "doc", sourceSystem: null, sourceExternalId: null, hasSourceMetadata: true}}).action, "mismatch");
-  assert.equal(classifyTicketIdentity({ticket: ticket(), sourceSystem: "test-source", existing: undefined,
-    sourceIdentityConflict: true}).action, "mismatch");
-  assert.equal(classifyTicketIdentity({ticket: ticket(), sourceSystem: "test-source", existing: undefined,
-    unresolvedReferences: true}).action, "admission_held");
-  assert.equal(classifyTicketIdentity({ticket: ticket(), sourceSystem: "test-source",
-    existing: {id: "doc", sourceSystem: "test-source", sourceExternalId: "9", projectId: "project", subsidiaryId: "other-entity"},
-    expectedProjectId: "project", expectedSubsidiaryId: "entity"}).action, "mismatch");
-  assert.equal(classifyTicketIdentity({ticket: ticket(), sourceSystem: "test-source",
-    existing: {id: "doc", sourceSystem: "test-source", sourceExternalId: "9"}}).action, "exact_replay");
+  assert.deepEqual(held.reasons, [
+    "native_ticket_source_lineage_missing",
+    "governed_native_identity_certification_required",
+  ]);
+  assert.equal(
+    classifyTicketIdentity({
+      ticket: ticket(),
+      sourceSystem: "test-source",
+      existing: { id: "doc", sourceSystem: null, sourceExternalId: null, hasSourceMetadata: true },
+    }).action,
+    "mismatch",
+  );
+  assert.equal(
+    classifyTicketIdentity({
+      ticket: ticket(),
+      sourceSystem: "test-source",
+      existing: undefined,
+      sourceIdentityConflict: true,
+    }).action,
+    "mismatch",
+  );
+  assert.equal(
+    classifyTicketIdentity({
+      ticket: ticket(),
+      sourceSystem: "test-source",
+      existing: undefined,
+      unresolvedReferences: true,
+    }).action,
+    "admission_held",
+  );
+  assert.equal(
+    classifyTicketIdentity({
+      ticket: ticket(),
+      sourceSystem: "test-source",
+      existing: {
+        id: "doc",
+        sourceSystem: "test-source",
+        sourceExternalId: "9",
+        projectId: "project",
+        subsidiaryId: "other-entity",
+      },
+      expectedProjectId: "project",
+      expectedSubsidiaryId: "entity",
+    }).action,
+    "mismatch",
+  );
+  assert.equal(
+    classifyTicketIdentity({
+      ticket: ticket(),
+      sourceSystem: "test-source",
+      existing: { id: "doc", sourceSystem: "test-source", sourceExternalId: "9" },
+    }).action,
+    "exact_replay",
+  );
 });
 
 test("valid artifact hashes and an asserted number or amount match cannot authorize source binding", async () => {
   const attempt = {
-    orgId: "123e4567-e89b-12d3-a456-426614174000", sourceSystem: "test-source", tickets: [ticket()], apply: true,
-    sourceProof: {headersSha256: "a".repeat(64), chargesSha256: "b".repeat(64)},
-    identityBindings: [{sourceSystem: "test-source", sourceTicketId: "9", nativeDocumentId: "123e4567-e89b-12d3-a456-426614174001",
-      expectedUpdatedAt: "2026-10-14T12:00:00Z", subsidiaryId: "123e4567-e89b-12d3-a456-426614174002",
-      sourceRowSha256: fieldTicketSourceHeaderRowSha256(ticket()), reason: "Ticket number and aggregate amount match", nativeSubtotal: "95.0000"}],
+    orgId: "123e4567-e89b-12d3-a456-426614174000",
+    sourceSystem: "test-source",
+    tickets: [ticket()],
+    apply: true,
+    sourceProof: { headersSha256: "a".repeat(64), chargesSha256: "b".repeat(64) },
+    identityBindings: [
+      {
+        sourceSystem: "test-source",
+        sourceTicketId: "9",
+        nativeDocumentId: "123e4567-e89b-12d3-a456-426614174001",
+        expectedUpdatedAt: "2026-10-14T12:00:00Z",
+        subsidiaryId: "123e4567-e89b-12d3-a456-426614174002",
+        sourceRowSha256: fieldTicketSourceHeaderRowSha256(ticket()),
+        reason: "Ticket number and aggregate amount match",
+        nativeSubtotal: "95.0000",
+      },
+    ],
   };
-  await assert.rejects(() => importFieldTickets(attempt), /source identity admission is held.*identity-binding manifests are not supported/);
+  await assert.rejects(
+    () => importFieldTickets(attempt),
+    /source identity admission is held.*identity-binding manifests are not supported/,
+  );
 });
 
 test("source row provenance distinguishes an omitted superintendent from an explicit removal", () => {
-  assert.notEqual(fieldTicketSourceHeaderRowSha256(ticket({superintendentRef: undefined})), fieldTicketSourceHeaderRowSha256(ticket({superintendentRef: null})));
+  assert.notEqual(
+    fieldTicketSourceHeaderRowSha256(ticket({ superintendentRef: undefined })),
+    fieldTicketSourceHeaderRowSha256(ticket({ superintendentRef: null })),
+  );
 });
 
 const charge = (overrides: Partial<ImportBillableCharge> = {}): ImportBillableCharge => ({
@@ -177,26 +240,78 @@ test("billable-timesheet JSON keeps source money and quantity as exact decimals"
     { ...charge(), amount: "95.0000", quantity: "1.00000000", unitPrice: "95.00000000" },
   ]);
   assert.throws(() => parseBillableChargesJson("{}"), /must contain a JSON array/);
-  assert.throws(() => parseBillableChargesJson(JSON.stringify([charge(), charge()])), /appears more than once/);
-  assert.throws(() => parseBillableChargesJson(JSON.stringify([charge({ quantity: "0" })])), /non-positive quantity/);
-  assert.throws(() => parseBillableChargesJson(JSON.stringify([charge({ amount: "1.00001" })])), /loses precision beyond 4 decimal places/);
+  assert.throws(
+    () => parseBillableChargesJson(JSON.stringify([charge(), charge()])),
+    /appears more than once/,
+  );
+  assert.throws(
+    () => parseBillableChargesJson(JSON.stringify([charge({ quantity: "0" })])),
+    /non-positive quantity/,
+  );
+  assert.throws(
+    () => parseBillableChargesJson(JSON.stringify([charge({ amount: "1.00001" })])),
+    /loses precision beyond 4 decimal places/,
+  );
 });
 
 test("billable-timesheet source rows link to exact sales-order lines and preserve ticket lineage", () => {
   const charges = [
-    charge({ sourceId: "100", sourceDocumentRef: "562976", amount: "285.00", quantity: "1.00", unitPrice: "285.00", occurredOn: "2026-04-04" }),
-    charge({ sourceId: "101", sourceDocumentRef: "562976", amount: "285.00", quantity: "1.00", unitPrice: "285.00", occurredOn: "2026-04-04" }),
+    charge({
+      sourceId: "100",
+      sourceDocumentRef: "562976",
+      amount: "285.00",
+      quantity: "1.00",
+      unitPrice: "285.00",
+      occurredOn: "2026-04-04",
+    }),
+    charge({
+      sourceId: "101",
+      sourceDocumentRef: "562976",
+      amount: "285.00",
+      quantity: "1.00",
+      unitPrice: "285.00",
+      occurredOn: "2026-04-04",
+    }),
   ];
   const nativeLines: SourceChargeLine[] = [
-    { id: "line-a", sourceDocumentRef: "562976", itemRef: "2461", amount: "285.0000", quantity: "1.00000000", occurredOn: "2026-04-04", fieldTicketId: null },
-    { id: "line-b", sourceDocumentRef: "562976", itemRef: "2461", amount: "285.0000", quantity: "1.00000000", occurredOn: "2026-04-04", fieldTicketId: "ticket-a" },
+    {
+      id: "line-a",
+      sourceDocumentRef: "562976",
+      itemRef: "2461",
+      amount: "285.0000",
+      quantity: "1.00000000",
+      occurredOn: "2026-04-04",
+      fieldTicketId: null,
+    },
+    {
+      id: "line-b",
+      sourceDocumentRef: "562976",
+      itemRef: "2461",
+      amount: "285.0000",
+      quantity: "1.00000000",
+      occurredOn: "2026-04-04",
+      fieldTicketId: "ticket-a",
+    },
   ];
   assert.deepEqual(
-    matchBillableChargeLines(charges, nativeLines, new Map([["26684", "ticket-a"]])).map((link) => [link.sourceTransactionId, link.nativeLineId, link.previousTicketDocumentId]),
-    [["100", "line-a", null], ["101", "line-b", "ticket-a"]],
+    matchBillableChargeLines(charges, nativeLines, new Map([["26684", "ticket-a"]])).map((link) => [
+      link.sourceTransactionId,
+      link.nativeLineId,
+      link.previousTicketDocumentId,
+    ]),
+    [
+      ["100", "line-a", null],
+      ["101", "line-b", "ticket-a"],
+    ],
   );
-  assert.deepEqual(matchBillableChargeLines([...charges].reverse(), [...nativeLines].reverse(), new Map([["26684", "ticket-a"]])),
-    matchBillableChargeLines(charges, nativeLines, new Map([["26684", "ticket-a"]])));
+  assert.deepEqual(
+    matchBillableChargeLines(
+      [...charges].reverse(),
+      [...nativeLines].reverse(),
+      new Map([["26684", "ticket-a"]]),
+    ),
+    matchBillableChargeLines(charges, nativeLines, new Map([["26684", "ticket-a"]])),
+  );
 });
 
 test("billable-timesheet linking refuses source ambiguity and missing native order lines", () => {
@@ -204,16 +319,61 @@ test("billable-timesheet linking refuses source ambiguity and missing native ord
     charge({ sourceId: "100", sourceDocumentRef: "SO1" }),
     charge({ sourceId: "101", sourceDocumentRef: "SO1", ticketRef: "26685" }),
   ];
-  const line: SourceChargeLine = { id: "line-a", sourceDocumentRef: "SO1", itemRef: "2461", amount: "95.0000", quantity: "1.00000000", occurredOn: "2026-08-22", fieldTicketId: null };
-  assert.throws(() => matchBillableChargeLines(rows, [line, { ...line, id: "line-b" }], new Map([["26684", "ticket-a"], ["26685", "ticket-b"]])), /multiple tickets/);
-  assert.throws(() => matchBillableChargeLines([charge({ sourceDocumentRef: "SO1" })], [], new Map([["26684", "ticket-a"]])), /counts differ/);
-  assert.throws(() => matchBillableChargeLines([charge({ sourceDocumentRef: "SO1" })], [line], new Map()), /no imported native field ticket/);
-  assert.throws(() => matchBillableChargeLines([charge({ sourceDocumentRef: "SO1" })], [{ ...line, fieldTicketId: "other-ticket" }], new Map([["26684", "ticket-a"]])), /already linked to a different field ticket/);
+  const line: SourceChargeLine = {
+    id: "line-a",
+    sourceDocumentRef: "SO1",
+    itemRef: "2461",
+    amount: "95.0000",
+    quantity: "1.00000000",
+    occurredOn: "2026-08-22",
+    fieldTicketId: null,
+  };
+  assert.throws(
+    () =>
+      matchBillableChargeLines(
+        rows,
+        [line, { ...line, id: "line-b" }],
+        new Map([
+          ["26684", "ticket-a"],
+          ["26685", "ticket-b"],
+        ]),
+      ),
+    /multiple tickets/,
+  );
+  assert.throws(
+    () =>
+      matchBillableChargeLines(
+        [charge({ sourceDocumentRef: "SO1" })],
+        [],
+        new Map([["26684", "ticket-a"]]),
+      ),
+    /counts differ/,
+  );
+  assert.throws(
+    () => matchBillableChargeLines([charge({ sourceDocumentRef: "SO1" })], [line], new Map()),
+    /no imported native field ticket/,
+  );
+  assert.throws(
+    () =>
+      matchBillableChargeLines(
+        [charge({ sourceDocumentRef: "SO1" })],
+        [{ ...line, fieldTicketId: "other-ticket" }],
+        new Map([["26684", "ticket-a"]]),
+      ),
+    /already linked to a different field ticket/,
+  );
 });
 
 test("billable source input rejects negative sub-money-scale values and impossible work dates", () => {
-  for (const invalid of [charge({quantity: "-0.00000001"}), charge({unitPrice: "-0.00000001"}), charge({occurredOn: "2026-02-30"})]) {
-    assert.throws(() => parseBillableChargesJson(JSON.stringify([invalid])), /non-positive quantity|invalid work date/);
+  for (const invalid of [
+    charge({ quantity: "-0.00000001" }),
+    charge({ unitPrice: "-0.00000001" }),
+    charge({ occurredOn: "2026-02-30" }),
+  ]) {
+    assert.throws(
+      () => parseBillableChargesJson(JSON.stringify([invalid])),
+      /non-positive quantity|invalid work date/,
+    );
   }
 });
 

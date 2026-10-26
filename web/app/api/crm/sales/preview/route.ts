@@ -17,8 +17,7 @@ export const POST = defineRoute({
   maxBodyBytes: 8 * 1024 * 1024,
   handler: async ({ authz, body }) => {
     if (
-      (hasGeographicCoverage(body.geography) ||
-        body.geography.excludes.length) &&
+      (hasGeographicCoverage(body.geography) || body.geography.excludes.length) &&
       !(await isFeatureEnabled(authz.user.orgId, "geographicTerritories"))
     )
       throw new SalesError(

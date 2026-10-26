@@ -15,14 +15,21 @@ type RentRollRow = {
   lease: LeaseRow | null;
 };
 
-export function monthlyCharges(data: Pick<PropertyWorkspace, "charges">, lease: LeaseRow | null, today: string): string {
+export function monthlyCharges(
+  data: Pick<PropertyWorkspace, "charges">,
+  lease: LeaseRow | null,
+  today: string,
+): string {
   if (!lease) return "0";
-  const current = data.charges.filter((charge) =>
-    charge.leaseId === lease.id && charge.frequency === "monthly" &&
-    charge.effectiveFrom <= today && (!charge.effectiveTo || charge.effectiveTo >= today),
+  const current = data.charges.filter(
+    (charge) =>
+      charge.leaseId === lease.id &&
+      charge.frequency === "monthly" &&
+      charge.effectiveFrom <= today &&
+      (!charge.effectiveTo || charge.effectiveTo >= today),
   );
   if (current.length) return decimalSum(current.map((charge) => charge.amount));
-  return lease.status === "draft" ? lease.baseRent ?? "0" : "0";
+  return lease.status === "draft" ? (lease.baseRent ?? "0") : "0";
 }
 
 export function pastDue(
@@ -40,15 +47,25 @@ export function pastDue(
   if (data.overdueByLease) return "0";
   const invoices = new Map<string, string>();
   for (const line of data.schedules) {
-    if (line.leaseId === lease.id && line.invoiceDocumentId &&
-        line.invoiceStatus === "posted" && line.invoiceDueOn && line.invoiceDueOn < today) {
+    if (
+      line.leaseId === lease.id &&
+      line.invoiceDocumentId &&
+      line.invoiceStatus === "posted" &&
+      line.invoiceDueOn &&
+      line.invoiceDueOn < today
+    ) {
       invoices.set(line.invoiceDocumentId, line.invoiceOpenBalance ?? "0");
     }
   }
   return decimalSum([...invoices.values()]);
 }
 
-export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
+export function RentRollTable({
+  data,
+  money,
+  onOpenUnit,
+  onOpenLease,
+}: {
   data: PropertyWorkspace;
   money: Money;
   onOpenUnit: (id: string) => void;
@@ -69,12 +86,14 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
       draftByUnit.set(lease.unitId, lease);
   }
   const rows: RentRollRow[] = [
-    ...operatingLeases.filter((lease) => lease.unitId).map((lease) => ({
-      key: `lease:${lease.id}`,
-      property: data.properties.find((item) => item.id === lease.propertyId),
-      unit: data.units.find((item) => item.id === lease.unitId) ?? null,
-      lease,
-    })),
+    ...operatingLeases
+      .filter((lease) => lease.unitId)
+      .map((lease) => ({
+        key: `lease:${lease.id}`,
+        property: data.properties.find((item) => item.id === lease.propertyId),
+        unit: data.units.find((item) => item.id === lease.unitId) ?? null,
+        lease,
+      })),
     ...data.units
       .filter((unit) => !occupiedUnitIds.has(unit.id))
       .map((unit) => ({
@@ -84,9 +103,7 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
         lease: draftByUnit.get(unit.id) ?? null,
       })),
     ...data.leases
-      .filter((lease) =>
-        !lease.unitId && ["active", "notice", "draft"].includes(lease.status),
-      )
+      .filter((lease) => !lease.unitId && ["active", "notice", "draft"].includes(lease.status))
       .map((lease) => ({
         key: `lease:${lease.id}`,
         property: data.properties.find((item) => item.id === lease.propertyId),
@@ -110,8 +127,14 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
     return true;
   });
   const searchText = (row: RentRollRow) =>
-    [row.property?.name, row.property?.code, row.unit?.code, row.unit?.name,
-      row.lease?.leaseNumber, row.lease?.tenantName]
+    [
+      row.property?.name,
+      row.property?.code,
+      row.unit?.code,
+      row.unit?.name,
+      row.lease?.leaseNumber,
+      row.lease?.tenantName,
+    ]
       .map((value) => String(value ?? ""))
       .join(" ");
   const open = (row: RentRollRow) => {
@@ -127,19 +150,34 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
         searchable
         onRowClick={open}
         rowRole="button"
-        empty={<Empty title="No rent-roll rows match" detail="Adjust the search, property, or status filters." />}
-        toolbarAfter={(
+        empty={
+          <Empty
+            title="No rent-roll rows match"
+            detail="Adjust the search, property, or status filters."
+          />
+        }
+        toolbarAfter={
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Property">
-              <Select className="sm:w-56" value={propertyId} onChange={(event) => setPropertyId(event.target.value)}>
+              <Select
+                className="sm:w-56"
+                value={propertyId}
+                onChange={(event) => setPropertyId(event.target.value)}
+              >
                 <option value="all">All properties</option>
                 {data.properties.map((property) => (
-                  <option key={property.id} value={property.id}>{property.name}</option>
+                  <option key={property.id} value={property.id}>
+                    {property.name}
+                  </option>
                 ))}
               </Select>
             </Field>
             <Field label="Status">
-              <Select className="sm:w-44" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <Select
+                className="sm:w-44"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+              >
                 <option value="all">All statuses</option>
                 <option value="active">Active</option>
                 <option value="notice">Notice</option>
@@ -148,11 +186,9 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
                 <option value="offline">Offline</option>
               </Select>
             </Field>
-            <p className="pb-2 text-xs text-slate-500">
-              Historical leases stay on each property
-            </p>
+            <p className="pb-2 text-xs text-slate-500">Historical leases stay on each property</p>
           </div>
-        )}
+        }
         columns={[
           {
             key: "property",
@@ -161,7 +197,8 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
               <>
                 <div className="font-medium">{row.property?.name ?? "—"}</div>
                 <div className="text-xs text-slate-500">
-                  {row.unit?.code ?? "Whole property"}{row.unit?.name ? ` · ${row.unit.name}` : ""}
+                  {row.unit?.code ?? "Whole property"}
+                  {row.unit?.name ? ` · ${row.unit.name}` : ""}
                 </div>
               </>
             ),
@@ -173,7 +210,9 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
             cell: (row) => (
               <>
                 <div>{row.lease?.tenantName ?? "No tenant"}</div>
-                <div className="font-mono text-xs text-slate-500">{row.lease?.leaseNumber ?? "Available"}</div>
+                <div className="font-mono text-xs text-slate-500">
+                  {row.lease?.leaseNumber ?? "Available"}
+                </div>
               </>
             ),
             search: searchText,
@@ -192,13 +231,19 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
             key: "charges",
             header: "Monthly charges",
             align: "right",
-            cell: (row) => row.lease ? money(monthlyCharges(data, row.lease, today), { currency: row.lease.currency }) : "—",
+            cell: (row) =>
+              row.lease
+                ? money(monthlyCharges(data, row.lease, today), { currency: row.lease.currency })
+                : "—",
           },
           {
             key: "deposit",
             header: "Deposit held",
             align: "right",
-            cell: (row) => row.lease ? money(row.lease.depositBalance ?? 0, { currency: row.lease.currency }) : "—",
+            cell: (row) =>
+              row.lease
+                ? money(row.lease.depositBalance ?? 0, { currency: row.lease.currency })
+                : "—",
           },
           {
             key: "pastDue",
@@ -207,7 +252,9 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
             cell: (row) => {
               const overdueAmount = pastDue(data, row.lease, today);
               return (
-                <span className={cn(decimalCmp(overdueAmount, "0") > 0 && "font-medium text-red-600")}>
+                <span
+                  className={cn(decimalCmp(overdueAmount, "0") > 0 && "font-medium text-red-600")}
+                >
                   {row.lease ? money(overdueAmount, { currency: row.lease.currency }) : "—"}
                 </span>
               );
@@ -216,11 +263,14 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
           {
             key: "billing",
             header: "Billing",
-            cell: (row) => row.lease ? (
-              <Badge variant={row.lease.autoInvoice ? "success" : "secondary"}>
-                {row.lease.autoInvoice ? "Automatic" : "Manual"}
-              </Badge>
-            ) : "—",
+            cell: (row) =>
+              row.lease ? (
+                <Badge variant={row.lease.autoInvoice ? "success" : "secondary"}>
+                  {row.lease.autoInvoice ? "Automatic" : "Manual"}
+                </Badge>
+              ) : (
+                "—"
+              ),
           },
         ]}
       />

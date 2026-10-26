@@ -35,10 +35,16 @@ import {
 /* ------------------------------------------------------------------ */
 
 const CA_ENTITY = {
-  id: "sub-ca", name: "Acme Canada Ltd", country: "CA", baseCurrency: "CAD",
+  id: "sub-ca",
+  name: "Acme Canada Ltd",
+  country: "CA",
+  baseCurrency: "CAD",
 };
 const US_ENTITY = {
-  id: "sub-us", name: "Acme US Inc", country: "US", baseCurrency: "USD",
+  id: "sub-us",
+  name: "Acme US Inc",
+  country: "US",
+  baseCurrency: "USD",
 };
 
 const caRun = (): PayrollRunContext =>
@@ -60,21 +66,25 @@ test("an entity whose functional currency is not its pack's statutory currency i
   // argument. A USD-denominated Canadian run files USD numbers on a CRA
   // return, and every GL leg balances perfectly while doing it.
   assert.throws(
-    () => resolvePayrollRunContext({
-      payDate: "2026-07-21",
-      subsidiary: { ...CA_ENTITY, baseCurrency: "USD" },
-    }),
+    () =>
+      resolvePayrollRunContext({
+        payDate: "2026-07-21",
+        subsidiary: { ...CA_ENTITY, baseCurrency: "USD" },
+      }),
     (error: unknown) =>
-      error instanceof PayrollJurisdictionError
-      && /statutory engine computes in CAD.*functional currency is USD/s.test(error.message),
+      error instanceof PayrollJurisdictionError &&
+      /statutory engine computes in CAD.*functional currency is USD/s.test(error.message),
   );
 });
 
 test("a run document denominated differently from its own entity is refused", () => {
   assert.throws(
-    () => resolvePayrollRunContext({
-      payDate: "2026-07-21", subsidiary: CA_ENTITY, runCurrency: "USD",
-    }),
+    () =>
+      resolvePayrollRunContext({
+        payDate: "2026-07-21",
+        subsidiary: CA_ENTITY,
+        runCurrency: "USD",
+      }),
     /denominated in USD but its Acme Canada Ltd entity's functional currency is CAD/,
   );
 });
@@ -84,15 +94,19 @@ test("an entity in a country with no payroll pack is refused, not defaulted to C
   // the country packs were registered (and IT's registration holds the same
   // risk for any other real code). The invariant is about an UNREGISTERED
   // country, so it needs a code the registry does not hold.
-  assert.ok(!("XX" in PAYROLL_COUNTRY_PACKS), "XX must stay unregistered for this test to mean anything");
+  assert.ok(
+    !("XX" in PAYROLL_COUNTRY_PACKS),
+    "XX must stay unregistered for this test to mean anything",
+  );
   assert.throws(
-    () => resolvePayrollRunContext({
-      payDate: "2026-07-21",
-      subsidiary: { id: "sub-xx", name: "Acme XX Ltd", country: "XX", baseCurrency: "GBP" },
-    }),
+    () =>
+      resolvePayrollRunContext({
+        payDate: "2026-07-21",
+        subsidiary: { id: "sub-xx", name: "Acme XX Ltd", country: "XX", baseCurrency: "GBP" },
+      }),
     (error: unknown) =>
-      error instanceof PayrollJurisdictionError
-      && /Acme XX Ltd.*registered in XX.*no payroll country pack for XX/s.test(error.message),
+      error instanceof PayrollJurisdictionError &&
+      /Acme XX Ltd.*registered in XX.*no payroll country pack for XX/s.test(error.message),
   );
 });
 
@@ -108,17 +122,19 @@ test("a CA-profile employee paid by a US entity is REFUSED, never silently withh
   // Ontario income tax withheld from an employee of a US legal entity, filed
   // under a CRA program account, in the wrong currency.
   assert.throws(
-    () => resolveEmployeePayrollContext({
-      run: usRun(),
-      employee: { partyId: "e1", name: "Scoped Sam", country: "CA", region: "ON" },
-    }),
+    () =>
+      resolveEmployeePayrollContext({
+        run: usRun(),
+        employee: { partyId: "e1", name: "Scoped Sam", country: "CA", region: "ON" },
+      }),
     (error: unknown) =>
-      error instanceof PayrollJurisdictionError
+      error instanceof PayrollJurisdictionError &&
       // The name rides the caller's per-employee channel (rendered as
       // "name: message"), so the message itself must not repeat it.
-      && !/Scoped Sam/.test(error.message)
-      && /on the CA country pack, but this run pays from Acme US Inc \(US legal entity\)/
-        .test(error.message),
+      !/Scoped Sam/.test(error.message) &&
+      /on the CA country pack, but this run pays from Acme US Inc \(US legal entity\)/.test(
+        error.message,
+      ),
   );
 });
 
@@ -126,9 +142,15 @@ test("a correctly configured US employee of a US entity resolves cleanly", () =>
   const resolved = resolveEmployeePayrollContext({
     run: usRun(),
     employee: {
-      partyId: "e1", name: "Scoped Sam", country: "US", region: "TX",
-      subsidiaryId: "sub-us", subsidiaryCountry: "US",
-      filingAccountId: "fa-1", filingAccountCountry: "US", filingAccountNumber: "12-3456789",
+      partyId: "e1",
+      name: "Scoped Sam",
+      country: "US",
+      region: "TX",
+      subsidiaryId: "sub-us",
+      subsidiaryCountry: "US",
+      filingAccountId: "fa-1",
+      filingAccountCountry: "US",
+      filingAccountNumber: "12-3456789",
     },
   });
   assert.equal(resolved.country, "US");
@@ -142,27 +164,37 @@ test("an employee of a different legal entity than the run pays from is refused"
   // An ORG-WIDE pay schedule pays across subsidiaries. That is how a US-entity
   // employee ended up on a Canadian run with nothing complaining.
   assert.throws(
-    () => resolveEmployeePayrollContext({
-      run: caRun(),
-      employee: {
-        partyId: "e2", name: "Cross Chris", country: "CA", region: "ON",
-        subsidiaryId: "sub-us", subsidiaryCountry: "US",
-      },
-    }),
+    () =>
+      resolveEmployeePayrollContext({
+        run: caRun(),
+        employee: {
+          partyId: "e2",
+          name: "Cross Chris",
+          country: "CA",
+          region: "ON",
+          subsidiaryId: "sub-us",
+          subsidiaryCountry: "US",
+        },
+      }),
     /legal entity is in US but this run pays from Acme Canada Ltd \(CA\)/,
   );
 });
 
 test("a CRA program account on a US employee is refused — a filing account is a tax authority", () => {
   assert.throws(
-    () => resolveEmployeePayrollContext({
-      run: usRun(),
-      employee: {
-        partyId: "e3", name: "Misfiled Morgan", country: "US", region: "TX",
-        filingAccountId: "fa-ca", filingAccountCountry: "CA",
-        filingAccountNumber: "999999999RP0001",
-      },
-    }),
+    () =>
+      resolveEmployeePayrollContext({
+        run: usRun(),
+        employee: {
+          partyId: "e3",
+          name: "Misfiled Morgan",
+          country: "US",
+          region: "TX",
+          filingAccountId: "fa-ca",
+          filingAccountCountry: "CA",
+          filingAccountNumber: "999999999RP0001",
+        },
+      }),
     /999999999RP0001 files in CA — this run files in US/,
   );
 });
@@ -174,9 +206,15 @@ test("every broken link in the chain is reported at once, not one refusal per at
       employee: {
         // The region is checked against the employee's OWN declared country —
         // 'TX' is not a province, so all four links break at once.
-        partyId: "e4", name: "Tangled Terry", country: "CA", region: "TX",
-        subsidiaryId: "sub-ca", subsidiaryCountry: "CA",
-        filingAccountId: "fa-ca", filingAccountCountry: "CA", filingAccountNumber: "RP0001",
+        partyId: "e4",
+        name: "Tangled Terry",
+        country: "CA",
+        region: "TX",
+        subsidiaryId: "sub-ca",
+        subsidiaryCountry: "CA",
+        filingAccountId: "fa-ca",
+        filingAccountCountry: "CA",
+        filingAccountNumber: "RP0001",
       },
     });
     assert.fail("expected a refusal");
@@ -206,7 +244,22 @@ test("Quebec is SUPPORTED by the CA pack — TP-1015 and the RL-1 both exist now
 });
 
 test("every T4127 province is supported, including QC and ZZ", () => {
-  for (const province of ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT", "ZZ"]) {
+  for (const province of [
+    "AB",
+    "BC",
+    "MB",
+    "NB",
+    "NL",
+    "NS",
+    "NT",
+    "NU",
+    "ON",
+    "PE",
+    "QC",
+    "SK",
+    "YT",
+    "ZZ",
+  ]) {
     assert.doesNotThrow(() => assertPayrollRegionSupported("CA", province), province);
   }
 });
@@ -250,7 +303,8 @@ test("the US pack supports every withholding jurisdiction, and an unknown one di
   // codebase could tell. Derived from the engine registry now, so the two
   // cannot disagree.
   assert.equal(
-    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 51,
+    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length,
+    51,
     "forty-two jurisdictions with an engine, nine with no wage income tax",
   );
 });
@@ -285,7 +339,10 @@ test("both current packs declare a calendar tax year — as a declaration, not a
 
 test("the tax-year mechanism handles a non-calendar year, so the declaration is real", () => {
   const hmrc: PayrollTaxYearDefinition = {
-    basis: "fiscal", startMonth: 4, startDay: 6, namedBy: "opening_year",
+    basis: "fiscal",
+    startMonth: 4,
+    startDay: 6,
+    namedBy: "opening_year",
   };
   assert.equal(taxYearFor(hmrc, "2026-04-05"), 2025);
   assert.equal(taxYearFor(hmrc, "2026-04-06"), 2026);
@@ -294,7 +351,10 @@ test("the tax-year mechanism handles a non-calendar year, so the declaration is 
   assert.throws(() => taxYearFor(hmrc, "2026-02-31"), /invalid pay date/);
 
   const ato: PayrollTaxYearDefinition = {
-    basis: "fiscal", startMonth: 7, startDay: 1, namedBy: "closing_year",
+    basis: "fiscal",
+    startMonth: 7,
+    startDay: 1,
+    namedBy: "closing_year",
   };
   assert.equal(taxYearFor(ato, "2026-06-30"), 2026);
   assert.equal(taxYearFor(ato, "2026-07-01"), 2027);
@@ -343,42 +403,75 @@ test("a single-province employee is capped exactly as before", () => {
 /* ------------------------------------------------------------------ */
 
 const TRANSMITTER = {
-  bn: "999999999RP0001", transmitterNumber: "MM555555", name: "Acme Ltd",
-  contactName: "Pat Payroll", contactEmail: "pat@acme.test", contactPhone: "5555550100",
+  bn: "999999999RP0001",
+  transmitterNumber: "MM555555",
+  name: "Acme Ltd",
+  contactName: "Pat Payroll",
+  contactEmail: "pat@acme.test",
+  contactPhone: "5555550100",
 };
 
 const slip = (over: Partial<T4Slip> = {}): T4Slip & { sin: string } => ({
-  employeePartyId: "e1", employeeName: "Jean Tremblay", province: "ON", isQuebec: false,
+  employeePartyId: "e1",
+  employeeName: "Jean Tremblay",
+  province: "ON",
+  isQuebec: false,
   filingAccountId: null,
-  box14EmploymentIncome: "50000", box16Cpp: "3500", box16aCpp2: "200", box18Ei: "900",
-  box22IncomeTax: "8000", box24EiInsurable: "50000", box26CppPensionable: "50000",
-  box44UnionDues: "0", box55Qpip: "0", box56QpipInsurable: "0", stubCount: 26, employerCpp: "3500", employerCpp2: "0", employerEi: "1260",
+  box14EmploymentIncome: "50000",
+  box16Cpp: "3500",
+  box16aCpp2: "200",
+  box18Ei: "900",
+  box22IncomeTax: "8000",
+  box24EiInsurable: "50000",
+  box26CppPensionable: "50000",
+  box44UnionDues: "0",
+  box55Qpip: "0",
+  box56QpipInsurable: "0",
+  stubCount: 26,
+  employerCpp: "3500",
+  employerCpp2: "0",
+  employerEi: "1260",
   sin: "046454286",
   ...over,
 });
 
-const t4 = (slips: (T4Slip & { sin: string })[]): string => renderT4Xml({
-  orgId: "11111111-2222-3333-4444-555555555555",
-  taxYear: 2026,
-  transmitter: TRANSMITTER,
-  returns: [{
-    filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
-    slips,
-    summary: {
-      slips: slips.length, employmentIncome: "50000", employeeCpp: "3500", employeeCpp2: "200",
-      employerCpp: "3500", employerCpp2: "0", employeeEi: "900", employerEi: "1260", incomeTax: "8000",
-      remitted: "0",
-    },
-  }],
-});
+const t4 = (slips: (T4Slip & { sin: string })[]): string =>
+  renderT4Xml({
+    orgId: "11111111-2222-3333-4444-555555555555",
+    taxYear: 2026,
+    transmitter: TRANSMITTER,
+    returns: [
+      {
+        filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
+        slips,
+        summary: {
+          slips: slips.length,
+          employmentIncome: "50000",
+          employeeCpp: "3500",
+          employeeCpp2: "200",
+          employerCpp: "3500",
+          employerCpp2: "0",
+          employeeEi: "900",
+          employerEi: "1260",
+          incomeTax: "8000",
+          remitted: "0",
+        },
+      },
+    ],
+  });
 
 test("a Quebec slip files QPP in the QPP box, not the CPP box", () => {
   // Box 16 (CPP) and box 17 (QPP) are mutually exclusive. Reporting a QC
   // employee's contribution as CPP tells the CRA they paid into a plan they
   // are not in, and leaves a hole in the QPP record Retraite Québec keeps.
-  const xml = t4([slip({
-    province: "QC", isQuebec: true, box55Qpip: "442.90", box56QpipInsurable: "103000",
-  })]);
+  const xml = t4([
+    slip({
+      province: "QC",
+      isQuebec: true,
+      box55Qpip: "442.90",
+      box56QpipInsurable: "103000",
+    }),
+  ]);
   assert.match(xml, /<QPP_CNTRB_AMT>3500\.00<\/QPP_CNTRB_AMT>/);
   assert.doesNotMatch(xml, /<CPP_CNTRB_AMT>/);
   assert.match(xml, /<EMPT_PROV_CD>QC<\/EMPT_PROV_CD>/);
@@ -387,9 +480,14 @@ test("a Quebec slip files QPP in the QPP box, not the CPP box", () => {
 test("a Quebec slip carries QPIP premiums and insurable earnings (boxes 55 and 56)", () => {
   // `box55Qpip` was computed by the year-end builder and appeared ZERO times
   // in the XML builder: the premium simply vanished between the two.
-  const xml = t4([slip({
-    province: "QC", isQuebec: true, box55Qpip: "442.90", box56QpipInsurable: "103000",
-  })]);
+  const xml = t4([
+    slip({
+      province: "QC",
+      isQuebec: true,
+      box55Qpip: "442.90",
+      box56QpipInsurable: "103000",
+    }),
+  ]);
   assert.match(xml, /<PPIP_AMT>442\.90<\/PPIP_AMT>/);
   assert.match(xml, /<PPIP_ERN_AMT>103000\.00<\/PPIP_ERN_AMT>/);
 });

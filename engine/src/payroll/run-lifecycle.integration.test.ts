@@ -1,8 +1,21 @@
-import { seedPayrollSettings } from '../testing/fixtures.ts';
-import { seedPayrollComponent as insertPayrollComponent, seedPayrollStatutoryTreatment } from '../testing/fixtures.ts';
+import { seedPayrollSettings } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrg, seedFlowActors, dropScratchOrgReporting, seedWorkerEmployment, assertDedicatedFixtureDatabase,
+  seedPayrollComponent as insertPayrollComponent,
+  seedPayrollStatutoryTreatment,
+} from "../testing/fixtures.ts";
+import {
+  seedPayrollSchedule,
+  seedPayrollEmployeeRole,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  dropScratchOrgReporting,
+  seedWorkerEmployment,
+  assertDedicatedFixtureDatabase,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -17,17 +30,25 @@ import { calculatedRun, seedAdoption, seedOntarioEhtFixture } from "./filing-tes
 import { commitPayRun } from "./run-commit.ts";
 import { cmp } from "../money/money.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
-async function seedPayrollComponent(...args: Parameters<typeof insertPayrollComponent>): Promise<void> {
+async function seedPayrollComponent(
+  ...args: Parameters<typeof insertPayrollComponent>
+): Promise<void> {
   await insertPayrollComponent(...args);
   const [orgId, componentId, fields] = args;
   await seedPayrollStatutoryTreatment(orgId, componentId, {
-    effectiveFrom: "2026-01-01", programExclusions: [], vacationable: true,
-    createdBy: fields.createdBy, updatedBy: fields.updatedBy,
+    effectiveFrom: "2026-01-01",
+    programExclusions: [],
+    vacationable: true,
+    createdBy: fields.createdBy,
+    updatedBy: fields.updatedBy,
   });
 }
 
 /** Identical Ontario hourly employment and approved time for lifecycle calculations. */
-async function seedHourlyLifecycle(name: string, options: { monthly?: boolean; scheduleName?: string; terminatedOn?: string } = {}) {
+async function seedHourlyLifecycle(
+  name: string,
+  options: { monthly?: boolean; scheduleName?: string; terminatedOn?: string } = {},
+) {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   await seedPayrollSettings(org.orgId, {
@@ -39,34 +60,59 @@ async function seedHourlyLifecycle(name: string, options: { monthly?: boolean; s
   const employeeId = randomUUID();
   const scheduleId = randomUUID();
   await seedPayrollPerson(org.orgId, employeeId, `${name} Employee`);
-  await seedPayrollEmployeeRole(org.orgId, employeeId, { id: randomUUID(), terminatedOn: options.terminatedOn ?? null });
+  await seedPayrollEmployeeRole(org.orgId, employeeId, {
+    id: randomUUID(),
+    terminatedOn: options.terminatedOn ?? null,
+  });
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: options.scheduleName ?? `${name} Schedule`, frequency: options.monthly ? 'monthly' : 'biweekly',
-    periodsPerYear: options.monthly ? 12 : 26, anchorPeriodEnd: options.monthly ? '2026-07-31' : '2026-07-18',
+    name: options.scheduleName ?? `${name} Schedule`,
+    frequency: options.monthly ? "monthly" : "biweekly",
+    periodsPerYear: options.monthly ? 12 : 26,
+    anchorPeriodEnd: options.monthly ? "2026-07-31" : "2026-07-18",
     payDateOffsetDays: 3,
   });
   await seedPayrollWage(org.orgId, employeeId, actorId, {
-    currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
+    currency: "CAD",
+    rate: "30",
+    basis: "hour",
+    annualHours: "2080",
+    effectiveFrom: "2026-01-01",
   });
   // Hires carry an HRM employment or stub calculation refuses them.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   // Coverage is out of scope for lifecycle mechanics: the hire stands
   // explicitly exempt so the run refuses nothing, with money identical.
-  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-    country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-    wcbExempt: true, wcbExemptReason: 'lifecycle fixture: workers-compensation coverage out of scope',
-  }, { percentFloor: null, method: 'accrue' });
+  await seedPayrollProfile(
+    org.orgId,
+    employeeId,
+    employmentId,
+    scheduleId,
+    actorId,
+    {
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+      wcbExempt: true,
+      wcbExemptReason: "lifecycle fixture: workers-compensation coverage out of scope",
+    },
+    { percentFloor: null, method: "accrue" },
+  );
 
   await seedPayrollTime(org.orgId, employeeId, actorId, {
-    workedOn: '2026-07-06', hours: '8', status: 'approved', isBillable: false, billingStatus: 'unbilled',
-    costingBasis: 'actual',
+    workedOn: "2026-07-06",
+    hours: "8",
+    status: "approved",
+    isBillable: false,
+    billingStatus: "unbilled",
+    costingBasis: "actual",
   });
 
   return { org, actorId, employeeId, scheduleId };
 }
 
 describe("run-lifecycle", () => {
-
   const DB = !!process.env.OPENBOOKS_DB_URL;
 
   /**
@@ -74,20 +120,23 @@ describe("run-lifecycle", () => {
    * final-pay run ending mid-span must not drag max(period_end) forward, or the
    * next regular run silently skips the period the off-cycle run interrupted.
    */
-  test("an off-cycle final-pay run does not move the next regular period", { skip: !DB }, async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedPayrollSettings(org.orgId, {
+  test(
+    "an off-cycle final-pay run does not move the next regular period",
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedPayrollSettings(org.orgId, {
         features: { payroll: true },
       });
-    await seedPayrollComponents(org.orgId, actorId, "CA");
-    const employeeId = randomUUID();
-    const scheduleId = randomUUID();
-    await db.execute(sql`
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+      const employeeId = randomUUID();
+      const scheduleId = randomUUID();
+      await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${employeeId}, ${org.orgId}, 'person', 'Lifecycle Employee', true, '{}'::jsonb)
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into pay_schedules
         (id, org_id, name, frequency, periods_per_year, anchor_period_end,
          pay_date_offset_days, is_active, created_by, updated_by)
@@ -95,7 +144,7 @@ describe("run-lifecycle", () => {
         (${scheduleId}, ${org.orgId}, 'Lifecycle Schedule', 'biweekly', 26, '2026-07-11',
          3, true, ${actorId}, ${actorId})
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into employee_payroll_profiles
         (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis,
          federal_claim_code, provincial_claim_code, wcb_exempt, wcb_exempt_reason,
@@ -106,73 +155,102 @@ describe("run-lifecycle", () => {
          true, ${actorId}, ${actorId})
     `);
 
-    // The last regular payday ended 2026-07-11; the next span is 07-12–07-25.
-    await createPayRun({
-      orgId: org.orgId,
-      actorId,
-      payScheduleId: scheduleId,
-      periodStart: "2026-06-28",
-      periodEnd: "2026-07-11",
-    });
-    // An off-cycle final pay spans past the next regular payday: it ends
-    // 2026-07-30, beyond the 2026-07-25 regular period end. (A mid-span end
-    // alone is already absorbed by nextPeriodAfter's floor step; only an end
-    // past the next schedule date can drag max(period_end) forward.)
-    await createPayRun({
-      orgId: org.orgId,
-      actorId,
-      payScheduleId: scheduleId,
-      periodStart: "2026-07-12",
-      periodEnd: "2026-07-30",
-      runType: "termination",
-      employeePartyIds: [employeeId],
-    });
+      // The last regular payday ended 2026-07-11; the next span is 07-12–07-25.
+      await createPayRun({
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-06-28",
+        periodEnd: "2026-07-11",
+      });
+      // An off-cycle final pay spans past the next regular payday: it ends
+      // 2026-07-30, beyond the 2026-07-25 regular period end. (A mid-span end
+      // alone is already absorbed by nextPeriodAfter's floor step; only an end
+      // past the next schedule date can drag max(period_end) forward.)
+      await createPayRun({
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-12",
+        periodEnd: "2026-07-30",
+        runType: "termination",
+        employeePartyIds: [employeeId],
+      });
 
-    // The next regular run must still open 07-12–07-25 — not jump to 07-26–08-08.
-    const next = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
-    const stored = (await db.execute<{ period_start: string; period_end: string }>(sql`
+      // The next regular run must still open 07-12–07-25 — not jump to 07-26–08-08.
+      const next = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
+      const stored = (
+        await db.execute<{ period_start: string; period_end: string }>(
+          sql`
       select period_start::text as period_start, period_end::text as period_end
         from pay_runs where org_id = ${org.orgId} and document_id = ${next.documentId}
-    `, "objects"))[0]!;
-    assert.equal(stored.period_start, "2026-07-12");
-    assert.equal(stored.period_end, "2026-07-25");
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(stored.period_start, "2026-07-12");
+      assert.equal(stored.period_end, "2026-07-25");
 
-    await dropScratchOrg(org.orgId);
-  });
+      await dropScratchOrg(org.orgId);
+    },
+  );
 });
 
 describe("run-boundary", () => {
-
   const invalidPeriods = [
-    { name: 'impossible calendar date', periodStart: '2026-02-30', periodEnd: '2026-03-07' },
-    { name: 'inverted period', periodStart: '2026-07-18', periodEnd: '2026-07-05' },
-    { name: 'partial explicit period', periodStart: '2026-06-01' },
-    { name: 'pay date before period end', periodStart: '2026-07-05', periodEnd: '2026-07-18', payDate: '2026-07-17' },
-    { name: 'impossible pay date', periodStart: '2026-07-05', periodEnd: '2026-07-18', payDate: '2026-02-30' },
-  ]
+    { name: "impossible calendar date", periodStart: "2026-02-30", periodEnd: "2026-03-07" },
+    { name: "inverted period", periodStart: "2026-07-18", periodEnd: "2026-07-05" },
+    { name: "partial explicit period", periodStart: "2026-06-01" },
+    {
+      name: "pay date before period end",
+      periodStart: "2026-07-05",
+      periodEnd: "2026-07-18",
+      payDate: "2026-07-17",
+    },
+    {
+      name: "impossible pay date",
+      periodStart: "2026-07-05",
+      periodEnd: "2026-07-18",
+      payDate: "2026-02-30",
+    },
+  ];
   for (const { name, ...dates } of invalidPeriods) {
-    test(`pay run refuses ${name} without allocating a document or number`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-      const org = await createScratchOrg()
-      try {
-        const actorId = (await seedFlowActors(org.orgId)).adminId
-        const scheduleId = randomUUID()
-        await db.execute(sql`update orgs set settings = settings || '{"features":{"payroll":true}}'::jsonb where id = ${org.orgId}`)
-        await db.execute(sql`insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, is_active, created_by, updated_by)
-          values (${scheduleId}, ${org.orgId}, 'Boundary schedule', 'biweekly', 26, '2026-07-18', 3, true, ${actorId}, ${actorId})`)
-        const snapshot = async () => await db.execute(sql`select
+    test(
+      `pay run refuses ${name} without allocating a document or number`,
+      { skip: !process.env.OPENBOOKS_DB_URL },
+      async () => {
+        const org = await createScratchOrg();
+        try {
+          const actorId = (await seedFlowActors(org.orgId)).adminId;
+          const scheduleId = randomUUID();
+          await db.execute(
+            sql`update orgs set settings = settings || '{"features":{"payroll":true}}'::jsonb where id = ${org.orgId}`,
+          );
+          await db.execute(sql`insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, is_active, created_by, updated_by)
+          values (${scheduleId}, ${org.orgId}, 'Boundary schedule', 'biweekly', 26, '2026-07-18', 3, true, ${actorId}, ${actorId})`);
+          const snapshot = async () =>
+            await db.execute(
+              sql`select
           (select count(*) from documents where org_id = ${org.orgId}) as documents,
           (select count(*) from pay_runs where org_id = ${org.orgId}) as runs,
-          (select jsonb_agg(to_jsonb(s) order by s.id) from number_sequences s where org_id = ${org.orgId}) as sequences`, "objects")
-        const before = await snapshot()
-        await assert.rejects(createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId, ...dates }), PayrollError)
-        assert.deepEqual(await snapshot(), before)
-      } finally { await dropScratchOrgReporting(org.orgId) }
-    })
+          (select jsonb_agg(to_jsonb(s) order by s.id) from number_sequences s where org_id = ${org.orgId}) as sequences`,
+              "objects",
+            );
+          const before = await snapshot();
+          await assert.rejects(
+            createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId, ...dates }),
+            PayrollError,
+          );
+          assert.deepEqual(await snapshot(), before);
+        } finally {
+          await dropScratchOrgReporting(org.orgId);
+        }
+      },
+    );
   }
 });
 
 describe("run-assignment-window", () => {
-
   const DB = !!process.env.OPENBOOKS_DB_URL;
 
   /**
@@ -182,20 +260,31 @@ describe("run-assignment-window", () => {
    * passed pre-flight and was then silently left off the cheque.)
    */
   test("an assignment ending mid-period is paid on the stub", { skip: !DB }, async () => {
-    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle('Window');
+    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle("Window");
 
     const component = async (code: string): Promise<string> => {
       const id = randomUUID();
       await seedPayrollComponent(org.orgId, id, {
-        code: code, name: code, kind: 'earning', systemKey: null, basis: 'fixed_amount', isActive: true,
-        createdBy: actorId, updatedBy: actorId,
+        code: code,
+        name: code,
+        kind: "earning",
+        systemKey: null,
+        basis: "fixed_amount",
+        isActive: true,
+        createdBy: actorId,
+        updatedBy: actorId,
       });
       return id;
     };
     const midId = await component("MIDSUM");
     const beforeId = await component("BEFORESUM");
     const fullId = await component("FULLSUM");
-    const assign = async (componentId: string, value: string, from: string, to: string | null): Promise<void> => {
+    const assign = async (
+      componentId: string,
+      value: string,
+      from: string,
+      to: string | null,
+    ): Promise<void> => {
       await db.execute(sql`
         insert into employee_pay_components (org_id, employee_party_id, component_id, value,
                                              effective_from, effective_to, is_active,
@@ -217,24 +306,38 @@ describe("run-assignment-window", () => {
       periodStart: "2026-07-05",
       periodEnd: "2026-07-18",
     });
-    assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
+    assert.deepEqual(
+      (await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors,
+      [],
+    );
 
-    const lines = await db.execute<{ code: string; amount: string }>(sql`
+    const lines = await db.execute<{ code: string; amount: string }>(
+      sql`
       select c.code, l.amount::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         join pay_components c on c.id = l.component_id and c.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          and l.component_id in (${midId}, ${beforeId}, ${fullId})
-    `, "objects");
+    `,
+      "objects",
+    );
     const byCode = new Map(lines.map((l) => [l.code, l.amount]));
     // 6 of the 14 period days covered: 6/14 × 50.00, rounded to cents.
-    assert.equal(byCode.get("MIDSUM"), "21.4300",
-      "an assignment ending mid-period is paid for its covered days, not the full period");
-    assert.ok(!byCode.has("BEFORESUM"),
-      "an assignment that ended before the period started must stay off the stub");
-    assert.equal(byCode.get("FULLSUM"), "50.0000",
-      "a fully-covering assignment pays its full value with no proration math");
+    assert.equal(
+      byCode.get("MIDSUM"),
+      "21.4300",
+      "an assignment ending mid-period is paid for its covered days, not the full period",
+    );
+    assert.ok(
+      !byCode.has("BEFORESUM"),
+      "an assignment that ended before the period started must stay off the stub",
+    );
+    assert.equal(
+      byCode.get("FULLSUM"),
+      "50.0000",
+      "a fully-covering assignment pays its full value with no proration math",
+    );
 
     await dropScratchOrg(org.orgId);
   });
@@ -245,55 +348,74 @@ describe("run-assignment-window", () => {
    * pays its covered calendar-day fraction, so the two slices of one amended
    * component sum to exactly one period: never the sum of both full values.
    */
-  test("a mid-month amendment pays each slice, never twice the component", { skip: !DB }, async () => {
-    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle('Amend', { monthly: true });
+  test(
+    "a mid-month amendment pays each slice, never twice the component",
+    { skip: !DB },
+    async () => {
+      const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle("Amend", {
+        monthly: true,
+      });
 
-    const componentId = randomUUID();
-    await seedPayrollComponent(org.orgId, componentId, {
-      code: 'AMENDED-ALLOW', name: 'AMENDED-ALLOW', kind: 'earning', systemKey: null, basis: 'fixed_amount',
-      isActive: true, createdBy: actorId, updatedBy: actorId,
-    });
-    const slice = async (value: string, from: string, to: string | null): Promise<void> => {
-      await db.execute(sql`
+      const componentId = randomUUID();
+      await seedPayrollComponent(org.orgId, componentId, {
+        code: "AMENDED-ALLOW",
+        name: "AMENDED-ALLOW",
+        kind: "earning",
+        systemKey: null,
+        basis: "fixed_amount",
+        isActive: true,
+        createdBy: actorId,
+        updatedBy: actorId,
+      });
+      const slice = async (value: string, from: string, to: string | null): Promise<void> => {
+        await db.execute(sql`
         insert into employee_pay_components (org_id, employee_party_id, component_id, value,
                                              effective_from, effective_to, is_active,
                                              created_by, updated_by)
         values (${org.orgId}, ${employeeId}, ${componentId}, ${value}, ${from}, ${to}, true,
                 ${actorId}, ${actorId})`);
-    };
-    await slice("3000.00", "2026-01-01", "2026-07-15");
-    await slice("3100.00", "2026-07-16", null);
+      };
+      await slice("3000.00", "2026-01-01", "2026-07-15");
+      await slice("3100.00", "2026-07-16", null);
 
-    const run = await createPayRun({
-      orgId: org.orgId,
-      actorId,
-      payScheduleId: scheduleId,
-      periodStart: "2026-07-01",
-      periodEnd: "2026-07-31",
-    });
-    assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
+      const run = await createPayRun({
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-01",
+        periodEnd: "2026-07-31",
+      });
+      assert.deepEqual(
+        (await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors,
+        [],
+      );
 
-    const lines = await db.execute<{ amount: string }>(sql`
+      const lines = await db.execute<{ amount: string }>(
+        sql`
       select l.amount::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          and l.component_id = ${componentId}
        order by l.amount
-    `, "objects");
-    assert.equal(lines.length, 2, "both slices of the amended component are paid");
-    // 15/31 × 3000.00 and 16/31 × 3100.00, rounded to cents: ≈ half each.
-    assert.equal(lines[0]!.amount, "1451.6100");
-    assert.equal(lines[1]!.amount, "1600.0000");
-    assert.ok(Number(lines[0]!.amount) + Number(lines[1]!.amount) < 6100,
-      "the two slices must never sum to both full values");
+    `,
+        "objects",
+      );
+      assert.equal(lines.length, 2, "both slices of the amended component are paid");
+      // 15/31 × 3000.00 and 16/31 × 3100.00, rounded to cents: ≈ half each.
+      assert.equal(lines[0]!.amount, "1451.6100");
+      assert.equal(lines[1]!.amount, "1600.0000");
+      assert.ok(
+        Number(lines[0]!.amount) + Number(lines[1]!.amount) < 6100,
+        "the two slices must never sum to both full values",
+      );
 
-    await dropScratchOrg(org.orgId);
-  });
+      await dropScratchOrg(org.orgId);
+    },
+  );
 });
 
 describe("run-entitlement-hours-payout", () => {
-
   const DB = !!process.env.OPENBOOKS_DB_URL;
 
   /**
@@ -302,12 +424,21 @@ describe("run-entitlement-hours-payout", () => {
    * the ledger movement clearing the bank stays in the plan's unit.
    */
   test("a final pay values an hours bank at the wage", { skip: !DB }, async () => {
-    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle('Banked', { scheduleName: 'Bank Schedule', terminatedOn: '2026-07-18' });
+    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle("Banked", {
+      scheduleName: "Bank Schedule",
+      terminatedOn: "2026-07-18",
+    });
 
     const payoutComponentId = randomUUID();
     await seedPayrollComponent(org.orgId, payoutComponentId, {
-      code: 'SICK-PAY', name: 'Sick bank payout', kind: 'earning', systemKey: null, basis: 'fixed_amount',
-      isActive: true, createdBy: actorId, updatedBy: actorId,
+      code: "SICK-PAY",
+      name: "Sick bank payout",
+      kind: "earning",
+      systemKey: null,
+      basis: "fixed_amount",
+      isActive: true,
+      createdBy: actorId,
+      updatedBy: actorId,
     });
     const planId = randomUUID();
     await db.execute(sql`
@@ -331,77 +462,118 @@ describe("run-entitlement-hours-payout", () => {
       runType: "termination",
       employeePartyIds: [employeeId],
     });
-    assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
+    assert.deepEqual(
+      (await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors,
+      [],
+    );
 
-    const lines = await db.execute<{ amount: string }>(sql`
+    const lines = await db.execute<{ amount: string }>(
+      sql`
       select l.amount::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          and l.component_id = ${payoutComponentId}
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal(lines.length, 1, "the final pay carries the bank payout line");
-    assert.equal(lines[0]!.amount, "1200.0000",
-      "40 hours at $30/h pay $1,200 — never the $40.00 hour count");
+    assert.equal(
+      lines[0]!.amount,
+      "1200.0000",
+      "40 hours at $30/h pay $1,200 — never the $40.00 hour count",
+    );
 
     // The clearing movement stays in the plan's unit: the bank IS hours.
-    const cleared = await db.execute<{ amount: string; kind: string }>(sql`
+    const cleared = await db.execute<{ amount: string; kind: string }>(
+      sql`
       select amount::text as amount, kind from entitlement_ledger
        where org_id = ${org.orgId} and plan_id = ${planId} and kind = 'payout'
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal(cleared.length, 1);
     assert.equal(cleared[0]!.amount, "-40.0000");
 
     await dropScratchOrg(org.orgId);
   });
 
-  test("a final pay converts the hours-bank wage into the run currency", { skip: !DB }, async () => {
-    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle("Foreign Banked", { terminatedOn: "2026-07-18" });
-    try {
-      await db.execute(sql`update labor_cost_rates set rate='60',currency='USD'
-        where org_id=${org.orgId} and employee_party_id=${employeeId}`);
-      await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
-        values (${org.orgId}, 'USD', 'CAD', '2026-01-01', 'spot', '1.5')`);
-      const payoutComponentId = randomUUID();
-      await seedPayrollComponent(org.orgId, payoutComponentId, {
-        code: 'FOREIGN-SICK-PAY', name: 'Foreign sick bank payout', kind: 'earning', systemKey: null,
-        basis: 'fixed_amount', isActive: true, createdBy: actorId, updatedBy: actorId,
+  test(
+    "a final pay converts the hours-bank wage into the run currency",
+    { skip: !DB },
+    async () => {
+      const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle("Foreign Banked", {
+        terminatedOn: "2026-07-18",
       });
-      const planId = randomUUID();
-      await db.execute(sql`
+      try {
+        await db.execute(sql`update labor_cost_rates set rate='60',currency='USD'
+        where org_id=${org.orgId} and employee_party_id=${employeeId}`);
+        await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+        values (${org.orgId}, 'USD', 'CAD', '2026-01-01', 'spot', '1.5')`);
+        const payoutComponentId = randomUUID();
+        await seedPayrollComponent(org.orgId, payoutComponentId, {
+          code: "FOREIGN-SICK-PAY",
+          name: "Foreign sick bank payout",
+          kind: "earning",
+          systemKey: null,
+          basis: "fixed_amount",
+          isActive: true,
+          createdBy: actorId,
+          updatedBy: actorId,
+        });
+        const planId = randomUUID();
+        await db.execute(sql`
         insert into entitlement_plans (id, org_id, code, name, system_key, unit, direction,
                                        accrual_method, payout_component_id, created_by, updated_by)
         values (${planId}, ${org.orgId}, 'FOREIGN-SICK-HRS', 'Foreign sick bank', null, 'hours', 'accrue',
                 'manual', ${payoutComponentId}, ${actorId}, ${actorId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into entitlement_ledger (org_id, plan_id, employee_party_id, movement_date, amount,
                                         hours, kind, pay_run_document_id, note, created_by, updated_by)
         values (${org.orgId}, ${planId}, ${employeeId}, '2026-07-01', '40.0000',
                 null, 'accrual', null, 'banked time', ${actorId}, ${actorId})`);
 
-      const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
-        runType: "termination", employeePartyIds: [employeeId],
-      });
-      assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
-      const line = (await db.execute<{ amount: string }>(sql`
+        const run = await createPayRun({
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
+          runType: "termination",
+          employeePartyIds: [employeeId],
+        });
+        assert.deepEqual(
+          (await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors,
+          [],
+        );
+        const line = (
+          await db.execute<{ amount: string }>(
+            sql`
         select l.amount::text as amount from pay_stub_lines l
           join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
          where s.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
            and l.component_id=${payoutComponentId}
-      `, "objects"))[0];
-      assert.equal(line?.amount, "3600.0000", "40 hours at USD 60 convert to CAD 90 per hour before payment");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  });
+      `,
+            "objects",
+          )
+        )[0];
+        assert.equal(
+          line?.amount,
+          "3600.0000",
+          "40 hours at USD 60 convert to CAD 90 per hour before payment",
+        );
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 });
 
 describe("calculation-rollback", () => {
-
   async function evidence(orgId: string) {
-    return (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
+    return (
+      await db.execute<{ state: unknown }>(
+        sql`select jsonb_build_object(
       'documents',(select jsonb_agg(to_jsonb(d) order by id) from documents d where org_id=${orgId}),
       'runs',(select jsonb_agg(to_jsonb(r) order by document_id) from pay_runs r where org_id=${orgId}),
       'stubs',(select jsonb_agg(to_jsonb(s) order by id) from pay_stubs s where org_id=${orgId}),
@@ -410,11 +582,16 @@ describe("calculation-rollback", () => {
       'entitlements',(select jsonb_agg(to_jsonb(e) order by id) from entitlement_ledger e where org_id=${orgId}),
       'projection',(select jsonb_agg(to_jsonb(d) order by id) from document_lines d where org_id=${orgId}),
       'time',(select jsonb_agg(to_jsonb(t) order by id) from time_entries t where org_id=${orgId})
-    ) as state`, "objects"))[0]!.state;
+    ) as state`,
+        "objects",
+      )
+    )[0]!.state;
   }
 
-  test("an employee SQL failure raises its original cause and restores calculation evidence inside an ambient transaction",
-    { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  test(
+    "an employee SQL failure raises its original cause and restores calculation evidence inside an ambient transaction",
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
       await assertDedicatedFixtureDatabase();
       const fx = await seedAdoption();
       const faultName = `payroll_line_failure_${randomUUID().replaceAll("-", "")}`;
@@ -422,46 +599,83 @@ describe("calculation-rollback", () => {
       try {
         const { input } = await calculatedRun(fx);
         const before = await evidence(fx.orgId);
-        await withOrgTransaction(fx.orgId, async () => {
-          await db.execute(sql`update parties set custom=custom || '{"callerWork":true}'::jsonb
+        await withOrgTransaction(
+          fx.orgId,
+          async () => {
+            await db.execute(sql`update parties set custom=custom || '{"callerWork":true}'::jsonb
             where org_id=${fx.orgId} and id=${fx.employeeId}`);
-          const baseline = await calculatePayRun({ ...input, dryRun: true });
-          assert.equal(baseline.employees, 1, "the ambient fixture must reach the employee before fault injection");
-          assert.deepEqual(baseline.errors, []);
-          assert.deepEqual(await evidence(fx.orgId), before, "the pre-fault preview must preserve calculation evidence");
-          // The fault occurs after the employee header has been written. DDL
-          // is confined to this marked fixture database and caller transaction;
-          // success drops it, while any failed assertion rolls it back.
-          await db.execute(sql`create function ${fault}() returns trigger language plpgsql as $$
+            const baseline = await calculatePayRun({ ...input, dryRun: true });
+            assert.equal(
+              baseline.employees,
+              1,
+              "the ambient fixture must reach the employee before fault injection",
+            );
+            assert.deepEqual(baseline.errors, []);
+            assert.deepEqual(
+              await evidence(fx.orgId),
+              before,
+              "the pre-fault preview must preserve calculation evidence",
+            );
+            // The fault occurs after the employee header has been written. DDL
+            // is confined to this marked fixture database and caller transaction;
+            // success drops it, while any failed assertion rolls it back.
+            await db.execute(sql`create function ${fault}() returns trigger language plpgsql as $$
             begin
               if not exists(select 1 from pay_stubs where org_id=new.org_id and id=new.stub_id) then
                 raise exception 'The payroll persistence fault did not reach the employee header';
               end if;
               raise exception 'Injected payroll line persistence refusal' using errcode='23514';
             end $$`);
-          await db.execute(sql`create trigger ${fault} after insert on pay_stub_lines
+            await db.execute(sql`create trigger ${fault} after insert on pay_stub_lines
             for each row when (new.org_id=${sql.raw(`'${fx.orgId}'::uuid`)}) execute function ${fault}()`);
-          await assert.rejects(calculatePayRun(input), (error: unknown) => {
-            assert.ok(errorChainMatches(error, /Injected payroll line persistence refusal/),
-              new Error("The original payroll persistence refusal was not raised; inspect the caught cause", { cause: error }));
-            assert.equal(errorChainMatches(error, /current transaction is aborted/), false);
-            return true;
-          });
-          assert.deepEqual(await evidence(fx.orgId), before,
-            "caught calculation failure must restore the previous stubs, lines, totals and source evidence");
-          await db.execute(sql`drop trigger ${fault} on pay_stub_lines`);
-          await db.execute(sql`drop function ${fault}()`);
-        }, { isolationLevel: "REPEATABLE READ" });
-        assert.equal((await db.execute<{ marker: boolean }>(sql`select (custom->>'callerWork')::boolean as marker
-          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`, "objects"))[0]!.marker, true,
-        "recovering the failed calculation must preserve earlier caller work");
+            await assert.rejects(calculatePayRun(input), (error: unknown) => {
+              assert.ok(
+                errorChainMatches(error, /Injected payroll line persistence refusal/),
+                new Error(
+                  "The original payroll persistence refusal was not raised; inspect the caught cause",
+                  { cause: error },
+                ),
+              );
+              assert.equal(errorChainMatches(error, /current transaction is aborted/), false);
+              return true;
+            });
+            assert.deepEqual(
+              await evidence(fx.orgId),
+              before,
+              "caught calculation failure must restore the previous stubs, lines, totals and source evidence",
+            );
+            await db.execute(sql`drop trigger ${fault} on pay_stub_lines`);
+            await db.execute(sql`drop function ${fault}()`);
+          },
+          { isolationLevel: "REPEATABLE READ" },
+        );
+        assert.equal(
+          (
+            await db.execute<{ marker: boolean }>(
+              sql`select (custom->>'callerWork')::boolean as marker
+          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`,
+              "objects",
+            )
+          )[0]!.marker,
+          true,
+          "recovering the failed calculation must preserve earlier caller work",
+        );
         assert.deepEqual(await evidence(fx.orgId), before);
-        assert.deepEqual((await calculatePayRun(input)).errors, [], "the native calculation recovers after the fault is removed");
-      } finally { await dropScratchOrgReporting(fx.orgId); }
-    });
+        assert.deepEqual(
+          (await calculatePayRun(input)).errors,
+          [],
+          "the native calculation recovers after the fault is removed",
+        );
+      } finally {
+        await dropScratchOrgReporting(fx.orgId);
+      }
+    },
+  );
 
-  test("a caught late payroll commit refusal restores all evidence in an ambient transaction",
-    { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  test(
+    "a caught late payroll commit refusal restores all evidence in an ambient transaction",
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
       const fx = await seedAdoption();
       const fault = sql.identifier(`payroll_commit_fault_${randomUUID().replaceAll("-", "")}`);
       try {
@@ -485,60 +699,119 @@ describe("calculation-rollback", () => {
             assert.equal(errorChainMatches(error, /current transaction is aborted/), false);
             return true;
           });
-          assert.deepEqual(await evidence(fx.orgId), before,
-            "the caught refusal restores projections, liabilities, time claims and calculated evidence");
+          assert.deepEqual(
+            await evidence(fx.orgId),
+            before,
+            "the caught refusal restores projections, liabilities, time claims and calculated evidence",
+          );
           await db.execute(sql`drop trigger ${fault} on pay_runs`);
           await db.execute(sql`drop function ${fault}()`);
         });
-        assert.equal((await db.execute<{marker:boolean}>(sql`select (custom->>'callerWork')::boolean as marker
-          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`, "objects"))[0]!.marker, true);
+        assert.equal(
+          (
+            await db.execute<{ marker: boolean }>(
+              sql`select (custom->>'callerWork')::boolean as marker
+          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`,
+              "objects",
+            )
+          )[0]!.marker,
+          true,
+        );
         assert.ok((await commitPayRun(input)).lines > 0);
-      } finally { await dropScratchOrgReporting(fx.orgId); }
-    });
+      } finally {
+        await dropScratchOrgReporting(fx.orgId);
+      }
+    },
+  );
 
   for (const mode of ["dry-run", "simulation"] as const) {
     for (const ambient of [false, true]) {
-      test(`payroll ${mode} preserves all evidence ${ambient ? "inside an ambient transaction" : "standalone"}`,
-        { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test(
+        `payroll ${mode} preserves all evidence ${ambient ? "inside an ambient transaction" : "standalone"}`,
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
           const fx = await seedAdoption();
           try {
             const { input } = await calculatedRun(fx);
             if (mode === "simulation") await commitPayRun(input);
             const before = await evidence(fx.orgId);
             const preview = async () => {
-              const result = await calculatePayRun({ ...input, ...(mode === "simulation" ? { simulate: true } : { dryRun: true }) });
+              const result = await calculatePayRun({
+                ...input,
+                ...(mode === "simulation" ? { simulate: true } : { dryRun: true }),
+              });
               assert.equal(result.employees, 1);
               assert.deepEqual(result.errors, []);
               assert.equal(cmp(result.gross, "240"), 0);
-              assert.equal(result.stubs?.length, 1, "preview exposes the actual employee result before rollback");
+              assert.equal(
+                result.stubs?.length,
+                1,
+                "preview exposes the actual employee result before rollback",
+              );
               assert.equal(cmp(result.stubs![0]!.gross, result.gross), 0);
               assert.equal(cmp(result.stubs![0]!.netPay, result.net), 0);
-              assert.ok(result.stubs![0]!.lines.some((line) => line.kind === "earning" && cmp(line.amount, "240") === 0));
-              assert.equal(cmp(result.stubs![0]!.factors.I!, "240"), 0,
-                "preview retains statutory income evidence after its transaction rolls back");
+              assert.ok(
+                result.stubs![0]!.lines.some(
+                  (line) => line.kind === "earning" && cmp(line.amount, "240") === 0,
+                ),
+              );
+              assert.equal(
+                cmp(result.stubs![0]!.factors.I!, "240"),
+                0,
+                "preview retains statutory income evidence after its transaction rolls back",
+              );
               const cpp = result.stubs![0]!.lines.find((line) => line.systemKey === "cpp");
               assert.ok(cpp);
-              assert.equal(cmp(result.stubs![0]!.factors.C!, cpp.amount), 0,
-                "captured contribution evidence agrees with the actual preview deduction");
-              assert.deepEqual(await evidence(fx.orgId), before, "preview must preserve IDs, values, and audit evidence");
+              assert.equal(
+                cmp(result.stubs![0]!.factors.C!, cpp.amount),
+                0,
+                "captured contribution evidence agrees with the actual preview deduction",
+              );
+              assert.deepEqual(
+                await evidence(fx.orgId),
+                before,
+                "preview must preserve IDs, values, and audit evidence",
+              );
             };
             if (ambient) {
-              await withOrgTransaction(fx.orgId, async () => {
-                await db.execute(sql`update parties set custom=custom || '{"previewCallerWork":true}'::jsonb
+              await withOrgTransaction(
+                fx.orgId,
+                async () => {
+                  await db.execute(sql`update parties set custom=custom || '{"previewCallerWork":true}'::jsonb
                   where org_id=${fx.orgId} and id=${fx.employeeId}`);
-                await preview();
-              }, { isolationLevel: "REPEATABLE READ" });
-              assert.equal((await db.execute<{ marker: boolean }>(sql`select (custom->>'previewCallerWork')::boolean as marker
-                from parties where org_id=${fx.orgId} and id=${fx.employeeId}`, "objects"))[0]!.marker, true,
-              "preview rollback must preserve the caller's earlier work");
+                  await preview();
+                },
+                { isolationLevel: "REPEATABLE READ" },
+              );
+              assert.equal(
+                (
+                  await db.execute<{ marker: boolean }>(
+                    sql`select (custom->>'previewCallerWork')::boolean as marker
+                from parties where org_id=${fx.orgId} and id=${fx.employeeId}`,
+                    "objects",
+                  )
+                )[0]!.marker,
+                true,
+                "preview rollback must preserve the caller's earlier work",
+              );
             } else await preview();
-            assert.deepEqual(await evidence(fx.orgId), before, "committing the caller transaction cannot persist preview writes");
+            assert.deepEqual(
+              await evidence(fx.orgId),
+              before,
+              "committing the caller transaction cannot persist preview writes",
+            );
             if (mode === "dry-run") {
               assert.deepEqual((await calculatePayRun(input)).errors, []);
-              assert.ok((await commitPayRun(input)).lines > 0, "real calculation and commit must still persist");
+              assert.ok(
+                (await commitPayRun(input)).lines > 0,
+                "real calculation and commit must still persist",
+              );
             }
-          } finally { await dropScratchOrgReporting(fx.orgId); }
-        });
+          } finally {
+            await dropScratchOrgReporting(fx.orgId);
+          }
+        },
+      );
     }
   }
 });

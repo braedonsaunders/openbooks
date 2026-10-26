@@ -34,7 +34,11 @@ async function seedJurisdiction(orgId: string, code: string): Promise<string> {
   return id;
 }
 
-async function seedRegistration(orgId: string, jurisdictionId: string, number: string): Promise<string> {
+async function seedRegistration(
+  orgId: string,
+  jurisdictionId: string,
+  number: string,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into tax_registrations
@@ -43,27 +47,28 @@ async function seedRegistration(orgId: string, jurisdictionId: string, number: s
   return id;
 }
 
-test("a legacy mismatched registration is refused at resolve, unpinned", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await seedForm(org.orgId);
-    const caId = await seedJurisdiction(org.orgId, "CA");
-    await seedRegistration(org.orgId, caId, "CA-REG-1");
-    await assert.rejects(
-      computeTaxReturn(org.orgId, FORM, org.date, org.date),
-      (e: unknown) => {
+test(
+  "a legacy mismatched registration is refused at resolve, unpinned",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedForm(org.orgId);
+      const caId = await seedJurisdiction(org.orgId, "CA");
+      await seedRegistration(org.orgId, caId, "CA-REG-1");
+      await assert.rejects(computeTaxReturn(org.orgId, FORM, org.date, org.date), (e: unknown) => {
         assert.ok(e instanceof TaxReturnError);
         assert.match(e.message, /CA-REG-1/);
         assert.match(e.message, /"CA"/);
         assert.match(e.message, /US_NY_ST100/);
         assert.match(e.message, /US-NY/);
         return true;
-      },
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a legacy mismatched registration is refused at resolve, pinned", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -72,9 +77,16 @@ test("a legacy mismatched registration is refused at resolve, pinned", { skip: !
     const caId = await seedJurisdiction(org.orgId, "CA");
     const regId = await seedRegistration(org.orgId, caId, "CA-REG-1");
     await assert.rejects(
-      computeTaxReturn(org.orgId, FORM, org.date, org.date, {}, {
-        filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regId },
-      }),
+      computeTaxReturn(
+        org.orgId,
+        FORM,
+        org.date,
+        org.date,
+        {},
+        {
+          filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regId },
+        },
+      ),
       (e: unknown) => {
         assert.ok(e instanceof TaxReturnError);
         assert.match(e.message, /CA-REG-1/);
@@ -100,26 +112,30 @@ test("a registration in the form's own jurisdiction still resolves", { skip: !DB
   }
 });
 
-test("a registration on a tenant-defined form keeps the historical pick", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const custom = "CUSTOM-PROBE";
-    await db.execute(sql`
+test(
+  "a registration on a tenant-defined form keeps the historical pick",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const custom = "CUSTOM-PROBE";
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, ${custom}, 'Custom probe', 'portal_manual', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values (${randomUUID()}, ${org.orgId}, ${custom}, '1', 'Probe box', null, null, 1, 10)`);
-    const caId = await seedJurisdiction(org.orgId, "CA");
-    const regId = randomUUID();
-    await db.execute(sql`
+      const caId = await seedJurisdiction(org.orgId, "CA");
+      const regId = randomUUID();
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
       values (${regId}, ${org.orgId}, ${caId}, 'CA-CUSTOM-1', 'quarterly', ${custom}, true)`);
-    const result = await computeTaxReturn(org.orgId, custom, org.date, org.date);
-    assert.equal(result.registrationNumber, "CA-CUSTOM-1");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, custom, org.date, org.date);
+      assert.equal(result.registrationNumber, "CA-CUSTOM-1");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -48,17 +48,25 @@ export const crewTimeBatchAdapter: InboxAdapter = {
         waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/time/crew",
-        actions: sodBlocked ? [] : [
-          { key: "approve", label: "Approve", style: "primary" as const, needsReason: false },
-          { key: "reject", label: "Reject", style: "danger" as const, needsReason: true },
-          { key: "delegate", label: "Delegate", style: "secondary" as const, needsReason: true },
-        ],
+        actions: sodBlocked
+          ? []
+          : [
+              { key: "approve", label: "Approve", style: "primary" as const, needsReason: false },
+              { key: "reject", label: "Reject", style: "danger" as const, needsReason: true },
+              {
+                key: "delegate",
+                label: "Delegate",
+                style: "secondary" as const,
+                needsReason: true,
+              },
+            ],
         source: { kind: "crew_time_batch_gate", id: gate.id },
       });
     }
     const partyId = await actorPartyId(ctx);
     if (partyId) {
-      const batches = await exec.execute<OwnBatchRow>(sql`
+      const batches = await exec.execute<OwnBatchRow>(
+        sql`
         select b.id::text as id, b.worked_on::text as worked_on, b.status,
                p.name as project_name
           from crew_time_batches b
@@ -68,7 +76,9 @@ export const crewTimeBatchAdapter: InboxAdapter = {
            and b.status in ('draft', 'rejected')
          order by b.worked_on desc
          limit 10
-      `, "objects");
+      `,
+        "objects",
+      );
       for (const batch of batches) {
         out.push({
           id: inboxItemId("crew_time_batch", `own:${batch.id}`),
@@ -96,16 +106,34 @@ export const crewTimeBatchAdapter: InboxAdapter = {
     if (sourceId.startsWith("gate:")) {
       const gateId = sourceId.slice("gate:".length);
       if (actionKey === "approve") {
-        await decideGate({ gateId, decision: "approved", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "approved",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "reject") {
-        await decideGate({ gateId, decision: "rejected", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "rejected",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "delegate") {
         const delegation = parseDelegationReason(reason);
-        await delegateGate(gateId, ctx.actorId, delegation.toUserId, allowedSubsidiaryIds, delegation.note);
+        await delegateGate(
+          gateId,
+          ctx.actorId,
+          delegation.toUserId,
+          allowedSubsidiaryIds,
+          delegation.note,
+        );
         return;
       }
     }

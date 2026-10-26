@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const React = await import('react')
+const React = await import("react");
 // The drawer's modules build JSX at import under the classic runtime.
-Object.assign(globalThis, { React })
-const { renderToString } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const { DocumentDrawerTitle } = await import('./document-drawer')
+Object.assign(globalThis, { React });
+const { renderToString } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const { DocumentDrawerTitle } = await import("./document-drawer");
 
 // the invoice drawer title row clipped the status pill to "Vo…"
 // at 390px — the title was a single nowrap flex row, so the pill (last
@@ -17,42 +17,42 @@ function titleHtml(props?: { externalRef?: string | null; externalSource?: strin
   /* eslint-disable react/no-children-prop */
   return renderToString(
     React.createElement(NextIntlClientProvider, {
-      locale: 'en',
-      timeZone: 'UTC',
+      locale: "en",
+      timeZone: "UTC",
       messages: {},
       children: React.createElement(DocumentDrawerTitle, {
-        kind: 'customer_invoice',
-        documentNumber: 'INV-00001',
-        statusLabel: 'Voided',
-        statusVariant: 'outline',
+        kind: "customer_invoice",
+        documentNumber: "INV-00001",
+        statusLabel: "Voided",
+        statusVariant: "outline",
         ...props,
       }),
     }),
-  )
+  );
   /* eslint-enable react/no-children-prop */
 }
 
-test('drawer title row wraps instead of clipping the status pill', () => {
-  const html = titleHtml()
-  assert.ok(html.includes('Voided'), 'status pill text must render in full')
-  assert.ok(html.includes('INV-00001'), 'document number must render')
-  const row = html.match(/<span class="([^"]*)">/)
-  assert.ok(row, 'title row must render')
-  assert.match(row[1]!, /flex-wrap/, 'title row must wrap on narrow viewports')
-})
+test("drawer title row wraps instead of clipping the status pill", () => {
+  const html = titleHtml();
+  assert.ok(html.includes("Voided"), "status pill text must render in full");
+  assert.ok(html.includes("INV-00001"), "document number must render");
+  const row = html.match(/<span class="([^"]*)">/);
+  assert.ok(row, "title row must render");
+  assert.match(row[1]!, /flex-wrap/, "title row must wrap on narrow viewports");
+});
 
-test('status pill never shrinks', () => {
-  const html = titleHtml()
-  const pill = html.match(/<div class="([^"]*)">Voided<\/div>/)
-  assert.ok(pill, 'status pill must render')
-  assert.match(pill[1]!, /shrink-0/, 'status pill must keep its width, never clip')
-})
+test("status pill never shrinks", () => {
+  const html = titleHtml();
+  const pill = html.match(/<div class="([^"]*)">Voided<\/div>/);
+  assert.ok(pill, "status pill must render");
+  assert.match(pill[1]!, /shrink-0/, "status pill must keep its width, never clip");
+});
 
-test('external provenance chip renders only when the pair is set', () => {
-  const bare = titleHtml()
-  assert.ok(!bare.includes('shopify'), 'no chip without a stored pair')
-  const half = titleHtml({ externalRef: 'SHOP-1' })
-  assert.ok(!half.includes('SHOP-1'), 'a lone half must not render')
-  const html = titleHtml({ externalRef: 'SHOP-1', externalSource: 'shopify' })
-  assert.ok(html.includes('shopify · SHOP-1'), 'the pair must render as one chip')
-})
+test("external provenance chip renders only when the pair is set", () => {
+  const bare = titleHtml();
+  assert.ok(!bare.includes("shopify"), "no chip without a stored pair");
+  const half = titleHtml({ externalRef: "SHOP-1" });
+  assert.ok(!half.includes("SHOP-1"), "a lone half must not render");
+  const html = titleHtml({ externalRef: "SHOP-1", externalSource: "shopify" });
+  assert.ok(html.includes("shopify · SHOP-1"), "the pair must render as one chip");
+});

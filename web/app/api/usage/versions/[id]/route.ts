@@ -7,5 +7,6 @@ export const GET = defineRoute({
   permission: "usage.read",
   feature: "usageBilling",
   params: z.object({ id: uuidString() }).strict(),
-  handler: async ({ authz, params }) => Response.json(await getUsageRatingPlanVersionWithBands(authz.user.orgId, params.id)),
+  handler: async ({ authz, params }) =>
+    Response.json(await getUsageRatingPlanVersionWithBands(authz.user.orgId, params.id)),
 });

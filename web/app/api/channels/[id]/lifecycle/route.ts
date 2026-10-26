@@ -40,9 +40,14 @@ export const POST = defineRoute({
       if (body.action === "test") {
         ensureShopifyAdapterRegistered();
         const adapter = channelAdapter("shopify");
-        return NextResponse.json(await adapter.testConnection({ orgId: gate.user.orgId, actorId: gate.user.id }, id));
+        return NextResponse.json(
+          await adapter.testConnection({ orgId: gate.user.orgId, actorId: gate.user.id }, id),
+        );
       }
-      if (body.action === "disconnect" && (await getChannel(gate.user.orgId, id)).kind === "shopify") {
+      if (
+        body.action === "disconnect" &&
+        (await getChannel(gate.user.orgId, id)).kind === "shopify"
+      ) {
         // A Shopify disconnect also removes the storefront subscriptions;
         // anything left behind warns instead of blocking the disconnect.
         const result = await disconnectShopify(gate.user.orgId, gate.user.id, id, body.reason);
@@ -58,7 +63,8 @@ export const POST = defineRoute({
               : await retryChannel(gate.user.orgId, gate.user.id, id, body.reason);
       return NextResponse.json({ channel });
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+      if (error instanceof CommerceError && error.code === "channel_not_found")
+        return notFound("channel");
       throw error;
     }
   },

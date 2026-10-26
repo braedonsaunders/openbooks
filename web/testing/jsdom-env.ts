@@ -18,13 +18,10 @@ export interface JsdomPresetOptions {
   event?: "jsdom" | "native";
 }
 
-export async function bootJsdomEnvironment(
-  options: JsdomPresetOptions = {},
-): Promise<void> {
-  const dom = new JSDOM(
-    options.html ?? "<!DOCTYPE html><html><body></body></html>",
-    { url: options.url ?? "http://localhost/" },
-  );
+export async function bootJsdomEnvironment(options: JsdomPresetOptions = {}): Promise<void> {
+  const dom = new JSDOM(options.html ?? "<!DOCTYPE html><html><body></body></html>", {
+    url: options.url ?? "http://localhost/",
+  });
   const globals = globalThis as Record<string, unknown>;
   const domWindow = dom.window as unknown as Record<string, unknown>;
   // Union of the browser globals the suite's inline bootstraps copied: event
@@ -58,8 +55,7 @@ export async function bootJsdomEnvironment(
   }
   if (options.scrollIntoView !== false) {
     const prototype = (globalThis as Record<string, unknown>).HTMLElement as
-      | { prototype?: { scrollIntoView?: unknown } }
-      | undefined;
+      { prototype?: { scrollIntoView?: unknown } } | undefined;
     if (prototype?.prototype && typeof prototype.prototype.scrollIntoView !== "function") {
       prototype.prototype.scrollIntoView = function () {};
     }
@@ -111,10 +107,13 @@ export function enterJsdomDate(input: HTMLInputElement, text: string): void {
 /** Dispatch through the element's realm so React observes the browser's native value setter. */
 export function setJsdomInput(input: HTMLInputElement, value: string): void {
   const realm = input.ownerDocument.defaultView!;
-  Object.getOwnPropertyDescriptor(realm.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-  input.dispatchEvent(new realm.Event('input', { bubbles: true }));
+  Object.getOwnPropertyDescriptor(realm.HTMLInputElement.prototype, "value")!.set!.call(
+    input,
+    value,
+  );
+  input.dispatchEvent(new realm.Event("input", { bubbles: true }));
 }
 export function clickJsdomElement(element: Element): void {
   const realm = element.ownerDocument.defaultView!;
-  element.dispatchEvent(new realm.MouseEvent('click', { bubbles: true }));
+  element.dispatchEvent(new realm.MouseEvent("click", { bubbles: true }));
 }

@@ -32,18 +32,26 @@ const describeCapabilities: AssistantToolDef = {
   // Which tools exist for the caller is not sensitive; every assistant user may ask.
   gate: { mode: "public" },
   inputSchema: z.object({
-    module: z.string().max(40).optional().describe("Return only this module's tools, with descriptions (module keys come from the overview)"),
+    module: z
+      .string()
+      .max(40)
+      .optional()
+      .describe(
+        "Return only this module's tools, with descriptions (module keys come from the overview)",
+      ),
   }),
   execute: async (raw, authz: Authz): Promise<ToolResult> => {
     const { module: onlyModule } = raw as { module?: string };
     // Dynamic import: registry.ts mounts this file, so a static import would cycle.
     const { ASSISTANT_TOOLS, applicationToolVisible } = await import("./registry");
     const features = await resolvedFeatureState(authz.user.orgId);
-    const visible = ASSISTANT_TOOLS.filter((tool) => canRunTool(authz, tool, features)).map((tool) => ({
-      name: tool.name,
-      blurb: oneLine(tool.description),
-      module: moduleOfTool(tool.name, tool.feature),
-    }));
+    const visible = ASSISTANT_TOOLS.filter((tool) => canRunTool(authz, tool, features)).map(
+      (tool) => ({
+        name: tool.name,
+        blurb: oneLine(tool.description),
+        module: moduleOfTool(tool.name, tool.feature),
+      }),
+    );
     for (const definition of APPLICATION_TOOLS) {
       if (!applicationToolVisible(definition, authz, features)) continue;
       if (!definition.readOnly && !can(authz, "assistant.write")) continue;
@@ -73,44 +81,73 @@ const describeCapabilities: AssistantToolDef = {
           .map((tool) => (withBlurbs ? tool : tool.name)),
       }))
       .sort((a, b) =>
-        a.module === b.module ? 0 : a.module === "core" ? -1 : b.module === "core" ? 1 : (
-          a.module < b.module ? -1 : 1
-        ),
+        a.module === b.module
+          ? 0
+          : a.module === "core"
+            ? -1
+            : b.module === "core"
+              ? 1
+              : a.module < b.module
+                ? -1
+                : 1,
       );
     const featuresOff = FEATURES.filter((feature) => !featureEnabled(features, feature.key))
       .map((feature) => feature.key)
       .sort();
     if (onlyModule !== undefined && groups.length === 0) {
-      return { ok: false, error: `unknown module; use one of: ${[...byModule.keys()].sort().join(", ")}` };
+      return {
+        ok: false,
+        error: `unknown module; use one of: ${[...byModule.keys()].sort().join(", ")}`,
+      };
     }
     return {
       ok: true,
       data: { groups, featuresOff, totalTools: visible.length, detailed: withBlurbs },
-      note: (withBlurbs ? "" : "Overview lists tool names per module; call again with `module` for descriptions. ") +
+      note:
+        (withBlurbs
+          ? ""
+          : "Overview lists tool names per module; call again with `module` for descriptions. ") +
         "Live catalog for your permissions; tools of disabled modules are hidden. Mutating tools return a review card and change nothing until confirmed.",
     };
   },
 };
 
 const findToolsSchema = z.object({
-  query: z.string().trim().min(1).max(200).optional()
+  query: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
     .describe("Keywords for the capability you need (e.g. inventory, pay run, tax return)"),
-  module: z.string().max(40).optional()
+  module: z
+    .string()
+    .max(40)
+    .optional()
     .describe("Return every tool in this module (module keys come from the empty call)"),
-  limit: z.number().int().min(1).max(20).optional()
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .optional()
     .describe("Max tools to return for a query (default 8)"),
 });
 
 /** Live, gated catalog entries shaped for search: the same gates that build the model tool set. */
-async function searchableCatalog(authz: Authz): Promise<{ name: string; blurb: string; module: string }[]> {
+async function searchableCatalog(
+  authz: Authz,
+): Promise<{ name: string; blurb: string; module: string }[]> {
   // Dynamic imports: registry.ts mounts this file, so static imports would cycle.
   const { ASSISTANT_TOOLS, applicationToolVisible } = await import("./registry");
   const features = await resolvedFeatureState(authz.user.orgId);
-  const catalog = ASSISTANT_TOOLS.filter((tool) => canRunTool(authz, tool, features)).map((tool) => ({
-    name: tool.name,
-    blurb: oneLine(tool.description),
-    module: moduleOfTool(tool.name, tool.feature),
-  }));
+  const catalog = ASSISTANT_TOOLS.filter((tool) => canRunTool(authz, tool, features)).map(
+    (tool) => ({
+      name: tool.name,
+      blurb: oneLine(tool.description),
+      module: moduleOfTool(tool.name, tool.feature),
+    }),
+  );
   for (const definition of APPLICATION_TOOLS) {
     if (!applicationToolVisible(definition, authz, features)) continue;
     if (!definition.readOnly && !can(authz, "assistant.write")) continue;
@@ -154,7 +191,9 @@ const findTools: AssistantToolDef = {
     }
     if (query !== undefined) {
       const tools = matchTools(catalog, query, limit);
-      const modules = [...new Set(tools.map((tool) => tool.module))].filter((m) => m !== "core").sort();
+      const modules = [...new Set(tools.map((tool) => tool.module))]
+        .filter((m) => m !== "core")
+        .sort();
       return {
         ok: true,
         data: { tools, modules, total: tools.length },
@@ -170,7 +209,12 @@ const findTools: AssistantToolDef = {
       .sort((a, b) => (a.module < b.module ? -1 : 1));
     return {
       ok: true,
-      data: { tools: [], modules: modules.map((m) => m.module), counts: modules, total: catalog.length },
+      data: {
+        tools: [],
+        modules: modules.map((m) => m.module),
+        counts: modules,
+        total: catalog.length,
+      },
       note: "Module overview; call again with module or query for tool blurbs.",
     };
   },

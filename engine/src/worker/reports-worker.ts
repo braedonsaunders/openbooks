@@ -1,7 +1,10 @@
 import { Worker } from "bullmq";
 import { REPORTS_QUEUE, getBlockingConnection, type ReportJobData } from "@openbooks/jobs";
 import { withBypassContext, withOrgContext } from "../platform/db.ts";
-import { dispatchReportDeliveries, processScheduledReportRun } from "../delivery/report-delivery.ts";
+import {
+  dispatchReportDeliveries,
+  processScheduledReportRun,
+} from "../delivery/report-delivery.ts";
 import { renderReportPdf } from "./render-client.ts";
 
 /**
@@ -18,10 +21,10 @@ export function createReportsWorker(): Worker<ReportJobData> {
       // crosses its own explicit trusted boundary. A queue callback has neither
       // by default, and RLS would otherwise deny both silently.
       const result = await withOrgContext(d.orgId, () =>
-        processScheduledReportRun(
-          d.runId,
-          (orgId, definitionId, runId) => renderReportPdf(orgId, definitionId, { ...d.params, runId }),
-        ));
+        processScheduledReportRun(d.runId, (orgId, definitionId, runId) =>
+          renderReportPdf(orgId, definitionId, { ...d.params, runId }),
+        ),
+      );
       // bypass: scheduler-tick — the delivery drain sends queued report deliveries of every organization.
       await withBypassContext(() => dispatchReportDeliveries());
       return { runId: d.runId, ...result };

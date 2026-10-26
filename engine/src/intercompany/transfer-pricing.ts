@@ -33,7 +33,7 @@ export type TransferPricingPolicy = {
   costAccountId: string;
   effectiveFrom: string;
   effectiveTo: string | null;
-}
+};
 
 /**
  * The policy in effect for a seller, buyer and date: the buyer-specific one
@@ -44,7 +44,9 @@ export async function transferPricingPolicyInEffect(
   orgId: string,
   input: { sellerSubsidiaryId: string; buyerSubsidiaryId: string; date: string },
 ): Promise<TransferPricingPolicy | null> {
-  const row = (await runner.execute<TransferPricingPolicy>(sql`
+  const row = (
+    await runner.execute<TransferPricingPolicy>(
+      sql`
     select id, code, name, seller_subsidiary_id as "sellerSubsidiaryId", buyer_subsidiary_id as "buyerSubsidiaryId",
            method, price_level_id as "priceLevelId", markup_percent::text as "markupPercent",
            revenue_account_id as "revenueAccountId", cost_account_id as "costAccountId",
@@ -57,13 +59,18 @@ export async function transferPricingPolicyInEffect(
        and (effective_to is null or effective_to >= ${input.date}::date)
      order by (buyer_subsidiary_id is null), effective_from desc
      limit 1
-     for share`, "objects"))[0];
+     for share`,
+      "objects",
+    )
+  )[0];
   return row ?? null;
 }
 
 function scaledUnits(value: string, scale: number): bigint {
   const [whole = "0", fraction = ""] = value.replace(/^-/, "").split(".");
-  const units = BigInt(whole) * 10n ** BigInt(scale) + BigInt((fraction + "0".repeat(scale)).slice(0, scale) || "0");
+  const units =
+    BigInt(whole) * 10n ** BigInt(scale) +
+    BigInt((fraction + "0".repeat(scale)).slice(0, scale) || "0");
   return value.startsWith("-") ? -units : units;
 }
 
@@ -71,8 +78,10 @@ function scaledUnits(value: string, scale: number): bigint {
 export function costPlusUnitPrice(unitCost: string, markupPercent: string): string {
   const cost = canonicalDecimal(unitCost, 8);
   const markup = canonicalDecimal(markupPercent, 4);
-  if (cost === null || compareDecimal(cost, "0") < 0) throw new IntercompanyError("the unit cost to mark up must be a non-negative amount");
-  if (markup === null || compareDecimal(markup, "0") < 0) throw new IntercompanyError("the transfer pricing markup must be a non-negative percentage");
+  if (cost === null || compareDecimal(cost, "0") < 0)
+    throw new IntercompanyError("the unit cost to mark up must be a non-negative amount");
+  if (markup === null || compareDecimal(markup, "0") < 0)
+    throw new IntercompanyError("the transfer pricing markup must be a non-negative percentage");
   // price = cost × (100 + markup) / 100, at cost scale 1e8 and markup scale 1e4.
   const costUnits = scaledUnits(cost, 8);
   const markupUnits = scaledUnits(markup, 4);
@@ -93,7 +102,9 @@ export async function priceLevelUnitPrice(
   orgId: string,
   input: { priceLevelId: string; itemId: string; currency: string; quantity: string; date: string },
 ): Promise<string | null> {
-  const schedule = (await runner.execute<{ id: string }>(sql`
+  const schedule = (
+    await runner.execute<{ id: string }>(
+      sql`
     select schedule.id
       from item_price_schedules schedule
       join price_levels level
@@ -107,16 +118,23 @@ export async function priceLevelUnitPrice(
             or (schedule.family_id is not null
                 and schedule.family_id = (select family_id from items where org_id = ${orgId} and id = ${input.itemId})))
      order by (schedule.item_id = ${input.itemId}) desc nulls last, schedule.effective_from desc, schedule.revision desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (!schedule) return null;
-  const breaks = await runner.execute<{ minimumQuantity: string; unitPrice: string }>(sql`
+  const breaks = await runner.execute<{ minimumQuantity: string; unitPrice: string }>(
+    sql`
     select minimum_quantity::text as "minimumQuantity", unit_price::text as "unitPrice"
       from item_price_breaks
-     where org_id = ${orgId} and schedule_id = ${schedule.id}`, "objects");
+     where org_id = ${orgId} and schedule_id = ${schedule.id}`,
+    "objects",
+  );
   if (breaks.length === 0) return null;
   // A quantity below the smallest break prices at the smallest break.
-  const selected = selectQuantityPrice(input.quantity, breaks)
-    ?? [...breaks].sort((a, b) => compareDecimal(a.minimumQuantity, b.minimumQuantity))[0]!;
+  const selected =
+    selectQuantityPrice(input.quantity, breaks) ??
+    [...breaks].sort((a, b) => compareDecimal(a.minimumQuantity, b.minimumQuantity))[0]!;
   return selected.unitPrice;
 }
 
@@ -130,7 +148,14 @@ export async function transferUnitPrice(
   runner: SqlExecutor,
   orgId: string,
   policy: TransferPricingPolicy,
-  input: { itemId: string; itemLabel: string; quantity: string; date: string; currency: string; unitCost: string },
+  input: {
+    itemId: string;
+    itemLabel: string;
+    quantity: string;
+    date: string;
+    currency: string;
+    unitCost: string;
+  },
 ): Promise<string> {
   if (policy.method === "cost_plus") {
     return costPlusUnitPrice(input.unitCost, policy.markupPercent ?? "0");
@@ -167,27 +192,37 @@ export interface TransferPricingPolicyWrite {
  */
 export function transferPricingPolicyRefusal(input: TransferPricingPolicyWrite): string | null {
   const seller = typeof input.sellerSubsidiaryId === "string" ? input.sellerSubsidiaryId : "";
-  const buyer = typeof input.buyerSubsidiaryId === "string" && input.buyerSubsidiaryId ? input.buyerSubsidiaryId : null;
+  const buyer =
+    typeof input.buyerSubsidiaryId === "string" && input.buyerSubsidiaryId
+      ? input.buyerSubsidiaryId
+      : null;
   if (!isUuid(seller)) return "Choose the selling subsidiary";
   if (buyer && !isUuid(buyer)) return "Choose a valid buying subsidiary";
-  if (buyer === seller) return "A subsidiary cannot set transfer prices for sales to itself; choose a different buying subsidiary";
+  if (buyer === seller)
+    return "A subsidiary cannot set transfer prices for sales to itself; choose a different buying subsidiary";
   const method = input.method;
-  if (method !== "price_level" && method !== "cost_plus") return "Choose how transfer prices are set: a price level or cost plus a markup";
-  const level = typeof input.priceLevelId === "string" && input.priceLevelId ? input.priceLevelId : null;
-  const markup = input.markupPercent === null || input.markupPercent === undefined || input.markupPercent === ""
-    ? null
-    : canonicalDecimal(input.markupPercent, 4);
+  if (method !== "price_level" && method !== "cost_plus")
+    return "Choose how transfer prices are set: a price level or cost plus a markup";
+  const level =
+    typeof input.priceLevelId === "string" && input.priceLevelId ? input.priceLevelId : null;
+  const markup =
+    input.markupPercent === null || input.markupPercent === undefined || input.markupPercent === ""
+      ? null
+      : canonicalDecimal(input.markupPercent, 4);
   if (method === "price_level") {
     if (!level) return "Choose the price level transfer prices come from";
-    if (markup !== null) return "A price-level policy takes its prices from the level; clear the markup";
+    if (markup !== null)
+      return "A price-level policy takes its prices from the level; clear the markup";
   } else {
     if (level) return "A cost-plus policy prices from cost; clear the price level";
     if (markup === null) return "Enter the markup percentage added to cost";
-    if (compareDecimal(markup, "0") < 0 || compareDecimal(markup, "1000") > 0) return "The markup must be between 0 and 1000 percent";
+    if (compareDecimal(markup, "0") < 0 || compareDecimal(markup, "1000") > 0)
+      return "The markup must be between 0 and 1000 percent";
   }
   const from = typeof input.effectiveFrom === "string" ? input.effectiveFrom : "";
   const to = typeof input.effectiveTo === "string" && input.effectiveTo ? input.effectiveTo : null;
   if (!isIsoCalendarDate(from)) return "Enter the date the policy takes effect";
-  if (to && (!isIsoCalendarDate(to) || to < from)) return "The end date must be on or after the start date";
+  if (to && (!isIsoCalendarDate(to) || to < from))
+    return "The end date must be on or after the start date";
   return null;
 }

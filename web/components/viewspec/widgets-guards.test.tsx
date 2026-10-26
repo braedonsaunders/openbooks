@@ -14,7 +14,11 @@ import type { ReactElement } from "react";
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (/\.(css|scss|sass|less)(\?[^"]*)?$/.test(specifier)) {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export default {}" };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export default {}",
+      };
     }
     return nextResolve(specifier, context);
   },
@@ -34,21 +38,32 @@ function propsOf(node: unknown): Record<string, unknown> {
 }
 
 test("non-numeric amounts fall back to the default instead of NaN", () => {
-  const roster = propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: "abc", totalCards: "abc" }));
-  assert.equal(roster.totalCash, '0');
-  assert.equal(roster.totalCards, '0');
+  const roster = propsOf(
+    BANKING_WIDGETS["banking-roster"]({ totalCash: "abc", totalCards: "abc" }),
+  );
+  assert.equal(roster.totalCash, "0");
+  assert.equal(roster.totalCards, "0");
   const recon = propsOf(
-    BANKING_WIDGETS["reconcile-workspace"]({ stmtTotal: "abc", glTotal: "abc", matchedTotal: "abc" }),
+    BANKING_WIDGETS["reconcile-workspace"]({
+      stmtTotal: "abc",
+      glTotal: "abc",
+      matchedTotal: "abc",
+    }),
   );
   assert.equal(recon.stmtTotal, 0);
   assert.equal(recon.glTotal, 0);
   assert.equal(recon.matchedTotal, 0);
   assert.equal(propsOf(AGENTS_WIDGETS["metric-tile"]({ value: "abc" })).value, 0);
-  const counts = propsOf(CONTROLS_WIDGETS["row-counts-cell"]({ created: "abc", updated: "abc", failed: "abc" }));
+  const counts = propsOf(
+    CONTROLS_WIDGETS["row-counts-cell"]({ created: "abc", updated: "abc", failed: "abc" }),
+  );
   assert.equal(counts.created, 0);
   assert.equal(counts.updated, 0);
   assert.equal(counts.failed, 0);
-  assert.equal(propsOf(OPERATIONS_WIDGETS["close-readiness-cell"]({ readiness: "abc" })).readiness, 0);
+  assert.equal(
+    propsOf(OPERATIONS_WIDGETS["close-readiness-cell"]({ readiness: "abc" })).readiness,
+    0,
+  );
   assert.equal(propsOf(OPERATIONS_WIDGETS["new-filing"]({ defaultYear: "abc" })).defaultYear, 0);
   const hero = propsOf(
     SETUP_WIDGETS["setup-readiness-hero"]({
@@ -65,7 +80,10 @@ test("non-numeric amounts fall back to the default instead of NaN", () => {
 });
 
 test("exact banking amounts pass through untouched", () => {
-  assert.equal(propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: '42.5000' })).totalCash, '42.5000');
+  assert.equal(
+    propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: "42.5000" })).totalCash,
+    "42.5000",
+  );
   assert.equal(propsOf(AGENTS_WIDGETS["metric-tile"]({ value: 7 })).value, 7);
   assert.equal(propsOf(OPERATIONS_WIDGETS["new-filing"]({ defaultYear: 2026 })).defaultYear, 2026);
 });

@@ -3,12 +3,35 @@ import { sql } from "drizzle-orm";
 import { businessToday, parseIsoDate } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { latestWebConnectorHeartbeat, prepareCapture, releaseCapture, waitForCapture, type CaptureResponse } from "../qbd/bridge.ts";
-import { assertQbdResponsePayload, assertUniformReportLocale, nodes, parseQbdReportAmount, parseQbdReportDate, parseReportRows, parseXml, type QbdReportAmount } from "../qbd/qbxml.ts";
+import {
+  latestWebConnectorHeartbeat,
+  prepareCapture,
+  releaseCapture,
+  waitForCapture,
+  type CaptureResponse,
+} from "../qbd/bridge.ts";
+import {
+  assertQbdResponsePayload,
+  assertUniformReportLocale,
+  nodes,
+  parseQbdReportAmount,
+  parseQbdReportDate,
+  parseReportRows,
+  parseXml,
+  type QbdReportAmount,
+} from "../qbd/qbxml.ts";
 import type { NativeContext } from "./native.ts";
 import { allModules, fiscalYearsForRange, monthlySourcePeriods } from "./periods.ts";
 import { buildQbdLedgerDocuments } from "./qbd-native.ts";
-import type { EntityStream, MigrationSource, NativeChanges, SourceAccountMonthRow, SourceEntity, SourceOpeningBalance, SourceTrialBalanceRow } from "./source.ts";
+import type {
+  EntityStream,
+  MigrationSource,
+  NativeChanges,
+  SourceAccountMonthRow,
+  SourceEntity,
+  SourceOpeningBalance,
+  SourceTrialBalanceRow,
+} from "./source.ts";
 
 export interface QbdSourceConfig {
   orgId: string;
@@ -56,13 +79,19 @@ function bool(value: unknown, fallback = true): boolean {
 
 function findDeep(value: unknown, key: string): unknown {
   if (Array.isArray(value)) {
-    for (const child of value) { const found = findDeep(child, key); if (found !== undefined) return found; }
+    for (const child of value) {
+      const found = findDeep(child, key);
+      if (found !== undefined) return found;
+    }
     return undefined;
   }
   if (!value || typeof value !== "object") return undefined;
   const node = value as Record<string, unknown>;
   if (key in node) return node[key];
-  for (const child of Object.values(node)) { const found = findDeep(child, key); if (found !== undefined) return found; }
+  for (const child of Object.values(node)) {
+    const found = findDeep(child, key);
+    if (found !== undefined) return found;
+  }
   return undefined;
 }
 
@@ -80,7 +109,16 @@ function reportAmount(into: QbdReportAmount[], value: string | undefined, scope:
 
 export class QbdSource implements MigrationSource {
   readonly name = "qbd";
-  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'parties', 'items'], ['customers', 'vendors', 'employees'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
+  readonly entityMappingMetadata = entityMappingMetadata(
+    ["accounting_periods", "accounts", "parties", "items"],
+    ["customers", "vendors", "employees"],
+    {
+      accounts: ["number", "name", "type", "isActive"],
+      parties: ["displayName", "kind", "isActive"],
+      items: ["code", "name", "kind", "isActive"],
+      tax_codes: ["code", "name", "ratePercent", "appliesTo"],
+    },
+  );
   readonly refKey = "qbdId";
   readonly baseCurrency: string;
   private captureId: string | null = null;
@@ -94,7 +132,10 @@ export class QbdSource implements MigrationSource {
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {
-    const heartbeat = await latestWebConnectorHeartbeat(this.config.orgId, this.config.connectionId);
+    const heartbeat = await latestWebConnectorHeartbeat(
+      this.config.orgId,
+      this.config.connectionId,
+    );
     if (!heartbeat) return { ok: false, detail: "Web Connector has not authenticated yet" };
     const ageMinutes = Math.floor((Date.now() - new Date(heartbeat).getTime()) / 60_000);
     return ageMinutes <= 15
@@ -111,18 +152,25 @@ export class QbdSource implements MigrationSource {
       since,
     });
     await waitForCapture(this.config.orgId, this.captureId);
-    const captured = (await db.execute<{ through: Date }>(sql`select captured_through as through from qbd_captures where id = ${this.captureId} and org_id = ${this.config.orgId}`, "objects"));
+    const captured = await db.execute<{ through: Date }>(
+      sql`select captured_through as through from qbd_captures where id = ${this.captureId} and org_id = ${this.config.orgId}`,
+      "objects",
+    );
     this.capturedThrough = captured[0]?.through ?? new Date();
     this.captureReady = true;
   }
 
   private async responseRows(family: string): Promise<CaptureResponse[]> {
     await this.capture();
-    const result = (await db.execute<CaptureResponse>(sql`
+    const result = await db.execute<CaptureResponse>(
+      sql`
       select family, request_kind as "requestKind", page, response_xml as "responseXml"
         from qbd_requests where capture_id = ${this.captureId} and org_id = ${this.config.orgId} and family = ${family} and status = 'complete'
-       order by sequence`, "objects"));
-    if (result.some((row) => !row.responseXml)) throw new Error(`QuickBooks capture family ${family} contains an empty response`);
+       order by sequence`,
+      "objects",
+    );
+    if (result.some((row) => !row.responseXml))
+      throw new Error(`QuickBooks capture family ${family} contains an empty response`);
     return result;
   }
 
@@ -171,8 +219,14 @@ export class QbdSource implements MigrationSource {
           // take the held path.
           parties.push({
             sourceRef: `${prefix}:${id}`,
-            mappingEntities: [family === "customer" ? "customers" : family === "vendor" ? "vendors" : "employees"],
-            fields: { displayName: (text(p.Name) || text(p.FullName) || `${prefix} ${id}`).slice(0, 500), kind, isActive: bool(p.IsActive) },
+            mappingEntities: [
+              family === "customer" ? "customers" : family === "vendor" ? "vendors" : "employees",
+            ],
+            fields: {
+              displayName: (text(p.Name) || text(p.FullName) || `${prefix} ${id}`).slice(0, 500),
+              kind,
+              isActive: bool(p.IsActive),
+            },
           });
         }
       }
@@ -193,7 +247,11 @@ export class QbdSource implements MigrationSource {
           fields: {
             code: (text(item.Name) || `qbd-${id}`).slice(0, 100),
             name: name.slice(0, 500),
-            kind: inventory ? "inventory" : /service/i.test(JSON.stringify(item)) ? "service" : "non_inventory",
+            kind: inventory
+              ? "inventory"
+              : /service/i.test(JSON.stringify(item))
+                ? "service"
+                : "non_inventory",
             incomeAccountRef: income?.id ?? null,
             expenseAccountRef: expense?.id ?? null,
             inventoryAccountRef: inventory?.id ?? null,
@@ -223,10 +281,15 @@ export class QbdSource implements MigrationSource {
     );
   }
 
-  async controlAccounts(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>> {
+  async controlAccounts(): Promise<
+    Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>
+  > {
     const accounts = await this.accountRecords();
-    const first = (type: string) => accounts.find((a) => text(a.AccountType) === type && bool(a.IsActive));
-    const tax = accounts.find((a) => /(?:sales tax|gst|hst|vat).*(?:payable|liability)/i.test(text(a.FullName) || text(a.Name)));
+    const first = (type: string) =>
+      accounts.find((a) => text(a.AccountType) === type && bool(a.IsActive));
+    const tax = accounts.find((a) =>
+      /(?:sales tax|gst|hst|vat).*(?:payable|liability)/i.test(text(a.FullName) || text(a.Name)),
+    );
     return {
       ar: text(first("AccountsReceivable")?.ListID) || undefined,
       ap: text(first("AccountsPayable")?.ListID) || undefined,
@@ -238,16 +301,21 @@ export class QbdSource implements MigrationSource {
 
   private async ledgerFamilies(): Promise<string[]> {
     await this.capture();
-    const result = (await db.execute<{ family: string }>(sql`
+    const result = await db.execute<{ family: string }>(
+      sql`
       select distinct family from qbd_requests
        where capture_id = ${this.captureId} and org_id = ${this.config.orgId} and family like 'ledger:%' and status = 'complete'
-       order by family`, "objects"));
+       order by family`,
+      "objects",
+    );
     return result.map((row) => row.family);
   }
 
   private async ledgerRows(family: string) {
     const responses = await this.responseRows(family);
-    const rows = responses.flatMap((response) => parseReportRows(response.responseXml).filter((row) => row.rowType === "DataRow"));
+    const rows = responses.flatMap((response) =>
+      parseReportRows(response.responseXml).filter((row) => row.rowType === "DataRow"),
+    );
     // A nonzero GeneralLedger DataRow without a TxnID cannot be grouped into
     // its transaction: buildQbdLedgerDocuments would silently drop the leg
     // (and a fully TxnID-less transaction would vanish from the pulled set
@@ -271,7 +339,9 @@ export class QbdSource implements MigrationSource {
       if (row.columns.TxnID) return;
       const amount = toUnits(debit) - toUnits(credit);
       if (amount !== 0n) {
-        throw new Error(`QuickBooks GeneralLedger response for month ${month} contains a nonzero row without a TxnID (row ${index + 1}, account "${row.columns.Account ?? ""}", debit "${row.columns.Debit ?? ""}", credit "${row.columns.Credit ?? ""}"); the sync is refused before any deletion inference`);
+        throw new Error(
+          `QuickBooks GeneralLedger response for month ${month} contains a nonzero row without a TxnID (row ${index + 1}, account "${row.columns.Account ?? ""}", debit "${row.columns.Debit ?? ""}", credit "${row.columns.Credit ?? ""}"); the sync is refused before any deletion inference`,
+        );
       }
     });
     return rows;
@@ -295,11 +365,16 @@ export class QbdSource implements MigrationSource {
       vendor: new Map<string, string>(),
       employee: new Map<string, string>(),
     };
-    for (const [family, suffix, prefix] of [["customer", "CustomerRet", "C"], ["vendor", "VendorRet", "V"], ["employee", "EmployeeRet", "E"]] as const) {
-      for (const xml of await this.parsedFamily(family)) for (const p of nodes(xml, suffix)) {
-        const id = text(p.ListID);
-        if (id) partyRefByFamily[family].set(text(p.FullName) || text(p.Name), `${prefix}:${id}`);
-      }
+    for (const [family, suffix, prefix] of [
+      ["customer", "CustomerRet", "C"],
+      ["vendor", "VendorRet", "V"],
+      ["employee", "EmployeeRet", "E"],
+    ] as const) {
+      for (const xml of await this.parsedFamily(family))
+        for (const p of nodes(xml, suffix)) {
+          const id = text(p.ListID);
+          if (id) partyRefByFamily[family].set(text(p.FullName) || text(p.Name), `${prefix}:${id}`);
+        }
     }
 
     const documents: NativeChanges["documents"] = [];
@@ -315,10 +390,16 @@ export class QbdSource implements MigrationSource {
       documents.push(...built.documents);
       unbuildable.push(...built.unbuildable);
     }
-    const existing = (await db.execute<{ ref: string }>(sql`
+    const existing = await db.execute<{ ref: string }>(
+      sql`
       select custom->>'qbdId' as ref from documents
-       where org_id = ${ctx.orgId} and custom->>'qbdId' is not null`, "objects"));
-    const pulled = new Set([...documents.map((d) => d.sourceRef), ...unbuildable.map((u) => u.ref)]);
+       where org_id = ${ctx.orgId} and custom->>'qbdId' is not null`,
+      "objects",
+    );
+    const pulled = new Set([
+      ...documents.map((d) => d.sourceRef),
+      ...unbuildable.map((u) => u.ref),
+    ]);
     const deletedRefs = existing.map((r) => r.ref).filter((ref) => !pulled.has(ref));
     return {
       documents,
@@ -333,15 +414,19 @@ export class QbdSource implements MigrationSource {
     const response = (await this.responseRows("trial-balance"))[0];
     if (!response) throw new Error("QuickBooks capture omitted the trial balance");
     const accounts = await this.accountRecords();
-    const byName = new Map(accounts.flatMap((a) => {
-      const id = text(a.ListID);
-      return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
-    }));
+    const byName = new Map(
+      accounts.flatMap((a) => {
+        const id = text(a.ListID);
+        return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
+      }),
+    );
     const locales: QbdReportAmount[] = [];
     const out = parseReportRows(response.responseXml).flatMap((row) => {
       if (row.rowType !== "DataRow") return [];
       const accountRef = byName.get(row.columns.Account ?? "");
-      const balance = toUnits(reportAmount(locales, row.columns.Debit, "trial balance")) - toUnits(reportAmount(locales, row.columns.Credit, "trial balance"));
+      const balance =
+        toUnits(reportAmount(locales, row.columns.Debit, "trial balance")) -
+        toUnits(reportAmount(locales, row.columns.Credit, "trial balance"));
       if (!accountRef) {
         // A nonzero source balance with no ListID mapping must REFUSE
         // verification by name: silently dropping it makes the account
@@ -349,7 +434,9 @@ export class QbdSource implements MigrationSource {
         // mismatches) while the ledgers genuinely differ. A truly zero row
         // is deliberately skipped — there is nothing to verify.
         if (balance !== 0n) {
-          throw new Error(`QuickBooks trial balance reports ${fromUnits(balance)} for unmapped account "${row.columns.Account ?? ""}"; map the account before verification can pass`);
+          throw new Error(
+            `QuickBooks trial balance reports ${fromUnits(balance)} for unmapped account "${row.columns.Account ?? ""}"; map the account before verification can pass`,
+          );
         }
         return [];
       }
@@ -368,29 +455,43 @@ export class QbdSource implements MigrationSource {
    */
   async openingBalances(): Promise<SourceOpeningBalance[]> {
     const start = new Date(`${this.config.historyStartDate}T00:00:00.000Z`);
-    if (Number.isNaN(start.getTime())) throw new Error(`invalid QuickBooks history start date: ${this.config.historyStartDate}`);
+    if (Number.isNaN(start.getTime()))
+      throw new Error(`invalid QuickBooks history start date: ${this.config.historyStartDate}`);
     const asOf = new Date(start.getTime() - 86_400_000).toISOString().slice(0, 10);
     const responses = await this.responseRows("opening-trial-balance");
     if (responses.length === 0) {
-      throw new Error(`QuickBooks capture omitted the opening trial balance as of ${asOf}; bounded history from ${this.config.historyStartDate} cannot reconcile its opening balances — re-run the capture`);
+      throw new Error(
+        `QuickBooks capture omitted the opening trial balance as of ${asOf}; bounded history from ${this.config.historyStartDate} cannot reconcile its opening balances — re-run the capture`,
+      );
     }
     const accounts = await this.accountRecords();
-    const byName = new Map(accounts.flatMap((a) => {
-      const id = text(a.ListID);
-      return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
-    }));
+    const byName = new Map(
+      accounts.flatMap((a) => {
+        const id = text(a.ListID);
+        return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
+      }),
+    );
     const openingDate = this.config.historyStartDate;
     const scope = `opening trial balance as of ${asOf}`;
     const locales: QbdReportAmount[] = [];
     const out = responses.flatMap((response) => {
-      assertQbdResponsePayload({ family: "opening-trial-balance", requestKind: "TrialBalance", expectedRs: "GeneralSummaryReportQueryRs", responseXml: response.responseXml });
+      assertQbdResponsePayload({
+        family: "opening-trial-balance",
+        requestKind: "TrialBalance",
+        expectedRs: "GeneralSummaryReportQueryRs",
+        responseXml: response.responseXml,
+      });
       return parseReportRows(response.responseXml).flatMap((row) => {
         if (row.rowType !== "DataRow") return [];
         const accountRef = byName.get(row.columns.Account ?? "");
-        const balance = toUnits(reportAmount(locales, row.columns.Debit, scope)) - toUnits(reportAmount(locales, row.columns.Credit, scope));
+        const balance =
+          toUnits(reportAmount(locales, row.columns.Debit, scope)) -
+          toUnits(reportAmount(locales, row.columns.Credit, scope));
         if (!accountRef) {
           if (balance !== 0n) {
-            throw new Error(`QuickBooks opening trial balance as of ${asOf} reports ${fromUnits(balance)} for unmapped account "${row.columns.Account ?? ""}"; map the account before sync can proceed`);
+            throw new Error(
+              `QuickBooks opening trial balance as of ${asOf} reports ${fromUnits(balance)} for unmapped account "${row.columns.Account ?? ""}"; map the account before sync can proceed`,
+            );
           }
           return [];
         }
@@ -404,10 +505,12 @@ export class QbdSource implements MigrationSource {
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
     const accounts = await this.accountRecords();
-    const byName = new Map(accounts.flatMap((a) => {
-      const id = text(a.ListID);
-      return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
-    }));
+    const byName = new Map(
+      accounts.flatMap((a) => {
+        const id = text(a.ListID);
+        return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
+      }),
+    );
     const buckets = new Map<string, bigint>();
     for (const family of await this.ledgerFamilies()) {
       for (const row of await this.ledgerRows(family)) {
@@ -420,14 +523,18 @@ export class QbdSource implements MigrationSource {
         // Locale uniformity was already refused per family inside ledgerRows;
         // here each cell still parses through the locale-aware parser so no
         // amount reaches the true-up through comma-stripping.
-        const amount = toUnits(parseQbdReportAmount(row.columns.Debit, family).text) - toUnits(parseQbdReportAmount(row.columns.Credit, family).text);
+        const amount =
+          toUnits(parseQbdReportAmount(row.columns.Debit, family).text) -
+          toUnits(parseQbdReportAmount(row.columns.Credit, family).text);
         if (!accountRef) {
           // Same fail-closed rule as trialBalance above: nonzero source
           // activity with no ListID mapping refuses by name (account, month,
           // amount) instead of vanishing from the true-up. A truly zero row
           // is deliberately skipped — there is nothing to reconcile.
           if (amount !== 0n) {
-            throw new Error(`QuickBooks ledger reports ${fromUnits(amount)} for unmapped account "${row.columns.Account ?? ""}" in ${month}; map the account before sync can proceed`);
+            throw new Error(
+              `QuickBooks ledger reports ${fromUnits(amount)} for unmapped account "${row.columns.Account ?? ""}" in ${month}; map the account before sync can proceed`,
+            );
           }
           continue;
         }

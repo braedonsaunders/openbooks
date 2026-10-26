@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env.ts'
+import { stubModules } from "../../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env.ts";
 
 // The Hire action drawer never fails silently: required fields carry inline
 // errors, submit focuses the first invalid field, and a server refusal
@@ -9,7 +9,15 @@ import { bootJsdomEnvironment } from '../../../testing/jsdom-env.ts'
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/hrm", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__hireRouter}export function usePathname(){return \'/hrm\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__hireRouter}export function usePathname(){return '/hrm'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 const { registerHooks } = await import("node:module");
 registerHooks({
@@ -57,14 +65,20 @@ function scriptFetch(post: () => Response) {
   const prior = globalThis.fetch;
   const posts: PostCall[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.includes("/api/hrm/employments") && (init?.method ?? "GET") === "POST") {
       posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown> });
       return post();
     }
     if (url.includes("/api/hrm/options")) {
       const query = new URL(url, "http://localhost:4800").searchParams;
-      if (query.get("source") === "employer-subsidiaries" && !query.get("q") && !query.get("include")) {
+      if (
+        query.get("source") === "employer-subsidiaries" &&
+        !query.get("q") &&
+        !query.get("include")
+      ) {
         // A single visible entity preselects, so the employer is filled.
         return Response.json({ options: [{ subsidiaryId: "emp-1", label: "Employer One" }] });
       }
@@ -89,7 +103,14 @@ async function mountHire() {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-10-01">
-          <HireEmploymentDrawer partyId="person-1" partyName="Pat Candidate" onClose={() => {}} onSaved={() => { saved += 1; }} />
+          <HireEmploymentDrawer
+            partyId="person-1"
+            partyName="Pat Candidate"
+            onClose={() => {}}
+            onSaved={() => {
+              saved += 1;
+            }}
+          />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
     );
@@ -110,7 +131,9 @@ async function mountHire() {
 }
 
 function buttonNamed(name: string): HTMLButtonElement {
-  const found = [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === name);
+  const found = [...document.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === name,
+  );
   assert.ok(found, `a "${name}" action must render`);
   return found as HTMLButtonElement;
 }
@@ -127,9 +150,10 @@ async function typeIntoId(id: string, value: string) {
   const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
   assert.ok(el, `the #${id} field must render`);
   await act(async () => {
-    const proto = el instanceof window.HTMLTextAreaElement
-      ? window.HTMLTextAreaElement.prototype
-      : window.HTMLInputElement.prototype;
+    const proto =
+      el instanceof window.HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
     setter.call(el, value);
     el.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -139,7 +163,9 @@ async function typeIntoId(id: string, value: string) {
 }
 
 test("an empty reason shows an inline error and focuses the field without posting", async (t) => {
-  const fetch = scriptFetch(() => Response.json({ employment: { id: "e1" }, request: { id: "r1" } }));
+  const fetch = scriptFetch(() =>
+    Response.json({ employment: { id: "e1" }, request: { id: "r1" } }),
+  );
   const mounted = await mountHire();
   t.after(async () => {
     await mounted.done();
@@ -160,7 +186,9 @@ test("an empty reason shows an inline error and focuses the field without postin
 });
 
 test("an empty assignment key shows an inline error without posting", async (t) => {
-  const fetch = scriptFetch(() => Response.json({ employment: { id: "e1" }, request: { id: "r1" } }));
+  const fetch = scriptFetch(() =>
+    Response.json({ employment: { id: "e1" }, request: { id: "r1" } }),
+  );
   const mounted = await mountHire();
   t.after(async () => {
     await mounted.done();
@@ -179,7 +207,10 @@ test("an empty assignment key shows an inline error without posting", async (t) 
 
 test("a server refusal renders with its message and saves nothing", async (t) => {
   const fetch = scriptFetch(
-    () => new Response(JSON.stringify({ error: "The start date falls in a locked period." }), { status: 422 }),
+    () =>
+      new Response(JSON.stringify({ error: "The start date falls in a locked period." }), {
+        status: 422,
+      }),
   );
   const mounted = await mountHire();
   t.after(async () => {
@@ -202,7 +233,9 @@ test("a server refusal renders with its message and saves nothing", async (t) =>
 });
 
 test("a valid hire posts once and completes", async (t) => {
-  const fetch = scriptFetch(() => Response.json({ employment: { id: "e1" }, request: { id: "r1" } }));
+  const fetch = scriptFetch(() =>
+    Response.json({ employment: { id: "e1" }, request: { id: "r1" } }),
+  );
   const mounted = await mountHire();
   t.after(async () => {
     await mounted.done();

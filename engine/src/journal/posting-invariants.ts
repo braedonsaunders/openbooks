@@ -9,9 +9,15 @@ import { type Doc, PostingError } from "./posting-contracts.ts";
  * these; a cash document that settles exactly zero records its quantities
  * this way. Every other zero-money leg carries nothing and is dropped.
  */
-export function isMeasurementLeg(line: { amount: string; quantity?: string | null; unit?: string | null }): boolean {
+export function isMeasurementLeg(line: {
+  amount: string;
+  quantity?: string | null;
+  unit?: string | null;
+}): boolean {
   const quantity = canonicalDecimal(canonicalDecimal(line.quantity, 8), 4);
-  return isZero(line.amount) && !!line.unit?.trim() && quantity !== null && toUnits(quantity) !== 0n;
+  return (
+    isZero(line.amount) && !!line.unit?.trim() && quantity !== null && toUnits(quantity) !== 0n
+  );
 }
 
 /**
@@ -19,11 +25,12 @@ export function isMeasurementLeg(line: { amount: string; quantity?: string | nul
  * and — in a statistical journal — every leg that states a quantity. Fewer
  * than two legs are refused unless the one leg is a measurement.
  */
-export function retainedKernelLines<T extends { amount: string; quantity?: string | null; unit?: string | null }>(
-  lines: readonly T[],
-  statistical: boolean,
-): T[] {
-  const kept = lines.filter((line) => !isZero(line.amount) || (statistical && !!line.quantity) || isMeasurementLeg(line));
+export function retainedKernelLines<
+  T extends { amount: string; quantity?: string | null; unit?: string | null },
+>(lines: readonly T[], statistical: boolean): T[] {
+  const kept = lines.filter(
+    (line) => !isZero(line.amount) || (statistical && !!line.quantity) || isMeasurementLeg(line),
+  );
   const single = kept.length === 1 ? kept[0] : undefined;
   if (kept.length < 2 && !(statistical && single) && !(single && isMeasurementLeg(single)))
     throw new PostingError("posting produced fewer than 2 lines");
@@ -37,21 +44,28 @@ export function retainedKernelLines<T extends { amount: string; quantity?: strin
  * error before any journal row is inserted.
  */
 export function assertFinalKernelBalance(
-  lines: readonly { amount: string; subsidiaryId: string; quantity?: string | null; unit?: string | null }[],
+  lines: readonly {
+    amount: string;
+    subsidiaryId: string;
+    quantity?: string | null;
+    unit?: string | null;
+  }[],
 ): void {
   // Document quantities carry eight storage decimals; only exact four-place
   // statistical values qualify, including their zero-padded storage readback.
   const single = lines.length === 1 ? lines[0] : undefined;
   const quantity = canonicalDecimal(canonicalDecimal(single?.quantity, 8), 4);
-  const measurement = single !== undefined && isZero(single.amount) && !!single.unit?.trim() &&
-    quantity !== null && toUnits(quantity) !== 0n;
+  const measurement =
+    single !== undefined &&
+    isZero(single.amount) &&
+    !!single.unit?.trim() &&
+    quantity !== null &&
+    toUnits(quantity) !== 0n;
   if (lines.length < 2 && !measurement)
     throw new PostingError("posting produced fewer than 2 lines");
   const total = sumMoney(lines.map((line) => line.amount));
   if (!isZero(total))
-    throw new PostingError(
-      `functional-currency journal does not balance (sum=${total})`,
-    );
+    throw new PostingError(`functional-currency journal does not balance (sum=${total})`);
   const bySubsidiary = new Map<string, string[]>();
   for (const line of lines) {
     const amounts = bySubsidiary.get(line.subsidiaryId) ?? [];

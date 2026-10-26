@@ -30,7 +30,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.payroll-run-attribute-entity-test')]
@@ -65,11 +65,11 @@ const runUrl = "./route.ts?payroll-run-attribute-entity";
 const { POST: postRun } = (await import(runUrl)) as typeof import("./route.ts");
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
-const { recurringBenefitsRunSource } = await import("@openbooks/engine/testing/payroll/benefit-plan-inputs");
+const { recurringBenefitsRunSource } =
+  await import("@openbooks/engine/testing/payroll/benefit-plan-inputs");
 
 // Production scopes every route read through the request org; the mocked
 // authz stands in for the request here, so each route call runs inside the
@@ -80,10 +80,7 @@ function scoped<T>(fn: () => Promise<T>): Promise<T> {
   return withOrgContext(authz.user.orgId, fn);
 }
 
-function attribute(
-  id: string,
-  body: Record<string, unknown>,
-): Promise<Response> {
+function attribute(id: string, body: Record<string, unknown>): Promise<Response> {
   return scoped(() =>
     postRun(
       new Request(`http://openbooks.test/api/payroll/runs/${id}`, {
@@ -97,9 +94,14 @@ function attribute(
 }
 
 async function docSubsidiary(orgId: string, documentId: string): Promise<string | null> {
-  const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+  const row = (
+    await db.execute<{ subsidiary_id: string | null }>(
+      sql`
       select subsidiary_id::text as subsidiary_id from documents
-       where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0];
   return row?.subsidiary_id ?? null;
 }
 
@@ -115,42 +117,43 @@ test(
       const adminId = actors.adminId;
       const restrictedId = actors.submitterId;
 
-      const { runDocumentId, scopedDocumentId, draftDocumentId, otherId } =
-        await withBypass(async () => {
-        await db.execute(sql`
+      const { runDocumentId, scopedDocumentId, draftDocumentId, otherId } = await withBypass(
+        async () => {
+          await db.execute(sql`
           update orgs set settings = jsonb_set(settings, '{features}',
             coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ payroll: true })}::jsonb)
            where id = ${orgId}`);
-        // A second entity so the restricted caller has somewhere to stand.
-        const otherId = randomUUID();
-        await db.execute(sql`
+          // A second entity so the restricted caller has somewhere to stand.
+          const otherId = randomUUID();
+          await db.execute(sql`
           insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, is_elimination, is_active, custom)
           values (${otherId}, ${orgId}, 'Entity B', 'USD', 'US', ${rootId}, false, true, '{}'::jsonb)`);
-        const scheduleId = randomUUID();
-        await db.execute(sql`
+          const scheduleId = randomUUID();
+          await db.execute(sql`
           insert into pay_schedules (org_id, id, name, frequency, periods_per_year,
                                      anchor_period_end, pay_date_offset_days, subsidiary_id)
           values (${orgId}, ${scheduleId}, 'Legacy schedule', 'monthly', 12, '2026-07-31', 0, ${rootId})`);
-        // Legacy shape: committed, but the document carries no entity.
-        const makeEntitylessCommitted = async (): Promise<string> => {
-          const run = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleId });
-          await db.execute(sql`
+          // Legacy shape: committed, but the document carries no entity.
+          const makeEntitylessCommitted = async (): Promise<string> => {
+            const run = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleId });
+            await db.execute(sql`
             update documents set subsidiary_id = null
              where org_id = ${orgId} and id = ${run.documentId}`);
-          // This empty historical fixture has no recurring benefit subjects;
-          // preserve that fact through the same source reader as calculation.
-          const benefitSource = await recurringBenefitsRunSource(db, orgId, run.documentId);
-          assert.deepEqual(benefitSource, []);
-          await db.execute(sql`
+            // This empty historical fixture has no recurring benefit subjects;
+            // preserve that fact through the same source reader as calculation.
+            const benefitSource = await recurringBenefitsRunSource(db, orgId, run.documentId);
+            assert.deepEqual(benefitSource, []);
+            await db.execute(sql`
             update pay_runs set run_status = 'committed', benefit_source_snapshot=${JSON.stringify(benefitSource)}::jsonb
              where org_id = ${orgId} and document_id = ${run.documentId}`);
-          return run.documentId;
-        };
-        const runDocumentId = await makeEntitylessCommitted();
-        const scopedDocumentId = await makeEntitylessCommitted();
-        const draft = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleId });
-        return { runDocumentId, scopedDocumentId, draftDocumentId: draft.documentId, otherId };
-      });
+            return run.documentId;
+          };
+          const runDocumentId = await makeEntitylessCommitted();
+          const scopedDocumentId = await makeEntitylessCommitted();
+          const draft = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleId });
+          return { runDocumentId, scopedDocumentId, draftDocumentId: draft.documentId, otherId };
+        },
+      );
 
       // An unrestricted caller attributes the legacy run to the root.
       routeState.authz = {
@@ -174,10 +177,7 @@ test(
         subsidiaryId: "not-a-subsidiary",
       });
       assert.equal(malformed.status, 422);
-      assert.match(
-        ((await malformed.json()) as { error: string }).error,
-        /choose a subsidiary/,
-      );
+      assert.match(((await malformed.json()) as { error: string }).error, /choose a subsidiary/);
 
       // A draft run is edited, not attributed.
       const draftRefused = await attribute(draftDocumentId, {
@@ -185,10 +185,7 @@ test(
         subsidiaryId: rootId,
       });
       assert.equal(draftRefused.status, 422);
-      assert.match(
-        ((await draftRefused.json()) as { error: string }).error,
-        /not committed/,
-      );
+      assert.match(((await draftRefused.json()) as { error: string }).error, /not committed/);
       // Untouched: still the schedule-stamped root, still a draft.
       assert.equal(await docSubsidiary(orgId, draftDocumentId), rootId);
 
@@ -198,10 +195,7 @@ test(
         subsidiaryId: rootId,
       });
       assert.equal(reRefused.status, 422);
-      assert.match(
-        ((await reRefused.json()) as { error: string }).error,
-        /already attributed/,
-      );
+      assert.match(((await reRefused.json()) as { error: string }).error, /already attributed/);
 
       // A restricted caller meets the missing-run 404 on the entityless
       // run — indistinguishable, and the denial writes nothing.

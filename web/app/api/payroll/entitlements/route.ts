@@ -1,14 +1,13 @@
-import { defineRoute } from '@/lib/api/route'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { entitlementBalances } from '@openbooks/engine/payroll/entitlements/operations'
-import { guardSubsidiaryScope } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { entitlementBalances } from "@openbooks/engine/payroll/entitlements/operations";
+import { guardSubsidiaryScope } from "../../../../lib/authz";
+import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
-
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * One employee's entitlement (pay bank) balances and their movement history —
@@ -20,13 +19,13 @@ export const dynamic = 'force-dynamic'
  * on payroll.read behind the payroll feature.
  */
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const orgId = gate.user.orgId
-    const employee = new URL(req.url).searchParams.get('employee')
+    const orgId = gate.user.orgId;
+    const employee = new URL(req.url).searchParams.get("employee");
     if (!employee || !isUuid(employee)) {
-      return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+      return NextResponse.json({ error: "invalid employee" }, { status: 422 });
     }
 
     // The scope check and every protected read run in one tenant transaction
@@ -36,7 +35,11 @@ export const GET = defineRoute({
     return withOrgTransaction(orgId, async () => {
       // Money balances are denominated in the employee's legal entity's functional
       // currency (the same currency their wage and pay run carry).
-      const currencyRes = (await db.execute<{ currency: string | null; subsidiaryId: string | null }>(sql`
+      const currencyRes = await db.execute<{
+        currency: string | null;
+        subsidiaryId: string | null;
+      }>(
+        sql`
         select coalesce(s.base_currency, o.base_currency) as currency,
                p.subsidiary_id as "subsidiaryId"
           from parties p
@@ -44,17 +47,20 @@ export const GET = defineRoute({
           left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
          where p.org_id = ${orgId} and p.id = ${employee}
          for share of p
-      `, 'objects'))
-      const employeeRow = currencyRes[0]
-      if (!employeeRow) return notFound("record")
-      const denied = guardSubsidiaryScope(gate, employeeRow.subsidiaryId)
-      if (denied) return denied
-      const currency = employeeRow.currency ?? 'CAD'
+      `,
+        "objects",
+      );
+      const employeeRow = currencyRes[0];
+      if (!employeeRow) return notFound("record");
+      const denied = guardSubsidiaryScope(gate, employeeRow.subsidiaryId);
+      if (denied) return denied;
+      const currency = employeeRow.currency ?? "CAD";
 
-      const balances = await entitlementBalances(orgId, employee, undefined, { executor: db })
+      const balances = await entitlementBalances(orgId, employee, undefined, { executor: db });
       // The movements behind those balances — the append-only evidence trail, most
       // recent first, tied back to the pay run that produced each one.
-      const movements = (await db.execute(sql`
+      const movements = await db.execute(
+        sql`
         select l.id, l.plan_id, pl.code as plan_code, pl.name as plan_name, pl.unit,
                l.movement_date, l.amount, l.hours, l.kind, l.note,
                l.source_holiday_key, l.source_holiday_date::text, l.take_on::text,
@@ -65,30 +71,31 @@ export const GET = defineRoute({
          where l.org_id = ${orgId} and l.employee_party_id = ${employee}
          order by l.movement_date desc, l.created_at desc
          limit 200
-      `, 'objects'))
+      `,
+        "objects",
+      );
 
       return NextResponse.json({
-      currency,
-      balances: balances.map((b) => ({
-        planId: b.plan.id,
-        planCode: b.plan.code,
-        planName: b.plan.name,
-        unit: b.plan.unit,
-        direction: b.plan.direction,
-        balance: b.balance,
-        balanceMoney: b.balanceMoney,
-        balanceHours: b.balanceHours,
-        wage: b.wage,
-        maxBalance: b.limit?.maxBalance ?? null,
-        notifyBalance: b.limit?.notifyBalance ?? null,
-        limitScope: b.limit?.scope ?? null,
-        overLimit: b.overLimit,
-        nearLimit: b.nearLimit,
-        lastMovementDate: b.lastMovementDate,
-      })),
-      movements,
-      })
-    })
-
+        currency,
+        balances: balances.map((b) => ({
+          planId: b.plan.id,
+          planCode: b.plan.code,
+          planName: b.plan.name,
+          unit: b.plan.unit,
+          direction: b.plan.direction,
+          balance: b.balance,
+          balanceMoney: b.balanceMoney,
+          balanceHours: b.balanceHours,
+          wage: b.wage,
+          maxBalance: b.limit?.maxBalance ?? null,
+          notifyBalance: b.limit?.notifyBalance ?? null,
+          limitScope: b.limit?.scope ?? null,
+          overLimit: b.overLimit,
+          nearLimit: b.nearLimit,
+          lastMovementDate: b.lastMovementDate,
+        })),
+        movements,
+      });
+    });
   },
-})
+});

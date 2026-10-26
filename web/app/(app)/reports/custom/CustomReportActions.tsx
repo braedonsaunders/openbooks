@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
-import { Button } from '@openbooks/ui'
-import { confirmDialog } from '@/lib/confirm'
-import { refusalMessageFromBody } from '@/lib/api-error'
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { Button } from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
+import { refusalMessageFromBody } from "@/lib/api-error";
 
 /**
  * Row actions for a report definition: run/view, edit in the builder, clone
@@ -18,102 +18,104 @@ export function CustomReportActions({
   kind,
   canCreate,
 }: {
-  id: string
-  kind: 'built_in' | 'custom'
-  canCreate: boolean
+  id: string;
+  kind: "built_in" | "custom";
+  canCreate: boolean;
 }) {
-  const t = useTranslations('reports.custom.actions')
-  const tc = useTranslations('common')
-  const [busy, setBusy] = useState(false)
-  const router = useRouter()
+  const t = useTranslations("reports.custom.actions");
+  const tc = useTranslations("common");
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
 
   async function clone() {
     // busy resets in finally: a network failure must release the disabled
     // buttons, or the row sticks busy on a dead request.
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch(`/api/reports/definitions/${id}`)
+      const res = await fetch(`/api/reports/definitions/${id}`);
       if (!res.ok) {
-        const failure = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(failure.error ?? t('loadFailed'))
-        return
+        const failure = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(failure.error ?? t("loadFailed"));
+        return;
       }
-      const data = await res.json()
-      const def = data.definition
-      const created = await fetch('/api/reports/definitions', {
-        method: 'POST',
+      const data = await res.json();
+      const def = data.definition;
+      const created = await fetch("/api/reports/definitions", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
         },
         body: JSON.stringify({
-          name: t('copyName', { name: def.name }),
+          name: t("copyName", { name: def.name }),
           description: def.description,
           query: def.query,
           layout: def.layout,
         }),
-      })
+      });
       if (!created.ok) {
-        const failure = (await created.json().catch(() => ({}))) as { error?: string }
-        toast.error(failure.error ?? t('cloneFailed'))
-        return
+        const failure = (await created.json().catch(() => ({}))) as { error?: string };
+        toast.error(failure.error ?? t("cloneFailed"));
+        return;
       }
-      const createdData = await created.json()
-      toast.success(t('cloned'))
-      router.push(`/reports/custom/builder/${createdData.definition.id}`)
-      router.refresh()
+      const createdData = await created.json();
+      toast.success(t("cloned"));
+      router.push(`/reports/custom/builder/${createdData.definition.id}`);
+      router.refresh();
     } catch {
-      toast.error(t('cloneFailed'))
+      toast.error(t("cloneFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function remove() {
     const ok = await confirmDialog({
-      message: t('deleteConfirm'),
-      tone: 'danger',
-    })
-    if (!ok) return
-    setBusy(true)
+      message: t("deleteConfirm"),
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/reports/definitions/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/reports/definitions/${id}`, { method: "DELETE" });
       // The error body may not be JSON (proxy 5xx pages): check ok BEFORE
       // parsing, so the refusal survives instead of becoming a parse error.
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(refusalMessageFromBody(data, { fallback: t('deleteFailed') }) ?? t('deleteFailed'))
-      } else toast.success(t('deleted'))
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(
+          refusalMessageFromBody(data, { fallback: t("deleteFailed") }) ?? t("deleteFailed"),
+        );
+      } else toast.success(t("deleted"));
     } catch {
-      toast.error(t('deleteFailed'))
+      toast.error(t("deleteFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-    router.refresh()
+    router.refresh();
   }
 
   return (
     <div className="flex items-center justify-end gap-1.5">
       <Button variant="outline" size="sm" asChild>
-        <Link href={`/reports/custom/run/${id}`}>{t('run')}</Link>
+        <Link href={`/reports/custom/run/${id}`}>{t("run")}</Link>
       </Button>
       {canCreate ? (
         <>
           <Button variant="ghost" size="sm" asChild>
-            <Link href={`/reports/custom/builder/${id}`}>{tc('actions.edit')}</Link>
+            <Link href={`/reports/custom/builder/${id}`}>{tc("actions.edit")}</Link>
           </Button>
           <Button variant="ghost" size="sm" disabled={busy} onClick={clone}>
-            {t('clone')}
+            {t("clone")}
           </Button>
-          {kind === 'custom' ? (
+          {kind === "custom" ? (
             <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
-              {tc('actions.delete')}
+              {tc("actions.delete")}
             </Button>
           ) : null}
         </>
       ) : null}
     </div>
-  )
+  );
 }

@@ -12,10 +12,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __mandatePatchBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -28,7 +34,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { seedApprovedBankAccountFixture } = await import("@openbooks/engine/testing/bank-accounts");
 const { PATCH } = await import("./route.ts");
 
@@ -39,16 +46,27 @@ async function fixture(): Promise<{ orgId: string; mandateId: string; date: stri
   state.actorId = actorId;
   const bankAccountId = randomUUID();
   const mandateId = randomUUID();
-  await seedApprovedBankAccountFixture({orgId:org.orgId,actorId,partyId:org.customerId,id:bankAccountId,
-    bankName:"Customer bank",country:"CA",currency:"CAD",routing:{},lastFour:"1234"});
-  await withBypassContext(() => db.execute(sql`
+  await seedApprovedBankAccountFixture({
+    orgId: org.orgId,
+    actorId,
+    partyId: org.customerId,
+    id: bankAccountId,
+    bankName: "Customer bank",
+    country: "CA",
+    currency: "CAD",
+    routing: {},
+    lastFour: "1234",
+  });
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into payment_mandates
       (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,
        status, signed_on, valid_from, created_by, updated_by)
     values
       (${mandateId}, ${org.orgId}, ${org.customerId}, ${bankAccountId},
        'nacha', 'MANDATE-BOUNDS', 'active', ${org.date}, ${org.date},
-       ${actorId}, ${actorId})`));
+       ${actorId}, ${actorId})`),
+  );
   return { orgId: org.orgId, mandateId, date: org.date };
 }
 
@@ -67,8 +85,10 @@ const patch = (mandateId: string, body: unknown) =>
 async function signedOn(orgId: string, mandateId: string): Promise<string | null> {
   const rows = await withBypassContext(() =>
     db.execute<{ signed_on: string | null }>(
-      sql`select signed_on::text as signed_on from payment_mandates where org_id = ${orgId} and id = ${mandateId}`, "objects",
-    ));
+      sql`select signed_on::text as signed_on from payment_mandates where org_id = ${orgId} and id = ${mandateId}`,
+      "objects",
+    ),
+  );
   return rows[0]?.signed_on ?? null;
 }
 
@@ -76,9 +96,19 @@ test("mandate update refuses a non-calendar signed date without writing", async 
   const { orgId, mandateId, date } = await fixture();
   try {
     const response = await patch(mandateId, { signedOn: "2026-09-31" });
-    const json = (await response.json().catch(() => null)) as { error?: string; issues?: { path: string }[] } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.ok(json?.issues?.some((issue) => issue.path === "signedOn"), "the refusal names the signedOn field");
+    const json = (await response.json().catch(() => null)) as {
+      error?: string;
+      issues?: { path: string }[];
+    } | null;
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.ok(
+      json?.issues?.some((issue) => issue.path === "signedOn"),
+      "the refusal names the signedOn field",
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(await signedOn(orgId, mandateId), date);
   } finally {

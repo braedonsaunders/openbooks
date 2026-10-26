@@ -1,7 +1,7 @@
-import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
-import { NewFlowButton, FlowRowActions } from './FlowsClient'
-import { QuickApprovalButton } from './QuickApproval'
+import Link from "next/link";
+import { Badge } from "@openbooks/ui";
+import { NewFlowButton, FlowRowActions } from "./FlowsClient";
+import { QuickApprovalButton } from "./QuickApproval";
 
 /**
  * The flows list's composite cells, extracted from page.tsx.
@@ -18,13 +18,10 @@ import { QuickApprovalButton } from './QuickApproval'
  *  spec's link cell carries no className contract for this treatment. */
 export function FlowNameCell({ name, href }: { name: string; href: string }) {
   return (
-    <Link
-      href={href}
-      className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-    >
+    <Link href={href} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
       {name}
     </Link>
-  )
+  );
 }
 
 /** Badge + timestamp when the flow has run, else the never-ran label. The
@@ -37,18 +34,18 @@ export function FlowLastRunCell({
   at,
   fallback,
 }: {
-  status: string | null
-  variant: 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'
-  at: string | null
-  fallback: string
+  status: string | null;
+  variant: "success" | "warning" | "destructive" | "secondary" | "outline";
+  at: string | null;
+  fallback: string;
 }) {
-  if (at === null) return <>{fallback}</>
+  if (at === null) return <>{fallback}</>;
   return (
     <span className="inline-flex items-center gap-2">
       <Badge variant={variant}>{status}</Badge>
       <span className="tabular-nums">{at}</span>
     </span>
-  )
+  );
 }
 
 /** The client enable/delete controls. The `key={updatedAt}` remount (the
@@ -61,20 +58,14 @@ export function FlowRowActionsCell({
   enabled,
   updatedAt,
 }: {
-  id: string
-  name: string
-  enabled: boolean
-  updatedAt: string
+  id: string;
+  name: string;
+  enabled: boolean;
+  updatedAt: string;
 }) {
   return (
-    <FlowRowActions
-      id={id}
-      name={name}
-      enabled={enabled}
-      updatedAt={updatedAt}
-      key={updatedAt}
-    />
-  )
+    <FlowRowActions id={id} name={name} enabled={enabled} updatedAt={updatedAt} key={updatedAt} />
+  );
 }
 
-export { NewFlowButton, QuickApprovalButton }
+export { NewFlowButton, QuickApprovalButton };

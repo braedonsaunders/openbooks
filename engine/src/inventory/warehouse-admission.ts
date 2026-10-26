@@ -25,7 +25,8 @@ export class WarehouseRefusal extends InventoryError {
   }
 }
 
-const FEATURES_REMEDY = "ask an administrator to turn on Warehousing in Company Settings → Features";
+const FEATURES_REMEDY =
+  "ask an administrator to turn on Warehousing in Company Settings → Features";
 export const WAREHOUSES_REMEDY = "Warehouse → Warehouses";
 
 /**
@@ -47,7 +48,10 @@ const DIRECTION_LABEL: Record<StockMovementDirection, string> = {
  * a retired one never returns; a suspended warehouse stops taking stock but
  * may still be drawn down, counted and revalued so it can be emptied.
  */
-export function warehouseAdmits(status: WarehouseStatus, direction: StockMovementDirection): boolean {
+export function warehouseAdmits(
+  status: WarehouseStatus,
+  direction: StockMovementDirection,
+): boolean {
   if (status === "active") return true;
   if (status === "suspended") return direction !== "inbound";
   return false;
@@ -67,13 +71,18 @@ export async function assertWarehouseAdmitsMovement(
   stockLocationId: string,
   direction: StockMovementDirection,
 ): Promise<void> {
-  const warehouse = (await tx.execute<{ code: string; status: WarehouseStatus }>(sql`
+  const warehouse = (
+    await tx.execute<{ code: string; status: WarehouseStatus }>(
+      sql`
     select wl.code, w.status
       from warehouses w
       join stock_locations wl on wl.id = w.stock_location_id and wl.org_id = w.org_id
      where w.org_id = ${orgId}
        and w.stock_location_id = stock_location_warehouse(${orgId}::uuid, ${stockLocationId}::uuid)
-     for share of w`, "objects"))[0];
+     for share of w`,
+      "objects",
+    )
+  )[0];
   if (!warehouse || warehouseAdmits(warehouse.status, direction)) return;
   const featureOn = await orgFeatureEnabled(orgId, "warehousing", tx as SqlExecutor);
   const code = warehouse.code;

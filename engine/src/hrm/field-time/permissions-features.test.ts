@@ -31,14 +31,20 @@ describe("field-time feature", () => {
 describe("field-time permissions", () => {
   it("the catalogue holds the three field-time keys", () => {
     for (const key of ["time.clock", "time.crew.enter", "time.kiosk.manage"]) {
-      assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);
+      assert.ok(
+        (PERMISSION_CATALOGUE as readonly string[]).includes(key),
+        `${key} must exist in the catalogue`,
+      );
     }
   });
   it("the time group lists them", () => {
     const group = PERMISSION_GROUPS.find((g) => g.key === "time");
     assert.ok(group, "time group must exist");
     for (const key of ["time.clock", "time.crew.enter", "time.kiosk.manage"]) {
-      assert.ok(group.permissions.some((p) => p.key === key), `time group must list ${key}`);
+      assert.ok(
+        group.permissions.some((p) => p.key === key),
+        `time group must list ${key}`,
+      );
     }
   });
   it("time.clock rides every built-in role", () => {

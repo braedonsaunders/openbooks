@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  listExitRecords,
-  recordExit,
-} from "@openbooks/engine/hrm/performance/exits";
+import { listExitRecords, recordExit } from "@openbooks/engine/hrm/performance/exits";
 
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
@@ -24,10 +21,7 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
     const employmentId = new URL(req.url).searchParams.get("employmentId");
     if (employmentId !== null && !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employmentId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employmentId must be a uuid" }, { status: 400 });
     }
     try {
       const exits = await listExitRecords({

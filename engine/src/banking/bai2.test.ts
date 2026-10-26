@@ -64,8 +64,7 @@ test("BAI2 refuses a repeated 03 section for the same account", () => {
           "16,165,10000,Z,REF2,,deposit/",
         ].join("\n"),
       ),
-    (err: unknown) =>
-      err instanceof BankingError && /repeats account 123/.test(err.message),
+    (err: unknown) => err instanceof BankingError && /repeats account 123/.test(err.message),
   );
 });
 
@@ -79,23 +78,28 @@ test("BAI2 refuses a 03 account record without an account number", () => {
           "16,165,150000,Z,REF,,deposit/",
         ].join("\n"),
       ),
-    (err: unknown) =>
-      err instanceof BankingError && /missing its account number/.test(err.message),
+    (err: unknown) => err instanceof BankingError && /missing its account number/.test(err.message),
   );
 });
 
-test("BAI2 skips complete funds structures before transaction references and repeated summaries",()=>{
-  const header="02,ORG,1,1,260821,0000,CAD,2/\n";
-  for(const funds of ["Z","V,260822,1200","S,20,30,50","D,2,0,20,2,80"]){
-    const parsed=parseBai2(header+`03,123,CAD,100,015,015,${funds},015,9000,,Z/\n16,165,100,${funds},BANK-REF,CUSTOMER-REF,wire,text/`);
-    assert.equal(parsed.closingBalance,"90.0000");
-    assert.equal(parsed.lines[0]!.bankTransactionId,"BANK-REF");
-    assert.equal(parsed.lines[0]!.counterpartyRef,"CUSTOMER-REF");
-    assert.equal(parsed.lines[0]!.description,"wire,text");
+test("BAI2 skips complete funds structures before transaction references and repeated summaries", () => {
+  const header = "02,ORG,1,1,260821,0000,CAD,2/\n";
+  for (const funds of ["Z", "V,260822,1200", "S,20,30,50", "D,2,0,20,2,80"]) {
+    const parsed = parseBai2(
+      header +
+        `03,123,CAD,100,015,015,${funds},015,9000,,Z/\n16,165,100,${funds},BANK-REF,CUSTOMER-REF,wire,text/`,
+    );
+    assert.equal(parsed.closingBalance, "90.0000");
+    assert.equal(parsed.lines[0]!.bankTransactionId, "BANK-REF");
+    assert.equal(parsed.lines[0]!.counterpartyRef, "CUSTOMER-REF");
+    assert.equal(parsed.lines[0]!.description, "wire,text");
   }
 });
-test("BAI2 refuses truncated or malformed availability rather than treating its fields as references",()=>{
-  for(const funds of ["S,100","D,999999999999999999999","D,2,0,20","Q"]){
-    assert.throws(()=>parseBai2(`02,ORG,1,1,260821,0000,CAD,2/\n03,123,CAD,015,10000/\n16,165,100,${funds}/`),BankingError);
+test("BAI2 refuses truncated or malformed availability rather than treating its fields as references", () => {
+  for (const funds of ["S,100", "D,999999999999999999999", "D,2,0,20", "Q"]) {
+    assert.throws(
+      () => parseBai2(`02,ORG,1,1,260821,0000,CAD,2/\n03,123,CAD,015,10000/\n16,165,100,${funds}/`),
+      BankingError,
+    );
   }
 });

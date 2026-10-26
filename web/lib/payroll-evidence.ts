@@ -1,10 +1,10 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { PDFDocument } from 'pdf-lib'
-import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { ensureReportDefinitions } from '@openbooks/engine/reports/ensure-report-definitions'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { PDFDocument } from "pdf-lib";
+import { getTranslations } from "next-intl/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { ensureReportDefinitions } from "@openbooks/engine/reports/ensure-report-definitions";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import { previewPayRunGl } from "@openbooks/engine/payroll/run-commit";
 import {
@@ -12,12 +12,18 @@ import {
   payrollRunPopulationScopeFilter,
   payrollSubsidiaryInScope,
   type PayrollSubsidiaryScope,
-} from '@openbooks/engine/payroll/scope'
-import { resolveDefinitionToExportData } from './report-run'
-import { exportDataToPdf, orgBranding, resolveLayout, type ExportData, type Translator } from './report-pdf'
-import { parseReportQuery } from './report-filters'
-import { resolvePeriod } from './periods'
-import { uploadAndAttach } from './file-cabinet'
+} from "@openbooks/engine/payroll/scope";
+import { resolveDefinitionToExportData } from "./report-run";
+import {
+  exportDataToPdf,
+  orgBranding,
+  resolveLayout,
+  type ExportData,
+  type Translator,
+} from "./report-pdf";
+import { parseReportQuery } from "./report-filters";
+import { resolvePeriod } from "./periods";
+import { uploadAndAttach } from "./file-cabinet";
 
 /**
  * The pay-run approval evidence package.
@@ -39,20 +45,20 @@ import { uploadAndAttach } from './file-cabinet'
  * all show the same immutable evidence.
  */
 
-const EVIDENCE_SLUGS = ['payroll-journal', 'payroll-register'] as const
+const EVIDENCE_SLUGS = ["payroll-journal", "payroll-register"] as const;
 
 export interface PayRunEvidence {
-  fileId: string
-  filename: string
+  fileId: string;
+  filename: string;
   /** What made it into the package, for the audit note and the UI. */
-  parts: string[]
+  parts: string[];
 }
 type RunHeader = {
-  document_number: string
-  period_start: string
-  period_end: string
-  pay_date: string
-  run_status: string
+  document_number: string;
+  period_start: string;
+  period_end: string;
+  pay_date: string;
+  run_status: string;
 };
 
 async function loadRun(
@@ -60,7 +66,8 @@ async function loadRun(
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RunHeader> {
-  const r = (await db.execute<RunHeader>(sql`
+  const r = await db.execute<RunHeader>(
+    sql`
     select d.document_number, r.period_start::text as period_start,
            r.period_end::text as period_end, r.pay_date::text as pay_date, r.run_status
       from pay_runs r
@@ -71,10 +78,12 @@ async function loadRun(
        -- must own the complete population, exactly as the run detail and
        -- the GL preview action require.
        ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
-  `, 'objects'))
-  const run = r[0]
-  if (!run) throw new PayrollError('pay run not found')
-  return run
+  `,
+    "objects",
+  );
+  const run = r[0];
+  if (!run) throw new PayrollError("pay run not found");
+  return run;
 }
 
 /** The GL preview as report-engine content, so it prints like the other two. */
@@ -85,24 +94,26 @@ async function glPreviewExportData(
   title: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<ExportData> {
-  const preview = await previewPayRunGl(orgId, documentId, allowedSubsidiaryIds)
+  const preview = await previewPayRunGl(orgId, documentId, allowedSubsidiaryIds);
   return {
     title,
     dateRangeLabel: `${run.period_start} – ${run.period_end}`,
-    summary: [{ label: 'Total debits', value: preview.debitTotal }],
-    groups: [{
-      kind: 'results',
-      title,
-      columns: ['Account', 'Party', 'Project', 'Amount'],
-      align: ['left', 'left', 'left', 'right'],
-      rows: preview.legs.map((leg) => [
-        leg.accountLabel,
-        leg.partyName ?? '',
-        leg.projectName ?? '',
-        leg.amount,
-      ]),
-    }],
-  } as ExportData
+    summary: [{ label: "Total debits", value: preview.debitTotal }],
+    groups: [
+      {
+        kind: "results",
+        title,
+        columns: ["Account", "Party", "Project", "Amount"],
+        align: ["left", "left", "left", "right"],
+        rows: preview.legs.map((leg) => [
+          leg.accountLabel,
+          leg.partyName ?? "",
+          leg.projectName ?? "",
+          leg.amount,
+        ]),
+      },
+    ],
+  } as ExportData;
 }
 
 /**
@@ -115,92 +126,114 @@ export async function assemblePayRunEvidence(
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunEvidence> {
-  const run = await loadRun(orgId, documentId, allowedSubsidiaryIds)
-  if (run.run_status === 'draft') {
-    throw new PayrollError('calculate the pay run before submitting it for approval')
+  const run = await loadRun(orgId, documentId, allowedSubsidiaryIds);
+  if (run.run_status === "draft") {
+    throw new PayrollError("calculate the pay run before submitting it for approval");
   }
-  await ensureReportDefinitions(orgId)
+  await ensureReportDefinitions(orgId);
 
-  const t = (await getTranslations('reports')) as unknown as Translator
-  const period = await resolvePeriod('custom', {
-    customFrom: run.period_start, customTo: run.pay_date, orgId,
-  })
-  const params = new URLSearchParams({ period: 'custom', from: run.period_start, to: run.pay_date })
-  const ctx = { orgId, t, period, query: parseReportQuery(params) }
-  const branding = await orgBranding(orgId)
-  const { page, showSummary } = resolveLayout(null)
-  const stamp = await businessToday(orgId)
-  const generatedAt = new Date(`${stamp}T00:00:00Z`)
+  const t = (await getTranslations("reports")) as unknown as Translator;
+  const period = await resolvePeriod("custom", {
+    customFrom: run.period_start,
+    customTo: run.pay_date,
+    orgId,
+  });
+  const params = new URLSearchParams({
+    period: "custom",
+    from: run.period_start,
+    to: run.pay_date,
+  });
+  const ctx = { orgId, t, period, query: parseReportQuery(params) };
+  const branding = await orgBranding(orgId);
+  const { page, showSummary } = resolveLayout(null);
+  const stamp = await businessToday(orgId);
+  const generatedAt = new Date(`${stamp}T00:00:00Z`);
 
-  const definitions = (await db.execute<{ slug: string; id: string; name: string }>(sql`
+  const definitions = await db.execute<{ slug: string; id: string; name: string }>(
+    sql`
     select slug, id, name from report_definitions
      where org_id = ${orgId} and kind = 'built_in'
-       and slug = any(${`{${EVIDENCE_SLUGS.join(',')}}`}::text[])
-  `, 'objects'))
+       and slug = any(${`{${EVIDENCE_SLUGS.join(",")}}`}::text[])
+  `,
+    "objects",
+  );
 
   const missingDefinitions = EVIDENCE_SLUGS.filter(
     (slug) => !definitions.some((row) => row.slug === slug),
-  )
+  );
   if (missingDefinitions.length > 0) {
-    throw new PayrollError(`required built-in payroll evidence reports are unavailable: ${missingDefinitions.join(', ')}`)
+    throw new PayrollError(
+      `required built-in payroll evidence reports are unavailable: ${missingDefinitions.join(", ")}`,
+    );
   }
 
-  const parts: string[] = []
-  const pdfs: Buffer[] = []
+  const parts: string[] = [];
+  const pdfs: Buffer[] = [];
   for (const slug of EVIDENCE_SLUGS) {
-    const definition = definitions.find((row) => row.slug === slug)
-    if (!definition) throw new PayrollError(`required built-in payroll evidence report is unavailable: ${slug}`)
+    const definition = definitions.find((row) => row.slug === slug);
+    if (!definition)
+      throw new PayrollError(`required built-in payroll evidence report is unavailable: ${slug}`);
     const data = await resolveDefinitionToExportData(orgId, definition.id, params, ctx, {
       // The exact run, not merely its period: an off-cycle run inside a period
       // already paid must not drag the regular run's numbers into evidence.
       extraFilters: {
-        combinator: 'and',
-        rules: [{ field: 'run_number', op: 'eq', value: run.document_number }],
+        combinator: "and",
+        rules: [{ field: "run_number", op: "eq", value: run.document_number }],
       },
-    })
-    pdfs.push(await exportDataToPdf(data, branding, page, { showSummary, generatedAt }))
-    parts.push(definition.name)
+    });
+    pdfs.push(await exportDataToPdf(data, branding, page, { showSummary, generatedAt }));
+    parts.push(definition.name);
   }
 
-  const glTitle = `GL preview ${run.document_number}`
-  pdfs.push(await exportDataToPdf(
-    await glPreviewExportData(orgId, documentId, run, glTitle, allowedSubsidiaryIds), branding, page, { showSummary: true, generatedAt },
-  ))
-  parts.push(glTitle)
+  const glTitle = `GL preview ${run.document_number}`;
+  pdfs.push(
+    await exportDataToPdf(
+      await glPreviewExportData(orgId, documentId, run, glTitle, allowedSubsidiaryIds),
+      branding,
+      page,
+      { showSummary: true, generatedAt },
+    ),
+  );
+  parts.push(glTitle);
 
-  const merged = await PDFDocument.create()
+  const merged = await PDFDocument.create();
   for (const pdf of pdfs) {
-    const doc = await PDFDocument.load(pdf)
-    const pages = await merged.copyPages(doc, doc.getPageIndices())
-    for (const copied of pages) merged.addPage(copied)
+    const doc = await PDFDocument.load(pdf);
+    const pages = await merged.copyPages(doc, doc.getPageIndices());
+    for (const copied of pages) merged.addPage(copied);
   }
-  const filename = `${run.document_number}-payroll-evidence.pdf`.replace(/\s+/g, '-')
-  const bytes = Buffer.from(await merged.save())
+  const filename = `${run.document_number}-payroll-evidence.pdf`.replace(/\s+/g, "-");
+  const bytes = Buffer.from(await merged.save());
   const stored = await withOrgTransaction(orgId, async () => {
-    const locked = (await db.execute<{ subsidiary_id: string | null; run_status: string }>(sql`
+    const locked = (
+      await db.execute<{ subsidiary_id: string | null; run_status: string }>(
+        sql`
       select d.subsidiary_id, r.run_status
         from documents d
         join pay_runs r on r.document_id = d.id and r.org_id = d.org_id
        where d.org_id = ${orgId} and d.id = ${documentId}
        for update of d
-    `, 'objects'))[0]
+    `,
+        "objects",
+      )
+    )[0];
     if (!locked || !payrollSubsidiaryInScope(allowedSubsidiaryIds, locked.subsidiary_id)) {
-      throw new PayrollError('pay run not found')
+      throw new PayrollError("pay run not found");
     }
-    if (locked.run_status === 'draft') {
-      throw new PayrollError('calculate the pay run before submitting it for approval')
+    if (locked.run_status === "draft") {
+      throw new PayrollError("calculate the pay run before submitting it for approval");
     }
-    await lockAndCheckPayrollRunPopulation(db, orgId, documentId, allowedSubsidiaryIds)
+    await lockAndCheckPayrollRunPopulation(db, orgId, documentId, allowedSubsidiaryIds);
     return uploadAndAttach({
       orgId,
-      targetTable: 'documents',
+      targetTable: "documents",
       targetId: documentId,
       filename,
-      contentType: 'application/pdf',
+      contentType: "application/pdf",
       bytes,
       createdBy: userId,
       executor: db,
-    })
-  })
-  return { fileId: stored.id, filename, parts }
+    });
+  });
+  return { fileId: stored.id, filename, parts };
 }

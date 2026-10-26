@@ -76,49 +76,66 @@ export async function computeJpStatutoryWithRates(
   ctx: PayrollStatutoryComputeContext,
   rates: JpStatutoryRates,
 ): Promise<Record<string, string>> {
-  const { taxYear, region, income, nonPeriodic, periodsPerYear, pushStatutory, certificateFor, bool } = ctx;
+  const {
+    taxYear,
+    region,
+    income,
+    nonPeriodic,
+    periodsPerYear,
+    pushStatutory,
+    certificateFor,
+    bool,
+  } = ctx;
   if (taxYear !== 2026) {
     fail(
-      `tax year ${taxYear} has not been transcribed — the JP payroll pack's only transcribed `
-      + "year is calendar 2026 (令和8年分 月額表 + 厚生年金保険料額表 令和8年度版). "
-      + "This year is not yet supported by the JP pack; contact support.",
+      `tax year ${taxYear} has not been transcribed — the JP payroll pack's only transcribed ` +
+        "year is calendar 2026 (令和8年分 月額表 + 厚生年金保険料額表 令和8年度版). " +
+        "This year is not yet supported by the JP pack; contact support.",
     );
   }
   if (!JP_PREFECTURE_CODES.includes(region)) {
     fail(
-      `region "${region || "(unset)"}" is not a known JIS prefecture code `
-      + `(${JP_PREFECTURE_CODES[0]}–${JP_PREFECTURE_CODES[JP_PREFECTURE_CODES.length - 1]}) — refusing, never defaulting`,
+      `region "${region || "(unset)"}" is not a known JIS prefecture code ` +
+        `(${JP_PREFECTURE_CODES[0]}–${JP_PREFECTURE_CODES[JP_PREFECTURE_CODES.length - 1]}) — refusing, never defaulting`,
     );
   }
   ctx.assertRegionSupported(region);
   if (periodsPerYear !== 12) {
     fail(
-      `periodsPerYear ${periodsPerYear} is refused: the 月額表 prices a month's pay and the `
-      + "標準報酬月額 is intrinsically monthly — monthly payroll only",
+      `periodsPerYear ${periodsPerYear} is refused: the 月額表 prices a month's pay and the ` +
+        "標準報酬月額 is intrinsically monthly — monthly payroll only",
     );
   }
   const payDate = ctx.run.pay_date;
   if (payDate == null || !/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
-    fail("run pay_date is required to determine the effective month of the 2026 child-related contributions");
+    fail(
+      "run pay_date is required to determine the effective month of the 2026 child-related contributions",
+    );
   }
   const taxResidence = certificateFor("jp_tax_residency")?.answers?.status;
   if (taxResidence == null) {
-    fail("Japanese tax residence and wage-source status is required; record jp_tax_residency before payroll");
+    fail(
+      "Japanese tax residence and wage-source status is required; record jp_tax_residency before payroll",
+    );
   }
   if (taxResidence === "nonresident_mixed_source") {
-    fail("Japan-source wage allocation is unavailable for nonresidents with Japan and foreign work; calculate the split in supported Japanese payroll software before payroll");
+    fail(
+      "Japan-source wage allocation is unavailable for nonresidents with Japan and foreign work; calculate the split in supported Japanese payroll software before payroll",
+    );
   }
   if (taxResidence === "nonresident_treaty_or_exemption") {
-    fail("nonresident treaty relief or exemption is not implemented; calculate the applicable treaty relief in supported Japanese payroll software before payroll");
+    fail(
+      "nonresident treaty relief or exemption is not implemented; calculate the applicable treaty relief in supported Japanese payroll software before payroll",
+    );
   }
   if (taxResidence === "nonresident_domestic_corporation_officer") {
-    fail("a nonresident officer's salary may be Japan-source even for overseas duties; confirm source treatment in supported Japanese payroll software before payroll");
+    fail(
+      "a nonresident officer's salary may be Japan-source even for overseas duties; confirm source treatment in supported Japanese payroll software before payroll",
+    );
   }
-  if (![
-    "resident",
-    "nonresident_japan_source",
-    "nonresident_foreign_source",
-  ].includes(taxResidence)) {
+  if (
+    !["resident", "nonresident_japan_source", "nonresident_foreign_source"].includes(taxResidence)
+  ) {
     fail(`Japanese tax residence and wage-source status "${taxResidence}" is not supported`);
   }
   // Amounts arrive as decimal strings (money.ts 4dp, e.g. "300000.0000");
@@ -148,16 +165,20 @@ export async function computeJpStatutoryWithRates(
   const standardRaw = empFact("JP", ctx.emp, "jp_hyojun_hoshu");
   if (standardRaw == null || !/^\d+$/.test(standardRaw)) {
     fail(
-      `employee jp_hyojun_hoshu "${standardRaw ?? ""}" is not set: the 標準報酬月額 (a published 厚生年金 `
-      + "grade value, copied off the JPS notice) is required — see JP_REFUSED_2026 on 定時決定/随時改定",
+      `employee jp_hyojun_hoshu "${standardRaw ?? ""}" is not set: the 標準報酬月額 (a published 厚生年金 ` +
+        "grade value, copied off the JPS notice) is required — see JP_REFUSED_2026 on 定時決定/随時改定",
     );
   }
   const standard = BigInt(standardRaw);
 
   const insuranceCertificate = certificateFor("jp_employment_insurance");
-  const insuranceRaw = empFact("JP", {
-    jp_employment_insurance_coverage: insuranceCertificate?.answers.coverage_status ?? null,
-  }, "jp_employment_insurance_coverage");
+  const insuranceRaw = empFact(
+    "JP",
+    {
+      jp_employment_insurance_coverage: insuranceCertificate?.answers.coverage_status ?? null,
+    },
+    "jp_employment_insurance_coverage",
+  );
   const insuranceCoverage = resolveEmployeeFact(
     "JP",
     "jp_employment_insurance_coverage",
@@ -165,18 +186,18 @@ export async function computeJpStatutoryWithRates(
   );
   if (insuranceCoverage === "insured") {
     fail(
-      "the employee is covered by 雇用保険, but employee/employer premiums and the deduction "
-      + "before the 月額表 lookup are not implemented. Complete this run in payroll software that "
-      + "calculates the applicable MHLW employment-insurance rates; do not omit the premiums.",
+      "the employee is covered by 雇用保険, but employee/employer premiums and the deduction " +
+        "before the 月額表 lookup are not implemented. Complete this run in payroll software that " +
+        "calculates the applicable MHLW employment-insurance rates; do not omit the premiums.",
     );
   }
 
   const kaigo = empFact("JP", ctx.emp, "jp_kaigo_dainigou");
   if (kaigo !== "false") {
     fail(
-      `employee jp_kaigo_dainigou "${kaigo ?? ""}" is not "false": a 介護保険第2号被保険者 (40–64) owes `
-      + "the 介護 premium this engine does not price, and an undeclared status must not default into "
-      + "health-without-介護 — see JP_REFUSED_2026",
+      `employee jp_kaigo_dainigou "${kaigo ?? ""}" is not "false": a 介護保険第2号被保険者 (40–64) owes ` +
+        "the 介護 premium this engine does not price, and an undeclared status must not default into " +
+        "health-without-介護 — see JP_REFUSED_2026",
     );
   }
 
@@ -190,18 +211,19 @@ export async function computeJpStatutoryWithRates(
       if (!/^\d+$/.test(raw)) fail(`jp_fuyo ${key} "${raw}" is not a non-negative integer`);
       return Number(raw);
     };
-    dependents = countOf("fuyo_count")
-      + (bool(answers["honnin_shogai"] ?? null) ? 1 : 0)
-      + (bool(answers["hitori_oya"] ?? null) ? 1 : 0)
-      + (bool(answers["kafu"] ?? null) ? 1 : 0)
-      + (bool(answers["kinro_gakusei"] ?? null) ? 1 : 0)
-      + countOf("kazoku_shogai_kasan");
+    dependents =
+      countOf("fuyo_count") +
+      (bool(answers["honnin_shogai"] ?? null) ? 1 : 0) +
+      (bool(answers["hitori_oya"] ?? null) ? 1 : 0) +
+      (bool(answers["kafu"] ?? null) ? 1 : 0) +
+      (bool(answers["kinro_gakusei"] ?? null) ? 1 : 0) +
+      countOf("kazoku_shogai_kasan");
   }
 
   if (rates.healthRate == null || rates.healthRate === "") {
     fail(
-      `no jp_health_rate is configured for prefecture ${region} in 2026 — the in-force 健康保険 rate `
-      + "(協会けんぽ branch or 健康保険組合) must be entered; the pack computes no health premium without it",
+      `no jp_health_rate is configured for prefecture ${region} in 2026 — the in-force 健康保険 rate ` +
+        "(協会けんぽ branch or 健康保険組合) must be entered; the pack computes no health premium without it",
     );
   }
 
@@ -209,24 +231,63 @@ export async function computeJpStatutoryWithRates(
   // prices premiums off the 標準報酬 grade) is skipped — pricing it on zero pay
   // would refuse on premiums-exceed-pay. True-zero runs still refuse there.
   const bonusOnly = bonusYen !== 0n && gross === 0n;
-  const result = bonusOnly ? null : calculateJp2026({
-    grossMonthly: gross,
-    standard,
-    dependents,
-    healthRate: rates.healthRate,
-    childContributionsEffective: payDate >= "2026-04-01",
-    taxResidence: taxResidence as "resident" | "nonresident_japan_source" | "nonresident_foreign_source",
-  });
+  const result = bonusOnly
+    ? null
+    : calculateJp2026({
+        grossMonthly: gross,
+        standard,
+        dependents,
+        healthRate: rates.healthRate,
+        childContributionsEffective: payDate >= "2026-04-01",
+        taxResidence: taxResidence as
+          "resident" | "nonresident_japan_source" | "nonresident_foreign_source",
+      });
 
   if (result !== null) {
-    pushStatutory("income_tax", "deduction", "源泉徴収 (gensen withholding)", String(result.gensen), 110);
+    pushStatutory(
+      "income_tax",
+      "deduction",
+      "源泉徴収 (gensen withholding)",
+      String(result.gensen),
+      110,
+    );
     pushStatutory("pension", "deduction", "厚生年金保険 (employee)", String(result.pension), 120);
     pushStatutory("health", "deduction", "健康保険 (employee)", String(result.health), 130);
-    pushStatutory("child_support", "deduction", "子ども・子育て支援金 (employee)", String(result.childSupport), 140);
-    pushStatutory("pension", "employer_contribution", "厚生年金保険 (employer)", String(result.pensionEmployer), 220);
-    pushStatutory("health", "employer_contribution", "健康保険 (employer)", String(result.healthEmployer), 230);
-    pushStatutory("child_support", "employer_contribution", "子ども・子育て支援金 (employer)", String(result.childSupportEmployer), 240);
-    pushStatutory("child_care_employer", "employer_contribution", "子ども・子育て拠出金 (employer)", String(result.childCareEmployer), 250);
+    pushStatutory(
+      "child_support",
+      "deduction",
+      "子ども・子育て支援金 (employee)",
+      String(result.childSupport),
+      140,
+    );
+    pushStatutory(
+      "pension",
+      "employer_contribution",
+      "厚生年金保険 (employer)",
+      String(result.pensionEmployer),
+      220,
+    );
+    pushStatutory(
+      "health",
+      "employer_contribution",
+      "健康保険 (employer)",
+      String(result.healthEmployer),
+      230,
+    );
+    pushStatutory(
+      "child_support",
+      "employer_contribution",
+      "子ども・子育て支援金 (employer)",
+      String(result.childSupportEmployer),
+      240,
+    );
+    pushStatutory(
+      "child_care_employer",
+      "employer_contribution",
+      "子ども・子育て拠出金 (employer)",
+      String(result.childCareEmployer),
+      250,
+    );
   }
 
   // Bonus withholding (JP-BONUS-IMPL): the transcribed rate table, the 10×
@@ -241,20 +302,24 @@ export async function computeJpStatutoryWithRates(
     if (periodRaw != null && periodRaw !== "") {
       if (periodRaw !== "6" && periodRaw !== "12") {
         fail(
-          `employee jp_bonus_period_months "${periodRaw}" is not "6" or "12": semiannual bonuses use 6; `
-          + "use 12 only when the bonus computation period exceeds 6 months — see NTA Tax Answer No.2523",
+          `employee jp_bonus_period_months "${periodRaw}" is not "6" or "12": semiannual bonuses use 6; ` +
+            "use 12 only when the bonus computation period exceeds 6 months — see NTA Tax Answer No.2523",
         );
       }
       periodMonths = periodRaw === "12" ? 12 : 6;
     }
     bonusGensen = calculateBonusWithholding({
       bonusNet: bonusYen,
-      priorMonthNet: priorRaw == null || priorRaw === "" ? null : yenOf(priorRaw, "prior-month net pay"),
+      priorMonthNet:
+        priorRaw == null || priorRaw === "" ? null : yenOf(priorRaw, "prior-month net pay"),
       dependents,
       periodMonths,
       priorMonthWithholding:
-        priorGensenRaw == null || priorGensenRaw === "" ? null : yenOf(priorGensenRaw, "prior-month withholding"),
-      taxResidence: taxResidence as "resident" | "nonresident_japan_source" | "nonresident_foreign_source",
+        priorGensenRaw == null || priorGensenRaw === ""
+          ? null
+          : yenOf(priorGensenRaw, "prior-month withholding"),
+      taxResidence: taxResidence as
+        "resident" | "nonresident_japan_source" | "nonresident_foreign_source",
     });
     pushStatutory("income_tax", "deduction", "源泉徴収 (bonus)", String(bonusGensen), 111);
   }
@@ -280,7 +345,12 @@ export async function computeJpStatutory(
   if (ctx.taxYear !== 2026) {
     return computeJpStatutoryWithRates(ctx, { healthRate: null });
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, JP_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
+  const resolution = await resolveStatutoryRates(
+    ctx.orgId,
+    JP_PACK_RATES,
+    ctx.taxYear,
+    ctx.run.pay_date,
+  );
   const health = resolution.values("jp_health_rate", { region: ctx.region });
   return computeJpStatutoryWithRates(ctx, { healthRate: health?.rate ?? null });
 }

@@ -1,6 +1,4 @@
-import type {
-  PayrollRemittanceSchedule,
-} from "../../packs.ts";
+import type { PayrollRemittanceSchedule } from "../../packs.ts";
 
 /**
  * Canada Revenue Agency payroll source-deductions remittance schedule — the
@@ -99,19 +97,22 @@ export const CRA_REMITTANCE_SCHEDULE: PayrollRemittanceSchedule = {
         secondDueDay: 10,
         secondDueMonthOffset: 1,
       },
-      rule: "accelerated threshold 1 — remuneration paid the 1st to the 15th, "
-        + "due the 25th of the same month",
-      ruleSecondHalf: "accelerated threshold 1 — remuneration paid the 16th to month end, "
-        + "due the 10th of the following month",
+      rule:
+        "accelerated threshold 1 — remuneration paid the 1st to the 15th, " +
+        "due the 25th of the same month",
+      ruleSecondHalf:
+        "accelerated threshold 1 — remuneration paid the 16th to month end, " +
+        "due the 10th of the following month",
     },
     {
       frequency: "accelerated_2",
       label: "Accelerated threshold 2",
       averageMonthlyMin: "100000",
       due: { kind: "quarter_month_working_days", workingDays: 3 },
-      rule: "accelerated threshold 2 — remuneration paid in a quarter-month period "
-        + "(the 1st to the 7th, the 8th to the 14th, the 15th to the 21st, or the 22nd "
-        + "to the last day of the month), due the 3rd working day after the end of that period",
+      rule:
+        "accelerated threshold 2 — remuneration paid in a quarter-month period " +
+        "(the 1st to the 7th, the 8th to the 14th, the 15th to the 21st, or the 22nd " +
+        "to the last day of the month), due the 3rd working day after the end of that period",
     },
   ],
 };

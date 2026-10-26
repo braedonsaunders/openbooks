@@ -1,7 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { readV1JsonObject, requireV1IdempotencyKey, withV1Request } from "../../../../../../lib/api/v1-request";
+import {
+  readV1JsonObject,
+  requireV1IdempotencyKey,
+  withV1Request,
+} from "../../../../../../lib/api/v1-request";
 import { assertApplicationPermission } from "../../../../../../lib/application/context";
 import { executeIdempotent } from "../../../../../../lib/application/idempotency";
 import { getSetupRecord } from "../../../../../../lib/application/setup-read";
@@ -45,11 +49,19 @@ async function handleV1PATCH(
       operation: "setup_record.update",
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { entityKey, body },
-      execute: async () => settleWrite(await updateSetupRecord(
-        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
-        entityKey,
-        body,
-      )),
+      execute: async () =>
+        settleWrite(
+          await updateSetupRecord(
+            {
+              orgId: context.authz.user.orgId,
+              id: context.authz.user.id,
+              permissions: context.authz.permissions,
+              allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+            },
+            entityKey,
+            body,
+          ),
+        ),
     });
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });
@@ -72,11 +84,19 @@ async function handleV1DELETE(
       operation: "setup_record.delete",
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { entityKey, id },
-      execute: async () => settleWrite(await deleteSetupRecord(
-        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
-        entityKey,
-        id,
-      )),
+      execute: async () =>
+        settleWrite(
+          await deleteSetupRecord(
+            {
+              orgId: context.authz.user.orgId,
+              id: context.authz.user.id,
+              permissions: context.authz.permissions,
+              allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+            },
+            entityKey,
+            id,
+          ),
+        ),
     });
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });
@@ -84,15 +104,18 @@ async function handleV1DELETE(
 
 export const GET = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1GET(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const PATCH = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const DELETE = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1DELETE(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1DELETE(request, { params: Promise.resolve(params as never) } as never),
 });

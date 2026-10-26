@@ -7,10 +7,7 @@ import { getTranslations } from "next-intl/server";
 import { REPORT_ENTITY_MAP } from "@openbooks/reports";
 import { isFeatureEnabled } from "@/lib/features";
 import { pool } from "@openbooks/engine/platform/db";
-import {
-  InsightDenominationError,
-  runInsightQuery,
-} from "@openbooks/analytics/server";
+import { InsightDenominationError, runInsightQuery } from "@openbooks/analytics/server";
 import {
   InsightCompileError,
   InsightValidationError,
@@ -19,14 +16,8 @@ import {
 import { can } from "../../../../lib/authz";
 import { withAuthzContext } from "@/lib/authz-context";
 import { reportEntityCatalog } from "@/lib/custom-record-report-catalog";
-import {
-  InsightBookScopeError,
-  resolveInsightBookScope,
-} from "@/lib/insight-books";
-import {
-  insightCompileErrorMessage,
-  insightLabelResolver,
-} from "../../../../lib/insight-labels";
+import { InsightBookScopeError, resolveInsightBookScope } from "@/lib/insight-books";
+import { insightCompileErrorMessage, insightLabelResolver } from "../../../../lib/insight-labels";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { reportExpenseAccess } from "@/lib/expense-access";
 import { fiscalStartMonth } from "@/lib/fiscal";
@@ -37,7 +28,12 @@ import { normalizeQuery } from "../_lib";
 // or narrow that scope.
 const postBodySchema0 = z.strictObject({
   query: z.json().refine((value) => {
-    try { validateInsightQuery(value); return true; } catch { return false; }
+    try {
+      validateInsightQuery(value);
+      return true;
+    } catch {
+      return false;
+    }
   }, "query must follow the insight query schema"),
   allowedSubsidiaryIds: z.json().optional(),
 });
@@ -85,18 +81,12 @@ export const POST = defineRoute({
     // caller built or one someone else pinned to their dashboard.
     const needed = sourcePermission(query.source);
     if (needed && !can(gate, needed)) {
-      return NextResponse.json(
-        { error: `missing permission: ${needed}` },
-        { status: 403 },
-      );
+      return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 });
     }
 
     const feature = REPORT_ENTITY_MAP[query.source]?.featureKey;
     if (feature && !(await isFeatureEnabled(gate.user.orgId, feature))) {
-      return NextResponse.json(
-        { error: `${feature} feature is disabled` },
-        { status: 403 },
-      );
+      return NextResponse.json({ error: `${feature} feature is disabled` }, { status: 403 });
     }
 
     // The book basis resolves before execution: book-scoped entities default to
@@ -121,20 +111,20 @@ export const POST = defineRoute({
       // or limit, so no card can isolate one employee's pay.
       // Expense report rows reach only an expense reader (own reports under
       // self-service), whatever the card asks for.
-      const [labels, today, catalog, startMonth, expenseAccess] = await withAuthzContext(gate, () => Promise.all([
-        insightLabelResolver(),
-        businessToday(gate.user.orgId),
-        reportEntityCatalog(gate),
-        fiscalStartMonth(gate.user.orgId),
-        reportExpenseAccess(gate),
-      ]));
+      const [labels, today, catalog, startMonth, expenseAccess] = await withAuthzContext(gate, () =>
+        Promise.all([
+          insightLabelResolver(),
+          businessToday(gate.user.orgId),
+          reportEntityCatalog(gate),
+          fiscalStartMonth(gate.user.orgId),
+          reportExpenseAccess(gate),
+        ]),
+      );
       const result = await runInsightQuery(
         pool,
         query,
         gate.user.orgId,
-        gate.allowedSubsidiaryIds === null
-          ? null
-          : [...gate.allowedSubsidiaryIds],
+        gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
         labels,
         today,
         allowedBookIds,
@@ -151,10 +141,7 @@ export const POST = defineRoute({
         return apiErrorResponse(e, { safeStatus: 422 });
       }
       if (e instanceof InsightCompileError) {
-        return NextResponse.json(
-          { error: await insightCompileErrorMessage(e) },
-          { status: 422 },
-        );
+        return NextResponse.json({ error: await insightCompileErrorMessage(e) }, { status: 422 });
       }
       if (e instanceof InsightValidationError) {
         // Catalog-referencing failures carry a compile-error code — translate
@@ -172,10 +159,7 @@ export const POST = defineRoute({
       // Postgres statement_timeout / cancel surfaces as a friendly 400.
       if (/statement timeout|canceling statement/i.test(msg)) {
         const t = await getTranslations("insights");
-        return NextResponse.json(
-          { error: t("compileErrors.timeout") },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: t("compileErrors.timeout") }, { status: 400 });
       }
       // Full error stays in the server log only; the client gets a generic
       // message so database internals never reach the browser.

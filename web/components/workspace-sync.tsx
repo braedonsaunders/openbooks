@@ -1,9 +1,13 @@
-'use client'
+"use client";
 
-import { useEffect, useRef } from 'react'
-import { useTranslations } from 'next-intl'
-import { confirmDialog } from '../lib/confirm'
-import { isSwitchingWorkspace, reloadWorkspaceDocument, WORKSPACE_CHANNEL } from '../lib/workspace-switch'
+import { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
+import { confirmDialog } from "../lib/confirm";
+import {
+  isSwitchingWorkspace,
+  reloadWorkspaceDocument,
+  WORKSPACE_CHANNEL,
+} from "../lib/workspace-switch";
 
 /**
  * Keeps an open tab honest about which workspace it acts in. The active
@@ -16,67 +20,73 @@ import { isSwitchingWorkspace, reloadWorkspaceDocument, WORKSPACE_CHANNEL } from
  * after a switch is reloaded.
  */
 export function WorkspaceSync({ orgId, name }: { orgId: string; name: string }) {
-  const t = useTranslations('shell')
-  const prompted = useRef(false)
+  const t = useTranslations("shell");
+  const prompted = useRef(false);
 
   useEffect(() => {
-    let disposed = false
+    let disposed = false;
     const markStale = (activeOrgId: unknown) => {
-      if (disposed || isSwitchingWorkspace()) return
-      if (typeof activeOrgId !== 'string' || activeOrgId === orgId || prompted.current) return
-      prompted.current = true
+      if (disposed || isSwitchingWorkspace()) return;
+      if (typeof activeOrgId !== "string" || activeOrgId === orgId || prompted.current) return;
+      prompted.current = true;
       void confirmDialog({
-        title: t('workspaceSync.title'),
-        message: t('workspaceSync.description', { name }),
-        confirmLabel: t('workspaceSync.reload'),
-        cancelLabel: t('routeState.backToDashboard'),
+        title: t("workspaceSync.title"),
+        message: t("workspaceSync.description", { name }),
+        confirmLabel: t("workspaceSync.reload"),
+        cancelLabel: t("routeState.backToDashboard"),
       }).then((reload) => {
-        reloadWorkspaceDocument(reload ? undefined : '/dashboard')
-      })
-    }
-    const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(WORKSPACE_CHANNEL)
-    if (channel) channel.onmessage = (event: MessageEvent<{ orgId?: unknown }>) => markStale(event.data?.orgId)
+        reloadWorkspaceDocument(reload ? undefined : "/dashboard");
+      });
+    };
+    const channel =
+      typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(WORKSPACE_CHANNEL);
+    if (channel)
+      channel.onmessage = (event: MessageEvent<{ orgId?: unknown }>) =>
+        markStale(event.data?.orgId);
 
     const activeOrgId = async (): Promise<unknown> => {
-      const response = await fetch('/api/me/workspace', { cache: 'no-store' })
-      return response.ok ? ((await response.json()) as { orgId?: unknown }).orgId : undefined
-    }
+      const response = await fetch("/api/me/workspace", { cache: "no-store" });
+      return response.ok ? ((await response.json()) as { orgId?: unknown }).orgId : undefined;
+    };
     const check = async () => {
-      if (document.visibilityState !== 'visible') return
+      if (document.visibilityState !== "visible") return;
       try {
-        markStale(await activeOrgId())
+        markStale(await activeOrgId());
       } catch {
         // Offline or mid-deploy: the next visibility change checks again.
       }
-    }
+    };
     // A page reached through history can be the document rendered for
     // whichever workspace was active when it was left, restored from the
     // back/forward cache or the HTTP cache. Going back is a navigation, so a
     // page from another workspace is simply loaded afresh.
     const reloadIfOtherWorkspace = async () => {
       try {
-        const current = await activeOrgId()
-        if (!disposed && typeof current === 'string' && current !== orgId) reloadWorkspaceDocument()
+        const current = await activeOrgId();
+        if (!disposed && typeof current === "string" && current !== orgId)
+          reloadWorkspaceDocument();
       } catch {
         // Offline: the visibility check covers the next return to this tab.
       }
-    }
+    };
     const restored = (event: PageTransitionEvent) => {
-      if (event.persisted) void reloadIfOtherWorkspace()
-    }
-    const [navigation] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[]
-    if (navigation?.type === 'back_forward') void reloadIfOtherWorkspace()
-    document.addEventListener('visibilitychange', check)
-    window.addEventListener('focus', check)
-    window.addEventListener('pageshow', restored)
+      if (event.persisted) void reloadIfOtherWorkspace();
+    };
+    const [navigation] = performance.getEntriesByType(
+      "navigation",
+    ) as PerformanceNavigationTiming[];
+    if (navigation?.type === "back_forward") void reloadIfOtherWorkspace();
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    window.addEventListener("pageshow", restored);
     return () => {
-      disposed = true
-      channel?.close()
-      document.removeEventListener('visibilitychange', check)
-      window.removeEventListener('focus', check)
-      window.removeEventListener('pageshow', restored)
-    }
-  }, [orgId, name, t])
+      disposed = true;
+      channel?.close();
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+      window.removeEventListener("pageshow", restored);
+    };
+  }, [orgId, name, t]);
 
-  return null
+  return null;
 }

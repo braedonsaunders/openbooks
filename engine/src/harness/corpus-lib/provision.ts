@@ -38,18 +38,29 @@ function monthsInWindow(startDate: string, endDate: string): { year: number; mon
   while (y < endY || (y === endY && m <= endM)) {
     out.push({ year: y, month: m });
     m += 1;
-    if (m > 12) { m = 1; y += 1; }
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
   }
   return out;
 }
 
 const OPTIONAL_CONTROL_KEYS = [
-  "employeePayable", "retainageReceivable", "laborWip", "laborClearing",
-  "unbilledReceivable", "projectRevenue", "payrollVariance",
+  "employeePayable",
+  "retainageReceivable",
+  "laborWip",
+  "laborClearing",
+  "unbilledReceivable",
+  "projectRevenue",
+  "payrollVariance",
 ] as const;
 
 export async function provisionCorpusOrg(
-  corpus: Pick<Corpus, "name" | "currency" | "country" | "startDate" | "endDate" | "accounts" | "parties" | "projects">,
+  corpus: Pick<
+    Corpus,
+    "name" | "currency" | "country" | "startDate" | "endDate" | "accounts" | "parties" | "projects"
+  >,
 ): Promise<CorpusWorld> {
   for (const required of ["ar", "ap", "bank"]) {
     if (!corpus.accounts.some((a) => a.key === required)) {
@@ -105,13 +116,23 @@ export async function provisionCorpusOrg(
         values (${id}, ${orgId}, ${a.number}, ${a.name}, ${a.type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
     }
 
-    const control: Record<string, string> = { ar: accounts.ar!, ap: accounts.ap!, bank: accounts.bank! };
+    const control: Record<string, string> = {
+      ar: accounts.ar!,
+      ap: accounts.ap!,
+      bank: accounts.bank!,
+    };
     for (const k of OPTIONAL_CONTROL_KEYS) {
       if (accounts[k]) control[k] = accounts[k]!;
     }
     if (accounts.fxGainLoss) control.fxRealizedGainLoss = accounts.fxGainLoss;
-    const settings = { simHarness: true, simProfile: `corpus:${corpus.name}`, controlAccounts: control };
-    await db.execute(sql`update orgs set settings = ${JSON.stringify(settings)}::jsonb where id = ${orgId}`);
+    const settings = {
+      simHarness: true,
+      simProfile: `corpus:${corpus.name}`,
+      controlAccounts: control,
+    };
+    await db.execute(
+      sql`update orgs set settings = ${JSON.stringify(settings)}::jsonb where id = ${orgId}`,
+    );
 
     const partyIds: Record<string, string> = {};
     for (const p of corpus.parties) {
@@ -120,12 +141,15 @@ export async function provisionCorpusOrg(
 
     const adminId = randomUUID();
     await db.transaction(async (tx) => {
-      const role = (await tx.execute<{ id: string }>(sql`
+      const role = await tx.execute<{ id: string }>(
+        sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
         values (${orgId}, 'admin', 'admin', false, '[]'::jsonb)
         on conflict (org_id, key) do update set updated_at = now()
         returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       await tx.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)
         values (${adminId}, ${orgId}, ${`replay-${adminId.slice(0, 8)}@sim.test`}, 'Replay Operator', 'x', true)
@@ -141,8 +165,13 @@ export async function provisionCorpusOrg(
     const projectIds: Record<string, string> = {};
     if (corpus.projects?.length) {
       const typeByKey = new Map(
-        (await db.execute<{ id: string; key: string }>(sql`
-          select id, key from project_types where org_id = ${orgId} and is_active`, "objects")).map((t) => [t.key, t.id]),
+        (
+          await db.execute<{ id: string; key: string }>(
+            sql`
+          select id, key from project_types where org_id = ${orgId} and is_active`,
+            "objects",
+          )
+        ).map((t) => [t.key, t.id]),
       );
       for (const spec of corpus.projects) {
         projectIds[spec.key] = await insertProject(orgId, spec, {
@@ -165,11 +194,23 @@ export async function provisionCorpusOrg(
       // are inert — only ids matter to the activity primitives.
       vendors: corpus.parties
         .filter((p) => p.roles.includes("vendor"))
-        .map((p) => ({ id: partyIds[p.key]!, name: p.name, termDays: 30, expenseCategories: [], billMin: 0, billMax: 0 })),
+        .map((p) => ({
+          id: partyIds[p.key]!,
+          name: p.name,
+          termDays: 30,
+          expenseCategories: [],
+          billMin: 0,
+          billMax: 0,
+        })),
       customers: corpus.parties
         .filter((p) => p.roles.includes("customer"))
         .map((p) => ({
-          id: partyIds[p.key]!, name: p.name, termDays: 30, revenueCategories: [], invoiceMin: 0, invoiceMax: 0,
+          id: partyIds[p.key]!,
+          name: p.name,
+          termDays: 30,
+          revenueCategories: [],
+          invoiceMin: 0,
+          invoiceMax: 0,
           payment: { onTime: 1, late: 0, veryLate: 0, shortPay: 0, delinquent: 0 },
         })),
       actors: { apClerk: adminId, arClerk: adminId, controller: adminId, admin: adminId },
@@ -189,18 +230,28 @@ export async function provisionCorpusOrg(
 
 async function insertParty(orgId: string, p: CorpusParty): Promise<string> {
   const id = randomUUID();
-  const primaryKind = p.roles.includes("customer") ? "customer" : p.roles.includes("vendor") ? "vendor" : "employee";
+  const primaryKind = p.roles.includes("customer")
+    ? "customer"
+    : p.roles.includes("vendor")
+      ? "vendor"
+      : "employee";
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${id}, ${orgId}, ${primaryKind}, ${p.name}, true, '{}'::jsonb)`);
   if (p.roles.includes("customer")) {
-    await db.execute(sql`insert into customer_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+    await db.execute(
+      sql`insert into customer_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`,
+    );
   }
   if (p.roles.includes("vendor")) {
-    await db.execute(sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+    await db.execute(
+      sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`,
+    );
   }
   if (p.roles.includes("employee")) {
-    await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+    await db.execute(
+      sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`,
+    );
   }
   return id;
 }
@@ -208,10 +259,17 @@ async function insertParty(orgId: string, p: CorpusParty): Promise<string> {
 async function insertProject(
   orgId: string,
   spec: CorpusProject,
-  opts: { typeId: string | null; customerId: string | undefined; startsOn: string; incomeAccountId: string },
+  opts: {
+    typeId: string | null;
+    customerId: string | undefined;
+    startsOn: string;
+    incomeAccountId: string;
+  },
 ): Promise<string> {
-  if (!opts.typeId) throw new Error(`corpus project "${spec.key}": unknown project-type key "${spec.method}"`);
-  if (!opts.customerId) throw new Error(`corpus project "${spec.key}": unknown customer "${spec.customer}"`);
+  if (!opts.typeId)
+    throw new Error(`corpus project "${spec.key}": unknown project-type key "${spec.method}"`);
+  if (!opts.customerId)
+    throw new Error(`corpus project "${spec.key}": unknown customer "${spec.customer}"`);
   const id = randomUUID();
   const sovTotal = spec.sovLines?.reduce((a, l) => a + Number(l.scheduledValue), 0) ?? 0;
   const contractValue = spec.contractValue ?? String(sovTotal);

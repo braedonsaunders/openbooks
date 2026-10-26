@@ -1,10 +1,11 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { page, frame, widgetBlock } = await import('@braedonsaunders/appkit-viewspec')
-const { savePageSpec, restorePageSpec, listPageSpecHistory } = await import('./page-specs.ts')
+import assert from "node:assert/strict";
+import test from "node:test";
+const { db, env, withBypass } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { page, frame, widgetBlock } = await import("@braedonsaunders/appkit-viewspec");
+const { savePageSpec, restorePageSpec, listPageSpecHistory } = await import("./page-specs.ts");
 
 /**
  * Layout-restore scope: a restore must supersede only the layer it publishes
@@ -14,159 +15,255 @@ const { savePageSpec, restorePageSpec, listPageSpecHistory } = await import('./p
  */
 
 const registries = {
-  widgets: new Set(['stat-tile-row', 'banking-roster', 'save-view']),
-  frames: new Set(['page-container', 'card']),
-}
+  widgets: new Set(["stat-tile-row", "banking-roster", "save-view"]),
+  frames: new Set(["page-container", "card"]),
+};
 
 const spec = (note: string) =>
   page({
-    route: '/banking',
-    body: [frame('card', [widgetBlock('banking-roster', { accounts: [], note })])],
-  }) as never
+    route: "/banking",
+    body: [frame("card", [widgetBlock("banking-roster", { accounts: [], note })])],
+  }) as never;
 
 async function activeRows(orgId: string, route: string) {
   return await withBypass(() =>
-      db.execute<{ id: string; userId: string | null }>(sql`
+    db.execute<{ id: string; userId: string | null }>(
+      sql`
         select id, user_id as "userId" from page_specs
          where org_id = ${orgId} and route = ${route} and is_active
          order by user_id nulls first
-      `, 'objects'),
-    )
+      `,
+      "objects",
+    ),
+  );
 }
 
-test('layout history shows org versions plus the reader\'s own — never a colleague\'s', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { orgId } = await withBypass(() => createScratchOrg())
-  const adminId = await withBypass(() => createScratchUser(orgId, 'Layout admin', 'admin'))
-  const userA = await withBypass(() => createScratchUser(orgId, 'Layout user A', 'admin'))
-  const userB = await withBypass(() => createScratchUser(orgId, 'Layout user B', 'admin'))
-  try {
-    const org = await withBypass(() =>
-      savePageSpec({ orgId, actorId: adminId, route: '/banking', spec: spec('org'), registries }),
-    )
-    assert.equal(org.ok, true, 'org layout saves')
-    const a = await withBypass(() =>
-      savePageSpec({ orgId, actorId: userA, route: '/banking', spec: spec('A personal'), registries, scope: 'user' }),
-    )
-    assert.equal(a.ok, true, 'A personal saves')
-    const b = await withBypass(() =>
-      savePageSpec({ orgId, actorId: userB, route: '/banking', spec: spec('B personal'), registries, scope: 'user' }),
-    )
-    assert.equal(b.ok, true, 'B personal saves')
+test(
+  "layout history shows org versions plus the reader's own — never a colleague's",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { orgId } = await withBypass(() => createScratchOrg());
+    const adminId = await withBypass(() => createScratchUser(orgId, "Layout admin", "admin"));
+    const userA = await withBypass(() => createScratchUser(orgId, "Layout user A", "admin"));
+    const userB = await withBypass(() => createScratchUser(orgId, "Layout user B", "admin"));
+    try {
+      const org = await withBypass(() =>
+        savePageSpec({ orgId, actorId: adminId, route: "/banking", spec: spec("org"), registries }),
+      );
+      assert.equal(org.ok, true, "org layout saves");
+      const a = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: userA,
+          route: "/banking",
+          spec: spec("A personal"),
+          registries,
+          scope: "user",
+        }),
+      );
+      assert.equal(a.ok, true, "A personal saves");
+      const b = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: userB,
+          route: "/banking",
+          spec: spec("B personal"),
+          registries,
+          scope: "user",
+        }),
+      );
+      assert.equal(b.ok, true, "B personal saves");
 
-    const seen = await withBypass(() => listPageSpecHistory(orgId, '/banking', userB))
-    const authors = new Set(seen.map((v) => v.savedBy))
-    assert.ok(authors.has(adminId), 'org history is visible')
-    assert.ok(authors.has(userB), 'own personal history is visible')
-    assert.equal(authors.has(userA), false, 'a colleague\'s personal history must not leak')
-  } finally {
-    await withBypass(() => dropScratchOrg(orgId))
-  }
-})
+      const seen = await withBypass(() => listPageSpecHistory(orgId, "/banking", userB));
+      const authors = new Set(seen.map((v) => v.savedBy));
+      assert.ok(authors.has(adminId), "org history is visible");
+      assert.ok(authors.has(userB), "own personal history is visible");
+      assert.equal(authors.has(userA), false, "a colleague's personal history must not leak");
+    } finally {
+      await withBypass(() => dropScratchOrg(orgId));
+    }
+  },
+);
 
-test('restoring an org version leaves personal layouts active', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { orgId } = await withBypass(() => createScratchOrg())
-  const adminId = await withBypass(() => createScratchUser(orgId, 'Layout admin', 'admin'))
-  const userId = await withBypass(() => createScratchUser(orgId, 'Layout user', 'admin'))
-  try {
-    const v1 = await withBypass(() =>
-      savePageSpec({ orgId, actorId: adminId, route: '/banking', spec: spec('org v1'), registries }),
-    )
-    assert.equal(v1.ok, true, 'org v1 saves')
-    const personal = await withBypass(() =>
-      savePageSpec({ orgId, actorId: userId, route: '/banking', spec: spec('personal'), registries, scope: 'user' }),
-    )
-    assert.equal(personal.ok, true, 'personal layout saves')
-    const v2 = await withBypass(() =>
-      savePageSpec({ orgId, actorId: adminId, route: '/banking', spec: spec('org v2'), registries }),
-    )
-    assert.equal(v2.ok, true, 'org v2 saves')
-    if (!v1.ok || !v2.ok) throw new Error('seed saves failed')
+test(
+  "restoring an org version leaves personal layouts active",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { orgId } = await withBypass(() => createScratchOrg());
+    const adminId = await withBypass(() => createScratchUser(orgId, "Layout admin", "admin"));
+    const userId = await withBypass(() => createScratchUser(orgId, "Layout user", "admin"));
+    try {
+      const v1 = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: adminId,
+          route: "/banking",
+          spec: spec("org v1"),
+          registries,
+        }),
+      );
+      assert.equal(v1.ok, true, "org v1 saves");
+      const personal = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: userId,
+          route: "/banking",
+          spec: spec("personal"),
+          registries,
+          scope: "user",
+        }),
+      );
+      assert.equal(personal.ok, true, "personal layout saves");
+      const v2 = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: adminId,
+          route: "/banking",
+          spec: spec("org v2"),
+          registries,
+        }),
+      );
+      assert.equal(v2.ok, true, "org v2 saves");
+      if (!v1.ok || !v2.ok) throw new Error("seed saves failed");
 
-    const restored = await withBypass(() =>
-      restorePageSpec({ orgId, actorId: adminId, route: '/banking', versionId: v1.id, registries }),
-    )
-    assert.equal(restored.ok, true, 'restore succeeds')
+      const restored = await withBypass(() =>
+        restorePageSpec({
+          orgId,
+          actorId: adminId,
+          route: "/banking",
+          versionId: v1.id,
+          registries,
+        }),
+      );
+      assert.equal(restored.ok, true, "restore succeeds");
 
-    const rows = await activeRows(orgId, '/banking')
-    const personalStillActive = rows.some((r) => r.userId === userId)
-    assert.equal(personalStillActive, true, 'the personal layout must survive an org restore')
-    assert.equal(
-      rows.filter((r) => r.userId === null).length,
-      1,
-      'exactly one org layout is active after the restore',
-    )
-  } finally {
-    await withBypass(() => dropScratchOrg(orgId))
-  }
-})
+      const rows = await activeRows(orgId, "/banking");
+      const personalStillActive = rows.some((r) => r.userId === userId);
+      assert.equal(personalStillActive, true, "the personal layout must survive an org restore");
+      assert.equal(
+        rows.filter((r) => r.userId === null).length,
+        1,
+        "exactly one org layout is active after the restore",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(orgId));
+    }
+  },
+);
 
-test('restoring a personal version republishes only the personal layer', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { orgId } = await withBypass(() => createScratchOrg())
-  const adminId = await withBypass(() => createScratchUser(orgId, 'Layout admin', 'admin'))
-  const userId = await withBypass(() => createScratchUser(orgId, 'Layout user', 'admin'))
-  try {
-    const org = await withBypass(() =>
-      savePageSpec({ orgId, actorId: adminId, route: '/banking', spec: spec('org'), registries }),
-    )
-    assert.equal(org.ok, true, 'org layout saves')
-    const p1 = await withBypass(() =>
-      savePageSpec({ orgId, actorId: userId, route: '/banking', spec: spec('personal v1'), registries, scope: 'user' }),
-    )
-    assert.equal(p1.ok, true, 'personal v1 saves')
-    const p2 = await withBypass(() =>
-      savePageSpec({ orgId, actorId: userId, route: '/banking', spec: spec('personal v2'), registries, scope: 'user' }),
-    )
-    assert.equal(p2.ok, true, 'personal v2 saves')
-    if (!p1.ok) throw new Error('seed saves failed')
+test(
+  "restoring a personal version republishes only the personal layer",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { orgId } = await withBypass(() => createScratchOrg());
+    const adminId = await withBypass(() => createScratchUser(orgId, "Layout admin", "admin"));
+    const userId = await withBypass(() => createScratchUser(orgId, "Layout user", "admin"));
+    try {
+      const org = await withBypass(() =>
+        savePageSpec({ orgId, actorId: adminId, route: "/banking", spec: spec("org"), registries }),
+      );
+      assert.equal(org.ok, true, "org layout saves");
+      const p1 = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: userId,
+          route: "/banking",
+          spec: spec("personal v1"),
+          registries,
+          scope: "user",
+        }),
+      );
+      assert.equal(p1.ok, true, "personal v1 saves");
+      const p2 = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: userId,
+          route: "/banking",
+          spec: spec("personal v2"),
+          registries,
+          scope: "user",
+        }),
+      );
+      assert.equal(p2.ok, true, "personal v2 saves");
+      if (!p1.ok) throw new Error("seed saves failed");
 
-    const restored = await withBypass(() =>
-      restorePageSpec({ orgId, actorId: userId, route: '/banking', versionId: p1.id, registries, scope: 'user' }),
-    )
-    assert.equal(restored.ok, true, 'personal restore succeeds')
+      const restored = await withBypass(() =>
+        restorePageSpec({
+          orgId,
+          actorId: userId,
+          route: "/banking",
+          versionId: p1.id,
+          registries,
+          scope: "user",
+        }),
+      );
+      assert.equal(restored.ok, true, "personal restore succeeds");
 
-    const rows = await activeRows(orgId, '/banking')
-    assert.equal(rows.length, 2, 'org plus personal stay active')
-    assert.equal(
-      rows.filter((r) => r.userId === null).length,
-      1,
-      'the org layout survives a personal restore',
-    )
-    const mine = rows.find((r) => r.userId === userId)
-    assert.ok(mine, 'a personal layout is active')
-    if (!restored.ok) throw new Error('restore failed')
-    assert.equal(mine!.id, restored.id, 'the restored row is the active personal layout')
-  } finally {
-    await withBypass(() => dropScratchOrg(orgId))
-  }
-})
+      const rows = await activeRows(orgId, "/banking");
+      assert.equal(rows.length, 2, "org plus personal stay active");
+      assert.equal(
+        rows.filter((r) => r.userId === null).length,
+        1,
+        "the org layout survives a personal restore",
+      );
+      const mine = rows.find((r) => r.userId === userId);
+      assert.ok(mine, "a personal layout is active");
+      if (!restored.ok) throw new Error("restore failed");
+      assert.equal(mine!.id, restored.id, "the restored row is the active personal layout");
+    } finally {
+      await withBypass(() => dropScratchOrg(orgId));
+    }
+  },
+);
 
-test('a refused restore leaves every layer untouched', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { orgId } = await withBypass(() => createScratchOrg())
-  const adminId = await withBypass(() => createScratchUser(orgId, 'Layout admin', 'admin'))
-  const userId = await withBypass(() => createScratchUser(orgId, 'Layout user', 'admin'))
-  try {
-    const v1 = await withBypass(() =>
-      savePageSpec({ orgId, actorId: adminId, route: '/banking', spec: spec('org v1'), registries }),
-    )
-    assert.equal(v1.ok, true, 'org v1 saves')
-    const personal = await withBypass(() =>
-      savePageSpec({ orgId, actorId: userId, route: '/banking', spec: spec('personal'), registries, scope: 'user' }),
-    )
-    assert.equal(personal.ok, true, 'personal layout saves')
-    const before = await activeRows(orgId, '/banking')
+test(
+  "a refused restore leaves every layer untouched",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { orgId } = await withBypass(() => createScratchOrg());
+    const adminId = await withBypass(() => createScratchUser(orgId, "Layout admin", "admin"));
+    const userId = await withBypass(() => createScratchUser(orgId, "Layout user", "admin"));
+    try {
+      const v1 = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: adminId,
+          route: "/banking",
+          spec: spec("org v1"),
+          registries,
+        }),
+      );
+      assert.equal(v1.ok, true, "org v1 saves");
+      const personal = await withBypass(() =>
+        savePageSpec({
+          orgId,
+          actorId: userId,
+          route: "/banking",
+          spec: spec("personal"),
+          registries,
+          scope: "user",
+        }),
+      );
+      assert.equal(personal.ok, true, "personal layout saves");
+      const before = await activeRows(orgId, "/banking");
 
-    const refused = await withBypass(() =>
-      restorePageSpec({
-        orgId,
-        actorId: adminId,
-        route: '/banking',
-        versionId: '00000000-0000-0000-0000-000000000000',
-        registries,
-      }),
-    )
-    assert.equal(refused.ok, false, 'unknown version is refused')
-    assert.deepEqual(await activeRows(orgId, '/banking'), before, 'a refused restore changes nothing')
-  } finally {
-    await withBypass(() => dropScratchOrg(orgId))
-  }
-})
+      const refused = await withBypass(() =>
+        restorePageSpec({
+          orgId,
+          actorId: adminId,
+          route: "/banking",
+          versionId: "00000000-0000-0000-0000-000000000000",
+          registries,
+        }),
+      );
+      assert.equal(refused.ok, false, "unknown version is refused");
+      assert.deepEqual(
+        await activeRows(orgId, "/banking"),
+        before,
+        "a refused restore changes nothing",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(orgId));
+    }
+  },
+);

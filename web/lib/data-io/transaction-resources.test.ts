@@ -1,34 +1,30 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import ExcelJS from 'exceljs'
-import { DOC_KINDS } from '../document-kinds.ts'
-import {
-  CELL_PROVENANCE_KEY,
-  SOURCE_COLUMNS_KEY,
-  UNMAPPED_COLUMNS_KEY,
-} from './types.ts'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import ExcelJS from "exceljs";
+import { DOC_KINDS } from "../document-kinds.ts";
+import { CELL_PROVENANCE_KEY, SOURCE_COLUMNS_KEY, UNMAPPED_COLUMNS_KEY } from "./types.ts";
 
 interface TransactionImportState {
-  failLineInsert: boolean
-  transactionCalls: number
-  rootInsertCalls: number
-  transactionInsertTargets: string[]
-  rollbacks: number
-  outOfTransactionInsertStatements: number
-  strandedTransactionWrites: number
-  savepointsOpened: number
-  savepointReleases: number
-  savepointRollbacks: number
-  failureLifecycle: string[]
-  documents: Record<string, unknown>[]
-  lines: Record<string, unknown>[]
-  attemptedLines: Record<string, unknown>[]
-  precomputeCalls: { orgId: string; kind: string; body: Record<string, unknown> }[]
-  editCalls: { id: string; body: Record<string, unknown>; ctx: Record<string, unknown> }[]
+  failLineInsert: boolean;
+  transactionCalls: number;
+  rootInsertCalls: number;
+  transactionInsertTargets: string[];
+  rollbacks: number;
+  outOfTransactionInsertStatements: number;
+  strandedTransactionWrites: number;
+  savepointsOpened: number;
+  savepointReleases: number;
+  savepointRollbacks: number;
+  failureLifecycle: string[];
+  documents: Record<string, unknown>[];
+  lines: Record<string, unknown>[];
+  attemptedLines: Record<string, unknown>[];
+  precomputeCalls: { orgId: string; kind: string; body: Record<string, unknown> }[];
+  editCalls: { id: string; body: Record<string, unknown>; ctx: Record<string, unknown> }[];
 }
 
-const stateKey = Symbol.for('openbooks.transaction-import-test')
+const stateKey = Symbol.for("openbooks.transaction-import-test");
 const importState: TransactionImportState = {
   failLineInsert: false,
   transactionCalls: 0,
@@ -46,21 +42,21 @@ const importState: TransactionImportState = {
   attemptedLines: [],
   precomputeCalls: [],
   editCalls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
-      export { and, asc, desc, eq, inArray, isNull, or } from '${import.meta.resolve('drizzle-orm')}'
+      export { and, asc, desc, eq, inArray, isNull, or } from '${import.meta.resolve("drizzle-orm")}'
       export function sql(strings, ...values) {
         return { strings, values }
       }
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.transaction-import-test')]
       const documentId = 'document-1'
@@ -189,7 +185,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:posting',
+    "mock:posting",
     `
       export async function postDocument() {
         throw new Error('postDocument is not expected in this test')
@@ -197,7 +193,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:documents',
+    "mock:documents",
     `
       export async function controlDeps() {
         throw new Error('controlDeps is not expected in this test')
@@ -227,7 +223,7 @@ const mockSources = new Map<string, string>([
     // The native edit core: the double records what the importer asked for
     // and performs the same line insert through the caller's transaction, so
     // the atomicity assertions still observe the line writes.
-    'mock:write',
+    "mock:write",
     `
       const state = globalThis[Symbol.for('openbooks.transaction-import-test')]
       const documentLines = Symbol.for('openbooks.transaction-import-test.document-lines')
@@ -254,14 +250,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:resource-core',
+    "mock:resource-core",
     `
       // The pure cap/gate re-export the REAL ./export-cap.ts through this
       // double — never copied. Only impure surfaces are stubbed below.
-      export * from '${new URL('./export-cap.ts', import.meta.url).href}'
-      export { MAX_EXPORT_ROWS, enforceExportRowLimit } from '${new URL('./export-cap.ts', import.meta.url).href}'
-      export { duplicateImportRowIndexes, importRowAction } from '${new URL('./resource-core.ts', import.meta.url).href}'
-      export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from '${new URL('./subsidiary-scope.ts', import.meta.url).href}'
+      export * from '${new URL("./export-cap.ts", import.meta.url).href}'
+      export { MAX_EXPORT_ROWS, enforceExportRowLimit } from '${new URL("./export-cap.ts", import.meta.url).href}'
+      export { duplicateImportRowIndexes, importRowAction } from '${new URL("./resource-core.ts", import.meta.url).href}'
+      export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from '${new URL("./subsidiary-scope.ts", import.meta.url).href}'
 
       export async function orgFeatureEnabled() {
         return false
@@ -280,367 +276,366 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
-      ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/platform/db', 'mock:db'],
-      ['@openbooks/engine/ledger/posting-document', 'mock:posting'],
-      ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
-      ['@openbooks/engine/ledger/document-service', 'mock:documents'],
-      ['@openbooks/engine/documents/write', 'mock:write'],
-      ['../bills.ts', 'mock:documents'],
-      ['./resource-core', 'mock:resource-core'],
-    ]).get(specifier)
-    if (mockUrl) return { url: mockUrl, shortCircuit: true }
-    return nextResolve(specifier, context)
+      ["drizzle-orm", "mock:drizzle"],
+      ["@openbooks/engine/platform/db", "mock:db"],
+      ["@openbooks/engine/ledger/posting-document", "mock:posting"],
+      ["../../../engine/src/ledger/document-service.ts", "mock:documents"],
+      ["@openbooks/engine/ledger/document-service", "mock:documents"],
+      ["@openbooks/engine/documents/write", "mock:write"],
+      ["../bills.ts", "mock:documents"],
+      ["./resource-core", "mock:resource-core"],
+    ]).get(specifier);
+    if (mockUrl) return { url: mockUrl, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url);
     if (source !== undefined) {
-      return { format: 'module', source, shortCircuit: true }
+      return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const resourceUrl = './transaction-resources.ts?atomic-import-test'
-const { transactionResource } = await import(resourceUrl) as typeof import('./transaction-resources.ts')
-const parseUrl = './parse.ts?transaction-xlsx-provenance-test'
-const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
-hooks.deregister()
+const resourceUrl = "./transaction-resources.ts?atomic-import-test";
+const { transactionResource } = (await import(
+  resourceUrl
+)) as typeof import("./transaction-resources.ts");
+const parseUrl = "./parse.ts?transaction-xlsx-provenance-test";
+const { parseImportFile } = (await import(parseUrl)) as typeof import("./parse.ts");
+hooks.deregister();
 
 function resetImportState(failLineInsert: boolean): void {
-  importState.failLineInsert = failLineInsert
-  importState.transactionCalls = 0
-  importState.rootInsertCalls = 0
-  importState.transactionInsertTargets.length = 0
-  importState.rollbacks = 0
-  importState.outOfTransactionInsertStatements = 0
-  importState.strandedTransactionWrites = 0
-  importState.savepointsOpened = 0
-  importState.savepointReleases = 0
-  importState.savepointRollbacks = 0
-  importState.failureLifecycle.length = 0
-  importState.documents.length = 0
-  importState.lines.length = 0
-  importState.attemptedLines.length = 0
-  importState.precomputeCalls.length = 0
-  importState.editCalls.length = 0
+  importState.failLineInsert = failLineInsert;
+  importState.transactionCalls = 0;
+  importState.rootInsertCalls = 0;
+  importState.transactionInsertTargets.length = 0;
+  importState.rollbacks = 0;
+  importState.outOfTransactionInsertStatements = 0;
+  importState.strandedTransactionWrites = 0;
+  importState.savepointsOpened = 0;
+  importState.savepointReleases = 0;
+  importState.savepointRollbacks = 0;
+  importState.failureLifecycle.length = 0;
+  importState.documents.length = 0;
+  importState.lines.length = 0;
+  importState.attemptedLines.length = 0;
+  importState.precomputeCalls.length = 0;
+  importState.editCalls.length = 0;
 }
 
 async function importCardCharge(
   row: Record<string, unknown> = {
-    documentDate: '2026-08-24',
-    account: '5000',
-    amount: '999999999999999.1234',
+    documentDate: "2026-08-24",
+    account: "5000",
+    amount: "999999999999999.1234",
   },
 ) {
-  const cfg = DOC_KINDS.card_charge
-  assert.ok(cfg)
-  return transactionResource(cfg, 'org-1').write(
-    [row],
-    'insert',
-    { orgId: 'org-1', actorId: 'actor-1', dryRun: false },
-  )
+  const cfg = DOC_KINDS.card_charge;
+  assert.ok(cfg);
+  return transactionResource(cfg, "org-1").write([row], "insert", {
+    orgId: "org-1",
+    actorId: "actor-1",
+    dryRun: false,
+  });
 }
 
 async function xlsxTransactionRows(): Promise<Record<string, unknown>[]> {
-  const workbook = new ExcelJS.Workbook()
-  const sheet = workbook.addWorksheet('Transactions')
-  const nestedLines = '[{"account":"5000","amount":"999999999999998.9900"}]'
-  sheet.addRow(['documentDate', 'account', 'amount', 'debit', 'credit', 'lines'])
-  sheet.addRow(['2026-08-24', '5000', 999999999999998.99, '', '', ''])
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Transactions");
+  const nestedLines = '[{"account":"5000","amount":"999999999999998.9900"}]';
+  sheet.addRow(["documentDate", "account", "amount", "debit", "credit", "lines"]);
+  sheet.addRow(["2026-08-24", "5000", 999999999999998.99, "", "", ""]);
   sheet.addRow([
-    '2026-08-24',
-    '5000',
-    { formula: '999999999999998.99', result: 999999999999998.99 },
-    '',
-    '',
-    '',
-  ])
-  sheet.addRow(['2026-08-24', '5000', '999999999999998.9900', '', '', ''])
+    "2026-08-24",
+    "5000",
+    { formula: "999999999999998.99", result: 999999999999998.99 },
+    "",
+    "",
+    "",
+  ]);
+  sheet.addRow(["2026-08-24", "5000", "999999999999998.9900", "", "", ""]);
   sheet.addRow([
-    '2026-08-24',
-    '5000',
+    "2026-08-24",
+    "5000",
     {
       formula: 'TEXT(999999999999998.99,"0.0000")',
-      result: '999999999999999.0000',
+      result: "999999999999999.0000",
     },
-    '',
-    '',
-    '',
-  ])
+    "",
+    "",
+    "",
+  ]);
   sheet.addRow([
-    '2026-08-24',
-    '5000',
-    '',
+    "2026-08-24",
+    "5000",
+    "",
     {
       formula: 'TEXT(999999999999998.99,"0.0000")',
-      result: '999999999999999.0000',
+      result: "999999999999999.0000",
     },
-    { sharedFormula: 'D6', result: '999999999999999.0000' },
-    '',
-  ])
-  sheet.addRow(['2026-08-24', '', '', '', '', { formula: 'A1', result: nestedLines }])
-  sheet.addRow(['2026-08-24', '', '', '', '', { sharedFormula: 'F7', result: nestedLines }])
-  const buffer = await workbook.xlsx.writeBuffer()
+    { sharedFormula: "D6", result: "999999999999999.0000" },
+    "",
+  ]);
+  sheet.addRow(["2026-08-24", "", "", "", "", { formula: "A1", result: nestedLines }]);
+  sheet.addRow(["2026-08-24", "", "", "", "", { sharedFormula: "F7", result: nestedLines }]);
+  const buffer = await workbook.xlsx.writeBuffer();
   return (
-    await parseImportFile('xlsx', {
-      base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
+    await parseImportFile("xlsx", {
+      base64: Buffer.from(buffer as ArrayBuffer).toString("base64"),
     })
-  ).rows
+  ).rows;
 }
 
 async function xlsxArrayFormulaRows(): Promise<Record<string, unknown>[]> {
-  const workbook = new ExcelJS.Workbook()
-  const sheet = workbook.addWorksheet('Transactions')
-  const nestedLines = '[{"account":"5000","amount":"999999999999998.9900"}]'
-  sheet.addRow(['documentDate', 'account', 'amount', 'debit', 'credit', 'lines'])
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Transactions");
+  const nestedLines = '[{"account":"5000","amount":"999999999999998.9900"}]';
+  sheet.addRow(["documentDate", "account", "amount", "debit", "credit", "lines"]);
   for (let row = 2; row <= 8; row++) {
-    sheet.getCell(row, 1).value = '2026-08-24'
-    sheet.getCell(row, 2).value = '5000'
+    sheet.getCell(row, 1).value = "2026-08-24";
+    sheet.getCell(row, 2).value = "5000";
   }
-  for (let row = 9; row <= 10; row++) sheet.getCell(row, 1).value = '2026-08-24'
+  for (let row = 9; row <= 10; row++) sheet.getCell(row, 1).value = "2026-08-24";
   const fillFormula = sheet.fillFormula.bind(sheet) as unknown as (
     range: string,
     formula: string,
     results: Array<string | number>,
-    shareType: 'array',
-  ) => void
+    shareType: "array",
+  ) => void;
   fillFormula(
-    'C2:C4',
+    "C2:C4",
     'TEXT(999999999999998.99,"0.0000")',
-    [1, 999999999999998.99, '999999999999999.0000'],
-    'array',
-  )
-  fillFormula(
-    'D5:D6',
-    'TEXT(999999999999998.99,"0.0000")',
-    [1, '999999999999999.0000'],
-    'array',
-  )
-  fillFormula(
-    'E7:E8',
-    'TEXT(999999999999998.99,"0.0000")',
-    [1, 999999999999998.99],
-    'array',
-  )
-  fillFormula('F9:F10', 'A1', [nestedLines, nestedLines], 'array')
-  const buffer = await workbook.xlsx.writeBuffer()
+    [1, 999999999999998.99, "999999999999999.0000"],
+    "array",
+  );
+  fillFormula("D5:D6", 'TEXT(999999999999998.99,"0.0000")', [1, "999999999999999.0000"], "array");
+  fillFormula("E7:E8", 'TEXT(999999999999998.99,"0.0000")', [1, 999999999999998.99], "array");
+  fillFormula("F9:F10", "A1", [nestedLines, nestedLines], "array");
+  const buffer = await workbook.xlsx.writeBuffer();
   return (
-    await parseImportFile('xlsx', {
-      base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
+    await parseImportFile("xlsx", {
+      base64: Buffer.from(buffer as ArrayBuffer).toString("base64"),
     })
-  ).rows
+  ).rows;
 }
 
 function mappedTransactionRow(
   row: Record<string, unknown>,
-  source: 'amount' | 'debit' | 'credit' | 'lines',
+  source: "amount" | "debit" | "credit" | "lines",
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {
     documentDate: row.documentDate,
     account: row.account,
     [SOURCE_COLUMNS_KEY]: {},
-  }
-  const sources = out[SOURCE_COLUMNS_KEY] as Record<string, string>
-  if (source === 'lines') {
-    out.lines = row.lines
-    sources.lines = 'lines'
+  };
+  const sources = out[SOURCE_COLUMNS_KEY] as Record<string, string>;
+  if (source === "lines") {
+    out.lines = row.lines;
+    sources.lines = "lines";
   } else {
-    out.amount = row[source]
-    sources.amount = source
+    out.amount = row[source];
+    sources.amount = source;
   }
-  const provenance = row[CELL_PROVENANCE_KEY]
+  const provenance = row[CELL_PROVENANCE_KEY];
   if (provenance !== undefined) {
-    out[UNMAPPED_COLUMNS_KEY] = { [CELL_PROVENANCE_KEY]: provenance }
+    out[UNMAPPED_COLUMNS_KEY] = { [CELL_PROVENANCE_KEY]: provenance };
   }
-  return out
+  return out;
 }
 
-test('transaction import rolls back its draft when line persistence fails', async () => {
-  resetImportState(true)
+test("transaction import rolls back its draft when line persistence fails", async () => {
+  resetImportState(true);
 
-  const outcome = await importCardCharge()
+  const outcome = await importCardCharge();
 
   assert.deepEqual(outcome, {
     created: 0,
     updated: 0,
     failed: 1,
-    errors: [{ row: 1, message: 'could not save this row; check its values and try again' }],
-  })
-  assert.equal(importState.transactionCalls, 1)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.deepEqual(
-    importState.transactionInsertTargets,
-    ['documents', 'documentLines'],
-  )
-  assert.equal(importState.rollbacks, 1)
-  assert.equal(importState.attemptedLines[0]?.amount, '999999999999999.1234')
-  assert.equal(importState.savepointRollbacks, 1)
+    errors: [{ row: 1, message: "could not save this row; check its values and try again" }],
+  });
+  assert.equal(importState.transactionCalls, 1);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.deepEqual(importState.transactionInsertTargets, ["documents", "documentLines"]);
+  assert.equal(importState.rollbacks, 1);
+  assert.equal(importState.attemptedLines[0]?.amount, "999999999999999.1234");
+  assert.equal(importState.savepointRollbacks, 1);
   assert.deepEqual(
     importState.failureLifecycle,
-    ['rollback', 'release', 'rethrow'],
-    'the failed row must release its rolled-back savepoint before its error escapes',
-  )
+    ["rollback", "release", "rethrow"],
+    "the failed row must release its rolled-back savepoint before its error escapes",
+  );
   assert.deepEqual(
     importState.attemptedLines.map((line) => [line.via, line.transactionId]),
-    [['transaction', 'txn-1']],
-  )
-  assert.equal(importState.outOfTransactionInsertStatements, 0)
-  assert.equal(importState.strandedTransactionWrites, 0)
-  assert.deepEqual(
-    importState.documents,
-    [],
-    'the failed row must not leave an orphan draft',
-  )
-  assert.deepEqual(importState.lines, [])
-})
+    [["transaction", "txn-1"]],
+  );
+  assert.equal(importState.outOfTransactionInsertStatements, 0);
+  assert.equal(importState.strandedTransactionWrites, 0);
+  assert.deepEqual(importState.documents, [], "the failed row must not leave an orphan draft");
+  assert.deepEqual(importState.lines, []);
+});
 
-test('transaction import commits its draft and lines together', async () => {
-  resetImportState(false)
+test("transaction import commits its draft and lines together", async () => {
+  resetImportState(false);
 
-  const outcome = await importCardCharge()
+  const outcome = await importCardCharge();
 
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-  assert.equal(importState.transactionCalls, 1)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.deepEqual(
-    importState.transactionInsertTargets,
-    ['documents', 'documentLines'],
-  )
-  assert.equal(importState.rollbacks, 0)
-  assert.equal(importState.savepointsOpened, 1)
-  assert.equal(importState.savepointReleases, 1)
-  assert.equal(importState.savepointRollbacks, 0)
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+  assert.equal(importState.transactionCalls, 1);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.deepEqual(importState.transactionInsertTargets, ["documents", "documentLines"]);
+  assert.equal(importState.rollbacks, 0);
+  assert.equal(importState.savepointsOpened, 1);
+  assert.equal(importState.savepointReleases, 1);
+  assert.equal(importState.savepointRollbacks, 0);
   // The committed draft and its lines must come from one transaction
   // connection: every attempted line write carries that provenance, nothing
   // was inserted through the root connection (builder or raw SQL), and no
   // write was left unsettled when the transaction resolved.
   assert.deepEqual(
     importState.attemptedLines.map((line) => [line.via, line.transactionId]),
-    [['transaction', 'txn-1']],
-  )
-  assert.equal(importState.outOfTransactionInsertStatements, 0)
-  assert.equal(importState.strandedTransactionWrites, 0)
+    [["transaction", "txn-1"]],
+  );
+  assert.equal(importState.outOfTransactionInsertStatements, 0);
+  assert.equal(importState.strandedTransactionWrites, 0);
   assert.deepEqual(importState.documents, [
     {
-      orgId: 'org-1',
-      kind: 'card_charge',
-      documentNumber: 'CC-000001',
+      orgId: "org-1",
+      kind: "card_charge",
+      documentNumber: "CC-000001",
       partyId: null,
-      documentDate: '2026-08-24',
+      documentDate: "2026-08-24",
       dueDate: null,
-      currency: 'CAD',
+      currency: "CAD",
       referenceNumber: null,
       memo: null,
-      status: 'draft',
-      createdBy: 'actor-1',
-      id: 'document-1',
+      status: "draft",
+      createdBy: "actor-1",
+      id: "document-1",
     },
-  ])
+  ]);
   assert.deepEqual(importState.lines, [
     {
-      orgId: 'org-1',
-      documentId: 'document-1',
+      orgId: "org-1",
+      documentId: "document-1",
       lineNumber: 1,
-      accountId: 'account-1',
+      accountId: "account-1",
       description: null,
-      amount: '999999999999999.1234',
+      amount: "999999999999999.1234",
       taxCodeId: null,
-      createdBy: 'actor-1',
+      createdBy: "actor-1",
     },
+  ]);
+});
+
+test("transaction import writes tax-profiled lines through the native edit core", async () => {
+  resetImportState(false);
+
+  const outcome = await importCardCharge({
+    documentDate: "2026-08-24",
+    account: "5000",
+    amount: "100.00",
+    taxCode: "TAX",
+  });
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+  const expectedLines = [
+    { accountId: "account-1", amount: "100.0000", description: null, taxCodeId: "tax-1" },
+  ];
+  assert.equal(
+    importState.precomputeCalls.length,
+    1,
+    "provider-dependent totals resolve once, before the transaction",
+  );
+  assert.deepEqual(importState.precomputeCalls[0]!.body.lines, expectedLines);
+  assert.equal(importState.editCalls.length, 1, "the lines are written by the shared edit core");
+  const [edit] = importState.editCalls;
+  assert.equal(edit!.id, "document-1");
+  assert.deepEqual(edit!.body.lines, expectedLines);
+  assert.equal(
+    edit!.body.expectedUpdatedAt,
+    "revision-1",
+    "the edit carries the draft revision read in the transaction",
+  );
+  assert.equal(edit!.ctx.source, "api");
+  assert.equal(edit!.ctx.runFlows, false, "imports keep firing no update flows");
+  assert.equal(importState.lines[0]!.taxCodeId, "tax-1");
+});
+
+test("transaction import refuses impossible document and due dates before writing", async () => {
+  resetImportState(false);
+  const writer = transactionResource(DOC_KINDS.vendor_bill!, "org-1");
+  for (const row of [
+    { documentDate: "2026-02-30" },
+    { documentDate: "2026-02-28", dueDate: "2026-02-31" },
   ])
-})
+    assert.equal(
+      (await writer.write([row], "insert", { orgId: "org-1", actorId: "actor-1", dryRun: false }))
+        .failed,
+      1,
+    );
+  assert.equal(importState.transactionCalls, 0);
+});
 
-test('transaction import writes tax-profiled lines through the native edit core', async () => {
-  resetImportState(false)
-
-  const outcome = await importCardCharge({
-    documentDate: '2026-08-24',
-    account: '5000',
-    amount: '100.00',
-    taxCode: 'TAX',
-  })
-
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-  const expectedLines = [{ accountId: 'account-1', amount: '100.0000', description: null, taxCodeId: 'tax-1' }]
-  assert.equal(importState.precomputeCalls.length, 1, 'provider-dependent totals resolve once, before the transaction')
-  assert.deepEqual(importState.precomputeCalls[0]!.body.lines, expectedLines)
-  assert.equal(importState.editCalls.length, 1, 'the lines are written by the shared edit core')
-  const [edit] = importState.editCalls
-  assert.equal(edit!.id, 'document-1')
-  assert.deepEqual(edit!.body.lines, expectedLines)
-  assert.equal(edit!.body.expectedUpdatedAt, 'revision-1', 'the edit carries the draft revision read in the transaction')
-  assert.equal(edit!.ctx.source, 'api')
-  assert.equal(edit!.ctx.runFlows, false, 'imports keep firing no update flows')
-  assert.equal(importState.lines[0]!.taxCodeId, 'tax-1')
-})
-
-test('transaction import refuses impossible document and due dates before writing', async () => {
-  resetImportState(false)
-  const writer = transactionResource(DOC_KINDS.vendor_bill!, 'org-1')
-  for (const row of [{ documentDate: '2026-02-30' }, { documentDate: '2026-02-28', dueDate: '2026-02-31' }]) assert.equal((await writer.write([row], 'insert', { orgId: 'org-1', actorId: 'actor-1', dryRun: false })).failed, 1)
-  assert.equal(importState.transactionCalls, 0)
-})
-
-
-test('transaction import preserves an exact decimal string inside JSON lines', async () => {
-  resetImportState(false)
+test("transaction import preserves an exact decimal string inside JSON lines", async () => {
+  resetImportState(false);
 
   const outcome = await importCardCharge({
-    documentDate: '2026-08-24',
+    documentDate: "2026-08-24",
     lines: '[{"account":"5000","amount":"999999999999998.9900"}]',
-  })
+  });
 
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-  assert.equal(importState.transactionCalls, 1)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.equal(importState.attemptedLines[0]?.amount, '999999999999998.9900')
-  assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
-})
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+  assert.equal(importState.transactionCalls, 1);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.equal(importState.attemptedLines[0]?.amount, "999999999999998.9900");
+  assert.equal(importState.lines[0]?.amount, "999999999999998.9900");
+});
 
-test('transaction import keeps unquoted number tokens in JSON lines exact', async (t) => {
-  await t.test('does not let an integer-valued double silently round .99 away', async () => {
-    resetImportState(false)
+test("transaction import keeps unquoted number tokens in JSON lines exact", async (t) => {
+  await t.test("does not let an integer-valued double silently round .99 away", async () => {
+    resetImportState(false);
 
     const outcome = await importCardCharge({
-      documentDate: '2026-08-24',
+      documentDate: "2026-08-24",
       // Unquoted on purpose: JSON.parse would hand back the safe integer
       // 999999999999999 and the ledger would store ...999.0000.
       lines: '[{"account":"5000","amount":999999999999998.99}]',
-    })
+    });
 
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-    assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
-  })
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+    assert.equal(importState.lines[0]?.amount, "999999999999998.9900");
+  });
 
-  await t.test('accepts an exactly representable unquoted fraction', async () => {
-    resetImportState(false)
+  await t.test("accepts an exactly representable unquoted fraction", async () => {
+    resetImportState(false);
 
     const outcome = await importCardCharge({
-      documentDate: '2026-08-24',
+      documentDate: "2026-08-24",
       lines: '[{"account":"5000","amount":100.25}]',
-    })
+    });
 
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-    assert.equal(importState.lines[0]?.amount, '100.2500')
-  })
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+    assert.equal(importState.lines[0]?.amount, "100.2500");
+  });
 
-  await t.test('rejects a scientific-notation token like quoted text', async () => {
-    resetImportState(false)
+  await t.test("rejects a scientific-notation token like quoted text", async () => {
+    resetImportState(false);
 
-    const amount = '1e3'
+    const amount = "1e3";
     const outcome = await importCardCharge({
-      documentDate: '2026-08-24',
+      documentDate: "2026-08-24",
       lines: `[{"account":"5000","amount":${amount}}]`,
-    })
+    });
 
-    assert.equal(outcome.created, 0)
-    assert.equal(outcome.failed, 1)
+    assert.equal(outcome.created, 0);
+    assert.equal(outcome.failed, 1);
     assert.deepEqual(outcome.errors, [
       {
         row: 1,
@@ -649,24 +644,24 @@ test('transaction import keeps unquoted number tokens in JSON lines exact', asyn
           String(amount) +
           '" must be an exact decimal string with at most 4 decimal places',
       },
-    ])
-    assert.equal(importState.transactionCalls, 0)
-    assert.deepEqual(importState.attemptedLines, [])
-  })
-})
+    ]);
+    assert.equal(importState.transactionCalls, 0);
+    assert.deepEqual(importState.attemptedLines, []);
+  });
+});
 
-test('transaction import line amounts hold exact decimal values at the boundary', async (t) => {
+test("transaction import line amounts hold exact decimal values at the boundary", async (t) => {
   const rejectAmount = async (amount: unknown) => {
-    resetImportState(false)
+    resetImportState(false);
 
     const outcome = await importCardCharge({
-      documentDate: '2026-08-24',
-      account: '5000',
+      documentDate: "2026-08-24",
+      account: "5000",
       amount,
-    })
+    });
 
-    assert.equal(outcome.created, 0)
-    assert.equal(outcome.failed, 1)
+    assert.equal(outcome.created, 0);
+    assert.equal(outcome.failed, 1);
     assert.deepEqual(outcome.errors, [
       {
         row: 1,
@@ -675,118 +670,94 @@ test('transaction import line amounts hold exact decimal values at the boundary'
           String(amount) +
           '" must be an exact decimal string with at most 4 decimal places',
       },
-    ])
-    assert.equal(importState.transactionCalls, 0)
-    assert.deepEqual(importState.attemptedLines, [])
-    assert.deepEqual(importState.lines, [])
-  }
+    ]);
+    assert.equal(importState.transactionCalls, 0);
+    assert.deepEqual(importState.attemptedLines, []);
+    assert.deepEqual(importState.lines, []);
+  };
 
-  await t.test('rejects a fifth decimal place instead of rounding it away', async () => {
-    await rejectAmount('999999999999998.99001')
-  })
+  await t.test("rejects a fifth decimal place instead of rounding it away", async () => {
+    await rejectAmount("999999999999998.99001");
+  });
 
-  await t.test('rejects scientific-notation text', async () => {
-    await rejectAmount('1e3')
-  })
+  await t.test("rejects scientific-notation text", async () => {
+    await rejectAmount("1e3");
+  });
 
-  await t.test('rejects non-numeric text', async () => {
-    await rejectAmount('NaN')
-  })
+  await t.test("rejects non-numeric text", async () => {
+    await rejectAmount("NaN");
+  });
 
-  await t.test('preserves a negative amount exactly', async () => {
-    resetImportState(false)
+  await t.test("preserves a negative amount exactly", async () => {
+    resetImportState(false);
 
     const outcome = await importCardCharge({
-      documentDate: '2026-08-24',
+      documentDate: "2026-08-24",
       lines: '[{"account":"5000","amount":"-100.5"}]',
-    })
+    });
 
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-    assert.equal(importState.lines[0]?.amount, '-100.5000')
-  })
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+    assert.equal(importState.lines[0]?.amount, "-100.5000");
+  });
 
-  await t.test('stores zero as the canonical four-decimal zero', async () => {
-    resetImportState(false)
+  await t.test("stores zero as the canonical four-decimal zero", async () => {
+    resetImportState(false);
 
     const outcome = await importCardCharge({
-      documentDate: '2026-08-24',
+      documentDate: "2026-08-24",
       lines: '[{"account":"5000","amount":"-0"}]',
-    })
+    });
 
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-    assert.equal(importState.lines[0]?.amount, '0.0000')
-  })
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+    assert.equal(importState.lines[0]?.amount, "0.0000");
+  });
 
-  await t.test('canonicalizes an explicit plus sign and leading zeros', async () => {
-    resetImportState(false)
+  await t.test("canonicalizes an explicit plus sign and leading zeros", async () => {
+    resetImportState(false);
 
     const outcome = await importCardCharge({
-      documentDate: '2026-08-24',
+      documentDate: "2026-08-24",
       lines: '[{"account":"5000","amount":"+0007.25"}]',
-    })
+    });
 
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-    assert.equal(importState.lines[0]?.amount, '7.2500')
-  })
-})
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+    assert.equal(importState.lines[0]?.amount, "7.2500");
+  });
+});
 
-test('transaction import preserves XLSX cell provenance at the write boundary', async (t) => {
-  const [numericRow, numericFormulaRow, textRow, textFormulaRow, debitCreditFormulaRow, nestedFormulaRow, sharedNestedFormulaRow] =
-    await xlsxTransactionRows()
-  assert.ok(numericRow)
-  assert.ok(numericFormulaRow)
-  assert.ok(textRow)
-  assert.ok(textFormulaRow)
-  assert.ok(debitCreditFormulaRow)
-  assert.ok(nestedFormulaRow)
-  assert.ok(sharedNestedFormulaRow)
+test("transaction import preserves XLSX cell provenance at the write boundary", async (t) => {
+  const [
+    numericRow,
+    numericFormulaRow,
+    textRow,
+    textFormulaRow,
+    debitCreditFormulaRow,
+    nestedFormulaRow,
+    sharedNestedFormulaRow,
+  ] = await xlsxTransactionRows();
+  assert.ok(numericRow);
+  assert.ok(numericFormulaRow);
+  assert.ok(textRow);
+  assert.ok(textFormulaRow);
+  assert.ok(debitCreditFormulaRow);
+  assert.ok(nestedFormulaRow);
+  assert.ok(sharedNestedFormulaRow);
 
-  await t.test('refuses a numeric amount parsed from XLSX', async () => {
-    resetImportState(false)
+  await t.test("refuses a numeric amount parsed from XLSX", async () => {
+    resetImportState(false);
 
-    const outcome = await importCardCharge(mappedTransactionRow(numericRow, 'amount'))
+    const outcome = await importCardCharge(mappedTransactionRow(numericRow, "amount"));
 
-    assert.equal(outcome.created, 0)
-    assert.equal(outcome.failed, 1)
-    assert.match(outcome.errors[0]?.message ?? '', /spreadsheet number/)
-    assert.equal(importState.transactionCalls, 0)
-  })
+    assert.equal(outcome.created, 0);
+    assert.equal(outcome.failed, 1);
+    assert.match(outcome.errors[0]?.message ?? "", /spreadsheet number/);
+    assert.equal(importState.transactionCalls, 0);
+  });
 
-  await t.test('rejects a numeric formula result before writing', async () => {
-    resetImportState(false)
+  await t.test("rejects a numeric formula result before writing", async () => {
+    resetImportState(false);
 
-    const outcome = await importCardCharge(mappedTransactionRow(numericFormulaRow, 'amount'))
-
-    assert.deepEqual(outcome, {
-      created: 0,
-      updated: 0,
-      failed: 1,
-      errors: [
-        {
-          row: 1,
-          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
-        },
-      ],
-    })
-    assert.equal(importState.transactionCalls, 0)
-    assert.deepEqual(importState.attemptedLines, [])
-  })
-
-  await t.test('accepts an exact text amount without changing it', async () => {
-    resetImportState(false)
-
-    const outcome = await importCardCharge(mappedTransactionRow(textRow, 'amount'))
-
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-    assert.equal(importState.transactionCalls, 1)
-    assert.equal(importState.attemptedLines[0]?.amount, '999999999999998.9900')
-    assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
-  })
-
-  await t.test('rejects a TEXT formula cached as a decimal string', async () => {
-    resetImportState(false)
-
-    const outcome = await importCardCharge(mappedTransactionRow(textFormulaRow, 'amount'))
+    const outcome = await importCardCharge(mappedTransactionRow(numericFormulaRow, "amount"));
 
     assert.deepEqual(outcome, {
       created: 0,
@@ -795,104 +766,142 @@ test('transaction import preserves XLSX cell provenance at the write boundary', 
       errors: [
         {
           row: 1,
-          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+          message:
+            "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
         },
       ],
-    })
-    assert.equal(importState.transactionCalls, 0)
-    assert.deepEqual(importState.attemptedLines, [])
-  })
+    });
+    assert.equal(importState.transactionCalls, 0);
+    assert.deepEqual(importState.attemptedLines, []);
+  });
 
-  for (const source of ['debit', 'credit'] as const) {
+  await t.test("accepts an exact text amount without changing it", async () => {
+    resetImportState(false);
+
+    const outcome = await importCardCharge(mappedTransactionRow(textRow, "amount"));
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+    assert.equal(importState.transactionCalls, 1);
+    assert.equal(importState.attemptedLines[0]?.amount, "999999999999998.9900");
+    assert.equal(importState.lines[0]?.amount, "999999999999998.9900");
+  });
+
+  await t.test("rejects a TEXT formula cached as a decimal string", async () => {
+    resetImportState(false);
+
+    const outcome = await importCardCharge(mappedTransactionRow(textFormulaRow, "amount"));
+
+    assert.deepEqual(outcome, {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message:
+            "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
+        },
+      ],
+    });
+    assert.equal(importState.transactionCalls, 0);
+    assert.deepEqual(importState.attemptedLines, []);
+  });
+
+  for (const source of ["debit", "credit"] as const) {
     await t.test(`rejects a formula-derived ${source} mapped to amount`, async () => {
-      resetImportState(false)
+      resetImportState(false);
 
-      const outcome = await importCardCharge(mappedTransactionRow(debitCreditFormulaRow, source))
+      const outcome = await importCardCharge(mappedTransactionRow(debitCreditFormulaRow, source));
 
-      assert.equal(outcome.created, 0)
-      assert.equal(outcome.failed, 1)
+      assert.equal(outcome.created, 0);
+      assert.equal(outcome.failed, 1);
       assert.deepEqual(outcome.errors, [
         {
           row: 1,
-          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+          message:
+            "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
         },
-      ])
-      assert.equal(importState.transactionCalls, 0)
-      assert.deepEqual(importState.attemptedLines, [])
-    })
+      ]);
+      assert.equal(importState.transactionCalls, 0);
+      assert.deepEqual(importState.attemptedLines, []);
+    });
   }
 
   for (const [name, row] of [
-    ['formula-derived nested lines', nestedFormulaRow],
-    ['shared-formula-derived nested lines', sharedNestedFormulaRow],
+    ["formula-derived nested lines", nestedFormulaRow],
+    ["shared-formula-derived nested lines", sharedNestedFormulaRow],
   ] as const) {
     await t.test(`rejects ${name}`, async () => {
-      resetImportState(false)
+      resetImportState(false);
 
-      const outcome = await importCardCharge(mappedTransactionRow(row, 'lines'))
+      const outcome = await importCardCharge(mappedTransactionRow(row, "lines"));
 
-      assert.equal(outcome.created, 0)
-      assert.equal(outcome.failed, 1)
+      assert.equal(outcome.created, 0);
+      assert.equal(outcome.failed, 1);
       assert.deepEqual(outcome.errors, [
         {
           row: 1,
-          message: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+          message: "lines cannot come from a spreadsheet formula; provide literal JSON text",
         },
-      ])
-      assert.equal(importState.transactionCalls, 0)
-      assert.deepEqual(importState.attemptedLines, [])
-    })
+      ]);
+      assert.equal(importState.transactionCalls, 0);
+      assert.deepEqual(importState.attemptedLines, []);
+    });
   }
-})
+});
 
-test('transaction import rejects XLSX array-formula child values before writing', async (t) => {
-  const rows = await xlsxArrayFormulaRows()
-  assert.equal(rows.length, 9)
+test("transaction import rejects XLSX array-formula child values before writing", async (t) => {
+  const rows = await xlsxArrayFormulaRows();
+  assert.equal(rows.length, 9);
   const cases = [
     {
-      name: 'numeric amount child',
+      name: "numeric amount child",
       row: rows[1],
-      source: 'amount' as const,
-      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+      source: "amount" as const,
+      message:
+        "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
     },
     {
-      name: 'cached-string amount child',
+      name: "cached-string amount child",
       row: rows[2],
-      source: 'amount' as const,
-      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+      source: "amount" as const,
+      message:
+        "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
     },
     {
-      name: 'cached-string debit child',
+      name: "cached-string debit child",
       row: rows[4],
-      source: 'debit' as const,
-      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+      source: "debit" as const,
+      message:
+        "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
     },
     {
-      name: 'numeric credit child',
+      name: "numeric credit child",
       row: rows[6],
-      source: 'credit' as const,
-      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+      source: "credit" as const,
+      message:
+        "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
     },
     {
-      name: 'nested-lines cached-string child',
+      name: "nested-lines cached-string child",
       row: rows[8],
-      source: 'lines' as const,
-      message: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+      source: "lines" as const,
+      message: "lines cannot come from a spreadsheet formula; provide literal JSON text",
     },
-  ]
+  ];
 
   for (const { name, row, source, message } of cases) {
-    assert.ok(row)
+    assert.ok(row);
     await t.test(`rejects ${name}`, async () => {
-      resetImportState(false)
+      resetImportState(false);
 
-      const outcome = await importCardCharge(mappedTransactionRow(row, source))
+      const outcome = await importCardCharge(mappedTransactionRow(row, source));
 
-      assert.equal(outcome.created, 0)
-      assert.equal(outcome.failed, 1)
-      assert.deepEqual(outcome.errors, [{ row: 1, message }])
-      assert.equal(importState.transactionCalls, 0)
-      assert.deepEqual(importState.attemptedLines, [])
-    })
+      assert.equal(outcome.created, 0);
+      assert.equal(outcome.failed, 1);
+      assert.deepEqual(outcome.errors, [{ row: 1, message }]);
+      assert.equal(importState.transactionCalls, 0);
+      assert.deepEqual(importState.attemptedLines, []);
+    });
   }
-})
+});

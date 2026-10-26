@@ -28,9 +28,11 @@ interface Fixture {
 /**
  * A BC employee with June vacation pay and no hours recorded.
  */
-async function seedPaidVacationBeforeCanadaDay(options: {
-  workSchedule?: boolean;
-} = {}): Promise<Fixture> {
+async function seedPaidVacationBeforeCanadaDay(
+  options: {
+    workSchedule?: boolean;
+  } = {},
+): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const scheduleId = randomUUID();
@@ -48,7 +50,10 @@ async function seedPaidVacationBeforeCanadaDay(options: {
   await db.execute(sql`
     insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
-  const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId, from: "2024-01-01" });
+  const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, {
+    workerPartyId: employeeId,
+    from: "2024-01-01",
+  });
 
   const component = async (code: string, systemKey: string) => {
     const id = randomUUID();
@@ -84,7 +89,8 @@ async function seedPaidVacationBeforeCanadaDay(options: {
                              created_by, updated_by)
       values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'BC', 26, ${payDate}, 2026,
               'CAD', ${periodStart === "2026-05-25" ? "1000.00" : "2000.00"}, ${actorId}, ${actorId})`);
-    const insertLine = (amount: string, from: string | null, to: string | null) => db.execute(sql`
+    const insertLine = (amount: string, from: string | null, to: string | null) =>
+      db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount,
                                   earned_from, earned_to, sequence, created_by, updated_by)
       values (${org.orgId}, ${stubId}, ${vacationComponentId}, 'earning', 'Vacation payout',
@@ -93,8 +99,13 @@ async function seedPaidVacationBeforeCanadaDay(options: {
       await insertLine("100.00", "2026-05-25", "2026-05-31");
       // Day-resolved like the engine's own producers emit: the $900 June
       // week counts its 5 weekdays as earned days in the lookback.
-      for (const [day, amount] of [["2026-06-01", "180.00"], ["2026-06-02", "180.00"],
-           ["2026-06-03", "180.00"], ["2026-06-04", "180.00"], ["2026-06-05", "180.00"]] as const) {
+      for (const [day, amount] of [
+        ["2026-06-01", "180.00"],
+        ["2026-06-02", "180.00"],
+        ["2026-06-03", "180.00"],
+        ["2026-06-04", "180.00"],
+        ["2026-06-05", "180.00"],
+      ] as const) {
         await insertLine(amount, day, day);
       }
     } else await insertLine("2000.00", null, null);
@@ -133,8 +144,15 @@ async function seedPaidVacationBeforeCanadaDay(options: {
             2026, 'calculated', ${actorId}, ${actorId})`);
 
   return {
-    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, employeeId, employmentId, vacationComponentId,
-    holidayComponentId, premiumComponentId, currentRunId,
+    orgId: org.orgId,
+    subsidiaryId: org.subsidiaryId,
+    actorId,
+    employeeId,
+    employmentId,
+    vacationComponentId,
+    holidayComponentId,
+    premiumComponentId,
+    currentRunId,
   };
 }
 
@@ -161,13 +179,16 @@ test(
     try {
       // The old 15-of-30 test counted no approved work days and refused this
       // employee, despite $4,000 of paid vacation in the lookback.
-      const timesheetDays = (await db.execute<{ days: number }>(sql`
+      const timesheetDays = await db.execute<{ days: number }>(
+        sql`
         select count(distinct worked_on)::int as days
           from time_entries
          where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}
            and status = 'approved' and hours > 0
            and worked_on between '2026-06-01' and '2026-06-30'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(Number(timesheetDays[0]?.days ?? 0), 0);
 
       const lines = await resolveStatutoryHolidayPay(db, holidayInput(fx));
@@ -179,7 +200,10 @@ test(
       assert.match(holidayPay.basis, /÷ 15 days worked or earned wages/);
       assert.equal(holidayPay.holidayDate, "2026-07-01");
       // Not worked, so no premium line.
-      assert.equal(lines.some((line) => line.componentId === fx.premiumComponentId), false);
+      assert.equal(
+        lines.some((line) => line.componentId === fx.premiumComponentId),
+        false,
+      );
       // Manitoba Remembrance Day is work-triggered, not a general holiday: 2
       // hours worked on 11-11 with a non-exempt employer pays the normal-day
       // amount (8 h × $30) plus the 1.5× overtime minimum on the greater of
@@ -187,25 +211,52 @@ test(
       await db.execute(sql`insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
         is_billable, billing_status, costing_basis, created_by, updated_by)
         values (${fx.orgId}, ${fx.employeeId}, '2026-11-11', '2', 'approved', false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
-      await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId,
-        subsidiaryId: fx.subsidiaryId, country: "CA", factKey: "mb_remembrance_day_act_exempt",
-        effectiveFrom: "2026-01-01", value: "false", changeReason: "Subject to Manitoba Act" });
-      const manitoba = await resolveStatutoryHolidayPay(db, { ...holidayInput(fx),
-        periodStart: "2026-11-11", periodEnd: "2026-11-11", jurisdiction: "CA-MB", occupationClass: "general",
-        country: "CA", subsidiaryId: fx.subsidiaryId });
-      assert.deepEqual(manitoba.map((line) => line.amount), ["240.0000", "120.0000"]);
       await upsertPayrollEmployerFact({
-        orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: fx.subsidiaryId,
-        country: "CA", factKey: "work_week_start", effectiveFrom: "2026-01-01",
-        value: "1", changeReason: "Ontario ESA work-week election",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        subsidiaryId: fx.subsidiaryId,
+        country: "CA",
+        factKey: "mb_remembrance_day_act_exempt",
+        effectiveFrom: "2026-01-01",
+        value: "false",
+        changeReason: "Subject to Manitoba Act",
+      });
+      const manitoba = await resolveStatutoryHolidayPay(db, {
+        ...holidayInput(fx),
+        periodStart: "2026-11-11",
+        periodEnd: "2026-11-11",
+        jurisdiction: "CA-MB",
+        occupationClass: "general",
+        country: "CA",
+        subsidiaryId: fx.subsidiaryId,
+      });
+      assert.deepEqual(
+        manitoba.map((line) => line.amount),
+        ["240.0000", "120.0000"],
+      );
+      await upsertPayrollEmployerFact({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        subsidiaryId: fx.subsidiaryId,
+        country: "CA",
+        factKey: "work_week_start",
+        effectiveFrom: "2026-01-01",
+        value: "1",
+        changeReason: "Ontario ESA work-week election",
       });
       const ontario = await resolveStatutoryHolidayPay(db, {
-        ...holidayInput(fx), country: "CA", subsidiaryId: fx.subsidiaryId,
-        jurisdiction: "CA-ON", absentWithoutConsentByHoliday: { "canada_day|2026-07-01": false },
+        ...holidayInput(fx),
+        country: "CA",
+        subsidiaryId: fx.subsidiaryId,
+        jurisdiction: "CA-ON",
+        absentWithoutConsentByHoliday: { "canada_day|2026-07-01": false },
       });
       // ESA s. 24(1)(a): regular wages (none here) plus vacation payable for
       // the four work weeks before the holiday week — $2,900 ÷ 20.
-      assert.equal(ontario.find((line) => line.componentId === fx.holidayComponentId)?.amount, "145.0000");
+      assert.equal(
+        ontario.find((line) => line.componentId === fx.holidayComponentId)?.amount,
+        "145.0000",
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -241,7 +292,11 @@ test(
     // demand fired only for CA-ON/CA-QC, so an Alberta run paid the holiday
     // without ever asking the employer the question the statute requires.
     const org = await createScratchOrg();
-    const { workerPartyId: employeePartyId, employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { from: "2020-01-01" });
+    const { workerPartyId: employeePartyId, employmentId } = await seedEmployment(
+      org.orgId,
+      org.subsidiaryId,
+      { from: "2020-01-01" },
+    );
     try {
       await assert.rejects(
         resolveStatutoryHolidayPay(db, {
@@ -266,175 +321,196 @@ test(
   },
 );
 
-test(
-  "jurisdictions that do not declare the test are not asked for it",
-  { skip: !DB },
-  async () => {
-    // British Columbia declares no last-and-first condition and no commission
-    // window, so a BC run with no facts supplied must keep computing (here:
-    // no wages, no pay) rather than trip a demand driven by another
-    // province's statute. BC does declare its own 30-day employment
-    // qualifier, so the employee gets a hire date to isolate this question.
-    const org = await createScratchOrg();
-    const orgId = org.orgId;
-    const employeePartyId = randomUUID();
-    const actorId = (await seedFlowActors(orgId)).adminId;
-    await db.execute(sql`
+test("jurisdictions that do not declare the test are not asked for it", { skip: !DB }, async () => {
+  // British Columbia declares no last-and-first condition and no commission
+  // window, so a BC run with no facts supplied must keep computing (here:
+  // no wages, no pay) rather than trip a demand driven by another
+  // province's statute. BC does declare its own 30-day employment
+  // qualifier, so the employee gets a hire date to isolate this question.
+  const org = await createScratchOrg();
+  const orgId = org.orgId;
+  const employeePartyId = randomUUID();
+  const actorId = (await seedFlowActors(orgId)).adminId;
+  await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${employeePartyId}, ${orgId}, 'person', 'BC Employee', true, '{}'::jsonb)`);
-    await db.execute(sql`
+  await db.execute(sql`
       insert into employee_roles (org_id, party_id, hired_on, created_by, updated_by)
       values (${orgId}, ${employeePartyId}, '2020-01-01', ${actorId}, ${actorId})`);
-    const { employmentId } = await seedEmployment(orgId, org.subsidiaryId, { workerPartyId: employeePartyId, from: "2020-01-01" });
-    try {
-      const lines = await resolveStatutoryHolidayPay(db, {
-        orgId,
-        employeePartyId,
-        employmentId,
-        employeeName: "BC Employee",
-        jurisdiction: "CA-BC",
-        periodStart: "2026-10-11",
-        periodEnd: "2026-10-17",
-        holidayComponentId: randomUUID(),
-        premiumComponentId: randomUUID(),
-        excludeDocumentId: randomUUID(),
-        hourlyRate: "25.00",
-        subsidiaryId: org.subsidiaryId,
-      });
-      assert.deepEqual(lines, []);
-    } finally {
-      await dropScratchOrgReporting(orgId);
-    }
-  },
-);
+  const { employmentId } = await seedEmployment(orgId, org.subsidiaryId, {
+    workerPartyId: employeePartyId,
+    from: "2020-01-01",
+  });
+  try {
+    const lines = await resolveStatutoryHolidayPay(db, {
+      orgId,
+      employeePartyId,
+      employmentId,
+      employeeName: "BC Employee",
+      jurisdiction: "CA-BC",
+      periodStart: "2026-10-11",
+      periodEnd: "2026-10-17",
+      holidayComponentId: randomUUID(),
+      premiumComponentId: randomUUID(),
+      excludeDocumentId: randomUUID(),
+      hourlyRate: "25.00",
+      subsidiaryId: org.subsidiaryId,
+    });
+    assert.deepEqual(lines, []);
+  } finally {
+    await dropScratchOrgReporting(orgId);
+  }
+});
 
 async function straddlingStubCase(datedSpan: boolean): Promise<void> {
-    // The Remembrance Day wall: a November 8–21 2025 run looks back over
-    // October 14–November 10 ("the 4 weeks immediately preceding the general
-    // holiday", Code Part 2 Div. 5), which straddles the committed October
-    // 6–19 stub — and that stub carries no dated earning evidence, because
-    // the calculation used to write earned dates as NULL. Alberta's own
-    // averaging basis is calendar wages over days WORKED, so the undated
-    // stub spreads evenly across its pay period; only a stub with no pay
-    // period at all still refuses.
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const scheduleId = randomUUID();
-    await db.execute(sql`
+  // The Remembrance Day wall: a November 8–21 2025 run looks back over
+  // October 14–November 10 ("the 4 weeks immediately preceding the general
+  // holiday", Code Part 2 Div. 5), which straddles the committed October
+  // 6–19 stub — and that stub carries no dated earning evidence, because
+  // the calculation used to write earned dates as NULL. Alberta's own
+  // averaging basis is calendar wages over days WORKED, so the undated
+  // stub spreads evenly across its pay period; only a stub with no pay
+  // period at all still refuses.
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const scheduleId = randomUUID();
+  await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active, created_by, updated_by)
       values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2025-10-19', 3, true,
               ${actorId}, ${actorId})`);
-    const employeeId = randomUUID();
-    await db.execute(sql`
+  const employeeId = randomUUID();
+  await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
       values (${employeeId}, ${org.orgId}, 'person', 'Alberta Hourly', true,
               ${org.subsidiaryId}, '{}'::jsonb)`);
-    await db.execute(sql`
+  await db.execute(sql`
       insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
       values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
-    const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId, from: "2024-01-01" });
-    const component = async (code: string, systemKey: string) => {
-      const id = randomUUID();
-      await db.execute(sql`
+  const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, {
+    workerPartyId: employeeId,
+    from: "2024-01-01",
+  });
+  const component = async (code: string, systemKey: string) => {
+    const id = randomUUID();
+    await db.execute(sql`
         insert into pay_components (id, org_id, code, name, kind, system_key, basis, is_active,
                                     created_by, updated_by)
         values (${id}, ${org.orgId}, ${code}, ${code}, 'earning', ${systemKey}, 'fixed_amount',
                 true, ${actorId}, ${actorId})`);
-      return id;
-    };
-    const wageComponentId = await component("REGWAGE", "regular_wages");
-    const holidayComponentId = await component("STATHOL", "stat_holiday");
-    const premiumComponentId = await component("STATPREM", "stat_holiday_premium");
-    // Four approved days in the window — the whole denominator, since
-    // Alberta divides by days worked and nothing else.
-    for (const workedOn of ["2025-10-14", "2025-10-15", "2025-10-16", "2025-10-17"]) {
-      await db.execute(sql`insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
+    return id;
+  };
+  const wageComponentId = await component("REGWAGE", "regular_wages");
+  const holidayComponentId = await component("STATHOL", "stat_holiday");
+  const premiumComponentId = await component("STATPREM", "stat_holiday_premium");
+  // Four approved days in the window — the whole denominator, since
+  // Alberta divides by days worked and nothing else.
+  for (const workedOn of ["2025-10-14", "2025-10-15", "2025-10-16", "2025-10-17"]) {
+    await db.execute(sql`insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
         is_billable, billing_status, costing_basis, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, ${workedOn}, '8', 'approved', false, 'unbilled', 'actual',
         ${actorId}, ${actorId})`);
-    }
-    const committed = async (periodStart: string, periodEnd: string, lines: {
-      componentId: string; amount: string; from: string | null; to: string | null;
-    }[]) => {
-      const documentId = randomUUID();
-      await db.execute(sql`
+  }
+  const committed = async (
+    periodStart: string,
+    periodEnd: string,
+    lines: {
+      componentId: string;
+      amount: string;
+      from: string | null;
+      to: string | null;
+    }[],
+  ) => {
+    const documentId = randomUUID();
+    await db.execute(sql`
         insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
                                currency, status, created_by, updated_by)
         values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
                 ${org.subsidiaryId}, ${periodEnd}, 'CAD', 'approved', ${actorId}, ${actorId})`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                               pay_date, tax_year, run_status, calculated_at, created_by, updated_by)
         values (${documentId}, ${org.orgId}, ${scheduleId}, ${periodStart}, ${periodEnd}, ${periodEnd},
                 2025, 'committed', now(), ${actorId}, ${actorId})`);
-      const stubId = randomUUID();
-      await db.execute(sql`
+    const stubId = randomUUID();
+    await db.execute(sql`
         insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                periods_per_year, pay_date, tax_year, currency_code, gross,
                                created_by, updated_by)
         values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'AB', 26, ${periodEnd}, 2025,
                 'CAD', '0.00', ${actorId}, ${actorId})`);
-      let sequence = 10;
-      for (const line of lines) {
-        await db.execute(sql`
+    let sequence = 10;
+    for (const line of lines) {
+      await db.execute(sql`
           insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount,
                                       earned_from, earned_to, sequence, created_by, updated_by)
           values (${org.orgId}, ${stubId}, ${line.componentId}, 'earning', 'Regular wages',
                   null, ${line.amount}, ${line.from}, ${line.to}, ${sequence}, ${actorId}, ${actorId})`);
-        sequence += 10;
-      }
-    };
-    // The legacy stub: no dated earning evidence, so its $1,680 spreads over
-    // its 14-day period and only the 6 days inside the window count.
-    await committed("2025-10-06", "2025-10-19",
-      [{ componentId: wageComponentId, amount: "1680.00", from: datedSpan ? "2025-10-06" : null, to: datedSpan ? "2025-10-19" : null }]);
-    // A dated stub prices exactly: October 20 sits inside the window.
-    await committed("2025-10-20", "2025-10-26",
-      [{ componentId: wageComponentId, amount: "200.00", from: "2025-10-20", to: "2025-10-20" }]);
-    const currentRunId = randomUUID();
-    await db.execute(sql`
+      sequence += 10;
+    }
+  };
+  // The legacy stub: no dated earning evidence, so its $1,680 spreads over
+  // its 14-day period and only the 6 days inside the window count.
+  await committed("2025-10-06", "2025-10-19", [
+    {
+      componentId: wageComponentId,
+      amount: "1680.00",
+      from: datedSpan ? "2025-10-06" : null,
+      to: datedSpan ? "2025-10-19" : null,
+    },
+  ]);
+  // A dated stub prices exactly: October 20 sits inside the window.
+  await committed("2025-10-20", "2025-10-26", [
+    { componentId: wageComponentId, amount: "200.00", from: "2025-10-20", to: "2025-10-20" },
+  ]);
+  const currentRunId = randomUUID();
+  await db.execute(sql`
       insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
                              currency, status, created_by, updated_by)
       values (${org.orgId}, ${currentRunId}, 'pay_run', ${`PAY-${currentRunId.slice(0, 8)}`},
               ${org.subsidiaryId}, '2025-11-24', 'CAD', 'draft', ${actorId}, ${actorId})`);
-    await db.execute(sql`
+  await db.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                             tax_year, run_status, created_by, updated_by)
       values (${currentRunId}, ${org.orgId}, ${scheduleId}, '2025-11-08', '2025-11-21', '2025-11-24',
               2025, 'calculated', ${actorId}, ${actorId})`);
-    try {
-      const lines = await resolveStatutoryHolidayPay(db, {
-        orgId: org.orgId,
-        country: "CA",
-        subsidiaryId: org.subsidiaryId,
-        employeePartyId: employeeId,
-        employmentId,
-        employeeName: "Alberta Hourly",
-        jurisdiction: "CA-AB",
-        periodStart: "2025-11-08",
-        periodEnd: "2025-11-21",
-        holidayComponentId,
-        premiumComponentId,
-        excludeDocumentId: currentRunId,
-        hourlyRate: "25.00",
-        absentWithoutConsentByHoliday: { "remembrance_day|2025-11-11": false },
-      });
-      const holidayPay = lines.find((line) => line.componentId === holidayComponentId);
-      assert.ok(holidayPay, "Remembrance Day is paid");
-      // $1,680 × 6 days in window ÷ 14-day period = $720, plus the $200 dated
-      // line in full; $920 ÷ 4 days worked = $230, exact.
-      assert.equal(holidayPay.amount, "230.0000");
-      assert.match(holidayPay.basis,
-        /920\.0000 earned in the 4 weeks before the holiday ÷ 4 days worked/);
-      // The estimate is named on the day's pay line, not silent.
-      assert.match(holidayPay.basis, /2025-10-06 through 2025-10-19/);
-      assert.equal(holidayPay.holidayDate, "2025-11-11");
-      // Not worked, so no premium line.
-      assert.equal(lines.some((line) => line.componentId === premiumComponentId), false);
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
+  try {
+    const lines = await resolveStatutoryHolidayPay(db, {
+      orgId: org.orgId,
+      country: "CA",
+      subsidiaryId: org.subsidiaryId,
+      employeePartyId: employeeId,
+      employmentId,
+      employeeName: "Alberta Hourly",
+      jurisdiction: "CA-AB",
+      periodStart: "2025-11-08",
+      periodEnd: "2025-11-21",
+      holidayComponentId,
+      premiumComponentId,
+      excludeDocumentId: currentRunId,
+      hourlyRate: "25.00",
+      absentWithoutConsentByHoliday: { "remembrance_day|2025-11-11": false },
+    });
+    const holidayPay = lines.find((line) => line.componentId === holidayComponentId);
+    assert.ok(holidayPay, "Remembrance Day is paid");
+    // $1,680 × 6 days in window ÷ 14-day period = $720, plus the $200 dated
+    // line in full; $920 ÷ 4 days worked = $230, exact.
+    assert.equal(holidayPay.amount, "230.0000");
+    assert.match(
+      holidayPay.basis,
+      /920\.0000 earned in the 4 weeks before the holiday ÷ 4 days worked/,
+    );
+    // The estimate is named on the day's pay line, not silent.
+    assert.match(holidayPay.basis, /2025-10-06 through 2025-10-19/);
+    assert.equal(holidayPay.holidayDate, "2025-11-11");
+    // Not worked, so no premium line.
+    assert.equal(
+      lines.some((line) => line.componentId === premiumComponentId),
+      false,
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
 }
 
 test(

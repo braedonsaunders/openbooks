@@ -1,25 +1,29 @@
 /** The country-pack registry and its derived lookups. Split from packs.ts (pure moves only). */
-import { type PayrollStatutoryReportingCode, type PayrollStatutoryComponent, type PayrollCountry, type PayrollCountryPack } from "./pack-types"
-import { CA_PAYROLL_PACK } from "./canada/pack.ts"
-import { US_PAYROLL_PACK } from "./us/pack.ts"
-import { GB_PACK } from "./gb/pack.ts"
-import { DE_PAYROLL_PACK } from "./de/pack.ts"
-import { FR_PAYROLL_PACK } from "./fr/pack.ts"
-import { IE_PAYROLL_PACK } from "./ie/pack.ts"
-import { AU_PAYROLL_PACK } from "./au/pack.ts"
-import { IT_PAYROLL_PACK } from "./it/pack.ts"
-import { NL_PAYROLL_PACK } from "./nl/pack.ts"
-import { ES_PAYROLL_PACK } from "./es/pack.ts"
-import { SG_PAYROLL_PACK } from "./sg/pack.ts"
-import { JP_PAYROLL_PACK } from "./jp/pack.ts"
-import { PL_PAYROLL_PACK } from "./pl/pack.ts"
-import { BR_PAYROLL_PACK } from "./br/pack.ts"
-import { registerPayrollCertificateSource } from "./certificates.ts"
-import { registerPayrollReciprocitySource } from "./reciprocity.ts"
-import { registerPayrollWithholdingSource } from "./withholding-jurisdictions.ts"
-import { registerEmployerFacts } from "./employer-facts.ts"
-import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts"
-
+import {
+  type PayrollStatutoryReportingCode,
+  type PayrollStatutoryComponent,
+  type PayrollCountry,
+  type PayrollCountryPack,
+} from "./pack-types";
+import { CA_PAYROLL_PACK } from "./canada/pack.ts";
+import { US_PAYROLL_PACK } from "./us/pack.ts";
+import { GB_PACK } from "./gb/pack.ts";
+import { DE_PAYROLL_PACK } from "./de/pack.ts";
+import { FR_PAYROLL_PACK } from "./fr/pack.ts";
+import { IE_PAYROLL_PACK } from "./ie/pack.ts";
+import { AU_PAYROLL_PACK } from "./au/pack.ts";
+import { IT_PAYROLL_PACK } from "./it/pack.ts";
+import { NL_PAYROLL_PACK } from "./nl/pack.ts";
+import { ES_PAYROLL_PACK } from "./es/pack.ts";
+import { SG_PAYROLL_PACK } from "./sg/pack.ts";
+import { JP_PAYROLL_PACK } from "./jp/pack.ts";
+import { PL_PAYROLL_PACK } from "./pl/pack.ts";
+import { BR_PAYROLL_PACK } from "./br/pack.ts";
+import { registerPayrollCertificateSource } from "./certificates.ts";
+import { registerPayrollReciprocitySource } from "./reciprocity.ts";
+import { registerPayrollWithholdingSource } from "./withholding-jurisdictions.ts";
+import { registerEmployerFacts } from "./employer-facts.ts";
+import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
 
 // --- Canadian jurisdictions ------------------------------------------------
 // Declared in ./canada/employment-standards.ts, beside the T4127 constants and
@@ -27,9 +31,7 @@ import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts"
 // country pack's Canadian tree. Moved verbatim; the six previously declared
 // jurisdictions are byte-for-byte the same declarations they were.
 
-
 // --- United States ---------------------------------------------------------
-
 
 export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
   CA: CA_PAYROLL_PACK,
@@ -315,7 +317,9 @@ export function installablePayrollPackSummaries(): PayrollPackSummary[] {
       country: pack.country,
       name: pack.name,
       statutoryComponents: [
-        ...new Set(pack.statutorySlots.flatMap((slot) => slot.components).map((component) => component.name)),
+        ...new Set(
+          pack.statutorySlots.flatMap((slot) => slot.components).map((component) => component.name),
+        ),
       ],
       regions: { known: pack.regions.known.length, supported: pack.regions.supported.length },
       publishedTaxYears: [
@@ -348,8 +352,8 @@ export function payrollPack(country: string): PayrollCountryPack {
   const pack = PAYROLL_COUNTRY_PACKS[country];
   if (!pack) {
     throw new PayrollJurisdictionError(
-      `no payroll country pack for ${country || "(unset)"} — payroll is implemented for `
-      + `${Object.keys(PAYROLL_COUNTRY_PACKS).join(", ")}`,
+      `no payroll country pack for ${country || "(unset)"} — payroll is implemented for ` +
+        `${Object.keys(PAYROLL_COUNTRY_PACKS).join(", ")}`,
     );
   }
   return pack;
@@ -365,16 +369,18 @@ export function payrollPack(country: string): PayrollCountryPack {
  * than refusing: setup validates the country itself, and a default must
  * never be the thing that breaks a save.
  */
-export function employerLevyProgramKeys(country: string | null, nonTaxableDefaultsOnly = false): string[] {
-  const codes = country
-    ? [country]
-    : installablePayrollPacks().map((pack) => pack.country);
+export function employerLevyProgramKeys(
+  country: string | null,
+  nonTaxableDefaultsOnly = false,
+): string[] {
+  const codes = country ? [country] : installablePayrollPacks().map((pack) => pack.country);
   const keys = new Set<string>();
   for (const code of codes) {
     const pack = PAYROLL_COUNTRY_PACKS[code];
     if (!pack) continue;
     for (const program of pack.employerLevyPrograms ?? []) {
-      if (!nonTaxableDefaultsOnly || program.nonTaxableEarningsExcludedByDefault) keys.add(program.key);
+      if (!nonTaxableDefaultsOnly || program.nonTaxableEarningsExcludedByDefault)
+        keys.add(program.key);
     }
   }
   return [...keys].sort();
@@ -413,15 +419,17 @@ export function resolvePayrollStatutoryReportingCode(
   payDate: string,
 ): PayrollStatutoryReportingCode | null {
   if (category == null) return null;
-  const matches = (payrollPack(country).statutoryReportingCodes ?? []).filter((entry) =>
-    entry.category === category
-      && entry.effectiveFrom <= payDate
-      && (entry.effectiveTo == null || payDate < entry.effectiveTo));
+  const matches = (payrollPack(country).statutoryReportingCodes ?? []).filter(
+    (entry) =>
+      entry.category === category &&
+      entry.effectiveFrom <= payDate &&
+      (entry.effectiveTo == null || payDate < entry.effectiveTo),
+  );
   if (matches.length !== 1) {
     throw new PayrollPackError(
-      `pay component reporting category "${category}" has ${matches.length === 0 ? "no" : "multiple"} `
-      + `tax-form code mappings in the ${country} pack effective on ${payDate}; update the pack's `
-      + "effective-dated statutory reporting declaration before calculating this payroll",
+      `pay component reporting category "${category}" has ${matches.length === 0 ? "no" : "multiple"} ` +
+        `tax-form code mappings in the ${country} pack effective on ${payDate}; update the pack's ` +
+        "effective-dated statutory reporting declaration before calculating this payroll",
     );
   }
   return matches[0]!;

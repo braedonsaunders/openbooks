@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -21,7 +21,10 @@ interface InboundEvent {
   receivedAt: string;
 }
 
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "success" | "secondary" | "outline" | "destructive" | "warning"
+> = {
   processed: "success",
   ignored: "secondary",
   pending: "secondary",
@@ -35,7 +38,13 @@ const FILTERS = ["all", "pending", "failed", "dead", "processed"] as const;
  * One channel's delivery activity: filterable, searchable, replayable.
  * The filter persists in the URL so a queue row deep-links to its slice.
  */
-export function ChannelActivity({ channelId, canManage }: { channelId: string; canManage: boolean }) {
+export function ChannelActivity({
+  channelId,
+  canManage,
+}: {
+  channelId: string;
+  canManage: boolean;
+}) {
   const { dateTime } = useViewerFormat();
   const t = useTranslations("channels");
   const [events, setEvents] = useState<InboundEvent[]>([]);
@@ -53,7 +62,9 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
     return fetch(`/api/channels/${channelId}/events?limit=500`)
       .then(async (res) => {
         if (!res.ok) {
-          setLoadError(await readApiErrorMessage(res, t("activity.toast.loadFailed", { status: res.status })));
+          setLoadError(
+            await readApiErrorMessage(res, t("activity.toast.loadFailed", { status: res.status })),
+          );
           setLoading(false);
           return;
         }
@@ -99,7 +110,12 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
           body: JSON.stringify({ reason }),
         });
         if (!res.ok) {
-          toast.error(await readApiErrorMessage(res, t("activity.toast.replayFailed", { status: res.status })));
+          toast.error(
+            await readApiErrorMessage(
+              res,
+              t("activity.toast.replayFailed", { status: res.status }),
+            ),
+          );
           break;
         }
         replayed += 1;
@@ -118,7 +134,8 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
     () => (filter === "all" ? events : events.filter((event) => event.status === filter)),
     [events, filter],
   );
-  const statusLabel = (s: string) => (t.has(`activity.status.${s}`) ? t(`activity.status.${s}`) : s);
+  const statusLabel = (s: string) =>
+    t.has(`activity.status.${s}`) ? t(`activity.status.${s}`) : s;
 
   const columns: PagedColumn<InboundEvent>[] = useMemo(
     () => [
@@ -141,13 +158,19 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
         key: "status",
         header: t("activity.columns.status"),
         cell: (row) => (
-          <Badge variant={STATUS_VARIANT[row.status] ?? "secondary"}>{statusLabel(row.status)}</Badge>
+          <Badge variant={STATUS_VARIANT[row.status] ?? "secondary"}>
+            {statusLabel(row.status)}
+          </Badge>
         ),
       },
       {
         key: "error",
         header: t("activity.columns.error"),
-        cell: (row) => <span className="text-slate-500">{row.status === "processed" || row.status === "ignored" ? "—" : (row.error ?? "—")}</span>,
+        cell: (row) => (
+          <span className="text-slate-500">
+            {row.status === "processed" || row.status === "ignored" ? "—" : (row.error ?? "—")}
+          </span>
+        ),
       },
       ...(canManage
         ? [
@@ -156,7 +179,12 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
               header: "",
               cell: (row: InboundEvent) =>
                 row.status === "failed" || row.status === "dead" ? (
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void replay([row.id])}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void replay([row.id])}
+                  >
                     <RotateCcw size={14} /> {t("activity.replayOne")}
                   </Button>
                 ) : null,
@@ -182,7 +210,11 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={filter} onChange={(e) => changeFilter(e.target.value)} aria-label={t("activity.filterLabel")}>
+        <Select
+          value={filter}
+          onChange={(e) => changeFilter(e.target.value)}
+          aria-label={t("activity.filterLabel")}
+        >
           {FILTERS.map((value) => (
             <option key={value} value={value}>
               {t(`activity.filters.${value}`)}
@@ -190,7 +222,12 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
           ))}
         </Select>
         {canManage && selected.size > 0 ? (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void replay([...selected])}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void replay([...selected])}
+          >
             <RotateCcw size={14} /> {t("activity.replaySelected", { count: selected.size })}
           </Button>
         ) : null}
@@ -201,7 +238,9 @@ export function ChannelActivity({ channelId, canManage }: { channelId: string; c
         pageSize={25}
         searchable
         rowKey={(row) => row.id}
-        empty={<EmptyState title={t("activity.emptyTitle")} description={t("activity.emptyBody")} />}
+        empty={
+          <EmptyState title={t("activity.emptyTitle")} description={t("activity.emptyBody")} />
+        }
         selection={
           canManage
             ? {

@@ -16,19 +16,12 @@ import { purchaseOrderConversionPermission } from "../permissions";
 import { isUuid } from "../list-params";
 import { isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import { add, compareDecimal, mulPercent, neg } from "@openbooks/engine/money";
-import {
-  issueSalesOrder,
-  SalesOrderIssueError,
-} from "@openbooks/engine/sales/orders";
+import { issueSalesOrder, SalesOrderIssueError } from "@openbooks/engine/sales/orders";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
-import {
-  applyOrderEdit,
-  OrderEditError,
-  type OrderPatchBody,
-} from "../order-draft-edit";
+import { applyOrderEdit, OrderEditError, type OrderPatchBody } from "../order-draft-edit";
 import { orderEditServices } from "../../app/api/_order/handlers";
 import {
   exactOrderQuantity,
@@ -36,14 +29,8 @@ import {
   type OrderLineInput,
 } from "../../app/api/_order/line-selection";
 import { decimalNullRefusal } from "../payroll-decimal-refusal";
-import {
-  findDocumentByExternalRef,
-  resolveExternalRefPair,
-} from "../external-ref";
-import {
-  upsertApplicationCustomer,
-  type CustomerUpsertInput,
-} from "./customer-upsert";
+import { findDocumentByExternalRef, resolveExternalRefPair } from "../external-ref";
+import { upsertApplicationCustomer, type CustomerUpsertInput } from "./customer-upsert";
 
 export const ORDER_TYPE_KIND = {
   quotes: "quote",
@@ -63,21 +50,29 @@ function orderWritePermission(kind: OrderKind): string {
  * fulfilling moves stock, so with Inventory on it also needs items.post —
  * the same rule as the order drawer's convert endpoint.
  */
-async function conversionPermissions(orgId: string, sourceKind: OrderKind, targetKind: string): Promise<string[]> {
-  const base = sourceKind === "purchase_order" ? purchaseOrderConversionPermission(targetKind) : orderWritePermission(sourceKind);
+async function conversionPermissions(
+  orgId: string,
+  sourceKind: OrderKind,
+  targetKind: string,
+): Promise<string[]> {
+  const base =
+    sourceKind === "purchase_order"
+      ? purchaseOrderConversionPermission(targetKind)
+      : orderWritePermission(sourceKind);
   const movesStock = targetKind === "purchase_receipt" || targetKind === "sales_fulfillment";
   return movesStock && (await isFeatureEnabled(orgId, "inventory")) ? [base, "items.post"] : [base];
 }
 
 function conversionFailure(error: unknown): never {
   if (error instanceof ConversionError) {
-    const code = error.status === 404
-      ? "not_found"
-      : error.status === 409
-        ? "conflict"
-        : error.status === 403
-          ? "forbidden"
-          : "invalid_input";
+    const code =
+      error.status === 404
+        ? "not_found"
+        : error.status === 409
+          ? "conflict"
+          : error.status === 403
+            ? "forbidden"
+            : "invalid_input";
     throw new ApplicationError(code, error.message, error.status, {
       ...(error.code ? { code: error.code } : {}),
       ...(error.details ? { details: error.details } : {}),
@@ -117,7 +112,13 @@ export async function createApplicationOrder(
     request: { kind: input.kind, subsidiaryId },
     execute: async () => {
       try {
-        const draft = await createOrderDraft(context.authz.user.orgId, context.authz.user.id, input.kind, input.idempotencyKey, subsidiaryId);
+        const draft = await createOrderDraft(
+          context.authz.user.orgId,
+          context.authz.user.id,
+          input.kind,
+          input.idempotencyKey,
+          subsidiaryId,
+        );
         return { id: draft.id, documentNumber: draft.document_number };
       } catch (error) {
         if (error instanceof OrderDraftConflictError) {
@@ -159,7 +160,11 @@ export async function convertApplicationOrder(
   }
   assertSubsidiaryAccess(context, source.subsidiaryId);
   const sourceKind = source.kind;
-  for (const permission of await conversionPermissions(context.authz.user.orgId, sourceKind, input.targetKind)) {
+  for (const permission of await conversionPermissions(
+    context.authz.user.orgId,
+    sourceKind,
+    input.targetKind,
+  )) {
     assertApplicationPermission(context, permission);
   }
   if (!(await isFeatureEnabled(context.authz.user.orgId, "orders"))) throw notFound("order");
@@ -204,18 +209,30 @@ export async function convertApplicationOrder(
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-async function sourceOrder(orgId: string, documentId: string): Promise<{ kind: OrderKind; subsidiaryId: string | null }> {
-  const row = (await db.execute<{ kind: string; subsidiary_id: string | null }>(sql`
+async function sourceOrder(
+  orgId: string,
+  documentId: string,
+): Promise<{ kind: OrderKind; subsidiaryId: string | null }> {
+  const row = (
+    await db.execute<{ kind: string; subsidiary_id: string | null }>(
+      sql`
     select kind, subsidiary_id from documents
      where id = ${documentId} and org_id = ${orgId}
        and kind in ('quote', 'sales_order', 'purchase_order')
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) throw notFound("order");
   return { kind: row.kind as OrderKind, subsidiaryId: row.subsidiary_id };
 }
 
 /** The drawer config for the v1 sales-order surface: same writer, same rules. */
-const SALES_ORDER_CFG = { kind: "sales_order", readPerm: "ar.read", createPerm: "ar.create" } as const;
+const SALES_ORDER_CFG = {
+  kind: "sales_order",
+  readPerm: "ar.read",
+  createPerm: "ar.create",
+} as const;
 
 function orderEditFailure(error: unknown): never {
   if (error instanceof OrderEditError) {
@@ -347,8 +364,13 @@ async function resolveLineItem(
     if (typeof itemId !== "string" || !isUuid(itemId)) {
       throw invalidInput(`Order line ${lineNumber}: itemId must be a UUID`);
     }
-    const row = (await db.execute<{ id: string }>(sql`
-      select id from items where id = ${itemId} and org_id = ${orgId}`, "objects"))[0];
+    const row = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from items where id = ${itemId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw invalidInput(
         `Order line ${lineNumber}: item "${itemId}" not found in this organization — check the id or create the item first`,
@@ -360,8 +382,13 @@ async function resolveLineItem(
     if (typeof itemCode !== "string" || itemCode.trim() === "") {
       throw invalidInput(`Order line ${lineNumber}: itemCode must not be blank`);
     }
-    const row = (await db.execute<{ id: string }>(sql`
-      select id from items where code = ${itemCode.trim()} and org_id = ${orgId}`, "objects"))[0];
+    const row = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from items where code = ${itemCode.trim()} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw invalidInput(
         `Order line ${lineNumber}: item code "${itemCode.trim()}" not found in this organization — check the code or create the item first`,
@@ -386,13 +413,23 @@ async function mapV1OrderLine(
   const quantity = exactOrderQuantity(line.quantity ?? "1");
   if (quantity === "invalid") {
     throw invalidInput(
-      decimalNullRefusal(`lines[${lineNumber - 1}].quantity`, "a quantity", line.quantity ?? "1", 8),
+      decimalNullRefusal(
+        `lines[${lineNumber - 1}].quantity`,
+        "a quantity",
+        line.quantity ?? "1",
+        8,
+      ),
     );
   }
   const unitPrice = exactOrderUnitPrice(line.unitPrice ?? "0");
   if (unitPrice === "invalid") {
     throw invalidInput(
-      decimalNullRefusal(`lines[${lineNumber - 1}].unitPrice`, "an amount", line.unitPrice ?? "0", 8),
+      decimalNullRefusal(
+        `lines[${lineNumber - 1}].unitPrice`,
+        "an amount",
+        line.unitPrice ?? "0",
+        8,
+      ),
     );
   }
   let net = unitPrice;
@@ -410,7 +447,12 @@ async function mapV1OrderLine(
       compareDecimal(percent.trim(), "100") > 0
     ) {
       throw invalidInput(
-        decimalNullRefusal(`lines[${lineNumber - 1}].discountPercent`, "a percent from 0 to 100", percent, 18),
+        decimalNullRefusal(
+          `lines[${lineNumber - 1}].discountPercent`,
+          "a percent from 0 to 100",
+          percent,
+          18,
+        ),
       );
     }
     // Discounts are money: the ledger keeps four decimals, and the order
@@ -429,7 +471,12 @@ async function mapV1OrderLine(
     const discount = exactOrderUnitPrice(line.discountAmount);
     if (discount === "invalid") {
       throw invalidInput(
-        decimalNullRefusal(`lines[${lineNumber - 1}].discountAmount`, "an amount", line.discountAmount, 8),
+        decimalNullRefusal(
+          `lines[${lineNumber - 1}].discountAmount`,
+          "an amount",
+          line.discountAmount,
+          8,
+        ),
       );
     }
     try {
@@ -516,13 +563,26 @@ async function resolveFullOrderCustomer(
     throw invalidInput("customer is required — send customer.id or match fields");
   }
   if (customer.id !== undefined) {
-    const rest = ["externalRef", "externalSource", "email", "name", "kind", "phone", "address"] as const;
+    const rest = [
+      "externalRef",
+      "externalSource",
+      "email",
+      "name",
+      "kind",
+      "phone",
+      "address",
+    ] as const;
     if (rest.some((key) => customer[key] !== undefined)) {
       throw invalidInput("send either customer.id or customer match fields, not both");
     }
     if (!isUuid(customer.id)) throw invalidInput("customer.id must be a UUID");
-    const row = (await db.execute<{ id: string }>(sql`
-      select id from parties where id = ${customer.id} and org_id = ${orgId}`, "objects"))[0];
+    const row = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from parties where id = ${customer.id} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0];
     // A write that matches zero rows is a failure, not a success: the save
     // below would otherwise bind a stranger's id or fail on the FK as a 500.
     if (!row) throw invalidInput(`customer "${customer.id}" not found in this organization`);
@@ -566,7 +626,8 @@ export async function createFullApplicationOrder(
     lines: unknown[];
   };
 }> {
-  if (input.kind !== "sales_order") throw invalidInput("a full order body is only accepted for sales orders");
+  if (input.kind !== "sales_order")
+    throw invalidInput("a full order body is only accepted for sales orders");
   if (!input.idempotencyKey || !input.idempotencyKey.trim()) {
     throw invalidInput("Idempotency-Key header is required");
   }
@@ -583,8 +644,13 @@ export async function createFullApplicationOrder(
     draftDocumentId(orgId, input.idempotencyKey),
   );
   if (input.currency !== undefined) {
-    const base = (await db.execute<{ base_currency: string | null }>(sql`
-      select base_currency from orgs where id = ${orgId}`, "objects"))[0]?.base_currency;
+    const base = (
+      await db.execute<{ base_currency: string | null }>(
+        sql`
+      select base_currency from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.base_currency;
     if (!base || String(input.currency).trim().toUpperCase() !== base.toUpperCase()) {
       throw invalidInput(
         base
@@ -602,9 +668,14 @@ export async function createFullApplicationOrder(
   });
   // The drawer's first save fences on the fresh draft's own token: read it
   // back rather than inventing one, exactly as the drawer reloads before saving.
-  const fresh = (await db.execute<{ token: string }>(sql`
+  const fresh = (
+    await db.execute<{ token: string }>(
+      sql`
     select revision_seq::text as token from documents
-     where id = ${draft.result.id} and org_id = ${orgId}`, "objects"))[0];
+     where id = ${draft.result.id} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!fresh) throw notFound("order");
   const patch: OrderPatchBody = {
     expectedUpdatedAt: fresh.token,
@@ -710,10 +781,15 @@ export async function issueApplicationOrder(
       "expectedUpdatedAt is required — pass the revision token returned by the order create or the last lines response",
     );
   }
-  const source = (await db.execute<{ subsidiary_id: string | null; document_number: string }>(sql`
+  const source = (
+    await db.execute<{ subsidiary_id: string | null; document_number: string }>(
+      sql`
     select subsidiary_id, document_number from documents
      where id = ${input.documentId} and org_id = ${orgId} and kind = 'sales_order'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // The route issues one order kind: any other id is not this route's order.
   if (!source) throw notFound("order");
   assertSubsidiaryAccess(context, source.subsidiary_id);
@@ -727,9 +803,14 @@ export async function issueApplicationOrder(
     });
     // Every mutation moves the revision: hand back the fresh token so the
     // caller can convert or void without another read.
-    const token = (await db.execute<{ token: string }>(sql`
+    const token = (
+      await db.execute<{ token: string }>(
+        sql`
       select revision_seq::text as token from documents
-       where id = ${input.documentId} and org_id = ${orgId}`, "objects"))[0];
+       where id = ${input.documentId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0];
     if (!token) throw notFound("order");
     if (issued.submission.gated) {
       return {

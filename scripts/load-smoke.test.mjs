@@ -11,18 +11,9 @@ test("percentile uses the nearest-rank method", () => {
 });
 
 test("load options reject unsafe or malformed targets", () => {
-  assert.throws(
-    () => parseLoadOptions(["--base-url", "file:///tmp/openbooks"]),
-    /http or https/,
-  );
-  assert.throws(
-    () => parseLoadOptions(["--path", "api/v1/health"]),
-    /start with/,
-  );
-  assert.throws(
-    () => parseLoadOptions(["--concurrency", "0"]),
-    /positive integer/,
-  );
+  assert.throws(() => parseLoadOptions(["--base-url", "file:///tmp/openbooks"]), /http or https/);
+  assert.throws(() => parseLoadOptions(["--path", "api/v1/health"]), /start with/);
+  assert.throws(() => parseLoadOptions(["--concurrency", "0"]), /positive integer/);
 });
 
 test("load probe records status, latency, and thresholds", async (t) => {

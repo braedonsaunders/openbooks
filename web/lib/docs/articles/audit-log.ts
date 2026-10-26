@@ -1,13 +1,14 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const auditLog: DocArticle = {
-  slug: 'audit-log',
-  title: 'Audit Log',
-  category: 'administration',
+  slug: "audit-log",
+  title: "Audit Log",
+  category: "administration",
   order: 4,
-  summary: 'Search immutable business events and inspect readable field changes, record snapshots, and ledger impact.',
-  updated: '2026-07-19',
-  keywords: ['audit', 'history', 'changes', 'before', 'after', 'ledger impact', 'evidence'],
+  summary:
+    "Search immutable business events and inspect readable field changes, record snapshots, and ledger impact.",
+  updated: "2026-07-19",
+  keywords: ["audit", "history", "changes", "before", "after", "ledger impact", "evidence"],
   body: `# Audit Log
 
 The Audit Log is the organization-scoped, append-only history of changes to
@@ -52,4 +53,4 @@ path rather than an interactive user. Review the event context and request ID to
 identify the originating process. The audit entry itself cannot be edited or
 deleted.
 `,
-}
+};

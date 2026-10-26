@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Filter, Plus, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { UNTITLED_CARD_NAME as UNTITLED_CARD } from '../../../lib/insight-untitled'
-import { confirmDialog } from '../../../lib/confirm'
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Filter, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import { UNTITLED_CARD_NAME as UNTITLED_CARD } from "../../../lib/insight-untitled";
+import { confirmDialog } from "../../../lib/confirm";
 import {
   INITIAL_CARD_SAVE,
   cardSaveReducer,
@@ -15,7 +15,7 @@ import {
   requestCardSave,
   shouldAdoptRevision,
   type CardSaveDraft,
-} from './card-save'
+} from "./card-save";
 import {
   FILTER_OPERATOR_MAP,
   getSource,
@@ -27,48 +27,61 @@ import {
   type QueryResult,
   type VizSettings,
   type VizType,
-} from '@openbooks/analytics'
-import { REPORT_ENTITY_MAP, type ReportMeasure } from '@openbooks/reports'
-import { InsightResultView } from '@openbooks/analytics/viz'
-import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
-import { MeasureEditor } from '../reports/query-config'
-import { VIZ_META } from './viz-meta'
-import { reportEnumLabel } from '@/lib/report-enum-label'
-import type { CardRow } from '../../api/insights/_lib'
+} from "@openbooks/analytics";
+import { REPORT_ENTITY_MAP, type ReportMeasure } from "@openbooks/reports";
+import { InsightResultView } from "@openbooks/analytics/viz";
+import { Badge, Button, Input, Label, Select, UrlDrawer } from "@openbooks/ui";
+import { MeasureEditor } from "../reports/query-config";
+import { VIZ_META } from "./viz-meta";
+import { reportEnumLabel } from "@/lib/report-enum-label";
+import type { CardRow } from "../../api/insights/_lib";
 
-const field = 'space-y-1.5'
-const DATE_BINS: DateBin[] = ['day', 'week', 'month', 'quarter', 'year']
+const field = "space-y-1.5";
+const DATE_BINS: DateBin[] = ["day", "week", "month", "quarter", "year"];
 
-type DimensionState = { field: string; bin: DateBin | '' }
-type FilterState = { field: string; op: FilterOp; value: string }
+type DimensionState = { field: string; bin: DateBin | "" };
+type FilterState = { field: string; op: FilterOp; value: string };
 
-function measureForEditor(measure: NonNullable<InsightQuery['measures']>[number]): ReportMeasure {
-  const fn = measure.fn ?? measure.agg ?? 'count'
-  const column = measure.column ?? measure.field
-  return { ...measure, fn, ...(column ? { column } : {}) } as ReportMeasure
+function measureForEditor(measure: NonNullable<InsightQuery["measures"]>[number]): ReportMeasure {
+  const fn = measure.fn ?? measure.agg ?? "count";
+  const column = measure.column ?? measure.field;
+  return { ...measure, fn, ...(column ? { column } : {}) } as ReportMeasure;
 }
 
-function toQuery(sourceKey: string, measures: ReportMeasure[], dimensions: DimensionState[], filters: FilterState[]): InsightQuery {
-  const source = getSource(sourceKey)
+function toQuery(
+  sourceKey: string,
+  measures: ReportMeasure[],
+  dimensions: DimensionState[],
+  filters: FilterState[],
+): InsightQuery {
+  const source = getSource(sourceKey);
   return {
     source: sourceKey,
     measures,
     dimensions: dimensions.map((d) => {
-      const f = source?.fields.find((x) => x.key === d.field)
-      return d.bin && f?.canBin ? { field: d.field, bin: d.bin } : { field: d.field }
+      const f = source?.fields.find((x) => x.key === d.field);
+      return d.bin && f?.canBin ? { field: d.field, bin: d.bin } : { field: d.field };
     }),
     filters: filters
       .filter((f) => f.field && f.op)
       .map((f) => {
-        const meta = FILTER_OPERATOR_MAP[f.op]
-        if (!meta || meta.needsValue === 'none') return { field: f.field, op: f.op }
-        if (meta.needsValue === 'list') {
-          return { field: f.field, op: f.op, value: f.value.split(',').map((s) => s.trim()).filter(Boolean) }
+        const meta = FILTER_OPERATOR_MAP[f.op];
+        if (!meta || meta.needsValue === "none") return { field: f.field, op: f.op };
+        if (meta.needsValue === "list") {
+          return {
+            field: f.field,
+            op: f.op,
+            value: f.value
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          };
         }
-        if (meta.needsValue === 'number') return { field: f.field, op: f.op, value: Number(f.value) }
-        return { field: f.field, op: f.op, value: f.value }
+        if (meta.needsValue === "number")
+          return { field: f.field, op: f.op, value: Number(f.value) };
+        return { field: f.field, op: f.op, value: f.value };
       }),
-  }
+  };
 }
 
 export function CardStudio({
@@ -79,124 +92,130 @@ export function CardStudio({
   inventoryEnabled,
   createMode = false,
 }: {
-  card: CardRow
-  canCreate: boolean
-  canPublish: boolean
+  card: CardRow;
+  canCreate: boolean;
+  canPublish: boolean;
   /** Catalog sources this user may query, in catalog order — the server drops
    *  the ones whose permission they lack (payroll wages). */
-  sourceKeys: string[]
-  inventoryEnabled: boolean
+  sourceKeys: string[];
+  inventoryEnabled: boolean;
   /**
    * Unsaved create (`?card=new`): the studio edits a blank in memory, the
    * debounced autosave never arms, and the card is POSTed once on explicit
    * Save. Cancel/close writes nothing.
    */
-  createMode?: boolean
+  createMode?: boolean;
 }) {
-  const t = useTranslations('insights')
-  const tCatalog = useTranslations('reports')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const fieldId = useId()
-  const ro = !canCreate
+  const t = useTranslations("insights");
+  const tCatalog = useTranslations("reports");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const fieldId = useId();
+  const ro = !canCreate;
   // One stable idempotency key per studio session: a double-clicked Save (or
   // a retried request) resolves to the same card instead of a duplicate.
-  const requestIdRef = useRef<string | null>(null)
+  const requestIdRef = useRef<string | null>(null);
 
-  const initialQuery = (card.query ?? {}) as InsightQuery
-  const [name, setName] = useState(card.name === UNTITLED_CARD ? '' : card.name)
-  const [description, setDescription] = useState(card.description ?? '')
-  const [sourceKey, setSourceKey] = useState(initialQuery.source ?? 'ledger_lines')
+  const initialQuery = (card.query ?? {}) as InsightQuery;
+  const [name, setName] = useState(card.name === UNTITLED_CARD ? "" : card.name);
+  const [description, setDescription] = useState(card.description ?? "");
+  const [sourceKey, setSourceKey] = useState(initialQuery.source ?? "ledger_lines");
 
   const [measures, setMeasures] = useState<ReportMeasure[]>(
     (initialQuery.measures ?? []).map(measureForEditor),
-  )
+  );
   const [dimensions, setDimensions] = useState<DimensionState[]>(
-    (initialQuery.dimensions ?? []).map((d) => ({ field: d.field, bin: (d.bin as DateBin) ?? '' })),
-  )
+    (initialQuery.dimensions ?? []).map((d) => ({ field: d.field, bin: (d.bin as DateBin) ?? "" })),
+  );
   const [filters, setFilters] = useState<FilterState[]>(
     (initialQuery.filters ?? []).map((f) => ({
       field: f.field,
       op: f.op,
-      value: Array.isArray(f.value) ? f.value.join(', ') : f.value == null ? '' : String(f.value),
+      value: Array.isArray(f.value) ? f.value.join(", ") : f.value == null ? "" : String(f.value),
     })),
-  )
+  );
 
-  const [vizType, setVizType] = useState<VizType>(card.viz_type)
-  const [vizSettings, setVizSettings] = useState<VizSettings>(card.viz_settings ?? {})
-  const [status, setStatus] = useState(card.status)
+  const [vizType, setVizType] = useState<VizType>(card.viz_type);
+  const [vizSettings, setVizSettings] = useState<VizSettings>(card.viz_settings ?? {});
+  const [status, setStatus] = useState(card.status);
 
   const source = useMemo(() => {
-    const catalog = getSource(sourceKey)
-    return catalog ? insightSourceForFeatureState(catalog, { inventory: inventoryEnabled }) : null
-  }, [sourceKey, inventoryEnabled])
+    const catalog = getSource(sourceKey);
+    return catalog ? insightSourceForFeatureState(catalog, { inventory: inventoryEnabled }) : null;
+  }, [sourceKey, inventoryEnabled]);
   const sources = useMemo(
     () => sourceKeys.map((k) => getSource(k)).filter((x): x is NonNullable<typeof x> => x !== null),
     [sourceKeys],
-  )
+  );
   // Insight sources ARE the report entities, so their labels come from the
   // shared report catalog namespace — one wording per field, everywhere.
-  const fieldLabel = (key: string) => tCatalog(`catalog.columns.${sourceKey}.${key}`)
+  const fieldLabel = (key: string) => tCatalog(`catalog.columns.${sourceKey}.${key}`);
   const enumLabel = (v: string, field: string) =>
-    reportEnumLabel(tCatalog, v, { entity: sourceKey, column: field }) ?? v.replace(/_/g, ' ')
-  const dimensionFields = useMemo(() => source?.fields.filter((f) => f.canDimension) ?? [], [source])
-  const allFields = source?.fields ?? []
+    reportEnumLabel(tCatalog, v, { entity: sourceKey, column: field }) ?? v.replace(/_/g, " ");
+  const dimensionFields = useMemo(
+    () => source?.fields.filter((f) => f.canDimension) ?? [],
+    [source],
+  );
+  const allFields = source?.fields ?? [];
 
-  const query = useMemo(() => toQuery(sourceKey, measures, dimensions, filters), [sourceKey, measures, dimensions, filters])
+  const query = useMemo(
+    () => toQuery(sourceKey, measures, dimensions, filters),
+    [sourceKey, measures, dimensions, filters],
+  );
 
   // -- live preview (debounced POST /api/insights/query) --------------------
-  const [result, setResult] = useState<QueryResult | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [previewing, setPreviewing] = useState(false)
-  const previewSeq = useRef(0)
+  const [result, setResult] = useState<QueryResult | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const previewSeq = useRef(0);
 
   const runPreview = useCallback(async () => {
-    const seq = ++previewSeq.current
-    setPreviewing(true)
-    setPreviewError(null)
+    const seq = ++previewSeq.current;
+    setPreviewing(true);
+    setPreviewError(null);
     try {
-      const res = await fetch('/api/insights/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/insights/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
-      })
-      if (seq !== previewSeq.current) return
+      });
+      if (seq !== previewSeq.current) return;
       // The status is checked before the body is parsed: a non-JSON error
       // body must surface the named refusal, never a SyntaxError from
       // res.json() that collapses to the generic preview failure.
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, t('errors.queryFailed'))
-        if (seq !== previewSeq.current) return
-        setPreviewError(message)
-        setResult(null)
+        const message = await readApiErrorMessage(res, t("errors.queryFailed"));
+        if (seq !== previewSeq.current) return;
+        setPreviewError(message);
+        setResult(null);
       } else {
-        const data = (await res.json().catch(() => null)) as QueryResult | null
-        if (seq !== previewSeq.current) return
+        const data = (await res.json().catch(() => null)) as QueryResult | null;
+        if (seq !== previewSeq.current) return;
         if (!data || !Array.isArray(data.rows)) {
-          setPreviewError(t('errors.queryFailed'))
-          setResult(null)
+          setPreviewError(t("errors.queryFailed"));
+          setResult(null);
         } else {
-          setResult(data)
+          setResult(data);
         }
       }
     } catch {
-      if (seq === previewSeq.current) setPreviewError(t('cardStudio.previewRequestFailed'))
+      if (seq === previewSeq.current) setPreviewError(t("cardStudio.previewRequestFailed"));
     } finally {
-      if (seq === previewSeq.current) setPreviewing(false)
+      if (seq === previewSeq.current) setPreviewing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query]);
 
   useEffect(() => {
-    const timer = setTimeout(runPreview, 350)
-    return () => clearTimeout(timer)
-  }, [runPreview])
+    const timer = setTimeout(runPreview, 350);
+    return () => clearTimeout(timer);
+  }, [runPreview]);
 
   // -- autosave (debounced PATCH) -------------------------------------------
   // The machine owns status/error/conflict; the field states above stay the
   // single owner of the edit, so a refused save keeps it by construction —
   // the refusal paths below never touch them.
-  const [save, dispatchSave] = useReducer(cardSaveReducer, INITIAL_CARD_SAVE)
+  const [save, dispatchSave] = useReducer(cardSaveReducer, INITIAL_CARD_SAVE);
   const savePayload: CardSaveDraft = useMemo(
     () => ({
       name: name.trim() || UNTITLED_CARD,
@@ -206,36 +225,39 @@ export function CardStudio({
       vizSettings,
     }),
     [name, description, query, vizType, vizSettings],
-  )
+  );
   const saveMessages = useMemo(
     () => ({
-      missingRevision: t('autosave.missingRevision'),
-      saveFailed: t('autosave.failed'),
-      unusableRevision: t('autosave.unusableRevision'),
+      missingRevision: t("autosave.missingRevision"),
+      saveFailed: t("autosave.failed"),
+      unusableRevision: t("autosave.unusableRevision"),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
-  )
+  );
 
   // The server loads the displayed values and this revision in one SQL read.
   // Fetching a newer token alone would let stale local fields overwrite it.
-  const revisionRef = useRef<string | null>(card.updated_at)
+  const revisionRef = useRef<string | null>(card.updated_at);
 
-  const first = useRef(true)
-  const saveSeq = useRef(0)
-  const saveAbort = useRef<AbortController | null>(null)
+  const first = useRef(true);
+  const saveSeq = useRef(0);
+  const saveAbort = useRef<AbortController | null>(null);
   // Declared before the autosave effect so its teardown runs first: effect
   // cleanups can then tell a re-run (cancel and re-arm) from an unmount.
-  const mountedRef = useRef(true)
-  useEffect(() => () => {
-    mountedRef.current = false
-  }, [])
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   /** One save attempt for an already-fenced sequence number. */
   async function runSave(seq: number, draft: CardSaveDraft) {
-    const controller = new AbortController()
-    saveAbort.current = controller
-    dispatchSave({ type: 'save-start' })
+    const controller = new AbortController();
+    saveAbort.current = controller;
+    dispatchSave({ type: "save-start" });
     try {
       const outcome = await requestCardSave({
         fetchFn: fetch,
@@ -244,56 +266,64 @@ export function CardStudio({
         revision: revisionRef.current,
         messages: saveMessages,
         signal: controller.signal,
-      })
+      });
       // A request can commit just as its fetch is aborted. Adopt its token
       // for the next save — but only forward, and only the token: a late
       // response for a superseded draft must never set saved or touch the
       // newer local state below, even when the server accepted that older
       // write (the server then holds older content than the studio shows,
       // and the newer save's own outcome reports it).
-      if (outcome.kind === 'saved' && shouldAdoptRevision(outcome.revision, revisionRef.current)) {
-        revisionRef.current = outcome.revision
+      if (outcome.kind === "saved" && shouldAdoptRevision(outcome.revision, revisionRef.current)) {
+        revisionRef.current = outcome.revision;
       }
-      if (!isCurrentSave(seq, saveSeq.current)) return
-      if (outcome.kind === 'saved') {
-        dispatchSave({ type: 'save-ok' })
-        router.refresh()
+      if (!isCurrentSave(seq, saveSeq.current)) return;
+      if (outcome.kind === "saved") {
+        dispatchSave({ type: "save-ok" });
+        router.refresh();
       } else {
-        dispatchSave({ type: 'save-refused', message: outcome.message, conflict: outcome.conflict })
-        toast.error(outcome.message)
+        dispatchSave({
+          type: "save-refused",
+          message: outcome.message,
+          conflict: outcome.conflict,
+        });
+        toast.error(outcome.message);
       }
     } catch (error) {
-      if (!isCurrentSave(seq, saveSeq.current) || (error as { name?: string })?.name === 'AbortError') return
-      dispatchSave({ type: 'save-refused', message: t('autosave.failed'), conflict: false })
-      toast.error(t('autosave.failed'))
+      if (
+        !isCurrentSave(seq, saveSeq.current) ||
+        (error as { name?: string })?.name === "AbortError"
+      )
+        return;
+      dispatchSave({ type: "save-refused", message: t("autosave.failed"), conflict: false });
+      toast.error(t("autosave.failed"));
     } finally {
-      if (saveAbort.current === controller) saveAbort.current = null
+      if (saveAbort.current === controller) saveAbort.current = null;
     }
   }
 
   useEffect(() => {
     // Create mode is local-only until Save: no revision exists to echo and no
     // row exists to autosave into, so the debounced PATCH never arms.
-    if (ro || createMode) return
+    if (ro || createMode) return;
     if (first.current) {
-      first.current = false
-      return
+      first.current = false;
+      return;
     }
-    const seq = ++saveSeq.current
-    saveAbort.current?.abort()
-    saveAbort.current = null
-    dispatchSave({ type: 'edit', draft: savePayload })
-    let sent = false
+    const seq = ++saveSeq.current;
+    saveAbort.current?.abort();
+    saveAbort.current = null;
+    dispatchSave({ type: "edit", draft: savePayload });
+    let sent = false;
     const timer = setTimeout(() => {
-      sent = true
-      void runSave(seq, savePayload)
-    }, 600)
+      sent = true;
+      void runSave(seq, savePayload);
+    }, 600);
     return () => {
-      clearTimeout(timer)
+      clearTimeout(timer);
       if (mountedRef.current) {
-        saveAbort.current?.abort()
-        saveAbort.current = null
-        return
+        saveAbort.current?.abort();
+        saveAbort.current = null;
+        return;
       }
       // Unmount with a debounced edit that never sent: flush the latest
       // draft instead of dropping it. Drawer close navigates client-side,
@@ -303,34 +333,34 @@ export function CardStudio({
       // newer save can be scheduled after unmount, and its response adopts
       // exactly like the timer's save would have.
       if (!sent) {
-        void runSave(seq, savePayload)
+        void runSave(seq, savePayload);
       }
-    }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savePayload, ro])
+  }, [savePayload, ro]);
 
   // Create mode is local-only until explicit Save: the pristine payload is
   // the dirtiness baseline for the drawer close guard.
-  const [initialPayload] = useState(savePayload)
-  const createDirty = createMode && JSON.stringify(savePayload) !== JSON.stringify(initialPayload)
-  const unsaved = createDirty || (!createMode && !ro && save.status !== 'saved')
+  const [initialPayload] = useState(savePayload);
+  const createDirty = createMode && JSON.stringify(savePayload) !== JSON.stringify(initialPayload);
+  const unsaved = createDirty || (!createMode && !ro && save.status !== "saved");
   useEffect(() => {
-    if (!unsaved) return
+    if (!unsaved) return;
     // A full unload (refresh, tab close) would drop a debounced edit the
     // unmount flush cannot send: warn first, never lose silently.
     const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-    }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [unsaved])
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [unsaved]);
 
   /** Retry a failed autosave with the kept edit and the current token. */
   async function retrySave() {
-    const seq = ++saveSeq.current
-    saveAbort.current?.abort()
-    saveAbort.current = null
-    await runSave(seq, save.draft ?? savePayload)
+    const seq = ++saveSeq.current;
+    saveAbort.current?.abort();
+    saveAbort.current = null;
+    await runSave(seq, save.draft ?? savePayload);
   }
 
   /**
@@ -339,88 +369,96 @@ export function CardStudio({
    * is the sibling button; this one never drops the edit.
    */
   async function saveAnyway() {
-    const latest = await fetch(`/api/insights/cards/${card.id}`, { cache: 'no-store' })
+    const latest = await fetch(`/api/insights/cards/${card.id}`, { cache: "no-store" });
     if (!latest.ok) {
-      toast.error(await readApiErrorMessage(latest, t('errors.updateFailed')))
-      return
+      toast.error(await readApiErrorMessage(latest, t("errors.updateFailed")));
+      return;
     }
-    const data = (await latest.json().catch(() => null)) as { updated_at?: unknown } | null
-    if (typeof data?.updated_at !== 'string') {
-      dispatchSave({ type: 'save-refused', message: t('autosave.unusableRevision'), conflict: true })
-      toast.error(t('autosave.unusableRevision'))
-      return
+    const data = (await latest.json().catch(() => null)) as { updated_at?: unknown } | null;
+    if (typeof data?.updated_at !== "string") {
+      dispatchSave({
+        type: "save-refused",
+        message: t("autosave.unusableRevision"),
+        conflict: true,
+      });
+      toast.error(t("autosave.unusableRevision"));
+      return;
     }
-    revisionRef.current = data.updated_at
-    const seq = ++saveSeq.current
-    saveAbort.current?.abort()
-    saveAbort.current = null
-    await runSave(seq, save.draft ?? savePayload)
+    revisionRef.current = data.updated_at;
+    const seq = ++saveSeq.current;
+    saveAbort.current?.abort();
+    saveAbort.current = null;
+    await runSave(seq, save.draft ?? savePayload);
   }
 
   /** Reload path for a revision conflict: adopt the server state, discarding
    *  the local edit by explicit choice (confirmed — this is the only path
    *  that drops an edit, and it never runs silently). */
   async function reloadLatest() {
-    if (!(await confirmDialog({ message: t('cardStudio.reloadConfirm') }))) return
-    window.location.reload()
+    if (!(await confirmDialog({ message: t("cardStudio.reloadConfirm") }))) return;
+    window.location.reload();
   }
 
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(false);
   async function setPublished(next: boolean) {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/insights/cards/${card.id}/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ publish: next, expectedUpdatedAt: revisionRef.current }),
-      })
+      });
       // The status is checked before the body is parsed: a non-JSON error
       // body must surface the failure, never a SyntaxError from res.json().
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('errors.updateFailed')))
-      const data = (await res.json().catch(() => null)) as { updated_at?: unknown } | null
-      setStatus(next ? 'published' : 'draft')
-      toast.success(next ? t('cardStudio.publishedToast') : t('cardStudio.draftToast'))
-      revisionRef.current = typeof data?.updated_at === 'string' ? data.updated_at : null
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("errors.updateFailed")));
+      const data = (await res.json().catch(() => null)) as { updated_at?: unknown } | null;
+      setStatus(next ? "published" : "draft");
+      toast.success(next ? t("cardStudio.publishedToast") : t("cardStudio.draftToast"));
+      revisionRef.current = typeof data?.updated_at === "string" ? data.updated_at : null;
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : t('errors.updateFailed'))
+      toast.error(
+        error instanceof Error && error.message ? error.message : t("errors.updateFailed"),
+      );
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function remove() {
     const confirmed = await confirmDialog({
-      message: t('cardStudio.deleteConfirm'),
-      tone: 'danger',
-    })
-    if (!confirmed) return
-    setBusy(true)
+      message: t("cardStudio.deleteConfirm"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/insights/cards/${card.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/insights/cards/${card.id}`, { method: "DELETE" });
       // The status is checked before the body is parsed: the server's named
       // refusal wins over the generic fallback.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('cardStudio.deleteFailed')))
-      toast.success(t('cardStudio.deletedToast'))
-      router.push('/insights')
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("cardStudio.deleteFailed")));
+      toast.success(t("cardStudio.deletedToast"));
+      router.push("/insights");
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : t('cardStudio.deleteFailed'))
+      toast.error(
+        error instanceof Error && error.message ? error.message : t("cardStudio.deleteFailed"),
+      );
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   /** Create mode only: the single idempotent POST behind explicit Save. */
   async function createCard() {
-    setBusy(true)
-    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setBusy(true);
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
     try {
-      const res = await fetch('/api/insights/cards', {
-        method: 'POST',
+      const res = await fetch("/api/insights/cards", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': requestIdRef.current,
+          "Content-Type": "application/json",
+          "Idempotency-Key": requestIdRef.current,
         },
         body: JSON.stringify({
           name: name.trim() || UNTITLED_CARD,
@@ -429,47 +467,58 @@ export function CardStudio({
           vizType,
           vizSettings,
         }),
-      })
+      });
       // The status is checked before the body is trusted: the server's named
       // refusal (and remedy) wins over the generic fallback.
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, t('cards.createDraftFailed'))
-        dispatchSave({ type: 'save-refused', message, conflict: res.status === 409 })
-        toast.error(message)
-        return
+        const message = await readApiErrorMessage(res, t("cards.createDraftFailed"));
+        dispatchSave({ type: "save-refused", message, conflict: res.status === 409 });
+        toast.error(message);
+        return;
       }
-      const data = (await res.json().catch(() => null)) as { id?: unknown } | null
-      if (!data || typeof data.id !== 'string' || !data.id) {
-        toast.error(t('cards.createDraftFailed'))
-        return
+      const data = (await res.json().catch(() => null)) as { id?: unknown } | null;
+      if (!data || typeof data.id !== "string" || !data.id) {
+        toast.error(t("cards.createDraftFailed"));
+        return;
       }
-      toast.success(t('autosave.saved'))
-      router.replace(`/insights?card=${data.id}`)
-      router.refresh()
+      toast.success(t("autosave.saved"));
+      router.replace(`/insights?card=${data.id}`);
+      router.refresh();
     } catch {
-      dispatchSave({ type: 'save-refused', message: t('cards.createDraftFailed'), conflict: false })
-      toast.error(t('cards.createDraftFailed'))
+      dispatchSave({
+        type: "save-refused",
+        message: t("cards.createDraftFailed"),
+        conflict: false,
+      });
+      toast.error(t("cards.createDraftFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   // When source changes, drop selections that no longer exist.
   function changeSource(next: string) {
-    setSourceKey(next)
-    const ns = getSource(next)
-    if (!ns) return
-    const keys = new Set(ns.fields.map((f) => f.key))
-    setMeasures((ms) => ms.filter((measure) => measure.fn === 'count' || measure.fn === 'formula' || (measure.column ? keys.has(measure.column) : false)))
-    setDimensions((ds) => ds.filter((d) => keys.has(d.field)))
-    setFilters((fs) => fs.filter((f) => keys.has(f.field)))
-    setVizSettings({})
+    setSourceKey(next);
+    const ns = getSource(next);
+    if (!ns) return;
+    const keys = new Set(ns.fields.map((f) => f.key));
+    setMeasures((ms) =>
+      ms.filter(
+        (measure) =>
+          measure.fn === "count" ||
+          measure.fn === "formula" ||
+          (measure.column ? keys.has(measure.column) : false),
+      ),
+    );
+    setDimensions((ds) => ds.filter((d) => keys.has(d.field)));
+    setFilters((fs) => fs.filter((f) => keys.has(f.field)));
+    setVizSettings({});
   }
 
-  const nameValid = name.trim().length > 0
-  const outputColumns = result?.columns ?? []
-  const dimensionCols = outputColumns.filter((c) => c.role === 'dimension')
-  const measureCols = outputColumns.filter((c) => c.role === 'measure')
+  const nameValid = name.trim().length > 0;
+  const outputColumns = result?.columns ?? [];
+  const dimensionCols = outputColumns.filter((c) => c.role === "dimension");
+  const measureCols = outputColumns.filter((c) => c.role === "measure");
 
   // Drawer close never drops work silently. An unflushed debounced edit is
   // sent by the unmount flush, so the guard only fires for a create draft
@@ -477,15 +526,15 @@ export function CardStudio({
   // flush could still fail. An in-flight save completes in the background —
   // teardown no longer aborts it — so pure `saving` closes freely.
   async function confirmDiscard() {
-    if (busy) return false
+    if (busy) return false;
     const discardable =
-      createDirty || (!createMode && !ro && (save.status === 'dirty' || save.status === 'error'))
-    if (!discardable) return true
+      createDirty || (!createMode && !ro && (save.status === "dirty" || save.status === "error"));
+    if (!discardable) return true;
     return confirmDialog({
-      message: tCommon('feedback.unsavedChanges'),
-      confirmLabel: tCommon('confirm.discardChanges'),
-      tone: 'danger',
-    })
+      message: tCommon("feedback.unsavedChanges"),
+      confirmLabel: tCommon("confirm.discardChanges"),
+      tone: "danger",
+    });
   }
 
   return (
@@ -496,33 +545,42 @@ export function CardStudio({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span>{name.trim() || t('cardStudio.untitled')}</span>
-          <Badge variant={status === 'published' ? 'success' : 'outline'}>
-            {status === 'published' ? t('status.published') : tCommon('status.draft')}
+          <span>{name.trim() || t("cardStudio.untitled")}</span>
+          <Badge variant={status === "published" ? "success" : "outline"}>
+            {status === "published" ? t("status.published") : tCommon("status.draft")}
           </Badge>
         </span>
       }
-      description={canCreate && !createMode ? t('cardStudio.autosaveHint') : undefined}
+      description={canCreate && !createMode ? t("cardStudio.autosaveHint") : undefined}
       headerActions={
         createMode ? null : (
           <>
             {canCreate ? (
               <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
-                <Trash2 size={14} /> {tCommon('actions.delete')}
+                <Trash2 size={14} /> {tCommon("actions.delete")}
               </Button>
             ) : null}
             {canPublish ? (
-              status === 'published' ? (
-                <Button variant="outline" disabled={busy || save.status !== 'saved'} onClick={() => setPublished(false)}>
-                  {t('actions.unpublish')}
+              status === "published" ? (
+                <Button
+                  variant="outline"
+                  disabled={busy || save.status !== "saved"}
+                  onClick={() => setPublished(false)}
+                >
+                  {t("actions.unpublish")}
                 </Button>
               ) : (
                 <>
                   {!nameValid ? (
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.nameRequiredToPublish')}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {t("cardStudio.nameRequiredToPublish")}
+                    </span>
                   ) : null}
-                  <Button disabled={busy || !nameValid || save.status !== 'saved'} onClick={() => setPublished(true)}>
-                    {t('actions.publish')}
+                  <Button
+                    disabled={busy || !nameValid || save.status !== "saved"}
+                    onClick={() => setPublished(true)}
+                  >
+                    {t("actions.publish")}
                   </Button>
                 </>
               )
@@ -533,13 +591,20 @@ export function CardStudio({
       footer={
         createMode ? (
           <div className="flex w-full items-center justify-between gap-3">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('autosave.unsaved')}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {t("autosave.unsaved")}
+            </span>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => router.push('/insights')}>
-                {tCommon('actions.cancel')}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => router.push("/insights")}
+              >
+                {tCommon("actions.cancel")}
               </Button>
               <Button size="sm" disabled={busy} onClick={createCard}>
-                {tCommon('actions.save')}
+                {tCommon("actions.save")}
               </Button>
             </div>
           </div>
@@ -547,33 +612,36 @@ export function CardStudio({
           <div className="flex w-full items-center gap-3">
             <span
               className={
-                'text-xs ' + (save.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+                "text-xs " +
+                (save.status === "error"
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-slate-500 dark:text-slate-400")
               }
             >
               {canCreate
-                ? save.status === 'saved'
-                  ? t('autosave.saved')
-                  : save.status === 'saving'
-                    ? tCommon('actions.saving')
-                    : save.status === 'error'
-                      ? (save.error ?? t('cardStudio.saveFailedRetry'))
-                      : t('autosave.unsaved')
+                ? save.status === "saved"
+                  ? t("autosave.saved")
+                  : save.status === "saving"
+                    ? tCommon("actions.saving")
+                    : save.status === "error"
+                      ? (save.error ?? t("cardStudio.saveFailedRetry"))
+                      : t("autosave.unsaved")
                 : null}
             </span>
-            {canCreate && save.status === 'error' ? (
+            {canCreate && save.status === "error" ? (
               <span className="ml-auto flex items-center gap-2">
                 {save.conflict ? (
                   <>
                     <Button variant="outline" size="sm" onClick={reloadLatest}>
-                      {t('cardStudio.reloadLatest')}
+                      {t("cardStudio.reloadLatest")}
                     </Button>
                     <Button size="sm" onClick={saveAnyway}>
-                      {t('cardStudio.overwriteSave')}
+                      {t("cardStudio.overwriteSave")}
                     </Button>
                   </>
                 ) : (
                   <Button variant="outline" size="sm" onClick={retrySave}>
-                    {t('cardStudio.retrySave')}
+                    {t("cardStudio.retrySave")}
                   </Button>
                 )}
               </span>
@@ -587,16 +655,43 @@ export function CardStudio({
         <div className="space-y-6">
           <section className="grid gap-4">
             <div className={field}>
-              <Label id={`${fieldId}-name-label`} htmlFor={`${fieldId}-name`}>{tCommon('labels.name')}</Label>
-              <Input id={`${fieldId}-name`} aria-labelledby={`${fieldId}-name-label`} aria-label={tCommon('labels.name')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cardStudio.namePlaceholder')} disabled={ro} />
+              <Label id={`${fieldId}-name-label`} htmlFor={`${fieldId}-name`}>
+                {tCommon("labels.name")}
+              </Label>
+              <Input
+                id={`${fieldId}-name`}
+                aria-labelledby={`${fieldId}-name-label`}
+                aria-label={tCommon("labels.name")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t("cardStudio.namePlaceholder")}
+                disabled={ro}
+              />
             </div>
             <div className={field}>
-              <Label id={`${fieldId}-description-label`} htmlFor={`${fieldId}-description`}>{tCommon('labels.description')}</Label>
-              <Input id={`${fieldId}-description`} aria-labelledby={`${fieldId}-description-label`} aria-label={tCommon('labels.description')} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tCommon('labels.optional')} disabled={ro} />
+              <Label id={`${fieldId}-description-label`} htmlFor={`${fieldId}-description`}>
+                {tCommon("labels.description")}
+              </Label>
+              <Input
+                id={`${fieldId}-description`}
+                aria-labelledby={`${fieldId}-description-label`}
+                aria-label={tCommon("labels.description")}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={tCommon("labels.optional")}
+                disabled={ro}
+              />
             </div>
             <div className={field}>
-              <Label id={`${fieldId}-source-label`}>{t('cardStudio.sourceLabel')}</Label>
-              <Select id={`${fieldId}-source`} aria-labelledby={`${fieldId}-source-label`} aria-label={t('cardStudio.sourceLabel')} value={sourceKey} onChange={(e) => changeSource(e.target.value)} disabled={ro}>
+              <Label id={`${fieldId}-source-label`}>{t("cardStudio.sourceLabel")}</Label>
+              <Select
+                id={`${fieldId}-source`}
+                aria-labelledby={`${fieldId}-source-label`}
+                aria-label={t("cardStudio.sourceLabel")}
+                value={sourceKey}
+                onChange={(e) => changeSource(e.target.value)}
+                disabled={ro}
+              >
                 {sources.map((s) => (
                   <option key={s.key} value={s.key}>
                     {tCatalog(`catalog.entities.${s.key}.label`)}
@@ -626,28 +721,41 @@ export function CardStudio({
           {/* -- dimensions -------------------------------------------- */}
           <section className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cardStudio.groupByTitle')}</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("cardStudio.groupByTitle")}
+              </h3>
               {!ro ? (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setDimensions([...dimensions, { field: dimensionFields[0]?.key ?? '', bin: '' }])}
+                  onClick={() =>
+                    setDimensions([
+                      ...dimensions,
+                      { field: dimensionFields[0]?.key ?? "", bin: "" },
+                    ])
+                  }
                 >
-                  <Plus size={14} /> {tCommon('actions.add')}
+                  <Plus size={14} /> {tCommon("actions.add")}
                 </Button>
               ) : null}
             </div>
             {dimensions.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.groupByEmpty')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("cardStudio.groupByEmpty")}
+              </p>
             ) : (
               dimensions.map((d, i) => {
-                const f = source?.fields.find((x) => x.key === d.field)
+                const f = source?.fields.find((x) => x.key === d.field);
                 return (
                   <div key={i} className="flex items-center gap-2">
                     <Select
-                      aria-label={`${t('cardStudio.groupByTitle')} ${i + 1}: ${fieldLabel(d.field)}`}
+                      aria-label={`${t("cardStudio.groupByTitle")} ${i + 1}: ${fieldLabel(d.field)}`}
                       value={d.field}
-                      onChange={(e) => setDimensions(dimensions.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)))}
+                      onChange={(e) =>
+                        setDimensions(
+                          dimensions.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)),
+                        )
+                      }
                       disabled={ro}
                       className="flex-1"
                     >
@@ -659,13 +767,19 @@ export function CardStudio({
                     </Select>
                     {f?.canBin ? (
                       <Select
-                        aria-label={`${fieldLabel(d.field)}: ${t('cardStudio.binExact')}`}
+                        aria-label={`${fieldLabel(d.field)}: ${t("cardStudio.binExact")}`}
                         value={d.bin}
-                        onChange={(e) => setDimensions(dimensions.map((x, j) => (j === i ? { ...x, bin: e.target.value as DateBin | '' } : x)))}
+                        onChange={(e) =>
+                          setDimensions(
+                            dimensions.map((x, j) =>
+                              j === i ? { ...x, bin: e.target.value as DateBin | "" } : x,
+                            ),
+                          )
+                        }
                         disabled={ro}
                         className="w-28"
                       >
-                        <option value="">{t('cardStudio.binExact')}</option>
+                        <option value="">{t("cardStudio.binExact")}</option>
                         {DATE_BINS.map((b) => (
                           <option key={b} value={b}>
                             {t(`cardStudio.bins.${b}`)}
@@ -674,12 +788,17 @@ export function CardStudio({
                       </Select>
                     ) : null}
                     {!ro ? (
-                      <Button variant="ghost" size="sm" aria-label={t('cardStudio.removeDimension')} onClick={() => setDimensions(dimensions.filter((_, j) => j !== i))}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={t("cardStudio.removeDimension")}
+                        onClick={() => setDimensions(dimensions.filter((_, j) => j !== i))}
+                      >
                         <Trash2 size={14} />
                       </Button>
                     ) : null}
                   </div>
-                )
+                );
               })
             )}
           </section>
@@ -688,37 +807,53 @@ export function CardStudio({
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                <Filter size={14} /> {t('cardStudio.filtersTitle')}
+                <Filter size={14} /> {t("cardStudio.filtersTitle")}
               </h3>
               {!ro ? (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setFilters([...filters, { field: allFields[0]?.key ?? '', op: 'eq', value: '' }])}
+                  onClick={() =>
+                    setFilters([
+                      ...filters,
+                      { field: allFields[0]?.key ?? "", op: "eq", value: "" },
+                    ])
+                  }
                 >
-                  <Plus size={14} /> {tCommon('actions.add')}
+                  <Plus size={14} /> {tCommon("actions.add")}
                 </Button>
               ) : null}
             </div>
             {filters.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.filtersEmpty')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("cardStudio.filtersEmpty")}
+              </p>
             ) : (
               filters.map((flt, i) => {
-                const f = allFields.find((x) => x.key === flt.field)
-                const ops = f ? operatorsForType(f.semanticType) : []
-                const meta = FILTER_OPERATOR_MAP[flt.op]
-                const needsValue = meta && meta.needsValue !== 'none'
+                const f = allFields.find((x) => x.key === flt.field);
+                const ops = f ? operatorsForType(f.semanticType) : [];
+                const meta = FILTER_OPERATOR_MAP[flt.op];
+                const needsValue = meta && meta.needsValue !== "none";
                 return (
-                  <div key={i} className="space-y-1.5 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+                  <div
+                    key={i}
+                    className="space-y-1.5 rounded-lg border border-slate-200 p-2 dark:border-slate-800"
+                  >
                     <div className="flex items-center gap-2">
                       <Select
-                        aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${fieldLabel(flt.field)}`}
+                        aria-label={`${t("cardStudio.filtersTitle")} ${i + 1}: ${fieldLabel(flt.field)}`}
                         value={flt.field}
                         onChange={(e) => {
-                          const nf = allFields.find((x) => x.key === e.target.value)
-                          const validOps = nf ? operatorsForType(nf.semanticType) : []
-                          const op = validOps.some((o) => o.key === flt.op) ? flt.op : (validOps[0]?.key ?? 'eq')
-                          setFilters(filters.map((x, j) => (j === i ? { ...x, field: e.target.value, op } : x)))
+                          const nf = allFields.find((x) => x.key === e.target.value);
+                          const validOps = nf ? operatorsForType(nf.semanticType) : [];
+                          const op = validOps.some((o) => o.key === flt.op)
+                            ? flt.op
+                            : (validOps[0]?.key ?? "eq");
+                          setFilters(
+                            filters.map((x, j) =>
+                              j === i ? { ...x, field: e.target.value, op } : x,
+                            ),
+                          );
                         }}
                         disabled={ro}
                         className="flex-1"
@@ -730,16 +865,27 @@ export function CardStudio({
                         ))}
                       </Select>
                       {!ro ? (
-                        <Button variant="ghost" size="sm" aria-label={t('cardStudio.removeFilter')} onClick={() => setFilters(filters.filter((_, j) => j !== i))}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={t("cardStudio.removeFilter")}
+                          onClick={() => setFilters(filters.filter((_, j) => j !== i))}
+                        >
                           <Trash2 size={14} />
                         </Button>
                       ) : null}
                     </div>
                     <div className="flex items-center gap-2">
                       <Select
-                        aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${t(`operators.${flt.op}`)}`}
+                        aria-label={`${t("cardStudio.filtersTitle")} ${i + 1}: ${t(`operators.${flt.op}`)}`}
                         value={flt.op}
-                        onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, op: e.target.value as FilterOp } : x)))}
+                        onChange={(e) =>
+                          setFilters(
+                            filters.map((x, j) =>
+                              j === i ? { ...x, op: e.target.value as FilterOp } : x,
+                            ),
+                          )
+                        }
                         disabled={ro}
                         className="flex-1"
                       >
@@ -749,65 +895,88 @@ export function CardStudio({
                           </option>
                         ))}
                       </Select>
-                      {needsValue && f?.options?.length && meta?.needsValue === 'one' ? (
+                      {needsValue && f?.options?.length && meta?.needsValue === "one" ? (
                         // Fixed-vocabulary fields (status, type, every boolean)
                         // store stable codes — offer them as a localized select
                         // instead of asking the user to type the code.
                         <Select
-                          aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${t('cardStudio.filterPlaceholderValue')}`}
+                          aria-label={`${t("cardStudio.filtersTitle")} ${i + 1}: ${t("cardStudio.filterPlaceholderValue")}`}
                           value={flt.value}
-                          onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+                          onChange={(e) =>
+                            setFilters(
+                              filters.map((x, j) =>
+                                j === i ? { ...x, value: e.target.value } : x,
+                              ),
+                            )
+                          }
                           disabled={ro}
                           className="flex-1"
                         >
-                          <option value="">{t('cardStudio.filterPlaceholderValue')}</option>
+                          <option value="">{t("cardStudio.filterPlaceholderValue")}</option>
                           {f.options.map((v) => (
                             <option key={v} value={v}>
-                              {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v, f.key)}
+                              {f.valueKind === "boolean"
+                                ? t(`viz.values.${v === "true" ? "yes" : "no"}`)
+                                : enumLabel(v, f.key)}
                             </option>
                           ))}
                         </Select>
-                      ) : needsValue && f?.options?.length && meta?.needsValue === 'list' ? (
+                      ) : needsValue && f?.options?.length && meta?.needsValue === "list" ? (
                         // "is any of" over a known vocabulary: chips, so the
                         // stored list is always spelled in real codes.
                         <div className="flex flex-1 flex-wrap gap-1">
                           {f.options.map((v) => {
-                            const picked = flt.value.split(',').map((x) => x.trim()).filter(Boolean)
-                            const on = picked.includes(v)
+                            const picked = flt.value
+                              .split(",")
+                              .map((x) => x.trim())
+                              .filter(Boolean);
+                            const on = picked.includes(v);
                             return (
                               <button
                                 key={v}
                                 type="button"
                                 disabled={ro}
                                 onClick={() => {
-                                  const next = on ? picked.filter((x) => x !== v) : [...picked, v]
-                                  setFilters(filters.map((x, j) => (j === i ? { ...x, value: next.join(', ') } : x)))
+                                  const next = on ? picked.filter((x) => x !== v) : [...picked, v];
+                                  setFilters(
+                                    filters.map((x, j) =>
+                                      j === i ? { ...x, value: next.join(", ") } : x,
+                                    ),
+                                  );
                                 }}
                                 className={
-                                  'rounded-full border px-2 py-0.5 text-xs transition-colors disabled:opacity-60 ' +
+                                  "rounded-full border px-2 py-0.5 text-xs transition-colors disabled:opacity-60 " +
                                   (on
-                                    ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
-                                    : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300')
+                                    ? "border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300"
+                                    : "border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300")
                                 }
                               >
-                                {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v, f.key)}
+                                {f.valueKind === "boolean"
+                                  ? t(`viz.values.${v === "true" ? "yes" : "no"}`)
+                                  : enumLabel(v, f.key)}
                               </button>
-                            )
+                            );
                           })}
                         </div>
                       ) : needsValue ? (
                         <Input
-                          aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${t('cardStudio.filterPlaceholderValue')}`}
+                          aria-label={`${t("cardStudio.filtersTitle")} ${i + 1}: ${t("cardStudio.filterPlaceholderValue")}`}
                           value={flt.value}
-                          onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+                          onChange={(e) =>
+                            setFilters(
+                              filters.map((x, j) =>
+                                j === i ? { ...x, value: e.target.value } : x,
+                              ),
+                            )
+                          }
                           placeholder={
-                            meta?.needsValue === 'list'
-                              ? t('cardStudio.filterPlaceholderList')
-                              : meta?.needsValue === 'number'
-                                ? t('cardStudio.filterPlaceholderNumber')
-                                : f?.semanticType === 'date'
-                                  ? t('cardStudio.filterPlaceholderDate')
-                                  : t('cardStudio.filterPlaceholderValue')
+                            meta?.needsValue === "list"
+                              ? t("cardStudio.filterPlaceholderList")
+                              : meta?.needsValue === "number"
+                                ? t("cardStudio.filterPlaceholderNumber")
+                                : f?.semanticType === "date"
+                                  ? t("cardStudio.filterPlaceholderDate")
+                                  : t("cardStudio.filterPlaceholderValue")
                           }
                           disabled={ro}
                           className="flex-1"
@@ -815,7 +984,7 @@ export function CardStudio({
                       ) : null}
                     </div>
                   </div>
-                )
+                );
               })
             )}
           </section>
@@ -831,10 +1000,10 @@ export function CardStudio({
                 disabled={ro}
                 onClick={() => setVizType(v.value)}
                 className={
-                  'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors disabled:opacity-60 ' +
+                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors disabled:opacity-60 " +
                   (vizType === v.value
-                    ? 'border-teal-600 bg-teal-50 text-teal-700 dark:border-teal-400 dark:bg-teal-950/40 dark:text-teal-300'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900')
+                    ? "border-teal-600 bg-teal-50 text-teal-700 dark:border-teal-400 dark:bg-teal-950/40 dark:text-teal-300"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900")
                 }
               >
                 <v.Icon size={15} /> {t(v.labelKey)}
@@ -842,7 +1011,7 @@ export function CardStudio({
             ))}
           </div>
 
-          {vizType !== 'table' ? (
+          {vizType !== "table" ? (
             <VizSettingsEditor
               vizType={vizType}
               settings={vizSettings}
@@ -860,7 +1029,7 @@ export function CardStudio({
               </div>
             ) : !result ? (
               <div className="flex h-full min-h-[20rem] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-                {previewing ? t('cardStudio.runningPreview') : t('cardStudio.buildToPreview')}
+                {previewing ? t("cardStudio.runningPreview") : t("cardStudio.buildToPreview")}
               </div>
             ) : (
               <div className="h-[20rem]">
@@ -870,14 +1039,15 @@ export function CardStudio({
           </div>
           {result ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('cardStudio.rowCount', { count: result.rowCount })}
-              {result.truncated ? ` ${t('cardStudio.capped')}` : ''} · {t('cardStudio.duration', { ms: result.durationMs })}
+              {t("cardStudio.rowCount", { count: result.rowCount })}
+              {result.truncated ? ` ${t("cardStudio.capped")}` : ""} ·{" "}
+              {t("cardStudio.duration", { ms: result.durationMs })}
             </p>
           ) : null}
         </div>
       </div>
     </UrlDrawer>
-  )
+  );
 }
 
 function VizSettingsEditor({
@@ -888,20 +1058,17 @@ function VizSettingsEditor({
   measureCols,
   disabled,
 }: {
-  vizType: VizType
-  settings: VizSettings
-  onChange: (s: VizSettings) => void
-  dimensionCols: { key: string; label: string }[]
-  measureCols: { key: string; label: string }[]
-  disabled: boolean
+  vizType: VizType;
+  settings: VizSettings;
+  onChange: (s: VizSettings) => void;
+  dimensionCols: { key: string; label: string }[];
+  measureCols: { key: string; label: string }[];
+  disabled: boolean;
 }) {
-  const t = useTranslations('insights.vizSettings')
-  const fieldId = useId()
-  const set = (patch: Partial<VizSettings>) => onChange({ ...settings, ...patch })
-  const toggle = (
-    label: string,
-    key: keyof VizSettings,
-  ) => (
+  const t = useTranslations("insights.vizSettings");
+  const fieldId = useId();
+  const set = (patch: Partial<VizSettings>) => onChange({ ...settings, ...patch });
+  const toggle = (label: string, key: keyof VizSettings) => (
     <label className="flex items-center gap-1.5 text-sm">
       <input
         type="checkbox"
@@ -913,14 +1080,21 @@ function VizSettingsEditor({
       />
       {label}
     </label>
-  )
+  );
 
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-      <div className={field + ' min-w-[9rem]'}>
-        <Label id={`${fieldId}-category-label`}>{t('category')}</Label>
-        <Select id={`${fieldId}-category`} aria-labelledby={`${fieldId}-category-label`} aria-label={t('category')} value={settings.categoryField ?? ''} onChange={(e) => set({ categoryField: e.target.value || undefined })} disabled={disabled}>
-          <option value="">{t('auto')}</option>
+      <div className={field + " min-w-[9rem]"}>
+        <Label id={`${fieldId}-category-label`}>{t("category")}</Label>
+        <Select
+          id={`${fieldId}-category`}
+          aria-labelledby={`${fieldId}-category-label`}
+          aria-label={t("category")}
+          value={settings.categoryField ?? ""}
+          onChange={(e) => set({ categoryField: e.target.value || undefined })}
+          disabled={disabled}
+        >
+          <option value="">{t("auto")}</option>
           {dimensionCols.map((c) => (
             <option key={c.key} value={c.key}>
               {c.label}
@@ -928,17 +1102,17 @@ function VizSettingsEditor({
           ))}
         </Select>
       </div>
-      <div className={field + ' min-w-[9rem]'}>
-        <Label id={`${fieldId}-value-label`}>{t('value')}</Label>
+      <div className={field + " min-w-[9rem]"}>
+        <Label id={`${fieldId}-value-label`}>{t("value")}</Label>
         <Select
           id={`${fieldId}-value`}
           aria-labelledby={`${fieldId}-value-label`}
-          aria-label={t('value')}
-          value={settings.valueFields?.[0] ?? ''}
+          aria-label={t("value")}
+          value={settings.valueFields?.[0] ?? ""}
           onChange={(e) => set({ valueFields: e.target.value ? [e.target.value] : undefined })}
           disabled={disabled}
         >
-          <option value="">{t('allMeasures')}</option>
+          <option value="">{t("allMeasures")}</option>
           {measureCols.map((c) => (
             <option key={c.key} value={c.key}>
               {c.label}
@@ -947,12 +1121,12 @@ function VizSettingsEditor({
         </Select>
       </div>
       <div className="flex flex-wrap items-center gap-3 pb-2">
-        {(vizType === 'bar' || vizType === 'area') && toggle(t('stacked'), 'stacked')}
-        {vizType === 'bar' && toggle(t('horizontal'), 'horizontal')}
-        {(vizType === 'line' || vizType === 'area') && toggle(t('smooth'), 'smooth')}
-        {toggle(t('showValues'), 'showValues')}
-        {toggle(t('hideLegend'), 'hideLegend')}
+        {(vizType === "bar" || vizType === "area") && toggle(t("stacked"), "stacked")}
+        {vizType === "bar" && toggle(t("horizontal"), "horizontal")}
+        {(vizType === "line" || vizType === "area") && toggle(t("smooth"), "smooth")}
+        {toggle(t("showValues"), "showValues")}
+        {toggle(t("hideLegend"), "hideLegend")}
       </div>
     </div>
-  )
+  );
 }

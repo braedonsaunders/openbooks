@@ -1,44 +1,70 @@
-import { readExportWindow, transferId, transferWhere, transferLimit, finishExportPage } from './export-page'
-import { importRowError } from './row-error'
+import {
+  readExportWindow,
+  transferId,
+  transferWhere,
+  transferLimit,
+  finishExportPage,
+} from "./export-page";
+import { importRowError } from "./row-error";
 /** Setup-registry import/export resources. */
 
-import 'server-only'
-import { loadExtensionSettingRows } from '../setup/extension-settings'
-import { loadHomeAnnouncementRows } from '../setup/home-announcements'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { COUNTRY_CODES } from '../countries'
-import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
-import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
-import { buildRow, coerceBoolean, decodeStructuredSetupValues, idColumn, setupAuditReason, type Coerced } from '../setup/coerce'
-import { createInitialComponentTreatment } from '../setup/initial-component-treatment'
-import { defaultPayComponentProgramExclusions, foldPayComponentSetupCreate } from '../setup/write-shared'
-import { filingAccountProblem } from '@openbooks/engine/payroll/filing-registry'
-import { payComponentTreatmentProblem } from '@openbooks/engine/payroll/treatment-bases'
-import { savePayComponentEarningClassification, validateEntityIntegrity } from '../setup/write'
-import { permissionSetCovers } from '../permissions'
-import { payPeriodsPerYearProblem } from '@openbooks/engine/payroll/run-calendar'
-import { isSetupBookEntity, saveSetupBook } from '../setup/books'
-import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
-import { numberSequenceStoredCols } from '../setup/number-sequence-position'
+import "server-only";
+import { loadExtensionSettingRows } from "../setup/extension-settings";
+import { loadHomeAnnouncementRows } from "../setup/home-announcements";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { COUNTRY_CODES } from "../countries";
+import { featureEnabled, featureGateLockKey, resolvedFeatureState } from "../features";
+import {
+  SETUP_ENTITY_BY_KEY,
+  resolveSetupEntityGate,
+  setupEntityForFeatureState,
+  toSnake,
+  type SetupEntity,
+  type SetupField,
+} from "../setup/registry";
+import {
+  buildRow,
+  coerceBoolean,
+  decodeStructuredSetupValues,
+  idColumn,
+  setupAuditReason,
+  type Coerced,
+} from "../setup/coerce";
+import { createInitialComponentTreatment } from "../setup/initial-component-treatment";
+import {
+  defaultPayComponentProgramExclusions,
+  foldPayComponentSetupCreate,
+} from "../setup/write-shared";
+import { filingAccountProblem } from "@openbooks/engine/payroll/filing-registry";
+import { payComponentTreatmentProblem } from "@openbooks/engine/payroll/treatment-bases";
+import { savePayComponentEarningClassification, validateEntityIntegrity } from "../setup/write";
+import { permissionSetCovers } from "../permissions";
+import { payPeriodsPerYearProblem } from "@openbooks/engine/payroll/run-calendar";
+import { isSetupBookEntity, saveSetupBook } from "../setup/books";
+import { auditSetupChange as audit, loadSetupAuditRow } from "../setup/audit";
+import { numberSequenceStoredCols } from "../setup/number-sequence-position";
 import {
   createUsageMeter,
   deactivateUsageMeter,
   reactivateUsageMeter,
   updateUsageMeter,
   type UsageAggregation,
-} from '@openbooks/engine/billing/usage/records'
-import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/billing/usage/rating-plans'
-import { UsageBillingError } from '@openbooks/engine/billing/usage/errors'
-import { CommerceError, upsertAccountMap, upsertChannelLocation } from '@openbooks/engine/commerce'
-import { setupReadProjection, setupReadSource } from '../setup/read-shape'
+} from "@openbooks/engine/billing/usage/records";
+import {
+  createUsageRatingPlan,
+  retireUsageRatingPlan,
+} from "@openbooks/engine/billing/usage/rating-plans";
+import { UsageBillingError } from "@openbooks/engine/billing/usage/errors";
+import { CommerceError, upsertAccountMap, upsertChannelLocation } from "@openbooks/engine/commerce";
+import { setupReadProjection, setupReadSource } from "../setup/read-shape";
 import {
   enforceExportRowLimit,
   exportCell,
   RefResolver,
   type DataResource,
   type WriteCtx,
-} from './resource-core'
+} from "./resource-core";
 import {
   type CellValue,
   type ImportMode,
@@ -46,11 +72,11 @@ import {
   type ResourceField,
   type ResourceRefTarget,
   type WriteOutcome,
-} from './types'
+} from "./types";
 
 // Drizzle treats bare JS arrays in SQL templates as row constructors. Keep
 // array-valued setup fields as a single driver parameter for PostgreSQL.
-const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(value) : value
+const bindSetupValue = (value: unknown) => (Array.isArray(value) ? sql.param(value) : value);
 /**
  * Pay-schedule calendar integrity on the import path. The
  * interactive editor refuses a frequency/periods-per-year mismatch because
@@ -67,66 +93,69 @@ async function payScheduleImportProblem(
   built: Coerced[],
   current: { frequency: unknown; periods_per_year: unknown } | null,
 ): Promise<string | null> {
-  if (entityKey !== 'pay-schedules') return null
-  const col = (name: string) => built.find((c) => c.column === name)?.value
-  const frequency = String(col('frequency') ?? (current?.frequency as string | null) ?? '')
-  const periodsPerYear = Number(col('periods_per_year') ?? current?.periods_per_year)
-  if (!Number.isFinite(periodsPerYear)) return null
-  return payPeriodsPerYearProblem(frequency, periodsPerYear)
+  if (entityKey !== "pay-schedules") return null;
+  const col = (name: string) => built.find((c) => c.column === name)?.value;
+  const frequency = String(col("frequency") ?? (current?.frequency as string | null) ?? "");
+  const periodsPerYear = Number(col("periods_per_year") ?? current?.periods_per_year);
+  if (!Number.isFinite(periodsPerYear)) return null;
+  return payPeriodsPerYearProblem(frequency, periodsPerYear);
 }
 
 async function loadPayScheduleCurrent(
   orgId: string,
   existingId: string,
 ): Promise<{ frequency: unknown; periods_per_year: unknown } | null> {
-  const current = await db.execute<{ frequency: unknown; periods_per_year: unknown }>(sql`
+  const current = await db.execute<{ frequency: unknown; periods_per_year: unknown }>(
+    sql`
     select frequency, periods_per_year from pay_schedules
      where id = ${existingId} and org_id = ${orgId}
-     limit 1`, 'objects')
-  return current[0] ?? null
+     limit 1`,
+    "objects",
+  );
+  return current[0] ?? null;
 }
 
 // --- Setup-registry resources -------------------------------------------------
 
-const SETUP_KIND_MAP: Record<SetupField['kind'], ResourceField['kind']> = {
-  text: 'text',
-  country: 'select',
-  textarea: 'long_text',
-  integer: 'number',
+const SETUP_KIND_MAP: Record<SetupField["kind"], ResourceField["kind"]> = {
+  text: "text",
+  country: "select",
+  textarea: "long_text",
+  integer: "number",
   // Money travels as whole minor units, exactly like an integer: the
   // majors/minors conversion lives in the drawer and the command, so row
   // import and export neither reinterpret nor reprice the stored figure.
-  money: 'number',
-  decimal: 'number',
-  percent: 'percent',
-  boolean: 'boolean',
-  date: 'date',
-  select: 'select',
-  ref: 'reference',
-  multiref: 'multiselect',
-  json: 'long_text',
+  money: "number",
+  decimal: "number",
+  percent: "percent",
+  boolean: "boolean",
+  date: "date",
+  select: "select",
+  ref: "reference",
+  multiref: "multiselect",
+  json: "long_text",
   // Structured JSON remains one exact cell; timestamps retain their offset.
-  object: 'long_text',
-  objectArray: 'long_text',
-  zonedDateTime: 'datetime',
+  object: "long_text",
+  objectArray: "long_text",
+  zonedDateTime: "datetime",
   // An IANA time zone identifier travels as its exact name; the shared
   // setup coercer validates it on import.
-  timeZone: 'text',
+  timeZone: "text",
   // String-list fields round-trip through the shared setup coercer.
-  stringArray: 'long_text',
-}
+  stringArray: "long_text",
+};
 
 function refNaturalKey(ref: string): string {
-  if (ref === 'accounts') return 'number'
-  const entity = SETUP_ENTITY_BY_KEY.get(ref)
-  return entity?.naturalKey ?? 'id'
+  if (ref === "accounts") return "number";
+  const entity = SETUP_ENTITY_BY_KEY.get(ref);
+  return entity?.naturalKey ?? "id";
 }
 
 /** A ref target whose rows are referenced by natural key (the stored value
  *  IS the key, e.g. a registration's form code) — never resolved to a row
  *  id on import nor to a label on export. */
 function refTargetStoresKey(ref: string): boolean {
-  return (SETUP_ENTITY_BY_KEY.get(ref)?.refValue ?? null) !== null
+  return (SETUP_ENTITY_BY_KEY.get(ref)?.refValue ?? null) !== null;
 }
 
 /**
@@ -142,83 +171,89 @@ function refTargetStoresKey(ref: string): boolean {
  * below turns the next one into a compile error instead.
  */
 async function jsonBackedRows(
-  source: NonNullable<SetupEntity['dataSource']>,
+  source: NonNullable<SetupEntity["dataSource"]>,
   orgId: string,
   resourceLabel: string,
 ): Promise<Record<string, unknown>[]> {
   switch (source) {
-    case 'extension-settings':
+    case "extension-settings":
       // In-memory sources have no LIMIT clause, so the sentinel gate runs
       // here: refuse rather than slice silently.
       return enforceExportRowLimit(
         (await loadExtensionSettingRows(orgId)) as Record<string, unknown>[],
         resourceLabel,
-      )
-    case 'home-announcements': {
+      );
+    case "home-announcements": {
       // The exporter reads raw[toSnake(fieldKey)]; this loader hands back
       // the camelCase record shape, so the keys are translated here and
       // not in the domain module.
-      const rows = await loadHomeAnnouncementRows(orgId)
+      const rows = await loadHomeAnnouncementRows(orgId);
       return enforceExportRowLimit(rows, resourceLabel).map((row) => {
-        const out: Record<string, unknown> = {}
-        for (const [key, value] of Object.entries(row)) out[toSnake(key)] = value
-        return out
-      })
+        const out: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(row)) out[toSnake(key)] = value;
+        return out;
+      });
     }
     default: {
-      const unreachable: never = source
-      throw new Error(`setup data source ${String(unreachable)} has no export arm`)
+      const unreachable: never = source;
+      throw new Error(`setup data source ${String(unreachable)} has no export arm`);
     }
   }
 }
 
 function setupFields(entity: SetupEntity, forImport = false): ResourceField[] {
   const fields: ResourceField[] = entity.fields
-    .filter((f) => f.kind !== 'multiref') // join-table fields aren't bulk-importable yet
-    .filter((f) => !f.inputOnly || forImport && f.key === 'reason')
+    .filter((f) => f.kind !== "multiref") // join-table fields aren't bulk-importable yet
+    .filter((f) => !f.inputOnly || (forImport && f.key === "reason"))
     .map((f) => ({
       key: f.key,
       label: f.key,
       kind: SETUP_KIND_MAP[f.kind],
       required: f.required,
-      options: f.kind === 'country'
-        ? COUNTRY_CODES.map((code) => ({ value: code, label: code }))
-        : f.options?.map((o) => ({ value: o.value, label: o.value })),
+      options:
+        f.kind === "country"
+          ? COUNTRY_CODES.map((code) => ({ value: code, label: code }))
+          : f.options?.map((o) => ({ value: o.value, label: o.value })),
       // Only true reference fields resolve natural keys → ids on import. A
       // stringArray's `ref` is merely its type-ahead corpus — the values ARE
       // the stored strings. Likewise a ref whose target declares `refValue`
       // stores the natural key itself (a registration's returnFormCode IS
       // the form code): resolving it to a row id would write a uuid the
       // engine can never match, silently unlinking the row.
-      ref: f.kind === 'ref' && f.ref && !refTargetStoresKey(f.ref)
-        ? { resource: f.ref, by: refNaturalKey(f.ref) }
-        : undefined,
-    }))
+      ref:
+        f.kind === "ref" && f.ref && !refTargetStoresKey(f.ref)
+          ? { resource: f.ref, by: refNaturalKey(f.ref) }
+          : undefined,
+    }));
   // Audit-only inputs are accepted by imports, but never selected as stored
   // columns or replayed from an export's historical explanation.
-  if (forImport && entity.key === 'pay-components' && !fields.some(field => field.key === 'reason')) {
-    fields.push({ key: 'reason', label: 'reason', kind: 'long_text', required: false })
+  if (
+    forImport &&
+    entity.key === "pay-components" &&
+    !fields.some((field) => field.key === "reason")
+  ) {
+    fields.push({ key: "reason", label: "reason", kind: "long_text", required: false });
   }
-  if (forImport && entity.fields.some(field => field.key === 'reason' && !field.inputOnly)) {
-    fields.push({ key: 'auditReason', label: 'auditReason', kind: 'long_text', required: false })
+  if (forImport && entity.fields.some((field) => field.key === "reason" && !field.inputOnly)) {
+    fields.push({ key: "auditReason", label: "auditReason", kind: "long_text", required: false });
   }
-  return fields
+  return fields;
 }
 
 export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
   return {
     key: entity.key,
     label: entity.key,
-    group: 'Setup',
-    iconKey: entity.iconKey || 'sliders',
-    readPermission: 'admin.setup.manage',
-    writePermission: entity.writePermission ?? 'admin.setup.manage',
+    group: "Setup",
+    iconKey: entity.iconKey || "sliders",
+    readPermission: "admin.setup.manage",
+    writePermission: entity.writePermission ?? "admin.setup.manage",
     // Command-barred entities never offer an import action: their rows
     // either travel through the engine command ('command') or are refused
     // by name ('none'). Export stays available — reading rows back is safe.
-    supportsImport: !entity.readOnly && !entity.dataSource && entity.importVia !== 'none',
+    supportsImport: !entity.readOnly && !entity.dataSource && entity.importVia !== "none",
     naturalKey: entity.naturalKey,
-  }
+  };
 }
 
 /**
@@ -229,130 +264,153 @@ export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
  */
 function setupImportRefusal(entity: SetupEntity): string {
   switch (entity.key) {
-    case 'benefit-enrollment-configuration':
-    case 'benefit-enrollment-terms':
-      return `${entity.key} cannot be imported as configuration; elect coverage and its contribution terms through HRM Benefits enrollment (POST /api/hrm/enrollments), which checks eligibility and approval.`
-    case 'nonprofit-frameworks':
-    case 'fund-pairs':
-    case 'functional-mappings':
-      return `${entity.key} cannot be imported row by row; maintain it in Nonprofit Setup, which records the change with its reason and audit.`
-    case 'dunning-policies':
-      return 'dunning-policies cannot be imported row by row; maintain collection policies in Collections (Policies view), which validates the complete record.'
-    case 'quote-to-cash-policy':
-      return 'quote-to-cash-policy cannot be imported; edit the quote-to-cash policy in Setup, which validates the complete record.'
-    case 'bom-components':
-      return 'bom-components cannot be imported row by row; edit the bill of materials on the assembly in Inventory, which replaces the complete recipe with its version, reason and audit.'
-    case 'customer-portal':
-      return 'customer-portal cannot be imported; edit the customer portal settings in Setup, which validates the complete record.'
+    case "benefit-enrollment-configuration":
+    case "benefit-enrollment-terms":
+      return `${entity.key} cannot be imported as configuration; elect coverage and its contribution terms through HRM Benefits enrollment (POST /api/hrm/enrollments), which checks eligibility and approval.`;
+    case "nonprofit-frameworks":
+    case "fund-pairs":
+    case "functional-mappings":
+      return `${entity.key} cannot be imported row by row; maintain it in Nonprofit Setup, which records the change with its reason and audit.`;
+    case "dunning-policies":
+      return "dunning-policies cannot be imported row by row; maintain collection policies in Collections (Policies view), which validates the complete record.";
+    case "quote-to-cash-policy":
+      return "quote-to-cash-policy cannot be imported; edit the quote-to-cash policy in Setup, which validates the complete record.";
+    case "bom-components":
+      return "bom-components cannot be imported row by row; edit the bill of materials on the assembly in Inventory, which replaces the complete recipe with its version, reason and audit.";
+    case "customer-portal":
+      return "customer-portal cannot be imported; edit the customer portal settings in Setup, which validates the complete record.";
     default:
       // Fail closed for whatever the registry gains next: name the owning
       // endpoint rather than inventing a screen.
-      if (entity.command) return `${entity.key} cannot be imported; it changes only through its setup command (POST /api/admin/setup/${entity.key}/command).`
-      if (entity.mutationPath) return `${entity.key} cannot be imported; it must be saved through ${entity.mutationPath}, which validates the complete record.`
-      return `${entity.key} cannot be imported.`
+      if (entity.command)
+        return `${entity.key} cannot be imported; it changes only through its setup command (POST /api/admin/setup/${entity.key}/command).`;
+      if (entity.mutationPath)
+        return `${entity.key} cannot be imported; it must be saved through ${entity.mutationPath}, which validates the complete record.`;
+      return `${entity.key} cannot be imported.`;
   }
 }
 
 async function gatedSetupEntity(entity: SetupEntity, orgId: string): Promise<SetupEntity> {
-  const features = await resolvedFeatureState(orgId)
+  const features = await resolvedFeatureState(orgId);
   const gated = setupEntityForFeatureState(entity, {
-    multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
-    equipment: featureEnabled(features, 'equipment'),
-    fieldTickets: featureEnabled(features, 'fieldTickets'),
-  })
-  return entity.key === 'item-rate-books' && !featureEnabled(features, 'multiCurrency')
-    ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }
-    : gated
+    multiSubsidiary: featureEnabled(features, "multiSubsidiary"),
+    equipment: featureEnabled(features, "equipment"),
+    fieldTickets: featureEnabled(features, "fieldTickets"),
+  });
+  return entity.key === "item-rate-books" && !featureEnabled(features, "multiCurrency")
+    ? { ...gated, fields: gated.fields.filter((field) => field.key !== "currency") }
+    : gated;
 }
 
 export function setupResource(entity: SetupEntity, orgId: string): DataResource {
   return {
     descriptor: setupDescriptor(entity),
     async fields() {
-      return setupFields(await gatedSetupEntity(entity, orgId), true)
+      return setupFields(await gatedSetupEntity(entity, orgId), true);
     },
     async columns() {
-      return setupFields(await gatedSetupEntity(entity, orgId)).map((f) => ({ key: f.key, label: f.label }))
+      return setupFields(await gatedSetupEntity(entity, orgId)).map((f) => ({
+        key: f.key,
+        label: f.label,
+      }));
     },
-    async read(readCtx?: import('./resource-core').ReadCtx) {
-      const fields = setupFields(await gatedSetupEntity(entity, orgId))
-      const resolver = new RefResolver(orgId)
-      const cols = fields.map((f) => toSnake(f.key))
-      const resourceLabel = setupDescriptor(entity).label
-      const projection = entity.key === 'usage-rating-plans'
-        ? sql.raw(cols.map((column) => column === 'currency' ? 'currency_code as currency' : column).join(', '))
-        : setupReadProjection(entity, cols)
+    async read(readCtx?: import("./resource-core").ReadCtx) {
+      const fields = setupFields(await gatedSetupEntity(entity, orgId));
+      const resolver = new RefResolver(orgId);
+      const cols = fields.map((f) => toSnake(f.key));
+      const resourceLabel = setupDescriptor(entity).label;
+      const projection =
+        entity.key === "usage-rating-plans"
+          ? sql.raw(
+              cols
+                .map((column) => (column === "currency" ? "currency_code as currency" : column))
+                .join(", "),
+            )
+          : setupReadProjection(entity, cols);
       const result = entity.dataSource
         ? { rows: await jsonBackedRows(entity.dataSource, orgId, resourceLabel) }
-        : (await readExportWindow(db, sql`
+        : ((await readExportWindow(
+            db,
+            sql`
         select ${projection}${transferId(readCtx, sql.raw(idColumn(entity)))}
           from ${setupReadSource(entity)}
          ${entity.orgScoped ? sql`where org_id = ${orgId}` : sql`where true`}${transferWhere(readCtx, sql.raw(idColumn(entity)))}
          order by ${sql.raw(idColumn(entity))}
-         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, unknown>[] }
+         limit ${transferLimit(readCtx)}`,
+            readCtx,
+          )) as { rows: Record<string, unknown>[] });
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      if (!entity.dataSource) finishExportPage(result.rows, resourceLabel, readCtx)
+      if (!entity.dataSource) finishExportPage(result.rows, resourceLabel, readCtx);
       else if (readCtx?.page) {
-        const offset = readCtx.page.offset ?? 0
-        readCtx.page.done = offset + readCtx.page.size >= result.rows.length
-        result.rows = result.rows.slice(offset, offset + readCtx.page.size)
-        readCtx.page.next = String(offset + result.rows.length)
+        const offset = readCtx.page.offset ?? 0;
+        readCtx.page.done = offset + readCtx.page.size >= result.rows.length;
+        result.rows = result.rows.slice(offset, offset + readCtx.page.size);
+        readCtx.page.next = String(offset + result.rows.length);
       }
-      const out: Record<string, CellValue>[] = []
+      const out: Record<string, CellValue>[] = [];
       for (const raw of result.rows) {
-        const row: Record<string, CellValue> = {}
-        for (const f of fields) row[f.key] = await exportCell(f, raw[toSnake(f.key)], resolver)
-        out.push(row)
+        const row: Record<string, CellValue> = {};
+        for (const f of fields) row[f.key] = await exportCell(f, raw[toSnake(f.key)], resolver);
+        out.push(row);
       }
-      return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: out }
+      return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: out };
     },
     async write(rows, mode, ctx) {
       const refuse = (message: string): WriteOutcome => ({
-        created: 0, updated: 0, failed: rows.length,
+        created: 0,
+        updated: 0,
+        failed: rows.length,
         errors: rows.map((_, index) => ({ row: index + 1, message })),
-      })
-      if (entity.importVia === 'none') return refuse(setupImportRefusal(entity))
-      if (entity.readOnly) return refuse('resource is read-only')
-      if (entity.dataSource) return refuse('Use the module settings drawer for audited value changes')
-      if (ctx.orgId !== orgId) return refuse('resource belongs to another organization')
+      });
+      if (entity.importVia === "none") return refuse(setupImportRefusal(entity));
+      if (entity.readOnly) return refuse("resource is read-only");
+      if (entity.dataSource)
+        return refuse("Use the module settings drawer for audited value changes");
+      if (ctx.orgId !== orgId) return refuse("resource belongs to another organization");
       // Command-barred configuration never reaches the generic row writer:
       // 'none' is refused by name above the transaction, and a command-owned
       // entity without its import mapping fails closed instead of writing
       // raw rows past the command's guards. The registry guard test pins the
       // declaration; this is the runtime backstop.
-      if (entity.command && entity.importVia !== 'command') {
-        return refuse(`${entity.key} writes through its setup command (POST /api/admin/setup/${entity.key}/command), which this import does not support yet. Maintain it through its settings screen instead of importing rows.`)
+      if (entity.command && entity.importVia !== "command") {
+        return refuse(
+          `${entity.key} writes through its setup command (POST /api/admin/setup/${entity.key}/command), which this import does not support yet. Maintain it through its settings screen instead of importing rows.`,
+        );
       }
       return withOrgTransaction(orgId, async () => {
         // Keep discovery, field validation and every row savepoint on the same
         // connection. A disable either precedes this import or waits for its
         // entire transaction, including the import job's audit evidence.
-        await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
-        const features = await resolvedFeatureState(orgId)
+        await db.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`,
+        );
+        const features = await resolvedFeatureState(orgId);
         // One authoritative gate refuses the import before preview or commit.
         // A closed single-key gate keeps the existing refusal; a closed
         // any-of gate names the shared remedy instead of inventing its own.
-        const gate = resolveSetupEntityGate(entity, features)
-        if (!gate.enabled) return refuse(gate.remedy ?? 'resource is not available')
-        const gated = await gatedSetupEntity(entity, orgId)
-        const available = new Set(gated.fields.map((field) => field.key))
-        const unavailable = entity.fields.filter((field) => !available.has(field.key)).map((field) => field.key)
-        if (!ctx.dryRun) return writeSetup(gated, rows, mode, ctx, unavailable)
+        const gate = resolveSetupEntityGate(entity, features);
+        if (!gate.enabled) return refuse(gate.remedy ?? "resource is not available");
+        const gated = await gatedSetupEntity(entity, orgId);
+        const available = new Set(gated.fields.map((field) => field.key));
+        const unavailable = entity.fields
+          .filter((field) => !available.has(field.key))
+          .map((field) => field.key);
+        if (!ctx.dryRun) return writeSetup(gated, rows, mode, ctx, unavailable);
         // A preview exercises the same storage constraints, policy guards and
         // audit writes as commit. Keep earlier rows visible to later rows in
         // this batch, then discard the entire batch without rolling back the
         // caller's surrounding import transaction or its job evidence.
-        await db.execute(sql`savepoint setup_import_preview`)
+        await db.execute(sql`savepoint setup_import_preview`);
         try {
-          return await writeSetup(gated, rows, mode, { ...ctx, dryRun: false }, unavailable)
+          return await writeSetup(gated, rows, mode, { ...ctx, dryRun: false }, unavailable);
         } finally {
-          await db.execute(sql`rollback to savepoint setup_import_preview`)
-          await db.execute(sql`release savepoint setup_import_preview`)
+          await db.execute(sql`rollback to savepoint setup_import_preview`);
+          await db.execute(sql`release savepoint setup_import_preview`);
         }
-      })
+      });
     },
-  }
+  };
 }
 
 /**
@@ -370,32 +428,37 @@ async function setupPackProblem(
   existingId: string | null,
   orgId: string,
 ): Promise<string | null> {
-  if (entity.key !== 'pay-components' && entity.key !== 'payroll-filing-accounts') return null
-  const col = (name: string): unknown => cols.find((c) => c.column === name)?.value
-  let current: Record<string, unknown> | null = null
+  if (entity.key !== "pay-components" && entity.key !== "payroll-filing-accounts") return null;
+  const col = (name: string): unknown => cols.find((c) => c.column === name)?.value;
+  let current: Record<string, unknown> | null = null;
   if (existingId) {
-    const found = await db.execute<Record<string, unknown>>(entity.key === 'pay-components'
-      ? sql`select country, tax_treatment from pay_components where id = ${existingId} and org_id = ${orgId}`
-      : sql`select country, program_type, state_code from payroll_filing_accounts where id = ${existingId} and org_id = ${orgId}`, 'objects')
-    current = found[0] ?? null
-    if (!current) return 'row no longer exists'
+    const found = await db.execute<Record<string, unknown>>(
+      entity.key === "pay-components"
+        ? sql`select country, tax_treatment from pay_components where id = ${existingId} and org_id = ${orgId}`
+        : sql`select country, program_type, state_code from payroll_filing_accounts where id = ${existingId} and org_id = ${orgId}`,
+      "objects",
+    );
+    current = found[0] ?? null;
+    if (!current) return "row no longer exists";
   }
-  if (entity.key === 'pay-components') {
+  if (entity.key === "pay-components") {
     return payComponentTreatmentProblem({
-      country: (col('country') as string | null | undefined)
-        ?? (current?.country as string | null | undefined)
-        ?? null,
-      taxTreatment: (col('tax_treatment') as string | null | undefined)
-        ?? (current?.tax_treatment as string | null | undefined)
-        ?? null,
-    })
+      country:
+        (col("country") as string | null | undefined) ??
+        (current?.country as string | null | undefined) ??
+        null,
+      taxTreatment:
+        (col("tax_treatment") as string | null | undefined) ??
+        (current?.tax_treatment as string | null | undefined) ??
+        null,
+    });
   }
-  const rawState = col('state_code') !== undefined ? col('state_code') : current?.state_code
+  const rawState = col("state_code") !== undefined ? col("state_code") : current?.state_code;
   return filingAccountProblem({
-    country: String(col('country') ?? current?.country ?? ''),
-    programType: String(col('program_type') ?? current?.program_type ?? ''),
-    stateCode: rawState == null || rawState === '' ? null : String(rawState),
-  })
+    country: String(col("country") ?? current?.country ?? ""),
+    programType: String(col("program_type") ?? current?.program_type ?? ""),
+    stateCode: rawState == null || rawState === "" ? null : String(rawState),
+  });
 }
 
 /**
@@ -415,54 +478,65 @@ async function writeSetupCommandRow(
   entity: SetupEntity,
   src: Record<string, unknown>,
   ctx: WriteCtx,
-): Promise<'created' | 'updated'> {
+): Promise<"created" | "updated"> {
   switch (entity.command?.name) {
-    case 'upsertChannelAccountMap': {
-      const channelId = String(src.channelId ?? '')
-      const role = String(src.role ?? '')
-      const key = src.key == null || src.key === '' ? '' : String(src.key)
-      const open = await db.execute<{ id: string }>(sql`
+    case "upsertChannelAccountMap": {
+      const channelId = String(src.channelId ?? "");
+      const role = String(src.role ?? "");
+      const key = src.key == null || src.key === "" ? "" : String(src.key);
+      const open = await db.execute<{ id: string }>(
+        sql`
         select id from sales_channel_account_maps
          where org_id = ${ctx.orgId} and channel_id = ${channelId}
            and role = ${role} and key = ${key} and effective_to is null
-         limit 1`, 'objects')
+         limit 1`,
+        "objects",
+      );
       await upsertAccountMap(ctx.orgId, ctx.actorId, {
         channelId,
         role,
         key,
-        accountId: String(src.accountId ?? ''),
-        effectiveFrom: String(src.effectiveFrom ?? ''),
-      })
-      return open[0] ? 'updated' : 'created'
+        accountId: String(src.accountId ?? ""),
+        effectiveFrom: String(src.effectiveFrom ?? ""),
+      });
+      return open[0] ? "updated" : "created";
     }
-    case 'upsertChannelLocation': {
-      const channelId = String(src.channelId ?? '')
-      const externalLocationId = String(src.externalLocationId ?? '')
+    case "upsertChannelLocation": {
+      const channelId = String(src.channelId ?? "");
+      const externalLocationId = String(src.externalLocationId ?? "");
       // A blank optional control leaves the command default alone; any
       // supplied spelling coerces exactly as the interactive form does.
       const optionalBoolean = (value: unknown): boolean | undefined =>
-        value === undefined || value === null || value === '' ? undefined : coerceBoolean(value)
-      const existing = await db.execute<{ id: string }>(sql`
+        value === undefined || value === null || value === "" ? undefined : coerceBoolean(value);
+      const existing = await db.execute<{ id: string }>(
+        sql`
         select id from sales_channel_locations
          where org_id = ${ctx.orgId} and channel_id = ${channelId}
            and external_location_id = ${externalLocationId}
-         limit 1`, 'objects')
+         limit 1`,
+        "objects",
+      );
       await upsertChannelLocation(ctx.orgId, ctx.actorId, {
         channelId,
         externalLocationId,
-        externalName: String(src.externalName ?? ''),
+        externalName: String(src.externalName ?? ""),
         stockLocationId: src.stockLocationId ? String(src.stockLocationId) : null,
         syncInventory: optionalBoolean(src.syncInventory),
         fulfilsOrders: optionalBoolean(src.fulfilsOrders),
-        bufferQuantity: src.bufferQuantity == null || src.bufferQuantity === '' ? null : String(src.bufferQuantity),
+        bufferQuantity:
+          src.bufferQuantity == null || src.bufferQuantity === ""
+            ? null
+            : String(src.bufferQuantity),
         stopSellingAtZero: optionalBoolean(src.stopSellingAtZero),
-      })
-      return existing[0] ? 'updated' : 'created'
+      });
+      return existing[0] ? "updated" : "created";
     }
     default:
       // A command without its import dispatch fails closed: the generic
       // writer below must never store what the command would refuse.
-      throw new Error(`setup import cannot dispatch command ${entity.command?.name ?? 'unknown'} for ${entity.key}`)
+      throw new Error(
+        `setup import cannot dispatch command ${entity.command?.name ?? "unknown"} for ${entity.key}`,
+      );
   }
 }
 
@@ -482,73 +556,87 @@ async function writeSetup(
   ctx: WriteCtx,
   unavailableFields: readonly string[],
 ): Promise<WriteOutcome> {
-  const resolver = new RefResolver(ctx.orgId)
-  const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+  const resolver = new RefResolver(ctx.orgId);
+  const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] };
   // Refs whose target stores the natural key itself (refValue) are stored
   // verbatim — resolving them to row ids would corrupt the stored value.
-  const refFields = entity.fields.filter((f) => f.kind === 'ref' && f.ref && !refTargetStoresKey(f.ref))
+  const refFields = entity.fields.filter(
+    (f) => f.kind === "ref" && f.ref && !refTargetStoresKey(f.ref),
+  );
 
   for (let i = 0; i < rows.length; i++) {
-    const rowNo = i + 1
-    const src = { ...rows[i] }
+    const rowNo = i + 1;
+    const src = { ...rows[i] };
     try {
-      if (entity.writePermission && !permissionSetCovers(ctx.permissions ?? new Set(), entity.writePermission)) {
-        outcome.failed++
+      if (
+        entity.writePermission &&
+        !permissionSetCovers(ctx.permissions ?? new Set(), entity.writePermission)
+      ) {
+        outcome.failed++;
         outcome.errors.push({
           row: rowNo,
           message: `The ${entity.writePermission} permission is required to import ${entity.key}; grant it to the importing role and retry.`,
-        })
-        continue
+        });
+        continue;
       }
-      const unavailable = unavailableFields.find((key) => src[key] !== undefined && src[key] !== null && src[key] !== '')
+      const unavailable = unavailableFields.find(
+        (key) => src[key] !== undefined && src[key] !== null && src[key] !== "",
+      );
       if (unavailable) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: `${unavailable} is not available` })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: `${unavailable} is not available` });
+        continue;
       }
       // Exported structured cells are JSON text. Domain validators consume
       // records, so decode through shared setup coercion before any lookup or write.
-      const decoded = decodeStructuredSetupValues(entity, src)
-      if ('error' in decoded) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: decoded.error })
-        continue
+      const decoded = decodeStructuredSetupValues(entity, src);
+      if ("error" in decoded) {
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: decoded.error });
+        continue;
       }
-      Object.assign(src, decoded.body)
-      const auditReason = setupAuditReason(entity, src)
-      if ('error' in auditReason) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: auditReason.error })
-        continue
+      Object.assign(src, decoded.body);
+      const auditReason = setupAuditReason(entity, src);
+      if ("error" in auditReason) {
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: auditReason.error });
+        continue;
       }
 
-      if (entity.key === 'pay-components' && src.supplementalWageCategory != null && src.supplementalWageCategory !== '') {
-        const kind = String(src.kind ?? '')
-        const nonPeriodic = coerceBoolean(src.nonPeriodic)
-        if (kind !== 'earning' || !nonPeriodic) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: 'supplemental wage category requires a non-periodic earning' })
-          continue
+      if (
+        entity.key === "pay-components" &&
+        src.supplementalWageCategory != null &&
+        src.supplementalWageCategory !== ""
+      ) {
+        const kind = String(src.kind ?? "");
+        const nonPeriodic = coerceBoolean(src.nonPeriodic);
+        if (kind !== "earning" || !nonPeriodic) {
+          outcome.failed++;
+          outcome.errors.push({
+            row: rowNo,
+            message: "supplemental wage category requires a non-periodic earning",
+          });
+          continue;
         }
       }
 
       // Resolve reference columns (natural key → uuid) before coercion.
-      let refError: string | null = null
+      let refError: string | null = null;
       for (const rf of refFields) {
-        const human = src[rf.key]
-        if (human === undefined || human === null || human === '') continue
-        const target: ResourceRefTarget = { resource: rf.ref!, by: refNaturalKey(rf.ref!) }
-        const id = await resolver.resolveId(target, human)
+        const human = src[rf.key];
+        if (human === undefined || human === null || human === "") continue;
+        const target: ResourceRefTarget = { resource: rf.ref!, by: refNaturalKey(rf.ref!) };
+        const id = await resolver.resolveId(target, human);
         if (!id) {
-          refError = `${rf.key}: "${String(human)}" not found`
-          break
+          refError = `${rf.key}: "${String(human)}" not found`;
+          break;
         }
-        src[rf.key] = id
+        src[rf.key] = id;
       }
       if (refError) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: refError })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: refError });
+        continue;
       }
 
       // Command-owned rows leave the generic writer here: the engine command
@@ -556,58 +644,76 @@ async function writeSetup(
       // feature gate as the interactive path, on preview (under the caller's
       // savepoint, rolled back) and on commit alike. References above are
       // already resolved to tenant-owned ids, so the command receives UUIDs.
-      if (entity.command && entity.importVia === 'command') {
-        const integrityProblem = await validateEntityIntegrity(entity, src as Record<string, unknown>, ctx.orgId, undefined)
+      if (entity.command && entity.importVia === "command") {
+        const integrityProblem = await validateEntityIntegrity(
+          entity,
+          src as Record<string, unknown>,
+          ctx.orgId,
+          undefined,
+        );
         if (integrityProblem) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: integrityProblem })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: integrityProblem });
+          continue;
         }
-        const verdict = await writeSetupCommandRow(entity, src, ctx)
-        if (verdict === 'updated') outcome.updated++
-        else outcome.created++
-        continue
+        const verdict = await writeSetupCommandRow(entity, src, ctx);
+        if (verdict === "updated") outcome.updated++;
+        else outcome.created++;
+        continue;
       }
 
       // Does a row with this natural key already exist? A row without its
       // natural key has no identity and would duplicate on every re-import,
       // so keyed entities refuse it outright (entities without a natural key
       // match nothing and insert, as before).
-      let existingId: string | null = null
+      let existingId: string | null = null;
       if (entity.naturalKey) {
-        const nkVal = String(src[entity.naturalKey] ?? '').trim()
+        const nkVal = String(src[entity.naturalKey] ?? "").trim();
         if (!nkVal) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `${entity.naturalKey} is required` })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: `${entity.naturalKey} is required` });
+          continue;
         }
         {
-          const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``
-          const dup = await db.execute<{ id: string }>(sql`
+          const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``;
+          const dup = await db.execute<{ id: string }>(
+            sql`
             select ${sql.raw(idColumn(entity))} as id from ${sql.raw(entity.table)}
-             where ${sql.raw(toSnake(entity.naturalKey))} = ${nkVal}${orgFilter} limit 1`, 'objects')
-          existingId = dup[0]?.id ?? null
+             where ${sql.raw(toSnake(entity.naturalKey))} = ${nkVal}${orgFilter} limit 1`,
+            "objects",
+          );
+          existingId = dup[0]?.id ?? null;
         }
       }
 
       if (!existingId && entity.allowCreate === false) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: `${entity.key} cannot be created through configuration import; use its owning module lifecycle.` })
-        continue
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message: `${entity.key} cannot be created through configuration import; use its owning module lifecycle.`,
+        });
+        continue;
       }
 
-      if (existingId && mode === 'insert') {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: `already exists (${entity.naturalKey}=${String(src[entity.naturalKey!])})` })
-        continue
+      if (existingId && mode === "insert") {
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message: `already exists (${entity.naturalKey}=${String(src[entity.naturalKey!])})`,
+        });
+        continue;
       }
 
-      if (entity.key === 'pay-components' && existingId && Object.hasOwn(src, 'vacationable')) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'The component vacation flag is a creation-only default. Omit it when updating an existing component; change vacation-base inclusion through a dated component statutory treatment in Payroll Setup.' })
-        continue
+      if (entity.key === "pay-components" && existingId && Object.hasOwn(src, "vacationable")) {
+        outcome.failed++;
+        outcome.errors.push({
+          row: rowNo,
+          message:
+            "The component vacation flag is a creation-only default. Omit it when updating an existing component; change vacation-base inclusion through a dated component statutory treatment in Payroll Setup.",
+        });
+        continue;
       }
-      if (!existingId) Object.assign(src, foldPayComponentSetupCreate(entity.key, src))
+      if (!existingId) Object.assign(src, foldPayComponentSetupCreate(entity.key, src));
 
       // Domain checks that coercion cannot express (URL schemes, formula
       // shape, subsidiary/feature gates, tax-code invariants) run here —
@@ -616,194 +722,251 @@ async function writeSetup(
       // validator, so an import can never store what the form refuses
       // (e.g. a javascript: filing URL on tax-return-forms, or a
       // withholding code with no withholding account).
-      const integrityProblem = await validateEntityIntegrity(entity, src as Record<string, unknown>, ctx.orgId, existingId ?? undefined)
+      const integrityProblem = await validateEntityIntegrity(
+        entity,
+        src as Record<string, unknown>,
+        ctx.orgId,
+        existingId ?? undefined,
+      );
       if (integrityProblem) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: integrityProblem })
-        continue
+        outcome.failed++;
+        outcome.errors.push({ row: rowNo, message: integrityProblem });
+        continue;
       }
 
       if (isSetupBookEntity(entity)) {
-        const built = buildRow(entity, src, { forCreate: !existingId })
-        if ('error' in built) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: built.error })
-          continue
+        const built = buildRow(entity, src, { forCreate: !existingId });
+        if ("error" in built) {
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: built.error });
+          continue;
         }
-        const bookInput = { ...src }
-        for (const key of unavailableFields) delete bookInput[key]
+        const bookInput = { ...src };
+        for (const key of unavailableFields) delete bookInput[key];
         await db.transaction(async (tx) => {
-          await tx.execute(sql`savepoint setup_import_row`)
+          await tx.execute(sql`savepoint setup_import_row`);
           try {
             await saveSetupBook(entity, ctx.orgId, ctx.actorId, bookInput, tx, {
-              id: existingId ?? undefined, source: 'import', dryRun: ctx.dryRun,
-            })
-            await tx.execute(sql`release savepoint setup_import_row`)
+              id: existingId ?? undefined,
+              source: "import",
+              dryRun: ctx.dryRun,
+            });
+            await tx.execute(sql`release savepoint setup_import_row`);
           } catch (error) {
-            await tx.execute(sql`rollback to savepoint setup_import_row`)
-            await tx.execute(sql`release savepoint setup_import_row`)
-            throw error
+            await tx.execute(sql`rollback to savepoint setup_import_row`);
+            await tx.execute(sql`release savepoint setup_import_row`);
+            throw error;
           }
-        })
-        if (existingId) outcome.updated++
-        else outcome.created++
-        continue
+        });
+        if (existingId) outcome.updated++;
+        else outcome.created++;
+        continue;
       }
 
-      if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans') {
-        const built = buildRow(entity, src, { forCreate: !existingId })
-        if ('error' in built) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: built.error })
-          continue
+      if (entity.key === "usage-meters" || entity.key === "usage-rating-plans") {
+        const built = buildRow(entity, src, { forCreate: !existingId });
+        if ("error" in built) {
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: built.error });
+          continue;
         }
-        const values = Object.fromEntries(built.cols.map((column) => [column.column, column.value]))
+        const values = Object.fromEntries(
+          built.cols.map((column) => [column.column, column.value]),
+        );
         await db.transaction(async (tx) => {
-          await tx.execute(sql`savepoint setup_import_row`)
+          await tx.execute(sql`savepoint setup_import_row`);
           try {
             const before = existingId
               ? await loadSetupAuditRow(entity, ctx.orgId, existingId, tx, true)
-              : undefined
-            if (existingId && !before) throw new Error('row no longer exists')
-            let rowId = existingId ?? ''
-            if (entity.key === 'usage-meters') {
+              : undefined;
+            if (existingId && !before) throw new Error("row no longer exists");
+            let rowId = existingId ?? "";
+            if (entity.key === "usage-meters") {
               if (existingId) {
                 await updateUsageMeter(ctx.orgId, ctx.actorId, existingId, {
-                  key: String(values.key), name: String(values.name), unit: String(values.unit),
+                  key: String(values.key),
+                  name: String(values.name),
+                  unit: String(values.unit),
                   aggregation: values.aggregation as UsageAggregation,
-                  itemId: values.item_id == null || values.item_id === '' ? null : String(values.item_id),
-                })
+                  itemId:
+                    values.item_id == null || values.item_id === "" ? null : String(values.item_id),
+                });
               } else {
                 const created = await createUsageMeter(ctx.orgId, ctx.actorId, {
-                  key: String(values.key), name: String(values.name), unit: String(values.unit),
+                  key: String(values.key),
+                  name: String(values.name),
+                  unit: String(values.unit),
                   aggregation: values.aggregation as UsageAggregation,
-                  itemId: values.item_id == null || values.item_id === '' ? null : String(values.item_id),
-                })
-                rowId = String(created.id)
+                  itemId:
+                    values.item_id == null || values.item_id === "" ? null : String(values.item_id),
+                });
+                rowId = String(created.id);
               }
-              const wantedActive = values.is_active === undefined ? true : coerceBoolean(values.is_active)
-              const hadActive = before ? Boolean(before.is_active) : true
+              const wantedActive =
+                values.is_active === undefined ? true : coerceBoolean(values.is_active);
+              const hadActive = before ? Boolean(before.is_active) : true;
               if (wantedActive !== hadActive) {
-                if (wantedActive) await reactivateUsageMeter(ctx.orgId, ctx.actorId, rowId)
-                else await deactivateUsageMeter(ctx.orgId, ctx.actorId, rowId)
+                if (wantedActive) await reactivateUsageMeter(ctx.orgId, ctx.actorId, rowId);
+                else await deactivateUsageMeter(ctx.orgId, ctx.actorId, rowId);
               }
             } else if (existingId) {
               if (String(values.currency_code) !== String(before!.currency_code)) {
-                throw new UsageBillingError('usage_plan_currency_immutable', 'A rating plan currency cannot change after creation.', 'Create a new usage rating plan with the desired currency.', { field: 'currency', status: 409 })
+                throw new UsageBillingError(
+                  "usage_plan_currency_immutable",
+                  "A rating plan currency cannot change after creation.",
+                  "Create a new usage rating plan with the desired currency.",
+                  { field: "currency", status: 409 },
+                );
               }
-              if (values.status === 'retired' && before!.status === 'active') await retireUsageRatingPlan(ctx.orgId, ctx.actorId, rowId)
+              if (values.status === "retired" && before!.status === "active")
+                await retireUsageRatingPlan(ctx.orgId, ctx.actorId, rowId);
             } else {
               const created = await createUsageRatingPlan(ctx.orgId, ctx.actorId, {
-                name: String(values.name), currency: String(values.currency_code),
-              })
-              rowId = String(created.id)
-              if (values.status === 'retired') await retireUsageRatingPlan(ctx.orgId, ctx.actorId, rowId)
+                name: String(values.name),
+                currency: String(values.currency_code),
+              });
+              rowId = String(created.id);
+              if (values.status === "retired")
+                await retireUsageRatingPlan(ctx.orgId, ctx.actorId, rowId);
             }
-            await audit({
-              orgId: ctx.orgId, table: entity.table, rowId, action: existingId ? 'update' : 'insert',
-              changes: {
-                source: 'import',
-                ...auditReason,
-                ...(existingId ? { before } : { before: null }),
-                after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx),
+            await audit(
+              {
+                orgId: ctx.orgId,
+                table: entity.table,
+                rowId,
+                action: existingId ? "update" : "insert",
+                changes: {
+                  source: "import",
+                  ...auditReason,
+                  ...(existingId ? { before } : { before: null }),
+                  after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx),
+                },
+                actorId: ctx.actorId,
               },
-              actorId: ctx.actorId,
-            }, tx)
-            await tx.execute(sql`release savepoint setup_import_row`)
+              tx,
+            );
+            await tx.execute(sql`release savepoint setup_import_row`);
           } catch (error) {
-            await tx.execute(sql`rollback to savepoint setup_import_row`)
-            await tx.execute(sql`release savepoint setup_import_row`)
-            throw error
+            await tx.execute(sql`rollback to savepoint setup_import_row`);
+            await tx.execute(sql`release savepoint setup_import_row`);
+            throw error;
           }
-        })
-        if (existingId) outcome.updated++
-        else outcome.created++
-        continue
+        });
+        if (existingId) outcome.updated++;
+        else outcome.created++;
+        continue;
       }
 
       if (existingId) {
-        const built = buildRow(entity, src, { forCreate: false })
-        if ('error' in built) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: built.error })
-          continue
+        const built = buildRow(entity, src, { forCreate: false });
+        if ("error" in built) {
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: built.error });
+          continue;
         }
-        const updatePackProblem = await setupPackProblem(entity, built.cols, existingId, ctx.orgId)
+        const updatePackProblem = await setupPackProblem(entity, built.cols, existingId, ctx.orgId);
         if (updatePackProblem) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: updatePackProblem })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: updatePackProblem });
+          continue;
         }
         // A class under a misspelled or inactive regime (or
         // an incomplete MACRS class) must fail import exactly as the
         // interactive writer refuses it — same merged-row validator.
-        if (entity.key === 'tax-pool-classes') {
-          const classProblem = await validateEntityIntegrity(entity, src, ctx.orgId, existingId ?? undefined)
+        if (entity.key === "tax-pool-classes") {
+          const classProblem = await validateEntityIntegrity(
+            entity,
+            src,
+            ctx.orgId,
+            existingId ?? undefined,
+          );
           if (classProblem) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: classProblem })
-            continue
+            outcome.failed++;
+            outcome.errors.push({ row: rowNo, message: classProblem });
+            continue;
           }
         }
         const scheduleProblem = await payScheduleImportProblem(
           entity.key,
           built.cols,
-          entity.key === 'pay-schedules' ? await loadPayScheduleCurrent(ctx.orgId, existingId) : null,
-        )
+          entity.key === "pay-schedules"
+            ? await loadPayScheduleCurrent(ctx.orgId, existingId)
+            : null,
+        );
         if (scheduleProblem) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: scheduleProblem })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: scheduleProblem });
+          continue;
         }
-        const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
-        const statutoryReportingCategory = built.cols.find((column) => column.column === 'statutory_reporting_category')?.value
-        const statutoryExemptionCategory = built.cols.find((column) => column.column === 'statutory_exemption_category')?.value
-        const storageCols = entity.key === 'pay-components'
-          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
-            && column.column !== 'statutory_reporting_category'
-            && column.column !== 'statutory_exemption_category')
-          : entity.key === 'number-sequences'
-            // Imports carry the operator's next number, exactly as exports present it.
-            ? numberSequenceStoredCols(built.cols)
-            : built.cols
+        const supplementalWageCategory = built.cols.find(
+          (column) => column.column === "supplemental_wage_category",
+        )?.value;
+        const statutoryReportingCategory = built.cols.find(
+          (column) => column.column === "statutory_reporting_category",
+        )?.value;
+        const statutoryExemptionCategory = built.cols.find(
+          (column) => column.column === "statutory_exemption_category",
+        )?.value;
+        const storageCols =
+          entity.key === "pay-components"
+            ? built.cols.filter(
+                (column) =>
+                  column.column !== "supplemental_wage_category" &&
+                  column.column !== "statutory_reporting_category" &&
+                  column.column !== "statutory_exemption_category",
+              )
+            : entity.key === "number-sequences"
+              ? // Imports carry the operator's next number, exactly as exports present it.
+                numberSequenceStoredCols(built.cols)
+              : built.cols;
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
             // The import route owns an outer org transaction. A nested
             // db.transaction participates in that unit, so this savepoint is
             // what lets one failed row roll back without stranding later rows
             // in an aborted transaction.
-            await tx.execute(sql`savepoint setup_import_row`)
+            await tx.execute(sql`savepoint setup_import_row`);
             try {
-              const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``
-              const before = await loadSetupAuditRow(entity, ctx.orgId, existingId, tx, true)
-              if (!before) throw new Error('row no longer exists')
+              const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``;
+              const before = await loadSetupAuditRow(entity, ctx.orgId, existingId, tx, true);
+              if (!before) throw new Error("row no longer exists");
 
-              const setParts = storageCols.map((c) => sql`${sql.raw(c.column)} = ${bindSetupValue(c.value)}`)
+              const setParts = storageCols.map(
+                (c) => sql`${sql.raw(c.column)} = ${bindSetupValue(c.value)}`,
+              );
               if (entity.actorCols) {
-                setParts.push(sql`updated_by = ${ctx.actorId}`)
-                setParts.push(sql`updated_at = now()`)
+                setParts.push(sql`updated_by = ${ctx.actorId}`);
+                setParts.push(sql`updated_at = now()`);
               }
               if (setParts.length > 0) {
-                const updated = await tx.execute<Record<string, unknown>>(sql`
+                const updated = await tx.execute<Record<string, unknown>>(
+                  sql`
                   update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
                    where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
-                  returning *`, 'objects')
-                if (!updated[0]) throw new Error('row no longer exists')
-                if (entity.key === 'pay-components' && (src.supplementalWageCategory !== undefined || src.statutoryReportingCategory !== undefined || src.statutoryExemptionCategory !== undefined)) {
+                  returning *`,
+                  "objects",
+                );
+                if (!updated[0]) throw new Error("row no longer exists");
+                if (
+                  entity.key === "pay-components" &&
+                  (src.supplementalWageCategory !== undefined ||
+                    src.statutoryReportingCategory !== undefined ||
+                    src.statutoryExemptionCategory !== undefined)
+                ) {
                   await savePayComponentEarningClassification(tx, ctx.orgId, existingId, {
                     supplementalWageCategory,
                     statutoryReportingCategory,
                     statutoryExemptionCategory,
-                  })
+                  });
                 }
                 await audit(
                   {
                     orgId: entity.orgScoped ? ctx.orgId : null,
                     table: entity.table,
                     rowId: existingId,
-                    action: 'update',
+                    action: "update",
                     changes: {
-                      source: 'import',
+                      source: "import",
                       ...auditReason,
                       before,
                       after: await loadSetupAuditRow(entity, ctx.orgId, existingId, tx),
@@ -811,139 +974,168 @@ async function writeSetup(
                     actorId: ctx.actorId,
                   },
                   tx,
-                )
+                );
               }
-              await tx.execute(sql`release savepoint setup_import_row`)
+              await tx.execute(sql`release savepoint setup_import_row`);
             } catch (error) {
-              await tx.execute(sql`rollback to savepoint setup_import_row`)
-              await tx.execute(sql`release savepoint setup_import_row`)
-              throw error
+              await tx.execute(sql`rollback to savepoint setup_import_row`);
+              await tx.execute(sql`release savepoint setup_import_row`);
+              throw error;
             }
-          })
+          });
         }
-        outcome.updated++
+        outcome.updated++;
       } else {
-        const built = buildRow(entity, src, { forCreate: true })
-        if ('error' in built) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: built.error })
-          continue
+        const built = buildRow(entity, src, { forCreate: true });
+        if ("error" in built) {
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: built.error });
+          continue;
         }
-        const insertPackProblem = await setupPackProblem(entity, built.cols, null, ctx.orgId)
+        const insertPackProblem = await setupPackProblem(entity, built.cols, null, ctx.orgId);
         if (insertPackProblem) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: insertPackProblem })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: insertPackProblem });
+          continue;
         }
-        const initialProgramExclusions = entity.key === 'pay-components'
-          ? defaultPayComponentProgramExclusions(src) : null
+        const initialProgramExclusions =
+          entity.key === "pay-components" ? defaultPayComponentProgramExclusions(src) : null;
         // Same merged-row validator as the update branch —
         // preview and commit share the refusal through the row path.
-        if (entity.key === 'tax-pool-classes') {
-          const classProblem = await validateEntityIntegrity(entity, src, ctx.orgId, undefined)
+        if (entity.key === "tax-pool-classes") {
+          const classProblem = await validateEntityIntegrity(entity, src, ctx.orgId, undefined);
           if (classProblem) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: classProblem })
-            continue
+            outcome.failed++;
+            outcome.errors.push({ row: rowNo, message: classProblem });
+            continue;
           }
         }
-        const scheduleProblem = await payScheduleImportProblem(entity.key, built.cols, null)
+        const scheduleProblem = await payScheduleImportProblem(entity.key, built.cols, null);
         if (scheduleProblem) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: scheduleProblem })
-          continue
+          outcome.failed++;
+          outcome.errors.push({ row: rowNo, message: scheduleProblem });
+          continue;
         }
-        const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
-        const statutoryReportingCategory = built.cols.find((column) => column.column === 'statutory_reporting_category')?.value
-        const statutoryExemptionCategory = built.cols.find((column) => column.column === 'statutory_exemption_category')?.value
-        const storageCols = entity.key === 'pay-components'
-          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
-            && column.column !== 'statutory_reporting_category'
-            && column.column !== 'statutory_exemption_category')
-          : entity.key === 'number-sequences'
-            // Imports carry the operator's next number, exactly as exports present it.
-            ? numberSequenceStoredCols(built.cols)
-            : built.cols
+        const supplementalWageCategory = built.cols.find(
+          (column) => column.column === "supplemental_wage_category",
+        )?.value;
+        const statutoryReportingCategory = built.cols.find(
+          (column) => column.column === "statutory_reporting_category",
+        )?.value;
+        const statutoryExemptionCategory = built.cols.find(
+          (column) => column.column === "statutory_exemption_category",
+        )?.value;
+        const storageCols =
+          entity.key === "pay-components"
+            ? built.cols.filter(
+                (column) =>
+                  column.column !== "supplemental_wage_category" &&
+                  column.column !== "statutory_reporting_category" &&
+                  column.column !== "statutory_exemption_category",
+              )
+            : entity.key === "number-sequences"
+              ? // Imports carry the operator's next number, exactly as exports present it.
+                numberSequenceStoredCols(built.cols)
+              : built.cols;
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
             // See the update branch: this savepoint is required when the
             // caller already owns the import's outer transaction.
-            await tx.execute(sql`savepoint setup_import_row`)
+            await tx.execute(sql`savepoint setup_import_row`);
             try {
-              const cols = [...storageCols]
-              if (entity.orgScoped) cols.push({ column: 'org_id', value: ctx.orgId })
+              const cols = [...storageCols];
+              if (entity.orgScoped) cols.push({ column: "org_id", value: ctx.orgId });
               if (entity.actorCols) {
-                cols.push({ column: 'created_by', value: ctx.actorId })
-                cols.push({ column: 'updated_by', value: ctx.actorId })
+                cols.push({ column: "created_by", value: ctx.actorId });
+                cols.push({ column: "updated_by", value: ctx.actorId });
               }
-              const colSql = sql.raw(cols.map((c) => c.column).join(', '))
+              const colSql = sql.raw(cols.map((c) => c.column).join(", "));
               const valSql = sql.join(
                 cols.map((c) => sql`${bindSetupValue(c.value)}`),
                 sql`, `,
-              )
-              const ins = await tx.execute<Record<string, unknown>>(sql`
+              );
+              const ins = await tx.execute<Record<string, unknown>>(
+                sql`
                 insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
-                returning *`, 'objects')
-              const inserted = ins[0]
-              const rowId = String(inserted?.[idColumn(entity)] ?? '')
-              if (!inserted || !rowId) throw new Error('insert did not return a row')
+                returning *`,
+                "objects",
+              );
+              const inserted = ins[0];
+              const rowId = String(inserted?.[idColumn(entity)] ?? "");
+              if (!inserted || !rowId) throw new Error("insert did not return a row");
               if (initialProgramExclusions !== null) {
                 await createInitialComponentTreatment(tx, {
-                  orgId: ctx.orgId, actorId: ctx.actorId, componentId: rowId,
-                  vacationable: inserted.vacationable, programExclusions: initialProgramExclusions,
-                })
+                  orgId: ctx.orgId,
+                  actorId: ctx.actorId,
+                  componentId: rowId,
+                  vacationable: inserted.vacationable,
+                  programExclusions: initialProgramExclusions,
+                });
               }
-              if (entity.key === 'pay-components' && (supplementalWageCategory !== undefined || statutoryReportingCategory !== undefined || statutoryExemptionCategory !== undefined)) {
+              if (
+                entity.key === "pay-components" &&
+                (supplementalWageCategory !== undefined ||
+                  statutoryReportingCategory !== undefined ||
+                  statutoryExemptionCategory !== undefined)
+              ) {
                 await savePayComponentEarningClassification(tx, ctx.orgId, rowId, {
                   supplementalWageCategory,
                   statutoryReportingCategory,
                   statutoryExemptionCategory,
-                })
+                });
               }
               await audit(
                 {
                   orgId: entity.orgScoped ? ctx.orgId : null,
                   table: entity.table,
                   rowId,
-                  action: 'insert',
-                  changes: { source: 'import', ...auditReason, before: null, after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx) },
+                  action: "insert",
+                  changes: {
+                    source: "import",
+                    ...auditReason,
+                    before: null,
+                    after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx),
+                  },
                   actorId: ctx.actorId,
                 },
                 tx,
-              )
-              await tx.execute(sql`release savepoint setup_import_row`)
+              );
+              await tx.execute(sql`release savepoint setup_import_row`);
             } catch (error) {
-              await tx.execute(sql`rollback to savepoint setup_import_row`)
-              await tx.execute(sql`release savepoint setup_import_row`)
-              throw error
+              await tx.execute(sql`rollback to savepoint setup_import_row`);
+              await tx.execute(sql`release savepoint setup_import_row`);
+              throw error;
             }
-          })
+          });
         }
-        outcome.created++
+        outcome.created++;
       }
     } catch (e) {
-      outcome.failed++
+      outcome.failed++;
       if (e instanceof UsageBillingError) {
-        outcome.errors.push({ row: rowNo, message: `${e.message} Remedy: ${e.remedy}` })
-        continue
+        outcome.errors.push({ row: rowNo, message: `${e.message} Remedy: ${e.remedy}` });
+        continue;
       }
       // Domain refusals arrive with their remedy attached; keep it on the
       // row error so the operator reads the fix, not a storage echo.
       if (e instanceof CommerceError) {
-        outcome.errors.push({ row: rowNo, message: `${e.message} Remedy: ${e.remedy}` })
-        continue
+        outcome.errors.push({ row: rowNo, message: `${e.message} Remedy: ${e.remedy}` });
+        continue;
       }
       // Drizzle wraps the driver error, so the storage guard's message lives
       // on `cause` — surface that, never the wrapper's query echo.
-      const cause = (e as { cause?: { message?: string } })?.cause
-      const raw = cause?.message ?? (e as { message?: string })?.message ?? 'write failed'
+      const cause = (e as { cause?: { message?: string } })?.cause;
+      const raw = cause?.message ?? (e as { message?: string })?.message ?? "write failed";
       // A unique violation on import unambiguously means the row is already
       // there: the natural-key lookup found nothing only because the entity's
       // identity is composite (stock-locations, bom-components). Refuse it as
       // a duplicate naming the constraint instead of echoing storage text.
-      const dup = /duplicate key value violates unique constraint "([^"]+)"/.exec(raw)
-      outcome.errors.push({ row: rowNo, message: dup ? `already exists (${dup[1]})` : importRowError(e) })
+      const dup = /duplicate key value violates unique constraint "([^"]+)"/.exec(raw);
+      outcome.errors.push({
+        row: rowNo,
+        message: dup ? `already exists (${dup[1]})` : importRowError(e),
+      });
     }
   }
-  return outcome
+  return outcome;
 }

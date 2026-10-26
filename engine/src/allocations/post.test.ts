@@ -14,15 +14,19 @@ import {
 import type { AllocationRuleTarget, RuleInEffect, WeightedTarget } from "./types.ts";
 
 const emptyRunner = {
-  execute: (async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as PostRunner["execute"],
+  execute: (async (_query: unknown, mode?: string) =>
+    Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result,
+    )) as unknown as PostRunner["execute"],
 };
 
 /** Stub runner answering registry reads by matching the query text. */
-function stubRunner(
-  answer: (queryText: string) => Record<string, unknown>[],
-): PostRunner {
+function stubRunner(answer: (queryText: string) => Record<string, unknown>[]): PostRunner {
   return {
-    execute: (async (query: unknown, mode?: string) => Promise.resolve({ rows: answer(JSON.stringify(query)) }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as PostRunner["execute"],
+    execute: (async (query: unknown, mode?: string) =>
+      Promise.resolve({ rows: answer(JSON.stringify(query)) }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      )) as unknown as PostRunner["execute"],
   };
 }
 
@@ -45,7 +49,9 @@ const driverRunner = stubRunner((text) => {
 
 const gateOn = () => Promise.resolve(true);
 
-function target(overrides: Partial<AllocationRuleTarget> & { sequence: number }): AllocationRuleTarget {
+function target(
+  overrides: Partial<AllocationRuleTarget> & { sequence: number },
+): AllocationRuleTarget {
   return {
     targetAccountId: null,
     departmentId: null,
@@ -137,22 +143,44 @@ const expenseLine: PostSourceLine = {
 };
 
 test("payroll expense routing preserves every liability and apportions custom dimensions exactly", async () => {
-  const rule = ruleFixture({ version: {
-    documentKinds: ["pay_run"], dimensionFilters: { payrollExpensesOnly: true, payComponentIds: ["wages"] }, impact: "reclass",
-  }, targets: [
-    target({ id: "north", sequence: 1, fixedPercent: "60", extraDims: { crew: "north" } }),
-    target({ id: "south", sequence: 2, fixedPercent: "40", extraDims: { crew: "south" } }),
-  ] });
-  const result = await collectPostContributions(emptyRunner, { ...docFixture, kind: "pay_run" }, [
-    { ...expenseLine, amount: "100.0001", payrollExpense: true, payComponentId: "wages" },
-    { accountId: "net-payable", amount: "-75.0001", payrollExpense: false },
-    { accountId: "withholding", amount: "-25", payrollExpense: false },
-  ], { rulesOverride: [rule], featureGate: gateOn }, { postingDate: "2026-07-15" });
+  const rule = ruleFixture({
+    version: {
+      documentKinds: ["pay_run"],
+      dimensionFilters: { payrollExpensesOnly: true, payComponentIds: ["wages"] },
+      impact: "reclass",
+    },
+    targets: [
+      target({ id: "north", sequence: 1, fixedPercent: "60", extraDims: { crew: "north" } }),
+      target({ id: "south", sequence: 2, fixedPercent: "40", extraDims: { crew: "south" } }),
+    ],
+  });
+  const result = await collectPostContributions(
+    emptyRunner,
+    { ...docFixture, kind: "pay_run" },
+    [
+      { ...expenseLine, amount: "100.0001", payrollExpense: true, payComponentId: "wages" },
+      { accountId: "net-payable", amount: "-75.0001", payrollExpense: false },
+      { accountId: "withholding", amount: "-25", payrollExpense: false },
+    ],
+    { rulesOverride: [rule], featureGate: gateOn },
+    { postingDate: "2026-07-15" },
+  );
   assertContributorBalance(result.lines);
   assert.equal(result.lines.length, 3);
-  assert.ok(result.lines.every(row => row.sourceKernelIndex === 0));
-  assert.deepEqual(result.lines.filter(row => row.amount.startsWith("-")).map(row => row.amount), ["-100.0001"]);
-  assert.deepEqual(result.lines.filter(row => !row.amount.startsWith("-")).map(row => [row.extraDims?.crew, row.amount]), [["north", "60.0001"], ["south", "40.0000"]]);
+  assert.ok(result.lines.every((row) => row.sourceKernelIndex === 0));
+  assert.deepEqual(
+    result.lines.filter((row) => row.amount.startsWith("-")).map((row) => row.amount),
+    ["-100.0001"],
+  );
+  assert.deepEqual(
+    result.lines
+      .filter((row) => !row.amount.startsWith("-"))
+      .map((row) => [row.extraDims?.crew, row.amount]),
+    [
+      ["north", "60.0001"],
+      ["south", "40.0000"],
+    ],
+  );
 });
 
 function weights(keys: string[], values: string[]): WeightedTarget[] {
@@ -207,11 +235,14 @@ test("net_zero_pair adds dimensional attribution without moving account totals",
   });
   assert.equal(reportOnly.length, 0);
   assert.equal(lines.length, 3);
-  assert.deepEqual(lines.map((l) => [l.accountId, l.departmentId, l.amount]), [
-    ["acct-expense", "dept-a", "60.0000"],
-    ["acct-expense", "dept-b", "40.0000"],
-    ["acct-expense", "dept-src", "-100.0000"],
-  ]);
+  assert.deepEqual(
+    lines.map((l) => [l.accountId, l.departmentId, l.amount]),
+    [
+      ["acct-expense", "dept-a", "60.0000"],
+      ["acct-expense", "dept-b", "40.0000"],
+      ["acct-expense", "dept-src", "-100.0000"],
+    ],
+  );
   for (const line of lines) {
     assert.equal(line.contributorKind, "rule");
     assert.equal(line.contributorRef, "v-1");
@@ -228,7 +259,12 @@ test("net_zero_pair adds dimensional attribution without moving account totals",
 
 test("reclass moves the cost to the target account with an offset credit", () => {
   const targets = [
-    target({ sequence: 1, targetAccountId: "acct-cogs", departmentId: "dept-a", fixedPercent: "100.0000" }),
+    target({
+      sequence: 1,
+      targetAccountId: "acct-cogs",
+      departmentId: "dept-a",
+      fixedPercent: "100.0000",
+    }),
   ];
   const { lines } = __testBuildContributedLines({
     rule: ruleFixture({
@@ -242,17 +278,23 @@ test("reclass moves the cost to the target account with an offset credit", () =>
     weights: weights(["t1"], ["100"]),
     books: [undefined],
   });
-  assert.deepEqual(lines.map((l) => [l.accountId, l.amount]), [
-    ["acct-cogs", "100.0000"],
-    ["acct-expense", "-100.0000"],
-  ]);
+  assert.deepEqual(
+    lines.map((l) => [l.accountId, l.amount]),
+    [
+      ["acct-cogs", "100.0000"],
+      ["acct-expense", "-100.0000"],
+    ],
+  );
   assert.equal(lines[0]!.sourceKernelIndex, 2);
 });
 
 test("reclass honors the offset account for the credit side", () => {
   const targets = [target({ sequence: 1, departmentId: "dept-a", fixedPercent: "100.0000" })];
   const { lines } = __testBuildContributedLines({
-    rule: ruleFixture({ version: { impact: "reclass", offsetAccountId: "acct-clearing" }, targets }),
+    rule: ruleFixture({
+      version: { impact: "reclass", offsetAccountId: "acct-clearing" },
+      targets,
+    }),
     doc: docFixture,
     kernelLine: expenseLine,
     sourceKernelIndex: 0,
@@ -260,10 +302,13 @@ test("reclass honors the offset account for the credit side", () => {
     weights: weights(["t1"], ["100"]),
     books: [undefined],
   });
-  assert.deepEqual(lines.map((l) => [l.accountId, l.amount]), [
-    ["acct-expense", "100.0000"],
-    ["acct-clearing", "-100.0000"],
-  ]);
+  assert.deepEqual(
+    lines.map((l) => [l.accountId, l.amount]),
+    [
+      ["acct-expense", "100.0000"],
+      ["acct-clearing", "-100.0000"],
+    ],
+  );
 });
 
 test("report_only writes lineage drafts and no GL lines", () => {
@@ -278,7 +323,10 @@ test("report_only writes lineage drafts and no GL lines", () => {
   });
   assert.equal(lines.length, 0);
   assert.equal(reportOnly.length, 2);
-  assert.deepEqual(reportOnly.map((r) => r.amount), ["60.0000", "40.0000"]);
+  assert.deepEqual(
+    reportOnly.map((r) => r.amount),
+    ["60.0000", "40.0000"],
+  );
   for (const draft of reportOnly) {
     assert.equal(draft.mode, "post");
     assert.equal(draft.documentId, "doc-1");
@@ -288,7 +336,12 @@ test("report_only writes lineage drafts and no GL lines", () => {
 
 test("net_zero_pair refuses a target account (account totals must not move)", () => {
   const targets = [
-    target({ sequence: 1, targetAccountId: "acct-other", departmentId: "dept-a", fixedPercent: "100.0000" }),
+    target({
+      sequence: 1,
+      targetAccountId: "acct-other",
+      departmentId: "dept-a",
+      fixedPercent: "100.0000",
+    }),
   ];
   assert.throws(
     () =>
@@ -322,7 +375,9 @@ test("zero-weight targets write no zero-amount GL line", () => {
 
 test("memo templates render rule and target names", () => {
   const { lines } = __testBuildContributedLines({
-    rule: ruleFixture({ version: { lineDescriptionTemplate: "{{rule.name}} to {{target.label}}" } }),
+    rule: ruleFixture({
+      version: { lineDescriptionTemplate: "{{rule.name}} to {{target.label}}" },
+    }),
     doc: docFixture,
     kernelLine: expenseLine,
     sourceKernelIndex: 0,
@@ -350,15 +405,26 @@ test("resolveRuleBooks covers primary, all_posting, and listed books", () => {
     [undefined, "book-sec"],
   );
   assert.deepEqual(
-    resolveRuleBooks(ruleFixture({ version: { bookScope: "books", bookIds: ["book-sec"] } }), booksFixture),
+    resolveRuleBooks(
+      ruleFixture({ version: { bookScope: "books", bookIds: ["book-sec"] } }),
+      booksFixture,
+    ),
     ["book-sec"],
   );
   assert.throws(
-    () => resolveRuleBooks(ruleFixture({ version: { bookScope: "books", bookIds: ["book-dead"] } }), booksFixture),
+    () =>
+      resolveRuleBooks(
+        ruleFixture({ version: { bookScope: "books", bookIds: ["book-dead"] } }),
+        booksFixture,
+      ),
     /not an active posting book/,
   );
   assert.throws(
-    () => resolveRuleBooks(ruleFixture({ version: { bookScope: "books", bookIds: ["nope"] } }), booksFixture),
+    () =>
+      resolveRuleBooks(
+        ruleFixture({ version: { bookScope: "books", bookIds: ["nope"] } }),
+        booksFixture,
+      ),
     /unknown book/,
   );
 });
@@ -392,7 +458,9 @@ test("a stepped rule refuses at posting with the runnable remedy", async () => {
       [expenseLine],
       {
         rulesOverride: [
-          ruleFixture({ version: { basisKind: "stepped", basisConfig: { tiers: [{ upTo: "100" }] } } }),
+          ruleFixture({
+            version: { basisKind: "stepped", basisConfig: { tiers: [{ upTo: "100" }] } },
+          }),
         ],
         featureGate: gateOn,
       },
@@ -410,7 +478,10 @@ test("a rule scoped to another document kind never fires", async () => {
     emptyRunner,
     docFixture,
     [expenseLine],
-    { rulesOverride: [ruleFixture({ version: { documentKinds: ["journal"] } })], featureGate: gateOn },
+    {
+      rulesOverride: [ruleFixture({ version: { documentKinds: ["journal"] } })],
+      featureGate: gateOn,
+    },
     { postingDate: "2026-07-15" },
   );
   assert.deepEqual(result.lines, []);
@@ -453,13 +524,22 @@ test("driver-basis explicit targets resolve through the injected resolver", asyn
         }),
       ],
       driverResolver: {
-        resolve: () => Promise.resolve(new Map([["dept-a", "3.0000"], ["dept-b", "1.0000"]])),
+        resolve: () =>
+          Promise.resolve(
+            new Map([
+              ["dept-a", "3.0000"],
+              ["dept-b", "1.0000"],
+            ]),
+          ),
       },
       featureGate: gateOn,
     },
     { postingDate: "2026-07-15" },
   );
-  assert.deepEqual(result.lines.map((l) => l.amount), ["75.0000", "25.0000", "-100.0000"]);
+  assert.deepEqual(
+    result.lines.map((l) => l.amount),
+    ["75.0000", "25.0000", "-100.0000"],
+  );
   assert.equal(result.lines[0]!.lineage?.driverValue, "3.0000");
   assert.equal(result.lines[0]!.lineage?.driverTotal, "4.0000");
 });
@@ -476,7 +556,10 @@ test("a driver measuring no weight for any target refuses posting instead of spl
         rulesOverride: [
           ruleFixture({
             version: { basisKind: "driver", driverId: "drv-1" },
-            targets: [target({ sequence: 1, departmentId: "dept-a" }), target({ sequence: 2, departmentId: "dept-b" })],
+            targets: [
+              target({ sequence: 1, departmentId: "dept-a" }),
+              target({ sequence: 2, departmentId: "dept-b" }),
+            ],
           }),
         ],
         driverResolver: { resolve: () => Promise.resolve(new Map([["dept-c", "5.0000"]])) },
@@ -484,8 +567,11 @@ test("a driver measuring no weight for any target refuses posting instead of spl
       },
       { postingDate: "2026-07-15" },
     ),
-    (error: unknown) => error instanceof PostAllocationError
-      && new RegExp(`driver measured no weight for any target for ${docFixture.documentDate}, so there is no basis to apportion 100\\.0000 — record the driver values for that month`).test(error.message),
+    (error: unknown) =>
+      error instanceof PostAllocationError &&
+      new RegExp(
+        `driver measured no weight for any target for ${docFixture.documentDate}, so there is no basis to apportion 100\\.0000 — record the driver values for that month`,
+      ).test(error.message),
   );
 });
 
@@ -507,13 +593,25 @@ test("dynamic targets fan out to every measured dimension value", async () => {
         }),
       ],
       driverResolver: {
-        resolve: () => Promise.resolve(new Map([["dept-a", "1.0000"], ["dept-b", "1.0000"]])),
+        resolve: () =>
+          Promise.resolve(
+            new Map([
+              ["dept-a", "1.0000"],
+              ["dept-b", "1.0000"],
+            ]),
+          ),
       },
       featureGate: gateOn,
     },
     { postingDate: "2026-07-15" },
   );
   // Two 50.0000 target debits plus the -100.0000 source credit.
-  assert.deepEqual(result.lines.map((l) => l.amount), ["50.0000", "50.0000", "-100.0000"]);
-  assert.deepEqual(result.lines.slice(0, 2).map((l) => l.departmentId), ["dept-a", "dept-b"]);
+  assert.deepEqual(
+    result.lines.map((l) => l.amount),
+    ["50.0000", "50.0000", "-100.0000"],
+  );
+  assert.deepEqual(
+    result.lines.slice(0, 2).map((l) => l.departmentId),
+    ["dept-a", "dept-b"],
+  );
 });

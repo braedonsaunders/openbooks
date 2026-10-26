@@ -4,14 +4,28 @@ import { analyticsQuery } from "./query";
 import { currentAnalyticsRead, analyticsSection } from "./read-context";
 import { analyticsConfig } from "./config";
 import type { ConfigValuesOf } from "./config-spec";
-import { flowRates, MissingExchangeRateError, presentationCurrency, type FlowRates } from "../fx-presentation";
+import {
+  flowRates,
+  MissingExchangeRateError,
+  presentationCurrency,
+  type FlowRates,
+} from "../fx-presentation";
 import { add, cmp, mulDecimal } from "@openbooks/engine/money";
 import { ForbiddenError, type Authz } from "../authz";
 import { sentinelAccessDenied } from "./sentinel-access";
-import { auditEventArgs, type ConformityCode, type SentinelStrings, sentinelStrings } from "./sentinel-strings";
+import {
+  auditEventArgs,
+  type ConformityCode,
+  type SentinelStrings,
+  sentinelStrings,
+} from "./sentinel-strings";
 import { RISK_SCORING } from "./sentinel-scoring";
 export { RISK_SCORING, type RiskScoreRule, type RiskScoringSection } from "./sentinel-scoring";
-import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from "@openbooks/engine/platform/civil-date";
+import {
+  addCalendarDays,
+  addMonthsClamped,
+  calendarDaysBetween,
+} from "@openbooks/engine/platform/civil-date";
 import { englishCatalogMessage } from "./catalog-strings";
 
 /**
@@ -45,16 +59,27 @@ import { englishCatalogMessage } from "./catalog-strings";
 // The fixed severity model lives in ./sentinel-scoring (client-safe, so the
 // gauge and tiles read the same bands the scorer reads).
 
-const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", "expense_report", "journal", "customer_credit"] as const;
+const SPEND_KINDS = [
+  "vendor_bill",
+  "vendor_credit",
+  "vendor_payment",
+  "check",
+  "expense_report",
+  "journal",
+  "customer_credit",
+] as const;
 
 /**
  * An amount tier the organization configured: its threshold with the
  * severity model's points. An unset tier (empty threshold) is null — never
  * zero points, so scorers skip it and the score names the exclusion.
  */
-interface SetTier { threshold: string; points: number }
+interface SetTier {
+  threshold: string;
+  points: number;
+}
 const setTier = (rule: { points?: number }, threshold: string): SetTier | null =>
-  (threshold === "" || rule.points === undefined ? null : { threshold, points: rule.points });
+  threshold === "" || rule.points === undefined ? null : { threshold, points: rule.points };
 
 /**
  * First configured rung at or under the amount, in priority order. Empty
@@ -70,7 +95,8 @@ const ladderBump = (
 ): number => {
   for (const rung of rungs) {
     const set = setTier(rung.rule, rung.threshold);
-    if (set !== null && (strict ? cmp(total, set.threshold) > 0 : cmp(total, set.threshold) >= 0)) return set.points;
+    if (set !== null && (strict ? cmp(total, set.threshold) > 0 : cmp(total, set.threshold) >= 0))
+      return set.points;
   }
   return 0;
 };
@@ -81,16 +107,36 @@ const ladderBump = (
 // 0.0012 / 0.0018 / 0.0022. Expected frequencies are mathematics
 // (log10(1 + 1/d)).
 const BENFORD_1D: Record<number, number> = {
-  1: 0.30103, 2: 0.17609, 3: 0.12494, 4: 0.09691, 5: 0.07918, 6: 0.06695, 7: 0.05799, 8: 0.05115, 9: 0.04576,
+  1: 0.30103,
+  2: 0.17609,
+  3: 0.12494,
+  4: 0.09691,
+  5: 0.07918,
+  6: 0.06695,
+  7: 0.05799,
+  8: 0.05115,
+  9: 0.04576,
 };
 
 /** Benford conformity as a stable code — never translated text, so forensic
  * payloads (and the client's severity switches) compare against the same
  * value in every language. `insufficient` means the slice never scored. */
 export const benfordConformity1D = (mad: number): ConformityCode =>
-  (mad <= 0.006 ? "excellent" : mad <= 0.012 ? "acceptable" : mad <= 0.015 ? "marginal" : "nonConforming");
+  mad <= 0.006
+    ? "excellent"
+    : mad <= 0.012
+      ? "acceptable"
+      : mad <= 0.015
+        ? "marginal"
+        : "nonConforming";
 export const benfordConformity2D = (mad: number): ConformityCode =>
-  (mad <= 0.0012 ? "excellent" : mad <= 0.0018 ? "acceptable" : mad <= 0.0022 ? "marginal" : "nonConforming");
+  mad <= 0.0012
+    ? "excellent"
+    : mad <= 0.0018
+      ? "acceptable"
+      : mad <= 0.0022
+        ? "marginal"
+        : "nonConforming";
 
 /**
  * Per-digit Z-statistic from Benford's Law (Mark Nigrini, 2012): whether one
@@ -119,7 +165,13 @@ export interface FlowAmountLimit {
   limit: string;
 }
 
-type LogicRuleLeaf = { op: string; field?: string; value?: unknown; rules?: LogicRuleLeaf[]; rule?: LogicRuleLeaf };
+type LogicRuleLeaf = {
+  op: string;
+  field?: string;
+  value?: unknown;
+  rules?: LogicRuleLeaf[];
+  rule?: LogicRuleLeaf;
+};
 
 /**
  * Latest spot rate from a row's functional currency to presentation on or
@@ -147,11 +199,7 @@ function spotRateSql(func: SQL, date: SQL, pres: string, org: string): SQL {
  * earliest row, or flowRates throws the named missing-rate refusal. Without
  * this, the NULL lateral rate would silently drop rows from the detector.
  */
-async function assertFloorCoverage(
-  orgId: string,
-  pres: string,
-  scope: SQL,
-): Promise<void> {
+async function assertFloorCoverage(orgId: string, pres: string, scope: SQL): Promise<void> {
   const funcs = await analyticsQuery<{ func: string; mind: string }>(sql`
     select coalesce(s.base_currency, ${pres}) as func,
            min(coalesce(d.document_date, d.posting_date))::text as mind
@@ -192,10 +240,19 @@ export function extractFlowAmountLimits(
       return;
     }
     if (
-      (node.op === "gt" || node.op === "gte" || node.op === "lt" || node.op === "lte" || node.op === "eq") &&
+      (node.op === "gt" ||
+        node.op === "gte" ||
+        node.op === "lt" ||
+        node.op === "lte" ||
+        node.op === "eq") &&
       node.field === "total"
     ) {
-      const raw = typeof node.value === "number" ? String(node.value) : typeof node.value === "string" ? node.value.trim() : "";
+      const raw =
+        typeof node.value === "number"
+          ? String(node.value)
+          : typeof node.value === "string"
+            ? node.value.trim()
+            : "";
       if (/^\d+(\.\d+)?$/.test(raw) && /[1-9]/.test(raw)) {
         const key = `${subjectKind}|${raw}`;
         if (!seen.has(key)) {
@@ -210,13 +267,17 @@ export function extractFlowAmountLimits(
     // subject kind can never trip the threshold-trap detector, so counting
     // it would report the detector configured when it is not.
     if (!(SPEND_KINDS as readonly string[]).includes(flow.subjectKind)) continue;
-    const graph = flow.graph as { nodes?: Array<{ data?: { kind?: string; rule?: LogicRuleLeaf } }> } | null;
+    const graph = flow.graph as {
+      nodes?: Array<{ data?: { kind?: string; rule?: LogicRuleLeaf } }>;
+    } | null;
     const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : [];
     for (const node of nodes) {
       if (node?.data?.kind === "condition") visit(flow.subjectKind, node.data.rule);
     }
   }
-  out.sort((a, b) => (a.subjectKind < b.subjectKind ? -1 : a.subjectKind > b.subjectKind ? 1 : cmp(a.limit, b.limit)));
+  out.sort((a, b) =>
+    a.subjectKind < b.subjectKind ? -1 : a.subjectKind > b.subjectKind ? 1 : cmp(a.limit, b.limit),
+  );
   return out;
 }
 
@@ -241,26 +302,51 @@ export interface FlaggedDoc {
 }
 
 export interface DuplicateMember {
-  docId: string; docNumber: string; reference: string; date: string;
-  amount: string; currency: string; funcAmount: string; memo: string | null;
+  docId: string;
+  docNumber: string;
+  reference: string;
+  date: string;
+  amount: string;
+  currency: string;
+  funcAmount: string;
+  memo: string | null;
 }
 
 /** ONE finding per natural-key group: (party, kind, currency, amount, reference). */
 export interface DuplicateGroup {
   groupId: string;
-  partyId: string | null; partyName: string;
-  kind: string; currency: string;
-  amount: string; funcTotal: string;
-  count: number; dateSpanDays: number; firstDate: string; lastDate: string;
-  sameReference: boolean; confidence: number; riskScore: number;
+  partyId: string | null;
+  partyName: string;
+  kind: string;
+  currency: string;
+  amount: string;
+  funcTotal: string;
+  count: number;
+  dateSpanDays: number;
+  firstDate: string;
+  lastDate: string;
+  sameReference: boolean;
+  confidence: number;
+  riskScore: number;
   members: DuplicateMember[];
 }
 
 export interface DuplicatePair {
-  docId1: string; docId2: string; docNumber1: string; docNumber2: string;
-  kind: string; date1: string; date2: string; daysBetween: number;
-  amount: string; currency: string; partyId: string | null; partyName: string;
-  sameMemo: boolean; confidence: number; riskScore: number;
+  docId1: string;
+  docId2: string;
+  docNumber1: string;
+  docNumber2: string;
+  kind: string;
+  date1: string;
+  date2: string;
+  daysBetween: number;
+  amount: string;
+  currency: string;
+  partyId: string | null;
+  partyName: string;
+  sameMemo: boolean;
+  confidence: number;
+  riskScore: number;
 }
 
 export interface BenfordDigit {
@@ -275,12 +361,28 @@ export interface BenfordDigit {
 }
 
 export interface SequentialGroup {
-  partyId: string; partyName: string; count: number; totalAmount: string;
+  partyId: string;
+  partyName: string;
+  count: number;
+  totalAmount: string;
   currency: string;
-  startRef: number; endRef: number; dateSpanDays: number;
-  firstDate: string; lastDate: string;
-  riskLevel: "high" | "medium"; riskScore: number; reason: string;
-  invoices: { docId: string; docNumber: string; reference: string; date: string; amount: string; currency: string; funcAmount: string }[];
+  startRef: number;
+  endRef: number;
+  dateSpanDays: number;
+  firstDate: string;
+  lastDate: string;
+  riskLevel: "high" | "medium";
+  riskScore: number;
+  reason: string;
+  invoices: {
+    docId: string;
+    docNumber: string;
+    reference: string;
+    date: string;
+    amount: string;
+    currency: string;
+    funcAmount: string;
+  }[];
 }
 
 /** One Benford distribution for a single document currency. */
@@ -295,12 +397,21 @@ export interface BenfordCurrencySlice {
 }
 
 export interface GhostVendor {
-  vendorId: string; vendorName: string; employeeId: string; employeeName: string;
-  matchType: "name" | "address" | "name+address"; riskScore: number; reason: string;
+  vendorId: string;
+  vendorName: string;
+  employeeId: string;
+  employeeName: string;
+  matchType: "name" | "address" | "name+address";
+  riskScore: number;
+  reason: string;
 }
 
 export interface AuditEvent {
-  id: string; tableName: string; rowId: string; action: string; actorId: string | null;
+  id: string;
+  tableName: string;
+  rowId: string;
+  action: string;
+  actorId: string | null;
   /** Raw instant. */
   at: string;
   /** Wall time in the org's time zone, for display. */
@@ -315,7 +426,13 @@ export interface SentinelData {
    * from this object — never from restated prose. */
   scoring: typeof RISK_SCORING;
   period: { from: string; to: string; label: string };
-  meta: { totalDocs: number; totalAmount: string; presentationCurrency: string; days: number; queryMs: number };
+  meta: {
+    totalDocs: number;
+    totalAmount: string;
+    presentationCurrency: string;
+    days: number;
+    queryMs: number;
+  };
   config: SentinelConfig;
   summary: {
     flaggedCount: number;
@@ -333,7 +450,12 @@ export interface SentinelData {
     benfordConformity: string;
     benford2DConformity: string;
     approvalLimitRisk: boolean;
-    topRiskAreas: { area: string; severity: "critical" | "high" | "medium"; count: number; message: string }[];
+    topRiskAreas: {
+      area: string;
+      severity: "critical" | "high" | "medium";
+      count: number;
+      message: string;
+    }[];
     /** Translated names of skipped Configuration-governed scoring sources (unset floors/tiers). */
     excludedDetectors: string[];
   };
@@ -344,17 +466,64 @@ export interface SentinelData {
     /** Null when the duplicate floor is not configured. */
     unavailable: string | null;
   };
-  benford1D: { totalTransactions: number; digits: BenfordDigit[]; mad: number; conformity: string; message: string; byCurrency: BenfordCurrencySlice[] };
-  benford2D: { totalTransactions: number; digits: BenfordDigit[]; anomalies: BenfordDigit[]; mad: number; conformity: string; byCurrency: BenfordCurrencySlice[] };
-  thresholdTrap: { total: number; totalAmount: string; byTrap: { trap: string; count: number; amount: string }[]; items: FlaggedDoc[]; unavailable: string | null };
-  weekend: { total: number; totalAmount: string; saturday: number; sunday: number; items: FlaggedDoc[] };
-  rsf: { total: number; items: (FlaggedDoc & { rsf: number; secondLargest: string; baselineCount: number })[]; unavailable: string | null };
-  zscore: { total: number; items: (FlaggedDoc & { zScore: number; vendorAvg: string; vendorStdDev: string; baselineCount: number })[]; unavailable: string | null };
+  benford1D: {
+    totalTransactions: number;
+    digits: BenfordDigit[];
+    mad: number;
+    conformity: string;
+    message: string;
+    byCurrency: BenfordCurrencySlice[];
+  };
+  benford2D: {
+    totalTransactions: number;
+    digits: BenfordDigit[];
+    anomalies: BenfordDigit[];
+    mad: number;
+    conformity: string;
+    byCurrency: BenfordCurrencySlice[];
+  };
+  thresholdTrap: {
+    total: number;
+    totalAmount: string;
+    byTrap: { trap: string; count: number; amount: string }[];
+    items: FlaggedDoc[];
+    unavailable: string | null;
+  };
+  weekend: {
+    total: number;
+    totalAmount: string;
+    saturday: number;
+    sunday: number;
+    items: FlaggedDoc[];
+  };
+  rsf: {
+    total: number;
+    items: (FlaggedDoc & { rsf: number; secondLargest: string; baselineCount: number })[];
+    unavailable: string | null;
+  };
+  zscore: {
+    total: number;
+    items: (FlaggedDoc & {
+      zScore: number;
+      vendorAvg: string;
+      vendorStdDev: string;
+      baselineCount: number;
+    })[];
+    unavailable: string | null;
+  };
   sequential: SequentialGroup[];
   ghosts: GhostVendor[];
   auditTrail: { total: number; deletes: number; sensitiveChanges: number; events: AuditEvent[] };
   flagged: FlaggedDoc[];
-  vendorRisk: { partyId: string | null; partyName: string; flagCount: number; totalAmount: string; flagTypes: string[]; maxRiskScore: number; compositeScore: number }[];
+  vendorRisk: {
+    partyId: string | null;
+    partyName: string;
+    flagCount: number;
+    totalAmount: string;
+    flagTypes: string[];
+    maxRiskScore: number;
+    compositeScore: number;
+  }[];
   calendar: { date: string; count: number; amount: string }[];
 }
 
@@ -365,46 +534,101 @@ interface AggregateRow extends Record<string, string | number | null> {
   txn_amount: string | number;
 }
 interface FlaggedDocumentRow extends Record<string, unknown> {
-  id: string; document_number: string | null; kind: string; date: string; amount: string;
-  currency: string; func_amount: string; func: string;
-  party_id: string | null; party_name: string | null; trap?: string; dow?: string | number;
+  id: string;
+  document_number: string | null;
+  kind: string;
+  date: string;
+  amount: string;
+  currency: string;
+  func_amount: string;
+  func: string;
+  party_id: string | null;
+  party_name: string | null;
+  trap?: string;
+  dow?: string | number;
 }
 /** One natural-key group row with its member documents as JSON. */
 interface DuplicateGroupRow extends Record<string, unknown> {
-  party_id: string | null; party_name: string; kind: string; currency: string;
-  amt: string; refkey: string; cnt: string | number;
-  first_date: string; last_date: string; span_days: string | number; presented_total: string;
+  party_id: string | null;
+  party_name: string;
+  kind: string;
+  currency: string;
+  amt: string;
+  refkey: string;
+  cnt: string | number;
+  first_date: string;
+  last_date: string;
+  span_days: string | number;
+  presented_total: string;
   members: Array<{
-    docId: string; docNumber: string | null; reference: string; date: string;
-    amount: string; currency: string; funcAmount: string; funcCcy: string; memo: string | null;
+    docId: string;
+    docNumber: string | null;
+    reference: string;
+    date: string;
+    amount: string;
+    currency: string;
+    funcAmount: string;
+    funcCcy: string;
+    memo: string | null;
   }>;
 }
 interface VendorStatisticRow extends FlaggedDocumentRow {
-  rsf?: string | number; z?: string | number; second_amount: string;
-  baseline_count: string | number; avg_amount: string; std_amount: string;
+  rsf?: string | number;
+  z?: string | number;
+  second_amount: string;
+  baseline_count: string | number;
+  avg_amount: string;
+  std_amount: string;
   full_count?: string | number;
 }
 interface SequentialRow extends Record<string, unknown> {
   presented_total: string;
-  party_id: string; party_name: string; span_days: string | number; cnt: string | number;
+  party_id: string;
+  party_name: string;
+  span_days: string | number;
+  cnt: string | number;
   currency: string;
-  start_ref: string | number; end_ref: string | number;
-  first_date: string; last_date: string;
+  start_ref: string | number;
+  end_ref: string | number;
+  first_date: string;
+  last_date: string;
   full_count?: string | number;
-  invoices: Array<{ docId: string; docNumber: string; reference: string; date: string; amount: string; currency: string; funcAmount: string; funcCcy: string }>;
+  invoices: Array<{
+    docId: string;
+    docNumber: string;
+    reference: string;
+    date: string;
+    amount: string;
+    currency: string;
+    funcAmount: string;
+    funcCcy: string;
+  }>;
 }
 interface GhostRow extends Record<string, unknown> {
-  vendor_id: string; vendor_name: string; employee_id: string; employee_name: string;
-  name_match: boolean; address_match: boolean;
+  vendor_id: string;
+  vendor_name: string;
+  employee_id: string;
+  employee_name: string;
+  name_match: boolean;
+  address_match: boolean;
   full_count?: string | number;
 }
 interface AuditRow extends Record<string, unknown> {
-  id: string; table_name: string; row_id: string; action: string; actor_id: string | null;
-  at: string; display_at: string; changes: string | null;
+  id: string;
+  table_name: string;
+  row_id: string;
+  action: string;
+  actor_id: string | null;
+  at: string;
+  display_at: string;
+  changes: string | null;
 }
 /** Slim full-coverage id rows: every detector names each flagged document once. */
 interface FlaggedIdRow extends Record<string, unknown> {
-  doc_id: string; func_amount: string; func: string; date: string;
+  doc_id: string;
+  func_amount: string;
+  func: string;
+  date: string;
 }
 
 // ---- main -------------------------------------------------------------------
@@ -428,7 +652,10 @@ export async function sentinelData(
   const { from, to } = period;
   const t0 = Date.now();
   const evidenceLimit = currentAnalyticsRead()?.slug === "sentinel" ? 8 : null;
-  const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
+  const kindsIn = sql.join(
+    SPEND_KINDS.map((k) => sql`${k}`),
+    sql`, `,
+  );
   const cfg = await analyticsConfig(orgId, "sentinel");
   const DUPLICATE_THRESHOLD_DAYS = cfg.duplicateDays;
   // An unset duplicate floor refuses the whole duplicate detector by name:
@@ -482,7 +709,9 @@ export async function sentinelData(
   try {
     new Intl.DateTimeFormat("en", { timeZone: auditZone });
   } catch {
-    throw new Error(`organization time zone "${auditZone}" is not valid — fix it in Company Settings`);
+    throw new Error(
+      `organization time zone "${auditZone}" is not valid — fix it in Company Settings`,
+    );
   }
 
   // Shared filter: non-voided spend documents in the period with a readable
@@ -547,8 +776,17 @@ export async function sentinelData(
   }
 
   const [
-    aggRows, trapRows, dupAll, weekendDetail, weekendIds,
-    vendorStatRows, seqDetail, seqIds, ghostRows, auditRows, auditAgg,
+    aggRows,
+    trapRows,
+    dupAll,
+    weekendDetail,
+    weekendIds,
+    vendorStatRows,
+    seqDetail,
+    seqIds,
+    ghostRows,
+    auditRows,
+    auditAgg,
   ] = await Promise.all([
     // Six aggregates over the same row set in ONE scan (GROUPING SETS):
     // dataset meta, per-currency Benford 1D/2D, the threshold-trap split, the
@@ -559,7 +797,7 @@ export async function sentinelData(
     // distribution per currency, never blended) with exact transaction sums;
     // every other money sum is the first-leg translation, completed into the
     // presentation currency bucket by bucket below.
-    (analyticsQuery(sql`
+    analyticsQuery(sql`
       with base as (
         select coalesce(s.base_currency, ${presentationCcy}) as func,
                d.currency as cur,
@@ -594,13 +832,14 @@ export async function sentinelData(
         from base
        group by grouping sets ((), (cur, digit1), (cur, digit2), (trap), (dow),
                                (func, ddate), (trap, func, ddate), (dow, func, ddate))
-    `)),
+    `),
 
     // Threshold-trap rows: the 99-signature (per-currency minor units) AND a
     // configured band below a real Flows limit for the document's kind. Rows
     // outside every band never reach the client; with no limits at all the
     // predicate is empty and the detector reports unavailable.
-    (analyticsSection('sentinel', ['benford']) ? analyticsQuery(sql`
+    analyticsSection("sentinel", ["benford"])
+      ? analyticsQuery(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total)::text as amount, d.currency as currency,
         round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
@@ -629,7 +868,8 @@ export async function sentinelData(
         )
       order by abs(d.total) desc
       limit 100
-    `) : Promise.resolve({ rows: [] })),
+    `)
+      : Promise.resolve({ rows: [] }),
 
     // Duplicates, or the named refusal when the floor is not configured. The
     // candidate set (payable documents at or above the floor) materializes
@@ -644,7 +884,7 @@ export async function sentinelData(
     // group count, the excess-copy buckets every value-at-risk figure is
     // translated from, and the one anchor document per group that joins the
     // flagged union.
-    (duplicateFloor === null
+    duplicateFloor === null
       ? Promise.resolve({ rows: [] as DuplicateGroupRow[] })
       : analyticsQuery(sql`
       with cand as materialized (
@@ -726,13 +966,13 @@ export async function sentinelData(
         null::int, null::text, null::text, null::int, null::jsonb,
         func_ccy, ddate::text, func_amt::text, id::text, null::bigint, null::text
       from ranked_members where rn_anchor = 1
-    `)),
+    `),
 
     // Weekend-dated documents: top rows for display plus the slim full id
     // set for the flagged union. The detector itself is the accounting
     // document date — no business calendar exists yet, so weekend stays
     // Saturday/Sunday by design (see the module note).
-    (analyticsQuery(sql`
+    analyticsQuery(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total)::text as amount, d.currency as currency,
         round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
@@ -752,8 +992,8 @@ export async function sentinelData(
         and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
       order by abs(d.total) desc
       limit 200
-    `)),
-    (analyticsQuery(sql`
+    `),
+    analyticsQuery(sql`
       select d.id as doc_id,
         round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
         coalesce(s.base_currency, ${presentationCcy}) as func,
@@ -767,7 +1007,7 @@ export async function sentinelData(
         -- Same minor-unit dust gate as the shared filter above.
         and abs(coalesce(d.total, 0)) * power(10, coalesce(cu.minor_units, 2)) >= 100
         and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
-    `)),
+    `),
 
     // RSF and z-score share ONE per-(vendor, currency) baseline over the
     // configured window. A single window pass — ordered by amount for the
@@ -779,7 +1019,7 @@ export async function sentinelData(
     // nor inflate σ and mask a genuine same-currency outlier. Detail rows
     // (capped for display) union with the result's full count and the slim
     // full id set, so the counts always cover everything.
-    (analyticsQuery(sql`
+    analyticsQuery(sql`
       -- Rank, mean and σ stay in the document's own currency: rate drift
       -- inside one document currency must never move a ratio or a deviation.
       -- Each baseline row still carries its presentation-money companion
@@ -866,7 +1106,7 @@ export async function sentinelData(
       select 'rsf' as src, * from rsf
       union all
       select 'z' as src, * from zs
-    `)),
+    `),
 
     // Sequential invoice runs — gaps-and-islands over vendor reference numbers,
     // one island space per (vendor, document currency): a run is only a run
@@ -874,7 +1114,7 @@ export async function sentinelData(
     // exact and currency-blind) carry the full island count, and a second leg
     // unnests every island's invoices slim for the flagged union, so runs
     // past the display cut still count.
-    (analyticsQuery(sql`
+    analyticsQuery(sql`
       with refs as (
         select d.id, d.document_number, d.reference_number, d.party_id, d.currency,
           coalesce(d.document_date, d.posting_date) as doc_date, abs(d.total)::text as amount,
@@ -923,8 +1163,8 @@ export async function sentinelData(
       where i.span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
       order by i.span_days desc, i.cnt desc, i.party_id, i.currency
       limit 50
-    `)),
-    (analyticsQuery(sql`
+    `),
+    analyticsQuery(sql`
       with refs as (
         select d.id, d.party_id, d.currency,
           abs(d.total)::text as amount,
@@ -954,7 +1194,7 @@ export async function sentinelData(
       from numbered n
       join islands i using (party_id, currency, island)
       where i.span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
-    `)),
+    `),
 
     // Ghost vendors — the full two-phase detector, both phases in SQL.
     // Phase 1: company-vendor names vs employee names, where "employee" means
@@ -966,7 +1206,7 @@ export async function sentinelData(
     // whitespace stripped while KEEPING every script's letters and digits, so
     // accented and non-Latin addresses never collapse into each other) plus
     // postal code plus country. Detail rows carry the full match count.
-    (analyticsQuery(sql`
+    analyticsQuery(sql`
       with norm_addr as (
         select a.party_id,
           regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
@@ -1011,12 +1251,13 @@ export async function sentinelData(
           or bool_or(va.addr_key is not null and va.addr_key = ea.addr_key)
       )
       select *, (select count(*) from matches) as full_count from matches limit 50
-    `)),
+    `),
 
     // Native audit trail in the org's time zone: the window compares day
     // bounds as wall midnight in the org zone, and each event carries its
     // zone-rendered wall time for display alongside the raw instant.
-    ((analyticsSection('sentinel', ["audit"]) ? analyticsQuery(sql`
+    analyticsSection("sentinel", ["audit"])
+      ? analyticsQuery(sql`
       select a.id, a.table_name, a.row_id::text as row_id, a.action, a.actor_id::text as actor_id,
         a.at::text as at,
         to_char(a.at at time zone ${auditZone}, 'YYYY-MM-DD HH24:MI') as display_at,
@@ -1032,8 +1273,10 @@ export async function sentinelData(
         )
       order by a.at desc
       limit 100
-    `) : Promise.resolve({ rows: [] }))),
-    ((analyticsSection('sentinel', ["audit"]) ? analyticsQuery(sql`
+    `)
+      : Promise.resolve({ rows: [] }),
+    analyticsSection("sentinel", ["audit"])
+      ? analyticsQuery(sql`
       select count(*) as total,
         count(*) filter (where action in ('delete', 'DELETE')) as deletes,
         count(*) filter (where changes::text ~* 'bank|routing|iban|account_number|email|address') as sensitive
@@ -1041,60 +1284,124 @@ export async function sentinelData(
       where org_id = ${orgId}
         and at >= ((${from}::timestamp) at time zone ${auditZone})
         and at < (((${to}::date + 1)::timestamp) at time zone ${auditZone})
-    `) : Promise.resolve({ rows: [] }))),
-
+    `)
+      : Promise.resolve({ rows: [] }),
   ]);
 
   // Split the one grouping-sets result back into its shapes. grouping(col)
   // is 0 exactly when that column is a real key for the row. Benford sets are
   // keyed (currency, digit): one distribution per document currency.
-  const dupAllRows = (dupAll.rows);
+  const dupAllRows = dupAll.rows;
   const dupGroupRows = { rows: dupAllRows.filter((r) => (r as { src: string }).src === "group") };
   const dupAggRow = dupAllRows.find((r) => (r as { src: string }).src === "agg");
   const dupBucketRows = dupAllRows.filter((r) => (r as { src: string }).src === "buckets");
   const dupAnchorRows = dupAllRows.filter((r) => (r as { src: string }).src === "anchors");
 
-  const vendorStats = (vendorStatRows.rows);
-  const rsfRows = { rows: vendorStats.filter((r) => (r as { src: string }).src === "rsf").map((r) => ({ ...r, rsf: (r as { metric: string | number }).metric })) };
-  const zRows = { rows: vendorStats.filter((r) => (r as { src: string }).src === "z").map((r) => ({ ...r, z: (r as { metric: string | number }).metric })) };
+  const vendorStats = vendorStatRows.rows;
+  const rsfRows = {
+    rows: vendorStats
+      .filter((r) => (r as { src: string }).src === "rsf")
+      .map((r) => ({ ...r, rsf: (r as { metric: string | number }).metric })),
+  };
+  const zRows = {
+    rows: vendorStats
+      .filter((r) => (r as { src: string }).src === "z")
+      .map((r) => ({ ...r, z: (r as { metric: string | number }).metric })),
+  };
 
   const aggAll = aggRows.rows as AggregateRow[];
   const metaRow = aggAll.find((r) =>
-    ["g_func", "g_cur", "g_digit1", "g_digit2", "g_trap", "g_dow", "g_date"].every((f) => Number(r[f]) === 1));
+    ["g_func", "g_cur", "g_digit1", "g_digit2", "g_trap", "g_dow", "g_date"].every(
+      (f) => Number(r[f]) === 1,
+    ),
+  );
   // Benford's law is defined on leading digits 1-9 (first digit) and 10-99
   // (first two): a '0' leading digit or a short second digit from a sub-unit
   // amount is not a Benford observation, so those rows never enter a slice.
   const b1Rows = {
     rows: aggAll
-      .filter((r) => Number(r.g_digit1) === 0 && Number(r.g_cur) === 0 && r.digit1 !== null && String(r.digit1) !== "0")
-      .map((r) => ({ currency: String(r.cur), digit: r.digit1, count: r.count, amount: r.txn_amount })),
+      .filter(
+        (r) =>
+          Number(r.g_digit1) === 0 &&
+          Number(r.g_cur) === 0 &&
+          r.digit1 !== null &&
+          String(r.digit1) !== "0",
+      )
+      .map((r) => ({
+        currency: String(r.cur),
+        digit: r.digit1,
+        count: r.count,
+        amount: r.txn_amount,
+      })),
   };
   const b2Rows = {
     rows: aggAll
-      .filter((r) => Number(r.g_digit2) === 0 && Number(r.g_cur) === 0 && r.digit2 !== null && String(r.digit2).length === 2)
-      .map((r) => ({ currency: String(r.cur), digits: r.digit2, count: r.count, amount: r.txn_amount })),
+      .filter(
+        (r) =>
+          Number(r.g_digit2) === 0 &&
+          Number(r.g_cur) === 0 &&
+          r.digit2 !== null &&
+          String(r.digit2).length === 2,
+      )
+      .map((r) => ({
+        currency: String(r.cur),
+        digits: r.digit2,
+        count: r.count,
+        amount: r.txn_amount,
+      })),
   };
   const trapAgg = {
-    rows: aggAll
-      .filter((r) => Number(r.g_trap) === 0 && Number(r.g_func) === 1 && Number(r.g_date) === 1 && r.trap !== null),
+    rows: aggAll.filter(
+      (r) =>
+        Number(r.g_trap) === 0 &&
+        Number(r.g_func) === 1 &&
+        Number(r.g_date) === 1 &&
+        r.trap !== null,
+    ),
   };
   const weekendAgg = {
-    rows: aggAll
-      .filter((r) => Number(r.g_dow) === 0 && Number(r.g_func) === 1 && Number(r.g_date) === 1 && r.dow !== null),
+    rows: aggAll.filter(
+      (r) =>
+        Number(r.g_dow) === 0 && Number(r.g_func) === 1 && Number(r.g_date) === 1 && r.dow !== null,
+    ),
   };
   // Translation buckets: every consolidated total below is translated from
   // these per-(functional currency, date) first-leg sums — never by adding
   // mixed currencies raw.
-  interface Bucket { func: string; date: string; amount: string }
+  interface Bucket {
+    func: string;
+    date: string;
+    amount: string;
+  }
   const buckets: Bucket[] = aggAll
-    .filter((r) => Number(r.g_func) === 0 && Number(r.g_date) === 0
-      && Number(r.g_trap) === 1 && Number(r.g_dow) === 1 && r.func !== null)
+    .filter(
+      (r) =>
+        Number(r.g_func) === 0 &&
+        Number(r.g_date) === 0 &&
+        Number(r.g_trap) === 1 &&
+        Number(r.g_dow) === 1 &&
+        r.func !== null,
+    )
     .map((r) => ({ func: String(r.func), date: String(r.date), amount: String(r.amount) }));
   const trapBuckets: (Bucket & { trap: string })[] = aggAll
-    .filter((r) => Number(r.g_trap) === 0 && Number(r.g_func) === 0 && Number(r.g_date) === 0 && r.trap !== null)
-    .map((r) => ({ func: String(r.func), date: String(r.date), amount: String(r.amount), trap: String(r.trap) }));
+    .filter(
+      (r) =>
+        Number(r.g_trap) === 0 &&
+        Number(r.g_func) === 0 &&
+        Number(r.g_date) === 0 &&
+        r.trap !== null,
+    )
+    .map((r) => ({
+      func: String(r.func),
+      date: String(r.date),
+      amount: String(r.amount),
+      trap: String(r.trap),
+    }));
   const weekendBuckets: Bucket[] = aggAll
-    .filter((r) => Number(r.g_dow) === 0 && Number(r.g_func) === 0 && Number(r.g_date) === 0 && r.dow !== null)
+    .filter(
+      (r) =>
+        Number(r.g_dow) === 0 && Number(r.g_func) === 0 && Number(r.g_date) === 0 && r.dow !== null,
+    )
     .map((r) => ({ func: String(r.func), date: String(r.date), amount: String(r.amount) }));
 
   // One rate context for every translation on this page: buckets, duplicate
@@ -1105,15 +1412,28 @@ export async function sentinelData(
     ...trapBuckets.map((b) => ({ func: b.func, date: b.date })),
     ...weekendBuckets.map((b) => ({ func: b.func, date: b.date })),
     ...(trapRows.rows as FlaggedDocumentRow[]).map((r) => ({ func: r.func, date: r.date })),
-    ...dupBucketRows.map((r) => ({ func: (r as { func_ccy: string }).func_ccy, date: String((r as { ddate: string }).ddate) })),
-    ...dupAnchorRows.map((r) => ({ func: (r as { func_ccy: string }).func_ccy, date: String((r as { ddate: string }).ddate) })),
-    ...((dupGroupRows.rows as DuplicateGroupRow[]).flatMap((g) => (g.members ?? []).map((m) => ({ func: m.funcCcy, date: m.date })))),
-    ...((weekendDetail.rows as FlaggedDocumentRow[]).map((r) => ({ func: r.func, date: r.date }))),
-    ...((weekendIds.rows as FlaggedIdRow[]).map((r) => ({ func: r.func, date: r.date }))),
-    ...((rsfRows.rows as VendorStatisticRow[]).map((r) => ({ func: r.func, date: r.date }))),
-    ...((zRows.rows as VendorStatisticRow[]).map((r) => ({ func: r.func, date: r.date }))),
-    ...((seqDetail.rows as SequentialRow[]).flatMap((g) => ((g.invoices as SequentialRow["invoices"]) ?? []).map((inv) => ({ func: inv.funcCcy, date: inv.date })))),
-    ...((seqIds.rows as FlaggedIdRow[]).map((r) => ({ func: r.func, date: r.date }))),
+    ...dupBucketRows.map((r) => ({
+      func: (r as { func_ccy: string }).func_ccy,
+      date: String((r as { ddate: string }).ddate),
+    })),
+    ...dupAnchorRows.map((r) => ({
+      func: (r as { func_ccy: string }).func_ccy,
+      date: String((r as { ddate: string }).ddate),
+    })),
+    ...(dupGroupRows.rows as DuplicateGroupRow[]).flatMap((g) =>
+      (g.members ?? []).map((m) => ({ func: m.funcCcy, date: m.date })),
+    ),
+    ...(weekendDetail.rows as FlaggedDocumentRow[]).map((r) => ({ func: r.func, date: r.date })),
+    ...(weekendIds.rows as FlaggedIdRow[]).map((r) => ({ func: r.func, date: r.date })),
+    ...(rsfRows.rows as VendorStatisticRow[]).map((r) => ({ func: r.func, date: r.date })),
+    ...(zRows.rows as VendorStatisticRow[]).map((r) => ({ func: r.func, date: r.date })),
+    ...(seqDetail.rows as SequentialRow[]).flatMap((g) =>
+      ((g.invoices as SequentialRow["invoices"]) ?? []).map((inv) => ({
+        func: inv.funcCcy,
+        date: inv.date,
+      })),
+    ),
+    ...(seqIds.rows as FlaggedIdRow[]).map((r) => ({ func: r.func, date: r.date })),
   ];
   const rates: FlowRates = await flowRates(orgId, ratePairs);
   const present = (funcAmt: string, func: string, date: string): string =>
@@ -1141,8 +1461,13 @@ export async function sentinelData(
   // Per-date counts ride the calendar from the buckets' row counts — the
   // bucket rows each carry their set count.
   const calendarCounts = new Map<string, number>();
-  for (const r of aggAll.filter((x) => Number(x.g_func) === 0 && Number(x.g_date) === 0
-    && Number(x.g_trap) === 1 && Number(x.g_dow) === 1)) {
+  for (const r of aggAll.filter(
+    (x) =>
+      Number(x.g_func) === 0 &&
+      Number(x.g_date) === 0 &&
+      Number(x.g_trap) === 1 &&
+      Number(x.g_dow) === 1,
+  )) {
     calendarCounts.set(String(r.date), (calendarCounts.get(String(r.date)) ?? 0) + Number(r.count));
   }
   for (const day of calendar) day.count = calendarCounts.get(day.date) ?? 0;
@@ -1154,9 +1479,15 @@ export async function sentinelData(
   // Per-digit anomalies use the Z-statistic from Benford's Law
   // (Mark Nigrini, 2012), not a fixed deviation band.
   const minSample = cfg.benfordMinSample;
-  const slice1D = (currency: string, rows: { digit: unknown; count: unknown; amount: unknown }[]): BenfordCurrencySlice => {
+  const slice1D = (
+    currency: string,
+    rows: { digit: unknown; count: unknown; amount: unknown }[],
+  ): BenfordCurrencySlice => {
     const map = new Map<string, { count: number; amount: string }>(
-      rows.map((r) => [String(r.digit), { count: Number(r.count), amount: String(r.amount ?? "0") }]),
+      rows.map((r) => [
+        String(r.digit),
+        { count: Number(r.count), amount: String(r.amount ?? "0") },
+      ]),
     );
     const total = [...map.values()].reduce((s, v) => s + v.count, 0);
     let sumAbsDev = 0;
@@ -1169,15 +1500,22 @@ export async function sentinelData(
       sumAbsDev += Math.abs(deviation);
       const deviationPct = expected > 0 ? (deviation / expected) * 100 : 0;
       digits.push({
-        digit: d, count: row?.count ?? 0, amount: row?.amount ?? "0.0000",
-        observed, expected, deviationPct,
+        digit: d,
+        count: row?.count ?? 0,
+        amount: row?.amount ?? "0.0000",
+        observed,
+        expected,
+        deviationPct,
         isAnomaly: total >= minSample && benfordDigitZ(observed, expected, total) > 1.96,
       });
     }
     const mad = sumAbsDev / 9;
     if (total < minSample) {
       return {
-        currency, totalTransactions: total, digits, mad,
+        currency,
+        totalTransactions: total,
+        digits,
+        mad,
         conformity: "insufficient",
         message: strings.benfordInsufficient(total, minSample),
         anomalies: [],
@@ -1187,7 +1525,10 @@ export async function sentinelData(
     // the bands: benfordConformity1D owns the cut-offs.
     const conformity = benfordConformity1D(mad);
     return {
-      currency, totalTransactions: total, digits, mad,
+      currency,
+      totalTransactions: total,
+      digits,
+      mad,
       conformity,
       message:
         conformity === "excellent"
@@ -1200,9 +1541,15 @@ export async function sentinelData(
       anomalies: digits.filter((x) => x.isAnomaly),
     };
   };
-  const slice2D = (currency: string, rows: { digits: unknown; count: unknown; amount: unknown }[]): BenfordCurrencySlice => {
+  const slice2D = (
+    currency: string,
+    rows: { digits: unknown; count: unknown; amount: unknown }[],
+  ): BenfordCurrencySlice => {
     const map = new Map<string, { count: number; amount: string }>(
-      rows.map((r) => [String(r.digits), { count: Number(r.count), amount: String(r.amount ?? "0") }]),
+      rows.map((r) => [
+        String(r.digits),
+        { count: Number(r.count), amount: String(r.amount ?? "0") },
+      ]),
     );
     const total = [...map.values()].reduce((s, v) => s + v.count, 0);
     let sumAbsDev = 0;
@@ -1215,23 +1562,37 @@ export async function sentinelData(
       sumAbsDev += Math.abs(deviation);
       const deviationPct = expected > 0 ? (deviation / expected) * 100 : 0;
       digits.push({
-        digit: d, count: row?.count ?? 0, amount: row?.amount ?? "0.0000",
-        observed, expected, deviationPct,
+        digit: d,
+        count: row?.count ?? 0,
+        amount: row?.amount ?? "0.0000",
+        observed,
+        expected,
+        deviationPct,
         isAnomaly: total >= minSample && benfordDigitZ(observed, expected, total) > 1.96,
       });
     }
     const mad = sumAbsDev / 90;
     if (total < minSample) {
       return {
-        currency, totalTransactions: total, digits, mad,
-        conformity: "insufficient", message: strings.benfordInsufficient(total, minSample),
+        currency,
+        totalTransactions: total,
+        digits,
+        mad,
+        conformity: "insufficient",
+        message: strings.benfordInsufficient(total, minSample),
         anomalies: [],
       };
     }
     return {
-      currency, totalTransactions: total, digits, mad,
-      conformity: benfordConformity2D(mad), message: "",
-      anomalies: digits.filter((x) => x.isAnomaly && x.count >= 5).sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct)),
+      currency,
+      totalTransactions: total,
+      digits,
+      mad,
+      conformity: benfordConformity2D(mad),
+      message: "",
+      anomalies: digits
+        .filter((x) => x.isAnomaly && x.count >= 5)
+        .sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct)),
     };
   };
   const byCurrency = <T extends { currency: string }>(rows: T[]): Map<string, T[]> => {
@@ -1245,10 +1606,14 @@ export async function sentinelData(
   };
   const b1Slices = [...byCurrency(b1Rows.rows).entries()]
     .map(([currency, rows]) => slice1D(currency, rows))
-    .sort((a, b) => b.totalTransactions - a.totalTransactions || (a.currency < b.currency ? -1 : 1));
+    .sort(
+      (a, b) => b.totalTransactions - a.totalTransactions || (a.currency < b.currency ? -1 : 1),
+    );
   const b2Slices = [...byCurrency(b2Rows.rows).entries()]
     .map(([currency, rows]) => slice2D(currency, rows))
-    .sort((a, b) => b.totalTransactions - a.totalTransactions || (a.currency < b.currency ? -1 : 1));
+    .sort(
+      (a, b) => b.totalTransactions - a.totalTransactions || (a.currency < b.currency ? -1 : 1),
+    );
   // The legacy top-level shape carries the largest slice so single-currency
   // datasets (and existing consumers) read identical figures. SCORING reads
   // every sufficient slice below — one currency's nonconformity never hides
@@ -1274,14 +1639,29 @@ export async function sentinelData(
   // ---- Threshold trap ------------------------------------------------------------
   const trapRules = RISK_SCORING.trap.rules;
   const trapItems: FlaggedDoc[] = (trapRows.rows as FlaggedDocumentRow[]).map((r) => ({
-    docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-    amount: r.amount, currency: r.currency, funcAmount: translatedOf(r),
-    partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
+    docId: r.id,
+    docNumber: r.document_number ?? "",
+    kind: r.kind,
+    date: r.date,
+    amount: r.amount,
+    currency: r.currency,
+    funcAmount: translatedOf(r),
+    partyId: r.party_id,
+    partyName: strings.displayPartyName(r.party_name),
     flagType: "trap" as const,
     reason: strings.trapReason(r.trap as string),
-    riskScore: r.trap === "9999" ? trapRules.ends9999.points : r.trap === "999" ? trapRules.ends999.points : trapRules.ends99.points,
+    riskScore:
+      r.trap === "9999"
+        ? trapRules.ends9999.points
+        : r.trap === "999"
+          ? trapRules.ends999.points
+          : trapRules.ends99.points,
   }));
-  const trapByTrap = (trapAgg.rows as AggregateRow[]).map((r) => ({ trap: String(r.trap), count: Number(r.count), amount: "0.0000" }));
+  const trapByTrap = (trapAgg.rows as AggregateRow[]).map((r) => ({
+    trap: String(r.trap),
+    count: Number(r.count),
+    amount: "0.0000",
+  }));
   for (const t of trapByTrap) {
     t.amount = translateBuckets(trapBuckets.filter((b) => b.trap === t.trap));
   }
@@ -1290,8 +1670,11 @@ export async function sentinelData(
   const rsfUnavailable = rsfFloor === null ? strings.rsfFloorUnset : statsSpotRefusal;
   const zscoreUnavailable = zscoreFloor === null ? strings.zscoreFloorUnset : statsSpotRefusal;
   const amountTierUnset =
-    cfg.moderateRiskAmount === "" || cfg.highRiskAmount === "" || cfg.criticalRiskAmount === "" ||
-    cfg.aggregateHighAmount === "" || cfg.aggregateCriticalAmount === "";
+    cfg.moderateRiskAmount === "" ||
+    cfg.highRiskAmount === "" ||
+    cfg.criticalRiskAmount === "" ||
+    cfg.aggregateHighAmount === "" ||
+    cfg.aggregateCriticalAmount === "";
 
   // ---- Duplicates: one finding per natural-key group ---------------------------------
   const dupRules = RISK_SCORING.duplicate.rules;
@@ -1319,18 +1702,30 @@ export async function sentinelData(
     const spanDays = Number(r.span_days);
     const sameReference = r.refkey !== "";
     const members: DuplicateMember[] = (r.members ?? []).map((m) => ({
-      docId: m.docId, docNumber: m.docNumber ?? "", reference: m.reference ?? "",
-      date: m.date, amount: m.amount, currency: m.currency,
-      funcAmount: present(m.funcAmount, m.funcCcy, m.date), memo: m.memo,
+      docId: m.docId,
+      docNumber: m.docNumber ?? "",
+      reference: m.reference ?? "",
+      date: m.date,
+      amount: m.amount,
+      currency: m.currency,
+      funcAmount: present(m.funcAmount, m.funcCcy, m.date),
+      memo: m.memo,
     }));
     const funcTotal = r.presented_total;
     let score = dupRules.base.points + dupTierBump(funcTotal) + dupSpanBump(spanDays);
     if (sameReference) score += dupRules.sharedReference.points;
     return {
       groupId: [r.party_id ?? "", r.kind, r.currency, amount, r.refkey].join("|"),
-      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
-      kind: r.kind, currency: r.currency, amount, funcTotal,
-      count, dateSpanDays: spanDays, firstDate: r.first_date, lastDate: r.last_date,
+      partyId: r.party_id,
+      partyName: strings.displayPartyName(r.party_name),
+      kind: r.kind,
+      currency: r.currency,
+      amount,
+      funcTotal,
+      count,
+      dateSpanDays: spanDays,
+      firstDate: r.first_date,
+      lastDate: r.last_date,
       sameReference,
       confidence: dupConfidence(sameReference, spanDays),
       riskScore: Math.min(100, score),
@@ -1340,7 +1735,9 @@ export async function sentinelData(
   // Display order follows translated value at risk, so the largest excess
   // leads whatever the cut order fetched.
   dupGroups.sort((a, b) => cmp(b.funcTotal, a.funcTotal));
-  const dupTotal = Number((dupAggRow as { group_count: string | number } | undefined)?.group_count ?? 0);
+  const dupTotal = Number(
+    (dupAggRow as { group_count: string | number } | undefined)?.group_count ?? 0,
+  );
   const dupValueBuckets: Bucket[] = dupBucketRows.map((r) => ({
     func: String((r as { func_ccy: string }).func_ccy),
     date: String((r as { ddate: string }).ddate),
@@ -1358,26 +1755,42 @@ export async function sentinelData(
     const ms = g.members;
     for (let i = 0; i < ms.length; i++) {
       for (let j = i + 1; j < ms.length; j++) {
-        const a = ms[i]!, b = ms[j]!;
+        const a = ms[i]!,
+          b = ms[j]!;
         const days = Math.abs(calendarDaysBetween(a.date, b.date));
         const sameMemo = a.memo !== null && a.memo === b.memo;
         let score = dupRules.base.points + dupTierBump(g.funcTotal) + dupSpanBump(days);
         if (sameMemo || g.sameReference) score += dupRules.sharedReference.points;
         dupPairs.push({
-          docId1: a.docId, docId2: b.docId, docNumber1: a.docNumber, docNumber2: b.docNumber,
-          kind: g.kind, date1: a.date, date2: b.date, daysBetween: days, amount: g.amount,
-          currency: g.currency, partyId: g.partyId, partyName: g.partyName,
+          docId1: a.docId,
+          docId2: b.docId,
+          docNumber1: a.docNumber,
+          docNumber2: b.docNumber,
+          kind: g.kind,
+          date1: a.date,
+          date2: b.date,
+          daysBetween: days,
+          amount: g.amount,
+          currency: g.currency,
+          partyId: g.partyId,
+          partyName: g.partyName,
           sameMemo,
-          confidence: sameMemo || g.sameReference
-            ? dupRules.confSharedReference.confidence
-            : dupConfidence(false, days),
+          confidence:
+            sameMemo || g.sameReference
+              ? dupRules.confSharedReference.confidence
+              : dupConfidence(false, days),
           riskScore: Math.min(100, score),
         });
       }
     }
   }
-  dupPairs.sort((x, y) => cmp(y.amount, x.amount) || x.daysBetween - y.daysBetween
-    || (x.docId1 < y.docId1 ? -1 : 1) || (x.docId2 < y.docId2 ? -1 : 1));
+  dupPairs.sort(
+    (x, y) =>
+      cmp(y.amount, x.amount) ||
+      x.daysBetween - y.daysBetween ||
+      (x.docId1 < y.docId1 ? -1 : 1) ||
+      (x.docId2 < y.docId2 ? -1 : 1),
+  );
   const dupPairsCapped = dupPairs.slice(0, 200);
 
   // ---- Weekend ------------------------------------------------------------------------
@@ -1392,16 +1805,23 @@ export async function sentinelData(
     ]);
     if (isSunday) score += weekendRules.sunday.points;
     return {
-      docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount: r.amount, currency: r.currency, funcAmount: translated,
-      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
+      docId: r.id,
+      docNumber: r.document_number ?? "",
+      kind: r.kind,
+      date: r.date,
+      amount: r.amount,
+      currency: r.currency,
+      funcAmount: translated,
+      partyId: r.party_id,
+      partyName: strings.displayPartyName(r.party_name),
       flagType: "weekend" as const,
       reason: strings.weekendReason(isSunday),
       riskScore: Math.min(100, score),
     };
   });
-  let satCount = 0, sunCount = 0;
-  for (const r of (weekendAgg.rows as AggregateRow[])) {
+  let satCount = 0,
+    sunCount = 0;
+  for (const r of weekendAgg.rows as AggregateRow[]) {
     if (Number(r.dow) === 0) sunCount = Number(r.count);
     else satCount = Number(r.count);
   }
@@ -1426,13 +1846,21 @@ export async function sentinelData(
       { rule: rsfRules.tierHigh, threshold: cfg.highRiskAmount },
     ]);
     return {
-      docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount: r.amount, currency: r.currency, funcAmount: translated,
-      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
+      docId: r.id,
+      docNumber: r.document_number ?? "",
+      kind: r.kind,
+      date: r.date,
+      amount: r.amount,
+      currency: r.currency,
+      funcAmount: translated,
+      partyId: r.party_id,
+      partyName: strings.displayPartyName(r.party_name),
       flagType: "rsf" as const,
       reason: strings.rsfReason(rsf, strings.displayPartyName(r.party_name), String(r.currency)),
       riskScore: Math.min(100, score),
-      rsf, secondLargest: r.second_amount, baselineCount: Number(r.baseline_count),
+      rsf,
+      secondLargest: r.second_amount,
+      baselineCount: Number(r.baseline_count),
     };
   });
 
@@ -1447,15 +1875,31 @@ export async function sentinelData(
     let score = zRules.base.points;
     if (Math.abs(z) >= zRules.z5.z) score += zRules.z5.points;
     else if (Math.abs(z) >= zRules.z4.z) score += zRules.z4.points;
-    score += ladderBump(translated, [{ rule: zRules.tierCritical, threshold: cfg.criticalRiskAmount }]);
+    score += ladderBump(translated, [
+      { rule: zRules.tierCritical, threshold: cfg.criticalRiskAmount },
+    ]);
     return {
-      docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount: r.amount, currency: r.currency, funcAmount: translated,
-      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name),
+      docId: r.id,
+      docNumber: r.document_number ?? "",
+      kind: r.kind,
+      date: r.date,
+      amount: r.amount,
+      currency: r.currency,
+      funcAmount: translated,
+      partyId: r.party_id,
+      partyName: strings.displayPartyName(r.party_name),
       flagType: "zscore" as const,
-      reason: strings.zscoreReason(Math.abs(z), strings.displayPartyName(r.party_name), String(r.currency), Number(r.baseline_count)),
+      reason: strings.zscoreReason(
+        Math.abs(z),
+        strings.displayPartyName(r.party_name),
+        String(r.currency),
+        Number(r.baseline_count),
+      ),
       riskScore: Math.min(100, score),
-      zScore: z, vendorAvg: r.avg_amount, vendorStdDev: r.std_amount, baselineCount: Number(r.baseline_count),
+      zScore: z,
+      vendorAvg: r.avg_amount,
+      vendorStdDev: r.std_amount,
+      baselineCount: Number(r.baseline_count),
     };
   });
   const rsfDisplay = rsfItems.slice(0, 100);
@@ -1468,8 +1912,13 @@ export async function sentinelData(
     const spanDays = Number(r.span_days);
     const count = Number(r.cnt);
     const invoices = ((r.invoices as SequentialRow["invoices"]) ?? []).map((inv) => ({
-      docId: inv.docId, docNumber: inv.docNumber, reference: inv.reference, date: inv.date,
-      amount: inv.amount, currency: inv.currency, funcAmount: present(inv.funcAmount, inv.funcCcy, inv.date),
+      docId: inv.docId,
+      docNumber: inv.docNumber,
+      reference: inv.reference,
+      date: inv.date,
+      amount: inv.amount,
+      currency: inv.currency,
+      funcAmount: present(inv.funcAmount, inv.funcCcy, inv.date),
     }));
     const totalAmount = r.presented_total;
     let score = spanDays >= seqHighDays ? seqRules.highSpan.points : seqRules.baseSpan.points;
@@ -1485,12 +1934,26 @@ export async function sentinelData(
     );
     const level: "high" | "medium" = spanDays >= seqHighDays ? "high" : "medium";
     return {
-      partyId: r.party_id, partyName: strings.displayPartyName(r.party_name), count, totalAmount,
+      partyId: r.party_id,
+      partyName: strings.displayPartyName(r.party_name),
+      count,
+      totalAmount,
       currency: r.currency,
-      startRef: Number(r.start_ref), endRef: Number(r.end_ref), dateSpanDays: spanDays,
-      firstDate: String(r.first_date), lastDate: String(r.last_date),
-      riskLevel: level, riskScore: Math.min(100, score),
-      reason: strings.sequentialReason(count, String(r.start_ref), String(r.end_ref), spanDays, level === "high", String(r.currency)),
+      startRef: Number(r.start_ref),
+      endRef: Number(r.end_ref),
+      dateSpanDays: spanDays,
+      firstDate: String(r.first_date),
+      lastDate: String(r.last_date),
+      riskLevel: level,
+      riskScore: Math.min(100, score),
+      reason: strings.sequentialReason(
+        count,
+        String(r.start_ref),
+        String(r.end_ref),
+        spanDays,
+        level === "high",
+        String(r.currency),
+      ),
       invoices: invoices.slice(0, 12),
     };
   });
@@ -1500,45 +1963,79 @@ export async function sentinelData(
   // ---- Ghost vendors (tiers from the severity model) -----------------------
   const ghostRules = RISK_SCORING.ghost.rules;
   const ghostFull = ghostRows.rows as GhostRow[];
-  const ghosts: GhostVendor[] = ghostFull.map((r) => {
-    const name = Boolean(r.name_match);
-    const addr = Boolean(r.address_match);
-    const matchType: GhostVendor["matchType"] = name && addr ? "name+address" : addr ? "address" : "name";
-    return {
-      vendorId: r.vendor_id, vendorName: r.vendor_name, employeeId: r.employee_id, employeeName: r.employee_name,
-      matchType,
-      riskScore: name && addr ? ghostRules.nameAndAddress.points : addr ? ghostRules.addressOnly.points : ghostRules.nameOnly.points,
-      reason: name && addr
-        ? strings.ghostBoth(String(r.vendor_name), String(r.employee_name))
-        : addr
-          ? strings.ghostAddress(String(r.vendor_name), String(r.employee_name))
-          : strings.ghostName(String(r.vendor_name), String(r.employee_name)),
-    };
-  }).sort((a, b) => b.riskScore - a.riskScore);
-  const ghostCount = ghostFull.length > 0 ? Number(ghostFull[0]!.full_count ?? ghostFull.length) : 0;
+  const ghosts: GhostVendor[] = ghostFull
+    .map((r) => {
+      const name = Boolean(r.name_match);
+      const addr = Boolean(r.address_match);
+      const matchType: GhostVendor["matchType"] =
+        name && addr ? "name+address" : addr ? "address" : "name";
+      return {
+        vendorId: r.vendor_id,
+        vendorName: r.vendor_name,
+        employeeId: r.employee_id,
+        employeeName: r.employee_name,
+        matchType,
+        riskScore:
+          name && addr
+            ? ghostRules.nameAndAddress.points
+            : addr
+              ? ghostRules.addressOnly.points
+              : ghostRules.nameOnly.points,
+        reason:
+          name && addr
+            ? strings.ghostBoth(String(r.vendor_name), String(r.employee_name))
+            : addr
+              ? strings.ghostAddress(String(r.vendor_name), String(r.employee_name))
+              : strings.ghostName(String(r.vendor_name), String(r.employee_name)),
+      };
+    })
+    .sort((a, b) => b.riskScore - a.riskScore);
+  const ghostCount =
+    ghostFull.length > 0 ? Number(ghostFull[0]!.full_count ?? ghostFull.length) : 0;
 
   // ---- Audit trail ---------------------------------------------------------------------------------
-  const auditEvents: AuditEvent[] = ((auditRows.rows as AuditRow[])).map((r) => ({
-    id: r.id, tableName: r.table_name, rowId: r.row_id, action: r.action, actorId: r.actor_id, at: r.at,
+  const auditEvents: AuditEvent[] = (auditRows.rows as AuditRow[]).map((r) => ({
+    id: r.id,
+    tableName: r.table_name,
+    rowId: r.row_id,
+    action: r.action,
+    actorId: r.actor_id,
+    at: r.at,
     displayAt: r.display_at,
-    summary: strings.auditEvent(auditEventArgs(r.action, r.actor_id, r.table_name, r.row_id, r.changes)),
+    summary: strings.auditEvent(
+      auditEventArgs(r.action, r.actor_id, r.table_name, r.row_id, r.changes),
+    ),
   }));
-  const auditTotal = Number((auditAgg.rows[0] as { total: string | number } | undefined)?.total ?? 0);
-  const auditDeletes = Number((auditAgg.rows[0] as { deletes: string | number } | undefined)?.deletes ?? 0);
-  const auditSensitive = Number((auditAgg.rows[0] as { sensitive: string | number } | undefined)?.sensitive ?? 0);
+  const auditTotal = Number(
+    (auditAgg.rows[0] as { total: string | number } | undefined)?.total ?? 0,
+  );
+  const auditDeletes = Number(
+    (auditAgg.rows[0] as { deletes: string | number } | undefined)?.deletes ?? 0,
+  );
+  const auditSensitive = Number(
+    (auditAgg.rows[0] as { sensitive: string | number } | undefined)?.sensitive ?? 0,
+  );
 
   // ---- Flagged aggregate (dedup by doc, stable order) -----------------------------------------------
   // Display findings (capped per detector) for the tabs…
   const flagged: FlaggedDoc[] = [];
   const seen = new Set<string>();
-  const push = (f: FlaggedDoc) => { if (!seen.has(f.docId)) { seen.add(f.docId); flagged.push(f); } };
+  const push = (f: FlaggedDoc) => {
+    if (!seen.has(f.docId)) {
+      seen.add(f.docId);
+      flagged.push(f);
+    }
+  };
   for (const g of dupGroups) {
     // The group scan includes the threshold-sized boundary on both sides of
     // the report period. Anchor the single group finding to its earliest
     // in-period member; the reason gives the full count and preview evidence.
     const inPeriod = g.members.filter((m) => m.date >= from && m.date <= to);
     const anchor = inPeriod[0] ?? g.members[0]!;
-    const others = g.members.filter((m) => m.docId !== anchor.docId).map((m) => m.docNumber || m.docId).join(", ");
+    const others = g.members
+      .filter((m) => m.docId !== anchor.docId)
+      .map((m) => m.docNumber || m.docId)
+      .join(", ");
     push({
       docId: anchor.docId,
       docNumber: anchor.docNumber,
@@ -1550,7 +2047,14 @@ export async function sentinelData(
       partyId: g.partyId,
       partyName: g.partyName,
       flagType: "duplicate",
-      reason: strings.duplicateGroupReason({ count: g.count, currency: String(g.currency), amount: String(g.amount), sharedReference: g.sameReference && anchor.reference ? String(anchor.reference) : null, daysSpan: g.dateSpanDays, others }),
+      reason: strings.duplicateGroupReason({
+        count: g.count,
+        currency: String(g.currency),
+        amount: String(g.amount),
+        sharedReference: g.sameReference && anchor.reference ? String(anchor.reference) : null,
+        daysSpan: g.dateSpanDays,
+        others,
+      }),
       riskScore: g.riskScore,
     });
   }
@@ -1561,7 +2065,20 @@ export async function sentinelData(
   // invoices (threshold-trap docs stay in their own tab, NOT in the aggregate).
   for (const s of sequential)
     for (const inv of s.invoices)
-      push({ docId: inv.docId, docNumber: inv.docNumber, kind: "vendor_bill", date: inv.date, amount: inv.amount, currency: inv.currency, funcAmount: inv.funcAmount, partyId: s.partyId, partyName: s.partyName, flagType: "sequential", reason: s.reason, riskScore: s.riskScore });
+      push({
+        docId: inv.docId,
+        docNumber: inv.docNumber,
+        kind: "vendor_bill",
+        date: inv.date,
+        amount: inv.amount,
+        currency: inv.currency,
+        funcAmount: inv.funcAmount,
+        partyId: s.partyId,
+        partyName: s.partyName,
+        flagType: "sequential",
+        reason: s.reason,
+        riskScore: s.riskScore,
+      });
   flagged.sort((a, b) => b.riskScore - a.riskScore);
 
   // …and the EXACT flagged union for the counts: every detector names each
@@ -1581,10 +2098,11 @@ export async function sentinelData(
       String((r as { ddate: string }).ddate),
     );
   }
-  for (const r of (weekendIds.rows as FlaggedIdRow[])) addUnion(r.doc_id, r.func_amount, r.func, r.date);
+  for (const r of weekendIds.rows as FlaggedIdRow[])
+    addUnion(r.doc_id, r.func_amount, r.func, r.date);
   for (const r of rsfFull) addUnion(r.id, r.func_amount, r.func, r.date);
   for (const r of zFull) addUnion(r.id, r.func_amount, r.func, r.date);
-  for (const r of (seqIds.rows as FlaggedIdRow[])) addUnion(r.doc_id, r.func_amount, r.func, r.date);
+  for (const r of seqIds.rows as FlaggedIdRow[]) addUnion(r.doc_id, r.func_amount, r.func, r.date);
   let totalAtRisk = "0.0000";
   for (const { funcAmt, func, date } of union.values()) {
     totalAtRisk = add(totalAtRisk, present(funcAmt, func, date));
@@ -1597,7 +2115,18 @@ export async function sentinelData(
   for (const f of flagged) {
     const key = f.partyId ?? f.partyName ?? "unknown";
     let v = vendorMap.get(key);
-    if (!v) { v = { partyId: f.partyId, partyName: strings.displayPartyName(f.partyName), flagCount: 0, totalAmount: "0.0000", flagTypes: [], maxRiskScore: 0, compositeScore: 0 }; vendorMap.set(key, v); }
+    if (!v) {
+      v = {
+        partyId: f.partyId,
+        partyName: strings.displayPartyName(f.partyName),
+        flagCount: 0,
+        totalAmount: "0.0000",
+        flagTypes: [],
+        maxRiskScore: 0,
+        compositeScore: 0,
+      };
+      vendorMap.set(key, v);
+    }
     v.flagCount++;
     v.totalAmount = add(v.totalAmount, f.funcAmount);
     v.maxRiskScore = Math.max(v.maxRiskScore, f.riskScore);
@@ -1608,29 +2137,55 @@ export async function sentinelData(
     const critical = setTier(vendorRules.tierCritical, cfg.aggregateHighAmount);
     const high = setTier(vendorRules.tierHigh, cfg.highRiskAmount);
     const amountTier =
-      critical !== null && cmp(v.totalAmount, critical.threshold) >= 0 ? critical.points
-      : high !== null && cmp(v.totalAmount, high.threshold) >= 0 ? high.points
-      : vendorRules.tierBase.points;
-    v.compositeScore = Math.min(100, Math.round(Math.min(v.flagCount * vendorRules.perFlag.perUnit, vendorRules.perFlag.cap) + amountTier + v.flagTypes.length * vendorRules.perType.points + v.maxRiskScore * vendorRules.worstShare.share));
+      critical !== null && cmp(v.totalAmount, critical.threshold) >= 0
+        ? critical.points
+        : high !== null && cmp(v.totalAmount, high.threshold) >= 0
+          ? high.points
+          : vendorRules.tierBase.points;
+    v.compositeScore = Math.min(
+      100,
+      Math.round(
+        Math.min(v.flagCount * vendorRules.perFlag.perUnit, vendorRules.perFlag.cap) +
+          amountTier +
+          v.flagTypes.length * vendorRules.perType.points +
+          v.maxRiskScore * vendorRules.worstShare.share,
+      ),
+    );
   }
-  const vendorRisk = [...vendorMap.values()].sort((a, b) => b.compositeScore - a.compositeScore || cmp(b.totalAmount, a.totalAmount)).slice(0, 50);
+  const vendorRisk = [...vendorMap.values()]
+    .sort((a, b) => b.compositeScore - a.compositeScore || cmp(b.totalAmount, a.totalAmount))
+    .slice(0, 50);
 
   // ---- Summary (risk points from the severity model) ------------------------------------------------------------
   const summaryRules = RISK_SCORING.summary.rules;
   let risk = 0;
   if (flaggedCount >= cfg.summaryFlaggedHigh) risk += summaryRules.flaggedHigh.points;
   else if (flaggedCount >= cfg.summaryFlaggedMedium) risk += summaryRules.flaggedMedium.points;
-  if (cfg.aggregateCriticalAmount !== "" && cmp(dupAmount, cfg.aggregateCriticalAmount) > 0) risk += summaryRules.dupCritical.points;
-  else if (cfg.aggregateHighAmount !== "" && cmp(dupAmount, cfg.aggregateHighAmount) > 0) risk += summaryRules.dupHigh.points;
+  if (cfg.aggregateCriticalAmount !== "" && cmp(dupAmount, cfg.aggregateCriticalAmount) > 0)
+    risk += summaryRules.dupCritical.points;
+  else if (cfg.aggregateHighAmount !== "" && cmp(dupAmount, cfg.aggregateHighAmount) > 0)
+    risk += summaryRules.dupHigh.points;
   if (ghostCount > 0) risk += summaryRules.ghostAny.points;
   if (sequentialGroups > 0) risk += summaryRules.sequentialAny.points;
   if (deviating1D.length > 0) risk += summaryRules.benford.points;
 
   const topRiskAreas: SentinelData["summary"]["topRiskAreas"] = [];
-  if (ghostCount) topRiskAreas.push({ severity: "critical", count: ghostCount, ...strings.riskGhosts(ghostCount) });
-  if (sequentialGroups) topRiskAreas.push({ severity: "high", count: sequentialGroups, ...strings.riskSequential(sequentialGroups) });
-  if (dupTotal > cfg.duplicateAreaMin) topRiskAreas.push({ severity: "high", count: dupTotal, ...strings.riskDuplicates(dupTotal) });
-  if (trapTotal > 0) topRiskAreas.push({ severity: "high", count: trapTotal, ...strings.riskTraps(trapTotal) });
+  if (ghostCount)
+    topRiskAreas.push({
+      severity: "critical",
+      count: ghostCount,
+      ...strings.riskGhosts(ghostCount),
+    });
+  if (sequentialGroups)
+    topRiskAreas.push({
+      severity: "high",
+      count: sequentialGroups,
+      ...strings.riskSequential(sequentialGroups),
+    });
+  if (dupTotal > cfg.duplicateAreaMin)
+    topRiskAreas.push({ severity: "high", count: dupTotal, ...strings.riskDuplicates(dupTotal) });
+  if (trapTotal > 0)
+    topRiskAreas.push({ severity: "high", count: trapTotal, ...strings.riskTraps(trapTotal) });
   if (deviating1D.length > 0) {
     topRiskAreas.push({
       severity: "medium",
@@ -1638,14 +2193,25 @@ export async function sentinelData(
       ...strings.riskBenford(),
     });
   }
-  topRiskAreas.sort((a, b) => ({ critical: 0, high: 1, medium: 2 }[a.severity] - { critical: 0, high: 1, medium: 2 }[b.severity]));
+  topRiskAreas.sort(
+    (a, b) =>
+      ({ critical: 0, high: 1, medium: 2 })[a.severity] -
+      { critical: 0, high: 1, medium: 2 }[b.severity],
+  );
 
-  const days = Math.round((end.getTime() - new Date(from + "T00:00:00Z").getTime()) / 86_400_000) + 1;
+  const days =
+    Math.round((end.getTime() - new Date(from + "T00:00:00Z").getTime()) / 86_400_000) + 1;
 
   return {
     scoring: RISK_SCORING,
     period,
-    meta: { totalDocs: metaCount, totalAmount: metaTotal, presentationCurrency: presentationCcy, days, queryMs: Date.now() - t0 },
+    meta: {
+      totalDocs: metaCount,
+      totalAmount: metaTotal,
+      presentationCurrency: presentationCcy,
+      days,
+      queryMs: Date.now() - t0,
+    },
     config: cfg,
     summary: {
       flaggedCount,
@@ -1676,16 +2242,52 @@ export async function sentinelData(
         ...(amountTierUnset ? [strings.detectorAmountTiers] : []),
       ],
     },
-    duplicates: { total: dupTotal, pairs: dupPairsCapped, groups: dupGroups, unavailable: duplicateUnavailable },
-    benford1D: { totalTransactions: total1D, digits: digits1D, mad: mad1D, conformity: b1Top.conformity, message: benfordMessage, byCurrency: b1Slices },
-    benford2D: { totalTransactions: total2D, digits: digits2D, anomalies: anomalies2D, mad: mad2D, conformity: b2Top.conformity, byCurrency: b2Slices },
-    thresholdTrap: { total: trapTotal, totalAmount: trapTotalAmount, byTrap: trapByTrap, items: trapItems, unavailable: trapUnavailable },
-    weekend: { total: weekendTotal, totalAmount: weekendTotalAmount, saturday: satCount, sunday: sunCount, items: weekendItems },
+    duplicates: {
+      total: dupTotal,
+      pairs: dupPairsCapped,
+      groups: dupGroups,
+      unavailable: duplicateUnavailable,
+    },
+    benford1D: {
+      totalTransactions: total1D,
+      digits: digits1D,
+      mad: mad1D,
+      conformity: b1Top.conformity,
+      message: benfordMessage,
+      byCurrency: b1Slices,
+    },
+    benford2D: {
+      totalTransactions: total2D,
+      digits: digits2D,
+      anomalies: anomalies2D,
+      mad: mad2D,
+      conformity: b2Top.conformity,
+      byCurrency: b2Slices,
+    },
+    thresholdTrap: {
+      total: trapTotal,
+      totalAmount: trapTotalAmount,
+      byTrap: trapByTrap,
+      items: trapItems,
+      unavailable: trapUnavailable,
+    },
+    weekend: {
+      total: weekendTotal,
+      totalAmount: weekendTotalAmount,
+      saturday: satCount,
+      sunday: sunCount,
+      items: weekendItems,
+    },
     rsf: { total: rsfFull.length, items: rsfDisplay, unavailable: rsfUnavailable },
     zscore: { total: zFull.length, items: zDisplay, unavailable: zscoreUnavailable },
     sequential,
     ghosts,
-    auditTrail: { total: auditTotal, deletes: auditDeletes, sensitiveChanges: auditSensitive, events: auditEvents },
+    auditTrail: {
+      total: auditTotal,
+      deletes: auditDeletes,
+      sensitiveChanges: auditSensitive,
+      events: auditEvents,
+    },
     flagged: flagged.slice(0, 300),
     vendorRisk,
     calendar,

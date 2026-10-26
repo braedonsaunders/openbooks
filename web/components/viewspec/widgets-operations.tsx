@@ -1,4 +1,4 @@
-import { type ComponentProps } from 'react'
+import { type ComponentProps } from "react";
 import {
   ApprovalRequestHost,
   Pagination,
@@ -20,98 +20,119 @@ import {
   NewJournalButton,
   MatrixFilters,
   VendorComplianceDrawer,
-} from './native-widgets.client'
-import { WaiverNumberCell } from '../../app/(app)/compliance/lien-waivers/sections'
-import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
-import { KindChips, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/inbox/sections'
-import { SubmissionWithdrawCell } from '../../app/(app)/inbox/SubmissionWithdrawCell'
-import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
-import { BlockedBillsSection, ComplianceSetupBanner, ExpiringVendorsSection, ReadinessPanel, WaiversPanel } from '../../app/(app)/compliance/sections'
-import { CloseActionCell, CloseReadinessCell, CloseStatusCell, SingleBookLabel } from '../../app/(app)/close/sections'
-import { PostingPeriodsView } from '../../app/(app)/close/posting-periods/PostingPeriodsView'
-import { ProvisionsWorkspace } from '../../app/(app)/accounting/provisions/workspace'
-import { ReopenRequestsWorkspace } from '../../app/(app)/accounting/reopen-requests/workspace'
-import { AccountingChangesWorkspace } from '../../app/(app)/accounting/changes/workspace'
-import { InformationReturnFilingDrawer } from '../../app/(app)/compliance/information-returns/FilingDrawer'
-import { JournalDraftsPanel } from '../../app/(app)/journal/sections'
-import { Button } from '@openbooks/ui'
-import Link from 'next/link'
-import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
+} from "./native-widgets.client";
+import { WaiverNumberCell } from "../../app/(app)/compliance/lien-waivers/sections";
+import { VendorComplianceMatrix } from "../../app/(app)/compliance/vendors/Matrix";
+import {
+  KindChips,
+  ApprovalEngineCell,
+  SubmittedDocumentCell,
+} from "../../app/(app)/inbox/sections";
+import { SubmissionWithdrawCell } from "../../app/(app)/inbox/SubmissionWithdrawCell";
+import { AccountNameCell, AccountRegisterCell } from "../../app/(app)/accounts/sections";
+import {
+  BlockedBillsSection,
+  ComplianceSetupBanner,
+  ExpiringVendorsSection,
+  ReadinessPanel,
+  WaiversPanel,
+} from "../../app/(app)/compliance/sections";
+import {
+  CloseActionCell,
+  CloseReadinessCell,
+  CloseStatusCell,
+  SingleBookLabel,
+} from "../../app/(app)/close/sections";
+import { PostingPeriodsView } from "../../app/(app)/close/posting-periods/PostingPeriodsView";
+import { ProvisionsWorkspace } from "../../app/(app)/accounting/provisions/workspace";
+import { ReopenRequestsWorkspace } from "../../app/(app)/accounting/reopen-requests/workspace";
+import { AccountingChangesWorkspace } from "../../app/(app)/accounting/changes/workspace";
+import { InformationReturnFilingDrawer } from "../../app/(app)/compliance/information-returns/FilingDrawer";
+import { JournalDraftsPanel } from "../../app/(app)/journal/sections";
+import { Button } from "@openbooks/ui";
+import Link from "next/link";
+import { str, num, stringRecord, type WidgetRenderer } from "./widget-props";
 
 /** Financial operations and controls adapters: approvals, close, accounts, journals, budgets, compliance. Compose native components without changing their props or boundaries. */
 export const OPERATIONS_WIDGETS = {
-  'approval-request-host': () => <ApprovalRequestHost />,
-  'contractor-withholding-workspace': (props) => (
-    <ContractorWithholdingWorkspace {...(props as ComponentProps<typeof ContractorWithholdingWorkspace>)} />
+  "approval-request-host": () => <ApprovalRequestHost />,
+  "contractor-withholding-workspace": (props) => (
+    <ContractorWithholdingWorkspace
+      {...(props as ComponentProps<typeof ContractorWithholdingWorkspace>)}
+    />
   ),
-  'waiver-number-cell': (props) => (
+  "waiver-number-cell": (props) => (
     <WaiverNumberCell
-      waiverNumber={str(props, 'waiverNumber') ?? ''}
-      href={str(props, 'href') ?? ''}
-      directionLabel={str(props, 'directionLabel') ?? ''}
+      waiverNumber={str(props, "waiverNumber") ?? ""}
+      href={str(props, "href") ?? ""}
+      directionLabel={str(props, "directionLabel") ?? ""}
     />
   ),
   /* --- approvals ---------------------------------------------------------- */
-  'out-of-office': (props) => (
-    <OutOfOfficeButton users={(props.users as ComponentProps<typeof OutOfOfficeButton>['users']) ?? []} />
+  "out-of-office": (props) => (
+    <OutOfOfficeButton
+      users={(props.users as ComponentProps<typeof OutOfOfficeButton>["users"]) ?? []}
+    />
   ),
-  'delegation-banner': (props) => (
-    <DelegationBanner users={(props.users as ComponentProps<typeof DelegationBanner>['users']) ?? []} />
+  "delegation-banner": (props) => (
+    <DelegationBanner
+      users={(props.users as ComponentProps<typeof DelegationBanner>["users"]) ?? []}
+    />
   ),
-  'kind-chips': (props) => (
+  "kind-chips": (props) => (
     <KindChips
-      chips={(props.chips as ComponentProps<typeof KindChips>['chips']) ?? []}
-      clearHref={str(props, 'clearHref') ?? null}
-      clearLabel={str(props, 'clearLabel') ?? ''}
+      chips={(props.chips as ComponentProps<typeof KindChips>["chips"]) ?? []}
+      clearHref={str(props, "clearHref") ?? null}
+      clearLabel={str(props, "clearLabel") ?? ""}
     />
   ),
-  'approval-engine-cell': (props) => <ApprovalEngineCell name={str(props, 'name') ?? ''} />,
-  'submitted-document-cell': (props) => (
+  "approval-engine-cell": (props) => <ApprovalEngineCell name={str(props, "name") ?? ""} />,
+  "submitted-document-cell": (props) => (
     <SubmittedDocumentCell
-      documentNumber={str(props, 'documentNumber') ?? ''}
-      href={str(props, 'href') ?? null}
+      documentNumber={str(props, "documentNumber") ?? ""}
+      href={str(props, "href") ?? null}
     />
   ),
-  'submitted-withdraw-cell': (props) => (
+  "submitted-withdraw-cell": (props) => (
     <SubmissionWithdrawCell
-      endpoint={str(props, 'endpoint') ?? null}
-      documentNumber={str(props, 'documentNumber') ?? ''}
+      endpoint={str(props, "endpoint") ?? null}
+      documentNumber={str(props, "documentNumber") ?? ""}
     />
   ),
-  'approvals-table': (props) => (
+  "approvals-table": (props) => (
     <ApprovalsTable
-      rows={(props.rows as ComponentProps<typeof ApprovalsTable>['rows']) ?? []}
-      users={(props.users as ComponentProps<typeof ApprovalsTable>['users']) ?? []}
+      rows={(props.rows as ComponentProps<typeof ApprovalsTable>["rows"]) ?? []}
+      users={(props.users as ComponentProps<typeof ApprovalsTable>["users"]) ?? []}
       bulk={props.bulk === true}
       showAssignee={props.showAssignee === true}
       actionsEnabled={props.actionsEnabled === true}
-      awaitingOthers={num(props, 'awaitingOthers') ?? 0}
+      awaitingOthers={num(props, "awaitingOthers") ?? 0}
     />
   ),
-  'approvals-pagination': (props) => (
+  "approvals-pagination": (props) => (
     <Pagination
       basePath="/inbox"
-      currentParams={stringRecord(props, 'params') ?? {}}
-      total={num(props, 'total') ?? 0}
-      page={num(props, 'page') ?? 1}
-      perPage={num(props, 'perPage') ?? 25}
+      currentParams={stringRecord(props, "params") ?? {}}
+      total={num(props, "total") ?? 0}
+      page={num(props, "page") ?? 1}
+      perPage={num(props, "perPage") ?? 25}
     />
   ),
   /** Whole: per-row adjustment forms, the reason capture and the file/void
    *  actions are client state. The ledger figure and the filed figure are both
    *  on every row by design — never one silently replacing the other. */
-  'filing-worksheet': (props) => (
+  "filing-worksheet": (props) => (
     <FilingWorksheet
-      filing={props.filing as ComponentProps<typeof FilingWorksheet>['filing']}
-      boxes={props.boxes as ComponentProps<typeof FilingWorksheet>['boxes']}
+      filing={props.filing as ComponentProps<typeof FilingWorksheet>["filing"]}
+      boxes={props.boxes as ComponentProps<typeof FilingWorksheet>["boxes"]}
       canManage={props.canManage === true}
       canFile={props.canFile === true}
     />
   ),
-  'information-return-filing-drawer': (props) => (
+  "information-return-filing-drawer": (props) => (
     <InformationReturnFilingDrawer
-      detail={props.detail as ComponentProps<typeof InformationReturnFilingDrawer>['detail']}
-      closeHref={str(props, 'closeHref') ?? ''}
+      detail={props.detail as ComponentProps<typeof InformationReturnFilingDrawer>["detail"]}
+      closeHref={str(props, "closeHref") ?? ""}
     />
   ),
 
@@ -120,105 +141,113 @@ export const OPERATIONS_WIDGETS = {
   // The two right-hand panels are whole components rather than `panel` blocks
   // because `panel` has no actions slot, and the setup prompt is an Alert
   // rather than the dashed-card empty state.
-  'compliance-setup-banner': (props) => (
+  "compliance-setup-banner": (props) => (
     <ComplianceSetupBanner
-      prompt={str(props, 'prompt') ?? ''}
-      actionHref={str(props, 'actionHref') ?? ''}
-      actionLabel={str(props, 'actionLabel') ?? ''}
+      prompt={str(props, "prompt") ?? ""}
+      actionHref={str(props, "actionHref") ?? ""}
+      actionLabel={str(props, "actionLabel") ?? ""}
     />
   ),
-  'blocked-bills': (props) => (
+  "blocked-bills": (props) => (
     <BlockedBillsSection
-      rows={props.rows as ComponentProps<typeof BlockedBillsSection>['rows']}
-      empty={str(props, 'empty') ?? ''}
+      rows={props.rows as ComponentProps<typeof BlockedBillsSection>["rows"]}
+      empty={str(props, "empty") ?? ""}
     />
   ),
-  'expiring-vendors': (props) => (
+  "expiring-vendors": (props) => (
     <ExpiringVendorsSection
-      rows={props.rows as ComponentProps<typeof ExpiringVendorsSection>['rows']}
-      empty={str(props, 'empty') ?? ''}
+      rows={props.rows as ComponentProps<typeof ExpiringVendorsSection>["rows"]}
+      empty={str(props, "empty") ?? ""}
     />
   ),
-  'waivers-panel': (props) => (
+  "waivers-panel": (props) => (
     <WaiversPanel
-      title={str(props, 'title') ?? ''}
-      hint={str(props, 'hint') ?? ''}
-      actionHref={str(props, 'actionHref') ?? ''}
-      actionLabel={str(props, 'actionLabel') ?? ''}
-      rows={props.rows as ComponentProps<typeof WaiversPanel>['rows']}
-      empty={str(props, 'empty') ?? ''}
+      title={str(props, "title") ?? ""}
+      hint={str(props, "hint") ?? ""}
+      actionHref={str(props, "actionHref") ?? ""}
+      actionLabel={str(props, "actionLabel") ?? ""}
+      rows={props.rows as ComponentProps<typeof WaiversPanel>["rows"]}
+      empty={str(props, "empty") ?? ""}
     />
   ),
-  'readiness-panel': (props) => (
+  "readiness-panel": (props) => (
     <ReadinessPanel
-      title={str(props, 'title') ?? ''}
-      hint={str(props, 'hint') ?? ''}
-      actionHref={str(props, 'actionHref') ?? ''}
-      actionLabel={str(props, 'actionLabel') ?? ''}
-      rows={props.rows as ComponentProps<typeof ReadinessPanel>['rows']}
-      empty={str(props, 'empty') ?? ''}
+      title={str(props, "title") ?? ""}
+      hint={str(props, "hint") ?? ""}
+      actionHref={str(props, "actionHref") ?? ""}
+      actionLabel={str(props, "actionLabel") ?? ""}
+      rows={props.rows as ComponentProps<typeof ReadinessPanel>["rows"]}
+      empty={str(props, "empty") ?? ""}
     />
   ),
 
   /* --- budgets -------------------------------------------------------------- */
-  'new-budget': (props) => (
+  "new-budget": (props) => (
     <NewBudgetButton
       currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
     />
   ),
-  'budget-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof BudgetDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <BudgetDrawer key={remountKey} {...rest} />
+  "budget-drawer": (props) => {
+    const drawer = props.drawer as
+      (ComponentProps<typeof BudgetDrawer> & { remountKey: string }) | null;
+    if (!drawer) return null;
+    const { remountKey, ...rest } = drawer;
+    return <BudgetDrawer key={remountKey} {...rest} />;
   },
 
   /* --- period close --------------------------------------------------------- */
   /** `size: 'sm'` is load-bearing here: the default renders h-10 where the
    *  native header is h-8. */
-  'manage-books-button': (props) => {
-    const href = str(props, 'href')
-    if (!href) return null
+  "manage-books-button": (props) => {
+    const href = str(props, "href");
+    if (!href) return null;
     return (
       <Button asChild variant="outline" size="sm">
-        <Link href={href as never}>{str(props, 'label') ?? ''}</Link>
+        <Link href={href as never}>{str(props, "label") ?? ""}</Link>
       </Button>
-    )
+    );
   },
-  'single-book-label': (props) => (
-    <SingleBookLabel label={str(props, 'label') ?? ''} name={str(props, 'name') ?? ''} />
+  "single-book-label": (props) => (
+    <SingleBookLabel label={str(props, "label") ?? ""} name={str(props, "name") ?? ""} />
   ),
-  'close-posting-periods-workspace': (props) => (
-    <PostingPeriodsView key={str(props, 'bookId') || 'no-book'}
-      bookId={str(props, 'bookId') || null}
-      runId={str(props, 'runId') ?? null}
+  "close-posting-periods-workspace": (props) => (
+    <PostingPeriodsView
+      key={str(props, "bookId") || "no-book"}
+      bookId={str(props, "bookId") || null}
+      runId={str(props, "runId") ?? null}
       canManageBooks={props.canManageBooks === true}
-      manageBooksLabel={str(props, 'manageBooksLabel') ?? ''}
+      manageBooksLabel={str(props, "manageBooksLabel") ?? ""}
       canPreview={props.canPreview === true}
-      initialRows={(props.initialRows as ComponentProps<typeof PostingPeriodsView>['initialRows']) ?? null}
-      initialError={str(props, 'initialError') ?? null}
+      initialRows={
+        (props.initialRows as ComponentProps<typeof PostingPeriodsView>["initialRows"]) ?? null
+      }
+      initialError={str(props, "initialError") ?? null}
     />
   ),
-  'accounting-provisions-workspace': async (props) => (
-    <ProvisionsWorkspace data={props.data as ComponentProps<typeof ProvisionsWorkspace>['data']} />
+  "accounting-provisions-workspace": async (props) => (
+    <ProvisionsWorkspace data={props.data as ComponentProps<typeof ProvisionsWorkspace>["data"]} />
   ),
-  'accounting-reopen-requests-workspace': (props) => (
-    <ReopenRequestsWorkspace data={props.data as ComponentProps<typeof ReopenRequestsWorkspace>['data']} />
+  "accounting-reopen-requests-workspace": (props) => (
+    <ReopenRequestsWorkspace
+      data={props.data as ComponentProps<typeof ReopenRequestsWorkspace>["data"]}
+    />
   ),
-  'accounting-changes-workspace': async (props) => (
-    <AccountingChangesWorkspace data={props.data as ComponentProps<typeof AccountingChangesWorkspace>['data']} />
+  "accounting-changes-workspace": async (props) => (
+    <AccountingChangesWorkspace
+      data={props.data as ComponentProps<typeof AccountingChangesWorkspace>["data"]}
+    />
   ),
-  'close-readiness-cell': (props) => (
-    <CloseReadinessCell readiness={num(props, 'readiness') ?? 0} />
+  "close-readiness-cell": (props) => (
+    <CloseReadinessCell readiness={num(props, "readiness") ?? 0} />
   ),
   /** The run badge stacked over the lock-detail line (null when unlocked). */
-  'close-status-cell': (props) => (
+  "close-status-cell": (props) => (
     <CloseStatusCell
-      statusLabel={str(props, 'statusLabel') ?? ''}
+      statusLabel={str(props, "statusLabel") ?? ""}
       statusVariant={
-        props.statusVariant === 'success' || props.statusVariant === 'warning'
+        props.statusVariant === "success" || props.statusVariant === "warning"
           ? props.statusVariant
-          : 'outline'
+          : "outline"
       }
       lockLabel={(props.lockLabel as string | null) ?? null}
     />
@@ -226,108 +255,116 @@ export const OPERATIONS_WIDGETS = {
   /** The action cell's conditional triple — resume link, start control, or an
    *  em-dash. The LOADER decides which applies; the component renders the
    *  decision it is given. */
-  'close-action-cell': (props) => (
+  "close-action-cell": (props) => (
     <CloseActionCell
       actionHref={(props.actionHref as string | null) ?? null}
-      actionLabel={str(props, 'actionLabel') ?? ''}
-      actionLinkClassName={str(props, 'actionLinkClassName') ?? ''}
+      actionLabel={str(props, "actionLabel") ?? ""}
+      actionLinkClassName={str(props, "actionLinkClassName") ?? ""}
       canStart={props.canStart === true}
-      startPeriodId={str(props, 'startPeriodId') ?? ''}
+      startPeriodId={str(props, "startPeriodId") ?? ""}
       startBooks={(props.startBooks as { id: string; name: string }[]) ?? []}
-      startDefaultBookId={str(props, 'startDefaultBookId') ?? ''}
+      startDefaultBookId={str(props, "startDefaultBookId") ?? ""}
     />
   ),
 
   /* --- journal ------------------------------------------------------------- */
-  'journal-drafts': (props) => (
+  "journal-drafts": (props) => (
     <JournalDraftsPanel
-      heading={str(props, 'heading') ?? ''}
-      drafts={(props.drafts as ComponentProps<typeof JournalDraftsPanel>['drafts']) ?? []}
+      heading={str(props, "heading") ?? ""}
+      drafts={(props.drafts as ComponentProps<typeof JournalDraftsPanel>["drafts"]) ?? []}
     />
   ),
-  'journal-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof JournalDrawer> | null
-    return <>{drawer ? <JournalDrawer {...drawer} /> : null}<JournalEntryDrawer /></>
+  "journal-drawer": (props) => {
+    const drawer = props.drawer as ComponentProps<typeof JournalDrawer> | null;
+    return (
+      <>
+        {drawer ? <JournalDrawer {...drawer} /> : null}
+        <JournalEntryDrawer />
+      </>
+    );
   },
-  'new-journal': () => <NewJournalButton />,
+  "new-journal": () => <NewJournalButton />,
 
   /* --- chart of accounts -------------------------------------------------- */
-  'new-account': (props) => (
+  "new-account": (props) => (
     <NewAccountButton
       currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
-      label={str(props, 'label') ?? ''}
+      label={str(props, "label") ?? ""}
     />
   ),
-  'account-name-cell': (props) => (
+  "account-name-cell": (props) => (
     <AccountNameCell
-      number={str(props, 'number') ?? ''}
-      name={str(props, 'name') ?? ''}
-      href={str(props, 'href') ?? ''}
+      number={str(props, "number") ?? ""}
+      name={str(props, "name") ?? ""}
+      href={str(props, "href") ?? ""}
       isSummary={props.isSummary === true}
-      inactiveLabel={str(props, 'inactiveLabel') ?? null}
-      parentPath={str(props, 'parentPath') ?? null}
+      inactiveLabel={str(props, "inactiveLabel") ?? null}
+      parentPath={str(props, "parentPath") ?? null}
     />
   ),
-  'account-register-cell': (props) => (
+  "account-register-cell": (props) => (
     <AccountRegisterCell
-      accountId={str(props, 'accountId') ?? ''}
-      ariaLabel={str(props, 'ariaLabel') ?? ''}
-      title={str(props, 'title') ?? ''}
+      accountId={str(props, "accountId") ?? ""}
+      ariaLabel={str(props, "ariaLabel") ?? ""}
+      title={str(props, "title") ?? ""}
     />
   ),
-  'accounts-hierarchy': (props) => (
+  "accounts-hierarchy": (props) => (
     <AccountsHierarchyTable
-      groups={(props.groups as ComponentProps<typeof AccountsHierarchyTable>['groups']) ?? []}
-      labels={props.labels as ComponentProps<typeof AccountsHierarchyTable>['labels']}
+      groups={(props.groups as ComponentProps<typeof AccountsHierarchyTable>["groups"]) ?? []}
+      labels={props.labels as ComponentProps<typeof AccountsHierarchyTable>["labels"]}
     />
   ),
-  'account-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof AccountDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <AccountDrawer key={remountKey} {...rest} />
+  "account-drawer": (props) => {
+    const drawer = props.drawer as
+      (ComponentProps<typeof AccountDrawer> & { remountKey: string }) | null;
+    if (!drawer) return null;
+    const { remountKey, ...rest } = drawer;
+    return <AccountDrawer key={remountKey} {...rest} />;
   },
-  'compliance-matrix': (props) => (
+  "compliance-matrix": (props) => (
     <VendorComplianceMatrix
-      rows={props.rows as ComponentProps<typeof VendorComplianceMatrix>['rows']}
-      columns={props.columns as ComponentProps<typeof VendorComplianceMatrix>['columns']}
+      rows={props.rows as ComponentProps<typeof VendorComplianceMatrix>["rows"]}
+      columns={props.columns as ComponentProps<typeof VendorComplianceMatrix>["columns"]}
       classId={(props.classId as string | null) ?? null}
       stateFilter={(props.stateFilter as string | null) ?? null}
-      labels={props.labels as ComponentProps<typeof VendorComplianceMatrix>['labels']}
+      labels={props.labels as ComponentProps<typeof VendorComplianceMatrix>["labels"]}
     />
   ),
-  'matrix-filters': (props) => (
+  "matrix-filters": (props) => (
     <MatrixFilters
-      classes={props.classes as ComponentProps<typeof MatrixFilters>['classes']}
+      classes={props.classes as ComponentProps<typeof MatrixFilters>["classes"]}
       classId={(props.classId as string | null) ?? null}
       state={(props.state as string | null) ?? null}
     />
   ),
-  'vendor-compliance-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof VendorComplianceDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <VendorComplianceDrawer key={remountKey} {...rest} />
+  "vendor-compliance-drawer": (props) => {
+    const drawer = props.drawer as
+      (ComponentProps<typeof VendorComplianceDrawer> & { remountKey: string }) | null;
+    if (!drawer) return null;
+    const { remountKey, ...rest } = drawer;
+    return <VendorComplianceDrawer key={remountKey} {...rest} />;
   },
-  'new-filing': (props) => (
+  "new-filing": (props) => (
     <NewFilingButton
-      formTypes={(props.formTypes as ComponentProps<typeof NewFilingButton>['formTypes']) ?? []}
-      defaultYear={num(props, 'defaultYear') ?? 0}
+      formTypes={(props.formTypes as ComponentProps<typeof NewFilingButton>["formTypes"]) ?? []}
+      defaultYear={num(props, "defaultYear") ?? 0}
     />
   ),
-  'lien-waiver-toolbar': (props) => (
+  "lien-waiver-toolbar": (props) => (
     <LienWaiverToolbar
-      direction={str(props, 'direction') ?? ''}
-      status={str(props, 'status') ?? ''}
-      projects={props.projects as ComponentProps<typeof LienWaiverToolbar>['projects']}
-      vendors={props.vendors as ComponentProps<typeof LienWaiverToolbar>['vendors']}
+      direction={str(props, "direction") ?? ""}
+      status={str(props, "status") ?? ""}
+      projects={props.projects as ComponentProps<typeof LienWaiverToolbar>["projects"]}
+      vendors={props.vendors as ComponentProps<typeof LienWaiverToolbar>["vendors"]}
       canManage={props.canManage === true}
     />
   ),
-  'lien-waiver-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof LienWaiverDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <LienWaiverDrawer key={remountKey} {...rest} />
+  "lien-waiver-drawer": (props) => {
+    const drawer = props.drawer as
+      (ComponentProps<typeof LienWaiverDrawer> & { remountKey: string }) | null;
+    if (!drawer) return null;
+    const { remountKey, ...rest } = drawer;
+    return <LienWaiverDrawer key={remountKey} {...rest} />;
   },
-} satisfies Record<string, WidgetRenderer>
+} satisfies Record<string, WidgetRenderer>;

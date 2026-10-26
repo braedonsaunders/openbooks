@@ -1,194 +1,359 @@
-import { registerHooks } from 'node:module'
-import { resolveAppModule } from './test-module-hooks'
-import { pathToFileURL } from 'node:url'
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { randomUUID } from 'node:crypto'
-import * as React from 'react'
-import ExcelJS from 'exceljs'
-import { stubModules } from '../testing/stub-modules.ts'
+import { registerHooks } from "node:module";
+import { resolveAppModule } from "./test-module-hooks";
+import { pathToFileURL } from "node:url";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { randomUUID } from "node:crypto";
+import * as React from "react";
+import ExcelJS from "exceljs";
+import { stubModules } from "../testing/stub-modules.ts";
 
-const repo = process.cwd()
-const root = pathToFileURL(repo + '/').href
-const state: { user: import('./auth').SessionUser | null } = { user: null }
-Object.assign(globalThis, { __statementBookState: state, React })
-stubModules({ navigation: false, intl: 'export async function getFormatter(){return{number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}};export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t;};export async function getLocale(){return "en"}', authz: false, features: false });
+const repo = process.cwd();
+const root = pathToFileURL(repo + "/").href;
+const state: { user: import("./auth").SessionUser | null } = { user: null };
+Object.assign(globalThis, { __statementBookState: state, React });
+stubModules({
+  navigation: false,
+  intl: 'export async function getFormatter(){return{number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}};export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t;};export async function getLocale(){return "en"}',
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(s, c, next) {
-    if ((s === './auth' || s.endsWith('/lib/auth')) && c.parentURL?.includes('/web/') && !c.parentURL.includes('/web/lib/auth.ts')) {
+    if (
+      (s === "./auth" || s.endsWith("/lib/auth")) &&
+      c.parentURL?.includes("/web/") &&
+      !c.parentURL.includes("/web/lib/auth.ts")
+    ) {
       // Session identity comes from the test principal; every other auth
       // export (cookie names, token helpers used by locale/report-pdf) is the
       // real module's.
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(
-          `export * from ${JSON.stringify(root + 'web/lib/auth.ts')};export async function currentUser(){return globalThis.__statementBookState.user;}`,
-        ),
-      }
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export * from ${JSON.stringify(root + "web/lib/auth.ts")};export async function currentUser(){return globalThis.__statementBookState.user;}`,
+          ),
+      };
     }
-    const app = resolveAppModule(s, c, next, root)
-    if (app) return app
-    return next(s, c)
+    const app = resolveAppModule(s, c, next, root);
+    if (app) return app;
+    return next(s, c);
   },
-})
+});
 
-const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
-const { resolveReport } = await import('./report-run')
-const { withReportAuthz } = await import('./report-execution-context')
-const { parseReportQuery, buildDrillTarget, REPORT_PARAM_KEYS } = await import('./report-filters')
-const { parseReportDrillTarget, encodeReportDrillTarget } = await import('./report-drill')
-const { GET: exportStatement } = await import('../app/api/reports/statement/[kind]/export/route')
-const { GET: drill } = await import('../app/api/reports/drill/route')
+const { db, withBypassContext, withOrgTransaction } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
+const { resolveReport } = await import("./report-run");
+const { withReportAuthz } = await import("./report-execution-context");
+const { parseReportQuery, buildDrillTarget, REPORT_PARAM_KEYS } = await import("./report-filters");
+const { parseReportDrillTarget, encodeReportDrillTarget } = await import("./report-drill");
+const { GET: exportStatement } = await import("../app/api/reports/statement/[kind]/export/route");
+const { GET: drill } = await import("../app/api/reports/drill/route");
 const pages = {
-  pnl: (await import('../app/(app)/reports/pnl/page')).default,
-  'balance-sheet': (await import('../app/(app)/reports/balance-sheet/page')).default,
-}
-type Fixture = Awaited<ReturnType<typeof createScratchOrg>>
-type MatrixProps = { view: import('./statement-matrix').StatementView; drill: { bookId?: string; dims: import('./statement-matrix').StatementDimFilter; basis: 'accrual' } }
+  pnl: (await import("../app/(app)/reports/pnl/page")).default,
+  "balance-sheet": (await import("../app/(app)/reports/balance-sheet/page")).default,
+};
+type Fixture = Awaited<ReturnType<typeof createScratchOrg>>;
+type MatrixProps = {
+  view: import("./statement-matrix").StatementView;
+  drill: {
+    bookId?: string;
+    dims: import("./statement-matrix").StatementDimFilter;
+    basis: "accrual";
+  };
+};
 function matrixProps(node: unknown): MatrixProps | null {
-  if (!node || typeof node !== 'object') return null
-  if (React.isValidElement(node)) return matrixProps(node.props)
-  const props = node as Record<string, unknown>
-  if (props.view && props.drill) return props as MatrixProps
+  if (!node || typeof node !== "object") return null;
+  if (React.isValidElement(node)) return matrixProps(node.props);
+  const props = node as Record<string, unknown>;
+  if (props.view && props.drill) return props as MatrixProps;
   for (const value of Object.values(props)) {
-    const found = matrixProps(value)
-    if (found) return found
+    const found = matrixProps(value);
+    if (found) return found;
   }
-  return null
+  return null;
 }
-async function fixture(action: (org: Fixture, book: string, authz: import('./authz').Authz) => Promise<void>) {
+async function fixture(
+  action: (org: Fixture, book: string, authz: import("./authz").Authz) => Promise<void>,
+) {
   // Fixture setup seeds under explicit bypass: importing the pages under test
   // pulls in the web request-org resolver, which denies every unscoped query
   // under pooled RLS (bare createScratchOrg dies with 42501).
-  const org = await withBypassContext(() => createScratchOrg())
-  const book = randomUUID()
-  let unrelated: Fixture | undefined
+  const org = await withBypassContext(() => createScratchOrg());
+  const book = randomUUID();
+  let unrelated: Fixture | undefined;
   try {
     unrelated = await withBypassContext(async () => {
-      const u = await createScratchOrg()
+      const u = await createScratchOrg();
       await db.execute(sql`update subsidiaries set name='000 unrelated statement tenant'
-        where org_id=${u.orgId} and id=${u.subsidiaryId}`)
-      const uid = await createScratchUser(org.orgId, 'Book reader', 'book_reader')
-      await db.execute(sql`update app_roles set permissions='["reports.read","gl.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)
-      state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: 'Book reader', email: 'reader@example.test',
-        roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: uid }
+        where org_id=${u.orgId} and id=${u.subsidiaryId}`);
+      const uid = await createScratchUser(org.orgId, "Book reader", "book_reader");
+      await db.execute(
+        sql`update app_roles set permissions='["reports.read","gl.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`,
+      );
+      state.user = {
+        id: uid,
+        orgId: org.orgId,
+        isSuperAdmin: false,
+        name: "Book reader",
+        email: "reader@example.test",
+        roles: [],
+        envKind: "production",
+        productionOrgId: org.orgId,
+        homeOrgId: org.orgId,
+        homeUserId: uid,
+      };
       await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl,replication_mode,replication_from)
-        values(${book},${org.orgId},'TAX','Tax book',false,true,true,'full',${org.date})`)
-      for (const [id, amount, tag] of [[org.bookId, '100', 'PRIMARY'], [book, '700', 'SELECTED']] as const) {
-        const entry = randomUUID()
+        values(${book},${org.orgId},'TAX','Tax book',false,true,true,'full',${org.date})`);
+      for (const [id, amount, tag] of [
+        [org.bookId, "100", "PRIMARY"],
+        [book, "700", "SELECTED"],
+      ] as const) {
+        const entry = randomUUID();
         await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
-          values(${entry},${org.orgId},${id},${org.subsidiaryId},${tag},${org.date},${org.periodId},'draft','manual')`)
+          values(${entry},${org.orgId},${id},${org.subsidiaryId},${tag},${org.date},${org.periodId},'draft','manual')`);
         await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
           values(${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},${amount},'CAD',${amount},1),
-          (${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},${'-' + amount},'CAD',${'-' + amount},1)`)
-        await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`)
+          (${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},${"-" + amount},'CAD',${"-" + amount},1)`);
+        await db.execute(
+          sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`,
+        );
       }
-      return u
-    })
-    const authz = { user: state.user, permissions: new Set(['reports.read', 'gl.read']), allowedSubsidiaryIds: null } as import('./authz').Authz
-    await withOrgTransaction(org.orgId, () => withReportAuthz(authz, () => action(org, book, authz)))
+      return u;
+    });
+    const authz = {
+      user: state.user,
+      permissions: new Set(["reports.read", "gl.read"]),
+      allowedSubsidiaryIds: null,
+    } as import("./authz").Authz;
+    await withOrgTransaction(org.orgId, () =>
+      withReportAuthz(authz, () => action(org, book, authz)),
+    );
   } finally {
-    state.user = null
-    try { await withBypassContext(() => dropScratchOrgReporting(org.orgId)) }
-    finally { const u = unrelated; if (u) await withBypassContext(() => dropScratchOrgReporting(u.orgId)) }
+    state.user = null;
+    try {
+      await withBypassContext(() => dropScratchOrgReporting(org.orgId));
+    } finally {
+      const u = unrelated;
+      if (u) await withBypassContext(() => dropScratchOrgReporting(u.orgId));
+    }
   }
 }
-const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
+const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 // The schema-owner fixture connection bypasses RLS and pooled runs contain
 // several scratch tenants. Select this fixture's entity explicitly so this
 // accounting-book test does not depend on another tenant's picker ordering.
-const params = (org: Fixture, book?: string) => ({ period: 'custom', from: org.date, to: org.date, [REPORT_PARAM_KEYS.sub]: org.subsidiaryId, ...(book === undefined ? {} : { book }) })
-const request = (url: string) => new Request('http://test.local' + url)
+const params = (org: Fixture, book?: string) => ({
+  period: "custom",
+  from: org.date,
+  to: org.date,
+  [REPORT_PARAM_KEYS.sub]: org.subsidiaryId,
+  ...(book === undefined ? {} : { book }),
+});
+const request = (url: string) => new Request("http://test.local" + url);
 
-for (const kind of ['pnl', 'balance-sheet'] as const) {
-  test(`${kind} screen, shared renderer and exports retain the selected accounting book`, enabled, async () => fixture(async (org, book) => {
-    const account = kind === 'pnl' ? org.accounts.revenue : org.accounts.bank
-    for (const [selected, expected] of [[undefined, '100.0000'], [book, '700.0000'], [book.toUpperCase(), '700.0000']] as const) {
-      const sp = params(org, selected)
-      const matrix = matrixProps(await pages[kind]({ searchParams: Promise.resolve(sp) }))
-      assert.ok(matrix)
-      assert.equal(matrix.view.lines.find(line => line.accountId === account)?.values?.[0], expected, 'screen amount')
-      assert.equal(matrix.drill.bookId, selected ? book : org.bookId, 'drill retains the displayed book')
-      const p = new URLSearchParams(sp)
-      assert.equal(parseReportQuery(p).subsidiaryId, org.subsidiaryId, "fixture selects its entity through the real parser")
-      const resolved = await resolveReport(kind, p, { orgId: org.orgId, t: key => key,
-        period: { from: org.date, to: org.date, label: 'Book period' }, query: parseReportQuery(p) })
-      assert.equal(resolved.render, 'view')
-      if (resolved.render !== 'view') assert.fail('statement view required')
-      assert.equal(resolved.view.lines.find(line => line.accountId === account)?.values?.[0], expected, 'shared export/schedule renderer')
-      const response: Response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=csv&${p}`), { params: Promise.resolve({ kind }) })
-      assert.equal(response.status, 200, await response.clone().text())
-      const csv = await response.text()
-      assert.ok(csv.includes(expected.slice(0, -2)), csv)
-      assert.equal(csv.includes(selected ? '100.00' : '700.00'), false)
-    }
-    const p = new URLSearchParams(params(org, book))
-    const response: Response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=xlsx&${p}`), { params: Promise.resolve({ kind }) })
-    assert.equal(response.status, 200)
-    const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()) as unknown as Parameters<typeof workbook.xlsx.load>[0])
-    const rows = JSON.stringify(workbook.worksheets[0]?.getSheetValues())
-    assert.ok(rows.includes('700'))
-    assert.equal(rows.includes('100.00'), false)
-  }))
+for (const kind of ["pnl", "balance-sheet"] as const) {
+  test(
+    `${kind} screen, shared renderer and exports retain the selected accounting book`,
+    enabled,
+    async () =>
+      fixture(async (org, book) => {
+        const account = kind === "pnl" ? org.accounts.revenue : org.accounts.bank;
+        for (const [selected, expected] of [
+          [undefined, "100.0000"],
+          [book, "700.0000"],
+          [book.toUpperCase(), "700.0000"],
+        ] as const) {
+          const sp = params(org, selected);
+          const matrix = matrixProps(await pages[kind]({ searchParams: Promise.resolve(sp) }));
+          assert.ok(matrix);
+          assert.equal(
+            matrix.view.lines.find((line) => line.accountId === account)?.values?.[0],
+            expected,
+            "screen amount",
+          );
+          assert.equal(
+            matrix.drill.bookId,
+            selected ? book : org.bookId,
+            "drill retains the displayed book",
+          );
+          const p = new URLSearchParams(sp);
+          assert.equal(
+            parseReportQuery(p).subsidiaryId,
+            org.subsidiaryId,
+            "fixture selects its entity through the real parser",
+          );
+          const resolved = await resolveReport(kind, p, {
+            orgId: org.orgId,
+            t: (key) => key,
+            period: { from: org.date, to: org.date, label: "Book period" },
+            query: parseReportQuery(p),
+          });
+          assert.equal(resolved.render, "view");
+          if (resolved.render !== "view") assert.fail("statement view required");
+          assert.equal(
+            resolved.view.lines.find((line) => line.accountId === account)?.values?.[0],
+            expected,
+            "shared export/schedule renderer",
+          );
+          const response: Response = await exportStatement(
+            request(`/api/reports/statement/${kind}/export?format=csv&${p}`),
+            { params: Promise.resolve({ kind }) },
+          );
+          assert.equal(response.status, 200, await response.clone().text());
+          const csv = await response.text();
+          assert.ok(csv.includes(expected.slice(0, -2)), csv);
+          assert.equal(csv.includes(selected ? "100.00" : "700.00"), false);
+        }
+        const p = new URLSearchParams(params(org, book));
+        const response: Response = await exportStatement(
+          request(`/api/reports/statement/${kind}/export?format=xlsx&${p}`),
+          { params: Promise.resolve({ kind }) },
+        );
+        assert.equal(response.status, 200);
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(
+          Buffer.from(await response.arrayBuffer()) as unknown as Parameters<
+            typeof workbook.xlsx.load
+          >[0],
+        );
+        const rows = JSON.stringify(workbook.worksheets[0]?.getSheetValues());
+        assert.ok(rows.includes("700"));
+        assert.equal(rows.includes("100.00"), false);
+      }),
+  );
 }
 
-test('statement drill URL and route return the selected book supporting rows', enabled, async () => fixture(async (org, book) => {
-  const target = buildDrillTarget({ accountId: org.accounts.revenue, column: { kind: 'amount', from: org.date, to: org.date },
-    mode: 'flow', reportDims: {}, basis: 'accrual', label: 'Tax revenue', bookId: book })
-  assert.ok(target)
-  const parsed = parseReportDrillTarget(encodeReportDrillTarget(target))
-  assert.equal(parsed?.kind === 'ledger' ? parsed.bookId : undefined, book)
-  const response: Response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(encodeReportDrillTarget(target))))
-  assert.equal(response.status, 200, await response.clone().text())
-  const body = await response.text()
-  assert.ok(body.includes('SELECTED'), body)
-  assert.equal(body.includes('PRIMARY'), false)
-  assert.ok(body.includes('700.00'), body)
-}))
+test("statement drill URL and route return the selected book supporting rows", enabled, async () =>
+  fixture(async (org, book) => {
+    const target = buildDrillTarget({
+      accountId: org.accounts.revenue,
+      column: { kind: "amount", from: org.date, to: org.date },
+      mode: "flow",
+      reportDims: {},
+      basis: "accrual",
+      label: "Tax revenue",
+      bookId: book,
+    });
+    assert.ok(target);
+    const parsed = parseReportDrillTarget(encodeReportDrillTarget(target));
+    assert.equal(parsed?.kind === "ledger" ? parsed.bookId : undefined, book);
+    const response: Response = await drill(
+      request("/api/reports/drill?target=" + encodeURIComponent(encodeReportDrillTarget(target))),
+    );
+    assert.equal(response.status, 200, await response.clone().text());
+    const body = await response.text();
+    assert.ok(body.includes("SELECTED"), body);
+    assert.equal(body.includes("PRIMARY"), false);
+    assert.ok(body.includes("700.00"), body);
+  }),
+);
 
-test('explicit invalid or unavailable books never fall back to the primary book', enabled, async () => fixture(async (org, book) => {
-  // A foreign org's book id must read as foreign: create it under bypass so
-  // it does not join the surrounding tenant transaction.
-  const foreign = await withBypassContext(() => createScratchOrg())
-  try {
-    await withBypassContext(() => (db.execute(sql`update accounting_books set is_active=false where id=${book} and org_id=${org.orgId}`)))
-    for (const selected of ['', 'invalid', randomUUID(), foreign.bookId, book]) {
-      const sp = params(org, selected)
-      for (const kind of ['pnl', 'balance-sheet'] as const) {
-        await assert.rejects(pages[kind]({ searchParams: Promise.resolve(sp) }), /accounting book/i)
-        const response: Response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=csv&${new URLSearchParams(sp)}`), { params: Promise.resolve({ kind }) })
-        assert.equal(response.status, 422, selected)
+test(
+  "explicit invalid or unavailable books never fall back to the primary book",
+  enabled,
+  async () =>
+    fixture(async (org, book) => {
+      // A foreign org's book id must read as foreign: create it under bypass so
+      // it does not join the surrounding tenant transaction.
+      const foreign = await withBypassContext(() => createScratchOrg());
+      try {
+        await withBypassContext(() =>
+          db.execute(
+            sql`update accounting_books set is_active=false where id=${book} and org_id=${org.orgId}`,
+          ),
+        );
+        for (const selected of ["", "invalid", randomUUID(), foreign.bookId, book]) {
+          const sp = params(org, selected);
+          for (const kind of ["pnl", "balance-sheet"] as const) {
+            await assert.rejects(
+              pages[kind]({ searchParams: Promise.resolve(sp) }),
+              /accounting book/i,
+            );
+            const response: Response = await exportStatement(
+              request(
+                `/api/reports/statement/${kind}/export?format=csv&${new URLSearchParams(sp)}`,
+              ),
+              { params: Promise.resolve({ kind }) },
+            );
+            assert.equal(response.status, 422, selected);
+          }
+          const target = {
+            kind: "ledger",
+            label: "Revenue",
+            to: org.date,
+            mode: "flow",
+            bookId: selected,
+          };
+          const response: Response = await drill(
+            request("/api/reports/drill?target=" + encodeURIComponent(JSON.stringify(target))),
+          );
+          assert.equal(response.status, ["", "invalid"].includes(selected) ? 400 : 422);
+        }
+      } finally {
+        await withBypassContext(() => dropScratchOrgReporting(foreign.orgId));
       }
-      const target = { kind: 'ledger', label: 'Revenue', to: org.date, mode: 'flow', bookId: selected }
-      const response: Response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(JSON.stringify(target))))
-      assert.equal(response.status, ['', 'invalid'].includes(selected) ? 400 : 422)
-    }
-  } finally { await withBypassContext(() => dropScratchOrgReporting(foreign.orgId)) }
-}))
+    }),
+);
 
-test('budget Actual drills use the scenario book even after that book is retired', enabled, async () => fixture(async (org, book) => {
-  await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`)))
-  // A budget drill reads the plan as well as the ledger.
-  await withBypassContext(() => (db.execute(sql`update app_roles set permissions='["reports.read","gl.read","budgets.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)))
-  const scenario = randomUUID()
-  await withBypassContext(() => (db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name)
-    select ${scenario},${org.orgId},${book},fiscal_year,'Selected-book plan' from accounting_periods where id=${org.periodId} and org_id=${org.orgId}`)))
-  const target = buildDrillTarget({ accountId: org.accounts.revenue, column: { kind: 'amount', from: org.date, to: org.date },
-    mode: 'flow', reportDims: {}, basis: 'accrual', label: 'Actual revenue', budgetScenarioId: scenario })
-  assert.equal(target?.kind, 'budget', 'the scenario remains the authority for its Actual column')
-  if (target?.kind !== 'budget') assert.fail('budget target required')
-  assert.equal(target.scope, 'actual')
-  for (const active of [true, false]) {
-    await withBypassContext(() => (db.execute(sql`update accounting_books set is_active=${active} where id=${book} and org_id=${org.orgId}`)))
-    const response: Response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(encodeReportDrillTarget(target))))
-    assert.equal(response.status, 200, await response.clone().text())
-    const body = await response.text()
-    assert.ok(body.includes('SELECTED'), body)
-    assert.equal(body.includes('PRIMARY'), false)
-    assert.ok(body.includes('700.00'), body)
-  }
-}))
+test(
+  "budget Actual drills use the scenario book even after that book is retired",
+  enabled,
+  async () =>
+    fixture(async (org, book) => {
+      await withBypassContext(() =>
+        db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`,
+        ),
+      );
+      // A budget drill reads the plan as well as the ledger.
+      await withBypassContext(() =>
+        db.execute(
+          sql`update app_roles set permissions='["reports.read","gl.read","budgets.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`,
+        ),
+      );
+      const scenario = randomUUID();
+      await withBypassContext(() =>
+        db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name)
+    select ${scenario},${org.orgId},${book},fiscal_year,'Selected-book plan' from accounting_periods where id=${org.periodId} and org_id=${org.orgId}`),
+      );
+      const target = buildDrillTarget({
+        accountId: org.accounts.revenue,
+        column: { kind: "amount", from: org.date, to: org.date },
+        mode: "flow",
+        reportDims: {},
+        basis: "accrual",
+        label: "Actual revenue",
+        budgetScenarioId: scenario,
+      });
+      assert.equal(
+        target?.kind,
+        "budget",
+        "the scenario remains the authority for its Actual column",
+      );
+      if (target?.kind !== "budget") assert.fail("budget target required");
+      assert.equal(target.scope, "actual");
+      for (const active of [true, false]) {
+        await withBypassContext(() =>
+          db.execute(
+            sql`update accounting_books set is_active=${active} where id=${book} and org_id=${org.orgId}`,
+          ),
+        );
+        const response: Response = await drill(
+          request(
+            "/api/reports/drill?target=" + encodeURIComponent(encodeReportDrillTarget(target)),
+          ),
+        );
+        assert.equal(response.status, 200, await response.clone().text());
+        const body = await response.text();
+        assert.ok(body.includes("SELECTED"), body);
+        assert.equal(body.includes("PRIMARY"), false);
+        assert.ok(body.includes("700.00"), body);
+      }
+    }),
+);

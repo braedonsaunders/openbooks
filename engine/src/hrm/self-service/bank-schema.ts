@@ -34,8 +34,18 @@ export const bankChangeProposalSchema = z
       .trim()
       .min(4, "bank.accountNumber must be at least 4 characters")
       .max(64, "bank.accountNumber must be at most 64 characters"),
-    country: z.string().trim().max(64, "bank.country must be at most 64 characters").nullable().optional(),
-    currency: z.string().trim().max(3, "bank.currency must be at most 3 characters").nullable().optional(),
+    country: z
+      .string()
+      .trim()
+      .max(64, "bank.country must be at most 64 characters")
+      .nullable()
+      .optional(),
+    currency: z
+      .string()
+      .trim()
+      .max(3, "bank.currency must be at most 3 characters")
+      .nullable()
+      .optional(),
     routing: z.record(z.string(), z.string()).optional(),
   })
   .strict();

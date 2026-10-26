@@ -55,7 +55,10 @@ const WEBHOOK_MAX_RESPONSE_BYTES = 1_048_576;
 export class WebhookDeliveryError extends Error {}
 
 export function isLoopbackHostname(hostname: string): boolean {
-  const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  const host = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
   return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
 
@@ -73,7 +76,11 @@ export function deliveryUrlRefusal(url: string): string | null {
     return `webhook URL '${url}' is not a valid URL — use an https:// URL`;
   }
   if (parsed.protocol === "https:") return null;
-  if (parsed.protocol === "http:" && process.env.NODE_ENV === "test" && isLoopbackHostname(parsed.hostname)) {
+  if (
+    parsed.protocol === "http:" &&
+    process.env.NODE_ENV === "test" &&
+    isLoopbackHostname(parsed.hostname)
+  ) {
     return null;
   }
   return (
@@ -88,7 +95,12 @@ export function buildSignatureHeader(secret: string, timestampUnix: number, body
 }
 
 /** Parse and verify an `OpenBooks-Signature` header with an independent recomputation. */
-export function verifyWebhookSignature(secret: string, header: string, body: string, nowMs = Date.now()): boolean {
+export function verifyWebhookSignature(
+  secret: string,
+  header: string,
+  body: string,
+  nowMs = Date.now(),
+): boolean {
   const parts = header.split(",").map((p) => p.trim());
   const t = parts.find((p) => p.startsWith("t="))?.slice(2) ?? "";
   const candidates = parts.filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
@@ -123,7 +135,11 @@ export function classifyDeliveryResponse(code: number, excerpt: string): Deliver
   return { kind: "refused", code, excerpt };
 }
 
-export type PostDelivery = (url: string, body: string, headers: Record<string, string>) => Promise<{
+export type PostDelivery = (
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+) => Promise<{
   status: number;
   bodyExcerpt: string;
 }>;
@@ -146,20 +162,25 @@ export async function postWebhookDelivery(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_DELIVERY_TIMEOUT_MS);
   try {
-    const response = parsed.protocol === "http:"
-      ? await fetch(url, {
-        method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
-        body,
-        signal: controller.signal,
-        redirect: "manual",
-      })
-      : await guardedFetch(url, {
-        method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
-        body,
-        signal: controller.signal,
-      }, { maxResponseBytes: WEBHOOK_MAX_RESPONSE_BYTES });
+    const response =
+      parsed.protocol === "http:"
+        ? await fetch(url, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body,
+            signal: controller.signal,
+            redirect: "manual",
+          })
+        : await guardedFetch(
+            url,
+            {
+              method: "POST",
+              headers: { ...headers, "content-type": "application/json" },
+              body,
+              signal: controller.signal,
+            },
+            { maxResponseBytes: WEBHOOK_MAX_RESPONSE_BYTES },
+          );
     const text = await response.text().catch(() => "");
     return { status: response.status, bodyExcerpt: text.slice(0, RESPONSE_EXCERPT_CHARS) };
   } finally {
@@ -187,16 +208,21 @@ type ClaimedDelivery = {
 async function claimDueDeliveries(limit: number, now: Date): Promise<ClaimedDelivery[]> {
   // bypass: scheduler-tick — the delivery scan claims due items by id before their organization is in scope.
   return withBypassContext(async () => {
-    const candidates = await db.execute<{ id: string }>(sql`
+    const candidates = await db.execute<{ id: string }>(
+      sql`
       select id from webhook_deliveries
        where status = 'pending' and next_attempt_at <= ${now}
        order by next_attempt_at asc limit ${limit}
-    `, "objects");
+    `,
+      "objects",
+    );
     const claimed: ClaimedDelivery[] = [];
     for (const candidate of candidates) {
       // Atomic per-row claim: a rival that already moved the row matches
       // zero rows and moves on, so one delivery is never attempted twice.
-      const row = (await db.execute<ClaimedDelivery>(sql`
+      const row = (
+        await db.execute<ClaimedDelivery>(
+          sql`
         update webhook_deliveries d
            set attempt_count = d.attempt_count + 1,
                last_attempt_at = ${now},
@@ -216,7 +242,10 @@ async function claimDueDeliveries(limit: number, now: Date): Promise<ClaimedDeli
                   ep.consecutive_failures as "consecutiveFailures",
                   ep.auto_disable_after as "autoDisableAfter",
                   ep.status as "endpointStatus"
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (row) claimed.push(row);
     }
     return claimed;
@@ -231,9 +260,12 @@ async function notifyWebhookAdmins(
   orgId: string,
   input: { title: string; body: string; href: string },
 ): Promise<void> {
-  const candidates = await db.execute<{ id: string }>(sql`
+  const candidates = await db.execute<{ id: string }>(
+    sql`
     select id::text as id from users where org_id = ${orgId} and is_active
-  `, "objects");
+  `,
+    "objects",
+  );
   const recipients: { id: string }[] = [];
   for (const candidate of candidates) {
     if (await actorHasPermission(db, orgId, candidate.id, "webhooks.manage")) {
@@ -241,21 +273,33 @@ async function notifyWebhookAdmins(
     }
   }
   for (const recipient of recipients) {
-    const existing = (await db.execute<{ one: number }>(sql`
+    const existing = (
+      await db.execute<{ one: number }>(
+        sql`
       select 1 as one from notifications
        where org_id = ${orgId} and user_id = ${recipient.id}::uuid
          and kind = 'webhook_endpoint_disabled' and href = ${input.href} and read_at is null
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (existing) continue;
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into notifications (org_id, user_id, kind, title, body, href)
       values (${orgId}, ${recipient.id}::uuid, 'webhook_endpoint_disabled',
               ${input.title}, ${input.body}, ${input.href})
       returning id
-    `, "objects"))[0]?.id;
+    `,
+        "objects",
+      )
+    )[0]?.id;
     if (!inserted) {
-      throw new WebhookDeliveryError("the endpoint-disabled notice was not stored — no row was written; retry the action");
+      throw new WebhookDeliveryError(
+        "the endpoint-disabled notice was not stored — no row was written; retry the action",
+      );
     }
   }
 }
@@ -274,7 +318,9 @@ async function disableEndpoint(
      where org_id = ${orgId} and id = ${endpointId}::uuid and status = 'active'
   `);
   if ((updated.rowCount ?? 0) !== 1) {
-    throw new WebhookDeliveryError("the failing endpoint was not disabled — no row was written; retry the action");
+    throw new WebhookDeliveryError(
+      "the failing endpoint was not disabled — no row was written; retry the action",
+    );
   }
   await recordWebhookAudit(db, {
     orgId,
@@ -312,7 +358,9 @@ async function recordAttemptOutcome(
          where org_id = ${delivery.orgId} and id = ${delivery.id}::uuid
       `);
       if ((updated.rowCount ?? 0) !== 1) {
-        throw new WebhookDeliveryError(`delivery ${delivery.id} outcome was not stored — no row was written; retry the action`);
+        throw new WebhookDeliveryError(
+          `delivery ${delivery.id} outcome was not stored — no row was written; retry the action`,
+        );
       }
       await db.execute(sql`
         update webhook_endpoints
@@ -369,7 +417,11 @@ async function recordAttemptOutcome(
                updated_at = now()
          where org_id = ${delivery.orgId} and id = ${delivery.id}::uuid
       `);
-      await noteEndpointFailure(delivery, `delivery ${delivery.id} exhausted its 3-day retry budget`, now);
+      await noteEndpointFailure(
+        delivery,
+        `delivery ${delivery.id} exhausted its 3-day retry budget`,
+        now,
+      );
       return;
     }
     await db.execute(sql`
@@ -386,17 +438,28 @@ async function recordAttemptOutcome(
   });
 }
 
-async function noteEndpointFailure(delivery: ClaimedDelivery, error: string, now: Date): Promise<void> {
-  const row = (await db.execute<{ failures: number; threshold: number }>(sql`
+async function noteEndpointFailure(
+  delivery: ClaimedDelivery,
+  error: string,
+  now: Date,
+): Promise<void> {
+  const row = (
+    await db.execute<{ failures: number; threshold: number }>(
+      sql`
     update webhook_endpoints
        set consecutive_failures = consecutive_failures + 1,
            last_delivery_at = ${now}, last_delivery_status = 'failed', last_error = ${error},
            updated_at = now()
      where org_id = ${delivery.orgId} and id = ${delivery.endpointId}::uuid
     returning consecutive_failures as failures, auto_disable_after as threshold
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
-    throw new WebhookDeliveryError("the endpoint failure streak was not stored — no row was written; retry the action");
+    throw new WebhookDeliveryError(
+      "the endpoint failure streak was not stored — no row was written; retry the action",
+    );
   }
   if (row.failures >= row.threshold) {
     await disableEndpoint(
@@ -418,7 +481,11 @@ function deliveryBody(delivery: ClaimedDelivery): string {
   });
 }
 
-function signatureHeaders(delivery: ClaimedDelivery, body: string, timestampUnix: number): Record<string, string> {
+function signatureHeaders(
+  delivery: ClaimedDelivery,
+  body: string,
+  timestampUnix: number,
+): Record<string, string> {
   const scope = { orgId: delivery.orgId, purpose: "webhook.endpoint.secret" };
   const current = unsealSecret(delivery.secretSealed, scope);
   let header = buildSignatureHeader(current, timestampUnix, body);
@@ -484,7 +551,9 @@ export async function attemptDeliveryNow(
   post: PostDelivery = postWebhookDelivery,
 ): Promise<void> {
   const claimed = await withOrgContext(orgId, async () => {
-    const row = (await db.execute<ClaimedDelivery>(sql`
+    const row = (
+      await db.execute<ClaimedDelivery>(
+        sql`
       update webhook_deliveries d
          set attempt_count = d.attempt_count + 1,
              last_attempt_at = ${now},
@@ -504,7 +573,10 @@ export async function attemptDeliveryNow(
                 ep.consecutive_failures as "consecutiveFailures",
                 ep.auto_disable_after as "autoDisableAfter",
                 ep.status as "endpointStatus"
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     return row ?? null;
   });
   if (!claimed) {
@@ -532,4 +604,3 @@ export async function runWebhookDeliveryScan(
   }
   return { attempted: claimed.length, delivered };
 }
-

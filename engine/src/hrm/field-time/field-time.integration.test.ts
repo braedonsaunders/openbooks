@@ -47,9 +47,14 @@ async function enableFieldTime(orgId: string, extra: Record<string, boolean> = {
 
 function refusesCode(fn: () => Promise<unknown>): Promise<string> {
   return fn().then(
-    () => { throw new Error("expected a refusal"); },
+    () => {
+      throw new Error("expected a refusal");
+    },
     (error) => {
-      assert.ok(error instanceof FieldTimeError, `refusal is a FieldTimeError, got ${String(error)}`);
+      assert.ok(
+        error instanceof FieldTimeError,
+        `refusal is a FieldTimeError, got ${String(error)}`,
+      );
       return (error as FieldTimeError).code;
     },
   );
@@ -62,22 +67,68 @@ test("offline replay records each event once, entries once", { skip: !DB }, asyn
     const worker = randomUUID();
     const projectId = randomUUID();
     await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
-      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Crew Hand')`,
+      );
+      await db.execute(
+        sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`,
+      );
     });
     const events = [
-      { orgId: org.orgId, actorUserId: null, employeePartyId: worker, kind: "clock_in" as const, occurredAt: "2026-09-14T11:00:00.000Z", source: "mobile" as const, projectId, clientEventId: randomUUID() },
-      { orgId: org.orgId, actorUserId: null, employeePartyId: worker, kind: "clock_out" as const, occurredAt: "2026-09-14T19:00:00.000Z", source: "mobile" as const, projectId, clientEventId: randomUUID() },
+      {
+        orgId: org.orgId,
+        actorUserId: null,
+        employeePartyId: worker,
+        kind: "clock_in" as const,
+        occurredAt: "2026-09-14T11:00:00.000Z",
+        source: "mobile" as const,
+        projectId,
+        clientEventId: randomUUID(),
+      },
+      {
+        orgId: org.orgId,
+        actorUserId: null,
+        employeePartyId: worker,
+        kind: "clock_out" as const,
+        occurredAt: "2026-09-14T19:00:00.000Z",
+        source: "mobile" as const,
+        projectId,
+        clientEventId: randomUUID(),
+      },
     ];
     const first = await withOrg(org.orgId, () => replayClockEvents(events));
     const second = await withOrg(org.orgId, () => replayClockEvents(events));
-    assert.equal(first.filter((r) => "replayed" in r && (r as { replayed: boolean }).replayed).length, 0);
-    assert.equal(second.filter((r) => "replayed" in r && (r as { replayed: boolean }).replayed).length, 2);
-    const entries = await withOrg(org.orgId, async () => (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0]?.n);
+    assert.equal(
+      first.filter((r) => "replayed" in r && (r as { replayed: boolean }).replayed).length,
+      0,
+    );
+    assert.equal(
+      second.filter((r) => "replayed" in r && (r as { replayed: boolean }).replayed).length,
+      2,
+    );
+    const entries = await withOrg(
+      org.orgId,
+      async () =>
+        (
+          await db.execute<{ n: string }>(
+            sql`
+      select count(*)::text as n from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`,
+            "objects",
+          )
+        )[0]?.n,
+    );
     assert.equal(entries, "1");
-    const stored = await withOrg(org.orgId, async () => (await db.execute<{ hours: string }>(sql`
-      select hours::text as hours from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0]?.hours);
+    const stored = await withOrg(
+      org.orgId,
+      async () =>
+        (
+          await db.execute<{ hours: string }>(
+            sql`
+      select hours::text as hours from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`,
+            "objects",
+          )
+        )[0]?.hours,
+    );
     // 8h device time minus the 30-minute declared break, quarter-rounded.
     assert.equal(stored, "7.5000");
   } finally {
@@ -91,11 +142,18 @@ test("clock-out with no open pair refuses by name", { skip: !DB }, async () => {
     await enableFieldTime(org.orgId);
     const worker = randomUUID();
     const code = await withOrg(org.orgId, () =>
-      refusesCode(() => recordClockEvent({
-        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
-        kind: "clock_out", occurredAt: "2026-09-14T19:00:00.000Z",
-        source: "mobile", clientEventId: randomUUID(),
-      })));
+      refusesCode(() =>
+        recordClockEvent({
+          orgId: org.orgId,
+          actorUserId: null,
+          employeePartyId: worker,
+          kind: "clock_out",
+          occurredAt: "2026-09-14T19:00:00.000Z",
+          source: "mobile",
+          clientEventId: randomUUID(),
+        }),
+      ),
+    );
     assert.equal(code, "no_open_clock");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -109,23 +167,42 @@ test("stale pairs auto-close with a flag, hours kept", { skip: !DB }, async () =
     const worker = randomUUID();
     const projectId = randomUUID();
     await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
-      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Crew Hand')`,
+      );
+      await db.execute(
+        sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`,
+      );
       await recordClockEvent({
-        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
-        kind: "clock_in", occurredAt: "2026-09-10T11:00:00.000Z",
-        source: "mobile", projectId, clientEventId: randomUUID(),
+        orgId: org.orgId,
+        actorUserId: null,
+        employeePartyId: worker,
+        kind: "clock_in",
+        occurredAt: "2026-09-10T11:00:00.000Z",
+        source: "mobile",
+        projectId,
+        clientEventId: randomUUID(),
       });
       // A new clock-in 4 days later auto-closes the stale pair first.
       const result = await recordClockEvent({
-        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
-        kind: "clock_in", occurredAt: "2026-09-14T11:00:00.000Z",
-        source: "mobile", projectId, clientEventId: randomUUID(),
+        orgId: org.orgId,
+        actorUserId: null,
+        employeePartyId: worker,
+        kind: "clock_in",
+        occurredAt: "2026-09-14T11:00:00.000Z",
+        source: "mobile",
+        projectId,
+        clientEventId: randomUUID(),
       });
       assert.ok(result.autoClosedPairId, "the stale pair auto-closes with a flag");
-      const flagged = (await db.execute<{ n: string }>(sql`
+      const flagged = (
+        await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n from time_clock_events
-         where org_id = ${org.orgId} and auto_closed`, "objects"))[0]?.n;
+         where org_id = ${org.orgId} and auto_closed`,
+          "objects",
+        )
+      )[0]?.n;
       assert.equal(flagged, "1");
     });
   } finally {
@@ -139,26 +216,64 @@ test("five wrong PINs lock the kiosk identity", { skip: !DB }, async () => {
     await enableFieldTime(org.orgId);
     const worker = randomUUID();
     const kiosk = await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Crew Hand')`,
+      );
       const employmentId = randomUUID();
-      await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${worker}, ${org.subsidiaryId}, 1)`);
-      await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
-      const { kiosk } = await registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Gate", allowedSubsidiaryIds: null });
-      await setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821", allowedSubsidiaryIds: null });
+      await db.execute(
+        sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${worker}, ${org.subsidiaryId}, 1)`,
+      );
+      await db.execute(
+        sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`,
+      );
+      const { kiosk } = await registerKiosk({
+        orgId: org.orgId,
+        actorUserId: randomUUID(),
+        name: "Gate",
+        allowedSubsidiaryIds: null,
+      });
+      await setWorkerPin({
+        orgId: org.orgId,
+        actorUserId: randomUUID(),
+        employeePartyId: worker,
+        pin: "4821",
+        allowedSubsidiaryIds: null,
+      });
       return kiosk;
     });
     await withOrg(org.orgId, async () => {
-      assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })), "pin_wrong");
-      const firstFailure = (await db.execute<{ failed_attempts: number; locked_until: string | null }>(sql`
+      assert.equal(
+        await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })),
+        "pin_wrong",
+      );
+      const firstFailure = (
+        await db.execute<{ failed_attempts: number; locked_until: string | null }>(
+          sql`
         select failed_attempts, locked_until::text as locked_until from worker_clock_pins
-         where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0];
-      assert.equal(firstFailure?.failed_attempts, 1, "the refusal is raised only after its failure count commits");
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(
+        firstFailure?.failed_attempts,
+        1,
+        "the refusal is raised only after its failure count commits",
+      );
       assert.equal(firstFailure?.locked_until, null);
       for (let i = 0; i < 3; i++) {
-        assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })), "pin_wrong");
+        assert.equal(
+          await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })),
+          "pin_wrong",
+        );
       }
-      assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })), "pin_locked");
-      assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "4821" })), "pin_locked");
+      assert.equal(
+        await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })),
+        "pin_locked",
+      );
+      assert.equal(
+        await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "4821" })),
+        "pin_locked",
+      );
     });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -174,40 +289,105 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
     const projectId = randomUUID();
     const itemId = randomUUID();
     const unitId = randomUUID();
-    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
+    const actor = await createWorkOperator(org.orgId, "Crew operator", [
+      "time.read",
+      "time.manage",
+      "time.crew.enter",
+    ]);
     const posted = await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
-      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
-      await db.execute(sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`);
-      await db.execute(sql`insert into items (id, org_id, kind, code, name, default_cost, default_rate, expense_account_id, cost_recovery_account_id, income_account_id, is_active, custom) values (${itemId}, ${org.orgId}, 'equipment_charge', 'EXC', 'Excavator', '125.3750', '250.0000', ${org.accounts.cogs}, ${org.accounts.adjustment}, ${org.accounts.revenue}, true, '{}'::jsonb)`);
-      await db.execute(sql`insert into equipment_units (id, org_id, subsidiary_id, unit_number, name, status, charge_item_id, purchase_price) values (${unitId}, ${org.orgId}, ${org.subsidiaryId}, 'EQ-0001', 'Excavator 1', 'active', ${itemId}, '75000')`);
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`,
+      );
+      await db.execute(
+        sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`,
+      );
+      await db.execute(
+        sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`,
+      );
+      await db.execute(
+        sql`insert into items (id, org_id, kind, code, name, default_cost, default_rate, expense_account_id, cost_recovery_account_id, income_account_id, is_active, custom) values (${itemId}, ${org.orgId}, 'equipment_charge', 'EXC', 'Excavator', '125.3750', '250.0000', ${org.accounts.cogs}, ${org.accounts.adjustment}, ${org.accounts.revenue}, true, '{}'::jsonb)`,
+      );
+      await db.execute(
+        sql`insert into equipment_units (id, org_id, subsidiary_id, unit_number, name, status, charge_item_id, purchase_price) values (${unitId}, ${org.orgId}, ${org.subsidiaryId}, 'EQ-0001', 'Excavator 1', 'active', ${itemId}, '75000')`,
+      );
       const batchId = await createBatch({
-        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
-        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        actorUserId: actor,
+        foremanPartyId: foreman,
+        projectId,
+        workedOn: "2026-09-14",
+        canManageAll: true,
+        allowedSubsidiaryIds: null,
       });
       await setBatchLines({
-        orgId: org.orgId, actorUserId: actor, batchId,
-        lines: [{ employeePartyId: worker, hours: "8.0000", equipmentId: unitId, equipmentHours: "4.0000" }],
-        canManageAll: true, allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        actorUserId: actor,
+        batchId,
+        lines: [
+          {
+            employeePartyId: worker,
+            hours: "8.0000",
+            equipmentId: unitId,
+            equipmentHours: "4.0000",
+          },
+        ],
+        canManageAll: true,
+        allowedSubsidiaryIds: null,
       });
-      await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
+      await submitBatch({
+        orgId: org.orgId,
+        actorUserId: actor,
+        batchId,
+        canManageAll: true,
+        allowedSubsidiaryIds: null,
+      });
       // The tenant has no configured gate, so native submission releases the batch.
-      return postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
+      return postBatch({
+        orgId: org.orgId,
+        actorUserId: actor,
+        batchId,
+        allowedSubsidiaryIds: null,
+      });
     });
     assert.equal(posted.entryIds.length, 1);
     assert.equal(posted.chargeDocumentIds.length, 1);
     await withOrg(org.orgId, async () => {
       // Posting twice refuses — hours and charges stay single.
-      const batchId = (await db.execute<{ id: string }>(sql`select id::text as id from crew_time_batches where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
-      assert.equal(await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null })), "batch_already_posted");
-      const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`, "objects"))[0]?.n;
+      const batchId = (
+        await db.execute<{ id: string }>(
+          sql`select id::text as id from crew_time_batches where org_id = ${org.orgId} limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      assert.equal(
+        await refusesCode(() =>
+          postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }),
+        ),
+        "batch_already_posted",
+      );
+      const entries = (
+        await db.execute<{ n: string }>(
+          sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]?.n;
       assert.equal(entries, "1");
-      const charges = (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where org_id = ${org.orgId} and kind = 'project_charge'`, "objects"))[0]?.n;
+      const charges = (
+        await db.execute<{ n: string }>(
+          sql`select count(*)::text as n from documents where org_id = ${org.orgId} and kind = 'project_charge'`,
+          "objects",
+        )
+      )[0]?.n;
       assert.equal(charges, "1");
       // 4h × 125.3750 = 501.5000 balanced through the charge path.
-      const line = (await db.execute<{ cost_amount: string; bill_amount: string; equipment_unit_id: string }>(sql`
+      const line = (
+        await db.execute<{ cost_amount: string; bill_amount: string; equipment_unit_id: string }>(
+          sql`
         select cost_amount::text, bill_amount::text, equipment_unit_id::text from document_lines
-         where org_id = ${org.orgId} and equipment_unit_id = ${unitId}`, "objects"))[0];
+         where org_id = ${org.orgId} and equipment_unit_id = ${unitId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(line?.cost_amount, "501.5000");
       assert.equal(line?.equipment_unit_id, unitId);
     });
@@ -216,104 +396,215 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
   }
 });
 
-test("submission signs the batch lines that remain after a concurrent edit", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let releaseEdit!: () => void;
-  let acquiredEdit!: () => void;
-  const editHeld = new Promise<void>((resolve) => { acquiredEdit = resolve; });
-  const editCanCommit = new Promise<void>((resolve) => { releaseEdit = resolve; });
-  try {
-    await enableFieldTime(org.orgId);
-    const foreman = randomUUID();
-    const workerA = randomUUID();
-    const workerB = randomUUID();
-    const projectId = randomUUID();
-    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
-    const batchId = await withOrg(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{fieldTime,signatureRequired}', 'true'::jsonb, true) where id = ${org.orgId}`);
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${workerA}, ${org.orgId}, 'person', 'Crew A'), (${workerB}, ${org.orgId}, 'person', 'Crew B')`);
-      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-SIGN', 'Signing job', 'active', true, '{}'::jsonb)`);
-      await db.execute(sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`);
-      const id = await createBatch({ orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman, projectId, workedOn: "2026-09-15", canManageAll: true, allowedSubsidiaryIds: null });
-      await setBatchLines({ orgId: org.orgId, actorUserId: actor, batchId: id, lines: [{ employeePartyId: workerA, hours: "4.0000" }], canManageAll: true, allowedSubsidiaryIds: null });
-      return id;
+test(
+  "submission signs the batch lines that remain after a concurrent edit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let releaseEdit!: () => void;
+    let acquiredEdit!: () => void;
+    const editHeld = new Promise<void>((resolve) => {
+      acquiredEdit = resolve;
     });
+    const editCanCommit = new Promise<void>((resolve) => {
+      releaseEdit = resolve;
+    });
+    try {
+      await enableFieldTime(org.orgId);
+      const foreman = randomUUID();
+      const workerA = randomUUID();
+      const workerB = randomUUID();
+      const projectId = randomUUID();
+      const actor = await createWorkOperator(org.orgId, "Crew operator", [
+        "time.read",
+        "time.manage",
+        "time.crew.enter",
+      ]);
+      const batchId = await withOrg(org.orgId, async () => {
+        await db.execute(
+          sql`update orgs set settings = jsonb_set(settings, '{fieldTime,signatureRequired}', 'true'::jsonb, true) where id = ${org.orgId}`,
+        );
+        await db.execute(
+          sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${workerA}, ${org.orgId}, 'person', 'Crew A'), (${workerB}, ${org.orgId}, 'person', 'Crew B')`,
+        );
+        await db.execute(
+          sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-SIGN', 'Signing job', 'active', true, '{}'::jsonb)`,
+        );
+        await db.execute(
+          sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`,
+        );
+        const id = await createBatch({
+          orgId: org.orgId,
+          actorUserId: actor,
+          foremanPartyId: foreman,
+          projectId,
+          workedOn: "2026-09-15",
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
+        });
+        await setBatchLines({
+          orgId: org.orgId,
+          actorUserId: actor,
+          batchId: id,
+          lines: [{ employeePartyId: workerA, hours: "4.0000" }],
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
+        });
+        return id;
+      });
 
-    const editTransaction = withOrgTransaction(org.orgId, async () => {
-      await db.execute(sql`select id from crew_time_batches where org_id = ${org.orgId} and id = ${batchId} for update`);
-      acquiredEdit();
-      await editCanCommit;
-      await db.execute(sql`delete from crew_time_batch_lines where org_id = ${org.orgId} and batch_id = ${batchId}`);
-      await db.execute(sql`insert into crew_time_batch_lines (org_id, batch_id, employee_party_id, hours, created_by, updated_by) values (${org.orgId}, ${batchId}, ${workerB}, '6.0000', ${actor}, ${actor})`);
-    });
-    await editHeld;
-    const submission = withOrg(org.orgId, () => submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, signerName: "Foreman A", canManageAll: true, allowedSubsidiaryIds: null }));
-    let waiting = false;
-    for (let attempt = 0; attempt < 100; attempt++) {
-      const result = await withOrg(org.orgId, () => db.execute(sql`
+      const editTransaction = withOrgTransaction(org.orgId, async () => {
+        await db.execute(
+          sql`select id from crew_time_batches where org_id = ${org.orgId} and id = ${batchId} for update`,
+        );
+        acquiredEdit();
+        await editCanCommit;
+        await db.execute(
+          sql`delete from crew_time_batch_lines where org_id = ${org.orgId} and batch_id = ${batchId}`,
+        );
+        await db.execute(
+          sql`insert into crew_time_batch_lines (org_id, batch_id, employee_party_id, hours, created_by, updated_by) values (${org.orgId}, ${batchId}, ${workerB}, '6.0000', ${actor}, ${actor})`,
+        );
+      });
+      await editHeld;
+      const submission = withOrg(org.orgId, () =>
+        submitBatch({
+          orgId: org.orgId,
+          actorUserId: actor,
+          batchId,
+          signerName: "Foreman A",
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
+        }),
+      );
+      let waiting = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const result = await withOrg(org.orgId, () =>
+          db.execute(
+            sql`
         select pid from pg_stat_activity where datname = current_database()
           and pid <> pg_backend_pid() and wait_event_type = 'Lock'
-          and query ilike '%crew_time_batches%'`, "objects"));
-      if (result.length > 0) { waiting = true; break; }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    assert.ok(waiting, "submission waits for the edit's batch lock before reading signed lines");
-    releaseEdit();
-    await editTransaction;
-    await submission;
+          and query ilike '%crew_time_batches%'`,
+            "objects",
+          ),
+        );
+        if (result.length > 0) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.ok(waiting, "submission waits for the edit's batch lock before reading signed lines");
+      releaseEdit();
+      await editTransaction;
+      await submission;
 
-    await withOrg(org.orgId, async () => {
-      const result = (await db.execute<{ employee_party_id: string; hours: string; signature_evidence: { linesDigest: string } }>(sql`
+      await withOrg(org.orgId, async () => {
+        const result = (
+          await db.execute<{
+            employee_party_id: string;
+            hours: string;
+            signature_evidence: { linesDigest: string };
+          }>(
+            sql`
         select l.employee_party_id::text as employee_party_id, l.hours::text as hours, b.signature_evidence
           from crew_time_batches b join crew_time_batch_lines l on l.batch_id = b.id
-         where b.org_id = ${org.orgId} and b.id = ${batchId}`, "objects"))[0];
-      assert.equal(result?.employee_party_id, workerB);
-      const expected = createHash("sha256").update([workerB, "6.0000", "", "", "", "", "", ""].join("|")).digest("hex");
-      assert.equal(result?.signature_evidence.linesDigest, expected, "signature evidence identifies the lines actually submitted");
-    });
-  } finally {
-    releaseEdit();
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("a foreman double-submit names the existing batch instead of a 500", { skip: !DB }, async () => {
-  // G14: a retry/timeout second POST collided on the foreman/day business
-  // key and leaked a PG unique violation (a 500 with driver detail). The
-  // retry must refuse by name with the winning batch id, and exactly one
-  // batch row exists.
-  const org = await createScratchOrg();
-  try {
-    await enableFieldTime(org.orgId);
-    const foreman = randomUUID();
-    const projectId = randomUUID();
-    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
-    await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman')`);
-      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
-      await db.execute(sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`);
-      const first = await createBatch({
-        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
-        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
+         where b.org_id = ${org.orgId} and b.id = ${batchId}`,
+            "objects",
+          )
+        )[0];
+        assert.equal(result?.employee_party_id, workerB);
+        const expected = createHash("sha256")
+          .update([workerB, "6.0000", "", "", "", "", "", ""].join("|"))
+          .digest("hex");
+        assert.equal(
+          result?.signature_evidence.linesDigest,
+          expected,
+          "signature evidence identifies the lines actually submitted",
+        );
       });
-      const retry = await createBatch({
-        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
-        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
-      }).then(
-        () => { throw new Error("expected a refusal"); },
-        (error: unknown) => error,
-      );
-      assert.ok(retry instanceof FieldTimeError, `retry refuses with FieldTimeError, got ${String(retry)}`);
-      assert.equal(retry.code, "batch_already_exists");
-      assert.match(retry.message, new RegExp(`batch ${first}`), "the refusal names the winning batch id");
-      const batches = (await db.execute<{ ids: string[] }>(sql`
-        select array_agg(id::text) as ids from crew_time_batches where org_id = ${org.orgId}`, "objects"))[0]!.ids;
-      assert.deepEqual(batches, [first]);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    } finally {
+      releaseEdit();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a foreman double-submit names the existing batch instead of a 500",
+  { skip: !DB },
+  async () => {
+    // G14: a retry/timeout second POST collided on the foreman/day business
+    // key and leaked a PG unique violation (a 500 with driver detail). The
+    // retry must refuse by name with the winning batch id, and exactly one
+    // batch row exists.
+    const org = await createScratchOrg();
+    try {
+      await enableFieldTime(org.orgId);
+      const foreman = randomUUID();
+      const projectId = randomUUID();
+      const actor = await createWorkOperator(org.orgId, "Crew operator", [
+        "time.read",
+        "time.manage",
+        "time.crew.enter",
+      ]);
+      await withOrg(org.orgId, async () => {
+        await db.execute(
+          sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman')`,
+        );
+        await db.execute(
+          sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`,
+        );
+        await db.execute(
+          sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`,
+        );
+        const first = await createBatch({
+          orgId: org.orgId,
+          actorUserId: actor,
+          foremanPartyId: foreman,
+          projectId,
+          workedOn: "2026-09-14",
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
+        });
+        const retry = await createBatch({
+          orgId: org.orgId,
+          actorUserId: actor,
+          foremanPartyId: foreman,
+          projectId,
+          workedOn: "2026-09-14",
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
+        }).then(
+          () => {
+            throw new Error("expected a refusal");
+          },
+          (error: unknown) => error,
+        );
+        assert.ok(
+          retry instanceof FieldTimeError,
+          `retry refuses with FieldTimeError, got ${String(retry)}`,
+        );
+        assert.equal(retry.code, "batch_already_exists");
+        assert.match(
+          retry.message,
+          new RegExp(`batch ${first}`),
+          "the refusal names the winning batch id",
+        );
+        const batches = (
+          await db.execute<{ ids: string[] }>(
+            sql`
+        select array_agg(id::text) as ids from crew_time_batches where org_id = ${org.orgId}`,
+            "objects",
+          )
+        )[0]!.ids;
+        assert.deepEqual(batches, [first]);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a submitted batch approves once; a rejected batch never posts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -322,43 +613,106 @@ test("a submitted batch approves once; a rejected batch never posts", { skip: !D
     const foreman = randomUUID();
     const worker = randomUUID();
     const projectId = randomUUID();
-    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
+    const actor = await createWorkOperator(org.orgId, "Crew operator", [
+      "time.read",
+      "time.manage",
+      "time.crew.enter",
+    ]);
     await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
-      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`,
+      );
+      await db.execute(
+        sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`,
+      );
       const reviewer = await createWorkOperator(org.orgId, "Crew reviewer", ["time.approve"]);
-      await seedApprovalFlow(org.orgId, { subjectKind: "crew_time_batch", assignees: [{ type: "user", userId: reviewer }], mode: "all", preventSelfApproval: true });
-      const decide = async (batchId: string, decision: "approved" | "rejected", comment?: string) => {
-        const gate = (await db.execute<{id:string}>(sql`select id from flow_gates
-          where org_id=${org.orgId} and subject_kind='crew_time_batch' and subject_id=${batchId} and status='pending'`, "objects"))[0];
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "crew_time_batch",
+        assignees: [{ type: "user", userId: reviewer }],
+        mode: "all",
+        preventSelfApproval: true,
+      });
+      const decide = async (
+        batchId: string,
+        decision: "approved" | "rejected",
+        comment?: string,
+      ) => {
+        const gate = (
+          await db.execute<{ id: string }>(
+            sql`select id from flow_gates
+          where org_id=${org.orgId} and subject_kind='crew_time_batch' and subject_id=${batchId} and status='pending'`,
+            "objects",
+          )
+        )[0];
         assert.ok(gate, "the configured tenant Flow must retain a native review gate");
         await decideGate({ gateId: gate.id, userId: reviewer, decision, comment });
       };
       const submitted = async (workedOn: string): Promise<string> => {
         const batchId = await createBatch({
-          orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
-          projectId, workedOn, canManageAll: true, allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          actorUserId: actor,
+          foremanPartyId: foreman,
+          projectId,
+          workedOn,
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
         });
         await setBatchLines({
-          orgId: org.orgId, actorUserId: actor, batchId,
+          orgId: org.orgId,
+          actorUserId: actor,
+          batchId,
           lines: [{ employeePartyId: worker, hours: "8.0000" }],
-          canManageAll: true, allowedSubsidiaryIds: null,
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
         });
-        await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
+        await submitBatch({
+          orgId: org.orgId,
+          actorUserId: actor,
+          batchId,
+          canManageAll: true,
+          allowedSubsidiaryIds: null,
+        });
         return batchId;
       };
       const approvedId = await submitted("2026-09-14");
       await decide(approvedId, "approved");
-      assert.equal((await db.execute<{status:string}>(sql`select status from crew_time_batches where org_id=${org.orgId} and id=${approvedId}`, "objects"))[0]?.status, "approved");
       assert.equal(
-        await refusesCode(() => approveBatch({ orgId: org.orgId, actorUserId: actor, batchId: approvedId, allowedSubsidiaryIds: null })),
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from crew_time_batches where org_id=${org.orgId} and id=${approvedId}`,
+            "objects",
+          )
+        )[0]?.status,
+        "approved",
+      );
+      assert.equal(
+        await refusesCode(() =>
+          approveBatch({
+            orgId: org.orgId,
+            actorUserId: actor,
+            batchId: approvedId,
+            allowedSubsidiaryIds: null,
+          }),
+        ),
         "batch_not_approvable",
       );
       const rejectedId = await submitted("2026-09-15");
       await decide(rejectedId, "rejected", "Split the overtime line");
-      const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${rejectedId}`, "objects"))[0]?.status;
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`select status from crew_time_batches where id = ${rejectedId}`,
+          "objects",
+        )
+      )[0]?.status;
       assert.equal(status, "rejected");
-      const posted = await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId: rejectedId, allowedSubsidiaryIds: null }));
+      const posted = await refusesCode(() =>
+        postBatch({
+          orgId: org.orgId,
+          actorUserId: actor,
+          batchId: rejectedId,
+          allowedSubsidiaryIds: null,
+        }),
+      );
       assert.equal(posted, "batch_not_approved");
     });
   } finally {
@@ -370,11 +724,18 @@ test("feature-off recording refuses with the remedy", { skip: !DB }, async () =>
   const org = await createScratchOrg();
   try {
     const code = await withOrg(org.orgId, () =>
-      refusesCode(() => recordClockEvent({
-        orgId: org.orgId, actorUserId: null, employeePartyId: randomUUID(),
-        kind: "clock_in", occurredAt: "2026-09-14T11:00:00.000Z",
-        source: "mobile", clientEventId: randomUUID(),
-      })));
+      refusesCode(() =>
+        recordClockEvent({
+          orgId: org.orgId,
+          actorUserId: null,
+          employeePartyId: randomUUID(),
+          kind: "clock_in",
+          occurredAt: "2026-09-14T11:00:00.000Z",
+          source: "mobile",
+          clientEventId: randomUUID(),
+        }),
+      ),
+    );
     assert.equal(code, "field_time_off");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -388,25 +749,59 @@ test("crew post refuses while Projects is off and writes no time", { skip: !DB }
     const foreman = randomUUID();
     const worker = randomUUID();
     const projectId = randomUUID();
-    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
+    const actor = await createWorkOperator(org.orgId, "Crew operator", [
+      "time.read",
+      "time.manage",
+      "time.crew.enter",
+    ]);
     await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
-      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
-      await db.execute(sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`);
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`,
+      );
+      await db.execute(
+        sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`,
+      );
+      await db.execute(
+        sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`,
+      );
       // Batch scaffolding still works with Projects off; only the post that
       // would write open project time refuses, like the timesheet save.
       const batchId = await createBatch({
-        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
-        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        actorUserId: actor,
+        foremanPartyId: foreman,
+        projectId,
+        workedOn: "2026-09-14",
+        canManageAll: true,
+        allowedSubsidiaryIds: null,
       });
       await setBatchLines({
-        orgId: org.orgId, actorUserId: actor, batchId,
+        orgId: org.orgId,
+        actorUserId: actor,
+        batchId,
         lines: [{ employeePartyId: worker, hours: "8.0000" }],
-        canManageAll: true, allowedSubsidiaryIds: null,
+        canManageAll: true,
+        allowedSubsidiaryIds: null,
       });
-      await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
-      assert.equal(await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null })), "projects_off");
-      const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`, "objects"))[0]?.n;
+      await submitBatch({
+        orgId: org.orgId,
+        actorUserId: actor,
+        batchId,
+        canManageAll: true,
+        allowedSubsidiaryIds: null,
+      });
+      assert.equal(
+        await refusesCode(() =>
+          postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }),
+        ),
+        "projects_off",
+      );
+      const entries = (
+        await db.execute<{ n: string }>(
+          sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]?.n;
       assert.equal(entries, "0", "the refused post writes no time");
     });
   } finally {

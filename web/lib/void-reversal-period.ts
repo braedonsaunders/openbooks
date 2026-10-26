@@ -1,52 +1,52 @@
-'use client'
+"use client";
 
-import { promptDialog } from '@/lib/prompt'
+import { promptDialog } from "@/lib/prompt";
 
 export type VoidReversalPeriodCopy = {
-  title: string
+  title: string;
   /** Label above the reversal-date input. */
-  dateLabel: string
+  dateLabel: string;
   /** "Original entry" — prefixes the entry's date in the summary. */
-  summaryOriginal: string
+  summaryOriginal: string;
   /** "Reversal" — prefixes the suggested date in the summary. */
-  summaryReversal: string
+  summaryReversal: string;
   /** Fiscal-year abbreviation shown as "FY 2026". */
-  fiscalYear: string
+  fiscalYear: string;
   /** Shown when the entry's period closed and the default moved forward. */
-  fallbackNotice: string
+  fallbackNotice: string;
   /** Shown when no open period follows the entry's period. */
-  closedNotice: string
-  label: string
-  regularOption: string
-  confirm: string
-  cancel: string
-}
+  closedNotice: string;
+  label: string;
+  regularOption: string;
+  confirm: string;
+  cancel: string;
+};
 
 export type VoidReversalPeriodChoice = {
-  cancelled: boolean
-  reversalDate: string | null
-  reversalPeriodId: string | null
+  cancelled: boolean;
+  reversalDate: string | null;
+  reversalPeriodId: string | null;
   /** Revision token fenced on the void POST; null when the lookup failed. */
-  revision: string | null
-}
+  revision: string | null;
+};
 
 type AdjustmentPeriod = {
-  id: string
-  name: string
-  startsOn: string
-  endsOn: string
-}
+  id: string;
+  name: string;
+  startsOn: string;
+  endsOn: string;
+};
 
 export type VoidReversalSuggestion = {
-  originalDate: string
-  suggestedDate: string
-  fallbackToOpenPeriod: boolean
-  originalFiscalYear: number | null
-  originalPeriodName: string | null
-  suggestedFiscalYear: number | null
-  suggestedPeriodName: string | null
-  suggestedOpen: boolean
-}
+  originalDate: string;
+  suggestedDate: string;
+  fallbackToOpenPeriod: boolean;
+  originalFiscalYear: number | null;
+  originalPeriodName: string | null;
+  suggestedFiscalYear: number | null;
+  suggestedPeriodName: string | null;
+  suggestedOpen: boolean;
+};
 
 /**
  * One YYYY-MM-DD line for the dialog summary: the date with its fiscal year
@@ -59,7 +59,9 @@ export function formatReversalSummaryLine(
   fiscalYear: number | null,
   fiscalYearLabel: string,
 ): string {
-  return fiscalYear == null ? `${label}: ${date}` : `${label}: ${date} (${fiscalYearLabel} ${fiscalYear})`
+  return fiscalYear == null
+    ? `${label}: ${date}`
+    : `${label}: ${date} (${fiscalYearLabel} ${fiscalYear})`;
 }
 
 /**
@@ -68,19 +70,32 @@ export function formatReversalSummaryLine(
  * moved forward — or the no-open-period warning when nothing follows.
  */
 export function formatReversalSummary(
-  copy: Pick<VoidReversalPeriodCopy, 'summaryOriginal' | 'summaryReversal' | 'fiscalYear' | 'fallbackNotice' | 'closedNotice'>,
+  copy: Pick<
+    VoidReversalPeriodCopy,
+    "summaryOriginal" | "summaryReversal" | "fiscalYear" | "fallbackNotice" | "closedNotice"
+  >,
   suggestion: VoidReversalSuggestion,
 ): string {
   const parts = [
-    formatReversalSummaryLine(copy.summaryOriginal, suggestion.originalDate, suggestion.originalFiscalYear, copy.fiscalYear),
-    formatReversalSummaryLine(copy.summaryReversal, suggestion.suggestedDate, suggestion.suggestedFiscalYear, copy.fiscalYear),
-  ]
-  if (suggestion.fallbackToOpenPeriod) parts.push(copy.fallbackNotice)
-  else if (!suggestion.suggestedOpen) parts.push(copy.closedNotice)
-  return parts.join(' · ')
+    formatReversalSummaryLine(
+      copy.summaryOriginal,
+      suggestion.originalDate,
+      suggestion.originalFiscalYear,
+      copy.fiscalYear,
+    ),
+    formatReversalSummaryLine(
+      copy.summaryReversal,
+      suggestion.suggestedDate,
+      suggestion.suggestedFiscalYear,
+      copy.fiscalYear,
+    ),
+  ];
+  if (suggestion.fallbackToOpenPeriod) parts.push(copy.fallbackNotice);
+  else if (!suggestion.suggestedOpen) parts.push(copy.closedNotice);
+  return parts.join(" · ");
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Confirm a void reversal with its date. The dialog always shows the entry's
@@ -97,40 +112,48 @@ export async function promptVoidReversalPeriod(
   documentId: string,
   copy: VoidReversalPeriodCopy,
 ): Promise<VoidReversalPeriodChoice> {
-  let periods: AdjustmentPeriod[] = []
-  let suggestion: VoidReversalSuggestion | null = null
-  let revision: string | null = null
+  let periods: AdjustmentPeriod[] = [];
+  let suggestion: VoidReversalSuggestion | null = null;
+  let revision: string | null = null;
   try {
-    const res = await fetch(`/api/documents/${documentId}/void`)
+    const res = await fetch(`/api/documents/${documentId}/void`);
     if (res.ok) {
-      const data = (await res.json().catch(() => null)) as {
-        adjustmentPeriods?: unknown
-      } & Partial<VoidReversalSuggestion> & { revision?: unknown } | null
+      const data = (await res.json().catch(() => null)) as
+        | ({
+            adjustmentPeriods?: unknown;
+          } & Partial<VoidReversalSuggestion> & { revision?: unknown })
+        | null;
       if (data && Array.isArray(data.adjustmentPeriods)) {
         periods = (data.adjustmentPeriods as Partial<AdjustmentPeriod>[]).filter(
           (period): period is AdjustmentPeriod =>
-            !!period && typeof period.id === 'string' && typeof period.name === 'string',
-        )
+            !!period && typeof period.id === "string" && typeof period.name === "string",
+        );
       }
-      if (data && typeof data.originalDate === 'string' && typeof data.suggestedDate === 'string') {
-        revision = typeof data.revision === 'string' && data.revision.length > 0 ? data.revision : null
+      if (data && typeof data.originalDate === "string" && typeof data.suggestedDate === "string") {
+        revision =
+          typeof data.revision === "string" && data.revision.length > 0 ? data.revision : null;
         suggestion = {
           originalDate: data.originalDate,
           suggestedDate: data.suggestedDate,
           fallbackToOpenPeriod: data.fallbackToOpenPeriod === true,
-          originalFiscalYear: typeof data.originalFiscalYear === 'number' ? data.originalFiscalYear : null,
-          originalPeriodName: typeof data.originalPeriodName === 'string' ? data.originalPeriodName : null,
-          suggestedFiscalYear: typeof data.suggestedFiscalYear === 'number' ? data.suggestedFiscalYear : null,
-          suggestedPeriodName: typeof data.suggestedPeriodName === 'string' ? data.suggestedPeriodName : null,
+          originalFiscalYear:
+            typeof data.originalFiscalYear === "number" ? data.originalFiscalYear : null,
+          originalPeriodName:
+            typeof data.originalPeriodName === "string" ? data.originalPeriodName : null,
+          suggestedFiscalYear:
+            typeof data.suggestedFiscalYear === "number" ? data.suggestedFiscalYear : null,
+          suggestedPeriodName:
+            typeof data.suggestedPeriodName === "string" ? data.suggestedPeriodName : null,
           suggestedOpen: data.suggestedOpen === true,
-        }
+        };
       }
     }
   } catch {
-    periods = []
+    periods = [];
   }
-  if (!suggestion) return { cancelled: false, reversalDate: null, reversalPeriodId: null, revision }
-  let reversalDate = suggestion.suggestedDate
+  if (!suggestion)
+    return { cancelled: false, reversalDate: null, reversalPeriodId: null, revision };
+  let reversalDate = suggestion.suggestedDate;
   for (;;) {
     const chosen = await promptDialog({
       title: copy.title,
@@ -139,25 +162,28 @@ export async function promptVoidReversalPeriod(
       initialValue: reversalDate,
       confirmLabel: copy.confirm,
       cancelLabel: copy.cancel,
-    })
-    if (chosen === null) return { cancelled: true, reversalDate: null, reversalPeriodId: null, revision }
+    });
+    if (chosen === null)
+      return { cancelled: true, reversalDate: null, reversalPeriodId: null, revision };
     if (ISO_DATE.test(chosen)) {
-      reversalDate = chosen
-      break
+      reversalDate = chosen;
+      break;
     }
-    reversalDate = chosen
+    reversalDate = chosen;
   }
-  if (periods.length === 0) return { cancelled: false, reversalDate, reversalPeriodId: null, revision }
+  if (periods.length === 0)
+    return { cancelled: false, reversalDate, reversalPeriodId: null, revision };
   const period = await promptDialog({
     title: copy.title,
     label: copy.label,
     confirmLabel: copy.confirm,
     cancelLabel: copy.cancel,
     options: [
-      { value: '', label: copy.regularOption },
+      { value: "", label: copy.regularOption },
       ...periods.map((entry) => ({ value: entry.id, label: entry.name })),
     ],
-  })
-  if (period === null) return { cancelled: true, reversalDate: null, reversalPeriodId: null, revision }
-  return { cancelled: false, reversalDate, reversalPeriodId: period || null, revision }
+  });
+  if (period === null)
+    return { cancelled: true, reversalDate: null, reversalPeriodId: null, revision };
+  return { cancelled: false, reversalDate, reversalPeriodId: period || null, revision };
 }

@@ -92,7 +92,10 @@ function compareText(a: string, b: string): number {
 }
 
 function assertWeekRange(window: ForecastWindow): void {
-  for (const [field, date] of [["firstWeek", window.firstWeek], ["lastWeek", window.lastWeek]] as const) {
+  for (const [field, date] of [
+    ["firstWeek", window.firstWeek],
+    ["lastWeek", window.lastWeek],
+  ] as const) {
     if (weekStartOf(date) !== date) throw new RangeError(`${field} must be a Sunday`);
   }
   const spanDays = calendarDaysBetween(window.firstWeek, window.lastWeek);
@@ -155,9 +158,14 @@ export function buildResourcingForecast(
     activeById.set(row.id, row);
     if (row.employeePartyId) {
       const fact = getPersonWeek(row.employeePartyId, row.weekStart);
-      const bucket = row.booking === "hard"
-        ? (row.isBillable ? fact.hardBillable : fact.hardNonBillable)
-        : (row.isBillable ? fact.softBillable : fact.softNonBillable);
+      const bucket =
+        row.booking === "hard"
+          ? row.isBillable
+            ? fact.hardBillable
+            : fact.hardNonBillable
+          : row.isBillable
+            ? fact.softBillable
+            : fact.softNonBillable;
       bucket.push(row.id);
       const weekMap = row.booking === "hard" ? personHardWeeks : personSoftWeeks;
       const weeks = weekMap.get(row.employeePartyId) ?? new Map<string, string[]>();
@@ -179,47 +187,60 @@ export function buildResourcingForecast(
     }
   }
 
-  const facts = [...personWeeks.values()].map((fact): PersonWeekForecast => {
-    const hardBillableHours = sum(fact.hardBillable.map((id) => {
-      return activeById.get(id)!.plannedHours;
-    }));
-    const hardNonBillableHours = sum(fact.hardNonBillable.map((id) => {
-      return activeById.get(id)!.plannedHours;
-    }));
-    const softBillableHours = sum(fact.softBillable.map((id) => {
-      return activeById.get(id)!.plannedHours;
-    }));
-    const softNonBillableHours = sum(fact.softNonBillable.map((id) => {
-      return activeById.get(id)!.plannedHours;
-    }));
-    const hardHours = add(hardBillableHours, hardNonBillableHours);
-    const netCapacity = fact.availability?.netCapacity ?? null;
-    return {
-      employeePartyId: fact.employeePartyId,
-      weekStart: fact.weekStart,
-      capacity: fact.availability?.capacity ?? null,
-      holidays: fact.availability?.holidays ?? null,
-      timeOff: fact.availability?.timeOff ?? null,
-      netCapacity,
-      capacityOverage: fact.availability?.overage ?? null,
-      hardBillableHours,
-      hardNonBillableHours,
-      softBillableHours,
-      softNonBillableHours,
-      availableHours: netCapacity === null ? null : add(netCapacity, neg(hardHours)),
-      overallocated: netCapacity === null ? null : cmp(hardHours, netCapacity) > 0,
-      assignmentIds: sorted([
-        ...fact.hardBillable,
-        ...fact.hardNonBillable,
-        ...fact.softBillable,
-        ...fact.softNonBillable,
-      ]),
-      hardBillableAssignmentIds: sorted(fact.hardBillable),
-      hardNonBillableAssignmentIds: sorted(fact.hardNonBillable),
-      softBillableAssignmentIds: sorted(fact.softBillable),
-      softNonBillableAssignmentIds: sorted(fact.softNonBillable),
-    };
-  }).sort((a, b) => compareText(a.weekStart, b.weekStart) || compareText(a.employeePartyId, b.employeePartyId));
+  const facts = [...personWeeks.values()]
+    .map((fact): PersonWeekForecast => {
+      const hardBillableHours = sum(
+        fact.hardBillable.map((id) => {
+          return activeById.get(id)!.plannedHours;
+        }),
+      );
+      const hardNonBillableHours = sum(
+        fact.hardNonBillable.map((id) => {
+          return activeById.get(id)!.plannedHours;
+        }),
+      );
+      const softBillableHours = sum(
+        fact.softBillable.map((id) => {
+          return activeById.get(id)!.plannedHours;
+        }),
+      );
+      const softNonBillableHours = sum(
+        fact.softNonBillable.map((id) => {
+          return activeById.get(id)!.plannedHours;
+        }),
+      );
+      const hardHours = add(hardBillableHours, hardNonBillableHours);
+      const netCapacity = fact.availability?.netCapacity ?? null;
+      return {
+        employeePartyId: fact.employeePartyId,
+        weekStart: fact.weekStart,
+        capacity: fact.availability?.capacity ?? null,
+        holidays: fact.availability?.holidays ?? null,
+        timeOff: fact.availability?.timeOff ?? null,
+        netCapacity,
+        capacityOverage: fact.availability?.overage ?? null,
+        hardBillableHours,
+        hardNonBillableHours,
+        softBillableHours,
+        softNonBillableHours,
+        availableHours: netCapacity === null ? null : add(netCapacity, neg(hardHours)),
+        overallocated: netCapacity === null ? null : cmp(hardHours, netCapacity) > 0,
+        assignmentIds: sorted([
+          ...fact.hardBillable,
+          ...fact.hardNonBillable,
+          ...fact.softBillable,
+          ...fact.softNonBillable,
+        ]),
+        hardBillableAssignmentIds: sorted(fact.hardBillable),
+        hardNonBillableAssignmentIds: sorted(fact.hardNonBillable),
+        softBillableAssignmentIds: sorted(fact.softBillable),
+        softNonBillableAssignmentIds: sorted(fact.softNonBillable),
+      };
+    })
+    .sort(
+      (a, b) =>
+        compareText(a.weekStart, b.weekStart) || compareText(a.employeePartyId, b.employeePartyId),
+    );
 
   const hardIdsByPerson = new Map<string, string[]>();
   for (const [personId, weeks] of personHardWeeks) {
@@ -227,7 +248,12 @@ export function buildResourcingForecast(
   }
   const benchByPerson = new Map<string, BenchPerson>();
   for (const fact of facts) {
-    if (!inWindow(fact.weekStart, window) || fact.netCapacity === null || cmp(fact.netCapacity, "0") <= 0) continue;
+    if (
+      !inWindow(fact.weekStart, window) ||
+      fact.netCapacity === null ||
+      cmp(fact.netCapacity, "0") <= 0
+    )
+      continue;
     const existing = benchByPerson.get(fact.employeePartyId) ?? {
       employeePartyId: fact.employeePartyId,
       weekStarts: [],
@@ -240,10 +266,12 @@ export function buildResourcingForecast(
     benchByPerson.set(fact.employeePartyId, existing);
   }
   const bench = [...benchByPerson.values()]
-    .filter((person) => (hardIdsByPerson.get(person.employeePartyId) ?? []).every((id) => {
-      const row = activeById.get(id)!;
-      return !inWindow(row.weekStart, window);
-    }))
+    .filter((person) =>
+      (hardIdsByPerson.get(person.employeePartyId) ?? []).every((id) => {
+        const row = activeById.get(id)!;
+        return !inWindow(row.weekStart, window);
+      }),
+    )
     .map((person) => ({
       ...person,
       weekStarts: sorted(person.weekStarts),
@@ -262,11 +290,16 @@ export function buildResourcingForecast(
   }
   const rolloffs: RolloffPerson[] = [];
   for (const [employeePartyId, hardWeeks] of hardWeeksByPerson) {
-    const lastHardWeek = hardWeeks.reduce((latest, week) => week > latest ? week : latest);
+    const lastHardWeek = hardWeeks.reduce((latest, week) => (week > latest ? week : latest));
     if (lastHardWeek < asOfWeek || lastHardWeek > rolloffEnd) continue;
     const lastWeekIds = personHardWeeks.get(employeePartyId)?.get(lastHardWeek) ?? [];
     const tentativeAfterIds = activeAssignments
-      .filter((row) => row.employeePartyId === employeePartyId && row.booking === "soft" && row.weekStart > lastHardWeek)
+      .filter(
+        (row) =>
+          row.employeePartyId === employeePartyId &&
+          row.booking === "soft" &&
+          row.weekStart > lastHardWeek,
+      )
       .map((row) => row.id);
     rolloffs.push({
       employeePartyId,
@@ -275,22 +308,28 @@ export function buildResourcingForecast(
       tentativeAfterIds: sorted(tentativeAfterIds),
     });
   }
-  rolloffs.sort((a, b) => compareText(a.lastHardWeek, b.lastHardWeek) || compareText(a.employeePartyId, b.employeePartyId));
+  rolloffs.sort(
+    (a, b) =>
+      compareText(a.lastHardWeek, b.lastHardWeek) ||
+      compareText(a.employeePartyId, b.employeePartyId),
+  );
 
-  const genericDemand = [...genericWeeks.values()].map((fact): GenericDemandWeek => {
-    const hardHours = sum(fact.hard.map((id) => activeById.get(id)!.plannedHours));
-    const softHours = sum(fact.soft.map((id) => activeById.get(id)!.plannedHours));
-    return {
-      jobTitle: fact.jobTitle,
-      weekStart: fact.weekStart,
-      hardHours,
-      softHours,
-      totalHours: add(hardHours, softHours),
-      assignmentIds: sorted([...fact.hard, ...fact.soft]),
-      hardAssignmentIds: sorted(fact.hard),
-      softAssignmentIds: sorted(fact.soft),
-    };
-  }).sort((a, b) => compareText(a.weekStart, b.weekStart) || compareText(a.jobTitle, b.jobTitle));
+  const genericDemand = [...genericWeeks.values()]
+    .map((fact): GenericDemandWeek => {
+      const hardHours = sum(fact.hard.map((id) => activeById.get(id)!.plannedHours));
+      const softHours = sum(fact.soft.map((id) => activeById.get(id)!.plannedHours));
+      return {
+        jobTitle: fact.jobTitle,
+        weekStart: fact.weekStart,
+        hardHours,
+        softHours,
+        totalHours: add(hardHours, softHours),
+        assignmentIds: sorted([...fact.hard, ...fact.soft]),
+        hardAssignmentIds: sorted(fact.hard),
+        softAssignmentIds: sorted(fact.soft),
+      };
+    })
+    .sort((a, b) => compareText(a.weekStart, b.weekStart) || compareText(a.jobTitle, b.jobTitle));
 
   return { personWeeks: facts, bench, rolloffs, genericDemand };
 }

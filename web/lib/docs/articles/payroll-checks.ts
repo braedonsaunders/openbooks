@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const payrollChecks: DocArticle = {
-  slug: 'payroll-checks',
-  title: 'Payroll Checks',
-  category: 'projects',
+  slug: "payroll-checks",
+  title: "Payroll Checks",
+  category: "projects",
   order: 15,
   summary:
-    'The deterministic pre-run anomaly queue: block, warn and info flags with their numbers, lifecycle transitions with reasons, and the finalize gate they enforce.',
-  updated: '2026-09-27',
-  keywords: ['payroll', 'anomaly', 'flags', 'checks', 'finalize', 'block', 'scan', 'timesheet'],
-  related: ['payroll', 'payslip-explanations', 'ai-governance-ledger'],
+    "The deterministic pre-run anomaly queue: block, warn and info flags with their numbers, lifecycle transitions with reasons, and the finalize gate they enforce.",
+  updated: "2026-09-27",
+  keywords: ["payroll", "anomaly", "flags", "checks", "finalize", "block", "scan", "timesheet"],
+  related: ["payroll", "payslip-explanations", "ai-governance-ledger"],
   body: `# Payroll Checks
 
 Payroll checks scan a pay period before the run finalizes and raise one flag per finding, each with its numbers: the amounts, the cohort baseline they were measured against, and the exact records behind them. Flags come in three severities. Block refuses the pay-run finalize while open. Warn records the risk and lets the run through once acknowledged. Info is FYI and never gates anything.
@@ -28,4 +28,4 @@ A run whose period overlaps an open block flag cannot finalize: the commit refus
 
 Timesheet approvers see the same flags as chips on the weekly grid for weeks they overlap — informational only, approval itself is never blocked. Every scan, transition and finalize refusal appends to the AI governance ledger with the flag as its source.
 `,
-}
+};

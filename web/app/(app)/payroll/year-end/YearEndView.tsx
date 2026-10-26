@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
-import { FilingWorkspace } from '../_ui/filing-workspace'
+import { useTranslations } from "next-intl";
+import type { YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
+import { FilingWorkspace } from "../_ui/filing-workspace";
 
 /**
  * Year-end cockpit body: the shared filing workspace (registry-declared
@@ -18,38 +18,38 @@ export function YearEndView({
   sections,
   canFile,
 }: {
-  year: number
-  years: number[]
-  sections: YearEndFilingSection[]
+  year: number;
+  years: number[];
+  sections: YearEndFilingSection[];
   /** Whether the operator may file (payroll.run) — gates every filing act. */
-  canFile: boolean
+  canFile: boolean;
 }) {
-  const t = useTranslations('payroll.yearEnd')
+  const t = useTranslations("payroll.yearEnd");
   return (
     <FilingWorkspace
       year={year}
       years={years}
       path="/payroll/year-end"
       canFile={canFile}
-      emptyTitle={t('noFilings')}
+      emptyTitle={t("noFilings")}
       // The original → amended → cancelled lifecycle belongs to year-end
       // returns only. Separation documents live on /payroll/separations and
       // their corrections are the agency's own separation workflow.
       amendments
       groups={[
         {
-          key: 'annual',
-          label: t('cadence.annual'),
-          help: t('cadence.annualHelp'),
-          sections: sections.filter((section) => section.cadence === 'annual'),
+          key: "annual",
+          label: t("cadence.annual"),
+          help: t("cadence.annualHelp"),
+          sections: sections.filter((section) => section.cadence === "annual"),
         },
         {
-          key: 'quarterly',
-          label: t('cadence.quarterly'),
-          help: t('cadence.quarterlyHelp'),
-          sections: sections.filter((section) => section.cadence === 'quarterly'),
+          key: "quarterly",
+          label: t("cadence.quarterly"),
+          help: t("cadence.quarterlyHelp"),
+          sections: sections.filter((section) => section.cadence === "quarterly"),
         },
       ]}
     />
-  )
+  );
 }

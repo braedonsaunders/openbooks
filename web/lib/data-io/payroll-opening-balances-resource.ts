@@ -1,10 +1,17 @@
-import { importRowError } from './row-error'
-import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { cmp } from '@openbooks/engine/money/money'
-import { parseEntitlementCarryInAmount } from '@openbooks/engine/payroll/entitlements-openings-save'
+import { importRowError } from "./row-error";
+import {
+  readExportWindow,
+  transferId,
+  transferWhere,
+  transferOrder,
+  transferLimit,
+  finishExportPage,
+} from "./export-page";
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { cmp } from "@openbooks/engine/money/money";
+import { parseEntitlementCarryInAmount } from "@openbooks/engine/payroll/entitlements-openings-save";
 import {
   assertTaxYear,
   declaredProgramBaseFields,
@@ -19,7 +26,7 @@ import {
   saveOpeningBalances,
   type DeclaredProgramBaseField,
   type OpeningComponentField,
-} from '@openbooks/engine/payroll/opening-balances'
+} from "@openbooks/engine/payroll/opening-balances";
 import {
   assertMovementDate,
   entitlementOpeningLocks,
@@ -27,16 +34,22 @@ import {
   resolvePlanLimit,
   saveEntitlementOpenings,
   type EntitlementPlan,
-} from '@openbooks/engine/payroll/entitlements/operations'
-import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
-import type { DataResource, WriteCtx } from './resources'
+} from "@openbooks/engine/payroll/entitlements/operations";
+import type {
+  CellValue,
+  ImportMode,
+  ResourceDescriptor,
+  ResourceField,
+  WriteOutcome,
+} from "./types";
+import type { DataResource, WriteCtx } from "./resources";
 import {
   duplicateImportRowIndexes,
   importRowAction,
   subsidiaryReadFilterWithUnassigned,
   type ReadCtx,
-} from './resource-core'
-import { employeeWriteScopeError } from './write-scope'
+} from "./resource-core";
+import { employeeWriteScopeError } from "./write-scope";
 
 /**
  * Mid-year adoption carry-in as an import/export resource.
@@ -56,19 +69,19 @@ import { employeeWriteScopeError } from './write-scope'
 
 // Row cap is the canonical MAX_EXPORT_ROWS from ./resource-core (a second
 // local copy would let the two caps drift, silently reintroducing this bug).
-export const PAYROLL_OPENING_BALANCES_KEY = 'payroll-opening-balances'
+export const PAYROLL_OPENING_BALANCES_KEY = "payroll-opening-balances";
 
 export const PAYROLL_OPENING_BALANCES_DESCRIPTOR: ResourceDescriptor = {
   key: PAYROLL_OPENING_BALANCES_KEY,
-  label: 'Payroll opening balances',
-  group: 'Setup',
-  iconKey: 'history',
-  readPermission: 'payroll.read',
-  writePermission: 'payroll.manage',
+  label: "Payroll opening balances",
+  group: "Setup",
+  iconKey: "history",
+  readPermission: "payroll.read",
+  writePermission: "payroll.manage",
   supportsImport: true,
-  naturalKey: 'employee + taxYear',
+  naturalKey: "employee + taxYear",
   scopedWrite: true,
-}
+};
 
 /**
  * Component openings become one column per annually-capped component, named
@@ -77,7 +90,7 @@ export const PAYROLL_OPENING_BALANCES_DESCRIPTOR: ResourceDescriptor = {
  * imported into another. The engine resolves either the code or the uuid, so the
  * importer does not own a second resolver.
  */
-const COMPONENT_PREFIX = 'component:'
+const COMPONENT_PREFIX = "component:";
 
 /**
  * Per-program insurable-earnings carry-ins become one column per declared
@@ -87,7 +100,7 @@ const COMPONENT_PREFIX = 'component:'
  * declaration (English fallback, like the declaration itself): no catalog
  * key is minted per program.
  */
-const PROGRAM_PREFIX = 'program:'
+const PROGRAM_PREFIX = "program:";
 
 /**
  * Advisory for a row that carries no amounts where no carry-in is stored.
@@ -96,14 +109,14 @@ const PROGRAM_PREFIX = 'program:'
  * than a created/updated count — a blank line in a file must never read as
  * progress.
  */
-const NOTHING_TO_WRITE = 'row carries no amounts and no carry-in is stored — nothing to write'
+const NOTHING_TO_WRITE = "row carries no amounts and no carry-in is stored — nothing to write";
 
 function componentColumnKey(component: OpeningComponentField): string {
-  return `${COMPONENT_PREFIX}${component.code}`
+  return `${COMPONENT_PREFIX}${component.code}`;
 }
 
 function programColumnKey(programKey: string): string {
-  return `${PROGRAM_PREFIX}${programKey}`
+  return `${PROGRAM_PREFIX}${programKey}`;
 }
 
 /**
@@ -114,17 +127,15 @@ function programColumnKey(programKey: string): string {
  * an instruction to delete an employee's program base, and the engine treats
  * `undefined` as "keep what is stored".
  */
-function programAmountsFrom(
-  src: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-  const amounts: Record<string, unknown> = {}
-  let present = false
+function programAmountsFrom(src: Record<string, unknown>): Record<string, unknown> | undefined {
+  const amounts: Record<string, unknown> = {};
+  let present = false;
   for (const [key, value] of Object.entries(src)) {
-    if (!key.startsWith(PROGRAM_PREFIX)) continue
-    present = true
-    amounts[key.slice(PROGRAM_PREFIX.length)] = value
+    if (!key.startsWith(PROGRAM_PREFIX)) continue;
+    present = true;
+    amounts[key.slice(PROGRAM_PREFIX.length)] = value;
   }
-  return present ? amounts : undefined
+  return present ? amounts : undefined;
 }
 
 /**
@@ -135,17 +146,15 @@ function programAmountsFrom(
  * instruction to delete an employee's deferral year-to-date, and the engine
  * treats `undefined` as "keep what is stored".
  */
-function componentAmountsFrom(
-  src: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-  const amounts: Record<string, unknown> = {}
-  let present = false
+function componentAmountsFrom(src: Record<string, unknown>): Record<string, unknown> | undefined {
+  const amounts: Record<string, unknown> = {};
+  let present = false;
   for (const [key, value] of Object.entries(src)) {
-    if (!key.startsWith(COMPONENT_PREFIX)) continue
-    present = true
-    amounts[key.slice(COMPONENT_PREFIX.length)] = value
+    if (!key.startsWith(COMPONENT_PREFIX)) continue;
+    present = true;
+    amounts[key.slice(COMPONENT_PREFIX.length)] = value;
   }
-  return present ? amounts : undefined
+  return present ? amounts : undefined;
 }
 
 function fields(
@@ -155,38 +164,40 @@ function fields(
 ): ResourceField[] {
   return [
     {
-      key: 'employee',
-      label: 'Employee (number, code, or name)',
-      kind: 'reference',
+      key: "employee",
+      label: "Employee (number, code, or name)",
+      kind: "reference",
       required: true,
-      ref: { resource: 'parties', by: 'shortCode' },
+      ref: { resource: "parties", by: "shortCode" },
     },
-    { key: 'employeeName', label: 'Employee name', kind: 'text', readOnly: true },
-    { key: 'taxYear', label: 'Tax year', kind: 'number', required: true },
-    ...(forImport ? [
-      { key: 'auditReason', label: 'Audit reason', kind: 'text' as const },
-      { key: 'sourceReference', label: 'Source reference', kind: 'text' as const },
-    ] : []),
+    { key: "employeeName", label: "Employee name", kind: "text", readOnly: true },
+    { key: "taxYear", label: "Tax year", kind: "number", required: true },
+    ...(forImport
+      ? [
+          { key: "auditReason", label: "Audit reason", kind: "text" as const },
+          { key: "sourceReference", label: "Source reference", kind: "text" as const },
+        ]
+      : []),
     ...OPENING_BALANCE_FIELDS.map((field) => ({
       key: field.key,
       label: field.label,
-      kind: 'currency' as const,
+      kind: "currency" as const,
     })),
     ...programs.map((program) => ({
       key: programColumnKey(program.programKey),
       label: `${program.label} carry-in`,
-      kind: 'currency' as const,
+      kind: "currency" as const,
     })),
     ...components.map((component) => ({
       key: componentColumnKey(component),
       label: `${component.name} year-to-date`,
-      kind: 'currency' as const,
+      kind: "currency" as const,
       // A component whose annual cap has been removed is inert: the amount is
       // exported so nothing is hidden, and refused on import so nobody enters a
       // number that changes nothing.
       readOnly: !component.capped,
     })),
-  ]
+  ];
 }
 
 /**
@@ -207,9 +218,10 @@ async function resolveEmployee(
   orgId: string,
   raw: unknown,
 ): Promise<{ id: string } | { error: string }> {
-  const value = String(raw ?? '').trim()
-  if (!value) return { error: 'employee is required' }
-  const matches = await db.execute<{ id: string; display_name: string }>(sql`
+  const value = String(raw ?? "").trim();
+  if (!value) return { error: "employee is required" };
+  const matches = await db.execute<{ id: string; display_name: string }>(
+    sql`
     select distinct p.id, p.display_name
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
@@ -222,51 +234,58 @@ async function resolveEmployee(
             or p.short_code = ${value}
             or p.display_name = ${value})
      limit 3
-  `, 'objects')
+  `,
+    "objects",
+  );
   if (matches.length === 0) {
-    return { error: `employee "${value}" not found — no payroll number, code, or name matches` }
+    return { error: `employee "${value}" not found — no payroll number, code, or name matches` };
   }
   if (matches.length > 1) {
-    return { error: `employee "${value}" matches more than one person — use the payroll number` }
+    return { error: `employee "${value}" matches more than one person — use the payroll number` };
   }
-  return { id: matches[0]!.id }
+  return { id: matches[0]!.id };
 }
 
 export function payrollOpeningBalancesResource(orgId: string): DataResource {
-  const amountCols = OPENING_BALANCE_FIELDS.map((f) => sql.raw(`b.${f.column} as "${f.key}"`))
+  const amountCols = OPENING_BALANCE_FIELDS.map((f) => sql.raw(`b.${f.column} as "${f.key}"`));
   // The capped-component list is org configuration, so it is loaded once per
   // resource instance and shared by fields(), columns(), read() and write().
-  let componentsPromise: Promise<OpeningComponentField[]> | null = null
+  let componentsPromise: Promise<OpeningComponentField[]> | null = null;
   const loadComponents = () => {
-    componentsPromise ??= openingComponentFields(orgId, null)
-    return componentsPromise
-  }
+    componentsPromise ??= openingComponentFields(orgId, null);
+    return componentsPromise;
+  };
   // Pack-declared contribution programs are code, not org configuration, but
   // loading them once per instance keeps fields(), columns(), read() and
   // write() on the same vocabulary for the file.
-  let programsPromise: Promise<DeclaredProgramBaseField[]> | null = null
+  let programsPromise: Promise<DeclaredProgramBaseField[]> | null = null;
   const loadPrograms = () => {
-    programsPromise ??= declaredProgramBaseFields()
-    return programsPromise
-  }
+    programsPromise ??= declaredProgramBaseFields();
+    return programsPromise;
+  };
 
   return {
     descriptor: PAYROLL_OPENING_BALANCES_DESCRIPTOR,
     async fields() {
-      return fields(await loadComponents(), await loadPrograms(), true)
+      return fields(await loadComponents(), await loadPrograms(), true);
     },
     async columns() {
-      return fields(await loadComponents(), await loadPrograms()).map((f) => ({ key: f.key, label: f.label }))
+      return fields(await loadComponents(), await loadPrograms()).map((f) => ({
+        key: f.key,
+        label: f.label,
+      }));
     },
     async read(readCtx?: ReadCtx) {
-      const components = await loadComponents()
-      const programs = await loadPrograms()
-      const resourceFields = fields(components, programs)
-      const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }))
+      const components = await loadComponents();
+      const programs = await loadPrograms();
+      const resourceFields = fields(components, programs);
+      const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }));
       // Employee visibility is decided by the PARTY's subsidiary, in SQL —
       // never by matching the exported employee label afterwards, which a
       // same-named employee in another legal entity would also match.
-      const result = (await readExportWindow(db, sql`
+      const result = (await readExportWindow(
+        db,
+        sql`
         select b.id as "__rowId"${transferId(readCtx, sql`b.id`)},
                b.employee_party_id as "__employeeId",
                coalesce(er.employee_number, p.short_code, p.display_name) as "employee",
@@ -278,57 +297,93 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           left join employee_roles er on er.party_id = p.id and er.org_id = b.org_id
          where b.org_id = ${orgId}${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          ${transferWhere(readCtx, sql`b.id`)} order by ${transferOrder(readCtx, sql`b.id`, sql`b.tax_year desc, p.display_name, b.id`)}
-         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
+         limit ${transferLimit(readCtx)}`,
+        readCtx,
+      )) as { rows: Record<string, CellValue>[] };
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      finishExportPage(result.rows, PAYROLL_OPENING_BALANCES_DESCRIPTOR.label, readCtx)
+      finishExportPage(result.rows, PAYROLL_OPENING_BALANCES_DESCRIPTOR.label, readCtx);
 
       // Component openings pivot onto their parent row. Joining them in SQL
       // would multiply the rows; the export is one row per carry-in.
-      const componentRows = await db.execute<{ opening_balance_id: string; code: string; amount: string }>(sql`
+      const componentRows = await db.execute<{
+        opening_balance_id: string;
+        code: string;
+        amount: string;
+      }>(
+        sql`
         select oc.opening_balance_id, c.code, oc.ytd_amount::text as amount
           from payroll_opening_balance_components oc
           join pay_components c on c.id = oc.component_id and c.org_id = oc.org_id
-         where oc.org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and oc.opening_balance_id in (${sql.join(result.rows.map((row) => sql`${row.__rowId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
-      const byRow = new Map<string, Record<string, string>>()
+         where oc.org_id = ${orgId}${
+           readCtx?.page
+             ? result.rows.length
+               ? sql` and oc.opening_balance_id in (${sql.join(
+                   result.rows.map((row) => sql`${row.__rowId}::uuid`),
+                   sql`, `,
+                 )})`
+               : sql` and false`
+             : sql``
+         }`,
+        "objects",
+      );
+      const byRow = new Map<string, Record<string, string>>();
       for (const row of componentRows) {
-        const amounts = byRow.get(row.opening_balance_id) ?? {}
-        amounts[`${COMPONENT_PREFIX}${row.code}`] = row.amount
-        byRow.set(row.opening_balance_id, amounts)
+        const amounts = byRow.get(row.opening_balance_id) ?? {};
+        amounts[`${COMPONENT_PREFIX}${row.code}`] = row.amount;
+        byRow.set(row.opening_balance_id, amounts);
       }
       // Program bases pivot onto their parent row by (employee, year): the
       // export stays one row per carry-in, like the components above.
-      const programRows = await db.execute<{ employee_party_id: string; tax_year: number; program_key: string; amount: string }>(sql`
+      const programRows = await db.execute<{
+        employee_party_id: string;
+        tax_year: number;
+        program_key: string;
+        amount: string;
+      }>(
+        sql`
         select employee_party_id, tax_year, program_key, insurable_ytd::text as amount
           from payroll_opening_program_bases
-         where org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and (employee_party_id,tax_year) in (${sql.join(result.rows.map((row) => sql`(${row.__employeeId}::uuid,${row.taxYear}::int)`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
-      const programsByEmployeeYear = new Map<string, Record<string, string>>()
+         where org_id = ${orgId}${
+           readCtx?.page
+             ? result.rows.length
+               ? sql` and (employee_party_id,tax_year) in (${sql.join(
+                   result.rows.map((row) => sql`(${row.__employeeId}::uuid,${row.taxYear}::int)`),
+                   sql`, `,
+                 )})`
+               : sql` and false`
+             : sql``
+         }`,
+        "objects",
+      );
+      const programsByEmployeeYear = new Map<string, Record<string, string>>();
       for (const row of programRows) {
-        const key = `${row.employee_party_id} ${row.tax_year}`
-        const amounts = programsByEmployeeYear.get(key) ?? {}
-        amounts[`${PROGRAM_PREFIX}${row.program_key}`] = row.amount
-        programsByEmployeeYear.set(key, amounts)
+        const key = `${row.employee_party_id} ${row.tax_year}`;
+        const amounts = programsByEmployeeYear.get(key) ?? {};
+        amounts[`${PROGRAM_PREFIX}${row.program_key}`] = row.amount;
+        programsByEmployeeYear.set(key, amounts);
       }
       const rows = result.rows.map((row) => {
-        const rowId = String(row.__rowId ?? '')
-        const rest = { ...row }
-        delete rest.__rowId
-        const employeeYear = `${String(rest.__employeeId ?? '')} ${String(rest.taxYear ?? '')}`
-        delete rest.__employeeId
-        const out: Record<string, CellValue> = { ...rest }
-        for (const component of components) out[componentColumnKey(component)] = null
-        for (const [key, value] of Object.entries(byRow.get(rowId) ?? {})) out[key] = value
-        for (const program of programs) out[programColumnKey(program.programKey)] = null
-        for (const [key, value] of Object.entries(programsByEmployeeYear.get(employeeYear) ?? {})) out[key] = value
-        return out
-      })
-      return { fields: resourceFields, columns, rows }
+        const rowId = String(row.__rowId ?? "");
+        const rest = { ...row };
+        delete rest.__rowId;
+        const employeeYear = `${String(rest.__employeeId ?? "")} ${String(rest.taxYear ?? "")}`;
+        delete rest.__employeeId;
+        const out: Record<string, CellValue> = { ...rest };
+        for (const component of components) out[componentColumnKey(component)] = null;
+        for (const [key, value] of Object.entries(byRow.get(rowId) ?? {})) out[key] = value;
+        for (const program of programs) out[programColumnKey(program.programKey)] = null;
+        for (const [key, value] of Object.entries(programsByEmployeeYear.get(employeeYear) ?? {}))
+          out[key] = value;
+        return out;
+      });
+      return { fields: resourceFields, columns, rows };
     },
     async write(rows, _mode, ctx: WriteCtx) {
-      const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+      const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] };
       // Locks and existing rows are per tax year; cache them so a 500-row load
       // is not 500 extra round trips.
-      const lockCache = new Map<number, Awaited<ReturnType<typeof openingBalanceLocks>>>()
-      const existingCache = new Map<number, Set<string>>()
+      const lockCache = new Map<number, Awaited<ReturnType<typeof openingBalanceLocks>>>();
+      const existingCache = new Map<number, Set<string>>();
 
       // Whole-input duplicate guard before any save: per-row saves bypass
       // the engine's batch guard, so every row sharing a resolved
@@ -338,114 +393,158 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
       // are per-row, unlike the engine's all-or-nothing batch),
       // including identical repeats.
       const preflight: {
-        employeeId: string | null
-        employeeError: string | null
-        taxYear: number | null
-        taxError: string | null
-        scopeError: string | null
-      }[] = []
+        employeeId: string | null;
+        employeeError: string | null;
+        taxYear: number | null;
+        taxError: string | null;
+        scopeError: string | null;
+      }[] = [];
       for (const src of rows) {
-        let taxYear: number | null = null
-        let taxError: string | null = null
+        let taxYear: number | null = null;
+        let taxError: string | null = null;
         try {
-          taxYear = assertTaxYear(src.taxYear)
+          taxYear = assertTaxYear(src.taxYear);
         } catch (error) {
-          taxError = importRowError(error)
+          taxError = importRowError(error);
         }
-        let employeeId: string | null = null
-        let employeeError: string | null = null
-        let scopeError: string | null = null
+        let employeeId: string | null = null;
+        let employeeError: string | null = null;
+        let scopeError: string | null = null;
         if (taxError === null) {
-          const employee = await resolveEmployee(ctx.orgId, src.employee)
-          if ('error' in employee) employeeError = employee.error
-          else employeeId = employee.id
+          const employee = await resolveEmployee(ctx.orgId, src.employee);
+          if ("error" in employee) employeeError = employee.error;
+          else employeeId = employee.id;
         }
         if (taxError === null && employeeError === null && employeeId !== null) {
-          scopeError = await employeeWriteScopeError(ctx.orgId, employeeId, ctx.allowedSubsidiaryIds)
+          scopeError = await employeeWriteScopeError(
+            ctx.orgId,
+            employeeId,
+            ctx.allowedSubsidiaryIds,
+          );
         }
-        preflight.push({ employeeId, employeeError, taxYear, taxError, scopeError })
+        preflight.push({ employeeId, employeeError, taxYear, taxError, scopeError });
       }
-      await ctx.recordKeys?.(preflight.map((row) => row.employeeId !== null && row.taxYear !== null && row.scopeError === null ? `${row.employeeId} ${row.taxYear}` : null))
-      const keyUses = new Map<string, number>()
+      await ctx.recordKeys?.(
+        preflight.map((row) =>
+          row.employeeId !== null && row.taxYear !== null && row.scopeError === null
+            ? `${row.employeeId} ${row.taxYear}`
+            : null,
+        ),
+      );
+      const keyUses = new Map<string, number>();
       for (const p of preflight) {
         if (p.employeeId !== null && p.taxYear !== null && p.scopeError === null) {
-          const key = `${p.employeeId} ${p.taxYear}`
-          keyUses.set(key, (keyUses.get(key) ?? 0) + 1)
+          const key = `${p.employeeId} ${p.taxYear}`;
+          keyUses.set(key, (keyUses.get(key) ?? 0) + 1);
         }
       }
-      const duplicated = new Set<number>()
+      const duplicated = new Set<number>();
       preflight.forEach((p, index) => {
         if (
-          p.employeeId !== null && p.taxYear !== null && p.scopeError === null &&
+          p.employeeId !== null &&
+          p.taxYear !== null &&
+          p.scopeError === null &&
           keyUses.get(`${p.employeeId} ${p.taxYear}`)! > 1
         ) {
-          duplicated.add(index)
+          duplicated.add(index);
         }
-      })
+      });
       for (const index of [...duplicated].sort((a, b) => a - b)) {
-        const p = preflight[index]!
-        outcome.failed++
+        const p = preflight[index]!;
+        outcome.failed++;
         outcome.errors.push({
           row: index + 1,
           message: `employee "${String(rows[index]!.employee).trim()}" appears more than once in this load for tax year ${p.taxYear} — keep only one row per employee and tax year`,
-          field: 'employee',
-        })
+          field: "employee",
+        });
       }
 
       for (let index = 0; index < rows.length; index++) {
-        if (duplicated.has(index)) continue
-        const rowNo = index + 1
-        const src = rows[index]!
-        const pre = preflight[index]!
+        if (duplicated.has(index)) continue;
+        const rowNo = index + 1;
+        const src = rows[index]!;
+        const pre = preflight[index]!;
         try {
-          if (pre.taxError !== null) throw new Error(pre.taxError)
+          if (pre.taxError !== null) throw new Error(pre.taxError);
           if (pre.employeeError !== null || pre.employeeId === null) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: pre.employeeError ?? 'employee is required', field: 'employee' })
-            continue
+            outcome.failed++;
+            outcome.errors.push({
+              row: rowNo,
+              message: pre.employeeError ?? "employee is required",
+              field: "employee",
+            });
+            continue;
           }
-          const taxYear = pre.taxYear!
-          const employeeId = pre.employeeId
+          const taxYear = pre.taxYear!;
+          const employeeId = pre.employeeId;
           // Scope was decided in the preflight above, before the preview
           // reports anything: a restricted importer must not learn, even in
           // dry-run, that a hidden employee exists and would be
           // created/updated.
           if (pre.scopeError !== null) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: pre.scopeError, field: 'employee' })
-            continue
+            outcome.failed++;
+            outcome.errors.push({ row: rowNo, message: pre.scopeError, field: "employee" });
+            continue;
           }
 
           if (!lockCache.has(taxYear)) {
-            lockCache.set(taxYear, await openingBalanceLocks(ctx.orgId, taxYear, db, ctx.allowedSubsidiaryIds, ctx.recordKeys ? preflight.flatMap((row) => row.employeeId ? [row.employeeId] : []) : undefined))
-            const existing = await db.execute<{ employee_party_id: string }>(sql`
+            lockCache.set(
+              taxYear,
+              await openingBalanceLocks(
+                ctx.orgId,
+                taxYear,
+                db,
+                ctx.allowedSubsidiaryIds,
+                ctx.recordKeys
+                  ? preflight.flatMap((row) => (row.employeeId ? [row.employeeId] : []))
+                  : undefined,
+              ),
+            );
+            const existing = await db.execute<{ employee_party_id: string }>(
+              sql`
               select employee_party_id from payroll_opening_balances
-               where org_id = ${ctx.orgId} and tax_year = ${taxYear}${ctx.recordKeys ? sql` and employee_party_id in (${sql.join(preflight.filter((row) => row.employeeId !== null).map((row) => sql`${row.employeeId}::uuid`), sql`, `)})` : sql``}`, 'objects')
-            existingCache.set(taxYear, new Set(existing.map((r) => r.employee_party_id)))
+               where org_id = ${ctx.orgId} and tax_year = ${taxYear}${
+                 ctx.recordKeys
+                   ? sql` and employee_party_id in (${sql.join(
+                       preflight
+                         .filter((row) => row.employeeId !== null)
+                         .map((row) => sql`${row.employeeId}::uuid`),
+                       sql`, `,
+                     )})`
+                   : sql``
+               }`,
+              "objects",
+            );
+            existingCache.set(taxYear, new Set(existing.map((r) => r.employee_party_id)));
           }
-          const lock = lockCache.get(taxYear)!.get(employeeId)
+          const lock = lockCache.get(taxYear)!.get(employeeId);
           if (lock) {
-            outcome.failed++
+            outcome.failed++;
             outcome.errors.push({
               row: rowNo,
               message: `a pay run committed on ${lock.payDate} already used this carry-in for ${taxYear}; void that run before changing it`,
-            })
-            continue
+            });
+            continue;
           }
 
           // Validate in both modes so the wizard's preview is a real preview.
-          openingBalanceAuditContext({ auditReason: src.auditReason, sourceReference: src.sourceReference })
-          const amounts = normalizeOpeningBalance(src)
-          const components = componentAmountsFrom(src)
-          const normalizedComponents = components === undefined
-            ? {}
-            : normalizeOpeningComponents(components, await loadComponents())
-          const programs = programAmountsFrom(src)
-          const normalizedPrograms = programs === undefined
-            ? {}
-            : normalizeOpeningProgramBases(programs, await loadPrograms())
-          const existed = existingCache.get(taxYear)!.has(employeeId)
-          const empty = isEmptyOpeningBalance(amounts, normalizedComponents, normalizedPrograms)
+          openingBalanceAuditContext({
+            auditReason: src.auditReason,
+            sourceReference: src.sourceReference,
+          });
+          const amounts = normalizeOpeningBalance(src);
+          const components = componentAmountsFrom(src);
+          const normalizedComponents =
+            components === undefined
+              ? {}
+              : normalizeOpeningComponents(components, await loadComponents());
+          const programs = programAmountsFrom(src);
+          const normalizedPrograms =
+            programs === undefined
+              ? {}
+              : normalizeOpeningProgramBases(programs, await loadPrograms());
+          const existed = existingCache.get(taxYear)!.has(employeeId);
+          const empty = isEmptyOpeningBalance(amounts, normalizedComponents, normalizedPrograms);
           if (ctx.dryRun) {
             if (empty && !existed) {
               // A blank row with nothing stored writes nothing on commit
@@ -453,16 +552,16 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
               // preview must not claim an update either. The advisory keeps
               // the row visible instead of silently vanishing from the
               // counts; the commit path below reports the same warning.
-              if (!outcome.warnings) outcome.warnings = []
-              outcome.warnings.push({ row: rowNo, message: NOTHING_TO_WRITE })
-              continue
+              if (!outcome.warnings) outcome.warnings = [];
+              outcome.warnings.push({ row: rowNo, message: NOTHING_TO_WRITE });
+              continue;
             }
             // An empty row against a STORED carry-in clears it: commit
             // deletes it (counted as an update below), so preview says
             // updated. That delete behavior and its audit are unchanged.
-            if (existed) outcome.updated++
-            else outcome.created++
-            continue
+            if (existed) outcome.updated++;
+            else outcome.created++;
+            continue;
           }
 
           const result = await saveOpeningBalances({
@@ -473,33 +572,33 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
             taxYear,
             rows: [{ employeePartyId: employeeId, amounts: src, components, programs }],
             allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? undefined,
-          })
-          outcome.created += result.created
-          outcome.updated += result.updated + result.deleted
-          if (result.created > 0) existingCache.get(taxYear)!.add(employeeId)
-          if (result.deleted > 0) existingCache.get(taxYear)!.delete(employeeId)
+          });
+          outcome.created += result.created;
+          outcome.updated += result.updated + result.deleted;
+          if (result.created > 0) existingCache.get(taxYear)!.add(employeeId);
+          if (result.deleted > 0) existingCache.get(taxYear)!.delete(employeeId);
           if (empty && !existed) {
-            if (!outcome.warnings) outcome.warnings = []
-            outcome.warnings.push({ row: rowNo, message: NOTHING_TO_WRITE })
+            if (!outcome.warnings) outcome.warnings = [];
+            outcome.warnings.push({ row: rowNo, message: NOTHING_TO_WRITE });
           }
         } catch (error) {
-          outcome.failed++
+          outcome.failed++;
           outcome.errors.push({
             row: rowNo,
             message: importRowError(error),
-          })
+          });
         }
       }
-      return outcome
+      return outcome;
     },
-  }
+  };
 }
 
 /* ------------------------------------------------------------------ */
 /* Bank carry-ins (entitlement plans)                                  */
 /* ------------------------------------------------------------------ */
 
-export const PAYROLL_OPENING_ENTITLEMENTS_KEY = 'payroll-opening-entitlements'
+export const PAYROLL_OPENING_ENTITLEMENTS_KEY = "payroll-opening-entitlements";
 
 /**
  * A SEPARATE resource, not more columns on the one above, because the natural
@@ -515,64 +614,66 @@ export const PAYROLL_OPENING_ENTITLEMENTS_KEY = 'payroll-opening-entitlements'
  */
 export const PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR: ResourceDescriptor = {
   key: PAYROLL_OPENING_ENTITLEMENTS_KEY,
-  label: 'Payroll opening bank balances (vacation, banked time)',
-  group: 'Setup',
-  iconKey: 'history',
-  readPermission: 'payroll.read',
-  writePermission: 'payroll.manage',
+  label: "Payroll opening bank balances (vacation, banked time)",
+  group: "Setup",
+  iconKey: "history",
+  readPermission: "payroll.read",
+  writePermission: "payroll.manage",
   supportsImport: true,
-  naturalKey: 'employee + plan',
+  naturalKey: "employee + plan",
   scopedWrite: true,
-}
+};
 
 function entitlementFields(plans: readonly EntitlementPlan[]): ResourceField[] {
   return [
     {
-      key: 'employee',
-      label: 'Employee (number, code, or name)',
-      kind: 'reference',
+      key: "employee",
+      label: "Employee (number, code, or name)",
+      kind: "reference",
       required: true,
-      ref: { resource: 'parties', by: 'shortCode' },
+      ref: { resource: "parties", by: "shortCode" },
     },
-    { key: 'employeeName', label: 'Employee name', kind: 'text', readOnly: true },
+    { key: "employeeName", label: "Employee name", kind: "text", readOnly: true },
     {
-      key: 'plan',
-      label: 'Entitlement plan (code)',
-      kind: 'select',
+      key: "plan",
+      label: "Entitlement plan (code)",
+      kind: "select",
       required: true,
       options: plans.map((plan) => ({ value: plan.code, label: plan.name })),
     },
     {
-      key: 'asOf',
-      label: 'Carried in as at (YYYY-MM-DD)',
-      kind: 'date',
+      key: "asOf",
+      label: "Carried in as at (YYYY-MM-DD)",
+      kind: "date",
       required: true,
     },
-    { key: 'amount', label: 'Balance carried in', kind: 'currency', required: true },
-    { key: 'note', label: 'Reason or source reference', kind: 'text' },
-  ]
+    { key: "amount", label: "Balance carried in", kind: "currency", required: true },
+    { key: "note", label: "Reason or source reference", kind: "text" },
+  ];
 }
 
 export function payrollOpeningEntitlementsResource(orgId: string): DataResource {
-  let plansPromise: Promise<EntitlementPlan[]> | null = null
+  let plansPromise: Promise<EntitlementPlan[]> | null = null;
   const loadPlans = () => {
-    plansPromise ??= entitlementPlans(orgId)
-    return plansPromise
-  }
+    plansPromise ??= entitlementPlans(orgId);
+    return plansPromise;
+  };
 
   return {
     descriptor: PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR,
     async fields() {
-      return entitlementFields(await loadPlans())
+      return entitlementFields(await loadPlans());
     },
     async columns() {
-      return (await this.fields()).map((f) => ({ key: f.key, label: f.label }))
+      return (await this.fields()).map((f) => ({ key: f.key, label: f.label }));
     },
     async read(readCtx?: ReadCtx) {
-      const resourceFields = entitlementFields(await loadPlans())
-      const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }))
+      const resourceFields = entitlementFields(await loadPlans());
+      const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }));
       // Same identity-based employee scope as the balances read above.
-      const result = (await readExportWindow(db, sql`
+      const result = (await readExportWindow(
+        db,
+        sql`
         select coalesce(er.employee_number, p.short_code, p.display_name) as "employee",
                p.display_name as "employeeName",
                pl.code as "plan",
@@ -584,15 +685,17 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           left join employee_roles er on er.party_id = p.id and er.org_id = l.org_id
          where l.org_id = ${orgId} and l.kind = 'opening'${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          ${transferWhere(readCtx, sql`l.id`)} order by ${transferOrder(readCtx, sql`l.id`, sql`pl.code, p.display_name, l.id`)}
-         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
+         limit ${transferLimit(readCtx)}`,
+        readCtx,
+      )) as { rows: Record<string, CellValue>[] };
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      finishExportPage(result.rows, PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR.label, readCtx)
-      return { fields: resourceFields, columns, rows: result.rows }
+      finishExportPage(result.rows, PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR.label, readCtx);
+      return { fields: resourceFields, columns, rows: result.rows };
     },
     async write(rows, mode: ImportMode, ctx: WriteCtx) {
-      const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
-      const plans = await loadPlans()
-      const planByCode = new Map(plans.map((plan) => [plan.code.trim().toLowerCase(), plan]))
+      const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] };
+      const plans = await loadPlans();
+      const planByCode = new Map(plans.map((plan) => [plan.code.trim().toLowerCase(), plan]));
       // Preview must report what commit will do: classify each row against
       // the openings already stored, so an existing carry-in previews as an
       // update (or an insert conflict), never as a creation.
@@ -600,81 +703,108 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
       // Resolve the natural keys before saving any row. This resource calls
       // saveEntitlementOpenings once per row, so that function's per-call
       // duplicate guard cannot see a repeated employee/plan pair in this file.
-      const resolvedKeys: (string | null)[] = []
+      const resolvedKeys: (string | null)[] = [];
       for (const src of rows) {
-        const employee = await resolveEmployee(ctx.orgId, src.employee)
-        if ('error' in employee || await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)) {
-          resolvedKeys.push(null)
-          continue
+        const employee = await resolveEmployee(ctx.orgId, src.employee);
+        if (
+          "error" in employee ||
+          (await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds))
+        ) {
+          resolvedKeys.push(null);
+          continue;
         }
-        const plan = planByCode.get(String(src.plan ?? '').trim().toLowerCase())
-        resolvedKeys.push(plan ? `${employee.id}:${plan.id}` : null)
+        const plan = planByCode.get(
+          String(src.plan ?? "")
+            .trim()
+            .toLowerCase(),
+        );
+        resolvedKeys.push(plan ? `${employee.id}:${plan.id}` : null);
       }
-      await ctx.recordKeys?.(resolvedKeys)
-      const employeeIds = resolvedKeys.flatMap((key) => key ? [key.split(':')[0]!] : [])
-      const locks = await entitlementOpeningLocks(ctx.orgId, db, ctx.recordKeys ? employeeIds : undefined)
-      const storedRows = await db.execute<{ plan_id: string; employee_party_id: string }>(sql`
+      await ctx.recordKeys?.(resolvedKeys);
+      const employeeIds = resolvedKeys.flatMap((key) => (key ? [key.split(":")[0]!] : []));
+      const locks = await entitlementOpeningLocks(
+        ctx.orgId,
+        db,
+        ctx.recordKeys ? employeeIds : undefined,
+      );
+      const storedRows = await db.execute<{ plan_id: string; employee_party_id: string }>(
+        sql`
         select plan_id,employee_party_id from entitlement_ledger where org_id=${ctx.orgId} and kind='opening'
         ${ctx.recordKeys ? sql`and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)` : sql``}
-      `, 'objects')
-      const storedKeys = new Set(storedRows.map((row) => `${row.plan_id}:${row.employee_party_id}`))
-      const duplicateRows = duplicateImportRowIndexes(resolvedKeys)
+      `,
+        "objects",
+      );
+      const storedKeys = new Set(
+        storedRows.map((row) => `${row.plan_id}:${row.employee_party_id}`),
+      );
+      const duplicateRows = duplicateImportRowIndexes(resolvedKeys);
 
       for (let index = 0; index < rows.length; index++) {
-        const rowNo = index + 1
-        const src = rows[index]!
+        const rowNo = index + 1;
+        const src = rows[index]!;
         if (duplicateRows.has(index)) {
-          outcome.failed++
+          outcome.failed++;
           outcome.errors.push({
             row: rowNo,
-            field: 'employee',
-            message: 'this employee and entitlement plan appear more than once in this load — keep one row per employee and plan',
-          })
-          continue
+            field: "employee",
+            message:
+              "this employee and entitlement plan appear more than once in this load — keep one row per employee and plan",
+          });
+          continue;
         }
         try {
-          const employee = await resolveEmployee(ctx.orgId, src.employee)
-          if ('error' in employee) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: employee.error, field: 'employee' })
-            continue
+          const employee = await resolveEmployee(ctx.orgId, src.employee);
+          if ("error" in employee) {
+            outcome.failed++;
+            outcome.errors.push({ row: rowNo, message: employee.error, field: "employee" });
+            continue;
           }
           // Scope is decided before the preview reports anything: a restricted
           // importer must not learn, even in dry-run, that a hidden employee
           // exists and would be created/updated.
-          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)
+          const scopeError = await employeeWriteScopeError(
+            ctx.orgId,
+            employee.id,
+            ctx.allowedSubsidiaryIds,
+          );
           if (scopeError) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: scopeError, field: 'employee' })
-            continue
+            outcome.failed++;
+            outcome.errors.push({ row: rowNo, message: scopeError, field: "employee" });
+            continue;
           }
-          const planKey = String(src.plan ?? '').trim().toLowerCase()
-          const plan = planByCode.get(planKey)
+          const planKey = String(src.plan ?? "")
+            .trim()
+            .toLowerCase();
+          const plan = planByCode.get(planKey);
           if (!plan) {
-            outcome.failed++
+            outcome.failed++;
             outcome.errors.push({
               row: rowNo,
-              message: `"${String(src.plan ?? '')}" is not an active entitlement plan`,
-              field: 'plan',
-            })
-            continue
+              message: `"${String(src.plan ?? "")}" is not an active entitlement plan`,
+              field: "plan",
+            });
+            continue;
           }
-          const asOf = assertMovementDate(src.asOf)
-          const key = `${plan.id}:${employee.id}`
-          const action = importRowAction(mode, storedKeys.has(key))
-          if (action === 'conflict') {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: `${plan.code} carry-in already exists for this employee — choose upsert to replace it`, field: 'plan' })
-            continue
+          const asOf = assertMovementDate(src.asOf);
+          const key = `${plan.id}:${employee.id}`;
+          const action = importRowAction(mode, storedKeys.has(key));
+          if (action === "conflict") {
+            outcome.failed++;
+            outcome.errors.push({
+              row: rowNo,
+              message: `${plan.code} carry-in already exists for this employee — choose upsert to replace it`,
+              field: "plan",
+            });
+            continue;
           }
-          const lock = locks.get(`${plan.id}:${employee.id}`)
+          const lock = locks.get(`${plan.id}:${employee.id}`);
           if (lock) {
-            outcome.failed++
+            outcome.failed++;
             outcome.errors.push({
               row: rowNo,
               message: `a pay run committed on ${lock.payDate} already used the ${plan.code} carry-in; void that run before changing it`,
-            })
-            continue
+            });
+            continue;
           }
 
           // The amount and its SIGN are validated in both modes: a preview that
@@ -687,53 +817,58 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           // remedy, never stripped. Pre-normalizing here would reintroduce
           // the silent 100x revaluation the engine refuses, and the dry run
           // would report success for a load the real import then banks wrong.
-          const amount = parseEntitlementCarryInAmount(src.amount, plan.code)
-          if (plan.direction === 'accrue' && cmp(amount, '0') < 0) {
-            throw new Error(`${plan.code} is a bank the employer owes, so its carry-in cannot be negative`)
+          const amount = parseEntitlementCarryInAmount(src.amount, plan.code);
+          if (plan.direction === "accrue" && cmp(amount, "0") < 0) {
+            throw new Error(
+              `${plan.code} is a bank the employer owes, so its carry-in cannot be negative`,
+            );
           }
-          if (plan.direction === 'owe' && cmp(amount, '0') > 0) {
-            throw new Error(`${plan.code} is a balance the EMPLOYEE owes, so its carry-in must be negative`)
+          if (plan.direction === "owe" && cmp(amount, "0") > 0) {
+            throw new Error(
+              `${plan.code} is a balance the EMPLOYEE owes, so its carry-in must be negative`,
+            );
           }
-          const limit = await resolvePlanLimit(db, ctx.orgId, plan.id, employee.id, asOf)
-          const warning = cmp(amount, '0') > 0 && limit?.maxBalance != null && cmp(amount, limit.maxBalance) > 0
-            ? `${plan.code} carry-in ${amount} is above the ${limit.maxBalance} limit that resolves for this employee (${limit.scope} scope)`
-            : null
+          const limit = await resolvePlanLimit(db, ctx.orgId, plan.id, employee.id, asOf);
+          const warning =
+            cmp(amount, "0") > 0 && limit?.maxBalance != null && cmp(amount, limit.maxBalance) > 0
+              ? `${plan.code} carry-in ${amount} is above the ${limit.maxBalance} limit that resolves for this employee (${limit.scope} scope)`
+              : null;
           if (ctx.dryRun) {
-            if (action === 'update') outcome.updated++
-            else outcome.created++
+            if (action === "update") outcome.updated++;
+            else outcome.created++;
             if (warning) {
-              outcome.warnings ??= []
-              outcome.warnings.push({ row: rowNo, message: warning })
+              outcome.warnings ??= [];
+              outcome.warnings.push({ row: rowNo, message: warning });
             }
-            continue
+            continue;
           }
 
           const result = await saveEntitlementOpenings({
             orgId: ctx.orgId,
             actorId: ctx.actorId,
             movementDate: asOf,
-            note: String(src.note ?? '').trim() || null,
+            note: String(src.note ?? "").trim() || null,
             mode,
             rows: [{ employeePartyId: employee.id, amounts: { [plan.code]: amount } }],
             allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
-          })
-          outcome.created += result.created
-          outcome.updated += result.updated + result.deleted
+          });
+          outcome.created += result.created;
+          outcome.updated += result.updated + result.deleted;
           for (const item of result.warnings) {
-            outcome.warnings ??= []
-            outcome.warnings.push({ row: rowNo, message: item.message })
+            outcome.warnings ??= [];
+            outcome.warnings.push({ row: rowNo, message: item.message });
           }
-          if (result.created > 0) storedKeys.add(key)
-          if (result.deleted > 0) storedKeys.delete(key)
+          if (result.created > 0) storedKeys.add(key);
+          if (result.deleted > 0) storedKeys.delete(key);
         } catch (error) {
-          outcome.failed++
+          outcome.failed++;
           outcome.errors.push({
             row: rowNo,
             message: importRowError(error),
-          })
+          });
         }
       }
-      return outcome
+      return outcome;
     },
-  }
+  };
 }

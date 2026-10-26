@@ -1,4 +1,4 @@
-import { unstable_isUnrecognizedActionError } from 'next/navigation'
+import { unstable_isUnrecognizedActionError } from "next/navigation";
 
 /**
  * True when the failure means this tab is running an earlier deployment: the
@@ -7,6 +7,9 @@ import { unstable_isUnrecognizedActionError } from 'next/navigation'
  * boundaries offer a full reload instead.
  */
 export function isStaleDeploymentError(error: unknown): boolean {
-  if (unstable_isUnrecognizedActionError(error)) return true
-  return error instanceof Error && (error.name === 'UnrecognizedActionError' || error.name === 'ChunkLoadError')
+  if (unstable_isUnrecognizedActionError(error)) return true;
+  return (
+    error instanceof Error &&
+    (error.name === "UnrecognizedActionError" || error.name === "ChunkLoadError")
+  );
 }

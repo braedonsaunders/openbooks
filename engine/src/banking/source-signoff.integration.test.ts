@@ -77,82 +77,112 @@ async function postBankJournal(
 }
 
 async function clearedCount(orgId: string, accountId: string): Promise<number> {
-  return Number((await db.execute<{ n: string }>(sql`
+  return Number(
+    (
+      await db.execute<{ n: string }>(
+        sql`
     select count(*) as n from journal_lines
      where org_id = ${orgId} and account_id = ${accountId} and source_cleared_date is not null
-  `, "objects"))[0]!.n);
+  `,
+        "objects",
+      )
+    )[0]!.n,
+  );
 }
 
-test("source evidence policy defaults on and seeds through close defaults", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    assert.equal(await sourceEvidencePolicyActive(org.orgId), true);
-    await ensureCloseDefaults(org.orgId, actor);
-    const row = (await db.execute<{ code: string; is_active: boolean }>(sql`
+test(
+  "source evidence policy defaults on and seeds through close defaults",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
+      assert.equal(await sourceEvidencePolicyActive(org.orgId), true);
+      await ensureCloseDefaults(org.orgId, actor);
+      const row = (
+        await db.execute<{ code: string; is_active: boolean }>(
+          sql`
       select code, is_active from close_policies where org_id = ${org.orgId} and code = 'source-reconciliation-evidence'
-    `, "objects"))[0]!;
-    assert.equal(row?.code, "source-reconciliation-evidence");
-    assert.equal(row?.is_active, true);
-    assert.equal(await sourceEvidencePolicyActive(org.orgId), true);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(row?.code, "source-reconciliation-evidence");
+      assert.equal(row?.is_active, true);
+      assert.equal(await sourceEvidencePolicyActive(org.orgId), true);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("applySourceLineEvidence stamps unanimous groups and skips the rest", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
-    const full = await postBankJournal(org, actor, ["100", "50"], "full");
-    const mixed = await postBankJournal(org, actor, ["25", "30"], "mixed");
-    const result = await applySourceLineEvidence(org.orgId, "test-connector", [
-      {
-        entryId: full,
-        lines: [
-          { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
-          { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
-        ],
-      },
-      {
-        entryId: mixed,
-        lines: [
-          { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
-          { accountId: org.accounts.bank, cleared: false, clearedDate: null },
-        ],
-      },
-    ]);
-    assert.equal(result.entries, 2);
-    // The unanimous bank group stamps both legs; the mixed bank group stamps
-    // neither (one contributing source line is uncleared). Offset legs are
-    // never evidence input: their accounts are not reconcilable.
-    assert.equal(result.linesStamped, 2);
-    assert.equal(await clearedCount(org.orgId, org.accounts.bank), 2);
-    assert.equal(await clearedCount(org.orgId, org.accounts.adjustment), 0);
-    // Evidence without a date, and blank connectors, fail closed.
-    await assert.rejects(
-      applySourceLineEvidence(org.orgId, "test-connector", [
-        { entryId: full, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: null }] },
-      ]),
-      /clearedDate|date/i,
-    );
-    await assert.rejects(
-      applySourceLineEvidence(org.orgId, "  ", [
-        { entryId: full, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }] },
-      ]),
-      /connector/i,
-    );
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+test(
+  "applySourceLineEvidence stamps unanimous groups and skips the rest",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
+      const full = await postBankJournal(org, actor, ["100", "50"], "full");
+      const mixed = await postBankJournal(org, actor, ["25", "30"], "mixed");
+      const result = await applySourceLineEvidence(org.orgId, "test-connector", [
+        {
+          entryId: full,
+          lines: [
+            { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+            { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+          ],
+        },
+        {
+          entryId: mixed,
+          lines: [
+            { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+            { accountId: org.accounts.bank, cleared: false, clearedDate: null },
+          ],
+        },
+      ]);
+      assert.equal(result.entries, 2);
+      // The unanimous bank group stamps both legs; the mixed bank group stamps
+      // neither (one contributing source line is uncleared). Offset legs are
+      // never evidence input: their accounts are not reconcilable.
+      assert.equal(result.linesStamped, 2);
+      assert.equal(await clearedCount(org.orgId, org.accounts.bank), 2);
+      assert.equal(await clearedCount(org.orgId, org.accounts.adjustment), 0);
+      // Evidence without a date, and blank connectors, fail closed.
+      await assert.rejects(
+        applySourceLineEvidence(org.orgId, "test-connector", [
+          {
+            entryId: full,
+            lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: null }],
+          },
+        ]),
+        /clearedDate|date/i,
+      );
+      await assert.rejects(
+        applySourceLineEvidence(org.orgId, "  ", [
+          {
+            entryId: full,
+            lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }],
+          },
+        ]),
+        /connector/i,
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
 test("applySourceLineEvidence refuses a group that omits some of the entry's lines", async () => {
   const org = await createScratchOrg();
   try {
     const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
+    await db.execute(
+      sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+    );
     // Two bank lines on one entry, but evidence for only the first: the
     // group is incomplete, so NEITHER line may be stamped — the stamp targets
     // the whole (entry, account) and cannot tell evidenced lines apart.
@@ -183,161 +213,257 @@ test("applySourceLineEvidence refuses a group that omits some of the entry's lin
   }
 });
 
-test("signOffFromSourceEvidence signs off fully-cleared accounts without statements", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
-    const entry = await postBankJournal(org, actor, ["308", "21"], "aug");
-    await applySourceLineEvidence(org.orgId, "test-connector", [
-      {
-        entryId: entry,
-        lines: [
-          { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
-          { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
-        ],
-      },
-    ]);
-    await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const out = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(out.signed, true);
-    assert.equal(out.signed && out.clearedLines, 2);
-    const row = (await db.execute<{ status: string; evidence_kind: string; evidence_connector: string }>(sql`
+test(
+  "signOffFromSourceEvidence signs off fully-cleared accounts without statements",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
+      const entry = await postBankJournal(org, actor, ["308", "21"], "aug");
+      await applySourceLineEvidence(org.orgId, "test-connector", [
+        {
+          entryId: entry,
+          lines: [
+            { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+            { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+          ],
+        },
+      ]);
+      await refreshSourceReconciliationState(org.orgId, "test-connector");
+      const out = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(out.signed, true);
+      assert.equal(out.signed && out.clearedLines, 2);
+      const row = (
+        await db.execute<{ status: string; evidence_kind: string; evidence_connector: string }>(
+          sql`
       select status, evidence_kind, evidence_connector from reconciliations
        where id = ${out.signed ? out.reconciliationId : null} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
-    assert.equal(row.status, "signed_off");
-    assert.equal(row.evidence_kind, "source");
-    assert.equal(row.evidence_connector, "test-connector");
-    // No statement line was invented to support the sign-off.
-    assert.equal(
-      Number((await db.execute<{ n: string }>(sql`select count(*) as n from bank_statement_lines where org_id = ${org.orgId}`, "objects"))[0]!.n),
-      0,
-    );
-    // The cleared lines carry the reconciliation stamp.
-    assert.equal(
-      Number((await db.execute<{ n: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(row.status, "signed_off");
+      assert.equal(row.evidence_kind, "source");
+      assert.equal(row.evidence_connector, "test-connector");
+      // No statement line was invented to support the sign-off.
+      assert.equal(
+        Number(
+          (
+            await db.execute<{ n: string }>(
+              sql`select count(*) as n from bank_statement_lines where org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]!.n,
+        ),
+        0,
+      );
+      // The cleared lines carry the reconciliation stamp.
+      assert.equal(
+        Number(
+          (
+            await db.execute<{ n: string }>(
+              sql`
         select count(*) as n from journal_lines
-         where org_id = ${org.orgId} and reconciliation_id = ${out.signed ? out.reconciliationId : null}`, "objects"))[0]!.n),
-      2,
-    );
-    // A rerun through the same date is already covered, not a second row.
-    const again = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(again.signed, false);
-    assert.equal(!again.signed && again.reason, "already-covered");
-    assert.equal(
-      Number((await db.execute<{ n: string }>(sql`
-        select count(*) as n from reconciliations where org_id = ${org.orgId} and account_id = ${org.accounts.bank}`, "objects"))[0]!.n),
-      1,
-    );
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+         where org_id = ${org.orgId} and reconciliation_id = ${out.signed ? out.reconciliationId : null}`,
+              "objects",
+            )
+          )[0]!.n,
+        ),
+        2,
+      );
+      // A rerun through the same date is already covered, not a second row.
+      const again = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(again.signed, false);
+      assert.equal(!again.signed && again.reason, "already-covered");
+      assert.equal(
+        Number(
+          (
+            await db.execute<{ n: string }>(
+              sql`
+        select count(*) as n from reconciliations where org_id = ${org.orgId} and account_id = ${org.accounts.bank}`,
+              "objects",
+            )
+          )[0]!.n,
+        ),
+        1,
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("partially-cleared accounts stay open with exact counts", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
-    const cleared = await postBankJournal(org, actor, ["100"], "cleared");
-    await postBankJournal(org, actor, ["25"], "open");
-    await applySourceLineEvidence(org.orgId, "test-connector", [
-      { entryId: cleared, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }] },
-    ]);
-    const state = await refreshSourceReconciliationState(org.orgId, "test-connector");
-    assert.equal(state.length, 1);
-    assert.equal(state[0]!.clearedLines, 1);
-    assert.equal(state[0]!.unclearedLines, 1);
-    assert.equal(state[0]!.reconciledThrough, org.date);
-    const out = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(out.signed, false);
-    assert.equal(!out.signed && out.reason, "partially-cleared");
-    assert.equal(!out.signed && out.clearedLines, 1);
-    assert.equal(!out.signed && out.unclearedLines, 1);
-    assert.equal(
-      Number((await db.execute<{ n: string }>(sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`, "objects"))[0]!.n),
-      0,
-    );
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+test(
+  "partially-cleared accounts stay open with exact counts",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
+      const cleared = await postBankJournal(org, actor, ["100"], "cleared");
+      await postBankJournal(org, actor, ["25"], "open");
+      await applySourceLineEvidence(org.orgId, "test-connector", [
+        {
+          entryId: cleared,
+          lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }],
+        },
+      ]);
+      const state = await refreshSourceReconciliationState(org.orgId, "test-connector");
+      assert.equal(state.length, 1);
+      assert.equal(state[0]!.clearedLines, 1);
+      assert.equal(state[0]!.unclearedLines, 1);
+      assert.equal(state[0]!.reconciledThrough, org.date);
+      const out = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(out.signed, false);
+      assert.equal(!out.signed && out.reason, "partially-cleared");
+      assert.equal(!out.signed && out.clearedLines, 1);
+      assert.equal(!out.signed && out.unclearedLines, 1);
+      assert.equal(
+        Number(
+          (
+            await db.execute<{ n: string }>(
+              sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]!.n,
+        ),
+        0,
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("a source-cleared entry reversed later signs off with both legs and a net balance", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
-    const entry = await postBankJournal(org, actor, ["100"], "reversed");
-    const mirror = (await reverseProjectGlEntry(org.orgId, actor, entry, "Deposit returned by the bank", "2026-07-20"))!;
-    await applySourceLineEvidence(org.orgId, "test-connector", [entry, mirror].map((entryId) => ({ entryId, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: "2026-07-20" }] })));
-    await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const out = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null });
-    const { rows: [recon] } = await db.execute<{ statement_balance: string }>(sql`select statement_balance::text from reconciliations where org_id = ${org.orgId}`);
-    assert.deepEqual([out.signed && out.clearedLines, recon?.statement_balance], [2, "0.0000"], "the deposit and its reversal both cleared at the source and net to zero");
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+test(
+  "a source-cleared entry reversed later signs off with both legs and a net balance",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
+      const entry = await postBankJournal(org, actor, ["100"], "reversed");
+      const mirror = (await reverseProjectGlEntry(
+        org.orgId,
+        actor,
+        entry,
+        "Deposit returned by the bank",
+        "2026-07-20",
+      ))!;
+      await applySourceLineEvidence(
+        org.orgId,
+        "test-connector",
+        [entry, mirror].map((entryId) => ({
+          entryId,
+          lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: "2026-07-20" }],
+        })),
+      );
+      await refreshSourceReconciliationState(org.orgId, "test-connector");
+      const out = await signOffFromSourceEvidence(
+        { accountId: org.accounts.bank },
+        { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null },
+      );
+      const {
+        rows: [recon],
+      } = await db.execute<{ statement_balance: string }>(
+        sql`select statement_balance::text from reconciliations where org_id = ${org.orgId}`,
+      );
+      assert.deepEqual(
+        [out.signed && out.clearedLines, recon?.statement_balance],
+        [2, "0.0000"],
+        "the deposit and its reversal both cleared at the source and net to zero",
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("source sign-off advances through later dates and yields to open sessions", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
-    const entry = await postBankJournal(org, actor, ["100"], "first");
-    await applySourceLineEvidence(org.orgId, "test-connector", [
-      { entryId: entry, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }] },
-    ]);
-    await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const first = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(first.signed, true);
-    assert.equal(first.signed && first.advanced, false);
-    // An open statement session blocks the mirror from signing behind it.
-    const session = await startReconciliation(
-      { accountId: org.accounts.bank, throughDate: "2099-01-01", statementBalance: "100" },
-      ctx,
-    );
-    const laterEntry = await postBankJournal(org, actor, ["50"], "later");
-    await applySourceLineEvidence(org.orgId, "test-connector", [
-      { entryId: laterEntry, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: "2099-01-01" }] },
-    ]);
-    await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const blocked = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(blocked.signed, false);
-    assert.equal(!blocked.signed && blocked.reason, "open-session");
-    await discardReconciliation(session.id, ctx);
-    const second = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(second.signed, true);
-    assert.equal(second.signed && second.advanced, true);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+test(
+  "source sign-off advances through later dates and yields to open sessions",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
+      const entry = await postBankJournal(org, actor, ["100"], "first");
+      await applySourceLineEvidence(org.orgId, "test-connector", [
+        {
+          entryId: entry,
+          lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }],
+        },
+      ]);
+      await refreshSourceReconciliationState(org.orgId, "test-connector");
+      const first = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(first.signed, true);
+      assert.equal(first.signed && first.advanced, false);
+      // An open statement session blocks the mirror from signing behind it.
+      const session = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: "2099-01-01", statementBalance: "100" },
+        ctx,
+      );
+      const laterEntry = await postBankJournal(org, actor, ["50"], "later");
+      await applySourceLineEvidence(org.orgId, "test-connector", [
+        {
+          entryId: laterEntry,
+          lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: "2099-01-01" }],
+        },
+      ]);
+      await refreshSourceReconciliationState(org.orgId, "test-connector");
+      const blocked = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(blocked.signed, false);
+      assert.equal(!blocked.signed && blocked.reason, "open-session");
+      await discardReconciliation(session.id, ctx);
+      const second = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(second.signed, true);
+      assert.equal(second.signed && second.advanced, true);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("source sign-off refuses without evidence and when the policy is off", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
-    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
-    await postBankJournal(org, actor, ["100"], "unstamped");
-    const noEvidence = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(noEvidence.signed, false);
-    assert.equal(!noEvidence.signed && noEvidence.reason, "no-evidence");
-    await ensureCloseDefaults(org.orgId, actor);
-    await db.execute(sql`
+test(
+  "source sign-off refuses without evidence and when the policy is off",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+      );
+      await postBankJournal(org, actor, ["100"], "unstamped");
+      const noEvidence = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(noEvidence.signed, false);
+      assert.equal(!noEvidence.signed && noEvidence.reason, "no-evidence");
+      await ensureCloseDefaults(org.orgId, actor);
+      await db.execute(sql`
       update close_policies set is_active = false
        where org_id = ${org.orgId} and code = 'source-reconciliation-evidence'`);
-    assert.equal(await sourceEvidencePolicyActive(org.orgId), false);
-    const disabled = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(disabled.signed, false);
-    assert.equal(!disabled.signed && disabled.reason, "policy-disabled");
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      assert.equal(await sourceEvidencePolicyActive(org.orgId), false);
+      const disabled = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(disabled.signed, false);
+      assert.equal(!disabled.signed && disabled.reason, "policy-disabled");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

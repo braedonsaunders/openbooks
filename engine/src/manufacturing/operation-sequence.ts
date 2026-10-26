@@ -10,7 +10,10 @@ export interface SequencedOperation {
  * earlier-sequence operation that is not yet done, or null when the operation
  * may start. Routings carry no overlap flag, so the rule has no exceptions here.
  */
-export function sequenceBlocker<T extends SequencedOperation>(operations: readonly T[], sequence: number): T | null {
+export function sequenceBlocker<T extends SequencedOperation>(
+  operations: readonly T[],
+  sequence: number,
+): T | null {
   let blocker: T | null = null;
   for (const operation of operations) {
     if (operation.sequence >= sequence || operation.status === "done") continue;

@@ -1,48 +1,44 @@
-import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import ExcelJS from 'exceljs'
-import JSZip from 'jszip'
-import { DOC_KINDS, createPermission, postPermission } from '../document-kinds.ts'
-import type { DataResource } from './resource-core.ts'
-import {
-  CELL_PROVENANCE_KEY,
-  SOURCE_COLUMNS_KEY,
-  UNMAPPED_COLUMNS_KEY,
-} from './types.ts'
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import ExcelJS from "exceljs";
+import JSZip from "jszip";
+import { DOC_KINDS, createPermission, postPermission } from "../document-kinds.ts";
+import type { DataResource } from "./resource-core.ts";
+import { CELL_PROVENANCE_KEY, SOURCE_COLUMNS_KEY, UNMAPPED_COLUMNS_KEY } from "./types.ts";
 
 interface ImportRouteState {
-  resource: DataResource | null
-  resourceLookupCalls: number
-  resourceWriteCalls: number
-  rootInsertCalls: number
-  transactionCalls: number
-  transactionInsertTargets: string[]
-  rollbacks: number
-  mappedRows: Record<string, unknown>[] | null
-  withOrgTransactionCalls: number
-  orgTransactionRollbacks: number
-  historyInsertCalls: number
-  outOfTransactionHistoryInserts: number
-  failHistoryInsert: boolean
-  insideOrgTransaction: boolean
+  resource: DataResource | null;
+  resourceLookupCalls: number;
+  resourceWriteCalls: number;
+  rootInsertCalls: number;
+  transactionCalls: number;
+  transactionInsertTargets: string[];
+  rollbacks: number;
+  mappedRows: Record<string, unknown>[] | null;
+  withOrgTransactionCalls: number;
+  orgTransactionRollbacks: number;
+  historyInsertCalls: number;
+  outOfTransactionHistoryInserts: number;
+  failHistoryInsert: boolean;
+  insideOrgTransaction: boolean;
   activeOrgTxn: {
-    orgId: string
-    documents: Record<string, unknown>[]
-    lines: Record<string, unknown>[]
-    historyJobs: Record<string, unknown>[]
-  } | null
+    orgId: string;
+    documents: Record<string, unknown>[];
+    lines: Record<string, unknown>[];
+    historyJobs: Record<string, unknown>[];
+  } | null;
   committed: {
-    documents: Record<string, unknown>[]
-    lines: Record<string, unknown>[]
-    historyJobs: Record<string, unknown>[]
-  }
-  idempotency: Map<string, { request: string; value: unknown }>
-  permissions: Set<string>
+    documents: Record<string, unknown>[];
+    lines: Record<string, unknown>[];
+    historyJobs: Record<string, unknown>[];
+  };
+  idempotency: Map<string, { request: string; value: unknown }>;
+  permissions: Set<string>;
 }
 
-const stateKey = Symbol.for('openbooks.data-import-route-test')
+const stateKey = Symbol.for("openbooks.data-import-route-test");
 const importState: ImportRouteState = {
   resource: null,
   resourceLookupCalls: 0,
@@ -62,23 +58,23 @@ const importState: ImportRouteState = {
   committed: { documents: [], lines: [], historyJobs: [] },
   idempotency: new Map(),
   permissions: new Set(),
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
-      export { and, asc, desc, eq, inArray, isNull, or } from '${import.meta.resolve('drizzle-orm')}'
+      export { and, asc, desc, eq, inArray, isNull, or } from '${import.meta.resolve("drizzle-orm")}'
       export function sql(strings, ...values) {
         return { strings, values }
       }
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
+      export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
       export const ambientTenantOrgId = () => null
       export const currentRequestOrgResolver = () => null
       export const registerRequestOrgResolver = () => {}
@@ -227,10 +223,10 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
-      export { can } from ${JSON.stringify(import.meta.resolve('@/lib/authz'))}
+      export { can } from ${JSON.stringify(import.meta.resolve("@/lib/authz"))}
 
       export async function guardPermission() {
         // An organization-wide caller: the route refuses restricted callers
@@ -240,7 +236,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:resources',
+    "mock:resources",
     `
       const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
       export async function getResource() {
@@ -251,7 +247,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:parse',
+    "mock:parse",
     `
       export async function parseImportFile() {
         throw new Error('route parse mode is not expected in this preview test')
@@ -274,7 +270,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:posting',
+    "mock:posting",
     `
       export async function postDocument() {
         throw new Error('postDocument is not expected during a preview')
@@ -282,7 +278,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:documents',
+    "mock:documents",
     `
       export async function controlDeps() {
         throw new Error('controlDeps is not expected during a preview')
@@ -302,7 +298,7 @@ const mockSources = new Map<string, string>([
   ],
   [
     // The native edit core writes the lines through the caller's transaction.
-    'mock:write',
+    "mock:write",
     `
       const documentLines = Symbol.for('openbooks.data-import-route-test.document-lines')
       export async function precomputeDocumentTotalsForCreate() { return null }
@@ -316,14 +312,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:resource-core',
+    "mock:resource-core",
     `
       // The pure cap/gate re-export the REAL ./export-cap.ts through this
       // double — never copied. Only impure surfaces are stubbed below.
-      export * from '${new URL('./export-cap.ts', import.meta.url).href}'
-      export { MAX_EXPORT_ROWS, enforceExportRowLimit } from '${new URL('./export-cap.ts', import.meta.url).href}'
-      export { duplicateImportRowIndexes, importRowAction } from '${new URL('./resource-core.ts', import.meta.url).href}'
-      export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from '${new URL('./subsidiary-scope.ts', import.meta.url).href}'
+      export * from '${new URL("./export-cap.ts", import.meta.url).href}'
+      export { MAX_EXPORT_ROWS, enforceExportRowLimit } from '${new URL("./export-cap.ts", import.meta.url).href}'
+      export { duplicateImportRowIndexes, importRowAction } from '${new URL("./resource-core.ts", import.meta.url).href}'
+      export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from '${new URL("./subsidiary-scope.ts", import.meta.url).href}'
 
       export async function orgFeatureEnabled() {
         return false
@@ -339,546 +335,567 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
-      ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/platform/db', 'mock:db'],
-      ['@openbooks/engine/ledger/posting-document', 'mock:posting'],
-      ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
-      ['@openbooks/engine/ledger/document-service', 'mock:documents'],
-      ['@openbooks/engine/documents/write', 'mock:write'],
-      ['../bills.ts', 'mock:documents'],
-      ['./resource-core', 'mock:resource-core'],
-      ['@/lib/authz', 'mock:authz'],
-      ['@/lib/application/context', 'mock:db'],
-      ['@/lib/application/idempotency', 'mock:db'],
-      ['@/lib/data-io/resources', 'mock:resources'],
-      ['@/lib/data-io/parse', 'mock:parse'],
-    ]).get(specifier)
-    if (mockUrl) return { url: mockUrl, shortCircuit: true }
-    return nextResolve(specifier, context)
+      ["drizzle-orm", "mock:drizzle"],
+      ["@openbooks/engine/platform/db", "mock:db"],
+      ["@openbooks/engine/ledger/posting-document", "mock:posting"],
+      ["../../../engine/src/ledger/document-service.ts", "mock:documents"],
+      ["@openbooks/engine/ledger/document-service", "mock:documents"],
+      ["@openbooks/engine/documents/write", "mock:write"],
+      ["../bills.ts", "mock:documents"],
+      ["./resource-core", "mock:resource-core"],
+      ["@/lib/authz", "mock:authz"],
+      ["@/lib/application/context", "mock:db"],
+      ["@/lib/application/idempotency", "mock:db"],
+      ["@/lib/data-io/resources", "mock:resources"],
+      ["@/lib/data-io/parse", "mock:parse"],
+    ]).get(specifier);
+    if (mockUrl) return { url: mockUrl, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url);
     if (source !== undefined) {
-      return { format: 'module', source, shortCircuit: true }
+      return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const transactionUrl = './transaction-resources.ts?generic-import-route-test'
-const { transactionResource } = await import(transactionUrl) as typeof import('./transaction-resources.ts')
-const cardCharge = DOC_KINDS.card_charge
-assert.ok(cardCharge)
-importState.permissions = new Set(['data.import', createPermission(cardCharge.kind), postPermission(cardCharge.kind)])
-const actualResource = transactionResource(cardCharge, 'org-1')
+const transactionUrl = "./transaction-resources.ts?generic-import-route-test";
+const { transactionResource } = (await import(
+  transactionUrl
+)) as typeof import("./transaction-resources.ts");
+const cardCharge = DOC_KINDS.card_charge;
+assert.ok(cardCharge);
+importState.permissions = new Set([
+  "data.import",
+  createPermission(cardCharge.kind),
+  postPermission(cardCharge.kind),
+]);
+const actualResource = transactionResource(cardCharge, "org-1");
 importState.resource = {
   ...actualResource,
   async write(rows, mode, ctx) {
-    importState.resourceWriteCalls++
-    importState.mappedRows = structuredClone(rows)
-    return actualResource.write(rows, mode, ctx)
+    importState.resourceWriteCalls++;
+    importState.mappedRows = structuredClone(rows);
+    return actualResource.write(rows, mode, ctx);
   },
-}
-const routeUrl = '../../app/api/data/import/route.ts?duplicate-mapping-test'
-const { POST } = await import(routeUrl) as typeof import('../../app/api/data/import/route.ts')
-const parseUrl = './parse.ts?duplicate-mapping-route-test'
-const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
-after(() => hooks.deregister())
+};
+const routeUrl = "../../app/api/data/import/route.ts?duplicate-mapping-test";
+const { POST } = (await import(routeUrl)) as typeof import("../../app/api/data/import/route.ts");
+const parseUrl = "./parse.ts?duplicate-mapping-route-test";
+const { parseImportFile } = (await import(parseUrl)) as typeof import("./parse.ts");
+after(() => hooks.deregister());
 
 function resetImportState(): void {
-  importState.resourceLookupCalls = 0
-  importState.resourceWriteCalls = 0
-  importState.rootInsertCalls = 0
-  importState.transactionCalls = 0
-  importState.transactionInsertTargets.length = 0
-  importState.rollbacks = 0
-  importState.mappedRows = null
-  importState.withOrgTransactionCalls = 0
-  importState.orgTransactionRollbacks = 0
-  importState.historyInsertCalls = 0
-  importState.outOfTransactionHistoryInserts = 0
-  importState.failHistoryInsert = false
-  importState.insideOrgTransaction = false
-  importState.activeOrgTxn = null
-  importState.committed.documents.length = 0
-  importState.committed.lines.length = 0
-  importState.committed.historyJobs.length = 0
-  importState.idempotency.clear()
+  importState.resourceLookupCalls = 0;
+  importState.resourceWriteCalls = 0;
+  importState.rootInsertCalls = 0;
+  importState.transactionCalls = 0;
+  importState.transactionInsertTargets.length = 0;
+  importState.rollbacks = 0;
+  importState.mappedRows = null;
+  importState.withOrgTransactionCalls = 0;
+  importState.orgTransactionRollbacks = 0;
+  importState.historyInsertCalls = 0;
+  importState.outOfTransactionHistoryInserts = 0;
+  importState.failHistoryInsert = false;
+  importState.insideOrgTransaction = false;
+  importState.activeOrgTxn = null;
+  importState.committed.documents.length = 0;
+  importState.committed.lines.length = 0;
+  importState.committed.historyJobs.length = 0;
+  importState.idempotency.clear();
 }
 
-test('route rejects an unknown mode before resource lookup or writes', async () => {
-  resetImportState()
+test("route rejects an unknown mode before resource lookup or writes", async () => {
+  resetImportState();
 
-  const response = await POST(new Request('http://openbooks.test/api/data/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'publish',
-      resource: 'txn:card_charge',
-      rows: [],
+  const response = await POST(
+    new Request("http://openbooks.test/api/data/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "publish",
+        resource: "txn:card_charge",
+        rows: [],
+      }),
     }),
-  }))
+  );
 
-  assert.equal(response.status, 400)
-  const payload = await response.json()
-  assert.equal(payload.error, 'mode must be parse, preview or commit')
-  assert.equal(importState.resourceLookupCalls, 0)
-  assert.equal(importState.resourceWriteCalls, 0)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.equal(importState.transactionCalls, 0)
-})
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.equal(payload.error, "mode must be parse, preview or commit");
+  assert.equal(importState.resourceLookupCalls, 0);
+  assert.equal(importState.resourceWriteCalls, 0);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.equal(importState.transactionCalls, 0);
+});
 
-test('route rejects an unknown format instead of importing it as csv', async () => {
-  resetImportState()
+test("route rejects an unknown format instead of importing it as csv", async () => {
+  resetImportState();
 
-  const response = await POST(new Request('http://openbooks.test/api/data/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'preview',
-      resource: 'txn:card_charge',
-      format: 'xml',
-      rows: [],
-      mapping: {},
+  const response = await POST(
+    new Request("http://openbooks.test/api/data/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "preview",
+        resource: "txn:card_charge",
+        format: "xml",
+        rows: [],
+        mapping: {},
+      }),
     }),
-  }))
+  );
 
-  assert.equal(response.status, 400)
-  const payload = await response.json()
-  assert.equal(payload.error, 'format must be csv, xlsx or json')
-  assert.equal(importState.resourceLookupCalls, 0)
-  assert.equal(importState.resourceWriteCalls, 0)
-  assert.equal(importState.withOrgTransactionCalls, 0)
-  assert.equal(importState.historyInsertCalls, 0)
-})
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.equal(payload.error, "format must be csv, xlsx or json");
+  assert.equal(importState.resourceLookupCalls, 0);
+  assert.equal(importState.resourceWriteCalls, 0);
+  assert.equal(importState.withOrgTransactionCalls, 0);
+  assert.equal(importState.historyInsertCalls, 0);
+});
 
-test('route rejects an unknown importMode instead of coercing it to upsert', async () => {
-  resetImportState()
+test("route rejects an unknown importMode instead of coercing it to upsert", async () => {
+  resetImportState();
 
-  const response = await POST(new Request('http://openbooks.test/api/data/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'preview',
-      resource: 'txn:card_charge',
-      rows: [],
-      mapping: {},
-      importMode: 'replace',
+  const response = await POST(
+    new Request("http://openbooks.test/api/data/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "preview",
+        resource: "txn:card_charge",
+        rows: [],
+        mapping: {},
+        importMode: "replace",
+      }),
     }),
-  }))
+  );
 
-  assert.equal(response.status, 400)
-  const payload = await response.json()
-  assert.equal(payload.error, 'importMode must be insert or upsert')
-  assert.equal(importState.resourceLookupCalls, 0)
-  assert.equal(importState.resourceWriteCalls, 0)
-  assert.equal(importState.withOrgTransactionCalls, 0)
-  assert.equal(importState.historyInsertCalls, 0)
-})
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.equal(payload.error, "importMode must be insert or upsert");
+  assert.equal(importState.resourceLookupCalls, 0);
+  assert.equal(importState.resourceWriteCalls, 0);
+  assert.equal(importState.withOrgTransactionCalls, 0);
+  assert.equal(importState.historyInsertCalls, 0);
+});
 
-test('route refuses mapping targets and sources absent from the enabled resource and imported rows', async () => {
-  resetImportState()
+test("route refuses mapping targets and sources absent from the enabled resource and imported rows", async () => {
+  resetImportState();
   const targetResponse = await preview(
-    [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000', memo: 'Memo' }],
-    { documentDate: 'documentDate', account: 'account', amount: 'amount', memo: 'descripton' },
-  )
-  assert.equal(targetResponse.status, 400)
-  assert.match((await targetResponse.json()).error, /target field "descripton" is not available/)
-  assert.equal(importState.resourceWriteCalls, 0)
+    [{ documentDate: "2026-08-24", account: "5000", amount: "100.0000", memo: "Memo" }],
+    { documentDate: "documentDate", account: "account", amount: "amount", memo: "descripton" },
+  );
+  assert.equal(targetResponse.status, 400);
+  assert.match((await targetResponse.json()).error, /target field "descripton" is not available/);
+  assert.equal(importState.resourceWriteCalls, 0);
 
-  resetImportState()
+  resetImportState();
   const sourceResponse = await preview(
-    [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
-    { documentDate: 'documentDate', account: 'account', amount: 'amount', missingColumn: 'memo' },
-  )
-  assert.equal(sourceResponse.status, 400)
-  assert.match((await sourceResponse.json()).error, /source column "missingColumn" is not present/)
-  assert.equal(importState.resourceWriteCalls, 0)
-})
+    [{ documentDate: "2026-08-24", account: "5000", amount: "100.0000" }],
+    { documentDate: "documentDate", account: "account", amount: "amount", missingColumn: "memo" },
+  );
+  assert.equal(sourceResponse.status, 400);
+  assert.match((await sourceResponse.json()).error, /source column "missingColumn" is not present/);
+  assert.equal(importState.resourceWriteCalls, 0);
+});
 
-test('route refuses a subsidiary target hidden by the current feature set', async () => {
-  resetImportState()
+test("route refuses a subsidiary target hidden by the current feature set", async () => {
+  resetImportState();
   const response = await preview(
-    [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000', subsidiary: 'Root' }],
-    { documentDate: 'documentDate', account: 'account', amount: 'amount', subsidiary: 'subsidiary' },
-  )
-  assert.equal(response.status, 400)
-  assert.match((await response.json()).error, /target field "subsidiary" is not available/)
-  assert.equal(importState.resourceWriteCalls, 0)
-})
+    [{ documentDate: "2026-08-24", account: "5000", amount: "100.0000", subsidiary: "Root" }],
+    {
+      documentDate: "documentDate",
+      account: "account",
+      amount: "amount",
+      subsidiary: "subsidiary",
+    },
+  );
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /target field "subsidiary" is not available/);
+  assert.equal(importState.resourceWriteCalls, 0);
+});
 
-test('route rejects a non-boolean posting flag instead of treating it as true', async () => {
-  resetImportState()
+test("route rejects a non-boolean posting flag instead of treating it as true", async () => {
+  resetImportState();
 
-  const response = await POST(new Request('http://openbooks.test/api/data/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'commit',
-      idempotencyKey: 'charge-import-retry-001',
-      resource: 'txn:card_charge',
-      rows: [],
-      mapping: {},
-      post: 'yes',
+  const response = await POST(
+    new Request("http://openbooks.test/api/data/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "commit",
+        idempotencyKey: "charge-import-retry-001",
+        resource: "txn:card_charge",
+        rows: [],
+        mapping: {},
+        post: "yes",
+      }),
     }),
-  }))
+  );
 
-  assert.equal(response.status, 400)
-  const payload = await response.json()
-  assert.equal(payload.error, 'post must be a boolean')
-  assert.equal(importState.resourceLookupCalls, 0)
-  assert.equal(importState.resourceWriteCalls, 0)
-  assert.equal(importState.withOrgTransactionCalls, 0)
-  assert.equal(importState.historyInsertCalls, 0)
-})
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.equal(payload.error, "post must be a boolean");
+  assert.equal(importState.resourceLookupCalls, 0);
+  assert.equal(importState.resourceWriteCalls, 0);
+  assert.equal(importState.withOrgTransactionCalls, 0);
+  assert.equal(importState.historyInsertCalls, 0);
+});
 
-test('route refuses posting when the selected resource does not support it', async () => {
-  resetImportState()
-  const originalResource = importState.resource
-  assert.ok(originalResource)
+test("route refuses posting when the selected resource does not support it", async () => {
+  resetImportState();
+  const originalResource = importState.resource;
+  assert.ok(originalResource);
   importState.resource = {
     ...originalResource,
     descriptor: { ...originalResource.descriptor, canPost: false },
-  }
+  };
 
   try {
-    const response = await POST(new Request('http://openbooks.test/api/data/import', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'preview',
-        resource: 'txn:card_charge',
-        rows: [],
-        mapping: {},
-        post: true,
+    const response = await POST(
+      new Request("http://openbooks.test/api/data/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "preview",
+          resource: "txn:card_charge",
+          rows: [],
+          mapping: {},
+          post: true,
+        }),
       }),
-    }))
+    );
 
-    assert.equal(response.status, 400)
-    const payload = await response.json()
-    assert.match(payload.error, /posting is not supported for resource/)
-    assert.equal(importState.resourceWriteCalls, 0)
-    assert.equal(importState.withOrgTransactionCalls, 0)
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.match(payload.error, /posting is not supported for resource/);
+    assert.equal(importState.resourceWriteCalls, 0);
+    assert.equal(importState.withOrgTransactionCalls, 0);
   } finally {
-    importState.resource = originalResource
+    importState.resource = originalResource;
   }
-})
+});
 
 function commitRequest(overrides: Record<string, unknown> = {}): Request {
-  return new Request('http://openbooks.test/api/data/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+  return new Request("http://openbooks.test/api/data/import", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      mode: 'commit',
-      idempotencyKey: 'charge-import-retry-001',
-      resource: 'txn:card_charge',
-      format: 'json',
-      rows: [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
-      mapping: { documentDate: 'documentDate', account: 'account', amount: 'amount' },
-      importMode: 'insert',
-      fileName: 'charges.csv',
+      mode: "commit",
+      idempotencyKey: "charge-import-retry-001",
+      resource: "txn:card_charge",
+      format: "json",
+      rows: [{ documentDate: "2026-08-24", account: "5000", amount: "100.0000" }],
+      mapping: { documentDate: "documentDate", account: "account", amount: "amount" },
+      importMode: "insert",
+      fileName: "charges.csv",
       ...overrides,
     }),
-  })
+  });
 }
 
-test('commit persists imported rows and their import_jobs evidence in ONE org transaction', async () => {
-  resetImportState()
+test("commit persists imported rows and their import_jobs evidence in ONE org transaction", async () => {
+  resetImportState();
 
-  const response = await POST(commitRequest())
+  const response = await POST(commitRequest());
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     outcome: { created: 1, updated: 0, failed: 0, errors: [] },
-    jobId: 'job-1',
+    jobId: "job-1",
     total: 1,
     replayed: false,
-  })
-  assert.equal(importState.withOrgTransactionCalls, 1)
-  assert.equal(importState.historyInsertCalls, 1)
+  });
+  assert.equal(importState.withOrgTransactionCalls, 1);
+  assert.equal(importState.historyInsertCalls, 1);
   // The evidence row must have been written while the org transaction held
   // the writes — never on a separate connection after they committed.
-  assert.equal(importState.outOfTransactionHistoryInserts, 0)
-  assert.equal(importState.transactionCalls, 1)
-  assert.equal(importState.rollbacks, 0)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.deepEqual(importState.transactionInsertTargets, ['documents', 'documentLines'])
-  assert.equal(importState.committed.documents.length, 1)
-  assert.equal(importState.committed.lines.length, 1)
-  assert.equal(importState.committed.historyJobs.length, 1)
-})
+  assert.equal(importState.outOfTransactionHistoryInserts, 0);
+  assert.equal(importState.transactionCalls, 1);
+  assert.equal(importState.rollbacks, 0);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.deepEqual(importState.transactionInsertTargets, ["documents", "documentLines"]);
+  assert.equal(importState.committed.documents.length, 1);
+  assert.equal(importState.committed.lines.length, 1);
+  assert.equal(importState.committed.historyJobs.length, 1);
+});
 
-test('commit applies the documented defaults when optional fields are absent', async () => {
-  resetImportState()
+test("commit applies the documented defaults when optional fields are absent", async () => {
+  resetImportState();
 
-  const response = await POST(new Request('http://openbooks.test/api/data/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'commit',
-      idempotencyKey: 'charge-default-retry-001',
-      resource: 'txn:card_charge',
-      rows: [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
-      mapping: { documentDate: 'documentDate', account: 'account', amount: 'amount' },
+  const response = await POST(
+    new Request("http://openbooks.test/api/data/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "commit",
+        idempotencyKey: "charge-default-retry-001",
+        resource: "txn:card_charge",
+        rows: [{ documentDate: "2026-08-24", account: "5000", amount: "100.0000" }],
+        mapping: { documentDate: "documentDate", account: "account", amount: "amount" },
+      }),
     }),
-  }))
+  );
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     outcome: { created: 1, updated: 0, failed: 0, errors: [] },
-    jobId: 'job-1',
+    jobId: "job-1",
     total: 1,
     replayed: false,
-  })
-  const job = importState.committed.historyJobs[0] as { values: unknown[] } | undefined
-  assert.ok(job)
+  });
+  const job = importState.committed.historyJobs[0] as { values: unknown[] } | undefined;
+  assert.ok(job);
   // values: org_id, resource_key, resource_label, format, file_name, mode, …
-  assert.equal(job.values[3], 'csv')
-  assert.equal(job.values[4], null)
-  assert.equal(job.values[5], 'upsert')
-})
+  assert.equal(job.values[3], "csv");
+  assert.equal(job.values[4], null);
+  assert.equal(job.values[5], "upsert");
+});
 
-test('a repeated commit key replays the saved import result without writing records or a second import job', async () => {
-  resetImportState()
+test("a repeated commit key replays the saved import result without writing records or a second import job", async () => {
+  resetImportState();
 
-  const first = await POST(commitRequest())
-  const firstPayload = await first.json()
-  const replay = await POST(commitRequest())
+  const first = await POST(commitRequest());
+  const firstPayload = await first.json();
+  const replay = await POST(commitRequest());
 
-  assert.equal(first.status, 200)
-  assert.equal(replay.status, 200)
-  assert.deepEqual(await replay.json(), { ...firstPayload, replayed: true })
-  assert.equal(importState.resourceWriteCalls, 1)
-  assert.equal(importState.historyInsertCalls, 1)
-  assert.equal(importState.committed.documents.length, 1)
-  assert.equal(importState.committed.historyJobs.length, 1)
-})
+  assert.equal(first.status, 200);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), { ...firstPayload, replayed: true });
+  assert.equal(importState.resourceWriteCalls, 1);
+  assert.equal(importState.historyInsertCalls, 1);
+  assert.equal(importState.committed.documents.length, 1);
+  assert.equal(importState.committed.historyJobs.length, 1);
+});
 
-test('a repeated commit key with changed import content is refused before writes', async () => {
-  resetImportState()
-  await POST(commitRequest())
+test("a repeated commit key with changed import content is refused before writes", async () => {
+  resetImportState();
+  await POST(commitRequest());
 
   await assert.rejects(
-    POST(commitRequest({ rows: [{ documentDate: '2026-08-25', account: '5000', amount: '100.0000' }] })),
+    POST(
+      commitRequest({
+        rows: [{ documentDate: "2026-08-25", account: "5000", amount: "100.0000" }],
+      }),
+    ),
     /idempotencyKey was already used with different input/,
-  )
-  assert.equal(importState.resourceWriteCalls, 1)
-  assert.equal(importState.historyInsertCalls, 1)
-})
+  );
+  assert.equal(importState.resourceWriteCalls, 1);
+  assert.equal(importState.historyInsertCalls, 1);
+});
 
-test('commit requires a stable idempotency key before opening its transaction', async () => {
-  resetImportState()
-  const response = await POST(commitRequest({ idempotencyKey: undefined }))
-  assert.equal(response.status, 400)
-  assert.equal(importState.withOrgTransactionCalls, 0)
-  assert.equal(importState.resourceWriteCalls, 0)
-})
+test("commit requires a stable idempotency key before opening its transaction", async () => {
+  resetImportState();
+  const response = await POST(commitRequest({ idempotencyKey: undefined }));
+  assert.equal(response.status, 400);
+  assert.equal(importState.withOrgTransactionCalls, 0);
+  assert.equal(importState.resourceWriteCalls, 0);
+});
 
-test('a failed import_jobs insert rolls the whole commit back — no data without evidence', async () => {
-  resetImportState()
-  importState.failHistoryInsert = true
+test("a failed import_jobs insert rolls the whole commit back — no data without evidence", async () => {
+  resetImportState();
+  importState.failHistoryInsert = true;
 
-  await assert.rejects(
-    POST(commitRequest()),
-    { message: 'forced import_jobs insert failure' },
-  )
+  await assert.rejects(POST(commitRequest()), { message: "forced import_jobs insert failure" });
 
-  assert.equal(importState.withOrgTransactionCalls, 1)
-  assert.equal(importState.orgTransactionRollbacks, 1)
-  assert.equal(importState.historyInsertCalls, 1)
-  assert.equal(importState.outOfTransactionHistoryInserts, 0)
+  assert.equal(importState.withOrgTransactionCalls, 1);
+  assert.equal(importState.orgTransactionRollbacks, 1);
+  assert.equal(importState.historyInsertCalls, 1);
+  assert.equal(importState.outOfTransactionHistoryInserts, 0);
   assert.deepEqual(
     importState.committed.documents,
     [],
-    'the imported draft must roll back with its failed evidence row',
-  )
-  assert.deepEqual(importState.committed.lines, [])
-  assert.deepEqual(importState.committed.historyJobs, [])
-})
+    "the imported draft must roll back with its failed evidence row",
+  );
+  assert.deepEqual(importState.committed.lines, []);
+  assert.deepEqual(importState.committed.historyJobs, []);
+});
 
-test('reserved import metadata wire keys have one shared definition', async () => {
+test("reserved import metadata wire keys have one shared definition", async () => {
   const files = [
-    './types.ts',
-    './parse.ts',
-    './transaction-resources.ts',
-    './prior-payroll-register-resource.ts',
-    '../../app/api/data/import/route.ts',
-  ]
+    "./types.ts",
+    "./parse.ts",
+    "./transaction-resources.ts",
+    "./prior-payroll-register-resource.ts",
+    "../../app/api/data/import/route.ts",
+  ];
   const sources = await Promise.all(
-    files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
-  )
-  const escapeRegExp = (value: string) => value.replace(/[.*+?${}()|[\]\\]/g, '\\$&')
+    files.map((file) => readFile(new URL(file, import.meta.url), "utf8")),
+  );
+  const escapeRegExp = (value: string) => value.replace(/[.*+?${}()|[\]\\]/g, "\\$&");
   for (const key of [CELL_PROVENANCE_KEY, SOURCE_COLUMNS_KEY, UNMAPPED_COLUMNS_KEY]) {
-    const definition = new RegExp(`=\\s*(['"])${escapeRegExp(key)}\\1`, 'g')
+    const definition = new RegExp(`=\\s*(['"])${escapeRegExp(key)}\\1`, "g");
     const count = sources.reduce(
       (total, source) => total + Array.from(source.matchAll(definition)).length,
       0,
-    )
-    assert.equal(count, 1, `${key} must have exactly one production definition`)
+    );
+    assert.equal(count, 1, `${key} must have exactly one production definition`);
   }
-})
+});
 
-async function parsedFormulaRow(kind: 'amount' | 'lines'): Promise<Record<string, unknown>> {
-  const workbook = new ExcelJS.Workbook()
-  const sheet = workbook.addWorksheet('Transactions')
-  if (kind === 'amount') {
-    sheet.addRow(['documentDate', 'account', 'literal_amount', 'formula_amount'])
+async function parsedFormulaRow(kind: "amount" | "lines"): Promise<Record<string, unknown>> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Transactions");
+  if (kind === "amount") {
+    sheet.addRow(["documentDate", "account", "literal_amount", "formula_amount"]);
     sheet.addRow([
-      '2026-08-24',
-      '5000',
-      '999999999999998.9900',
+      "2026-08-24",
+      "5000",
+      "999999999999998.9900",
       {
         formula: 'TEXT(999999999999998.99,"0.0000")',
-        result: '999999999999999.0000',
+        result: "999999999999999.0000",
       },
-    ])
+    ]);
   } else {
-    const lines = '[{"account":"5000","amount":"999999999999998.9900"}]'
-    sheet.addRow(['documentDate', 'literal_lines', 'formula_lines'])
-    sheet.addRow(['2026-08-24', lines, { formula: 'A1', result: lines }])
+    const lines = '[{"account":"5000","amount":"999999999999998.9900"}]';
+    sheet.addRow(["documentDate", "literal_lines", "formula_lines"]);
+    sheet.addRow(["2026-08-24", lines, { formula: "A1", result: lines }]);
   }
-  const buffer = await workbook.xlsx.writeBuffer()
-  const parsed = await parseImportFile('xlsx', {
-    base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
-  })
-  const row = parsed.rows[0]
-  assert.ok(row)
-  return row
+  const buffer = await workbook.xlsx.writeBuffer();
+  const parsed = await parseImportFile("xlsx", {
+    base64: Buffer.from(buffer as ArrayBuffer).toString("base64"),
+  });
+  const row = parsed.rows[0];
+  assert.ok(row);
+  return row;
 }
 
 async function parsedHyperlinkedFormulaRows(): Promise<Record<string, unknown>[]> {
-  const workbook = new ExcelJS.Workbook()
-  const sheet = workbook.addWorksheet('Transactions')
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Transactions");
+  sheet.addRow(["documentDate", "account", "numeric_hyperlink_amount", "string_hyperlink_amount"]);
   sheet.addRow([
-    'documentDate',
-    'account',
-    'numeric_hyperlink_amount',
-    'string_hyperlink_amount',
-  ])
+    "2026-08-24",
+    "5000",
+    { formula: "999999999999998.99", result: 999999999999998.99 },
+    "",
+  ]);
   sheet.addRow([
-    '2026-08-24',
-    '5000',
-    { formula: '999999999999998.99', result: 999999999999998.99 },
-    '',
-  ])
-  sheet.addRow([
-    '2026-08-24',
-    '5000',
-    '',
+    "2026-08-24",
+    "5000",
+    "",
     {
       formula: 'TEXT(999999999999998.99,"0.0000")',
-      result: '999999999999999.0000',
+      result: "999999999999999.0000",
     },
-  ])
+  ]);
 
   // ExcelJS cannot author a formula and hyperlink on the same cell through
   // its public value API, but real workbooks can carry both. Add the standard
   // worksheet hyperlink relationships to the XLSX package after serialization.
-  const zip = await JSZip.loadAsync(Buffer.from(await workbook.xlsx.writeBuffer() as ArrayBuffer))
-  const sheetFile = zip.file('xl/worksheets/sheet1.xml')
-  assert.ok(sheetFile)
-  const sheetXml = await sheetFile.async('string')
-  assert.match(sheetXml, /<\/worksheet>$/)
+  const zip = await JSZip.loadAsync(
+    Buffer.from((await workbook.xlsx.writeBuffer()) as ArrayBuffer),
+  );
+  const sheetFile = zip.file("xl/worksheets/sheet1.xml");
+  assert.ok(sheetFile);
+  const sheetXml = await sheetFile.async("string");
+  assert.match(sheetXml, /<\/worksheet>$/);
   zip.file(
-    'xl/worksheets/sheet1.xml',
+    "xl/worksheets/sheet1.xml",
     sheetXml.replace(
-      '</worksheet>',
+      "</worksheet>",
       '<hyperlinks><hyperlink ref="C2" r:id="rId1"/><hyperlink ref="D3" r:id="rId2"/></hyperlinks></worksheet>',
     ),
-  )
+  );
   zip.file(
-    'xl/worksheets/_rels/sheet1.xml.rels',
+    "xl/worksheets/_rels/sheet1.xml.rels",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.test/numeric" TargetMode="External"/>' +
       '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.test/string" TargetMode="External"/>' +
-      '</Relationships>',
-  )
-  const linkedWorkbook = await zip.generateAsync({ type: 'nodebuffer' })
-  return (
-    await parseImportFile('xlsx', { base64: linkedWorkbook.toString('base64') })
-  ).rows
+      "</Relationships>",
+  );
+  const linkedWorkbook = await zip.generateAsync({ type: "nodebuffer" });
+  return (await parseImportFile("xlsx", { base64: linkedWorkbook.toString("base64") })).rows;
 }
 
 async function preview(
   rows: Record<string, unknown>[],
   mapping: Record<string, string>,
 ): Promise<Response> {
-  return POST(new Request('http://openbooks.test/api/data/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'preview',
-      resource: 'txn:card_charge',
-      format: 'xlsx',
-      rows,
-      mapping,
-      importMode: 'insert',
+  return POST(
+    new Request("http://openbooks.test/api/data/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "preview",
+        resource: "txn:card_charge",
+        format: "xlsx",
+        rows,
+        mapping,
+        importMode: "insert",
+      }),
     }),
-  }))
+  );
 }
 
-test('route rejects duplicate amount mappings before a formula value can outrun its provenance', async () => {
-  resetImportState()
-  const row = await parsedFormulaRow('amount')
-  assert.deepEqual(row[CELL_PROVENANCE_KEY], { formula_amount: 'formula' })
+test("route rejects duplicate amount mappings before a formula value can outrun its provenance", async () => {
+  resetImportState();
+  const row = await parsedFormulaRow("amount");
+  assert.deepEqual(row[CELL_PROVENANCE_KEY], { formula_amount: "formula" });
 
   const response = await preview([row], {
-    documentDate: 'documentDate',
-    account: 'account',
-    literal_amount: 'amount',
-    formula_amount: 'amount',
-  })
+    documentDate: "documentDate",
+    account: "account",
+    literal_amount: "amount",
+    formula_amount: "amount",
+  });
 
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'multiple source columns map to the same target field',
-    field: 'amount',
-    sources: ['literal_amount', 'formula_amount'],
-  })
-  assert.equal(importState.resourceWriteCalls, 0)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.equal(importState.transactionCalls, 0)
-})
+    error: "multiple source columns map to the same target field",
+    field: "amount",
+    sources: ["literal_amount", "formula_amount"],
+  });
+  assert.equal(importState.resourceWriteCalls, 0);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.equal(importState.transactionCalls, 0);
+});
 
-test('route rejects duplicate nested-lines mappings before a formula value can outrun its provenance', async () => {
-  resetImportState()
-  const row = await parsedFormulaRow('lines')
-  assert.deepEqual(row[CELL_PROVENANCE_KEY], { formula_lines: 'formula' })
+test("route rejects duplicate nested-lines mappings before a formula value can outrun its provenance", async () => {
+  resetImportState();
+  const row = await parsedFormulaRow("lines");
+  assert.deepEqual(row[CELL_PROVENANCE_KEY], { formula_lines: "formula" });
 
   const response = await preview([row], {
-    documentDate: 'documentDate',
-    literal_lines: 'lines',
-    formula_lines: 'lines',
-  })
+    documentDate: "documentDate",
+    literal_lines: "lines",
+    formula_lines: "lines",
+  });
 
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'multiple source columns map to the same target field',
-    field: 'lines',
-    sources: ['literal_lines', 'formula_lines'],
-  })
-  assert.equal(importState.resourceWriteCalls, 0)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.equal(importState.transactionCalls, 0)
-})
+    error: "multiple source columns map to the same target field",
+    field: "lines",
+    sources: ["literal_lines", "formula_lines"],
+  });
+  assert.equal(importState.resourceWriteCalls, 0);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.equal(importState.transactionCalls, 0);
+});
 
-test('route carries renamed amount provenance into transaction validation before writes', async () => {
-  resetImportState()
-  const row = await parsedFormulaRow('amount')
+test("route carries renamed amount provenance into transaction validation before writes", async () => {
+  resetImportState();
+  const row = await parsedFormulaRow("amount");
 
   const response = await preview([row], {
-    documentDate: 'documentDate',
-    account: 'account',
-    formula_amount: 'amount',
-  })
+    documentDate: "documentDate",
+    account: "account",
+    formula_amount: "amount",
+  });
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     outcome: {
       created: 0,
@@ -887,67 +904,68 @@ test('route carries renamed amount provenance into transaction validation before
       errors: [
         {
           row: 1,
-          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+          message:
+            "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
         },
       ],
     },
     total: 1,
-  })
-  assert.equal(importState.resourceWriteCalls, 1)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.equal(importState.transactionCalls, 0)
-  const mappedRow = importState.mappedRows?.[0]
-  assert.ok(mappedRow)
+  });
+  assert.equal(importState.resourceWriteCalls, 1);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.equal(importState.transactionCalls, 0);
+  const mappedRow = importState.mappedRows?.[0];
+  assert.ok(mappedRow);
   assert.deepEqual(mappedRow[SOURCE_COLUMNS_KEY], {
-    documentDate: 'documentDate',
-    account: 'account',
-    amount: 'formula_amount',
-  })
+    documentDate: "documentDate",
+    account: "account",
+    amount: "formula_amount",
+  });
   assert.deepEqual(mappedRow[UNMAPPED_COLUMNS_KEY], {
-    literal_amount: '999999999999998.9900',
-  })
-})
+    literal_amount: "999999999999998.9900",
+  });
+});
 
-test('route binds provenance to the selected amount source', async () => {
-  resetImportState()
-  const row = await parsedFormulaRow('amount')
+test("route binds provenance to the selected amount source", async () => {
+  resetImportState();
+  const row = await parsedFormulaRow("amount");
 
   const response = await preview([row], {
-    documentDate: 'documentDate',
-    account: 'account',
-    literal_amount: 'amount',
-  })
+    documentDate: "documentDate",
+    account: "account",
+    literal_amount: "amount",
+  });
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     outcome: { created: 1, updated: 0, failed: 0, errors: [] },
     total: 1,
-  })
-  assert.equal(importState.resourceWriteCalls, 1)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.equal(importState.transactionCalls, 0)
-  const mappedRow = importState.mappedRows?.[0]
-  assert.ok(mappedRow)
+  });
+  assert.equal(importState.resourceWriteCalls, 1);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.equal(importState.transactionCalls, 0);
+  const mappedRow = importState.mappedRows?.[0];
+  assert.ok(mappedRow);
   assert.deepEqual(mappedRow[SOURCE_COLUMNS_KEY], {
-    documentDate: 'documentDate',
-    account: 'account',
-    amount: 'literal_amount',
-  })
+    documentDate: "documentDate",
+    account: "account",
+    amount: "literal_amount",
+  });
   assert.deepEqual(mappedRow[UNMAPPED_COLUMNS_KEY], {
-    formula_amount: '999999999999999.0000',
-  })
-})
+    formula_amount: "999999999999999.0000",
+  });
+});
 
-test('route carries renamed nested-lines provenance into transaction validation before writes', async () => {
-  resetImportState()
-  const row = await parsedFormulaRow('lines')
+test("route carries renamed nested-lines provenance into transaction validation before writes", async () => {
+  resetImportState();
+  const row = await parsedFormulaRow("lines");
 
   const response = await preview([row], {
-    documentDate: 'documentDate',
-    formula_lines: 'lines',
-  })
+    documentDate: "documentDate",
+    formula_lines: "lines",
+  });
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     outcome: {
       created: 0,
@@ -956,52 +974,52 @@ test('route carries renamed nested-lines provenance into transaction validation 
       errors: [
         {
           row: 1,
-          message: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+          message: "lines cannot come from a spreadsheet formula; provide literal JSON text",
         },
       ],
     },
     total: 1,
-  })
-  assert.equal(importState.resourceWriteCalls, 1)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.equal(importState.transactionCalls, 0)
-})
+  });
+  assert.equal(importState.resourceWriteCalls, 1);
+  assert.equal(importState.rootInsertCalls, 0);
+  assert.equal(importState.transactionCalls, 0);
+});
 
-test('route carries hyperlinked formula provenance into transaction validation before writes', async (t) => {
-  const [numericRow, stringRow] = await parsedHyperlinkedFormulaRows()
-  assert.ok(numericRow)
-  assert.ok(stringRow)
+test("route carries hyperlinked formula provenance into transaction validation before writes", async (t) => {
+  const [numericRow, stringRow] = await parsedHyperlinkedFormulaRows();
+  assert.ok(numericRow);
+  assert.ok(stringRow);
   const cases = [
     {
-      name: 'numeric cached result',
+      name: "numeric cached result",
       row: numericRow,
-      source: 'numeric_hyperlink_amount',
+      source: "numeric_hyperlink_amount",
       value: 999999999999999,
     },
     {
-      name: 'string cached result',
+      name: "string cached result",
       row: stringRow,
-      source: 'string_hyperlink_amount',
-      value: '999999999999999.0000',
+      source: "string_hyperlink_amount",
+      value: "999999999999999.0000",
     },
-  ] as const
+  ] as const;
 
   for (const { name, row, source, value } of cases) {
     await t.test(`rejects ${name}`, async () => {
-      resetImportState()
-      assert.equal(row[source], value)
+      resetImportState();
+      assert.equal(row[source], value);
 
       const response = await preview([row], {
-        documentDate: 'documentDate',
-        account: 'account',
-        [source]: 'amount',
-      })
+        documentDate: "documentDate",
+        account: "account",
+        [source]: "amount",
+      });
 
-      assert.equal(importState.resourceWriteCalls, 1)
-      assert.equal(importState.rootInsertCalls, 0)
-      assert.equal(importState.transactionCalls, 0)
-      assert.deepEqual(row[CELL_PROVENANCE_KEY], { [source]: 'formula' })
-      assert.equal(response.status, 200)
+      assert.equal(importState.resourceWriteCalls, 1);
+      assert.equal(importState.rootInsertCalls, 0);
+      assert.equal(importState.transactionCalls, 0);
+      assert.deepEqual(row[CELL_PROVENANCE_KEY], { [source]: "formula" });
+      assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), {
         outcome: {
           created: 0,
@@ -1010,12 +1028,13 @@ test('route carries hyperlinked formula provenance into transaction validation b
           errors: [
             {
               row: 1,
-              message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+              message:
+                "line amount cannot come from a spreadsheet formula; provide a literal decimal string",
             },
           ],
         },
         total: 1,
-      })
-    })
+      });
+    });
   }
-})
+});

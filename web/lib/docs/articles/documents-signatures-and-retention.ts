@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const documentsSignaturesAndRetention: DocArticle = {
-  slug: 'documents-signatures-and-retention',
-  title: 'HR Documents, Signatures, and Retention',
-  category: 'administration',
+  slug: "documents-signatures-and-retention",
+  title: "HR Documents, Signatures, and Retention",
+  category: "administration",
   order: 13,
   summary:
-    'How HR issues documents from templates, collects ordered e-signatures and acknowledgments, retains them on schedules with audited deletion, and exports subject data — with categories declared once under Setup.',
-  updated: '2026-09-27',
-  keywords: ['document', 'template', 'signature', 'acknowledgment', 'retention', 'legal hold', 'export', 'category', 'merge'],
-  related: ['positions-and-headcount', 'certifications-licenses-dispatch'],
+    "How HR issues documents from templates, collects ordered e-signatures and acknowledgments, retains them on schedules with audited deletion, and exports subject data — with categories declared once under Setup.",
+  updated: "2026-09-27",
+  keywords: [
+    "document",
+    "template",
+    "signature",
+    "acknowledgment",
+    "retention",
+    "legal hold",
+    "export",
+    "category",
+    "merge",
+  ],
+  related: ["positions-and-headcount", "certifications-licenses-dispatch"],
   body: `# HR Documents, Signatures, and Retention
 
 HR documents answer one question: what did this person sign, and can we prove it. Templates declare the reusable shells, documents carry the issued instances with their ordered signer timeline, retention schedules declare how long each category lives, and subject-access exports answer data requests. Every refusal on these paths names its remedy — an undeclared category points at Setup, a consumed link points at HR.
@@ -52,4 +62,4 @@ The Documents register lists every document with title, category, status, and ho
 
 The Documents page carries three rehomed Setup sections: Templates, Categories, and Retention schedules. Templates edit signer membership as three booleans in canonical order plus a merge-key list — never raw JSON — and the Setup write path shares the engine's own validation, refusing unknown merge keys and undeclared categories with the engine's own words.
 `,
-}
+};

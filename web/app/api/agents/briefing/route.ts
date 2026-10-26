@@ -2,11 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { AIDisabledError } from "../../../../lib/assistant/client";
-import {
-  generateBriefing,
-  loadBriefing,
-  sendBriefingEmail,
-} from "../../../../lib/agents/briefing";
+import { generateBriefing, loadBriefing, sendBriefingEmail } from "../../../../lib/agents/briefing";
 const postBodySchema0 = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("generate") }),
   z.strictObject({ action: z.literal("send") }),
@@ -43,16 +39,10 @@ export const POST = defineRoute({
         return NextResponse.json({ ok: true, briefing });
       } catch (error) {
         if (error instanceof AIDisabledError) {
-          return NextResponse.json(
-            { error: "ai_not_configured" },
-            { status: 503 },
-          );
+          return NextResponse.json({ error: "ai_not_configured" }, { status: 503 });
         }
         if (error instanceof Error && error.message === "briefing_empty") {
-          return NextResponse.json(
-            { error: "briefing_empty" },
-            { status: 502 },
-          );
+          return NextResponse.json({ error: "briefing_empty" }, { status: 502 });
         }
         console.error("[agents/briefing] generate failed", error);
         return NextResponse.json({ error: "briefing_failed" }, { status: 500 });
@@ -60,8 +50,7 @@ export const POST = defineRoute({
     }
     if (body.action === "send") {
       const { briefing } = await loadBriefing(gate);
-      if (!briefing)
-        return NextResponse.json({ error: "no_briefing" }, { status: 404 });
+      if (!briefing) return NextResponse.json({ error: "no_briefing" }, { status: 404 });
       const result = await sendBriefingEmail(gate, briefing.text);
       return NextResponse.json({ ok: true, ...result });
     }

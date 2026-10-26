@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderMemo } from "./period-run.ts";
 
-const VARS = { ruleName: "Rent", periodName: "2026-07", periodLabel: "P07 FY2026", targetLabel: "Dept A" };
+const VARS = {
+  ruleName: "Rent",
+  periodName: "2026-07",
+  periodLabel: "P07 FY2026",
+  targetLabel: "Dept A",
+};
 
 test("an authored {{period.name}} token keeps the stored period name the author configured against", () => {
   assert.equal(

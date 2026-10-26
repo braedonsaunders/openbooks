@@ -21,8 +21,13 @@ async function seedMonthlyPeriods(
   orgId: string,
   months: { n: number; name: string; from: string; to: string }[],
 ): Promise<void> {
-  const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
+  const cal = (
+    await db.execute<{ id: string }>(
+      sql`
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   for (const m of months) {
     await db.execute(sql`
       insert into accounting_periods
@@ -86,9 +91,14 @@ async function seedEvidence(orgId: string, assetId: string, actorId: string): Pr
     await tx.execute(sql`
       insert into folders (id, org_id, name, record_table, record_id, created_by, updated_by)
       values (${folderId}, ${orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
-    const fileId = (await tx.execute<{ id: string }>(sql`
+    const fileId = (
+      await tx.execute<{ id: string }>(
+        sql`
       insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-      values (${orgId}, ${folderId}, 'meter.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
+      values (${orgId}, ${folderId}, 'meter.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`,
+        "objects",
+      )
+    )[0]!.id;
     await tx.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
       values (${orgId}, ${fileId}, 'fixed_assets', ${assetId}, ${actorId})`);
@@ -116,70 +126,99 @@ test("disposal settles against the continued carrying amount", { skip: !DB }, as
       date: "2026-03-31",
       actorId,
     });
-    assert.equal(disposal.nbv, "62000.0000", `disposal NBV must net the opening figure (got ${disposal.nbv})`);
-    assert.equal(disposal.gainLoss, "8000.0000", `gain must be proceeds − continued NBV (got ${disposal.gainLoss})`);
+    assert.equal(
+      disposal.nbv,
+      "62000.0000",
+      `disposal NBV must net the opening figure (got ${disposal.nbv})`,
+    );
+    assert.equal(
+      disposal.gainLoss,
+      "8000.0000",
+      `gain must be proceeds − continued NBV (got ${disposal.gainLoss})`,
+    );
     assert.equal(disposal.status, "disposed");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("impairment delta and the IFRS restoration ceiling use the continued carrying amount", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedMonthlyPeriods(org.orgId, MONTHS_2026);
-    await setFramework(org.orgId, "ifrs");
-    const assetId = await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
-      amount: "55000.0000",
-      asOf: "2025-12-31",
-    });
-    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+test(
+  "impairment delta and the IFRS restoration ceiling use the continued carrying amount",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedMonthlyPeriods(org.orgId, MONTHS_2026);
+      await setFramework(org.orgId, "ifrs");
+      const assetId = await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
+        amount: "55000.0000",
+        asOf: "2025-12-31",
+      });
+      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
 
-    // Continued NBV 65000 → 60000 is a 5000 loss, not a 60000 one.
-    const impairment = await remeasureAsset(org.orgId, assetId, {
-      newCarryingValue: "60000.0000",
-      date: "2026-01-31",
-      actorId,
-    });
-    assert.equal(impairment.kind, "impaired");
-    assert.equal(impairment.delta, "-5000.0000", `impairment must measure off the continued NBV (got ${impairment.delta})`);
-
-    // By 2026-06-30 the unimpaired counterfactual is
-    // 120000 − 55000 − 6000 (Jan–Jun plan) = 59000: restoring to 64000
-    // breaches the IAS 36 ceiling even though it sits inside the 5000 loss.
-    await assert.rejects(
-      remeasureAsset(org.orgId, assetId, {
-        newCarryingValue: "64000.0000",
-        date: "2026-06-30",
+      // Continued NBV 65000 → 60000 is a 5000 loss, not a 60000 one.
+      const impairment = await remeasureAsset(org.orgId, assetId, {
+        newCarryingValue: "60000.0000",
+        date: "2026-01-31",
         actorId,
-      }),
-      /carrying amount without impairment|caps an impairment reversal/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
+      assert.equal(impairment.kind, "impaired");
+      assert.equal(
+        impairment.delta,
+        "-5000.0000",
+        `impairment must measure off the continued NBV (got ${impairment.delta})`,
+      );
 
-test("an asset fully depreciated by its opening figure flips to fully_depreciated", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedMonthlyPeriods(org.orgId, MONTHS_2026);
-    const assetId = await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
-      amount: "120000.0000",
-      asOf: "2025-12-31",
-    });
-    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    const run = await runDepreciation(org.orgId, "2026-03-31", actorId, assetId);
-    assert.equal(run.posted, 0, "nothing remains to post");
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`, "objects"))[0]!.status;
-    assert.equal(status, "fully_depreciated", `opening-consumed basis must flip status (got ${status})`);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // By 2026-06-30 the unimpaired counterfactual is
+      // 120000 − 55000 − 6000 (Jan–Jun plan) = 59000: restoring to 64000
+      // breaches the IAS 36 ceiling even though it sits inside the 5000 loss.
+      await assert.rejects(
+        remeasureAsset(org.orgId, assetId, {
+          newCarryingValue: "64000.0000",
+          date: "2026-06-30",
+          actorId,
+        }),
+        /carrying amount without impairment|caps an impairment reversal/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "an asset fully depreciated by its opening figure flips to fully_depreciated",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedMonthlyPeriods(org.orgId, MONTHS_2026);
+      const assetId = await seedOnboardedAsset(org.orgId, org.subsidiaryId, org.accounts, {
+        amount: "120000.0000",
+        asOf: "2025-12-31",
+      });
+      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      const run = await runDepreciation(org.orgId, "2026-03-31", actorId, assetId);
+      assert.equal(run.posted, 0, "nothing remains to post");
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
+      select status from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.status;
+      assert.equal(
+        status,
+        "fully_depreciated",
+        `opening-consumed basis must flip status (got ${status})`,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("reversing a disposal restores the continued carrying status", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -191,12 +230,18 @@ test("reversing a disposal restores the continued carrying status", { skip: !DB 
       asOf: "2025-12-31",
     });
     await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    const pending = await db.execute<{ amount: string }>(sql`
+    const pending = await db.execute<{ amount: string }>(
+      sql`
       select l.planned_amount::text as amount from depreciation_schedule_lines l
       join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-      where s.org_id=${org.orgId} and s.asset_id=${assetId} and l.posted_amount is null`, "objects");
+      where s.org_id=${org.orgId} and s.asset_id=${assetId} and l.posted_amount is null`,
+      "objects",
+    );
     assert.ok(pending.length > 0, "zero-charge projections remain as schedule evidence");
-    assert.ok(pending.every((line) => isZero(line.amount)), "the opening figure consumes every planned charge");
+    assert.ok(
+      pending.every((line) => isZero(line.amount)),
+      "the opening figure consumes every planned charge",
+    );
     const disposal = await disposeAsset(org.orgId, assetId, {
       proceeds: "5000.0000",
       proceedsAccountId: org.accounts.invAsset,
@@ -205,9 +250,14 @@ test("reversing a disposal restores the continued carrying status", { skip: !DB 
     });
     assert.equal(disposal.nbv, "0.0000");
     assert.equal(disposal.gainLoss, "5000.0000");
-    const eventId = (await db.execute<{ id: string }>(sql`
+    const eventId = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from asset_events
-       where org_id = ${org.orgId} and asset_id = ${assetId} and kind = 'disposed' limit 1`, "objects"))[0]!.id;
+       where org_id = ${org.orgId} and asset_id = ${assetId} and kind = 'disposed' limit 1`,
+        "objects",
+      )
+    )[0]!.id;
     const reversal = await reverseAssetLifecycleEvent(org.orgId, eventId, {
       date: "2026-04-15",
       actorId,
@@ -224,48 +274,52 @@ test("reversing a disposal restores the continued carrying status", { skip: !DB 
   }
 });
 
-test("manual evidence cannot push accumulated depreciation past the opening-adjusted basis", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedMonthlyPeriods(org.orgId, MONTHS_2026);
-    const assetId = await seedOnboardedAsset(
-      org.orgId,
-      org.subsidiaryId,
-      org.accounts,
-      { amount: "115000.0000", asOf: "2025-12-31" },
-      "manual",
-    );
-    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    const evidenceFileId = await seedEvidence(org.orgId, assetId, actorId);
+test(
+  "manual evidence cannot push accumulated depreciation past the opening-adjusted basis",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedMonthlyPeriods(org.orgId, MONTHS_2026);
+      const assetId = await seedOnboardedAsset(
+        org.orgId,
+        org.subsidiaryId,
+        org.accounts,
+        { amount: "115000.0000", asOf: "2025-12-31" },
+        "manual",
+      );
+      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+      const evidenceFileId = await seedEvidence(org.orgId, assetId, actorId);
 
-    // 115000 (opening) + 6000 would breach the 120000 basis.
-    await assert.rejects(
-      recordDepreciationInput({
+      // 115000 (opening) + 6000 would breach the 120000 basis.
+      await assert.rejects(
+        recordDepreciationInput({
+          orgId: org.orgId,
+          assetId,
+          effectiveDate: "2026-03-15",
+          kind: "manual",
+          value: "6000.0000",
+          memo: "Q1 usage top-up",
+          evidenceFileId,
+          actorId,
+        }),
+        /between zero and the salvage floor/,
+      );
+      // Exactly to the basis is still accepted.
+      const ok = await recordDepreciationInput({
         orgId: org.orgId,
         assetId,
         effectiveDate: "2026-03-15",
         kind: "manual",
-        value: "6000.0000",
+        value: "5000.0000",
         memo: "Q1 usage top-up",
         evidenceFileId,
         actorId,
-      }),
-      /between zero and the salvage floor/,
-    );
-    // Exactly to the basis is still accepted.
-    const ok = await recordDepreciationInput({
-      orgId: org.orgId,
-      assetId,
-      effectiveDate: "2026-03-15",
-      kind: "manual",
-      value: "5000.0000",
-      memo: "Q1 usage top-up",
-      evidenceFileId,
-      actorId,
-    });
-    assert.equal(ok.plannedAmount, "5000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
+      assert.equal(ok.plannedAmount, "5000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

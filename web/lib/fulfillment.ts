@@ -1,14 +1,14 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 /** A carrier a draft shipment may name, with the service levels it offers. */
 export interface CarrierOption {
-  id: string
-  code: string
-  name: string
-  services: string[]
+  id: string;
+  code: string;
+  name: string;
+  services: string[];
 }
 
 /**
@@ -17,19 +17,32 @@ export interface CarrierOption {
  * a shipment that already names one still shows it from its own record.
  */
 export async function listActiveCarriers(orgId: string): Promise<CarrierOption[]> {
-  const rows = await db.execute<{ id: string; code: string; name: string; services: string[] | null }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    code: string;
+    name: string;
+    services: string[] | null;
+  }>(
+    sql`
     select id, code, name, services
       from carriers
      where org_id = ${orgId} and is_active
-     order by name, code`, 'objects')
-  return rows.map((row) => ({ id: row.id, code: row.code, name: row.name, services: row.services ?? [] }))
+     order by name, code`,
+    "objects",
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    services: row.services ?? [],
+  }));
 }
 
 export interface FulfillmentQueueCounts {
   /** Pick lists not voided whose stage is still open. */
-  openPickLists: number
+  openPickLists: number;
   /** Draft shipments: created from a pick list and not yet completed. */
-  shipmentsToComplete: number
+  shipmentsToComplete: number;
 }
 
 /**
@@ -41,7 +54,9 @@ export async function fulfillmentQueueCounts(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<FulfillmentQueueCounts> {
-  const row = (await db.execute<{ open_pick_lists: string; shipments_to_complete: string }>(sql`
+  const row = (
+    await db.execute<{ open_pick_lists: string; shipments_to_complete: string }>(
+      sql`
     select count(*) filter (where d.kind = 'pick_list')::text as open_pick_lists,
            count(*) filter (where d.kind = 'shipment' and d.status = 'draft')::text as shipments_to_complete
       from documents d
@@ -49,9 +64,12 @@ export async function fulfillmentQueueCounts(
      where d.org_id = ${orgId}
        and d.kind in ('pick_list', 'shipment')
        and d.status <> 'voided'
-       and fd.stage = 'open'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}`, 'objects'))[0]
+       and fd.stage = 'open'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}`,
+      "objects",
+    )
+  )[0];
   return {
     openPickLists: Number(row?.open_pick_lists ?? 0),
     shipmentsToComplete: Number(row?.shipments_to_complete ?? 0),
-  }
+  };
 }

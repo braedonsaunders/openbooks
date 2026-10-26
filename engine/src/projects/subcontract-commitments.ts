@@ -18,7 +18,8 @@ export async function directSubcontractOpenCommitment(
   orgId: string,
   projectId: string,
 ): Promise<string> {
-  const result = (await db.execute<{ func: string | null; committed: string }>(sql`
+  const result = await db.execute<{ func: string | null; committed: string }>(
+    sql`
     select s.currency as func,
       coalesce(sum(greatest(0,
         s.original_commitment + coalesce(changes.approved, 0) - coalesce(apps.billed, 0)
@@ -38,7 +39,9 @@ export async function directSubcontractOpenCommitment(
        and s.status in ('active', 'substantially_complete')
        and s.purchase_order_id is null
      group by 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   // FX "as of" is the org's business day, never the UTC day (which is tomorrow
   // in the evening for the Americas).
   const today = await businessToday(orgId);
@@ -48,8 +51,10 @@ export async function directSubcontractOpenCommitment(
   );
   let total = "0";
   for (const r of result) {
-    total = add(total, translateFlowAmount(String(r.committed ?? 0), r.func ?? null, today, ctx.rateAt));
+    total = add(
+      total,
+      translateFlowAmount(String(r.committed ?? 0), r.func ?? null, today, ctx.rateAt),
+    );
   }
   return normalizeMoney(total);
 }
-

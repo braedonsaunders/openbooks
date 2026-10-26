@@ -9,7 +9,10 @@ import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
 // jsdom first: the drawer reads browser globals at render.
-await bootJsdomEnvironment({ url: "http://localhost:4800/entities/vendors?party=22222222-2222-4222-8222-222222222222&mode=edit", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/entities/vendors?party=22222222-2222-4222-8222-222222222222&mode=edit",
+  matchMediaMatches: false,
+});
 
 const script = { confirmResult: true, confirmCalls: 0 };
 Object.assign(globalThis, {
@@ -111,7 +114,9 @@ async function mount() {
   script.confirmCalls = 0;
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === `/api/parties/${PARTY_ID}` && init?.method === "PATCH") {
       return Response.json({ ok: true });
     }
@@ -161,7 +166,14 @@ async function typeIntoForm() {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     for (const input of inputs) {
       // File inputs (the party photo control) cannot take a programmatic value.
-      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox" || input.type === "file") continue;
+      if (
+        input.disabled ||
+        input.readOnly ||
+        input.type === "hidden" ||
+        input.type === "checkbox" ||
+        input.type === "file"
+      )
+        continue;
       setter?.call(input, `${input.value}x`);
       input.dispatchEvent(new window.Event("input", { bubbles: true }));
     }

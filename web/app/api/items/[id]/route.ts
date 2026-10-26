@@ -1,35 +1,41 @@
 import { nullableExactMoney } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
-import { z } from 'zod'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
-import { isUuid } from '../../../../lib/list-params'
-import { loadItem } from '../_lib'
-import { parseItemShippingFields, type ItemShippingValues } from '../shipping-item-fields'
-import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
+import { z } from "zod";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { isFeatureEnabled } from "../../../../lib/features";
+import {
+  customFieldViewerFor,
+  findUnownedCustomReferences,
+  hiddenCustomFieldRefusal,
+  loadFieldDefs,
+  validateCustomValues,
+  visibleCustomFieldDefs,
+} from "../../../../lib/custom-fields";
+import { isUuid } from "../../../../lib/list-params";
+import { loadItem } from "../_lib";
+import { parseItemShippingFields, type ItemShippingValues } from "../shipping-item-fields";
+import { canonicalDecimal, compareDecimal, fixedDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
-import { emitItemUpdated } from '@openbooks/engine/webhooks'
+import { emitItemUpdated } from "@openbooks/engine/webhooks";
 import { wholeDigits } from "@openbooks/engine/money";
 
-
 const ITEM_KINDS = [
-  'service',
-  'non_inventory',
-  'inventory',
-  'assembly',
-  'kit',
-  'other_charge',
-  'equipment_charge',
-  'labor',
-  'absence',
-  'discount',
-] as const
+  "service",
+  "non_inventory",
+  "inventory",
+  "assembly",
+  "kit",
+  "other_charge",
+  "equipment_charge",
+  "labor",
+  "absence",
+  "discount",
+] as const;
 
-const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /**
  * Account types a service item may point its payroll costing at. Expense and
@@ -39,82 +45,89 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
  * income, bank, receivable and fixed-asset accounts are never valid.
  */
 const PAYROLL_COSTING_ACCOUNT_TYPES = new Set([
-  'expense',
-  'expense_other',
-  'expense_deferred',
-  'cogs',
-  'asset_current_other',
-])
+  "expense",
+  "expense_other",
+  "expense_deferred",
+  "cogs",
+  "asset_current_other",
+]);
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
-  return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })
+  return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 });
 }
 
 /** Trimmed string or null ('' and non-strings collapse to null). */
 function strOrNull(v: unknown): string | null {
-  if (typeof v !== 'string') return null
-  const s = v.trim()
-  return s === '' ? null : s
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  return s === "" ? null : s;
 }
 
-function uuidOrNull(v: unknown): string | null | 'invalid' {
-  const s = strOrNull(v)
-  if (s === null) return null
-  return isUuid(s) ? s : 'invalid'
+function uuidOrNull(v: unknown): string | null | "invalid" {
+  const s = strOrNull(v);
+  if (s === null) return null;
+  return isUuid(s) ? s : "invalid";
 }
 
-const nullableText = z.string().nullable().optional()
-const nullableMoney = z.preprocess(
-  value => typeof value === 'string' && value.trim() === '' ? null : value,
-  nullableExactMoney(),
-).optional()
+const nullableText = z.string().nullable().optional();
+const nullableMoney = z
+  .preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+    nullableExactMoney(),
+  )
+  .optional();
 
 // Validate the complete patch shape before normalization. Non-text values must
 // never become silent clears, and PostgreSQL must not coerce lifecycle flags.
-const itemPatchSchema = z.object({
-  kind: z.enum(ITEM_KINDS).optional(),
-  code: nullableText,
-  name: z.string().optional(),
-  description: nullableText,
-  category: nullableText,
-  unit: nullableText,
-  defaultRate: nullableMoney,
-  defaultCost: nullableMoney,
-  incomeAccountId: nullableText,
-  expenseAccountId: nullableText,
-  payrollExpenseAccountId: nullableText,
-  costRecoveryAccountId: nullableText,
-  taxCodeId: nullableText,
-  showOnTimesheet: z.boolean().optional(),
-  weight: nullableText,
-  weightUnit: nullableText,
-  dimensions: z.unknown().nullable().optional(),
-  hsCode: nullableText,
-  countryOfOrigin: nullableText,
-  isActive: z.boolean().optional(),
-  custom: z.record(z.string(), z.json()).optional(),
-  recognitionRuleId: nullableText,
-  deferredAccountId: nullableText,
-  createPlansOn: z.string().optional(),
-  revenueAllocation: z.string().optional(),
-  standaloneSellingPrice: nullableMoney,
-  reason: nullableText,
-  changeReason: nullableText,
-}).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })
-type PatchBody = z.output<typeof itemPatchSchema>
+const itemPatchSchema = z
+  .object({
+    kind: z.enum(ITEM_KINDS).optional(),
+    code: nullableText,
+    name: z.string().optional(),
+    description: nullableText,
+    category: nullableText,
+    unit: nullableText,
+    defaultRate: nullableMoney,
+    defaultCost: nullableMoney,
+    incomeAccountId: nullableText,
+    expenseAccountId: nullableText,
+    payrollExpenseAccountId: nullableText,
+    costRecoveryAccountId: nullableText,
+    taxCodeId: nullableText,
+    showOnTimesheet: z.boolean().optional(),
+    weight: nullableText,
+    weightUnit: nullableText,
+    dimensions: z.unknown().nullable().optional(),
+    hsCode: nullableText,
+    countryOfOrigin: nullableText,
+    isActive: z.boolean().optional(),
+    custom: z.record(z.string(), z.json()).optional(),
+    recognitionRuleId: nullableText,
+    deferredAccountId: nullableText,
+    createPlansOn: z.string().optional(),
+    revenueAllocation: z.string().optional(),
+    standaloneSellingPrice: nullableMoney,
+    reason: nullableText,
+    changeReason: nullableText,
+  })
+  .strict()
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
+type PatchBody = z.output<typeof itemPatchSchema>;
 
-const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
-const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
+const CREATE_PLANS_ON = ["billing", "fulfillment", "arrangement"] as const;
+const REVENUE_ALLOCATION = ["normal", "exclude", "software"] as const;
 const REVENUE_RECOGNITION_BODY_KEYS = [
-  'recognitionRuleId',
-  'deferredAccountId',
-  'createPlansOn',
-  'revenueAllocation',
-  'standaloneSellingPrice',
-] as const
+  "recognitionRuleId",
+  "deferredAccountId",
+  "createPlansOn",
+  "revenueAllocation",
+  "standaloneSellingPrice",
+] as const;
 
 function bodyTouchesRevenueRecognition(body: PatchBody): boolean {
-  return REVENUE_RECOGNITION_BODY_KEYS.some((key) => body[key] !== undefined)
+  return REVENUE_RECOGNITION_BODY_KEYS.some((key) => body[key] !== undefined);
 }
 
 /**
@@ -124,35 +137,35 @@ function bodyTouchesRevenueRecognition(body: PatchBody): boolean {
  * item row later.
  */
 const ITEM_ACCOUNTING_CONFIGURATION_FIELDS = [
-  'kind',
-  'code',
-  'name',
-  'description',
-  'category',
-  'unit',
-  'default_rate',
-  'default_cost',
-  'income_account_id',
-  'expense_account_id',
-  'payroll_expense_account_id',
-  'cost_recovery_account_id',
-  'tax_code_id',
-  'show_on_timesheet',
-  'recognition_rule_id',
-  'deferred_account_id',
-  'create_plans_on',
-  'revenue_allocation',
-  'standalone_selling_price',
-  'is_active',
-  'custom',
-  'updated_at',
-  'updated_by',
-] as const
+  "kind",
+  "code",
+  "name",
+  "description",
+  "category",
+  "unit",
+  "default_rate",
+  "default_cost",
+  "income_account_id",
+  "expense_account_id",
+  "payroll_expense_account_id",
+  "cost_recovery_account_id",
+  "tax_code_id",
+  "show_on_timesheet",
+  "recognition_rule_id",
+  "deferred_account_id",
+  "create_plans_on",
+  "revenue_allocation",
+  "standalone_selling_price",
+  "is_active",
+  "custom",
+  "updated_at",
+  "updated_by",
+] as const;
 
 function accountingConfiguration(row: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
     ITEM_ACCOUNTING_CONFIGURATION_FIELDS.map((field) => [field, row[field] ?? null]),
-  )
+  );
 }
 
 /** A validation failure discovered after the item row is locked. */
@@ -164,19 +177,23 @@ class PatchNotFound extends Error {}
 /** A custom field the caller may not change; refused by name. */
 class PatchForbidden extends Error {}
 
-const itemParams = z.object({ id: z.string() })
+const itemParams = z.object({ id: z.string() });
 
 export const GET = defineRoute({
-  permission: 'items.read',
-  feature: { none: 'The item catalog is available independently of optional inventory capabilities.' },
+  permission: "items.read",
+  feature: {
+    none: "The item catalog is available independently of optional inventory capabilities.",
+  },
   params: itemParams,
   handler: async ({ authz: gate, params: { id } }) => {
-  if (!isUuid(id)) return notFound("record")
-  const payload = await loadItem(id, gate.user.orgId, { customFieldViewer: customFieldViewerFor(gate) })
-  if (!payload) return notFound("record")
-  return NextResponse.json(payload)
+    if (!isUuid(id)) return notFound("record");
+    const payload = await loadItem(id, gate.user.orgId, {
+      customFieldViewer: customFieldViewerFor(gate),
+    });
+    if (!payload) return notFound("record");
+    return NextResponse.json(payload);
   },
-})
+});
 
 /**
  * Autosave for the item flyout: catalog fields, account/tax links, custom
@@ -184,282 +201,323 @@ export const GET = defineRoute({
  * are updated; a real name is required to activate.
  */
 export const PATCH = defineRoute({
-  permission: 'items.manage',
-  feature: { none: 'The item catalog is available independently of optional inventory capabilities.' },
-  scope: 'unrestricted',
+  permission: "items.manage",
+  feature: {
+    none: "The item catalog is available independently of optional inventory capabilities.",
+  },
+  scope: "unrestricted",
   params: itemParams,
   body: itemPatchSchema,
   opaque: {
-    dimensions: "shipping dimensions are validated by parseItemShippingFields, refusing unusable values by name",
+    dimensions:
+      "shipping dimensions are validated by parseItemShippingFields, refusing unusable values by name",
   },
   handler: async ({ request, params: { id }, body, authz: gate }) => {
-  // Item accounts, tax, and recognition config apply org-wide.
-  const user = gate.user
-  if (!isUuid(id)) return notFound("record")
+    // Item accounts, tax, and recognition config apply org-wide.
+    const user = gate.user;
+    if (!isUuid(id)) return notFound("record");
 
-
-  // -- kind ----------------------------------------------------------------
-  if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {
-    return bad('Invalid item kind')
-  }
-
-  // -- name / activation ---------------------------------------------------
-  const name = body.name !== undefined ? body.name.trim() : undefined
-
-  // -- default rate --------------------------------------------------------
-  let defaultRate: string | null | undefined
-  if (body.defaultRate !== undefined) {
-    const raw = strOrNull(body.defaultRate)
-    if (raw === null) defaultRate = null
-    else {
-      const exact = canonicalDecimal(raw, 4)
-      if (exact === null) return bad(moneyRefusal('Default rate', raw, 'a rate'))
-      if (wholeDigits(exact) > 15) return bad('Default rate is out of range — at most 15 whole digits fit the ledger')
-      defaultRate = fixedDecimal(exact, 4)
+    // -- kind ----------------------------------------------------------------
+    if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {
+      return bad("Invalid item kind");
     }
-  }
 
-  let defaultCost: string | null | undefined
-  if (body.defaultCost !== undefined) {
-    const raw = strOrNull(body.defaultCost)
-    if (raw === null) defaultCost = null
-    else {
-      const exact = canonicalDecimal(raw, 4)
-      if (exact === null) return bad(moneyRefusal('Default cost', raw))
-      if (compareDecimal(exact, '0') < 0) return bad('Default cost must be a non-negative number')
-      if (wholeDigits(exact) > 15) return bad('Default cost is out of range — at most 15 whole digits fit the ledger')
-      defaultCost = fixedDecimal(exact, 4)
+    // -- name / activation ---------------------------------------------------
+    const name = body.name !== undefined ? body.name.trim() : undefined;
+
+    // -- default rate --------------------------------------------------------
+    let defaultRate: string | null | undefined;
+    if (body.defaultRate !== undefined) {
+      const raw = strOrNull(body.defaultRate);
+      if (raw === null) defaultRate = null;
+      else {
+        const exact = canonicalDecimal(raw, 4);
+        if (exact === null) return bad(moneyRefusal("Default rate", raw, "a rate"));
+        if (wholeDigits(exact) > 15)
+          return bad("Default rate is out of range — at most 15 whole digits fit the ledger");
+        defaultRate = fixedDecimal(exact, 4);
+      }
     }
-  }
 
-  // -- account / tax references (must exist & belong to org) ---------------
-  // IDs are normalized before the transaction; authoritative existence checks
-  // happen below after the item row is locked, so a concurrent account change
-  // cannot make the audit's before-image disagree with the committed write.
-  let incomeAccountId: string | null | undefined
-  if (body.incomeAccountId !== undefined) {
-    const v = uuidOrNull(body.incomeAccountId)
-    if (v === 'invalid') return bad('Invalid income account')
-    incomeAccountId = v
-  }
-
-  let expenseAccountId: string | null | undefined
-  if (body.expenseAccountId !== undefined) {
-    const v = uuidOrNull(body.expenseAccountId)
-    if (v === 'invalid') return bad('Invalid expense account')
-    expenseAccountId = v
-  }
-
-  let payrollExpenseAccountId: string | null | undefined
-  if (body.payrollExpenseAccountId !== undefined) {
-    const v = uuidOrNull(body.payrollExpenseAccountId)
-    if (v === 'invalid') return bad('Invalid payroll costing account')
-    payrollExpenseAccountId = v
-  }
-
-  let costRecoveryAccountId: string | null | undefined
-  if (body.costRecoveryAccountId !== undefined) {
-    const v = uuidOrNull(body.costRecoveryAccountId)
-    if (v === 'invalid') return bad('Invalid recovery account')
-    costRecoveryAccountId = v
-  }
-
-  let taxCodeId: string | null | undefined
-  if (body.taxCodeId !== undefined) {
-    const v = uuidOrNull(body.taxCodeId)
-    if (v === 'invalid') return bad('Invalid tax code')
-    taxCodeId = v
-  }
-
-  // -- revenue recognition -------------------------------------------------
-  let recognitionRuleId: string | null | undefined
-  if (body.recognitionRuleId !== undefined) {
-    const v = uuidOrNull(body.recognitionRuleId)
-    if (v === 'invalid') return bad('Invalid recognition rule')
-    recognitionRuleId = v
-  }
-
-  let deferredAccountId: string | null | undefined
-  if (body.deferredAccountId !== undefined) {
-    const v = uuidOrNull(body.deferredAccountId)
-    if (v === 'invalid') return bad('Invalid deferred revenue account')
-    deferredAccountId = v
-  }
-
-  if (body.createPlansOn !== undefined && !CREATE_PLANS_ON.includes(body.createPlansOn as (typeof CREATE_PLANS_ON)[number])) {
-    return bad('Invalid "create plans on" value')
-  }
-  if (
-    body.revenueAllocation !== undefined &&
-    !REVENUE_ALLOCATION.includes(body.revenueAllocation as (typeof REVENUE_ALLOCATION)[number])
-  ) {
-    return bad('Invalid revenue allocation')
-  }
-
-  let standaloneSellingPrice: string | null | undefined
-  if (body.standaloneSellingPrice !== undefined) {
-    const raw = strOrNull(body.standaloneSellingPrice)
-    if (raw === null) standaloneSellingPrice = null
-    else {
-      const exact = canonicalDecimal(raw, 4)
-      if (exact === null) return bad(moneyRefusal('Standalone selling price', raw))
-      if (wholeDigits(exact) > 15) return bad('Standalone selling price is out of range — at most 15 whole digits fit the ledger')
-      standaloneSellingPrice = fixedDecimal(exact, 4)
+    let defaultCost: string | null | undefined;
+    if (body.defaultCost !== undefined) {
+      const raw = strOrNull(body.defaultCost);
+      if (raw === null) defaultCost = null;
+      else {
+        const exact = canonicalDecimal(raw, 4);
+        if (exact === null) return bad(moneyRefusal("Default cost", raw));
+        if (compareDecimal(exact, "0") < 0)
+          return bad("Default cost must be a non-negative number");
+        if (wholeDigits(exact) > 15)
+          return bad("Default cost is out of range — at most 15 whole digits fit the ledger");
+        defaultCost = fixedDecimal(exact, 4);
+      }
     }
-  }
 
-  // -- custom fields -------------------------------------------------------
-  let cleanedCustom: Record<string, unknown> | null = null
+    // -- account / tax references (must exist & belong to org) ---------------
+    // IDs are normalized before the transaction; authoritative existence checks
+    // happen below after the item row is locked, so a concurrent account change
+    // cannot make the audit's before-image disagree with the committed write.
+    let incomeAccountId: string | null | undefined;
+    if (body.incomeAccountId !== undefined) {
+      const v = uuidOrNull(body.incomeAccountId);
+      if (v === "invalid") return bad("Invalid income account");
+      incomeAccountId = v;
+    }
 
-  const reason = strOrNull(body.reason ?? body.changeReason)
+    let expenseAccountId: string | null | undefined;
+    if (body.expenseAccountId !== undefined) {
+      const v = uuidOrNull(body.expenseAccountId);
+      if (v === "invalid") return bad("Invalid expense account");
+      expenseAccountId = v;
+    }
 
-  try {
-    const updated = await withOrgTransaction(user.orgId, async () => {
-      // This is the authoritative before-image. The tenant-pinned transaction
-      // and row lock serialize every item configuration edit, including the
-      // audit insert below, so concurrent writers cannot falsify evidence.
-      const locked = await db.execute<Record<string, unknown>>(sql`
+    let payrollExpenseAccountId: string | null | undefined;
+    if (body.payrollExpenseAccountId !== undefined) {
+      const v = uuidOrNull(body.payrollExpenseAccountId);
+      if (v === "invalid") return bad("Invalid payroll costing account");
+      payrollExpenseAccountId = v;
+    }
+
+    let costRecoveryAccountId: string | null | undefined;
+    if (body.costRecoveryAccountId !== undefined) {
+      const v = uuidOrNull(body.costRecoveryAccountId);
+      if (v === "invalid") return bad("Invalid recovery account");
+      costRecoveryAccountId = v;
+    }
+
+    let taxCodeId: string | null | undefined;
+    if (body.taxCodeId !== undefined) {
+      const v = uuidOrNull(body.taxCodeId);
+      if (v === "invalid") return bad("Invalid tax code");
+      taxCodeId = v;
+    }
+
+    // -- revenue recognition -------------------------------------------------
+    let recognitionRuleId: string | null | undefined;
+    if (body.recognitionRuleId !== undefined) {
+      const v = uuidOrNull(body.recognitionRuleId);
+      if (v === "invalid") return bad("Invalid recognition rule");
+      recognitionRuleId = v;
+    }
+
+    let deferredAccountId: string | null | undefined;
+    if (body.deferredAccountId !== undefined) {
+      const v = uuidOrNull(body.deferredAccountId);
+      if (v === "invalid") return bad("Invalid deferred revenue account");
+      deferredAccountId = v;
+    }
+
+    if (
+      body.createPlansOn !== undefined &&
+      !CREATE_PLANS_ON.includes(body.createPlansOn as (typeof CREATE_PLANS_ON)[number])
+    ) {
+      return bad('Invalid "create plans on" value');
+    }
+    if (
+      body.revenueAllocation !== undefined &&
+      !REVENUE_ALLOCATION.includes(body.revenueAllocation as (typeof REVENUE_ALLOCATION)[number])
+    ) {
+      return bad("Invalid revenue allocation");
+    }
+
+    let standaloneSellingPrice: string | null | undefined;
+    if (body.standaloneSellingPrice !== undefined) {
+      const raw = strOrNull(body.standaloneSellingPrice);
+      if (raw === null) standaloneSellingPrice = null;
+      else {
+        const exact = canonicalDecimal(raw, 4);
+        if (exact === null) return bad(moneyRefusal("Standalone selling price", raw));
+        if (wholeDigits(exact) > 15)
+          return bad(
+            "Standalone selling price is out of range — at most 15 whole digits fit the ledger",
+          );
+        standaloneSellingPrice = fixedDecimal(exact, 4);
+      }
+    }
+
+    // -- custom fields -------------------------------------------------------
+    let cleanedCustom: Record<string, unknown> | null = null;
+
+    const reason = strOrNull(body.reason ?? body.changeReason);
+
+    try {
+      const updated = await withOrgTransaction(user.orgId, async () => {
+        // This is the authoritative before-image. The tenant-pinned transaction
+        // and row lock serialize every item configuration edit, including the
+        // audit insert below, so concurrent writers cannot falsify evidence.
+        const locked = await db.execute<Record<string, unknown>>(
+          sql`
         select * from items where id = ${id} and org_id = ${user.orgId} for update
-      `, 'objects')
-      const before = locked[0]
-      if (!before) throw new PatchNotFound()
+      `,
+          "objects",
+        );
+        const before = locked[0];
+        if (!before) throw new PatchNotFound();
 
-      if (body.custom !== undefined) {
-        const viewer = customFieldViewerFor(gate)
-        const activeDefs = await loadFieldDefs('items')
-        // PATCH custom values are partial: validate the effective bag so an
-        // omitted required field can be satisfied by its stored value. Keep
-        // unknown/system keys intact while applying the cleaned submitted
-        // values, matching the shared entity-writer contract.
-        const existingCustom =
-          before.custom && typeof before.custom === 'object'
-            ? (before.custom as Record<string, unknown>)
-            : {}
-        const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, existingCustom)
-        if (hidden) throw new PatchForbidden(hidden.message)
-        const defs = visibleCustomFieldDefs(activeDefs, viewer)
-        const v = validateCustomValues(defs, { ...existingCustom, ...body.custom })
-        if (!v.ok) throw new PatchInvalid(Object.values(v.errors)[0]!)
-        // Reference custom values are uuid-SHAPED at this point but nothing
-        // proves the referenced row belongs to the caller: refuse foreign or
-        // dangling ids instead of persisting a cross-tenant pointer.
-        // Supplied values only, so legacy bags cannot lock unrelated edits.
-        const suppliedCustom: Record<string, unknown> = {}
-        for (const key of Object.keys(body.custom)) {
-          if (v.cleaned[key] !== undefined) suppliedCustom[key] = v.cleaned[key]
+        if (body.custom !== undefined) {
+          const viewer = customFieldViewerFor(gate);
+          const activeDefs = await loadFieldDefs("items");
+          // PATCH custom values are partial: validate the effective bag so an
+          // omitted required field can be satisfied by its stored value. Keep
+          // unknown/system keys intact while applying the cleaned submitted
+          // values, matching the shared entity-writer contract.
+          const existingCustom =
+            before.custom && typeof before.custom === "object"
+              ? (before.custom as Record<string, unknown>)
+              : {};
+          const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, existingCustom);
+          if (hidden) throw new PatchForbidden(hidden.message);
+          const defs = visibleCustomFieldDefs(activeDefs, viewer);
+          const v = validateCustomValues(defs, { ...existingCustom, ...body.custom });
+          if (!v.ok) throw new PatchInvalid(Object.values(v.errors)[0]!);
+          // Reference custom values are uuid-SHAPED at this point but nothing
+          // proves the referenced row belongs to the caller: refuse foreign or
+          // dangling ids instead of persisting a cross-tenant pointer.
+          // Supplied values only, so legacy bags cannot lock unrelated edits.
+          const suppliedCustom: Record<string, unknown> = {};
+          for (const key of Object.keys(body.custom)) {
+            if (v.cleaned[key] !== undefined) suppliedCustom[key] = v.cleaned[key];
+          }
+          const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom);
+          if (unowned.length > 0)
+            throw new PatchInvalid(`${unowned[0]!.label} not found in this organization`);
+          cleanedCustom = { ...existingCustom, ...v.cleaned };
         }
-        const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
-        if (unowned.length > 0) throw new PatchInvalid(`${unowned[0]!.label} not found in this organization`)
-        cleanedCustom = { ...existingCustom, ...v.cleaned }
-      }
 
-      if (bodyTouchesRevenueRecognition(body) && !(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
-        throw new PatchNotFound()
-      }
-      if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(user.orgId, 'timeTracking'))) {
-        throw new PatchNotFound()
-      }
-      // Shipping attributes only rate while the hub is on; the stored
-      // columns stay readable, but a new write without the feature refuses
-      // the same way a gated flag does.
-      const touchesShipping = body.weight !== undefined
-        || body.weightUnit !== undefined
-        || body.dimensions !== undefined
-        || body.hsCode !== undefined
-        || body.countryOfOrigin !== undefined
-      if (touchesShipping && !(await isFeatureEnabled(user.orgId, 'shippingHub'))) {
-        throw new PatchNotFound()
-      }
-      let shipWeight: string | null | undefined
-      let shipWeightUnit: string | null | undefined
-      let shipDimensions: ItemShippingValues['dimensions']
-      let shipHsCode: string | null | undefined
-      let shipOrigin: string | null | undefined
-      if (touchesShipping) {
-        const parsed = parseItemShippingFields({
-          weight: body.weight,
-          weightUnit: body.weightUnit,
-          dimensions: body.dimensions,
-          hsCode: body.hsCode,
-          countryOfOrigin: body.countryOfOrigin,
-        })
-        if (!parsed.ok) throw new PatchInvalid(parsed.message)
-        shipWeight = parsed.values.weight
-        shipWeightUnit = parsed.values.weightUnit
-        shipDimensions = parsed.values.dimensions
-        shipHsCode = parsed.values.hsCode
-        shipOrigin = parsed.values.countryOfOrigin
-      }
-      // Inventory kinds (inventory / assembly / kit) are Inventory configuration.
-      // Turning that switch off must refuse a new write; the stored kind stays.
-      if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
-        const nextKind = String(body.kind)
-        const storedKind = String(before.kind ?? '')
-        if (INVENTORY_ITEM_KINDS.has(nextKind) || (INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind)) {
-          throw new PatchNotFound()
+        if (
+          bodyTouchesRevenueRecognition(body) &&
+          !(await isFeatureEnabled(user.orgId, "revenueRecognition"))
+        ) {
+          throw new PatchNotFound();
         }
-      }
-      // Equipment-charge kind is Equipment configuration.
-      // Turning that switch off must refuse a new write; the stored kind stays.
-      if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'equipment'))) {
-        const nextKind = String(body.kind)
-        const storedKind = String(before.kind ?? '')
-        if (nextKind === 'equipment_charge' && nextKind !== storedKind) {
-          throw new PatchNotFound()
+        if (
+          body.showOnTimesheet !== undefined &&
+          !(await isFeatureEnabled(user.orgId, "timeTracking"))
+        ) {
+          throw new PatchNotFound();
         }
-      }
+        // Shipping attributes only rate while the hub is on; the stored
+        // columns stay readable, but a new write without the feature refuses
+        // the same way a gated flag does.
+        const touchesShipping =
+          body.weight !== undefined ||
+          body.weightUnit !== undefined ||
+          body.dimensions !== undefined ||
+          body.hsCode !== undefined ||
+          body.countryOfOrigin !== undefined;
+        if (touchesShipping && !(await isFeatureEnabled(user.orgId, "shippingHub"))) {
+          throw new PatchNotFound();
+        }
+        let shipWeight: string | null | undefined;
+        let shipWeightUnit: string | null | undefined;
+        let shipDimensions: ItemShippingValues["dimensions"];
+        let shipHsCode: string | null | undefined;
+        let shipOrigin: string | null | undefined;
+        if (touchesShipping) {
+          const parsed = parseItemShippingFields({
+            weight: body.weight,
+            weightUnit: body.weightUnit,
+            dimensions: body.dimensions,
+            hsCode: body.hsCode,
+            countryOfOrigin: body.countryOfOrigin,
+          });
+          if (!parsed.ok) throw new PatchInvalid(parsed.message);
+          shipWeight = parsed.values.weight;
+          shipWeightUnit = parsed.values.weightUnit;
+          shipDimensions = parsed.values.dimensions;
+          shipHsCode = parsed.values.hsCode;
+          shipOrigin = parsed.values.countryOfOrigin;
+        }
+        // Inventory kinds (inventory / assembly / kit) are Inventory configuration.
+        // Turning that switch off must refuse a new write; the stored kind stays.
+        if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, "inventory"))) {
+          const nextKind = String(body.kind);
+          const storedKind = String(before.kind ?? "");
+          if (
+            INVENTORY_ITEM_KINDS.has(nextKind) ||
+            (INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind)
+          ) {
+            throw new PatchNotFound();
+          }
+        }
+        // Equipment-charge kind is Equipment configuration.
+        // Turning that switch off must refuse a new write; the stored kind stays.
+        if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, "equipment"))) {
+          const nextKind = String(body.kind);
+          const storedKind = String(before.kind ?? "");
+          if (nextKind === "equipment_charge" && nextKind !== storedKind) {
+            throw new PatchNotFound();
+          }
+        }
 
-      const willBeActive = body.isActive ?? Boolean(before.is_active)
-      const effectiveName = name ?? String(before.name ?? '').trim()
-      if (willBeActive && (!effectiveName || effectiveName === 'New item')) {
-        throw new PatchInvalid(
-          body.isActive === true ? 'Give the item a real name before activating it' : 'An active item needs a name',
-        )
-      }
+        const willBeActive = body.isActive ?? Boolean(before.is_active);
+        const effectiveName = name ?? String(before.name ?? "").trim();
+        if (willBeActive && (!effectiveName || effectiveName === "New item")) {
+          throw new PatchInvalid(
+            body.isActive === true
+              ? "Give the item a real name before activating it"
+              : "An active item needs a name",
+          );
+        }
 
-      const assertReference = async (
-        table: 'accounts' | 'tax_codes' | 'recognition_rules',
-        value: string | null | undefined,
-        error: string,
-      ): Promise<void> => {
-        if (value === undefined || value === null) return
-        const found = await db.execute(sql`
+        const assertReference = async (
+          table: "accounts" | "tax_codes" | "recognition_rules",
+          value: string | null | undefined,
+          error: string,
+        ): Promise<void> => {
+          if (value === undefined || value === null) return;
+          const found = await db.execute(
+            sql`
           select 1 from ${sql.raw(table)} where id = ${value} and org_id = ${user.orgId}
-        `, 'objects')
-        if (!found[0]) throw new PatchInvalid(error)
-      }
-      // Where worked hours may land. Expense and COGS cover the ordinary
-      // cases; asset_current_other covers capitalised labour — every shipped
-      // inventory/WIP account (manufacturing 1210 Work in Process included)
-      // carries exactly that type, and produced inventory must be costed
-      // there, not expensed. Liability, equity, income, bank, receivable and
-      // fixed-asset accounts can never be the debit for worked hours.
-      const assertPayrollCostingAccountType = async (
-        value: string | null | undefined,
-      ): Promise<void> => {
-        if (value === undefined || value === null) return
-        const acct = await db.execute<{ type: string; isActive: boolean; isSummary: boolean }>(sql`
+        `,
+            "objects",
+          );
+          if (!found[0]) throw new PatchInvalid(error);
+        };
+        // Where worked hours may land. Expense and COGS cover the ordinary
+        // cases; asset_current_other covers capitalised labour — every shipped
+        // inventory/WIP account (manufacturing 1210 Work in Process included)
+        // carries exactly that type, and produced inventory must be costed
+        // there, not expensed. Liability, equity, income, bank, receivable and
+        // fixed-asset accounts can never be the debit for worked hours.
+        const assertPayrollCostingAccountType = async (
+          value: string | null | undefined,
+        ): Promise<void> => {
+          if (value === undefined || value === null) return;
+          const acct = await db.execute<{ type: string; isActive: boolean; isSummary: boolean }>(
+            sql`
           select type, is_active as "isActive", is_summary as "isSummary"
             from accounts where id = ${value} and org_id = ${user.orgId}
-        `, 'objects')
-        const row = acct[0]
-        if (!row) throw new PatchInvalid('Payroll costing account not found')
-        if (!row.isActive) throw new PatchInvalid('Payroll costing account is inactive')
-        if (row.isSummary) throw new PatchInvalid('Summary accounts cannot receive worked-hours cost')
-        if (!PAYROLL_COSTING_ACCOUNT_TYPES.has(row.type)) {
-          throw new PatchInvalid(`Payroll costing account type ${row.type} cannot receive worked-hours cost`)
-        }
-      }
-      await assertReference('accounts', incomeAccountId, 'Income account not found')
-      await assertReference('accounts', expenseAccountId, 'Expense account not found')
-      await assertReference('accounts', payrollExpenseAccountId, 'Payroll costing account not found')
-      await assertPayrollCostingAccountType(payrollExpenseAccountId)
-      await assertReference('accounts', costRecoveryAccountId, 'Recovery account not found')
-      await assertReference('tax_codes', taxCodeId, 'Tax code not found')
-      await assertReference('recognition_rules', recognitionRuleId, 'Recognition rule not found')
-      await assertReference('accounts', deferredAccountId, 'Deferred revenue account not found')
+        `,
+            "objects",
+          );
+          const row = acct[0];
+          if (!row) throw new PatchInvalid("Payroll costing account not found");
+          if (!row.isActive) throw new PatchInvalid("Payroll costing account is inactive");
+          if (row.isSummary)
+            throw new PatchInvalid("Summary accounts cannot receive worked-hours cost");
+          if (!PAYROLL_COSTING_ACCOUNT_TYPES.has(row.type)) {
+            throw new PatchInvalid(
+              `Payroll costing account type ${row.type} cannot receive worked-hours cost`,
+            );
+          }
+        };
+        await assertReference("accounts", incomeAccountId, "Income account not found");
+        await assertReference("accounts", expenseAccountId, "Expense account not found");
+        await assertReference(
+          "accounts",
+          payrollExpenseAccountId,
+          "Payroll costing account not found",
+        );
+        await assertPayrollCostingAccountType(payrollExpenseAccountId);
+        await assertReference("accounts", costRecoveryAccountId, "Recovery account not found");
+        await assertReference("tax_codes", taxCodeId, "Tax code not found");
+        await assertReference("recognition_rules", recognitionRuleId, "Recognition rule not found");
+        await assertReference("accounts", deferredAccountId, "Deferred revenue account not found");
 
-      const written = await db.execute<Record<string, unknown>>(sql`
+        const written = await db.execute<Record<string, unknown>>(
+          sql`
         update items set
           kind = coalesce(${body.kind ?? null}, kind),
           name = ${name !== undefined ? name : sql`name`},
@@ -490,37 +548,45 @@ export const PATCH = defineRoute({
           updated_at = now(), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
         returning *
-      `, 'objects')
-      const after = written[0]
-      if (!after) throw new Error('item_changed')
+      `,
+          "objects",
+        );
+        const after = written[0];
+        if (!after) throw new Error("item_changed");
 
-      const changes: Record<string, unknown> = {
-        before: accountingConfiguration(before),
-        after: accountingConfiguration(after),
-      }
-      if (reason !== null) changes.reason = reason
-      await db.execute(sql`
+        const changes: Record<string, unknown> = {
+          before: accountingConfiguration(before),
+          after: accountingConfiguration(after),
+        };
+        if (reason !== null) changes.reason = reason;
+        await db.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
         values
           (${user.orgId}, 'items', ${id}, 'update', ${JSON.stringify(changes)}::jsonb,
-           ${user.id}, ${request.headers.get('X-Request-Id')}, now())
-      `)
-      // Subscriber event joins the save transaction: a rolled-back save announces nothing.
-      await emitItemUpdated(db, user.orgId, id)
-      return after
-    })
-    if (!updated) return notFound("record")
-  } catch (e: unknown) {
-    if (e instanceof PatchNotFound) return notFound("record")
-    if (e instanceof PatchInvalid) return bad(e.message)
-    if (e instanceof PatchForbidden) return NextResponse.json({ error: e.message }, { status: 403 })
-    const msg = e instanceof Error ? `${e.message} ${String((e as { cause?: unknown }).cause ?? '')}` : String(e)
-    if (msg.includes('items_org_code')) return bad('Code already in use')
-    throw e
-  }
+           ${user.id}, ${request.headers.get("X-Request-Id")}, now())
+      `);
+        // Subscriber event joins the save transaction: a rolled-back save announces nothing.
+        await emitItemUpdated(db, user.orgId, id);
+        return after;
+      });
+      if (!updated) return notFound("record");
+    } catch (e: unknown) {
+      if (e instanceof PatchNotFound) return notFound("record");
+      if (e instanceof PatchInvalid) return bad(e.message);
+      if (e instanceof PatchForbidden)
+        return NextResponse.json({ error: e.message }, { status: 403 });
+      const msg =
+        e instanceof Error
+          ? `${e.message} ${String((e as { cause?: unknown }).cause ?? "")}`
+          : String(e);
+      if (msg.includes("items_org_code")) return bad("Code already in use");
+      throw e;
+    }
 
-  const payload = await loadItem(id, user.orgId, { customFieldViewer: customFieldViewerFor(gate) })
-  return NextResponse.json(payload)
+    const payload = await loadItem(id, user.orgId, {
+      customFieldViewer: customFieldViewerFor(gate),
+    });
+    return NextResponse.json(payload);
   },
-})
+});

@@ -1,79 +1,91 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { defineRoute } from '../../../../../lib/api/route'
-import { notFound } from '@/lib/api/responses'
-import { guardSubsidiaryScope } from '../../../../../lib/authz'
-import { crmActivityScope } from '../../../../../lib/crm-scope'
-import { isUuid } from '../../../../../lib/list-params'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { defineRoute } from "../../../../../lib/api/route";
+import { notFound } from "@/lib/api/responses";
+import { guardSubsidiaryScope } from "../../../../../lib/authz";
+import { crmActivityScope } from "../../../../../lib/crm-scope";
+import { isUuid } from "../../../../../lib/list-params";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const PAGE_SIZE = 15
-const KINDS = new Set(['task', 'call', 'event', 'email', 'note'])
-const STATUSES = new Set(['planned', 'in_progress', 'completed', 'cancelled'])
+const PAGE_SIZE = 15;
+const KINDS = new Set(["task", "call", "event", "email", "note"]);
+const STATUSES = new Set(["planned", "in_progress", "completed", "cancelled"]);
 
 /** Searchable, filtered CRM activity sublist for a customer flyout. */
 export const GET = defineRoute({
-  permission: 'crm.activities.read',
-  feature: 'crm',
+  permission: "crm.activities.read",
+  feature: "crm",
   params: z.object({ id: z.string() }),
   handler: async ({ request, authz: gate, params }) => {
-  const { id } = params
-  if (!isUuid(id)) return notFound("record")
+    const { id } = params;
+    if (!isUuid(id)) return notFound("record");
 
-  // Party record boundary (null-subsidiary parties are org-wide).
-  const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from parties where id=${id} and org_id=${gate.user.orgId} limit 1`, 'objects'))
-  if (!party[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, party[0].subsidiaryId, { orgWideNull: true })
-  if (scopeDenied) return scopeDenied
+    // Party record boundary (null-subsidiary parties are org-wide).
+    const party = await db.execute<{ subsidiaryId: string | null }>(
+      sql`
+    select subsidiary_id as "subsidiaryId" from parties where id=${id} and org_id=${gate.user.orgId} limit 1`,
+      "objects",
+    );
+    if (!party[0]) return notFound("record");
+    const scopeDenied = guardSubsidiaryScope(gate, party[0].subsidiaryId, { orgWideNull: true });
+    if (scopeDenied) return scopeDenied;
 
-  const url = new URL(request.url)
-  const q = url.searchParams.get('q')?.trim().slice(0, 100) ?? ''
-  const requestedKind = url.searchParams.get('kind') ?? ''
-  const requestedStatus = url.searchParams.get('status') ?? ''
-  const kind = KINDS.has(requestedKind) ? requestedKind : ''
-  const status = STATUSES.has(requestedStatus) ? requestedStatus : ''
-  const requestedPage = Number(url.searchParams.get('page') ?? '1')
-  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q")?.trim().slice(0, 100) ?? "";
+    const requestedKind = url.searchParams.get("kind") ?? "";
+    const requestedStatus = url.searchParams.get("status") ?? "";
+    const kind = KINDS.has(requestedKind) ? requestedKind : "";
+    const status = STATUSES.has(requestedStatus) ? requestedStatus : "";
+    const requestedPage = Number(url.searchParams.get("page") ?? "1");
+    const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 
-  // Same activity boundary as the CRM account record and the activities list:
-  // an activity is visible only when every linked record is. Rows, count,
-  // facets and the ?q= search all sit behind it so nothing hidden leaks.
-  const scoped = sql`a.org_id=${gate.user.orgId}
+    // Same activity boundary as the CRM account record and the activities list:
+    // an activity is visible only when every linked record is. Rows, count,
+    // facets and the ?q= search all sit behind it so nothing hidden leaks.
+    const scoped = sql`a.org_id=${gate.user.orgId}
     and exists (
       select 1 from crm_activity_links l
        where l.org_id=a.org_id and l.activity_id=a.id
          and l.subject_kind='account' and l.subject_id=${id}
-    )${crmActivityScope(gate.allowedSubsidiaryIds)}`
-  const where = sql`${scoped}
+    )${crmActivityScope(gate.allowedSubsidiaryIds)}`;
+    const where = sql`${scoped}
     ${q ? sql`and (a.subject ilike ${`%${q}%`} or coalesce(a.body,'') ilike ${`%${q}%`})` : sql``}
     ${kind ? sql`and a.kind=${kind}` : sql``}
-    ${status ? sql`and a.status=${status}` : sql``}`
+    ${status ? sql`and a.status=${status}` : sql``}`;
 
-  const [rows, total, filters] = (await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    const [rows, total, filters] = await Promise.all([
+      db.execute<Record<string, unknown>>(
+        sql`
       select a.id,a.kind,a.status,a.subject,coalesce(a.starts_at,a.due_at,a.created_at) activity_date
         from crm_activities a where ${where}
        order by coalesce(a.starts_at,a.due_at,a.created_at) desc,a.created_at desc
-       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`, 'objects'),
-    db.execute<Record<string, unknown>>(sql`select count(*)::int count from crm_activities a where ${where}`, 'objects'),
-    db.execute<Record<string, unknown>>(sql`
+       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`select count(*)::int count from crm_activities a where ${where}`,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
       select array_remove(array_agg(distinct a.kind order by a.kind),null) kinds,
              array_remove(array_agg(distinct a.status order by a.status),null) statuses
         from crm_activities a
-       where ${scoped}`, 'objects'),
-  ]))
+       where ${scoped}`,
+        "objects",
+      ),
+    ]);
 
-  return NextResponse.json({
-    rows,
-    total: Number(total[0]?.count ?? 0),
-    page,
-    perPage: PAGE_SIZE,
-    kinds: filters[0]?.kinds ?? [],
-    statuses: filters[0]?.statuses ?? [],
-  })
+    return NextResponse.json({
+      rows,
+      total: Number(total[0]?.count ?? 0),
+      page,
+      perPage: PAGE_SIZE,
+      kinds: filters[0]?.kinds ?? [],
+      statuses: filters[0]?.statuses ?? [],
+    });
   },
-})
+});

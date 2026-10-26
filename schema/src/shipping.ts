@@ -82,7 +82,9 @@ export const shippingAccounts = pgTable(
   (t) => [
     uniqueIndex("shipping_accounts_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("shipping_accounts_org_name_unique").on(t.orgId, t.name),
-    uniqueIndex("shipping_accounts_org_default_unique").on(t.orgId).where(sql`${t.isDefault}`),
+    uniqueIndex("shipping_accounts_org_default_unique")
+      .on(t.orgId)
+      .where(sql`${t.isDefault}`),
     check("shipping_accounts_name_nonblank", sql`length(btrim(${t.name})) > 0`),
   ],
 );
@@ -112,7 +114,9 @@ export const packagePresets = pgTable(
   (t) => [
     uniqueIndex("package_presets_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("package_presets_org_name_unique").on(t.orgId, t.name),
-    uniqueIndex("package_presets_org_default_unique").on(t.orgId).where(sql`${t.isDefault}`),
+    uniqueIndex("package_presets_org_default_unique")
+      .on(t.orgId)
+      .where(sql`${t.isDefault}`),
     check("package_presets_name_nonblank", sql`length(btrim(${t.name})) > 0`),
   ],
 );
@@ -134,12 +138,21 @@ export const shippingSettings = pgTable(
     carrierPayableAccountId: uuid("carrier_payable_account_id"),
     defaultAccountId: uuid("default_account_id"),
     defaultPresetId: uuid("default_preset_id"),
-    defaultRateRule: text("default_rate_rule", { enum: SHIPPING_RATE_RULES }).notNull().default("cheapest"),
+    defaultRateRule: text("default_rate_rule", { enum: SHIPPING_RATE_RULES })
+      .notNull()
+      .default("cheapest"),
     /** Markup applied on top of the carrier rate, in basis points. */
     markupBps: integer("markup_bps").notNull().default(0),
-    defaultInsurance: text("default_insurance", { enum: ["none", "carrier_full"] }).notNull().default("none"),
-    defaultSignature: text("default_signature", { enum: ["none", "direct", "adult"] }).notNull().default("none"),
-    customsDefaults: jsonb("customs_defaults").$type<ShippingCustomsDefaults>().notNull().default({}),
+    defaultInsurance: text("default_insurance", { enum: ["none", "carrier_full"] })
+      .notNull()
+      .default("none"),
+    defaultSignature: text("default_signature", { enum: ["none", "direct", "adult"] })
+      .notNull()
+      .default("none"),
+    customsDefaults: jsonb("customs_defaults")
+      .$type<ShippingCustomsDefaults>()
+      .notNull()
+      .default({}),
     ...auditColumns,
   },
   (t) => [
@@ -163,9 +176,9 @@ export const shipmentLabels = pgTable(
     id: id(),
     orgId: orgRef(),
     shipmentDocumentId: uuid("shipment_document_id").notNull(),
-    handlingUnitId:uuid("handling_unit_id"),
-    handlingUnitVersion:bigint("handling_unit_version",{mode:"bigint"}),
-    direction:text("direction",{enum:["outbound","return"]}),
+    handlingUnitId: uuid("handling_unit_id"),
+    handlingUnitVersion: bigint("handling_unit_version", { mode: "bigint" }),
+    direction: text("direction", { enum: ["outbound", "return"] }),
     orderDocumentId: uuid("order_document_id"),
     accountId: uuid("account_id").notNull(),
     provider: text("provider", { enum: SHIPPING_PROVIDERS }).notNull(),
@@ -180,7 +193,9 @@ export const shipmentLabels = pgTable(
     labelUrl: text("label_url"),
     labelFileId: uuid("label_file_id"),
     trackingNumber: text("tracking_number"),
-    trackingStatus: text("tracking_status", { enum: SHIPPING_TRACKING_STATUSES }).notNull().default("unknown"),
+    trackingStatus: text("tracking_status", { enum: SHIPPING_TRACKING_STATUSES })
+      .notNull()
+      .default("unknown"),
     events: jsonb("events").$type<ShippingTrackingEvent[]>().notNull().default([]),
     status: text("status", { enum: SHIPPING_LABEL_STATUSES }).notNull().default("purchased"),
     costEntryId: uuid("cost_entry_id"),
@@ -193,7 +208,9 @@ export const shipmentLabels = pgTable(
     uniqueIndex("shipment_labels_live_rate_unique")
       .on(t.orgId, t.shipmentDocumentId, t.providerRateId)
       .where(sql`${t.status} = 'purchased'`),
-    uniqueIndex("shipment_labels_live_unit").on(t.orgId,t.handlingUnitId,t.direction).where(sql`${t.handlingUnitId} is not null and ${t.status}='purchased'`),
+    uniqueIndex("shipment_labels_live_unit")
+      .on(t.orgId, t.handlingUnitId, t.direction)
+      .where(sql`${t.handlingUnitId} is not null and ${t.status}='purchased'`),
     index("shipment_labels_org_shipment").on(t.orgId, t.shipmentDocumentId),
   ],
 );
@@ -216,9 +233,9 @@ export const shippingRateQuotes = pgTable(
     id: id(),
     orgId: orgRef(),
     shipmentDocumentId: uuid("shipment_document_id").notNull(),
-    handlingUnitId:uuid("handling_unit_id"),
-    handlingUnitVersion:bigint("handling_unit_version",{mode:"bigint"}),
-    direction:text("direction",{enum:["outbound","return"]}),
+    handlingUnitId: uuid("handling_unit_id"),
+    handlingUnitVersion: bigint("handling_unit_version", { mode: "bigint" }),
+    direction: text("direction", { enum: ["outbound", "return"] }),
     accountId: uuid("account_id").notNull(),
     requestHash: text("request_hash").notNull(),
     rates: jsonb("rates").$type<NormalizedShippingRate[]>().notNull().default([]),

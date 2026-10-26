@@ -33,10 +33,8 @@ const JOURNAL_DIR = join(ENGINE_SRC, "journal") + "/";
 const TEST =
   /(^|\/)(__tests__|__snapshots__|__fixtures__|__mocks__)\/|\.test\.[cm]?[jt]sx?$|\.spec\.[cm]?[jt]sx?$|\/testing\//;
 
-const RAW_WRITE =
-  /\b(insert\s+into|update|delete\s+from)\s+journal_(entries|lines)\b/gi;
-const DRIZZLE_WRITE =
-  /\.(insert|update|delete)\(\s*schema\.journal(Entries|Lines)\s*\)/g;
+const RAW_WRITE = /\b(insert\s+into|update|delete\s+from)\s+journal_(entries|lines)\b/gi;
+const DRIZZLE_WRITE = /\.(insert|update|delete)\(\s*schema\.journal(Entries|Lines)\s*\)/g;
 
 // SET columns allowed on journal_lines outside the ledger module: governed
 // non-financial columns only (see header).

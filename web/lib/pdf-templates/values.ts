@@ -1,23 +1,28 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
-import { documentBalanceDueLateral } from '@openbooks/engine/records/balance-due'
-import { db } from '@openbooks/engine/platform/db'
-import { orgFeatureEnabled } from '@openbooks/engine/organization/org-feature-lock'
-import { add, cmp, formatMoney, isZero, mul, neg, sum } from '@openbooks/engine/money/money'
-import { chequeMicrFields } from '@openbooks/engine/payments-core/cheque-bank'
-import { issuedChequeBank, amountInWords } from '@openbooks/engine/payroll/cheques'
-import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/payroll/packs'
-import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
-import { resolveLocale } from '../locale'
-import { subsidiaryVisibleFilter } from '../subsidiaries'
-import { isFeatureEnabled } from '../features'
-import { hasForeignLines, PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
-import { orgIdentityMergeValues, type OrgIdentityRow } from './org-identity'
-import { loadFieldTicket } from '../field-tickets'
-import { buildPayStubStatement, toStatementLine, type StatementRow } from './pay-stub-statement'
-import { canonicalDecimal } from '../exact-decimal'
-import type { FulfillmentDocumentView } from '@openbooks/engine/sales/fulfillment/module'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { addCalendarDays, businessToday } from "@openbooks/engine/platform/business-date/module";
+import { documentBalanceDueLateral } from "@openbooks/engine/records/balance-due";
+import { db } from "@openbooks/engine/platform/db";
+import { orgFeatureEnabled } from "@openbooks/engine/organization/org-feature-lock";
+import { add, cmp, formatMoney, isZero, mul, neg, sum } from "@openbooks/engine/money/money";
+import { chequeMicrFields } from "@openbooks/engine/payments-core/cheque-bank";
+import { issuedChequeBank, amountInWords } from "@openbooks/engine/payroll/cheques";
+import { incomeTaxWithholdingSystemKeys } from "@openbooks/engine/payroll/packs";
+import { createMoneyFormatter, type MoneyFormatter } from "../money-format";
+import { resolveLocale } from "../locale";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { isFeatureEnabled } from "../features";
+import {
+  hasForeignLines,
+  PDF_RECORD_TYPE_BY_KEY,
+  type PdfMergeField,
+  type PdfRecordTypeMeta,
+} from "./catalog";
+import { orgIdentityMergeValues, type OrgIdentityRow } from "./org-identity";
+import { loadFieldTicket } from "../field-tickets";
+import { buildPayStubStatement, toStatementLine, type StatementRow } from "./pay-stub-statement";
+import { canonicalDecimal } from "../exact-decimal";
+import type { FulfillmentDocumentView } from "@openbooks/engine/sales/fulfillment/module";
 
 /**
  * The value loader — shapes a real record into the merge map a PDF template
@@ -27,44 +32,44 @@ import type { FulfillmentDocumentView } from '@openbooks/engine/sales/fulfillmen
  */
 
 export type PdfRecordValues = {
-  values: Record<string, unknown>
+  values: Record<string, unknown>;
   /** e.g. "INV-000123" — used for the download filename. */
-  reference: string
-}
+  reference: string;
+};
 
 /** Local-midnight Date for civil parts. setFullYear keeps literal years
  *  0001-0099 that new Date(y, …) would remap onto 1900-1999 (a 0096 invoice
  *  date rendered with a 1996 year); local midnight, so the day never shifts. */
 function localMidnight(year: number, monthIndex: number, day: number): Date {
-  const date = new Date(0)
-  date.setFullYear(year, monthIndex, day)
-  date.setHours(0, 0, 0, 0)
-  return date
+  const date = new Date(0);
+  date.setFullYear(year, monthIndex, day);
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
 function fmtDate(v: unknown, locale: string): string {
-  if (!v) return ''
-  const s = String(v)
+  if (!v) return "";
+  const s = String(v);
   // date columns arrive as 'YYYY-MM-DD' — parse as local so the day never shifts.
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
-  const d = m ? localMidnight(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s)
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  const d = m ? localMidnight(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
 }
 
 function fmtStatus(v: unknown): string {
-  const s = String(v ?? '').replace(/_/g, ' ')
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
+  const s = String(v ?? "").replace(/_/g, " ");
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
 }
 
 function fmtQty(v: unknown, locale: string): string {
-  if (v === null || v === undefined || v === '') return ''
-  const n = Number(v)
-  if (Number.isNaN(n)) return String(v)
-  return n.toLocaleString(locale, { maximumFractionDigits: 4 })
+  if (v === null || v === undefined || v === "") return "";
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  return n.toLocaleString(locale, { maximumFractionDigits: 4 });
 }
 
-type OrgRow = OrgIdentityRow & { base_currency: string; brand_primary: string | null }
+type OrgRow = OrgIdentityRow & { base_currency: string; brand_primary: string | null };
 
 /**
  * One documented fallback policy for the whole file: a printed amount is
@@ -84,27 +89,32 @@ type OrgRow = OrgIdentityRow & { base_currency: string; brand_primary: string | 
  * beside it instead of rounding to a 0.0 the money contradicts.
  */
 export function formatExactHours(decimal4: string): string {
-  const [int = '0', frac = ''] = decimal4.split('.')
-  const trimmed = frac.replace(/0+$/, '')
-  return trimmed ? `${int}.${trimmed}` : int
+  const [int = "0", frac = ""] = decimal4.split(".");
+  const trimmed = frac.replace(/0+$/, "");
+  return trimmed ? `${int}.${trimmed}` : int;
 }
 
 export class MissingPdfOrgError extends Error {
   constructor(orgId: string) {
-    super(`organization ${orgId} was not found — refusing to print amounts in an invented currency`)
-    this.name = 'MissingPdfOrgError'
+    super(
+      `organization ${orgId} was not found — refusing to print amounts in an invented currency`,
+    );
+    this.name = "MissingPdfOrgError";
   }
 }
 
 async function orgRow(orgId: string): Promise<OrgRow> {
-  const r = (await db.execute<OrgRow>(sql`
+  const r = await db.execute<OrgRow>(
+    sql`
     select name, base_currency, settings ->> 'brandPrimary' as brand_primary,
            legal_name, tax_ids, settings -> 'companyAddress' as company_address
       from orgs where id = ${orgId}
-  `, 'objects'))
-  const row = r[0]
-  if (!row) throw new MissingPdfOrgError(orgId)
-  return row
+  `,
+    "objects",
+  );
+  const row = r[0];
+  if (!row) throw new MissingPdfOrgError(orgId);
+  return row;
 }
 
 async function customFieldValues(
@@ -114,27 +124,30 @@ async function customFieldValues(
   custom: Record<string, unknown>,
   format: MoneyFormatter,
 ): Promise<Record<string, string>> {
-  const r = (await db.execute<{ key: string; field_type: string }>(sql`
+  const r = await db.execute<{ key: string; field_type: string }>(
+    sql`
     select key, field_type from custom_field_defs
      where org_id = ${orgId} and target_table = ${targetTable} and is_active
        and (target_kind is null ${targetKind ? sql`or target_kind = ${targetKind}` : sql``})
-  `, 'objects'))
-  const out: Record<string, string> = {}
+  `,
+    "objects",
+  );
+  const out: Record<string, string> = {};
   for (const def of r) {
-    const v = custom?.[def.key]
-    if (v === null || v === undefined || v === '') {
-      out[`cf_${def.key}`] = ''
-    } else if (def.field_type === 'currency') {
-      out[`cf_${def.key}`] = format.money(v as number)
-    } else if (def.field_type === 'date') {
-      out[`cf_${def.key}`] = fmtDate(v, format.locale)
-    } else if (def.field_type === 'boolean') {
-      out[`cf_${def.key}`] = v ? 'Yes' : 'No'
+    const v = custom?.[def.key];
+    if (v === null || v === undefined || v === "") {
+      out[`cf_${def.key}`] = "";
+    } else if (def.field_type === "currency") {
+      out[`cf_${def.key}`] = format.money(v as number);
+    } else if (def.field_type === "date") {
+      out[`cf_${def.key}`] = fmtDate(v, format.locale);
+    } else if (def.field_type === "boolean") {
+      out[`cf_${def.key}`] = v ? "Yes" : "No";
     } else {
-      out[`cf_${def.key}`] = Array.isArray(v) ? v.join(', ') : String(v)
+      out[`cf_${def.key}`] = Array.isArray(v) ? v.join(", ") : String(v);
     }
   }
-  return out
+  return out;
 }
 
 async function loadDocumentValues(
@@ -150,7 +163,8 @@ async function loadDocumentValues(
   // earlier (preview sampling, print/send fences) cannot be trusted across
   // the await boundary, and a record moved out of scope between check and
   // load reads as not found instead of leaking.
-  const r = (await db.execute<Record<string, unknown>>(sql`
+  const r = await db.execute<Record<string, unknown>>(
+    sql`
     select d.*, p.display_name as party_name, p.email as party_email, p.phone as party_phone,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country,
            case when d.status = 'posted' then d.total - ap.applied end as balance_due
@@ -162,19 +176,22 @@ async function loadDocumentValues(
       ) a on true
       ${documentBalanceDueLateral()}
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${meta.docKind}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
-  `, 'objects'))
-  const doc = r[0]
-  if (!doc) return null
+  `,
+    "objects",
+  );
+  const doc = r[0];
+  if (!doc) return null;
 
-  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()]);
   // The documented chain: the document's currency, else the org's base — the
   // same expression the `currency` merge value below uses. No literal here.
-  const format = createMoneyFormatter(locale, String(doc.currency ?? org.base_currency))
-  const { money } = format
-  const customerPartNumbersEnabled = await isFeatureEnabled(orgId, 'customerPartNumbers')
-  const foreignLines = hasForeignLines(meta)
+  const format = createMoneyFormatter(locale, String(doc.currency ?? org.base_currency));
+  const { money } = format;
+  const customerPartNumbersEnabled = await isFeatureEnabled(orgId, "customerPartNumbers");
+  const foreignLines = hasForeignLines(meta);
 
-  const lines = (await db.execute<Record<string, unknown>>(sql`
+  const lines = await db.execute<Record<string, unknown>>(
+    sql`
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
            l.service_party_id, sp.display_name as service_party_name,
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
@@ -190,117 +207,148 @@ async function loadDocumentValues(
            and cir.item_id = l.item_id and ${customerPartNumbersEnabled}
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
   const address = [
     doc.line1,
     doc.line2,
-    [doc.city, doc.region, doc.postal_code].filter(Boolean).join(', '),
+    [doc.city, doc.region, doc.postal_code].filter(Boolean).join(", "),
     doc.country,
   ]
     .filter(Boolean)
-    .join(', ')
+    .join(", ");
 
-  const dropShipAddress = meta.docKind === 'purchase_order'
-    && await orgFeatureEnabled(orgId, 'dropShipping', db)
-    ? (await db.execute<{ ship_to_address: Record<string, unknown> }>(sql`
+  const dropShipAddress =
+    meta.docKind === "purchase_order" && (await orgFeatureEnabled(orgId, "dropShipping", db))
+      ? ((
+          await db.execute<{ ship_to_address: Record<string, unknown> }>(
+            sql`
         select ship_to_address
           from drop_ship_orders
          where org_id = ${orgId} and purchase_order_id = ${id}
-      `, 'objects'))[0]?.ship_to_address ?? null
-    : null
+      `,
+            "objects",
+          )
+        )[0]?.ship_to_address ?? null)
+      : null;
   const shipToAddress = dropShipAddress
     ? [
         dropShipAddress.line1,
         dropShipAddress.line2,
-        [dropShipAddress.city, dropShipAddress.region, dropShipAddress.postalCode].filter(Boolean).join(', '),
+        [dropShipAddress.city, dropShipAddress.region, dropShipAddress.postalCode]
+          .filter(Boolean)
+          .join(", "),
         dropShipAddress.country,
-      ].filter(Boolean).join(', ')
-    : ''
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : "";
 
-  const subtotal = String(doc.subtotal ?? '0')
-  const taxTotal = String(doc.tax_total ?? '0')
-  const total = String(doc.total ?? '0')
+  const subtotal = String(doc.subtotal ?? "0");
+  const taxTotal = String(doc.tax_total ?? "0");
+  const total = String(doc.total ?? "0");
 
   // Grouped-by-service-party layout for consolidated invoices: one entry per
   // service customer in first-seen line order, each with its lines plus
   // exact decimal subtotals (never float math on money). Lines naming no
   // service party stay in `lines` only, so standalone invoices carry no
   // empty groups.
-  const groups = new Map<string, { name: string; lines: Record<string, unknown>[]; subtotal: string[]; tax: string[] }>()
+  const groups = new Map<
+    string,
+    { name: string; lines: Record<string, unknown>[]; subtotal: string[]; tax: string[] }
+  >();
   const lineValues = lines.map((l) => {
     const line: Record<string, unknown> = {
-      line_number: String(l.line_number ?? ''),
-      item_name: l.item_name ?? '',
-      customer_sku: l.customer_sku ?? '',
-      account_name: l.account_name ?? '',
-      description: l.description ?? '',
+      line_number: String(l.line_number ?? ""),
+      item_name: l.item_name ?? "",
+      customer_sku: l.customer_sku ?? "",
+      account_name: l.account_name ?? "",
+      description: l.description ?? "",
       quantity: fmtQty(l.quantity, locale),
-      unit: l.unit ?? '',
-      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : money(String(l.unit_price)),
-      tax_amount: l.tax_amount === null || l.tax_amount === undefined || isZero(String(l.tax_amount)) ? '' : money(String(l.tax_amount)),
-      amount: money(String(l.amount ?? '0')),
-      service_party_name: l.service_party_name ?? '',
+      unit: l.unit ?? "",
+      unit_price:
+        l.unit_price === null || l.unit_price === undefined ? "" : money(String(l.unit_price)),
+      tax_amount:
+        l.tax_amount === null || l.tax_amount === undefined || isZero(String(l.tax_amount))
+          ? ""
+          : money(String(l.tax_amount)),
+      amount: money(String(l.amount ?? "0")),
+      service_party_name: l.service_party_name ?? "",
       work_from: fmtDate(l.work_from, locale),
       work_to: fmtDate(l.work_to, locale),
-      ...(foreignLines ? foreignLineValues(l, String(doc.currency ?? org.base_currency), money, locale) : {}),
-    }
-    const servicePartyId = l.service_party_id as string | null
+      ...(foreignLines
+        ? foreignLineValues(l, String(doc.currency ?? org.base_currency), money, locale)
+        : {}),
+    };
+    const servicePartyId = l.service_party_id as string | null;
     if (servicePartyId) {
-      let group = groups.get(servicePartyId)
+      let group = groups.get(servicePartyId);
       if (!group) {
-        group = { name: String(l.service_party_name ?? ''), lines: [], subtotal: [], tax: [] }
-        groups.set(servicePartyId, group)
+        group = { name: String(l.service_party_name ?? ""), lines: [], subtotal: [], tax: [] };
+        groups.set(servicePartyId, group);
       }
-      group.lines.push(line)
-      group.subtotal.push(String(l.amount ?? '0'))
-      group.tax.push(String(l.tax_amount ?? '0'))
+      group.lines.push(line);
+      group.subtotal.push(String(l.amount ?? "0"));
+      group.tax.push(String(l.tax_amount ?? "0"));
     }
-    return line
-  })
+    return line;
+  });
   const lineGroups = [...groups.values()].map((group) => {
-    const groupSubtotal = sum(group.subtotal)
-    const groupTax = sum(group.tax)
+    const groupSubtotal = sum(group.subtotal);
+    const groupTax = sum(group.tax);
     return {
       service_party_name: group.name,
       lines: group.lines,
       group_subtotal: money(groupSubtotal),
       group_tax: money(groupTax),
       group_total: money(add(groupSubtotal, groupTax)),
-    }
-  })
+    };
+  });
 
   const values: Record<string, unknown> = {
-    ...Object.fromEntries(meta.fields.map(field => [field.key, ''])),
-    ...Object.fromEntries(meta.collections.map(collection => [collection.key, []])),
-    document_number: doc.document_number ?? '',
+    ...Object.fromEntries(meta.fields.map((field) => [field.key, ""])),
+    ...Object.fromEntries(meta.collections.map((collection) => [collection.key, []])),
+    document_number: doc.document_number ?? "",
     document_date: fmtDate(doc.document_date, locale),
     due_date: fmtDate(doc.due_date, locale),
     work_completed_on: fmtDate(doc.work_completed_on, locale),
-    reference_number: doc.reference_number ?? '',
+    reference_number: doc.reference_number ?? "",
     status: fmtStatus(doc.status),
-    memo: doc.memo ?? '',
+    memo: doc.memo ?? "",
     currency: doc.currency ?? org.base_currency,
-    party_name: doc.party_name ?? '',
-    party_email: doc.party_email ?? '',
-    party_phone: doc.party_phone ?? '',
+    party_name: doc.party_name ?? "",
+    party_email: doc.party_email ?? "",
+    party_phone: doc.party_phone ?? "",
     party_address: address,
-    ...(meta.docKind === 'purchase_order' ? {
-      ship_to_name: dropShipAddress?.label ?? '',
-      ship_to_address: shipToAddress,
-    } : {}),
+    ...(meta.docKind === "purchase_order"
+      ? {
+          ship_to_name: dropShipAddress?.label ?? "",
+          ship_to_address: shipToAddress,
+        }
+      : {}),
     subtotal: money(subtotal),
     tax_total: money(taxTotal),
     total: money(total),
-    balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(String(doc.balance_due)),
+    balance_due:
+      doc.balance_due === null || doc.balance_due === undefined
+        ? ""
+        : money(String(doc.balance_due)),
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     lines: lineValues,
     line_groups: lineGroups,
-    ...(await customFieldValues(orgId, 'documents', meta.docKind, (doc.custom ?? {}) as Record<string, unknown>, format)),
-  }
+    ...(await customFieldValues(
+      orgId,
+      "documents",
+      meta.docKind,
+      (doc.custom ?? {}) as Record<string, unknown>,
+      format,
+    )),
+  };
 
-  return { values, reference: String(doc.document_number ?? meta.docTitle) }
+  return { values, reference: String(doc.document_number ?? meta.docTitle) };
 }
 
 async function loadJournalValues(
@@ -308,55 +356,61 @@ async function loadJournalValues(
   id: string,
   scope: ReadonlySet<string> | null,
 ): Promise<PdfRecordValues | null> {
-  const r = (await db.execute<Record<string, unknown>>(sql`
+  const r = await db.execute<Record<string, unknown>>(
+    sql`
     select e.* from journal_entries e
      where e.id = ${id} and e.org_id = ${orgId}${subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)}
-  `, 'objects'))
-  const entry = r[0]
-  if (!entry) return null
+  `,
+    "objects",
+  );
+  const entry = r[0];
+  if (!entry) return null;
 
-  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
-  const { money } = createMoneyFormatter(locale, org.base_currency)
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()]);
+  const { money } = createMoneyFormatter(locale, org.base_currency);
 
-  const lines = (await db.execute<Record<string, unknown>>(sql`
+  const lines = await db.execute<Record<string, unknown>>(
+    sql`
     select l.line_number, l.amount, l.memo,
            acc.number as account_number, acc.name as account_name
       from journal_lines l
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
      where l.entry_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
-  const debitAmounts: string[] = []
-  const creditAmounts: string[] = []
+  const debitAmounts: string[] = [];
+  const creditAmounts: string[] = [];
   const lineRows = lines.map((l) => {
-    const amount = String(l.amount ?? '0')
-    if (cmp(amount, '0') >= 0) debitAmounts.push(amount)
-    else creditAmounts.push(neg(amount))
+    const amount = String(l.amount ?? "0");
+    if (cmp(amount, "0") >= 0) debitAmounts.push(amount);
+    else creditAmounts.push(neg(amount));
     return {
-      line_number: String(l.line_number ?? ''),
-      account_number: l.account_number ?? '',
-      account_name: l.account_name ?? '',
-      memo: l.memo ?? '',
-      debit: cmp(amount, '0') >= 0 ? money(amount) : '',
-      credit: cmp(amount, '0') < 0 ? money(neg(amount)) : '',
-    }
-  })
+      line_number: String(l.line_number ?? ""),
+      account_number: l.account_number ?? "",
+      account_name: l.account_name ?? "",
+      memo: l.memo ?? "",
+      debit: cmp(amount, "0") >= 0 ? money(amount) : "",
+      credit: cmp(amount, "0") < 0 ? money(neg(amount)) : "",
+    };
+  });
 
   const values: Record<string, unknown> = {
-    entry_number: entry.entry_number ?? '',
+    entry_number: entry.entry_number ?? "",
     posting_date: fmtDate(entry.posting_date, locale),
     status: fmtStatus(entry.status),
     origin: fmtStatus(entry.origin),
-    memo: entry.memo ?? '',
+    memo: entry.memo ?? "",
     total_debits: money(sum(debitAmounts)),
     total_credits: money(sum(creditAmounts)),
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     lines: lineRows,
-  }
+  };
 
-  return { values, reference: String(entry.entry_number ?? 'Journal') }
+  return { values, reference: String(entry.entry_number ?? "Journal") };
 }
 
 /** Load + format the merge values for one record. Null when not found. */
@@ -365,7 +419,8 @@ async function loadPayStubValues(
   id: string,
   scope: ReadonlySet<string> | null,
 ): Promise<PdfRecordValues | null> {
-  const r = (await db.execute<Record<string, unknown>>(sql`
+  const r = await db.execute<Record<string, unknown>>(
+    sql`
     select s.*, r.period_start, r.period_end, d.document_number, d.subsidiary_id,
            p.display_name as employee_name, p.email as employee_email,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country as address_country
@@ -378,21 +433,26 @@ async function loadPayStubValues(
          order by is_default_billing desc, created_at limit 1
       ) a on true
      where s.id = ${id} and s.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
-  `, 'objects'))
-  const stub = r[0]
-  if (!stub) return null
+  `,
+    "objects",
+  );
+  const stub = r[0];
+  if (!stub) return null;
 
-  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
-  const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()]);
+  const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency));
 
-  const lines = (await db.execute<Record<string, unknown>>(sql`
+  const lines = await db.execute<Record<string, unknown>>(
+    sql`
     select l.kind, coalesce(c.name, l.description) as description, l.hours, l.rate, l.amount, l.payment_kind,
            l.component_id, c.system_key, c.taxable
       from pay_stub_lines l
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
   // YTD for this employer and currency through this payment. Later payments
   // on the same date must not change an earlier statement. The persisted ID
@@ -415,12 +475,13 @@ async function loadPayStubValues(
   const incomeTaxKeys = sql.join(
     incomeTaxWithholdingSystemKeys().map((key) => sql`${key}`),
     sql`, `,
-  )
+  );
   const statementOrder = sql`(
     select pay_date, created_at, id from pay_stubs
      where org_id = ${orgId} and id = ${id}
-  )`
-  const ytd = (await db.execute<{ gross: string; net: string; tax: string }>(sql`
+  )`;
+  const ytd = await db.execute<{ gross: string; net: string; tax: string }>(
+    sql`
     select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
            coalesce(sum(income_tax_lines.tax), 0) as tax
       from pay_stubs s
@@ -438,29 +499,37 @@ async function loadPayStubValues(
        and (s.pay_date, s.created_at, s.id) <= ${statementOrder}
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
        and s.currency_code = ${stub.currency_code}
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
-  const byKind = (kind: string) => lines
-    .filter((l) => l.kind === kind)
-    .map((l) => ({
-      description: l.description ?? '',
-      non_cash: l.payment_kind === 'non_cash',
-      hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
-      rate: l.rate != null ? money(String(l.rate)) : '',
-      amount: money(String(l.amount ?? '0')),
-    }))
+  const byKind = (kind: string) =>
+    lines
+      .filter((l) => l.kind === kind)
+      .map((l) => ({
+        description: l.description ?? "",
+        non_cash: l.payment_kind === "non_cash",
+        hours: l.hours != null ? Number(l.hours).toFixed(2) : "",
+        rate: l.rate != null ? money(String(l.rate)) : "",
+        amount: money(String(l.amount ?? "0")),
+      }));
   const deductionsTotal = sum(
-    lines.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
-  )
+    lines.filter((l) => l.kind === "deduction").map((l) => String(l.amount ?? "0")),
+  );
 
-  const nonCash = sum(lines.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
+  const nonCash = sum(
+    lines
+      .filter((l) => l.kind === "earning" && l.payment_kind === "non_cash")
+      .map((l) => String(l.amount)),
+  );
 
   // Per-line year-to-date for the statement-of-earnings sections: every
   // committed stub of this employee in the same tax year, legal entity and
   // currency that precedes this one, plus this stub's own lines. A component
   // paid earlier in the year but not on this stub still prints with a zero
   // current amount, so the employee can reconcile the year on every stub.
-  const priorLines = (await db.execute<Record<string, unknown>>(sql`
+  const priorLines = await db.execute<Record<string, unknown>>(
+    sql`
     select l.component_id, l.kind, l.payment_kind, coalesce(c.name, max(l.description)) as description,
            c.system_key, c.taxable,
            coalesce(sum(l.amount), 0) as amount, coalesce(sum(l.hours), 0) as hours
@@ -475,74 +544,84 @@ async function loadPayStubValues(
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
        and s.currency_code = ${stub.currency_code}
      group by l.component_id, l.kind, l.payment_kind, c.name, c.system_key, c.taxable
-  `, 'objects'))
+  `,
+    "objects",
+  );
   const statement = buildPayStubStatement(
     lines.map(toStatementLine),
     priorLines.map(toStatementLine),
     new Set(incomeTaxWithholdingSystemKeys()),
-  )
-  const sectionRows = (rows: StatementRow[], sign: '+' | '-') => rows.map((row) => ({
-    description: row.description,
-    hours: isZero(row.hours) ? '' : Number(row.hours).toFixed(2),
-    rate: row.rate != null ? money(row.rate) : '',
-    current: money(sign === '-' ? neg(row.current) : row.current),
-    ytd_amount: money(sign === '-' ? neg(row.ytd) : row.ytd),
-    ytd_hours: isZero(row.ytdHours) ? '' : Number(row.ytdHours).toFixed(2),
-  }))
-  const sectionTotal = (rows: StatementRow[], pick: 'current' | 'ytd', sign: '+' | '-') => {
-    const total = sum(rows.map((row) => row[pick]))
-    return money(sign === '-' ? neg(total) : total)
-  }
+  );
+  const sectionRows = (rows: StatementRow[], sign: "+" | "-") =>
+    rows.map((row) => ({
+      description: row.description,
+      hours: isZero(row.hours) ? "" : Number(row.hours).toFixed(2),
+      rate: row.rate != null ? money(row.rate) : "",
+      current: money(sign === "-" ? neg(row.current) : row.current),
+      ytd_amount: money(sign === "-" ? neg(row.ytd) : row.ytd),
+      ytd_hours: isZero(row.ytdHours) ? "" : Number(row.ytdHours).toFixed(2),
+    }));
+  const sectionTotal = (rows: StatementRow[], pick: "current" | "ytd", sign: "+" | "-") => {
+    const total = sum(rows.map((row) => row[pick]));
+    return money(sign === "-" ? neg(total) : total);
+  };
   const addressLines = [
     stub.line1,
     stub.line2,
-    [[stub.city, stub.region].filter(Boolean).join(' '), stub.postal_code].filter(Boolean).join(' '),
-  ].map((part) => String(part ?? '').trim()).filter(Boolean)
+    [[stub.city, stub.region].filter(Boolean).join(" "), stub.postal_code]
+      .filter(Boolean)
+      .join(" "),
+  ]
+    .map((part) => String(part ?? "").trim())
+    .filter(Boolean);
 
   const values: Record<string, unknown> = {
-    employee_name: stub.employee_name ?? '',
+    employee_name: stub.employee_name ?? "",
     // party_* aliases power the shared record-email path (sendRecordPdfEmail).
-    party_name: stub.employee_name ?? '',
-    party_email: stub.employee_email ?? '',
-    document_number: stub.document_number ?? '',
+    party_name: stub.employee_name ?? "",
+    party_email: stub.employee_email ?? "",
+    document_number: stub.document_number ?? "",
     period_start: fmtDate(stub.period_start, locale),
     period_end: fmtDate(stub.period_end, locale),
     pay_date: fmtDate(stub.pay_date, locale),
-    province: stub.province ?? '',
-    currency: stub.currency_code ?? '',
-    gross: money(String(stub.gross ?? '0')),
+    province: stub.province ?? "",
+    currency: stub.currency_code ?? "",
+    gross: money(String(stub.gross ?? "0")),
     non_cash_earnings: money(nonCash),
-    cash_gross: money(add(String(stub.gross ?? '0'), neg(nonCash))),
+    cash_gross: money(add(String(stub.gross ?? "0"), neg(nonCash))),
     has_non_cash_earnings: !isZero(nonCash),
     total_deductions: money(deductionsTotal),
-    net_pay: money(String(stub.net_pay ?? '0')),
-    vacation_accrued: money(String(stub.vacation_accrued ?? '0')),
-    ytd_gross: money(String(ytd[0]?.gross ?? '0')),
-    ytd_tax: money(String(ytd[0]?.tax ?? '0')),
-    ytd_net: money(String(ytd[0]?.net ?? '0')),
+    net_pay: money(String(stub.net_pay ?? "0")),
+    vacation_accrued: money(String(stub.vacation_accrued ?? "0")),
+    ytd_gross: money(String(ytd[0]?.gross ?? "0")),
+    ytd_tax: money(String(ytd[0]?.tax ?? "0")),
+    ytd_net: money(String(ytd[0]?.net ?? "0")),
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
-    earnings: byKind('earning'),
-    deductions: byKind('deduction'),
-    employer_contributions: byKind('employer_contribution'),
-    cheque_number: stub.cheque_number ?? '',
-    employee_address: addressLines.join(', '),
-    employee_address_line1: addressLines[0] ?? '',
-    employee_address_line2: addressLines.length > 2 ? addressLines[1] : '',
-    employee_address_locality: addressLines.length > 1 ? addressLines[addressLines.length - 1] : '',
-    earnings_detail: sectionRows(statement.earnings, '+'),
-    earnings_current_total: sectionTotal(statement.earnings, 'current', '+'),
-    earnings_ytd_total: sectionTotal(statement.earnings, 'ytd', '+'),
-    withholdings: sectionRows(statement.withholdings, '+'),
-    withholdings_current_total: sectionTotal(statement.withholdings, 'current', '+'),
-    withholdings_ytd_total: sectionTotal(statement.withholdings, 'ytd', '+'),
-    taxable_company_items: sectionRows(statement.taxableCompanyItems, '+'),
+    earnings: byKind("earning"),
+    deductions: byKind("deduction"),
+    employer_contributions: byKind("employer_contribution"),
+    cheque_number: stub.cheque_number ?? "",
+    employee_address: addressLines.join(", "),
+    employee_address_line1: addressLines[0] ?? "",
+    employee_address_line2: addressLines.length > 2 ? addressLines[1] : "",
+    employee_address_locality: addressLines.length > 1 ? addressLines[addressLines.length - 1] : "",
+    earnings_detail: sectionRows(statement.earnings, "+"),
+    earnings_current_total: sectionTotal(statement.earnings, "current", "+"),
+    earnings_ytd_total: sectionTotal(statement.earnings, "ytd", "+"),
+    withholdings: sectionRows(statement.withholdings, "+"),
+    withholdings_current_total: sectionTotal(statement.withholdings, "current", "+"),
+    withholdings_ytd_total: sectionTotal(statement.withholdings, "ytd", "+"),
+    taxable_company_items: sectionRows(statement.taxableCompanyItems, "+"),
     has_taxable_company_items: statement.taxableCompanyItems.length > 0,
-    net_adjustments: sectionRows(statement.netAdjustments, '-'),
-    net_adjustments_current_total: sectionTotal(statement.netAdjustments, 'current', '-'),
-    net_adjustments_ytd_total: sectionTotal(statement.netAdjustments, 'ytd', '-'),
-  }
-  return { values, reference: `${stub.document_number ?? 'Pay stub'} ${stub.employee_name ?? ''}`.trim() }
+    net_adjustments: sectionRows(statement.netAdjustments, "-"),
+    net_adjustments_current_total: sectionTotal(statement.netAdjustments, "current", "-"),
+    net_adjustments_ytd_total: sectionTotal(statement.netAdjustments, "ytd", "-"),
+  };
+  return {
+    values,
+    reference: `${stub.document_number ?? "Pay stub"} ${stub.employee_name ?? ""}`.trim(),
+  };
 }
 
 /**
@@ -558,7 +637,8 @@ async function loadPayrollChequeValues(
   id: string,
   scope: ReadonlySet<string> | null,
 ): Promise<PdfRecordValues | null> {
-  const r = (await db.execute<Record<string, unknown>>(sql`
+  const r = await db.execute<Record<string, unknown>>(
+    sql`
     select s.*, r.period_start, r.period_end, d.document_number, d.subsidiary_id,
            p.display_name as employee_name,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country
@@ -572,89 +652,126 @@ async function loadPayrollChequeValues(
       ) a on true
      where s.id = ${id} and s.org_id = ${orgId} and s.payment_method = 'cheque'
        and s.cheque_number is not null and r.run_status='committed'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
-  `, 'objects'))
-  const stub = r[0]
-  if (!stub) return null
+  `,
+    "objects",
+  );
+  const stub = r[0];
+  if (!stub) return null;
 
-  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
-  const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()]);
+  const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency));
 
-  const lines = (await db.execute<Record<string, unknown>>(sql`
+  const lines = await db.execute<Record<string, unknown>>(
+    sql`
     select l.component_id, l.kind, l.description, c.name as component_name,
            l.hours, l.rate, l.amount, l.payment_kind, c.system_key, c.taxable
       from pay_stub_lines l
       left join pay_components c on c.org_id=l.org_id and c.id=l.component_id
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
-  `, 'objects'))
+  `,
+    "objects",
+  );
   // Cheque remittance includes every non-cash earning already included in
   // gross. The shared statement groups dated lines without changing amounts.
-  const statement = buildPayStubStatement(lines.map(toStatementLine), [],
-    new Set(incomeTaxWithholdingSystemKeys()), { includeNonTaxableCompanyItems: true })
-  const printRows = (rows: StatementRow[], nonCash: boolean) => rows.map(row => ({
-    description: row.description,
-    non_cash: nonCash,
-    hours: isZero(row.hours) ? '' : formatMoney(row.hours, 2),
-    rate: row.rate === null ? '' : money(row.rate),
-    amount: money(row.current),
-  }))
+  const statement = buildPayStubStatement(
+    lines.map(toStatementLine),
+    [],
+    new Set(incomeTaxWithholdingSystemKeys()),
+    { includeNonTaxableCompanyItems: true },
+  );
+  const printRows = (rows: StatementRow[], nonCash: boolean) =>
+    rows.map((row) => ({
+      description: row.description,
+      non_cash: nonCash,
+      hours: isZero(row.hours) ? "" : formatMoney(row.hours, 2),
+      rate: row.rate === null ? "" : money(row.rate),
+      amount: money(row.current),
+    }));
   const deductionsTotal = sum(
-    lines.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
-  )
+    lines.filter((l) => l.kind === "deduction").map((l) => String(l.amount ?? "0")),
+  );
 
   const address = [
     stub.line1,
     stub.line2,
-    [stub.city, stub.region, stub.postal_code].filter(Boolean).join(', '),
+    [stub.city, stub.region, stub.postal_code].filter(Boolean).join(", "),
     stub.country,
-  ].filter(Boolean).join(', ')
+  ]
+    .filter(Boolean)
+    .join(", ");
 
-  const net = String(stub.net_pay ?? '0')
-  const nonCash = sum(lines.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
-  const chequeBankValues = await chequeBankMergeValues(orgId, id, String(stub.cheque_number))
-  const payeeName = chequeBankValues.issued_payee_name ?? stub.employee_name ?? ''
+  const net = String(stub.net_pay ?? "0");
+  const nonCash = sum(
+    lines
+      .filter((l) => l.kind === "earning" && l.payment_kind === "non_cash")
+      .map((l) => String(l.amount)),
+  );
+  const chequeBankValues = await chequeBankMergeValues(orgId, id, String(stub.cheque_number));
+  const payeeName = chequeBankValues.issued_payee_name ?? stub.employee_name ?? "";
 
   const values: Record<string, unknown> = {
     ...chequeBankValues,
-    cheque_number: stub.cheque_number ?? '',
+    cheque_number: stub.cheque_number ?? "",
     employee_name: payeeName,
     party_name: payeeName,
     employee_address: address,
     party_address: address,
     pay_date: fmtDate(stub.pay_date, locale),
-    pay_date_iso: String(stub.pay_date ?? '').slice(0,10),
+    pay_date_iso: String(stub.pay_date ?? "").slice(0, 10),
     amount: money(net),
     // The legal amount comes from the engine, off the exact decimal — never
     // from the formatted courtesy amount above.
     amount_in_words: amountInWords(net),
-    currency: stub.currency_code ?? '',
+    currency: stub.currency_code ?? "",
     memo: `Pay period ${fmtDate(stub.period_start, locale)} – ${fmtDate(stub.period_end, locale)}`,
-    document_number: stub.document_number ?? '',
+    document_number: stub.document_number ?? "",
     period_start: fmtDate(stub.period_start, locale),
     period_end: fmtDate(stub.period_end, locale),
-    gross: money(String(stub.gross ?? '0')),
+    gross: money(String(stub.gross ?? "0")),
     non_cash_earnings: money(nonCash),
-    cash_gross: money(add(String(stub.gross ?? '0'), neg(nonCash))),
+    cash_gross: money(add(String(stub.gross ?? "0"), neg(nonCash))),
     has_non_cash_earnings: !isZero(nonCash),
     total_deductions: money(deductionsTotal),
     net_pay: money(net),
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
-    earnings: [...printRows(statement.earnings, false), ...printRows(statement.taxableCompanyItems, true)],
+    earnings: [
+      ...printRows(statement.earnings, false),
+      ...printRows(statement.taxableCompanyItems, true),
+    ],
     deductions: printRows([...statement.withholdings, ...statement.netAdjustments], false),
-  }
+  };
   return {
     values,
-    reference: `${stub.cheque_number ?? 'Cheque'} ${payeeName}`.trim(),
-  }
+    reference: `${stub.cheque_number ?? "Cheque"} ${payeeName}`.trim(),
+  };
 }
 
 async function chequeBankMergeValues(orgId: string, stubId: string, number: string) {
-  const basis = await issuedChequeBank(orgId, stubId)
-  if (!basis?.bank) return {issued_payee_name:basis?.payeeName,cheque_bank_profile:basis?.profileId??'',bank_name:'',bank_branch_address:'',bank_account:'',micr_serial:'',micr_transit:'',micr_account:''}
-  const fields = /^\d{1,11}$/.test(number) ? chequeMicrFields(number,basis.bank) : null
-  return {issued_payee_name:basis.payeeName,cheque_bank_profile:basis.profileId, bank_name:basis.bank.bankName, bank_branch_address:basis.bank.branchAddress,
-    bank_account:basis.bank.accountEncoding, micr_serial:fields?.micrSerial??'',micr_transit:fields?.micrTransit??'',micr_account:fields?.micrAccount??''}
+  const basis = await issuedChequeBank(orgId, stubId);
+  if (!basis?.bank)
+    return {
+      issued_payee_name: basis?.payeeName,
+      cheque_bank_profile: basis?.profileId ?? "",
+      bank_name: "",
+      bank_branch_address: "",
+      bank_account: "",
+      micr_serial: "",
+      micr_transit: "",
+      micr_account: "",
+    };
+  const fields = /^\d{1,11}$/.test(number) ? chequeMicrFields(number, basis.bank) : null;
+  return {
+    issued_payee_name: basis.payeeName,
+    cheque_bank_profile: basis.profileId,
+    bank_name: basis.bank.bankName,
+    bank_branch_address: basis.bank.branchAddress,
+    bank_account: basis.bank.accountEncoding,
+    micr_serial: fields?.micrSerial ?? "",
+    micr_transit: fields?.micrTransit ?? "",
+    micr_account: fields?.micrAccount ?? "",
+  };
 }
 
 /**
@@ -670,14 +787,14 @@ export async function loadPdfRecordValues(
   id: string,
   scope: ReadonlySet<string> | null,
 ): Promise<PdfRecordValues | null> {
-  const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
-  if (!meta) return null
-  if (meta.key === 'journal_entry') return loadJournalValues(orgId, id, scope)
-  if (meta.key === 'pay_stub') return loadPayStubValues(orgId, id, scope)
-  if (meta.key === 'payroll_cheque') return loadPayrollChequeValues(orgId, id, scope)
-  if (meta.key === 'field_ticket') return loadFieldTicketValues(orgId, id, scope)
-  if (meta.docKind === 'shipment') return loadShipmentValues(orgId, id, scope)
-  return loadDocumentValues(meta, orgId, id, scope)
+  const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
+  if (!meta) return null;
+  if (meta.key === "journal_entry") return loadJournalValues(orgId, id, scope);
+  if (meta.key === "pay_stub") return loadPayStubValues(orgId, id, scope);
+  if (meta.key === "payroll_cheque") return loadPayrollChequeValues(orgId, id, scope);
+  if (meta.key === "field_ticket") return loadFieldTicketValues(orgId, id, scope);
+  if (meta.docKind === "shipment") return loadShipmentValues(orgId, id, scope);
+  return loadDocumentValues(meta, orgId, id, scope);
 }
 
 /**
@@ -693,106 +810,138 @@ async function loadShipmentValues(
 ): Promise<PdfRecordValues | null> {
   // Loaded on demand: the fulfilment engine brings the Flows and inventory
   // graph with it, which no other record type's print needs.
-  const { FulfillmentRefusal, getFulfillmentDocument } = await import('@openbooks/engine/sales/fulfillment/module')
-  let shipment: FulfillmentDocumentView | null
+  const { FulfillmentRefusal, getFulfillmentDocument } =
+    await import("@openbooks/engine/sales/fulfillment/module");
+  let shipment: FulfillmentDocumentView | null;
   try {
-    shipment = await getFulfillmentDocument(db, orgId, id, scope)
+    shipment = await getFulfillmentDocument(db, orgId, id, scope);
   } catch (error) {
     // Fulfillment switched off between the route's gate and this load.
-    if (error instanceof FulfillmentRefusal && error.code === 'feature_disabled') return null
-    throw error
+    if (error instanceof FulfillmentRefusal && error.code === "feature_disabled") return null;
+    throw error;
   }
-  if (!shipment || shipment.kind !== 'shipment') return null
-  const customerPartNumbersEnabled = await isFeatureEnabled(orgId, 'customerPartNumbers')
+  if (!shipment || shipment.kind !== "shipment") return null;
+  const customerPartNumbersEnabled = await isFeatureEnabled(orgId, "customerPartNumbers");
   const [org, locale, party, customRow] = await Promise.all([
     orgRow(orgId),
     resolveLocale(),
     shipment.customer
-      ? db.execute<{ email: string | null; phone: string | null }>(sql`
-          select email, phone from parties where org_id = ${orgId} and id = ${shipment.customer.id}`, 'objects')
+      ? db.execute<{ email: string | null; phone: string | null }>(
+          sql`
+          select email, phone from parties where org_id = ${orgId} and id = ${shipment.customer.id}`,
+          "objects",
+        )
       : null,
-    db.execute<{ custom: Record<string, unknown> | null }>(sql`
-      select custom from documents where org_id = ${orgId} and id = ${shipment.id}`, 'objects'),
-  ])
+    db.execute<{ custom: Record<string, unknown> | null }>(
+      sql`
+      select custom from documents where org_id = ${orgId} and id = ${shipment.id}`,
+      "objects",
+    ),
+  ]);
   const warehouse = await db.execute<{
-    address_line1: string | null
-    address_line2: string | null
-    city: string | null
-    region: string | null
-    postal_code: string | null
-    country: string | null
-  }>(sql`
+    address_line1: string | null;
+    address_line2: string | null;
+    city: string | null;
+    region: string | null;
+    postal_code: string | null;
+    country: string | null;
+  }>(
+    sql`
     select address_line1, address_line2, city, region, postal_code, country
-      from warehouses where org_id = ${orgId} and stock_location_id = ${shipment.warehouse.id}`, 'objects')
-  const format = createMoneyFormatter(locale, org.base_currency)
-  const address = shipment.shipToAddress
-  const cartons = [...new Set(
-    shipment.lines.map((line) => line.carton?.trim()).filter((carton): carton is string => Boolean(carton)),
-  )]
-  const shipFrom = warehouse[0]
-  const itemIds = [...new Set(shipment.lines.map((line) => line.itemId))]
-  const customerSkus = customerPartNumbersEnabled && shipment.customer && itemIds.length > 0
-    ? (await db.execute<{ item_id: string; customer_sku: string }>(sql`
+      from warehouses where org_id = ${orgId} and stock_location_id = ${shipment.warehouse.id}`,
+    "objects",
+  );
+  const format = createMoneyFormatter(locale, org.base_currency);
+  const address = shipment.shipToAddress;
+  const cartons = [
+    ...new Set(
+      shipment.lines
+        .map((line) => line.carton?.trim())
+        .filter((carton): carton is string => Boolean(carton)),
+    ),
+  ];
+  const shipFrom = warehouse[0];
+  const itemIds = [...new Set(shipment.lines.map((line) => line.itemId))];
+  const customerSkus =
+    customerPartNumbersEnabled && shipment.customer && itemIds.length > 0
+      ? await db.execute<{ item_id: string; customer_sku: string }>(
+          sql`
         select item_id, customer_sku from customer_item_refs
          where org_id = ${orgId} and customer_id = ${shipment.customer.id}
            and item_id = any(${sql.param(itemIds)}::uuid[])
-      `, 'objects'))
-    : []
-  const customerSkuByItem = new Map(customerSkus.map((row) => [row.item_id, row.customer_sku]))
+      `,
+          "objects",
+        )
+      : [];
+  const customerSkuByItem = new Map(customerSkus.map((row) => [row.item_id, row.customer_sku]));
   const values: Record<string, unknown> = {
     document_number: shipment.documentNumber,
     document_date: fmtDate(shipment.documentDate, locale),
-    status: fmtStatus(shipment.stage === 'done' && shipment.status !== 'voided' ? 'completed' : shipment.status),
-    sales_order_number: shipment.salesOrder?.number ?? '',
-    pick_list_number: shipment.pickList?.number ?? '',
-    party_name: shipment.customer?.name ?? '',
-    party_email: party?.[0]?.email ?? '',
-    party_phone: party?.[0]?.phone ?? '',
-    ship_to_name: address?.label ?? shipment.customer?.name ?? '',
+    status: fmtStatus(
+      shipment.stage === "done" && shipment.status !== "voided" ? "completed" : shipment.status,
+    ),
+    sales_order_number: shipment.salesOrder?.number ?? "",
+    pick_list_number: shipment.pickList?.number ?? "",
+    party_name: shipment.customer?.name ?? "",
+    party_email: party?.[0]?.email ?? "",
+    party_phone: party?.[0]?.phone ?? "",
+    ship_to_name: address?.label ?? shipment.customer?.name ?? "",
     ship_to_address: address
-      ? [address.line1, address.line2, [address.city, address.region, address.postalCode].filter(Boolean).join(', '), address.country]
+      ? [
+          address.line1,
+          address.line2,
+          [address.city, address.region, address.postalCode].filter(Boolean).join(", "),
+          address.country,
+        ]
           .filter(Boolean)
-          .join(', ')
-      : '',
+          .join(", ")
+      : "",
     warehouse_name: `${shipment.warehouse.code} · ${shipment.warehouse.name}`,
     warehouse_address: shipFrom
       ? [
           shipFrom.address_line1,
           shipFrom.address_line2,
-          [shipFrom.city, shipFrom.region, shipFrom.postal_code].filter(Boolean).join(', '),
+          [shipFrom.city, shipFrom.region, shipFrom.postal_code].filter(Boolean).join(", "),
           shipFrom.country,
-        ].filter(Boolean).join(', ')
-      : '',
-    carrier_name: shipment.carrier?.name ?? '',
-    carrier_service: shipment.carrierService ?? '',
-    tracking_number: shipment.trackingNumber ?? '',
-    tracking_url: shipment.trackingUrl ?? '',
-    carton_count: cartons.length > 0 ? String(cartons.length) : '',
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : "",
+    carrier_name: shipment.carrier?.name ?? "",
+    carrier_service: shipment.carrierService ?? "",
+    tracking_number: shipment.trackingNumber ?? "",
+    tracking_url: shipment.trackingUrl ?? "",
+    carton_count: cartons.length > 0 ? String(cartons.length) : "",
     cartons: cartons.map((carton, index) => ({
       carton,
       carton_number: String(index + 1),
       carton_total: String(cartons.length),
       barcode: `${shipment.documentNumber}-C${index + 1}`,
     })),
-    memo: shipment.memo ?? '',
+    memo: shipment.memo ?? "",
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     lines: shipment.lines.map((line) => ({
       line_number: String(line.lineNumber),
       item_name: line.itemLabel,
-      customer_sku: customerSkuByItem.get(line.itemId) ?? '',
-      description: line.description ?? '',
+      customer_sku: customerSkuByItem.get(line.itemId) ?? "",
+      description: line.description ?? "",
       quantity: canonicalDecimal(line.quantity, 8) ?? line.quantity,
-      unit: line.unit ?? '',
-      carton: line.carton ?? '',
+      unit: line.unit ?? "",
+      carton: line.carton ?? "",
       bin: line.binCode,
-      lot_serial: line.serialNumber ?? line.lotNumber ?? '',
+      lot_serial: line.serialNumber ?? line.lotNumber ?? "",
     })),
-    ...(await customFieldValues(orgId, 'documents', 'shipment', customRow[0]?.custom ?? {}, format)),
-  }
-  return { values, reference: shipment.documentNumber }
+    ...(await customFieldValues(
+      orgId,
+      "documents",
+      "shipment",
+      customRow[0]?.custom ?? {},
+      format,
+    )),
+  };
+  return { values, reference: shipment.documentNumber };
 }
-
 
 /**
  * Field-ticket merge map. Crew rows collapse time types into reg/OT/DT tiers
@@ -805,104 +954,120 @@ async function loadFieldTicketValues(
   id: string,
   scope: ReadonlySet<string> | null,
 ): Promise<PdfRecordValues | null> {
-  let ticket: Awaited<ReturnType<typeof loadFieldTicket>>
+  let ticket: Awaited<ReturnType<typeof loadFieldTicket>>;
   try {
-    ticket = await loadFieldTicket(orgId, id, { includeRelated: false, allowedSubsidiaryIds: scope })
+    ticket = await loadFieldTicket(orgId, id, {
+      includeRelated: false,
+      allowedSubsidiaryIds: scope,
+    });
   } catch {
-    return null
+    return null;
   }
-  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
-  const { money } = createMoneyFormatter(locale, org.base_currency)
-  const m = (v: unknown) => (v === null || v === undefined || v === '' ? '' : money(String(v)))
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()]);
+  const { money } = createMoneyFormatter(locale, org.base_currency);
+  const m = (v: unknown) => (v === null || v === undefined || v === "" ? "" : money(String(v)));
 
-  const ft = ticket.fieldTicket
+  const ft = ticket.fieldTicket;
   // Day axis: up to 7 days from periodStart.
-  const days: string[] = []
+  const days: string[] = [];
   {
     // addCalendarDays parses the ISO string (exact for years 0001-0099)
     // instead of Date.UTC, which would remap years 0-99 onto 1900-1999.
     for (let i = 0; i < 7; i++) {
-      const dayIso = addCalendarDays(ft.periodStart, i)
-      if (dayIso > ft.periodEnd) break
-      days.push(dayIso)
+      const dayIso = addCalendarDays(ft.periodStart, i);
+      if (dayIso > ft.periodEnd) break;
+      days.push(dayIso);
     }
   }
   const tier = (
-    classification: 'regular' | 'overtime' | 'double_time' | 'other',
-  ): 'reg' | 'ot' | 'dt' | 'other' => {
-    if (classification === 'overtime') return 'ot'
-    if (classification === 'double_time') return 'dt'
-    return classification === 'other' ? 'other' : 'reg'
-  }
+    classification: "regular" | "overtime" | "double_time" | "other",
+  ): "reg" | "ot" | "dt" | "other" => {
+    if (classification === "overtime") return "ot";
+    if (classification === "double_time") return "dt";
+    return classification === "other" ? "other" : "reg";
+  };
 
   interface CrewAgg {
-    employee_name: string
-    labor_class: string
+    employee_name: string;
+    labor_class: string;
     /** Exact numeric(19,4) decimal strings — never floats. */
-    hours: Record<'reg' | 'ot' | 'dt' | 'other', string>
-    rates: Record<'reg' | 'ot' | 'dt' | 'other', string | null>
-    perDay: Record<string, string>
-    amount: string
+    hours: Record<"reg" | "ot" | "dt" | "other", string>;
+    rates: Record<"reg" | "ot" | "dt" | "other", string | null>;
+    perDay: Record<string, string>;
+    amount: string;
   }
-  const crewMap = new Map<string, CrewAgg>()
+  const crewMap = new Map<string, CrewAgg>();
   for (const e of ticket.entries) {
-    const k = `${e.employee_party_id}|${e.item_id ?? ''}`
-    let row = crewMap.get(k)
+    const k = `${e.employee_party_id}|${e.item_id ?? ""}`;
+    let row = crewMap.get(k);
     if (!row) {
       row = {
         employee_name: e.employee_name,
-        labor_class: e.item_name ?? '',
-        hours: { reg: '0.0000', ot: '0.0000', dt: '0.0000', other: '0.0000' },
+        labor_class: e.item_name ?? "",
+        hours: { reg: "0.0000", ot: "0.0000", dt: "0.0000", other: "0.0000" },
         rates: { reg: null, ot: null, dt: null, other: null },
         perDay: {},
-        amount: '0',
-      }
-      crewMap.set(k, row)
+        amount: "0",
+      };
+      crewMap.set(k, row);
     }
-    const t = tier(e.time_classification)
+    const t = tier(e.time_classification);
     // Hours stay exact decimals end to end: float accumulation plus
     // one-decimal formatting once printed 0.0 for a nonzero 0.04 while the
     // billed amount beside it was nonzero.
-    const h = typeof e.hours === 'number' ? String(e.hours) : (e.hours ?? '0')
-    row.hours[t] = add(row.hours[t]!, h)
+    const h = typeof e.hours === "number" ? String(e.hours) : (e.hours ?? "0");
+    row.hours[t] = add(row.hours[t]!, h);
     if (e.bill_rate != null) {
-      row.rates[t] = row.rates[t] ?? String(e.bill_rate)
-      row.amount = add(row.amount, mul(String(e.hours ?? '0'), String(e.bill_rate)))
+      row.rates[t] = row.rates[t] ?? String(e.bill_rate);
+      row.amount = add(row.amount, mul(String(e.hours ?? "0"), String(e.bill_rate)));
     }
-    const di = days.indexOf(e.worked_on)
+    const di = days.indexOf(e.worked_on);
     if (di >= 0) {
-      const cell = `day${di + 1}_${t}`
-      row.perDay[cell] = add(row.perDay[cell] ?? '0.0000', h)
+      const cell = `day${di + 1}_${t}`;
+      row.perDay[cell] = add(row.perDay[cell] ?? "0.0000", h);
     }
   }
 
   const crew = [...crewMap.values()].map((r) => {
-    const hoursCell = (v: string): string => (!isZero(v) ? formatExactHours(v) : '')
+    const hoursCell = (v: string): string => (!isZero(v) ? formatExactHours(v) : "");
     const rowVals: Record<string, unknown> = {
       employee_name: r.employee_name,
       labor_class: r.labor_class,
-      class_code: r.labor_class ? r.labor_class.charAt(0).toUpperCase() : '',
+      class_code: r.labor_class ? r.labor_class.charAt(0).toUpperCase() : "",
       reg_hours: hoursCell(r.hours.reg),
       ot_hours: hoursCell(r.hours.ot),
       dt_hours: hoursCell(r.hours.dt),
       other_hours: hoursCell(r.hours.other),
-      total_hours: formatExactHours(add(add(r.hours.reg, r.hours.ot), add(r.hours.dt, r.hours.other))),
-      reg_rate: r.rates.reg != null ? m(r.rates.reg) : '',
-      ot_rate: r.rates.ot != null ? m(r.rates.ot) : '',
-      dt_rate: r.rates.dt != null ? m(r.rates.dt) : '',
-      other_rate: r.rates.other != null ? m(r.rates.other) : '',
-      amount: isZero(r.amount) ? '' : m(r.amount),
-    }
+      total_hours: formatExactHours(
+        add(add(r.hours.reg, r.hours.ot), add(r.hours.dt, r.hours.other)),
+      ),
+      reg_rate: r.rates.reg != null ? m(r.rates.reg) : "",
+      ot_rate: r.rates.ot != null ? m(r.rates.ot) : "",
+      dt_rate: r.rates.dt != null ? m(r.rates.dt) : "",
+      other_rate: r.rates.other != null ? m(r.rates.other) : "",
+      amount: isZero(r.amount) ? "" : m(r.amount),
+    };
     for (let i = 1; i <= 7; i++) {
-      for (const t of ['reg', 'ot', 'dt', 'other'] as const) {
-        const key = `day${i}_${t}`
-        rowVals[key] = r.perDay[key] !== undefined ? hoursCell(r.perDay[key]!) : ''
+      for (const t of ["reg", "ot", "dt", "other"] as const) {
+        const key = `day${i}_${t}`;
+        rowVals[key] = r.perDay[key] !== undefined ? hoursCell(r.perDay[key]!) : "";
       }
     }
-    return rowVals
-  })
+    return rowVals;
+  });
 
-  const party = (await db.execute<{ display_name: string | null; email: string | null; phone: string | null; line1: string | null; line2: string | null; city: string | null; region: string | null; postal_code: string | null; country: string | null }>(sql`
+  const party = await db.execute<{
+    display_name: string | null;
+    email: string | null;
+    phone: string | null;
+    line1: string | null;
+    line2: string | null;
+    city: string | null;
+    region: string | null;
+    postal_code: string | null;
+    country: string | null;
+  }>(
+    sql`
     select p.display_name, p.email, p.phone,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country
       from parties p
@@ -911,27 +1076,29 @@ async function loadFieldTicketValues(
          order by is_default_billing desc, created_at limit 1
       ) a on true
      where p.org_id = ${orgId} and p.id = (select party_id from documents where id = ${id} and org_id = ${orgId})
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
   // The customer's default billing address, like the document loader prints —
   // the catalog advertises this merge field, so it must never stay blank.
   const partyAddress = [
     party[0]?.line1,
     party[0]?.line2,
-    [party[0]?.city, party[0]?.region, party[0]?.postal_code].filter(Boolean).join(', '),
+    [party[0]?.city, party[0]?.region, party[0]?.postal_code].filter(Boolean).join(", "),
     party[0]?.country,
   ]
     .filter(Boolean)
-    .join(', ')
+    .join(", ");
 
   const totalHours = ticket.entries.reduce(
-    (a, e) => add(a, typeof e.hours === 'number' ? String(e.hours) : (e.hours ?? '0')),
-    '0.0000',
-  )
+    (a, e) => add(a, typeof e.hours === "number" ? String(e.hours) : (e.hours ?? "0")),
+    "0.0000",
+  );
   const dayLabel = (dayIso: string) => {
-    const d = new Date(`${dayIso}T12:00:00Z`)
-    return `${d.toLocaleDateString('en-CA', { weekday: 'short', timeZone: 'UTC' })} ${dayIso.slice(5)}`
-  }
+    const d = new Date(`${dayIso}T12:00:00Z`);
+    return `${d.toLocaleDateString("en-CA", { weekday: "short", timeZone: "UTC" })} ${dayIso.slice(5)}`;
+  };
   const values: Record<string, unknown> = {
     document_number: ticket.documentNumber,
     document_date: fmtDate(ticket.documentDate, locale),
@@ -940,36 +1107,38 @@ async function loadFieldTicketValues(
     period_start: fmtDate(ft.periodStart, locale),
     period_end: fmtDate(ft.periodEnd, locale),
     project_name: ticket.projectName,
-    po_number: ticket.referenceNumber ?? '',
+    po_number: ticket.referenceNumber ?? "",
     foreman_name: ticket.foremanName,
-    work_description: ticket.memo ?? '',
+    work_description: ticket.memo ?? "",
     party_name: party[0]?.display_name ?? ticket.customerName,
-    party_email: party[0]?.email ?? '',
-    party_phone: party[0]?.phone ?? '',
+    party_email: party[0]?.email ?? "",
+    party_phone: party[0]?.phone ?? "",
     party_address: partyAddress,
     labor_total: m(ticket.laborTotal),
     lines_total: m(ticket.linesTotal),
     grand_total: m(ticket.grandTotal),
     total_hours: formatExactHours(totalHours),
-    customer_signature_image: ft.signatures?.customer?.image ?? '',
-    customer_signature_name: ft.signatures?.customer?.name ?? '',
-    customer_signed_at: ft.signatures?.customer?.at ? fmtDate(ft.signatures.customer.at.slice(0, 10), locale) : '',
-    customer_comment: ft.signatures?.customer?.comment ?? '',
-    foreman_signature_image: ft.signatures?.foreman?.image ?? '',
+    customer_signature_image: ft.signatures?.customer?.image ?? "",
+    customer_signature_name: ft.signatures?.customer?.name ?? "",
+    customer_signed_at: ft.signatures?.customer?.at
+      ? fmtDate(ft.signatures.customer.at.slice(0, 10), locale)
+      : "",
+    customer_comment: ft.signatures?.customer?.comment ?? "",
+    foreman_signature_image: ft.signatures?.foreman?.image ?? "",
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     crew,
     lines: ticket.lines.map((l) => ({
-      item_name: l.item_name ?? '',
-      description: l.description ?? '',
+      item_name: l.item_name ?? "",
+      description: l.description ?? "",
       quantity: fmtQty(l.quantity, locale),
       unit_price: m(l.unit_price),
       amount: m(l.amount),
     })),
-  }
-  for (let i = 0; i < 7; i++) values[`day${i + 1}_label`] = days[i] ? dayLabel(days[i]!) : ''
+  };
+  for (let i = 0; i < 7; i++) values[`day${i + 1}_label`] = days[i] ? dayLabel(days[i]!) : "";
 
-  return { values, reference: ticket.documentNumber }
+  return { values, reference: ticket.documentNumber };
 }
 
 /**
@@ -985,44 +1154,59 @@ export async function findSamplePdfRecordId(
   orgId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<string | null> {
-  const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
-  if (!meta) return null
-  if (meta.key === 'journal_entry') {
-    const r = (await db.execute<{ id: string }>(sql`
+  const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
+  if (!meta) return null;
+  if (meta.key === "journal_entry") {
+    const r = await db.execute<{ id: string }>(
+      sql`
       select id from journal_entries where org_id = ${orgId}${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
        order by created_at desc limit 1
-    `, 'objects'))
-    return r[0]?.id ?? null
+    `,
+      "objects",
+    );
+    return r[0]?.id ?? null;
   }
-  if (meta.key === 'pay_stub' || meta.key === 'payroll_cheque') {
-    const r = (await db.execute<{ id: string }>(sql`
+  if (meta.key === "pay_stub" || meta.key === "payroll_cheque") {
+    const r = await db.execute<{ id: string }>(
+      sql`
       select s.id from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       join documents d on d.id = r.document_id and d.org_id = r.org_id and d.kind = 'pay_run'
        where s.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
-         and (${meta.key === 'pay_stub'} or (s.payment_method = 'cheque' and s.cheque_number is not null))
+         and (${meta.key === "pay_stub"} or (s.payment_method = 'cheque' and s.cheque_number is not null))
        order by s.created_at desc, s.id desc limit 1
-    `, 'objects'))
-    return r[0]?.id ?? null
+    `,
+      "objects",
+    );
+    return r[0]?.id ?? null;
   }
-  const r = (await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     select id from documents where org_id = ${orgId} and kind = ${meta.docKind}${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
      order by created_at desc limit 1
-  `, 'objects'))
-  return r[0]?.id ?? null
+  `,
+    "objects",
+  );
+  return r[0]?.id ?? null;
 }
 
 /** Custom-field merge fields for the builder palette (per record type). */
-export async function customMergeFields(recordType: string, orgId: string): Promise<PdfMergeField[]> {
-  const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
-  if (!meta || !meta.docKind) return []
-  const r = (await db.execute<{ key: string; label: string }>(sql`
+export async function customMergeFields(
+  recordType: string,
+  orgId: string,
+): Promise<PdfMergeField[]> {
+  const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
+  if (!meta || !meta.docKind) return [];
+  const r = await db.execute<{ key: string; label: string }>(
+    sql`
     select key, label from custom_field_defs
      where org_id = ${orgId} and target_table = 'documents' and is_active
        and (target_kind is null or target_kind = ${meta.docKind})
      order by sort_order, label
-  `, 'objects'))
-  return r.map((d) => ({ key: `cf_${d.key}`, label: d.label, sample: d.label }))
+  `,
+    "objects",
+  );
+  return r.map((d) => ({ key: `cf_${d.key}`, label: d.label, sample: d.label }));
 }
 
 /**
@@ -1034,22 +1218,29 @@ export async function customMergeFields(recordType: string, orgId: string): Prom
 export function foreignLineValues(
   line: Record<string, unknown>,
   documentCurrency: string,
-  money: MoneyFormatter['money'],
+  money: MoneyFormatter["money"],
   locale: string,
 ): { original_currency: string; original_amount: string; fx_rate: string; fx_basis: string } {
-  const currency = typeof line.original_currency === 'string' ? line.original_currency : ''
-  if (!currency) return { original_currency: '', original_amount: '', fx_rate: '', fx_basis: '' }
-  const evidence = (line.original_fx_evidence && typeof line.original_fx_evidence === 'object' ? line.original_fx_evidence : {}) as Record<string, unknown>
-  const rate = canonicalDecimal(String(line.original_fx_rate ?? ''), 10) ?? String(line.original_fx_rate ?? '')
-  const basis = evidence.method === 'billed_amount'
-    ? `Billed ${money(String(evidence.billedAmount ?? '0'))}`
-    : evidence.method === 'override'
-      ? `Explicit rate: ${String(evidence.reason ?? '')}`
-      : `Dated rate of ${fmtDate(evidence.observationDate ?? evidence.rateDate, locale)}`
+  const currency = typeof line.original_currency === "string" ? line.original_currency : "";
+  if (!currency) return { original_currency: "", original_amount: "", fx_rate: "", fx_basis: "" };
+  const evidence = (
+    line.original_fx_evidence && typeof line.original_fx_evidence === "object"
+      ? line.original_fx_evidence
+      : {}
+  ) as Record<string, unknown>;
+  const rate =
+    canonicalDecimal(String(line.original_fx_rate ?? ""), 10) ??
+    String(line.original_fx_rate ?? "");
+  const basis =
+    evidence.method === "billed_amount"
+      ? `Billed ${money(String(evidence.billedAmount ?? "0"))}`
+      : evidence.method === "override"
+        ? `Explicit rate: ${String(evidence.reason ?? "")}`
+        : `Dated rate of ${fmtDate(evidence.observationDate ?? evidence.rateDate, locale)}`;
   return {
     original_currency: currency,
-    original_amount: money(String(line.original_amount ?? '0'), { currency }),
+    original_amount: money(String(line.original_amount ?? "0"), { currency }),
     fx_rate: `1 ${currency} = ${rate} ${documentCurrency}`,
     fx_basis: basis,
-  }
+  };
 }

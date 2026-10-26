@@ -1,5 +1,5 @@
-import { toChartNumber } from '../../../../lib/chart-number'
-import Link from 'next/link'
+import { toChartNumber } from "../../../../lib/chart-number";
+import Link from "next/link";
 import {
   Badge,
   Button,
@@ -9,8 +9,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@openbooks/ui'
-import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
+} from "@openbooks/ui";
+import { DirtyUrlDrawer } from "../../../../components/dirty-url-drawer";
 import {
   CompensationSettingsForm,
   CycleCreateForm,
@@ -21,14 +21,14 @@ import {
   PayInfoRequestButton,
   PlanCreateForm,
   PlanLineApproveButton,
-} from './islands'
+} from "./islands";
 import type {
   CompCycleDialogState,
   CompDialogRefusal,
   CompEquityDialogState,
   CompLineRow,
   CompPlanDialogState,
-} from '../../../../lib/hrm/compensation'
+} from "../../../../lib/hrm/compensation";
 
 /**
  * Compensation sections (server components): the band placement bar
@@ -46,34 +46,23 @@ export function PlacementBar({
   rate,
   label,
 }: {
-  min: string | null
-  target: string | null
-  max: string | null
-  rate: string | null
-  label: string
+  min: string | null;
+  target: string | null;
+  max: string | null;
+  rate: string | null;
+  label: string;
 }) {
   if (min === null || target === null || max === null || rate === null) {
-    return (
-      <span className="text-sm text-slate-500 dark:text-slate-400">
-        {label}
-      </span>
-    )
+    return <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>;
   }
-  const lo = toChartNumber(min)
-  const hi = toChartNumber(max)
-  const at = toChartNumber(rate)
-  const span = hi - lo > 0 ? hi - lo : 1
-  const pct = Math.min(100, Math.max(0, ((at - lo) / span) * 100))
-  const targetPct = Math.min(
-    100,
-    Math.max(0, ((toChartNumber(target) - lo) / span) * 100),
-  )
+  const lo = toChartNumber(min);
+  const hi = toChartNumber(max);
+  const at = toChartNumber(rate);
+  const span = hi - lo > 0 ? hi - lo : 1;
+  const pct = Math.min(100, Math.max(0, ((at - lo) / span) * 100));
+  const targetPct = Math.min(100, Math.max(0, ((toChartNumber(target) - lo) / span) * 100));
   return (
-    <span
-      className="flex min-w-28 flex-col gap-1"
-      role="img"
-      aria-label={label}
-    >
+    <span className="flex min-w-28 flex-col gap-1" role="img" aria-label={label}>
       <span className="relative h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700">
         <span
           className="absolute top-[-3px] h-3 w-0.5 bg-slate-400 dark:bg-slate-500"
@@ -84,11 +73,9 @@ export function PlacementBar({
           style={{ left: `calc(${pct}% - 5px)` }}
         />
       </span>
-      <span className="text-xs text-slate-500 dark:text-slate-400">
-        {label}
-      </span>
+      <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
     </span>
-  )
+  );
 }
 
 export function PacingBar({
@@ -96,82 +83,80 @@ export function PacingBar({
   note,
   over = false,
 }: {
-  pct: number | null
-  note: string
-  over?: boolean
+  pct: number | null;
+  note: string;
+  over?: boolean;
 }) {
   if (pct === null)
     return (
       <span
-        className={`text-sm ${over ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}
+        className={`text-sm ${over ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-slate-400"}`}
       >
         {note}
       </span>
-    )
-  const width = Math.min(100, Math.max(0, pct))
+    );
+  const width = Math.min(100, Math.max(0, pct));
   return (
     <span className="flex min-w-40 flex-col gap-1" role="img" aria-label={note}>
       <span className="relative h-2 w-full rounded-full bg-slate-200 dark:bg-slate-700">
         <span
-          className={`absolute left-0 top-0 h-2 rounded-full ${over || pct > 100 ? 'bg-red-500' : 'bg-blue-600'}`}
+          className={`absolute left-0 top-0 h-2 rounded-full ${over || pct > 100 ? "bg-red-500" : "bg-blue-600"}`}
           style={{ width: `${width}%` }}
         />
       </span>
       <span className="text-xs text-slate-500 dark:text-slate-400">{note}</span>
     </span>
-  )
+  );
 }
 
 export interface CompDrawerLabels {
-  proposeTitle: string
-  decideTitle: string
-  historyTitle: string
-  pctLabel: string
-  rateLabel: string
-  reasonLabel: string
-  pctInvalid: string
-  decideReasonLabel: string
-  failed: string
-  submit: string
-  cancel: string
-  approve: string
-  reject: string
-  reopen: string
+  proposeTitle: string;
+  decideTitle: string;
+  historyTitle: string;
+  pctLabel: string;
+  rateLabel: string;
+  reasonLabel: string;
+  pctInvalid: string;
+  decideReasonLabel: string;
+  failed: string;
+  submit: string;
+  cancel: string;
+  approve: string;
+  reject: string;
+  reopen: string;
 }
 
 export interface LineDrawerData {
-  open: boolean
-  closeHref: string
-  title: string
-  line: CompLineRow | null
+  open: boolean;
+  closeHref: string;
+  title: string;
+  line: CompLineRow | null;
   history: {
-    kind: string
-    actor: string | null
-    reason: string | null
-    at: string
-  }[]
-  labels: CompDrawerLabels
-  cycleId: string
-  canDecide: boolean
+    kind: string;
+    actor: string | null;
+    reason: string | null;
+    at: string;
+  }[];
+  labels: CompDrawerLabels;
+  cycleId: string;
+  canDecide: boolean;
   /** Transition-table gates from the loader: the forms render
    *  only while the round/line state allows the action. */
-  canPropose: boolean
-  canDecideLine: boolean
-  historyColumns: { event: string; reason: string; at: string }
-  emptyHistory: string
+  canPropose: boolean;
+  canDecideLine: boolean;
+  historyColumns: { event: string; reason: string; at: string };
+  emptyHistory: string;
 }
 
 export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
-  if (!drawer.open || !drawer.line) return null
-  const line = drawer.line
+  if (!drawer.open || !drawer.line) return null;
+  const line = drawer.line;
   return (
     <DirtyUrlDrawer open closeHref={drawer.closeHref} title={drawer.title}>
       <div className="flex flex-col gap-6">
         {drawer.canPropose ? (
           <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              {drawer.labels.proposeTitle}
-            </h3>
+            <h3 className="mb-2 text-sm font-semibold">{drawer.labels.proposeTitle}</h3>
             <LineProposeForm
               cycleId={drawer.cycleId}
               lineId={line.id}
@@ -190,9 +175,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
         ) : null}
         {drawer.canDecide && drawer.canDecideLine ? (
           <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              {drawer.labels.decideTitle}
-            </h3>
+            <h3 className="mb-2 text-sm font-semibold">{drawer.labels.decideTitle}</h3>
             <LineDecideButtons
               cycleId={drawer.cycleId}
               lineId={line.id}
@@ -207,13 +190,9 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
           </div>
         ) : null}
         <div>
-          <h3 className="mb-2 text-sm font-semibold">
-            {drawer.labels.historyTitle}
-          </h3>
+          <h3 className="mb-2 text-sm font-semibold">{drawer.labels.historyTitle}</h3>
           {drawer.history.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {drawer.emptyHistory}
-            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.emptyHistory}</p>
           ) : (
             <Table>
               <TableHeader>
@@ -229,7 +208,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
                     <TableCell>
                       <Badge variant="secondary">{h.kind}</Badge>
                     </TableCell>
-                    <TableCell>{h.reason ?? '—'}</TableCell>
+                    <TableCell>{h.reason ?? "—"}</TableCell>
                     <TableCell>{h.at}</TableCell>
                   </TableRow>
                 ))}
@@ -239,7 +218,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
         </div>
       </div>
     </DirtyUrlDrawer>
-  )
+  );
 }
 
 /**
@@ -247,9 +226,9 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
  * next to the permission and feature gates that arm them — these aliases
  * keep the historic names the widget adapters resolve.
  */
-export type CompDialogData = CompCycleDialogState
-export type PlanDialogData = CompPlanDialogState
-export type EquityDialogData = CompEquityDialogState
+export type CompDialogData = CompCycleDialogState;
+export type PlanDialogData = CompPlanDialogState;
+export type EquityDialogData = CompEquityDialogState;
 
 /**
  * A computed prerequisite refusal inside an open create dialog: the dialog
@@ -262,16 +241,14 @@ export function DialogRefusal({
   remedyHref,
   remedyLabel,
 }: {
-  refusal: CompDialogRefusal
-  remedyHref: string | null
-  remedyLabel: string | null
+  refusal: CompDialogRefusal;
+  remedyHref: string | null;
+  remedyLabel: string | null;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold">{refusal.title}</h3>
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        {refusal.message}
-      </p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{refusal.message}</p>
       {remedyHref && remedyLabel ? (
         <div>
           <Button asChild>
@@ -280,11 +257,11 @@ export function DialogRefusal({
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
-  if (!dialog.open) return null
+  if (!dialog.open) return null;
   return (
     <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
@@ -318,11 +295,11 @@ export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
         />
       )}
     </DirtyUrlDrawer>
-  )
+  );
 }
 
 export function CompPlanDialog({ dialog }: { dialog: PlanDialogData }) {
-  if (!dialog.open) return null
+  if (!dialog.open) return null;
   return (
     <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
@@ -344,11 +321,11 @@ export function CompPlanDialog({ dialog }: { dialog: PlanDialogData }) {
         />
       )}
     </DirtyUrlDrawer>
-  )
+  );
 }
 
 export function CompEquityDialog({ dialog }: { dialog: EquityDialogData }) {
-  if (!dialog.open) return null
+  if (!dialog.open) return null;
   return (
     <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
@@ -371,15 +348,10 @@ export function CompEquityDialog({ dialog }: { dialog: EquityDialogData }) {
         />
       )}
     </DirtyUrlDrawer>
-  )
+  );
 }
 
-export {
-  CompensationSettingsForm,
-  CycleMoveButtons,
-  PayInfoRequestButton,
-  PlanLineApproveButton,
-}
+export { CompensationSettingsForm, CycleMoveButtons, PayInfoRequestButton, PlanLineApproveButton };
 
 /** Placement summary line on the Me surface: loader-resolved strings, no chart. */
 export function PlacementSummary({
@@ -387,27 +359,21 @@ export function PlacementSummary({
   compaRatio,
   bandRange,
 }: {
-  placement: string
-  compaRatio: string | null
-  bandRange: string | null
+  placement: string;
+  compaRatio: string | null;
+  bandRange: string | null;
 }) {
   return (
     <p className="text-sm">
       {placement}
       {compaRatio ? (
-        <span className="text-slate-500 dark:text-slate-400">
-          {' '}
-          · {compaRatio}
-        </span>
+        <span className="text-slate-500 dark:text-slate-400"> · {compaRatio}</span>
       ) : null}
       {bandRange ? (
-        <span className="text-slate-500 dark:text-slate-400">
-          {' '}
-          · {bandRange}
-        </span>
+        <span className="text-slate-500 dark:text-slate-400"> · {bandRange}</span>
       ) : null}
     </p>
-  )
+  );
 }
 
 /** Pay-information request action with the open request's status. */
@@ -419,12 +385,12 @@ export function PayInfoRequest({
   submit,
   cancel,
 }: {
-  employmentId: string
-  requestLabel: string
-  requestStatus: string | null
-  failed: string
-  submit: string
-  cancel: string
+  employmentId: string;
+  requestLabel: string;
+  requestStatus: string | null;
+  failed: string;
+  submit: string;
+  cancel: string;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -434,10 +400,8 @@ export function PayInfoRequest({
         requestLabel={requestLabel}
       />
       {requestStatus ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {requestStatus}
-        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{requestStatus}</p>
       ) : null}
     </div>
-  )
+  );
 }

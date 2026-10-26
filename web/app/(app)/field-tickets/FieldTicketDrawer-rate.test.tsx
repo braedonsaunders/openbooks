@@ -1,13 +1,18 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 // A rate-lookup 422 silently cleared rate, amount, source and
 // provenance with no message. The lookup now pins its named reason beside
 // the kept (stale) values. Mounts the real FieldTicketDrawer under jsdom:
 // a successful lookup prices the line, then a refused lookup must keep the
 // last good rate on screen with the named reason in a role=alert region.
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/field-tickets?ticket=ft-1&transactionTab=items', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/field-tickets?ticket=ft-1&transactionTab=items",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 Object.assign(globalThis, {
   __ftTestRouter: {
@@ -17,97 +22,107 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__ftTestRouter}export function usePathname(){return "/field-tickets"}export function useSearchParams(){return new URLSearchParams("ticket=ft-1&transactionTab=items")}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__ftTestRouter}export function usePathname(){return "/field-tickets"}export function useSearchParams(){return new URLSearchParams("ticket=ft-1&transactionTab=items")}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}",
+      };
     }
-    if (specifier === '@/lib/confirm') {
+    if (specifier === "@/lib/confirm") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export function confirmDialog(){return Promise.resolve(true)};export function ConfirmRoot(){return null}',
-      }
+        url: "data:text/javascript,export function confirmDialog(){return Promise.resolve(true)};export function ConfirmRoot(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { MoneyProvider } = await import('../../../components/money-provider')
-const { FieldTicketDrawer } = await import('./FieldTicketDrawer')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../components/money-provider");
+const { FieldTicketDrawer } = await import("./FieldTicketDrawer");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const TICKET = {
-  id: 'ft-1',
-  documentNumber: 'FT-0001',
-  status: 'draft',
-  documentDate: '2026-09-15',
+  id: "ft-1",
+  documentNumber: "FT-0001",
+  status: "draft",
+  documentDate: "2026-09-15",
   referenceNumber: null,
   memo: null,
-  customerName: 'Acme',
-  projectId: 'proj-1',
-  projectName: 'Acme Tower',
-  foremanName: 'Sammy Sloppy',
-  revision: '2026-09-01T10:00:00.000000Z',
-  fieldTicket: { period: 'daily', periodStart: '2026-09-01', periodEnd: '2026-09-30', foremanPartyId: null },
+  customerName: "Acme",
+  projectId: "proj-1",
+  projectName: "Acme Tower",
+  foremanName: "Sammy Sloppy",
+  revision: "2026-09-01T10:00:00.000000Z",
+  fieldTicket: {
+    period: "daily",
+    periodStart: "2026-09-01",
+    periodEnd: "2026-09-30",
+    foremanPartyId: null,
+  },
   entries: [],
   lines: [],
-  laborTotal: '0',
-  linesTotal: '0',
-  grandTotal: '0',
+  laborTotal: "0",
+  linesTotal: "0",
+  grandTotal: "0",
   links: [],
   billingRequests: [],
-}
+};
 
 async function mount(
   t: TestContext,
   rateResponder: () => Response,
   deleteResponder: () => Response = () => Response.json({ ok: true }),
-  initialMode: 'edit' | 'view' = 'edit',
+  initialMode: "edit" | "view" = "edit",
   postResponder: () => Response = () => Response.json(TICKET),
 ): Promise<{ requests: { url: string; method: string }[] }> {
-  const requests: { url: string; method: string }[] = []
-  const prior = globalThis.fetch
+  const requests: { url: string; method: string }[] = [];
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    const url = String(input)
-    const method = init?.method ?? 'GET'
-    requests.push({ url, method })
-    if (url.startsWith('/api/flows/manual')) return Response.json({ buttons: [] })
-    if (url.startsWith('/api/flows/record-state')) {
-      return Response.json({ approvalState: { status: 'draft', pendingWith: [], myActions: null }, history: [] })
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    requests.push({ url, method });
+    if (url.startsWith("/api/flows/manual")) return Response.json({ buttons: [] });
+    if (url.startsWith("/api/flows/record-state")) {
+      return Response.json({
+        approvalState: { status: "draft", pendingWith: [], myActions: null },
+        history: [],
+      });
     }
-    if (url.startsWith('/api/field-tickets/item-rate')) return rateResponder()
-    if (url === `/api/field-tickets/${TICKET.id}` && method === 'POST') return postResponder()
-    if (url === `/api/field-tickets/${TICKET.id}` && method === 'DELETE') return deleteResponder()
-    throw new Error(`unexpected fetch ${(init?.method ?? 'GET')} ${url}`)
-  }) as typeof fetch
+    if (url.startsWith("/api/field-tickets/item-rate")) return rateResponder();
+    if (url === `/api/field-tickets/${TICKET.id}` && method === "POST") return postResponder();
+    if (url === `/api/field-tickets/${TICKET.id}` && method === "DELETE") return deleteResponder();
+    throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${url}`);
+  }) as typeof fetch;
   t.after(() => {
-    globalThis.fetch = prior
-  })
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+    globalThis.fetch = prior;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const node of [...document.body.children]) node.remove()
-  })
+      rootHandle.unmount();
+    });
+    host.remove();
+    for (const node of [...document.body.children]) node.remove();
+  });
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -117,8 +132,10 @@ async function mount(
             employees={[]}
             laborItems={[]}
             timeTypes={[]}
-            catalogItems={[{ id: 'item-1', name: 'Excavation', kind: 'service', default_rate: null }]}
-            projects={[{ id: 'proj-1', name: 'Acme Tower', customerName: 'Acme' } as never]}
+            catalogItems={[
+              { id: "item-1", name: "Excavation", kind: "service", default_rate: null },
+            ]}
+            projects={[{ id: "proj-1", name: "Acme Tower", customerName: "Acme" } as never]}
             projectTasks={[]}
             equipmentUnits={[]}
             equipmentEnabled={false}
@@ -127,122 +144,165 @@ async function mount(
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    for (let i = 0; i < 10; i++) await tick()
-  })
-  return { requests }
+    );
+    for (let i = 0; i < 10; i++) await tick();
+  });
+  return { requests };
 }
 
 async function pickItem(): Promise<void> {
-  const trigger = [...document.querySelectorAll('button')].find((b) =>
-    (b.textContent ?? '').includes('Pick an item'),
-  ) as HTMLButtonElement | undefined
-  assert.ok(trigger, 'the line item picker must render')
+  const trigger = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Pick an item"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(trigger, "the line item picker must render");
   await act(async () => {
-    trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-  })
+    trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+    await tick();
+  });
   const option = [...document.querySelectorAll('button[role="option"]')].find((candidate) =>
-    (candidate.textContent ?? '').includes('Excavation'),
-  ) as HTMLButtonElement | undefined
-  assert.ok(option, 'the picker must offer the Excavation item')
+    (candidate.textContent ?? "").includes("Excavation"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(option, "the picker must offer the Excavation item");
   await act(async () => {
-    option.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 10; i++) await tick()
-  })
+    option.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 10; i++) await tick();
+  });
 }
 
 async function setQty(value: string): Promise<void> {
-  const qty = document.querySelector('#ft-qty') as HTMLInputElement | null
-  assert.ok(qty, 'the quantity input must render')
+  const qty = document.querySelector("#ft-qty") as HTMLInputElement | null;
+  assert.ok(qty, "the quantity input must render");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-    setter?.call(qty, value)
-    qty.dispatchEvent(new window.Event('input', { bubbles: true }))
-    for (let i = 0; i < 10; i++) await tick()
-  })
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(qty, value);
+    qty.dispatchEvent(new window.Event("input", { bubbles: true }));
+    for (let i = 0; i < 10; i++) await tick();
+  });
 }
 
-test('a refused rate lookup keeps the last good rate and pins the named reason', async (t) => {
-  let refuse = false
+test("a refused rate lookup keeps the last good rate and pins the named reason", async (t) => {
+  let refuse = false;
   await mount(t, () =>
     refuse
-      ? Response.json({ error: 'no rate book covers Excavation on 2026-09-30' }, { status: 422 })
-      : Response.json({ rate: '150.00', amount: '150.00', source: 'rate_book', rateUnits: [] }),
-  )
-  await pickItem()
-  await setQty('1')
+      ? Response.json({ error: "no rate book covers Excavation on 2026-09-30" }, { status: 422 })
+      : Response.json({ rate: "150.00", amount: "150.00", source: "rate_book", rateUnits: [] }),
+  );
+  await pickItem();
+  await setQty("1");
   assert.ok(
-    (document.querySelector('#ft-rate') as HTMLInputElement | null)?.value.includes('150'),
-    'the successful lookup must price the line',
-  )
-  refuse = true
-  await setQty('2')
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the refused lookup must pin its reason instead of failing silently')
-  assert.match(alert.textContent ?? '', /no rate book covers Excavation/)
-  const add = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Add line'))
-  assert.ok(add, 'the add-line action renders')
-  assert.equal((add as HTMLButtonElement).disabled, true, 'a refused rate must block adding the line')
+    (document.querySelector("#ft-rate") as HTMLInputElement | null)?.value.includes("150"),
+    "the successful lookup must price the line",
+  );
+  refuse = true;
+  await setQty("2");
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused lookup must pin its reason instead of failing silently");
+  assert.match(alert.textContent ?? "", /no rate book covers Excavation/);
+  const add = [...document.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Add line"),
+  );
+  assert.ok(add, "the add-line action renders");
+  assert.equal(
+    (add as HTMLButtonElement).disabled,
+    true,
+    "a refused rate must block adding the line",
+  );
   assert.ok(
-    (document.querySelector('#ft-rate') as HTMLInputElement | null)?.value.includes('150'),
-    'the last good rate must stay on screen beside the refusal',
-  )
-})
+    (document.querySelector("#ft-rate") as HTMLInputElement | null)?.value.includes("150"),
+    "the last good rate must stay on screen beside the refusal",
+  );
+});
 
-test('closing a saved draft never discards it', async (t) => {
-  const { requests } = await mount(t, () => Response.json({}), () => Response.json({ ok: true }), 'view')
-  const close = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null
-  assert.ok(close, 'the drawer close action renders')
+test("closing a saved draft never discards it", async (t) => {
+  const { requests } = await mount(
+    t,
+    () => Response.json({}),
+    () => Response.json({ ok: true }),
+    "view",
+  );
+  const close = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
+  assert.ok(close, "the drawer close action renders");
   await act(async () => {
-    close.click()
-    await tick()
-    await tick()
-  })
+    close.click();
+    await tick();
+    await tick();
+  });
   assert.ok(
-    !requests.some((request) => request.method === 'DELETE'),
-    'a ticket the operator saved stays until an explicit Discard',
-  )
-})
+    !requests.some((request) => request.method === "DELETE"),
+    "a ticket the operator saved stays until an explicit Discard",
+  );
+});
 
-test('explicit discard keeps a refused draft open with its reason pinned', async (t) => {
-  const { requests } = await mount(t, () => Response.json({}), () => Response.json({ error: 'Ticket contains billable time' }, { status: 409 }), 'view')
-  const actions = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Actions')
-  assert.ok(actions, 'the drawer actions menu renders')
+test("explicit discard keeps a refused draft open with its reason pinned", async (t) => {
+  const { requests } = await mount(
+    t,
+    () => Response.json({}),
+    () => Response.json({ error: "Ticket contains billable time" }, { status: 409 }),
+    "view",
+  );
+  const actions = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === "Actions",
+  );
+  assert.ok(actions, "the drawer actions menu renders");
   await act(async () => {
-    actions.click()
-    await tick()
-  })
-  const discard = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Discard draft'))
-  assert.ok(discard, `manageable drafts offer Discard; buttons: ${[...document.querySelectorAll('button')].map((button) => button.textContent?.trim()).join(' | ')}`)
+    actions.click();
+    await tick();
+  });
+  const discard = [...document.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Discard draft"),
+  );
+  assert.ok(
+    discard,
+    `manageable drafts offer Discard; buttons: ${[...document.querySelectorAll("button")].map((button) => button.textContent?.trim()).join(" | ")}`,
+  );
   await act(async () => {
-    discard.click()
-    await tick()
-    await tick()
-  })
-  assert.ok(requests.some((request) => request.url === `/api/field-tickets/${TICKET.id}` && request.method === 'DELETE'))
-  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Ticket contains billable time/)
-})
+    discard.click();
+    await tick();
+    await tick();
+  });
+  assert.ok(
+    requests.some(
+      (request) => request.url === `/api/field-tickets/${TICKET.id}` && request.method === "DELETE",
+    ),
+  );
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /Ticket contains billable time/,
+  );
+});
 
-
-test('a refused ticket mutation pins its reason and keeps the draft for a successful retry', async (t) => {
-  let refused = true
-  await mount(t,
-    () => Response.json({ rate: '150.00', amount: '150.00', source: 'rate_book', rateUnits: [] }),
-    () => Response.json({ ok: true }), 'edit',
-    () => refused
-      ? Response.json({ error: 'Choose an active item' }, { status: 422 })
-      : Response.json({ ...TICKET, revision: '2026-09-01T10:00:00.000001Z' }),
-  )
-  await pickItem()
-  await setQty('1')
-  const add = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Add line'))
-  assert.ok(add)
-  await act(async () => { add.click(); for (let i = 0; i < 10; i++) await tick() })
-  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Choose an active item/)
-  assert.equal((document.querySelector('#ft-qty') as HTMLInputElement | null)?.value, '1')
-  refused = false
-  await act(async () => { add.click(); for (let i = 0; i < 10; i++) await tick() })
-  assert.ok(!document.querySelector('[role="alert"]'), 'successful retry clears the prior refusal')
-})
+test("a refused ticket mutation pins its reason and keeps the draft for a successful retry", async (t) => {
+  let refused = true;
+  await mount(
+    t,
+    () => Response.json({ rate: "150.00", amount: "150.00", source: "rate_book", rateUnits: [] }),
+    () => Response.json({ ok: true }),
+    "edit",
+    () =>
+      refused
+        ? Response.json({ error: "Choose an active item" }, { status: 422 })
+        : Response.json({ ...TICKET, revision: "2026-09-01T10:00:00.000001Z" }),
+  );
+  await pickItem();
+  await setQty("1");
+  const add = [...document.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Add line"),
+  );
+  assert.ok(add);
+  await act(async () => {
+    add.click();
+    for (let i = 0; i < 10; i++) await tick();
+  });
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /Choose an active item/,
+  );
+  assert.equal((document.querySelector("#ft-qty") as HTMLInputElement | null)?.value, "1");
+  refused = false;
+  await act(async () => {
+    add.click();
+    for (let i = 0; i < 10; i++) await tick();
+  });
+  assert.ok(!document.querySelector('[role="alert"]'), "successful retry clears the prior refusal");
+});

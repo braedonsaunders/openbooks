@@ -28,8 +28,7 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === "@/lib/authz" ||
-      (specifier === "../../../lib/authz" &&
-        context.parentURL?.includes("/api/notifications/"))
+      (specifier === "../../../lib/authz" && context.parentURL?.includes("/api/notifications/"))
     ) {
       return { url: "mock:notifications-scope-authz", shortCircuit: true };
     }
@@ -52,9 +51,8 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET, PATCH } = await import("../../api/notifications/route.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 
@@ -63,21 +61,23 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 function authzFor(orgId: string, userId: string, name: string): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@scratch.test`, name, orgId,
+      id: userId,
+      email: `${userId}@scratch.test`,
+      name,
+      orgId,
       roles: [{ key: "clerk", name: "clerk" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(),
     allowedSubsidiaryIds: null,
   };
 }
 
-async function seedNotification(
-  orgId: string,
-  userId: string,
-  title: string,
-): Promise<string> {
+async function seedNotification(orgId: string, userId: string, title: string): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`insert into notifications (id, org_id, user_id, kind, title, body, href, read_at)
     values (${id}, ${orgId}, ${userId}, 'approval', ${title}, null, null, null)`);
@@ -86,7 +86,8 @@ async function seedNotification(
 
 async function readAt(id: string): Promise<string | null> {
   const found = await db.execute<{ read_at: string | null }>(
-    sql`select read_at from notifications where id = ${id}`, "objects",
+    sql`select read_at from notifications where id = ${id}`,
+    "objects",
   );
   return found[0]?.read_at ?? null;
 }
@@ -113,7 +114,9 @@ interface BellPayload {
 }
 
 async function bellView(orgId: string): Promise<BellPayload> {
-  const res = await withOrgContext(orgId, () => GET(new Request("http://openbooks.test/api/notifications/inbox")));
+  const res = await withOrgContext(orgId, () =>
+    GET(new Request("http://openbooks.test/api/notifications/inbox")),
+  );
   assert.equal(res.status, 200);
   return (await res.json()) as BellPayload;
 }
@@ -202,9 +205,7 @@ test("mark-read touches only the caller's own rows", { skip: !DB }, async () => 
     assert.equal(await withBypass(() => readAt(ids.mallory)), null);
 
     // Mark-all-read clears Alice's remaining rows and nothing else.
-    const second = await withBypass(() =>
-      seedNotification(orgA.orgId, alice, "alice second"),
-    );
+    const second = await withBypass(() => seedNotification(orgA.orgId, alice, "alice second"));
     const cleared = await withOrgContext(orgA.orgId, () => PATCH(patchRequest({ all: true })));
     assert.equal(cleared.status, 200);
     assert.notEqual(await withBypass(() => readAt(second)), null);

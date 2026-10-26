@@ -95,8 +95,8 @@ export const PL_PIT_POMNIEJSZENIE_2024 = {
   polowa: "150",
   trzecia: "100",
   quote:
-    "płatnik pomniejsza zaliczki o kwotę stanowiącą nie więcej niż 1/12 kwoty zmniejszającej podatek, "
-    + "jeżeli podatnik złoży temu płatnikowi oświadczenie o stosowaniu pomniejszenia",
+    "płatnik pomniejsza zaliczki o kwotę stanowiącą nie więcej niż 1/12 kwoty zmniejszającej podatek, " +
+    "jeżeli podatnik złoży temu płatnikowi oświadczenie o stosowaniu pomniejszenia",
 } as const;
 
 /**
@@ -116,16 +116,16 @@ export const PL_KUP_2024 = {
   miejscowy: {
     miesiecznie: "250",
     quote:
-      "wynoszą 250 zł miesięcznie, a za rok podatkowy łącznie nie więcej niż 3000 zł – w przypadku "
-      + "gdy podatnik uzyskuje przychody z tytułu jednego stosunku służbowego, stosunku pracy, "
-      + "spółdzielczego stosunku pracy oraz pracy nakładczej",
+      "wynoszą 250 zł miesięcznie, a za rok podatkowy łącznie nie więcej niż 3000 zł – w przypadku " +
+      "gdy podatnik uzyskuje przychody z tytułu jednego stosunku służbowego, stosunku pracy, " +
+      "spółdzielczego stosunku pracy oraz pracy nakładczej",
   },
   dojazd: {
     miesiecznie: "300",
     quote:
-      "wynoszą 300 zł miesięcznie, a za rok podatkowy łącznie nie więcej niż 3600 zł – w przypadku "
-      + "gdy miejsce stałego lub czasowego zamieszkania podatnika jest położone poza miejscowością, "
-      + "w której znajduje się zakład pracy, i podatnik nie uzyskuje dodatku za rozłąkę",
+      "wynoszą 300 zł miesięcznie, a za rok podatkowy łącznie nie więcej niż 3600 zł – w przypadku " +
+      "gdy miejsce stałego lub czasowego zamieszkania podatnika jest położone poza miejscowością, " +
+      "w której znajduje się zakład pracy, i podatnik nie uzyskuje dodatku za rozłąkę",
   },
 } as const;
 
@@ -146,7 +146,10 @@ export const PL_KUP_2024 = {
  * od 0,40 % do 8,12 %. Verified verbatim, identical to 2025/2026.
  */
 export const PL_SKLADKI_STOPY_2024 = {
-  emerytalneTotal: { rate: "0.1952", quote: "19,52 % podstawy wymiaru – na ubezpieczenie emerytalne" },
+  emerytalneTotal: {
+    rate: "0.1952",
+    quote: "19,52 % podstawy wymiaru – na ubezpieczenie emerytalne",
+  },
   rentoweTotal: { rate: "0.08", quote: "8,00 % podstawy wymiaru – na ubezpieczenia rentowe" },
   choroboweTotal: { rate: "0.0245", quote: "2,45 % podstawy wymiaru – na ubezpieczenie chorobowe" },
   wypadkoweRange: {
@@ -165,41 +168,41 @@ export const PL_SKLADKI_PODZIAL_2024 = {
   emerytalneEe: {
     rate: "0.0976",
     quote:
-      "Składki na ubezpieczenia emerytalne: 1) pracowników (…) – finansują z własnych środków, "
-      + "w równych częściach, ubezpieczeni i płatnicy składek",
+      "Składki na ubezpieczenia emerytalne: 1) pracowników (…) – finansują z własnych środków, " +
+      "w równych częściach, ubezpieczeni i płatnicy składek",
   },
   emerytalneEr: {
     rate: "0.0976",
     quote:
-      "Składki na ubezpieczenia emerytalne: 1) pracowników (…) – finansują z własnych środków, "
-      + "w równych częściach, ubezpieczeni i płatnicy składek",
+      "Składki na ubezpieczenia emerytalne: 1) pracowników (…) – finansują z własnych środków, " +
+      "w równych częściach, ubezpieczeni i płatnicy składek",
   },
   rentoweEe: {
     rate: "0.015",
     quote:
-      "Składki na ubezpieczenia rentowe osób, o których mowa w ust. 1 i 1a, finansują z własnych "
-      + "środków, w wysokości 1,5 % podstawy wymiaru ubezpieczeni i w wysokości 6,5 % podstawy "
-      + "wymiaru płatnicy składek",
+      "Składki na ubezpieczenia rentowe osób, o których mowa w ust. 1 i 1a, finansują z własnych " +
+      "środków, w wysokości 1,5 % podstawy wymiaru ubezpieczeni i w wysokości 6,5 % podstawy " +
+      "wymiaru płatnicy składek",
   },
   rentoweEr: {
     rate: "0.065",
     quote:
-      "Składki na ubezpieczenia rentowe osób, o których mowa w ust. 1 i 1a, finansują z własnych "
-      + "środków, w wysokości 1,5 % podstawy wymiaru ubezpieczeni i w wysokości 6,5 % podstawy "
-      + "wymiaru płatnicy składek",
+      "Składki na ubezpieczenia rentowe osób, o których mowa w ust. 1 i 1a, finansują z własnych " +
+      "środków, w wysokości 1,5 % podstawy wymiaru ubezpieczeni i w wysokości 6,5 % podstawy " +
+      "wymiaru płatnicy składek",
   },
   choroboweEe: {
     rate: "0.0245",
     quote:
-      "Składki na ubezpieczenie chorobowe podlegających temu ubezpieczeniu osób, wymienionych "
-      + "w ust. 1 pkt 1–4, 7a–9 i 11 oraz w ust. 1c, finansują w całości, z własnych środków, "
-      + "sami ubezpieczeni",
+      "Składki na ubezpieczenie chorobowe podlegających temu ubezpieczeniu osób, wymienionych " +
+      "w ust. 1 pkt 1–4, 7a–9 i 11 oraz w ust. 1c, finansują w całości, z własnych środków, " +
+      "sami ubezpieczeni",
   },
   wypadkoweEr: {
     rate: null,
     quote:
-      "Składki na ubezpieczenie wypadkowe osób wymienionych w ust. 1 pkt 1 i 3–10 (…) finansują "
-      + "w całości, z własnych środków, płatnicy składek",
+      "Składki na ubezpieczenie wypadkowe osób wymienionych w ust. 1 pkt 1 i 3–10 (…) finansują " +
+      "w całości, z własnych środków, płatnicy składek",
   },
 } as const;
 
@@ -215,9 +218,9 @@ export const PL_ROCZNY_LIMIT_2024 = {
   annual: "234720",
   prognozowane: "7824",
   quote:
-    "ogłasza się, że kwota ograniczenia rocznej podstawy wymiaru składek na ubezpieczenia emerytalne "
-    + "i rentowe w roku 2024 wynosi 234 720 zł, a przyjęta do jej ustalenia kwota prognozowanego "
-    + "przeciętnego wynagrodzenia wynosi 7824 zł",
+    "ogłasza się, że kwota ograniczenia rocznej podstawy wymiaru składek na ubezpieczenia emerytalne " +
+    "i rentowe w roku 2024 wynosi 234 720 zł, a przyjęta do jej ustalenia kwota prognozowanego " +
+    "przeciętnego wynagrodzenia wynosi 7824 zł",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -262,23 +265,23 @@ export const PL_FUNDUSZE_2024 = {
   fp: {
     rate: "0.01",
     quote:
-      "ustala się wysokość obowiązkowej składki na Fundusz Pracy, która wynosi 1,0 % podstawy "
-      + "wymiaru składek na ubezpieczenia emerytalne i rentowe, określonej w art. 104 ust. 1 "
-      + "wymienionej ustawy",
+      "ustala się wysokość obowiązkowej składki na Fundusz Pracy, która wynosi 1,0 % podstawy " +
+      "wymiaru składek na ubezpieczenia emerytalne i rentowe, określonej w art. 104 ust. 1 " +
+      "wymienionej ustawy",
   },
   fs: {
     rate: "0.0145",
     quote:
-      "ustala się wysokość obowiązkowej składki na Fundusz Solidarnościowy, która wynosi 1,45 % "
-      + "podstawy wymiaru składek na ubezpieczenia emerytalne i rentowe, określonej w art. 104 ust. 1 "
-      + "ustawy wymienionej w art. 26",
+      "ustala się wysokość obowiązkowej składki na Fundusz Solidarnościowy, która wynosi 1,45 % " +
+      "podstawy wymiaru składek na ubezpieczenia emerytalne i rentowe, określonej w art. 104 ust. 1 " +
+      "ustawy wymienionej w art. 26",
   },
   fgsp: {
     rate: "0.001",
     quote:
-      "ustala się wysokość obowiązkowej składki na Fundusz Gwarantowanych Świadczeń Pracowniczych, "
-      + "która wynosi 0,10 % podstawy wymiaru składek na ubezpieczenia emerytalne i rentowe, "
-      + "określonej w art. 29 ust. 1 wymienionej ustawy",
+      "ustala się wysokość obowiązkowej składki na Fundusz Gwarantowanych Świadczeń Pracowniczych, " +
+      "która wynosi 0,10 % podstawy wymiaru składek na ubezpieczenia emerytalne i rentowe, " +
+      "określonej w art. 29 ust. 1 wymienionej ustawy",
   },
 } as const;
 
@@ -323,8 +326,8 @@ export const PL_MIN_WAGE_2024 = {
   drugaPolowa: "4300",
   zmianaOd: "2024-07-01",
   quote:
-    "Od dnia 1 stycznia 2024 r. ustala się minimalne wynagrodzenie za pracę w wysokości 4242 zł; "
-    + "od dnia 1 lipca 2024 r. ustala się minimalne wynagrodzenie za pracę w wysokości 4300 zł",
+    "Od dnia 1 stycznia 2024 r. ustala się minimalne wynagrodzenie za pracę w wysokości 4242 zł; " +
+    "od dnia 1 lipca 2024 r. ustala się minimalne wynagrodzenie za pracę w wysokości 4300 zł",
 } as const;
 
 // ---------------------------------------------------------------------------

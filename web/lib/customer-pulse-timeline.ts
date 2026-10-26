@@ -1,13 +1,17 @@
-import 'server-only'
+import "server-only";
 
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
-import { normalizeMoney } from '@openbooks/engine/money'
-import { crmActivityScope, crmSharedScope } from './crm-scope'
-import { subsidiaryVisibleFilter } from './subsidiaries'
-import { enabledCustomerPulseSections } from './customer-pulse-access'
-import type { CustomerPulseSections } from './customer-pulse-sections'
-import { customerPulseTimelineParams, type CustomerPulseTimelineItem, type CustomerPulseTimelinePage } from './customer-pulse-timeline-params'
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/database";
+import { normalizeMoney } from "@openbooks/engine/money";
+import { crmActivityScope, crmSharedScope } from "./crm-scope";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
+import { enabledCustomerPulseSections } from "./customer-pulse-access";
+import type { CustomerPulseSections } from "./customer-pulse-sections";
+import {
+  customerPulseTimelineParams,
+  type CustomerPulseTimelineItem,
+  type CustomerPulseTimelinePage,
+} from "./customer-pulse-timeline-params";
 
 /** One permission-filtered timeline, counted and paged in the same snapshot.
  * Filtering precedes paging; independent source caps never truncate history. */
@@ -18,18 +22,22 @@ export async function loadCustomerPulseTimeline(
   sections: CustomerPulseSections | undefined,
   search: Record<string, string | string[] | undefined> = {},
 ): Promise<CustomerPulseTimelinePage | null> {
-  const effectiveSections = await enabledCustomerPulseSections(orgId, sections)
-  if (!effectiveSections) return null
-  const params = customerPulseTimelineParams(search)
-  const party = await db.execute<{ id: string }>(sql`
+  const effectiveSections = await enabledCustomerPulseSections(orgId, sections);
+  if (!effectiveSections) return null;
+  const params = customerPulseTimelineParams(search);
+  const party = await db.execute<{ id: string }>(
+    sql`
     select p.id from parties p where p.org_id = ${orgId} and p.id = ${partyId}
     ${crmSharedScope(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, 'objects')
-  if (!party.length) return null
-  if (!effectiveSections.ar && !effectiveSections.crm) return { ...params, rows: [], total: 0 }
+  `,
+    "objects",
+  );
+  if (!party.length) return null;
+  if (!effectiveSections.ar && !effectiveSections.crm) return { ...params, rows: [], total: 0 };
 
-  const sources: SQL[] = []
-  if (effectiveSections.crm) sources.push(sql`
+  const sources: SQL[] = [];
+  if (effectiveSections.crm)
+    sources.push(sql`
     select a.id, 'activity'::text as type, a.subject as title, a.body as description,
            null::text as amount, null::text as currency,
            coalesce(a.starts_at, a.due_at, a.created_at) as timestamp,
@@ -40,8 +48,9 @@ export async function loadCustomerPulseTimeline(
          where l.org_id = a.org_id and l.activity_id = a.id
            and l.subject_kind = 'account' and l.subject_id = ${partyId})
        ${crmActivityScope(allowedSubsidiaryIds)}
-  `)
-  if (effectiveSections.ar) sources.push(sql`
+  `);
+  if (effectiveSections.ar)
+    sources.push(sql`
     select d.id,
            case d.kind when 'quote' then 'estimate' when 'sales_order' then 'sales_order'
              when 'customer_payment' then 'payment' else 'invoice' end as type,
@@ -53,14 +62,19 @@ export async function loadCustomerPulseTimeline(
      where d.org_id = ${orgId} and d.party_id = ${partyId}
        and d.kind in ('quote', 'sales_order', 'customer_invoice', 'customer_payment')
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-  `)
-  const direction = params.dir === 'asc' ? sql`asc` : sql`desc`
-  const result = await db.execute<{ total: string; rows: CustomerPulseTimelineItem[] }>(sql`
+  `);
+  const direction = params.dir === "asc" ? sql`asc` : sql`desc`;
+  const result = await db.execute<{ total: string; rows: CustomerPulseTimelineItem[] }>(
+    sql`
     with timeline as not materialized (${sql.join(sources, sql` union all `)}),
     matching as not materialized (
       select * from timeline
-      ${params.q ? sql`where title ilike ${`%${params.q}%`} or coalesce(description, '') ilike ${`%${params.q}%`}
-        or coalesce(reference, '') ilike ${`%${params.q}%`} or coalesce(status, '') ilike ${`%${params.q}%`}` : sql``}
+      ${
+        params.q
+          ? sql`where title ilike ${`%${params.q}%`} or coalesce(description, '') ilike ${`%${params.q}%`}
+        or coalesce(reference, '') ilike ${`%${params.q}%`} or coalesce(status, '') ilike ${`%${params.q}%`}`
+          : sql``
+      }
     ), total as (select count(*)::text as count from matching),
     page_rows as (
       select * from matching order by timestamp ${direction}, created_at ${direction}, type asc, id asc
@@ -74,17 +88,27 @@ export async function loadCustomerPulseTimeline(
            ) order by p.timestamp ${direction}, p.created_at ${direction}, p.type asc, p.id asc)
              filter (where p.id is not null), '[]'::jsonb) as rows
       from total left join page_rows p on true group by total.count
-  `, 'objects')
-  const row = result[0]
-  if (!row) throw new Error('Customer interaction history could not be read.')
-  const total = Number(row.total)
-  if (!Number.isSafeInteger(total) || total < 0) throw new Error('Customer interaction history count is invalid.')
-  return { ...params, total, rows: row.rows.map((item) => ({
-    id: item.id, type: item.type, title: item.title, description: item.description,
-    timestamp: item.timestamp,
-    ...(item.amount != null ? { amount: normalizeMoney(item.amount) } : {}),
-    ...(item.currency != null ? { currency: item.currency } : {}),
-    ...(item.status != null ? { status: item.status } : {}),
-    ...(item.reference != null ? { reference: item.reference } : {}),
-  })) }
+  `,
+    "objects",
+  );
+  const row = result[0];
+  if (!row) throw new Error("Customer interaction history could not be read.");
+  const total = Number(row.total);
+  if (!Number.isSafeInteger(total) || total < 0)
+    throw new Error("Customer interaction history count is invalid.");
+  return {
+    ...params,
+    total,
+    rows: row.rows.map((item) => ({
+      id: item.id,
+      type: item.type,
+      title: item.title,
+      description: item.description,
+      timestamp: item.timestamp,
+      ...(item.amount != null ? { amount: normalizeMoney(item.amount) } : {}),
+      ...(item.currency != null ? { currency: item.currency } : {}),
+      ...(item.status != null ? { status: item.status } : {}),
+      ...(item.reference != null ? { reference: item.reference } : {}),
+    })),
+  };
 }

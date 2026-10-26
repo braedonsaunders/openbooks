@@ -3,15 +3,17 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { loadResourcingBoard } from "@/lib/resourcing/queries";
 
-const Query = z.object({
-  firstSunday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  lastSunday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  projectId: uuidString().optional(),
-  departmentId: uuidString().optional(),
-  jobTitle: z.string().trim().min(1).optional(),
-  qualificationTypeId: uuidString().optional(),
-  page: z.coerce.number().int().min(1).optional(),
-}).strict();
+const Query = z
+  .object({
+    firstSunday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    lastSunday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    projectId: uuidString().optional(),
+    departmentId: uuidString().optional(),
+    jobTitle: z.string().trim().min(1).optional(),
+    qualificationTypeId: uuidString().optional(),
+    page: z.coerce.number().int().min(1).optional(),
+  })
+  .strict();
 
 export const GET = defineRoute({
   permission: "resourcing.read",
@@ -21,6 +23,8 @@ export const GET = defineRoute({
     if (!parsed.success) {
       return Response.json({ error: "Invalid board filters" }, { status: 400 });
     }
-    return Response.json(await loadResourcingBoard(authz.user.orgId, authz.allowedSubsidiaryIds, parsed.data));
+    return Response.json(
+      await loadResourcingBoard(authz.user.orgId, authz.allowedSubsidiaryIds, parsed.data),
+    );
   },
 });

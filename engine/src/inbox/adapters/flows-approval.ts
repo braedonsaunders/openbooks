@@ -41,19 +41,15 @@ async function gateItem(
   gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"],
   ctx: InboxListContext,
 ): Promise<InboxItem | null> {
-  if (!ctx.approvalWorklistOwnsGates && INBOX_OWNED_GATE_SUBJECTS.has(gate.subjectKind)) return null;
-  const dueAt = gate.escalateAt
-    ? new Date(gate.escalateAt).toISOString()
-    : null;
-  const onBehalf = gate.onBehalfOf
-    ? ` on behalf of ${gate.onBehalfOf.name}`
-    : "";
+  if (!ctx.approvalWorklistOwnsGates && INBOX_OWNED_GATE_SUBJECTS.has(gate.subjectKind))
+    return null;
+  const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
+  const onBehalf = gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : "";
   // Resolve the separation-of-duties outcome in advance through the same
   // native gate check the decide path enforces: a submitter/maker the
   // gate's prevent-self-approval excludes sees "Awaiting another approver"
   // with NO decision actions, never an Approve that refuses on click.
-  const awaitingAnother = (await gateDecisionCapability(gate.id, ctx.actorId))
-    .sodBlocked;
+  const awaitingAnother = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
   return {
     id: inboxItemId("flows_approval", `gate:${gate.id}`),
     kind: "flows_approval",
@@ -112,9 +108,7 @@ export const flowsApprovalAdapter: InboxAdapter = {
         ...(scope?.allowedSubsidiaryIds !== undefined
           ? {
               allowedSubsidiaryIds:
-                scope.allowedSubsidiaryIds === null
-                  ? null
-                  : new Set(scope.allowedSubsidiaryIds),
+                scope.allowedSubsidiaryIds === null ? null : new Set(scope.allowedSubsidiaryIds),
             }
           : {}),
       },
@@ -129,21 +123,13 @@ export const flowsApprovalAdapter: InboxAdapter = {
     }
     return out;
   },
-  async lookup(
-    ctx: InboxListContext,
-    sourceId: string,
-  ): Promise<InboxItem | null> {
+  async lookup(ctx: InboxListContext, sourceId: string): Promise<InboxItem | null> {
     const separator = sourceId.indexOf(":");
     if (separator < 1) return null;
     const leg = sourceId.slice(0, separator);
     const id = sourceId.slice(separator + 1);
     if (!isUuid(id) || leg !== "gate") return null;
-    const item = await worklistApprovalById(
-      ctx.orgId,
-      ctx.actorId,
-      toWorklistScope(ctx),
-      id,
-    );
+    const item = await worklistApprovalById(ctx.orgId, ctx.actorId, toWorklistScope(ctx), id);
     if (!item) return null;
     if (item.kind === "flow_gate") return gateItem(item.gate, ctx);
     return null;
@@ -206,8 +192,6 @@ export const flowsApprovalAdapter: InboxAdapter = {
         return;
       }
     }
-    throw new Error(
-      `action ${JSON.stringify(actionKey)} is not available on this approval`,
-    );
+    throw new Error(`action ${JSON.stringify(actionKey)} is not available on this approval`);
   },
 };

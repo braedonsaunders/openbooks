@@ -48,41 +48,48 @@ async function countRows(
   clauses: { key: string; operator: "eq" | "ne"; value: string }[] = [],
 ): Promise<number> {
   const view = { ...defaultListView("customer_invoice"), filters: clauses };
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
-      where ${invoiceServicePartyWhere([...KINDS], view, adhoc, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from documents d
+      where ${invoiceServicePartyWhere([...KINDS], view, adhoc, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test("the AR service-party filter finds the payer invoices carrying the child's charges", { skip: !DB }, async () => {
-  const { org, child, stranger } = await fixture();
-  try {
-    assert.equal(await countRows(org.orgId, {}), 2, "unfiltered list sees both invoices");
-    assert.equal(
-      await countRows(org.orgId, { filters: { service_party_id: child } }),
-      1,
-      "the child's filter finds exactly the consolidated invoice",
-    );
-    assert.equal(
-      await countRows(org.orgId, { filters: { service_party_id: stranger } }),
-      0,
-      "an uninvolved customer matches nothing",
-    );
-    assert.equal(
-      await countRows(org.orgId, { filters: { service_party_id: "not-a-uuid" } }),
-      0,
-      "a malformed service party matches nothing instead of throwing",
-    );
-    assert.equal(
-      await countRows(org.orgId, {}, [{ key: "service_party_id", operator: "eq", value: child }]),
-      1,
-      "a saved view on the service party filters the same way",
-    );
-    assert.equal(
-      await countRows(org.orgId, {}, [{ key: "service_party_id", operator: "ne", value: child }]),
-      1,
-      "negating the service party keeps the invoice without the child's lines",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "the AR service-party filter finds the payer invoices carrying the child's charges",
+  { skip: !DB },
+  async () => {
+    const { org, child, stranger } = await fixture();
+    try {
+      assert.equal(await countRows(org.orgId, {}), 2, "unfiltered list sees both invoices");
+      assert.equal(
+        await countRows(org.orgId, { filters: { service_party_id: child } }),
+        1,
+        "the child's filter finds exactly the consolidated invoice",
+      );
+      assert.equal(
+        await countRows(org.orgId, { filters: { service_party_id: stranger } }),
+        0,
+        "an uninvolved customer matches nothing",
+      );
+      assert.equal(
+        await countRows(org.orgId, { filters: { service_party_id: "not-a-uuid" } }),
+        0,
+        "a malformed service party matches nothing instead of throwing",
+      );
+      assert.equal(
+        await countRows(org.orgId, {}, [{ key: "service_party_id", operator: "eq", value: child }]),
+        1,
+        "a saved view on the service party filters the same way",
+      );
+      assert.equal(
+        await countRows(org.orgId, {}, [{ key: "service_party_id", operator: "ne", value: child }]),
+        1,
+        "negating the service party keeps the invoice without the child's lines",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

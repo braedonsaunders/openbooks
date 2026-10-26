@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // SIM OPP-00002 (titled, Closed-lost, no account, no
 // subsidiary) was invisible under Status=All with every facet at 0 while its
@@ -15,134 +15,186 @@ import test from 'node:test'
 // placeholder-titled stub stays hidden. Fails on pre-fix code, which
 // required an account for every activation.
 
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __opportunityActivationState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __opportunityActivationState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}')
-    if (specifier === '@/lib/authz' || specifier === '../../../../../lib/authz') return virtual(`
+    if (specifier === "next/navigation") return virtual("export function redirect() {}");
+    if (specifier === "@/lib/authz" || specifier === "../../../../../lib/authz")
+      return virtual(`
       export async function guardPermission() {
         const s = globalThis.__opportunityActivationState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    if (specifier === '@/lib/feature-gates' || specifier === '../../../../../lib/feature-gates') return virtual(`
+    `);
+    if (specifier === "@/lib/feature-gates" || specifier === "../../../../../lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__opportunityActivationState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
-const { opportunityWhere, OPPORTUNITY_BASE_JOINS } = await import(
-  '../../../../../lib/customization/entity-list-query/opportunities.ts'
-)
-const { PATCH } = await import('./route.ts')
-const { defaultListView } = await import('@openbooks/customization')
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
+});
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
+const { opportunityWhere, OPPORTUNITY_BASE_JOINS } =
+  await import("../../../../../lib/customization/entity-list-query/opportunities.ts");
+const { PATCH } = await import("./route.ts");
+const { defaultListView } = await import("@openbooks/customization");
+const { installTrustedTestDatabaseBypass } =
+  await import("@openbooks/engine/testing/database-bypass");
 // The route chain pulls in web/lib/request-org, which claims the
 // process-global request-org resolver slot at import time and displaces the
 // trusted test bypass installed by the --import preload. Re-install last so
 // scratch seeding keeps its authority.
-installTrustedTestDatabaseBypass()
+installTrustedTestDatabaseBypass();
 
 async function fixture() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = (await seedFlowActors(org.orgId)).adminId
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = (await seedFlowActors(org.orgId)).adminId;
   await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-     where id = ${org.orgId}`)
-  const statuses = await db.execute<{ id: string; key: string }>(sql`
+     where id = ${org.orgId}`);
+  const statuses = await db.execute<{ id: string; key: string }>(
+    sql`
     insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
     values (${org.orgId}, 'open', 'Open', 10, false, false, true),
            (${org.orgId}, 'closed_lost', 'Closed lost', 0, true, false, true)
-    returning id, key`, 'objects')
-  const openId = statuses.find((s) => s.key === 'open')!.id
-  const closedLostId = statuses.find((s) => s.key === 'closed_lost')!.id
-  return { org, openId, closedLostId }
+    returning id, key`,
+    "objects",
+  );
+  const openId = statuses.find((s) => s.key === "open")!.id;
+  const closedLostId = statuses.find((s) => s.key === "closed_lost")!.id;
+  return { org, openId, closedLostId };
 }
 
-async function seedOpp(orgId: string, number: string, title: string, statusId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
+async function seedOpp(
+  orgId: string,
+  number: string,
+  title: string,
+  statusId: string,
+): Promise<string> {
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     insert into crm_opportunities (org_id, opportunity_number, title, status_id, currency, is_active)
     values (${orgId}, ${number}, ${title}, ${statusId}, 'CAD', false)
-    returning id`, 'objects'))[0]!.id
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
 }
 
 async function revision(id: string): Promise<string> {
-  const row = (await db.execute<{ revision: string }>(sql`
+  const row = (
+    await db.execute<{ revision: string }>(
+      sql`
     select (revision_seq)::text as revision
-      from crm_opportunities where id = ${id}`, 'objects'))[0]!
-  return row.revision
+      from crm_opportunities where id = ${id}`,
+      "objects",
+    )
+  )[0]!;
+  return row.revision;
 }
 
-async function patch(id: string, body: Record<string, unknown>): Promise<{ status: number; body: string }> {
-  const expectedUpdatedAt = await revision(id)
-  const response = await withOrgContext(state.orgId, () => PATCH(
-    new Request(`http://crm.test/api/crm/opportunities/${id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...body, expectedUpdatedAt }),
-    }),
-    { params: Promise.resolve({ id }) },
-  ))
-  return { status: response.status, body: await response.text() }
+async function patch(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ status: number; body: string }> {
+  const expectedUpdatedAt = await revision(id);
+  const response = await withOrgContext(state.orgId, () =>
+    PATCH(
+      new Request(`http://crm.test/api/crm/opportunities/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, expectedUpdatedAt }),
+      }),
+      { params: Promise.resolve({ id }) },
+    ),
+  );
+  return { status: response.status, body: await response.text() };
 }
 
 async function listedNumbers(orgId: string): Promise<string[]> {
   const where = opportunityWhere(
-    { ...defaultListView('opportunity'), filters: [] },
-    { showInactive: false, filters: {}, q: '' } as never,
+    { ...defaultListView("opportunity"), filters: [] },
+    { showInactive: false, filters: {}, q: "" } as never,
     orgId,
     null,
-  )
-  const rows = await withOrgContext(orgId, () => db.execute<{ opportunity_number: string }>(sql`
-    select o.opportunity_number from crm_opportunities o ${OPPORTUNITY_BASE_JOINS} where ${where}`, 'objects'))
-  return rows.map((r) => r.opportunity_number)
+  );
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<{ opportunity_number: string }>(
+      sql`
+    select o.opportunity_number from crm_opportunities o ${OPPORTUNITY_BASE_JOINS} where ${where}`,
+      "objects",
+    ),
+  );
+  return rows.map((r) => r.opportunity_number);
 }
 
-test('closing an account-less titled opportunity activates it into the Status=All list', async () => {
-  const { org, openId, closedLostId } = await fixture()
+test("closing an account-less titled opportunity activates it into the Status=All list", async () => {
+  const { org, openId, closedLostId } = await fixture();
   try {
     // The exact SIM OPP-00002 shape: real title, no account, no subsidiary,
     // carried inactive from its creation-stub save.
-    const oppId = await seedOpp(org.orgId, 'OPP-SIM-2', 'SIM Verify Opp', openId)
-    assert.deepEqual(await listedNumbers(org.orgId), [], 'stale inactive row hides like the SIM list')
+    const oppId = await seedOpp(org.orgId, "OPP-SIM-2", "SIM Verify Opp", openId);
+    assert.deepEqual(
+      await listedNumbers(org.orgId),
+      [],
+      "stale inactive row hides like the SIM list",
+    );
 
     // Drawer-shaped close: status + loss reason, no isActive flag.
-    const saved = await patch(oppId, { statusId: closedLostId, winLossReason: 'Lost on price' })
-    assert.equal(saved.status, 200, saved.body)
-    const active = (await db.execute<{ is_active: boolean }>(sql`
-      select is_active from crm_opportunities where id = ${oppId}`, 'objects'))[0]!.is_active
-    assert.equal(active, true, 'titled closed record activates without an account')
-    assert.deepEqual(await listedNumbers(org.orgId), ['OPP-SIM-2'], 'activated record lists under Status=All')
+    const saved = await patch(oppId, { statusId: closedLostId, winLossReason: "Lost on price" });
+    assert.equal(saved.status, 200, saved.body);
+    const active = (
+      await db.execute<{ is_active: boolean }>(
+        sql`
+      select is_active from crm_opportunities where id = ${oppId}`,
+        "objects",
+      )
+    )[0]!.is_active;
+    assert.equal(active, true, "titled closed record activates without an account");
+    assert.deepEqual(
+      await listedNumbers(org.orgId),
+      ["OPP-SIM-2"],
+      "activated record lists under Status=All",
+    );
   } finally {
-    state.orgId = ''
-    state.actorId = ''
-    await dropScratchOrg(org.orgId)
+    state.orgId = "";
+    state.actorId = "";
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('a placeholder-titled stub stays hidden after an open save', async () => {
-  const { org, openId } = await fixture()
+test("a placeholder-titled stub stays hidden after an open save", async () => {
+  const { org, openId } = await fixture();
   try {
-    const oppId = await seedOpp(org.orgId, 'OPP-SIM-1', 'New opportunity', openId)
-    const saved = await patch(oppId, { statusId: openId })
-    assert.equal(saved.status, 200, saved.body)
-    const active = (await db.execute<{ is_active: boolean }>(sql`
-      select is_active from crm_opportunities where id = ${oppId}`, 'objects'))[0]!.is_active
-    assert.equal(active, false, 'untitled stub must not leak into the list')
-    assert.deepEqual(await listedNumbers(org.orgId), [])
+    const oppId = await seedOpp(org.orgId, "OPP-SIM-1", "New opportunity", openId);
+    const saved = await patch(oppId, { statusId: openId });
+    assert.equal(saved.status, 200, saved.body);
+    const active = (
+      await db.execute<{ is_active: boolean }>(
+        sql`
+      select is_active from crm_opportunities where id = ${oppId}`,
+        "objects",
+      )
+    )[0]!.is_active;
+    assert.equal(active, false, "untitled stub must not leak into the list");
+    assert.deepEqual(await listedNumbers(org.orgId), []);
   } finally {
-    state.orgId = ''
-    state.actorId = ''
-    await dropScratchOrg(org.orgId)
+    state.orgId = "";
+    state.actorId = "";
+    await dropScratchOrg(org.orgId);
   }
-})
+});

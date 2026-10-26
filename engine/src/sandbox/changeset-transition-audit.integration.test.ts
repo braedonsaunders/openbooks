@@ -1,5 +1,5 @@
-import {installEngineSeams} from "../composition/install.ts";
-import {decideGate} from "../flows/gates.ts";
+import { installEngineSeams } from "../composition/install.ts";
+import { decideGate } from "../flows/gates.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -34,11 +34,20 @@ async function insertDraftChangeSet(orgId: string, createdBy: string): Promise<s
 }
 
 async function changeSetStatus(orgId: string, changeSetId: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`
-      select status from change_sets where id = ${changeSetId} and org_id = ${orgId}`, "objects"))[0]!.status;
+  return (
+    await db.execute<{ status: string }>(
+      sql`
+      select status from change_sets where id = ${changeSetId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.status;
 }
 
-async function setRolePermissions(orgId: string, roleKey: string, permissions: readonly string[]): Promise<void> {
+async function setRolePermissions(
+  orgId: string,
+  roleKey: string,
+  permissions: readonly string[],
+): Promise<void> {
   const updated = await db.execute<never>(sql`
     update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
      where org_id = ${orgId} and key = ${roleKey}`);
@@ -52,7 +61,11 @@ test("change-set review and approval require admin.sandboxes.manage", { skip: !D
   try {
     const actors = await seedFlowActors(org.orgId);
     const changeSetId = await insertDraftChangeSet(org.orgId, actors.submitterId);
-    await seedApprovalFlow(org.orgId,{subjectKind:"sandbox_change_set",assignees:[{type:"user",userId:actors.approver2Id}],mode:"all"});
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "sandbox_change_set",
+      assignees: [{ type: "user", userId: actors.approver2Id }],
+      mode: "all",
+    });
 
     // An active production user is not enough: seedFlowActors mints the
     // approver role with permissions []. Unrelated grants, and a deny of the
@@ -84,68 +97,88 @@ test("change-set review and approval require admin.sandboxes.manage", { skip: !D
 
     await setRolePermissions(org.orgId, "approver", []);
     await assert.rejects(
-      () => decideChangeSet(org.orgId,changeSetId,actors.approver2Id),
+      () => decideChangeSet(org.orgId, changeSetId, actors.approver2Id),
       /not an approver|permission|authoriz|admin\.sandboxes\.manage/i,
     );
     assert.equal(await changeSetStatus(org.orgId, changeSetId), "reviewed");
 
     await setRolePermissions(org.orgId, "approver", ["admin.sandboxes.manage"]);
-    await decideChangeSet(org.orgId,changeSetId,actors.approver2Id);
+    await decideChangeSet(org.orgId, changeSetId, actors.approver2Id);
     assert.equal(await changeSetStatus(org.orgId, changeSetId), "approved");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("change-set review and approval evidence their transitions in audit_log", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    await setRolePermissions(org.orgId, "approver", ["admin.sandboxes.manage"]);
-    const changeSetId = await insertDraftChangeSet(org.orgId, actors.submitterId);
-    await seedApprovalFlow(org.orgId,{subjectKind:"sandbox_change_set",assignees:[{type:"user",userId:actors.approver2Id}],mode:"all"});
+test(
+  "change-set review and approval evidence their transitions in audit_log",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await setRolePermissions(org.orgId, "approver", ["admin.sandboxes.manage"]);
+      const changeSetId = await insertDraftChangeSet(org.orgId, actors.submitterId);
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "sandbox_change_set",
+        assignees: [{ type: "user", userId: actors.approver2Id }],
+        mode: "all",
+      });
 
-    await reviewChangeSet(changeSetId, actors.approver1Id);
-    await decideChangeSet(org.orgId,changeSetId,actors.approver2Id);
+      await reviewChangeSet(changeSetId, actors.approver1Id);
+      await decideChangeSet(org.orgId, changeSetId, actors.approver2Id);
 
-    assert.equal(await changeSetStatus(org.orgId, changeSetId), "approved");
+      assert.equal(await changeSetStatus(org.orgId, changeSetId), "approved");
 
-    const rows = await db.execute<{
+      const rows = await db.execute<{
         action: string;
         actor_id: string | null;
         changes: Record<string, unknown>;
-      }>(sql`
+      }>(
+        sql`
         select action, actor_id, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'change_sets' and row_id = ${changeSetId}
          order by at, id
-      `, "objects");
-    assert.equal(rows.length, 2);
-    assert.deepEqual(
-      rows.map((row) => row.action),
-      ["update", "update"],
-    );
-    assert.deepEqual(
-      rows.map((row) => row.actor_id),
-      [actors.approver1Id, actors.approver2Id],
-    );
-    const [reviewed, approved] = rows.map((row) => row.changes as {
-      operation: string;
-      before: { status: string };
-      after: { status: string };
-    });
-    assert.equal(reviewed!.operation, "review");
-    assert.equal(reviewed!.before.status, "draft");
-    assert.equal(reviewed!.after.status, "reviewed");
-    assert.equal(approved!.operation, "approve");
-    assert.equal(approved!.before.status, "reviewed");
-    assert.equal(approved!.after.status, "approved");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+        "objects",
+      );
+      assert.equal(rows.length, 2);
+      assert.deepEqual(
+        rows.map((row) => row.action),
+        ["update", "update"],
+      );
+      assert.deepEqual(
+        rows.map((row) => row.actor_id),
+        [actors.approver1Id, actors.approver2Id],
+      );
+      const [reviewed, approved] = rows.map(
+        (row) =>
+          row.changes as {
+            operation: string;
+            before: { status: string };
+            after: { status: string };
+          },
+      );
+      assert.equal(reviewed!.operation, "review");
+      assert.equal(reviewed!.before.status, "draft");
+      assert.equal(reviewed!.after.status, "reviewed");
+      assert.equal(approved!.operation, "approve");
+      assert.equal(approved!.before.status, "reviewed");
+      assert.equal(approved!.after.status, "approved");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-async function decideChangeSet(orgId:string,subjectId:string,userId:string): Promise<void> {
-  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId}
-    and subject_kind='sandbox_change_set' and subject_id=${subjectId} and status='pending'`, "objects"))[0];
-  assert.ok(gate);await decideGate({gateId:gate.id,userId,decision:"approved"});
+async function decideChangeSet(orgId: string, subjectId: string, userId: string): Promise<void> {
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${orgId}
+    and subject_kind='sandbox_change_set' and subject_id=${subjectId} and status='pending'`,
+      "objects",
+    )
+  )[0];
+  assert.ok(gate);
+  await decideGate({ gateId: gate.id, userId, decision: "approved" });
 }

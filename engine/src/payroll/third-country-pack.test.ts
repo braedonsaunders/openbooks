@@ -69,7 +69,8 @@ function fixturePack(): PayrollCountryPack {
       label: "nation",
       known: ["ENG", "SCT", "WLS", "NIR"],
       supported: ["ENG"],
-      unsupportedReason: "income tax withholding for {region} is not implemented by the GB fixture pack",
+      unsupportedReason:
+        "income tax withholding for {region} is not implemented by the GB fixture pack",
       regionNames: { ENG: "England", SCT: "Scotland", WLS: "Wales", NIR: "Northern Ireland" },
     },
     jurisdictions: [],
@@ -96,7 +97,9 @@ function fixturePack(): PayrollCountryPack {
 }
 
 /** Insert the fixture, run the body, and always remove it again. */
-async function withFixture(body: (pack: PayrollCountryPack) => void | Promise<void>): Promise<void> {
+async function withFixture(
+  body: (pack: PayrollCountryPack) => void | Promise<void>,
+): Promise<void> {
   const pack = fixturePack();
   PAYROLL_COUNTRY_PACKS["GB"] = pack;
   try {
@@ -153,10 +156,11 @@ test("the run context resolves for the third country, on its own tax year", asyn
 test("a currency the pack's engine does not compute in refuses, naming both", async () => {
   await withFixture(() => {
     assert.throws(
-      () => resolvePayrollRunContext({
-        payDate: "2026-04-06",
-        subsidiary: { id: "sub-gb", name: "GB Ltd", country: "GB", baseCurrency: "USD" },
-      }),
+      () =>
+        resolvePayrollRunContext({
+          payDate: "2026-04-06",
+          subsidiary: { id: "sub-gb", name: "GB Ltd", country: "GB", baseCurrency: "USD" },
+        }),
       /GBP.*USD|USD.*GBP/,
     );
   });
@@ -188,10 +192,11 @@ test("the employee half of the chain agrees per country, or refuses both sides",
     };
     assert.equal(resolveEmployeePayrollContext({ run, employee }).country, "GB");
     assert.throws(
-      () => resolveEmployeePayrollContext({
-        run,
-        employee: { ...employee, partyId: "emp-ca", name: "Ca Employee", country: "CA" },
-      }),
+      () =>
+        resolveEmployeePayrollContext({
+          run,
+          employee: { ...employee, partyId: "emp-ca", name: "Ca Employee", country: "CA" },
+        }),
       /CA.*GB|GB.*CA/,
     );
   });

@@ -5,7 +5,6 @@ import { listAutomationRuns } from "@openbooks/engine/automations/services";
 import { isUuid } from "../../../../../lib/list-params";
 import { automationErrorResponse } from "../../_lib";
 
-
 export const runtime = "nodejs";
 
 /** Runs tab: the automation's run log, filterable by status. */
@@ -18,10 +17,7 @@ export const GET = defineRoute({
 
     const { id } = await ctx.params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "automation id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "automation id must be a uuid" }, { status: 400 });
     const url = new URL(req.url);
     const status = url.searchParams.get("status");
     try {

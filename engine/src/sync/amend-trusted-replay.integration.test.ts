@@ -68,7 +68,11 @@ function pgMessage(error: unknown): string {
   return out;
 }
 
-function deleteLines(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, o: ScratchOrg, id: string) {
+function deleteLines(
+  tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
+  o: ScratchOrg,
+  id: string,
+) {
   return tx.execute(sql`
     delete from document_lines where document_id = ${id} and org_id = ${o.orgId}`);
 }
@@ -86,9 +90,12 @@ test(
       await deleteLines(tx, o, id);
     });
 
-    const left = await db.execute<{ n: number }>(sql`
+    const left = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from document_lines
-       where document_id = ${id} and org_id = ${o.orgId}`, "objects");
+       where document_id = ${id} and org_id = ${o.orgId}`,
+      "objects",
+    );
     assert.equal(left[0]!.n, 0, "the paired authority must admit the rebuild");
   },
 );

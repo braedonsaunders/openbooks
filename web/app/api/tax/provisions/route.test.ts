@@ -25,8 +25,7 @@ interface RouteState {
   calls: ProvisionCreateCall[];
 }
 const routeState: RouteState = { calls: [] };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 const SUBSIDIARY_ID = "00000000-0000-4000-8000-00000000b001";
 
 const root = pathToFileURL(process.cwd() + "/").href;
@@ -65,10 +64,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
-  [
-    "@openbooks/engine/tax-returns/income-tax-provision",
-    "mock:income-tax-provision",
-  ],
+  ["@openbooks/engine/tax-returns/income-tax-provision", "mock:income-tax-provision"],
 ]);
 
 const hooks = registerHooks({
@@ -85,8 +81,7 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -142,17 +137,14 @@ test("POST keeps a valid categorized difference and skips empty grid rows", asyn
 
   assert.equal(response.status, 201);
   assert.equal(routeState.calls.length, 1);
-  assert.deepEqual(
-    routeState.calls[0]!.input.additionalDifferences,
-    [
-      {
-        category: "revenue_recognition",
-        description: "Lease incentive",
-        difference: "100.0000",
-        source: "manual",
-      },
-    ],
-  );
+  assert.deepEqual(routeState.calls[0]!.input.additionalDifferences, [
+    {
+      category: "revenue_recognition",
+      description: "Lease incentive",
+      difference: "100.0000",
+      source: "manual",
+    },
+  ]);
 });
 
 test("POST refuses a populated row without a description instead of dropping it", async () => {
@@ -242,7 +234,10 @@ test("a described row with an empty amount refuses by row instead of an unnamed 
   });
   assert.equal(entity.status, 400);
   assert.deepEqual(await entity.json(), {
-    error: 'entities["' + SUBSIDIARY_ID + '"].permanentDifferences[0]: amount is required when a description is provided',
+    error:
+      'entities["' +
+      SUBSIDIARY_ID +
+      '"].permanentDifferences[0]: amount is required when a description is provided',
   });
   assert.equal(routeState.calls.length, 0);
 });
@@ -250,7 +245,10 @@ test("a described row with an empty amount refuses by row instead of an unnamed 
 test("POST rejects non-array top-level difference lists instead of ignoring them", async () => {
   for (const body of [
     { fiscalYear: 2026, permanentDifferences: "bogus" },
-    { fiscalYear: 2026, additionalDifferences: { description: "Lease", category: "other", difference: "1" } },
+    {
+      fiscalYear: 2026,
+      additionalDifferences: { description: "Lease", category: "other", difference: "1" },
+    },
   ]) {
     routeState.calls.length = 0;
     const response = await post(body);
@@ -301,7 +299,8 @@ test("POST still refuses a deliberately chosen category with no description", as
   });
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: "additionalDifferences[0]: description is required when an amount or category is provided",
+    error:
+      "additionalDifferences[0]: description is required when an amount or category is provided",
   });
   assert.equal(routeState.calls.length, 0);
 });
@@ -402,9 +401,7 @@ test("POST refuses malformed per-entity inputs without reaching the run", async 
     },
     {
       [SUBSIDIARY_ID]: {
-        additionalDifferences: [
-          { description: "Lease", category: "typo", difference: "10.00" },
-        ],
+        additionalDifferences: [{ description: "Lease", category: "typo", difference: "10.00" }],
       },
     },
     { [SUBSIDIARY_ID]: { lossCarryforwardUsed: "bogus" } },
@@ -415,7 +412,9 @@ test("POST refuses malformed per-entity inputs without reaching the run", async 
     assert.equal(response.status, 400, JSON.stringify(entities));
     const body = (await response.json()) as { error: string; issues: { path: string }[] };
     assert.ok(body.error.length > 0);
-    assert.ok(body.issues.some((issue) => issue.path === 'entities' || issue.path.startsWith('entities.')));
+    assert.ok(
+      body.issues.some((issue) => issue.path === "entities" || issue.path.startsWith("entities.")),
+    );
     assert.equal(routeState.calls.length, 0);
   }
 });
@@ -439,7 +438,8 @@ test("POST refuses non-object grid rows by indexed path instead of skipping them
       const response = await post(body);
       assert.equal(response.status, 400, `${name}: ${JSON.stringify(body)}`);
       const payload = (await response.json()) as { error: string; issues: { path: string }[] };
-      const collection = 'permanentDifferences' in body ? 'permanentDifferences' : 'additionalDifferences';
+      const collection =
+        "permanentDifferences" in body ? "permanentDifferences" : "additionalDifferences";
       assert.ok(payload.error.length > 0);
       assert.ok(payload.issues.some((issue) => issue.path === `${collection}.0`));
       assert.equal(routeState.calls.length, 0, `${name} must never reach the provision run`);
@@ -453,8 +453,14 @@ test("POST refuses non-object grid rows by indexed path instead of skipping them
       assert.equal(response.status, 400, `per-entity ${name}: ${key}`);
       const payload = (await response.json()) as { error: string; issues: { path: string }[] };
       assert.ok(payload.error.length > 0);
-      assert.ok(payload.issues.some((issue) => issue.path === `entities.${SUBSIDIARY_ID}.${key}.0`));
-      assert.equal(routeState.calls.length, 0, `per-entity ${name} must never reach the provision run`);
+      assert.ok(
+        payload.issues.some((issue) => issue.path === `entities.${SUBSIDIARY_ID}.${key}.0`),
+      );
+      assert.equal(
+        routeState.calls.length,
+        0,
+        `per-entity ${name} must never reach the provision run`,
+      );
     }
   }
 
@@ -466,7 +472,7 @@ test("POST refuses non-object grid rows by indexed path instead of skipping them
   });
   assert.equal(indexed.status, 400);
   const indexedBody = (await indexed.json()) as { error: string; issues: { path: string }[] };
-  assert.equal(indexedBody.issues[0]?.path, 'permanentDifferences.1');
+  assert.equal(indexedBody.issues[0]?.path, "permanentDifferences.1");
   assert.equal(routeState.calls.length, 0);
 
   routeState.calls.length = 0;
@@ -476,7 +482,7 @@ test("POST refuses non-object grid rows by indexed path instead of skipping them
   });
   assert.equal(temporary.status, 400);
   const temporaryBody = (await temporary.json()) as { error: string; issues: { path: string }[] };
-  assert.equal(temporaryBody.issues[0]?.path, 'additionalDifferences.0');
+  assert.equal(temporaryBody.issues[0]?.path, "additionalDifferences.0");
   assert.equal(routeState.calls.length, 0);
 });
 
@@ -487,7 +493,7 @@ test("POST refuses a malformed presentation currency without reaching the run", 
     assert.equal(response.status, 400, JSON.stringify(presentationCurrency));
     const body = (await response.json()) as { error: string; issues: { path: string }[] };
     assert.equal(body.error, "invalid presentation currency");
-    assert.equal(body.issues[0]?.path, 'presentationCurrency');
+    assert.equal(body.issues[0]?.path, "presentationCurrency");
     assert.equal(routeState.calls.length, 0);
   }
 });

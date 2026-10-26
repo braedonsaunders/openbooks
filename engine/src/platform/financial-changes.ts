@@ -52,8 +52,7 @@ export const ACCOUNT_MERGE_OPERATION = "account_merge";
 
 export const ADJUDICATED_HOLIDAY_HOURS_OPERATION = "adjudicated_holiday_hours";
 
-export const HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION =
-  "historical_translation_contribution";
+export const HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION = "historical_translation_contribution";
 
 /** Each accounting event uses its native feature at submission as well as application. */
 export function financialChangeFeature(domain: FinancialChangeDomain, operation: string) {
@@ -76,14 +75,11 @@ export class FinancialChangeConflictError extends Error {
 }
 
 /** Manufacturing events use the shared immutable proposal and approval ledger. */
-export const MANUFACTURING_LOSS_DISPOSITION_OPERATION =
-  "work_order_loss_disposition";
+export const MANUFACTURING_LOSS_DISPOSITION_OPERATION = "work_order_loss_disposition";
 export const MANUFACTURING_STANDARD_ROLLUP_OPERATION = "standard_cost_rollup";
 export const MANUFACTURING_BOM_APPROVAL_OPERATION = "bom_revision_activation";
-export const MANUFACTURING_ROUTING_APPROVAL_OPERATION =
-  "routing_revision_activation";
-export const MANUFACTURING_SCRAP_RESTATEMENT_OPERATION =
-  "scrap_snapshot_restatement";
+export const MANUFACTURING_ROUTING_APPROVAL_OPERATION = "routing_revision_activation";
+export const MANUFACTURING_SCRAP_RESTATEMENT_OPERATION = "scrap_snapshot_restatement";
 
 /** Typed binding for a manufacturing scrap-snapshot restatement proposal.
  *
@@ -138,12 +134,17 @@ export async function loadFinancialChange(
   id: string,
   options: { lock?: boolean } = {},
 ): Promise<FinancialChange> {
-  const row = (await tx.execute<FinancialChange>(sql`
+  const row = (
+    await tx.execute<FinancialChange>(
+      sql`
     select *, effective_on::text as effective_on,
       public.financial_change_self_decision_authorized(org_id,id,submitted_by) as self_approval_authorized
     from financial_changes
      where id=${id} and org_id=${orgId} ${options.lock === false ? sql`` : sql`for update`}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) throw new Error("financial change not found");
   return row;
 }
@@ -166,10 +167,15 @@ export async function existingFinancialChange(
   tx: SqlExecutor,
   args: Omit<FinancialChangeProposal, "beforeState">,
 ): Promise<string | null> {
-  const existing = (await tx.execute<FinancialChange>(sql`
+  const existing = (
+    await tx.execute<FinancialChange>(
+      sql`
     select *, effective_on::text as effective_on from financial_changes
      where org_id=${args.orgId} and idempotency_key=${args.idempotencyKey}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!existing) return null;
   if (
     existing.domain !== args.domain ||
@@ -203,15 +209,17 @@ export async function proposeFinancialChange(
   const existing = await existingFinancialChange(tx, args);
   if (existing) return existing;
   const id = randomUUID();
-  const inserted = await tx.execute(sql`
+  const inserted = await tx.execute(
+    sql`
     insert into financial_changes(id,org_id,subsidiary_id,domain,subject_id,operation,effective_on,reason,
       idempotency_key,payload,before_state,submitted_by,created_by,updated_by)
     values (${id},${args.orgId},${args.subsidiaryId},${args.domain},${args.subjectId},${args.operation},
       ${args.effectiveOn},${args.reason.trim()},${args.idempotencyKey},${JSON.stringify(args.payload)}::jsonb,
       ${JSON.stringify(args.beforeState)}::jsonb,${args.actorId},${args.actorId},${args.actorId}) returning id
-  `, "objects");
-  if (inserted.length !== 1)
-    throw new Error("financial change proposal could not be recorded");
+  `,
+    "objects",
+  );
+  if (inserted.length !== 1) throw new Error("financial change proposal could not be recorded");
   return id;
 }
 export function assertFinancialChangeApproved(
@@ -223,14 +231,11 @@ export function assertFinancialChangeApproved(
   },
 ): void {
   if (change.domain !== args.domain || change.subject_id !== args.subjectId)
-    throw new FinancialChangeConflictError(
-      "approval belongs to another financial record",
-    );
+    throw new FinancialChangeConflictError("approval belongs to another financial record");
   if (
     change.status !== "approved" ||
     !change.approved_by ||
-    (change.approved_by === change.submitted_by &&
-      change.self_approval_authorized !== true)
+    (change.approved_by === change.submitted_by && change.self_approval_authorized !== true)
   ) {
     throw new FinancialChangeConflictError(
       "Submit this change through Flows and obtain a decision permitted by its approval policy before applying it.",
@@ -251,108 +256,155 @@ export async function loadFinancialChangeSubjectLabel(
 ): Promise<string | null> {
   if (domain === "payroll") {
     return (
-      (await tx.execute<{ label: string }>(
-          sql`select display_name as label from parties where org_id=${orgId} and id=${subjectId}`, "objects",
-        ))[0]?.label ?? null
+      (
+        await tx.execute<{ label: string }>(
+          sql`select display_name as label from parties where org_id=${orgId} and id=${subjectId}`,
+          "objects",
+        )
+      )[0]?.label ?? null
     );
   }
   if (domain === "ledger") {
     return (
-      (await tx.execute<{ label: string }>(
-          sql`select concat_ws(' · ', number, name) as label from accounts where org_id=${orgId} and id=${subjectId}`, "objects",
-        ))[0]?.label ?? null
+      (
+        await tx.execute<{ label: string }>(
+          sql`select concat_ws(' · ', number, name) as label from accounts where org_id=${orgId} and id=${subjectId}`,
+          "objects",
+        )
+      )[0]?.label ?? null
     );
   }
   if (domain === "sales") {
     return (
-      (await tx.execute<{ label: string }>(
-          sql`select document.document_number || ' — line ' || line.line_number as label from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${orgId} and line.id=${subjectId}`, "objects",
-        ))[0]?.label ?? null
+      (
+        await tx.execute<{ label: string }>(
+          sql`select document.document_number || ' — line ' || line.line_number as label from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${orgId} and line.id=${subjectId}`,
+          "objects",
+        )
+      )[0]?.label ?? null
     );
   }
   if (domain === "lease") {
-    const row = (await tx.execute<{ label: string }>(sql`
+    const row = (
+      await tx.execute<{ label: string }>(
+        sql`
         select nullif(concat_ws(' — ', lease_number, nullif(btrim(description), '')), '') as label
           from lease_agreements
          where org_id=${orgId} and id=${subjectId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     return row?.label ?? null;
   }
   if (domain === "asset") {
-    const row = (await tx.execute<{ label: string }>(sql`
+    const row = (
+      await tx.execute<{ label: string }>(
+        sql`
         select asset_number || ' — ' || name as label
           from fixed_assets
          where org_id=${orgId} and id=${subjectId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     return row?.label ?? null;
   }
   if (domain === "revenue") {
-    const row = (await tx.execute<{ label: string }>(sql`
+    const row = (
+      await tx.execute<{ label: string }>(
+        sql`
         select nullif(concat_ws(' — ', contract_number, nullif(btrim(memo), '')), '') as label
           from revenue_contracts
          where org_id=${orgId} and id=${subjectId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     return row?.label ?? null;
   }
   if (domain === "provision") {
     return (
-      (await tx.execute<{ label: string }>(sql`
+      (
+        await tx.execute<{ label: string }>(
+          sql`
       select name as label from provision_obligations where org_id=${orgId} and id=${subjectId}
-    `, "objects"))[0]?.label ?? null
+    `,
+          "objects",
+        )
+      )[0]?.label ?? null
     );
   }
   if (domain === "manufacturing") {
     if (
-      [
-        MANUFACTURING_STANDARD_ROLLUP_OPERATION,
-        MANUFACTURING_BOM_APPROVAL_OPERATION,
-      ].includes(operation ?? "")
+      [MANUFACTURING_STANDARD_ROLLUP_OPERATION, MANUFACTURING_BOM_APPROVAL_OPERATION].includes(
+        operation ?? "",
+      )
     )
       return (
-        (await tx.execute<{ label: string }>(
-            sql`select concat_ws(' — ',code,name) as label from items where org_id=${orgId} and id=${subjectId}`, "objects",
-          ))[0]?.label ?? null
+        (
+          await tx.execute<{ label: string }>(
+            sql`select concat_ws(' — ',code,name) as label from items where org_id=${orgId} and id=${subjectId}`,
+            "objects",
+          )
+        )[0]?.label ?? null
       );
     if (operation === MANUFACTURING_ROUTING_APPROVAL_OPERATION)
       return (
-        (await tx.execute<{ label: string }>(
-            sql`select concat_ws(' — ',code,name) as label from mfg_routings where org_id=${orgId} and id=${subjectId}`, "objects",
-          ))[0]?.label ?? null
+        (
+          await tx.execute<{ label: string }>(
+            sql`select concat_ws(' — ',code,name) as label from mfg_routings where org_id=${orgId} and id=${subjectId}`,
+            "objects",
+          )
+        )[0]?.label ?? null
       );
     if (operation === MANUFACTURING_LOSS_DISPOSITION_OPERATION)
       return (
-        (await tx.execute<{ label: string }>(
-            sql`select number as label from mfg_work_orders where org_id=${orgId} and id=${subjectId}`, "objects",
-          ))[0]?.label ?? null
+        (
+          await tx.execute<{ label: string }>(
+            sql`select number as label from mfg_work_orders where org_id=${orgId} and id=${subjectId}`,
+            "objects",
+          )
+        )[0]?.label ?? null
       );
     if (operation === MANUFACTURING_SCRAP_RESTATEMENT_OPERATION)
       return (
-        (await tx.execute<{ label: string }>(
-            sql`select work.number || ' — scrap' as label from mfg_scrap_events event join mfg_work_orders work on work.org_id=event.org_id and work.id=event.work_order_id where event.org_id=${orgId} and event.id=${subjectId}`, "objects",
-          ))[0]?.label ?? null
+        (
+          await tx.execute<{ label: string }>(
+            sql`select work.number || ' — scrap' as label from mfg_scrap_events event join mfg_work_orders work on work.org_id=event.org_id and work.id=event.work_order_id where event.org_id=${orgId} and event.id=${subjectId}`,
+            "objects",
+          )
+        )[0]?.label ?? null
       );
     return null;
   }
-  if (
-    domain === "consolidation" &&
-    operation === HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION
-  ) {
+  if (domain === "consolidation" && operation === HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION) {
     return (
-      (await tx.execute<{ label: string }>(sql`
+      (
+        await tx.execute<{ label: string }>(
+          sql`
       select entry.entry_number || ' — line ' || line.line_number as label
         from journal_lines line
         join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
        where line.org_id=${orgId} and line.id=${subjectId}
-    `, "objects"))[0]?.label ?? null
+    `,
+          "objects",
+        )
+      )[0]?.label ?? null
     );
   }
-  const row = (await tx.execute<{ label: string }>(sql`
+  const row = (
+    await tx.execute<{ label: string }>(
+      sql`
       select child.name as label
         from subsidiary_ownership_interests soi
         join subsidiaries child
           on child.id = soi.subsidiary_id and child.org_id = soi.org_id
        where soi.org_id=${orgId} and soi.id=${subjectId}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   return row?.label ?? null;
 }
 
@@ -363,13 +415,15 @@ export async function completeFinancialChange(
   actorId: string,
   result: Record<string, unknown>,
 ): Promise<void> {
-  const updated = await tx.execute(sql`
+  const updated = await tx.execute(
+    sql`
     update financial_changes set status='applied',result=${JSON.stringify(result)}::jsonb,
       applied_by=${actorId},applied_at=now(),updated_by=${actorId},updated_at=now()
      where org_id=${orgId} and id=${changeId} and status='approved' returning id
-  `, "objects");
-  if (updated.length !== 1)
-    throw new Error("approved financial change could not be completed");
+  `,
+    "objects",
+  );
+  if (updated.length !== 1) throw new Error("approved financial change could not be completed");
 }
 
 /** Module writers submit through the installed Flow engine without reversing
@@ -382,9 +436,7 @@ type FinancialChangeSubmission = (
 const financialChangeComposition = globalThis as typeof globalThis & {
   __openbooksFinancialChangeSubmission?: FinancialChangeSubmission;
 };
-export function registerFinancialChangeSubmission(
-  handler: FinancialChangeSubmission,
-): void {
+export function registerFinancialChangeSubmission(handler: FinancialChangeSubmission): void {
   financialChangeComposition.__openbooksFinancialChangeSubmission = handler;
 }
 export async function submitNativeFinancialChange(

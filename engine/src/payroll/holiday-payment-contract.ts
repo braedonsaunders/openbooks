@@ -1,4 +1,8 @@
-import { canonicalNonNegativeDecimal, fixedDecimal, isPositiveDecimal } from "../money/exact-decimal.ts";
+import {
+  canonicalNonNegativeDecimal,
+  fixedDecimal,
+  isPositiveDecimal,
+} from "../money/exact-decimal.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { isPayRateBasis } from "../projects/pay-rate-basis.ts";
@@ -23,8 +27,15 @@ export interface AdjudicatedHolidayPayment {
 }
 
 const FIELDS = new Set([
-  "employeePartyId", "holidayDates", "hours", "assessedOn", "wageBasisDate",
-  "paymentDate", "instructionKey", "sourceReference", "sourceDigest",
+  "employeePartyId",
+  "holidayDates",
+  "hours",
+  "assessedOn",
+  "wageBasisDate",
+  "paymentDate",
+  "instructionKey",
+  "sourceReference",
+  "sourceDigest",
 ]);
 
 function requiredText(value: unknown, field: string, maximum: number): string {
@@ -48,7 +59,10 @@ export function readAdjudicatedHolidayPayment(value: unknown): AdjudicatedHolida
   }
   const input = value as Record<string, unknown>;
   for (const key of Object.keys(input)) {
-    if (!FIELDS.has(key)) throw new PayrollError(`Holiday-payment field ${key} is not supported; supply paid hours and source evidence, not a calculated cash amount.`);
+    if (!FIELDS.has(key))
+      throw new PayrollError(
+        `Holiday-payment field ${key} is not supported; supply paid hours and source evidence, not a calculated cash amount.`,
+      );
   }
   if (typeof input.employeePartyId !== "string" || !isUuid(input.employeePartyId)) {
     throw new PayrollError("Select the employee named in the holiday-payment evidence.");
@@ -57,21 +71,27 @@ export function readAdjudicatedHolidayPayment(value: unknown): AdjudicatedHolida
   const assessedOn = requiredDate(input.assessedOn, "assessedOn");
   const wageBasisDate = requiredDate(input.wageBasisDate, "wageBasisDate");
   if (assessedOn > paymentDate || wageBasisDate > paymentDate) {
-    throw new PayrollError("The entitlement assessment and wage basis must not be later than the instructed payment date.");
+    throw new PayrollError(
+      "The entitlement assessment and wage basis must not be later than the instructed payment date.",
+    );
   }
   if (!Array.isArray(input.holidayDates) || input.holidayDates.length < 1) {
     throw new PayrollError("Identify every holiday covered by the unpaid entitlement.");
   }
-  const holidayDates = input.holidayDates.map(date => requiredDate(date, "holidayDates"));
+  const holidayDates = input.holidayDates.map((date) => requiredDate(date, "holidayDates"));
   if (new Set(holidayDates).size !== holidayDates.length) {
     throw new PayrollError("A holiday occurrence can appear only once in a payment instruction.");
   }
-  if (holidayDates.some(date => date > assessedOn || date >= paymentDate)) {
-    throw new PayrollError("Deferred holiday pay must identify holidays already assessed before their instructed payment date.");
+  if (holidayDates.some((date) => date > assessedOn || date >= paymentDate)) {
+    throw new PayrollError(
+      "Deferred holiday pay must identify holidays already assessed before their instructed payment date.",
+    );
   }
   const hours = canonicalNonNegativeDecimal(input.hours, 2);
   if (hours === null || !isPositiveDecimal(hours) || hours.split(".")[0]!.length > 10) {
-    throw new PayrollError("Unpaid holiday hours must be a positive exact decimal with at most 2 decimal places and 10 whole digits.");
+    throw new PayrollError(
+      "Unpaid holiday hours must be a positive exact decimal with at most 2 decimal places and 10 whole digits.",
+    );
   }
   const sourceDigest = requiredText(input.sourceDigest, "sourceDigest", 64);
   if (!/^[a-f0-9]{64}$/i.test(sourceDigest)) {
@@ -81,7 +101,9 @@ export function readAdjudicatedHolidayPayment(value: unknown): AdjudicatedHolida
     employeePartyId: input.employeePartyId.toLowerCase(),
     holidayDates: [...holidayDates].sort(),
     hours: fixedDecimal(hours, 2),
-    assessedOn, wageBasisDate, paymentDate,
+    assessedOn,
+    wageBasisDate,
+    paymentDate,
     instructionKey: requiredText(input.instructionKey, "instructionKey", 200),
     sourceReference: requiredText(input.sourceReference, "sourceReference", 2000),
     sourceDigest: sourceDigest.toLowerCase(),
@@ -98,19 +120,36 @@ export function priceAdjudicatedHolidayPayment(
   const rate = canonicalNonNegativeDecimal(effectiveRate.rate, 4);
   const annualHours = canonicalNonNegativeDecimal(effectiveRate.annualHours, 4);
   const basis = effectiveRate.basis;
-  if (!isPayRateBasis(basis)) throw new PayrollError("Resolve a wage quoted in a supported native pay cadence before pricing the holiday entitlement.");
-  if (rate === null || !isPositiveDecimal(rate) || basis !== "hour" && (annualHours === null || !isPositiveDecimal(annualHours))) {
-    throw new PayrollError("Resolve a positive dated wage and annual-hours basis before pricing the holiday entitlement.");
+  if (!isPayRateBasis(basis))
+    throw new PayrollError(
+      "Resolve a wage quoted in a supported native pay cadence before pricing the holiday entitlement.",
+    );
+  if (
+    rate === null ||
+    !isPositiveDecimal(rate) ||
+    (basis !== "hour" && (annualHours === null || !isPositiveDecimal(annualHours)))
+  ) {
+    throw new PayrollError(
+      "Resolve a positive dated wage and annual-hours basis before pricing the holiday entitlement.",
+    );
   }
-  const priced = priceDatedWageEntries(payrollHourlyWage({ rate, basis, annualHours: effectiveRate.annualHours }), "1", [
-    { workedOn: reviewed.wageBasisDate, hours: reviewed.hours },
-  ], effectiveRate);
-  if (priced.days.length !== 1) throw new PayrollError("The holiday payment did not resolve to one dated wage calculation.");
+  const priced = priceDatedWageEntries(
+    payrollHourlyWage({ rate, basis, annualHours: effectiveRate.annualHours }),
+    "1",
+    [{ workedOn: reviewed.wageBasisDate, hours: reviewed.hours }],
+    effectiveRate,
+  );
+  if (priced.days.length !== 1)
+    throw new PayrollError("The holiday payment did not resolve to one dated wage calculation.");
   if (!isPositiveDecimal(priced.rate) || priced.rate.split(".")[0]!.length > 15) {
-    throw new PayrollError("The dated holiday wage does not resolve to a positive rate within the payroll rate column; review its wage and declared rate precision.");
+    throw new PayrollError(
+      "The dated holiday wage does not resolve to a positive rate within the payroll rate column; review its wage and declared rate precision.",
+    );
   }
   if (priced.days[0]!.amount.split(".")[0]!.length > 15) {
-    throw new PayrollError("The holiday entitlement exceeds the payroll amount column; review its source hours and dated wage.");
+    throw new PayrollError(
+      "The holiday entitlement exceeds the payroll amount column; review its source hours and dated wage.",
+    );
   }
   return { hours: reviewed.hours, rate: priced.rate, amount: priced.days[0]!.amount };
 }

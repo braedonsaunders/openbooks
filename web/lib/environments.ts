@@ -44,21 +44,26 @@ export async function shellEnvironments(authz: Authz): Promise<WorkspaceEnvironm
   const accessible = await accessibleProductionOrgs(home);
   // Every reachable production organization's sandboxes are admitted in one
   // set-based read, so the shell's cost does not grow with the tenant count.
-  const sandboxes = await enterableSandboxes(home, accessible.filter((o) => o.envKind === "production").map((o) => o.orgId));
+  const sandboxes = await enterableSandboxes(
+    home,
+    accessible.filter((o) => o.envKind === "production").map((o) => o.orgId),
+  );
   const tenants: TenantGroup[] = accessible.map((o) => ({
     productionOrgId: o.orgId,
     productionOrgName: o.name,
     envKind: o.envKind,
-    sandboxes: o.envKind === "production"
-      ? sandboxes.filter((sandbox) => sandbox.productionOrgId === o.orgId)
-        .map(({ orgId, name, status, tier }) => ({ orgId, name, status, tier }))
-      : [],
+    sandboxes:
+      o.envKind === "production"
+        ? sandboxes
+            .filter((sandbox) => sandbox.productionOrgId === o.orgId)
+            .map(({ orgId, name, status, tier }) => ({ orgId, name, status, tier }))
+        : [],
   }));
   const currentName =
     authz.user.envKind === "production" || authz.user.envKind === "preview"
-      ? tenants.find((t) => t.productionOrgId === authz.user.productionOrgId)?.productionOrgName ??
-        "Production"
-      : authz.user.sandboxName ?? "Sandbox";
+      ? (tenants.find((t) => t.productionOrgId === authz.user.productionOrgId)?.productionOrgName ??
+        "Production")
+      : (authz.user.sandboxName ?? "Sandbox");
   return {
     currentOrgId: authz.user.orgId,
     envKind: authz.user.envKind,

@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { stubModules } from '../../../../testing/stub-modules'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { stubModules } from "../../../../testing/stub-modules";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
 /**
  * Assistant commit shape-checks draft line amounts (4dp) but never fences
@@ -12,18 +12,18 @@ import { sql } from 'drizzle-orm'
  * 500) instead of failing closed with a named 422 and nothing written.
  * documents subtotal/total and document_lines amount are numeric(19,4).
  */
-const STATE_KEY = Symbol.for('openbooks.assistant-commit-bounds-test')
+const STATE_KEY = Symbol.for("openbooks.assistant-commit-bounds-test");
 
 interface CommitState {
   authz: {
-    user: Record<string, unknown>
-    permissions: Set<string>
-    allowedSubsidiaryIds: Set<string> | null
-  } | null
+    user: Record<string, unknown>;
+    permissions: Set<string>;
+    allowedSubsidiaryIds: Set<string> | null;
+  } | null;
 }
 
-const commitState: CommitState = { authz: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[STATE_KEY] = commitState
+const commitState: CommitState = { authz: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[STATE_KEY] = commitState;
 
 // One session for every spelling of the gate: the route imports it by
 // relative path while the route factory resolves the same module by @/
@@ -41,7 +41,7 @@ const commitAuthzSource = `
     if (subsidiaryId == null || subsidiaryId === '') return opts.orgWideNull === true
     return scope.has(subsidiaryId)
   }
-`
+`;
 stubModules({
   navigation: false,
   intl: false,
@@ -57,171 +57,194 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
-const { POST } = await import('./route.ts')
+const { POST } = await import("./route.ts");
 
 type Fixture = {
-  org: Awaited<ReturnType<typeof createScratchOrg>>
-  actorId: string
-  bankLabel: string
-  revenueLabel: string
-}
+  org: Awaited<ReturnType<typeof createScratchOrg>>;
+  actorId: string;
+  bankLabel: string;
+  revenueLabel: string;
+};
 
 // Preview lines carry the server-side "number · name" account label, so
 // resolve the scratch accounts' real labels rather than inventing text.
 async function makeFixture(): Promise<Fixture> {
   const org = await withBypass(async () => {
-    const created = await createScratchOrg()
-    const { seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
-    return { created, actors: await seedFlowActors(created.orgId) }
-  })
+    const created = await createScratchOrg();
+    const { seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+    return { created, actors: await seedFlowActors(created.orgId) };
+  });
   const label = async (id: string) =>
-    (await withBypass(() =>
-      db.execute<{ number: string; name: string }>(sql`select number, name from accounts where id = ${id} and org_id = ${org.created.orgId}`, 'objects'),
-    ))[0]!
-  const bank = await label(org.created.accounts.bank)
-  const revenue = await label(org.created.accounts.revenue)
+    (
+      await withBypass(() =>
+        db.execute<{ number: string; name: string }>(
+          sql`select number, name from accounts where id = ${id} and org_id = ${org.created.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!;
+  const bank = await label(org.created.accounts.bank);
+  const revenue = await label(org.created.accounts.revenue);
   return {
     org: org.created,
     actorId: org.actors.adminId,
     bankLabel: `${bank.number} · ${bank.name}`,
     revenueLabel: `${revenue.number} · ${revenue.name}`,
-  }
+  };
 }
 
-function authzFor(fx: Fixture): CommitState['authz'] {
+function authzFor(fx: Fixture): CommitState["authz"] {
   return {
     user: {
       id: fx.actorId,
-      email: 'commit-bounds@scratch.test',
-      name: 'Commit Bounds Caller',
+      email: "commit-bounds@scratch.test",
+      name: "Commit Bounds Caller",
       roles: [],
       orgId: fx.org.orgId,
-      envKind: 'production',
+      envKind: "production",
       productionOrgId: fx.org.orgId,
       isSuperAdmin: false,
       homeUserId: fx.actorId,
       homeOrgId: fx.org.orgId,
     },
-    permissions: new Set(['assistant.write', 'gl.post']),
+    permissions: new Set(["assistant.write", "gl.post"]),
     allowedSubsidiaryIds: null,
-  }
+  };
 }
 
 function commitBody(fx: Fixture, amount: string) {
   return {
-    kind: 'create_journal_entry',
+    kind: "create_journal_entry",
     preview: {
       documentDate: fx.org.date,
-      memo: 'commit bounds probe',
+      memo: "commit bounds probe",
       lines: [
         { accountId: fx.org.accounts.bank, accountLabel: fx.bankLabel, description: null, amount },
-        { accountId: fx.org.accounts.revenue, accountLabel: fx.revenueLabel, description: null, amount: `-${amount}` },
+        {
+          accountId: fx.org.accounts.revenue,
+          accountLabel: fx.revenueLabel,
+          description: null,
+          amount: `-${amount}`,
+        },
       ],
     },
     confirmToken: `bounds-probe-${randomUUID()}`,
-  }
+  };
 }
 
 function post(body: unknown): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/assistant/commit', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/assistant/commit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }) as never,
-  ) as unknown as Promise<Response>
+  ) as unknown as Promise<Response>;
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  return (await withOrgContext(orgId, () =>
-      db.execute<{ n: number }>(sql`
+  return (
+    await withOrgContext(orgId, () =>
+      db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from documents
-         where org_id = ${orgId} and kind = 'journal'`, 'objects'),
-    ))[0]!.n
+         where org_id = ${orgId} and kind = 'journal'`,
+        "objects",
+      ),
+    )
+  )[0]!.n;
 }
 
-test(
-  'commit refuses balanced lines wider than numeric(19,4) without writing',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx)
-      const response = await post(commitBody(fx, '99999999999999999999.99'));
-      const json = (await response.json().catch(() => null)) as { error?: string } | null;
-      assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-      assert.doesNotMatch(json?.error ?? '', /numeric field overflow|Failed query/i);
-      assert.equal(await journalCount(fx.org.orgId), 0)
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+test("commit refuses balanced lines wider than numeric(19,4) without writing", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx);
+    const response = await post(commitBody(fx, "99999999999999999999.99"));
+    const json = (await response.json().catch(() => null)) as { error?: string } | null;
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
+    assert.equal(await journalCount(fx.org.orgId), 0);
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
-test(
-  'commit still drafts ordinary balanced lines',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx)
-      const response = await post(commitBody(fx, '10.00'))
-      assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)))
-      assert.equal(await journalCount(fx.org.orgId), 1)
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+test("commit still drafts ordinary balanced lines", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx);
+    const response = await post(commitBody(fx, "10.00"));
+    assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
+    assert.equal(await journalCount(fx.org.orgId), 1);
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
-test(
-  'a failed line insert leaves no journal and the confirmation can be retried',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx)
-      const body = commitBody(fx, '10.00')
-      body.preview.lines[1]!.accountId = randomUUID()
-      const failed = await post(body)
-      const failedJson = (await failed.json().catch(() => null)) as { error?: string } | null
-      assert.equal(failed.status, 404, JSON.stringify(failedJson))
-      assert.deepEqual(failedJson, { error: 'not_found' })
-      assert.equal(await journalCount(fx.org.orgId), 0)
+test("a failed line insert leaves no journal and the confirmation can be retried", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx);
+    const body = commitBody(fx, "10.00");
+    body.preview.lines[1]!.accountId = randomUUID();
+    const failed = await post(body);
+    const failedJson = (await failed.json().catch(() => null)) as { error?: string } | null;
+    assert.equal(failed.status, 404, JSON.stringify(failedJson));
+    assert.deepEqual(failedJson, { error: "not_found" });
+    assert.equal(await journalCount(fx.org.orgId), 0);
 
-      body.preview.lines[1]!.accountId = fx.org.accounts.revenue
-      const retry = await post(body)
-      assert.equal(retry.status, 200, JSON.stringify(await retry.json().catch(() => null)))
-      assert.equal(await journalCount(fx.org.orgId), 1)
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+    body.preview.lines[1]!.accountId = fx.org.accounts.revenue;
+    const retry = await post(body);
+    assert.equal(retry.status, 200, JSON.stringify(await retry.json().catch(() => null)));
+    assert.equal(await journalCount(fx.org.orgId), 1);
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
-test(
-  'a retried confirmation replays the same draft instead of double-posting',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx)
-      const body = commitBody(fx, '10.00')
-      const first = await post(body)
-      assert.equal(first.status, 200, JSON.stringify(await first.clone().json().catch(() => null)))
-      const second = await post(body)
-      assert.equal(second.status, 200, JSON.stringify(await second.clone().json().catch(() => null)))
-      assert.deepEqual(await second.json(), await first.json())
-      assert.equal(await journalCount(fx.org.orgId), 1)
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+test("a retried confirmation replays the same draft instead of double-posting", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx);
+    const body = commitBody(fx, "10.00");
+    const first = await post(body);
+    assert.equal(
+      first.status,
+      200,
+      JSON.stringify(
+        await first
+          .clone()
+          .json()
+          .catch(() => null),
+      ),
+    );
+    const second = await post(body);
+    assert.equal(
+      second.status,
+      200,
+      JSON.stringify(
+        await second
+          .clone()
+          .json()
+          .catch(() => null),
+      ),
+    );
+    assert.deepEqual(await second.json(), await first.json());
+    assert.equal(await journalCount(fx.org.orgId), 1);
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});

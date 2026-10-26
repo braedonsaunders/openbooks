@@ -38,39 +38,51 @@ export const runtime = "nodejs";
  * rates.
  */
 async function handleV1POST(request: Request): Promise<NextResponse> {
-  return withV1Request(request, "api/v1/close/revaluation-rate-evidence", async (_auth, context) => {
-    const body = recordBody.parse(await readV1JsonObject(request));
-    const outcome = await recordApplicationClosingFxRateEvidence(context, {
-      ...body,
-      idempotencyKey: requireV1IdempotencyKey(request),
-    });
-    return { status: outcome.replayed ? 200 : 201, body: outcome.result, replayed: outcome.replayed };
-  });
+  return withV1Request(
+    request,
+    "api/v1/close/revaluation-rate-evidence",
+    async (_auth, context) => {
+      const body = recordBody.parse(await readV1JsonObject(request));
+      const outcome = await recordApplicationClosingFxRateEvidence(context, {
+        ...body,
+        idempotencyKey: requireV1IdempotencyKey(request),
+      });
+      return {
+        status: outcome.replayed ? 200 : 201,
+        body: outcome.result,
+        replayed: outcome.replayed,
+      };
+    },
+  );
 }
 
 async function handleV1GET(request: Request): Promise<NextResponse> {
-  return withV1Request(request, "api/v1/close/revaluation-rate-evidence", async (_auth, context) => {
-    const search = new URL(request.url).searchParams;
-    const periodId = search.get("periodId") ?? "";
-    const bookId = search.get("bookId") ?? "";
-    if (!uuidString().safeParse(periodId).success || !uuidString().safeParse(bookId).success) {
-      return {
-        status: 400,
-        body: { error: "Choose the close period and book to load FX exposures for." },
-        replayed: false,
-      };
-    }
-    const subsidiaryIds = (search.get("subsidiaryIds") ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    const exposures = await listApplicationRevaluationExposures(context, {
-      periodId,
-      bookId,
-      subsidiaryIds: subsidiaryIds.length > 0 ? subsidiaryIds : undefined,
-    });
-    return { status: 200, body: { exposures }, replayed: false };
-  });
+  return withV1Request(
+    request,
+    "api/v1/close/revaluation-rate-evidence",
+    async (_auth, context) => {
+      const search = new URL(request.url).searchParams;
+      const periodId = search.get("periodId") ?? "";
+      const bookId = search.get("bookId") ?? "";
+      if (!uuidString().safeParse(periodId).success || !uuidString().safeParse(bookId).success) {
+        return {
+          status: 400,
+          body: { error: "Choose the close period and book to load FX exposures for." },
+          replayed: false,
+        };
+      }
+      const subsidiaryIds = (search.get("subsidiaryIds") ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const exposures = await listApplicationRevaluationExposures(context, {
+        periodId,
+        bookId,
+        subsidiaryIds: subsidiaryIds.length > 0 ? subsidiaryIds : undefined,
+      });
+      return { status: 200, body: { exposures }, replayed: false };
+    },
+  );
 }
 
 export const POST = defineRoute({

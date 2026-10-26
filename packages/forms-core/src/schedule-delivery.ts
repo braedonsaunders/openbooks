@@ -8,7 +8,10 @@ export const schedulePdfLayoutSchema = z.strictObject({
   daysPerSection: z.union([z.literal(7), z.literal(14)]),
   detail: z.enum(["assignments", "hours", "full"]),
   style: z.enum(["modern", "classic"]).optional(),
-  accentColor: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-f]{6}$/i)
+    .optional(),
   showLegend: z.boolean().optional(),
   shadeWeekends: z.boolean().optional(),
   colorTreatment: z.enum(["subtle", "strong"]).optional(),
@@ -16,13 +19,23 @@ export const schedulePdfLayoutSchema = z.strictObject({
 });
 export type SchedulePdfLayout = z.infer<typeof schedulePdfLayoutSchema>;
 export const defaultSchedulePdfLayout: SchedulePdfLayout = {
-  paperSize: 'tabloid', orientation: 'landscape', marginMm: 8, density: 'compact',
-  daysPerSection: 14, detail: 'assignments', style: 'modern', accentColor: '#0f766e',
-  showLegend: true, shadeWeekends: true, colorTreatment: 'subtle', colorIntensity: 8,
+  paperSize: "tabloid",
+  orientation: "landscape",
+  marginMm: 8,
+  density: "compact",
+  daysPerSection: 14,
+  detail: "assignments",
+  style: "modern",
+  accentColor: "#0f766e",
+  showLegend: true,
+  shadeWeekends: true,
+  colorTreatment: "subtle",
+  colorIntensity: 8,
 };
 /** Board policy JSON is validated before a configured layout becomes an editable or printable value. */
 export function configuredSchedulePdfLayout(policy: unknown): SchedulePdfLayout {
-  const layout = policy && typeof policy === 'object' && 'pdfLayout' in policy ? policy.pdfLayout : null;
+  const layout =
+    policy && typeof policy === "object" && "pdfLayout" in policy ? policy.pdfLayout : null;
   return layout == null ? defaultSchedulePdfLayout : schedulePdfLayoutSchema.parse(layout);
 }
 /** Stored native board policy; enabling and timing remain owned by Flows. */
@@ -49,19 +62,13 @@ export const automaticScheduleDeliverySchema = z
     subjectIds: z
       .array(uuidString())
       .max(500)
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        "Choose distinct native subjects.",
-      )
+      .refine((ids) => new Set(ids).size === ids.length, "Choose distinct native subjects.")
       .default([]),
     cohort: z.enum(["scope", "scheduled", "supervisors", "self"]).optional(),
     additionalRoleKeys: z
       .array(z.string().min(1).max(80))
       .max(20)
-      .refine(
-        (keys) => new Set(keys).size === keys.length,
-        "Choose distinct native roles.",
-      )
+      .refine((keys) => new Set(keys).size === keys.length, "Choose distinct native roles.")
       .default([]),
     additionalPartyIds: z
       .array(uuidString())
@@ -78,27 +85,18 @@ export const automaticScheduleDeliverySchema = z
   .refine(
     (p) =>
       p.recipientMode !== "selected" ||
-      p.subjectIds.length +
-        p.additionalPartyIds.length +
-        p.additionalRoleKeys.length >
-        0,
+      p.subjectIds.length + p.additionalPartyIds.length + p.additionalRoleKeys.length > 0,
     "Choose at least one explicit native recipient rule.",
   )
   .refine(
     (p) =>
       p.recipientMode !== "automatic" ||
-      p.additionalPartyIds.length +
-        p.additionalRoleKeys.length +
-        p.subjectIds.length ===
-        0,
+      p.additionalPartyIds.length + p.additionalRoleKeys.length + p.subjectIds.length === 0,
     "Use combined delivery when adding explicit recipients to an automatic audience.",
   )
   .refine(
     (p) =>
-      p.additionalPartyIds.length + p.additionalRoleKeys.length === 0 ||
-      p.visibility === "board",
+      p.additionalPartyIds.length + p.additionalRoleKeys.length === 0 || p.visibility === "board",
     "Additional contacts require explicitly shared whole-board reports.",
   );
-export type AutomaticScheduleDeliveryPolicy = z.infer<
-  typeof automaticScheduleDeliverySchema
->;
+export type AutomaticScheduleDeliveryPolicy = z.infer<typeof automaticScheduleDeliverySchema>;

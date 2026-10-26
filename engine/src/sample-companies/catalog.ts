@@ -40,7 +40,14 @@ export const SAMPLE_COMPANY_PROFILES = [
     industryKey: "it_software_saas",
     profileId: "saas",
     companyName: "Northstar Cloud",
-    focus: ["subscriptions", "deferred revenue", "revenue recognition", "dunning", "usage billing", "SaaS metrics"],
+    focus: [
+      "subscriptions",
+      "deferred revenue",
+      "revenue recognition",
+      "dunning",
+      "usage billing",
+      "SaaS metrics",
+    ],
   },
   {
     industryKey: "accounting_firm",
@@ -82,12 +89,15 @@ export const SAMPLE_COMPANY_PROFILES = [
     industryKey: "field_service",
     profileId: "field-service",
     companyName: "Ridgeway Heating & Cooling",
-    focus: ["service requests and dispatch", "technician utilization", "maintenance agreements", "parts and job margin"],
+    focus: [
+      "service requests and dispatch",
+      "technician utilization",
+      "maintenance agreements",
+      "parts and job margin",
+    ],
   },
 ] as const satisfies readonly SampleCompanyProfile[];
 
 export const SAMPLE_COMPANY_BY_INDUSTRY = new Map<string, (typeof SAMPLE_COMPANY_PROFILES)[number]>(
   SAMPLE_COMPANY_PROFILES.map((profile) => [profile.industryKey, profile]),
 );
-
-

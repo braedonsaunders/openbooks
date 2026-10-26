@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { QualificationDrawer } from './QualificationDrawer'
+import { useRouter } from "next/navigation";
+import { QualificationDrawer } from "./QualificationDrawer";
 
 /**
  * Qualification record and detail entry point, opened from the page
@@ -19,24 +19,24 @@ export function QualificationDialog({
   closeHref,
   canManage,
 }: {
-  qualificationId: string | null
-  recordOpen: boolean
-  closeHref: string
+  qualificationId: string | null;
+  recordOpen: boolean;
+  closeHref: string;
   /** Loader-resolved manage grant: Verify, Renew and Revoke render
    * only with it. */
-  canManage: boolean
+  canManage: boolean;
 }) {
-  const router = useRouter()
+  const router = useRouter();
   return (
     <QualificationDrawer
-      key={qualificationId ?? 'record'}
+      key={qualificationId ?? "record"}
       qualificationId={qualificationId}
       recordOpen={recordOpen}
       canManage={canManage}
       onClose={() => {
-        router.push(closeHref as never)
-        router.refresh()
+        router.push(closeHref as never);
+        router.refresh();
       }}
     />
-  )
+  );
 }

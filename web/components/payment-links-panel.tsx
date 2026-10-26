@@ -26,7 +26,13 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive" | "
 };
 
 /** Online payment links on a posted customer invoice — create, copy, void. */
-export function PaymentLinksPanel({ documentId, canManage }: { documentId: string; canManage: boolean }) {
+export function PaymentLinksPanel({
+  documentId,
+  canManage,
+}: {
+  documentId: string;
+  canManage: boolean;
+}) {
   const t = useTranslations("ar.paymentLinks");
   const tCommon = useTranslations("common");
   const [links, setLinks] = useState<Link[]>([]);
@@ -124,7 +130,11 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
         {canManage ? (
           <div className="flex items-center gap-2">
             {providers.length > 1 ? (
-              <Select value={provider} onChange={(e) => setProvider(e.target.value)} className="h-8 text-xs">
+              <Select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+                className="h-8 text-xs"
+              >
                 {providers.map((p) => (
                   <option key={p} value={p}>
                     {p === "gocardless" ? "GoCardless" : p === "adyen" ? "Adyen" : "Stripe"}
@@ -132,7 +142,12 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
                 ))}
               </Select>
             ) : null}
-            <Button size="sm" variant="outline" disabled={busy || !provider} onClick={() => void create()}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !provider}
+              onClick={() => void create()}
+            >
               {t("create")}
             </Button>
           </div>
@@ -149,9 +164,15 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
         <ul className="space-y-1.5">
           {links.map((link) => (
             <li key={link.id} className="flex items-center gap-2 text-sm">
-              <Badge variant={STATUS_VARIANT[link.status] ?? "secondary"}>{t(`status.${link.status}`)}</Badge>
+              <Badge variant={STATUS_VARIANT[link.status] ?? "secondary"}>
+                {t(`status.${link.status}`)}
+              </Badge>
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {link.provider === "gocardless" ? "GoCardless" : link.provider === "adyen" ? "Adyen" : "Stripe"}
+                {link.provider === "gocardless"
+                  ? "GoCardless"
+                  : link.provider === "adyen"
+                    ? "Adyen"
+                    : "Stripe"}
               </span>
               {link.status === "active" ? (
                 <>

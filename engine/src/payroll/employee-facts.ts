@@ -38,10 +38,7 @@
  */
 import { getTableColumns } from "drizzle-orm";
 import { employeePayrollProfiles } from "@openbooks/schema";
-import {
-  packCertificates,
-  profileColumnField,
-} from "./certificates.ts";
+import { packCertificates, profileColumnField } from "./certificates.ts";
 import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
 import type { PayrollCountryPack } from "./packs.ts";
 
@@ -139,14 +136,16 @@ export function employeeRecordDateFact(
   return {
     key,
     kind: "code",
-    label: key === "hired_on" ? "Hire date (employee record)" : "Termination date (employee record)",
+    label:
+      key === "hired_on" ? "Hire date (employee record)" : "Termination date (employee record)",
     refusalReason,
     required: false,
     producer: {
       kind: "none",
-      notes: "Carried on the payroll roster from the employee record's "
-        + (key === "hired_on" ? "Hire date" : "termination date")
-        + "; edited on the employee, not on a payroll form.",
+      notes:
+        "Carried on the payroll roster from the employee record's " +
+        (key === "hired_on" ? "Hire date" : "termination date") +
+        "; edited on the employee, not on a payroll form.",
     },
   };
 }
@@ -196,15 +195,15 @@ export function empFact(
 ): string | null | undefined {
   if (!FACTS.has(country)) {
     throw new PayrollJurisdictionError(
-      `no employeeFacts registered for ${country || "(unset)"} — the pack's compute path `
-      + "must import its own <country>/employee-facts.ts so its reads resolve through the declaration",
+      `no employeeFacts registered for ${country || "(unset)"} — the pack's compute path ` +
+        "must import its own <country>/employee-facts.ts so its reads resolve through the declaration",
     );
   }
   const declared = (FACTS.get(country) ?? []).some((fact) => fact.key === key);
   if (!declared) {
     throw new PayrollPackError(
-      `the ${country} payroll pack reads employee fact "${key}" without declaring it — `
-      + `declare it in the pack's employeeFacts (key, kind, bounds, producer, refusal reason) first`,
+      `the ${country} payroll pack reads employee fact "${key}" without declaring it — ` +
+        `declare it in the pack's employeeFacts (key, kind, bounds, producer, refusal reason) first`,
     );
   }
   return emp[key];
@@ -221,22 +220,22 @@ export function resolveEmployeeFact(
 ): string | null {
   if (!FACTS.has(country)) {
     throw new PayrollJurisdictionError(
-      `no employeeFacts registered for ${country || "(unset)"} — the pack's compute path `
-      + "must import its own <country>/employee-facts.ts so its reads resolve through the declaration",
+      `no employeeFacts registered for ${country || "(unset)"} — the pack's compute path ` +
+        "must import its own <country>/employee-facts.ts so its reads resolve through the declaration",
     );
   }
   const fact = (FACTS.get(country) ?? []).find((candidate) => candidate.key === key);
   if (!fact) {
     throw new PayrollPackError(
-      `the ${country} payroll pack reads employee fact "${key}" without declaring it — `
-      + `declare it in employeeFacts (kind, bounds, producer, refusal reason) first`,
+      `the ${country} payroll pack reads employee fact "${key}" without declaring it — ` +
+        `declare it in employeeFacts (kind, bounds, producer, refusal reason) first`,
     );
   }
   if (raw == null || raw.trim() === "") {
     if (!fact.required) return null;
     throw new PayrollPackError(
-      `${country} payroll cannot calculate without ${fact.label} (${fact.key}): `
-      + `${fact.refusalReason} Supply this fact through the pack's declared producer.`,
+      `${country} payroll cannot calculate without ${fact.label} (${fact.key}): ` +
+        `${fact.refusalReason} Supply this fact through the pack's declared producer.`,
     );
   }
   const value = raw.trim();
@@ -249,7 +248,10 @@ export function resolveEmployeeFact(
     const n = Number(value);
     if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(n)) {
       invalid = "must be a whole number";
-    } else if (fact.min !== undefined && n < fact.min || fact.max !== undefined && n > fact.max) {
+    } else if (
+      (fact.min !== undefined && n < fact.min) ||
+      (fact.max !== undefined && n > fact.max)
+    ) {
       invalid = `must be between ${fact.min ?? "−∞"} and ${fact.max ?? "∞"}`;
     } else if (fact.kind === "count" && n < 0) {
       invalid = "must be a non-negative whole number";
@@ -257,8 +259,8 @@ export function resolveEmployeeFact(
   }
   if (invalid) {
     throw new PayrollPackError(
-      `${country} payroll cannot use ${fact.label} (${fact.key}) value "${value}": ${invalid}. `
-      + `${fact.refusalReason} Correct the value in the pack's declared producer.`,
+      `${country} payroll cannot use ${fact.label} (${fact.key}) value "${value}": ${invalid}. ` +
+        `${fact.refusalReason} Correct the value in the pack's declared producer.`,
     );
   }
   return value;
@@ -274,7 +276,9 @@ export function missingEmployeeFacts(
   emp: Record<string, string | null>,
 ): readonly PayrollEmployeeFact[] {
   return employeeFactsFor(country).filter(
-    (fact) => fact.required && (emp[fact.key] === undefined || emp[fact.key] === null || emp[fact.key] === ""),
+    (fact) =>
+      fact.required &&
+      (emp[fact.key] === undefined || emp[fact.key] === null || emp[fact.key] === ""),
   );
 }
 
@@ -300,26 +304,28 @@ export function employeeFactProducerProblem(
         const field = profileColumnField(country, producer.column);
         if (!field) {
           return (
-            `${country} employee fact "${fact.key}" claims profile column "${producer.column}", `
-            + "which no certificate field of this pack maps — the column is not a producer"
+            `${country} employee fact "${fact.key}" claims profile column "${producer.column}", ` +
+            "which no certificate field of this pack maps — the column is not a producer"
           );
         }
         return null;
       }
       case "certificate": {
         const declared = packCertificates(country);
-        const certificate = declared.certificates.find((entry) => entry.key === producer.certificate);
+        const certificate = declared.certificates.find(
+          (entry) => entry.key === producer.certificate,
+        );
         if (!certificate) {
           return (
-            `${country} employee fact "${fact.key}" claims certificate "${producer.certificate}", `
-            + "which this pack does not declare"
+            `${country} employee fact "${fact.key}" claims certificate "${producer.certificate}", ` +
+            "which this pack does not declare"
           );
         }
         const field = certificate.fields.find((entry) => entry.key === producer.field);
         if (!field) {
           return (
-            `${country} employee fact "${fact.key}" claims field "${producer.field}" `
-            + `on certificate "${producer.certificate}", which declares no such field`
+            `${country} employee fact "${fact.key}" claims field "${producer.field}" ` +
+            `on certificate "${producer.certificate}", which declares no such field`
           );
         }
         return null;
@@ -327,8 +333,8 @@ export function employeeFactProducerProblem(
       case "exemption_flag": {
         if (!exemptionColumns.includes(producer.column)) {
           return (
-            `${country} employee fact "${fact.key}" claims exemption flag column "${producer.column}", `
-            + "which this pack does not declare in profileExemptionFlags"
+            `${country} employee fact "${fact.key}" claims exemption flag column "${producer.column}", ` +
+            "which this pack does not declare in profileExemptionFlags"
           );
         }
         return null;
@@ -337,8 +343,8 @@ export function employeeFactProducerProblem(
         const columns = Object.values(getTableColumns(employeePayrollProfiles));
         if (!columns.some((column) => column.name === producer.column)) {
           return (
-            `${country} employee fact "${fact.key}" claims base profile column "${producer.column}", `
-            + "which employee_payroll_profiles does not carry"
+            `${country} employee fact "${fact.key}" claims base profile column "${producer.column}", ` +
+            "which employee_payroll_profiles does not carry"
           );
         }
         return null;
@@ -374,8 +380,10 @@ export function employeeFactsProblem(
       return `the ${country} payroll pack declares choice fact "${fact.key}" with no choices`;
     }
     if (
-      (fact.kind === "year" || fact.kind === "integer" || fact.kind === "count")
-      && fact.min !== undefined && fact.max !== undefined && fact.min > fact.max
+      (fact.kind === "year" || fact.kind === "integer" || fact.kind === "count") &&
+      fact.min !== undefined &&
+      fact.max !== undefined &&
+      fact.min > fact.max
     ) {
       return `the ${country} payroll pack declares fact "${fact.key}" with min ${fact.min} above max ${fact.max}`;
     }
@@ -401,8 +409,8 @@ export function packPayableProblem(pack: PayrollCountryPack): string | null {
   if (blocked.length === 0) return null;
   const names = blocked.map((fact) => `${fact.label} (${fact.key})`).join("; ");
   return (
-    `the ${pack.country} payroll pack is installable but cannot pay any employee: `
-    + `${blocked.length} required employee fact${blocked.length === 1 ? " has" : "s have"} no producer — ${names}`
+    `the ${pack.country} payroll pack is installable but cannot pay any employee: ` +
+    `${blocked.length} required employee fact${blocked.length === 1 ? " has" : "s have"} no producer — ${names}`
   );
 }
 

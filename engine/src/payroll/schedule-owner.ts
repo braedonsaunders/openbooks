@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql, type SQL } from "drizzle-orm";
 
 /** The native schedule owner; an organization-wide schedule pays from its active root. */
 export function payScheduleOwnerSql(orgId: string, scheduleSubsidiaryId: SQL): SQL {

@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
+import { redirect } from "next/navigation";
+import { getFormatter, getLocale, getTranslations } from "next-intl/server";
 import {
   grid,
   page,
@@ -12,21 +12,26 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { getAuthz, can, assertCan } from '../../../lib/authz'
-import { canAccessStatement } from '../../../lib/report-authz'
-import { resolveNav } from '../../../lib/nav/resolve'
-import { resolvePeriod } from '../../../lib/periods'
-import { financialHealth, scoreLabelOf, type FinancialHealth, type RatioResult } from '../../../lib/analytics/financial-health'
-import { healthStrings, localizedRatioDefs } from '../../../lib/analytics/health-strings'
-import { accountingHome } from '../../../lib/module-home/accounting'
-import { homeFiscalWindow } from '../../../lib/module-home/fiscal-window'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { formatCivilDate, reportPeriodLabel } from '@/lib/format'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { groupTabs } from '../../../components/module-home/group-tabs'
-import type { DirectoryItem } from '../../../components/module-home/ui'
-import type { AttentionItem, HealthCategoryRow, HealthRatioRow, HealthTone } from './sections'
+} from "@braedonsaunders/appkit-viewspec";
+import { getAuthz, can, assertCan } from "../../../lib/authz";
+import { canAccessStatement } from "../../../lib/report-authz";
+import { resolveNav } from "../../../lib/nav/resolve";
+import { resolvePeriod } from "../../../lib/periods";
+import {
+  financialHealth,
+  scoreLabelOf,
+  type FinancialHealth,
+  type RatioResult,
+} from "../../../lib/analytics/financial-health";
+import { healthStrings, localizedRatioDefs } from "../../../lib/analytics/health-strings";
+import { accountingHome } from "../../../lib/module-home/accounting";
+import { homeFiscalWindow } from "../../../lib/module-home/fiscal-window";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { formatCivilDate, reportPeriodLabel } from "@/lib/format";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { groupTabs } from "../../../components/module-home/group-tabs";
+import type { DirectoryItem } from "../../../components/module-home/ui";
+import type { AttentionItem, HealthCategoryRow, HealthRatioRow, HealthTone } from "./sections";
 
 /**
  * The accounting cockpit, split into a loader and a spec.
@@ -41,96 +46,108 @@ import type { AttentionItem, HealthCategoryRow, HealthRatioRow, HealthTone } fro
  * Query, permission and formatting logic below are verbatim from page.tsx.
  */
 
-type Tabs = Awaited<ReturnType<typeof groupTabs>>
+type Tabs = Awaited<ReturnType<typeof groupTabs>>;
 
 export interface AccountingData {
-  access: { reports: boolean; close: boolean; gl: boolean; findings: boolean }
-  title: string
-  description: string
-  tabs: Tabs
-  healthAccent: 'emerald' | 'amber' | 'red'
-  healthScoreLabel: string
-  healthScoreValue: string
-  healthScoreSub: string
-  healthScoreTone: 'positive' | 'warning' | 'negative'
-  netIncomeAccent: 'teal' | 'red'
-  netIncomeLabel: string
-  netIncomeValue: string
-  netIncomeSub: string
-  netIncomeTone: 'positive' | 'negative'
-  closeLabel: string
-  closeValue: string
-  closeSub: string
-  draftLabel: string
-  draftValue: string
-  draftSub: string
-  draftAccent: 'amber' | 'emerald'
-  draftTone: 'warning' | 'positive'
-  findingsLabel: string
-  findingsValue: string
-  findingsSub: string
-  findingsAccent: 'red' | 'amber' | 'emerald'
-  findingsTone: 'negative' | 'warning' | 'positive'
-  heroTitle: string
-  heroHint: string
-  gaugeValue: number
-  gaugeLabel: string
+  access: { reports: boolean; close: boolean; gl: boolean; findings: boolean };
+  title: string;
+  description: string;
+  tabs: Tabs;
+  healthAccent: "emerald" | "amber" | "red";
+  healthScoreLabel: string;
+  healthScoreValue: string;
+  healthScoreSub: string;
+  healthScoreTone: "positive" | "warning" | "negative";
+  netIncomeAccent: "teal" | "red";
+  netIncomeLabel: string;
+  netIncomeValue: string;
+  netIncomeSub: string;
+  netIncomeTone: "positive" | "negative";
+  closeLabel: string;
+  closeValue: string;
+  closeSub: string;
+  draftLabel: string;
+  draftValue: string;
+  draftSub: string;
+  draftAccent: "amber" | "emerald";
+  draftTone: "warning" | "positive";
+  findingsLabel: string;
+  findingsValue: string;
+  findingsSub: string;
+  findingsAccent: "red" | "amber" | "emerald";
+  findingsTone: "negative" | "warning" | "positive";
+  heroTitle: string;
+  heroHint: string;
+  gaugeValue: number;
+  gaugeLabel: string;
   /** The organization's own gauge bands, threaded to the hero gauge. Null without reports.read, where the hero never renders. */
-  gaugeBands: { excellent: number; good: number; average: number } | null
-  categories: HealthCategoryRow[]
-  ratios: HealthRatioRow[]
-  ratioLabels: { ratio: string; value: string; benchmark: string; grade: string }
-  fullAnalysisLabel: string
+  gaugeBands: { excellent: number; good: number; average: number } | null;
+  categories: HealthCategoryRow[];
+  ratios: HealthRatioRow[];
+  ratioLabels: { ratio: string; value: string; benchmark: string; grade: string };
+  fullAnalysisLabel: string;
   /** financial-health needs reports.read: close.read/gl.read callers get the
    * ratios without the deep link, exactly as the tab bar already hides it. */
-  showFullAnalysisLink: boolean
-  directoryTitle: string
-  hasDirectory: boolean
-  directory: DirectoryItem[]
-  attentionTitle: string
-  attentionAllClear: string
-  hasAttention: boolean
-  attention: AttentionItem[]
+  showFullAnalysisLink: boolean;
+  directoryTitle: string;
+  hasDirectory: boolean;
+  directory: DirectoryItem[];
+  attentionTitle: string;
+  attentionAllClear: string;
+  hasAttention: boolean;
+  attention: AttentionItem[];
 }
 
 export async function loadAccounting(): Promise<AccountingData> {
-  const format = await getFormatter()
-  const { moneyCompact } = await getMoneyFormatter()
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  if (!['gl.read', 'close.read', 'reports.read'].some((p) => can(authz, p))) assertCan(authz, 'gl.read')
-  const t = await getTranslations('accounting')
-  const tAnalytics = await getTranslations('analytics')
-  const ratioDefs = localizedRatioDefs(tAnalytics)
-  const tNav = await getTranslations('nav')
+  const format = await getFormatter();
+  const { moneyCompact } = await getMoneyFormatter();
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  if (!["gl.read", "close.read", "reports.read"].some((p) => can(authz, p)))
+    assertCan(authz, "gl.read");
+  const t = await getTranslations("accounting");
+  const tAnalytics = await getTranslations("analytics");
+  const ratioDefs = localizedRatioDefs(tAnalytics);
+  const tNav = await getTranslations("nav");
 
   // The default fiscal year, the same one the analytics dashboard opens on.
   // Its window is cut at the business day, so the figures and the label agree.
-  const locale = await getLocale()
-  const today = await businessToday(authz.user.orgId)
-  const period = await resolvePeriod(null, { orgId: authz.user.orgId, today })
-  const yearWindow = homeFiscalWindow(period, today)
-  const periodLabel = reportPeriodLabel(period, locale)
+  const locale = await getLocale();
+  const today = await businessToday(authz.user.orgId);
+  const period = await resolvePeriod(null, { orgId: authz.user.orgId, today });
+  const yearWindow = homeFiscalWindow(period, today);
+  const periodLabel = reportPeriodLabel(period, locale);
   const windowLabel = yearWindow.throughDate
-    ? t('home.vitals.throughDate', { label: periodLabel, date: formatCivilDate(yearWindow.throughDate, locale) })
-    : periodLabel
+    ? t("home.vitals.throughDate", {
+        label: periodLabel,
+        date: formatCivilDate(yearWindow.throughDate, locale),
+      })
+    : periodLabel;
   // The health score, net income and the ratio set are financial-statement
   // figures: they follow the same data grants as the statements they come
   // from (reports.read plus the ledger grant the balance sheet and P&L
   // require), never reports.read alone.
-  const financialsVisible = can(authz, 'reports.read') && canAccessStatement(authz, 'balance-sheet') && canAccessStatement(authz, 'pnl')
+  const financialsVisible =
+    can(authz, "reports.read") &&
+    canAccessStatement(authz, "balance-sheet") &&
+    canAccessStatement(authz, "pnl");
   const access = {
-    gl: can(authz, 'gl.read'),
-    close: can(authz, 'close.read'),
-    findings: can(authz, 'close.read'),
-    accounts: can(authz, 'gl.read'),
-    budgets: can(authz, 'budgets.read'),
-    assets: can(authz, 'assets.read'),
-  }
+    gl: can(authz, "gl.read"),
+    close: can(authz, "close.read"),
+    findings: can(authz, "close.read"),
+    accounts: can(authz, "gl.read"),
+    budgets: can(authz, "budgets.read"),
+    assets: can(authz, "assets.read"),
+  };
   const [data, healthResult, navGroups] = await Promise.all([
     accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access, locale),
     financialsVisible
-      ? financialHealth({ from: yearWindow.from, to: yearWindow.to, label: periodLabel }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, locale))
+      ? financialHealth(
+          { from: yearWindow.from, to: yearWindow.to, label: periodLabel },
+          authz.user.orgId,
+          authz.allowedSubsidiaryIds,
+          healthStrings(tAnalytics, locale),
+        )
       : Promise.resolve(null),
     resolveNav(
       authz.user.orgId,
@@ -138,134 +155,176 @@ export async function loadAccounting(): Promise<AccountingData> {
       authz.user.roles.map(({ key }) => key),
       (key) => {
         try {
-          return tNav(key)
+          return tNav(key);
         } catch {
-          return ''
+          return "";
         }
       },
       (key) => {
         try {
-          return tNav.has(key)
+          return tNav.has(key);
         } catch {
-          return false
+          return false;
         }
       },
     ),
-  ])
+  ]);
   // Without the statement grants the health widgets are not composed at all
   // (their `when` is access.reports), so no figure is ever fabricated for them.
-  const health: FinancialHealth | null = healthResult
+  const health: FinancialHealth | null = healthResult;
   // Tones follow the organization's configured score bands, never fixed cut-offs.
   const toneOf = (score: number | null): HealthTone => {
-    const label = health ? scoreLabelOf(score, health.benchmarks) : null
-    return label === 'excellent' || label === 'good' ? 'good' : label === 'average' ? 'warn' : 'bad'
-  }
+    const label = health ? scoreLabelOf(score, health.benchmarks) : null;
+    return label === "excellent" || label === "good"
+      ? "good"
+      : label === "average"
+        ? "warn"
+        : "bad";
+  };
 
   // close.read/gl.read callers see the ratios but must never be deep-linked
   // into financial-health, which requires reports.read.
-  const canReadReports = financialsVisible
-  const groupItems = navGroups.find((g) => g.id === 'accounting')?.items ?? []
-  const tabs = await groupTabs('accounting', '/accounting', {
-    exclude: canReadReports ? [] : ['/analytics/financial-health'],
+  const canReadReports = financialsVisible;
+  const groupItems = navGroups.find((g) => g.id === "accounting")?.items ?? [];
+  const tabs = await groupTabs("accounting", "/accounting", {
+    exclude: canReadReports ? [] : ["/analytics/financial-health"],
     orgId: authz.user.orgId,
-  })
+  });
 
-  const badgeFor = (href: string): DirectoryItem['badge'] => {
+  const badgeFor = (href: string): DirectoryItem["badge"] => {
     switch (href) {
-      case '/journal':
+      case "/journal":
         return {
           value: String(data.draftJournals),
-          hint: t('home.directory.journalHint', { posted: data.postedJournals7d }),
-          tone: data.draftJournals > 0 ? 'warning' : 'positive',
-        }
-      case '/accounts':
-        return { value: String(data.badges.accounts), hint: t('home.directory.accountsHint') }
-      case '/budgets':
-        return { value: String(data.badges.budgets), hint: t('home.directory.budgetsHint') }
-      case '/assets':
-        return { value: String(data.badges.assets), hint: t('home.directory.assetsHint') }
-      case '/continuous-close':
+          hint: t("home.directory.journalHint", { posted: data.postedJournals7d }),
+          tone: data.draftJournals > 0 ? "warning" : "positive",
+        };
+      case "/accounts":
+        return { value: String(data.badges.accounts), hint: t("home.directory.accountsHint") };
+      case "/budgets":
+        return { value: String(data.badges.budgets), hint: t("home.directory.budgetsHint") };
+      case "/assets":
+        return { value: String(data.badges.assets), hint: t("home.directory.assetsHint") };
+      case "/continuous-close":
         return {
           value: String(data.workItems.total),
-          hint: t('home.directory.continuousCloseHint', { critical: data.workItems.critical }),
-          tone: data.workItems.critical > 0 ? 'warning' : 'neutral',
-        }
+          hint: t("home.directory.continuousCloseHint", { critical: data.workItems.critical }),
+          tone: data.workItems.critical > 0 ? "warning" : "neutral",
+        };
       default:
-        return undefined
+        return undefined;
     }
-  }
+  };
   const directory: DirectoryItem[] = groupItems
-    .filter((i) => i.href !== '/accounting' && i.href !== '/close')
-    .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }))
+    .filter((i) => i.href !== "/accounting" && i.href !== "/close")
+    .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }));
 
   // Graded ratios across categories, best-covered first (nulls excluded).
   const gradedRatios = Object.values(health?.ratios ?? {})
     .flat()
-    .filter((r): r is RatioResult & { value: string; score: number } => r.value !== null && r.score !== null)
-    .sort((a, b) => a.score - b.score)
+    .filter(
+      (r): r is RatioResult & { value: string; score: number } =>
+        r.value !== null && r.score !== null,
+    )
+    .sort((a, b) => a.score - b.score);
 
-  const attention: AttentionItem[] = []
+  const attention: AttentionItem[] = [];
   if (data.workItems.critical > 0) {
-    attention.push({ tone: 'negative', text: t('home.attention.criticalItems', { count: data.workItems.critical }), href: '/continuous-close' })
+    attention.push({
+      tone: "negative",
+      text: t("home.attention.criticalItems", { count: data.workItems.critical }),
+      href: "/continuous-close",
+    });
   }
   if (data.workItems.warning > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.warningItems', { count: data.workItems.warning }), href: '/continuous-close' })
+    attention.push({
+      tone: "warning",
+      text: t("home.attention.warningItems", { count: data.workItems.warning }),
+      href: "/continuous-close",
+    });
   }
   if (data.draftJournals > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.draftJournals', { count: data.draftJournals }), href: '/journal' })
+    attention.push({
+      tone: "warning",
+      text: t("home.attention.draftJournals", { count: data.draftJournals }),
+      href: "/journal",
+    });
   }
   for (const r of gradedRatios.slice(0, 3)) {
-    if (r.grade === 'F' && canReadReports) {
+    if (r.grade === "F" && canReadReports) {
       attention.push({
-        tone: 'warning',
-        text: t('home.attention.weakRatio', { ratio: ratioDefs[r.id]?.label ?? r.id }),
-        href: '/analytics/financial-health',
-      })
+        tone: "warning",
+        text: t("home.attention.weakRatio", { ratio: ratioDefs[r.id]?.label ?? r.id }),
+        href: "/analytics/financial-health",
+      });
     }
   }
 
   return {
-    access: { reports: financialsVisible, close: access.close, gl: access.gl, findings: access.findings },
-    title: t('home.title'),
-    description: t('home.description'),
+    access: {
+      reports: financialsVisible,
+      close: access.close,
+      gl: access.gl,
+      findings: access.findings,
+    },
+    title: t("home.title"),
+    description: t("home.description"),
     tabs,
-    healthAccent: health?.overallScore == null ? 'amber' : ({ good: 'emerald', warn: 'amber', bad: 'red' } as const)[toneOf(health.overallScore)],
-    healthScoreLabel: t('home.vitals.healthScore'),
-    healthScoreValue: health?.overallScore == null ? '—' : String(Math.round(health.overallScore)),
-    healthScoreSub: health?.scoreLabel ? t(`home.score.${health.scoreLabel}`) : t('home.score.unscored'),
-    healthScoreTone: health?.overallScore == null ? 'warning' : ({ good: 'positive', warn: 'warning', bad: 'negative' } as const)[toneOf(health.overallScore)],
-    netIncomeAccent: health?.figures.netIncome.startsWith('-') ? 'red' : 'teal',
-    netIncomeLabel: t('home.vitals.netIncome'),
-    netIncomeValue: health ? moneyCompact(health.figures.netIncome) : '—',
+    healthAccent:
+      health?.overallScore == null
+        ? "amber"
+        : ({ good: "emerald", warn: "amber", bad: "red" } as const)[toneOf(health.overallScore)],
+    healthScoreLabel: t("home.vitals.healthScore"),
+    healthScoreValue: health?.overallScore == null ? "—" : String(Math.round(health.overallScore)),
+    healthScoreSub: health?.scoreLabel
+      ? t(`home.score.${health.scoreLabel}`)
+      : t("home.score.unscored"),
+    healthScoreTone:
+      health?.overallScore == null
+        ? "warning"
+        : ({ good: "positive", warn: "warning", bad: "negative" } as const)[
+            toneOf(health.overallScore)
+          ],
+    netIncomeAccent: health?.figures.netIncome.startsWith("-") ? "red" : "teal",
+    netIncomeLabel: t("home.vitals.netIncome"),
+    netIncomeValue: health ? moneyCompact(health.figures.netIncome) : "—",
     netIncomeSub: windowLabel,
-    netIncomeTone: health?.figures.netIncome.startsWith('-') ? 'negative' : 'positive',
-    closeLabel: t('home.vitals.close'),
+    netIncomeTone: health?.figures.netIncome.startsWith("-") ? "negative" : "positive",
+    closeLabel: t("home.vitals.close"),
     // A restricted caller reads the organization-wide refusal by name —
     // never "no close run" for a run they are not allowed to see. The value
     // stays a short catalogued word; the refusal itself is the reason in
     // the sub-caption, never a sentence in the KPI slot.
-    closeValue: data.closeUnavailable ? t('home.vitals.closeUnavailable') : (data.close.progressPct === null ? t('home.vitals.noClose') : `${data.close.progressPct}%`),
+    closeValue: data.closeUnavailable
+      ? t("home.vitals.closeUnavailable")
+      : data.close.progressPct === null
+        ? t("home.vitals.noClose")
+        : `${data.close.progressPct}%`,
     closeSub: data.closeUnavailable
-      ? t('home.vitals.closeOrgWide')
+      ? t("home.vitals.closeOrgWide")
       : data.close.periodName
-        ? t('home.vitals.closeSub', { period: data.close.periodName })
+        ? t("home.vitals.closeSub", { period: data.close.periodName })
         : data.lastLockedPeriod
-          ? t('home.vitals.lockedThroughSub', { period: data.lastLockedPeriod })
-          : t('home.vitals.noCloseSub'),
-    draftLabel: t('home.vitals.draftJournals'),
+          ? t("home.vitals.lockedThroughSub", { period: data.lastLockedPeriod })
+          : t("home.vitals.noCloseSub"),
+    draftLabel: t("home.vitals.draftJournals"),
     draftValue: format.number(data.draftJournals),
-    draftSub: t('home.vitals.draftJournalsSub', { posted: data.postedJournals7d }),
-    draftAccent: data.draftJournals > 0 ? 'amber' : 'emerald',
-    draftTone: data.draftJournals > 0 ? 'warning' : 'positive',
-    findingsLabel: t('home.vitals.openFindings'),
+    draftSub: t("home.vitals.draftJournalsSub", { posted: data.postedJournals7d }),
+    draftAccent: data.draftJournals > 0 ? "amber" : "emerald",
+    draftTone: data.draftJournals > 0 ? "warning" : "positive",
+    findingsLabel: t("home.vitals.openFindings"),
     findingsValue: format.number(data.workItems.total),
-    findingsSub: t('home.vitals.openFindingsSub', { critical: data.workItems.critical }),
-    findingsAccent: data.workItems.critical > 0 ? 'red' : data.workItems.total > 0 ? 'amber' : 'emerald',
-    findingsTone: data.workItems.critical > 0 ? 'negative' : data.workItems.total > 0 ? 'warning' : 'positive',
-    heroTitle: t('home.hero.title'),
+    findingsSub: t("home.vitals.openFindingsSub", { critical: data.workItems.critical }),
+    findingsAccent:
+      data.workItems.critical > 0 ? "red" : data.workItems.total > 0 ? "amber" : "emerald",
+    findingsTone:
+      data.workItems.critical > 0 ? "negative" : data.workItems.total > 0 ? "warning" : "positive",
+    heroTitle: t("home.hero.title"),
     heroHint: windowLabel,
     gaugeValue: health?.overallScore ?? 0,
-    gaugeLabel: health?.scoreLabel ? t(`home.score.${health.scoreLabel}`) : t('home.score.unscored'),
+    gaugeLabel: health?.scoreLabel
+      ? t(`home.score.${health.scoreLabel}`)
+      : t("home.score.unscored"),
     // An unscored organization carries no verdict: null bands keep the hero
     // ring untoned instead of grading the stand-in 0 as poor.
     gaugeBands: health?.overallScore == null ? null : health.benchmarks.labels,
@@ -282,109 +341,109 @@ export async function loadAccounting(): Promise<AccountingData> {
       label: ratioDefs[r.id]?.label ?? r.id,
       calc: r.calc,
       value: fmtRatio(r.value, r.format, moneyCompact, format),
-      benchmark: r.benchmark === null ? '—' : fmtRatio(r.benchmark, r.format, moneyCompact, format),
-      grade: r.grade ?? '—',
+      benchmark: r.benchmark === null ? "—" : fmtRatio(r.benchmark, r.format, moneyCompact, format),
+      grade: r.grade ?? "—",
       score: r.score,
       tone: toneOf(r.score),
     })),
     ratioLabels: {
-      ratio: t('home.hero.ratio'),
-      value: t('home.hero.value'),
-      benchmark: t('home.hero.benchmark'),
-      grade: t('home.hero.grade'),
+      ratio: t("home.hero.ratio"),
+      value: t("home.hero.value"),
+      benchmark: t("home.hero.benchmark"),
+      grade: t("home.hero.grade"),
     },
-    fullAnalysisLabel: t('home.hero.fullAnalysis'),
+    fullAnalysisLabel: t("home.hero.fullAnalysis"),
     showFullAnalysisLink: canReadReports,
-    directoryTitle: t('home.directory.title'),
+    directoryTitle: t("home.directory.title"),
     hasDirectory: directory.length > 0,
     directory,
-    attentionTitle: t('home.attention.title'),
-    attentionAllClear: t('home.attention.allClear'),
+    attentionTitle: t("home.attention.title"),
+    attentionAllClear: t("home.attention.allClear"),
     hasAttention: financialsVisible || access.gl || access.findings,
     // Capped where the native call site caps it: the rail shows six.
     attention: attention.slice(0, 6),
-  }
+  };
 }
 
-const f = ref<AccountingData>()
+const f = ref<AccountingData>();
 
 export function accountingSpec(data: AccountingData): PageSpec {
   return page({
-    route: '/accounting',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/accounting",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
     body: [
-      grid('flex h-full min-h-0 flex-col gap-4', [
+      grid("flex h-full min-h-0 flex-col gap-4", [
         // Vitals strip. Tones and accents are loader-resolved strings; the
         // tiles render the same HomeStatTile both paths use.
-        grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
+        grid("grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5", [
           statTile({
-            iconKey: 'heart-pulse',
-            accent: f('healthAccent'),
-            label: f('healthScoreLabel'),
-            value: f('healthScoreValue'),
-            sub: f('healthScoreSub'),
-            tone: f('healthScoreTone'),
-            when: f('access.reports'),
+            iconKey: "heart-pulse",
+            accent: f("healthAccent"),
+            label: f("healthScoreLabel"),
+            value: f("healthScoreValue"),
+            sub: f("healthScoreSub"),
+            tone: f("healthScoreTone"),
+            when: f("access.reports"),
           }),
           statTile({
-            iconKey: 'trending-up',
-            accent: f('netIncomeAccent'),
-            label: f('netIncomeLabel'),
-            value: f('netIncomeValue'),
-            sub: f('netIncomeSub'),
-            tone: f('netIncomeTone'),
-            when: f('access.reports'),
+            iconKey: "trending-up",
+            accent: f("netIncomeAccent"),
+            label: f("netIncomeLabel"),
+            value: f("netIncomeValue"),
+            sub: f("netIncomeSub"),
+            tone: f("netIncomeTone"),
+            when: f("access.reports"),
           }),
           statTile({
-            iconKey: 'check-circle',
-            accent: 'violet',
-            label: f('closeLabel'),
-            value: f('closeValue'),
-            sub: f('closeSub'),
-            when: f('access.close'),
+            iconKey: "check-circle",
+            accent: "violet",
+            label: f("closeLabel"),
+            value: f("closeValue"),
+            sub: f("closeSub"),
+            when: f("access.close"),
           }),
           statTile({
-            iconKey: 'list-checks',
-            accent: f('draftAccent'),
-            label: f('draftLabel'),
-            value: f('draftValue'),
-            sub: f('draftSub'),
-            tone: f('draftTone'),
-            when: f('access.gl'),
+            iconKey: "list-checks",
+            accent: f("draftAccent"),
+            label: f("draftLabel"),
+            value: f("draftValue"),
+            sub: f("draftSub"),
+            tone: f("draftTone"),
+            when: f("access.gl"),
           }),
           statTile({
-            iconKey: 'triangle-alert',
-            accent: f('findingsAccent'),
-            label: f('findingsLabel'),
-            value: f('findingsValue'),
-            sub: f('findingsSub'),
-            tone: f('findingsTone'),
-            when: f('access.findings'),
+            iconKey: "triangle-alert",
+            accent: f("findingsAccent"),
+            label: f("findingsLabel"),
+            value: f("findingsValue"),
+            sub: f("findingsSub"),
+            tone: f("findingsTone"),
+            when: f("access.findings"),
           }),
         ]),
 
-        grid('grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3', [
+        grid("grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3", [
           panel({
-            title: f('heroTitle'),
-            iconKey: 'heart-pulse',
-            hint: f('heroHint'),
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            className: 'min-h-[24rem] lg:col-span-2',
-            when: f('access.reports'),
+            title: f("heroTitle"),
+            iconKey: "heart-pulse",
+            hint: f("heroHint"),
+            bodyClassName: "min-h-0 overflow-y-auto p-0",
+            className: "min-h-[24rem] lg:col-span-2",
+            when: f("access.reports"),
             blocks: [
               // The hero body (gauge + category bars + ratio table + deep
               // link) is one widget: its table is a plain hand-styled
               // <table>, not either spec table variant, and the gauge is a
               // client SVG component. See ./sections.
-              widgetBlock('health-hero', {
+              widgetBlock("health-hero", {
                 gaugeValue: data.gaugeValue,
                 gaugeLabel: data.gaugeLabel,
                 gaugeBands: data.gaugeBands,
@@ -397,19 +456,22 @@ export function accountingSpec(data: AccountingData): PageSpec {
             ],
           }),
 
-          grid('flex min-h-0 flex-col gap-5 overflow-y-auto', [
+          grid("flex min-h-0 flex-col gap-5 overflow-y-auto", [
             {
-              ...widgetBlock('directory-section', { items: data.directory, title: data.directoryTitle }),
-              when: f('hasDirectory'),
+              ...widgetBlock("directory-section", {
+                items: data.directory,
+                title: data.directoryTitle,
+              }),
+              when: f("hasDirectory"),
             },
             panel({
-              title: f('attentionTitle'),
-              iconKey: 'triangle-alert',
-              bodyClassName: 'p-0',
-              className: 'shrink-0',
-              when: f('hasAttention'),
+              title: f("attentionTitle"),
+              iconKey: "triangle-alert",
+              bodyClassName: "p-0",
+              className: "shrink-0",
+              when: f("hasAttention"),
               blocks: [
-                widgetBlock('attention-list', {
+                widgetBlock("attention-list", {
                   items: data.attention,
                   allClear: data.attentionAllClear,
                 }),
@@ -419,25 +481,29 @@ export function accountingSpec(data: AccountingData): PageSpec {
         ]),
       ]),
     ],
-  })
+  });
 }
 
 /** Display an exact ratio value; Intl formats the decimal string itself. */
 function fmtRatio(
   value: string,
-  format: RatioResult['format'],
+  format: RatioResult["format"],
   moneyCompact: (value: string) => string,
   formatter: Awaited<ReturnType<typeof getFormatter>>,
 ): string {
-  const exact = value as unknown as number
+  const exact = value as unknown as number;
   switch (format) {
-    case 'pct':
-      return formatter.number(exact, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
-    case 'money':
-      return moneyCompact(value)
-    case 'times':
-      return `${formatter.number(exact, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`
-    case 'points':
-      return formatter.number(exact, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    case "pct":
+      return formatter.number(exact, {
+        style: "percent",
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      });
+    case "money":
+      return moneyCompact(value);
+    case "times":
+      return `${formatter.number(exact, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`;
+    case "points":
+      return formatter.number(exact, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   }
 }

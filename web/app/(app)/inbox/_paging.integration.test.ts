@@ -55,9 +55,7 @@ registerScopedHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { loadApprovals } = await import("./view.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
@@ -70,51 +68,91 @@ const TOTAL = GATES + DOCS;
 function authzFor(orgId: string, userId: string): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Paging Approver", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Paging Approver",
+      orgId,
       roles: [{ key: "approver", name: "approver" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(["flows.approve", "ap.approve", "ar.approve", "time.approve"]),
     allowedSubsidiaryIds: null,
   };
 }
 
-const {seedFlowActors,seedApprovalFlow,seedDraftDocument,grantScratchPermissions}=await import('@openbooks/engine/testing/fixtures');
-const {submitForApproval}=await import('@openbooks/engine/flows/submit');
-const {routeSubjectSubmission}=await import('@openbooks/engine/flows/submission-policy');
-const {withOrgTransaction}=await import('@openbooks/engine/platform/db');
-const {installEngineSeams}=await import('@openbooks/engine/composition/install');
+const { seedFlowActors, seedApprovalFlow, seedDraftDocument, grantScratchPermissions } =
+  await import("@openbooks/engine/testing/fixtures");
+const { submitForApproval } = await import("@openbooks/engine/flows/submit");
+const { routeSubjectSubmission } = await import("@openbooks/engine/flows/submission-policy");
+const { withOrgTransaction } = await import("@openbooks/engine/platform/db");
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
 installEngineSeams();
 
-async function seedPagingOrg(gateCount:number,docCount:number):Promise<{org:ScratchOrg;approver:string;submitter:string}>{
- const org=await withBypass(()=>createScratchOrg());
- try{
-  const actors=await withBypass(()=>seedFlowActors(org.orgId));
-  await withBypass(async()=>{
-   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"flows":true,"timeTracking":true}'::jsonb) where id=${org.orgId}`);
-   await grantScratchPermissions(org.orgId,actors.approver1Id,['time.approve','ar.approve']);
-   for(const subjectKind of ['timesheet_week','customer_invoice'])await seedApprovalFlow(org.orgId,{subjectKind,assignees:[{type:'user',userId:actors.approver1Id}],mode:'all'});
-  });
-  for(let i=0;i<gateCount;i++){
-   const employee=randomUUID(),id=randomUUID();await withBypass(async()=>{
-    await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values(${employee},${org.orgId},'person',${`Paging worker ${i}`},${org.subsidiaryId},true,'{}'::jsonb)`);
-    await db.execute(sql`insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status,submitted_by,submitted_at,created_by,updated_by) values(${id},${org.orgId},${employee},'2026-07-12','submitted',${actors.submitterId},now(),${actors.submitterId},${actors.submitterId})`);
-   });
-   await withOrgTransaction(org.orgId,()=>routeSubjectSubmission({orgId:org.orgId,actorId:actors.submitterId,subjectKind:'timesheet_week',subjectId:id}));
+async function seedPagingOrg(
+  gateCount: number,
+  docCount: number,
+): Promise<{ org: ScratchOrg; approver: string; submitter: string }> {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actors = await withBypass(() => seedFlowActors(org.orgId));
+    await withBypass(async () => {
+      await db.execute(
+        sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"flows":true,"timeTracking":true}'::jsonb) where id=${org.orgId}`,
+      );
+      await grantScratchPermissions(org.orgId, actors.approver1Id, ["time.approve", "ar.approve"]);
+      for (const subjectKind of ["timesheet_week", "customer_invoice"])
+        await seedApprovalFlow(org.orgId, {
+          subjectKind,
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "all",
+        });
+    });
+    for (let i = 0; i < gateCount; i++) {
+      const employee = randomUUID(),
+        id = randomUUID();
+      await withBypass(async () => {
+        await db.execute(
+          sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values(${employee},${org.orgId},'person',${`Paging worker ${i}`},${org.subsidiaryId},true,'{}'::jsonb)`,
+        );
+        await db.execute(
+          sql`insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status,submitted_by,submitted_at,created_by,updated_by) values(${id},${org.orgId},${employee},'2026-07-12','submitted',${actors.submitterId},now(),${actors.submitterId},${actors.submitterId})`,
+        );
+      });
+      await withOrgTransaction(org.orgId, () =>
+        routeSubjectSubmission({
+          orgId: org.orgId,
+          actorId: actors.submitterId,
+          subjectKind: "timesheet_week",
+          subjectId: id,
+        }),
+      );
+    }
+    for (let i = 0; i < docCount; i++) {
+      const id = await withBypass(() =>
+        seedDraftDocument(org.orgId, {
+          kind: "customer_invoice",
+          createdBy: actors.submitterId,
+          number: `PAGING-${i}`,
+        }),
+      );
+      await withOrgContext(org.orgId, () =>
+        submitForApproval("customer_invoice", id, actors.submitterId),
+      );
+    }
+    return { org, approver: actors.approver1Id, submitter: actors.submitterId };
+  } catch (error) {
+    await withBypass(() => dropScratchOrg(org.orgId));
+    throw error;
   }
-  for(let i=0;i<docCount;i++){
-   const id=await withBypass(()=>seedDraftDocument(org.orgId,{kind:'customer_invoice',createdBy:actors.submitterId,number:`PAGING-${i}`}));
-   await withOrgContext(org.orgId,()=>submitForApproval('customer_invoice',id,actors.submitterId));
-  }
-  return{org,approver:actors.approver1Id,submitter:actors.submitterId};
- }catch(error){await withBypass(()=>dropScratchOrg(org.orgId));throw error;}
 }
 
 test("approvals mine tab pages in SQL instead of returning every gate", { skip: !DB }, async () => {
   const { org, approver } = await seedPagingOrg(GATES, DOCS);
   try {
-
     state.authz = authzFor(org.orgId, approver);
     const first = await withOrgContext(org.orgId, () => loadApprovals({}));
     assert.ok(first, "loader returns data");
@@ -129,7 +167,9 @@ test("approvals mine tab pages in SQL instead of returning every gate", { skip: 
       assert.ok(!firstKeys.has(row.key), `page two repeats a page-one row (${row.key})`);
     }
     assert.equal(
-      first!.approvalRows.length + second!.approvalRows.length + (await withOrgContext(org.orgId, () => loadApprovals({ page: "3" })))!.approvalRows.length,
+      first!.approvalRows.length +
+        second!.approvalRows.length +
+        (await withOrgContext(org.orgId, () => loadApprovals({ page: "3" })))!.approvalRows.length,
       TOTAL,
       "pages partition the whole worklist",
     );
@@ -147,22 +187,31 @@ test("approvals mine tab pages in SQL instead of returning every gate", { skip: 
   }
 });
 
-test("approvals submitted tab pages native submission runs",{skip:!DB},async()=>{
- const {org,submitter}=await seedPagingOrg(0,3);
- try{
-  state.authz=authzFor(org.orgId,submitter);
-  const data=await withOrgContext(org.orgId,()=>loadApprovals({tab:'submitted'}));assert.ok(data);
-  assert.equal(data.submittedTotal,3);assert.equal(data.submittedRows.length,3);
-  const empty=await withOrgContext(org.orgId,()=>loadApprovals({tab:'submitted',page:'2'}));
-  assert.equal(empty?.submittedTotal,3);assert.equal(empty?.submittedRows.length,0);
- }finally{state.authz=null;await withBypass(()=>dropScratchOrg(org.orgId));}
+test("approvals submitted tab pages native submission runs", { skip: !DB }, async () => {
+  const { org, submitter } = await seedPagingOrg(0, 3);
+  try {
+    state.authz = authzFor(org.orgId, submitter);
+    const data = await withOrgContext(org.orgId, () => loadApprovals({ tab: "submitted" }));
+    assert.ok(data);
+    assert.equal(data.submittedTotal, 3);
+    assert.equal(data.submittedRows.length, 3);
+    const empty = await withOrgContext(org.orgId, () =>
+      loadApprovals({ tab: "submitted", page: "2" }),
+    );
+    assert.equal(empty?.submittedTotal, 3);
+    assert.equal(empty?.submittedRows.length, 0);
+  } finally {
+    state.authz = null;
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
 });
 
 test("paged worklist agrees with the full worklist the tile counts", { skip: !DB }, async () => {
   // The center and dashboard use the same native gate predicates.
   // Walking every page must reproduce
   // the full set, the total, and the kind chips exactly.
-  const { approvalWorklistForAuthz, approvalWorklistPageForAuthz } = await import("@/lib/application/approvals");
+  const { approvalWorklistForAuthz, approvalWorklistPageForAuthz } =
+    await import("@/lib/application/approvals");
   type Full = Awaited<ReturnType<typeof approvalWorklistForAuthz>>;
   const { org, approver } = await seedPagingOrg(30, 4);
   try {
@@ -185,7 +234,7 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
       if (window.items.length < 10) break;
       assert.ok(pageNum < 10, "paging terminates");
     }
-    const keyOf=(item:Full[number]):string=>`flow_gate:${item.id}`;
+    const keyOf = (item: Full[number]): string => `flow_gate:${item.id}`;
     assert.deepEqual(
       new Set(seen.map(keyOf)),
       new Set(full.map(keyOf)),
@@ -194,25 +243,44 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
     assert.equal(total, full.length, "paged total ties the full count");
     const expectedChips = new Map<string, number>();
     for (const item of full) {
-      const kind=item.document?.kind??item.subjectKind;
+      const kind = item.document?.kind ?? item.subjectKind;
       expectedChips.set(kind, (expectedChips.get(kind) ?? 0) + 1);
     }
-    assert.deepEqual(Object.fromEntries(chips), Object.fromEntries(expectedChips), "kind chips tie the full set");
+    assert.deepEqual(
+      Object.fromEntries(chips),
+      Object.fromEntries(expectedChips),
+      "kind chips tie the full set",
+    );
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("a submitted week without native routing evidence is not an alternate approval",{skip:!DB},async()=>{
- const {org,approver,submitter}=await seedPagingOrg(1,0);
- try{
-  await withBypass(async()=>{
-   const employee=randomUUID();await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values(${employee},${org.orgId},'person','Unrouted worker',${org.subsidiaryId},true,'{}'::jsonb)`);
-   await db.execute(sql`insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status,submitted_by,submitted_at,created_by,updated_by) values(${randomUUID()},${org.orgId},${employee},'2026-07-19','submitted',${submitter},now(),${submitter},${submitter})`);
-  });
-  state.authz=authzFor(org.orgId,approver);
-  const data=await withOrgContext(org.orgId,()=>loadApprovals({}));assert.ok(data);
-  assert.equal(data.total,1);assert.equal(data.unfilteredTotal,1);assert.equal(data.approvalRows.length,1);
-  assert.equal(data.tabs.find(tab=>tab.key==='mine')?.count,1);
- }finally{state.authz=null;await withBypass(()=>dropScratchOrg(org.orgId));}
-});
+test(
+  "a submitted week without native routing evidence is not an alternate approval",
+  { skip: !DB },
+  async () => {
+    const { org, approver, submitter } = await seedPagingOrg(1, 0);
+    try {
+      await withBypass(async () => {
+        const employee = randomUUID();
+        await db.execute(
+          sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values(${employee},${org.orgId},'person','Unrouted worker',${org.subsidiaryId},true,'{}'::jsonb)`,
+        );
+        await db.execute(
+          sql`insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status,submitted_by,submitted_at,created_by,updated_by) values(${randomUUID()},${org.orgId},${employee},'2026-07-19','submitted',${submitter},now(),${submitter},${submitter})`,
+        );
+      });
+      state.authz = authzFor(org.orgId, approver);
+      const data = await withOrgContext(org.orgId, () => loadApprovals({}));
+      assert.ok(data);
+      assert.equal(data.total, 1);
+      assert.equal(data.unfilteredTotal, 1);
+      assert.equal(data.approvalRows.length, 1);
+      assert.equal(data.tabs.find((tab) => tab.key === "mine")?.count, 1);
+    } finally {
+      state.authz = null;
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

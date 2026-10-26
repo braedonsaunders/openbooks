@@ -1,18 +1,18 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { registerHooks } from 'node:module'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
 
 // Promoting a personal default must take the scope advisory lock before the
 // insert. Without it, two concurrent POSTs both unset zero rows and both
 // persist is_default=true — overlapping configuration no resolve can pick.
 
-const stateKey = Symbol.for('openbooks.list-view-personal-default-post-test')
+const stateKey = Symbol.for("openbooks.list-view-personal-default-post-test");
 interface DbState {
-  statements: unknown[]
-  defaultCount: number
+  statements: unknown[];
+  defaultCount: number;
 }
-const dbState: DbState = { statements: [], defaultCount: 1 }
-;(globalThis as Record<symbol, unknown>)[stateKey] = dbState
+const dbState: DbState = { statements: [], defaultCount: 1 };
+(globalThis as Record<symbol, unknown>)[stateKey] = dbState;
 
 const mockAuthz = `
   export async function getAuthz() {
@@ -21,20 +21,18 @@ const mockAuthz = `
   export async function can() {
     return true
   }
-`
+`;
 const mockGates = `
   export async function refuseDisabledRecordType() {
     return null
   }
-`
+`;
 const seededViewsUrl = new URL(
-  '../../../../../packages/customization/src/seeded-views.ts',
+  "../../../../../packages/customization/src/seeded-views.ts",
   import.meta.url,
-).href
-const schemaUrl = new URL(
-  '../../../../../packages/customization/src/schema.ts',
-  import.meta.url,
-).href
+).href;
+const schemaUrl = new URL("../../../../../packages/customization/src/schema.ts", import.meta.url)
+  .href;
 const mockCustomization = `
   export { stripSeededDefaultMark } from '${seededViewsUrl}'
   export { defaultListView, lockedListEntriesUnchanged } from '${schemaUrl}'
@@ -42,121 +40,145 @@ const mockCustomization = `
   export function parseListView(input) {
     return { success: true, data: input, issues: [] }
   }
-`
+`;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const parent = context.parentURL ?? ''
-    if (specifier === '@/lib/authz') return { shortCircuit: true, format: 'module', url: 'mock:authz-personal-default' }
-    if (specifier === '@openbooks/engine/platform/db' && parent.includes('customization/list-views')) {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export const db = { execute: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-post-test")].db.execute(...a), transaction: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-post-test")].db.transaction(...a) }' }
+    const parent = context.parentURL ?? "";
+    if (specifier === "@/lib/authz")
+      return { shortCircuit: true, format: "module", url: "mock:authz-personal-default" };
+    if (
+      specifier === "@openbooks/engine/platform/db" &&
+      parent.includes("customization/list-views")
+    ) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: 'data:text/javascript,export const db = { execute: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-post-test")].db.execute(...a), transaction: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-post-test")].db.transaction(...a) }',
+      };
     }
     if (
-      (specifier.endsWith('lib/authz') || specifier.endsWith('lib/customization/gates')) &&
-      parent.includes('customization/list-views')
+      (specifier.endsWith("lib/authz") || specifier.endsWith("lib/customization/gates")) &&
+      parent.includes("customization/list-views")
     ) {
-      return { shortCircuit: true, format: 'module', url: `mock:${specifier.endsWith('lib/authz') ? 'authz' : 'gates'}-personal-default` }
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: `mock:${specifier.endsWith("lib/authz") ? "authz" : "gates"}-personal-default`,
+      };
     }
-    if (specifier === '@openbooks/customization' && parent.includes('customization/list-views')) {
-      return { shortCircuit: true, format: 'module', url: 'mock:customization-personal-default' }
+    if (specifier === "@openbooks/customization" && parent.includes("customization/list-views")) {
+      return { shortCircuit: true, format: "module", url: "mock:customization-personal-default" };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:authz-personal-default') return { format: 'module', source: mockAuthz, shortCircuit: true }
-    if (url === 'mock:gates-personal-default') return { format: 'module', source: mockGates, shortCircuit: true }
-    if (url === 'mock:customization-personal-default') return { format: 'module', source: mockCustomization, shortCircuit: true }
-    return nextLoad(url, context)
+    if (url === "mock:authz-personal-default")
+      return { format: "module", source: mockAuthz, shortCircuit: true };
+    if (url === "mock:gates-personal-default")
+      return { format: "module", source: mockGates, shortCircuit: true };
+    if (url === "mock:customization-personal-default")
+      return { format: "module", source: mockCustomization, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const { SQL } = await import('drizzle-orm')
-const { POST } = await import('./route.ts')
+const { SQL } = await import("drizzle-orm");
+const { POST } = await import("./route.ts");
 
 function haystack(statements: unknown[]): string {
-  const parts: string[] = []
+  const parts: string[] = [];
   const visit = (node: unknown): void => {
-    if (node == null) return
-    if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
-      parts.push(String(node))
-      return
+    if (node == null) return;
+    if (typeof node === "string" || typeof node === "number" || typeof node === "boolean") {
+      parts.push(String(node));
+      return;
     }
-    if (typeof node !== 'object') return
+    if (typeof node !== "object") return;
     if (node instanceof SQL) {
-      for (const chunk of (node as { queryChunks: unknown[] }).queryChunks) visit(chunk)
-      return
+      for (const chunk of (node as { queryChunks: unknown[] }).queryChunks) visit(chunk);
+      return;
     }
-    if ('value' in node) visit((node as { value: unknown }).value)
-    else for (const value of Object.values(node)) visit(value)
-  }
-  for (const statement of statements) visit(statement)
-  return parts.join(' ')
+    if ("value" in node) visit((node as { value: unknown }).value);
+    else for (const value of Object.values(node)) visit(value);
+  };
+  for (const statement of statements) visit(statement);
+  return parts.join(" ");
 }
 
 function installDb() {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
-  }
-  state.statements = []
-  state.defaultCount = 1
+    db: {
+      execute: (query: unknown, mode?: string) => Promise<unknown>;
+      transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+    };
+  };
+  state.statements = [];
+  state.defaultCount = 1;
   state.db = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result,
+      ),
     transaction: async (fn) => {
       const tx = {
         execute: async (query: unknown, mode?: string) => {
-          const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
-          state.statements.push(query)
-          const text = haystack([query])
-          if (/count\(\*\)/.test(text)) return inMode({ rows: [{ n: state.defaultCount }] })
-          return inMode({ rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Mine' }] })
+          const inMode = <T extends { rows: unknown }>(result: T) =>
+            mode === "objects" ? result.rows : result;
+          state.statements.push(query);
+          const text = haystack([query]);
+          if (/count\(\*\)/.test(text)) return inMode({ rows: [{ n: state.defaultCount }] });
+          return inMode({ rows: [{ id: "99999999-9999-4999-8999-999999999999", name: "Mine" }] });
         },
-      }
-      return fn(tx)
+      };
+      return fn(tx);
     },
-  }
+  };
 }
 
-const { defaultListView: liveDefaultListView } = await import(
-  '../../../../../packages/customization/src/schema.ts'
-)
+const { defaultListView: liveDefaultListView } =
+  await import("../../../../../packages/customization/src/schema.ts");
 // The vehicle config must carry the locked display_name placement: POST
 // refuses a config that drops locked columns before the default-scope logic
 // these tests exercise.
 const viewBody = {
-  recordType: 'employee',
-  name: 'Mine',
-  scope: 'user',
-  config: { ...liveDefaultListView('employee') },
-}
+  recordType: "employee",
+  name: "Mine",
+  scope: "user",
+  config: { ...liveDefaultListView("employee") },
+};
 
-test('POST of a personal default locks the owner scope before insert', async () => {
-  installDb()
+test("POST of a personal default locks the owner scope before insert", async () => {
+  installDb();
   const res = await POST(
-    new Request('http://x/api/customization/list-views', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://x/api/customization/list-views", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...viewBody, isDefault: true }),
     }),
-  )
-  assert.equal(res.status, 200)
-  const text = haystack(dbState.statements)
-  assert.match(text, /pg_advisory_xact_lock/)
-  assert.match(text, /list-view-default:org-1:user:user-1:employee/)
-  const lockAt = text.indexOf('pg_advisory_xact_lock')
-  const insertAt = text.indexOf('insert into list_views')
-  assert.ok(lockAt >= 0 && insertAt >= 0 && lockAt < insertAt, 'the scope lock must precede the insert')
-})
+  );
+  assert.equal(res.status, 200);
+  const text = haystack(dbState.statements);
+  assert.match(text, /pg_advisory_xact_lock/);
+  assert.match(text, /list-view-default:org-1:user:user-1:employee/);
+  const lockAt = text.indexOf("pg_advisory_xact_lock");
+  const insertAt = text.indexOf("insert into list_views");
+  assert.ok(
+    lockAt >= 0 && insertAt >= 0 && lockAt < insertAt,
+    "the scope lock must precede the insert",
+  );
+});
 
-test('POST refuses a personal default when the write would leave two defaults', async () => {
-  installDb()
-  dbState.defaultCount = 2
+test("POST refuses a personal default when the write would leave two defaults", async () => {
+  installDb();
+  dbState.defaultCount = 2;
   const res = await POST(
-    new Request('http://x/api/customization/list-views', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://x/api/customization/list-views", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...viewBody, isDefault: true }),
     }),
-  )
-  assert.equal(res.status, 409)
-  assert.match(String((await res.json()).error), /default/i)
-})
+  );
+  assert.equal(res.status, 409);
+  assert.match(String((await res.json()).error), /default/i);
+});

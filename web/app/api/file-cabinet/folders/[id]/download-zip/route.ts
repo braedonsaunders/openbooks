@@ -22,14 +22,12 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const access = await requireFolderAccess(gate, id, "viewer");
     if (access) return access;
 
     const folder = await getFolder(gate.user.orgId, id);
-    if (!folder)
-      return notFound("record");
+    if (!folder) return notFound("record");
 
     const viewer = fileViewer(gate);
     const entries = await folderZipManifest(gate.user.orgId, id, viewer);

@@ -34,15 +34,11 @@ export function BankingReconPanel({
     <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
       <h4 className="font-medium">{t("periods.bankingReconTitle")}</h4>
       {unavailable ? (
-        <p className="text-sm text-slate-500">
-          {t("periods.bankingReconUnavailable")}
-        </p>
+        <p className="text-sm text-slate-500">{t("periods.bankingReconUnavailable")}</p>
       ) : accounts === null ? (
         <p className="text-sm text-slate-500">…</p>
       ) : accounts.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          {t("periods.bankingReconEmpty")}
-        </p>
+        <p className="text-sm text-slate-500">{t("periods.bankingReconEmpty")}</p>
       ) : (
         <ul className="space-y-1">
           {accounts.map((account) => (
@@ -51,11 +47,7 @@ export function BankingReconPanel({
                 {[account.number, account.name].filter(Boolean).join(" ")}
               </span>
               <Badge
-                variant={
-                  account.status === "signed_off" && !account.stale
-                    ? "success"
-                    : "warning"
-                }
+                variant={account.status === "signed_off" && !account.stale ? "success" : "warning"}
               >
                 {account.status === "signed_off"
                   ? t("periods.bankingReconSignedOff")
@@ -178,10 +170,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
             </p>
           ) : null}
           <Field label={t("fields.calendar")}>
-            <Select
-              value={calendarId}
-              onChange={(e) => setCalendarId(e.target.value)}
-            >
+            <Select value={calendarId} onChange={(e) => setCalendarId(e.target.value)}>
               {props.calendarOptions
                 .filter((item) => item.is_active)
                 .map((item) => (
@@ -192,11 +181,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
             </Select>
           </Field>
           <Field label={t("fields.fiscalYear")}>
-            <Input
-              type="number"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-            />
+            <Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
           </Field>
         </div>
       </UrlDrawer>
@@ -260,9 +245,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">
-                      {t(`modules.${module}`)}
-                    </span>
+                    <span className="font-medium">{t(`modules.${module}`)}</span>
                     <Badge
                       variant={
                         state === "closed"
@@ -288,9 +271,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        setAction({ module, state: "soft_closed" })
-                      }
+                      onClick={() => setAction({ module, state: "soft_closed" })}
                     >
                       {t("actions.softClose")}
                     </Button>
@@ -315,9 +296,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
                       })
                     }
                   >
-                    {state === "closed"
-                      ? t("actions.reopen")
-                      : t("actions.close")}
+                    {state === "closed" ? t("actions.reopen") : t("actions.close")}
                   </Button>
                 </div>
               </div>
@@ -415,9 +394,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
                       .join(", ")}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  {item.reason}
-                </p>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.reason}</p>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {t("periods.requestedBy", { name: item.requester_name })}
                 </p>
@@ -463,9 +440,9 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
                   <div className="flex justify-end gap-2">
                     {/* The window drawer creates a request for an approver to decide. */}
                     <Link
-                        href={drawerHref(props.currentParams, "periods", "reopen", item.id)}
-                        className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
+                      href={drawerHref(props.currentParams, "periods", "reopen", item.id)}
+                      className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
                       {t("periods.extendReopenTitle")}
                     </Link>
                     <Button
@@ -507,10 +484,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
               ) : null}
             </div>
             <Field label={t("fields.reason")}>
-              <Textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
+              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} />
             </Field>
             {action.module === "banking" &&
             (action.state === "closed" || action.state === "soft_closed") ? (
@@ -522,10 +496,7 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
               />
             ) : null}
             {offerIncludeGl ? (
-              <Check
-                checked={includeGl}
-                onChange={(value) => setIncludeGl(value)}
-              >
+              <Check checked={includeGl} onChange={(value) => setIncludeGl(value)}>
                 {t("periods.reopenIncludeGl")}
               </Check>
             ) : null}
@@ -559,7 +530,9 @@ export function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) 
                     {t("periods.earlierOpenWarning", {
                       module: t(`modules.${action.module}`),
                       count: earlierOpenPeriods.length,
-                      periods: earlierOpenPeriods.slice(0, 4).join(", ") + (earlierOpenPeriods.length > 4 ? ", …" : ""),
+                      periods:
+                        earlierOpenPeriods.slice(0, 4).join(", ") +
+                        (earlierOpenPeriods.length > 4 ? ", …" : ""),
                     })}
                   </p>
                 ) : null}

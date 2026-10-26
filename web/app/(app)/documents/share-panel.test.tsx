@@ -12,7 +12,11 @@ declare global {
 
 // jsdom first: the panel reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/documents/files", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/documents/files",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 registerHooks({
@@ -39,10 +43,14 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const GRANTS_BASE = "/api/file-cabinet/folders/r1/grants";
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -145,7 +153,10 @@ test("a refused grant pins as an alert and toasts, then releases busy", async (t
   );
   const toasts = globalThis.__shareToasts ?? [];
   assert.ok(
-    toasts.some((toast) => toast.kind === "error" && /Only managers may share this folder/.test(toast.message)),
+    toasts.some(
+      (toast) =>
+        toast.kind === "error" && /Only managers may share this folder/.test(toast.message),
+    ),
     "the refusal must also toast as an error",
   );
   assert.ok(

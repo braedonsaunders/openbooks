@@ -5,10 +5,26 @@ import { benefitProgramShapeProblem } from "./benefit-programs";
 const reward = { family: "reward", currency: "USD", frequency: "manual" };
 const quarterly = { ...reward, family: "incentive", frequency: "quarterly" };
 for (const { name, body, refusal } of [
-  { name: "unknown program families name the available choices", body: { ...reward, family: "health" }, refusal: /reward, allowance, incentive, or custom/ },
-  { name: "program currency requires an uppercase ISO code", body: { ...reward, currency: "usd" }, refusal: /3-letter ISO code in capitals/ },
-  { name: "quarterly programs need an explicit period basis", body: quarterly, refusal: /calendar or fiscal/ },
-  { name: "annual programs refuse an unknown period basis", body: { ...quarterly, frequency: "annual", periodBasis: "lunar" }, refusal: /calendar or fiscal/ },
+  {
+    name: "unknown program families name the available choices",
+    body: { ...reward, family: "health" },
+    refusal: /reward, allowance, incentive, or custom/,
+  },
+  {
+    name: "program currency requires an uppercase ISO code",
+    body: { ...reward, currency: "usd" },
+    refusal: /3-letter ISO code in capitals/,
+  },
+  {
+    name: "quarterly programs need an explicit period basis",
+    body: quarterly,
+    refusal: /calendar or fiscal/,
+  },
+  {
+    name: "annual programs refuse an unknown period basis",
+    body: { ...quarterly, frequency: "annual", periodBasis: "lunar" },
+    refusal: /calendar or fiscal/,
+  },
 ]) {
   test(name, () => assert.match(benefitProgramShapeProblem(body) ?? "", refusal));
 }

@@ -1,5 +1,5 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 export const deviceBody = z.strictObject({
   subsidiaryId: uuidString(),
@@ -8,4 +8,4 @@ export const deviceBody = z.strictObject({
   timeZone: z.string().min(1).max(128),
   isActive: z.boolean(),
   reason: z.string().trim().min(1).max(2000),
-})
+});

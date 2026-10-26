@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
-import { stubModules } from '../../../testing/stub-modules'
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
 
-await bootJsdomEnvironment({ url: 'http://localhost:4800/collections', matchMediaMatches: false })
-const recoveryToasts: [string, ...unknown[]][] = []
-Object.assign(globalThis, { __recoveryToasts: recoveryToasts })
+await bootJsdomEnvironment({ url: "http://localhost:4800/collections", matchMediaMatches: false });
+const recoveryToasts: [string, ...unknown[]][] = [];
+Object.assign(globalThis, { __recoveryToasts: recoveryToasts });
 stubModules({
-  navigation: { pathname: '/collections' },
+  navigation: { pathname: "/collections" },
   extra: {
-    sonner: "export const toast={success(...a){globalThis.__recoveryToasts.push(['success',...a])},error(...a){globalThis.__recoveryToasts.push(['error',...a])}}",
-    'next/link': "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
+    sonner:
+      "export const toast={success(...a){globalThis.__recoveryToasts.push(['success',...a])},error(...a){globalThis.__recoveryToasts.push(['error',...a])}}",
+    "next/link":
+      "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
   },
 });
 
@@ -96,7 +98,10 @@ function hiddenGuard(text: string): Element | "missing" | null {
 
 function assertHidden(text: string, message: string) {
   const guard = hiddenGuard(text);
-  assert.ok(guard instanceof Element, `${message} (row absent: ${guard === "missing" ? "missing" : "visible"})`);
+  assert.ok(
+    guard instanceof Element,
+    `${message} (row absent: ${guard === "missing" ? "missing" : "visible"})`,
+  );
 }
 
 /**
@@ -215,7 +220,10 @@ test("breakdown drills into the governed report definition", async () => {
  * instead of a generic failure.
  */
 test("a refused setup link surfaces the server refusal and remedy", async (t) => {
-  const refusal = { error: "The issuer refused the setup session", remedy: "Ask the customer for a different card" };
+  const refusal = {
+    error: "The issuer refused the setup session",
+    remedy: "Ask the customer for a different card",
+  };
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async () => ({
     ok: false,
@@ -237,9 +245,7 @@ test("a refused setup link surfaces the server refusal and remedy", async (t) =>
       await tick();
       await tick();
     });
-    const errors = recoveryToasts.filter(
-      ([tone]) => tone === "error",
-    );
+    const errors = recoveryToasts.filter(([tone]) => tone === "error");
     assert.ok(errors.length > 0, "the refusal toasts instead of failing silently");
     assert.ok(
       String(errors[0]?.[1]).includes("issuer refused"),
@@ -297,9 +303,7 @@ test("missing report definition links to the Reports hub with no custom list", a
       "no decline-class list renders without a definition",
     );
     assert.ok(
-      ![...host.querySelectorAll("span")].some((element) =>
-        element.textContent === "stripe",
-      ),
+      ![...host.querySelectorAll("span")].some((element) => element.textContent === "stripe"),
       "no provider list renders without a definition",
     );
     assert.equal(

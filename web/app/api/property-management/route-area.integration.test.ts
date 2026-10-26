@@ -1,9 +1,9 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import test from 'node:test';
-import type { SessionUser } from '../../../lib/auth';
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../../../lib/auth";
 
 /**
  * Property units fence rentableArea to 4dp shape but never bound its
@@ -15,54 +15,101 @@ import type { SessionUser } from '../../../lib/auth';
 
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmUnitBoundState: state });
-registerHooks({ resolve(specifier, context, next) {
-  // Resolve package contracts against this checkout; pin the
-  // worktree copy. Package subpath exports (@openbooks/engine/money) keep
-  // their own resolution.
+registerHooks({
+  resolve(specifier, context, next) {
+    // Resolve package contracts against this checkout; pin the
+    // worktree copy. Package subpath exports (@openbooks/engine/money) keep
+    // their own resolution.
 
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__pmUnitBoundState.user}' };
-  const engineUrl = resolveEngineSpecifier(specifier);
-  if (engineUrl) return next(engineUrl, context);
-  return next(specifier, context);
-} });
-const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { POST } = await import('./route.ts');
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__pmUnitBoundState.user}",
+      };
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return next(engineUrl, context);
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { POST } = await import("./route.ts");
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await createScratchUser(org.orgId, 'Property clerk', 'property_clerk');
-  await withBypassContext(() => db.execute(sql`update app_roles set permissions='["ar.create"]'::jsonb where org_id=${org.orgId} and key='property_clerk'`));
-  await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',
-    coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":true}'::jsonb) where id=${org.orgId}`));
+  const actorId = await createScratchUser(org.orgId, "Property clerk", "property_clerk");
+  await withBypassContext(() =>
+    db.execute(
+      sql`update app_roles set permissions='["ar.create"]'::jsonb where org_id=${org.orgId} and key='property_clerk'`,
+    ),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":true}'::jsonb) where id=${org.orgId}`),
+  );
   const propertyId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into managed_properties (id, org_id, subsidiary_id, location_id, code, name, property_type, status, currency, rent_income_account_id)
-    values (${propertyId}, ${org.orgId}, ${org.subsidiaryId}, ${org.locationId}, 'PRP-BOUND', 'Bound property', 'commercial', 'active', 'CAD', ${org.accounts.revenue})`));
-  state.user = { id: actorId, orgId: org.orgId, name: 'Property clerk', email: 'clerk@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actorId };
+  await withBypassContext(() =>
+    db.execute(sql`insert into managed_properties (id, org_id, subsidiary_id, location_id, code, name, property_type, status, currency, rent_income_account_id)
+    values (${propertyId}, ${org.orgId}, ${org.subsidiaryId}, ${org.locationId}, 'PRP-BOUND', 'Bound property', 'commercial', 'active', 'CAD', ${org.accounts.revenue})`),
+  );
+  state.user = {
+    id: actorId,
+    orgId: org.orgId,
+    name: "Property clerk",
+    email: "clerk@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: org.orgId,
+    homeOrgId: org.orgId,
+    homeUserId: actorId,
+  };
   return { org, propertyId };
 }
 
 const post = (orgId: string, body: unknown) =>
-  withOrgContext(orgId, () => POST(new Request('http://pm.test/api/property-management', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })));
+  withOrgContext(orgId, () =>
+    POST(
+      new Request("http://pm.test/api/property-management", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
+  );
 
 async function unitCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from property_units where org_id = ${orgId}`, 'objects'));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from property_units where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
-test('unit creation refuses a rentable area wider than numeric(19,4) without writing', async () => {
+test("unit creation refuses a rentable area wider than numeric(19,4) without writing", async () => {
   const { org, propertyId } = await fixture();
   try {
-    const response = await post(org.orgId, { action: 'createUnit', propertyId, code: 'U-1', rentableArea: '99999999999999999999.99' });
+    const response = await post(org.orgId, {
+      action: "createUnit",
+      propertyId,
+      code: "U-1",
+      rentableArea: "99999999999999999999.99",
+    });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.notEqual(response.status, 500, `expected a named error, got 500: ${JSON.stringify(json)}`);
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.notEqual(
+      response.status,
+      500,
+      `expected a named error, got 500: ${JSON.stringify(json)}`,
+    );
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.equal(await unitCount(org.orgId), 0);
   } finally {
     state.user = null;
@@ -70,10 +117,15 @@ test('unit creation refuses a rentable area wider than numeric(19,4) without wri
   }
 });
 
-test('unit creation still files an ordinary area', async () => {
+test("unit creation still files an ordinary area", async () => {
   const { org, propertyId } = await fixture();
   try {
-    const response = await post(org.orgId, { action: 'createUnit', propertyId, code: 'U-1', rentableArea: '120.5' });
+    const response = await post(org.orgId, {
+      action: "createUnit",
+      propertyId,
+      code: "U-1",
+      rentableArea: "120.5",
+    });
     assert.equal(response.status, 201, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await unitCount(org.orgId), 1);
   } finally {
@@ -82,22 +134,61 @@ test('unit creation still files an ordinary area', async () => {
   }
 });
 
-test('CAM pool vacancy treatment is validated at the API and persisted as chosen', async () => {
+test("CAM pool vacancy treatment is validated at the API and persisted as chosen", async () => {
   const { org, propertyId } = await fixture();
   try {
-    const pool = { action: 'createCamPool', propertyId, name: 'FY26 CAM', fiscalYear: 2026, periodStartsOn: '2026-07-01',
-      periodEndsOn: '2026-07-31', budgetAmount: '1000', expenseAccountIds: [org.accounts.adjustment] };
-    const refused = await post(org.orgId, { ...pool, allocationBasis: 'equal', vacancyTreatment: 'total_rentable_area' });
+    const pool = {
+      action: "createCamPool",
+      propertyId,
+      name: "FY26 CAM",
+      fiscalYear: 2026,
+      periodStartsOn: "2026-07-01",
+      periodEndsOn: "2026-07-31",
+      budgetAmount: "1000",
+      expenseAccountIds: [org.accounts.adjustment],
+    };
+    const refused = await post(org.orgId, {
+      ...pool,
+      allocationBasis: "equal",
+      vacancyTreatment: "total_rentable_area",
+    });
     assert.ok(!refused.ok);
     const refusal = (await refused.json()) as { error?: string };
-    assert.match(String(refusal.error), /Only a rentable-area CAM pool can leave the vacant share with the landlord/);
-    const unknown = await post(org.orgId, { ...pool, allocationBasis: 'rentable_area', vacancyTreatment: 'vacant_free' });
-    assert.ok(unknown.status >= 400 && unknown.status < 500, `expected a 4xx, got ${unknown.status}`);
-    const created = await post(org.orgId, { ...pool, allocationBasis: 'rentable_area', vacancyTreatment: 'total_rentable_area' });
-    assert.ok(created.ok, JSON.stringify(await created.clone().json().catch(() => null)));
-    const rows = await withBypassContext(() => db.execute<{ treatment: string }>(sql`
-      select vacancy_treatment as treatment from cam_pools where org_id = ${org.orgId}`, 'objects'));
-    assert.deepEqual(rows, [{ treatment: 'total_rentable_area' }]);
+    assert.match(
+      String(refusal.error),
+      /Only a rentable-area CAM pool can leave the vacant share with the landlord/,
+    );
+    const unknown = await post(org.orgId, {
+      ...pool,
+      allocationBasis: "rentable_area",
+      vacancyTreatment: "vacant_free",
+    });
+    assert.ok(
+      unknown.status >= 400 && unknown.status < 500,
+      `expected a 4xx, got ${unknown.status}`,
+    );
+    const created = await post(org.orgId, {
+      ...pool,
+      allocationBasis: "rentable_area",
+      vacancyTreatment: "total_rentable_area",
+    });
+    assert.ok(
+      created.ok,
+      JSON.stringify(
+        await created
+          .clone()
+          .json()
+          .catch(() => null),
+      ),
+    );
+    const rows = await withBypassContext(() =>
+      db.execute<{ treatment: string }>(
+        sql`
+      select vacancy_treatment as treatment from cam_pools where org_id = ${org.orgId}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(rows, [{ treatment: "total_rentable_area" }]);
   } finally {
     state.user = null;
     await withBypassContext(() => dropScratchOrg(org.orgId));

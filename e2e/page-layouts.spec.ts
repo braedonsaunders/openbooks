@@ -23,7 +23,10 @@ const LIST = "/admin/page-layouts";
 const ROUTE = "/banking";
 
 async function findLayoutRow(page: Page) {
-  await page.locator("main").getByRole("searchbox", { name: "Search routes and modules" }).fill(ROUTE);
+  await page
+    .locator("main")
+    .getByRole("searchbox", { name: "Search routes and modules" })
+    .fill(ROUTE);
   await expect(page.getByRole("link", { name: ROUTE, exact: true })).toBeVisible();
 }
 
@@ -37,10 +40,9 @@ async function findLayoutRow(page: Page) {
  * way IN rather than only on the way out survives the crash case too.
  */
 async function resetLayout(page: Page) {
-  const response = await page.request.delete(
-    `/api/page-specs?route=${encodeURIComponent(ROUTE)}`,
-    { headers: { Origin: new URL(page.url()).origin } },
-  );
+  const response = await page.request.delete(`/api/page-specs?route=${encodeURIComponent(ROUTE)}`, {
+    headers: { Origin: new URL(page.url()).origin },
+  });
   // 404 means there was nothing stored, which is the state we wanted anyway.
   expect([200, 404]).toContain(response.status());
 }
@@ -99,9 +101,7 @@ test.describe("page layouts", () => {
       // Hiding a block is the headline operation. Address the panel's own
       // ROW — children nest inside their parent's list item, so filtering list
       // items by text would match every ancestor too.
-      const panel = dialog
-        .locator("[data-block-path]")
-        .filter({ hasText: "trendTitle" });
+      const panel = dialog.locator("[data-block-path]").filter({ hasText: "trendTitle" });
       await expect(panel).toHaveCount(1);
       await panel.getByRole("button", { name: /hide/i }).click();
       await expect(dialog.getByText("trendTitle")).toHaveCount(0);
@@ -193,9 +193,11 @@ test.describe("page layouts", () => {
       // live layout and keeps every row — so this counts the GROWTH rather
       // than a total that earlier runs have already moved.
       const countVersions = async () =>
-        ((await (
-          await page.request.get(`/api/page-specs?route=${encodeURIComponent(ROUTE)}&history=1`)
-        ).json()) as { versions: unknown[] }).versions.length;
+        (
+          (await (
+            await page.request.get(`/api/page-specs?route=${encodeURIComponent(ROUTE)}&history=1`)
+          ).json()) as { versions: unknown[] }
+        ).versions.length;
       const before = await countVersions();
 
       // Two saves, so there is something to go back TO. The in-editor undo
@@ -254,7 +256,10 @@ test.describe("page layouts", () => {
     }
   });
 
-  test("a layout the renderer would refuse is reported, not stored", async ({ browser, baseURL }) => {
+  test("a layout the renderer would refuse is reported, not stored", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`${LIST}?route=${encodeURIComponent(ROUTE)}`);
@@ -276,7 +281,9 @@ test.describe("page layouts", () => {
 
       // The offending widget is NAMED. "Invalid" is not a message anyone can
       // act on, and an author who cannot see which widget is wrong will guess.
-      await expect(dialog.getByText('unknown widget "no-such-widget"', { exact: true })).toBeVisible();
+      await expect(
+        dialog.getByText('unknown widget "no-such-widget"', { exact: true }),
+      ).toBeVisible();
 
       // A prop the widget does not read is refused too, and the message names
       // the near miss. Before the contracts this saved cleanly and then did

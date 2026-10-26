@@ -25,13 +25,21 @@ const listBankReconciliations: AssistantToolDef = {
   feature: "banking",
   inputSchema: z.object({
     accountId: uuidInput.optional(),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum rows to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "banking")))
+      return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { accountId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
@@ -42,7 +50,9 @@ const listBankReconciliations: AssistantToolDef = {
          ${a.accountId ? sql` and r.account_id = ${a.accountId}` : sql``}
        order by r.created_at desc
        limit ${limit}
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -73,9 +83,11 @@ const getBankReconciliation: AssistantToolDef = {
   feature: "banking",
   inputSchema: z.object({ reconciliationId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "banking")))
+      return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { reconciliationId: string };
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
@@ -83,7 +95,9 @@ const getBankReconciliation: AssistantToolDef = {
        join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${authz.user.orgId} and r.id = ${a.reconciliationId}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const recon = rows[0];
     if (!recon) return { ok: false, error: "reconciliation_not_found" };
     const totals = await reconciliationTotals(a.reconciliationId, {
@@ -125,17 +139,25 @@ const listUnmatchedBankLines: AssistantToolDef = {
   feature: "banking",
   inputSchema: z.object({
     accountId: uuidInput.optional(),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum rows to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "banking")))
+      return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { accountId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
     const where = sql`l.org_id = ${authz.user.orgId} and l.match_status = 'unmatched'
       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
       ${a.accountId ? sql` and l.account_id = ${a.accountId}` : sql``}`;
-    const [rows, count] = (await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+    const [rows, count] = await Promise.all([
+      db.execute<Record<string, unknown>>(
+        sql`
         select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
                l.account_id, a.number as account_number, a.name as account_name
           from bank_statement_lines l
@@ -143,14 +165,19 @@ const listUnmatchedBankLines: AssistantToolDef = {
          where ${where}
          order by l.posted_on desc, l.line_number
          limit ${limit}
-      `, "objects"),
-      db.execute<{ n: string }>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<{ n: string }>(
+        sql`
         select count(*) as n
           from bank_statement_lines l
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where ${where}
-      `, "objects"),
-    ]));
+      `,
+        "objects",
+      ),
+    ]);
     const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
       rows.map((l) => ({
@@ -192,7 +219,8 @@ const listBankFeeds: AssistantToolDef = {
     }
     // Deliberately never selects the sealed `credentials` column — only the
     // fact that credentials exist.
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select c.id, c.name, c.provider, c.account_id, c.status,
              c.external_account_id, c.sync_cadence,
              c.next_sync_at, c.last_sync_at, c.last_attempt_at, c.last_result, c.last_error, c.is_active,
@@ -204,7 +232,9 @@ const listBankFeeds: AssistantToolDef = {
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by c.created_at desc
        limit 200
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {

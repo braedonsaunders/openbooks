@@ -5,20 +5,34 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { runRevaluation } from "@openbooks/engine/close/fx-revaluation";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
 import type { Authz } from "./authz";
 
 const enabled = !!process.env.OPENBOOKS_DB_URL;
 const state: { gate: Authz | null } = { gate: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.fx-feature-race")] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.fx-feature-race")
+] = state;
 // Substitute identity only; the feature gate, parser, service and writes remain native.
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "./authz" && (context.parentURL ?? "").endsWith("/lib/feature-gates.ts")) {
-    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-      `export async function guardPermission(){return globalThis[Symbol.for('openbooks.fx-feature-race')].gate}`) };
-  }
-  return next(specifier, context);
-} });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./authz" && (context.parentURL ?? "").endsWith("/lib/feature-gates.ts")) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function guardPermission(){return globalThis[Symbol.for('openbooks.fx-feature-race')].gate}`,
+          ),
+      };
+    }
+    return next(specifier, context);
+  },
+});
 // Finish async module registration before declaring any tests (--test-force-exit).
 const { POST } = await import("../app/api/close/run-revaluation/route");
 
@@ -48,46 +62,81 @@ async function fixture() {
     (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
     values(${org.orgId},${entryId},1,${org.accounts.ar},${org.subsidiaryId},136,'USD',100,1.36),
       (${org.orgId},${entryId},2,${org.accounts.clearing},${org.subsidiaryId},-136,'CAD',-136,1)`);
-  await db.execute(sql`update journal_entries set status='posted',posted_at=now() where org_id=${org.orgId} and id=${entryId}`);
-  state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["*"]), allowedSubsidiaryIds: null } as Authz;
+  await db.execute(
+    sql`update journal_entries set status='posted',posted_at=now() where org_id=${org.orgId} and id=${entryId}`,
+  );
+  state.gate = {
+    user: { orgId: org.orgId, id: actorId },
+    permissions: new Set(["*"]),
+    allowedSubsidiaryIds: null,
+  } as Authz;
   return { ...org, actorId };
 }
 
 async function evidence(orgId: string) {
-  return await db.execute(sql`select * from (
+  return await db.execute(
+    sql`select * from (
     select 'journal' as kind,to_jsonb(e) as row from journal_entries e where org_id=${orgId}
     union all select 'audit',to_jsonb(a) from audit_log a where org_id=${orgId}
-  ) evidence order by kind,row::text`, "objects");
+  ) evidence order by kind,row::text`,
+    "objects",
+  );
 }
 
-test("disabled multi-currency blocks the FX service before any journal or audit mutation", { skip: !enabled }, async () => {
-  const org = await fixture();
-  try {
-    await setFeature(org.orgId, false);
-    const before = await evidence(org.orgId);
-    await assert.rejects(() => runRevaluation(org.orgId, org.periodId, org.actorId), /multiCurrency feature is disabled/);
-    assert.deepEqual(await evidence(org.orgId), before);
-    await setFeature(org.orgId, true);
-    assert.equal((await runRevaluation(org.orgId, org.periodId, org.actorId)).posted.length, 1);
-  } finally { state.gate = null; await dropScratchOrg(org.orgId); }
-});
+test(
+  "disabled multi-currency blocks the FX service before any journal or audit mutation",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      await setFeature(org.orgId, false);
+      const before = await evidence(org.orgId);
+      await assert.rejects(
+        () => runRevaluation(org.orgId, org.periodId, org.actorId),
+        /multiCurrency feature is disabled/,
+      );
+      assert.deepEqual(await evidence(org.orgId), before);
+      await setFeature(org.orgId, true);
+      assert.equal((await runRevaluation(org.orgId, org.periodId, org.actorId)).posted.length, 1);
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("FX route rejects a feature disable committed after its initial guard", { skip: !enabled }, async () => {
-  const org = await fixture();
-  try {
-    let before: Awaited<ReturnType<typeof evidence>> | undefined;
-    const req = new Request("https://openbooks.test/api/close/run-revaluation", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: new ReadableStream({ async pull(controller) {
-        await setFeature(org.orgId, false);
-        before = await evidence(org.orgId);
-        controller.enqueue(new TextEncoder().encode(JSON.stringify({ periodId: org.periodId })));
-        controller.close();
-      } }, { highWaterMark: 0 }), duplex: "half",
-    } as RequestInit & { duplex: "half" });
-    const response = await POST(req);
-    assert.ok(before, "the native initial gate must have passed before disabling");
-    assert.equal(response.status, 404, JSON.stringify(await response.json()));
-    assert.deepEqual(await evidence(org.orgId), before);
-  } finally { state.gate = null; await dropScratchOrg(org.orgId); }
-});
+test(
+  "FX route rejects a feature disable committed after its initial guard",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      let before: Awaited<ReturnType<typeof evidence>> | undefined;
+      const req = new Request("https://openbooks.test/api/close/run-revaluation", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: new ReadableStream(
+          {
+            async pull(controller) {
+              await setFeature(org.orgId, false);
+              before = await evidence(org.orgId);
+              controller.enqueue(
+                new TextEncoder().encode(JSON.stringify({ periodId: org.periodId })),
+              );
+              controller.close();
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+        duplex: "half",
+      } as RequestInit & { duplex: "half" });
+      const response = await POST(req);
+      assert.ok(before, "the native initial gate must have passed before disabling");
+      assert.equal(response.status, 404, JSON.stringify(await response.json()));
+      assert.deepEqual(await evidence(org.orgId), before);
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

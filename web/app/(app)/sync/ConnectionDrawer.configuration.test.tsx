@@ -1,260 +1,633 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { registerHooks } from 'node:module'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
-import { stubModules } from '../../../testing/stub-modules'
-import { connectorSettings } from '@openbooks/engine/sync/connection-settings'
-import { entityMappingMetadata } from '@openbooks/engine/sync/entity-mapping-contract'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
+import { connectorSettings } from "@openbooks/engine/sync/connection-settings";
+import { entityMappingMetadata } from "@openbooks/engine/sync/entity-mapping-contract";
 
-await bootJsdomEnvironment({ url: 'http://localhost/sync', event: 'jsdom' })
-const uiSource = new URL('../../../../packages/ui/src/index.ts', import.meta.url).href
-registerHooks({ resolve(specifier, context, next) {
-  return specifier === '@openbooks/ui' ? { shortCircuit: true, url: uiSource } : next(specifier, context)
-} })
-stubModules({ navigation: { pathname: '/sync' }, extra: {
-  'next/link': 'export default function Link(p){return p.children}',
-  sonner: 'export const toast={success(){},error(message){globalThis.__connectionErrors.push(String(message))}};export function Toaster(){return null}',
-} })
-const React = await import('react')
-Object.assign(globalThis, { React, __connectionErrors: [] as string[] })
-const { act } = React
-const { createRoot } = await import('react-dom/client')
-const { NextIntlClientProvider, createTranslator } = await import('next-intl')
-const { LOCALE_CODES } = await import('../../../i18n/config')
-const messages = (await import('../../../messages/en')).default
-const { ConnectionDrawer } = await import('./PlatformClient')
-const { ConfirmRoot } = await import('../../../lib/confirm')
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
-const errorMessages = () => (globalThis as typeof globalThis & { __connectionErrors: string[] }).__connectionErrors
+await bootJsdomEnvironment({ url: "http://localhost/sync", event: "jsdom" });
+const uiSource = new URL("../../../../packages/ui/src/index.ts", import.meta.url).href;
+registerHooks({
+  resolve(specifier, context, next) {
+    return specifier === "@openbooks/ui"
+      ? { shortCircuit: true, url: uiSource }
+      : next(specifier, context);
+  },
+});
+stubModules({
+  navigation: { pathname: "/sync" },
+  extra: {
+    "next/link": "export default function Link(p){return p.children}",
+    sonner:
+      "export const toast={success(){},error(message){globalThis.__connectionErrors.push(String(message))}};export function Toaster(){return null}",
+  },
+});
+const React = await import("react");
+Object.assign(globalThis, { React, __connectionErrors: [] as string[] });
+const { act } = React;
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider, createTranslator } = await import("next-intl");
+const { LOCALE_CODES } = await import("../../../i18n/config");
+const messages = (await import("../../../messages/en")).default;
+const { ConnectionDrawer } = await import("./PlatformClient");
+const { ConfirmRoot } = await import("../../../lib/confirm");
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
+const errorMessages = () =>
+  (globalThis as typeof globalThis & { __connectionErrors: string[] }).__connectionErrors;
 
 async function click(text: string) {
-  const button = [...document.querySelectorAll('button')].find((button) => !button.closest('[hidden]') && button.textContent?.trim().replace(/\s*\d+$/, '') === text)
-  assert.ok(button, `missing ${text}`)
-  await act(async () => { button.click(); await tick() })
+  const button = [...document.querySelectorAll("button")].find(
+    (button) =>
+      !button.closest("[hidden]") && button.textContent?.trim().replace(/\s*\d+$/, "") === text,
+  );
+  assert.ok(button, `missing ${text}`);
+  await act(async () => {
+    button.click();
+    await tick();
+  });
 }
 async function fill(label: string, value: string) {
-  const element = [...document.querySelectorAll('label')].find((element) => !element.closest('[hidden]') && element.textContent?.trim().startsWith(label))
-  assert.ok(element, `missing ${label}`)
-  const input = document.getElementById(element.htmlFor) as HTMLInputElement | HTMLSelectElement | HTMLButtonElement
-  assert.ok(input, `${label} is associated with its control`)
-  if (input.tagName === 'BUTTON') {
-    await act(async () => { input.click(); await tick() })
-    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.trim() === value)
-    assert.ok(option, `missing choice ${value}`)
-    await act(async () => { option.click(); await tick() })
-    assert.equal(input.textContent?.trim(), value, `${label} commits the selected choice`)
-    return
+  const element = [...document.querySelectorAll("label")].find(
+    (element) => !element.closest("[hidden]") && element.textContent?.trim().startsWith(label),
+  );
+  assert.ok(element, `missing ${label}`);
+  const input = document.getElementById(element.htmlFor) as
+    HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
+  assert.ok(input, `${label} is associated with its control`);
+  if (input.tagName === "BUTTON") {
+    await act(async () => {
+      input.click();
+      await tick();
+    });
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (option) => option.textContent?.trim() === value,
+    );
+    assert.ok(option, `missing choice ${value}`);
+    await act(async () => {
+      option.click();
+      await tick();
+    });
+    assert.equal(input.textContent?.trim(), value, `${label} commits the selected choice`);
+    return;
   }
   await act(async () => {
-    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')!.set!.call(input, value)
-    input.dispatchEvent(new window.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }))
-    await tick()
-  })
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value")!.set!.call(input, value);
+    input.dispatchEvent(
+      new window.Event(input.tagName === "SELECT" ? "change" : "input", { bubbles: true }),
+    );
+    await tick();
+  });
 }
 
-const manifest = (source: string) => ({ source, displayName: source, authKind: 'token' as const, blurb: '',
+const manifest = (source: string) => ({
+  source,
+  displayName: source,
+  authKind: "token" as const,
+  blurb: "",
   configFields: [],
-  secretFields: [], ...connectorSettings(source),
-})
+  secretFields: [],
+  ...connectorSettings(source),
+});
 
-test('structured connection mappings and content save and reopen without losing nested values or OAuth identity', async (t) => {
-  const host = document.createElement('div'); document.body.append(host)
-  const root = createRoot(host)
-  let editing = { id: 'connection-1', source: 'netsuite', displayName: 'Source account', authKind: 'token', status: 'active' as const,
-    config: { realmId: 'callback-owned', entityMappings: { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman', projectStatuses: { 'In Progress': 'active' }, taxCodeFallbacks: { sales: '13' } } } } as Record<string, unknown>,
-    mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, outOfPeriodDatePolicy: 'refuse' as const,
-    postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
-  let saved: { config: Record<string, unknown> } | undefined
-  const readSaved = (): { config: Record<string, unknown> } | undefined => saved
-  const previousFetch = globalThis.fetch
-  const reads: string[] = []
+test("structured connection mappings and content save and reopen without losing nested values or OAuth identity", async (t) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  let editing = {
+    id: "connection-1",
+    source: "netsuite",
+    displayName: "Source account",
+    authKind: "token",
+    status: "active" as const,
+    config: {
+      realmId: "callback-owned",
+      entityMappings: {
+        version: 1,
+        entities: {},
+        sourceOptions: {
+          projectForemanField: "custentity_foreman",
+          projectStatuses: { "In Progress": "active" },
+          taxCodeFallbacks: { sales: "13" },
+        },
+      },
+    } as Record<string, unknown>,
+    mirrorEnabled: true,
+    mirrorSchedule: "daily",
+    postedChangePolicy: "review_required" as const,
+    outOfPeriodDatePolicy: "refuse" as const,
+    postedChangeAuthorizedAt: null,
+    cursor: null,
+    lastRunAt: null,
+    lastError: null,
+    hasSecrets: true,
+  };
+  let saved: { config: Record<string, unknown> } | undefined;
+  const readSaved = (): { config: Record<string, unknown> } | undefined => saved;
+  const previousFetch = globalThis.fetch;
+  const reads: string[] = [];
   globalThis.fetch = (async (input, init) => {
-    if (String(input).includes('/mapping-catalog')) {
-      const entities = entityMappingMetadata(['items', 'parties'], ['customers', 'vendors', 'employees'])
-      const entity = new URL(String(input), 'http://localhost').searchParams.get('entity')
-      return Response.json(entity ? { entity: entities.find(row => row.key === entity) } : { entities })
+    if (String(input).includes("/mapping-catalog")) {
+      const entities = entityMappingMetadata(
+        ["items", "parties"],
+        ["customers", "vendors", "employees"],
+      );
+      const entity = new URL(String(input), "http://localhost").searchParams.get("entity");
+      return Response.json(
+        entity ? { entity: entities.find((row) => row.key === entity) } : { entities },
+      );
     }
-    if (String(input).includes('/mapping-options?')) {
-      reads.push(String(input))
-      const query = new URL(String(input), 'http://localhost').searchParams
-      const field = query.get('field')
-      if (field === 'timeTypeMultiplierField') assert.equal(query.get('parent'), 'customrecord_time')
+    if (String(input).includes("/mapping-options?")) {
+      reads.push(String(input));
+      const query = new URL(String(input), "http://localhost").searchParams;
+      const field = query.get("field");
+      if (field === "timeTypeMultiplierField")
+        assert.equal(query.get("parent"), "customrecord_time");
       const choices: Record<string, { value: string; label: string }[]> = {
-        projectForemanField: [{ value: 'custentity_foreman', label: 'Foreman contact' }],
-        timeTypeRecord: [{ value: 'customrecord_time', label: 'Time categories' }],
-        timeTypeMultiplierField: [{ value: 'custrecord_multiplier', label: 'Multiplier' }],
-        projectStatuses: [{ value: 'Completed', label: 'Completed' }],
-      }
-      return Response.json(choices[field ?? ''] ?? [])
+        projectForemanField: [{ value: "custentity_foreman", label: "Foreman contact" }],
+        timeTypeRecord: [{ value: "customrecord_time", label: "Time categories" }],
+        timeTypeMultiplierField: [{ value: "custrecord_multiplier", label: "Multiplier" }],
+        projectStatuses: [{ value: "Completed", label: "Completed" }],
+      };
+      return Response.json(choices[field ?? ""] ?? []);
     }
-    assert.equal(String(input), '/api/platform/connections/connection-1'); assert.equal(init?.method, 'PATCH')
-    saved = JSON.parse(String(init?.body)); return Response.json({ ok: true })
-  }) as typeof fetch
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = previousFetch })
-  const show = (open: boolean) => root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC" onError={(error) => { throw error }}>
-    <ConfirmRoot /><ConnectionDrawer open={open} onClose={() => {}} sourceTypes={[manifest('netsuite')]} currencies={[]} editing={editing} onSaved={() => {}} />
-  </NextIntlClientProvider>)
-  await act(async () => { show(false); await tick() })
-  await act(async () => { show(true); await tick() })
-  assert.equal(document.querySelector('textarea'), null, 'legacy mapping manifest never exposes raw JSON')
-  await click('Mappings')
-  await click('Source options')
-  assert.match(document.body.textContent ?? '', /Foreman contact/)
-  assert.equal(document.querySelector('input[placeholder="Source field or record ID"]'), null, 'source fields use labeled choices rather than identifiers to type')
-  await click('Time types')
-  const child = [...document.querySelectorAll('label')].find((label) => label.textContent === 'Time-type multiplier')!
-  assert.equal((document.getElementById(child.htmlFor) as HTMLInputElement).disabled, true)
-  await fill('Time-type source record', 'Time categories')
-  await fill('Time-type multiplier', 'Multiplier')
-  await click('Projects')
-  assert.match(document.body.textContent ?? '', /In Progress/)
-  await fill('Source value', 'Completed')
-  await fill('Native value', 'Closed')
-  await click('Sync content')
-  await click('Save changes')
-  assert.equal(saved, undefined, 'unfinished mapping is never silently discarded or saved')
-  assert.match(errorMessages().at(-1) ?? '', /Finish or discard/)
-  await click('Time types'); await click('Projects')
-  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Source value')!.htmlFor) as HTMLButtonElement).textContent?.trim(), 'Completed', 'mapping draft survives both resource and drawer switches')
-  await click('Add value mapping')
-  await click('Sync content')
-  const filesLabel = [...document.querySelectorAll('label')].find((label) => label.textContent === 'Sync transaction documents and files')!
-  await act(async () => { (document.getElementById(filesLabel.htmlFor) as HTMLInputElement).click(); await tick() })
-  await click('Save changes')
-  assert.ok(saved, `save must send a request after completing the mapping: ${errorMessages().at(-1) ?? 'no refusal'}`)
-  assert.equal(readSaved()!.config.realmId, undefined, 'callback identity is not edited')
-  assert.deepEqual(readSaved()!.config.syncOptions, { attachments: false, projectFinancials: true, crm: true, fixedAssets: true })
-  assert.equal(readSaved()!.config.mappingJson, undefined, 'only the structured configuration is written')
-  const mappings = (readSaved()!.config.entityMappings as { sourceOptions: Record<string, unknown> }).sourceOptions
-  assert.deepEqual(mappings.projectStatuses, { 'In Progress': 'active', Completed: 'closed' })
-  assert.deepEqual(mappings.taxCodeFallbacks, { sales: '13' })
-  assert.equal(mappings.timeTypeMultiplierField, 'custrecord_multiplier')
-  editing = { ...editing, config: { ...readSaved()!.config, realmId: 'callback-owned' } }
-  await act(async () => { show(false); await tick() })
-  await act(async () => { show(true); await tick() })
-  await click('Mappings'); await click('Source options'); await click('Time types')
-  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Time-type multiplier')!.htmlFor) as HTMLButtonElement).textContent?.trim(), 'Multiplier')
-  assert.ok(reads.some((url) => url.includes('field=timeTypeMultiplierField&parent=customrecord_time')))
-  await click('Sync content')
-  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Sync transaction documents and files')!.htmlFor) as HTMLInputElement).checked, false)
+    assert.equal(String(input), "/api/platform/connections/connection-1");
+    assert.equal(init?.method, "PATCH");
+    saved = JSON.parse(String(init?.body));
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = previousFetch;
+  });
+  const show = (open: boolean) =>
+    root.render(
+      <NextIntlClientProvider
+        locale="en"
+        messages={messages}
+        timeZone="UTC"
+        onError={(error) => {
+          throw error;
+        }}
+      >
+        <ConfirmRoot />
+        <ConnectionDrawer
+          open={open}
+          onClose={() => {}}
+          sourceTypes={[manifest("netsuite")]}
+          currencies={[]}
+          editing={editing}
+          onSaved={() => {}}
+        />
+      </NextIntlClientProvider>,
+    );
+  await act(async () => {
+    show(false);
+    await tick();
+  });
+  await act(async () => {
+    show(true);
+    await tick();
+  });
+  assert.equal(
+    document.querySelector("textarea"),
+    null,
+    "legacy mapping manifest never exposes raw JSON",
+  );
+  await click("Mappings");
+  await click("Source options");
+  assert.match(document.body.textContent ?? "", /Foreman contact/);
+  assert.equal(
+    document.querySelector('input[placeholder="Source field or record ID"]'),
+    null,
+    "source fields use labeled choices rather than identifiers to type",
+  );
+  await click("Time types");
+  const child = [...document.querySelectorAll("label")].find(
+    (label) => label.textContent === "Time-type multiplier",
+  )!;
+  assert.equal((document.getElementById(child.htmlFor) as HTMLInputElement).disabled, true);
+  await fill("Time-type source record", "Time categories");
+  await fill("Time-type multiplier", "Multiplier");
+  await click("Projects");
+  assert.match(document.body.textContent ?? "", /In Progress/);
+  await fill("Source value", "Completed");
+  await fill("Native value", "Closed");
+  await click("Sync content");
+  await click("Save changes");
+  assert.equal(saved, undefined, "unfinished mapping is never silently discarded or saved");
+  assert.match(errorMessages().at(-1) ?? "", /Finish or discard/);
+  await click("Time types");
+  await click("Projects");
+  assert.equal(
+    (
+      document.getElementById(
+        [...document.querySelectorAll("label")].find(
+          (label) => label.textContent === "Source value",
+        )!.htmlFor,
+      ) as HTMLButtonElement
+    ).textContent?.trim(),
+    "Completed",
+    "mapping draft survives both resource and drawer switches",
+  );
+  await click("Add value mapping");
+  await click("Sync content");
+  const filesLabel = [...document.querySelectorAll("label")].find(
+    (label) => label.textContent === "Sync transaction documents and files",
+  )!;
+  await act(async () => {
+    (document.getElementById(filesLabel.htmlFor) as HTMLInputElement).click();
+    await tick();
+  });
+  await click("Save changes");
+  assert.ok(
+    saved,
+    `save must send a request after completing the mapping: ${errorMessages().at(-1) ?? "no refusal"}`,
+  );
+  assert.equal(readSaved()!.config.realmId, undefined, "callback identity is not edited");
+  assert.deepEqual(readSaved()!.config.syncOptions, {
+    attachments: false,
+    projectFinancials: true,
+    crm: true,
+    fixedAssets: true,
+  });
+  assert.equal(
+    readSaved()!.config.mappingJson,
+    undefined,
+    "only the structured configuration is written",
+  );
+  const mappings = (
+    readSaved()!.config.entityMappings as { sourceOptions: Record<string, unknown> }
+  ).sourceOptions;
+  assert.deepEqual(mappings.projectStatuses, { "In Progress": "active", Completed: "closed" });
+  assert.deepEqual(mappings.taxCodeFallbacks, { sales: "13" });
+  assert.equal(mappings.timeTypeMultiplierField, "custrecord_multiplier");
+  editing = { ...editing, config: { ...readSaved()!.config, realmId: "callback-owned" } };
+  await act(async () => {
+    show(false);
+    await tick();
+  });
+  await act(async () => {
+    show(true);
+    await tick();
+  });
+  await click("Mappings");
+  await click("Source options");
+  await click("Time types");
+  assert.equal(
+    (
+      document.getElementById(
+        [...document.querySelectorAll("label")].find(
+          (label) => label.textContent === "Time-type multiplier",
+        )!.htmlFor,
+      ) as HTMLButtonElement
+    ).textContent?.trim(),
+    "Multiplier",
+  );
+  assert.ok(
+    reads.some((url) => url.includes("field=timeTypeMultiplierField&parent=customrecord_time")),
+  );
+  await click("Sync content");
+  assert.equal(
+    (
+      document.getElementById(
+        [...document.querySelectorAll("label")].find(
+          (label) => label.textContent === "Sync transaction documents and files",
+        )!.htmlFor,
+      ) as HTMLInputElement
+    ).checked,
+    false,
+  );
 });
 
-test('entity field and value mappings support custom targets, defaults, drafts, edit, remove and exact reopen', async (t) => {
-  const host = document.createElement('div'); document.body.append(host)
-  const root = createRoot(host)
-  const entities = entityMappingMetadata(['items', 'parties'], ['customers', 'vendors', 'employees'])
-  entities.find(entity => entity.key === 'items')!.nativeFields.push({ key: 'custom.category', customKey: 'category', label: 'Native category', kind: 'choice', options: [{ value: 'Materials', label: 'Materials' }, { value: 'Services', label: 'Services' }] })
-  let editing = { id: 'mapping-connection', source: 'qbo', displayName: 'Accounting source', authKind: 'oauth2', status: 'active' as const,
-    config: { realmId: 'callback-owned' } as Record<string, unknown>, mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, outOfPeriodDatePolicy: 'refuse' as const,
-    postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
-  let saved: { config: Record<string, unknown> } | undefined
-  const readSaved = (): { config: Record<string, unknown> } | undefined => saved
-  const previousFetch = globalThis.fetch
+test("entity field and value mappings support custom targets, defaults, drafts, edit, remove and exact reopen", async (t) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const entities = entityMappingMetadata(
+    ["items", "parties"],
+    ["customers", "vendors", "employees"],
+  );
+  entities
+    .find((entity) => entity.key === "items")!
+    .nativeFields.push({
+      key: "custom.category",
+      customKey: "category",
+      label: "Native category",
+      kind: "choice",
+      options: [
+        { value: "Materials", label: "Materials" },
+        { value: "Services", label: "Services" },
+      ],
+    });
+  let editing = {
+    id: "mapping-connection",
+    source: "qbo",
+    displayName: "Accounting source",
+    authKind: "oauth2",
+    status: "active" as const,
+    config: { realmId: "callback-owned" } as Record<string, unknown>,
+    mirrorEnabled: true,
+    mirrorSchedule: "daily",
+    postedChangePolicy: "review_required" as const,
+    outOfPeriodDatePolicy: "refuse" as const,
+    postedChangeAuthorizedAt: null,
+    cursor: null,
+    lastRunAt: null,
+    lastError: null,
+    hasSecrets: true,
+  };
+  let saved: { config: Record<string, unknown> } | undefined;
+  const readSaved = (): { config: Record<string, unknown> } | undefined => saved;
+  const previousFetch = globalThis.fetch;
   globalThis.fetch = (async (input, init) => {
-    if (String(input).includes('/mapping-catalog')) {
-      const key = new URL(String(input), 'http://localhost').searchParams.get('entity')
-      return Response.json(key ? { entity: entities.find(entity => entity.key === key) } : { entities })
+    if (String(input).includes("/mapping-catalog")) {
+      const key = new URL(String(input), "http://localhost").searchParams.get("entity");
+      return Response.json(
+        key ? { entity: entities.find((entity) => entity.key === key) } : { entities },
+      );
     }
-    assert.equal(String(input), '/api/platform/connections/mapping-connection'); assert.equal(init?.method, 'PATCH')
-    saved = JSON.parse(String(init?.body)); return Response.json({ ok: true })
-  }) as typeof fetch
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = previousFetch })
-  const show = (open: boolean) => root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC" onError={error => { throw error }}>
-    <ConnectionDrawer open={open} onClose={() => {}} sourceTypes={[manifest('qbo')]} currencies={[]} editing={editing} onSaved={() => {}} />
-  </NextIntlClientProvider>)
-  await act(async () => { show(false); await tick() }); await act(async () => { show(true); await tick() })
-  await click('Mappings'); await click('Add field mapping')
-  await fill('Source field', 'Kind'); await fill('Native field', 'Native category')
-  await click('Add value mapping'); await fill('Source value', 'inventory'); await fill('Native value', 'Materials')
-  await fill('Missing or unmapped value', 'Use the explicit default'); await fill('Default value', 'Services')
-  await click('Sync content'); await click('Save changes')
-  assert.equal(saved, undefined, 'an unapplied entity rule blocks connection save')
-  await click('Mappings'); await click('Apply mapping')
-  await fill('Entity', 'Customers'); await click('Add field mapping')
-  await fill('Native field', 'Display name'); await fill('Missing or unmapped value', 'Use the explicit default'); await fill('Default value', 'Imported customer')
-  await click('Apply mapping'); await click('Remove')
-  await fill('Entity', 'Items'); await click('Edit'); await fill('Native value', 'Services'); await click('Apply mapping')
-  await click('Save changes')
-  assert.ok(saved, errorMessages().at(-1) ?? 'Connection save must complete')
-  assert.deepEqual(readSaved()!.config.entityMappings, { version: 1, entities: {
-    items: [{ source: 'kind', target: 'custom.category', missing: 'default', values: [{ source: 'inventory', target: 'Services' }], defaultValue: 'Services' }], customers: [],
-  } })
-  editing = { ...editing, config: { ...readSaved()!.config, realmId: 'callback-owned' } }
-  await act(async () => { show(false); await tick() }); await act(async () => { show(true); await tick() })
-  await click('Mappings'); await click('Edit')
-  assert.equal((document.getElementById([...document.querySelectorAll('label')].find(label => !label.closest('[hidden]') && label.textContent?.startsWith('Native value'))!.htmlFor) as HTMLButtonElement).textContent?.trim(), 'Services')
-  assert.equal(document.querySelector('textarea'), null)
-  await click('Discard draft')
+    assert.equal(String(input), "/api/platform/connections/mapping-connection");
+    assert.equal(init?.method, "PATCH");
+    saved = JSON.parse(String(init?.body));
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = previousFetch;
+  });
+  const show = (open: boolean) =>
+    root.render(
+      <NextIntlClientProvider
+        locale="en"
+        messages={messages}
+        timeZone="UTC"
+        onError={(error) => {
+          throw error;
+        }}
+      >
+        <ConnectionDrawer
+          open={open}
+          onClose={() => {}}
+          sourceTypes={[manifest("qbo")]}
+          currencies={[]}
+          editing={editing}
+          onSaved={() => {}}
+        />
+      </NextIntlClientProvider>,
+    );
+  await act(async () => {
+    show(false);
+    await tick();
+  });
+  await act(async () => {
+    show(true);
+    await tick();
+  });
+  await click("Mappings");
+  await click("Add field mapping");
+  await fill("Source field", "Kind");
+  await fill("Native field", "Native category");
+  await click("Add value mapping");
+  await fill("Source value", "inventory");
+  await fill("Native value", "Materials");
+  await fill("Missing or unmapped value", "Use the explicit default");
+  await fill("Default value", "Services");
+  await click("Sync content");
+  await click("Save changes");
+  assert.equal(saved, undefined, "an unapplied entity rule blocks connection save");
+  await click("Mappings");
+  await click("Apply mapping");
+  await fill("Entity", "Customers");
+  await click("Add field mapping");
+  await fill("Native field", "Display name");
+  await fill("Missing or unmapped value", "Use the explicit default");
+  await fill("Default value", "Imported customer");
+  await click("Apply mapping");
+  await click("Remove");
+  await fill("Entity", "Items");
+  await click("Edit");
+  await fill("Native value", "Services");
+  await click("Apply mapping");
+  await click("Save changes");
+  assert.ok(saved, errorMessages().at(-1) ?? "Connection save must complete");
+  assert.deepEqual(readSaved()!.config.entityMappings, {
+    version: 1,
+    entities: {
+      items: [
+        {
+          source: "kind",
+          target: "custom.category",
+          missing: "default",
+          values: [{ source: "inventory", target: "Services" }],
+          defaultValue: "Services",
+        },
+      ],
+      customers: [],
+    },
+  });
+  editing = { ...editing, config: { ...readSaved()!.config, realmId: "callback-owned" } };
+  await act(async () => {
+    show(false);
+    await tick();
+  });
+  await act(async () => {
+    show(true);
+    await tick();
+  });
+  await click("Mappings");
+  await click("Edit");
+  assert.equal(
+    (
+      document.getElementById(
+        [...document.querySelectorAll("label")].find(
+          (label) => !label.closest("[hidden]") && label.textContent?.startsWith("Native value"),
+        )!.htmlFor,
+      ) as HTMLButtonElement
+    ).textContent?.trim(),
+    "Services",
+  );
+  assert.equal(document.querySelector("textarea"), null);
+  await click("Discard draft");
 });
 
-test('every connector uses the same content and mapping panels with truthful availability', async (t) => {
-  const host = document.createElement('div'); document.body.append(host)
-  const root = createRoot(host)
-  t.after(async () => { await act(async () => root.unmount()); host.remove() })
-  for (const source of ['netsuite', 'odoo', 'erpnext', 'qbd', 'qbo', 'xero', 'dynamics']) {
-    const show = (open: boolean) => root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-      <ConnectionDrawer open={open} onClose={() => {}} sourceTypes={[manifest(source)]} currencies={[]} presetSource={source} onSaved={() => {}} />
-    </NextIntlClientProvider>)
-    await act(async () => { show(false); await tick() })
-    await act(async () => { show(true); await tick() })
-    await click('Sync content')
-    const choices = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
-    assert.equal(choices.length, 4)
-    assert.equal(choices[0]!.disabled, source === 'qbd')
-    assert.ok(choices.slice(1).every((choice) => choice.disabled === (source !== 'netsuite')))
-    if (source === 'qbd') assert.match(document.body.textContent ?? '', /does not expose transaction file content/)
-    assert.match(document.body.textContent ?? '', /Always included/)
-    await click('Mappings')
-    await click('Source options')
-    assert.equal(document.querySelector('textarea'), null)
-    if (source !== 'netsuite') assert.match(document.body.textContent ?? '', /maps its supported records automatically/)
+test("every connector uses the same content and mapping panels with truthful availability", async (t) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  for (const source of ["netsuite", "odoo", "erpnext", "qbd", "qbo", "xero", "dynamics"]) {
+    const show = (open: boolean) =>
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <ConnectionDrawer
+            open={open}
+            onClose={() => {}}
+            sourceTypes={[manifest(source)]}
+            currencies={[]}
+            presetSource={source}
+            onSaved={() => {}}
+          />
+        </NextIntlClientProvider>,
+      );
+    await act(async () => {
+      show(false);
+      await tick();
+    });
+    await act(async () => {
+      show(true);
+      await tick();
+    });
+    await click("Sync content");
+    const choices = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    assert.equal(choices.length, 4);
+    assert.equal(choices[0]!.disabled, source === "qbd");
+    assert.ok(choices.slice(1).every((choice) => choice.disabled === (source !== "netsuite")));
+    if (source === "qbd")
+      assert.match(document.body.textContent ?? "", /does not expose transaction file content/);
+    assert.match(document.body.textContent ?? "", /Always included/);
+    await click("Mappings");
+    await click("Source options");
+    assert.equal(document.querySelector("textarea"), null);
+    if (source !== "netsuite")
+      assert.match(document.body.textContent ?? "", /maps its supported records automatically/);
   }
 });
 
-test('every new drawer message resolves with real native translation and interpolation in every locale', async () => {
+test("every new drawer message resolves with real native translation and interpolation in every locale", async () => {
   function paths(value: unknown, prefix: string): string[] {
-    if (typeof value === 'string') return [prefix]
-    return Object.entries(value as Record<string, unknown>).flatMap(([key, value]) => paths(value, `${prefix}.${key}`))
+    if (typeof value === "string") return [prefix];
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, value]) =>
+      paths(value, `${prefix}.${key}`),
+    );
   }
-  const keys = ['drawer.tabsLabel', ...paths(messages.sync.drawer.tabs, 'drawer.tabs'), ...paths(messages.sync.drawer.syncContent, 'drawer.syncContent'), ...paths(messages.sync.drawer.mappings, 'drawer.mappings'), ...paths(messages.sync.drawer.entityMappings, 'drawer.entityMappings'), 'runs.stats.contentExcluded', 'drawer.structuredRequired']
+  const keys = [
+    "drawer.tabsLabel",
+    ...paths(messages.sync.drawer.tabs, "drawer.tabs"),
+    ...paths(messages.sync.drawer.syncContent, "drawer.syncContent"),
+    ...paths(messages.sync.drawer.mappings, "drawer.mappings"),
+    ...paths(messages.sync.drawer.entityMappings, "drawer.entityMappings"),
+    "runs.stats.contentExcluded",
+    "drawer.structuredRequired",
+  ];
   for (const locale of LOCALE_CODES) {
-    const catalog = (await import(`../../../messages/${locale}/index.ts`)).default
-    const t = createTranslator({ locale, messages: catalog, namespace: 'sync', onError: (error) => { throw error } })
+    const catalog = (await import(`../../../messages/${locale}/index.ts`)).default;
+    const t = createTranslator({
+      locale,
+      messages: catalog,
+      namespace: "sync",
+      onError: (error) => {
+        throw error;
+      },
+    });
     for (const key of keys) {
-      const value = t(key, { parent: 'Source record', source: 'Completed', content: 'Files', value: 'Saved field', count: 2, entity: 'Items' })
-      assert.ok(value.trim(), `${locale}: ${key}`)
-      assert.ok(!/[{}]/.test(value), `${locale}: ${key} must interpolate`)
+      const value = t(key, {
+        parent: "Source record",
+        source: "Completed",
+        content: "Files",
+        value: "Saved field",
+        count: 2,
+        entity: "Items",
+      });
+      assert.ok(value.trim(), `${locale}: ${key}`);
+      assert.ok(!/[{}]/.test(value), `${locale}: ${key} must interpolate`);
     }
   }
 });
 
-
-test('unrepresentable saved mappings are read-only, preserve nested values, block saving and require explicit removal', async (t) => {
-  const host = document.createElement('div'); document.body.append(host)
-  const root = createRoot(host)
-  const editing = { id: 'saved-connection', source: 'netsuite', displayName: 'Saved connection', authKind: 'token', status: 'active' as const,
-    config: { entityMappings: { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman' }, unavailableRules: [{ key: 'obsolete', value: { nested: ['Original saved value', '100.0100'] }, reason: 'This source option is unsupported' }] } },
-    mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, outOfPeriodDatePolicy: 'refuse' as const, postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
-  let saved: { config: Record<string, unknown> } | undefined
-  const readSaved = (): { config: Record<string, unknown> } | undefined => saved
-  const previousFetch = globalThis.fetch
+test("unrepresentable saved mappings are read-only, preserve nested values, block saving and require explicit removal", async (t) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const editing = {
+    id: "saved-connection",
+    source: "netsuite",
+    displayName: "Saved connection",
+    authKind: "token",
+    status: "active" as const,
+    config: {
+      entityMappings: {
+        version: 1,
+        entities: {},
+        sourceOptions: { projectForemanField: "custentity_foreman" },
+        unavailableRules: [
+          {
+            key: "obsolete",
+            value: { nested: ["Original saved value", "100.0100"] },
+            reason: "This source option is unsupported",
+          },
+        ],
+      },
+    },
+    mirrorEnabled: true,
+    mirrorSchedule: "daily",
+    postedChangePolicy: "review_required" as const,
+    outOfPeriodDatePolicy: "refuse" as const,
+    postedChangeAuthorizedAt: null,
+    cursor: null,
+    lastRunAt: null,
+    lastError: null,
+    hasSecrets: true,
+  };
+  let saved: { config: Record<string, unknown> } | undefined;
+  const readSaved = (): { config: Record<string, unknown> } | undefined => saved;
+  const previousFetch = globalThis.fetch;
   globalThis.fetch = (async (input, init) => {
-    if (String(input).includes('/mapping-catalog')) return Response.json({ entities: [] })
-    if (String(input).includes('/mapping-options')) return Response.json({ choices: [{ value: 'custentity_foreman', label: 'Foreman contact' }] })
-    saved = JSON.parse(String(init?.body)); return Response.json({ ok: true })
-  }) as typeof fetch
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = previousFetch })
-  const show = (open: boolean) => root.render(<NextIntlClientProvider locale="en" messages={messages}><ConnectionDrawer open={open} onClose={() => {}} sourceTypes={[manifest('netsuite')]} currencies={[]} editing={editing} onSaved={() => {}} /></NextIntlClientProvider>)
-  await act(async () => { show(false); await tick() }); await act(async () => { show(true); await tick() })
-  await click('Mappings')
-  assert.match(document.body.textContent ?? '', /Unavailable saved rules/)
-  assert.match(document.body.textContent ?? '', /Original saved value/)
-  assert.match(document.body.textContent ?? '', /100.0100/)
-  assert.equal(document.querySelector('textarea'), null)
-  await click('Save changes'); assert.equal(saved, undefined)
-  assert.match(errorMessages().at(-1) ?? '', /Remove or resolve/)
-  await click('Remove'); await click('Save changes')
-  assert.ok(saved)
-  assert.equal(readSaved()!.config.mappingJson, undefined)
-  assert.deepEqual(readSaved()!.config.entityMappings, { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman' }, unavailableRules: [] })
-})
+    if (String(input).includes("/mapping-catalog")) return Response.json({ entities: [] });
+    if (String(input).includes("/mapping-options"))
+      return Response.json({
+        choices: [{ value: "custentity_foreman", label: "Foreman contact" }],
+      });
+    saved = JSON.parse(String(init?.body));
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = previousFetch;
+  });
+  const show = (open: boolean) =>
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ConnectionDrawer
+          open={open}
+          onClose={() => {}}
+          sourceTypes={[manifest("netsuite")]}
+          currencies={[]}
+          editing={editing}
+          onSaved={() => {}}
+        />
+      </NextIntlClientProvider>,
+    );
+  await act(async () => {
+    show(false);
+    await tick();
+  });
+  await act(async () => {
+    show(true);
+    await tick();
+  });
+  await click("Mappings");
+  assert.match(document.body.textContent ?? "", /Unavailable saved rules/);
+  assert.match(document.body.textContent ?? "", /Original saved value/);
+  assert.match(document.body.textContent ?? "", /100.0100/);
+  assert.equal(document.querySelector("textarea"), null);
+  await click("Save changes");
+  assert.equal(saved, undefined);
+  assert.match(errorMessages().at(-1) ?? "", /Remove or resolve/);
+  await click("Remove");
+  await click("Save changes");
+  assert.ok(saved);
+  assert.equal(readSaved()!.config.mappingJson, undefined);
+  assert.deepEqual(readSaved()!.config.entityMappings, {
+    version: 1,
+    entities: {},
+    sourceOptions: { projectForemanField: "custentity_foreman" },
+    unavailableRules: [],
+  });
+});

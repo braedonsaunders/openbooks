@@ -1,10 +1,10 @@
-import { sql } from 'drizzle-orm';
-import { db } from '../../platform/db.ts';
-import { resolveCanadianGoodsTaxes,persistGoodsTaxSnapshot } from '../../tax/goods-selection.ts';
-import { provisionTaxPacks } from '../../tax/pack-provisioning.ts';
-import { persistLineTaxComponents } from '../../tax/persist.ts';
-import { draftDocument,capture,deps } from '../ledger-helpers.ts';
-import { postDocument } from '../../ledger/posting-document.ts';
+import { sql } from "drizzle-orm";
+import { db } from "../../platform/db.ts";
+import { resolveCanadianGoodsTaxes, persistGoodsTaxSnapshot } from "../../tax/goods-selection.ts";
+import { provisionTaxPacks } from "../../tax/pack-provisioning.ts";
+import { persistLineTaxComponents } from "../../tax/persist.ts";
+import { draftDocument, capture, deps } from "../ledger-helpers.ts";
+import { postDocument } from "../../ledger/posting-document.ts";
 /**
  * Sales and consumption tax — ETA (GST/HST), Revenu Québec (QST), CRA GST34,
  * HMRC VAT Notice 700/12 (VAT100), and US economic-nexus thresholds.
@@ -78,7 +78,9 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
       values: { net: "100.0000", tax: "5.0000", total: "105.0000" },
     },
     run: () => {
-      const result = computeLineTaxes("100.00", [{ taxCodeId: "GST", sequence: 1, ratePercent: "5" }]);
+      const result = computeLineTaxes("100.00", [
+        { taxCodeId: "GST", sequence: 1, ratePercent: "5" },
+      ]);
       return {
         values: { net: result.netAmount, tax: result.taxTotal, total: result.total },
       };
@@ -124,7 +126,8 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
     citations: [
       {
         standard: "RQ QST",
-        reference: "Revenu Québec — Calculating the Taxes, two-step calculation (https://www.revenuquebec.ca/en/businesses/consumption-taxes/gsthst-and-qst/collecting-gst-and-qst/calculating-the-taxes/; verified 2026-09-19)",
+        reference:
+          "Revenu Québec — Calculating the Taxes, two-step calculation (https://www.revenuquebec.ca/en/businesses/consumption-taxes/gsthst-and-qst/collecting-gst-and-qst/calculating-the-taxes/; verified 2026-09-19)",
         kind: "requirement",
         requirement:
           "GST at 5% and QST at 9.975% are each calculated on the selling price excluding the other tax.",
@@ -202,7 +205,9 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
         (amount) =>
           computeLineTaxes(amount, [{ taxCodeId: "GST", sequence: 1, ratePercent: "5" }]).taxTotal,
       );
-      const document = computeLineTaxes("100.00", [{ taxCodeId: "GST", sequence: 1, ratePercent: "5" }]);
+      const document = computeLineTaxes("100.00", [
+        { taxCodeId: "GST", sequence: 1, ratePercent: "5" },
+      ]);
       return {
         values: {
           line1: lines[0]!,
@@ -349,7 +354,12 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
       );
       const value = (code: string): string => boxes.find((box) => box.lineCode === code)!.value;
       return {
-        values: { line109: value("109"), line113C: value("113C"), line114: value("114"), line115: value("115") },
+        values: {
+          line109: value("109"),
+          line113C: value("113C"),
+          line114: value("114"),
+          line115: value("115"),
+        },
       };
     },
   },
@@ -485,8 +495,7 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
         { state: "CA", salesUsd: "200000", txnCount: 100000 },
         { state: "CA", salesUsd: "600000", txnCount: 0 },
       ]);
-      const status = (sales: string): string =>
-        rows.find((row) => row.salesUsd === sales)!.status;
+      const status = (sales: string): string => rows.find((row) => row.salesUsd === sales)!.status;
       return { values: { highTxnLowSales: status("200000"), highSalesNoTxn: status("600000") } };
     },
   },
@@ -520,8 +529,7 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
         { state: "NY", salesUsd: "600000", txnCount: 50 },
         { state: "NY", salesUsd: "600000", txnCount: 150 },
       ]);
-      const status = (txn: number): string =>
-        rows.find((row) => row.txnCount === txn)!.status;
+      const status = (txn: number): string => rows.find((row) => row.txnCount === txn)!.status;
       return { values: { salesOnly: status(50), bothTriggers: status(150) } };
     },
   },
@@ -548,33 +556,103 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
       "The selling Canadian legal entity has a dated federal registration, the maintained Canada pack and configured collected-tax accounts. Ordinary goods and contractual delivery terms are explicitly assessed; the merchant does not select a tax code.",
     ],
     expected: {
-      values: {albertaTax:'5.0000',ontarioTax:'13.0000'},
-      entries:[
-        {step:'Alberta goods invoice',lines:[{role:'ar',amount:'105.0000'},{role:'revenue',amount:'-100.0000'},{role:'taxPayable',amount:'-5.0000'}]},
-        {step:'Ontario goods invoice',lines:[{role:'ar',amount:'113.0000'},{role:'revenue',amount:'-100.0000'},{role:'taxPayable',amount:'-13.0000'}]},
+      values: { albertaTax: "5.0000", ontarioTax: "13.0000" },
+      entries: [
+        {
+          step: "Alberta goods invoice",
+          lines: [
+            { role: "ar", amount: "105.0000" },
+            { role: "revenue", amount: "-100.0000" },
+            { role: "taxPayable", amount: "-5.0000" },
+          ],
+        },
+        {
+          step: "Ontario goods invoice",
+          lines: [
+            { role: "ar", amount: "113.0000" },
+            { role: "revenue", amount: "-100.0000" },
+            { role: "taxPayable", amount: "-13.0000" },
+          ],
+        },
       ],
     },
-    run: async ctx => {
-      const ledger=ctx.ledger!;
-      await provisionTaxPacks(ledger.orgId,['JURISDICTION:CA-AB','JURISDICTION:CA-ON'],ledger.actorId);
-      await db.execute(sql`update tax_codes set collected_account_id=${ctx.roles.taxPayable} where org_id=${ledger.orgId} and country='CA'`);
-      await db.execute(sql`update tax_registrations set subsidiary_id=${ledger.subsidiaryId},registration_number='123456789RT0001' where org_id=${ledger.orgId} and jurisdiction_id in(select id from tax_jurisdictions where org_id=${ledger.orgId} and code='CA')`);
-      const entries=[],values:Record<string,string>={};
-      for(const province of ['AB','ON']) {
-        const selection={basis:'ordinary_taxable_goods_sale',country:'CA',deliveryProvince:province,deliveryMethod:'supplier_arranged_shipping',agreementEvidence:'The signed ordinary taxable goods agreement requires supplier-arranged shipment to the stated destination province.'};
-        const documentId=await draftDocument(ledger,{kind:'customer_invoice',number:'GOODS-'+province,partyId:ledger.customerId,lines:[{accountId:ctx.roles.revenue,quantity:'1',unitPrice:'100',amount:'100'}]});
-        const chosen=(await resolveCanadianGoodsTaxes(ledger.orgId,{kind:'customer_invoice',subsidiaryId:ledger.subsidiaryId,documentDate:ledger.date,currency:'CAD',selection},[{amount:'100'}])).get(0)!;
-        await db.transaction(async tx=>{
-          await tx.execute(sql`update documents set custom=${JSON.stringify({canadianGoodsTax:selection})}::jsonb,tax_total=${chosen.computed.taxTotal},total=${chosen.computed.total} where org_id=${ledger.orgId} and id=${documentId}`);
-          const line=(await tx.execute<{id:string}>(sql`update document_lines set tax_amount=${chosen.computed.taxTotal},tax_input_amount='100' where org_id=${ledger.orgId} and document_id=${documentId} returning id`, "objects"))[0]!;
-          await persistLineTaxComponents(ledger.orgId,line.id,chosen.computed.components,ledger.actorId,tx);
-          await persistGoodsTaxSnapshot(tx,ledger.orgId,line.id,chosen.snapshot,ledger.actorId);
-          await tx.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${documentId}`);
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      await provisionTaxPacks(
+        ledger.orgId,
+        ["JURISDICTION:CA-AB", "JURISDICTION:CA-ON"],
+        ledger.actorId,
+      );
+      await db.execute(
+        sql`update tax_codes set collected_account_id=${ctx.roles.taxPayable} where org_id=${ledger.orgId} and country='CA'`,
+      );
+      await db.execute(
+        sql`update tax_registrations set subsidiary_id=${ledger.subsidiaryId},registration_number='123456789RT0001' where org_id=${ledger.orgId} and jurisdiction_id in(select id from tax_jurisdictions where org_id=${ledger.orgId} and code='CA')`,
+      );
+      const entries = [],
+        values: Record<string, string> = {};
+      for (const province of ["AB", "ON"]) {
+        const selection = {
+          basis: "ordinary_taxable_goods_sale",
+          country: "CA",
+          deliveryProvince: province,
+          deliveryMethod: "supplier_arranged_shipping",
+          agreementEvidence:
+            "The signed ordinary taxable goods agreement requires supplier-arranged shipment to the stated destination province.",
+        };
+        const documentId = await draftDocument(ledger, {
+          kind: "customer_invoice",
+          number: "GOODS-" + province,
+          partyId: ledger.customerId,
+          lines: [{ accountId: ctx.roles.revenue, quantity: "1", unitPrice: "100", amount: "100" }],
         });
-        entries.push(await capture(ctx,province==='AB'?'Alberta goods invoice':'Ontario goods invoice',async()=>{await postDocument(documentId,deps(ctx))}));
-        values[province==='AB'?'albertaTax':'ontarioTax']=chosen.computed.taxTotal;
+        const chosen = (
+          await resolveCanadianGoodsTaxes(
+            ledger.orgId,
+            {
+              kind: "customer_invoice",
+              subsidiaryId: ledger.subsidiaryId,
+              documentDate: ledger.date,
+              currency: "CAD",
+              selection,
+            },
+            [{ amount: "100" }],
+          )
+        ).get(0)!;
+        await db.transaction(async (tx) => {
+          await tx.execute(
+            sql`update documents set custom=${JSON.stringify({ canadianGoodsTax: selection })}::jsonb,tax_total=${chosen.computed.taxTotal},total=${chosen.computed.total} where org_id=${ledger.orgId} and id=${documentId}`,
+          );
+          const line = (
+            await tx.execute<{ id: string }>(
+              sql`update document_lines set tax_amount=${chosen.computed.taxTotal},tax_input_amount='100' where org_id=${ledger.orgId} and document_id=${documentId} returning id`,
+              "objects",
+            )
+          )[0]!;
+          await persistLineTaxComponents(
+            ledger.orgId,
+            line.id,
+            chosen.computed.components,
+            ledger.actorId,
+            tx,
+          );
+          await persistGoodsTaxSnapshot(tx, ledger.orgId, line.id, chosen.snapshot, ledger.actorId);
+          await tx.execute(
+            sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${documentId}`,
+          );
+        });
+        entries.push(
+          await capture(
+            ctx,
+            province === "AB" ? "Alberta goods invoice" : "Ontario goods invoice",
+            async () => {
+              await postDocument(documentId, deps(ctx));
+            },
+          ),
+        );
+        values[province === "AB" ? "albertaTax" : "ontarioTax"] = chosen.computed.taxTotal;
       }
-      return {entries,values};
+      return { entries, values };
     },
   },
 ];

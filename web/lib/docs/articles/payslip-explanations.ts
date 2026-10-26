@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const payslipExplanations: DocArticle = {
-  slug: 'payslip-explanations',
-  title: 'Payslip Explanations',
-  category: 'projects',
+  slug: "payslip-explanations",
+  title: "Payslip Explanations",
+  category: "projects",
   order: 14,
   summary:
-    'How every payslip line traces to its payroll run, wage rate, benefit and leave inputs, with the previous-stub diff and the exact records behind each number.',
-  updated: '2026-09-21',
-  keywords: ['payslip', 'pay stub', 'explain', 'wages', 'deductions', 'diff', 'payroll'],
-  related: ['payroll', 'self-service', 'payroll-checks'],
+    "How every payslip line traces to its payroll run, wage rate, benefit and leave inputs, with the previous-stub diff and the exact records behind each number.",
+  updated: "2026-09-21",
+  keywords: ["payslip", "pay stub", "explain", "wages", "deductions", "diff", "payroll"],
+  related: ["payroll", "self-service", "payroll-checks"],
   body: `# Payslip Explanations
 
 Every payslip line traces to the record that produced it. Open any payslip from Me → Pay and choose Explain: the drawer walks the gross, each earning, each deduction, and the employer cost, and every line names its treatment (which wage rate, which benefit election, which leave entry) plus the exact source record that opens on click.
@@ -26,4 +26,4 @@ You can explain your own payslips. Managers and payroll staff with the employmen
 
 The trace is read-only and never writes: it appends one line to the AI governance ledger recording that the explanation was shown, with the stub as its source.
 `,
-}
+};

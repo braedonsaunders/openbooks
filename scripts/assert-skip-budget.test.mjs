@@ -4,13 +4,23 @@ import { auditSkips } from "./assert-skip-budget.mjs";
 
 // Shapes copied from real CI database-shard logs (node's spec reporter).
 const run = (lines, { skipped, todo = 0 }) =>
-  [...lines, `ℹ tests 300`, `ℹ pass ${300 - skipped - todo}`, `ℹ fail 0`, `ℹ skipped ${skipped}`, `ℹ todo ${todo}`].join("\n");
-const dated = "﹣ a committed December run settles the year (1.458404ms) # annual settlement needs a December 2026 pay period to have begun";
+  [
+    ...lines,
+    `ℹ tests 300`,
+    `ℹ pass ${300 - skipped - todo}`,
+    `ℹ fail 0`,
+    `ℹ skipped ${skipped}`,
+    `ℹ todo ${todo}`,
+  ].join("\n");
+const dated =
+  "﹣ a committed December run settles the year (1.458404ms) # annual settlement needs a December 2026 pay period to have begun";
 const wiring = "﹣ posts a journal entry (0.2ms) # OPENBOOKS_DB_URL is not set";
 const entry = {
   budget: 0,
   reason: "the partition has a database",
-  declared: { "annual settlement needs a December 2026 pay period to have begun": "wall-clock gate" },
+  declared: {
+    "annual settlement needs a December 2026 pay period to have begun": "wall-clock gate",
+  },
 };
 
 test("a declared skip passes a zero budget and is still named", () => {
@@ -30,7 +40,11 @@ test("an undeclared skip cannot hide behind a declared one", () => {
 });
 
 test("undeclared skips within a non-zero budget pass, marked as such", () => {
-  const result = auditSkips(run([wiring], { skipped: 1 }), { budget: 2, reason: "capability gates" }, "unit");
+  const result = auditSkips(
+    run([wiring], { skipped: 1 }),
+    { budget: 2, reason: "capability gates" },
+    "unit",
+  );
   assert.equal(result.ok, true);
   assert.match(result.lines.join("\n"), /skipped \(within budget\): posts a journal entry/);
 });
@@ -46,7 +60,11 @@ test("todo tests carry the same mark, are counted, and are budgeted like skips",
   const counted = auditSkips(run([dated, todo], { skipped: 1, todo: 1 }), entry, "database");
   assert.equal(counted.ok, false, "an undeclared todo is an unrun control");
   assert.match(counted.lines.join("\n"), /reconciles a partial refund # TODO/);
-  const withBudget = auditSkips(run([dated, todo], { skipped: 1, todo: 1 }), { ...entry, budget: 1 }, "database");
+  const withBudget = auditSkips(
+    run([dated, todo], { skipped: 1, todo: 1 }),
+    { ...entry, budget: 1 },
+    "database",
+  );
   assert.equal(withBudget.ok, true);
 });
 

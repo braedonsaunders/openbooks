@@ -54,12 +54,17 @@ const row = (over: Partial<WorkScheduleRow> = {}): WorkScheduleRow => ({
   ...over,
 });
 
-const weekdays = (hours: string) =>
-  [1, 2, 3, 4, 5].map((dayIndex) => ({ dayIndex, hours }));
+const weekdays = (hours: string) => [1, 2, 3, 4, 5].map((dayIndex) => ({ dayIndex, hours }));
 
 const resolve = (over: Partial<ResolvedWorkSchedule> = {}): ResolvedWorkSchedule => ({
-  id: "s", name: null, scope: "employee", pattern: "cycle",
-  cycleDays: 7, cycleAnchor: SUNDAY, days: weekdays("8"), effectiveFrom: "2020-01-01",
+  id: "s",
+  name: null,
+  scope: "employee",
+  pattern: "cycle",
+  cycleDays: 7,
+  cycleAnchor: SUNDAY,
+  days: weekdays("8"),
+  effectiveFrom: "2020-01-01",
   ...over,
 });
 
@@ -136,8 +141,10 @@ test("a four-on-four-off rotation deliberately does not line up with the week", 
 test("unequal hours across working days ARE varying hours", () => {
   const schedule = resolve({
     days: [
-      { dayIndex: 1, hours: "10" }, { dayIndex: 2, hours: "10" },
-      { dayIndex: 3, hours: "10" }, { dayIndex: 4, hours: "4" },
+      { dayIndex: 1, hours: "10" },
+      { dayIndex: 2, hours: "10" },
+      { dayIndex: 3, hours: "10" },
+      { dayIndex: 4, hours: "4" },
     ],
   });
   assert.equal(hoursVaryByDay(schedule), true);
@@ -228,8 +235,13 @@ test("the pattern in force is the one in force ON THE DATE, not today's", () => 
   const rows = [
     row({ id: "full", employeePartyId: "emp-1", effectiveFrom: "2025-01-01", days: weekdays("8") }),
     row({
-      id: "part", employeePartyId: "emp-1", effectiveFrom: "2026-03-01",
-      days: [{ dayIndex: 2, hours: "6" }, { dayIndex: 4, hours: "6" }],
+      id: "part",
+      employeePartyId: "emp-1",
+      effectiveFrom: "2026-03-01",
+      days: [
+        { dayIndex: 2, hours: "6" },
+        { dayIndex: 4, hours: "6" },
+      ],
     }),
   ];
   assert.equal(pickWorkSchedule(rows, EMPLOYEE, "2026-01-01")!.id, "full");
@@ -244,8 +256,11 @@ test("an expired or inactive row stops competing without rewriting the past", ()
   const rows = [
     row({ id: "org", days: weekdays("7") }),
     row({
-      id: "emp", employeePartyId: "emp-1", days: weekdays("8"),
-      effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30",
+      id: "emp",
+      employeePartyId: "emp-1",
+      days: weekdays("8"),
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-06-30",
     }),
   ];
   assert.equal(pickWorkSchedule(rows, EMPLOYEE, "2026-06-30")!.id, "emp");
@@ -279,41 +294,50 @@ test("the description an operator reads in a refusal", () => {
  * titles, so direct writers cannot create two contradictory rows that the
  * resolver would have to choose between.
  */
-test("work-schedule scope uniqueness folds nullable keys and title case", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const insert = async (name: string, scope: { jobTitle?: string | null } = {}, effectiveFrom = "2026-01-01") => {
-      await db.execute(sql`
+test(
+  "work-schedule scope uniqueness folds nullable keys and title case",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const insert = async (
+        name: string,
+        scope: { jobTitle?: string | null } = {},
+        effectiveFrom = "2026-01-01",
+      ) => {
+        await db.execute(sql`
         insert into work_schedules
           (id, org_id, name, job_title, pattern, cycle_days, cycle_anchor, effective_from, is_active)
         values
           (${randomUUID()}, ${org.orgId}, ${name}, ${scope.jobTitle ?? null}, 'cycle', 7,
            '2026-01-04', ${effectiveFrom}, true)`);
-    };
-    const rejectDuplicate = async (work: () => Promise<unknown>) => {
-      await assert.rejects(work, (error: unknown) => {
-        let current: unknown = error;
-        for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
-          const candidate = current as { code?: string; constraint?: string; cause?: unknown };
-          if (candidate.code === "23505" && candidate.constraint === "work_schedules_scope_from") return true;
-          current = candidate.cause;
-        }
-        return false;
-      });
-    };
+      };
+      const rejectDuplicate = async (work: () => Promise<unknown>) => {
+        await assert.rejects(work, (error: unknown) => {
+          let current: unknown = error;
+          for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+            const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+            if (candidate.code === "23505" && candidate.constraint === "work_schedules_scope_from")
+              return true;
+            current = candidate.cause;
+          }
+          return false;
+        });
+      };
 
-    // Organization defaults have every nullable scope key set to NULL. A
-    // plain unique index admits both rows; the normalized expression index
-    // rejects the second one at the storage boundary.
-    await insert("Default A");
-    await rejectDuplicate(() => insert("Default B"));
+      // Organization defaults have every nullable scope key set to NULL. A
+      // plain unique index admits both rows; the normalized expression index
+      // rejects the second one at the storage boundary.
+      await insert("Default A");
+      await rejectDuplicate(() => insert("Default B"));
 
-    // The same normalization applies to the case-insensitive job-title scope;
-    // a different title remains a valid independent scope on that date.
-    await insert("Carpenter A", { jobTitle: "Carpenter" });
-    await rejectDuplicate(() => insert("Carpenter B", { jobTitle: "carpenter" }));
-    await insert("Electrician", { jobTitle: "Electrician" });
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      // The same normalization applies to the case-insensitive job-title scope;
+      // a different title remains a valid independent scope on that date.
+      await insert("Carpenter A", { jobTitle: "Carpenter" });
+      await rejectDuplicate(() => insert("Carpenter B", { jobTitle: "carpenter" }));
+      await insert("Electrician", { jobTitle: "Electrician" });
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

@@ -1,25 +1,25 @@
 /** Promotion application from document drawers: list active codes, apply one. */
-import 'server-only'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
+import "server-only";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/database";
 import {
   applyPromotion,
   listPromotions,
   type ApplyPromotionResult,
   type Promotion,
-} from '@openbooks/engine/sales/promotions'
+} from "@openbooks/engine/sales/promotions";
 
 export async function listActivePromotions(orgId: string): Promise<Promotion[]> {
-  return listPromotions(db, orgId, true)
+  return listPromotions(db, orgId, true);
 }
 
 export async function applyDocumentPromotion(input: {
-  orgId: string
-  actorId: string
-  documentId: string
-  code?: string
-  promotionId?: string
-  channelId?: string | null
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  actorId: string;
+  documentId: string;
+  code?: string;
+  promotionId?: string;
+  channelId?: string | null;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<ApplyPromotionResult> {
   return withOrgTransaction(input.orgId, () =>
     applyPromotion(db, input.orgId, input.actorId, {
@@ -29,5 +29,5 @@ export async function applyDocumentPromotion(input: {
       channelId: input.channelId,
       allowedSubsidiaryIds: input.allowedSubsidiaryIds,
     }),
-  )
+  );
 }

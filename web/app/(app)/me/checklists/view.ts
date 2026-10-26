@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -16,13 +16,10 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import {
-  loadMeChecklists,
-  type MeChecklistsData,
-} from '../../../../lib/hrm/self-service'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadMeChecklists, type MeChecklistsData } from "../../../../lib/hrm/self-service";
 
 /**
  * Me checklists — my process steps in the shared `table` block with the
@@ -31,82 +28,79 @@ import {
  * the service refusal inline with its remedy intact.
  */
 
-const f = ref<MeChecklistsData>()
-const rootF = rootRef<MeChecklistsData>()
+const f = ref<MeChecklistsData>();
+const rootF = rootRef<MeChecklistsData>();
 
 export function meChecklistsSpec(data: MeChecklistsData): PageSpec {
   return page({
-    route: '/me/checklists',
-    layout: 'list',
-    bodyClassName: 'space-y-4',
+    route: "/me/checklists",
+    layout: "list",
+    bodyClassName: "space-y-4",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
     body: [
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
-          title: data.refusal?.title ?? '',
+          title: data.refusal?.title ?? "",
           description: data.refusal?.message,
         },
-        f('refusal'),
+        f("refusal"),
       ),
       {
-        ...grid('space-y-4', [
-          grid('space-y-3', [
-            registeredListTable('me_checklists', {
-              variant: 'app',
-              rows: f('rows'),
-              rowKey: item('id'),
+        ...grid("space-y-4", [
+          grid("space-y-3", [
+            registeredListTable("me_checklists", {
+              variant: "app",
+              rows: f("rows"),
+              rowKey: item("id"),
               columns: [
-                column(f('columns.title'), text(item('title'))),
-                column(f('columns.process'), text(item('processKind'))),
+                column(f("columns.title"), text(item("title"))),
+                column(f("columns.process"), text(item("processKind"))),
+                column(f("columns.due"), text(item("dueOn"), { className: "tabular-nums" })),
+                column(f("columns.required"), text(item("requiredLabel"))),
+                column(f("columns.evidence"), text(item("evidenceLabel"))),
                 column(
-                  f('columns.due'),
-                  text(item('dueOn'), { className: 'tabular-nums' }),
-                ),
-                column(f('columns.required'), text(item('requiredLabel'))),
-                column(f('columns.evidence'), text(item('evidenceLabel'))),
-                column(
-                  f('columns.status'),
-                  badge(item('statusLabel'), {
-                    variant: item('statusVariant'),
+                  f("columns.status"),
+                  badge(item("statusLabel"), {
+                    variant: item("statusVariant"),
                   }),
                 ),
                 column(
-                  '',
-                  widgetCell('hrm-step-complete', {
-                    stepId: item('id'),
-                    label: item('completeLabel'),
-                    failedLabel: rootF('completeFailed'),
+                  "",
+                  widgetCell("hrm-step-complete", {
+                    stepId: item("id"),
+                    label: item("completeLabel"),
+                    failedLabel: rootF("completeFailed"),
                   }),
                 ),
               ],
               empty: {
-                title: f('emptyTitle'),
-                description: f('emptyDescription'),
+                title: f("emptyTitle"),
+                description: f("emptyDescription"),
               },
             }),
           ]),
         ]),
-        when: f('hasContent'),
+        when: f("hasContent"),
       },
     ],
-  })
+  });
 }
 
 export async function loadMeChecklistsPage(): Promise<MeChecklistsData> {
-  const authz = await requirePermission('hrm.self.read')
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  return loadMeChecklists(authz)
+  const authz = await requirePermission("hrm.self.read");
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  return loadMeChecklists(authz);
 }
 
 export async function meChecklistsTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('me.checklists.title')
+  const t = await getTranslations("hrm");
+  return t("me.checklists.title");
 }

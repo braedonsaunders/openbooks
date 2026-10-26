@@ -21,10 +21,7 @@ export const GET = defineRoute({
     const employmentId = url.searchParams.get("employment");
     const status = url.searchParams.get("status");
     if (employmentId !== null && !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employment must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employment must be a uuid" }, { status: 400 });
     }
     try {
       const requests = await listChangeRequests({

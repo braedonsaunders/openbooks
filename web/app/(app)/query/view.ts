@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { accessDeniedHref } from '../../../lib/gate-targets'
+import { redirect } from "next/navigation";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { accessDeniedHref } from "../../../lib/gate-targets";
 
 /**
  * The SQL console, split into a loader and a spec.
@@ -28,27 +28,27 @@ import { accessDeniedHref } from '../../../lib/gate-targets'
  */
 
 /** No server-rendered content: the loader runs the gates and binds nothing. */
-export type QueryData = Record<string, unknown>
+export type QueryData = Record<string, unknown>;
 
 export async function loadQuery(): Promise<QueryData> {
   // layout.tsx gates, verbatim: permission first, then feature flag, then
   // the unrestricted-scope fence both query endpoints enforce.
-  const authz = await requirePermission('sql.execute')
-  await requireFeatureEnabled(authz.user.orgId, 'queryConsole')
+  const authz = await requirePermission("sql.execute");
+  await requireFeatureEnabled(authz.user.orgId, "queryConsole");
   if (authz.allowedSubsidiaryIds !== null) {
-    redirect(accessDeniedHref({ permission: 'unrestricted subsidiary access' }))
+    redirect(accessDeniedHref({ permission: "unrestricted subsidiary access" }));
   }
-  return {}
+  return {};
 }
 
 export function querySpec(): PageSpec {
   return page({
-    route: '/query',
+    route: "/query",
     // Bare: the console owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-col` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it.
-    layout: 'bare',
+    layout: "bare",
     header: [],
-    body: [widgetBlock('query-console')],
-  })
+    body: [widgetBlock("query-console")],
+  });
 }

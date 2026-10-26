@@ -50,8 +50,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRecruitingAttachmentsNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmRecruitingAttachmentsNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -119,13 +120,21 @@ test("attach validates the body through the real parser before the service runs"
   const url = "http://openbooks.test/api/hrm/recruiting/attachments";
   assert.equal((await attachRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
   assert.equal(
-    (await attachRoute!.POST(jsonRequest(url, "POST", { requisitionId: REQUISITION_ID, displayName: "  " }))).status,
+    (
+      await attachRoute!.POST(
+        jsonRequest(url, "POST", { requisitionId: REQUISITION_ID, displayName: "  " }),
+      )
+    ).status,
     400,
   );
   assert.equal(
     (
       await attachRoute!.POST(
-        jsonRequest(url, "POST", { requisitionId: REQUISITION_ID, displayName: "Ada", mergeInto: "nope" }),
+        jsonRequest(url, "POST", {
+          requisitionId: REQUISITION_ID,
+          displayName: "Ada",
+          mergeInto: "nope",
+        }),
       )
     ).status,
     400,
@@ -144,7 +153,11 @@ test("attach forwards org, actor, and body in one call, then 201s", async () => 
   );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), {
-    attached: { candidate: { id: "candidate-1" }, mergedInto: null, application: { id: "application-1" } },
+    attached: {
+      candidate: { id: "candidate-1" },
+      mergedInto: null,
+      application: { id: "application-1" },
+    },
   });
   assert.equal(routeState.calls.length, 1, "exactly one service call stores both rows");
   assert.deepEqual(routeState.calls[0]!.args, {

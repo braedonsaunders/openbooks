@@ -2,7 +2,13 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { restrictionAdmits, type SubsidiaryContext } from "../organization/subsidiaries.ts";
-import { type InventoryProfile, InventoryError, InventoryOwnershipError, CostingPolicyChangeBlockedError, type Runner } from "./contracts.ts";
+import {
+  type InventoryProfile,
+  InventoryError,
+  InventoryOwnershipError,
+  CostingPolicyChangeBlockedError,
+  type Runner,
+} from "./contracts.ts";
 import { assertWarehouseAdmitsMovement, type StockMovementDirection } from "./warehouses.ts";
 import { assertSubcontractCustodyFeature } from "./subcontract-custody.ts";
 /**
@@ -28,19 +34,22 @@ export async function assertStockLocationAdmitsSubsidiary(
   // deactivation waits for in-flight movements, while a movement that arrives
   // after deactivation re-reads the committed inactive row and refuses it.
   // Share locks remain compatible across concurrent movements.
-  const r = (await tx.execute<{
-      code: string;
-      isActive: boolean;
-      subsidiary_id: string | null;
-      includeChildren: boolean;
-      kind: string;
-    }>(sql`
+  const r = await tx.execute<{
+    code: string;
+    isActive: boolean;
+    subsidiary_id: string | null;
+    includeChildren: boolean;
+    kind: string;
+  }>(
+    sql`
     select sl.code, sl.kind, sl.is_active as "isActive", l.subsidiary_id,
            l.subsidiary_include_children as "includeChildren"
       from stock_locations sl
       join locations l on l.id = sl.location_id and l.org_id = sl.org_id
      where sl.id = ${stockLocationId} and sl.org_id = ${orgId}
-     for share of sl`, "objects"));
+     for share of sl`,
+    "objects",
+  );
   const location = r[0];
   if (!location) {
     throw new InventoryError(
@@ -50,10 +59,9 @@ export async function assertStockLocationAdmitsSubsidiary(
   if (!location.isActive) {
     throw new InventoryError(`stock location "${location.code}" is inactive`);
   }
-  if (location.kind==='subcontract') await assertSubcontractCustodyFeature(tx as SqlExecutor,orgId);
-  if (
-    !restrictionAdmits(ctx, location.subsidiary_id, location.includeChildren, subsidiaryId)
-  ) {
+  if (location.kind === "subcontract")
+    await assertSubcontractCustodyFeature(tx as SqlExecutor, orgId);
+  if (!restrictionAdmits(ctx, location.subsidiary_id, location.includeChildren, subsidiaryId)) {
     throw new InventoryOwnershipError(
       `stock location "${location.code}" is restricted to another legal entity`,
     );
@@ -74,13 +82,16 @@ export async function assertNoForeignOnHand(
   stockLocationId: string,
   subsidiaryId: string,
 ): Promise<void> {
-  const r = (await tx.execute(sql`
+  const r = await tx.execute(
+    sql`
     select 1 from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
        and stock_location_id = ${stockLocationId}
        and remaining_quantity > 0
        and subsidiary_id <> ${subsidiaryId}
-     limit 1`, "objects"));
+     limit 1`,
+    "objects",
+  );
   if (r.length) {
     throw new InventoryOwnershipError(
       "on-hand stock at this location is owned by another legal entity",
@@ -94,26 +105,29 @@ export async function resolveProfile(
   runner: Runner = db,
   lock = false,
 ): Promise<InventoryProfile> {
-  const r = (await runner.execute<{
-      item_id: string;
-      costing_method: InventoryProfile["costingMethod"];
-      tracking: InventoryProfile["tracking"];
-      asset_account_id: string;
-      cogs_account_id: string;
-      adjustment_account_id: string | null;
-      variance_account_id: string | null;
-      standard_cost: string | null;
-      base_unit: string;
-      unit_conversions: unknown;
-      allow_negative_inventory: boolean;
-      negative_cost_basis: InventoryProfile["negativeCostBasis"];
-      provisional_unit_cost: string | null;
-    }>(sql`
+  const r = await runner.execute<{
+    item_id: string;
+    costing_method: InventoryProfile["costingMethod"];
+    tracking: InventoryProfile["tracking"];
+    asset_account_id: string;
+    cogs_account_id: string;
+    adjustment_account_id: string | null;
+    variance_account_id: string | null;
+    standard_cost: string | null;
+    base_unit: string;
+    unit_conversions: unknown;
+    allow_negative_inventory: boolean;
+    negative_cost_basis: InventoryProfile["negativeCostBasis"];
+    provisional_unit_cost: string | null;
+  }>(
+    sql`
     select item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
            variance_account_id, standard_cost, base_unit, unit_conversions, allow_negative_inventory,
            negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}
-     ${lock ? sql`for share` : sql``}`, "objects"));
+     ${lock ? sql`for share` : sql``}`,
+    "objects",
+  );
   const p = r[0];
   if (!p) throw new InventoryError(`item ${itemId} has no inventory profile`);
   if (p.tracking !== "none" && p.costing_method === "moving_average") {
@@ -122,7 +136,8 @@ export async function resolveProfile(
     );
   }
   const conversions = parseUnitConversions(p.unit_conversions);
-  if (conversions === "invalid") throw new InventoryError("Item unit conversions are invalid — correct the inventory profile");
+  if (conversions === "invalid")
+    throw new InventoryError("Item unit conversions are invalid — correct the inventory profile");
   return {
     itemId: p.item_id,
     costingMethod: p.costing_method,
@@ -172,9 +187,7 @@ const RE_COSTING_AUTHORIZATION_MIN_LENGTH = 5;
 const RE_COSTING_AUTHORIZATION_MAX_LENGTH = 500;
 
 export function parseCostingMethod(value: unknown): CostingMethod | null {
-  return value === "fifo" || value === "moving_average" || value === "standard"
-    ? value
-    : null;
+  return value === "fifo" || value === "moving_average" || value === "standard" ? value : null;
 }
 
 export function parseTrackingMode(value: unknown): TrackingMode | null {
@@ -208,11 +221,7 @@ export function parseUnitConversions(
     const folded = key.toLowerCase();
     if (seenFolded.has(folded)) return "invalid";
     seenFolded.add(folded);
-    if (
-      typeof rawFactor !== "number" ||
-      !Number.isFinite(rawFactor) ||
-      rawFactor <= 0
-    ) {
+    if (typeof rawFactor !== "number" || !Number.isFinite(rawFactor) || rawFactor <= 0) {
       return "invalid";
     }
     // Factors multiply exact 4dp quantities; an inexact factor (1/3 as a
@@ -228,14 +237,17 @@ export async function lockItemInventoryProfile(
   orgId: string,
   itemId: string,
 ): Promise<ItemInventoryProfileRow | null> {
-  const r = (await tx.execute<ItemInventoryProfileRow>(sql`
+  const r = await tx.execute<ItemInventoryProfileRow>(
+    sql`
     select id, abc_class, item_id, costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles
      where org_id = ${orgId} and item_id = ${itemId}
-     for update`, "objects"));
+     for update`,
+    "objects",
+  );
   return r[0] ?? null;
 }
 
@@ -263,12 +275,15 @@ export async function itemHoldsOpenStock(
   orgId: string,
   itemId: string,
 ): Promise<boolean> {
-  const held = (await tx.execute(sql`
+  const held = await tx.execute(
+    sql`
     select 1
       where exists (select 1 from cost_layers layer where layer.org_id = ${orgId}
                     and layer.item_id = ${itemId} and layer.remaining_quantity > 0)
          or exists (select 1 from inventory_provisional_costs provisional where provisional.org_id = ${orgId}
-                    and provisional.item_id = ${itemId} and provisional.remaining_quantity > 0)`, "objects"));
+                    and provisional.item_id = ${itemId} and provisional.remaining_quantity > 0)`,
+    "objects",
+  );
   return held.length > 0;
 }
 
@@ -322,19 +337,26 @@ export async function assertCostingPolicyChangeAllowed(
     );
   }
   const changed =
-    !current ||
-    current.costing_method !== next.costingMethod ||
-    current.tracking !== next.tracking;
+    !current || current.costing_method !== next.costingMethod || current.tracking !== next.tracking;
   if (!changed) return { changed: false, historyExisted: false };
   if (current && current.tracking !== next.tracking) {
-    const custody = await tx.execute(sql`select 1 from consignment_stock where org_id=${orgId} and item_id=${itemId} and remaining_quantity>0 limit 1`, "objects");
-    if (custody.length) throw new CostingPolicyChangeBlockedError('Return or take ownership of consigned stock before changing its tracking mode');
+    const custody = await tx.execute(
+      sql`select 1 from consignment_stock where org_id=${orgId} and item_id=${itemId} and remaining_quantity>0 limit 1`,
+      "objects",
+    );
+    if (custody.length)
+      throw new CostingPolicyChangeBlockedError(
+        "Return or take ownership of consigned stock before changing its tracking mode",
+      );
   }
-  const history = (await tx.execute<{ has_history: boolean }>(sql`
+  const history = await tx.execute<{ has_history: boolean }>(
+    sql`
     select exists(select 1 from cost_layers where org_id = ${orgId} and item_id = ${itemId})
         or exists(select 1 from inventory_movements where org_id = ${orgId} and item_id = ${itemId})
         or exists(select 1 from consignment_stock where org_id = ${orgId} and item_id = ${itemId})
-      as has_history`, "objects"));
+      as has_history`,
+    "objects",
+  );
   if (history[0]?.has_history !== true) {
     return { changed: true, historyExisted: false };
   }
@@ -362,10 +384,7 @@ export function assertMovementOwner(ctx: SubsidiaryContext, subsidiaryId: string
 /** Registry default is on — absence must not disable inventory. Resolved
  * through the canonical switchboard: the previous inline ::boolean cast
  * threw 22P02 on a non-boolean stored value. */
-export async function inventoryFeatureEnabled(
-  runner: Runner,
-  orgId: string,
-): Promise<boolean> {
+export async function inventoryFeatureEnabled(runner: Runner, orgId: string): Promise<boolean> {
   return orgFeatureEnabled(orgId, "inventory", runner as SqlExecutor);
 }
 
@@ -385,16 +404,22 @@ export async function assertInventoryOffHoldsNoStock(
 ): Promise<void> {
   const ids = [...new Set(itemIds)].sort();
   if (ids.length === 0) return;
-  const held = await runner.execute<{ label: string }>(sql`
+  const held = await runner.execute<{ label: string }>(
+    sql`
     select coalesce(nullif(btrim(item.code), ''), item.name) as label
       from items item
      where item.org_id = ${orgId}
-       and item.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
+       and item.id in (${sql.join(
+         ids.map((id) => sql`${id}::uuid`),
+         sql`, `,
+       )})
        and (exists (select 1 from cost_layers layer where layer.org_id = item.org_id
                      and layer.item_id = item.id and layer.remaining_quantity > 0)
          or exists (select 1 from inventory_provisional_costs provisional where provisional.org_id = item.org_id
                      and provisional.item_id = item.id and provisional.remaining_quantity > 0))
-     order by 1`, "objects");
+     order by 1`,
+    "objects",
+  );
   if (held.length === 0) return;
   const labels = held.map((row) => row.label).join(", ");
   throw new InventoryError(

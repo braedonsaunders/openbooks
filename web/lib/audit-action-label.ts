@@ -7,7 +7,7 @@
  * rendering of its code.
  */
 export function auditActionLabelKey(action: string): string {
-  return `actions.${action.replaceAll('.', '_')}`
+  return `actions.${action.replaceAll(".", "_")}`;
 }
 
 /** The label of an audit action through an `admin.audit` translator, or the fallback for an action without one. */
@@ -16,6 +16,6 @@ export function auditActionLabel(
   action: string,
   fallback: (action: string) => string,
 ): string {
-  const key = auditActionLabelKey(action) as never
-  return t.has(key) ? t(key) : fallback(action)
+  const key = auditActionLabelKey(action) as never;
+  return t.has(key) ? t(key) : fallback(action);
 }

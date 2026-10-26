@@ -49,8 +49,10 @@ export function shouldRefreshSummary(
 function cleanEntity(value: unknown): ResolvedEntity | null {
   if (typeof value !== "object" || value === null) return null;
   const { kind, id, label } = value as Record<string, unknown>;
-  if (kind !== "party" && kind !== "account" && kind !== "project" && kind !== "document") return null;
-  if (typeof id !== "string" || !id.trim() || typeof label !== "string" || !label.trim()) return null;
+  if (kind !== "party" && kind !== "account" && kind !== "project" && kind !== "document")
+    return null;
+  if (typeof id !== "string" || !id.trim() || typeof label !== "string" || !label.trim())
+    return null;
   return { kind, id: id.trim(), label: label.trim().slice(0, 120) };
 }
 
@@ -111,9 +113,10 @@ export function buildSummaryPrompt(
   transcriptText: string,
   previous: ConversationSummary | null,
 ): string {
-  const prior = previous && previous.text.trim()
-    ? `Previous summary (update it, keeping anything still relevant):\n${previous.text.trim()}\n\n`
-    : "";
+  const prior =
+    previous && previous.text.trim()
+      ? `Previous summary (update it, keeping anything still relevant):\n${previous.text.trim()}\n\n`
+      : "";
   return [
     "Summarise this accounting-assistant conversation for continuity. Reply with JSON ONLY, no prose:",
     '{"text": "<=3 sentences: what was asked, key figures found, what is still open>",',
@@ -128,7 +131,10 @@ export function buildSummaryPrompt(
 
 /** Parse the model's summary reply; falls back to prose when it ignores the schema. */
 export function parseSummaryModelOutput(raw: string): { text: string; entities: ResolvedEntity[] } {
-  const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+  const unfenced = raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/, "")
+    .trim();
   try {
     const parsed: unknown = JSON.parse(unfenced);
     if (typeof parsed !== "object" || parsed === null) throw new Error("not an object");

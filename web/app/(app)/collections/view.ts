@@ -1,112 +1,126 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
-import { builtInReportDefinitionId } from '../../../lib/custom-reports'
-import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
-import { businessToday } from '@openbooks/engine/platform/business-date'
-import { findCardsExpiringSoon, getRecoveryMetrics, MISSING_COLLECTION_POLICY } from '@openbooks/engine/payments/autopay'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { page, ref, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { isFeatureEnabled } from "../../../lib/features";
+import { isUuid, mergeHref, pickString } from "../../../lib/list-params";
+import { builtInReportDefinitionId } from "../../../lib/custom-reports";
+import { addCalendarDays } from "@openbooks/engine/platform/civil-date";
+import { businessToday } from "@openbooks/engine/platform/business-date";
+import {
+  findCardsExpiringSoon,
+  getRecoveryMetrics,
+  MISSING_COLLECTION_POLICY,
+} from "@openbooks/engine/payments/autopay";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 /** The shell composes shared page chrome, registered lists and domain editors.
  * Permissions and feature dependencies are resolved before reaching the client. */
 
 export interface CollectionsOption {
-  id: string
-  name?: string
-  label?: string
+  id: string;
+  name?: string;
+  label?: string;
 }
 
 export interface AttemptDrawerData {
   attempt: {
-    id: string
-    invoiceId: string
-    invoiceNumber: string
-    customerName: string
-    amount: string
-    currency: string
-    provider: string
-    providerRef: string | null
-    methodLabel: string | null
-    status: string
-    declineCode: string | null
-    declineKind: string | null
-    retryPosition: number
-    nextRetryOn: string | null
-    authUrl: string | null
-    usedBackup: boolean
-    receiptId: string | null
-    attemptedAt: string
-  }
-  canRetry: boolean
-  closeHref: string
+    id: string;
+    invoiceId: string;
+    invoiceNumber: string;
+    customerName: string;
+    amount: string;
+    currency: string;
+    provider: string;
+    providerRef: string | null;
+    methodLabel: string | null;
+    status: string;
+    declineCode: string | null;
+    declineKind: string | null;
+    retryPosition: number;
+    nextRetryOn: string | null;
+    authUrl: string | null;
+    usedBackup: boolean;
+    receiptId: string | null;
+    attemptedAt: string;
+  };
+  canRetry: boolean;
+  closeHref: string;
 }
 
 export interface RecoveryDashboardData {
-  window: { from: string; to: string }
+  window: { from: string; to: string };
   /** Tenant id of the governed collection-recovery-rate definition; null until seeded. */
-  recoveryReportId: string | null
+  recoveryReportId: string | null;
   /** Whether the viewer may run the governed definition (reports.read). */
-  canRunReport: boolean
+  canRunReport: boolean;
   metrics: {
-    attempts: number
-    invoicesWithFailures: number
-    recoveredInvoices: number
-    recoveredAmount: string
-    recoveredByCurrency: { currency: string; amount: string }[]
-    recoveryRate: number | null
-    churnPrevented: number
-    awaitingAuthentication: number
-    byDeclineClass: { declineClass: string; failedAttempts: number; recoveredInvoices: number; recoveryRate: number | null }[]
-    byProvider: { provider: string; failedAttempts: number; recoveredInvoices: number; recoveryRate: number | null }[]
-  }
+    attempts: number;
+    invoicesWithFailures: number;
+    recoveredInvoices: number;
+    recoveredAmount: string;
+    recoveredByCurrency: { currency: string; amount: string }[];
+    recoveryRate: number | null;
+    churnPrevented: number;
+    awaitingAuthentication: number;
+    byDeclineClass: {
+      declineClass: string;
+      failedAttempts: number;
+      recoveredInvoices: number;
+      recoveryRate: number | null;
+    }[];
+    byProvider: {
+      provider: string;
+      failedAttempts: number;
+      recoveredInvoices: number;
+      recoveryRate: number | null;
+    }[];
+  };
   awaitingAuth: {
-    attemptId: string
-    invoiceId: string
-    invoiceNumber: string
-    customerName: string
-    amount: string
-    currency: string
-    authUrl: string | null
-    attemptedAt: string
-  }[]
+    attemptId: string;
+    invoiceId: string;
+    invoiceNumber: string;
+    customerName: string;
+    amount: string;
+    currency: string;
+    authUrl: string | null;
+    attemptedAt: string;
+  }[];
   expiring: {
-    methodId: string
-    partyId: string
-    partyName: string | null
-    provider: string
-    brand: string | null
-    last4: string | null
-    expiresOn: string
+    methodId: string;
+    partyId: string;
+    partyName: string | null;
+    provider: string;
+    brand: string | null;
+    last4: string | null;
+    expiresOn: string;
     /**
      * That customer's own latest invoice currency, or null when they have no
      * invoice on file. Never another party's currency: the setup-link remedy
      * refuses by name instead of pricing in it.
      */
-    currency: string | null
-  }[]
+    currency: string | null;
+  }[];
   hardStuck: {
-    attemptId: string
-    invoiceNumber: string
-    customerName: string
-    amount: string
-    currency: string
-    declineCode: string | null
-  }[]
+    attemptId: string;
+    invoiceNumber: string;
+    customerName: string;
+    amount: string;
+    currency: string;
+    declineCode: string | null;
+  }[];
 }
 
 /** A missing prerequisite rendered as a calm notice, never a page crash. */
 export interface CollectionPolicyNotice {
-  title: string
-  description: string
-  actionLabel: string
-  actionHref: string
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionHref: string;
 }
 
 /**
@@ -116,34 +130,37 @@ export interface CollectionPolicyNotice {
  * else still throws.
  */
 export function isMissingCollectionPolicy(error: unknown): boolean {
-  return error instanceof Error && (error as { code?: unknown }).code === MISSING_COLLECTION_POLICY
+  return error instanceof Error && (error as { code?: unknown }).code === MISSING_COLLECTION_POLICY;
 }
 
 export interface CollectionsData {
-  title: string
-  description: string
+  title: string;
+  description: string;
   /** Availability of the receivables worklist, independently of configuration. */
-  worklistHref: string | null
-  worklistLabel: string
+  worklistHref: string | null;
+  worklistLabel: string;
   /** Present while automatic collection is on but no collection policy is. */
-  policyNotice: CollectionPolicyNotice | null
-  subscriptionsEnabled: boolean
-  advancedSubscriptionsEnabled: boolean
-  customers: CollectionsOption[]
-  incomeAccounts: CollectionsOption[]
+  policyNotice: CollectionPolicyNotice | null;
+  subscriptionsEnabled: boolean;
+  advancedSubscriptionsEnabled: boolean;
+  customers: CollectionsOption[];
+  incomeAccounts: CollectionsOption[];
   /** The automatic-collection queue renders only while the surface is on. */
-  autopayOn: boolean
+  autopayOn: boolean;
   /** Recovery facts for the dashboard; null while the surface is off. */
-  recovery: RecoveryDashboardData | null
+  recovery: RecoveryDashboardData | null;
   /** Page-owned URL views: exactly one operational body renders per view. */
-  tabs: { href: string; label: string; active?: boolean; count?: number | null }[]
-  activeView: string
-  onRecovery: boolean
-  onAttempts: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  attemptDrawer: ({ widget: 'collection-attempt-drawer'; props: { drawer: AttemptDrawerData & { remountKey: string } } }) | null
-  attemptsEmptyTitle: string
-  attemptsEmptyDescription: string
+  tabs: { href: string; label: string; active?: boolean; count?: number | null }[];
+  activeView: string;
+  onRecovery: boolean;
+  onAttempts: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  attemptDrawer: {
+    widget: "collection-attempt-drawer";
+    props: { drawer: AttemptDrawerData & { remountKey: string } };
+  } | null;
+  attemptsEmptyTitle: string;
+  attemptsEmptyDescription: string;
 }
 
 /**
@@ -157,21 +174,22 @@ async function loadRecovery(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   opts?: { canRunReport?: boolean },
 ): Promise<RecoveryDashboardData> {
-  const today = await businessToday(orgId)
-  const window = { from: addCalendarDays(today, -89), to: addCalendarDays(today, 1) }
+  const today = await businessToday(orgId);
+  const window = { from: addCalendarDays(today, -89), to: addCalendarDays(today, 1) };
   const [metrics, expiringCards, awaitingAuthRows, hardStuckRows] = await Promise.all([
     getRecoveryMetrics(orgId, window, allowedSubsidiaryIds),
     findCardsExpiringSoon(orgId, { asOf: today, allowedSubsidiaryIds }),
     db.execute<{
-      attemptId: string
-      invoiceId: string
-      invoiceNumber: string
-      customerName: string
-      amount: string
-      currency: string
-      authUrl: string | null
-      attemptedAt: string
-    }>(sql`
+      attemptId: string;
+      invoiceId: string;
+      invoiceNumber: string;
+      customerName: string;
+      amount: string;
+      currency: string;
+      authUrl: string | null;
+      attemptedAt: string;
+    }>(
+      sql`
       select a.id as "attemptId", a.invoice_id as "invoiceId", d.document_number as "invoiceNumber",
              p.display_name as "customerName", a.amount::text as "amount", a.currency,
              a.auth_url as "authUrl",
@@ -185,15 +203,18 @@ async function loadRecovery(
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        order by a.created_at desc
        limit 8
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     db.execute<{
-      attemptId: string
-      invoiceNumber: string
-      customerName: string
-      amount: string
-      currency: string
-      declineCode: string | null
-    }>(sql`
+      attemptId: string;
+      invoiceNumber: string;
+      customerName: string;
+      amount: string;
+      currency: string;
+      declineCode: string | null;
+    }>(
+      sql`
       select a.id as "attemptId", d.document_number as "invoiceNumber",
              p.display_name as "customerName", a.amount::text as "amount", a.currency,
              a.decline_code as "declineCode"
@@ -211,19 +232,22 @@ async function loadRecovery(
          )
        order by a.created_at desc
        limit 8
-    `, 'objects'),
-  ])
-  const expiring = expiringCards.slice(0, 8)
-  const awaitingAuth = awaitingAuthRows
-  const hardStuck = hardStuckRows
+    `,
+      "objects",
+    ),
+  ]);
+  const expiring = expiringCards.slice(0, 8);
+  const awaitingAuth = awaitingAuthRows;
+  const hardStuck = hardStuckRows;
   // Setup-link currency is per customer, never the book's latest invoice:
   // pricing one party's remedy in another party's currency misprices the
   // provider session. Customers with no invoice carry null and refuse by
   // name at send time.
-  const partyCurrency = new Map<string, string>()
+  const partyCurrency = new Map<string, string>();
   if (expiring.length > 0) {
-    const partyIds = [...new Set(expiring.map((row) => row.partyId))]
-    const currencyRows = await db.execute<{ partyId: string; currency: string }>(sql`
+    const partyIds = [...new Set(expiring.map((row) => row.partyId))];
+    const currencyRows = await db.execute<{ partyId: string; currency: string }>(
+      sql`
       select d.party_id as "partyId", d.currency
         from documents d
         join parties p on p.org_id = d.org_id and p.id = d.party_id
@@ -232,16 +256,18 @@ async function loadRecovery(
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        order by d.document_date desc, d.created_at desc, d.id desc
-    `, 'objects')
+    `,
+      "objects",
+    );
     for (const row of currencyRows) {
-      if (!partyCurrency.has(row.partyId)) partyCurrency.set(row.partyId, row.currency)
+      if (!partyCurrency.has(row.partyId)) partyCurrency.set(row.partyId, row.currency);
     }
   }
   // The governed recovery breakdown lives in the Reports hub; the dashboard
   // links to the tenant's own built-in definition rather than duplicating
   // its lists. The shared resolver ensures the catalog row and refuses a
   // tenant custom report that merely shares the slug.
-  const recoveryReportId = await builtInReportDefinitionId(orgId, 'collection-recovery-rate')
+  const recoveryReportId = await builtInReportDefinitionId(orgId, "collection-recovery-rate");
   return {
     window,
     recoveryReportId,
@@ -280,23 +306,20 @@ async function loadRecovery(
       currency: partyCurrency.get(row.partyId) ?? null,
     })),
     hardStuck,
-  }
+  };
 }
 
 export async function loadCollections(
   sp: Record<string, string | string[] | undefined> = {},
 ): Promise<CollectionsData> {
-  const [tNav, tAr] = await Promise.all([
-    getTranslations('nav'),
-    getTranslations('ar'),
-  ])
-  const authz = await requirePermission('documents.manage').catch(() => null)
-  if (!authz) redirect('/dashboard')
+  const [tNav, tAr] = await Promise.all([getTranslations("nav"), getTranslations("ar")]);
+  const authz = await requirePermission("documents.manage").catch(() => null);
+  if (!authz) redirect("/dashboard");
 
   const subscriptionsEnabled =
-    can(authz, 'ar.read') && (await isFeatureEnabled(authz.user.orgId, 'subscriptionBilling'))
+    can(authz, "ar.read") && (await isFeatureEnabled(authz.user.orgId, "subscriptionBilling"));
   const advancedSubscriptionsEnabled =
-    subscriptionsEnabled && (await isFeatureEnabled(authz.user.orgId, 'advancedSubscriptions'))
+    subscriptionsEnabled && (await isFeatureEnabled(authz.user.orgId, "advancedSubscriptions"));
   const [customers, incomeAccounts] = subscriptionsEnabled
     ? await Promise.all([
         db.execute<{ id: string; name: string }>(sql`
@@ -313,33 +336,36 @@ export async function loadCollections(
            order by number nulls last
         `),
       ])
-    : [{ rows: [] }, { rows: [] }]
+    : [{ rows: [] }, { rows: [] }];
 
-  const autopayOn = await isFeatureEnabled(authz.user.orgId, 'autopay')
-  let recovery: RecoveryDashboardData | null = null
-  let policyNotice: CollectionPolicyNotice | null = null
+  const autopayOn = await isFeatureEnabled(authz.user.orgId, "autopay");
+  let recovery: RecoveryDashboardData | null = null;
+  let policyNotice: CollectionPolicyNotice | null = null;
   if (autopayOn) {
     try {
       // The drill link reaches the native report runner, which demands
       // reports.read on top of this page's documents.manage: verify it
       // before linking so the action never leads to a refusal.
-      recovery = await loadRecovery(authz.user.orgId, authz.allowedSubsidiaryIds, { canRunReport: can(authz, 'reports.read') })
+      recovery = await loadRecovery(authz.user.orgId, authz.allowedSubsidiaryIds, {
+        canRunReport: can(authz, "reports.read"),
+      });
     } catch (error) {
-      if (!isMissingCollectionPolicy(error)) throw error
+      if (!isMissingCollectionPolicy(error)) throw error;
       policyNotice = {
-        title: tAr('collections.recovery.policyNotice.title'),
-        description: tAr('collections.recovery.policyNotice.description'),
-        actionLabel: tAr('collections.recovery.policyNotice.action'),
+        title: tAr("collections.recovery.policyNotice.title"),
+        description: tAr("collections.recovery.policyNotice.description"),
+        actionLabel: tAr("collections.recovery.policyNotice.action"),
         // Collection policies are maintained in the Collections Policies
         // view (the entity is rehomed there, so no /admin/setup page exists).
-        actionHref: '/collections?view=policies',
-      }
+        actionHref: "/collections?view=policies",
+      };
     }
   }
-  const attemptId = pickString(sp.attempt)
-  let attemptDrawer: CollectionsData['attemptDrawer'] = null
+  const attemptId = pickString(sp.attempt);
+  let attemptDrawer: CollectionsData["attemptDrawer"] = null;
   if (autopayOn && attemptId && isUuid(attemptId)) {
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute(
+      sql`
       select a.id, a.invoice_id as "invoiceId", d.document_number as "invoiceNumber",
              p.display_name as "customerName", a.amount::text as "amount", a.currency,
              a.provider, a.provider_ref as "providerRef",
@@ -360,52 +386,54 @@ export async function loadCollections(
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
        limit 1
-    `, 'objects')) as AttemptDrawerData['attempt'][]
-    const attempt = rows[0]
+    `,
+      "objects",
+    )) as AttemptDrawerData["attempt"][];
+    const attempt = rows[0];
     if (attempt) {
       attemptDrawer = {
-        widget: 'collection-attempt-drawer',
+        widget: "collection-attempt-drawer",
         props: {
           drawer: {
             attempt,
-            canRetry: can(authz, 'autopay.manage'),
+            canRetry: can(authz, "autopay.manage"),
             // Closing returns to the attempts list underneath with its
             // filters intact — never the bare page, which would drop the
             // view and read as an unrelated body.
-            closeHref: mergeHref('/collections', sp, { attempt: undefined, view: 'attempts' }),
+            closeHref: mergeHref("/collections", sp, { attempt: undefined, view: "attempts" }),
             remountKey: attempt.id,
           },
         },
-      }
+      };
     }
   }
 
-  const worklistHref = can(authz, 'ar.read') ? '/ar' : null
+  const worklistHref = can(authz, "ar.read") ? "/ar" : null;
   // Exactly one operational body renders per view. An open attempt drawer
   // forces its attempts list; otherwise the requested view wins while
   // available, defaulting to recovery for autopay portals and the standing
   // shell default everywhere else.
   const shellViews = [
-    ...(worklistHref ? ['worklist' as const] : []),
-    'recurring' as const,
-    ...(subscriptionsEnabled ? ['subscriptions' as const, 'plans' as const] : []),
+    ...(worklistHref ? ["worklist" as const] : []),
+    "recurring" as const,
+    ...(subscriptionsEnabled ? ["subscriptions" as const, "plans" as const] : []),
     ...(advancedSubscriptionsEnabled
-      ? ['versions' as const, 'contracts' as const, 'amendments' as const]
+      ? ["versions" as const, "contracts" as const, "amendments" as const]
       : []),
-    'policies' as const,
-  ]
-  const requestedView = pickString(sp.view)
-  const availableViews = [...(autopayOn ? (['recovery', 'attempts'] as const) : []), ...shellViews]
+    "policies" as const,
+  ];
+  const requestedView = pickString(sp.view);
+  const availableViews = [...(autopayOn ? (["recovery", "attempts"] as const) : []), ...shellViews];
   const activeView =
     attemptDrawer !== null
-      ? 'attempts'
+      ? "attempts"
       : requestedView && (availableViews as readonly string[]).includes(requestedView)
         ? requestedView
         : autopayOn
-          ? 'recovery'
+          ? "recovery"
           : worklistHref
-            ? 'worklist'
-            : 'policies'
+            ? "worklist"
+            : "policies";
   // View tabs keep every other list control (search, filters, saved-view
   // state) so switching views never silently resets the page around it, but
   // a drawer belongs to its own view: crossing views closes it rather than
@@ -414,112 +442,113 @@ export async function loadCollections(
   // it would override the tab); the record drawers survive only inside
   // their own views.
   const viewHref = (view: string) =>
-    mergeHref('/collections', sp, {
+    mergeHref("/collections", sp, {
       view,
       attempt: undefined,
-      subscription: view === 'subscriptions' || view === 'plans' ? pickString(sp.subscription) : undefined,
-      mode: view === 'subscriptions' || view === 'plans' ? pickString(sp.mode) : undefined,
-      form: view === 'subscriptions' || view === 'plans' ? pickString(sp.form) : undefined,
-      policy: view === 'policies' ? pickString(sp.policy) : undefined,
-    })
+      subscription:
+        view === "subscriptions" || view === "plans" ? pickString(sp.subscription) : undefined,
+      mode: view === "subscriptions" || view === "plans" ? pickString(sp.mode) : undefined,
+      form: view === "subscriptions" || view === "plans" ? pickString(sp.form) : undefined,
+      policy: view === "policies" ? pickString(sp.policy) : undefined,
+    });
   const attentionCount = recovery
     ? recovery.awaitingAuth.length + recovery.expiring.length + recovery.hardStuck.length
-    : 0
+    : 0;
   const tabLabels = {
-    recovery: tAr('collections.tabs.recovery'),
-    attempts: tAr('collections.tabs.attempts'),
-    worklist: tAr('collections.tabs.worklist'),
-    recurring: tAr('collections.tabs.recurring'),
-    subscriptions: tAr('collections.tabs.subscriptions'),
-    plans: tAr('collections.tabs.plans'),
-    versions: tAr('collections.tabs.versions'),
-    contracts: tAr('collections.tabs.contracts'),
-    amendments: tAr('collections.tabs.amendments'),
-    policies: tAr('collections.tabs.policies'),
-  } as const
-  const tabs = (['recovery', 'attempts', ...shellViews] as const)
+    recovery: tAr("collections.tabs.recovery"),
+    attempts: tAr("collections.tabs.attempts"),
+    worklist: tAr("collections.tabs.worklist"),
+    recurring: tAr("collections.tabs.recurring"),
+    subscriptions: tAr("collections.tabs.subscriptions"),
+    plans: tAr("collections.tabs.plans"),
+    versions: tAr("collections.tabs.versions"),
+    contracts: tAr("collections.tabs.contracts"),
+    amendments: tAr("collections.tabs.amendments"),
+    policies: tAr("collections.tabs.policies"),
+  } as const;
+  const tabs = (["recovery", "attempts", ...shellViews] as const)
     .filter((view) => (availableViews as readonly string[]).includes(view))
     .map((view) => ({
       href: viewHref(view),
       label: tabLabels[view],
       active: activeView === view,
-      ...(view === 'recovery' ? { count: attentionCount } : {}),
-    }))
+      ...(view === "recovery" ? { count: attentionCount } : {}),
+    }));
 
   return {
-    title: tNav('modules.collections'),
-    description: tAr('collections.pageDescription'),
+    title: tNav("modules.collections"),
+    description: tAr("collections.pageDescription"),
     worklistHref,
-    worklistLabel: tAr('collections.worklistCta'),
+    worklistLabel: tAr("collections.worklistCta"),
     subscriptionsEnabled,
     advancedSubscriptionsEnabled,
     customers: customers.rows.map((c) => ({ id: c.id, name: c.name })),
     incomeAccounts: incomeAccounts.rows.map((a) => ({
       id: a.id,
-      label: [a.number, a.name].filter(Boolean).join(' · '),
+      label: [a.number, a.name].filter(Boolean).join(" · "),
     })),
     autopayOn,
     recovery,
     policyNotice,
     tabs,
     activeView,
-    onRecovery: activeView === 'recovery',
-    onAttempts: activeView === 'attempts',
+    onRecovery: activeView === "recovery",
+    onAttempts: activeView === "attempts",
     currentParams: sp,
     attemptDrawer,
-    attemptsEmptyTitle: tAr('collections.attempts.emptyTitle'),
-    attemptsEmptyDescription: tAr('collections.attempts.emptyDescription'),
-  }
+    attemptsEmptyTitle: tAr("collections.attempts.emptyTitle"),
+    attemptsEmptyDescription: tAr("collections.attempts.emptyDescription"),
+  };
 }
 
-const f = ref<CollectionsData>()
+const f = ref<CollectionsData>();
 
 export function collectionsSpec(data: CollectionsData): PageSpec {
-  void data
+  void data;
   return page({
-    route: '/collections',
-    layout: 'bare',
+    route: "/collections",
+    layout: "bare",
     header: [],
     body: [
       // The shell renders first on every view: it owns the page header and
       // the native tab strip. On recovery and attempts it renders chrome
       // only (the client mounts no panel there), so the header always
       // precedes exactly one selected operational body below.
-      widgetBlock('collections-shell', {
-        title: f('title'),
-        description: f('description'),
-        tabs: f('tabs'),
-        initialView: f('activeView'),
-        autopayOn: f('autopayOn'),
-        worklistHref: f('worklistHref'),
-        worklistLabel: f('worklistLabel'),
-        subscriptionsEnabled: f('subscriptionsEnabled'),
-        advancedSubscriptionsEnabled: f('advancedSubscriptionsEnabled'),
-        customers: f('customers'),
-        incomeAccounts: f('incomeAccounts'),
+      widgetBlock("collections-shell", {
+        title: f("title"),
+        description: f("description"),
+        tabs: f("tabs"),
+        initialView: f("activeView"),
+        autopayOn: f("autopayOn"),
+        worklistHref: f("worklistHref"),
+        worklistLabel: f("worklistLabel"),
+        subscriptionsEnabled: f("subscriptionsEnabled"),
+        advancedSubscriptionsEnabled: f("advancedSubscriptionsEnabled"),
+        customers: f("customers"),
+        incomeAccounts: f("incomeAccounts"),
       }),
       {
         // The recovery cockpit owns its URL view: it never shares the body
         // with the console or the attempts list.
-        ...widgetBlock('recovery-dashboard', {
-          data: f('recovery'),
-          notice: f('policyNotice'),
+        ...widgetBlock("recovery-dashboard", {
+          data: f("recovery"),
+          notice: f("policyNotice"),
         }),
-        when: f('onRecovery'),
+        when: f("onRecovery"),
       },
       {
         // The attempts list owns its URL view with its drawer: an open
         // attempt forces this view server-side, so the drawer always has
         // its list underneath.
-        ...widgetBlock('entity-list-view', {
-          recordType: 'collection_attempt',
-          sp: f('currentParams'),
-          drawer: f('attemptDrawer'),
-          emptyTitle: f('attemptsEmptyTitle'),
-          emptyDescription: f('attemptsEmptyDescription'),
+        ...widgetBlock("entity-list-view", {
+          recordType: "collection_attempt",
+          sp: f("currentParams"),
+          drawer: f("attemptDrawer"),
+          emptyTitle: f("attemptsEmptyTitle"),
+          emptyDescription: f("attemptsEmptyDescription"),
         }),
-        when: f('onAttempts'),
+        when: f("onAttempts"),
       },
     ],
-  })
+  });
 }

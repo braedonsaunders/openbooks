@@ -247,10 +247,7 @@ export const quoteRampSteps = pgTable(
       "quote_ramp_steps_period_valid",
       sql`${t.periodIndex} >= 0 AND ${t.startsAfterMonths} >= 0`,
     ),
-    check(
-      "quote_ramp_steps_price_valid",
-      sql`${t.unitPrice} >= 0 AND ${t.quantity} > 0`,
-    ),
+    check("quote_ramp_steps_price_valid", sql`${t.unitPrice} >= 0 AND ${t.quantity} > 0`),
     check(
       "quote_ramp_steps_escalator_valid",
       sql`${t.escalatorPercent} IS NULL OR (${t.escalatorPercent} >= -100 AND ${t.escalatorPercent} <= 100)`,

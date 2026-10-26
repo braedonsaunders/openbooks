@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Loader2, Play } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
-import { postAgentScan } from '../run-agent-scan'
+import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Loader2, Play } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@openbooks/ui";
+import { postAgentScan } from "../run-agent-scan";
 
 /**
  * One run's row actions for the Agents activity spec table: the findings link
@@ -20,35 +20,37 @@ export function AgentsRunActions({
   findingsHref,
   findingsLabel,
 }: {
-  agentKey: string
-  findingsHref: string
-  findingsLabel: string
+  agentKey: string;
+  findingsHref: string;
+  findingsLabel: string;
 }) {
-  const t = useTranslations('admin')
-  const router = useRouter()
-  const [running, setRunning] = useState(false)
+  const t = useTranslations("admin");
+  const router = useRouter();
+  const [running, setRunning] = useState(false);
 
   async function rerun() {
-    if (running) return
-    setRunning(true)
+    if (running) return;
+    setRunning(true);
     try {
-      const outcome = await postAgentScan(agentKey, t('setup.agents.overview.scanFailed'))
+      const outcome = await postAgentScan(agentKey, t("setup.agents.overview.scanFailed"));
       if (!outcome.ok) {
         if (outcome.alreadyRunning) {
-          toast.error(t('setup.agents.overview.scanAlreadyRunning'))
-          router.refresh()
-          return
+          toast.error(t("setup.agents.overview.scanAlreadyRunning"));
+          router.refresh();
+          return;
         }
-        throw new Error(outcome.code === 'feature_disabled'
-          ? t('setup.agents.overview.featureOffError')
-          : outcome.error ?? t('setup.agents.overview.scanFailed'))
+        throw new Error(
+          outcome.code === "feature_disabled"
+            ? t("setup.agents.overview.featureOffError")
+            : (outcome.error ?? t("setup.agents.overview.scanFailed")),
+        );
       }
-      toast.success(t('setup.agents.overview.scanComplete', { count: outcome.detected }))
-      router.refresh()
+      toast.success(t("setup.agents.overview.scanComplete", { count: outcome.detected }));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setRunning(false)
+      setRunning(false);
     }
   }
 
@@ -57,10 +59,16 @@ export function AgentsRunActions({
       <Link href={findingsHref} className="font-medium text-teal-700 underline dark:text-teal-300">
         {findingsLabel}
       </Link>
-      <Button type="button" variant="outline" size="sm" disabled={running} onClick={() => void rerun()}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={running}
+        onClick={() => void rerun()}
+      >
         {running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-        {t('setup.agents.activity.rerun')}
+        {t("setup.agents.activity.rerun")}
       </Button>
     </span>
-  )
+  );
 }

@@ -43,14 +43,17 @@ export async function listFilingAccounts(
   country?: string,
   includeInactive = false,
 ): Promise<PayrollFilingAccount[]> {
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select id, country, program_type, account_number, name, remitter_type,
            subsidiary_id, state_code, is_default, is_active
       from payroll_filing_accounts
      where org_id = ${orgId} and (${includeInactive} or is_active)
        and (${country ?? null}::text is null or country = ${country ?? null})
      order by is_default desc, account_number
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map(toAccount);
 }
 
@@ -82,7 +85,10 @@ export interface FilingAccountRef {
 }
 
 export const UNASSIGNED_FILING_ACCOUNT: FilingAccountRef = {
-  id: null, accountNumber: null, name: null, remitterType: null,
+  id: null,
+  accountNumber: null,
+  name: null,
+  remitterType: null,
 };
 
 /**
@@ -140,17 +146,23 @@ export async function assertPayrollFilingAccountKnown(
   orgId: string,
   scope: { taxYear: number } | { from: string; to: string },
 ): Promise<void> {
-  const filter = "taxYear" in scope
-    ? sql`s.tax_year = ${scope.taxYear}`
-    : sql`s.pay_date between ${scope.from} and ${scope.to}`;
-  const result = await executor.execute(sql`
+  const filter =
+    "taxYear" in scope
+      ? sql`s.tax_year = ${scope.taxYear}`
+      : sql`s.pay_date between ${scope.from} and ${scope.to}`;
+  const result = await executor.execute(
+    sql`
     select s.id from pay_stubs s
     join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
      where s.org_id = ${orgId} and ${filter}
        and r.run_status = 'committed' and s.filing_account_source = 'unknown'
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (result.length) {
-    throw new PayrollError("Committed payroll has an unknown historical filing account. Reconcile its original payroll evidence before generating filing or remittance reports.");
+    throw new PayrollError(
+      "Committed payroll has an unknown historical filing account. Reconcile its original payroll evidence before generating filing or remittance reports.",
+    );
   }
 }

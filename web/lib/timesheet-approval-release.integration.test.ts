@@ -4,7 +4,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import {
+  db,
+  withBypassContext,
+  withOrgContext,
+  withOrgTransaction,
+} from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -30,7 +35,9 @@ const WEEK = "2026-07-12";
 async function seedWeek(status: "submitted", entryHours: string) {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
-  const submitterId = await withBypassContext(() => createScratchUser(org.orgId, "Week author", "admin"));
+  const submitterId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Week author", "admin"),
+  );
   await withBypassContext(async () => {
     await db.execute(sql`
       update app_roles set permissions = '["time.read", "time.manage", "time.approve"]'::jsonb
@@ -80,24 +87,50 @@ async function seedWeek(status: "submitted", entryHours: string) {
          ${submitterId}, ${submitterId})
     `);
   });
-  await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: "timesheet_week", mode: "any",
-    assignees: [{ type: "user", userId: actorId }], preventSelfApproval: true }));
-  await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId,
-    actorId: submitterId, subjectKind: "timesheet_week", subjectId: headerId }));
-  const gates = await withOrgContext(org.orgId, async () => await db.execute<{ id: string }>(sql`
+  await withBypassContext(() =>
+    seedApprovalFlow(org.orgId, {
+      subjectKind: "timesheet_week",
+      mode: "any",
+      assignees: [{ type: "user", userId: actorId }],
+      preventSelfApproval: true,
+    }),
+  );
+  await withOrgTransaction(org.orgId, () =>
+    routeSubjectSubmission({
+      orgId: org.orgId,
+      actorId: submitterId,
+      subjectKind: "timesheet_week",
+      subjectId: headerId,
+    }),
+  );
+  const gates = await withOrgContext(
+    org.orgId,
+    async () =>
+      await db.execute<{ id: string }>(
+        sql`
     select id from flow_gates where org_id=${org.orgId} and subject_kind='timesheet_week'
-      and subject_id=${headerId} and status='pending'`, "objects"));
+      and subject_id=${headerId} and status='pending'`,
+        "objects",
+      ),
+  );
   assert.equal(gates.length, 1);
   return { org, actorId, employeeId, headerId, timeEntryId, gateId: gates[0]!.id };
 }
 
 async function weekAudit(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => await db.execute<{ event: string; actorId: string; changes: Record<string, unknown> }>(sql`
+  return withOrgContext(
+    orgId,
+    async () =>
+      await db.execute<{ event: string; actorId: string; changes: Record<string, unknown> }>(
+        sql`
       select changes->>'event' as event, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId} and table_name = 'timesheet_weeks' and row_id = ${headerId}
        order by at, id
-    `, "objects"));
+    `,
+        "objects",
+      ),
+  );
 }
 
 async function cleanup(fixture: Awaited<ReturnType<typeof seedWeek>>) {
@@ -112,8 +145,12 @@ async function cleanup(fixture: Awaited<ReturnType<typeof seedWeek>>) {
 test("a flow-gated rejection audits the decision reason on the week", async () => {
   const fixture = await seedWeek("submitted", "4.0000");
   try {
-    const decision = await decideGate({ gateId: fixture.gateId, userId: fixture.actorId,
-      decision: "rejected", comment: "Client code is wrong, please fix" });
+    const decision = await decideGate({
+      gateId: fixture.gateId,
+      userId: fixture.actorId,
+      decision: "rejected",
+      comment: "Client code is wrong, please fix",
+    });
     assert.equal(decision.ok, true);
     const rows = await weekAudit(fixture.org.orgId, fixture.headerId);
     assert.equal(rows.length, 1, "the release must leave exactly one audit row for the week");
@@ -135,11 +172,24 @@ test("a flow-gated rejection audits the decision reason on the week", async () =
 
 test("a flow-gated approval records its comment and costs no zero-hour declaration", async () => {
   const fixture = await seedWeek("submitted", "0.0000");
-  const journalsBefore = await withOrgContext(fixture.org.orgId, async () => (await db.execute<{ n: string }>(sql`
-      select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`, "objects"))[0]!.n);
+  const journalsBefore = await withOrgContext(
+    fixture.org.orgId,
+    async () =>
+      (
+        await db.execute<{ n: string }>(
+          sql`
+      select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`,
+          "objects",
+        )
+      )[0]!.n,
+  );
   try {
-    const decision = await decideGate({ gateId: fixture.gateId, userId: fixture.actorId,
-      decision: "approved", comment: "Leave week looks right" });
+    const decision = await decideGate({
+      gateId: fixture.gateId,
+      userId: fixture.actorId,
+      decision: "approved",
+      comment: "Leave week looks right",
+    });
     assert.equal(decision.ok, true);
     const rows = await weekAudit(fixture.org.orgId, fixture.headerId);
     assert.equal(rows.length, 1, "the release must leave exactly one audit row for the week");
@@ -155,8 +205,17 @@ test("a flow-gated approval records its comment and costs no zero-hour declarati
     assert.deepEqual(changes.entryIds, [fixture.timeEntryId]);
     // No wage row covers this employee and no journals may appear: zero
     // hours approve with the week but never enter costing effects.
-    const journalsAfter = await withOrgContext(fixture.org.orgId, async () => (await db.execute<{ n: string }>(sql`
-        select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`, "objects"))[0]!.n);
+    const journalsAfter = await withOrgContext(
+      fixture.org.orgId,
+      async () =>
+        (
+          await db.execute<{ n: string }>(
+            sql`
+        select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`,
+            "objects",
+          )
+        )[0]!.n,
+    );
     assert.equal(journalsAfter, journalsBefore);
   } finally {
     await cleanup(fixture);

@@ -12,14 +12,8 @@ const DEFAULTS = Object.freeze({
 
 function positiveNumber(value, name, { integer = false } = {}) {
   const parsed = Number(value);
-  if (
-    !Number.isFinite(parsed) ||
-    parsed <= 0 ||
-    (integer && !Number.isInteger(parsed))
-  ) {
-    throw new Error(
-      `${name} must be a positive ${integer ? "integer" : "number"}`,
-    );
+  if (!Number.isFinite(parsed) || parsed <= 0 || (integer && !Number.isInteger(parsed))) {
+    throw new Error(`${name} must be a positive ${integer ? "integer" : "number"}`);
   }
   return parsed;
 }
@@ -45,8 +39,7 @@ export function parseLoadOptions(argv, env = process.env) {
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
-    if (!flag.startsWith("--") || value === undefined)
-      throw new Error(`invalid argument: ${flag}`);
+    if (!flag.startsWith("--") || value === undefined) throw new Error(`invalid argument: ${flag}`);
     index += 1;
     if (flag === "--base-url") values.baseUrl = value;
     else if (flag === "--concurrency") values.concurrency = value;
@@ -82,10 +75,7 @@ export function parseLoadOptions(argv, env = process.env) {
 export function percentile(samples, percentage) {
   if (samples.length === 0) return 0;
   const sorted = [...samples].sort((a, b) => a - b);
-  const index = Math.min(
-    sorted.length - 1,
-    Math.ceil((percentage / 100) * sorted.length) - 1,
-  );
+  const index = Math.min(sorted.length - 1, Math.ceil((percentage / 100) * sorted.length) - 1);
   return sorted[Math.max(0, index)];
 }
 
@@ -106,10 +96,7 @@ export async function runLoadProbe(options, fetchImpl = fetch) {
           signal: AbortSignal.timeout(options.timeoutMs),
         });
         latencies.push(performance.now() - started);
-        statusCounts.set(
-          response.status,
-          (statusCounts.get(response.status) ?? 0) + 1,
-        );
+        statusCounts.set(response.status, (statusCounts.get(response.status) ?? 0) + 1);
         if (!response.ok) errors += 1;
         await response.body?.cancel();
       } catch {
@@ -119,9 +106,7 @@ export async function runLoadProbe(options, fetchImpl = fetch) {
     }
   }
 
-  await Promise.all(
-    Array.from({ length: options.concurrency }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: options.concurrency }, () => worker()));
   const requests = latencies.length;
   const errorRate = requests === 0 ? 1 : errors / requests;
   const result = {
@@ -138,21 +123,15 @@ export async function runLoadProbe(options, fetchImpl = fetch) {
       p99: percentile(latencies, 99),
       max: latencies.length === 0 ? 0 : Math.max(...latencies),
     },
-    statusCounts: Object.fromEntries(
-      [...statusCounts.entries()].sort(([a], [b]) => a - b),
-    ),
+    statusCounts: Object.fromEntries([...statusCounts.entries()].sort(([a], [b]) => a - b)),
   };
 
   const failures = [];
   if (result.errorRate > options.maxErrorRate) {
-    failures.push(
-      `error rate ${result.errorRate.toFixed(4)} exceeds ${options.maxErrorRate}`,
-    );
+    failures.push(`error rate ${result.errorRate.toFixed(4)} exceeds ${options.maxErrorRate}`);
   }
   if (result.latencyMs.p95 > options.maxP95Ms) {
-    failures.push(
-      `p95 ${result.latencyMs.p95.toFixed(1)}ms exceeds ${options.maxP95Ms}ms`,
-    );
+    failures.push(`p95 ${result.latencyMs.p95.toFixed(1)}ms exceeds ${options.maxP95Ms}ms`);
   }
   return { failures, result };
 }
@@ -162,15 +141,11 @@ async function main() {
   const { failures, result } = await runLoadProbe(options);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (failures.length > 0) {
-    for (const failure of failures)
-      process.stderr.write(`load threshold failed: ${failure}\n`);
+    for (const failure of failures) process.stderr.write(`load threshold failed: ${failure}\n`);
     process.exitCode = 1;
   }
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }

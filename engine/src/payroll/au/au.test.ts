@@ -16,7 +16,12 @@ test("AU pack exists and is installable for FY 2026–27", () => {
   assert.equal(AU_PAYROLL_PACK.country, "AU");
   assert.equal(AU_PAYROLL_PACK.installable, true);
   assert.equal(AU_PAYROLL_PACK.statutoryCurrency, "AUD");
-  assert.deepEqual(AU_PAYROLL_PACK.taxYear, { basis: "fiscal", startMonth: 7, startDay: 1, namedBy: "closing_year" });
+  assert.deepEqual(AU_PAYROLL_PACK.taxYear, {
+    basis: "fiscal",
+    startMonth: 7,
+    startDay: 1,
+    namedBy: "closing_year",
+  });
   assert.equal(AU_PAYROLL_PACK.statutoryEngineLabel, "PAYG withholding");
   assert.equal(AU_PAYROLL_PACK.remittanceVendorSettingsKey, "atoRemittancePartyId");
 });
@@ -36,16 +41,17 @@ test("AU statutory slots name PAYG withholding, super and workers comp", () => {
 });
 
 test("AU regions list every state and territory as supported federal PAYG", () => {
-  assert.deepEqual([...AU_KNOWN_REGIONS], [
-    "NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT",
-  ]);
+  assert.deepEqual([...AU_KNOWN_REGIONS], ["NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT"]);
   assert.deepEqual(AU_PAYROLL_PACK.regions.known, AU_KNOWN_REGIONS);
   assert.deepEqual([...AU_PAYROLL_PACK.regions.supported], [...AU_KNOWN_REGIONS]);
 });
 
 test("AU statutory engine refuses bonuses by name (Schedule 5 untranscribed)", async () => {
   await assert.rejects(
-    () => computeAuStatutory({ taxYear: 2027, nonPeriodic: "1000.0000" } as Parameters<typeof computeAuStatutory>[0]),
+    () =>
+      computeAuStatutory({ taxYear: 2027, nonPeriodic: "1000.0000" } as Parameters<
+        typeof computeAuStatutory
+      >[0]),
     /Schedule 5/,
   );
 });

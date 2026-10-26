@@ -64,8 +64,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmEmploymentRecordNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmEmploymentRecordNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:gates"],
@@ -75,22 +76,23 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl: string = "./route.ts?hrm-employment-record";
-  const recordRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl: string = "./route.ts?hrm-employment-record";
+const recordRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 
@@ -103,7 +105,9 @@ function reset(): void {
 
 function getRequest(): { req: Request; ctx: { params: Promise<{ id: string }> } } {
   return {
-    req: new Request(`http://openbooks.test/api/hrm/employments/${EMPLOYMENT_ID}?effectiveDate=2026-09-20`),
+    req: new Request(
+      `http://openbooks.test/api/hrm/employments/${EMPLOYMENT_ID}?effectiveDate=2026-09-20`,
+    ),
     ctx: { params: Promise.resolve({ id: EMPLOYMENT_ID }) },
   };
 }
@@ -158,5 +162,8 @@ test("an employment outside scope is the same not-found response as an absent re
   );
   const missingGrant = await recordRoute!.GET(req, ctx);
   assert.equal(missingGrant.status, 403);
-  assert.match(String((await missingGrant.json() as { error: string }).error), /requires the hrm\.employment\.read permission/);
+  assert.match(
+    String(((await missingGrant.json()) as { error: string }).error),
+    /requires the hrm\.employment\.read permission/,
+  );
 });

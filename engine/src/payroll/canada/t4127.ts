@@ -21,11 +21,33 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { PayrollError } from "../error.ts";
 import type { Money } from "../../money/brands.ts";
 import {
-  bmax, bmin, D, max0, mulInt, mulRatioCents, mulRateCents, rate6, truncCents, U,
+  bmax,
+  bmin,
+  D,
+  max0,
+  mulInt,
+  mulRatioCents,
+  mulRateCents,
+  rate6,
+  truncCents,
+  U,
 } from "../../money/payroll-decimal.ts";
-import { rational as Q, addRational as qa, subtractRational as qs, multiplyRational, compareRational as qc, roundRational, type Rational } from "../../money/rational.ts";
 import {
-  claimCodeAmount, CPP_EXEMPTION_BY_P, EditionRates, PensionPlanRates, Province, ratesForPayDate,
+  rational as Q,
+  addRational as qa,
+  subtractRational as qs,
+  multiplyRational,
+  compareRational as qc,
+  roundRational,
+  type Rational,
+} from "../../money/rational.ts";
+import {
+  claimCodeAmount,
+  CPP_EXEMPTION_BY_P,
+  EditionRates,
+  PensionPlanRates,
+  Province,
+  ratesForPayDate,
 } from "./rates";
 
 export interface T4127Ytd {
@@ -52,20 +74,20 @@ export interface T4127Ytd {
 /** Prior committed inputs in the elected averaging window. Contribution
  * ceilings remain calendar-year inputs in ytd and are never reset here. */
 export interface T4127Averaging {
-  elapsedPeriods:number
-  income:string
-  pensionDeductions:string
-  alimonyDeductions:string
-  unionDues:string
-  f5A:string
-  pensionablePeriodic:string
-  insurablePeriodic:string
-  qpipPeriodic:string
-  pensionableNonPeriodic:string
-  insurableNonPeriodic:string
-  qpipNonPeriodic:string
-  periodicTax:string
-  bonusTax:string
+  elapsedPeriods: number;
+  income: string;
+  pensionDeductions: string;
+  alimonyDeductions: string;
+  unionDues: string;
+  f5A: string;
+  pensionablePeriodic: string;
+  insurablePeriodic: string;
+  qpipPeriodic: string;
+  pensionableNonPeriodic: string;
+  insurableNonPeriodic: string;
+  qpipNonPeriodic: string;
+  periodicTax: string;
+  bonusTax: string;
 }
 
 export interface CaContributionBases {
@@ -77,10 +99,21 @@ export interface CaContributionBases {
   qpipNonPeriodic: string;
 }
 
-export function assertCaContributionBases(input: Partial<CaContributionBases>): asserts input is CaContributionBases {
-  for (const key of ['pensionable','insurable','qpipInsurable','pensionableNonPeriodic','insurableNonPeriodic','qpipNonPeriodic'] as const) {
-    if (typeof input[key] !== 'string' || !input[key].trim()) {
-      throw new PayrollError(`Canadian payroll requires its explicit ${key} earnings base — classify the native earning components and recalculate`);
+export function assertCaContributionBases(
+  input: Partial<CaContributionBases>,
+): asserts input is CaContributionBases {
+  for (const key of [
+    "pensionable",
+    "insurable",
+    "qpipInsurable",
+    "pensionableNonPeriodic",
+    "insurableNonPeriodic",
+    "qpipNonPeriodic",
+  ] as const) {
+    if (typeof input[key] !== "string" || !input[key].trim()) {
+      throw new PayrollError(
+        `Canadian payroll requires its explicit ${key} earnings base — classify the native earning components and recalculate`,
+      );
     }
   }
 }
@@ -162,7 +195,7 @@ export interface T4127Input extends CaContributionBases {
   periodsRemaining?: number;
 
   /** An explicit election enables Option 2; absent preserves Option 1. */
-  averaging?:T4127Averaging;
+  averaging?: T4127Averaging;
   /**
    * CPP/EI/QPIP actually withheld on THIS run, for the K2 credits and the F5
    * deduction. A supplemental-period share prices contributions on the
@@ -267,8 +300,8 @@ function opt(value: string | undefined): bigint {
 }
 
 const QZERO = Q(0n);
-const qmin = (a: Rational, b: Rational): Rational => qc(a, b) < 0 ? a : b;
-const qmax = (a: Rational, b: Rational): Rational => qc(a, b) > 0 ? a : b;
+const qmin = (a: Rational, b: Rational): Rational => (qc(a, b) < 0 ? a : b);
+const qmax = (a: Rational, b: Rational): Rational => (qc(a, b) > 0 ? a : b);
 const qmax0 = (value: Rational): Rational => qmax(value, QZERO);
 const qsum = (...values: Rational[]): Rational => values.reduce(qa, QZERO);
 const qratio = (value: Rational, numerator: bigint, denominator: bigint): Rational => {
@@ -276,9 +309,13 @@ const qratio = (value: Rational, numerator: bigint, denominator: bigint): Ration
   return multiplyRational(value, Q(numerator, denominator));
 };
 const qrate = (value: Rational, rate: string): Rational => qratio(value, rate6(rate), 1_000_000n);
-const qint = (value: Rational, count: number): Rational => Q(mulInt(value.numerator, count), value.denominator);
+const qint = (value: Rational, count: number): Rational =>
+  Q(mulInt(value.numerator, count), value.denominator);
 
-function bracketFor(brackets: { upTo: string | null; rate: string; k: string }[], annual: Rational) {
+function bracketFor(
+  brackets: { upTo: string | null; rate: string; k: string }[],
+  annual: Rational,
+) {
   for (const bracket of brackets) {
     if (bracket.upTo === null || qc(annual, Q(U(bracket.upTo))) <= 0) return bracket;
   }
@@ -287,11 +324,22 @@ function bracketFor(brackets: { upTo: string | null; rate: string; k: string }[]
 
 function bpaPhaseOut(
   netIncome: Rational,
-  phase: { max: string; min: string; phaseStart: string; phaseEnd: string; slopeNum: string; slopeDen: string },
+  phase: {
+    max: string;
+    min: string;
+    phaseStart: string;
+    phaseEnd: string;
+    slopeNum: string;
+    slopeDen: string;
+  },
 ): Rational {
   if (qc(netIncome, Q(U(phase.phaseStart))) <= 0) return Q(U(phase.max));
   if (qc(netIncome, Q(U(phase.phaseEnd))) >= 0) return Q(U(phase.min));
-  const reduction = qratio(qs(netIncome, Q(U(phase.phaseStart))), BigInt(phase.slopeNum), BigInt(phase.slopeDen));
+  const reduction = qratio(
+    qs(netIncome, Q(U(phase.phaseStart))),
+    BigInt(phase.slopeNum),
+    BigInt(phase.slopeDen),
+  );
   // T4127 explicitly rounds the resulting personal amount to the cent.
   return Q(roundRational(qs(Q(U(phase.max)), reduction), 100n));
 }
@@ -326,8 +374,8 @@ function assertEiEmployerMultiple(value: string | undefined, fallback: string): 
   }
   if (!valid) {
     throw new PayrollError(
-      `employer EI multiple "${value}" must be a decimal with up to 4 places from 1.0000 to 1.4000 `
-      + "— enter the CRA-approved reduced rate for the payroll program account, or omit it for the statutory 1.4",
+      `employer EI multiple "${value}" must be a decimal with up to 4 places from 1.0000 to 1.4000 ` +
+        "— enter the CRA-approved reduced rate for the payroll program account, or omit it for the statutory 1.4",
     );
   }
   return raw;
@@ -348,9 +396,11 @@ function baseShare(amount: bigint, plan: PensionPlanRates): Rational {
 export function calculateT4127(input: T4127Input): T4127Result {
   const rates = ratesForPayDate(input.payDate);
   const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) throw new PayrollError(`invalid pay periods per year: ${P}`);
+  if (!Number.isInteger(P) || P < 1 || P > 2000)
+    throw new PayrollError(`invalid pay periods per year: ${P}`);
   const PM = input.cppMonths ?? 12;
-  if (!Number.isInteger(PM) || PM < 0 || PM > 12) throw new PayrollError(`invalid CPP months: ${PM}`);
+  if (!Number.isInteger(PM) || PM < 0 || PM > 12)
+    throw new PayrollError(`invalid CPP months: ${PM}`);
   const province = input.province;
   const isQuebec = province === "QC";
   const isOutside = province === "ZZ";
@@ -359,21 +409,30 @@ export function calculateT4127(input: T4127Input): T4127Result {
 
   const factors: Record<string, Money> = {};
   // D() emits fromUnits-fixed: every traced factor is canonical Money.
-  const trace = (key: string, value: bigint) => { factors[key] = D(value) as Money; };
+  const trace = (key: string, value: bigint) => {
+    factors[key] = D(value) as Money;
+  };
 
-  const averaging=input.averaging;
-  if(averaging && (!Number.isInteger(averaging.elapsedPeriods)||averaging.elapsedPeriods<1||averaging.elapsedPeriods>P))
-    throw new PayrollError('Cumulative averaging requires elapsed scheduled periods from 1 through the schedule’s periods per year — review the withholding method window');
-  const project = (amount: Rational): Rational => averaging
-    ? qratio(amount, BigInt(P), BigInt(averaging.elapsedPeriods))
-    : qint(amount, P);
+  const averaging = input.averaging;
+  if (
+    averaging &&
+    (!Number.isInteger(averaging.elapsedPeriods) ||
+      averaging.elapsedPeriods < 1 ||
+      averaging.elapsedPeriods > P)
+  )
+    throw new PayrollError(
+      "Cumulative averaging requires elapsed scheduled periods from 1 through the schedule’s periods per year — review the withholding method window",
+    );
+  const project = (amount: Rational): Rational =>
+    averaging ? qratio(amount, BigInt(P), BigInt(averaging.elapsedPeriods)) : qint(amount, P);
   const traceExact = (key: string, value: Rational) => trace(key, roundRational(value));
   const income = U(input.income);
   const bonus = opt(input.nonPeriodic);
   assertCaContributionBases(input);
   const PI = U(input.pensionable);
   const pensionableBonus = U(input.pensionableNonPeriodic);
-  const separateNonPeriodicPayment = input.separateNonPeriodicPayment ??
+  const separateNonPeriodicPayment =
+    input.separateNonPeriodicPayment ??
     (income === ZERO && (bonus > ZERO || pensionableBonus > ZERO) && PI <= pensionableBonus);
   const IE = U(input.insurable);
   const ytd = input.ytd ?? {};
@@ -410,7 +469,10 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const eiMax = U(isQuebec ? rates.ei.qcMaxEmployee : rates.ei.maxEmployee);
   const priorEi = opt(ytd.ei);
   const EI = input.eiExempt ? ZERO : max0(bmin(eiMax - priorEi, mulRateCents(IE, eiRate)));
-  const eiEmployer = mulRateCents(EI, assertEiEmployerMultiple(input.eiEmployerMultiple, rates.ei.employerMultiple));
+  const eiEmployer = mulRateCents(
+    EI,
+    assertEiEmployerMultiple(input.eiEmployerMultiple, rates.ei.employerMultiple),
+  );
   trace("EI", EI);
 
   // ---- QPIP (Quebec) -------------------------------------------------------
@@ -421,7 +483,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
   if (isQuebec) {
     const IE_QPIP = U(input.qpipInsurable);
     const priorQpip = opt(ytd.qpip);
-    qpip = max0(bmin(U(rates.qpip.maxEmployee) - priorQpip, mulRateCents(IE_QPIP, rates.qpip.employeeRate)));
+    qpip = max0(
+      bmin(U(rates.qpip.maxEmployee) - priorQpip, mulRateCents(IE_QPIP, rates.qpip.employeeRate)),
+    );
     const priorQpipEr = opt(ytd.qpipEmployer);
     qpipEmployer = max0(
       bmin(U(rates.qpip.maxEmployer) - priorQpipEr, mulRateCents(IE_QPIP, rates.qpip.employerRate)),
@@ -442,7 +506,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
     F5A = qratio(F5, max0(PI - pensionableBonus), PI);
     F5B = qs(F5, F5A);
   }
-  traceExact("F5", F5); traceExact("F5A", F5A); traceExact("F5B", F5B);
+  traceExact("F5", F5);
+  traceExact("F5A", F5A);
+  traceExact("F5B", F5B);
 
   const F = opt(input.pensionDeductions);
   const F2 = opt(input.alimonyDeductions);
@@ -454,9 +520,18 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const F4 = opt(ytd.nonPeriodicPensionDeductions);
   const F5BYtd = opt(ytd.nonPeriodicCppEnhancedDeductions);
 
-  const accumulatedPeriodic = qa(qs(Q(income - F - F2 - U1), F5A), Q(averaging
-    ? U(averaging.income) - U(averaging.pensionDeductions) - U(averaging.alimonyDeductions) - U(averaging.f5A) - U(averaging.unionDues)
-    : ZERO));
+  const accumulatedPeriodic = qa(
+    qs(Q(income - F - F2 - U1), F5A),
+    Q(
+      averaging
+        ? U(averaging.income) -
+            U(averaging.pensionDeductions) -
+            U(averaging.alimonyDeductions) -
+            U(averaging.f5A) -
+            U(averaging.unionDues)
+        : ZERO,
+    ),
+  );
   const annualPeriodic = qmax0(qs(project(accumulatedPeriodic), Q(HD + F1)));
   const bonusNet = qmax0(qs(Q(bonus - F3), F5B));
   const bonusYtdNet = Q(max0(B1 - F4 - F5BYtd));
@@ -471,7 +546,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
   traceExact("A_step2", aWithoutBonus);
   traceExact("A_bonus", aWithBonus);
   traceExact("A_periodic", aPeriodic);
-  trace("B1", B1); trace("F4", F4); trace("F5B_YTD", F5BYtd);
+  trace("B1", B1);
+  trace("F4", F4);
+  trace("F5B_YTD", F5BYtd);
 
   // Each bonus-method tax pass resolves its own income-phased claims.
   const claimsFor = (A: Rational): { TC: Rational; TCP: Rational } => {
@@ -488,20 +565,26 @@ export function calculateT4127(input: T4127Input): T4127Result {
       else if (input.provincialClaimCode !== undefined) {
         TCP = Q(U(claimCodeAmount(prov.claimCodes, input.provincialClaimCode)));
       } else if (prov.tcpDefault === "BPAF") TCP = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
-      else if (prov.tcpDefault === "BPAMB") TCP = prov.bpamb ? bpaPhaseOut(netIncomeForBpa, prov.bpamb) : bpamb(netIncomeForBpa);
+      else if (prov.tcpDefault === "BPAMB")
+        TCP = prov.bpamb ? bpaPhaseOut(netIncomeForBpa, prov.bpamb) : bpamb(netIncomeForBpa);
       else if (prov.tcpIncomePhaseOut) {
         const phase = prov.tcpIncomePhaseOut;
         const phaseStart = Q(U(phase.phaseStart));
         const phaseEnd = Q(U(phase.phaseEnd));
         if (qc(A, phaseStart) <= 0) TCP = Q(U(phase.max));
         else if (qc(A, phaseEnd) >= 0) TCP = Q(U(phase.min));
-        else TCP = qmax(Q(U(phase.min)), qs(Q(U(phase.max)), Q(roundRational(qrate(qs(A, phaseStart), phase.rate), 100n))));
+        else
+          TCP = qmax(
+            Q(U(phase.min)),
+            qs(Q(U(phase.max)), Q(roundRational(qrate(qs(A, phaseStart), phase.rate), 100n))),
+          );
       } else TCP = Q(U(prov.tcpDefault));
     }
     return { TC, TCP };
   };
   const { TC, TCP } = claimsFor(aTrace);
-  traceExact("TC", TC); traceExact("TCP", TCP);
+  traceExact("TC", TC);
+  traceExact("TCP", TCP);
 
   const maxBaseProrated = qratio(Q(U(plan.maxBase)), BigInt(PM), 12n);
   const k2Ytd = input.k2Method === "ytd";
@@ -509,80 +592,141 @@ export function calculateT4127(input: T4127Input): T4127Result {
   let cppCreditBasis: Rational;
   let eiCreditBasis: Rational;
   if (averaging) {
-    const projectedPe = qa(project(Q(PI - U(input.pensionableNonPeriodic) + U(averaging.pensionablePeriodic))), Q(U(averaging.pensionableNonPeriodic)));
-    const projectedIe = qa(project(Q(IE - U(input.insurableNonPeriodic) + U(averaging.insurablePeriodic))), Q(U(averaging.insurableNonPeriodic)));
-    cppCreditBasis = input.cppExempt || PM === 0 ? QZERO : qmin(maxBaseProrated,
-      qrate(qmax0(qs(projectedPe, qratio(Q(U("3500")), BigInt(PM), 12n))), plan.baseRate));
+    const projectedPe = qa(
+      project(Q(PI - U(input.pensionableNonPeriodic) + U(averaging.pensionablePeriodic))),
+      Q(U(averaging.pensionableNonPeriodic)),
+    );
+    const projectedIe = qa(
+      project(Q(IE - U(input.insurableNonPeriodic) + U(averaging.insurablePeriodic))),
+      Q(U(averaging.insurableNonPeriodic)),
+    );
+    cppCreditBasis =
+      input.cppExempt || PM === 0
+        ? QZERO
+        : qmin(
+            maxBaseProrated,
+            qrate(qmax0(qs(projectedPe, qratio(Q(U("3500")), BigInt(PM), 12n))), plan.baseRate),
+          );
     eiCreditBasis = input.eiExempt ? QZERO : qmin(Q(eiMax), qrate(qmax0(projectedIe), eiRate));
   } else if (k2Ytd) {
-    cppCreditBasis = qmin(maxBaseProrated, qa(baseShare(priorCpp, plan), baseShare(mulInt(creditCpp, PR), plan)));
+    cppCreditBasis = qmin(
+      maxBaseProrated,
+      qa(baseShare(priorCpp, plan), baseShare(mulInt(creditCpp, PR), plan)),
+    );
     eiCreditBasis = qmin(Q(eiMax), Q(priorEi + mulInt(creditEi, PR)));
   } else {
     const maxReached = priorCpp + creditCpp >= maxTotalProrated && maxTotalProrated > ZERO;
-    cppCreditBasis = input.cppExempt || PM === 0 ? QZERO
-      : maxReached ? maxBaseProrated : qmin(baseShare(mulInt(creditCpp, P), plan), maxBaseProrated);
+    cppCreditBasis =
+      input.cppExempt || PM === 0
+        ? QZERO
+        : maxReached
+          ? maxBaseProrated
+          : qmin(baseShare(mulInt(creditCpp, P), plan), maxBaseProrated);
     const eiMaxReached = priorEi + creditEi >= eiMax;
-    eiCreditBasis = input.eiExempt ? QZERO : eiMaxReached ? Q(eiMax) : qmin(Q(mulInt(creditEi, P)), Q(eiMax));
+    eiCreditBasis = input.eiExempt
+      ? QZERO
+      : eiMaxReached
+        ? Q(eiMax)
+        : qmin(Q(mulInt(creditEi, P)), Q(eiMax));
   }
   const projectedQpip = averaging
-    ? qa(project(Q((U(input.qpipInsurable)) - U(input.qpipNonPeriodic) + U(averaging.qpipPeriodic))), Q(U(averaging.qpipNonPeriodic)))
+    ? qa(
+        project(Q(U(input.qpipInsurable) - U(input.qpipNonPeriodic) + U(averaging.qpipPeriodic))),
+        Q(U(averaging.qpipNonPeriodic)),
+      )
     : QZERO;
-  const qpipCreditBasis = isQuebec ? qmin(averaging
-    ? qrate(qmax0(projectedQpip), rates.qpip.employeeRate) : Q(mulInt(creditQpip, P)), Q(U(rates.qpip.maxEmployee))) : QZERO;
+  const qpipCreditBasis = isQuebec
+    ? qmin(
+        averaging ? qrate(qmax0(projectedQpip), rates.qpip.employeeRate) : Q(mulInt(creditQpip, P)),
+        Q(U(rates.qpip.maxEmployee)),
+      )
+    : QZERO;
 
   function k2At(lowestRate: string): Rational {
-    return qrate(qsum(cppCreditBasis, eiCreditBasis, isQuebec ? qpipCreditBasis : QZERO), lowestRate);
+    return qrate(
+      qsum(cppCreditBasis, eiCreditBasis, isQuebec ? qpipCreditBasis : QZERO),
+      lowestRate,
+    );
   }
 
   const K3 = Q(opt(input.authorizedFederalCredits));
   const K3P = Q(opt(input.authorizedProvincialCredits));
   const LCF = Q(bmin(mulInt(opt(input.labourFundsCreditFederal), P), U(rates.federal.lcf.cap)));
-  const LCP = Q(prov?.lcp ? bmin(mulInt(opt(input.labourFundsCreditProvincial), P), U(prov.lcp.cap)) : ZERO);
-  const Y = Q(prov?.ontarioReduction ? mulInt(U(prov.ontarioReduction.perDependant),
-    (input.disabledDependants ?? 0) + (input.dependantsUnder19 ?? 0)) : ZERO);
+  const LCP = Q(
+    prov?.lcp ? bmin(mulInt(opt(input.labourFundsCreditProvincial), P), U(prov.lcp.cap)) : ZERO,
+  );
+  const Y = Q(
+    prov?.ontarioReduction
+      ? mulInt(
+          U(prov.ontarioReduction.perDependant),
+          (input.disabledDependants ?? 0) + (input.dependantsUnder19 ?? 0),
+        )
+      : ZERO,
+  );
 
-  const annualTax = (A: Rational): { t1: Rational; t2: Rational; parts: Record<string, Rational> } => {
+  const annualTax = (
+    A: Rational,
+  ): { t1: Rational; t2: Rational; parts: Record<string, Rational> } => {
     const parts: Record<string, Rational> = {};
     const { TC, TCP } = claimsFor(A);
     const fed = bracketFor(rates.federal.brackets, A);
     const K1 = qrate(TC, rates.federal.lowestRate);
     const K2 = k2At(rates.federal.lowestRate);
-    const K4 = qmin(qrate(qmax0(A), rates.federal.lowestRate), qrate(Q(U(rates.federal.cea)), rates.federal.lowestRate));
+    const K4 = qmin(
+      qrate(qmax0(A), rates.federal.lowestRate),
+      qrate(Q(U(rates.federal.cea)), rates.federal.lowestRate),
+    );
     let T3 = qmax0(qs(qrate(A, fed.rate), qsum(Q(U(fed.k)), K1, K2, K3, K4)));
     if (input.taxExempt) T3 = QZERO;
     let T1: Rational;
     if (isQuebec) T1 = qmax0(qs(qs(T3, LCF), qrate(T3, rates.federal.abatementQc)));
     else if (isOutside) T1 = qmax0(qs(qa(T3, qrate(T3, rates.federal.outsideCanadaSurtax)), LCF));
     else T1 = qmax0(qs(T3, LCF));
-    parts.K1 = K1; parts.K2 = K2; parts.K4 = K4; parts.T3 = T3; parts.T1 = T1;
+    parts.K1 = K1;
+    parts.K2 = K2;
+    parts.K4 = K4;
+    parts.T3 = T3;
+    parts.T1 = T1;
 
     let T2 = QZERO;
     if (prov) {
       const pb = bracketFor(prov.brackets, A);
       const K1P = qrate(TCP, prov.lowestRate);
       const K2P = k2At(prov.lowestRate);
-      const K4P = prov.hasK4p ? qmin(qrate(qmax0(A), prov.lowestRate), qrate(Q(U(rates.federal.cea)), prov.lowestRate)) : QZERO;
+      const K4P = prov.hasK4p
+        ? qmin(qrate(qmax0(A), prov.lowestRate), qrate(Q(U(rates.federal.cea)), prov.lowestRate))
+        : QZERO;
       const K5Basis = prov.k5p ? qmax0(qs(qa(K1P, K2P), Q(U(prov.k5p.threshold)))) : QZERO;
-      const K5P = prov.k5p ? prov.k5p.ratio
-        ? qratio(K5Basis, BigInt(prov.k5p.ratio.numerator), BigInt(prov.k5p.ratio.denominator))
-        : qrate(K5Basis, prov.k5p.rate) : QZERO;
+      const K5P = prov.k5p
+        ? prov.k5p.ratio
+          ? qratio(K5Basis, BigInt(prov.k5p.ratio.numerator), BigInt(prov.k5p.ratio.denominator))
+          : qrate(K5Basis, prov.k5p.rate)
+        : QZERO;
       let T4 = qmax0(qs(qrate(A, pb.rate), qsum(Q(U(pb.k)), K1P, K2P, K3P, K4P, K5P)));
       if (input.taxExempt) T4 = QZERO;
 
       let V1 = QZERO;
       if (prov.surtax) {
-        const [th1, th2] = prov.surtax.thresholds.map(value => Q(U(value))) as [Rational, Rational];
+        const [th1, th2] = prov.surtax.thresholds.map((value) => Q(U(value))) as [
+          Rational,
+          Rational,
+        ];
         const [r1, sr2] = prov.surtax.rates;
         if (qc(T4, th1) > 0) V1 = qa(V1, qrate(qs(T4, th1), r1));
         if (qc(T4, th2) > 0) V1 = qa(V1, qrate(qs(T4, th2), sr2));
       }
       let V2 = QZERO;
       if (prov.healthPremium && !input.taxExempt) {
-        if (qc(A, Q(U("200000"))) > 0) V2 = qmin(Q(U("900")), qa(Q(U("750")), qrate(qs(A, Q(U("200000"))), "0.25")));
-        else if (qc(A, Q(U("72000"))) > 0) V2 = qmin(Q(U("750")), qa(Q(U("600")), qrate(qs(A, Q(U("72000"))), "0.25")));
-        else if (qc(A, Q(U("48000"))) > 0) V2 = qmin(Q(U("600")), qa(Q(U("450")), qrate(qs(A, Q(U("48000"))), "0.25")));
-        else if (qc(A, Q(U("36000"))) > 0) V2 = qmin(Q(U("450")), qa(Q(U("300")), qrate(qs(A, Q(U("36000"))), "0.06")));
-        else if (qc(A, Q(U("20000"))) > 0) V2 = qmin(Q(U("300")), qrate(qs(A, Q(U("20000"))), "0.06"));
+        if (qc(A, Q(U("200000"))) > 0)
+          V2 = qmin(Q(U("900")), qa(Q(U("750")), qrate(qs(A, Q(U("200000"))), "0.25")));
+        else if (qc(A, Q(U("72000"))) > 0)
+          V2 = qmin(Q(U("750")), qa(Q(U("600")), qrate(qs(A, Q(U("72000"))), "0.25")));
+        else if (qc(A, Q(U("48000"))) > 0)
+          V2 = qmin(Q(U("600")), qa(Q(U("450")), qrate(qs(A, Q(U("48000"))), "0.25")));
+        else if (qc(A, Q(U("36000"))) > 0)
+          V2 = qmin(Q(U("450")), qa(Q(U("300")), qrate(qs(A, Q(U("36000"))), "0.06")));
+        else if (qc(A, Q(U("20000"))) > 0)
+          V2 = qmin(Q(U("300")), qrate(qs(A, Q(U("20000"))), "0.06"));
       }
       let S = QZERO;
       if (prov.ontarioReduction) {
@@ -591,11 +735,22 @@ export function calculateT4127(input: T4127Input): T4127Result {
       } else if (prov.bcReduction) {
         const red = prov.bcReduction;
         if (qc(A, Q(U(red.phaseStart))) <= 0) S = qmin(T4, Q(U(red.basic)));
-        else if (qc(A, Q(U(red.phaseEnd))) <= 0) S = qmin(T4, qmax0(qs(Q(U(red.basic)), qrate(qs(A, Q(U(red.phaseStart))), red.phaseRate))));
+        else if (qc(A, Q(U(red.phaseEnd))) <= 0)
+          S = qmin(
+            T4,
+            qmax0(qs(Q(U(red.basic)), qrate(qs(A, Q(U(red.phaseStart))), red.phaseRate))),
+          );
       }
       T2 = qmax0(qs(qsum(T4, V1, V2), qa(S, LCP)));
-      parts.K1P = K1P; parts.K2P = K2P; parts.K4P = K4P; parts.K5P = K5P;
-      parts.T4 = T4; parts.V1 = V1; parts.V2 = V2; parts.S = S; parts.T2 = T2;
+      parts.K1P = K1P;
+      parts.K2P = K2P;
+      parts.K4P = K4P;
+      parts.K5P = K5P;
+      parts.T4 = T4;
+      parts.V1 = V1;
+      parts.V2 = V2;
+      parts.S = S;
+      parts.T2 = T2;
     }
     return { t1: T1, t2: T2, parts };
   };
@@ -607,19 +762,33 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const traceParts = bonus > ZERO ? withBonus.parts : periodic.parts;
   for (const [key, value] of Object.entries(traceParts)) traceExact(key, value);
   const periodicClaims = claimsFor(aPeriodic);
-  traceExact("TC_periodic", periodicClaims.TC); traceExact("TCP_periodic", periodicClaims.TCP);
-  traceExact("T1_periodic", periodic.t1); traceExact("T2_periodic", periodic.t2);
+  traceExact("TC_periodic", periodicClaims.TC);
+  traceExact("TCP_periodic", periodicClaims.TCP);
+  traceExact("T1_periodic", periodic.t1);
+  traceExact("T2_periodic", periodic.t2);
 
   let periodicTax: bigint;
   if (averaging) {
-    const M = Q(U(averaging.periodicTax)), M1 = Q(U(averaging.bonusTax));
-    const beforeCurrent = qs(qratio(qs(qa(withoutBonus.t1, withoutBonus.t2), M1), BigInt(averaging.elapsedPeriods), BigInt(P)), M);
+    const M = Q(U(averaging.periodicTax)),
+      M1 = Q(U(averaging.bonusTax));
+    const beforeCurrent = qs(
+      qratio(
+        qs(qa(withoutBonus.t1, withoutBonus.t2), M1),
+        BigInt(averaging.elapsedPeriods),
+        BigInt(P),
+      ),
+      M,
+    );
     periodicTax = roundRational(qmax0(beforeCurrent), 100n) + L;
-    trace("S1_NUM", U(String(P))); trace("S1_DEN", U(String(averaging.elapsedPeriods))); trace("M", roundRational(M)); trace("M1", roundRational(M1));
+    trace("S1_NUM", U(String(P)));
+    trace("S1_DEN", U(String(averaging.elapsedPeriods)));
+    trace("M", roundRational(M));
+    trace("M1", roundRational(M1));
   } else if (qc(aPeriodic, QZERO) <= 0) periodicTax = L;
   else {
     const legs = periodTaxLegs(periodic.t1, periodic.t2, P);
-    trace("TF", legs.federal); trace("TP", legs.provincial);
+    trace("TF", legs.federal);
+    trace("TP", legs.provincial);
     periodicTax = legs.federal + legs.provincial + L;
   }
 
@@ -628,10 +797,15 @@ export function calculateT4127(input: T4127Input): T4127Result {
     if (!averaging && qc(aWithBonus, Q(U("5000"))) <= 0) {
       bonusTax = mulRateCents(bonus, isQuebec ? "0.10" : "0.15");
     } else {
-      bonusTax = roundRational(qmax0(qs(qa(withBonus.t1, withBonus.t2), qa(withoutBonus.t1, withoutBonus.t2))), 100n);
+      bonusTax = roundRational(
+        qmax0(qs(qa(withBonus.t1, withBonus.t2), qa(withoutBonus.t1, withoutBonus.t2))),
+        100n,
+      );
     }
   }
-  trace("L", L); trace("T", periodicTax); trace("TB", bonusTax);
+  trace("L", L);
+  trace("T", periodicTax);
+  trace("TB", bonusTax);
 
   return {
     edition: rates.edition,
@@ -650,7 +824,6 @@ export function calculateT4127(input: T4127Input): T4127Result {
     totalTax: D(periodicTax + bonusTax) as Money,
     factors,
   };
-
 }
 
 /** Federal and provincial income tax are withheld as separate per-period
@@ -658,7 +831,11 @@ export function calculateT4127(input: T4127Input): T4127Result {
  * periods. The federal leg rounds half-up to the cent directly; the provincial
  * leg is held at ledger precision (four places) before rounding to the cent,
  * as bureau payroll computes it. The period's tax is the sum of the legs. */
-export function periodTaxLegs(t1: bigint | Rational, t2: bigint | Rational, P: number): { federal: bigint; provincial: bigint } {
+export function periodTaxLegs(
+  t1: bigint | Rational,
+  t2: bigint | Rational,
+  P: number,
+): { federal: bigint; provincial: bigint } {
   if (!Number.isInteger(P) || P <= 0) throw new PayrollError(`not a positive integer: ${P}`);
   const annualFederal = typeof t1 === "bigint" ? Q(t1) : t1;
   const annualProvincial = typeof t2 === "bigint" ? Q(t2) : t2;

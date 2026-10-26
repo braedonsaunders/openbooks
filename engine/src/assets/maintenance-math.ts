@@ -16,7 +16,12 @@ function parseIsoDate(value: string): { year: number; month: number; day: number
   if (!match) refuse("date_invalid", `${value} is not a calendar date (YYYY-MM-DD)`);
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
   const probe = utcDateFromParts(year, month - 1, day);
-  if (year < 1 || probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
+  if (
+    year < 1 ||
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  ) {
     refuse("date_invalid", `${value} is not a calendar date (YYYY-MM-DD)`);
   }
   return { year, month, day };
@@ -28,7 +33,8 @@ function formatIsoDate(year: number, month: number, day: number): string {
 
 /** Add calendar months, clamping to the last day of a shorter month (Jan 31 + 1 → Feb 28/29). */
 export function addMonthsClamped(date: string, months: number): string {
-  if (!Number.isInteger(months)) refuse("interval_invalid", "the month interval must be a whole number");
+  if (!Number.isInteger(months))
+    refuse("interval_invalid", "the month interval must be a whole number");
   const { year, month, day } = parseIsoDate(date);
   const index = year * 12 + (month - 1) + months;
   const targetYear = Math.floor(index / 12);
@@ -41,7 +47,10 @@ export function addMonthsClamped(date: string, months: number): string {
 export function daysBetween(from: string, to: string): number {
   const a = parseIsoDate(from);
   const b = parseIsoDate(to);
-  return calendarDaysBetween(formatIsoDate(a.year, a.month, a.day), formatIsoDate(b.year, b.month, b.day));
+  return calendarDaysBetween(
+    formatIsoDate(a.year, a.month, a.day),
+    formatIsoDate(b.year, b.month, b.day),
+  );
 }
 
 export interface MaintenanceInterval {
@@ -52,11 +61,18 @@ export interface MaintenanceInterval {
   lastPerformedUsage: string | null;
 }
 
-export function assertMaintenanceInterval(interval: Pick<MaintenanceInterval, "intervalMonths" | "intervalUsage">): void {
+export function assertMaintenanceInterval(
+  interval: Pick<MaintenanceInterval, "intervalMonths" | "intervalUsage">,
+): void {
   if (interval.intervalMonths === null && interval.intervalUsage === null) {
     refuse("interval_required", "set a time interval, a usage interval, or both");
   }
-  if (interval.intervalMonths !== null && (!Number.isInteger(interval.intervalMonths) || interval.intervalMonths < 1 || interval.intervalMonths > 600)) {
+  if (
+    interval.intervalMonths !== null &&
+    (!Number.isInteger(interval.intervalMonths) ||
+      interval.intervalMonths < 1 ||
+      interval.intervalMonths > 600)
+  ) {
     refuse("interval_invalid", "the month interval must be a whole number from 1 to 600");
   }
   if (interval.intervalUsage !== null && cmp(interval.intervalUsage, "0") <= 0) {
@@ -65,12 +81,19 @@ export function assertMaintenanceInterval(interval: Pick<MaintenanceInterval, "i
 }
 
 /** The next due date and meter value for a schedule. */
-export function nextMaintenanceDue(interval: MaintenanceInterval): { nextDueOn: string | null; nextDueUsage: string | null } {
+export function nextMaintenanceDue(interval: MaintenanceInterval): {
+  nextDueOn: string | null;
+  nextDueUsage: string | null;
+} {
   assertMaintenanceInterval(interval);
   const anchor = interval.lastPerformedOn ?? interval.startsOn;
   return {
-    nextDueOn: interval.intervalMonths === null ? null : addMonthsClamped(anchor, interval.intervalMonths),
-    nextDueUsage: interval.intervalUsage === null ? null : add(interval.lastPerformedUsage ?? "0", interval.intervalUsage),
+    nextDueOn:
+      interval.intervalMonths === null ? null : addMonthsClamped(anchor, interval.intervalMonths),
+    nextDueUsage:
+      interval.intervalUsage === null
+        ? null
+        : add(interval.lastPerformedUsage ?? "0", interval.intervalUsage),
   };
 }
 

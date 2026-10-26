@@ -56,12 +56,8 @@ export function LaborPricingHeading({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-          {title}
-        </h2>
-        <p className="max-w-4xl text-sm text-slate-500 dark:text-slate-400">
-          {description}
-        </p>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+        <p className="max-w-4xl text-sm text-slate-500 dark:text-slate-400">{description}</p>
       </div>
       <Button asChild variant="ghost" size="sm">
         <Link href={docsHref as never}>

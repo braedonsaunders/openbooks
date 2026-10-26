@@ -1,5 +1,5 @@
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadPspUnmatched, pspUnmatchedSpec } from './view'
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadPspUnmatched, pspUnmatchedSpec } from "./view";
 
 /**
  * Banking → Payouts → Unmatched lines: every settlement line no document
@@ -8,9 +8,9 @@ import { loadPspUnmatched, pspUnmatchedSpec } from './view'
 export default async function PspUnmatchedPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | undefined>>
+  searchParams?: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = (await searchParams) ?? {}
-  const data = await loadPspUnmatched(sp)
-  return <ModuleView spec={pspUnmatchedSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = (await searchParams) ?? {};
+  const data = await loadPspUnmatched(sp);
+  return <ModuleView spec={pspUnmatchedSpec(data)} data={data} searchParams={sp} trusted />;
 }

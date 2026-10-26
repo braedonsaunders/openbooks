@@ -20,11 +20,9 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./run/route.ts");
-
 
 function caller(orgId: string, userId: string): SessionUser {
   return {
@@ -75,16 +73,23 @@ async function seedBulk(orgId: string): Promise<string> {
 
 async function runCount(orgId: string): Promise<number> {
   return Number(
-    (await db.execute<{ n: string }>(sql`
+    (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from script_runs where org_id = ${orgId}
-    `, "objects"))[0]!.n,
+    `,
+        "objects",
+      )
+    )[0]!.n,
   );
 }
 
 function runReq(id: string, body?: unknown): Request {
   return new Request(`http://audit.local/api/admin/scripts/${id}/run`, {
     method: "POST",
-    ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
   });
 }
 

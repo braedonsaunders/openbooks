@@ -5,9 +5,7 @@ import { inputGuards } from "../input-guards.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { listGoals } from "./performance-read.ts";
 import { listOneOnOneDirectory } from "./one-on-ones.ts";
-const { requireUuid } = inputGuards(
-  (message) => new HrmPerformanceError("INVALID_INPUT", message),
-);
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 /** Compose existing goal authority and the governed employee directory. */
 export async function getGoalWorkspace(args: {
   orgId: string;
@@ -20,12 +18,7 @@ export async function getGoalWorkspace(args: {
     const goals = await listGoals(args),
       directory = await listOneOnOneDirectory(args),
       own = new Set(await loadOwnEmploymentIds(db, orgId, actorId));
-    const manage = await actorHasPermission(
-      db,
-      orgId,
-      actorId,
-      "hrm.performance.manage",
-    );
+    const manage = await actorHasPermission(db, orgId, actorId, "hrm.performance.manage");
     const employees = directory.employments.map((e) => ({
       value: e.id,
       label: e.name,

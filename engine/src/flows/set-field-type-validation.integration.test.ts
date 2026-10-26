@@ -27,7 +27,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const adapter = createDocumentsFlowAdapter("vendor_bill");
 
-async function withOrgFixture(fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>): Promise<void> {
+async function withOrgFixture(
+  fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>,
+): Promise<void> {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
@@ -50,7 +52,10 @@ function setFieldPlan(field: string, value: unknown): AutomationPlan {
   };
 }
 
-async function createRun(orgId: string, submitterId: string): Promise<{ runId: string; flowId: string; subjectId: string }> {
+async function createRun(
+  orgId: string,
+  submitterId: string,
+): Promise<{ runId: string; flowId: string; subjectId: string }> {
   const flowId = randomUUID();
   const subjectId = await seedDraftDocument(orgId, { kind: "vendor_bill", createdBy: submitterId });
   await db.execute(sql`
@@ -72,8 +77,11 @@ async function createRun(orgId: string, submitterId: string): Promise<{ runId: s
 }
 
 async function docFields(subjectId: string): Promise<{ dueDate: unknown; memo: unknown }> {
-  const rows = await db.execute<{ due_date: unknown; memo: unknown }>(sql`
-    select due_date, memo from documents where id = ${subjectId}`, "objects");
+  const rows = await db.execute<{ due_date: unknown; memo: unknown }>(
+    sql`
+    select due_date, memo from documents where id = ${subjectId}`,
+    "objects",
+  );
   return { dueDate: rows[0]?.due_date, memo: rows[0]?.memo };
 }
 
@@ -81,17 +89,13 @@ test("set_field refuses a wrongly-typed value and writes nothing", { skip: !DB }
   await withOrgFixture(async (org, actors) => {
     const run = await createRun(org.orgId, actors.submitterId);
     const before = await docFields(run.subjectId);
-    const res = await executeFlowPlan(
-      { orgId: org.orgId },
-      adapter,
-      {
-        flow: { id: run.flowId, name: "Type probe", subjectKind: "vendor_bill", graph: {} },
-        runId: run.runId,
-        subjectId: run.subjectId,
-        plan: setFieldPlan("dueDate", "not-a-date"),
-        evalCtx: { values: {}, rows: {} },
-      },
-    );
+    const res = await executeFlowPlan({ orgId: org.orgId }, adapter, {
+      flow: { id: run.flowId, name: "Type probe", subjectKind: "vendor_bill", graph: {} },
+      runId: run.runId,
+      subjectId: run.subjectId,
+      plan: setFieldPlan("dueDate", "not-a-date"),
+      evalCtx: { values: {}, rows: {} },
+    });
     assert.equal(res.completed.length, 0, "the mistyped write must not complete");
     assert.equal(res.failed.length, 1);
     assert.match(res.failed[0]!, /dueDate/, "the refusal must name the field");
@@ -103,17 +107,13 @@ test("set_field refuses a wrongly-typed value and writes nothing", { skip: !DB }
 test("set_field still persists a correctly-typed value", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     const run = await createRun(org.orgId, actors.submitterId);
-    const res = await executeFlowPlan(
-      { orgId: org.orgId },
-      adapter,
-      {
-        flow: { id: run.flowId, name: "Type probe", subjectKind: "vendor_bill", graph: {} },
-        runId: run.runId,
-        subjectId: run.subjectId,
-        plan: setFieldPlan("dueDate", "2026-05-01"),
-        evalCtx: { values: {}, rows: {} },
-      },
-    );
+    const res = await executeFlowPlan({ orgId: org.orgId }, adapter, {
+      flow: { id: run.flowId, name: "Type probe", subjectKind: "vendor_bill", graph: {} },
+      runId: run.runId,
+      subjectId: run.subjectId,
+      plan: setFieldPlan("dueDate", "2026-05-01"),
+      evalCtx: { values: {}, rows: {} },
+    });
     assert.equal(res.failed.length, 0);
     assert.equal(res.completed.length, 1);
     const stored = (await docFields(run.subjectId)).dueDate;
@@ -125,62 +125,77 @@ test("set_field still persists a correctly-typed value", { skip: !DB }, async ()
 test("set_field refuses a number for a text field", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     const run = await createRun(org.orgId, actors.submitterId);
-    const res = await executeFlowPlan(
-      { orgId: org.orgId },
-      adapter,
-      {
-        flow: { id: run.flowId, name: "Type probe", subjectKind: "vendor_bill", graph: {} },
-        runId: run.runId,
-        subjectId: run.subjectId,
-        plan: setFieldPlan("memo", 42),
-        evalCtx: { values: {}, rows: {} },
-      },
-    );
+    const res = await executeFlowPlan({ orgId: org.orgId }, adapter, {
+      flow: { id: run.flowId, name: "Type probe", subjectKind: "vendor_bill", graph: {} },
+      runId: run.runId,
+      subjectId: run.subjectId,
+      plan: setFieldPlan("memo", 42),
+      evalCtx: { values: {}, rows: {} },
+    });
     assert.equal(res.completed.length, 0);
     assert.match(res.failed[0]!, /memo/);
   });
 });
 
-test("set_field validates tenant custom definitions for each custom value family", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    const cases = [
-      { key: "custom_number", fieldType: "number", config: {}, value: "42" },
-      { key: "custom_flag", fieldType: "boolean", config: {}, value: "true" },
-      { key: "custom_date", fieldType: "date", config: {}, value: 20260924 },
-      { key: "custom_choice", fieldType: "select", config: { options: ["approved", "rejected"] }, value: "pending" },
-    ] as const;
-
-    for (const field of cases) {
-      await db.insert(schema.customFieldDefs).values({
-        orgId: org.orgId,
-        targetTable: "documents",
-        targetKind: "vendor_bill",
-        key: field.key,
-        label: field.key,
-        fieldType: field.fieldType,
-        config: field.config,
-        createdBy: actors.adminId,
-        updatedBy: actors.adminId,
-      });
-      const run = await createRun(org.orgId, actors.submitterId);
-      const result = await executeFlowPlan(
-        { orgId: org.orgId },
-        adapter,
+test(
+  "set_field validates tenant custom definitions for each custom value family",
+  { skip: !DB },
+  async () => {
+    await withOrgFixture(async (org, actors) => {
+      const cases = [
+        { key: "custom_number", fieldType: "number", config: {}, value: "42" },
+        { key: "custom_flag", fieldType: "boolean", config: {}, value: "true" },
+        { key: "custom_date", fieldType: "date", config: {}, value: 20260924 },
         {
-          flow: { id: run.flowId, name: "Custom field type probe", subjectKind: "vendor_bill", graph: {} },
+          key: "custom_choice",
+          fieldType: "select",
+          config: { options: ["approved", "rejected"] },
+          value: "pending",
+        },
+      ] as const;
+
+      for (const field of cases) {
+        await db.insert(schema.customFieldDefs).values({
+          orgId: org.orgId,
+          targetTable: "documents",
+          targetKind: "vendor_bill",
+          key: field.key,
+          label: field.key,
+          fieldType: field.fieldType,
+          config: field.config,
+          createdBy: actors.adminId,
+          updatedBy: actors.adminId,
+        });
+        const run = await createRun(org.orgId, actors.submitterId);
+        const result = await executeFlowPlan({ orgId: org.orgId }, adapter, {
+          flow: {
+            id: run.flowId,
+            name: "Custom field type probe",
+            subjectKind: "vendor_bill",
+            graph: {},
+          },
           runId: run.runId,
           subjectId: run.subjectId,
           plan: setFieldPlan(field.key, field.value),
           evalCtx: { values: {}, rows: {} },
-        },
-      );
-      assert.equal(result.completed.length, 0, `${field.key} must not accept a value outside its definition`);
-      assert.equal(result.failed.length, 1);
-      assert.match(result.failed[0]!, new RegExp(field.key));
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`
+        });
+        assert.equal(
+          result.completed.length,
+          0,
+          `${field.key} must not accept a value outside its definition`,
+        );
+        assert.equal(result.failed.length, 1);
+        assert.match(result.failed[0]!, new RegExp(field.key));
+        const stored = (
+          await db.execute<{ custom: Record<string, unknown> }>(
+            sql`
         select custom from documents where id = ${run.subjectId} and org_id = ${org.orgId}
-      `, "objects"))[0]!.custom;
-      assert.equal(Object.hasOwn(stored, field.key), false, `${field.key} must remain unwritten`);
-    }
-  });
-});
+      `,
+            "objects",
+          )
+        )[0]!.custom;
+        assert.equal(Object.hasOwn(stored, field.key), false, `${field.key} must remain unwritten`);
+      }
+    });
+  },
+);

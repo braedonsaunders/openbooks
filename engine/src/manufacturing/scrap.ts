@@ -7,12 +7,7 @@ import {
   ManufacturingNotFoundError,
   ManufacturingIdempotencyConflictError,
 } from "./errors.ts";
-import {
-  auditChange,
-  decimalValue,
-  compareDecimal,
-  storageCode,
-} from "./master-support.ts";
+import { auditChange, decimalValue, compareDecimal, storageCode } from "./master-support.ts";
 import { lockManufacturingOrderExecutionAuthority } from "./authority.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { add } from "../money/money.ts";
@@ -34,9 +29,17 @@ export async function recordNormalScrap(
   input: NormalScrapInput,
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  if (![workOrderId,eventId,input.operationId,input.reasonId].every(isUuid)) throw new ManufacturingNotFoundError();
-  const effectiveScope=await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId,scope);
-  const order = (await tx.execute<{
+  if (![workOrderId, eventId, input.operationId, input.reasonId].every(isUuid))
+    throw new ManufacturingNotFoundError();
+  const effectiveScope = await lockManufacturingOrderExecutionAuthority(
+    tx,
+    orgId,
+    actorId,
+    workOrderId,
+    scope,
+  );
+  const order = (
+    await tx.execute<{
       id: string;
       subsidiaryId: string | null;
       status: string;
@@ -44,15 +47,13 @@ export async function recordNormalScrap(
       quantityCompleted: string;
       quantityScrapped: string;
     }>(
-      sql`select id,subsidiary_id as "subsidiaryId",status,quantity_ordered::text as "quantityOrdered",quantity_completed::text as "quantityCompleted",quantity_scrapped::text as "quantityScrapped" from mfg_work_orders where org_id=${orgId} and id=${workOrderId} for update`, "objects",
-    ))[0];
+      sql`select id,subsidiary_id as "subsidiaryId",status,quantity_ordered::text as "quantityOrdered",quantity_completed::text as "quantityCompleted",quantity_scrapped::text as "quantityScrapped" from mfg_work_orders where org_id=${orgId} and id=${workOrderId} for update`,
+      "objects",
+    )
+  )[0];
   if (!order || !subsidiaryScopeAllows(scope, order.subsidiaryId))
     throw new ManufacturingNotFoundError();
-  const quantity = decimalValue(
-    input.quantity,
-    "quantity",
-    "Enter a positive exact quantity.",
-  );
+  const quantity = decimalValue(input.quantity, "quantity", "Enter a positive exact quantity.");
   if (compareDecimal(quantity, "0") <= 0)
     throw new ManufacturingError("Scrap quantity must be positive.", {
       code: "invalid_scrap_quantity",
@@ -61,7 +62,8 @@ export async function recordNormalScrap(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext('manufacturing.scrap'),hashtext(${eventId}))`,
   );
-  const replay = (await tx.execute<{
+  const replay = (
+    await tx.execute<{
       id: string;
       operationId: string;
       quantity: string;
@@ -69,8 +71,10 @@ export async function recordNormalScrap(
       classification: string;
       workOrderId: string;
     }>(
-      sql`select id,work_order_id as "workOrderId",operation_id as "operationId",quantity::text,reason_id as "reasonId",classification from mfg_scrap_events where org_id=${orgId} and id=${eventId}`, "objects",
-    ))[0];
+      sql`select id,work_order_id as "workOrderId",operation_id as "operationId",quantity::text,reason_id as "reasonId",classification from mfg_scrap_events where org_id=${orgId} and id=${eventId}`,
+      "objects",
+    )
+  )[0];
   if (replay) {
     if (
       replay.workOrderId !== workOrderId ||
@@ -83,24 +87,21 @@ export async function recordNormalScrap(
     return replay;
   }
   if (order.status !== "in_progress")
-    throw new ManufacturingError(
-      "Record production scrap on an in-progress work order.",
-      {
-        status: 409,
-        code: "invalid_work_order_transition",
-        remedy: "Start or resume the work order first.",
-      },
-    );
+    throw new ManufacturingError("Record production scrap on an in-progress work order.", {
+      status: 409,
+      code: "invalid_work_order_transition",
+      remedy: "Start or resume the work order first.",
+    });
   if (compareDecimal(order.quantityCompleted, "0") > 0)
     throw new ManufacturingError(
       "Record normal production loss before the first finished-goods receipt.",
       {
         code: "scrap_after_receipt_requires_review",
-        remedy:
-          "Hold the work order to review the loss and its existing receipt valuation.",
+        remedy: "Hold the work order to review the loss and its existing receipt valuation.",
       },
     );
-  const operation = (await tx.execute<{
+  const operation = (
+    await tx.execute<{
       id: string;
       status: string;
       quantityPlanned: string;
@@ -108,34 +109,30 @@ export async function recordNormalScrap(
       quantityScrappedHere: string;
       subsidiaryId: string | null;
     }>(
-      sql`select o.id,o.status,o.quantity_planned::text as "quantityPlanned",o.quantity_done::text as "quantityDone",o.quantity_scrapped_here::text as "quantityScrappedHere",c.subsidiary_id as "subsidiaryId" from mfg_wo_operations o join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id where o.org_id=${orgId} and o.work_order_id=${workOrderId} and o.id=${input.operationId} for update of o`, "objects",
-    ))[0];
-  if (
-    !operation ||
-    !subsidiaryScopeAllows(effectiveScope, operation.subsidiaryId)
-  )
+      sql`select o.id,o.status,o.quantity_planned::text as "quantityPlanned",o.quantity_done::text as "quantityDone",o.quantity_scrapped_here::text as "quantityScrappedHere",c.subsidiary_id as "subsidiaryId" from mfg_wo_operations o join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id where o.org_id=${orgId} and o.work_order_id=${workOrderId} and o.id=${input.operationId} for update of o`,
+      "objects",
+    )
+  )[0];
+  if (!operation || !subsidiaryScopeAllows(effectiveScope, operation.subsidiaryId))
     throw new ManufacturingNotFoundError();
   if (operation.status !== "running" && operation.status !== "paused")
-    throw new ManufacturingError(
-      "Scrap can be recorded while an operation is running or paused.",
-      {
-        status: 409,
-        code: "invalid_operation_transition",
-        remedy: "Start the operation before recording its scrap.",
-      },
-    );
-  const reason = (await tx.execute<{ classification: string }>(
-      sql`select classification from mfg_scrap_reasons where org_id=${orgId} and id=${input.reasonId} and is_active for share`, "objects",
-    ))[0];
+    throw new ManufacturingError("Scrap can be recorded while an operation is running or paused.", {
+      status: 409,
+      code: "invalid_operation_transition",
+      remedy: "Start the operation before recording its scrap.",
+    });
+  const reason = (
+    await tx.execute<{ classification: string }>(
+      sql`select classification from mfg_scrap_reasons where org_id=${orgId} and id=${input.reasonId} and is_active for share`,
+      "objects",
+    )
+  )[0];
   if (!reason) throw new ManufacturingNotFoundError();
   if (reason.classification !== "normal")
-    throw new ManufacturingError(
-      "This command records normal production loss only.",
-      {
-        code: "abnormal_scrap_requires_valuation",
-        remedy: "Hold the work order while the abnormal loss is reviewed.",
-      },
-    );
+    throw new ManufacturingError("This command records normal production loss only.", {
+      code: "abnormal_scrap_requires_valuation",
+      remedy: "Hold the work order while the abnormal loss is reviewed.",
+    });
   const total = add(order.quantityScrapped, quantity),
     atOperation = add(operation.quantityScrappedHere, quantity);
   if (compareDecimal(total, order.quantityOrdered) >= 0)
@@ -143,44 +140,41 @@ export async function recordNormalScrap(
       "An all-loss order needs a governed disposition rather than a normal output receipt.",
       {
         code: "all_loss_disposition_required",
-        remedy: "Use Close as loss on the work order to review actual discarded quantity and consumed time through approval.",
+        remedy:
+          "Use Close as loss on the work order to review actual discarded quantity and consumed time through approval.",
       },
     );
   if (
-    compareDecimal(add(order.quantityCompleted, total), order.quantityOrdered) >
-      0 ||
-    compareDecimal(
-      add(operation.quantityDone, atOperation),
-      operation.quantityPlanned,
-    ) > 0
+    compareDecimal(add(order.quantityCompleted, total), order.quantityOrdered) > 0 ||
+    compareDecimal(add(operation.quantityDone, atOperation), operation.quantityPlanned) > 0
   )
-    throw new ManufacturingError(
-      "The reported output and scrap exceed the planned quantity.",
-      {
-        code: "scrap_quantity_exceeded",
-        field: "quantity",
-        remedy: "Check the quantity and prior scrap events.",
-      },
-    );
+    throw new ManufacturingError("The reported output and scrap exceed the planned quantity.", {
+      code: "scrap_quantity_exceeded",
+      field: "quantity",
+      remedy: "Check the quantity and prior scrap events.",
+    });
   let saved: { id: string } | undefined;
   try {
-    saved = (await tx.execute<{ id: string }>(
-        sql`insert into mfg_scrap_events (id,org_id,work_order_id,operation_id,quantity,reason_id,classification,treatment,frozen_value,approval_required,created_by,updated_by) values (${eventId},${orgId},${workOrderId},${input.operationId},${quantity},${input.reasonId},'normal','evidence',0,false,${actorId},${actorId}) returning id`, "objects",
-      ))[0];
+    saved = (
+      await tx.execute<{ id: string }>(
+        sql`insert into mfg_scrap_events (id,org_id,work_order_id,operation_id,quantity,reason_id,classification,treatment,frozen_value,approval_required,created_by,updated_by) values (${eventId},${orgId},${workOrderId},${input.operationId},${quantity},${input.reasonId},'normal','evidence',0,false,${actorId},${actorId}) returning id`,
+        "objects",
+      )
+    )[0];
   } catch (error) {
-    if (storageCode(error) === "23505")
-      throw new ManufacturingIdempotencyConflictError();
+    if (storageCode(error) === "23505") throw new ManufacturingIdempotencyConflictError();
     throw error;
   }
   if (!saved) throw new Error("The scrap event was not saved.");
   const op = await tx.execute(
-    sql`update mfg_wo_operations set quantity_scrapped_here=${atOperation},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and work_order_id=${workOrderId} and id=${input.operationId} returning id`, "objects",
+    sql`update mfg_wo_operations set quantity_scrapped_here=${atOperation},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and work_order_id=${workOrderId} and id=${input.operationId} returning id`,
+    "objects",
   );
   const wo = await tx.execute(
-    sql`update mfg_work_orders set quantity_scrapped=${total},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${workOrderId} returning id`, "objects",
+    sql`update mfg_work_orders set quantity_scrapped=${total},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${workOrderId} returning id`,
+    "objects",
   );
-  if (op.length !== 1 || wo.length !== 1)
-    throw new Error("The scrap quantities were not saved.");
+  if (op.length !== 1 || wo.length !== 1) throw new Error("The scrap quantities were not saved.");
   await auditChange(tx, {
     orgId,
     actorId,

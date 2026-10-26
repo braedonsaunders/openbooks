@@ -10,15 +10,21 @@ const virtual = (source: string) => ({
   url: `data:text/javascript,${encodeURIComponent(source)}`,
 });
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function forbidden() { throw Object.assign(new Error(\"forbidden\"), { status: 403 }); }", intl: "export async function getTranslations() { return (key) => key; }", extra: { "server-only": "export {}" } });
+stubModules({
+  navigation:
+    'export function forbidden() { throw Object.assign(new Error("forbidden"), { status: 403 }); }',
+  intl: "export async function getTranslations() { return (key) => key; }",
+  extra: { "server-only": "export {}" },
+});
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === "@braedonsaunders/appkit-viewspec") return virtual(`
+    if (specifier === "@braedonsaunders/appkit-viewspec")
+      return virtual(`
       export const page = () => ({}); export const pageHeader = () => ({});
       export const ref = () => ({}); export const widget = () => ({}); export const widgetBlock = () => ({});
     `);
-    if (specifier === "@openbooks/engine/platform/db") return virtual(`
+    if (specifier === "@openbooks/engine/platform/db")
+      return virtual(`
       const state = globalThis.__bankRuleViewScopeState;
       export const db = { execute: async (_query, mode) => { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.queries += 1; return inMode({ rows: [] }); } };
       export async function withBypassContext(work) { return work(); }

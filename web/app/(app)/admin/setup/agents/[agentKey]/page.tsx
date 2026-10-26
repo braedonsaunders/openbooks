@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../../../components/viewspec/module-view'
-import { agentPolicySpec, loadAgentPolicy } from './view'
+import { ModuleView } from "../../../../../../components/viewspec/module-view";
+import { agentPolicySpec, loadAgentPolicy } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Setup → Agents → one pack's policy. Detectors, thresholds, materiality,
@@ -12,11 +12,11 @@ export default async function AgentPolicySetup({
   params,
   searchParams,
 }: {
-  params: Promise<{ agentKey: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  params: Promise<{ agentKey: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { agentKey } = await params
-  const sp = await searchParams
-  const data = await loadAgentPolicy(agentKey)
-  return <ModuleView spec={agentPolicySpec(data)} data={data} searchParams={sp} trusted />
+  const { agentKey } = await params;
+  const sp = await searchParams;
+  const data = await loadAgentPolicy(agentKey);
+  return <ModuleView spec={agentPolicySpec(data)} data={data} searchParams={sp} trusted />;
 }

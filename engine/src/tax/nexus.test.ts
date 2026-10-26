@@ -153,5 +153,8 @@ test("a stagger start month aligns periods off the calendar quarter", () => {
   assert.deepEqual(filingPeriods("annual", "2026-05-01", "2026-05-31", 4), [
     { periodStart: "2026-04-01", periodEnd: "2027-03-31" },
   ]);
-  assert.throws(() => filingPeriods("monthly", "2026-01-01", "2026-01-31", 13), /start month must be 1–12/);
+  assert.throws(
+    () => filingPeriods("monthly", "2026-01-01", "2026-01-31", 13),
+    /start month must be 1–12/,
+  );
 });

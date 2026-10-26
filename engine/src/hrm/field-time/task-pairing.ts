@@ -22,9 +22,14 @@ export async function taskPairingCode(
   projectId: string | null,
   taskId: string,
 ): Promise<TaskPairingCode | null> {
-  const row = (await db.execute<{ project_id: string }>(sql`
+  const row = (
+    await db.execute<{ project_id: string }>(
+      sql`
     select project_id::text as project_id from project_tasks
-     where org_id = ${orgId} and id = ${taskId} limit 1`, "objects"))[0];
+     where org_id = ${orgId} and id = ${taskId} limit 1`,
+      "objects",
+    )
+  )[0];
   if (!row) return "task_unknown";
   if (projectId === null) return "task_without_project";
   if (row.project_id !== projectId) return "task_wrong_project";

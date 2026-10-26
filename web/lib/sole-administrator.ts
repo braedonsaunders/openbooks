@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import type { SqlExecutor } from '@openbooks/engine/platform/database'
+import { sql } from "drizzle-orm";
+import type { SqlExecutor } from "@openbooks/engine/platform/database";
 
 /**
  * How many OTHER active users of the organization can administer users.
@@ -19,7 +19,9 @@ export async function countOtherActiveUserAdministrators(
   orgId: string,
   actorId: string,
 ): Promise<number> {
-  const row = (await exec.execute<{ n: number }>(sql`
+  const row = (
+    await exec.execute<{ n: number }>(
+      sql`
     select count(*)::int as n
       from users u
      where u.org_id = ${orgId}
@@ -39,7 +41,10 @@ export async function countOtherActiveUserAdministrators(
            select 1 from user_permission_overrides o
             where o.org_id = u.org_id and o.user_id = u.id and o.effect = 'grant'
               and o.permission in ('admin.users.manage', 'admin.*', '*')))
-  `, 'objects'))[0]
-  if (!row) throw new Error('administrator count returned no row')
-  return row.n
+  `,
+      "objects",
+    )
+  )[0];
+  if (!row) throw new Error("administrator count returned no row");
+  return row.n;
 }

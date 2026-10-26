@@ -6,38 +6,37 @@
 // the assistant registry — visibility, execution, confirmation, commit,
 // replay, and tenant/permission isolation.
 
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const { installApp } = await import('./store')
-const { commitAppToolCommand } = await import('./tools')
-const { buildToolRegistryAsync, executeAssistantTool } = await import('../assistant/registry')
-const { createOpenBooksMcpServer } = await import('../mcp/server')
-const { Client: McpClient } = await import('@modelcontextprotocol/sdk/client/index.js')
-const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
-import type { Authz } from '../authz'
+const { installApp } = await import("./store");
+const { commitAppToolCommand } = await import("./tools");
+const { buildToolRegistryAsync, executeAssistantTool } = await import("../assistant/registry");
+const { createOpenBooksMcpServer } = await import("../mcp/server");
+const { Client: McpClient } = await import("@modelcontextprotocol/sdk/client/index.js");
+const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
+import type { Authz } from "../authz";
 
-const DB = !!env.OPENBOOKS_DB_URL
-const APP_KEY = `assistant-fixture-${randomUUID().slice(0, 8)}`
-const snake = APP_KEY.replaceAll('-', '_')
-const READ_TOOL = `app_${snake}_lookup`
-const MUTATING_TOOL = `app_${snake}_bump`
+const DB = !!env.OPENBOOKS_DB_URL;
+const APP_KEY = `assistant-fixture-${randomUUID().slice(0, 8)}`;
+const snake = APP_KEY.replaceAll("-", "_");
+const READ_TOOL = `app_${snake}_lookup`;
+const MUTATING_TOOL = `app_${snake}_bump`;
 
 type Fixture = {
-  orgId: string
-  otherOrgId: string
-  adminId: string
-  adminAuthz: Authz
-  limitedAuthz: Authz
-  noWriteAuthz: Authz
-  otherOrgAuthz: Authz
-}
+  orgId: string;
+  otherOrgId: string;
+  adminId: string;
+  adminAuthz: Authz;
+  limitedAuthz: Authz;
+  noWriteAuthz: Authz;
+  otherOrgAuthz: Authz;
+};
 
 function authzFor(
   user: { id: string; orgId: string; email: string; name: string },
@@ -48,9 +47,9 @@ function authzFor(
       id: user.id,
       email: user.email,
       name: user.name,
-      roles: [{ key: 'admin', name: 'Admin' }],
+      roles: [{ key: "admin", name: "Admin" }],
       orgId: user.orgId,
-      envKind: 'production',
+      envKind: "production",
       productionOrgId: user.orgId,
       isSuperAdmin: false,
       homeUserId: user.id,
@@ -58,78 +57,86 @@ function authzFor(
     },
     permissions,
     allowedSubsidiaryIds: null,
-  } as unknown as Authz
+  } as unknown as Authz;
 }
 
 async function makeFixture(lookupHandler?: string): Promise<Fixture> {
   return await withBypass(async () => {
-    const org = await createScratchOrg()
-    const other = await createScratchOrg()
-    const { adminId } = await seedFlowActors(org.orgId)
-    const base = { id: adminId, orgId: org.orgId, email: 'asst-tools@scratch.test', name: 'Tool Caller' }
+    const org = await createScratchOrg();
+    const other = await createScratchOrg();
+    const { adminId } = await seedFlowActors(org.orgId);
+    const base = {
+      id: adminId,
+      orgId: org.orgId,
+      email: "asst-tools@scratch.test",
+      name: "Tool Caller",
+    };
     await installApp(org.orgId, adminId, {
       manifest: {
         key: APP_KEY,
-        name: 'Assistant Fixture',
-        version: '1.0.0',
-        permissions: ['records.read'],
-        frontend: { entry: 'frontend/index.html' },
+        name: "Assistant Fixture",
+        version: "1.0.0",
+        permissions: ["records.read"],
+        frontend: { entry: "frontend/index.html" },
         endpoints: [
-          { name: 'lookup', file: 'backend/lookup.js' },
-          { name: 'counter', file: 'backend/counter.js', method: 'POST' },
+          { name: "lookup", file: "backend/lookup.js" },
+          { name: "counter", file: "backend/counter.js", method: "POST" },
         ],
         tools: [
           {
-            key: 'lookup',
-            title: 'Look up',
-            description: 'Echoes the query.',
+            key: "lookup",
+            title: "Look up",
+            description: "Echoes the query.",
             inputSchema: {
-              type: 'object',
-              properties: { q: { type: 'string', description: 'Query', maxLength: 200 } },
-              required: ['q'],
+              type: "object",
+              properties: { q: { type: "string", description: "Query", maxLength: 200 } },
+              required: ["q"],
             },
-            handler: 'lookup',
-            requiredPermissions: ['records.read'],
+            handler: "lookup",
+            requiredPermissions: ["records.read"],
           },
           {
-            key: 'bump',
-            title: 'Bump',
-            description: 'Increments the fixture counter.',
+            key: "bump",
+            title: "Bump",
+            description: "Increments the fixture counter.",
             inputSchema: {
-              type: 'object',
-              properties: { label: { type: 'string', description: 'Label', maxLength: 40 } },
+              type: "object",
+              properties: { label: { type: "string", description: "Label", maxLength: 40 } },
             },
-            handler: 'counter',
+            handler: "counter",
             readOnly: false,
-            confirmation: 'always',
+            confirmation: "always",
           },
         ],
       },
       files: [
-        { path: 'frontend/index.html', content: '<html><body>fixture</body></html>' },
+        { path: "frontend/index.html", content: "<html><body>fixture</body></html>" },
         {
-          path: 'backend/lookup.js',
-          content: lookupHandler ?? 'function handler(req) { var q = req.body && req.body.q; return { status: 200, body: { echo: q } } }',
+          path: "backend/lookup.js",
+          content:
+            lookupHandler ??
+            "function handler(req) { var q = req.body && req.body.q; return { status: 200, body: { echo: q } } }",
         },
         {
-          path: 'backend/counter.js',
-          content: 'function handler(req) { var cur = ob.storage.get("bumps", "tools") || 0; ob.storage.set("bumps", cur + 1, "tools"); return { status: 200, body: { bumps: cur + 1 } } }',
+          path: "backend/counter.js",
+          content:
+            'function handler(req) { var cur = ob.storage.get("bumps", "tools") || 0; ob.storage.set("bumps", cur + 1, "tools"); return { status: 200, body: { bumps: cur + 1 } } }',
         },
       ],
-    })
+    });
     return {
       orgId: org.orgId,
       otherOrgId: other.orgId,
       adminId,
-      adminAuthz: authzFor(base, new Set(['*'])),
-      limitedAuthz: authzFor(base, new Set(['assistant.use', 'assistant.write', 'apps.use'])),
-      noWriteAuthz: authzFor(base, new Set(['assistant.use', 'apps.use'])),
+      adminAuthz: authzFor(base, new Set(["*"])),
+      limitedAuthz: authzFor(base, new Set(["assistant.use", "assistant.write", "apps.use"])),
+      noWriteAuthz: authzFor(base, new Set(["assistant.use", "apps.use"])),
       otherOrgAuthz: authzFor(
-        { id: adminId, orgId: other.orgId, email: 'other@scratch.test', name: 'Other Org' },
-        new Set(['*']),
+        { id: adminId, orgId: other.orgId, email: "other@scratch.test", name: "Other Org" },
+        new Set(["*"]),
       ),
-    }
-  })
+    };
+  });
 }
 
 /**
@@ -137,186 +144,303 @@ async function makeFixture(lookupHandler?: string): Promise<Fixture> {
  * leases at every test boundary, so a fixture memoized across top-level tests
  * silently disappears under CI; each test creates, uses, and releases its own.
  */
-async function withFixture(run: (fx: Fixture) => Promise<void>, lookupHandler?: string): Promise<void> {
-  const fx = await makeFixture(lookupHandler)
+async function withFixture(
+  run: (fx: Fixture) => Promise<void>,
+  lookupHandler?: string,
+): Promise<void> {
+  const fx = await makeFixture(lookupHandler);
   try {
     // Assistant tool subjects resolve their app and registry from the
     // ambient tenant scope, exactly as a production request would carry it.
-    await withOrgContext(fx.orgId, () => run(fx))
+    await withOrgContext(fx.orgId, () => run(fx));
   } finally {
-    await withBypass(() => dropScratchOrg(fx.orgId))
-    await withBypass(() => dropScratchOrg(fx.otherOrgId))
+    await withBypass(() => dropScratchOrg(fx.orgId));
+    await withBypass(() => dropScratchOrg(fx.otherOrgId));
   }
 }
 
-test('read tool executes through executeAssistantTool with the stored schema', { skip: !DB }, async () => withFixture(async (fx) => {
-  const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'hello' })
-  assert.equal(result.ok, true, JSON.stringify(result))
-  assert.deepEqual((result as { ok: true; data: unknown }).data, { status: 200, body: { echo: 'hello' } })
-}))
+test(
+  "read tool executes through executeAssistantTool with the stored schema",
+  { skip: !DB },
+  async () =>
+    withFixture(async (fx) => {
+      const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: "hello" });
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.deepEqual((result as { ok: true; data: unknown }).data, {
+        status: 200,
+        body: { echo: "hello" },
+      });
+    }),
+);
 
-test('repeating an identical read runs again instead of replaying stale app data', { skip: !DB }, async () => withFixture(async (fx) => {
-  const first = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'same query' })
-  const second = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'same query' })
-  assert.equal(first.ok, true)
-  assert.deepEqual(second, first)
+test(
+  "repeating an identical read runs again instead of replaying stale app data",
+  { skip: !DB },
+  async () =>
+    withFixture(async (fx) => {
+      const first = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: "same query" });
+      const second = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: "same query" });
+      assert.equal(first.ok, true);
+      assert.deepEqual(second, first);
 
-  const claims = await withOrgContext(fx.orgId, () => db.execute<{ n: string }>(sql`
+      const claims = await withOrgContext(fx.orgId, () =>
+        db.execute<{ n: string }>(
+          sql`
     select count(*)::text as n from application_idempotency_keys
      where org_id = ${fx.orgId} and source = 'app'
        and operation = ${`apps.assistant_tool.${READ_TOOL}`}
-  `, 'objects'))
-  assert.equal(Number(claims[0]!.n), 2, 'each chat read has its own invocation identity')
-}))
+  `,
+          "objects",
+        ),
+      );
+      assert.equal(Number(claims[0]!.n), 2, "each chat read has its own invocation identity");
+    }),
+);
 
-test('oversized app tool responses are refused before they reach the model', { skip: !DB }, async () => withFixture(async (fx) => {
-  const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'large' })
-  assert.deepEqual(result, { ok: false, error: 'tool response too large; narrow the request' })
-}, 'function handler() { return { status: 200, body: { payload: "x".repeat(70 * 1024) } } }'))
+test(
+  "oversized app tool responses are refused before they reach the model",
+  { skip: !DB },
+  async () =>
+    withFixture(async (fx) => {
+      const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: "large" });
+      assert.deepEqual(result, { ok: false, error: "tool response too large; narrow the request" });
+    }, 'function handler() { return { status: 200, body: { payload: "x".repeat(70 * 1024) } } }'),
+);
 
-test('installation refuses a tool outside the admin grant before creating the app', { skip: !DB }, async () => withFixture(async (fx) => {
-  const key = `${APP_KEY}-denied`
-  await assert.rejects(
-    withBypass(() => installApp(fx.orgId, fx.adminId, {
-      manifest: {
-        key,
-        name: 'Denied Tool Fixture',
-        version: '1.0.0',
-        permissions: ['records.read'],
-        frontend: { entry: 'frontend/index.html' },
-        endpoints: [{ name: 'lookup', file: 'backend/lookup.js' }],
-        tools: [{
-          key: 'lookup',
-          title: 'Look up',
-          description: 'Echoes the query.',
-          inputSchema: {
-            type: 'object',
-            properties: { q: { type: 'string', description: 'Query', maxLength: 200 } },
-            required: ['q'],
-          },
-          handler: 'lookup',
-          requiredPermissions: ['records.read'],
-        }],
-      },
-      grantedPermissions: [],
-      files: [
-        { path: 'frontend/index.html', content: '<html></html>' },
-        { path: 'backend/lookup.js', content: 'function handler() { return { status: 200, body: {} } }' },
-      ],
-    })),
-    /invalid app tools:.*records\.read.*not granted/,
-  )
-  const rows = await withBypass(() => db.execute<{ count: string }>(sql`
+test(
+  "installation refuses a tool outside the admin grant before creating the app",
+  { skip: !DB },
+  async () =>
+    withFixture(async (fx) => {
+      const key = `${APP_KEY}-denied`;
+      await assert.rejects(
+        withBypass(() =>
+          installApp(fx.orgId, fx.adminId, {
+            manifest: {
+              key,
+              name: "Denied Tool Fixture",
+              version: "1.0.0",
+              permissions: ["records.read"],
+              frontend: { entry: "frontend/index.html" },
+              endpoints: [{ name: "lookup", file: "backend/lookup.js" }],
+              tools: [
+                {
+                  key: "lookup",
+                  title: "Look up",
+                  description: "Echoes the query.",
+                  inputSchema: {
+                    type: "object",
+                    properties: { q: { type: "string", description: "Query", maxLength: 200 } },
+                    required: ["q"],
+                  },
+                  handler: "lookup",
+                  requiredPermissions: ["records.read"],
+                },
+              ],
+            },
+            grantedPermissions: [],
+            files: [
+              { path: "frontend/index.html", content: "<html></html>" },
+              {
+                path: "backend/lookup.js",
+                content: "function handler() { return { status: 200, body: {} } }",
+              },
+            ],
+          }),
+        ),
+        /invalid app tools:.*records\.read.*not granted/,
+      );
+      const rows = await withBypass(() =>
+        db.execute<{ count: string }>(
+          sql`
     select count(*)::text as count from apps where org_id = ${fx.orgId} and key = ${key}
-  `, 'objects'))
-  assert.equal(rows[0]!.count, '0')
-}))
+  `,
+          "objects",
+        ),
+      );
+      assert.equal(rows[0]!.count, "0");
+    }),
+);
 
-test('registry exposes installed tools only to actors holding the grant intersection', { skip: !DB }, async () => withFixture(async (fx) => {
-  const adminTools = await buildToolRegistryAsync(fx.adminAuthz)
-  assert.ok(READ_TOOL in adminTools, 'admin sees the read tool')
-  assert.ok(MUTATING_TOOL in adminTools, 'admin sees the mutating tool')
-  const limitedTools = await buildToolRegistryAsync(fx.limitedAuthz)
-  assert.ok(!(READ_TOOL in limitedTools), 'records.read-gated tool is hidden without the permission')
-  assert.ok(MUTATING_TOOL in limitedTools, 'grant-free tool stays visible')
-  const otherTools = await withOrgContext(fx.otherOrgId, () => buildToolRegistryAsync(fx.otherOrgAuthz))
-  assert.ok(!(READ_TOOL in otherTools) && !(MUTATING_TOOL in otherTools), 'another org sees nothing')
-}))
+test(
+  "registry exposes installed tools only to actors holding the grant intersection",
+  { skip: !DB },
+  async () =>
+    withFixture(async (fx) => {
+      const adminTools = await buildToolRegistryAsync(fx.adminAuthz);
+      assert.ok(READ_TOOL in adminTools, "admin sees the read tool");
+      assert.ok(MUTATING_TOOL in adminTools, "admin sees the mutating tool");
+      const limitedTools = await buildToolRegistryAsync(fx.limitedAuthz);
+      assert.ok(
+        !(READ_TOOL in limitedTools),
+        "records.read-gated tool is hidden without the permission",
+      );
+      assert.ok(MUTATING_TOOL in limitedTools, "grant-free tool stays visible");
+      const otherTools = await withOrgContext(fx.otherOrgId, () =>
+        buildToolRegistryAsync(fx.otherOrgAuthz),
+      );
+      assert.ok(
+        !(READ_TOOL in otherTools) && !(MUTATING_TOOL in otherTools),
+        "another org sees nothing",
+      );
+    }),
+);
 
-test('MCP catalog enforces both app grants and the assistant doorway', { skip: !DB }, async () => withFixture(async (fx) => {
-  async function listFor(authz: Authz): Promise<string[]> {
-    const requestId = randomUUID()
-    const server = await withOrgContext(authz.user.orgId, () => createOpenBooksMcpServer({
-      auth: {
-        user: authz.user,
-        keyId: randomUUID(),
-        permissions: authz.permissions,
-        rateLimitPerMin: null,
-        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-        audit: {
-          method: 'MCP', path: '/mcp', ipAddress: null, userAgent: null, startedAt: Date.now(),
-        },
-      },
-      request: new Request('http://localhost/mcp'),
-      requestId,
-    }))
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-    const client = new McpClient({ name: 'OpenBooks test client', version: '1.0.0' })
-    try {
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
-      const result = await client.listTools()
-      return result.tools.map(({ name }) => name)
-    } finally {
-      await Promise.all([client.close(), server.close()])
+test("MCP catalog enforces both app grants and the assistant doorway", { skip: !DB }, async () =>
+  withFixture(async (fx) => {
+    async function listFor(authz: Authz): Promise<string[]> {
+      const requestId = randomUUID();
+      const server = await withOrgContext(authz.user.orgId, () =>
+        createOpenBooksMcpServer({
+          auth: {
+            user: authz.user,
+            keyId: randomUUID(),
+            permissions: authz.permissions,
+            rateLimitPerMin: null,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+            audit: {
+              method: "MCP",
+              path: "/mcp",
+              ipAddress: null,
+              userAgent: null,
+              startedAt: Date.now(),
+            },
+          },
+          request: new Request("http://localhost/mcp"),
+          requestId,
+        }),
+      );
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new McpClient({ name: "OpenBooks test client", version: "1.0.0" });
+      try {
+        await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+        const result = await client.listTools();
+        return result.tools.map(({ name }) => name);
+      } finally {
+        await Promise.all([client.close(), server.close()]);
+      }
     }
-  }
 
-  const adminNames = await listFor(fx.adminAuthz)
-  const limitedNames = await listFor(fx.limitedAuthz)
-  const noAssistantAuthz = {
-    ...fx.adminAuthz,
-    permissions: new Set(['apps.use', 'records.read']),
-  }
-  const noAssistantNames = await listFor(noAssistantAuthz)
-  assert.ok(adminNames.includes(READ_TOOL), 'granted app tool appears in the MCP catalog')
-  assert.ok(!limitedNames.includes(READ_TOOL), 'tool requiring records.read is absent without that grant')
-  assert.ok(!noAssistantNames.includes(READ_TOOL), 'apps.use and the app grant do not bypass assistant.use')
-}))
+    const adminNames = await listFor(fx.adminAuthz);
+    const limitedNames = await listFor(fx.limitedAuthz);
+    const noAssistantAuthz = {
+      ...fx.adminAuthz,
+      permissions: new Set(["apps.use", "records.read"]),
+    };
+    const noAssistantNames = await listFor(noAssistantAuthz);
+    assert.ok(adminNames.includes(READ_TOOL), "granted app tool appears in the MCP catalog");
+    assert.ok(
+      !limitedNames.includes(READ_TOOL),
+      "tool requiring records.read is absent without that grant",
+    );
+    assert.ok(
+      !noAssistantNames.includes(READ_TOOL),
+      "apps.use and the app grant do not bypass assistant.use",
+    );
+  }),
+);
 
-test('permission refusals and bad input fail closed without executing', { skip: !DB }, async () => withFixture(async (fx) => {
-  assert.deepEqual(
-    await executeAssistantTool(fx.limitedAuthz, READ_TOOL, { q: 'x' }),
-    { ok: false, error: 'forbidden' },
-  )
-  const invalid = await executeAssistantTool(fx.adminAuthz, READ_TOOL, {})
-  assert.equal(invalid.ok, false)
-  assert.match((invalid as { ok: false; error: string }).error, /invalid_input/)
-  assert.deepEqual(
-    await executeAssistantTool(fx.adminAuthz, 'app_no_such_app_no_tool', {}),
-    { ok: false, error: 'forbidden' },
-  )
-}))
+test("permission refusals and bad input fail closed without executing", { skip: !DB }, async () =>
+  withFixture(async (fx) => {
+    assert.deepEqual(await executeAssistantTool(fx.limitedAuthz, READ_TOOL, { q: "x" }), {
+      ok: false,
+      error: "forbidden",
+    });
+    const invalid = await executeAssistantTool(fx.adminAuthz, READ_TOOL, {});
+    assert.equal(invalid.ok, false);
+    assert.match((invalid as { ok: false; error: string }).error, /invalid_input/);
+    assert.deepEqual(await executeAssistantTool(fx.adminAuthz, "app_no_such_app_no_tool", {}), {
+      ok: false,
+      error: "forbidden",
+    });
+  }),
+);
 
-test('mutating tool proposes, commits, and replays the same outcome', { skip: !DB }, async () => withFixture(async (fx) => {
-  const proposed = await executeAssistantTool(fx.adminAuthz, MUTATING_TOOL, { label: 'c7' })
-  assert.equal(proposed.ok, true, JSON.stringify(proposed))
-  const card = (proposed as { ok: true; data: { proposedApplicationCommand: { toolName: string; input: unknown; confirmToken: string } } }).data.proposedApplicationCommand
+test("mutating tool proposes, commits, and replays the same outcome", { skip: !DB }, async () =>
+  withFixture(async (fx) => {
+    const proposed = await executeAssistantTool(fx.adminAuthz, MUTATING_TOOL, { label: "c7" });
+    assert.equal(proposed.ok, true, JSON.stringify(proposed));
+    const card = (
+      proposed as {
+        ok: true;
+        data: {
+          proposedApplicationCommand: { toolName: string; input: unknown; confirmToken: string };
+        };
+      }
+    ).data.proposedApplicationCommand;
 
-  await withBypass(async () => {
-    const version = (await db.execute<{ id: string }>(sql`insert into app_versions (org_id, app_id, version, manifest, status, created_by) select a.org_id, a.id, '2.0.0', jsonb_set(v.manifest, '{version}', '"2.0.0"'), 'active', a.updated_by from apps a join app_versions v on v.id = a.active_version_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} returning id`, 'objects'))[0]!
-    await db.execute(sql`insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by) select f.org_id, f.app_id, ${version.id}, f.path, f.kind, f.content_type, f.content, f.is_binary, f.size, f.created_by, f.updated_by from app_files f join apps a on a.org_id = f.org_id and a.id = f.app_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} and f.version_id = a.active_version_id`)
-    await db.execute(sql`update apps set active_version_id = ${version.id} where org_id = ${fx.orgId} and key = ${APP_KEY}`)
-  })
-  assert.deepEqual(await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, card.input, card.confirmToken),
-    { ok: false, error: 'confirmation_expired_or_modified', status: 422 })
-  const current = (await executeAssistantTool(fx.adminAuthz, MUTATING_TOOL, { label: 'c7' }) as { ok: true; data: { proposedApplicationCommand: { input: unknown; confirmToken: string } } }).data.proposedApplicationCommand
+    await withBypass(async () => {
+      const version = (
+        await db.execute<{ id: string }>(
+          sql`insert into app_versions (org_id, app_id, version, manifest, status, created_by) select a.org_id, a.id, '2.0.0', jsonb_set(v.manifest, '{version}', '"2.0.0"'), 'active', a.updated_by from apps a join app_versions v on v.id = a.active_version_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} returning id`,
+          "objects",
+        )
+      )[0]!;
+      await db.execute(
+        sql`insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by) select f.org_id, f.app_id, ${version.id}, f.path, f.kind, f.content_type, f.content, f.is_binary, f.size, f.created_by, f.updated_by from app_files f join apps a on a.org_id = f.org_id and a.id = f.app_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} and f.version_id = a.active_version_id`,
+      );
+      await db.execute(
+        sql`update apps set active_version_id = ${version.id} where org_id = ${fx.orgId} and key = ${APP_KEY}`,
+      );
+    });
+    assert.deepEqual(
+      await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, card.input, card.confirmToken),
+      { ok: false, error: "confirmation_expired_or_modified", status: 422 },
+    );
+    const current = (
+      (await executeAssistantTool(fx.adminAuthz, MUTATING_TOOL, { label: "c7" })) as {
+        ok: true;
+        data: { proposedApplicationCommand: { input: unknown; confirmToken: string } };
+      }
+    ).data.proposedApplicationCommand;
 
-  const first = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, current.input, current.confirmToken)
-  assert.deepEqual((first as { ok: true; result: unknown }).result, { status: 200, body: { bumps: 1 } })
+    const first = await commitAppToolCommand(
+      fx.adminAuthz,
+      MUTATING_TOOL,
+      current.input,
+      current.confirmToken,
+    );
+    assert.deepEqual((first as { ok: true; result: unknown }).result, {
+      status: 200,
+      body: { bumps: 1 },
+    });
 
-  const replay = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, current.input, current.confirmToken)
-  assert.deepEqual(replay, first)
-}))
+    const replay = await commitAppToolCommand(
+      fx.adminAuthz,
+      MUTATING_TOOL,
+      current.input,
+      current.confirmToken,
+    );
+    assert.deepEqual(replay, first);
+  }),
+);
 
-test('proposing and committing require the write permission', { skip: !DB }, async () => withFixture(async (fx) => {
-  assert.deepEqual(
-    await executeAssistantTool(fx.noWriteAuthz, MUTATING_TOOL, {}),
-    { ok: false, error: 'forbidden' },
-  )
-  assert.deepEqual(
-    await commitAppToolCommand(fx.noWriteAuthz, MUTATING_TOOL, {}, 'bogus-token'),
-    { ok: false, error: 'forbidden', status: 403 },
-  )
-}))
+test("proposing and committing require the write permission", { skip: !DB }, async () =>
+  withFixture(async (fx) => {
+    assert.deepEqual(await executeAssistantTool(fx.noWriteAuthz, MUTATING_TOOL, {}), {
+      ok: false,
+      error: "forbidden",
+    });
+    assert.deepEqual(
+      await commitAppToolCommand(fx.noWriteAuthz, MUTATING_TOOL, {}, "bogus-token"),
+      { ok: false, error: "forbidden", status: 403 },
+    );
+  }),
+);
 
-test('tool invocations leave app_runs evidence', { skip: !DB }, async () => withFixture(async (fx) => {
-  const orgId = fx.orgId
-  for (const q of ['one', 'two', 'three']) {
-    const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q })
-    assert.equal(result.ok, true, JSON.stringify(result))
-  }
-  const rows = await withOrgContext(orgId, () =>
-    db.execute<{ n: string }>(sql`select count(*) as n from app_runs where org_id = ${orgId}`, 'objects'),
-  )
-  assert.ok(Number(rows[0]!.n) >= 3, `expected tool invocation evidence, got ${rows[0]!.n}`)
-}))
+test("tool invocations leave app_runs evidence", { skip: !DB }, async () =>
+  withFixture(async (fx) => {
+    const orgId = fx.orgId;
+    for (const q of ["one", "two", "three"]) {
+      const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q });
+      assert.equal(result.ok, true, JSON.stringify(result));
+    }
+    const rows = await withOrgContext(orgId, () =>
+      db.execute<{ n: string }>(
+        sql`select count(*) as n from app_runs where org_id = ${orgId}`,
+        "objects",
+      ),
+    );
+    assert.ok(Number(rows[0]!.n) >= 3, `expected tool invocation evidence, got ${rows[0]!.n}`);
+  }),
+);

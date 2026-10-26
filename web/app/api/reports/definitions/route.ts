@@ -1,29 +1,36 @@
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
-import { validateReportLayout } from '@openbooks/reports'
-import { canSeeReportDefinition, guardReportEntity } from '../../../../lib/report-authz'
-import { slugifyReportName, uniqueReportSlug } from '../../../../lib/custom-reports'
-import { ensureReportDefinitions } from '@openbooks/engine/reports/ensure-report-definitions'
-import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
-import { isUuid } from '../../../../lib/list-params'
-import { auditSetupChange } from '../../../../lib/setup/audit'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { validateOrgReportQuery } from "@/lib/custom-record-report-catalog";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@openbooks/engine/platform/db";
+import { validateReportLayout } from "@openbooks/reports";
+import { canSeeReportDefinition, guardReportEntity } from "../../../../lib/report-authz";
+import { slugifyReportName, uniqueReportSlug } from "../../../../lib/custom-reports";
+import { ensureReportDefinitions } from "@openbooks/engine/reports/ensure-report-definitions";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "../../../../lib/api/idempotency";
+import { isUuid } from "../../../../lib/list-params";
+import { auditSetupChange } from "../../../../lib/setup/audit";
 
-const reportLayoutSchema = z.object({
-  paperSize: z.enum(['letter', 'legal', 'a4']).optional(),
-  orientation: z.enum(['portrait', 'landscape']).optional(), marginMm: z.number().finite().optional(),
-  showSummary: z.boolean().optional(), density: z.enum(['compact', 'standard']).optional(),
-}).nullable().optional();
+const reportLayoutSchema = z
+  .object({
+    paperSize: z.enum(["letter", "legal", "a4"]).optional(),
+    orientation: z.enum(["portrait", "landscape"]).optional(),
+    marginMm: z.number().finite().optional(),
+    showSummary: z.boolean().optional(),
+    density: z.enum(["compact", "standard"]).optional(),
+  })
+  .nullable()
+  .optional();
 const createReportBodySchema = z.object({
-  name: z.string().trim().min(1), description: z.string().nullable().optional(),
-  query: z.json(), layout: reportLayoutSchema,
-})
+  name: z.string().trim().min(1),
+  description: z.string().nullable().optional(),
+  query: z.json(),
+  layout: reportLayoutSchema,
+});
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * List report definitions for the org (built-in + custom).
@@ -33,28 +40,37 @@ export const runtime = 'nodejs'
  * stored plan itself) and hands out the id that every execution path keys on.
  */
 export const GET = defineRoute({
-  permission: 'reports.read',
-  feature: { none: "The list filters each definition by its statement or query entity feature access." },
+  permission: "reports.read",
+  feature: {
+    none: "The list filters each definition by its statement or query entity feature access.",
+  },
   handler: async ({ authz: routeAuthz }) => {
     const gate = routeAuthz;
-    const { user } = gate
-    await ensureReportDefinitions(user.orgId)
-    const rows = (await db.execute<{ report_type: string | null; query: unknown; statement: { kind?: string } | null }>(sql`
+    const { user } = gate;
+    await ensureReportDefinitions(user.orgId);
+    const rows = await db.execute<{
+      report_type: string | null;
+      query: unknown;
+      statement: { kind?: string } | null;
+    }>(
+      sql`
         select id, kind, report_type, slug, name, description, query, statement, updated_at
           from report_definitions
          where org_id = ${user.orgId} and archived_at is null
          order by kind, name
-      `, 'objects'))
-    const visible = []
+      `,
+      "objects",
+    );
+    const visible = [];
     for (const row of rows) {
-        // Statements answer the statement feature gate and query plans the
-        // entity gate; the entity gate alone hides every built-in statement.
-        if (!(await canSeeReportDefinition(gate, row))) continue
-        visible.push(row)
-      }
+      // Statements answer the statement feature gate and query plans the
+      // entity gate; the entity gate alone hides every built-in statement.
+      if (!(await canSeeReportDefinition(gate, row))) continue;
+      visible.push(row);
+    }
     return NextResponse.json({
-        definitions: visible,
-      })
+      definitions: visible,
+    });
   },
 });
 
@@ -65,67 +81,70 @@ export const GET = defineRoute({
  * calls this endpoint and therefore allocates nothing.
  */
 export const POST = defineRoute({
-  permission: 'reports.create',
-  feature: { none: "The submitted query is checked for its entity feature access before the definition is saved." },
+  permission: "reports.create",
+  feature: {
+    none: "The submitted query is checked for its entity feature access before the definition is saved.",
+  },
   body: createReportBodySchema,
   handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
-    const { user } = gate
-    const requestId = req.headers.get('Idempotency-Key')?.trim() ?? ''
+    const { user } = gate;
+    const requestId = req.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!isUuid(requestId)) {
-        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
-      }
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
+    }
 
-    const body = routeBody
-    const name = (body.name ?? '').trim()
-    if (!name) return NextResponse.json({ error: 'A report name is required' }, { status: 422 })
-    let query
+    const body = routeBody;
+    const name = (body.name ?? "").trim();
+    if (!name) return NextResponse.json({ error: "A report name is required" }, { status: 422 });
+    let query;
     try {
-        query = await validateOrgReportQuery(gate, body.query)
-      } catch (err) {
-        return apiErrorResponse(err, { safeStatus: 422 })
-      }
-    const denied = await guardReportEntity(gate, query)
-    if (denied) return denied
-    const description = body.description?.trim() || null
-    const layout = (validateReportLayout(body.layout) as Record<string, unknown> | null) ?? null
-    const slug = await uniqueReportSlug(user.orgId, slugifyReportName(name))
+      query = await validateOrgReportQuery(gate, body.query);
+    } catch (err) {
+      return apiErrorResponse(err, { safeStatus: 422 });
+    }
+    const denied = await guardReportEntity(gate, query);
+    if (denied) return denied;
+    const description = body.description?.trim() || null;
+    const layout = (validateReportLayout(body.layout) as Record<string, unknown> | null) ?? null;
+    const slug = await uniqueReportSlug(user.orgId, slugifyReportName(name));
     const snapshot = {
-        id: requestId,
-        org_id: user.orgId,
-        kind: 'custom',
-        report_type: 'query',
-        slug,
-        name,
-        description,
-        query,
-        layout,
-        system: false,
-        created_by: user.id,
-        updated_by: user.id,
-      }
-    const match = { name, description, query, layout }
+      id: requestId,
+      org_id: user.orgId,
+      kind: "custom",
+      report_type: "query",
+      slug,
+      name,
+      description,
+      query,
+      layout,
+      system: false,
+      created_by: user.id,
+      updated_by: user.id,
+    };
+    const match = { name, description, query, layout };
     const outcome = await db.transaction(async (tx) => {
-        const claim = await claimIdempotentCreate(tx, {
-          orgId: user.orgId,
-          table: 'report_definitions',
-          key: requestId,
-        })
-        if (claim === 'exists') {
-          return {
-            kind: 'replay' as const,
-            result: await resolveIdempotentReplay(tx, {
-              orgId: user.orgId,
-              table: 'report_definitions',
-              key: requestId,
-              match,
-            }),
-          }
-        }
-        // A concurrent retry can win the UUID insert after this transaction claims
-        // the same key. That collision is benign only after the audited payload is
-        // re-resolved below; every other collision is returned as a 409 refusal.
-        const inserted = (await tx.execute<Record<string, unknown>>(sql`
+      const claim = await claimIdempotentCreate(tx, {
+        orgId: user.orgId,
+        table: "report_definitions",
+        key: requestId,
+      });
+      if (claim === "exists") {
+        return {
+          kind: "replay" as const,
+          result: await resolveIdempotentReplay(tx, {
+            orgId: user.orgId,
+            table: "report_definitions",
+            key: requestId,
+            match,
+          }),
+        };
+      }
+      // A concurrent retry can win the UUID insert after this transaction claims
+      // the same key. That collision is benign only after the audited payload is
+      // re-resolved below; every other collision is returned as a 409 refusal.
+      const inserted = await tx.execute<Record<string, unknown>>(
+        sql`
           insert into report_definitions
             (id, org_id, kind, report_type, slug, name, description, query, layout,
              system, created_by, updated_by)
@@ -135,46 +154,53 @@ export const POST = defineRoute({
           -- A retry resolves the existing audited payload below; conflicting input is refused.
           on conflict (id) do nothing
           returning id, kind, slug, name, description, query, layout, updated_at
-        `, 'objects'))
-        if (!inserted[0]) {
-          return {
-            kind: 'replay' as const,
-            result: await resolveIdempotentReplay(tx, {
-              orgId: user.orgId,
-              table: 'report_definitions',
-              key: requestId,
-              match,
-            }),
-          }
-        }
-        await auditSetupChange(
-          {
+        `,
+        "objects",
+      );
+      if (!inserted[0]) {
+        return {
+          kind: "replay" as const,
+          result: await resolveIdempotentReplay(tx, {
             orgId: user.orgId,
-            table: 'report_definitions',
-            rowId: requestId,
-            action: 'insert',
-            changes: { before: null, after: snapshot },
-            actorId: user.id,
-            requestId,
-          },
-          tx,
-        )
-        return { kind: 'created' as const, definition: inserted[0] }
-      })
-    if (outcome.kind === 'replay') {
-        if (outcome.result === 'conflict') {
-          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
-        }
-        const existing = (await db.execute<Record<string, unknown>>(sql`
+            table: "report_definitions",
+            key: requestId,
+            match,
+          }),
+        };
+      }
+      await auditSetupChange(
+        {
+          orgId: user.orgId,
+          table: "report_definitions",
+          rowId: requestId,
+          action: "insert",
+          changes: { before: null, after: snapshot },
+          actorId: user.id,
+          requestId,
+        },
+        tx,
+      );
+      return { kind: "created" as const, definition: inserted[0] };
+    });
+    if (outcome.kind === "replay") {
+      if (outcome.result === "conflict") {
+        return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
+      }
+      const existing = (
+        await db.execute<Record<string, unknown>>(
+          sql`
           select id, kind, slug, name, description, query, layout, updated_at
             from report_definitions
            where id = ${requestId} and org_id = ${user.orgId}
-        `, 'objects'))[0]
-        if (!existing) {
-          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
-        }
-        return NextResponse.json({ definition: existing }, { status: 200 })
+        `,
+          "objects",
+        )
+      )[0];
+      if (!existing) {
+        return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
       }
-    return NextResponse.json({ definition: outcome.definition }, { status: 201 })
+      return NextResponse.json({ definition: existing }, { status: 200 });
+    }
+    return NextResponse.json({ definition: outcome.definition }, { status: 201 });
   },
 });

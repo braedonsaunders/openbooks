@@ -1,27 +1,27 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, UrlDrawer } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button, UrlDrawer } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
 
 /** Record routes for the cited sources; unknown kinds render as text. */
 function sourceHref(kind: string, id: string): string | null {
   switch (kind) {
-    case 'hrm_requisition':
-      return `/hrm/recruiting?requisition=${id}`
-    case 'hrm_review':
-      return `/hrm/performance?review=${id}`
-    case 'hrm_goal':
-      return `/hrm/performance?goal=${id}`
-    case 'hrm_process':
-      return `/hrm/processes?process=${id}`
-    case 'hrm_offer':
-      return `/hrm/recruiting?offer=${id}`
-    case 'position_version':
-      return `/hrm/positions?position=${id}`
+    case "hrm_requisition":
+      return `/hrm/recruiting?requisition=${id}`;
+    case "hrm_review":
+      return `/hrm/performance?review=${id}`;
+    case "hrm_goal":
+      return `/hrm/performance?goal=${id}`;
+    case "hrm_process":
+      return `/hrm/processes?process=${id}`;
+    case "hrm_offer":
+      return `/hrm/recruiting?offer=${id}`;
+    case "position_version":
+      return `/hrm/positions?position=${id}`;
     default:
-      return null
+      return null;
   }
 }
 
@@ -35,11 +35,11 @@ function sourceHref(kind: string, id: string): string | null {
  */
 /** What the drafting service returns: the text plus what it was built from. */
 type Draft = {
-  text: string
-  sources: { kind: string; id: string; excerpt: string }[]
-  biasFlags: { term: string; excerpt: string }[]
-  decisionId: string
-}
+  text: string;
+  sources: { kind: string; id: string; excerpt: string }[];
+  biasFlags: { term: string; excerpt: string }[];
+  decisionId: string;
+};
 
 export function AiDraftDrawer({
   draftParam,
@@ -54,129 +54,144 @@ export function AiDraftDrawer({
   loadingLabel,
   copiedLabel,
 }: {
-  draftParam: string | null
-  closeHref: string
-  fieldId: string
-  title: string
-  insertLabel: string
-  discardLabel: string
-  failedLabel: string
-  sourcesTitle: string
-  biasTitle: string
-  loadingLabel: string
-  copiedLabel: string
+  draftParam: string | null;
+  closeHref: string;
+  fieldId: string;
+  title: string;
+  insertLabel: string;
+  discardLabel: string;
+  failedLabel: string;
+  sourcesTitle: string;
+  biasTitle: string;
+  loadingLabel: string;
+  copiedLabel: string;
 }) {
-  const router = useRouter()
+  const router = useRouter();
   // Both the draft and any failure are stored WITH the request they
   // belong to. The drawer is keyed by a url param, so without that the
   // previous subject's draft (or its error) shows for a frame when you
   // open a different one -- and on this surface that frame is one
   // person's evidence-grounded text appearing under another's name.
-  const [loaded, setLoaded] = useState<{ param: string; draft: Draft } | null>(null)
-  const [failed, setFailed] = useState<{ param: string; message: string } | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [loaded, setLoaded] = useState<{ param: string; draft: Draft } | null>(null);
+  const [failed, setFailed] = useState<{ param: string; message: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   // A malformed ?draft= never resolves: parse during render and fail
   // loudly through the derived status — a synchronous setState in the
   // effect below cascades renders — instead of leaving busy true forever
   // with neither draft nor error.
-  const separator = draftParam === null ? -1 : draftParam.indexOf(':')
-  const kind = separator < 0 || draftParam === null ? '' : draftParam.slice(0, separator)
-  const subjectId = separator < 0 || draftParam === null ? '' : draftParam.slice(separator + 1)
-  const malformed = draftParam !== null && (!kind || !subjectId)
-  const draft = loaded && loaded.param === draftParam ? loaded.draft : null
-  const status = malformed ? failedLabel : failed && failed.param === draftParam ? failed.message : null
+  const separator = draftParam === null ? -1 : draftParam.indexOf(":");
+  const kind = separator < 0 || draftParam === null ? "" : draftParam.slice(0, separator);
+  const subjectId = separator < 0 || draftParam === null ? "" : draftParam.slice(separator + 1);
+  const malformed = draftParam !== null && (!kind || !subjectId);
+  const draft = loaded && loaded.param === draftParam ? loaded.draft : null;
+  const status = malformed
+    ? failedLabel
+    : failed && failed.param === draftParam
+      ? failed.message
+      : null;
   // Busy is a fact about the other two, not a third copy of the same
   // state: a draft is being fetched while one is asked for, none has
   // arrived, and nothing has failed.
-  const busy = Boolean(draftParam) && draft === null && status === null
+  const busy = Boolean(draftParam) && draft === null && status === null;
   useEffect(() => {
-    if (!draftParam || malformed) return
-    const requested = draftParam
-    let cancelled = false
-    fetch('/api/ai/drafts', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    if (!draftParam || malformed) return;
+    const requested = draftParam;
+    let cancelled = false;
+    fetch("/api/ai/drafts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ kind, subjectId }),
     })
       .then(async (res) => {
         if (!res.ok) {
-          const message = await readApiErrorMessage(res, failedLabel)
-          if (!cancelled) setFailed({ param: requested, message })
-          return
+          const message = await readApiErrorMessage(res, failedLabel);
+          if (!cancelled) setFailed({ param: requested, message });
+          return;
         }
-        const body = (await res.json()) as { draft: Draft }
-        if (!cancelled) setLoaded({ param: requested, draft: body.draft })
+        const body = (await res.json()) as { draft: Draft };
+        if (!cancelled) setLoaded({ param: requested, draft: body.draft });
       })
       .catch(() => {
-        if (!cancelled) setFailed({ param: requested, message: failedLabel })
-      })
+        if (!cancelled) setFailed({ param: requested, message: failedLabel });
+      });
     return () => {
-      cancelled = true
-    }
-  }, [draftParam, failedLabel, kind, malformed, subjectId])
-  if (!draftParam) return null
-  const close = async (outcome: 'accepted' | 'rejected' | null, decisionId: string | null): Promise<void> => {
+      cancelled = true;
+    };
+  }, [draftParam, failedLabel, kind, malformed, subjectId]);
+  if (!draftParam) return null;
+  const close = async (
+    outcome: "accepted" | "rejected" | null,
+    decisionId: string | null,
+  ): Promise<void> => {
     if (outcome && decisionId) {
       try {
-        const res = await fetch('/api/ai/drafts', {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
+        const res = await fetch("/api/ai/drafts", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ decisionId, outcome }),
-        })
+        });
         if (!res.ok) {
-          setFailed({ param: draftParam, message: await readApiErrorMessage(res, failedLabel) })
-          return
+          setFailed({ param: draftParam, message: await readApiErrorMessage(res, failedLabel) });
+          return;
         }
       } catch {
-        setFailed({ param: draftParam, message: failedLabel })
-        return
+        setFailed({ param: draftParam, message: failedLabel });
+        return;
       }
     }
-    router.push(closeHref)
-  }
+    router.push(closeHref);
+  };
   const insert = async (): Promise<void> => {
-    if (!draft) return
-    const field = fieldId ? document.getElementById(fieldId) : null
+    if (!draft) return;
+    const field = fieldId ? document.getElementById(fieldId) : null;
     if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
       const setter = Object.getOwnPropertyDescriptor(
-        field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
-        'value',
-      )?.set
-      setter?.call(field, draft.text)
-      field.dispatchEvent(new Event('input', { bubbles: true }))
-      await close('accepted', draft.decisionId)
-      return
+        field instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(field, draft.text);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      await close("accepted", draft.decisionId);
+      return;
     }
     // No editable field on this host (detail drawers): copy to the
     // clipboard first, and record acceptance only once the copy
     // succeeded — recording it before the copy (or without one) closes
     // the drawer on a draft the operator never received.
     if (!navigator.clipboard) {
-      setFailed({ param: draftParam, message: failedLabel })
-      return
+      setFailed({ param: draftParam, message: failedLabel });
+      return;
     }
     try {
-      await navigator.clipboard.writeText(draft.text)
+      await navigator.clipboard.writeText(draft.text);
     } catch {
-      setFailed({ param: draftParam, message: failedLabel })
-      return
+      setFailed({ param: draftParam, message: failedLabel });
+      return;
     }
-    setCopied(true)
-    await close('accepted', draft.decisionId)
-  }
+    setCopied(true);
+    await close("accepted", draft.decisionId);
+  };
   return (
     <UrlDrawer open closeHref={closeHref} title={title}>
       <div className="space-y-3">
         {busy ? <p className="text-sm text-slate-500 dark:text-slate-400">{loadingLabel}</p> : null}
-        {status ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
+        {status ? (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {status}
+          </p>
+        ) : null}
         {draft ? (
           <>
-            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{draft.text}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
+              {draft.text}
+            </p>
             <section>
               <h3 className="mb-1 text-sm font-medium">{sourcesTitle}</h3>
               <ul className="text-xs text-slate-500 dark:text-slate-400">
                 {draft.sources.map((source) => {
-                  const href = sourceHref(source.kind, source.id)
+                  const href = sourceHref(source.kind, source.id);
                   return (
                     <li key={`${source.kind}:${source.id}`}>
                       {href ? (
@@ -187,10 +202,10 @@ export function AiDraftDrawer({
                         <span>
                           {source.kind} · {source.id}
                         </span>
-                      )}{' '}
+                      )}{" "}
                       — {source.excerpt}
                     </li>
-                  )
+                  );
                 })}
               </ul>
             </section>
@@ -210,14 +225,20 @@ export function AiDraftDrawer({
               <Button size="sm" onClick={insert}>
                 {insertLabel}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => void close('rejected', draft.decisionId)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void close("rejected", draft.decisionId)}
+              >
                 {discardLabel}
               </Button>
             </div>
-            {copied ? <p className="text-xs text-slate-500 dark:text-slate-400">{copiedLabel}</p> : null}
+            {copied ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">{copiedLabel}</p>
+            ) : null}
           </>
         ) : null}
       </div>
     </UrlDrawer>
-  )
+  );
 }

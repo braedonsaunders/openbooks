@@ -2,16 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
-import type {
-  MigrationSource,
-  SourceOpeningBalance,
-  SourceTrialBalanceRow,
-} from "./source.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import type { MigrationSource, SourceOpeningBalance, SourceTrialBalanceRow } from "./source.ts";
 import { verifyCurrentLedgerState } from "./sync.ts";
 import { trueUpResidualGl } from "./trueup.ts";
 
@@ -56,36 +48,39 @@ test(
       const control = { actorId, syncRunId: "opening-test-run" };
 
       const first = await trueUpResidualGl(org.orgId, source, control);
-      assert.deepEqual(
-        { entries: first.entries, lines: first.lines },
-        { entries: 1, lines: 2 },
-      );
+      assert.deepEqual({ entries: first.entries, lines: first.lines }, { entries: 1, lines: 2 });
 
-      const journals = (await db.execute<{
+      const journals = await db.execute<{
         entryNumber: string;
         postingDate: string;
         memo: string;
         status: string;
-      }>(sql`
+      }>(
+        sql`
         select entry_number as "entryNumber", posting_date::text as "postingDate",
                memo, status
           from journal_entries
          where org_id = ${org.orgId} and memo like 'Migration opening balance%'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(journals.length, 1);
       assert.equal(journals[0]?.postingDate, openingDate);
       assert.equal(journals[0]?.status, "posted");
       assert.match(journals[0]?.entryNumber ?? "", /^OPENING-/);
 
       // The lines tie to the opening trial balance exactly.
-      const lines = (await db.execute<{ ref: string; amount: string }>(sql`
+      const lines = await db.execute<{ ref: string; amount: string }>(
+        sql`
         select a.custom->>'parityRef' as ref, sum(l.amount)::text as amount
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${org.orgId} and e.memo like 'Migration opening balance%'
          group by 1 order by 1
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(lines, [
         { ref: "A", amount: "100.0000" },
         { ref: "B", amount: "-100.0000" },

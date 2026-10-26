@@ -17,9 +17,7 @@ test("flow subject profiles carry each subject kind exactly once", () => {
 });
 
 test("the pay run entry is payroll's dedicated profile", () => {
-  const entries = listFlowSubjectProfiles().filter(
-    (profile) => profile.subjectKind === "pay_run",
-  );
+  const entries = listFlowSubjectProfiles().filter((profile) => profile.subjectKind === "pay_run");
   assert.equal(entries.length, 1);
   assert.deepEqual(entries[0], payRunSubjectProfile);
   assert.ok(entries[0]?.fields.some((field) => field.key === "runType"));

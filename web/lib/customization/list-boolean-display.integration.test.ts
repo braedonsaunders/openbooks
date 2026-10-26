@@ -26,34 +26,56 @@ const booleanDef = {
   sortOrder: 0,
 } as const;
 
-test("boolean custom columns extract real booleans, so stored false is falsy", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const base = defaultListView("vendor_bill");
-    const view = {
-      ...base,
-      columns: [...base.columns, { key: "cf_flag", visible: true }],
-    };
-    const cols = columnDescriptors("vendor_bill", view, [booleanDef] as never, DOCUMENT_BUILT_IN_EXPR, {}, "d");
-    const flag = cols.find((c) => c.key === "cf_flag");
-    assert.ok(flag?.expr, "the boolean custom column must produce a select expression");
+test(
+  "boolean custom columns extract real booleans, so stored false is falsy",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const base = defaultListView("vendor_bill");
+      const view = {
+        ...base,
+        columns: [...base.columns, { key: "cf_flag", visible: true }],
+      };
+      const cols = columnDescriptors(
+        "vendor_bill",
+        view,
+        [booleanDef] as never,
+        DOCUMENT_BUILT_IN_EXPR,
+        {},
+        "d",
+      );
+      const flag = cols.find((c) => c.key === "cf_flag");
+      assert.ok(flag?.expr, "the boolean custom column must produce a select expression");
 
-    const insert = async (custom: string): Promise<string> => {
-      const id = randomUUID();
-      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+      const insert = async (custom: string): Promise<string> => {
+        const id = randomUUID();
+        await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
         values (${id}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-${id.slice(0, 8)}`}, ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${custom}::jsonb)`);
-      return id;
-    };
-    const read = async (id: string): Promise<unknown> => {
-      const rows = await db.execute<{ v: unknown }>(sql`select ${flag.expr} as v from documents d where d.id = ${id}`, "objects");
-      return rows[0]!.v;
-    };
+        return id;
+      };
+      const read = async (id: string): Promise<unknown> => {
+        const rows = await db.execute<{ v: unknown }>(
+          sql`select ${flag.expr} as v from documents d where d.id = ${id}`,
+          "objects",
+        );
+        return rows[0]!.v;
+      };
 
-    // Strict equality: the text 'false' is truthy and renders "Yes".
-    assert.equal(await read(await insert('{"flag": false}')), false, "stored false must extract as boolean false");
-    assert.equal(await read(await insert('{"flag": true}')), true, "stored true must extract as boolean true");
-    assert.equal(await read(await insert('{}')), null, "missing value must stay null");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Strict equality: the text 'false' is truthy and renders "Yes".
+      assert.equal(
+        await read(await insert('{"flag": false}')),
+        false,
+        "stored false must extract as boolean false",
+      );
+      assert.equal(
+        await read(await insert('{"flag": true}')),
+        true,
+        "stored true must extract as boolean true",
+      );
+      assert.equal(await read(await insert("{}")), null, "missing value must stay null");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

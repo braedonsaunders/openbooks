@@ -12,7 +12,11 @@ export interface PreferenceUser {
  * active environment's acting user row.
  */
 export function preferenceUserIdentity(user: PreferenceUser): { id: string; orgId: string } {
-  if (user.envKind === "production" && user.id === user.homeUserId && user.orgId !== user.homeOrgId) {
+  if (
+    user.envKind === "production" &&
+    user.id === user.homeUserId &&
+    user.orgId !== user.homeOrgId
+  ) {
     return { id: user.homeUserId, orgId: user.homeOrgId };
   }
   return { id: user.id, orgId: user.orgId };

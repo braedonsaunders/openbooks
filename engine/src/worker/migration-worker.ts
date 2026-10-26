@@ -19,10 +19,7 @@ import {
   syncConnectionRunLockKey,
 } from "../sync/sync.ts";
 import { syncProjectFinancialInputs } from "../sync/project-financial-inputs.ts";
-import {
-  AttachmentImportError,
-  importNetSuiteAttachments,
-} from "../sync/netsuite-attachments.ts";
+import { AttachmentImportError, importNetSuiteAttachments } from "../sync/netsuite-attachments.ts";
 import { purgeExpiredQbdBridgeData } from "../qbd/bridge.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { mirrorIsDue } from "../sync/mirror-schedule.ts";
@@ -37,123 +34,124 @@ import { mirrorIsDue } from "../sync/mirror-schedule.ts";
 export function createMigrationWorker(): Worker<MigrationJobData> {
   return new Worker<MigrationJobData>(
     MIGRATION_QUEUE,
-    async (job) => withOrgContext(job.data.orgId, async () => {
-      const {
-        orgId,
-        connectionId,
-        mode,
-        triggeredBy,
-        sourceFileIds,
-        sourceRefs,
-      } = job.data;
-      if (sourceFileIds?.length && mode !== "attachments") {
-        throw new Error("sourceFileIds are only valid for attachment jobs");
-      }
-      if (sourceRefs?.length && mode !== "targeted_repair") {
-        throw new Error("sourceRefs are only valid for targeted repair jobs");
-      }
-      if (mode === "targeted_repair" && !sourceRefs?.length) {
-        throw new Error("targeted repair jobs require sourceRefs");
-      }
-      const conn = await getConnection(orgId, connectionId);
-      if (!conn)
-        throw new Error(
-          `connection ${connectionId} not found for org ${orgId}`,
-        );
-
-      if (mode === "attachments") {
-        if (conn.source !== "netsuite")
-          throw new Error(
-            "attachment migration is only supported by NetSuite connections",
-          );
-        let started: { id: string };
-        try {
-          [started] = await claimSyncRun({ orgId, connectionId, kind: "attachments", sourceName: conn.source, triggeredBy: triggeredBy ?? "worker" });
-        } catch (error) {
-          if (error instanceof SyncRunAlreadyActiveError) return { skipped: "run_already_active" as const };
-          throw error;
+    async (job) =>
+      withOrgContext(job.data.orgId, async () => {
+        const { orgId, connectionId, mode, triggeredBy, sourceFileIds, sourceRefs } = job.data;
+        if (sourceFileIds?.length && mode !== "attachments") {
+          throw new Error("sourceFileIds are only valid for attachment jobs");
         }
-        const runId = started.id;
-        try {
-          const summary = await importNetSuiteAttachments({
-            org: orgId,
-            connectionId,
-            actorId: triggeredBy && isUuid(triggeredBy) ? triggeredBy : null,
-            execute: true,
-            concurrency: 4,
-            sourceFileIds,
-          });
-          await db.execute(sql`
+        if (sourceRefs?.length && mode !== "targeted_repair") {
+          throw new Error("sourceRefs are only valid for targeted repair jobs");
+        }
+        if (mode === "targeted_repair" && !sourceRefs?.length) {
+          throw new Error("targeted repair jobs require sourceRefs");
+        }
+        const conn = await getConnection(orgId, connectionId);
+        if (!conn) throw new Error(`connection ${connectionId} not found for org ${orgId}`);
+
+        if (mode === "attachments") {
+          if (conn.source !== "netsuite")
+            throw new Error("attachment migration is only supported by NetSuite connections");
+          let started: { id: string };
+          try {
+            [started] = await claimSyncRun({
+              orgId,
+              connectionId,
+              kind: "attachments",
+              sourceName: conn.source,
+              triggeredBy: triggeredBy ?? "worker",
+            });
+          } catch (error) {
+            if (error instanceof SyncRunAlreadyActiveError)
+              return { skipped: "run_already_active" as const };
+            throw error;
+          }
+          const runId = started.id;
+          try {
+            const summary = await importNetSuiteAttachments({
+              org: orgId,
+              connectionId,
+              actorId: triggeredBy && isUuid(triggeredBy) ? triggeredBy : null,
+              execute: true,
+              concurrency: 4,
+              sourceFileIds,
+            });
+            await db.execute(sql`
             update sync_runs
                set status = 'ok', finished_at = now(), stats = ${JSON.stringify(summary)}::jsonb,
                    progress = ${JSON.stringify({ phase: "complete" })}::jsonb
              where id = ${runId} and org_id = ${orgId}
           `);
-          return { runId, kind: "attachments", ...summary };
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          const stats =
-            error instanceof AttachmentImportError ? error.summary : null;
-          await db.execute(sql`
+            return { runId, kind: "attachments", ...summary };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const stats = error instanceof AttachmentImportError ? error.summary : null;
+            await db.execute(sql`
             update sync_runs
                set status = 'failed', finished_at = now(), error_message = ${message},
                    stats = ${stats ? JSON.stringify(stats) : null}::jsonb
              where id = ${runId} and org_id = ${orgId}
           `);
-          throw error;
+            throw error;
+          }
         }
-      }
 
-      const source = buildSource(conn);
-      if (mode === "project_financials") {
-        let started: { id: string };
-        try {
-          [started] = await claimSyncRun({ orgId, connectionId, kind: "project_financials", sourceName: conn.source, triggeredBy: triggeredBy ?? "worker" });
-        } catch (error) {
-          if (error instanceof SyncRunAlreadyActiveError) return { skipped: "run_already_active" as const };
-          throw error;
-        }
-        const runId = started.id;
-        try {
-          const summary = await syncProjectFinancialInputs(source, {
-            orgId,
-            connectionId,
-            runId,
-            actorId: triggeredBy,
-            apply: true,
-          });
-          await db.execute(sql`
+        const source = buildSource(conn);
+        if (mode === "project_financials") {
+          let started: { id: string };
+          try {
+            [started] = await claimSyncRun({
+              orgId,
+              connectionId,
+              kind: "project_financials",
+              sourceName: conn.source,
+              triggeredBy: triggeredBy ?? "worker",
+            });
+          } catch (error) {
+            if (error instanceof SyncRunAlreadyActiveError)
+              return { skipped: "run_already_active" as const };
+            throw error;
+          }
+          const runId = started.id;
+          try {
+            const summary = await syncProjectFinancialInputs(source, {
+              orgId,
+              connectionId,
+              runId,
+              actorId: triggeredBy,
+              apply: true,
+            });
+            await db.execute(sql`
             update sync_runs
                set status = 'ok', finished_at = now(),
                    stats = ${JSON.stringify(summary)}::jsonb,
                    progress = ${JSON.stringify({ phase: "complete" })}::jsonb
              where id = ${runId} and org_id = ${orgId}
           `);
-          return { runId, kind: "project_financials", ...summary };
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          await db.execute(sql`
+            return { runId, kind: "project_financials", ...summary };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await db.execute(sql`
             update sync_runs
                set status = 'failed', finished_at = now(),
                    error_message = ${message}
              where id = ${runId} and org_id = ${orgId}
           `);
-          throw error;
-        } finally {
-          await source.dispose?.();
+            throw error;
+          } finally {
+            await source.dispose?.();
+          }
         }
-      }
-      if (mode === "preflight") {
-        await db.execute(sql`
+        if (mode === "preflight") {
+          await db.execute(sql`
           update sync_runs
              set status = 'failed', finished_at = now(),
                  error_message = 'Preflight was interrupted before the worker could finish it.'
            where org_id = ${orgId} and connection_id = ${connectionId}
              and kind = 'full_preflight' and status = 'running'
         `);
-        const started = (await db.execute<{ id: string }>(sql`
+          const started = await db.execute<{ id: string }>(
+            sql`
           insert into sync_runs
             (org_id, connection_id, source, kind, status, triggered_by, progress)
           values
@@ -164,104 +162,99 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                message: "Comparing the complete source and target populations…",
              })}::jsonb)
           returning id
-        `, "objects"));
-        const runId = started[0]!.id;
-        try {
-          const plan = await preflightFullSync(source, {
-            orgId,
-            connectionId,
-          });
-          await db.execute(sql`
+        `,
+            "objects",
+          );
+          const runId = started[0]!.id;
+          try {
+            const plan = await preflightFullSync(source, {
+              orgId,
+              connectionId,
+            });
+            await db.execute(sql`
             update sync_runs
                set status = 'ok', finished_at = now(),
                    stats = ${JSON.stringify(plan)}::jsonb,
                    progress = ${JSON.stringify({ phase: "complete" })}::jsonb
              where id = ${runId} and org_id = ${orgId}
           `);
-          return { runId, kind: "full_preflight", ...plan };
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          await db.execute(sql`
+            return { runId, kind: "full_preflight", ...plan };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await db.execute(sql`
             update sync_runs
                set status = 'failed', finished_at = now(),
                    error_message = ${message}
              where id = ${runId} and org_id = ${orgId}
           `);
+            throw error;
+          } finally {
+            await source.dispose?.();
+          }
+        }
+        const postedChangeAuthorization =
+          conn.postedChangePolicy === "append_only_automatic" &&
+          conn.postedChangeAuthorizedBy &&
+          conn.postedChangeAuthorizedAt
+            ? {
+                actorId: conn.postedChangeAuthorizedBy,
+                authorizedAt: new Date(conn.postedChangeAuthorizedAt),
+              }
+            : undefined;
+        const ctx = { orgId, connectionId, postedChangeAuthorization };
+        let result;
+        try {
+          result =
+            mode === "full_migration"
+              ? await runFullMigration(source, triggeredBy ?? "worker", ctx)
+              : mode === "targeted_repair"
+                ? await runTargetedRepair(source, sourceRefs!, triggeredBy ?? "worker", ctx)
+                : await runSync(source, triggeredBy ?? "worker", ctx);
+        } catch (error) {
+          if (error instanceof SyncRunAlreadyActiveError) {
+            // A stalled re-delivery of a job whose original attempt is still
+            // running. The live attempt owns the work, so stand down rather than
+            // fail: throwing here would burn a BullMQ attempt and, at
+            // maxStalledCount, surface an alarming failure for a run that is
+            // proceeding normally.
+            console.log(
+              `[migration-worker] ${mode} already active for connection ${connectionId}; standing down`,
+            );
+            return { skipped: "run_already_active" as const };
+          }
           throw error;
-        } finally {
-          await source.dispose?.();
         }
-      }
-      const postedChangeAuthorization =
-        conn.postedChangePolicy === "append_only_automatic" &&
-        conn.postedChangeAuthorizedBy &&
-        conn.postedChangeAuthorizedAt
-          ? {
-              actorId: conn.postedChangeAuthorizedBy,
-              authorizedAt: new Date(conn.postedChangeAuthorizedAt),
-            }
-          : undefined;
-      const ctx = { orgId, connectionId, postedChangeAuthorization };
-      let result;
-      try {
-        result =
-          mode === "full_migration"
-            ? await runFullMigration(source, triggeredBy ?? "worker", ctx)
-            : mode === "targeted_repair"
-              ? await runTargetedRepair(
-                  source,
-                  sourceRefs!,
-                  triggeredBy ?? "worker",
-                  ctx,
-                )
-            : await runSync(source, triggeredBy ?? "worker", ctx);
-      } catch (error) {
-        if (error instanceof SyncRunAlreadyActiveError) {
-          // A stalled re-delivery of a job whose original attempt is still
-          // running. The live attempt owns the work, so stand down rather than
-          // fail: throwing here would burn a BullMQ attempt and, at
-          // maxStalledCount, surface an alarming failure for a run that is
-          // proceeding normally.
-          console.log(
-            `[migration-worker] ${mode} already active for connection ${connectionId}; standing down`,
-          );
-          return { skipped: "run_already_active" as const };
-        }
-        throw error;
-      }
 
-      return {
-        runId: result.runId,
-        kind: result.kind,
-        docsNew: result.docsNew,
-        docsAmended: result.docsAmended,
-        tb: {
-          accounts: result.tb.accounts,
-          matches: result.tb.matches,
-          mismatches: result.tb.mismatches.length,
-        },
-        periods: {
-          checked: result.periods.checked,
-          matches: result.periods.matches,
-          mismatches: result.periods.checked - result.periods.matches,
-        },
-        projectPeriods: result.projectPeriods
-          ? {
-              checked: result.projectPeriods.checked,
-              matches: result.projectPeriods.matches,
-              mismatches:
-                result.projectPeriods.checked - result.projectPeriods.matches,
-            }
-          : null,
-        openItems: result.openItems
-          ? {
-              checked: result.openItems.checked,
-              matches: result.openItems.matches,
-            }
-          : null,
-      };
-    }),
+        return {
+          runId: result.runId,
+          kind: result.kind,
+          docsNew: result.docsNew,
+          docsAmended: result.docsAmended,
+          tb: {
+            accounts: result.tb.accounts,
+            matches: result.tb.matches,
+            mismatches: result.tb.mismatches.length,
+          },
+          periods: {
+            checked: result.periods.checked,
+            matches: result.periods.matches,
+            mismatches: result.periods.checked - result.periods.matches,
+          },
+          projectPeriods: result.projectPeriods
+            ? {
+                checked: result.projectPeriods.checked,
+                matches: result.projectPeriods.matches,
+                mismatches: result.projectPeriods.checked - result.projectPeriods.matches,
+              }
+            : null,
+          openItems: result.openItems
+            ? {
+                checked: result.openItems.checked,
+                matches: result.openItems.matches,
+              }
+            : null,
+        };
+      }),
     {
       connection: getBlockingConnection(),
       concurrency: 2,
@@ -291,11 +284,13 @@ const MIRROR_TICK_MS = 5 * 60_000;
  */
 export async function reapStaleSyncRuns(): Promise<number> {
   // bypass: scheduler-tick — stale sync runs are found across every organization.
-  const stale = await withBypassContext(() => db.execute<{
-    id: string;
-    orgId: string;
-    connectionId: string | null;
-  }>(sql`
+  const stale = await withBypassContext(() =>
+    db.execute<{
+      id: string;
+      orgId: string;
+      connectionId: string | null;
+    }>(
+      sql`
     select id, org_id as "orgId", connection_id as "connectionId"
       from sync_runs
      where status = 'running'
@@ -303,7 +298,10 @@ export async function reapStaleSyncRuns(): Promise<number> {
          when kind = 'full_migration' then interval '6 hours'
          else interval '30 minutes'
        end
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   if (stale.length === 0) return 0;
 
   // A full migration can legitimately exceed the age threshold. BullMQ's
@@ -314,16 +312,18 @@ export async function reapStaleSyncRuns(): Promise<number> {
   let reaped = 0;
   for (const run of stale) {
     if (run.connectionId && activeConnections.has(run.connectionId)) continue;
-    const changed = await withOrgContext(run.orgId, () => db.transaction(async (tx) => {
-      if (run.connectionId) {
-        await tx.execute(sql`
+    const changed = await withOrgContext(run.orgId, () =>
+      db.transaction(async (tx) => {
+        if (run.connectionId) {
+          await tx.execute(sql`
           select pg_advisory_xact_lock(
             hashtext(${run.orgId}),
             hashtext(${syncConnectionRunLockKey(run.connectionId)})
           )
         `);
-      }
-      return tx.execute(sql`
+        }
+        return tx.execute(
+          sql`
         update sync_runs
            set status = 'failed', finished_at = now(),
                error_message = 'Run never finished: the worker was interrupted (deploy, crash, or restart). Marked failed by the stale-run reaper.'
@@ -335,8 +335,11 @@ export async function reapStaleSyncRuns(): Promise<number> {
              else interval '30 minutes'
            end
          returning id
-      `, "objects");
-    }));
+      `,
+          "objects",
+        );
+      }),
+    );
     if (changed.length > 0) reaped += 1;
   }
   return reaped;
@@ -369,7 +372,10 @@ export async function enqueueDueMirrors(
   enqueue: typeof enqueueMigration = enqueueMigration,
   now: Date = new Date(),
 ): Promise<{ attempted: number; orgErrors: MirrorEnqueueOrgError[] }> {
-  const outcome: { attempted: number; orgErrors: MirrorEnqueueOrgError[] } = { attempted: 0, orgErrors: [] };
+  const outcome: { attempted: number; orgErrors: MirrorEnqueueOrgError[] } = {
+    attempted: 0,
+    orgErrors: [],
+  };
   for (const c of candidates) {
     if (!mirrorIsDue({ ...c, now })) continue;
     const bucket = Math.floor(now.getTime() / MIRROR_TICK_MS);
@@ -387,7 +393,10 @@ export async function enqueueDueMirrors(
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       outcome.orgErrors.push({ orgId: c.orgId, connectionId: c.id, error: message });
-      console.error(`[mirror-scheduler] org ${c.orgId} mirror enqueue failed:`, e instanceof Error ? e.message : e);
+      console.error(
+        `[mirror-scheduler] org ${c.orgId} mirror enqueue failed:`,
+        e instanceof Error ? e.message : e,
+      );
     }
   }
   return outcome;
@@ -402,11 +411,12 @@ export function startMirrorScheduler(): void {
   const tick = async () => {
     try {
       const reaped = await reapStaleSyncRuns();
-      if (reaped > 0)
-        console.log(`[mirror-scheduler] reaped ${reaped} stale sync run(s)`);
+      if (reaped > 0) console.log(`[mirror-scheduler] reaped ${reaped} stale sync run(s)`);
       await purgeExpiredQbdBridgeData();
       // bypass: scheduler-tick — mirror connections due a scheduled run are found across every organization.
-      const candidates = await withBypassContext(() => db.execute<MirrorCandidate>(sql`
+      const candidates = await withBypassContext(() =>
+        db.execute<MirrorCandidate>(
+          sql`
         select c.id, c.org_id as "orgId", c.mirror_schedule as schedule,
                history.last_successful_at as "lastSuccessfulAt",
                history.last_scheduled_attempt_at as "lastScheduledAttemptAt",
@@ -436,7 +446,10 @@ export function startMirrorScheduler(): void {
              select 1 from sync_runs running
               where running.connection_id = c.id and running.org_id = c.org_id
                 and running.kind = 'incremental' and running.status = 'running'
-           )`, "objects"));
+           )`,
+          "objects",
+        ),
+      );
       const outcome = await enqueueDueMirrors(candidates);
       if (outcome.orgErrors.length > 0) {
         console.error(

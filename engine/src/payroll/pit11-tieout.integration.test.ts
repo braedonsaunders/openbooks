@@ -17,7 +17,12 @@ import {
   pit11Slips,
   pit11Slip,
 } from "./pl/pit11.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import "../testing/database-bypass.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -62,7 +67,9 @@ async function makeEmployee(
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${id}, ${orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
-  await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+  await db.execute(
+    sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`,
+  );
   const employmentId = await seedWorkerEmployment(orgId, id, subsidiaryId);
   await db.execute(sql`
     insert into employee_payroll_profiles
@@ -94,8 +101,20 @@ test(
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const wageId = await makeAccount(org.orgId, actorId, "6000", "Wages & Salaries", "expense");
-      const netId = await makeAccount(org.orgId, actorId, "2300", "Employee Payable", "liability_current_other");
-      const deductionsId = await makeAccount(org.orgId, actorId, "2110", "Payroll Deductions", "liability_current_other");
+      const netId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2300",
+        "Employee Payable",
+        "liability_current_other",
+      );
+      const deductionsId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2110",
+        "Payroll Deductions",
+        "liability_current_other",
+      );
       await db.execute(sql`
         update subsidiaries set base_currency = 'PLN', country = 'PL'
          where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
@@ -133,12 +152,27 @@ test(
         values (${scheduleId}, ${org.orgId}, 'PL monthly', 'monthly', 12, '2026-01-31', 0,
                 ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
       const anna = await makeEmployee(
-        org.orgId, org.subsidiaryId, actorId, scheduleId, "Anna Kowalska", 1990, "96000",
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Anna Kowalska",
+        1990,
+        "96000",
       );
       const marek = await makeEmployee(
-        org.orgId, org.subsidiaryId, actorId, scheduleId, "Marek Nowak", 1985, "72000",
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Marek Nowak",
+        1985,
+        "72000",
       );
-      const employeesWithPesel = [[anna, "90010100009"], [marek, "85010100005"]] as const;
+      const employeesWithPesel = [
+        [anna, "90010100009"],
+        [marek, "85010100005"],
+      ] as const;
       for (const [employeeId, pesel] of employeesWithPesel) {
         await db.execute(sql`
           update employee_payroll_profiles
@@ -152,29 +186,54 @@ test(
         ["2026-02-01", "2026-02-28", "2026-02-28"],
       ] as const) {
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: start, periodEnd: end, payDate,
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: start,
+          periodEnd: end,
+          payDate,
         });
-        assert.deepEqual((await calculatePayRun({
-          orgId: org.orgId, actorId, documentId: run.documentId,
-        })).errors, []);
+        assert.deepEqual(
+          (
+            await calculatePayRun({
+              orgId: org.orgId,
+              actorId,
+              documentId: run.documentId,
+            })
+          ).errors,
+          [],
+        );
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
         committed.push(run.documentId);
       }
       // March prices but is never committed: a draft run must not appear on
       // a statutory filing.
       const march = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-03-01", periodEnd: "2026-03-31", payDate: "2026-03-31",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-03-01",
+        periodEnd: "2026-03-31",
+        payDate: "2026-03-31",
       });
-      assert.deepEqual((await calculatePayRun({
-        orgId: org.orgId, actorId, documentId: march.documentId,
-      })).errors, []);
-      const marchStubs = (await db.execute<{ n: string }>(sql`
+      assert.deepEqual(
+        (
+          await calculatePayRun({
+            orgId: org.orgId,
+            actorId,
+            documentId: march.documentId,
+          })
+        ).errors,
+        [],
+      );
+      const marchStubs = await db.execute<{ n: string }>(
+        sql`
         select count(*)::text as n from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${org.orgId} and s.pay_run_document_id = ${march.documentId}
-           and r.run_status <> 'committed'`, "objects"));
+           and r.run_status <> 'committed'`,
+        "objects",
+      );
       assert.equal(marchStubs[0]!.n, "2", "March priced two stubs and stayed uncommitted");
 
       const slips = await pit11Slips(org.orgId, 2026);
@@ -207,9 +266,13 @@ test(
       // with a differently-shaped query and prove every box matches it to
       // the grosz. The March run's stubs would add 8 000 / 6 000 to poz. 29
       // here if the population ever read them.
-      const ledger = (await db.execute<{
+      const ledger = await db.execute<{
         employee_party_id: string;
-        przychod: string; kup: string; zaliczka: string; spoleczne: string; zdrowotna: string;
+        przychod: string;
+        kup: string;
+        zaliczka: string;
+        spoleczne: string;
+        zdrowotna: string;
       }>(sql`
         select s.employee_party_id,
                (select sum(l.amount)::text from pay_stub_lines l
@@ -231,17 +294,37 @@ test(
           from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'PL'
-           and r.run_status = 'committed'`));
+           and r.run_status = 'committed'`);
       const sumBy = (id: string, pick: (row: (typeof ledger.rows)[number]) => string | null) =>
         ledger.rows
           .filter((row) => row.employee_party_id === id)
           .reduce((acc, row) => add(acc, pick(row) ?? "0"), "0");
       for (const [id, slip] of byId) {
-        assert.equal(slip.przychod, sumBy(id, (row) => row.przychod), "poz. 29 ties to committed earning lines");
-        assert.equal(slip.kup, sumBy(id, (row) => row.kup), "poz. 30 ties to committed KUP factors");
-        assert.equal(slip.zaliczka, sumBy(id, (row) => row.zaliczka), "poz. 33 ties to committed PIT lines");
-        assert.equal(slip.skladkiSpoleczne, sumBy(id, (row) => row.spoleczne), "poz. 95 ties to committed ZUS lines");
-        assert.equal(slip.skladkiZdrowotne, sumBy(id, (row) => row.zdrowotna), "poz. 122 ties to committed NFZ lines");
+        assert.equal(
+          slip.przychod,
+          sumBy(id, (row) => row.przychod),
+          "poz. 29 ties to committed earning lines",
+        );
+        assert.equal(
+          slip.kup,
+          sumBy(id, (row) => row.kup),
+          "poz. 30 ties to committed KUP factors",
+        );
+        assert.equal(
+          slip.zaliczka,
+          sumBy(id, (row) => row.zaliczka),
+          "poz. 33 ties to committed PIT lines",
+        );
+        assert.equal(
+          slip.skladkiSpoleczne,
+          sumBy(id, (row) => row.spoleczne),
+          "poz. 95 ties to committed ZUS lines",
+        );
+        assert.equal(
+          slip.skladkiZdrowotne,
+          sumBy(id, (row) => row.zdrowotna),
+          "poz. 122 ties to committed NFZ lines",
+        );
       }
 
       // The population the surface reads: every emitted row id round-trips

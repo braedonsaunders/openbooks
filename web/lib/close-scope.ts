@@ -8,10 +8,6 @@ import { notFound } from "@/lib/api/responses";
  * span the organization. A selected subsidiary must never authorize that data.
  */
 
-export function guardCloseScope(
-  authz: Pick<Authz, "allowedSubsidiaryIds">,
-): NextResponse | null {
-  return authz.allowedSubsidiaryIds === null
-    ? null
-    : notFound("record");
+export function guardCloseScope(authz: Pick<Authz, "allowedSubsidiaryIds">): NextResponse | null {
+  return authz.allowedSubsidiaryIds === null ? null : notFound("record");
 }

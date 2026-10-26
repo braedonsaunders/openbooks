@@ -26,35 +26,23 @@ export class SampleCompanyError extends Error {
   readonly name: string = "SampleCompanyError";
 }
 
-export type SampleCompanyProvisioningStage =
-  | "template"
-  | "clone"
-  | "finalize"
-  | "numbering";
+export type SampleCompanyProvisioningStage = "template" | "clone" | "finalize" | "numbering";
 
-export const SAMPLE_COMPANY_STAGE_CODES: Record<
-  SampleCompanyProvisioningStage,
-  string
-> = {
+export const SAMPLE_COMPANY_STAGE_CODES: Record<SampleCompanyProvisioningStage, string> = {
   template: "sample-company-template-failed",
   clone: "sample-company-clone-failed",
   finalize: "sample-company-finalize-failed",
   numbering: "sample-company-numbering-failed",
 };
 
-const SAMPLE_COMPANY_STAGE_PHRASES: Record<
-  SampleCompanyProvisioningStage,
-  string
-> = {
+const SAMPLE_COMPANY_STAGE_PHRASES: Record<SampleCompanyProvisioningStage, string> = {
   template: "preparing the verified template failed",
   clone: "copying the template's posted history failed",
   finalize: "finalizing the new company failed",
   numbering: "reconciling document numbering failed",
 };
 
-export function sampleCompanyStageMessage(
-  stage: SampleCompanyProvisioningStage,
-): string {
+export function sampleCompanyStageMessage(stage: SampleCompanyProvisioningStage): string {
   return (
     `Sample company preparation stopped: ${SAMPLE_COMPANY_STAGE_PHRASES[stage]}. ` +
     "Company readiness is unconfirmed. Check Company Setup for an available sample company; if none is available, contact support before creating another copy."
@@ -85,9 +73,11 @@ export class SampleCompanyProvisioningError extends SampleCompanyError {
  * Lives here (not in the route) so the safety claim and the serialization
  * that relies on it change together.
  */
-export function sampleCompanyProvisioningBody(
-  error: SampleCompanyProvisioningError,
-): { error: string; stage: SampleCompanyProvisioningStage; message: string } {
+export function sampleCompanyProvisioningBody(error: SampleCompanyProvisioningError): {
+  error: string;
+  stage: SampleCompanyProvisioningStage;
+  message: string;
+} {
   return { error: error.code, stage: error.stage, message: error.message };
 }
 

@@ -10,7 +10,6 @@
 import type { CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
-
 export interface VendorStrings {
   locale: string;
   monthLabel(ym: string): string;

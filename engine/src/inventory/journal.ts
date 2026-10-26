@@ -32,8 +32,11 @@ export async function stockLocationDim(
   explicit: string | null | undefined,
 ): Promise<string | null> {
   if (explicit) return explicit;
-  const r = await runner.execute<{ location_id: string | null }>(sql`
-    select location_id from stock_locations where org_id = ${orgId} and id = ${stockLocationId}`, "objects");
+  const r = await runner.execute<{ location_id: string | null }>(
+    sql`
+    select location_id from stock_locations where org_id = ${orgId} and id = ${stockLocationId}`,
+    "objects",
+  );
   return r[0]?.location_id ?? null;
 }
 
@@ -48,13 +51,16 @@ export async function assertInventoryAccountsPostable(
     id: string;
     is_active: boolean;
     is_summary: boolean;
-  }>(sql`
+  }>(
+    sql`
     select id, is_active, is_summary
       from accounts
      where org_id = ${orgId}
        and id = any(${uuidArray(ids)}::uuid[])
      for share
-  `, "objects");
+  `,
+    "objects",
+  );
   const byId = new Map(accounts.map((account) => [account.id, account]));
   for (const id of ids) {
     const account = byId.get(id);
@@ -86,8 +92,7 @@ export async function postInventoryEntry(
   },
 ): Promise<string> {
   const bal = sum(p.lines.map((l) => l.amount));
-  if (!isZero(bal))
-    throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
+  if (!isZero(bal)) throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
   // Application-level companion to the je_guard Postgres gate (which refuses
   // the draft→posted flip in a GL-closed period): fail fast with a named
   // InventoryError instead of dying at the flip with a raw driver error.
@@ -104,9 +109,18 @@ export async function postInventoryEntry(
     if (error instanceof CloseError) throw new InventoryError(error.message);
     throw error;
   }
-  await assertInventoryAccountsPostable(tx, p.orgId, p.lines.map((line) => line.accountId));
-  const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
-    where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`, "objects"))[0];
+  await assertInventoryAccountsPostable(
+    tx,
+    p.orgId,
+    p.lines.map((line) => line.accountId),
+  );
+  const book = (
+    await tx.execute<{ id: string }>(
+      sql`select id from accounting_books
+    where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`,
+      "objects",
+    )
+  )[0];
   if (!book) throw new InventoryError("inventory journal requires an active posting book");
   // Every journal write routes through the ONE ledger API: it owns balance
   // validation, the open-period check, the posting lock, the single
@@ -144,5 +158,6 @@ export function inventoryOffsetAccountProblem(
   label: string,
 ): string | null {
   return offsetAccountId?.toLowerCase() === assetAccountId.toLowerCase()
-    ? `the ${label} account must be distinct from the inventory asset account` : null;
+    ? `the ${label} account must be distinct from the inventory asset account`
+    : null;
 }

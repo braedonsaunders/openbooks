@@ -22,7 +22,9 @@ export function collectTestFiles(root = ROOT) {
   for (const sub of ["engine/src", "web", "packages", "schema", "e2e"]) {
     try {
       if (statSync(join(root, sub)).isDirectory()) walk(join(root, sub));
-    } catch { /* optional tree absent */ }
+    } catch {
+      /* optional tree absent */
+    }
   }
   return out;
 }
@@ -35,7 +37,9 @@ export function splitTests(src) {
   return starts.map((start, k) => ({
     start,
     line: src.slice(0, start).split("\n").length,
-    name: (src.slice(start).match(/(?:test|it)\s*\(\s*(['"`])((?:\\\1|(?!\1).){0,80})/) ?? [])[2] ?? "?",
+    name:
+      (src.slice(start).match(/(?:test|it)\s*\(\s*(['"`])((?:\\\1|(?!\1).){0,80})/) ?? [])[2] ??
+      "?",
     body: src.slice(start, k + 1 < starts.length ? starts[k + 1] : src.length),
   }));
 }
@@ -55,7 +59,8 @@ function constructedNonEmpty(collection, body) {
   if (/^[A-Z_][A-Z0-9_]*$/.test(trimmed.split(".")[0])) return true;
   if (trimmed.includes("?") && trimmed.includes("[")) {
     const branches = trimmed.split("?")[1]?.split(":") ?? [];
-    if (branches.length > 0 && branches.every((branch) => /^\s*\[/.test(branch.trim()))) return true;
+    if (branches.length > 0 && branches.every((branch) => /^\s*\[/.test(branch.trim())))
+      return true;
   }
   const base = trimmed.split(".")[0].split("[")[0].split("(")[0];
   // Right-hand side of a same-test `const/let/var BASE ... = RHS;`, found by
@@ -64,14 +69,32 @@ function constructedNonEmpty(collection, body) {
   const rhsOf = (name) => {
     const decl = body.match(new RegExp(`(?:const|let|var)\\s+${esc(name)}\\b`));
     if (!decl) return null;
-    let depth = 0; let quote = null;
+    let depth = 0;
+    let quote = null;
     for (let i = decl.index + decl[0].length; i < body.length; i++) {
       const ch = body[i];
-      if (quote) { if (ch === quote && body[i - 1] !== "\\") quote = null; continue; }
-      if (ch === "'" || ch === '"' || ch === "`") { quote = ch; continue; }
-      if (ch === "(" || ch === "{" || ch === "[") { depth++; continue; }
-      if (ch === ")" || ch === "}" || ch === "]") { depth--; continue; }
-      if (ch === "=" && depth === 0 && !/[=<>!]/.test(body[i - 1] ?? "") && !/[=>]/.test(body[i + 1] ?? "")) {
+      if (quote) {
+        if (ch === quote && body[i - 1] !== "\\") quote = null;
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        quote = ch;
+        continue;
+      }
+      if (ch === "(" || ch === "{" || ch === "[") {
+        depth++;
+        continue;
+      }
+      if (ch === ")" || ch === "}" || ch === "]") {
+        depth--;
+        continue;
+      }
+      if (
+        ch === "=" &&
+        depth === 0 &&
+        !/[=<>!]/.test(body[i - 1] ?? "") &&
+        !/[=>]/.test(body[i + 1] ?? "")
+      ) {
         return body.slice(i + 1, body.indexOf(";", i));
       }
       if (ch === ";" && depth === 0) return null;
@@ -87,9 +110,16 @@ function constructedNonEmpty(collection, body) {
     if (rhs && /\[[\s\S]/.test(rhs) && !/[([]/.test(rhs.split("[")[0])) return true;
     // new Set([...]) / new Map([...]) over literals: length preserved.
     if (rhs && new RegExp(`^\\s*new\\s+(?:Set|Map)\\s*\\(\\s*\\[`).test(rhs)) return true;
-    if (new RegExp(`(?:const|let|var)\\s+${esc(base)}\\s*=\\s*await\\s+Promise\\s*\\.\\s*all(?:Settled)?\\s*\\(\\s*\\[`).test(body)) return true;
+    if (
+      new RegExp(
+        `(?:const|let|var)\\s+${esc(base)}\\s*=\\s*await\\s+Promise\\s*\\.\\s*all(?:Settled)?\\s*\\(\\s*\\[`,
+      ).test(body)
+    )
+      return true;
   }
-  const objectOf = trimmed.match(/^Object\s*\.\s*(?:entries|keys|values)\s*\(\s*([A-Za-z_$][\w$]*)\s*\)$/);
+  const objectOf = trimmed.match(
+    /^Object\s*\.\s*(?:entries|keys|values)\s*\(\s*([A-Za-z_$][\w$]*)\s*\)$/,
+  );
   if (objectOf) {
     const inner = objectOf[1];
     if (/^[A-Z_][A-Z0-9_]*$/.test(inner)) return true;
@@ -105,8 +135,8 @@ function derivations(body, collection) {
   const names = new Set([collection, `${collection}.rows`]);
   const pattern = new RegExp(
     `(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:await\\s+)?${esc(collection)}(?:\\.rows)?\\s*\\.\\s*(map|filter|flatMap|slice|sort)\\s*\\(` +
-    `|(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*Object\\s*\\.\\s*(?:entries|keys|values)\\s*\\(\\s*${esc(collection)}\\s*\\)` +
-    `|(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${esc(collection)}\\s*\\.\\s*rows\\b`,
+      `|(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*Object\\s*\\.\\s*(?:entries|keys|values)\\s*\\(\\s*${esc(collection)}\\s*\\)` +
+      `|(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${esc(collection)}\\s*\\.\\s*rows\\b`,
     "g",
   );
   for (const match of body.matchAll(pattern)) {
@@ -135,20 +165,35 @@ export function comparandAfter(body, expression) {
   while (i < body.length) {
     const char = body[i];
     if (quote) {
-      if (char === "\\") { i += 2; continue; }
+      if (char === "\\") {
+        i += 2;
+        continue;
+      }
       if (char === quote) quote = null;
       i++;
       continue;
     }
-    if (char === "'" || char === '"') { quote = char; i++; continue; }
-    if (char === "(") { call++; i++; continue; }
+    if (char === "'" || char === '"') {
+      quote = char;
+      i++;
+      continue;
+    }
+    if (char === "(") {
+      call++;
+      i++;
+      continue;
+    }
     if (char === ")") {
       call--;
       if (call === 0) return null;
       i++;
       continue;
     }
-    if (char === "[" || char === "{") { depth[char]++; i++; continue; }
+    if (char === "[" || char === "{") {
+      depth[char]++;
+      i++;
+      continue;
+    }
     if (char === "]" || char === "}") {
       if (char === "]" && depth["["] > 0) depth["["]--;
       if (char === "}" && depth["{"] > 0) depth["{"]--;
@@ -165,15 +210,34 @@ export function comparandAfter(body, expression) {
       while (j < body.length) {
         const inner = body[j];
         if (subQuote) {
-          if (inner === "\\") { j += 2; continue; }
+          if (inner === "\\") {
+            j += 2;
+            continue;
+          }
           if (inner === subQuote) subQuote = null;
           j++;
           continue;
         }
-        if (inner === "'" || inner === '"') { subQuote = inner; j++; continue; }
-        if (inner === "(") { subCall++; j++; continue; }
-        if (inner === "[") { sub["["]++; j++; continue; }
-        if (inner === "{") { sub["{"]++; j++; continue; }
+        if (inner === "'" || inner === '"') {
+          subQuote = inner;
+          j++;
+          continue;
+        }
+        if (inner === "(") {
+          subCall++;
+          j++;
+          continue;
+        }
+        if (inner === "[") {
+          sub["["]++;
+          j++;
+          continue;
+        }
+        if (inner === "{") {
+          sub["{"]++;
+          j++;
+          continue;
+        }
         if (inner === ")") {
           subCall--;
           if (subCall === 0) return body.slice(start, j).trim();
@@ -183,8 +247,16 @@ export function comparandAfter(body, expression) {
         if (inner === "," && subZero()) {
           return body.slice(start, j).trim();
         }
-        if (inner === "]" && sub["["] > 0) { sub["["]--; j++; continue; }
-        if (inner === "}" && sub["{"] > 0) { sub["{"]--; j++; continue; }
+        if (inner === "]" && sub["["] > 0) {
+          sub["["]--;
+          j++;
+          continue;
+        }
+        if (inner === "}" && sub["{"] > 0) {
+          sub["{"]--;
+          j++;
+          continue;
+        }
         j++;
       }
       return body.slice(start).trim();
@@ -200,13 +272,19 @@ export function anchored(body, collection) {
     if (new RegExp(`\\b${expression}\\s*\\.\\s*(length|size)\\b`).test(body)) return true;
     // `has` is the Set membership probe, the same non-vacuity evidence as
     // `includes` on an array: it fails when the collection is empty.
-    if (new RegExp(`\\b${expression}\\s*\\.\\s*(has|includes|indexOf|find|some|every)\\s*\\(`).test(body)) return true;
+    if (
+      new RegExp(`\\b${expression}\\s*\\.\\s*(has|includes|indexOf|find|some|every)\\s*\\(`).test(
+        body,
+      )
+    )
+      return true;
     if (new RegExp(`\\b${expression}\\s*\\[\\s*0\\s*\\]`).test(body)) return true;
     // A deepEqual of the collection (or its map) against a non-empty literal
     // fails on empty: `deepEqual(rows.map(r => r.id), [..])`. A comparand
     // held in a variable proves nothing by itself and does not anchor.
     const comparand = comparandAfter(body, expression);
-    if (comparand && /^\s*(\[\s*\S|\{\s*[^}]|['"`][^'"`]|true\b|[1-9])/.test(comparand)) return true;
+    if (comparand && /^\s*(\[\s*\S|\{\s*[^}]|['"`][^'"`]|true\b|[1-9])/.test(comparand))
+      return true;
   }
   return false;
 }
@@ -216,17 +294,30 @@ export function anchored(body, collection) {
 // checker must see it. Reads to the `;` at paren depth 0; bails on a brace
 // (a block body belongs to loopBody, a `}` ends the enclosing scope).
 function bareStatement(text, from) {
-  let depth = 0; let quote = null;
+  let depth = 0;
+  let quote = null;
   for (let i = from; i < text.length; i++) {
     const char = text[i];
     if (quote) {
-      if (char === "\\") { i++; continue; }
+      if (char === "\\") {
+        i++;
+        continue;
+      }
       if (char === quote) quote = null;
       continue;
     }
-    if (char === "'" || char === '"' || char === "`") { quote = char; continue; }
-    if (char === "(") { depth++; continue; }
-    if (char === ")") { depth = Math.max(0, depth - 1); continue; }
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "(") {
+      depth++;
+      continue;
+    }
+    if (char === ")") {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
     if (char === ";" && depth === 0) return text.slice(from, i + 1);
     if ((char === "{" || char === "}") && depth === 0) return "";
   }
@@ -248,12 +339,19 @@ function loopBody(body, from) {
   while (i < body.length) {
     const char = body[i];
     if (quote) {
-      if (char === "\\") { i += 2; continue; }
+      if (char === "\\") {
+        i += 2;
+        continue;
+      }
       if (char === quote) quote = null;
       i++;
       continue;
     }
-    if (char === "'" || char === '"') { quote = char; i++; continue; }
+    if (char === "'" || char === '"') {
+      quote = char;
+      i++;
+      continue;
+    }
     if (char === "{") depth++;
     if (char === "}") {
       depth--;
@@ -271,7 +369,8 @@ export function scanFile(path, root = ROOT) {
   const src = codeOnly(readFileSync(path, "utf8"));
   const rel = path.startsWith(root + "/") ? path.slice(root.length + 1) : path;
   for (const unit of splitTests(src)) {
-    const loopRe = /for\s*\(\s*(?:const|let|var|await)\s+[a-zA-Z_$][\w$]*\s+of\s+([^;()]{1,90})\)|([a-zA-Z_$][\w$.[\]()'"?]*)\.forEach\s*\(/g;
+    const loopRe =
+      /for\s*\(\s*(?:const|let|var|await)\s+[a-zA-Z_$][\w$]*\s+of\s+([^;()]{1,90})\)|([a-zA-Z_$][\w$.[\]()'"?]*)\.forEach\s*\(/g;
     let match;
     while ((match = loopRe.exec(unit.body))) {
       const collection = (match[1] ?? match[2]).trim();
@@ -291,12 +390,19 @@ export function scanFile(path, root = ROOT) {
         while (i < unit.body.length) {
           const char = unit.body[i];
           if (quote) {
-            if (char === "\\") { i += 2; continue; }
+            if (char === "\\") {
+              i += 2;
+              continue;
+            }
             if (char === quote) quote = null;
             i++;
             continue;
           }
-          if (char === "'" || char === '"') { quote = char; i++; continue; }
+          if (char === "'" || char === '"') {
+            quote = char;
+            i++;
+            continue;
+          }
           if (char === "(") depth++;
           if (char === ")") {
             depth--;
@@ -306,13 +412,19 @@ export function scanFile(path, root = ROOT) {
         }
         return "";
       };
-      const loopChunk = match[1] !== undefined
-        ? (loopBody(unit.body, headerEnd) ?? bareStatement(unit.body, headerEnd))
-        : forEachChunk();
+      const loopChunk =
+        match[1] !== undefined
+          ? (loopBody(unit.body, headerEnd) ?? bareStatement(unit.body, headerEnd))
+          : forEachChunk();
       if (!/\bassert\b/.test(loopChunk) && !/\bexpect\b/.test(loopChunk)) continue;
       if (anchored(unit.body, collection)) continue;
       const loopLine = unit.line + unit.body.slice(0, match.index).split("\n").length - 1;
-      findings.push({ file: rel, line: loopLine, name: unit.name.slice(0, 70), collection: collection.slice(0, 70) });
+      findings.push({
+        file: rel,
+        line: loopLine,
+        name: unit.name.slice(0, 70),
+        collection: collection.slice(0, 70),
+      });
     }
   }
   return findings;
@@ -331,7 +443,9 @@ if (invoked) {
   const root = process.argv[2] ?? ROOT;
   const findings = scanTree(root);
   for (const finding of findings) {
-    console.log(`${finding.file}:${finding.line} [${finding.name}] loop over \`${finding.collection}\` has no non-vacuity anchor`);
+    console.log(
+      `${finding.file}:${finding.line} [${finding.name}] loop over \`${finding.collection}\` has no non-vacuity anchor`,
+    );
   }
   console.log(`checked integration loop anchors; unanchored=${findings.length}`);
   process.exit(findings.length > 0 ? 1 : 0);

@@ -93,7 +93,9 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
   const prior = globalThis.fetch;
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     calls.push({ url, init });
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
@@ -106,9 +108,8 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
 }
 
 function buttonNamed(name: string): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll("button")].find(
-    (b) => b.textContent?.trim() === name,
-  ) as HTMLButtonElement | undefined;
+  return [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === name) as
+    HTMLButtonElement | undefined;
 }
 
 function hrefs(): string[] {
@@ -181,21 +182,39 @@ test("busy-season gap action confirms once, retries idempotently, and drills to 
   const createdHost = await mount(projects);
   await click(buttonNamed(labels.requestAction)!);
   assert.equal(created.calls.length, 1);
-  assert.ok(created.calls.every((call) => call.url === "/api/resourcing/requests"), "no submit or booking endpoint is ever called");
+  assert.ok(
+    created.calls.every((call) => call.url === "/api/resourcing/requests"),
+    "no submit or booking endpoint is ever called",
+  );
   assert.ok(createdHost.textContent?.includes("request-1"), "the created draft id is shown");
   const shown = hrefs();
   for (const id of ["line-manual", "line-pipeline"]) {
-    assert.ok(shown.some((href) => href.includes(`/resourcing/demand?demand=${id}`)), `demand line ${id} drills to its drawer`);
+    assert.ok(
+      shown.some((href) => href.includes(`/resourcing/demand?demand=${id}`)),
+      `demand line ${id} drills to its drawer`,
+    );
   }
-  assert.ok(shown.some((href) => href.includes(`/crm/opportunities?opportunity=opp-open`)), "the weighting opportunity drills to the CRM");
+  assert.ok(
+    shown.some((href) => href.includes(`/crm/opportunities?opportunity=opp-open`)),
+    "the weighting opportunity drills to the CRM",
+  );
   for (const id of ["assign-named", "assign-generic"]) {
-    assert.ok(shown.some((href) => href.includes(`/resourcing/assignments?assignment=${id}`)), `assignment ${id} drills to its drawer`);
+    assert.ok(
+      shown.some((href) => href.includes(`/resourcing/assignments?assignment=${id}`)),
+      `assignment ${id} drills to its drawer`,
+    );
   }
   for (const id of ["alice", "bob"]) {
-    assert.ok(shown.some((href) => href.includes(`/entities/employees?party=${id}`)), `staff ${id} drills to their drawer`);
+    assert.ok(
+      shown.some((href) => href.includes(`/entities/employees?party=${id}`)),
+      `staff ${id} drills to their drawer`,
+    );
   }
   assert.ok(shown.includes("/hrm/leave"), "absence evidence links the leave queue");
-  assert.ok(shown.includes("/admin/setup/payroll?tab=holidays"), "holiday evidence links the holiday setup");
+  assert.ok(
+    shown.includes("/admin/setup/payroll?tab=holidays"),
+    "holiday evidence links the holiday setup",
+  );
   created.restore();
 
   globalThis.__promptVerdict = "project-alpha";
@@ -203,7 +222,13 @@ test("busy-season gap action confirms once, retries idempotently, and drills to 
   const retrying = scriptFetch(() => {
     attempts += 1;
     return attempts < 3
-      ? Response.json({ message: "project is outside your subsidiaries", remedy: "choose a project in your subsidiaries" }, { status: 422 })
+      ? Response.json(
+          {
+            message: "project is outside your subsidiaries",
+            remedy: "choose a project in your subsidiaries",
+          },
+          { status: 422 },
+        )
       : Response.json({ id: "request-2" });
   });
   await mount(projects);
@@ -221,14 +246,22 @@ test("busy-season gap action confirms once, retries idempotently, and drills to 
   retrying.restore();
 
   globalThis.__promptVerdict = "project-alpha";
-  const refused = scriptFetch(() => Response.json(
-    { message: "project is outside your subsidiaries", remedy: "choose a project in your subsidiaries" },
-    { status: 422 },
-  ));
+  const refused = scriptFetch(() =>
+    Response.json(
+      {
+        message: "project is outside your subsidiaries",
+        remedy: "choose a project in your subsidiaries",
+      },
+      { status: 422 },
+    ),
+  );
   await mount(projects);
   await click(buttonNamed(labels.requestAction)!);
   const text = document.body.textContent ?? "";
-  assert.ok(text.includes("project is outside your subsidiaries"), "the refusal message is delivered");
+  assert.ok(
+    text.includes("project is outside your subsidiaries"),
+    "the refusal message is delivered",
+  );
   assert.ok(text.includes("choose a project in your subsidiaries"), "the real remedy is delivered");
   refused.restore();
 

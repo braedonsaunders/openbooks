@@ -88,31 +88,38 @@ async function postMismatchedInvoice(org: ScratchOrg, actor: string): Promise<st
   return docId;
 }
 
-test("document-journal-tieout fails when the claim leg understates the header", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Totals prover", "admin");
-    await postMismatchedInvoice(org, actor);
+test(
+  "document-journal-tieout fails when the claim leg understates the header",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Totals prover", "admin");
+      await postMismatchedInvoice(org, actor);
 
-    const cp = await runScenario(org.orgId, { at: org.date });
-    const tie = check(cp, "document-journal-tieout");
-    assert.equal(tie.ok, false, `journal tie-out MUST fail: ${tie.detail}`);
-    assert.match(tie.detail, /1 posted documents with untraceable header totals/);
-    assert.equal(cp.pass, false, "an untraceable fixture cannot be golden");
-    othersGreen(cp, "document-journal-tieout");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const cp = await runScenario(org.orgId, { at: org.date });
+      const tie = check(cp, "document-journal-tieout");
+      assert.equal(tie.ok, false, `journal tie-out MUST fail: ${tie.detail}`);
+      assert.match(tie.detail, /1 posted documents with untraceable header totals/);
+      assert.equal(cp.pass, false, "an untraceable fixture cannot be golden");
+      othersGreen(cp, "document-journal-tieout");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("document-header-arithmetic fails on a lineless total that ignores its subtotal", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Totals prover", "admin");
-    const docId = randomUUID();
-    // A payment header with no lines: 0017 is vacuous here, so the stranded
-    // total commits and only the header-sum gate can catch it.
-    await db.execute(sql`
+test(
+  "document-header-arithmetic fails on a lineless total that ignores its subtotal",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Totals prover", "admin");
+      const docId = randomUUID();
+      // A payment header with no lines: 0017 is vacuous here, so the stranded
+      // total commits and only the header-sum gate can catch it.
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
          currency, fx_rate, subtotal, tax_total, total, created_by)
@@ -120,16 +127,17 @@ test("document-header-arithmetic fails on a lineless total that ignores its subt
               ${org.subsidiaryId}, ${org.customerId}, ${org.date},
               'CAD', 1, '0', '0', '100.0000', ${actor})`);
 
-    const cp = await runScenario(org.orgId, { at: org.date });
-    const arith = check(cp, "document-header-arithmetic");
-    assert.equal(arith.ok, false, `header arithmetic MUST fail: ${arith.detail}`);
-    assert.match(arith.detail, /1 documents with total ≠ subtotal \+ tax_total/);
-    assert.equal(cp.pass, false, "a mis-added fixture cannot be golden");
-    othersGreen(cp, "document-header-arithmetic");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const cp = await runScenario(org.orgId, { at: org.date });
+      const arith = check(cp, "document-header-arithmetic");
+      assert.equal(arith.ok, false, `header arithmetic MUST fail: ${arith.detail}`);
+      assert.match(arith.detail, /1 documents with total ≠ subtotal \+ tax_total/);
+      assert.equal(cp.pass, false, "a mis-added fixture cannot be golden");
+      othersGreen(cp, "document-header-arithmetic");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("kernel-posted invoice ties at every document granularity", { skip: !DB }, async () => {
   // Positive control for the family: a genuine kernel posting must satisfy
@@ -161,8 +169,16 @@ test("kernel-posted invoice ties at every document granularity", { skip: !DB }, 
     });
 
     const cp = await runScenario(org.orgId, { at: org.date });
-    assert.equal(check(cp, "document-header-arithmetic").ok, true, "header arithmetic must hold on a kernel posting");
-    assert.equal(check(cp, "document-lines-tieout").ok, true, "header↔lines must hold on a kernel posting");
+    assert.equal(
+      check(cp, "document-header-arithmetic").ok,
+      true,
+      "header arithmetic must hold on a kernel posting",
+    );
+    assert.equal(
+      check(cp, "document-lines-tieout").ok,
+      true,
+      "header↔lines must hold on a kernel posting",
+    );
     const tie = check(cp, "document-journal-tieout");
     assert.equal(tie.ok, true, `header↔journal must hold on a kernel posting: ${tie.detail}`);
     assert.equal(cp.pass, true, "a clean kernel posting must be golden");

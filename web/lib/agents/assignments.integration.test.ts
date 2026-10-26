@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
-import { stubModules } from '../../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../auth";
+import { stubModules } from "../../testing/stub-modules.ts";
 
 // Assignment & SLA proofs (b06, migration 0153): user/role assignment with
 // due dates, comment threads, inbox assignee facets, and the write doorway.
@@ -12,16 +12,24 @@ const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06Assign: state });
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__b06Assign.user}' };
-  return next(specifier, context);
-} });
-const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { getAuthz } = await import('../authz');
-const { addWorkItemNote, listWorkItemNotes, loadWorkItemAssignment, setWorkItemAssignment } = await import('./assignments');
-const { loadAgentInbox } = await import('./inbox');
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__b06Assign.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { getAuthz } = await import("../authz");
+const { addWorkItemNote, listWorkItemNotes, loadWorkItemAssignment, setWorkItemAssignment } =
+  await import("./assignments");
+const { loadAgentInbox } = await import("./inbox");
 
 async function seedFinding(orgId: string): Promise<string> {
   const id = randomUUID();
@@ -36,179 +44,228 @@ async function seedFinding(orgId: string): Promise<string> {
 }
 
 async function asUser(orgId: string, name: string, roleKey: string, perms: string[]) {
-  const actor = await createScratchUser(orgId, name, roleKey) as unknown as string;
-  await db.execute(sql`update app_roles set permissions=${JSON.stringify(perms)}::jsonb where org_id=${orgId} and key=${roleKey}`);
-  state.user = { id: actor, orgId, name, email: `${roleKey}@scratch.test`, roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor };
+  const actor = (await createScratchUser(orgId, name, roleKey)) as unknown as string;
+  await db.execute(
+    sql`update app_roles set permissions=${JSON.stringify(perms)}::jsonb where org_id=${orgId} and key=${roleKey}`,
+  );
+  state.user = {
+    id: actor,
+    orgId,
+    name,
+    email: `${roleKey}@scratch.test`,
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: actor,
+  };
   return actor;
 }
 
-const WRITER = ['assistant.use', 'assistant.write', 'gl.read'];
-const READER = ['assistant.use', 'gl.read'];
+const WRITER = ["assistant.use", "assistant.write", "gl.read"];
+const READER = ["assistant.use", "gl.read"];
 
 type Fallible = { ok: true; id?: string } | { ok: false; error: string };
 function err(result: Fallible): string | undefined {
   return result.ok ? undefined : result.error;
 }
 
-test('assignment round-trips user, due, overdue, and inbox facets', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const itemId = await seedFinding(org.orgId);
-    const me = await asUser(org.orgId, 'Writer', 'b06_assign_writer', WRITER);
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      // Unassigned to start.
-      const before = await loadWorkItemAssignment(authz, itemId);
-      assert.equal(before?.assigneeUserId, null);
-      const future = new Date(Date.now() + 86_400_000).toISOString();
-      assert.deepEqual(await setWorkItemAssignment(authz, itemId, { assigneeUserId: me, dueAt: future }), { ok: true });
-      const after = await loadWorkItemAssignment(authz, itemId);
-      assert.equal(after?.assigneeUserId, me);
-      assert.equal(after?.assigneeUserName, 'Writer');
-      assert.equal(after?.overdue, false);
-      // Inbox surfaces the assignee and the mine/unassigned facets.
-      const inbox = await loadAgentInbox(authz, {});
-      const row = inbox.rows.find((r) => r.id === itemId);
-      assert.deepEqual(row?.assignee, { kind: 'user', id: me, name: 'Writer' });
-      assert.equal(inbox.facets.assignedToMe, 1);
-      assert.equal(inbox.facets.unassigned, 0);
-      assert.equal(inbox.facets.overdue, 0);
-      const mine = await loadAgentInbox(authz, { assignedToMe: true });
-      assert.equal(mine.total, 1);
-      // Past due flips the overdue flag on the row, the loader, and the facet.
-      const past = new Date(Date.now() - 86_400_000).toISOString();
-      assert.deepEqual(await setWorkItemAssignment(authz, itemId, { assigneeUserId: me, dueAt: past }), { ok: true });
-      const late = await loadWorkItemAssignment(authz, itemId);
-      assert.equal(late?.overdue, true);
-      const overdue = await loadAgentInbox(authz, { overdueOnly: true });
-      assert.equal(overdue.total, 1);
-      assert.equal(overdue.rows[0]?.overdue, true);
-      assert.equal((await loadAgentInbox(authz, {})).facets.overdue, 1);
-      // Clearing restores the unassigned bucket.
-      assert.deepEqual(
-        await setWorkItemAssignment(authz, itemId, { assigneeUserId: null, assigneeRole: null, dueAt: null }),
-        { ok: true },
-      );
-      assert.equal((await loadWorkItemAssignment(authz, itemId))?.assigneeUserId, null);
-      assert.equal((await loadAgentInbox(authz, {})).facets.unassigned, 1);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test('assignment accepts org roles and rejects strangers', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const itemId = await seedFinding(org.orgId);
-    await asUser(org.orgId, 'Writer', 'b06_assign_writer', WRITER);
-    const role = await db.execute<{ id: string }>(sql`select id from app_roles where org_id=${org.orgId} and key='b06_assign_writer'`, 'objects');
-    const roleId = String(role[0]?.id);
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      assert.deepEqual(
-        await setWorkItemAssignment(authz, itemId, { assigneeRole: roleId }),
-        { ok: true },
-      );
-      const loaded = await loadWorkItemAssignment(authz, itemId);
-      assert.equal(loaded?.assigneeRole, roleId);
-      assert.ok((loaded?.assigneeRoleName ?? '').length > 0);
-      const inbox = await loadAgentInbox(authz, {});
-      assert.equal(inbox.rows.find((r) => r.id === itemId)?.assignee?.kind, 'role');
-      // Unknown user, unknown role, and garbage due dates all fail closed.
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: randomUUID() })),
-        'invalid_assignee',
-      );
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { assigneeRole: randomUUID() })),
-        'invalid_assignee',
-      );
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: null, dueAt: 'not-a-date' })),
-        'invalid_due',
-      );
-      // Malformed ids fail closed as invalid_assignee, never a driver throw.
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: 'junk' })),
-        'invalid_assignee',
-      );
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { assigneeRole: 'junk' })),
-        'invalid_assignee',
-      );
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: 12345 as unknown as string })),
-        'invalid_assignee',
-      );
-      // Due date without an owner is not an assignment.
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { dueAt: new Date().toISOString() })),
-        'missing_assignee',
-      );
-      // Unknown findings and other orgs read as not_found.
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, randomUUID(), { assigneeRole: roleId })),
-        'not_found',
-      );
-      assert.equal(await loadWorkItemAssignment(authz, randomUUID()), null);
-    });
-    const orgB = await createScratchOrg();
+test(
+  "assignment round-trips user, due, overdue, and inbox facets",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
     try {
-      await asUser(orgB.orgId, 'Outsider', 'b06_assign_outsider', WRITER);
-      await withOrgContext(orgB.orgId, async () => {
+      const itemId = await seedFinding(org.orgId);
+      const me = await asUser(org.orgId, "Writer", "b06_assign_writer", WRITER);
+      await withOrgContext(org.orgId, async () => {
         const authz = await getAuthz();
         assert.ok(authz);
+        // Unassigned to start.
+        const before = await loadWorkItemAssignment(authz, itemId);
+        assert.equal(before?.assigneeUserId, null);
+        const future = new Date(Date.now() + 86_400_000).toISOString();
         assert.deepEqual(
-          err(await setWorkItemAssignment(authz, itemId, { assigneeRole: roleId })),
-          'not_found',
+          await setWorkItemAssignment(authz, itemId, { assigneeUserId: me, dueAt: future }),
+          { ok: true },
         );
-        assert.equal(await loadWorkItemAssignment(authz, itemId), null);
-        assert.deepEqual(await listWorkItemNotes(authz, itemId), []);
+        const after = await loadWorkItemAssignment(authz, itemId);
+        assert.equal(after?.assigneeUserId, me);
+        assert.equal(after?.assigneeUserName, "Writer");
+        assert.equal(after?.overdue, false);
+        // Inbox surfaces the assignee and the mine/unassigned facets.
+        const inbox = await loadAgentInbox(authz, {});
+        const row = inbox.rows.find((r) => r.id === itemId);
+        assert.deepEqual(row?.assignee, { kind: "user", id: me, name: "Writer" });
+        assert.equal(inbox.facets.assignedToMe, 1);
+        assert.equal(inbox.facets.unassigned, 0);
+        assert.equal(inbox.facets.overdue, 0);
+        const mine = await loadAgentInbox(authz, { assignedToMe: true });
+        assert.equal(mine.total, 1);
+        // Past due flips the overdue flag on the row, the loader, and the facet.
+        const past = new Date(Date.now() - 86_400_000).toISOString();
+        assert.deepEqual(
+          await setWorkItemAssignment(authz, itemId, { assigneeUserId: me, dueAt: past }),
+          { ok: true },
+        );
+        const late = await loadWorkItemAssignment(authz, itemId);
+        assert.equal(late?.overdue, true);
+        const overdue = await loadAgentInbox(authz, { overdueOnly: true });
+        assert.equal(overdue.total, 1);
+        assert.equal(overdue.rows[0]?.overdue, true);
+        assert.equal((await loadAgentInbox(authz, {})).facets.overdue, 1);
+        // Clearing restores the unassigned bucket.
+        assert.deepEqual(
+          await setWorkItemAssignment(authz, itemId, {
+            assigneeUserId: null,
+            assigneeRole: null,
+            dueAt: null,
+          }),
+          { ok: true },
+        );
+        assert.equal((await loadWorkItemAssignment(authz, itemId))?.assigneeUserId, null);
+        assert.equal((await loadAgentInbox(authz, {})).facets.unassigned, 1);
       });
     } finally {
-      await dropScratchOrg(orgB.orgId);
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test('notes thread round-trips and the doorway holds', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const itemId = await seedFinding(org.orgId);
-    await asUser(org.orgId, 'Writer', 'b06_assign_writer', WRITER);
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      assert.deepEqual(await listWorkItemNotes(authz, itemId), []);
-      const first = await addWorkItemNote(authz, itemId, 'Checking with finance');
-      assert.equal(first.ok, true);
-      const second = await addWorkItemNote(authz, itemId, 'Confirmed — resolving');
-      assert.equal(second.ok, true);
-      const notes = await listWorkItemNotes(authz, itemId);
-      assert.deepEqual(notes.map((n) => n.body), ['Checking with finance', 'Confirmed — resolving']);
-      assert.ok(notes.every((n) => n.userName === 'Writer'));
-      assert.deepEqual(err(await addWorkItemNote(authz, itemId, '   ')), 'invalid_body');
-      assert.deepEqual(err(await addWorkItemNote(authz, randomUUID(), 'x')), 'not_found');
-    });
-    // Reader (no assistant.write) can read the thread but cannot write or assign.
-    await asUser(org.orgId, 'Reader', 'b06_assign_reader', READER);
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      assert.equal((await listWorkItemNotes(authz, itemId)).length, 2);
-      assert.deepEqual(err(await addWorkItemNote(authz, itemId, 'nope')), 'forbidden');
-      const me = state.user?.id ?? '';
-      assert.deepEqual(
-        err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: me })),
-        'forbidden',
+test(
+  "assignment accepts org roles and rejects strangers",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const itemId = await seedFinding(org.orgId);
+      await asUser(org.orgId, "Writer", "b06_assign_writer", WRITER);
+      const role = await db.execute<{ id: string }>(
+        sql`select id from app_roles where org_id=${org.orgId} and key='b06_assign_writer'`,
+        "objects",
       );
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const roleId = String(role[0]?.id);
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        assert.deepEqual(await setWorkItemAssignment(authz, itemId, { assigneeRole: roleId }), {
+          ok: true,
+        });
+        const loaded = await loadWorkItemAssignment(authz, itemId);
+        assert.equal(loaded?.assigneeRole, roleId);
+        assert.ok((loaded?.assigneeRoleName ?? "").length > 0);
+        const inbox = await loadAgentInbox(authz, {});
+        assert.equal(inbox.rows.find((r) => r.id === itemId)?.assignee?.kind, "role");
+        // Unknown user, unknown role, and garbage due dates all fail closed.
+        assert.deepEqual(
+          err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: randomUUID() })),
+          "invalid_assignee",
+        );
+        assert.deepEqual(
+          err(await setWorkItemAssignment(authz, itemId, { assigneeRole: randomUUID() })),
+          "invalid_assignee",
+        );
+        assert.deepEqual(
+          err(
+            await setWorkItemAssignment(authz, itemId, {
+              assigneeUserId: null,
+              dueAt: "not-a-date",
+            }),
+          ),
+          "invalid_due",
+        );
+        // Malformed ids fail closed as invalid_assignee, never a driver throw.
+        assert.deepEqual(
+          err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: "junk" })),
+          "invalid_assignee",
+        );
+        assert.deepEqual(
+          err(await setWorkItemAssignment(authz, itemId, { assigneeRole: "junk" })),
+          "invalid_assignee",
+        );
+        assert.deepEqual(
+          err(
+            await setWorkItemAssignment(authz, itemId, {
+              assigneeUserId: 12345 as unknown as string,
+            }),
+          ),
+          "invalid_assignee",
+        );
+        // Due date without an owner is not an assignment.
+        assert.deepEqual(
+          err(await setWorkItemAssignment(authz, itemId, { dueAt: new Date().toISOString() })),
+          "missing_assignee",
+        );
+        // Unknown findings and other orgs read as not_found.
+        assert.deepEqual(
+          err(await setWorkItemAssignment(authz, randomUUID(), { assigneeRole: roleId })),
+          "not_found",
+        );
+        assert.equal(await loadWorkItemAssignment(authz, randomUUID()), null);
+      });
+      const orgB = await createScratchOrg();
+      try {
+        await asUser(orgB.orgId, "Outsider", "b06_assign_outsider", WRITER);
+        await withOrgContext(orgB.orgId, async () => {
+          const authz = await getAuthz();
+          assert.ok(authz);
+          assert.deepEqual(
+            err(await setWorkItemAssignment(authz, itemId, { assigneeRole: roleId })),
+            "not_found",
+          );
+          assert.equal(await loadWorkItemAssignment(authz, itemId), null);
+          assert.deepEqual(await listWorkItemNotes(authz, itemId), []);
+        });
+      } finally {
+        await dropScratchOrg(orgB.orgId);
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "notes thread round-trips and the doorway holds",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const itemId = await seedFinding(org.orgId);
+      await asUser(org.orgId, "Writer", "b06_assign_writer", WRITER);
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        assert.deepEqual(await listWorkItemNotes(authz, itemId), []);
+        const first = await addWorkItemNote(authz, itemId, "Checking with finance");
+        assert.equal(first.ok, true);
+        const second = await addWorkItemNote(authz, itemId, "Confirmed — resolving");
+        assert.equal(second.ok, true);
+        const notes = await listWorkItemNotes(authz, itemId);
+        assert.deepEqual(
+          notes.map((n) => n.body),
+          ["Checking with finance", "Confirmed — resolving"],
+        );
+        assert.ok(notes.every((n) => n.userName === "Writer"));
+        assert.deepEqual(err(await addWorkItemNote(authz, itemId, "   ")), "invalid_body");
+        assert.deepEqual(err(await addWorkItemNote(authz, randomUUID(), "x")), "not_found");
+      });
+      // Reader (no assistant.write) can read the thread but cannot write or assign.
+      await asUser(org.orgId, "Reader", "b06_assign_reader", READER);
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        assert.equal((await listWorkItemNotes(authz, itemId)).length, 2);
+        assert.deepEqual(err(await addWorkItemNote(authz, itemId, "nope")), "forbidden");
+        const me = state.user?.id ?? "";
+        assert.deepEqual(
+          err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: me })),
+          "forbidden",
+        );
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

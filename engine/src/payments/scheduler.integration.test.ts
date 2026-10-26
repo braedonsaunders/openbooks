@@ -139,20 +139,24 @@ async function failPaymentInstructionInserts(orgId: string): Promise<() => Promi
   const suffix = orgId.replaceAll("-", "").slice(0, 12);
   const fn = `openbooks_test_fail_instr_${suffix}`;
   const trigger = `openbooks_test_fail_instr_${suffix}`;
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     create function public.${fn}() returns trigger
     language plpgsql as $$
     begin
       raise exception 'forced instruction failure';
     end
     $$
-  `));
-  await db.execute(sql.raw(`
+  `),
+  );
+  await db.execute(
+    sql.raw(`
     create trigger ${trigger}
     before insert on public.payment_instructions
     for each row when (new.org_id = '${orgId}'::uuid)
     execute function public.${fn}()
-  `));
+  `),
+  );
   return async () => {
     await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.payment_instructions`));
     await db.execute(sql.raw(`drop function if exists public.${fn}()`));
@@ -163,7 +167,8 @@ async function failDraftRunSubmissions(orgId: string): Promise<() => Promise<voi
   const suffix = orgId.replaceAll("-", "").slice(0, 12);
   const fn = `openbooks_test_fail_submit_${suffix}`;
   const trigger = `openbooks_test_fail_submit_${suffix}`;
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     create function public.${fn}() returns trigger
     language plpgsql as $$
     begin
@@ -173,13 +178,16 @@ async function failDraftRunSubmissions(orgId: string): Promise<() => Promise<voi
       return new;
     end
     $$
-  `));
-  await db.execute(sql.raw(`
+  `),
+  );
+  await db.execute(
+    sql.raw(`
     create trigger ${trigger}
     before update on public.payment_runs
     for each row when (new.org_id = '${orgId}'::uuid)
     execute function public.${fn}()
-  `));
+  `),
+  );
   return async () => {
     await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.payment_runs`));
     await db.execute(sql.raw(`drop function if exists public.${fn}()`));
@@ -190,7 +198,8 @@ async function failScheduleCursorAdvance(orgId: string): Promise<() => Promise<v
   const suffix = orgId.replaceAll("-", "").slice(0, 12);
   const fn = `openbooks_test_fail_advance_${suffix}`;
   const trigger = `openbooks_test_fail_advance_${suffix}`;
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     create function public.${fn}() returns trigger
     language plpgsql as $$
     begin
@@ -200,13 +209,16 @@ async function failScheduleCursorAdvance(orgId: string): Promise<() => Promise<v
       return new;
     end
     $$
-  `));
-  await db.execute(sql.raw(`
+  `),
+  );
+  await db.execute(
+    sql.raw(`
     create trigger ${trigger}
     before update on public.payment_schedules
     for each row when (new.org_id = '${orgId}'::uuid)
     execute function public.${fn}()
-  `));
+  `),
+  );
   return async () => {
     await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.payment_schedules`));
     await db.execute(sql.raw(`drop function if exists public.${fn}()`));
@@ -222,27 +234,38 @@ type OccurrenceRow = {
 };
 
 async function occurrences(orgId: string, scheduleId: string): Promise<OccurrenceRow[]> {
-  return withBypassContext(async () =>
-    await db.execute<OccurrenceRow>(sql`
+  return withBypassContext(
+    async () =>
+      await db.execute<OccurrenceRow>(
+        sql`
       select id::text as id, status, payment_run_id::text as payment_run_id, attempt_count, result
         from payment_schedule_occurrences
        where org_id = ${orgId} and schedule_id = ${scheduleId}
        order by occurrence_at
-    `, "objects"));
+    `,
+        "objects",
+      ),
+  );
 }
 
 async function scheduleRow(orgId: string, scheduleId: string) {
-  const row = (await withBypassContext(() =>
-    db.execute<{
-      next_run_at: Date | string | null;
-      last_run_at: Date | string | null;
-      last_payment_run_id: string | null;
-      last_result: Record<string, unknown> | null;
-    }>(sql`
+  const row = (
+    await withBypassContext(() =>
+      db.execute<{
+        next_run_at: Date | string | null;
+        last_run_at: Date | string | null;
+        last_payment_run_id: string | null;
+        last_result: Record<string, unknown> | null;
+      }>(
+        sql`
       select next_run_at, last_run_at, last_payment_run_id::text as last_payment_run_id, last_result
         from payment_schedules
        where id = ${scheduleId} and org_id = ${orgId}
-    `, "objects")))[0];
+    `,
+        "objects",
+      ),
+    )
+  )[0];
   if (!row) return row;
   return {
     ...row,
@@ -252,57 +275,90 @@ async function scheduleRow(orgId: string, scheduleId: string) {
 }
 
 async function runRow(orgId: string, runId: string) {
-  return withBypassContext(async () =>
-    (await db.execute<{
-      status: string;
-      created_by: string | null;
-      submitted_by: string | null;
-      updated_by: string | null;
-      source_schedule_id: string | null;
-    }>(sql`
+  return withBypassContext(
+    async () =>
+      (
+        await db.execute<{
+          status: string;
+          created_by: string | null;
+          submitted_by: string | null;
+          updated_by: string | null;
+          source_schedule_id: string | null;
+        }>(
+          sql`
       select status, created_by::text as created_by, submitted_by::text as submitted_by,
              updated_by::text as updated_by, source_schedule_id::text as source_schedule_id
         from payment_runs
        where id = ${runId} and org_id = ${orgId}
-    `, "objects"))[0]);
+    `,
+          "objects",
+        )
+      )[0],
+  );
 }
 
 async function runEvents(orgId: string, runId: string) {
-  return withBypassContext(async () =>
-    await db.execute<{
-      event_type: string;
-      actor_id: string | null;
-      details: Record<string, unknown>;
-    }>(sql`
+  return withBypassContext(
+    async () =>
+      await db.execute<{
+        event_type: string;
+        actor_id: string | null;
+        details: Record<string, unknown>;
+      }>(
+        sql`
       select event_type, actor_id::text as actor_id, details
         from payment_events
        where org_id = ${orgId} and payment_run_id = ${runId}
        order by created_at, id
-    `, "objects"));
+    `,
+        "objects",
+      ),
+  );
 }
 
 async function instructionCount(orgId: string, runId: string): Promise<number> {
   return withBypassContext(async () =>
-    Number((await db.execute<{ n: number }>(sql`
+    Number(
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from payment_instructions
        where org_id = ${orgId} and payment_run_id = ${runId}
-    `, "objects"))[0]!.n));
+    `,
+          "objects",
+        )
+      )[0]!.n,
+    ),
+  );
 }
 
 async function runsForSchedule(orgId: string, scheduleId: string): Promise<string[]> {
   return withBypassContext(async () =>
-    (await db.execute<{ id: string }>(sql`
+    (
+      await db.execute<{ id: string }>(
+        sql`
       select id::text as id from payment_runs
        where org_id = ${orgId} and source_schedule_id = ${scheduleId}
-    `, "objects")).map((r) => r.id));
+    `,
+        "objects",
+      )
+    ).map((r) => r.id),
+  );
 }
 
 /** Decide the run's open approval gate as `userId`. */
 async function decideRunApproval(orgId: string, runId: string, userId: string): Promise<void> {
-  const gate = (await withBypass(() => db.execute<{ id: string }>(sql`
+  const gate = (
+    await withBypass(() =>
+      db.execute<{ id: string }>(
+        sql`
     select id from flow_gates
      where org_id = ${orgId} and subject_id = ${runId} and status = 'pending'
-     order by (assignee_user_id = ${userId}) desc, created_at limit 1`, "objects")))[0];
+     order by (assignee_user_id = ${userId}) desc, created_at limit 1`,
+        "objects",
+      ),
+    )
+  )[0];
   assert.ok(gate, "the run has an open approval gate");
   await decideGate({ gateId: gate.id, decision: "approved", userId });
 }
@@ -317,7 +373,8 @@ test(
       // old scheduler fabricated the org UUID as a fake user actor here.
       const fixture = await seedScheduleFixture(org, { createdBy: null });
       const approverId = await withBypass(() =>
-        createPaymentUser(org.orgId, "Payment approver", "payment_approver"));
+        createPaymentUser(org.orgId, "Payment approver", "payment_approver"),
+      );
 
       const outcomes = await runDuePaymentSchedules();
       assert.equal(outcomes.length, 1);
@@ -384,7 +441,8 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const historicalAuthor = await withBypass(() =>
-        createPaymentUser(org.orgId, "Historical schedule author", "payment_author"));
+        createPaymentUser(org.orgId, "Historical schedule author", "payment_author"),
+      );
       const fixture = await seedScheduleFixture(org, { createdBy: historicalAuthor });
 
       const outcomes = await runDuePaymentSchedules();
@@ -421,24 +479,44 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const fixture = await seedScheduleFixture(org, { action: "create_draft" });
-      await assert.rejects(withOrgContext(org.orgId, () => createPaymentRun({ orgId: org.orgId, allowedSubsidiaryIds: null, createdBy: null, paymentBankProfileId: fixture.profileId, billDocumentIds: [fixture.billId], maximumRunAmount: "100" })), /live bill balances exceed the scheduled maximum run amount/);
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          createPaymentRun({
+            orgId: org.orgId,
+            allowedSubsidiaryIds: null,
+            createdBy: null,
+            paymentBankProfileId: fixture.profileId,
+            billDocumentIds: [fixture.billId],
+            maximumRunAmount: "100",
+          }),
+        ),
+        /live bill balances exceed the scheduled maximum run amount/,
+      );
       const run = await withOrgContext(org.orgId, () =>
-        createPaymentRun({ allowedSubsidiaryIds: null,
+        createPaymentRun({
+          allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: fixture.operatorId,
           paymentBankProfileId: fixture.profileId,
           billDocumentIds: [fixture.billId],
           scheduledFor: org.date,
-        }));
+        }),
+      );
       await withOrgContext(org.orgId, () =>
-        submitPaymentRun(run.id, org.orgId, fixture.operatorId));
+        submitPaymentRun(run.id, org.orgId, fixture.operatorId),
+      );
 
       const stored = await runRow(org.orgId, run.id);
-      assert.deepEqual([stored!.created_by, stored!.submitted_by, stored!.status],
-        [fixture.operatorId, fixture.operatorId, "pending_approval"]);
+      assert.deepEqual(
+        [stored!.created_by, stored!.submitted_by, stored!.status],
+        [fixture.operatorId, fixture.operatorId, "pending_approval"],
+      );
 
       const events = await runEvents(org.orgId, run.id);
-      assert.equal(events.find((e) => e.event_type === "run_created")!.actor_id, fixture.operatorId);
+      assert.equal(
+        events.find((e) => e.event_type === "run_created")!.actor_id,
+        fixture.operatorId,
+      );
       const submitted = events.find((e) => e.event_type === "run_submitted")!;
       assert.equal(submitted.actor_id, fixture.operatorId);
       assert.equal(submitted.details.source, "user");
@@ -470,15 +548,21 @@ test(
       const failed = await runDuePaymentSchedules();
       assert.equal(failed.length, 1);
       assert.ok(failed[0]!.error, "the failed tick reports an error");
-      assert.equal((await occurrences(org.orgId, fixture.scheduleId)).length, 0,
-        "no occurrence is claimed when creation rolls back");
-      assert.deepEqual(await runsForSchedule(org.orgId, fixture.scheduleId), [],
-        "no run exists");
+      assert.equal(
+        (await occurrences(org.orgId, fixture.scheduleId)).length,
+        0,
+        "no occurrence is claimed when creation rolls back",
+      );
+      assert.deepEqual(await runsForSchedule(org.orgId, fixture.scheduleId), [], "no run exists");
       const afterFailure = await scheduleRow(org.orgId, fixture.scheduleId);
-      assert.ok(afterFailure!.next_run_at && afterFailure!.next_run_at <= new Date(),
-        "the cursor was NOT advanced — the occurrence is still due");
-      assert.ok((afterFailure!.last_result as { error?: string }).error,
-        "the failure is visible on the schedule");
+      assert.ok(
+        afterFailure!.next_run_at && afterFailure!.next_run_at <= new Date(),
+        "the cursor was NOT advanced — the occurrence is still due",
+      );
+      assert.ok(
+        (afterFailure!.last_result as { error?: string }).error,
+        "the failure is visible on the schedule",
+      );
 
       await dropFailureTrigger();
       dropFailureTrigger = () => Promise.resolve();
@@ -530,8 +614,10 @@ test(
       assert.ok(committedRunId);
       assert.equal(await instructionCount(org.orgId, committedRunId), 1);
       const afterCrash = await scheduleRow(org.orgId, fixture.scheduleId);
-      assert.ok(afterCrash!.next_run_at && afterCrash!.next_run_at <= new Date(),
-        "the cursor was not advanced");
+      assert.ok(
+        afterCrash!.next_run_at && afterCrash!.next_run_at <= new Date(),
+        "the cursor was not advanced",
+      );
 
       await dropFailureTrigger();
       dropFailureTrigger = () => Promise.resolve();
@@ -541,20 +627,24 @@ test(
       // of skipping it or creating a second run.
       const resumed = await runDuePaymentSchedules();
       assert.equal(resumed.length, 1);
-      assert.equal(resumed[0]!.runId, committedRunId,
-        "the retry completes the same committed run");
+      assert.equal(resumed[0]!.runId, committedRunId, "the retry completes the same committed run");
 
       const occAfter = await occurrences(org.orgId, fixture.scheduleId);
       assert.equal(occAfter.length, 1, "still exactly one occurrence");
       assert.equal(occAfter[0]!.status, "submitted");
       assert.equal(occAfter[0]!.payment_run_id, committedRunId);
       assert.deepEqual(await runsForSchedule(org.orgId, fixture.scheduleId), [committedRunId]);
-      assert.equal(await instructionCount(org.orgId, committedRunId), 1,
-        "no duplicate instructions after resume");
+      assert.equal(
+        await instructionCount(org.orgId, committedRunId),
+        1,
+        "no duplicate instructions after resume",
+      );
       const schedule = await scheduleRow(org.orgId, fixture.scheduleId);
       assert.equal(schedule!.last_payment_run_id, committedRunId);
-      assert.ok(schedule!.next_run_at && schedule!.next_run_at > fixture.dueAt,
-        "the cursor advanced only after the occurrence was finished");
+      assert.ok(
+        schedule!.next_run_at && schedule!.next_run_at > fixture.dueAt,
+        "the cursor advanced only after the occurrence was finished",
+      );
       const run = await runRow(org.orgId, committedRunId);
       assert.equal(run!.status, "pending_approval");
     } finally {
@@ -636,36 +726,44 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const fixture = await seedScheduleFixture(org);
-      const run = await withOrgContext(org.orgId, () => createPaymentRun({ allowedSubsidiaryIds: null,
-        orgId: org.orgId,
-        createdBy: null,
-        paymentBankProfileId: fixture.profileId,
-        billDocumentIds: [fixture.billId],
-        scheduledFor: org.date,
-        sourceScheduleId: fixture.scheduleId,
-        selectionCriteria: { dueThroughDays: 30 },
-        sourceOccurrence: {
-          scheduleId: fixture.scheduleId,
-          occurrenceAt: fixture.dueAt,
-          status: "awaiting_submit",
-        },
-      }));
+      const run = await withOrgContext(org.orgId, () =>
+        createPaymentRun({
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          createdBy: null,
+          paymentBankProfileId: fixture.profileId,
+          billDocumentIds: [fixture.billId],
+          scheduledFor: org.date,
+          sourceScheduleId: fixture.scheduleId,
+          selectionCriteria: { dueThroughDays: 30 },
+          sourceOccurrence: {
+            scheduleId: fixture.scheduleId,
+            occurrenceAt: fixture.dueAt,
+            status: "awaiting_submit",
+          },
+        }),
+      );
       const runId = run.id;
       await withOrgContext(org.orgId, () =>
-        cancelPaymentRun(runId, org.orgId, fixture.operatorId, "operator cancelled scheduled run"));
+        cancelPaymentRun(runId, org.orgId, fixture.operatorId, "operator cancelled scheduled run"),
+      );
       // Model an interrupted scheduler retry against an already cancelled
       // linked run. The run lifecycle above creates the real terminal state;
       // this restores the durable retry marker recovery must reconcile.
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         update payment_schedule_occurrences
            set status = 'submit_failed', attempt_count = 1
          where org_id = ${org.orgId} and schedule_id = ${fixture.scheduleId}
            and payment_run_id = ${runId}
-      `));
-      await withBypassContext(() => db.execute(sql`
+      `),
+      );
+      await withBypassContext(() =>
+        db.execute(sql`
         update payment_schedules set next_run_at = now() + interval '1 day'
          where org_id = ${org.orgId} and id = ${fixture.scheduleId}
-      `));
+      `),
+      );
 
       await runDuePaymentSchedules();
       const occurrence = (await occurrences(org.orgId, fixture.scheduleId))[0]!;
@@ -705,11 +803,13 @@ test(
       const runId = first[0]!.runId!;
       // Force the exact post-crash ledger state a hard kill would leave: the
       // occurrence believes submission is still pending.
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         update payment_schedule_occurrences
            set status = 'awaiting_submit', attempt_count = 0
          where org_id = ${org.orgId} and schedule_id = ${fixture.scheduleId}
-      `));
+      `),
+      );
 
       await dropFailureTrigger();
       dropFailureTrigger = () => Promise.resolve();
@@ -717,8 +817,10 @@ test(
       // The schedule is no longer due — only the occurrence recovery pass can
       // finish the submission, and it must resume the SAME run.
       const schedule = await scheduleRow(org.orgId, fixture.scheduleId);
-      assert.ok(schedule!.next_run_at && schedule!.next_run_at > new Date(),
-        "the schedule is no longer due");
+      assert.ok(
+        schedule!.next_run_at && schedule!.next_run_at > new Date(),
+        "the schedule is no longer due",
+      );
       const resumed = await runDuePaymentSchedules();
       assert.equal(resumed.length, 0, "nothing new is due");
 
@@ -746,32 +848,37 @@ test(
       const fixture = await seedScheduleFixture(org);
       const now = new Date();
 
-      const [a, b] = await Promise.all([
-        runDuePaymentSchedules(now),
-        runDuePaymentSchedules(now),
-      ]);
+      const [a, b] = await Promise.all([runDuePaymentSchedules(now), runDuePaymentSchedules(now)]);
       const runIds = new Set(
-        [...a, ...b]
-          .map((o) => o.runId)
-          .filter((id): id is string => Boolean(id)),
+        [...a, ...b].map((o) => o.runId).filter((id): id is string => Boolean(id)),
       );
       assert.equal(runIds.size, 1, `both ticks observe the same run: ${[...runIds]}`);
       const runId = [...runIds][0]!;
-      assert.ok([...a, ...b].filter((row) => row.scheduleId === fixture.scheduleId).every((row) => row.runId === runId),
-        'a concurrent empty selection must observe the winning occurrence instead of reporting no run');
+      assert.ok(
+        [...a, ...b]
+          .filter((row) => row.scheduleId === fixture.scheduleId)
+          .every((row) => row.runId === runId),
+        "a concurrent empty selection must observe the winning occurrence instead of reporting no run",
+      );
 
       const occ = await occurrences(org.orgId, fixture.scheduleId);
       assert.equal(occ.length, 1, "exactly one occurrence was claimed");
       assert.equal(occ[0]!.payment_run_id, runId);
       assert.equal((await runsForSchedule(org.orgId, fixture.scheduleId)).length, 1);
-      assert.equal(await instructionCount(org.orgId, runId), 1,
-        "no duplicate instructions across concurrent ticks");
+      assert.equal(
+        await instructionCount(org.orgId, runId),
+        1,
+        "no duplicate instructions across concurrent ticks",
+      );
       const schedule = await scheduleRow(org.orgId, fixture.scheduleId);
       assert.equal(schedule!.last_payment_run_id, runId);
       assert.ok(schedule!.next_run_at && schedule!.next_run_at > fixture.dueAt);
       const run = await runRow(org.orgId, runId);
-      assert.equal(run!.status, "pending_approval",
-        "the single submission completed despite the race");
+      assert.equal(
+        run!.status,
+        "pending_approval",
+        "the single submission completed despite the race",
+      );
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -786,11 +893,13 @@ test(
     try {
       const fixture = await seedScheduleFixture(org, { createdBy: null });
       // Remove every payable bill so the selection is empty.
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         update documents
            set payment_hold_reason = 'held for test'
          where org_id = ${org.orgId} and id = ${fixture.billId}
-      `));
+      `),
+      );
 
       const outcomes = await runDuePaymentSchedules();
       assert.equal(outcomes.length, 1);
@@ -803,8 +912,10 @@ test(
       assert.equal(occ[0]!.payment_run_id, null);
       assert.deepEqual(await runsForSchedule(org.orgId, fixture.scheduleId), []);
       const schedule = await scheduleRow(org.orgId, fixture.scheduleId);
-      assert.ok(schedule!.next_run_at && schedule!.next_run_at > fixture.dueAt,
-        "the cursor advanced past the empty occurrence");
+      assert.ok(
+        schedule!.next_run_at && schedule!.next_run_at > fixture.dueAt,
+        "the cursor advanced past the empty occurrence",
+      );
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }

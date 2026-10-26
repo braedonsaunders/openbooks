@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { BudgetMutationError } from './budget-mutations'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { BudgetMutationError } from "./budget-mutations";
 
 /**
  * Scenario-level subsidiary authority for budget scenarios.
@@ -22,24 +22,33 @@ import { BudgetMutationError } from './budget-mutations'
  */
 
 /** Distinct subsidiary ids a scenario's lines touch (null = unassigned). */
-async function scenarioLineSubsidiaryIds(scenarioId: string, orgId: string): Promise<(string | null)[]> {
-  const rows = (await db.execute<{ subsidiary_id: string | null }>(sql`
+async function scenarioLineSubsidiaryIds(
+  scenarioId: string,
+  orgId: string,
+): Promise<(string | null)[]> {
+  const rows = await db.execute<{ subsidiary_id: string | null }>(
+    sql`
     select distinct subsidiary_id from budget_lines
      where org_id = ${orgId} and scenario_id = ${scenarioId}
-  `, 'objects'))
-  return rows.map((row) => row.subsidiary_id)
+  `,
+    "objects",
+  );
+  return rows.map((row) => row.subsidiary_id);
 }
 
 /** The org's root subsidiary (the entity an unassigned line resolves to). */
 async function rootSubsidiary(orgId: string): Promise<{ id: string; name: string } | null> {
-  const rows = (await db.execute<{ id: string; name: string }>(sql`
+  const rows = await db.execute<{ id: string; name: string }>(
+    sql`
     select id, name from subsidiaries
      where org_id = ${orgId}
        and parent_id is null and is_active and not is_elimination
      order by created_at, id
      limit 1
-  `, 'objects'))
-  return rows[0] ?? null
+  `,
+    "objects",
+  );
+  return rows[0] ?? null;
 }
 
 /**
@@ -56,30 +65,33 @@ export async function scenarioOutOfScopeSubsidiaryNames(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<string[]> {
-  if (allowedSubsidiaryIds === null) return []
-  const touched = await scenarioLineSubsidiaryIds(scenarioId, orgId)
-  if (touched.length === 0) return []
-  const outOfScopeIds = new Set<string>()
-  let unassignedOutOfScope = false
-  const root = touched.includes(null) ? await rootSubsidiary(orgId) : null
+  if (allowedSubsidiaryIds === null) return [];
+  const touched = await scenarioLineSubsidiaryIds(scenarioId, orgId);
+  if (touched.length === 0) return [];
+  const outOfScopeIds = new Set<string>();
+  let unassignedOutOfScope = false;
+  const root = touched.includes(null) ? await rootSubsidiary(orgId) : null;
   for (const id of touched) {
     if (id === null) {
-      if (!root || !allowedSubsidiaryIds.has(root.id)) unassignedOutOfScope = true
+      if (!root || !allowedSubsidiaryIds.has(root.id)) unassignedOutOfScope = true;
     } else if (!allowedSubsidiaryIds.has(id)) {
-      outOfScopeIds.add(id)
+      outOfScopeIds.add(id);
     }
   }
-  const names: string[] = []
+  const names: string[] = [];
   if (outOfScopeIds.size > 0) {
-    const rows = (await db.execute<{ id: string; name: string }>(sql`
+    const rows = await db.execute<{ id: string; name: string }>(
+      sql`
       select id, name from subsidiaries
-       where org_id = ${orgId} and id = any(${`{${[...outOfScopeIds].join(',')}}`}::uuid[])
-    `, 'objects'))
-    const byId = new Map(rows.map((row) => [row.id, row.name]))
-    for (const id of [...outOfScopeIds].sort()) names.push(byId.get(id) ?? id)
+       where org_id = ${orgId} and id = any(${`{${[...outOfScopeIds].join(",")}}`}::uuid[])
+    `,
+      "objects",
+    );
+    const byId = new Map(rows.map((row) => [row.id, row.name]));
+    for (const id of [...outOfScopeIds].sort()) names.push(byId.get(id) ?? id);
   }
-  if (unassignedOutOfScope) names.push(root?.name ?? 'unassigned')
-  return names.sort()
+  if (unassignedOutOfScope) names.push(root?.name ?? "unassigned");
+  return names.sort();
 }
 
 /**
@@ -88,5 +100,5 @@ export async function scenarioOutOfScopeSubsidiaryNames(
  * operator knows whose approver must act instead.
  */
 export function outOfScopeScenarioError(names: string[]): BudgetMutationError {
-  return new BudgetMutationError(`out_of_scope_subsidiaries: ${names.join(', ')}`, 403)
+  return new BudgetMutationError(`out_of_scope_subsidiaries: ${names.join(", ")}`, 403);
 }

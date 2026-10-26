@@ -3,20 +3,14 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  lockScopeRow,
-  ScopeNotFoundError,
-} from "@openbooks/engine/organization/scope";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { ACCOUNT_TYPES } from "@openbooks/schema";
 import {
   guardSubsidiaryScope,
   guardUnrestrictedScope,
   subsidiaryScopeAllows,
 } from "../../../../lib/authz";
-import {
-  isFeatureEnabled,
-  subsidiaryFeatureEnabled,
-} from "../../../../lib/features";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../lib/features";
 import {
   customFieldViewerFor,
   findUnownedCustomReferences,
@@ -51,10 +45,10 @@ const CURRENCY_RE = /^[A-Z]{3}$/;
 // Validate the complete input before normalization or financial policy checks.
 const patchBodySchema = z
   .strictObject({
-  ...accountInputFields,
-  name: z.string().trim().min(1, "name cannot be empty").optional(),
-  /** Confirms a second active account with an existing name (see duplicate_account_name). */
-  acknowledgeDuplicateName: z.boolean().optional(),
+    ...accountInputFields,
+    name: z.string().trim().min(1, "name cannot be empty").optional(),
+    /** Confirms a second active account with an existing name (see duplicate_account_name). */
+    acknowledgeDuplicateName: z.boolean().optional(),
   })
   .refine(
     (body) => Object.keys(body).some((key) => key !== "acknowledgeDuplicateName"),
@@ -93,14 +87,13 @@ function textOrNull(value: unknown): string | null {
   return trimmed || null;
 }
 
-async function belongsToOrg(
-  table: "accounts" | "subsidiaries",
-  id: string,
-  orgId: string,
-) {
-  const result = await db.execute(sql`
+async function belongsToOrg(table: "accounts" | "subsidiaries", id: string, orgId: string) {
+  const result = await db.execute(
+    sql`
     select 1 from ${sql.raw(table)} where id = ${id} and org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return Boolean(result[0]);
 }
 
@@ -112,22 +105,14 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _request, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
-    const payload = await loadAccount(
-      id,
-      gate.user.orgId,
-      gate.allowedSubsidiaryIds,
-    );
-    if (!payload)
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
+    const payload = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds);
+    if (!payload) return notFound("record");
     // Entity-owned accounts are visible only inside the caller's scope; the
     // shared chart (null subsidiary) reads for everyone.
-    const denied = guardSubsidiaryScope(
-      gate,
-      payload.account.subsidiary_id as string | null,
-      { orgWideNull: true },
-    );
+    const denied = guardSubsidiaryScope(gate, payload.account.subsidiary_id as string | null, {
+      orgWideNull: true,
+    });
     if (denied) return denied;
     return NextResponse.json(await redactAccountCustomFields(payload, customFieldViewerFor(gate)));
   },
@@ -142,23 +127,15 @@ export const PATCH = defineRoute({
   body: patchBodySchema,
   handler: async ({ request, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
-    const existingPayload = await loadAccount(
-      id,
-      gate.user.orgId,
-      gate.allowedSubsidiaryIds,
-    );
-    if (!existingPayload)
-      return notFound("record");
+    const existingPayload = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds);
+    if (!existingPayload) return notFound("record");
     const existing = existingPayload.account;
     // Reads hide out-of-scope entity accounts; the shared chart reads for all.
-    const readDenied = guardSubsidiaryScope(
-      gate,
-      existing.subsidiary_id as string | null,
-      { orgWideNull: true },
-    );
+    const readDenied = guardSubsidiaryScope(gate, existing.subsidiary_id as string | null, {
+      orgWideNull: true,
+    });
     if (readDenied) return readDenied;
     // The shared chart has no subsidiary lineage, so any write to it acts on
     // every entity at once: restricted callers cannot write it.
@@ -172,23 +149,18 @@ export const PATCH = defineRoute({
     // reconcilable invariant forces: a reconcilable account must carry a
     // currency, and a single-currency org has only its base (the same base-only
     // pass-through as transaction import).
-    const nextReconcilable =
-      body.reconcilable ?? Boolean(existing.reconcilable);
+    const nextReconcilable = body.reconcilable ?? Boolean(existing.reconcilable);
     if (
       body.currencyRestriction !== undefined &&
       !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
     ) {
-      const restriction =
-        textOrNull(body.currencyRestriction)?.toUpperCase() ?? null;
+      const restriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null;
       const base = await orgBaseCurrency(gate.user.orgId);
       if (!(nextReconcilable && restriction && base && restriction === base)) {
         return notFound("record");
       }
     }
-    if (
-      body.eliminate !== undefined &&
-      !(await subsidiaryFeatureEnabled(gate.user.orgId))
-    ) {
+    if (body.eliminate !== undefined && !(await subsidiaryFeatureEnabled(gate.user.orgId))) {
       return notFound("record");
     }
 
@@ -202,11 +174,7 @@ export const PATCH = defineRoute({
     ) {
       return bad("invalid_type", "type");
     }
-    if (
-      body.type !== undefined &&
-      body.type !== existing.type &&
-      existingPayload.hasTransactions
-    ) {
+    if (body.type !== undefined && body.type !== existing.type && existingPayload.hasTransactions) {
       return bad("type_has_transactions", "type");
     }
     const nextType = body.type ?? String(existing.type);
@@ -219,18 +187,17 @@ export const PATCH = defineRoute({
     }
     const effectiveParentId =
       parentId !== undefined ? parentId : (existing.parent_id as string | null);
-    if (
-      effectiveParentId &&
-      body.type !== undefined &&
-      body.parentId === undefined
-    ) {
+    if (effectiveParentId && body.type !== undefined && body.parentId === undefined) {
       const parent = await db.execute<{
         type: string;
         subsidiary_id: string | null;
-      }>(sql`
+      }>(
+        sql`
       select type, subsidiary_id from accounts
        where id = ${effectiveParentId} and org_id = ${gate.user.orgId}
-    `, "objects");
+    `,
+        "objects",
+      );
       if (!parent[0]) return notFound("record");
       if (
         guardSubsidiaryScope(gate, parent[0].subsidiary_id, {
@@ -245,24 +212,22 @@ export const PATCH = defineRoute({
     }
 
     const nextSummary = body.isSummary ?? Boolean(existing.is_summary);
-    if (nextSummary && nextReconcilable)
-      return bad("summary_reconcilable_conflict");
+    if (nextSummary && nextReconcilable) return bad("summary_reconcilable_conflict");
     if (body.isSummary === true && existingPayload.hasTransactions)
       return bad("summary_has_transactions", "isSummary");
 
     let currencyRestriction: string | null | undefined;
     if (body.currencyRestriction !== undefined) {
-      currencyRestriction =
-        textOrNull(body.currencyRestriction)?.toUpperCase() ?? null;
+      currencyRestriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null;
       if (currencyRestriction && !CURRENCY_RE.test(currencyRestriction)) {
         return bad("invalid_currency", "currencyRestriction");
       }
       if (currencyRestriction) {
         const currency = await db.execute(
-          sql`select 1 from currencies where code = ${currencyRestriction}`, "objects",
+          sql`select 1 from currencies where code = ${currencyRestriction}`,
+          "objects",
         );
-        if (!currency[0])
-          return bad("invalid_currency", "currencyRestriction");
+        if (!currency[0]) return bad("invalid_currency", "currencyRestriction");
       }
     }
     // Storage requires reconcilable accounts to carry a settlement currency
@@ -297,19 +262,17 @@ export const PATCH = defineRoute({
 
     let requiredDimensions: string[] | undefined;
     if (body.requiredDimensions !== undefined) {
-      const definitions = await db.execute<{ key: string }>(sql`
+      const definitions = await db.execute<{ key: string }>(
+        sql`
       select key from segment_definitions
        where org_id = ${gate.user.orgId} and is_active and allow_account_requirement
-    `, "objects");
-      const allowed = new Set([
-        "party",
-        ...definitions.map((row) => row.key),
-      ]);
+    `,
+        "objects",
+      );
+      const allowed = new Set(["party", ...definitions.map((row) => row.key)]);
       if (
         !Array.isArray(body.requiredDimensions) ||
-        body.requiredDimensions.some(
-          (d) => typeof d !== "string" || !allowed.has(d),
-        )
+        body.requiredDimensions.some((d) => typeof d !== "string" || !allowed.has(d))
       ) {
         return bad("invalid_dimensions", "requiredDimensions");
       }
@@ -334,7 +297,10 @@ export const PATCH = defineRoute({
       // stored value is kept, since `custom` is merged over the stored bag.
       const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, existingCustom);
       if (hidden)
-        return NextResponse.json({ error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } }, { status: 403 });
+        return NextResponse.json(
+          { error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } },
+          { status: 403 },
+        );
       const patchDefs = visibleCustomFieldDefs(activeDefs, viewer);
       const validated = validateCustomValues(patchDefs, {
         ...existingCustom,
@@ -345,16 +311,14 @@ export const PATCH = defineRoute({
       // lock unrelated edits.
       const suppliedCustom: Record<string, unknown> = {};
       for (const key of Object.keys(body.custom)) {
-        if (validated.cleaned[key] !== undefined)
-          suppliedCustom[key] = validated.cleaned[key];
+        if (validated.cleaned[key] !== undefined) suppliedCustom[key] = validated.cleaned[key];
       }
       const unownedPatchRefs = await findUnownedCustomReferences(
         gate.user.orgId,
         patchDefs,
         suppliedCustom,
       );
-      if (unownedPatchRefs.length > 0)
-        return bad("unknown_custom_reference", "custom");
+      if (unownedPatchRefs.length > 0) return bad("unknown_custom_reference", "custom");
       custom = { ...existingCustom, ...validated.cleaned };
     }
 
@@ -364,11 +328,7 @@ export const PATCH = defineRoute({
         // Keep hierarchy serialization before any per-account row lock. Two
         // concurrent reparents otherwise hold their own row and can deadlock
         // when the hierarchy loser tries to inspect the winner's row.
-        if (
-          parentId !== undefined ||
-          body.isSummary === false ||
-          body.isActive === false
-        ) {
+        if (parentId !== undefined || body.isSummary === false || body.isActive === false) {
           await tx.execute(sql`
           select pg_advisory_xact_lock(hashtextextended(${`accounts-hierarchy:${gate.user.orgId}`}, 0))
         `);
@@ -377,35 +337,43 @@ export const PATCH = defineRoute({
         // statement import/reconciliation holds this same row lock while it
         // rechecks subsidiary ownership, so a rehome and account-scoped work
         // have one deterministic order.
-        const locked = (await tx.execute<{
+        const locked = (
+          await tx.execute<{
             subsidiary_id: string | null;
             unchanged: boolean;
-          }>(sql`
+          }>(
+            sql`
         select subsidiary_id,
                updated_at = ${existing.updated_at} as unchanged
           from accounts
          where id = ${id} and org_id = ${gate.user.orgId}
          for update
-      `, "objects"))[0];
+      `,
+            "objects",
+          )
+        )[0];
         if (
           !locked ||
-          !subsidiaryScopeAllows(
-            gate.allowedSubsidiaryIds,
-            locked.subsidiary_id,
-            { orgWideNull: true },
-          )
+          !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, locked.subsidiary_id, {
+            orgWideNull: true,
+          })
         ) {
           throw new PatchNotFound();
         }
         if (!locked.unchanged) throw new Error("account_changed");
         if (body.isSummary === false || body.isActive === false) {
-          const children = (await tx.execute<{
+          const children = (
+            await tx.execute<{
               has_children: boolean;
               has_active_children: boolean;
-            }>(sql`
+            }>(
+              sql`
           select exists(select 1 from accounts child where child.org_id = ${gate.user.orgId} and child.parent_id = ${id}) as has_children,
                  exists(select 1 from accounts child where child.org_id = ${gate.user.orgId} and child.parent_id = ${id} and child.is_active) as has_active_children
-        `, "objects"))[0];
+        `,
+              "objects",
+            )
+          )[0];
           if (body.isSummary === false && children?.has_children)
             throw new PatchInvalid("summary_has_children", "isSummary");
           if (body.isActive === false && children?.has_active_children)
@@ -424,25 +392,26 @@ export const PATCH = defineRoute({
                 { orgWideNull: true },
               );
             } catch (error) {
-              if (error instanceof ScopeNotFoundError)
-                throw new PatchNotFound();
+              if (error instanceof ScopeNotFoundError) throw new PatchNotFound();
               throw error;
             }
             const parent = await tx.execute<{
               is_summary: boolean;
               is_active: boolean;
               type: string;
-            }>(sql`
+            }>(
+              sql`
             select is_summary, is_active, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
-          `, "objects");
+          `,
+              "objects",
+            );
             if (!parent[0]) throw new PatchNotFound();
-            if (!parent[0].is_summary)
-              throw new PatchInvalid("parent_must_be_summary", "parentId");
-            if (!parent[0].is_active)
-              throw new PatchInvalid("inactive_parent", "parentId");
+            if (!parent[0].is_summary) throw new PatchInvalid("parent_must_be_summary", "parentId");
+            if (!parent[0].is_active) throw new PatchInvalid("inactive_parent", "parentId");
             if (parent[0].type !== nextType)
               throw new PatchInvalid("parent_type_mismatch", "parentId");
-            const cycle = await tx.execute(sql`
+            const cycle = await tx.execute(
+              sql`
             with recursive descendants as (
               select id from accounts where id = ${id} and org_id = ${gate.user.orgId}
               union
@@ -451,18 +420,25 @@ export const PATCH = defineRoute({
               where child.org_id = ${gate.user.orgId}
             )
             select 1 from descendants where id = ${parentId} limit 1
-          `, "objects");
-            if (cycle[0])
-              throw new PatchInvalid("parent_cycle", "parentId");
+          `,
+              "objects",
+            );
+            if (cycle[0]) throw new PatchInvalid("parent_cycle", "parentId");
           }
         }
         // A rename, a subsidiary move, or a reactivation can create a second
         // active account with the same name where both are visible. Other
         // edits leave the name identity unchanged and skip the check.
         const nextActive = body.isActive ?? Boolean(existing.is_active);
-        const nextSubsidiaryId = subsidiaryId !== undefined ? subsidiaryId : ((existing.subsidiary_id as string | null) ?? null);
-        const nameChanged = name !== undefined && accountNameKey(name) !== accountNameKey(String(existing.name));
-        const subsidiaryChanged = subsidiaryId !== undefined && subsidiaryId !== ((existing.subsidiary_id as string | null) ?? null);
+        const nextSubsidiaryId =
+          subsidiaryId !== undefined
+            ? subsidiaryId
+            : ((existing.subsidiary_id as string | null) ?? null);
+        const nameChanged =
+          name !== undefined && accountNameKey(name) !== accountNameKey(String(existing.name));
+        const subsidiaryChanged =
+          subsidiaryId !== undefined &&
+          subsidiaryId !== ((existing.subsidiary_id as string | null) ?? null);
         const reactivated = body.isActive === true && !existing.is_active;
         if (nextActive && (nameChanged || subsidiaryChanged || reactivated)) {
           const effectiveName = name ?? String(existing.name);
@@ -480,7 +456,8 @@ export const PATCH = defineRoute({
             duplicateWarning = duplicate;
           }
         }
-        const updated = await tx.execute<Record<string, unknown>>(sql`
+        const updated = await tx.execute<Record<string, unknown>>(
+          sql`
         update accounts set
           number = ${body.number !== undefined ? textOrNull(body.number) : sql`number`},
           name = ${name !== undefined ? name : sql`name`},
@@ -501,7 +478,9 @@ export const PATCH = defineRoute({
          where id = ${id} and org_id = ${gate.user.orgId}
            and updated_at = ${existing.updated_at}
          returning *
-      `, "objects");
+      `,
+          "objects",
+        );
         if (!updated[0]) throw new Error("account_changed");
         await tx.execute(sql`
         insert into audit_log
@@ -513,22 +492,17 @@ export const PATCH = defineRoute({
       `);
       });
     } catch (error) {
-      if (error instanceof PatchNotFound)
-        return notFound("record");
+      if (error instanceof PatchNotFound) return notFound("record");
       if (error instanceof PatchInvalid) return bad(error.code, error.field);
       if (error instanceof PatchDuplicateName) return duplicateNameRefusal(error.warning);
       const cause =
-        error && typeof error === "object"
-          ? (error as { cause?: unknown }).cause
-          : undefined;
+        error && typeof error === "object" ? (error as { cause?: unknown }).cause : undefined;
       const constraint =
         cause && typeof cause === "object"
           ? (cause as { constraint?: unknown }).constraint
           : undefined;
       const message =
-        error instanceof Error
-          ? `${error.message} ${String(cause ?? "")}`
-          : String(error);
+        error instanceof Error ? `${error.message} ${String(cause ?? "")}` : String(error);
       if (
         constraint === "accounts_type_has_transactions" ||
         message.includes("type cannot change after journal lines exist")
@@ -537,9 +511,7 @@ export const PATCH = defineRoute({
       }
       if (
         constraint === "accounts_summary_has_transactions" ||
-        message.includes(
-          "summary classification cannot change after journal lines exist",
-        )
+        message.includes("summary classification cannot change after journal lines exist")
       ) {
         return bad("summary_has_transactions", "isSummary");
       }
@@ -549,17 +521,28 @@ export const PATCH = defineRoute({
         // for the drawer's existing-account link.
         const attempted = textOrNull(body.number);
         const holder = attempted
-          ? (await db.execute<{ id: string; name: string; number: string | null }>(sql`
+          ? (
+              await db.execute<{ id: string; name: string; number: string | null }>(
+                sql`
               select id, name, number from accounts
                where org_id = ${gate.user.orgId} and number = ${attempted} and id <> ${id}
                limit 1
-            `, "objects"))[0]
+            `,
+                "objects",
+              )
+            )[0]
           : undefined;
-        return bad("number_in_use", "number", holder ? {
-          existingAccountId: holder.id,
-          existingAccountName: holder.name,
-          existingAccountNumber: holder.number,
-        } : undefined);
+        return bad(
+          "number_in_use",
+          "number",
+          holder
+            ? {
+                existingAccountId: holder.id,
+                existingAccountName: holder.name,
+                existingAccountNumber: holder.number,
+              }
+            : undefined,
+        );
       }
       if (message.includes("account_changed")) {
         return NextResponse.json({ error: "account_changed" }, { status: 409 });
@@ -567,17 +550,18 @@ export const PATCH = defineRoute({
       throw error;
     }
 
-    const savedPayload = await loadAccount(
-      id,
-      gate.user.orgId,
-      gate.allowedSubsidiaryIds,
-    );
-    const saved = savedPayload ? await redactAccountCustomFields(savedPayload, customFieldViewerFor(gate)) : null;
+    const savedPayload = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds);
+    const saved = savedPayload
+      ? await redactAccountCustomFields(savedPayload, customFieldViewerFor(gate))
+      : null;
     // Effective values after the edit; a statement behind the account counts as
     // corroboration even when the name says nothing. The warning rides
     // alongside success — the edit is always saved.
-    const backed = await db.execute(sql`
-    select 1 from bank_statements where org_id = ${gate.user.orgId} and account_id = ${id} limit 1`, "objects");
+    const backed = await db.execute(
+      sql`
+    select 1 from bank_statements where org_id = ${gate.user.orgId} and account_id = ${id} limit 1`,
+      "objects",
+    );
     const hygiene = assetBankHygieneWarning({
       type: nextType,
       name: name ?? String(existing.name),

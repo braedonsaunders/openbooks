@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 
 /**
  * A file blob ready to serve. `versionId` identifies the immutable
@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server'
  * (append-only versioning), so it is a strong ETag validator.
  */
 export interface ServableBlob {
-  filename: string
-  contentType: string
-  bytes: Buffer
-  versionId: string
+  filename: string;
+  contentType: string;
+  bytes: Buffer;
+  versionId: string;
 }
 
 /**
@@ -42,10 +42,11 @@ export interface ServableBlob {
  * under `nosniff` and stays inline so pdf/image previews keep working.
  */
 export function isActiveContentType(contentType: string): boolean {
-  const base = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
-  if (base === 'text/html' || base === 'application/xhtml+xml' || base === 'image/svg+xml') return true;
-  if (base === 'application/xml' || base === 'text/xml') return true;
-  if (base.endsWith('+xml')) return true;
+  const base = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (base === "text/html" || base === "application/xhtml+xml" || base === "image/svg+xml")
+    return true;
+  if (base === "application/xml" || base === "text/xml") return true;
+  if (base.endsWith("+xml")) return true;
   return false;
 }
 
@@ -54,34 +55,40 @@ export function blobResponse(
   blob: ServableBlob,
   opts: { immutable?: boolean; fallbackName?: string } = {},
 ): NextResponse {
-  const etag = `"${blob.versionId}"`
+  const etag = `"${blob.versionId}"`;
   const cacheControl = opts.immutable
-    ? 'private, max-age=31536000, immutable'
-    : 'private, no-cache'
+    ? "private, max-age=31536000, immutable"
+    : "private, no-cache";
 
-  if (req.headers.get('if-none-match') === etag) {
-    return new NextResponse(null, { status: 304, headers: { ETag: etag, 'Cache-Control': cacheControl } })
+  if (req.headers.get("if-none-match") === etag) {
+    return new NextResponse(null, {
+      status: 304,
+      headers: { ETag: etag, "Cache-Control": cacheControl },
+    });
   }
 
   const asciiName =
-    blob.filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_').trim() ||
-    (opts.fallbackName ?? 'file')
-  const utf8Name = encodeURIComponent(blob.filename)
-  const body = new Uint8Array(blob.bytes)
+    blob.filename
+      .replace(/[^\x20-\x7e]/g, "_")
+      .replace(/["\\]/g, "_")
+      .trim() ||
+    (opts.fallbackName ?? "file");
+  const utf8Name = encodeURIComponent(blob.filename);
+  const body = new Uint8Array(blob.bytes);
 
   // Active documents download; inert bytes preview inline. The disposition
   // is derived from the served type here — callers must not decide it.
-  const disposition = isActiveContentType(blob.contentType) ? 'attachment' : 'inline';
+  const disposition = isActiveContentType(blob.contentType) ? "attachment" : "inline";
 
   return new NextResponse(body, {
     status: 200,
     headers: {
-      'Content-Type': blob.contentType,
-      'Content-Length': String(body.byteLength),
-      'Content-Disposition': `${disposition}; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': cacheControl,
+      "Content-Type": blob.contentType,
+      "Content-Length": String(body.byteLength),
+      "Content-Disposition": `${disposition}; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": cacheControl,
       ETag: etag,
     },
-  })
+  });
 }

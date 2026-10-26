@@ -1,15 +1,14 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadCustomFields, customFieldsSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadCustomFields, customFieldsSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
-
+export const dynamic = "force-dynamic";
 
 export default async function CustomFields({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadCustomFields(sp)
-  return <ModuleView spec={customFieldsSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadCustomFields(sp);
+  return <ModuleView spec={customFieldsSpec(data)} data={data} searchParams={sp} trusted />;
 }

@@ -67,8 +67,14 @@ export async function createItemFamily(
   const options = normalizeFamilyOptions(input.options);
   return db.transaction(async (tx) => {
     await assertItemVariantsFeature(tx, orgId);
-    const taken = (await tx.execute(sql`
-      select 1 from item_families where org_id = ${orgId} and code = ${code}`, "objects")).length > 0;
+    const taken =
+      (
+        await tx.execute(
+          sql`
+      select 1 from item_families where org_id = ${orgId} and code = ${code}`,
+          "objects",
+        )
+      ).length > 0;
     if (taken) {
       throw new ItemFamilyError(
         `family code ${code} is already in use`,
@@ -77,22 +83,32 @@ export async function createItemFamily(
         409,
       );
     }
-    const family = (await tx.execute<FamilyRow>(sql`
+    const family = (
+      await tx.execute<FamilyRow>(
+        sql`
       insert into item_families
         (org_id, code, name, description, category, kind, default_unit, default_rate, status, created_by, updated_by)
       values
         (${orgId}, ${code}, ${name}, ${description}, ${category}, ${kind}, ${defaultUnit}, ${defaultRate}, 'active', ${actorId}, ${actorId})
-      returning id, code, name, description, category, kind, default_unit, default_rate, status`, "objects"))[0];
+      returning id, code, name, description, category, kind, default_unit, default_rate, status`,
+        "objects",
+      )
+    )[0];
     if (!family) throw new InventoryError("product family was not created");
     let position = 0;
     for (const option of options) {
       position += 1;
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = (
+        await tx.execute<{ id: string }>(
+          sql`
         insert into item_family_options
           (org_id, family_id, position, name, "values", created_by, updated_by)
         values
           (${orgId}, ${family.id}, ${position}, ${option.name}, ${textArrayLiteral(option.values.map((entry) => entry.value))}::text[], ${actorId}, ${actorId})
-        returning id`, "objects"))[0];
+        returning id`,
+          "objects",
+        )
+      )[0];
       if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
     }
     const detail: ItemFamilyDetail = {
@@ -130,14 +146,26 @@ export async function updateItemFamily(
     await assertItemVariantsFeature(tx, orgId);
     const current = await lockFamily(tx, orgId, familyId);
     const before = toFamilyRecord(current);
-    const code = patch.code === undefined ? before.code : requiredText(patch.code, "a family code", 60);
+    const code =
+      patch.code === undefined ? before.code : requiredText(patch.code, "a family code", 60);
     const name = patch.name === undefined ? before.name : requiredText(patch.name, "a family name");
-    const kind = patch.kind === undefined ? before.kind : assertVariantKind((patch.kind ?? "").trim());
-    const description = patch.description === undefined ? before.description : cleanText(patch.description, "description", 1000);
-    const category = patch.category === undefined ? before.category : cleanText(patch.category, "category");
-    const defaultUnit = patch.defaultUnit === undefined ? before.defaultUnit : cleanText(patch.defaultUnit, "unit", 40);
-    const defaultRate = patch.defaultRate === undefined ? before.defaultRate : assertRate(patch.defaultRate, "default rate");
-    const statusRaw = patch.status === undefined ? before.status : patch.status?.trim() ?? null;
+    const kind =
+      patch.kind === undefined ? before.kind : assertVariantKind((patch.kind ?? "").trim());
+    const description =
+      patch.description === undefined
+        ? before.description
+        : cleanText(patch.description, "description", 1000);
+    const category =
+      patch.category === undefined ? before.category : cleanText(patch.category, "category");
+    const defaultUnit =
+      patch.defaultUnit === undefined
+        ? before.defaultUnit
+        : cleanText(patch.defaultUnit, "unit", 40);
+    const defaultRate =
+      patch.defaultRate === undefined
+        ? before.defaultRate
+        : assertRate(patch.defaultRate, "default rate");
+    const statusRaw = patch.status === undefined ? before.status : (patch.status?.trim() ?? null);
     if (statusRaw !== "active" && statusRaw !== "inactive") {
       throw new ItemFamilyError(
         "family status is active or inactive",
@@ -147,8 +175,14 @@ export async function updateItemFamily(
       );
     }
     if (code !== before.code) {
-      const taken = (await tx.execute(sql`
-        select 1 from item_families where org_id = ${orgId} and code = ${code} and id <> ${familyId}`, "objects")).length > 0;
+      const taken =
+        (
+          await tx.execute(
+            sql`
+        select 1 from item_families where org_id = ${orgId} and code = ${code} and id <> ${familyId}`,
+            "objects",
+          )
+        ).length > 0;
       if (taken) {
         throw new ItemFamilyError(
           `family code ${code} is already in use`,
@@ -158,13 +192,18 @@ export async function updateItemFamily(
         );
       }
     }
-    const updated = (await tx.execute<FamilyRow>(sql`
+    const updated = (
+      await tx.execute<FamilyRow>(
+        sql`
       update item_families
          set code = ${code}, name = ${name}, description = ${description}, category = ${category},
              kind = ${kind}, default_unit = ${defaultUnit}, default_rate = ${defaultRate},
              status = ${statusRaw}, updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${familyId}
-      returning id, code, name, description, category, kind, default_unit, default_rate, status`, "objects"))[0];
+      returning id, code, name, description, category, kind, default_unit, default_rate, status`,
+        "objects",
+      )
+    )[0];
     if (!updated) throw new InventoryError("product family update matched no row");
     const after = toFamilyRecord(updated);
     await writeFamilyAudit(tx, orgId, actorId, "item_families", familyId, "update", {
@@ -205,15 +244,25 @@ export async function convertItemToFamily(
   }
   return db.transaction(async (tx) => {
     await assertItemVariantsFeature(tx, orgId);
-    const item = (await tx.execute<{
-      id: string; kind: string; code: string | null; name: string;
-      category: string | null; unit: string | null; default_rate: string | null;
-      family_id: string | null;
-    }>(sql`
+    const item = (
+      await tx.execute<{
+        id: string;
+        kind: string;
+        code: string | null;
+        name: string;
+        category: string | null;
+        unit: string | null;
+        default_rate: string | null;
+        family_id: string | null;
+      }>(
+        sql`
       select id, kind, code, name, category, unit, default_rate, family_id
         from items
        where org_id = ${orgId} and id = ${input.itemId}
-       for update`, "objects"))[0];
+       for update`,
+        "objects",
+      )
+    )[0];
     if (!item) {
       throw new ItemFamilyError(
         "the item is not in this organization",
@@ -231,12 +280,22 @@ export async function convertItemToFamily(
       );
     }
     const kind = assertVariantKind(item.kind);
-    const code = input.code === undefined || input.code === null
-      ? item.code ?? item.name.replace(/[^A-Za-z0-9]+/g, "-").toUpperCase()
-      : requiredText(input.code, "a family code", 60);
-    const name = input.name === undefined || input.name === null ? item.name : requiredText(input.name, "a family name");
-    const taken = (await tx.execute(sql`
-      select 1 from item_families where org_id = ${orgId} and code = ${code}`, "objects")).length > 0;
+    const code =
+      input.code === undefined || input.code === null
+        ? (item.code ?? item.name.replace(/[^A-Za-z0-9]+/g, "-").toUpperCase())
+        : requiredText(input.code, "a family code", 60);
+    const name =
+      input.name === undefined || input.name === null
+        ? item.name
+        : requiredText(input.name, "a family name");
+    const taken =
+      (
+        await tx.execute(
+          sql`
+      select 1 from item_families where org_id = ${orgId} and code = ${code}`,
+          "objects",
+        )
+      ).length > 0;
     if (taken) {
       throw new ItemFamilyError(
         `family code ${code} is already in use`,
@@ -245,13 +304,18 @@ export async function convertItemToFamily(
         409,
       );
     }
-    const family = (await tx.execute<FamilyRow>(sql`
+    const family = (
+      await tx.execute<FamilyRow>(
+        sql`
       insert into item_families
         (org_id, code, name, description, category, kind, default_unit, default_rate, status, created_by, updated_by)
       values
         (${orgId}, ${code}, ${name}, ${cleanText(input.description, "description", 1000)}, ${cleanText(input.category, "category") ?? item.category},
          ${kind}, ${item.unit}, ${item.default_rate}, 'active', ${actorId}, ${actorId})
-      returning id, code, name, description, category, kind, default_unit, default_rate, status`, "objects"))[0];
+      returning id, code, name, description, category, kind, default_unit, default_rate, status`,
+        "objects",
+      )
+    )[0];
     if (!family) throw new InventoryError("product family was not created");
     const normalized = normalizeFamilyOptions(
       input.options.map((option) => ({ name: option.name, values: [option.value] })),
@@ -259,12 +323,17 @@ export async function convertItemToFamily(
     let position = 0;
     for (const option of normalized) {
       position += 1;
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = (
+        await tx.execute<{ id: string }>(
+          sql`
         insert into item_family_options
           (org_id, family_id, position, name, "values", created_by, updated_by)
         values
           (${orgId}, ${family.id}, ${position}, ${option.name}, ${textArrayLiteral(option.values.map((entry) => entry.value))}::text[], ${actorId}, ${actorId})
-        returning id`, "objects"))[0];
+        returning id`,
+          "objects",
+        )
+      )[0];
       if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
     }
     const optionValues: OptionCombination = {};
@@ -274,7 +343,8 @@ export async function convertItemToFamily(
          set family_id = ${family.id}, option_values = ${JSON.stringify(optionValues)}::jsonb,
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${item.id}`);
-    if ((attached.rowCount ?? 0) !== 1) throw new InventoryError(`item ${item.code ?? item.name} convert matched no row`);
+    if ((attached.rowCount ?? 0) !== 1)
+      throw new InventoryError(`item ${item.code ?? item.name} convert matched no row`);
     const detail: ItemFamilyDetail = {
       ...toFamilyRecord(family),
       options: await loadOptions(tx, orgId, family.id),
@@ -331,16 +401,28 @@ export async function createFamilyWithVariants(
   const defaultUnit = cleanText(input.defaultUnit, "unit", 40);
   const defaultRate = assertRate(input.defaultRate, "default rate");
   const options = normalizeFamilyOptions(input.options);
-  const pattern = input.codePattern === undefined || input.codePattern === null
-    ? DEFAULT_VARIANT_CODE_PATTERN
-    : input.codePattern;
+  const pattern =
+    input.codePattern === undefined || input.codePattern === null
+      ? DEFAULT_VARIANT_CODE_PATTERN
+      : input.codePattern;
   if (pattern.trim() === "") {
-    throw new ItemFamilyError("a code pattern cannot be blank", "invalid_code_pattern", "use {family}-{values}", 422);
+    throw new ItemFamilyError(
+      "a code pattern cannot be blank",
+      "invalid_code_pattern",
+      "use {family}-{values}",
+      422,
+    );
   }
   return db.transaction(async (tx) => {
     await assertItemVariantsFeature(tx, orgId);
-    const taken = (await tx.execute(sql`
-      select 1 from item_families where org_id = ${orgId} and code = ${code}`, "objects")).length > 0;
+    const taken =
+      (
+        await tx.execute(
+          sql`
+      select 1 from item_families where org_id = ${orgId} and code = ${code}`,
+          "objects",
+        )
+      ).length > 0;
     if (taken) {
       throw new ItemFamilyError(
         `family code ${code} is already in use`,
@@ -349,23 +431,33 @@ export async function createFamilyWithVariants(
         409,
       );
     }
-    const family = (await tx.execute<FamilyRow>(sql`
+    const family = (
+      await tx.execute<FamilyRow>(
+        sql`
       insert into item_families
         (org_id, code, name, description, category, kind, default_unit, default_rate, status, created_by, updated_by)
       values
         (${orgId}, ${code}, ${name}, ${description}, ${category}, ${kind}, ${defaultUnit}, ${defaultRate}, 'active', ${actorId}, ${actorId})
-      returning id, code, name, description, category, kind, default_unit, default_rate, status`, "objects"))[0];
+      returning id, code, name, description, category, kind, default_unit, default_rate, status`,
+        "objects",
+      )
+    )[0];
     if (!family) throw new InventoryError("product family was not created");
     let position = 0;
     const records: FamilyOptionRecord[] = [];
     for (const option of options) {
       position += 1;
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = (
+        await tx.execute<{ id: string }>(
+          sql`
         insert into item_family_options
           (org_id, family_id, position, name, "values", created_by, updated_by)
         values
           (${orgId}, ${family.id}, ${position}, ${option.name}, ${textArrayLiteral(option.values.map((entry) => entry.value))}::text[], ${actorId}, ${actorId})
-        returning id`, "objects"))[0];
+        returning id`,
+          "objects",
+        )
+      )[0];
       if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
       records.push({
         id: inserted.id,
@@ -375,9 +467,10 @@ export async function createFamilyWithVariants(
       });
     }
     const optionNames = records.map((option) => option.name);
-    const choices: CreateVariantChoice[] = input.variants === undefined || input.variants === null
-      ? cartesianCombinations(records).map((optionValues) => ({ optionValues }))
-      : input.variants.map((choice) => ({ ...choice }));
+    const choices: CreateVariantChoice[] =
+      input.variants === undefined || input.variants === null
+        ? cartesianCombinations(records).map((optionValues) => ({ optionValues }))
+        : input.variants.map((choice) => ({ ...choice }));
     const included = choices.filter((choice) => choice.include !== false);
     if (included.length === 0) {
       throw new ItemFamilyError(
@@ -415,7 +508,10 @@ export async function createFamilyWithVariants(
     const variantRecords: VariantRecord[] = [];
     for (const choice of included) {
       const valuesInOrder = optionNames.map((optionName) => choice.optionValues[optionName]!);
-      const override = choice.code === undefined || choice.code === null ? null : cleanText(choice.code, "variant code", 60);
+      const override =
+        choice.code === undefined || choice.code === null
+          ? null
+          : cleanText(choice.code, "variant code", 60);
       const variantCode = override ?? renderVariantCode(pattern, family.code, valuesInOrder);
       if (seenCodes.has(variantCode.toLowerCase())) {
         throw new ItemFamilyError(
@@ -426,8 +522,13 @@ export async function createFamilyWithVariants(
         );
       }
       seenCodes.add(variantCode.toLowerCase());
-      const collision = (await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from items where org_id = ${orgId} and code = ${variantCode}`, "objects"))[0];
+      const collision = (
+        await tx.execute<{ id: string; name: string }>(
+          sql`
+        select id, name from items where org_id = ${orgId} and code = ${variantCode}`,
+          "objects",
+        )
+      )[0];
       if (collision) {
         throw new ItemFamilyError(
           `variant code ${variantCode} is already used by ${collision.name}`,
@@ -448,11 +549,16 @@ export async function createFamilyWithVariants(
             422,
           );
         }
-        const barcodeTaken = (await tx.execute<{ code: string | null; name: string }>(sql`
+        const barcodeTaken = (
+          await tx.execute<{ code: string | null; name: string }>(
+            sql`
           select i.code, i.name
             from item_identifiers ii
             join items i on i.id = ii.item_id and i.org_id = ii.org_id
-           where ii.org_id = ${orgId} and ii.value = ${value}`, "objects"))[0];
+           where ii.org_id = ${orgId} and ii.value = ${value}`,
+            "objects",
+          )
+        )[0];
         if (barcodeTaken) {
           throw new ItemFamilyError(
             `barcode ${value} is already used by ${barcodeTaken.code ?? barcodeTaken.name}`,
@@ -464,27 +570,48 @@ export async function createFamilyWithVariants(
         barcode = { value, kind: choice.barcode.kind };
       }
       const variantName = variantDisplayName(family.name, valuesInOrder);
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = (
+        await tx.execute<{ id: string }>(
+          sql`
         insert into items
           (org_id, kind, code, name, category, unit, default_rate,
            family_id, option_values, is_active, created_by, updated_by)
         values
           (${orgId}, ${kind}, ${variantCode}, ${variantName}, ${category}, ${defaultUnit}, ${price},
            ${family.id}, ${JSON.stringify(choice.optionValues)}::jsonb, true, ${actorId}, ${actorId})
-        returning id`, "objects"))[0];
+        returning id`,
+          "objects",
+        )
+      )[0];
       if (!inserted) throw new InventoryError(`variant ${variantCode} was not created`);
       if (barcode) {
-        const added = (await tx.execute<{ id: string }>(sql`
+        const added = (
+          await tx.execute<{ id: string }>(
+            sql`
           insert into item_identifiers (org_id, item_id, kind, value, created_by, updated_by)
           values (${orgId}, ${inserted.id}, ${barcode.kind}, ${barcode.value}, ${actorId}, ${actorId})
-          returning id`, "objects"))[0];
+          returning id`,
+            "objects",
+          )
+        )[0];
         if (!added) throw new InventoryError(`variant ${variantCode} barcode was not created`);
       }
       await writeFamilyAudit(tx, orgId, actorId, "items", inserted.id, "insert", {
         event: "variant_generated",
-        after: { familyId: family.id, code: variantCode, name: variantName, optionValues: choice.optionValues },
+        after: {
+          familyId: family.id,
+          code: variantCode,
+          name: variantName,
+          optionValues: choice.optionValues,
+        },
       });
-      results.push({ id: inserted.id, code: variantCode, name: variantName, optionValues: choice.optionValues, created: true });
+      results.push({
+        id: inserted.id,
+        code: variantCode,
+        name: variantName,
+        optionValues: choice.optionValues,
+        created: true,
+      });
       variantRecords.push({
         id: inserted.id,
         code: variantCode,

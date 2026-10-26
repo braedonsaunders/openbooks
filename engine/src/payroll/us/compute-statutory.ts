@@ -1,6 +1,12 @@
-import { usOpeningAccountBaseForEin, usOpeningFieldForEin } from './opening-ytd-source.ts';
-import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs } from '../statutory-history-scope.ts';
-import { employeeOpeningLevyAmount, readEmployeeOpeningLevySources } from '../opening-levy-source-reader.ts';
+import { usOpeningAccountBaseForEin, usOpeningFieldForEin } from "./opening-ytd-source.ts";
+import {
+  resolveStatutoryHistoryScope,
+  employerScopedStatutoryStubs,
+} from "../statutory-history-scope.ts";
+import {
+  employeeOpeningLevyAmount,
+  readEmployeeOpeningLevySources,
+} from "../opening-levy-source-reader.ts";
 import { sql } from "drizzle-orm";
 import type { db } from "../../platform/db.ts";
 import { PayrollError } from "../error.ts";
@@ -15,33 +21,41 @@ import { findStoredEmployerFactValue, resolveStoredEmployerFact } from "../emplo
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
 import "./employee-facts.ts";
-import {
-  certificateSubRegions,
-  certificateCode,
-  packCertificates,
-} from "../certificates.ts";
+import { certificateSubRegions, certificateCode, packCertificates } from "../certificates.ts";
 import { advisoryGaps, blockingGaps, resolveWithholding } from "../withholding-resolution.ts";
 import { regionWithholding, subRegionLevy } from "../withholding-jurisdictions.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import {
-  computeUsEmployerWithholding, computeUsWithholding, usSubRegionRateIndex,
+  computeUsEmployerWithholding,
+  computeUsWithholding,
+  usSubRegionRateIndex,
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
+import { US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE } from "./opening-ytd.ts";
 import {
-  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE,
-} from "./opening-ytd.ts";
-import { applySuiTransferCredits, suiTransferRuleFor, type SuiPriorStateWages } from "./sui-transfer.ts";
+  applySuiTransferCredits,
+  suiTransferRuleFor,
+  type SuiPriorStateWages,
+} from "./sui-transfer.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
-import { loadUsFilingAccounts, resolveUsEmployerScope, resolveUsStateSuiAccount, resolveUsFederalFilingAccount } from "./employer-scope.ts";
+import {
+  loadUsFilingAccounts,
+  resolveUsEmployerScope,
+  resolveUsStateSuiAccount,
+  resolveUsFederalFilingAccount,
+} from "./employer-scope.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
 import { caEttWithholding, caSdiWithholding } from "./states/ca.ts";
 import { coFamliWithholding } from "./states/co.ts";
 import {
-  waCaresWithholding, waPackCoversYear, waPfmlWithholding,
-  type WaBackfillRates, type WaPfmlEmployerSize,
+  waCaresWithholding,
+  waPackCoversYear,
+  waPfmlWithholding,
+  type WaBackfillRates,
+  type WaPfmlEmployerSize,
 } from "./states/wa.ts";
 import { dcOpflWithholding } from "./states/dc.ts";
 import { ctPaidLeaveWithholding } from "./states/ct.ts";
@@ -91,7 +105,10 @@ export type UsYtdRow = {
  */
 export type UsSuiFinancingMethod = "contributory" | "reimbursable" | "school_employees_fund";
 
-export function resolveUsSuiFinancingMethod(method: string | null, region: string): UsSuiFinancingMethod {
+export function resolveUsSuiFinancingMethod(
+  method: string | null,
+  region: string,
+): UsSuiFinancingMethod {
   const canonical = resolveEmployerFact("US", "sui_financing_method", method);
   switch (canonical) {
     case "contributory":
@@ -100,9 +117,9 @@ export function resolveUsSuiFinancingMethod(method: string | null, region: strin
       return canonical;
     default:
       throw new PayrollPackError(
-        `US SUI cannot be calculated for the ${region} employer account using the "${canonical}" financing method. `
-        + "Record one of the declared financing methods for this state unemployment account "
-        + "in Payroll Setup → Employer facts.",
+        `US SUI cannot be calculated for the ${region} employer account using the "${canonical}" financing method. ` +
+          "Record one of the declared financing methods for this state unemployment account " +
+          "in Payroll Setup → Employer facts.",
       );
   }
 }
@@ -123,20 +140,32 @@ export function resolveUsSuiFinancingMethod(method: string | null, region: strin
 export async function usWaivedSuiRateSlots(
   tx: Pick<typeof db, "execute">,
   input: {
-    orgId: string; filingAccountId: string | null; region: string | null; payDate: string;
-    employeePartyId?: string; subsidiaryId?: string | null;
+    orgId: string;
+    filingAccountId: string | null;
+    region: string | null;
+    payDate: string;
+    employeePartyId?: string;
+    subsidiaryId?: string | null;
   },
 ): Promise<readonly string[]> {
   const { orgId, filingAccountId, region, payDate } = input;
   if (!filingAccountId || !region) return [];
   const employeeSubsidiaryId = input.subsidiaryId ?? null;
   const suiAccountId = resolveUsStateSuiAccount(
-    await loadUsFilingAccounts(tx, orgId), filingAccountId, employeeSubsidiaryId, region, payDate,
+    await loadUsFilingAccounts(tx, orgId),
+    filingAccountId,
+    employeeSubsidiaryId,
+    region,
+    payDate,
   );
   if (!suiAccountId) return [];
   const recorded = await findStoredEmployerFactValue({
-    tx, orgId, filingAccountId: suiAccountId,
-    country: "US", factKey: "sui_financing_method", asOf: payDate,
+    tx,
+    orgId,
+    filingAccountId: suiAccountId,
+    country: "US",
+    factKey: "sui_financing_method",
+    asOf: payDate,
   });
   if (recorded == null) return [];
   const method = resolveUsSuiFinancingMethod(recorded, region);
@@ -163,7 +192,11 @@ export function resolveUsSuiYtd(
   taxYear: number,
   ytd: Pick<
     UsYtdRow,
-    "suiCurrentRegion" | "suiOpeningCurrentRegion" | "suiOpeningUnscoped" | "suiOtherStateWages" | "suiOpeningStates"
+    | "suiCurrentRegion"
+    | "suiOpeningCurrentRegion"
+    | "suiOpeningUnscoped"
+    | "suiOtherStateWages"
+    | "suiOpeningStates"
   >,
 ): string {
   const openingStates = ytd.suiOpeningStates ?? {};
@@ -171,7 +204,7 @@ export function resolveUsSuiYtd(
   if (ytd.suiOpeningUnscoped && !hasOpeningStates) {
     throw new PayrollError(
       `US SUI cannot be calculated for ${region}: prior insurable wages sit in an opening balance without state allocation. ` +
-      `Enter the per-state SUI carry-in in Payroll → Opening balances (one row per state) before calculating this run; FUTA wages are not an SUI substitute.`,
+        `Enter the per-state SUI carry-in in Payroll → Opening balances (one row per state) before calculating this run; FUTA wages are not an SUI substitute.`,
     );
   }
   // Current-region base: committed stubs plus the entered carry-in for this state.
@@ -192,7 +225,7 @@ export function resolveUsSuiYtd(
     const rule = suiTransferRuleFor(region);
     throw new PayrollError(
       `US SUI cannot be calculated for ${region}: ${rule.citation} does not credit prior wages paid in ${uncreditedStates.join(", ")}. ` +
-      `Record the transfer determination for those wages before calculating this run.`,
+        `Record the transfer determination for those wages before calculating this run.`,
     );
   }
   return base;
@@ -219,7 +252,11 @@ export function resolveUsSuiYtdForCoverage(
   taxYear: number,
   ytd: Pick<
     UsYtdRow,
-    "suiCurrentRegion" | "suiOpeningCurrentRegion" | "suiOpeningUnscoped" | "suiOtherStateWages" | "suiOpeningStates"
+    | "suiCurrentRegion"
+    | "suiOpeningCurrentRegion"
+    | "suiOpeningUnscoped"
+    | "suiOtherStateWages"
+    | "suiOpeningStates"
   >,
   suiExempt: boolean,
 ): string {
@@ -230,16 +267,25 @@ export function resolveUsSuiYtdForCoverage(
 async function utEmployerWaiverCoversPeriod(ctx: PayrollStatutoryComputeContext): Promise<boolean> {
   const { run, subsidiaryId, tx, orgId } = ctx;
   if (!subsidiaryId) return false;
-  const resolveAt = (asOf: string) => resolveStoredEmployerFact({
-    tx, orgId, subsidiaryId, country: "US", factKey: "ut_withholding_commission_waiver", asOf,
-  });
+  const resolveAt = (asOf: string) =>
+    resolveStoredEmployerFact({
+      tx,
+      orgId,
+      subsidiaryId,
+      country: "US",
+      factKey: "ut_withholding_commission_waiver",
+      asOf,
+    });
   if (!run.period_start || !run.period_end) {
-    if (await resolveAt(run.pay_date!) === "approved") {
-      throw new PayrollPackError("US UT employer withholding waiver cannot be applied without the payroll period start and end dates");
+    if ((await resolveAt(run.pay_date!)) === "approved") {
+      throw new PayrollPackError(
+        "US UT employer withholding waiver cannot be applied without the payroll period start and end dates",
+      );
     }
     return false;
   }
-  const changes = await tx.execute<{ boundary: string }>(sql`
+  const changes = await tx.execute<{ boundary: string }>(
+    sql`
     select distinct boundary::text as boundary
       from (
         select effective_from as boundary from payroll_employer_facts
@@ -255,10 +301,14 @@ async function utEmployerWaiverCoversPeriod(ctx: PayrollStatutoryComputeContext)
            and superseded_on > ${run.period_start}::date and superseded_on <= ${run.period_end}::date
       ) boundaries
      order by boundary
-  `, "objects");
-  const dates = [...new Set([run.period_start, ...changes.map((row) => row.boundary), run.period_end])];
+  `,
+    "objects",
+  );
+  const dates = [
+    ...new Set([run.period_start, ...changes.map((row) => row.boundary), run.period_end]),
+  ];
   let approvedBoundaries = 0;
-  for (const date of dates) if (await resolveAt(date) === "approved") approvedBoundaries++;
+  for (const date of dates) if ((await resolveAt(date)) === "approved") approvedBoundaries++;
   if (approvedBoundaries === dates.length) return true;
   if (approvedBoundaries > 0) {
     throw new PayrollPackError(
@@ -287,7 +337,8 @@ export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   STATUTORY_LEVY_TAX: "Tax from the declared flat rate",
   US_RESIDENT_WITHHOLDING_OUTCOME: "Resident withholding outcome vs work-region tax",
   US_RESIDENT_WORK_REGION_TAX_CREDIT: "Work-region tax credited to the residence state",
-  US_RESIDENT_WAIVED_WAGES: "Wages excluded from residence withholding as covered by work-region tax",
+  US_RESIDENT_WAIVED_WAGES:
+    "Wages excluded from residence withholding as covered by work-region tax",
 };
 
 /**
@@ -296,69 +347,141 @@ export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
  * unpaid figures consume FICA/FUTA/SUI room in a later run.
  */
 export async function usEmployeeYtd(
-  ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId">,
+  ctx: Pick<
+    PayrollStatutoryComputeContext,
+    "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId"
+  >,
   region: string,
   filingAccountId: string | null = null,
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
-  const historyScope=await resolveStatutoryHistoryScope(tx,{...ctx,country:'US'});
-  if (historyScope.currency !== 'USD') {
-    throw new PayrollError('US annual statutory history requires the actual pay-run USD currency basis');
+  const historyScope = await resolveStatutoryHistoryScope(tx, { ...ctx, country: "US" });
+  if (historyScope.currency !== "USD") {
+    throw new PayrollError(
+      "US annual statutory history requires the actual pay-run USD currency basis",
+    );
   }
   const accounts = await loadUsFilingAccounts(tx, orgId);
-  const employeeSubsidiaryId=historyScope.subsidiaryId;
-  const source = await tx.execute<{ pay_date: string }>(sql`select pay_date::text from pay_runs
-    where org_id=${orgId} and document_id=${documentId}`, "objects");
-  if (source.length !== 1) throw new PayrollError('US year-to-date inputs require the actual native pay-run source date.');
+  const employeeSubsidiaryId = historyScope.subsidiaryId;
+  const source = await tx.execute<{ pay_date: string }>(
+    sql`select pay_date::text from pay_runs
+    where org_id=${orgId} and document_id=${documentId}`,
+    "objects",
+  );
+  if (source.length !== 1)
+    throw new PayrollError("US year-to-date inputs require the actual native pay-run source date.");
   const sourceDate = source[0]!.pay_date;
   const scope = resolveUsEmployerScope(accounts, filingAccountId, employeeSubsidiaryId, sourceDate);
-  const suiAccountId = resolveUsStateSuiAccount(accounts, filingAccountId, employeeSubsidiaryId, region, sourceDate);
+  const suiAccountId = resolveUsStateSuiAccount(
+    accounts,
+    filingAccountId,
+    employeeSubsidiaryId,
+    region,
+    sourceDate,
+  );
   const openingSources = await readEmployeeOpeningLevySources(tx, {
-    orgId, employeePartyId, taxYear, subsidiaryId: employeeSubsidiaryId, beforeDate: sourceDate,
+    orgId,
+    employeePartyId,
+    taxYear,
+    subsidiaryId: employeeSubsidiaryId,
+    beforeDate: sourceDate,
   });
   const openingFuta = employeeOpeningLevyAmount(openingSources, {
-    programKey: 'us_futa', region: 'US', filingAccountId: scope.federalAccountId,
+    programKey: "us_futa",
+    region: "US",
+    filingAccountId: scope.federalAccountId,
   });
-  if (openingSources.facts?.originalCountry === 'US' && openingSources.hasFutaWageHistory && (scope.federalAccountId === null
-    || !openingSources.allocations.some((allocation) => allocation.programKey === 'us_futa'
-      && allocation.filingAccountId === scope.federalAccountId))) {
-    throw new PayrollError('Prior FUTA wages do not have an opening allocation for this legal employer EIN. Qualify the original EIN source in Payroll → Opening balances → Levy source before calculating.');
+  if (
+    openingSources.facts?.originalCountry === "US" &&
+    openingSources.hasFutaWageHistory &&
+    (scope.federalAccountId === null ||
+      !openingSources.allocations.some(
+        (allocation) =>
+          allocation.programKey === "us_futa" &&
+          allocation.filingAccountId === scope.federalAccountId,
+      ))
+  ) {
+    throw new PayrollError(
+      "Prior FUTA wages do not have an opening allocation for this legal employer EIN. Qualify the original EIN source in Payroll → Opening balances → Levy source before calculating.",
+    );
   }
-  const openingSui = openingSources.allocations.filter((allocation) =>
-    allocation.programKey === 'us_sui' && allocation.federalAccountId === scope.federalAccountId);
+  const openingSui = openingSources.allocations.filter(
+    (allocation) =>
+      allocation.programKey === "us_sui" && allocation.federalAccountId === scope.federalAccountId,
+  );
   const openingSuiCurrentRegion = employeeOpeningLevyAmount(openingSources, {
-    programKey: 'us_sui', region, filingAccountId: suiAccountId, federalAccountId: scope.federalAccountId,
+    programKey: "us_sui",
+    region,
+    filingAccountId: suiAccountId,
+    federalAccountId: scope.federalAccountId,
   });
-  const suiOpeningStates = openingSui.reduce<Record<string, string>>((totals, allocation) => ({
-    ...totals,
-    [allocation.region]: add(totals[allocation.region] ?? '0', allocation.amount),
-  }), {});
+  const suiOpeningStates = openingSui.reduce<Record<string, string>>(
+    (totals, allocation) => ({
+      ...totals,
+      [allocation.region]: add(totals[allocation.region] ?? "0", allocation.amount),
+    }),
+    {},
+  );
   // Resolve every retained stub at its own pay date. A state registration
   // can change affiliation without moving prior wages into the new EIN.
-  const priorStubs = await tx.execute<{ id: string; filing_account_id: string | null; source_date: string }>(sql`
+  const priorStubs = await tx.execute<{
+    id: string;
+    filing_account_id: string | null;
+    source_date: string;
+  }>(
+    sql`
     select s.id, s.filing_account_id, s.history_run_pay_date::text as source_date
-      from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s
-  `, "objects");
-  const ids = priorStubs.filter(stub => resolveUsFederalFilingAccount(
-    accounts, stub.filing_account_id, employeeSubsidiaryId, stub.source_date,
-  ) === scope.federalAccountId).map(stub => stub.id);
-  const sameEinStubs = (alias: string) => ids.length
-    ? sql`${sql.raw(alias + '.id')} in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)})`
-    : sql`false`;
-  const employerStubs = sameEinStubs('s');
-  const otherEmployerStubs = sameEinStubs('s2');
-  const openingFica = usOpeningFieldForEin(openingSources, scope.federalAccountId, 'pensionable_ytd');
-  const openingSupplemental = usOpeningFieldForEin(openingSources, scope.federalAccountId, 'non_periodic_ytd');
-  const openingFicaWithheld = usOpeningFieldForEin(openingSources, scope.federalAccountId, 'fica_withheld_ytd');
-  const einCarryIn = (programKey: typeof US_FICA_WAGES_ACCOUNT_BASE | typeof US_FICA_WITHHELD_ACCOUNT_BASE) =>
+      from ${employerScopedStatutoryStubs(historyScope, { employeePartyId })} s
+  `,
+    "objects",
+  );
+  const ids = priorStubs
+    .filter(
+      (stub) =>
+        resolveUsFederalFilingAccount(
+          accounts,
+          stub.filing_account_id,
+          employeeSubsidiaryId,
+          stub.source_date,
+        ) === scope.federalAccountId,
+    )
+    .map((stub) => stub.id);
+  const sameEinStubs = (alias: string) =>
+    ids.length
+      ? sql`${sql.raw(alias + ".id")} in (${sql.join(
+          ids.map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )})`
+      : sql`false`;
+  const employerStubs = sameEinStubs("s");
+  const otherEmployerStubs = sameEinStubs("s2");
+  const openingFica = usOpeningFieldForEin(
+    openingSources,
+    scope.federalAccountId,
+    "pensionable_ytd",
+  );
+  const openingSupplemental = usOpeningFieldForEin(
+    openingSources,
+    scope.federalAccountId,
+    "non_periodic_ytd",
+  );
+  const openingFicaWithheld = usOpeningFieldForEin(
+    openingSources,
+    scope.federalAccountId,
+    "fica_withheld_ytd",
+  );
+  const einCarryIn = (
+    programKey: typeof US_FICA_WAGES_ACCOUNT_BASE | typeof US_FICA_WITHHELD_ACCOUNT_BASE,
+  ) =>
     sql`${usOpeningAccountBaseForEin(openingSources, scope.federalAccountId, programKey)}::numeric`;
-  const r = (await tx.execute<UsYtdRow>(sql`
+  const r = await tx.execute<UsYtdRow>(
+    sql`
     select
       ${openingFica}::numeric
       + ${einCarryIn(US_FICA_WAGES_ACCOUNT_BASE)}
       + coalesce(sum(s.pensionable_earnings), 0) as fica,
       ${openingFuta}::numeric + coalesce(sum(s.insurable_earnings), 0) as futa,
-      ${openingSources.facts?.originalCountry === 'US' && openingSources.hasSuiWageHistory && openingSui.length === 0}::boolean as "suiOpeningUnscoped",
+      ${openingSources.facts?.originalCountry === "US" && openingSources.hasSuiWageHistory && openingSui.length === 0}::boolean as "suiOpeningUnscoped",
       coalesce(sum(s.insurable_earnings) filter (where s.province = ${region}), 0)::text as "suiCurrentRegion",
       coalesce(string_agg(distinct s.province, ', ' order by s.province)
         filter (where s.province <> ${region} and s.insurable_earnings > 0), '') as "suiOtherRegions",
@@ -366,7 +489,7 @@ export async function usEmployeeYtd(
         select jsonb_object_agg(prior.province, prior.total)
           from (
             select s2.province as province, sum(s2.insurable_earnings)::text as total
-              from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s2
+              from ${employerScopedStatutoryStubs(historyScope, { employeePartyId })} s2
              where ${otherEmployerStubs}
                and s2.province <> ${region} and s2.insurable_earnings > 0
              group by s2.province
@@ -398,7 +521,7 @@ export async function usEmployeeYtd(
           and history.pay_run_document_id <> ${documentId}
           and committed_run.run_status = 'committed'
           and committed_document.status <> 'voided'
-          and ${sameEinStubs('history')}
+          and ${sameEinStubs("history")}
           and coalesce((history.factors->>'B')::numeric, 0) = 0
           and (fact.key like 'SIT_%' or fact.key like 'LIT_%')
           and coalesce(fact.value::numeric, 0) > 0
@@ -412,21 +535,27 @@ export async function usEmployeeYtd(
         select jsonb_object_agg(lst.key, lst.total::text)
         from (
           select fact.key, sum(coalesce(fact.value::numeric,0)) as total
-            from ${employerScopedStatutoryStubs(historyScope,{employeePartyId,region:'PA'})} history
+            from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region: "PA" })} history
             cross join lateral jsonb_each_text(history.factors) as fact(key,value)
-           where ${sameEinStubs('history')} and fact.key like 'LIT#_PA-%-LST' escape '#'
+           where ${sameEinStubs("history")} and fact.key like 'LIT#_PA-%-LST' escape '#'
            group by fact.key
         ) lst
       ), '{}'::jsonb) as "lstWithheldYtd"
-    from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s
+    from ${employerScopedStatutoryStubs(historyScope, { employeePartyId })} s
     where ${employerStubs}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0]!;
   const lstWithheldYtd = { ...row.lstWithheldYtd };
   for (const allocation of openingSources.allocations) {
-    if (allocation.programKey !== 'us_pa_lst' || allocation.federalAccountId !== scope.federalAccountId) continue;
+    if (
+      allocation.programKey !== "us_pa_lst" ||
+      allocation.federalAccountId !== scope.federalAccountId
+    )
+      continue;
     const key = `LIT_PA-${allocation.subRegion}-LST`;
-    lstWithheldYtd[key] = add(lstWithheldYtd[key] ?? '0', allocation.amount);
+    lstWithheldYtd[key] = add(lstWithheldYtd[key] ?? "0", allocation.amount);
   }
   return {
     ...row,
@@ -444,10 +573,29 @@ export async function computeUsStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    tx, orgId, employeePartyId, employeeName, taxYear, country, region,
-    run, emp, filingAccountId, periodsPerYear: P, income, nonPeriodic, pensionable,
-    supplementalWageAmounts, statutoryExemptionAmounts,
-    insurable, employerEmployeeCount, reducedBases, pushStatutory, storedCertificates, certificateFor, bool,
+    tx,
+    orgId,
+    employeePartyId,
+    employeeName,
+    taxYear,
+    country,
+    region,
+    run,
+    emp,
+    filingAccountId,
+    periodsPerYear: P,
+    income,
+    nonPeriodic,
+    pensionable,
+    supplementalWageAmounts,
+    statutoryExemptionAmounts,
+    insurable,
+    employerEmployeeCount,
+    reducedBases,
+    pushStatutory,
+    storedCertificates,
+    certificateFor,
+    bool,
     assertRegionSupported,
   } = ctx;
 
@@ -461,7 +609,11 @@ export async function computeUsStatutory(
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd(ctx, region, filingAccountId);
   const openingLevySources = await readEmployeeOpeningLevySources(tx, {
-    orgId, employeePartyId, taxYear, subsidiaryId: (await resolveStatutoryHistoryScope(tx, { ...ctx, country: 'US' })).subsidiaryId, beforeDate: run.pay_date!,
+    orgId,
+    employeePartyId,
+    taxYear,
+    subsidiaryId: (await resolveStatutoryHistoryScope(tx, { ...ctx, country: "US" })).subsidiaryId,
+    beforeDate: run.pay_date!,
   });
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
   // The method is read raw and resolved through the declaration: a missing
@@ -473,13 +625,19 @@ export async function computeUsStatutory(
   // (legacy or region rates) with no method to record, while every resolved
   // SUI account must declare its method.
   const suiAccountId = filingAccountId && !suiExempt ? ytd.suiAccountId : null;
-  const suiFinancingMethod = suiAccountId ? resolveUsSuiFinancingMethod(
-    await findStoredEmployerFactValue({
-      tx, orgId, filingAccountId: suiAccountId,
-      country: "US", factKey: "sui_financing_method", asOf: run.pay_date!,
-    }),
-    region,
-  ) : null;
+  const suiFinancingMethod = suiAccountId
+    ? resolveUsSuiFinancingMethod(
+        await findStoredEmployerFactValue({
+          tx,
+          orgId,
+          filingAccountId: suiAccountId,
+          country: "US",
+          factKey: "sui_financing_method",
+          asOf: run.pay_date!,
+        }),
+        region,
+      )
+    : null;
   // A reimbursable account — nonprofits and government employers electing
   // reimbursement under FUTA §3309 — and a California School Employees Fund
   // account pay no per-wage SUI contribution: no SUI is priced on the stub,
@@ -504,21 +662,25 @@ export async function computeUsStatutory(
       // typecheck time instead of silently pricing the new method.
       const unhandled: never = suiFinancingMethod;
       throw new PayrollPackError(
-        `US SUI cannot be calculated for the ${region} employer account using the "${unhandled}" financing method. `
-        + "Record one of the declared financing methods for this state unemployment account "
-        + "in Payroll Setup → Employer facts.",
+        `US SUI cannot be calculated for the ${region} employer account using the "${unhandled}" financing method. ` +
+          "Record one of the declared financing methods for this state unemployment account " +
+          "in Payroll Setup → Employer facts.",
       );
     }
   }
   const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, taxYear, ytd, suiExempt) : "0";
-  const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
+  const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as
+    "single" | "married_joint" | "head_household";
   const federalAlienStatus = certificateFor("us_w4_tax_residency")?.answers.alien_status;
   const nonresidentAlien = requireUsFederalAlienStatus(federalAlienStatus);
   const federalAdditionalPerPeriod = empFact("US", emp, "additional_tax_per_period") ?? "0.0000";
   const statutory = calculatePub15T({
-    payDate: run.pay_date!, periodsPerYear: P,
-    wages: fitWages, supplemental: nonPeriodic,
-    ficaWages: pensionable, futaWages: insurable,
+    payDate: run.pay_date!,
+    periodsPerYear: P,
+    wages: fitWages,
+    supplemental: nonPeriodic,
+    ficaWages: pensionable,
+    futaWages: insurable,
     filingStatus,
     multipleJobs: bool(empFact("US", emp, "multiple_jobs")),
     dependentCredits: empFact("US", emp, "dependent_credits") ?? undefined,
@@ -526,7 +688,10 @@ export async function computeUsStatutory(
     deductionsAnnual: empFact("US", emp, "deductions_annual") ?? undefined,
     extraPerPeriod: federalAdditionalPerPeriod,
     pre2020: bool(empFact("US", emp, "w4_pre_2020"))
-      ? { allowances: Number(empFact("US", emp, "w4_allowances") ?? 0), married: filingStatus === "married_joint" }
+      ? {
+          allowances: Number(empFact("US", emp, "w4_allowances") ?? 0),
+          married: filingStatus === "married_joint",
+        }
       : undefined,
     fitExempt: bool(empFact("US", emp, "tax_exempt")),
     nonresidentAlien,
@@ -538,31 +703,61 @@ export async function computeUsStatutory(
     futaWorkAllocations: ctx.workAllocations,
     sui,
     ytd: {
-      ssWages: ytd.fica, medicareWages: ytd.fica,
-      futaWages: ytd.futa, suiWages: suiWagesYtd,
+      ssWages: ytd.fica,
+      medicareWages: ytd.fica,
+      futaWages: ytd.futa,
+      suiWages: suiWagesYtd,
       supplemental: ytd.supplemental,
     },
   });
   pushStatutory("fit", "deduction", "Federal income tax", statutory.fit, 110);
   pushStatutory("ss", "deduction", "Social Security", statutory.ss, 120);
   pushStatutory("medicare", "deduction", "Medicare", statutory.medicare, 130);
-  pushStatutory("medicare_addl", "deduction", "Additional Medicare", statutory.additionalMedicare, 135);
-  pushStatutory("ss", "employer_contribution", "Social Security (employer)", statutory.ssEmployer, 210);
-  pushStatutory("medicare", "employer_contribution", "Medicare (employer)", statutory.medicareEmployer, 220);
-  pushStatutory("futa", "employer_contribution", "Federal unemployment (FUTA)", statutory.futa, 230);
+  pushStatutory(
+    "medicare_addl",
+    "deduction",
+    "Additional Medicare",
+    statutory.additionalMedicare,
+    135,
+  );
+  pushStatutory(
+    "ss",
+    "employer_contribution",
+    "Social Security (employer)",
+    statutory.ssEmployer,
+    210,
+  );
+  pushStatutory(
+    "medicare",
+    "employer_contribution",
+    "Medicare (employer)",
+    statutory.medicareEmployer,
+    220,
+  );
+  pushStatutory(
+    "futa",
+    "employer_contribution",
+    "Federal unemployment (FUTA)",
+    statutory.futa,
+    230,
+  );
   pushStatutory("suta", "employer_contribution", "State unemployment (SUI)", statutory.suta, 250);
   let factors: Record<string, string> = {
     ...statutory.factors,
     // The trace factor moves with the base it prices: I is the FIT-able
     // periodic wage, so it reads the reduced leg, not the reported gross.
-    B: nonPeriodic, I: fitWages, PI: pensionable, IE: insurable,
+    B: nonPeriodic,
+    I: fitWages,
+    PI: pensionable,
+    IE: insurable,
   };
   for (const allocation of ctx.workAllocations ?? []) {
     if (allocation.subRegion !== null || allocation.sourceWagesCurrentPeriod == null) continue;
     const key = `work_source_wages:${allocation.region}`;
-    factors[key] = key in factors
-      ? sum([factors[key]!, allocation.sourceWagesCurrentPeriod])
-      : allocation.sourceWagesCurrentPeriod;
+    factors[key] =
+      key in factors
+        ? sum([factors[key]!, allocation.sourceWagesCurrentPeriod])
+        : allocation.sourceWagesCurrentPeriod;
   }
   // Connecticut Paid Leave (2026: 0.5% of FICA-taxable wages to the SS
   // base) withholds beside income tax, never inside it — on the FICA leg
@@ -580,9 +775,10 @@ export async function computeUsStatutory(
       .map((row) => row.certificateKey);
 
   const subRegionsOnFile = (side: "work" | "residence"): string[] => {
-    const sideRegion = side === "work"
-      ? region
-      : ((empFact("US", emp, "residence_region") as string | null) || region);
+    const sideRegion =
+      side === "work"
+        ? region
+        : (empFact("US", emp, "residence_region") as string | null) || region;
     const codes: string[] = [];
     for (const certificate of packCertificates(country).certificates) {
       if (!certificate.fields.some((field) => field.subRegion?.side === side)) continue;
@@ -595,7 +791,11 @@ export async function computeUsStatutory(
     }
     const reach = side === "work" ? "nonresident" : "resident";
     for (const declaration of regionWithholding(country, sideRegion).subRegions) {
-      if (declaration.automatic && declaration.reaches.includes(reach) && !codes.includes(declaration.code)) {
+      if (
+        declaration.automatic &&
+        declaration.reaches.includes(reach) &&
+        !codes.includes(declaration.code)
+      ) {
         codes.push(declaration.code);
       }
     }
@@ -610,7 +810,13 @@ export async function computeUsStatutory(
   // levy priced (periodic plus supplemental).
   if (region === "DC") {
     const dcOpfl = dcOpflWithholding(run.pay_date!, sum([income, nonPeriodic]));
-    pushStatutory("dc_opfl_employer", "employer_contribution", "DC Paid Family Leave (employer)", dcOpfl, 254);
+    pushStatutory(
+      "dc_opfl_employer",
+      "employer_contribution",
+      "DC Paid Family Leave (employer)",
+      dcOpfl,
+      254,
+    );
     factors = { ...factors, DC_OPFL_EMPLOYER: dcOpfl };
   }
   const resolution = resolveWithholding({
@@ -629,26 +835,37 @@ export async function computeUsStatutory(
     }),
   });
   const hasDetroitResidentLevy = resolution.levies.some(
-    (levy) => levy.region === "MI" && levy.level === "sub_region"
-      && levy.subRegion === "DETROIT" && levy.reach === "resident",
+    (levy) =>
+      levy.region === "MI" &&
+      levy.level === "sub_region" &&
+      levy.subRegion === "DETROIT" &&
+      levy.reach === "resident",
   );
   // Every other Michigan taxing city this Detroit resident works in: the
   // resident rate prices per work-city allocation (2.4% minus THAT city's
   // nonresident rate), so first-match `.find` would price every allocation
   // at one city's credit. Rate lookup stays here, beside the tenant rates.
   const detroitOtherCities = hasDetroitResidentLevy
-    ? [...new Set(resolution.levies
-      .filter((levy) => levy.region === "MI" && levy.level === "sub_region"
-        && levy.side === "work" && levy.subRegion !== "DETROIT" && levy.subRegion !== null)
-      .map((levy) => levy.subRegion!))]
-      .map((code) => {
+    ? [
+        ...new Set(
+          resolution.levies
+            .filter(
+              (levy) =>
+                levy.region === "MI" &&
+                levy.level === "sub_region" &&
+                levy.side === "work" &&
+                levy.subRegion !== "DETROIT" &&
+                levy.subRegion !== null,
+            )
+            .map((levy) => levy.subRegion!),
+        ),
+      ].map((code) => {
         const rates = config.subRegionRates("us_mi_city", "MI", code);
         return { code, nonresidentRate: rates?.nonresidentRate ?? rates?.rate ?? null };
       })
     : [];
-  const supplementalPaymentTiming = U(income) === 0n && U(nonPeriodic) > 0n
-    ? "separate" as const
-    : "combined" as const;
+  const supplementalPaymentTiming =
+    U(income) === 0n && U(nonPeriodic) > 0n ? ("separate" as const) : ("combined" as const);
 
   const blocking = blockingGaps(resolution);
   const advisory = advisoryGaps(resolution);
@@ -658,13 +875,14 @@ export async function computeUsStatutory(
     // blocking rule, and without this the form that changes the answer stays
     // hidden. Worded for the refused run — no claim about what is withheld,
     // because nothing was.
-    const unclaimed = advisory.length > 0
-      && resolution.agreement?.taxedBy === "residence"
-      && resolution.agreement.certificateKey
-      ? ` In addition, the ${resolution.workRegion}/${resolution.residenceRegion} reciprocity`
-        + ` agreement is unclaimed (${resolution.agreement.certificateKey} is not on file): once`
-        + " the above is resolved, collecting the form moves withholding to the residence region."
-      : "";
+    const unclaimed =
+      advisory.length > 0 &&
+      resolution.agreement?.taxedBy === "residence" &&
+      resolution.agreement.certificateKey
+        ? ` In addition, the ${resolution.workRegion}/${resolution.residenceRegion} reciprocity` +
+          ` agreement is unclaimed (${resolution.agreement.certificateKey} is not on file): once` +
+          " the above is resolved, collecting the form moves withholding to the residence region."
+        : "";
     throw new PayrollError(
       `${employeeName}: ${blocking.map((gap) => gap.message).join(" ")}${unclaimed}`,
     );
@@ -673,13 +891,14 @@ export async function computeUsStatutory(
   // opening balance with unscoped insurable wages (the same provenance gap
   // that refuses SUI) may hide Minnesota base, so a Minnesota premium levy
   // with such history refuses rather than overstating the room.
-  const mnPremium = resolution.levies.some((levy) => levy.region === "MN"
-    && (levy.subRegion === "PL" || levy.subRegion === "PLE"));
+  const mnPremium = resolution.levies.some(
+    (levy) => levy.region === "MN" && (levy.subRegion === "PL" || levy.subRegion === "PLE"),
+  );
   if (mnPremium && ytd.suiOpeningUnscoped) {
     throw new PayrollError(
-      `${employeeName}: Minnesota Paid Leave cannot be calculated: prior insurable wages sit in `
-      + "an opening balance without state allocation, and the premium's wage-base room cannot be "
-      + "established. Complete the state-scoped wage history before calculating this run; refused by name",
+      `${employeeName}: Minnesota Paid Leave cannot be calculated: prior insurable wages sit in ` +
+        "an opening balance without state allocation, and the premium's wage-base room cannot be " +
+        "established. Complete the state-scoped wage history before calculating this run; refused by name",
     );
   }
   // Advisory gaps reach the operator as named, non-blocking run warnings and
@@ -700,8 +919,20 @@ export async function computeUsStatutory(
   // levy-routed. Same base the CO levy priced (periodic plus supplemental).
   if (region === "CO") {
     const famli = coFamliWithholding(run.pay_date!, sum([income, nonPeriodic]));
-    pushStatutory("co_famli_employee", "deduction", "Colorado FAMLI (employee)", famli.employee, 149);
-    pushStatutory("co_famli_employer", "employer_contribution", "Colorado FAMLI (employer)", famli.employer, 252);
+    pushStatutory(
+      "co_famli_employee",
+      "deduction",
+      "Colorado FAMLI (employee)",
+      famli.employee,
+      149,
+    );
+    pushStatutory(
+      "co_famli_employer",
+      "employer_contribution",
+      "Colorado FAMLI (employer)",
+      famli.employer,
+      252,
+    );
     factors = {
       ...factors,
       CO_FAMLI_EMPLOYEE: famli.employee,
@@ -720,14 +951,18 @@ export async function computeUsStatutory(
   // defaulted share.
   if (region === "WA") {
     const recordedSize = await resolveStoredEmployerFact({
-      tx, orgId, subsidiaryId: ctx.subsidiaryId ?? null,
-      country: "US", factKey: "wa_pfml_employer_size", asOf: run.pay_date!,
+      tx,
+      orgId,
+      subsidiaryId: ctx.subsidiaryId ?? null,
+      country: "US",
+      factKey: "wa_pfml_employer_size",
+      asOf: run.pay_date!,
     });
     const employerSize = recordedSize as WaPfmlEmployerSize;
     if (employerSize !== "fifty_or_more" && employerSize !== "fewer_than_fifty") {
       throw new PayrollError(
-        `${employeeName}: Washington PFML cannot be calculated without the employer's recorded size `
-        + "(50 or more employees, or fewer) — record it in Payroll Setup → Employer facts",
+        `${employeeName}: Washington PFML cannot be calculated without the employer's recorded size ` +
+          "(50 or more employees, or fewer) — record it in Payroll Setup → Employer facts",
       );
     }
     // The pack's transcribed table wins wherever one is published; a year it
@@ -738,10 +973,10 @@ export async function computeUsStatutory(
     const entered = waPackCoversYear(year) ? undefined : config.waBackfill("WA");
     if (!waPackCoversYear(year) && !entered) {
       throw new PayrollError(
-        `${employeeName}: Washington PFML and WA Cares have no rates for ${year} in this pack `
-        + `version — enter the year's published rates in Payroll Setup → Statutory rates `
-        + `(US · Washington PFML back-fill) with the official Employment Security Department citation, `
-        + `or contact support. This run priced no Washington PFML or WA Cares.`,
+        `${employeeName}: Washington PFML and WA Cares have no rates for ${year} in this pack ` +
+          `version — enter the year's published rates in Payroll Setup → Statutory rates ` +
+          `(US · Washington PFML back-fill) with the official Employment Security Department citation, ` +
+          `or contact support. This run priced no Washington PFML or WA Cares.`,
       );
     }
     // Every field is required at the write boundary, so a stored row carries
@@ -749,16 +984,34 @@ export async function computeUsStatutory(
     // back-fill validator re-checks shape before a cent prices.
     const backfill: WaBackfillRates | undefined = entered
       ? {
-        pfmlTotalRate: entered.totalRate!,
-        pfmlEmployeeShare: entered.employeeShare!,
-        pfmlEmployerShare: entered.employerShare!,
-        pfmlWageBase: entered.wageBase!,
-        caresRate: entered.caresRate!,
-      }
+          pfmlTotalRate: entered.totalRate!,
+          pfmlEmployeeShare: entered.employeeShare!,
+          pfmlEmployerShare: entered.employerShare!,
+          pfmlWageBase: entered.wageBase!,
+          caresRate: entered.caresRate!,
+        }
       : undefined;
-    const pfml = waPfmlWithholding(run.pay_date!, sum([income, nonPeriodic]), ytd.fica, employerSize, backfill);
-    pushStatutory("wa_pfml_employee", "deduction", "Washington PFML (employee)", pfml.employee, 144);
-    pushStatutory("wa_pfml_employer", "employer_contribution", "Washington PFML (employer)", pfml.employer, 253);
+    const pfml = waPfmlWithholding(
+      run.pay_date!,
+      sum([income, nonPeriodic]),
+      ytd.fica,
+      employerSize,
+      backfill,
+    );
+    pushStatutory(
+      "wa_pfml_employee",
+      "deduction",
+      "Washington PFML (employee)",
+      pfml.employee,
+      144,
+    );
+    pushStatutory(
+      "wa_pfml_employer",
+      "employer_contribution",
+      "Washington PFML (employer)",
+      pfml.employer,
+      253,
+    );
     const cares = waCaresWithholding(run.pay_date!, sum([income, nonPeriodic]), backfill);
     pushStatutory("wa_cares_employee", "deduction", "Washington WA Cares (employee)", cares, 146);
     factors = {
@@ -773,8 +1026,10 @@ export async function computeUsStatutory(
   // federal employer lines take 210–250, so transit starts at 260.
   let transitSequence = 260;
   for (const levy of resolution.levies) {
-    if (levy.level === "sub_region"
-      && subRegionLevy(country, levy.region, levy.subRegion!)?.pocket === "employer") {
+    if (
+      levy.level === "sub_region" &&
+      subRegionLevy(country, levy.region, levy.subRegion!)?.pocket === "employer"
+    ) {
       // Employer-pocket levies accrue at employer cost — never out of the
       // cheque. Oregon transit's declared base is district-sourced wages from
       // verified work records; its rate is employer-entered and refused by
@@ -784,13 +1039,16 @@ export async function computeUsStatutory(
         payDate: run.pay_date!,
         wages: sum([income, nonPeriodic]),
         wageAllocations: ctx.workAllocations,
-        ytdWages: levy.region === "MN" && levy.subRegion === "PL" ? ytd.mnPaidLeaveWages : undefined,
-        tenantRates: (rateKey, subRegion) =>
-          config.subRegionRates(rateKey, levy.region, subRegion),
+        ytdWages:
+          levy.region === "MN" && levy.subRegion === "PL" ? ytd.mnPaidLeaveWages : undefined,
+        tenantRates: (rateKey, subRegion) => config.subRegionRates(rateKey, levy.region, subRegion),
       });
       pushStatutory(
         "transit_payroll_tax",
-        "employer_contribution", employerTax.label, employerTax.tax, transitSequence++,
+        "employer_contribution",
+        employerTax.label,
+        employerTax.tax,
+        transitSequence++,
       );
       factors = {
         ...factors,
@@ -799,14 +1057,23 @@ export async function computeUsStatutory(
       };
       continue;
     }
-    const employerWithholdingWaiver = levy.region === "UT"
-      ? await utEmployerWaiverCoversPeriod(ctx)
-      : false;
-    if (levy.region === 'PA' && levy.level === 'sub_region') {
-      const clgs = certificateFor('us_pa_clgs32_6');
-      const workPsd = levy.side === 'work' ? levy.subRegion : clgs == null ? null : certificateCode(clgs, 'work_psd_code');
-      if (workPsd && config.subRegionRates('us_pa_lst', 'PA', workPsd)?.annualAmount != null) {
-        employeeOpeningLevyAmount(openingLevySources, { programKey: 'us_pa_lst', region: 'PA', subRegion: workPsd, federalAccountId: ytd.federalAccountId });
+    const employerWithholdingWaiver =
+      levy.region === "UT" ? await utEmployerWaiverCoversPeriod(ctx) : false;
+    if (levy.region === "PA" && levy.level === "sub_region") {
+      const clgs = certificateFor("us_pa_clgs32_6");
+      const workPsd =
+        levy.side === "work"
+          ? levy.subRegion
+          : clgs == null
+            ? null
+            : certificateCode(clgs, "work_psd_code");
+      if (workPsd && config.subRegionRates("us_pa_lst", "PA", workPsd)?.annualAmount != null) {
+        employeeOpeningLevyAmount(openingLevySources, {
+          programKey: "us_pa_lst",
+          region: "PA",
+          subRegion: workPsd,
+          federalAccountId: ytd.federalAccountId,
+        });
       }
     }
     const withheld = computeUsWithholding({
@@ -826,9 +1093,9 @@ export async function computeUsStatutory(
       federalFilingStatus: filingStatus,
       federalLegacyW4: bool(empFact("US", emp, "w4_pre_2020"))
         ? {
-          status: filingStatus === "married_joint" ? "married" : "single",
-          allowances: Number(empFact("US", emp, "w4_allowances") ?? 0),
-        }
+            status: filingStatus === "married_joint" ? "married" : "single",
+            allowances: Number(empFact("US", emp, "w4_allowances") ?? 0),
+          }
         : undefined,
       federalTaxExempt: bool(empFact("US", emp, "tax_exempt")),
       federalAdditionalPerPeriod,
@@ -839,15 +1106,15 @@ export async function computeUsStatutory(
       regularWageTaxWithheldThisYear: ytd.regularWageTaxWithheldThisYear,
       regularWageTaxWithheldFor: ytd.regularWageTaxWithheldKeys,
       wageAllocations: ctx.workAllocations,
-      residentWithholdingFacts: levy.basis === "resident_out_of_region"
-        && levy.residentWithholdingMethod?.kind !== "full"
-        ? resolveUsResidentWithholdingFacts(
-          sum([income, nonPeriodic]),
-          ctx.workAllocations,
-          workRegionTaxes,
-          residenceRegion,
-        )
-        : undefined,
+      residentWithholdingFacts:
+        levy.basis === "resident_out_of_region" && levy.residentWithholdingMethod?.kind !== "full"
+          ? resolveUsResidentWithholdingFacts(
+              sum([income, nonPeriodic]),
+              ctx.workAllocations,
+              workRegionTaxes,
+              residenceRegion,
+            )
+          : undefined,
       federalIncomeTax: statutory.fit,
       federalWithholdingExempt: bool(empFact("US", emp, "tax_exempt")),
       // `wages` and `supplemental` are already the declared reduced bases;
@@ -865,14 +1132,15 @@ export async function computeUsStatutory(
       ytd: {
         supplemental: ytd.supplemental,
         lstWithheldYtd: ytd.lstWithheldYtd,
-        ...(levy.region === "MN" && levy.subRegion === "PLE" ? { wages: ytd.mnPaidLeaveWages } : {}),
+        ...(levy.region === "MN" && levy.subRegion === "PLE"
+          ? { wages: ytd.mnPaidLeaveWages }
+          : {}),
       },
       socialInsuranceDeducted: {
         period: sum([statutory.ss, statutory.medicare, statutory.additionalMedicare]),
         yearToDate: ytd.fica_tax,
       },
-      tenantRates: (rateKey, subRegion) =>
-        config.subRegionRates(rateKey, levy.region, subRegion),
+      tenantRates: (rateKey, subRegion) => config.subRegionRates(rateKey, levy.region, subRegion),
       detroitOtherCities,
     });
     if (!withheld) continue;
@@ -882,10 +1150,12 @@ export async function computeUsStatutory(
     if (levy.level === "region") regionTax = withheld.tax;
     const lineSequence = sequence++;
     pushStatutory(
-      levy.statutoryComponent?.systemKey
-        ?? (levy.level === "region" ? "state_income_tax" : "local_income_tax"),
+      levy.statutoryComponent?.systemKey ??
+        (levy.level === "region" ? "state_income_tax" : "local_income_tax"),
       levy.statutoryComponent?.kind ?? "deduction",
-      withheld.label, withheld.tax, lineSequence,
+      withheld.label,
+      withheld.tax,
+      lineSequence,
     );
     if (levy.level === "sub_region" && withheld.localTaxableWages !== undefined) {
       factors[w2LocalWageTraceKey(lineSequence)] = withheld.localTaxableWages;
@@ -937,14 +1207,15 @@ export async function computeUsStatutory(
     const reserve = config.ettReserveBalance(region);
     if (reserve == null) {
       throw new PayrollError(
-        "California Employment Training Tax needs the employer's UI reserve account balance "
-        + "(positive balance owes 0.1% on the first $7,000; a deficit balance is exempt). "
-        + "Enter it on the us_ca_ett rate before calculating — refused by name",
+        "California Employment Training Tax needs the employer's UI reserve account balance " +
+          "(positive balance owes 0.1% on the first $7,000; a deficit balance is exempt). " +
+          "Enter it on the us_ca_ett rate before calculating — refused by name",
       );
     }
     if (U(reserve) > 0n) {
       const caEtt = caEttWithholding(
-        run.pay_date!, sum([income, nonPeriodic]),
+        run.pay_date!,
+        sum([income, nonPeriodic]),
         caEttWagesYtd(ytd, sui && !suiExempt ? suiWagesYtd : null),
       );
       pushStatutory("ca_ett", "employer_contribution", "CA employment training tax", caEtt, 251);

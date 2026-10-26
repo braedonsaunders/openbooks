@@ -4,13 +4,15 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { idempotentUsageCreate } from "../_idempotent";
 
-const Body = z.object({
-  key: z.string().trim().min(1),
-  name: z.string().trim().min(1),
-  unit: z.string().trim().min(1),
-  aggregation: z.enum(["sum", "count", "max", "last", "unique_count"]),
-  itemId: uuidString().nullable().optional(),
-}).strict();
+const Body = z
+  .object({
+    key: z.string().trim().min(1),
+    name: z.string().trim().min(1),
+    unit: z.string().trim().min(1),
+    aggregation: z.enum(["sum", "count", "max", "last", "unique_count"]),
+    itemId: uuidString().nullable().optional(),
+  })
+  .strict();
 
 export const GET = defineRoute({
   permission: "usage.read",
@@ -23,11 +25,12 @@ export const POST = defineRoute({
   feature: "usageBilling",
   scope: "unrestricted",
   body: Body,
-  handler: async ({ request, authz, body }) => idempotentUsageCreate({
-    request,
-    authz,
-    operation: "usage.meter.create",
-    requestBody: body,
-    execute: () => createUsageMeter(authz.user.orgId, authz.user.id, body),
-  }),
+  handler: async ({ request, authz, body }) =>
+    idempotentUsageCreate({
+      request,
+      authz,
+      operation: "usage.meter.create",
+      requestBody: body,
+      execute: () => createUsageMeter(authz.user.orgId, authz.user.id, body),
+    }),
 });

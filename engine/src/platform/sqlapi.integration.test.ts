@@ -1,165 +1,171 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import type { PoolClient } from 'pg'
-import { db, pool, withBypass, withOrgContext } from './db.ts'
-import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts'
-import { listSchema, runUserSql, SQL_TEXT_EXECUTING_FUNCTIONS } from './sqlapi.ts'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import type { PoolClient } from "pg";
+import { db, pool, withBypass, withOrgContext } from "./db.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { listSchema, runUserSql, SQL_TEXT_EXECUTING_FUNCTIONS } from "./sqlapi.ts";
 
-const DB = !!process.env.OPENBOOKS_DB_URL
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test('governed SQL catalog enforces tenant RLS and denies credential surfaces', { skip: !DB }, async () => {
-  const first = await withBypass(() => createScratchOrg())
-  const second = await withBypass(() => createScratchOrg())
-  try {
-    const firstTaxGroupId = randomUUID()
-    const firstTaxCodeId = randomUUID()
-    const firstTaxMemberId = randomUUID()
-    const secondTaxGroupId = randomUUID()
-    const secondTaxCodeId = randomUUID()
-    const secondTaxMemberId = randomUUID()
-    await withBypass(async () => {
-      await db.execute(sql`
+test(
+  "governed SQL catalog enforces tenant RLS and denies credential surfaces",
+  { skip: !DB },
+  async () => {
+    const first = await withBypass(() => createScratchOrg());
+    const second = await withBypass(() => createScratchOrg());
+    try {
+      const firstTaxGroupId = randomUUID();
+      const firstTaxCodeId = randomUUID();
+      const firstTaxMemberId = randomUUID();
+      const secondTaxGroupId = randomUUID();
+      const secondTaxCodeId = randomUUID();
+      const secondTaxMemberId = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`
         insert into tax_codes (id, org_id, code, name)
         values
           (${firstTaxCodeId}, ${first.orgId}, ${`FIRST-${first.orgId.slice(0, 8)}`}, 'First tenant tax'),
           (${secondTaxCodeId}, ${second.orgId}, ${`SECOND-${second.orgId.slice(0, 8)}`}, 'Second tenant tax')
-      `)
-      await db.execute(sql`
+      `);
+        await db.execute(sql`
         insert into tax_groups (id, org_id, code, name)
         values
           (${firstTaxGroupId}, ${first.orgId}, ${`FIRST-${first.orgId.slice(0, 8)}`}, 'First tenant group'),
           (${secondTaxGroupId}, ${second.orgId}, ${`SECOND-${second.orgId.slice(0, 8)}`}, 'Second tenant group')
-      `)
-      await db.execute(sql`
+      `);
+        await db.execute(sql`
         insert into tax_group_members (id, tax_group_id, tax_code_id, sequence)
         values
           (${firstTaxMemberId}, ${firstTaxGroupId}, ${firstTaxCodeId}, 1),
           (${secondTaxMemberId}, ${secondTaxGroupId}, ${secondTaxCodeId}, 1)
-      `)
-    })
+      `);
+      });
 
-    const firstRows = await runUserSql(
-      'select distinct org_id::text as org_id from accounts order by org_id',
-      { orgId: first.orgId },
-    )
-    const secondRows = await runUserSql(
-      'select distinct org_id::text as org_id from accounts order by org_id',
-      { orgId: second.orgId },
-    )
-    assert.deepEqual(firstRows.rows, [{ org_id: first.orgId }])
-    assert.deepEqual(secondRows.rows, [{ org_id: second.orgId }])
-    const boundary = await runUserSql(
-      `select current_setting('transaction_read_only') as read_only,
+      const firstRows = await runUserSql(
+        "select distinct org_id::text as org_id from accounts order by org_id",
+        { orgId: first.orgId },
+      );
+      const secondRows = await runUserSql(
+        "select distinct org_id::text as org_id from accounts order by org_id",
+        { orgId: second.orgId },
+      );
+      assert.deepEqual(firstRows.rows, [{ org_id: first.orgId }]);
+      assert.deepEqual(secondRows.rows, [{ org_id: second.orgId }]);
+      const boundary = await runUserSql(
+        `select current_setting('transaction_read_only') as read_only,
               current_user as current_user,
               current_schema as current_schema,
               current_setting('app.current_org') as current_org,
               current_setting('app.bypass_rls') as bypass_rls`,
-      { orgId: first.orgId },
-    )
-    assert.deepEqual(boundary.rows, [{
-      read_only: 'on',
-      current_user: 'openbooks_read',
-      current_schema: 'openbooks_query',
-      current_org: first.orgId,
-      bypass_rls: 'off',
-    }])
-    const capped = await runUserSql('select generate_series(1, 3) as value', {
-      orgId: first.orgId,
-      maxRows: 2,
-    })
-    assert.deepEqual(capped.rows, [{ value: 1 }, { value: 2 }])
-    assert.equal(capped.truncated, true)
-    await assert.rejects(
-      runUserSql("select repeat('x', 5000) as payload", {
+        { orgId: first.orgId },
+      );
+      assert.deepEqual(boundary.rows, [
+        {
+          read_only: "on",
+          current_user: "openbooks_read",
+          current_schema: "openbooks_query",
+          current_org: first.orgId,
+          bypass_rls: "off",
+        },
+      ]);
+      const capped = await runUserSql("select generate_series(1, 3) as value", {
         orgId: first.orgId,
-        maxBytes: 200,
-      }),
-      /query result exceeds 200 bytes/,
-    )
-    await assert.rejects(
-      runUserSql('select lo_create(0)', { orgId: first.orgId }),
-      /read-only transaction/i,
-    )
-    await assert.rejects(
-      runUserSql('select pg_sleep(0.1)', { orgId: first.orgId, timeoutMs: 20 }),
-      /statement timeout|canceling statement/i,
-    )
-    const firstTaxMembers = await runUserSql(
-      'select id::text as id from tax_group_members order by id',
-      { orgId: first.orgId },
-    )
-    const secondTaxMembers = await runUserSql(
-      'select id::text as id from tax_group_members order by id',
-      { orgId: second.orgId },
-    )
-    assert.deepEqual(firstTaxMembers.rows, [{ id: firstTaxMemberId }])
-    assert.deepEqual(secondTaxMembers.rows, [{ id: secondTaxMemberId }])
+        maxRows: 2,
+      });
+      assert.deepEqual(capped.rows, [{ value: 1 }, { value: 2 }]);
+      assert.equal(capped.truncated, true);
+      await assert.rejects(
+        runUserSql("select repeat('x', 5000) as payload", {
+          orgId: first.orgId,
+          maxBytes: 200,
+        }),
+        /query result exceeds 200 bytes/,
+      );
+      await assert.rejects(
+        runUserSql("select lo_create(0)", { orgId: first.orgId }),
+        /read-only transaction/i,
+      );
+      await assert.rejects(
+        runUserSql("select pg_sleep(0.1)", { orgId: first.orgId, timeoutMs: 20 }),
+        /statement timeout|canceling statement/i,
+      );
+      const firstTaxMembers = await runUserSql(
+        "select id::text as id from tax_group_members order by id",
+        { orgId: first.orgId },
+      );
+      const secondTaxMembers = await runUserSql(
+        "select id::text as id from tax_group_members order by id",
+        { orgId: second.orgId },
+      );
+      assert.deepEqual(firstTaxMembers.rows, [{ id: firstTaxMemberId }]);
+      assert.deepEqual(secondTaxMembers.rows, [{ id: secondTaxMemberId }]);
 
-    const catalog = await listSchema(first.orgId, { payrollRead: true })
-    const byName = new Map(catalog.map((relation) => [relation.name, relation]))
-    for (const forbidden of [
-      'users',
-      'user_org_access',
-      'api_keys',
-      'connections',
-      'orgs',
-      'qbd_sessions',
-      'sftp_servers',
-      'bank_feed_connections',
-      'payment_links',
-      'psp_provider_configs',
-      'tax_rate_provider_configs',
-    ]) {
-      assert.equal(byName.has(forbidden), false, `${forbidden} must not be introspectable`)
-    }
-    assert.ok(byName.has('accounts'))
-    assert.ok(byName.has('journal_entries'))
-    assert.ok(catalog.length > 0)
-    const accountId = byName.get('accounts')?.columns.find((column) => column.name === 'id')
-    assert.equal(accountId?.isKey, false, 'a governed view column is not a declared unique key')
-    assert.equal(
-      byName.get('party_bank_accounts')?.columns.some((column) => column.name === 'account_number_encrypted'),
-      false,
-    )
-    assert.equal(
-      byName.get('vendor_roles')?.columns.some((column) => column.name === 'tin_encrypted'),
-      false,
-    )
+      const catalog = await listSchema(first.orgId, { payrollRead: true });
+      const byName = new Map(catalog.map((relation) => [relation.name, relation]));
+      for (const forbidden of [
+        "users",
+        "user_org_access",
+        "api_keys",
+        "connections",
+        "orgs",
+        "qbd_sessions",
+        "sftp_servers",
+        "bank_feed_connections",
+        "payment_links",
+        "psp_provider_configs",
+        "tax_rate_provider_configs",
+      ]) {
+        assert.equal(byName.has(forbidden), false, `${forbidden} must not be introspectable`);
+      }
+      assert.ok(byName.has("accounts"));
+      assert.ok(byName.has("journal_entries"));
+      assert.ok(catalog.length > 0);
+      const accountId = byName.get("accounts")?.columns.find((column) => column.name === "id");
+      assert.equal(accountId?.isKey, false, "a governed view column is not a declared unique key");
+      assert.equal(
+        byName
+          .get("party_bank_accounts")
+          ?.columns.some((column) => column.name === "account_number_encrypted"),
+        false,
+      );
+      assert.equal(
+        byName.get("vendor_roles")?.columns.some((column) => column.name === "tin_encrypted"),
+        false,
+      );
 
-    await assert.rejects(
-      runUserSql('select password_hash from public.users', { orgId: first.orgId }),
-      /permission denied/,
-    )
-    await assert.rejects(
-      runUserSql('select * from public.user_org_access', { orgId: first.orgId }),
-      /permission denied/,
-    )
-    await assert.rejects(
-      runUserSql('select * from public.accounts', { orgId: first.orgId }),
-      /permission denied/,
-    )
-    await assert.rejects(
-      runUserSql(
-        `with changed as materialized (
+      await assert.rejects(
+        runUserSql("select password_hash from public.users", { orgId: first.orgId }),
+        /permission denied/,
+      );
+      await assert.rejects(
+        runUserSql("select * from public.user_org_access", { orgId: first.orgId }),
+        /permission denied/,
+      );
+      await assert.rejects(
+        runUserSql("select * from public.accounts", { orgId: first.orgId }),
+        /permission denied/,
+      );
+      await assert.rejects(
+        runUserSql(
+          `with changed as materialized (
            select pg_catalog."set_config"('app.current_org', '${second.orgId}', true)
          )
          select distinct account.org_id::text as org_id
            from accounts account cross join changed`,
-        { orgId: first.orgId },
-      ),
-      /set_config\(\) is not allowed|permission denied for function set_config/,
-    )
-    await assert.rejects(
-      runUserSql(
-        `select U&"\\0073et_config"('app.current_org', '${second.orgId}', true)`,
-        { orgId: first.orgId },
-      ),
-      /set_config\(\) is not allowed/,
-    )
-    const executableDefiners = await runUserSql(
-      `select procedure.proname as name
+          { orgId: first.orgId },
+        ),
+        /set_config\(\) is not allowed|permission denied for function set_config/,
+      );
+      await assert.rejects(
+        runUserSql(`select U&"\\0073et_config"('app.current_org', '${second.orgId}', true)`, {
+          orgId: first.orgId,
+        }),
+        /set_config\(\) is not allowed/,
+      );
+      const executableDefiners = await runUserSql(
+        `select procedure.proname as name
          from pg_catalog.pg_proc procedure
          join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
         where namespace.nspname = 'public'
@@ -168,202 +174,300 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
             'openbooks_read', procedure.oid, 'execute'
           )
         order by procedure.proname`,
-      { orgId: first.orgId },
-    )
-    assert.deepEqual(executableDefiners.rows, [{ name: 'openbooks_query_org_id' }])
-    await assert.rejects(
-      runUserSql('select * from pg_temp.openbooks_query_context', { orgId: first.orgId }),
-      /permission denied/,
-    )
-    await assert.rejects(
-      runUserSql('select account_number_encrypted from party_bank_accounts', { orgId: first.orgId }),
-      /does not exist/,
-    )
-    await assert.rejects(
-      runUserSql('select tin_encrypted from vendor_roles', { orgId: first.orgId }),
-      /does not exist/,
-    )
-  } finally {
-    await withBypass(() => dropScratchOrg(second.orgId))
-    await withBypass(() => dropScratchOrg(first.orgId))
-  }
-})
-
-test('the read role cannot execute SQL text, so console SQL cannot return to the application login', { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    const escape = "select pg_catalog.query_to_xml('select pg_catalog.set_config(''role'', ''none'', true)', false, false, '') as x"
-    await assert.rejects(runUserSql(escape, { orgId: org.orgId }), /query_to_xml\(\) is not allowed in user SQL/)
-    // Beneath the text checker, PostgreSQL refuses the same statement in the
-    // exact session the governed transaction builds on the runtime login.
-    const client = await withOrgContext(org.orgId, () => pool.connect())
-    try {
-      await client.query('begin transaction read only')
-      await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)", [org.orgId])
-      await client.query('set local role openbooks_read')
-      await assert.rejects(client.query(escape), /permission denied for function query_to_xml/)
-      await client.query('rollback')
+        { orgId: first.orgId },
+      );
+      assert.deepEqual(executableDefiners.rows, [{ name: "openbooks_query_org_id" }]);
+      await assert.rejects(
+        runUserSql("select * from pg_temp.openbooks_query_context", { orgId: first.orgId }),
+        /permission denied/,
+      );
+      await assert.rejects(
+        runUserSql("select account_number_encrypted from party_bank_accounts", {
+          orgId: first.orgId,
+        }),
+        /does not exist/,
+      );
+      await assert.rejects(
+        runUserSql("select tin_encrypted from vendor_roles", { orgId: first.orgId }),
+        /does not exist/,
+      );
     } finally {
-      client.release()
+      await withBypass(() => dropScratchOrg(second.orgId));
+      await withBypass(() => dropScratchOrg(first.orgId));
     }
-    const executable = await withBypass(() => db.execute<{ fn: string }>(sql`
+  },
+);
+
+test(
+  "the read role cannot execute SQL text, so console SQL cannot return to the application login",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const escape =
+        "select pg_catalog.query_to_xml('select pg_catalog.set_config(''role'', ''none'', true)', false, false, '') as x";
+      await assert.rejects(
+        runUserSql(escape, { orgId: org.orgId }),
+        /query_to_xml\(\) is not allowed in user SQL/,
+      );
+      // Beneath the text checker, PostgreSQL refuses the same statement in the
+      // exact session the governed transaction builds on the runtime login.
+      const client = await withOrgContext(org.orgId, () => pool.connect());
+      try {
+        await client.query("begin transaction read only");
+        await client.query(
+          "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+          [org.orgId],
+        );
+        await client.query("set local role openbooks_read");
+        await assert.rejects(client.query(escape), /permission denied for function query_to_xml/);
+        await client.query("rollback");
+      } finally {
+        client.release();
+      }
+      const executable = await withBypass(() =>
+        db.execute<{ fn: string }>(
+          sql`
       select p.oid::regprocedure::text as fn from pg_proc p
        where p.pronamespace = 'pg_catalog'::regnamespace
-         and p.proname::text = any(${`{${SQL_TEXT_EXECUTING_FUNCTIONS.join(',')}}`}::text[])
-         and has_function_privilege('openbooks_read', p.oid, 'EXECUTE')`, 'objects'))
-    assert.deepEqual(executable, [])
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('payroll relations in the governed catalog need payroll.read, however the query reaches them', { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    for (const reader of [
-      'select count(*) as n from pay_stubs',
-      'with x as (select * from employee_pay_components) select count(*) as n from x',
-      'select count(*) as n from accounts a where exists (select 1 from employee_payroll_profiles p where p.org_id = a.org_id)',
-    ]) {
-      await assert.rejects(runUserSql(reader, { orgId: org.orgId }), /requires the payroll\.read permission: this query reads (employee_pay_components|employee_payroll_profiles|pay_stubs)/, reader)
-      const granted = await runUserSql(reader, { orgId: org.orgId, payrollRead: true })
-      assert.equal(granted.rowCount, 1)
+         and p.proname::text = any(${`{${SQL_TEXT_EXECUTING_FUNCTIONS.join(",")}}`}::text[])
+         and has_function_privilege('openbooks_read', p.oid, 'EXECUTE')`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(executable, []);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
-    // Relations outside payroll, including construction pay applications, stay open.
-    assert.equal((await runUserSql('select count(*) as n from pay_applications', { orgId: org.orgId })).rowCount, 1)
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+  },
+);
 
-test('governed SQL stays available while the ordinary request pool is saturated', { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  const heldClients: PoolClient[] = []
-  try {
-    assert.equal(pool.options.max, 10)
-    // Pin an explicit tenant scope while saturating: pool.connect routes
-    // through the ambient context, and the integration harness runs under
-    // bypass — without the scope these holders would occupy the small
-    // bypass pool instead of the ordinary request pool under test.
-    await withOrgContext(org.orgId, async () => {
-      for (let index = 0; index < pool.options.max; index += 1) {
-        heldClients.push(await pool.connect())
+test(
+  "payroll relations in the governed catalog need payroll.read, however the query reaches them",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      for (const reader of [
+        "select count(*) as n from pay_stubs",
+        "with x as (select * from employee_pay_components) select count(*) as n from x",
+        "select count(*) as n from accounts a where exists (select 1 from employee_payroll_profiles p where p.org_id = a.org_id)",
+      ]) {
+        await assert.rejects(
+          runUserSql(reader, { orgId: org.orgId }),
+          /requires the payroll\.read permission: this query reads (employee_pay_components|employee_payroll_profiles|pay_stubs)/,
+          reader,
+        );
+        const granted = await runUserSql(reader, { orgId: org.orgId, payrollRead: true });
+        assert.equal(granted.rowCount, 1);
       }
-    })
-
-    const operations = Promise.all([
-      runUserSql('select 42 as answer', { orgId: org.orgId }),
-      listSchema(org.orgId),
-    ])
-    let outcome:
-      | { ok: true; value: Awaited<typeof operations> }
-      | { ok: false; error: unknown }
-      | undefined
-    const settled = operations.then(
-      (value) => { outcome = { ok: true, value }; return outcome },
-      (error: unknown) => { outcome = { ok: false, error }; return outcome },
-    )
-
-    for (let turn = 0; turn < 2_000 && !outcome && pool.waitingCount === 0; turn += 1) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 5))
+      // Relations outside payroll, including construction pay applications, stay open.
+      assert.equal(
+        (await runUserSql("select count(*) as n from pay_applications", { orgId: org.orgId }))
+          .rowCount,
+        1,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
-    const ordinaryWaitersWhileHeld = pool.waitingCount
-    const completedWhileHeld = outcome !== undefined
+  },
+);
 
-    for (const client of heldClients.splice(0)) client.release()
-    const finalOutcome = await settled
-    if (!finalOutcome.ok) throw finalOutcome.error
+test(
+  "governed SQL stays available while the ordinary request pool is saturated",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const heldClients: PoolClient[] = [];
+    try {
+      assert.equal(pool.options.max, 10);
+      // Pin an explicit tenant scope while saturating: pool.connect routes
+      // through the ambient context, and the integration harness runs under
+      // bypass — without the scope these holders would occupy the small
+      // bypass pool instead of the ordinary request pool under test.
+      await withOrgContext(org.orgId, async () => {
+        for (let index = 0; index < pool.options.max; index += 1) {
+          heldClients.push(await pool.connect());
+        }
+      });
 
-    assert.equal(ordinaryWaitersWhileHeld, 0)
-    assert.equal(completedWhileHeld, true)
-    assert.deepEqual(finalOutcome.value[0].rows, [{ answer: 42 }])
-    assert.ok(finalOutcome.value[1].length > 0)
-  } finally {
-    for (const client of heldClients) client.release()
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+      const operations = Promise.all([
+        runUserSql("select 42 as answer", { orgId: org.orgId }),
+        listSchema(org.orgId),
+      ]);
+      let outcome:
+        { ok: true; value: Awaited<typeof operations> } | { ok: false; error: unknown } | undefined;
+      const settled = operations.then(
+        (value) => {
+          outcome = { ok: true, value };
+          return outcome;
+        },
+        (error: unknown) => {
+          outcome = { ok: false, error };
+          return outcome;
+        },
+      );
 
-test('governed SQL redacts private CRM bodies and time-entry memos after repeated native catalog refresh', { skip: !DB, timeout: 120_000 }, async () => {
-  // Rebuilding the supported catalog must preserve private-field projections.
-  await pool.query('select public.openbooks_refresh_query_catalog()')
-  await pool.query('select public.openbooks_refresh_query_catalog()')
+      for (let turn = 0; turn < 2_000 && !outcome && pool.waitingCount === 0; turn += 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      }
+      const ordinaryWaitersWhileHeld = pool.waitingCount;
+      const completedWhileHeld = outcome !== undefined;
 
-  const org = await withBypass(() => createScratchOrg())
-  const privateActivityId = randomUUID()
-  const publicActivityId = randomUUID()
-  const privateTimeEntryId = randomUUID()
-  const publicTimeEntryId = randomUUID()
-  try {
-    await withBypass(async () => {
-      await db.execute(sql`
+      for (const client of heldClients.splice(0)) client.release();
+      const finalOutcome = await settled;
+      if (!finalOutcome.ok) throw finalOutcome.error;
+
+      assert.equal(ordinaryWaitersWhileHeld, 0);
+      assert.equal(completedWhileHeld, true);
+      assert.deepEqual(finalOutcome.value[0].rows, [{ answer: 42 }]);
+      assert.ok(finalOutcome.value[1].length > 0);
+    } finally {
+      for (const client of heldClients) client.release();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "governed SQL redacts private CRM bodies and time-entry memos after repeated native catalog refresh",
+  { skip: !DB, timeout: 120_000 },
+  async () => {
+    // Rebuilding the supported catalog must preserve private-field projections.
+    await pool.query("select public.openbooks_refresh_query_catalog()");
+    await pool.query("select public.openbooks_refresh_query_catalog()");
+
+    const org = await withBypass(() => createScratchOrg());
+    const privateActivityId = randomUUID();
+    const publicActivityId = randomUUID();
+    const privateTimeEntryId = randomUUID();
+    const publicTimeEntryId = randomUUID();
+    try {
+      await withBypass(async () => {
+        await db.execute(sql`
         insert into crm_activities
           (id, org_id, kind, status, subject, body, is_private)
         values
           (${privateActivityId}, ${org.orgId}, 'note', 'planned', 'Private note', 'CRM secret body', true),
           (${publicActivityId}, ${org.orgId}, 'note', 'planned', 'Public note', 'CRM public body', false)
-      `)
-      await db.execute(sql`
+      `);
+        await db.execute(sql`
         insert into time_entries
           (id, org_id, employee_party_id, worked_on, hours, memo, memo_is_private, status)
         values
           (${privateTimeEntryId}, ${org.orgId}, ${org.customerId}, ${org.date}, '2.5000', 'Payroll secret memo', true, 'approved'),
           (${publicTimeEntryId}, ${org.orgId}, ${org.customerId}, ${org.date}, '1.2500', 'Timesheet public memo', false, 'approved')
-      `)
-    })
+      `);
+      });
 
-    const activities = await runUserSql(
-      `select id::text as id, subject, body, is_private
+      const activities = await runUserSql(
+        `select id::text as id, subject, body, is_private
         from crm_activities
         where id in ('${privateActivityId}', '${publicActivityId}')
         order by subject`,
-      { orgId: org.orgId },
-    )
-    assert.deepEqual(activities.rows, [
-      { id: privateActivityId, subject: 'Private note', body: null, is_private: true },
-      { id: publicActivityId, subject: 'Public note', body: 'CRM public body', is_private: false },
-    ])
+        { orgId: org.orgId },
+      );
+      assert.deepEqual(activities.rows, [
+        { id: privateActivityId, subject: "Private note", body: null, is_private: true },
+        {
+          id: publicActivityId,
+          subject: "Public note",
+          body: "CRM public body",
+          is_private: false,
+        },
+      ]);
 
-    const timeEntries = await runUserSql(
-      `select id::text as id, hours::text as hours, memo, memo_is_private
+      const timeEntries = await runUserSql(
+        `select id::text as id, hours::text as hours, memo, memo_is_private
         from time_entries
         where id in ('${privateTimeEntryId}', '${publicTimeEntryId}')
         order by hours desc`,
-      { orgId: org.orgId, payrollRead: true },
-    )
-    assert.deepEqual(timeEntries.rows, [
-      { id: privateTimeEntryId, hours: '2.5000', memo: null, memo_is_private: true },
-      { id: publicTimeEntryId, hours: '1.2500', memo: 'Timesheet public memo', memo_is_private: false },
-    ])
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
-
-
-test('shared payroll-bearing relations and their schema need actual payroll authority', { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    for (const relation of ['journal_entries', 'journal_lines', 'documents', 'document_lines', 'time_entries', 'labor_cost_rates', 'field_ticket_labor_lines', 'hrm_benefit_program_revisions']) {
-      const reader = `with private_rows as (select * from ${relation}) select count(*) as n from private_rows`
-      await assert.rejects(runUserSql(reader, { orgId: org.orgId }), /payroll.read/, relation)
-      assert.equal((await runUserSql(reader, { orgId: org.orgId, payrollRead: true, expenseRead: true })).rowCount, 1)
+        { orgId: org.orgId, payrollRead: true },
+      );
+      assert.deepEqual(timeEntries.rows, [
+        { id: privateTimeEntryId, hours: "2.5000", memo: null, memo_is_private: true },
+        {
+          id: publicTimeEntryId,
+          hours: "1.2500",
+          memo: "Timesheet public memo",
+          memo_is_private: false,
+        },
+      ]);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
-    // The document relations also carry every employee's expense reports.
-    for (const relation of ['documents', 'document_lines', 'document_line_tax_components', 'document_links']) {
-      const reader = `with private_rows as (select * from ${relation}) select count(*) as n from private_rows`
-      await assert.rejects(runUserSql(reader, { orgId: org.orgId, payrollRead: true }), /expenses\.read/, relation)
+  },
+);
+
+test(
+  "shared payroll-bearing relations and their schema need actual payroll authority",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      for (const relation of [
+        "journal_entries",
+        "journal_lines",
+        "documents",
+        "document_lines",
+        "time_entries",
+        "labor_cost_rates",
+        "field_ticket_labor_lines",
+        "hrm_benefit_program_revisions",
+      ]) {
+        const reader = `with private_rows as (select * from ${relation}) select count(*) as n from private_rows`;
+        await assert.rejects(runUserSql(reader, { orgId: org.orgId }), /payroll.read/, relation);
+        assert.equal(
+          (await runUserSql(reader, { orgId: org.orgId, payrollRead: true, expenseRead: true }))
+            .rowCount,
+          1,
+        );
+      }
+      // The document relations also carry every employee's expense reports.
+      for (const relation of [
+        "documents",
+        "document_lines",
+        "document_line_tax_components",
+        "document_links",
+      ]) {
+        const reader = `with private_rows as (select * from ${relation}) select count(*) as n from private_rows`;
+        await assert.rejects(
+          runUserSql(reader, { orgId: org.orgId, payrollRead: true }),
+          /expenses\.read/,
+          relation,
+        );
+      }
+      const payrollCatalog = new Set(
+        (await listSchema(org.orgId, { payrollRead: true })).map((table) => table.name),
+      );
+      assert.equal(
+        payrollCatalog.has("documents"),
+        false,
+        "expense-bearing relations are not listed without expense read",
+      );
+      assert.ok(payrollCatalog.has("journal_lines"));
+      assert.ok(
+        new Set(
+          (await listSchema(org.orgId, { payrollRead: true, expenseRead: true })).map(
+            (table) => table.name,
+          ),
+        ).has("documents"),
+      );
+      const publicCatalog = new Set((await listSchema(org.orgId)).map((table) => table.name));
+      const authorizedCatalog = new Set(
+        (await listSchema(org.orgId, { payrollRead: true })).map((table) => table.name),
+      );
+      assert.ok(publicCatalog.has("accounts"));
+      assert.equal(publicCatalog.has("pay_stubs"), false);
+      assert.equal(publicCatalog.has("journal_lines"), false);
+      assert.ok(authorizedCatalog.has("journal_lines"));
+      assert.equal(
+        (await runUserSql("select 42 as answer; -- trailing", { orgId: org.orgId })).rows[0]
+          ?.answer,
+        42,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
-    const payrollCatalog = new Set((await listSchema(org.orgId, { payrollRead: true })).map(table => table.name))
-    assert.equal(payrollCatalog.has('documents'), false, 'expense-bearing relations are not listed without expense read')
-    assert.ok(payrollCatalog.has('journal_lines'))
-    assert.ok(new Set((await listSchema(org.orgId, { payrollRead: true, expenseRead: true })).map(table => table.name)).has('documents'))
-    const publicCatalog = new Set((await listSchema(org.orgId)).map(table => table.name))
-    const authorizedCatalog = new Set((await listSchema(org.orgId, { payrollRead: true })).map(table => table.name))
-    assert.ok(publicCatalog.has('accounts'))
-    assert.equal(publicCatalog.has('pay_stubs'), false)
-    assert.equal(publicCatalog.has('journal_lines'), false)
-    assert.ok(authorizedCatalog.has('journal_lines'))
-    assert.equal((await runUserSql('select 42 as answer; -- trailing', { orgId: org.orgId })).rows[0]?.answer, 42)
-  } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
-})
+  },
+);

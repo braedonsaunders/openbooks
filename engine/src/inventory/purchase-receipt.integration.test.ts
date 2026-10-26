@@ -13,8 +13,11 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * stock a second time, and any invoice/order price difference lands in PPV.
  * Runs in a child with React's server condition like the sales counterpart.
  */
-test("goods receipts bring stock in once, govern billing, and clear received-not-billed", { skip: !DB }, () => {
-  const source = `
+test(
+  "goods receipts bring stock in once, govern billing, and clear received-not-billed",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -217,23 +220,24 @@ test("goods receipts bring stock in once, govern billing, and clear received-not
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /PURCHASE-RECEIPT-EXACTLY-ONCE/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /PURCHASE-RECEIPT-EXACTLY-ONCE/);
+  },
+);
 
 test("goods receipt rejects a non-calendar date without mutating the order", { skip: !DB }, () => {
   const source = `
@@ -316,8 +320,11 @@ test("goods receipt rejects a non-calendar date without mutating the order", { s
   assert.match(result.stdout, /PURCHASE-RECEIPT-DATE-FENCE/);
 });
 
-test("voiding a goods receipt unwinds stock and restores counters, then the order voids", { skip: !DB }, () => {
-  const source = `
+test(
+  "voiding a goods receipt unwinds stock and restores counters, then the order voids",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -395,26 +402,30 @@ test("voiding a goods receipt unwinds stock and restores counters, then the orde
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /PURCHASE-RECEIPT-VOID-UNWIND/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /PURCHASE-RECEIPT-VOID-UNWIND/);
+  },
+);
 
-test("a reversed goods receipt is dead coverage: the later bill refuses instead of receiving again", { skip: !DB }, () => {
-  const source = `
+test(
+  "a reversed goods receipt is dead coverage: the later bill refuses instead of receiving again",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -510,20 +521,21 @@ test("a reversed goods receipt is dead coverage: the later bill refuses instead 
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /PURCHASE-RECEIPT-REVERSED-COVERAGE/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /PURCHASE-RECEIPT-REVERSED-COVERAGE/);
+  },
+);

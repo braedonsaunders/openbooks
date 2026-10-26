@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { quoteFromRate, sumComponentTax } from "../tax/rate-providers.ts";
-import { summarizeSettlement, parseStripeBalanceTransactions, parseRecurlySettlement } from "../payments/psp-settlement.ts";
+import {
+  summarizeSettlement,
+  parseStripeBalanceTransactions,
+  parseRecurlySettlement,
+} from "../payments/psp-settlement.ts";
 import { assertTracking } from "../inventory/tracking.ts";
 import { InventoryError } from "../inventory/contracts.ts";
 import { prorate } from "../billing/subscription-billing.ts";
@@ -29,7 +33,16 @@ test("summarizeSettlement rolls charges fees refunds fx", () => {
 
 test("parseStripeBalanceTransactions converts cents", () => {
   const p = parseStripeBalanceTransactions(
-    [{ id: "txn_1", type: "charge", amount: 1250, fee: 36, currency: "usd", description: "Invoice" }],
+    [
+      {
+        id: "txn_1",
+        type: "charge",
+        amount: 1250,
+        fee: 36,
+        currency: "usd",
+        description: "Invoice",
+      },
+    ],
     "po_1",
     "2026-07-01",
   );
@@ -54,9 +67,17 @@ test("parseRecurlySettlement maps lines", () => {
 });
 
 test("assertTracking enforces lot and serial", () => {
-  assert.throws(() => assertTracking({ tracking: "lot" }, { quantity: "1" }, "receipt"), InventoryError);
-  assert.throws(() => assertTracking({ tracking: "serial" }, { quantity: "2", serialId: "x" }, "issue"), InventoryError);
-  assert.doesNotThrow(() => assertTracking({ tracking: "lot" }, { quantity: "5", lotId: "l1" }, "receipt"));
+  assert.throws(
+    () => assertTracking({ tracking: "lot" }, { quantity: "1" }, "receipt"),
+    InventoryError,
+  );
+  assert.throws(
+    () => assertTracking({ tracking: "serial" }, { quantity: "2", serialId: "x" }, "issue"),
+    InventoryError,
+  );
+  assert.doesNotThrow(() =>
+    assertTracking({ tracking: "lot" }, { quantity: "5", lotId: "l1" }, "receipt"),
+  );
   assert.doesNotThrow(() => assertTracking({ tracking: "none" }, { quantity: "5" }, "receipt"));
 });
 

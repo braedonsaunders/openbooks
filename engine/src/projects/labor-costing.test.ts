@@ -1,7 +1,12 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { computeCostRate, convertFixedLaborComponents, convertLaborWage, parseLaborCostComponents, type LaborCostComponent } from "./labor-costing.ts";
-
+import {
+  computeCostRate,
+  convertFixedLaborComponents,
+  convertLaborWage,
+  parseLaborCostComponents,
+  type LaborCostComponent,
+} from "./labor-costing.ts";
 
 const cfg = (components: LaborCostComponent[], hoursPerDay = 8) => ({ hoursPerDay, components });
 
@@ -12,13 +17,25 @@ test("wage only — multiplier applies", () => {
 });
 
 test("percent_of_wage scales with overtime when flagged", () => {
-  const burden: LaborCostComponent = { key: "b", name: "Burden", kind: "percent_of_wage", value: "13", scaleWithOvertime: true };
+  const burden: LaborCostComponent = {
+    key: "b",
+    name: "Burden",
+    kind: "percent_of_wage",
+    value: "13",
+    scaleWithOvertime: true,
+  };
   // 40×1.5 + 13% of 60 = 60 + 7.80
   assert.equal(computeCostRate("40", "1.5", cfg([burden])), "67.8000");
 });
 
 test("percent_of_wage on base wage when not scaled", () => {
-  const burden: LaborCostComponent = { key: "b", name: "Burden", kind: "percent_of_wage", value: "13", scaleWithOvertime: false };
+  const burden: LaborCostComponent = {
+    key: "b",
+    name: "Burden",
+    kind: "percent_of_wage",
+    value: "13",
+    scaleWithOvertime: false,
+  };
   // 40×1.5 + 13% of 40 = 60 + 5.20
   assert.equal(computeCostRate("40", "1.5", cfg([burden])), "65.2000");
 });
@@ -32,14 +49,26 @@ test("per_day prorates by hoursPerDay and never scales", () => {
 
 test("per_hour flat vs scaled", () => {
   const flat: LaborCostComponent = { key: "f", name: "Flat", kind: "per_hour", value: "3" };
-  const scaled: LaborCostComponent = { key: "s", name: "Scaled", kind: "per_hour", value: "3", scaleWithOvertime: true };
+  const scaled: LaborCostComponent = {
+    key: "s",
+    name: "Scaled",
+    kind: "per_hour",
+    value: "3",
+    scaleWithOvertime: true,
+  };
   assert.equal(computeCostRate("40", "1.5", cfg([flat])), "63.0000");
   assert.equal(computeCostRate("40", "1.5", cfg([scaled])), "64.5000");
 });
 
 test("stacked labor costing: burden percentage plus per diem", () => {
   const comps: LaborCostComponent[] = [
-    { key: "burden", name: "Payroll burden (est.)", kind: "percent_of_wage", value: "14", scaleWithOvertime: true },
+    {
+      key: "burden",
+      name: "Payroll burden (est.)",
+      kind: "percent_of_wage",
+      value: "14",
+      scaleWithOvertime: true,
+    },
     { key: "perdiem", name: "Per diem", kind: "per_day", value: "60" },
   ];
   // 38×1 + 5.32 + 7.50 = 50.82
@@ -104,9 +133,18 @@ test("a negative worker-comp group rate refuses instead of reducing the rate", (
 });
 
 test("the shared component parser refuses garbage the write API would", () => {
-  assert.throws(() => parseLaborCostComponents([{ kind: "annual_bonus", value: "5" }]), /component 1: unknown kind/);
-  assert.throws(() => parseLaborCostComponents([{ kind: "per_hour", value: "1.23456" }]), /at most 4 decimal places/);
-  assert.throws(() => parseLaborCostComponents([{ kind: "per_hour", value: "-2" }]), /cannot be negative/);
+  assert.throws(
+    () => parseLaborCostComponents([{ kind: "annual_bonus", value: "5" }]),
+    /component 1: unknown kind/,
+  );
+  assert.throws(
+    () => parseLaborCostComponents([{ kind: "per_hour", value: "1.23456" }]),
+    /at most 4 decimal places/,
+  );
+  assert.throws(
+    () => parseLaborCostComponents([{ kind: "per_hour", value: "-2" }]),
+    /cannot be negative/,
+  );
   assert.deepEqual(parseLaborCostComponents(null), []);
   assert.deepEqual(parseLaborCostComponents([{ kind: "per_day", value: "75.50" }]), [
     { key: "c0", kind: "per_day", name: "Component", value: "75.5", scaleWithOvertime: false },

@@ -1,18 +1,20 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import { db, withBypassContext } from '@openbooks/engine/platform/db'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
-const stateKey = Symbol.for('openbooks.file-bulk-route-test')
-const state = { authz: null as {
-  user: { id: string; orgId: string }
-  permissions: Set<string>
-  allowedSubsidiaryIds: null
-} | null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.file-bulk-route-test");
+const state = {
+  authz: null as {
+    user: { id: string; orgId: string };
+    permissions: Set<string>;
+    allowedSubsidiaryIds: null;
+  } | null,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 // Faithful `can`: the bulk verdicts hinge on the documents.manage baseline
 // (manager deletes, viewer is skipped), so the mock must honour the
@@ -25,49 +27,53 @@ const mockAuthz = `
     return authz?.permissions?.has('*') || authz?.permissions?.has(permission) || false
   }
   export function subsidiaryScopeAllows() { return true }
-`
+`;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // The route factory resolves its session gate lazily through the
     // @/lib/authz alias at request time, so the hook must cover that alias
     // in addition to the route's relative import.
-    if (specifier === '../../../lib/authz') {
-      return { shortCircuit: true, url: 'mock:file-bulk-authz' }
+    if (specifier === "../../../lib/authz") {
+      return { shortCircuit: true, url: "mock:file-bulk-authz" };
     }
     // The route factory resolves its session gate lazily through the
     // @/lib/authz alias at request time: a separate branch, one parent
     // per branch, so the static wiring check keeps reading both edges.
-    if (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route')) {
-      return { shortCircuit: true, url: 'mock:file-bulk-authz' }
+    if (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route")) {
+      return { shortCircuit: true, url: "mock:file-bulk-authz" };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:file-bulk-authz') return { format: 'module', source: mockAuthz, shortCircuit: true }
-    return nextLoad(url, context)
+    if (url === "mock:file-bulk-authz")
+      return { format: "module", source: mockAuthz, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeSpecifier: string = './route.ts?file-bulk-test'
-const { POST } = (await import(routeSpecifier)) as typeof import('./route.ts')
+const routeSpecifier: string = "./route.ts?file-bulk-test";
+const { POST } = (await import(routeSpecifier)) as typeof import("./route.ts");
 // The factory's lazy session-gate import runs on every request, so the hook
 // must stay registered until the file's tests finish.
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 
 function bulkReq(body: unknown): Request {
-  return new Request('https://meta.fixture/api/file-cabinet/bulk', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+  return new Request("https://meta.fixture/api/file-cabinet/bulk", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-  })
+  });
 }
 
 async function isInactive(orgId: string, id: string): Promise<boolean | null> {
-  const r = (await db.execute<{ isInactive: boolean }>(sql`
+  const r = await db.execute<{ isInactive: boolean }>(
+    sql`
     select is_inactive as "isInactive" from files where id = ${id} and org_id = ${orgId}
-  `, 'objects'))
-  return r[0]?.isInactive ?? null
+  `,
+    "objects",
+  );
+  return r[0]?.isInactive ?? null;
 }
 
 /**
@@ -75,78 +81,80 @@ async function isInactive(orgId: string, id: string): Promise<boolean | null> {
  * id — not just counts — so the client can report a partial bulk as partial
  * and keep exactly the refused rows selected.
  */
-test('bulk delete reports per-row verdicts with counts that add up', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  const actorId = randomUUID()
-  const folder = randomUUID()
-  const fileA = randomUUID()
-  const fileB = randomUUID()
+test("bulk delete reports per-row verdicts with counts that add up", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = randomUUID();
+  const folder = randomUUID();
+  const fileA = randomUUID();
+  const fileB = randomUUID();
   try {
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into folders (id, org_id, parent_folder_id, name)
       values (${folder}, ${org.orgId}, null, 'F')
-    `))
-    await withBypassContext(() => db.execute(sql`
+    `),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into files (id, org_id, folder_id, name, content_type, size_bytes)
       values (${fileA}, ${org.orgId}, ${folder}, 'a.txt', 'text/plain', 3),
              (${fileB}, ${org.orgId}, ${folder}, 'b.txt', 'text/plain', 3)
-    `))
+    `),
+    );
 
     // A documents.read caller is a viewer, not a manager: both rows refuse
     // with the access reason and nothing is trashed.
     state.authz = {
       user: { id: actorId, orgId: org.orgId },
-      permissions: new Set(['documents.read']),
+      permissions: new Set(["documents.read"]),
       allowedSubsidiaryIds: null,
-    }
+    };
     {
-      const res = await POST(bulkReq({ action: 'delete', fileIds: [fileA, fileB] }))
-      assert.equal(res.status, 200)
+      const res = await POST(bulkReq({ action: "delete", fileIds: [fileA, fileB] }));
+      assert.equal(res.status, 200);
       const body = (await res.json()) as {
-        ok: boolean; done: number; skipped: number
-        results: { id: string; kind: string; ok: boolean; error?: string }[]
-      }
-      assert.equal(body.ok, true)
-      assert.equal(body.done, 0)
-      assert.equal(body.skipped, 2)
-      assert.deepEqual(
-        body.results,
-        [
-          { id: fileA, kind: 'file', ok: false, error: 'forbidden' },
-          { id: fileB, kind: 'file', ok: false, error: 'forbidden' },
-        ],
-      )
-      assert.equal(await isInactive(org.orgId, fileA), false)
-      assert.equal(await isInactive(org.orgId, fileB), false)
+        ok: boolean;
+        done: number;
+        skipped: number;
+        results: { id: string; kind: string; ok: boolean; error?: string }[];
+      };
+      assert.equal(body.ok, true);
+      assert.equal(body.done, 0);
+      assert.equal(body.skipped, 2);
+      assert.deepEqual(body.results, [
+        { id: fileA, kind: "file", ok: false, error: "forbidden" },
+        { id: fileB, kind: "file", ok: false, error: "forbidden" },
+      ]);
+      assert.equal(await isInactive(org.orgId, fileA), false);
+      assert.equal(await isInactive(org.orgId, fileB), false);
     }
 
     // A documents.manage caller trashes both rows with per-row success.
     state.authz = {
       user: { id: actorId, orgId: org.orgId },
-      permissions: new Set(['documents.manage']),
+      permissions: new Set(["documents.manage"]),
       allowedSubsidiaryIds: null,
-    }
+    };
     {
-      const res = await POST(bulkReq({ action: 'delete', fileIds: [fileA, fileB] }))
-      assert.equal(res.status, 200)
+      const res = await POST(bulkReq({ action: "delete", fileIds: [fileA, fileB] }));
+      assert.equal(res.status, 200);
       const body = (await res.json()) as {
-        ok: boolean; done: number; skipped: number
-        results: { id: string; kind: string; ok: boolean; error?: string }[]
-      }
-      assert.equal(body.done, 2)
-      assert.equal(body.skipped, 0)
-      assert.deepEqual(
-        body.results,
-        [
-          { id: fileA, kind: 'file', ok: true },
-          { id: fileB, kind: 'file', ok: true },
-        ],
-      )
-      assert.equal(await isInactive(org.orgId, fileA), true)
-      assert.equal(await isInactive(org.orgId, fileB), true)
+        ok: boolean;
+        done: number;
+        skipped: number;
+        results: { id: string; kind: string; ok: boolean; error?: string }[];
+      };
+      assert.equal(body.done, 2);
+      assert.equal(body.skipped, 0);
+      assert.deepEqual(body.results, [
+        { id: fileA, kind: "file", ok: true },
+        { id: fileB, kind: "file", ok: true },
+      ]);
+      assert.equal(await isInactive(org.orgId, fileA), true);
+      assert.equal(await isInactive(org.orgId, fileB), true);
     }
   } finally {
-    state.authz = null
-    await dropScratchOrg(org.orgId)
+    state.authz = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});

@@ -55,11 +55,12 @@ export function totpCode(
   counter.writeBigUInt64BE(BigInt(step));
   const digest = createHmac("sha1", key).update(counter).digest();
   const offset = digest[digest.length - 1]! & 15;
-  const binary = ((digest[offset]! & 127) << 24)
-    | (digest[offset + 1]! << 16)
-    | (digest[offset + 2]! << 8)
-    | digest[offset + 3]!;
-  return { code: String(binary % (10 ** digits)).padStart(digits, "0"), step };
+  const binary =
+    ((digest[offset]! & 127) << 24) |
+    (digest[offset + 1]! << 16) |
+    (digest[offset + 2]! << 8) |
+    digest[offset + 3]!;
+  return { code: String(binary % 10 ** digits).padStart(digits, "0"), step };
 }
 
 function equalCode(left: string, right: string): boolean {
@@ -79,14 +80,22 @@ export function verifyTotpCode(
   if (!/^\d{6}$/.test(normalized)) return null;
   for (const offset of [-1, 0, 1]) {
     const candidate = totpCode(secret, epochMs + offset * 30_000);
-    if (candidate && candidate.step > (lastUsedStep ?? -1) && equalCode(candidate.code, normalized)) {
+    if (
+      candidate &&
+      candidate.step > (lastUsedStep ?? -1) &&
+      equalCode(candidate.code, normalized)
+    ) {
       return candidate.step;
     }
   }
   return null;
 }
 
-export function totpProvisioningUri(input: { secret: string; email: string; issuer?: string }): string {
+export function totpProvisioningUri(input: {
+  secret: string;
+  email: string;
+  issuer?: string;
+}): string {
   const issuer = input.issuer?.trim() || "OpenBooks";
   const label = `${issuer}:${input.email}`;
   const params = new URLSearchParams({

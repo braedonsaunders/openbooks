@@ -14,20 +14,20 @@ export function normalizeHrmProcessTemplateInput(
   entityKey: string,
   body: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (entityKey !== 'hrm-process-templates') return body
+  if (entityKey !== "hrm-process-templates") return body;
   const hasSlots =
-    body.appliesEmployerSubsidiaryId !== undefined || body.appliesDepartmentId !== undefined
-  if (!hasSlots) return body
+    body.appliesEmployerSubsidiaryId !== undefined || body.appliesDepartmentId !== undefined;
+  if (!hasSlots) return body;
   const slot = (value: unknown): string | null => {
-    if (value === undefined || value === null || value === '') return null
-    return String(value)
-  }
-  const { appliesEmployerSubsidiaryId, appliesDepartmentId, ...rest } = body
+    if (value === undefined || value === null || value === "") return null;
+    return String(value);
+  };
+  const { appliesEmployerSubsidiaryId, appliesDepartmentId, ...rest } = body;
   return {
     ...rest,
     appliesTo: {
       employer_subsidiary_id: slot(appliesEmployerSubsidiaryId),
       department_id: slot(appliesDepartmentId),
     },
-  }
+  };
 }

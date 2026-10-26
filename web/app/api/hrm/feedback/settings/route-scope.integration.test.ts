@@ -16,8 +16,10 @@ const virtual = (source: string) => ({
 const authzUrl = pathToFileURL(process.cwd() + "/web/lib/authz.ts").href;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}");
-    if (specifier === "next/headers") return virtual("export function cookies() { throw new Error('no cookies in route test') }");
+    if (specifier === "next/navigation")
+      return virtual("export function redirect() {}; export function notFound() {}");
+    if (specifier === "next/headers")
+      return virtual("export function cookies() { throw new Error('no cookies in route test') }");
     if (
       specifier.endsWith("/lib/authz") &&
       (context.parentURL?.includes("/api/hrm/feedback/settings/") ||
@@ -42,7 +44,8 @@ registerHooks({
 
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET, POST } = await import("./route.ts");
 
 test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", async () => {
@@ -52,23 +55,34 @@ test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", 
   state.actorId = actorId;
   state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
   try {
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
         features: { hrm: true, hrmPerformance: true },
         hrm_feedback: { public_praise_by: "anyone" },
-      })}::jsonb where id = ${org.orgId}`));
+      })}::jsonb where id = ${org.orgId}`),
+    );
     const read = await GET(new Request("http://feedback.test/api/hrm/feedback/settings"));
     assert.equal(read.status, 403, "restricted HR actors cannot read org-wide feedback policy");
     assert.deepEqual(await read.json(), { error: "requires unrestricted subsidiary access" });
-    const response = await POST(new Request("http://feedback.test/api/hrm/feedback/settings", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ publicPraiseBy: "managers_and_hr" }),
-    }));
+    const response = await POST(
+      new Request("http://feedback.test/api/hrm/feedback/settings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ publicPraiseBy: "managers_and_hr" }),
+      }),
+    );
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
-    const stored = (await withBypassContext(() => db.execute<{ setting: string }>(sql`
-      select settings #>> '{hrm_feedback,public_praise_by}' as setting from orgs where id = ${org.orgId}`, "objects")))[0]?.setting;
+    const stored = (
+      await withBypassContext(() =>
+        db.execute<{ setting: string }>(
+          sql`
+      select settings #>> '{hrm_feedback,public_praise_by}' as setting from orgs where id = ${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]?.setting;
     assert.equal(stored, "anyone", "the refused org-wide policy change must not persist");
   } finally {
     state.allowedSubsidiaryIds = null;

@@ -79,9 +79,11 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (typeof specifier !== "string") return nextResolve(specifier, context);
     if (specifier.endsWith("/platform/db.ts")) return { url: "mock:db", shortCircuit: true };
-    if (specifier === "../../hrm/change-requests.ts") return { url: "mock:change-requests", shortCircuit: true };
+    if (specifier === "../../hrm/change-requests.ts")
+      return { url: "mock:change-requests", shortCircuit: true };
     if (specifier.endsWith("/flows/gates.ts")) return { url: "mock:gates", shortCircuit: true };
-    if (specifier === "../../automations/action-reasons.ts") return { url: "mock:action-reasons", shortCircuit: true };
+    if (specifier === "../../automations/action-reasons.ts")
+      return { url: "mock:action-reasons", shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -92,10 +94,17 @@ const hooks = registerHooks({
 });
 
 const adapterUrl = "./hrm-change-request.ts?hrm-change-request-adapter-test";
-const { hrmChangeRequestAdapter } = (await import(adapterUrl)) as typeof import("./hrm-change-request.ts");
+const { hrmChangeRequestAdapter } = (await import(
+  adapterUrl
+)) as typeof import("./hrm-change-request.ts");
 hooks.deregister();
 
-const CTX = { orgId: "org-1", actorId: "user-1", asOf: "2026-08-01T00:00:00Z", allowedSubsidiaryIds: null };
+const CTX = {
+  orgId: "org-1",
+  actorId: "user-1",
+  asOf: "2026-08-01T00:00:00Z",
+  allowedSubsidiaryIds: null,
+};
 
 test("an inbox submit classifies the stored draft before submitting it", async () => {
   Object.assign(adapterState, { refuse: false, validated: [], submitted: [] });

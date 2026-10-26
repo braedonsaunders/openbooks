@@ -1,25 +1,25 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
-import { payablePayeeBankAccountSql } from '@openbooks/engine/payments/run-readiness'
-import { subsidiaryVisibleFilter } from './subsidiaries'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/database";
+import { payablePayeeBankAccountSql } from "@openbooks/engine/payments/run-readiness";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
 
 export type PartyDebitMandateRow = {
-  id: string
-  mandateReference: string
-  scheme: 'nacha' | 'sepa_core' | 'sepa_b2b' | 'custom'
-  status: 'pending' | 'active' | 'suspended' | 'revoked' | 'expired'
-  partyBankAccountId: string
-  bankAccountLabel: string
-  signedOn: string | null
-  validFrom: string | null
-  expiresOn: string | null
-}
+  id: string;
+  mandateReference: string;
+  scheme: "nacha" | "sepa_core" | "sepa_b2b" | "custom";
+  status: "pending" | "active" | "suspended" | "revoked" | "expired";
+  partyBankAccountId: string;
+  bankAccountLabel: string;
+  signedOn: string | null;
+  validFrom: string | null;
+  expiresOn: string | null;
+};
 
 export type PartyDebitMandateBankAccount = {
-  id: string
-  label: string
-}
+  id: string;
+  label: string;
+};
 
 /**
  * One counterparty's debit mandates and the bank accounts a new mandate may
@@ -32,16 +32,25 @@ export async function loadPartyDebitMandates(
   orgId: string,
   partyId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-): Promise<{ mandates: PartyDebitMandateRow[]; bankAccounts: PartyDebitMandateBankAccount[] } | null> {
-  const party = (await db.execute(sql`
+): Promise<{
+  mandates: PartyDebitMandateRow[];
+  bankAccounts: PartyDebitMandateBankAccount[];
+} | null> {
+  const party = (
+    await db.execute(
+      sql`
     select p.id from parties p
      where p.id = ${partyId} and p.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-  `, 'objects'))[0]
-  if (!party) return null
+  `,
+      "objects",
+    )
+  )[0];
+  if (!party) return null;
 
   const [mandates, bankAccounts] = await Promise.all([
-    db.execute<PartyDebitMandateRow>(sql`
+    db.execute<PartyDebitMandateRow>(
+      sql`
       select m.id,
              m.mandate_reference as "mandateReference",
              m.scheme,
@@ -56,16 +65,21 @@ export async function loadPartyDebitMandates(
         join party_bank_accounts b on b.id = m.party_bank_account_id and b.org_id = m.org_id
        where m.org_id = ${orgId} and m.party_id = ${partyId}
        order by m.created_at desc, m.id
-    `, 'objects'),
-    db.execute<PartyDebitMandateBankAccount>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<PartyDebitMandateBankAccount>(
+      sql`
       select b.id,
              concat_ws(' · ', nullif(b.bank_name, ''),
                case when b.account_last_four is not null then '••••' || b.account_last_four end) as label
         from party_bank_accounts b
        where b.org_id = ${orgId} and b.party_id = ${partyId}
-         and ${payablePayeeBankAccountSql('b')}
+         and ${payablePayeeBankAccountSql("b")}
        order by b.created_at desc, b.id
-    `, 'objects'),
-  ])
-  return { mandates, bankAccounts }
+    `,
+      "objects",
+    ),
+  ]);
+  return { mandates, bankAccounts };
 }

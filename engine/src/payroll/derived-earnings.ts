@@ -5,7 +5,16 @@ import { db } from "../platform/db.ts";
 import { addCalendarDays, endOfMonth, startOfMonth } from "../platform/business-date.ts";
 import { annualPayRateSqlText } from "../projects/pay-rate-basis.ts";
 import {
-  add, apportion, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
+  add,
+  apportion,
+  cmp,
+  formatMoney,
+  fromUnits,
+  mul,
+  mulPercent,
+  roundMoney,
+  sum,
+  toUnits,
 } from "../money/money.ts";
 import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
 import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
@@ -58,16 +67,9 @@ export type DerivedTrigger =
   | "equipment_charge";
 
 export type DerivedQuantityMode =
-  | "count"
-  | "sum_hours"
-  | "count_nights"
-  | "sum_quantity"
-  | "sum_bill_amount";
+  "count" | "sum_hours" | "count_nights" | "sum_quantity" | "sum_bill_amount";
 export type DerivedRateMode =
-  | "fixed_per_unit"
-  | "percent_of_gross"
-  | "percent_of_quantity"
-  | "rate_card";
+  "fixed_per_unit" | "percent_of_gross" | "percent_of_quantity" | "rate_card";
 export type DerivedCostingMode = "source" | "first_project_of_day" | "none";
 
 export interface DerivedRule {
@@ -383,10 +385,14 @@ function byClockThenCaptureOrder(a: DerivedTimeEntry, b: DerivedTimeEntry): numb
 /** Whether a rule's employee-scope filters admit this employee at all. */
 export function ruleAdmitsEmployee(rule: DerivedRule, employee: DerivedEmployeeScope): boolean {
   if (titleIsExcluded(rule, employee.jobTitle)) return false;
-  if (rule.includedJobTitles.length > 0 && !titleListNames(rule.includedJobTitles, employee.jobTitle)) {
+  if (
+    rule.includedJobTitles.length > 0 &&
+    !titleListNames(rule.includedJobTitles, employee.jobTitle)
+  ) {
     return false;
   }
-  if (rule.jobTitle && normalizeTitle(rule.jobTitle) !== normalizeTitle(employee.jobTitle)) return false;
+  if (rule.jobTitle && normalizeTitle(rule.jobTitle) !== normalizeTitle(employee.jobTitle))
+    return false;
   if (rule.tradeId && rule.tradeId !== employee.tradeId) return false;
   return true;
 }
@@ -469,9 +475,7 @@ function firstProjectOfDay(
 }
 
 function unitQuantity(rule: DerivedRule, entries: DerivedTimeEntry[]): string {
-  return rule.quantityMode === "sum_hours"
-    ? sum(entries.map((entry) => entry.hours))
-    : "1";
+  return rule.quantityMode === "sum_hours" ? sum(entries.map((entry) => entry.hours)) : "1";
 }
 
 /** What one charge line is worth in the rule's chosen measure. */
@@ -493,10 +497,7 @@ function chargeQuantity(rule: DerivedRule, charge: DerivedEquipmentCharge): stri
  * (attribute the charges, or narrow the rule's filters so they fall outside
  * it), which is the same trade every other control in the payroll makes.
  */
-function chargeUnitsForRule(
-  rule: DerivedRule,
-  input: DerivedEarningsInput,
-): PendingUnit[] {
+function chargeUnitsForRule(rule: DerivedRule, input: DerivedEarningsInput): PendingUnit[] {
   const window = settlementMonth(input.periodStart, input.periodEnd);
   if (!window) return [];
   if (rule.timeTypeId) {
@@ -547,15 +548,13 @@ function chargeUnitsForRule(
 }
 
 /** The payable facts a rule finds, before pricing. */
-function unitsForRule(
-  rule: DerivedRule,
-  input: DerivedEarningsInput,
-): PendingUnit[] {
+function unitsForRule(rule: DerivedRule, input: DerivedEarningsInput): PendingUnit[] {
   if (rule.trigger === "equipment_charge") return chargeUnitsForRule(rule, input);
 
-  const window = rule.trigger === "month_end"
-    ? settlementMonth(input.periodStart, input.periodEnd)
-    : { start: input.periodStart, end: input.periodEnd };
+  const window =
+    rule.trigger === "month_end"
+      ? settlementMonth(input.periodStart, input.periodEnd)
+      : { start: input.periodStart, end: input.periodEnd };
   if (!window) return [];
 
   const qualifying = input.entries
@@ -597,11 +596,12 @@ function unitsForRule(
   for (const entry of inWindow) {
     // month_end reads the settled month one entry at a time, exactly like
     // time_entry — only the window differs.
-    const key = rule.trigger === "distinct_day"
-      ? entry.workedOn
-      : rule.trigger === "distinct_project_day"
-        ? `${entry.workedOn}|${entry.projectId ?? ""}`
-        : entry.id;
+    const key =
+      rule.trigger === "distinct_day"
+        ? entry.workedOn
+        : rule.trigger === "distinct_project_day"
+          ? `${entry.workedOn}|${entry.projectId ?? ""}`
+          : entry.id;
     const bucket = grouped.get(key);
     if (bucket) bucket.push(entry);
     else grouped.set(key, [entry]);
@@ -708,9 +708,10 @@ function describe(rule: DerivedRule, quantity: string, rate: string): string {
     // Name the BASE, not just the percentage. "3% of gross" and "3% of
     // equipment billed" are the two numbers this rule set must never be
     // allowed to confuse, and the stub is where an employee would notice.
-    const basis = rule.quantityMode === "sum_bill_amount"
-      ? `${formatMoney(quantity, 2)} billed`
-      : `${qty} units`;
+    const basis =
+      rule.quantityMode === "sum_bill_amount"
+        ? `${formatMoney(quantity, 2)} billed`
+        : `${qty} units`;
     return `${rule.name} (${percent}% of ${basis})`;
   }
   const unit = rule.quantityMode === "sum_hours" ? `${qty} h` : qty;
@@ -752,7 +753,10 @@ export function applyDerivedRule(
     // rule can never pay a penny more or less than the percentage of gross it
     // declares, and no fact can be paid a negative amount.
     const total = mulPercent(input.gross, requiredRateValue(rule), 2);
-    const shares = allocateByQuantity(total, costed.map((unit) => unit.quantity));
+    const shares = allocateByQuantity(
+      total,
+      costed.map((unit) => unit.quantity),
+    );
     if (shares === null) return empty;
     units = costed.map((unit, index) => ({ ...unit, amount: shares[index]! }));
   } else if (rule.rateMode === "percent_of_quantity") {
@@ -822,9 +826,10 @@ export function applyDerivedRule(
       // Both percent modes carry no per-unit money rate — a percentage in a
       // rate column would be read as dollars by every stub, export and PDF
       // that renders it.
-      rate: rule.rateMode === "percent_of_gross" || rule.rateMode === "percent_of_quantity"
-        ? null
-        : roundMoney(rate, 4),
+      rate:
+        rule.rateMode === "percent_of_gross" || rule.rateMode === "percent_of_quantity"
+          ? null
+          : roundMoney(rate, 4),
       amount: value.amount,
       projectId: value.unit.projectId,
       departmentId: value.unit.departmentId,
@@ -847,7 +852,9 @@ export function applyDerivedRule(
 /** Every active rule's lines for one employee. Pure — no database. */
 export function computeDerivedEarnings(input: DerivedEarningsInput): DerivedEarningLine[] {
   const lines: DerivedEarningLine[] = [];
-  for (const rule of [...input.rules].sort((a, b) => a.sequence - b.sequence || (a.code < b.code ? -1 : 1))) {
+  for (const rule of [...input.rules].sort(
+    (a, b) => a.sequence - b.sequence || (a.code < b.code ? -1 : 1),
+  )) {
     lines.push(...applyDerivedRule(rule, input).lines);
   }
   return lines;
@@ -857,29 +864,54 @@ export function computeDerivedEarnings(input: DerivedEarningsInput): DerivedEarn
 // Database-backed entry points
 // ---------------------------------------------------------------------------
 type RuleRow = {
-  id: string; code: string; name: string; component_id: string;
-  trigger: DerivedTrigger; time_type_id: string | null; project_id: string | null;
-  department_id: string | null; equipment_unit_id: string | null; item_id: string | null;
-  trade_id: string | null; job_title: string | null;
-  billable_only: boolean; included_job_titles: unknown; excluded_job_titles: unknown;
-  quantity_mode: DerivedQuantityMode; rate_mode: DerivedRateMode;
-  rate_value: string | null; costing_mode: DerivedCostingMode; sequence: number;
-  is_active?: boolean; effective_from?: string; effective_to?: string | null;
+  id: string;
+  code: string;
+  name: string;
+  component_id: string;
+  trigger: DerivedTrigger;
+  time_type_id: string | null;
+  project_id: string | null;
+  department_id: string | null;
+  equipment_unit_id: string | null;
+  item_id: string | null;
+  trade_id: string | null;
+  job_title: string | null;
+  billable_only: boolean;
+  included_job_titles: unknown;
+  excluded_job_titles: unknown;
+  quantity_mode: DerivedQuantityMode;
+  rate_mode: DerivedRateMode;
+  rate_value: string | null;
+  costing_mode: DerivedCostingMode;
+  sequence: number;
+  is_active?: boolean;
+  effective_from?: string;
+  effective_to?: string | null;
 };
 
 function toRule(row: RuleRow): DerivedRule {
   const titles = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
   const excluded = titles(row.excluded_job_titles);
   return {
-    id: row.id, code: row.code, name: row.name, componentId: row.component_id,
-    trigger: row.trigger, timeTypeId: row.time_type_id, projectId: row.project_id,
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    componentId: row.component_id,
+    trigger: row.trigger,
+    timeTypeId: row.time_type_id,
+    projectId: row.project_id,
     departmentId: row.department_id,
-    equipmentUnitId: row.equipment_unit_id ?? null, itemId: row.item_id ?? null,
-    tradeId: row.trade_id, jobTitle: row.job_title,
+    equipmentUnitId: row.equipment_unit_id ?? null,
+    itemId: row.item_id ?? null,
+    tradeId: row.trade_id,
+    jobTitle: row.job_title,
     billableOnly: row.billable_only === true,
-    includedJobTitles: titles(row.included_job_titles), excludedJobTitles: excluded,
-    quantityMode: row.quantity_mode, rateMode: row.rate_mode,
-    rateValue: row.rate_value, costingMode: row.costing_mode,
+    includedJobTitles: titles(row.included_job_titles),
+    excludedJobTitles: excluded,
+    quantityMode: row.quantity_mode,
+    rateMode: row.rate_mode,
+    rateValue: row.rate_value,
+    costingMode: row.costing_mode,
     sequence: Number(row.sequence),
   };
 }
@@ -887,36 +919,52 @@ function toRule(row: RuleRow): DerivedRule {
 /** Active rules effective on the pay period end (the employee_pay_components
  * convention: one date decides the whole period). */
 export async function loadActiveDerivedRules(
-  tx: Pick<typeof db, "execute">, orgId: string, periodEnd: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  periodEnd: string,
 ): Promise<DerivedRule[]> {
-  const r = (await tx.execute<RuleRow>(sql`
+  const r = await tx.execute<RuleRow>(
+    sql`
     select * from pay_derived_rules
      where org_id = ${orgId} and is_active
        and effective_from <= ${periodEnd}
        and (effective_to is null or effective_to >= ${periodEnd})
      order by sequence, code
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map(toRule);
 }
 
 async function loadComponents(
-  tx: Pick<typeof db, "execute">, orgId: string, componentIds: string[],
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  componentIds: string[],
 ): Promise<Map<string, DerivedComponent>> {
   if (componentIds.length === 0) return new Map();
-  const r = (await tx.execute<{
-      id: string; name: string; value: string | null; kind: string;
-      taxable: boolean; pensionable: boolean; insurable: boolean;
-      non_periodic: boolean; supplemental_wage_category: string | null;
-      statutory_reporting_category: string | null;
-      statutory_exemption_category: string | null;
-    }>(sql`
+  const r = await tx.execute<{
+    id: string;
+    name: string;
+    value: string | null;
+    kind: string;
+    taxable: boolean;
+    pensionable: boolean;
+    insurable: boolean;
+    non_periodic: boolean;
+    supplemental_wage_category: string | null;
+    statutory_reporting_category: string | null;
+    statutory_exemption_category: string | null;
+  }>(
+    sql`
     select c.id, c.name, c.value, c.kind, c.taxable, c.pensionable, c.insurable, c.non_periodic,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_components c
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where c.org_id = ${orgId} and c.id = any(${`{${componentIds.join(",")}}`}::uuid[])
-  `, "objects"));
+  `,
+    "objects",
+  );
   const map = new Map<string, DerivedComponent>();
   for (const row of r) {
     if (row.kind !== "earning") {
@@ -925,25 +973,38 @@ async function loadComponents(
       );
     }
     map.set(row.id, {
-      id: row.id, name: row.name, value: row.value,
-      taxable: row.taxable === true, pensionable: row.pensionable === true,
+      id: row.id,
+      name: row.name,
+      value: row.value,
+      taxable: row.taxable === true,
+      pensionable: row.pensionable === true,
       insurable: row.insurable === true,
       nonPeriodic: row.non_periodic === true,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       statutoryReportingCategory: row.statutory_reporting_category,
-      statutoryExemptionCategory: row.statutory_exemption_category as UsStatutoryExemptionCategory | null,
+      statutoryExemptionCategory:
+        row.statutory_exemption_category as UsStatutoryExemptionCategory | null,
     });
   }
   return map;
 }
 
 async function loadEmployeeScope(
-  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  employeePartyId: string,
 ): Promise<DerivedEmployeeScope> {
-  const r = (await tx.execute<{ job_title: string | null; trade_id: string | null; department_id: string | null }>(sql`
+  const r = await tx.execute<{
+    job_title: string | null;
+    trade_id: string | null;
+    department_id: string | null;
+  }>(
+    sql`
     select job_title, trade_id, department_id from employee_roles
      where org_id = ${orgId} and party_id = ${employeePartyId} limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0];
   return {
     jobTitle: row?.job_title ?? null,
@@ -955,10 +1016,13 @@ async function loadEmployeeScope(
 
 /** Resolve the same employee admission used by calculation, including configured rules that owe no units. */
 export async function applicableDerivedRules(
-  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, rules: DerivedRule[],
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  employeePartyId: string,
+  rules: DerivedRule[],
 ): Promise<{ employee: DerivedEmployeeScope; rules: DerivedRule[] }> {
   const employee = await loadEmployeeScope(tx, orgId, employeePartyId);
-  return { employee, rules: rules.filter(rule => ruleAdmitsEmployee(rule, employee)) };
+  return { employee, rules: rules.filter((rule) => ruleAdmitsEmployee(rule, employee)) };
 }
 
 /**
@@ -976,14 +1040,24 @@ export async function applicableDerivedRules(
  * never billed for, nor miss revenue they were.
  */
 async function loadEquipmentCharges(
-  tx: Pick<typeof db, "execute">, orgId: string, from: string, to: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<DerivedEquipmentCharge[]> {
-  const r = (await tx.execute<{
-      id: string; document_date: string | Date; employee_id: string | null;
-      equipment_unit_id: string | null; item_id: string | null;
-      project_id: string | null; department_id: string | null;
-      is_billable: boolean; base_quantity: string; bill_amount: string;
-    }>(sql`
+  const r = await tx.execute<{
+    id: string;
+    document_date: string | Date;
+    employee_id: string | null;
+    equipment_unit_id: string | null;
+    item_id: string | null;
+    project_id: string | null;
+    department_id: string | null;
+    is_billable: boolean;
+    base_quantity: string;
+    bill_amount: string;
+  }>(
+    sql`
     select dl.id, d.document_date, dl.employee_id, dl.equipment_unit_id, dl.item_id,
            coalesce(dl.project_id, d.project_id) as project_id,
            coalesce(dl.department_id, d.department_id) as department_id,
@@ -1002,12 +1076,14 @@ async function loadEquipmentCharges(
        and dl.equipment_unit_id is not null
        and d.document_date between ${from} and ${to}
      order by d.document_date, dl.id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map((row) => ({
     id: row.id,
-    day: String(row.document_date instanceof Date
-      ? row.document_date.toISOString()
-      : row.document_date).slice(0, 10),
+    day: String(
+      row.document_date instanceof Date ? row.document_date.toISOString() : row.document_date,
+    ).slice(0, 10),
     employeePartyId: row.employee_id,
     equipmentUnitId: row.equipment_unit_id,
     itemId: row.item_id,
@@ -1020,20 +1096,30 @@ async function loadEquipmentCharges(
 }
 
 async function loadEntries(
-  tx: Pick<typeof db, "execute">, orgId: string,
-  employeePartyIds: string[], from: string, to: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  employeePartyIds: string[],
+  from: string,
+  to: string,
 ): Promise<Map<string, DerivedTimeEntry[]>> {
   const byEmployee = new Map<string, DerivedTimeEntry[]>();
   if (employeePartyIds.length === 0) return byEmployee;
   // Deliberately no payroll_batch_ref filter: lookback and settled-month rows
   // were claimed by the runs that paid their wages, and reading them proves
   // the employee stayed / operated the equipment. Wages are not re-paid here.
-  const r = (await tx.execute<{
-      id: string; employee_party_id: string; worked_on: string; hours: string;
-      time_type_id: string | null; project_id: string | null;
-      department_id: string | null; is_billable: boolean;
-      started_at: string | Date | null; created_at: string | Date;
-    }>(sql`
+  const r = await tx.execute<{
+    id: string;
+    employee_party_id: string;
+    worked_on: string;
+    hours: string;
+    time_type_id: string | null;
+    project_id: string | null;
+    department_id: string | null;
+    is_billable: boolean;
+    started_at: string | Date | null;
+    created_at: string | Date;
+  }>(
+    sql`
     select id, employee_party_id, worked_on, hours, time_type_id, project_id,
            department_id, is_billable, started_at, created_at
       from time_entries
@@ -1044,10 +1130,11 @@ async function loadEntries(
      -- Same precedence the comparator applies: the recorded clock time, then
      -- capture order for entries that have none (nulls last, not first).
      order by employee_party_id, worked_on, started_at asc nulls last, created_at, id
-  `, "objects"));
-  const stamp = (value: string | Date | null): string | null => value === null
-    ? null
-    : value instanceof Date ? value.toISOString() : String(value);
+  `,
+    "objects",
+  );
+  const stamp = (value: string | Date | null): string | null =>
+    value === null ? null : value instanceof Date ? value.toISOString() : String(value);
   for (const row of r) {
     const entry: DerivedTimeEntry = {
       id: row.id,
@@ -1069,16 +1156,22 @@ async function loadEntries(
 
 /** rate_card overrides assigned to an employee, effective at the period end. */
 async function loadRateOverrides(
-  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, periodEnd: string,
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  employeePartyId: string,
+  periodEnd: string,
 ): Promise<Record<string, string>> {
-  const r = (await tx.execute<{ component_id: string; value: string }>(sql`
+  const r = await tx.execute<{ component_id: string; value: string }>(
+    sql`
     select component_id, value from employee_pay_components
      where org_id = ${orgId} and employee_party_id = ${employeePartyId} and is_active
        and value is not null
        and effective_from <= ${periodEnd}
        and (effective_to is null or effective_to >= ${periodEnd})
      order by effective_from
-  `, "objects"));
+  `,
+    "objects",
+  );
   const overrides: Record<string, string> = {};
   for (const row of r) overrides[row.component_id] = row.value;
   return overrides;
@@ -1106,7 +1199,12 @@ export async function resolveDerivedEarnings(
   const { orgId, employeePartyId, periodStart, periodEnd, rules } = params;
   if (rules.length === 0) return [];
 
-  const { employee, rules: applicable } = await applicableDerivedRules(tx, orgId, employeePartyId, rules);
+  const { employee, rules: applicable } = await applicableDerivedRules(
+    tx,
+    orgId,
+    employeePartyId,
+    rules,
+  );
   // Cheap exit before any further reads: an excluded PM is excluded from every
   // rule that names their title, whatever time they booked.
   if (applicable.length === 0) return [];
@@ -1114,11 +1212,19 @@ export async function resolveDerivedEarnings(
   const window = derivedEntryWindow(applicable, periodStart, periodEnd);
   const entries = [...params.timeEntries];
   if (window.from < periodStart) {
-    const extra = await loadEntries(tx, orgId, [employeePartyId], window.from, addCalendarDays(periodStart, -1));
+    const extra = await loadEntries(
+      tx,
+      orgId,
+      [employeePartyId],
+      window.from,
+      addCalendarDays(periodStart, -1),
+    );
     entries.push(...(extra.get(employeePartyId) ?? []));
   }
   const seen = new Set<string>();
-  const deduped = entries.filter((entry) => (seen.has(entry.id) ? false : (seen.add(entry.id), true)));
+  const deduped = entries.filter((entry) =>
+    seen.has(entry.id) ? false : (seen.add(entry.id), true),
+  );
 
   // The charge month is read only when an equipment rule actually survived the
   // employee-scope filters, so a payroll with no equipment incentive pays for
@@ -1127,7 +1233,9 @@ export async function resolveDerivedEarnings(
 
   // Sequential loads: the stub calculation runs on its transaction client,
   // which is one pg connection — fanning out queues concurrent queries on it.
-  const components = await loadComponents(tx, orgId, [...new Set(applicable.map((rule) => rule.componentId))]);
+  const components = await loadComponents(tx, orgId, [
+    ...new Set(applicable.map((rule) => rule.componentId)),
+  ]);
   const rateOverrides = await loadRateOverrides(tx, orgId, employeePartyId, periodEnd);
   const charges: DerivedEquipmentCharge[] = chargeWindow
     ? await loadEquipmentCharges(tx, orgId, chargeWindow.start, chargeWindow.end)
@@ -1159,11 +1267,18 @@ export interface DerivedRulePreviewRow {
 
 export interface DerivedRulePreview {
   rule: {
-    id: string; code: string; name: string; isActive: boolean;
-    trigger: DerivedTrigger; quantityMode: DerivedQuantityMode;
-    rateMode: DerivedRateMode; rateValue: string | null;
-    costingMode: DerivedCostingMode; componentName: string;
-    effectiveFrom: string; effectiveTo: string | null;
+    id: string;
+    code: string;
+    name: string;
+    isActive: boolean;
+    trigger: DerivedTrigger;
+    quantityMode: DerivedQuantityMode;
+    rateMode: DerivedRateMode;
+    rateValue: string | null;
+    costingMode: DerivedCostingMode;
+    componentName: string;
+    effectiveFrom: string;
+    effectiveTo: string | null;
   };
   periodStart: string;
   periodEnd: string;
@@ -1205,35 +1320,52 @@ export interface DerivedRulePreview {
  * look before enabling. Nobody should turn on a money rule blind.
  */
 export async function previewDerivedRule(
-  orgId: string, ruleId: string, periodStart: string, periodEnd: string,
+  orgId: string,
+  ruleId: string,
+  periodStart: string,
+  periodEnd: string,
 ): Promise<DerivedRulePreview> {
-  const ruleRes = (await db.execute<(RuleRow & { component_name: string })>(sql`
+  const ruleRes = await db.execute<RuleRow & { component_name: string }>(
+    sql`
     select r.*, c.name as component_name from pay_derived_rules r
       join pay_components c on c.id = r.component_id and c.org_id = r.org_id
      where r.org_id = ${orgId} and r.id = ${ruleId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = ruleRes[0];
   if (!row) throw new DerivedEarningsError("derived earnings rule not found");
   const rule = toRule(row);
 
   // Everyone who could be paid by this run of rules: active employees with a
   // payroll profile, which is exactly the population calculatePayRun walks.
-  const peopleRes = (await db.execute<{
-      party_id: string; display_name: string; job_title: string | null;
-      trade_id: string | null; department_id: string | null;
-    }>(sql`
+  const peopleRes = await db.execute<{
+    party_id: string;
+    display_name: string;
+    job_title: string | null;
+    trade_id: string | null;
+    department_id: string | null;
+  }>(
+    sql`
     select p.id as party_id, p.display_name, er.job_title, er.trade_id, er.department_id
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where prof.org_id = ${orgId} and prof.is_active
        and ${payrollEmploymentOverlapsPeriod({
-         org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
-         employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
-         periodStart: sql`${periodStart}`, periodEnd: sql`${periodEnd}`,
+         org: sql`prof.org_id`,
+         employee: sql`p.id`,
+         employment: sql`prof.employment_id`,
+         employer: sql`p.subsidiary_id`,
+         hiredOn: sql`er.hired_on`,
+         terminatedOn: sql`er.terminated_on`,
+         periodStart: sql`${periodStart}`,
+         periodEnd: sql`${periodEnd}`,
        })}
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   const people = peopleRes;
 
   const window = derivedEntryWindow([rule], periodStart, periodEnd);
@@ -1242,7 +1374,13 @@ export async function previewDerivedRule(
   // both price against one snapshot of the month.
   const chargeWindow = derivedChargeWindow([rule], periodStart, periodEnd);
   const [entriesByEmployee, components, charges] = await Promise.all([
-    loadEntries(db, orgId, people.map((person) => person.party_id), window.from, window.to),
+    loadEntries(
+      db,
+      orgId,
+      people.map((person) => person.party_id),
+      window.from,
+      window.to,
+    ),
     loadComponents(db, orgId, [rule.componentId]),
     chargeWindow
       ? loadEquipmentCharges(db, orgId, chargeWindow.start, chargeWindow.end)
@@ -1256,7 +1394,8 @@ export async function previewDerivedRule(
   // to four places like the run's hourly wage.
   const grossByEmployee = new Map<string, string>();
   if (rule.rateMode === "percent_of_gross") {
-    const grossRes = (await db.execute<{ employee_party_id: string; gross: string }>(sql`
+    const grossRes = await db.execute<{ employee_party_id: string; gross: string }>(
+      sql`
       select te.employee_party_id,
              coalesce(sum(round(te.hours * coalesce(tt.cost_multiplier, 1) * lcr.rate, 4)), 0)::text as gross
         from time_entries te
@@ -1275,7 +1414,9 @@ export async function previewDerivedRule(
          and te.worked_on between ${periodStart} and ${periodEnd}
          and coalesce(tt.exclude_from_wages, false) = false
        group by te.employee_party_id
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const gross of grossRes) {
       grossByEmployee.set(gross.employee_party_id, roundMoney(gross.gross, 2));
     }
@@ -1288,7 +1429,9 @@ export async function previewDerivedRule(
   const paid = new Set<string>();
   for (const person of people) {
     const employee: DerivedEmployeeScope = {
-      jobTitle: person.job_title, tradeId: person.trade_id, departmentId: person.department_id,
+      jobTitle: person.job_title,
+      tradeId: person.trade_id,
+      departmentId: person.department_id,
       partyId: person.party_id,
     };
     if (titleIsExcluded(rule, person.job_title)) {
@@ -1301,9 +1444,13 @@ export async function previewDerivedRule(
     }
     try {
       const { units } = applyDerivedRule(rule, {
-        rules: [rule], components, employee, charges,
+        rules: [rule],
+        components,
+        employee,
+        charges,
         entries: entriesByEmployee.get(person.party_id) ?? [],
-        periodStart, periodEnd,
+        periodStart,
+        periodEnd,
         gross: grossByEmployee.get(person.party_id) ?? "0",
       });
       for (const unit of units) {
@@ -1337,16 +1484,21 @@ export async function previewDerivedRule(
         paid.clear();
         break;
       }
-      errors.push(`${person.display_name}: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(
+        `${person.display_name}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
   if (projectIds.length > 0) {
-    const projects = (await db.execute<{ id: string; label: string }>(sql`
+    const projects = await db.execute<{ id: string; label: string }>(
+      sql`
       select id, case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
         from projects where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])
-    `, "objects"));
+    `,
+      "objects",
+    );
     const byId = new Map(projects.map((project) => [project.id, project.label]));
     for (const preview of rows) {
       preview.projectName = preview.projectId ? (byId.get(preview.projectId) ?? null) : null;
@@ -1355,18 +1507,26 @@ export async function previewDerivedRule(
 
   return {
     rule: {
-      id: rule.id, code: rule.code, name: rule.name,
-      isActive: row.is_active === true, trigger: rule.trigger,
-      quantityMode: rule.quantityMode, rateMode: rule.rateMode,
-      rateValue: rule.rateValue, costingMode: rule.costingMode,
+      id: rule.id,
+      code: rule.code,
+      name: rule.name,
+      isActive: row.is_active === true,
+      trigger: rule.trigger,
+      quantityMode: rule.quantityMode,
+      rateMode: rule.rateMode,
+      rateValue: rule.rateValue,
+      costingMode: rule.costingMode,
       componentName: row.component_name,
       effectiveFrom: String(row.effective_from ?? "").slice(0, 10),
       effectiveTo: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
     },
     periodStart,
     periodEnd,
-    rows: rows.sort((a, b) =>
-      a.employeeName.localeCompare(b.employeeName) || (a.day < b.day ? -1 : a.day > b.day ? 1 : 0)),
+    rows: rows.sort(
+      (a, b) =>
+        a.employeeName.localeCompare(b.employeeName) ||
+        (a.day < b.day ? -1 : a.day > b.day ? 1 : 0),
+    ),
     excluded,
     employeeCount: paid.size,
     total: sum(rows.map((r) => r.amount)),

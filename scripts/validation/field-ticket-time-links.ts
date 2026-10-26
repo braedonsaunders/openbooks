@@ -75,7 +75,8 @@ export async function resolveTimeTicketLinks(
   const BATCH = 1_000;
   for (let offset = 0; offset < links.length; offset += BATCH) {
     const batch = links.slice(offset, offset + BATCH);
-    const result = await db.execute(sql`
+    const result = await db.execute(
+      sql`
       with source as (
         select *
           from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
@@ -104,27 +105,19 @@ export async function resolveTimeTicketLinks(
           on target_ticket.org_id = ${orgId}
          and target_ticket.kind = 'field_ticket'
          and target_ticket.document_number = source."ticketNumber"
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of result as Array<Record<string, unknown>>) {
       resolved.push({
         sourceRef: String(row.source_ref),
         ticketNumber: String(row.ticket_number),
         timeEntryId: row.time_entry_id ? String(row.time_entry_id) : null,
-        currentTicketId: row.current_ticket_id
-          ? String(row.current_ticket_id)
-          : null,
-        currentTicketNumber: row.current_ticket_number
-          ? String(row.current_ticket_number)
-          : null,
-        targetTicketId: row.target_ticket_id
-          ? String(row.target_ticket_id)
-          : null,
-        entryProjectId: row.entry_project_id
-          ? String(row.entry_project_id)
-          : null,
-        ticketProjectId: row.ticket_project_id
-          ? String(row.ticket_project_id)
-          : null,
+        currentTicketId: row.current_ticket_id ? String(row.current_ticket_id) : null,
+        currentTicketNumber: row.current_ticket_number ? String(row.current_ticket_number) : null,
+        targetTicketId: row.target_ticket_id ? String(row.target_ticket_id) : null,
+        entryProjectId: row.entry_project_id ? String(row.entry_project_id) : null,
+        ticketProjectId: row.ticket_project_id ? String(row.ticket_project_id) : null,
         protectedEvidence: Boolean(row.protected_evidence),
       });
     }
@@ -141,32 +134,17 @@ export function classifyTimeTicketLinks(
   uniqueSourceLinks: number,
 ): LinkClassification {
   const missingTimeEntries = resolved.filter((row) => !row.timeEntryId);
-  const missingTickets = resolved.filter(
-    (row) => row.timeEntryId && !row.targetTicketId,
-  );
+  const missingTickets = resolved.filter((row) => row.timeEntryId && !row.targetTicketId);
   const projectConflicts = resolved.filter(
-    (row) =>
-      row.timeEntryId &&
-      row.targetTicketId &&
-      row.entryProjectId !== row.ticketProjectId,
+    (row) => row.timeEntryId && row.targetTicketId && row.entryProjectId !== row.ticketProjectId,
   );
   const changes = resolved.filter(
-    (row) =>
-      row.timeEntryId &&
-      row.targetTicketId &&
-      row.currentTicketId !== row.targetTicketId,
+    (row) => row.timeEntryId && row.targetTicketId && row.currentTicketId !== row.targetTicketId,
   );
-  const applicableChanges = changes.filter(
-    (row) => row.entryProjectId === row.ticketProjectId,
-  );
-  const protectedChanges = applicableChanges.filter(
-    (row) => row.protectedEvidence,
-  );
+  const applicableChanges = changes.filter((row) => row.entryProjectId === row.ticketProjectId);
+  const protectedChanges = applicableChanges.filter((row) => row.protectedEvidence);
   const exactCurrentLinks = resolved.filter(
-    (row) =>
-      row.timeEntryId &&
-      row.targetTicketId &&
-      row.currentTicketId === row.targetTicketId,
+    (row) => row.timeEntryId && row.targetTicketId && row.currentTicketId === row.targetTicketId,
   );
   if (
     missingTimeEntries.length +
@@ -247,7 +225,8 @@ export async function applyTimeTicketLinks(
         join plan on plan."timeEntryId" = te.id
        where te.org_id = ${orgId}
        for update of te
-    `, "objects",
+    `,
+    "objects",
   );
   const lockedIdSet = new Set(lockedIds.map((row) => String(row.locked_entry_id)));
   for (const row of batch) {
@@ -297,15 +276,15 @@ export async function applyTimeTicketLinks(
           on target_ticket.org_id = ${orgId}
          and target_ticket.kind = 'field_ticket'
          and target_ticket.document_number = plan."ticketNumber"
-    `, "objects",
+    `,
+    "objects",
   );
   if (locked.length !== batch.length) {
     throw new Error(
       `refusing apply: locked ${locked.length} of ${batch.length} planned time entries; re-run the plan`,
     );
   }
-  const uuidOrNull = (value: unknown): string | null =>
-    value ? String(value) : null;
+  const uuidOrNull = (value: unknown): string | null => (value ? String(value) : null);
   for (const row of locked) {
     const entryId = String(row.time_entry_id);
     const sourceRef = String(row.source_ref);
@@ -321,10 +300,7 @@ export async function applyTimeTicketLinks(
         `refusing apply: time entry ${entryId} (source ${sourceRef}) moved from ticket ${plannedFrom ?? "unlinked"} to ${currentTicketId ?? "unlinked"} after the plan; re-run the plan`,
       );
     }
-    if (
-      uuidOrNull(row.entry_project_id) !==
-      uuidOrNull(row.planned_entry_project_id)
-    ) {
+    if (uuidOrNull(row.entry_project_id) !== uuidOrNull(row.planned_entry_project_id)) {
       throw new Error(
         `refusing apply: time entry ${entryId} (source ${sourceRef}) changed project after the plan; re-run the plan`,
       );
@@ -334,10 +310,7 @@ export async function applyTimeTicketLinks(
         `refusing apply: time entry ${entryId} (source ${sourceRef}) target ticket ${String(row.ticket_number)} no longer resolves after the plan; re-run the plan`,
       );
     }
-    if (
-      uuidOrNull(row.ticket_project_id) !==
-      uuidOrNull(row.planned_ticket_project_id)
-    ) {
+    if (uuidOrNull(row.ticket_project_id) !== uuidOrNull(row.planned_ticket_project_id)) {
       throw new Error(
         `refusing apply: time entry ${entryId} (source ${sourceRef}) target ticket changed project after the plan; re-run the plan`,
       );

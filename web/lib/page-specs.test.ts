@@ -1,8 +1,16 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { test } from 'node:test'
-import { page, widgetBlock, textBlock, frame, ref, validateSpec, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { validateAgainstRegistries } from './page-spec-validate'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import { test } from "node:test";
+import {
+  page,
+  widgetBlock,
+  textBlock,
+  frame,
+  ref,
+  validateSpec,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { validateAgainstRegistries } from "./page-spec-validate";
 
 /**
  * Module precedence (Phase 1d): user > org-native > module > built-in.
@@ -16,15 +24,15 @@ import { validateAgainstRegistries } from './page-spec-validate'
  * can leak elsewhere.
  */
 
-const PRECEDENCE_DB_KEY = Symbol.for('openbooks.page-specs-precedence-test')
+const PRECEDENCE_DB_KEY = Symbol.for("openbooks.page-specs-precedence-test");
 
 interface PrecedenceDbState {
-  responses: Array<{ rows: unknown[] }>
-  queries: string[]
+  responses: Array<{ rows: unknown[] }>;
+  queries: string[];
 }
 
-const precedenceDb: PrecedenceDbState = { responses: [], queries: [] }
-;(globalThis as unknown as Record<symbol, PrecedenceDbState>)[PRECEDENCE_DB_KEY] = precedenceDb
+const precedenceDb: PrecedenceDbState = { responses: [], queries: [] };
+(globalThis as unknown as Record<symbol, PrecedenceDbState>)[PRECEDENCE_DB_KEY] = precedenceDb;
 
 // Walks drizzle's chunk tree instead of calling `toQuery()`, which needs a
 // live dialect. Kept as a source string (not a serialized closure) because
@@ -68,24 +76,30 @@ const MOCK_DB_SOURCE = `
     return inMode(await (state.responses.shift() ?? { rows: [] }))
   }
   export const db = { execute, transaction: async (fn) => fn({ execute }) }
-`
+`;
 
 const precedenceHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/platform/db') {
-      return { shortCircuit: true, format: 'module', url: 'mock:page-specs-precedence-db' }
+    if (specifier === "@openbooks/engine/platform/db") {
+      return { shortCircuit: true, format: "module", url: "mock:page-specs-precedence-db" };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url !== 'mock:page-specs-precedence-db') return nextLoad(url, context)
-    return { format: 'module', shortCircuit: true, source: MOCK_DB_SOURCE }
+    if (url !== "mock:page-specs-precedence-db") return nextLoad(url, context);
+    return { format: "module", shortCircuit: true, source: MOCK_DB_SOURCE };
   },
-})
+});
 
-const { loadPageSpec, savePageSpec, clearPageSpec, listPageSpecHistory, restorePageSpec, pickPageSpecRow } =
-  await import('./page-specs.ts')
-precedenceHooks.deregister()
+const {
+  loadPageSpec,
+  savePageSpec,
+  clearPageSpec,
+  listPageSpecHistory,
+  restorePageSpec,
+  pickPageSpecRow,
+} = await import("./page-specs.ts");
+precedenceHooks.deregister();
 
 /**
  * What a stored page spec is allowed to be.
@@ -97,92 +111,92 @@ precedenceHooks.deregister()
  */
 
 const registries = {
-  widgets: new Set(['stat-tile-row', 'banking-roster', 'save-view']),
-  frames: new Set(['page-container', 'card']),
-}
+  widgets: new Set(["stat-tile-row", "banking-roster", "save-view"]),
+  frames: new Set(["page-container", "card"]),
+};
 
-test('accepts a spec that names only registered widgets and frames', () => {
+test("accepts a spec that names only registered widgets and frames", () => {
   const spec = page({
-    route: '/banking',
-    body: [frame('card', [widgetBlock('banking-roster', { accounts: [] })])],
-  })
-  const result = validateAgainstRegistries(spec, registries)
-  assert.equal(result.ok, true)
-})
+    route: "/banking",
+    body: [frame("card", [widgetBlock("banking-roster", { accounts: [] })])],
+  });
+  const result = validateAgainstRegistries(spec, registries);
+  assert.equal(result.ok, true);
+});
 
-test('rejects a widget the host cannot render, naming it', () => {
+test("rejects a widget the host cannot render, naming it", () => {
   // The schema only requires a slug, so `payrol-cockpit` passes it and would
   // throw UnknownWidgetError mid-render — a blank page for the tenant and a
   // stack trace for us. This is the gate that turns it into a save-time error.
-  const spec = page({ route: '/banking', body: [widgetBlock('payrol-cockpit')] })
-  assert.equal(validateSpec(spec).ok, true, 'the schema alone accepts it')
+  const spec = page({ route: "/banking", body: [widgetBlock("payrol-cockpit")] });
+  assert.equal(validateSpec(spec).ok, true, "the schema alone accepts it");
 
-  const result = validateAgainstRegistries(spec, registries)
-  assert.equal(result.ok, false)
-  assert.ok(!result.ok && result.errors.some((e) => e.includes('payrol-cockpit')))
-})
+  const result = validateAgainstRegistries(spec, registries);
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok && result.errors.some((e) => e.includes("payrol-cockpit")));
+});
 
-test('rejects an unregistered frame', () => {
-  const spec = page({ route: '/banking', body: [frame('trapdoor', [textBlock('hi')])] })
-  const result = validateAgainstRegistries(spec, registries)
-  assert.equal(result.ok, false)
-  assert.ok(!result.ok && result.errors.some((e) => e.includes('trapdoor')))
-})
+test("rejects an unregistered frame", () => {
+  const spec = page({ route: "/banking", body: [frame("trapdoor", [textBlock("hi")])] });
+  const result = validateAgainstRegistries(spec, registries);
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok && result.errors.some((e) => e.includes("trapdoor")));
+});
 
-test('finds names at any depth, not just the top level', () => {
+test("finds names at any depth, not just the top level", () => {
   const spec = page({
-    route: '/banking',
-    body: [frame('card', [frame('page-container', [widgetBlock('not-a-widget')])])],
-  })
-  const result = validateAgainstRegistries(spec, registries)
-  assert.equal(result.ok, false)
-  assert.ok(!result.ok && result.errors.some((e) => e.includes('not-a-widget')))
-})
+    route: "/banking",
+    body: [frame("card", [frame("page-container", [widgetBlock("not-a-widget")])])],
+  });
+  const result = validateAgainstRegistries(spec, registries);
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok && result.errors.some((e) => e.includes("not-a-widget")));
+});
 
-test('reports each unknown name once, however often it appears', () => {
+test("reports each unknown name once, however often it appears", () => {
   const spec = page({
-    route: '/banking',
-    body: [widgetBlock('ghost'), widgetBlock('ghost'), widgetBlock('ghost')],
-  })
-  const result = validateAgainstRegistries(spec, registries)
-  assert.equal(result.ok, false)
-  assert.ok(!result.ok)
-  assert.equal(result.errors.filter((e) => e.includes('ghost')).length, 1)
-})
+    route: "/banking",
+    body: [widgetBlock("ghost"), widgetBlock("ghost"), widgetBlock("ghost")],
+  });
+  const result = validateAgainstRegistries(spec, registries);
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok);
+  assert.equal(result.errors.filter((e) => e.includes("ghost")).length, 1);
+});
 
-test('a stored spec cannot smuggle a function, an org id, or a component', () => {
+test("a stored spec cannot smuggle a function, an org id, or a component", () => {
   // The three things the language forbids, as they would arrive over the
   // wire: JSON cannot carry a function, but an object shaped like a call is
   // the shape an attacker would try. `strictObject` refuses every one.
   for (const body of [
-    [{ kind: 'text', content: { $fn: 'process.exit' } }],
-    [{ kind: 'widget', widget: 'save-view', props: {}, orgId: 'other-tenant' }],
-    [{ kind: 'widget', widget: 'save-view', component: 'AdminPanel' }],
+    [{ kind: "text", content: { $fn: "process.exit" } }],
+    [{ kind: "widget", widget: "save-view", props: {}, orgId: "other-tenant" }],
+    [{ kind: "widget", widget: "save-view", component: "AdminPanel" }],
   ]) {
     const result = validateAgainstRegistries(
-      { specVersion: 1, route: '/banking', layout: 'list', header: [], body },
+      { specVersion: 1, route: "/banking", layout: "list", header: [], body },
       registries,
-    )
-    assert.equal(result.ok, false, `should have rejected ${JSON.stringify(body)}`)
+    );
+    assert.equal(result.ok, false, `should have rejected ${JSON.stringify(body)}`);
   }
-})
+});
 
-test('a field ref is a dot path and nothing more', () => {
+test("a field ref is a dot path and nothing more", () => {
   // The one place a spec touches property lookup. `resolvePath` guards the
   // prototype segments; here we prove the schema keeps a ref to a plain path
   // rather than anything evaluable.
-  const f = ref<{ title: string }>()
-  const spec = page({ route: '/banking', body: [textBlock(f('title'))] })
-  const result = validateAgainstRegistries(spec, registries)
-  assert.equal(result.ok, true)
-  assert.deepEqual((spec.body[0] as { content: unknown }).content, { $: 'title' })
-})
+  const f = ref<{ title: string }>();
+  const spec = page({ route: "/banking", body: [textBlock(f("title"))] });
+  const result = validateAgainstRegistries(spec, registries);
+  assert.equal(result.ok, true);
+  assert.deepEqual((spec.body[0] as { content: unknown }).content, { $: "title" });
+});
 
-test('validateSpec hands back the parsed spec, so callers stop holding unknown', () => {
-  const result = validateSpec(page({ route: '/banking', body: [textBlock('hi')] }))
-  assert.equal(result.ok, true)
-  assert.ok(result.ok && result.spec.route === '/banking')
-})
+test("validateSpec hands back the parsed spec, so callers stop holding unknown", () => {
+  const result = validateSpec(page({ route: "/banking", body: [textBlock("hi")] }));
+  assert.equal(result.ok, true);
+  assert.ok(result.ok && result.spec.route === "/banking");
+});
 
 /**
  * Prop contracts — the gate that turns a silent typo into a refusal.
@@ -193,101 +207,100 @@ test('validateSpec hands back the parsed spec, so callers stop holding unknown',
 const withContracts = {
   ...registries,
   contracts: {
-    'banking-roster': { props: ['accounts', 'totalCash'] },
-    'save-view': { props: [] },
-    'stat-tile-row': { props: ['anything'], open: true as const },
+    "banking-roster": { props: ["accounts", "totalCash"] },
+    "save-view": { props: [] },
+    "stat-tile-row": { props: ["anything"], open: true as const },
   },
-}
+};
 
-test('a prop the widget does not read is refused, with the near miss named', () => {
+test("a prop the widget does not read is refused, with the near miss named", () => {
   const spec = page({
-    route: '/banking',
-    body: [widgetBlock('banking-roster', { accounts: [], totalCsh: 0 })],
-  })
-  const result = validateAgainstRegistries(spec, withContracts)
-  assert.equal(result.ok, false)
-  assert.ok(!result.ok)
-  assert.equal(result.errors.length, 1)
+    route: "/banking",
+    body: [widgetBlock("banking-roster", { accounts: [], totalCsh: 0 })],
+  });
+  const result = validateAgainstRegistries(spec, withContracts);
+  assert.equal(result.ok, false);
+  assert.ok(!result.ok);
+  assert.equal(result.errors.length, 1);
   // Both names in one message: the one that is wrong and the one that is
   // probably meant. A bare "unknown prop" leaves an author scanning a list.
-  assert.match(result.errors[0]!, /banking-roster/)
-  assert.match(result.errors[0]!, /"totalCsh"/)
-  assert.match(result.errors[0]!, /did you mean "totalCash"/)
-})
+  assert.match(result.errors[0]!, /banking-roster/);
+  assert.match(result.errors[0]!, /"totalCsh"/);
+  assert.match(result.errors[0]!, /did you mean "totalCash"/);
+});
 
-test('a prop nothing resembles is refused without a guess', () => {
+test("a prop nothing resembles is refused without a guess", () => {
   // A wrong suggestion costs more than none — it sends the author to rename a
   // prop that was never the problem.
-  const spec = page({ route: '/banking', body: [widgetBlock('banking-roster', { zzzzzzzz: 1 })] })
-  const result = validateAgainstRegistries(spec, withContracts)
-  assert.ok(!result.ok)
-  assert.doesNotMatch(result.errors[0]!, /did you mean/)
-})
+  const spec = page({ route: "/banking", body: [widgetBlock("banking-roster", { zzzzzzzz: 1 })] });
+  const result = validateAgainstRegistries(spec, withContracts);
+  assert.ok(!result.ok);
+  assert.doesNotMatch(result.errors[0]!, /did you mean/);
+});
 
-test('a missing prop is NOT an error, because a widget may have a default', () => {
-  const spec = page({ route: '/banking', body: [widgetBlock('banking-roster', {})] })
-  assert.equal(validateAgainstRegistries(spec, withContracts).ok, true)
-})
+test("a missing prop is NOT an error, because a widget may have a default", () => {
+  const spec = page({ route: "/banking", body: [widgetBlock("banking-roster", {})] });
+  assert.equal(validateAgainstRegistries(spec, withContracts).ok, true);
+});
 
-test('an open widget is checked for nothing', () => {
+test("an open widget is checked for nothing", () => {
   // Seventeen entries forward their props wholesale, so any name may be
   // meaningful. Guessing at those would trade a silent typo for a confident
   // false refusal, which is the worse failure.
-  const spec = page({ route: '/banking', body: [widgetBlock('stat-tile-row', { whatever: 1 })] })
-  assert.equal(validateAgainstRegistries(spec, withContracts).ok, true)
-})
+  const spec = page({ route: "/banking", body: [widgetBlock("stat-tile-row", { whatever: 1 })] });
+  assert.equal(validateAgainstRegistries(spec, withContracts).ok, true);
+});
 
-test('with no contracts supplied, props are not checked at all', () => {
+test("with no contracts supplied, props are not checked at all", () => {
   // This is what the RENDER path passes. A layout stored under older rules
   // must keep rendering: tightening a rule must never take a working page
   // away from a reader who had nothing to do with it.
-  const spec = page({ route: '/banking', body: [widgetBlock('banking-roster', { totalCsh: 0 })] })
-  assert.equal(validateAgainstRegistries(spec, registries).ok, true)
-})
+  const spec = page({ route: "/banking", body: [widgetBlock("banking-roster", { totalCsh: 0 })] });
+  assert.equal(validateAgainstRegistries(spec, registries).ok, true);
+});
 
-test('the same bad prop is reported once, however often it appears', () => {
+test("the same bad prop is reported once, however often it appears", () => {
   const spec = page({
-    route: '/banking',
-    body: [widgetBlock('banking-roster', { nope: 1 }), widgetBlock('banking-roster', { nope: 2 })],
-  })
-  const result = validateAgainstRegistries(spec, withContracts)
-  assert.ok(!result.ok)
-  assert.equal(result.errors.length, 1)
-})
+    route: "/banking",
+    body: [widgetBlock("banking-roster", { nope: 1 }), widgetBlock("banking-roster", { nope: 2 })],
+  });
+  const result = validateAgainstRegistries(spec, withContracts);
+  assert.ok(!result.ok);
+  assert.equal(result.errors.length, 1);
+});
 
-test('props are checked on widget CELLS and refs too, not only blocks', () => {
+test("props are checked on widget CELLS and refs too, not only blocks", () => {
   // A widget reached through a table cell renders the same component, so a
   // prop that reaches nothing there is the same defect.
   const spec = page({
-    route: '/banking',
+    route: "/banking",
     header: [
       {
-        kind: 'page-header',
-        title: 'x',
-        actions: [{ widget: 'banking-roster', props: { totalCsh: 1 } }],
+        kind: "page-header",
+        title: "x",
+        actions: [{ widget: "banking-roster", props: { totalCsh: 1 } }],
       },
     ],
     body: [],
-  })
-  const result = validateAgainstRegistries(spec, withContracts)
-  assert.ok(!result.ok)
-  assert.match(result.errors[0]!, /totalCsh/)
-})
+  });
+  const result = validateAgainstRegistries(spec, withContracts);
+  assert.ok(!result.ok);
+  assert.match(result.errors[0]!, /totalCsh/);
+});
 
-
-const PRECEDENCE_ROUTE = '/reports/aging'
+const PRECEDENCE_ROUTE = "/reports/aging";
 
 function precedenceSpec(marker: string): PageSpec {
-  return page({ route: PRECEDENCE_ROUTE, body: [textBlock(marker)] })
+  return page({ route: PRECEDENCE_ROUTE, body: [textBlock(marker)] });
 }
 
 function candidateRow(
   marker: string,
   opts: {
-    userId?: string | null
-    extensionVersionId?: string | null
-    isCurrent?: boolean
-    updatedAt?: string
+    userId?: string | null;
+    extensionVersionId?: string | null;
+    isCurrent?: boolean;
+    updatedAt?: string;
   } = {},
 ) {
   return {
@@ -296,22 +309,22 @@ function candidateRow(
     user_id: opts.userId ?? null,
     extension_version_id: opts.extensionVersionId ?? null,
     is_current: opts.isCurrent ?? false,
-    updated_at: opts.updatedAt ?? '2026-03-01T00:00:00.000Z',
-  }
+    updated_at: opts.updatedAt ?? "2026-03-01T00:00:00.000Z",
+  };
 }
 
 function contentMarker(result: { spec: PageSpec } | null): unknown {
-  const first = result?.spec.body[0] as { content?: unknown } | undefined
-  return first?.content
+  const first = result?.spec.body[0] as { content?: unknown } | undefined;
+  return first?.content;
 }
 
 function resetPrecedenceDb(responses: Array<{ rows: unknown[] }>): void {
-  precedenceDb.responses = responses
-  precedenceDb.queries = []
+  precedenceDb.responses = responses;
+  precedenceDb.queries = [];
 }
 
 function recordedUpdates(): string[] {
-  return precedenceDb.queries.filter((q) => q.toLowerCase().startsWith('update page_specs'))
+  return precedenceDb.queries.filter((q) => q.toLowerCase().startsWith("update page_specs"));
 }
 
 /**
@@ -320,201 +333,220 @@ function recordedUpdates(): string[] {
  * stale-module, whatever order the rows arrive in.
  */
 
-test('precedence over coexisting rows: user beats org-native beats module', () => {
+test("precedence over coexisting rows: user beats org-native beats module", () => {
   const rows = [
-    candidateRow('from-module', { extensionVersionId: 'mv-2', isCurrent: true }),
-    candidateRow('tenant-org'),
-    candidateRow('mine', { userId: 'user-1' }),
-  ]
-  assert.equal(pickPageSpecRow(rows)?.id, 'row-mine')
+    candidateRow("from-module", { extensionVersionId: "mv-2", isCurrent: true }),
+    candidateRow("tenant-org"),
+    candidateRow("mine", { userId: "user-1" }),
+  ];
+  assert.equal(pickPageSpecRow(rows)?.id, "row-mine");
+  assert.equal(pickPageSpecRow(rows.filter((row) => row.user_id === null))?.id, "row-tenant-org");
   assert.equal(
-    pickPageSpecRow(rows.filter((row) => row.user_id === null))?.id,
-    'row-tenant-org',
-  )
-  assert.equal(
-    pickPageSpecRow(rows.filter((row) => row.user_id === null && row.extension_version_id !== null))?.id,
-    'row-from-module',
-  )
-})
+    pickPageSpecRow(rows.filter((row) => row.user_id === null && row.extension_version_id !== null))
+      ?.id,
+    "row-from-module",
+  );
+});
 
-test('a superseded version never resolves while the current projection is active', () => {
+test("a superseded version never resolves while the current projection is active", () => {
   // Newer write, but behind a superseded version: currency beats recency.
   const rows = [
-    candidateRow('module-old', {
-      extensionVersionId: 'mv-1',
+    candidateRow("module-old", {
+      extensionVersionId: "mv-1",
       isCurrent: false,
-      updatedAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: "2026-05-01T00:00:00.000Z",
     }),
-    candidateRow('module-new', {
-      extensionVersionId: 'mv-2',
+    candidateRow("module-new", {
+      extensionVersionId: "mv-2",
       isCurrent: true,
-      updatedAt: '2026-02-01T00:00:00.000Z',
+      updatedAt: "2026-02-01T00:00:00.000Z",
     }),
-  ]
-  assert.equal(pickPageSpecRow(rows)?.id, 'row-module-new')
-})
+  ];
+  assert.equal(pickPageSpecRow(rows)?.id, "row-module-new");
+});
 
-test('a stale projection still beats built-in when nothing newer is stored', () => {
+test("a stale projection still beats built-in when nothing newer is stored", () => {
   assert.equal(
-    pickPageSpecRow([candidateRow('module-old', { extensionVersionId: 'mv-1', isCurrent: false })])?.id,
-    'row-module-old',
-  )
-  assert.equal(pickPageSpecRow([]), null)
-})
+    pickPageSpecRow([candidateRow("module-old", { extensionVersionId: "mv-1", isCurrent: false })])
+      ?.id,
+    "row-module-old",
+  );
+  assert.equal(pickPageSpecRow([]), null);
+});
 
-test('same-rank ties break toward the most recent write', () => {
+test("same-rank ties break toward the most recent write", () => {
   const rows = [
-    candidateRow('module-old', {
-      extensionVersionId: 'mv-1',
+    candidateRow("module-old", {
+      extensionVersionId: "mv-1",
       isCurrent: true,
-      updatedAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: "2026-01-01T00:00:00.000Z",
     }),
-    candidateRow('module-new', {
-      extensionVersionId: 'mv-2',
+    candidateRow("module-new", {
+      extensionVersionId: "mv-2",
       isCurrent: true,
-      updatedAt: '2026-02-01T00:00:00.000Z',
+      updatedAt: "2026-02-01T00:00:00.000Z",
     }),
-  ]
-  assert.equal(pickPageSpecRow(rows)?.id, 'row-module-new')
-})
+  ];
+  assert.equal(pickPageSpecRow(rows)?.id, "row-module-new");
+});
 
-test('an installed module spec resolves when the tenant stored nothing', async () => {
-  resetPrecedenceDb([{ rows: [candidateRow('from-module', { extensionVersionId: 'mv-1', isCurrent: true })] }])
-  const result = await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
-  assert.ok(result)
-  assert.equal(contentMarker(result), 'from-module')
-  assert.equal(result.scope, 'org')
-  assert.equal(result.extensionVersionId, 'mv-1')
-})
+test("an installed module spec resolves when the tenant stored nothing", async () => {
+  resetPrecedenceDb([
+    { rows: [candidateRow("from-module", { extensionVersionId: "mv-1", isCurrent: true })] },
+  ]);
+  const result = await loadPageSpec("org-1", PRECEDENCE_ROUTE, registries);
+  assert.ok(result);
+  assert.equal(contentMarker(result), "from-module");
+  assert.equal(result.scope, "org");
+  assert.equal(result.extensionVersionId, "mv-1");
+});
 
-test('nothing stored resolves to nothing: the page renders its built-in spec', async () => {
-  resetPrecedenceDb([{ rows: [] }])
-  assert.equal(await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries, 'user-1'), null)
-})
+test("nothing stored resolves to nothing: the page renders its built-in spec", async () => {
+  resetPrecedenceDb([{ rows: [] }]);
+  assert.equal(await loadPageSpec("org-1", PRECEDENCE_ROUTE, registries, "user-1"), null);
+});
 
-test('a corrupt tenant layout does not fall through to the module: the page renders built-in', async () => {
+test("a corrupt tenant layout does not fall through to the module: the page renders built-in", async () => {
   // Fail closed, as before modules existed: an invalid winner resolves to
   // null rather than promoting a lower layer the tenant did not choose.
   resetPrecedenceDb([
     {
       rows: [
         {
-          id: 'row-bad',
+          id: "row-bad",
           spec: { nonsense: true },
           user_id: null,
           extension_version_id: null,
           is_current: false,
-          updated_at: '2026-03-01T00:00:00.000Z',
+          updated_at: "2026-03-01T00:00:00.000Z",
         },
-        candidateRow('from-module', { extensionVersionId: 'mv-1', isCurrent: true }),
+        candidateRow("from-module", { extensionVersionId: "mv-1", isCurrent: true }),
       ],
     },
-  ])
-  assert.equal(await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries), null)
-})
+  ]);
+  assert.equal(await loadPageSpec("org-1", PRECEDENCE_ROUTE, registries), null);
+});
 
-test('a corrupt extension row does not block the tenant layout above it', async () => {
+test("a corrupt extension row does not block the tenant layout above it", async () => {
   resetPrecedenceDb([
     {
       rows: [
         {
-          id: 'row-bad-module',
+          id: "row-bad-module",
           spec: { nonsense: true },
           user_id: null,
-          extension_version_id: 'mv-1',
+          extension_version_id: "mv-1",
           is_current: true,
-          updated_at: '2026-03-01T00:00:00.000Z',
+          updated_at: "2026-03-01T00:00:00.000Z",
         },
-        candidateRow('tenant-org'),
+        candidateRow("tenant-org"),
       ],
     },
-  ])
-  const result = await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
-  assert.ok(result)
-  assert.equal(contentMarker(result), 'tenant-org')
-})
+  ]);
+  const result = await loadPageSpec("org-1", PRECEDENCE_ROUTE, registries);
+  assert.ok(result);
+  assert.equal(contentMarker(result), "tenant-org");
+});
 
-test('two modules on one route resolve deterministically: last write wins', async () => {
+test("two modules on one route resolve deterministically: last write wins", async () => {
   resetPrecedenceDb([
     {
       rows: [
-        candidateRow('module-old', {
-          extensionVersionId: 'mv-1',
+        candidateRow("module-old", {
+          extensionVersionId: "mv-1",
           isCurrent: true,
-          updatedAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: "2026-01-01T00:00:00.000Z",
         }),
-        candidateRow('module-new', {
-          extensionVersionId: 'mv-2',
+        candidateRow("module-new", {
+          extensionVersionId: "mv-2",
           isCurrent: true,
-          updatedAt: '2026-02-01T00:00:00.000Z',
+          updatedAt: "2026-02-01T00:00:00.000Z",
         }),
       ],
     },
-  ])
-  const result = await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
-  assert.ok(result)
-  assert.equal(contentMarker(result), 'module-new')
-  assert.equal(result.extensionVersionId, 'mv-2')
-})
+  ]);
+  const result = await loadPageSpec("org-1", PRECEDENCE_ROUTE, registries);
+  assert.ok(result);
+  assert.equal(contentMarker(result), "module-new");
+  assert.equal(result.extensionVersionId, "mv-2");
+});
 
-test('resolution reads the module pointer and version currency', async () => {
-  resetPrecedenceDb([{ rows: [] }])
-  await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
-  const selects = precedenceDb.queries.filter((q) => q.toLowerCase().startsWith('select'))
-  assert.ok(selects.length >= 1, 'expected a select against page_specs')
+test("resolution reads the module pointer and version currency", async () => {
+  resetPrecedenceDb([{ rows: [] }]);
+  await loadPageSpec("org-1", PRECEDENCE_ROUTE, registries);
+  const selects = precedenceDb.queries.filter((q) => q.toLowerCase().startsWith("select"));
+  assert.ok(selects.length >= 1, "expected a select against page_specs");
   for (const q of selects) {
-    assert.match(q, /extension_version_id/)
-    assert.match(q, /active_version_id/)
+    assert.match(q, /extension_version_id/);
+    assert.match(q, /active_version_id/);
   }
-})
+});
 
-test('saving a tenant layout shadows a module projection without touching it', async () => {
+test("saving a tenant layout shadows a module projection without touching it", async () => {
   // Coexistence is legal now: the save supersedes tenant rows only, and the
   // extension row stays active underneath for a later clear to reveal.
-  resetPrecedenceDb([{ rows: [] }, { rows: [{ id: 'new-row' }] }])
+  resetPrecedenceDb([{ rows: [] }, { rows: [{ id: "new-row" }] }]);
   const saved = await savePageSpec({
-    orgId: 'org-1',
-    actorId: 'user-1',
+    orgId: "org-1",
+    actorId: "user-1",
     route: PRECEDENCE_ROUTE,
-    spec: precedenceSpec('tenant-new'),
+    spec: precedenceSpec("tenant-new"),
     registries,
-  })
-  assert.equal(saved.ok, true)
-  const updates = recordedUpdates()
-  assert.ok(updates.length >= 1, 'expected a supersession update')
-  for (const q of updates) assert.match(q, /extension_version_id is null/)
-})
+  });
+  assert.equal(saved.ok, true);
+  const updates = recordedUpdates();
+  assert.ok(updates.length >= 1, "expected a supersession update");
+  for (const q of updates) assert.match(q, /extension_version_id is null/);
+});
 
-test('clearing a tenant override leaves the module projection active', async () => {
-  resetPrecedenceDb([{ rows: [{ id: 'row-tenant' }] }])
-  const cleared = await clearPageSpec({ orgId: 'org-1', actorId: 'user-1', route: PRECEDENCE_ROUTE })
-  assert.equal(cleared.cleared, 1)
-  const updates = recordedUpdates()
-  assert.equal(updates.length, 1)
-  assert.match(updates[0]!, /extension_version_id is null/)
-})
+test("clearing a tenant override leaves the module projection active", async () => {
+  resetPrecedenceDb([{ rows: [{ id: "row-tenant" }] }]);
+  const cleared = await clearPageSpec({
+    orgId: "org-1",
+    actorId: "user-1",
+    route: PRECEDENCE_ROUTE,
+  });
+  assert.equal(cleared.cleared, 1);
+  const updates = recordedUpdates();
+  assert.equal(updates.length, 1);
+  assert.match(updates[0]!, /extension_version_id is null/);
+});
 
-test('restoring a version supersedes tenant rows only', async () => {
+test("restoring a version supersedes tenant rows only", async () => {
   resetPrecedenceDb([
-    { rows: [{ spec: precedenceSpec('restored'), note: null, is_active: false }] },
+    { rows: [{ spec: precedenceSpec("restored"), note: null, is_active: false }] },
     { rows: [] },
-    { rows: [{ id: 'restored-row' }] },
-  ])
+    { rows: [{ id: "restored-row" }] },
+  ]);
   const restored = await restorePageSpec({
-    orgId: 'org-1',
-    actorId: 'user-1',
+    orgId: "org-1",
+    actorId: "user-1",
     route: PRECEDENCE_ROUTE,
-    versionId: 'v-old',
+    versionId: "v-old",
     registries,
-  })
-  assert.equal(restored.ok, true)
-  const updates = recordedUpdates()
-  assert.ok(updates.length >= 1, 'expected a supersession update')
-  for (const q of updates) assert.match(q, /extension_version_id is null/)
-})
+  });
+  assert.equal(restored.ok, true);
+  const updates = recordedUpdates();
+  assert.ok(updates.length >= 1, "expected a supersession update");
+  for (const q of updates) assert.match(q, /extension_version_id is null/);
+});
 
-test('history identifies personal versions for a layer-preserving restore', async () => {
-  resetPrecedenceDb([{ rows: [{ id: 'personal', is_active: false, note: null, created_at: '2026-01-01', created_by: 'user-1', author: 'Ada', user_id: 'user-1' }] }])
-  const [version] = await listPageSpecHistory('org-1', PRECEDENCE_ROUTE, 'user-1')
-  assert.equal(version?.scope, 'user')
-})
+test("history identifies personal versions for a layer-preserving restore", async () => {
+  resetPrecedenceDb([
+    {
+      rows: [
+        {
+          id: "personal",
+          is_active: false,
+          note: null,
+          created_at: "2026-01-01",
+          created_by: "user-1",
+          author: "Ada",
+          user_id: "user-1",
+        },
+      ],
+    },
+  ]);
+  const [version] = await listPageSpecHistory("org-1", PRECEDENCE_ROUTE, "user-1");
+  assert.equal(version?.scope, "user");
+});

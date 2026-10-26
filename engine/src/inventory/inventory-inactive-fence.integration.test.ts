@@ -9,7 +9,12 @@ import { transferInventory } from "./transfers.ts";
 import { deactivateItem, postedCounts } from "./integration-seeds.ts";
 import { reverseInventoryMovement } from "./reversal.ts";
 import { InventoryError } from "./contracts.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -37,7 +42,10 @@ async function receiveWhileActive(org: ScratchOrg, quantity = "10"): Promise<str
 
 function expectInactiveRefusal(itemName: string) {
   return (e: unknown) => {
-    assert.ok(e instanceof InventoryError, "inactive posting must refuse as InventoryError (HTTP 422)");
+    assert.ok(
+      e instanceof InventoryError,
+      "inactive posting must refuse as InventoryError (HTTP 422)",
+    );
     assert.match((e as Error).message, new RegExp(itemName), "the refusal must name the item");
     assert.match((e as Error).message, /inactive/, "the refusal must say inactive");
     assert.match(
@@ -49,33 +57,41 @@ function expectInactiveRefusal(itemName: string) {
   };
 }
 
-test("receiving an inactive item is refused by name with nothing posted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await deactivateItem(org.orgId, org.items.fifo);
-    const before = await postedCounts(org.orgId);
-    await assert.rejects(
-      receiveInventory(org.orgId, null, {
-        itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId,
-        quantity: "4",
-        unitCost: "1",
-        subsidiaryId: org.subsidiaryId,
-        offsetAccountId: org.accounts.clearing,
-        date: org.date,
-      }),
-      expectInactiveRefusal("FIFO Widget"),
-    );
-    assert.deepEqual(await postedCounts(org.orgId), before, "no movement, journal, or layer may be written");
-    assert.deepEqual(
-      await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
-      { quantity: "0.0000", value: "0.0000", unitCost: "0" },
-      "no stock may be minted",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "receiving an inactive item is refused by name with nothing posted",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await deactivateItem(org.orgId, org.items.fifo);
+      const before = await postedCounts(org.orgId);
+      await assert.rejects(
+        receiveInventory(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantity: "4",
+          unitCost: "1",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+        }),
+        expectInactiveRefusal("FIFO Widget"),
+      );
+      assert.deepEqual(
+        await postedCounts(org.orgId),
+        before,
+        "no movement, journal, or layer may be written",
+      );
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
+        { quantity: "0.0000", value: "0.0000", unitCost: "0" },
+        "no stock may be minted",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("issuing an inactive item is refused by name with nothing posted", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -94,7 +110,11 @@ test("issuing an inactive item is refused by name with nothing posted", { skip: 
       }),
       expectInactiveRefusal("FIFO Widget"),
     );
-    assert.deepEqual(await postedCounts(org.orgId), before, "no movement, journal, or layer change may be written");
+    assert.deepEqual(
+      await postedCounts(org.orgId),
+      before,
+      "no movement, journal, or layer change may be written",
+    );
     assert.deepEqual(
       await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
       onHandBefore,
@@ -105,151 +125,186 @@ test("issuing an inactive item is refused by name with nothing posted", { skip: 
   }
 });
 
-test("transferring an inactive item is refused by name with nothing posted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await receiveWhileActive(org);
-    await deactivateItem(org.orgId, org.items.fifo);
-    const before = await postedCounts(org.orgId);
-    const sourceBefore = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    await assert.rejects(
-      transferInventory(org.orgId, null, {
-        itemId: org.items.fifo,
-        fromStockLocationId: org.stockLocationId,
-        toStockLocationId: org.stockLocationId2,
-        quantity: "3",
-        subsidiaryId: org.subsidiaryId,
-        date: org.date,
-      }),
-      expectInactiveRefusal("FIFO Widget"),
-    );
-    assert.deepEqual(await postedCounts(org.orgId), before, "no movement, journal, or layer change may be written");
-    assert.deepEqual(
-      await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
-      sourceBefore,
-      "no stock may leave the source",
-    );
-    assert.deepEqual(
-      await getOnHand(org.orgId, org.items.fifo, org.stockLocationId2),
-      { quantity: "0.0000", value: "0.0000", unitCost: "0" },
-      "no stock may arrive at the destination",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "transferring an inactive item is refused by name with nothing posted",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await receiveWhileActive(org);
+      await deactivateItem(org.orgId, org.items.fifo);
+      const before = await postedCounts(org.orgId);
+      const sourceBefore = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      await assert.rejects(
+        transferInventory(org.orgId, null, {
+          itemId: org.items.fifo,
+          fromStockLocationId: org.stockLocationId,
+          toStockLocationId: org.stockLocationId2,
+          quantity: "3",
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        expectInactiveRefusal("FIFO Widget"),
+      );
+      assert.deepEqual(
+        await postedCounts(org.orgId),
+        before,
+        "no movement, journal, or layer change may be written",
+      );
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
+        sourceBefore,
+        "no stock may leave the source",
+      );
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.fifo, org.stockLocationId2),
+        { quantity: "0.0000", value: "0.0000", unitCost: "0" },
+        "no stock may arrive at the destination",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("adjusting an inactive item is refused by name in both directions", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await receiveWhileActive(org);
-    await deactivateItem(org.orgId, org.items.fifo);
-    const before = await postedCounts(org.orgId);
-    const onHandBefore = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    await assert.rejects(
-      adjustInventory(org.orgId, null, {
+test(
+  "adjusting an inactive item is refused by name in both directions",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await receiveWhileActive(org);
+      await deactivateItem(org.orgId, org.items.fifo);
+      const before = await postedCounts(org.orgId);
+      const onHandBefore = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      await assert.rejects(
+        adjustInventory(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantityDelta: "5",
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        expectInactiveRefusal("FIFO Widget"),
+      );
+      await assert.rejects(
+        adjustInventory(org.orgId, null, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantityDelta: "-2",
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        expectInactiveRefusal("FIFO Widget"),
+      );
+      assert.deepEqual(
+        await postedCounts(org.orgId),
+        before,
+        "no movement, journal, or layer change may be written",
+      );
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
+        onHandBefore,
+        "on-hand must be untouched",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "reversing a receipt stays possible after the item is deactivated",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const movementId = await receiveWhileActive(org);
+      await deactivateItem(org.orgId, org.items.fifo);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const reversed = await reverseInventoryMovement(org.orgId, actorId, {
+        movementId,
+        reversalDate: org.date,
+        reason: "supplier recalled the shipment after discontinuation",
+      });
+      assert.equal(reversed.alreadyReversed, false);
+      assert.equal(reversed.movementIds.length, 1);
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
+        { quantity: "0.0000", value: "0.0000", unitCost: "0" },
+        "the reversal must restore the exact prior state",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a deactivation racing a receipt serializes to one refusal with no partial post",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const editor = new pg.Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+    });
+    await editor.connect();
+    let editorCommitted = false;
+    let pendingReceipt: ReturnType<typeof receiveInventory> | undefined;
+    try {
+      const before = await postedCounts(org.orgId);
+
+      // Hold the deactivation's FOR UPDATE uncommitted — the same lock the
+      // item PATCH takes — so the receipt must queue on the items row.
+      await editor.query("begin");
+      // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
+      await editor.query(`update items set is_active = false where id = '${org.items.fifo}'`);
+
+      pendingReceipt = receiveInventory(org.orgId, null, {
         itemId: org.items.fifo,
         stockLocationId: org.stockLocationId,
-        quantityDelta: "5",
+        quantity: "4",
+        unitCost: "1",
         subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
         date: org.date,
-      }),
-      expectInactiveRefusal("FIFO Widget"),
-    );
-    await assert.rejects(
-      adjustInventory(org.orgId, null, {
-        itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId,
-        quantityDelta: "-2",
-        subsidiaryId: org.subsidiaryId,
-        date: org.date,
-      }),
-      expectInactiveRefusal("FIFO Widget"),
-    );
-    assert.deepEqual(await postedCounts(org.orgId), before, "no movement, journal, or layer change may be written");
-    assert.deepEqual(
-      await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
-      onHandBefore,
-      "on-hand must be untouched",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
 
-test("reversing a receipt stays possible after the item is deactivated", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const movementId = await receiveWhileActive(org);
-    await deactivateItem(org.orgId, org.items.fifo);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const reversed = await reverseInventoryMovement(org.orgId, actorId, {
-      movementId,
-      reversalDate: org.date,
-      reason: "supplier recalled the shipment after discontinuation",
-    });
-    assert.equal(reversed.alreadyReversed, false);
-    assert.equal(reversed.movementIds.length, 1);
-    assert.deepEqual(
-      await getOnHand(org.orgId, org.items.fifo, org.stockLocationId),
-      { quantity: "0.0000", value: "0.0000", unitCost: "0" },
-      "the reversal must restore the exact prior state",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("a deactivation racing a receipt serializes to one refusal with no partial post", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
-  await editor.connect();
-  let editorCommitted = false;
-  let pendingReceipt: ReturnType<typeof receiveInventory> | undefined;
-  try {
-    const before = await postedCounts(org.orgId);
-
-    // Hold the deactivation's FOR UPDATE uncommitted — the same lock the
-    // item PATCH takes — so the receipt must queue on the items row.
-    await editor.query("begin");
-    // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
-    await editor.query(`update items set is_active = false where id = '${org.items.fifo}'`);
-
-    pendingReceipt = receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "4",
-      unitCost: "1",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing,
-      date: org.date,
-    });
-
-    // Row-level waits never appear as ungranted relation locks in pg_locks
-    // (they queue on the holder's transaction id), so watch the blocked
-    // backend itself: the receipt's items read waiting on a Lock event.
-    let queuedOnItems = false;
-    for (let waited = 0; waited < 10_000 && !queuedOnItems; waited += 25) {
-      const waiting = (await db.execute<{ waiting: boolean }>(sql`
+      // Row-level waits never appear as ungranted relation locks in pg_locks
+      // (they queue on the holder's transaction id), so watch the blocked
+      // backend itself: the receipt's items read waiting on a Lock event.
+      let queuedOnItems = false;
+      for (let waited = 0; waited < 10_000 && !queuedOnItems; waited += 25) {
+        const waiting = (
+          await db.execute<{ waiting: boolean }>(
+            sql`
         select exists(
           select 1 from pg_stat_activity
            where wait_event_type = 'Lock'
              and query ilike '%from items%'
         ) as waiting
-      `, "objects"))[0]?.waiting;
-      queuedOnItems = waiting === true;
-      if (!queuedOnItems) await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.equal(queuedOnItems, true, "the receipt must wait for the concurrent deactivation");
+      `,
+            "objects",
+          )
+        )[0]?.waiting;
+        queuedOnItems = waiting === true;
+        if (!queuedOnItems) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(queuedOnItems, true, "the receipt must wait for the concurrent deactivation");
 
-    await editor.query("commit");
-    editorCommitted = true;
-    await assert.rejects(pendingReceipt, expectInactiveRefusal("FIFO Widget"));
-    assert.deepEqual(await postedCounts(org.orgId), before, "the raced receipt must leave no partial post");
-  } finally {
-    if (!editorCommitted) await editor.query("rollback").catch(() => undefined);
-    await editor.end().catch(() => undefined);
-    await pendingReceipt?.catch(() => undefined);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await editor.query("commit");
+      editorCommitted = true;
+      await assert.rejects(pendingReceipt, expectInactiveRefusal("FIFO Widget"));
+      assert.deepEqual(
+        await postedCounts(org.orgId),
+        before,
+        "the raced receipt must leave no partial post",
+      );
+    } finally {
+      if (!editorCommitted) await editor.query("rollback").catch(() => undefined);
+      await editor.end().catch(() => undefined);
+      await pendingReceipt?.catch(() => undefined);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

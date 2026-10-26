@@ -1,74 +1,154 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { registerHooks } from 'node:module'
-import { randomUUID } from 'node:crypto'
-import pg from 'pg'
-import type { SessionUser } from '../../../lib/auth'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
+import { randomUUID } from "node:crypto";
+import pg from "pg";
+import type { SessionUser } from "../../../lib/auth";
 
-const session: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __timesheetSaveControls: session })
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__timesheetSaveControls.user}' }
-  return next(specifier, context)
-}})
-const { configureTimesheetReviewFixture,decideTimesheetFixture,installTimesheetFlowFixture } = await import('../../../testing/timesheet-flows')
-const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
-const { waitForLockWaiter } = await import('@openbooks/engine/testing/lock-wait')
-const { PUT } = await import('./route')
-const { POST: submitWeek } = await import('./submit/route')
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __timesheetSaveControls: session });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "next-intl/server")
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}",
+      };
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__timesheetSaveControls.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { configureTimesheetReviewFixture, decideTimesheetFixture, installTimesheetFlowFixture } =
+  await import("../../../testing/timesheet-flows");
+const { sql } = await import("drizzle-orm");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
+const { waitForLockWaiter } = await import("@openbooks/engine/testing/lock-wait");
+const { PUT } = await import("./route");
+const { POST: submitWeek } = await import("./submit/route");
 
-const { loadWeek } = await import('./_lib')
-const { isIsoCalendarDate } = await import('@openbooks/engine/platform/business-date/module')
+const { loadWeek } = await import("./_lib");
+const { isIsoCalendarDate } = await import("@openbooks/engine/platform/business-date/module");
 
 async function fixture(reviewRequired: boolean) {
-  const org = await createScratchOrg()
-  const actor = await createScratchUser(org.orgId, 'Timesheet auditor', 'reviewer')
-  await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
-  await installTimesheetFlowFixture()
-  if(reviewRequired)await configureTimesheetReviewFixture(org.orgId,actor,false)
-  session.user = { id: actor, orgId: org.orgId, name: 'Auditor', email: 'auditor@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-  const nativeId = () => { const id = randomUUID(); return `${id.slice(0, 14)}f${id.slice(15)}` }
-  const employee = nativeId(), project = nativeId()
-  await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
-    features: { projects: true, timeTracking: true },
-    laborCosting: { mode: 'post', hoursPerDay: "8", annualHours: "2080", components: [] },
-    controlAccounts: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, laborWip: org.accounts.cogs, laborClearing: org.accounts.clearing },
-  })}::jsonb where id=${org.orgId}`)
+  const org = await createScratchOrg();
+  const actor = await createScratchUser(org.orgId, "Timesheet auditor", "reviewer");
+  await db.execute(
+    sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+  );
+  await installTimesheetFlowFixture();
+  if (reviewRequired) await configureTimesheetReviewFixture(org.orgId, actor, false);
+  session.user = {
+    id: actor,
+    orgId: org.orgId,
+    name: "Auditor",
+    email: "auditor@example.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: org.orgId,
+    homeOrgId: org.orgId,
+    homeUserId: actor,
+  };
+  const nativeId = () => {
+    const id = randomUUID();
+    return `${id.slice(0, 14)}f${id.slice(15)}`;
+  };
+  const employee = nativeId(),
+    project = nativeId();
+  await db.execute(
+    sql`update orgs set settings = settings || ${JSON.stringify({
+      features: { projects: true, timeTracking: true },
+      laborCosting: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] },
+      controlAccounts: {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+        laborWip: org.accounts.cogs,
+        laborClearing: org.accounts.clearing,
+      },
+    })}::jsonb where id=${org.orgId}`,
+  );
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-    values (${employee},${org.orgId},'employee','Time worker',${org.subsidiaryId},true,'{}'::jsonb)`)
-  await db.execute(sql`insert into employee_roles(id,org_id,party_id,is_active) values (${randomUUID()},${org.orgId},${employee},true)`)
+    values (${employee},${org.orgId},'employee','Time worker',${org.subsidiaryId},true,'{}'::jsonb)`);
+  await db.execute(
+    sql`insert into employee_roles(id,org_id,party_id,is_active) values (${randomUUID()},${org.orgId},${employee},true)`,
+  );
   await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
-    values (${project},${org.orgId},${org.subsidiaryId},'SAVE','Time save',${org.customerId},'active',true,'{}'::jsonb)`)
+    values (${project},${org.orgId},${org.subsidiaryId},'SAVE','Time save',${org.customerId},'active',true,'{}'::jsonb)`);
   await db.execute(sql`insert into labor_cost_rates(org_id,employee_party_id,currency,rate,basis,effective_from,is_active)
-    values (${org.orgId},${employee},'CAD','30','hour','2026-01-01',true)`)
-  await db.execute(sql`update items set default_rate='100' where org_id=${org.orgId} and id=${org.items.service}`)
-  const row = { projectId: project, itemId: org.items.service, isBillable: true, hours: ['', '', '', '4', '', '', ''] }
-  const save = async (body: { week?: string; expectedRevision?: string; [key: string]: unknown }) => {
-    const week = body.week && isIsoCalendarDate(body.week) ? body.week : '2026-07-12'
-    const expectedRevision = body.expectedRevision ?? (await withOrgContext(org.orgId, () => loadWeek(org.orgId, employee, week))).revision
-    return withOrgContext(org.orgId, () => PUT(new Request('http://audit.local/api/timesheets', {
-      method: 'PUT', body: JSON.stringify({ employee, week: '2026-07-12', rows: [row], expectedRevision, ...body }),
-    })))
-  }
-  const submit=async(week='2026-07-12')=>{
-    const loaded=await withOrgContext(org.orgId,()=>loadWeek(org.orgId,employee,week));
-    const additional=loaded.status==='approved'?{selections:loaded.pendingEntries!.map(({id,updatedAt})=>({id,updatedAt})),reason:'Submit the newly recorded hours.'}:{};
-    return withOrgContext(org.orgId,()=>submitWeek(new Request('http://audit.local/api/timesheets/submit',{method:'POST',body:JSON.stringify({employee,week,...additional})})));
-  }
-  const snapshot = () => db.execute(sql`select * from time_entries where org_id=${org.orgId} order by id`, 'objects')
-  const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
-  return { org, actor, employee, project, row, save, submit, snapshot, close }
+    values (${org.orgId},${employee},'CAD','30','hour','2026-01-01',true)`);
+  await db.execute(
+    sql`update items set default_rate='100' where org_id=${org.orgId} and id=${org.items.service}`,
+  );
+  const row = {
+    projectId: project,
+    itemId: org.items.service,
+    isBillable: true,
+    hours: ["", "", "", "4", "", "", ""],
+  };
+  const save = async (body: {
+    week?: string;
+    expectedRevision?: string;
+    [key: string]: unknown;
+  }) => {
+    const week = body.week && isIsoCalendarDate(body.week) ? body.week : "2026-07-12";
+    const expectedRevision =
+      body.expectedRevision ??
+      (await withOrgContext(org.orgId, () => loadWeek(org.orgId, employee, week))).revision;
+    return withOrgContext(org.orgId, () =>
+      PUT(
+        new Request("http://audit.local/api/timesheets", {
+          method: "PUT",
+          body: JSON.stringify({
+            employee,
+            week: "2026-07-12",
+            rows: [row],
+            expectedRevision,
+            ...body,
+          }),
+        }),
+      ),
+    );
+  };
+  const submit = async (week = "2026-07-12") => {
+    const loaded = await withOrgContext(org.orgId, () => loadWeek(org.orgId, employee, week));
+    const additional =
+      loaded.status === "approved"
+        ? {
+            selections: loaded.pendingEntries!.map(({ id, updatedAt }) => ({ id, updatedAt })),
+            reason: "Submit the newly recorded hours.",
+          }
+        : {};
+    return withOrgContext(org.orgId, () =>
+      submitWeek(
+        new Request("http://audit.local/api/timesheets/submit", {
+          method: "POST",
+          body: JSON.stringify({ employee, week, ...additional }),
+        }),
+      ),
+    );
+  };
+  const snapshot = () =>
+    db.execute(sql`select * from time_entries where org_id=${org.orgId} order by id`, "objects");
+  const close = async () => {
+    session.user = null;
+    await dropScratchOrgReporting(org.orgId);
+  };
+  return { org, actor, employee, project, row, save, submit, snapshot, close };
 }
 
-test('malformed weekly grids cannot erase existing hours', async () => {
-  const f = await fixture(true)
+test("malformed weekly grids cannot erase existing hours", async () => {
+  const f = await fixture(true);
   try {
-    assert.equal((await f.save({})).status, 200)
-    const before = await f.snapshot()
-    assert.equal(before.length, 1)
+    assert.equal((await f.save({})).status, 200);
+    const before = await f.snapshot();
+    assert.equal(before.length, 1);
     for (const body of [
       { employee: "not-an-id" },
       { rows: [{ ...f.row, projectId: "not-an-id" }] },
@@ -76,280 +156,420 @@ test('malformed weekly grids cannot erase existing hours', async () => {
       { rows: [{ ...f.row, hours: null }] },
       { rows: [{ projectId: f.project }] },
       { rows: [null] },
-      { rows: [{ ...f.row, isBillable: 'true' }] },
-      { rows: [{ ...f.row, hours: ['', '', '', '4', '', '', '', '8'] }] },
-      { week: '2026-02-30', rows: [] },
+      { rows: [{ ...f.row, isBillable: "true" }] },
+      { rows: [{ ...f.row, hours: ["", "", "", "4", "", "", "", "8"] }] },
+      { week: "2026-02-30", rows: [] },
     ]) {
-      const response = await f.save(body)
-      assert.equal(response.status, 422, JSON.stringify(body))
-      assert.deepEqual(await f.snapshot(), before)
+      const response = await f.save(body);
+      assert.equal(response.status, 422, JSON.stringify(body));
+      assert.deepEqual(await f.snapshot(), before);
     }
     // An intentional empty grid still clears editable time.
-    assert.equal((await f.save({ rows: [] })).status, 200)
-    assert.equal((await f.snapshot()).length, 0)
-  } finally { await f.close() }
-})
+    assert.equal((await f.save({ rows: [] })).status, 200);
+    assert.equal((await f.snapshot()).length, 0);
+  } finally {
+    await f.close();
+  }
+});
 
-test('zero-gate submission captures rates and posts configured labor atomically', async () => {
-  const f = await fixture(false)
+test("zero-gate submission captures rates and posts configured labor atomically", async () => {
+  const f = await fixture(false);
   try {
-    const response = await f.save({})
-    assert.equal(response.status, 200, await response.clone().text())
-    assert.equal((await f.snapshot())[0]!.status,'draft','saving captures a draft; submission applies the tenant policy');
-    const submitted=await f.submit();assert.equal(submitted.status,200,await submitted.clone().text());
-    const entry = (await f.snapshot())[0]!
-    assert.equal(entry.status, 'approved')
-    assert.equal(entry.cost_rate, '30.0000')
-    assert.equal(entry.bill_rate, '100.0000')
-    assert.ok(entry.cost_journal_entry_id)
-    assert.equal(entry.approved_by, f.actor, 'zero-gate release retains the actual native command actor')
-    const journal = (await db.execute(sql`select count(*)::int as lines, sum(amount)::text as balance from journal_lines where org_id=${f.org.orgId} and entry_id=${entry.cost_journal_entry_id}`, 'objects'))[0]!
-    assert.equal(journal.lines, 2)
-    assert.equal(journal.balance, '0.0000')
+    const response = await f.save({});
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal(
+      (await f.snapshot())[0]!.status,
+      "draft",
+      "saving captures a draft; submission applies the tenant policy",
+    );
+    const submitted = await f.submit();
+    assert.equal(submitted.status, 200, await submitted.clone().text());
+    const entry = (await f.snapshot())[0]!;
+    assert.equal(entry.status, "approved");
+    assert.equal(entry.cost_rate, "30.0000");
+    assert.equal(entry.bill_rate, "100.0000");
+    assert.ok(entry.cost_journal_entry_id);
+    assert.equal(
+      entry.approved_by,
+      f.actor,
+      "zero-gate release retains the actual native command actor",
+    );
+    const journal = (
+      await db.execute(
+        sql`select count(*)::int as lines, sum(amount)::text as balance from journal_lines where org_id=${f.org.orgId} and entry_id=${entry.cost_journal_entry_id}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(journal.lines, 2);
+    assert.equal(journal.balance, "0.0000");
     // The next day's automatic approval preserves the first day's posted
     // evidence and applies effects only to the newly captured hours.
-    assert.equal((await f.save({ rows: [{ ...f.row, hours: ['', '', '', '', '2', '', ''] }] })).status, 200)
-    const additional=await f.submit();assert.equal(additional.status,200,await additional.clone().text());
-    const before = await f.snapshot()
-    assert.equal(before.length, 2)
-    assert.deepEqual(before.find(row => row.id === entry.id), entry)
-    const posted = (await db.execute(sql`select sum(l.amount)::text as cost from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-      where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.cogs} and e.status='posted'`, 'objects'))[0]!
-    assert.equal(posted.cost, '180.0000')
+    assert.equal(
+      (await f.save({ rows: [{ ...f.row, hours: ["", "", "", "", "2", "", ""] }] })).status,
+      200,
+    );
+    const additional = await f.submit();
+    assert.equal(additional.status, 200, await additional.clone().text());
+    const before = await f.snapshot();
+    assert.equal(before.length, 2);
+    assert.deepEqual(
+      before.find((row) => row.id === entry.id),
+      entry,
+    );
+    const posted = (
+      await db.execute(
+        sql`select sum(l.amount)::text as cost from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+      where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.cogs} and e.status='posted'`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(posted.cost, "180.0000");
     // No accounting period exists for this second date. Failed effects must
     // roll back the time insert as well as the journal work.
-    assert.equal((await f.save({week:'2026-08-02'})).status,200);
-    const saved=await f.snapshot();
-    const refused=await f.submit('2026-08-02');
-    const refusalBody=await refused.text();
-    assert.equal(refused.status,409,refusalBody);
-    assert.match(refusalBody,/No accounting period covers/);
-    assert.deepEqual(await f.snapshot(),saved,'a refused submission preserves the saved draft and every posted row');
-    for(const row of before)assert.deepEqual(saved.find(candidate=>candidate.id===row.id),row)
-  } finally { await f.close() }
-})
+    assert.equal((await f.save({ week: "2026-08-02" })).status, 200);
+    const saved = await f.snapshot();
+    const refused = await f.submit("2026-08-02");
+    const refusalBody = await refused.text();
+    assert.equal(refused.status, 409, refusalBody);
+    assert.match(refusalBody, /No accounting period covers/);
+    assert.deepEqual(
+      await f.snapshot(),
+      saved,
+      "a refused submission preserves the saved draft and every posted row",
+    );
+    for (const row of before)
+      assert.deepEqual(
+        saved.find((candidate) => candidate.id === row.id),
+        row,
+      );
+  } finally {
+    await f.close();
+  }
+});
 
-test('nonbillable employee hours retain their department and dated wage without inventing project costs', async () => {
-  const f = await fixture(true)
+test("nonbillable employee hours retain their department and dated wage without inventing project costs", async () => {
+  const f = await fixture(true);
   try {
-    const department = randomUUID(), otherDepartment = randomUUID(), otherSub = randomUUID()
+    const department = randomUUID(),
+      otherDepartment = randomUUID(),
+      otherSub = randomUUID();
     await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,custom)
-      values (${otherSub},${f.org.orgId},${f.org.subsidiaryId},'Other company','CAD','CA',true,'{}'::jsonb)`)
+      values (${otherSub},${f.org.orgId},${f.org.subsidiaryId},'Other company','CAD','CA',true,'{}'::jsonb)`);
     await db.execute(sql`insert into departments(id,org_id,subsidiary_id,name)
       values (${department},${f.org.orgId},${f.org.subsidiaryId},'Administration'),
-        (${otherDepartment},${f.org.orgId},${otherSub},'Other company administration')`)
-    const row = { ...f.row, projectId: null, departmentId: department, isBillable: false, memo: 'Training' }
-    for (const invalid of [{ ...row, isBillable: true }, { ...row, departmentId: otherDepartment }]) {
-      const refusal = await f.save({ rows: [invalid] })
-      assert.equal(refusal.status, 422, await refusal.clone().text())
-      const message = ((await refusal.json()) as { error: string }).error
-      assert.match(message, invalid.isBillable ? /Billable hours need a project.*select.*or mark.*nonbillable/ : /department.*different legal entity.*select/)
-      assert.equal((await f.snapshot()).length, 0)
+        (${otherDepartment},${f.org.orgId},${otherSub},'Other company administration')`);
+    const row = {
+      ...f.row,
+      projectId: null,
+      departmentId: department,
+      isBillable: false,
+      memo: "Training",
+    };
+    for (const invalid of [
+      { ...row, isBillable: true },
+      { ...row, departmentId: otherDepartment },
+    ]) {
+      const refusal = await f.save({ rows: [invalid] });
+      assert.equal(refusal.status, 422, await refusal.clone().text());
+      const message = ((await refusal.json()) as { error: string }).error;
+      assert.match(
+        message,
+        invalid.isBillable
+          ? /Billable hours need a project.*select.*or mark.*nonbillable/
+          : /department.*different legal entity.*select/,
+      );
+      assert.equal((await f.snapshot()).length, 0);
     }
-    assert.equal((await f.save({ rows: [row] })).status, 200)
-    const draft = (await f.snapshot())[0]!
-    assert.equal(draft.status, 'draft')
-    assert.equal(draft.project_id, null)
-    assert.equal(draft.department_id, department)
-    const command = (action: typeof submitWeek) => withOrgContext(f.org.orgId, () => action(new Request('http://audit.local/api/timesheets', {
-      method: 'POST', body: JSON.stringify({ employee: f.employee, week: '2026-07-12' }),
-    })))
-    const submitted = await command(submitWeek)
-    assert.equal(submitted.status, 200, await submitted.clone().text())
-    const approved = await withOrgContext(f.org.orgId,()=>decideTimesheetFixture({orgId:f.org.orgId,employee:f.employee,week:'2026-07-12',decision:'approved'}))
-    assert.equal(approved.status, 200, await approved.clone().text())
-    const entry = (await f.snapshot())[0]!
-    assert.equal(entry.id, draft.id)
-    assert.equal(entry.project_id, null)
-    assert.equal(entry.department_id, department)
-    assert.equal(entry.hours, '4.0000')
-    assert.equal(entry.status, 'approved')
-    assert.equal(entry.approved_by, f.actor)
-    assert.equal(entry.cost_rate, '30.0000')
-    assert.equal(entry.cost_rate_currency, 'CAD')
-    assert.equal(entry.cost_rate_subsidiary_id, f.org.subsidiaryId)
-    assert.equal(entry.bill_rate, null)
-    assert.equal(entry.cost_journal_entry_id, null)
-    assert.equal(entry.overhead_journal_entry_id, null)
-    const journals = await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`, 'objects')
-    assert.equal(journals.length, 0)
-    const audit = await db.execute(sql`select changes from audit_log where org_id=${f.org.orgId}
-      and table_name='timesheet_weeks' and actor_id=${f.actor} and changes->>'event'='approved'`, 'objects')
-    assert.equal(audit.length, 1)
-    assert.equal((await f.save({ rows: [row] })).status, 200)
-    assert.deepEqual(await f.snapshot(), [entry])
-    assert.deepEqual(await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`, 'objects'), journals)
-  } finally { await f.close() }
-})
+    assert.equal((await f.save({ rows: [row] })).status, 200);
+    const draft = (await f.snapshot())[0]!;
+    assert.equal(draft.status, "draft");
+    assert.equal(draft.project_id, null);
+    assert.equal(draft.department_id, department);
+    const command = (action: typeof submitWeek) =>
+      withOrgContext(f.org.orgId, () =>
+        action(
+          new Request("http://audit.local/api/timesheets", {
+            method: "POST",
+            body: JSON.stringify({ employee: f.employee, week: "2026-07-12" }),
+          }),
+        ),
+      );
+    const submitted = await command(submitWeek);
+    assert.equal(submitted.status, 200, await submitted.clone().text());
+    const approved = await withOrgContext(f.org.orgId, () =>
+      decideTimesheetFixture({
+        orgId: f.org.orgId,
+        employee: f.employee,
+        week: "2026-07-12",
+        decision: "approved",
+      }),
+    );
+    assert.equal(approved.status, 200, await approved.clone().text());
+    const entry = (await f.snapshot())[0]!;
+    assert.equal(entry.id, draft.id);
+    assert.equal(entry.project_id, null);
+    assert.equal(entry.department_id, department);
+    assert.equal(entry.hours, "4.0000");
+    assert.equal(entry.status, "approved");
+    assert.equal(entry.approved_by, f.actor);
+    assert.equal(entry.cost_rate, "30.0000");
+    assert.equal(entry.cost_rate_currency, "CAD");
+    assert.equal(entry.cost_rate_subsidiary_id, f.org.subsidiaryId);
+    assert.equal(entry.bill_rate, null);
+    assert.equal(entry.cost_journal_entry_id, null);
+    assert.equal(entry.overhead_journal_entry_id, null);
+    const journals = await db.execute(
+      sql`select * from journal_entries where org_id=${f.org.orgId} order by id`,
+      "objects",
+    );
+    assert.equal(journals.length, 0);
+    const audit = await db.execute(
+      sql`select changes from audit_log where org_id=${f.org.orgId}
+      and table_name='timesheet_weeks' and actor_id=${f.actor} and changes->>'event'='approved'`,
+      "objects",
+    );
+    assert.equal(audit.length, 1);
+    assert.equal((await f.save({ rows: [row] })).status, 200);
+    assert.deepEqual(await f.snapshot(), [entry]);
+    assert.deepEqual(
+      await db.execute(
+        sql`select * from journal_entries where org_id=${f.org.orgId} order by id`,
+        "objects",
+      ),
+      journals,
+    );
+  } finally {
+    await f.close();
+  }
+});
 
-test('replaying an identical save returns the stored week without duplicating hours or effects', async () => {
+test("replaying an identical save returns the stored week without duplicating hours or effects", async () => {
   // A replayed grid retains submitted financial evidence.
-  const f = await fixture(false)
+  const f = await fixture(false);
   try {
-    assert.equal((await f.save({})).status, 200)
-    const submission=await f.submit();assert.equal(submission.status,200,await submission.clone().text());
-    const first = await f.snapshot()
-    assert.equal(first.length, 1)
-    const journalsBefore = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`, 'objects'))[0]!.n
-    const replay = await f.save({})
-    assert.equal(replay.status, 200, await replay.clone().text())
-    const second = await f.snapshot()
-    assert.deepEqual(second.map((row) => row.id), first.map((row) => row.id), 'replay must reuse the stored rows')
-    assert.deepEqual(second, first)
-    const journalsAfter = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`, 'objects'))[0]!.n
-    assert.equal(journalsAfter, journalsBefore, 'replay must not post fresh financial effects')
-  } finally { await f.close() }
-})
+    assert.equal((await f.save({})).status, 200);
+    const submission = await f.submit();
+    assert.equal(submission.status, 200, await submission.clone().text());
+    const first = await f.snapshot();
+    assert.equal(first.length, 1);
+    const journalsBefore = (
+      await db.execute(
+        sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
+    const replay = await f.save({});
+    assert.equal(replay.status, 200, await replay.clone().text());
+    const second = await f.snapshot();
+    assert.deepEqual(
+      second.map((row) => row.id),
+      first.map((row) => row.id),
+      "replay must reuse the stored rows",
+    );
+    assert.deepEqual(second, first);
+    const journalsAfter = (
+      await db.execute(
+        sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
+    assert.equal(journalsAfter, journalsBefore, "replay must not post fresh financial effects");
+  } finally {
+    await f.close();
+  }
+});
 
-test('replaying a draft grid reuses the stored rows instead of churning them', async () => {
-  const f = await fixture(true)
+test("replaying a draft grid reuses the stored rows instead of churning them", async () => {
+  const f = await fixture(true);
   try {
-    assert.equal((await f.save({})).status, 200)
-    const first = await f.snapshot()
-    assert.equal(first.length, 1)
-    assert.equal((await f.save({})).status, 200)
-    assert.deepEqual(await f.snapshot(), first)
-  } finally { await f.close() }
-})
+    assert.equal((await f.save({})).status, 200);
+    const first = await f.snapshot();
+    assert.equal(first.length, 1);
+    assert.equal((await f.save({})).status, 200);
+    assert.deepEqual(await f.snapshot(), first);
+  } finally {
+    await f.close();
+  }
+});
 
-test('time cannot be pinned to a non-person party or an employment that lapsed', async () => {
-  const f = await fixture(true)
+test("time cannot be pinned to a non-person party or an employment that lapsed", async () => {
+  const f = await fixture(true);
   try {
-    assert.equal((await f.save({})).status, 200)
+    assert.equal((await f.save({})).status, 200);
     // A vendor party (no employee role at all) is not an employee.
-    const vendor = randomUUID()
+    const vendor = randomUUID();
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-      values (${vendor},${f.org.orgId},'vendor','No Employment',${f.org.subsidiaryId},true,'{}'::jsonb)`)
-    const refused = await f.save({ employee: vendor })
-    assert.equal(refused.status, 422, await refused.clone().text())
-    assert.match(((await refused.json()) as { error: string }).error, /Employee not found/)
+      values (${vendor},${f.org.orgId},'vendor','No Employment',${f.org.subsidiaryId},true,'{}'::jsonb)`);
+    const refused = await f.save({ employee: vendor });
+    assert.equal(refused.status, 422, await refused.clone().text());
+    assert.match(((await refused.json()) as { error: string }).error, /Employee not found/);
     // Deactivating the employment closes the pin even though the party stays.
-    const expectedRevision = (await withOrgContext(f.org.orgId, () => loadWeek(f.org.orgId, f.employee, '2026-07-12'))).revision
-    await db.execute(sql`update employee_roles set is_active = false where org_id=${f.org.orgId} and party_id=${f.employee}`)
-    const closed = await f.save({ expectedRevision })
-    assert.equal(closed.status, 422, await closed.clone().text())
-    assert.match(((await closed.json()) as { error: string }).error, /Employee not found/)
-    assert.equal((await f.snapshot()).length, 1, 'refused pins store nothing new')
-  } finally { await f.close() }
-})
+    const expectedRevision = (
+      await withOrgContext(f.org.orgId, () => loadWeek(f.org.orgId, f.employee, "2026-07-12"))
+    ).revision;
+    await db.execute(
+      sql`update employee_roles set is_active = false where org_id=${f.org.orgId} and party_id=${f.employee}`,
+    );
+    const closed = await f.save({ expectedRevision });
+    assert.equal(closed.status, 422, await closed.clone().text());
+    assert.match(((await closed.json()) as { error: string }).error, /Employee not found/);
+    assert.equal((await f.snapshot()).length, 1, "refused pins store nothing new");
+  } finally {
+    await f.close();
+  }
+});
 
-test('a weekly save never deletes amendment offsets or their referenced originals', async () => {
+test("a weekly save never deletes amendment offsets or their referenced originals", async () => {
   // Amendment history is append-only: an offset points at its original by
   // id, and deleting either side orphans the correction into phantom
   // hours. With automatic approval the approved original would otherwise
   // be replaceable — only the amendment link keeps it (and the offset
   // itself) out of the save's delete set.
-  const f = await fixture(false)
+  const f = await fixture(false);
   try {
-    const originalId = randomUUID()
-    const offsetId = randomUUID()
-    const ordinaryId = randomUUID()
+    const originalId = randomUUID();
+    const offsetId = randomUUID();
+    const ordinaryId = randomUUID();
     await db.execute(sql`insert into time_entries
       (id, org_id, employee_party_id, worked_on, hours, project_id, item_id, status, is_billable, costing_basis, custom, created_by, updated_by)
-      values (${originalId},${f.org.orgId},${f.employee},'2026-07-15','4.0000',${f.project},${f.org.items.service},'approved',true,'actual','{}'::jsonb,${f.actor},${f.actor})`)
+      values (${originalId},${f.org.orgId},${f.employee},'2026-07-15','4.0000',${f.project},${f.org.items.service},'approved',true,'actual','{}'::jsonb,${f.actor},${f.actor})`);
     await db.execute(sql`insert into time_entries
       (id, org_id, employee_party_id, worked_on, hours, project_id, item_id, status, is_billable, costing_basis, custom, amends_entry_id, created_by, updated_by)
-      values (${offsetId},${f.org.orgId},${f.employee},'2026-07-15','-4.0000',${f.project},${f.org.items.service},'draft',true,'actual','{}'::jsonb,${originalId},${f.actor},${f.actor})`)
+      values (${offsetId},${f.org.orgId},${f.employee},'2026-07-15','-4.0000',${f.project},${f.org.items.service},'draft',true,'actual','{}'::jsonb,${originalId},${f.actor},${f.actor})`);
     await db.execute(sql`insert into time_entries
       (id, org_id, employee_party_id, worked_on, hours, project_id, item_id, status, is_billable, costing_basis, custom, created_by, updated_by)
-      values (${ordinaryId},${f.org.orgId},${f.employee},'2026-07-16','2.0000',${f.project},${f.org.items.service},'draft',true,'actual','{}'::jsonb,${f.actor},${f.actor})`)
-    const before = await f.snapshot()
-    assert.equal(before.length, 3)
+      values (${ordinaryId},${f.org.orgId},${f.employee},'2026-07-16','2.0000',${f.project},${f.org.items.service},'draft',true,'actual','{}'::jsonb,${f.actor},${f.actor})`);
+    const before = await f.snapshot();
+    assert.equal(before.length, 3);
     // A grid that replaces the week's editable hours outright.
-    const response = await f.save({ rows: [{ ...f.row, hours: ['', '', '', '8', '', '', ''] }] })
-    assert.equal(response.status, 200, await response.clone().text())
-    const after = await f.snapshot()
-    const byId = new Map(after.map((row) => [row.id, row]))
-    assert.deepEqual(byId.get(originalId), before.find((row) => row.id === originalId), 'the referenced original survives byte-identical')
-    assert.deepEqual(byId.get(offsetId), before.find((row) => row.id === offsetId), 'the amendment offset survives byte-identical')
-    assert.ok(!byId.has(ordinaryId), 'the ordinary replaceable row is replaced')
-    assert.equal(after.length, 3, 'original + offset + the newly saved line')
-  } finally { await f.close() }
-})
+    const response = await f.save({ rows: [{ ...f.row, hours: ["", "", "", "8", "", "", ""] }] });
+    assert.equal(response.status, 200, await response.clone().text());
+    const after = await f.snapshot();
+    const byId = new Map(after.map((row) => [row.id, row]));
+    assert.deepEqual(
+      byId.get(originalId),
+      before.find((row) => row.id === originalId),
+      "the referenced original survives byte-identical",
+    );
+    assert.deepEqual(
+      byId.get(offsetId),
+      before.find((row) => row.id === offsetId),
+      "the amendment offset survives byte-identical",
+    );
+    assert.ok(!byId.has(ordinaryId), "the ordinary replaceable row is replaced");
+    assert.equal(after.length, 3, "original + offset + the newly saved line");
+  } finally {
+    await f.close();
+  }
+});
 
 test("hours cannot be booked to another legal entity's project", async () => {
-  const f = await fixture(true)
+  const f = await fixture(true);
   try {
-    const otherSub = randomUUID()
+    const otherSub = randomUUID();
     await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,custom)
-      values (${otherSub},${f.org.orgId},${f.org.subsidiaryId},'Other Co','CAD','CA',true,'{}'::jsonb)`)
-    const otherProject = randomUUID()
+      values (${otherSub},${f.org.orgId},${f.org.subsidiaryId},'Other Co','CAD','CA',true,'{}'::jsonb)`);
+    const otherProject = randomUUID();
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
-      values (${otherProject},${f.org.orgId},${otherSub},'XENT','Foreign project',${f.org.customerId},'active',true,'{}'::jsonb)`)
-    const refused = await f.save({ rows: [{ ...f.row, projectId: otherProject }] })
-    assert.equal(refused.status, 422, await refused.clone().text())
-    assert.match(((await refused.json()) as { error: string }).error, /different legal entity/)
-    assert.equal((await f.snapshot()).length, 0, 'refused cross-entity lines store nothing')
+      values (${otherProject},${f.org.orgId},${otherSub},'XENT','Foreign project',${f.org.customerId},'active',true,'{}'::jsonb)`);
+    const refused = await f.save({ rows: [{ ...f.row, projectId: otherProject }] });
+    assert.equal(refused.status, 422, await refused.clone().text());
+    assert.match(((await refused.json()) as { error: string }).error, /different legal entity/);
+    assert.equal((await f.snapshot()).length, 0, "refused cross-entity lines store nothing");
     // The employee's own entity still saves.
-    assert.equal((await f.save({})).status, 200)
-    assert.equal((await f.snapshot()).length, 1)
-  } finally { await f.close() }
-})
+    assert.equal((await f.save({})).status, 200);
+    assert.equal((await f.snapshot()).length, 1);
+  } finally {
+    await f.close();
+  }
+});
 
-test('an hours cell wider than the ledger column fails closed without writing', async () => {
+test("an hours cell wider than the ledger column fails closed without writing", async () => {
   // time_entries.hours is numeric(19,4): a pasted 20-digit cell cleared the
   // exact-decimal check and died in Postgres with a storage error. Fail
   // closed with the named 422 and write nothing.
-  const f = await fixture(true)
+  const f = await fixture(true);
   try {
-    const response = await f.save({ rows: [{ ...f.row, hours: ['99999999999999999999', '', '', '', '', '', ''] }] })
-    assert.equal(response.status, 422, await response.clone().text())
-    assert.match(((await response.json()) as { error: string }).error, /Hours/)
-    assert.equal((await f.snapshot()).length, 0)
+    const response = await f.save({
+      rows: [{ ...f.row, hours: ["99999999999999999999", "", "", "", "", "", ""] }],
+    });
+    assert.equal(response.status, 422, await response.clone().text());
+    assert.match(((await response.json()) as { error: string }).error, /Hours/);
+    assert.equal((await f.snapshot()).length, 0);
     // The column maximum itself still saves.
-    const ok = await f.save({ rows: [{ ...f.row, hours: ['999999999999999.9999', '', '', '', '', '', ''] }] })
-    assert.equal(ok.status, 200, await ok.clone().text())
-    assert.equal((await f.snapshot()).length, 1)
-  } finally { await f.close() }
-})
+    const ok = await f.save({
+      rows: [{ ...f.row, hours: ["999999999999999.9999", "", "", "", "", "", ""] }],
+    });
+    assert.equal(ok.status, 200, await ok.clone().text());
+    assert.equal((await f.snapshot()).length, 1);
+  } finally {
+    await f.close();
+  }
+});
 
-test('a foreign reference custom value cannot be saved on a time row', async () => {
-  const f = await fixture(false)
-  const foreign = await createScratchOrg()
+test("a foreign reference custom value cannot be saved on a time row", async () => {
+  const f = await fixture(false);
+  const foreign = await createScratchOrg();
   try {
     await db.execute(sql`
       insert into custom_field_defs
         (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
       values
         (${randomUUID()}, ${f.org.orgId}, 'time_entries', null, 'line_ref', 'Line reference', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${f.actor}, ${f.actor})
-    `)
-    const refused = await f.save({ rows: [{ ...f.row, custom: { line_ref: foreign.vendorId } }] })
-    assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${await refused.clone().text()}`)
-    assert.equal((await f.snapshot()).length, 0, 'refused references store nothing')
-    const saved = await f.save({ rows: [{ ...f.row, custom: { line_ref: f.org.vendorId } }] })
-    assert.equal(saved.status, 200, `own-org reference must stay green: ${await saved.clone().text()}`)
-    assert.equal((await f.snapshot()).length, 1)
+    `);
+    const refused = await f.save({ rows: [{ ...f.row, custom: { line_ref: foreign.vendorId } }] });
+    assert.equal(
+      refused.status,
+      422,
+      `expected 422, got ${refused.status}: ${await refused.clone().text()}`,
+    );
+    assert.equal((await f.snapshot()).length, 0, "refused references store nothing");
+    const saved = await f.save({ rows: [{ ...f.row, custom: { line_ref: f.org.vendorId } }] });
+    assert.equal(
+      saved.status,
+      200,
+      `own-org reference must stay green: ${await saved.clone().text()}`,
+    );
+    assert.equal((await f.snapshot()).length, 1);
   } finally {
-    await dropScratchOrgReporting(foreign.orgId)
-    await f.close()
+    await dropScratchOrgReporting(foreign.orgId);
+    await f.close();
   }
-})
+});
 
-test('a project save racing a Projects disable loses and stores nothing', async () => {
+test("a project save racing a Projects disable loses and stores nothing", async () => {
   // Steady state never reaches the write transaction (timeTracking's parent
   // gate refuses at entry), so this parks a disable mid-flight: the entry
   // guard still sees Projects on while the staged flag write holds the org
   // row exclusively. The save must wait on the fence, then refuse once the
   // disable commits — never land project lines first.
-  const f = await fixture(true)
-  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL })
-  let pending: Promise<Response> | undefined
+  const f = await fixture(true);
+  const writer = new pg.Client({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
+  });
+  let pending: Promise<Response> | undefined;
   try {
-    await writer.connect()
-    await writer.query('begin') // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
-    await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [f.org.orgId])
-    pending = f.save({})
-    pending.catch(() => {})
-    await waitForLockWaiter(writer, { label: 'the timesheet save' })
-    await writer.query('commit')
-    const response = await pending
-    assert.equal(response.status, 422, await response.clone().text())
-    assert.equal(((await response.json()) as { error: string }).error, 'Projects feature is disabled')
-    assert.equal((await f.snapshot()).length, 0, 'the losing save inserts no project lines')
+    await writer.connect();
+    await writer.query("begin"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
+    await writer.query(
+      "update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1",
+      [f.org.orgId],
+    );
+    pending = f.save({});
+    pending.catch(() => {});
+    await waitForLockWaiter(writer, { label: "the timesheet save" });
+    await writer.query("commit");
+    const response = await pending;
+    assert.equal(response.status, 422, await response.clone().text());
+    assert.equal(
+      ((await response.json()) as { error: string }).error,
+      "Projects feature is disabled",
+    );
+    assert.equal((await f.snapshot()).length, 0, "the losing save inserts no project lines");
   } finally {
-    await writer.query('rollback').catch(() => {})
-    await writer.end()
-    await pending?.catch(() => {})
-    await f.close()
+    await writer.query("rollback").catch(() => {});
+    await writer.end();
+    await pending?.catch(() => {});
+    await f.close();
   }
-})
+});

@@ -15,12 +15,14 @@ export const runtime = "nodejs";
  */
 export const GET = defineRoute({
   permission: "assistant.use",
-  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  feature: {
+    none: "Assistant access is controlled by assistant permissions and provider configuration.",
+  },
   params: z.object({ runId: uuidString() }),
   handler: async ({ authz, params }) => {
-  const { runId } = params;
-  const run = await createDbOwnedRunStore(authz).readRun(runId);
-  if (!run) return notFound("record");
-  return NextResponse.json({ run });
+    const { runId } = params;
+    const run = await createDbOwnedRunStore(authz).readRun(runId);
+    if (!run) return notFound("record");
+    return NextResponse.json({ run });
   },
 });

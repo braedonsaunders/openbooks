@@ -7,7 +7,7 @@ registerHooks({
     if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       return {
         shortCircuit: true,
-        url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(new URL('../../../../../lib/authz.ts', import.meta.url).href)}; export async function guardPermission(){return {user:{id:'user',orgId:'org'},allowedSubsidiaryIds:null}}`)}`,
+        url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../../../lib/authz.ts", import.meta.url).href)}; export async function guardPermission(){return {user:{id:'user',orgId:'org'},allowedSubsidiaryIds:null}}`)}`,
       };
     }
     return nextResolve(specifier, context);
@@ -15,14 +15,16 @@ registerHooks({
 });
 
 const directDownloadRouteUrl: string = "./route.ts?direct-backup-download-test";
-const { GET } = await import(directDownloadRouteUrl) as typeof import("./route.ts");
+const { GET } = (await import(directDownloadRouteUrl)) as typeof import("./route.ts");
 test("direct browser export refuses with the restore-grade recovery path", async () => {
   const response = await GET();
 
   assert.equal(response.status, 410);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   assert.deepEqual(await response.json(), {
-    error: "direct browser export is disabled because it cannot include restore-grade hash evidence",
-    recovery: "create a stored backup and download both Archive and Manifest, or run src/backup/local-cli.ts from the engine directory",
+    error:
+      "direct browser export is disabled because it cannot include restore-grade hash evidence",
+    recovery:
+      "create a stored backup and download both Archive and Manifest, or run src/backup/local-cli.ts from the engine directory",
   });
 });

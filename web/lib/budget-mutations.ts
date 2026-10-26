@@ -1,63 +1,73 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { normalizeMoney, toUnits } from '@openbooks/engine/money/money'
-import type { BudgetDimensions } from './budgets'
-import { PNL_TYPES } from './account-types'
-import { canonicalDecimal } from './exact-decimal'
-import { BudgetDimensionError, effectiveExtraDimsSql, loadBudgetSegments, resolveBudgetExtraDims } from '@openbooks/engine/budgets/dimensions'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { normalizeMoney, toUnits } from "@openbooks/engine/money/money";
+import type { BudgetDimensions } from "./budgets";
+import { PNL_TYPES } from "./account-types";
+import { canonicalDecimal } from "./exact-decimal";
+import {
+  BudgetDimensionError,
+  effectiveExtraDimsSql,
+  loadBudgetSegments,
+  resolveBudgetExtraDims,
+} from "@openbooks/engine/budgets/dimensions";
 
 export type BudgetCellInput = BudgetDimensions & {
   /** Legal entity owning this planning cell; omitted inputs resolve to root. */
-  subsidiaryId?: string | null
-  accountId: string
-  periodId: string
-  amount: string
-  note?: string | null
-}
+  subsidiaryId?: string | null;
+  accountId: string;
+  periodId: string;
+  amount: string;
+  note?: string | null;
+};
 
 export class BudgetMutationError extends Error {
   constructor(
     message: string,
     readonly status = 422,
   ) {
-    super(message)
+    super(message);
   }
 }
 
-const MAX_UNITS = 9_999_999_999_999_999_999n
+const MAX_UNITS = 9_999_999_999_999_999_999n;
 
 export function normalizeBudgetAmount(value: unknown): string {
-  if (typeof value !== 'string' && typeof value !== 'number') throw new BudgetMutationError('invalid_amount')
-  const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new BudgetMutationError('invalid_amount')
-  let normalized: string
+  if (typeof value !== "string" && typeof value !== "number")
+    throw new BudgetMutationError("invalid_amount");
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new BudgetMutationError("invalid_amount");
+  let normalized: string;
   try {
-    normalized = normalizeMoney(exact)
+    normalized = normalizeMoney(exact);
   } catch {
-    throw new BudgetMutationError('invalid_amount')
+    throw new BudgetMutationError("invalid_amount");
   }
-  const units = toUnits(normalized)
-  if (units > MAX_UNITS || units < -MAX_UNITS) throw new BudgetMutationError('amount_out_of_range')
-  return normalized
+  const units = toUnits(normalized);
+  if (units > MAX_UNITS || units < -MAX_UNITS) throw new BudgetMutationError("amount_out_of_range");
+  return normalized;
 }
 
-function cellKey(cell: Pick<BudgetCellInput, 'accountId' | 'periodId'> & Partial<BudgetDimensions> & Pick<BudgetCellInput, 'subsidiaryId'>) {
+function cellKey(
+  cell: Pick<BudgetCellInput, "accountId" | "periodId"> &
+    Partial<BudgetDimensions> &
+    Pick<BudgetCellInput, "subsidiaryId">,
+) {
   return [
     cell.accountId,
     cell.periodId,
-    cell.subsidiaryId ?? '',
-    cell.departmentId ?? '',
-    cell.projectId ?? '',
-    cell.locationId ?? '',
-    cell.classId ?? '',
+    cell.subsidiaryId ?? "",
+    cell.departmentId ?? "",
+    cell.projectId ?? "",
+    cell.locationId ?? "",
+    cell.classId ?? "",
     JSON.stringify(cell.extraDims ?? {}),
-  ].join('|')
+  ].join("|");
 }
 
 function uuidArray(ids: string[]) {
-  return `{${[...new Set(ids)].join(',')}}`
+  return `{${[...new Set(ids)].join(",")}}`;
 }
 
 /**
@@ -66,163 +76,222 @@ function uuidArray(ids: string[]) {
  * the database trigger installed with the budget-management migration.
  */
 export async function saveBudgetCells(input: {
-  scenarioId: string
-  orgId: string
-  actorId: string
-  expectedRevision: number
-  cells: BudgetCellInput[]
-  source?: string
+  scenarioId: string;
+  orgId: string;
+  actorId: string;
+  expectedRevision: number;
+  cells: BudgetCellInput[];
+  source?: string;
 }): Promise<{ revision: number; changed: number }> {
   if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
-    throw new BudgetMutationError('invalid_revision')
+    throw new BudgetMutationError("invalid_revision");
   }
   if (input.cells.length === 0 || input.cells.length > 1_000) {
-    throw new BudgetMutationError('cells_must_contain_1_to_1000_rows')
+    throw new BudgetMutationError("cells_must_contain_1_to_1000_rows");
   }
 
   let normalized = input.cells.map((cell) => ({
     ...cell,
     amount: normalizeBudgetAmount(cell.amount),
-    note: typeof cell.note === 'string' ? cell.note.trim().slice(0, 2_000) || null : null,
+    note: typeof cell.note === "string" ? cell.note.trim().slice(0, 2_000) || null : null,
     subsidiaryId: cell.subsidiaryId ?? null,
     departmentId: cell.departmentId ?? null,
     projectId: cell.projectId ?? null,
     locationId: cell.locationId ?? null,
     classId: cell.classId ?? null,
-  }))
+  }));
 
   return db.transaction(async (tx) => {
     // Custom segments (fund included) are part of the cell identity budgetary
     // control matches on. Each cell's assignment is validated against the
     // active segments, and a cell that names no fund is saved under the
     // default fund explicitly, so the stored line is the cell control reads.
-    const segments = await loadBudgetSegments(tx, input.orgId)
+    const segments = await loadBudgetSegments(tx, input.orgId);
     try {
-      normalized = normalized.map((cell) => ({ ...cell, extraDims: resolveBudgetExtraDims(segments, cell.extraDims) }))
+      normalized = normalized.map((cell) => ({
+        ...cell,
+        extraDims: resolveBudgetExtraDims(segments, cell.extraDims),
+      }));
     } catch (error) {
-      if (error instanceof BudgetDimensionError) throw new BudgetMutationError(error.message)
-      throw error
+      if (error instanceof BudgetDimensionError) throw new BudgetMutationError(error.message);
+      throw error;
     }
-    const locked = (await tx.execute<{ status: string; revision: number; fiscal_year: number }>(sql`
+    const locked = await tx.execute<{ status: string; revision: number; fiscal_year: number }>(
+      sql`
       select id, status, revision, fiscal_year
         from budget_scenarios
        where id = ${input.scenarioId} and org_id = ${input.orgId}
        for update
-    `, 'objects'))
-    const scenario = locked[0]
-    if (!scenario) throw new BudgetMutationError('not_found', 404)
-    if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
-    if (Number(scenario.revision) !== input.expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+    `,
+      "objects",
+    );
+    const scenario = locked[0];
+    if (!scenario) throw new BudgetMutationError("not_found", 404);
+    if (scenario.status !== "draft") throw new BudgetMutationError("budget_is_locked", 409);
+    if (Number(scenario.revision) !== input.expectedRevision)
+      throw new BudgetMutationError("revision_conflict", 409);
 
     // The database trigger resolves an omitted entity to the tenant root. Do
     // the same before deriving keys/evidence so an omitted cell and an
     // explicitly-rooted cell cannot bypass duplicate detection, and a delete
     // or before-image lookup targets the row the trigger will actually write.
     if (normalized.some((cell) => cell.subsidiaryId === null)) {
-      const root = await tx.execute<{ id: string }>(sql`
+      const root = await tx.execute<{ id: string }>(
+        sql`
         select id from subsidiaries
          where org_id = ${input.orgId}
            and parent_id is null and is_active and not is_elimination
          order by created_at, id
          limit 1
-      `, 'objects')
-      const rootId = root[0]?.id
-      if (!rootId) throw new BudgetMutationError('invalid_subsidiary')
-      normalized = normalized.map((cell) => ({ ...cell, subsidiaryId: cell.subsidiaryId ?? rootId }))
+      `,
+        "objects",
+      );
+      const rootId = root[0]?.id;
+      if (!rootId) throw new BudgetMutationError("invalid_subsidiary");
+      normalized = normalized.map((cell) => ({
+        ...cell,
+        subsidiaryId: cell.subsidiaryId ?? rootId,
+      }));
     }
     if (new Set(normalized.map(cellKey)).size !== normalized.length) {
-      throw new BudgetMutationError('duplicate_cells_in_request')
+      throw new BudgetMutationError("duplicate_cells_in_request");
     }
 
-    const accountIds = normalized.map((cell) => cell.accountId)
-    const periodIds = normalized.map((cell) => cell.periodId)
+    const accountIds = normalized.map((cell) => cell.accountId);
+    const periodIds = normalized.map((cell) => cell.periodId);
     // Sequential reads: the save runs on one transaction client, so
     // validating accounts and periods at once queues concurrent queries on it.
-    const accounts = await tx.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
+    const accounts = await tx.execute<{
+      id: string;
+      number: string | null;
+      name: string;
+      type: string;
+    }>(
+      sql`
         select id, number, name, type from accounts
          where org_id = ${input.orgId} and id = any(${uuidArray(accountIds)}::uuid[])
            and is_active and not is_summary
-      `, 'objects')
-    const periods = await tx.execute<{ id: string }>(sql`
+      `,
+      "objects",
+    );
+    const periods = await tx.execute<{ id: string }>(
+      sql`
         select p.id from accounting_periods p
           join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
          where p.org_id = ${input.orgId} and p.id = any(${uuidArray(periodIds)}::uuid[])
            and p.fiscal_year = ${scenario.fiscal_year} and not p.is_adjustment and fc.is_default
-      `, 'objects')
+      `,
+      "objects",
+    );
     if (new Set(accounts.map((row) => row.id)).size !== new Set(accountIds).size) {
-      throw new BudgetMutationError('invalid_account')
+      throw new BudgetMutationError("invalid_account");
     }
     // Budgets cover the P&L only: a balance-sheet account refuses by name
     // instead of landing in a line the worksheet hides but the totals count.
-    const nonPnl = accounts.filter((row) => !PNL_TYPES.includes(row.type))
+    const nonPnl = accounts.filter((row) => !PNL_TYPES.includes(row.type));
     if (nonPnl.length > 0) {
-      const names = nonPnl.map((row) => (row.number ? `${row.name} (${row.number})` : row.name)).join(', ')
-      throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${names}`)
+      const names = nonPnl
+        .map((row) => (row.number ? `${row.name} (${row.number})` : row.name))
+        .join(", ");
+      throw new BudgetMutationError(
+        `non_pnl_account: budgets cover profit-and-loss accounts only: ${names}`,
+      );
     }
     if (new Set(periods.map((row) => row.id)).size !== new Set(periodIds).size) {
-      throw new BudgetMutationError('invalid_period')
+      throw new BudgetMutationError("invalid_period");
     }
 
-    const subsidiaryIds = [...new Set(normalized.map((cell) => cell.subsidiaryId).filter((id): id is string => !!id))]
+    const subsidiaryIds = [
+      ...new Set(normalized.map((cell) => cell.subsidiaryId).filter((id): id is string => !!id)),
+    ];
     if (subsidiaryIds.length) {
-      const subsidiaries = await tx.execute<{ id: string }>(sql`
+      const subsidiaries = await tx.execute<{ id: string }>(
+        sql`
         select id from subsidiaries
          where org_id = ${input.orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])
            and is_active and not is_elimination
-      `, 'objects')
-      if (subsidiaries.length !== subsidiaryIds.length) throw new BudgetMutationError('invalid_subsidiary')
+      `,
+        "objects",
+      );
+      if (subsidiaries.length !== subsidiaryIds.length)
+        throw new BudgetMutationError("invalid_subsidiary");
     }
 
     const dimensionIds = {
-      departmentId: [...new Set(normalized.map((cell) => cell.departmentId).filter((id): id is string => !!id))],
-      projectId: [...new Set(normalized.map((cell) => cell.projectId).filter((id): id is string => !!id))],
-      locationId: [...new Set(normalized.map((cell) => cell.locationId).filter((id): id is string => !!id))],
-      classId: [...new Set(normalized.map((cell) => cell.classId).filter((id): id is string => !!id))],
-    }
+      departmentId: [
+        ...new Set(normalized.map((cell) => cell.departmentId).filter((id): id is string => !!id)),
+      ],
+      projectId: [
+        ...new Set(normalized.map((cell) => cell.projectId).filter((id): id is string => !!id)),
+      ],
+      locationId: [
+        ...new Set(normalized.map((cell) => cell.locationId).filter((id): id is string => !!id)),
+      ],
+      classId: [
+        ...new Set(normalized.map((cell) => cell.classId).filter((id): id is string => !!id)),
+      ],
+    };
     // Sequential reads on the same single-client transaction: starting every
     // query up front would run them all before the first await.
     const dimensionResults: { rows: { id: string }[] }[] = [
       dimensionIds.departmentId.length
-        ? await tx.execute<{ id: string }>(sql`select id from departments where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.departmentId)}::uuid[])`)
+        ? await tx.execute<{ id: string }>(
+            sql`select id from departments where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.departmentId)}::uuid[])`,
+          )
         : { rows: [] },
       dimensionIds.projectId.length
-        ? await tx.execute<{ id: string }>(sql`select id from projects where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.projectId)}::uuid[])`)
+        ? await tx.execute<{ id: string }>(
+            sql`select id from projects where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.projectId)}::uuid[])`,
+          )
         : { rows: [] },
       dimensionIds.locationId.length
-        ? await tx.execute<{ id: string }>(sql`select id from locations where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.locationId)}::uuid[])`)
+        ? await tx.execute<{ id: string }>(
+            sql`select id from locations where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.locationId)}::uuid[])`,
+          )
         : { rows: [] },
       dimensionIds.classId.length
-        ? await tx.execute<{ id: string }>(sql`select id from classes where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.classId)}::uuid[])`)
+        ? await tx.execute<{ id: string }>(
+            sql`select id from classes where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.classId)}::uuid[])`,
+          )
         : { rows: [] },
-    ]
-    const dimensionExpected = [dimensionIds.departmentId, dimensionIds.projectId, dimensionIds.locationId, dimensionIds.classId]
+    ];
+    const dimensionExpected = [
+      dimensionIds.departmentId,
+      dimensionIds.projectId,
+      dimensionIds.locationId,
+      dimensionIds.classId,
+    ];
     dimensionResults.forEach((result, index) => {
-      if (result.rows.length !== dimensionExpected[index]!.length) throw new BudgetMutationError('invalid_dimension')
-    })
+      if (result.rows.length !== dimensionExpected[index]!.length)
+        throw new BudgetMutationError("invalid_dimension");
+    });
 
     interface BudgetLineBeforeRow extends Record<string, unknown> {
-      account_id: string
-      period_id: string
-      subsidiary_id: string | null
-      department_id: string | null
-      project_id: string | null
-      location_id: string | null
-      class_id: string | null
-      extra_dims: Record<string, string>
-      amount: string
-      note: string | null
+      account_id: string;
+      period_id: string;
+      subsidiary_id: string | null;
+      department_id: string | null;
+      project_id: string | null;
+      location_id: string | null;
+      class_id: string | null;
+      extra_dims: Record<string, string>;
+      amount: string;
+      note: string | null;
     }
     // Read under the same effective-fund reading control uses, so a line saved
     // before fund accounting (no fund key) is the before-image of — and is
     // replaced by — the default-fund cell the worksheet now shows it in.
-    const beforeRows = (await tx.execute<BudgetLineBeforeRow>(sql`
+    const beforeRows = await tx.execute<BudgetLineBeforeRow>(
+      sql`
       select account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
              ${effectiveExtraDimsSql(sql`extra_dims`, input.orgId)} as extra_dims, amount::text, note
         from budget_lines
        where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
          and account_id = any(${uuidArray(accountIds)}::uuid[])
          and period_id = any(${uuidArray(periodIds)}::uuid[])
-    `, 'objects'))
+    `,
+      "objects",
+    );
     const before = new Map(
       beforeRows.map((row) => [
         cellKey({
@@ -233,16 +302,18 @@ export async function saveBudgetCells(input: {
           projectId: row.project_id,
           locationId: row.location_id,
           classId: row.class_id,
-          extraDims: Object.fromEntries(Object.entries(row.extra_dims ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
+          extraDims: Object.fromEntries(
+            Object.entries(row.extra_dims ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+          ),
         }),
         { amount: row.amount, note: row.note },
       ]),
-    )
+    );
 
-    const evidence: Record<string, unknown>[] = []
+    const evidence: Record<string, unknown>[] = [];
     for (const cell of normalized) {
-      const old = before.get(cellKey(cell)) ?? null
-      const extraDims = JSON.stringify(cell.extraDims)
+      const old = before.get(cellKey(cell)) ?? null;
+      const extraDims = JSON.stringify(cell.extraDims);
       // Clear the cell's line under every stored spelling of its identity (an
       // older line may name no fund), then write the one explicit line.
       await tx.execute(sql`
@@ -256,9 +327,9 @@ export async function saveBudgetCells(input: {
            and class_id is not distinct from ${cell.classId}
            and ${effectiveExtraDimsSql(sql`extra_dims`, input.orgId)} = ${extraDims}::jsonb
            and (${toUnits(cell.amount) === 0n && !cell.note} or extra_dims <> ${extraDims}::jsonb)
-      `)
+      `);
       if (toUnits(cell.amount) === 0n && !cell.note) {
-        evidence.push({ ...cell, before: old, after: null })
+        evidence.push({ ...cell, before: old, after: null });
       } else {
         await tx.execute(sql`
           insert into budget_lines
@@ -271,28 +342,28 @@ export async function saveBudgetCells(input: {
           on conflict on constraint budget_lines_cell do update set
             amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by
           where budget_lines.org_id = ${input.orgId}
-        `)
-        evidence.push({ ...cell, before: old, after: { amount: cell.amount, note: cell.note } })
+        `);
+        evidence.push({ ...cell, before: old, after: { amount: cell.amount, note: cell.note } });
       }
     }
 
-    const nextRevision = input.expectedRevision + 1
+    const nextRevision = input.expectedRevision + 1;
     await tx.execute(sql`
       update budget_scenarios
          set revision = ${nextRevision}, updated_at = now(), updated_by = ${input.actorId}
        where id = ${input.scenarioId} and org_id = ${input.orgId}
-    `)
+    `);
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'budget_scenarios', ${input.scenarioId}, 'update',
         ${JSON.stringify({
-          source: input.source ?? 'worksheet',
+          source: input.source ?? "worksheet",
           revisionBefore: input.expectedRevision,
           revisionAfter: nextRevision,
           cells: evidence,
         })}::jsonb,
         ${input.actorId})
-    `)
-    return { revision: nextRevision, changed: normalized.length }
-  })
+    `);
+    return { revision: nextRevision, changed: normalized.length };
+  });
 }

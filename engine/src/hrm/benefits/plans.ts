@@ -33,19 +33,15 @@ function toPlanRow(row: Record<string, unknown>): BenefitPlanRow {
     code: String(row.code),
     name: String(row.name),
     kind: String(row.kind),
-    providerPartyId:
-      row.providerPartyId != null ? String(row.providerPartyId) : null,
+    providerPartyId: row.providerPartyId != null ? String(row.providerPartyId) : null,
     employerSubsidiaryId:
-      row.employerSubsidiaryId != null
-        ? String(row.employerSubsidiaryId)
-        : null,
+      row.employerSubsidiaryId != null ? String(row.employerSubsidiaryId) : null,
     currency: String(row.currency),
     waitingPeriodDays: Number(row.waitingPeriodDays ?? 0),
     waitingPeriodMonths: Number(row.waitingPeriodMonths ?? 0),
     isActive: row.isActive === true,
     effectiveFrom: String(row.effectiveFrom).slice(0, 10),
-    effectiveTo:
-      row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
+    effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
   };
 }
 
@@ -55,10 +51,15 @@ export async function loadBenefitPlan(
   orgId: string,
   planId: string,
 ): Promise<BenefitPlanRow> {
-  const row = (await exec.execute<Record<string, unknown>>(sql`
+  const row = (
+    await exec.execute<Record<string, unknown>>(
+      sql`
       select ${PLAN_COLUMNS} from hrm_benefit_plans
        where org_id = ${orgId} and id = ${planId}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new BenefitsError(
       "NOT_FOUND",

@@ -12,44 +12,44 @@ import {
   type PageSpec,
   type PaperBlock,
   type WidgetRef,
-} from '@braedonsaunders/appkit-viewspec'
+} from "@braedonsaunders/appkit-viewspec";
 
-type FilterOptions = Omit<FilterBarBlock, 'kind' | 'controls' | 'actions'>
+type FilterOptions = Omit<FilterBarBlock, "kind" | "controls" | "actions">;
 
 export interface StatementReportFilter {
-  controls: FilterBarControls
-  options?: FilterOptions
-  actions?: WidgetRef[]
+  controls: FilterBarControls;
+  options?: FilterOptions;
+  actions?: WidgetRef[];
 }
 
 export interface StatementReportSchedule {
-  definitionId: string
-  statementParams?: Record<string, string | undefined>
-  historyHref?: string
-  when?: FieldRef
+  definitionId: string;
+  statementParams?: Record<string, string | undefined>;
+  historyHref?: string;
+  when?: FieldRef;
 }
 
 export interface StatementReportExport {
-  kind?: string
-  params?: Record<string, string | undefined>
-  baseHref?: string
+  kind?: string;
+  params?: Record<string, string | undefined>;
+  baseHref?: string;
 }
 
 export interface StatementReportSpecOptions {
-  route: string
-  header: Omit<PageHeaderBlock, 'kind'>
-  filters?: StatementReportFilter[]
-  actionsBefore?: WidgetRef[]
-  schedule?: StatementReportSchedule
-  saveView?: boolean
-  exportMenu?: StatementReportExport
-  headerBeforeFilters?: Block[]
-  headerAfterFilters?: Block[]
-  bodyBeforePaper?: Block[]
-  bodyAfterPaper?: Block[]
-  paper: Omit<PaperBlock, 'kind' | 'blocks'>
-  blocks: Block[]
-  showPaper?: boolean
+  route: string;
+  header: Omit<PageHeaderBlock, "kind">;
+  filters?: StatementReportFilter[];
+  actionsBefore?: WidgetRef[];
+  schedule?: StatementReportSchedule;
+  saveView?: boolean;
+  exportMenu?: StatementReportExport;
+  headerBeforeFilters?: Block[];
+  headerAfterFilters?: Block[];
+  bodyBeforePaper?: Block[];
+  bodyAfterPaper?: Block[];
+  paper: Omit<PaperBlock, "kind" | "blocks">;
+  blocks: Block[];
+  showPaper?: boolean;
 }
 
 /**
@@ -78,31 +78,33 @@ export function statementReportSpec({
     ...(schedule
       ? [
           widget(
-            'schedule-report',
+            "schedule-report",
             {
               definitionId: schedule.definitionId,
-              ...(schedule.statementParams === undefined ? {} : { statementParams: schedule.statementParams }),
+              ...(schedule.statementParams === undefined
+                ? {}
+                : { statementParams: schedule.statementParams }),
               ...(schedule.historyHref === undefined ? {} : { historyHref: schedule.historyHref }),
             },
             schedule.when,
           ),
         ]
       : []),
-    ...(saveView ? [widget('save-view')] : []),
+    ...(saveView ? [widget("save-view")] : []),
     ...(exportMenu
       ? [
-          widget('export-menu', {
+          widget("export-menu", {
             ...(exportMenu.kind === undefined ? {} : { kind: exportMenu.kind }),
             ...(exportMenu.params === undefined ? {} : { params: exportMenu.params }),
             ...(exportMenu.baseHref === undefined ? {} : { baseHref: exportMenu.baseHref }),
           }),
         ]
       : []),
-  ]
+  ];
 
   return page({
     route,
-    layout: 'list',
+    layout: "list",
     header: [
       pageHeader(header),
       ...headerBeforeFilters,
@@ -116,15 +118,15 @@ export function statementReportSpec({
       ...(showPaper ? [paper({ ...paperOptions, blocks })] : []),
       ...bodyAfterPaper,
     ],
-  })
+  });
 }
 
 export function stringReportParams(
   searchParams: Record<string, string | string[] | undefined>,
 ): Record<string, string> {
-  const params: Record<string, string> = {}
+  const params: Record<string, string> = {};
   for (const [key, value] of Object.entries(searchParams)) {
-    if (typeof value === 'string') params[key] = value
+    if (typeof value === "string") params[key] = value;
   }
-  return params
+  return params;
 }

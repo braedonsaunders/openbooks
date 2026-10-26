@@ -31,7 +31,8 @@ export async function prevailingWageForTimeEntry(input: {
   // and not-yet-started ('offered') versions never answer for worked time
   // (the org-chart incumbent predicate); only overlapping live
   // employments refuse, as genuinely ambiguous.
-  const employments = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+  const employments = await db.execute<{ id: string; subsidiaryId: string | null }>(
+    sql`
       select distinct e.id::text as id, e.employer_subsidiary_id::text as "subsidiaryId"
         from worker_employments e
         join worker_employment_versions v
@@ -42,7 +43,9 @@ export async function prevailingWageForTimeEntry(input: {
          and (v.effective_to is null or v.effective_to > ${input.workedOn}::date)
          and v.status in ('active', 'on_leave', 'suspended')
        order by id
-    `, "objects");
+    `,
+    "objects",
+  );
   if (employments.length === 0) return null;
   if (employments.length > 1) {
     throw new HrmConstructionError(
@@ -50,20 +53,29 @@ export async function prevailingWageForTimeEntry(input: {
     );
   }
   const employment = employments[0]!;
-  const schedules = await db.execute<{ appliesTo: AppliesTo }>(sql`
+  const schedules = await db.execute<{ appliesTo: AppliesTo }>(
+    sql`
       select applies_to as "appliesTo" from hrm_rate_schedules
        where org_id = ${input.orgId}::uuid and is_active
          and effective_from <= ${input.workedOn}::date
          and (effective_to is null or effective_to >= ${input.workedOn}::date)
-    `, "objects");
+    `,
+    "objects",
+  );
   if (schedules.length === 0) return null;
-  const project = (await db.execute<{ subsidiaryId: string | null; custom: Record<string, unknown> }>(sql`
+  const project = (
+    await db.execute<{ subsidiaryId: string | null; custom: Record<string, unknown> }>(
+      sql`
       select subsidiary_id::text as "subsidiaryId", custom
         from projects where org_id = ${input.orgId}::uuid and id = ${input.projectId}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!project) return null;
   const customLocation = (project.custom as Record<string, unknown> | null)?.location_id;
-  const departmentRows = await db.execute<{ departmentId: string | null }>(sql`
+  const departmentRows = await db.execute<{ departmentId: string | null }>(
+    sql`
     select department_id::text as "departmentId"
       from employment_assignment_versions
      where org_id = ${input.orgId}::uuid and employment_id = ${employment.id}::uuid
@@ -72,9 +84,13 @@ export async function prevailingWageForTimeEntry(input: {
        and (effective_to is null or effective_to > ${input.workedOn}::date)
      order by version_no desc
      limit 2
-  `, "objects");
+  `,
+    "objects",
+  );
   if (departmentRows.length > 1) {
-    throw new HrmConstructionError(`Employment ${employment.id} has more than one primary department effective ${input.workedOn} — resolve the overlapping assignment versions before pricing.`);
+    throw new HrmConstructionError(
+      `Employment ${employment.id} has more than one primary department effective ${input.workedOn} — resolve the overlapping assignment versions before pricing.`,
+    );
   }
   const target = {
     projectId: input.projectId,

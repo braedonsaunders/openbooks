@@ -39,20 +39,25 @@ async function seedAdvanceMonthly(
     values (${planId}, ${org.orgId}, 'Advance plan', '0', 'CAD', 'monthly', 1,
             ${org.accounts.revenue}, true, ${actor})
   `);
-  const versionId = await createPlanVersion(org.orgId, actor, {
-    planId,
-    effectiveFrom: "2026-01-01",
-    billingTiming: "advance",
-    components: [
-      {
-        componentKey: "fee",
-        name: "Fee",
-        quantity: "1",
-        unitPrice: "100.0000",
-        incomeAccountId: org.accounts.revenue,
-      },
-    ],
-  }, null);
+  const versionId = await createPlanVersion(
+    org.orgId,
+    actor,
+    {
+      planId,
+      effectiveFrom: "2026-01-01",
+      billingTiming: "advance",
+      components: [
+        {
+          componentKey: "fee",
+          name: "Fee",
+          quantity: "1",
+          unitPrice: "100.0000",
+          incomeAccountId: org.accounts.revenue,
+        },
+      ],
+    },
+    null,
+  );
   await publishPlanVersion(org.orgId, actor, versionId, null);
   const subscriptionId = randomUUID();
   await db.execute(sql`
@@ -98,7 +103,12 @@ test("a July 1 timing change leaves June billing on the old timing", DB, async (
       { startsOn: june.periodStartsOn, endsOn: june.periodEndsOn },
       { startsOn: "2026-06-01", endsOn: "2026-07-01" },
     );
-    const july = (await advancedBillingSnapshot(org.orgId, subscriptionId, "2026-07-01", "2026-06-01"))!;
+    const july = (await advancedBillingSnapshot(
+      org.orgId,
+      subscriptionId,
+      "2026-07-01",
+      "2026-06-01",
+    ))!;
     assert.equal(july.billingTiming, "arrears");
     assert.deepEqual(
       { startsOn: july.periodStartsOn, endsOn: july.periodEndsOn },
@@ -119,8 +129,14 @@ test("a future term reduction does not stop billing before its date", DB, async 
       termEndsOn: "2026-06-15",
       idempotencyKey: randomUUID(),
     });
-    assert.equal(await prepareAdvancedSubscriptionBilling(org.orgId, subscriptionId, "2026-06-20"), true);
-    assert.equal(await prepareAdvancedSubscriptionBilling(org.orgId, subscriptionId, "2026-07-15"), false);
+    assert.equal(
+      await prepareAdvancedSubscriptionBilling(org.orgId, subscriptionId, "2026-06-20"),
+      true,
+    );
+    assert.equal(
+      await prepareAdvancedSubscriptionBilling(org.orgId, subscriptionId, "2026-07-15"),
+      false,
+    );
   });
 });
 
@@ -136,6 +152,9 @@ test("a post-term timing change does not rewrite the boundary bill", DB, async (
       billingTiming: "arrears",
       idempotencyKey: randomUUID(),
     });
-    assert.equal(await prepareAdvancedSubscriptionBilling(org.orgId, subscriptionId, "2026-07-01"), false);
+    assert.equal(
+      await prepareAdvancedSubscriptionBilling(org.orgId, subscriptionId, "2026-07-01"),
+      false,
+    );
   });
 });

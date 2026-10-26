@@ -12,7 +12,10 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { add, isZero, mul } from "../money/money.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";
-import { resolveCoveringPeriodsInWindow, type CoveringPeriod } from "../periods/period-resolution.ts";
+import {
+  resolveCoveringPeriodsInWindow,
+  type CoveringPeriod,
+} from "../periods/period-resolution.ts";
 import { laborCostingSettingsInTx } from "./labor-costing.ts";
 import { postProjectLaborCost, recognitionAccounts } from "./recognition.ts";
 
@@ -38,17 +41,10 @@ const LABOR_SETUP_HREF = "/admin/setup/labor-costing?view=posting";
 const FEATURES_HREF = "/admin/setup/features";
 
 export type LaborCostCatchUpBlockerCode =
-  | "projects_disabled"
-  | "mode_off"
-  | "accounts_unmapped"
-  | "no_posting_book"
-  | "no_root_subsidiary";
+  "projects_disabled" | "mode_off" | "accounts_unmapped" | "no_posting_book" | "no_root_subsidiary";
 
 export type LaborCostCatchUpRefusalCode =
-  | LaborCostCatchUpBlockerCode
-  | "reason_invalid"
-  | "through_invalid"
-  | "scope_restricted";
+  LaborCostCatchUpBlockerCode | "reason_invalid" | "through_invalid" | "scope_restricted";
 
 /** A typed refusal carrying the operator remedy. The API boundary renders
  * code, message and remedy, and the 422 status, without a server-side log. */
@@ -165,7 +161,8 @@ function blocker(code: LaborCostCatchUpBlockerCode): LaborCostCatchUpBlocker {
       return {
         code,
         message: "Labor costing is not posting standard cost to jobs.",
-        remedy: "In Labor costing setup → Posting, choose Post standard cost to jobs, then run the catch-up.",
+        remedy:
+          "In Labor costing setup → Posting, choose Post standard cost to jobs, then run the catch-up.",
         setupHref: LABOR_SETUP_HREF,
       };
     case "accounts_unmapped":
@@ -230,7 +227,9 @@ function requireThrough(through: string): string {
 }
 
 /** Month state from the states of its entries: one shared state, or partial. */
-export function summarizeMonthState(states: readonly LaborCostCatchUpEntryState[]): LaborCostCatchUpMonthState {
+export function summarizeMonthState(
+  states: readonly LaborCostCatchUpEntryState[],
+): LaborCostCatchUpMonthState {
   const distinct = new Set(states);
   if (distinct.size === 1) return [...distinct][0]!;
   return "partial";
@@ -293,7 +292,11 @@ export function summarizeUnpostedRows(rows: readonly UnpostedLaborRow[]): {
 }
 
 /** Feature, mode, control-account, book and root-entity prerequisites. */
-async function readPrerequisites(executor: SqlExecutor, orgId: string, lock: boolean): Promise<Prerequisites> {
+async function readPrerequisites(
+  executor: SqlExecutor,
+  orgId: string,
+  lock: boolean,
+): Promise<Prerequisites> {
   const blockers: LaborCostCatchUpBlocker[] = [];
   const projectsOn = lock
     ? await lockAndCheckOrgFeature(executor, orgId, "projects")
@@ -304,15 +307,27 @@ async function readPrerequisites(executor: SqlExecutor, orgId: string, lock: boo
   const accounts = await recognitionAccounts(orgId, executor);
   if (!accounts.laborWip || !accounts.laborClearing) blockers.push(blocker("accounts_unmapped"));
   // Same selection the posting kernel makes for an unqualified project journal.
-  const book = (await executor.execute<{ id: string }>(sql`
+  const book =
+    (
+      await executor.execute<{ id: string }>(
+        sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1`, "objects"))[0] ?? null;
+     limit 1`,
+        "objects",
+      )
+    )[0] ?? null;
   if (!book) blockers.push(blocker("no_posting_book"));
-  const root = (await executor.execute<{ id: string }>(sql`
+  const root =
+    (
+      await executor.execute<{ id: string }>(
+        sql`
     select id from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination and parent_id is null
-     limit 1`, "objects"))[0] ?? null;
+     limit 1`,
+        "objects",
+      )
+    )[0] ?? null;
   if (!root) blockers.push(blocker("no_root_subsidiary"));
   return { blockers, bookId: book?.id ?? null, rootSubsidiaryId: root?.id ?? null };
 }
@@ -331,7 +346,8 @@ async function collectUnpostedRows(
   through: string,
   scope: { bookId: string; rootSubsidiaryId: string },
 ): Promise<UnpostedLaborRow[]> {
-  const candidates = await executor.execute<CandidateRow>(sql`
+  const candidates = await executor.execute<CandidateRow>(
+    sql`
     select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on::text as worked_on,
            coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id,
            coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency
@@ -345,7 +361,9 @@ async function collectUnpostedRows(
        and te.cost_rate is not null
        and te.worked_on <= ${through}::date
        and coalesce(p.is_internal, false) = false
-     order by te.worked_on, te.id`, "objects");
+     order by te.worked_on, te.id`,
+    "objects",
+  );
 
   const costed = candidates.flatMap((row) => {
     const cost = mul(String(row.hours ?? "0"), String(row.cost_rate ?? "0"));
@@ -362,7 +380,9 @@ async function collectUnpostedRows(
   const gateCache = new Map<string, boolean>();
   const rows: UnpostedLaborRow[] = [];
   for (const { row, cost } of costed) {
-    const period = periods.find((item) => item.starts_on <= row.worked_on && row.worked_on <= item.ends_on) ?? null;
+    const period =
+      periods.find((item) => item.starts_on <= row.worked_on && row.worked_on <= item.ends_on) ??
+      null;
     let state: LaborCostCatchUpEntryState = "no_period";
     if (period) {
       // The posting path posts each journal to the legal entity of its rows,
@@ -407,12 +427,13 @@ export async function previewUnpostedLaborCost(
 ): Promise<UnpostedLaborCostPreview> {
   const through = requireThrough(options.through);
   const prerequisites = await readPrerequisites(db, orgId, false);
-  const rows = prerequisites.bookId && prerequisites.rootSubsidiaryId
-    ? await collectUnpostedRows(db, orgId, through, {
-        bookId: prerequisites.bookId,
-        rootSubsidiaryId: prerequisites.rootSubsidiaryId,
-      })
-    : [];
+  const rows =
+    prerequisites.bookId && prerequisites.rootSubsidiaryId
+      ? await collectUnpostedRows(db, orgId, through, {
+          bookId: prerequisites.bookId,
+          rootSubsidiaryId: prerequisites.rootSubsidiaryId,
+        })
+      : [];
   const { months, totals } = summarizeUnpostedRows(rows);
   return { through, blockers: prerequisites.blockers, months, totals };
 }
@@ -440,7 +461,13 @@ export async function postUnpostedLaborCost(
     await acquireOrgFeatureGateLock(db, orgId);
     const actor = await lockActorIdentity(db, orgId, actorId);
     if (!actor) throw new ScopeNotFoundError();
-    const allowedSubsidiaries = await lockActorCommandAuthority(db, orgId, actorId, null, "gl.post");
+    const allowedSubsidiaries = await lockActorCommandAuthority(
+      db,
+      orgId,
+      actorId,
+      null,
+      "gl.post",
+    );
     if (allowedSubsidiaries !== null) {
       throw new LaborCostCatchUpRefusal(
         "scope_restricted",
@@ -450,19 +477,30 @@ export async function postUnpostedLaborCost(
     }
     const prerequisites = await readPrerequisites(db, orgId, true);
     if (prerequisites.blockers.length > 0) throw refusalFor(prerequisites.blockers);
-    const scope = { bookId: prerequisites.bookId!, rootSubsidiaryId: prerequisites.rootSubsidiaryId! };
+    const scope = {
+      bookId: prerequisites.bookId!,
+      rootSubsidiaryId: prerequisites.rootSubsidiaryId!,
+    };
 
     const rows = await collectUnpostedRows(db, orgId, through, scope);
     const postableIds = rows.filter((row) => row.state === "open").map((row) => row.id);
-    const journalEntryIds = postableIds.length > 0
-      ? await postProjectLaborCost(orgId, actorId, postableIds)
-      : [];
+    const journalEntryIds =
+      postableIds.length > 0 ? await postProjectLaborCost(orgId, actorId, postableIds) : [];
     // Read back which rows this run stamped. Only journals created here count,
     // so a concurrent run's stamps never inflate this run's totals.
-    const stamped = new Set(journalEntryIds.length === 0 ? [] : (await db.execute<{ id: string }>(sql`
+    const stamped = new Set(
+      journalEntryIds.length === 0
+        ? []
+        : (
+            await db.execute<{ id: string }>(
+              sql`
       select id from time_entries
        where org_id = ${orgId}
-         and cost_journal_entry_id = any(${`{${journalEntryIds.join(",")}}`}::uuid[])`, "objects")).map((row) => row.id));
+         and cost_journal_entry_id = any(${`{${journalEntryIds.join(",")}}`}::uuid[])`,
+              "objects",
+            )
+          ).map((row) => row.id),
+    );
     const posted = rows.filter((row) => stamped.has(row.id));
     const postedSummary = summarizeUnpostedRows(posted).totals;
 
@@ -471,7 +509,12 @@ export async function postUnpostedLaborCost(
       if (row.state === "open" || stamped.has(row.id)) continue;
       const state = row.state === "closed" ? "closed" : "no_period";
       const key = `${row.month}|${state}`;
-      const group = skippedGroups.get(key) ?? { month: row.month, state, entries: 0, remedy: SKIP_REMEDY[state] };
+      const group = skippedGroups.get(key) ?? {
+        month: row.month,
+        state,
+        entries: 0,
+        remedy: SKIP_REMEDY[state],
+      };
       group.entries += 1;
       skippedGroups.set(key, group);
     }
@@ -488,7 +531,11 @@ export async function postUnpostedLaborCost(
           kind: "labor_cost_catch_up",
           reason,
           through,
-          before: { eligibleEntries: eligible.entries, eligibleHours: eligible.hours, eligibleCosts: eligible.costs },
+          before: {
+            eligibleEntries: eligible.entries,
+            eligibleHours: eligible.hours,
+            eligibleCosts: eligible.costs,
+          },
           after: {
             postedEntries: posted.length,
             postedHours: postedSummary.hours,

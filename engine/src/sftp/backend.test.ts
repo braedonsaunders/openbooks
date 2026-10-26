@@ -46,7 +46,13 @@ test("a percent-encoded cross-tenant traversal prefix is refused by both physica
     new RegExp(`must stay under sftp/${ORG}/`),
   );
   assert.throws(
-    () => backendFor({ orgId: ORG, backend: "local", bucket: null, rootPrefix: `sftp/${VICTIM}/statements` }),
+    () =>
+      backendFor({
+        orgId: ORG,
+        backend: "local",
+        bucket: null,
+        rootPrefix: `sftp/${VICTIM}/statements`,
+      }),
     new RegExp(`must stay under sftp/${ORG}/`),
     "the local physical resolver must enforce tenant binding, not only path shape",
   );
@@ -60,7 +66,12 @@ test("a valid tenant-relative control resolves under the tenant namespace and th
   // all four variables (and restore them) so this stays a pure containment
   // check regardless of the ambient environment.
   const s3Vars = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"] as const;
-  const savedS3 = new Map(s3Vars.map((name) => [name, process.env[name] ?? (env as Record<string, string | undefined>)[name]]));
+  const savedS3 = new Map(
+    s3Vars.map((name) => [
+      name,
+      process.env[name] ?? (env as Record<string, string | undefined>)[name],
+    ]),
+  );
   try {
     for (const name of s3Vars) {
       process.env[name] = `test-${name.toLowerCase().replace(/_/g, "-")}`;
@@ -82,7 +93,11 @@ test("a valid tenant-relative control resolves under the tenant namespace and th
   return local
     .write("inbound/note.txt", Buffer.from("contained"))
     .then(() => {
-      assert.equal(existsSync(fileOnDisk), true, "the virtual root must resolve under the tenant subfolder");
+      assert.equal(
+        existsSync(fileOnDisk),
+        true,
+        "the virtual root must resolve under the tenant subfolder",
+      );
       return local.read("inbound/note.txt");
     })
     .then((buf) => assert.equal(buf.toString("utf8"), "contained"))

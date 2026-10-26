@@ -35,7 +35,9 @@ function withEnglishFallback(base: Messages, overlay: Messages): Messages {
 
 async function loadLocaleMessages(locale: Locale): Promise<Messages> {
   const en = (await MESSAGE_LOADERS[DEFAULT_LOCALE]()).default;
-  return locale === DEFAULT_LOCALE ? en : withEnglishFallback(en, (await MESSAGE_LOADERS[locale]()).default);
+  return locale === DEFAULT_LOCALE
+    ? en
+    : withEnglishFallback(en, (await MESSAGE_LOADERS[locale]()).default);
 }
 
 // The catalogs are static, so production merges each locale once per process.
@@ -84,7 +86,9 @@ const PUBLISHED_CATALOGS = Symbol.for("openbooks.i18n.client-catalogs");
  */
 export function publishClientCatalog(locale: Locale, messages: Messages): SerializedCatalog {
   const catalog = serializeCatalog(messages);
-  const store = globalThis as { [PUBLISHED_CATALOGS]?: Map<string, { version: string; messages: Messages }> };
+  const store = globalThis as {
+    [PUBLISHED_CATALOGS]?: Map<string, { version: string; messages: Messages }>;
+  };
   (store[PUBLISHED_CATALOGS] ??= new Map()).set(locale, { version: catalog.version, messages });
   return catalog;
 }

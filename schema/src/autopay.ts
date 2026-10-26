@@ -37,7 +37,9 @@ export const customerPaymentMethods = pgTable(
     lastUpdaterRefreshAt: timestamp("last_updater_refresh_at", { withTimezone: true }),
     expiryNotifiedOn: date("expiry_notified_on"),
     isDefault: boolean("is_default").notNull().default(false),
-    status: text("status", { enum: ["pending", "active", "removed"] }).notNull().default("active"),
+    status: text("status", { enum: ["pending", "active", "removed"] })
+      .notNull()
+      .default("active"),
     ...auditColumns,
   },
   (t) => [
@@ -59,7 +61,9 @@ export const autopayEnrollments = pgTable(
     partyId: uuid("party_id").notNull(),
     subscriptionId: uuid("subscription_id"),
     paymentMethodId: uuid("payment_method_id"),
-    status: text("status", { enum: ["active", "paused", "canceled"] }).notNull().default("active"),
+    status: text("status", { enum: ["active", "paused", "canceled"] })
+      .notNull()
+      .default("active"),
     chargeOnIssue: boolean("charge_on_issue").notNull().default(false),
     ...auditColumns,
   },
@@ -98,7 +102,9 @@ export const collectionAttempts = pgTable(
       .notNull()
       .default("initiated"),
     declineCode: text("decline_code"),
-    declineKind: text("decline_kind", { enum: ["hard", "soft", "insufficient_funds", "needs_authentication"] }),
+    declineKind: text("decline_kind", {
+      enum: ["hard", "soft", "insufficient_funds", "needs_authentication"],
+    }),
     retryPosition: integer("retry_position").notNull().default(0),
     nextRetryOn: date("next_retry_on"),
     authUrl: text("auth_url"),

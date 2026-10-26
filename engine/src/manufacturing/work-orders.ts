@@ -1,9 +1,12 @@
+import { routeNativeApproval, readNativeApprovalDecision } from "../platform/approval-routing.ts";
+import { loadReceiptRework } from "./receipt-rework.ts";
 import {
-  routeNativeApproval,
-  readNativeApprovalDecision,
-} from "../platform/approval-routing.ts";
-import {loadReceiptRework} from "./receipt-rework.ts";
-import { lockManufacturingManageAuthority, lockManufacturingOrderManageAuthority, lockManufacturingOrderExecutionAuthority, lockManufacturingRoutingAuthority, assertManufacturingStockLocationScope } from "./authority.ts";
+  lockManufacturingManageAuthority,
+  lockManufacturingOrderManageAuthority,
+  lockManufacturingOrderExecutionAuthority,
+  lockManufacturingRoutingAuthority,
+  assertManufacturingStockLocationScope,
+} from "./authority.ts";
 import { resolveInspectionPlan } from "../inventory/inspections.ts";
 import { createOperationInspection } from "./quality-execution.ts";
 import { orderResourcesVisible, routingResourcesVisible } from "./resource-scope.ts";
@@ -13,7 +16,12 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { add, cmp, isZero, mul, neg, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
-import { loadSubsidiaryContext, restrictionAdmits, SubsidiaryError, type SubsidiaryContext } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  restrictionAdmits,
+  SubsidiaryError,
+  type SubsidiaryContext,
+} from "../organization/subsidiaries.ts";
 import {
   computeCostRate,
   convertFixedLaborComponents,
@@ -32,11 +40,19 @@ import {
 } from "../allocations/overhead-post.ts";
 import { getAvailableToPromise } from "../inventory/availability.ts";
 import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
-import { resolveProfile, assertStockLocationAdmitsSubsidiary } from "../inventory/profile-policy.ts";
+import {
+  resolveProfile,
+  assertStockLocationAdmitsSubsidiary,
+} from "../inventory/profile-policy.ts";
 import { inventoryRequestHash } from "../inventory/action-idempotency.ts";
 import { InventoryError, type Runner } from "../inventory/contracts.ts";
 import { assertInventoryAccountsPostable } from "../inventory/journal.ts";
-import { getOnHandWith,periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
+import {
+  getOnHandWith,
+  periodForDate,
+  primaryBookId,
+  subsidiaryCurrency,
+} from "../inventory/position.ts";
 import { hourlyPayRate } from "../projects/pay-rate-basis.ts";
 import { explodeBom } from "./bom-explode.ts";
 import { sequenceBlocker } from "./operation-sequence.ts";
@@ -47,7 +63,10 @@ import { getManufacturingPolicies } from "./policies.ts";
 import { setupEditorHref } from "./setup-editors.ts";
 import { backflushOperation, operationEventDate } from "./materials.ts";
 import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
-import { checkPinnedOperatingProfileCommand, resolveOperatingProfileForCreate } from "../organization/operating-profiles.ts";
+import {
+  checkPinnedOperatingProfileCommand,
+  resolveOperatingProfileForCreate,
+} from "../organization/operating-profiles.ts";
 
 export interface WorkOrderInput {
   producedItemId: string;
@@ -92,16 +111,44 @@ const workOrderColumns = sql`id, org_id as "orgId", number, produced_item_id as 
   standard_cost_snapshot::text as "standardCostSnapshot", cost_collected::text as "costCollected"`;
 
 type WorkOrderRow = {
-  id: string; orgId: string; number: string; producedItemId: string; routingId: string | null;
-  bomRevision: string | null; routingVersion: number | null; quantityOrdered: string;
-  quantityCompleted: string; quantityScrapped: string; unit: string; status: string;
-  priority: string; source: string; sourceRefId: string | null; parentWoId: string | null;
-  subsidiaryId: string | null; issueLocationId: string | null; receiptLocationId: string | null;
-  plannedStart: string | null; plannedEnd: string | null; releasedAt: Date | null; startedAt: Date | null;
-  completedAt: Date | null; closedAt: Date | null; holdReason: string | null; cancelReason: string | null; shortCloseReason: string | null;
-  productionMode:"order"|"batch"|"continuous";campaignReference:string|null;
-  lossChangeId:string|null;receiptReworkInspectionId:string|null;receiptReworkSequence:number|null;holdPriorStatus: string | null; operatingProfileVersionId: string | null; operatingDepartmentId: string | null;
-  standardCostSnapshot: string | null; costCollected: string | null;
+  id: string;
+  orgId: string;
+  number: string;
+  producedItemId: string;
+  routingId: string | null;
+  bomRevision: string | null;
+  routingVersion: number | null;
+  quantityOrdered: string;
+  quantityCompleted: string;
+  quantityScrapped: string;
+  unit: string;
+  status: string;
+  priority: string;
+  source: string;
+  sourceRefId: string | null;
+  parentWoId: string | null;
+  subsidiaryId: string | null;
+  issueLocationId: string | null;
+  receiptLocationId: string | null;
+  plannedStart: string | null;
+  plannedEnd: string | null;
+  releasedAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  closedAt: Date | null;
+  holdReason: string | null;
+  cancelReason: string | null;
+  shortCloseReason: string | null;
+  productionMode: "order" | "batch" | "continuous";
+  campaignReference: string | null;
+  lossChangeId: string | null;
+  receiptReworkInspectionId: string | null;
+  receiptReworkSequence: number | null;
+  holdPriorStatus: string | null;
+  operatingProfileVersionId: string | null;
+  operatingDepartmentId: string | null;
+  standardCostSnapshot: string | null;
+  costCollected: string | null;
 };
 
 type WorkOrderRead = WorkOrderRow & { pendingApproval: boolean };
@@ -116,21 +163,39 @@ function rowOrNotFound<T>(rows: T[]): T {
   return row;
 }
 
-async function loadOrder(tx: SqlExecutor, orgId: string, id: string, lock = false): Promise<WorkOrderRow> {
-  return rowOrNotFound(await tx.execute<WorkOrderRow>(sql`
+async function loadOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  id: string,
+  lock = false,
+): Promise<WorkOrderRow> {
+  return rowOrNotFound(
+    await tx.execute<WorkOrderRow>(
+      sql`
     select ${workOrderColumns} from mfg_work_orders
-     where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`, "objects"));
+     where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`,
+      "objects",
+    ),
+  );
 }
 
 async function itemDetails(tx: SqlExecutor, orgId: string, itemId: string) {
-  const row = (await tx.execute<{
-    id: string; code: string | null; name: string; is_active: boolean;
-    base_unit: string | null;
-  }>(sql`
+  const row = (
+    await tx.execute<{
+      id: string;
+      code: string | null;
+      name: string;
+      is_active: boolean;
+      base_unit: string | null;
+    }>(
+      sql`
     select i.id, i.code, i.name, i.is_active, profile.base_unit
       from items i left join item_inventory_profiles profile
         on profile.org_id=i.org_id and profile.item_id=i.id
-     where i.org_id=${orgId} and i.id=${itemId}`, "objects"))[0];
+     where i.org_id=${orgId} and i.id=${itemId}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new ManufacturingNotFoundError();
   return row;
 }
@@ -144,13 +209,28 @@ async function validateLocation(
 ): Promise<void> {
   if (!locationId) return;
   const context = await loadSubsidiaryContext(tx, orgId);
-  await assertStockLocationAdmitsSubsidiary(tx, orgId, context, locationId, subsidiaryId, direction);
+  await assertStockLocationAdmitsSubsidiary(
+    tx,
+    orgId,
+    context,
+    locationId,
+    subsidiaryId,
+    direction,
+  );
 }
 
 function checkQuantity(value: unknown): string {
-  const quantity = decimalValue(value, "quantityOrdered", "Enter a positive exact quantity with no more than four decimal places.");
+  const quantity = decimalValue(
+    value,
+    "quantityOrdered",
+    "Enter a positive exact quantity with no more than four decimal places.",
+  );
   if (compareDecimal(quantity, "0") <= 0) {
-    refuse("Work order quantity must be greater than zero.", "invalid_quantity", "Enter a positive exact quantity with no more than four decimal places.");
+    refuse(
+      "Work order quantity must be greater than zero.",
+      "invalid_quantity",
+      "Enter a positive exact quantity with no more than four decimal places.",
+    );
   }
   return quantity;
 }
@@ -163,134 +243,290 @@ async function validateSource(
   subsidiaryId: string,
 ): Promise<void> {
   if (source === "parent") {
-    if (!sourceRefId) refuse("A child work order must reference its parent.", "invalid_parent_reference", "Release the parent work order to create its child orders.");
+    if (!sourceRefId)
+      refuse(
+        "A child work order must reference its parent.",
+        "invalid_parent_reference",
+        "Release the parent work order to create its child orders.",
+      );
     return;
   }
   if (source === "manual") {
-    if (sourceRefId !== null) refuse("A manual work order cannot reference a sales order.", "invalid_source_reference", "Choose manual source or link a sales order.");
+    if (sourceRefId !== null)
+      refuse(
+        "A manual work order cannot reference a sales order.",
+        "invalid_source_reference",
+        "Choose manual source or link a sales order.",
+      );
     return;
   }
-  if (!sourceRefId) refuse("A sales-order work order needs its source order.", "invalid_source_reference", "Choose the sales order this work order will fulfill.");
-  const sourceRow = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from documents where org_id=${orgId} and id=${sourceRefId} and kind='sales_order'`, "objects"))[0];
+  if (!sourceRefId)
+    refuse(
+      "A sales-order work order needs its source order.",
+      "invalid_source_reference",
+      "Choose the sales order this work order will fulfill.",
+    );
+  const sourceRow = (
+    await tx.execute<{ subsidiary_id: string | null }>(
+      sql`
+    select subsidiary_id from documents where org_id=${orgId} and id=${sourceRefId} and kind='sales_order'`,
+      "objects",
+    )
+  )[0];
   if (!sourceRow || (sourceRow.subsidiary_id && sourceRow.subsidiary_id !== subsidiaryId)) {
     throw new ManufacturingNotFoundError();
   }
 }
 
-async function hasPendingApproval(
-  tx: SqlExecutor,
-  orgId: string,
-  id: string,
-): Promise<boolean> {
+async function hasPendingApproval(tx: SqlExecutor, orgId: string, id: string): Promise<boolean> {
   return (
-    (await tx.execute(sql`
+    (
+      await tx.execute(
+        sql`
     select 1 from flow_gates where org_id=${orgId} and subject_kind='work_order'
-      and subject_id=${id} and status in ('pending','escalated') limit 1`, "objects")).length > 0
+      and subject_id=${id} and status in ('pending','escalated') limit 1`,
+        "objects",
+      )
+    ).length > 0
   );
 }
 
 type PendingWorkOrderGate = { id: string; run_id: string; status: string };
 
-async function lockPendingApprovals(tx: SqlExecutor, orgId: string, id: string): Promise<PendingWorkOrderGate[]> {
-  return await tx.execute<PendingWorkOrderGate>(sql`
+async function lockPendingApprovals(
+  tx: SqlExecutor,
+  orgId: string,
+  id: string,
+): Promise<PendingWorkOrderGate[]> {
+  return await tx.execute<PendingWorkOrderGate>(
+    sql`
     select id, run_id, status from flow_gates where org_id=${orgId} and subject_kind='work_order'
-      and subject_id=${id} and status in ('pending','escalated') order by id for update`, "objects");
+      and subject_id=${id} and status in ('pending','escalated') order by id for update`,
+    "objects",
+  );
 }
 
-async function cancelPendingApprovals(tx: SqlExecutor, orgId: string, gates: PendingWorkOrderGate[], actorId: string, reason: string): Promise<void> {
+async function cancelPendingApprovals(
+  tx: SqlExecutor,
+  orgId: string,
+  gates: PendingWorkOrderGate[],
+  actorId: string,
+  reason: string,
+): Promise<void> {
   if (!gates.length) return;
   const runIds = [...new Set(gates.map((gate) => gate.run_id))];
   const gateIds = gates.map((gate) => gate.id);
-  const cancelledGates = await tx.execute(sql`
+  const cancelledGates = await tx.execute(
+    sql`
     update flow_gates set status='cancelled', comment=${reason}, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(gateIds)}::jsonb)::uuid)
-       and status in ('pending','escalated') returning id`, "objects");
+       and status in ('pending','escalated') returning id`,
+    "objects",
+  );
   if (cancelledGates.length !== gateIds.length) {
-    refuse("A pending work-order approval changed while the order was being cancelled.", "work_order_approval_changed", "Reload the work order and retry the cancellation.", 409);
+    refuse(
+      "A pending work-order approval changed while the order was being cancelled.",
+      "work_order_approval_changed",
+      "Reload the work order and retry the cancellation.",
+      409,
+    );
   }
   for (const gate of gates) {
     await auditChange(tx, {
-      orgId, actorId, table: "flow_gates", rowId: gate.id, action: "update",
-      before: { status: gate.status }, after: { status: "cancelled", reason },
+      orgId,
+      actorId,
+      table: "flow_gates",
+      rowId: gate.id,
+      action: "update",
+      before: { status: gate.status },
+      after: { status: "cancelled", reason },
     });
   }
-  const runStates = await tx.execute<{ id: string; status: string }>(sql`
+  const runStates = await tx.execute<{ id: string; status: string }>(
+    sql`
     select id, status from flow_runs where org_id=${orgId}
       and id in (select jsonb_array_elements_text(${JSON.stringify(runIds)}::jsonb)::uuid)
-      and status in ('running','waiting') order by id for update`, "objects");
+      and status in ('running','waiting') order by id for update`,
+    "objects",
+  );
   if (runStates.length !== runIds.length) {
-    refuse("A work-order approval run changed while the order was being cancelled.", "work_order_approval_changed", "Reload the work order and retry the cancellation.", 409);
+    refuse(
+      "A work-order approval run changed while the order was being cancelled.",
+      "work_order_approval_changed",
+      "Reload the work order and retry the cancellation.",
+      409,
+    );
   }
-  const cancelledRuns = await tx.execute(sql`
+  const cancelledRuns = await tx.execute(
+    sql`
     update flow_runs set status='cancelled', finished_at=now(), updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(runIds)}::jsonb)::uuid)
-       and status in ('running','waiting') returning id`, "objects");
+       and status in ('running','waiting') returning id`,
+    "objects",
+  );
   if (cancelledRuns.length !== runIds.length) {
-    refuse("A work-order approval run changed while the order was being cancelled.", "work_order_approval_changed", "Reload the work order and retry the cancellation.", 409);
+    refuse(
+      "A work-order approval run changed while the order was being cancelled.",
+      "work_order_approval_changed",
+      "Reload the work order and retry the cancellation.",
+      409,
+    );
   }
   for (const run of runStates) {
     await auditChange(tx, {
-      orgId, actorId, table: "flow_runs", rowId: run.id, action: "update",
-      before: { status: run.status }, after: { status: "cancelled", reason },
+      orgId,
+      actorId,
+      table: "flow_runs",
+      rowId: run.id,
+      action: "update",
+      before: { status: run.status },
+      after: { status: "cancelled", reason },
     });
   }
 }
 
 /** A continuous run is an ordinary bounded order with the same inventory and accounting lifecycle. */
-function productionRunDetails(input:{productionMode?:string;campaignReference?:string|null},definition:{physicalModel:string}|null,start:string|null,end:string|null) {
-  const productionMode=input.productionMode??(definition?.physicalModel==='process'?'batch':'order');
-  if(!['order','batch','continuous'].includes(productionMode)||(productionMode!=='order'&&definition?.physicalModel!=='process'))
-    refuse('Batch and continuous runs need a process operating profile.','production_run_style_required','Choose a batch/process workflow, or keep this work as a production order.');
-  if(productionMode==='continuous'&&(!start||!end))
-    refuse('A continuous run needs a bounded planned start and finish.','production_run_window_required','Choose the dates and expected output of this run. Record output through partial receipts, and start another run for the next window.');
-  if(input.campaignReference!=null&&(typeof input.campaignReference!=='string'||input.campaignReference.trim().length>100))
-    refuse('Campaign references can contain at most 100 characters.','campaign_reference_invalid','Enter a concise reference for the related runs, or leave it empty.');
-  return {productionMode:productionMode as WorkOrderRow['productionMode'],campaignReference:input.campaignReference?.trim()||null};
+function productionRunDetails(
+  input: { productionMode?: string; campaignReference?: string | null },
+  definition: { physicalModel: string } | null,
+  start: string | null,
+  end: string | null,
+) {
+  const productionMode =
+    input.productionMode ?? (definition?.physicalModel === "process" ? "batch" : "order");
+  if (
+    !["order", "batch", "continuous"].includes(productionMode) ||
+    (productionMode !== "order" && definition?.physicalModel !== "process")
+  )
+    refuse(
+      "Batch and continuous runs need a process operating profile.",
+      "production_run_style_required",
+      "Choose a batch/process workflow, or keep this work as a production order.",
+    );
+  if (productionMode === "continuous" && (!start || !end))
+    refuse(
+      "A continuous run needs a bounded planned start and finish.",
+      "production_run_window_required",
+      "Choose the dates and expected output of this run. Record output through partial receipts, and start another run for the next window.",
+    );
+  if (
+    input.campaignReference != null &&
+    (typeof input.campaignReference !== "string" || input.campaignReference.trim().length > 100)
+  )
+    refuse(
+      "Campaign references can contain at most 100 characters.",
+      "campaign_reference_invalid",
+      "Enter a concise reference for the related runs, or leave it empty.",
+    );
+  return {
+    productionMode: productionMode as WorkOrderRow["productionMode"],
+    campaignReference: input.campaignReference?.trim() || null,
+  };
 }
 
 async function insertDraft(
   tx: SqlExecutor,
   orgId: string,
   actorId: string,
-  input: Omit<WorkOrderInput, "source"> & { source: "manual" | "sales_order" | "parent"; sourceRefId: string | null },
-  opts: { id?: string; requestId?: string; parentWoId?: string | null; inheritedProfile?: {versionId:string|null; departmentId:string|null} } = {},
+  input: Omit<WorkOrderInput, "source"> & {
+    source: "manual" | "sales_order" | "parent";
+    sourceRefId: string | null;
+  },
+  opts: {
+    id?: string;
+    requestId?: string;
+    parentWoId?: string | null;
+    inheritedProfile?: { versionId: string | null; departmentId: string | null };
+  } = {},
 ): Promise<WorkOrderRead> {
-  const scope = await lockManufacturingManageAuthority(tx,orgId,actorId,input.subsidiaryId);
+  const scope = await lockManufacturingManageAuthority(tx, orgId, actorId, input.subsidiaryId);
   const item = await itemDetails(tx, orgId, input.producedItemId);
-  if (!item.is_active) refuse(`Produced item ${item.code?.trim() || item.name} is inactive.`, "inactive_item", "Reactivate the item in Item setup before creating a work order.");
+  if (!item.is_active)
+    refuse(
+      `Produced item ${item.code?.trim() || item.name} is inactive.`,
+      "inactive_item",
+      "Reactivate the item in Item setup before creating a work order.",
+    );
   const subsidiaries = await loadSubsidiaryContext(tx as Runner, orgId);
   const subsidiary = subsidiaries.byId.get(input.subsidiaryId);
   if (!subsidiary) throw new ManufacturingNotFoundError();
   if (!subsidiary.isActive || subsidiary.isElimination) {
-    refuse("Choose an active operating subsidiary for the work order.", "invalid_work_order_subsidiary", "Choose an active, non-elimination subsidiary in Company setup.");
+    refuse(
+      "Choose an active operating subsidiary for the work order.",
+      "invalid_work_order_subsidiary",
+      "Choose an active, non-elimination subsidiary in Company setup.",
+    );
   }
   if (!item.base_unit) {
-    refuse(`Produced item ${item.code?.trim() || item.name} has no inventory profile.`, "item_not_stocked", "Add an inventory costing profile in the item's Inventory costing section.");
+    refuse(
+      `Produced item ${item.code?.trim() || item.name} has no inventory profile.`,
+      "item_not_stocked",
+      "Add an inventory costing profile in the item's Inventory costing section.",
+    );
   }
   const quantity = checkQuantity(input.quantityOrdered);
   const start = input.plannedStart == null ? null : isoDate(input.plannedStart, "plannedStart");
   const end = input.plannedEnd == null ? null : isoDate(input.plannedEnd, "plannedEnd");
-  if (start && end && end < start) refuse("Planned end must be on or after planned start.", "invalid_work_order_dates", "Choose an end date on or after the start date.");
+  if (start && end && end < start)
+    refuse(
+      "Planned end must be on or after planned start.",
+      "invalid_work_order_dates",
+      "Choose an end date on or after the start date.",
+    );
   if (input.priority && !["low", "normal", "high", "rush"].includes(input.priority)) {
-    refuse("Choose a valid work-order priority.", "invalid_priority", "Choose low, normal, high, or rush.");
+    refuse(
+      "Choose a valid work-order priority.",
+      "invalid_priority",
+      "Choose low, normal, high, or rush.",
+    );
   }
   await validateSource(tx, orgId, input.source, input.sourceRefId, input.subsidiaryId);
   if (input.source === "parent" && opts.parentWoId !== input.sourceRefId) {
-    refuse("A child work order must reference its parent work order.", "invalid_parent_reference", "Release the parent work order to create its child orders.");
+    refuse(
+      "A child work order must reference its parent work order.",
+      "invalid_parent_reference",
+      "Release the parent work order to create its child orders.",
+    );
   }
   await validateLocation(tx, orgId, input.subsidiaryId, input.issueLocationId ?? null, "outbound");
   await validateLocation(tx, orgId, input.subsidiaryId, input.receiptLocationId ?? null, "inbound");
   if (input.routingId) {
-    const routing = (await tx.execute<{ id: string }>(sql`
+    const routing = (
+      await tx.execute<{ id: string }>(
+        sql`
       select r.id from mfg_routings r where r.org_id=${orgId} and r.id=${input.routingId}
-        and r.produced_item_id=${input.producedItemId} ${routingResourcesVisible(scope)}`, "objects"))[0];
-    if (!routing) refuse("The selected routing is for a different produced item.", "routing_item_mismatch", "Choose a routing version for the produced item.");
+        and r.produced_item_id=${input.producedItemId} ${routingResourcesVisible(scope)}`,
+        "objects",
+      )
+    )[0];
+    if (!routing)
+      refuse(
+        "The selected routing is for a different produced item.",
+        "routing_item_mismatch",
+        "Choose a routing version for the produced item.",
+      );
   }
   const number = await allocateDocumentNumber(tx, orgId, "work_order", "WO-");
-  const operating = opts.inheritedProfile ? { ...opts.inheritedProfile, definition: opts.inheritedProfile.versionId ? await checkPinnedOperatingProfileCommand(tx,orgId,actorId,{versionId:opts.inheritedProfile.versionId,family:'production',subsidiaryId:input.subsidiaryId}) : null } : await resolveOperatingProfileForCreate(tx, orgId, actorId, { family: 'production', subsidiaryId: input.subsidiaryId, selection: input.operatingProfile, departmentId: input.operatingDepartmentId });
-  const run=productionRunDetails(input,operating.definition,start,end);
-  const inserted = await tx.execute<WorkOrderRow>(sql`
+  const operating = opts.inheritedProfile
+    ? {
+        ...opts.inheritedProfile,
+        definition: opts.inheritedProfile.versionId
+          ? await checkPinnedOperatingProfileCommand(tx, orgId, actorId, {
+              versionId: opts.inheritedProfile.versionId,
+              family: "production",
+              subsidiaryId: input.subsidiaryId,
+            })
+          : null,
+      }
+    : await resolveOperatingProfileForCreate(tx, orgId, actorId, {
+        family: "production",
+        subsidiaryId: input.subsidiaryId,
+        selection: input.operatingProfile,
+        departmentId: input.operatingDepartmentId,
+      });
+  const run = productionRunDetails(input, operating.definition, start, end);
+  const inserted = await tx.execute<WorkOrderRow>(
+    sql`
     insert into mfg_work_orders (id, org_id, number, produced_item_id, routing_id, quantity_ordered, unit,
       status, priority, source, source_ref_id, parent_wo_id, subsidiary_id, issue_location_id,
       receipt_location_id, planned_start, planned_end, production_mode,campaign_reference,operating_profile_version_id, operating_department_id, created_by, updated_by)
@@ -298,10 +534,17 @@ async function insertDraft(
       ${input.routingId ?? null}, ${quantity}, ${item.base_unit}, 'draft', ${input.priority ?? "normal"}, ${input.source},
       ${input.sourceRefId}, ${opts.parentWoId ?? null}, ${input.subsidiaryId}, ${input.issueLocationId ?? null},
       ${input.receiptLocationId ?? null}, ${start}, ${end}, ${run.productionMode},${run.campaignReference},${operating.versionId}, ${operating.departmentId}, ${actorId}, ${actorId})
-    returning ${workOrderColumns}`, "objects");
+    returning ${workOrderColumns}`,
+    "objects",
+  );
   const after = rowOrNotFound(inserted);
   await auditChange(tx, {
-    orgId, actorId, table: "mfg_work_orders", rowId: after.id, action: "insert", before: null,
+    orgId,
+    actorId,
+    table: "mfg_work_orders",
+    rowId: after.id,
+    action: "insert",
+    before: null,
     after: { status: "draft", reason: "Created as a draft work order.", order: after },
     requestId: opts.requestId,
   });
@@ -318,10 +561,18 @@ export async function createWorkOrder(
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const source = input.source ?? "manual";
   if (source !== "manual" && source !== "sales_order") {
-    refuse("Only manual and sales-order work orders can be created directly.", "invalid_source", "Create child work orders through parent release, or choose manual/sales-order source.");
+    refuse(
+      "Only manual and sales-order work orders can be created directly.",
+      "invalid_source",
+      "Create child work orders through parent release, or choose manual/sales-order source.",
+    );
   }
   if (source === "manual" && input.sourceRefId) {
-    refuse("A manual work order cannot reference a sales order.", "invalid_source_reference", "Choose manual source or link a sales order.");
+    refuse(
+      "A manual work order cannot reference a sales order.",
+      "invalid_source_reference",
+      "Choose manual source or link a sales order.",
+    );
   }
   return insertDraft(
     tx,
@@ -336,19 +587,31 @@ export async function createWorkOrder(
   );
 }
 
-export async function getWorkOrder(tx: SqlExecutor, orgId: string, id: string, lock = false): Promise<WorkOrderRead | null> {
+export async function getWorkOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  id: string,
+  lock = false,
+): Promise<WorkOrderRead | null> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   if (lock) {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-work-order:${id}`}, 0))`);
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-work-order:${id}`}, 0))`,
+    );
   }
-  const row = (await tx.execute<WorkOrderRow & { pendingApproval: boolean }>(sql`
+  const row = (
+    await tx.execute<WorkOrderRow & { pendingApproval: boolean }>(
+      sql`
     select ${workOrderColumns},
       (mfg_work_orders.status='draft' and exists (
         select 1 from flow_gates gate where gate.org_id=mfg_work_orders.org_id
           and gate.subject_kind='work_order' and gate.subject_id=mfg_work_orders.id
           and gate.status in ('pending','escalated')
       )) as "pendingApproval"
-      from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`, "objects"))[0];
+      from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   if (!lock) row.costCollected = await workOrderCostCollected(tx, orgId, row);
   return row;
@@ -361,7 +624,11 @@ export async function getWorkOrder(tx: SqlExecutor, orgId: string, id: string, l
  * entries so it can never drift from the books; unknown when WIP is not
  * mapped.
  */
-async function workOrderCostCollected(tx: SqlExecutor, orgId: string, order: WorkOrderRow): Promise<string | null> {
+async function workOrderCostCollected(
+  tx: SqlExecutor,
+  orgId: string,
+  order: WorkOrderRow,
+): Promise<string | null> {
   let wipId: string;
   try {
     wipId = await manufacturingControlAccount(tx, orgId, order.subsidiaryId, "mfgWip");
@@ -369,7 +636,9 @@ async function workOrderCostCollected(tx: SqlExecutor, orgId: string, order: Wor
     if (error instanceof ManufacturingError) return null;
     throw error;
   }
-  const collected = (await tx.execute<{ amount: string }>(sql`
+  const collected = (
+    await tx.execute<{ amount: string }>(
+      sql`
     select coalesce(sum(line.amount) filter (where line.amount > 0), 0)::text as amount
       from journal_entries entry
       join journal_lines line on line.org_id = entry.org_id and line.entry_id = entry.id
@@ -378,7 +647,10 @@ async function workOrderCostCollected(tx: SqlExecutor, orgId: string, order: Wor
        -- Live entries only: a reversed charge and its reversal are not cost collected.
        and entry.status = 'posted' and entry.reverses_entry_id is null
        and line.account_id = ${wipId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return collected?.amount ?? "0";
 }
 
@@ -390,49 +662,142 @@ export async function updateDraftWorkOrder(
   patch: WorkOrderPatch,
 ): Promise<WorkOrderRead> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  const commandScope = await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
+  const commandScope = await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
   const before = await loadOrder(tx, orgId, id, true);
   if (before.status !== "draft") {
     await heldRefusal(before);
-    refuse(`Work order ${before.number} is ${before.status} and cannot be edited.`, "work_order_not_draft", "Cancel the work order and create a replacement with the revised details.", 409);
+    refuse(
+      `Work order ${before.number} is ${before.status} and cannot be edited.`,
+      "work_order_not_draft",
+      "Cancel the work order and create a replacement with the revised details.",
+      409,
+    );
   }
   if (await hasPendingApproval(tx, orgId, id)) {
-    refuse(`Work order ${before.number} is awaiting approval and cannot be edited.`, "work_order_pending_approval", "Resolve or reject the pending approval before editing the draft.", 409);
+    refuse(
+      `Work order ${before.number} is awaiting approval and cannot be edited.`,
+      "work_order_pending_approval",
+      "Resolve or reject the pending approval before editing the draft.",
+      409,
+    );
   }
-  const quantity = patch.quantityOrdered === undefined ? before.quantityOrdered : checkQuantity(patch.quantityOrdered);
-  const start = patch.plannedStart === undefined ? before.plannedStart : patch.plannedStart === null ? null : isoDate(patch.plannedStart, "plannedStart");
-  const end = patch.plannedEnd === undefined ? before.plannedEnd : patch.plannedEnd === null ? null : isoDate(patch.plannedEnd, "plannedEnd");
-  if (start && end && end < start) refuse("Planned end must be on or after planned start.", "invalid_work_order_dates", "Choose an end date on or after the start date.");
-  const issueLocationId = patch.issueLocationId === undefined ? before.issueLocationId : patch.issueLocationId;
-  const receiptLocationId = patch.receiptLocationId === undefined ? before.receiptLocationId : patch.receiptLocationId;
-  if (before.receiptReworkInspectionId && (cmp(quantity,before.quantityOrdered)!==0 || issueLocationId!==before.issueLocationId))
-    refuse('A received-stock repair keeps the full inspected quantity and its original source location.', 'receipt_rework_identity_frozen', 'Keep the original quantity and source; change scheduling or the output location, and dispose failed work through Quality or Close as loss.',409);
-  if (!before.subsidiaryId) refuse(`Work order ${before.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before editing the work order.");
-  await validateLocation(tx as Runner, orgId, before.subsidiaryId, issueLocationId ?? null, "outbound");
-  await validateLocation(tx as Runner, orgId, before.subsidiaryId, receiptLocationId ?? null, "inbound");
-  await assertManufacturingStockLocationScope(tx,orgId,issueLocationId,commandScope);
-  await assertManufacturingStockLocationScope(tx,orgId,receiptLocationId,commandScope);
+  const quantity =
+    patch.quantityOrdered === undefined
+      ? before.quantityOrdered
+      : checkQuantity(patch.quantityOrdered);
+  const start =
+    patch.plannedStart === undefined
+      ? before.plannedStart
+      : patch.plannedStart === null
+        ? null
+        : isoDate(patch.plannedStart, "plannedStart");
+  const end =
+    patch.plannedEnd === undefined
+      ? before.plannedEnd
+      : patch.plannedEnd === null
+        ? null
+        : isoDate(patch.plannedEnd, "plannedEnd");
+  if (start && end && end < start)
+    refuse(
+      "Planned end must be on or after planned start.",
+      "invalid_work_order_dates",
+      "Choose an end date on or after the start date.",
+    );
+  const issueLocationId =
+    patch.issueLocationId === undefined ? before.issueLocationId : patch.issueLocationId;
+  const receiptLocationId =
+    patch.receiptLocationId === undefined ? before.receiptLocationId : patch.receiptLocationId;
+  if (
+    before.receiptReworkInspectionId &&
+    (cmp(quantity, before.quantityOrdered) !== 0 || issueLocationId !== before.issueLocationId)
+  )
+    refuse(
+      "A received-stock repair keeps the full inspected quantity and its original source location.",
+      "receipt_rework_identity_frozen",
+      "Keep the original quantity and source; change scheduling or the output location, and dispose failed work through Quality or Close as loss.",
+      409,
+    );
+  if (!before.subsidiaryId)
+    refuse(
+      `Work order ${before.number} has no subsidiary.`,
+      "work_order_subsidiary_required",
+      "Choose an operating subsidiary before editing the work order.",
+    );
+  await validateLocation(
+    tx as Runner,
+    orgId,
+    before.subsidiaryId,
+    issueLocationId ?? null,
+    "outbound",
+  );
+  await validateLocation(
+    tx as Runner,
+    orgId,
+    before.subsidiaryId,
+    receiptLocationId ?? null,
+    "inbound",
+  );
+  await assertManufacturingStockLocationScope(tx, orgId, issueLocationId, commandScope);
+  await assertManufacturingStockLocationScope(tx, orgId, receiptLocationId, commandScope);
   const routingId = patch.routingId === undefined ? before.routingId : patch.routingId;
   if (routingId) {
-    await lockManufacturingRoutingAuthority(tx,orgId,actorId,routingId);
-    const routing = await tx.execute(sql`select 1 from mfg_routings where org_id=${orgId} and id=${routingId} and produced_item_id=${before.producedItemId}`, "objects");
-    if (!routing.length) refuse("The selected routing is for a different produced item.", "routing_item_mismatch", "Choose a routing version for the produced item.");
+    await lockManufacturingRoutingAuthority(tx, orgId, actorId, routingId);
+    const routing = await tx.execute(
+      sql`select 1 from mfg_routings where org_id=${orgId} and id=${routingId} and produced_item_id=${before.producedItemId}`,
+      "objects",
+    );
+    if (!routing.length)
+      refuse(
+        "The selected routing is for a different produced item.",
+        "routing_item_mismatch",
+        "Choose a routing version for the produced item.",
+      );
   }
-  const definition=before.operatingProfileVersionId?await checkPinnedOperatingProfileCommand(tx,orgId,actorId,{versionId:before.operatingProfileVersionId,family:'production',subsidiaryId:before.subsidiaryId}):null;
-  const run=productionRunDetails({productionMode:patch.productionMode??before.productionMode,campaignReference:patch.campaignReference===undefined?before.campaignReference:patch.campaignReference},definition,start,end);
-  const updated = await tx.execute<WorkOrderRow>(sql`
+  const definition = before.operatingProfileVersionId
+    ? await checkPinnedOperatingProfileCommand(tx, orgId, actorId, {
+        versionId: before.operatingProfileVersionId,
+        family: "production",
+        subsidiaryId: before.subsidiaryId,
+      })
+    : null;
+  const run = productionRunDetails(
+    {
+      productionMode: patch.productionMode ?? before.productionMode,
+      campaignReference:
+        patch.campaignReference === undefined ? before.campaignReference : patch.campaignReference,
+    },
+    definition,
+    start,
+    end,
+  );
+  const updated = await tx.execute<WorkOrderRow>(
+    sql`
     update mfg_work_orders set quantity_ordered=${quantity}, planned_start=${start}, planned_end=${end},production_mode=${run.productionMode},campaign_reference=${run.campaignReference},
       issue_location_id=${issueLocationId ?? null}, receipt_location_id=${receiptLocationId ?? null},
       routing_id=${routingId ?? null}, updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`, "objects");
+     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_work_orders",
+    rowId: id,
+    action: "update",
+    before,
+    after,
+  });
   return { ...after, pendingApproval: false };
 }
 
 type ActiveRouting = {
-  id: string; version: number; effective_from: string; effective_to: string | null;
-  default_issue_location_id: string | null; default_receipt_location_id: string | null;
+  id: string;
+  version: number;
+  effective_from: string;
+  effective_to: string | null;
+  default_issue_location_id: string | null;
+  default_receipt_location_id: string | null;
   overheadBasis: string;
 };
 
@@ -444,7 +809,8 @@ async function activeRouting(
   asOf: string,
   selectedId: string | null,
 ): Promise<ActiveRouting> {
-  const matches = await tx.execute<ActiveRouting>(sql`
+  const matches = await tx.execute<ActiveRouting>(
+    sql`
     select id, version, effective_from::text, effective_to::text,
            default_issue_location_id, default_receipt_location_id,
            overhead_basis as "overheadBasis"
@@ -452,22 +818,42 @@ async function activeRouting(
      where org_id=${orgId} and produced_item_id=${itemId} and status='active'
        and effective_from <= ${asOf}::date and (effective_to is null or ${asOf}::date < effective_to)
        and (${selectedId}::uuid is null or id=${selectedId})
-     order by version desc for share`, "objects");
+     order by version desc for share`,
+    "objects",
+  );
   if (matches.length !== 1) {
-    refuse(`No active routing version for ${code} is effective on ${asOf}.`, "routing_not_effective", `Activate a routing version for ${code}.`);
+    refuse(
+      `No active routing version for ${code} is effective on ${asOf}.`,
+      "routing_not_effective",
+      `Activate a routing version for ${code}.`,
+    );
   }
   return matches[0]!;
 }
 
 type BomRow = {
-  component_item_id: string; component_code: string | null; quantity_per: string;quantity_basis:BomQuantityBasis;formula_output_quantity:string;
-  sort_order: number; effective_from: string | null; effective_to: string | null;
-  operation_seq: number | null; scrap_pct: string | null; is_byproduct: boolean;
-  output_cost_weight:string|null;
+  component_item_id: string;
+  component_code: string | null;
+  quantity_per: string;
+  quantity_basis: BomQuantityBasis;
+  formula_output_quantity: string;
+  sort_order: number;
+  effective_from: string | null;
+  effective_to: string | null;
+  operation_seq: number | null;
+  scrap_pct: string | null;
+  is_byproduct: boolean;
+  output_cost_weight: string | null;
 };
 
-async function effectiveBomRows(tx: SqlExecutor, orgId: string, itemId: string, asOf: string): Promise<BomRow[]> {
-  return await tx.execute<BomRow>(sql`
+async function effectiveBomRows(
+  tx: SqlExecutor,
+  orgId: string,
+  itemId: string,
+  asOf: string,
+): Promise<BomRow[]> {
+  return await tx.execute<BomRow>(
+    sql`
     select b.component_item_id, component.code as component_code, b.quantity_per::text as quantity_per,
            b.sort_order, b.effective_from::text as effective_from, b.effective_to::text as effective_to,
            b.operation_seq,b.quantity_basis,b.formula_output_quantity::text,b.scrap_pct::text as scrap_pct, b.is_byproduct,b.output_cost_weight::text
@@ -476,7 +862,9 @@ async function effectiveBomRows(tx: SqlExecutor, orgId: string, itemId: string, 
        and (b.effective_from is null or b.effective_from <= ${asOf}::date)
        and (b.effective_to is null or ${asOf}::date < b.effective_to)
      order by b.sort_order, b.component_item_id, b.operation_seq nulls first,
-              b.is_byproduct, b.effective_from nulls first`, "objects");
+              b.is_byproduct, b.effective_from nulls first`,
+    "objects",
+  );
 }
 
 function bomRevision(itemId: string, rows: BomRow[]): string {
@@ -485,8 +873,17 @@ function bomRevision(itemId: string, rows: BomRow[]): string {
     assemblyItemId: itemId,
     components: rows.map((row) => {
       const evidence: {
-        componentItemId: string; quantityPer: string; sortOrder: number;
-        effectiveFrom?: string; effectiveTo?: string; operationSeq?: number; scrapPct?: string;quantityBasis?:BomQuantityBasis;formulaOutputQuantity?:string;isByproduct?:boolean;outputCostWeight?:string;
+        componentItemId: string;
+        quantityPer: string;
+        sortOrder: number;
+        effectiveFrom?: string;
+        effectiveTo?: string;
+        operationSeq?: number;
+        scrapPct?: string;
+        quantityBasis?: BomQuantityBasis;
+        formulaOutputQuantity?: string;
+        isByproduct?: boolean;
+        outputCostWeight?: string;
       } = {
         componentItemId: row.component_item_id,
         quantityPer: normalizeMoney(row.quantity_per),
@@ -495,23 +892,38 @@ function bomRevision(itemId: string, rows: BomRow[]): string {
       if (row.effective_from !== null) evidence.effectiveFrom = row.effective_from;
       if (row.effective_to !== null) evidence.effectiveTo = row.effective_to;
       if (row.operation_seq !== null) evidence.operationSeq = row.operation_seq;
-      if (row.scrap_pct !== null && cmp(row.scrap_pct, "0") !== 0) evidence.scrapPct = normalizeMoney(row.scrap_pct);
-      if(row.quantity_basis!=='per_unit') {evidence.quantityBasis=row.quantity_basis;evidence.formulaOutputQuantity=normalizeMoney(row.formula_output_quantity);}
-      if(row.is_byproduct)evidence.isByproduct=true;
-      if(row.output_cost_weight!==null)evidence.outputCostWeight=normalizeMoney(row.output_cost_weight);
+      if (row.scrap_pct !== null && cmp(row.scrap_pct, "0") !== 0)
+        evidence.scrapPct = normalizeMoney(row.scrap_pct);
+      if (row.quantity_basis !== "per_unit") {
+        evidence.quantityBasis = row.quantity_basis;
+        evidence.formulaOutputQuantity = normalizeMoney(row.formula_output_quantity);
+      }
+      if (row.is_byproduct) evidence.isByproduct = true;
+      if (row.output_cost_weight !== null)
+        evidence.outputCostWeight = normalizeMoney(row.output_cost_weight);
       return evidence;
     }),
   };
   return `sha256:${inventoryRequestHash(snapshot)}`;
 }
 
-async function materialReservations(tx: SqlExecutor, orgId: string, subsidiaryId: string, itemId: string): Promise<string> {
-  const row = (await tx.execute<{ reserved: string }>(sql`
+async function materialReservations(
+  tx: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+  itemId: string,
+): Promise<string> {
+  const row = (
+    await tx.execute<{ reserved: string }>(
+      sql`
     select coalesce(sum(greatest(material.required_qty-material.issued_qty-material.backflush_qty, 0)),0)::text as reserved
       from mfg_wo_materials material join mfg_work_orders order_row
         on order_row.org_id=material.org_id and order_row.id=material.work_order_id
      where material.org_id=${orgId} and material.component_item_id=${itemId}
-       and order_row.subsidiary_id=${subsidiaryId} and order_row.status in ('released','in_progress')`, "objects"))[0];
+       and order_row.subsidiary_id=${subsidiaryId} and order_row.status in ('released','in_progress')`,
+      "objects",
+    )
+  )[0];
   return row?.reserved ?? "0";
 }
 
@@ -519,36 +931,102 @@ async function releaseMaterials(
   tx: SqlExecutor,
   orgId: string,
   order: WorkOrderRow,
-  lines: Array<{ itemId: string; itemCode: string; required: string; operationSeq: number | null; quantityPer: string;quantityBasis:BomQuantityBasis;formulaOutputQuantity:string; scrapPct: string | null }>,
+  lines: Array<{
+    itemId: string;
+    itemCode: string;
+    required: string;
+    operationSeq: number | null;
+    quantityPer: string;
+    quantityBasis: BomQuantityBasis;
+    formulaOutputQuantity: string;
+    scrapPct: string | null;
+  }>,
   issueLocationId: string,
-  repair?:{receiptMovementId:string|null;lotId:string|null;serialId:string|null},
-): Promise<Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string; quantityPer: string;quantityBasis:BomQuantityBasis;formulaOutputQuantity:string; scrapPct: string | null }>> {
-  const warehouse = (await tx.execute<{ warehouse_id: string | null }>(sql`
-    select stock_location_warehouse(${orgId}::uuid, ${issueLocationId}::uuid) as warehouse_id`, "objects"))[0]?.warehouse_id ?? null;
+  repair?: { receiptMovementId: string | null; lotId: string | null; serialId: string | null },
+): Promise<
+  Array<{
+    itemId: string;
+    itemCode: string;
+    required: string;
+    shortage: string;
+    operationSeq: number | null;
+    tracking: string;
+    quantityPer: string;
+    quantityBasis: BomQuantityBasis;
+    formulaOutputQuantity: string;
+    scrapPct: string | null;
+  }>
+> {
+  const warehouse =
+    (
+      await tx.execute<{ warehouse_id: string | null }>(
+        sql`
+    select stock_location_warehouse(${orgId}::uuid, ${issueLocationId}::uuid) as warehouse_id`,
+        "objects",
+      )
+    )[0]?.warehouse_id ?? null;
   const itemIds = [...new Set(lines.map((line) => line.itemId))].sort();
   for (const itemId of itemIds) {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-release:${order.subsidiaryId}:${itemId}`}, 0))`);
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-release:${order.subsidiaryId}:${itemId}`}, 0))`,
+    );
   }
   const shortages: string[] = [];
-  const result: Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string; quantityPer: string;quantityBasis:BomQuantityBasis;formulaOutputQuantity:string; scrapPct: string | null }> = [];
+  const result: Array<{
+    itemId: string;
+    itemCode: string;
+    required: string;
+    shortage: string;
+    operationSeq: number | null;
+    tracking: string;
+    quantityPer: string;
+    quantityBasis: BomQuantityBasis;
+    formulaOutputQuantity: string;
+    scrapPct: string | null;
+  }> = [];
   for (const itemId of itemIds) {
     const item = await itemDetails(tx, orgId, itemId);
     const displayCode = item.code?.trim() || item.name;
-    const itemLines = lines.filter((line) => line.itemId === itemId)
+    const itemLines = lines
+      .filter((line) => line.itemId === itemId)
       .map((material) => ({ ...material, itemCode: displayCode }));
     const line = itemLines[0]!;
     // ATP is the authoritative no-profile refusal; let it pass through unchanged.
-    const atp = repair?{available:(await getOnHandWith(tx,orgId,itemId,issueLocationId,{subsidiaryId:order.subsidiaryId!,sourceReceiptMovementId:repair.receiptMovementId!,lotId:repair.lotId,serialId:repair.serialId})).quantity}:await getAvailableToPromise(tx as Runner, orgId, {
-      itemId, subsidiaryId: order.subsidiaryId!, warehouseId: warehouse,
-    });
+    const atp = repair
+      ? {
+          available: (
+            await getOnHandWith(tx, orgId, itemId, issueLocationId, {
+              subsidiaryId: order.subsidiaryId!,
+              sourceReceiptMovementId: repair.receiptMovementId!,
+              lotId: repair.lotId,
+              serialId: repair.serialId,
+            })
+          ).quantity,
+        }
+      : await getAvailableToPromise(tx as Runner, orgId, {
+          itemId,
+          subsidiaryId: order.subsidiaryId!,
+          warehouseId: warehouse,
+        });
     const profile = await resolveProfile(orgId, itemId, tx as Runner, true);
-    const account = (await tx.execute<{ id: string }>(sql`
+    const account = (
+      await tx.execute<{ id: string }>(
+        sql`
       select id from accounts where org_id=${orgId} and id=${profile.assetAccountId}
-        and is_active and type like 'asset_%'`, "objects"))[0];
+        and is_active and type like 'asset_%'`,
+        "objects",
+      )
+    )[0];
     if (!account) {
-      refuse(`Component ${line.itemCode} has no active inventory asset account.`, "component_asset_account_missing", `Map accounts for ${line.itemCode} in item setup.`);
+      refuse(
+        `Component ${line.itemCode} has no active inventory asset account.`,
+        "component_asset_account_missing",
+        `Map accounts for ${line.itemCode} in item setup.`,
+      );
     }
-    let remainingUnits = toUnits(atp.available) - toUnits(repair?"0":await materialReservations(tx, orgId, order.subsidiaryId!, itemId));
+    let remainingUnits =
+      toUnits(atp.available) -
+      toUnits(repair ? "0" : await materialReservations(tx, orgId, order.subsidiaryId!, itemId));
     for (const material of itemLines) {
       const availableUnits = remainingUnits > 0n ? remainingUnits : 0n;
       const requiredUnits = toUnits(material.required);
@@ -561,13 +1039,21 @@ async function releaseMaterials(
   }
   const policy = await getManufacturingPolicies(tx, orgId);
   if (policy.shortagePolicy === "refuse" && shortages.length) {
-    refuse(`Work order ${order.number} has material shortages: ${shortages.join(", ")}.`, "work_order_shortage", "Receive or transfer each named component into the order's issue warehouse before release.");
+    refuse(
+      `Work order ${order.number} has material shortages: ${shortages.join(", ")}.`,
+      "work_order_shortage",
+      "Receive or transfer each named component into the order's issue warehouse before release.",
+    );
   }
   return result;
 }
 
 type CanonicalBurdenComponent = {
-  key: string; kind: string; name: string; value: string; scaleWithOvertime: boolean;
+  key: string;
+  kind: string;
+  name: string;
+  value: string;
+  scaleWithOvertime: boolean;
 };
 
 type ReleaseBurdenDocument = {
@@ -575,14 +1061,23 @@ type ReleaseBurdenDocument = {
   annualHours: number;
   components: CanonicalBurdenComponent[];
   source: {
-    wageRowId: string; effectiveFrom: string; rate: string;
-    currency: string; basis: string; annualHours: string;
+    wageRowId: string;
+    effectiveFrom: string;
+    rate: string;
+    currency: string;
+    basis: string;
+    annualHours: string;
   };
 };
 
 type ReleaseOverheadCardEvidence = {
-  id: string; effectiveFrom: string; effectiveTo: string | null;
-  kind: string; category: string | null; rate: string; method: string;
+  id: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  kind: string;
+  category: string | null;
+  rate: string;
+  method: string;
 };
 
 type ReleaseOverheadDocument = {
@@ -639,14 +1134,26 @@ async function releaseBusinessDate(tx: SqlExecutor, orgId: string): Promise<stri
     return await businessTodayInTx(tx, orgId);
   } catch (err) {
     if (err instanceof Error) {
-      if (err.message === `organization ${orgId} not found — cannot resolve its business time zone`) {
-        refuse("The work order cannot be released because its organization is missing.", "org_not_found", "Contact an administrator; the organization record is missing.");
+      if (
+        err.message === `organization ${orgId} not found — cannot resolve its business time zone`
+      ) {
+        refuse(
+          "The work order cannot be released because its organization is missing.",
+          "org_not_found",
+          "Contact an administrator; the organization record is missing.",
+        );
       }
       if (
         err.message.startsWith("Stored business time zone ") &&
-        err.message.endsWith(" is not a known IANA time zone — set Business time zone in Company Settings → Organization")
+        err.message.endsWith(
+          " is not a known IANA time zone — set Business time zone in Company Settings → Organization",
+        )
       ) {
-        refuse(err.message, "invalid_business_timezone", "Set Business time zone in Company Settings → Organization.");
+        refuse(
+          err.message,
+          "invalid_business_timezone",
+          "Set Business time zone in Company Settings → Organization.",
+        );
       }
     }
     throw err;
@@ -657,26 +1164,46 @@ async function releaseBusinessDate(tx: SqlExecutor, orgId: string): Promise<stri
 // re-read inside the release transaction. A subsidiary that left the
 // hierarchy, was deactivated, or lost its currency since creation refuses;
 // there is no fallback to an org default.
-async function releaseFunctionalCurrency(tx: SqlExecutor, orgId: string, order: WorkOrderRow): Promise<string> {
+async function releaseFunctionalCurrency(
+  tx: SqlExecutor,
+  orgId: string,
+  order: WorkOrderRow,
+): Promise<string> {
   let context: SubsidiaryContext;
   try {
     context = await loadSubsidiaryContext(tx, orgId);
   } catch (err) {
     if (err instanceof SubsidiaryError) {
-      refuse(`Work order ${order.number} cannot be released because its subsidiary hierarchy is unavailable.`, "work_order_subsidiary_unavailable", "Restore the subsidiary hierarchy in Company Settings → Organization before releasing the work order.");
+      refuse(
+        `Work order ${order.number} cannot be released because its subsidiary hierarchy is unavailable.`,
+        "work_order_subsidiary_unavailable",
+        "Restore the subsidiary hierarchy in Company Settings → Organization before releasing the work order.",
+      );
     }
     throw err;
   }
   const subsidiary = context.byId.get(order.subsidiaryId!);
   if (!subsidiary) {
-    refuse(`Work order ${order.number} names a subsidiary outside this organization.`, "invalid_work_order_subsidiary", "Choose an active, non-elimination subsidiary in Company setup.");
+    refuse(
+      `Work order ${order.number} names a subsidiary outside this organization.`,
+      "invalid_work_order_subsidiary",
+      "Choose an active, non-elimination subsidiary in Company setup.",
+    );
   }
   if (!subsidiary.isActive || subsidiary.isElimination) {
-    refuse("Choose an active operating subsidiary for the work order.", "invalid_work_order_subsidiary", "Choose an active, non-elimination subsidiary in Company setup.");
+    refuse(
+      "Choose an active operating subsidiary for the work order.",
+      "invalid_work_order_subsidiary",
+      "Choose an active, non-elimination subsidiary in Company setup.",
+    );
   }
   const currency = checkCurrencyCode(subsidiary.baseCurrency);
   if (!currency) {
-    refuse(`Subsidiary ${subsidiary.name} has no usable functional currency.`, "subsidiary_currency_missing", "Set the subsidiary's base currency in Company Settings → Organization before releasing the work order.");
+    refuse(
+      `Subsidiary ${subsidiary.name} has no usable functional currency.`,
+      "subsidiary_currency_missing",
+      "Set the subsidiary's base currency in Company Settings → Organization before releasing the work order.",
+    );
   }
   return currency;
 }
@@ -707,28 +1234,60 @@ async function resolveOperationLabor(
   functionalCurrency: string,
   settings: LaborCostingSettings,
   caches: ReleaseSnapshotCaches,
-): Promise<Pick<OperationReleaseSnapshot,
-  "wageId" | "wageEffectiveFrom" | "wageRate" | "wageCurrency" | "wageBasis" | "wageAnnualHours" |
-  "finalRate" | "functionalCurrency" | "burden" | "burdenHash" |
-  "fxClass" | "fxRate" | "fxRowId" | "fxDate" | "fxSource" | "fxDirection">> {
-  const laborRemedy = "Review labor costing rates and settings in Company Settings → Labor costing.";
+): Promise<
+  Pick<
+    OperationReleaseSnapshot,
+    | "wageId"
+    | "wageEffectiveFrom"
+    | "wageRate"
+    | "wageCurrency"
+    | "wageBasis"
+    | "wageAnnualHours"
+    | "finalRate"
+    | "functionalCurrency"
+    | "burden"
+    | "burdenHash"
+    | "fxClass"
+    | "fxRate"
+    | "fxRowId"
+    | "fxDate"
+    | "fxSource"
+    | "fxDirection"
+  >
+> {
+  const laborRemedy =
+    "Review labor costing rates and settings in Company Settings → Labor costing.";
   let rate = caches.rates.get(departmentId);
   if (rate === undefined) {
     try {
       rate = await resolveStandardLaborRateInTx(tx, orgId, {
-        departmentId, subsidiaryId: order.subsidiaryId, releaseDate,
+        departmentId,
+        subsidiaryId: order.subsidiaryId,
+        releaseDate,
       });
     } catch (err) {
-      refuse(kernelMessage(err, `The standard labor rate for ${opLabel} cannot be resolved.`), "standard_labor_rate_unresolved", laborRemedy);
+      refuse(
+        kernelMessage(err, `The standard labor rate for ${opLabel} cannot be resolved.`),
+        "standard_labor_rate_unresolved",
+        laborRemedy,
+      );
     }
     caches.rates.set(departmentId, rate);
   }
   if (!rate) {
-    refuse(`No standard labor rate covers ${opLabel} on ${releaseDate}.`, "standard_labor_rate_missing", `Add a department, subsidiary, or org-wide standard labor rate effective on or before ${releaseDate} in Company Settings → Labor costing.`);
+    refuse(
+      `No standard labor rate covers ${opLabel} on ${releaseDate}.`,
+      "standard_labor_rate_missing",
+      `Add a department, subsidiary, or org-wide standard labor rate effective on or before ${releaseDate} in Company Settings → Labor costing.`,
+    );
   }
   const wageCurrency = checkCurrencyCode(rate.currency);
   if (!wageCurrency) {
-    refuse(`Standard labor rate ${rate.rateId} carries an unusable currency.`, "standard_labor_currency_invalid", "Fix the rate's currency in Company Settings → Labor costing.");
+    refuse(
+      `Standard labor rate ${rate.rateId} carries an unusable currency.`,
+      "standard_labor_currency_invalid",
+      "Fix the rate's currency in Company Settings → Labor costing.",
+    );
   }
   // Time-based source rates stay in their own basis in the frozen evidence;
   // the hourly wage converts once through the row's own annual-hours evidence.
@@ -741,13 +1300,21 @@ async function resolveOperationLabor(
       try {
         quote = await laborFxQuoteInTx(tx, orgId, wageCurrency, functionalCurrency, releaseDate);
       } catch (err) {
-        refuse(kernelMessage(err, `The FX conversion for ${opLabel} cannot be resolved.`), "standard_labor_fx_unresolved", "Review FX spot rates in Company Settings → FX provider.");
+        refuse(
+          kernelMessage(err, `The FX conversion for ${opLabel} cannot be resolved.`),
+          "standard_labor_fx_unresolved",
+          "Review FX spot rates in Company Settings → FX provider.",
+        );
       }
     }
     caches.fx.set(fxKey, quote);
   }
   if (wageCurrency !== functionalCurrency && !quote) {
-    refuse(`No FX spot rate converts standard labor ${wageCurrency} to ${functionalCurrency} on or before ${releaseDate} for ${opLabel}.`, "standard_labor_fx_missing", `Add an FX spot rate for ${wageCurrency} to ${functionalCurrency} covering ${releaseDate} in Company Settings → FX provider.`);
+    refuse(
+      `No FX spot rate converts standard labor ${wageCurrency} to ${functionalCurrency} on or before ${releaseDate} for ${opLabel}.`,
+      "standard_labor_fx_missing",
+      `Add an FX spot rate for ${wageCurrency} to ${functionalCurrency} covering ${releaseDate} in Company Settings → FX provider.`,
+    );
   }
   // One frozen conversion factor prices both the wage and the fixed burden
   // components; same-currency operations convert at an explicit par of 1.
@@ -759,10 +1326,15 @@ async function resolveOperationLabor(
   let finalRate: string;
   try {
     finalRate = computeCostRate(functionalWage, "1", {
-      hoursPerDay: settings.hoursPerDay, components: functionalComponents,
+      hoursPerDay: settings.hoursPerDay,
+      components: functionalComponents,
     });
   } catch (err) {
-    refuse(kernelMessage(err, `The standard labor burden for ${opLabel} cannot be priced.`), "standard_labor_burden_invalid", laborRemedy);
+    refuse(
+      kernelMessage(err, `The standard labor burden for ${opLabel} cannot be priced.`),
+      "standard_labor_burden_invalid",
+      laborRemedy,
+    );
   }
   const burden: ReleaseBurdenDocument = {
     hoursPerDay: settings.hoursPerDay,
@@ -819,10 +1391,16 @@ async function resolveOperationOverhead(
   if (cards === undefined) {
     try {
       cards = await resolveStandardOverheadCardsInTx(tx, orgId, {
-        departmentId, basis, onDate: releaseDate,
+        departmentId,
+        basis,
+        onDate: releaseDate,
       });
     } catch (err) {
-      refuse(kernelMessage(err, `The standard overhead cards for ${opLabel} cannot be resolved.`), "standard_overhead_unresolved", overheadRemedy);
+      refuse(
+        kernelMessage(err, `The standard overhead cards for ${opLabel} cannot be resolved.`),
+        "standard_overhead_unresolved",
+        overheadRemedy,
+      );
     }
     caches.overhead.set(departmentId, cards);
   }
@@ -837,7 +1415,11 @@ async function resolveOperationOverhead(
     try {
       canonicalRate = normalizeMoney(card.ratePercent);
     } catch {
-      refuse(`Frozen standard overhead card ${card.id} carries an unusable rate.`, "standard_overhead_card_invalid", overheadRemedy);
+      refuse(
+        `Frozen standard overhead card ${card.id} carries an unusable rate.`,
+        "standard_overhead_card_invalid",
+        overheadRemedy,
+      );
     }
     evidence.push({
       id: card.id,
@@ -882,21 +1464,47 @@ async function defaultReleaseDepartmentId(
   centerCode: string,
   opLabel: string,
 ): Promise<{ id: string; subsidiaryId: string | null; includeChildren: boolean }> {
-  if (!order.subsidiaryId) refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release.");
-  const rows = await tx.execute<{ id: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
+  if (!order.subsidiaryId)
+    refuse(
+      `Work order ${order.number} has no subsidiary.`,
+      "work_order_subsidiary_required",
+      "Choose an operating subsidiary before release.",
+    );
+  const rows = await tx.execute<{
+    id: string;
+    subsidiaryId: string | null;
+    includeChildren: boolean;
+  }>(
+    sql`
     select id, subsidiary_id as "subsidiaryId", subsidiary_include_children as "includeChildren"
-      from departments where org_id = ${orgId} and is_active order by id for share`, "objects");
+      from departments where org_id = ${orgId} and is_active order by id for share`,
+    "objects",
+  );
   if (rows.length === 1) {
     const only = rows[0]!;
-    if (!restrictionAdmits(entityContext, only.subsidiaryId, only.includeChildren, order.subsidiaryId)) {
-      refuse(`The department of work center ${centerCode} for ${opLabel} does not admit this legal entity.`, "work_center_department_entity_mismatch", `Choose an admitted department on work center ${centerCode} in Manufacturing → Work centers.`);
+    if (
+      !restrictionAdmits(entityContext, only.subsidiaryId, only.includeChildren, order.subsidiaryId)
+    ) {
+      refuse(
+        `The department of work center ${centerCode} for ${opLabel} does not admit this legal entity.`,
+        "work_center_department_entity_mismatch",
+        `Choose an admitted department on work center ${centerCode} in Manufacturing → Work centers.`,
+      );
     }
     return only;
   }
   if (rows.length === 0) {
-    refuse(`Work center ${centerCode} for ${opLabel} has no department.`, "work_center_department_required", `Create a department in Company Settings → Departments, then assign it to work center ${centerCode} in Manufacturing → Work centers.`);
+    refuse(
+      `Work center ${centerCode} for ${opLabel} has no department.`,
+      "work_center_department_required",
+      `Create a department in Company Settings → Departments, then assign it to work center ${centerCode} in Manufacturing → Work centers.`,
+    );
   }
-  refuse(`Work center ${centerCode} for ${opLabel} has no department.`, "work_center_department_required", `Assign a department to work center ${centerCode} in Manufacturing → Work centers.`);
+  refuse(
+    `Work center ${centerCode} for ${opLabel} has no department.`,
+    "work_center_department_required",
+    `Assign a department to work center ${centerCode} in Manufacturing → Work centers.`,
+  );
 }
 
 // Freeze every operation's complete labor/FX/overhead snapshot before the
@@ -912,35 +1520,66 @@ export async function resolveOperationReleaseSnapshots(
   releaseDate: string,
   functionalCurrency: string,
 ): Promise<OperationReleaseSnapshot[]> {
-  const laborRemedy = "Review labor costing rates and settings in Company Settings → Labor costing.";
+  const laborRemedy =
+    "Review labor costing rates and settings in Company Settings → Labor costing.";
   if (!["labor_hours", "machine_hours", "units"].includes(routing.overheadBasis)) {
-    refuse(`Routing version ${routing.version} carries an unknown overhead basis.`, "invalid_overhead_basis", "Choose labor hours, machine hours, or units on the routing.");
+    refuse(
+      `Routing version ${routing.version} carries an unknown overhead basis.`,
+      "invalid_overhead_basis",
+      "Choose labor hours, machine hours, or units on the routing.",
+    );
   }
   const basis = routing.overheadBasis as StandardOverheadBasis;
   let settings: LaborCostingSettings;
   try {
     settings = await laborCostingSettingsInTx(tx, orgId);
   } catch (err) {
-    refuse(kernelMessage(err, `The labor costing settings for work order ${order.number} cannot be resolved.`), "labor_costing_settings_invalid", laborRemedy);
+    refuse(
+      kernelMessage(
+        err,
+        `The labor costing settings for work order ${order.number} cannot be resolved.`,
+      ),
+      "labor_costing_settings_invalid",
+      laborRemedy,
+    );
   }
   const centerIds = [...new Set(operations.map((operation) => operation.work_center_id))].sort();
   // The stored department id carries no foreign key, so the department is
   // never trusted by UUID alone: the join admits only a same-organization
   // department row, and both activity flags are frozen per operation.
   const centers = await tx.execute<{
-    id: string; code: string | null; is_active: boolean; subsidiary_id:string|null;
-    department_id: string | null; department_active: boolean | null; department_subsidiary_id:string|null; department_include_children:boolean|null;
-  }>(sql`
+    id: string;
+    code: string | null;
+    is_active: boolean;
+    subsidiary_id: string | null;
+    department_id: string | null;
+    department_active: boolean | null;
+    department_subsidiary_id: string | null;
+    department_include_children: boolean | null;
+  }>(
+    sql`
     select center.id, center.code, center.is_active,center.subsidiary_id,
            center.department_id, department.is_active as department_active,department.subsidiary_id as department_subsidiary_id,department.subsidiary_include_children as department_include_children
       from mfg_work_centers center
       left join departments department
         on department.org_id = center.org_id and department.id = center.department_id
      where center.org_id=${orgId}
-       and center.id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid) order by center.id for share of center`, "objects");
-  const departments=centerIds.length?(await tx.execute<{id:string;active:boolean;subsidiaryId:string|null;includeChildren:boolean}>(sql`select id,is_active as active,subsidiary_id as "subsidiaryId",subsidiary_include_children as "includeChildren" from departments where org_id=${orgId} and id in (select department_id from mfg_work_centers where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid)) order by id for share`, "objects")):[];
-  const departmentById=new Map(departments.map(row=>[row.id,row]));
-  const entityContext=await loadSubsidiaryContext(tx,orgId);
+       and center.id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid) order by center.id for share of center`,
+    "objects",
+  );
+  const departments = centerIds.length
+    ? await tx.execute<{
+        id: string;
+        active: boolean;
+        subsidiaryId: string | null;
+        includeChildren: boolean;
+      }>(
+        sql`select id,is_active as active,subsidiary_id as "subsidiaryId",subsidiary_include_children as "includeChildren" from departments where org_id=${orgId} and id in (select department_id from mfg_work_centers where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid)) order by id for share`,
+        "objects",
+      )
+    : [];
+  const departmentById = new Map(departments.map((row) => [row.id, row]));
+  const entityContext = await loadSubsidiaryContext(tx, orgId);
   const centerById = new Map(centers.map((center) => [center.id, center]));
   const caches: ReleaseSnapshotCaches = { rates: new Map(), fx: new Map(), overhead: new Map() };
   const snapshots: OperationReleaseSnapshot[] = [];
@@ -948,35 +1587,99 @@ export async function resolveOperationReleaseSnapshots(
     const opLabel = `operation ${operation.sequence} of work order ${order.number}`;
     const center = centerById.get(operation.work_center_id);
     if (!center) {
-      refuse(`Work center ${operation.work_center_id} for ${opLabel} is outside this organization.`, "work_center_not_found", `Point ${opLabel} at a work center from this organization.`);
+      refuse(
+        `Work center ${operation.work_center_id} for ${opLabel} is outside this organization.`,
+        "work_center_not_found",
+        `Point ${opLabel} at a work center from this organization.`,
+      );
     }
     const centerCode = center.code?.trim() || center.id;
     if (!center.is_active) {
-      refuse(`Work center ${centerCode} for ${opLabel} is inactive.`, "work_center_inactive", `Reactivate work center ${centerCode} or point ${opLabel} at an active work center.`);
+      refuse(
+        `Work center ${centerCode} for ${opLabel} is inactive.`,
+        "work_center_inactive",
+        `Reactivate work center ${centerCode} or point ${opLabel} at an active work center.`,
+      );
     }
     let departmentId = center.department_id;
     if (!departmentId) {
-      const resolved = await defaultReleaseDepartmentId(tx, orgId, order, entityContext, centerCode, opLabel);
+      const resolved = await defaultReleaseDepartmentId(
+        tx,
+        orgId,
+        order,
+        entityContext,
+        centerCode,
+        opLabel,
+      );
       departmentId = resolved.id;
       if (!departmentById.has(departmentId)) {
-        departmentById.set(departmentId, { id: resolved.id, active: true, subsidiaryId: resolved.subsidiaryId, includeChildren: resolved.includeChildren });
+        departmentById.set(departmentId, {
+          id: resolved.id,
+          active: true,
+          subsidiaryId: resolved.subsidiaryId,
+          includeChildren: resolved.includeChildren,
+        });
       }
     }
-    const department=departmentById.get(departmentId);
+    const department = departmentById.get(departmentId);
     if (!department) {
-      refuse(`Work center ${centerCode} for ${opLabel} names a department outside this organization.`, "work_center_department_invalid", `Assign an active department from this organization to work center ${centerCode} in Company Settings → Departments.`);
+      refuse(
+        `Work center ${centerCode} for ${opLabel} names a department outside this organization.`,
+        "work_center_department_invalid",
+        `Assign an active department from this organization to work center ${centerCode} in Company Settings → Departments.`,
+      );
     }
     if (!department.active) {
-      refuse(`The department of work center ${centerCode} for ${opLabel} is inactive.`, "work_center_department_inactive", `Reactivate the department in Company Settings → Departments or assign an active department to work center ${centerCode}.`);
+      refuse(
+        `The department of work center ${centerCode} for ${opLabel} is inactive.`,
+        "work_center_department_inactive",
+        `Reactivate the department in Company Settings → Departments or assign an active department to work center ${centerCode}.`,
+      );
     }
-    if (!order.subsidiaryId || (center.subsidiary_id!==null && center.subsidiary_id!==order.subsidiaryId)) {
-      refuse(`Work center ${centerCode} cannot serve this work order’s legal entity.`,"work_center_entity_mismatch","Choose a work center in this legal entity or an organization-wide work center.");
+    if (
+      !order.subsidiaryId ||
+      (center.subsidiary_id !== null && center.subsidiary_id !== order.subsidiaryId)
+    ) {
+      refuse(
+        `Work center ${centerCode} cannot serve this work order’s legal entity.`,
+        "work_center_entity_mismatch",
+        "Choose a work center in this legal entity or an organization-wide work center.",
+      );
     }
-    if (!restrictionAdmits(entityContext,department.subsidiaryId,department.includeChildren,order.subsidiaryId)) {
-      refuse(`The department of work center ${centerCode} does not admit this legal entity.`,"work_center_department_entity_mismatch","Choose an admitted department on the work center or review its legal-entity scope in Company Setup → Departments.");
+    if (
+      !restrictionAdmits(
+        entityContext,
+        department.subsidiaryId,
+        department.includeChildren,
+        order.subsidiaryId,
+      )
+    ) {
+      refuse(
+        `The department of work center ${centerCode} does not admit this legal entity.`,
+        "work_center_department_entity_mismatch",
+        "Choose an admitted department on the work center or review its legal-entity scope in Company Setup → Departments.",
+      );
     }
-    const labor = await resolveOperationLabor(tx, orgId, order, opLabel, departmentId, releaseDate, functionalCurrency, settings, caches);
-    const overhead = await resolveOperationOverhead(tx, orgId, opLabel, departmentId, basis, releaseDate, caches);
+    const labor = await resolveOperationLabor(
+      tx,
+      orgId,
+      order,
+      opLabel,
+      departmentId,
+      releaseDate,
+      functionalCurrency,
+      settings,
+      caches,
+    );
+    const overhead = await resolveOperationOverhead(
+      tx,
+      orgId,
+      opLabel,
+      departmentId,
+      basis,
+      releaseDate,
+      caches,
+    );
     snapshots.push({
       sequence: operation.sequence,
       workCenterId: operation.work_center_id,
@@ -994,61 +1697,146 @@ async function releaseOne(
   id: string,
   options: { reason?: string | null; fromApproval?: boolean } = {},
 ): Promise<WorkOrderRead> {
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
   const order = await loadOrder(tx, orgId, id, true);
   if (order.status !== "draft") {
-    if (order.status === "on_hold") refuse(`Work order ${order.number} is on hold for ${order.holdReason}.`, "work_order_on_hold", "Resume the work order before releasing it.", 409);
-    refuse(`Work order ${order.number} is ${order.status} and cannot be released.`, "work_order_not_draft", "Release a draft work order or create a replacement.", 409);
+    if (order.status === "on_hold")
+      refuse(
+        `Work order ${order.number} is on hold for ${order.holdReason}.`,
+        "work_order_on_hold",
+        "Resume the work order before releasing it.",
+        409,
+      );
+    refuse(
+      `Work order ${order.number} is ${order.status} and cannot be released.`,
+      "work_order_not_draft",
+      "Release a draft work order or create a replacement.",
+      409,
+    );
   }
-  const pendingGate = (await tx.execute(sql`
+  const pendingGate =
+    (
+      await tx.execute(
+        sql`
     select 1 from flow_gates where org_id=${orgId} and subject_kind='work_order'
-      and subject_id=${id} and status in ('pending','escalated') limit 1`, "objects")).length > 0;
+      and subject_id=${id} and status in ('pending','escalated') limit 1`,
+        "objects",
+      )
+    ).length > 0;
   if (pendingGate && !options.fromApproval) {
-    refuse(`Work order ${order.number} is awaiting approval.`, "work_order_pending_approval", "Resolve the pending work-order approval before releasing it.", 409);
+    refuse(
+      `Work order ${order.number} is awaiting approval.`,
+      "work_order_pending_approval",
+      "Resolve the pending work-order approval before releasing it.",
+      409,
+    );
   }
-  if (!order.subsidiaryId) refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release.");
+  if (!order.subsidiaryId)
+    refuse(
+      `Work order ${order.number} has no subsidiary.`,
+      "work_order_subsidiary_required",
+      "Choose an operating subsidiary before release.",
+    );
   // The single governing date for every date-effective release lookup
   // (routing and recipe effectivity below; labor, FX and overhead rates in
   // the release snapshots): the order's planned start, falling back to
   // today's business date in the org's time zone. A back-dated order
   // releases against the rates and versions effective then, never today.
-  const releaseDate =
-    order.plannedStart ?? (await releaseBusinessDate(tx, orgId));
+  const releaseDate = order.plannedStart ?? (await releaseBusinessDate(tx, orgId));
   const produced = await itemDetails(tx, orgId, order.producedItemId);
-  const routing = await activeRouting(tx, orgId, order.producedItemId, produced.code?.trim() || produced.name, releaseDate, order.routingId);
-  const releaseScope = await lockManufacturingRoutingAuthority(tx,orgId,actorId,routing.id);
+  const routing = await activeRouting(
+    tx,
+    orgId,
+    order.producedItemId,
+    produced.code?.trim() || produced.name,
+    releaseDate,
+    order.routingId,
+  );
+  const releaseScope = await lockManufacturingRoutingAuthority(tx, orgId, actorId, routing.id);
   const issueLocationId = order.issueLocationId ?? routing.default_issue_location_id;
   const receiptLocationId = order.receiptLocationId ?? routing.default_receipt_location_id;
-  if (!issueLocationId) refuse(`Work order ${order.number} has no issue location.`, "work_order_issue_location_required", "Choose an active stock location for material issue in the draft work order.");
-  if (!receiptLocationId) refuse(`Work order ${order.number} has no receipt location.`, "work_order_receipt_location_required", "Choose an active stock location for finished goods in the draft work order.");
-  await assertManufacturingStockLocationScope(tx,orgId,issueLocationId,releaseScope);
-  await assertManufacturingStockLocationScope(tx,orgId,receiptLocationId,releaseScope);
+  if (!issueLocationId)
+    refuse(
+      `Work order ${order.number} has no issue location.`,
+      "work_order_issue_location_required",
+      "Choose an active stock location for material issue in the draft work order.",
+    );
+  if (!receiptLocationId)
+    refuse(
+      `Work order ${order.number} has no receipt location.`,
+      "work_order_receipt_location_required",
+      "Choose an active stock location for finished goods in the draft work order.",
+    );
+  await assertManufacturingStockLocationScope(tx, orgId, issueLocationId, releaseScope);
+  await assertManufacturingStockLocationScope(tx, orgId, receiptLocationId, releaseScope);
   await validateLocation(tx as Runner, orgId, order.subsidiaryId, issueLocationId, "outbound");
   await validateLocation(tx as Runner, orgId, order.subsidiaryId, receiptLocationId, "inbound");
 
   await tx.execute(sql`lock table bom_components in share mode`);
-  const repair=await loadReceiptRework(tx,orgId,id);
-  if(repair&&(repair.itemId!==order.producedItemId||repair.subsidiaryId!==order.subsidiaryId||repair.stockLocationId!==issueLocationId||cmp(repair.quantity,order.quantityOrdered)!==0))
-    refuse('The rework draft must retain its original inspected item, entity, source location and quantity.','receipt_rework_draft_mismatch','Restore the failed receipt defaults before releasing this repair.');
-  const explosion = repair?{components:[],byproducts:[]}:await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, releaseDate);
-  const directRows = repair?[]:await effectiveBomRows(tx, orgId, order.producedItemId, releaseDate);
-  const revision = repair?inventoryRequestHash({inspectionId:repair.id,receiptMovementId:repair.receiptMovementId,itemId:repair.itemId,quantity:repair.quantity,plan:repair.planSnapshot}):bomRevision(order.producedItemId, directRows);
+  const repair = await loadReceiptRework(tx, orgId, id);
+  if (
+    repair &&
+    (repair.itemId !== order.producedItemId ||
+      repair.subsidiaryId !== order.subsidiaryId ||
+      repair.stockLocationId !== issueLocationId ||
+      cmp(repair.quantity, order.quantityOrdered) !== 0)
+  )
+    refuse(
+      "The rework draft must retain its original inspected item, entity, source location and quantity.",
+      "receipt_rework_draft_mismatch",
+      "Restore the failed receipt defaults before releasing this repair.",
+    );
+  const explosion = repair
+    ? { components: [], byproducts: [] }
+    : await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, releaseDate);
+  const directRows = repair
+    ? []
+    : await effectiveBomRows(tx, orgId, order.producedItemId, releaseDate);
+  const revision = repair
+    ? inventoryRequestHash({
+        inspectionId: repair.id,
+        receiptMovementId: repair.receiptMovementId,
+        itemId: repair.itemId,
+        quantity: repair.quantity,
+        plan: repair.planSnapshot,
+      })
+    : bomRevision(order.producedItemId, directRows);
   const operations = await tx.execute<{
-    sequence: number; name: string; work_center_id: string; setup_minutes: string; run_minutes_per_unit: string;
-    backflush_at: string; quality_gate: string; labor_minutes_per_unit: string | null; labor_time_source: string;
-  }>(sql`
+    sequence: number;
+    name: string;
+    work_center_id: string;
+    setup_minutes: string;
+    run_minutes_per_unit: string;
+    backflush_at: string;
+    quality_gate: string;
+    labor_minutes_per_unit: string | null;
+    labor_time_source: string;
+  }>(
+    sql`
     select sequence, name, work_center_id, setup_minutes::text, run_minutes_per_unit::text,
            backflush_at, quality_gate,labor_minutes_per_unit::text,labor_time_source
       from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
-       ${repair?sql`and sequence=${repair.sequence}`:sql``}
-     order by sequence for share`, "objects");
-  if (!operations.length) refuse(`Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`, "routing_operations_required", "Add an operation to the active routing version.");
+       ${repair ? sql`and sequence=${repair.sequence}` : sql``}
+     order by sequence for share`,
+    "objects",
+  );
+  if (!operations.length)
+    refuse(
+      `Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`,
+      "routing_operations_required",
+      "Add an operation to the active routing version.",
+    );
 
   const directMake = new Set<string>();
   for (const row of directRows) {
     if (row.is_byproduct) continue;
-    const policy = (await tx.execute<{ supply_method: string }>(sql`
-      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`, "objects"))[0];
+    const policy = (
+      await tx.execute<{ supply_method: string }>(
+        sql`
+      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`,
+        "objects",
+      )
+    )[0];
     if (policy?.supply_method !== "make") continue;
     const code = row.component_code?.trim() || row.component_item_id;
     await activeRouting(tx, orgId, row.component_item_id, code, releaseDate, null);
@@ -1057,34 +1845,85 @@ async function releaseOne(
   const rootMaterialLines = directRows
     .filter((line) => !line.is_byproduct && !directMake.has(line.component_item_id))
     .map((line) => ({
-      itemId: line.component_item_id, itemCode: line.component_code?.trim() || line.component_item_id,
-      required: bomRequiredQuantity(order.quantityOrdered, line.quantity_per, line.scrap_pct,{quantityBasis:line.quantity_basis,formulaOutputQuantity:line.formula_output_quantity}).quantity,
-      operationSeq: line.operation_seq, quantityPer: line.quantity_per,quantityBasis:line.quantity_basis,formulaOutputQuantity:line.formula_output_quantity, scrapPct: line.scrap_pct,
+      itemId: line.component_item_id,
+      itemCode: line.component_code?.trim() || line.component_item_id,
+      required: bomRequiredQuantity(order.quantityOrdered, line.quantity_per, line.scrap_pct, {
+        quantityBasis: line.quantity_basis,
+        formulaOutputQuantity: line.formula_output_quantity,
+      }).quantity,
+      operationSeq: line.operation_seq,
+      quantityPer: line.quantity_per,
+      quantityBasis: line.quantity_basis,
+      formulaOutputQuantity: line.formula_output_quantity,
+      scrapPct: line.scrap_pct,
     }));
-  const preparedMaterials = await releaseMaterials(tx, orgId, order, repair?[{itemId:repair.itemId,itemCode:produced.code??produced.name,required:repair.quantity,operationSeq:null,quantityPer:'1',quantityBasis:'per_unit',formulaOutputQuantity:'1',scrapPct:'0'}]:rootMaterialLines, issueLocationId,repair??undefined);
-  const producedProfile = (await tx.execute<{ costing_method: string; standard_cost: string | null }>(sql`
+  const preparedMaterials = await releaseMaterials(
+    tx,
+    orgId,
+    order,
+    repair
+      ? [
+          {
+            itemId: repair.itemId,
+            itemCode: produced.code ?? produced.name,
+            required: repair.quantity,
+            operationSeq: null,
+            quantityPer: "1",
+            quantityBasis: "per_unit",
+            formulaOutputQuantity: "1",
+            scrapPct: "0",
+          },
+        ]
+      : rootMaterialLines,
+    issueLocationId,
+    repair ?? undefined,
+  );
+  const producedProfile = (
+    await tx.execute<{ costing_method: string; standard_cost: string | null }>(
+      sql`
     select costing_method, standard_cost::text from item_inventory_profiles
-     where org_id=${orgId} and item_id=${order.producedItemId} for share`, "objects"))[0];
-  const standardCost = producedProfile?.costing_method === "standard" ? producedProfile.standard_cost : null;
+     where org_id=${orgId} and item_id=${order.producedItemId} for share`,
+      "objects",
+    )
+  )[0];
+  const standardCost =
+    producedProfile?.costing_method === "standard" ? producedProfile.standard_cost : null;
   // Every operation snapshot resolves and freezes BEFORE the release status
   // mutation below: any refusal throws here and rolls the whole release
   // back, so operations are only ever inserted with complete coherent
   // values. There is no draft/null insert-then-fill path.
   const functionalCurrency = await releaseFunctionalCurrency(tx, orgId, order);
-  const snapshots = await resolveOperationReleaseSnapshots(tx, orgId, order, operations, routing, releaseDate, functionalCurrency);
+  const snapshots = await resolveOperationReleaseSnapshots(
+    tx,
+    orgId,
+    order,
+    operations,
+    routing,
+    releaseDate,
+    functionalCurrency,
+  );
   const before = order;
-  const released = await tx.execute<WorkOrderRow>(sql`
+  const released = await tx.execute<WorkOrderRow>(
+    sql`
     update mfg_work_orders set routing_id=${routing.id}, routing_version=${routing.version}, bom_revision=${revision},
       standard_cost_snapshot=${standardCost}, issue_location_id=${issueLocationId}, receipt_location_id=${receiptLocationId},
       status='released', released_at=now(), updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`, "objects");
+     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`,
+    "objects",
+  );
   const after = rowOrNotFound(released);
   await auditChange(tx, {
-    orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update",
+    orgId,
+    actorId,
+    table: "mfg_work_orders",
+    rowId: id,
+    action: "update",
     before: options.fromApproval ? { ...before, status: "pending_approval" } : before,
     after: {
       ...after,
-      reason: options.reason?.trim() || (options.fromApproval ? "Approved through the work-order flow." : "Released."),
+      reason:
+        options.reason?.trim() ||
+        (options.fromApproval ? "Approved through the work-order flow." : "Released."),
       release: {
         releaseDate,
         subsidiaryId: order.subsidiaryId,
@@ -1106,9 +1945,27 @@ async function releaseOne(
 
   for (const [index, operation] of operations.entries()) {
     const snapshot = snapshots[index]!;
-    const inspectionPlan=repair?{...repair.planSnapshot,point:"operation" as const,operationSequence:operation.sequence}:await resolveInspectionPlan(tx,orgId,order.producedItemId,"operation",releaseDate,operation.sequence);
-    const plannedRunMinutes = decimalValue(mul(operation.run_minutes_per_unit, order.quantityOrdered), "plannedRunMinutes", "Reduce the order quantity or revise the routing run time so the planned minutes fit the supported range.");
-    const inserted = await tx.execute(sql`
+    const inspectionPlan = repair
+      ? {
+          ...repair.planSnapshot,
+          point: "operation" as const,
+          operationSequence: operation.sequence,
+        }
+      : await resolveInspectionPlan(
+          tx,
+          orgId,
+          order.producedItemId,
+          "operation",
+          releaseDate,
+          operation.sequence,
+        );
+    const plannedRunMinutes = decimalValue(
+      mul(operation.run_minutes_per_unit, order.quantityOrdered),
+      "plannedRunMinutes",
+      "Reduce the order quantity or revise the routing run time so the planned minutes fit the supported range.",
+    );
+    const inserted = await tx.execute(
+      sql`
       insert into mfg_wo_operations (org_id, work_order_id, sequence, name, work_center_id,
         planned_setup_minutes, planned_run_minutes, labor_minutes_per_unit, labor_time_source, quantity_planned, quality_gate, backflush_at,inspection_plan_snapshot,
         standard_labor_wage_id, standard_labor_effective_from, standard_labor_rate, standard_labor_currency,
@@ -1120,7 +1977,7 @@ async function releaseOne(
         created_by, updated_by)
       values (${orgId}, ${id}, ${operation.sequence}, ${operation.name}, ${operation.work_center_id},
         ${operation.setup_minutes}, ${plannedRunMinutes}, ${operation.labor_minutes_per_unit}, ${operation.labor_time_source},
-        ${order.quantityOrdered}, ${operation.quality_gate}, ${repair?"none":operation.backflush_at},${inspectionPlan?JSON.stringify(inspectionPlan):null}::jsonb,
+        ${order.quantityOrdered}, ${operation.quality_gate}, ${repair ? "none" : operation.backflush_at},${inspectionPlan ? JSON.stringify(inspectionPlan) : null}::jsonb,
         ${snapshot.wageId}, ${snapshot.wageEffectiveFrom}, ${snapshot.wageRate}, ${snapshot.wageCurrency},
         ${snapshot.wageBasis}, ${snapshot.wageAnnualHours}, ${snapshot.finalRate},
         ${snapshot.functionalCurrency},
@@ -1128,71 +1985,195 @@ async function releaseOne(
         ${snapshot.fxClass}, ${snapshot.fxRate}, ${snapshot.fxRowId}, ${snapshot.fxDate},
         ${snapshot.fxSource}, ${snapshot.fxDirection},
         ${JSON.stringify(snapshot.overhead)}::jsonb, ${snapshot.overheadHash},
-        ${actorId}, ${actorId}) returning id`, "objects");
+        ${actorId}, ${actorId}) returning id`,
+      "objects",
+    );
     const operationId = inserted[0]?.id;
-    if (!operationId) refuse("A work-order operation snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
+    if (!operationId)
+      refuse(
+        "A work-order operation snapshot was not saved.",
+        "write_failed",
+        "Retry the release; contact an administrator if it continues.",
+      );
     await auditChange(tx, {
-      orgId, actorId, table: "mfg_wo_operations", rowId: String(operationId), action: "insert", before: null,
+      orgId,
+      actorId,
+      table: "mfg_wo_operations",
+      rowId: String(operationId),
+      action: "insert",
+      before: null,
       after: {
-        status: "pending", sequence: operation.sequence, name: operation.name, workCenterId: operation.work_center_id,
-        quantityPlanned: order.quantityOrdered, backflushAt: repair?"none":operation.backflush_at, qualityGate: operation.quality_gate,inspectionPlan,
-        standardLaborBurdenHash: snapshot.burdenHash, overheadSnapshotHash: snapshot.overheadHash,
+        status: "pending",
+        sequence: operation.sequence,
+        name: operation.name,
+        workCenterId: operation.work_center_id,
+        quantityPlanned: order.quantityOrdered,
+        backflushAt: repair ? "none" : operation.backflush_at,
+        qualityGate: operation.quality_gate,
+        inspectionPlan,
+        standardLaborBurdenHash: snapshot.burdenHash,
+        overheadSnapshotHash: snapshot.overheadHash,
       },
     });
   }
   for (const material of preparedMaterials) {
-    const inserted = await tx.execute(sql`
+    const inserted = await tx.execute(
+      sql`
       insert into mfg_wo_materials (org_id, work_order_id, component_item_id, required_qty,
         operation_seq, lot_serial_policy, shortage_qty, quantity_per, scrap_pct,quantity_basis,formula_output_quantity, created_by, updated_by)
       values (${orgId}, ${id}, ${material.itemId}, ${material.required}, ${material.operationSeq},
         ${material.tracking}, ${material.shortage}, ${material.quantityPer}, ${material.scrapPct ?? "0"},${material.quantityBasis},${material.formulaOutputQuantity},
-        ${actorId}, ${actorId}) returning id`, "objects");
+        ${actorId}, ${actorId}) returning id`,
+      "objects",
+    );
     const materialId = inserted[0]?.id;
-    if (!materialId) refuse("A work-order material snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
+    if (!materialId)
+      refuse(
+        "A work-order material snapshot was not saved.",
+        "write_failed",
+        "Retry the release; contact an administrator if it continues.",
+      );
     await auditChange(tx, {
-      orgId, actorId, table: "mfg_wo_materials", rowId: String(materialId), action: "insert", before: null,
+      orgId,
+      actorId,
+      table: "mfg_wo_materials",
+      rowId: String(materialId),
+      action: "insert",
+      before: null,
       after: {
-        componentItemId: material.itemId, requiredQty: material.required, shortageQty: material.shortage,
-        operationSeq: material.operationSeq, quantityPer: material.quantityPer,quantityBasis:material.quantityBasis,formulaOutputQuantity:material.formulaOutputQuantity, scrapPct: material.scrapPct,
+        componentItemId: material.itemId,
+        requiredQty: material.required,
+        shortageQty: material.shortage,
+        operationSeq: material.operationSeq,
+        quantityPer: material.quantityPer,
+        quantityBasis: material.quantityBasis,
+        formulaOutputQuantity: material.formulaOutputQuantity,
+        scrapPct: material.scrapPct,
       },
     });
   }
 
-  const rootByproductIds = new Set(explosion.byproducts
-    .filter((line) => line.parentItemId === order.producedItemId)
-    .map((line) => line.itemId));
-  const byproductQuantities=new Map<string,{quantityPer:string;quantityBasis:BomQuantityBasis;formulaOutputQuantity:string;outputCostWeight:string|null}>();
-  for(const line of directRows) {
-    if(!line.is_byproduct||!rootByproductIds.has(line.component_item_id)) continue;
-    const prior=byproductQuantities.get(line.component_item_id);
-    if(prior&&(prior.quantityBasis!==line.quantity_basis||cmp(prior.formulaOutputQuantity,line.formula_output_quantity)!==0)) refuse("A by-product has different formula bases in this recipe.","byproduct_formula_basis_conflict","Use a common formula output quantity for this by-product's lines.");
-    if(prior&&((prior.outputCostWeight===null)!==(line.output_cost_weight===null)||(prior.outputCostWeight!==null&&line.output_cost_weight!==null&&cmp(prior.outputCostWeight,line.output_cost_weight)!==0)))refuse('An output has different cost allocation policies in this recipe.','joint_output_weight_conflict','Use one cost weight for every effective line of the same joint output.');
-    byproductQuantities.set(line.component_item_id,{quantityPer:add(prior?.quantityPer??'0',line.quantity_per),quantityBasis:line.quantity_basis,formulaOutputQuantity:line.formula_output_quantity,outputCostWeight:line.output_cost_weight});
+  const rootByproductIds = new Set(
+    explosion.byproducts
+      .filter((line) => line.parentItemId === order.producedItemId)
+      .map((line) => line.itemId),
+  );
+  const byproductQuantities = new Map<
+    string,
+    {
+      quantityPer: string;
+      quantityBasis: BomQuantityBasis;
+      formulaOutputQuantity: string;
+      outputCostWeight: string | null;
+    }
+  >();
+  for (const line of directRows) {
+    if (!line.is_byproduct || !rootByproductIds.has(line.component_item_id)) continue;
+    const prior = byproductQuantities.get(line.component_item_id);
+    if (
+      prior &&
+      (prior.quantityBasis !== line.quantity_basis ||
+        cmp(prior.formulaOutputQuantity, line.formula_output_quantity) !== 0)
+    )
+      refuse(
+        "A by-product has different formula bases in this recipe.",
+        "byproduct_formula_basis_conflict",
+        "Use a common formula output quantity for this by-product's lines.",
+      );
+    if (
+      prior &&
+      ((prior.outputCostWeight === null) !== (line.output_cost_weight === null) ||
+        (prior.outputCostWeight !== null &&
+          line.output_cost_weight !== null &&
+          cmp(prior.outputCostWeight, line.output_cost_weight) !== 0))
+    )
+      refuse(
+        "An output has different cost allocation policies in this recipe.",
+        "joint_output_weight_conflict",
+        "Use one cost weight for every effective line of the same joint output.",
+      );
+    byproductQuantities.set(line.component_item_id, {
+      quantityPer: add(prior?.quantityPer ?? "0", line.quantity_per),
+      quantityBasis: line.quantity_basis,
+      formulaOutputQuantity: line.formula_output_quantity,
+      outputCostWeight: line.output_cost_weight,
+    });
   }
-  for(const [itemId,policy] of byproductQuantities) {
-    const outputProfile=policy.outputCostWeight!==null?await resolveProfile(orgId,itemId,tx,true):null;
-    const outputStandard=outputProfile?.costingMethod==='standard'?outputProfile.standardCost:null;
-    if(outputProfile?.costingMethod==='standard'&&outputStandard===null)refuse('A joint output has no configured standard cost.','joint_output_standard_missing','Govern its item standard before releasing this production order.');
-    const inserted=await tx.execute<{id:string}>(sql`insert into mfg_wo_byproducts(org_id,work_order_id,item_id,quantity_per,quantity_basis,formula_output_quantity,output_cost_weight,standard_cost_snapshot,created_by,updated_by)
-      values(${orgId},${id},${itemId},${policy.quantityPer},${policy.quantityBasis},${policy.formulaOutputQuantity},${policy.outputCostWeight},${outputStandard},${actorId},${actorId}) returning id`, "objects");
-    const byproductId=inserted[0]?.id;
-    if(!byproductId) refuse("A work-order by-product snapshot was not saved.","write_failed","Retry the release.");
-    await auditChange(tx,{orgId,actorId,table:'mfg_wo_byproducts',rowId:byproductId,action:'insert',before:null,after:{itemId,...policy,standardCostSnapshot:outputStandard}});
+  for (const [itemId, policy] of byproductQuantities) {
+    const outputProfile =
+      policy.outputCostWeight !== null ? await resolveProfile(orgId, itemId, tx, true) : null;
+    const outputStandard =
+      outputProfile?.costingMethod === "standard" ? outputProfile.standardCost : null;
+    if (outputProfile?.costingMethod === "standard" && outputStandard === null)
+      refuse(
+        "A joint output has no configured standard cost.",
+        "joint_output_standard_missing",
+        "Govern its item standard before releasing this production order.",
+      );
+    const inserted = await tx.execute<{ id: string }>(
+      sql`insert into mfg_wo_byproducts(org_id,work_order_id,item_id,quantity_per,quantity_basis,formula_output_quantity,output_cost_weight,standard_cost_snapshot,created_by,updated_by)
+      values(${orgId},${id},${itemId},${policy.quantityPer},${policy.quantityBasis},${policy.formulaOutputQuantity},${policy.outputCostWeight},${outputStandard},${actorId},${actorId}) returning id`,
+      "objects",
+    );
+    const byproductId = inserted[0]?.id;
+    if (!byproductId)
+      refuse(
+        "A work-order by-product snapshot was not saved.",
+        "write_failed",
+        "Retry the release.",
+      );
+    await auditChange(tx, {
+      orgId,
+      actorId,
+      table: "mfg_wo_byproducts",
+      rowId: byproductId,
+      action: "insert",
+      before: null,
+      after: { itemId, ...policy, standardCostSnapshot: outputStandard },
+    });
   }
 
   for (const row of directRows) {
     if (row.is_byproduct) continue;
-    const policy = (await tx.execute<{ supply_method: string }>(sql`
-      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`, "objects"))[0];
+    const policy = (
+      await tx.execute<{ supply_method: string }>(
+        sql`
+      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`,
+        "objects",
+      )
+    )[0];
     if (policy?.supply_method !== "make") continue;
-    const childQty = bomRequiredQuantity(order.quantityOrdered, row.quantity_per, row.scrap_pct,{quantityBasis:row.quantity_basis,formulaOutputQuantity:row.formula_output_quantity}).quantity;
-    const child = await insertDraft(tx, orgId, actorId, {
-      producedItemId: row.component_item_id, quantityOrdered: childQty, subsidiaryId: order.subsidiaryId,
-      issueLocationId, receiptLocationId: issueLocationId, plannedStart: order.plannedStart, plannedEnd: order.plannedEnd,
-      source: "parent", sourceRefId: id, priority: order.priority as WorkOrderInput["priority"],
-    }, { parentWoId: id, inheritedProfile: {versionId:order.operatingProfileVersionId,departmentId:order.operatingDepartmentId} });
+    const childQty = bomRequiredQuantity(order.quantityOrdered, row.quantity_per, row.scrap_pct, {
+      quantityBasis: row.quantity_basis,
+      formulaOutputQuantity: row.formula_output_quantity,
+    }).quantity;
+    const child = await insertDraft(
+      tx,
+      orgId,
+      actorId,
+      {
+        producedItemId: row.component_item_id,
+        quantityOrdered: childQty,
+        subsidiaryId: order.subsidiaryId,
+        issueLocationId,
+        receiptLocationId: issueLocationId,
+        plannedStart: order.plannedStart,
+        plannedEnd: order.plannedEnd,
+        source: "parent",
+        sourceRefId: id,
+        priority: order.priority as WorkOrderInput["priority"],
+      },
+      {
+        parentWoId: id,
+        inheritedProfile: {
+          versionId: order.operatingProfileVersionId,
+          departmentId: order.operatingDepartmentId,
+        },
+      },
+    );
     await releaseOne(tx, orgId, actorId, child.id, {
-      reason: `Child of ${order.number}.`, fromApproval: options.fromApproval,
+      reason: `Child of ${order.number}.`,
+      fromApproval: options.fromApproval,
     });
   }
   return { ...after, pendingApproval: false };
@@ -1224,22 +2205,46 @@ export interface ReleaseReadinessFinding {
  * covers that date yet.
  */
 export async function resolveEmptyOperationOverhead(
-  tx: SqlExecutor, orgId: string, workOrderId: string, operationId: string,
+  tx: SqlExecutor,
+  orgId: string,
+  workOrderId: string,
+  operationId: string,
 ): Promise<{ snapshot: unknown; governingDate: string } | null> {
   const order = await loadOrder(tx, orgId, workOrderId);
-  const operation = (await tx.execute<{ sequence: number; work_center_id: string }>(sql`
+  const operation = (
+    await tx.execute<{ sequence: number; work_center_id: string }>(
+      sql`
     select sequence, work_center_id from mfg_wo_operations
-     where org_id = ${orgId} and work_order_id = ${workOrderId} and id = ${operationId}`, "objects"))[0];
+     where org_id = ${orgId} and work_order_id = ${workOrderId} and id = ${operationId}`,
+      "objects",
+    )
+  )[0];
   if (!operation || order.routingVersion === null || !order.subsidiaryId) return null;
-  const governingDate = order.plannedStart ?? (order.releasedAt ? new Date(order.releasedAt).toISOString().slice(0, 10) : await releaseBusinessDate(tx, orgId));
-  const routing = (await tx.execute<ActiveRouting>(sql`
+  const governingDate =
+    order.plannedStart ??
+    (order.releasedAt
+      ? new Date(order.releasedAt).toISOString().slice(0, 10)
+      : await releaseBusinessDate(tx, orgId));
+  const routing = (
+    await tx.execute<ActiveRouting>(
+      sql`
     select id, version, effective_from::text, effective_to::text,
            default_issue_location_id, default_receipt_location_id, overhead_basis as "overheadBasis"
       from mfg_routings
-     where org_id = ${orgId} and produced_item_id = ${order.producedItemId} and version = ${order.routingVersion}`, "objects"))[0];
+     where org_id = ${orgId} and produced_item_id = ${order.producedItemId} and version = ${order.routingVersion}`,
+      "objects",
+    )
+  )[0];
   if (!routing) return null;
   const [snapshot] = await resolveOperationReleaseSnapshots(
-    tx, orgId, order, [operation], routing, governingDate, await releaseFunctionalCurrency(tx, orgId, order));
+    tx,
+    orgId,
+    order,
+    [operation],
+    routing,
+    governingDate,
+    await releaseFunctionalCurrency(tx, orgId, order),
+  );
   if (!snapshot || snapshot.overhead.cards.length === 0) return null;
   return { snapshot: snapshot.overhead, governingDate };
 }
@@ -1251,7 +2256,7 @@ export async function readWorkOrderReleaseReadiness(
   id: string,
 ): Promise<{ status: "not_draft" | "ready" | "blocked"; findings: ReleaseReadinessFinding[] }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
   const order = await loadOrder(tx, orgId, id);
   if (order.status !== "draft") return { status: "not_draft", findings: [] };
   const findings: ReleaseReadinessFinding[] = [];
@@ -1268,11 +2273,22 @@ export async function readWorkOrderReleaseReadiness(
       return value;
     } catch (error) {
       await tx.execute(sql`rollback to savepoint ${name}`);
-      const finding = error instanceof ManufacturingError && error.status !== 404
-        ? { code: error.code, message: error.message, remedy: error.remedy ?? null, href: setupEditorHref(error.code, fallbackHref) }
-        : error instanceof InventoryError
-          ? { code: "stock_location_unavailable", message: error.message, remedy: null, href: "/admin/setup/stock-locations" }
-          : null;
+      const finding =
+        error instanceof ManufacturingError && error.status !== 404
+          ? {
+              code: error.code,
+              message: error.message,
+              remedy: error.remedy ?? null,
+              href: setupEditorHref(error.code, fallbackHref),
+            }
+          : error instanceof InventoryError
+            ? {
+                code: "stock_location_unavailable",
+                message: error.message,
+                remedy: null,
+                href: "/admin/setup/stock-locations",
+              }
+            : null;
       if (!finding) throw error;
       const key = `${finding.code}\u0000${finding.message}`;
       if (!recorded.has(key)) {
@@ -1285,44 +2301,103 @@ export async function readWorkOrderReleaseReadiness(
   const orderHref = `/manufacturing/work-orders?record=${id}`;
   const subsidiaryId = order.subsidiaryId;
   if (!subsidiaryId) {
-    await attempt(orderHref, async () => refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release."));
+    await attempt(orderHref, async () =>
+      refuse(
+        `Work order ${order.number} has no subsidiary.`,
+        "work_order_subsidiary_required",
+        "Choose an operating subsidiary before release.",
+      ),
+    );
   }
-  const releaseDate =
-    order.plannedStart ?? (await releaseBusinessDate(tx, orgId));
+  const releaseDate = order.plannedStart ?? (await releaseBusinessDate(tx, orgId));
   const produced = await itemDetails(tx, orgId, order.producedItemId);
   const routing = await attempt("/manufacturing/routings", () =>
-    activeRouting(tx, orgId, order.producedItemId, produced.code?.trim() || produced.name, releaseDate, order.routingId));
+    activeRouting(
+      tx,
+      orgId,
+      order.producedItemId,
+      produced.code?.trim() || produced.name,
+      releaseDate,
+      order.routingId,
+    ),
+  );
   const issueLocationId = order.issueLocationId ?? routing?.default_issue_location_id ?? null;
   const receiptLocationId = order.receiptLocationId ?? routing?.default_receipt_location_id ?? null;
   if (routing && !issueLocationId) {
-    await attempt(orderHref, async () => refuse(`Work order ${order.number} has no issue location.`, "work_order_issue_location_required", "Choose an active stock location for material issue in the draft work order."));
+    await attempt(orderHref, async () =>
+      refuse(
+        `Work order ${order.number} has no issue location.`,
+        "work_order_issue_location_required",
+        "Choose an active stock location for material issue in the draft work order.",
+      ),
+    );
   }
   if (routing && !receiptLocationId) {
-    await attempt(orderHref, async () => refuse(`Work order ${order.number} has no receipt location.`, "work_order_receipt_location_required", "Choose an active stock location for finished goods in the draft work order."));
+    await attempt(orderHref, async () =>
+      refuse(
+        `Work order ${order.number} has no receipt location.`,
+        "work_order_receipt_location_required",
+        "Choose an active stock location for finished goods in the draft work order.",
+      ),
+    );
   }
   if (subsidiaryId) {
-    if (issueLocationId) await attempt("/admin/setup/stock-locations", () => validateLocation(tx as Runner, orgId, subsidiaryId, issueLocationId, "outbound"));
-    if (receiptLocationId) await attempt("/admin/setup/stock-locations", () => validateLocation(tx as Runner, orgId, subsidiaryId, receiptLocationId, "inbound"));
+    if (issueLocationId)
+      await attempt("/admin/setup/stock-locations", () =>
+        validateLocation(tx as Runner, orgId, subsidiaryId, issueLocationId, "outbound"),
+      );
+    if (receiptLocationId)
+      await attempt("/admin/setup/stock-locations", () =>
+        validateLocation(tx as Runner, orgId, subsidiaryId, receiptLocationId, "inbound"),
+      );
   }
   await attempt(`/inventory?inventoryView=bom&bom=${order.producedItemId}`, () =>
-    explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, releaseDate));
+    explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, releaseDate),
+  );
   if (routing && subsidiaryId) {
     const operations = await tx.execute<{
-      sequence: number; name: string; work_center_id: string; setup_minutes: string; run_minutes_per_unit: string;
-      backflush_at: string; quality_gate: string; labor_minutes_per_unit: string | null; labor_time_source: string;
-    }>(sql`
+      sequence: number;
+      name: string;
+      work_center_id: string;
+      setup_minutes: string;
+      run_minutes_per_unit: string;
+      backflush_at: string;
+      quality_gate: string;
+      labor_minutes_per_unit: string | null;
+      labor_time_source: string;
+    }>(
+      sql`
       select sequence, name, work_center_id, setup_minutes::text, run_minutes_per_unit::text,
              backflush_at, quality_gate, labor_minutes_per_unit::text, labor_time_source
         from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
-       order by sequence`, "objects");
+       order by sequence`,
+      "objects",
+    );
     if (!operations.length) {
-      await attempt(`/manufacturing/routings?record=${routing.id}`, async () => refuse(`Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`, "routing_operations_required", "Add an operation to the active routing version."));
+      await attempt(`/manufacturing/routings?record=${routing.id}`, async () =>
+        refuse(
+          `Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`,
+          "routing_operations_required",
+          "Add an operation to the active routing version.",
+        ),
+      );
     }
-    const functionalCurrency = await attempt("/admin/setup/company", () => releaseFunctionalCurrency(tx, orgId, order));
+    const functionalCurrency = await attempt("/admin/setup/company", () =>
+      releaseFunctionalCurrency(tx, orgId, order),
+    );
     if (functionalCurrency) {
       for (const operation of operations) {
         await attempt("/manufacturing/work-centers", () =>
-          resolveOperationReleaseSnapshots(tx, orgId, order, [operation], routing, releaseDate, functionalCurrency));
+          resolveOperationReleaseSnapshots(
+            tx,
+            orgId,
+            order,
+            [operation],
+            routing,
+            releaseDate,
+            functionalCurrency,
+          ),
+        );
       }
     }
   }
@@ -1336,7 +2411,9 @@ export async function readWorkOrderReleaseReadiness(
       await releaseOne(tx, orgId, actorId, id, {});
     } catch (error) {
       await tx.execute(sql`rollback to savepoint ${name}`);
-      await attempt(orderHref, async () => { throw error; });
+      await attempt(orderHref, async () => {
+        throw error;
+      });
       return { status: "blocked", findings };
     }
     await tx.execute(sql`rollback to savepoint ${name}`);
@@ -1352,7 +2429,7 @@ export async function releaseWorkOrder(
   options: { reason?: string | null; approvalRunId?: string } = {},
 ): Promise<WorkOrderRead> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
   const order = await loadOrder(tx, orgId, id, true);
   if (order.status !== "draft")
     return releaseOne(tx, orgId, actorId, id, { reason: options.reason });
@@ -1372,16 +2449,14 @@ export async function releaseWorkOrder(
         "Complete every configured work-order approval gate.",
         409,
       );
-    if (await hasPendingApproval(tx, orgId, id))
-      return { ...order, pendingApproval: true };
+    if (await hasPendingApproval(tx, orgId, id)) return { ...order, pendingApproval: true };
     const routing = await routeNativeApproval({
       orgId,
       actorId,
       subjectKind: "work_order",
       subjectId: id,
     });
-    if (routing.policy.kind === "gated")
-      return { ...order, pendingApproval: true };
+    if (routing.policy.kind === "gated") return { ...order, pendingApproval: true };
   }
   return releaseOne(tx, orgId, actorId, id, {
     reason: options.reason,
@@ -1389,69 +2464,151 @@ export async function releaseWorkOrder(
   });
 }
 
-export async function holdWorkOrder(tx: SqlExecutor, orgId: string, actorId: string, id: string, reason: string): Promise<WorkOrderRead> {
+export async function holdWorkOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+  reason: string,
+): Promise<WorkOrderRead> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
   const before = await loadOrder(tx, orgId, id, true);
   const holdReason = reason?.trim();
-  if (!holdReason) refuse("A hold reason is required.", "hold_reason_required", "Enter the quality, material, or operating reason for the hold.");
+  if (!holdReason)
+    refuse(
+      "A hold reason is required.",
+      "hold_reason_required",
+      "Enter the quality, material, or operating reason for the hold.",
+    );
   if (before.status === "on_hold") return { ...before, pendingApproval: false };
   if (before.status !== "released" && before.status !== "in_progress") {
-    refuse(`Work order ${before.number} cannot be put on hold from ${before.status}.`, "invalid_work_order_transition", "Hold a released or in-progress work order.", 409);
+    refuse(
+      `Work order ${before.number} cannot be put on hold from ${before.status}.`,
+      "invalid_work_order_transition",
+      "Hold a released or in-progress work order.",
+      409,
+    );
   }
-  const updated = await tx.execute<WorkOrderRow>(sql`
+  const updated = await tx.execute<WorkOrderRow>(
+    sql`
     update mfg_work_orders set status='on_hold', hold_reason=${holdReason}, hold_prior_status=${before.status},
       updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`, "objects");
+     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: holdReason } });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_work_orders",
+    rowId: id,
+    action: "update",
+    before,
+    after: { ...after, reason: holdReason },
+  });
   return { ...after, pendingApproval: false };
 }
 
 async function heldRefusal(order: WorkOrderRow): Promise<void> {
   if (order.status === "on_hold") {
-    refuse(`Work order ${order.number} is on hold for ${order.holdReason}.`, "work_order_on_hold", "Resume the work order before continuing.", 409);
+    refuse(
+      `Work order ${order.number} is on hold for ${order.holdReason}.`,
+      "work_order_on_hold",
+      "Resume the work order before continuing.",
+      409,
+    );
   }
 }
 
-export async function resumeWorkOrder(tx: SqlExecutor, orgId: string, actorId: string, id: string): Promise<WorkOrderRead> {
+export async function resumeWorkOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+): Promise<WorkOrderRead> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
   const before = await loadOrder(tx, orgId, id, true);
   if (before.status !== "on_hold") {
-    if (before.status === "released" || before.status === "in_progress") return { ...before, pendingApproval: false };
-    refuse(`Work order ${before.number} is ${before.status} and cannot resume.`, "invalid_work_order_transition", "Resume an order that is on hold.", 409);
+    if (before.status === "released" || before.status === "in_progress")
+      return { ...before, pendingApproval: false };
+    refuse(
+      `Work order ${before.number} is ${before.status} and cannot resume.`,
+      "invalid_work_order_transition",
+      "Resume an order that is on hold.",
+      409,
+    );
   }
   const prior = before.holdPriorStatus;
   if (prior !== "released" && prior !== "in_progress") {
-    refuse(`Work order ${before.number} has no valid prior state for its hold.`, "hold_history_missing", "Restore the held work order's prior status to released or in progress before retrying.", 409);
+    refuse(
+      `Work order ${before.number} has no valid prior state for its hold.`,
+      "hold_history_missing",
+      "Restore the held work order's prior status to released or in progress before retrying.",
+      409,
+    );
   }
-  const updated = await tx.execute<WorkOrderRow>(sql`
+  const updated = await tx.execute<WorkOrderRow>(
+    sql`
     update mfg_work_orders set status=${prior}, hold_reason=null, hold_prior_status=null,
       updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='on_hold' returning ${workOrderColumns}`, "objects");
+     where org_id=${orgId} and id=${id} and status='on_hold' returning ${workOrderColumns}`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: "Resumed from hold." } });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_work_orders",
+    rowId: id,
+    action: "update",
+    before,
+    after: { ...after, reason: "Resumed from hold." },
+  });
   return { ...after, pendingApproval: false };
 }
 
-export async function startWorkOrder(tx: SqlExecutor, orgId: string, actorId: string, id: string): Promise<WorkOrderRead> {
+export async function startWorkOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+): Promise<WorkOrderRead> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
   const before = await loadOrder(tx, orgId, id, true);
   await heldRefusal(before);
   if (before.status === "in_progress") return { ...before, pendingApproval: false };
-  if (before.status !== "released") refuse(`Work order ${before.number} cannot start from ${before.status}.`, "invalid_work_order_transition", "Start a released work order.", 409);
-  const updated = await tx.execute<WorkOrderRow>(sql`
+  if (before.status !== "released")
+    refuse(
+      `Work order ${before.number} cannot start from ${before.status}.`,
+      "invalid_work_order_transition",
+      "Start a released work order.",
+      409,
+    );
+  const updated = await tx.execute<WorkOrderRow>(
+    sql`
     update mfg_work_orders set status='in_progress', started_at=now(), updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='released' returning ${workOrderColumns}`, "objects");
+     where org_id=${orgId} and id=${id} and status='released' returning ${workOrderColumns}`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: "Started." } });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_work_orders",
+    rowId: id,
+    action: "update",
+    before,
+    after: { ...after, reason: "Started." },
+  });
   return { ...after, pendingApproval: false };
 }
 
 async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow) {
-  return await tx.execute<{ entry_number: string }>(sql`
+  return await tx.execute<{ entry_number: string }>(
+    sql`
     select entry.entry_number from journal_entries entry
      where entry.org_id=${orgId} and entry.origin='manufacturing'
        -- Live entries only: cancellation is blocked only by unreversed original manufacturing entries.
@@ -1465,7 +2622,9 @@ async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow
           where reversal.org_id=entry.org_id and reversal.reverses_entry_id=entry.id
             and reversal.status in ('posted','reversed')
        )
-     order by entry.entry_number`, "objects");
+     order by entry.entry_number`,
+    "objects",
+  );
 }
 
 /**
@@ -1475,48 +2634,105 @@ async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow
  * remains is that consumed conversion cost: it is written off to the
  * produced item's variance account, in the same transaction as the cancel.
  */
-async function writeOffAbandonedWip(tx: SqlExecutor, orgId: string, actorId: string, order: WorkOrderRow, reason: string): Promise<void> {
+async function writeOffAbandonedWip(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  order: WorkOrderRow,
+  reason: string,
+): Promise<void> {
   const wipId = await manufacturingControlAccount(tx, orgId, order.subsidiaryId, "mfgWip");
-  const balance = (await tx.execute<{ balance: string }>(sql`
+  const balance =
+    (
+      await tx.execute<{ balance: string }>(
+        sql`
     select coalesce(sum(line.amount), 0)::text as balance
       from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
      where line.org_id=${orgId} and line.account_id=${wipId} and entry.origin='manufacturing'
-       and entry.custom->>'work_order_number'=${order.number} and entry.status in ('posted','reversed')`, "objects"))[0]?.balance ?? "0";
+       and entry.custom->>'work_order_number'=${order.number} and entry.status in ('posted','reversed')`,
+        "objects",
+      )
+    )[0]?.balance ?? "0";
   if (isZero(balance)) return;
   if (cmp(balance, "0") < 0) {
-    refuse(`Work order ${order.number} has a credit balance in Manufacturing WIP.`, "negative_work_order_wip", "Review the work order's manufacturing journal entries before cancelling it.");
+    refuse(
+      `Work order ${order.number} has a credit balance in Manufacturing WIP.`,
+      "negative_work_order_wip",
+      "Review the work order's manufacturing journal entries before cancelling it.",
+    );
   }
   if (!order.subsidiaryId || !order.bomRevision || order.routingVersion === null) {
-    refuse(`Work order ${order.number} is missing its released posting evidence.`, "work_order_snapshot_missing", "Contact an administrator; the released work order has no BOM and routing evidence.", 409);
+    refuse(
+      `Work order ${order.number} is missing its released posting evidence.`,
+      "work_order_snapshot_missing",
+      "Contact an administrator; the released work order has no BOM and routing evidence.",
+      409,
+    );
   }
-  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,order.id);
+  await lockManufacturingOrderExecutionAuthority(tx, orgId, actorId, order.id);
   const profile = await resolveProfile(orgId, order.producedItemId, tx as Runner, true);
   if (!profile.varianceAccountId) {
-    refuse(`Work order ${order.number} has ${balance} of absorbed labor and overhead to write off, but its produced item has no variance account.`,
-      "abandoned_wip_variance_account_missing", "Configure the produced item's variance account in inventory costing setup, then cancel again.");
+    refuse(
+      `Work order ${order.number} has ${balance} of absorbed labor and overhead to write off, but its produced item has no variance account.`,
+      "abandoned_wip_variance_account_missing",
+      "Configure the produced item's variance account in inventory costing setup, then cancel again.",
+    );
   }
   const date = await businessTodayInTx(tx, orgId);
   const periodId = await periodForDate(orgId, date, tx as Runner);
-  if (!periodId) refuse(`No accounting period covers ${date}.`, "posting_period_missing", "Open an accounting period for the cancellation date.");
+  if (!periodId)
+    refuse(
+      `No accounting period covers ${date}.`,
+      "posting_period_missing",
+      "Open an accounting period for the cancellation date.",
+    );
   const lines = [
-    { accountId: profile.varianceAccountId, amount: balance, memo: `Abandoned work on cancelled work order ${order.number}` },
-    { accountId: wipId, amount: neg(balance), memo: `Cancelled work order ${order.number} WIP write-off` },
+    {
+      accountId: profile.varianceAccountId,
+      amount: balance,
+      memo: `Abandoned work on cancelled work order ${order.number}`,
+    },
+    {
+      accountId: wipId,
+      amount: neg(balance),
+      memo: `Cancelled work order ${order.number} WIP write-off`,
+    },
   ];
-  await assertInventoryAccountsPostable(tx as Runner, orgId, lines.map((line) => line.accountId));
+  await assertInventoryAccountsPostable(
+    tx as Runner,
+    orgId,
+    lines.map((line) => line.accountId),
+  );
   await postManufacturingEntry(tx as Runner, {
-    orgId, bookId: await primaryBookId(orgId, tx as Runner), subsidiaryId: order.subsidiaryId, actorId,
-    currency: await subsidiaryCurrency(orgId, order.subsidiaryId, tx as Runner), periodId, date,
+    orgId,
+    bookId: await primaryBookId(orgId, tx as Runner),
+    subsidiaryId: order.subsidiaryId,
+    actorId,
+    currency: await subsidiaryCurrency(orgId, order.subsidiaryId, tx as Runner),
+    periodId,
+    date,
     entryNumber: `MFG-CANCEL-${date}-${randomUUID().slice(0, 12)}`,
-    memo: `Abandoned WIP write-off for cancelled work order ${order.number}`, lines,
-    custom: { workOrderNumber: order.number, bomRevision: order.bomRevision, routingVersion: String(order.routingVersion), cancelReason: reason },
+    memo: `Abandoned WIP write-off for cancelled work order ${order.number}`,
+    lines,
+    custom: {
+      workOrderNumber: order.number,
+      bomRevision: order.bomRevision,
+      routingVersion: String(order.routingVersion),
+      cancelReason: reason,
+    },
   });
 }
 
 async function descendants(tx: SqlExecutor, orgId: string, id: string) {
   return await tx.execute<{
-    id: string; number: string; status: string; started_at: Date | null; parent_wo_id: string;
+    id: string;
+    number: string;
+    status: string;
+    started_at: Date | null;
+    parent_wo_id: string;
     operation_started: boolean;
-  }>(sql`
+  }>(
+    sql`
     with recursive children as (
       select id, number, status, started_at, parent_wo_id from mfg_work_orders
        where org_id=${orgId} and parent_wo_id=${id}
@@ -1527,73 +2743,171 @@ async function descendants(tx: SqlExecutor, orgId: string, id: string) {
     )
     select child.*, exists(select 1 from mfg_wo_operations op where op.org_id=${orgId}
       and op.work_order_id=child.id and (op.started_at is not null or op.status in ('running','paused','done'))) as operation_started
-      from children child order by child.id`, "objects");
+      from children child order by child.id`,
+    "objects",
+  );
 }
 
-export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: string, id: string, reason?: string | null): Promise<WorkOrderRead> {
+export async function cancelWorkOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+  reason?: string | null,
+): Promise<WorkOrderRead> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-work-order:${id}`}, 0))`);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-work-order:${id}`}, 0))`,
+  );
   const pendingGates = await lockPendingApprovals(tx, orgId, id);
   const before = await loadOrder(tx, orgId, id, true);
-  if(before.receiptReworkInspectionId) refuse("A received-stock repair must keep its failed inspection linked.","receipt_rework_cancel_refused","Finish its setup and release the repair, or use Close as loss for actually discarded work after release.",409);
+  if (before.receiptReworkInspectionId)
+    refuse(
+      "A received-stock repair must keep its failed inspection linked.",
+      "receipt_rework_cancel_refused",
+      "Finish its setup and release the repair, or use Close as loss for actually discarded work after release.",
+      409,
+    );
   if (before.status === "cancelled") return { ...before, pendingApproval: false };
   if (before.status !== "draft" && before.status !== "released" && before.status !== "on_hold") {
     await heldRefusal(before);
-    refuse(`Work order ${before.number} cannot be cancelled from ${before.status}.`, "invalid_work_order_transition", "Put the order on hold, reverse its completion receipts and material issues, then cancel it.", 409);
+    refuse(
+      `Work order ${before.number} cannot be cancelled from ${before.status}.`,
+      "invalid_work_order_transition",
+      "Put the order on hold, reverse its completion receipts and material issues, then cancel it.",
+      409,
+    );
   }
   const cancelReason = reason?.trim() || null;
   if (before.status !== "draft" && !cancelReason) {
-    refuse(`Cancelling work order ${before.number} requires a reason.`, "cancel_reason_required", "Enter why the released work order is being cancelled.");
+    refuse(
+      `Cancelling work order ${before.number} requires a reason.`,
+      "cancel_reason_required",
+      "Enter why the released work order is being cancelled.",
+    );
   }
   const entries = await postedEntries(tx, orgId, before);
   if (entries.length) {
-    refuse(`Work order ${before.number} has posted manufacturing entries ${entries.map((entry) => entry.entry_number).join(", ")}.`, "work_order_has_postings", "Reverse the work order's completion receipts (newest first) and then its material issues through the inventory movement reversal, then cancel the work order.", 409);
+    refuse(
+      `Work order ${before.number} has posted manufacturing entries ${entries.map((entry) => entry.entry_number).join(", ")}.`,
+      "work_order_has_postings",
+      "Reverse the work order's completion receipts (newest first) and then its material issues through the inventory movement reversal, then cancel the work order.",
+      409,
+    );
   }
   const children = await descendants(tx, orgId, id);
   const childGates = new Map<string, PendingWorkOrderGate[]>();
-  for (const summary of children) await lockManufacturingOrderManageAuthority(tx,orgId,actorId,summary.id);
-  for (const summary of children) childGates.set(summary.id, await lockPendingApprovals(tx, orgId, summary.id));
+  for (const summary of children)
+    await lockManufacturingOrderManageAuthority(tx, orgId, actorId, summary.id);
+  for (const summary of children)
+    childGates.set(summary.id, await lockPendingApprovals(tx, orgId, summary.id));
   const lockedChildren: Array<{ summary: (typeof children)[number]; row: WorkOrderRow }> = [];
-  for (const summary of children) lockedChildren.push({ summary, row: await loadOrder(tx, orgId, summary.id, true) });
-  const startedChildren = lockedChildren.filter(({ summary, row }) =>
-    row.startedAt || summary.operation_started || ["in_progress", "done", "closed"].includes(row.status));
+  for (const summary of children)
+    lockedChildren.push({ summary, row: await loadOrder(tx, orgId, summary.id, true) });
+  const startedChildren = lockedChildren.filter(
+    ({ summary, row }) =>
+      row.startedAt ||
+      summary.operation_started ||
+      ["in_progress", "done", "closed"].includes(row.status),
+  );
   if (startedChildren.length) {
-    refuse(`Work order ${before.number} has started child work orders ${startedChildren.map(({ row }) => row.number).join(", ")}.`, "started_child_work_orders", "Put each named child on hold, reverse any posted entries, cancel the child, then retry the parent cancellation.", 409);
+    refuse(
+      `Work order ${before.number} has started child work orders ${startedChildren.map(({ row }) => row.number).join(", ")}.`,
+      "started_child_work_orders",
+      "Put each named child on hold, reverse any posted entries, cancel the child, then retry the parent cancellation.",
+      409,
+    );
   }
   for (const { row: childBefore } of lockedChildren) {
     if (childBefore.status === "cancelled") continue;
     const childEntries = await postedEntries(tx, orgId, childBefore);
     if (childEntries.length) {
-      refuse(`Child work order ${childBefore.number} has posted manufacturing entries ${childEntries.map((entry) => entry.entry_number).join(", ")}.`, "work_order_has_postings", "Reverse the child's completion receipts (newest first) and then its material issues through the inventory movement reversal, then cancel the child and parent work orders.", 409);
+      refuse(
+        `Child work order ${childBefore.number} has posted manufacturing entries ${childEntries.map((entry) => entry.entry_number).join(", ")}.`,
+        "work_order_has_postings",
+        "Reverse the child's completion receipts (newest first) and then its material issues through the inventory movement reversal, then cancel the child and parent work orders.",
+        409,
+      );
     }
-    await cancelPendingApprovals(tx, orgId, childGates.get(childBefore.id) ?? [], actorId, cancelReason ?? `Parent ${before.number} cancelled.`);
-    const childAfter = await tx.execute<WorkOrderRow>(sql`
+    await cancelPendingApprovals(
+      tx,
+      orgId,
+      childGates.get(childBefore.id) ?? [],
+      actorId,
+      cancelReason ?? `Parent ${before.number} cancelled.`,
+    );
+    const childAfter = await tx.execute<WorkOrderRow>(
+      sql`
       update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason ?? `Parent ${before.number} cancelled.`},
         hold_reason=null, hold_prior_status=null, updated_by=${actorId}, updated_at=now()
-       where org_id=${orgId} and id=${childBefore.id} and status=${childBefore.status} returning ${workOrderColumns}`, "objects");
+       where org_id=${orgId} and id=${childBefore.id} and status=${childBefore.status} returning ${workOrderColumns}`,
+      "objects",
+    );
     const cancelledChild = rowOrNotFound(childAfter);
-    await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: childBefore.id, action: "update", before: childBefore, after: { ...cancelledChild, reason: cancelReason ?? `Parent ${before.number} cancelled.` } });
+    await auditChange(tx, {
+      orgId,
+      actorId,
+      table: "mfg_work_orders",
+      rowId: childBefore.id,
+      action: "update",
+      before: childBefore,
+      after: { ...cancelledChild, reason: cancelReason ?? `Parent ${before.number} cancelled.` },
+    });
   }
-  await cancelPendingApprovals(tx, orgId, pendingGates, actorId, cancelReason ?? "Draft cancelled.");
-  if (before.status !== "draft") await writeOffAbandonedWip(tx, orgId, actorId, before, cancelReason ?? "Cancelled.");
-  const updated = await tx.execute<WorkOrderRow>(sql`
+  await cancelPendingApprovals(
+    tx,
+    orgId,
+    pendingGates,
+    actorId,
+    cancelReason ?? "Draft cancelled.",
+  );
+  if (before.status !== "draft")
+    await writeOffAbandonedWip(tx, orgId, actorId, before, cancelReason ?? "Cancelled.");
+  const updated = await tx.execute<WorkOrderRow>(
+    sql`
     update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason}, hold_reason=null, hold_prior_status=null,
       updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`, "objects");
+     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: cancelReason ?? "Draft cancelled." } });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_work_orders",
+    rowId: id,
+    action: "update",
+    before,
+    after: { ...after, reason: cancelReason ?? "Draft cancelled." },
+  });
   return { ...after, pendingApproval: false };
 }
 
-async function lockOperation(tx: SqlExecutor, orgId: string, workOrderId: string, operationId: string) {
+async function lockOperation(
+  tx: SqlExecutor,
+  orgId: string,
+  workOrderId: string,
+  operationId: string,
+) {
   const order = await loadOrder(tx, orgId, workOrderId, true);
-  const operation = (await tx.execute<{
-    id: string; work_order_id: string; sequence: number; name: string; status: string; operator_user_id: string | null;
-    pause_reason: string | null; started_at: Date | null;
-  }>(sql`
+  const operation = (
+    await tx.execute<{
+      id: string;
+      work_order_id: string;
+      sequence: number;
+      name: string;
+      status: string;
+      operator_user_id: string | null;
+      pause_reason: string | null;
+      started_at: Date | null;
+    }>(
+      sql`
     select id, work_order_id, sequence, name, status, operator_user_id, pause_reason, started_at
-      from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} for update`, "objects"))[0];
+      from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} for update`,
+      "objects",
+    )
+  )[0];
   if (!operation) throw new ManufacturingNotFoundError();
   return { order, operation };
 }
@@ -1604,11 +2918,24 @@ async function lockOperation(tx: SqlExecutor, orgId: string, workOrderId: string
  * operation whose inspection failed, so that source operation is still held
  * open while its rework runs; they are exempt from the sequence.
  */
-async function assertEarlierOperationsDone(tx: SqlExecutor, orgId: string, workOrderId: string, operation: { id: string; sequence: number; name: string }) {
-  const reworkOf = (await tx.execute(sql`select 1 from inventory_inspections where org_id=${orgId} and rework_operation_id=${operation.id} limit 1`, "objects"))[0];
+async function assertEarlierOperationsDone(
+  tx: SqlExecutor,
+  orgId: string,
+  workOrderId: string,
+  operation: { id: string; sequence: number; name: string },
+) {
+  const reworkOf = (
+    await tx.execute(
+      sql`select 1 from inventory_inspections where org_id=${orgId} and rework_operation_id=${operation.id} limit 1`,
+      "objects",
+    )
+  )[0];
   if (reworkOf) return;
-  const operations = await tx.execute<{ sequence: number; name: string; status: string }>(sql`
-    select sequence, name, status from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId}`, "objects");
+  const operations = await tx.execute<{ sequence: number; name: string; status: string }>(
+    sql`
+    select sequence, name, status from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId}`,
+    "objects",
+  );
   const blocker = sequenceBlocker(operations, operation.sequence);
   if (blocker) {
     refuse(
@@ -1620,27 +2947,65 @@ async function assertEarlierOperationsDone(tx: SqlExecutor, orgId: string, workO
   }
 }
 
-export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string, options: { startedOn?: string | null } = {}) {
+export async function startWorkOrderOperation(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  workOrderId: string,
+  operationId: string,
+  options: { startedOn?: string | null } = {},
+) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
+  await lockManufacturingOrderExecutionAuthority(tx, orgId, actorId, workOrderId);
   const { order, operation: before } = await lockOperation(tx, orgId, workOrderId, operationId);
   await heldRefusal(order);
   if (order.status === "released") await startWorkOrder(tx, orgId, actorId, workOrderId);
-  else if (order.status !== "in_progress") refuse(`Start work order ${order.number} before starting an operation.`, "work_order_not_started", "Start the released work order first.", 409);
+  else if (order.status !== "in_progress")
+    refuse(
+      `Start work order ${order.number} before starting an operation.`,
+      "work_order_not_started",
+      "Start the released work order first.",
+      409,
+    );
   if (before.status === "running") return before;
-  if (before.status !== "pending") refuse(`Operation ${before.sequence} cannot start from ${before.status}.`, "invalid_operation_transition", "Start a pending operation or resume a paused one.", 409);
+  if (before.status !== "pending")
+    refuse(
+      `Operation ${before.sequence} cannot start from ${before.status}.`,
+      "invalid_operation_transition",
+      "Start a pending operation or resume a paused one.",
+      409,
+    );
   await assertEarlierOperationsDone(tx, orgId, workOrderId, before);
   // A back-dated start stamps and backflushes on the day production began.
-  const startedOn = await operationEventDate(tx, orgId, options.startedOn, null, `Operation ${before.sequence}`);
-  const updated = await tx.execute(sql`
+  const startedOn = await operationEventDate(
+    tx,
+    orgId,
+    options.startedOn,
+    null,
+    `Operation ${before.sequence}`,
+  );
+  const updated = await tx.execute(
+    sql`
     update mfg_wo_operations set status='running', operator_user_id=${actorId}, started_at=${startedOn ? sql`${startedOn}::date::timestamptz` : sql`now()`},
       pause_reason=null, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='pending'
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: "Operation started." } });
-  await createOperationInspection(tx,orgId,actorId,workOrderId,operationId);
-  await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "start", { onDate: startedOn ?? undefined });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_wo_operations",
+    rowId: operationId,
+    action: "update",
+    before,
+    after: { ...after, reason: "Operation started." },
+  });
+  await createOperationInspection(tx, orgId, actorId, workOrderId, operationId);
+  await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "start", {
+    onDate: startedOn ?? undefined,
+  });
   return after;
 }
 
@@ -1653,80 +3018,204 @@ export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
  * posted consumption keeps its date, so it must be reversed first.
  */
 export async function correctWorkOrderOperationStart(
-  tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string,
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  workOrderId: string,
+  operationId: string,
   input: { startedOn: string; reason: string },
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingOrderManageAuthority(tx, orgId, actorId, workOrderId);
   const { order, operation: before } = await lockOperation(tx, orgId, workOrderId, operationId);
   const reason = input.reason?.trim() ?? "";
-  if (reason.length < 5) refuse(`Correcting operation ${before.sequence}'s start requires a reason.`, "start_correction_reason_required", "Enter why the recorded start is wrong.");
+  if (reason.length < 5)
+    refuse(
+      `Correcting operation ${before.sequence}'s start requires a reason.`,
+      "start_correction_reason_required",
+      "Enter why the recorded start is wrong.",
+    );
   if (before.status !== "running" && before.status !== "paused") {
-    refuse(`Operation ${before.sequence} is ${before.status}; only a started, unfinished operation's start can be corrected.`, "invalid_operation_transition", "Correct the start before completing the operation.", 409);
+    refuse(
+      `Operation ${before.sequence} is ${before.status}; only a started, unfinished operation's start can be corrected.`,
+      "invalid_operation_transition",
+      "Correct the start before completing the operation.",
+      409,
+    );
   }
-  const startedOn = await operationEventDate(tx, orgId, input.startedOn, null, `Operation ${before.sequence}`);
-  const recorded = before.started_at ? new Date(before.started_at).toISOString().slice(0, 10) : null;
+  const startedOn = await operationEventDate(
+    tx,
+    orgId,
+    input.startedOn,
+    null,
+    `Operation ${before.sequence}`,
+  );
+  const recorded = before.started_at
+    ? new Date(before.started_at).toISOString().slice(0, 10)
+    : null;
   if (!startedOn || (recorded !== null && startedOn >= recorded)) {
-    refuse(`Operation ${before.sequence} started on ${recorded}; a correction must state an earlier day.`, "start_correction_not_earlier", "Enter the earlier day production actually began.");
+    refuse(
+      `Operation ${before.sequence} started on ${recorded}; a correction must state an earlier day.`,
+      "start_correction_not_earlier",
+      "Enter the earlier day production actually began.",
+    );
   }
-  const posted = (await tx.execute<{ entry_number: string; posting_date: string }>(sql`
+  const posted = (
+    await tx.execute<{ entry_number: string; posting_date: string }>(
+      sql`
     select entry_number, posting_date::text as posting_date from journal_entries
      where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=${order.number}
        and custom->>'operation_id'=${operationId}
        -- Live entries only: a reversed posting no longer fixes a date.
        and status='posted' and reverses_entry_id is null
-     order by posting_date limit 1`, "objects"))[0];
+     order by posting_date limit 1`,
+      "objects",
+    )
+  )[0];
   if (posted) {
-    refuse(`Operation ${before.sequence} already posted ${posted.entry_number} on ${posted.posting_date}.`, "start_correction_posted", "Reverse that posting before correcting the start, so its date and the start agree.", 409);
+    refuse(
+      `Operation ${before.sequence} already posted ${posted.entry_number} on ${posted.posting_date}.`,
+      "start_correction_posted",
+      "Reverse that posting before correcting the start, so its date and the start agree.",
+      409,
+    );
   }
-  const updated = await tx.execute(sql`
+  const updated = await tx.execute(
+    sql`
     update mfg_wo_operations set started_at=${startedOn}::date::timestamptz, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status in ('running','paused')
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason } });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_wo_operations",
+    rowId: operationId,
+    action: "update",
+    before,
+    after: { ...after, reason },
+  });
   return after;
 }
 
-export async function pauseWorkOrderOperation(tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string, reason: string) {
+export async function pauseWorkOrderOperation(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  workOrderId: string,
+  operationId: string,
+  reason: string,
+) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,workOrderId);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, workOrderId);
   const { order, operation: before } = await lockOperation(tx, orgId, workOrderId, operationId);
   await heldRefusal(order);
   const pauseReason = reason?.trim();
-  if (!pauseReason) refuse(`Pausing operation ${before.sequence} requires a reason.`, "pause_reason_required", "Enter why the operation is paused.");
-  if (before.status !== "running") refuse(`Operation ${before.sequence} cannot pause from ${before.status}.`, "invalid_operation_transition", "Pause an operation that is running.", 409);
-  const updated = await tx.execute(sql`
+  if (!pauseReason)
+    refuse(
+      `Pausing operation ${before.sequence} requires a reason.`,
+      "pause_reason_required",
+      "Enter why the operation is paused.",
+    );
+  if (before.status !== "running")
+    refuse(
+      `Operation ${before.sequence} cannot pause from ${before.status}.`,
+      "invalid_operation_transition",
+      "Pause an operation that is running.",
+      409,
+    );
+  const updated = await tx.execute(
+    sql`
     update mfg_wo_operations set status='paused', pause_reason=${pauseReason}, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='running'
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: pauseReason } });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_wo_operations",
+    rowId: operationId,
+    action: "update",
+    before,
+    after: { ...after, reason: pauseReason },
+  });
   return after;
 }
 
-export async function resumeWorkOrderOperation(tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string) {
+export async function resumeWorkOrderOperation(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  workOrderId: string,
+  operationId: string,
+) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,workOrderId);
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, workOrderId);
   const { order, operation: before } = await lockOperation(tx, orgId, workOrderId, operationId);
   await heldRefusal(order);
   if (before.status === "running") return before;
-  if (before.status !== "paused") refuse(`Operation ${before.sequence} cannot resume from ${before.status}.`, "invalid_operation_transition", "Resume an operation that is paused.", 409);
-  const updated = await tx.execute(sql`
+  if (before.status !== "paused")
+    refuse(
+      `Operation ${before.sequence} cannot resume from ${before.status}.`,
+      "invalid_operation_transition",
+      "Resume an operation that is paused.",
+      409,
+    );
+  const updated = await tx.execute(
+    sql`
     update mfg_wo_operations set status='running', pause_reason=null, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='paused'
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`,
+    "objects",
+  );
   const after = rowOrNotFound(updated);
-  await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: "Operation resumed." } });
+  await auditChange(tx, {
+    orgId,
+    actorId,
+    table: "mfg_wo_operations",
+    rowId: operationId,
+    action: "update",
+    before,
+    after: { ...after, reason: "Operation resumed." },
+  });
   return after;
 }
 
 /** Replay checks current authority and the record's retained composition, not today's department default. */
-export async function checkWorkOrderCreateReplay(tx:SqlExecutor,orgId:string,actorId:string,id:string,requestedScope:ReadonlySet<string>|null) {
-  await assertManufacturingFeature(tx,orgId,'manufacturing');
-  const order=await loadOrder(tx,orgId,id);
-  const scope=await lockManufacturingManageAuthority(tx,orgId,actorId,order.subsidiaryId,requestedScope);
-  if (!(await tx.execute(sql`select r.id from mfg_work_orders r where r.org_id=${orgId} and r.id=${id} ${orderResourcesVisible(scope,'r')}`, "objects"))[0]) throw new ManufacturingNotFoundError();
-  if(order.operatingProfileVersionId) await checkPinnedOperatingProfileCommand(tx,orgId,actorId,{versionId:order.operatingProfileVersionId,family:'production',subsidiaryId:order.subsidiaryId});
-  return getWorkOrder(tx,orgId,id);
+export async function checkWorkOrderCreateReplay(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+  requestedScope: ReadonlySet<string> | null,
+) {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
+  const order = await loadOrder(tx, orgId, id);
+  const scope = await lockManufacturingManageAuthority(
+    tx,
+    orgId,
+    actorId,
+    order.subsidiaryId,
+    requestedScope,
+  );
+  if (
+    !(
+      await tx.execute(
+        sql`select r.id from mfg_work_orders r where r.org_id=${orgId} and r.id=${id} ${orderResourcesVisible(scope, "r")}`,
+        "objects",
+      )
+    )[0]
+  )
+    throw new ManufacturingNotFoundError();
+  if (order.operatingProfileVersionId)
+    await checkPinnedOperatingProfileCommand(tx, orgId, actorId, {
+      versionId: order.operatingProfileVersionId,
+      family: "production",
+      subsidiaryId: order.subsidiaryId,
+    });
+  return getWorkOrder(tx, orgId, id);
 }

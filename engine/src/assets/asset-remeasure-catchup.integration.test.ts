@@ -60,14 +60,17 @@ async function seedCatchupAsset(org: ScratchOrg, actorId: string, tag: string) {
 
 async function planRows(orgId: string, assetId: string) {
   return await db.execute<{
-      planned: string;
-      posted: string | null;
-    }>(sql`
+    planned: string;
+    posted: string | null;
+  }>(
+    sql`
       select l.planned_amount::text as planned, l.posted_amount::text as posted
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
        where l.org_id = ${orgId} and s.asset_id = ${assetId}
-       order by l.sequence`, "objects");
+       order by l.sequence`,
+    "objects",
+  );
 }
 
 test(
@@ -103,11 +106,16 @@ test(
         retained.reduce((total, line) => total + Number(line.planned), 0).toFixed(4),
         "800.0000",
       );
-      const balance = (await db.execute<{ total: string }>(sql`
+      const balance = (
+        await db.execute<{ total: string }>(
+          sql`
           select coalesce(sum(l.amount), 0)::text as total
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-           where l.org_id = ${unposted.orgId} and e.id = ${impairment.entryId}`, "objects"))[0]!;
+           where l.org_id = ${unposted.orgId} and e.id = ${impairment.entryId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(balance.total, "0.0000");
 
       // The posted companion still measures off the posted carrying value:

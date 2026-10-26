@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { registeredListTable } from '../../../lib/list/prepared-spec'
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { registeredListTable } from "../../../lib/list/prepared-spec";
 import {
   column,
   drill,
@@ -21,25 +21,29 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { ACCOUNT_CLASS_TYPES } from '../../../lib/account-types'
-import { accountBalanceDrill, accountClassBalanceDrill } from '../../../lib/account-balance-drill'
-import { resolvePeriod } from '../../../lib/periods'
-import type { ReportDrillTarget } from '../../../lib/report-drill'
-import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
-import { accountsWithBalances, orgInfo } from '../../../lib/data'
-import { can, requirePermission } from '../../../lib/authz'
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
-import { loadAccount, redactAccountCustomFields } from '../../api/accounts/_lib'
-import { segmentRegistry } from '../../../lib/segments'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
-import { accountParentPath, orderAccountHierarchy } from '../../../lib/account-hierarchy'
-import { listScopedAccountOptions } from '../../../lib/scoped-options'
-import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
-import { decimalAdd, decimalCmp, decimalSum } from '../../../lib/statement-format'
-import type { HierarchyAccountGroup } from './AccountsHierarchyTable'
-import type { AccountDrawer, AccountDrawerMerge } from './AccountDrawer'
+} from "@braedonsaunders/appkit-viewspec";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { ACCOUNT_CLASS_TYPES } from "../../../lib/account-types";
+import { accountBalanceDrill, accountClassBalanceDrill } from "../../../lib/account-balance-drill";
+import { resolvePeriod } from "../../../lib/periods";
+import type { ReportDrillTarget } from "../../../lib/report-drill";
+import { isUuid, mergeHref, parseListParams, pickString } from "../../../lib/list-params";
+import { accountsWithBalances, orgInfo } from "../../../lib/data";
+import { can, requirePermission } from "../../../lib/authz";
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../lib/custom-fields";
+import { loadAccount, redactAccountCustomFields } from "../../api/accounts/_lib";
+import { segmentRegistry } from "../../../lib/segments";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../lib/features";
+import { accountParentPath, orderAccountHierarchy } from "../../../lib/account-hierarchy";
+import { listScopedAccountOptions } from "../../../lib/scoped-options";
+import { subsidiaryUiOptions } from "../../../lib/subsidiaries";
+import { decimalAdd, decimalCmp, decimalSum } from "../../../lib/statement-format";
+import type { HierarchyAccountGroup } from "./AccountsHierarchyTable";
+import type { AccountDrawer, AccountDrawerMerge } from "./AccountDrawer";
 
 /**
  * The chart of accounts, split into a loader and a spec.
@@ -57,43 +61,43 @@ import type { AccountDrawer, AccountDrawerMerge } from './AccountDrawer'
 
 // accounts.type enum → message key under accounts.types.* (unknown values render verbatim).
 const TYPE_KEYS: Record<string, string> = {
-  asset_bank: 'assetBank',
-  asset_receivable: 'assetReceivable',
-  asset_current_other: 'assetCurrentOther',
-  asset_fixed: 'assetFixed',
-  asset_other: 'assetOther',
-  liability_payable: 'liabilityPayable',
-  liability_card: 'liabilityCard',
-  liability_current_other: 'liabilityCurrentOther',
-  liability_long_term: 'liabilityLongTerm',
-  equity: 'equity',
-  income: 'income',
-  income_other: 'incomeOther',
-  cogs: 'cogs',
-  expense: 'expense',
-  expense_other: 'expenseOther',
-  expense_deferred: 'expenseDeferred',
-  statistical: 'statistical',
-}
+  asset_bank: "assetBank",
+  asset_receivable: "assetReceivable",
+  asset_current_other: "assetCurrentOther",
+  asset_fixed: "assetFixed",
+  asset_other: "assetOther",
+  liability_payable: "liabilityPayable",
+  liability_card: "liabilityCard",
+  liability_current_other: "liabilityCurrentOther",
+  liability_long_term: "liabilityLongTerm",
+  equity: "equity",
+  income: "income",
+  income_other: "incomeOther",
+  cogs: "cogs",
+  expense: "expense",
+  expense_other: "expenseOther",
+  expense_deferred: "expenseDeferred",
+  statistical: "statistical",
+};
 // Group the detailed types into the 5 statement classes for the filter.
 const CLASS_OF: Record<string, string> = Object.fromEntries(
   Object.entries(ACCOUNT_CLASS_TYPES).flatMap(([classKey, types]) =>
     types.map((type) => [type, classKey]),
   ),
-)
-CLASS_OF.statistical='statistical'
+);
+CLASS_OF.statistical = "statistical";
 // statement class → message key under accounts.classes.* (unknown values render verbatim).
 const CLASS_KEYS: Record<string, string> = {
-  asset: 'asset',
-  liability: 'liability',
-  equity: 'equity',
-  income: 'income',
-  expense: 'expense',
-  statistical: 'statistical',
-}
-const CLASS_ORDER = ['asset', 'liability', 'equity', 'income', 'expense','statistical'] as const
+  asset: "asset",
+  liability: "liability",
+  equity: "equity",
+  income: "income",
+  expense: "expense",
+  statistical: "statistical",
+};
+const CLASS_ORDER = ["asset", "liability", "equity", "income", "expense", "statistical"] as const;
 
-type AccountDrawerProps = Parameters<typeof AccountDrawer>[0]
+type AccountDrawerProps = Parameters<typeof AccountDrawer>[0];
 
 /**
  * Merge affordances for one open account: the survivors it may merge into
@@ -104,41 +108,56 @@ async function accountMergeDrawerProps(
   account: Record<string, unknown>,
   input: { orgId: string; enabled: boolean; canMerge: boolean; today: string },
 ): Promise<AccountDrawerMerge | null> {
-  const id = typeof account.id === 'string' ? account.id : ''
-  const mergedIntoId = typeof account.merged_into_id === 'string' ? account.merged_into_id : null
-  if (!id || (!input.enabled && !mergedIntoId)) return null
+  const id = typeof account.id === "string" ? account.id : "";
+  const mergedIntoId = typeof account.merged_into_id === "string" ? account.merged_into_id : null;
+  if (!id || (!input.enabled && !mergedIntoId)) return null;
   const [targets, survivor, proposal] = await Promise.all([
     input.canMerge && !mergedIntoId
-      ? db.execute<{ id: string; number: string | null; name: string }>(sql`
+      ? db.execute<{ id: string; number: string | null; name: string }>(
+          sql`
           select id, number, name from accounts
-           where org_id = ${input.orgId} and id <> ${id} and type = ${String(account.type ?? '')}
+           where org_id = ${input.orgId} and id <> ${id} and type = ${String(account.type ?? "")}
              and is_active and not is_summary and merged_into_id is null
-           order by number nulls last, name`, 'objects')
+           order by number nulls last, name`,
+          "objects",
+        )
       : Promise.resolve([] as { id: string; number: string | null; name: string }[]),
     mergedIntoId
-      ? db.execute<{ label: string }>(sql`
-          select concat_ws(' ', number, name) as label from accounts where org_id = ${input.orgId} and id = ${mergedIntoId}`, 'objects')
+      ? db.execute<{ label: string }>(
+          sql`
+          select concat_ws(' ', number, name) as label from accounts where org_id = ${input.orgId} and id = ${mergedIntoId}`,
+          "objects",
+        )
       : Promise.resolve([] as { label: string }[]),
-    db.execute<{ id: string; status: string; effective_on: string; target_label: string | null }>(sql`
+    db.execute<{ id: string; status: string; effective_on: string; target_label: string | null }>(
+      sql`
       select f.id, f.status, f.effective_on::text as effective_on, concat_ws(' ', t.number, t.name) as target_label
         from financial_changes f
         left join accounts t on t.org_id = f.org_id and t.id::text = f.payload ->> 'targetAccountId'
        where f.org_id = ${input.orgId} and f.domain = 'ledger' and f.operation = 'account_merge'
          and f.subject_id = ${id} and f.status in ('draft', 'pending', 'approved')
-       order by f.created_at desc limit 1`, 'objects'),
-  ])
-  const mergedAt = account.merged_at instanceof Date
-    ? account.merged_at.toISOString().slice(0, 10)
-    : typeof account.merged_at === 'string' ? account.merged_at.slice(0, 10) : ''
+       order by f.created_at desc limit 1`,
+      "objects",
+    ),
+  ]);
+  const mergedAt =
+    account.merged_at instanceof Date
+      ? account.merged_at.toISOString().slice(0, 10)
+      : typeof account.merged_at === "string"
+        ? account.merged_at.slice(0, 10)
+        : "";
   return {
     canMerge: input.canMerge && !mergedIntoId,
-    targets: targets.map((row) => ({ value: row.id, label: `${row.number ?? ''} ${row.name}`.trim() })),
+    targets: targets.map((row) => ({
+      value: row.id,
+      label: `${row.number ?? ""} ${row.name}`.trim(),
+    })),
     today: input.today,
     proposal: proposal[0]
       ? {
           changeId: proposal[0].id,
-          status: proposal[0].status as 'draft' | 'pending' | 'approved',
-          targetLabel: proposal[0].target_label ?? '',
+          status: proposal[0].status as "draft" | "pending" | "approved",
+          targetLabel: proposal[0].target_label ?? "",
           effectiveDate: proposal[0].effective_on,
         }
       : null,
@@ -146,183 +165,189 @@ async function accountMergeDrawerProps(
       ? {
           label: survivor[0]?.label ?? mergedIntoId,
           date: mergedAt,
-          reason: typeof account.merge_reason === 'string' ? account.merge_reason : null,
+          reason: typeof account.merge_reason === "string" ? account.merge_reason : null,
           href: `/accounts?account=${mergedIntoId}`,
         }
       : null,
-  }
+  };
 }
-type CurrencyOption = { code: string; name: string }
-const FLAT_PER_PAGE = 50
+type CurrencyOption = { code: string; name: string };
+const FLAT_PER_PAGE = 50;
 
 export interface AccountSearchRow {
-  id: string
-  number: string
-  name: string
-  href: string
-  isSummary: boolean
-  inactiveLabel: string | null
-  parentPath: string | null
-  typeLabel: string
-  balance: string
-  balanceTone: 'negative' | 'default'
-  balanceDrill: ReportDrillTarget | null
-  registerAriaLabel: string
+  id: string;
+  number: string;
+  name: string;
+  href: string;
+  isSummary: boolean;
+  inactiveLabel: string | null;
+  parentPath: string | null;
+  typeLabel: string;
+  balance: string;
+  balanceTone: "negative" | "default";
+  balanceDrill: ReportDrillTarget | null;
+  registerAriaLabel: string;
 }
 
 export interface AccountsData {
-  title: string
-  description: string
-  newAccountLabel: string
-  canManageAccounts: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  searchPlaceholder: string
-  classLabel: string
-  classCounts: { value: string; label: string; count: number }[]
-  viewTabs: { href: string; label: string; active: boolean }[]
-  onList: boolean
-  onSearch: boolean
-  onHierarchy: boolean
-  showFilters: boolean
-  columnAccount: string
-  columnType: string
-  columnBalance: string
-  columnActions: string
-  viewRegisterLabel: string
-  rows: AccountSearchRow[]
-  total: number
-  currentPage: number
-  perPage: number
-  groups: HierarchyAccountGroup[]
+  title: string;
+  description: string;
+  newAccountLabel: string;
+  canManageAccounts: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  searchPlaceholder: string;
+  classLabel: string;
+  classCounts: { value: string; label: string; count: number }[];
+  viewTabs: { href: string; label: string; active: boolean }[];
+  onList: boolean;
+  onSearch: boolean;
+  onHierarchy: boolean;
+  showFilters: boolean;
+  columnAccount: string;
+  columnType: string;
+  columnBalance: string;
+  columnActions: string;
+  viewRegisterLabel: string;
+  rows: AccountSearchRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
+  groups: HierarchyAccountGroup[];
   hierarchyLabels: {
-    account: string
-    type: string
-    balance: string
-    actions: string
-    inactive: string
-    viewRegister: string
-    expandAccount: string
-    collapseAccount: string
-  }
-  drawerOpen: boolean
+    account: string;
+    type: string;
+    balance: string;
+    actions: string;
+    inactive: string;
+    viewRegister: string;
+    expandAccount: string;
+    collapseAccount: string;
+  };
+  drawerOpen: boolean;
   /** The entity list renders its own drawer, so the page must not repeat it. */
-  drawerOutsideList: boolean
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
+  drawerOutsideList: boolean;
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
 }
 
 export async function loadAccounts(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AccountsData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const authz = await requirePermission('gl.read')
-  const t = await getTranslations('accounts')
-  const tc = await getTranslations('common')
-  const typeLabel = (type: string) => (TYPE_KEYS[type] ? t(`types.${TYPE_KEYS[type]}`) : type)
-  const layout = pickString(sp.layout) === 'hierarchy' ? 'hierarchy' : 'list'
+  const { money: formatMoney } = await getMoneyFormatter();
+  const authz = await requirePermission("gl.read");
+  const t = await getTranslations("accounts");
+  const tc = await getTranslations("common");
+  const typeLabel = (type: string) => (TYPE_KEYS[type] ? t(`types.${TYPE_KEYS[type]}`) : type);
+  const layout = pickString(sp.layout) === "hierarchy" ? "hierarchy" : "list";
   const params = parseListParams(sp, {
-    sort: 'number',
-    allowedSorts: ['number'] as const,
+    sort: "number",
+    allowedSorts: ["number"] as const,
     perPage: FLAT_PER_PAGE,
-  })
-  const q = params.q?.toLowerCase()
-  const cls = pickString(sp.class)
-  const showInactive = pickString(sp.showInactive) === 'true'
-  const accountId = pickString(sp.account)
-  const canManageAccounts = can(authz, 'gl.manage')
-  const creating = pickString(sp.accountNew) === '1' && canManageAccounts
+  });
+  const q = params.q?.toLowerCase();
+  const cls = pickString(sp.class);
+  const showInactive = pickString(sp.showInactive) === "true";
+  const accountId = pickString(sp.account);
+  const canManageAccounts = can(authz, "gl.manage");
+  const creating = pickString(sp.accountNew) === "1" && canManageAccounts;
 
-  const asOf = await businessToday(authz.user.orgId)
-  const currentPeriod = await resolvePeriod('this_period', {
+  const asOf = await businessToday(authz.user.orgId);
+  const currentPeriod = await resolvePeriod("this_period", {
     today: asOf,
     orgId: authz.user.orgId,
-  })
-  const accounts = await accountsWithBalances(
-    authz.user.orgId,
-    asOf,
-    authz.allowedSubsidiaryIds,
-  )
-  const visibleAccounts = showInactive ? accounts : accounts.filter((account) => account.is_active)
+  });
+  const accounts = await accountsWithBalances(authz.user.orgId, asOf, authz.allowedSubsidiaryIds);
+  const visibleAccounts = showInactive ? accounts : accounts.filter((account) => account.is_active);
 
   // roll balances up through summary parents (needed in both modes)
-  const byId = new Map(accounts.map((a) => [a.id, a]))
-  const rolled = new Map<string, string>(accounts.map((a) => [a.id, a.balance]))
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  const rolled = new Map<string, string>(accounts.map((a) => [a.id, a.balance]));
   for (const a of accounts) {
-    let p = a.parent_id
-    const visited = new Set<string>()
+    let p = a.parent_id;
+    const visited = new Set<string>();
     while (p && !visited.has(p)) {
-      visited.add(p)
-      rolled.set(p, decimalAdd(rolled.get(p) ?? '0.0000', a.balance))
-      p = byId.get(p)?.parent_id ?? null
+      visited.add(p);
+      rolled.set(p, decimalAdd(rolled.get(p) ?? "0.0000", a.balance));
+      p = byId.get(p)?.parent_id ?? null;
     }
   }
 
   const classCounts = Object.entries(
     visibleAccounts.reduce<Record<string, number>>((m, a) => {
-      const c = CLASS_OF[a.type] ?? 'other'
-      m[c] = (m[c] ?? 0) + 1
-      return m
+      const c = CLASS_OF[a.type] ?? "other";
+      m[c] = (m[c] ?? 0) + 1;
+      return m;
     }, {}),
   ).map(([value, count]) => ({
     value,
     label: CLASS_KEYS[value] ? t(`classes.${CLASS_KEYS[value]}`) : value,
     count,
-  }))
+  }));
 
-  const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled, baseCurrency, mergesEnabled] = await Promise.all([
-    accountId && isUuid(accountId)
-      ? loadAccount(accountId, authz.user.orgId, authz.allowedSubsidiaryIds).then((payload) =>
-          payload ? redactAccountCustomFields(payload, customFieldViewerFor(authz)) : null)
-      : null,
-    subsidiaryFeatureEnabled(authz.user.orgId),
-    isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
-    orgInfo(authz.user.orgId).then((org) => org?.base_currency ?? ''),
-    isFeatureEnabled(authz.user.orgId, 'accountMerges'),
-  ])
+  const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled, baseCurrency, mergesEnabled] =
+    await Promise.all([
+      accountId && isUuid(accountId)
+        ? loadAccount(accountId, authz.user.orgId, authz.allowedSubsidiaryIds).then((payload) =>
+            payload ? redactAccountCustomFields(payload, customFieldViewerFor(authz)) : null,
+          )
+        : null,
+      subsidiaryFeatureEnabled(authz.user.orgId),
+      isFeatureEnabled(authz.user.orgId, "multiCurrency"),
+      orgInfo(authz.user.orgId).then((org) => org?.base_currency ?? ""),
+      isFeatureEnabled(authz.user.orgId, "accountMerges"),
+    ]);
   const merge = openAccount
     ? await accountMergeDrawerProps(openAccount.account, {
         orgId: authz.user.orgId,
         enabled: mergesEnabled,
-        canMerge: mergesEnabled && canManageAccounts && can(authz, 'gl.post') && authz.allowedSubsidiaryIds === null,
+        canMerge:
+          mergesEnabled &&
+          canManageAccounts &&
+          can(authz, "gl.post") &&
+          authz.allowedSubsidiaryIds === null,
         today: asOf,
       })
-    : null
+    : null;
   const drawerOptions =
     openAccount || creating
       ? await Promise.all([
-          listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { summaryOnly: true })
-            .then((rows) => ({ rows })),
+          listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+            summaryOnly: true,
+          }).then((rows) => ({ rows })),
           multiCurrencyEnabled
             ? db.execute<CurrencyOption>(sql`select code, name from currencies order by code`)
-            // Single-currency orgs offer only the base currency, so a
-            // reconcilable account still has a settlement currency to carry.
-            : baseCurrency
-              ? db.execute<CurrencyOption>(sql`select code, name from currencies where code = ${baseCurrency}`)
+            : // Single-currency orgs offer only the base currency, so a
+              // reconcilable account still has a settlement currency to carry.
+              baseCurrency
+              ? db.execute<CurrencyOption>(
+                  sql`select code, name from currencies where code = ${baseCurrency}`,
+                )
               : Promise.resolve({ rows: [] as CurrencyOption[] }),
           subsidiaryUiOptions(authz.user.orgId).then((rows) => ({
-            rows: rows.filter((option) =>
-              authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id),
+            rows: rows.filter(
+              (option) =>
+                authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id),
             ),
           })),
-          loadFieldDefs('accounts'),
+          loadFieldDefs("accounts"),
           segmentRegistry(authz.user.orgId),
         ])
-      : null
-  const requestedReturn = pickString(sp.drawerReturn)
-  const closeHref = requestedReturn?.startsWith('/accounts')
+      : null;
+  const requestedReturn = pickString(sp.drawerReturn);
+  const closeHref = requestedReturn?.startsWith("/accounts")
     ? requestedReturn
-    : mergeHref('/accounts', sp, {
+    : mergeHref("/accounts", sp, {
         account: undefined,
         accountNew: undefined,
         drawerReturn: undefined,
-      })
+      });
   const drawerPayload = creating
     ? {
         account: {
-          id: '',
-          number: '',
-          name: '',
-          type: 'expense',
-          description: '',
+          id: "",
+          number: "",
+          name: "",
+          type: "expense",
+          description: "",
           parent_id: null,
           is_summary: false,
           is_active: true,
@@ -340,17 +365,17 @@ export async function loadAccounts(
         childCount: 0,
         activeChildCount: 0,
       }
-    : openAccount
+    : openAccount;
   const drawer =
     drawerPayload && drawerOptions
       ? {
-          remountKey: creating ? 'new-account' : String(drawerPayload.account.id),
+          remountKey: creating ? "new-account" : String(drawerPayload.account.id),
           payload: drawerPayload,
           parents: drawerOptions[0].rows
             .filter((option) => option.id !== drawerPayload.account.id)
             .map((option) => ({
               value: option.id,
-              label: `${option.number ?? ''} ${option.name}`.trim(),
+              label: `${option.number ?? ""} ${option.name}`.trim(),
               type: option.type,
             })),
           currencies: drawerOptions[1].rows.map((option) => ({
@@ -361,7 +386,10 @@ export async function loadAccounts(
             value: option.id,
             label: option.name,
           })),
-          fieldDefs: visibleCustomFieldDefs(drawerOptions[3], customFieldViewerFor(authz)) as AccountDrawerProps['fieldDefs'],
+          fieldDefs: visibleCustomFieldDefs(
+            drawerOptions[3],
+            customFieldViewerFor(authz),
+          ) as AccountDrawerProps["fieldDefs"],
           customFieldViewer: customFieldViewerFor(authz),
           segments: (drawerOptions[4] as Awaited<ReturnType<typeof segmentRegistry>>)
             .filter((segment) => segment.allowAccountRequirement)
@@ -374,40 +402,40 @@ export async function loadAccounts(
           baseCurrency,
           merge,
         }
-      : null
+      : null;
 
   // ---- searched → flat, paginated results with hierarchy context ----------
   const matches =
-    layout === 'hierarchy' && q
+    layout === "hierarchy" && q
       ? visibleAccounts
           .filter(
             (a) =>
               (!cls || CLASS_OF[a.type] === cls) &&
               (!q ||
-                (a.number ?? '').toLowerCase().includes(q) ||
+                (a.number ?? "").toLowerCase().includes(q) ||
                 a.name.toLowerCase().includes(q)),
           )
-          .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? ''))
-      : []
-  const pageRows = matches.slice((params.page - 1) * FLAT_PER_PAGE, params.page * FLAT_PER_PAGE)
+          .sort((a, b) => (a.number ?? "").localeCompare(b.number ?? ""))
+      : [];
+  const pageRows = matches.slice((params.page - 1) * FLAT_PER_PAGE, params.page * FLAT_PER_PAGE);
 
   // ---- default → five statement classes containing the account hierarchy --
   const groups: HierarchyAccountGroup[] =
-    layout === 'hierarchy' && !q
+    layout === "hierarchy" && !q
       ? CLASS_ORDER.filter((classKey) => !cls || cls === classKey)
           .map((classKey) => {
             const {
               members: classAccounts,
               ordered,
               parentIds,
-            } = orderAccountHierarchy(visibleAccounts, classKey, CLASS_OF)
-            const classBalance = decimalSum(classAccounts.map((account) => account.balance))
+            } = orderAccountHierarchy(visibleAccounts, classKey, CLASS_OF);
+            const classBalance = decimalSum(classAccounts.map((account) => account.balance));
             return {
               key: classKey,
               label: t(`classes.${CLASS_KEYS[classKey]}`),
               count: classAccounts.length,
               balance: formatMoney(classBalance),
-              balanceNegative: decimalCmp(classBalance, '0.0000') < 0,
+              balanceNegative: decimalCmp(classBalance, "0.0000") < 0,
               drill: accountClassBalanceDrill({
                 classKey,
                 label: t(`classes.${CLASS_KEYS[classKey]}`),
@@ -416,223 +444,225 @@ export async function loadAccounts(
                 period: currentPeriod.presetId,
               }),
               rows: ordered.map((account) => {
-                const balance = rolled.get(account.id) ?? '0.0000'
+                const balance = rolled.get(account.id) ?? "0.0000";
                 return {
                   id: account.id,
                   parentId: parentIds.get(account.id) ?? null,
-                  number: account.number ?? tc('labels.notSet'),
+                  number: account.number ?? tc("labels.notSet"),
                   name: account.name,
                   typeLabel: typeLabel(account.type),
                   isSummary: account.is_summary,
                   isActive: account.is_active,
                   balance: formatMoney(balance),
-                  balanceNegative: decimalCmp(balance, '0.0000') < 0,
+                  balanceNegative: decimalCmp(balance, "0.0000") < 0,
                   drill: accountBalanceDrill({
                     accountId: account.id,
-                    label: `${account.number ?? ''} ${account.name}`.trim(),
+                    label: `${account.number ?? ""} ${account.name}`.trim(),
                     type: account.type,
                     from: currentPeriod.from,
                     to: currentPeriod.to,
                     period: currentPeriod.presetId,
                   }),
-                  detailHref: mergeHref('/accounts', sp, {
+                  detailHref: mergeHref("/accounts", sp, {
                     account: account.id,
                     accountNew: undefined,
                   }),
-                }
+                };
               }),
-            }
+            };
           })
           .filter((group) => group.count > 0)
-      : []
+      : [];
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
-    newAccountLabel: t('list.newAccount'),
+    title: t("list.title"),
+    description: t("list.description"),
+    newAccountLabel: t("list.newAccount"),
     canManageAccounts,
     currentParams: sp,
-    searchPlaceholder: t('list.searchPlaceholder'),
-    classLabel: tc('labels.class'),
+    searchPlaceholder: t("list.searchPlaceholder"),
+    classLabel: tc("labels.class"),
     classCounts,
     viewTabs: [
-      { href: '/accounts', label: t('list.views.list'), active: layout === 'list' },
+      { href: "/accounts", label: t("list.views.list"), active: layout === "list" },
       {
-        href: '/accounts?layout=hierarchy',
-        label: t('list.views.hierarchy'),
-        active: layout === 'hierarchy',
+        href: "/accounts?layout=hierarchy",
+        label: t("list.views.hierarchy"),
+        active: layout === "hierarchy",
       },
-      ...(mergesEnabled ? [{ href: '/accounts/merges', label: t('merge.history'), active: false }] : []),
+      ...(mergesEnabled
+        ? [{ href: "/accounts/merges", label: t("merge.history"), active: false }]
+        : []),
     ],
-    onList: layout === 'list',
-    onSearch: layout === 'hierarchy' && Boolean(q),
-    onHierarchy: layout === 'hierarchy' && !q,
-    showFilters: layout === 'hierarchy',
-    columnAccount: tc('labels.account'),
-    columnType: tc('labels.type'),
-    columnBalance: tc('labels.balance'),
-    columnActions: tc('labels.actions'),
-    viewRegisterLabel: t('list.viewRegister'),
+    onList: layout === "list",
+    onSearch: layout === "hierarchy" && Boolean(q),
+    onHierarchy: layout === "hierarchy" && !q,
+    showFilters: layout === "hierarchy",
+    columnAccount: tc("labels.account"),
+    columnType: tc("labels.type"),
+    columnBalance: tc("labels.balance"),
+    columnActions: tc("labels.actions"),
+    viewRegisterLabel: t("list.viewRegister"),
     rows: pageRows.map((a) => {
-      const bal = rolled.get(a.id) ?? '0.0000'
-      const parentPath = accountParentPath(a, byId)
+      const bal = rolled.get(a.id) ?? "0.0000";
+      const parentPath = accountParentPath(a, byId);
       return {
         id: a.id,
-        number: a.number ?? tc('labels.notSet'),
+        number: a.number ?? tc("labels.notSet"),
         name: a.name,
-        href: mergeHref('/accounts', sp, { account: a.id }),
+        href: mergeHref("/accounts", sp, { account: a.id }),
         isSummary: a.is_summary,
-        inactiveLabel: a.is_active ? null : t('list.badges.inactive'),
+        inactiveLabel: a.is_active ? null : t("list.badges.inactive"),
         parentPath: parentPath ? parentPath : null,
         typeLabel: typeLabel(a.type),
         balance: formatMoney(bal),
-        balanceTone: decimalCmp(bal, '0.0000') < 0 ? ('negative' as const) : ('default' as const),
+        balanceTone: decimalCmp(bal, "0.0000") < 0 ? ("negative" as const) : ("default" as const),
         balanceDrill: accountBalanceDrill({
           accountId: a.id,
-          label: `${a.number ?? ''} ${a.name}`.trim(),
+          label: `${a.number ?? ""} ${a.name}`.trim(),
           type: a.type,
           from: currentPeriod.from,
           to: currentPeriod.to,
           period: currentPeriod.presetId,
         }),
-        registerAriaLabel: `${t('list.viewRegister')}: ${a.number ?? ''} ${a.name}`.trim(),
-      }
+        registerAriaLabel: `${t("list.viewRegister")}: ${a.number ?? ""} ${a.name}`.trim(),
+      };
     }),
     total: matches.length,
     currentPage: params.page,
     perPage: FLAT_PER_PAGE,
     groups,
     hierarchyLabels: {
-      account: tc('labels.account'),
-      type: tc('labels.type'),
-      balance: tc('labels.balance'),
-      actions: tc('labels.actions'),
-      inactive: t('list.badges.inactive'),
-      viewRegister: t('list.viewRegister'),
-      expandAccount: t('list.expandAccount'),
-      collapseAccount: t('list.collapseAccount'),
+      account: tc("labels.account"),
+      type: tc("labels.type"),
+      balance: tc("labels.balance"),
+      actions: tc("labels.actions"),
+      inactive: t("list.badges.inactive"),
+      viewRegister: t("list.viewRegister"),
+      expandAccount: t("list.expandAccount"),
+      collapseAccount: t("list.collapseAccount"),
     },
     drawerOpen: Boolean(drawer),
-    drawerOutsideList: Boolean(drawer) && layout !== 'list',
+    drawerOutsideList: Boolean(drawer) && layout !== "list",
     drawer,
-  }
+  };
 }
 
-const f = ref<AccountsData>()
-const item = field
-const rootF = rootRef<AccountsData>()
+const f = ref<AccountsData>();
+const item = field;
+const rootF = rootRef<AccountsData>();
 
 export function accountsSpec(data: AccountsData): PageSpec {
   const newAccount = {
-    widget: 'new-account',
+    widget: "new-account",
     props: { currentParams: data.currentParams, label: data.newAccountLabel },
-  }
+  };
   return page({
-    route: '/accounts',
-    layout: 'list',
+    route: "/accounts",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
-          widget(newAccount.widget, newAccount.props, f('canManageAccounts')),
-          widget('module-home-tabs', { tabs: data.viewTabs }),
+          widget(newAccount.widget, newAccount.props, f("canManageAccounts")),
+          widget("module-home-tabs", { tabs: data.viewTabs }),
         ],
       }),
       {
-        ...grid('flex flex-wrap items-center gap-2', [
-          widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-          widgetBlock('filter-chips', {
-            basePath: '/accounts',
+        ...grid("flex flex-wrap items-center gap-2", [
+          widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+          widgetBlock("filter-chips", {
+            basePath: "/accounts",
             currentParams: data.currentParams,
-            paramKey: 'class',
+            paramKey: "class",
             label: data.classLabel,
             options: data.classCounts,
           }),
-          widgetBlock('show-inactives-toggle', {
-            basePath: '/accounts',
+          widgetBlock("show-inactives-toggle", {
+            basePath: "/accounts",
             currentParams: data.currentParams,
           }),
         ]),
-        when: f('showFilters'),
+        when: f("showFilters"),
       },
     ],
     body: [
       {
-        ...widgetBlock('entity-list-view', {
-          recordType: 'account',
+        ...widgetBlock("entity-list-view", {
+          recordType: "account",
           sp: data.currentParams,
-          drawer: data.drawer ? { widget: 'account-drawer', props: { drawer: data.drawer } } : null,
+          drawer: data.drawer ? { widget: "account-drawer", props: { drawer: data.drawer } } : null,
           emptyAction: data.canManageAccounts ? newAccount : null,
         }),
-        when: f('onList'),
+        when: f("onList"),
       },
       {
         // Flat search results use the shared registered list composition —
         // the loader's server window (total/currentPage/perPage below), never
         // a client reslice. The hierarchy tree and entity list stay as-is.
-        ...registeredListTable('accounts_search', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
+        ...registeredListTable("accounts_search", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
           columns: [
             column(
-              rootF('columnAccount'),
-              widgetCell('account-name-cell', {
-                number: item('number'),
-                name: item('name'),
-                href: item('href'),
-                isSummary: item('isSummary'),
-                inactiveLabel: item('inactiveLabel'),
-                parentPath: item('parentPath'),
+              rootF("columnAccount"),
+              widgetCell("account-name-cell", {
+                number: item("number"),
+                name: item("name"),
+                href: item("href"),
+                isSummary: item("isSummary"),
+                inactiveLabel: item("inactiveLabel"),
+                parentPath: item("parentPath"),
               }),
             ),
-            column(rootF('columnType'), text(item('typeLabel')), {
-              className: 'text-slate-500 dark:text-slate-400',
+            column(rootF("columnType"), text(item("typeLabel")), {
+              className: "text-slate-500 dark:text-slate-400",
             }),
             column(
-              rootF('columnBalance'),
-              drill(item('balanceDrill'), money(item('balance'), { tone: item('balanceTone') })),
-              { align: 'right' },
+              rootF("columnBalance"),
+              drill(item("balanceDrill"), money(item("balance"), { tone: item("balanceTone") })),
+              { align: "right" },
             ),
             column(
-              rootF('columnActions'),
-              widgetCell('account-register-cell', {
-                accountId: item('id'),
-                ariaLabel: item('registerAriaLabel'),
-                title: rootF('viewRegisterLabel'),
+              rootF("columnActions"),
+              widgetCell("account-register-cell", {
+                accountId: item("id"),
+                ariaLabel: item("registerAriaLabel"),
+                title: rootF("viewRegisterLabel"),
               }),
               // `align` would put `text-right` on the header too; the native
               // header carries only its width.
-              { className: 'text-right', headerClassName: 'w-14', srOnlyHeader: true },
+              { className: "text-right", headerClassName: "w-14", srOnlyHeader: true },
             ),
           ],
         }),
-        when: f('onSearch'),
+        when: f("onSearch"),
       },
       {
         ...pagination({
-          basePath: '/accounts',
-          total: f('total'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          basePath: "/accounts",
+          total: f("total"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
         }),
-        when: f('onSearch'),
+        when: f("onSearch"),
       },
       {
-        ...widgetBlock('accounts-hierarchy', {
+        ...widgetBlock("accounts-hierarchy", {
           groups: data.groups,
           labels: data.hierarchyLabels,
         }),
-        when: f('onHierarchy'),
+        when: f("onHierarchy"),
       },
       // The entity list renders the drawer itself, so only the other two
       // layouts place it here — the same arrangement the native page has.
       {
-        ...widgetBlock('account-drawer', { drawer: data.drawer }),
-        when: f('drawerOutsideList'),
+        ...widgetBlock("account-drawer", { drawer: data.drawer }),
+        when: f("drawerOutsideList"),
       },
     ],
-  })
+  });
 }

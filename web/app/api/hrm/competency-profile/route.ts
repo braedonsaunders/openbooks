@@ -17,10 +17,7 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz }) => {
     const employmentId = new URL(req.url).searchParams.get("employmentId");
     if (!employmentId || !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employmentId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employmentId must be a uuid" }, { status: 400 });
     }
     try {
       const profile = await competencyProfileForEmployment({

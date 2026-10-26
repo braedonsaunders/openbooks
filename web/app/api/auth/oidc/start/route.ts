@@ -16,7 +16,9 @@ function safeOidcNext(value: string | null): string {
 
 export async function GET(request: NextRequest) {
   try {
-    const flow = await beginOidcAuthorization(safeOidcNext(request.nextUrl.searchParams.get("next")));
+    const flow = await beginOidcAuthorization(
+      safeOidcNext(request.nextUrl.searchParams.get("next")),
+    );
     const response = NextResponse.redirect(flow.url);
     response.cookies.set(OIDC_FLOW_COOKIE, flow.flowCookie, {
       httpOnly: true,

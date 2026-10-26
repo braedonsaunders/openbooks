@@ -16,13 +16,15 @@ export class PayRunAdjustmentIdempotencyConflict extends Error {
   readonly status = 409 as const;
   readonly code = "idempotency-conflict" as const;
   constructor(reason: "changed-payload" | "foreign-key" | "corrected-request" | "source-recorded") {
-    super(reason === "source-recorded"
-      ? "This issued levy source already has an audited recording. Review that recording and its correction history instead of entering the same source again."
-      : reason === "foreign-key"
-      ? "This request key is already in use by another organization. Reopen the adjustment form to try again with a fresh request."
-      : reason === "corrected-request"
-      ? "This audited payroll input request has been corrected or removed. Review the current run input and submit any further correction with a fresh request key."
-      : "This adjustment was already saved with different details. Reopen the adjustment form to try again with a fresh request.");
+    super(
+      reason === "source-recorded"
+        ? "This issued levy source already has an audited recording. Review that recording and its correction history instead of entering the same source again."
+        : reason === "foreign-key"
+          ? "This request key is already in use by another organization. Reopen the adjustment form to try again with a fresh request."
+          : reason === "corrected-request"
+            ? "This audited payroll input request has been corrected or removed. Review the current run input and submit any further correction with a fresh request key."
+            : "This adjustment was already saved with different details. Reopen the adjustment form to try again with a fresh request.",
+    );
   }
 }
 
@@ -54,16 +56,22 @@ export function payRunBulkAdjustmentId(batchKey: string, employeePartyId: string
 export function persistAdjustmentMoney(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) {
-    throw new PayrollError("adjustment amount must be an exact decimal of at most 4 decimal places");
+    throw new PayrollError(
+      "adjustment amount must be an exact decimal of at most 4 decimal places",
+    );
   }
   let amount: string;
   try {
     amount = normalizeMoney(exact);
   } catch {
-    throw new PayrollError("adjustment amount must be an exact decimal of at most 4 decimal places");
+    throw new PayrollError(
+      "adjustment amount must be an exact decimal of at most 4 decimal places",
+    );
   }
   if (amount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
-    throw new PayrollError("adjustment amount is out of range — at most 15 whole digits fit the ledger");
+    throw new PayrollError(
+      "adjustment amount is out of range — at most 15 whole digits fit the ledger",
+    );
   }
   return amount;
 }
@@ -76,11 +84,15 @@ export function persistAdjustmentMoney(value: unknown): string {
  */
 export function persistAdjustmentHours(value: unknown, amount: string): string {
   const exact = canonicalDecimal(value, 2);
-  if (exact === null || exact.startsWith("-") && !amount.startsWith("-")) {
-    throw new PayrollError("adjustment hours must be a non-negative decimal of at most 2 decimal places");
+  if (exact === null || (exact.startsWith("-") && !amount.startsWith("-"))) {
+    throw new PayrollError(
+      "adjustment hours must be a non-negative decimal of at most 2 decimal places",
+    );
   }
   if (exact.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 10) {
-    throw new PayrollError("adjustment hours are out of range — at most 10 whole digits fit the ledger");
+    throw new PayrollError(
+      "adjustment hours are out of range — at most 10 whole digits fit the ledger",
+    );
   }
   return exact;
 }
@@ -94,7 +106,10 @@ export function persistAdjustmentHours(value: unknown, amount: string): string {
  * the 4dp money normalizer, which pads every value past the column scale so
  * the engine gate below rejects even whole hours.
  */
-export function canonicalAdjustmentHours(value: unknown, bankDepositAmount?: unknown): string | null {
+export function canonicalAdjustmentHours(
+  value: unknown,
+  bankDepositAmount?: unknown,
+): string | null {
   if (value == null || value === "") return null;
   const exact = canonicalDecimal(value, 2);
   if (exact === null) return null;
@@ -185,18 +200,34 @@ export type IncomeTaxOverrideEvidence = {
   requestId: string;
 };
 
-export function parseIncomeTaxOverrideEvidence(value: string | null): IncomeTaxOverrideEvidence | null {
+export function parseIncomeTaxOverrideEvidence(
+  value: string | null,
+): IncomeTaxOverrideEvidence | null {
   if (value == null) return null;
   try {
     const parsed = JSON.parse(value) as Partial<IncomeTaxOverrideEvidence>;
-    if (parsed.kind !== "income_tax_override" || typeof parsed.reason !== "string"
-      || typeof parsed.sourceReference !== "string" || typeof parsed.requestId !== "string") return null;
+    if (
+      parsed.kind !== "income_tax_override" ||
+      typeof parsed.reason !== "string" ||
+      typeof parsed.sourceReference !== "string" ||
+      typeof parsed.requestId !== "string"
+    )
+      return null;
     return parsed as IncomeTaxOverrideEvidence;
   } catch {
     return null;
   }
 }
 
-export function incomeTaxOverrideEvidence(reason: string, sourceReference: string, requestId: string): string {
-  return JSON.stringify({ kind: "income_tax_override", reason, sourceReference, requestId } satisfies IncomeTaxOverrideEvidence);
+export function incomeTaxOverrideEvidence(
+  reason: string,
+  sourceReference: string,
+  requestId: string,
+): string {
+  return JSON.stringify({
+    kind: "income_tax_override",
+    reason,
+    sourceReference,
+    requestId,
+  } satisfies IncomeTaxOverrideEvidence);
 }

@@ -19,11 +19,7 @@ import {
   reconciliationTotals,
   startReconciliation,
 } from "./banking.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 // A first reconciliation on a credit-card (liability) account from a
 // balance-less statement: the card owes 4,612.30 in GL terms (-4,612.30),
@@ -104,8 +100,18 @@ async function setupCardRecon(org: ScratchOrg, actor: string) {
       currency: "CAD",
       statementDate: "2026-10-03",
       lines: [
-        { postedOn: FIRST_LINE_DATE, amount: "200.00", description: "Card charge", bankTransactionId: "card-line-charge" },
-        { postedOn: "2026-10-03", amount: "-500.00", description: "Card payment", bankTransactionId: "card-line-payment" },
+        {
+          postedOn: FIRST_LINE_DATE,
+          amount: "200.00",
+          description: "Card charge",
+          bankTransactionId: "card-line-charge",
+        },
+        {
+          postedOn: "2026-10-03",
+          amount: "-500.00",
+          description: "Card payment",
+          bankTransactionId: "card-line-payment",
+        },
       ],
     },
     ctx,
@@ -118,11 +124,16 @@ async function setupCardRecon(org: ScratchOrg, actor: string) {
 }
 
 async function statementLineIds(orgId: string, cardId: string): Promise<string[]> {
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and account_id = ${cardId}
      order by posted_on asc
-  `, "objects")).map((row) => row.id);
+  `,
+      "objects",
+    )
+  ).map((row) => row.id);
 }
 
 test(
@@ -140,7 +151,11 @@ test(
       assert.equal(position.bookBalance, "-4612.3000");
 
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: await statementLineIds(org.orgId, cardId), journalLineIds: [chargeId, paymentId] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: await statementLineIds(org.orgId, cardId),
+          journalLineIds: [chargeId, paymentId],
+        },
         ctx,
       );
 
@@ -163,7 +178,10 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 2,
       });
-      assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 2 });
+      assert.deepEqual(await markReconciled(recon.id, ctx), {
+        status: "signed_off",
+        journalLinesReconciled: 2,
+      });
 
       // The GL-signed carry chains into the next session: new lines balance
       // on the carried opening exactly like the chequing path.
@@ -175,21 +193,35 @@ test(
           currency: "CAD",
           statementDate: "2026-10-20",
           lines: [
-            { postedOn: "2026-10-20", amount: "20.00", description: "Second charge", bankTransactionId: "card-second-charge" },
+            {
+              postedOn: "2026-10-20",
+              amount: "20.00",
+              description: "Second charge",
+              bankTransactionId: "card-second-charge",
+            },
           ],
         },
         ctx,
       );
-      const statement2Id = (await db.execute<{ id: string }>(sql`
+      const statement2Id = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'card-second-charge'
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const recon2 = await startReconciliation(
         { accountId: cardId, throughDate: "2026-10-20", statementBalance: "4332.30" },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon2.id, statementLineIds: [statement2Id], journalLineIds: [period2] },
+        {
+          reconciliationId: recon2.id,
+          statementLineIds: [statement2Id],
+          journalLineIds: [period2],
+        },
         ctx,
       );
       assert.deepEqual(await reconciliationTotals(recon2.id, ctx), {
@@ -200,7 +232,10 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 1,
       });
-      assert.deepEqual(await markReconciled(recon2.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
+      assert.deepEqual(await markReconciled(recon2.id, ctx), {
+        status: "signed_off",
+        journalLinesReconciled: 1,
+      });
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -216,7 +251,11 @@ test(
       const actor = await createWorkOperator(org.orgId, "Bank reviewer", ["banking.reconcile"]);
       const { ctx, cardId, recon, chargeId, paymentId } = await setupCardRecon(org, actor);
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: await statementLineIds(org.orgId, cardId), journalLineIds: [chargeId, paymentId] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: await statementLineIds(org.orgId, cardId),
+          journalLineIds: [chargeId, paymentId],
+        },
         ctx,
       );
       const totals = await confirmOpeningBalance(
@@ -247,7 +286,11 @@ test(
         /does not match the book balance carried in \(-4612\.3000 through 2026-10-02\)/,
       );
       await assert.rejects(
-        confirmOpeningBalance(recon.id, { openingBalance: CARD_OPENING_STATEMENT, reason: "ok" }, ctx),
+        confirmOpeningBalance(
+          recon.id,
+          { openingBalance: CARD_OPENING_STATEMENT, reason: "ok" },
+          ctx,
+        ),
         /between 5 and 500 characters/,
       );
       await assert.rejects(

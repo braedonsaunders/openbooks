@@ -9,11 +9,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { flowDocumentEffects } from "./document-effects-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import {
@@ -85,19 +81,13 @@ const RECORD_ROUTES: Record<string, (id: string) => string> = {
   quote: (id) => `/estimates?estimate=${id}`,
 };
 
-async function loadDoc(
-  subjectId: string,
-  orgId?: string,
-): Promise<DocRow | null> {
+async function loadDoc(subjectId: string, orgId?: string): Promise<DocRow | null> {
   const [doc] = await db
     .select()
     .from(schema.documents)
     .where(
       orgId
-        ? and(
-            eq(schema.documents.id, subjectId),
-            eq(schema.documents.orgId, orgId),
-          )
+        ? and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, orgId))
         : eq(schema.documents.id, subjectId),
     );
   return doc ?? null;
@@ -118,9 +108,7 @@ async function auditFlowDocumentUpdate(
 ): Promise<void> {
   const after = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
   if (!before || !after) {
-    throw new Error(
-      `flow document audit snapshot unavailable for ${subjectId}`,
-    );
+    throw new Error(`flow document audit snapshot unavailable for ${subjectId}`);
   }
   await recordTransactionAudit(db, {
     orgId: ctx.orgId,
@@ -142,10 +130,7 @@ async function auditFlowDocumentUpdate(
  * own unconditional literal so RESERVED_DOCUMENT_FIELD_KEYS can enumerate it —
  * add a column here and the reserved set follows automatically.
  */
-function builtinHeaderValues(
-  doc: DocRow,
-  partyName: string | null,
-): Record<string, unknown> {
+function builtinHeaderValues(doc: DocRow, partyName: string | null): Record<string, unknown> {
   return {
     id: doc.id,
     kind: doc.kind,
@@ -177,10 +162,7 @@ function builtinHeaderValues(
   };
 }
 
-export function headerValues(
-  doc: DocRow,
-  partyName: string | null,
-): Record<string, unknown> {
+export function headerValues(doc: DocRow, partyName: string | null): Record<string, unknown> {
   return {
     // Registered custom jsonb keys ride along for interpolation and conditions;
     // the tenant-aware authoring profile exposes only active definitions.
@@ -234,12 +216,15 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         const r = await db.execute<{
           display_name: string;
           eft_notification_email: string | null;
-        }>(sql`
+        }>(
+          sql`
           select p.display_name, vr.eft_notification_email
             from parties p
             left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
            where p.id = ${doc.partyId} and p.org_id = ${doc.orgId}
-        `, "objects");
+        `,
+          "objects",
+        );
         partyName = r[0]?.display_name ?? null;
         vendorEftEmail = r[0]?.eft_notification_email ?? null;
       }
@@ -255,10 +240,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         .orderBy(schema.documentLines.lineNumber);
       const values = headerValues(doc, partyName);
       if (kind === "quote")
-        Object.assign(
-          values,
-          await readDocumentApprovalFacts(kind, doc.orgId, subjectId),
-        );
+        Object.assign(values, await readDocumentApprovalFacts(kind, doc.orgId, subjectId));
       values.lineCount = lines.length;
       // The vendor's remittance address (vendor_roles.eft_notification_email)
       // — a `field` recipient target delivers to it directly (EFT emails).
@@ -276,9 +258,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
 
     label(subjectId: string, values: Record<string, unknown>): string {
       const kindLabel = String(values.kind ?? kind).replace(/_/g, " ");
-      const num = values.documentNumber
-        ? ` ${String(values.documentNumber)}`
-        : "";
+      const num = values.documentNumber ? ` ${String(values.documentNumber)}` : "";
       const party = values.partyName ? ` — ${String(values.partyName)}` : "";
       return `${kindLabel}${num}${party}` || subjectId;
     },
@@ -293,11 +273,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       return doc?.status ?? null;
     },
 
-    async changeStatus(
-      subjectId: string,
-      to: string,
-      ctx: FlowExecCtx,
-    ): Promise<void> {
+    async changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void> {
       const doc = await loadDoc(subjectId, ctx.orgId);
       if (!doc) throw new Error(`document ${subjectId} not found`);
       const legalFrom = STATUS_TRANSITIONS[to];
@@ -313,11 +289,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
           `illegal status transition ${doc.status} → ${to} for ${doc.documentNumber}`,
         );
       }
-      const before = await captureTransactionAuditSnapshot(
-        db,
-        subjectId,
-        ctx.orgId,
-      );
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
       await db
         .update(schema.documents)
         .set({
@@ -325,29 +297,17 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
           updatedBy: ctx.userId ?? null,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(schema.documents.id, subjectId),
-            eq(schema.documents.orgId, ctx.orgId),
-          ),
-        );
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
       await auditFlowDocumentUpdate(subjectId, ctx, before);
     },
 
-    async markAwaitingApproval(
-      subjectId: string,
-      ctx: FlowExecCtx,
-    ): Promise<void> {
+    async markAwaitingApproval(subjectId: string, ctx: FlowExecCtx): Promise<void> {
       // Submit parity for retried runs (flows/run.ts): the draft → pending
       // transition submitForApproval owns on the first attempt. Only acts
       // from draft, so replays and already-parked records are no-ops.
       const doc = await loadDoc(subjectId, ctx.orgId);
       if (!doc || doc.status !== "draft") return;
-      const before = await captureTransactionAuditSnapshot(
-        db,
-        subjectId,
-        ctx.orgId,
-      );
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
       await db
         .update(schema.documents)
         .set({
@@ -357,12 +317,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
           updatedBy: ctx.userId ?? doc.createdBy,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(schema.documents.id, subjectId),
-            eq(schema.documents.orgId, ctx.orgId),
-          ),
-        );
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
       await auditFlowDocumentUpdate(subjectId, ctx, before);
     },
 
@@ -376,20 +331,13 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       // change_status node. Only acts while the record is awaiting approval, so
       // it is idempotent and never fights a status a later action set.
       const doc = await loadDoc(subjectId, ctx.orgId);
-      if (
-        doc?.voidRequestedAt &&
-        (doc.status === "posted" || doc.status === "approved")
-      ) {
+      if (doc?.voidRequestedAt && (doc.status === "posted" || doc.status === "approved")) {
         // Void completion lives behind the installed document-effects port
         // The adapter never imports ledger. Runs inline in this call
         // chain, so the ambient pinned org transaction is unchanged.
         const effects = flowDocumentEffects();
         if (outcome === "approved") {
-          await effects.completeRequestedVoid(
-            subjectId,
-            ctx.orgId,
-            ctx.allowedSubsidiaryIds,
-          );
+          await effects.completeRequestedVoid(subjectId, ctx.orgId, ctx.allowedSubsidiaryIds);
         } else {
           await effects.rejectRequestedVoid(
             subjectId,
@@ -402,27 +350,16 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       }
       if (!doc || doc.status !== "pending_approval") return;
       const to = outcome === "approved" ? "approved" : "draft";
-      const before = await captureTransactionAuditSnapshot(
-        db,
-        subjectId,
-        ctx.orgId,
-      );
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
       await db
         .update(schema.documents)
         .set({
           status: to as DocRow["status"],
-          ...(outcome === "rejected"
-            ? { submittedBy: null, submittedAt: null }
-            : {}),
+          ...(outcome === "rejected" ? { submittedBy: null, submittedAt: null } : {}),
           updatedBy: ctx.userId ?? null,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(schema.documents.id, subjectId),
-            eq(schema.documents.orgId, ctx.orgId),
-          ),
-        );
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
       await auditFlowDocumentUpdate(subjectId, ctx, before, detail?.comment);
     },
 
@@ -443,11 +380,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       ) {
         throw new Error(`payment field "${field}" is not writable by flows`);
       }
-      const consolidationRefusal = await consolidationSourceRefusal(
-        db,
-        ctx.orgId,
-        subjectId,
-      );
+      const consolidationRefusal = await consolidationSourceRefusal(db, ctx.orgId, subjectId);
       if (consolidationRefusal) throw new Error(consolidationRefusal);
       if (["vendor_payment", "customer_payment"].includes(kind)) {
         await lockEditablePaymentDocument(subjectId, ctx.orgId, {
@@ -456,28 +389,25 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       }
       const headerField = WRITABLE_DOCUMENT_FIELDS.has(field);
       if (!headerField) {
-        const customField = await db.execute(sql`
+        const customField = await db.execute(
+          sql`
           select 1 from custom_field_defs
            where org_id = ${ctx.orgId} and target_table = 'documents'
              and (target_kind is null or target_kind = ${kind})
              and key = ${field} and is_active
            limit 1
-        `, "objects");
+        `,
+          "objects",
+        );
         if (customField.length === 0) {
           throw new Error(`field "${field}" is not writable by flows`);
         }
         // The value writes around applyDocumentEdit: prove shape and org
         // ownership, or a foreign reference id persists as a silent
         // cross-tenant pointer (custom jsonb has no constraint at all).
-        await assertDocumentMutationRefsOwned(ctx.orgId, kind, [
-          { field, value },
-        ]);
+        await assertDocumentMutationRefsOwned(ctx.orgId, kind, [{ field, value }]);
       }
-      const before = await captureTransactionAuditSnapshot(
-        db,
-        subjectId,
-        ctx.orgId,
-      );
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
       if (!headerField) {
         await db.execute(sql`
           update documents
@@ -489,9 +419,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         return;
       }
       // Native dims write around applyDocumentEdit too: same ownership fence.
-      await assertDocumentMutationRefsOwned(ctx.orgId, kind, [
-        { field, value },
-      ]);
+      await assertDocumentMutationRefsOwned(ctx.orgId, kind, [{ field, value }]);
       await db
         .update(schema.documents)
         .set({
@@ -499,12 +427,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
           updatedBy: ctx.userId ?? null,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(schema.documents.id, subjectId),
-            eq(schema.documents.orgId, ctx.orgId),
-          ),
-        );
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
       await auditFlowDocumentUpdate(subjectId, ctx, before);
     },
 
@@ -522,12 +445,15 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
           `findCandidateIds for "${kind}" requires an ambient tenant context (withOrg)`,
         );
       }
-      const r = await db.execute<{ id: string }>(sql`
+      const r = await db.execute<{ id: string }>(
+        sql`
         select id from documents
          where org_id = ${orgId} and kind = ${kind} and status <> 'voided'
          order by created_at desc
          limit ${limit}
-      `, "objects");
+      `,
+        "objects",
+      );
       return r.map((row) => row.id);
     },
   });

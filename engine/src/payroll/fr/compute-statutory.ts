@@ -1,4 +1,4 @@
-import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";;
+import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * The FR pack's statutory pass: PAS (prélèvement à la source) for calendar
  * 2026.
@@ -66,12 +66,20 @@ import {
   frPasDefaultRateUnits,
   frPasEditionForVersement,
 } from "./tables-2026.ts";
-import { calculateFrApec2026, calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
+import {
+  calculateFrApec2026,
+  calculateFrCotisations2026,
+  calculateFrNetImposable2026,
+} from "./cotisations.ts";
 import { frAllocFamReducedEligible } from "./statutory-rates.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import "./employee-facts.ts";
-import { calculateFrRgdu2026, committedFrRgduYearToDate, frRgduSmicFromHours2026 } from "./rgdu-2026.ts";
+import {
+  calculateFrRgdu2026,
+  committedFrRgduYearToDate,
+  frRgduSmicFromHours2026,
+} from "./rgdu-2026.ts";
 import { committedFrPlafondYearToDate, frCeilingThirtieths } from "./plafond-ytd.ts";
 
 const U = (s: string): bigint => toUnits(s);
@@ -82,7 +90,7 @@ const CENT_UNITS = 100n;
 
 /** Exact 1e6-scale rate from a PERCENT string ("2.9" means 2.9 %). */
 function percent6(value: string): bigint {
-  const canonical = canonicalNonNegativeDecimal(value,2);
+  const canonical = canonicalNonNegativeDecimal(value, 2);
   if (canonical === null) {
     throw new PayrollPackError(
       `FR PAS transmitted rate is not a percent with at most two decimals: "${value}"`,
@@ -107,12 +115,12 @@ export type FrDomicile = "metropole" | "hors_de_france";
  */
 function horsDeFrance182ARefusal(): never {
   throw new PayrollPackError(
-    `FR PAS refuses a hors-de-France domicile for wages: salaires for work in France paid to a person `
-    + `not fiscally domiciled in France fall under the retenue à la source of CGI art. 182 A — a separate `
-    + `annual barème after a 10 % abatement, "directement prélevée par votre employeur" (DGFiP, Particularités `
-    + `de la fiscalité des non-résidents, fiche 03-2026), "différente du prélèvement à la source (PAS), appliqué `
-    + `aux résidents fiscaux de France". The 182 A barème is not transcribed (see FR_REFUSED_2026) — refusing, `
-    + `never priced with grille I.`,
+    `FR PAS refuses a hors-de-France domicile for wages: salaires for work in France paid to a person ` +
+      `not fiscally domiciled in France fall under the retenue à la source of CGI art. 182 A — a separate ` +
+      `annual barème after a 10 % abatement, "directement prélevée par votre employeur" (DGFiP, Particularités ` +
+      `de la fiscalité des non-résidents, fiche 03-2026), "différente du prélèvement à la source (PAS), appliqué ` +
+      `aux résidents fiscaux de France". The 182 A barème is not transcribed (see FR_REFUSED_2026) — refusing, ` +
+      `never priced with grille I.`,
   );
 }
 
@@ -198,19 +206,20 @@ export function calculateFrPas2026(input: FrPas2026Input): FrPas2026Result {
   if (input.domicile === "hors_de_france") horsDeFrance182ARefusal();
   if (input.domicile !== "metropole") {
     throw new PayrollPackError(
-      `FR PAS grille lookup refused for domicile "${input.domicile}": only `
-      + "grille I (métropole) computes — grilles II "
-      + "(Guadeloupe, Réunion, Martinique) and III (Guyane, Mayotte) are "
-      + "refused by name, never approximated (see FR_REFUSED_2026).",
+      `FR PAS grille lookup refused for domicile "${input.domicile}": only ` +
+        "grille I (métropole) computes — grilles II " +
+        "(Guadeloupe, Réunion, Martinique) and III (Guyane, Mayotte) are " +
+        "refused by name, never approximated (see FR_REFUSED_2026).",
     );
   }
   const edition = frPasEditionForVersement(input.payDate);
   const bands = edition === "may2025" ? FR_PAS_METROPOLE_MAY2025 : FR_PAS_METROPOLE_MAY2026;
 
   // Monthly equivalent for the lookup (§180), rounded to the centime.
-  const monthlyBase = input.periodsPerYear === 12
-    ? rCent(base)
-    : rCent(roundDiv(base * BigInt(input.periodsPerYear), 12n));
+  const monthlyBase =
+    input.periodsPerYear === 12
+      ? rCent(base)
+      : rCent(roundDiv(base * BigInt(input.periodsPerYear), 12n));
 
   let ratePct6: bigint;
   let rateSource: FrPas2026Result["rateSource"];
@@ -249,59 +258,68 @@ export function calculateFrPas2026(input: FrPas2026Input): FrPas2026Result {
 export async function computeFrStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { taxYear, region, run, income, nonPeriodic, periodsPerYear, pushStatutory, certificateFor } = ctx;
+  const {
+    taxYear,
+    region,
+    run,
+    income,
+    nonPeriodic,
+    periodsPerYear,
+    pushStatutory,
+    certificateFor,
+  } = ctx;
   if (taxYear !== 2026) {
     throw new PayrollPackError(
-      `FR PAS withholding for tax year ${taxYear} has not been transcribed `
-      + "— the FR payroll pack's only transcribed year is calendar 2026. "
-      + "This year is not yet supported by the FR pack; contact support.",
+      `FR PAS withholding for tax year ${taxYear} has not been transcribed ` +
+        "— the FR payroll pack's only transcribed year is calendar 2026. " +
+        "This year is not yet supported by the FR pack; contact support.",
     );
   }
   if (region !== "FR") {
     throw new PayrollPackError(
-      `FR PAS withholding for region "${region}" is not supported: the pack `
-      + "knows one national region, FR — PAS is national. DOM grilles II and "
-      + "III are keyed by domicile on the fr_pas_option certificate, not by "
-      + "region, and are refused below by domicile name.",
+      `FR PAS withholding for region "${region}" is not supported: the pack ` +
+        "knows one national region, FR — PAS is national. DOM grilles II and " +
+        "III are keyed by domicile on the fr_pas_option certificate, not by " +
+        "region, and are refused below by domicile name.",
     );
   }
   const payDate = run["pay_date"];
   if (!payDate) {
     throw new PayrollPackError(
-      "FR PAS needs the versement date (run pay_date) to select the grille "
-      + "edition in force — January–April 2026 versements use the May-2025 "
-      + "grids, May–December the May-2026 grids.",
+      "FR PAS needs the versement date (run pay_date) to select the grille " +
+        "edition in force — January–April 2026 versements use the May-2025 " +
+        "grids, May–December the May-2026 grids.",
     );
   }
   const answers = certificateFor("fr_pas_option")?.answers ?? {};
   const domicile = answers["domicile"];
   if (domicile === "guadeloupe_reunion_martinique") {
     throw new PayrollPackError(
-      "FR PAS grille lookup refused: domicile Guadeloupe / Réunion / "
-      + "Martinique uses grille II, which is not transcribed "
-      + "(see FR_REFUSED_2026). Grille I (métropole) is never substituted.",
+      "FR PAS grille lookup refused: domicile Guadeloupe / Réunion / " +
+        "Martinique uses grille II, which is not transcribed " +
+        "(see FR_REFUSED_2026). Grille I (métropole) is never substituted.",
     );
   }
   if (domicile === "guyane_mayotte") {
     throw new PayrollPackError(
-      "FR PAS grille lookup refused: domicile Guyane / Mayotte uses grille "
-      + "III, which is not transcribed (see FR_REFUSED_2026). Grille I "
-      + "(métropole) is never substituted.",
+      "FR PAS grille lookup refused: domicile Guyane / Mayotte uses grille " +
+        "III, which is not transcribed (see FR_REFUSED_2026). Grille I " +
+        "(métropole) is never substituted.",
     );
   }
   if (domicile === "hors_de_france") horsDeFrance182ARefusal();
   if (domicile === "metropole_hors_france") {
     throw new PayrollPackError(
-      `FR PAS needs a re-affirmed domicile (fr_pas_option): "metropole_hors_france" lumped métropole residents `
-      + `with persons domiciled hors de France, who price under different mechanisms (PAS grille I vs the CGI `
-      + `art. 182 A retenue) — re-affirm domicile as "metropole" or "hors_de_france".`,
+      `FR PAS needs a re-affirmed domicile (fr_pas_option): "metropole_hors_france" lumped métropole residents ` +
+        `with persons domiciled hors de France, who price under different mechanisms (PAS grille I vs the CGI ` +
+        `art. 182 A retenue) — re-affirm domicile as "metropole" or "hors_de_france".`,
     );
   }
   if (domicile !== "metropole") {
     throw new PayrollPackError(
-      "FR PAS needs an affirmed domicile (fr_pas_option … domicile = "
-      + `"metropole" or "hors_de_france"): the grilles — and the 182 A retenue — differ by domicile and `
-      + "an undeclared domicile must not fall through to grille I.",
+      "FR PAS needs an affirmed domicile (fr_pas_option … domicile = " +
+        `"metropole" or "hors_de_france"): the grilles — and the 182 A retenue — differ by domicile and ` +
+        "an undeclared domicile must not fall through to grille I.",
     );
   }
   const transmitted = answers["taux_transmis"] ?? null;
@@ -312,14 +330,16 @@ export async function computeFrStatutory(
   // (and the allowance) is moot. See FR_REFUSED_2026.
   if (answers["short_contract"] === "true" && (transmitted == null || transmitted === "")) {
     throw new PayrollPackError(
-      "FR PAS refuses a declared short contract (CDD ou mission d'intérim of no more than two months, "
-      + "BOI-IR-PAS-20-20-30-10 §230–250) without a transmitted DGFiP rate: the €748/€766 contrats-courts "
-      + "abattement (BOI-BAREME-000037) is not computed. Transmit the employee's DGFiP rate, or wait for "
-      + "allowance support, before calculating.",
+      "FR PAS refuses a declared short contract (CDD ou mission d'intérim of no more than two months, " +
+        "BOI-IR-PAS-20-20-30-10 §230–250) without a transmitted DGFiP rate: the €748/€766 contrats-courts " +
+        "abattement (BOI-BAREME-000037) is not computed. Transmit the employee's DGFiP rate, or wait for " +
+        "allowance support, before calculating.",
     );
   }
   if (!ctx.subsidiaryId) {
-    throw new PayrollPackError("FR RGDU needs the paying legal-employer identity to resolve its effective employer facts.");
+    throw new PayrollPackError(
+      "FR RGDU needs the paying legal-employer identity to resolve its effective employer facts.",
+    );
   }
   const employerEffectif = await resolveStoredEmployerFact({
     tx: ctx.tx,
@@ -330,39 +350,49 @@ export async function computeFrStatutory(
     asOf: payDate,
   });
   const base = D(U(income) + U(nonPeriodic === "" ? "0" : nonPeriodic));
-  const agsEmployerType = U(base) > 0n ? await resolveStoredEmployerFact({
-    tx: ctx.tx,
-    orgId: ctx.orgId,
-    subsidiaryId: ctx.subsidiaryId,
-    country: "FR",
-    factKey: "fr_ags_employer_type",
-    asOf: payDate,
-  }) : null;
+  const agsEmployerType =
+    U(base) > 0n
+      ? await resolveStoredEmployerFact({
+          tx: ctx.tx,
+          orgId: ctx.orgId,
+          subsidiaryId: ctx.subsidiaryId,
+          country: "FR",
+          factKey: "fr_ags_employer_type",
+          asOf: payDate,
+        })
+      : null;
   // The taxe d'apprentissage regime is a required legal-employer fact: absent
   // refuses by name (Payroll Setup → Employer facts, payroll country France),
   // never falls through to the 0,68 % mainland rate.
-  const apprentissageRegime = U(base) > 0n ? await resolveStoredEmployerFact({
-    tx: ctx.tx,
-    orgId: ctx.orgId,
-    subsidiaryId: ctx.subsidiaryId,
-    country: "FR",
-    factKey: "fr_apprentissage_regime",
-    asOf: payDate,
-  }) : null;
+  const apprentissageRegime =
+    U(base) > 0n
+      ? await resolveStoredEmployerFact({
+          tx: ctx.tx,
+          orgId: ctx.orgId,
+          subsidiaryId: ctx.subsidiaryId,
+          country: "FR",
+          factKey: "fr_apprentissage_regime",
+          asOf: payDate,
+        })
+      : null;
   // The CDD flag has no producer channel yet: absent reads as CDI (the
   // es_contrato_temporal precedent) and only a present-but-foreign value
   // refuses, through the shared employee-fact gate.
-  const contratCdd = resolveEmployeeFact(
-    "FR", "fr_contrat_cdd", empFact("FR", ctx.emp ?? {}, "fr_contrat_cdd"),
-  ) === "true";
+  const contratCdd =
+    resolveEmployeeFact("FR", "fr_contrat_cdd", empFact("FR", ctx.emp ?? {}, "fr_contrat_cdd")) ===
+    "true";
   // APEC prices only for attested covered workers; uncovered tranches and
   // periods price zero through the same function, never a silent skip.
   const apecEligibility = resolveEmployeeFact(
     "FR",
     "fr_apec_eligibility",
-    empFact("FR", {
-      fr_apec_eligibility: certificateFor("fr_apec_status")?.answers.apec_eligibility ?? null,
-    }, "fr_apec_eligibility"),
+    empFact(
+      "FR",
+      {
+        fr_apec_eligibility: certificateFor("fr_apec_status")?.answers.apec_eligibility ?? null,
+      },
+      "fr_apec_eligibility",
+    ),
   );
   const apec = calculateFrApec2026({
     brut: base,
@@ -437,14 +467,17 @@ export async function computeFrStatutory(
     payDate,
     periodsPerYear,
     ytdRemunerationBefore: plafondHistory.ytdGross,
-    ceilingPeriodsElapsed: periodsPerYear === 12
-      ? Number(payDate.slice(5, 7))
-      : plafondHistory.priorStubCount + 1,
-    ceilingThirtieths: periodsPerYear === 12
-      ? frCeilingThirtieths({
-        taxYear, payDate, hiredOn: ctx.emp["hired_on"], terminatedOn: ctx.emp["terminated_on"],
-      })
-      : undefined,
+    ceilingPeriodsElapsed:
+      periodsPerYear === 12 ? Number(payDate.slice(5, 7)) : plafondHistory.priorStubCount + 1,
+    ceilingThirtieths:
+      periodsPerYear === 12
+        ? frCeilingThirtieths({
+            taxYear,
+            payDate,
+            hiredOn: ctx.emp["hired_on"],
+            terminatedOn: ctx.emp["terminated_on"],
+          })
+        : undefined,
     employerEffectif,
     allocFamReducedEligible,
     agsInterim: agsEmployerType === "temporary_work_agency",
@@ -454,14 +487,18 @@ export async function computeFrStatutory(
     contratCdd,
   });
   if (ctx.gross == null) {
-    throw new PayrollPackError("FR RGDU cannot calculate because the payroll engine did not supply this stub's contributory gross.");
+    throw new PayrollPackError(
+      "FR RGDU cannot calculate because the payroll engine did not supply this stub's contributory gross.",
+    );
   }
   const rgduEmployeeFacts = {
     fr_rgdu_eligible: answers["rgdu_eligibility"] ?? null,
     fr_rgdu_regular_hours: ctx.statutoryHours?.regular ?? null,
   };
   const employeeEligibility = resolveEmployeeFact(
-    "FR", "fr_rgdu_eligible", empFact("FR", rgduEmployeeFacts, "fr_rgdu_eligible"),
+    "FR",
+    "fr_rgdu_eligible",
+    empFact("FR", rgduEmployeeFacts, "fr_rgdu_eligible"),
   );
   const eligible = employeeEligibility === "eligible";
   if (eligible && !ctx.employmentId) {
@@ -469,20 +506,24 @@ export async function computeFrStatutory(
       "FR RGDU refuses this employee: an employment contract is required to apply the contract-specific annual calculation (CSS D.241-7 V). Record the worker's legal employment before calculating.",
     );
   }
-  const history = eligible ? await committedFrRgduYearToDate({
-    tx: ctx.tx,
-    orgId: ctx.orgId,
-    subsidiaryId: ctx.subsidiaryId,
-    employeePartyId: ctx.employeePartyId,
-    employmentId: ctx.employmentId!,
-    taxYear,
-    payDate,
-    excludeDocumentId: ctx.documentId,
-  }) : { remuneration: "0", smic: "0", reduction: "0" };
+  const history = eligible
+    ? await committedFrRgduYearToDate({
+        tx: ctx.tx,
+        orgId: ctx.orgId,
+        subsidiaryId: ctx.subsidiaryId,
+        employeePartyId: ctx.employeePartyId,
+        employmentId: ctx.employmentId!,
+        taxYear,
+        payDate,
+        excludeDocumentId: ctx.documentId,
+      })
+    : { remuneration: "0", smic: "0", reduction: "0" };
   let currentSmic = "0";
   if (eligible && run["run_type"] === "regular") {
     const regularHours = resolveEmployeeFact(
-      "FR", "fr_rgdu_regular_hours", empFact("FR", rgduEmployeeFacts, "fr_rgdu_regular_hours"),
+      "FR",
+      "fr_rgdu_regular_hours",
+      empFact("FR", rgduEmployeeFacts, "fr_rgdu_regular_hours"),
     );
     if (regularHours == null) {
       throw new PayrollPackError(
@@ -495,13 +536,17 @@ export async function computeFrStatutory(
   const smicYtd = D(U(history.smic) + U(currentSmic));
   const contributoryBase = U(base);
   const coveredAtmp = roundDiv(contributoryBase * 4_900n, RATE6);
-  const urssafCoveredAmount = U(cots.maladieEr) + U(cots.vieillesseEr)
-    + U(cots.allocFamEr) + U(cots.fnalEr) + U(cots.csaEr) + U(cots.chomageEr)
-    + coveredAtmp;
+  const urssafCoveredAmount =
+    U(cots.maladieEr) +
+    U(cots.vieillesseEr) +
+    U(cots.allocFamEr) +
+    U(cots.fnalEr) +
+    U(cots.csaEr) +
+    U(cots.chomageEr) +
+    coveredAtmp;
   const agircArrcoCoveredAmount = U(cots.arrcoEr) + U(cots.cegEr) + U(cots.cetEr);
-  const coveredRate = (amount: bigint): string => contributoryBase === 0n
-    ? "0"
-    : D(roundDiv(amount * 10_000n, contributoryBase));
+  const coveredRate = (amount: bigint): string =>
+    contributoryBase === 0n ? "0" : D(roundDiv(amount * 10_000n, contributoryBase));
   const urssafCoveredRate = coveredRate(urssafCoveredAmount);
   const agircArrcoCoveredRate = coveredRate(agircArrcoCoveredAmount);
   const rgdu = calculateFrRgdu2026({
@@ -514,29 +559,137 @@ export async function computeFrStatutory(
     agircArrcoCoveredRate,
   });
   const signedReduction = (amount: string): string => D(-U(amount));
-  pushStatutory("rgdu_urssaf", "employer_contribution", "Réduction générale (part Urssaf)", signedReduction(rgdu.urssafAdjustment), 250);
-  pushStatutory("rgdu_arrco", "employer_contribution", "Réduction générale (part Agirc-Arrco)", signedReduction(rgdu.agircArrcoAdjustment), 251);
+  pushStatutory(
+    "rgdu_urssaf",
+    "employer_contribution",
+    "Réduction générale (part Urssaf)",
+    signedReduction(rgdu.urssafAdjustment),
+    250,
+  );
+  pushStatutory(
+    "rgdu_arrco",
+    "employer_contribution",
+    "Réduction générale (part Agirc-Arrco)",
+    signedReduction(rgdu.agircArrcoAdjustment),
+    251,
+  );
   pushStatutory("pas", "deduction", "Prélèvement à la source", result.pas, 110);
-  pushStatutory("vieillesse", "deduction", "Assurance vieillesse (salariale)", cots.vieillesseSal, 120);
+  pushStatutory(
+    "vieillesse",
+    "deduction",
+    "Assurance vieillesse (salariale)",
+    cots.vieillesseSal,
+    120,
+  );
   pushStatutory("csg", "deduction", "CSG (salariale)", cots.csg, 130);
   pushStatutory("crds", "deduction", "CRDS (salariale)", cots.crds, 135);
-  pushStatutory("maladie_er", "employer_contribution", "Assurance maladie (employeur)", cots.maladieEr, 210);
-  pushStatutory("vieillesse_er", "employer_contribution", "Assurance vieillesse (employeur)", cots.vieillesseEr, 211);
-  pushStatutory("allocfam_er", "employer_contribution", "Allocations familiales (employeur)", cots.allocFamEr, 215);
-  pushStatutory("chomage_er", "employer_contribution", "Assurance chômage (employeur)", cots.chomageEr, 225);
+  pushStatutory(
+    "maladie_er",
+    "employer_contribution",
+    "Assurance maladie (employeur)",
+    cots.maladieEr,
+    210,
+  );
+  pushStatutory(
+    "vieillesse_er",
+    "employer_contribution",
+    "Assurance vieillesse (employeur)",
+    cots.vieillesseEr,
+    211,
+  );
+  pushStatutory(
+    "allocfam_er",
+    "employer_contribution",
+    "Allocations familiales (employeur)",
+    cots.allocFamEr,
+    215,
+  );
+  pushStatutory(
+    "chomage_er",
+    "employer_contribution",
+    "Assurance chômage (employeur)",
+    cots.chomageEr,
+    225,
+  );
   pushStatutory("ags_er", "employer_contribution", "Cotisation AGS (employeur)", cots.agsEr, 226);
-  pushStatutory("cdn_er", "employer_contribution", "FNAL, CSA et dialogue social (employeur)", cots.cdnEr, 230);
-  pushStatutory("cfp_er", "employer_contribution", "Contribution à la formation professionnelle (employeur)", cots.cfpEr, 227);
-  pushStatutory("apprentissage_er", "employer_contribution", "Taxe d'apprentissage (employeur)", cots.apprentissageEr, 228);
-  pushStatutory("cpf_cdd_er", "employer_contribution", "Contribution CPF-CDD (employeur)", cots.cpfCddEr, 229);
-  pushStatutory("atmp", "employer_contribution", "Accidents du travail et maladies professionnelles (employeur)", cots.atmpEr, 220);
-  pushStatutory("versement_mobilite_er", "employer_contribution", "Versement mobilité (employeur)", cots.versementMobiliteEr, 221);
+  pushStatutory(
+    "cdn_er",
+    "employer_contribution",
+    "FNAL, CSA et dialogue social (employeur)",
+    cots.cdnEr,
+    230,
+  );
+  pushStatutory(
+    "cfp_er",
+    "employer_contribution",
+    "Contribution à la formation professionnelle (employeur)",
+    cots.cfpEr,
+    227,
+  );
+  pushStatutory(
+    "apprentissage_er",
+    "employer_contribution",
+    "Taxe d'apprentissage (employeur)",
+    cots.apprentissageEr,
+    228,
+  );
+  pushStatutory(
+    "cpf_cdd_er",
+    "employer_contribution",
+    "Contribution CPF-CDD (employeur)",
+    cots.cpfCddEr,
+    229,
+  );
+  pushStatutory(
+    "atmp",
+    "employer_contribution",
+    "Accidents du travail et maladies professionnelles (employeur)",
+    cots.atmpEr,
+    220,
+  );
+  pushStatutory(
+    "versement_mobilite_er",
+    "employer_contribution",
+    "Versement mobilité (employeur)",
+    cots.versementMobiliteEr,
+    221,
+  );
   pushStatutory("arrco", "deduction", "Retraite complémentaire (salariale)", cots.arrcoSal, 140);
-  pushStatutory("arrco", "employer_contribution", "Retraite complémentaire (employeur)", cots.arrcoEr, 240);
-  pushStatutory("ceg", "deduction", "Contribution d'équilibre général (salariale)", cots.cegSal, 141);
-  pushStatutory("ceg", "employer_contribution", "Contribution d'équilibre général (employeur)", cots.cegEr, 241);
-  pushStatutory("cet", "deduction", "Contribution d'équilibre technique (salariale)", cots.cetSal, 142);
-  pushStatutory("cet", "employer_contribution", "Contribution d'équilibre technique (employeur)", cots.cetEr, 242);
+  pushStatutory(
+    "arrco",
+    "employer_contribution",
+    "Retraite complémentaire (employeur)",
+    cots.arrcoEr,
+    240,
+  );
+  pushStatutory(
+    "ceg",
+    "deduction",
+    "Contribution d'équilibre général (salariale)",
+    cots.cegSal,
+    141,
+  );
+  pushStatutory(
+    "ceg",
+    "employer_contribution",
+    "Contribution d'équilibre général (employeur)",
+    cots.cegEr,
+    241,
+  );
+  pushStatutory(
+    "cet",
+    "deduction",
+    "Contribution d'équilibre technique (salariale)",
+    cots.cetSal,
+    142,
+  );
+  pushStatutory(
+    "cet",
+    "employer_contribution",
+    "Contribution d'équilibre technique (employeur)",
+    cots.cetEr,
+    242,
+  );
   pushStatutory("apec", "deduction", "Cotisation APEC (salariale)", apec.employee, 143);
   pushStatutory("apec", "employer_contribution", "Cotisation APEC (employeur)", apec.employer, 243);
   return {

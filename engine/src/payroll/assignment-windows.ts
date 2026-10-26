@@ -42,9 +42,10 @@ export function assignmentCoveredDays(args: {
   periodEnd: string;
 }): { coveredDays: number; periodDays: number } {
   const from = args.effectiveFrom > args.periodStart ? args.effectiveFrom : args.periodStart;
-  const through = args.effectiveTo == null || args.effectiveTo > args.periodEnd
-    ? args.periodEnd
-    : args.effectiveTo;
+  const through =
+    args.effectiveTo == null || args.effectiveTo > args.periodEnd
+      ? args.periodEnd
+      : args.effectiveTo;
   return {
     coveredDays: through >= from ? inclusiveCalendarDays(from, through) : 0,
     periodDays: inclusiveCalendarDays(args.periodStart, args.periodEnd),
@@ -63,6 +64,8 @@ export function assignmentCoversPeriod(args: {
   periodStart: string;
   periodEnd: string;
 }): boolean {
-  return args.effectiveFrom <= args.periodStart
-    && (args.effectiveTo == null || args.effectiveTo >= args.periodEnd);
+  return (
+    args.effectiveFrom <= args.periodStart &&
+    (args.effectiveTo == null || args.effectiveTo >= args.periodEnd)
+  );
 }

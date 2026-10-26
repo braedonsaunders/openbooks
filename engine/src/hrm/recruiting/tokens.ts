@@ -42,9 +42,7 @@ function secret(): string {
   // Fail closed — a guessable constant would be a cross-tenant forgery hole.
   const key = process.env.FLOWS_EMAIL_SECRET || process.env.SESSION_SECRET;
   if (!key) {
-    throw new Error(
-      "FLOWS_EMAIL_SECRET or SESSION_SECRET must be set to sign recruiting links",
-    );
+    throw new Error("FLOWS_EMAIL_SECRET or SESSION_SECRET must be set to sign recruiting links");
   }
   return key;
 }
@@ -60,7 +58,10 @@ export function createRecruitingToken(args: {
   /** Override for tests; defaults to now + the purpose TTL. */
   expiresAt?: number;
 }): string {
-  if (!args.rowId) throw new Error("a recruiting token needs a row id — name the interview, offer, or org it opens");
+  if (!args.rowId)
+    throw new Error(
+      "a recruiting token needs a row id — name the interview, offer, or org it opens",
+    );
   const ttl =
     args.purpose === "book"
       ? BOOKING_TOKEN_TTL_MS

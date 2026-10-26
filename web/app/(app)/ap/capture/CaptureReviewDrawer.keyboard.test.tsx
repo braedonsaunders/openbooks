@@ -12,19 +12,32 @@ declare global {
 }
 
 // The primary modifier follows the platform; pin a non-Apple one (Ctrl).
-Object.defineProperty(globalThis.navigator ?? {}, "platform", { value: "Linux x86_64", configurable: true });
+Object.defineProperty(globalThis.navigator ?? {}, "platform", {
+  value: "Linux x86_64",
+  configurable: true,
+});
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/ap/capture", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/ap/capture",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 Object.defineProperty(window.navigator, "platform", { value: "Linux x86_64", configurable: true });
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){const r=globalThis.__kbRouter;return{push(u){r.pushes.push(u)},replace(u){r.pushes.push(u)},refresh(){r.refreshes+=1},back(){},prefetch(){}}}export function usePathname(){return '/ap/capture'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){const r=globalThis.__kbRouter;return{push(u){r.pushes.push(u)},replace(u){r.pushes.push(u)},refresh(){r.refreshes+=1},back(){},prefetch(){}}}export function usePathname(){return '/ap/capture'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
-      return { shortCircuit: true, url: "data:text/javascript,export default function Link(p){return p.children}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export default function Link(p){return p.children}",
+      };
     }
     if (specifier === "sonner") {
       return {
@@ -33,7 +46,8 @@ registerHooks({
       };
     }
     if (specifier === "../../../../lib/confirm") {
-      const source = "export async function confirmDialog(options){(globalThis.__kbConfirms??=[]).push(options);return true}";
+      const source =
+        "export async function confirmDialog(options){(globalThis.__kbConfirms??=[]).push(options);return true}";
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` };
     }
     return next(specifier, context);
@@ -96,21 +110,34 @@ function detail(overrides: { invoiceNumber?: string | null; total?: string | nul
 
 type Calls = { materialize: number; actions: unknown[]; bulk: unknown[] };
 
-async function mount(options: { postStatus?: number; postBody?: unknown; invoiceNumber?: string | null; total?: string | null; canPost?: boolean; trust?: unknown } = {}) {
+async function mount(
+  options: {
+    postStatus?: number;
+    postBody?: unknown;
+    invoiceNumber?: string | null;
+    total?: string | null;
+    canPost?: boolean;
+    trust?: unknown;
+  } = {},
+) {
   globalThis.__kbRouter = { pushes: [], refreshes: 0 };
   globalThis.__kbToasts = [];
   globalThis.__kbConfirms = [];
   const calls: Calls = { materialize: 0, actions: [], bulk: [] };
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === `/api/ap-capture/${CAPTURE_ID}/materialize`) {
       calls.materialize += 1;
       return Response.json({ documentId: "bill-1", documentNumber: "BILL-1" });
     }
     if (url === "/api/documents/actions") {
       calls.actions.push(JSON.parse(String(init?.body)));
-      return Response.json(options.postBody ?? { ok: true, entryId: "je-1" }, { status: options.postStatus ?? 200 });
+      return Response.json(options.postBody ?? { ok: true, entryId: "je-1" }, {
+        status: options.postStatus ?? 200,
+      });
     }
     if (url === "/api/ap-capture/actions") {
       calls.bulk.push(JSON.parse(String(init?.body)));
@@ -155,14 +182,18 @@ async function mount(options: { postStatus?: number; postBody?: unknown; invoice
 
 async function press(target: EventTarget, init: KeyboardEventInit) {
   await act(async () => {
-    target.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+    target.dispatchEvent(
+      new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+    );
     await tick(60);
   });
   await tick(30);
 }
 
 function inputHolding(value: string): HTMLInputElement {
-  const found = [...document.querySelectorAll("input")].find((el) => (el as HTMLInputElement).value === value);
+  const found = [...document.querySelectorAll("input")].find(
+    (el) => (el as HTMLInputElement).value === value,
+  );
   assert.ok(found, `an input holding ${JSON.stringify(value)} must exist`);
   return found as HTMLInputElement;
 }
@@ -202,24 +233,43 @@ test("Ctrl+Shift+Enter creates the draft, posts it through the documents action 
   assert.equal(drawer.calls.materialize, 1);
   assert.deepEqual(drawer.calls.actions, [{ action: "post", documentId: "bill-1" }]);
   assert.deepEqual(globalThis.__kbRouter!.pushes, [NAVIGATION.nextReviewHref]);
-  assert.ok(globalThis.__kbToasts!.some((toast) => toast.kind === "success" && toast.message === "Bill posted"));
+  assert.ok(
+    globalThis.__kbToasts!.some(
+      (toast) => toast.kind === "success" && toast.message === "Bill posted",
+    ),
+  );
 });
 
 test("a posting refusal keeps the draft, pins the refusal and stays on the capture", async (t) => {
-  const drawer = await mount({ postStatus: 422, postBody: { error: "The period 2026-10 is closed for AP." } });
+  const drawer = await mount({
+    postStatus: 422,
+    postBody: { error: "The period 2026-10 is closed for AP." },
+  });
   t.after(() => drawer.done());
   await press(document.body, { key: "Enter", code: "Enter", ctrlKey: true, shiftKey: true });
   assert.equal(drawer.calls.materialize, 1);
   assert.deepEqual(globalThis.__kbRouter!.pushes, [], "review does not move past a refused post");
-  const pinned = [...document.querySelectorAll('[role="alert"]')].map((node) => node.textContent ?? "");
-  assert.ok(pinned.some((textContent) => textContent.includes("The period 2026-10 is closed for AP.")), pinned.join(" | "));
+  const pinned = [...document.querySelectorAll('[role="alert"]')].map(
+    (node) => node.textContent ?? "",
+  );
+  assert.ok(
+    pinned.some((textContent) => textContent.includes("The period 2026-10 is closed for AP.")),
+    pinned.join(" | "),
+  );
 });
 
 test("an approval Flow holding the bill is reported as submitted, not posted", async (t) => {
-  const drawer = await mount({ postStatus: 202, postBody: { ok: true, pendingApproval: true, requestId: "run-1" } });
+  const drawer = await mount({
+    postStatus: 202,
+    postBody: { ok: true, pendingApproval: true, requestId: "run-1" },
+  });
   t.after(() => drawer.done());
   await press(document.body, { key: "Enter", code: "Enter", ctrlKey: true, shiftKey: true });
-  assert.ok(globalThis.__kbToasts!.some((toast) => toast.message === "Draft created and submitted for approval"));
+  assert.ok(
+    globalThis.__kbToasts!.some(
+      (toast) => toast.message === "Draft created and submitted for approval",
+    ),
+  );
   assert.deepEqual(globalThis.__kbRouter!.pushes, [NAVIGATION.nextReviewHref]);
 });
 
@@ -246,17 +296,28 @@ test("Enter in a field jumps to the next field that needs attention, then to Cre
   await act(async () => {
     await tick(80);
   });
-  const invoice = document.querySelector<HTMLInputElement>('[data-capture-field="invoiceNumber"] input')!;
-  assert.ok(document.activeElement === invoice, "focus starts on the first field needing attention");
+  const invoice = document.querySelector<HTMLInputElement>(
+    '[data-capture-field="invoiceNumber"] input',
+  )!;
+  assert.ok(
+    document.activeElement === invoice,
+    "focus starts on the first field needing attention",
+  );
   await press(invoice, { key: "Enter", code: "Enter" });
   const total = document.querySelector('[data-capture-field="total"] input');
   assert.ok(document.activeElement === total, "Enter skips the confident fields between them");
   await press(total!, { key: "Enter", code: "Enter" });
-  assert.equal((document.activeElement as HTMLElement | null)?.hasAttribute("data-capture-primary"), true, "with every field confirmed, Enter lands on Create draft");
+  assert.equal(
+    (document.activeElement as HTMLElement | null)?.hasAttribute("data-capture-primary"),
+    true,
+    "with every field confirmed, Enter lands on Create draft",
+  );
 });
 
 test("the vendor's earned trust is shown on the capture", async (t) => {
-  const drawer = await mount({ trust: { trusted: true, cleanStreak: 3, threshold: 3, policyEnabled: true, brokenBy: null } });
+  const drawer = await mount({
+    trust: { trusted: true, cleanStreak: 3, threshold: 3, policyEnabled: true, brokenBy: null },
+  });
   t.after(() => drawer.done());
   assert.ok(document.body.textContent?.includes("Trusted: 3 clean bills in a row"));
 });

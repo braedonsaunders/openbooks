@@ -61,7 +61,10 @@ interface SelectionOptions {
   allowNotRun: boolean;
 }
 
-async function execute(filter?: string, selection: SelectionOptions = { allowEmpty: false, allowNotRun: false }): Promise<CorpusReport> {
+async function execute(
+  filter?: string,
+  selection: SelectionOptions = { allowEmpty: false, allowNotRun: false },
+): Promise<CorpusReport> {
   const problems = validateCorpus();
   if (problems.length > 0) {
     console.error("The conformance register is malformed:");
@@ -100,7 +103,13 @@ async function execute(filter?: string, selection: SelectionOptions = { allowEmp
     if (kase.tier !== "ledger" || kase.support === "not-implemented") {
       // Emptiness is judged once on the aggregate below, not per admitted
       // single: a non-matching single contributes nothing either way.
-      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter, allowEmpty: true });
+      const single = await runCorpus([kase], {
+        at,
+        gitSha,
+        runId: producerRunId,
+        filter,
+        allowEmpty: true,
+      });
       results.push(...single.results);
       continue;
     }
@@ -132,7 +141,10 @@ async function execute(filter?: string, selection: SelectionOptions = { allowEmp
   });
 }
 
-async function executeControls(filter?: string, selection: SelectionOptions = { allowEmpty: false, allowNotRun: false }): Promise<CorpusReport<ControlCase>> {
+async function executeControls(
+  filter?: string,
+  selection: SelectionOptions = { allowEmpty: false, allowNotRun: false },
+): Promise<CorpusReport<ControlCase>> {
   const problems = validateControls();
   if (problems.length > 0) {
     console.error("The controls register is malformed:");
@@ -168,7 +180,13 @@ async function executeControls(filter?: string, selection: SelectionOptions = { 
     if (kase.tier !== "ledger" || kase.support === "not-implemented") {
       // Emptiness is judged once on the aggregate below, not per admitted
       // single: a non-matching single contributes nothing either way.
-      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter, allowEmpty: true });
+      const single = await runCorpus([kase], {
+        at,
+        gitSha,
+        runId: producerRunId,
+        filter,
+        allowEmpty: true,
+      });
       results.push(...single.results);
       continue;
     }

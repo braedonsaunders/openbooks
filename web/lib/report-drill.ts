@@ -1,175 +1,175 @@
-import { isPeriodPreset } from '@openbooks/reports'
-import type { StatementBasis, StatementDimFilter, StatementMode } from './statement-matrix'
-import type { AgingBucket, AgingCurrencyBasis, AgingSide } from './reports'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { isPeriodPreset } from "@openbooks/reports";
+import type { StatementBasis, StatementDimFilter, StatementMode } from "./statement-matrix";
+import type { AgingBucket, AgingCurrencyBasis, AgingSide } from "./reports";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /** Namespaced so the drill flyout does not rewrite a report page's period. */
-export const REPORT_DRILL_PERIOD_PARAM = 'reportDrillPeriod'
-export const REPORT_DRILL_FROM_PARAM = 'reportDrillFrom'
-export const REPORT_DRILL_TO_PARAM = 'reportDrillTo'
+export const REPORT_DRILL_PERIOD_PARAM = "reportDrillPeriod";
+export const REPORT_DRILL_FROM_PARAM = "reportDrillFrom";
+export const REPORT_DRILL_TO_PARAM = "reportDrillTo";
 /** Overlay chrome for the void-pair toggle; the drill fetch maps it to hideVoids. */
-export const REPORT_DRILL_HIDE_VOIDS_PARAM = 'reportDrillHideVoids'
+export const REPORT_DRILL_HIDE_VOIDS_PARAM = "reportDrillHideVoids";
 
 export type ReportDrillTarget =
   | {
-      kind: 'ledger'
-      label: string
-      accountIds?: string[]
-      accountTypes?: string[]
-      from?: string
-      to: string
-      mode: StatementMode
-      dims?: StatementDimFilter
-      subsidiaryId?: string
-      bookId?: string
-      basis?: StatementBasis
-      partyIds?: string[]
+      kind: "ledger";
+      label: string;
+      accountIds?: string[];
+      accountTypes?: string[];
+      from?: string;
+      to: string;
+      mode: StatementMode;
+      dims?: StatementDimFilter;
+      subsidiaryId?: string;
+      bookId?: string;
+      basis?: StatementBasis;
+      partyIds?: string[];
       /** Ledger lines with no party, kept separate from an unfiltered total. */
-      unassignedParty?: boolean
-      projectCustomerId?: string
-      unassignedProjectCustomer?: boolean
-      projectSearch?: string
-      activeProjectsOnly?: boolean
+      unassignedParty?: boolean;
+      projectCustomerId?: string;
+      unassignedProjectCustomer?: boolean;
+      projectSearch?: string;
+      activeProjectsOnly?: boolean;
       /** Revenue less debit-normal costs, used by profit subtotals. */
-      profitSigned?: boolean
+      profitSigned?: boolean;
       /** Only journal entries that touch a bank account; used by Cash Flow. */
-      cashOnly?: boolean
+      cashOnly?: boolean;
       /** Drop complete in-window void pairs (they net to zero). Off by
        *  default: the drill shows every posted line with its void marker. */
-      hideVoidPairs?: boolean
+      hideVoidPairs?: boolean;
       /** House period-preset id. Present on period-browsable drills (CoA);
        *  omitted on statement cell drills so the flyout keeps the cell window. */
-      period?: string
+      period?: string;
       /** Newest activity first — CoA / register-style browsing, not cell tie-out. */
-      newestFirst?: boolean
+      newestFirst?: boolean;
       /** Keep period-end closing and opening journals: general ledger,
        *  register and chart-of-accounts drills. Statement drills omit them. */
-      includePeriodEndJournals?: boolean
+      includePeriodEndJournals?: boolean;
     }
   | {
-      kind: 'aging'
-      label: string
-      side: AgingSide
-      asOf: string
-      dims?: StatementDimFilter
+      kind: "aging";
+      label: string;
+      side: AgingSide;
+      asOf: string;
+      dims?: StatementDimFilter;
       /** Subsidiary context node the report was viewed under (scoped server-side). */
-      subsidiaryId?: string
-      partyId?: string
+      subsidiaryId?: string;
+      partyId?: string;
       /** Open documents with no party, kept separate from an unfiltered total. */
-      unassignedParty?: boolean
-      bucket?: AgingBucket
+      unassignedParty?: boolean;
+      bucket?: AgingBucket;
       /** Currency basis the report was viewed under; absent reads base. */
-      currencyBasis?: AgingCurrencyBasis
+      currencyBasis?: AgingCurrencyBasis;
       /** Reporting currency the report was viewed under; absent reads org base. */
-      currency?: string
+      currency?: string;
     }
   | {
-      kind: 'budget'
-      label: string
-      scenarioId: string
-      scope: 'actual' | 'budget' | 'variance'
-      accountIds?: string[]
-      accountTypes?: string[]
+      kind: "budget";
+      label: string;
+      scenarioId: string;
+      scope: "actual" | "budget" | "variance";
+      accountIds?: string[];
+      accountTypes?: string[];
       /** Revenue less debit-normal costs, used by profit subtotals. */
-      profitSigned?: boolean
-      dims?: StatementDimFilter
+      profitSigned?: boolean;
+      dims?: StatementDimFilter;
       /** Report window the drill must tie to; absent keeps the scenario year. */
-      from?: string
-      to?: string
+      from?: string;
+      to?: string;
     }
   | {
-      kind: 'orders'
-      label: string
-      orderKind: 'quote' | 'sales_order' | 'purchase_order'
-      scope: 'open' | 'converted' | 'conversion' | 'voided'
+      kind: "orders";
+      label: string;
+      orderKind: "quote" | "sales_order" | "purchase_order";
+      scope: "open" | "converted" | "conversion" | "voided";
     }
   | {
-      kind: 'time'
-      label: string
-      from: string
-      to: string
-      projectId?: string
-      projectCustomerId?: string
-      unassignedProjectCustomer?: boolean
-      projectSearch?: string
-      activeProjectsOnly?: boolean
+      kind: "time";
+      label: string;
+      from: string;
+      to: string;
+      projectId?: string;
+      projectCustomerId?: string;
+      unassignedProjectCustomer?: boolean;
+      projectSearch?: string;
+      activeProjectsOnly?: boolean;
     }
   | {
-      kind: 'custom'
-      label: string
-      source: 'definition' | 'view'
-      id: string
+      kind: "custom";
+      label: string;
+      source: "definition" | "view";
+      id: string;
       /** Exact scope of the clicked aggregate: eq value, inclusive date
        *  range, or null-bucket marker per breakout. */
-      filter?: { field: string; value?: string; from?: string; to?: string; empty?: true }[]
-    }
+      filter?: { field: string; value?: string; from?: string; to?: string; empty?: true }[];
+    };
 
 /** Overlay a resolved period window onto a ledger drill without dropping scope. */
 export function applyLedgerDrillWindow(
-  target: Extract<ReportDrillTarget, { kind: 'ledger' }>,
+  target: Extract<ReportDrillTarget, { kind: "ledger" }>,
   window: { from: string; to: string; period: string },
-): Extract<ReportDrillTarget, { kind: 'ledger' }> {
+): Extract<ReportDrillTarget, { kind: "ledger" }> {
   return {
     ...target,
-    mode: 'flow',
+    mode: "flow",
     from: window.from,
     to: window.to,
     period: window.period,
-  }
+  };
 }
 
-export type ReportDrillCell = string | number | null
+export type ReportDrillCell = string | number | null;
 
 export type ReportDrillResponse = {
-  title: string
-  description?: string
-  summary: { label: string; value: string }[]
-  columns: { label: string; align?: 'left' | 'right' | 'center' }[]
+  title: string;
+  description?: string;
+  summary: { label: string; value: string }[];
+  columns: { label: string; align?: "left" | "right" | "center" }[];
   rows: {
-    key: string
-    cells: ReportDrillCell[]
-    transaction?: { entryId: string; docKind?: string | null; docId?: string | null }
-  }[]
+    key: string;
+    cells: ReportDrillCell[];
+    transaction?: { entryId: string; docKind?: string | null; docId?: string | null };
+  }[];
   /** Cell that opens the native transaction drawer when transaction is set. */
-  linkColumn?: number
-  page: number
-  perPage: number
-  total: number
+  linkColumn?: number;
+  page: number;
+  perPage: number;
+  total: number;
   /** Lines in the full set that belong to a complete in-window void pair.
    *  The drawer offers the hide-voids toggle exactly when this is positive. */
-  voidPairLines?: number
-}
+  voidPairLines?: number;
+};
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-const ACCOUNT_TYPE = /^[a-z][a-z0-9_]{0,63}$/
-const SEGMENT_KEY = /^[a-z][a-z0-9_]{0,63}$/
-const AGING_BUCKETS = new Set<AgingBucket>(['current', 'b1', 'b2', 'b3', 'b4'])
-const ORDER_KINDS = new Set(['quote', 'sales_order', 'purchase_order'])
-const ORDER_SCOPES = new Set(['open', 'converted', 'conversion', 'voided'])
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ACCOUNT_TYPE = /^[a-z][a-z0-9_]{0,63}$/;
+const SEGMENT_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+const AGING_BUCKETS = new Set<AgingBucket>(["current", "b1", "b2", "b3", "b4"]);
+const ORDER_KINDS = new Set(["quote", "sales_order", "purchase_order"]);
+const ORDER_SCOPES = new Set(["open", "converted", "conversion", "voided"]);
 
 function stringValue(value: unknown, max = 200): string | null {
-  return typeof value === 'string' && value.length > 0 && value.length <= max ? value : null
+  return typeof value === "string" && value.length > 0 && value.length <= max ? value : null;
 }
 
 function uuidValue(value: unknown): string | undefined {
-  return isUuid(value) ? value : undefined
+  return isUuid(value) ? value : undefined;
 }
 
 function uuidList(value: unknown): string[] | undefined {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 50) return undefined
-  const ids = value.filter((item): item is string => isUuid(item))
-  return ids.length === value.length ? ids : undefined
+  if (!Array.isArray(value) || value.length === 0 || value.length > 50) return undefined;
+  const ids = value.filter((item): item is string => isUuid(item));
+  return ids.length === value.length ? ids : undefined;
 }
 
 function dimsValue(value: unknown): StatementDimFilter | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const raw = value as Record<string, unknown>
-  let segments: Record<string, string> | undefined
-  if (raw.segments && typeof raw.segments === 'object' && !Array.isArray(raw.segments)) {
-    segments = {}
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  let segments: Record<string, string> | undefined;
+  if (raw.segments && typeof raw.segments === "object" && !Array.isArray(raw.segments)) {
+    segments = {};
     for (const [key, entry] of Object.entries(raw.segments as Record<string, unknown>)) {
-      if (Object.keys(segments).length === 20) break
-      if (SEGMENT_KEY.test(key) && isUuid(entry)) segments[key] = entry
+      if (Object.keys(segments).length === 20) break;
+      if (SEGMENT_KEY.test(key) && isUuid(entry)) segments[key] = entry;
     }
   }
   // The view's entity set survives the URL round-trip under the same uuid
@@ -177,7 +177,7 @@ function dimsValue(value: unknown): StatementDimFilter | undefined {
   // it with the caller's allowlist, so a forged set cannot widen a reader.
   // Malformed ids degrade to the picker-node fallback (or the allowlist),
   // never to an unfiltered read.
-  const subsidiaryIds = uuidList(raw.subsidiaryIds)
+  const subsidiaryIds = uuidList(raw.subsidiaryIds);
   return {
     departmentId: uuidValue(raw.departmentId),
     projectId: uuidValue(raw.projectId),
@@ -185,61 +185,71 @@ function dimsValue(value: unknown): StatementDimFilter | undefined {
     classId: uuidValue(raw.classId),
     ...(segments && Object.keys(segments).length ? { segments } : {}),
     ...(subsidiaryIds ? { subsidiaryIds } : {}),
-  }
+  };
 }
 
 export function encodeReportDrillTarget(target: ReportDrillTarget): string {
-  return JSON.stringify(target)
+  return JSON.stringify(target);
 }
 
 /** Parse URL-provided drill state fail-closed before it reaches SQL helpers. */
 export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | null {
-  if (!raw || raw.length > 8_000) return null
-  let value: unknown
+  if (!raw || raw.length > 8_000) return null;
+  let value: unknown;
   try {
-    value = JSON.parse(raw)
+    value = JSON.parse(raw);
   } catch {
-    return null
+    return null;
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const input = value as Record<string, unknown>
-  const label = stringValue(input.label)
-  if (!label) return null
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const label = stringValue(input.label);
+  if (!label) return null;
 
-  if (input.kind === 'ledger') {
-    const to = stringValue(input.to, 10)
-    const from = input.from === undefined ? undefined : stringValue(input.from, 10) ?? undefined
-    const accountIds = uuidList(input.accountIds)
-    const partyIds = uuidList(input.partyIds)
-    const projectCustomerId = uuidValue(input.projectCustomerId)
-    const bookId = uuidValue(input.bookId)
-    const projectSearch = input.projectSearch === undefined ? undefined : stringValue(input.projectSearch) ?? undefined
-    const rawAccountTypes = Array.isArray(input.accountTypes) ? input.accountTypes : undefined
-    const accountTypes = rawAccountTypes && rawAccountTypes.length <= 50
-      ? rawAccountTypes.filter((type): type is string => typeof type === 'string' && ACCOUNT_TYPE.test(type))
-      : undefined
-    if (!to || !ISO_DATE.test(to) || (from && !ISO_DATE.test(from))) return null
-    if (input.accountIds !== undefined && !accountIds) return null
-    if (input.partyIds !== undefined && !partyIds) return null
-    if (partyIds && input.unassignedParty === true) return null
-    if (input.projectCustomerId !== undefined && !projectCustomerId) return null
-    if (input.bookId !== undefined && !bookId) return null
-    if (input.projectSearch !== undefined && !projectSearch) return null
-    if (projectCustomerId && input.unassignedProjectCustomer === true) return null
-    if (input.accountTypes !== undefined && (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)) return null
-    const period = isPeriodPreset(input.period) ? input.period : undefined
+  if (input.kind === "ledger") {
+    const to = stringValue(input.to, 10);
+    const from = input.from === undefined ? undefined : (stringValue(input.from, 10) ?? undefined);
+    const accountIds = uuidList(input.accountIds);
+    const partyIds = uuidList(input.partyIds);
+    const projectCustomerId = uuidValue(input.projectCustomerId);
+    const bookId = uuidValue(input.bookId);
+    const projectSearch =
+      input.projectSearch === undefined
+        ? undefined
+        : (stringValue(input.projectSearch) ?? undefined);
+    const rawAccountTypes = Array.isArray(input.accountTypes) ? input.accountTypes : undefined;
+    const accountTypes =
+      rawAccountTypes && rawAccountTypes.length <= 50
+        ? rawAccountTypes.filter(
+            (type): type is string => typeof type === "string" && ACCOUNT_TYPE.test(type),
+          )
+        : undefined;
+    if (!to || !ISO_DATE.test(to) || (from && !ISO_DATE.test(from))) return null;
+    if (input.accountIds !== undefined && !accountIds) return null;
+    if (input.partyIds !== undefined && !partyIds) return null;
+    if (partyIds && input.unassignedParty === true) return null;
+    if (input.projectCustomerId !== undefined && !projectCustomerId) return null;
+    if (input.bookId !== undefined && !bookId) return null;
+    if (input.projectSearch !== undefined && !projectSearch) return null;
+    if (projectCustomerId && input.unassignedProjectCustomer === true) return null;
+    if (
+      input.accountTypes !== undefined &&
+      (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)
+    )
+      return null;
+    const period = isPeriodPreset(input.period) ? input.period : undefined;
     return {
-      kind: 'ledger',
+      kind: "ledger",
       label,
       accountIds,
       accountTypes,
       from,
       to,
-      mode: input.mode === 'balance' ? 'balance' : 'flow',
+      mode: input.mode === "balance" ? "balance" : "flow",
       dims: dimsValue(input.dims),
       subsidiaryId: uuidValue(input.subsidiaryId),
       bookId,
-      basis: input.basis === 'cash' ? 'cash' : 'accrual',
+      basis: input.basis === "cash" ? "cash" : "accrual",
       partyIds,
       unassignedParty: input.unassignedParty === true,
       projectCustomerId,
@@ -252,29 +262,32 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       ...(input.newestFirst === true ? { newestFirst: true } : {}),
       ...(input.hideVoidPairs === true ? { hideVoidPairs: true } : {}),
       ...(input.includePeriodEndJournals === true ? { includePeriodEndJournals: true } : {}),
-    }
+    };
   }
 
-  if (input.kind === 'aging') {
-    const asOf = stringValue(input.asOf, 10)
-    const side = input.side === 'ap' ? 'ap' : input.side === 'ar' ? 'ar' : null
-    const bucket = typeof input.bucket === 'string' && AGING_BUCKETS.has(input.bucket as AgingBucket)
-      ? (input.bucket as AgingBucket)
-      : undefined
+  if (input.kind === "aging") {
+    const asOf = stringValue(input.asOf, 10);
+    const side = input.side === "ap" ? "ap" : input.side === "ar" ? "ar" : null;
+    const bucket =
+      typeof input.bucket === "string" && AGING_BUCKETS.has(input.bucket as AgingBucket)
+        ? (input.bucket as AgingBucket)
+        : undefined;
     // An unrecognized currency falls back the same way the report does (base
     // basis, org base) — a hand-edited drill URL must never refuse or guess.
-    const currencyBasis = input.currencyBasis === 'transaction' || input.currencyBasis === 'base'
-      ? input.currencyBasis
-      : undefined
-    const currency = typeof input.currency === 'string' && /^[A-Z]{3}$/.test(input.currency)
-      ? input.currency
-      : undefined
-    const partyId = uuidValue(input.partyId)
-    if (!asOf || !ISO_DATE.test(asOf) || !side) return null
-    if (input.partyId !== undefined && !partyId) return null
-    if (partyId && input.unassignedParty === true) return null
+    const currencyBasis =
+      input.currencyBasis === "transaction" || input.currencyBasis === "base"
+        ? input.currencyBasis
+        : undefined;
+    const currency =
+      typeof input.currency === "string" && /^[A-Z]{3}$/.test(input.currency)
+        ? input.currency
+        : undefined;
+    const partyId = uuidValue(input.partyId);
+    if (!asOf || !ISO_DATE.test(asOf) || !side) return null;
+    if (input.partyId !== undefined && !partyId) return null;
+    if (partyId && input.unassignedParty === true) return null;
     return {
-      kind: 'aging',
+      kind: "aging",
       label,
       side,
       asOf,
@@ -285,90 +298,111 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       bucket,
       currencyBasis,
       currency,
-    }
+    };
   }
 
-  if (input.kind === 'budget') {
-    const scenarioId = uuidValue(input.scenarioId)
-    const accountIds = uuidList(input.accountIds)
-    const rawAccountTypes = Array.isArray(input.accountTypes) ? input.accountTypes : undefined
-    const accountTypes = rawAccountTypes && rawAccountTypes.length <= 50
-      ? rawAccountTypes.filter((type): type is string => typeof type === 'string' && ACCOUNT_TYPE.test(type))
-      : undefined
-    if (!scenarioId || !['actual', 'budget', 'variance'].includes(String(input.scope))) return null
-    if (input.accountIds !== undefined && !accountIds) return null
-    if (input.accountTypes !== undefined && (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)) return null
-    const from = input.from === undefined ? undefined : stringValue(input.from, 10) ?? undefined
-    const to = input.to === undefined ? undefined : stringValue(input.to, 10) ?? undefined
-    if ((from && !ISO_DATE.test(from)) || (to && !ISO_DATE.test(to))) return null
+  if (input.kind === "budget") {
+    const scenarioId = uuidValue(input.scenarioId);
+    const accountIds = uuidList(input.accountIds);
+    const rawAccountTypes = Array.isArray(input.accountTypes) ? input.accountTypes : undefined;
+    const accountTypes =
+      rawAccountTypes && rawAccountTypes.length <= 50
+        ? rawAccountTypes.filter(
+            (type): type is string => typeof type === "string" && ACCOUNT_TYPE.test(type),
+          )
+        : undefined;
+    if (!scenarioId || !["actual", "budget", "variance"].includes(String(input.scope))) return null;
+    if (input.accountIds !== undefined && !accountIds) return null;
+    if (
+      input.accountTypes !== undefined &&
+      (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)
+    )
+      return null;
+    const from = input.from === undefined ? undefined : (stringValue(input.from, 10) ?? undefined);
+    const to = input.to === undefined ? undefined : (stringValue(input.to, 10) ?? undefined);
+    if ((from && !ISO_DATE.test(from)) || (to && !ISO_DATE.test(to))) return null;
     return {
-      kind: 'budget',
+      kind: "budget",
       label,
       scenarioId,
-      scope: input.scope as 'actual' | 'budget' | 'variance',
+      scope: input.scope as "actual" | "budget" | "variance",
       accountIds,
       accountTypes,
       profitSigned: input.profitSigned === true,
       dims: dimsValue(input.dims),
       from,
       to,
-    }
+    };
   }
 
-  if (input.kind === 'orders') {
-    if (!ORDER_KINDS.has(String(input.orderKind)) || !ORDER_SCOPES.has(String(input.scope))) return null
+  if (input.kind === "orders") {
+    if (!ORDER_KINDS.has(String(input.orderKind)) || !ORDER_SCOPES.has(String(input.scope)))
+      return null;
     return {
-      kind: 'orders',
+      kind: "orders",
       label,
-      orderKind: input.orderKind as 'quote' | 'sales_order' | 'purchase_order',
-      scope: input.scope as 'open' | 'converted' | 'conversion' | 'voided',
-    }
+      orderKind: input.orderKind as "quote" | "sales_order" | "purchase_order",
+      scope: input.scope as "open" | "converted" | "conversion" | "voided",
+    };
   }
 
-  if (input.kind === 'time') {
-    const from = stringValue(input.from, 10)
-    const to = stringValue(input.to, 10)
-    const projectId = uuidValue(input.projectId)
-    const projectCustomerId = uuidValue(input.projectCustomerId)
-    const projectSearch = input.projectSearch === undefined ? undefined : stringValue(input.projectSearch) ?? undefined
-    if (!from || !to || !ISO_DATE.test(from) || !ISO_DATE.test(to)) return null
-    if (input.projectId !== undefined && !projectId) return null
-    if (input.projectCustomerId !== undefined && !projectCustomerId) return null
-    if (input.projectSearch !== undefined && !projectSearch) return null
-    if ((projectId || projectCustomerId) && input.unassignedProjectCustomer === true) return null
+  if (input.kind === "time") {
+    const from = stringValue(input.from, 10);
+    const to = stringValue(input.to, 10);
+    const projectId = uuidValue(input.projectId);
+    const projectCustomerId = uuidValue(input.projectCustomerId);
+    const projectSearch =
+      input.projectSearch === undefined
+        ? undefined
+        : (stringValue(input.projectSearch) ?? undefined);
+    if (!from || !to || !ISO_DATE.test(from) || !ISO_DATE.test(to)) return null;
+    if (input.projectId !== undefined && !projectId) return null;
+    if (input.projectCustomerId !== undefined && !projectCustomerId) return null;
+    if (input.projectSearch !== undefined && !projectSearch) return null;
+    if ((projectId || projectCustomerId) && input.unassignedProjectCustomer === true) return null;
     return {
-      kind: 'time', label, from, to, projectId, projectCustomerId,
+      kind: "time",
+      label,
+      from,
+      to,
+      projectId,
+      projectCustomerId,
       unassignedProjectCustomer: input.unassignedProjectCustomer === true,
       projectSearch,
       activeProjectsOnly: input.activeProjectsOnly === true,
-    }
+    };
   }
 
-  if (input.kind === 'custom') {
-    const id = uuidValue(input.id)
-    if (!id || (input.source !== 'definition' && input.source !== 'view')) return null
+  if (input.kind === "custom") {
+    const id = uuidValue(input.id);
+    if (!id || (input.source !== "definition" && input.source !== "view")) return null;
     // Optional aggregate scope: per-breakout predicates. Fields are validated
     // against the entity catalog at load time; here each entry just has to
     // look like a column key with exactly one predicate shape.
-    let filter: { field: string; value?: string; from?: string; to?: string; empty?: true }[] | undefined
-    const rawFilter = (input as { filter?: unknown }).filter
+    let filter:
+      { field: string; value?: string; from?: string; to?: string; empty?: true }[] | undefined;
+    const rawFilter = (input as { filter?: unknown }).filter;
     if (Array.isArray(rawFilter) && rawFilter.length <= 8) {
-      const clean: NonNullable<typeof filter> = []
-      const dateish = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+      const clean: NonNullable<typeof filter> = [];
+      const dateish = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
       for (const entry of rawFilter) {
-        if (!entry || typeof entry !== 'object') return null
-        const { field, value, from, to, empty } = entry as Record<string, unknown>
-        if (typeof field !== 'string' || !/^[a-z][a-z0-9_]{0,62}$/.test(field)) return null
-        if (empty === true) clean.push({ field, empty: true })
-        else if (dateish(from) && dateish(to)) clean.push({ field, from: from as string, to: to as string })
-        else if ((typeof value === 'string' || typeof value === 'number') && String(value).length <= 256) {
-          clean.push({ field, value: String(value) })
-        } else return null
+        if (!entry || typeof entry !== "object") return null;
+        const { field, value, from, to, empty } = entry as Record<string, unknown>;
+        if (typeof field !== "string" || !/^[a-z][a-z0-9_]{0,62}$/.test(field)) return null;
+        if (empty === true) clean.push({ field, empty: true });
+        else if (dateish(from) && dateish(to))
+          clean.push({ field, from: from as string, to: to as string });
+        else if (
+          (typeof value === "string" || typeof value === "number") &&
+          String(value).length <= 256
+        ) {
+          clean.push({ field, value: String(value) });
+        } else return null;
       }
-      filter = clean
+      filter = clean;
     }
-    return { kind: 'custom', label, source: input.source, id, filter }
+    return { kind: "custom", label, source: input.source, id, filter };
   }
 
-  return null
+  return null;
 }

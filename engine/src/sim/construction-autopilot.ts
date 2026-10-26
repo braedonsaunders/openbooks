@@ -44,21 +44,27 @@ async function stampCollectible(world: SimOrg, invoiceId: string, today: string)
 
 /** Sum of posted customer-invoice totals tagged to a job (billed-to-date). */
 async function billedToDate(world: SimOrg, projectId: string): Promise<number> {
-  const r = (await db.execute<{ billed: string }>(sql`
+  const r = await db.execute<{ billed: string }>(
+    sql`
     select coalesce(sum(d.total), 0)::text as billed from documents d
      -- Live entries only: a voided invoice no longer bills the job.
      where d.org_id = ${world.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
        and (d.custom->'sim'->>'projectId' = ${projectId}
-            or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = ${projectId}))`, "objects"));
+            or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = ${projectId}))`,
+    "objects",
+  );
   return Number(r[0]?.billed ?? "0");
 }
 
 /** Distinct field-ticket days of unbilled crew time on a job (for equipment days). */
 async function unbilledCrewDays(world: SimOrg, projectId: string): Promise<number> {
-  const r = (await db.execute<{ days: string }>(sql`
+  const r = await db.execute<{ days: string }>(
+    sql`
     select count(distinct worked_on)::text as days from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and billing_status = 'unbilled'`, "objects"));
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`,
+    "objects",
+  );
   return Number(r[0]?.days ?? "0");
 }
 
@@ -70,13 +76,20 @@ async function jobPostedCost(
 ): Promise<{ labor: number; purchases: number; total: number }> {
   const a = world.accounts;
   const labor = new Set([a.laborWip, a.directLabor].filter(Boolean) as string[]);
-  const purchase = new Set([a.materials, a.subcontractor, a.equipmentRental, a.jobTravel, a.cogs].filter(Boolean) as string[]);
-  const r = (await db.execute<{ acct: string; amt: string }>(sql`
+  const purchase = new Set(
+    [a.materials, a.subcontractor, a.equipmentRental, a.jobTravel, a.cogs].filter(
+      Boolean,
+    ) as string[],
+  );
+  const r = await db.execute<{ acct: string; amt: string }>(
+    sql`
     select l.account_id as acct, coalesce(sum(l.amount), 0)::text as amt
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${world.orgId} and l.project_id = ${projectId}
        and to_char(e.posting_date, 'YYYY-MM') = ${month}
-     group by l.account_id`, "objects"));
+     group by l.account_id`,
+    "objects",
+  );
   let lab = 0;
   let pur = 0;
   for (const row of r) {
@@ -125,7 +138,8 @@ export async function autopilotConstruction(
   world: SimOrg,
   today: string,
 ): Promise<{ actions: number }> {
-  if (world.jobs.length === 0 || world.employees.length === 0 || !isMonthEnd(today)) return { actions: 0 };
+  if (world.jobs.length === 0 || world.employees.length === 0 || !isMonthEnd(today))
+    return { actions: 0 };
   const month = today.slice(0, 7);
 
   let actions = 0;
@@ -137,7 +151,12 @@ export async function autopilotConstruction(
       const cost = await jobPostedCost(world, job.id, month);
 
       if (job.method === "time_and_materials" || job.method === "not_to_exceed") {
-        if (job.method === "not_to_exceed" && contract > 0 && (await billedToDate(world, job.id)) >= contract * 0.95) continue;
+        if (
+          job.method === "not_to_exceed" &&
+          contract > 0 &&
+          (await billedToDate(world, job.id)) >= contract * 0.95
+        )
+          continue;
         const r = await billTimeAndMaterials(world, job.id, today, {
           extraLines: await extraLines(profile, world, job, cost.purchases),
           memo: `${job.method === "not_to_exceed" ? "NTE" : "T&M"} billing — ${job.name}`,
@@ -152,26 +171,45 @@ export async function autopilotConstruction(
         if (r) actions++;
       } else if (job.method === "schedule_of_values") {
         // AIA progress draw sized to this month's posted cost × markup.
-        const sovTotal = (await db.execute<{ t: string }>(sql`
+        const sovTotal = await db.execute<{ t: string }>(
+          sql`
           select coalesce(sum(scheduled_value), 0)::text as t from sov_lines
-           where org_id = ${world.orgId} and project_id = ${job.id}`, "objects"));
+           where org_id = ${world.orgId} and project_id = ${job.id}`,
+          "objects",
+        );
         const sov = Number(sovTotal[0]?.t ?? "0");
         const billed = await billedToDate(world, job.id);
         if (sov > 0 && billed < sov * 0.9) {
           const fraction = Math.min((cost.total * POC_MARKUP) / sov, 0.9 - billed / sov);
           if (fraction > 0.0005) {
-            const inv = await runProgressBilling(world, job.id, today, fraction.toFixed(4), world.actors.arClerk, world.actors.controller);
+            const inv = await runProgressBilling(
+              world,
+              job.id,
+              today,
+              fraction.toFixed(4),
+              world.actors.arClerk,
+              world.actors.controller,
+            );
             await stampCollectible(world, inv.invoiceId, today);
             actions++;
           }
         } else if (sov > 0 && billed >= sov * 0.9) {
-          const ret = (await db.execute<{ bal: string }>(sql`
+          const ret = await db.execute<{ bal: string }>(
+            sql`
             select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
               join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-             where l.org_id = ${world.orgId} and l.account_id = ${world.accounts.retainageReceivable}`, "objects"));
+             where l.org_id = ${world.orgId} and l.account_id = ${world.accounts.retainageReceivable}`,
+            "objects",
+          );
           const retBal = Number(ret[0]?.bal ?? "0");
           if (retBal > 1) {
-            const inv = await releaseProjectRetainage(world, job.id, today, retBal.toFixed(2), world.actors.controller);
+            const inv = await releaseProjectRetainage(
+              world,
+              job.id,
+              today,
+              retBal.toFixed(2),
+              world.actors.controller,
+            );
             await stampCollectible(world, inv.invoiceId, today);
             actions++;
           }
@@ -181,7 +219,13 @@ export async function autopilotConstruction(
         if (contract > 0 && billed < contract * 0.98) {
           const amt = Math.min(cost.total * POC_MARKUP, contract - billed);
           if (amt > 0.005) {
-            const inv = await billFixedPrice(world, job.id, amt.toFixed(2), today, "Monthly progress milestone");
+            const inv = await billFixedPrice(
+              world,
+              job.id,
+              amt.toFixed(2),
+              today,
+              "Monthly progress milestone",
+            );
             await stampCollectible(world, inv.invoiceId, today);
             actions++;
           }

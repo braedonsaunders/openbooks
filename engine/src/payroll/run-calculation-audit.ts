@@ -193,16 +193,18 @@ export async function capturePayRunCalculationEvidence(
   orgId: string,
   documentId: string,
 ): Promise<CapturedPayRunCalculationEvidence | null> {
-  const main = (await tx.execute<{
-    runStatus: string;
-    calculatedAt: string | null;
-    calculationSourceDigest: string | null;
-    hasStubs: boolean;
-    runText: string;
-    stubsText: string;
-    entitlementsText: string;
-    benefitAllocationsText: string;
-  }>(sql`
+  const main = (
+    await tx.execute<{
+      runStatus: string;
+      calculatedAt: string | null;
+      calculationSourceDigest: string | null;
+      hasStubs: boolean;
+      runText: string;
+      stubsText: string;
+      entitlementsText: string;
+      benefitAllocationsText: string;
+    }>(
+      sql`
     select r.run_status as "runStatus",
            r.calculated_at::text as "calculatedAt",
            r.calculation_source_digest as "calculationSourceDigest",
@@ -217,12 +219,17 @@ export async function capturePayRunCalculationEvidence(
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!main) return null;
 
   let holidayAllocationsText: string;
   {
-    const captured = (await tx.execute<{ evidence: string }>(sql`
+    const captured = (
+      await tx.execute<{ evidence: string }>(
+        sql`
       select coalesce((
         select jsonb_agg(allocation_value order by allocation_id)
           from (
@@ -243,14 +250,22 @@ export async function capturePayRunCalculationEvidence(
              where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
           ) allocation_rows
       ), '[]'::jsonb)::text as evidence
-    `, "objects"))[0];
-    if (!captured) throw new PayrollError("the calculated holiday evidence could not be read — retry the calculation");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!captured)
+      throw new PayrollError(
+        "the calculated holiday evidence could not be read — retry the calculation",
+      );
     holidayAllocationsText = captured.evidence;
   }
 
   let compensationCalculationsText: string;
   {
-    const captured = (await tx.execute<{ evidence: string }>(sql`
+    const captured = (
+      await tx.execute<{ evidence: string }>(
+        sql`
       select coalesce((
         select jsonb_agg(calculation_value order by calculation_id)
           from (
@@ -266,21 +281,29 @@ export async function capturePayRunCalculationEvidence(
              where c.org_id = ${orgId} and c.pay_run_document_id = ${documentId}
           ) calculation_rows
       ), '[]'::jsonb)::text as evidence
-    `, "objects"))[0];
-    if (!captured) throw new PayrollError("the calculated compensation evidence could not be read — retry the calculation");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!captured)
+      throw new PayrollError(
+        "the calculated compensation evidence could not be read — retry the calculation",
+      );
     compensationCalculationsText = captured.evidence;
   }
 
   return {
-    evidence: `{"run":${main.runText},"stubs":${main.stubsText},`
-      + `"entitlements":${main.entitlementsText},`
-      + `"benefitAllocations":${main.benefitAllocationsText},`
-      + `"holidayAllocations":${holidayAllocationsText},`
-      + `"compensationCalculations":${compensationCalculationsText}}`,
-    hasCalculatedResult: main.runStatus === "calculated"
-      || main.calculatedAt !== null
-      || main.calculationSourceDigest !== null
-      || main.hasStubs,
+    evidence:
+      `{"run":${main.runText},"stubs":${main.stubsText},` +
+      `"entitlements":${main.entitlementsText},` +
+      `"benefitAllocations":${main.benefitAllocationsText},` +
+      `"holidayAllocations":${holidayAllocationsText},` +
+      `"compensationCalculations":${compensationCalculationsText}}`,
+    hasCalculatedResult:
+      main.runStatus === "calculated" ||
+      main.calculatedAt !== null ||
+      main.calculationSourceDigest !== null ||
+      main.hasStubs,
     calculationSourceDigest: main.calculationSourceDigest,
   };
 }
@@ -307,13 +330,14 @@ export async function recordPayRunCalculationEvent(
   },
 ): Promise<void> {
   const beforeEvidence = input.before?.hasCalculatedResult ? input.before.evidence : null;
-  const reason = beforeEvidence !== null
-    ? "Pay run recalculated: the prior calculated result was replaced by this calculation"
-    : "Pay run calculated: the calculated result was recorded";
-  const beforeFragment = beforeEvidence !== null
-    ? sql`${beforeEvidence}::jsonb`
-    : sql`'null'::jsonb`;
-  const inserted = await tx.execute<{ id: string }>(sql`
+  const reason =
+    beforeEvidence !== null
+      ? "Pay run recalculated: the prior calculated result was replaced by this calculation"
+      : "Pay run calculated: the calculated result was recorded";
+  const beforeFragment =
+    beforeEvidence !== null ? sql`${beforeEvidence}::jsonb` : sql`'null'::jsonb`;
+  const inserted = await tx.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${input.orgId}, 'pay_runs', ${input.documentId}, 'update',
             jsonb_build_object(
@@ -326,7 +350,9 @@ export async function recordPayRunCalculationEvent(
             ),
             ${input.actorId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (inserted.length !== 1) {
     throw new PayrollError(
       "the pay run calculation audit event was not recorded — the calculation has been rolled back; retry the calculation",

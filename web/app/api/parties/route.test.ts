@@ -45,16 +45,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      return (chunk as { queryChunks?: unknown[] })?.queryChunks
-        ? sqlText(chunk)
-        : "";
+      return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : "";
     })
     .join("");
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksPartiesSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksPartiesSqlText = sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -166,10 +162,7 @@ const hooks = registerHooks({
     // audit evidence is reproduced with. It loads for real.
     if (specifier === "@openbooks/engine/platform/canonical-json") {
       return {
-        url: new URL(
-          "../../../../engine/src/platform/canonical-json.ts",
-          import.meta.url,
-        ).href,
+        url: new URL("../../../../engine/src/platform/canonical-json.ts", import.meta.url).href,
         shortCircuit: true,
       };
     }
@@ -180,8 +173,7 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -258,7 +250,7 @@ test("party creation replays only the exact request for an idempotency key", asy
 
   const changed = await post(key, { displayName: "Acme Renamed", kind: "company" });
   assert.equal(changed.status, 409);
-  const changedConflict = await changed.json() as { code?: string; remedy?: string };
+  const changedConflict = (await changed.json()) as { code?: string; remedy?: string };
   assert.equal(changedConflict.code, "idempotency_key_conflict");
   assert.match(changedConflict.remedy ?? "", /fresh request/);
 });
@@ -271,7 +263,7 @@ test("a key minted in another org cannot claim the row", async () => {
   state.auditAfter = null;
   const claimed = await post(key, { displayName: "Acme Corp" });
   assert.equal(claimed.status, 409);
-  const claimedConflict = await claimed.json() as { code?: string; remedy?: string };
+  const claimedConflict = (await claimed.json()) as { code?: string; remedy?: string };
   assert.equal(claimedConflict.code, "idempotency_key_conflict");
   assert.match(claimedConflict.remedy ?? "", /fresh request/);
 });
@@ -309,18 +301,33 @@ test("a nameless party and the draft sentinels are refused before any write", as
 test("an email no message could be sent to is refused by field before any write", async () => {
   for (const email of ["not-an-email", "qa beta@example.com", "a@@example.com", "@example.com"]) {
     reset();
-    const response = await post("00000000-0000-4000-8000-00000000b00a", { displayName: "QA Tester Alpha", kind: "person", email });
+    const response = await post("00000000-0000-4000-8000-00000000b00a", {
+      displayName: "QA Tester Alpha",
+      kind: "person",
+      email,
+    });
     assert.equal(response.status, 422, email);
-    const body = await response.json() as { error: string; field?: string };
+    const body = (await response.json()) as { error: string; field?: string };
     assert.equal(body.field, "email");
     assert.match(body.error, /valid email address/);
-    assert.ok(!state.transactionQueries.some((q) => q.includes("insert into parties")), `no party row for ${email}`);
+    assert.ok(
+      !state.transactionQueries.some((q) => q.includes("insert into parties")),
+      `no party row for ${email}`,
+    );
   }
   reset();
-  const accepted = await post("00000000-0000-4000-8000-00000000b00b", { displayName: "QA Tester Beta", kind: "person", email: "qa.beta@example.com" });
+  const accepted = await post("00000000-0000-4000-8000-00000000b00b", {
+    displayName: "QA Tester Beta",
+    kind: "person",
+    email: "qa.beta@example.com",
+  });
   assert.equal(accepted.status, 201, "a valid address saves");
   reset();
-  const blank = await post("00000000-0000-4000-8000-00000000b00c", { displayName: "QA Tester Gamma", kind: "person", email: "  " });
+  const blank = await post("00000000-0000-4000-8000-00000000b00c", {
+    displayName: "QA Tester Gamma",
+    kind: "person",
+    email: "  ",
+  });
   assert.equal(blank.status, 201, "a blank address is no address");
 });
 
@@ -332,7 +339,10 @@ test("a foreign role reference is refused as unknown, never persisted", async ()
     roles: { customer: { enabled: true, paymentTermsId: "00000000-0000-f000-0000-00000000b008" } },
   });
   assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), { error: "Invalid customer payment terms", field: "roles" });
+  assert.deepEqual(await response.json(), {
+    error: "Invalid customer payment terms",
+    field: "roles",
+  });
   assert.ok(
     !state.transactionQueries.some((q) => q.includes("insert into parties")),
     "no party row may be written with a cross-tenant reference",
@@ -344,7 +354,9 @@ test("payroll-gated and currency-gated writes fail closed when the switch is off
   state.features = { payroll: false, multiCurrency: true };
   const payrollOff = await post("00000000-0000-4000-8000-00000000b009", {
     displayName: "Acme Corp",
-    roles: { employee: { enabled: true, workerCompGroupId: "00000000-0000-4000-8000-00000000b010" } },
+    roles: {
+      employee: { enabled: true, workerCompGroupId: "00000000-0000-4000-8000-00000000b010" },
+    },
   });
   assert.equal(payrollOff.status, 404);
 

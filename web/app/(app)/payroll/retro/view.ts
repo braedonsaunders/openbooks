@@ -1,11 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { scopedRetroSchedules } from '../../../../lib/payroll-scoped-views'
-import type { RetroSchedule } from './RetroWorkspace'
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { scopedRetroSchedules } from "../../../../lib/payroll-scoped-views";
+import type { RetroSchedule } from "./RetroWorkspace";
 
 /**
  * Retroactive pay — the workspace, split into a loader and a spec.
@@ -36,59 +43,63 @@ import type { RetroSchedule } from './RetroWorkspace'
  */
 
 export interface PayrollRetroData {
-  title: string
-  description: string
+  title: string;
+  description: string;
   /** The header's primary action; reviews need a pay schedule to scope them. */
-  newReview: { href: string; label: string; available: boolean }
+  newReview: { href: string; label: string; available: boolean };
   workspace: {
-    schedules: RetroSchedule[]
-    canRun: boolean
-  }
+    schedules: RetroSchedule[];
+    canRun: boolean;
+  };
 }
 
 export async function loadPayrollRetro(): Promise<PayrollRetroData> {
-  const authz = await requirePermission('payroll.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'payroll')
+  const authz = await requirePermission("payroll.read");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "payroll");
 
-  const t = await getTranslations('payroll')
+  const t = await getTranslations("payroll");
   const text = (key: string, fallback: string) =>
-    t.has(key as never) ? t(key as never) : fallback
+    t.has(key as never) ? t(key as never) : fallback;
 
-  const schedules: RetroSchedule[] = await scopedRetroSchedules(authz)
+  const schedules: RetroSchedule[] = await scopedRetroSchedules(authz);
 
   return {
-    title: text('retro.title', 'Retroactive pay'),
+    title: text("retro.title", "Retroactive pay"),
     description: text(
-      'retro.description',
-      'A raise backdated over periods that have already been paid. Recalculate each of those periods, see what it should have paid against what it did, and pay the difference — taxed as the jurisdiction requires and costed to the jobs the hours were charged to.',
+      "retro.description",
+      "A raise backdated over periods that have already been paid. Recalculate each of those periods, see what it should have paid against what it did, and pay the difference — taxed as the jurisdiction requires and costed to the jobs the hours were charged to.",
     ),
     newReview: {
-      href: '/payroll/retro?new=1',
-      label: text('retro.workspace.newReview', 'New review'),
+      href: "/payroll/retro?new=1",
+      label: text("retro.workspace.newReview", "New review"),
       available: schedules.length > 0,
     },
     workspace: {
       schedules,
-      canRun: can(authz, 'payroll.run'),
+      canRun: can(authz, "payroll.run"),
     },
-  }
+  };
 }
 
-const f = ref<PayrollRetroData>()
+const f = ref<PayrollRetroData>();
 
 export function payrollRetroSpec(_data: PayrollRetroData): PageSpec {
   return page({
-    route: '/payroll/retro',
-    layout: 'list',
+    route: "/payroll/retro",
+    layout: "list",
     header: [
       // Module tabs live in the shared payroll navigation. The primary
       // action sits beside them and opens the workspace's scope drawer.
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
-          widget('link-button', { href: f('newReview.href'), label: f('newReview.label'), iconKey: 'plus' }, f('newReview.available')),
+          widget(
+            "link-button",
+            { href: f("newReview.href"), label: f("newReview.label"), iconKey: "plus" },
+            f("newReview.available"),
+          ),
         ],
       }),
     ],
@@ -98,10 +109,10 @@ export function payrollRetroSpec(_data: PayrollRetroData): PageSpec {
       // create-run action and the detail drawer — placed through one
       // widget. The component owns picker state, fetch mutations and every
       // conditional pair; the spec only names where it lives.
-      widgetBlock('retro-workspace', {
-        schedules: f('workspace.schedules'),
-        canRun: f('workspace.canRun'),
+      widgetBlock("retro-workspace", {
+        schedules: f("workspace.schedules"),
+        canRun: f("workspace.canRun"),
       }),
     ],
-  })
+  });
 }

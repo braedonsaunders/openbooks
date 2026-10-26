@@ -1,33 +1,39 @@
-import { ModuleView } from '@/components/viewspec/module-view'
-import { SetupEntitySection } from '../../../../admin/setup/[entity]/SetupEntitySection'
-import { loadSchedulingPage, schedulingSpec } from '../../../../scheduling/view'
-import { SETUP_ENTITY_BY_KEY } from '@/lib/setup/registry'
-import { getAuthz } from '@/lib/authz'
-import { pickString } from '@/lib/list-params'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
-import { notFound } from 'next/navigation'
-export const dynamic = 'force-dynamic'
+import { ModuleView } from "@/components/viewspec/module-view";
+import { SetupEntitySection } from "../../../../admin/setup/[entity]/SetupEntitySection";
+import { loadSchedulingPage, schedulingSpec } from "../../../../scheduling/view";
+import { SETUP_ENTITY_BY_KEY } from "@/lib/setup/registry";
+import { getAuthz } from "@/lib/authz";
+import { pickString } from "@/lib/list-params";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { notFound } from "next/navigation";
+export const dynamic = "force-dynamic";
 /** A project-owned schedule body never appears in the general board picker. */
 export default async function ProjectBoard({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { id } = await params
-  if (!isUuid(id)) notFound()
+  const { id } = await params;
+  if (!isUuid(id)) notFound();
   const sp = await searchParams,
     data = await loadSchedulingPage(sp, id),
-    authz = await getAuthz()
+    authz = await getAuthz();
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
       <div className="min-h-0 flex-1">
-        <ModuleView spec={{ ...schedulingSpec(data), route: data.hostPath }} data={data} searchParams={sp} trusted contained />
+        <ModuleView
+          spec={{ ...schedulingSpec(data), route: data.hostPath }}
+          data={data}
+          searchParams={sp}
+          trusted
+          contained
+        />
       </div>
       {authz && data.canConfigure && pickString(sp.boardRow) ? (
         <SetupEntitySection
-          entity={SETUP_ENTITY_BY_KEY.get('schedule-boards')!}
+          entity={SETUP_ENTITY_BY_KEY.get("schedule-boards")!}
           orgId={authz.user.orgId}
           actorId={authz.user.id}
           allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
@@ -40,5 +46,5 @@ export default async function ProjectBoard({
         />
       ) : null}
     </div>
-  )
+  );
 }

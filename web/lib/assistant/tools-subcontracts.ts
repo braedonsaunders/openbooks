@@ -71,7 +71,8 @@ const searchSubcontracts: AssistantToolDef = {
       where = sql`${where} and (s.number ilike ${like} or s.title ilike ${like})`;
     }
     if (a.vendorQuery) where = sql`${where} and v.display_name ilike ${`%${a.vendorQuery}%`}`;
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select s.id, s.number, s.title, s.status, s.currency,
              s.original_commitment as "originalCommitment",
              (s.original_commitment + coalesce(changes.approved, 0))::text as "revisedCommitment",
@@ -95,8 +96,12 @@ const searchSubcontracts: AssistantToolDef = {
        order by case s.status when 'active' then 0 when 'pending_approval' then 1 when 'draft' then 2 else 3 end,
                 s.number
        limit ${limit}
-    `, "objects");
-    const totals = (await db.execute<{ n: string; revised: string; billed: string; retained: string }>(sql`
+    `,
+      "objects",
+    );
+    const totals = (
+      await db.execute<{ n: string; revised: string; billed: string; retained: string }>(
+        sql`
       select count(*) as n,
              coalesce(sum(s.original_commitment + coalesce(changes.approved, 0)), 0) as revised,
              coalesce(sum(coalesce(apps.billed, 0)), 0) as billed,
@@ -114,7 +119,10 @@ const searchSubcontracts: AssistantToolDef = {
             from vendor_pay_applications where org_id = s.org_id and subcontract_id = s.id
         ) apps on true
        where ${where}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,
@@ -155,7 +163,8 @@ const getSubcontract: AssistantToolDef = {
     const a = raw as { id: string };
     const orgId = authz.user.orgId;
     const id = a.id;
-    const contract = (await db.execute<Record<string, unknown>>(sql`
+    const contract = await db.execute<Record<string, unknown>>(
+      sql`
       select s.id, s.number, s.title, s.description, s.status, s.currency, p.subsidiary_id as "projectSubsidiaryId",
              s.project_id as "projectId", p.name as "projectName", s.vendor_id as "vendorId", v.display_name as "vendorName",
              s.original_commitment as "originalCommitment", s.default_retainage_percent as "defaultRetainagePercent",
@@ -167,15 +176,23 @@ const getSubcontract: AssistantToolDef = {
         left join lateral (select sum(amount) filter (where status = 'approved') as approved
           from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id) ch on true
        where s.org_id = ${orgId} and s.id = ${id}
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!contract[0]) return { ok: false, error: "not_found" };
-    const { projectSubsidiaryId, ...subcontract } = contract[0] as Record<string, unknown> & { projectSubsidiaryId: string | null };
+    const { projectSubsidiaryId, ...subcontract } = contract[0] as Record<string, unknown> & {
+      projectSubsidiaryId: string | null;
+    };
     // A subcontract on a project outside the caller's scope is a missing one.
-    if (authz.allowedSubsidiaryIds && !authz.allowedSubsidiaryIds.has(String(projectSubsidiaryId))) {
+    if (
+      authz.allowedSubsidiaryIds &&
+      !authz.allowedSubsidiaryIds.has(String(projectSubsidiaryId))
+    ) {
       return { ok: false, error: "not_found" };
     }
     const [sov, changes, applications, lines, controls, releases] = await Promise.all([
-      db.execute(sql`
+      db.execute(
+        sql`
         select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
                l.retainage_percent as "retainagePercent", l.expense_account_id as "expenseAccountId",
                l.change_order_id as "changeOrderId", l.sort_order as "sortOrder",
@@ -188,21 +205,30 @@ const getSubcontract: AssistantToolDef = {
              order by vpa.application_number desc limit 1
           ) earned on true
          where l.org_id = ${orgId} and l.subcontract_id = ${id} order by l.sort_order, l.item_no
-      `, "objects"),
-      db.execute(sql`
+      `,
+        "objects",
+      ),
+      db.execute(
+        sql`
         select id, number, description, status, amount, target_sov_line_id as "targetSovLineId",
                approved_on as "approvedOn"
           from subcontract_change_orders where org_id = ${orgId} and subcontract_id = ${id} order by created_at desc
-      `, "objects"),
-      db.execute(sql`
+      `,
+        "objects",
+      ),
+      db.execute(
+        sql`
         select a.id, a.application_number as "applicationNumber", a.period_end as "periodEnd",
                a.vendor_invoice_number as "vendorInvoiceNumber", a.status,
                a.gross_this_period as "grossThisPeriod", a.retainage_this_period as "retainageThisPeriod", a.net_due as "netDue",
                a.vendor_bill_document_id as "vendorBillDocumentId", d.document_number as "vendorBillNumber", d.status as "vendorBillStatus"
           from vendor_pay_applications a left join documents d on d.id = a.vendor_bill_document_id and d.org_id = a.org_id
          where a.org_id = ${orgId} and a.subcontract_id = ${id} order by a.application_number desc
-      `, "objects"),
-      db.execute(sql`
+      `,
+        "objects",
+      ),
+      db.execute(
+        sql`
         select l.pay_application_id as "payApplicationId", l.sov_line_id as "sovLineId", sov.item_no as "itemNo", sov.description,
                sov.scheduled_value as "scheduledValue", l.previous_earned as "previousEarned",
                l.previous_materials_stored as "previousMaterialsStored", l.work_completed_this_period as "workCompletedThisPeriod",
@@ -210,26 +236,44 @@ const getSubcontract: AssistantToolDef = {
           from vendor_pay_application_lines l join vendor_pay_applications app on app.id = l.pay_application_id and app.org_id = l.org_id
           join subcontract_sov_lines sov on sov.id = l.sov_line_id and sov.org_id = l.org_id
          where l.org_id = ${orgId} and app.subcontract_id = ${id} order by app.application_number desc, sov.sort_order
-      `, "objects"),
-      db.execute(sql`
+      `,
+        "objects",
+      ),
+      db.execute(
+        sql`
         select c.id, c.control_type as "controlType", c.status, c.pay_application_id as "payApplicationId",
                c.vendor_bill_document_id as "vendorBillDocumentId", c.joint_payee_party_id as "jointPayeePartyId",
                p.display_name as "jointPayeeName", c.amount_limit as "amountLimit", c.reason,
                c.effective_on as "effectiveOn", c.expires_on as "expiresOn", c.release_reason as "releaseReason"
           from subcontract_payment_controls c left join parties p on p.id = c.joint_payee_party_id and p.org_id = c.org_id
          where c.org_id = ${orgId} and c.subcontract_id = ${id} order by c.created_at desc
-      `, "objects"),
-      db.execute(sql`
+      `,
+        "objects",
+      ),
+      db.execute(
+        sql`
         select r.id, r.period_end as "periodEnd", r.amount, r.vendor_bill_document_id as "vendorBillDocumentId",
                d.document_number as "vendorBillNumber", d.status as "vendorBillStatus", r.memo
           from vendor_retainage_releases r join documents d on d.id = r.vendor_bill_document_id and d.org_id = r.org_id
          where r.org_id = ${orgId} and r.subcontract_id = ${id} order by r.period_end desc
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const moneyKeys = new Set([
-      "originalCommitment", "revisedCommitment", "scheduledValue", "earnedToDate", "amount",
-      "grossThisPeriod", "retainageThisPeriod", "netDue", "previousEarned", "previousMaterialsStored",
-      "workCompletedThisPeriod", "materialsStoredCurrent", "amountLimit",
+      "originalCommitment",
+      "revisedCommitment",
+      "scheduledValue",
+      "earnedToDate",
+      "amount",
+      "grossThisPeriod",
+      "retainageThisPeriod",
+      "netDue",
+      "previousEarned",
+      "previousMaterialsStored",
+      "workCompletedThisPeriod",
+      "materialsStoredCurrent",
+      "amountLimit",
     ]);
     const monetize = (row: Record<string, unknown>) => {
       const out: Record<string, unknown> = { ...row };
@@ -345,10 +389,17 @@ const preBillingAnalyticsTool: AssistantToolDef = {
     }
     const a = raw as { asOf?: string };
     try {
-      const analytics = await preBillingAnalytics(authz.user.orgId, a.asOf, authz.allowedSubsidiaryIds);
+      const analytics = await preBillingAnalytics(
+        authz.user.orgId,
+        a.asOf,
+        authz.allowedSubsidiaryIds,
+      );
       return { ok: true, data: { ...analytics, href: "/projects/pre-billing" } };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : "tool_failed" };
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message.slice(0, 200) : "tool_failed",
+      };
     }
   },
 };

@@ -1,28 +1,18 @@
-'use client'
-import type { ReactNode } from 'react'
-import { cmp, roundDiv, toUnits } from '@openbooks/engine/money'
+"use client";
+import type { ReactNode } from "react";
+import { cmp, roundDiv, toUnits } from "@openbooks/engine/money";
 
-import {
-  Building,
-  Clock,
-  Mail,
-  Phone,
-  ShieldAlert,
-} from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import {
-  Badge,
-  Card,
-  cn,
-} from '@openbooks/ui'
-import { useMoney } from '@/components/money-provider'
-import type { CustomerPulseData } from '../../../lib/customer-pulse'
-import { PulseHistoryTable } from './PulseHistoryTable'
+import { Building, Clock, Mail, Phone, ShieldAlert } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Badge, Card, cn } from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
+import type { CustomerPulseData } from "../../../lib/customer-pulse";
+import { PulseHistoryTable } from "./PulseHistoryTable";
 
 function billedPercent(billed: string, contract: string): string {
-  const denominator = toUnits(contract)
-  if (denominator <= 0n) return '—'
-  return `${roundDiv(toUnits(billed) * 100n, denominator)}%`
+  const denominator = toUnits(contract);
+  if (denominator <= 0n) return "—";
+  return `${roundDiv(toUnits(billed) * 100n, denominator)}%`;
 }
 
 /**
@@ -43,27 +33,27 @@ function billedPercent(billed: string, contract: string): string {
  * panel names the missing access instead of rendering zeros.
  */
 function RestrictedCard({ title, className }: { title: string; className?: string }) {
-  const t = useTranslations('crm.pulse')
+  const t = useTranslations("crm.pulse");
   return (
-    <Card className={className ?? 'p-4'}>
+    <Card className={className ?? "p-4"}>
       <div className="text-xs font-medium text-slate-500">{title}</div>
       <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
         <ShieldAlert className="h-4 w-4 shrink-0" />
-        {t('restrictedNotice')}
+        {t("restrictedNotice")}
       </div>
     </Card>
-  )
+  );
 }
 
 export function PulsePanel({ data, history }: { data: CustomerPulseData; history?: ReactNode }) {
-  const { party, sections, aging, credit, paymentMetrics, pipeline, projects, timeline } = data
-  const t = useTranslations('crm.pulse')
-  const tc = useTranslations('common')
-  const { money } = useMoney(party.currency)
+  const { party, sections, aging, credit, paymentMetrics, pipeline, projects, timeline } = data;
+  const t = useTranslations("crm.pulse");
+  const tc = useTranslations("common");
+  const { money } = useMoney(party.currency);
   // An empty timeline means "nothing recorded" only when the caller may see
   // at least one timeline-carrying section; otherwise entries were withheld
   // for access and the panel must say so instead of reporting no activity.
-  const timelineWithheld = timeline.length === 0 && !sections.ar && !sections.crm
+  const timelineWithheld = timeline.length === 0 && !sections.ar && !sections.crm;
 
   return (
     <div className="space-y-6">
@@ -76,7 +66,7 @@ export function PulsePanel({ data, history }: { data: CustomerPulseData; history
             {party.isOnHold && (
               <Badge variant="destructive" className="flex items-center gap-1">
                 <ShieldAlert className="h-3.5 w-3.5" />
-                {t('creditHold')}
+                {t("creditHold")}
               </Badge>
             )}
             <Badge variant="outline">{party.currency}</Badge>
@@ -97,7 +87,7 @@ export function PulsePanel({ data, history }: { data: CustomerPulseData; history
             {party.paymentTermsName && (
               <span className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
                 <Clock className="h-3.5 w-3.5 text-slate-400" />
-                {t('terms', { terms: party.paymentTermsName })}
+                {t("terms", { terms: party.paymentTermsName })}
               </span>
             )}
             {party.subsidiaryName && (
@@ -111,7 +101,7 @@ export function PulsePanel({ data, history }: { data: CustomerPulseData; history
 
         {party.holdReason && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
-            <span className="font-semibold">{t('holdReason')}</span> {party.holdReason}
+            <span className="font-semibold">{t("holdReason")}</span> {party.holdReason}
           </div>
         )}
       </div>
@@ -119,178 +109,192 @@ export function PulsePanel({ data, history }: { data: CustomerPulseData; history
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {aging && credit && paymentMetrics ? (
           <>
-        <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">{t('openReceivables')}</div>
-          <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {money(aging.totalOpen)}
-          </div>
-          <div className="mt-2 text-xs">
-            {cmp(aging.totalOverdue, '0') > 0 ? (
-              <span className="font-semibold text-rose-600 dark:text-rose-400">
-                {t('overdue', { amount: money(aging.totalOverdue) })}
-              </span>
-            ) : (
-              <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                {t('allCurrent')}
-              </span>
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">{t('dso')}</div>
-          {/* No payment history anywhere leaves the figure unknown — never 0,
-            which would read as "settles today". */}
-          {paymentMetrics.dso === null ? (
-            <div className="mt-1 text-2xl font-bold text-slate-400 dark:text-slate-500">
-              {tc('labels.unknownValue')}
-            </div>
-          ) : (
-            <>
+            <Card className="p-4">
+              <div className="text-xs font-medium text-slate-500">{t("openReceivables")}</div>
               <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                {paymentMetrics.dso} <span className="text-sm font-normal text-slate-500">{t('days')}</span>
+                {money(aging.totalOpen)}
+              </div>
+              <div className="mt-2 text-xs">
+                {cmp(aging.totalOverdue, "0") > 0 ? (
+                  <span className="font-semibold text-rose-600 dark:text-rose-400">
+                    {t("overdue", { amount: money(aging.totalOverdue) })}
+                  </span>
+                ) : (
+                  <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                    {t("allCurrent")}
+                  </span>
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs font-medium text-slate-500">{t("dso")}</div>
+              {/* No payment history anywhere leaves the figure unknown — never 0,
+            which would read as "settles today". */}
+              {paymentMetrics.dso === null ? (
+                <div className="mt-1 text-2xl font-bold text-slate-400 dark:text-slate-500">
+                  {tc("labels.unknownValue")}
+                </div>
+              ) : (
+                <>
+                  <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    {paymentMetrics.dso}{" "}
+                    <span className="text-sm font-normal text-slate-500">{t("days")}</span>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {paymentMetrics.partyAvgDaysToPay !== null &&
+                    paymentMetrics.orgAvgDaysToPay !== null
+                      ? t("customerAvg", {
+                          customer: paymentMetrics.partyAvgDaysToPay,
+                          org: paymentMetrics.orgAvgDaysToPay,
+                        })
+                      : paymentMetrics.orgAvgDaysToPay !== null
+                        ? t("orgBenchmark", { org: paymentMetrics.orgAvgDaysToPay })
+                        : null}
+                  </div>
+                </>
+              )}
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs font-medium text-slate-500">{t("creditHeadroom")}</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                {credit.remainingCredit !== null ? (
+                  money(credit.remainingCredit)
+                ) : (
+                  <span className="font-normal text-slate-500">{t("noLimit")}</span>
+                )}
               </div>
               <div className="mt-2 text-xs text-slate-500">
-                {paymentMetrics.partyAvgDaysToPay !== null && paymentMetrics.orgAvgDaysToPay !== null
-                  ? t('customerAvg', { customer: paymentMetrics.partyAvgDaysToPay, org: paymentMetrics.orgAvgDaysToPay })
-                  : paymentMetrics.orgAvgDaysToPay !== null
-                    ? t('orgBenchmark', { org: paymentMetrics.orgAvgDaysToPay })
-                    : null}
+                {credit.creditLimit !== null
+                  ? t("limitUsed", {
+                      limit: money(credit.creditLimit),
+                      percent: Math.round(credit.creditUtilizationPercent || 0),
+                    })
+                  : t("unrestricted")}
               </div>
-            </>
-          )}
-        </Card>
-
-        <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">{t('creditHeadroom')}</div>
-          <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {credit.remainingCredit !== null ? (
-              money(credit.remainingCredit)
-            ) : (
-              <span className="font-normal text-slate-500">{t('noLimit')}</span>
-            )}
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            {credit.creditLimit !== null
-              ? t('limitUsed', {
-                  limit: money(credit.creditLimit),
-                  percent: Math.round(credit.creditUtilizationPercent || 0),
-                })
-              : t('unrestricted')}
-          </div>
-        </Card>
+            </Card>
           </>
         ) : (
           <>
-            <RestrictedCard title={t('openReceivables')} />
-            <RestrictedCard title={t('dso')} />
-            <RestrictedCard title={t('creditHeadroom')} />
+            <RestrictedCard title={t("openReceivables")} />
+            <RestrictedCard title={t("dso")} />
+            <RestrictedCard title={t("creditHeadroom")} />
           </>
         )}
         {pipeline ? (
-        <Card className="p-4">
-          <div className="text-xs font-medium text-slate-500">{t('pipelineValue')}</div>
-          <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {money(pipeline.projectedPipeline)}
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            {pipeline.winRatePercent !== null ? (
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                {t('winRate', { percent: pipeline.winRatePercent, won: pipeline.wonOpportunities })}
-              </span>
-            ) : (
-              t('openDeals', { count: pipeline.openOpportunities })
-            )}
-          </div>
-        </Card>
+          <Card className="p-4">
+            <div className="text-xs font-medium text-slate-500">{t("pipelineValue")}</div>
+            <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+              {money(pipeline.projectedPipeline)}
+            </div>
+            <div className="mt-2 text-xs text-slate-500">
+              {pipeline.winRatePercent !== null ? (
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  {t("winRate", {
+                    percent: pipeline.winRatePercent,
+                    won: pipeline.wonOpportunities,
+                  })}
+                </span>
+              ) : (
+                t("openDeals", { count: pipeline.openOpportunities })
+              )}
+            </div>
+          </Card>
         ) : (
-          <RestrictedCard title={t('pipelineValue')} />
+          <RestrictedCard title={t("pipelineValue")} />
         )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {aging && credit ? (
           <>
-        <Card className="p-5 lg:col-span-2">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('agingTitle')}</h3>
-          <p className="mt-0.5 text-xs text-slate-500">{t('agingDescription')}</p>
+            <Card className="p-5 lg:col-span-2">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {t("agingTitle")}
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500">{t("agingDescription")}</p>
 
-          <div className="mt-4 grid grid-cols-5 gap-2 border-t border-slate-100 pt-3 text-center dark:border-slate-800">
-            <div className="rounded-lg bg-emerald-50/60 p-2.5 dark:bg-emerald-950/20">
-              <div className="text-[11px] font-medium text-slate-500">{t('bucketCurrent')}</div>
-              <div className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                {money(aging.current)}
+              <div className="mt-4 grid grid-cols-5 gap-2 border-t border-slate-100 pt-3 text-center dark:border-slate-800">
+                <div className="rounded-lg bg-emerald-50/60 p-2.5 dark:bg-emerald-950/20">
+                  <div className="text-[11px] font-medium text-slate-500">{t("bucketCurrent")}</div>
+                  <div className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                    {money(aging.current)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-900">
+                  <div className="text-[11px] font-medium text-slate-500">{t("bucket1To30")}</div>
+                  <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-200">
+                    {money(aging.days1To30)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-amber-50/60 p-2.5 dark:bg-amber-950/20">
+                  <div className="text-[11px] font-medium text-slate-500">{t("bucket31To60")}</div>
+                  <div className="mt-1 text-sm font-bold text-amber-700 dark:text-amber-300">
+                    {money(aging.days31To60)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-orange-50/60 p-2.5 dark:bg-orange-950/20">
+                  <div className="text-[11px] font-medium text-slate-500">{t("bucket61To90")}</div>
+                  <div className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
+                    {money(aging.days61To90)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-rose-50/60 p-2.5 dark:bg-rose-950/20">
+                  <div className="text-[11px] font-medium text-slate-500">{t("bucket90Plus")}</div>
+                  <div className="mt-1 text-sm font-bold text-rose-700 dark:text-rose-300">
+                    {money(aging.days90Plus)}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-900">
-              <div className="text-[11px] font-medium text-slate-500">{t('bucket1To30')}</div>
-              <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-200">
-                {money(aging.days1To30)}
-              </div>
-            </div>
-            <div className="rounded-lg bg-amber-50/60 p-2.5 dark:bg-amber-950/20">
-              <div className="text-[11px] font-medium text-slate-500">{t('bucket31To60')}</div>
-              <div className="mt-1 text-sm font-bold text-amber-700 dark:text-amber-300">
-                {money(aging.days31To60)}
-              </div>
-            </div>
-            <div className="rounded-lg bg-orange-50/60 p-2.5 dark:bg-orange-950/20">
-              <div className="text-[11px] font-medium text-slate-500">{t('bucket61To90')}</div>
-              <div className="mt-1 text-sm font-bold text-orange-700 dark:text-orange-300">
-                {money(aging.days61To90)}
-              </div>
-            </div>
-            <div className="rounded-lg bg-rose-50/60 p-2.5 dark:bg-rose-950/20">
-              <div className="text-[11px] font-medium text-slate-500">{t('bucket90Plus')}</div>
-              <div className="mt-1 text-sm font-bold text-rose-700 dark:text-rose-300">
-                {money(aging.days90Plus)}
-              </div>
-            </div>
-          </div>
-        </Card>
+            </Card>
 
-        <Card className="p-5">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('creditTitle')}</h3>
-          <p className="mt-0.5 text-xs text-slate-500">{t('creditDescription')}</p>
+            <Card className="p-5">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {t("creditTitle")}
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500">{t("creditDescription")}</p>
 
-          <div className="mt-4 space-y-2.5 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
-            <div className="flex justify-between">
-              <span className="text-slate-500">{t('creditLimit')}</span>
-              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                {credit.creditLimit !== null ? money(credit.creditLimit) : tc('labels.none')}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">{t('openInvoices')}</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">
-                {money(credit.openArBalance)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">{t('unbilledOrders')}</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">
-                {money(credit.unbilledOrdersBalance)}
-              </span>
-            </div>
-            <div className="flex justify-between border-t border-slate-200 pt-2 font-bold dark:border-slate-800">
-              <span>{t('headroom')}</span>
-              <span
-                className={cn(
-                  credit.remainingCredit !== null && cmp(credit.remainingCredit, '0') <= 0
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-emerald-600 dark:text-emerald-400',
-                )}
-              >
-                {credit.remainingCredit !== null ? money(credit.remainingCredit) : t('uncapped')}
-              </span>
-            </div>
-          </div>
-        </Card>
+              <div className="mt-4 space-y-2.5 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t("creditLimit")}</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {credit.creditLimit !== null ? money(credit.creditLimit) : tc("labels.none")}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t("openInvoices")}</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                    {money(credit.openArBalance)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t("unbilledOrders")}</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                    {money(credit.unbilledOrdersBalance)}
+                  </span>
+                </div>
+                <div className="flex justify-between border-t border-slate-200 pt-2 font-bold dark:border-slate-800">
+                  <span>{t("headroom")}</span>
+                  <span
+                    className={cn(
+                      credit.remainingCredit !== null && cmp(credit.remainingCredit, "0") <= 0
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-emerald-600 dark:text-emerald-400",
+                    )}
+                  >
+                    {credit.remainingCredit !== null
+                      ? money(credit.remainingCredit)
+                      : t("uncapped")}
+                  </span>
+                </div>
+              </div>
+            </Card>
           </>
         ) : (
           <>
-            <RestrictedCard title={t('agingTitle')} className="p-5 lg:col-span-2" />
-            <RestrictedCard title={t('creditTitle')} className="p-5" />
+            <RestrictedCard title={t("agingTitle")} className="p-5 lg:col-span-2" />
+            <RestrictedCard title={t("creditTitle")} className="p-5" />
           </>
         )}
       </div>
@@ -298,26 +302,28 @@ export function PulsePanel({ data, history }: { data: CustomerPulseData; history
       {projects ? (
         <Card className="p-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('projectsTitle')}</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              {t("projectsTitle")}
+            </h3>
             <Badge variant="outline">
-              {t('projectsCount', { active: projects.activeCount, total: projects.totalCount })}
+              {t("projectsCount", { active: projects.activeCount, total: projects.totalCount })}
             </Badge>
           </div>
           <div className="mt-4 grid grid-cols-3 gap-4 border-t border-slate-100 pt-3 text-center dark:border-slate-800">
             <div>
-              <div className="text-xs text-slate-500">{t('contractBudget')}</div>
+              <div className="text-xs text-slate-500">{t("contractBudget")}</div>
               <div className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">
                 {money(projects.totalContractValue)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">{t('billedToDate')}</div>
+              <div className="text-xs text-slate-500">{t("billedToDate")}</div>
               <div className="mt-1 text-base font-bold text-emerald-600 dark:text-emerald-400">
                 {money(projects.totalBilled)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">{t('billedProgress')}</div>
+              <div className="text-xs text-slate-500">{t("billedProgress")}</div>
               <div className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">
                 {billedPercent(projects.totalBilled, projects.totalContractValue)}
               </div>
@@ -325,18 +331,26 @@ export function PulsePanel({ data, history }: { data: CustomerPulseData; history
           </div>
         </Card>
       ) : sections.projects ? null : (
-        <RestrictedCard title={t('projectsTitle')} className="p-5" />
+        <RestrictedCard title={t("projectsTitle")} className="p-5" />
       )}
 
       <Card className="p-5">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('timelineTitle')}</h3>
-        <p className="mt-0.5 text-xs text-slate-500">{t('timelineDescription')}</p>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          {t("timelineTitle")}
+        </h3>
+        <p className="mt-0.5 text-xs text-slate-500">{t("timelineDescription")}</p>
 
         <div className="mt-4">
-          {history ?? <PulseHistoryTable rows={timeline} currency={party.currency} withheld={timelineWithheld}
-            state={data.timelinePage ?? { total: timeline.length, page: 1, perPage: 50 }} />}
+          {history ?? (
+            <PulseHistoryTable
+              rows={timeline}
+              currency={party.currency}
+              withheld={timelineWithheld}
+              state={data.timelinePage ?? { total: timeline.length, page: 1, perPage: 50 }}
+            />
+          )}
         </div>
       </Card>
     </div>
-  )
+  );
 }

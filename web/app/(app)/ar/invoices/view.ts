@@ -1,29 +1,55 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { can, requirePermission } from '../../../../lib/authz'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { can, requirePermission } from "../../../../lib/authz";
 import { AR_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
-import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import {
+  accountOptions,
+  createDocumentSeed,
+  dimensionOptions,
+  taxCodeOptions,
+  taxGroupOptions,
+} from "../../../../lib/documents.ts";
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
-import type { DocKindConfig } from '../../../../lib/document-kinds'
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
-import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../../lib/features'
-import type { DocumentDrawer } from '../../../../components/document-drawer'
-import type { AppliedPayment } from '../../../../components/applied-payments-panel'
-import { nativeGoodsTaxAvailable, readProviderTransactionsForDocument } from '@openbooks/engine/tax'
-import type { TaxProviderChipRow } from '../../../../components/tax-provider-chip'
-import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
-import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list-query'
-import { documentSettlementHref } from '../../../../lib/settlement-href'
-import { creditApplicationsDrawer, type CreditApplicationsDrawer } from '../../../../lib/credit-applications-drawer'
-import { invoiceWriteOffDrawer, type InvoiceWriteOffDrawer } from '../../../../lib/invoice-write-off-drawer'
+import type { DocKindConfig } from "../../../../lib/document-kinds";
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../../lib/custom-fields";
+import { isMultiSubsidiary, subsidiaryOptions } from "../../../../lib/subsidiaries";
+import { resolveFormLayout } from "../../../../lib/customization/resolve";
+import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from "../../../../lib/features";
+import type { DocumentDrawer } from "../../../../components/document-drawer";
+import type { AppliedPayment } from "../../../../components/applied-payments-panel";
+import {
+  nativeGoodsTaxAvailable,
+  readProviderTransactionsForDocument,
+} from "@openbooks/engine/tax";
+import type { TaxProviderChipRow } from "../../../../components/tax-provider-chip";
+import { TAX_FILING_WRITE_PERMISSION } from "../../../../lib/tax-filing-permission";
+import { DISPLAY_DOCUMENT_NUMBER_EXPR } from "../../../../lib/customization/list-query";
+import { documentSettlementHref } from "../../../../lib/settlement-href";
+import {
+  creditApplicationsDrawer,
+  type CreditApplicationsDrawer,
+} from "../../../../lib/credit-applications-drawer";
+import {
+  invoiceWriteOffDrawer,
+  type InvoiceWriteOffDrawer,
+} from "../../../../lib/invoice-write-off-drawer";
 
 /**
  * Customer invoices + credits, split into a loader and a spec.
@@ -43,150 +69,177 @@ import { invoiceWriteOffDrawer, type InvoiceWriteOffDrawer } from '../../../../l
  * so they travel through the loader result and the widgets render them.
  */
 
-type DocumentDrawerProps = Parameters<typeof DocumentDrawer>[0]
-type LoadedDocument = NonNullable<Awaited<ReturnType<typeof loadDocument>>>
+type DocumentDrawerProps = Parameters<typeof DocumentDrawer>[0];
+type LoadedDocument = NonNullable<Awaited<ReturnType<typeof loadDocument>>>;
 
 export interface ArInvoicesDrawer {
   /** Remount key: switching documents must reset the drawer's client state. */
-  remountKey: string
-  basePath: string
-  payload: LoadedDocument | { doc: Record<string, unknown>; lines: Record<string, unknown>[] }
+  remountKey: string;
+  basePath: string;
+  payload: LoadedDocument | { doc: Record<string, unknown>; lines: Record<string, unknown>[] };
   /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
-  createMode: boolean
-  config: DocKindConfig
-  initialMode: 'edit' | 'view'
-  parties: DocumentDrawerProps['parties']
-  accounts: DocumentDrawerProps['accounts']
-  taxCodes: DocumentDrawerProps['taxCodes']
-  taxGroups: DocumentDrawerProps['taxGroups']
-  departments: DocumentDrawerProps['departments']
-  projects: DocumentDrawerProps['projects']
-  locations: DocumentDrawerProps['locations']
-  classes: DocumentDrawerProps['classes']
-  segments: DocumentDrawerProps['segments']
-  builtinSegments: DocumentDrawerProps['builtinSegments']
-  items: Record<string, unknown>[]
-  stockLocations: { id: string; code: string | null }[]
-  subsidiaries: DocumentDrawerProps['subsidiaries']
-  headerDefs: DocumentDrawerProps['headerDefs']
-  lineDefs: DocumentDrawerProps['lineDefs']
-  canCreate: boolean
-  canPost: boolean
-  layout: DocumentDrawerProps['layout']
-  availableLayouts: DocumentDrawerProps['availableLayouts']
-  currentLayoutId: DocumentDrawerProps['currentLayoutId']
-  recordType: string
-  canCustomize: boolean
-  paymentLinks: { documentId: string; canManage: boolean } | null
-  supplyEvidence: { documentId: string; status: string; canManage: boolean } | null
-  allocationsEntryEnabled: boolean
-  appliedPayments: { payments: AppliedPayment[]; currency: string } | null
-  creditApplications: CreditApplicationsDrawer | null
+  createMode: boolean;
+  config: DocKindConfig;
+  initialMode: "edit" | "view";
+  parties: DocumentDrawerProps["parties"];
+  accounts: DocumentDrawerProps["accounts"];
+  taxCodes: DocumentDrawerProps["taxCodes"];
+  taxGroups: DocumentDrawerProps["taxGroups"];
+  departments: DocumentDrawerProps["departments"];
+  projects: DocumentDrawerProps["projects"];
+  locations: DocumentDrawerProps["locations"];
+  classes: DocumentDrawerProps["classes"];
+  segments: DocumentDrawerProps["segments"];
+  builtinSegments: DocumentDrawerProps["builtinSegments"];
+  items: Record<string, unknown>[];
+  stockLocations: { id: string; code: string | null }[];
+  subsidiaries: DocumentDrawerProps["subsidiaries"];
+  headerDefs: DocumentDrawerProps["headerDefs"];
+  lineDefs: DocumentDrawerProps["lineDefs"];
+  canCreate: boolean;
+  canPost: boolean;
+  layout: DocumentDrawerProps["layout"];
+  availableLayouts: DocumentDrawerProps["availableLayouts"];
+  currentLayoutId: DocumentDrawerProps["currentLayoutId"];
+  recordType: string;
+  canCustomize: boolean;
+  paymentLinks: { documentId: string; canManage: boolean } | null;
+  supplyEvidence: { documentId: string; status: string; canManage: boolean } | null;
+  allocationsEntryEnabled: boolean;
+  appliedPayments: { payments: AppliedPayment[]; currency: string } | null;
+  creditApplications: CreditApplicationsDrawer | null;
   /** Write off the open balance of this posted invoice; null when none applies. */
-  invoiceWriteOff: InvoiceWriteOffDrawer | null
-  returnAuthorizationHref: string | null
+  invoiceWriteOff: InvoiceWriteOffDrawer | null;
+  returnAuthorizationHref: string | null;
   /** Receive payment for this posted invoice (party + invoice preselected). */
-  settlementHref: string | null
-  promotionsEnabled: boolean
+  settlementHref: string | null;
+  promotionsEnabled: boolean;
   /** Canadian goods tax can be computed natively for this organization. */
-  nativeGoodsTaxAvailable: boolean
+  nativeGoodsTaxAvailable: boolean;
   /** Provider commit rows for a posted sales document; null while the
    *  document is a draft or has nothing to commit to. */
-  taxProvider: { documentNumber: string; provider: string; rows: TaxProviderChipRow[]; canRetry: boolean } | null
+  taxProvider: {
+    documentNumber: string;
+    provider: string;
+    rows: TaxProviderChipRow[];
+    canRetry: boolean;
+  } | null;
   /** Active marketplace facilitators for the per-line "tax collected by"
    *  column. Empty hides the column. */
-  marketplaceFacilitators: { name: string }[]
+  marketplaceFacilitators: { name: string }[];
 }
 
 export interface ArInvoicesData {
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  canCreate: boolean
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canCreate: boolean;
   /** Loader-resolved post capability, threaded into the row actions so a
    *  preparer never sees an enabled Post (the drawer reads the same value). */
-  canPost: boolean
+  canPost: boolean;
   newButton: {
-    items: { kind: string; label: string }[]
-    basePath: string
-    triggerLabel: string
-  }
-  drawerOpen: boolean
-  drawer: ArInvoicesDrawer | null
+    items: { kind: string; label: string }[];
+    basePath: string;
+    triggerLabel: string;
+  };
+  drawerOpen: boolean;
+  drawer: ArInvoicesDrawer | null;
 }
 
 export async function loadArInvoices(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ArInvoicesData> {
-  const authz = await requirePermission('ar.read')
-  const canCreate = can(authz, 'ar.create')
+  const authz = await requirePermission("ar.read");
+  const canCreate = can(authz, "ar.create");
   const [featureState, inventoryEnabled, equipmentEnabled] = await Promise.all([
     resolvedFeatureState(authz.user.orgId),
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-    isFeatureEnabled(authz.user.orgId, 'equipment'),
-  ])
-  const onlinePaymentsEnabled = featureEnabled(featureState, 'onlinePayments')
-  const t = await getTranslations('ar')
-  const rawDocId = typeof sp.doc === 'string' ? sp.doc : undefined
+    isFeatureEnabled(authz.user.orgId, "inventory"),
+    isFeatureEnabled(authz.user.orgId, "equipment"),
+  ]);
+  const onlinePaymentsEnabled = featureEnabled(featureState, "onlinePayments");
+  const t = await getTranslations("ar");
+  const rawDocId = typeof sp.doc === "string" ? sp.doc : undefined;
   // Only a real document id (or 'new') reaches the loader: a malformed
   // ?doc= must never bind to a uuid column and render a 500.
-  const docId = rawDocId === 'new' || (typeof rawDocId === 'string' && isUuid(rawDocId)) ? rawDocId : undefined
+  const docId =
+    rawDocId === "new" || (typeof rawDocId === "string" && isUuid(rawDocId)) ? rawDocId : undefined;
 
   const newButton = {
     items: [
-      { kind: 'customer_invoice', label: t('actions.newInvoice') },
-      { kind: 'customer_credit', label: t('actions.newCredit') },
+      { kind: "customer_invoice", label: t("actions.newInvoice") },
+      { kind: "customer_credit", label: t("actions.newCredit") },
     ],
-    basePath: '/ar/invoices',
-    triggerLabel: t('actions.new'),
-  }
+    basePath: "/ar/invoices",
+    triggerLabel: t("actions.new"),
+  };
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
-  const fieldViewer = customFieldViewerFor(authz)
-  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId, fieldViewer) : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
-    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
-    ? loadedDoc : null
+  const fieldViewer = customFieldViewerFor(authz);
+  const loadedDoc =
+    docId && docId !== "new" ? await loadDocument(docId, authz.user.orgId, fieldViewer) : null;
+  const openDoc =
+    loadedDoc &&
+    loadedDoc.doc.org_id === authz.user.orgId &&
+    (!authz.allowedSubsidiaryIds ||
+      authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
+      ? loadedDoc
+      : null;
   const documentOptionScope = openDoc
     ? new Set([String(openDoc.doc.subsidiary_id)])
-    : authz.allowedSubsidiaryIds
-  const openKind = openDoc?.doc.kind as string | undefined
+    : authz.allowedSubsidiaryIds;
+  const openKind = openDoc?.doc.kind as string | undefined;
   // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
   // over a blank in-memory payload. The kind must belong to this page, the
   // caller must hold its create permission, and nothing is read or written
   // for an id — the document exists only after an explicit Save.
-  const createKind = typeof sp.kind === 'string' && (AR_KINDS as readonly string[]).includes(sp.kind)
-    && isDocumentCreateKind(sp.kind) ? sp.kind : undefined
-  const isCreate = docId === 'new' && !!createKind && canCreate
-  const drawerKind = openKind ?? createKind
-  const drawerOpen = !!(openDoc && openKind && (AR_KINDS as readonly string[]).includes(openKind)) || isCreate
+  const createKind =
+    typeof sp.kind === "string" &&
+    (AR_KINDS as readonly string[]).includes(sp.kind) &&
+    isDocumentCreateKind(sp.kind)
+      ? sp.kind
+      : undefined;
+  const isCreate = docId === "new" && !!createKind && canCreate;
+  const drawerKind = openKind ?? createKind;
+  const drawerOpen =
+    !!(openDoc && openKind && (AR_KINDS as readonly string[]).includes(openKind)) || isCreate;
   const [loadedHeaderDefs, loadedLineDefs] = drawerOpen
-    ? await Promise.all([loadFieldDefs('documents', drawerKind!), loadFieldDefs('document_lines', drawerKind!)])
-    : [[], []]
-  const headerDefs = visibleCustomFieldDefs(loadedHeaderDefs, fieldViewer)
-  const lineDefs = visibleCustomFieldDefs(loadedLineDefs, fieldViewer)
+    ? await Promise.all([
+        loadFieldDefs("documents", drawerKind!),
+        loadFieldDefs("document_lines", drawerKind!),
+      ])
+    : [[], []];
+  const headerDefs = visibleCustomFieldDefs(loadedHeaderDefs, fieldViewer);
+  const lineDefs = visibleCustomFieldDefs(loadedLineDefs, fieldViewer);
   // The create seed carries no lines, so the keep-existing-items clause
   // matches nothing — the same items list a blank draft would see.
-  const existingDocId = openDoc ? docId : null
+  const existingDocId = openDoc ? docId : null;
   // Tax choices price as of the open document's own date, so a draft dated
   // before a rate change keeps the rate its amounts were entered at.
-  const openDocumentFields = openDoc?.doc as Record<string, unknown> | undefined
-  const openDocumentDate = typeof openDocumentFields?.document_date === 'string' ? openDocumentFields.document_date : undefined
+  const openDocumentFields = openDoc?.doc as Record<string, unknown> | undefined;
+  const openDocumentDate =
+    typeof openDocumentFields?.document_date === "string"
+      ? openDocumentFields.document_date
+      : undefined;
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
           listScopedPartyOptionsWithCurrent(
             authz.user.orgId,
             documentOptionScope,
-            'customer',
+            "customer",
             openDoc?.doc.party_id ? String(openDoc.doc.party_id) : undefined,
           ),
-          accountOptions(DOC_KINDS[drawerKind! as 'customer_invoice']!, authz.user.orgId, documentOptionScope),
+          accountOptions(
+            DOC_KINDS[drawerKind! as "customer_invoice"]!,
+            authz.user.orgId,
+            documentOptionScope,
+          ),
           taxCodeOptions(undefined, openDocumentDate),
           taxGroupOptions(undefined, openDocumentDate),
           dimensionOptions(authz.user.orgId, undefined, documentOptionScope),
-          db.execute(sql`
+          db.execute(
+            sql`
             select it.id, it.code, it.name,
                    exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
              from items it
@@ -199,22 +252,28 @@ export async function loadArInvoices(
                     where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                  )
                )
-             order by coalesce(it.code, it.name), it.name limit 2000`, 'objects'),
+             order by coalesce(it.code, it.name), it.name limit 2000`,
+            "objects",
+          ),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
           isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
-            if (!multi) return null
-            const options = await subsidiaryOptions()
+            if (!multi) return null;
+            const options = await subsidiaryOptions();
             return authz.allowedSubsidiaryIds
               ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-              : options
+              : options;
           }),
           // Warehouses for the line-level stock-location picker (customer
           // invoices only). Empty hides the picker; a single location is
           // stamped silently by the edit writer instead.
           inventoryEnabled
-            ? db.execute<Record<string, unknown>>(sql`
+            ? db
+                .execute<Record<string, unknown>>(
+                  sql`
               select id, code from stock_locations
-               where org_id = ${authz.user.orgId} and is_active order by code`).then((r) => r.rows)
+               where org_id = ${authz.user.orgId} and is_active order by code`,
+                )
+                .then((r) => r.rows)
             : [],
         ])
       : null,
@@ -229,11 +288,12 @@ export async function loadArInvoices(
           explicitLayoutId: pickString(sp.form),
         })
       : null,
-  ])
+  ]);
   // Blank in-memory payload for unsaved create. The subsidiary defaults to
   // the first in-scope option in multi-subsidiary orgs so the form opens
   // submittable; unrestricted orgs keep the factory root default.
-  const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
+  const createSeed =
+    isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null;
 
   // Active open-item applications INTO this document's lines (receipts,
   // credits), so a paid invoice names what paid it instead of showing only a
@@ -242,10 +302,17 @@ export async function loadArInvoices(
   // panel was empty on every invoice it exists for while quietly working on
   // credit memos. `from_line` is the settling side, `to_line` the item being
   // settled (schema/src/ledger.ts).
-  const appliedRows = drawerOpen && openDoc && !isCreate
-    ? (await db.execute<{
-        id: string; number: string; kind: string; date: string | null; amount: string; appliedOn: string | null
-      }>(sql`
+  const appliedRows =
+    drawerOpen && openDoc && !isCreate
+      ? await db.execute<{
+          id: string;
+          number: string;
+          kind: string;
+          date: string | null;
+          amount: string;
+          appliedOn: string | null;
+        }>(
+          sql`
         select ap.id::text as id, ${DISPLAY_DOCUMENT_NUMBER_EXPR} as number, d.kind as kind,
                d.document_date::text as date, ap.amount::text as amount,
                ap.applied_on::text as "appliedOn"
@@ -258,84 +325,111 @@ export async function loadArInvoices(
          where ap.org_id = ${authz.user.orgId} and settled_entry.source_document_id = ${openDoc.doc.id}
            and ap.unapplied_at is null
          order by ap.applied_on desc, ap.created_at desc
-      `, 'objects'))
-    : []
+      `,
+          "objects",
+        )
+      : [];
   // A restricted subsidiary scope narrows the seed default the same way
   // the picker list narrows: the first visible subsidiary wins.
   const createSubsidiaryDefault = (() => {
-    if (!createSeed || !pickers) return null
-    const options = (pickers[6] ?? []) as { id: string }[]
-    if (options.length === 0) return null
+    if (!createSeed || !pickers) return null;
+    const options = (pickers[6] ?? []) as { id: string }[];
+    if (options.length === 0) return null;
     const inScope = authz.allowedSubsidiaryIds
       ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-      : options
-    return inScope[0]?.id ?? null
-  })()
+      : options;
+    return inScope[0]?.id ?? null;
+  })();
   if (createSeed && createSubsidiaryDefault) {
-    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
+    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault;
   }
-  const drawerPayload = openDoc ?? createSeed
+  const drawerPayload = openDoc ?? createSeed;
   // Provider commit rows for a posted sales document: posting enqueues them
   // in its own transaction, so by the time the drawer opens they are here.
   // Drafts and unconfigured providers read null and render no chip.
-  const providerRows = drawerOpen && openDoc && !isCreate && String(openDoc.doc.status) === 'posted'
-    ? await readProviderTransactionsForDocument(authz.user.orgId, String(openDoc.doc.id))
-    : []
+  const providerRows =
+    drawerOpen && openDoc && !isCreate && String(openDoc.doc.status) === "posted"
+      ? await readProviderTransactionsForDocument(authz.user.orgId, String(openDoc.doc.id))
+      : [];
   // Facilitator names for the line-level collector choice. Drafts need them
   // as much as posted documents (the choice is made before posting), so this
   // loads for every open drawer on this page's sales kinds.
   const facilitatorRows = drawerOpen
-    ? (await db.execute<{ name: string }>(sql`
+    ? await db.execute<{ name: string }>(
+        sql`
         select name from marketplace_facilitators
          where org_id = ${authz.user.orgId} and is_active
-         order by name`, 'objects'))
-    : []
-  const taxProvider = providerRows.length > 0 && openDoc
-    ? {
-        documentNumber: String(openDoc.doc.document_number),
-        provider: String(providerRows[0]!.provider),
-        rows: providerRows.map((row): TaxProviderChipRow => ({
-          id: String(row.id),
-          status: String(row.status),
-          lastError: row.lastError,
-        })),
-        canRetry: can(authz, TAX_FILING_WRITE_PERMISSION),
-      }
-    : null
+         order by name`,
+        "objects",
+      )
+    : [];
+  const taxProvider =
+    providerRows.length > 0 && openDoc
+      ? {
+          documentNumber: String(openDoc.doc.document_number),
+          provider: String(providerRows[0]!.provider),
+          rows: providerRows.map((row): TaxProviderChipRow => ({
+            id: String(row.id),
+            status: String(row.status),
+            lastError: row.lastError,
+          })),
+          canRetry: can(authz, TAX_FILING_WRITE_PERMISSION),
+        }
+      : null;
   const drawer =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
-          basePath: '/ar/invoices',
+          basePath: "/ar/invoices",
           remountKey: openDoc ? String(openDoc.doc.id) : `new:${drawerKind}`,
           payload: drawerPayload,
           createMode: isCreate,
           taxProvider,
           marketplaceFacilitators: facilitatorRows,
-          allocationsEntryEnabled: featureEnabled(featureState, 'allocationsAtEntry'),
-          appliedPayments: appliedRows.length > 0 && openDoc
-            ? { payments: appliedRows as AppliedPayment[], currency: String(openDoc.doc.currency) }
-            : null,
+          allocationsEntryEnabled: featureEnabled(featureState, "allocationsAtEntry"),
+          appliedPayments:
+            appliedRows.length > 0 && openDoc
+              ? {
+                  payments: appliedRows as AppliedPayment[],
+                  currency: String(openDoc.doc.currency),
+                }
+              : null,
           // Only a posted credit memo can settle anything. The panel reads its
           // own state; the loader supplies identity and the permission.
           creditApplications:
-            openDoc && drawerKind === 'customer_credit'
-              ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, { ar: can(authz, 'ar.pay'), ap: false })
+            openDoc && drawerKind === "customer_credit"
+              ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, {
+                  ar: can(authz, "ar.pay"),
+                  ap: false,
+                })
               : null,
-          invoiceWriteOff: openDoc && drawerKind === 'customer_invoice'
-            ? invoiceWriteOffDrawer(openDoc.doc as Record<string, unknown>, can(authz, 'ar.create') && can(authz, 'ar.post') && can(authz, 'ar.pay'))
-            : null,
+          invoiceWriteOff:
+            openDoc && drawerKind === "customer_invoice"
+              ? invoiceWriteOffDrawer(
+                  openDoc.doc as Record<string, unknown>,
+                  can(authz, "ar.create") && can(authz, "ar.post") && can(authz, "ar.pay"),
+                )
+              : null,
           returnAuthorizationHref:
-            drawerKind === 'customer_invoice' && featureEnabled(featureState, 'returnAuthorizations') && can(authz, 'orders.fulfill')
-              ? '/returns?doc=new&kind=rma'
+            drawerKind === "customer_invoice" &&
+            featureEnabled(featureState, "returnAuthorizations") &&
+            can(authz, "orders.fulfill")
+              ? "/returns?doc=new&kind=rma"
               : null,
-          settlementHref: documentSettlementHref(openDoc?.doc as Record<string, unknown> | undefined, {
-            ar: can(authz, 'ar.pay'),
-            ap: false,
-          }),
-          promotionsEnabled: featureEnabled(featureState, 'promotions'),
-          nativeGoodsTaxAvailable: drawerKind === 'customer_invoice' ? await nativeGoodsTaxAvailable(authz.user.orgId) : false,
+          settlementHref: documentSettlementHref(
+            openDoc?.doc as Record<string, unknown> | undefined,
+            {
+              ar: can(authz, "ar.pay"),
+              ap: false,
+            },
+          ),
+          promotionsEnabled: featureEnabled(featureState, "promotions"),
+          nativeGoodsTaxAvailable:
+            drawerKind === "customer_invoice"
+              ? await nativeGoodsTaxAvailable(authz.user.orgId)
+              : false,
           config: DOC_KINDS[drawerKind]!,
-          initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          initialMode: (isCreate || pickString(sp.mode) === "edit" ? "edit" : "view") as
+            "edit" | "view",
           parties: pickers[0],
           accounts: pickers[1],
           taxCodes: pickers[2],
@@ -349,17 +443,17 @@ export async function loadArInvoices(
           items: pickers[5],
           stockLocations: (pickers[7] ?? []) as { id: string; code: string | null }[],
           subsidiaries: pickers[6] ?? undefined,
-          headerDefs: headerDefs as DocumentDrawerProps['headerDefs'],
-          lineDefs: lineDefs as DocumentDrawerProps['lineDefs'],
+          headerDefs: headerDefs as DocumentDrawerProps["headerDefs"],
+          lineDefs: lineDefs as DocumentDrawerProps["lineDefs"],
           canCreate,
-          canPost: can(authz, 'ar.post'),
+          canPost: can(authz, "ar.post"),
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
           recordType: drawerKind,
-          canCustomize: can(authz, 'admin.customization.manage'),
+          canCustomize: can(authz, "admin.customization.manage"),
           paymentLinks:
-            drawerKind === 'customer_invoice' && onlinePaymentsEnabled && openDoc
+            drawerKind === "customer_invoice" && onlinePaymentsEnabled && openDoc
               ? { documentId: String(openDoc.doc.id), canManage: canCreate }
               : null,
           // Cross-border evidence travels with the drawer like payments do:
@@ -367,44 +461,48 @@ export async function loadArInvoices(
           // its own state. Hidden while the feature is off; data is kept.
           supplyEvidence:
             openDoc &&
-            (drawerKind === 'customer_invoice' || drawerKind === 'customer_credit') &&
-            featureEnabled(featureState, 'crossBorderTax')
-              ? { documentId: String(openDoc.doc.id), status: String(openDoc.doc.status), canManage: canCreate }
+            (drawerKind === "customer_invoice" || drawerKind === "customer_credit") &&
+            featureEnabled(featureState, "crossBorderTax")
+              ? {
+                  documentId: String(openDoc.doc.id),
+                  status: String(openDoc.doc.status),
+                  canManage: canCreate,
+                }
               : null,
         }
-      : null
+      : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     currentParams: sp,
     canCreate,
-    canPost: can(authz, 'ar.post'),
+    canPost: can(authz, "ar.post"),
     newButton,
     drawerOpen: Boolean(drawer),
     drawer,
-  }
+  };
 }
 
-const f = ref<ArInvoicesData>()
+const f = ref<ArInvoicesData>();
 
 export function arInvoicesSpec(data: ArInvoicesData): PageSpec {
   const newDocument = {
-    widget: 'new-document',
+    widget: "new-document",
     props: {
       items: data.newButton.items,
       basePath: data.newButton.basePath,
       triggerLabel: data.newButton.triggerLabel,
     },
-  }
+  };
   return page({
-    route: '/ar/invoices',
-    layout: 'list',
+    route: "/ar/invoices",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget(newDocument.widget, newDocument.props, f('canCreate'))],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget(newDocument.widget, newDocument.props, f("canCreate"))],
       }),
     ],
     body: [
@@ -413,13 +511,13 @@ export function arInvoicesSpec(data: ArInvoicesData): PageSpec {
       // a spec. The spec supplies only the record type and the URL it was
       // already rendering with; `rowActions` names the per-row actions widget
       // (defined in the registry entry) and the slot resolves it per row.
-      widgetBlock('record-list-view', {
-        recordType: 'customer_invoice',
-        basePath: '/ar/invoices',
+      widgetBlock("record-list-view", {
+        recordType: "customer_invoice",
+        basePath: "/ar/invoices",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer ? { widget: "document-drawer", props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newDocument : null,
       }),
     ],
-  })
+  });
 }

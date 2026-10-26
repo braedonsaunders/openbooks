@@ -9,7 +9,13 @@ const routeState: {
   permissions: string[];
   features: string[];
   scopeDenied: boolean;
-  calls: Array<{ orgId: string; month: string; reason: string; requestedBy: string; idempotencyKey: string }>;
+  calls: Array<{
+    orgId: string;
+    month: string;
+    reason: string;
+    requestedBy: string;
+    idempotencyKey: string;
+  }>;
   behavior: "created" | "replayed" | "conflict";
 } = {
   session: { id: "user-1", orgId: "org-1" },
@@ -20,7 +26,9 @@ const routeState: {
   behavior: "created",
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksNormalizationRequestsNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksNormalizationRequestsNextResponse = NextResponse;
 
 stubModules({
   navigation: false,
@@ -81,19 +89,25 @@ stubModules({
   },
 });
 
-const { POST } = (await import(new URL("./route.ts?metrics-normalization-requests", import.meta.url).href)) as typeof import("./route.ts");
+const { POST } = (await import(
+  new URL("./route.ts?metrics-normalization-requests", import.meta.url).href
+)) as typeof import("./route.ts");
 
 const KEY = "00000000-0000-4000-8000-000000000001";
 
 function reset(overrides?: Partial<typeof routeState>) {
-  Object.assign(routeState, {
-    session: { id: "user-1", orgId: "org-1" },
-    permissions: ["usage.manage"],
-    features: ["saasMetrics"],
-    scopeDenied: false,
-    calls: [],
-    behavior: "created",
-  }, overrides);
+  Object.assign(
+    routeState,
+    {
+      session: { id: "user-1", orgId: "org-1" },
+      permissions: ["usage.manage"],
+      features: ["saasMetrics"],
+      scopeDenied: false,
+      calls: [],
+      behavior: "created",
+    },
+    overrides,
+  );
 }
 
 function post(body: unknown) {
@@ -106,7 +120,11 @@ function post(body: unknown) {
   );
 }
 
-const VALID = { month: "2026-07-01", reason: "Correct the July legacy denomination.", idempotencyKey: KEY };
+const VALID = {
+  month: "2026-07-01",
+  reason: "Correct the July legacy denomination.",
+  idempotencyKey: KEY,
+};
 
 test("POST files exactly one month with the caller's identity and answers 201", async () => {
   reset();
@@ -115,13 +133,15 @@ test("POST files exactly one month with the caller's identity and answers 201", 
   const body = await response.json();
   assert.equal(body.created, true);
   assert.equal(body.request.status, "pending");
-  assert.deepEqual(routeState.calls, [{
-    orgId: "org-1",
-    month: "2026-07-01",
-    reason: "Correct the July legacy denomination.",
-    requestedBy: "user-1",
-    idempotencyKey: KEY,
-  }]);
+  assert.deepEqual(routeState.calls, [
+    {
+      orgId: "org-1",
+      month: "2026-07-01",
+      reason: "Correct the July legacy denomination.",
+      requestedBy: "user-1",
+      idempotencyKey: KEY,
+    },
+  ]);
 });
 
 test("POST replays the same key and body with 200 instead of duplicating", async () => {

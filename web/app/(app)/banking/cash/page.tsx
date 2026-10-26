@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadBankingCash, bankingCashSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadBankingCash, bankingCashSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('banking.cash')
-  return { title: t('title') }
+  const t = await getTranslations("banking.cash");
+  return { title: t("title") };
 }
 
 /**
@@ -18,9 +18,9 @@ export async function generateMetadata() {
 export default async function BankingCashPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadBankingCash(sp)
-  return <ModuleView spec={bankingCashSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadBankingCash(sp);
+  return <ModuleView spec={bankingCashSpec(data)} data={data} searchParams={sp} trusted />;
 }

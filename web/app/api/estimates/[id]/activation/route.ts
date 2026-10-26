@@ -2,10 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import {
-  activateQuote,
-  quoteCashPreview,
-} from "@openbooks/engine/billing/quote-to-cash";
+import { activateQuote, quoteCashPreview } from "@openbooks/engine/billing/quote-to-cash";
 
 export const runtime = "nodejs";
 
@@ -28,7 +25,9 @@ export const GET = defineRoute({
   params,
   handler: async ({ authz, params }) => {
     try {
-      return NextResponse.json(await quoteCashPreview(authz.user.orgId, params.id, authz.allowedSubsidiaryIds));
+      return NextResponse.json(
+        await quoteCashPreview(authz.user.orgId, params.id, authz.allowedSubsidiaryIds),
+      );
     } catch (e) {
       return apiErrorResponse(e);
     }

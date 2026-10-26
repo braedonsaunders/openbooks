@@ -178,31 +178,38 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   {
     table: "service_jobs",
-    reason: "a customer's service job and its priced scope are counterparty commercial records; operations remit.",
+    reason:
+      "a customer's service job and its priced scope are counterparty commercial records; operations remit.",
   },
   {
     table: "service_agreements",
-    reason: "a customer's recurring service agreement is a counterparty commercial record; operations remit.",
+    reason:
+      "a customer's recurring service agreement is a counterparty commercial record; operations remit.",
   },
   {
     table: "withholding_standings",
-    reason: "a subcontractor's statutory withholding standing is a counterparty tax record; finance remit.",
+    reason:
+      "a subcontractor's statutory withholding standing is a counterparty tax record; finance remit.",
   },
   {
     table: "withholding_deductions",
-    reason: "statutory deductions from payments to a subcontractor are filed tax evidence; finance remit.",
+    reason:
+      "statutory deductions from payments to a subcontractor are filed tax evidence; finance remit.",
   },
   {
     table: "withholding_enrollments",
-    reason: "the tax authority a contractor remits to is a counterparty reference, not a personal record.",
+    reason:
+      "the tax authority a contractor remits to is a counterparty reference, not a personal record.",
   },
   {
     table: "customer_item_refs",
-    reason: "customer product codes and item mappings are business reference data, not personal records.",
+    reason:
+      "customer product codes and item mappings are business reference data, not personal records.",
   },
   {
     table: "party_tax_ids",
-    reason: "customer tax identifiers and their validation evidence are counterparty business records; finance remit.",
+    reason:
+      "customer tax identifiers and their validation evidence are counterparty business records; finance remit.",
   },
   {
     table: "demand_item_policies",
@@ -214,7 +221,8 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   {
     table: "restocking_fee_policies",
-    reason: "merchant-authored return fee rules are commercial configuration, not personal records.",
+    reason:
+      "merchant-authored return fee rules are commercial configuration, not personal records.",
   },
   {
     table: "worker_clock_pins",
@@ -253,9 +261,7 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   {
     table: "document_lines",
-    reason:
-      "same store as documents; employee_id lines are billing detail, not " +
-      "HR file data.",
+    reason: "same store as documents; employee_id lines are billing detail, not " + "HR file data.",
   },
   {
     table: "fulfillment_documents",
@@ -266,8 +272,7 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   {
     table: "journal_lines",
-    reason:
-      "general ledger; finance remit. Payroll postings derive from gathered pay stubs.",
+    reason: "general ledger; finance remit. Payroll postings derive from gathered pay stubs.",
   },
   {
     table: "gifts",
@@ -284,22 +289,68 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   { table: "autopay_enrollments", reason: "collection mandates; finance remit." },
   { table: "payment_mandates", reason: "financial instruments; finance remit." },
   { table: "subscription_usage_links", reason: "usage pricing config; customer counterparty." },
-  { table: "subscriptions", reason: "recurring billing config; customer counterparty. Finance remit." },
-  { table: "customer_billing_relationships", reason: "payer hierarchy config; customer counterparty. Finance remit." },
-  { table: "consolidation_groups", reason: "consolidated billing config; customer counterparty. Finance remit." },
-  { table: "stored_value_accounts", reason: "stored-value balances; customer counterparty. Finance remit." },
-  { table: "pos_registers", reason: "point-of-sale register configuration; walk-in customer counterparty. Finance remit." },
-  { table: "equity_securities", reason: "share certificates, awards and convertibles; holder counterparty on the statutory register. Finance remit." },
-  { table: "channel_orders", reason: "storefront order records; customer counterparty. Finance remit." },
-  { table: "channel_order_economics", reason: "per-line margin facts; customer counterparty via the order. Finance remit." },
-  { table: "channel_order_economics_pending", reason: "margin restatement queue; order link only. Finance remit." },
+  {
+    table: "subscriptions",
+    reason: "recurring billing config; customer counterparty. Finance remit.",
+  },
+  {
+    table: "customer_billing_relationships",
+    reason: "payer hierarchy config; customer counterparty. Finance remit.",
+  },
+  {
+    table: "consolidation_groups",
+    reason: "consolidated billing config; customer counterparty. Finance remit.",
+  },
+  {
+    table: "stored_value_accounts",
+    reason: "stored-value balances; customer counterparty. Finance remit.",
+  },
+  {
+    table: "pos_registers",
+    reason: "point-of-sale register configuration; walk-in customer counterparty. Finance remit.",
+  },
+  {
+    table: "equity_securities",
+    reason:
+      "share certificates, awards and convertibles; holder counterparty on the statutory register. Finance remit.",
+  },
+  {
+    table: "channel_orders",
+    reason: "storefront order records; customer counterparty. Finance remit.",
+  },
+  {
+    table: "channel_order_economics",
+    reason: "per-line margin facts; customer counterparty via the order. Finance remit.",
+  },
+  {
+    table: "channel_order_economics_pending",
+    reason: "margin restatement queue; order link only. Finance remit.",
+  },
   { table: "channel_ad_spend", reason: "imported marketing spend; no person link. Finance remit." },
-  { table: "channel_order_events", reason: "storefront order events; customer counterparty. Finance remit." },
-  { table: "channel_daily_summaries", reason: "aggregated storefront sales batches; no person link. Finance remit." },
-  { table: "customer_portal_links", reason: "portal access tokens; customer counterparty. Finance remit." },
-  { table: "customer_portal_events", reason: "portal action history; customer counterparty. Finance remit." },
-  { table: "customer_portal_settings", reason: "portal configuration; no person link. Finance remit." },
-  { table: "sales_channel_posting_policies", reason: "merchant posting configuration; no person link. Finance remit." },
+  {
+    table: "channel_order_events",
+    reason: "storefront order events; customer counterparty. Finance remit.",
+  },
+  {
+    table: "channel_daily_summaries",
+    reason: "aggregated storefront sales batches; no person link. Finance remit.",
+  },
+  {
+    table: "customer_portal_links",
+    reason: "portal access tokens; customer counterparty. Finance remit.",
+  },
+  {
+    table: "customer_portal_events",
+    reason: "portal action history; customer counterparty. Finance remit.",
+  },
+  {
+    table: "customer_portal_settings",
+    reason: "portal configuration; no person link. Finance remit.",
+  },
+  {
+    table: "sales_channel_posting_policies",
+    reason: "merchant posting configuration; no person link. Finance remit.",
+  },
   { table: "usage_prepaid_grants", reason: "prepaid balances; customer counterparty." },
   {
     table: "information_return_recipients",
@@ -312,10 +363,24 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "asset register; the custodian link is an assignment, not a subject " +
       "record. Asset remit.",
   },
-  { table: "asset_proposals", reason: "capitalization queue; the vendor is the counterparty of a posted purchase line. Asset remit." },
-  { table: "asset_maintenance_schedules", reason: "asset maintenance plan; the vendor is the expected service provider. Asset remit." },
-  { table: "asset_maintenance_records", reason: "asset maintenance history; the vendor is the counterparty that performed the work. Asset remit." },
-  { table: "asset_insurance_policies", reason: "asset insurance contracts; the insurer is the counterparty. Asset remit." },
+  {
+    table: "asset_proposals",
+    reason:
+      "capitalization queue; the vendor is the counterparty of a posted purchase line. Asset remit.",
+  },
+  {
+    table: "asset_maintenance_schedules",
+    reason: "asset maintenance plan; the vendor is the expected service provider. Asset remit.",
+  },
+  {
+    table: "asset_maintenance_records",
+    reason:
+      "asset maintenance history; the vendor is the counterparty that performed the work. Asset remit.",
+  },
+  {
+    table: "asset_insurance_policies",
+    reason: "asset insurance contracts; the insurer is the counterparty. Asset remit.",
+  },
   {
     table: "grants",
     reason: "grant awards; sponsor counterparty. Finance remit.",
@@ -385,13 +450,11 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   { table: "compliance_waivers", reason: "compliance module remit." },
   {
     table: "projects",
-    reason:
-      "construction ops remit; customer counterparty, foreman/manager actor-side.",
+    reason: "construction ops remit; customer counterparty, foreman/manager actor-side.",
   },
   {
     table: "field_tickets",
-    reason:
-      "construction billing documents; customer doc with foreman actor-side. Ops remit.",
+    reason: "construction billing documents; customer doc with foreman actor-side. Ops remit.",
   },
   { table: "field_ticket_policies", reason: "customer billing config. Ops remit." },
   {
@@ -399,29 +462,54 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason: "foreman-side capture envelopes; ops time capture.",
   },
   { table: "prebill_lines", reason: "construction billing detail. Ops remit." },
-  { table: "hrm_benefit_transaction_policies", reason: "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements." },
-  { table: "hrm_benefit_transaction_items", reason: "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements." },
-  { table: "hrm_benefit_transaction_positions", reason: "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements." },
-  { table: "hrm_benefit_transaction_limits", reason: "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements." },
-  { table: "hrm_benefit_programs", reason: "Employer policy configuration; the subject's memberships and award policy identity are exported." },
-  { table: "hrm_benefit_program_sources", reason: "Employer financial account configuration; subject awards are exported without company ledger source snapshots." },
-  { table: "hrm_benefit_program_scopes", reason: "Employer department and project measurement configuration; subject memberships and awards are exported." },
+  {
+    table: "hrm_benefit_transaction_policies",
+    reason:
+      "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements.",
+  },
+  {
+    table: "hrm_benefit_transaction_items",
+    reason:
+      "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements.",
+  },
+  {
+    table: "hrm_benefit_transaction_positions",
+    reason:
+      "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements.",
+  },
+  {
+    table: "hrm_benefit_transaction_limits",
+    reason:
+      "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements.",
+  },
+  {
+    table: "hrm_benefit_programs",
+    reason:
+      "Employer policy configuration; the subject's memberships and award policy identity are exported.",
+  },
+  {
+    table: "hrm_benefit_program_sources",
+    reason:
+      "Employer financial account configuration; subject awards are exported without company ledger source snapshots.",
+  },
+  {
+    table: "hrm_benefit_program_scopes",
+    reason:
+      "Employer department and project measurement configuration; subject memberships and awards are exported.",
+  },
   {
     table: "hrm_benefit_plans",
     reason:
-      "plan definitions; provider counterparty. The subject instances " +
-      "(enrollments) gather.",
+      "plan definitions; provider counterparty. The subject instances " + "(enrollments) gather.",
   },
   {
     table: "hrm_calibration_sessions",
     reason:
-      "facilitator actor-side; the session is about ratees, not the " +
-      "facilitator's record.",
+      "facilitator actor-side; the session is about ratees, not the " + "facilitator's record.",
   },
   {
     table: "hrm_comp_cycle_budgets",
-    reason:
-      "manager-side budget envelopes; outcomes gather via statements and lines.",
+    reason: "manager-side budget envelopes; outcomes gather via statements and lines.",
   },
   {
     table: "hrm_requisitions",
@@ -429,24 +517,44 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   {
     table: "hrm_process_template_versions",
-    reason: "published process configuration; employee execution evidence stays on checklist instances.",
+    reason:
+      "published process configuration; employee execution evidence stays on checklist instances.",
   },
   {
     table: "hrm_process_template_steps",
     reason: "template defaults; instances on subject processes are deferred above.",
   },
-  { table: "consignment_stock", reason: "consigned inventory balances; the owner is the customer or vendor counterparty. Inventory remit." },
+  {
+    table: "consignment_stock",
+    reason:
+      "consigned inventory balances; the owner is the customer or vendor counterparty. Inventory remit.",
+  },
   {
     table: "stock_locations",
     reason:
       "inventory location configuration; the owner and custodian links are counterparty or " +
       "assignment references, not subject records. Inventory remit.",
   },
-  { table: "mfg_subcontracts", reason: "outside-processing orders; the vendor is the counterparty. Manufacturing remit." },
-  { table: "rebate_agreements", reason: "rebate programs; the customer or vendor is the counterparty. Finance remit." },
-  { table: "rebate_accruals", reason: "rebate accruals under an agreement; customer or vendor counterparty. Finance remit." },
-  { table: "rebate_claims", reason: "rebate claims under an agreement; customer or vendor counterparty. Finance remit." },
-  { table: "statement_batch_items", reason: "customer statement deliveries; the customer is the counterparty. Finance remit." },
+  {
+    table: "mfg_subcontracts",
+    reason: "outside-processing orders; the vendor is the counterparty. Manufacturing remit.",
+  },
+  {
+    table: "rebate_agreements",
+    reason: "rebate programs; the customer or vendor is the counterparty. Finance remit.",
+  },
+  {
+    table: "rebate_accruals",
+    reason: "rebate accruals under an agreement; customer or vendor counterparty. Finance remit.",
+  },
+  {
+    table: "rebate_claims",
+    reason: "rebate claims under an agreement; customer or vendor counterparty. Finance remit.",
+  },
+  {
+    table: "statement_batch_items",
+    reason: "customer statement deliveries; the customer is the counterparty. Finance remit.",
+  },
   {
     table: "schedule_resource_recipients",
     reason:
@@ -459,7 +567,8 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   {
     table: "intercompany_representing_parties",
-    reason: "intercompany configuration naming the customer and vendor that stand for a legal entity; finance remit.",
+    reason:
+      "intercompany configuration naming the customer and vendor that stand for a legal entity; finance remit.",
   },
 ];
 

@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import {
   ActionError,
@@ -6,8 +6,8 @@ import {
   transportError,
   type ActionResult,
   type FieldIssue,
-} from '@braedonsaunders/appkit-errors'
-import { joinRefusal } from './refusal-sentence'
+} from "@braedonsaunders/appkit-errors";
+import { joinRefusal } from "./refusal-sentence";
 
 /**
  * Reading a failed API response in the browser. The status is checked FIRST:
@@ -25,7 +25,7 @@ import { joinRefusal } from './refusal-sentence'
  * fallback, so the caller can never toast `undefined` or an empty string.
  */
 export async function readApiErrorMessage(res: Response, fallback: string): Promise<string> {
-  return messageFromBody(await readErrorBody(res), res.status, fallback)
+  return messageFromBody(await readErrorBody(res), res.status, fallback);
 }
 
 /**
@@ -37,81 +37,85 @@ export async function readApiErrorMessage(res: Response, fallback: string): Prom
  * throw it; a rejected fetch is never wrapped in it.
  */
 export class ApiResponseError extends Error {
-  readonly status: number
-  readonly code: string | undefined
-  readonly body: unknown
+  readonly status: number;
+  readonly code: string | undefined;
+  readonly body: unknown;
 
   constructor(message: string, status: number, body: unknown = null) {
-    super(message)
-    this.name = 'ApiResponseError'
-    this.status = status
-    this.body = body
+    super(message);
+    this.name = "ApiResponseError";
+    this.status = status;
+    this.body = body;
     const code =
-      body !== null && typeof body === 'object' && !Array.isArray(body)
+      body !== null && typeof body === "object" && !Array.isArray(body)
         ? (body as { code?: unknown }).code
-        : undefined
-    this.code = typeof code === 'string' && code.trim() !== '' ? code : undefined
+        : undefined;
+    this.code = typeof code === "string" && code.trim() !== "" ? code : undefined;
   }
 }
 
 async function readErrorBody(res: Response): Promise<unknown> {
   try {
-    return await res.json()
+    return await res.json();
   } catch {
-    return null
+    return null;
   }
 }
 
 function messageFromBody(body: unknown, status: number, fallback: string): string {
-  const named = readNamedRefusal(body)
-  if (named) return named
-  const safeFallback = fallback.trim() !== '' ? fallback : 'request failed'
-  return `${safeFallback} (status ${status})`
+  const named = readNamedRefusal(body);
+  if (named) return named;
+  const safeFallback = fallback.trim() !== "" ? fallback : "request failed";
+  return `${safeFallback} (status ${status})`;
 }
 
 async function responseError(res: Response, fallback: string): Promise<ApiResponseError> {
-  const body = await readErrorBody(res)
-  return new ApiResponseError(messageFromBody(body, res.status, fallback), res.status, body)
+  const body = await readErrorBody(res);
+  return new ApiResponseError(messageFromBody(body, res.status, fallback), res.status, body);
 }
 
 function readNamedRefusal(body: unknown): string | null {
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return null;
   const record = body as {
-    error?: unknown
-    message?: unknown
-    detail?: unknown
-    errors?: unknown
-    remedy?: unknown
-    details?: unknown
-    issues?: unknown
-  }
-  const fields = [record.error, record.message, record.detail]
+    error?: unknown;
+    message?: unknown;
+    detail?: unknown;
+    errors?: unknown;
+    remedy?: unknown;
+    details?: unknown;
+    issues?: unknown;
+  };
+  const fields = [record.error, record.message, record.detail];
   const single =
-    fields.find((field): field is string => typeof field === 'string' && field.trim() !== '')?.trim() ??
-    null
+    fields
+      .find((field): field is string => typeof field === "string" && field.trim() !== "")
+      ?.trim() ?? null;
   const listed = Array.isArray(record.errors)
     ? record.errors
-        .filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+        .filter((entry): entry is string => typeof entry === "string" && entry.trim() !== "")
         .map((entry) => entry.trim())
-    : []
-  const unnamed = single ?? (listed.length > 0 ? listed.join('; ') : null)
+    : [];
+  const unnamed = single ?? (listed.length > 0 ? listed.join("; ") : null);
   // A schema refusal names its field so the operator knows what to correct.
-  const field = issueField(record.issues)
-  const refusal = unnamed && field && !unnamed.includes(field) ? `${field}: ${unnamed}` : unnamed
-  if (!refusal) return null
-  const details = record.details !== null && typeof record.details === 'object' && !Array.isArray(record.details)
-    ? record.details as { remedy?: unknown }
-    : null
-  const remedyValue = typeof record.remedy === 'string' && record.remedy.trim() !== ''
-    ? record.remedy
-    : details?.remedy
-  const remedy = typeof remedyValue === 'string' && remedyValue.trim() !== '' ? remedyValue.trim() : null
-  return joinRefusal(refusal, remedy)
+  const field = issueField(record.issues);
+  const refusal = unnamed && field && !unnamed.includes(field) ? `${field}: ${unnamed}` : unnamed;
+  if (!refusal) return null;
+  const details =
+    record.details !== null && typeof record.details === "object" && !Array.isArray(record.details)
+      ? (record.details as { remedy?: unknown })
+      : null;
+  const remedyValue =
+    typeof record.remedy === "string" && record.remedy.trim() !== ""
+      ? record.remedy
+      : details?.remedy;
+  const remedy =
+    typeof remedyValue === "string" && remedyValue.trim() !== "" ? remedyValue.trim() : null;
+  return joinRefusal(refusal, remedy);
 }
 
-export type ApiBulkFailure = { id: string; error: string }
+export type ApiBulkFailure = { id: string; error: string };
 
-export type ApiBulkItemResult = { id: string; ok: boolean; error?: unknown }
+export type ApiBulkItemResult = { id: string; ok: boolean; error?: unknown };
 
 /**
  * Split a bulk selection into bounded request batches. The server refuses
@@ -119,12 +123,13 @@ export type ApiBulkItemResult = { id: string; ok: boolean; error?: unknown }
  * more than the ceiling per request — every requested id is attempted.
  */
 export function chunkArray<T>(values: readonly T[], size: number): T[][] {
-  if (!Number.isInteger(size) || size <= 0) throw new Error('chunk size must be a positive integer')
-  const chunks: T[][] = []
+  if (!Number.isInteger(size) || size <= 0)
+    throw new Error("chunk size must be a positive integer");
+  const chunks: T[][] = [];
   for (let index = 0; index < values.length; index += size) {
-    chunks.push([...values.slice(index, index + size)])
+    chunks.push([...values.slice(index, index + size)]);
   }
-  return chunks
+  return chunks;
 }
 
 /**
@@ -138,23 +143,23 @@ export function reconcileBulkResults(
   results: readonly ApiBulkItemResult[] | undefined,
   notProcessedMessage: string,
 ): ApiBulkFailure[] {
-  const byId = new Map((results ?? []).map((result) => [result.id, result]))
-  const failures: ApiBulkFailure[] = []
+  const byId = new Map((results ?? []).map((result) => [result.id, result]));
+  const failures: ApiBulkFailure[] = [];
   for (const id of requestedIds) {
-    const result = byId.get(id)
+    const result = byId.get(id);
     if (!result) {
-      failures.push({ id, error: notProcessedMessage })
+      failures.push({ id, error: notProcessedMessage });
     } else if (result.ok === false) {
       failures.push({
         id,
         error:
-          typeof result.error === 'string' && result.error.trim() !== ''
+          typeof result.error === "string" && result.error.trim() !== ""
             ? result.error.trim()
             : notProcessedMessage,
-      })
+      });
     }
   }
-  return failures
+  return failures;
 }
 
 /**
@@ -164,20 +169,20 @@ export function reconcileBulkResults(
  * reason per item — so bulk callers render these entries, one row each.
  * Never throws: an unparseable body is zero observable failures, not a crash.
  */
-export function readApiBulkFailures(body: unknown, itemFallback = 'failed'): ApiBulkFailure[] {
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) return []
-  const results = (body as { results?: unknown }).results
-  if (!Array.isArray(results)) return []
-  const failures: ApiBulkFailure[] = []
+export function readApiBulkFailures(body: unknown, itemFallback = "failed"): ApiBulkFailure[] {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return [];
+  const results = (body as { results?: unknown }).results;
+  if (!Array.isArray(results)) return [];
+  const failures: ApiBulkFailure[] = [];
   for (const entry of results) {
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue
-    const row = entry as { id?: unknown; ok?: unknown; error?: unknown }
-    if (row.ok !== false) continue
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const row = entry as { id?: unknown; ok?: unknown; error?: unknown };
+    if (row.ok !== false) continue;
     const error =
-      typeof row.error === 'string' && row.error.trim() !== '' ? row.error.trim() : itemFallback
-    failures.push({ id: typeof row.id === 'string' ? row.id : '', error })
+      typeof row.error === "string" && row.error.trim() !== "" ? row.error.trim() : itemFallback;
+    failures.push({ id: typeof row.id === "string" ? row.id : "", error });
   }
-  return failures
+  return failures;
 }
 
 /**
@@ -189,8 +194,8 @@ export function readApiBulkFailures(body: unknown, itemFallback = 'failed'): Api
  * release the button, never wedge it.
  */
 export async function throwApiErrorIfNotOk(res: Response, fallback: string): Promise<void> {
-  if (res.ok) return
-  throw await responseError(res, fallback)
+  if (res.ok) return;
+  throw await responseError(res, fallback);
 }
 
 /**
@@ -205,13 +210,17 @@ export async function throwApiErrorIfNotOk(res: Response, fallback: string): Pro
  * callers show their translated fallback for it rather than the browser's
  * untranslated text.
  */
-export async function apiJson<T>(url: string, init?: RequestInit, fallbackMessage = 'request failed'): Promise<T> {
-  const res = await fetch(url, init)
-  if (!res.ok) throw await responseError(res, fallbackMessage)
+export async function apiJson<T>(
+  url: string,
+  init?: RequestInit,
+  fallbackMessage = "request failed",
+): Promise<T> {
+  const res = await fetch(url, init);
+  if (!res.ok) throw await responseError(res, fallbackMessage);
   try {
-    return (await res.json()) as T
+    return (await res.json()) as T;
   } catch {
-    throw new ApiResponseError(messageFromBody(null, res.status, fallbackMessage), res.status)
+    throw new ApiResponseError(messageFromBody(null, res.status, fallbackMessage), res.status);
   }
 }
 
@@ -224,8 +233,8 @@ export async function apiJson<T>(url: string, init?: RequestInit, fallbackMessag
  * usable server message, which always renders verbatim.
  */
 export type RefusalCopy = {
-  fallback: string
-  codeMessage?: (code: string) => string | undefined
+  fallback: string;
+  codeMessage?: (code: string) => string | undefined;
   /**
    * Copy for a server failure that named no reason: a 5xx without a usable
    * body (a gateway page, an empty 500) and a request that never got an
@@ -233,20 +242,20 @@ export type RefusalCopy = {
    * names the failure instead of a refusal. A reason the server did name
    * always wins, and omitting this keeps the status-stamped fallback.
    */
-  unavailable?: string
-}
+  unavailable?: string;
+};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
-    : null
+    : null;
 }
 
 function firstUsableString(...values: unknown[]): string | null {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim() !== '') return value.trim()
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
   }
-  return null
+  return null;
 }
 
 /**
@@ -261,59 +270,58 @@ function firstUsableString(...values: unknown[]): string | null {
  * this helper never invents locale copy itself.
  */
 export function refusalMessageFromBody(body: unknown, copy: RefusalCopy): string | null {
-  const record = asRecord(body)
-  if (!record) return null
-  const nested = asRecord(record.error)
-  const unnamed = firstUsableString(
-    record.error,
-    record.message,
-    record.detail,
-    nested?.message,
-  ) ?? listedErrors(record.errors)
-  const field = issueField(record.issues)
-  const refusal = unnamed && field && !unnamed.includes(field) ? `${field}: ${unnamed}` : unnamed
+  const record = asRecord(body);
+  if (!record) return null;
+  const nested = asRecord(record.error);
+  const unnamed =
+    firstUsableString(record.error, record.message, record.detail, nested?.message) ??
+    listedErrors(record.errors);
+  const field = issueField(record.issues);
+  const refusal = unnamed && field && !unnamed.includes(field) ? `${field}: ${unnamed}` : unnamed;
   if (refusal) {
     const remedy =
-      typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
-    return joinRefusal(refusal, remedy)
+      typeof record.remedy === "string" && record.remedy.trim() !== ""
+        ? record.remedy.trim()
+        : null;
+    return joinRefusal(refusal, remedy);
   }
-  const code = readRefusalCode(body)
-  if (code) return copy.codeMessage?.(code) ?? null
-  return null
+  const code = readRefusalCode(body);
+  if (code) return copy.codeMessage?.(code) ?? null;
+  return null;
 }
 
 function listedErrors(errors: unknown): string | null {
-  if (!Array.isArray(errors)) return null
+  if (!Array.isArray(errors)) return null;
   const entries = errors
-    .filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
-    .map((entry) => entry.trim())
-  return entries.length > 0 ? entries.join('; ') : null
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim() !== "")
+    .map((entry) => entry.trim());
+  return entries.length > 0 ? entries.join("; ") : null;
 }
 
 /** The stable machine code when the server sent one; ActionErrors carry it for copy mapping. */
 export function readRefusalCode(body: unknown): string | undefined {
-  const record = asRecord(body)
-  const code = record?.code
-  return typeof code === 'string' && code.trim() !== '' ? code.trim() : undefined
+  const record = asRecord(body);
+  const code = record?.code;
+  return typeof code === "string" && code.trim() !== "" ? code.trim() : undefined;
 }
 
 /** Structured machine evidence from a refusal body (`details`), defensively decoded. */
 export function readRefusalDetails(body: unknown): Record<string, unknown> | null {
-  return asRecord(asRecord(body)?.details)
+  return asRecord(asRecord(body)?.details);
 }
 
 /** Field-level failures from a 400 body, defensively decoded: malformed entries are dropped. */
 export function readRefusalIssues(body: unknown): FieldIssue[] {
-  const raw = asRecord(body)?.issues
-  if (!Array.isArray(raw)) return []
-  const issues: FieldIssue[] = []
+  const raw = asRecord(body)?.issues;
+  if (!Array.isArray(raw)) return [];
+  const issues: FieldIssue[] = [];
   for (const entry of raw) {
-    const item = asRecord(entry)
-    if (item && typeof item.path === 'string' && typeof item.message === 'string') {
-      issues.push({ path: item.path, message: item.message })
+    const item = asRecord(entry);
+    if (item && typeof item.path === "string" && typeof item.message === "string") {
+      issues.push({ path: item.path, message: item.message });
     }
   }
-  return issues
+  return issues;
 }
 
 /**
@@ -331,15 +339,15 @@ export async function readAppActionResult<T = unknown>(
   res: Response,
   copy: RefusalCopy,
 ): Promise<ActionResult<T>> {
-  let body: unknown = null
+  let body: unknown = null;
   try {
-    body = await res.json()
+    body = await res.json();
   } catch {
-    body = null
+    body = null;
   }
-  if (res.ok) return { ok: true, status: res.status, data: body as T }
-  const code = readRefusalCode(body)
-  const safeFallback = copy.fallback.trim() !== '' ? copy.fallback : 'request failed'
+  if (res.ok) return { ok: true, status: res.status, data: body as T };
+  const code = readRefusalCode(body);
+  const safeFallback = copy.fallback.trim() !== "" ? copy.fallback : "request failed";
   const error: DetailedActionError = new ActionError({
     kind: kindForStatus(res.status),
     status: res.status,
@@ -349,15 +357,17 @@ export async function readAppActionResult<T = unknown>(
       refusalMessageFromBody(body, copy) ??
       (res.status >= 500 && copy.unavailable
         ? copy.unavailable
-        : code ? `${safeFallback} (HTTP ${res.status}, ${code})` : `${safeFallback} (HTTP ${res.status})`),
-  })
+        : code
+          ? `${safeFallback} (HTTP ${res.status}, ${code})`
+          : `${safeFallback} (HTTP ${res.status})`),
+  });
   // Structured machine evidence rides beside the refusal (never rendered by
   // the alert itself): renderers that know a details kind — a closed
   // period's scope with its reopen route — read it from here instead of
   // parsing message text.
-  const details = readRefusalDetails(body)
-  if (details) error.details = details
-  return { ok: false, error }
+  const details = readRefusalDetails(body);
+  if (details) error.details = details;
+  return { ok: false, error };
 }
 
 /**
@@ -367,7 +377,7 @@ export async function readAppActionResult<T = unknown>(
  * a details kind.
  */
 export interface DetailedActionError extends ActionError {
-  details?: Record<string, unknown> | null
+  details?: Record<string, unknown> | null;
 }
 
 /**
@@ -382,29 +392,42 @@ export async function fetchAppAction<T = unknown>(
   init: RequestInit | undefined,
   copy: RefusalCopy,
 ): Promise<ActionResult<T>> {
-  let res: Response
+  let res: Response;
   try {
-    res = await fetch(url, init)
+    res = await fetch(url, init);
   } catch (thrown) {
-    const detail = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown)
-    const aborted = thrown instanceof DOMException && thrown.name === 'AbortError'
-    const error = transportError(detail, aborted)
-    if (!copy.unavailable) return { ok: false, error }
+    const detail = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown);
+    const aborted = thrown instanceof DOMException && thrown.name === "AbortError";
+    const error = transportError(detail, aborted);
+    if (!copy.unavailable) return { ok: false, error };
     // Same classification as a transport refusal, with the connection copy
     // as its message; the transport detail stays on the error for the log.
     return {
       ok: false,
-      error: new ActionError({ kind: error.kind, aborted, detail, serverMessage: copy.unavailable }),
-    }
+      error: new ActionError({
+        kind: error.kind,
+        aborted,
+        detail,
+        serverMessage: copy.unavailable,
+      }),
+    };
   }
-  return readAppActionResult<T>(res, copy)
+  return readAppActionResult<T>(res, copy);
 }
 
 function issueField(issues: unknown): string | null {
-  if (!Array.isArray(issues)) return null
-  const path = (issues[0] as { path?: unknown } | undefined)?.path
-  if (typeof path !== 'string' || path.trim() === '') return null
-  const leaf = path.split('.').filter((segment) => !/^\d+$/.test(segment)).pop() ?? path
-  const words = leaf.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim().toLowerCase()
-  return words === '' ? null : words.charAt(0).toUpperCase() + words.slice(1)
+  if (!Array.isArray(issues)) return null;
+  const path = (issues[0] as { path?: unknown } | undefined)?.path;
+  if (typeof path !== "string" || path.trim() === "") return null;
+  const leaf =
+    path
+      .split(".")
+      .filter((segment) => !/^\d+$/.test(segment))
+      .pop() ?? path;
+  const words = leaf
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words === "" ? null : words.charAt(0).toUpperCase() + words.slice(1);
 }

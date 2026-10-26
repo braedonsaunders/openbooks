@@ -49,9 +49,7 @@ function wholeNumber(value: unknown): number | null {
  * values are skipped: recognitionPeriods is nullable and the remaining
  * fields fall through to their database defaults.
  */
-export function recognitionRulePolicyProblem(
-  policy: RecognitionRulePolicy,
-): string | null {
+export function recognitionRulePolicyProblem(policy: RecognitionRulePolicy): string | null {
   if (present(policy.recognitionPeriods)) {
     const periods = wholeNumber(policy.recognitionPeriods);
     if (

@@ -1,226 +1,244 @@
-import type { DashboardLayoutData, DashboardQuickAction } from '@openbooks/schema'
+import type { DashboardLayoutData, DashboardQuickAction } from "@openbooks/schema";
 
-export type QuickAction = DashboardQuickAction
+export type QuickAction = DashboardQuickAction;
 
-export type QuickActionTranslator = (key: string) => string
+export type QuickActionTranslator = (key: string) => string;
 
-type QuickActionsSaveResult = { ok: true } | { ok: false; error?: string }
+type QuickActionsSaveResult = { ok: true } | { ok: false; error?: string };
 
-export type SaveQuickActionsAction = (input: QuickAction[]) => Promise<QuickActionsSaveResult>
+export type SaveQuickActionsAction = (input: QuickAction[]) => Promise<QuickActionsSaveResult>;
 
 export type QuickActionOption = {
-  id?: string
-  label: string
-  labelKey?: string
-  href: string
-  iconKey: string
-  tone: string
-  hint?: string
-}
+  id?: string;
+  label: string;
+  labelKey?: string;
+  href: string;
+  iconKey: string;
+  tone: string;
+  hint?: string;
+};
 
 export type QuickActionOptions = {
-  common: QuickActionOption[]
-}
+  common: QuickActionOption[];
+};
 
 type QuickActionTone =
-  | 'rose' | 'orange' | 'amber' | 'emerald' | 'teal' | 'sky' | 'blue' | 'violet' | 'slate'
+  "rose" | "orange" | "amber" | "emerald" | "teal" | "sky" | "blue" | "violet" | "slate";
 
 type ToneClasses = {
-  tile: string
-  chip: string
-  label: string
-  arrow: string
-  swatch: string
-  name: string
-}
+  tile: string;
+  chip: string;
+  label: string;
+  arrow: string;
+  swatch: string;
+  name: string;
+};
 
 export const TONES: Record<QuickActionTone, ToneClasses> = {
   rose: {
-    tile: 'border-slate-200/70 bg-white hover:border-rose-300 hover:bg-rose-50/70 focus-visible:ring-rose-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-rose-800/70 dark:hover:bg-rose-950/30',
-    chip: 'bg-rose-100 text-rose-700 group-hover:bg-rose-600 group-hover:text-white dark:bg-rose-950/60 dark:text-rose-300 dark:group-hover:bg-rose-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-rose-900 dark:text-slate-200 dark:group-hover:text-rose-100',
-    arrow: 'text-rose-500 dark:text-rose-400',
-    swatch: 'bg-rose-500',
-    name: 'Rose',
+    tile: "border-slate-200/70 bg-white hover:border-rose-300 hover:bg-rose-50/70 focus-visible:ring-rose-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-rose-800/70 dark:hover:bg-rose-950/30",
+    chip: "bg-rose-100 text-rose-700 group-hover:bg-rose-600 group-hover:text-white dark:bg-rose-950/60 dark:text-rose-300 dark:group-hover:bg-rose-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-rose-900 dark:text-slate-200 dark:group-hover:text-rose-100",
+    arrow: "text-rose-500 dark:text-rose-400",
+    swatch: "bg-rose-500",
+    name: "Rose",
   },
   orange: {
-    tile: 'border-slate-200/70 bg-white hover:border-orange-300 hover:bg-orange-50/70 focus-visible:ring-orange-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-orange-800/70 dark:hover:bg-orange-950/30',
-    chip: 'bg-orange-100 text-orange-700 group-hover:bg-orange-600 group-hover:text-white dark:bg-orange-950/60 dark:text-orange-300 dark:group-hover:bg-orange-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-orange-900 dark:text-slate-200 dark:group-hover:text-orange-100',
-    arrow: 'text-orange-500 dark:text-orange-400',
-    swatch: 'bg-orange-500',
-    name: 'Orange',
+    tile: "border-slate-200/70 bg-white hover:border-orange-300 hover:bg-orange-50/70 focus-visible:ring-orange-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-orange-800/70 dark:hover:bg-orange-950/30",
+    chip: "bg-orange-100 text-orange-700 group-hover:bg-orange-600 group-hover:text-white dark:bg-orange-950/60 dark:text-orange-300 dark:group-hover:bg-orange-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-orange-900 dark:text-slate-200 dark:group-hover:text-orange-100",
+    arrow: "text-orange-500 dark:text-orange-400",
+    swatch: "bg-orange-500",
+    name: "Orange",
   },
   amber: {
-    tile: 'border-slate-200/70 bg-white hover:border-amber-300 hover:bg-amber-50/70 focus-visible:ring-amber-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-amber-800/70 dark:hover:bg-amber-950/30',
-    chip: 'bg-amber-100 text-amber-700 group-hover:bg-amber-500 group-hover:text-white dark:bg-amber-950/60 dark:text-amber-300 dark:group-hover:bg-amber-500 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-amber-900 dark:text-slate-200 dark:group-hover:text-amber-100',
-    arrow: 'text-amber-500 dark:text-amber-400',
-    swatch: 'bg-amber-500',
-    name: 'Amber',
+    tile: "border-slate-200/70 bg-white hover:border-amber-300 hover:bg-amber-50/70 focus-visible:ring-amber-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-amber-800/70 dark:hover:bg-amber-950/30",
+    chip: "bg-amber-100 text-amber-700 group-hover:bg-amber-500 group-hover:text-white dark:bg-amber-950/60 dark:text-amber-300 dark:group-hover:bg-amber-500 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-amber-900 dark:text-slate-200 dark:group-hover:text-amber-100",
+    arrow: "text-amber-500 dark:text-amber-400",
+    swatch: "bg-amber-500",
+    name: "Amber",
   },
   emerald: {
-    tile: 'border-slate-200/70 bg-white hover:border-emerald-300 hover:bg-emerald-50/70 focus-visible:ring-emerald-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-emerald-800/70 dark:hover:bg-emerald-950/30',
-    chip: 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white dark:bg-emerald-950/60 dark:text-emerald-300 dark:group-hover:bg-emerald-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-emerald-900 dark:text-slate-200 dark:group-hover:text-emerald-100',
-    arrow: 'text-emerald-500 dark:text-emerald-400',
-    swatch: 'bg-emerald-500',
-    name: 'Emerald',
+    tile: "border-slate-200/70 bg-white hover:border-emerald-300 hover:bg-emerald-50/70 focus-visible:ring-emerald-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-emerald-800/70 dark:hover:bg-emerald-950/30",
+    chip: "bg-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white dark:bg-emerald-950/60 dark:text-emerald-300 dark:group-hover:bg-emerald-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-emerald-900 dark:text-slate-200 dark:group-hover:text-emerald-100",
+    arrow: "text-emerald-500 dark:text-emerald-400",
+    swatch: "bg-emerald-500",
+    name: "Emerald",
   },
   teal: {
-    tile: 'border-slate-200/70 bg-white hover:border-teal-300 hover:bg-teal-50/70 focus-visible:ring-teal-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-teal-800/70 dark:hover:bg-teal-950/30',
-    chip: 'bg-teal-100 text-teal-700 group-hover:bg-teal-600 group-hover:text-white dark:bg-teal-950/60 dark:text-teal-300 dark:group-hover:bg-teal-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-teal-900 dark:text-slate-200 dark:group-hover:text-teal-100',
-    arrow: 'text-teal-500 dark:text-teal-400',
-    swatch: 'bg-teal-500',
-    name: 'Teal',
+    tile: "border-slate-200/70 bg-white hover:border-teal-300 hover:bg-teal-50/70 focus-visible:ring-teal-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-teal-800/70 dark:hover:bg-teal-950/30",
+    chip: "bg-teal-100 text-teal-700 group-hover:bg-teal-600 group-hover:text-white dark:bg-teal-950/60 dark:text-teal-300 dark:group-hover:bg-teal-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-teal-900 dark:text-slate-200 dark:group-hover:text-teal-100",
+    arrow: "text-teal-500 dark:text-teal-400",
+    swatch: "bg-teal-500",
+    name: "Teal",
   },
   sky: {
-    tile: 'border-slate-200/70 bg-white hover:border-sky-300 hover:bg-sky-50/70 focus-visible:ring-sky-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-sky-800/70 dark:hover:bg-sky-950/30',
-    chip: 'bg-sky-100 text-sky-700 group-hover:bg-sky-600 group-hover:text-white dark:bg-sky-950/60 dark:text-sky-300 dark:group-hover:bg-sky-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-sky-900 dark:text-slate-200 dark:group-hover:text-sky-100',
-    arrow: 'text-sky-500 dark:text-sky-400',
-    swatch: 'bg-sky-500',
-    name: 'Sky',
+    tile: "border-slate-200/70 bg-white hover:border-sky-300 hover:bg-sky-50/70 focus-visible:ring-sky-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-sky-800/70 dark:hover:bg-sky-950/30",
+    chip: "bg-sky-100 text-sky-700 group-hover:bg-sky-600 group-hover:text-white dark:bg-sky-950/60 dark:text-sky-300 dark:group-hover:bg-sky-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-sky-900 dark:text-slate-200 dark:group-hover:text-sky-100",
+    arrow: "text-sky-500 dark:text-sky-400",
+    swatch: "bg-sky-500",
+    name: "Sky",
   },
   blue: {
-    tile: 'border-slate-200/70 bg-white hover:border-blue-300 hover:bg-blue-50/70 focus-visible:ring-blue-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-blue-800/70 dark:hover:bg-blue-950/30',
-    chip: 'bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/60 dark:text-blue-300 dark:group-hover:bg-blue-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-blue-900 dark:text-slate-200 dark:group-hover:text-blue-100',
-    arrow: 'text-blue-500 dark:text-blue-400',
-    swatch: 'bg-blue-500',
-    name: 'Blue',
+    tile: "border-slate-200/70 bg-white hover:border-blue-300 hover:bg-blue-50/70 focus-visible:ring-blue-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-blue-800/70 dark:hover:bg-blue-950/30",
+    chip: "bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/60 dark:text-blue-300 dark:group-hover:bg-blue-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-blue-900 dark:text-slate-200 dark:group-hover:text-blue-100",
+    arrow: "text-blue-500 dark:text-blue-400",
+    swatch: "bg-blue-500",
+    name: "Blue",
   },
   violet: {
-    tile: 'border-slate-200/70 bg-white hover:border-violet-300 hover:bg-violet-50/70 focus-visible:ring-violet-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-violet-800/70 dark:hover:bg-violet-950/30',
-    chip: 'bg-violet-100 text-violet-700 group-hover:bg-violet-600 group-hover:text-white dark:bg-violet-950/60 dark:text-violet-300 dark:group-hover:bg-violet-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-violet-900 dark:text-slate-200 dark:group-hover:text-violet-100',
-    arrow: 'text-violet-500 dark:text-violet-400',
-    swatch: 'bg-violet-500',
-    name: 'Violet',
+    tile: "border-slate-200/70 bg-white hover:border-violet-300 hover:bg-violet-50/70 focus-visible:ring-violet-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-violet-800/70 dark:hover:bg-violet-950/30",
+    chip: "bg-violet-100 text-violet-700 group-hover:bg-violet-600 group-hover:text-white dark:bg-violet-950/60 dark:text-violet-300 dark:group-hover:bg-violet-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-violet-900 dark:text-slate-200 dark:group-hover:text-violet-100",
+    arrow: "text-violet-500 dark:text-violet-400",
+    swatch: "bg-violet-500",
+    name: "Violet",
   },
   slate: {
-    tile: 'border-slate-200/70 bg-white hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-slate-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-slate-600 dark:hover:bg-slate-800/60',
-    chip: 'bg-slate-200 text-slate-700 group-hover:bg-slate-700 group-hover:text-white dark:bg-slate-800 dark:text-slate-200 dark:group-hover:bg-slate-600 dark:group-hover:text-white',
-    label: 'text-slate-700 group-hover:text-slate-900 dark:text-slate-200 dark:group-hover:text-white',
-    arrow: 'text-slate-500 dark:text-slate-400',
-    swatch: 'bg-slate-500',
-    name: 'Slate',
+    tile: "border-slate-200/70 bg-white hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-slate-400/70 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-slate-600 dark:hover:bg-slate-800/60",
+    chip: "bg-slate-200 text-slate-700 group-hover:bg-slate-700 group-hover:text-white dark:bg-slate-800 dark:text-slate-200 dark:group-hover:bg-slate-600 dark:group-hover:text-white",
+    label:
+      "text-slate-700 group-hover:text-slate-900 dark:text-slate-200 dark:group-hover:text-white",
+    arrow: "text-slate-500 dark:text-slate-400",
+    swatch: "bg-slate-500",
+    name: "Slate",
   },
-}
+};
 
-export const TONE_KEYS = Object.keys(TONES) as QuickActionTone[]
+export const TONE_KEYS = Object.keys(TONES) as QuickActionTone[];
 
 export function toneOf(tone: string): ToneClasses {
-  return TONES[tone as QuickActionTone] ?? TONES.slate
+  return TONES[tone as QuickActionTone] ?? TONES.slate;
 }
 
 export function isExternalHref(href: string): boolean {
-  return /^https?:\/\//i.test(href)
+  return /^https?:\/\//i.test(href);
 }
 
-export const MAX_QUICK_ACTIONS = 12
+export const MAX_QUICK_ACTIONS = 12;
 
-type CuratedQuickAction = Omit<QuickActionOption, 'label' | 'id' | 'hint'> & {
-  id: string
-  labelKey: string
+type CuratedQuickAction = Omit<QuickActionOption, "label" | "id" | "hint"> & {
+  id: string;
+  labelKey: string;
   /** Key into quickActions.hints, resolved in the request locale by the picker. */
-  hintKey: 'create' | 'open'
-  requiredPermission: string | null
+  hintKey: "create" | "open";
+  requiredPermission: string | null;
   /** Grants that open the action as well, such as a self-service grant over the holder's own records. */
-  alsoPermittedBy?: readonly string[]
+  alsoPermittedBy?: readonly string[];
   /** Features switch — omit from the catalog and live chips when off. */
-  requiredFeature?: string
-}
+  requiredFeature?: string;
+};
 
 /** Whether a holder of these permissions may use a curated quick action. */
 export function quickActionPermitted(
-  action: Pick<CuratedQuickAction, 'requiredPermission' | 'alsoPermittedBy'>,
+  action: Pick<CuratedQuickAction, "requiredPermission" | "alsoPermittedBy">,
   holds: (permission: string) => boolean,
 ): boolean {
-  if (!action.requiredPermission) return true
-  return holds(action.requiredPermission) || (action.alsoPermittedBy ?? []).some(holds)
+  if (!action.requiredPermission) return true;
+  return holds(action.requiredPermission) || (action.alsoPermittedBy ?? []).some(holds);
 }
 
 export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   {
-    id: 'd-receipt', labelKey: 'receivePayment', href: '/receipts?paymentNew=1&mode=edit',
-    iconKey: 'receipt', tone: 'emerald', hintKey: 'create', requiredPermission: 'ar.pay',
+    id: "d-receipt",
+    labelKey: "receivePayment",
+    href: "/receipts?paymentNew=1&mode=edit",
+    iconKey: "receipt",
+    tone: "emerald",
+    hintKey: "create",
+    requiredPermission: "ar.pay",
   },
   {
-    id: 'd-bank-review', labelKey: 'reviewBanking', href: '/banking/match',
-    iconKey: 'receipt', tone: 'sky', hintKey: 'open', requiredPermission: 'banking.reconcile', requiredFeature: 'banking',
+    id: "d-bank-review",
+    labelKey: "reviewBanking",
+    href: "/banking/match",
+    iconKey: "receipt",
+    tone: "sky",
+    hintKey: "open",
+    requiredPermission: "banking.reconcile",
+    requiredFeature: "banking",
   },
   {
-    id: 'd-journal',
-    labelKey: 'newJournalEntry',
-    href: '/journal',
-    iconKey: 'journal',
-    tone: 'teal',
-    hintKey: 'create',
-    requiredPermission: 'gl.post',
+    id: "d-journal",
+    labelKey: "newJournalEntry",
+    href: "/journal",
+    iconKey: "journal",
+    tone: "teal",
+    hintKey: "create",
+    requiredPermission: "gl.post",
   },
   {
-    id: 'd-bill',
-    labelKey: 'newBill',
-    href: '/ap',
-    iconKey: 'file',
-    tone: 'orange',
-    hintKey: 'create',
-    requiredPermission: 'ap.create',
+    id: "d-bill",
+    labelKey: "newBill",
+    href: "/ap",
+    iconKey: "file",
+    tone: "orange",
+    hintKey: "create",
+    requiredPermission: "ap.create",
   },
   {
-    id: 'd-invoice',
-    labelKey: 'newInvoice',
-    href: '/ar',
-    iconKey: 'file-check',
-    tone: 'emerald',
-    hintKey: 'create',
-    requiredPermission: 'ar.create',
+    id: "d-invoice",
+    labelKey: "newInvoice",
+    href: "/ar",
+    iconKey: "file-check",
+    tone: "emerald",
+    hintKey: "create",
+    requiredPermission: "ar.create",
   },
   {
-    id: 'd-payment',
-    labelKey: 'newPayment',
-    href: '/payments',
-    iconKey: 'receipt',
-    tone: 'violet',
-    hintKey: 'create',
-    requiredPermission: 'ap.pay',
+    id: "d-payment",
+    labelKey: "newPayment",
+    href: "/payments",
+    iconKey: "receipt",
+    tone: "violet",
+    hintKey: "create",
+    requiredPermission: "ap.pay",
   },
   {
-    id: 'd-expense',
-    labelKey: 'newExpense',
-    href: '/expenses/reports',
-    iconKey: 'clipboard',
-    tone: 'amber',
-    hintKey: 'create',
-    requiredPermission: 'expenses.create',
+    id: "d-expense",
+    labelKey: "newExpense",
+    href: "/expenses/reports",
+    iconKey: "clipboard",
+    tone: "amber",
+    hintKey: "create",
+    requiredPermission: "expenses.create",
     // Employees file their own reports through the self-service grant.
-    alsoPermittedBy: ['expenses.self'],
+    alsoPermittedBy: ["expenses.self"],
     // Same switch as the shell create menu: the draft API 404s when Expenses is off.
-    requiredFeature: 'expenses',
+    requiredFeature: "expenses",
   },
   {
-    id: 'd-report',
-    labelKey: 'runReport',
-    href: '/reports',
-    iconKey: 'chart',
-    tone: 'slate',
-    hintKey: 'open',
-    requiredPermission: 'reports.read',
+    id: "d-report",
+    labelKey: "runReport",
+    href: "/reports",
+    iconKey: "chart",
+    tone: "slate",
+    hintKey: "open",
+    requiredPermission: "reports.read",
   },
-]
+];
 
 export const DEFAULT_QUICK_ACTIONS: QuickAction[] = CURATED_QUICK_ACTIONS.filter(
-  (action) => action.id !== 'd-receipt' && action.id !== 'd-bank-review',
-).map(
-  ({ id, labelKey, href, iconKey, tone }) => ({ id, labelKey, href, iconKey, tone }),
-)
+  (action) => action.id !== "d-receipt" && action.id !== "d-bank-review",
+).map(({ id, labelKey, href, iconKey, tone }) => ({ id, labelKey, href, iconKey, tone }));
 
-const CURATED_BY_ID = new Map(CURATED_QUICK_ACTIONS.map((action) => [action.id, action]))
+const CURATED_BY_ID = new Map(CURATED_QUICK_ACTIONS.map((action) => [action.id, action]));
 
-export function isCuratedQuickAction(action: Pick<QuickAction, 'id'>): boolean {
-  return CURATED_BY_ID.has(action.id)
+export function isCuratedQuickAction(action: Pick<QuickAction, "id">): boolean {
+  return CURATED_BY_ID.has(action.id);
 }
 
 /**
@@ -229,32 +247,32 @@ export function isCuratedQuickAction(action: Pick<QuickAction, 'id'>): boolean {
  * labelKey existed retain their stored label as a safe legacy fallback.
  */
 export function quickActionLabel(action: QuickAction, t: QuickActionTranslator): string {
-  const curated = CURATED_BY_ID.get(action.id)
-  const labelKey = curated?.labelKey
+  const curated = CURATED_BY_ID.get(action.id);
+  const labelKey = curated?.labelKey;
   if (labelKey) {
-    const messageKey = `quickActions.labels.${labelKey}`
+    const messageKey = `quickActions.labels.${labelKey}`;
     try {
-      const translated = t(messageKey)
+      const translated = t(messageKey);
       // Some next-intl configurations return the key instead of throwing for
       // a missing message; retain a label written by an older layout then too.
-      return translated === messageKey ? action.label ?? '' : translated
+      return translated === messageKey ? (action.label ?? "") : translated;
     } catch {
       // A deployment with an older catalogue can still render a legacy label.
-      return action.label ?? ''
+      return action.label ?? "";
     }
   }
-  return action.label ?? ''
+  return action.label ?? "";
 }
 
 /** Strip locale-dependent labels from product-owned actions before persistence. */
 export function normalizeQuickAction(action: QuickAction): QuickAction {
-  const curated = CURATED_BY_ID.get(action.id)
+  const curated = CURATED_BY_ID.get(action.id);
   if (!curated) {
     return {
       ...action,
       label: action.label?.trim() || undefined,
       labelKey: undefined,
-    }
+    };
   }
   return {
     id: curated.id,
@@ -262,11 +280,11 @@ export function normalizeQuickAction(action: QuickAction): QuickAction {
     href: action.href.trim() || curated.href,
     iconKey: action.iconKey || curated.iconKey,
     tone: action.tone || curated.tone,
-  }
+  };
 }
 
 export function normalizeQuickActions(actions: readonly QuickAction[]): QuickAction[] {
-  return actions.map(normalizeQuickAction)
+  return actions.map(normalizeQuickAction);
 }
 
 /**
@@ -278,39 +296,35 @@ export function normalizeQuickActions(actions: readonly QuickAction[]): QuickAct
  * empty one. `incoming` must already be normalized.
  */
 export function mergeQuickActionsSave(args: {
-  existingWidgets?: DashboardLayoutData['widgets'] | null
-  existingQuickActions?: readonly QuickAction[] | null
-  incoming: QuickAction[]
-  hiddenIds: ReadonlySet<string>
-  defaultWidgets: DashboardLayoutData['widgets']
+  existingWidgets?: DashboardLayoutData["widgets"] | null;
+  existingQuickActions?: readonly QuickAction[] | null;
+  incoming: QuickAction[];
+  hiddenIds: ReadonlySet<string>;
+  defaultWidgets: DashboardLayoutData["widgets"];
 }): DashboardLayoutData {
-  const preserved = normalizeQuickActions(args.existingQuickActions ?? [])
-    .filter((action) => args.hiddenIds.has(action.id))
-  const incomingIds = new Set(args.incoming.map((action) => action.id))
+  const preserved = normalizeQuickActions(args.existingQuickActions ?? []).filter((action) =>
+    args.hiddenIds.has(action.id),
+  );
+  const incomingIds = new Set(args.incoming.map((action) => action.id));
   return {
     widgets:
       args.existingWidgets && args.existingWidgets.length > 0
         ? args.existingWidgets
         : args.defaultWidgets,
-    quickActions: [
-      ...args.incoming,
-      ...preserved.filter((action) => !incomingIds.has(action.id)),
-    ],
-  }
+    quickActions: [...args.incoming, ...preserved.filter((action) => !incomingIds.has(action.id))],
+  };
 }
 
-export function hiddenCuratedQuickActionIds(
-  featureOn: (key: string) => boolean,
-): string[] {
-  return CURATED_QUICK_ACTIONS
-    .filter((action) => action.requiredFeature != null && !featureOn(action.requiredFeature))
-    .map((action) => action.id)
+export function hiddenCuratedQuickActionIds(featureOn: (key: string) => boolean): string[] {
+  return CURATED_QUICK_ACTIONS.filter(
+    (action) => action.requiredFeature != null && !featureOn(action.requiredFeature),
+  ).map((action) => action.id);
 }
 
 export function visibleQuickActions(
   actions: readonly QuickAction[] | null | undefined,
   hiddenIds: ReadonlySet<string>,
 ): QuickAction[] {
-  const source = actions ?? DEFAULT_QUICK_ACTIONS
-  return source.filter((action) => !hiddenIds.has(action.id))
+  const source = actions ?? DEFAULT_QUICK_ACTIONS;
+  return source.filter((action) => !hiddenIds.has(action.id));
 }

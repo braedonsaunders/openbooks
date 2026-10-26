@@ -1,24 +1,45 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
-import { businessToday } from '@openbooks/engine/platform/business-date'
-import { parseIsoDate } from '@openbooks/engine/platform/civil-date'
-import { add, cmp, div, fromUnits, mul, mulDecimal, mulRate, neg, normalizeMoney, roundDiv, toUnits } from '@openbooks/engine/money'
-import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from './fx-presentation'
-import { openItems } from './cash/open-items'
-import { paymentStats } from './cash/core'
-import { resolveProjectFinancials } from './project-financials'
-import { loadProjectType } from './project-type'
-import { crmOpportunityScope, crmSharedScope } from './crm-scope'
-import { subsidiaryVisibleFilter } from './subsidiaries'
-import { customerOrderCommitmentsSource } from './customer-credit'
-import { enabledCustomerPulseSections } from './customer-pulse-access'
-import { loadCustomerPulseTimeline } from './customer-pulse-timeline'
-import type { CustomerPulseTimelineItem, CustomerPulseTimelinePage } from './customer-pulse-timeline-params'
-import type { CustomerPulseSections } from './customer-pulse-sections'
-export { pulseSectionsFor } from './customer-pulse-sections'
-export type { CustomerPulseSections } from './customer-pulse-sections'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/database";
+import { businessToday } from "@openbooks/engine/platform/business-date";
+import { parseIsoDate } from "@openbooks/engine/platform/civil-date";
+import {
+  add,
+  cmp,
+  div,
+  fromUnits,
+  mul,
+  mulDecimal,
+  mulRate,
+  neg,
+  normalizeMoney,
+  roundDiv,
+  toUnits,
+} from "@openbooks/engine/money";
+import {
+  flowRates,
+  lineFunctional,
+  presentationCurrency,
+  presentationRates,
+  translateFlows,
+} from "./fx-presentation";
+import { openItems } from "./cash/open-items";
+import { paymentStats } from "./cash/core";
+import { resolveProjectFinancials } from "./project-financials";
+import { loadProjectType } from "./project-type";
+import { crmOpportunityScope, crmSharedScope } from "./crm-scope";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
+import { customerOrderCommitmentsSource } from "./customer-credit";
+import { enabledCustomerPulseSections } from "./customer-pulse-access";
+import { loadCustomerPulseTimeline } from "./customer-pulse-timeline";
+import type {
+  CustomerPulseTimelineItem,
+  CustomerPulseTimelinePage,
+} from "./customer-pulse-timeline-params";
+import type { CustomerPulseSections } from "./customer-pulse-sections";
+export { pulseSectionsFor } from "./customer-pulse-sections";
+export type { CustomerPulseSections } from "./customer-pulse-sections";
 
 /**
  * Money travels as canonical numeric(19,4) decimal strings (house bigint
@@ -28,16 +49,16 @@ export type { CustomerPulseSections } from './customer-pulse-sections'
  * 2^53 lose cents. Counts, days and percents stay numbers; they are not
  * money and never aggregate across currencies.
  */
-export type PulseMoney = string
+export type PulseMoney = string;
 
 export interface CustomerAgingBreakdown {
-  current: PulseMoney
-  days1To30: PulseMoney
-  days31To60: PulseMoney
-  days61To90: PulseMoney
-  days90Plus: PulseMoney
-  totalOpen: PulseMoney
-  totalOverdue: PulseMoney
+  current: PulseMoney;
+  days1To30: PulseMoney;
+  days31To60: PulseMoney;
+  days61To90: PulseMoney;
+  days90Plus: PulseMoney;
+  totalOpen: PulseMoney;
+  totalOverdue: PulseMoney;
 }
 
 /**
@@ -46,21 +67,21 @@ export interface CustomerAgingBreakdown {
  * division. Display rounding happens at the UI edge.
  */
 export function marginPercent(profit: PulseMoney, base: PulseMoney): number | null {
-  const baseUnits = toUnits(base)
-  if (baseUnits === 0n) return null
-  const negative = baseUnits < 0n
-  const signedProfit = toUnits(profit) * (negative ? -1n : 1n)
-  const absoluteBase = negative ? -baseUnits : baseUnits
-  return Number(fromUnits(roundDiv((signedProfit * 100n * 10_000n), absoluteBase)))
+  const baseUnits = toUnits(base);
+  if (baseUnits === 0n) return null;
+  const negative = baseUnits < 0n;
+  const signedProfit = toUnits(profit) * (negative ? -1n : 1n);
+  const absoluteBase = negative ? -baseUnits : baseUnits;
+  return Number(fromUnits(roundDiv(signedProfit * 100n * 10_000n, absoluteBase)));
 }
 
 export interface CustomerPulseData {
   party: {
-    id: string
-    displayName: string
-    email: string | null
-    phone: string | null
-    website: string | null
+    id: string;
+    displayName: string;
+    email: string | null;
+    phone: string | null;
+    website: string | null;
     /**
      * Presentation currency of the whole pulse: the org base. Every
      * aggregate in this payload is denominated in it — it is never an
@@ -68,70 +89,70 @@ export interface CustomerPulseData {
      * foreign role currency are translated into it; per-item timeline
      * entries carry their own currency).
      */
-    currency: string
-    subsidiaryName: string | null
+    currency: string;
+    subsidiaryName: string | null;
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
-    paymentTermsName?: string | null
+    paymentTermsName?: string | null;
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
-    isOnHold?: boolean
+    isOnHold?: boolean;
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
-    holdReason?: string | null
+    holdReason?: string | null;
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
-    creditLimit?: PulseMoney | null
+    creditLimit?: PulseMoney | null;
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
-    hasCreditLimit?: boolean
-  }
+    hasCreditLimit?: boolean;
+  };
   /** Echo of the sections granted for this response, so consumers (UI,
    *  assistant tools) can tell "omitted for access" apart from "empty". */
-  sections: CustomerPulseSections
+  sections: CustomerPulseSections;
   /** Present only with ar.read. */
-  aging?: CustomerAgingBreakdown
+  aging?: CustomerAgingBreakdown;
   /** Present only with ar.read. */
   credit?: {
-    creditLimit: PulseMoney | null
-    openArBalance: PulseMoney
-    unbilledOrdersBalance: PulseMoney
-    remainingCredit: PulseMoney | null
-    creditUtilizationPercent: number | null
-  }
+    creditLimit: PulseMoney | null;
+    openArBalance: PulseMoney;
+    unbilledOrdersBalance: PulseMoney;
+    remainingCredit: PulseMoney | null;
+    creditUtilizationPercent: number | null;
+  };
   /** Present only with ar.read. */
   paymentMetrics?: {
     /** Mean days to settle (null = no payment history anywhere). */
-    dso: number | null
-    partyAvgDaysToPay: number | null
-    orgAvgDaysToPay: number | null
-    settlementsCount: number
-  }
+    dso: number | null;
+    partyAvgDaysToPay: number | null;
+    orgAvgDaysToPay: number | null;
+    settlementsCount: number;
+  };
   /** Present only with crm.accounts.read. */
   pipeline?: {
-    totalOpportunities: number
-    openOpportunities: number
-    wonOpportunities: number
-    lostOpportunities: number
-    projectedPipeline: PulseMoney
-    weightedPipeline: PulseMoney
-    wonAmount: PulseMoney
-    winRatePercent: number | null
-  }
+    totalOpportunities: number;
+    openOpportunities: number;
+    wonOpportunities: number;
+    lostOpportunities: number;
+    projectedPipeline: PulseMoney;
+    weightedPipeline: PulseMoney;
+    wonAmount: PulseMoney;
+    winRatePercent: number | null;
+  };
   /** Present only with projects.read (and the Projects feature enabled). */
   projects?: {
-    enabled: boolean
-    totalCount: number
-    activeCount: number
-    totalContractValue: PulseMoney
-    totalBilled: PulseMoney
-    totalCost: PulseMoney
-    grossProfit: PulseMoney
-    grossMarginPercent: number | null
-  }
+    enabled: boolean;
+    totalCount: number;
+    activeCount: number;
+    totalContractValue: PulseMoney;
+    totalBilled: PulseMoney;
+    totalCost: PulseMoney;
+    grossProfit: PulseMoney;
+    grossMarginPercent: number | null;
+  };
   /**
    * Always present but permission-filtered: CRM activities ride the CRM
    * section, commercial documents (quotes, sales orders, invoices,
    * payments) ride the AR section. A caller with neither section gets an
    * empty timeline rather than anyone else's entries.
    */
-  timeline: CustomerPulseTimelineItem[]
-  timelinePage?: Omit<CustomerPulseTimelinePage, 'rows'>
+  timeline: CustomerPulseTimelineItem[];
+  timelinePage?: Omit<CustomerPulseTimelinePage, "rows">;
 }
 
 export async function loadCustomerPulse(
@@ -139,38 +160,39 @@ export async function loadCustomerPulse(
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
   sections?: CustomerPulseSections,
-  timelineSearch: Record<string, string | string[] | undefined> = { pulseHistoryPerPage: '50' },
+  timelineSearch: Record<string, string | string[] | undefined> = { pulseHistoryPerPage: "50" },
 ): Promise<CustomerPulseData | null> {
   // No sections means no access: callers must resolve permissions through
   // pulseSectionsFor first. Defaulting to everything here would reintroduce
   // the leak the parameter exists to close.
-  const effectiveSections = await enabledCustomerPulseSections(orgId, sections)
-  if (!effectiveSections) return null
+  const effectiveSections = await enabledCustomerPulseSections(orgId, sections);
+  if (!effectiveSections) return null;
 
-  const asOf = await businessToday(orgId)
-  const allowedSubArray = allowedSubsidiaryIds ? Array.from(allowedSubsidiaryIds) : undefined
+  const asOf = await businessToday(orgId);
+  const allowedSubArray = allowedSubsidiaryIds ? Array.from(allowedSubsidiaryIds) : undefined;
 
   // Presentation currency is the org base (the house doctrine for consolidated
   // views): every aggregate below lands in it, and the label names it. The
   // org row may not name one — that refuses by name here instead of
   // inventing USD. Credit limits are denominated in the customer role's own
   // currency and translated into the base below.
-  const base = await presentationCurrency(orgId)
+  const base = await presentationCurrency(orgId);
 
   // 1. Party identity and credit settings
   const partyResult = await db.execute<{
-    id: string
-    display_name: string
-    email: string | null
-    phone: string | null
-    website: string | null
-    cr_currency: string | null
-    subsidiary_name: string | null
-    terms_name: string | null
-    is_on_hold: boolean | null
-    hold_reason: string | null
-    cr_credit_limit: string | null
-  }>(sql`
+    id: string;
+    display_name: string;
+    email: string | null;
+    phone: string | null;
+    website: string | null;
+    cr_currency: string | null;
+    subsidiary_name: string | null;
+    terms_name: string | null;
+    is_on_hold: boolean | null;
+    hold_reason: string | null;
+    cr_credit_limit: string | null;
+  }>(
+    sql`
     select p.id, p.display_name, p.email, p.phone, p.website,
            cr.currency as cr_currency,
            sub.name as subsidiary_name,
@@ -183,27 +205,32 @@ export async function loadCustomerPulse(
       left join subsidiaries sub on sub.id = p.subsidiary_id and sub.org_id = p.org_id
       left join payment_terms pt on pt.id = cr.payment_terms_id and pt.org_id = p.org_id
      where p.id = ${partyId} and p.org_id = ${orgId}${crmSharedScope(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, 'objects')
+  `,
+    "objects",
+  );
 
-  const partyRow = partyResult[0]
-  if (!partyRow) return null
+  const partyRow = partyResult[0];
+  if (!partyRow) return null;
 
   // The credit limit lives on the customer role alongside terms and hold
   // state. parties carries no credit columns, so there is no fallback.
   // Canonical decimal text, never parseFloat (see PulseMoney).
-  const creditLimitRaw = partyRow.cr_credit_limit
-  const hasCreditLimit = creditLimitRaw !== null && creditLimitRaw !== undefined
-  const creditLimitCurrency = partyRow.cr_currency ?? base
+  const creditLimitRaw = partyRow.cr_credit_limit;
+  const hasCreditLimit = creditLimitRaw !== null && creditLimitRaw !== undefined;
+  const creditLimitCurrency = partyRow.cr_currency ?? base;
   // Translate the limit from its denominated currency into the presentation
   // base at the closing spot. A missing rate refuses by name (fail closed),
   // never by silently mixing currencies.
-  let creditLimit: PulseMoney | null = null
+  let creditLimit: PulseMoney | null = null;
   if (effectiveSections.ar && hasCreditLimit) {
-    const limitRates = await presentationRates(orgId, base, [creditLimitCurrency], asOf)
-    creditLimit = mulRate(normalizeMoney(creditLimitRaw!), limitRates.get(lineFunctional(creditLimitCurrency, base))!)
+    const limitRates = await presentationRates(orgId, base, [creditLimitCurrency], asOf);
+    creditLimit = mulRate(
+      normalizeMoney(creditLimitRaw!),
+      limitRates.get(lineFunctional(creditLimitCurrency, base))!,
+    );
   }
 
-  const party: CustomerPulseData['party'] = {
+  const party: CustomerPulseData["party"] = {
     id: partyRow.id,
     displayName: partyRow.display_name,
     email: partyRow.email,
@@ -211,66 +238,66 @@ export async function loadCustomerPulse(
     website: partyRow.website,
     currency: base,
     subsidiaryName: partyRow.subsidiary_name,
-  }
+  };
   // Credit controls are AR-domain facts (same rows the directory's `crm`
   // bundle withholds from crm.accounts.read holders). A caller without
   // ar.read gets identity only — the keys are absent, not nulled.
   if (effectiveSections.ar) {
-    party.paymentTermsName = partyRow.terms_name
-    party.isOnHold = Boolean(partyRow.is_on_hold)
-    party.holdReason = partyRow.hold_reason
-    party.creditLimit = creditLimit
-    party.hasCreditLimit = hasCreditLimit
+    party.paymentTermsName = partyRow.terms_name;
+    party.isOnHold = Boolean(partyRow.is_on_hold);
+    party.holdReason = partyRow.hold_reason;
+    party.creditLimit = creditLimit;
+    party.hasCreditLimit = hasCreditLimit;
   }
 
   // 2-4. Receivables telemetry (AR section only). Skipped entirely without
   // ar.read: no open-item, order-commitment, or payment-history query runs,
   // so no AR figure can reach a CRM-only caller.
-  let aging: CustomerPulseData['aging']
-  let credit: CustomerPulseData['credit']
-  let paymentMetrics: CustomerPulseData['paymentMetrics']
+  let aging: CustomerPulseData["aging"];
+  let credit: CustomerPulseData["credit"];
+  let paymentMetrics: CustomerPulseData["paymentMetrics"];
   if (effectiveSections.ar) {
     // 2. Open AR items and aging buckets
     const [allOpenItems, stats] = await Promise.all([
-      openItems(orgId, 'ar', asOf, allowedSubArray, partyId),
-      paymentStats('ar', asOf, allowedSubArray, orgId),
-    ])
+      openItems(orgId, "ar", asOf, allowedSubArray, partyId),
+      paymentStats("ar", asOf, allowedSubArray, orgId),
+    ]);
 
-    const customerOpenItems = allOpenItems.filter((item) => item.partyId === partyId)
-    const asOfDate = parseIsoDate(asOf)
+    const customerOpenItems = allOpenItems.filter((item) => item.partyId === partyId);
+    const asOfDate = parseIsoDate(asOf);
 
     // Exact decimal accumulation: openItems returns canonical decimal text
     // and the house bigint helpers keep it exact (0.10 + 0.20 stays
     // "0.3000"; values above 2^53 keep their cents).
-    let current = '0'
-    let days1To30 = '0'
-    let days31To60 = '0'
-    let days61To90 = '0'
-    let days90Plus = '0'
-    let totalOpen = '0'
-    let totalOverdue = '0'
+    let current = "0";
+    let days1To30 = "0";
+    let days31To60 = "0";
+    let days61To90 = "0";
+    let days90Plus = "0";
+    let totalOpen = "0";
+    let totalOverdue = "0";
 
     for (const item of customerOpenItems) {
-      const val = normalizeMoney(item.remaining)
-      totalOpen = add(totalOpen, val)
+      const val = normalizeMoney(item.remaining);
+      totalOpen = add(totalOpen, val);
 
       if (!item.dueDate) {
-        current = add(current, val)
-        continue
+        current = add(current, val);
+        continue;
       }
 
       const diffDays = Math.floor(
         (asOfDate.getTime() - item.dueDate.getTime()) / (1000 * 60 * 60 * 24),
-      )
+      );
 
       if (diffDays <= 0) {
-        current = add(current, val)
+        current = add(current, val);
       } else {
-        totalOverdue = add(totalOverdue, val)
-        if (diffDays <= 30) days1To30 = add(days1To30, val)
-        else if (diffDays <= 60) days31To60 = add(days31To60, val)
-        else if (diffDays <= 90) days61To90 = add(days61To90, val)
-        else days90Plus = add(days90Plus, val)
+        totalOverdue = add(totalOverdue, val);
+        if (diffDays <= 30) days1To30 = add(days1To30, val);
+        else if (diffDays <= 60) days31To60 = add(days31To60, val);
+        else if (diffDays <= 90) days61To90 = add(days61To90, val);
+        else days90Plus = add(days90Plus, val);
       }
     }
 
@@ -280,29 +307,32 @@ export async function loadCustomerPulse(
     // document-date spot (flow doctrine), so a mixed-currency book lands in
     // the presentation base instead of summing raw across currencies.
     const unbilledRows = await db.execute<{ date: string; func: string | null; amount: string }>(
-      customerOrderCommitmentsSource(orgId, allowedSubsidiaryIds ?? null, partyId), 'objects',
-    )
-    const unbilledOrdersBalance = await translateFlows(orgId, unbilledRows)
+      customerOrderCommitmentsSource(orgId, allowedSubsidiaryIds ?? null, partyId),
+      "objects",
+    );
+    const unbilledOrdersBalance = await translateFlows(orgId, unbilledRows);
 
     // Remaining credit headroom, exact: limit minus committed (open plus
     // unbilled), floored at zero. Utilization is a display percent derived
     // from the exact strings at the edge — it never feeds another sum.
-    let remainingCredit: PulseMoney | null = null
-    let creditUtilizationPercent: number | null = null
+    let remainingCredit: PulseMoney | null = null;
+    let creditUtilizationPercent: number | null = null;
     if (hasCreditLimit && creditLimit !== null) {
-      const committed = add(totalOpen, unbilledOrdersBalance)
-      remainingCredit = cmp(committed, creditLimit) > 0 ? '0.0000' : add(creditLimit, neg(committed))
-      creditUtilizationPercent = cmp(creditLimit, '0') > 0
-        ? Math.min(100, Number(mul(div(committed, creditLimit), '100')))
-        : 100
+      const committed = add(totalOpen, unbilledOrdersBalance);
+      remainingCredit =
+        cmp(committed, creditLimit) > 0 ? "0.0000" : add(creditLimit, neg(committed));
+      creditUtilizationPercent =
+        cmp(creditLimit, "0") > 0
+          ? Math.min(100, Number(mul(div(committed, creditLimit), "100")))
+          : 100;
     }
 
     // 4. Payment metrics & DSO. No history anywhere is null, never 0:
     // Math.round(null) is 0, which would read as "settles today".
-    const partyStat = stats.map.get(partyId)
-    const partyAvgDaysToPay = partyStat ? Math.round(partyStat.avg) : null
-    const orgAvgDaysToPay = stats.globalAvg === null ? null : Math.round(stats.globalAvg)
-    const dso = partyAvgDaysToPay ?? orgAvgDaysToPay
+    const partyStat = stats.map.get(partyId);
+    const partyAvgDaysToPay = partyStat ? Math.round(partyStat.avg) : null;
+    const orgAvgDaysToPay = stats.globalAvg === null ? null : Math.round(stats.globalAvg);
+    const dso = partyAvgDaysToPay ?? orgAvgDaysToPay;
 
     aging = {
       current: normalizeMoney(current),
@@ -312,20 +342,20 @@ export async function loadCustomerPulse(
       days90Plus: normalizeMoney(days90Plus),
       totalOpen: normalizeMoney(totalOpen),
       totalOverdue: normalizeMoney(totalOverdue),
-    }
+    };
     credit = {
       creditLimit,
       openArBalance: normalizeMoney(totalOpen),
       unbilledOrdersBalance,
       remainingCredit,
       creditUtilizationPercent,
-    }
+    };
     paymentMetrics = {
       dso,
       partyAvgDaysToPay,
       orgAvgDaysToPay,
       settlementsCount: partyStat?.n ?? 0,
-    }
+    };
   }
 
   // 5. Commercial Pipeline (CRM section only). Opportunity amounts are
@@ -333,16 +363,17 @@ export async function loadCustomerPulse(
   // row translates currency→base at its expected-close spot (flow doctrine;
   // a missing close date reads the current spot). One shared rate context
   // covers every row; a missing rate refuses by name instead of mixing.
-  let pipeline: CustomerPulseData['pipeline']
+  let pipeline: CustomerPulseData["pipeline"];
   if (effectiveSections.crm) {
     const oppRows = await db.execute<{
-      projected: string
-      weighted: string
-      currency: string
-      date: string
-      is_closed: boolean
-      is_won: boolean
-    }>(sql`
+      projected: string;
+      weighted: string;
+      currency: string;
+      date: string;
+      is_closed: boolean;
+      is_won: boolean;
+    }>(
+      sql`
       select o.projected_amount::text as projected, o.weighted_amount::text as weighted,
              o.currency, coalesce(o.expected_close_date::text, ${asOf}) as date,
              s.is_closed, s.is_won
@@ -352,29 +383,40 @@ export async function loadCustomerPulse(
          and o.party_id = ${partyId}
          and o.is_active
          ${crmOpportunityScope(allowedSubsidiaryIds)}
-    `, 'objects')
+    `,
+      "objects",
+    );
 
-    const fx = await flowRates(orgId, oppRows.map((r) => ({ func: r.currency, date: r.date })))
-    let projected = '0'
-    let weighted = '0'
-    let won = '0'
-    let wonCount = 0
-    let lostCount = 0
-    let openCount = 0
+    const fx = await flowRates(
+      orgId,
+      oppRows.map((r) => ({ func: r.currency, date: r.date })),
+    );
+    let projected = "0";
+    let weighted = "0";
+    let won = "0";
+    let wonCount = 0;
+    let lostCount = 0;
+    let openCount = 0;
     for (const r of oppRows) {
       if (!r.is_closed) {
-        openCount += 1
-        projected = add(projected, mulDecimal(normalizeMoney(r.projected), fx.rateAt(r.currency, r.date)))
-        weighted = add(weighted, mulDecimal(normalizeMoney(r.weighted), fx.rateAt(r.currency, r.date)))
+        openCount += 1;
+        projected = add(
+          projected,
+          mulDecimal(normalizeMoney(r.projected), fx.rateAt(r.currency, r.date)),
+        );
+        weighted = add(
+          weighted,
+          mulDecimal(normalizeMoney(r.weighted), fx.rateAt(r.currency, r.date)),
+        );
       } else if (r.is_won) {
-        wonCount += 1
-        won = add(won, mulDecimal(normalizeMoney(r.projected), fx.rateAt(r.currency, r.date)))
+        wonCount += 1;
+        won = add(won, mulDecimal(normalizeMoney(r.projected), fx.rateAt(r.currency, r.date)));
       } else {
-        lostCount += 1
+        lostCount += 1;
       }
     }
-    const closedCount = wonCount + lostCount
-    const winRatePercent = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null
+    const closedCount = wonCount + lostCount;
+    const winRatePercent = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null;
 
     pipeline = {
       totalOpportunities: oppRows.length,
@@ -385,7 +427,7 @@ export async function loadCustomerPulse(
       weightedPipeline: normalizeMoney(weighted),
       wonAmount: normalizeMoney(won),
       winRatePercent,
-    }
+    };
   }
 
   // 6. Project Rollups (projects section only, and only when enabled).
@@ -396,42 +438,51 @@ export async function loadCustomerPulse(
   // previous code set cost to 0 and margin to 100% without reading any cost
   // source. Profit here is realized billing margin (invoiced minus cost),
   // so the figures always tie: profit + cost = billed.
-  let projects: CustomerPulseData['projects']
+  let projects: CustomerPulseData["projects"];
   if (effectiveSections.projects) {
-    const listRes = await db.execute<{ id: string; status: string }>(sql`
+    const listRes = await db.execute<{ id: string; status: string }>(
+      sql`
       select prj.id, prj.status
         from projects prj
        where prj.org_id = ${orgId}
          and prj.customer_id = ${partyId}
          and prj.is_active
          ${subsidiaryVisibleFilter(sql`prj.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-    `, 'objects')
-    let contractTotal = '0'
-    let billedTotal = '0'
-    let costTotal = '0'
+    `,
+      "objects",
+    );
+    let contractTotal = "0";
+    let billedTotal = "0";
+    let costTotal = "0";
     for (const row of listRes) {
-      const projectType = await loadProjectType(orgId, row.id)
-      const fin = await resolveProjectFinancials(orgId, row.id, projectType.financialProfile)
-      contractTotal = add(contractTotal, normalizeMoney(String(fin.contractValue ?? '0')))
-      billedTotal = add(billedTotal, normalizeMoney(String(fin.measures.invoiced_to_date ?? '0')))
-      costTotal = add(costTotal, normalizeMoney(String(fin.measures.total_cost ?? '0')))
+      const projectType = await loadProjectType(orgId, row.id);
+      const fin = await resolveProjectFinancials(orgId, row.id, projectType.financialProfile);
+      contractTotal = add(contractTotal, normalizeMoney(String(fin.contractValue ?? "0")));
+      billedTotal = add(billedTotal, normalizeMoney(String(fin.measures.invoiced_to_date ?? "0")));
+      costTotal = add(costTotal, normalizeMoney(String(fin.measures.total_cost ?? "0")));
     }
-    const profit = add(billedTotal, neg(costTotal))
+    const profit = add(billedTotal, neg(costTotal));
     projects = {
       enabled: true,
       totalCount: listRes.length,
-      activeCount: listRes.filter((r) => r.status === 'awarded' || r.status === 'active').length,
+      activeCount: listRes.filter((r) => r.status === "awarded" || r.status === "active").length,
       totalContractValue: normalizeMoney(contractTotal),
       totalBilled: normalizeMoney(billedTotal),
       totalCost: normalizeMoney(costTotal),
       grossProfit: normalizeMoney(profit),
       grossMarginPercent: marginPercent(profit, billedTotal),
-    }
+    };
   }
 
-  const timelinePage = await loadCustomerPulseTimeline(partyId, orgId, allowedSubsidiaryIds, effectiveSections, timelineSearch)
-  if (!timelinePage) return null
-  const { rows: timeline, ...timelinePagination } = timelinePage
+  const timelinePage = await loadCustomerPulseTimeline(
+    partyId,
+    orgId,
+    allowedSubsidiaryIds,
+    effectiveSections,
+    timelineSearch,
+  );
+  if (!timelinePage) return null;
+  const { rows: timeline, ...timelinePagination } = timelinePage;
 
   return {
     party,
@@ -443,5 +494,5 @@ export async function loadCustomerPulse(
     ...(projects !== undefined ? { projects } : null),
     timeline,
     timelinePage: timelinePagination,
-  }
+  };
 }

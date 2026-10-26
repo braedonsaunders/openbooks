@@ -5,7 +5,7 @@
 // — the value unions are imported type-only so this module is safe to bundle
 // into the client filter bar too.
 
-import { DEFAULT_PERIOD_PRESET, isPeriodPreset } from '@openbooks/reports'
+import { DEFAULT_PERIOD_PRESET, isPeriodPreset } from "@openbooks/reports";
 import type {
   StatementBasis,
   StatementBreakout,
@@ -13,82 +13,90 @@ import type {
   StatementCompare,
   StatementDimFilter,
   StatementMode,
-} from './statement-matrix'
-import type { ReportDrillTarget } from './report-drill'
-import type { AgingCurrencyBasis } from './reports/aging'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/civil-date'
+} from "./statement-matrix";
+import type { ReportDrillTarget } from "./report-drill";
+import type { AgingCurrencyBasis } from "./reports/aging";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/civil-date";
 
-export type ReportScale = 'actual' | 'thousands' | 'millions'
-export type ProjectReportScope = 'active' | 'all'
+export type ReportScale = "actual" | "thousands" | "millions";
+export type ProjectReportScope = "active" | "all";
 
 export type ReportQuery = {
   /** Period preset id (see PERIOD_PRESETS); `custom` uses `from`/`to`. */
-  period: string
-  from?: string
-  to?: string
-  breakout: StatementBreakout
-  compare: StatementCompare
-  basis: StatementBasis
-  dims: StatementDimFilter
+  period: string;
+  from?: string;
+  to?: string;
+  breakout: StatementBreakout;
+  compare: StatementCompare;
+  basis: StatementBasis;
+  dims: StatementDimFilter;
   /** Customer scope used by customer/job profitability reporting. */
-  customerId?: string
+  customerId?: string;
   /** Project population used by project profitability reporting. */
-  projectScope: ProjectReportScope
+  projectScope: ProjectReportScope;
   /** Subsidiary context node; unset = the root (consolidated). */
-  subsidiaryId?: string
-  showZero: boolean
-  scale: ReportScale
-}
+  subsidiaryId?: string;
+  showZero: boolean;
+  scale: ReportScale;
+};
 
-const BREAKOUTS: StatementBreakout[] = ['none', 'department', 'project', 'location', 'class', 'month', 'quarter']
-const COMPARES: StatementCompare[] = ['none', 'prior_period', 'prior_year']
-const BASES: StatementBasis[] = ['accrual', 'cash']
-const SCALES: ReportScale[] = ['actual', 'thousands', 'millions']
+const BREAKOUTS: StatementBreakout[] = [
+  "none",
+  "department",
+  "project",
+  "location",
+  "class",
+  "month",
+  "quarter",
+];
+const COMPARES: StatementCompare[] = ["none", "prior_period", "prior_year"];
+const BASES: StatementBasis[] = ["accrual", "cash"];
+const SCALES: ReportScale[] = ["actual", "thousands", "millions"];
 
 /** URL param keys — stable; persisted in saved views. */
 export const REPORT_PARAM_KEYS = {
-  period: 'period',
-  from: 'from',
-  to: 'to',
-  breakout: 'breakout',
-  compare: 'compare',
-  basis: 'basis',
-  dept: 'dept',
-  project: 'project',
-  customer: 'customer',
-  projectScope: 'projects',
-  location: 'location',
-  class: 'class',
-  sub: 'sub',
-  zero: 'zero',
-  scale: 'scale',
+  period: "period",
+  from: "from",
+  to: "to",
+  breakout: "breakout",
+  compare: "compare",
+  basis: "basis",
+  dept: "dept",
+  project: "project",
+  customer: "customer",
+  projectScope: "projects",
+  location: "location",
+  class: "class",
+  sub: "sub",
+  zero: "zero",
+  scale: "scale",
   /** Aging reporting currency; the shared `basis` key means accrual/cash. */
-  currency: 'currency',
-  currencyBasis: 'currencyBasis',
-} as const
+  currency: "currency",
+  currencyBasis: "currencyBasis",
+} as const;
 
-type ParamSource = URLSearchParams | Record<string, string | undefined>
+type ParamSource = URLSearchParams | Record<string, string | undefined>;
 
 function read(sp: ParamSource, key: string): string | undefined {
-  if (sp instanceof URLSearchParams) return sp.get(key) ?? undefined
-  return sp[key]
+  if (sp instanceof URLSearchParams) return sp.get(key) ?? undefined;
+  return sp[key];
 }
 
 function oneOf<T extends string>(v: string | undefined, allowed: T[], fallback: T): T {
-  return v && (allowed as string[]).includes(v) ? (v as T) : fallback
+  return v && (allowed as string[]).includes(v) ? (v as T) : fallback;
 }
 
 /** A uuid-valued param, or undefined when absent or malformed. */
 function uuidParam(sp: ParamSource, key: string): string | undefined {
-  const value = read(sp, key)
-  return value && isUuid(value) ? value : undefined
+  const value = read(sp, key);
+  return value && isUuid(value) ? value : undefined;
 }
 
 /** True when `value` is a well-formed uuid — for page/route params that bind
  *  into uuid predicates outside the shared query (e.g. `account`). */
 export function isReportUuidParam(value: string | null | undefined): value is string {
-  return !!value && isUuid(value)
+  return !!value && isUuid(value);
 }
 
 /**
@@ -97,19 +105,19 @@ export function isReportUuidParam(value: string | null | undefined): value is st
  * remedy instead of widening the window to a default period.
  */
 export class IncompleteReportPeriodError extends Error {
-  readonly code = 'incomplete-report-period'
-  readonly status = 422
-  readonly remedy = 'Set both a From and a To date, with From on or before To.'
-  readonly from: string | null
-  readonly to: string | null
+  readonly code = "incomplete-report-period";
+  readonly status = 422;
+  readonly remedy = "Set both a From and a To date, with From on or before To.";
+  readonly from: string | null;
+  readonly to: string | null;
 
   constructor(from: string | null | undefined, to: string | null | undefined) {
     super(
-      `A custom period needs both a From and a To date, with From on or before To (received from '${from ?? ''}', to '${to ?? ''}').`,
-    )
-    this.name = 'IncompleteReportPeriodError'
-    this.from = from ?? null
-    this.to = to ?? null
+      `A custom period needs both a From and a To date, with From on or before To (received from '${from ?? ""}', to '${to ?? ""}').`,
+    );
+    this.name = "IncompleteReportPeriodError";
+    this.from = from ?? null;
+    this.to = to ?? null;
   }
 }
 
@@ -123,9 +131,9 @@ export function assertCustomPeriodBounds(
   to: string | null | undefined,
 ): { from: string; to: string } {
   if (!isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
-    throw new IncompleteReportPeriodError(from, to)
+    throw new IncompleteReportPeriodError(from, to);
   }
-  return { from, to }
+  return { from, to };
 }
 
 /**
@@ -134,28 +142,34 @@ export function assertCustomPeriodBounds(
  * bounds, so only it is checked; every other param set passes through.
  */
 export function assertSavedReportPeriod(params: Record<string, string | undefined>): void {
-  const custom = params.period === 'custom' || (!params.period && (params.from || params.to))
-  if (custom) assertCustomPeriodBounds(params.from, params.to)
+  const custom = params.period === "custom" || (!params.period && (params.from || params.to));
+  if (custom) assertCustomPeriodBounds(params.from, params.to);
 }
 
 function segmentFilters(sp: ParamSource): Record<string, string> {
-  const entries = sp instanceof URLSearchParams ? [...sp.entries()] : Object.entries(sp)
+  const entries = sp instanceof URLSearchParams ? [...sp.entries()] : Object.entries(sp);
   return Object.fromEntries(
     entries
-      .filter(([key, value]) => key.startsWith('seg_') && /^[a-z][a-z0-9_]{0,62}$/.test(key.slice(4)) && typeof value === 'string' && value)
+      .filter(
+        ([key, value]) =>
+          key.startsWith("seg_") &&
+          /^[a-z][a-z0-9_]{0,62}$/.test(key.slice(4)) &&
+          typeof value === "string" &&
+          value,
+      )
       .map(([key, value]) => [key.slice(4), String(value)]),
-  )
+  );
 }
 
 /** Parse a filter query from search params, applying safe defaults. */
 export interface AgingCurrencyScope {
-  baseCurrency: string
-  currencies: string[]
+  baseCurrency: string;
+  currencies: string[];
 }
 
 export interface AgingCurrencySelection {
-  basis: AgingCurrencyBasis
-  currency: string
+  basis: AgingCurrencyBasis;
+  currency: string;
 }
 
 /**
@@ -170,12 +184,12 @@ export function resolveAgingCurrencyParams(
   sp: ParamSource,
   scope: AgingCurrencyScope,
 ): AgingCurrencySelection {
-  const basis = read(sp, REPORT_PARAM_KEYS.currencyBasis)
-  const requested = read(sp, REPORT_PARAM_KEYS.currency)
+  const basis = read(sp, REPORT_PARAM_KEYS.currencyBasis);
+  const requested = read(sp, REPORT_PARAM_KEYS.currency);
   return {
-    basis: basis === 'transaction' ? 'transaction' : 'base',
+    basis: basis === "transaction" ? "transaction" : "base",
     currency: requested && scope.currencies.includes(requested) ? requested : scope.baseCurrency,
-  }
+  };
 }
 
 export function parseReportQuery(
@@ -183,28 +197,30 @@ export function parseReportQuery(
   options: {
     /** The preset an absent period resolves to; point-in-time statements
      *  pass `AS_OF_DEFAULT_PERIOD_PRESET`. */
-    defaultPeriod?: string
+    defaultPeriod?: string;
   } = {},
 ): ReportQuery {
-  const periodRaw = read(sp, REPORT_PARAM_KEYS.period)
-  const from = read(sp, REPORT_PARAM_KEYS.from) || undefined
-  const to = read(sp, REPORT_PARAM_KEYS.to) || undefined
+  const periodRaw = read(sp, REPORT_PARAM_KEYS.period);
+  const from = read(sp, REPORT_PARAM_KEYS.from) || undefined;
+  const to = read(sp, REPORT_PARAM_KEYS.to) || undefined;
   return {
     // Dates without a named period are a custom window: a link or saved view
     // carrying only From/To must never reopen as the default period.
     period: isPeriodPreset(periodRaw)
       ? periodRaw!
-      : !periodRaw && (from || to) ? 'custom' : (options.defaultPeriod ?? DEFAULT_PERIOD_PRESET),
+      : !periodRaw && (from || to)
+        ? "custom"
+        : (options.defaultPeriod ?? DEFAULT_PERIOD_PRESET),
     from,
     to,
     breakout: (() => {
-      const value = read(sp, REPORT_PARAM_KEYS.breakout)
-      return value?.startsWith('segment:') && /^[a-z][a-z0-9_]{0,62}$/.test(value.slice(8))
-        ? value as StatementBreakout
-        : oneOf(value, BREAKOUTS, 'none')
+      const value = read(sp, REPORT_PARAM_KEYS.breakout);
+      return value?.startsWith("segment:") && /^[a-z][a-z0-9_]{0,62}$/.test(value.slice(8))
+        ? (value as StatementBreakout)
+        : oneOf(value, BREAKOUTS, "none");
     })(),
-    compare: oneOf(read(sp, REPORT_PARAM_KEYS.compare), COMPARES, 'none'),
-    basis: oneOf(read(sp, REPORT_PARAM_KEYS.basis), BASES, 'accrual'),
+    compare: oneOf(read(sp, REPORT_PARAM_KEYS.compare), COMPARES, "none"),
+    basis: oneOf(read(sp, REPORT_PARAM_KEYS.basis), BASES, "accrual"),
     // Dimension ids bind straight into uuid predicates (dimWhere), so a
     // hand-edited or stale value is re-clamped to "no filter" here — the same
     // authoritative treatment the other filter params get — instead of
@@ -217,47 +233,49 @@ export function parseReportQuery(
       segments: segmentFilters(sp),
     },
     customerId: uuidParam(sp, REPORT_PARAM_KEYS.customer),
-    projectScope: oneOf(read(sp, REPORT_PARAM_KEYS.projectScope), ['active', 'all'], 'active'),
+    projectScope: oneOf(read(sp, REPORT_PARAM_KEYS.projectScope), ["active", "all"], "active"),
     // Preserve explicit selections for the scoped resolver; even an empty
     // or malformed value must not become an omitted filter and select a default.
     subsidiaryId: read(sp, REPORT_PARAM_KEYS.sub),
-    showZero: read(sp, REPORT_PARAM_KEYS.zero) === '1',
-    scale: oneOf(read(sp, REPORT_PARAM_KEYS.scale), SCALES, 'actual'),
-  }
+    showZero: read(sp, REPORT_PARAM_KEYS.zero) === "1",
+    scale: oneOf(read(sp, REPORT_PARAM_KEYS.scale), SCALES, "actual"),
+  };
 }
 
 /** Serialize a query back to URLSearchParams (omitting defaults for clean URLs). */
 export function toSearchParams(q: ReportQuery): URLSearchParams {
-  const p = new URLSearchParams()
-  const k = REPORT_PARAM_KEYS
-  if (q.period && q.period !== DEFAULT_PERIOD_PRESET) p.set(k.period, q.period)
-  if (q.period === 'custom') {
-    if (q.from) p.set(k.from, q.from)
-    if (q.to) p.set(k.to, q.to)
+  const p = new URLSearchParams();
+  const k = REPORT_PARAM_KEYS;
+  if (q.period && q.period !== DEFAULT_PERIOD_PRESET) p.set(k.period, q.period);
+  if (q.period === "custom") {
+    if (q.from) p.set(k.from, q.from);
+    if (q.to) p.set(k.to, q.to);
   }
-  if (q.breakout !== 'none') p.set(k.breakout, q.breakout)
-  if (q.compare !== 'none') p.set(k.compare, q.compare)
-  if (q.basis !== 'accrual') p.set(k.basis, q.basis)
-  if (q.dims.departmentId) p.set(k.dept, q.dims.departmentId)
-  if (q.dims.projectId) p.set(k.project, q.dims.projectId)
-  if (q.dims.locationId) p.set(k.location, q.dims.locationId)
-  if (q.dims.classId) p.set(k.class, q.dims.classId)
-  if (q.customerId) p.set(k.customer, q.customerId)
-  if (q.projectScope !== 'active') p.set(k.projectScope, q.projectScope)
-  for (const [key, value] of Object.entries(q.dims.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
-    p.set(`seg_${key}`, value)
+  if (q.breakout !== "none") p.set(k.breakout, q.breakout);
+  if (q.compare !== "none") p.set(k.compare, q.compare);
+  if (q.basis !== "accrual") p.set(k.basis, q.basis);
+  if (q.dims.departmentId) p.set(k.dept, q.dims.departmentId);
+  if (q.dims.projectId) p.set(k.project, q.dims.projectId);
+  if (q.dims.locationId) p.set(k.location, q.dims.locationId);
+  if (q.dims.classId) p.set(k.class, q.dims.classId);
+  if (q.customerId) p.set(k.customer, q.customerId);
+  if (q.projectScope !== "active") p.set(k.projectScope, q.projectScope);
+  for (const [key, value] of Object.entries(q.dims.segments ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    p.set(`seg_${key}`, value);
   }
-  if (q.subsidiaryId) p.set(k.sub, q.subsidiaryId)
-  if (q.showZero) p.set(k.zero, '1')
-  if (q.scale !== 'actual') p.set(k.scale, q.scale)
-  return p
+  if (q.subsidiaryId) p.set(k.sub, q.subsidiaryId);
+  if (q.showZero) p.set(k.zero, "1");
+  if (q.scale !== "actual") p.set(k.scale, q.scale);
+  return p;
 }
 
 /** Divisor for a scale, plus the "in thousands/millions" note (empty when actual). */
 export function scaleFactor(scale: ReportScale): { divisor: number; note: string } {
-  if (scale === 'thousands') return { divisor: 1000, note: 'In thousands' }
-  if (scale === 'millions') return { divisor: 1_000_000, note: 'In millions' }
-  return { divisor: 1, note: '' }
+  if (scale === "thousands") return { divisor: 1000, note: "In thousands" };
+  if (scale === "millions") return { divisor: 1_000_000, note: "In millions" };
+  return { divisor: 1, note: "" };
 }
 
 // --- drill-through -----------------------------------------------------------
@@ -267,13 +285,13 @@ export function scaleFactor(scale: ReportScale): { divisor: number; note: string
 // the report basis, and a `back` link to the exact report.
 
 export type DrillColumn = {
-  kind: StatementColumnKind
-  from?: string | null
-  to?: string
-  dimField?: 'department' | 'project' | 'location' | 'class'
-  dimValue?: string | null
-  segmentKey?: string
-}
+  kind: StatementColumnKind;
+  from?: string | null;
+  to?: string;
+  dimField?: "department" | "project" | "location" | "class";
+  dimValue?: string | null;
+  segmentKey?: string;
+};
 
 // P&L profit rows (gross profit, net income, computed earnings, and the
 // equity subtotals that roll them up) mix credit-normal revenue with
@@ -284,92 +302,109 @@ export type DrillColumn = {
 // rows (whose residual cannot tie either way) keep the reader-signed net.
 // Kept as literal lists: this module ships to the client filter bar and must
 // not pull in the server-only matrix engine for its type constants.
-const PROFIT_CREDIT_TYPES = new Set(['income', 'income_other'])
-const PROFIT_DEBIT_TYPES = new Set(['cogs', 'expense', 'expense_other', 'expense_deferred'])
-const DRILL_ASSET_TYPES = new Set(['asset_bank', 'asset_receivable', 'asset_current_other', 'asset_fixed', 'asset_other'])
+const PROFIT_CREDIT_TYPES = new Set(["income", "income_other"]);
+const PROFIT_DEBIT_TYPES = new Set(["cogs", "expense", "expense_other", "expense_deferred"]);
+const DRILL_ASSET_TYPES = new Set([
+  "asset_bank",
+  "asset_receivable",
+  "asset_current_other",
+  "asset_fixed",
+  "asset_other",
+]);
 
 function isProfitDrill(types: string[] | undefined): boolean {
-  if (!types || types.length === 0) return false
-  return types.some((type) => PROFIT_CREDIT_TYPES.has(type))
-    && types.some((type) => PROFIT_DEBIT_TYPES.has(type))
-    && !types.some((type) => DRILL_ASSET_TYPES.has(type))
+  if (!types || types.length === 0) return false;
+  return (
+    types.some((type) => PROFIT_CREDIT_TYPES.has(type)) &&
+    types.some((type) => PROFIT_DEBIT_TYPES.has(type)) &&
+    !types.some((type) => DRILL_ASSET_TYPES.has(type))
+  );
 }
 
 /** Build the typed supporting-detail target for one statement cell. */
 export function buildDrillTarget(args: {
-  accountId?: string
-  drillTypes?: string[]
-  column: DrillColumn
-  sourceColumns?: DrillColumn[]
-  mode: StatementMode
-  reportDims: StatementDimFilter
-  basis: StatementBasis
+  accountId?: string;
+  drillTypes?: string[];
+  column: DrillColumn;
+  sourceColumns?: DrillColumn[];
+  mode: StatementMode;
+  reportDims: StatementDimFilter;
+  basis: StatementBasis;
   /** Subsidiary context node used by the shared drawer query. */
-  subsidiaryId?: string
-  label: string
-  budgetScenarioId?: string
-  bookId?: string
+  subsidiaryId?: string;
+  label: string;
+  budgetScenarioId?: string;
+  bookId?: string;
 }): ReportDrillTarget | null {
-  const { column } = args
+  const { column } = args;
   if (args.budgetScenarioId) {
     // The drill must tie to the displayed report window, not the scenario's
     // whole fiscal year: carry the dated columns' range (the actual column
     // carries the resolved window) exactly like every other drill target.
     const datedWindows = [column, ...(args.sourceColumns ?? [])].filter(
       (source): source is DrillColumn & { to: string } => !!source.to,
-    )
-    const windowFroms = datedWindows.map((source) => source.from).filter((value): value is string => !!value)
-    const windowTos = datedWindows.map((source) => source.to)
+    );
+    const windowFroms = datedWindows
+      .map((source) => source.from)
+      .filter((value): value is string => !!value);
+    const windowTos = datedWindows.map((source) => source.to);
     return {
-      kind: 'budget',
+      kind: "budget",
       label: args.label,
       scenarioId: args.budgetScenarioId,
-      scope: column.kind === 'amount' ? (column.to ? 'actual' : 'budget') : 'variance',
+      scope: column.kind === "amount" ? (column.to ? "actual" : "budget") : "variance",
       accountIds: args.accountId ? [args.accountId] : undefined,
       accountTypes: args.drillTypes,
       ...(isProfitDrill(args.drillTypes) && !args.accountId ? { profitSigned: true as const } : {}),
       dims: args.reportDims,
       from: windowFroms.length ? windowFroms.reduce((a, b) => (a < b ? a : b)) : undefined,
       to: windowTos.length ? windowTos.reduce((a, b) => (a > b ? a : b)) : undefined,
-    }
+    };
   }
-  const sourceColumns = column.kind === 'amount'
-    ? [column]
-    : (args.sourceColumns ?? []).filter((source) => source.kind === 'amount' && source.to)
-  const dated = sourceColumns.filter((source): source is DrillColumn & { to: string } => !!source.to)
-  if (dated.length === 0) return null
+  const sourceColumns =
+    column.kind === "amount"
+      ? [column]
+      : (args.sourceColumns ?? []).filter((source) => source.kind === "amount" && source.to);
+  const dated = sourceColumns.filter(
+    (source): source is DrillColumn & { to: string } => !!source.to,
+  );
+  if (dated.length === 0) return null;
   // Unassigned breakout bucket needs an "is null" filter we don't express in URLs.
-  if ((column.dimField || column.segmentKey) && (column.dimValue === null || column.dimValue === undefined)) return null
-  if (!args.accountId && !(args.drillTypes && args.drillTypes.length)) return null
+  if (
+    (column.dimField || column.segmentKey) &&
+    (column.dimValue === null || column.dimValue === undefined)
+  )
+    return null;
+  if (!args.accountId && !(args.drillTypes && args.drillTypes.length)) return null;
 
-  const froms = dated.map((source) => source.from).filter((value): value is string => !!value)
-  const tos = dated.map((source) => source.to)
-  const from = froms.length ? froms.reduce((a, b) => (a < b ? a : b)) : undefined
-  const to = tos.reduce((a, b) => (a > b ? a : b))
+  const froms = dated.map((source) => source.from).filter((value): value is string => !!value);
+  const tos = dated.map((source) => source.to);
+  const from = froms.length ? froms.reduce((a, b) => (a < b ? a : b)) : undefined;
+  const to = tos.reduce((a, b) => (a > b ? a : b));
 
-  const dims: StatementDimFilter = { ...args.reportDims }
+  const dims: StatementDimFilter = { ...args.reportDims };
   if (column.dimField && column.dimValue) {
-    const key = column.dimField
-    if (key === 'department') dims.departmentId = column.dimValue
-    else if (key === 'project') dims.projectId = column.dimValue
-    else if (key === 'location') dims.locationId = column.dimValue
-    else if (key === 'class') dims.classId = column.dimValue
+    const key = column.dimField;
+    if (key === "department") dims.departmentId = column.dimValue;
+    else if (key === "project") dims.projectId = column.dimValue;
+    else if (key === "location") dims.locationId = column.dimValue;
+    else if (key === "class") dims.classId = column.dimValue;
   }
   if (column.segmentKey && column.dimValue) {
-    dims.segments = { ...(dims.segments ?? {}), [column.segmentKey]: column.dimValue }
+    dims.segments = { ...(dims.segments ?? {}), [column.segmentKey]: column.dimValue };
   }
   return {
-    kind: 'ledger',
+    kind: "ledger",
     label: args.label,
     accountIds: args.accountId ? [args.accountId] : undefined,
     accountTypes: args.accountId ? undefined : args.drillTypes,
     ...(isProfitDrill(args.drillTypes) && !args.accountId ? { profitSigned: true as const } : {}),
     mode: args.mode,
-    from: args.mode === 'flow' ? from : undefined,
+    from: args.mode === "flow" ? from : undefined,
     to,
     dims,
     subsidiaryId: args.subsidiaryId,
     bookId: args.bookId,
     basis: args.basis,
-  }
+  };
 }

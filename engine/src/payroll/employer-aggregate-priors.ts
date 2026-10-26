@@ -120,9 +120,9 @@ export async function assessStubAggregateLevies(input: {
     const assessedOn = statutoryAssessment(input.country, levy.systemKey, "employer_contribution");
     if (assessedOn !== "earnings") {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" points at ${levy.systemKey}/employer_contribution, `
-        + `which is assessed on ${assessedOn} — an aggregate levy must ride an earnings-assessed `
-        + "component, or the deduction-protection fixpoint moves it",
+        `employer-aggregate levy "${levy.key}" points at ${levy.systemKey}/employer_contribution, ` +
+          `which is assessed on ${assessedOn} — an aggregate levy must ride an earnings-assessed ` +
+          "component, or the deduction-protection fixpoint moves it",
       );
     }
   }
@@ -158,13 +158,20 @@ export async function assessStubAggregateLevies(input: {
   });
   const factors: Record<string, string> = {};
   for (const { levy, priors } of resolved) {
-    const stubBase = levy.base.source === "gross" ? input.gross
-      : levy.base.source === "taxable" ? input.taxableGross
-      : pensionableStubBase(levy, input.pensionable, input.periodsPerYear);
+    const stubBase =
+      levy.base.source === "gross"
+        ? input.gross
+        : levy.base.source === "taxable"
+          ? input.taxableGross
+          : pensionableStubBase(levy, input.pensionable, input.periodsPerYear);
     const assessed = assessAggregateLevyStub(levy, stubBase, priors);
     if (cmp(assessed.amount, "0") !== 0) {
       input.pushStatutory(
-        levy.systemKey, "employer_contribution", levy.description, assessed.amount, levy.sequence,
+        levy.systemKey,
+        "employer_contribution",
+        levy.description,
+        assessed.amount,
+        levy.sequence,
       );
     }
     Object.assign(factors, assessed.factors);
@@ -176,8 +183,17 @@ export async function resolveAggregateLevyPriors(
   input: AggregatePriorsInput,
 ): Promise<ResolvedAggregateLevy[]> {
   const {
-    tx, orgId, country, documentId, employeePartyId, taxYear, region,
-    levies, tenantValues, subsidiaryId, payDate,
+    tx,
+    orgId,
+    country,
+    documentId,
+    employeePartyId,
+    taxYear,
+    region,
+    levies,
+    tenantValues,
+    subsidiaryId,
+    payDate,
   } = input;
   // Sequential levies: the stub calculation runs on its transaction client,
   // which is one pg connection — resolving every levy at once queues
@@ -188,21 +204,38 @@ export async function resolveAggregateLevyPriors(
       levy,
       priors: {
         employerPriorBase: await employerPriorBase(tx, {
-          orgId, country, documentId, taxYear, levy,
+          orgId,
+          country,
+          documentId,
+          taxYear,
+          levy,
           region: levy.base.scope === "region" ? region : null,
         }),
-        employeePriorBase: levy.allowance?.kind === "per_employee_cap"
-          ? await employeePriorBase(tx, {
-            orgId, country, documentId, employeePartyId, taxYear, levy,
-          })
-          : "0",
+        employeePriorBase:
+          levy.allowance?.kind === "per_employee_cap"
+            ? await employeePriorBase(tx, {
+                orgId,
+                country,
+                documentId,
+                employeePartyId,
+                taxYear,
+                levy,
+              })
+            : "0",
         tenantValues,
-        accruing: levy.allowance?.kind === "accruing_allowance"
-          ? await resolveAccruingInputs(tx, {
-            orgId, country, subsidiaryId, payDate, documentId, taxYear, levy,
-            region: levy.base.scope === "region" ? region : null,
-          })
-          : undefined,
+        accruing:
+          levy.allowance?.kind === "accruing_allowance"
+            ? await resolveAccruingInputs(tx, {
+                orgId,
+                country,
+                subsidiaryId,
+                payDate,
+                documentId,
+                taxYear,
+                levy,
+                region: levy.base.scope === "region" ? region : null,
+              })
+            : undefined,
       },
     });
   }
@@ -222,26 +255,30 @@ function pensionableStubBase(
 ): string {
   if (pensionable === undefined || periodsPerYear === undefined) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" prices a pensionable base the run did not resolve — `
-      + "engine defect",
+      `employer-aggregate levy "${levy.key}" prices a pensionable base the run did not resolve — ` +
+        "engine defect",
     );
   }
   const floor = levy.base.periodFloor;
   if (!floor) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" prices a pensionable base with no period floors — `
-      + "engine defect",
+      `employer-aggregate levy "${levy.key}" prices a pensionable base with no period floors — ` +
+        "engine defect",
     );
   }
-  const threshold = periodsPerYear === 52 ? floor.weekly
-    : periodsPerYear === 12 ? floor.monthly
-    : periodsPerYear === 1 ? floor.annual
-    : null;
+  const threshold =
+    periodsPerYear === 52
+      ? floor.weekly
+      : periodsPerYear === 12
+        ? floor.monthly
+        : periodsPerYear === 1
+          ? floor.annual
+          : null;
   if (threshold === null) {
     if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" needs a positive integer periods-per-year, `
-        + `got ${periodsPerYear}`,
+        `employer-aggregate levy "${levy.key}" needs a positive integer periods-per-year, ` +
+          `got ${periodsPerYear}`,
       );
     }
     // Unlisted periodicity prorates the annual floor to the penny, the way
@@ -261,8 +298,8 @@ function pensionableLessFloor(levyKey: string, pensionable: string, threshold: s
     base = toUnits(pensionable) - toUnits(threshold);
   } catch {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levyKey}" prices a pensionable base that is not decimal money — `
-      + "engine defect",
+      `employer-aggregate levy "${levyKey}" prices a pensionable base that is not decimal money — ` +
+        "engine defect",
     );
   }
   return base <= 0n ? "0" : fromUnits(base);
@@ -285,36 +322,51 @@ async function resolveAccruingInputs(
   const { orgId, country, subsidiaryId, payDate, documentId, taxYear, levy, region } = input;
   if (levy.allowance?.kind !== "accruing_allowance") {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" resolves accruing inputs for a non-accruing allowance — `
-      + "engine defect",
+      `employer-aggregate levy "${levy.key}" resolves accruing inputs for a non-accruing allowance — ` +
+        "engine defect",
     );
   }
   if (!subsidiaryId) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" needs the paying legal employer to resolve its `
-      + "allowance share — assign the payroll run to its legal employer",
+      `employer-aggregate levy "${levy.key}" needs the paying legal employer to resolve its ` +
+        "allowance share — assign the payroll run to its legal employer",
     );
   }
   if (payDate === undefined || payDate === "") {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" accrues its allowance against the pay date, which the `
-      + "run did not resolve — engine defect",
+      `employer-aggregate levy "${levy.key}" accrues its allowance against the pay date, which the ` +
+        "run did not resolve — engine defect",
     );
   }
   const allowanceAnnual = await resolveStoredEmployerFact({
-    tx, orgId, subsidiaryId, country,
-    factKey: levy.allowance.factKey, asOf: payDate,
+    tx,
+    orgId,
+    subsidiaryId,
+    country,
+    factKey: levy.allowance.factKey,
+    asOf: payDate,
   });
   if (allowanceAnnual === null) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" has no allowance share recorded for this legal employer `
-      + `— record it in Payroll Setup → Employer facts (${levy.allowance.factKey})`,
+      `employer-aggregate levy "${levy.key}" has no allowance share recorded for this legal employer ` +
+        `— record it in Payroll Setup → Employer facts (${levy.allowance.factKey})`,
     );
   }
   return {
-    priorAmount: await employerPriorAmount(tx, { orgId, country, documentId, taxYear, levy, region }),
+    priorAmount: await employerPriorAmount(tx, {
+      orgId,
+      country,
+      documentId,
+      taxYear,
+      levy,
+      region,
+    }),
     allowanceAnnual,
-    monthsElapsed: taxMonthsElapsed(payDate, levy.allowance.yearStartMonth, levy.allowance.yearStartDay),
+    monthsElapsed: taxMonthsElapsed(
+      payDate,
+      levy.allowance.yearStartMonth,
+      levy.allowance.yearStartDay,
+    ),
   };
 }
 
@@ -336,7 +388,8 @@ async function employerPriorAmount(
   // exists, so `input.country` is intentionally unread here.
   const { orgId, documentId, taxYear, levy, region } = input;
   const amountKey = levy.factorKey;
-  const rows = (await tx.execute<{ prior: string }>(sql`
+  const rows = await tx.execute<{ prior: string }>(
+    sql`
     select coalesce(sum((s.factors->>${amountKey})::numeric), 0) as prior
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
@@ -345,7 +398,9 @@ async function employerPriorAmount(
        and (${region}::text is null or s.province = ${region})
        and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
        and d.status <> 'voided'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows[0]!.prior;
 }
 
@@ -363,7 +418,8 @@ async function employerPriorBase(
 ): Promise<string> {
   const { orgId, country, documentId, taxYear, levy, region } = input;
   const earnKey = `${levy.factorKey}_EARN`;
-  const rows = (await tx.execute<{ prior: string }>(sql`
+  const rows = await tx.execute<{ prior: string }>(
+    sql`
     select coalesce((
              select base_ytd from payroll_employer_levy_opening
               where org_id = ${orgId} and tax_year = ${taxYear}
@@ -378,7 +434,9 @@ async function employerPriorBase(
        and (${region}::text is null or s.province = ${region})
        and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
        and d.status <> 'voided'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows[0]!.prior;
 }
 
@@ -399,12 +457,15 @@ async function employeePriorBase(
   const openingColumn = levy.employeeOpeningFieldKey
     ? employeeOpeningColumn(input.country, levy)
     : null;
-  const rows = (await tx.execute<{ prior: string }>(sql`
-    select ${openingColumn
-      ? sql`coalesce((select ${sql.raw(openingColumn)} from payroll_opening_balances
+  const rows = await tx.execute<{ prior: string }>(
+    sql`
+    select ${
+      openingColumn
+        ? sql`coalesce((select ${sql.raw(openingColumn)} from payroll_opening_balances
                         where org_id = ${orgId} and employee_party_id = ${employeePartyId}
                           and tax_year = ${taxYear}), 0)`
-      : sql`0`}
+        : sql`0`
+    }
            + coalesce(sum((s.factors->>${earnKey})::numeric), 0) as prior
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
@@ -413,7 +474,9 @@ async function employeePriorBase(
        and s.tax_year = ${taxYear}
        and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
        and d.status <> 'voided'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows[0]!.prior;
 }
 
@@ -430,8 +493,8 @@ function employeeOpeningColumn(country: string, levy: PayrollEmployerAggregateLe
   );
   if (!field) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" reads opening field "${key}" — `
-      + `the ${country} pack declares no such year-to-date field`,
+      `employer-aggregate levy "${levy.key}" reads opening field "${key}" — ` +
+        `the ${country} pack declares no such year-to-date field`,
     );
   }
   return field.column;

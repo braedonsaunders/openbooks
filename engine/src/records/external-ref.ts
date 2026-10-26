@@ -30,7 +30,11 @@ export function resolveExternalRefPair(input: {
         "externalRef must be a string — send the external system's id for this document as text or omit both externalRef and externalSource",
     };
   }
-  if (externalSource !== undefined && externalSource !== null && typeof externalSource !== "string") {
+  if (
+    externalSource !== undefined &&
+    externalSource !== null &&
+    typeof externalSource !== "string"
+  ) {
     return {
       action: "refuse",
       message:
@@ -75,11 +79,14 @@ export async function findDocumentByExternalRef(
   source: string,
   excludeId?: string,
 ): Promise<{ id: string; documentNumber: string } | null> {
-  const rows = await runner.execute<{ id: string; document_number: string }>(sql`
+  const rows = await runner.execute<{ id: string; document_number: string }>(
+    sql`
     select id, document_number from documents
      where org_id = ${orgId} and external_source = ${source} and external_ref = ${ref}
        ${excludeId ? sql`and id <> ${excludeId}` : sql<SQL>``}
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   const row = rows[0];
   return row ? { id: row.id, documentNumber: row.document_number } : null;
 }

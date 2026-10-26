@@ -21,46 +21,51 @@
  */
 
 /** Downstream consumers that pin a time entry. Order is the reporting order. */
-export const LOCK_REASONS = ['invoiced', 'paid', 'costed', 'ticketed'] as const
-export type LockReason = (typeof LOCK_REASONS)[number]
+export const LOCK_REASONS = ["invoiced", "paid", "costed", "ticketed"] as const;
+export type LockReason = (typeof LOCK_REASONS)[number];
 
 /** The provenance columns that decide whether an entry is still free. */
 export interface EntryProvenance {
-  invoicedByLineId: string | null
-  payrollBatchRef: string | null
-  costJournalEntryId: string | null
-  productionConsumedOperationId?: string | null
+  invoicedByLineId: string | null;
+  payrollBatchRef: string | null;
+  costJournalEntryId: string | null;
+  productionConsumedOperationId?: string | null;
   /** Applied overhead is also posted ledger evidence, even when labour cost is not. */
-  overheadJournalEntryId?: string | null
-  fieldTicketId: string | null
+  overheadJournalEntryId?: string | null;
+  fieldTicketId: string | null;
   /** Independent of invoice-line provenance — imported billed rows may have no line id. */
-  billingStatus?: 'unbilled' | 'billed' | null
+  billingStatus?: "unbilled" | "billed" | null;
 }
 
 /** Every downstream consumer holding this entry, in reporting order. */
 export function lockReasonsFor(entry: EntryProvenance): LockReason[] {
-  const reasons: LockReason[] = []
-  if (entry.invoicedByLineId || entry.billingStatus === 'billed') reasons.push('invoiced')
-  if (entry.payrollBatchRef) reasons.push('paid')
-  if (entry.costJournalEntryId || entry.overheadJournalEntryId || entry.productionConsumedOperationId) reasons.push('costed')
-  if (entry.fieldTicketId) reasons.push('ticketed')
-  return reasons
+  const reasons: LockReason[] = [];
+  if (entry.invoicedByLineId || entry.billingStatus === "billed") reasons.push("invoiced");
+  if (entry.payrollBatchRef) reasons.push("paid");
+  if (
+    entry.costJournalEntryId ||
+    entry.overheadJournalEntryId ||
+    entry.productionConsumedOperationId
+  )
+    reasons.push("costed");
+  if (entry.fieldTicketId) reasons.push("ticketed");
+  return reasons;
 }
 
 /** Union of the lock reasons across a whole week, deduped and ordered. */
 export function weekLockReasons(entries: EntryProvenance[]): LockReason[] {
-  const found = new Set<LockReason>()
-  for (const entry of entries) for (const reason of lockReasonsFor(entry)) found.add(reason)
-  return LOCK_REASONS.filter((reason) => found.has(reason))
+  const found = new Set<LockReason>();
+  for (const entry of entries) for (const reason of lockReasonsFor(entry)) found.add(reason);
+  return LOCK_REASONS.filter((reason) => found.has(reason));
 }
 
 export interface ReopenDecision {
   /** True when every entry in the week is free of downstream consumers. */
-  allowed: boolean
+  allowed: boolean;
   /** Why not, for the message. Empty when allowed. */
-  reasons: LockReason[]
+  reasons: LockReason[];
   /** How many entries are pinned (0 when allowed). */
-  lockedCount: number
+  lockedCount: number;
 }
 
 /**
@@ -71,9 +76,9 @@ export interface ReopenDecision {
  * paid, which is exactly the ambiguity approval exists to prevent.
  */
 export function canReopenWeek(entries: EntryProvenance[]): ReopenDecision {
-  const lockedCount = entries.filter((entry) => lockReasonsFor(entry).length > 0).length
-  const reasons = weekLockReasons(entries)
-  return { allowed: lockedCount === 0, reasons, lockedCount }
+  const lockedCount = entries.filter((entry) => lockReasonsFor(entry).length > 0).length;
+  const reasons = weekLockReasons(entries);
+  return { allowed: lockedCount === 0, reasons, lockedCount };
 }
 
 /**
@@ -82,5 +87,5 @@ export function canReopenWeek(entries: EntryProvenance[]): ReopenDecision {
  * rather than reopened.
  */
 export function isReopenableStatus(status: string): boolean {
-  return status === 'approved'
+  return status === "approved";
 }

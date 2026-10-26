@@ -23,14 +23,21 @@ export async function assertHrmEnabled(exec: SqlExecutor, orgId: string): Promis
 }
 
 /** Read admission uses the caller's snapshot without acquiring writer row locks. */
-export async function assertHrmReadEnabled(exec:SqlExecutor,orgId:string):Promise<void>{
-  const organization=(await exec.execute<{id:string}>(sql`select id from orgs where id=${orgId}`, "objects"))[0];
-  if(!organization||!(await orgFeatureEnabled(orgId,HRM_FEATURE_KEY,exec))){
-    throw new BenefitsError("REFUSED","benefits are unavailable while the hrm feature is off — enable it under Company Settings → Features; existing benefits data is preserved");
+export async function assertHrmReadEnabled(exec: SqlExecutor, orgId: string): Promise<void> {
+  const organization = (
+    await exec.execute<{ id: string }>(sql`select id from orgs where id=${orgId}`, "objects")
+  )[0];
+  if (!organization || !(await orgFeatureEnabled(orgId, HRM_FEATURE_KEY, exec))) {
+    throw new BenefitsError(
+      "REFUSED",
+      "benefits are unavailable while the hrm feature is off — enable it under Company Settings → Features; existing benefits data is preserved",
+    );
   }
 }
 
-export const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new BenefitsError("INVALID_INPUT", message));
+export const { requireOrgId, requireActorId, requireId } = inputGuards(
+  (message) => new BenefitsError("INVALID_INPUT", message),
+);
 
 /** Strict civil date (YYYY-MM-DD), refused with the remedy otherwise. */
 export function requireCivilDate(value: unknown, field: string): string {

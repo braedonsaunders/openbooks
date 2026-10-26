@@ -1,9 +1,6 @@
 import { sanitizeDecisionCause } from "./decision-cause.ts";
 import { hasFlowDecisionAuthority } from "./decision-authority.ts";
-import {
-  sendAutomaticSchedule,
-  sendReviewedSchedule,
-} from "./schedule-distribution-hook.ts";
+import { sendAutomaticSchedule, sendReviewedSchedule } from "./schedule-distribution-hook.ts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   flowFieldValueError,
@@ -15,18 +12,9 @@ import {
   type GateData,
 } from "@openbooks/forms-core";
 import { businessToday } from "../platform/business-date.ts";
-import {
-  db,
-  schema,
-  withOrgTransaction,
-  withTransactionSavepoint,
-} from "../platform/db.ts";
+import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter } from "./types.ts";
-import {
-  resolveAssigneeUsers,
-  resolveRecipientEmails,
-  resolveRecipientUsers,
-} from "./targets.ts";
+import { resolveAssigneeUsers, resolveRecipientEmails, resolveRecipientUsers } from "./targets.ts";
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
 import { flowPdfTemplateMeta, renderFlowPdf } from "./pdf-hook.ts";
@@ -94,10 +82,7 @@ export interface ExecuteFlowPlanResult {
 
 /** Org display name for email shells (best-effort). */
 async function orgName(orgId: string): Promise<string> {
-  const [org] = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
   return org?.name ?? "OpenBooks";
 }
 
@@ -115,9 +100,7 @@ export async function executeFlowPlan(
     rows: params.evalCtx.rows ?? {},
     requestContext: {
       ...params.evalCtx.requestContext,
-      today:
-        params.evalCtx.requestContext?.today ??
-        (await businessToday(ctx.orgId)),
+      today: params.evalCtx.requestContext?.today ?? (await businessToday(ctx.orgId)),
     },
   };
   const targetCtx = {
@@ -128,7 +111,7 @@ export async function executeFlowPlan(
 
   const completed: string[] = [];
   const failed: string[] = [];
-  const failureCauses:unknown[]=[];
+  const failureCauses: unknown[] = [];
   let gatesCreated = 0;
 
   // --- Effect checkpoints ---------------------------------------------------
@@ -141,17 +124,13 @@ export async function executeFlowPlan(
       })
       .from(schema.flowRunEffects)
       .where(
-        and(
-          eq(schema.flowRunEffects.runId, runId),
-          eq(schema.flowRunEffects.orgId, ctx.orgId),
-        ),
+        and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.orgId, ctx.orgId)),
       );
     // A claim is inserted before its side effect. An empty detail therefore
     // means the process may have died in that gap, not that the effect is
     // complete; only a stamped outcome suppresses a resumed attempt.
     for (const row of rows) {
-      if (row.detail && Object.keys(row.detail).length > 0)
-        completedEffects.add(row.effectKey);
+      if (row.detail && Object.keys(row.detail).length > 0) completedEffects.add(row.effectKey);
     }
   }
 
@@ -175,28 +154,19 @@ export async function executeFlowPlan(
       .select({ detail: schema.flowRunEffects.detail })
       .from(schema.flowRunEffects)
       .where(
-        and(
-          eq(schema.flowRunEffects.runId, runId),
-          eq(schema.flowRunEffects.effectKey, effectKey),
-        ),
+        and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)),
       )
       .for("update");
     return Boolean(existing && Object.keys(existing.detail ?? {}).length === 0);
   };
 
   // Stamp the outcome onto the already-claimed checkpoint (never inserts).
-  const markEffectComplete = async (
-    effectKey: string,
-    detail: Record<string, unknown>,
-  ) => {
+  const markEffectComplete = async (effectKey: string, detail: Record<string, unknown>) => {
     await db
       .update(schema.flowRunEffects)
       .set({ detail })
       .where(
-        and(
-          eq(schema.flowRunEffects.runId, runId),
-          eq(schema.flowRunEffects.effectKey, effectKey),
-        ),
+        and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)),
       );
   };
 
@@ -219,10 +189,7 @@ export async function executeFlowPlan(
 
   // --- Action handlers --------------------------------------------------------
 
-  const runAction = async (
-    nodeId: string,
-    action: ActionData,
-  ): Promise<string> => {
+  const runAction = async (nodeId: string, action: ActionData): Promise<string> => {
     switch (action.action) {
       case "send_board_schedule": {
         if (flow.subjectKind !== "schedule_board" || !ctx.scheduledOccurrence)
@@ -233,9 +200,7 @@ export async function executeFlowPlan(
       }
       case "distribute_schedule": {
         if (flow.subjectKind !== "schedule_distribution" || !ctx.userId)
-          throw new Error(
-            "Schedule email requires its reviewed native subject and acting user.",
-          );
+          throw new Error("Schedule email requires its reviewed native subject and acting user.");
         const sent = await sendReviewedSchedule({
           requestId: subjectId,
           runId,
@@ -246,8 +211,7 @@ export async function executeFlowPlan(
       case "send_email": {
         const to = await resolveRecipientEmails(action.to, targetCtx);
         if (to.length === 0) throw new Error("no recipients resolved");
-        const subject =
-          interpolateTemplate(action.subject, evalCtx) || "Notification";
+        const subject = interpolateTemplate(action.subject, evalCtx) || "Notification";
         const body = interpolateTemplate(action.body, evalCtx);
         // attachPdf: render the record's PDF via the hook the web process
         // registers at boot; a process without a renderer (standalone worker)
@@ -280,9 +244,7 @@ export async function executeFlowPlan(
               // The outbox payload is the durable issuance record for this
               // attachment: pin which template design produced it there.
               pdfTemplateMeta = flowPdfTemplateMeta(pdf.template);
-            } else
-              pdfNote =
-                " (pdf unavailable in this process, sent without attachment)";
+            } else pdfNote = " (pdf unavailable in this process, sent without attachment)";
           } catch (e) {
             console.error(`[flows] attachPdf render failed (run ${runId}):`, e);
             pdfNote = " (pdf render failed, sent without attachment)";
@@ -313,10 +275,7 @@ export async function executeFlowPlan(
           // The outbox is the durable transport. If its insert fails, keep the
           // effect claim retryable: the action loop releases the claim and
           // stops the chain, so a later run can persist and deliver the email.
-          console.error(
-            `[flows] send_email deferral failed (run ${runId}):`,
-            e,
-          );
+          console.error(`[flows] send_email deferral failed (run ${runId}):`, e);
           throw e;
         }
         return `send_email→${to.length}${pdfNote}`;
@@ -325,11 +284,8 @@ export async function executeFlowPlan(
       case "notify": {
         const users = await resolveRecipientUsers(action.to, targetCtx);
         if (users.length === 0) throw new Error("no users resolved");
-        const title =
-          interpolateTemplate(action.title, evalCtx) || "Notification";
-        const body = action.body
-          ? interpolateTemplate(action.body, evalCtx)
-          : null;
+        const title = interpolateTemplate(action.title, evalCtx) || "Notification";
+        const body = action.body ? interpolateTemplate(action.body, evalCtx) : null;
         const href = action.href
           ? interpolateTemplate(action.href, evalCtx)
           : adapter.deepLink(subjectId);
@@ -353,10 +309,7 @@ export async function executeFlowPlan(
         // definition before the adapter persists either a header or custom
         // field. The adapter remains authoritative for write permission and
         // reference ownership.
-        const profile = await flowSubjectProfileForOrg(
-          ctx.orgId,
-          adapter.subjectKind,
-        );
+        const profile = await flowSubjectProfileForOrg(ctx.orgId, adapter.subjectKind);
         const def = profile?.fields.find((field) => field.key === action.field);
         const typeError = def ? flowFieldValueError(def, v ?? null) : null;
         if (typeError) throw new Error(typeError);
@@ -407,9 +360,7 @@ export async function executeFlowPlan(
           subjectKind: flow.subjectKind,
           subjectId,
           flowId: flow.id,
-          reason: action.reason
-            ? interpolateTemplate(action.reason, evalCtx)
-            : null,
+          reason: action.reason ? interpolateTemplate(action.reason, evalCtx) : null,
           exemptRoles: action.exemptRoles ?? [],
           userId: ctx.userId ?? null,
         });
@@ -435,8 +386,7 @@ export async function executeFlowPlan(
       // winner's transaction and then gets zero rows, so the effect fires
       // exactly once.
       const outcome = await runEffectTransaction(async () => {
-        if (!(await claimEffect(effectKey)))
-          return { claimed: false, desc: "" };
+        if (!(await claimEffect(effectKey))) return { claimed: false, desc: "" };
         const desc = await runAction(nodeId, action);
         await markEffectComplete(effectKey, {
           action: action.action,
@@ -467,8 +417,7 @@ export async function executeFlowPlan(
       if (completedEffects.has(effectKey)) continue;
       try {
         const outcome = await runEffectTransaction(async () => {
-          if (!(await claimEffect(effectKey)))
-            return { claimed: false, count: 0 };
+          if (!(await claimEffect(effectKey))) return { claimed: false, count: 0 };
           const count = await createGate(ctx, adapter, {
             flow,
             runId,
@@ -533,11 +482,16 @@ async function createGate(
   // Only the tenant's configured recipients may decide. A self-approval
   // restriction never substitutes an unconfigured supervisor or administrator.
   if (gate.preventSelfApproval !== false) {
-    const run = (await db.execute<{ created_by: string | null }>(sql`
+    const run = (
+      await db.execute<{ created_by: string | null }>(
+        sql`
       select created_by from flow_runs where org_id=${ctx.orgId} and id=${runId}
         and flow_id=${flow.id} and subject_kind=${adapter.subjectKind} and subject_id=${subjectId}
       for share
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!run) throw new Error("The gate has no retained native submission run.");
     const blocked = await resolveSodBlockedIds(
       ctx.orgId,
@@ -636,9 +590,7 @@ async function createGate(
           ),
         ),
       );
-    const gateRowByAssignee = new Map(
-      rows.map((r) => [r.assigneeUserId, r.id]),
-    );
+    const gateRowByAssignee = new Map(rows.map((r) => [r.assigneeUserId, r.id]));
     for (const u of assignees) {
       if (!u.email.includes("@")) continue;
       const gateRowId = gateRowByAssignee.get(u.id);

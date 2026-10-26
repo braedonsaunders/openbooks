@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AutopayError, classifyDecline, parseExpiryNoticeDays, retryLadderForClass, terminalDeclineDetail, type AutopayPolicy } from "./autopay-policy.ts";
+import {
+  AutopayError,
+  classifyDecline,
+  parseExpiryNoticeDays,
+  retryLadderForClass,
+  terminalDeclineDetail,
+  type AutopayPolicy,
+} from "./autopay-policy.ts";
 
 function policy(): AutopayPolicy {
   return {
@@ -44,7 +51,10 @@ test("each decline class reads its own retry ladder", () => {
 
 test("terminal declines name the remedy that clears them", () => {
   assert.match(terminalDeclineDetail("hard", "stolen_card"), /update the payment method/);
-  assert.match(terminalDeclineDetail("needs_authentication", "authentication_required"), /authentication link/);
+  assert.match(
+    terminalDeclineDetail("needs_authentication", "authentication_required"),
+    /authentication link/,
+  );
   assert.match(terminalDeclineDetail("soft", "do_not_honor"), /final retry/);
 });
 

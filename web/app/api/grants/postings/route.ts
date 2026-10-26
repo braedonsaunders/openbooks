@@ -1,8 +1,8 @@
-import { defineRoute } from '@/lib/api/route'
-import { uuidId } from '../../../../lib/api/json'
-import { guardPermission } from '../../../../lib/authz'
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
+import { defineRoute } from "@/lib/api/route";
+import { uuidId } from "../../../../lib/api/json";
+import { guardPermission } from "../../../../lib/authz";
+import { NextResponse } from "next/server";
+import { z } from "zod";
 import {
   amendGrant,
   awardGrant,
@@ -10,9 +10,9 @@ import {
   recordGrantDrawdown,
   voidGrant,
   voidGrantDrawdown,
-} from '@openbooks/engine/nonprofit/grants'
+} from "@openbooks/engine/nonprofit/grants";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const postingAccounts = z.strictObject({
   bankAccountId: uuidId,
@@ -21,7 +21,7 @@ const postingAccounts = z.strictObject({
   grantRevenueAccountId: uuidId,
   exchangeReceivableAccountId: uuidId,
   exchangeRevenueAccountId: uuidId,
-})
+});
 
 /**
  * Posting grant commands. Both grants.manage and gl.post are proven in
@@ -30,45 +30,47 @@ const postingAccounts = z.strictObject({
  * non-posting lifecycle lives on the sibling commands route under
  * grants.manage alone.
  */
-const grantPostingBody = z.discriminatedUnion('action', [
+const grantPostingBody = z.discriminatedUnion("action", [
   z.strictObject({
-    action: z.literal('award'),
+    action: z.literal("award"),
     grantId: uuidId,
     accounts: postingAccounts,
     postingDate: z.string(),
   }),
   z.strictObject({
-    action: z.literal('recordDrawdown'),
+    action: z.literal("recordDrawdown"),
     grantId: uuidId,
     drawdownId: uuidId.optional(),
     amount: z.string(),
-    kind: z.enum(['advance', 'reimbursement', 'final']),
+    kind: z.enum(["advance", "reimbursement", "final"]),
     accounts: postingAccounts,
     postingDate: z.string(),
   }),
   z.strictObject({
-    action: z.literal('recognizeDrawdown'),
+    action: z.literal("recognizeDrawdown"),
     drawdownId: uuidId,
     grantRevenueAccountId: uuidId,
     refundableAdvanceAccountId: uuidId,
     postingDate: z.string(),
   }),
   z.strictObject({
-    action: z.literal('amend'),
+    action: z.literal("amend"),
     grantId: uuidId,
     reason: z.string(),
     changes: z.strictObject({
       name: z.string().optional(),
       sponsorPartyId: uuidId.optional(),
-      sponsorKind: z.enum(['government', 'foundation', 'corporate']).optional(),
-      determination: z.enum(['contribution_unconditional', 'contribution_conditional', 'exchange']).optional(),
+      sponsorKind: z.enum(["government", "foundation", "corporate"]).optional(),
+      determination: z
+        .enum(["contribution_unconditional", "contribution_conditional", "exchange"])
+        .optional(),
       barrier: z.string().nullable().optional(),
       rightOfReturn: z.boolean().optional(),
       awardAmount: z.string().optional(),
       periodFrom: z.string().optional(),
       periodTo: z.string().optional(),
       indirectRate: z.string().optional(),
-      indirectBase: z.enum(['direct_costs', 'modified_total_direct']).optional(),
+      indirectBase: z.enum(["direct_costs", "modified_total_direct"]).optional(),
       mtdcExclusionAccountGroupId: uuidId.nullable().optional(),
       mtdcSubawardAccountGroupId: uuidId.nullable().optional(),
       mtdcSubawardThreshold: z.string().nullable().optional(),
@@ -81,18 +83,18 @@ const grantPostingBody = z.discriminatedUnion('action', [
     postingDate: z.string(),
   }),
   z.strictObject({
-    action: z.literal('void'),
+    action: z.literal("void"),
     grantId: uuidId,
     postingDate: z.string(),
     reason: z.string(),
   }),
   z.strictObject({
-    action: z.literal('voidDrawdown'),
+    action: z.literal("voidDrawdown"),
     drawdownId: uuidId,
     postingDate: z.string(),
     reason: z.string(),
   }),
-])
+]);
 
 export const POST = defineRoute({
   authorize: async () => {
@@ -100,25 +102,33 @@ export const POST = defineRoute({
     // `instanceof NextResponse`, and a data-URL session double cannot name
     // next/server — Response is the portable base both share, so the status
     // and body survive the trip either way.
-    const manage = await guardPermission('grants.manage')
-    if (manage instanceof Response) return NextResponse.json(await manage.json(), { status: manage.status })
-    const post = await guardPermission('gl.post')
-    if (post instanceof Response) return NextResponse.json(await post.json(), { status: post.status })
-    return post
+    const manage = await guardPermission("grants.manage");
+    if (manage instanceof Response)
+      return NextResponse.json(await manage.json(), { status: manage.status });
+    const post = await guardPermission("gl.post");
+    if (post instanceof Response)
+      return NextResponse.json(await post.json(), { status: post.status });
+    return post;
   },
-  feature: 'grantManagement',
-  scope: 'unrestricted',
+  feature: "grantManagement",
+  scope: "unrestricted",
   body: grantPostingBody,
   handler: async ({ authz, body }) => {
-    const orgId = authz.user.orgId
-    const actorId = authz.user.id
+    const orgId = authz.user.orgId;
+    const actorId = authz.user.id;
     switch (body.action) {
-      case 'award':
+      case "award":
         return NextResponse.json({
           ok: true,
-          ...(await awardGrant({ orgId, grantId: body.grantId, accounts: body.accounts, postingDate: body.postingDate, actorId })),
-        })
-      case 'recordDrawdown':
+          ...(await awardGrant({
+            orgId,
+            grantId: body.grantId,
+            accounts: body.accounts,
+            postingDate: body.postingDate,
+            actorId,
+          })),
+        });
+      case "recordDrawdown":
         return NextResponse.json({
           ok: true,
           ...(await recordGrantDrawdown({
@@ -131,8 +141,8 @@ export const POST = defineRoute({
             postingDate: body.postingDate,
             actorId,
           })),
-        })
-      case 'recognizeDrawdown':
+        });
+      case "recognizeDrawdown":
         return NextResponse.json({
           ok: true,
           ...(await recognizeGrantDrawdown({
@@ -143,8 +153,8 @@ export const POST = defineRoute({
             postingDate: body.postingDate,
             actorId,
           })),
-        })
-      case 'amend':
+        });
+      case "amend":
         return NextResponse.json({
           ok: true,
           grant: await amendGrant({
@@ -156,17 +166,29 @@ export const POST = defineRoute({
             postingDate: body.postingDate,
             actorId,
           }),
-        })
-      case 'void':
+        });
+      case "void":
         return NextResponse.json({
           ok: true,
-          grant: await voidGrant({ orgId, grantId: body.grantId, postingDate: body.postingDate, reason: body.reason, actorId }),
-        })
-      case 'voidDrawdown':
-        await voidGrantDrawdown({ orgId, drawdownId: body.drawdownId, postingDate: body.postingDate, reason: body.reason, actorId })
-        return NextResponse.json({ ok: true })
+          grant: await voidGrant({
+            orgId,
+            grantId: body.grantId,
+            postingDate: body.postingDate,
+            reason: body.reason,
+            actorId,
+          }),
+        });
+      case "voidDrawdown":
+        await voidGrantDrawdown({
+          orgId,
+          drawdownId: body.drawdownId,
+          postingDate: body.postingDate,
+          reason: body.reason,
+          actorId,
+        });
+        return NextResponse.json({ ok: true });
       default:
-        return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+        return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   },
-})
+});

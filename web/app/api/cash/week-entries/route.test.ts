@@ -24,19 +24,23 @@ const routeState: RouteState = {
   allowedSubsidiaryIds: null,
   cashPositionCalls: [],
 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 // Published for the mock below: mock sources cannot import, so the session
 // mock reads the REAL engine check through here instead of reimplementing it.
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.cash-week-entries-route-test.can")] = (authz: { permissions: Set<string> }, perm: string) =>
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.cash-week-entries-route-test.can")
+] = (authz: { permissions: Set<string> }, perm: string) =>
   permissionSetCovers(authz.permissions, perm);
 
 const mockSources = new Map<string, string>([
-  ["mock:authz", // Session boundary; can() delegates to the published engine check.
+  [
+    "mock:authz", // Session boundary; can() delegates to the published engine check.
     `const state = globalThis[Symbol.for('openbooks.cash-week-entries-route-test')], check = globalThis[Symbol.for('openbooks.cash-week-entries-route-test.can')]
       export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds } }
       export function can(authz, perm) { return check(authz, perm) }
       export async function isFeatureEnabled() { return true }
-    `,],
+    `,
+  ],
   [
     "mock:analytics-config",
     `
@@ -71,13 +75,18 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-let GET: typeof import("./route.ts")["GET"];
+let GET: (typeof import("./route.ts"))["GET"];
 if (process.env.VITEST) {
   const { vi } = await import(vitestModuleName);
   const { permissionSetCovers } = await import("@openbooks/engine/organization/permissions");
   vi["mock"]("../../../../lib/authz", () => ({
-    getAuthz: async () => ({ user: { orgId: "org-1", id: "user-1" }, permissions: new Set(["*"]), allowedSubsidiaryIds: routeState.allowedSubsidiaryIds }),
-    can: (authz: { permissions: Set<string> }, perm: string) => permissionSetCovers(authz.permissions, perm),
+    getAuthz: async () => ({
+      user: { orgId: "org-1", id: "user-1" },
+      permissions: new Set(["*"]),
+      allowedSubsidiaryIds: routeState.allowedSubsidiaryIds,
+    }),
+    can: (authz: { permissions: Set<string> }, perm: string) =>
+      permissionSetCovers(authz.permissions, perm),
   }));
   vi["mock"]("../../../../lib/features", () => ({ isFeatureEnabled: async () => true }));
   vi["mock"]("../../../../lib/analytics/config", () => ({
@@ -96,11 +105,13 @@ if (process.env.VITEST) {
     ) => {
       routeState.cashPositionCalls.push({ orgId, horizonWeeks, apSettings, asOfDate, subIds });
       return {
-        weeks: [{
-          weekStart: "2026-08-23",
-          arEntries: [{ id: "ar-1" }],
-          apEntries: [{ id: "ap-1" }],
-        }],
+        weeks: [
+          {
+            weekStart: "2026-08-23",
+            arEntries: [{ id: "ar-1" }],
+            apEntries: [{ id: "ap-1" }],
+          },
+        ],
       };
     },
   }));
@@ -127,7 +138,6 @@ if (process.env.VITEST) {
     },
   });
   ({ GET } = (await import("./route.ts")) as typeof import("./route.ts"));
-
 }
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
@@ -145,7 +155,10 @@ const restrictedDefault = async () => {
   const response = await get();
 
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000003"]);
+  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000003",
+  ]);
   assert.deepEqual(await response.json(), {
     weekStart: "2026-08-23",
     arEntries: [{ id: "ar-1" }],
@@ -178,7 +191,9 @@ const restrictedAllowed = async () => {
   const response = await get("week=2026-08-23&sub=00000000-0000-4000-8000-000000000002");
 
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["00000000-0000-4000-8000-000000000002"]);
+  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, [
+    "00000000-0000-4000-8000-000000000002",
+  ]);
 };
 
 const unrestricted = async () => {
@@ -191,20 +206,28 @@ const unrestricted = async () => {
   routeState.cashPositionCalls.length = 0;
   const selected = await get("week=2026-08-23&sub=00000000-0000-4000-8000-000000000002");
   assert.equal(selected.status, 200);
-  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["00000000-0000-4000-8000-000000000002"]);
+  assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, [
+    "00000000-0000-4000-8000-000000000002",
+  ]);
 };
 
 if (process.env.VITEST) {
   const { describe, it } = await import(vitestModuleName);
   describe("cash week entries subsidiary scope", () => {
-    it("restricted callers inherit every allowed subsidiary when sub is omitted", restrictedDefault);
+    it(
+      "restricted callers inherit every allowed subsidiary when sub is omitted",
+      restrictedDefault,
+    );
     it("restricted callers cannot drill into an out-of-scope subsidiary", restrictedDenied);
     it("empty subsidiary scopes fail closed", emptyScopeDenied);
     it("restricted callers may explicitly drill into an allowed subsidiary", restrictedAllowed);
     it("unrestricted callers retain whole-company and explicit subsidiary behavior", unrestricted);
   });
 } else {
-  test("restricted callers inherit every allowed subsidiary when sub is omitted", restrictedDefault);
+  test(
+    "restricted callers inherit every allowed subsidiary when sub is omitted",
+    restrictedDefault,
+  );
   test("restricted callers cannot drill into an out-of-scope subsidiary", restrictedDenied);
   test("empty subsidiary scopes fail closed", emptyScopeDenied);
   test("restricted callers may explicitly drill into an allowed subsidiary", restrictedAllowed);
@@ -212,36 +235,44 @@ if (process.env.VITEST) {
 }
 
 const invalidQueries = [
-  'week=2026-02-29', 'week=2026-04-31', 'week=0000-01-01',
-  'week=2026-08-23&asOf=not-a-date', 'week=2026-08-23&asOf=2026-02-29',
-  'week=2026-08-23&asOf=', 'week=2026-08-23&horizon=1.5',
-  'week=2026-08-23&horizon=Infinity', 'week=2026-08-23&horizon=0',
-  'week=2026-08-23&horizon=53', 'week=2026-08-23&horizon=oops',
-  'week=2026-08-23&horizon=', 'week=2026-08-23&sub=not-a-uuid',
-  'week=2026-08-23&sub=,', 'week=2026-08-23&sub=',
+  "week=2026-02-29",
+  "week=2026-04-31",
+  "week=0000-01-01",
+  "week=2026-08-23&asOf=not-a-date",
+  "week=2026-08-23&asOf=2026-02-29",
+  "week=2026-08-23&asOf=",
+  "week=2026-08-23&horizon=1.5",
+  "week=2026-08-23&horizon=Infinity",
+  "week=2026-08-23&horizon=0",
+  "week=2026-08-23&horizon=53",
+  "week=2026-08-23&horizon=oops",
+  "week=2026-08-23&horizon=",
+  "week=2026-08-23&sub=not-a-uuid",
+  "week=2026-08-23&sub=,",
+  "week=2026-08-23&sub=",
 ];
 for (const query of invalidQueries) {
   const check = async () => {
     reset(null);
     const response = await get(query);
-    assert.equal(response.status,400);
-    assert.deepEqual(routeState.cashPositionCalls,[],'invalid input must not query the forecast');
+    assert.equal(response.status, 400);
+    assert.deepEqual(routeState.cashPositionCalls, [], "invalid input must not query the forecast");
   };
   if (process.env.VITEST) {
     const { it } = await import(vitestModuleName);
-    it(`cash drill rejects ${query}`,check);
-  } else test(`cash drill rejects ${query}`,check);
+    it(`cash drill rejects ${query}`, check);
+  } else test(`cash drill rejects ${query}`, check);
 }
-for (const horizon of [1,52]) {
+for (const horizon of [1, 52]) {
   const check = async () => {
     reset(null);
     const response = await get(`week=2026-08-23&horizon=${horizon}&asOf=2024-02-29`);
-    assert.equal(response.status,200);
-    assert.equal(routeState.cashPositionCalls[0]?.horizonWeeks,horizon);
-    assert.equal(routeState.cashPositionCalls[0]?.asOfDate,'2024-02-29');
+    assert.equal(response.status, 200);
+    assert.equal(routeState.cashPositionCalls[0]?.horizonWeeks, horizon);
+    assert.equal(routeState.cashPositionCalls[0]?.asOfDate, "2024-02-29");
   };
   if (process.env.VITEST) {
     const { it } = await import(vitestModuleName);
-    it(`cash drill accepts horizon boundary ${horizon}`,check);
-  } else test(`cash drill accepts horizon boundary ${horizon}`,check);
+    it(`cash drill accepts horizon boundary ${horizon}`, check);
+  } else test(`cash drill accepts horizon boundary ${horizon}`, check);
 }

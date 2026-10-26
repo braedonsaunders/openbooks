@@ -5,11 +5,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, pinnedTransactionExecutor } from "../platform/db.ts";
-import {
-  cancelDispatchRuns,
-  dispatchFailureReason,
-  FlowDispatchError,
-} from "./dispatch-result.ts";
+import { cancelDispatchRuns, dispatchFailureReason, FlowDispatchError } from "./dispatch-result.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { parseFlowGraph, runRecordFlows, type RecordFlowsResult } from "./run.ts";
 
@@ -18,29 +14,46 @@ export type SubmissionPolicy = FlowSubmissionPolicy;
 
 /** Unattended channel receipts name their active source instead of impersonating a user. */
 export async function assertSystemSubmissionSource(input: {
-  orgId: string; subjectKind: string; subjectId: string; source: FlowEventSource;
+  orgId: string;
+  subjectKind: string;
+  subjectId: string;
+  source: FlowEventSource;
 }): Promise<void> {
   if (input.source === "schedule") return;
   if (input.source === "portal" && input.subjectKind === "rma") {
-    if (!await lockAndCheckOrgFeature(db, input.orgId, "customerPortal"))
-      throw new FlowDispatchError("Enable Customer portal in Company Settings → Features before submitting portal returns.");
-    const source = await db.execute<{ valid: boolean }>(sql`select public.flow_portal_return_source_valid(
+    if (!(await lockAndCheckOrgFeature(db, input.orgId, "customerPortal")))
+      throw new FlowDispatchError(
+        "Enable Customer portal in Company Settings → Features before submitting portal returns.",
+      );
+    const source = await db.execute<{ valid: boolean }>(
+      sql`select public.flow_portal_return_source_valid(
       d.org_id,d.id,d.custom->'portalRequest') as valid from documents d
-      where d.org_id=${input.orgId} and d.id=${input.subjectId}`, "objects");
+      where d.org_id=${input.orgId} and d.id=${input.subjectId}`,
+      "objects",
+    );
     if (source[0]?.valid) return;
   }
   if (input.source === "sync" && ["cash_sale", "cash_refund"].includes(input.subjectKind)) {
-    if (!(await lockAndCheckOrgFeature(db,input.orgId,"salesChannels")) ||
-        !(await lockAndCheckOrgFeature(db,input.orgId,"cashSales")))
-      throw new FlowDispatchError("Enable Sales Channels and Cash sales in Company Settings → Features before submitting channel records.");
-    const channel = await db.execute(sql`select c.id from sales_channels c join documents d
+    if (
+      !(await lockAndCheckOrgFeature(db, input.orgId, "salesChannels")) ||
+      !(await lockAndCheckOrgFeature(db, input.orgId, "cashSales"))
+    )
+      throw new FlowDispatchError(
+        "Enable Sales Channels and Cash sales in Company Settings → Features before submitting channel records.",
+      );
+    const channel = await db.execute(
+      sql`select c.id from sales_channels c join documents d
       on d.org_id=c.org_id and d.source_channel_id=c.id and d.external_source=c.kind
       where d.org_id=${input.orgId} and d.id=${input.subjectId} and d.kind=${input.subjectKind}
         and nullif(btrim(d.external_ref),'') is not null and c.status='active'
-      for share of c`, "objects");
+      for share of c`,
+      "objects",
+    );
     if (channel.length === 1) return;
   }
-  throw new FlowDispatchError("The submission requires an authorized actor or its native unattended source.");
+  throw new FlowDispatchError(
+    "The submission requires an authorized actor or its native unattended source.",
+  );
 }
 
 export async function routeSubjectSubmission(input: {
@@ -60,16 +73,14 @@ export async function routeSubjectSubmission(input: {
   dispatch: RecordFlowsResult;
 }> {
   if (!pinnedTransactionExecutor()) {
-    throw new Error(
-      "Submission routing requires the subject's active transaction.",
-    );
+    throw new Error("Submission routing requires the subject's active transaction.");
   }
   const source = input.event?.source ?? input.source ?? "ui";
-  if (input.actorId === null)
-    await assertSystemSubmissionSource({ ...input, source });
+  if (input.actorId === null) await assertSystemSubmissionSource({ ...input, source });
   await lockApprovalSubject(input.orgId, input.subjectKind, input.subjectId);
-  const actor = input.actorId === null ? null : await lockActorIdentity(db,input.orgId,input.actorId);
-  if(input.actorId !== null && !actor)
+  const actor =
+    input.actorId === null ? null : await lockActorIdentity(db, input.orgId, input.actorId);
+  if (input.actorId !== null && !actor)
     throw new FlowDispatchError("The submission requires an active authorized acting identity.");
   const adapter = getFlowAdapter(input.subjectKind);
   if (!adapter) {
@@ -82,23 +93,30 @@ export async function routeSubjectSubmission(input: {
   await db.execute(sql`lock table flows in share mode`);
   const context = await adapter.loadContext(input.subjectId);
   if (!context)
-    throw new FlowDispatchError(
-      "The submission record is unavailable; reopen it before retrying.",
-    );
-  context.values = { ...context.values, event_source: source, submissionActorHomeOrgId: actor?.orgId ?? null };
+    throw new FlowDispatchError("The submission record is unavailable; reopen it before retrying.");
+  context.values = {
+    ...context.values,
+    event_source: source,
+    submissionActorHomeOrgId: actor?.orgId ?? null,
+  };
   if (input.command)
     context.values = {
       ...context.values,
       command: input.command,
       commandAction: input.command.action ?? null,
     };
-  const flows = await db.execute<{ id: string; graph: unknown }>(sql`
+  const flows = await db.execute<{ id: string; graph: unknown }>(
+    sql`
     select id,graph from flows where org_id=${input.orgId}
       and subject_kind=${input.subjectKind} and enabled order by id
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const flow of flows) {
     if (!parseFlowGraph(flow.id, flow.graph))
-      throw new FlowDispatchError(`Flow ${flow.id} has an invalid graph. Open Flows to correct it before submitting this record.`);
+      throw new FlowDispatchError(
+        `Flow ${flow.id} has an invalid graph. Open Flows to correct it before submitting this record.`,
+      );
   }
   const dispatch = await runRecordFlows(
     input.event ?? { kind: "on_submit", source: input.source ?? "ui" },
@@ -112,11 +130,8 @@ export async function routeSubjectSubmission(input: {
   );
   if (
     dispatch.failed ||
-    dispatch.runs.some(
-      (run) => run.status === "failed" || run.status === "cancelled",
-    ) ||
-    (dispatch.gatesCreated === 0 &&
-      dispatch.runs.some((run) => run.status !== "completed"))
+    dispatch.runs.some((run) => run.status === "failed" || run.status === "cancelled") ||
+    (dispatch.gatesCreated === 0 && dispatch.runs.some((run) => run.status !== "completed"))
   ) {
     await cancelDispatchRuns(
       input.orgId,
@@ -136,18 +151,19 @@ export async function routeSubjectSubmission(input: {
     runIds: dispatch.runs.map((run) => run.runId).sort(),
   };
   const submissionId = randomUUID();
-  const saved =
-    await db.execute(sql`insert into flow_submissions(id,org_id,subject_kind,subject_id,actor_id,policy,context,graphs)
+  const saved = await db.execute(
+    sql`insert into flow_submissions(id,org_id,subject_kind,subject_id,actor_id,policy,context,graphs)
     values(${submissionId},${input.orgId},${input.subjectKind},${input.subjectId},${input.actorId},${JSON.stringify(policy)}::jsonb,
-      ${JSON.stringify(context.values)}::jsonb,${JSON.stringify(flows)}::jsonb) returning id`, "objects");
+      ${JSON.stringify(context.values)}::jsonb,${JSON.stringify(flows)}::jsonb) returning id`,
+    "objects",
+  );
   if (saved.length !== 1)
     throw new FlowDispatchError(
       "The submission routing receipt was not saved; nothing was released.",
     );
   return {
     submissionId,
-    gatingRunId:
-      dispatch.runs.find((run) => run.gatesCreated > 0)?.runId ?? null,
+    gatingRunId: dispatch.runs.find((run) => run.gatesCreated > 0)?.runId ?? null,
     policy,
     dispatch,
   };

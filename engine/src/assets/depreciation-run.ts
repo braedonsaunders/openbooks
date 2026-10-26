@@ -1,16 +1,39 @@
 /** Depreciation run: claim reload, confirm batch, recognition. Split from assets/depreciation.ts (pure moves only). */
-import { assertLocalDepreciation, assertLocalDepreciationSelection } from "./depreciation-ownership.ts";
+import {
+  assertLocalDepreciation,
+  assertLocalDepreciationSelection,
+} from "./depreciation-ownership.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withTransactionSavepoint } from "../platform/db.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { arePeriodModulesOpen, canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
-import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  arePeriodModulesOpen,
+  canonicalPeriodLabel,
+  type PeriodDisplayInput,
+} from "../periods/period-policy.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  uuidArray,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { add, isZero, neg } from "../money/money.ts";
 import { DepreciationRefusalError } from "./depreciation-errors.ts";
 import { resolveAssetAccounts, type AssetAccounts } from "./depreciation-schedule-math.ts";
 import { buildSchedule } from "./depreciation-schedule-build.ts";
-import { ClosedBatchError, StalePreviewError, assertConfirmSetCurrent, depreciationPeriodRef, reconcileAssetDepreciationStatusWithRunner, type ClaimedDepreciationLine, type DepreciationPeriodColumns, type ExpectedDepreciationLine, type RunDepreciationResult, type RunDepreciationScope } from "./depreciation-run-scope.ts";
+import {
+  ClosedBatchError,
+  StalePreviewError,
+  assertConfirmSetCurrent,
+  depreciationPeriodRef,
+  reconcileAssetDepreciationStatusWithRunner,
+  type ClaimedDepreciationLine,
+  type DepreciationPeriodColumns,
+  type ExpectedDepreciationLine,
+  type RunDepreciationResult,
+  type RunDepreciationScope,
+} from "./depreciation-run-scope.ts";
 
 /**
  * Recognize every due depreciation line through `asOfDate`. Posting books use
@@ -31,7 +54,8 @@ export async function reloadClaimLine(
   asOfDate: string,
   allowedSubsidiaryIds: string[] | undefined,
 ): Promise<ClaimedDepreciationLine | null> {
-  const claim = await runner.execute<ClaimedDepreciationLine & { custom: unknown }>(sql`
+  const claim = await runner.execute<ClaimedDepreciationLine & { custom: unknown }>(
+    sql`
     select a.custom, l.id as line_id,
            l.planned_amount,
            l.period_id,
@@ -72,7 +96,9 @@ export async function reloadClaimLine(
        and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
-     for update of l for share of bk`, "objects");
+     for update of l for share of bk`,
+    "objects",
+  );
   if (claim[0]) assertLocalDepreciation(claim[0].custom, claim[0].asset_number);
   return claim[0] ?? null;
 }
@@ -136,11 +162,14 @@ async function runConfirmBatch(
   const lineIds = [...new Set(scope.expectedLines.map((line) => line.lineId))].sort();
   const scopedAssetIds =
     scope.assetIds && scope.assetIds.length > 0 ? [...new Set(scope.assetIds)] : undefined;
-  const due = await outer.execute<DepreciationPeriodColumns & {
-    line_id: string;
-    asset_id: string;
-    asset_number: string;
-  }>(sql`
+  const due = await outer.execute<
+    DepreciationPeriodColumns & {
+      line_id: string;
+      asset_id: string;
+      asset_number: string;
+    }
+  >(
+    sql`
     select l.id as line_id, a.id as asset_id,
            a.asset_number, p.fiscal_year, p.period_number, p.is_adjustment,
            p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_text
@@ -161,7 +190,9 @@ async function runConfirmBatch(
        ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
        ${scope.periodId ? sql`and l.period_id = ${scope.periodId}` : sql``}
        and l.id = any(${uuidArray(lineIds)}::uuid[])
-     order by l.id`, "objects");
+     order by l.id`,
+    "objects",
+  );
 
   const validated: {
     lineId: string;
@@ -175,21 +206,27 @@ async function runConfirmBatch(
   }[] = [];
   for (const row of due) {
     const rowPeriod = canonicalPeriodLabel(depreciationPeriodRef(row));
-    const assetLock = await outer.execute<{ category_id: string; subsidiary_id: string }>(sql`
+    const assetLock = await outer.execute<{ category_id: string; subsidiary_id: string }>(
+      sql`
       select category_id, subsidiary_id
         from fixed_assets
        where id = ${row.asset_id} and org_id = ${orgId}
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     const assetKey = assetLock[0];
     if (!assetKey) {
       throw new StalePreviewError(
         `asset ${row.asset_id} left the confirmed scope; re-preview before confirming`,
       );
     }
-    const categoryLock = await outer.execute<{ id: string }>(sql`
+    const categoryLock = await outer.execute<{ id: string }>(
+      sql`
       select id from asset_categories
        where id = ${assetKey.category_id} and org_id = ${orgId}
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     if (!categoryLock[0]) {
       throw new StalePreviewError(
         `${row.asset_number} ${rowPeriod}: asset category changed; re-preview before confirming`,
@@ -276,7 +313,10 @@ async function runConfirmBatch(
       await outer.execute(sql`
         select id from accounts
          where org_id = ${orgId}
-           and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)})
+           and id in (${sql.join(
+             accountIds.map((id) => sql`${id}`),
+             sql`, `,
+           )})
          order by id
          for update`);
       const dimensions = [
@@ -336,13 +376,16 @@ async function runConfirmBatch(
   for (const line of validated) {
     const { claimed, accounts, planned, periodRef, periodLabel } = line;
     if (!claimed.posts_gl || isZero(planned)) {
-      const recorded = await outer.execute<{ id: string }>(sql`
+      const recorded = await outer.execute<{ id: string }>(
+        sql`
         update depreciation_schedule_lines
            set posted_amount = ${planned},
                non_gl_recognized_at = ${claimed.posts_gl ? sql`null` : sql`clock_timestamp()`},
                updated_at = now(), updated_by = ${actorId}
          where id = ${line.lineId} and org_id = ${orgId} and posted_amount is null
-         returning id`, "objects");
+         returning id`,
+        "objects",
+      );
       if (recorded.length !== 1) {
         throw new Error(
           "depreciation recognition did not record the claimed line; reload the schedule and retry",
@@ -429,7 +472,7 @@ export async function runDepreciation(
       : assetId
         ? [assetId]
         : undefined;
-  await assertLocalDepreciationSelection(db,orgId,scopedAssetIds,allowedSubsidiaryIds);
+  await assertLocalDepreciationSelection(db, orgId, scopedAssetIds, allowedSubsidiaryIds);
   const result: RunDepreciationResult = {
     posted: 0,
     recorded: 0,
@@ -454,11 +497,12 @@ export async function runDepreciation(
   // the depreciable life): extension is best-effort, and a schedule that
   // cannot extend keeps its lines and the reason lands in problems, never a
   // fatal error.
-  const stale = (await db.execute<{
+  const stale = await db.execute<{
     asset_id: string;
     book_id: string;
     asset_number: string;
-  }>(sql`
+  }>(
+    sql`
     select distinct s.asset_id, s.book_id, a.asset_number
       from depreciation_schedules s
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
@@ -492,7 +536,9 @@ export async function runDepreciation(
                 join accounting_periods pp on pp.id = l.period_id and pp.org_id = l.org_id
                where l.org_id = s.org_id and l.schedule_id = s.id
             ), date '0001-01-01')
-       )`, "objects"));
+       )`,
+    "objects",
+  );
   for (const s of stale) {
     try {
       await buildSchedule(s.asset_id, orgId, actorId, s.book_id, allowedSubsidiaryIds);
@@ -523,14 +569,16 @@ export async function runDepreciation(
       ),
     );
   } else {
-
-  // Due, unposted lines are only a candidate list. Account, dimension, and
-  // other posting fields are reloaded under locks inside each line transaction.
-  const due = (await db.execute<DepreciationPeriodColumns & {
-    line_id: string;
-    asset_id: string;
-    asset_number: string;
-  }>(sql`
+    // Due, unposted lines are only a candidate list. Account, dimension, and
+    // other posting fields are reloaded under locks inside each line transaction.
+    const due = await db.execute<
+      DepreciationPeriodColumns & {
+        line_id: string;
+        asset_id: string;
+        asset_number: string;
+      }
+    >(
+      sql`
     select l.id as line_id, a.id as asset_id,
            a.asset_number, p.fiscal_year, p.period_number, p.is_adjustment,
            p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_text
@@ -551,283 +599,310 @@ export async function runDepreciation(
        ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
        ${scope?.periodId ? sql`and l.period_id = ${scope.periodId}` : sql``}
        ${scope?.lineIds && scope.lineIds.length > 0 ? sql`and l.id = any(${`{${[...new Set(scope.lineIds)].join(",")}}`}::uuid[])` : sql``}
-     order by a.asset_number, l.sequence`, "objects"));
+     order by a.asset_number, l.sequence`,
+      "objects",
+    );
 
-  for (const row of due) {
-    const rowPeriodRef = depreciationPeriodRef(row);
-    const rowPeriod = canonicalPeriodLabel(rowPeriodRef);
-    try {
-      const posted = await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
-        // Serialize against the authoritative asset edit path before reading
-        // any account or dimension-bearing fields. The due query above is only
-        // a candidate list; every posting input is reloaded after this lock.
-        const assetLock = (await tx.execute<{ category_id: string; subsidiary_id: string }>(sql`
+    for (const row of due) {
+      const rowPeriodRef = depreciationPeriodRef(row);
+      const rowPeriod = canonicalPeriodLabel(rowPeriodRef);
+      try {
+        const posted = await db.transaction(async (tx) =>
+          withTransactionSavepoint(tx, async () => {
+            // Serialize against the authoritative asset edit path before reading
+            // any account or dimension-bearing fields. The due query above is only
+            // a candidate list; every posting input is reloaded after this lock.
+            const assetLock = await tx.execute<{ category_id: string; subsidiary_id: string }>(
+              sql`
           select category_id, subsidiary_id
             from fixed_assets
            where id = ${row.asset_id} and org_id = ${orgId}
-           for update`, "objects"));
-        const assetKey = assetLock[0];
-        if (!assetKey) return null;
+           for update`,
+              "objects",
+            );
+            const assetKey = assetLock[0];
+            if (!assetKey) return null;
 
-        // Category account defaults are another authoritative source. Lock it
-        // before resolving native asset overrides so a concurrent category edit
-        // cannot be mixed with this asset snapshot.
-        const categoryLock = (await tx.execute<{ id: string }>(sql`
+            // Category account defaults are another authoritative source. Lock it
+            // before resolving native asset overrides so a concurrent category edit
+            // cannot be mixed with this asset snapshot.
+            const categoryLock = await tx.execute<{ id: string }>(
+              sql`
           select id from asset_categories
            where id = ${assetKey.category_id} and org_id = ${orgId}
-           for update`, "objects"));
-        if (!categoryLock[0]) throw new DepreciationRefusalError("asset category not found");
+           for update`,
+              "objects",
+            );
+            if (!categoryLock[0]) throw new DepreciationRefusalError("asset category not found");
 
-        // Restriction validation depends on the complete subsidiary tree. Lock
-        // that tree before loading it so parent/active-state edits cannot race
-        // the account and dimension checks below.
-        await tx.execute(sql`
+            // Restriction validation depends on the complete subsidiary tree. Lock
+            // that tree before loading it so parent/active-state edits cannot race
+            // the account and dimension checks below.
+            await tx.execute(sql`
           select id from subsidiaries
            where org_id = ${orgId}
            order by id
            for update`);
 
-        // Claim the schedule line inside the posting transaction. Concurrent
-        // runners serialize here and the loser observes posted_amount. The
-        // asset/category/subsidiary locks above ensure every selected field is
-        // the current committed configuration for this posting.
-        const claimed = await reloadClaimLine(
-          tx,
-          orgId,
-          row.line_id,
-          asOfDate,
-          allowedSubsidiaryIds ? [...allowedSubsidiaryIds] : undefined,
-        );
-        if (!claimed) return null;
-        const periodRef = depreciationPeriodRef(claimed);
-        const periodLabel = canonicalPeriodLabel(periodRef);
+            // Claim the schedule line inside the posting transaction. Concurrent
+            // runners serialize here and the loser observes posted_amount. The
+            // asset/category/subsidiary locks above ensure every selected field is
+            // the current committed configuration for this posting.
+            const claimed = await reloadClaimLine(
+              tx,
+              orgId,
+              row.line_id,
+              asOfDate,
+              allowedSubsidiaryIds ? [...allowedSubsidiaryIds] : undefined,
+            );
+            if (!claimed) return null;
+            const periodRef = depreciationPeriodRef(claimed);
+            const periodLabel = canonicalPeriodLabel(periodRef);
 
-        // Use the existing shared posting fence before the close check. A
-        // reporting-only recognition must serialize with close even though
-        // it will never reach je_guard. The storage guard takes it too.
-        await tx.execute(sql`select period_posting_fence(${orgId}, ${claimed.period_id}, ${claimed.book_id})`);
-        // One period gate: the shared assets+GL check replaces the raw
-        // period_module_is_closed projection. Discovery stays advisory — a
-        // closed line is skipped, not fatal — and source-owned imported
-        // locks skip exactly like user locks.
-        if (!(await arePeriodModulesOpen(tx, {
-          orgId,
-          periodId: claimed.period_id,
-          bookId: claimed.book_id,
-          subsidiaryIds: [claimed.subsidiary_id],
-          modules: ["assets"],
-        }))) {
-          return {
-            entryId: null,
-            amount: String(claimed.planned_amount),
-            periodClosed: true,
-            assetNumber: claimed.asset_number,
-            periodName: periodLabel,
-            periodRef,
-          };
-        }
+            // Use the existing shared posting fence before the close check. A
+            // reporting-only recognition must serialize with close even though
+            // it will never reach je_guard. The storage guard takes it too.
+            await tx.execute(
+              sql`select period_posting_fence(${orgId}, ${claimed.period_id}, ${claimed.book_id})`,
+            );
+            // One period gate: the shared assets+GL check replaces the raw
+            // period_module_is_closed projection. Discovery stays advisory — a
+            // closed line is skipped, not fatal — and source-owned imported
+            // locks skip exactly like user locks.
+            if (
+              !(await arePeriodModulesOpen(tx, {
+                orgId,
+                periodId: claimed.period_id,
+                bookId: claimed.book_id,
+                subsidiaryIds: [claimed.subsidiary_id],
+                modules: ["assets"],
+              }))
+            ) {
+              return {
+                entryId: null,
+                amount: String(claimed.planned_amount),
+                periodClosed: true,
+                assetNumber: claimed.asset_number,
+                periodName: periodLabel,
+                periodRef,
+              };
+            }
 
-        const accounts = resolveAssetAccounts(
-          {
-            assetAccountId: claimed.asset_account,
-            accumulatedDepreciationAccountId: claimed.asset_accum,
-            depreciationExpenseAccountId: claimed.asset_expense,
-          },
-          {
-            assetAccountId: claimed.cat_asset,
-            accumulatedDepreciationAccountId: claimed.cat_accum,
-            depreciationExpenseAccountId: claimed.cat_expense,
-          },
-        );
+            const accounts = resolveAssetAccounts(
+              {
+                assetAccountId: claimed.asset_account,
+                accumulatedDepreciationAccountId: claimed.asset_accum,
+                depreciationExpenseAccountId: claimed.asset_expense,
+              },
+              {
+                assetAccountId: claimed.cat_asset,
+                accumulatedDepreciationAccountId: claimed.cat_accum,
+                depreciationExpenseAccountId: claimed.cat_expense,
+              },
+            );
 
-        // Lock every account and dimension that will be validated/read by the
-        // journal insert. Their rows may carry subsidiary restrictions, so the
-        // validation below must run after these locks on this same snapshot.
-        const accountIds = [...new Set([
-          accounts.assetAccountId,
-          accounts.accumulatedDepreciationAccountId,
-          accounts.depreciationExpenseAccountId,
-        ])];
-        await tx.execute(sql`
+            // Lock every account and dimension that will be validated/read by the
+            // journal insert. Their rows may carry subsidiary restrictions, so the
+            // validation below must run after these locks on this same snapshot.
+            const accountIds = [
+              ...new Set([
+                accounts.assetAccountId,
+                accounts.accumulatedDepreciationAccountId,
+                accounts.depreciationExpenseAccountId,
+              ]),
+            ];
+            await tx.execute(sql`
           select id from accounts
            where org_id = ${orgId}
-             and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)})
+             and id in (${sql.join(
+               accountIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
            order by id
            for update`);
 
-        const dimensions = [
-          { table: "departments", id: claimed.department_id },
-          { table: "projects", id: claimed.project_id },
-          { table: "locations", id: claimed.location_id },
-        ] as const;
-        for (const dimension of dimensions) {
-          if (!dimension.id) continue;
-          await tx.execute(sql`
+            const dimensions = [
+              { table: "departments", id: claimed.department_id },
+              { table: "projects", id: claimed.project_id },
+              { table: "locations", id: claimed.location_id },
+            ] as const;
+            for (const dimension of dimensions) {
+              if (!dimension.id) continue;
+              await tx.execute(sql`
             select id from ${sql.raw(dimension.table)}
              where org_id = ${orgId} and id = ${dimension.id}
              for update`);
-        }
+            }
 
-        const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
-        const planned = String(claimed.planned_amount);
-        const lines = [
-          { accountId: accounts.depreciationExpenseAccountId, amount: planned },
-          { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
-        ];
-        await validateSubsidiaryRestrictions(tx, {
-          orgId,
-          ctx: subsidiaryContext,
-          docSubsidiaryId: claimed.subsidiary_id,
-          lines: lines.map((line) => ({
-            ...line,
-            subsidiaryId: claimed.subsidiary_id,
-            departmentId: claimed.department_id,
-            projectId: claimed.project_id,
-            locationId: claimed.location_id,
-          })),
-        });
-        assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: claimed.subsidiary_id })));
-        if (!claimed.posts_gl || isZero(planned)) {
-          // The database validates the book and close policy, freezes the
-          // non-GL timestamp and writes immutable before/after audit evidence.
-          // Do not manufacture a journal merely to complete the subledger.
-          const recorded = await tx.execute<{ id: string }>(sql`
+            const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
+            const planned = String(claimed.planned_amount);
+            const lines = [
+              { accountId: accounts.depreciationExpenseAccountId, amount: planned },
+              { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
+            ];
+            await validateSubsidiaryRestrictions(tx, {
+              orgId,
+              ctx: subsidiaryContext,
+              docSubsidiaryId: claimed.subsidiary_id,
+              lines: lines.map((line) => ({
+                ...line,
+                subsidiaryId: claimed.subsidiary_id,
+                departmentId: claimed.department_id,
+                projectId: claimed.project_id,
+                locationId: claimed.location_id,
+              })),
+            });
+            assertFinalKernelBalance(
+              lines.map((line) => ({ amount: line.amount, subsidiaryId: claimed.subsidiary_id })),
+            );
+            if (!claimed.posts_gl || isZero(planned)) {
+              // The database validates the book and close policy, freezes the
+              // non-GL timestamp and writes immutable before/after audit evidence.
+              // Do not manufacture a journal merely to complete the subledger.
+              const recorded = await tx.execute<{ id: string }>(
+                sql`
             update depreciation_schedule_lines
                set posted_amount = ${planned},
                    non_gl_recognized_at = ${claimed.posts_gl ? sql`null` : sql`clock_timestamp()`},
                    updated_at = now(), updated_by = ${actorId}
              where id = ${row.line_id} and org_id = ${orgId} and posted_amount is null
-             returning id`, "objects");
-          if (recorded.length !== 1) throw new Error("depreciation recognition did not record the claimed line; reload the schedule and retry");
-          return {
-            entryId: null,
-            recorded: !claimed.posts_gl,
-            amount: planned,
-            assetId: row.asset_id,
-            assetNumber: claimed.asset_number,
-            periodName: periodLabel,
-            periodRef,
-            lineId: row.line_id,
-          };
-        }
+             returning id`,
+                "objects",
+              );
+              if (recorded.length !== 1)
+                throw new Error(
+                  "depreciation recognition did not record the claimed line; reload the schedule and retry",
+                );
+              return {
+                entryId: null,
+                recorded: !claimed.posts_gl,
+                amount: planned,
+                assetId: row.asset_id,
+                assetNumber: claimed.asset_number,
+                periodName: periodLabel,
+                periodRef,
+                lineId: row.line_id,
+              };
+            }
 
-        // Corrections create another line for the same asset and period, so the
-        // schedule-line id distinguishes every physical journal generation.
-        // Every journal write routes through the ONE ledger API.
-        const postedEntry = await postEntry(tx, {
-          orgId,
-          bookId: claimed.book_id,
-          subsidiaryId: claimed.subsidiary_id,
-          entryNumber: `DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`,
-          postingDate: scope?.postingDate ?? claimed.period_ends_on,
-          periodId: claimed.period_id,
-          memo: `Depreciation — ${claimed.asset_name} (${periodLabel})`,
-          origin: "depreciation",
-          actorId,
-          currency: claimed.base_currency,
-          lines: lines.map((l) => ({
-            accountId: l.accountId,
-            amount: l.amount,
-            departmentId: claimed.department_id,
-            projectId: claimed.project_id,
-            locationId: claimed.location_id,
-            memo: `Depreciation ${periodLabel}`,
-          })),
-        });
-        const eid = postedEntry.entryId;
+            // Corrections create another line for the same asset and period, so the
+            // schedule-line id distinguishes every physical journal generation.
+            // Every journal write routes through the ONE ledger API.
+            const postedEntry = await postEntry(tx, {
+              orgId,
+              bookId: claimed.book_id,
+              subsidiaryId: claimed.subsidiary_id,
+              entryNumber: `DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`,
+              postingDate: scope?.postingDate ?? claimed.period_ends_on,
+              periodId: claimed.period_id,
+              memo: `Depreciation — ${claimed.asset_name} (${periodLabel})`,
+              origin: "depreciation",
+              actorId,
+              currency: claimed.base_currency,
+              lines: lines.map((l) => ({
+                accountId: l.accountId,
+                amount: l.amount,
+                departmentId: claimed.department_id,
+                projectId: claimed.project_id,
+                locationId: claimed.location_id,
+                memo: `Depreciation ${periodLabel}`,
+              })),
+            });
+            const eid = postedEntry.entryId;
 
-        await tx.execute(sql`
+            await tx.execute(sql`
           update depreciation_schedule_lines
              set posted_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.line_id} and org_id = ${orgId}`);
 
-        return {
-          entryId: eid,
-          amount: planned,
-          assetId: row.asset_id,
-          assetNumber: claimed.asset_number,
-          periodName: periodLabel,
-          periodRef,
-          lineId: row.line_id,
-        };
-      }));
+            return {
+              entryId: eid,
+              amount: planned,
+              assetId: row.asset_id,
+              assetNumber: claimed.asset_number,
+              periodName: periodLabel,
+              periodRef,
+              lineId: row.line_id,
+            };
+          }),
+        );
 
-      if (!posted) {
-        result.skipped++;
-        result.skippedAssets.push({
-          assetNumber: row.asset_number,
-          period: rowPeriod,
-          periodRef: rowPeriodRef,
-          reason: "line already posted or removed",
-        });
-        continue;
-      }
-      if (posted.periodClosed) {
-        result.skipped++;
-        result.skippedAssets.push({
-          assetNumber: posted.assetNumber,
-          period: posted.periodName,
-          periodRef: posted.periodRef,
-          reason: "GL period closed",
-        });
-        result.problems.push(`${posted.assetNumber} ${posted.periodName}: GL period closed`);
-        result.problemItems.push({
-          assetNumber: posted.assetNumber,
-          period: posted.periodName,
-          periodRef: posted.periodRef,
-          message: "GL period closed",
-          assetId: row.asset_id,
-          lineId: row.line_id,
-        });
-        continue;
-      }
-      if ("recorded" in posted && posted.recorded) {
-        result.recorded++;
-        result.recordedAmount = add(result.recordedAmount, posted.amount);
-        result.recordedEntries.push({
+        if (!posted) {
+          result.skipped++;
+          result.skippedAssets.push({
+            assetNumber: row.asset_number,
+            period: rowPeriod,
+            periodRef: rowPeriodRef,
+            reason: "line already posted or removed",
+          });
+          continue;
+        }
+        if (posted.periodClosed) {
+          result.skipped++;
+          result.skippedAssets.push({
+            assetNumber: posted.assetNumber,
+            period: posted.periodName,
+            periodRef: posted.periodRef,
+            reason: "GL period closed",
+          });
+          result.problems.push(`${posted.assetNumber} ${posted.periodName}: GL period closed`);
+          result.problemItems.push({
+            assetNumber: posted.assetNumber,
+            period: posted.periodName,
+            periodRef: posted.periodRef,
+            message: "GL period closed",
+            assetId: row.asset_id,
+            lineId: row.line_id,
+          });
+          continue;
+        }
+        if ("recorded" in posted && posted.recorded) {
+          result.recorded++;
+          result.recordedAmount = add(result.recordedAmount, posted.amount);
+          result.recordedEntries.push({
+            assetId: posted.assetId,
+            assetNumber: posted.assetNumber,
+            period: posted.periodName,
+            periodRef: posted.periodRef,
+            amount: posted.amount,
+            lineId: posted.lineId,
+          });
+          continue;
+        }
+        if (!posted.entryId) {
+          result.skipped++;
+          result.skippedAssets.push({
+            assetNumber: posted.assetNumber,
+            period: posted.periodName,
+            periodRef: posted.periodRef,
+            reason: "line vanished before claim",
+          });
+          continue;
+        }
+        result.posted++;
+        result.totalAmount = add(result.totalAmount, posted.amount);
+        result.entries.push({
           assetId: posted.assetId,
           assetNumber: posted.assetNumber,
           period: posted.periodName,
           periodRef: posted.periodRef,
           amount: posted.amount,
+          entryId: posted.entryId,
           lineId: posted.lineId,
         });
-        continue;
-      }
-      if (!posted.entryId) {
-        result.skipped++;
-        result.skippedAssets.push({
-          assetNumber: posted.assetNumber,
-          period: posted.periodName,
-          periodRef: posted.periodRef,
-          reason: "line vanished before claim",
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        result.problems.push(`${row.asset_number} ${rowPeriod}: ${msg.slice(0, 120)}`);
+        result.problemItems.push({
+          assetNumber: row.asset_number,
+          period: rowPeriod,
+          periodRef: rowPeriodRef,
+          message: msg.slice(0, 120),
+          assetId: row.asset_id,
+          lineId: row.line_id,
         });
-        continue;
       }
-      result.posted++;
-      result.totalAmount = add(result.totalAmount, posted.amount);
-      result.entries.push({
-        assetId: posted.assetId,
-        assetNumber: posted.assetNumber,
-        period: posted.periodName,
-        periodRef: posted.periodRef,
-        amount: posted.amount,
-        entryId: posted.entryId,
-        lineId: posted.lineId,
-      });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      result.problems.push(`${row.asset_number} ${rowPeriod}: ${msg.slice(0, 120)}`);
-      result.problemItems.push({
-        assetNumber: row.asset_number,
-        period: rowPeriod,
-        periodRef: rowPeriodRef,
-        message: msg.slice(0, 120),
-        assetId: row.asset_id,
-        lineId: row.line_id,
-      });
     }
-  }
   }
 
   // A run that posts nothing must still say what it ran for and what is
@@ -835,11 +910,14 @@ export async function runDepreciation(
   // problems list while a planned line waits in the open period.
   // Same scope as the due list above, minus the ended-period filter.
   if (result.posted === 0 && result.recorded === 0) {
-    const next = (await db.execute<DepreciationPeriodColumns & {
-      asset_number: string;
-      ends_on: string;
-      amount: string;
-    }>(sql`
+    const next = await db.execute<
+      DepreciationPeriodColumns & {
+        asset_number: string;
+        ends_on: string;
+        amount: string;
+      }
+    >(
+      sql`
       select a.asset_number, p.fiscal_year, p.period_number, p.is_adjustment,
              p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_text,
              p.ends_on::text as ends_on,
@@ -860,7 +938,9 @@ export async function runDepreciation(
          ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
          ${scope?.periodId ? sql`and l.period_id = ${scope.periodId}` : sql``}
        order by p.ends_on, a.asset_number, l.sequence
-       limit 1`, "objects"));
+       limit 1`,
+      "objects",
+    );
     const upcoming = next[0];
     if (upcoming) {
       const periodRef = depreciationPeriodRef(upcoming);
@@ -876,10 +956,14 @@ export async function runDepreciation(
 
   if (scopedAssetIds) {
     for (const id of scopedAssetIds) {
-      await db.transaction(tx => reconcileAssetDepreciationStatusWithRunner(tx, orgId, actorId, id, allowedSubsidiaryIds));
+      await db.transaction((tx) =>
+        reconcileAssetDepreciationStatusWithRunner(tx, orgId, actorId, id, allowedSubsidiaryIds),
+      );
     }
   } else {
-    await db.transaction(tx => reconcileAssetDepreciationStatusWithRunner(tx, orgId, actorId, assetId, allowedSubsidiaryIds));
+    await db.transaction((tx) =>
+      reconcileAssetDepreciationStatusWithRunner(tx, orgId, actorId, assetId, allowedSubsidiaryIds),
+    );
   }
 
   return result;

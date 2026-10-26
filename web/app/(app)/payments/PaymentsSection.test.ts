@@ -24,14 +24,8 @@ const mockSources = new Map<string, string>([
       export function redirect() { throw new Error('redirect') }
     `,
   ],
-  [
-    "mock:next-headers",
-    `export function cookies() { return { get() { return undefined } } }`,
-  ],
-  [
-    "mock:next-intl-server",
-    `export async function getTranslations() { return (key) => key }`,
-  ],
+  ["mock:next-headers", `export function cookies() { return { get() { return undefined } } }`],
+  ["mock:next-intl-server", `export async function getTranslations() { return (key) => key }`],
   [
     "mock:engine-db",
     `
@@ -53,22 +47,10 @@ const mockSources = new Map<string, string>([
       export const PAYMENT_KIND_SIDE = { vendor_payment: "ap", customer_payment: "ar" }
     `,
   ],
-  [
-    "mock:business-date",
-    `export async function businessToday() { return '2026-07-31' }`,
-  ],
-  [
-    "mock:form-layout",
-    `export async function resolveFormLayout() { return { layout: null } }`,
-  ],
-  [
-    "mock:payment-drawer",
-    `export function PaymentDrawer() { return null }`,
-  ],
-  [
-    "mock:features",
-    `export async function isFeatureEnabled() { return true }`,
-  ],
+  ["mock:business-date", `export async function businessToday() { return '2026-07-31' }`],
+  ["mock:form-layout", `export async function resolveFormLayout() { return { layout: null } }`],
+  ["mock:payment-drawer", `export function PaymentDrawer() { return null }`],
+  ["mock:features", `export async function isFeatureEnabled() { return true }`],
   [
     "mock:record-list-view",
     `
@@ -117,10 +99,13 @@ const hooks = registerHooks({
   },
 });
 
-const { PaymentsSection } = (await import("./PaymentsSection.tsx")) as typeof import("./PaymentsSection.tsx");
+const { PaymentsSection } =
+  (await import("./PaymentsSection.tsx")) as typeof import("./PaymentsSection.tsx");
 const { paymentsSpec } = (await import("./view.ts")) as typeof import("./view.ts");
-const { receiptsSpec } = (await import("../receipts/view.ts")) as typeof import("../receipts/view.ts");
-const { resolveValue } = (await import("@braedonsaunders/appkit-viewspec")) as typeof import("@braedonsaunders/appkit-viewspec");
+const { receiptsSpec } =
+  (await import("../receipts/view.ts")) as typeof import("../receipts/view.ts");
+const { resolveValue } =
+  (await import("@braedonsaunders/appkit-viewspec")) as typeof import("@braedonsaunders/appkit-viewspec");
 hooks.deregister();
 
 function authzWith(permissions: string[]): Authz {
@@ -155,14 +140,32 @@ async function renderSection(
     canManage: permissions.includes("admin.customization.manage"),
     canCreate,
     userRoles: [],
-  })) as { props: { drawer: RenderedList["drawer"]; emptyAction: unknown; canManage: unknown } } | null;
+  })) as {
+    props: { drawer: RenderedList["drawer"]; emptyAction: unknown; canManage: unknown };
+  } | null;
   if (el === null) return null;
-  return { drawer: el.props.drawer, emptyAction: el.props.emptyAction, canManage: el.props.canManage };
+  return {
+    drawer: el.props.drawer,
+    emptyAction: el.props.emptyAction,
+    canManage: el.props.canManage,
+  };
 }
 
 for (const party of [
-  { kind: "vendor_payment", grant: "ap.pay", party: "payer", button: "the New payment button is still offered", initialMode: "edit" as const },
-  { kind: "customer_payment", grant: "ar.pay", party: "receiver", button: "the New receipt button is still offered", initialMode: undefined },
+  {
+    kind: "vendor_payment",
+    grant: "ap.pay",
+    party: "payer",
+    button: "the New payment button is still offered",
+    initialMode: "edit" as const,
+  },
+  {
+    kind: "customer_payment",
+    grant: "ar.pay",
+    party: "receiver",
+    button: "the New receipt button is still offered",
+    initialMode: undefined,
+  },
 ] as const) {
   test(`an ${party.grant.replace(".pay", "")}.pay-only user with ?paymentNew=1 gets the editable create drawer`, async () => {
     const section = (await renderSection(party.kind, [party.grant], { paymentNew: "1" }, true))!;
@@ -170,7 +173,8 @@ for (const party of [
     assert.equal(section.canManage, false);
     assert.ok(section.drawer, "the create drawer opens without the customization right");
     assert.equal(section.drawer.props.createMode, true);
-    if (party.initialMode !== undefined) assert.equal(section.drawer.props.initialMode, party.initialMode);
+    if (party.initialMode !== undefined)
+      assert.equal(section.drawer.props.initialMode, party.initialMode);
     assert.ok(section.emptyAction, party.button);
   });
 }
@@ -183,7 +187,10 @@ test("the same payer without ?paymentNew=1 sees New payment and no drawer", asyn
 });
 
 test("a user without ap.pay never sees New payment", async () => {
-  assert.equal(await renderSection("vendor_payment", ["gl.read"], { paymentNew: "1" }, false), null);
+  assert.equal(
+    await renderSection("vendor_payment", ["gl.read"], { paymentNew: "1" }, false),
+    null,
+  );
   assert.equal(await renderSection("vendor_payment", ["gl.read"], {}, false), null);
 });
 
@@ -195,7 +202,12 @@ test("withholding canCreate hides both the button and the drawer", async () => {
 });
 
 test("the customization right still reaches the list view untouched", async () => {
-  const section = (await renderSection("vendor_payment", ["ap.pay", "admin.customization.manage"], {}, true))!;
+  const section = (await renderSection(
+    "vendor_payment",
+    ["ap.pay", "admin.customization.manage"],
+    {},
+    true,
+  ))!;
   assert.ok(section);
   assert.equal(section.canManage, true);
   assert.ok(section.drawer === null);
@@ -234,10 +246,16 @@ const paymentsBase = {
 test("the payments header button shares canCreate with the drawer", () => {
   const shown = headerNewPaymentWidgets(paymentsSpec({ ...paymentsBase, showNewPayment: true }));
   assert.equal(shown.length, 1);
-  assert.equal(resolveValue(shown[0]!.when as never, { ...paymentsBase, showNewPayment: true }), true);
+  assert.equal(
+    resolveValue(shown[0]!.when as never, { ...paymentsBase, showNewPayment: true }),
+    true,
+  );
   const hidden = headerNewPaymentWidgets(paymentsSpec({ ...paymentsBase, showNewPayment: false }));
   assert.equal(hidden.length, 1);
-  assert.equal(resolveValue(hidden[0]!.when as never, { ...paymentsBase, showNewPayment: false }), false);
+  assert.equal(
+    resolveValue(hidden[0]!.when as never, { ...paymentsBase, showNewPayment: false }),
+    false,
+  );
 });
 
 test("the receipts header button shares canCreate with the drawer", () => {

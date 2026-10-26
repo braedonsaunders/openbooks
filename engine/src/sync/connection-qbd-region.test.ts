@@ -18,14 +18,19 @@ test("the manifest offers only Web Connector-supported regions", () => {
   assert.deepEqual([...QBD_WEB_CONNECTOR_REGIONS], ["US", "CA", "UK"]);
   const region = manifest.configFields.find((field) => field.key === "region");
   assert.ok(region);
-  assert.deepEqual(region.options?.map((option) => option.value), ["US", "CA", "UK"]);
+  assert.deepEqual(
+    region.options?.map((option) => option.value),
+    ["US", "CA", "UK"],
+  );
 });
 
 test("AU/NZ regions are refused by name at setup validation", () => {
   for (const region of ["AU", "NZ"]) {
     assert.match(
       validateSourceConfig(manifest, { ...base, region }) ?? "",
-      new RegExp(`QuickBooks Desktop ${region} editions are not supported by the Intuit Web Connector`),
+      new RegExp(
+        `QuickBooks Desktop ${region} editions are not supported by the Intuit Web Connector`,
+      ),
       `${region} must hear the truthful refusal, not a bare invalid value`,
     );
   }

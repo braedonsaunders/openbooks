@@ -23,8 +23,12 @@ export interface RoundingRule {
 const SCALE = 10_000n;
 
 function parseTenThousandths(hours: string): bigint {
-  const canonical = canonicalNonNegativeDecimal(hours,4);
-  if (canonical === null) throw new FieldTimeError("invalid_hours", `Hours ${JSON.stringify(hours)} are not a non-negative number with at most 4 decimals — re-enter the hours`);
+  const canonical = canonicalNonNegativeDecimal(hours, 4);
+  if (canonical === null)
+    throw new FieldTimeError(
+      "invalid_hours",
+      `Hours ${JSON.stringify(hours)} are not a non-negative number with at most 4 decimals — re-enter the hours`,
+    );
   const [whole = "0", fraction = ""] = canonical.split(".");
   return BigInt(whole) * SCALE + BigInt(fraction.padEnd(4, "0"));
 }
@@ -101,8 +105,16 @@ export function distributeProRata(total: number, weights: number[]): number[] {
  * replace the auto-deduction up to their length instead of stacking
  * on top of it.
  */
-export function netShiftMs(grossMs: number, recordedBreakMs: number, unpaidBreakMinutes: number): number {
-  for (const [name, value] of [["gross", grossMs], ["recorded breaks", recordedBreakMs], ["unpaid rule", unpaidBreakMinutes]] as const) {
+export function netShiftMs(
+  grossMs: number,
+  recordedBreakMs: number,
+  unpaidBreakMinutes: number,
+): number {
+  for (const [name, value] of [
+    ["gross", grossMs],
+    ["recorded breaks", recordedBreakMs],
+    ["unpaid rule", unpaidBreakMinutes],
+  ] as const) {
     if (!Number.isFinite(value) || value < 0) {
       throw new FieldTimeError(
         "invalid_break_rule",
@@ -135,7 +147,10 @@ export function allocateShiftNetMs(
       "Shift segments and their breaks do not line up — re-record the clock events so every segment carries its break time",
     );
   }
-  for (const [name, values] of [["gross", grossMs], ["recorded breaks", recordedBreakMs]] as const) {
+  for (const [name, values] of [
+    ["gross", grossMs],
+    ["recorded breaks", recordedBreakMs],
+  ] as const) {
     for (const value of values) {
       if (!Number.isFinite(value) || value < 0) {
         throw new FieldTimeError(
@@ -240,14 +255,18 @@ function requireTimeZone(timeZone: string): string {
  * (rather than importing the platform formatter) so this database-free
  * module never loads the db-backed platform stack in unit tests.
  */
-function zoneDateParts(instantMs: number, timeZone: string): { y: number; mo: number; d: number; date: string } {
+function zoneDateParts(
+  instantMs: number,
+  timeZone: string,
+): { y: number; mo: number; d: number; date: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date(instantMs));
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
   return {
     y: Number(value("year")),
     mo: Number(value("month")),
@@ -275,7 +294,8 @@ function zoneOffsetMs(instantMs: number, timeZone: string): number {
     second: "2-digit",
     hour12: false,
   }).formatToParts(new Date(instantMs));
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
   // en-CA midnight formats as "24" on some runtimes; normalize to 00.
   const hour = value("hour") === "24" ? "00" : value("hour");
   const asUTC = utcDateFromParts(
@@ -310,7 +330,10 @@ function startOfZoneDayMs(y: number, mo: number, d: number, timeZone: string): n
  */
 export function splitZoneDays(fromMs: number, toMs: number, timeZone: string): DayPiece[] {
   const zone = requireTimeZone(timeZone);
-  for (const [name, value] of [["span start", fromMs], ["span end", toMs]] as const) {
+  for (const [name, value] of [
+    ["span start", fromMs],
+    ["span end", toMs],
+  ] as const) {
     if (!Number.isFinite(value) || value < 0) {
       throw new FieldTimeError(
         "invalid_occurred_at",
@@ -326,7 +349,10 @@ export function splitZoneDays(fromMs: number, toMs: number, timeZone: string): D
     const here = zoneDateParts(cursor, zone);
     const morrow = new Date(utcDateFromParts(here.y, here.mo - 1, here.d).getTime() + 86_400_000);
     const nextMidnight = startOfZoneDayMs(
-      morrow.getUTCFullYear(), morrow.getUTCMonth() + 1, morrow.getUTCDate(), zone,
+      morrow.getUTCFullYear(),
+      morrow.getUTCMonth() + 1,
+      morrow.getUTCDate(),
+      zone,
     );
     let pieceEnd = Math.min(end, nextMidnight);
     // A degenerate boundary (a midnight that does not exist or repeats
@@ -370,13 +396,14 @@ export function insidePolygon(point: LatLng, polygon: LatLng[]): boolean {
     const a = polygon[i]!;
     const b = polygon[j]!;
     // On-segment check: cross product ~0 and within the bounding box.
-    const cross =
-      (b.lng - a.lng) * (point.lat - a.lat) - (b.lat - a.lat) * (point.lng - a.lng);
-    if (Math.abs(cross) < 1e-9 &&
-        point.lng >= Math.min(a.lng, b.lng) - 1e-9 &&
-        point.lng <= Math.max(a.lng, b.lng) + 1e-9 &&
-        point.lat >= Math.min(a.lat, b.lat) - 1e-9 &&
-        point.lat <= Math.max(a.lat, b.lat) + 1e-9) {
+    const cross = (b.lng - a.lng) * (point.lat - a.lat) - (b.lat - a.lat) * (point.lng - a.lng);
+    if (
+      Math.abs(cross) < 1e-9 &&
+      point.lng >= Math.min(a.lng, b.lng) - 1e-9 &&
+      point.lng <= Math.max(a.lng, b.lng) + 1e-9 &&
+      point.lat >= Math.min(a.lat, b.lat) - 1e-9 &&
+      point.lat <= Math.max(a.lat, b.lat) + 1e-9
+    ) {
       return true;
     }
     if (a.lat > point.lat !== b.lat > point.lat) {
@@ -441,7 +468,10 @@ export function validateEventChronology(
   openOccurredAtMs: number,
   eventOccurredAtMs: number,
 ): void {
-  for (const [name, value] of [["open clock-in", openOccurredAtMs], ["event", eventOccurredAtMs]] as const) {
+  for (const [name, value] of [
+    ["open clock-in", openOccurredAtMs],
+    ["event", eventOccurredAtMs],
+  ] as const) {
     if (!Number.isFinite(value)) {
       throw new FieldTimeError(
         "invalid_occurred_at",
@@ -505,10 +535,7 @@ export function validateClockSequence(
       return;
     case "break_end":
       if (!state.onBreak) {
-        throw new FieldTimeError(
-          "no_open_break",
-          "No open break to end — start a break first",
-        );
+        throw new FieldTimeError("no_open_break", "No open break to end — start a break first");
       }
       return;
     case "switch":

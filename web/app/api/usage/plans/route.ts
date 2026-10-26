@@ -1,9 +1,14 @@
-import { createUsageRatingPlan, listUsageRatingPlans } from "@openbooks/engine/billing/usage/rating-plans";
+import {
+  createUsageRatingPlan,
+  listUsageRatingPlans,
+} from "@openbooks/engine/billing/usage/rating-plans";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentUsageCreate } from "../_idempotent";
 import { z } from "zod";
 
-const Body = z.object({ name: z.string().trim().min(1), currency: z.string().regex(/^[A-Z]{3}$/) }).strict();
+const Body = z
+  .object({ name: z.string().trim().min(1), currency: z.string().regex(/^[A-Z]{3}$/) })
+  .strict();
 
 export const GET = defineRoute({
   permission: "usage.read",
@@ -16,8 +21,12 @@ export const POST = defineRoute({
   feature: "usageBilling",
   scope: "unrestricted",
   body: Body,
-  handler: async ({ request, authz, body }) => idempotentUsageCreate({
-    request, authz, operation: "usage.plan.create", requestBody: body,
-    execute: () => createUsageRatingPlan(authz.user.orgId, authz.user.id, body),
-  }),
+  handler: async ({ request, authz, body }) =>
+    idempotentUsageCreate({
+      request,
+      authz,
+      operation: "usage.plan.create",
+      requestBody: body,
+      execute: () => createUsageRatingPlan(authz.user.orgId, authz.user.id, body),
+    }),
 });

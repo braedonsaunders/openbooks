@@ -186,9 +186,7 @@ export function postTerminationConflictOf(
   const match = PROVENANCE_CONFLICT.exec(observation.provenance);
   if (match === null) return null;
   const activityAnchor = match[2]!;
-  const dates = [...activityAnchor.matchAll(/@(\d{4}-\d{2}-\d{2})/g)]
-    .map((hit) => hit[1]!)
-    .sort();
+  const dates = [...activityAnchor.matchAll(/@(\d{4}-\d{2}-\d{2})/g)].map((hit) => hit[1]!).sort();
   const activityDate = dates.length > 0 ? dates[dates.length - 1]! : "";
   return { terminatedOn: match[1]!, activityAnchor, activityDate };
 }
@@ -325,8 +323,7 @@ function normalizedId(value: string | null): string | null {
   return value.length === 0 ? null : value;
 }
 
-const RECORDED_STAMP_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
+const RECORDED_STAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
 
 /**
  * Strict UTC instant check mirroring the temporal.ts recorded-stamp
@@ -353,10 +350,8 @@ function isRecordedInstant(value: unknown): value is string {
  * Operator evidence (observation, resolution) is excluded: later assertions
  * must not read as source drift. Evidence handles are excluded likewise.
  */
-const FINGERPRINT_VERSION =
-  "openbooks/hrm-migration-preflight/source-fingerprint/v1";
-const ROW_IDENTITY_VERSION =
-  "openbooks/hrm-migration-preflight/row-identity/v1";
+const FINGERPRINT_VERSION = "openbooks/hrm-migration-preflight/source-fingerprint/v1";
+const ROW_IDENTITY_VERSION = "openbooks/hrm-migration-preflight/row-identity/v1";
 
 /** Stable canonical encoding: object keys sorted recursively, arrays ordered. */
 function canonicalEncode(value: unknown): string {
@@ -372,9 +367,7 @@ function canonicalEncode(value: unknown): string {
 }
 
 function sha256Hex(version: string, encoded: string): string {
-  return createHash("sha256")
-    .update(`${version}\n${encoded}`, "utf8")
-    .digest("hex");
+  return createHash("sha256").update(`${version}\n${encoded}`, "utf8").digest("hex");
 }
 
 export function fingerprintSourceRow(row: SourcePersonRow): string {
@@ -434,8 +427,7 @@ export interface MappingSetEntry {
   readonly terminatedOn: string | null;
 }
 
-const MAPPING_SET_DIGEST_VERSION =
-  "openbooks/hrm-migration-preflight/mapping-set-digest/v1";
+const MAPPING_SET_DIGEST_VERSION = "openbooks/hrm-migration-preflight/mapping-set-digest/v1";
 
 /**
  * Digest binding the exact operator mapping set an approval covers.
@@ -446,9 +438,7 @@ const MAPPING_SET_DIGEST_VERSION =
  * so the collector, the approval requester, and the verifier pin the same
  * digest the classifier recomputes.
  */
-export function hashOperatorMappingSet(
-  entries: readonly MappingSetEntry[],
-): string {
+export function hashOperatorMappingSet(entries: readonly MappingSetEntry[]): string {
   const sorted = [...entries].sort((left, right) =>
     left.partyId < right.partyId ? -1 : left.partyId > right.partyId ? 1 : 0,
   );
@@ -477,13 +467,9 @@ interface RowContext {
   provenance: string[];
 }
 
-function addProvenance(
-  ctx: RowContext,
-  values: readonly (string | null)[],
-): void {
+function addProvenance(ctx: RowContext, values: readonly (string | null)[]): void {
   for (const value of values) {
-    if (isNonBlank(value) && !ctx.provenance.includes(value))
-      ctx.provenance.push(value);
+    if (isNonBlank(value) && !ctx.provenance.includes(value)) ctx.provenance.push(value);
   }
 }
 
@@ -496,15 +482,12 @@ function checkBinding(
   const binding = row.existingBinding;
   if (binding === null) return false;
   const mismatches: string[] = [];
-  if (binding.canonicalOrgId !== row.orgId)
-    mismatches.push("canonical org differs from row org");
+  if (binding.canonicalOrgId !== row.orgId) mismatches.push("canonical org differs from row org");
   if (binding.canonicalWorkerPartyId !== row.nativePartyId) {
     mismatches.push("canonical worker differs from row native party");
   }
   if (binding.canonicalEmployerSubsidiaryId !== effectiveEmployer) {
-    mismatches.push(
-      "canonical employer differs from the row effective employer",
-    );
+    mismatches.push("canonical employer differs from the row effective employer");
   }
   if (!isNonBlank(binding.canonicalEmploymentId))
     mismatches.push("canonical employment id is missing");
@@ -514,19 +497,13 @@ function checkBinding(
     );
   }
   if (!isNonBlank(binding.sourceVersion) || !isNonBlank(row.sourceVersion)) {
-    mismatches.push(
-      "source version is missing or blank and cannot prove consistency",
-    );
+    mismatches.push("source version is missing or blank and cannot prove consistency");
   }
   if (binding.sourceFingerprint !== fingerprint) {
-    mismatches.push(
-      "source fingerprint differs: the source changed since binding",
-    );
+    mismatches.push("source fingerprint differs: the source changed since binding");
   }
-  if (!isRecordedInstant(binding.boundAt))
-    mismatches.push("boundAt is not a valid UTC instant");
-  if (!isNonBlank(binding.provenance))
-    mismatches.push("binding provenance is missing");
+  if (!isRecordedInstant(binding.boundAt)) mismatches.push("boundAt is not a valid UTC instant");
+  if (!isNonBlank(binding.provenance)) mismatches.push("binding provenance is missing");
   if (mismatches.length > 0) {
     ctx.issues.push({
       code: "binding_conflict",
@@ -585,8 +562,7 @@ function checkEmployer(
   );
   const distinct = new Set(
     matching.map(
-      (candidate) =>
-        `${candidate.orgId}\0${candidate.isActive}\0${candidate.isEliminated}`,
+      (candidate) => `${candidate.orgId}\0${candidate.isActive}\0${candidate.isEliminated}`,
     ),
   );
   if (distinct.size > 1) {
@@ -727,10 +703,7 @@ function checkObservation(row: SourcePersonRow, ctx: RowContext): boolean {
     }
     return false;
   }
-  if (
-    !isRecordedInstant(observation.observedAt) ||
-    !isNonBlank(observation.provenance)
-  ) {
+  if (!isRecordedInstant(observation.observedAt) || !isNonBlank(observation.provenance)) {
     ctx.issues.push({
       code: "invalid_observation_evidence",
       level: "ambiguous",
@@ -777,17 +750,10 @@ function checkResolutionDates(
   const problems: string[] = [];
   if (!isNonBlank(resolution.rationale)) problems.push("rationale is missing");
   if (resolution.hiredOn !== null && !isCivilDate(resolution.hiredOn)) {
-    problems.push(
-      `mapped hired_on ${resolution.hiredOn} is not a valid YYYY-MM-DD date`,
-    );
+    problems.push(`mapped hired_on ${resolution.hiredOn} is not a valid YYYY-MM-DD date`);
   }
-  if (
-    resolution.terminatedOn !== null &&
-    !isCivilDate(resolution.terminatedOn)
-  ) {
-    problems.push(
-      `mapped terminated_on ${resolution.terminatedOn} is not a valid YYYY-MM-DD date`,
-    );
+  if (resolution.terminatedOn !== null && !isCivilDate(resolution.terminatedOn)) {
+    problems.push(`mapped terminated_on ${resolution.terminatedOn} is not a valid YYYY-MM-DD date`);
   }
   // Civil event dates: only terminated strictly before hired contradicts.
   if (
@@ -898,8 +864,7 @@ function checkEvidence(
   ctx: RowContext,
 ): { serviceStart: string | null; serviceStartProvenance: string | null } {
   const role = row.role !== null && row.role.present ? row.role : null;
-  const payroll =
-    row.payroll !== null && row.payroll.present ? row.payroll : null;
+  const payroll = row.payroll !== null && row.payroll.present ? row.payroll : null;
   if (
     row.role !== null &&
     !row.role.present &&
@@ -922,8 +887,7 @@ function checkEvidence(
   // contradict, so there is nothing to silently prefer here.
   const mappedStart = resolution.applied ? resolution.hiredOn : null;
   const mappedEnd = resolution.applied ? resolution.terminatedOn : null;
-  const mappedStartProvenance =
-    mappedStart !== null ? "operator-employer-date-mapping" : null;
+  const mappedStartProvenance = mappedStart !== null ? "operator-employer-date-mapping" : null;
   if (role === null && payroll === null) {
     // One explicit date-evidence contract across role presence: observed
     // termination requires an actual terminated_on date, never invented
@@ -970,8 +934,7 @@ function checkEvidence(
     // interval endpoints: only terminated strictly before hired contradicts;
     // a same-day hire plus termination is valid and migrates as-is.
     const roleHiredValid = role.hiredOn !== null && isCivilDate(role.hiredOn);
-    const roleTerminatedValid =
-      role.terminatedOn !== null && isCivilDate(role.terminatedOn);
+    const roleTerminatedValid = role.terminatedOn !== null && isCivilDate(role.terminatedOn);
     if (role.hiredOn !== null && !roleHiredValid) {
       ctx.issues.push({
         code: "invalid_service_date",
@@ -1165,12 +1128,7 @@ function checkEvidence(
     }
     return { serviceStart, serviceStartProvenance };
   }
-  if (
-    !row.party.isActive &&
-    row.party.sourceIsNew &&
-    role !== null &&
-    payroll === null
-  ) {
+  if (!row.party.isActive && row.party.sourceIsNew && role !== null && payroll === null) {
     ctx.issues.push({
       code: "draft_suspect",
       level: "requires_review",
@@ -1225,8 +1183,7 @@ function classifyRow(
     ctx.issues.push({
       code: "invalid_source_identity",
       level: "ambiguous",
-      detail:
-        "the candidate lacks a complete (org, namespace, source id, native party) identity.",
+      detail: "the candidate lacks a complete (org, namespace, source id, native party) identity.",
       remedy:
         "Supply collector evidence with the stable org id, source namespace, source key, and native " +
         "party id for this candidate.",
@@ -1250,9 +1207,7 @@ function classifyRow(
   // Flows approval authorizes it. The conflict checks below still read the
   // claimed employer so a source-versus-operator disagreement refuses as
   // ambiguous even before approval exists.
-  const submissionKey = (
-    row.resolution?.approvalSubmissionId ?? ""
-  ).toLowerCase();
+  const submissionKey = (row.resolution?.approvalSubmissionId ?? "").toLowerCase();
   const groupDigest = isNonBlank(submissionKey)
     ? (approval.groupDigests.get(submissionKey) ?? null)
     : null;
@@ -1261,18 +1216,11 @@ function classifyRow(
       ? checkResolutionApproval(row, approval.appliedBy, groupDigest, ctx)
       : false;
   const applied = shape.applied && authorized;
-  const effectiveEmployer =
-    applied && shape.employer !== null ? shape.employer : assertedEmployer;
+  const effectiveEmployer = applied && shape.employer !== null ? shape.employer : assertedEmployer;
   checkEmployer(row, effectiveEmployer, shape.employer, assertedEmployer, ctx);
   const payrollScope =
-    row.payroll !== null && row.payroll.present
-      ? normalizedId(row.payroll.subsidiaryId)
-      : null;
-  if (
-    payrollScope !== null &&
-    effectiveEmployer !== null &&
-    payrollScope !== effectiveEmployer
-  ) {
+    row.payroll !== null && row.payroll.present ? normalizedId(row.payroll.subsidiaryId) : null;
+  if (payrollScope !== null && effectiveEmployer !== null && payrollScope !== effectiveEmployer) {
     ctx.issues.push({
       code: "schedule_employer_conflict",
       level: "ambiguous",
@@ -1285,8 +1233,7 @@ function classifyRow(
     });
   }
   const observationCurrent = checkObservation(row, ctx);
-  const observationTerminated =
-    observationCurrent && row.observation?.status === "terminated";
+  const observationTerminated = observationCurrent && row.observation?.status === "terminated";
   const evidence = checkEvidence(
     row,
     observationCurrent,
@@ -1299,12 +1246,7 @@ function classifyRow(
     ctx,
   );
   const fingerprint = fingerprintSourceRow(row);
-  const bindingConsistent = checkBinding(
-    row,
-    fingerprint,
-    effectiveEmployer,
-    ctx,
-  );
+  const bindingConsistent = checkBinding(row, fingerprint, effectiveEmployer, ctx);
 
   // The candidate emits only when nothing blocks: any retained issue —
   // including an invalid employer under a valid observation — nulls it.
@@ -1328,10 +1270,7 @@ function classifyRow(
   const provenance = [...ctx.provenance].sort();
   const issues = ctx.issues;
   let classification: PreflightCode = "ready";
-  if (
-    isDuplicate &&
-    issues.some((issue) => issue.code === "duplicate_source_key")
-  ) {
+  if (isDuplicate && issues.some((issue) => issue.code === "duplicate_source_key")) {
     classification = "ambiguous";
   } else {
     for (const level of PRIMARY_PRIORITY) {
@@ -1384,11 +1323,11 @@ export function preflightEmploymentMigration(
   rows: readonly SourcePersonRow[],
   options: PreflightEmploymentMigrationOptions = {},
 ): PreflightReport {
-  const counts = Object.fromEntries(
-    PREFLIGHT_CODES.map((code) => [code, 0]),
-  ) as Record<PreflightCode, number>;
-  if (rows.length === 0)
-    return { status: "empty_not_evaluated", rows: [], counts };
+  const counts = Object.fromEntries(PREFLIGHT_CODES.map((code) => [code, 0])) as Record<
+    PreflightCode,
+    number
+  >;
+  if (rows.length === 0) return { status: "empty_not_evaluated", rows: [], counts };
   const seen = new Map<string, number>();
   for (const row of rows) {
     const key = duplicateKey(row);
@@ -1400,9 +1339,7 @@ export function preflightEmploymentMigration(
   // binding in checkResolutionApproval.
   const groupEntries = new Map<string, MappingSetEntry[]>();
   for (const row of rows) {
-    const submissionKey = (
-      row.resolution?.approvalSubmissionId ?? ""
-    ).toLowerCase();
+    const submissionKey = (row.resolution?.approvalSubmissionId ?? "").toLowerCase();
     if (!isNonBlank(submissionKey)) continue;
     const entry = mappingEntryOf(row);
     if (entry === null) continue;
@@ -1424,15 +1361,13 @@ export function preflightEmploymentMigration(
     result: classifyRow(row, (seen.get(duplicateKey(row)) ?? 0) > 1, approval),
   }));
   decorated.sort((a, b) => {
-    if (a.result.orgId !== b.result.orgId)
-      return a.result.orgId < b.result.orgId ? -1 : 1;
+    if (a.result.orgId !== b.result.orgId) return a.result.orgId < b.result.orgId ? -1 : 1;
     if (a.result.sourceNamespace !== b.result.sourceNamespace) {
       return a.result.sourceNamespace < b.result.sourceNamespace ? -1 : 1;
     }
     if (a.result.sourceId !== b.result.sourceId)
       return a.result.sourceId < b.result.sourceId ? -1 : 1;
-    if (a.fingerprint !== b.fingerprint)
-      return a.fingerprint < b.fingerprint ? -1 : 1;
+    if (a.fingerprint !== b.fingerprint) return a.fingerprint < b.fingerprint ? -1 : 1;
     if (a.tieBreak !== b.tieBreak) return a.tieBreak < b.tieBreak ? -1 : 1;
     return 0;
   });

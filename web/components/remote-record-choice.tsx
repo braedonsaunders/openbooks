@@ -10,8 +10,8 @@ export function RemoteRecordChoice({
   options,
   endpoint,
   resultKey,
-  disabled=false,
-  clearable=false,
+  disabled = false,
+  clearable = false,
   onChange,
   labels,
   emptyHint,
@@ -51,10 +51,7 @@ export function RemoteRecordChoice({
       if (value) url.searchParams.set("selected", value);
       fetch(url.pathname + url.search, { signal: controller.signal })
         .then(async (response) => {
-          if (!response.ok)
-            throw new Error(
-              await readApiErrorMessage(response, labels.loadFailed),
-            );
+          if (!response.ok) throw new Error(await readApiErrorMessage(response, labels.loadFailed));
           const data = await response.json();
           return (resultKey ? data[resultKey] : data) as RemoteRecordOption[];
         })
@@ -81,12 +78,8 @@ export function RemoteRecordChoice({
     };
   }, [endpoint, query, value, resultKey, labels.loadFailed, attempt]);
   const selected =
-    rows.find((o) => o.value === value) ??
-    (chosen?.value === value ? chosen : undefined);
-  const choices =
-    selected && !rows.some((o) => o.value === value)
-      ? [selected, ...rows]
-      : rows;
+    rows.find((o) => o.value === value) ?? (chosen?.value === value ? chosen : undefined);
+  const choices = selected && !rows.some((o) => o.value === value) ? [selected, ...rows] : rows;
   const showEmptyHint =
     emptyHint !== undefined &&
     !loading &&

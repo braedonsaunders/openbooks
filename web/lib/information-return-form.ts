@@ -2,7 +2,7 @@ import {
   filedBoxAmounts,
   formDefinition,
   type FormDefinition,
-} from '@openbooks/engine/compliance/information-returns'
+} from "@openbooks/engine/compliance/information-returns";
 
 /**
  * Recipient copies of information returns (1099-NEC / 1099-MISC / T4A) as
@@ -20,46 +20,49 @@ import {
  */
 
 export interface RecipientFormData {
-  formType: string
-  taxYear: number
+  formType: string;
+  taxYear: number;
   /** Payer identification, from the filing's frozen snapshot. */
-  payerName: string
-  payerAddress?: string | null
-  payerTin?: string | null
-  recipientName: string
-  recipientAddress?: string | null
+  payerName: string;
+  payerAddress?: string | null;
+  payerTin?: string | null;
+  recipientName: string;
+  recipientAddress?: string | null;
   /** Masked, e.g. "***-**-1234". The full TIN never leaves the sealed column. */
-  recipientTinMasked?: string | null
-  accountNumber?: string | null
-  computedAmounts: Record<string, string>
-  adjustments: Record<string, string>
-  corrected: boolean
-  void: boolean
-  currency: string
+  recipientTinMasked?: string | null;
+  accountNumber?: string | null;
+  computedAmounts: Record<string, string>;
+  adjustments: Record<string, string>;
+  corrected: boolean;
+  void: boolean;
+  currency: string;
 }
 
 export function esc(value: string): string {
   return value.replace(/[&<>"']/g, (c) =>
-    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
-  )
+    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;",
+  );
 }
 
-export { formatBoxAmount } from './information-return-format'
-import { formatBoxAmount, isZeroDecimalText } from './information-return-format'
+export { formatBoxAmount } from "./information-return-format";
+import { formatBoxAmount, isZeroDecimalText } from "./information-return-format";
 
 /** Mask a TIN for the recipient copy, keeping only the last four digits. */
-export function maskTin(last4: string | null | undefined, tinType: string | null | undefined): string {
-  if (!last4) return ''
-  if (tinType === 'ein' || tinType === 'bn') return `**-***${last4}`
-  if (tinType === 'sin') return `***-***-${last4}`
-  return `***-**-${last4}`
+export function maskTin(
+  last4: string | null | undefined,
+  tinType: string | null | undefined,
+): string {
+  if (!last4) return "";
+  if (tinType === "ein" || tinType === "bn") return `**-***${last4}`;
+  if (tinType === "sin") return `***-***-${last4}`;
+  return `***-**-${last4}`;
 }
 
 interface BoxCell {
-  number: string
-  name: string
-  value: string
-  isIndicator: boolean
+  number: string;
+  name: string;
+  value: string;
+  isIndicator: boolean;
 }
 
 function boxCells(form: FormDefinition, amounts: Record<string, string>): BoxCell[] {
@@ -67,19 +70,19 @@ function boxCells(form: FormDefinition, amounts: Record<string, string>): BoxCel
     number: box.number,
     name: box.name,
     value: box.isIndicator
-      ? !isZeroDecimalText(amounts[box.key] ?? '0')
-        ? 'X'
-        : ''
+      ? !isZeroDecimalText(amounts[box.key] ?? "0")
+        ? "X"
+        : ""
       : formatBoxAmount(amounts[box.key]),
     isIndicator: box.isIndicator === true,
-  }))
+  }));
 }
 
 /** The printable recipient copy. */
 export function renderInformationReturnBody(data: RecipientFormData): string {
-  const form = formDefinition(data.formType)
-  const amounts = filedBoxAmounts(data.computedAmounts, data.adjustments)
-  const cells = boxCells(form, amounts)
+  const form = formDefinition(data.formType);
+  const amounts = filedBoxAmounts(data.computedAmounts, data.adjustments);
+  const cells = boxCells(form, amounts);
   return `
 <style>
   :root { --ink: #0f172a; --muted: #64748b; --rule: #94a3b8; }
@@ -120,23 +123,25 @@ export function renderInformationReturnBody(data: RecipientFormData): string {
   </div>
 </div>
 
-${data.corrected || data.void
-  ? `<div class="flags">${data.corrected ? '<span>CORRECTED</span>' : ''}${data.void ? '<span>VOID</span>' : ''}</div>`
-  : ''}
+${
+  data.corrected || data.void
+    ? `<div class="flags">${data.corrected ? "<span>CORRECTED</span>" : ""}${data.void ? "<span>VOID</span>" : ""}</div>`
+    : ""
+}
 
 <div class="parties">
   <div>
     <div class="caption">Payer's name, address and TIN</div>
-    <div class="value">${esc(data.payerName)}${data.payerAddress ? `\n${esc(data.payerAddress)}` : ''}${
-      data.payerTin ? `\nTIN ${esc(data.payerTin)}` : ''
+    <div class="value">${esc(data.payerName)}${data.payerAddress ? `\n${esc(data.payerAddress)}` : ""}${
+      data.payerTin ? `\nTIN ${esc(data.payerTin)}` : ""
     }</div>
   </div>
   <div>
     <div class="caption">Recipient's name, address and TIN</div>
-    <div class="value">${esc(data.recipientName)}${data.recipientAddress ? `\n${esc(data.recipientAddress)}` : ''}${
-      data.recipientTinMasked ? `\nTIN ${esc(data.recipientTinMasked)}` : ''
+    <div class="value">${esc(data.recipientName)}${data.recipientAddress ? `\n${esc(data.recipientAddress)}` : ""}${
+      data.recipientTinMasked ? `\nTIN ${esc(data.recipientTinMasked)}` : ""
     }</div>
-    ${data.accountNumber ? `<div class="caption" style="margin-top:6px">Account number</div><div class="value">${esc(data.accountNumber)}</div>` : ''}
+    ${data.accountNumber ? `<div class="caption" style="margin-top:6px">Account number</div><div class="value">${esc(data.accountNumber)}</div>` : ""}
   </div>
 </div>
 
@@ -146,10 +151,10 @@ ${data.corrected || data.void
       (cell) => `<div class="box">
         <div class="num">${esc(cell.number)}</div>
         <div class="label">${esc(cell.name)}</div>
-        <div class="amt">${cell.isIndicator ? esc(cell.value) : cell.value ? `${esc(data.currency)} ${cell.value}` : ''}</div>
+        <div class="amt">${cell.isIndicator ? esc(cell.value) : cell.value ? `${esc(data.currency)} ${cell.value}` : ""}</div>
       </div>`,
     )
-    .join('')}
+    .join("")}
 </div>
 
 <div class="notice">
@@ -164,5 +169,5 @@ ${data.corrected || data.void
   are required to file a return and this income is not reported on it, a penalty may be imposed. Amounts are
   stated in ${esc(data.currency)}.
 </div>
-`
+`;
 }

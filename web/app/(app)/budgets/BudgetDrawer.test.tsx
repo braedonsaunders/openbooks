@@ -1,11 +1,16 @@
-import { recordApprovalState } from '../../../testing/record-approval-state';
+import { recordApprovalState } from "../../../testing/record-approval-state";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/budgets?budget=abc", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/budgets?budget=abc",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 declare global {
   var __budgetTestRouter: { push(): void; refresh(): void } | undefined;
@@ -14,10 +19,12 @@ declare global {
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__budgetTestRouter}export function usePathname(){return '/budgets'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__budgetTestRouter}export function usePathname(){return '/budgets'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -83,13 +90,28 @@ function workspace() {
     effectiveSubsidiaryId: "00000000-0000-4000-8000-000000000001",
     effectiveExtraDims: { fund: OPERATING_FUND },
     dimensions: {
-      subsidiaries: [], departments: [], projects: [], locations: [], classes: [],
-      segments: [{ key: "fund", name: "Fund", defaultValueId: OPERATING_FUND, values: [{ id: OPERATING_FUND, code: "OPS", name: "Operating" }] }],
+      subsidiaries: [],
+      departments: [],
+      projects: [],
+      locations: [],
+      classes: [],
+      segments: [
+        {
+          key: "fund",
+          name: "Fund",
+          defaultValueId: OPERATING_FUND,
+          values: [{ id: OPERATING_FUND, code: "OPS", name: "Operating" }],
+        },
+      ],
     },
   };
 }
 
-async function mountDrawer(overrides?: { status?: string; canApprove?: boolean; budgetImport?: boolean }) {
+async function mountDrawer(overrides?: {
+  status?: string;
+  canApprove?: boolean;
+  budgetImport?: boolean;
+}) {
   globalThis.__budgetTestRouter = { push() {}, refresh() {} };
   globalThis.__budgetTestToasts = [];
   const host = document.createElement("div");
@@ -104,8 +126,14 @@ async function mountDrawer(overrides?: { status?: string; canApprove?: boolean; 
           <PromptRoot />
           <BudgetDrawer
             initial={initial as never}
-            currentParams={overrides?.budgetImport ? { budgetImport: '1' } : {}}
-            dims={{ subsidiaryId: null, departmentId: null, projectId: null, locationId: null, classId: null }}
+            currentParams={overrides?.budgetImport ? { budgetImport: "1" } : {}}
+            dims={{
+              subsidiaryId: null,
+              departmentId: null,
+              projectId: null,
+              locationId: null,
+              classId: null,
+            }}
             closeHref="/budgets"
             books={[]}
             years={[2026]}
@@ -123,8 +151,14 @@ async function mountDrawer(overrides?: { status?: string; canApprove?: boolean; 
   return { host, root };
 }
 
-async function cleanupDrawer(host: HTMLDivElement, root: ReturnType<typeof createRoot>, priorFetch: typeof fetch) {
-  await act(async () => root.unmount()); host.remove(); globalThis.fetch = priorFetch;
+async function cleanupDrawer(
+  host: HTMLDivElement,
+  root: ReturnType<typeof createRoot>,
+  priorFetch: typeof fetch,
+) {
+  await act(async () => root.unmount());
+  host.remove();
+  globalThis.fetch = priorFetch;
 }
 
 /** a refused submit must pin its typed reason on the record, not
@@ -168,10 +202,16 @@ test("a refused tenant Flow decision stays beside the budget", async (t) => {
   const priorFetch = globalThis.fetch;
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if(String(input).startsWith("/api/flows/record-state"))return Response.json(recordApprovalState({status:"pending_approval",gateId:"gate-1",canDecide:true}));
+    if (String(input).startsWith("/api/flows/record-state"))
+      return Response.json(
+        recordApprovalState({ status: "pending_approval", gateId: "gate-1", canDecide: true }),
+      );
     calls.push(`${(init?.method ?? "GET").toUpperCase()} ${String(input)}`);
-    if (String(input)==="/api/flows/gates/decide") {
-      return Response.json({ error: "The tenant Flow requires another assigned reviewer." }, { status: 409 });
+    if (String(input) === "/api/flows/gates/decide") {
+      return Response.json(
+        { error: "The tenant Flow requires another assigned reviewer." },
+        { status: 409 },
+      );
     }
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
@@ -199,55 +239,83 @@ test("a refused tenant Flow decision stays beside the budget", async (t) => {
   assert.ok(alert, "the typed refusal must persist inline on the drawer");
 });
 
-test('rejecting a budget captures the checker rationale before sending the decision', async (t) => {
+test("rejecting a budget captures the checker rationale before sending the decision", async (t) => {
   const priorFetch = globalThis.fetch;
   const decisions: Record<string, unknown>[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if(String(input).startsWith('/api/flows/record-state'))return Response.json(recordApprovalState({status:'pending_approval',gateId:'gate-1',canDecide:true}));
-    if (String(input)==='/api/flows/gates/decide') {
+    if (String(input).startsWith("/api/flows/record-state"))
+      return Response.json(
+        recordApprovalState({ status: "pending_approval", gateId: "gate-1", canDecide: true }),
+      );
+    if (String(input) === "/api/flows/gates/decide") {
       decisions.push(JSON.parse(String(init?.body)));
-      return Response.json({ status: 'draft', revision: 2 });
+      return Response.json({ status: "draft", revision: 2 });
     }
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
-  const { host, root } = await mountDrawer({ status: 'pending_approval', canApprove: true });
+  const { host, root } = await mountDrawer({ status: "pending_approval", canApprove: true });
   t.after(() => cleanupDrawer(host, root, priorFetch));
-  const reject = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === 'Reject')!;
-  await act(async () => { reject.click(); await tick(); });
+  const reject = [...document.querySelectorAll("button")].find(
+    (el) => el.textContent?.trim() === "Reject",
+  )!;
+  await act(async () => {
+    reject.click();
+    await tick();
+  });
   assert.equal(decisions.length, 0);
   const dialog = document.querySelector('[aria-labelledby="prompt-title"]')!;
-  assert.match(dialog.textContent ?? '', /Rejection reason/);
-  const field = dialog.querySelector('input')!;
+  assert.match(dialog.textContent ?? "", /Rejection reason/);
+  const field = dialog.querySelector("input")!;
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(field, 'Revenue assumptions need supporting evidence.');
-    field.dispatchEvent(new window.Event('input', { bubbles: true }));
-    field.dispatchEvent(new window.FocusEvent('focusout', { bubbles: true }));
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(
+      field,
+      "Revenue assumptions need supporting evidence.",
+    );
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+    field.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
     await tick();
-    dialog.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    dialog
+      .querySelector("form")!
+      .dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
     await tick();
   });
   assert.equal(decisions.length, 1);
-  assert.equal(decisions[0]!.comment, 'Revenue assumptions need supporting evidence.');
-  assert.equal(decisions[0]!.gateId, 'gate-1');
-  assert.equal(decisions[0]!.decision, 'rejected');
+  assert.equal(decisions[0]!.comment, "Revenue assumptions need supporting evidence.");
+  assert.equal(decisions[0]!.gateId, "gate-1");
+  assert.equal(decisions[0]!.decision, "rejected");
 });
 
-test('cancelling the rejection reason preserves the pending budget without a write', async (t) => {
+test("cancelling the rejection reason preserves the pending budget without a write", async (t) => {
   const priorFetch = globalThis.fetch;
   let writes = 0;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if(String(input).startsWith("/api/flows/record-state"))return Response.json(recordApprovalState({status:"pending_approval",gateId:"gate-1",canDecide:true}));
-    if (init?.method && init.method !== 'GET') writes++;
+    if (String(input).startsWith("/api/flows/record-state"))
+      return Response.json(
+        recordApprovalState({ status: "pending_approval", gateId: "gate-1", canDecide: true }),
+      );
+    if (init?.method && init.method !== "GET") writes++;
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
-  const { host, root } = await mountDrawer({ status: 'pending_approval', canApprove: true });
+  const { host, root } = await mountDrawer({ status: "pending_approval", canApprove: true });
   t.after(() => cleanupDrawer(host, root, priorFetch));
-  const reject = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === 'Reject')!;
-  await act(async () => { reject.click(); await tick(); });
-  const cancel = [...document.querySelectorAll<HTMLButtonElement>('[aria-labelledby="prompt-title"] button')].find((el) => el.textContent?.trim() === 'Cancel')!;
-  await act(async () => { cancel.click(); await tick(); });
+  const reject = [...document.querySelectorAll("button")].find(
+    (el) => el.textContent?.trim() === "Reject",
+  )!;
+  await act(async () => {
+    reject.click();
+    await tick();
+  });
+  const cancel = [
+    ...document.querySelectorAll<HTMLButtonElement>('[aria-labelledby="prompt-title"] button'),
+  ].find((el) => el.textContent?.trim() === "Cancel")!;
+  await act(async () => {
+    cancel.click();
+    await tick();
+  });
   assert.equal(writes, 0);
-  assert.ok([...document.querySelectorAll('button')].some((el) => el.textContent?.trim() === 'Reject'));
+  assert.ok(
+    [...document.querySelectorAll("button")].some((el) => el.textContent?.trim() === "Reject"),
+  );
 });
 
 /* ------------------------------------------------ OM-05 unsaved-create */
@@ -260,8 +328,34 @@ function creatableWorkspace() {
     ...base,
     scenario: { ...base.scenario, id: "", name: "", revision: 0 },
     periods: [
-      { id: randomUUID(), name: "P01 FY2026 · Jan 2026", periodNumber: 1, startsOn: "2026-01-01", endsOn: "2026-01-31", periodRef: { fiscalYear: 2026, periodNumber: 1, adjustment: false, startsOn: "2026-01-01", endsOn: "2026-01-31" } },
-      { id: randomUUID(), name: "P02 FY2026 · Feb 2026", periodNumber: 2, startsOn: "2026-02-01", endsOn: "2026-02-28", periodRef: { fiscalYear: 2026, periodNumber: 2, adjustment: false, startsOn: "2026-02-01", endsOn: "2026-02-28" } },
+      {
+        id: randomUUID(),
+        name: "P01 FY2026 · Jan 2026",
+        periodNumber: 1,
+        startsOn: "2026-01-01",
+        endsOn: "2026-01-31",
+        periodRef: {
+          fiscalYear: 2026,
+          periodNumber: 1,
+          adjustment: false,
+          startsOn: "2026-01-01",
+          endsOn: "2026-01-31",
+        },
+      },
+      {
+        id: randomUUID(),
+        name: "P02 FY2026 · Feb 2026",
+        periodNumber: 2,
+        startsOn: "2026-02-01",
+        endsOn: "2026-02-28",
+        periodRef: {
+          fiscalYear: 2026,
+          periodNumber: 2,
+          adjustment: false,
+          startsOn: "2026-02-01",
+          endsOn: "2026-02-28",
+        },
+      },
     ],
     accounts: [{ id: randomUUID(), number: "4000", name: "Services revenue", type: "income" }],
     effectiveSubsidiaryId: CREATE_SUB,
@@ -313,7 +407,13 @@ async function mountCreateDrawer(options?: {
           <BudgetDrawer
             initial={creatableWorkspace() as never}
             currentParams={options?.params ?? {}}
-            dims={{ subsidiaryId: null, departmentId: null, projectId: null, locationId: null, classId: null }}
+            dims={{
+              subsidiaryId: null,
+              departmentId: null,
+              projectId: null,
+              locationId: null,
+              classId: null,
+            }}
             closeHref="/budgets"
             books={[]}
             years={[2026]}
@@ -348,14 +448,12 @@ async function mountCreateDrawer(options?: {
 test("typing an annual amount updates the slice total live, with zero writes", async (t) => {
   const mounted = await mountCreateDrawer();
   t.after(() => mounted.cleanup());
-  assert.deepEqual(
-    mounted.calls,
-    [],
-    "opening the unsaved drawer must issue zero requests",
-  );
+  assert.deepEqual(mounted.calls, [], "opening the unsaved drawer must issue zero requests");
   assert.doesNotMatch(document.body.textContent ?? "", /1,?200/, "total starts at zero");
 
-  const annual = document.querySelector('[aria-label="Services revenue Annual total"]') as HTMLInputElement;
+  const annual = document.querySelector(
+    '[aria-label="Services revenue Annual total"]',
+  ) as HTMLInputElement;
   assert.ok(annual, "annual total cell must render");
   await act(async () => {
     typeInto(annual, "1200");
@@ -363,8 +461,16 @@ test("typing an annual amount updates the slice total live, with zero writes", a
   await tick();
 
   assert.equal(annual.value, "1200", "annual input stays controlled on the typed figure");
-  assert.match(document.body.textContent ?? "", /1,?200/, "slice total reflects the typed amount before blur");
-  assert.match(document.body.textContent ?? "", /Unsaved changes/, "mid-edit total is marked pending");
+  assert.match(
+    document.body.textContent ?? "",
+    /1,?200/,
+    "slice total reflects the typed amount before blur",
+  );
+  assert.match(
+    document.body.textContent ?? "",
+    /Unsaved changes/,
+    "mid-edit total is marked pending",
+  );
   assert.deepEqual(
     mounted.calls,
     [],
@@ -414,7 +520,9 @@ test("Save opens the created draft when saving its lines is refused", async (t) 
   await act(async () => {
     typeInto(nameInput, "FY26 services");
   });
-  const month = document.querySelector('[aria-label="Services revenue P01 FY2026 · Jan 2026"]') as HTMLInputElement;
+  const month = document.querySelector(
+    '[aria-label="Services revenue P01 FY2026 · Jan 2026"]',
+  ) as HTMLInputElement;
   assert.ok(month, "monthly cell must render");
   await act(async () => {
     typeInto(month, "100.00");
@@ -437,26 +545,84 @@ test("Save opens the created draft when saving its lines is refused", async (t) 
   assert.equal((draft.body as Record<string, unknown>).name, "FY26 services");
   const lines = mounted.calls.find((call) => call.url.includes("/lines"));
   assert.ok(lines, "Save must commit the entered lines");
-  const cells = (lines.body as { cells: { amount: string; extraDims?: Record<string, string> }[] }).cells;
+  const cells = (lines.body as { cells: { amount: string; extraDims?: Record<string, string> }[] })
+    .cells;
   assert.equal(cells.length, 1, "only the entered non-zero cell is committed");
-  assert.deepEqual(cells[0]!.extraDims, { fund: OPERATING_FUND }, "the cell is saved under the worksheet's fund");
+  assert.deepEqual(
+    cells[0]!.extraDims,
+    { fund: OPERATING_FUND },
+    "the cell is saved under the worksheet's fund",
+  );
   // Income accounts display credit-normal: the typed 100.00 stores negative.
   assert.equal(cells[0]!.amount, "-100.0000");
   assert.equal(mounted.pushes.length, 1, "Save navigates to the created draft after line refusal");
-  assert.match(mounted.pushes[0]!, new RegExp(`budget=${scenarioId}`), "recovery opens the saved record");
-  assert.doesNotMatch(mounted.pushes[0]!, /budgetNew/, "the saved record is no longer a create view");
+  assert.match(
+    mounted.pushes[0]!,
+    new RegExp(`budget=${scenarioId}`),
+    "recovery opens the saved record",
+  );
+  assert.doesNotMatch(
+    mounted.pushes[0]!,
+    /budgetNew/,
+    "the saved record is no longer a create view",
+  );
   assert.ok(
-    (globalThis.__budgetTestToasts ?? []).some((toast) => /saving its lines failed/i.test(toast.message) && /budget_is_locked/.test(toast.message)),
+    (globalThis.__budgetTestToasts ?? []).some(
+      (toast) =>
+        /saving its lines failed/i.test(toast.message) && /budget_is_locked/.test(toast.message),
+    ),
     "Save explains the persisted draft and the line refusal",
   );
 });
 
 test("a late preview cannot enable applying the previously selected budget file", async (t) => {
-  const pending: ((r: Response) => void)[] = [], commits: Record<string, unknown>[] = [], priorFetch = globalThis.fetch;
-  globalThis.fetch = (async (input, init) => { if (!String(input).includes('/import')) return Response.json({}, { status: 404 }); const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>; if (body.commit) { commits.push(body); return Response.json({ imported: 1 }); } return new Promise<Response>((resolve) => pending.push(resolve)); }) as typeof fetch;
-  const { host, root } = await mountDrawer({ budgetImport: true }); t.after(() => cleanupDrawer(host, root, priorFetch));
-  const choose = async (name: string, text: string) => act(async () => { const input = document.querySelector('input[type="file"]')!; Object.defineProperty(input, "files", { configurable: true, value: [Object.assign(new Blob([text]), { name })] }); input.dispatchEvent(new window.Event("change", { bubbles: true })); await tick(); }); const click = async (label: string) => act(async () => { [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === label)!.click(); await tick(); });
-  await choose("a.csv", "account,period,amount\n4000,1,10"); await click("Validate file"); await choose("b.csv", "account,period,amount\n4000,1,20");
-  await act(async () => { pending[0]!(Response.json({ valid: true, rows: 1, errors: [] })); await tick(); }); assert.equal([...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Apply import"), false);
-  await click("Validate file"); await act(async () => { pending[1]!(Response.json({ valid: true, rows: 1, errors: [] })); await tick(); }); await click("Apply import"); assert.equal(commits[0]?.text, "account,period,amount\n4000,1,20");
+  const pending: ((r: Response) => void)[] = [],
+    commits: Record<string, unknown>[] = [],
+    priorFetch = globalThis.fetch;
+  globalThis.fetch = (async (input, init) => {
+    if (!String(input).includes("/import")) return Response.json({}, { status: 404 });
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    if (body.commit) {
+      commits.push(body);
+      return Response.json({ imported: 1 });
+    }
+    return new Promise<Response>((resolve) => pending.push(resolve));
+  }) as typeof fetch;
+  const { host, root } = await mountDrawer({ budgetImport: true });
+  t.after(() => cleanupDrawer(host, root, priorFetch));
+  const choose = async (name: string, text: string) =>
+    act(async () => {
+      const input = document.querySelector('input[type="file"]')!;
+      Object.defineProperty(input, "files", {
+        configurable: true,
+        value: [Object.assign(new Blob([text]), { name })],
+      });
+      input.dispatchEvent(new window.Event("change", { bubbles: true }));
+      await tick();
+    });
+  const click = async (label: string) =>
+    act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((b) => b.textContent?.trim() === label)!
+        .click();
+      await tick();
+    });
+  await choose("a.csv", "account,period,amount\n4000,1,10");
+  await click("Validate file");
+  await choose("b.csv", "account,period,amount\n4000,1,20");
+  await act(async () => {
+    pending[0]!(Response.json({ valid: true, rows: 1, errors: [] }));
+    await tick();
+  });
+  assert.equal(
+    [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Apply import"),
+    false,
+  );
+  await click("Validate file");
+  await act(async () => {
+    pending[1]!(Response.json({ valid: true, rows: 1, errors: [] }));
+    await tick();
+  });
+  await click("Apply import");
+  assert.equal(commits[0]?.text, "account,period,amount\n4000,1,20");
 });

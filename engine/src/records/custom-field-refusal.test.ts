@@ -6,7 +6,11 @@ import type { CustomFieldViewer } from "@openbooks/customization";
 const clerk: CustomFieldViewer = { roleKeys: ["clerk"], canManageCustomFields: false };
 const manager: CustomFieldViewer = { roleKeys: ["clerk"], canManageCustomFields: true };
 
-function def(key: string, config: Record<string, unknown> = {}, isRequired = false): CustomFieldDef {
+function def(
+  key: string,
+  config: Record<string, unknown> = {},
+  isRequired = false,
+): CustomFieldDef {
   return {
     id: `id-${key}`,
     targetTable: "items",
@@ -25,23 +29,41 @@ const restricted = def("cost_basis", { allowedRoles: ["buyer"] });
 const required = def("approval_code", { allowedRoles: ["buyer"] }, true);
 
 test("an unchanged echo of a hidden value is accepted on update", () => {
-  const refusal = hiddenCustomFieldRefusal([open, restricted], clerk, { cost_basis: "100" }, { cost_basis: "100" });
+  const refusal = hiddenCustomFieldRefusal(
+    [open, restricted],
+    clerk,
+    { cost_basis: "100" },
+    { cost_basis: "100" },
+  );
   assert.equal(refusal, null);
 });
 
 test("an update that omits a hidden field is accepted and changes nothing", () => {
-  assert.equal(hiddenCustomFieldRefusal([open, restricted], clerk, { open_note: "x" }, { cost_basis: "100" }), null);
+  assert.equal(
+    hiddenCustomFieldRefusal([open, restricted], clerk, { open_note: "x" }, { cost_basis: "100" }),
+    null,
+  );
 });
 
 test("a changed hidden value is refused by name on update", () => {
-  const refusal = hiddenCustomFieldRefusal([open, restricted], clerk, { cost_basis: "120" }, { cost_basis: "100" });
+  const refusal = hiddenCustomFieldRefusal(
+    [open, restricted],
+    clerk,
+    { cost_basis: "120" },
+    { cost_basis: "100" },
+  );
   assert.ok(refusal);
   assert.equal(refusal.key, "cost_basis");
   assert.match(refusal.message, /restricted to other roles and cannot be changed by your role/);
 });
 
 test("clearing a stored hidden value is refused on update", () => {
-  const refusal = hiddenCustomFieldRefusal([restricted], clerk, { cost_basis: null }, { cost_basis: "100" });
+  const refusal = hiddenCustomFieldRefusal(
+    [restricted],
+    clerk,
+    { cost_basis: null },
+    { cost_basis: "100" },
+  );
   assert.equal(refusal?.key, "cost_basis");
 });
 
@@ -71,6 +93,17 @@ test("a create without a required hidden field is refused, since no permitted ro
 });
 
 test("managers pass every write check", () => {
-  assert.equal(hiddenCustomFieldRefusal([restricted, required], manager, { cost_basis: "1", approval_code: "A" }, null), null);
-  assert.equal(hiddenCustomFieldRefusal([restricted], manager, { cost_basis: "2" }, { cost_basis: "1" }), null);
+  assert.equal(
+    hiddenCustomFieldRefusal(
+      [restricted, required],
+      manager,
+      { cost_basis: "1", approval_code: "A" },
+      null,
+    ),
+    null,
+  );
+  assert.equal(
+    hiddenCustomFieldRefusal([restricted], manager, { cost_basis: "2" }, { cost_basis: "1" }),
+    null,
+  );
 });

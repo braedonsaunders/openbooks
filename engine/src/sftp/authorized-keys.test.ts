@@ -19,7 +19,10 @@ test("a real generated key validates and normalizes to canonical spacing", () =>
 test("malformed lines are refused with physical line numbers", () => {
   const good = realKeyLine();
   assert.throws(
-    () => validateAuthorizedKeys([good, "hello world", "", "# comment", "ssh-ed25519 not-base64!!!"].join("\n")),
+    () =>
+      validateAuthorizedKeys(
+        [good, "hello world", "", "# comment", "ssh-ed25519 not-base64!!!"].join("\n"),
+      ),
     /line 2: .*Unsupported key format.*line 5: .*Unsupported key format/,
   );
 });

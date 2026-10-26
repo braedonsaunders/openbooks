@@ -59,13 +59,22 @@ const searchOrders: AssistantToolDef = {
   feature: "orders",
   inputSchema: z.object({
     kind: z.enum(ORDER_KINDS).optional().describe("Default all kinds the caller may see"),
-    status: z.enum(["draft", "pending_approval", "approved", "posted", "voided"]).optional().describe("Only orders in this status"),
+    status: z
+      .enum(["draft", "pending_approval", "approved", "posted", "voided"])
+      .optional()
+      .describe("Only orders in this status"),
     partyQuery: z.string().max(100).optional().describe("Match the customer/vendor name"),
     query: z.string().max(100).optional().describe("Match document number or memo"),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
-    fulfilment: z.enum(["unfulfilled", "partially_fulfilled", "fulfilled"]).optional().describe("Only orders at this fulfilment state"),
-    billing: z.enum(["unbilled", "partially_billed", "billed"]).optional().describe("Only orders at this billing state"),
+    fulfilment: z
+      .enum(["unfulfilled", "partially_fulfilled", "fulfilled"])
+      .optional()
+      .describe("Only orders at this fulfilment state"),
+    billing: z
+      .enum(["unbilled", "partially_billed", "billed"])
+      .optional()
+      .describe("Only orders at this billing state"),
     limit: z.number().int().min(1).max(50).optional().describe("Default 20"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
@@ -100,11 +109,15 @@ const searchOrders: AssistantToolDef = {
     if (a.toDate) where = sql`${where} and d.document_date <= ${a.toDate}`;
     let progressFilter = sql`true`;
     if (a.fulfilment === "unfulfilled") progressFilter = sql`ordered <= 0 or fulfilled <= 0`;
-    if (a.fulfilment === "partially_fulfilled") progressFilter = sql`fulfilled > 0 and fulfilled < ordered`;
+    if (a.fulfilment === "partially_fulfilled")
+      progressFilter = sql`fulfilled > 0 and fulfilled < ordered`;
     if (a.fulfilment === "fulfilled") progressFilter = sql`fulfilled >= ordered and ordered > 0`;
-    if (a.billing === "unbilled") progressFilter = sql`(${progressFilter}) and (ordered <= 0 or billed <= 0)`;
-    if (a.billing === "partially_billed") progressFilter = sql`(${progressFilter}) and billed > 0 and billed < ordered`;
-    if (a.billing === "billed") progressFilter = sql`(${progressFilter}) and billed >= ordered and ordered > 0`;
+    if (a.billing === "unbilled")
+      progressFilter = sql`(${progressFilter}) and (ordered <= 0 or billed <= 0)`;
+    if (a.billing === "partially_billed")
+      progressFilter = sql`(${progressFilter}) and billed > 0 and billed < ordered`;
+    if (a.billing === "billed")
+      progressFilter = sql`(${progressFilter}) and billed >= ordered and ordered > 0`;
     const filtered = sql`
       with grouped as (
         select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency,
@@ -120,16 +133,24 @@ const searchOrders: AssistantToolDef = {
                   d.currency, d.total, d.memo, p.display_name
       ), filtered as (select * from grouped where ${progressFilter})
     `;
-    const rows = await db.execute<Record<string, unknown>>(sql`${filtered}
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`${filtered}
       select * from filtered
        order by document_date desc, document_number desc
        limit ${limit + 1}
-    `, "objects");
-    const totals = (await db.execute<{ n: string; sum_total: string; backlog: string }>(sql`${filtered}
+    `,
+      "objects",
+    );
+    const totals = (
+      await db.execute<{ n: string; sum_total: string; backlog: string }>(
+        sql`${filtered}
       select count(*) as n, coalesce(sum(total), 0) as sum_total,
              coalesce(sum(case when status = 'approved' then total else 0 end), 0) as backlog
         from filtered
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const total = Number(totals?.n ?? 0);
     const mapped = rows.map((r) => {
       const ordered = toQuantityUnits(String(r.ordered ?? "0"));
@@ -146,7 +167,10 @@ const searchOrders: AssistantToolDef = {
         party: r.party,
         fulfilment: fulfilmentStatus(ordered, fulfilled),
         billing: billingStatus(ordered, billed),
-        memo: typeof r.memo === "string" && r.memo.length > 160 ? `${r.memo.slice(0, 160)}…[truncated]` : (r.memo as string | null),
+        memo:
+          typeof r.memo === "string" && r.memo.length > 160
+            ? `${r.memo.slice(0, 160)}…[truncated]`
+            : (r.memo as string | null),
         href: r.kind === "purchase_order" ? "/purchase-orders" : "/sales-orders",
       };
     });
@@ -157,7 +181,8 @@ const searchOrders: AssistantToolDef = {
         total,
         sumTotal: money(totals?.sum_total),
         backlogTotal: money(totals?.backlog),
-        backlogNote: "Sum of document totals over ALL matches still in approved (committed, not yet invoiced) status.",
+        backlogNote:
+          "Sum of document totals over ALL matches still in approved (committed, not yet invoiced) status.",
         returned: page.returned,
         dropped: page.dropped,
         truncated: page.truncated,
@@ -186,7 +211,16 @@ const getOrder: AssistantToolDef = {
     if (!can(authz, kindPerm(a.kind))) return { ok: false, error: "forbidden" };
     const payload = await loadOrder(a.id, authz.user.orgId, a.kind, authz.allowedSubsidiaryIds);
     if (!payload) return { ok: false, error: "not_found" };
-    const fulfil = await db.execute<{ id: string; item_id: string | null; item_kind: string | null; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>(sql`
+    const fulfil = await db.execute<{
+      id: string;
+      item_id: string | null;
+      item_kind: string | null;
+      quantity: string;
+      quantity_fulfilled: string;
+      quantity_billed: string;
+      quantity_cancelled: string;
+    }>(
+      sql`
       select l.id, l.item_id, i.kind as item_kind, l.quantity::text as quantity,
              coalesce(l.quantity_fulfilled, 0)::text as quantity_fulfilled,
              coalesce(l.quantity_billed, 0)::text as quantity_billed,
@@ -194,21 +228,34 @@ const getOrder: AssistantToolDef = {
         from document_lines l
         left join items i on i.id = l.item_id and i.org_id = l.org_id
        where l.document_id = ${a.id} and l.org_id = ${authz.user.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const fulfilById = new Map(fulfil.map((f) => [f.id, f]));
     const doc = payload.doc as Record<string, unknown>;
     let dropShip: unknown = undefined;
     if (await isFeatureEnabled(authz.user.orgId, "dropShipping")) {
       let salesOrderId = a.kind === "sales_order" ? a.id : null;
       if (a.kind === "purchase_order") {
-        salesOrderId = (await db.execute<{ sales_order_id: string }>(sql`
+        salesOrderId =
+          (
+            await db.execute<{ sales_order_id: string }>(
+              sql`
           select sales_order_id from drop_ship_orders
-           where org_id = ${authz.user.orgId} and purchase_order_id = ${a.id}`, "objects"))[0]?.sales_order_id ?? null;
+           where org_id = ${authz.user.orgId} and purchase_order_id = ${a.id}`,
+              "objects",
+            )
+          )[0]?.sales_order_id ?? null;
       }
       if (salesOrderId) {
         dropShip = {
           salesOrderId,
-          lines: await dropShipOrderStatus(db, authz.user.orgId, salesOrderId, authz.allowedSubsidiaryIds),
+          lines: await dropShipOrderStatus(
+            db,
+            authz.user.orgId,
+            salesOrderId,
+            authz.allowedSubsidiaryIds,
+          ),
         };
       }
     }
@@ -227,7 +274,8 @@ const getOrder: AssistantToolDef = {
         // only received quantity and on a sales order only shipped quantity;
         // service and account lines, and every estimate line, bill on the
         // ordered remainder.
-        requiresReceipt: a.kind !== "quote" && f?.item_id != null && lineRequiresReceipt(f.item_kind),
+        requiresReceipt:
+          a.kind !== "quote" && f?.item_id != null && lineRequiresReceipt(f.item_kind),
       });
       return {
         ...l,
@@ -238,7 +286,10 @@ const getOrder: AssistantToolDef = {
         quantityBilled: fromQuantityUnits(toQuantityUnits(billed)),
         quantityCancelled: fromQuantityUnits(toQuantityUnits(cancelled)),
         remainingBillable: fromQuantityUnits(remaining),
-        fulfilment: fulfilmentStatus(toQuantityUnits(ordered) - toQuantityUnits(cancelled), toQuantityUnits(fulfilled)),
+        fulfilment: fulfilmentStatus(
+          toQuantityUnits(ordered) - toQuantityUnits(cancelled),
+          toQuantityUnits(fulfilled),
+        ),
       };
     });
     const header: Record<string, unknown> = {
@@ -269,7 +320,9 @@ const getBackorderPosition: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["ar.read"] },
   feature: "fulfillment",
   inputSchema: z.object({
-    orderId: uuidInput.optional().describe("Sales order id from search_orders; omit for every order"),
+    orderId: uuidInput
+      .optional()
+      .describe("Sales order id from search_orders; omit for every order"),
     limit: z.number().int().min(1).max(200).optional().describe("Default 50"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {

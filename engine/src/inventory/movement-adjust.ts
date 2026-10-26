@@ -50,8 +50,7 @@ export async function adjustInventory(
   // figures must refuse before delegation or any journal math.
   const quantityDelta = persistReceiptMoney(input.quantityDelta, "adjustment quantity");
   const sign = cmp(quantityDelta, "0");
-  if (sign === 0)
-    throw new InventoryError("adjustment quantity cannot be zero");
+  if (sign === 0) throw new InventoryError("adjustment quantity cannot be zero");
   // Keep the adjustment-account lookup in the same lock boundary as the
   // delegated movement. Lock the position first to preserve the canonical
   // position → profile ordering used by receive/issue and avoid deadlocks.
@@ -60,7 +59,13 @@ export async function adjustInventory(
     // peer holding the fence deadlocks against this transaction at posting.
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertInventoryFeature(tx, orgId);
-    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,input.stockLocationId);
+    await lockSubcontractCustodyAuthority(
+      tx,
+      orgId,
+      actorId,
+      input.subsidiaryId,
+      input.stockLocationId,
+    );
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // Positive deltas inherit this refusal from receiveInventory; negative

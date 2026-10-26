@@ -16,7 +16,11 @@ declare global {
 
 // jsdom first: the island reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/agents", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/agents",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -24,7 +28,10 @@ const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return{push(h){(globalThis.__triagePushed??=[]).push(String(h))},refresh(){},replace(){}}}export function usePathname(){return '/agents'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return{push(h){(globalThis.__triagePushed??=[]).push(String(h))},refresh(){},replace(){}}}export function usePathname(){return '/agents'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
@@ -51,10 +58,14 @@ const { AgentsTriageKeys } = await import("./AgentsTriageKeys");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     const method = init?.method ?? "GET";
     (globalThis.__triageFetches ??= []).push({ url, method });
     return handler(url, init) ?? Response.json({});
@@ -83,7 +94,7 @@ async function press(key: string) {
 }
 
 async function pressOn(target: Element, key: string) {
-  let event: KeyboardEvent | undefined
+  let event: KeyboardEvent | undefined;
   await act(async () => {
     event = new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
     target.dispatchEvent(event);
@@ -160,11 +171,19 @@ test("a refused middle row does not stop the bulk and stays accounted", async (t
   const attempted = (globalThis.__triageFetches ?? []).filter(
     (f) => f.url.startsWith("/api/continuous-close/items/") && f.method === "PATCH",
   );
-  assert.equal(attempted.length, 3, `every selected row must be attempted, saw ${JSON.stringify(attempted)}`);
+  assert.equal(
+    attempted.length,
+    3,
+    `every selected row must be attempted, saw ${JSON.stringify(attempted)}`,
+  );
 
   const toasts = globalThis.__triageToasts ?? [];
   const errors = toasts.filter((toast) => toast.kind === "error");
-  assert.equal(errors.length, 1, `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`);
+  assert.equal(
+    errors.length,
+    1,
+    `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`,
+  );
   assert.match(errors[0]?.message ?? "", /Applied 2/, "the toast must name the applied count");
   assert.match(errors[0]?.message ?? "", /1 refused/, "the toast must name the refused count");
 
@@ -175,7 +194,11 @@ test("a refused middle row does not stop the bulk and stays accounted", async (t
     /isn't available for this finding anymore/,
     "the pinned refusal must carry the translated invalid_transition reason",
   );
-  assert.match(document.body.textContent ?? "", /1 selected/, "exactly the refused row must stay selected");
+  assert.match(
+    document.body.textContent ?? "",
+    /1 selected/,
+    "exactly the refused row must stay selected",
+  );
 });
 
 test("document shortcuts leave Enter on an interactive button to native activation", async (t) => {

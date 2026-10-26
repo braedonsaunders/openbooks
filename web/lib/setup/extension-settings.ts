@@ -1,49 +1,112 @@
-import 'server-only'
+import "server-only";
 
-import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from '@openbooks/engine/extensions/projections'
-import type { SetupEntity } from './types'
+import {
+  getExtensionSettings,
+  listActiveExtensionContributions,
+  updateExtensionSetting,
+} from "@openbooks/engine/extensions/projections";
+import type { SetupEntity } from "./types";
 
 /** Installed apps that declare at least one setting: one Setup page each, ordered by name. */
 export async function listAppSettingPages(orgId: string): Promise<{ key: string; name: string }[]> {
-  const apps = new Map<string, string>()
-  for (const { extensionKey, extensionName, contribution } of await listActiveExtensionContributions(orgId)) {
-    if (contribution.kind === 'setting') apps.set(extensionKey, extensionName)
+  const apps = new Map<string, string>();
+  for (const {
+    extensionKey,
+    extensionName,
+    contribution,
+  } of await listActiveExtensionContributions(orgId)) {
+    if (contribution.kind === "setting") apps.set(extensionKey, extensionName);
   }
-  return [...apps].map(([key, name]) => ({ key, name })).sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+  return [...apps]
+    .map(([key, name]) => ({ key, name }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
 }
 
 /** Extension declarations use the existing setup list and drawer through this
  *  data adapter. `appKey` narrows the rows to one installed app's settings. */
 export async function loadExtensionSettingRows(orgId: string, appKey?: string) {
-  const [declarations, values] = await Promise.all([listActiveExtensionContributions(orgId), getExtensionSettings(orgId)])
-  return declarations.flatMap(({ extensionKey, versionId, contribution }) => contribution.kind !== 'setting' || (appKey !== undefined && extensionKey !== appKey) ? [] : [{
-    id: `${extensionKey}:${contribution.key}`, extension_key: extensionKey, setting_key: contribution.key,
-    name: contribution.label, description: contribution.description ?? '', value_type: contribution.valueType,
-    value: values[extensionKey]?.[contribution.key] ?? null, extension_version_id: versionId,
-  }]).sort((a, b) => a.id.localeCompare(b.id))
+  const [declarations, values] = await Promise.all([
+    listActiveExtensionContributions(orgId),
+    getExtensionSettings(orgId),
+  ]);
+  return declarations
+    .flatMap(({ extensionKey, versionId, contribution }) =>
+      contribution.kind !== "setting" || (appKey !== undefined && extensionKey !== appKey)
+        ? []
+        : [
+            {
+              id: `${extensionKey}:${contribution.key}`,
+              extension_key: extensionKey,
+              setting_key: contribution.key,
+              name: contribution.label,
+              description: contribution.description ?? "",
+              value_type: contribution.valueType,
+              value: values[extensionKey]?.[contribution.key] ?? null,
+              extension_version_id: versionId,
+            },
+          ],
+    )
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function extensionSettingDrawerEntity(entity: SetupEntity, row: Record<string, unknown>): SetupEntity {
-  return { ...entity, fields: entity.fields.map((field) => field.key !== 'value' ? field : {
-    ...field, kind: row.value_type === 'boolean' ? 'boolean' : row.value_type === 'string' ? 'text' : 'json',
-  }) }
+export function extensionSettingDrawerEntity(
+  entity: SetupEntity,
+  row: Record<string, unknown>,
+): SetupEntity {
+  return {
+    ...entity,
+    fields: entity.fields.map((field) =>
+      field.key !== "value"
+        ? field
+        : {
+            ...field,
+            kind:
+              row.value_type === "boolean"
+                ? "boolean"
+                : row.value_type === "string"
+                  ? "text"
+                  : "json",
+          },
+    ),
+  };
 }
 
-export async function saveExtensionSettingRow(orgId: string, actorId: string, permissions: readonly string[], body: Record<string, unknown>) {
-  const row = (await loadExtensionSettingRows(orgId)).find((candidate) => candidate.id === body.id)
-  if (!row) throw new Error('Active extension setting not found')
-  if (!Object.hasOwn(body, 'expectedValue') || typeof body.expectedExtensionVersionId !== 'string') {
-    throw Object.assign(new Error('Reload this setting before saving changes'), { status: 409 })
+export async function saveExtensionSettingRow(
+  orgId: string,
+  actorId: string,
+  permissions: readonly string[],
+  body: Record<string, unknown>,
+) {
+  const row = (await loadExtensionSettingRows(orgId)).find((candidate) => candidate.id === body.id);
+  if (!row) throw new Error("Active extension setting not found");
+  if (
+    !Object.hasOwn(body, "expectedValue") ||
+    typeof body.expectedExtensionVersionId !== "string"
+  ) {
+    throw Object.assign(new Error("Reload this setting before saving changes"), { status: 409 });
   }
-  let value = body.value
-  if (row.value_type === 'json' || row.value_type === 'number') {
-    if (typeof value === 'string') {
-      try { value = JSON.parse(value) } catch { throw new Error('Enter a valid JSON value') }
+  let value = body.value;
+  if (row.value_type === "json" || row.value_type === "number") {
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        throw new Error("Enter a valid JSON value");
+      }
     }
   }
-  await updateExtensionSetting({ orgId, actorId, extensionKey: row.extension_key, key: row.setting_key, value,
-    reason: typeof body.reason === 'string' ? body.reason : '', effectivePermissions: permissions,
-    ...(Object.hasOwn(body, 'expectedValue') ? { expectedValue: body.expectedValue } : {}),
-    ...(typeof body.expectedExtensionVersionId === 'string' ? { expectedExtensionVersionId: body.expectedExtensionVersionId } : {}) })
-  return { id: row.id }
+  await updateExtensionSetting({
+    orgId,
+    actorId,
+    extensionKey: row.extension_key,
+    key: row.setting_key,
+    value,
+    reason: typeof body.reason === "string" ? body.reason : "",
+    effectivePermissions: permissions,
+    ...(Object.hasOwn(body, "expectedValue") ? { expectedValue: body.expectedValue } : {}),
+    ...(typeof body.expectedExtensionVersionId === "string"
+      ? { expectedExtensionVersionId: body.expectedExtensionVersionId }
+      : {}),
+  });
+  return { id: row.id };
 }

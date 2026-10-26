@@ -1,49 +1,56 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import React from 'react'
+import assert from "node:assert/strict";
+import test from "node:test";
+import React from "react";
 
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/hrm/surveys' } })
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/hrm/surveys" } });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
-    }
-
-    if (specifier === 'next/link') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
+        url: "data:text/javascript,export const toast = { success(){}, error(){} }",
+      };
     }
-    return next(specifier, context)
+
+    if (specifier === "next/link") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export default function Link(p){return p.children}",
+      };
+    }
+    return next(specifier, context);
   },
-})
-const { NextIntlClientProvider } = await import('next-intl')
-const { readFileSync } = await import('node:fs')
-const { SurveysDrawer } = await import('./sections')
+});
+const { NextIntlClientProvider } = await import("next-intl");
+const { readFileSync } = await import("node:fs");
+const { SurveysDrawer } = await import("./sections");
 // tsx compiles JSX classic: the island never imports React, so the test bridges it.
-Object.assign(globalThis, { React })
+Object.assign(globalThis, { React });
 
 // The shared Drawer reads its own copy through next-intl: serve the real catalogs.
 const messages = {
-  hrm: JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8')),
-  common: JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8')),
-  ui: JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8')),
-}
+  hrm: JSON.parse(
+    readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+  ),
+  common: JSON.parse(
+    readFileSync(new URL("../../../../messages/en/common.json", import.meta.url), "utf8"),
+  ),
+  ui: JSON.parse(readFileSync(new URL("../../../../messages/en/ui.json", import.meta.url), "utf8")),
+};
 
-type Drawer = Parameters<typeof SurveysDrawer>[0]['drawer']
+type Drawer = Parameters<typeof SurveysDrawer>[0]["drawer"];
 
 const drawer = {
-  closeHref: '/hrm/surveys',
-  title: 'Pulse',
+  closeHref: "/hrm/surveys",
+  title: "Pulse",
   survey: {
-    id: 'survey-1',
-    status: 'closed',
+    id: "survey-1",
+    status: "closed",
     questions: [
-      { id: 'q1', prompt: 'How are you?', kind: 'scale' },
-      { id: 'q2', prompt: 'Tell us more.', kind: 'mystery_kind' },
+      { id: "q1", prompt: "How are you?", kind: "scale" },
+      { id: "q2", prompt: "Tell us more.", kind: "mystery_kind" },
     ],
   },
   results: {
@@ -58,51 +65,69 @@ const drawer = {
   },
   people: [],
   questionKinds: [
-    { value: 'scale', label: 'Scale' },
-    { value: 'enps', label: 'eNPS' },
-    { value: 'text', label: 'Text' },
-    { value: 'single', label: 'Single choice' },
-    { value: 'multi', label: 'Multiple choice' },
+    { value: "scale", label: "Scale" },
+    { value: "enps", label: "eNPS" },
+    { value: "text", label: "Text" },
+    { value: "single", label: "Single choice" },
+    { value: "multi", label: "Multiple choice" },
   ],
   missingDetail: null,
   labels: {
-    results: 'Results',
-    participation: 'Participation',
-    enps: 'eNPS',
-    drivers: 'Drivers',
-    heatmap: 'Heatmap',
-    suppressed: 'Suppressed',
-    comments: 'Comments',
-    trend: 'Trend',
-    questions: 'Questions',
-    open: 'Open',
-    close: 'Close',
-    actionFailed: 'Failed.',
-    invite: 'Invite',
-    cancel: 'Cancel',
+    results: "Results",
+    participation: "Participation",
+    enps: "eNPS",
+    drivers: "Drivers",
+    heatmap: "Heatmap",
+    suppressed: "Suppressed",
+    comments: "Comments",
+    trend: "Trend",
+    questions: "Questions",
+    open: "Open",
+    close: "Close",
+    actionFailed: "Failed.",
+    invite: "Invite",
+    cancel: "Cancel",
   },
-} as unknown as Drawer
-assert.ok(drawer)
+} as unknown as Drawer;
+assert.ok(drawer);
 
-async function renderText(target: Drawer = drawer): Promise<{ text: string; heatClasses: string[]; unmount: () => Promise<void> }> {
-  const { JSDOM } = await import('jsdom')
+async function renderText(
+  target: Drawer = drawer,
+): Promise<{ text: string; heatClasses: string[]; unmount: () => Promise<void> }> {
+  const { JSDOM } = await import("jsdom");
   // A real URL: UrlDrawer resolves its close href against the address bar.
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
-    url: 'http://localhost/hrm/surveys?survey=survey-1',
-  })
+    url: "http://localhost/hrm/surveys?survey=survey-1",
+  });
   const previous = {
     window: (globalThis as Record<string, unknown>).window,
     document: (globalThis as Record<string, unknown>).document,
     navigator: (globalThis as Record<string, unknown>).navigator,
     self: (globalThis as Record<string, unknown>).self,
-  }
-  Object.defineProperty(globalThis, 'window', { value: dom.window, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'document', { value: dom.window.document, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'self', { value: dom.window, configurable: true, writable: true })
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  const win = dom.window as unknown as { matchMedia?: (query: string) => unknown }
-  if (typeof win.matchMedia !== 'function') {
+  };
+  Object.defineProperty(globalThis, "window", {
+    value: dom.window,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "document", {
+    value: dom.window.document,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    value: dom.window.navigator,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "self", {
+    value: dom.window,
+    configurable: true,
+    writable: true,
+  });
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const win = dom.window as unknown as { matchMedia?: (query: string) => unknown };
+  if (typeof win.matchMedia !== "function") {
     win.matchMedia = () => ({
       matches: false,
       addEventListener() {},
@@ -110,63 +135,82 @@ async function renderText(target: Drawer = drawer): Promise<{ text: string; heat
       addListener() {},
       removeListener() {},
       dispatchEvent() {
-        return false
+        return false;
       },
-    })
+    });
   }
-  const doc = dom.window.document
-  const { createRoot } = await import('react-dom/client')
-  const { act } = await import('react')
-  const root = createRoot(doc.getElementById('root')!)
+  const doc = dom.window.document;
+  const { createRoot } = await import("react-dom/client");
+  const { act } = await import("react");
+  const root = createRoot(doc.getElementById("root")!);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages}>
         <SurveysDrawer drawer={target} />
       </NextIntlClientProvider>,
-    )
-  })
+    );
+  });
   return {
-    text: doc.body.textContent ?? '',
-    heatClasses: [...doc.querySelectorAll('td')].map((cell) => cell.className),
+    text: doc.body.textContent ?? "",
+    heatClasses: [...doc.querySelectorAll("td")].map((cell) => cell.className),
     unmount: async () => {
       await act(async () => {
-        root.unmount()
-      })
-      Object.defineProperty(globalThis, 'window', { value: previous.window, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'document', { value: previous.document, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'navigator', { value: previous.navigator, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'self', { value: previous.self, configurable: true, writable: true })
+        root.unmount();
+      });
+      Object.defineProperty(globalThis, "window", {
+        value: previous.window,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, "document", {
+        value: previous.document,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, "navigator", {
+        value: previous.navigator,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, "self", {
+        value: previous.self,
+        configurable: true,
+        writable: true,
+      });
     },
-  }
+  };
 }
 
-test('result question kinds render the translated option label', async () => {
-  const m = await renderText()
+test("result question kinds render the translated option label", async () => {
+  const m = await renderText();
   try {
-    assert.match(m.text, /Scale/, 'the scale question renders its translated kind')
-    assert.ok(!/(^|[^_a-z])scale([^_a-z]|$)/.test(m.text), 'no raw scale code leaks into the display')
+    assert.match(m.text, /Scale/, "the scale question renders its translated kind");
+    assert.ok(
+      !/(^|[^_a-z])scale([^_a-z]|$)/.test(m.text),
+      "no raw scale code leaks into the display",
+    );
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});
 
-test('an unrecognized question kind falls back to its code, never blank', async () => {
-  const m = await renderText()
+test("an unrecognized question kind falls back to its code, never blank", async () => {
+  const m = await renderText();
   try {
-    assert.match(m.text, /mystery_kind/, 'an unknown kind stays visible as its code')
+    assert.match(m.text, /mystery_kind/, "an unknown kind stays visible as its code");
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});
 
-test('heatmap severity bands use readable semantic colors in light and dark themes', async () => {
+test("heatmap severity bands use readable semantic colors in light and dark themes", async () => {
   const target = {
     ...drawer,
     results: {
       ...drawer.results!,
       heat: {
-        drivers: ['Safety'],
-        segments: ['North', 'Central', 'South'],
+        drivers: ["Safety"],
+        segments: ["North", "Central", "South"],
         cells: {
           Safety: {
             North: { mean: 1.5, suppressed: false },
@@ -176,13 +220,27 @@ test('heatmap severity bands use readable semantic colors in light and dark them
         },
       },
     },
-  } as unknown as Drawer
-  const m = await renderText(target)
+  } as unknown as Drawer;
+  const m = await renderText(target);
   try {
-    assert.ok(m.heatClasses.some((className) => className.includes('bg-red-50') && className.includes('dark:text-red-200')))
-    assert.ok(m.heatClasses.some((className) => className.includes('bg-amber-50') && className.includes('dark:text-amber-200')))
-    assert.ok(m.heatClasses.some((className) => className.includes('bg-emerald-50') && className.includes('dark:text-emerald-200')))
+    assert.ok(
+      m.heatClasses.some(
+        (className) => className.includes("bg-red-50") && className.includes("dark:text-red-200"),
+      ),
+    );
+    assert.ok(
+      m.heatClasses.some(
+        (className) =>
+          className.includes("bg-amber-50") && className.includes("dark:text-amber-200"),
+      ),
+    );
+    assert.ok(
+      m.heatClasses.some(
+        (className) =>
+          className.includes("bg-emerald-50") && className.includes("dark:text-emerald-200"),
+      ),
+    );
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});

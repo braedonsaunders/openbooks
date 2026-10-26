@@ -18,10 +18,7 @@ export {
   type AddressLookup,
 } from "@openbooks/engine/connectors/ssrf-guard";
 
-import {
-  connectorUrlRefusal,
-  type AddressLookup,
-} from "@openbooks/engine/connectors/ssrf-guard";
+import { connectorUrlRefusal, type AddressLookup } from "@openbooks/engine/connectors/ssrf-guard";
 
 export const CALLBACK_OWNED_CONFIG_KEYS = [
   "realmId",

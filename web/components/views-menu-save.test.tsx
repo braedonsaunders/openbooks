@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // LAYOUT2 sweep: the saved-view default picker fires one PUT per pick. A
 // refused save must surface the named failure (never an unhandled rejection
@@ -21,7 +21,7 @@ const worktreeUi = pathToFileURL(
 ).href;
 await bootJsdomEnvironment({ url: "http://localhost:4800/customers", matchMediaMatches: false });
 
-stubModules({ navigation: { pathname: '/customers' }, intl: false, authz: false, features: false });
+stubModules({ navigation: { pathname: "/customers" }, intl: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -55,10 +55,10 @@ type Catalog = typeof messages | typeof messagesFr;
 const { ViewsMenu } = await import("./views-menu");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
-const FAILED = (messages as { customization: { views: { setDefaultFailed: string } } }).customization.views
-  .setDefaultFailed;
-const SET_DEFAULT = (messages as { customization: { views: { setDefault: string } } }).customization.views
-  .setDefault;
+const FAILED = (messages as { customization: { views: { setDefaultFailed: string } } })
+  .customization.views.setDefaultFailed;
+const SET_DEFAULT = (messages as { customization: { views: { setDefault: string } } }).customization
+  .views.setDefault;
 
 function provider(children: React.ReactElement, locale = "en", catalog: Catalog = messages) {
   /* eslint-disable react/no-children-prop */
@@ -71,12 +71,22 @@ function provider(children: React.ReactElement, locale = "en", catalog: Catalog 
   /* eslint-enable react/no-children-prop */
 }
 
-async function mountMenu(options: {
-  locale?: string
-  catalog?: Catalog
-  available?: Array<{ id: string; name: string; recordType: string; scope: "org" | "user"; ownerId: string | null; isDefault: boolean; isActive: boolean }>
-  currentName?: string
-} = {}): Promise<{ root: { unmount: () => void } }> {
+async function mountMenu(
+  options: {
+    locale?: string;
+    catalog?: Catalog;
+    available?: Array<{
+      id: string;
+      name: string;
+      recordType: string;
+      scope: "org" | "user";
+      ownerId: string | null;
+      isDefault: boolean;
+      isActive: boolean;
+    }>;
+    currentName?: string;
+  } = {},
+): Promise<{ root: { unmount: () => void } }> {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -86,7 +96,15 @@ async function mountMenu(options: {
       provider(
         React.createElement(ViewsMenu, {
           available: options.available ?? [
-            { id: "v1", name: "V One", recordType: "customer", scope: "user", ownerId: null, isDefault: false, isActive: true },
+            {
+              id: "v1",
+              name: "V One",
+              recordType: "customer",
+              scope: "user",
+              ownerId: null,
+              isDefault: false,
+              isActive: true,
+            },
           ],
           currentId: "v1",
           currentName: options.currentName ?? "V One",
@@ -119,11 +137,24 @@ test("an unrenamed seeded view stays translated in the French dropdown", async (
     catalog: messagesFr,
     currentName: "Vue par défaut",
     available: [
-      { id: "v1", name: "Default view", recordType: "customer", scope: "user", ownerId: null, isDefault: false, isActive: true },
+      {
+        id: "v1",
+        name: "Default view",
+        recordType: "customer",
+        scope: "user",
+        ownerId: null,
+        isDefault: false,
+        isActive: true,
+      },
     ],
   });
-  const defaultView = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.includes("Vue par défaut"));
-  assert.ok(defaultView, 'the seeded "Default view" row must use its French label after opening the menu');
+  const defaultView = [...document.querySelectorAll('[role="menuitem"]')].find((item) =>
+    item.textContent?.includes("Vue par défaut"),
+  );
+  assert.ok(
+    defaultView,
+    'the seeded "Default view" row must use its French label after opening the menu',
+  );
   assert.doesNotMatch(defaultView.textContent ?? "", /Default view/);
   await act(async () => {
     root.unmount();

@@ -94,7 +94,8 @@ export async function loadStaffablePeople(
     ? await isFeatureEnabled(orgId, "hrmCertifications")
     : false;
   if (certificationsOn && options.qualificationTypeId) {
-    const qualifications = await db.execute<QualificationRow>(sql`
+    const qualifications = await db.execute<QualificationRow>(
+      sql`
       select e.worker_party_id as party_id, q.status, q.issued_on::text as issued_on,
              q.expires_on::text as expires_on, t.renewal_lead_days
         from hrm_worker_qualifications q
@@ -102,7 +103,9 @@ export async function loadStaffablePeople(
         join hrm_qualification_types t on t.org_id = q.org_id and t.id = q.type_id
        where q.org_id = ${orgId} and q.type_id = ${options.qualificationTypeId}
          and t.is_active
-    `, "objects");
+    `,
+      "objects",
+    );
     const qualifiedPeople = new Set<string>();
     for (const row of qualifications) {
       const status = projectDerivedStatus({
@@ -114,34 +117,37 @@ export async function loadStaffablePeople(
       });
       if (status === "valid" || status === "expiring") qualifiedPeople.add(row.party_id);
     }
-    filters.push(qualifiedPeople.size > 0
-      ? inArray(parties.id, [...qualifiedPeople])
-      : sql`false`);
+    filters.push(qualifiedPeople.size > 0 ? inArray(parties.id, [...qualifiedPeople]) : sql`false`);
   }
 
   const where = sql`${and(...filters)}${subsidiaryVisibleFilter(sql`parties.subsidiary_id`, allowedSubsidiaryIds)}`;
-  const total = (await db.select({ total: sql<number>`count(*)::int` })
-    .from(parties)
-    .innerJoin(employeeRoles, and(
-      eq(employeeRoles.orgId, parties.orgId),
-      eq(employeeRoles.partyId, parties.id),
-    ))
-    .where(where))[0]?.total ?? 0;
+  const total =
+    (
+      await db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(parties)
+        .innerJoin(
+          employeeRoles,
+          and(eq(employeeRoles.orgId, parties.orgId), eq(employeeRoles.partyId, parties.id)),
+        )
+        .where(where)
+    )[0]?.total ?? 0;
   const requestedPage = Math.max(1, Math.floor(options.page));
   const pageSize = Math.max(1, Math.min(MAX_BOARD_PEOPLE, Math.floor(options.pageSize)));
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(pageCount, requestedPage);
-  const people = await db.select({
-    partyId: parties.id,
-    displayName: parties.displayName,
-    jobTitle: employeeRoles.jobTitle,
-    departmentId: employeeRoles.departmentId,
-  })
+  const people = await db
+    .select({
+      partyId: parties.id,
+      displayName: parties.displayName,
+      jobTitle: employeeRoles.jobTitle,
+      departmentId: employeeRoles.departmentId,
+    })
     .from(parties)
-    .innerJoin(employeeRoles, and(
-      eq(employeeRoles.orgId, parties.orgId),
-      eq(employeeRoles.partyId, parties.id),
-    ))
+    .innerJoin(
+      employeeRoles,
+      and(eq(employeeRoles.orgId, parties.orgId), eq(employeeRoles.partyId, parties.id)),
+    )
     .where(where)
     .orderBy(parties.displayName, parties.id)
     .limit(pageSize)
@@ -197,21 +203,23 @@ export async function loadResourcingBoard(
     departmentId: options.departmentId,
     jobTitle: options.jobTitle,
     qualificationTypeId: options.qualificationTypeId,
-    onDate: options.onDate ?? await businessToday(orgId),
+    onDate: options.onDate ?? (await businessToday(orgId)),
     page: requestedPage,
     pageSize,
   });
   const page = Math.min(Math.max(1, Math.ceil(staff.total / pageSize)), requestedPage);
   const pageEmployeeIds = staff.people.map((person) => person.partyId);
-  const pageFilter = pageEmployeeIds.length > 0
-    ? sql`(${inArray(resAssignments.employeePartyId, pageEmployeeIds)} or ${resAssignments.employeePartyId} is null)`
-    : sql`${resAssignments.employeePartyId} is null`;
-  const joined = await db.select({ assignment: resAssignments })
+  const pageFilter =
+    pageEmployeeIds.length > 0
+      ? sql`(${inArray(resAssignments.employeePartyId, pageEmployeeIds)} or ${resAssignments.employeePartyId} is null)`
+      : sql`${resAssignments.employeePartyId} is null`;
+  const joined = await db
+    .select({ assignment: resAssignments })
     .from(resAssignments)
-    .innerJoin(projects, and(
-      eq(projects.orgId, resAssignments.orgId),
-      eq(projects.id, resAssignments.projectId),
-    ))
+    .innerJoin(
+      projects,
+      and(eq(projects.orgId, resAssignments.orgId), eq(projects.id, resAssignments.projectId)),
+    )
     .where(sql`${where} and ${pageFilter}`);
   const allRows = joined.map((row) => row.assignment);
 
@@ -220,18 +228,25 @@ export async function loadResourcingBoard(
   if (options.departmentId) {
     const genericRows = allRows.filter((row) => row.employeePartyId === null);
     excludedGenericAssignmentCount = genericRows.length;
-    const employeeIds = [...new Set(allRows.flatMap((row) => row.employeePartyId ? [row.employeePartyId] : []))];
+    const employeeIds = [
+      ...new Set(allRows.flatMap((row) => (row.employeePartyId ? [row.employeePartyId] : []))),
+    ];
     const departmentPeople = employeeIds.length
-      ? await db.select({ partyId: employeeRoles.partyId })
-        .from(employeeRoles)
-        .where(and(
-          eq(employeeRoles.orgId, orgId),
-          eq(employeeRoles.departmentId, options.departmentId),
-          inArray(employeeRoles.partyId, employeeIds),
-        ))
+      ? await db
+          .select({ partyId: employeeRoles.partyId })
+          .from(employeeRoles)
+          .where(
+            and(
+              eq(employeeRoles.orgId, orgId),
+              eq(employeeRoles.departmentId, options.departmentId),
+              inArray(employeeRoles.partyId, employeeIds),
+            ),
+          )
       : [];
     const visiblePeople = new Set(departmentPeople.map((row) => row.partyId));
-    rows = allRows.filter((row) => row.employeePartyId !== null && visiblePeople.has(row.employeePartyId));
+    rows = allRows.filter(
+      (row) => row.employeePartyId !== null && visiblePeople.has(row.employeePartyId),
+    );
   }
 
   const employeeIds = pageEmployeeIds;

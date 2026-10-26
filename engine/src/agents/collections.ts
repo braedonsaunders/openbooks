@@ -82,7 +82,11 @@ export type CollectionsLoaders = {
   /** Org business day (business-date.ts); injectable so unit tests stay DB-free. */
   today: (orgId: string) => Promise<string>;
   overdueCustomers: (orgId: string, today: string) => Promise<OverdueCustomerRow[]>;
-  overdueInvoices: (orgId: string, today: string, limitPerParty: number) => Promise<OverdueInvoiceRow[]>;
+  overdueInvoices: (
+    orgId: string,
+    today: string,
+    limitPerParty: number,
+  ) => Promise<OverdueInvoiceRow[]>;
   brokenPromises: (orgId: string, cutoff: string) => Promise<BrokenPromiseRow[]>;
 };
 
@@ -140,12 +144,18 @@ export function qualifiesForCreditHold(args: {
     : 0;
   return (
     ageDays >= args.holdOverdueDays &&
-    absoluteUnits(args.overdueBalance) >= absoluteUnits(args.threshold) * BigInt(args.holdMaterialityMultiple) &&
+    absoluteUnits(args.overdueBalance) >=
+      absoluteUnits(args.threshold) * BigInt(args.holdMaterialityMultiple) &&
     args.overdueCount >= args.minOverdueInvoices
   );
 }
 
-function reminderDraft(args: { partyName: string; overdueBalance: string; oldestDue: string; count: number }): string {
+function reminderDraft(args: {
+  partyName: string;
+  overdueBalance: string;
+  oldestDue: string;
+  count: number;
+}): string {
   return (
     `To: ${args.partyName} — Subject: Outstanding balance ${args.overdueBalance} ` +
     `(${args.count} overdue invoice${args.count === 1 ? "" : "s"}, oldest due ${args.oldestDue}). ` +
@@ -159,7 +169,7 @@ function partyKey(partyId: string | null): string {
 }
 
 async function loadOverdueCustomers(orgId: string, today: string): Promise<OverdueCustomerRow[]> {
-  const aggregates = (await db.execute<{
+  const aggregates = await db.execute<{
     party_id: string | null;
     party_name: string;
     email: string | null;
@@ -168,7 +178,8 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
     overdue_count: number;
     open_count: number;
     oldest_due: string;
-  }>(sql`
+  }>(
+    sql`
     select d.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
            max(p.email) as email,
@@ -186,8 +197,15 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
        and d.open_balance <> 0
      group by d.party_id, p.display_name
     having count(*) filter (where d.kind = 'customer_invoice' and d.due_date < ${today}) > 0
-  `, "objects"));
-  const late = (await db.execute<{ party_id: string | null; late_count: number; worst_days: number }>(sql`
+  `,
+    "objects",
+  );
+  const late = await db.execute<{
+    party_id: string | null;
+    late_count: number;
+    worst_days: number;
+  }>(
+    sql`
     select jl.party_id, count(*)::int as late_count,
            max(x.applied_on - jl.due_date)::int as worst_days
       from applications x
@@ -199,9 +217,14 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
        and jl.due_date is not null
        and x.applied_on > jl.due_date
      group by jl.party_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const lateByParty = new Map<string, { late_count: number; worst_days: number }>(
-    late.map((row) => [partyKey(row.party_id), { late_count: Number(row.late_count), worst_days: Number(row.worst_days) }]),
+    late.map((row) => [
+      partyKey(row.party_id),
+      { late_count: Number(row.late_count), worst_days: Number(row.worst_days) },
+    ]),
   );
   return aggregates.map((row) => ({
     partyId: row.party_id,
@@ -217,14 +240,19 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
   }));
 }
 
-async function loadOverdueInvoices(orgId: string, today: string, limitPerParty: number): Promise<OverdueInvoiceRow[]> {
-  const rows = (await db.execute<{
+async function loadOverdueInvoices(
+  orgId: string,
+  today: string,
+  limitPerParty: number,
+): Promise<OverdueInvoiceRow[]> {
+  const rows = await db.execute<{
     party_id: string | null;
     doc_id: string;
     doc_number: string | null;
     due_date: string;
     open_balance: string;
-  }>(sql`
+  }>(
+    sql`
     select party_id, doc_id, doc_number, due_date, open_balance from (
       select d.party_id,
              d.id as doc_id,
@@ -239,7 +267,9 @@ async function loadOverdueInvoices(orgId: string, today: string, limitPerParty: 
          and d.open_balance <> 0
          and d.due_date < ${today}
     ) ranked where position <= ${limitPerParty}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     partyId: row.party_id,
     docId: row.doc_id,
@@ -250,7 +280,7 @@ async function loadOverdueInvoices(orgId: string, today: string, limitPerParty: 
 }
 
 async function loadBrokenPromises(orgId: string, cutoff: string): Promise<BrokenPromiseRow[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     party_id: string | null;
     party_name: string;
     doc_id: string;
@@ -258,7 +288,8 @@ async function loadBrokenPromises(orgId: string, cutoff: string): Promise<Broken
     expected_pay_date: string;
     due_date: string | null;
     open_balance: string;
-  }>(sql`
+  }>(
+    sql`
     select d.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
            d.id as doc_id,
@@ -276,7 +307,9 @@ async function loadBrokenPromises(orgId: string, cutoff: string): Promise<Broken
        and d.expected_pay_date <= ${cutoff}
      order by d.expected_pay_date, abs(d.open_balance) desc
      limit 200
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     partyId: row.party_id,
     partyName: row.party_name,
@@ -301,7 +334,13 @@ export async function collectionsFindings(
   detectors: ContinuousCloseDetectorPolicy[],
   loaders: CollectionsLoaders = productionCollectionsLoaders,
 ): Promise<AgentFinding[]> {
-  if (!detectors.some((detector) => detector.enabled && (COLLECTIONS_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey))) {
+  if (
+    !detectors.some(
+      (detector) =>
+        detector.enabled &&
+        (COLLECTIONS_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey),
+    )
+  ) {
     return [];
   }
   const today = await loaders.today(orgId);
@@ -315,7 +354,12 @@ export async function collectionsFindings(
   // as a data-quality finding — never merged into a pseudo-customer.
   const customerlessDocs = new Map<
     string,
-    { docNumber: string | null; dueDate: string | null; expectedPayDate: string | null; openBalance: string }
+    {
+      docNumber: string | null;
+      dueDate: string | null;
+      expectedPayDate: string | null;
+      openBalance: string;
+    }
   >();
   if (overduePolicy?.enabled || holdPolicy?.enabled) {
     const customers = await loaders.overdueCustomers(orgId, today);
@@ -342,7 +386,10 @@ export async function collectionsFindings(
     // They are reported once, below, as a data-quality finding.
     const identified = customers.filter((customer) => customer.partyId !== null);
     const ranked = identified
-      .filter((customer) => overdueThreshold !== null && absoluteUnits(customer.overdueBalance) >= overdueThreshold)
+      .filter(
+        (customer) =>
+          overdueThreshold !== null && absoluteUnits(customer.overdueBalance) >= overdueThreshold,
+      )
       .sort((a, b) => {
         const diff = toUnits(b.overdueBalance) - toUnits(a.overdueBalance);
         return diff === 0n ? 0 : diff > 0n ? 1 : -1;
@@ -352,7 +399,9 @@ export async function collectionsFindings(
       if (overduePolicy?.enabled && rankedKeys.has(partyKey(customer.partyId))) {
         const threshold = effectiveDetectorMateriality(overduePolicy, agentThreshold);
         {
-          const index = ranked.findIndex((entry) => partyKey(entry.partyId) === partyKey(customer.partyId));
+          const index = ranked.findIndex(
+            (entry) => partyKey(entry.partyId) === partyKey(customer.partyId),
+          );
           const partyInvoices = invoicesByParty.get(partyKey(customer.partyId)) ?? [];
           findings.push({
             agentKey: "collections",
@@ -445,7 +494,8 @@ export async function collectionsFindings(
               oldestDue: customer.oldestDue,
               latePayments: customer.latePayments,
               worstLateDays: customer.worstLateDays,
-              review: "Place on credit hold and require prepayment on new orders until the arrears clear.",
+              review:
+                "Place on credit hold and require prepayment on new orders until the arrears clear.",
               href: arCockpitHref(),
             },
             evidence: [
@@ -537,7 +587,10 @@ export async function collectionsFindings(
   if (customerlessDocs.size > 0 && (overduePolicy?.enabled || promisePolicy?.enabled)) {
     const docs = [...customerlessDocs.entries()];
     const total = fromUnits(docs.reduce((sum, [, doc]) => sum + toUnits(doc.openBalance), 0n));
-    const dueDates = docs.map(([, doc]) => doc.dueDate).filter((date): date is string => date !== null).sort();
+    const dueDates = docs
+      .map(([, doc]) => doc.dueDate)
+      .filter((date): date is string => date !== null)
+      .sort();
     findings.push({
       agentKey: "collections",
       findingType: "invoices_without_customer",

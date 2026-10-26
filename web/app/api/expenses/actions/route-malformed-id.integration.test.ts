@@ -1,20 +1,26 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
+import test from "node:test";
 
 // Malformed document ids must resolve through the same not-found contract as
 // unknown ids. Without the UUID gate the id binds straight into the lookup
 // and PostgreSQL answers 22P02, which the route's catch maps to a 500.
-const root = pathToFileURL(process.cwd() + '/').href
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __expenseActionsIdState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const root = pathToFileURL(process.cwd() + "/").href;
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __expenseActionsIdState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz' ||
-      (specifier === '@/lib/authz' && context.parentURL?.includes('/web/lib/api/route.ts'))) return virtual(`
+    if (
+      specifier === "../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+    )
+      return virtual(`
       export async function getAuthz() {
         const s = globalThis.__expenseActionsIdState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: ['expenses.create', 'ap.post'], allowedSubsidiaryIds: null };
@@ -22,67 +28,79 @@ registerHooks({
       export function can(authz, permission) { return authz.permissions.includes(permission) }
       export function guardSubsidiaryScope() { return null }
       export { subsidiaryScopeAllows } from '${root}engine/src/organization/subsidiary-scope.ts'
-    `)
-    if (specifier === '../../../../lib/features') return virtual(`
+    `);
+    if (specifier === "../../../../lib/features")
+      return virtual(`
       export async function isFeatureEnabled() { return true }
-    `)
+    `);
     // Pin the engine to THIS checkout: the environment shares node_modules
     // with the main checkout, so an unmapped @openbooks/engine import would
     // silently exercise main's engine instead of the branch under test.
-    if (specifier.startsWith('@openbooks/engine/')) return next(root + specifier.slice('@openbooks/'.length), context)
-    return next(specifier, context)
+    if (specifier.startsWith("@openbooks/engine/"))
+      return next(root + specifier.slice("@openbooks/".length), context);
+    return next(specifier, context);
   },
-})
-const { withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { POST } = await import('./route.ts')
+});
+const { withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { POST } = await import("./route.ts");
 
 async function fixture() {
-  const org = await withBypassContext(() => createScratchOrg())
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
-  return org
+  const org = await withBypassContext(() => createScratchOrg());
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
+  return org;
 }
 
 async function post(body: unknown): Promise<{ status: number; json: unknown }> {
-  const response = await withOrgContext(state.orgId, () => POST(
-    new Request('http://expenses.test/api/expenses/actions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  ))
-  return { status: response.status, json: await response.json().catch(() => null) }
+  const response = await withOrgContext(state.orgId, () =>
+    POST(
+      new Request("http://expenses.test/api/expenses/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
+  );
+  return { status: response.status, json: await response.json().catch(() => null) };
 }
 
-test('submit returns 404 for a malformed expense report id', async () => {
-  const org = await fixture()
+test("submit returns 404 for a malformed expense report id", async () => {
+  const org = await fixture();
   try {
-    const result = await post({ action: 'submit', documentId: 'not-a-uuid' })
-    assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+    const result = await post({ action: "submit", documentId: "not-a-uuid" });
+    assert.equal(
+      result.status,
+      404,
+      `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('post returns 404 for a malformed expense report id', async () => {
-  const org = await fixture()
+test("post returns 404 for a malformed expense report id", async () => {
+  const org = await fixture();
   try {
-    const result = await post({ action: 'post', documentId: 'not-a-uuid' })
-    assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+    const result = await post({ action: "post", documentId: "not-a-uuid" });
+    assert.equal(
+      result.status,
+      404,
+      `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('unknown ids still return the not-found contract', async () => {
-  const org = await fixture()
+test("unknown ids still return the not-found contract", async () => {
+  const org = await fixture();
   try {
-    const submit = await post({ action: 'submit', documentId: randomUUID() })
-    assert.equal(submit.status, 404, JSON.stringify(submit.json))
-    const postResult = await post({ action: 'post', documentId: randomUUID() })
-    assert.equal(postResult.status, 404, JSON.stringify(postResult.json))
+    const submit = await post({ action: "submit", documentId: randomUUID() });
+    assert.equal(submit.status, 404, JSON.stringify(submit.json));
+    const postResult = await post({ action: "post", documentId: randomUUID() });
+    assert.equal(postResult.status, 404, JSON.stringify(postResult.json));
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

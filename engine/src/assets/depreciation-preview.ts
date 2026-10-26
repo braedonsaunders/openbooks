@@ -6,7 +6,10 @@ import { uuidArray } from "../organization/subsidiaries.ts";
 import { add } from "../money/money.ts";
 import { canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { resolveAssetAccounts } from "./depreciation-schedule-math.ts";
-import { previewDepreciationFingerprint, type FingerprintedDepreciationRow } from "./depreciation-run-scope.ts";
+import {
+  previewDepreciationFingerprint,
+  type FingerprintedDepreciationRow,
+} from "./depreciation-run-scope.ts";
 
 export interface DepreciationPreviewInput {
   asOfDate: string;
@@ -17,7 +20,6 @@ export interface DepreciationPreviewInput {
   /** Operator-chosen posting date, fingerprinted but not projected. */
   postingDate?: string;
 }
-
 
 export interface DepreciationPreviewRow extends FingerprintedDepreciationRow {
   assetId: string;
@@ -83,7 +85,6 @@ export interface DepreciationPreview {
   fingerprint: string;
 }
 
-
 /**
  * Read-only depreciation preview: the exact accounting impact of confirming
  * the current selection — one balanced debit/credit pair per due line —
@@ -99,8 +100,8 @@ export async function previewDepreciation(
 ): Promise<DepreciationPreview> {
   const scopedAssetIds =
     input.assetIds && input.assetIds.length > 0 ? [...new Set(input.assetIds)] : undefined;
-  await assertLocalDepreciationSelection(db,orgId,scopedAssetIds,input.allowedSubsidiaryIds);
-  const due = (await db.execute<{
+  await assertLocalDepreciationSelection(db, orgId, scopedAssetIds, input.allowedSubsidiaryIds);
+  const due = await db.execute<{
     line_id: string;
     asset_id: string;
     asset_number: string;
@@ -129,7 +130,8 @@ export async function previewDepreciation(
     cat_asset: string;
     cat_accum: string;
     cat_expense: string;
-  }>(sql`
+  }>(
+    sql`
     select l.id as line_id,
            a.id as asset_id, a.asset_number, a.name as asset_name,
            a.subsidiary_id, sub.name as subsidiary_name,
@@ -165,7 +167,9 @@ export async function previewDepreciation(
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}
        ${input.bookId ? sql`and s.book_id = ${input.bookId}` : sql``}
        ${input.periodId ? sql`and l.period_id = ${input.periodId}` : sql``}
-     order by a.asset_number, p.ends_on, l.sequence`, "objects"));
+     order by a.asset_number, p.ends_on, l.sequence`,
+    "objects",
+  );
 
   const accountIds = new Set<string>();
   const resolved = due.map((row) => {
@@ -194,10 +198,13 @@ export async function previewDepreciation(
   });
   const accountMeta =
     accountIds.size > 0
-      ? await db.execute<{ id: string; number: string | null; name: string | null }>(sql`
+      ? await db.execute<{ id: string; number: string | null; name: string | null }>(
+          sql`
         select id, number, name from accounts
-         where org_id = ${orgId} and id = any(${uuidArray([...accountIds])}::uuid[])`, "objects")
-      : [] as { id: string; number: string | null; name: string | null }[];
+         where org_id = ${orgId} and id = any(${uuidArray([...accountIds])}::uuid[])`,
+          "objects",
+        )
+      : ([] as { id: string; number: string | null; name: string | null }[]);
   const metaById = new Map(accountMeta.map((account) => [String(account.id), account]));
 
   // One balanced pair per line: debits and credits accumulate independently
@@ -205,43 +212,45 @@ export async function previewDepreciation(
   let totalAmount = "0";
   let totalDebits = "0";
   let totalCredits = "0";
-  const rows: DepreciationPreviewRow[] = resolved.map(({ row, accounts, periodRef, periodLabel }) => {
-    const debit = metaById.get(accounts.depreciationExpenseAccountId);
-    const credit = metaById.get(accounts.accumulatedDepreciationAccountId);
-    totalAmount = add(totalAmount, String(row.amount));
-    totalDebits = add(totalDebits, String(row.amount));
-    totalCredits = add(totalCredits, String(row.amount));
-    return {
-      lineId: String(row.line_id),
-      assetId: String(row.asset_id),
-      assetNumber: String(row.asset_number),
-      assetName: String(row.asset_name),
-      subsidiaryId: String(row.subsidiary_id),
-      subsidiaryName: row.subsidiary_name ? String(row.subsidiary_name) : null,
-      departmentId: row.department_id ? String(row.department_id) : null,
-      departmentName: row.department_name ? String(row.department_name) : null,
-      projectId: row.project_id ? String(row.project_id) : null,
-      projectName: row.project_name ? String(row.project_name) : null,
-      locationId: row.location_id ? String(row.location_id) : null,
-      locationName: row.location_name ? String(row.location_name) : null,
-      bookId: String(row.book_id),
-      bookName: String(row.book_name),
-      postsGl: row.posts_gl === true,
-      periodId: String(row.period_id),
-      periodName: periodLabel,
-      periodRef,
-      periodEndsOn: String(row.period_ends_on),
-      amount: String(row.amount),
-      debitAccountId: accounts.depreciationExpenseAccountId,
-      debitAccountNumber: debit?.number ? String(debit.number) : null,
-      debitAccountName: debit?.name ? String(debit.name) : null,
-      creditAccountId: accounts.accumulatedDepreciationAccountId,
-      creditAccountNumber: credit?.number ? String(credit.number) : null,
-      creditAccountName: credit?.name ? String(credit.name) : null,
-      accountsResolved: !!debit && !!credit,
-      evidence: row.posts_gl === true ? "gl-posting" : "reporting-only",
-    };
-  });
+  const rows: DepreciationPreviewRow[] = resolved.map(
+    ({ row, accounts, periodRef, periodLabel }) => {
+      const debit = metaById.get(accounts.depreciationExpenseAccountId);
+      const credit = metaById.get(accounts.accumulatedDepreciationAccountId);
+      totalAmount = add(totalAmount, String(row.amount));
+      totalDebits = add(totalDebits, String(row.amount));
+      totalCredits = add(totalCredits, String(row.amount));
+      return {
+        lineId: String(row.line_id),
+        assetId: String(row.asset_id),
+        assetNumber: String(row.asset_number),
+        assetName: String(row.asset_name),
+        subsidiaryId: String(row.subsidiary_id),
+        subsidiaryName: row.subsidiary_name ? String(row.subsidiary_name) : null,
+        departmentId: row.department_id ? String(row.department_id) : null,
+        departmentName: row.department_name ? String(row.department_name) : null,
+        projectId: row.project_id ? String(row.project_id) : null,
+        projectName: row.project_name ? String(row.project_name) : null,
+        locationId: row.location_id ? String(row.location_id) : null,
+        locationName: row.location_name ? String(row.location_name) : null,
+        bookId: String(row.book_id),
+        bookName: String(row.book_name),
+        postsGl: row.posts_gl === true,
+        periodId: String(row.period_id),
+        periodName: periodLabel,
+        periodRef,
+        periodEndsOn: String(row.period_ends_on),
+        amount: String(row.amount),
+        debitAccountId: accounts.depreciationExpenseAccountId,
+        debitAccountNumber: debit?.number ? String(debit.number) : null,
+        debitAccountName: debit?.name ? String(debit.name) : null,
+        creditAccountId: accounts.accumulatedDepreciationAccountId,
+        creditAccountNumber: credit?.number ? String(credit.number) : null,
+        creditAccountName: credit?.name ? String(credit.name) : null,
+        accountsResolved: !!debit && !!credit,
+        evidence: row.posts_gl === true ? "gl-posting" : "reporting-only",
+      };
+    },
+  );
 
   // Stale-schedule detection is the run's extension query minus the
   // extension: reported here, never executed. Only periods the builder could
@@ -249,11 +258,12 @@ export async function previewDepreciation(
   // life. A period past the last depreciable month (or from another calendar)
   // can never receive a line, so flagging it would block Confirm behind a
   // rebuild that changes nothing.
-  const stale = (await db.execute<{
+  const stale = await db.execute<{
     asset_id: string;
     asset_number: string;
     asset_name: string;
-  }>(sql`
+  }>(
+    sql`
     select distinct s.asset_id, a.asset_number, a.name as asset_name
       from depreciation_schedules s
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
@@ -286,7 +296,9 @@ export async function previewDepreciation(
                 join accounting_periods pp on pp.id = l.period_id and pp.org_id = l.org_id
                where l.org_id = s.org_id and l.schedule_id = s.id
             ), date '0001-01-01')
-       )`, "objects"));
+       )`,
+    "objects",
+  );
   const staleAssets = stale.map((row) => ({
     assetId: String(row.asset_id),
     assetNumber: String(row.asset_number),
@@ -338,7 +350,8 @@ export async function previewDepreciation(
       entry_number: string;
       posted_on: string;
       amount: string;
-    }>(sql`
+    }>(
+      sql`
       select due.line_id::text as line_id, e.id::text as entry_id,
              e.entry_number, e.posting_date::text as posted_on, due.amount::text as amount
         from (values ${sql.join(dueTuples, sql`, `)}) as due(line_id, book_id, period_id, subsidiary_id, expense_id, accum_id, amount)
@@ -355,7 +368,9 @@ export async function previewDepreciation(
          and not exists (
                select 1 from depreciation_schedule_lines linked
                 where linked.org_id = ${orgId} and linked.journal_entry_id = e.id)
-    `, "objects");
+    `,
+      "objects",
+    );
     const rowById = new Map(rows.map((row) => [row.lineId, row]));
     for (const match of matched) {
       const line = rowById.get(String(match.line_id));

@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { LeaveDrawer } from './LeaveDrawer'
+import { useRouter } from "next/navigation";
+import { LeaveDrawer } from "./LeaveDrawer";
 
 /**
  * Leave filing and detail entry point, opened from the page header or a row
@@ -22,24 +22,24 @@ export function LeaveDialog({
   canWithdrawCancel,
   recordOpen = false,
 }: {
-  requestId: string | null
-  absenceId?: string | null
-  closeHref: string
-  canWithdrawCancel: boolean
-  recordOpen?: boolean
+  requestId: string | null;
+  absenceId?: string | null;
+  closeHref: string;
+  canWithdrawCancel: boolean;
+  recordOpen?: boolean;
 }) {
-  const router = useRouter()
+  const router = useRouter();
   return (
     <LeaveDrawer
-      key={requestId ?? absenceId ?? (recordOpen ? 'record' : 'file')}
+      key={requestId ?? absenceId ?? (recordOpen ? "record" : "file")}
       requestId={requestId}
       absenceId={absenceId}
       canWithdrawCancel={canWithdrawCancel}
       record={recordOpen && requestId === null && absenceId === null}
       onClose={() => {
-        router.push(closeHref as never)
-        router.refresh()
+        router.push(closeHref as never);
+        router.refresh();
       }}
     />
-  )
+  );
 }

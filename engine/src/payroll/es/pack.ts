@@ -17,10 +17,7 @@
  * only proved structural conformance; the claim that nothing here is
  * registered no longer holds.)
  */
-import type {
-  PayrollCountryPack,
-  PayrollRegionCoverage,
-} from "../pack-types.ts";
+import type { PayrollCountryPack, PayrollRegionCoverage } from "../pack-types.ts";
 import { ES_CERTIFICATES } from "./certificates.ts";
 import { computeEsStatutory, ES_FACTOR_LABELS } from "./compute-statutory.ts";
 import { esPackFilings } from "./filings.ts";
@@ -37,8 +34,23 @@ export type EsPayrollPack = Omit<PayrollCountryPack, "country"> & {
 
 /** AEAT-territory communities: every known code except the foral NC/PV. */
 const ES_AEAT_SUPPORTED = [
-  "AN", "AR", "AS", "CN", "CB", "CL", "CM", "CT", "EX", "GA",
-  "IB", "RI", "MD", "MC", "VC", "CE", "ML",
+  "AN",
+  "AR",
+  "AS",
+  "CN",
+  "CB",
+  "CL",
+  "CM",
+  "CT",
+  "EX",
+  "GA",
+  "IB",
+  "RI",
+  "MD",
+  "MC",
+  "VC",
+  "CE",
+  "ML",
 ];
 
 /**
@@ -59,16 +71,18 @@ const ES_REGIONS: PayrollRegionCoverage = {
   // computes AEAT-territory IRPF end to end — only the foral NC/PV stay out.
   supported: ES_AEAT_SUPPORTED,
   unsupportedReason:
-    "IRPF withholding for {region} is not implemented by the ES payroll pack — the pack computes "
-    + "AEAT-territory IRPF from the year's transcribed ALGORITMO and refuses the foral NC/PV by name, "
-    + "so reaching this message means {region} has no declared rule — refusing, never defaulting",
+    "IRPF withholding for {region} is not implemented by the ES payroll pack — the pack computes " +
+    "AEAT-territory IRPF from the year's transcribed ALGORITMO and refuses the foral NC/PV by name, " +
+    "so reaching this message means {region} has no declared rule — refusing, never defaulting",
   unsupportedReasons: {
-    NC: "Navarra applies the foral IRPF regime: foral retention tables for Navarra "
-      + "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. "
-      + "These territories are not yet supported by the ES pack; contact support.",
-    PV: "the Basque Historical Territories — Álava/Araba, Gipuzkoa and Bizkaia — apply the "
-      + "foral IRPF regime: foral retention tables for the three Haciendas Forales aren't in this pack — "
-      + "AEAT tables never cover them. These territories are not yet supported by the ES pack; contact support.",
+    NC:
+      "Navarra applies the foral IRPF regime: foral retention tables for Navarra " +
+      "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. " +
+      "These territories are not yet supported by the ES pack; contact support.",
+    PV:
+      "the Basque Historical Territories — Álava/Araba, Gipuzkoa and Bizkaia — apply the " +
+      "foral IRPF regime: foral retention tables for the three Haciendas Forales aren't in this pack — " +
+      "AEAT tables never cover them. These territories are not yet supported by the ES pack; contact support.",
   },
 };
 
@@ -87,7 +101,8 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
     example: "12345678Z",
     requiredForPayroll: true,
     neededFor: "Modelo 190",
-    citation: "DGP: 'número de DNI con letra | NIE con letra' (EU TIN-ES: DNI 8 digits + letter; NIE X/Y/Z + 7 digits + letter)",
+    citation:
+      "DGP: 'número de DNI con letra | NIE con letra' (EU TIN-ES: DNI 8 digits + letter; NIE X/Y/Z + 7 digits + letter)",
     numericEntry: false,
   },
   installable: true,
@@ -131,12 +146,28 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         // The AEAT algorithm works from the period's retribuciones íntegras
         // LESS pre-tax minoraciones — a protected pre-tax deduction moves it,
         // so taxable_income, re-derived every fixpoint pass like T4127-T/FIT.
-        { code: "IRPF", name: "IRPF withholding", systemKey: "irpf", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "IRPF",
+          name: "IRPF withholding",
+          systemKey: "irpf",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
         // IRNR withholding for nonresidents (LIRNR art. 25 flat rate on gross):
         // computed from earnings, never from income after pre-tax deductions,
         // so `earnings` — a protected pre-tax order must not move it. Same
         // AEAT remittance as IRPF; the 216/296 populations aggregate this key.
-        { code: "IRNR", name: "IRNR withholding", systemKey: "irnr", kind: "deduction", sequence: 111, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "IRNR",
+          name: "IRNR withholding",
+          systemKey: "irnr",
+          kind: "deduction",
+          sequence: 111,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -152,51 +183,187 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         // deduction enters the formula. Employee share settles with the TGSS,
         // a different agency from the AEAT pack vendor, hence external with a
         // per-component destination (the CCC-registered TGSS party).
-        { code: "SS-CC", name: "Seguridad Social (employee)", systemKey: "ss_cc", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-CC",
+          name: "Seguridad Social (employee)",
+          systemKey: "ss_cc",
+          kind: "deduction",
+          sequence: 120,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Orden PJC/297/2026 art. 33.2.a (indefinida): 1,55 % trabajadora.
-        { code: "SS-DES", name: "Desempleo (employee)", systemKey: "ss_des", kind: "deduction", sequence: 121, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-DES",
+          name: "Desempleo (employee)",
+          systemKey: "ss_des",
+          kind: "deduction",
+          sequence: 121,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 33.2.c: 0,10 % trabajadora.
-        { code: "SS-FOR", name: "Formación profesional (employee)", systemKey: "ss_for", kind: "deduction", sequence: 122, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-FOR",
+          name: "Formación profesional (employee)",
+          systemKey: "ss_for",
+          kind: "deduction",
+          sequence: 122,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 16: 0,15 % trabajadora.
-        { code: "SS-MEI", name: "MEI (employee)", systemKey: "ss_mei", kind: "deduction", sequence: 123, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-MEI",
+          name: "MEI (employee)",
+          systemKey: "ss_mei",
+          kind: "deduction",
+          sequence: 123,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Orden PJC/297/2026 art. 5: the additional contribution on
         // overtime pay prices on classified overtime euros, never on
         // hours — fuerza mayor vs resto decide 2 % vs 4,70 % trabajadora.
-        { code: "SS-HEX", name: "Horas extraordinarias (employee)", systemKey: "ss_hex_resto", kind: "deduction", sequence: 124, assessedOn: "earnings", remittance: "external" },
-        { code: "SS-HEX-FM", name: "Horas extraordinarias fuerza mayor (employee)", systemKey: "ss_hex_fm", kind: "deduction", sequence: 125, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-HEX",
+          name: "Horas extraordinarias (employee)",
+          systemKey: "ss_hex_resto",
+          kind: "deduction",
+          sequence: 124,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "SS-HEX-FM",
+          name: "Horas extraordinarias fuerza mayor (employee)",
+          systemKey: "ss_hex_fm",
+          kind: "deduction",
+          sequence: 125,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 17.1: solidaridad above the tope máximo, per-tranche split
         // (first tranche 0,19 % trabajadora). Distinct systemKey — the cuota
         // prices off retribución, never the CC base alone.
-        { code: "SS-SOL", name: "Solidaridad (employee)", systemKey: "ss_solidaridad", kind: "deduction", sequence: 126, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-SOL",
+          name: "Solidaridad (employee)",
+          systemKey: "ss_solidaridad",
+          kind: "deduction",
+          sequence: 126,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 4.a: 23,60 % empresa. Distinct systemKey from the employee
         // share — the engine pushes ss_cc_er, never employer-side ss_cc.
-        { code: "SS-CC-ER", name: "Seguridad Social (employer)", systemKey: "ss_cc_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-CC-ER",
+          name: "Seguridad Social (employer)",
+          systemKey: "ss_cc_er",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 33.2.a (indefinida): 5,5 % empresa.
-        { code: "SS-DES-ER", name: "Desempleo (employer)", systemKey: "ss_des_er", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-DES-ER",
+          name: "Desempleo (employer)",
+          systemKey: "ss_des_er",
+          kind: "employer_contribution",
+          sequence: 211,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 33.2.b: 0,20 % empresa.
-        { code: "SS-FOGASA-ER", name: "FOGASA (employer)", systemKey: "ss_fogasa_er", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-FOGASA-ER",
+          name: "FOGASA (employer)",
+          systemKey: "ss_fogasa_er",
+          kind: "employer_contribution",
+          sequence: 212,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 33.2.c: 0,60 % empresa.
-        { code: "SS-FOR-ER", name: "Formación profesional (employer)", systemKey: "ss_for_er", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-FOR-ER",
+          name: "Formación profesional (employer)",
+          systemKey: "ss_for_er",
+          kind: "employer_contribution",
+          sequence: 213,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 16: 0,75 % empresa.
-        { code: "SS-MEI-ER", name: "MEI (employer)", systemKey: "ss_mei_er", kind: "employer_contribution", sequence: 214, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-MEI-ER",
+          name: "MEI (employer)",
+          systemKey: "ss_mei_er",
+          kind: "employer_contribution",
+          sequence: 214,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 4.b: AT/EP exclusively employer, rated by the establishment's
         // DA 61ª activity tariff (es_atep_rate employer fact) on the
         // professional base. Emitted only when the tariff is on file.
-        { code: "SS-ATEP-ER", name: "AT/EP (employer)", systemKey: "ss_atep_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-ATEP-ER",
+          name: "AT/EP (employer)",
+          systemKey: "ss_atep_er",
+          kind: "employer_contribution",
+          sequence: 215,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 28.1: €33.62 employer charge at termination of a fixed-term
         // contract under thirty days (art. 28.2 exclusions screened first).
         // Emitted only when the screened charge applies.
-        { code: "SS-CORTA-ER", name: "Cotización adicional contratos corta duración (employer)", systemKey: "ss_corta_er", kind: "employer_contribution", sequence: 216, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-CORTA-ER",
+          name: "Cotización adicional contratos corta duración (employer)",
+          systemKey: "ss_corta_er",
+          kind: "employer_contribution",
+          sequence: 216,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Orden PJC/297/2026 art. 5: 23,60 % empresa on non-fuerza-mayor
         // overtime pay, 12 % on fuerza-mayor overtime pay. Sequences follow
         // the landed AT/EP and corta-duración lines above.
-        { code: "SS-HEX-ER", name: "Horas extraordinarias (employer)", systemKey: "ss_hex_resto_er", kind: "employer_contribution", sequence: 217, assessedOn: "earnings", remittance: "external" },
-        { code: "SS-HEX-FM-ER", name: "Horas extraordinarias fuerza mayor (employer)", systemKey: "ss_hex_fm_er", kind: "employer_contribution", sequence: 218, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-HEX-ER",
+          name: "Horas extraordinarias (employer)",
+          systemKey: "ss_hex_resto_er",
+          kind: "employer_contribution",
+          sequence: 217,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "SS-HEX-FM-ER",
+          name: "Horas extraordinarias fuerza mayor (employer)",
+          systemKey: "ss_hex_fm_er",
+          kind: "employer_contribution",
+          sequence: 218,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
         // Art. 17.1: solidaridad above the tope máximo, per-tranche split
         // (first tranche 0,96 % empresa). Distinct systemKey from the
         // employee share — the engine pushes ss_solidaridad_er, never
         // employer-side ss_solidaridad.
-        { code: "SS-SOL-ER", name: "Solidaridad (employer)", systemKey: "ss_solidaridad_er", kind: "employer_contribution", sequence: 219, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SS-SOL-ER",
+          name: "Solidaridad (employer)",
+          systemKey: "ss_solidaridad_er",
+          kind: "employer_contribution",
+          sequence: 219,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
   ],

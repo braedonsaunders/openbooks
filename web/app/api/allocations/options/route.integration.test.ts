@@ -40,11 +40,17 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
+    if (
+      specifier === "./authz" &&
+      String(context.parentURL ?? "").includes("lib/allocations-gate.ts")
+    ) {
       return { url: "mock:options-authz", shortCircuit: true };
     }
-    if (specifier === '@/lib/feature-gates' && String(context.parentURL ?? '').includes('/lib/api/route')) {
-      return { url: 'mock:options-authz', shortCircuit: true };
+    if (
+      specifier === "@/lib/feature-gates" &&
+      String(context.parentURL ?? "").includes("/lib/api/route")
+    ) {
+      return { url: "mock:options-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
@@ -61,11 +67,9 @@ const optionsRoute = (await import(routeUrl)) as typeof import("./route.ts");
 after(() => hooks.deregister());
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 import { sql } from "drizzle-orm";
-
 
 test("options returns every picker list; subsidiaries follow scope", async () => {
   const org = await createScratchOrg();
@@ -96,17 +100,41 @@ test("options returns every picker list; subsidiaries follow scope", async () =>
       insert into segment_values (id, org_id, segment_id, code, name, is_active)
       values (${regionEast}, ${org.orgId}, ${segmentId}, 'E', 'East', true),
              (${regionWest}, ${org.orgId}, ${segmentId}, 'W', 'West', false)`);
-    const res = await optionsRoute.GET(new Request('http://allocations.test'));
+    const res = await optionsRoute.GET(new Request("http://allocations.test"));
     assert.equal(res.status, 200);
     const body = (await res.json()) as Record<string, { id: string }[]>;
-    for (const key of ["accounts", "departments", "locations", "classes", "projects", "subsidiaries", "books", "periods", "rules", "reports", "measures", "parties", "items", "segments"]) {
+    for (const key of [
+      "accounts",
+      "departments",
+      "locations",
+      "classes",
+      "projects",
+      "subsidiaries",
+      "books",
+      "periods",
+      "rules",
+      "reports",
+      "measures",
+      "parties",
+      "items",
+      "segments",
+    ]) {
       assert.ok(Array.isArray(body[key]), key);
     }
     assert.ok((body.accounts ?? []).length > 0, "seeded chart");
     assert.ok((body.periods ?? []).length > 0, "seeded periods");
-    assert.ok((body.books ?? []).some((b) => b.id === org.bookId), "primary book listed");
-    assert.ok((body.subsidiaries ?? []).some((s) => s.id === org.subsidiaryId), "root subsidiary listed");
-    assert.ok((body.measures ?? []).some((m) => m.id === "headcount"), "native measures listed");
+    assert.ok(
+      (body.books ?? []).some((b) => b.id === org.bookId),
+      "primary book listed",
+    );
+    assert.ok(
+      (body.subsidiaries ?? []).some((s) => s.id === org.subsidiaryId),
+      "root subsidiary listed",
+    );
+    assert.ok(
+      (body.measures ?? []).some((m) => m.id === "headcount"),
+      "native measures listed",
+    );
     const parties = (body.parties ?? []) as { id: string; label: string; roles: string[] }[];
     const vendor = parties.find((p) => p.id === org.vendorId);
     assert.ok(vendor, "seeded vendor listed");
@@ -116,12 +144,22 @@ test("options returns every picker list; subsidiaries follow scope", async () =>
     assert.ok(customer.roles.includes("customer"), "customer role served from the role table");
     assert.ok(!customer.roles.includes("vendor"), "roles are per-party");
     const items = (body.items ?? []) as { id: string; label: string }[];
-    assert.ok(items.some((i) => i.label === "FIFO Widget"), "seeded items listed");
-    const segments = (body.segments ?? []) as unknown as { key: string; label: string; values: { id: string; label: string }[] }[];
+    assert.ok(
+      items.some((i) => i.label === "FIFO Widget"),
+      "seeded items listed",
+    );
+    const segments = (body.segments ?? []) as unknown as {
+      key: string;
+      label: string;
+      values: { id: string; label: string }[];
+    }[];
     const region = segments.find((s) => s.key === "region");
     assert.ok(region, "custom segment listed");
     assert.equal(region.label, "Regions");
-    assert.ok(region.values.some((v) => v.id === regionEast), "active segment value listed");
+    assert.ok(
+      region.values.some((v) => v.id === regionEast),
+      "active segment value listed",
+    );
     assert.ok(!region.values.some((v) => v.id === regionWest), "inactive segment value excluded");
 
     routeState.authz = {
@@ -129,7 +167,9 @@ test("options returns every picker list; subsidiaries follow scope", async () =>
       permissions: new Set(["allocations.read"]),
       allowedSubsidiaryIds: [],
     };
-    const scoped = (await (await optionsRoute.GET(new Request('http://allocations.test'))).json()) as {
+    const scoped = (await (
+      await optionsRoute.GET(new Request("http://allocations.test"))
+    ).json()) as {
       subsidiaries: unknown[];
       parties: unknown[];
       items: { id: string }[];

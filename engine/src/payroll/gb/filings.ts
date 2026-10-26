@@ -23,7 +23,13 @@
  */
 
 import { add } from "../../money/money.ts";
-import type { PayrollFilingData, PayrollFilingRowScope, PayrollFilingSlipData, PayrollPackFilings, PayrollYearEndFiling } from "../filing-registry.ts";
+import type {
+  PayrollFilingData,
+  PayrollFilingRowScope,
+  PayrollFilingSlipData,
+  PayrollPackFilings,
+  PayrollYearEndFiling,
+} from "../filing-registry.ts";
 import { PayrollError } from "../error.ts";
 import { filingAccountRef, filingAccountsById } from "../filing.ts";
 import type { GbYearStatement } from "../yearend.ts";
@@ -157,7 +163,11 @@ async function gbPayeReference(orgId: string, filingAccountId: string | null): P
  * not numbered boxes), so each slip box below is keyed by the form's own
  * section heading, quoted.
  */
-async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function p60Slip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const { gbP60Slips } = await gbYearEnd();
   const slips = await gbP60Slips(orgId, taxYear);
   const slip = slips.find(
@@ -168,8 +178,8 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
   }
   if (!slip.finalTaxCode) {
     throw new PayrollError(
-      `${slip.employeeName} has no P6/P9 coding notice on file — the P60's final tax code box cannot be `
-      + "printed without one. File the gb_tax_code_notice certificate, then re-open the P60.",
+      `${slip.employeeName} has no P6/P9 coding notice on file — the P60's final tax code box cannot be ` +
+        "printed without one. File the gb_tax_code_notice certificate, then re-open the P60.",
     );
   }
   const { gbTaxYearBounds } = await gbYearEnd();
@@ -185,7 +195,10 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
       // such, never invented.
       { label: "National Insurance number (if known)", value: "Not known" },
       { label: "Works/payroll number (where appropriate)", value: slip.payrollNumber ?? "—" },
-      { label: "Employer PAYE reference", value: await gbPayeReference(orgId, slip.filingAccountId) },
+      {
+        label: "Employer PAYE reference",
+        value: await gbPayeReference(orgId, slip.filingAccountId),
+      },
       { label: "Tax year to 5 April", value: `${gbTaxYearLabel(taxYear)} (to ${end})` },
     ],
     boxes: [
@@ -193,18 +206,51 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
       // figures arrive on the P45 and this product holds no P45 input channel
       // (a P45 joiner's prior pay is refused by name in the engine), so they
       // are declared not-held rather than printed as zeros.
-      { code: "prev-pay", label: "Pay — In previous employments", value: "Not held — no P45 figures on file" },
-      { code: "prev-tax", label: "Tax deducted — In previous employments", value: "Not held — no P45 figures on file" },
+      {
+        code: "prev-pay",
+        label: "Pay — In previous employments",
+        value: "Not held — no P45 figures on file",
+      },
+      {
+        code: "prev-tax",
+        label: "Tax deducted — In previous employments",
+        value: "Not held — no P45 figures on file",
+      },
       // RD1 certificate text: "This form shows your total pay for Income Tax
       // purposes in this employment for the year."
-      { code: "this-pay", label: "Pay — In this employment", value: slip.payInEmployment, emphasis: true },
-      { code: "this-tax", label: "Tax deducted — In this employment", value: slip.taxDeducted, emphasis: true },
-      { code: "total-pay", label: "Pay — Total for year (this employment; no previous-employment figures held)", value: slip.payInEmployment, emphasis: true },
-      { code: "total-tax", label: "Tax deducted — Total for year (this employment; no previous-employment figures held)", value: slip.taxDeducted, emphasis: true },
+      {
+        code: "this-pay",
+        label: "Pay — In this employment",
+        value: slip.payInEmployment,
+        emphasis: true,
+      },
+      {
+        code: "this-tax",
+        label: "Tax deducted — In this employment",
+        value: slip.taxDeducted,
+        emphasis: true,
+      },
+      {
+        code: "total-pay",
+        label: "Pay — Total for year (this employment; no previous-employment figures held)",
+        value: slip.payInEmployment,
+        emphasis: true,
+      },
+      {
+        code: "total-tax",
+        label:
+          "Tax deducted — Total for year (this employment; no previous-employment figures held)",
+        value: slip.taxDeducted,
+        emphasis: true,
+      },
       // RD1: "final tax code including the 'Week 1' or 'Month 1' indicator
       // (if applicable)". An S-prefix code reports Scottish tax (rates.ts:
       // the code selects the band table), so the slip says so.
-      { code: "final-tax-code", label: "Final tax code", value: slip.finalTaxCode + (slip.scottishCode ? " — Scottish taxpayer rate" : "") },
+      {
+        code: "final-tax-code",
+        label: "Final tax code",
+        value: slip.finalTaxCode + (slip.scottishCode ? " — Scottish taxpayer rate" : ""),
+      },
       // RD1 NIC section: one row per table letter used during the year, with
       // earnings at the LEL, above the LEL to the PT, above the PT to the
       // UEL, and the employee's contributions due above the PT. The engine
@@ -215,26 +261,78 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
       // box reports what was actually withheld. Table letter A is the
       // engine's stated assumption for every employee (compute-statutory.ts
       // header: no category-letter input channel exists yet).
-      { code: "nic-letter", label: "NIC table letter", value: "A (the engine prices category A for every employee)" },
-      { code: "nic-lel", label: "Earnings at the Lower Earnings Limit", value: "Not held — the subledger carries no LEL/PT/UEL split" },
-      { code: "nic-lel-pt", label: "Earnings above the LEL, up to and including the Primary Threshold", value: "Not held — the subledger carries no LEL/PT/UEL split" },
-      { code: "nic-pt-uel", label: "Earnings above the PT, up to and including the Upper Earnings Limit", value: "Not held — the subledger carries no LEL/PT/UEL split" },
-      { code: "nic-contrib", label: "Employee's contributions due on all earnings above the PT", value: slip.nicEmployee },
+      {
+        code: "nic-letter",
+        label: "NIC table letter",
+        value: "A (the engine prices category A for every employee)",
+      },
+      {
+        code: "nic-lel",
+        label: "Earnings at the Lower Earnings Limit",
+        value: "Not held — the subledger carries no LEL/PT/UEL split",
+      },
+      {
+        code: "nic-lel-pt",
+        label: "Earnings above the LEL, up to and including the Primary Threshold",
+        value: "Not held — the subledger carries no LEL/PT/UEL split",
+      },
+      {
+        code: "nic-pt-uel",
+        label: "Earnings above the PT, up to and including the Upper Earnings Limit",
+        value: "Not held — the subledger carries no LEL/PT/UEL split",
+      },
+      {
+        code: "nic-contrib",
+        label: "Employee's contributions due on all earnings above the PT",
+        value: slip.nicEmployee,
+      },
       // RD1: the six statutory payments "included in the pay 'In this
       // employment' figure above". The pack prices no statutory payments
       // (jurisdictions.ts header; rates.ts declares the AE band as data
       // only), so any such pay rides ordinary earnings inside the pay figure
       // and cannot be separated back out — declared, not guessed.
-      { code: "smp", label: "Statutory Maternity Pay paid", value: "Not held — the pack prices no statutory payments" },
-      { code: "spp", label: "Statutory Paternity Pay paid", value: "Not held — the pack prices no statutory payments" },
-      { code: "shpp", label: "Statutory Shared Parental Pay paid", value: "Not held — the pack prices no statutory payments" },
-      { code: "sap", label: "Statutory Adoption Pay paid", value: "Not held — the pack prices no statutory payments" },
-      { code: "spbp", label: "Statutory Parental Bereavement Pay paid", value: "Not held — the pack prices no statutory payments" },
-      { code: "sncp", label: "Statutory Neonatal Care Pay paid", value: "Not held — the pack prices no statutory payments" },
+      {
+        code: "smp",
+        label: "Statutory Maternity Pay paid",
+        value: "Not held — the pack prices no statutory payments",
+      },
+      {
+        code: "spp",
+        label: "Statutory Paternity Pay paid",
+        value: "Not held — the pack prices no statutory payments",
+      },
+      {
+        code: "shpp",
+        label: "Statutory Shared Parental Pay paid",
+        value: "Not held — the pack prices no statutory payments",
+      },
+      {
+        code: "sap",
+        label: "Statutory Adoption Pay paid",
+        value: "Not held — the pack prices no statutory payments",
+      },
+      {
+        code: "spbp",
+        label: "Statutory Parental Bereavement Pay paid",
+        value: "Not held — the pack prices no statutory payments",
+      },
+      {
+        code: "sncp",
+        label: "Statutory Neonatal Care Pay paid",
+        value: "Not held — the pack prices no statutory payments",
+      },
       // RD1 reports whole pounds. Loan calculation floors each payroll
       // deduction to pounds, so these cumulative totals are whole pounds too.
-      { code: "student-loan", label: "Student Loan deductions in this employment (whole £s only)", value: slip.studentLoanDeducted },
-      { code: "postgrad-loan", label: "Postgraduate Loan deductions in this employment (whole £s only)", value: slip.postgraduateLoanDeducted },
+      {
+        code: "student-loan",
+        label: "Student Loan deductions in this employment (whole £s only)",
+        value: slip.studentLoanDeducted,
+      },
+      {
+        code: "postgrad-loan",
+        label: "Postgraduate Loan deductions in this employment (whole £s only)",
+        value: slip.postgraduateLoanDeducted,
+      },
     ],
     notes: [
       "Pay and tax 'In this employment' are the figures to use for a tax return, if the employee gets one (RD1 best practice).",
@@ -261,7 +359,11 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
  * whether student or postgraduate loan deductions continue under the latest
  * starter checklist on file.
  */
-async function p45Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function p45Slip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const { gbP45Leavers } = await gbYearEnd();
   const leavers = await gbP45Leavers(orgId, taxYear);
   const leaver = leavers.find(
@@ -272,8 +374,8 @@ async function p45Slip(orgId: string, taxYear: number, rowId: string): Promise<P
   }
   if (!leaver.finalTaxCode) {
     throw new PayrollError(
-      `${leaver.employeeName} has no P6/P9 coding notice on file — the P45's tax code cannot be `
-      + "printed without one. File the gb_tax_code_notice certificate, then re-open the P45.",
+      `${leaver.employeeName} has no P6/P9 coding notice on file — the P45's tax code cannot be ` +
+        "printed without one. File the gb_tax_code_notice certificate, then re-open the P45.",
     );
   }
   return {
@@ -284,14 +386,31 @@ async function p45Slip(orgId: string, taxYear: number, rowId: string): Promise<P
       { label: "Employee's name", value: leaver.employeeName },
       { label: "National Insurance number (if known)", value: "Not known" },
       { label: "Works/payroll number (where appropriate)", value: leaver.payrollNumber ?? "—" },
-      { label: "Employer PAYE reference", value: await gbPayeReference(orgId, leaver.filingAccountId) },
+      {
+        label: "Employer PAYE reference",
+        value: await gbPayeReference(orgId, leaver.filingAccountId),
+      },
       { label: "Tax year", value: gbTaxYearLabel(taxYear) },
     ],
     boxes: [
       { code: "leaving-date", label: "Date of leaving", value: leaver.leavingDate, emphasis: true },
-      { code: "tax-code", label: "Tax code at leaving", value: leaver.finalTaxCode + (leaver.scottishCode ? " — Scottish taxpayer rate" : "") },
-      { code: "pay-to-date", label: "Total pay to date in this employment", value: leaver.payInEmployment, emphasis: true },
-      { code: "tax-to-date", label: "Total tax to date in this employment", value: leaver.taxDeducted, emphasis: true },
+      {
+        code: "tax-code",
+        label: "Tax code at leaving",
+        value: leaver.finalTaxCode + (leaver.scottishCode ? " — Scottish taxpayer rate" : ""),
+      },
+      {
+        code: "pay-to-date",
+        label: "Total pay to date in this employment",
+        value: leaver.payInEmployment,
+        emphasis: true,
+      },
+      {
+        code: "tax-to-date",
+        label: "Total tax to date in this employment",
+        value: leaver.taxDeducted,
+        emphasis: true,
+      },
       {
         code: "student-loan",
         label: "Student Loan deductions to continue",
@@ -323,36 +442,37 @@ function gbStatementAmendment(form: "P60" | "P45"): NonNullable<PayrollYearEndFi
     vehicle: "same_form",
     slip: {
       build: async (row, orgId, taxYear) => {
-        const current = form === "P60"
-          ? await p60Slip(orgId, taxYear, row.rowId)
-          : await p45Slip(orgId, taxYear, row.rowId);
+        const current =
+          form === "P60"
+            ? await p60Slip(orgId, taxYear, row.rowId)
+            : await p45Slip(orgId, taxYear, row.rowId);
         return {
           ...current,
           formName: `${current.formName} (CORRECTED)`,
           notes: [
-            `A corrected ${form}: re-rendered from the committed pay runs as they stand now — correct the `
-            + "payroll first (a retro or adjustment run), update the year-to-date figures in the next or an "
-            + "additional FPS (gov.uk 'You made a mistake in your FPS or EPS'), then hand over this replacement.",
+            `A corrected ${form}: re-rendered from the committed pay runs as they stand now — correct the ` +
+              "payroll first (a retro or adjustment run), update the year-to-date figures in the next or an " +
+              "additional FPS (gov.uk 'You made a mistake in your FPS or EPS'), then hand over this replacement.",
             ...(current.notes ?? []),
           ],
         };
       },
     },
     downloadRefusal:
-      `no electronic ${form} correction file is generated — the replacement ${form} above is complete; `
-      + "correct the year-to-date figures through RTI payroll software (gov.uk 'You made a mistake in "
-      + "your FPS or EPS')",
+      `no electronic ${form} correction file is generated — the replacement ${form} above is complete; ` +
+      "correct the year-to-date figures through RTI payroll software (gov.uk 'You made a mistake in " +
+      "your FPS or EPS')",
   };
 }
 
 const RTI_REFUSAL =
-  "the GB pack produces no RTI submission — no Full Payment Submission and no Employer Payment Summary. "
-  + "The statement figures above are complete on screen; report pay, deductions and starters/leavers through "
-  + "RTI payroll software on every payday (gov.uk 'Report payroll information').";
+  "the GB pack produces no RTI submission — no Full Payment Submission and no Employer Payment Summary. " +
+  "The statement figures above are complete on screen; report pay, deductions and starters/leavers through " +
+  "RTI payroll software on every payday (gov.uk 'Report payroll information').";
 
 const P11D_REFUSAL =
-  "P11D benefits returns are not produced by any payroll filing here — benefits in kind are outside the "
-  + "payroll subledger. Report them through HMRC's PAYE online service.";
+  "P11D benefits returns are not produced by any payroll filing here — benefits in kind are outside the " +
+  "payroll subledger. Report them through HMRC's PAYE online service.";
 
 /** Lazy, like caPackFilings/usPackFilings: the filings modules sit in an
  * import cycle with the year-end builders, so the declaration must not be
@@ -374,9 +494,9 @@ export function gbPackFilings(): PayrollPackFilings {
         label: "P60 End of Year Certificate",
         cadence: "annual",
         description:
-          "P60 End of Year Certificates for employees still employed at 5 April, from committed GB pay runs. "
-          + "RTI (Full Payment Submission, Employer Payment Summary) and P11D benefits returns are out of scope "
-          + "and refused by name below.",
+          "P60 End of Year Certificates for employees still employed at 5 April, from committed GB pay runs. " +
+          "RTI (Full Payment Submission, Employer Payment Summary) and P11D benefits returns are out of scope " +
+          "and refused by name below.",
         emptyText: "No P60-eligible employees with committed GB pay stubs for this year.",
         population: (orgId, taxYear) => p60Population(orgId, taxYear),
         parseRowId: parseGbStatementRowId,
@@ -395,16 +515,16 @@ export function gbPackFilings(): PayrollPackFilings {
         // with the RTI standard by name.
         cadence: "separation",
         description:
-          "P45 Parts 1A/2/3 for employees who left in the year, from committed GB pay runs. "
-          + "Part 1 goes to HMRC through the Full Payment Submission (RTI, out of scope and refused by name below).",
+          "P45 Parts 1A/2/3 for employees who left in the year, from committed GB pay runs. " +
+          "Part 1 goes to HMRC through the Full Payment Submission (RTI, out of scope and refused by name below).",
         emptyText: "No leavers with committed GB pay stubs for this year.",
         population: (orgId, taxYear) => p45Population(orgId, taxYear),
         parseRowId: parseGbStatementRowId,
         slip: { build: (orgId, taxYear, rowId) => p45Slip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the GB pack produces no RTI leaver submission — P45 Part 1 goes to HMRC through the Full Payment "
-          + "Submission when the employee leaves. The Parts 1A/2/3 statement above is complete on screen; "
-          + "report the leaving through RTI payroll software (gov.uk 'What to do when an employee leaves').",
+          "the GB pack produces no RTI leaver submission — P45 Part 1 goes to HMRC through the Full Payment " +
+          "Submission when the employee leaves. The Parts 1A/2/3 statement above is complete on screen; " +
+          "report the leaving through RTI payroll software (gov.uk 'What to do when an employee leaves').",
         amendment: gbStatementAmendment("P45"),
       },
     ],

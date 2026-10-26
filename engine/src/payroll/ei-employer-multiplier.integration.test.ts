@@ -11,7 +11,12 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedVacationTerms } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -50,7 +55,9 @@ test(
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+        slotAccounts: {
+          CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable },
+        },
       });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
@@ -70,17 +77,25 @@ test(
       const standardId = await filingAccount("222222222RP0002");
       const gappedId = await filingAccount("333333333RP0003");
       await upsertPayrollEmployerFact({
-        orgId: org.orgId, actorId, country: "CA", factKey: "ei_employer_multiplier",
+        orgId: org.orgId,
+        actorId,
+        country: "CA",
+        factKey: "ei_employer_multiplier",
         filingAccountId: reducedId,
-        effectiveFrom: "2026-01-01", value: "1.167",
+        effectiveFrom: "2026-01-01",
+        value: "1.167",
         changeReason: "CRA-approved reduced rate for the account wage-loss plan.",
       });
       // The gapped account records its approval only from August: a July
       // pay date falls in the uncovered gap and must refuse.
       await upsertPayrollEmployerFact({
-        orgId: org.orgId, actorId, country: "CA", factKey: "ei_employer_multiplier",
+        orgId: org.orgId,
+        actorId,
+        country: "CA",
+        factKey: "ei_employer_multiplier",
         filingAccountId: gappedId,
-        effectiveFrom: "2026-08-01", value: "1.167",
+        effectiveFrom: "2026-08-01",
+        value: "1.167",
         changeReason: "CRA-approved reduced rate for the account wage-loss plan.",
       });
 
@@ -96,7 +111,11 @@ test(
       const scheduleId = await makeSchedule("Biweekly");
       const gapScheduleId = await makeSchedule("Biweekly gap");
 
-      const hire = async (name: string, accountId: string | null, rosterScheduleId: string = scheduleId) => {
+      const hire = async (
+        name: string,
+        accountId: string | null,
+        rosterScheduleId: string = scheduleId,
+      ) => {
         const employeeId = randomUUID();
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -126,17 +145,30 @@ test(
       const standardEmployeeId = await hire("Sam Standard", standardId);
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 2);
 
-      const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
+      const stubs = await db.execute<{
+        employee_party_id: string;
+        factors: Record<string, string>;
+      }>(
+        sql`
         select employee_party_id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       const stubFor = (employeeId: string) =>
         stubs.find((row) => row.employee_party_id === employeeId)!;
 
@@ -153,10 +185,17 @@ test(
       // page that records the multiple.
       await hire("Gail Gapped", gappedId, gapScheduleId);
       const gapRun = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: gapScheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: gapScheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const gapResult = await calculatePayRun({ orgId: org.orgId, documentId: gapRun.documentId, actorId });
+      const gapResult = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: gapRun.documentId,
+        actorId,
+      });
       const gapErrors = gapResult.errors.filter((error) => error.employee === "Gail Gapped");
       assert.equal(gapErrors.length, 1);
       assert.match(gapErrors[0]!.message, /Gail Gapped/);

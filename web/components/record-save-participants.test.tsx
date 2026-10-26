@@ -10,7 +10,8 @@ const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");
 const { act, useState } = await import("react");
-const { RecordSaveContext, useRecordSaveParticipant, useRecordSaveRegistry } = await import("./record-save-participants");
+const { RecordSaveContext, useRecordSaveParticipant, useRecordSaveRegistry } =
+  await import("./record-save-participants");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -19,7 +20,9 @@ let registry: Registry | null = null;
 
 function Host({ children }: { children: React.ReactNode }) {
   const value = useRecordSaveRegistry(true);
-  React.useLayoutEffect(() => { registry = value; }, [value]);
+  React.useLayoutEffect(() => {
+    registry = value;
+  }, [value]);
   return <RecordSaveContext.Provider value={value.context}>{children}</RecordSaveContext.Provider>;
 }
 
@@ -76,7 +79,12 @@ async function type(host: HTMLElement, name: string, value: string) {
 
 test("the record reads dirty from its sections and saves only the dirty ones", async (t) => {
   const log: string[] = [];
-  const view = await render(<Host><Section name="relationship" log={log} /><Section name="compliance" log={log} /></Host>);
+  const view = await render(
+    <Host>
+      <Section name="relationship" log={log} />
+      <Section name="compliance" log={log} />
+    </Host>,
+  );
   t.after(view.done);
   assert.equal(registry!.dirty, false, "untouched sections leave the record clean");
   await type(view.host, "compliance", "C1");
@@ -93,7 +101,12 @@ test("the record reads dirty from its sections and saves only the dirty ones", a
 
 test("a refused section stops the save and names itself so the record can show it", async (t) => {
   const log: string[] = [];
-  const view = await render(<Host><Section name="relationship" log={log} refuse /><Section name="compliance" log={log} /></Host>);
+  const view = await render(
+    <Host>
+      <Section name="relationship" log={log} refuse />
+      <Section name="compliance" log={log} />
+    </Host>,
+  );
   t.after(view.done);
   await type(view.host, "relationship", "Software");
   await type(view.host, "compliance", "C1");
@@ -109,7 +122,11 @@ test("a refused section stops the save and names itself so the record can show i
 
 test("discarding the record resets every section", async (t) => {
   const log: string[] = [];
-  const view = await render(<Host><Section name="relationship" log={log} /></Host>);
+  const view = await render(
+    <Host>
+      <Section name="relationship" log={log} />
+    </Host>,
+  );
   t.after(view.done);
   await type(view.host, "relationship", "Software");
   await act(async () => {
@@ -117,7 +134,10 @@ test("discarding the record resets every section", async (t) => {
     await tick();
   });
   assert.deepEqual(log, ["reset:relationship"]);
-  assert.equal((view.host.querySelector('input[aria-label="relationship"]') as HTMLInputElement).value, "");
+  assert.equal(
+    (view.host.querySelector('input[aria-label="relationship"]') as HTMLInputElement).value,
+    "",
+  );
   assert.equal(registry!.dirty, false);
 });
 

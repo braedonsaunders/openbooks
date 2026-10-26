@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { stubModules } from '../../../../../../testing/stub-modules'
-import test from 'node:test'
-import { NextResponse } from 'next/server'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { stubModules } from "../../../../../../testing/stub-modules";
+import test from "node:test";
+import { NextResponse } from "next/server";
 
 // Route boundary suite for the frozen-filing export (D2): the reprint must
 // denominate the frozen boxes in the filing's FROZEN currency and carry its
@@ -10,34 +10,40 @@ import { NextResponse } from 'next/server'
 // (with the remedy) a pre-snapshot filing whose currency was never frozen.
 
 interface ExportState {
-  filingRow: Record<string, unknown> | null
-  captured: Record<string, unknown> | null
-  allowedSubsidiaryIds: string[] | null
-  scopeChecks: Array<string | null>
-  filingReads: number
+  filingRow: Record<string, unknown> | null;
+  captured: Record<string, unknown> | null;
+  allowedSubsidiaryIds: string[] | null;
+  scopeChecks: Array<string | null>;
+  filingReads: number;
 }
 
-const stateKey = Symbol.for('openbooks.filing-export-route-test')
-const exportState: ExportState = { filingRow: null, captured: null, allowedSubsidiaryIds: null, scopeChecks: [], filingReads: 0 }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = exportState
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksFilingExportNextResponse =
-  NextResponse
+const stateKey = Symbol.for("openbooks.filing-export-route-test");
+const exportState: ExportState = {
+  filingRow: null,
+  captured: null,
+  allowedSubsidiaryIds: null,
+  scopeChecks: [],
+  filingReads: 0,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = exportState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksFilingExportNextResponse =
+  NextResponse;
 
 /** Flatten a drizzle SQL chunk into its raw text for query scripting. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((c) => {
-      if (typeof c === 'string') return c
-      const value = (c as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c)
-      return ''
+      if (typeof c === "string") return c;
+      const value = (c as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextFilingExport = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextFilingExport = sqlText;
 
 stubModules({
   navigation: false,
@@ -103,7 +109,7 @@ stubModules({
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
     `,
-    "@openbooks/engine/platform/business-date/module": `export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
+    "@openbooks/engine/platform/business-date/module": `export * from '${import.meta.resolve("@openbooks/engine/platform/business-date/module")}'
       export async function businessToday() { return '2026-08-24' }`,
     "next-intl/server": `export async function getTranslations() { return (key) => key } export async function getLocale() { return 'en' }`,
     "../../../../../../lib/export": `
@@ -128,124 +134,127 @@ stubModules({
       export async function exportDataToPdf() { throw new Error('unexpected pdf render') }
     `,
   },
-})
+});
 
-const exportRouteUrl = './route.ts?filing-export-frozen-test'
-const { GET } = (await import(exportRouteUrl)) as typeof import('./route.ts')
+const exportRouteUrl = "./route.ts?filing-export-frozen-test";
+const { GET } = (await import(exportRouteUrl)) as typeof import("./route.ts");
 
-const SUB = '11111111-1111-4111-8111-111111111111'
+const SUB = "11111111-1111-4111-8111-111111111111";
 
 function frozenRow(): Record<string, unknown> {
   return {
-    form_code: 'VAT100',
-    form_name: 'VAT100',
-    period_from: '2026-01-01',
-    period_to: '2026-03-31',
-    submission_channel: 'portal_manual',
-    boxes: [{ lineCode: '1', label: 'Box 1', value: '100.0000', computed: true, editable: false }],
-    snapshot_hash: 'hash-1',
+    form_code: "VAT100",
+    form_name: "VAT100",
+    period_from: "2026-01-01",
+    period_to: "2026-03-31",
+    submission_channel: "portal_manual",
+    boxes: [{ lineCode: "1", label: "Box 1", value: "100.0000", computed: true, editable: false }],
+    snapshot_hash: "hash-1",
     version: 3,
-    functional_currency: 'EUR',
+    functional_currency: "EUR",
     translation: {
-      presentationCurrency: 'EUR',
-      rateType: 'spot',
-      rateDate: '2026-03-31',
+      presentationCurrency: "EUR",
+      rateType: "spot",
+      rateDate: "2026-03-31",
       entities: [],
     },
     subsidiary_ids: [SUB],
-    registration_id: '33333333-3333-4333-8333-333333333333',
-    registration_number: 'EU123456',
-  }
+    registration_id: "33333333-3333-4333-8333-333333333333",
+    registration_number: "EU123456",
+  };
 }
 
 function get(filingId: string): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/tax/filings/${filingId}/export?format=csv`),
-    { params: Promise.resolve({ id: filingId }) },
-  )
+  return GET(new Request(`http://openbooks.test/api/tax/filings/${filingId}/export?format=csv`), {
+    params: Promise.resolve({ id: filingId }),
+  });
 }
 
-test('export denominates frozen boxes in the frozen currency, not the org base', async () => {
-  exportState.filingRow = frozenRow()
-  exportState.captured = null
-  exportState.allowedSubsidiaryIds = null
-  exportState.scopeChecks = []
-  exportState.filingReads = 0
+test("export denominates frozen boxes in the frozen currency, not the org base", async () => {
+  exportState.filingRow = frozenRow();
+  exportState.captured = null;
+  exportState.allowedSubsidiaryIds = null;
+  exportState.scopeChecks = [];
+  exportState.filingReads = 0;
 
-  const response = await get(randomUUID())
+  const response = await get(randomUUID());
 
-  assert.equal(response.status, 200)
-  const captured = exportState.captured!
-  assert.equal(captured.functionalCurrency, 'EUR')
-  assert.equal(captured.registrationNumber, 'EU123456')
-  assert.equal(captured.registrationId, '33333333-3333-4333-8333-333333333333')
-  assert.deepEqual(captured.subsidiaryIds, [SUB])
+  assert.equal(response.status, 200);
+  const captured = exportState.captured!;
+  assert.equal(captured.functionalCurrency, "EUR");
+  assert.equal(captured.registrationNumber, "EU123456");
+  assert.equal(captured.registrationId, "33333333-3333-4333-8333-333333333333");
+  assert.deepEqual(captured.subsidiaryIds, [SUB]);
   assert.deepEqual(
     captured.translation,
     frozenRow().translation,
-    'a translated view reprints its frozen translation evidence',
-  )
-  assert.deepEqual(exportState.scopeChecks, [SUB])
-})
+    "a translated view reprints its frozen translation evidence",
+  );
+  assert.deepEqual(exportState.scopeChecks, [SUB]);
+});
 
-test('a restricted filer can export its own in-scope frozen filing', async () => {
-  exportState.filingRow = frozenRow()
-  exportState.allowedSubsidiaryIds = [SUB]
-  exportState.scopeChecks = []
-  exportState.filingReads = 0
+test("a restricted filer can export its own in-scope frozen filing", async () => {
+  exportState.filingRow = frozenRow();
+  exportState.allowedSubsidiaryIds = [SUB];
+  exportState.scopeChecks = [];
+  exportState.filingReads = 0;
 
-  const response = await get(randomUUID())
+  const response = await get(randomUUID());
 
-  assert.equal(response.status, 200)
-  assert.equal(exportState.filingReads, 1, 'load the org-bound filing before checking its frozen scope')
-  assert.deepEqual(exportState.scopeChecks, [SUB])
-})
+  assert.equal(response.status, 200);
+  assert.equal(
+    exportState.filingReads,
+    1,
+    "load the org-bound filing before checking its frozen scope",
+  );
+  assert.deepEqual(exportState.scopeChecks, [SUB]);
+});
 
-test('a restricted filer cannot export a frozen filing covering an out-of-scope subsidiary', async () => {
-  const outOfScope = '22222222-2222-4222-8222-222222222222'
-  exportState.filingRow = { ...frozenRow(), subsidiary_ids: [SUB, outOfScope] }
-  exportState.allowedSubsidiaryIds = [SUB]
-  exportState.scopeChecks = []
-  exportState.filingReads = 0
+test("a restricted filer cannot export a frozen filing covering an out-of-scope subsidiary", async () => {
+  const outOfScope = "22222222-2222-4222-8222-222222222222";
+  exportState.filingRow = { ...frozenRow(), subsidiary_ids: [SUB, outOfScope] };
+  exportState.allowedSubsidiaryIds = [SUB];
+  exportState.scopeChecks = [];
+  exportState.filingReads = 0;
 
-  const response = await get(randomUUID())
+  const response = await get(randomUUID());
 
-  assert.equal(response.status, 404)
-  assert.equal(exportState.filingReads, 1)
-  assert.deepEqual(exportState.scopeChecks, [SUB, outOfScope])
-})
+  assert.equal(response.status, 404);
+  assert.equal(exportState.filingReads, 1);
+  assert.deepEqual(exportState.scopeChecks, [SUB, outOfScope]);
+});
 
-test('a pre-snapshot filing without frozen currency is refused with the remedy', async () => {
-  exportState.filingRow = { ...frozenRow(), functional_currency: null }
-  exportState.captured = null
+test("a pre-snapshot filing without frozen currency is refused with the remedy", async () => {
+  exportState.filingRow = { ...frozenRow(), functional_currency: null };
+  exportState.captured = null;
 
-  const response = await get(randomUUID())
+  const response = await get(randomUUID());
 
-  assert.equal(response.status, 422)
-  assert.match(await response.text(), /prepare a new version/)
-  assert.equal(exportState.captured, null, 'no export is rendered without an honest denomination')
-})
+  assert.equal(response.status, 422);
+  assert.match(await response.text(), /prepare a new version/);
+  assert.equal(exportState.captured, null, "no export is rendered without an honest denomination");
+});
 
-test('a v1 row reprints with no invented registration identity', async () => {
+test("a v1 row reprints with no invented registration identity", async () => {
   exportState.filingRow = {
     ...frozenRow(),
-    functional_currency: 'CAD',
+    functional_currency: "CAD",
     translation: null,
     subsidiary_ids: null,
     registration_id: null,
     registration_number: null,
-  }
-  exportState.captured = null
-  exportState.allowedSubsidiaryIds = null
-  exportState.scopeChecks = []
+  };
+  exportState.captured = null;
+  exportState.allowedSubsidiaryIds = null;
+  exportState.scopeChecks = [];
 
-  const response = await get(randomUUID())
+  const response = await get(randomUUID());
 
-  assert.equal(response.status, 200)
-  const captured = exportState.captured!
-  assert.equal(captured.functionalCurrency, 'CAD')
-  assert.equal(captured.registrationNumber, null)
-  assert.equal(captured.registrationId, null)
-  assert.deepEqual(captured.subsidiaryIds, [])
-  assert.equal(captured.translation, null)
-})
+  assert.equal(response.status, 200);
+  const captured = exportState.captured!;
+  assert.equal(captured.functionalCurrency, "CAD");
+  assert.equal(captured.registrationNumber, null);
+  assert.equal(captured.registrationId, null);
+  assert.deepEqual(captured.subsidiaryIds, []);
+  assert.equal(captured.translation, null);
+});

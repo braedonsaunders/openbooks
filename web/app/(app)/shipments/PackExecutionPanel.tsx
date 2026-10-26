@@ -50,14 +50,18 @@ export function PackExecutionPanel({
   const [moveKey, setMoveKey] = useState(() => crypto.randomUUID());
   const load = useCallback(() => {
     return fetch(`/api/shipping/handling-units?shipmentId=${shipment.id}`, { cache: "no-store" })
-      .then(async response => {
-        if (!response.ok) throw new Error(await readApiErrorMessage(response, "Cartons could not be loaded"));
-        return await response.json() as { units: UnitView[]; bins: { id: string; code: string }[] };
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error(await readApiErrorMessage(response, "Cartons could not be loaded"));
+        return (await response.json()) as {
+          units: UnitView[];
+          bins: { id: string; code: string }[];
+        };
       })
-      .then(result => {
+      .then((result) => {
         setUnits(result.units);
         setBins(result.bins);
-        setBin(current => current || firstLineBinId || result.bins[0]?.id || "");
+        setBin((current) => current || firstLineBinId || result.bins[0]?.id || "");
       });
   }, [firstLineBinId, shipment.id]);
   useEffect(() => {
@@ -74,18 +78,13 @@ export function PackExecutionPanel({
     router.refresh();
   });
   const unit = units.find((row) => row.id === selected),
-    assigned = new Set(
-      units.flatMap((row) => row.lines.map((line) => line.lineId)),
-    );
+    assigned = new Set(units.flatMap((row) => row.lines.map((line) => line.lineId)));
   const binOptions = bins.map((bin) => ({ id: bin.id, label: bin.code }));
   async function command(body: Record<string, unknown>) {
     setBusy(true);
     setError(null);
     try {
-      const result = await executionRequest<{ id?: string }>(
-        "/api/shipping/handling-units",
-        body,
-      );
+      const result = await executionRequest<{ id?: string }>("/api/shipping/handling-units", body);
       if (body.action === "create" && result.id) {
         setLineIds([]);
         setCode("");
@@ -95,9 +94,7 @@ export function PackExecutionPanel({
       if (body.action === "move") setMoveKey(crypto.randomUUID());
       router.refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Carton operation was refused",
-      );
+      setError(cause instanceof Error ? cause.message : "Carton operation was refused");
     } finally {
       setBusy(false);
     }
@@ -122,10 +119,7 @@ export function PackExecutionPanel({
       ) : null}
       <Label>
         Handling unit
-        <Select
-          value={selected}
-          onChange={(event) => setSelected(event.target.value)}
-        >
+        <Select value={selected} onChange={(event) => setSelected(event.target.value)}>
           <option value="">New carton</option>
           {units.map((row) => (
             <option key={row.id} value={row.id}>
@@ -140,17 +134,11 @@ export function PackExecutionPanel({
             <>
               <Label>
                 Carton code
-                <Input
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                />
+                <Input value={code} onChange={(event) => setCode(event.target.value)} />
               </Label>
               <Label>
                 Packing bin
-                <Select
-                  value={bin}
-                  onChange={(event) => setBin(event.target.value)}
-                >
+                <Select value={bin} onChange={(event) => setBin(event.target.value)}>
                   {binOptions.map((row) => (
                     <option key={row.id} value={row.id}>
                       {row.label}
@@ -159,16 +147,11 @@ export function PackExecutionPanel({
                 </Select>
               </Label>
               <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">
-                  Assign shipment contents
-                </legend>
+                <legend className="text-sm font-medium">Assign shipment contents</legend>
                 {shipment.lines
                   .filter((line) => !assigned.has(line.lineId))
                   .map((line) => (
-                    <label
-                      key={line.lineId}
-                      className="flex items-center gap-2 text-sm"
-                    >
+                    <label key={line.lineId} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={lineIds.includes(line.lineId)}
@@ -180,8 +163,7 @@ export function PackExecutionPanel({
                           )
                         }
                       />
-                      {line.itemLabel} · {line.quantity} {line.unit ?? ""} ·{" "}
-                      {line.binCode}
+                      {line.itemLabel} · {line.quantity} {line.unit ?? ""} · {line.binCode}
                     </label>
                   ))}
               </fieldset>
@@ -201,9 +183,7 @@ export function PackExecutionPanel({
               </Button>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Select a carton to review its contents.
-            </p>
+            <p className="text-sm text-muted-foreground">Select a carton to review its contents.</p>
           )}
         </div>
       ) : (
@@ -221,8 +201,8 @@ export function PackExecutionPanel({
                 key: "item",
                 header: "Item",
                 cell: (line) =>
-                  shipment.lines.find((row) => row.lineId === line.lineId)
-                    ?.itemLabel ?? line.itemId,
+                  shipment.lines.find((row) => row.lineId === line.lineId)?.itemLabel ??
+                  line.itemId,
               },
               { key: "qty", header: "Quantity", cell: (line) => line.quantity },
               {
@@ -252,18 +232,13 @@ export function PackExecutionPanel({
             ]}
           />
           {canManage && unit.status === "open" ? (
-            <Button
-              disabled={busy}
-              onClick={() => command({ action: "seal", unitId: unit.id })}
-            >
+            <Button disabled={busy} onClick={() => command({ action: "seal", unitId: unit.id })}>
               Mark carton packed
             </Button>
           ) : null}
           {canMove && unit.status === "packed" ? (
             <fieldset className="space-y-2 rounded-md border p-3">
-              <legend className="text-sm font-medium">
-                Move handling unit
-              </legend>
+              <legend className="text-sm font-medium">Move handling unit</legend>
               <Label>
                 Destination bin
                 <Select
@@ -282,10 +257,7 @@ export function PackExecutionPanel({
               </Label>
               <Label>
                 Reason
-                <Input
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                />
+                <Input value={reason} onChange={(event) => setReason(event.target.value)} />
               </Label>
               <Button
                 disabled={busy || !destination || reason.trim().length < 5}

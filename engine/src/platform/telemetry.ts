@@ -86,7 +86,9 @@ function metricsInstruments(): Instruments {
         description: "Wall-clock duration of durable-work attempts.",
         unit: "ms",
         advice: {
-          explicitBucketBoundaries: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000],
+          explicitBucketBoundaries: [
+            5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000,
+          ],
         },
       }),
       terminalFailures: meter.createCounter("openbooks.terminal_failures", {
@@ -148,11 +150,7 @@ export function recordOutboxAttempt(
  * stamp, and this counter can never drift apart.
  */
 export function recordTerminalFailure(
-  surface:
-    | "scheduler_outbox"
-    | "report_runs"
-    | "report_delivery_outbox"
-    | "posting_effects",
+  surface: "scheduler_outbox" | "report_runs" | "report_delivery_outbox" | "posting_effects",
   kind?: string | null,
 ): void {
   metricsInstruments().terminalFailures.add(1, {
@@ -177,9 +175,7 @@ function configuredEndpoint(value: string | undefined): value is string {
 
 function splitUrlSuffix(value: string): [base: string, suffix: string] {
   const suffixIndex = value.search(/[?#]/);
-  return suffixIndex === -1
-    ? [value, ""]
-    : [value.slice(0, suffixIndex), value.slice(suffixIndex)];
+  return suffixIndex === -1 ? [value, ""] : [value.slice(0, suffixIndex), value.slice(suffixIndex)];
 }
 
 function ensureRootPath(value: string): string {
@@ -193,10 +189,7 @@ function ensureRootPath(value: string): string {
  * a path, in which case the required root path is added. The shared value is a
  * base URL, so only its path receives the relative `v1/<signal>` path.
  */
-export function resolveOtlpHttpEndpoint(
-  env: TelemetryEnv,
-  signal: OtlpSignal,
-): string | undefined {
+export function resolveOtlpHttpEndpoint(env: TelemetryEnv, signal: OtlpSignal): string | undefined {
   const specific = env[SIGNAL_ENDPOINT_VARIABLES[signal]];
   if (configuredEndpoint(specific)) return ensureRootPath(specific);
 
@@ -213,7 +206,10 @@ export function telemetryEnabled(env: TelemetryEnv = process.env): boolean {
   );
 }
 
-function signalDisabled(env: TelemetryEnv, varName: "OTEL_TRACES_EXPORTER" | "OTEL_METRICS_EXPORTER"): boolean {
+function signalDisabled(
+  env: TelemetryEnv,
+  varName: "OTEL_TRACES_EXPORTER" | "OTEL_METRICS_EXPORTER",
+): boolean {
   return env[varName] === "none";
 }
 
@@ -222,9 +218,7 @@ function enabledExportEndpoint(
   signal: "traces" | "metrics",
 ): string | undefined {
   const exporterVariable = signal === "traces" ? "OTEL_TRACES_EXPORTER" : "OTEL_METRICS_EXPORTER";
-  return signalDisabled(env, exporterVariable)
-    ? undefined
-    : resolveOtlpHttpEndpoint(env, signal);
+  return signalDisabled(env, exporterVariable) ? undefined : resolveOtlpHttpEndpoint(env, signal);
 }
 
 /** Parse the standard OTEL_RESOURCE_ATTRIBUTES "k=v,k2=v2" list (URL-encoded). */
@@ -262,7 +256,11 @@ export function startTelemetry(
   env: TelemetryEnv = process.env,
   localSpanProcessors: readonly SpanProcessor[] = [],
 ): Promise<boolean> {
-  if (!localSpanProcessors.length && !enabledExportEndpoint(env, "traces") && !enabledExportEndpoint(env, "metrics")) {
+  if (
+    !localSpanProcessors.length &&
+    !enabledExportEndpoint(env, "traces") &&
+    !enabledExportEndpoint(env, "metrics")
+  ) {
     return Promise.resolve(false);
   }
   bootPromise ??= boot(env, localSpanProcessors).catch((error) => {
@@ -296,7 +294,10 @@ function parseHeaders(raw: string | undefined): Record<string, string> {
   return headers;
 }
 
-async function boot(env: TelemetryEnv, localSpanProcessors: readonly SpanProcessor[]): Promise<boolean> {
+async function boot(
+  env: TelemetryEnv,
+  localSpanProcessors: readonly SpanProcessor[],
+): Promise<boolean> {
   const tracesEndpoint = enabledExportEndpoint(env, "traces");
   const metricsEndpoint = enabledExportEndpoint(env, "metrics");
   const tracesOn = tracesEndpoint !== undefined;
@@ -326,19 +327,25 @@ async function boot(env: TelemetryEnv, localSpanProcessors: readonly SpanProcess
       resource,
       spanProcessors: [
         ...localSpanProcessors,
-        ...(tracesOn ? [new traceSdk.BatchSpanProcessor(
-          new tracesExporter.OTLPTraceExporter({
-            ...exporterDefaults,
-            url: tracesEndpoint,
-          }),
-        )] : []),
+        ...(tracesOn
+          ? [
+              new traceSdk.BatchSpanProcessor(
+                new tracesExporter.OTLPTraceExporter({
+                  ...exporterDefaults,
+                  url: tracesEndpoint,
+                }),
+              ),
+            ]
+          : []),
       ],
     });
     if (trace.setGlobalTracerProvider(provider)) {
       shutdowns.push(() => provider.shutdown());
     } else {
       await provider.shutdown();
-      throw new Error("A trace provider is already registered; local span processors could not be installed.");
+      throw new Error(
+        "A trace provider is already registered; local span processors could not be installed.",
+      );
     }
   }
 

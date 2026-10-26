@@ -1,5 +1,5 @@
-import { ApprovalActions } from '@/components/approval-actions'
-import Link from 'next/link'
+import { ApprovalActions } from "@/components/approval-actions";
+import Link from "next/link";
 import {
   Badge,
   Table,
@@ -9,8 +9,8 @@ import {
   TableHeader,
   TableRow,
   UrlDrawer,
-} from '@openbooks/ui'
-import { RecruitingCreateForm } from './RecruitingCreateForm'
+} from "@openbooks/ui";
+import { RecruitingCreateForm } from "./RecruitingCreateForm";
 import {
   ApplicationActionsIsland,
   ApplicationAttachIsland,
@@ -28,15 +28,15 @@ import {
   SlotProposeIsland,
   type Option,
   type PostingContentLabels,
-} from './actions'
-import type { RecruitingPageData } from './view'
+} from "./actions";
+import type { RecruitingPageData } from "./view";
 import type {
   InterviewDrawer,
   OfferDrawerExtra,
   PostingDrawerExtra,
   PoolDrawer,
   ConsentStatus,
-} from './depth-view'
+} from "./depth-view";
 
 /**
  * Recruiting drawer sections (server components): the URL drawer shell
@@ -50,244 +50,240 @@ import type {
  */
 
 export interface DrawerLabels {
-  pipeline: string
-  applications: string
-  noApplications: string
-  candidate: string
-  stage: string
-  applied: string
-  lastEvent: string
-  interviews: string
-  offer: string
-  timeToFill: string
-  days: string
-  attachTitle: string
-  attachName: string
-  attachEmail: string
-  attachPhone: string
-  attachSubmit: string
-  attachFailed: string
-  attachMergedNote: string
-  moveTitle: string
-  moveSubmit: string
-  moveFailed: string
-  rejectTitle: string
-  rejectReason: string
-  rejectSubmit: string
-  rejectFailed: string
-  withdrawLabel: string
-  withdrawFailed: string
-  interviewTitle: string
-  interviewKind: string
-  interviewWhen: string
-  interviewDuration: string
-  interviewLocation: string
-  interviewPanel: string
-  interviewSubmit: string
-  interviewFailed: string
-  interviewInvalidTime: string
-  completeTitle: string
-  completeOutcome: string
-  completeFeedback: string
-  completeSubmit: string
-  completeFailed: string
-  cancelLabel: string
-  offerTitle: string
-  offerEmployer: string
-  offerJob: string
-  offerStart: string
-  offerAmount: string
-  offerCurrency: string
-  offerBasis: string
-  offerExpires: string
-  offerSubmit: string
-  offerFailed: string
-  offerSend: string
-  offerAccept: string
-  offerDecline: string
-  offerWithdraw: string
-  offerReason: string
-  offerActionFailed: string
-  description: string
+  pipeline: string;
+  applications: string;
+  noApplications: string;
+  candidate: string;
+  stage: string;
+  applied: string;
+  lastEvent: string;
+  interviews: string;
+  offer: string;
+  timeToFill: string;
+  days: string;
+  attachTitle: string;
+  attachName: string;
+  attachEmail: string;
+  attachPhone: string;
+  attachSubmit: string;
+  attachFailed: string;
+  attachMergedNote: string;
+  moveTitle: string;
+  moveSubmit: string;
+  moveFailed: string;
+  rejectTitle: string;
+  rejectReason: string;
+  rejectSubmit: string;
+  rejectFailed: string;
+  withdrawLabel: string;
+  withdrawFailed: string;
+  interviewTitle: string;
+  interviewKind: string;
+  interviewWhen: string;
+  interviewDuration: string;
+  interviewLocation: string;
+  interviewPanel: string;
+  interviewSubmit: string;
+  interviewFailed: string;
+  interviewInvalidTime: string;
+  completeTitle: string;
+  completeOutcome: string;
+  completeFeedback: string;
+  completeSubmit: string;
+  completeFailed: string;
+  cancelLabel: string;
+  offerTitle: string;
+  offerEmployer: string;
+  offerJob: string;
+  offerStart: string;
+  offerAmount: string;
+  offerCurrency: string;
+  offerBasis: string;
+  offerExpires: string;
+  offerSubmit: string;
+  offerFailed: string;
+  offerSend: string;
+  offerAccept: string;
+  offerDecline: string;
+  offerWithdraw: string;
+  offerReason: string;
+  offerActionFailed: string;
+  description: string;
 }
 
 export interface RequisitionDrawerData {
-  id: string
-  requisitionNumber: string
-  title: string
-  positionCode: string | null
-  departmentName: string | null
-  headcount: number
-  filledCount: number
-  hiringManagerName: string | null
-  openedOn: string | null
-  status: string
-  targetStartOn: string | null
-  compensation: string | null
-  bandRange: string | null
-  description: string | null
-  employmentKind: string | null
-  jobDescriptionName: string | null
-  revision: number
+  id: string;
+  requisitionNumber: string;
+  title: string;
+  positionCode: string | null;
+  departmentName: string | null;
+  headcount: number;
+  filledCount: number;
+  hiringManagerName: string | null;
+  openedOn: string | null;
+  status: string;
+  targetStartOn: string | null;
+  compensation: string | null;
+  bandRange: string | null;
+  description: string | null;
+  employmentKind: string | null;
+  jobDescriptionName: string | null;
+  revision: number;
   /** Copy and edit controls for the posting content. */
-  postingLabels: PostingContentLabels
-  stages: readonly { id: string; key: string; name: string; kind: string }[]
-  funnel: readonly { stageKey: string; stageName: string; count: number }[]
+  postingLabels: PostingContentLabels;
+  stages: readonly { id: string; key: string; name: string; kind: string }[];
+  funnel: readonly { stageKey: string; stageName: string; count: number }[];
   applications: readonly {
-    id: string
+    id: string;
     candidate: {
-      id: string
-      displayName: string
-      email: string | null
-      phone: string | null
-      href: string
-    }
-    stageId: string
-    stageKey: string
-    stageName: string
-    status: string
-    appliedOn: string
-    lastEventKind: string | null
-    lastEventAt: string | null
-    interviewsCount: number
-    liveOfferStatus: string | null
-  }[]
-  timeToFillDays: number | null
-  closeHref: string
-  stageLabels: Record<string, string>
-  statusLabels: Record<string, string>
+      id: string;
+      displayName: string;
+      email: string | null;
+      phone: string | null;
+      href: string;
+    };
+    stageId: string;
+    stageKey: string;
+    stageName: string;
+    status: string;
+    appliedOn: string;
+    lastEventKind: string | null;
+    lastEventAt: string | null;
+    interviewsCount: number;
+    liveOfferStatus: string | null;
+  }[];
+  timeToFillDays: number | null;
+  closeHref: string;
+  stageLabels: Record<string, string>;
+  statusLabels: Record<string, string>;
   /** HR-21 "Draft from evidence" link for the description (job_description kind). */
-  draft: { href: string; label: string } | null
-  labels: DrawerLabels
+  draft: { href: string; label: string } | null;
+  labels: DrawerLabels;
   /**
    * The opening's legal entity the offer draft inherits (id for the POST,
    * NAME for the eye), plus the authorized employers the caller may
    * instead choose. The POST route stays authoritative on scope.
    */
-  offerEmployer: { value: string; label: string }
-  offerEmployerOptions: Option[]
+  offerEmployer: { value: string; label: string };
+  offerEmployerOptions: Option[];
   /**
    * Lifecycle controls (open/hold/resume/cancel) as the status allows.
    * canManage mirrors the hrm.recruiting.manage grant the PATCH endpoint
    * enforces — display gating only; the server owns audit and SoD.
    */
   lifecycle: {
-    canManage: boolean
+    canManage: boolean;
     labels: {
-      title: string
-      open: string
-      hold: string
-      resume: string
-      cancel: string
-      reason: string
-      failed: string
-    }
-  }
+      title: string;
+      open: string;
+      hold: string;
+      resume: string;
+      cancel: string;
+      reason: string;
+      failed: string;
+    };
+  };
   /**
    * Funnel move affordance: the org-wide manage grant, or the hiring
    * manager on their own requisition (the move endpoint allows both;
    * reject/withdraw need the grant in full and ride lifecycle.canManage).
    * Readers who are neither see no application actions at all.
    */
-  canMoveApplications: boolean
-  candidateOptions: Option[]
-  employeeOptions: Option[]
+  canMoveApplications: boolean;
+  candidateOptions: Option[];
+  employeeOptions: Option[];
   /** The org's business time zone: the schedule island resolves the
    *  wall-clock datetime-local against it to the ISO instant the
    *  schedule endpoint requires. */
-  timeZone: string
-  kindOptions: Option[]
-  outcomeOptions: Option[]
-  basisOptions: Option[]
+  timeZone: string;
+  kindOptions: Option[];
+  outcomeOptions: Option[];
+  basisOptions: Option[];
 }
 
 export interface CandidateDrawerData {
-  id: string
+  id: string;
   /** hrm.recruiting.manage: interview complete/cancel renders only with it. */
-  canManage: boolean
-  displayName: string
-  email: string | null
-  phone: string | null
-  source: string | null
+  canManage: boolean;
+  displayName: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
   applications: readonly {
-    requisitionId: string
-    requisitionNumber: string
-    requisitionTitle: string
-    applicationId: string
-    stageName: string
-    status: string
-    appliedOn: string
-  }[]
+    requisitionId: string;
+    requisitionNumber: string;
+    requisitionTitle: string;
+    applicationId: string;
+    stageName: string;
+    status: string;
+    appliedOn: string;
+  }[];
   interviews: readonly {
-    id: string
-    applicationId: string
-    kind: string
-    kindLabel: string
-    scheduledAt: string
-    status: string
-    outcome: string | null
-  }[]
-  closeHref: string
+    id: string;
+    applicationId: string;
+    kind: string;
+    kindLabel: string;
+    scheduledAt: string;
+    status: string;
+    outcome: string | null;
+  }[];
+  closeHref: string;
   labels: {
-    applications: string
-    interviews: string
-    email: string
-    phone: string
-    source: string
-  }
-  outcomeOptions: Option[]
+    applications: string;
+    interviews: string;
+    email: string;
+    phone: string;
+    source: string;
+  };
+  outcomeOptions: Option[];
   actionLabels: {
-    outcome: string
-    feedback: string
-    submit: string
-    cancel: string
-    failed: string
-  }
+    outcome: string;
+    feedback: string;
+    submit: string;
+    cancel: string;
+    failed: string;
+  };
 }
 
 export interface OfferDrawerData {
-  id: string
+  id: string;
   /** hrm.recruiting.manage: send/accept/decline/withdraw render only with it. */
-  canManage: boolean
-  applicationId: string
-  requisitionId: string
+  canManage: boolean;
+  applicationId: string;
+  requisitionId: string;
   /** Persisted legal entity display name, loader-resolved — never the raw id. */
-  employerName: string
-  jobTitle: string
-  proposedStartOn: string
-  compensationAmount: string
-  compensationCurrency: string
-  compensationBasis: string
-  status: string
-  statusLabel: string
-  effectiveStatus: string
-  effectiveStatusLabel: string
-  sentAt: string | null
-  expiresOn: string | null
-  respondedAt: string | null
-  declineReason: string | null
-  closeHref: string
+  employerName: string;
+  jobTitle: string;
+  proposedStartOn: string;
+  compensationAmount: string;
+  compensationCurrency: string;
+  compensationBasis: string;
+  status: string;
+  statusLabel: string;
+  effectiveStatus: string;
+  effectiveStatusLabel: string;
+  sentAt: string | null;
+  expiresOn: string | null;
+  respondedAt: string | null;
+  declineReason: string | null;
+  closeHref: string;
   /** HR-21 "Draft from evidence" link for the letter clauses (offer_letter_clauses kind). */
-  draft: { href: string; label: string } | null
+  draft: { href: string; label: string } | null;
   labels: {
-    employer: string
-    send: string
-    accept: string
-    decline: string
-    withdraw: string
-    reason: string
-    failed: string
-    addBankAccount: string
-  }
+    employer: string;
+    send: string;
+    accept: string;
+    decline: string;
+    withdraw: string;
+    reason: string;
+    failed: string;
+    addBankAccount: string;
+  };
 }
 
 /** The requisition flyout body: facts, pipeline chips, applications, islands. */
-export function RequisitionDrawerBody({
-  detail,
-}: {
-  detail: RequisitionDrawerData
-}) {
-  const { labels } = detail
+export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerData }) {
+  const { labels } = detail;
   return (
     <div className="space-y-6">
       <div>
@@ -301,14 +297,10 @@ export function RequisitionDrawerBody({
           {detail.hiringManagerName ? ` · ${detail.hiringManagerName}` : null}
         </p>
         {detail.compensation ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {detail.compensation}
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{detail.compensation}</p>
         ) : null}
         {detail.bandRange ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {detail.bandRange}
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{detail.bandRange}</p>
         ) : null}
         {detail.timeToFillDays !== null ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -331,8 +323,7 @@ export function RequisitionDrawerBody({
           description={detail.description}
           sourceName={detail.jobDescriptionName}
           canEdit={
-            detail.lifecycle.canManage &&
-            ['draft', 'open', 'on_hold'].includes(detail.status)
+            detail.lifecycle.canManage && ["draft", "open", "on_hold"].includes(detail.status)
           }
           labels={detail.postingLabels}
         />
@@ -362,9 +353,7 @@ export function RequisitionDrawerBody({
           {labels.applications}
         </h4>
         {detail.applications.length === 0 ? (
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {labels.noApplications}
-          </p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{labels.noApplications}</p>
         ) : (
           <div className="mt-2 space-y-4">
             {detail.applications.map((application) => (
@@ -382,9 +371,7 @@ export function RequisitionDrawerBody({
                   <Badge variant="outline">{application.stageName}</Badge>
                   <Badge variant="secondary">{application.status}</Badge>
                   {application.liveOfferStatus ? (
-                    <Badge variant="warning">
-                      {application.liveOfferStatus}
-                    </Badge>
+                    <Badge variant="warning">{application.liveOfferStatus}</Badge>
                   ) : null}
                 </div>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -491,15 +478,11 @@ export function RequisitionDrawerBody({
         ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 /** The candidate flyout body: contact facts (as redacted), applications, interviews. */
-export function CandidateDrawerBody({
-  detail,
-}: {
-  detail: CandidateDrawerData
-}) {
+export function CandidateDrawerBody({ detail }: { detail: CandidateDrawerData }) {
   return (
     <div className="space-y-6">
       <div>
@@ -537,8 +520,7 @@ export function CandidateDrawerBody({
               <TableRow key={application.applicationId}>
                 <TableCell>
                   <span className="text-sm font-medium">
-                    {application.requisitionNumber} ·{' '}
-                    {application.requisitionTitle}
+                    {application.requisitionNumber} · {application.requisitionTitle}
                   </span>
                   <span className="ml-2">
                     <Badge variant="outline">{application.stageName}</Badge>
@@ -560,11 +542,10 @@ export function CandidateDrawerBody({
               className="rounded-md border border-slate-200 p-3 dark:border-slate-800"
             >
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                {interview.kindLabel} · {interview.scheduledAt} ·{' '}
-                {interview.status}
+                {interview.kindLabel} · {interview.scheduledAt} · {interview.status}
                 {interview.outcome ? ` · ${interview.outcome}` : null}
               </p>
-              {interview.status === 'scheduled' && detail.canManage ? (
+              {interview.status === "scheduled" && detail.canManage ? (
                 <div className="mt-2">
                   <InterviewActionsIsland
                     interviewId={interview.id}
@@ -578,7 +559,7 @@ export function CandidateDrawerBody({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /** The offer flyout body: terms plus the lifecycle actions. */
@@ -593,8 +574,8 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
           {detail.labels.employer}: {detail.employerName}
         </p>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          {detail.compensationAmount} {detail.compensationCurrency}{' '}
-          {detail.compensationBasis} · {detail.proposedStartOn}
+          {detail.compensationAmount} {detail.compensationCurrency} {detail.compensationBasis} ·{" "}
+          {detail.proposedStartOn}
         </p>
         <div className="mt-2 flex gap-1.5">
           <Badge variant="outline">{detail.statusLabel}</Badge>
@@ -603,9 +584,7 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
           ) : null}
         </div>
         {detail.declineReason ? (
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {detail.declineReason}
-          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{detail.declineReason}</p>
         ) : null}
         {detail.draft ? (
           <a
@@ -616,12 +595,11 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
           </a>
         ) : null}
       </div>
-      {detail.canManage &&
-      (detail.status === 'draft' || detail.status === 'sent') ? (
+      {detail.canManage && (detail.status === "draft" || detail.status === "sent") ? (
         <OfferActionsIsland offerId={detail.id} labels={detail.labels} />
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -631,7 +609,7 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
  * read — private notes never cross into another interviewer's render.
  */
 export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
-  const { labels } = detail
+  const { labels } = detail;
   return (
     <div className="space-y-6">
       <div>
@@ -654,10 +632,7 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
               <li key={index}>
                 {question.question}
                 {question.attribute ? (
-                  <span className="text-xs text-slate-400">
-                    {' '}
-                    · {question.attribute}
-                  </span>
+                  <span className="text-xs text-slate-400"> · {question.attribute}</span>
                 ) : null}
               </li>
             ))}
@@ -665,17 +640,11 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
         </div>
       ) : null}
       <div>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {labels.slots}
-        </h4>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.slots}</h4>
         <div className="mt-2 space-y-1.5">
           {detail.slots.map((slot) => (
-            <p
-              key={slot.id}
-              className="text-sm text-slate-600 dark:text-slate-300"
-            >
-              {slot.startsAt} — {slot.endsAt}{' '}
-              <Badge variant="outline">{slot.kind}</Badge>
+            <p key={slot.id} className="text-sm text-slate-600 dark:text-slate-300">
+              {slot.startsAt} — {slot.endsAt} <Badge variant="outline">{slot.kind}</Badge>
             </p>
           ))}
         </div>
@@ -686,16 +655,14 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
               pools={detail.pools}
               timeZone={detail.timeZone}
               labels={{
-                submit: labels.submit ?? 'Propose slots',
-                failed: labels.failed ?? 'Save failed.',
-                invalidTime:
-                  detail.labels.invalidTime ?? 'Enter a valid local time.',
-                proposeFromPool:
-                  detail.labels.proposeFromPool ?? 'Propose from pool',
-                starts: detail.labels.starts ?? 'Starts',
-                ends: detail.labels.ends ?? 'Ends',
-                timezone: detail.labels.timezone ?? 'Time zone',
-                bookingLink: detail.labels.bookingLink ?? 'Booking link',
+                submit: labels.submit ?? "Propose slots",
+                failed: labels.failed ?? "Save failed.",
+                invalidTime: detail.labels.invalidTime ?? "Enter a valid local time.",
+                proposeFromPool: detail.labels.proposeFromPool ?? "Propose from pool",
+                starts: detail.labels.starts ?? "Starts",
+                ends: detail.labels.ends ?? "Ends",
+                timezone: detail.labels.timezone ?? "Time zone",
+                bookingLink: detail.labels.bookingLink ?? "Booking link",
               }}
             />
           </div>
@@ -715,17 +682,17 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
               interviewId={detail.id}
               criteria={detail.criteria}
               labels={{
-                overall: labels.overall ?? 'Overall',
-                submit: labels.submit ?? 'Submit',
-                failed: labels.failed ?? 'Save failed.',
-                ratings: detail.labels.ratings ?? 'Ratings',
-                privateNotes: detail.labels.privateNotes ?? 'Private notes',
-                sharedNotes: detail.labels.sharedNotes ?? 'Shared notes',
+                overall: labels.overall ?? "Overall",
+                submit: labels.submit ?? "Submit",
+                failed: labels.failed ?? "Save failed.",
+                ratings: detail.labels.ratings ?? "Ratings",
+                privateNotes: detail.labels.privateNotes ?? "Private notes",
+                sharedNotes: detail.labels.sharedNotes ?? "Shared notes",
                 ratingOptions: {
-                  strong_no: detail.labels.ratingStrongNo ?? 'Strong no',
-                  no: detail.labels.ratingNo ?? 'No',
-                  yes: detail.labels.ratingYes ?? 'Yes',
-                  strong_yes: detail.labels.ratingStrongYes ?? 'Strong yes',
+                  strong_no: detail.labels.ratingStrongNo ?? "Strong no",
+                  no: detail.labels.ratingNo ?? "No",
+                  yes: detail.labels.ratingYes ?? "Yes",
+                  strong_yes: detail.labels.ratingStrongYes ?? "Strong yes",
                 },
               }}
             />
@@ -737,17 +704,12 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           {labels.others}
         </h4>
         {detail.blinded ? (
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {labels.blinded}
-          </p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{labels.blinded}</p>
         ) : (
           <div className="mt-2 space-y-1.5">
             {detail.others.map((other, index) => (
-              <p
-                key={index}
-                className="text-sm text-slate-600 dark:text-slate-300"
-              >
-                {other.interviewer ?? '—'} · {other.overall ?? '—'}
+              <p key={index} className="text-sm text-slate-600 dark:text-slate-300">
+                {other.interviewer ?? "—"} · {other.overall ?? "—"}
               </p>
             ))}
           </div>
@@ -761,23 +723,17 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             {detail.summary.submittedCount}/{detail.summary.totalCount}
             {detail.summary.missing.length > 0
-              ? ` · ${labels.missing}: ${detail.summary.missing.join(', ')}`
+              ? ` · ${labels.missing}: ${detail.summary.missing.join(", ")}`
               : null}
           </p>
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 /** HR-18 offer signature block: state chip, version history, send/void. */
-export function OfferDepthBody({
-  offerId,
-  extra,
-}: {
-  offerId: string
-  extra: OfferDrawerExtra
-}) {
+export function OfferDepthBody({ offerId, extra }: { offerId: string; extra: OfferDrawerExtra }) {
   return (
     <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
       <ApprovalActions subjectKind="recruiting_offer" subjectId={offerId} />
@@ -802,18 +758,18 @@ export function OfferDepthBody({
           <OfferSigningIsland
             offerId={offerId}
             labels={{
-              sendLink: extra.labels.sendLink ?? 'Send signing link',
-              void: extra.labels.void ?? 'Void',
-              failed: extra.labels.failed ?? 'Save failed.',
-              email: extra.labels.email ?? 'Email',
-              name: extra.labels.name ?? 'Name',
-              reason: extra.labels.reason ?? 'Reason',
+              sendLink: extra.labels.sendLink ?? "Send signing link",
+              void: extra.labels.void ?? "Void",
+              failed: extra.labels.failed ?? "Save failed.",
+              email: extra.labels.email ?? "Email",
+              name: extra.labels.name ?? "Name",
+              reason: extra.labels.reason ?? "Reason",
             }}
           />
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 /** HR-18 posting flyout: board state, publish controls, disposition log. */
@@ -822,25 +778,21 @@ export function PostingDrawerBody({
   extra,
 }: {
   posting: {
-    id: string
-    boardKey: string
-    status: string
-    statusCode: string
-    requisitionId: string
-  }
-  extra: PostingDrawerExtra
+    id: string;
+    boardKey: string;
+    status: string;
+    statusCode: string;
+    requisitionId: string;
+  };
+  extra: PostingDrawerExtra;
 }) {
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {posting.boardKey === 'feed'
-            ? extra.labels.feed
-            : extra.labels.internal}
+          {posting.boardKey === "feed" ? extra.labels.feed : extra.labels.internal}
         </h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          {posting.status}
-        </p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{posting.status}</p>
       </div>
       {extra.canManage ? (
         <PostingActionsIsland
@@ -848,13 +800,13 @@ export function PostingDrawerBody({
           status={posting.statusCode}
           requisitionId={posting.requisitionId}
           labels={{
-            publish: extra.labels.publish ?? 'Publish',
-            pause: extra.labels.pause ?? 'Pause',
-            close: extra.labels.close ?? 'Close',
-            failed: extra.labels.failed ?? 'Save failed.',
-            board: extra.labels.board ?? 'board',
-            internal: extra.labels.internal ?? 'internal',
-            feed: extra.labels.feed ?? 'feed',
+            publish: extra.labels.publish ?? "Publish",
+            pause: extra.labels.pause ?? "Pause",
+            close: extra.labels.close ?? "Close",
+            failed: extra.labels.failed ?? "Save failed.",
+            board: extra.labels.board ?? "board",
+            internal: extra.labels.internal ?? "internal",
+            feed: extra.labels.feed ?? "feed",
           }}
         />
       ) : null}
@@ -871,7 +823,7 @@ export function PostingDrawerBody({
         </ul>
       </div>
     </div>
-  )
+  );
 }
 
 /** HR-18 pool flyout: members plus match-to-opening. */
@@ -879,9 +831,7 @@ export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {detail.name}
-        </h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.name}</h3>
       </div>
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -904,8 +854,8 @@ export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
                   poolId={detail.id}
                   candidateId={member.candidateId}
                   labels={{
-                    remove: detail.labels.remove ?? 'Remove',
-                    failed: detail.labels.failed ?? 'Save failed.',
+                    remove: detail.labels.remove ?? "Remove",
+                    failed: detail.labels.failed ?? "Save failed.",
                   }}
                 />
               ) : null}
@@ -922,18 +872,18 @@ export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
             <PoolRediscoverIsland
               poolId={detail.id}
               labels={{
-                tags: detail.labels.tags ?? 'Tags (comma separated)',
-                failed: detail.labels.failed ?? 'Save failed.',
-                requisition: detail.labels.requisition ?? 'requisition',
-                requisitionId: detail.labels.requisitionId ?? 'requisition id',
-                match: detail.labels.matchAction ?? 'Match',
+                tags: detail.labels.tags ?? "Tags (comma separated)",
+                failed: detail.labels.failed ?? "Save failed.",
+                requisition: detail.labels.requisition ?? "requisition",
+                requisitionId: detail.labels.requisitionId ?? "requisition id",
+                match: detail.labels.matchAction ?? "Match",
               }}
             />
           </div>
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 /** HR-18 consent block for the candidate flyout: grants, expiries, retention date. */
@@ -958,7 +908,7 @@ export function ConsentBody({ consents }: { consents: ConsentStatus }) {
         ))}
       </ul>
     </div>
-  )
+  );
 }
 
 /**
@@ -967,12 +917,8 @@ export function ConsentBody({ consents }: { consents: ConsentStatus }) {
  * nothing — the spec's `when` gate already omits it, so this is the second
  * half of the same guard.
  */
-export function RecruitingDrawer({
-  drawer,
-}: {
-  drawer: RecruitingPageData['drawer']
-}) {
-  if (!drawer) return null
+export function RecruitingDrawer({ drawer }: { drawer: RecruitingPageData["drawer"] }) {
+  if (!drawer) return null;
   return (
     <UrlDrawer
       open
@@ -993,19 +939,13 @@ export function RecruitingDrawer({
         <>
           <OfferDrawerBody detail={drawer.offer} />
           {drawer.offerExtra ? (
-            <OfferDepthBody
-              offerId={drawer.offer.id}
-              extra={drawer.offerExtra}
-            />
+            <OfferDepthBody offerId={drawer.offer.id} extra={drawer.offerExtra} />
           ) : null}
         </>
       ) : drawer.interview ? (
         <InterviewDrawerBody detail={drawer.interview} />
       ) : drawer.postingExtra ? (
-        <PostingDrawerBody
-          posting={drawer.postingExtra.posting}
-          extra={drawer.postingExtra}
-        />
+        <PostingDrawerBody posting={drawer.postingExtra.posting} extra={drawer.postingExtra} />
       ) : drawer.pool ? (
         <PoolDrawerBody detail={drawer.pool} />
       ) : drawer.detailError ? (
@@ -1021,10 +961,8 @@ export function RecruitingDrawer({
           </Link>
         </div>
       ) : drawer.missingDetail ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {drawer.missingDetail}
-        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
       ) : null}
     </UrlDrawer>
-  )
+  );
 }

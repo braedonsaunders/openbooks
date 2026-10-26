@@ -87,14 +87,22 @@ const bacsInputs = (): PayRunBankFileInputs => ({
   },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIDGET", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: { sortCode: "20-45-12" },
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIDGET",
+      amount: "2500.0000",
+      employeeNumber: "EMP-0001",
+      routing: { sortCode: "20-45-12" },
       accountNumber: "12345678",
       sortCode: "20-45-12",
     },
     {
-      stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "1821.5000",
-      employeeNumber: "EMP-0002", routing: { sortCode: "601613" },
+      stubId: "s2",
+      employeePartyId: "p2",
+      employeeName: "BO SAVER",
+      amount: "1821.5000",
+      employeeNumber: "EMP-0002",
+      routing: { sortCode: "601613" },
       accountNumber: "87654321",
       sortCode: "60-16-13",
     },
@@ -192,7 +200,13 @@ test("every golden record carries its label and exact width, terminators outside
   const records = result.content.split("\r\n").filter((line) => line.length > 0);
   assert.equal(records.length, 10);
   const widths: Record<string, number> = {
-    VOL1: 80, HDR1: 80, HDR2: 80, UHL1: 80, EOF1: 80, EOF2: 80, UTL1: 80,
+    VOL1: 80,
+    HDR1: 80,
+    HDR2: 80,
+    UHL1: 80,
+    EOF1: 80,
+    EOF2: 80,
+    UTL1: 80,
   };
   for (const record of records) {
     const label = record.slice(0, 4);
@@ -209,8 +223,16 @@ test("every golden record carries its label and exact width, terminators outside
 test("an accented employee name folds to ASCII and keeps every record's byte width", () => {
   const inputs = bacsInputs();
   inputs.credits[0]!.employeeName = "Zoë Ångström";
-  const records = renderBacs(inputs).content.split("\r\n").filter((line) => line.length > 0);
-  for (const record of records) assert.equal(Buffer.byteLength(record, "utf8"), record.slice(0, 4) in { VOL1: 1, HDR1: 1, HDR2: 1, UHL1: 1, EOF1: 1, EOF2: 1, UTL1: 1 } ? 80 : 100);
+  const records = renderBacs(inputs)
+    .content.split("\r\n")
+    .filter((line) => line.length > 0);
+  for (const record of records)
+    assert.equal(
+      Buffer.byteLength(record, "utf8"),
+      record.slice(0, 4) in { VOL1: 1, HDR1: 1, HDR2: 1, UHL1: 1, EOF1: 1, EOF2: 1, UTL1: 1 }
+        ? 80
+        : 100,
+    );
   assert.ok(records.some((record) => record.slice(82, 100) === "ZOE ANGSTROM".padEnd(18, " ")));
 });
 
@@ -256,13 +278,15 @@ test("the independent worked example matches at every data offset", () => {
     creationDate: "2026-08-14",
     volSerial: "000001",
     fileNumber: "001",
-    payments: [{
-      amountCents: 15050n,
-      sortCode: "12-34-56",
-      accountNumber: "12345678",
-      accountName: "Beneficiary Ltd",
-      reference: "INV-1001",
-    }],
+    payments: [
+      {
+        amountCents: 15050n,
+        sortCode: "12-34-56",
+        accountNumber: "12345678",
+        accountName: "Beneficiary Ltd",
+        reference: "INV-1001",
+      },
+    ],
   });
   const detail = mine.split("\r\n").find((line) => line.length === 100)!;
   assert.equal(detail.slice(0, 6), "123456");
@@ -332,7 +356,9 @@ test("a malformed sort code is refused rather than written into the sort-code fi
 
 test("a six-digit sort code without hyphens canonicalizes — the hyphens are formatting, not identity", () => {
   assert.deepEqual(resolveBacsCreditor("BO SAVER", { sortCode: "601613" }, "87654321"), {
-    ok: true, sortCode: "60-16-13", accountNumber: "87654321",
+    ok: true,
+    sortCode: "60-16-13",
+    accountNumber: "87654321",
   });
 });
 
@@ -366,7 +392,8 @@ test("an unconfigured Bacs originator is refused by name rather than emitting by
           serviceUserName: "",
         },
       }),
-    (error: Error) => error instanceof PaymentError && /Bacs originator settings are invalid/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /Bacs originator settings are invalid/.test(error.message),
   );
 });
 
@@ -390,7 +417,8 @@ test("a Bacs profile cannot render another format — the mismatch names bacs", 
           timeZone: "UTC",
         },
       ),
-    (error: Error) => error instanceof PayrollError && /originates bacs, not sepa/.test(error.message),
+    (error: Error) =>
+      error instanceof PayrollError && /originates bacs, not sepa/.test(error.message),
   );
 });
 
@@ -432,7 +460,8 @@ test("a file total past the 11-digit pence field is refused, not silently unbala
   inputs.population.total = "10000001821.4900";
   assert.throws(
     () => renderBacs(inputs),
-    (error: Error) => error instanceof PaymentError && /does not fit in 11 digits/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /does not fit in 11 digits/.test(error.message),
   );
 });
 
@@ -529,48 +558,64 @@ async function bacsProfileOrg(secrets: Record<string, unknown>) {
   return { orgId: org.orgId, profileId };
 }
 
-test("a bacs_credit bank profile is listed for payroll and resolves its originator", { skip: !DB }, async () => {
-  const fx = await bacsProfileOrg({
-    serviceUserNumber: "123456",
-    originatingSortCode: "60-16-13",
-    originatingAccount: "12345678",
-    serviceUserName: "ACME LTD",
-  });
-  // Reachable: the operator's picker sees the profile, on the bacs format,
-  // fully configured — the "No originating bank profile is set up" dead end
-  // from the GB persona run is gone for this rail.
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.deepEqual(
-    profiles.map((p) => ({ name: p.name, format: p.format, currency: p.currency, configured: p.configured })),
-    [{
-      name: "Payroll direct deposit (Bacs)",
-      format: "bacs",
-      currency: "GBP",
-      configured: true,
-    }],
-  );
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (!resolved.ok) assert.fail(`expected a configured Bacs originator: ${resolved.missing.join(", ")}`);
-  assert.equal(resolved.format, "bacs");
-  assert.equal(resolved.config.currency, "GBP");
-  assert.deepEqual(resolved.config.bacs, {
-    serviceUserNumber: "123456",
-    originatingSortCode: "60-16-13",
-    originatingAccount: "12345678",
-    serviceUserName: "ACME LTD",
-  });
-});
+test(
+  "a bacs_credit bank profile is listed for payroll and resolves its originator",
+  { skip: !DB },
+  async () => {
+    const fx = await bacsProfileOrg({
+      serviceUserNumber: "123456",
+      originatingSortCode: "60-16-13",
+      originatingAccount: "12345678",
+      serviceUserName: "ACME LTD",
+    });
+    // Reachable: the operator's picker sees the profile, on the bacs format,
+    // fully configured — the "No originating bank profile is set up" dead end
+    // from the GB persona run is gone for this rail.
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.deepEqual(
+      profiles.map((p) => ({
+        name: p.name,
+        format: p.format,
+        currency: p.currency,
+        configured: p.configured,
+      })),
+      [
+        {
+          name: "Payroll direct deposit (Bacs)",
+          format: "bacs",
+          currency: "GBP",
+          configured: true,
+        },
+      ],
+    );
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (!resolved.ok)
+      assert.fail(`expected a configured Bacs originator: ${resolved.missing.join(", ")}`);
+    assert.equal(resolved.format, "bacs");
+    assert.equal(resolved.config.currency, "GBP");
+    assert.deepEqual(resolved.config.bacs, {
+      serviceUserNumber: "123456",
+      originatingSortCode: "60-16-13",
+      originatingAccount: "12345678",
+      serviceUserName: "ACME LTD",
+    });
+  },
+);
 
-test("a bacs profile with a malformed SUN is listed as not configured, naming it", { skip: !DB }, async () => {
-  const fx = await bacsProfileOrg({
-    serviceUserNumber: "bogus",
-    originatingSortCode: "60-16-13",
-    originatingAccount: "12345678",
-    serviceUserName: "ACME LTD",
-  });
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.equal(profiles[0]?.configured, false);
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (resolved.ok) assert.fail("a malformed SUN must not resolve");
-  assert.match(resolved.missing.join(", "), /serviceUserNumber/);
-});
+test(
+  "a bacs profile with a malformed SUN is listed as not configured, naming it",
+  { skip: !DB },
+  async () => {
+    const fx = await bacsProfileOrg({
+      serviceUserNumber: "bogus",
+      originatingSortCode: "60-16-13",
+      originatingAccount: "12345678",
+      serviceUserName: "ACME LTD",
+    });
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.equal(profiles[0]?.configured, false);
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (resolved.ok) assert.fail("a malformed SUN must not resolve");
+    assert.match(resolved.missing.join(", "), /serviceUserNumber/);
+  },
+);

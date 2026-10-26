@@ -9,12 +9,16 @@ import { planningTransaction } from "../_transaction";
 const Params = z.object({}).strict();
 
 export const GET = defineRoute({
-  permission: "inventory.plan", feature: "demandPlanning", params: Params,
-  handler: async ({ request, authz }) => planningTransaction(authz.user.orgId, async () => {
-    const parsed = uuidString().safeParse(new URL(request.url).searchParams.get("subsidiaryId"));
-    if (!parsed.success) return Response.json({ error: "subsidiaryId must be a UUID" }, { status: 400 });
-    const denied = guardSubsidiaryScope(authz, parsed.data);
-    if (denied) return denied;
-    return Response.json(await forecastAccuracy(db, authz.user.orgId, parsed.data));
-  }),
+  permission: "inventory.plan",
+  feature: "demandPlanning",
+  params: Params,
+  handler: async ({ request, authz }) =>
+    planningTransaction(authz.user.orgId, async () => {
+      const parsed = uuidString().safeParse(new URL(request.url).searchParams.get("subsidiaryId"));
+      if (!parsed.success)
+        return Response.json({ error: "subsidiaryId must be a UUID" }, { status: 400 });
+      const denied = guardSubsidiaryScope(authz, parsed.data);
+      if (denied) return denied;
+      return Response.json(await forecastAccuracy(db, authz.user.orgId, parsed.data));
+    }),
 });

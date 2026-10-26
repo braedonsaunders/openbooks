@@ -50,7 +50,10 @@ function relate(candidate: string[], existing: string[]): RootOverlapRelation | 
  * `sftp/org/x/sub` but NOT `sftp/org/x2`. Rows whose own prefix splits to
  * nothing are ignored — a missing root cannot contain anything.
  */
-export function findRootOverlap(candidatePrefix: string, existing: readonly SftpRootRef[]): { row: SftpRootRef; relation: RootOverlapRelation } | null {
+export function findRootOverlap(
+  candidatePrefix: string,
+  existing: readonly SftpRootRef[],
+): { row: SftpRootRef; relation: RootOverlapRelation } | null {
   const candidate = splitRootSegments(candidatePrefix);
   if (candidate.length === 0) return null;
   for (const row of existing) {
@@ -63,7 +66,9 @@ export function findRootOverlap(candidatePrefix: string, existing: readonly Sftp
 }
 
 /** Every overlapping pair among the given rows (each pair reported once). */
-export function detectRootOverlaps(rows: readonly SftpRootRef[]): { a: SftpRootRef; b: SftpRootRef; relation: RootOverlapRelation }[] {
+export function detectRootOverlaps(
+  rows: readonly SftpRootRef[],
+): { a: SftpRootRef; b: SftpRootRef; relation: RootOverlapRelation }[] {
   const out: { a: SftpRootRef; b: SftpRootRef; relation: RootOverlapRelation }[] = [];
   for (let i = 0; i < rows.length; i++) {
     for (let j = i + 1; j < rows.length; j++) {
@@ -81,7 +86,10 @@ export function detectRootOverlaps(rows: readonly SftpRootRef[]): { a: SftpRootR
  * Refusal message naming the conflicting server and the remedy. `candidate`
  * is the requested prefix, `hit` the overlap found by `findRootOverlap`.
  */
-export function rootOverlapRefusal(candidatePrefix: string, hit: { row: SftpRootRef; relation: RootOverlapRelation }): string {
+export function rootOverlapRefusal(
+  candidatePrefix: string,
+  hit: { row: SftpRootRef; relation: RootOverlapRelation },
+): string {
   const { row, relation } = hit;
   const how =
     relation === "equal"

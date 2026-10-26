@@ -54,10 +54,15 @@ export function mathRefusal<T>(code: HrmPerformanceCode, fn: () => T): T {
  */
 export function isUniqueViolationOn(error: unknown, constraint: string): boolean {
   const seen = new Set<unknown>();
-  for (let cur: unknown = error; cur !== null && typeof cur === "object"; ) {
+  for (let cur: unknown = error; cur !== null && typeof cur === "object";) {
     if (seen.has(cur)) return false;
     seen.add(cur);
-    const record = cur as { code?: unknown; constraint?: unknown; message?: unknown; cause?: unknown };
+    const record = cur as {
+      code?: unknown;
+      constraint?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
     if (record.code === "23505" && record.constraint === constraint) return true;
     if (typeof record.message === "string" && record.message.includes(constraint)) return true;
     cur = record.cause;

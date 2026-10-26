@@ -10,7 +10,10 @@ import { stubModules } from "../../../testing/stub-modules";
 // org-wide party to the root default.
 
 // jsdom first: the drawer reads browser globals at render.
-await bootJsdomEnvironment({ url: "http://localhost:4800/entities/employees", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/entities/employees",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
@@ -94,7 +97,15 @@ function payloadFor(subsidiaryId: string | null) {
     },
     customer: null,
     vendor: null,
-    employee: { is_active: true, employee_number: null, job_title: null, department_id: null, trade_id: null, worker_comp_group_id: null, hired_on: null },
+    employee: {
+      is_active: true,
+      employee_number: null,
+      job_title: null,
+      department_id: null,
+      trade_id: null,
+      worker_comp_group_id: null,
+      hired_on: null,
+    },
     addresses: [],
     contacts: [],
     bankAccounts: [],
@@ -107,7 +118,9 @@ const bodies: Array<Record<string, unknown>> = [];
 function scriptFetch() {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === `/api/parties/${PARTY_ID}` && init?.method === "PATCH") {
       bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
       return Response.json({ party: { is_active: true } });
@@ -179,7 +192,10 @@ async function typeName() {
   const nameInput = document.querySelector('input:not([type="file"])') as HTMLInputElement | null;
   assert.ok(nameInput, "overview must render a name input");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     setter.call(nameInput, "Sean Murphy");
     nameInput.dispatchEvent(new window.Event("change", { bubbles: true }));
     await tick();
@@ -256,7 +272,10 @@ test("deactivating never carries the subsidiary form state", async (t) => {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  const activePayload = { ...payloadFor(IE_ID), party: { ...payloadFor(IE_ID).party, display_name: "Sean Murphy", is_active: true } };
+  const activePayload = {
+    ...payloadFor(IE_ID),
+    party: { ...payloadFor(IE_ID).party, display_name: "Sean Murphy", is_active: true },
+  };
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">

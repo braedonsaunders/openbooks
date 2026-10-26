@@ -1,34 +1,44 @@
-import 'server-only'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
+import "server-only";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
-import { randomUUID } from 'node:crypto'
-import { createHash } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { adjustInventory } from '@openbooks/engine/inventory/movements'
-import { db, withOrgContext, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { PORTAL_ACTOR_ID } from '@openbooks/engine/portal'
-import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/submit'
-import { controlDeps } from '@openbooks/engine/ledger/document-service'
-import { postDocument } from '@openbooks/engine/ledger/posting-document'
-import { postedDocumentControlAccount } from '@openbooks/engine/ledger/posting-control-account'
-import { runPostDocumentEffects } from '@openbooks/engine/ledger/posting-dispatch'
-import { runRecordFlows } from '@openbooks/engine/flows/module'
-import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
-import { apportion, fromUnits, mulPercent, quantumScale, roundDiv, toUnits } from '@openbooks/engine/money'
+import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { adjustInventory } from "@openbooks/engine/inventory/movements";
+import { db, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { PORTAL_ACTOR_ID } from "@openbooks/engine/portal";
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/submit";
+import { controlDeps } from "@openbooks/engine/ledger/document-service";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { postedDocumentControlAccount } from "@openbooks/engine/ledger/posting-control-account";
+import { runPostDocumentEffects } from "@openbooks/engine/ledger/posting-dispatch";
+import { runRecordFlows } from "@openbooks/engine/flows/module";
+import { canonicalDecimal, compareDecimal } from "@openbooks/engine/money/decimal";
+import {
+  apportion,
+  fromUnits,
+  mulPercent,
+  quantumScale,
+  roundDiv,
+  toUnits,
+} from "@openbooks/engine/money";
 import {
   recordRestockingFeeWaiver,
   resolveRestockingFee,
   restockingFeeCreditLines,
   type ResolveRestockingFeeResult,
-} from '@openbooks/engine/sales/restocking-fees'
+} from "@openbooks/engine/sales/restocking-fees";
 import {
   UnknownCurrencyPrecisionError,
   currencyPrecisionRemedy,
   resolveCurrencyQuantum,
-} from '@openbooks/engine/sales/currency-precision'
-import { returnableSources } from '@openbooks/engine/inventory/returnable-sources'
-import { postedReturnEvidenceScope, SALES_FULFILLMENT_DOCUMENT_KIND } from '@openbooks/engine/inventory'
-import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
+} from "@openbooks/engine/sales/currency-precision";
+import { returnableSources } from "@openbooks/engine/inventory/returnable-sources";
+import {
+  postedReturnEvidenceScope,
+  SALES_FULFILLMENT_DOCUMENT_KIND,
+} from "@openbooks/engine/inventory";
+import { subsidiaryScopeAllows } from "@openbooks/engine/organization/scope";
 import {
   authorizeReturn,
   completeReturnInspection,
@@ -42,30 +52,30 @@ import {
   ReturnRefusal,
   type InspectionLine,
   type ReturnAuthorization,
-} from '@openbooks/engine/sales/returns'
-import { createDocument } from './documents.ts'
-import type { DocumentEditInput, DocumentLineInput } from '@openbooks/engine/ledger/document-input'
+} from "@openbooks/engine/sales/returns";
+import { createDocument } from "./documents.ts";
+import type { DocumentEditInput, DocumentLineInput } from "@openbooks/engine/ledger/document-input";
 import {
   deriveEmailDeliveryKey,
   returnDecisionEmail,
   returnReceivedEmail,
   emailDeliveryBlockedParts,
   sendVia,
-} from '@openbooks/emails'
+} from "@openbooks/emails";
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransportDetailed,
-} from '@openbooks/engine/delivery/email-config/module'
+} from "@openbooks/engine/delivery/email-config/module";
 
 export type ReturnSourceSelection = {
-  lineNumber: number
-  sourceIssueMovementId: string
-  lotId?: string | null
-  serialId?: string | null
-}
+  lineNumber: number;
+  sourceIssueMovementId: string;
+  lotId?: string | null;
+  serialId?: string | null;
+};
 
 /**
  * Return lines arrive priced (operator drawer) or quantity-only (portal self-
@@ -76,36 +86,51 @@ export type ReturnSourceSelection = {
 export type ReturnLineRequest = DocumentLineInput | { quantity: string };
 
 export async function createReturnAuthorization(input: {
-  orgId: string
-  actorId: string
-  key: string
-  body: Omit<DocumentEditInput, 'lines'> & { lines?: ReturnLineRequest[] }
-  sourceSelections: ReturnSourceSelection[]
-  requestBody: unknown
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  actorId: string;
+  key: string;
+  body: Omit<DocumentEditInput, "lines"> & { lines?: ReturnLineRequest[] };
+  sourceSelections: ReturnSourceSelection[];
+  requestBody: unknown;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /**
    * Customer scope asserted by the caller (a portal session): the RMA names
    * this customer party, proven owned before the write, so the draft binds
    * against the customer instead of the actor's subsidiary roles.
    */
-  onBehalfOfPartyId?: string | null
+  onBehalfOfPartyId?: string | null;
 }): Promise<ReturnAuthorization> {
   const result = await withOrgTransaction(input.orgId, async () => {
-    const requestedLines = input.body.lines ?? []
+    const requestedLines = input.body.lines ?? [];
     if (requestedLines.length === 0 || input.sourceSelections.length !== requestedLines.length) {
-      throw new ReturnRefusal('Choose one posted shipment for every return line', 'invalid_input', 422, 'Add return lines and select a customer shipment on each line')
+      throw new ReturnRefusal(
+        "Choose one posted shipment for every return line",
+        "invalid_input",
+        422,
+        "Add return lines and select a customer shipment on each line",
+      );
     }
-    const documentLines: NonNullable<DocumentEditInput['lines']> = []
+    const documentLines: NonNullable<DocumentEditInput["lines"]> = [];
     for (let index = 0; index < requestedLines.length; index++) {
-      const selection = input.sourceSelections.find((candidate) => candidate.lineNumber === index + 1)
-      if (!selection) throw new ReturnRefusal(`Return line ${index + 1} has no shipment source`, 'invalid_input', 422, 'Choose a customer shipment for every line')
-      const source = (await db.execute<{
-        item_id: string
-        account_id: string | null
-        description: string | null
-        unit: string | null
-        stock_location_id: string
-      }>(sql`
+      const selection = input.sourceSelections.find(
+        (candidate) => candidate.lineNumber === index + 1,
+      );
+      if (!selection)
+        throw new ReturnRefusal(
+          `Return line ${index + 1} has no shipment source`,
+          "invalid_input",
+          422,
+          "Choose a customer shipment for every line",
+        );
+      const source = (
+        await db.execute<{
+          item_id: string;
+          account_id: string | null;
+          description: string | null;
+          unit: string | null;
+          stock_location_id: string;
+        }>(
+          sql`
         -- A fulfillment line carries the order line's account, which may be
         -- empty when the order relied on the item's income account; invoicing
         -- from the order resolves the same fallback.
@@ -115,12 +140,25 @@ export async function createReturnAuthorization(input: {
           join document_lines source_line on source_line.id = movement.document_line_id and source_line.org_id = movement.org_id
           left join items item on item.id = movement.item_id and item.org_id = movement.org_id
          where movement.org_id = ${input.orgId} and movement.id = ${selection.sourceIssueMovementId}
-      `, 'objects'))[0]
+      `,
+          "objects",
+        )
+      )[0];
       if (!source) {
-        throw new ReturnRefusal(`Return line ${index + 1} shipment is unavailable`, 'source_unavailable', 422, 'Choose a posted customer shipment with a sale line')
+        throw new ReturnRefusal(
+          `Return line ${index + 1} shipment is unavailable`,
+          "source_unavailable",
+          422,
+          "Choose a posted customer shipment with a sale line",
+        );
       }
       if (!source.account_id) {
-        throw new ReturnRefusal(`Return line ${index + 1} shipment has no sale line account and its item has no income account`, 'source_unavailable', 422, 'Set an income account on the item, then authorize the return again')
+        throw new ReturnRefusal(
+          `Return line ${index + 1} shipment has no sale line account and its item has no income account`,
+          "source_unavailable",
+          422,
+          "Set an income account on the item, then authorize the return again",
+        );
       }
       documentLines.push({
         ...requestedLines[index]!,
@@ -128,108 +166,147 @@ export async function createReturnAuthorization(input: {
         itemId: source.item_id,
         description: source.description,
         unit: source.unit,
-        unitPrice: '0',
-        amount: '0',
+        unitPrice: "0",
+        amount: "0",
         taxCodeId: null,
         taxGroupId: null,
         taxOverridden: false,
         taxAmount: null,
         stockLocationId: source.stock_location_id,
-      })
+      });
     }
-    const body: DocumentEditInput = { ...input.body, lines: documentLines }
-    const portalRequest = input.actorId === PORTAL_ACTOR_ID
-      ? portalReturnRequest(body.custom)
-      : null
-    if (input.actorId === PORTAL_ACTOR_ID && (!portalRequest || !isUuid(portalRequest.partyId) || !isUuid(portalRequest.linkId)
-      || portalRequest.partyId !== input.onBehalfOfPartyId)) {
-      throw new ReturnRefusal('The portal return request details are missing', 'invalid_input', 422, 'Ask the customer to submit the return again')
+    const body: DocumentEditInput = { ...input.body, lines: documentLines };
+    const portalRequest =
+      input.actorId === PORTAL_ACTOR_ID ? portalReturnRequest(body.custom) : null;
+    if (
+      input.actorId === PORTAL_ACTOR_ID &&
+      (!portalRequest ||
+        !isUuid(portalRequest.partyId) ||
+        !isUuid(portalRequest.linkId) ||
+        portalRequest.partyId !== input.onBehalfOfPartyId)
+    ) {
+      throw new ReturnRefusal(
+        "The portal return request details are missing",
+        "invalid_input",
+        422,
+        "Ask the customer to submit the return again",
+      );
     }
     const draft = await createDocument({
       orgId: input.orgId,
       userId: input.actorId,
-      kind: 'rma',
+      kind: "rma",
       key: input.key,
       body,
       subsidiaryId: body.subsidiaryId ?? null,
       requestBody: input.requestBody,
       onBehalfOfPartyId: input.onBehalfOfPartyId ?? null,
       ...(portalRequest ? { nativeCustom: { portalRequest } } : {}),
-    })
-    if (draft.status === 'created') {
-      await runRecordFlows({ kind: 'on_create', source: portalRequest ? 'portal' : 'ui' }, 'rma', draft.id, { orgId: input.orgId, userId: portalRequest ? null : input.actorId })
-      if (draft.deferredUpdate) await runRecordFlows(draft.deferredUpdate, 'rma', draft.id, { orgId: input.orgId, userId: input.actorId })
+    });
+    if (draft.status === "created") {
+      await runRecordFlows(
+        { kind: "on_create", source: portalRequest ? "portal" : "ui" },
+        "rma",
+        draft.id,
+        { orgId: input.orgId, userId: portalRequest ? null : input.actorId },
+      );
+      if (draft.deferredUpdate)
+        await runRecordFlows(draft.deferredUpdate, "rma", draft.id, {
+          orgId: input.orgId,
+          userId: input.actorId,
+        });
     }
-    return authorizeReturn(db, input.orgId, input.actorId, draft.id, input.sourceSelections, input.allowedSubsidiaryIds,
-      portalRequest ? { source: 'portal' } : {})
-  })
-  return result
+    return authorizeReturn(
+      db,
+      input.orgId,
+      input.actorId,
+      draft.id,
+      input.sourceSelections,
+      input.allowedSubsidiaryIds,
+      portalRequest ? { source: "portal" } : {},
+    );
+  });
+  return result;
 }
 
 export async function receiveReturnAuthorization(input: {
-  orgId: string
-  actorId: string
-  documentId: string
-  receivedLines: Array<{ lineId: string; received: string }>
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  actorId: string;
+  documentId: string;
+  receivedLines: Array<{ lineId: string; received: string }>;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<ReturnAuthorization> {
-  return withOrgTransaction(input.orgId, () => receiveReturn(
-    db, input.orgId, input.actorId, input.documentId, input.receivedLines, input.allowedSubsidiaryIds,
-  ))
+  return withOrgTransaction(input.orgId, () =>
+    receiveReturn(
+      db,
+      input.orgId,
+      input.actorId,
+      input.documentId,
+      input.receivedLines,
+      input.allowedSubsidiaryIds,
+    ),
+  );
 }
 
 export async function rejectReturnAuthorization(input: {
-  orgId: string
-  actorId: string
-  documentId: string
-  reason: string
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  actorId: string;
+  documentId: string;
+  reason: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
-  return withOrgTransaction(input.orgId, () => rejectReturn(
-    db, input.orgId, input.actorId, input.documentId, input.reason, input.allowedSubsidiaryIds,
-  ))
+  return withOrgTransaction(input.orgId, () =>
+    rejectReturn(
+      db,
+      input.orgId,
+      input.actorId,
+      input.documentId,
+      input.reason,
+      input.allowedSubsidiaryIds,
+    ),
+  );
 }
 
 type SourceLine = Record<string, unknown> & {
-  item_id: string
-  account_id: string | null
-  description: string | null
-  quantity: string
-  unit_price: string
-  amount: string
-  tax_code_id: string | null
-  tax_group_id: string | null
-  tax_amount: string
-  stock_location_id: string | null
-  lot_id: string | null
-  serial_id: string | null
-  source_stock_location_id: string
-  source_document_number: string | null
-  order_line_id: string | null
-  customer_credit_id: string | null
-}
+  item_id: string;
+  account_id: string | null;
+  description: string | null;
+  quantity: string;
+  unit_price: string;
+  amount: string;
+  tax_code_id: string | null;
+  tax_group_id: string | null;
+  tax_amount: string;
+  stock_location_id: string | null;
+  lot_id: string | null;
+  serial_id: string | null;
+  source_stock_location_id: string;
+  source_document_number: string | null;
+  order_line_id: string | null;
+  customer_credit_id: string | null;
+};
 
 type BilledOrderLine = Record<string, unknown> & {
-  order_number: string | null
-  invoice_lines: number
-  pricing_profiles: number
-  invoice_numbers: string | null
-  account_id: string | null
-  tax_code_id: string | null
-  tax_group_id: string | null
-  billed_quantity: string
-  returned_quantity: string
-  unit_price: string | null
-  amount: string | null
-  tax_amount: string | null
-}
+  order_number: string | null;
+  invoice_lines: number;
+  pricing_profiles: number;
+  invoice_numbers: string | null;
+  account_id: string | null;
+  tax_code_id: string | null;
+  tax_group_id: string | null;
+  billed_quantity: string;
+  returned_quantity: string;
+  unit_price: string | null;
+  amount: string | null;
+  tax_amount: string | null;
+};
 
 /**
  * Units of one sales-order line already credited within the current preview or
  * inspection, so two RMA lines drawn from the same order line cannot together
  * credit more than the order billed.
  */
-type OrderLineClaims = Map<string, string>
+type OrderLineClaims = Map<string, string>;
 
 /**
  * Price the customer credit for one accepted RMA line from what the customer
@@ -253,8 +330,10 @@ async function customerCreditLine(
   sourceIssueMovementId: string,
   claims: OrderLineClaims,
 ): Promise<DocumentLineInput | null> {
-  if (line.accepted === '0') return null
-  const source = (await db.execute<SourceLine>(sql`
+  if (line.accepted === "0") return null;
+  const source = (
+    await db.execute<SourceLine>(
+      sql`
     select source_line.item_id, source_line.account_id, source_line.description,
            source_line.quantity::text, source_line.unit_price::text,
            round(source_line.amount * ${line.accepted}::numeric / nullif(source_line.quantity, 0), 4)::text as amount,
@@ -272,19 +351,32 @@ async function customerCreditLine(
      where movement.org_id = ${orgId} and movement.id = ${sourceIssueMovementId}
        and rma.document_id = ${rmaId} and movement.kind = 'issue' and movement.status = 'posted'
        and source_line.item_id is not null
-  `, 'objects'))[0]
+  `,
+      "objects",
+    )
+  )[0];
   if (!source) {
-    throw new ReturnRefusal(`RMA line ${line.lineId} has no customer sale line to credit`, 'source_unavailable', 422, 'Choose a customer invoice or sales fulfillment line with a posted stock issue')
+    throw new ReturnRefusal(
+      `RMA line ${line.lineId} has no customer sale line to credit`,
+      "source_unavailable",
+      422,
+      "Choose a customer invoice or sales fulfillment line with a posted stock issue",
+    );
   }
   const inventoryReturnSource = {
     movementId: sourceIssueMovementId,
     sourceStockLocationId: source.source_stock_location_id,
     lotId: source.lot_id,
     serialId: source.serial_id,
-  }
+  };
   if (source.order_line_id === null) {
     if (!source.account_id) {
-      throw new ReturnRefusal(`RMA line ${line.lineId} has no customer sale line to credit`, 'source_unavailable', 422, 'Choose a customer invoice or sales fulfillment line with a posted stock issue')
+      throw new ReturnRefusal(
+        `RMA line ${line.lineId} has no customer sale line to credit`,
+        "source_unavailable",
+        422,
+        "Choose a customer invoice or sales fulfillment line with a posted stock issue",
+      );
     }
     return {
       itemId: source.item_id,
@@ -299,12 +391,14 @@ async function customerCreditLine(
       taxAmount: source.tax_amount,
       stockLocationId: line.dispositionLocationId,
       inventoryReturnSource,
-    }
+    };
   }
 
-  const orderLineId = source.order_line_id
-  const priorClaim = claims.get(orderLineId) ?? '0'
-  const billed = (await db.execute<BilledOrderLine>(sql`
+  const orderLineId = source.order_line_id;
+  const priorClaim = claims.get(orderLineId) ?? "0";
+  const billed = (
+    await db.execute<BilledOrderLine>(
+      sql`
     with order_line as (
       select ol.id, ol.document_id, od.document_number
         from document_lines ol
@@ -335,7 +429,7 @@ async function customerCreditLine(
          and shipped.document_line_id = shipped_line.id and shipped.kind = 'issue' and shipped.status = 'posted'
         join inventory_movements prior on prior.org_id = shipped.org_id
         join document_lines credit_line on credit_line.id = prior.document_line_id and credit_line.org_id = prior.org_id
-       where ${postedReturnEvidenceScope({ orgId, returnKind: 'receipt', evidenceKey: 'sourceIssueMovementId', sourceId: sql`shipped.id::text` })}
+       where ${postedReturnEvidenceScope({ orgId, returnKind: "receipt", evidenceKey: "sourceIssueMovementId", sourceId: sql`shipped.id::text` })}
          and credit_line.document_id is distinct from ${source.customer_credit_id}::uuid
     )
     select (select document_number from order_line) as order_number,
@@ -353,34 +447,51 @@ async function customerCreditLine(
            round(sum(invoice_line.amount) * ${line.accepted}::numeric / nullif(sum(invoice_line.quantity), 0), 4)::text as amount,
            round(sum(invoice_line.tax_amount) * ${line.accepted}::numeric / nullif(sum(invoice_line.quantity), 0), 4)::text as tax_amount
       from invoice_line
-  `, 'objects'))[0]
-  const shipment = source.source_document_number ?? 'the shipment'
-  const order = billed?.order_number ?? 'its sales order'
-  if (!billed || billed.invoice_lines === 0 || billed.amount === null || billed.tax_amount === null || billed.unit_price === null) {
+  `,
+      "objects",
+    )
+  )[0];
+  const shipment = source.source_document_number ?? "the shipment";
+  const order = billed?.order_number ?? "its sales order";
+  if (
+    !billed ||
+    billed.invoice_lines === 0 ||
+    billed.amount === null ||
+    billed.tax_amount === null ||
+    billed.unit_price === null
+  ) {
     throw new ReturnRefusal(
       `RMA line ${line.lineId} returns goods shipped on ${shipment} that no posted customer invoice has billed from ${order}, so there is no price to credit`,
-      'source_unavailable', 422,
+      "source_unavailable",
+      422,
       `Invoice the shipped goods from ${order} and post that invoice, then inspect the return again`,
-    )
+    );
   }
   if (billed.pricing_profiles !== 1 || !billed.account_id) {
     throw new ReturnRefusal(
       `RMA line ${line.lineId} returns goods from ${order} that were billed on ${billed.invoice_numbers} with different income accounts or tax profiles, so one credit price cannot be chosen`,
-      'source_unavailable', 422,
+      "source_unavailable",
+      422,
       `Void the invoice that billed this line of ${order} on a different income account or tax profile, invoice the goods again from ${order}, then inspect the return again`,
-    )
+    );
   }
-  const creditable = (await db.execute<{ quantity: string; claim: string }>(sql`
+  const creditable = (
+    await db.execute<{ quantity: string; claim: string }>(
+      sql`
     select (${billed.billed_quantity}::numeric - ${billed.returned_quantity}::numeric - ${priorClaim}::numeric)::text as quantity,
-           (${priorClaim}::numeric + ${line.accepted}::numeric)::text as claim`, 'objects'))[0]!
+           (${priorClaim}::numeric + ${line.accepted}::numeric)::text as claim`,
+      "objects",
+    )
+  )[0]!;
   if (compareDecimal(line.accepted, creditable.quantity) > 0) {
     throw new ReturnRefusal(
       `RMA line ${line.lineId} accepts ${line.accepted} units from ${order}, but only ${creditable.quantity} of the units invoiced on ${billed.invoice_numbers} remain to be credited`,
-      'exceeds_returnable_quantity', 409,
+      "exceeds_returnable_quantity",
+      409,
       `Accept no more than ${creditable.quantity}, or invoice the remaining shipped goods from ${order} and post that invoice before inspecting the return`,
-    )
+    );
   }
-  claims.set(orderLineId, creditable.claim)
+  claims.set(orderLineId, creditable.claim);
   return {
     itemId: source.item_id,
     accountId: billed.account_id,
@@ -394,10 +505,10 @@ async function customerCreditLine(
     taxAmount: billed.tax_amount,
     stockLocationId: line.dispositionLocationId,
     inventoryReturnSource,
-  }
+  };
 }
 
-type CreditedReturnLine = { lineId: string; itemId: string | null; lineTotalMinor: bigint }
+type CreditedReturnLine = { lineId: string; itemId: string | null; lineTotalMinor: bigint };
 
 /**
  * The return currency's ISO quantum through the single Sales-owned
@@ -408,12 +519,17 @@ type CreditedReturnLine = { lineId: string; itemId: string | null; lineTotalMino
  */
 async function creditQuantum(currency: string): Promise<number> {
   try {
-    return await resolveCurrencyQuantum(db, currency)
+    return await resolveCurrencyQuantum(db, currency);
   } catch (error) {
     if (error instanceof UnknownCurrencyPrecisionError) {
-      throw new ReturnRefusal(error.message, 'currency_precision_unknown', 422, currencyPrecisionRemedy(currency))
+      throw new ReturnRefusal(
+        error.message,
+        "currency_precision_unknown",
+        422,
+        currencyPrecisionRemedy(currency),
+      );
     }
-    throw error
+    throw error;
   }
 }
 
@@ -422,24 +538,32 @@ async function creditQuantum(currency: string): Promise<number> {
  * preview and the inspect write path so both price the same lines.
  */
 async function resolveInspectionRestockingFee(input: {
-  orgId: string
-  returnDate: string
-  currency: string
-  credited: CreditedReturnLine[]
-  waived: boolean
-  waiveReason: string | null
+  orgId: string;
+  returnDate: string;
+  currency: string;
+  credited: CreditedReturnLine[];
+  waived: boolean;
+  waiveReason: string | null;
 }): Promise<ResolveRestockingFeeResult> {
-  const itemIds = [...new Set(input.credited.map((line) => line.itemId).filter((id): id is string => id !== null))]
-  const categories = itemIds.length === 0 ? [] : (await db.execute<{ id: string; category: string | null }>(sql`
-    select id, category from items where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(itemIds)}::jsonb)::uuid)`, 'objects'))
-  const categoryByItem = new Map(categories.map((row) => [row.id, row.category]))
+  const itemIds = [
+    ...new Set(input.credited.map((line) => line.itemId).filter((id): id is string => id !== null)),
+  ];
+  const categories =
+    itemIds.length === 0
+      ? []
+      : await db.execute<{ id: string; category: string | null }>(
+          sql`
+    select id, category from items where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(itemIds)}::jsonb)::uuid)`,
+          "objects",
+        );
+  const categoryByItem = new Map(categories.map((row) => [row.id, row.category]));
   return resolveRestockingFee(db, input.orgId, {
     returnDate: input.returnDate,
     currency: input.currency,
     lines: input.credited.map((line) => ({
       key: line.lineId,
       itemId: line.itemId,
-      itemCategory: line.itemId ? categoryByItem.get(line.itemId) ?? null : null,
+      itemCategory: line.itemId ? (categoryByItem.get(line.itemId) ?? null) : null,
       lineTotalMinor: line.lineTotalMinor,
     })),
     waived: input.waived,
@@ -447,37 +571,69 @@ async function resolveInspectionRestockingFee(input: {
     // The inspect route authorizes the grant before requesting a waiver;
     // the preview never waives.
     canWaive: input.waived,
-  })
+  });
 }
 
 /** Fee preview for the inspect form: what the accepted quantities would charge. */
 export async function previewReturnRestockingFee(input: {
-  orgId: string
-  documentId: string
-  lines: Array<{ lineId: string; accepted: string }>
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  documentId: string;
+  lines: Array<{ lineId: string; accepted: string }>;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<ResolveRestockingFeeResult> {
-  const current = await getReturnAuthorization(db, input.orgId, input.documentId, input.allowedSubsidiaryIds)
-  if (current.stage !== 'receiving' && current.stage !== 'inspected') {
-    throw new ReturnRefusal('The return must be received before previewing fees', 'wrong_stage', 409, 'Receive the authorized goods first')
+  const current = await getReturnAuthorization(
+    db,
+    input.orgId,
+    input.documentId,
+    input.allowedSubsidiaryIds,
+  );
+  if (current.stage !== "receiving" && current.stage !== "inspected") {
+    throw new ReturnRefusal(
+      "The return must be received before previewing fees",
+      "wrong_stage",
+      409,
+      "Receive the authorized goods first",
+    );
   }
-  const header = (await db.execute<{ document_date: string; currency: string }>(sql`
+  const header = (
+    await db.execute<{ document_date: string; currency: string }>(
+      sql`
     select document_date::text, currency from documents
-     where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`, 'objects'))[0]
-  if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
-  const quantum = await creditQuantum(header.currency)
-  const scale = quantumScale(quantum)
-  const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
-  const credited: CreditedReturnLine[] = []
-  const claims: OrderLineClaims = new Map()
+     where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`,
+      "objects",
+    )
+  )[0];
+  if (!header) throw new ReturnRefusal("Return authorization not found", "not_found", 404);
+  const quantum = await creditQuantum(header.currency);
+  const scale = quantumScale(quantum);
+  const linesById = new Map(current.lines.map((line) => [line.lineId, line]));
+  const credited: CreditedReturnLine[] = [];
+  const claims: OrderLineClaims = new Map();
   for (const { lineId, accepted: rawAccepted } of input.lines) {
-    const accepted = parseAcceptedQuantity(rawAccepted, `Accepted quantity for return line ${lineId}`)
-    const rmaLine = linesById.get(lineId)
-    if (!rmaLine?.sourceIssueMovementId || lineIsZero(accepted)) continue
-    const credit = await customerCreditLine(input.orgId, current.id, {
-      lineId, accepted, disposition: null, dispositionLocationId: null,
-    }, rmaLine.sourceIssueMovementId, claims)
-    if (credit) credited.push({ lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: roundDiv(toUnits(credit.amount), scale) })
+    const accepted = parseAcceptedQuantity(
+      rawAccepted,
+      `Accepted quantity for return line ${lineId}`,
+    );
+    const rmaLine = linesById.get(lineId);
+    if (!rmaLine?.sourceIssueMovementId || lineIsZero(accepted)) continue;
+    const credit = await customerCreditLine(
+      input.orgId,
+      current.id,
+      {
+        lineId,
+        accepted,
+        disposition: null,
+        dispositionLocationId: null,
+      },
+      rmaLine.sourceIssueMovementId,
+      claims,
+    );
+    if (credit)
+      credited.push({
+        lineId,
+        itemId: rmaLine.itemId ?? null,
+        lineTotalMinor: roundDiv(toUnits(credit.amount), scale),
+      });
   }
   return resolveInspectionRestockingFee({
     orgId: input.orgId,
@@ -486,51 +642,58 @@ export async function previewReturnRestockingFee(input: {
     credited,
     waived: false,
     waiveReason: null,
-  })
+  });
 }
 
 async function createVendorReturnDrafts(input: {
-  orgId: string
-  actorId: string
-  rma: ReturnAuthorization
-  rmaDocumentDate: string
-  inspectionLines: InspectionLine[]
+  orgId: string;
+  actorId: string;
+  rma: ReturnAuthorization;
+  rmaDocumentDate: string;
+  inspectionLines: InspectionLine[];
 }): Promise<string[]> {
-  const byVendor = new Map<string, InspectionLine[]>()
+  const byVendor = new Map<string, InspectionLine[]>();
   for (const decision of input.inspectionLines) {
-    if (decision.disposition !== 'vendor-return' || lineIsZero(decision.accepted)) continue
-    const vendorId = decision.vendorId
-    if (!vendorId) throw new Error(`RMA line ${decision.lineId} requires a vendor`)
-    const group = byVendor.get(vendorId) ?? []
-    group.push(decision)
-    byVendor.set(vendorId, group)
+    if (decision.disposition !== "vendor-return" || lineIsZero(decision.accepted)) continue;
+    const vendorId = decision.vendorId;
+    if (!vendorId) throw new Error(`RMA line ${decision.lineId} requires a vendor`);
+    const group = byVendor.get(vendorId) ?? [];
+    group.push(decision);
+    byVendor.set(vendorId, group);
   }
-  const created: string[] = []
+  const created: string[] = [];
   for (const [vendorId, lines] of byVendor) {
     const sourceLines = await db.execute<{
-      line_id: string
-      line_number: number
-      item_id: string | null
-      description: string | null
-      unit: string | null
-      asset_account_id: string | null
-    }>(sql`
+      line_id: string;
+      line_number: number;
+      item_id: string | null;
+      description: string | null;
+      unit: string | null;
+      asset_account_id: string | null;
+    }>(
+      sql`
       select line.id as line_id, line.line_number, line.item_id, line.description, line.unit,
              profile.asset_account_id
         from document_lines line
         left join item_inventory_profiles profile on profile.org_id = line.org_id and profile.item_id = line.item_id
        where line.org_id = ${input.orgId} and line.document_id = ${input.rma.id}
-         and line.id in (${sql.join(lines.map((line) => sql`${line.lineId}`), sql`, `)})
-       order by line.line_number`, 'objects')
-    const sourceByLine = new Map(sourceLines.map((line) => [line.line_id, line]))
+         and line.id in (${sql.join(
+           lines.map((line) => sql`${line.lineId}`),
+           sql`, `,
+         )})
+       order by line.line_number`,
+      "objects",
+    );
+    const sourceByLine = new Map(sourceLines.map((line) => [line.line_id, line]));
     const vendorCreditLines: DocumentLineInput[] = lines.map((decision) => {
-      const source = sourceByLine.get(decision.lineId)
+      const source = sourceByLine.get(decision.lineId);
       if (!source?.item_id || !source.asset_account_id) {
         throw new ReturnRefusal(
           `RMA line ${decision.lineId} has no inventory asset account for a vendor return`,
-          'source_unavailable', 422,
-          'Set an inventory costing profile with an asset account, then inspect the return again',
-        )
+          "source_unavailable",
+          422,
+          "Set an inventory costing profile with an asset account, then inspect the return again",
+        );
       }
       return {
         accountId: source.asset_account_id,
@@ -538,24 +701,24 @@ async function createVendorReturnDrafts(input: {
         description: source.description ?? `Return from ${input.rma.documentNumber}`,
         quantity: decision.accepted,
         unit: source.unit,
-        unitPrice: '0',
-        amount: '0',
+        unitPrice: "0",
+        amount: "0",
         taxCodeId: null,
         taxGroupId: null,
         taxOverridden: false,
-        taxAmount: '0',
+        taxAmount: "0",
         stockLocationId: decision.dispositionLocationId,
-      }
-    })
-    const key = randomUUID()
+      };
+    });
+    const key = randomUUID();
     const result = await createDocument({
       orgId: input.orgId,
       userId: input.actorId,
-      kind: 'vendor_credit',
+      kind: "vendor_credit",
       key,
       nativeCustom: { rmaVendorReturnDraft: { rmaId: input.rma.id } },
       subsidiaryId: input.rma.subsidiaryId,
-      requestBody: { kind: 'vendor_credit', rmaId: input.rma.id, vendorId },
+      requestBody: { kind: "vendor_credit", rmaId: input.rma.id, vendorId },
       body: {
         partyId: vendorId,
         subsidiaryId: input.rma.subsidiaryId,
@@ -564,118 +727,167 @@ async function createVendorReturnDrafts(input: {
         memo: `Vendor return requested from ${input.rma.documentNumber}`,
         lines: vendorCreditLines,
       },
-    })
-    if (result.status === 'created') {
-      created.push(result.id)
-      await runRecordFlows({ kind: 'on_create', source: 'ui' }, 'vendor_credit', result.id, { orgId: input.orgId, userId: input.actorId })
-      if (result.deferredUpdate) await runRecordFlows(result.deferredUpdate, 'vendor_credit', result.id, { orgId: input.orgId, userId: input.actorId })
+    });
+    if (result.status === "created") {
+      created.push(result.id);
+      await runRecordFlows({ kind: "on_create", source: "ui" }, "vendor_credit", result.id, {
+        orgId: input.orgId,
+        userId: input.actorId,
+      });
+      if (result.deferredUpdate)
+        await runRecordFlows(result.deferredUpdate, "vendor_credit", result.id, {
+          orgId: input.orgId,
+          userId: input.actorId,
+        });
     }
-    const link = await db.execute(sql`
+    const link = await db.execute(
+      sql`
       insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
       values (${input.orgId}, ${input.rma.id}, ${result.id}, 'created_from', ${input.actorId}, ${input.actorId})
       -- A retry may observe this same relationship after a vendor draft replay;
       -- the read below proves the expected edge exists before continuing.
       on conflict (org_id, from_document_id, to_document_id, link_type) do nothing
-      returning id`, 'objects')
+      returning id`,
+      "objects",
+    );
     if (link.length !== 1) {
-      const existing = await db.execute(sql`
+      const existing = await db.execute(
+        sql`
         select id from document_links where org_id = ${input.orgId} and from_document_id = ${input.rma.id}
-          and to_document_id = ${result.id} and link_type = 'created_from'`, 'objects')
-      if (existing.length !== 1) throw new Error('vendor credit link was not recorded')
+          and to_document_id = ${result.id} and link_type = 'created_from'`,
+        "objects",
+      );
+      if (existing.length !== 1) throw new Error("vendor credit link was not recorded");
     }
     for (const decision of lines) {
       const updated = await db.execute<never>(sql`
         update rma_lines set vendor_credit_id = ${result.id}, updated_by = ${input.actorId}, updated_at = now()
          where org_id = ${input.orgId} and document_id = ${input.rma.id} and line_id = ${decision.lineId}
-           and disposition = 'vendor-return' and vendor_credit_id is null`)
+           and disposition = 'vendor-return' and vendor_credit_id is null`);
       if (updated.rowCount !== 1) {
-        const existing = await db.execute(sql`
-          select vendor_credit_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.rma.id} and line_id = ${decision.lineId}`, 'objects')
-        if (existing[0]?.vendor_credit_id !== result.id) throw new Error(`vendor credit for RMA line ${decision.lineId} was not recorded`)
+        const existing = await db.execute(
+          sql`
+          select vendor_credit_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.rma.id} and line_id = ${decision.lineId}`,
+          "objects",
+        );
+        if (existing[0]?.vendor_credit_id !== result.id)
+          throw new Error(`vendor credit for RMA line ${decision.lineId} was not recorded`);
       }
     }
   }
-  return created
+  return created;
 }
 
-async function linkReturnDocument(rmaId: string, childId: string, orgId: string, actorId: string): Promise<void> {
+async function linkReturnDocument(
+  rmaId: string,
+  childId: string,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
   const inserted = await db.execute<Record<string, unknown>>(sql`
     insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
     values (${orgId}, ${rmaId}, ${childId}, 'created_from', ${actorId}, ${actorId})
     -- A customer credit is created once per inspected RMA; a retry may
     -- encounter its already recorded edge, which is verified immediately.
     on conflict (org_id, from_document_id, to_document_id, link_type) do nothing
-    returning id`)
-  if (inserted.rowCount === 1) return
-  const existing = await db.execute(sql`
+    returning id`);
+  if (inserted.rowCount === 1) return;
+  const existing = await db.execute(
+    sql`
     select id from document_links where org_id = ${orgId} and from_document_id = ${rmaId}
-      and to_document_id = ${childId} and link_type = 'created_from'`, 'objects')
-  if (existing.length !== 1) throw new Error('customer credit link was not recorded')
+      and to_document_id = ${childId} and link_type = 'created_from'`,
+    "objects",
+  );
+  if (existing.length !== 1) throw new Error("customer credit link was not recorded");
 }
 
 function lineIsZero(value: string): boolean {
-  const exact = canonicalDecimal(value, 8)
-  return exact !== null && compareDecimal(exact, '0') === 0
+  const exact = canonicalDecimal(value, 8);
+  return exact !== null && compareDecimal(exact, "0") === 0;
 }
 
 type PortalReturnRequest = {
-  partyId?: string
-  linkId?: string
-  resolution: 'refund' | 'exchange' | 'store_credit'
-  storeCreditBonusPercent: string
-}
+  partyId?: string;
+  linkId?: string;
+  resolution: "refund" | "exchange" | "store_credit";
+  storeCreditBonusPercent: string;
+};
 
 function portalReturnRequest(value: unknown): PortalReturnRequest | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const portalRequest = (value as Record<string, unknown>).portalRequest
-  if (!portalRequest || typeof portalRequest !== 'object' || Array.isArray(portalRequest)) return null
-  const request = portalRequest as Record<string, unknown>
-  const resolution = request.resolution
-  const bonus = typeof request.storeCreditBonusPercent === 'string'
-    ? canonicalDecimal(request.storeCreditBonusPercent, 2)
-    : null
-  if (resolution !== 'refund' && resolution !== 'exchange' && resolution !== 'store_credit') {
-    throw new ReturnRefusal('The portal return outcome is invalid', 'invalid_input', 422, 'Ask the customer to submit the return again')
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const portalRequest = (value as Record<string, unknown>).portalRequest;
+  if (!portalRequest || typeof portalRequest !== "object" || Array.isArray(portalRequest))
+    return null;
+  const request = portalRequest as Record<string, unknown>;
+  const resolution = request.resolution;
+  const bonus =
+    typeof request.storeCreditBonusPercent === "string"
+      ? canonicalDecimal(request.storeCreditBonusPercent, 2)
+      : null;
+  if (resolution !== "refund" && resolution !== "exchange" && resolution !== "store_credit") {
+    throw new ReturnRefusal(
+      "The portal return outcome is invalid",
+      "invalid_input",
+      422,
+      "Ask the customer to submit the return again",
+    );
   }
-  if (bonus === null || compareDecimal(bonus, '0') < 0 || compareDecimal(bonus, '100') > 0
-    || (resolution !== 'store_credit' && !lineIsZero(bonus))) {
-    throw new ReturnRefusal('The portal return store credit bonus is invalid', 'invalid_input', 422, 'Correct Customer Portal return settings, then submit the return again')
+  if (
+    bonus === null ||
+    compareDecimal(bonus, "0") < 0 ||
+    compareDecimal(bonus, "100") > 0 ||
+    (resolution !== "store_credit" && !lineIsZero(bonus))
+  ) {
+    throw new ReturnRefusal(
+      "The portal return store credit bonus is invalid",
+      "invalid_input",
+      422,
+      "Correct Customer Portal return settings, then submit the return again",
+    );
   }
-  return { resolution, storeCreditBonusPercent: bonus,
-    ...(typeof request.partyId === 'string' ? { partyId: request.partyId } : {}),
-    ...(typeof request.linkId === 'string' ? { linkId: request.linkId } : {}),
-  }
+  return {
+    resolution,
+    storeCreditBonusPercent: bonus,
+    ...(typeof request.partyId === "string" ? { partyId: request.partyId } : {}),
+    ...(typeof request.linkId === "string" ? { linkId: request.linkId } : {}),
+  };
 }
 
 async function storeCreditProgramForCurrency(orgId: string, currency: string): Promise<string> {
-  const programs = await db.execute<{ id: string; currency: string | null }>(sql`
+  const programs = await db.execute<{ id: string; currency: string | null }>(
+    sql`
     select id, currency from stored_value_programs
      where org_id = ${orgId} and kind = 'store_credit' and is_active
        and (currency = ${currency} or currency is null)
-     order by currency desc nulls last, created_at, id`, 'objects')
-  const exact = programs.filter((program) => program.currency === currency)
-  if (exact.length === 1) return exact[0]!.id
+     order by currency desc nulls last, created_at, id`,
+    "objects",
+  );
+  const exact = programs.filter((program) => program.currency === currency);
+  if (exact.length === 1) return exact[0]!.id;
   if (exact.length > 1) {
     throw new ReturnRefusal(
       `More than one active store credit program issues ${currency}`,
-      'invalid_input', 422,
+      "invalid_input",
+      422,
       `Keep one active ${currency} store credit program or contact your administrator to select the return program`,
-    )
+    );
   }
-  const currencyNeutral = programs.filter((program) => program.currency === null)
-  if (currencyNeutral.length === 1) return currencyNeutral[0]!.id
+  const currencyNeutral = programs.filter((program) => program.currency === null);
+  if (currencyNeutral.length === 1) return currencyNeutral[0]!.id;
   if (currencyNeutral.length > 1) {
     throw new ReturnRefusal(
       `More than one active store credit program accepts ${currency}`,
-      'invalid_input', 422,
+      "invalid_input",
+      422,
       `Keep one active currency-neutral store credit program or create one for ${currency}`,
-    )
+    );
   }
   throw new ReturnRefusal(
     `No active store credit program issues ${currency}`,
-    'invalid_input', 422,
+    "invalid_input",
+    422,
     `Create an active store credit program for ${currency} in Setup → Sales → Stored value programs`,
-  )
+  );
 }
 
 function storeCreditBonusLines(
@@ -683,94 +895,155 @@ function storeCreditBonusLines(
   percent: string,
   quantum: number,
 ): DocumentLineInput[] {
-  if (lineIsZero(percent)) return []
-  const scale = quantumScale(quantum)
-  const weights = lines.map((line) => roundDiv(toUnits(line.amount), scale))
+  if (lineIsZero(percent)) return [];
+  const scale = quantumScale(quantum);
+  const weights = lines.map((line) => roundDiv(toUnits(line.amount), scale));
   if (weights.some((weight) => weight < 0n)) {
-    throw new ReturnRefusal('A store credit bonus cannot be allocated to a negative return line', 'invalid_input', 422, 'Review the return line prices before inspecting it')
+    throw new ReturnRefusal(
+      "A store credit bonus cannot be allocated to a negative return line",
+      "invalid_input",
+      422,
+      "Review the return line prices before inspecting it",
+    );
   }
-  const baseMinor = weights.reduce((sum, weight) => sum + weight, 0n)
-  if (baseMinor === 0n) return []
-  const bonus = mulPercent(fromUnits(baseMinor * scale), percent, quantum)
-  const bonusMinor = roundDiv(toUnits(bonus), scale)
-  const allocations = apportion(bonusMinor, weights)
+  const baseMinor = weights.reduce((sum, weight) => sum + weight, 0n);
+  if (baseMinor === 0n) return [];
+  const bonus = mulPercent(fromUnits(baseMinor * scale), percent, quantum);
+  const bonusMinor = roundDiv(toUnits(bonus), scale);
+  const allocations = apportion(bonusMinor, weights);
   return lines.flatMap((line, index) => {
-    const amountMinor = allocations[index] ?? 0n
-    if (amountMinor === 0n) return []
-    const amount = fromUnits(amountMinor * scale)
-    return [{
-      accountId: line.accountId,
-      description: 'Store credit bonus',
-      quantity: '1',
-      unitPrice: amount,
-      amount,
-      taxCodeId: null,
-      taxGroupId: null,
-      taxOverridden: false,
-      taxAmount: '0',
-    }]
-  })
+    const amountMinor = allocations[index] ?? 0n;
+    if (amountMinor === 0n) return [];
+    const amount = fromUnits(amountMinor * scale);
+    return [
+      {
+        accountId: line.accountId,
+        description: "Store credit bonus",
+        quantity: "1",
+        unitPrice: amount,
+        amount,
+        taxCodeId: null,
+        taxGroupId: null,
+        taxOverridden: false,
+        taxAmount: "0",
+      },
+    ];
+  });
 }
 
 function customerCreditKey(rmaId: string): string {
-  const bytes = createHash('sha256').update(`customer-return:${rmaId}`).digest().subarray(0, 16)
-  bytes[6] = (bytes[6]! & 0x0f) | 0x50
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80
-  const hex = bytes.toString('hex')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  const bytes = createHash("sha256").update(`customer-return:${rmaId}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** Inspect received goods, issue the customer credit, write off scrap, and stage vendor credits. */
 export async function inspectReturnAuthorization(input: {
-  orgId: string
-  actorId: string
-  documentId: string
-  inspectionLines: InspectionLine[]
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  actorId: string;
+  documentId: string;
+  inspectionLines: InspectionLine[];
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /** The inspect route authorizes the grant before passing these through. */
-  waiveFee?: boolean
-  waiveReason?: string | null
+  waiveFee?: boolean;
+  waiveReason?: string | null;
 }): Promise<{ authorization: ReturnAuthorization; awaitingCreditApproval: boolean }> {
-  let postedCreditId: string | null = null
+  let postedCreditId: string | null = null;
   const result = await withOrgTransaction(input.orgId, async () => {
-    const current = await getReturnAuthorization(db, input.orgId, input.documentId, input.allowedSubsidiaryIds)
-    if (current.stage === 'done') return { authorization: current, awaitingCreditApproval: false }
-    if (current.stage !== 'receiving' && current.stage !== 'inspected') {
-      throw new ReturnRefusal(`${current.documentNumber} must be received before inspection`, 'wrong_stage', 409, 'Receive the authorized goods before inspection')
+    const current = await getReturnAuthorization(
+      db,
+      input.orgId,
+      input.documentId,
+      input.allowedSubsidiaryIds,
+    );
+    if (current.stage === "done") return { authorization: current, awaitingCreditApproval: false };
+    if (current.stage !== "receiving" && current.stage !== "inspected") {
+      throw new ReturnRefusal(
+        `${current.documentNumber} must be received before inspection`,
+        "wrong_stage",
+        409,
+        "Receive the authorized goods before inspection",
+      );
     }
-    validateReturnInspection(current, input.inspectionLines)
-    const header = (await db.execute<{ party_id: string; subsidiary_id: string; document_date: string; status: string; currency: string; created_by: string | null; custom: unknown }>(sql`
+    validateReturnInspection(current, input.inspectionLines);
+    const header = (
+      await db.execute<{
+        party_id: string;
+        subsidiary_id: string;
+        document_date: string;
+        status: string;
+        currency: string;
+        created_by: string | null;
+        custom: unknown;
+      }>(
+        sql`
       select party_id, subsidiary_id, document_date::text, status, currency, created_by, custom
-        from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`, 'objects'))[0]
-    if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
-    const portalRequest = header.created_by === PORTAL_ACTOR_ID ? portalReturnRequest(header.custom) : null
+        from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`,
+        "objects",
+      )
+    )[0];
+    if (!header) throw new ReturnRefusal("Return authorization not found", "not_found", 404);
+    const portalRequest =
+      header.created_by === PORTAL_ACTOR_ID ? portalReturnRequest(header.custom) : null;
     if (header.created_by === PORTAL_ACTOR_ID && !portalRequest) {
-      throw new ReturnRefusal('The portal return request details are missing', 'invalid_input', 422, 'Ask the customer to submit the return again')
+      throw new ReturnRefusal(
+        "The portal return request details are missing",
+        "invalid_input",
+        422,
+        "Ask the customer to submit the return again",
+      );
     }
-    const quantum = await creditQuantum(header.currency)
-    const scale = quantumScale(quantum)
-    let creditId = current.customerCreditId
-    let awaitingCreditApproval = false
+    const quantum = await creditQuantum(header.currency);
+    const scale = quantumScale(quantum);
+    let creditId = current.customerCreditId;
+    let awaitingCreditApproval = false;
     if (!creditId) {
-      const linesById = new Map(current.lines.map((line) => [line.lineId, line]))
-      const creditLines: DocumentLineInput[] = []
-      const credited: Array<{ lineId: string; itemId: string | null; lineTotalMinor: bigint }> = []
-      const claims: OrderLineClaims = new Map()
+      const linesById = new Map(current.lines.map((line) => [line.lineId, line]));
+      const creditLines: DocumentLineInput[] = [];
+      const credited: Array<{ lineId: string; itemId: string | null; lineTotalMinor: bigint }> = [];
+      const claims: OrderLineClaims = new Map();
       for (const decision of input.inspectionLines) {
-        const rmaLine = linesById.get(decision.lineId)
-        if (!rmaLine?.sourceIssueMovementId) throw new ReturnRefusal(`RMA line ${decision.lineId} has no return source`, 'source_unavailable', 422, 'Reload the authorized return lines')
-        const line = await customerCreditLine(input.orgId, current.id, decision, rmaLine.sourceIssueMovementId, claims)
+        const rmaLine = linesById.get(decision.lineId);
+        if (!rmaLine?.sourceIssueMovementId)
+          throw new ReturnRefusal(
+            `RMA line ${decision.lineId} has no return source`,
+            "source_unavailable",
+            422,
+            "Reload the authorized return lines",
+          );
+        const line = await customerCreditLine(
+          input.orgId,
+          current.id,
+          decision,
+          rmaLine.sourceIssueMovementId,
+          claims,
+        );
         if (line) {
-          creditLines.push(line)
-          credited.push({ lineId: decision.lineId, itemId: rmaLine.itemId ?? null, lineTotalMinor: roundDiv(toUnits(line.amount), scale) })
+          creditLines.push(line);
+          credited.push({
+            lineId: decision.lineId,
+            itemId: rmaLine.itemId ?? null,
+            lineTotalMinor: roundDiv(toUnits(line.amount), scale),
+          });
         }
       }
-      if (creditLines.length === 0) throw new ReturnRefusal('Accept at least one unit before issuing a customer credit', 'invalid_input', 422, 'Accept a received quantity for at least one line')
-      const storeCreditProgramId = portalRequest?.resolution === 'store_credit'
-        ? await storeCreditProgramForCurrency(input.orgId, header.currency)
-        : null
-      if (portalRequest?.resolution === 'store_credit') {
-        creditLines.push(...storeCreditBonusLines(creditLines, portalRequest.storeCreditBonusPercent, quantum))
+      if (creditLines.length === 0)
+        throw new ReturnRefusal(
+          "Accept at least one unit before issuing a customer credit",
+          "invalid_input",
+          422,
+          "Accept a received quantity for at least one line",
+        );
+      const storeCreditProgramId =
+        portalRequest?.resolution === "store_credit"
+          ? await storeCreditProgramForCurrency(input.orgId, header.currency)
+          : null;
+      if (portalRequest?.resolution === "store_credit") {
+        creditLines.push(
+          ...storeCreditBonusLines(creditLines, portalRequest.storeCreditBonusPercent, quantum),
+        );
       }
       // The restocking fee rides on the accepted value: one income line per
       // fee-bearing return line, reducing the credit the customer receives.
@@ -781,15 +1054,15 @@ export async function inspectReturnAuthorization(input: {
         credited,
         waived: input.waiveFee === true,
         waiveReason: input.waiveReason ?? null,
-      })
-      for (const feeLine of restockingFeeCreditLines(fee)) creditLines.push(feeLine)
+      });
+      for (const feeLine of restockingFeeCreditLines(fee)) creditLines.push(feeLine);
       if (input.waiveFee === true && BigInt(fee.unwaivedTotalMinor) > 0n) {
         await recordRestockingFeeWaiver(db, input.orgId, input.actorId, input.documentId, {
           totalMinor: fee.unwaivedTotalMinor,
           currency: fee.currency,
           minorUnits: fee.minorUnits,
-          reason: (input.waiveReason ?? '').trim(),
-        })
+          reason: (input.waiveReason ?? "").trim(),
+        });
       }
       // A return against an invoice credits that invoice's own receivable
       // account, so the credit can be applied to it; a fulfillment-sourced
@@ -797,14 +1070,14 @@ export async function inspectReturnAuthorization(input: {
       // organization control).
       const sourceControlAccountId = current.sourceDocumentId
         ? await postedDocumentControlAccount(db, input.orgId, current.sourceDocumentId)
-        : null
+        : null;
       const created = await createDocument({
         orgId: input.orgId,
         userId: input.actorId,
-        kind: 'customer_credit',
+        kind: "customer_credit",
         key: customerCreditKey(current.id),
         subsidiaryId: header.subsidiary_id,
-        requestBody: { kind: 'customer_credit', rmaId: current.id, lines: input.inspectionLines },
+        requestBody: { kind: "customer_credit", rmaId: current.id, lines: input.inspectionLines },
         body: {
           partyId: header.party_id,
           subsidiaryId: header.subsidiary_id,
@@ -814,203 +1087,395 @@ export async function inspectReturnAuthorization(input: {
           memo: `Customer return under ${current.documentNumber}`,
           lines: creditLines,
           ...(sourceControlAccountId
-            ? { custom: {
-                controlAccountId: sourceControlAccountId,
-              } }
+            ? {
+                custom: {
+                  controlAccountId: sourceControlAccountId,
+                },
+              }
             : {}),
         },
         ...(portalRequest
-          ? { nativeCustom: {
-              ...(storeCreditProgramId ? { storeCreditProgramId } : {}),
-              portalReturnResolution: portalRequest.resolution,
-            } }
+          ? {
+              nativeCustom: {
+                ...(storeCreditProgramId ? { storeCreditProgramId } : {}),
+                portalReturnResolution: portalRequest.resolution,
+              },
+            }
           : {}),
-      })
-      creditId = created.id
-      if (created.status === 'created') {
-        await runRecordFlows({ kind: 'on_create', source: 'ui' }, 'customer_credit', created.id, { orgId: input.orgId, userId: input.actorId })
-        if (created.deferredUpdate) await runRecordFlows(created.deferredUpdate, 'customer_credit', created.id, { orgId: input.orgId, userId: input.actorId })
+      });
+      creditId = created.id;
+      if (created.status === "created") {
+        await runRecordFlows({ kind: "on_create", source: "ui" }, "customer_credit", created.id, {
+          orgId: input.orgId,
+          userId: input.actorId,
+        });
+        if (created.deferredUpdate)
+          await runRecordFlows(created.deferredUpdate, "customer_credit", created.id, {
+            orgId: input.orgId,
+            userId: input.actorId,
+          });
       }
-      const submission = await submitAndReleaseIfUngated('customer_credit', creditId, input.actorId)
-      if (submission.flowError) throw new ReturnRefusal(submission.flowError, 'approval_routing_failed', 422, 'Correct the customer credit approval flow, then inspect again')
-      awaitingCreditApproval = submission.gated
+      const submission = await submitAndReleaseIfUngated(
+        "customer_credit",
+        creditId,
+        input.actorId,
+      );
+      if (submission.flowError)
+        throw new ReturnRefusal(
+          submission.flowError,
+          "approval_routing_failed",
+          422,
+          "Correct the customer credit approval flow, then inspect again",
+        );
+      awaitingCreditApproval = submission.gated;
       const inspected = await recordReturnInspection(
-        db, input.orgId, input.actorId, input.documentId, input.inspectionLines, creditId, input.allowedSubsidiaryIds,
-      )
-      await linkReturnDocument(inspected.id, creditId, input.orgId, input.actorId)
+        db,
+        input.orgId,
+        input.actorId,
+        input.documentId,
+        input.inspectionLines,
+        creditId,
+        input.allowedSubsidiaryIds,
+      );
+      await linkReturnDocument(inspected.id, creditId, input.orgId, input.actorId);
       await createVendorReturnDrafts({
         orgId: input.orgId,
         actorId: input.actorId,
         rma: inspected,
         rmaDocumentDate: header.document_date,
         inspectionLines: input.inspectionLines,
-      })
-      if (awaitingCreditApproval) return { authorization: await getReturnAuthorization(db, input.orgId, input.documentId, input.allowedSubsidiaryIds), awaitingCreditApproval: true }
+      });
+      if (awaitingCreditApproval)
+        return {
+          authorization: await getReturnAuthorization(
+            db,
+            input.orgId,
+            input.documentId,
+            input.allowedSubsidiaryIds,
+          ),
+          awaitingCreditApproval: true,
+        };
     } else {
-      const credit = (await db.execute<{ status: string }>(sql`
-        select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`, 'objects'))[0]
-      if (!credit) throw new ReturnRefusal('Return authorization customer credit not found', 'not_found', 404)
-      if (credit.status === 'pending_approval') {
-        return { authorization: current, awaitingCreditApproval: true }
+      const credit = (
+        await db.execute<{ status: string }>(
+          sql`
+        select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`,
+          "objects",
+        )
+      )[0];
+      if (!credit)
+        throw new ReturnRefusal("Return authorization customer credit not found", "not_found", 404);
+      if (credit.status === "pending_approval") {
+        return { authorization: current, awaitingCreditApproval: true };
       }
-      if (credit.status !== 'approved' && credit.status !== 'posted') {
-        throw new ReturnRefusal(`Customer credit is ${credit.status}; resolve it before completing the return`, 'wrong_stage', 409, 'Resolve or resubmit the customer credit, then inspect the return again')
+      if (credit.status !== "approved" && credit.status !== "posted") {
+        throw new ReturnRefusal(
+          `Customer credit is ${credit.status}; resolve it before completing the return`,
+          "wrong_stage",
+          409,
+          "Resolve or resubmit the customer credit, then inspect the return again",
+        );
       }
     }
 
-    if (!creditId) throw new ReturnRefusal('Customer credit was not created', 'wrong_stage', 409, 'Reload the return authorization and inspect it again')
-    const creditStatus = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`, 'objects'))[0]?.status
-    if (creditStatus === 'approved') {
+    if (!creditId)
+      throw new ReturnRefusal(
+        "Customer credit was not created",
+        "wrong_stage",
+        409,
+        "Reload the return authorization and inspect it again",
+      );
+    const creditStatus = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`,
+        "objects",
+      )
+    )[0]?.status;
+    if (creditStatus === "approved") {
       await postDocument(creditId, await controlDeps(input.orgId), {
         deferEffects: true,
-        audit: { actorId: input.actorId, source: 'ui' },
-      })
-    } else if (creditStatus !== 'posted') {
-      throw new ReturnRefusal(`Customer credit is ${creditStatus ?? 'missing'}`, 'wrong_stage', 409, 'Approve the customer credit before completing inspection')
+        audit: { actorId: input.actorId, source: "ui" },
+      });
+    } else if (creditStatus !== "posted") {
+      throw new ReturnRefusal(
+        `Customer credit is ${creditStatus ?? "missing"}`,
+        "wrong_stage",
+        409,
+        "Approve the customer credit before completing inspection",
+      );
     }
-    postedCreditId = creditId
-    return { authorization: await getReturnAuthorization(db, input.orgId, input.documentId, input.allowedSubsidiaryIds), awaitingCreditApproval: false }
-  })
-  if (!postedCreditId) return result
+    postedCreditId = creditId;
+    return {
+      authorization: await getReturnAuthorization(
+        db,
+        input.orgId,
+        input.documentId,
+        input.allowedSubsidiaryIds,
+      ),
+      awaitingCreditApproval: false,
+    };
+  });
+  if (!postedCreditId) return result;
   // Posting commits its durable effect row first; stock receipts run after that
   // commit, before scrap leaves the quarantine location.
-  await runPostDocumentEffects(postedCreditId, 'approved', { actorId: input.actorId })
+  await runPostDocumentEffects(postedCreditId, "approved", { actorId: input.actorId });
   const authorization = await withOrgTransaction(input.orgId, async () => {
-    const rma = await getReturnAuthorization(db, input.orgId, input.documentId, input.allowedSubsidiaryIds)
-    if (rma.stage === 'done') return rma
+    const rma = await getReturnAuthorization(
+      db,
+      input.orgId,
+      input.documentId,
+      input.allowedSubsidiaryIds,
+    );
+    if (rma.stage === "done") return rma;
     for (const line of rma.lines) {
-      if (line.disposition !== 'scrap' || line.accepted === '0' || line.scrapMovementId || !line.itemId || !line.dispositionLocationId) continue
-      const header = (await db.execute<{ subsidiary_id: string; document_date: string }>(sql`
-        select subsidiary_id, document_date::text from documents where org_id = ${input.orgId} and id = ${input.documentId}`, 'objects'))[0]
-      if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
-      const idempotencyKey = `rma-scrap:${input.documentId}:${line.lineId}`
-      let movementId = await findScrapMovement(input.orgId, idempotencyKey, line)
+      if (
+        line.disposition !== "scrap" ||
+        line.accepted === "0" ||
+        line.scrapMovementId ||
+        !line.itemId ||
+        !line.dispositionLocationId
+      )
+        continue;
+      const header = (
+        await db.execute<{ subsidiary_id: string; document_date: string }>(
+          sql`
+        select subsidiary_id, document_date::text from documents where org_id = ${input.orgId} and id = ${input.documentId}`,
+          "objects",
+        )
+      )[0];
+      if (!header) throw new ReturnRefusal("Return authorization not found", "not_found", 404);
+      const idempotencyKey = `rma-scrap:${input.documentId}:${line.lineId}`;
+      let movementId = await findScrapMovement(input.orgId, idempotencyKey, line);
       if (!movementId) {
         try {
-          const acceptedQuantity = canonicalDecimal(line.accepted, 8)
-          if (acceptedQuantity === null) throw new ReturnRefusal(`Accepted quantity for RMA line ${line.lineId} is unreadable`, 'invalid_quantity', 422, 'Reload the return authorization and enter an exact accepted quantity')
-          movementId = (await adjustInventory(input.orgId, input.actorId, {
-            itemId: line.itemId,
-            stockLocationId: line.dispositionLocationId,
-            quantityDelta: `-${acceptedQuantity}`,
-            subsidiaryId: header.subsidiary_id,
-            date: header.document_date,
-            idempotencyKey,
-            lotId: line.lotId,
-            serialId: line.serialId,
-            memo: `Scrap from return authorization ${rma.documentNumber}`,
-          })).movementId
+          const acceptedQuantity = canonicalDecimal(line.accepted, 8);
+          if (acceptedQuantity === null)
+            throw new ReturnRefusal(
+              `Accepted quantity for RMA line ${line.lineId} is unreadable`,
+              "invalid_quantity",
+              422,
+              "Reload the return authorization and enter an exact accepted quantity",
+            );
+          movementId = (
+            await adjustInventory(input.orgId, input.actorId, {
+              itemId: line.itemId,
+              stockLocationId: line.dispositionLocationId,
+              quantityDelta: `-${acceptedQuantity}`,
+              subsidiaryId: header.subsidiary_id,
+              date: header.document_date,
+              idempotencyKey,
+              lotId: line.lotId,
+              serialId: line.serialId,
+              memo: `Scrap from return authorization ${rma.documentNumber}`,
+            })
+          ).movementId;
         } catch (error) {
-          if (!isUniqueConstraintError(error)) throw error
-          movementId = await findScrapMovement(input.orgId, idempotencyKey, line)
-          if (!movementId) throw error
+          if (!isUniqueConstraintError(error)) throw error;
+          movementId = await findScrapMovement(input.orgId, idempotencyKey, line);
+          if (!movementId) throw error;
         }
       }
-      if (!movementId) throw new ReturnRefusal(`Scrap movement for RMA line ${line.lineId} was not recorded`, 'changed_concurrently', 409, 'Reload the return authorization and retry inspection')
+      if (!movementId)
+        throw new ReturnRefusal(
+          `Scrap movement for RMA line ${line.lineId} was not recorded`,
+          "changed_concurrently",
+          409,
+          "Reload the return authorization and retry inspection",
+        );
       const recorded = await db.execute<never>(sql`
         update rma_lines set scrap_movement_id = ${movementId}, updated_by = ${input.actorId}, updated_at = now()
          where org_id = ${input.orgId} and document_id = ${input.documentId} and line_id = ${line.lineId}
-           and disposition = 'scrap' and scrap_movement_id is null`)
+           and disposition = 'scrap' and scrap_movement_id is null`);
       if (recorded.rowCount !== 1) {
-        const current = await db.execute<{ scrap_movement_id: string | null }>(sql`
-          select scrap_movement_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.documentId} and line_id = ${line.lineId}`, 'objects')
+        const current = await db.execute<{ scrap_movement_id: string | null }>(
+          sql`
+          select scrap_movement_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.documentId} and line_id = ${line.lineId}`,
+          "objects",
+        );
         if (current[0]?.scrap_movement_id !== movementId) {
-          throw new ReturnRefusal(`Scrap for RMA line ${line.lineId} changed concurrently`, 'changed_concurrently', 409, 'Reload the return authorization and retry inspection')
+          throw new ReturnRefusal(
+            `Scrap for RMA line ${line.lineId} changed concurrently`,
+            "changed_concurrently",
+            409,
+            "Reload the return authorization and retry inspection",
+          );
         }
       }
     }
-    return completeReturnInspection(db, input.orgId, input.actorId, input.documentId, input.allowedSubsidiaryIds)
-  })
-  return { authorization, awaitingCreditApproval: false }
+    return completeReturnInspection(
+      db,
+      input.orgId,
+      input.actorId,
+      input.documentId,
+      input.allowedSubsidiaryIds,
+    );
+  });
+  return { authorization, awaitingCreditApproval: false };
 }
 
-async function findScrapMovement(orgId: string, idempotencyKey: string, line: ReturnAuthorization['lines'][number]): Promise<string | null> {
-  const row = (await db.execute<{ id: string; item_id: string; stock_location_id: string; quantity: string; lot_id: string | null; serial_id: string | null }>(sql`
+async function findScrapMovement(
+  orgId: string,
+  idempotencyKey: string,
+  line: ReturnAuthorization["lines"][number],
+): Promise<string | null> {
+  const row = (
+    await db.execute<{
+      id: string;
+      item_id: string;
+      stock_location_id: string;
+      quantity: string;
+      lot_id: string | null;
+      serial_id: string | null;
+    }>(
+      sql`
     select id, item_id, stock_location_id, quantity::text, lot_id, serial_id
       from inventory_movements
-     where org_id = ${orgId} and idempotency_key = ${idempotencyKey} and kind = 'issue' and status = 'posted'`, 'objects'))[0]
-  if (!row) return null
-  if (row.item_id !== line.itemId || row.stock_location_id !== line.dispositionLocationId
-    || row.lot_id !== line.lotId || row.serial_id !== line.serialId
-    || compareDecimal(row.quantity, `-${line.accepted}`) !== 0) {
-    throw new ReturnRefusal(`Scrap movement for RMA line ${line.lineId} conflicts with its inspection`, 'changed_concurrently', 409, 'Contact an administrator to review the inventory movement before retrying')
+     where org_id = ${orgId} and idempotency_key = ${idempotencyKey} and kind = 'issue' and status = 'posted'`,
+      "objects",
+    )
+  )[0];
+  if (!row) return null;
+  if (
+    row.item_id !== line.itemId ||
+    row.stock_location_id !== line.dispositionLocationId ||
+    row.lot_id !== line.lotId ||
+    row.serial_id !== line.serialId ||
+    compareDecimal(row.quantity, `-${line.accepted}`) !== 0
+  ) {
+    throw new ReturnRefusal(
+      `Scrap movement for RMA line ${line.lineId} conflicts with its inspection`,
+      "changed_concurrently",
+      409,
+      "Contact an administrator to review the inventory movement before retrying",
+    );
   }
-  return row.id
+  return row.id;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const shape = error as { code?: unknown; cause?: { code?: unknown } }
-  return shape.code === '23505' || shape.cause?.code === '23505'
+  if (!error || typeof error !== "object") return false;
+  const shape = error as { code?: unknown; cause?: { code?: unknown } };
+  return shape.code === "23505" || shape.cause?.code === "23505";
 }
 
 export async function sendReturnAuthorizationEmail(input: {
-  orgId: string
-  actorId: string
-  documentId: string
-  type: 'received' | 'decision'
-  to?: string
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  actorId: string;
+  documentId: string;
+  type: "received" | "decision";
+  to?: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<{ to: string; subject: string }> {
-  const authorization = await loadReturnAuthorization(input.orgId, input.documentId, input.allowedSubsidiaryIds)
-  const validStage = input.type === 'received'
-    ? authorization.stage === 'receiving' || authorization.stage === 'inspected' || authorization.stage === 'done'
-    : authorization.stage === 'done' || authorization.stage === 'rejected'
+  const authorization = await loadReturnAuthorization(
+    input.orgId,
+    input.documentId,
+    input.allowedSubsidiaryIds,
+  );
+  const validStage =
+    input.type === "received"
+      ? authorization.stage === "receiving" ||
+        authorization.stage === "inspected" ||
+        authorization.stage === "done"
+      : authorization.stage === "done" || authorization.stage === "rejected";
   if (!validStage) {
     throw new ReturnRefusal(
       `${authorization.documentNumber} is not ready for this email`,
-      'wrong_stage',
+      "wrong_stage",
       409,
-      input.type === 'received' ? 'Record receipt of the customer goods before sending this message' : 'Complete inspection or reject the authorization before sending its decision',
-    )
+      input.type === "received"
+        ? "Record receipt of the customer goods before sending this message"
+        : "Complete inspection or reject the authorization before sending its decision",
+    );
   }
-  const party = (await db.execute<{ email: string | null; display_name: string | null; org_name: string }>(sql`
+  const party = (
+    await db.execute<{ email: string | null; display_name: string | null; org_name: string }>(
+      sql`
     select p.email, p.display_name, o.name as org_name
       from orgs o left join parties p on p.org_id = o.id and p.id = ${authorization.customerId}
-     where o.id = ${input.orgId}`, 'objects'))[0]
-  const to = input.to?.trim() || party?.email?.trim() || ''
-  if (!to) throw new ReturnRefusal('No recipient email', 'invalid_input', 422, "Enter a recipient or add an email address to the customer's record")
-  const delivery = await resolveOrgEmailTransportDetailed(input.orgId)
-  if (delivery.state !== 'ready') {
-    const parts = emailDeliveryBlockedParts(delivery)
-    throw new ReturnRefusal(parts.summary, 'invalid_input', 422, parts.remedy)
+     where o.id = ${input.orgId}`,
+      "objects",
+    )
+  )[0];
+  const to = input.to?.trim() || party?.email?.trim() || "";
+  if (!to)
+    throw new ReturnRefusal(
+      "No recipient email",
+      "invalid_input",
+      422,
+      "Enter a recipient or add an email address to the customer's record",
+    );
+  const delivery = await resolveOrgEmailTransportDetailed(input.orgId);
+  if (delivery.state !== "ready") {
+    const parts = emailDeliveryBlockedParts(delivery);
+    throw new ReturnRefusal(parts.summary, "invalid_input", 422, parts.remedy);
   }
-  const transport = delivery.transport
+  const transport = delivery.transport;
   const linkedCredit = authorization.customerCreditId
-    ? (await db.execute<{ document_number: string }>(sql`select document_number from documents where org_id = ${input.orgId} and id = ${authorization.customerCreditId}`, 'objects'))[0]?.document_number
-    : null
-  const reason = input.type === 'decision' && authorization.stage === 'rejected'
-    ? (await db.execute<{ rejection_reason: string | null }>(sql`select rejection_reason from rma_documents where org_id = ${input.orgId} and document_id = ${input.documentId}`, 'objects'))[0]?.rejection_reason
-    : null
-  const body = input.type === 'received'
-    ? returnReceivedEmail({ orgName: party?.org_name || 'OpenBooks', recipientName: party?.display_name, rmaNumber: authorization.documentNumber })
-    : returnDecisionEmail({ orgName: party?.org_name || 'OpenBooks', recipientName: party?.display_name, rmaNumber: authorization.documentNumber, customerCreditNumber: linkedCredit, reason })
+    ? (
+        await db.execute<{ document_number: string }>(
+          sql`select document_number from documents where org_id = ${input.orgId} and id = ${authorization.customerCreditId}`,
+          "objects",
+        )
+      )[0]?.document_number
+    : null;
+  const reason =
+    input.type === "decision" && authorization.stage === "rejected"
+      ? (
+          await db.execute<{ rejection_reason: string | null }>(
+            sql`select rejection_reason from rma_documents where org_id = ${input.orgId} and document_id = ${input.documentId}`,
+            "objects",
+          )
+        )[0]?.rejection_reason
+      : null;
+  const body =
+    input.type === "received"
+      ? returnReceivedEmail({
+          orgName: party?.org_name || "OpenBooks",
+          recipientName: party?.display_name,
+          rmaNumber: authorization.documentNumber,
+        })
+      : returnDecisionEmail({
+          orgName: party?.org_name || "OpenBooks",
+          recipientName: party?.display_name,
+          rmaNumber: authorization.documentNumber,
+          customerCreditNumber: linkedCredit,
+          reason,
+        });
   const logId = await insertEmailLog({
     orgId: input.orgId,
     recipients: [to],
     subject: body.subject,
-    status: 'queued',
-    categoryKey: 'document',
-    meta: { recordType: 'rma', recordId: input.documentId, event: input.type },
-    actor: { kind: 'user', userId: input.actorId },
-  })
-  let uncertaintyRecorded = false
+    status: "queued",
+    categoryKey: "document",
+    meta: { recordType: "rma", recordId: input.documentId, event: input.type },
+    actor: { kind: "user", userId: input.actorId },
+  });
+  let uncertaintyRecorded = false;
   try {
-    const outcome = await sendVia(transport, { to, subject: body.subject, html: body.html, text: body.text }, {
-      deliveryKey: deriveEmailDeliveryKey({ orgId: input.orgId, scope: `direct:${logId}`, to }),
-    })
-    if (outcome.kind === 'sent') await markEmailSent(input.orgId, logId, outcome.providerMessageId)
+    const outcome = await sendVia(
+      transport,
+      { to, subject: body.subject, html: body.html, text: body.text },
+      {
+        deliveryKey: deriveEmailDeliveryKey({ orgId: input.orgId, scope: `direct:${logId}`, to }),
+      },
+    );
+    if (outcome.kind === "sent") await markEmailSent(input.orgId, logId, outcome.providerMessageId);
     else {
-      uncertaintyRecorded = true
-      await markEmailUncertain(input.orgId, logId, outcome.reason)
-      throw new Error(outcome.reason)
+      uncertaintyRecorded = true;
+      await markEmailUncertain(input.orgId, logId, outcome.reason);
+      throw new Error(outcome.reason);
     }
   } catch (error) {
-    if (!uncertaintyRecorded) await markEmailFailed(input.orgId, logId, error instanceof Error ? error.message : String(error))
-    throw error
+    if (!uncertaintyRecorded)
+      await markEmailFailed(
+        input.orgId,
+        logId,
+        error instanceof Error ? error.message : String(error),
+      );
+    throw error;
   }
-  return { to, subject: body.subject }
+  return { to, subject: body.subject };
 }
 
 export async function loadReturnAuthorization(
@@ -1018,7 +1483,9 @@ export async function loadReturnAuthorization(
   documentId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ReturnAuthorization> {
-  return withOrgContext(orgId, () => getReturnAuthorization(db, orgId, documentId, allowedSubsidiaryIds))
+  return withOrgContext(orgId, () =>
+    getReturnAuthorization(db, orgId, documentId, allowedSubsidiaryIds),
+  );
 }
 
 export async function findReturnAuthorization(
@@ -1027,10 +1494,10 @@ export async function findReturnAuthorization(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ReturnAuthorization | null> {
   try {
-    return await loadReturnAuthorization(orgId, documentId, allowedSubsidiaryIds)
+    return await loadReturnAuthorization(orgId, documentId, allowedSubsidiaryIds);
   } catch (error) {
-    if (error instanceof ReturnRefusal && error.code === 'not_found') return null
-    throw error
+    if (error instanceof ReturnRefusal && error.code === "not_found") return null;
+    throw error;
   }
 }
 
@@ -1038,41 +1505,60 @@ export async function loadReturnAuthorizations(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ReturnAuthorization[]> {
-  return withOrgContext(orgId, () => listReturnAuthorizations(db, orgId, allowedSubsidiaryIds))
+  return withOrgContext(orgId, () => listReturnAuthorizations(db, orgId, allowedSubsidiaryIds));
 }
 
 export async function loadReturnableSources(input: {
-  orgId: string
-  partyId: string
-  subsidiaryId: string
-  itemId?: string
-  stockLocationId?: string
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  partyId: string;
+  subsidiaryId: string;
+  itemId?: string;
+  stockLocationId?: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<Awaited<ReturnType<typeof returnableSources>> | null> {
-  if (!subsidiaryScopeAllows(input.allowedSubsidiaryIds, input.subsidiaryId)) return null
+  if (!subsidiaryScopeAllows(input.allowedSubsidiaryIds, input.subsidiaryId)) return null;
   return withOrgContext(input.orgId, async () => {
-    const party = (await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from parties where org_id = ${input.orgId} and id = ${input.partyId}`, 'objects'))[0]
-    if (!party || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, party.subsidiary_id, { orgWideNull: true })) {
-      return null
+    const party = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
+      select subsidiary_id from parties where org_id = ${input.orgId} and id = ${input.partyId}`,
+        "objects",
+      )
+    )[0];
+    if (
+      !party ||
+      !subsidiaryScopeAllows(input.allowedSubsidiaryIds, party.subsidiary_id, { orgWideNull: true })
+    ) {
+      return null;
     }
     return returnableSources(db, input.orgId, {
-      side: 'sales',
+      side: "sales",
       partyId: input.partyId,
       itemId: input.itemId,
       stockLocationId: input.stockLocationId,
-      subsidiaryIds: input.allowedSubsidiaryIds === null
-        ? [input.subsidiaryId]
-        : input.allowedSubsidiaryIds.has(input.subsidiaryId) ? [input.subsidiaryId] : [],
+      subsidiaryIds:
+        input.allowedSubsidiaryIds === null
+          ? [input.subsidiaryId]
+          : input.allowedSubsidiaryIds.has(input.subsidiaryId)
+            ? [input.subsidiaryId]
+            : [],
       limit: 200,
-    })
-  })
+    });
+  });
 }
 
-export async function loadReturnPartyScope(orgId: string, partyId: string): Promise<{ subsidiaryId: string | null } | null> {
+export async function loadReturnPartyScope(
+  orgId: string,
+  partyId: string,
+): Promise<{ subsidiaryId: string | null } | null> {
   return withOrgContext(orgId, async () => {
-    const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from parties where org_id = ${orgId} and id = ${partyId}`, 'objects'))[0]
-    return row ? { subsidiaryId: row.subsidiary_id } : null
-  })
+    const row = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
+      select subsidiary_id from parties where org_id = ${orgId} and id = ${partyId}`,
+        "objects",
+      )
+    )[0];
+    return row ? { subsidiaryId: row.subsidiary_id } : null;
+  });
 }

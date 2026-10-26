@@ -1,4 +1,4 @@
-import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
+import type { CaBonusIncomeReferenceSource } from "./canada/bonus-income-reference.ts";
 import type { db } from "../platform/db.ts";
 import type { Money } from "../money/brands.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";

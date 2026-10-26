@@ -81,7 +81,7 @@ async function raceTreeReparents(
     const observation = await observeTreeFence(transactionA.pid, transactionB.pid, secondUpdate);
     await transactionA.client.query("commit");
     openA = false;
-    const secondResult = observation.result ?? await secondUpdate;
+    const secondResult = observation.result ?? (await secondUpdate);
     if (secondResult.status === "fulfilled") await transactionB.client.query("commit");
     else await transactionB.client.query("rollback");
     openB = false;
@@ -101,24 +101,41 @@ function assertCycleRejected(result: TreeUpdateResult): void {
   }
 }
 
-test("segment-value tree writes serialize per tenant and segment before cycle checks", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const otherOrg = await createScratchOrg();
-  try {
-    const segmentId = randomUUID();
-    const otherSegmentId = randomUUID();
-    const otherOrgSegmentId = randomUUID();
-    await db.execute(sql`
+test(
+  "segment-value tree writes serialize per tenant and segment before cycle checks",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const otherOrg = await createScratchOrg();
+    try {
+      const segmentId = randomUUID();
+      const otherSegmentId = randomUUID();
+      const otherOrgSegmentId = randomUUID();
+      await db.execute(sql`
       insert into segment_definitions (id, org_id, key, name, plural_name, source_kind, is_hierarchical)
       values
         (${segmentId}, ${org.orgId}, 'region_tree', 'Region', 'Regions', 'custom', true),
         (${otherSegmentId}, ${org.orgId}, 'channel_tree', 'Channel', 'Channels', 'custom', true),
         (${otherOrgSegmentId}, ${otherOrg.orgId}, 'region_tree', 'Region', 'Regions', 'custom', true)`);
 
-    const ids = Array.from({ length: 14 }, () => randomUUID());
-    const [twoA, twoB, longA, longB, longC, validA, validB, validC, validD,
-      otherSegmentValue, otherOrgValue, directParent, directChild, rejectedDirect] = ids as string[];
-    await db.execute(sql`
+      const ids = Array.from({ length: 14 }, () => randomUUID());
+      const [
+        twoA,
+        twoB,
+        longA,
+        longB,
+        longC,
+        validA,
+        validB,
+        validC,
+        validD,
+        otherSegmentValue,
+        otherOrgValue,
+        directParent,
+        directChild,
+        rejectedDirect,
+      ] = ids as string[];
+      await db.execute(sql`
       insert into segment_values (id, org_id, segment_id, parent_id, code, name)
       values
         (${twoA}, ${org.orgId}, ${segmentId}, null, 'TWO-A', 'Two A'),
@@ -134,64 +151,65 @@ test("segment-value tree writes serialize per tenant and segment before cycle ch
         (${otherOrgValue}, ${otherOrg.orgId}, ${otherOrgSegmentId}, null, 'OTHER-ORG', 'Other organization'),
         (${directParent}, ${org.orgId}, ${segmentId}, null, 'DIRECT-PARENT', 'Direct parent')`);
 
-    const twoNode = await raceTreeReparents(
-      org.orgId,
-      { valueId: twoA, parentId: twoB },
-      { valueId: twoB, parentId: twoA },
-    );
-    assert.equal(twoNode.blocked, true, "the reciprocal reparent must wait on the tree fence");
-    assertCycleRejected(twoNode.second);
+      const twoNode = await raceTreeReparents(
+        org.orgId,
+        { valueId: twoA, parentId: twoB },
+        { valueId: twoB, parentId: twoA },
+      );
+      assert.equal(twoNode.blocked, true, "the reciprocal reparent must wait on the tree fence");
+      assertCycleRejected(twoNode.second);
 
-    const longer = await raceTreeReparents(
-      org.orgId,
-      { valueId: longA, parentId: longC },
-      { valueId: longC, parentId: longB },
-    );
-    assert.equal(longer.blocked, true, "the longer-cycle reparent must wait on the tree fence");
-    assertCycleRejected(longer.second);
+      const longer = await raceTreeReparents(
+        org.orgId,
+        { valueId: longA, parentId: longC },
+        { valueId: longC, parentId: longB },
+      );
+      assert.equal(longer.blocked, true, "the longer-cycle reparent must wait on the tree fence");
+      assertCycleRejected(longer.second);
 
-    const valid = await raceTreeReparents(
-      org.orgId,
-      { valueId: validA, parentId: validB },
-      { valueId: validC, parentId: validD },
-    );
-    assert.equal(valid.blocked, true, "same-segment valid moves still serialize at storage");
-    assert.equal(valid.second.status, "fulfilled", "independent valid moves must both commit");
+      const valid = await raceTreeReparents(
+        org.orgId,
+        { valueId: validA, parentId: validB },
+        { valueId: validC, parentId: validD },
+      );
+      assert.equal(valid.blocked, true, "same-segment valid moves still serialize at storage");
+      assert.equal(valid.second.status, "fulfilled", "independent valid moves must both commit");
 
-    await assert.rejects(
-      db.execute(sql`
+      await assert.rejects(
+        db.execute(sql`
         insert into segment_values (id, org_id, segment_id, parent_id, code, name)
         values (${rejectedDirect}, ${org.orgId}, ${segmentId}, ${otherSegmentValue}, 'BAD-SEGMENT', 'Bad segment parent')`),
-      (error: unknown) => pgMessage(error).includes("segment value parent is invalid"),
-    );
-    await assert.rejects(
-      db.execute(sql`
+        (error: unknown) => pgMessage(error).includes("segment value parent is invalid"),
+      );
+      await assert.rejects(
+        db.execute(sql`
         insert into segment_values (id, org_id, segment_id, parent_id, code, name)
         values (${rejectedDirect}, ${org.orgId}, ${segmentId}, ${otherOrgValue}, 'BAD-ORG', 'Bad organization parent')`),
-      (error: unknown) => pgMessage(error).includes("segment value parent is invalid"),
-    );
-    await db.execute(sql`
+        (error: unknown) => pgMessage(error).includes("segment value parent is invalid"),
+      );
+      await db.execute(sql`
       insert into segment_values (id, org_id, segment_id, parent_id, code, name)
       values (${directChild}, ${org.orgId}, ${segmentId}, ${directParent}, 'DIRECT-CHILD', 'Direct child')`);
 
-    const parents = await db.execute<{ id: string; parent_id: string | null }>(sql`
+      const parents = await db.execute<{ id: string; parent_id: string | null }>(sql`
       select id::text as id, parent_id::text as parent_id from segment_values
        where org_id = ${org.orgId}
          and id in (${twoA}, ${twoB}, ${longA}, ${longC}, ${validA}, ${validC}, ${directChild})`);
-    assert.deepEqual(
-      new Map(parents.rows.map((row) => [row.id, row.parent_id])),
-      new Map([
-        [twoA, twoB],
-        [twoB, null],
-        [longA, longC],
-        [longC, null],
-        [validA, validB],
-        [validC, validD],
-        [directChild, directParent],
-      ]),
-    );
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-    await dropScratchOrgReporting(otherOrg.orgId);
-  }
-});
+      assert.deepEqual(
+        new Map(parents.rows.map((row) => [row.id, row.parent_id])),
+        new Map([
+          [twoA, twoB],
+          [twoB, null],
+          [longA, longC],
+          [longC, null],
+          [validA, validB],
+          [validC, validD],
+          [directChild, directParent],
+        ]),
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+      await dropScratchOrgReporting(otherOrg.orgId);
+    }
+  },
+);

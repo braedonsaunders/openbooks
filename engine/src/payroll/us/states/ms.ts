@@ -22,7 +22,10 @@
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, certificateFlag, type PayrollCertificate,
+  certificateAmount,
+  certificateChoice,
+  certificateFlag,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -37,14 +40,23 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ms.ts";
 const DOLLAR = 10_000n;
 
 export type MsFilingStatus = "single" | "head_of_family" | "married_one" | "married_both";
 
 const MS_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "annual",
+  "daily",
 ];
 
 export interface MsYearRates {
@@ -72,18 +84,20 @@ const MS_EDITIONS_BY_YEAR: Record<number, MsYearRates> = {
   [MS_RATES_2026.year]: MS_RATES_2026,
 };
 
-export const MS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Mississippi Pub. 89-700-25-1 (Rev. 07/25) — 2026 Computer Payroll formula",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Mississippi Department of Revenue, Pub. 89-700-25-1 (Rev. 07/25) and "
-    + "Computer Payroll Accounting flowchart (Rev. 8/13/25) — 4.0% of taxable "
-    + "income over $10,000, Weekly 2026 Table A $500–$510 / $0-exemption cell "
-    + "($11)",
-  status: "published",
-  region: "MS",
-}];
+export const MS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Mississippi Pub. 89-700-25-1 (Rev. 07/25) — 2026 Computer Payroll formula",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Mississippi Department of Revenue, Pub. 89-700-25-1 (Rev. 07/25) and " +
+      "Computer Payroll Accounting flowchart (Rev. 8/13/25) — 4.0% of taxable " +
+      "income over $10,000, Weekly 2026 Table A $500–$510 / $0-exemption cell " +
+      "($11)",
+    status: "published",
+    region: "MS",
+  },
+];
 
 export function msRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
@@ -105,11 +119,26 @@ function compute(
 
   if (certificateFlag(input.certificate, "exempt")) {
     requireMilitarySpouseEligibility(input.certificate, "Mississippi", [
-      { key: "servicemember_stationed_under_orders_ms", description: "the servicemember spouse is assigned to Mississippi under military orders" },
-      { key: "employee_present_to_accompany", description: "the employee is in Mississippi solely to be with the servicemember spouse" },
-      { key: "employee_domiciled_outside_ms", description: "the employee maintains domicile outside Mississippi" },
-      { key: "servicemember_dd2058_on_file", description: "a copy of the servicemember's federal Form DD-2058 is attached" },
-      { key: "military_spouse_id_on_file", description: "a copy of the employee's Military Spouse ID card is attached" },
+      {
+        key: "servicemember_stationed_under_orders_ms",
+        description: "the servicemember spouse is assigned to Mississippi under military orders",
+      },
+      {
+        key: "employee_present_to_accompany",
+        description: "the employee is in Mississippi solely to be with the servicemember spouse",
+      },
+      {
+        key: "employee_domiciled_outside_ms",
+        description: "the employee maintains domicile outside Mississippi",
+      },
+      {
+        key: "servicemember_dd2058_on_file",
+        description: "a copy of the servicemember's federal Form DD-2058 is attached",
+      },
+      {
+        key: "military_spouse_id_on_file",
+        description: "a copy of the employee's Military Spouse ID card is attached",
+      },
     ]);
     const exempt = context.exemptResult({ factorKey: "MS_EXEMPT", factorFormat: "decimal" });
     if (exempt) return exempt;
@@ -118,7 +147,8 @@ function compute(
   // No 89-350: Pub. 89-700 withholds from Tables A at zero exemption — Single,
   // no personal exemption. The flowchart still subtracts the Single standard
   // deduction.
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as MsFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as MsFilingStatus;
   const exemption = U(certificateAmount(input.certificate, "exemption") ?? "0");
   let wages = U(input.wages) + U(input.supplemental ?? "0");
   if (input.basis === "nonresident") {
@@ -168,7 +198,12 @@ export const MS_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MS_STATE_ENGINE = defineStateEngine({
-  state: { state: "MS", label: "Mississippi income tax", printedPeriods: MS_PERIODS, fixedPeriodsOnly: true },
+  state: {
+    state: "MS",
+    label: "Mississippi income tax",
+    printedPeriods: MS_PERIODS,
+    fixedPeriodsOnly: true,
+  },
   editions: pairStateRateEditions(Object.values(MS_EDITIONS_BY_YEAR), MS_TAX_YEAR_EDITIONS),
   compute: compute,
 });
@@ -203,13 +238,13 @@ export const MS_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "MS" },
   purpose: "withholding",
   citation:
-    "Mississippi Department of Revenue, Pub. 89-700-25-1 (Rev. 07/25); "
-    + "Computer Payroll Accounting flowchart (Rev. 8/13/25); Form 89-350. "
-    + "Federal Form W-4 may not be used.",
+    "Mississippi Department of Revenue, Pub. 89-700-25-1 (Rev. 07/25); " +
+    "Computer Payroll Accounting flowchart (Rev. 8/13/25); Form 89-350. " +
+    "Federal Form W-4 may not be used.",
   summary:
-    "Sets Mississippi filing status and the dollar exemption claimed on line 6. "
-    + "If the employee does not furnish an 89-350, Pub. 89-700 requires "
-    + "withholding as Single with zero exemption.",
+    "Sets Mississippi filing status and the dollar exemption claimed on line 6. " +
+    "If the employee does not furnish an 89-350, Pub. 89-700 requires " +
+    "withholding as Single with zero exemption.",
   storage: "certificate_rows",
   fields: [
     {
@@ -230,9 +265,9 @@ export const MS_CERTIFICATE: PayrollCertificate = {
         },
       ],
       help:
-        "The flowchart's MS code. Married one-spouse uses the joint $4,600 "
-        + "standard deduction; both-spouses splits it to $2,300 each. Default "
-        + "Single is Pub. 89-700's missing-form rule (Tables A, zero exemption).",
+        "The flowchart's MS code. Married one-spouse uses the joint $4,600 " +
+        "standard deduction; both-spouses splits it to $2,300 each. Default " +
+        "Single is Pub. 89-700's missing-form rule (Tables A, zero exemption).",
     },
     {
       key: "exemption",
@@ -242,9 +277,9 @@ export const MS_CERTIFICATE: PayrollCertificate = {
       min: "0",
       default: "0",
       help:
-        "The dollar total from Form 89-350 line 6 (personal exemption plus "
-        + "dependents, age, and blindness). Default zero is Pub. 89-700's "
-        + "missing-form rule — withhold without the benefit of exemption.",
+        "The dollar total from Form 89-350 line 6 (personal exemption plus " +
+        "dependents, age, and blindness). Default zero is Pub. 89-700's " +
+        "missing-form rule — withhold without the benefit of exemption.",
     },
     {
       key: "additional_per_period",
@@ -253,42 +288,47 @@ export const MS_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A written agreement may withhold more than, but not less than, the "
-        + "required amount. Added AFTER the flowchart amount is rounded to "
-        + "the nearest whole dollar.",
+        "A written agreement may withhold more than, but not less than, the " +
+        "required amount. Added AFTER the flowchart amount is rounded to " +
+        "the nearest whole dollar.",
     },
     {
       key: "exempt",
       label: "Line 8 — Military spouse (MSRRA) exempt from Mississippi withholding",
       kind: "flag",
       help:
-        "A current Exempt on line 8, with the supporting military-spouse "
-        + "documents Pub. 89-700 requires, withholds zero.",
+        "A current Exempt on line 8, with the supporting military-spouse " +
+        "documents Pub. 89-700 requires, withholds zero.",
     },
     {
       key: "servicemember_stationed_under_orders_ms",
       label: "Servicemember spouse is assigned to Mississippi under military orders",
-      kind: "flag", help: "Pub. 89-700 military-spouse line 8 eligibility statement.",
+      kind: "flag",
+      help: "Pub. 89-700 military-spouse line 8 eligibility statement.",
     },
     {
       key: "employee_present_to_accompany",
       label: "Employee is in Mississippi solely to be with the servicemember spouse",
-      kind: "flag", help: "MSRRA presence condition for the Pub. 89-700 line 8 claim.",
+      kind: "flag",
+      help: "MSRRA presence condition for the Pub. 89-700 line 8 claim.",
     },
     {
       key: "employee_domiciled_outside_ms",
       label: "Employee maintains domicile outside Mississippi",
-      kind: "flag", help: "MSRRA nonresident-domicile condition for the Pub. 89-700 line 8 claim.",
+      kind: "flag",
+      help: "MSRRA nonresident-domicile condition for the Pub. 89-700 line 8 claim.",
     },
     {
       key: "servicemember_dd2058_on_file",
       label: "Copy of servicemember's federal Form DD-2058 is attached",
-      kind: "flag", help: "Pub. 89-700 explicitly requires DD-2058 to validate the exemption claim.",
+      kind: "flag",
+      help: "Pub. 89-700 explicitly requires DD-2058 to validate the exemption claim.",
     },
     {
       key: "military_spouse_id_on_file",
       label: "Copy of employee's Military Spouse ID card is attached",
-      kind: "flag", help: "Pub. 89-700 explicitly requires the Military Spouse ID card.",
+      kind: "flag",
+      help: "Pub. 89-700 explicitly requires the Military Spouse ID card.",
     },
   ],
 };
@@ -308,6 +348,6 @@ export const MS_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Mississippi Department of Revenue, Pub. 89-700-25-1 (Rev. 07/25); "
-    + "Computer Payroll Accounting flowchart (Rev. 8/13/25); Form 89-350",
+    "Mississippi Department of Revenue, Pub. 89-700-25-1 (Rev. 07/25); " +
+    "Computer Payroll Accounting flowchart (Rev. 8/13/25); Form 89-350",
 };

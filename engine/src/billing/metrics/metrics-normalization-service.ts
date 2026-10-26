@@ -1,5 +1,10 @@
 import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
-import { routeNativeApproval, readNativeApprovalDecision, lockApprovalSubject, cancelNativeApprovals } from "../../platform/approval-routing.ts";
+import {
+  routeNativeApproval,
+  readNativeApprovalDecision,
+  lockApprovalSubject,
+  cancelNativeApprovals,
+} from "../../platform/approval-routing.ts";
 import { lockActorCommandAuthority } from "../../organization/actor-command-authority.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -40,10 +45,12 @@ import {
  */
 
 const FEATURES_REMEDY = "Enable SaaS metrics in Company Settings → Features.";
-const SETUP_LIST_REMEDY = "Open Company Setup → SaaS Metrics to review the request and its recorded result.";
+const SETUP_LIST_REMEDY =
+  "Open Company Setup → SaaS Metrics to review the request and its recorded result.";
 const DEFAULT_LEASE_MINUTES = 10;
 
-export type NormalizationRequestStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
+export type NormalizationRequestStatus =
+  "pending" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface NormalizationRequestRecord {
   id: string;
@@ -131,7 +138,12 @@ function requireReason(reason: string): string {
 }
 
 /** Canonical body hash: same key with a byte-identical body replays, any difference conflicts. */
-function requestBodyHash(args: { orgId: string; month: string; reason: string; requestedBy: string }): string {
+function requestBodyHash(args: {
+  orgId: string;
+  month: string;
+  reason: string;
+  requestedBy: string;
+}): string {
   return createHash("sha256")
     .update(canonicalNormalizationJson({ v: 1, ...args }), "utf8")
     .digest("hex");
@@ -217,11 +229,14 @@ async function readRequest(
   orgId: string,
   requestId: string,
 ): Promise<RequestRow | null> {
-  const rows = await executor.execute<RequestRow>(sql`
+  const rows = await executor.execute<RequestRow>(
+    sql`
     select ${REQUEST_COLUMNS}
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and id = ${requestId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
@@ -290,16 +305,22 @@ export async function createNormalizationRequest(args: {
   const idempotencyKey = requireUuid(args.idempotencyKey, "idempotency_key");
   const bodyHash = requestBodyHash({ orgId, month, reason, requestedBy });
   return withOrgTransaction(orgId, async () => {
-    await lockNormalizationOperator(orgId,requestedBy);
-    const attemptInsert = async (): Promise<{ request: NormalizationRequestRecord; created: boolean } | null> => {
+    await lockNormalizationOperator(orgId, requestedBy);
+    const attemptInsert = async (): Promise<{
+      request: NormalizationRequestRecord;
+      created: boolean;
+    } | null> => {
       try {
-        const inserted = await db.execute<RequestRow>(sql`
+        const inserted = await db.execute<RequestRow>(
+          sql`
           insert into saas_metrics_normalization_requests
             (org_id, month, reason, requested_by, idempotency_key, request_hash, created_by, updated_by)
           values (${orgId}, ${month}::date, ${reason}, ${requestedBy}, ${idempotencyKey}, ${bodyHash},
                   ${requestedBy}, ${requestedBy})
           returning ${REQUEST_COLUMNS}
-        `, "objects");
+        `,
+          "objects",
+        );
         if (inserted.length !== 1 || !inserted[0]) {
           throw refusal(
             "saas_normalization_request_write_missing",
@@ -328,7 +349,10 @@ export async function createNormalizationRequest(args: {
         return null;
       }
     };
-    const replayOrRefuse = async (): Promise<{ request: NormalizationRequestRecord; created: boolean }> => {
+    const replayOrRefuse = async (): Promise<{
+      request: NormalizationRequestRecord;
+      created: boolean;
+    }> => {
       const byKey = await readRequestByKey(db, orgId, idempotencyKey);
       if (byKey) {
         if (byKey.request_hash === bodyHash) return { request: toRecord(byKey), created: false };
@@ -356,23 +380,23 @@ export async function createNormalizationRequest(args: {
     };
     const byKey = await readRequestByKey(db, orgId, idempotencyKey);
     if (byKey) {
-        if (byKey.request_hash === bodyHash) return { request: toRecord(byKey), created: false };
-        throw refusal(
-          "saas_normalization_idempotency_conflict",
-          `Idempotency key ${idempotencyKey} already belongs to request ${byKey.id} with a different body.`,
-          "Reuse the original request body with this idempotency key, or generate a new idempotency key in Company Setup → SaaS Metrics.",
-          { field: "idempotency_key", status: 409 },
-        );
-      }
+      if (byKey.request_hash === bodyHash) return { request: toRecord(byKey), created: false };
+      throw refusal(
+        "saas_normalization_idempotency_conflict",
+        `Idempotency key ${idempotencyKey} already belongs to request ${byKey.id} with a different body.`,
+        "Reuse the original request body with this idempotency key, or generate a new idempotency key in Company Setup → SaaS Metrics.",
+        { field: "idempotency_key", status: 409 },
+      );
+    }
     const live = await readLiveRequest(db, orgId, month);
     if (live) {
-        throw refusal(
-          "saas_normalization_request_live",
-          `A ${live.status} normalization request ${live.id} already covers ${month}.`,
-          liveRequestRemedy(toRecord(live)),
-          { field: "month", status: 409 },
-        );
-      }
+      throw refusal(
+        "saas_normalization_request_live",
+        `A ${live.status} normalization request ${live.id} already covers ${month}.`,
+        liveRequestRemedy(toRecord(live)),
+        { field: "month", status: 409 },
+      );
+    }
     return (await attemptInsert()) ?? replayOrRefuse();
   });
 }
@@ -382,11 +406,14 @@ async function readRequestByKey(
   orgId: string,
   idempotencyKey: string,
 ): Promise<RequestRow | null> {
-  const rows = await executor.execute<RequestRow>(sql`
+  const rows = await executor.execute<RequestRow>(
+    sql`
     select ${REQUEST_COLUMNS}
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and idempotency_key = ${idempotencyKey}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
@@ -395,11 +422,14 @@ async function readLiveRequest(
   orgId: string,
   month: string,
 ): Promise<RequestRow | null> {
-  const rows = await executor.execute<RequestRow>(sql`
+  const rows = await executor.execute<RequestRow>(
+    sql`
     select ${REQUEST_COLUMNS}
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and month = ${month}::date and status in ('pending', 'running')
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
@@ -421,11 +451,17 @@ async function diagnoseFenceMiss(
       { status: 409 },
     );
   }
-  const expiry = (await executor.execute<{ expired: boolean }>(sql`
+  const expiry =
+    (
+      await executor.execute<{ expired: boolean }>(
+        sql`
     select lease_expires_at <= now() as expired
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and id = ${requestId}
-  `, "objects"))[0]?.expired ?? true;
+  `,
+        "objects",
+      )
+    )[0]?.expired ?? true;
   throw refusal(
     "saas_normalization_lease_mismatch",
     `The presented lease token does not match the live lease for request ${requestId}.`,
@@ -446,8 +482,8 @@ export async function cancelNormalizationRequest(args: {
   const requestId = requireUuid(args.requestId, "request_id");
   const actorId = requireUuid(args.actorId, "actor_id");
   return withOrgTransaction(orgId, async () => {
-    await lockApprovalSubject(orgId,"metrics_normalization",requestId);
-    await lockNormalizationOperator(orgId,actorId);
+    await lockApprovalSubject(orgId, "metrics_normalization", requestId);
+    await lockNormalizationOperator(orgId, actorId);
     const existing = await readRequest(db, orgId, requestId);
     if (!existing) throw missingRequest(requestId);
     if (existing.status === "pending") {
@@ -459,13 +495,21 @@ export async function cancelNormalizationRequest(args: {
           { status: 409 },
         );
       }
-      await cancelNativeApprovals({orgId,actorId,subjectKind:"metrics_normalization",subjectId:requestId});
-      const updated = await db.execute<RequestRow>(sql`
+      await cancelNativeApprovals({
+        orgId,
+        actorId,
+        subjectKind: "metrics_normalization",
+        subjectId: requestId,
+      });
+      const updated = await db.execute<RequestRow>(
+        sql`
         update saas_metrics_normalization_requests
            set status = 'cancelled', updated_by = ${actorId}
          where org_id = ${orgId} and id = ${requestId} and status = 'pending'
         returning ${REQUEST_COLUMNS}
-      `, "objects");
+      `,
+        "objects",
+      );
       if (updated.length !== 1 || !updated[0]) throw missingRequest(requestId);
       return toRecord(updated[0]!);
     }
@@ -498,7 +542,9 @@ async function assertLiveClaim(
   requestId: string,
   leaseToken: string,
   ttlMinutes: number,
-): Promise<{ kind: "replay"; result: NormalizationExecutionResult } | { kind: "live"; claim: LiveClaim }> {
+): Promise<
+  { kind: "replay"; result: NormalizationExecutionResult } | { kind: "live"; claim: LiveClaim }
+> {
   const existing = await readRequest(executor, orgId, requestId);
   if (!existing) throw missingRequest(requestId);
   if (existing.status === "succeeded" && existing.result) {
@@ -517,8 +563,13 @@ async function assertLiveClaim(
     );
   }
   const claimed = await executor.execute<{
-    month: string; attempt_count: number; approved_by: string; reason: string; idempotency_key: string;
-  }>(sql`
+    month: string;
+    attempt_count: number;
+    approved_by: string;
+    reason: string;
+    idempotency_key: string;
+  }>(
+    sql`
     update saas_metrics_normalization_requests
        set lease_expires_at = greatest(lease_expires_at, now() + make_interval(mins => ${ttlMinutes})),
            progress = progress || '{"phase":"executing"}'::jsonb,
@@ -527,7 +578,9 @@ async function assertLiveClaim(
        and lease_token = ${leaseToken} and lease_expires_at > now()
     returning month::text as month, attempt_count, approved_by::text as approved_by,
               reason, idempotency_key::text as idempotency_key
-  `, "objects");
+  `,
+    "objects",
+  );
   if (claimed.length !== 1 || !claimed[0]) {
     await diagnoseFenceMiss(executor, orgId, requestId);
   }
@@ -559,14 +612,17 @@ async function markProgress(
   leaseToken: string,
   progress: Record<string, unknown>,
 ): Promise<void> {
-  const updated = await executor.execute<{ id: string }>(sql`
+  const updated = await executor.execute<{ id: string }>(
+    sql`
     update saas_metrics_normalization_requests
        set progress = progress || ${JSON.stringify(progress)}::jsonb,
            updated_by = approved_by
      where org_id = ${orgId} and id = ${requestId} and status = 'running'
        and lease_token = ${leaseToken} and lease_expires_at > now()
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (updated.length !== 1) {
     await diagnoseFenceMiss(executor, orgId, requestId);
   }
@@ -583,11 +639,15 @@ function assertLegacyMonth(before: StoredMetricsMonth, month: string): void {
       { field: "month", status: 409 },
     );
   }
-  const isLegacy = (row: { reportingCurrency: string | null; denominationVersion: string | null }): boolean =>
-    row.reportingCurrency === null && row.denominationVersion === null;
+  const isLegacy = (row: {
+    reportingCurrency: string | null;
+    denominationVersion: string | null;
+  }): boolean => row.reportingCurrency === null && row.denominationVersion === null;
   const legacy = all.filter(isLegacy);
   if (legacy.length !== all.length) {
-    const complete = all.filter((row) => row.reportingCurrency !== null && row.denominationVersion !== null);
+    const complete = all.filter(
+      (row) => row.reportingCurrency !== null && row.denominationVersion !== null,
+    );
     if (complete.length === all.length) {
       throw refusal(
         "saas_normalization_already_normalized",
@@ -610,7 +670,11 @@ function assertLegacyMonth(before: StoredMetricsMonth, month: string): void {
  * writer hash must agree with the read-only reproduction. Source changes,
  * altered values and missing keys all refuse before any correction write.
  */
-function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month, month: string): string[] {
+function proveLegacyMonth(
+  before: StoredMetricsMonth,
+  reproduced: LegacyV0Month,
+  month: string,
+): string[] {
   const all = [...before.monthly, ...before.facts, ...before.cohorts];
   // Natural-key grain first: the proved sets must match the reproduced
   // sets exactly, in both directions, before any value is compared.
@@ -618,15 +682,31 @@ function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month,
   const v0MonthlyKeys = new Set(reproduced.monthly.map((row) => row.subscriptionId));
   const storedFactsKeys = new Set(before.facts.map((row) => row.subsidiaryId));
   const v0FactsKeys = new Set(reproduced.facts.map((row) => row.subsidiaryId));
-  const storedCohortKeys = new Set(before.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
-  const v0CohortKeys = new Set(reproduced.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
+  const storedCohortKeys = new Set(
+    before.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`),
+  );
+  const v0CohortKeys = new Set(
+    reproduced.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`),
+  );
   const keyDrift = [
-    ...[...storedMonthlyKeys].filter((key) => !v0MonthlyKeys.has(key)).map((key) => `saas_metrics_monthly:${key}`),
-    ...[...v0MonthlyKeys].filter((key) => !storedMonthlyKeys.has(key)).map((key) => `saas_metrics_monthly:${key}`),
-    ...[...storedFactsKeys].filter((key) => !v0FactsKeys.has(key)).map((key) => `saas_metrics_facts_monthly:${key}`),
-    ...[...v0FactsKeys].filter((key) => !storedFactsKeys.has(key)).map((key) => `saas_metrics_facts_monthly:${key}`),
-    ...[...storedCohortKeys].filter((key) => !v0CohortKeys.has(key)).map((key) => `saas_metrics_cohort_monthly:${key}`),
-    ...[...v0CohortKeys].filter((key) => !storedCohortKeys.has(key)).map((key) => `saas_metrics_cohort_monthly:${key}`),
+    ...[...storedMonthlyKeys]
+      .filter((key) => !v0MonthlyKeys.has(key))
+      .map((key) => `saas_metrics_monthly:${key}`),
+    ...[...v0MonthlyKeys]
+      .filter((key) => !storedMonthlyKeys.has(key))
+      .map((key) => `saas_metrics_monthly:${key}`),
+    ...[...storedFactsKeys]
+      .filter((key) => !v0FactsKeys.has(key))
+      .map((key) => `saas_metrics_facts_monthly:${key}`),
+    ...[...v0FactsKeys]
+      .filter((key) => !storedFactsKeys.has(key))
+      .map((key) => `saas_metrics_facts_monthly:${key}`),
+    ...[...storedCohortKeys]
+      .filter((key) => !v0CohortKeys.has(key))
+      .map((key) => `saas_metrics_cohort_monthly:${key}`),
+    ...[...v0CohortKeys]
+      .filter((key) => !storedCohortKeys.has(key))
+      .map((key) => `saas_metrics_cohort_monthly:${key}`),
   ];
   if (keyDrift.length > 0) {
     throw refusal(
@@ -639,7 +719,10 @@ function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month,
   // One common stored hash must match an exact historical writer payload:
   // either the initial computation or the repeat with its cohort opening.
   const storedHashes = [...new Set(all.map((row) => row.inputsHash))];
-  if (storedHashes.length !== 1 || (storedHashes[0] !== reproduced.legacyHash && storedHashes[0] !== reproduced.initialLegacyHash)) {
+  if (
+    storedHashes.length !== 1 ||
+    (storedHashes[0] !== reproduced.legacyHash && storedHashes[0] !== reproduced.initialLegacyHash)
+  ) {
     const valuesMatch = compareV0Values(before, reproduced).length === 0;
     if (valuesMatch) {
       throw refusal(
@@ -747,13 +830,17 @@ function compareV0Values(before: StoredMetricsMonth, reproduced: LegacyV0Month):
       }
     }
   }
-  const v0CohortsByKey = new Map(reproduced.cohorts.map((row) => [`${row.subsidiaryId}:${row.cohortMonth}`, row]));
+  const v0CohortsByKey = new Map(
+    reproduced.cohorts.map((row) => [`${row.subsidiaryId}:${row.cohortMonth}`, row]),
+  );
   for (const stored of before.cohorts) {
     const expected = v0CohortsByKey.get(`${stored.subsidiaryId}:${stored.cohortMonth}`);
     if (!expected) continue;
     for (const field of V0_COHORT_FIELDS) {
       if (String(stored[field]) !== String(expected[field])) {
-        drift.push(`saas_metrics_cohort_monthly:${stored.subsidiaryId}:${stored.cohortMonth}.${field}`);
+        drift.push(
+          `saas_metrics_cohort_monthly:${stored.subsidiaryId}:${stored.cohortMonth}.${field}`,
+        );
       }
     }
   }
@@ -786,19 +873,29 @@ function assertSameGrain(
   const v1Monthly = new Set(normalized.computed.rows.map((row) => row.subscriptionId));
   const beforeFacts = new Set(before.facts.map((row) => row.subsidiaryId));
   const v1Facts = new Set(normalized.facts.map((row) => row.subsidiaryId));
-  const beforeCohorts = new Set(before.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
-  const v1Cohorts = new Set(normalized.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
-  for (const key of v1Monthly) if (!beforeMonthly.has(key)) missing.push(`saas_metrics_monthly:${key}`);
-  for (const key of beforeMonthly) if (!v1Monthly.has(key)) missing.push(`saas_metrics_monthly:${key}`);
-  for (const key of v1Facts) if (!beforeFacts.has(key)) missing.push(`saas_metrics_facts_monthly:${key}`);
-  for (const key of beforeFacts) if (!v1Facts.has(key)) missing.push(`saas_metrics_facts_monthly:${key}`);
-  for (const key of v1Cohorts) if (!beforeCohorts.has(key)) missing.push(`saas_metrics_cohort_monthly:${key}`);
-  for (const key of beforeCohorts) if (!v1Cohorts.has(key)) missing.push(`saas_metrics_cohort_monthly:${key}`);
+  const beforeCohorts = new Set(
+    before.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`),
+  );
+  const v1Cohorts = new Set(
+    normalized.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`),
+  );
+  for (const key of v1Monthly)
+    if (!beforeMonthly.has(key)) missing.push(`saas_metrics_monthly:${key}`);
+  for (const key of beforeMonthly)
+    if (!v1Monthly.has(key)) missing.push(`saas_metrics_monthly:${key}`);
+  for (const key of v1Facts)
+    if (!beforeFacts.has(key)) missing.push(`saas_metrics_facts_monthly:${key}`);
+  for (const key of beforeFacts)
+    if (!v1Facts.has(key)) missing.push(`saas_metrics_facts_monthly:${key}`);
+  for (const key of v1Cohorts)
+    if (!beforeCohorts.has(key)) missing.push(`saas_metrics_cohort_monthly:${key}`);
+  for (const key of beforeCohorts)
+    if (!v1Cohorts.has(key)) missing.push(`saas_metrics_cohort_monthly:${key}`);
   if (
-    missing.length > 0
-    || normalized.computed.rows.length !== before.monthly.length
-    || normalized.facts.length !== before.facts.length
-    || normalized.cohorts.length !== before.cohorts.length
+    missing.length > 0 ||
+    normalized.computed.rows.length !== before.monthly.length ||
+    normalized.facts.length !== before.facts.length ||
+    normalized.cohorts.length !== before.cohorts.length
   ) {
     throw refusal(
       "saas_normalization_grain_changed",
@@ -826,7 +923,8 @@ async function writeCorrectionAudit(
 ): Promise<void> {
   for (const seed of args.seeds) {
     const after = seed.after as { normalizationEvidence?: unknown } | null;
-    const inserted = await executor.execute<{ id: string }>(sql`
+    const inserted = await executor.execute<{ id: string }>(
+      sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (${args.orgId}, ${seed.table}, ${seed.rowId}, 'saas_normalization_corrected',
         ${JSON.stringify({
@@ -846,7 +944,9 @@ async function writeCorrectionAudit(
           v1Evidence: after?.normalizationEvidence ?? null,
         })}::jsonb, ${args.actor}, ${args.idempotencyKey})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (inserted.length !== 1) {
       throw refusal(
         "saas_normalization_audit_write_missing",
@@ -858,7 +958,10 @@ async function writeCorrectionAudit(
   }
 }
 
-function toFailure(error: unknown, month: string): { failure: string; remedy: string; error: UsageBillingError } {
+function toFailure(
+  error: unknown,
+  month: string,
+): { failure: string; remedy: string; error: UsageBillingError } {
   if (error instanceof UsageBillingError) {
     return { failure: `[${error.code}] ${error.message}`, remedy: error.remedy, error };
   }
@@ -868,7 +971,11 @@ function toFailure(error: unknown, month: string): { failure: string; remedy: st
     `Normalization execution for ${month} stopped before any metric change was kept: ${detail}`,
     "Review the failure detail, correct the cause, then retry the request in Company Setup → SaaS Metrics; the month's stored rows are unchanged.",
   );
-  return { failure: `[saas_normalization_execution_failed] ${wrapped.message}`, remedy: wrapped.remedy, error: wrapped };
+  return {
+    failure: `[saas_normalization_execution_failed] ${wrapped.message}`,
+    remedy: wrapped.remedy,
+    error: wrapped,
+  };
 }
 
 /**
@@ -887,7 +994,8 @@ async function recordExecutionFailure(args: {
 }): Promise<never> {
   try {
     await withOrgTransaction(args.orgId, async () => {
-      const updated = await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(
+        sql`
         update saas_metrics_normalization_requests
            set status = 'failed', failure = ${args.failure}, remedy = ${args.remedy},
                progress = progress || '{"phase":"failed"}'::jsonb,
@@ -895,13 +1003,18 @@ async function recordExecutionFailure(args: {
          where org_id = ${args.orgId} and id = ${args.requestId} and status = 'running'
            and lease_token = ${args.leaseToken} and lease_expires_at > now()
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (updated.length !== 1) {
         await diagnoseFenceMiss(db, args.orgId, args.requestId);
       }
     });
   } catch (recordError) {
-    if (recordError instanceof UsageBillingError && recordError.code.startsWith("saas_normalization_lease")) {
+    if (
+      recordError instanceof UsageBillingError &&
+      recordError.code.startsWith("saas_normalization_lease")
+    ) {
       throw args.original;
     }
     throw recordError;
@@ -946,7 +1059,11 @@ async function runCorrectionAttempt(
   return withOrgTransaction(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
     if (!(await lockAndCheckOrgFeature(db, orgId, "saasMetrics"))) {
-      throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
+      throw refusal(
+        "feature_off",
+        "SaaS metrics are disabled for this organization.",
+        FEATURES_REMEDY,
+      );
     }
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${normalizationMonthLockKey(orgId, month)}, 0))`,
@@ -988,22 +1105,31 @@ async function runCorrectionAttempt(
     // A closed month is corrected here only under this approved request;
     // the accounting period itself is never reopened and posted history is
     // never reversed or rewritten.
-    const deletedMonthly = await db.execute<{ id: string }>(sql`
+    const deletedMonthly = await db.execute<{ id: string }>(
+      sql`
       delete from saas_metrics_monthly
        where org_id = ${orgId} and month = ${claim.month}::date returning id
-    `, "objects");
-    const deletedFacts = await db.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    );
+    const deletedFacts = await db.execute<{ id: string }>(
+      sql`
       delete from saas_metrics_facts_monthly
        where org_id = ${orgId} and month = ${claim.month}::date returning id
-    `, "objects");
-    const deletedCohorts = await db.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    );
+    const deletedCohorts = await db.execute<{ id: string }>(
+      sql`
       delete from saas_metrics_cohort_monthly
        where org_id = ${orgId} and month = ${claim.month}::date returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (
-      deletedMonthly.length !== before.monthly.length
-      || deletedFacts.length !== before.facts.length
-      || deletedCohorts.length !== before.cohorts.length
+      deletedMonthly.length !== before.monthly.length ||
+      deletedFacts.length !== before.facts.length ||
+      deletedCohorts.length !== before.cohorts.length
     ) {
       throw refusal(
         "saas_normalization_row_count_drift",
@@ -1015,14 +1141,14 @@ async function runCorrectionAttempt(
     await writeNormalizedMetricsMonth(db, orgId, normalized);
     const after = await readStoredMetricsMonth(db, orgId, claim.month);
     if (
-      after.monthly.length !== normalized.computed.rows.length
-      || after.facts.length !== normalized.facts.length
-      || after.cohorts.length !== normalized.cohorts.length
-      || ![...after.monthly, ...after.facts, ...after.cohorts].every(
+      after.monthly.length !== normalized.computed.rows.length ||
+      after.facts.length !== normalized.facts.length ||
+      after.cohorts.length !== normalized.cohorts.length ||
+      ![...after.monthly, ...after.facts, ...after.cohorts].every(
         (row) =>
-          row.inputsHash === normalized.monthHash
-          && row.reportingCurrency === normalized.reportingCurrency
-          && row.denominationVersion === SAAS_METRICS_DENOMINATION_VERSION,
+          row.inputsHash === normalized.monthHash &&
+          row.reportingCurrency === normalized.reportingCurrency &&
+          row.denominationVersion === SAAS_METRICS_DENOMINATION_VERSION,
       )
     ) {
       throw refusal(
@@ -1048,10 +1174,16 @@ async function runCorrectionAttempt(
     };
     const beforeMonthlyByKey = new Map(before.monthly.map((row) => [row.subscriptionId, row]));
     const beforeFactsByKey = new Map(before.facts.map((row) => [row.subsidiaryId, row]));
-    const beforeCohortsByKey = new Map(before.cohorts.map((row) => [`${row.subsidiaryId}:${row.cohortMonth}`, row]));
+    const beforeCohortsByKey = new Map(
+      before.cohorts.map((row) => [`${row.subsidiaryId}:${row.cohortMonth}`, row]),
+    );
     const seeds: CorrectionAuditSeed[] = [
       ...after.monthly.map((row): CorrectionAuditSeed => {
-        const prior = requirePrior(beforeMonthlyByKey.get(row.subscriptionId), "saas_metrics_monthly", row.subscriptionId);
+        const prior = requirePrior(
+          beforeMonthlyByKey.get(row.subscriptionId),
+          "saas_metrics_monthly",
+          row.subscriptionId,
+        );
         return {
           table: "saas_metrics_monthly",
           rowId: row.id,
@@ -1063,7 +1195,11 @@ async function runCorrectionAttempt(
         };
       }),
       ...after.facts.map((row): CorrectionAuditSeed => {
-        const prior = requirePrior(beforeFactsByKey.get(row.subsidiaryId), "saas_metrics_facts_monthly", row.subsidiaryId);
+        const prior = requirePrior(
+          beforeFactsByKey.get(row.subsidiaryId),
+          "saas_metrics_facts_monthly",
+          row.subsidiaryId,
+        );
         return {
           table: "saas_metrics_facts_monthly",
           rowId: row.id,
@@ -1083,7 +1219,11 @@ async function runCorrectionAttempt(
         return {
           table: "saas_metrics_cohort_monthly",
           rowId: row.id,
-          naturalKey: { subsidiaryId: row.subsidiaryId, cohortMonth: row.cohortMonth, month: row.month },
+          naturalKey: {
+            subsidiaryId: row.subsidiaryId,
+            cohortMonth: row.cohortMonth,
+            month: row.month,
+          },
           change: "corrected",
           before: prior,
           after: row,
@@ -1116,7 +1256,8 @@ async function runCorrectionAttempt(
       replacedCohorts: before.cohorts.length,
       sourceV0Hashes,
     };
-    const finalized = await db.execute<{ id: string }>(sql`
+    const finalized = await db.execute<{ id: string }>(
+      sql`
       update saas_metrics_normalization_requests
          set status = 'succeeded', result = ${JSON.stringify(result)}::jsonb,
              progress = progress || '{"phase":"complete"}'::jsonb,
@@ -1124,7 +1265,9 @@ async function runCorrectionAttempt(
        where org_id = ${orgId} and id = ${requestId} and status = 'running'
          and lease_token = ${leaseToken} and lease_expires_at > now()
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (finalized.length !== 1) {
       await diagnoseFenceMiss(db, orgId, requestId);
     }
@@ -1162,7 +1305,7 @@ export async function approveAndExecuteNormalizationRequest(args: {
     );
   }
   const peek = await withOrgTransaction(orgId, async () => {
-    await lockNormalizationOperator(orgId,approverId);
+    await lockNormalizationOperator(orgId, approverId);
     return readRequest(db, orgId, requestId);
   });
   if (!peek) throw missingRequest(requestId);
@@ -1178,12 +1321,7 @@ export async function approveAndExecuteNormalizationRequest(args: {
     );
   }
   await withOrgTransaction(orgId, () =>
-    requireNormalizationApproval(
-      orgId,
-      requestId,
-      approverId,
-      args.approvalRunId,
-    ),
+    requireNormalizationApproval(orgId, requestId, approverId, args.approvalRunId),
   );
   if (peek.approved_by !== null && peek.approved_by !== approverId) {
     throw refusal(
@@ -1197,12 +1335,15 @@ export async function approveAndExecuteNormalizationRequest(args: {
   const leaseToken = randomUUID();
   await withOrgTransaction(orgId, async () => {
     if (peek.approved_by === null) {
-      const approved = await db.execute<{ id: string }>(sql`
+      const approved = await db.execute<{ id: string }>(
+        sql`
         update saas_metrics_normalization_requests
            set approved_by = ${approverId}, approved_at = now(), updated_by = ${approverId}
          where org_id = ${orgId} and id = ${requestId} and status = 'pending' and approved_by is null
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (approved.length !== 1) {
         const current = await readRequest(db, orgId, requestId);
         if (!current) throw missingRequest(requestId);
@@ -1222,7 +1363,8 @@ export async function approveAndExecuteNormalizationRequest(args: {
         );
       }
     }
-    const claimed = await db.execute<{ id: string }>(sql`
+    const claimed = await db.execute<{ id: string }>(
+      sql`
       update saas_metrics_normalization_requests
          set status = 'running', lease_token = ${leaseToken},
              lease_expires_at = now() + make_interval(mins => ${ttlMinutes}),
@@ -1231,7 +1373,9 @@ export async function approveAndExecuteNormalizationRequest(args: {
              updated_by = approved_by
        where org_id = ${orgId} and id = ${requestId} and status = 'pending'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (claimed.length !== 1) {
       const current = await readRequest(db, orgId, requestId);
       throw refusal(
@@ -1256,8 +1400,8 @@ export async function approveAndExecuteNormalizationRequest(args: {
     // claim — including a post-claim feature-off — records one under the
     // live lease.
     if (
-      error instanceof UsageBillingError
-      && [
+      error instanceof UsageBillingError &&
+      [
         "saas_normalization_request_missing",
         "saas_normalization_execute_state",
         "saas_normalization_execute_unapproved",
@@ -1270,7 +1414,14 @@ export async function approveAndExecuteNormalizationRequest(args: {
       throw error;
     }
     const { failure, remedy, error: original } = toFailure(error, month);
-    return await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
+    return await recordExecutionFailure({
+      orgId,
+      requestId,
+      leaseToken,
+      failure,
+      remedy,
+      original,
+    });
   }
 }
 
@@ -1306,12 +1457,7 @@ export async function approveAndExecuteNormalizationRequest(args: {
  * row can never shadow a later outcome.
  */
 export type NormalizationMonthState =
-  | "legacy"
-  | "ready"
-  | "pending"
-  | "running"
-  | "failed"
-  | "refused";
+  "legacy" | "ready" | "pending" | "running" | "failed" | "refused";
 
 export interface NormalizationMonthRequest {
   id: string;
@@ -1391,18 +1537,20 @@ function monthRequestState(
   // evidence tamper. Only rows that purport to carry normalization
   // evidence can disagree with their own row hash.
   const coherentHashes =
-    singleHash !== undefined && singleEvidence !== undefined && singleEvidence === singleHash
-    && shape.evidenceMismatch === 0;
+    singleHash !== undefined &&
+    singleEvidence !== undefined &&
+    singleEvidence === singleHash &&
+    shape.evidenceMismatch === 0;
   // Shape first, coherence second: completeV1Shape says every stored row
   // is a complete v1 row under one currency (version and evidence
   // presence ride along with the v1 counter), while coherentHashes adds
   // the single canonical hash with per-row evidence binding. Ready needs
   // both; diagnosis names shape failures before hash failures.
   const completeV1Shape =
-    shape.total > 0
-    && shape.v1 === shape.total
-    && shape.currencies.length === 1
-    && shape.currencies[0] !== undefined;
+    shape.total > 0 &&
+    shape.v1 === shape.total &&
+    shape.currencies.length === 1 &&
+    shape.currencies[0] !== undefined;
   const coherentV1 = completeV1Shape && coherentHashes;
   const describeShape = (): string => {
     if (shape.total === 0) return `Month ${month} has no stored metric rows.`;
@@ -1456,11 +1604,11 @@ function monthRequestState(
         detail.push("the stored evidence hashes do not agree on one canonical hash");
       }
       if (
-        result.subscriptionRows !== shape.monthly
-        || result.subsidiaryRows !== shape.facts
-        || result.replacedMonthly !== shape.monthly
-        || result.replacedFacts !== shape.facts
-        || result.replacedCohorts !== shape.cohorts
+        result.subscriptionRows !== shape.monthly ||
+        result.subsidiaryRows !== shape.facts ||
+        result.replacedMonthly !== shape.monthly ||
+        result.replacedFacts !== shape.facts ||
+        result.replacedCohorts !== shape.cohorts
       ) {
         detail.push(
           `the stored counts ${shape.monthly}/${shape.facts}/${shape.cohorts} do not match the recorded counts`,
@@ -1479,8 +1627,8 @@ function monthRequestState(
       ...base,
       state: "refused",
       failure:
-        `Request ${terminal.id} succeeded for ${month}, but the stored rows no longer match its recorded result: `
-        + `${detail.join("; ")}.`,
+        `Request ${terminal.id} succeeded for ${month}, but the stored rows no longer match its recorded result: ` +
+        `${detail.join("; ")}.`,
       remedy: MONTH_REQUEST_REMEDY,
     };
   }
@@ -1500,14 +1648,21 @@ function monthRequestState(
   return { ...base, state: "refused", failure: describeShape(), remedy: MONTH_REQUEST_REMEDY };
 }
 
-export async function listNormalizationMonthStates(orgId: string): Promise<NormalizationMonthStates[]> {
+export async function listNormalizationMonthStates(
+  orgId: string,
+): Promise<NormalizationMonthStates[]> {
   const resolvedOrgId = requireUuid(orgId, "org_id");
   return withOrgTransaction(resolvedOrgId, async () => {
     await acquireOrgFeatureGateLock(db, resolvedOrgId);
     if (!(await lockAndCheckOrgFeature(db, resolvedOrgId, "saasMetrics"))) {
-      throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
+      throw refusal(
+        "feature_off",
+        "SaaS metrics are disabled for this organization.",
+        FEATURES_REMEDY,
+      );
     }
-    const shapes = await db.execute<MonthShapeRow>(sql`
+    const shapes = await db.execute<MonthShapeRow>(
+      sql`
       with rows as (
         select month::text as month, reporting_currency, denomination_version, normalization_evidence,
                inputs_hash, 'monthly' as source
@@ -1548,14 +1703,19 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
                                 then 1 else 0 end), 0)::int as "evidenceMismatch"
         from months m left join rows r on r.month = m.month
        group by m.month order by m.month desc
-    `, "objects");
-    const requests = await db.execute<MonthRequestRow>(sql`
+    `,
+      "objects",
+    );
+    const requests = await db.execute<MonthRequestRow>(
+      sql`
       select id::text as id, month::text as month, status,
              created_at::text as "createdAt", failure, remedy, result
         from saas_metrics_normalization_requests
        where org_id = ${resolvedOrgId}
        order by month desc, created_at desc, id desc
-    `, "objects");
+    `,
+      "objects",
+    );
     const byMonth = new Map<string, MonthRequestRow[]>();
     for (const row of requests) {
       const key = row.month.slice(0, 10);
@@ -1575,9 +1735,9 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
   });
 }
 
-async function lockNormalizationOperator(orgId:string,actorId:string): Promise<void> {
-  const allowed=await lockActorCommandAuthority(db,orgId,actorId,null,"usage.manage");
-  if(allowed!==null)throw new ScopeNotFoundError();
+async function lockNormalizationOperator(orgId: string, actorId: string): Promise<void> {
+  const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, "usage.manage");
+  if (allowed !== null) throw new ScopeNotFoundError();
 }
 
 async function requireNormalizationApproval(
@@ -1586,7 +1746,7 @@ async function requireNormalizationApproval(
   actorId: string,
   approvalRunId?: string,
 ): Promise<void> {
-  await lockNormalizationOperator(orgId,actorId);
+  await lockNormalizationOperator(orgId, actorId);
   const decision = await readNativeApprovalDecision({
     orgId,
     actorId,
@@ -1597,9 +1757,12 @@ async function requireNormalizationApproval(
   });
   const ungated =
     !approvalRunId &&
-    (await db.execute<{ allowed: boolean }>(
-        sql`select public.normalization_request_flow_authorized(${orgId},${requestId},${actorId},'approved') as allowed`, "objects",
-      ))[0]?.allowed === true;
+    (
+      await db.execute<{ allowed: boolean }>(
+        sql`select public.normalization_request_flow_authorized(${orgId},${requestId},${actorId},'approved') as allowed`,
+        "objects",
+      )
+    )[0]?.allowed === true;
   if (!decision && !ungated)
     throw refusal(
       "saas_normalization_approval_required",
@@ -1617,8 +1780,7 @@ export async function releaseNormalizationApproval(args: {
   ctx: { orgId: string; userId?: string | null };
 }): Promise<void> {
   const actorId = args.ctx.userId;
-  if (!actorId)
-    throw new Error("A metrics correction requires a named operator.");
+  if (!actorId) throw new Error("A metrics correction requires a named operator.");
   const orgId = args.ctx.orgId,
     requestId = args.subjectId;
   const decision = await readNativeApprovalDecision({
@@ -1645,9 +1807,11 @@ export async function releaseNormalizationApproval(args: {
     });
     return;
   }
-  await lockNormalizationOperator(orgId,actorId);
-  const changed =
-    await db.execute(sql`update saas_metrics_normalization_requests set status='cancelled',updated_by=${actorId}
-    where org_id=${orgId} and id=${requestId} and status='pending' returning id`, "objects");
+  await lockNormalizationOperator(orgId, actorId);
+  const changed = await db.execute(
+    sql`update saas_metrics_normalization_requests set status='cancelled',updated_by=${actorId}
+    where org_id=${orgId} and id=${requestId} and status='pending' returning id`,
+    "objects",
+  );
   if (changed.length !== 1) throw missingRequest(requestId);
 }

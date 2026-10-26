@@ -73,12 +73,16 @@ test("unknown-table refusal names the table and the remedy", () => {
   assert.match(unknownSearchTableRefusal("pg_shadow"), /openbooks_query/);
 });
 
-
 test("null search values match SQL null and non-finite numbers refuse", () => {
-  assert.equal(buildGovernedSearchSql("accounts", { name: null }, COLUMNS),
-    'select * from openbooks_query."accounts" where "name" IS NULL limit 1000');
+  assert.equal(
+    buildGovernedSearchSql("accounts", { name: null }, COLUMNS),
+    'select * from openbooks_query."accounts" where "name" IS NULL limit 1000',
+  );
   for (const value of [NaN, Infinity, -Infinity]) {
     assert.throws(() => searchFilterLiteral(value), /finite numbers/);
-    assert.throws(() => buildGovernedSearchSql("accounts", { number: value }, COLUMNS), /finite numbers/);
+    assert.throws(
+      () => buildGovernedSearchSql("accounts", { number: value }, COLUMNS),
+      /finite numbers/,
+    );
   }
 });

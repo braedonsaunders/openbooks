@@ -51,10 +51,7 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:email-tokens",
-    `export function appBaseUrl() { return "https://books.example"; }`,
-  ],
+  ["mock:email-tokens", `export function appBaseUrl() { return "https://books.example"; }`],
 ]);
 
 const hooks = registerHooks({
@@ -75,12 +72,13 @@ const hooks = registerHooks({
   },
 });
 
-const xero_oauth_startUrl = './route.ts?xero-oauth-start'
-const { GET } = (await import(xero_oauth_startUrl)) as typeof import('./route.ts');
-const xero_oauth_start_flowUrl = '../../_flow.ts?xero-oauth-start-flow'
-const { CONNECTION_OAUTH_COOKIE } = (await import(xero_oauth_start_flowUrl)) as typeof import('../../_flow.ts');
-test.after(() => hooks.deregister())
-
+const xero_oauth_startUrl = "./route.ts?xero-oauth-start";
+const { GET } = (await import(xero_oauth_startUrl)) as typeof import("./route.ts");
+const xero_oauth_start_flowUrl = "../../_flow.ts?xero-oauth-start-flow";
+const { CONNECTION_OAUTH_COOKIE } = (await import(
+  xero_oauth_start_flowUrl
+)) as typeof import("../../_flow.ts");
+test.after(() => hooks.deregister());
 
 function cookieMap(response: Response): Map<string, string> {
   const raw =
@@ -98,9 +96,12 @@ function cookieMap(response: Response): Map<string, string> {
 
 test("Xero start pins redirect_uri to appBaseUrl, not the request Host", async () => {
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/oauth/xero/start?connectionId=conn-1", {
-      headers: { host: "evil.example", "x-forwarded-host": "evil.example" },
-    }),
+    new Request(
+      "https://evil.example/api/platform/connections/oauth/xero/start?connectionId=conn-1",
+      {
+        headers: { host: "evil.example", "x-forwarded-host": "evil.example" },
+      },
+    ),
   );
   assert.equal(res.status, 307);
   const location = new URL(res.headers.get("location") ?? "");
@@ -113,12 +114,19 @@ test("Xero start pins redirect_uri to appBaseUrl, not the request Host", async (
 
 test("Xero start mints a one-time nonce in sealed state and the CSRF cookie", async () => {
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/oauth/xero/start?connectionId=conn-1"),
+    new Request(
+      "https://evil.example/api/platform/connections/oauth/xero/start?connectionId=conn-1",
+    ),
   );
   const location = new URL(res.headers.get("location") ?? "");
   const sealed = location.searchParams.get("state");
   assert.ok(sealed);
-  const payload = unsealJson<{ orgId?: string; connectionId?: string; nonce?: string; exp?: number }>(sealed, { orgId: "system", purpose: "connection.oauth.state" });
+  const payload = unsealJson<{
+    orgId?: string;
+    connectionId?: string;
+    nonce?: string;
+    exp?: number;
+  }>(sealed, { orgId: "system", purpose: "connection.oauth.state" });
   assert.equal(payload?.orgId, "org-1");
   assert.equal(payload?.connectionId, "conn-1");
   assert.equal(typeof payload?.nonce, "string");
@@ -129,12 +137,13 @@ test("Xero start mints a one-time nonce in sealed state and the CSRF cookie", as
   assert.equal(cookies.get(CONNECTION_OAUTH_COOKIE), payload?.nonce);
 });
 
-
 test("a Postgres 22P02 connection id is 404, not an unhandled 500", async () => {
   state.identityError = "22P02";
   try {
     const res = await GET(
-      new Request("https://books.example/api/platform/connections/oauth/xero/start?connectionId=not-a-uuid"),
+      new Request(
+        "https://books.example/api/platform/connections/oauth/xero/start?connectionId=not-a-uuid",
+      ),
     );
     assert.equal(res.status, 404);
     assert.deepEqual(await res.json(), { error: "not_found" });

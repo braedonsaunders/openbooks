@@ -1,6 +1,9 @@
-import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
-import type { PostingPeriodCandidate } from '@openbooks/engine/close/posting-periods'
-import type { PeriodEndPeriodLabel, PeriodEndPreview } from '@openbooks/engine/close/period-end-journals'
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
+import type { PostingPeriodCandidate } from "@openbooks/engine/close/posting-periods";
+import type {
+  PeriodEndPeriodLabel,
+  PeriodEndPreview,
+} from "@openbooks/engine/close/period-end-journals";
 
 /**
  * Close payloads with their periods labelled in the viewer's locale
@@ -19,15 +22,18 @@ export function labelPostingPeriodCandidates(
     ...row,
     periodName: row.periodRef ? periodDisplayLabel(row.periodRef, locale) : row.periodName,
     adjustmentPeriod: row.adjustmentPeriod
-      ? { ...row.adjustmentPeriod, name: periodDisplayLabel(row.adjustmentPeriod.periodRef, locale) }
+      ? {
+          ...row.adjustmentPeriod,
+          name: periodDisplayLabel(row.adjustmentPeriod.periodRef, locale),
+        }
       : null,
-  }))
+  }));
 }
 
 /** A period-end journals preview with its closing, opening and journal periods labelled. */
 export function labelPeriodEndPreview(preview: PeriodEndPreview, locale: string): PeriodEndPreview {
   const label = (period: PeriodEndPeriodLabel | null): PeriodEndPeriodLabel | null =>
-    period ? { ...period, name: periodDisplayLabel(period.periodRef, locale) } : null
+    period ? { ...period, name: periodDisplayLabel(period.periodRef, locale) } : null;
   return {
     ...preview,
     fiscalYear: {
@@ -42,5 +48,5 @@ export function labelPeriodEndPreview(preview: PeriodEndPreview, locale: string)
         periodName: periodDisplayLabel(journal.periodRef, locale),
       })),
     })),
-  }
+  };
 }

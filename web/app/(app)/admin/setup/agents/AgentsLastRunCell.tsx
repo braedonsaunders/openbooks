@@ -1,4 +1,4 @@
-import { Badge } from '@openbooks/ui'
+import { Badge } from "@openbooks/ui";
 
 /**
  * One pack's last-run cell for the Agents overview table: the run-status
@@ -13,11 +13,11 @@ export function AgentsLastRunCell({
   dateLine,
   nextLine,
 }: {
-  hasRun: boolean
-  statusLabel: string
-  statusVariant: 'success' | 'destructive' | 'secondary' | 'outline'
-  dateLine: string
-  nextLine: string | null
+  hasRun: boolean;
+  statusLabel: string;
+  statusVariant: "success" | "destructive" | "secondary" | "outline";
+  dateLine: string;
+  nextLine: string | null;
 }) {
   if (!hasRun) {
     return (
@@ -25,15 +25,19 @@ export function AgentsLastRunCell({
         {dateLine}
         {nextLine ? <span className="mt-0.5 block text-xs">{nextLine}</span> : null}
       </span>
-    )
+    );
   }
   return (
     <span className="block">
       <Badge variant={statusVariant}>{statusLabel}</Badge>
-      <span className="mt-1 block text-sm whitespace-nowrap text-slate-700 dark:text-slate-200">{dateLine}</span>
+      <span className="mt-1 block text-sm whitespace-nowrap text-slate-700 dark:text-slate-200">
+        {dateLine}
+      </span>
       {nextLine ? (
-        <span className="mt-0.5 block text-xs whitespace-nowrap text-slate-500 dark:text-slate-400">{nextLine}</span>
+        <span className="mt-0.5 block text-xs whitespace-nowrap text-slate-500 dark:text-slate-400">
+          {nextLine}
+        </span>
       ) : null}
     </span>
-  )
+  );
 }

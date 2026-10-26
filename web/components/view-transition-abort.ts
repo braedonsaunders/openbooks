@@ -15,26 +15,26 @@
  */
 
 const BENIGN_ABORT_PREFIXES = [
-  'Transition was aborted because of invalid state',
-  'Skipping view transition because viewport size changed',
-  'Skipping view transition because document visibility state has become hidden',
-  'View transition was skipped because document visibility state is hidden',
-] as const
+  "Transition was aborted because of invalid state",
+  "Skipping view transition because viewport size changed",
+  "Skipping view transition because document visibility state has become hidden",
+  "View transition was skipped because document visibility state is hidden",
+] as const;
 
 /** True for a view transition the browser skipped or aborted for layout or visibility. */
 export function isBenignViewTransitionAbort(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false
-  const { name, message } = error as { name?: unknown; message?: unknown }
+  if (typeof error !== "object" || error === null) return false;
+  const { name, message } = error as { name?: unknown; message?: unknown };
   return (
-    name === 'InvalidStateError' &&
-    typeof message === 'string' &&
+    name === "InvalidStateError" &&
+    typeof message === "string" &&
     BENIGN_ABORT_PREFIXES.some((prefix) => message.startsWith(prefix))
-  )
+  );
 }
 
 // A development hot reload installs again; the previous listener is
 // replaced rather than stacked.
-const ABORT_FILTER = Symbol.for('openbooks.view-transition-abort-filter')
+const ABORT_FILTER = Symbol.for("openbooks.view-transition-abort-filter");
 
 /**
  * Stops the reported error event for a benign view transition abort before
@@ -43,14 +43,14 @@ const ABORT_FILTER = Symbol.for('openbooks.view-transition-abort-filter')
  * runs ahead of the window's other listeners for an event dispatched at it.
  */
 export function installViewTransitionAbortFilter(target: EventTarget = window) {
-  const registry = target as unknown as Record<symbol, ((event: Event) => void) | undefined>
-  const previous = registry[ABORT_FILTER]
-  if (previous) target.removeEventListener('error', previous, true)
+  const registry = target as unknown as Record<symbol, ((event: Event) => void) | undefined>;
+  const previous = registry[ABORT_FILTER];
+  if (previous) target.removeEventListener("error", previous, true);
   const filter = (event: Event) => {
-    if (!isBenignViewTransitionAbort((event as ErrorEvent).error)) return
-    event.preventDefault()
-    event.stopImmediatePropagation()
-  }
-  registry[ABORT_FILTER] = filter
-  target.addEventListener('error', filter, true)
+    if (!isBenignViewTransitionAbort((event as ErrorEvent).error)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  registry[ABORT_FILTER] = filter;
+  target.addEventListener("error", filter, true);
 }

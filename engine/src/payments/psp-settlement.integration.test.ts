@@ -17,17 +17,18 @@ import {
   type ParsedSettlement,
 } from "./psp-settlement.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("provider config service requires the explicit unrestricted-scope sentinel", async () => {
   await assert.rejects(
-    savePspProviderConfig("not-an-org", { provider: "stripe", isEnabled: true }, "actor", new Set(["sub-a"])),
+    savePspProviderConfig(
+      "not-an-org",
+      { provider: "stripe", isEnabled: true },
+      "actor",
+      new Set(["sub-a"]),
+    ),
     (error: unknown) => error instanceof UnrestrictedScopeError,
   );
 });
@@ -114,22 +115,25 @@ test(
         "exactly one concurrent import creates the batch",
       );
       const batchId = imports[0].batchId;
-      const draft = (await db.execute<{
-          status: string;
-          gross_amount: string;
-          fee_amount: string;
-          refund_amount: string;
-          dispute_amount: string;
-          fx_amount: string;
-          net_amount: string;
-          line_count: number;
-        }>(sql`
+      const draft = await db.execute<{
+        status: string;
+        gross_amount: string;
+        fee_amount: string;
+        refund_amount: string;
+        dispute_amount: string;
+        fx_amount: string;
+        net_amount: string;
+        line_count: number;
+      }>(
+        sql`
         select status, gross_amount::text, fee_amount::text,
                refund_amount::text, dispute_amount::text, fx_amount::text,
                net_amount::text, line_count
           from psp_settlement_batches
          where id = ${batchId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(draft[0], {
         status: "draft",
         gross_amount: "200.0000",
@@ -140,12 +144,15 @@ test(
         net_amount: "165.2500",
         line_count: 6,
       });
-      const evidenceLines = (await db.execute<{ count: number; distinct_refs: number }>(sql`
+      const evidenceLines = await db.execute<{ count: number; distinct_refs: number }>(
+        sql`
         select count(*)::int as count,
                count(distinct external_ref)::int as distinct_refs
           from psp_settlement_lines
          where batch_id = ${batchId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(evidenceLines[0], {
         count: 6,
         distinct_refs: 6,
@@ -161,34 +168,41 @@ test(
         "concurrent post retries return one journal",
       );
       const entryId = posts[0].entryId;
-      const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const gl = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, sum(amount)::text as amount
           from journal_lines
          where entry_id = ${entryId} and org_id = ${org.orgId}
          group by account_id
          order by account_id
-      `, "objects"));
-      const byAccount = new Map(
-        gl.map((line) => [line.account_id, line.amount]),
+      `,
+        "objects",
       );
+      const byAccount = new Map(gl.map((line) => [line.account_id, line.amount]));
       assert.equal(byAccount.get(org.accounts.bank), "165.2500");
       assert.equal(byAccount.get(org.accounts.freight), "6.0000");
       assert.equal(byAccount.get(org.accounts.adjustment), "10.0000");
       assert.equal(byAccount.get(org.accounts.fxGainLoss), "-1.2500");
       assert.equal(byAccount.get(org.accounts.clearing), "-180.0000");
-      const balance = (await db.execute<{ amount: string }>(sql`
+      const balance = await db.execute<{ amount: string }>(
+        sql`
         select coalesce(sum(amount), 0)::text as amount
           from journal_lines where entry_id = ${entryId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(balance[0]?.amount, "0.0000");
-      const postAudits = (await db.execute<{ count: number }>(sql`
+      const postAudits = await db.execute<{ count: number }>(
+        sql`
         select count(*)::int as count
           from audit_log
          where org_id = ${org.orgId}
            and table_name = 'psp_settlement_batches'
            and row_id = ${batchId}
            and action = 'post'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(postAudits[0]?.count, 1);
 
       const reimport = await importSettlementBatch(
@@ -204,37 +218,57 @@ test(
       const postedRetry = await importSettlementBatch(org.orgId, actor, parsed, accounts);
       assert.deepEqual(postedRetry, { batchId, created: false });
       await assert.rejects(
-        importSettlementBatch(org.orgId, actor, {
-          ...parsed,
-          lines: parsed.lines.map((line, index) => index === 0
-            ? { ...line, amount: "999.0000", description: "corrected provider line" }
-            : line),
-        }, accounts),
+        importSettlementBatch(
+          org.orgId,
+          actor,
+          {
+            ...parsed,
+            lines: parsed.lines.map((line, index) =>
+              index === 0
+                ? { ...line, amount: "999.0000", description: "corrected provider line" }
+                : line,
+            ),
+          },
+          accounts,
+        ),
         /already has different evidence/,
         "a posted reference cannot be replaced by a corrected provider payload",
       );
 
       const reversals = await Promise.all([
-        reverseSettlementBatch(org.orgId, batchId, actor, {
-          reversalDate: org.date,
-          reason: "Provider confirmed payout cancellation",
-        }, null),
-        reverseSettlementBatch(org.orgId, batchId, actor, {
-          reversalDate: org.date,
-          reason: "Provider confirmed payout cancellation",
-        }, null),
+        reverseSettlementBatch(
+          org.orgId,
+          batchId,
+          actor,
+          {
+            reversalDate: org.date,
+            reason: "Provider confirmed payout cancellation",
+          },
+          null,
+        ),
+        reverseSettlementBatch(
+          org.orgId,
+          batchId,
+          actor,
+          {
+            reversalDate: org.date,
+            reason: "Provider confirmed payout cancellation",
+          },
+          null,
+        ),
       ]);
       assert.equal(reversals[0].entryId, reversals[1].entryId);
       const reversalEntryId = reversals[0].entryId;
-      const mirror = (await db.execute<{
-          source_amount: string;
-          reversal_amount: string;
-          source_txn_amount: string;
-          reversal_txn_amount: string;
-          same_account: boolean;
-          same_currency: boolean;
-          same_rate: boolean;
-        }>(sql`
+      const mirror = await db.execute<{
+        source_amount: string;
+        reversal_amount: string;
+        source_txn_amount: string;
+        reversal_txn_amount: string;
+        same_account: boolean;
+        same_currency: boolean;
+        same_rate: boolean;
+      }>(
+        sql`
         select source.line_number,
                source.amount::text as source_amount,
                reversal.amount::text as reversal_amount,
@@ -249,7 +283,9 @@ test(
            and reversal.line_number = source.line_number
          where source.entry_id = ${entryId}
          order by source.line_number
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(mirror.length, 6);
       for (const line of mirror) {
         assert.equal(
@@ -266,16 +302,17 @@ test(
         assert.equal(line.same_currency, true);
         assert.equal(line.same_rate, true);
       }
-      const lifecycle = (await db.execute<{
-          status: string;
-          journal_entry_id: string;
-          reversal_entry_id: string;
-          reversal_reason: string;
-          reversed_by: string;
-          source_status: string;
-          reversal_status: string;
-          reverses_entry_id: string;
-        }>(sql`
+      const lifecycle = await db.execute<{
+        status: string;
+        journal_entry_id: string;
+        reversal_entry_id: string;
+        reversal_reason: string;
+        reversed_by: string;
+        source_status: string;
+        reversal_status: string;
+        reverses_entry_id: string;
+      }>(
+        sql`
         select b.status, b.journal_entry_id, b.reversal_entry_id,
                b.reversal_reason, b.reversed_by,
                source.status as source_status,
@@ -285,7 +322,9 @@ test(
           join journal_entries source on source.id = b.journal_entry_id
           join journal_entries reversal on reversal.id = b.reversal_entry_id
          where b.id = ${batchId} and b.org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(lifecycle[0], {
         status: "void",
         journal_entry_id: entryId,
@@ -324,11 +363,14 @@ test(
         postSettlementBatch(org.orgId, usd.batchId, actor, null),
         /requires payout_rate evidence/,
       );
-      const usdState = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
+      const usdState = await db.execute<{ status: string; journal_entry_id: string | null }>(
+        sql`
         select status, journal_entry_id
           from psp_settlement_batches
          where id = ${usd.batchId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(usdState[0], {
         status: "draft",
         journal_entry_id: null,
@@ -353,11 +395,14 @@ test(
         postSettlementBatch(org.orgId, locked.batchId, actor, null),
         /BANKING is closed/,
       );
-      const lockedState = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
+      const lockedState = await db.execute<{ status: string; journal_entry_id: string | null }>(
+        sql`
         select status, journal_entry_id
           from psp_settlement_batches
          where id = ${locked.batchId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(lockedState[0], {
         status: "draft",
         journal_entry_id: null,
@@ -389,7 +434,12 @@ test(
         lines: [
           { kind: "charge", amount: "1000.0000", currency: "CAD", externalRef: "charge-1" },
           { kind: "dispute", amount: "100.0000", currency: "CAD", externalRef: "dispute-1" },
-          { kind: "dispute_reversal", amount: "150.0000", currency: "CAD", externalRef: "dispute-reversal-1" },
+          {
+            kind: "dispute_reversal",
+            amount: "150.0000",
+            currency: "CAD",
+            externalRef: "dispute-reversal-1",
+          },
         ],
       };
       const accounts = {
@@ -402,27 +452,33 @@ test(
       };
       const imported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
       assert.equal(imported.created, true);
-      const row = (await db.execute<{
-          gross_amount: string;
-          dispute_amount: string;
-          net_amount: string;
-        }>(sql`
+      const row = await db.execute<{
+        gross_amount: string;
+        dispute_amount: string;
+        net_amount: string;
+      }>(
+        sql`
         select gross_amount::text, dispute_amount::text, net_amount::text
           from psp_settlement_batches
          where id = ${imported.batchId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(row[0], {
         gross_amount: "1000.0000",
         dispute_amount: "-50.0000",
         net_amount: "1050.0000",
       });
       const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor, null);
-      const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const gl = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, sum(amount)::text as amount
           from journal_lines
          where entry_id = ${entryId} and org_id = ${org.orgId}
          group by account_id
-      `, "objects"));
+      `,
+        "objects",
+      );
       const byAccount = new Map(gl.map((line) => [line.account_id, line.amount]));
       assert.equal(byAccount.get(org.accounts.bank), "1050.0000");
       assert.equal(
@@ -465,19 +521,25 @@ test(
         subsidiaryId: org.subsidiaryId,
       };
       const imported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
-      const row = (await db.execute<{ dispute_amount: string; net_amount: string }>(sql`
+      const row = await db.execute<{ dispute_amount: string; net_amount: string }>(
+        sql`
         select dispute_amount::text, net_amount::text
           from psp_settlement_batches
          where id = ${imported.batchId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(row[0], { dispute_amount: "100.0000", net_amount: "900.0000" });
       const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor, null);
-      const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const gl = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, sum(amount)::text as amount
           from journal_lines
          where entry_id = ${entryId} and org_id = ${org.orgId}
          group by account_id
-      `, "objects"));
+      `,
+        "objects",
+      );
       const byAccount = new Map(gl.map((line) => [line.account_id, line.amount]));
       assert.equal(byAccount.get(org.accounts.adjustment), "100.0000");
       assert.equal(byAccount.get(org.accounts.clearing), "-1000.0000");
@@ -535,11 +597,12 @@ test(
           error.message === "realized FX gain/loss account is not configured",
       );
 
-      const state = (await db.execute<{
+      const state = await db.execute<{
         status: string;
         journal_entry_id: string | null;
         journal_entries: number;
-      }>(sql`
+      }>(
+        sql`
         select b.status,
                b.journal_entry_id,
                (select count(*)::int
@@ -548,7 +611,9 @@ test(
                    and j.id = b.journal_entry_id) as journal_entries
           from psp_settlement_batches b
          where b.id = ${batchId} and b.org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(state[0], {
         status: "draft",
         journal_entry_id: null,
@@ -568,11 +633,16 @@ test(
     const foreign = await createScratchOrg();
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
-      const foreignBank = (await db.execute<{ id: string }>(sql`
+      const foreignBank = (
+        await db.execute<{ id: string }>(
+          sql`
           select id from accounts
            where org_id = ${foreign.orgId} and type = 'asset_bank'
              and is_active and not is_summary limit 1
-        `, "objects"))[0]!.id;
+        `,
+          "objects",
+        )
+      )[0]!.id;
       const parsed: ParsedSettlement = {
         provider: "stripe",
         externalRef: `payout-foreign-${org.orgId}`,
@@ -597,10 +667,15 @@ test(
         },
       );
       assert.equal(
-        (await db.execute<{ n: number }>(sql`
+        (
+          await db.execute<{ n: number }>(
+            sql`
             select count(*)::int as n from psp_settlement_batches
              where org_id = ${org.orgId} and external_ref = ${parsed.externalRef}
-          `, "objects"))[0]!.n,
+          `,
+            "objects",
+          )
+        )[0]!.n,
         0,
         "the refused import stores no batch",
       );
@@ -631,11 +706,16 @@ test(
     const foreign = await createScratchOrg();
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
-      const foreignBank = (await db.execute<{ id: string }>(sql`
+      const foreignBank = (
+        await db.execute<{ id: string }>(
+          sql`
           select id from accounts
            where org_id = ${foreign.orgId} and type = 'asset_bank'
              and is_active and not is_summary limit 1
-        `, "objects"))[0]!.id;
+        `,
+          "objects",
+        )
+      )[0]!.id;
       // A bank account deactivated-or-foreign after import (or written around
       // the service) must fail closed naming the account — not escape as a
       // raw foreign-key 500 from the journal insert.
@@ -660,10 +740,15 @@ test(
         },
       );
       assert.equal(
-        (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
+        (
+          await db.execute<{ status: string; journal_entry_id: string | null }>(
+            sql`
             select status, journal_entry_id from psp_settlement_batches
              where id = ${batchId} and org_id = ${org.orgId}
-          `, "objects"))[0]!.status,
+          `,
+            "objects",
+          )
+        )[0]!.status,
         "draft",
         "the refused post leaves the draft without a journal",
       );
@@ -734,24 +819,27 @@ test(
       };
       const first = await importSettlementBatch(org.orgId, actor, parsed, accounts);
       assert.equal(first.created, true);
-      const batch = (await db.execute<{
-          status: string;
-          gross_amount: string;
-          fee_amount: string;
-          refund_amount: string;
-          dispute_amount: string;
-          adjustment_amount: string;
-          fx_amount: string;
-          net_amount: string;
-          line_count: number;
-        }>(sql`
+      const batch = await db.execute<{
+        status: string;
+        gross_amount: string;
+        fee_amount: string;
+        refund_amount: string;
+        dispute_amount: string;
+        adjustment_amount: string;
+        fx_amount: string;
+        net_amount: string;
+        line_count: number;
+      }>(
+        sql`
         select status, gross_amount::text, fee_amount::text,
                refund_amount::text, dispute_amount::text,
                adjustment_amount::text, fx_amount::text, net_amount::text,
                line_count
           from psp_settlement_batches
          where id = ${first.batchId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       // The receipt is what was collected: gross − adjustments == amount_paid,
       // with adjustments tracked apart from refunds.
       assert.deepEqual(batch[0], {
@@ -765,19 +853,22 @@ test(
         net_amount: "80.0000",
         line_count: 3,
       });
-      const stored = (await db.execute<{
-          line_number: number;
-          kind: string;
-          external_ref: string | null;
-          description: string | null;
-          amount: string;
-          meta: Record<string, unknown>;
-        }>(sql`
+      const stored = await db.execute<{
+        line_number: number;
+        kind: string;
+        external_ref: string | null;
+        description: string | null;
+        amount: string;
+        meta: Record<string, unknown>;
+      }>(
+        sql`
         select line_number, kind, external_ref, description, amount::text as amount, meta
           from psp_settlement_lines
          where batch_id = ${first.batchId} and org_id = ${org.orgId}
          order by line_number
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(
         stored.map((line) => [line.kind, line.amount]),
         [
@@ -795,20 +886,30 @@ test(
       assert.deepEqual(replay, { batchId: first.batchId, created: false });
 
       await assert.rejects(
-        importSettlementBatch(org.orgId, actor, {
-          ...parsed,
-          lines: parsed.lines.map((line, index) => index === 0
-            ? { ...line, amount: "91.0000" }
-            : line),
-        }, accounts),
+        importSettlementBatch(
+          org.orgId,
+          actor,
+          {
+            ...parsed,
+            lines: parsed.lines.map((line, index) =>
+              index === 0 ? { ...line, amount: "91.0000" } : line,
+            ),
+          },
+          accounts,
+        ),
         /already has different evidence/,
         "draft evidence is immutable for a repeated provider reference",
       );
       assert.equal(
-        (await db.execute<{ n: number }>(sql`
+        (
+          await db.execute<{ n: number }>(
+            sql`
             select count(*)::int as n from psp_settlement_lines
              where batch_id = ${first.batchId} and org_id = ${org.orgId}
-          `, "objects"))[0]!.n,
+          `,
+            "objects",
+          )
+        )[0]!.n,
         3,
       );
 
@@ -830,10 +931,15 @@ test(
           error instanceof PspSettlementError && error.message.includes(mismatchId),
       );
       assert.equal(
-        (await db.execute<{ n: number }>(sql`
+        (
+          await db.execute<{ n: number }>(
+            sql`
             select count(*)::int as n from psp_settlement_batches
              where org_id = ${org.orgId} and external_ref = ${mismatchId}
-          `, "objects"))[0]!.n,
+          `,
+            "objects",
+          )
+        )[0]!.n,
         0,
         "the refused settlement stores no batch",
       );
@@ -876,13 +982,16 @@ test(
         subsidiaryId: org.subsidiaryId,
       });
       const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
-      const gl = (await db.execute<{ account_id: string; memo: string; amount: string }>(sql`
+      const gl = await db.execute<{ account_id: string; memo: string; amount: string }>(
+        sql`
         select account_id, memo, sum(amount)::text as amount
           from journal_lines
          where entry_id = ${entryId} and org_id = ${org.orgId}
          group by account_id, memo
          order by memo
-      `, "objects"));
+      `,
+        "objects",
+      );
       const byMemo = new Map(gl.map((line) => [line.memo, line]));
       // Bank receipts exactly what was collected; the adjustment clears the
       // customer balance on its own line, apart from any refund leg.
@@ -893,19 +1002,25 @@ test(
       assert.equal(byMemo.get("PSP clearing / charges")?.amount, "-100.0000");
       assert.equal(byMemo.get("PSP clearing / charges")?.account_id, org.accounts.clearing);
       assert.equal(gl.length, 3);
-      const balance = (await db.execute<{ amount: string }>(sql`
+      const balance = await db.execute<{ amount: string }>(
+        sql`
         select coalesce(sum(amount), 0)::text as amount
           from journal_lines where entry_id = ${entryId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(balance[0]?.amount, "0.0000");
-      const postAudits = (await db.execute<{ count: number }>(sql`
+      const postAudits = await db.execute<{ count: number }>(
+        sql`
         select count(*)::int as count
           from audit_log
          where org_id = ${org.orgId}
            and table_name = 'psp_settlement_batches'
            and row_id = ${batchId}
            and action = 'post'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(postAudits[0]?.count, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -932,8 +1047,18 @@ test(
         currency: "CAD",
         actorId: actor,
         lines: [
-          { accountId: org.accounts.bank, amount: "100.0000", currency: "CAD", txnAmount: "100.0000" },
-          { accountId: org.accounts.revenue, amount: "-100.0000", currency: "CAD", txnAmount: "-100.0000" },
+          {
+            accountId: org.accounts.bank,
+            amount: "100.0000",
+            currency: "CAD",
+            txnAmount: "100.0000",
+          },
+          {
+            accountId: org.accounts.revenue,
+            amount: "-100.0000",
+            currency: "CAD",
+            txnAmount: "-100.0000",
+          },
         ],
       });
       const parsed: ParsedSettlement = {
@@ -956,48 +1081,94 @@ test(
       };
       const imported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
       assert.equal(imported.created, true);
-      const lineRows = await db.execute<{ id: string; kind: string }>(sql`
+      const lineRows = await db.execute<{ id: string; kind: string }>(
+        sql`
         select id, kind from psp_settlement_lines
-         where batch_id = ${imported.batchId} and org_id = ${org.orgId} order by line_number`, "objects");
+         where batch_id = ${imported.batchId} and org_id = ${org.orgId} order by line_number`,
+        "objects",
+      );
       const charge = lineRows.find((row) => row.kind === "charge")!;
       const fee = lineRows.find((row) => row.kind === "fee")!;
       // Journal recognition evidences the charge without a document link.
-      const marked = await markSettlementLineJournal(org.orgId, imported.batchId, charge.id, sale.entryId, actor, null);
+      const marked = await markSettlementLineJournal(
+        org.orgId,
+        imported.batchId,
+        charge.id,
+        sale.entryId,
+        actor,
+        null,
+      );
       assert.equal(marked.journalEntryId, sale.entryId);
       assert.equal(marked.journalEntryNumber, `JE-SALE-${org.orgId.slice(0, 8)}`);
       // Re-marking the same entry is idempotent; a fee leg is not order evidence.
-      const again = await markSettlementLineJournal(org.orgId, imported.batchId, charge.id, sale.entryId, actor, null);
+      const again = await markSettlementLineJournal(
+        org.orgId,
+        imported.batchId,
+        charge.id,
+        sale.entryId,
+        actor,
+        null,
+      );
       assert.deepEqual(again, marked);
       await assert.rejects(
         markSettlementLineJournal(org.orgId, imported.batchId, fee.id, sale.entryId, actor, null),
         /not order evidence/,
       );
       await assert.rejects(
-        markSettlementLineJournal(org.orgId, imported.batchId, charge.id, randomUUID(), actor, null),
+        markSettlementLineJournal(
+          org.orgId,
+          imported.batchId,
+          charge.id,
+          randomUUID(),
+          actor,
+          null,
+        ),
         /does not belong to this organization/,
       );
       // The marker reads back off the line for the close gate and the drawer.
-      const stored = (await db.execute<{ marker: string | null }>(sql`
+      const stored = (
+        await db.execute<{ marker: string | null }>(
+          sql`
         select meta->'recognizedByJournalEntry'->>'number' as marker from psp_settlement_lines
-         where id = ${charge.id} and org_id = ${org.orgId}`, "objects"))[0];
+         where id = ${charge.id} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(stored?.marker, `JE-SALE-${org.orgId.slice(0, 8)}`);
       await clearSettlementLineJournal(org.orgId, imported.batchId, charge.id, actor, null);
-      const cleared = (await db.execute<{ marker: string | null }>(sql`
+      const cleared = (
+        await db.execute<{ marker: string | null }>(
+          sql`
         select meta->>'recognizedByJournalEntry' as marker from psp_settlement_lines
-         where id = ${charge.id} and org_id = ${org.orgId}`, "objects"))[0];
+         where id = ${charge.id} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(cleared?.marker, null);
       // Deleting the draft frees the provider reference for a corrected reimport.
       const deleted = await deleteSettlementDraft(
-        org.orgId, imported.batchId, actor, { reason: "bad-scale test draft, reimporting corrected" }, null,
+        org.orgId,
+        imported.batchId,
+        actor,
+        { reason: "bad-scale test draft, reimporting corrected" },
+        null,
       );
       assert.equal(deleted.batchId, imported.batchId);
-      const gone = (await db.execute<{ count: number }>(sql`
-        select count(*)::int as count from psp_settlement_batches where id = ${imported.batchId}`, "objects"));
+      const gone = await db.execute<{ count: number }>(
+        sql`
+        select count(*)::int as count from psp_settlement_batches where id = ${imported.batchId}`,
+        "objects",
+      );
       assert.equal(gone[0]?.count, 0);
-      const audit = (await db.execute<{ reason: string }>(sql`
+      const audit = (
+        await db.execute<{ reason: string }>(
+          sql`
         select changes->>'reason' as reason from audit_log
          where org_id = ${org.orgId} and table_name = 'psp_settlement_batches'
-           and row_id = ${imported.batchId} and action = 'delete'`, "objects"))[0];
+           and row_id = ${imported.batchId} and action = 'delete'`,
+          "objects",
+        )
+      )[0];
       assert.equal(audit?.reason, "bad-scale test draft, reimporting corrected");
       const reimported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
       assert.equal(reimported.created, true);
@@ -1005,7 +1176,13 @@ test(
       // A posted batch refuses deletion: history unwinds through reversal.
       await postSettlementBatch(org.orgId, reimported.batchId, actor, null);
       await assert.rejects(
-        deleteSettlementDraft(org.orgId, reimported.batchId, actor, { reason: "posted history must stay" }, null),
+        deleteSettlementDraft(
+          org.orgId,
+          reimported.batchId,
+          actor,
+          { reason: "posted history must stay" },
+          null,
+        ),
         /reverse a posted batch/,
       );
       await assert.rejects(

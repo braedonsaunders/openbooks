@@ -99,9 +99,7 @@ function nonNegative(cents: bigint): bigint {
 }
 
 function refuse(what: string): never {
-  throw new DeSettlementRefusal(
-    `DE Lohnsteuer-Jahresausgleich (§42b EStG) 2026: ${what}`,
-  );
+  throw new DeSettlementRefusal(`DE Lohnsteuer-Jahresausgleich (§42b EStG) 2026: ${what}`);
 }
 
 export interface DeSettlementRates {
@@ -119,21 +117,21 @@ export async function computeDeSettlementWithRates(
 ): Promise<Record<string, string>> {
   if (ctx.taxYear !== 2026) {
     refuse(
-      `only tax year 2026 is transcribed (BMF Programmablaufplan für den Lohnsteuerabzug 2026, `
-      + `Stand 12.11.2025, plus SVRV 2026) — got ${ctx.taxYear}.`,
+      `only tax year 2026 is transcribed (BMF Programmablaufplan für den Lohnsteuerabzug 2026, ` +
+        `Stand 12.11.2025, plus SVRV 2026) — got ${ctx.taxYear}.`,
     );
   }
   if (!isFinalPeriodOfTaxYear(DE_SETTLEMENT_TAX_YEAR, ctx.periodsPerYear, ctx.payDate)) {
     refuse(
-      `the Ausgleich runs only in the final period of the tax year (EStG §42b Absatz 3 Satz 1: `
-      + `frühestens bei der Lohnabrechnung für den letzten im Ausgleichsjahr endenden `
-      + `Lohnzahlungszeitraum) — pay date ${ctx.payDate} is not it.`,
+      `the Ausgleich runs only in the final period of the tax year (EStG §42b Absatz 3 Satz 1: ` +
+        `frühestens bei der Lohnabrechnung für den letzten im Ausgleichsjahr endenden ` +
+        `Lohnzahlungszeitraum) — pay date ${ctx.payDate} is not it.`,
     );
   }
   if (ctx.region == null || ctx.region === "") {
     refuse(
-      "the Ausgleich needs the Beschäftigungsland (ctx.region) for the Kirchenlohnsteuer "
-      + "rate and the Sachsen PV rule — got none.",
+      "the Ausgleich needs the Beschäftigungsland (ctx.region) for the Kirchenlohnsteuer " +
+        "rate and the Sachsen PV rule — got none.",
     );
   }
   // The SAME gate the monthly pass calls: a settlement must not quietly
@@ -141,9 +139,9 @@ export async function computeDeSettlementWithRates(
   ctx.assertRegionSupported(ctx.region);
   if (rates.kvz == null) {
     refuse(
-      "the Ausgleich cannot run without the Krankenkasse's own Zusatzbeitragssatz: no de_kvz "
-      + "statutory rate is configured for this employer in 2026 — refusing rather than defaulting "
-      + "to zero or to the BMG national average.",
+      "the Ausgleich cannot run without the Krankenkasse's own Zusatzbeitragssatz: no de_kvz " +
+        "statutory rate is configured for this employer in 2026 — refusing rather than defaulting " +
+        "to zero or to the BMG national average.",
     );
   }
 
@@ -165,11 +163,11 @@ export async function computeDeSettlementWithRates(
   const ausgleich = ctx.certificateFor("de_ausgleich");
   if (ausgleich == null || !ausgleich.onFile) {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" without the §42b attestations `
-      + `(certificate de_ausgleich: employee facts ${DE_AUSGLEICH_GANZJAEHRIG}, `
-      + `${DE_AUSGLEICH_UNVERAENDERT}, ${DE_AUSGLEICH_KEIN_AUSSCHLUSS}) — file each flag on the `
-      + `certificate from the HR records, the ELStAM history and the Lohnkonto; an assumed yes `
-      + `would be a silently wrong refund.`,
+      `no Ausgleich for employee "${ctx.employeeName}" without the §42b attestations ` +
+        `(certificate de_ausgleich: employee facts ${DE_AUSGLEICH_GANZJAEHRIG}, ` +
+        `${DE_AUSGLEICH_UNVERAENDERT}, ${DE_AUSGLEICH_KEIN_AUSSCHLUSS}) — file each flag on the ` +
+        `certificate from the HR records, the ELStAM history and the Lohnkonto; an assumed yes ` +
+        `would be a silently wrong refund.`,
     );
   }
   const ausgleichEmployeeFacts = {
@@ -178,45 +176,60 @@ export async function computeDeSettlementWithRates(
     de_ausgleich_kein_ausschluss: ausgleich.answers["kein_ausschluss"] ?? null,
   };
   const ganzjaehrig = resolveEmployeeFact(
-    "DE", "de_ausgleich_ganzjaehrig", empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_ganzjaehrig"),
+    "DE",
+    "de_ausgleich_ganzjaehrig",
+    empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_ganzjaehrig"),
   );
   const unveraendert = resolveEmployeeFact(
-    "DE", "de_ausgleich_unveraendert", empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_unveraendert"),
+    "DE",
+    "de_ausgleich_unveraendert",
+    empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_unveraendert"),
   );
   const keinAusschluss = resolveEmployeeFact(
-    "DE", "de_ausgleich_kein_ausschluss", empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_kein_ausschluss"),
+    "DE",
+    "de_ausgleich_kein_ausschluss",
+    empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_kein_ausschluss"),
   );
   const absent: string[] = [];
-  if (ganzjaehrig == null) absent.push(`certificate de_ausgleich field ganzjaehrig (employee fact ${DE_AUSGLEICH_GANZJAEHRIG})`);
-  if (unveraendert == null) absent.push(`certificate de_ausgleich field unveraendert (employee fact ${DE_AUSGLEICH_UNVERAENDERT})`);
-  if (keinAusschluss == null) absent.push(`certificate de_ausgleich field kein_ausschluss (employee fact ${DE_AUSGLEICH_KEIN_AUSSCHLUSS})`);
+  if (ganzjaehrig == null)
+    absent.push(
+      `certificate de_ausgleich field ganzjaehrig (employee fact ${DE_AUSGLEICH_GANZJAEHRIG})`,
+    );
+  if (unveraendert == null)
+    absent.push(
+      `certificate de_ausgleich field unveraendert (employee fact ${DE_AUSGLEICH_UNVERAENDERT})`,
+    );
+  if (keinAusschluss == null)
+    absent.push(
+      `certificate de_ausgleich field kein_ausschluss (employee fact ${DE_AUSGLEICH_KEIN_AUSSCHLUSS})`,
+    );
   if (absent.length > 0) {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" without the §42b attestations `
-      + `(${absent.join(", ")}) — answer each flag on the certificate from the HR records, `
-      + `the ELStAM history and the Lohnkonto; an assumed yes would be a silently wrong refund.`,
+      `no Ausgleich for employee "${ctx.employeeName}" without the §42b attestations ` +
+        `(${absent.join(", ")}) — answer each flag on the certificate from the HR records, ` +
+        `the ELStAM history and the Lohnkonto; an assumed yes would be a silently wrong refund.`,
     );
   }
   if (ganzjaehrig !== "true" || unveraendert !== "true" || keinAusschluss !== "true") {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" under §42b Abs. 1 EStG: the attestations `
-      + `deny a continuously employed, unchanged, exclusion-free Ausgleichsjahr — this employee `
-      + `settles through assessment, never through this settlement.`,
+      `no Ausgleich for employee "${ctx.employeeName}" under §42b Abs. 1 EStG: the attestations ` +
+        `deny a continuously employed, unchanged, exclusion-free Ausgleichsjahr — this employee ` +
+        `settles through assessment, never through this settlement.`,
     );
   }
 
   const elstam = ctx.certificateFor("de_elstam");
   if (elstam == null || !elstam.onFile) {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" without retrieved ELStAM (EStG §§39a, 39e): `
-      + `§42b Abs. 2 Satz 3 prices the annual tax at the December Steuerklasse.`,
+      `no Ausgleich for employee "${ctx.employeeName}" without retrieved ELStAM (EStG §§39a, 39e): ` +
+        `§42b Abs. 2 Satz 3 prices the annual tax at the December Steuerklasse.`,
     );
   }
   const stklRaw = elstam.answers["steuerklasse"] ?? null;
   if (stklRaw == null || stklRaw === "") {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}": no Steuerklasse on the ELStAM declaration — `
-      + `refusing rather than assuming Steuerklasse I.`,
+      `no Ausgleich for employee "${ctx.employeeName}": no Steuerklasse on the ELStAM declaration — ` +
+        `refusing rather than assuming Steuerklasse I.`,
     );
   }
   const stkl = STKL_BY_ROMAN[stklRaw];
@@ -227,8 +240,8 @@ export async function computeDeSettlementWithRates(
   // a December V/VI is certainly such a spell.
   if (stkl === 5 || stkl === 6) {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" in Steuerklasse ${stklRaw} (§42b Abs. 1 `
-      + `Satz 3 Nr. 2 EStG bars classes V and VI).`,
+      `no Ausgleich for employee "${ctx.employeeName}" in Steuerklasse ${stklRaw} (§42b Abs. 1 ` +
+        `Satz 3 Nr. 2 EStG bars classes V and VI).`,
     );
   }
   // Nr. 3a/3b are certificate-readable: any §39a amount or any Faktor bars.
@@ -236,16 +249,16 @@ export async function computeDeSettlementWithRates(
   const hinzu = toUnits(elstam.answers["hinzurechnungsbetrag"] ?? "0");
   if (freibetrag !== 0n || hinzu !== 0n) {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" with a §39a Freibetrag or `
-      + `Hinzurechnungsbetrag (§42b Abs. 1 Satz 3 Nr. 3a EStG).`,
+      `no Ausgleich for employee "${ctx.employeeName}" with a §39a Freibetrag or ` +
+        `Hinzurechnungsbetrag (§42b Abs. 1 Satz 3 Nr. 3a EStG).`,
     );
   }
   const faktorRaw = elstam.answers["faktor"] ?? null;
   const faktor = faktorRaw == null || faktorRaw === "" ? 1 : Number(faktorRaw);
   if (faktor !== 1) {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" under the Faktorverfahren (§42b Abs. 1 `
-      + `Satz 3 Nr. 3b EStG bars EStG §39f).`,
+      `no Ausgleich for employee "${ctx.employeeName}" under the Faktorverfahren (§42b Abs. 1 ` +
+        `Satz 3 Nr. 3b EStG bars EStG §39f).`,
     );
   }
   const zkfRaw = elstam.answers["kinderfreibetrag_anzahl"] ?? null;
@@ -255,10 +268,17 @@ export async function computeDeSettlementWithRates(
   const pvCert = ctx.certificateFor("de_pv_nachweis");
   const pvzRaw = pvCert?.answers["kinderlosenzuschlag"] ?? null;
   const pvaRaw = pvCert?.answers["abschlag_kinder"] ?? null;
-  if (pvCert == null || !pvCert.onFile || pvzRaw == null || pvzRaw === "" || pvaRaw == null || pvaRaw === "") {
+  if (
+    pvCert == null ||
+    !pvCert.onFile ||
+    pvzRaw == null ||
+    pvzRaw === "" ||
+    pvaRaw == null ||
+    pvaRaw === ""
+  ) {
     refuse(
-      `no Ausgleich for employee "${ctx.employeeName}" without the Pflegeversicherung child facts `
-      + `(PUEG Kindernachweis) — refusing rather than silently assuming a childless employee.`,
+      `no Ausgleich for employee "${ctx.employeeName}" without the Pflegeversicherung child facts ` +
+        `(PUEG Kindernachweis) — refusing rather than silently assuming a childless employee.`,
     );
   }
   const pvz = ctx.bool(pvzRaw) ? 1 : 0;
@@ -306,7 +326,9 @@ export async function computeDeSettlementWithRates(
   const annualKistC = annual.bk === 0n ? 0n : (annual.bk * BigInt(kistRate)) / 100n;
 
   const withheldLstC = centsOf(ctx.priors.ytdWithheldBySystemKey["lohnsteuer"] ?? "0.0000");
-  const withheldSoliC = centsOf(ctx.priors.ytdWithheldBySystemKey["solidaritaetszuschlag"] ?? "0.0000");
+  const withheldSoliC = centsOf(
+    ctx.priors.ytdWithheldBySystemKey["solidaritaetszuschlag"] ?? "0.0000",
+  );
   const withheldKistC = centsOf(ctx.priors.ytdWithheldBySystemKey["kirchenlohnsteuer"] ?? "0.0000");
 
   const push = ctx.pushSettlement;
@@ -314,13 +336,31 @@ export async function computeDeSettlementWithRates(
   const refundSoliC = withheldSoliC - annualSoliC;
   const refundKistC = withheldKistC - annualKistC;
   if (refundLstC > 0n) {
-    push("lohnsteuer", "credit", "Lohnsteuer-Jahresausgleich (§42b EStG) — Erstattung", eurosOf(refundLstC), SEQ_LST_AUSGLEICH);
+    push(
+      "lohnsteuer",
+      "credit",
+      "Lohnsteuer-Jahresausgleich (§42b EStG) — Erstattung",
+      eurosOf(refundLstC),
+      SEQ_LST_AUSGLEICH,
+    );
   }
   if (refundSoliC > 0n) {
-    push("solidaritaetszuschlag", "credit", "Solidaritätszuschlag zum Jahresausgleich (§42b EStG) — Erstattung", eurosOf(refundSoliC), SEQ_SOLI_AUSGLEICH);
+    push(
+      "solidaritaetszuschlag",
+      "credit",
+      "Solidaritätszuschlag zum Jahresausgleich (§42b EStG) — Erstattung",
+      eurosOf(refundSoliC),
+      SEQ_SOLI_AUSGLEICH,
+    );
   }
   if (refundKistC > 0n) {
-    push("kirchenlohnsteuer", "credit", "Kirchenlohnsteuer zum Jahresausgleich (§42b EStG) — Erstattung", eurosOf(refundKistC), SEQ_KIST_AUSGLEICH);
+    push(
+      "kirchenlohnsteuer",
+      "credit",
+      "Kirchenlohnsteuer zum Jahresausgleich (§42b EStG) — Erstattung",
+      eurosOf(refundKistC),
+      SEQ_KIST_AUSGLEICH,
+    );
   }
 
   return {
@@ -335,7 +375,12 @@ export async function computeDeSettlementWithRates(
 export async function computeDeSettlement(
   ctx: PayrollAnnualSettlementContext,
 ): Promise<Record<string, string>> {
-  const resolution = await resolveStatutoryRates(ctx.orgId, DE_PACK_RATES, ctx.taxYear, ctx.payDate);
+  const resolution = await resolveStatutoryRates(
+    ctx.orgId,
+    DE_PACK_RATES,
+    ctx.taxYear,
+    ctx.payDate,
+  );
   const kvzRaw = resolution.values("de_kvz")?.rate ?? null;
   const kvz = kvzRaw == null ? null : Number(kvzRaw);
   return computeDeSettlementWithRates(ctx, {
@@ -357,15 +402,15 @@ export function deAnnualSettlement(taxYear: number): PayrollAnnualSettlement | n
   return {
     label: "Lohnsteuer-Jahresausgleich (§42b EStG)",
     citation:
-      "EStG §42b (Lohnsteuer-Jahresausgleich durch den Arbeitgeber: Abs. 2 Sätze 3–4 "
-      + "Rechenweg, Abs. 3 Satz 1 frühestens Dezember, Abs. 4 Lohnkonto/Bescheinigung); "
-      + "EStG §39b Abs. 2 Sätze 6–7 (Jahreslohnsteuer; Monatslohnsteuer als Zwölftel); "
-      + "EStG §41b Abs. 1 Satz 2 Nr. 4 (Bescheinigung: einbehaltene Lohnsteuer, Soli, KiSt); "
-      + "EStG §41c Abs. 3 (Änderung nach Ablauf des Jahres — keine Ausgleichs-Nachforderung); "
-      + "SolZG §§3–4 (Bemessung, 5,5 %, 11,9 % Milderung); EStG §51a "
-      + "(Kirchenlohnsteuer-Bemessung); BMF Programmablaufplan für den Lohnsteuerabzug 2026 "
-      + "(BMF-Schreiben vom 12.11.2025, Stand 12.11.2025 endgültig, Anlage 1 — annual path); "
-      + "SVRV 2026 (bundeseinheitliche ceilings); SGB XI §§55/58 (PV Abschläge, Sachsen)",
+      "EStG §42b (Lohnsteuer-Jahresausgleich durch den Arbeitgeber: Abs. 2 Sätze 3–4 " +
+      "Rechenweg, Abs. 3 Satz 1 frühestens Dezember, Abs. 4 Lohnkonto/Bescheinigung); " +
+      "EStG §39b Abs. 2 Sätze 6–7 (Jahreslohnsteuer; Monatslohnsteuer als Zwölftel); " +
+      "EStG §41b Abs. 1 Satz 2 Nr. 4 (Bescheinigung: einbehaltene Lohnsteuer, Soli, KiSt); " +
+      "EStG §41c Abs. 3 (Änderung nach Ablauf des Jahres — keine Ausgleichs-Nachforderung); " +
+      "SolZG §§3–4 (Bemessung, 5,5 %, 11,9 % Milderung); EStG §51a " +
+      "(Kirchenlohnsteuer-Bemessung); BMF Programmablaufplan für den Lohnsteuerabzug 2026 " +
+      "(BMF-Schreiben vom 12.11.2025, Stand 12.11.2025 endgültig, Anlage 1 — annual path); " +
+      "SVRV 2026 (bundeseinheitliche ceilings); SGB XI §§55/58 (PV Abschläge, Sachsen)",
     mode: "adjustment_line",
     // The attestations live on the de_ausgleich certificate, not on the run
     // record (no profile surface collects them), so the edition requires the

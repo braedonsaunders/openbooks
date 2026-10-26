@@ -19,8 +19,15 @@ export const POST = defineRoute({
   feature: "hrm",
   body: fileBankChangeBody,
   handler: async ({ request: _req, authz: gate, body }) => {
-    if (body.bank.country !== undefined && body.bank.country !== null && !normalizeCountryCode(body.bank.country)) {
-      return NextResponse.json({ error: "country must be a valid ISO country code" }, { status: 400 });
+    if (
+      body.bank.country !== undefined &&
+      body.bank.country !== null &&
+      !normalizeCountryCode(body.bank.country)
+    ) {
+      return NextResponse.json(
+        { error: "country must be a valid ISO country code" },
+        { status: 400 },
+      );
     }
     if (
       body.bank.currency !== undefined &&
@@ -37,10 +44,15 @@ export const POST = defineRoute({
         bank: {
           bankName: body.bank.bankName,
           accountNumber: body.bank.accountNumber,
-          ...(body.bank.country === undefined ? {} : { country: normalizeCountryCode(body.bank.country) ?? body.bank.country }),
+          ...(body.bank.country === undefined
+            ? {}
+            : { country: normalizeCountryCode(body.bank.country) ?? body.bank.country }),
           ...(body.bank.currency === undefined
             ? {}
-            : { currency: body.bank.currency === null ? null : body.bank.currency.trim().toUpperCase() }),
+            : {
+                currency:
+                  body.bank.currency === null ? null : body.bank.currency.trim().toUpperCase(),
+              }),
           ...(body.bank.routing === undefined ? {} : { routing: body.bank.routing }),
         },
         reason: body.reason,

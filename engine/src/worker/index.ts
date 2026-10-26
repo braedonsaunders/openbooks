@@ -39,7 +39,10 @@ async function within<T>(operation: Promise<T>, milliseconds = 5_000): Promise<T
     return await Promise.race([
       operation,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("worker dependency check timed out")), milliseconds);
+        timer = setTimeout(
+          () => reject(new Error("worker dependency check timed out")),
+          milliseconds,
+        );
       }),
     ]);
   } finally {
@@ -90,9 +93,13 @@ async function main(): Promise<void> {
   ensureScheduler();
 
   for (const w of workers) {
-    w.on("failed", (job, err) => console.error(`[worker] ${w.name} job ${job?.id} failed:`, err?.message));
+    w.on("failed", (job, err) =>
+      console.error(`[worker] ${w.name} job ${job?.id} failed:`, err?.message),
+    );
   }
-  console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture, backup; scheduled ticks owned (scripts, feeds, billing, outbox, flows, close) + report + sandbox + backup schedulers ticking");
+  console.log(
+    "[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture, backup; scheduled ticks owned (scripts, feeds, billing, outbox, flows, close) + report + sandbox + backup schedulers ticking",
+  );
 
   const heartbeat = async () => {
     try {

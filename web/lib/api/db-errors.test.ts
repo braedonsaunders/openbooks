@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { dbWriteErrorResponse } from "./db-errors";
-import { isUuid } from '../list-params';
+import { isUuid } from "../list-params";
 
 const CONFLICTS = { form_layouts_org_type_name: "A form with that name already exists" };
 
 function pgError(code: string, constraint: string): Error {
-  return Object.assign(new Error(`duplicate key value violates unique constraint "${constraint}"`), {
-    code,
-    constraint,
-  });
+  return Object.assign(
+    new Error(`duplicate key value violates unique constraint "${constraint}"`),
+    {
+      code,
+      constraint,
+    },
+  );
 }
 
 function drizzleWrapped(code: string, constraint: string): Error {
@@ -21,8 +24,14 @@ function drizzleWrapped(code: string, constraint: string): Error {
 }
 
 test("a unique violation on a known constraint becomes a 409", async () => {
-  for (const error of [pgError("23505", "form_layouts_org_type_name"), drizzleWrapped("23505", "form_layouts_org_type_name")]) {
-    const res = dbWriteErrorResponse(error, { route: "customization:form-layouts", uniqueConflicts: CONFLICTS });
+  for (const error of [
+    pgError("23505", "form_layouts_org_type_name"),
+    drizzleWrapped("23505", "form_layouts_org_type_name"),
+  ]) {
+    const res = dbWriteErrorResponse(error, {
+      route: "customization:form-layouts",
+      uniqueConflicts: CONFLICTS,
+    });
     assert.equal(res.status, 409);
     assert.deepEqual(await res.json(), { error: "A form with that name already exists" });
   }
@@ -47,7 +56,7 @@ test("a unique violation on an unknown constraint is a generic 500", async () =>
   assert.equal(res.status, 500);
   const body = (await res.json()) as { error: string; correlationId: string };
   assert.equal(body.error, "save failed");
-  assert.ok(isUuid(body.correlationId), 'the correlation id is a UUID');
+  assert.ok(isUuid(body.correlationId), "the correlation id is a UUID");
 });
 
 test("unexpected failures are generic, correlated, and logged", async () => {
@@ -58,14 +67,23 @@ test("unexpected failures are generic, correlated, and logged", async () => {
   };
   try {
     const boom = new Error("connect ECONNREFUSED 10.0.0.85:5432");
-    const res = dbWriteErrorResponse(boom, { route: "customization:form-layouts", uniqueConflicts: CONFLICTS });
+    const res = dbWriteErrorResponse(boom, {
+      route: "customization:form-layouts",
+      uniqueConflicts: CONFLICTS,
+    });
     assert.equal(res.status, 500);
     const body = (await res.json()) as { error: string; correlationId: string };
     assert.deepEqual(Object.keys(body).sort(), ["correlationId", "error"]);
-    assert.ok(!JSON.stringify(body).includes("10.0.0.85"), "storage internals must not reach the client");
+    assert.ok(
+      !JSON.stringify(body).includes("10.0.0.85"),
+      "storage internals must not reach the client",
+    );
     assert.equal(logged.length, 1);
     assert.match(String(logged[0]![0]), /customization:form-layouts/);
-    assert.ok(String(logged[0]![0]).includes(body.correlationId), "the log must carry the correlation id");
+    assert.ok(
+      String(logged[0]![0]).includes(body.correlationId),
+      "the log must carry the correlation id",
+    );
     assert.equal(logged[0]![1], boom);
   } finally {
     console.error = prior;

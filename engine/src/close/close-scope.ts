@@ -3,7 +3,10 @@ import { sql, type SQL } from "drizzle-orm";
 /** Limit a close read to the closing entities; an org-wide close reads every entity. */
 export function closeEntityScope(subsidiaryIds: string[], entity: SQL): SQL {
   return subsidiaryIds.length
-    ? sql`${entity} in (${sql.join(subsidiaryIds.map(id => sql`${id}::uuid`), sql`, `)})`
+    ? sql`${entity} in (${sql.join(
+        subsidiaryIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`
     : sql`true`;
 }
 
@@ -11,7 +14,9 @@ export function closeBankStatementScope(orgId: string, subsidiaryIds: string[]):
   const inScope = (entity: SQL) => closeEntityScope(subsidiaryIds, entity);
   // Bank evidence is account-wide. For shared accounts its entity cannot be
   // inferred from a statement, so it remains relevant to every applicable close.
-  return !subsidiaryIds.length ? sql`true` : sql`(
+  return !subsidiaryIds.length
+    ? sql`true`
+    : sql`(
     a.subsidiary_id is null or ${inScope(sql`a.subsidiary_id`)} or
     (a.subsidiary_include_children and exists (
       with recursive ancestors as (

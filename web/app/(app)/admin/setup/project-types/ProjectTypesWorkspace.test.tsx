@@ -3,11 +3,19 @@ import test from "node:test";
 
 // jsdom first: the workspace reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/project-types", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/project-types",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {refresh(){},push(){},replace(){},back(){},forward(){}}};export function redirect(){throw new Error('redirect')};export function notFound(){throw new Error('notFound')}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return {refresh(){},push(){},replace(){},back(){},forward(){}}};export function redirect(){throw new Error('redirect')};export function notFound(){throw new Error('notFound')}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
@@ -65,7 +73,12 @@ async function mount() {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-09-23">
-          <ProjectTypesWorkspace types={TYPES} dimensions={[]} incomeAccounts={[]} fieldTicketsEnabled={false} />
+          <ProjectTypesWorkspace
+            types={TYPES}
+            dimensions={[]}
+            incomeAccounts={[]}
+            fieldTicketsEnabled={false}
+          />
           <ConfirmRoot />
         </BusinessDateProvider>
       </NextIntlClientProvider>,

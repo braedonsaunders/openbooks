@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { dateOrFalse, pushCustomFieldFilter } from "../list-query";
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 /* ------------------------------------------------------------------ */
 /* Journal entries                                                     */
@@ -18,7 +18,7 @@ export const JOURNAL_ENTRY_BUILT_IN_EXPR: Record<string, SQL> = {
   line_count: sql`entry_totals.line_count`,
   total_debits: sql`entry_totals.total_debits`,
   status: sql`e.status`,
-}
+};
 
 export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
   date: sql`e.posting_date`,
@@ -28,7 +28,7 @@ export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
   lines: sql`entry_totals.line_count`,
   debits: sql`entry_totals.total_debits`,
   status: sql`e.status`,
-}
+};
 
 /**
  * Origins posted as standalone GL-native journals with no subledger document:
@@ -102,7 +102,7 @@ export const JOURNAL_ENTRY_TABLE = `(
   select je.* from journal_entries je
     join documents jd on (jd.posted_entry_id = je.id or jd.id = je.source_document_id)
       and jd.kind in ('journal', 'pay_run') and jd.org_id = je.org_id
-)`
+)`;
 
 /** The source-document join the journal-entry WHERE clause references for
  * saved `cf_*` filters (`source_doc.custom`). Count queries use exactly this
@@ -120,29 +120,40 @@ export const JOURNAL_ENTRY_TABLE = `(
  * (the journal default view carries none), so the three counts agree by
  * construction instead of by copy. Alias `e` matches the list table alias.
  */
-export function journalScopeWhere(orgId: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
-  const parts: SQL[] = [sql`e.org_id = ${orgId}`]
+export function journalScopeWhere(
+  orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): SQL {
+  const parts: SQL[] = [sql`e.org_id = ${orgId}`];
   if (allowedSubsidiaryIds) {
-    const ids = [...allowedSubsidiaryIds]
-    parts.push(ids.length ? sql`and exists (
+    const ids = [...allowedSubsidiaryIds];
+    parts.push(
+      ids.length
+        ? sql`and exists (
       select 1 from journal_lines visible
        where visible.entry_id=e.id and visible.org_id = e.org_id and visible.org_id = ${orgId}
-         and visible.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
-    )` : sql`and false`)
+         and visible.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])
+    )`
+        : sql`and false`,
+    );
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }
 
 /** Draft lists share the whole-document authorization used by their editor. */
 export function journalDraftScopeWhere(orgId: string, allowed: ReadonlySet<string> | null): SQL {
-  const ids = allowed ? [...allowed] : []
+  const ids = allowed ? [...allowed] : [];
   return sql`e.org_id = ${orgId} and e.kind = 'journal' and e.status = 'draft'
     ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowed)}
-    ${allowed ? sql`and not exists (
+    ${
+      allowed
+        ? sql`and not exists (
       select 1 from document_lines l where l.document_id = e.id and l.org_id = e.org_id
        and l.subsidiary_id is not null
-       and not (l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))
-    )` : sql``}`
+       and not (l.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[]))
+    )`
+        : sql``
+    }`;
 }
 
 export function journalEntryCountJoins(): SQL {
@@ -153,16 +164,16 @@ export function journalEntryCountJoins(): SQL {
        where (d.posted_entry_id = e.id or d.id = e.source_document_id)
          and d.org_id = e.org_id and d.kind in ('journal', 'pay_run')
        limit 1
-    ) source_doc on true`
+    ) source_doc on true`;
 }
 
 export function journalEntryBaseJoins(allowedSubsidiaryIds?: Set<string> | null): SQL {
-  const ids = allowedSubsidiaryIds ? [...allowedSubsidiaryIds] : []
+  const ids = allowedSubsidiaryIds ? [...allowedSubsidiaryIds] : [];
   const lineVisibility = allowedSubsidiaryIds
     ? ids.length
-      ? sql`and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
+      ? sql`and l.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])`
       : sql`and false`
-    : sql``
+    : sql``;
   return sql`
     ${journalEntryCountJoins()}
     join lateral (
@@ -170,42 +181,51 @@ export function journalEntryBaseJoins(allowedSubsidiaryIds?: Set<string> | null)
              coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as total_debits
         from journal_lines l
        where l.entry_id = e.id and l.org_id = e.org_id ${lineVisibility}
-    ) entry_totals on true`
+    ) entry_totals on true`;
 }
 
 function journalEntryFilterPredicate(clause: FilterClause): SQL | null {
-  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+  const value = Array.isArray(clause.value)
+    ? String(clause.value[0] ?? "")
+    : String(clause.value ?? "");
   const select = (column: SQL) => {
-    if (clause.operator === 'eq') return sql`${column} = ${value}`
-    if (clause.operator === 'ne') return sql`${column} <> ${value}`
-    if (clause.operator === 'in' || clause.operator === 'not_in') {
-      const values = (Array.isArray(clause.value) ? clause.value : [value]).map(String).filter(Boolean)
-      if (!values.length) return clause.operator === 'in' ? sql`false` : sql`true`
-      const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-      return clause.operator === 'in' ? sql`${column} in (${list})` : sql`${column} not in (${list})`
+    if (clause.operator === "eq") return sql`${column} = ${value}`;
+    if (clause.operator === "ne") return sql`${column} <> ${value}`;
+    if (clause.operator === "in" || clause.operator === "not_in") {
+      const values = (Array.isArray(clause.value) ? clause.value : [value])
+        .map(String)
+        .filter(Boolean);
+      if (!values.length) return clause.operator === "in" ? sql`false` : sql`true`;
+      const list = sql.join(
+        values.map((item) => sql`${item}`),
+        sql`, `,
+      );
+      return clause.operator === "in"
+        ? sql`${column} in (${list})`
+        : sql`${column} not in (${list})`;
     }
-    return null
+    return null;
+  };
+  if (clause.key === "origin") return select(sql`e.origin`);
+  if (clause.key === "status") return select(sql`e.status`);
+  if (clause.key === "book") {
+    const code = sql`(select book.code from accounting_books book where book.org_id = e.org_id and book.id = e.book_id)`;
+    if (clause.operator === "contains") return sql`${code} ilike ${`%${value}%`}`;
+    return select(code);
   }
-  if (clause.key === 'origin') return select(sql`e.origin`)
-  if (clause.key === 'status') return select(sql`e.status`)
-  if (clause.key === 'book') {
-    const code = sql`(select book.code from accounting_books book where book.org_id = e.org_id and book.id = e.book_id)`
-    if (clause.operator === 'contains') return sql`${code} ilike ${`%${value}%`}`
-    return select(code)
-  }
-  if (clause.key === 'posting_date') {
-    const refusedDay = dateOrFalse(value)
-    if (refusedDay) return refusedDay
-    if (clause.operator === 'eq') return sql`e.posting_date = ${value}`
-    if (clause.operator === 'gte') return sql`e.posting_date >= ${value}`
-    if (clause.operator === 'lte') return sql`e.posting_date <= ${value}`
-    if (clause.operator === 'between') {
-      const refusedUpper = dateOrFalse(String(clause.to ?? ''))
-      if (refusedUpper) return refusedUpper
-      return sql`e.posting_date between ${value} and ${String(clause.to ?? '')}`
+  if (clause.key === "posting_date") {
+    const refusedDay = dateOrFalse(value);
+    if (refusedDay) return refusedDay;
+    if (clause.operator === "eq") return sql`e.posting_date = ${value}`;
+    if (clause.operator === "gte") return sql`e.posting_date >= ${value}`;
+    if (clause.operator === "lte") return sql`e.posting_date <= ${value}`;
+    if (clause.operator === "between") {
+      const refusedUpper = dateOrFalse(String(clause.to ?? ""));
+      if (refusedUpper) return refusedUpper;
+      return sql`e.posting_date between ${value} and ${String(clause.to ?? "")}`;
     }
   }
-  return null
+  return null;
 }
 
 export function journalEntryWhere(
@@ -213,7 +233,7 @@ export function journalEntryWhere(
   adhoc: EntityAdhoc,
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
-  customFieldAlias = 'source_doc',
+  customFieldAlias = "source_doc",
 ): SQL {
   // Visibility (journal-document entries plus standalone engine journals) is
   // built into JOURNAL_ENTRY_TABLE as a union of two index-driven legs — a
@@ -221,18 +241,21 @@ export function journalEntryWhere(
   // per-row source_doc lateral test ran for every entry in the tenant.
   // Org scope plus the subsidiary fence is the shared journalScopeWhere so
   // the list total and the header/guide counts cannot drift apart.
-  const parts: SQL[] = [journalScopeWhere(orgId, allowedSubsidiaryIds)]
+  const parts: SQL[] = [journalScopeWhere(orgId, allowedSubsidiaryIds)];
   for (const filter of view.filters) {
-    if (pushCustomFieldFilter(parts, filter, customFieldAlias)) continue
-    const predicate = journalEntryFilterPredicate(filter)
-    if (predicate) parts.push(sql`and ${predicate}`)
+    if (pushCustomFieldFilter(parts, filter, customFieldAlias)) continue;
+    const predicate = journalEntryFilterPredicate(filter);
+    if (predicate) parts.push(sql`and ${predicate}`);
   }
-  if (adhoc.filters?.origin) parts.push(sql`and e.origin = ${adhoc.filters.origin}`)
-  if (adhoc.filters?.status) parts.push(sql`and e.status = ${adhoc.filters.status}`)
-  if (adhoc.filters?.book) parts.push(sql`and e.book_id in (select book.id from accounting_books book where book.org_id = e.org_id and book.code = ${adhoc.filters.book})`)
+  if (adhoc.filters?.origin) parts.push(sql`and e.origin = ${adhoc.filters.origin}`);
+  if (adhoc.filters?.status) parts.push(sql`and e.status = ${adhoc.filters.status}`);
+  if (adhoc.filters?.book)
+    parts.push(
+      sql`and e.book_id in (select book.id from accounting_books book where book.org_id = e.org_id and book.code = ${adhoc.filters.book})`,
+    );
   if (adhoc.q) {
-    const query = `%${adhoc.q}%`
-    parts.push(sql`and (e.entry_number ilike ${query} or e.memo ilike ${query})`)
+    const query = `%${adhoc.q}%`;
+    parts.push(sql`and (e.entry_number ilike ${query} or e.memo ilike ${query})`);
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }

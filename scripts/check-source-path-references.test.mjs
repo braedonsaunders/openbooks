@@ -13,7 +13,10 @@ import { analyze, segmentReferences, stripComments } from "./check-source-path-r
 // on repository source. The temp repo below is still assembled with real .ts
 // names, so every shape resolves exactly as the literals did.
 function fixture(name) {
-  return readFileSync(new URL(`./fixtures/source-path-references/${name}.txt`, import.meta.url), "utf8");
+  return readFileSync(
+    new URL(`./fixtures/source-path-references/${name}.txt`, import.meta.url),
+    "utf8",
+  );
 }
 
 // The check lists files through git, so the fixture is a real repository.
@@ -28,7 +31,10 @@ function repo(files) {
   return root;
 }
 
-const ENGINE = { "engine/src/crm/crm.ts": "export const x = 1;\n", "engine/src/coins/coins.ts": "export const y = 1;\n" };
+const ENGINE = {
+  "engine/src/crm/crm.ts": "export const x = 1;\n",
+  "engine/src/coins/coins.ts": "export const y = 1;\n",
+};
 
 test("segment-assembled, new URL and escaped regex references that resolve pass; each stale shape is named with its line", () => {
   const root = repo({
@@ -69,8 +75,13 @@ test("a synthetic path is opted out on its line; an absence assertion and a comm
 });
 
 test("segmentReferences reads quoted segments across line breaks and stops at the first non-segment", () => {
-  const refs = segmentReferences('join(root,\n  "engine",\n  "src",\n  "payroll", "run-lifecycle.ts",\n) + other("engine", "x")');
-  assert.deepEqual(refs.map((r) => r.path), ["engine/src/payroll/run-lifecycle.ts"]);
+  const refs = segmentReferences(
+    'join(root,\n  "engine",\n  "src",\n  "payroll", "run-lifecycle.ts",\n) + other("engine", "x")',
+  );
+  assert.deepEqual(
+    refs.map((r) => r.path),
+    ["engine/src/payroll/run-lifecycle.ts"],
+  );
 });
 
 test("stripComments keeps line structure", () => {

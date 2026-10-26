@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { createPaymentDocument } from "./payment-documents.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -34,10 +30,13 @@ async function setup() {
 }
 
 async function paymentDrafts(orgId: string) {
-  return await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  return await db.execute<{ id: string; subsidiary_id: string | null }>(
+    sql`
     select id, subsidiary_id from documents
      where org_id = ${orgId} and kind in ('vendor_payment', 'customer_payment')
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 test("a restricted payment draft lands in their own subsidiary, never the root", async () => {

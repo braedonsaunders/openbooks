@@ -22,12 +22,23 @@ const argOrg = process.argv[2];
 // Default discovery is trusted, but limited to sandboxes so a bare command
 // cannot select an arbitrary production tenant. Explicit ids support rehearsal.
 // bypass: cross-org-by-design — with no id given, the harness discovers a sandbox among every organization.
-const orgId = argOrg ?? (await withBypassContext(async () =>
-  (await db.execute<{ id: string }>(sql`
+const orgId =
+  argOrg ??
+  (await withBypassContext(
+    async () =>
+      (
+        await db.execute<{ id: string }>(
+          sql`
     select id from orgs where env_kind = 'sandbox' order by created_at, id limit 1
-  `, "objects"))[0]?.id,
-));
-if (!orgId) { console.error("no org"); process.exit(1); }
+  `,
+          "objects",
+        )
+      )[0]?.id,
+  ));
+if (!orgId) {
+  console.error("no org");
+  process.exit(1);
+}
 
 const gitSha = sourceSha();
 const producerRunId = runId();
@@ -38,24 +49,35 @@ const cp = await runScenarioForOrg(orgId, { at, gitSha, runId: producerRunId });
 const pad = (s: string, n: number) => s.padEnd(n);
 console.log(`\n=== Golden fixture: ${cp.orgName} (${cp.orgId}) ===`);
 console.log(`git=${cp.gitSha ?? "?"}  at=${cp.at}`);
-console.log(`cutoff: ${cp.cutoff}  (${cp.cutoffSource}) — balance-mode checks verify as-of this date`);
+console.log(
+  `cutoff: ${cp.cutoff}  (${cp.cutoffSource}) — balance-mode checks verify as-of this date`,
+);
 console.log(`counts: ${JSON.stringify(cp.counts)}`);
-console.log(`trial balance: debits=${cp.trialBalance.debits} credits=${cp.trialBalance.credits} accounts=${cp.trialBalance.accounts}`);
+console.log(
+  `trial balance: debits=${cp.trialBalance.debits} credits=${cp.trialBalance.credits} accounts=${cp.trialBalance.accounts}`,
+);
 
 console.log(`\nchecks:`);
-for (const c of cp.checks) console.log(`  ${c.ok ? "PASS" : "FAIL"}  ${pad(c.name, 22)} ${c.detail}`);
+for (const c of cp.checks)
+  console.log(`  ${c.ok ? "PASS" : "FAIL"}  ${pad(c.name, 22)} ${c.detail}`);
 
 console.log(`\nsubledger ↔ GL tie-out (as-of ${cp.cutoff}; residual = GL − aging − directJE):`);
 for (const t of cp.controlTieOut) {
-  console.log(`  ${pad(t.number ?? "", 8)} ${pad(t.kind, 18)} GL=${pad(t.gl, 15)} aging=${pad(t.subledger, 15)} directJE=${pad(t.direct, 13)} residual=${t.diff}`);
+  console.log(
+    `  ${pad(t.number ?? "", 8)} ${pad(t.kind, 18)} GL=${pad(t.gl, 15)} aging=${pad(t.subledger, 15)} directJE=${pad(t.direct, 13)} residual=${t.diff}`,
+  );
 }
 
 console.log(`\nreport latency (inception-scan hot path):`);
-for (const t of cp.timings) console.log(`  ${pad(t.report, 18)} ${String(t.ms).padStart(6)} ms  (${t.rows} rows)`);
+for (const t of cp.timings)
+  console.log(`  ${pad(t.report, 18)} ${String(t.ms).padStart(6)} ms  (${t.rows} rows)`);
 
 const dir = join(process.cwd(), "harness-checkpoints");
 mkdirSync(dir, { recursive: true });
-const file = join(dir, `${cp.orgName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${at.replace(/[:.]/g, "-")}.json`);
+const file = join(
+  dir,
+  `${cp.orgName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${at.replace(/[:.]/g, "-")}.json`,
+);
 writeFileSync(file, JSON.stringify(cp, null, 2));
 console.log(`\ncheckpoint written: ${file}`);
 console.log(cp.pass ? "\nRESULT: PASS" : "\nRESULT: FAIL");

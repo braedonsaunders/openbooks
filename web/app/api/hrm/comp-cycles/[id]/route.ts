@@ -38,8 +38,7 @@ export const GET = defineRoute({
     const payrollOff = await meritCyclesPayrollRefusal(gate.user.orgId);
     if (payrollOff) return payrollOff;
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid cycle" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid cycle" }, { status: 400 });
     try {
       const cycle = await getCycle({
         orgId: gate.user.orgId,
@@ -59,14 +58,7 @@ export const GET = defineRoute({
   },
 });
 
-const ACTIONS = [
-  "open",
-  "submit",
-  "push",
-  "close",
-  "cancel",
-  "budgets",
-] as const;
+const ACTIONS = ["open", "submit", "push", "close", "cancel", "budgets"] as const;
 
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
@@ -78,16 +70,11 @@ export const POST = defineRoute({
       reason: z.string().trim().min(1).max(2000).optional(),
     }),
   ),
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const payrollOff = await meritCyclesPayrollRefusal(gate.user.orgId);
     if (payrollOff) return payrollOff;
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid cycle" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid cycle" }, { status: 400 });
 
     try {
       const q = { orgId: gate.user.orgId, actorId: gate.user.id, cycleId: id };
@@ -113,19 +100,12 @@ export const POST = defineRoute({
           return NextResponse.json({ cycle });
         }
         case "cancel": {
-          if (!body.reason)
-            return NextResponse.json(
-              { error: "reason required" },
-              { status: 400 },
-            );
+          if (!body.reason) return NextResponse.json({ error: "reason required" }, { status: 400 });
           const cycle = await cancelCycle({ ...q, reason: body.reason });
           return NextResponse.json({ cycle });
         }
         default:
-          return NextResponse.json(
-            { error: "unknown action" },
-            { status: 400 },
-          );
+          return NextResponse.json({ error: "unknown action" }, { status: 400 });
       }
     } catch (e) {
       return compensationErrorResponse(e);

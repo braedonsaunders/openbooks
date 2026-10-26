@@ -9,14 +9,21 @@ declare global {
 
 // jsdom first: the wizard reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/close?run=abc&stage=execute", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/close?run=abc&stage=execute",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__closeTestRouter}export function usePathname(){return '/close'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__closeTestRouter}export function usePathname(){return '/close'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -224,18 +231,22 @@ test("a ready manual review task offers start and evidence controls", async (t) 
   });
   const labels = [...host.querySelectorAll("button")].map((el) => el.textContent?.trim());
   assert.ok(labels.includes("Start"), "a Ready review task must offer Start");
-  assert.ok(labels.includes("Add evidence"), "an evidence-gated review task must offer Add evidence");
+  assert.ok(
+    labels.includes("Add evidence"),
+    "an evidence-gated review task must offer Add evidence",
+  );
 });
 
 /** A re-run that only reverses a prior elimination must not toast "posted". */
 test("a reversed-only consolidation toasts the reversal, not a posting", async (t) => {
   const prior = globalThis.fetch;
-  globalThis.fetch = (async () => Response.json({
-    ok: true,
-    ratesWritten: 0,
-    ownership: { runId: "run-1", entryIds: [] },
-    elimination: { entryId: null, lineCount: 0, status: "reversed", reversalEntryIds: ["rev-1"] },
-  })) as typeof fetch;
+  globalThis.fetch = (async () =>
+    Response.json({
+      ok: true,
+      ratesWritten: 0,
+      ownership: { runId: "run-1", entryIds: [] },
+      elimination: { entryId: null, lineCount: 0, status: "reversed", reversalEntryIds: ["rev-1"] },
+    })) as typeof fetch;
   const { host, root } = await mountWizard();
   t.after(async () => {
     await act(async () => {
@@ -245,9 +256,15 @@ test("a reversed-only consolidation toasts the reversal, not a posting", async (
     globalThis.fetch = prior;
   });
   await clickRunConsolidation(host);
-  const successes = (globalThis.__closeTestToasts ?? []).filter((toast) => toast.kind === "success");
+  const successes = (globalThis.__closeTestToasts ?? []).filter(
+    (toast) => toast.kind === "success",
+  );
   assert.equal(successes.length, 1, "the run must toast exactly once");
-  assert.match(successes[0]!.message, /reversed/i, "the toast must name the reversal, not a posting");
+  assert.match(
+    successes[0]!.message,
+    /reversed/i,
+    "the toast must name the reversal, not a posting",
+  );
   assert.doesNotMatch(successes[0]!.message, /posted/i);
 });
 
@@ -269,7 +286,10 @@ test("a 422 consolidation refusal persists inline on the task", async (t) => {
   });
   await clickRunConsolidation(host);
   await tick();
-  assert.ok(calls.some((call) => call.includes("/api/consolidation")), "the run must reach the API");
+  assert.ok(
+    calls.some((call) => call.includes("/api/consolidation")),
+    "the run must reach the API",
+  );
   const alert = host.querySelector('[role="alert"]');
   assert.ok(alert, "the refusal must persist inline on the task");
   assert.match(alert.textContent ?? "", /ownership records/i);
@@ -362,8 +382,14 @@ test("a sales workstream task heading renders the translated label, not the mess
     await tick();
   });
   const headings = [...host.querySelectorAll("h3")].map((el) => el.textContent?.trim());
-  assert.ok(headings.includes("Sales"), `expected a Sales group heading, saw: ${headings.join(" | ")}`);
-  assert.ok(!host.textContent?.includes("workstreams.sales"), "the raw message key must not render");
+  assert.ok(
+    headings.includes("Sales"),
+    `expected a Sales group heading, saw: ${headings.join(" | ")}`,
+  );
+  assert.ok(
+    !host.textContent?.includes("workstreams.sales"),
+    "the raw message key must not render",
+  );
 });
 
 test("the wizard header links reopen requests exactly for the reopen permission", async (t) => {
@@ -415,11 +441,18 @@ async function mountReadiness(canRun: boolean) {
           stage="readiness"
           run={{ ...base.run, current_stage: "readiness" }}
           canRun={canRun}
-          exceptions={[{
-            id: randomUUID(), task_id: null, code: "posting-period-missing", severity: "error", status: "open",
-            title: "Transactions need an accounting period", message: "3 transactions fall outside any period.",
-            details: { count: 3 },
-          }]}
+          exceptions={[
+            {
+              id: randomUUID(),
+              task_id: null,
+              code: "posting-period-missing",
+              severity: "error",
+              status: "open",
+              title: "Transactions need an accounting period",
+              message: "3 transactions fall outside any period.",
+              details: { count: 3 },
+            },
+          ]}
         />
       </NextIntlClientProvider>,
     );
@@ -433,14 +466,20 @@ test("a missing-period remedy links only for users who may maintain posting peri
   try {
     const text = withheld.host.textContent ?? "";
     assert.ok(!text.includes("Open work area"), "no link to a page that would refuse the viewer");
-    assert.ok(text.includes("Execute close tasks and validation"), "the viewer is told which permission can act");
+    assert.ok(
+      text.includes("Execute close tasks and validation"),
+      "the viewer is told which permission can act",
+    );
   } finally {
     await act(async () => withheld.root.unmount());
     withheld.host.remove();
   }
   const offered = await mountReadiness(true);
   try {
-    assert.ok((offered.host.textContent ?? "").includes("Open work area"), "a close operator gets the work area");
+    assert.ok(
+      (offered.host.textContent ?? "").includes("Open work area"),
+      "a close operator gets the work area",
+    );
   } finally {
     await act(async () => offered.root.unmount());
     offered.host.remove();

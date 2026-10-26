@@ -5,11 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { timesheetWeeksFlowAdapter } from "./timesheet-weeks-adapter.ts";
 import { getFlowAdapter } from "./registry.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
  * Scheduled fan-out tenant isolation for timesheet weeks — parity with the
@@ -64,7 +60,11 @@ test("timesheet fan-out candidates stay inside the firing org", { skip: !DB }, a
     const candidates = await withOrg(orgA.orgId, () =>
       timesheetWeeksFlowAdapter.findCandidateIds!(100),
     );
-    assert.deepEqual(new Set(candidates), new Set(aWeeks), "only the firing org's weeks are candidates");
+    assert.deepEqual(
+      new Set(candidates),
+      new Set(aWeeks),
+      "only the firing org's weeks are candidates",
+    );
 
     const otherWay = await withOrg(orgB.orgId, () =>
       getFlowAdapter("timesheet_week")!.findCandidateIds!(100),

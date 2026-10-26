@@ -40,11 +40,7 @@ export function StartCloseButton({
   return (
     <div className="flex items-center gap-1">
       {books.length > 1 ? (
-        <Select
-          className="w-28"
-          value={bookId}
-          onChange={(e) => setBookId(e.target.value)}
-        >
+        <Select className="w-28" value={bookId} onChange={(e) => setBookId(e.target.value)}>
           {books.map((book) => (
             <option key={book.id} value={book.id}>
               {book.name}

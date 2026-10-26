@@ -55,48 +55,88 @@ export function planAllocations(
   }
   const subsidiaries = new Set(proposals.map((proposal) => proposal.subsidiaryId));
   if (subsidiaries.size > 1) {
-    refuse("proposals_cross_subsidiary", "proposals from different legal entities cannot be accepted together", {
-      remedy: "Accept each legal entity's proposals separately.",
-    });
+    refuse(
+      "proposals_cross_subsidiary",
+      "proposals from different legal entities cannot be accepted together",
+      {
+        remedy: "Accept each legal entity's proposals separately.",
+      },
+    );
   }
   if (new Set(proposals.map((proposal) => proposal.currency)).size > 1) {
-    refuse("proposals_mixed_currency", "proposals in different currencies cannot be accepted together");
+    refuse(
+      "proposals_mixed_currency",
+      "proposals in different currencies cannot be accepted together",
+    );
   }
   const total = proposals.reduce((sum, proposal) => add(sum, proposal.amount), "0");
   switch (operation) {
     case "asset":
     case "component": {
-      if (proposals.length !== 1) refuse("single_proposal_required", `${operation === "asset" ? "creating an asset" : "adding a component"} takes exactly one proposal; use merge to combine lines`);
-      if (targets.length !== 1) refuse("single_target_required", "exactly one resulting asset is required");
+      if (proposals.length !== 1)
+        refuse(
+          "single_proposal_required",
+          `${operation === "asset" ? "creating an asset" : "adding a component"} takes exactly one proposal; use merge to combine lines`,
+        );
+      if (targets.length !== 1)
+        refuse("single_target_required", "exactly one resulting asset is required");
       const amount = positive(targets[0]!.amount, "the asset cost");
       if (cmp(amount, total) !== 0) {
-        refuse("amount_mismatch", `the asset cost ${amount} must equal the proposal amount ${total}`, {
-          remedy: "Split the proposal to capitalize it as several assets.",
-        });
+        refuse(
+          "amount_mismatch",
+          `the asset cost ${amount} must equal the proposal amount ${total}`,
+          {
+            remedy: "Split the proposal to capitalize it as several assets.",
+          },
+        );
       }
       return [{ proposalId: proposals[0]!.id, targetIndex: 0, amount }];
     }
     case "split": {
-      if (proposals.length !== 1) refuse("single_proposal_required", "a split takes exactly one proposal");
-      if (targets.length < 2) refuse("split_targets_required", "a split needs at least two resulting assets");
-      const amounts = targets.map((target, index) => positive(target.amount, `asset ${index + 1} cost`));
+      if (proposals.length !== 1)
+        refuse("single_proposal_required", "a split takes exactly one proposal");
+      if (targets.length < 2)
+        refuse("split_targets_required", "a split needs at least two resulting assets");
+      const amounts = targets.map((target, index) =>
+        positive(target.amount, `asset ${index + 1} cost`),
+      );
       const allocated = amounts.reduce((sum, amount) => add(sum, amount), "0");
       if (cmp(allocated, total) !== 0) {
-        refuse("amount_mismatch", `the split assets total ${allocated} but the proposal carries ${total}`);
+        refuse(
+          "amount_mismatch",
+          `the split assets total ${allocated} but the proposal carries ${total}`,
+        );
       }
-      return amounts.map((amount, targetIndex) => ({ proposalId: proposals[0]!.id, targetIndex, amount }));
+      return amounts.map((amount, targetIndex) => ({
+        proposalId: proposals[0]!.id,
+        targetIndex,
+        amount,
+      }));
     }
     case "merge": {
-      if (proposals.length < 2) refuse("merge_proposals_required", "a merge needs at least two proposals");
-      if (targets.length !== 1) refuse("single_target_required", "a merge produces exactly one asset");
+      if (proposals.length < 2)
+        refuse("merge_proposals_required", "a merge needs at least two proposals");
+      if (targets.length !== 1)
+        refuse("single_target_required", "a merge produces exactly one asset");
       const amount = positive(targets[0]!.amount, "the asset cost");
       if (cmp(amount, total) !== 0) {
-        refuse("amount_mismatch", `the merged asset cost ${amount} must equal the proposals' total ${total}`);
+        refuse(
+          "amount_mismatch",
+          `the merged asset cost ${amount} must equal the proposals' total ${total}`,
+        );
       }
-      return proposals.map((proposal) => ({ proposalId: proposal.id, targetIndex: 0, amount: add(proposal.amount, "0") }));
+      return proposals.map((proposal) => ({
+        proposalId: proposal.id,
+        targetIndex: 0,
+        amount: add(proposal.amount, "0"),
+      }));
     }
     case "cip":
-      return proposals.map((proposal) => ({ proposalId: proposal.id, targetIndex: 0, amount: add(proposal.amount, "0") }));
+      return proposals.map((proposal) => ({
+        proposalId: proposal.id,
+        targetIndex: 0,
+        amount: add(proposal.amount, "0"),
+      }));
   }
 }
 
@@ -130,12 +170,27 @@ export function buildReclassLines(
   for (const allocation of allocations) {
     if (allocation.sourceAccountId === allocation.targetAccountId) continue;
     if (isZero(allocation.amount)) continue;
-    const dims = { departmentId: allocation.departmentId, projectId: allocation.projectId, locationId: allocation.locationId };
-    lines.push({ accountId: allocation.targetAccountId, amount: add(allocation.amount, "0"), memo: allocation.memo, ...dims });
-    lines.push({ accountId: allocation.sourceAccountId, amount: neg(allocation.amount), memo: allocation.memo, ...dims });
+    const dims = {
+      departmentId: allocation.departmentId,
+      projectId: allocation.projectId,
+      locationId: allocation.locationId,
+    };
+    lines.push({
+      accountId: allocation.targetAccountId,
+      amount: add(allocation.amount, "0"),
+      memo: allocation.memo,
+      ...dims,
+    });
+    lines.push({
+      accountId: allocation.sourceAccountId,
+      amount: neg(allocation.amount),
+      memo: allocation.memo,
+      ...dims,
+    });
   }
   const residual = lines.reduce((sum, line) => add(sum, line.amount), "0");
-  if (!isZero(residual)) refuse("reclass_unbalanced", `the reclassification does not balance (residual ${residual})`);
+  if (!isZero(residual))
+    refuse("reclass_unbalanced", `the reclassification does not balance (residual ${residual})`);
   return lines;
 }
 
@@ -144,9 +199,14 @@ export function buildReclassLines(
  * cents to the earliest shares, so the shares always sum to the amount.
  */
 export function splitEvenly(amount: string, parts: number): string[] {
-  if (!Number.isInteger(parts) || parts < 2 || parts > 500) refuse("split_parts_invalid", "split into between 2 and 500 assets");
+  if (!Number.isInteger(parts) || parts < 2 || parts > 500)
+    refuse("split_parts_invalid", "split into between 2 and 500 assets");
   const units = toUnits(amount);
   if (units <= 0n) refuse("amount_not_positive", "the amount to split must be greater than zero");
-  if (units % 100n !== 0n) refuse("split_precision", "only an amount stated to the cent can be split evenly");
-  return apportion(units / 100n, Array.from({ length: parts }, () => 1n)).map((cents) => fromUnits(cents * 100n));
+  if (units % 100n !== 0n)
+    refuse("split_precision", "only an amount stated to the cent can be split evenly");
+  return apportion(
+    units / 100n,
+    Array.from({ length: parts }, () => 1n),
+  ).map((cents) => fromUnits(cents * 100n));
 }

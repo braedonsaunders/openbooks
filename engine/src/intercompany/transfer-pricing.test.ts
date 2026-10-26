@@ -16,19 +16,54 @@ test("cost plus a markup prices exactly to eight decimals", () => {
 });
 
 test("a transfer pricing policy names exactly one pricing basis", () => {
-  const base = { sellerSubsidiaryId: SELLER, buyerSubsidiaryId: BUYER, effectiveFrom: "2026-01-01" };
-  assert.equal(transferPricingPolicyRefusal({ ...base, method: "cost_plus", markupPercent: "8" }), null);
-  assert.equal(transferPricingPolicyRefusal({ ...base, method: "price_level", priceLevelId: LEVEL }), null);
+  const base = {
+    sellerSubsidiaryId: SELLER,
+    buyerSubsidiaryId: BUYER,
+    effectiveFrom: "2026-01-01",
+  };
+  assert.equal(
+    transferPricingPolicyRefusal({ ...base, method: "cost_plus", markupPercent: "8" }),
+    null,
+  );
+  assert.equal(
+    transferPricingPolicyRefusal({ ...base, method: "price_level", priceLevelId: LEVEL }),
+    null,
+  );
   assert.match(transferPricingPolicyRefusal({ ...base, method: "cost_plus" })!, /markup/);
-  assert.match(transferPricingPolicyRefusal({ ...base, method: "cost_plus", markupPercent: "8", priceLevelId: LEVEL })!, /clear the price level/);
-  assert.match(transferPricingPolicyRefusal({ ...base, method: "price_level", priceLevelId: LEVEL, markupPercent: "8" })!, /clear the markup/);
+  assert.match(
+    transferPricingPolicyRefusal({
+      ...base,
+      method: "cost_plus",
+      markupPercent: "8",
+      priceLevelId: LEVEL,
+    })!,
+    /clear the price level/,
+  );
+  assert.match(
+    transferPricingPolicyRefusal({
+      ...base,
+      method: "price_level",
+      priceLevelId: LEVEL,
+      markupPercent: "8",
+    })!,
+    /clear the markup/,
+  );
   assert.match(transferPricingPolicyRefusal({ ...base, method: "price_level" })!, /price level/);
-  assert.match(transferPricingPolicyRefusal({ ...base, method: "flat" })!, /how transfer prices are set/);
+  assert.match(
+    transferPricingPolicyRefusal({ ...base, method: "flat" })!,
+    /how transfer prices are set/,
+  );
 });
 
 test("a subsidiary cannot set transfer prices for sales to itself", () => {
   assert.match(
-    transferPricingPolicyRefusal({ sellerSubsidiaryId: SELLER, buyerSubsidiaryId: SELLER, method: "cost_plus", markupPercent: "1", effectiveFrom: "2026-01-01" })!,
+    transferPricingPolicyRefusal({
+      sellerSubsidiaryId: SELLER,
+      buyerSubsidiaryId: SELLER,
+      method: "cost_plus",
+      markupPercent: "1",
+      effectiveFrom: "2026-01-01",
+    })!,
     /cannot set transfer prices for sales to itself/,
   );
 });
@@ -36,9 +71,30 @@ test("a subsidiary cannot set transfer prices for sales to itself", () => {
 test("the policy window must be dated and ordered", () => {
   const base = { sellerSubsidiaryId: SELLER, method: "cost_plus", markupPercent: "1" };
   assert.match(transferPricingPolicyRefusal({ ...base })!, /takes effect/);
-  assert.match(transferPricingPolicyRefusal({ ...base, effectiveFrom: "2026-02-01", effectiveTo: "2026-01-31" })!, /on or after/);
-  assert.equal(transferPricingPolicyRefusal({ ...base, effectiveFrom: "2026-02-01", effectiveTo: "2026-02-01" }), null);
-  assert.match(transferPricingPolicyRefusal({ ...base, markupPercent: "1000.0001", effectiveFrom: "2026-01-01" })!, /between 0 and 1000/);
+  assert.match(
+    transferPricingPolicyRefusal({
+      ...base,
+      effectiveFrom: "2026-02-01",
+      effectiveTo: "2026-01-31",
+    })!,
+    /on or after/,
+  );
+  assert.equal(
+    transferPricingPolicyRefusal({
+      ...base,
+      effectiveFrom: "2026-02-01",
+      effectiveTo: "2026-02-01",
+    }),
+    null,
+  );
+  assert.match(
+    transferPricingPolicyRefusal({
+      ...base,
+      markupPercent: "1000.0001",
+      effectiveFrom: "2026-01-01",
+    })!,
+    /between 0 and 1000/,
+  );
 });
 
 test("transfer amounts extend and divide at ledger precision", () => {

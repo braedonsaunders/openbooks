@@ -60,7 +60,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mi.ts";
 
 export interface MiYearRates {
@@ -93,7 +97,11 @@ export const MI_RATES_2026: MiYearRates = {
     // per diem/daily $1.64. The daily figure is $600 ÷ 365, NOT ÷ 260 — which
     // is why a 260-period payroll is refused rather than mapped onto "daily".
     printedExemption: {
-      52: "11.54", 26: "23.08", 24: "25.00", 12: "50.00", 365: "1.64",
+      52: "11.54",
+      26: "23.08",
+      24: "25.00",
+      12: "50.00",
+      365: "1.64",
     },
   },
 };
@@ -102,17 +110,19 @@ const MI_EDITIONS_BY_YEAR: Record<number, MiYearRates> = {
   [MI_RATES_2026.year]: MI_RATES_2026,
 };
 
-export const MI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Form 446 (Rev. 02-26); Detroit Form 5469 (Rev. 05-25)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Michigan Department of Treasury, Form 446 (Rev. 02-26) 2026 Michigan Income Tax Withholding "
-    + "Guide — rate 4.25%, personal exemption $5,900; Form 5469 (Rev. 05-25) 2026 City of Detroit "
-    + "Income Tax Withholding Guide — 2.4% resident, 1.2% nonresident, $600 exemption",
-  status: "published",
-  region: "MI",
-}];
+export const MI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Form 446 (Rev. 02-26); Detroit Form 5469 (Rev. 05-25)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Michigan Department of Treasury, Form 446 (Rev. 02-26) 2026 Michigan Income Tax Withholding " +
+      "Guide — rate 4.25%, personal exemption $5,900; Form 5469 (Rev. 05-25) 2026 City of Detroit " +
+      "Income Tax Withholding Guide — 2.4% resident, 1.2% nonresident, $600 exemption",
+    status: "published",
+    region: "MI",
+  },
+];
 
 function periodsGuard(periodsPerYear: number): void {
   MI_STATE_ENGINE.requirePeriodsPerYear(periodsPerYear);
@@ -237,10 +247,30 @@ export const MI_WITHHOLDING: UsStateWithholdingEngine = {
  * Detroit — see `MI_CITY_RATE_SOURCE` below for why.
  */
 export const MI_TAXING_CITIES: readonly string[] = [
-  "ALBION", "BATTLE_CREEK", "BENTON_HARBOR", "BIG_RAPIDS", "DETROIT", "EAST_LANSING",
-  "FLINT", "GRAND_RAPIDS", "GRAYLING", "HAMTRAMCK", "HIGHLAND_PARK", "HUDSON", "IONIA",
-  "JACKSON", "LANSING", "LAPEER", "MUSKEGON", "MUSKEGON_HEIGHTS", "PONTIAC", "PORT_HURON",
-  "PORTLAND", "SAGINAW", "SPRINGFIELD", "WALKER",
+  "ALBION",
+  "BATTLE_CREEK",
+  "BENTON_HARBOR",
+  "BIG_RAPIDS",
+  "DETROIT",
+  "EAST_LANSING",
+  "FLINT",
+  "GRAND_RAPIDS",
+  "GRAYLING",
+  "HAMTRAMCK",
+  "HIGHLAND_PARK",
+  "HUDSON",
+  "IONIA",
+  "JACKSON",
+  "LANSING",
+  "LAPEER",
+  "MUSKEGON",
+  "MUSKEGON_HEIGHTS",
+  "PONTIAC",
+  "PORT_HURON",
+  "PORTLAND",
+  "SAGINAW",
+  "SPRINGFIELD",
+  "WALKER",
 ];
 
 /**
@@ -258,8 +288,8 @@ export const MI_TAXING_CITIES: readonly string[] = [
  * rates are.
  */
 export const MI_CITY_RATE_SOURCE =
-  "Detroit: Michigan Department of Treasury Form 5469. Every other city: the city's own "
-  + "ordinance, entered by the employer against the jurisdiction (statutory rate \"us_mi_city\").";
+  "Detroit: Michigan Department of Treasury Form 5469. Every other city: the city's own " +
+  'ordinance, entered by the employer against the jurisdiction (statutory rate "us_mi_city").';
 
 /**
  * The Detroit per-period exemption value, from Form 5469's printed table.
@@ -273,7 +303,10 @@ export function miDetroitExemptionPerPeriod(payDate: string, periodsPerYear: num
   const rates = DETROIT_STATE_ENGINE.ratesForPayDate(payDate);
   DETROIT_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, DETROIT_PERIODS, 365);
   const printed = rates.detroit.printedExemption[periodsPerYear];
-  if (printed == null) throw new PayrollError(`Detroit withholding has no printed exemption for ${periodsPerYear} periods`);
+  if (printed == null)
+    throw new PayrollError(
+      `Detroit withholding has no printed exemption for ${periodsPerYear} periods`,
+    );
   return printed;
 }
 
@@ -298,9 +331,9 @@ export function miDetroitResidentRate(input: {
   const reduced = U(rates.detroit.residentRate) - U(input.otherCityNonresidentRate);
   if (reduced < 0n) {
     throw new PayrollError(
-      "the other city's nonresident income tax rate is higher than Detroit's 2.4% resident rate, "
-      + "which the Michigan City Income Tax Act does not permit — check the rate entered for the "
-      + `work city (${input.otherCityNonresidentRate}).`,
+      "the other city's nonresident income tax rate is higher than Detroit's 2.4% resident rate, " +
+        "which the Michigan City Income Tax Act does not permit — check the rate entered for the " +
+        `work city (${input.otherCityNonresidentRate}).`,
     );
   }
   return D(reduced);
@@ -335,23 +368,23 @@ export function miCityWithholding(input: {
 }): { tax: string; factors: Record<string, string> } {
   if (!MI_TAXING_CITIES.includes(input.city)) {
     throw new PayrollError(
-      `"${input.city}" is not a Michigan city that levies an income tax. The Michigan City Income `
-      + `Tax Act admits exactly ${MI_TAXING_CITIES.length}: ${MI_TAXING_CITIES.join(", ")}. `
-      + "Correct the employee's work or residence city.",
+      `"${input.city}" is not a Michigan city that levies an income tax. The Michigan City Income ` +
+        `Tax Act admits exactly ${MI_TAXING_CITIES.length}: ${MI_TAXING_CITIES.join(", ")}. ` +
+        "Correct the employee's work or residence city.",
     );
   }
   if (input.rate == null || input.rate === "") {
     throw new PayrollError(
-      `no income tax rate has been entered for ${input.city} (Michigan). ${MI_CITY_RATE_SOURCE} `
-      + "Withholding nothing would under-withhold every employee the city's tax reaches.",
+      `no income tax rate has been entered for ${input.city} (Michigan). ${MI_CITY_RATE_SOURCE} ` +
+        "Withholding nothing would under-withhold every employee the city's tax reaches.",
     );
   }
   if (input.exemptionPerYear == null || input.exemptionPerYear === "") {
     throw new PayrollError(
-      `no annual exemption value has been entered for ${input.city} (Michigan). A city's income `
-      + "tax is levied on compensation AFTER an exemption allowance, and the allowance is not the "
-      + "same in every city — Detroit's is $600 a year. Withholding on the full wage would "
-      + "over-withhold.",
+      `no annual exemption value has been entered for ${input.city} (Michigan). A city's income ` +
+        "tax is levied on compensation AFTER an exemption allowance, and the allowance is not the " +
+        "same in every city — Detroit's is $600 a year. Withholding on the full wage would " +
+        "over-withhold.",
     );
   }
   periodsGuard(input.periodsPerYear);
@@ -381,7 +414,7 @@ function computeDetroit(
 ): UsStateWithholdingResult {
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
   const fullRate = rates.detroit.residentRate;
-  const otherCities = input.basis === "resident" ? input.detroitOtherCities ?? [] : [];
+  const otherCities = input.basis === "resident" ? (input.detroitOtherCities ?? []) : [];
   const perPeriod = miDetroitExemptionPerPeriod(input.payDate, input.periodsPerYear);
 
   const factors = context.factors;
@@ -428,8 +461,8 @@ function computeDetroit(
   for (const city of otherCities) {
     if (!city.nonresidentRate) {
       throw new PayrollError(
-        `Detroit resident withholding needs the ${city.code} nonresident rate under Michigan Form 5469; `
-        + "record that rate in the employer's us_mi_city settings before calculating",
+        `Detroit resident withholding needs the ${city.code} nonresident rate under Michigan Form 5469; ` +
+          "record that rate in the employer's us_mi_city settings before calculating",
       );
     }
     const allocation = (input.wageAllocations ?? []).find(
@@ -438,16 +471,19 @@ function computeDetroit(
     const basis = allocation?.sourceWagesCurrentPeriod;
     if (basis == null) {
       throw new PayrollError(
-        `Detroit resident withholding needs current-period source wages for work in ${city.code} `
-        + "(Michigan) to price the 2.4%-minus-that-city credit; record approved work-location "
-        + "time or an HR allocation before calculating; refused by name",
+        `Detroit resident withholding needs current-period source wages for work in ${city.code} ` +
+          "(Michigan) to price the 2.4%-minus-that-city credit; record approved work-location " +
+          "time or an HR allocation before calculating; refused by name",
       );
     }
     const cityWages = U(basis);
     otherWages += cityWages;
     slices.push({
       wages: cityWages,
-      rate: miDetroitResidentRate({ payDate: input.payDate, otherCityNonresidentRate: city.nonresidentRate }),
+      rate: miDetroitResidentRate({
+        payDate: input.payDate,
+        otherCityNonresidentRate: city.nonresidentRate,
+      }),
     });
   }
   const totalWages = U(input.wages);
@@ -475,11 +511,19 @@ function computeDetroit(
 }
 
 const DETROIT_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "daily",
 ];
 
 const DETROIT_STATE_ENGINE = defineStateEngine({
-  state: { state: "MI-DETROIT", label: "City of Detroit income tax", printedPeriods: DETROIT_PERIODS },
+  state: {
+    state: "MI-DETROIT",
+    label: "City of Detroit income tax",
+    printedPeriods: DETROIT_PERIODS,
+  },
   editions: pairStateRateEditions(Object.values(MI_EDITIONS_BY_YEAR), MI_TAX_YEAR_EDITIONS),
   compute: computeDetroit,
 });

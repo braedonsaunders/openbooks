@@ -16,19 +16,28 @@ const ORG = "11111111-1111-4111-8111-111111111111";
 
 type Observation = { statement: string; durationMs: number; args: number };
 
-function fakeConnection(respond: (text: string) => Promise<unknown> = () => Promise.resolve({ rows: [], rowCount: 0 })) {
+function fakeConnection(
+  respond: (text: string) => Promise<unknown> = () => Promise.resolve({ rows: [], rowCount: 0 }),
+) {
   const client = {
     query(text: string | { text: string }) {
       return respond(typeof text === "string" ? text : text.text);
     },
     release() {},
-    on() { return client; },
-    off() { return client; },
+    on() {
+      return client;
+    },
+    off() {
+      return client;
+    },
   };
   return client;
 }
 
-async function withConnection<T>(client: ReturnType<typeof fakeConnection>, work: () => Promise<T>): Promise<T> {
+async function withConnection<T>(
+  client: ReturnType<typeof fakeConnection>,
+  work: () => Promise<T>,
+): Promise<T> {
   const original = pg.Pool.prototype.connect;
   pg.Pool.prototype.connect = (async () => client) as unknown as typeof original;
   try {
@@ -41,7 +50,11 @@ async function withConnection<T>(client: ReturnType<typeof fakeConnection>, work
 function recordObservations(): { observations: Observation[]; dispose: () => void } {
   const observations: Observation[] = [];
   const dispose = registerQueryObserver((...args: unknown[]) => {
-    observations.push({ statement: args[0] as string, durationMs: args[1] as number, args: args.length });
+    observations.push({
+      statement: args[0] as string,
+      durationMs: args[1] as number,
+      args: args.length,
+    });
   });
   return { observations, dispose };
 }
@@ -56,7 +69,9 @@ test("each statement sent on the connection is reported with its text and durati
   const { observations, dispose } = recordObservations();
   disposers.push(dispose);
   await withConnection(fakeConnection(), () =>
-    withOrgContext(ORG, () => pool.query("select * from invoices where id = $1", ["secret-tenant-value"])),
+    withOrgContext(ORG, () =>
+      pool.query("select * from invoices where id = $1", ["secret-tenant-value"]),
+    ),
   );
   assert.deepEqual(
     observations.map((o) => o.statement),
@@ -67,7 +82,11 @@ test("each statement sent on the connection is reported with its text and durati
     "the tenant-scope round trip is a real round trip and is reported too",
   );
   for (const observation of observations) {
-    assert.equal(observation.args, 2, "observers receive the statement and duration, never parameters");
+    assert.equal(
+      observation.args,
+      2,
+      "observers receive the statement and duration, never parameters",
+    );
     assert.ok(Number.isFinite(observation.durationMs) && observation.durationMs >= 0);
   }
   assert.ok(!JSON.stringify(observations).includes("secret-tenant-value"));
@@ -77,7 +96,9 @@ test("statements issued on one checkout are timed from when they reach the conne
   const { observations, dispose } = recordObservations();
   disposers.push(dispose);
   let releaseSlow!: () => void;
-  const slow = new Promise<void>((resolve) => { releaseSlow = resolve; });
+  const slow = new Promise<void>((resolve) => {
+    releaseSlow = resolve;
+  });
   const connection = fakeConnection(async (text) => {
     if (text === "select slow") await slow;
     return { rows: [], rowCount: 0 };
@@ -98,7 +119,10 @@ test("statements issued on one checkout are timed from when they reach the conne
   const slowObservation = observations.find((o) => o.statement === "select slow");
   const fastObservation = observations.find((o) => o.statement === "select fast");
   assert.ok(slowObservation && fastObservation);
-  assert.ok(slowObservation.durationMs >= 25, `slow statement measured ${slowObservation.durationMs}ms`);
+  assert.ok(
+    slowObservation.durationMs >= 25,
+    `slow statement measured ${slowObservation.durationMs}ms`,
+  );
   assert.ok(
     fastObservation.durationMs < slowObservation.durationMs,
     "time spent queued behind the slow statement is not attributed to the fast one",
@@ -110,7 +134,8 @@ test("a failed statement is reported and still rejects with its original error",
   disposers.push(dispose);
   const failure = new Error("relation does not exist");
   const connection = fakeConnection((text) =>
-    text === "select broken" ? Promise.reject(failure) : Promise.resolve({ rows: [], rowCount: 0 }));
+    text === "select broken" ? Promise.reject(failure) : Promise.resolve({ rows: [], rowCount: 0 }),
+  );
   await assert.rejects(
     withConnection(connection, () => withOrgContext(ORG, () => pool.query("select broken"))),
     (error) => error === failure,
@@ -119,13 +144,18 @@ test("a failed statement is reported and still rejects with its original error",
 });
 
 test("an observer that throws does not change the statement's result", async () => {
-  disposers.push(registerQueryObserver(() => { throw new Error("observer defect"); }));
+  disposers.push(
+    registerQueryObserver(() => {
+      throw new Error("observer defect");
+    }),
+  );
   const originalError = console.error;
   console.error = () => {};
   try {
     const rows = [{ answer: 42 }];
-    const result = await withConnection(fakeConnection(() => Promise.resolve({ rows, rowCount: 1 })), () =>
-      withOrgContext(ORG, () => pool.query("select 42 as answer")),
+    const result = await withConnection(
+      fakeConnection(() => Promise.resolve({ rows, rowCount: 1 })),
+      () => withOrgContext(ORG, () => pool.query("select 42 as answer")),
     );
     assert.deepEqual(result.rows, rows);
   } finally {

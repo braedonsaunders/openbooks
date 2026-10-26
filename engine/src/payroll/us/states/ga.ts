@@ -48,10 +48,14 @@
  */
 import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import { certificateAmount, certificateChoice, certificateCount }
-  from "../../certificates.ts";
+import { certificateAmount, certificateChoice, certificateCount } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext, US_STATE_PAY_PERIODS } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+  US_STATE_PAY_PERIODS,
+} from "./state-engine.ts";
 import {
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -63,12 +67,24 @@ const RATES_MODULE = "engine/src/payroll/us/states/ga.ts";
 
 /** Georgia prints all eight payroll periods. */
 type GaPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "semiannual" | "annual" | "daily";
+  | "weekly"
+  | "biweekly"
+  | "semimonthly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual"
+  | "daily";
 
 const GA_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 /**
@@ -105,25 +121,105 @@ export interface GaEdition {
 }
 
 const GA_TABLE_DEC_2025: Readonly<Record<GaPeriod, GaTableRow>> = {
-  weekly: { marriedJoint: "461.54", singleOrHoh: "230.77", marriedSeparate: "230.77", allowance: "76.92" },
-  biweekly: { marriedJoint: "923.08", singleOrHoh: "461.54", marriedSeparate: "461.54", allowance: "153.85" },
-  semimonthly: { marriedJoint: "1000.00", singleOrHoh: "500.00", marriedSeparate: "500.00", allowance: "166.67" },
-  monthly: { marriedJoint: "2000.00", singleOrHoh: "1000.00", marriedSeparate: "1000.00", allowance: "333.33" },
-  quarterly: { marriedJoint: "6000.00", singleOrHoh: "3000.00", marriedSeparate: "3000.00", allowance: "1000.00" },
-  semiannual: { marriedJoint: "12000.00", singleOrHoh: "6000.00", marriedSeparate: "6000.00", allowance: "2000.00" },
-  annual: { marriedJoint: "24000.00", singleOrHoh: "12000.00", marriedSeparate: "12000.00", allowance: "4000.00" },
-  daily: { marriedJoint: "65.75", singleOrHoh: "32.88", marriedSeparate: "32.88", allowance: "10.96" },
+  weekly: {
+    marriedJoint: "461.54",
+    singleOrHoh: "230.77",
+    marriedSeparate: "230.77",
+    allowance: "76.92",
+  },
+  biweekly: {
+    marriedJoint: "923.08",
+    singleOrHoh: "461.54",
+    marriedSeparate: "461.54",
+    allowance: "153.85",
+  },
+  semimonthly: {
+    marriedJoint: "1000.00",
+    singleOrHoh: "500.00",
+    marriedSeparate: "500.00",
+    allowance: "166.67",
+  },
+  monthly: {
+    marriedJoint: "2000.00",
+    singleOrHoh: "1000.00",
+    marriedSeparate: "1000.00",
+    allowance: "333.33",
+  },
+  quarterly: {
+    marriedJoint: "6000.00",
+    singleOrHoh: "3000.00",
+    marriedSeparate: "3000.00",
+    allowance: "1000.00",
+  },
+  semiannual: {
+    marriedJoint: "12000.00",
+    singleOrHoh: "6000.00",
+    marriedSeparate: "6000.00",
+    allowance: "2000.00",
+  },
+  annual: {
+    marriedJoint: "24000.00",
+    singleOrHoh: "12000.00",
+    marriedSeparate: "12000.00",
+    allowance: "4000.00",
+  },
+  daily: {
+    marriedJoint: "65.75",
+    singleOrHoh: "32.88",
+    marriedSeparate: "32.88",
+    allowance: "10.96",
+  },
 };
 
 const GA_TABLE_JUN_2026: Readonly<Record<GaPeriod, GaTableRow>> = {
-  weekly: { marriedJoint: "576.92", singleOrHoh: "288.46", marriedSeparate: "288.46", allowance: "96.15" },
-  biweekly: { marriedJoint: "1153.85", singleOrHoh: "576.92", marriedSeparate: "576.92", allowance: "192.31" },
-  semimonthly: { marriedJoint: "1250.00", singleOrHoh: "625.00", marriedSeparate: "625.00", allowance: "208.33" },
-  monthly: { marriedJoint: "2500.00", singleOrHoh: "1250.00", marriedSeparate: "1250.00", allowance: "416.67" },
-  quarterly: { marriedJoint: "7500.00", singleOrHoh: "3750.00", marriedSeparate: "3750.00", allowance: "1250.00" },
-  semiannual: { marriedJoint: "15000.00", singleOrHoh: "7500.00", marriedSeparate: "7500.00", allowance: "2500.00" },
-  annual: { marriedJoint: "30000.00", singleOrHoh: "15000.00", marriedSeparate: "15000.00", allowance: "5000.00" },
-  daily: { marriedJoint: "82.19", singleOrHoh: "41.10", marriedSeparate: "41.10", allowance: "13.70" },
+  weekly: {
+    marriedJoint: "576.92",
+    singleOrHoh: "288.46",
+    marriedSeparate: "288.46",
+    allowance: "96.15",
+  },
+  biweekly: {
+    marriedJoint: "1153.85",
+    singleOrHoh: "576.92",
+    marriedSeparate: "576.92",
+    allowance: "192.31",
+  },
+  semimonthly: {
+    marriedJoint: "1250.00",
+    singleOrHoh: "625.00",
+    marriedSeparate: "625.00",
+    allowance: "208.33",
+  },
+  monthly: {
+    marriedJoint: "2500.00",
+    singleOrHoh: "1250.00",
+    marriedSeparate: "1250.00",
+    allowance: "416.67",
+  },
+  quarterly: {
+    marriedJoint: "7500.00",
+    singleOrHoh: "3750.00",
+    marriedSeparate: "3750.00",
+    allowance: "1250.00",
+  },
+  semiannual: {
+    marriedJoint: "15000.00",
+    singleOrHoh: "7500.00",
+    marriedSeparate: "7500.00",
+    allowance: "2500.00",
+  },
+  annual: {
+    marriedJoint: "30000.00",
+    singleOrHoh: "15000.00",
+    marriedSeparate: "15000.00",
+    allowance: "5000.00",
+  },
+  daily: {
+    marriedJoint: "82.19",
+    singleOrHoh: "41.10",
+    marriedSeparate: "41.10",
+    allowance: "13.70",
+  },
 };
 
 export const GA_EDITIONS: readonly GaEdition[] = [
@@ -132,8 +228,8 @@ export const GA_EDITIONS: readonly GaEdition[] = [
     effectiveTo: "2026-05-11",
     label: "Georgia Employer's Withholding Tax Guide 2026, revised December 2025 (5.19%)",
     citation:
-      "Georgia Department of Revenue, Employer's Withholding Tax Guide 2026 (REVISED: December "
-      + "2025), Percentage Method for Employee Withholding, Tables E and F (pp. 46–47)",
+      "Georgia Department of Revenue, Employer's Withholding Tax Guide 2026 (REVISED: December " +
+      "2025), Percentage Method for Employee Withholding, Tables E and F (pp. 46–47)",
     rate: "0.0519",
     tableE: GA_TABLE_DEC_2025,
     tableF: GA_TABLE_DEC_2025,
@@ -143,22 +239,24 @@ export const GA_EDITIONS: readonly GaEdition[] = [
     effectiveTo: null,
     label: "Georgia Employer's Withholding Tax Guide 2026, revised June 2026 (4.99%, HB 463)",
     citation:
-      "Georgia Department of Revenue, Employer's Withholding Tax Guide 2026 (REVISED: June 2026), "
-      + "Percentage Method for Employee Withholding, Tables E and F (pp. 48–49); House Bill 463",
+      "Georgia Department of Revenue, Employer's Withholding Tax Guide 2026 (REVISED: June 2026), " +
+      "Percentage Method for Employee Withholding, Tables E and F (pp. 48–49); House Bill 463",
     rate: "0.0499",
     tableE: GA_TABLE_JUN_2026,
     tableF: GA_TABLE_JUN_2026,
   },
 ];
 
-export const GA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Georgia Employer's Withholding Tax Guide 2026 (December 2025 and June 2026 revisions)",
-  effectiveFrom: "2026-01-01",
-  citation: GA_EDITIONS.map((edition) => edition.citation).join("; "),
-  status: "published",
-  region: "GA",
-}];
+export const GA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Georgia Employer's Withholding Tax Guide 2026 (December 2025 and June 2026 revisions)",
+    effectiveFrom: "2026-01-01",
+    citation: GA_EDITIONS.map((edition) => edition.citation).join("; "),
+    status: "published",
+    region: "GA",
+  },
+];
 
 interface GaYearRates {
   year: number;
@@ -170,9 +268,11 @@ const GA_RATES: GaYearRates = { year: 2026, status: "published", editions: GA_ED
 
 export function gaEditionForPayDate(payDate: string): GaEdition {
   const rates = GA_STATE_ENGINE.ratesForPayDate(payDate);
-  const edition = rates.editions.find((candidate) =>
-    payDate >= candidate.effectiveFrom
-    && (candidate.effectiveTo == null || payDate < candidate.effectiveTo));
+  const edition = rates.editions.find(
+    (candidate) =>
+      payDate >= candidate.effectiveFrom &&
+      (candidate.effectiveTo == null || payDate < candidate.effectiveTo),
+  );
   if (!edition) {
     throw new PayrollError(
       `no Georgia withholding edition is loaded for a pay date of ${payDate} — ${RATES_MODULE}`,
@@ -185,7 +285,11 @@ function gaPeriodFor(periodsPerYear: number): GaPeriod {
   // Georgia's printed daily figures are annual amounts divided by 365. The
   // shared period mapping also calls a 260-period payroll "daily", but using
   // that alias would apply 365-day deductions to a 260-day filer.
-  return GA_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, US_STATE_PAY_PERIODS, 365) as GaPeriod;
+  return GA_STATE_ENGINE.requirePrintedPeriod(
+    periodsPerYear,
+    US_STATE_PAY_PERIODS,
+    365,
+  ) as GaPeriod;
 }
 
 /**
@@ -203,10 +307,14 @@ function gaPeriodFor(periodsPerYear: number): GaPeriod {
  */
 export function gaStandardDeduction(row: GaTableRow, status: string | null): string {
   switch (status) {
-    case "C": return row.marriedJoint;
-    case "B": return row.marriedSeparate;
-    case "D": return row.singleOrHoh;
-    default: return row.singleOrHoh;
+    case "C":
+      return row.marriedJoint;
+    case "B":
+      return row.marriedSeparate;
+    case "D":
+      return row.singleOrHoh;
+    default:
+      return row.singleOrHoh;
   }
 }
 
@@ -215,9 +323,11 @@ function compute(
   rates: GaYearRates,
   context: StateEngineContext<GaYearRates>,
 ): UsStateWithholdingResult {
-  const edition = rates.editions.find((candidate) =>
-    input.payDate >= candidate.effectiveFrom
-    && (candidate.effectiveTo == null || input.payDate < candidate.effectiveTo));
+  const edition = rates.editions.find(
+    (candidate) =>
+      input.payDate >= candidate.effectiveFrom &&
+      (candidate.effectiveTo == null || input.payDate < candidate.effectiveTo),
+  );
   if (!edition) {
     throw new PayrollError(
       `no Georgia withholding edition is loaded for a pay date of ${input.payDate} — ${RATES_MODULE}`,
@@ -245,8 +355,9 @@ function compute(
   // employer uses with the tables, and the printed wage-bracket tables carry a
   // single allowance count. Recorded as an inference from the form, not a
   // citation from the instruction.
-  const allowances = (certificateCount(input.certificate, "dependent_allowances") ?? 0)
-    + (certificateCount(input.certificate, "adjustment_allowances") ?? 0);
+  const allowances =
+    (certificateCount(input.certificate, "dependent_allowances") ?? 0) +
+    (certificateCount(input.certificate, "adjustment_allowances") ?? 0);
   const allowanceValue = U(row.allowance) * BigInt(allowances);
   factors.GA_ALLOWANCES = String(allowances);
   factors.GA_ALLOWANCE_VALUE = D(allowanceValue);

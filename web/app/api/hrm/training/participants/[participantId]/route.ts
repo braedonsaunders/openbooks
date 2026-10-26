@@ -1,19 +1,24 @@
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { getTrainingParticipant, respondTrainingInvitation } from '@openbooks/engine/hrm/training'
-import { participantParams, responseBody } from '../../contracts'
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { getTrainingParticipant, respondTrainingInvitation } from "@openbooks/engine/hrm/training";
+import { participantParams, responseBody } from "../../contracts";
 export const GET = defineRoute({
-  permission: 'hrm.certifications.read',
-  feature: 'hrmTraining',
+  permission: "hrm.certifications.read",
+  feature: "hrmTraining",
   params: participantParams,
   handler: async ({ authz, params }) =>
     NextResponse.json(
-      await getTrainingParticipant({ ...params, orgId: authz.user.orgId, actorId: authz.user.id, audience: 'staff' }),
+      await getTrainingParticipant({
+        ...params,
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        audience: "staff",
+      }),
     ),
-})
+});
 export const POST = defineRoute({
-  permission: 'hrm.certifications.manage',
-  feature: 'hrmTraining',
+  permission: "hrm.certifications.manage",
+  feature: "hrmTraining",
   params: participantParams,
   body: responseBody,
   invalidBodyStatus: 422,
@@ -24,7 +29,7 @@ export const POST = defineRoute({
         ...body,
         orgId: authz.user.orgId,
         actorId: authz.user.id,
-        audience: 'staff',
+        audience: "staff",
       }),
     ),
-})
+});

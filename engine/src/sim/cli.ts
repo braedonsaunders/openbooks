@@ -1,7 +1,11 @@
 import { join } from "node:path";
 import { env, pool, withOrgContext } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
-import { assertSimEnabled, assertDedicatedSimDatabase, assertDisposableDatabaseUrl } from "./db-guard.ts";
+import {
+  assertSimEnabled,
+  assertDedicatedSimDatabase,
+  assertDisposableDatabaseUrl,
+} from "./db-guard.ts";
 import { listProfiles } from "./profiles/index.ts";
 import { provisionRun, dayStart, dayEnd, verify, loadRun } from "./runner.ts";
 import { writeManifest } from "./manifest.ts";
@@ -56,11 +60,16 @@ function print(x: unknown): void {
 }
 
 /** Run a function scoped to the run's org and pinned to its simulated day. */
-async function inRun<T>(runDir: string, fn: (ctx: { world: ReturnType<typeof loadRun>["world"]; manifest: ReturnType<typeof loadRun>["manifest"] }) => Promise<T>): Promise<T> {
+async function inRun<T>(
+  runDir: string,
+  fn: (ctx: {
+    world: ReturnType<typeof loadRun>["world"];
+    manifest: ReturnType<typeof loadRun>["manifest"];
+  }) => Promise<T>,
+): Promise<T> {
   const { world, manifest } = loadRun(runDir);
-  const result = await withSimClock(
-    manifest.simDate,
-    () => withOrgContext(manifest.orgId, () => fn({ world, manifest })),
+  const result = await withSimClock(manifest.simDate, () =>
+    withOrgContext(manifest.orgId, () => fn({ world, manifest })),
   );
   writeManifest(runDir, manifest);
   return result;
@@ -71,7 +80,14 @@ async function main(): Promise<number> {
   const cmd = argv[0];
 
   if (cmd === "list-profiles") {
-    print(listProfiles().map((p) => ({ id: p.id, name: p.name, industry: p.industry, expects: p.expectedCapabilities })));
+    print(
+      listProfiles().map((p) => ({
+        id: p.id,
+        name: p.name,
+        industry: p.industry,
+        expects: p.expectedCapabilities,
+      })),
+    );
     return 0;
   }
 
@@ -79,7 +95,9 @@ async function main(): Promise<number> {
 
   switch (cmd) {
     case "provision": {
-      assertDisposableDatabaseUrl(env.OPENBOOKS_DB_URL!, "simulator provisioning", { requireLoopback: true });
+      assertDisposableDatabaseUrl(env.OPENBOOKS_DB_URL!, "simulator provisioning", {
+        requireLoopback: true,
+      });
       const f = parseFlags(argv.slice(1));
       const res = await provisionRun({
         profileId: f.profile ?? "general-contractor",
@@ -122,11 +140,22 @@ async function main(): Promise<number> {
       const runDir = argv[1]!;
       for (;;) {
         const start = await dayStart(runDir);
-        if (start.halted) { print({ halted: start.halted }); return 2; }
-        if (start.done) { print({ done: true, simDate: start.simDate }); return 0; }
-        await inRun(runDir, ({ world, manifest }) => autopilotDay(getProfile(manifest.profileId), world, manifest));
+        if (start.halted) {
+          print({ halted: start.halted });
+          return 2;
+        }
+        if (start.done) {
+          print({ done: true, simDate: start.simDate });
+          return 0;
+        }
+        await inRun(runDir, ({ world, manifest }) =>
+          autopilotDay(getProfile(manifest.profileId), world, manifest),
+        );
         const end = await dayEnd(runDir);
-        if (end.halted) { print({ simDate: end.simDate, halted: end.halted }); return 2; }
+        if (end.halted) {
+          print({ simDate: end.simDate, halted: end.halted });
+          return 2;
+        }
         if (end.ranFull) console.error(`[${end.simDate}] period checks passed`);
       }
     }
@@ -146,8 +175,12 @@ async function main(): Promise<number> {
       const runDir = argv[1]!;
       for (;;) {
         const res = await enduranceDay(runDir);
-        if (res.halted) { print({ simDate: res.simDate, halted: res.halted }); return 2; }
-        if (res.probesRun.length > 0) console.error(`[${res.simDate}] adversarial: ${res.probesRun.join(", ")} — all held`);
+        if (res.halted) {
+          print({ simDate: res.simDate, halted: res.halted });
+          return 2;
+        }
+        if (res.probesRun.length > 0)
+          console.error(`[${res.simDate}] adversarial: ${res.probesRun.join(", ")} — all held`);
         if (res.done) break;
       }
       const report = await enduranceFinale(runDir);
@@ -175,10 +208,19 @@ async function main(): Promise<number> {
       const profile = getProfile(manifest.profileId);
       const flags = parseFlags(argv.slice(2));
       const required = flags.require
-        ? flags.require.split(",").map((item) => item.trim()).filter(Boolean)
+        ? flags.require
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
         : profile.expectedCapabilities;
       const missing = required.filter((c) => !manifest.coverage.includes(c));
-      print({ covered: manifest.coverage, required, missing, counters: manifest.counters, complete: missing.length === 0 });
+      print({
+        covered: manifest.coverage,
+        required,
+        missing,
+        counters: manifest.counters,
+        complete: missing.length === 0,
+      });
       return missing.length === 0 ? 0 : 1;
     }
 
@@ -206,17 +248,28 @@ async function main(): Promise<number> {
       const f = parseFlags(argv.slice(3));
       const out = await inRun(runDir, async ({ world, manifest }) => {
         switch (screen) {
-          case "ap-inbox": return observe.apInbox(world);
-          case "ap-open": return observe.apOpen(world);
-          case "ar-inbox": return observe.arInbox(world);
-          case "ar-receipts": return observe.arReceipts(world);
-          case "ar-aging": return observe.arAging(world, f.asOf ?? manifest.simDate);
-          case "trial-balance": return observe.trialBalance(world, f.asOf ?? manifest.simDate);
-          case "period-status": return observe.periodStatus(world);
-          case "projects": return observe.projects(world);
-          case "crew": return observe.crew(world);
-          case "unbilled-time": return observe.unbilledTime(world);
-          default: throw new Error(`unknown observe screen "${screen}"`);
+          case "ap-inbox":
+            return observe.apInbox(world);
+          case "ap-open":
+            return observe.apOpen(world);
+          case "ar-inbox":
+            return observe.arInbox(world);
+          case "ar-receipts":
+            return observe.arReceipts(world);
+          case "ar-aging":
+            return observe.arAging(world, f.asOf ?? manifest.simDate);
+          case "trial-balance":
+            return observe.trialBalance(world, f.asOf ?? manifest.simDate);
+          case "period-status":
+            return observe.periodStatus(world);
+          case "projects":
+            return observe.projects(world);
+          case "crew":
+            return observe.crew(world);
+          case "unbilled-time":
+            return observe.unbilledTime(world);
+          default:
+            throw new Error(`unknown observe screen "${screen}"`);
         }
       });
       print(out);
@@ -232,36 +285,66 @@ async function main(): Promise<number> {
           case "post-bill":
             return ops.postBill(world, f.doc!);
           case "dispute-bill":
-            return ops.disputeBill(world, f.doc!, f.reason ?? "under review").then(() => ({ disputed: f.doc }));
+            return ops
+              .disputeBill(world, f.doc!, f.reason ?? "under review")
+              .then(() => ({ disputed: f.doc }));
           case "pay-vendor":
-            return ops.payVendor(world, f.vendor!, (f.lines ?? "").split(",").filter(Boolean), world.actors.apClerk, manifest.simDate);
+            return ops.payVendor(
+              world,
+              f.vendor!,
+              (f.lines ?? "").split(",").filter(Boolean),
+              world.actors.apClerk,
+              manifest.simDate,
+            );
           case "issue-invoice":
             return ops.issueInvoice(world, f.doc!);
           case "apply-receipt": {
-            const alloc = (f.alloc ?? "").split(",").filter(Boolean).map((s) => {
-              const [lineId, amount] = s.split(":");
-              return { lineId: lineId!, amount: amount! };
-            });
+            const alloc = (f.alloc ?? "")
+              .split(",")
+              .filter(Boolean)
+              .map((s) => {
+                const [lineId, amount] = s.split(":");
+                return { lineId: lineId!, amount: amount! };
+              });
             return ops.applyReceipt(world, f.payment!, alloc, world.actors.arClerk);
           }
           case "post-journal": {
-            const lines: ScriptJournalLine[] = (f.lines ?? "").split(",").filter(Boolean).map((s) => {
-              const [key, amount] = s.split(":");
-              const accountId = world.accounts[key!] ?? key!;
-              return { accountId, amount: amount! };
-            });
+            const lines: ScriptJournalLine[] = (f.lines ?? "")
+              .split(",")
+              .filter(Boolean)
+              .map((s) => {
+                const [key, amount] = s.split(":");
+                const accountId = world.accounts[key!] ?? key!;
+                return { accountId, amount: amount! };
+              });
             // --date lets the controller date a month-end adjustment into the
             // period being closed (e.g. 2026-01-31), not merely "today".
-            return ops.postAdjustingJournal(world, world.actors.controller, lines, f.memo ?? "adjustment", f.date ?? manifest.simDate);
+            return ops.postAdjustingJournal(
+              world,
+              world.actors.controller,
+              lines,
+              f.memo ?? "adjustment",
+              f.date ?? manifest.simDate,
+            );
           }
           case "close-month": {
             const period = world.periods.find((p) => p.name === f.period || p.id === f.period);
             if (!period) throw new Error(`unknown period "${f.period}"`);
-            return ops.closeMonth(world, period.id, world.actors.controller, f.reason ?? "month-end close");
+            return ops.closeMonth(
+              world,
+              period.id,
+              world.actors.controller,
+              f.reason ?? "month-end close",
+            );
           }
           // --- Phase 7: adversarial lifecycle ---
           case "void-doc":
-            return opsLifecycle.voidDocument(world, f.doc!, world.actors.controller, f.reason ?? "voided");
+            return opsLifecycle.voidDocument(
+              world,
+              f.doc!,
+              world.actors.controller,
+              f.reason ?? "voided",
+            );
           case "reverse-entry":
             return opsLifecycle.reverseEntry(world, f.entry!, world.actors.controller);
           case "write-off":
@@ -274,7 +357,11 @@ async function main(): Promise<number> {
             });
           // --- Phase 6: period-driven engines ---
           case "run-depreciation":
-            return opsPeriodic.runDepreciationForDate(world, f.asOf ?? manifest.simDate, world.actors.controller);
+            return opsPeriodic.runDepreciationForDate(
+              world,
+              f.asOf ?? manifest.simDate,
+              world.actors.controller,
+            );
           case "run-recurring":
             assertDedicatedSimDatabase("run-recurring");
             return opsPeriodic.runRecurringForDate(f.asOf ?? manifest.simDate);
@@ -295,10 +382,16 @@ async function main(): Promise<number> {
           }
           // --- Phase 6: construction AIA progress billing ---
           case "setup-project": {
-            const lines = (f.lines ?? "").split(",").filter(Boolean).map((s, i) => {
-              const [description, scheduledValue] = s.split(":");
-              return { description: description || `SOV ${i + 1}`, scheduledValue: scheduledValue ?? "0" };
-            });
+            const lines = (f.lines ?? "")
+              .split(",")
+              .filter(Boolean)
+              .map((s, i) => {
+                const [description, scheduledValue] = s.split(":");
+                return {
+                  description: description || `SOV ${i + 1}`,
+                  scheduledValue: scheduledValue ?? "0",
+                };
+              });
             return opsConstruction.setupProject(world, {
               name: f.name ?? "Project",
               code: f.code ?? `PRJ-${f.name ?? "X"}`,
@@ -312,13 +405,29 @@ async function main(): Promise<number> {
           }
           case "progress-bill":
             return opsConstruction.runProgressBilling(
-              world, f.project!, f.period ?? manifest.simDate, f.fraction ?? "0.1",
-              world.actors.arClerk, world.actors.controller,
+              world,
+              f.project!,
+              f.period ?? manifest.simDate,
+              f.fraction ?? "0.1",
+              world.actors.arClerk,
+              world.actors.controller,
             );
           case "bill-fixed":
-            return opsConstruction.billFixedPrice(world, f.project!, f.amount!, f.date ?? manifest.simDate, f.desc ?? "Milestone billing");
+            return opsConstruction.billFixedPrice(
+              world,
+              f.project!,
+              f.amount!,
+              f.date ?? manifest.simDate,
+              f.desc ?? "Milestone billing",
+            );
           case "release-retainage":
-            return opsConstruction.releaseProjectRetainage(world, f.project!, f.period ?? manifest.simDate, f.amount!, world.actors.controller);
+            return opsConstruction.releaseProjectRetainage(
+              world,
+              f.project!,
+              f.period ?? manifest.simDate,
+              f.amount!,
+              world.actors.controller,
+            );
           // --- Construction T&M: crew time -> labor cost -> T&M invoice ---
           case "log-crew-day":
             return opsTm.logCrewDay(world, {
@@ -340,20 +449,27 @@ async function main(): Promise<number> {
     }
 
     default:
-      console.error("usage: provision | day-start | observe | act | day-end | verify | endurance | endurance-report | status | coverage | reset | reset-org | list-profiles");
+      console.error(
+        "usage: provision | day-start | observe | act | day-end | verify | endurance | endurance-report | status | coverage | reset | reset-org | list-profiles",
+      );
       return 1;
   }
 }
 
 main()
-  .then(async (code) => { await pool.end(); process.exit(code); })
+  .then(async (code) => {
+    await pool.end();
+    process.exit(code);
+  })
   .catch(async (e) => {
-    console.error(e instanceof Error ? e.stack ?? e.message : e);
+    console.error(e instanceof Error ? (e.stack ?? e.message) : e);
     // Drizzle wraps the driver error; surface the underlying Postgres cause.
     let cause = (e as { cause?: unknown }).cause;
     while (cause) {
       const c = cause as { message?: string; detail?: string; code?: string; cause?: unknown };
-      console.error(`  caused by: ${c.code ? `[${c.code}] ` : ""}${c.message ?? String(cause)}${c.detail ? ` — ${c.detail}` : ""}`);
+      console.error(
+        `  caused by: ${c.code ? `[${c.code}] ` : ""}${c.message ?? String(cause)}${c.detail ? ` — ${c.detail}` : ""}`,
+      );
       cause = c.cause;
     }
     await pool.end();

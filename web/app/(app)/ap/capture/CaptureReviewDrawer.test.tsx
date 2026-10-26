@@ -17,14 +17,20 @@ declare global {
 }
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/ap/capture", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/ap/capture",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/capture'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/capture'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -38,7 +44,8 @@ registerHooks({
       };
     }
     if (specifier === "../../../../lib/confirm") {
-      const source = "export async function confirmDialog(options){(globalThis.__drawerConfirmCalls??=[]).push(options);return true}";
+      const source =
+        "export async function confirmDialog(options){(globalThis.__drawerConfirmCalls??=[]).push(options);return true}";
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` };
     }
     return next(specifier, context);
@@ -83,7 +90,19 @@ function initialDetail(invoiceNumber: string | null, priceVariance = false) {
       memo: null,
       lines: [],
     },
-    validation_issues: priceVariance ? [{ code: "po_price_variance", severity: "blocking" as const, field: "unitPrice", lineIndex: 0, expected: "10.00", actual: "11.00", message: "Price exceeds the order tolerance." }] : [],
+    validation_issues: priceVariance
+      ? [
+          {
+            code: "po_price_variance",
+            severity: "blocking" as const,
+            field: "unitPrice",
+            lineIndex: 0,
+            expected: "10.00",
+            actual: "11.00",
+            message: "Price exceeds the order tolerance.",
+          },
+        ]
+      : [],
     overall_confidence: null,
     vendor_candidate_id: null,
     purchase_order_id: priceVariance ? "po-1" : null,
@@ -99,7 +118,11 @@ function initialDetail(invoiceNumber: string | null, priceVariance = false) {
 
 type SentSave = { normalized: { invoiceNumber: string | null }; expectedUpdatedAt: string };
 
-async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) => void, options: { priceVariance?: boolean; canApprovePriceOverride?: boolean } = {}) {
+async function mount(
+  invoiceNumber: string | null,
+  onPatch: (sent: SentSave[]) => void,
+  options: { priceVariance?: boolean; canApprovePriceOverride?: boolean } = {},
+) {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
   globalThis.__drawerConfirmCalls = [];
@@ -108,7 +131,9 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
   const pending: Array<(response: Response) => void> = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === `/api/ap-capture/${CAPTURE_ID}` && init?.method === "PATCH") {
       sent.push(JSON.parse(String(init.body)) as SentSave);
       onPatch(sent);
@@ -129,7 +154,14 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <CaptureReviewDrawer initial={initialDetail(invoiceNumber, options.priceVariance)} vendors={[]} accounts={[]} purchaseOrders={[]} canCreate canApprovePriceOverride={options.canApprovePriceOverride} />
+        <CaptureReviewDrawer
+          initial={initialDetail(invoiceNumber, options.priceVariance)}
+          vendors={[]}
+          accounts={[]}
+          purchaseOrders={[]}
+          canCreate
+          canApprovePriceOverride={options.canApprovePriceOverride}
+        />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -143,7 +175,12 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
       const next = pending.shift();
       assert.ok(next, "a PATCH must be in flight to respond to");
       return act(async () => {
-        next(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
+        next(
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { "content-type": "application/json" },
+          }),
+        );
         await tick(50);
       });
     },
@@ -162,25 +199,42 @@ async function mount(invoiceNumber: string | null, onPatch: (sent: SentSave[]) =
 test("price variance override requires approval permission and sends explicit confirmation", async (t) => {
   const denied = await mount("INV-OVERRIDE-DENIED", () => {}, { priceVariance: true });
   t.after(() => denied.done());
-  assert.equal([...document.querySelectorAll("button")].some((button) => button.textContent?.includes("Approve variance and create draft")), false);
+  assert.equal(
+    [...document.querySelectorAll("button")].some((button) =>
+      button.textContent?.includes("Approve variance and create draft"),
+    ),
+    false,
+  );
 
   await denied.done();
-  const approved = await mount("INV-OVERRIDE", () => {}, { priceVariance: true, canApprovePriceOverride: true });
+  const approved = await mount("INV-OVERRIDE", () => {}, {
+    priceVariance: true,
+    canApprovePriceOverride: true,
+  });
   t.after(() => approved.done());
-  const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.includes("Approve variance and create draft"));
-  assert.ok(button, "an approver can create a draft with only purchase-order price variance blocking");
+  const button = [...document.querySelectorAll("button")].find((item) =>
+    item.textContent?.includes("Approve variance and create draft"),
+  );
+  assert.ok(
+    button,
+    "an approver can create a draft with only purchase-order price variance blocking",
+  );
   await act(async () => {
     button.click();
     await tick();
   });
-  assert.deepEqual(globalThis.__drawerConfirmCalls, ["This approves the purchase-order price variance for this bill and creates an AP draft. Continue?"]);
+  assert.deepEqual(globalThis.__drawerConfirmCalls, [
+    "This approves the purchase-order price variance for this bill and creates an AP draft. Continue?",
+  ]);
   assert.deepEqual(approved.materializeBodies, [{ priceOverride: true }]);
 });
 
 function invoiceInput(value: string): HTMLInputElement {
   // The drawer renders through a portal to document.body, so query the whole
   // document rather than the mount host.
-  const found = [...document.querySelectorAll("input")].find((el) => (el as HTMLInputElement).value === value);
+  const found = [...document.querySelectorAll("input")].find(
+    (el) => (el as HTMLInputElement).value === value,
+  );
   assert.ok(found, `an input holding ${JSON.stringify(value)} must exist`);
   return found as HTMLInputElement;
 }
@@ -188,7 +242,10 @@ function invoiceInput(value: string): HTMLInputElement {
 async function typeInto(input: HTMLInputElement, value: string) {
   await act(async () => {
     input.focus();
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     setter.call(input, value);
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
     await tick();
@@ -232,7 +289,27 @@ test("a slow first save neither 409s nor clobbers newer keystrokes", async (t) =
   const drawer = await mount("INV-1", () => {});
   t.after(() => drawer.done());
 
-  assert.ok(["Document type", "Vendor", "Invoice number", "Invoice date", "Due date", "Currency", "Purchase order", "Memo"].every((text) => [...document.querySelectorAll('label')].some((label) => label.textContent?.trim() === text && (label.htmlFor ? document.getElementById(label.htmlFor) : label.id && document.querySelector(`[aria-labelledby="${label.id}"]`)))), "visible invoice labels name their controls")
+  assert.ok(
+    [
+      "Document type",
+      "Vendor",
+      "Invoice number",
+      "Invoice date",
+      "Due date",
+      "Currency",
+      "Purchase order",
+      "Memo",
+    ].every((text) =>
+      [...document.querySelectorAll("label")].some(
+        (label) =>
+          label.textContent?.trim() === text &&
+          (label.htmlFor
+            ? document.getElementById(label.htmlFor)
+            : label.id && document.querySelector(`[aria-labelledby="${label.id}"]`)),
+      ),
+    ),
+    "visible invoice labels name their controls",
+  );
 
   await typeInto(invoiceInput("INV-1"), "INV-1a");
   await settleDebounce();
@@ -250,8 +327,16 @@ test("a slow first save neither 409s nor clobbers newer keystrokes", async (t) =
   await drawer.respond(200, normalized("SERVER-N", REV1));
   await tick(150);
   assert.equal(drawer.sent.length, 2, "the newer keystrokes are persisted by a follow-up save");
-  assert.equal(drawer.sent[1]!.expectedUpdatedAt, REV1, "the follow-up uses the adopted revision, not the stale one");
-  assert.equal(drawer.sent[1]!.normalized.invoiceNumber, "INV-1b", "newer keystrokes survive the first response");
+  assert.equal(
+    drawer.sent[1]!.expectedUpdatedAt,
+    REV1,
+    "the follow-up uses the adopted revision, not the stale one",
+  );
+  assert.equal(
+    drawer.sent[1]!.normalized.invoiceNumber,
+    "INV-1b",
+    "newer keystrokes survive the first response",
+  );
 
   await drawer.respond(200, normalized("SERVER-FINAL", REV2));
   await tick(150);
@@ -275,7 +360,10 @@ test("a revision conflict surfaces the remedy once and pauses retries until the 
   await drawer.respond(409, { error: remedy });
   await tick(100);
   const errors = (globalThis.__drawerToasts ?? []).filter((toast) => toast.kind === "error");
-  assert.ok(errors.some((toast) => toast.message === remedy), `the server remedy must toast, got ${JSON.stringify(globalThis.__drawerToasts)}`);
+  assert.ok(
+    errors.some((toast) => toast.message === remedy),
+    `the server remedy must toast, got ${JSON.stringify(globalThis.__drawerToasts)}`,
+  );
 
   await act(async () => {
     await tick(1200);

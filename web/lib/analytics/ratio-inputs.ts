@@ -50,34 +50,52 @@ export function isRatioInputKey(value: string): value is RatioInputKey {
   return (RATIO_INPUT_KEYS as readonly string[]).includes(value);
 }
 
-export async function loadRatioInputs(orgId: string): Promise<Record<RatioInputKey, RatioInputState>> {
+export async function loadRatioInputs(
+  orgId: string,
+): Promise<Record<RatioInputKey, RatioInputState>> {
   const [groups, members, accounts] = await Promise.all([
-    db.execute<{ id: string; key: string }>(sql`
+    db.execute<{ id: string; key: string }>(
+      sql`
       select id, key from account_groups
        where org_id = ${orgId} and dimension = ${RATIO_INPUT_DIMENSION} and is_active
-    `, "objects"),
-    db.execute<{ group_id: string; id: string; number: string | null; name: string; type: string }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<{ group_id: string; id: string; number: string | null; name: string; type: string }>(
+      sql`
       select m.group_id, a.id, a.number, a.name, a.type
         from account_group_members m
         join accounts a on a.id = m.account_id and a.org_id = m.org_id
        where m.org_id = ${orgId} and m.dimension = ${RATIO_INPUT_DIMENSION}
        order by a.number nulls last, a.name
-    `, "objects"),
-    db.execute<RatioInputAccount>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<RatioInputAccount>(
+      sql`
       select id, number, name, type from accounts
        where org_id = ${orgId} and is_active and not is_summary
        order by number nulls last, name
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
-  return Object.fromEntries(RATIO_INPUT_KEYS.map((key) => {
-    const group = groups.find((g) => g.key === key);
-    return [key, {
-      accounts: group
-        ? members.filter((m) => m.group_id === group.id).map(({ id, number, name, type }) => ({ id, number, name, type }))
-        : null,
-      candidates: accounts.filter((a) => RATIO_INPUT_ACCOUNT_TYPES[key].includes(a.type)),
-    }];
-  })) as Record<RatioInputKey, RatioInputState>;
+  return Object.fromEntries(
+    RATIO_INPUT_KEYS.map((key) => {
+      const group = groups.find((g) => g.key === key);
+      return [
+        key,
+        {
+          accounts: group
+            ? members
+                .filter((m) => m.group_id === group.id)
+                .map(({ id, number, name, type }) => ({ id, number, name, type }))
+            : null,
+          candidates: accounts.filter((a) => RATIO_INPUT_ACCOUNT_TYPES[key].includes(a.type)),
+        },
+      ];
+    }),
+  ) as Record<RatioInputKey, RatioInputState>;
 }
 
 /**
@@ -94,15 +112,20 @@ export async function saveRatioInput(
 ): Promise<RatioInputAccount[]> {
   const ids = [...new Set(accountIds)];
   return db.transaction(async (tx) => {
-    const found = ids.length === 0
-      ? [] as RatioInputAccount[]
-      : await tx.execute<RatioInputAccount>(sql`
+    const found =
+      ids.length === 0
+        ? ([] as RatioInputAccount[])
+        : await tx.execute<RatioInputAccount>(
+            sql`
           select id, number, name, type from accounts
            where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])
            for share
-        `, "objects");
+        `,
+            "objects",
+          );
     const missing = ids.filter((id) => !found.some((a) => a.id === id));
-    if (missing.length > 0) throw new RatioInputError(`unknown account ${missing[0]} — reload and choose from the list`);
+    if (missing.length > 0)
+      throw new RatioInputError(`unknown account ${missing[0]} — reload and choose from the list`);
     const wrong = found.filter((a) => !RATIO_INPUT_ACCOUNT_TYPES[key].includes(a.type));
     if (wrong.length > 0) {
       throw new RatioInputError(
@@ -111,26 +134,43 @@ export async function saveRatioInput(
     }
 
     // One writer per classification at a time; concurrent savers serialize.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ratio-inputs:${orgId}:${key}`}, 0))`);
-    let group = (await tx.execute<{ id: string }>(sql`
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`ratio-inputs:${orgId}:${key}`}, 0))`,
+    );
+    let group = (
+      await tx.execute<{ id: string }>(
+        sql`
       select id from account_groups where org_id = ${orgId} and dimension = ${RATIO_INPUT_DIMENSION} and key = ${key}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!group) {
-      const inserted = await tx.execute<{ id: string }>(sql`
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
         insert into account_groups (org_id, dimension, key, name, sort_order, match, is_catch_all, created_by, updated_by)
         values (${orgId}, ${RATIO_INPUT_DIMENSION}, ${key}, ${groupName}, ${RATIO_INPUT_KEYS.indexOf(key) * 10}, '{}'::jsonb, false, ${actorId}, ${actorId})
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       group = inserted[0];
       if (!group) throw new Error(`the ${key} classification could not be created`);
     } else {
       // A deactivated classification is reactivated by an explicit save.
-      await tx.execute(sql`update account_groups set is_active = true, updated_by = ${actorId}, updated_at = now() where id = ${group.id} and org_id = ${orgId}`);
+      await tx.execute(
+        sql`update account_groups set is_active = true, updated_by = ${actorId}, updated_at = now() where id = ${group.id} and org_id = ${orgId}`,
+      );
     }
 
-    const before = (await tx.execute<{ account_id: string }>(sql`
+    const before = (
+      await tx.execute<{ account_id: string }>(
+        sql`
       select account_id from account_group_members where org_id = ${orgId} and group_id = ${group.id} order by account_id
-    `, "objects")).map((r) => r.account_id);
+    `,
+        "objects",
+      )
+    ).map((r) => r.account_id);
 
     await tx.execute(sql`
       delete from account_group_members

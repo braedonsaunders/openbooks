@@ -38,20 +38,30 @@ export function orderDependencyComponents(
   };
   for (const n of names) if (!index.has(n)) visit(n);
   const componentFor = new Map<string, number>();
-  components.forEach((members, component) => members.forEach((member) => componentFor.set(member, component)));
-  const componentChildren = new Map(components.map((_, component) => [component, new Set<number>()]));
+  components.forEach((members, component) =>
+    members.forEach((member) => componentFor.set(member, component)),
+  );
+  const componentChildren = new Map(
+    components.map((_, component) => [component, new Set<number>()]),
+  );
   const componentIndeg = new Map(components.map((_, component) => [component, 0]));
   for (const [parent, childrenForParent] of edges) {
     for (const child of childrenForParent) {
       const parentComponent = componentFor.get(parent)!;
       const childComponent = componentFor.get(child)!;
-      if (parentComponent === childComponent || componentChildren.get(parentComponent)!.has(childComponent)) continue;
+      if (
+        parentComponent === childComponent ||
+        componentChildren.get(parentComponent)!.has(childComponent)
+      )
+        continue;
       componentChildren.get(parentComponent)!.add(childComponent);
       componentIndeg.set(childComponent, componentIndeg.get(childComponent)! + 1);
     }
   }
-  const componentOrder = (component: number) => Math.min(...components[component]!.map((n) => names.indexOf(n)));
-  const componentQueue = components.map((_, component) => component)
+  const componentOrder = (component: number) =>
+    Math.min(...components[component]!.map((n) => names.indexOf(n)));
+  const componentQueue = components
+    .map((_, component) => component)
     .filter((component) => componentIndeg.get(component) === 0)
     .sort((a, b) => componentOrder(a) - componentOrder(b));
   while (componentQueue.length) {

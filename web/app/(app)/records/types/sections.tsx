@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
+import Link from "next/link";
+import { Badge } from "@openbooks/ui";
 
 /**
  * Two cells whose content depends on the record type's publication state.
@@ -10,17 +10,25 @@ import { Badge } from '@openbooks/ui'
  */
 
 /** Record count, linked to the records list once the type is published. */
-export function RecordCountCell({ count, href, linked }: { count: string; href: string; linked: boolean }) {
-  if (!linked) return <>{count}</>
+export function RecordCountCell({
+  count,
+  href,
+  linked,
+}: {
+  count: string;
+  href: string;
+  linked: boolean;
+}) {
+  if (!linked) return <>{count}</>;
   return (
     <Link href={href as never} className="text-teal-700 hover:underline dark:text-teal-300">
       {count}
     </Link>
-  )
+  );
 }
 
 /** "Shown in nav" badge, or an em-dash when it is not. */
 export function InNavCell({ shown, label }: { shown: boolean; label: string }) {
-  if (!shown) return <span className="text-slate-400 dark:text-slate-500">—</span>
-  return <Badge variant="default">{label}</Badge>
+  if (!shown) return <span className="text-slate-400 dark:text-slate-500">—</span>;
+  return <Badge variant="default">{label}</Badge>;
 }

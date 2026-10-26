@@ -11,15 +11,9 @@ import {
   type AnnualSettlementPriors,
 } from "./annual-settlement.ts";
 import { createPushStatutory } from "./push-statutory.ts";
-import {
-  assertPayrollRegionSupported,
-  type PayrollCountryPack,
-} from "./packs.ts";
+import { assertPayrollRegionSupported, type PayrollCountryPack } from "./packs.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
-import type {
-  PayrollEmployerLevyFactors,
-  StubLine,
-} from "./statutory-context.ts";
+import type { PayrollEmployerLevyFactors, StubLine } from "./statutory-context.ts";
 
 /**
  * Annual-settlement run wiring — the generic half of the pack capability
@@ -103,7 +97,8 @@ async function committedPriorGross(
   tx: Pick<typeof db, "execute">,
   input: { orgId: string; employeePartyId: string; country: string; taxYear: number },
 ): Promise<string> {
-  const rows = (await tx.execute<{ prior: string }>(sql`
+  const rows = await tx.execute<{ prior: string }>(
+    sql`
     select coalesce(sum(s.gross), 0) as prior
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
@@ -111,7 +106,9 @@ async function committedPriorGross(
      where s.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
        and s.tax_year = ${input.taxYear} and s.country = ${input.country}
        and r.run_status = 'committed' and d.status <> 'voided'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows[0]!.prior;
 }
 
@@ -124,7 +121,8 @@ async function committedPriorWithheld(
   tx: Pick<typeof db, "execute">,
   input: { orgId: string; employeePartyId: string; country: string; taxYear: number },
 ): Promise<Record<string, string>> {
-  const rows = (await tx.execute<{ key: string; total: string }>(sql`
+  const rows = await tx.execute<{ key: string; total: string }>(
+    sql`
     select c.system_key as key, sum(l.amount)::text as total
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -137,7 +135,9 @@ async function committedPriorWithheld(
        and l.kind in ('deduction', 'credit')
        and c.system_key is not null
      group by c.system_key
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Object.fromEntries(rows.map((row) => [row.key, row.total]));
 }
 
@@ -153,10 +153,29 @@ export async function settleAnnualSettlement(
   input: AnnualSettlementRunInput,
 ): Promise<Record<string, string> | null> {
   const {
-    tx, orgId, documentId, pack, run, emp, country, region, taxYear,
-    periodsPerYear, runType, employeePartyId, employeeName,
-    income, nonPeriodic, lines, need, components, filingAccountId,
-    storedCertificates, certificateFor, bool, employerLevies,
+    tx,
+    orgId,
+    documentId,
+    pack,
+    run,
+    emp,
+    country,
+    region,
+    taxYear,
+    periodsPerYear,
+    runType,
+    employeePartyId,
+    employeeName,
+    income,
+    nonPeriodic,
+    lines,
+    need,
+    components,
+    filingAccountId,
+    storedCertificates,
+    certificateFor,
+    bool,
+    employerLevies,
   } = input;
 
   // Wiring-time resolution: absent declaration or a null edition settles
@@ -176,18 +195,18 @@ export async function settleAnnualSettlement(
   // silence — a skipped settlement is an unpaid refund nobody reports.
   if (settlement.mode !== "adjustment_line") {
     throw new PayrollPackError(
-      `annual settlement: "${settlement.label}" declares mode "${settlement.mode}" for ${employeeName} — `
-      + 'the run layer honours "adjustment_line" only (one extra line on an otherwise normal final run), '
-      + "so this employee's year is left unsettled by this run. Settle the residual through a pay-run "
-      + "adjustment and recalculate.",
+      `annual settlement: "${settlement.label}" declares mode "${settlement.mode}" for ${employeeName} — ` +
+        'the run layer honours "adjustment_line" only (one extra line on an otherwise normal final run), ' +
+        "so this employee's year is left unsettled by this run. Settle the residual through a pay-run " +
+        "adjustment and recalculate.",
     );
   }
   const missing = missingSettlementInputs(settlement, { emp, certificateFor });
   if (missing.length > 0) {
     throw new PayrollPackError(
-      `annual settlement: "${settlement.label}" cannot settle ${employeeName} — `
-      + `missing ${missing.join(", ")}: record the settlement's declared inputs for this employee `
-      + "(the employee facts and certificates the pack requires) and recalculate the run.",
+      `annual settlement: "${settlement.label}" cannot settle ${employeeName} — ` +
+        `missing ${missing.join(", ")}: record the settlement's declared inputs for this employee ` +
+        "(the employee facts and certificates the pack requires) and recalculate the run.",
     );
   }
 
@@ -204,14 +223,15 @@ export async function settleAnnualSettlement(
   const currentByKey: Record<string, string> = {};
   for (const line of lines) {
     if (line.kind !== "deduction" && line.kind !== "credit") continue;
-    const key = line.componentId == null
-      ? undefined
-      : systemKeyByComponentId.get(line.componentId);
+    const key = line.componentId == null ? undefined : systemKeyByComponentId.get(line.componentId);
     if (key == null) continue;
     currentByKey[key] = add(currentByKey[key] ?? "0", line.amount);
   }
   const historyByKey = await committedPriorWithheld(tx, {
-    orgId, employeePartyId, country, taxYear,
+    orgId,
+    employeePartyId,
+    country,
+    taxYear,
   });
   const ytdWithheldBySystemKey: Record<string, string> = { ...historyByKey };
   for (const [key, amount] of Object.entries(currentByKey)) {
@@ -231,13 +251,28 @@ export async function settleAnnualSettlement(
   // wrapped in the contract's sign-refusing push: direction rides the kind.
   const pushSettlement = createSettlementPush(
     createPushStatutory({
-      country, lines, emittedEarningsAssessed: new Set(), need,
+      country,
+      lines,
+      emittedEarningsAssessed: new Set(),
+      need,
     }),
   );
   return settlement.compute({
-    tx, orgId, documentId, employeePartyId, employeeName, taxYear, country,
-    region, run, emp, filingAccountId, periodsPerYear,
-    storedCertificates, certificateFor, bool,
+    tx,
+    orgId,
+    documentId,
+    employeePartyId,
+    employeeName,
+    taxYear,
+    country,
+    region,
+    run,
+    emp,
+    filingAccountId,
+    periodsPerYear,
+    storedCertificates,
+    certificateFor,
+    bool,
     assertRegionSupported: (supportedRegion) =>
       assertPayrollRegionSupported(country, supportedRegion),
     employerLevies,
@@ -257,8 +292,8 @@ export function assertSettlementFactorsMergeable(
   for (const [key, value] of Object.entries(settlementFactors)) {
     if (key in monthlyFactors && monthlyFactors[key] !== value) {
       throw new PayrollError(
-        `annual-settlement factor "${key}" collides with the ${country} pack's statutory factors `
-        + `for ${employeeName} — rename the settlement's factor key`,
+        `annual-settlement factor "${key}" collides with the ${country} pack's statutory factors ` +
+          `for ${employeeName} — rename the settlement's factor key`,
       );
     }
   }

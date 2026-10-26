@@ -52,9 +52,7 @@ test("ASC 606 Example 8 cumulative catch-up: 1,350,000 × 51.2% less 600,000 = 9
         netCredits: "0",
       },
     ],
-    promises: [
-      { existingId: "building", ssp: "1350000", percentComplete: "51.2" },
-    ],
+    promises: [{ existingId: "building", ssp: "1350000", percentComplete: "51.2" }],
     remainingDistinct: false,
     additionsAtStandalonePrice: false,
   });
@@ -92,11 +90,7 @@ test("deferred credits are netted once, and fractional allocations conserve ever
       treatment: "prospective",
       considerationChange: total,
       existing: [{ ...old, allocated: "300.0001", netCredits: "0.0001" }],
-      promises: [
-        promise,
-        { ssp: "1", percentComplete: "0" },
-        { ssp: "3", percentComplete: "0" },
-      ],
+      promises: [promise, { ssp: "1", percentComplete: "0" }, { ssp: "3", percentComplete: "0" }],
       remainingDistinct: true,
       additionsAtStandalonePrice: false,
     });
@@ -125,12 +119,6 @@ test("inconsistent classifications, duplicate identities, unknown promises and i
     { promises: [{ ...promise, percentComplete: "101" }] },
   ])
     assert.throws(() => measure({ ...base, ...patch }));
-  assert.throws(
-    () => measure({ ...base, treatment: "separate" }),
-    /separate contract/,
-  );
-  assert.throws(
-    () => measure({ ...base, treatment: "catch_up" }),
-    /non-distinct/,
-  );
+  assert.throws(() => measure({ ...base, treatment: "separate" }), /separate contract/);
+  assert.throws(() => measure({ ...base, treatment: "catch_up" }), /non-distinct/);
 });

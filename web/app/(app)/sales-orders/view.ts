@@ -1,22 +1,34 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { mergeHref, pickString, isUuid } from '../../../lib/list-params'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { can, requirePermission, type Authz } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../lib/features'
-import { dropShipOrderStatus } from '@openbooks/engine/sales/drop-ship'
-import { loadOrder } from '../../api/_order/lib'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
-import { customSegmentOptions } from '../../../lib/segments'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { mergeHref, pickString, isUuid } from "../../../lib/list-params";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { can, requirePermission, type Authz } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../lib/features";
+import { dropShipOrderStatus } from "@openbooks/engine/sales/drop-ship";
+import { loadOrder } from "../../api/_order/lib";
+import { resolveFormLayout } from "../../../lib/customization/resolve";
+import { customSegmentOptions } from "../../../lib/segments";
 import { taxCodeOptions, taxGroupOptions } from "../../../lib/documents.ts";
-import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
-import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from '../../../lib/scoped-options'
-import type { OrderDrawer } from '../_order/OrderDrawer'
+import { subsidiaryUiOptions } from "../../../lib/subsidiaries";
+import {
+  listScopedAccountOptions,
+  listScopedDepartmentOptions,
+  listScopedPartyOptions,
+  listScopedProjectOptions,
+} from "../../../lib/scoped-options";
+import type { OrderDrawer } from "../_order/OrderDrawer";
 
 /**
  * Sales orders, split into a loader and a spec.
@@ -37,78 +49,78 @@ import type { OrderDrawer } from '../_order/OrderDrawer'
  * them.
  */
 
-const KIND = 'sales_order' as const
-const BASE = '/sales-orders'
-const PARAM = 'order'
-const API = '/api/sales-orders'
-const CREATE_PARAM = 'orderNew'
+const KIND = "sales_order" as const;
+const BASE = "/sales-orders";
+const PARAM = "order";
+const API = "/api/sales-orders";
+const CREATE_PARAM = "orderNew";
 
-type OrderDrawerProps = Parameters<typeof OrderDrawer>[0]
-type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+type OrderDrawerProps = Parameters<typeof OrderDrawer>[0];
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never;
 
 export interface SalesOrderDrawer {
   /** Remount key: switching orders must reset the drawer's client state. */
-  remountKey: string
-  order: OrderDrawerProps['order']
-  initialMode: 'edit' | 'view'
-  createMode?: boolean
-  closeHref?: string
-  kind: typeof KIND
-  parties: OrderDrawerProps['parties']
-  accounts: OrderDrawerProps['accounts']
-  items: OrderDrawerProps['items']
-  stockLocations: OrderDrawerProps['stockLocations']
-  taxCodes: OrderDrawerProps['taxCodes']
-  taxGroups: OrderDrawerProps['taxGroups']
-  departments: OrderDrawerProps['departments']
-  projects: OrderDrawerProps['projects']
-  segments: OrderDrawerProps['segments']
-  subsidiaries: { id: string; name: string }[]
-  canManage: boolean
-  canApprove: boolean
-  canOverrideCredit: boolean
-  layout: OrderDrawerProps['layout']
-  backorders: boolean
-  pickLists: boolean
-  returnAuthorizations: boolean
-  promotionsEnabled: boolean
-  dropShipping: boolean
-  dropShipLines: OrderDrawerProps['dropShipLines']
-  dropShipVendors: OrderDrawerProps['dropShipVendors']
-  canAssessDropShip: boolean
-  dropShipLiabilityAccounts: {id:string;label:string}[]
-  canRouteDropShip: boolean
-  canCreateDropShipPurchaseOrder: boolean
-  barcodeScanningEnabled: boolean
-  customerItemRefs: { customerId: string; itemId: string; customerSku: string }[]
+  remountKey: string;
+  order: OrderDrawerProps["order"];
+  initialMode: "edit" | "view";
+  createMode?: boolean;
+  closeHref?: string;
+  kind: typeof KIND;
+  parties: OrderDrawerProps["parties"];
+  accounts: OrderDrawerProps["accounts"];
+  items: OrderDrawerProps["items"];
+  stockLocations: OrderDrawerProps["stockLocations"];
+  taxCodes: OrderDrawerProps["taxCodes"];
+  taxGroups: OrderDrawerProps["taxGroups"];
+  departments: OrderDrawerProps["departments"];
+  projects: OrderDrawerProps["projects"];
+  segments: OrderDrawerProps["segments"];
+  subsidiaries: { id: string; name: string }[];
+  canManage: boolean;
+  canApprove: boolean;
+  canOverrideCredit: boolean;
+  layout: OrderDrawerProps["layout"];
+  backorders: boolean;
+  pickLists: boolean;
+  returnAuthorizations: boolean;
+  promotionsEnabled: boolean;
+  dropShipping: boolean;
+  dropShipLines: OrderDrawerProps["dropShipLines"];
+  dropShipVendors: OrderDrawerProps["dropShipVendors"];
+  canAssessDropShip: boolean;
+  dropShipLiabilityAccounts: { id: string; label: string }[];
+  canRouteDropShip: boolean;
+  canCreateDropShipPurchaseOrder: boolean;
+  barcodeScanningEnabled: boolean;
+  customerItemRefs: { customerId: string; itemId: string; customerSku: string }[];
 }
 
 export interface SalesOrdersData {
-  title: string
-  description: string
-  baseCurrencyConfigured: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
+  title: string;
+  description: string;
+  baseCurrencyConfigured: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
   /** The New action hides without the create grant; the header then shows
    * the shared missing-grant hint instead (permission-hint widget). */
-  showCreateHint: boolean
-  createHintAction: string
+  showCreateHint: boolean;
+  createHintAction: string;
   newButton: {
-    apiPath: string
-    base: string
-    param: string
-    label: string
-    createFailedMessage: string
-  }
-  showNewRedirect: boolean
+    apiPath: string;
+    base: string;
+    param: string;
+    label: string;
+    createFailedMessage: string;
+  };
+  showNewRedirect: boolean;
   newRedirect: {
-    apiPath: string
-    base: string
-    param: string
-    createFailedMessage: string
-  }
-  drawerOpen: boolean
-  drawer: SalesOrderDrawer | null
+    apiPath: string;
+    base: string;
+    param: string;
+    createFailedMessage: string;
+  };
+  drawerOpen: boolean;
+  drawer: SalesOrderDrawer | null;
 }
 
 /**
@@ -116,71 +128,105 @@ export interface SalesOrdersData {
  * list — both need the fulfil-orders permission with Fulfillment on. The
  * create form and the routes enforce both again.
  */
-export async function orderFulfillmentActions(authz: Authz): Promise<{ backorders: boolean; pickLists: boolean; returnAuthorizations: boolean }> {
-  const enabled = can(authz, 'orders.fulfill') && (await isFeatureEnabled(authz.user.orgId, 'fulfillment'))
-  const returns = can(authz, 'orders.fulfill') && (await isFeatureEnabled(authz.user.orgId, 'returnAuthorizations'))
-  return { backorders: enabled, pickLists: enabled, returnAuthorizations: returns }
+export async function orderFulfillmentActions(
+  authz: Authz,
+): Promise<{ backorders: boolean; pickLists: boolean; returnAuthorizations: boolean }> {
+  const enabled =
+    can(authz, "orders.fulfill") && (await isFeatureEnabled(authz.user.orgId, "fulfillment"));
+  const returns =
+    can(authz, "orders.fulfill") &&
+    (await isFeatureEnabled(authz.user.orgId, "returnAuthorizations"));
+  return { backorders: enabled, pickLists: enabled, returnAuthorizations: returns };
 }
 
 export async function loadSalesOrders(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<SalesOrdersData> {
-  const authz = await requirePermission('ar.read')
-  await requireFeatureEnabled(authz.user.orgId, 'orders')
-  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
-  const dropShipping = await isFeatureEnabled(authz.user.orgId, 'dropShipping')
-  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
-  const customerPartNumbersEnabled = await isFeatureEnabled(authz.user.orgId, 'customerPartNumbers')
-  const canManage = can(authz, 'ar.create')
-  const canAssessDropShip = dropShipping && can(authz,'ar.post')
-  const canRouteDropShip = dropShipping && can(authz, 'orders.fulfill')
-  const canCreateDropShipPurchaseOrder = dropShipping && can(authz, 'ap.create')
-  const { backorders, pickLists, returnAuthorizations } = await orderFulfillmentActions(authz)
-  const t = await getTranslations('salesOrders')
-  const openId = pickString(sp[PARAM])
+  const authz = await requirePermission("ar.read");
+  await requireFeatureEnabled(authz.user.orgId, "orders");
+  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, "inventory");
+  const dropShipping = await isFeatureEnabled(authz.user.orgId, "dropShipping");
+  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, "barcodeScanning");
+  const customerPartNumbersEnabled = await isFeatureEnabled(
+    authz.user.orgId,
+    "customerPartNumbers",
+  );
+  const canManage = can(authz, "ar.create");
+  const canAssessDropShip = dropShipping && can(authz, "ar.post");
+  const canRouteDropShip = dropShipping && can(authz, "orders.fulfill");
+  const canCreateDropShipPurchaseOrder = dropShipping && can(authz, "ap.create");
+  const { backorders, pickLists, returnAuthorizations } = await orderFulfillmentActions(authz);
+  const t = await getTranslations("salesOrders");
+  const openId = pickString(sp[PARAM]);
   // Only a real document id may reach the uuid comparison: the create view
   // (no id, or the literal 'new') must not bind '' or 'new' to a uuid column.
-  const openDocumentId = openId && isUuid(openId) ? openId : null
+  const openDocumentId = openId && isUuid(openId) ? openId : null;
   // Unsaved-create: ?orderNew=1 opens an editable drawer on an in-memory
   // payload — zero writes on open, zero on Cancel, one idempotent POST on
   // Save. ?order=new deep links keep working through the redirect widget.
-  const creating = pickString(sp[CREATE_PARAM]) === '1' && canManage
-  const opening = (openId && openId !== 'new') || creating
+  const creating = pickString(sp[CREATE_PARAM]) === "1" && canManage;
+  const opening = (openId && openId !== "new") || creating;
   // The draft currency is the org's base currency — never invented. The New
   // button needs it on every render: without a configured currency it keeps
   // the draft-API path (which refuses by name with the setup remedy) instead
   // of opening an unsaved drawer, and a direct create URL opens no draft.
-  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`, 'objects'))[0]?.base_currency ?? null
+  const baseCurrency =
+    (
+      await db.execute<{ base_currency: string | null }>(
+        sql`select base_currency from orgs where id = ${authz.user.orgId}`,
+        "objects",
+      )
+    )[0]?.base_currency ?? null;
 
   const [openOrder, pickers] = await Promise.all([
-    openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
+    openId && openId !== "new"
+      ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds)
+      : null,
     opening
       ? Promise.all([
-          listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: 'customer', activeOnly: true }).then((rows) => ({ rows })),
-          listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['income', 'income_other'], activeOnly: true, postingOnly: true }).then((rows) => ({ rows: rows.map(({ number, ...account }) => ({ ...account, number: number ?? undefined })) })),
-          db.execute<ElementOf<OrderDrawerProps['items']>>(sql`
+          listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+            role: "customer",
+            activeOnly: true,
+          }).then((rows) => ({ rows })),
+          listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+            types: ["income", "income_other"],
+            activeOnly: true,
+            postingOnly: true,
+          }).then((rows) => ({
+            rows: rows.map(({ number, ...account }) => ({
+              ...account,
+              number: number ?? undefined,
+            })),
+          })),
+          db.execute<ElementOf<OrderDrawerProps["items"]>>(sql`
             select it.id, it.code, it.name, it.default_rate, it.income_account_id, it.expense_account_id, it.tax_code_id, it.unit,
                    exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
               from items it
              where it.org_id = ${authz.user.orgId} and it.is_active
                and (
                  ${inventoryEnabled ? sql`true` : sql`it.kind not in ('inventory', 'assembly', 'kit')`}
-                 ${openDocumentId
-                   ? sql`or it.id in (
+                 ${
+                   openDocumentId
+                     ? sql`or it.id in (
                        select item_id from document_lines
                         where org_id = ${authz.user.orgId} and document_id = ${openDocumentId} and item_id is not null
                      )`
-                   : sql``}
+                     : sql``
+                 }
                )
              order by it.name limit 2000`),
           taxCodeOptions(authz.user.orgId),
           taxGroupOptions(authz.user.orgId),
-          listScopedDepartmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds).then((rows) => ({ rows })),
-          listScopedProjectOptions(authz.user.orgId, authz.allowedSubsidiaryIds).then((rows) => ({ rows })),
+          listScopedDepartmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds).then(
+            (rows) => ({ rows }),
+          ),
+          listScopedProjectOptions(authz.user.orgId, authz.allowedSubsidiaryIds).then((rows) => ({
+            rows,
+          })),
           customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
           subsidiaryUiOptions(authz.user.orgId),
           inventoryEnabled
-            ? db.execute<ElementOf<OrderDrawerProps['stockLocations']>>(sql`
+            ? db.execute<ElementOf<OrderDrawerProps["stockLocations"]>>(sql`
               select sl.id, sl.code, l.subsidiary_id as "subsidiaryId"
                 from stock_locations sl
                 join locations l on l.id = sl.location_id and l.org_id = sl.org_id
@@ -188,37 +234,60 @@ export async function loadSalesOrders(
             : null,
         ])
       : null,
-  ])
-  const dropShipVendors = opening && canCreateDropShipPurchaseOrder
-    ? await listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: 'vendor', activeOnly: true })
-    : []
-  const dropShipLines = openOrder && dropShipping
-    ? await dropShipOrderStatus(db, authz.user.orgId, openDocumentId!, authz.allowedSubsidiaryIds)
-    : []
-  const scopedCustomerIds = pickers?.[0].rows.map((party) => party.id) ?? []
-  const customerItemRefs = customerPartNumbersEnabled && scopedCustomerIds.length > 0
-    ? (await db.execute<{ customer_id: string; item_id: string; customer_sku: string }>(sql`
+  ]);
+  const dropShipVendors =
+    opening && canCreateDropShipPurchaseOrder
+      ? await listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          role: "vendor",
+          activeOnly: true,
+        })
+      : [];
+  const dropShipLines =
+    openOrder && dropShipping
+      ? await dropShipOrderStatus(db, authz.user.orgId, openDocumentId!, authz.allowedSubsidiaryIds)
+      : [];
+  const scopedCustomerIds = pickers?.[0].rows.map((party) => party.id) ?? [];
+  const customerItemRefs =
+    customerPartNumbersEnabled && scopedCustomerIds.length > 0
+      ? (
+          await db.execute<{ customer_id: string; item_id: string; customer_sku: string }>(
+            sql`
         select customer_id, item_id, customer_sku from customer_item_refs
          where org_id = ${authz.user.orgId} and customer_id = any(${sql.param(scopedCustomerIds)}::uuid[])
-      `, 'objects')).map((row) => ({ customerId: row.customer_id, itemId: row.item_id, customerSku: row.customer_sku }))
-    : []
-  const resolvedForm = openOrder && pickers ? await resolveFormLayout({
-    orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
-    userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
-  }) : null
-  const drawerOrder = openOrder as unknown as OrderDrawerProps['order'] | null
+      `,
+            "objects",
+          )
+        ).map((row) => ({
+          customerId: row.customer_id,
+          itemId: row.item_id,
+          customerSku: row.customer_sku,
+        }))
+      : [];
+  const resolvedForm =
+    openOrder && pickers
+      ? await resolveFormLayout({
+          orgId: authz.user.orgId,
+          userId: authz.user.id,
+          recordType: KIND,
+          userRoles: authz.user.roles.map(({ key }) => key),
+          headerDefs: [],
+          lineDefs: [],
+          explicitLayoutId: pickString(sp.form),
+        })
+      : null;
+  const drawerOrder = openOrder as unknown as OrderDrawerProps["order"] | null;
   // In-memory payload for the unsaved drawer: a draft header with no number
   // (allocated inside the Save transaction), no lines, no links, and the
   // org's currency/today so totals and date fields render before Save.
   const createDefaults = creating
     ? { currency: baseCurrency, today: await businessToday(authz.user.orgId) }
-    : null
-  const unsavedOrder: OrderDrawerProps['order'] | null =
+    : null;
+  const unsavedOrder: OrderDrawerProps["order"] | null =
     creating && createDefaults?.currency
       ? ({
           doc: {
-            id: '',
-            status: 'draft',
+            id: "",
+            status: "draft",
             currency: createDefaults.currency,
             subsidiary_id: null,
             project_id: null,
@@ -226,10 +295,10 @@ export async function loadSalesOrders(
             memo: null,
             due_date: null,
             document_date: createDefaults.today,
-            updated_at: '',
-            subtotal: '0',
-            tax_total: '0',
-            total: '0',
+            updated_at: "",
+            subtotal: "0",
+            tax_total: "0",
+            total: "0",
             party_id: null,
             party_name: null,
             document_number: null,
@@ -237,26 +306,32 @@ export async function loadSalesOrders(
           },
           lines: [],
           links: [],
-        } as unknown as OrderDrawerProps['order'])
-      : null
+        } as unknown as OrderDrawerProps["order"])
+      : null;
 
   const newButton = {
     apiPath: API,
     base: BASE,
     param: PARAM,
-    label: t('list.newButton'),
-    createFailedMessage: t('list.createDraftFailed'),
-  }
+    label: t("list.newButton"),
+    createFailedMessage: t("list.createDraftFailed"),
+  };
 
   const drawer =
     (creating ? unsavedOrder : drawerOrder) && pickers
       ? {
-          remountKey: creating ? 'new-sales-order' : String(drawerOrder!.doc.id),
+          remountKey: creating ? "new-sales-order" : String(drawerOrder!.doc.id),
           order: (creating ? unsavedOrder : drawerOrder)!,
-          initialMode: (creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          initialMode: (creating || pickString(sp.mode) === "edit" ? "edit" : "view") as
+            "edit" | "view",
           createMode: creating || undefined,
           closeHref: creating
-            ? mergeHref(BASE, sp, { [PARAM]: undefined, [CREATE_PARAM]: undefined, mode: undefined, form: undefined })
+            ? mergeHref(BASE, sp, {
+                [PARAM]: undefined,
+                [CREATE_PARAM]: undefined,
+                mode: undefined,
+                form: undefined,
+              })
             : undefined,
           kind: KIND,
           orgId: authz.user.orgId,
@@ -270,55 +345,72 @@ export async function loadSalesOrders(
           projects: pickers[6].rows,
           segments: pickers[7],
           subsidiaries: pickers[8]
-            .filter((subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id))
-            .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` })),
+            .filter(
+              (subsidiary) =>
+                !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id),
+            )
+            .map((subsidiary) => ({
+              id: subsidiary.id,
+              name: `${"  ".repeat(subsidiary.depth)}${subsidiary.name}`,
+            })),
           canManage,
           // Sales orders approve under the same ar.create grant that creates them.
-          canApprove: can(authz, 'ar.create'),
-          canOverrideCredit: can(authz, 'ar.approve'),
+          canApprove: can(authz, "ar.create"),
+          canOverrideCredit: can(authz, "ar.approve"),
           layout: resolvedForm?.layout,
           backorders,
           pickLists,
           returnAuthorizations,
-          promotionsEnabled: await isFeatureEnabled(authz.user.orgId, 'promotions'),
+          promotionsEnabled: await isFeatureEnabled(authz.user.orgId, "promotions"),
           dropShipping,
           dropShipLines,
           dropShipVendors,
           canAssessDropShip,
-          dropShipLiabilityAccounts: canAssessDropShip ? (await listScopedAccountOptions(authz.user.orgId,authz.allowedSubsidiaryIds,{types:['liability_current_other','liability_long_term'],activeOnly:true,postingOnly:true})).map(account=>({id:account.id,label:`${account.number ?? ''} — ${account.name}`})) : [],
+          dropShipLiabilityAccounts: canAssessDropShip
+            ? (
+                await listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+                  types: ["liability_current_other", "liability_long_term"],
+                  activeOnly: true,
+                  postingOnly: true,
+                })
+              ).map((account) => ({
+                id: account.id,
+                label: `${account.number ?? ""} — ${account.name}`,
+              }))
+            : [],
           canRouteDropShip,
           canCreateDropShipPurchaseOrder,
           barcodeScanningEnabled,
           customerItemRefs,
         }
-      : null
+      : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     baseCurrencyConfigured: baseCurrency !== null,
     currentParams: sp,
     canManage,
     showCreateHint: !canManage,
-    createHintAction: t('list.createHintAction'),
+    createHintAction: t("list.createHintAction"),
     newButton,
-    showNewRedirect: openId === 'new' && canManage,
+    showNewRedirect: openId === "new" && canManage,
     newRedirect: {
       apiPath: API,
       base: BASE,
       param: PARAM,
-      createFailedMessage: t('list.createDraftFailed'),
+      createFailedMessage: t("list.createDraftFailed"),
     },
     drawerOpen: Boolean(drawer),
     drawer,
-  }
+  };
 }
 
-const f = ref<SalesOrdersData>()
+const f = ref<SalesOrdersData>();
 
 export function salesOrdersSpec(data: SalesOrdersData): PageSpec {
   const newOrder = {
-    widget: 'new-order',
+    widget: "new-order",
     props: {
       apiPath: data.newButton.apiPath,
       base: data.newButton.base,
@@ -327,17 +419,21 @@ export function salesOrdersSpec(data: SalesOrdersData): PageSpec {
       label: data.newButton.label,
       createFailedMessage: data.newButton.createFailedMessage,
     },
-  }
+  };
   return page({
-    route: '/sales-orders',
-    layout: 'list',
+    route: "/sales-orders",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
-          widget(newOrder.widget, newOrder.props, f('canManage')),
-          widget('permission-hint', { permission: 'ar.create', action: data.createHintAction }, f('showCreateHint')),
+          widget(newOrder.widget, newOrder.props, f("canManage")),
+          widget(
+            "permission-hint",
+            { permission: "ar.create", action: data.createHintAction },
+            f("showCreateHint"),
+          ),
         ],
       }),
     ],
@@ -348,15 +444,15 @@ export function salesOrdersSpec(data: SalesOrdersData): PageSpec {
       // an effect), so it rides the `newRedirect` presence flag as a widget
       // the slot does not own — it renders alongside the list, exactly where
       // the native drawer fragment sits.
-      widgetBlock('record-list-view', {
-        recordType: 'sales_order',
-        basePath: '/sales-orders',
+      widgetBlock("record-list-view", {
+        recordType: "sales_order",
+        basePath: "/sales-orders",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'order-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer ? { widget: "order-drawer", props: { drawer: data.drawer } } : null,
         emptyAction: data.canManage ? newOrder : null,
       }),
       widgetBlock(
-        'new-order-redirect',
+        "new-order-redirect",
         {
           apiPath: data.newRedirect.apiPath,
           base: data.newRedirect.base,
@@ -364,8 +460,8 @@ export function salesOrdersSpec(data: SalesOrdersData): PageSpec {
           createParam: CREATE_PARAM,
           createFailedMessage: data.newRedirect.createFailedMessage,
         },
-        f('showNewRedirect'),
+        f("showNewRedirect"),
       ),
     ],
-  })
+  });
 }

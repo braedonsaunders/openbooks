@@ -1,18 +1,27 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
-import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/banking/banking'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
-import { offsetSuggestionsFromHistory } from '../../../../lib/banking-match-candidates'
-import { listReconcilableBankAccounts, openingCarryStartDate } from '../../../../lib/banking-accounts'
-import { listScopedAccountOptions } from '../../../../lib/scoped-options'
-import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
-import type { MatchWorkspace } from './MatchWorkspace'
-import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
+import { reconciliationBookId, reconciliationTotals } from "@openbooks/engine/banking/banking";
+import {
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission, subsidiaryScopeAllows } from "../../../../lib/authz";
+import { offsetSuggestionsFromHistory } from "../../../../lib/banking-match-candidates";
+import {
+  listReconcilableBankAccounts,
+  openingCarryStartDate,
+} from "../../../../lib/banking-accounts";
+import { listScopedAccountOptions } from "../../../../lib/scoped-options";
+import { parsePrefixedListParams, pickString, isUuid } from "../../../../lib/list-params";
+import type { MatchWorkspace } from "./MatchWorkspace";
+import type { GlRow, ReviewRow, StatementRow } from "./MatchWorkspace";
 
 /**
  * Match bank data, split into a loader and a spec.
@@ -28,56 +37,59 @@ import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
  * one widget either way.
  */
 
-type MatchWorkspaceProps = Parameters<typeof MatchWorkspace>[0]
-const MATCH_TABS = ['match', 'review', 'excluded'] as const
+type MatchWorkspaceProps = Parameters<typeof MatchWorkspace>[0];
+const MATCH_TABS = ["match", "review", "excluded"] as const;
 
 interface UnmatchedRow extends Record<string, unknown> {
-  id: string
-  unmatched: string | number
+  id: string;
+  unmatched: string | number;
 }
 interface ReconciliationRow extends Record<string, unknown> {
-  id: string
-  through_date: string
-  statement_balance: string
-  currency: string
-  status: string
+  id: string;
+  through_date: string;
+  statement_balance: string;
+  currency: string;
+  status: string;
 }
-interface CountRow extends Record<string, unknown> { n: string | number }
+interface CountRow extends Record<string, unknown> {
+  n: string | number;
+}
 
 export interface MatchData {
-  title: string
-  description: string
-  accounts: MatchWorkspaceProps['accounts']
-  offsetAccounts: MatchWorkspaceProps['offsetAccounts']
-  account: MatchWorkspaceProps['account']
-  session: MatchWorkspaceProps['session']
-  data: MatchWorkspaceProps['data']
-  totals: MatchWorkspaceProps['totals']
-  currentParams: Record<string, string | string[] | undefined>
-  selectionKey: string
-  tab: 'match' | 'review' | 'excluded'
+  title: string;
+  description: string;
+  accounts: MatchWorkspaceProps["accounts"];
+  offsetAccounts: MatchWorkspaceProps["offsetAccounts"];
+  account: MatchWorkspaceProps["account"];
+  session: MatchWorkspaceProps["session"];
+  data: MatchWorkspaceProps["data"];
+  totals: MatchWorkspaceProps["totals"];
+  currentParams: Record<string, string | string[] | undefined>;
+  selectionKey: string;
+  tab: "match" | "review" | "excluded";
 }
 
 export async function loadMatch(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<MatchData> {
-  const authz = await requirePermission('banking.reconcile')
-  const t = await getTranslations('banking')
-  const orgId = authz.user.orgId
-  const accountId = pickString(sp.account)
-  const requestedTab = pickString(sp.tab)
+  const authz = await requirePermission("banking.reconcile");
+  const t = await getTranslations("banking");
+  const orgId = authz.user.orgId;
+  const accountId = pickString(sp.account);
+  const requestedTab = pickString(sp.tab);
   const tab = MATCH_TABS.includes(requestedTab as (typeof MATCH_TABS)[number])
-    ? requestedTab as (typeof MATCH_TABS)[number]
-    : 'match'
+    ? (requestedTab as (typeof MATCH_TABS)[number])
+    : "match";
 
   // Reconcilable accounts (the picker) come from the ONE banking reader
   // — the same membership the overview roster and the
   // account-page guard filter through — with per-account unmatched counts
   // grouped in one pass (statement lines in the account's own settlement
   // currency still awaiting a match).
-  const [accountRefs, unmatchedRes, offsetRefs] = (await Promise.all([
+  const [accountRefs, unmatchedRes, offsetRefs] = await Promise.all([
     listReconcilableBankAccounts(orgId),
-    db.execute<UnmatchedRow>(sql`
+    db.execute<UnmatchedRow>(
+      sql`
       select s.account_id as id, count(*) as unmatched
         from bank_statement_lines l
         join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -85,32 +97,40 @@ export async function loadMatch(
        where s.org_id = ${orgId} and l.org_id = ${orgId}
          and l.currency = a.currency_restriction and l.match_status = 'unmatched'
        group by s.account_id
-    `, 'objects'),
-    listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }),
-  ]))
+    `,
+      "objects",
+    ),
+    listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, {
+      activeOnly: true,
+      postingOnly: true,
+    }),
+  ]);
 
-  const unmatchedByAccount = new Map(unmatchedRes.map((r) => [r.id, Number(r.unmatched)]))
+  const unmatchedByAccount = new Map(unmatchedRes.map((r) => [r.id, Number(r.unmatched)]));
   // The picker names only the caller's own subsidiaries' accounts: a shared
   // account (or another entity's) is not offered, so it cannot be selected.
-  const visibleRefs = accountRefs.filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId))
+  const visibleRefs = accountRefs.filter((a) =>
+    subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId),
+  );
   const accounts = visibleRefs.map((a) => ({
     id: a.id,
-    label: [a.number, a.name].filter(Boolean).join(' · '),
+    label: [a.number, a.name].filter(Boolean).join(" · "),
     unmatched: unmatchedByAccount.get(a.id) ?? 0,
-  }))
+  }));
   const offsetAccounts = offsetRefs.map((a) => ({
     id: a.id,
-    label: [a.number, a.name].filter(Boolean).join(' · '),
-  }))
+    label: [a.number, a.name].filter(Boolean).join(" · "),
+  }));
 
-  const account = accountId && isUuid(accountId) ? visibleRefs.find((a) => a.id === accountId) : null
+  const account =
+    accountId && isUuid(accountId) ? visibleRefs.find((a) => a.id === accountId) : null;
 
   // No account selected → the workspace renders just its picker, so the
   // loader stops here rather than querying for a session that cannot exist.
   if (!account) {
     return {
-      title: t('match.title'),
-      description: t('match.description'),
+      title: t("match.title"),
+      description: t("match.description"),
       accounts,
       offsetAccounts,
       account: null,
@@ -120,38 +140,62 @@ export async function loadMatch(
       currentParams: sp,
       selectionKey: JSON.stringify([null, null, tab]),
       tab,
-    }
+    };
   }
 
   // Find the account's open reconciliation (do NOT create on render).
-  const openRes = (await db.execute<ReconciliationRow>(sql`
+  const openRes = await db.execute<ReconciliationRow>(
+    sql`
     select id, through_date, statement_balance, currency, status from reconciliations
      where org_id = ${orgId} and account_id = ${account.id} and status <> 'signed_off'
      order by created_at desc limit 1
-  `, 'objects'))
-  const session = openRes[0] ?? null
+  `,
+    "objects",
+  );
+  const session = openRes[0] ?? null;
 
-  let data = null
-  let totals = null
-  let selectionKey = JSON.stringify([account.id, session?.id ?? null, tab])
+  let data = null;
+  let totals = null;
+  let selectionKey = JSON.stringify([account.id, session?.id ?? null, tab]);
   if (session) {
     const ctx = {
       orgId,
       userId: authz.user.id,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    }
-    totals = await reconciliationTotals(session.id, ctx)
-    const bookId = await reconciliationBookId(db, orgId)
+    };
+    totals = await reconciliationTotals(session.id, ctx);
+    const bookId = await reconciliationBookId(db, orgId);
 
-    const stmtParams = parsePrefixedListParams(sp, 'stmt', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
-    const glParams = parsePrefixedListParams(sp, 'gl', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
-    const exParams = parsePrefixedListParams(sp, 'ex', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
-    selectionKey = JSON.stringify({ accountId: account.id, sessionId: session.id, tab, stmtParams, glParams })
+    const stmtParams = parsePrefixedListParams(sp, "stmt", {
+      sort: "date",
+      dir: "asc",
+      perPage: 15,
+      allowedSorts: ["date"] as const,
+    });
+    const glParams = parsePrefixedListParams(sp, "gl", {
+      sort: "date",
+      dir: "asc",
+      perPage: 15,
+      allowedSorts: ["date"] as const,
+    });
+    const exParams = parsePrefixedListParams(sp, "ex", {
+      sort: "date",
+      dir: "asc",
+      perPage: 15,
+      allowedSorts: ["date"] as const,
+    });
+    selectionKey = JSON.stringify({
+      accountId: account.id,
+      sessionId: session.id,
+      tab,
+      stmtParams,
+      glParams,
+    });
 
     const stmtWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId}
       and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.posted_on <= ${session.through_date}
-      ${stmtParams.q ? sql` and (l.description ilike ${'%' + stmtParams.q + '%'} or l.counterparty_ref ilike ${'%' + stmtParams.q + '%'} or l.amount::text ilike ${'%' + stmtParams.q + '%'})` : sql``}`
-    const carryStart = await openingCarryStartDate(orgId, account.id)
+      ${stmtParams.q ? sql` and (l.description ilike ${"%" + stmtParams.q + "%"} or l.counterparty_ref ilike ${"%" + stmtParams.q + "%"} or l.amount::text ilike ${"%" + stmtParams.q + "%"})` : sql``}`;
+    const carryStart = await openingCarryStartDate(orgId, account.id);
     const glWhere = sql`jl.account_id = ${account.id} and jl.org_id = ${orgId}
       and je.book_id = ${bookId} and jl.currency = ${session.currency}
       and je.status in ('posted', 'reversed') and je.posting_date <= ${session.through_date}
@@ -159,33 +203,49 @@ export async function loadMatch(
       ${carryStart ? sql`and je.posting_date >= ${carryStart}` : sql``}
       and jl.reconciled_at is null
       and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
-      ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.txn_amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
+      ${glParams.q ? sql` and (je.entry_number ilike ${"%" + glParams.q + "%"} or je.memo ilike ${"%" + glParams.q + "%"} or jl.memo ilike ${"%" + glParams.q + "%"} or jl.txn_amount::text ilike ${"%" + glParams.q + "%"})` : sql``}`;
     const exWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId} and l.match_status = 'excluded'
-      ${exParams.q ? sql` and (l.description ilike ${'%' + exParams.q + '%'} or l.amount::text ilike ${'%' + exParams.q + '%'})` : sql``}`
+      ${exParams.q ? sql` and (l.description ilike ${"%" + exParams.q + "%"} or l.amount::text ilike ${"%" + exParams.q + "%"})` : sql``}`;
 
-    const [stmt, stmtC, flaggedC, gl, glC, review, reviewC, ex, exC] = (await Promise.all([
-      db.execute<StatementRow>(sql`
+    const [stmt, stmtC, flaggedC, gl, glC, review, reviewC, ex, exC] = await Promise.all([
+      db.execute<StatementRow>(
+        sql`
         select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
                l.possible_duplicate_of,
                dup.posted_on as dup_posted_on, dup.amount as dup_amount, dup.description as dup_description
           from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
           left join bank_statement_lines dup on dup.id = l.possible_duplicate_of and dup.org_id = l.org_id
          where ${stmtWhere} order by l.posted_on, l.line_number
-         limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}`, 'objects'),
-      db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${stmtWhere}`, 'objects'),
-      db.execute<CountRow>(sql`
+         limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}`,
+        "objects",
+      ),
+      db.execute<CountRow>(
+        sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${stmtWhere}`,
+        "objects",
+      ),
+      db.execute<CountRow>(
+        sql`
         select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
          where s.account_id = ${account.id} and s.org_id = ${orgId}
-           and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.possible_duplicate_of is not null`, 'objects'),
-      db.execute<GlRow>(sql`
+           and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.possible_duplicate_of is not null`,
+        "objects",
+      ),
+      db.execute<GlRow>(
+        sql`
         select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
           left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
          where ${glWhere} order by je.posting_date, jl.line_number
-         limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}`, 'objects'),
-      db.execute<CountRow>(sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id where ${glWhere}`, 'objects'),
+         limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}`,
+        "objects",
+      ),
+      db.execute<CountRow>(
+        sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id where ${glWhere}`,
+        "objects",
+      ),
       // Review: auto matches with low confidence in this session
-      db.execute<ReviewRow>(sql`
+      db.execute<ReviewRow>(
+        sql`
         select m.id, m.statement_line_id, m.confidence, m.match_reasons,
                sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
                je.entry_number, jl.txn_amount as gl_amount, coalesce(jl.memo, je.memo) as gl_memo
@@ -195,42 +255,59 @@ export async function loadMatch(
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
            and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7
-         order by m.confidence asc, sl.posted_on limit 50`, 'objects'),
-      db.execute<CountRow>(sql`
+         order by m.confidence asc, sl.posted_on limit 50`,
+        "objects",
+      ),
+      db.execute<CountRow>(
+        sql`
         select count(*) as n
           from reconciliation_matches m
          where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
-           and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7`, 'objects'),
-      db.execute<StatementRow>(sql`
+           and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7`,
+        "objects",
+      ),
+      db.execute<StatementRow>(
+        sql`
         select l.id, l.posted_on, l.amount, l.description
           from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
          where ${exWhere} order by l.posted_on, l.line_number
-         limit ${exParams.perPage} offset ${(exParams.page - 1) * exParams.perPage}`, 'objects'),
-      db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${exWhere}`, 'objects'),
-    ]))
+         limit ${exParams.perPage} offset ${(exParams.page - 1) * exParams.perPage}`,
+        "objects",
+      ),
+      db.execute<CountRow>(
+        sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${exWhere}`,
+        "objects",
+      ),
+    ]);
 
     // Offset-account suggestions from confirmed history for the visible
     // lines; the workspace shows one only where no rule suggests a posting.
-    const offsetSuggestions = await offsetSuggestionsFromHistory(orgId, account.id, stmt)
+    const offsetSuggestions = await offsetSuggestionsFromHistory(orgId, account.id, stmt);
 
     data = {
-      stmtRows: stmt, stmtTotal: Number(stmtC[0]?.n ?? 0), stmtParams,
+      stmtRows: stmt,
+      stmtTotal: Number(stmtC[0]?.n ?? 0),
+      stmtParams,
       offsetSuggestions,
-      canRecordPayments: can(authz, 'ar.pay') || can(authz, 'ap.pay'),
+      canRecordPayments: can(authz, "ar.pay") || can(authz, "ap.pay"),
       flaggedTotal: Number(flaggedC[0]?.n ?? 0),
-      glRows: gl, glTotal: Number(glC[0]?.n ?? 0), glParams,
-      reviewRows: review, reviewTotal: Number(reviewC[0]?.n ?? 0),
-      excludedRows: ex, excludedTotal: Number(exC[0]?.n ?? 0), exParams,
-    }
+      glRows: gl,
+      glTotal: Number(glC[0]?.n ?? 0),
+      glParams,
+      reviewRows: review,
+      reviewTotal: Number(reviewC[0]?.n ?? 0),
+      excludedRows: ex,
+      excludedTotal: Number(exC[0]?.n ?? 0),
+      exParams,
+    };
   }
 
-
   return {
-    title: t('match.title'),
-    description: t('match.description'),
+    title: t("match.title"),
+    description: t("match.description"),
     accounts,
     offsetAccounts,
-    account: { id: account.id, label: [account.number, account.name].filter(Boolean).join(' · ') },
+    account: { id: account.id, label: [account.number, account.name].filter(Boolean).join(" · ") },
     session: session
       ? {
           id: session.id,
@@ -244,18 +321,18 @@ export async function loadMatch(
     currentParams: sp,
     selectionKey,
     tab,
-  }
+  };
 }
 
-const f = ref<MatchData>()
+const f = ref<MatchData>();
 
 export function matchSpec(data: MatchData): PageSpec {
   return page({
-    route: '/banking/match',
-    layout: 'list',
-    header: [pageHeader({ title: f('title'), description: f('description') })],
+    route: "/banking/match",
+    layout: "list",
+    header: [pageHeader({ title: f("title"), description: f("description") })],
     body: [
-      widgetBlock('match-workspace', {
+      widgetBlock("match-workspace", {
         accounts: data.accounts,
         offsetAccounts: data.offsetAccounts,
         account: data.account,
@@ -267,5 +344,5 @@ export function matchSpec(data: MatchData): PageSpec {
         tab: data.tab,
       }),
     ],
-  })
+  });
 }

@@ -98,10 +98,12 @@ const hooks = registerHooks({
 const { GET, PATCH, DELETE } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
-const request = (method: string, body: unknown, headers: Record<string, string> = {}) => new Request(
-  "http://openbooks.test/api/v1/setup/tax-codes/row-1",
-  { method, headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) },
-);
+const request = (method: string, body: unknown, headers: Record<string, string> = {}) =>
+  new Request("http://openbooks.test/api/v1/setup/tax-codes/row-1", {
+    method,
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
 const params = { params: Promise.resolve({ entityKey: "tax-codes", id: "row-1" }) };
 
 test("GET /api/v1/setup/[entityKey]/[id] reads through getSetupRecord", async () => {
@@ -115,7 +117,10 @@ test("GET /api/v1/setup/[entityKey]/[id] reads through getSetupRecord", async ()
 
 test("PATCH /api/v1/setup/[entityKey]/[id] merges the path id into the writer body", async () => {
   routeState.updated = null;
-  const response = await PATCH(request("PATCH", { rate: "7" }, { "idempotency-key": "key-1" }), params);
+  const response = await PATCH(
+    request("PATCH", { rate: "7" }, { "idempotency-key": "key-1" }),
+    params,
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { id: "row-1" });
   assert.equal(response.headers.get("idempotency-replayed"), "false");
@@ -137,12 +142,20 @@ test("DELETE /api/v1/setup/[entityKey]/[id] deletes through the Setup command", 
   assert.equal(response.headers.get("idempotency-replayed"), "false");
   assert.deepEqual(routeState.deleted, {
     // Actor scope is threaded into the Setup command; null is the unrestricted admin modeled here.
-    actor: { orgId: "org-1", id: "user-1", permissions: ["admin.setup.manage"], allowedSubsidiaryIds: null },
+    actor: {
+      orgId: "org-1",
+      id: "user-1",
+      permissions: ["admin.setup.manage"],
+      allowedSubsidiaryIds: null,
+    },
     entityKey: "tax-codes",
     id: "row-1",
   });
 });
 
 test("PATCH /api/v1/setup/[entityKey]/[id] requires an Idempotency-Key", async () => {
-  await assert.rejects(() => PATCH(request("PATCH", { rate: "7" }), params), /Idempotency-Key header is required/);
+  await assert.rejects(
+    () => PATCH(request("PATCH", { rate: "7" }), params),
+    /Idempotency-Key header is required/,
+  );
 });

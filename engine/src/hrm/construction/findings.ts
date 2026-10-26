@@ -24,11 +24,7 @@ import {
  */
 
 export type ComplianceFindingKind =
-  | "ratio_breach"
-  | "missing_rate"
-  | "class_unresolved"
-  | "registration_missing"
-  | "fringe_mismatch";
+  "ratio_breach" | "missing_rate" | "class_unresolved" | "registration_missing" | "fringe_mismatch";
 
 export interface ComplianceFinding {
   readonly id: string;
@@ -86,7 +82,9 @@ export async function recordFinding(
     throw new HrmConstructionError("Finding detail must be a JSON object.");
   }
   // An identical open finding is the same flag — return it instead of a duplicate row.
-  const existing = (await exec.execute<{ id: string }>(sql`
+  const existing = (
+    await exec.execute<{ id: string }>(
+      sql`
       select id from hrm_compliance_findings
        where org_id = ${orgId}::uuid and kind = ${input.kind}
          and project_id is not distinct from ${projectId}::uuid
@@ -94,19 +92,28 @@ export async function recordFinding(
          and employment_id is not distinct from ${employmentId}::uuid
          and status = 'open'
        order by recorded_at desc limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (existing) {
     return loadFinding(exec, orgId, String(existing.id));
   }
-  const created = (await exec.execute<{ id: string }>(sql`
+  const created = (
+    await exec.execute<{ id: string }>(
+      sql`
       insert into hrm_compliance_findings
         (org_id, kind, project_id, worked_on, employment_id, detail, status, created_by, updated_by)
       values (${orgId}::uuid, ${input.kind}, ${projectId}::uuid, ${workedOn}::date,
               ${employmentId}::uuid, ${JSON.stringify(detail)}::jsonb, 'open',
               ${input.actorId}::uuid, ${input.actorId}::uuid)
       returning id::text as id
-    `, "objects"))[0];
-  if (!created) throw new HrmConstructionError("The compliance finding was not recorded — no row was written.");
+    `,
+      "objects",
+    )
+  )[0];
+  if (!created)
+    throw new HrmConstructionError("The compliance finding was not recorded — no row was written.");
   return loadFinding(exec, orgId, String(created.id));
 }
 
@@ -115,7 +122,8 @@ export async function loadFinding(
   orgId: string,
   findingId: string,
 ): Promise<ComplianceFinding> {
-  const row = (await exec.execute<{
+  const row = (
+    await exec.execute<{
       id: string;
       kind: ComplianceFindingKind;
       projectId: string | null;
@@ -124,14 +132,18 @@ export async function loadFinding(
       detail: Record<string, unknown>;
       status: string;
       recordedAt: string;
-    }>(sql`
+    }>(
+      sql`
       select id::text as id, kind,
              project_id::text as "projectId", worked_on::text as "workedOn",
              employment_id::text as "employmentId",
              detail, status, recorded_at::text as "recordedAt"
         from hrm_compliance_findings
        where org_id = ${orgId}::uuid and id = ${findingId}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new HrmConstructionError(
       `Compliance finding ${findingId} does not exist in this organization — it may belong to another org.`,
@@ -148,8 +160,14 @@ export async function listFindings(
 ): Promise<readonly ComplianceFinding[]> {
   await assertConstructionFeature(exec, orgId, "Compliance findings");
   requireId(actorId, "actorId");
-  if (status !== undefined && status !== null && !["open", "acknowledged", "resolved"].includes(status)) {
-    throw new HrmConstructionError(`Unknown finding status ${status} — use open, acknowledged, or resolved.`);
+  if (
+    status !== undefined &&
+    status !== null &&
+    !["open", "acknowledged", "resolved"].includes(status)
+  ) {
+    throw new HrmConstructionError(
+      `Unknown finding status ${status} — use open, acknowledged, or resolved.`,
+    );
   }
   // Finding detail carries priced effects and named employments: a
   // restricted reader sees only findings anchored to in-scope projects
@@ -157,21 +175,23 @@ export async function listFindings(
   // visible; dangling anchors (project/employment gone) fail closed and
   // hide, because the anchor that would authorize the read is gone.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
-  const scope = allowed === null
-    ? sql``
-    : sql`and (f.project_id is null or p.subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[]))
+  const scope =
+    allowed === null
+      ? sql``
+      : sql`and (f.project_id is null or p.subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[]))
           and (f.employment_id is null or w.employer_subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[]))`;
   const statusFilter = status ? sql`and f.status = ${status}::text` : sql``;
   const rows = await exec.execute<{
-      id: string;
-      kind: ComplianceFindingKind;
-      projectId: string | null;
-      workedOn: string | null;
-      employmentId: string | null;
-      detail: Record<string, unknown>;
-      status: string;
-      recordedAt: string;
-    }>(sql`
+    id: string;
+    kind: ComplianceFindingKind;
+    projectId: string | null;
+    workedOn: string | null;
+    employmentId: string | null;
+    detail: Record<string, unknown>;
+    status: string;
+    recordedAt: string;
+  }>(
+    sql`
       select f.id::text as id, f.kind,
              f.project_id::text as "projectId", f.worked_on::text as "workedOn",
              f.employment_id::text as "employmentId",
@@ -183,7 +203,9 @@ export async function listFindings(
          ${statusFilter}
          ${scope}
        order by f.recorded_at desc
-    `, "objects");
+    `,
+    "objects",
+  );
   return rows.map((row) => ({ ...row, detail: (row.detail ?? {}) as Record<string, unknown> }));
 }
 
@@ -202,12 +224,17 @@ export async function acknowledgeFinding(
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
   const denied = `Compliance finding ${findingId} cannot be acknowledged — it does not exist here or is no longer open.`;
   return withOrgTransaction(orgId, async () => {
-    const finding = (await exec.execute<{ status: string; projectId: string | null; employmentId: string | null }>(sql`
+    const finding = (
+      await exec.execute<{ status: string; projectId: string | null; employmentId: string | null }>(
+        sql`
         select status, project_id::text as "projectId", employment_id::text as "employmentId"
           from hrm_compliance_findings
          where org_id = ${orgId}::uuid and id = ${findingId}::uuid
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!finding) {
       throw new HrmConstructionError(denied);
     }
@@ -241,12 +268,17 @@ export async function resolveFinding(
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
   const denied = `Compliance finding ${findingId} cannot be resolved — it does not exist here or is already resolved.`;
   return withOrgTransaction(orgId, async () => {
-    const finding = (await exec.execute<{ status: string; projectId: string | null; employmentId: string | null }>(sql`
+    const finding = (
+      await exec.execute<{ status: string; projectId: string | null; employmentId: string | null }>(
+        sql`
         select status, project_id::text as "projectId", employment_id::text as "employmentId"
           from hrm_compliance_findings
          where org_id = ${orgId}::uuid and id = ${findingId}::uuid
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!finding) {
       throw new HrmConstructionError(denied);
     }

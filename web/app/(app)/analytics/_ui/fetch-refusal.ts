@@ -7,11 +7,14 @@
  * failure. Falls back to the status when the body is unreadable or carries
  * no message.
  */
-export async function refusalMessage(res: Response, fallback = `HTTP ${res.status}`): Promise<string> {
+export async function refusalMessage(
+  res: Response,
+  fallback = `HTTP ${res.status}`,
+): Promise<string> {
   try {
-    const body = (await res.json()) as { error?: unknown }
-    return typeof body?.error === 'string' && body.error ? body.error : fallback
+    const body = (await res.json()) as { error?: unknown };
+    return typeof body?.error === "string" && body.error ? body.error : fallback;
   } catch {
-    return fallback
+    return fallback;
   }
 }

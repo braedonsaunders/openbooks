@@ -40,9 +40,8 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 const save = (body: Record<string, unknown>) =>
@@ -62,11 +61,11 @@ const week = (days: unknown[]) => ({
 const day = (dayIndex: unknown, hours = "8") => ({ dayIndex, hours });
 
 async function dayCount(orgId: string, scheduleId: string): Promise<number> {
-  const r = await withBypassContext(
-    () =>
-      db.execute<{ n: number }>(
-        sql`select count(*)::int as n from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId}`, "objects",
-      ),
+  const r = await withBypassContext(() =>
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId}`,
+      "objects",
+    ),
   );
   return r[0]!.n;
 }
@@ -74,13 +73,19 @@ async function dayCount(orgId: string, scheduleId: string): Promise<number> {
 test("a day entry outside the cycle is refused, never silently dropped", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     const days = [0, 1, 2, 3, 4, 5].map((dayIndex) => day(dayIndex));
     const response = await POST(save(week([...days, day(7)])));
     assert.equal(response.status, 422, "dayIndex 7 in a 7-day cycle");
     assert.match(((await response.json()) as { error: string }).error, /day/i);
-    const count = await withBypassContext(
-      () => db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId}`, "objects"),
+    const count = await withBypassContext(() =>
+      db.execute<{ n: number }>(
+        sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId}`,
+        "objects",
+      ),
     );
     assert.equal(count[0]!.n, 0, "a refused save must not store a partial pattern");
 
@@ -94,7 +99,10 @@ test("a day entry outside the cycle is refused, never silently dropped", async (
 test("a well-formed week still saves every working day", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     const response = await POST(save(week([0, 1, 2, 3, 4].map((dayIndex) => day(dayIndex)))));
     assert.equal(response.status, 200);
     const { id } = (await response.json()) as { id: string };

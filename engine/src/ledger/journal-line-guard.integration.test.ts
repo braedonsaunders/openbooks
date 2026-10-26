@@ -54,13 +54,16 @@ async function postBalanced(org: Org, number: string): Promise<string> {
     { accountId: org.accounts.bank, amount: "250.0000" },
     { accountId: org.accounts.revenue, amount: "-250.0000" },
   ]);
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
+  await db.execute(
+    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`,
+  );
   return entry;
 }
 
 async function lineCount(entry: string): Promise<number> {
   const r = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from journal_lines where entry_id = ${entry}`, "objects",
+    sql`select count(*)::int as n from journal_lines where entry_id = ${entry}`,
+    "objects",
   );
   return r[0]!.n;
 }
@@ -126,22 +129,28 @@ test("moving lines between draft entries stays allowed", { skip: !DB }, async ()
   }
 });
 
-test("retargeting a posted line at another tenant's entry raises a foreign-key error", { skip: !DB }, async () => {
-  const owner = await createScratchOrg();
-  const foreign = await createScratchOrg();
-  try {
-    const posted = await postBalanced(owner, "JL-51-G");
-    const foreignDraft = await draftEntry(foreign, "JL-51-H");
-    await assert.rejects(
-      db.execute(sql`update journal_lines set entry_id = ${foreignDraft} where entry_id = ${posted}`),
-      (error: unknown) => errorChainMatches(error, /does not exist in organization|immutable/),
-      "a line may never reference another tenant's entry",
-    );
-  } finally {
-    await dropScratchOrg(foreign.orgId);
-    await dropScratchOrg(owner.orgId);
-  }
-});
+test(
+  "retargeting a posted line at another tenant's entry raises a foreign-key error",
+  { skip: !DB },
+  async () => {
+    const owner = await createScratchOrg();
+    const foreign = await createScratchOrg();
+    try {
+      const posted = await postBalanced(owner, "JL-51-G");
+      const foreignDraft = await draftEntry(foreign, "JL-51-H");
+      await assert.rejects(
+        db.execute(
+          sql`update journal_lines set entry_id = ${foreignDraft} where entry_id = ${posted}`,
+        ),
+        (error: unknown) => errorChainMatches(error, /does not exist in organization|immutable/),
+        "a line may never reference another tenant's entry",
+      );
+    } finally {
+      await dropScratchOrg(foreign.orgId);
+      await dropScratchOrg(owner.orgId);
+    }
+  },
+);
 
 /**
  * Source-contract pin: the 0158 rewrite once dropped the 0038 tenant lookup
@@ -151,14 +160,23 @@ test("retargeting a posted line at another tenant's entry raises a foreign-key e
  */
 test("jl_guard source contract pins every inherited check", { skip: !DB }, async () => {
   const r = await db.execute<{ definition: string }>(
-    sql`select pg_get_functiondef('public.jl_guard()'::regprocedure) as definition`, "objects",
+    sql`select pg_get_functiondef('public.jl_guard()'::regprocedure) as definition`,
+    "objects",
   );
   const body = r[0]!.definition;
   assert.match(body, /where id = v_entry and org_id = v_line_org/, "tenant-coherent parent lookup");
-  assert.match(body, /journal entry % does not exist in organization %/, "23503 tenant-coherence error");
+  assert.match(
+    body,
+    /journal entry % does not exist in organization %/,
+    "23503 tenant-coherence error",
+  );
   assert.match(body, /old\.entry_id/, "original-parent lookup on UPDATE/DELETE");
   assert.match(body, /lines of a % journal entry are immutable/, "posted-immutability branch");
-  assert.match(body, /journal-line reconciliation evidence is append-only/, "evidence append-only rule");
+  assert.match(
+    body,
+    /journal-line reconciliation evidence is append-only/,
+    "evidence append-only rule",
+  );
   assert.match(body, /source_cleared_date/, "source-cleared evidence rule");
   assert.match(body, /openbooks_clone_authority/, "clone-authority exception (OM-13)");
   assert.match(body, /Branch: clone-authority-insert/, "clone-authority branch marker");

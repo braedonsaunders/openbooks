@@ -1,10 +1,10 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { receiveInboundApEmail } from './receive'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { receiveInboundApEmail } from "./receive";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const tokenParams = z.object({ token: z.string().max(64) })
+const tokenParams = z.object({ token: z.string().max(64) });
 
 /**
  * Inbound AP email webhook (Postmark, Mailgun, SendGrid or the generic JSON
@@ -15,7 +15,7 @@ const tokenParams = z.object({ token: z.string().max(64) })
  * state changes.
  */
 export const POST = defineRoute({
-  public: 'token',
+  public: "token",
   params: tokenParams,
   handler: async ({ request, params: { token } }) => receiveInboundApEmail(request, token),
-})
+});

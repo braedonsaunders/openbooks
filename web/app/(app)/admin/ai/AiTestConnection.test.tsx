@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/ai", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/ai",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -41,7 +45,10 @@ globalThis.fetch = (async (url: unknown, init?: { body?: unknown; method?: strin
   calls.push({ url: String(url), init });
   if (String(url).endsWith("/api/admin/ai/test")) {
     return new Response(
-      JSON.stringify({ ok: false, message: "Not configured yet — check the provider, API key, model and base URL." }),
+      JSON.stringify({
+        ok: false,
+        message: "Not configured yet — check the provider, API key, model and base URL.",
+      }),
       { headers: { "content-type": "application/json" } },
     );
   }
@@ -118,7 +125,9 @@ test("Test connection verifies the typed (unsaved) key", async () => {
   /* eslint-enable react/no-children-prop */
 
   // Type a key WITHOUT saving, then test the connection.
-  const keyInput = document.querySelector('input[placeholder="sk-ant-test-hint"]') as HTMLInputElement | null;
+  const keyInput = document.querySelector(
+    'input[placeholder="sk-ant-test-hint"]',
+  ) as HTMLInputElement | null;
   assert.ok(keyInput, "the API key field must render");
   await act(async () => {
     typeInto(keyInput, "sk-test-typed-key");
@@ -137,7 +146,11 @@ test("Test connection verifies the typed (unsaved) key", async () => {
   const testCall = calls.find((c) => String(c.url).endsWith("/api/admin/ai/test"));
   assert.ok(testCall, "Test connection must hit the test endpoint");
   const body = JSON.parse(String(testCall.init?.body ?? "{}")) as Record<string, unknown>;
-  assert.equal(body.apiKey, "sk-test-typed-key", "the test request must carry the typed key, not the saved config");
+  assert.equal(
+    body.apiKey,
+    "sk-test-typed-key",
+    "the test request must carry the typed key, not the saved config",
+  );
 
   await act(async () => {
     root.unmount();

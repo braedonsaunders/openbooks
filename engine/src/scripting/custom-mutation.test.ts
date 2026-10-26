@@ -25,7 +25,10 @@ test("before-submit custom mutations must be objects", async () => {
 
   assert.equal(result.status, "error");
   assert.match(result.abortReason ?? "", /before_submit scripts may only set custom to an object/);
-  assert.equal(beforePostCustomMutationError("invalid", "before_submit"), "before_submit scripts may only set custom to an object");
+  assert.equal(
+    beforePostCustomMutationError("invalid", "before_submit"),
+    "before_submit scripts may only set custom to an object",
+  );
 });
 
 test("before-submit custom mutations merge with persisted document fields", () => {

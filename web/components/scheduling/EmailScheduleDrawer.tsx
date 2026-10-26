@@ -1,64 +1,64 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
+import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Button, Drawer, Input, Select, RichTextEditor } from "@openbooks/ui";
-import { configuredSchedulePdfLayout, plainTextDocument, richTextPlainText, type RichTextDocument, type SchedulePdfLayout } from "@openbooks/forms-core";
-import type { BoardWindow } from './model'
-import { refusalMessageFromBody } from '../../lib/api-error'
-import type { ScheduleDistributionPreview } from '@openbooks/engine/schedule-boards/distribution'
-import { SchedulePdfFields } from './SchedulePdfFields'
-import { SchedulingAlert } from './SchedulingAlert'
-import { SchedulingRequestError } from './api'
-import { scheduleDistributionEmail } from '@openbooks/emails/schedule-distribution'
+import {
+  configuredSchedulePdfLayout,
+  plainTextDocument,
+  richTextPlainText,
+  type RichTextDocument,
+  type SchedulePdfLayout,
+} from "@openbooks/forms-core";
+import type { BoardWindow } from "./model";
+import { refusalMessageFromBody } from "../../lib/api-error";
+import type { ScheduleDistributionPreview } from "@openbooks/engine/schedule-boards/distribution";
+import { SchedulePdfFields } from "./SchedulePdfFields";
+import { SchedulingAlert } from "./SchedulingAlert";
+import { SchedulingRequestError } from "./api";
+import { scheduleDistributionEmail } from "@openbooks/emails/schedule-distribution";
 
 export function EmailScheduleDrawer({
   window: initialWindow,
   onClose,
 }: {
-  window: BoardWindow
-  onClose: () => void
+  window: BoardWindow;
+  onClose: () => void;
 }) {
   // Keep the reviewed drawer window stable while the board refreshes behind it.
-  const [board] = useState(initialWindow)
-  const t = useTranslations('scheduling.distribution')
-  const [recipientMode, setRecipientMode] = useState<
-    "automatic" | "selected" | "combined"
-  >("selected");
-  const [visibility, setVisibility] = useState<"personal" | "board">(
-    "personal",
+  const [board] = useState(initialWindow);
+  const t = useTranslations("scheduling.distribution");
+  const [recipientMode, setRecipientMode] = useState<"automatic" | "selected" | "combined">(
+    "selected",
   );
-  const [cohort, setCohort] = useState<
-    "scope" | "scheduled" | "supervisors" | "self"
-  >("scope");
+  const [visibility, setVisibility] = useState<"personal" | "board">("personal");
+  const [cohort, setCohort] = useState<"scope" | "scheduled" | "supervisors" | "self">("scope");
   const [includePdf, setIncludePdf] = useState(true),
     [messageContent, setMessageContent] = useState<RichTextDocument>(() => plainTextDocument("")),
     [extras, setExtras] = useState<{ id: string; name: string }[]>([]),
     [contactQuery, setContactQuery] = useState(""),
-    [contacts, setContacts] = useState<
-      { id: string; name: string; email: string | null }[]
-    >([]),
+    [contacts, setContacts] = useState<{ id: string; name: string; email: string | null }[]>([]),
     [moreContacts, setMoreContacts] = useState(false);
   const [everyone, setEveryone] = useState(false),
     [selected, setSelected] = useState<string[]>([]),
-    [reason, setReason] = useState('')
-  const [preview, setPreview] = useState<ScheduleDistributionPreview | null>(
-      null,
-    ),
+    [reason, setReason] = useState("");
+  const [preview, setPreview] = useState<ScheduleDistributionPreview | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<{
-      message: string
-      remedy: string | null
+      message: string;
+      remedy: string | null;
     } | null>(null),
     [queued, setQueued] = useState<{
-      id: string
-      flowId: string
-      runId: string
-    } | null>(null)
+      id: string;
+      flowId: string;
+      runId: string;
+    } | null>(null);
   const [key, setKey] = useState(() => crypto.randomUUID()),
-    [recipientId, setRecipientId] = useState('')
-  const [messageValid, setMessageValid] = useState(true)
-  const [pdfLayout, setPdfLayout] = useState<SchedulePdfLayout>(() => configuredSchedulePdfLayout(board.board.automaticDeliveryPolicy));
+    [recipientId, setRecipientId] = useState("");
+  const [messageValid, setMessageValid] = useState(true);
+  const [pdfLayout, setPdfLayout] = useState<SchedulePdfLayout>(() =>
+    configuredSchedulePdfLayout(board.board.automaticDeliveryPolicy),
+  );
   const [roleKeys, setRoleKeys] = useState<string[]>([]),
     [roles, setRoles] = useState<{ key: string; name: string }[]>([]);
   const rows = board.rows;
@@ -73,7 +73,9 @@ export function EmailScheduleDrawer({
         // code render instead of the bare `error` field.
         if (!response.ok) {
           const refusal = await response.json().catch(() => ({}));
-          throw new Error(refusalMessageFromBody(refusal, { fallback: t("refused") }) ?? t("refused"));
+          throw new Error(
+            refusalMessageFromBody(refusal, { fallback: t("refused") }) ?? t("refused"),
+          );
         }
         return response.json();
       })
@@ -94,56 +96,49 @@ export function EmailScheduleDrawer({
     return () => abort.abort();
   }, [board.board.id, contactQuery, t]);
   function reset() {
-    setPreview(null)
-    setQueued(null)
-    setKey(crypto.randomUUID())
-    setError(null)
+    setPreview(null);
+    setQueued(null);
+    setKey(crypto.randomUUID());
+    setError(null);
   }
   async function submit(command: "preview" | "send" | "pdf") {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const response = await fetch(
-        `/api/scheduling/boards/${board.board.id}/distribution`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            command,
-            from: board.from,
-            through: board.through,
-            audience: {
-              visibility,
-              recipientMode,
-              ...(board.board.rowKind === "people" ? {cohort} : {}),
-              additionalRoleKeys: visibility === "board" ? roleKeys : [],
-              additionalPartyIds:
-                visibility === "board" ? extras.map((e) => e.id) : [],
-              includePdf,
-              pdfLayout: includePdf ? pdfLayout : undefined,
-              message: richTextPlainText(messageContent),
-              messageContent,
-              everyone: recipientMode === "selected" ? false : everyone,
-              subjectIds: everyone ? [] : [...selected].sort(),
-            },
-            ...(command === "pdf"
-              ? { version: preview?.version, partyId: recipientId }
-              : {}),
-            ...(command === 'send'
-              ? { version: preview?.version, reason, key }
-              : {}),
-          }),
-        },
-      )
+      const response = await fetch(`/api/scheduling/boards/${board.board.id}/distribution`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          command,
+          from: board.from,
+          through: board.through,
+          audience: {
+            visibility,
+            recipientMode,
+            ...(board.board.rowKind === "people" ? { cohort } : {}),
+            additionalRoleKeys: visibility === "board" ? roleKeys : [],
+            additionalPartyIds: visibility === "board" ? extras.map((e) => e.id) : [],
+            includePdf,
+            pdfLayout: includePdf ? pdfLayout : undefined,
+            message: richTextPlainText(messageContent),
+            messageContent,
+            everyone: recipientMode === "selected" ? false : everyone,
+            subjectIds: everyone ? [] : [...selected].sort(),
+          },
+          ...(command === "pdf" ? { version: preview?.version, partyId: recipientId } : {}),
+          ...(command === "send" ? { version: preview?.version, reason, key } : {}),
+        }),
+      });
       // The message reads through the shared helper with the remedy stripped
       // (it rides separately in the error below).
       if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
+        const body = await response.json().catch(() => ({}));
         throw new SchedulingRequestError(
-          refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('refused') }) ?? t('refused'),
+          refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t("refused") }) ??
+            t("refused"),
           body.remedy ?? null,
           body.code ?? null,
-        )
+        );
       }
       if (command === "pdf") {
         const url = URL.createObjectURL(await response.blob());
@@ -154,21 +149,21 @@ export function EmailScheduleDrawer({
         URL.revokeObjectURL(url);
         return;
       }
-      const result = await response.json()
-      if (command === 'preview') {
-        setPreview(result)
-        setRecipientId(result.recipients[0]?.partyId ?? '')
-      } else setQueued(result)
+      const result = await response.json();
+      if (command === "preview") {
+        setPreview(result);
+        setRecipientId(result.recipients[0]?.partyId ?? "");
+      } else setQueued(result);
     } catch (cause) {
       setError({
-        message: cause instanceof Error ? cause.message : t('refused'),
+        message: cause instanceof Error ? cause.message : t("refused"),
         remedy: cause instanceof SchedulingRequestError ? cause.remedy : null,
-      })
+      });
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
-  const recipient = preview?.recipients.find((r) => r.partyId === recipientId)
+  const recipient = preview?.recipients.find((r) => r.partyId === recipientId);
   const report =
     preview && recipient
       ? scheduleDistributionEmail({
@@ -185,25 +180,25 @@ export function EmailScheduleDrawer({
               ? (preview.sharedLines ?? recipient.lines)
               : recipient.lines,
         })
-      : null
+      : null;
   return (
     <Drawer
       open
       onClose={onClose}
       size="lg"
-      title={t('title')}
+      title={t("title")}
       description={`${board.board.name} · ${board.from} – ${board.through} · ${board.board.timeZone}`}
       footer={
         <div className="flex flex-nowrap items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            {t('close')}
+            {t("close")}
           </Button>
           <Button
             variant="outline"
             disabled={busy || !messageValid || queued !== null}
-            onClick={() => void submit('preview')}
+            onClick={() => void submit("preview")}
           >
-            {t('preview')}
+            {t("preview")}
           </Button>
           <Button
             disabled={
@@ -214,314 +209,319 @@ export function EmailScheduleDrawer({
               !reason.trim() ||
               queued !== null
             }
-            onClick={() => void submit('send')}
+            onClick={() => void submit("send")}
           >
-            {busy ? t('working') : t('send')}
+            {busy ? t("working") : t("send")}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
-        <p className="text-sm text-slate-500">{t('explanation')}</p>
+        <p className="text-sm text-slate-500">{t("explanation")}</p>
         <fieldset className="space-y-3 border-0 p-0" data-schedule-recipients>
-          <legend className="mb-2 text-sm font-medium">{t('recipients')}</legend>
-        <label className="block text-sm">
-          {t('sharing')}
-          <Select
-            aria-label={t('sharing')}
-            value={visibility}
-            disabled={busy || queued !== null}
-            onChange={(event) => {
-              setVisibility(event.target.value as 'personal' | 'board')
-              reset()
-            }}
-            className="mt-1 w-full"
-          >
-            <option value="personal">{t('personal')}</option>
-            <option value="board">{t('wholeBoard')}</option>
-          </Select>
-        </label>
-        {visibility === 'board' ? (
-          <SchedulingAlert tone="info" message={t('wholeBoardReview')} />
-        ) : null}
-        <label className="block text-sm">
-          {t("recipientMode")}
-          <Select
-            aria-label={t("recipientMode")}
-            value={recipientMode}
-            disabled={busy || queued !== null}
-            onChange={(event) => {
-              setRecipientMode(event.target.value as typeof recipientMode);
-              setEveryone(event.target.value !== "selected");
-              setSelected([]);
-              setExtras([]);
-              setRoleKeys([]);
-              reset();
-            }}
-          >
-            {(["selected", "automatic", "combined"] as const).map((mode) => (
-              <option key={mode} value={mode}>
-                {t(`modes.${mode}`)}
-              </option>
-            ))}
-          </Select>
-        </label>
-        {board.board.rowKind === "people" && recipientMode !== "selected" ? (
+          <legend className="mb-2 text-sm font-medium">{t("recipients")}</legend>
           <label className="block text-sm">
-            {t("cohort")}
+            {t("sharing")}
             <Select
-              aria-label={t("cohort")}
-              value={cohort}
+              aria-label={t("sharing")}
+              value={visibility}
               disabled={busy || queued !== null}
-              onChange={(e) => {
-                setCohort(e.target.value as typeof cohort);
+              onChange={(event) => {
+                setVisibility(event.target.value as "personal" | "board");
+                reset();
+              }}
+              className="mt-1 w-full"
+            >
+              <option value="personal">{t("personal")}</option>
+              <option value="board">{t("wholeBoard")}</option>
+            </Select>
+          </label>
+          {visibility === "board" ? (
+            <SchedulingAlert tone="info" message={t("wholeBoardReview")} />
+          ) : null}
+          <label className="block text-sm">
+            {t("recipientMode")}
+            <Select
+              aria-label={t("recipientMode")}
+              value={recipientMode}
+              disabled={busy || queued !== null}
+              onChange={(event) => {
+                setRecipientMode(event.target.value as typeof recipientMode);
+                setEveryone(event.target.value !== "selected");
+                setSelected([]);
+                setExtras([]);
+                setRoleKeys([]);
                 reset();
               }}
             >
-              {(["scope", "scheduled", "supervisors", "self"] as const).map(
-                (value) => (
-                  <option key={value} value={value}>
-                    {t(`cohorts.${value}`)}
-                  </option>
-                ),
-              )}
+              {(["selected", "automatic", "combined"] as const).map((mode) => (
+                <option key={mode} value={mode}>
+                  {t(`modes.${mode}`)}
+                </option>
+              ))}
             </Select>
           </label>
-        ) : null}
-        {recipientMode !== "selected" ? (
-          <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={everyone}
-            disabled={busy || queued !== null}
-            onChange={(event) => {
-              setEveryone(event.target.checked)
-              reset()
-            }}
-          />
-          {t('everyone')}
-        </label>
-        ) : null}
-        {recipientMode === "selected" || !everyone ? (
-          <div className="max-h-48 overflow-auto">
-            {rows.map((row) => (
-              <label
-                key={row.subjectId}
-                className="flex items-center gap-2 py-1 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(row.subjectId)}
-                  disabled={busy || queued !== null}
-                  onChange={(event) => {
-                    setSelected((ids) =>
-                      event.target.checked
-                        ? [...ids, row.subjectId]
-                        : ids.filter((id) => id !== row.subjectId),
-                    )
-                    reset()
-                  }}
-                />
-                {row.name}
-              </label>
-            ))}
-          </div>
-        ) : null}
-        {visibility === "board" && recipientMode !== "automatic" ? (
-          <fieldset className="space-y-2">
-            <legend>{t("nativeContacts")}</legend>
-            <p className="text-xs text-slate-500">{t("additionalHelp")}</p>
-            <Input
-              aria-label={t("contactSearch")}
-              value={contactQuery}
-              onChange={(e) => setContactQuery(e.target.value)}
-              disabled={busy || queued !== null}
-            />
-            <Select
-              aria-label={t("nativeContacts")}
-              value=""
-              disabled={busy || queued !== null}
-              onChange={(e) => {
-                const contact = contacts.find((c) => c.id === e.target.value);
-                if (contact && !extras.some((c) => c.id === contact.id)) {
-                  setExtras((previous) => [...previous, contact]);
-                  reset();
-                }
-              }}
-            >
-              <option value="">{t("chooseContact")}</option>
-              {contacts
-                .filter((c) => !extras.some((x) => x.id === c.id))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} · {c.email ?? t("missingEmail")}
-                  </option>
-                ))}
-            </Select>
-            {moreContacts ? (
-              <p className="text-xs">{t("refineSearch")}</p>
-            ) : null}
-            {extras.map((contact) => (
-              <Button
-                key={contact.id}
-                variant="outline"
-                size="sm"
-                disabled={busy || queued !== null}
-                onClick={() => {
-                  setExtras((all) => all.filter((c) => c.id !== contact.id));
-                  reset();
-                }}
-              >
-                {contact.name} ×
-              </Button>
-            ))}
-          </fieldset>
-        ) : null}
-        {visibility === "board" &&
-        recipientMode !== "automatic" &&
-        roles.length ? (
-          <fieldset className="space-y-2">
-            <legend>{t("additionalRoles")}</legend>
-            <p className="text-xs text-slate-500">{t("roleHelp")}</p>
-            <Select
-              aria-label={t("additionalRoles")}
-              value=""
-              disabled={busy || queued !== null}
-              onChange={(event) => {
-                if (
-                  event.target.value &&
-                  !roleKeys.includes(event.target.value)
-                ) {
-                  setRoleKeys((keys) => [...keys, event.target.value]);
-                  reset();
-                }
-              }}
-            >
-              <option value="">{t("chooseRole")}</option>
-              {roles
-                .filter((role) => !roleKeys.includes(role.key))
-                .map((role) => (
-                  <option key={role.key} value={role.key}>
-                    {role.name}
-                  </option>
-                ))}
-            </Select>
-            {roleKeys.map((key) => (
-              <Button
-                key={key}
-                variant="outline"
-                size="sm"
-                disabled={busy || queued !== null}
-                onClick={() => {
-                  setRoleKeys((keys) => keys.filter((value) => value !== key));
-                  reset();
-                }}
-              >
-                {roles.find((role) => role.key === key)?.name ?? key} ×
-              </Button>
-            ))}
-          </fieldset>
-        ) : null}
-        {preview ? <div className="space-y-2" data-reviewed-recipients>
+          {board.board.rowKind === "people" && recipientMode !== "selected" ? (
             <label className="block text-sm">
-              {t('recipients')}
+              {t("cohort")}
               <Select
-                aria-label={t('recipients')}
-                value={recipientId}
+                aria-label={t("cohort")}
+                value={cohort}
                 disabled={busy || queued !== null}
-                onChange={(event) => setRecipientId(event.target.value)}
-                className="mt-1 w-full"
+                onChange={(e) => {
+                  setCohort(e.target.value as typeof cohort);
+                  reset();
+                }}
               >
-                {preview.recipients.map((r) => (
-                  <option key={r.partyId} value={r.partyId}>
-                    {r.contacts?.map((contact) => contact.name).join(", ") ??
-                      r.name}{" "}
-                    · {r.email ?? t("missingEmail")} ·{" "}
-                    {r.subjects.map((s) => s.name).join(', ')}
+                {(["scope", "scheduled", "supervisors", "self"] as const).map((value) => (
+                  <option key={value} value={value}>
+                    {t(`cohorts.${value}`)}
                   </option>
                 ))}
               </Select>
             </label>
-            {preview.excludedHistoricalSubjects?.length ? (
-              <SchedulingAlert
-                tone="info"
-                message={t("excludedHistory", {
-                  count: preview.excludedHistoricalSubjects.length,
-                })}
+          ) : null}
+          {recipientMode !== "selected" ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={everyone}
+                disabled={busy || queued !== null}
+                onChange={(event) => {
+                  setEveryone(event.target.checked);
+                  reset();
+                }}
               />
-            ) : null}
-        </div> : null}
+              {t("everyone")}
+            </label>
+          ) : null}
+          {recipientMode === "selected" || !everyone ? (
+            <div className="max-h-48 overflow-auto">
+              {rows.map((row) => (
+                <label key={row.subjectId} className="flex items-center gap-2 py-1 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(row.subjectId)}
+                    disabled={busy || queued !== null}
+                    onChange={(event) => {
+                      setSelected((ids) =>
+                        event.target.checked
+                          ? [...ids, row.subjectId]
+                          : ids.filter((id) => id !== row.subjectId),
+                      );
+                      reset();
+                    }}
+                  />
+                  {row.name}
+                </label>
+              ))}
+            </div>
+          ) : null}
+          {visibility === "board" && recipientMode !== "automatic" ? (
+            <fieldset className="space-y-2">
+              <legend>{t("nativeContacts")}</legend>
+              <p className="text-xs text-slate-500">{t("additionalHelp")}</p>
+              <Input
+                aria-label={t("contactSearch")}
+                value={contactQuery}
+                onChange={(e) => setContactQuery(e.target.value)}
+                disabled={busy || queued !== null}
+              />
+              <Select
+                aria-label={t("nativeContacts")}
+                value=""
+                disabled={busy || queued !== null}
+                onChange={(e) => {
+                  const contact = contacts.find((c) => c.id === e.target.value);
+                  if (contact && !extras.some((c) => c.id === contact.id)) {
+                    setExtras((previous) => [...previous, contact]);
+                    reset();
+                  }
+                }}
+              >
+                <option value="">{t("chooseContact")}</option>
+                {contacts
+                  .filter((c) => !extras.some((x) => x.id === c.id))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} · {c.email ?? t("missingEmail")}
+                    </option>
+                  ))}
+              </Select>
+              {moreContacts ? <p className="text-xs">{t("refineSearch")}</p> : null}
+              {extras.map((contact) => (
+                <Button
+                  key={contact.id}
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || queued !== null}
+                  onClick={() => {
+                    setExtras((all) => all.filter((c) => c.id !== contact.id));
+                    reset();
+                  }}
+                >
+                  {contact.name} ×
+                </Button>
+              ))}
+            </fieldset>
+          ) : null}
+          {visibility === "board" && recipientMode !== "automatic" && roles.length ? (
+            <fieldset className="space-y-2">
+              <legend>{t("additionalRoles")}</legend>
+              <p className="text-xs text-slate-500">{t("roleHelp")}</p>
+              <Select
+                aria-label={t("additionalRoles")}
+                value=""
+                disabled={busy || queued !== null}
+                onChange={(event) => {
+                  if (event.target.value && !roleKeys.includes(event.target.value)) {
+                    setRoleKeys((keys) => [...keys, event.target.value]);
+                    reset();
+                  }
+                }}
+              >
+                <option value="">{t("chooseRole")}</option>
+                {roles
+                  .filter((role) => !roleKeys.includes(role.key))
+                  .map((role) => (
+                    <option key={role.key} value={role.key}>
+                      {role.name}
+                    </option>
+                  ))}
+              </Select>
+              {roleKeys.map((key) => (
+                <Button
+                  key={key}
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || queued !== null}
+                  onClick={() => {
+                    setRoleKeys((keys) => keys.filter((value) => value !== key));
+                    reset();
+                  }}
+                >
+                  {roles.find((role) => role.key === key)?.name ?? key} ×
+                </Button>
+              ))}
+            </fieldset>
+          ) : null}
+          {preview ? (
+            <div className="space-y-2" data-reviewed-recipients>
+              <label className="block text-sm">
+                {t("recipients")}
+                <Select
+                  aria-label={t("recipients")}
+                  value={recipientId}
+                  disabled={busy || queued !== null}
+                  onChange={(event) => setRecipientId(event.target.value)}
+                  className="mt-1 w-full"
+                >
+                  {preview.recipients.map((r) => (
+                    <option key={r.partyId} value={r.partyId}>
+                      {r.contacts?.map((contact) => contact.name).join(", ") ?? r.name} ·{" "}
+                      {r.email ?? t("missingEmail")} · {r.subjects.map((s) => s.name).join(", ")}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              {preview.excludedHistoricalSubjects?.length ? (
+                <SchedulingAlert
+                  tone="info"
+                  message={t("excludedHistory", {
+                    count: preview.excludedHistoricalSubjects.length,
+                  })}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </fieldset>
-        <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800" data-schedule-attachment>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={includePdf}
+        <div
+          className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800"
+          data-schedule-attachment
+        >
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={includePdf}
+              disabled={busy || queued !== null}
+              onChange={(e) => {
+                setIncludePdf(e.target.checked);
+                reset();
+              }}
+            />
+            {t("includePdf")}
+          </label>
+          {includePdf ? (
+            <SchedulePdfFields
+              pdfLayout={pdfLayout}
+              setPdfLayout={setPdfLayout}
+              disabled={busy || queued !== null}
+              onChange={reset}
+            />
+          ) : null}
+        </div>
+        <fieldset className="space-y-2 border-0 p-0" data-schedule-message>
+          <legend className="mb-2 text-sm font-medium">{t("message")}</legend>
+          <RichTextEditor
+            label={t("message")}
+            value={messageContent}
             disabled={busy || queued !== null}
-            onChange={(e) => {
-              setIncludePdf(e.target.checked);
+            labels={{
+              bold: t("editor.bold"),
+              italic: t("editor.italic"),
+              underline: t("editor.underline"),
+              bullets: t("editor.bullets"),
+              numbered: t("editor.numbered"),
+              link: t("editor.link"),
+              linkAddress: t("editor.linkAddress"),
+              apply: t("editor.apply"),
+              invalid: t("editor.invalid"),
+            }}
+            onValidityChange={(valid) => {
+              setMessageValid(valid);
+              if (!valid) reset();
+            }}
+            onChange={(value) => {
+              setMessageContent(value);
               reset();
             }}
           />
-          {t("includePdf")}
-        </label>
-        {includePdf ? (
-          <SchedulePdfFields pdfLayout={pdfLayout} setPdfLayout={setPdfLayout} disabled={busy || queued !== null} onChange={reset} />
-        ) : null}
-        </div>
-        <fieldset className="space-y-2 border-0 p-0" data-schedule-message>
-          <legend className="mb-2 text-sm font-medium">{t('message')}</legend>
-          <RichTextEditor label={t('message')} value={messageContent} disabled={busy || queued !== null}
-            labels={{bold: t('editor.bold'), italic: t('editor.italic'), underline: t('editor.underline'), bullets: t('editor.bullets'), numbered: t('editor.numbered'), link: t('editor.link'), linkAddress: t('editor.linkAddress'), apply: t('editor.apply'), invalid: t('editor.invalid')}}
-            onValidityChange={valid => { setMessageValid(valid); if (!valid) reset() }}
-            onChange={value => { setMessageContent(value); reset() }} />
         </fieldset>
         <Input
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           disabled={busy || queued !== null}
-          placeholder={t('reason')}
-          aria-label={t('reason')}
+          placeholder={t("reason")}
+          aria-label={t("reason")}
         />
-        {error ? (
-          <SchedulingAlert message={error.message} remedy={error.remedy} />
-        ) : null}
+        {error ? <SchedulingAlert message={error.message} remedy={error.remedy} /> : null}
         {queued ? (
           <>
-            <SchedulingAlert
-              tone="info"
-              message={t('queued')}
-              remedy={t('deliveryStatus')}
-            />
+            <SchedulingAlert tone="info" message={t("queued")} remedy={t("deliveryStatus")} />
             <Link
               href={`/admin/flows/${queued.flowId}`}
               className="text-sm text-teal-700 underline"
             >
-              {t('flows')} · <code>{queued.runId}</code>
+              {t("flows")} · <code>{queued.runId}</code>
             </Link>
           </>
         ) : null}
         {preview ? (
           <>
             <p className="text-xs text-slate-500">
-              {t('version')}{' '}
-              <code className="break-all">{preview.version}</code>
+              {t("version")} <code className="break-all">{preview.version}</code>
             </p>
             {preview.refusals.map((message) => (
               <SchedulingAlert key={message} message={message} />
             ))}
             {includePdf && recipient ? (
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => void submit("pdf")}
-              >
+              <Button variant="outline" disabled={busy} onClick={() => void submit("pdf")}>
                 {t("downloadPdf")}
               </Button>
             ) : null}
             {report ? (
               <iframe
-                title={t('report')}
+                title={t("report")}
                 srcDoc={report.html}
                 sandbox=""
                 className="h-96 w-full rounded-lg border bg-white"
@@ -531,18 +531,18 @@ export function EmailScheduleDrawer({
         ) : null}
         <div className="flex gap-3 text-xs">
           <Link href="/admin/flows" className="text-teal-700 underline">
-            {t('flows')}
+            {t("flows")}
           </Link>
-          {board.board.rowKind === 'resources' ? (
+          {board.board.rowKind === "resources" ? (
             <Link
-              href={`${board.board.projectId ? `/projects/${board.board.projectId}/schedule` : '/scheduling'}/recipients?board=${encodeURIComponent(board.board.code)}`}
+              href={`${board.board.projectId ? `/projects/${board.board.projectId}/schedule` : "/scheduling"}/recipients?board=${encodeURIComponent(board.board.code)}`}
               className="text-teal-700 underline"
             >
-              {t('contacts')}
+              {t("contacts")}
             </Link>
           ) : null}
         </div>
       </div>
     </Drawer>
-  )
+  );
 }

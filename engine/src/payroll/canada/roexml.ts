@@ -7,9 +7,7 @@ import { db } from "../../platform/db.ts";
 import { formatMoney } from "../../money/money.ts";
 import { unsealSecret } from "../../platform/secrets.ts";
 import { PayrollError } from "../error.ts";
-import {
-  ROE_REASON_CODES, roeRecord, type RoeRecord, type RoeReasonCode,
-} from "../yearend.ts";
+import { ROE_REASON_CODES, roeRecord, type RoeRecord, type RoeReasonCode } from "../yearend.ts";
 import { validateXML } from "xmllint-wasm";
 
 // This is the schema linked from Service Canada's current ROE Web Appendix D.
@@ -71,8 +69,12 @@ export interface EmployerConfig {
 }
 
 const esc = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 
 /**
  * Exact decimal formatting — NEVER `Number(v).toFixed(2)`.
@@ -121,14 +123,19 @@ export async function buildRoeXml(
   orgId: string,
   issues: RoeIssueInput[],
 ): Promise<{ filename: string; xml: string; roeCount: number }> {
-  if (issues.length === 0) throw new PayrollError("select at least one employee to issue an ROE for");
+  if (issues.length === 0)
+    throw new PayrollError("select at least one employee to issue an ROE for");
 
-  const cfgRow = (await db.execute<{ cfg: Partial<EmployerConfig> | null }>(sql`
+  const cfgRow = await db.execute<{ cfg: Partial<EmployerConfig> | null }>(
+    sql`
     select settings#>'{payroll,t4Transmitter}' as cfg from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const cfg = cfgRow[0]?.cfg ?? {};
-  const missingCfg = (["bn", "name", "contactName", "contactPhone"] as const)
-    .filter((key) => !cfg[key] || !String(cfg[key]).trim());
+  const missingCfg = (["bn", "name", "contactName", "contactPhone"] as const).filter(
+    (key) => !cfg[key] || !String(cfg[key]).trim(),
+  );
   if (missingCfg.length > 0) {
     throw new PayrollError(
       `employer filing configuration incomplete (${missingCfg.join(", ")}) — set it under Payroll setup`,
@@ -136,11 +143,14 @@ export async function buildRoeXml(
   }
   const employer = cfg as EmployerConfig;
 
-  const sins = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
+  const sins = await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(
+    sql`
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId} and prof.country = 'CA'
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sinByEmployee = new Map(sins.map((row) => [row.employee_party_id, row.sin_encrypted]));
 
   const missingSins: string[] = [];
@@ -202,7 +212,9 @@ export async function validateRoeXml(xml: string): Promise<string> {
   });
   if (!result.valid) {
     const detail = result.errors.map((error) => error.message).join("; ");
-    throw new PayrollError(`generated ROE Payroll Extract v2 XML failed Service Canada's schema validation: ${detail}`);
+    throw new PayrollError(
+      `generated ROE Payroll Extract v2 XML failed Service Canada's schema validation: ${detail}`,
+    );
   }
   return xml;
 }
@@ -239,72 +251,106 @@ export function renderRoeXml(input: {
     .map(({ record }) => `${record.employeeName} (${record.country ?? "unknown country"})`);
   if (foreign.length > 0) {
     throw new PayrollError(
-      `a Record of Employment is a Service Canada return and can only be filed for a `
-      + `Canadian employee — not: ${foreign.join(", ")}`,
+      `a Record of Employment is a Service Canada return and can only be filed for a ` +
+        `Canadian employee — not: ${foreign.join(", ")}`,
     );
   }
   const phone = employer.contactPhone.replace(/\D/g, "");
   if (phone.length !== 10) {
-    throw new PayrollError("the ROE transmitter contact phone must contain a 3-digit area code and 7-digit number — correct Payroll setup");
+    throw new PayrollError(
+      "the ROE transmitter contact phone must contain a 3-digit area code and 7-digit number — correct Payroll setup",
+    );
   }
   const contact = personName(employer.contactName);
   if (!contact.first || !contact.last || contact.first.length > 20 || contact.last.length > 28) {
-    throw new PayrollError("the ROE transmitter contact needs a first and last name within Service Canada's field limits — correct Payroll setup");
+    throw new PayrollError(
+      "the ROE transmitter contact needs a first and last name within Service Canada's field limits — correct Payroll setup",
+    );
   }
   const roeXml: string[] = [];
   for (const { record, issue, sin } of records) {
     const names = personName(record.employeeName);
     const { mailingAddress: address } = record;
-    if (!address) throw new PayrollError(`${record.employeeName} has no ROE mailing address — add an employee address before issuing the ROE`);
+    if (!address)
+      throw new PayrollError(
+        `${record.employeeName} has no ROE mailing address — add an employee address before issuing the ROE`,
+      );
     const addressLines = [address.line1, `${address.city} ${address.region}`, address.line2 ?? ""];
-    if (addressLines.some((line) => line.length > 35)
-      || !address.line1.trim() || !address.city.trim() || !address.region.trim()
-      || !address.postalCode.trim() || address.postalCode.length > 10
-      || !["CA", "US"].includes(address.country)) {
-      throw new PayrollError(`${record.employeeName}'s ROE mailing address is incomplete or exceeds Service Canada's fields — correct the employee address`);
+    if (
+      addressLines.some((line) => line.length > 35) ||
+      !address.line1.trim() ||
+      !address.city.trim() ||
+      !address.region.trim() ||
+      !address.postalCode.trim() ||
+      address.postalCode.length > 10 ||
+      !["CA", "US"].includes(address.country)
+    ) {
+      throw new PayrollError(
+        `${record.employeeName}'s ROE mailing address is incomplete or exceeds Service Canada's fields — correct the employee address`,
+      );
     }
     if (names.first.length > 20 || names.middle.length > 4 || names.last.length > 28) {
-      throw new PayrollError(`${record.employeeName}'s name exceeds Service Canada's ROE name fields — correct the employee name`);
+      throw new PayrollError(
+        `${record.employeeName}'s name exceeds Service Canada's ROE name fields — correct the employee name`,
+      );
     }
     // Block 5: the employee's own payroll program account files the ROE;
     // employees on no account fall back to the employer business number.
     const bn = record.filingAccount.accountNumber ?? employer.bn;
-    const periodXml = record.periods.map((period, index) =>
-      `     <PP nbr="${index + 1}"><AMT>${amt(period.insurableEarnings)}</AMT></PP>`).join("\n");
-    const vacationXml = record.separationAmounts.filter((amount) => amount.block === "17A")
-      .map((amount) => `    <VP nbr="1"><CD>${esc(amount.code)}</CD><AMT>${amt(amount.amount)}</AMT></VP>`).join("");
-    const otherXml = record.separationAmounts.filter((amount) => amount.block === "17C")
-      .map((amount, index) => `    <OM nbr="${index + 1}"><CD>${esc(amount.code)}</CD><AMT>${amt(amount.amount)}</AMT></OM>`).join("");
+    const periodXml = record.periods
+      .map(
+        (period, index) =>
+          `     <PP nbr="${index + 1}"><AMT>${amt(period.insurableEarnings)}</AMT></PP>`,
+      )
+      .join("\n");
+    const vacationXml = record.separationAmounts
+      .filter((amount) => amount.block === "17A")
+      .map(
+        (amount) =>
+          `    <VP nbr="1"><CD>${esc(amount.code)}</CD><AMT>${amt(amount.amount)}</AMT></VP>`,
+      )
+      .join("");
+    const otherXml = record.separationAmounts
+      .filter((amount) => amount.block === "17C")
+      .map(
+        (amount, index) =>
+          `    <OM nbr="${index + 1}"><CD>${esc(amount.code)}</CD><AMT>${amt(amount.amount)}</AMT></OM>`,
+      )
+      .join("");
     const recall = issue.expectedRecallDate ? "Y" : "U";
     const comment = issue.comment?.trim() ?? "";
-    if (comment.length > 160) throw new PayrollError(`${record.employeeName}'s ROE comment exceeds Service Canada's 160-character limit`);
+    if (comment.length > 160)
+      throw new PayrollError(
+        `${record.employeeName}'s ROE comment exceeds Service Canada's 160-character limit`,
+      );
 
     roeXml.push(
       `  <ROE PrintingLanguage="E" Issue="S">\n` +
-      `   ${tag("B3", record.payrollReference)}\n` +
-      `   <B5>${esc(bn)}</B5><B6>${esc(record.payPeriodType)}</B6><B8>${esc(sin)}</B8>\n` +
-      `   <B9><FN>${esc(names.first)}</FN>${names.middle ? `<MN>${esc(names.middle)}</MN>` : ""}` +
-      `<LN>${esc(names.last)}</LN><A1>${esc(address.line1)}</A1>` +
-      `<A2>${esc(`${address.city} ${address.region}`)}</A2>${tag("A3", address.line2)}` +
-      `<PC>${esc(address.postalCode.replace(/[ -]/g, "").toUpperCase())}</PC></B9>\n` +
-      `   <B10>${esc(record.firstDayWorked ?? "")}</B10><B11>${esc(record.lastDayPaid ?? "")}</B11>` +
-      `<B12>${esc(record.finalPayPeriodEnd ?? "")}</B12>${tag("B13", record.occupation)}\n` +
-      `   <B14><CD>${recall}</CD>${tag("DT", issue.expectedRecallDate ?? null)}</B14>\n` +
-      `   <B15A>${ceilWhole(record.totalInsurableHours)}</B15A><B15C>\n${periodXml}\n   </B15C>\n` +
-      `   <B16><CD>${esc(reasonCode(issue.reasonCode))}</CD><FN>${esc(contact.first)}</FN>` +
-      `<LN>${esc(contact.last)}</LN><AC>${phone.slice(0, 3)}</AC><TEL>${phone.slice(3)}</TEL></B16>\n` +
-      `${vacationXml ? `   <B17A>${vacationXml}</B17A>\n` : ""}` +
-      `${otherXml ? `   <B17C>\n${otherXml}\n   </B17C>\n` : ""}` +
-      `${tag("B18", comment || null)}\n` +
-      `   <B20>E</B20>\n` +
-      `  </ROE>`,
+        `   ${tag("B3", record.payrollReference)}\n` +
+        `   <B5>${esc(bn)}</B5><B6>${esc(record.payPeriodType)}</B6><B8>${esc(sin)}</B8>\n` +
+        `   <B9><FN>${esc(names.first)}</FN>${names.middle ? `<MN>${esc(names.middle)}</MN>` : ""}` +
+        `<LN>${esc(names.last)}</LN><A1>${esc(address.line1)}</A1>` +
+        `<A2>${esc(`${address.city} ${address.region}`)}</A2>${tag("A3", address.line2)}` +
+        `<PC>${esc(address.postalCode.replace(/[ -]/g, "").toUpperCase())}</PC></B9>\n` +
+        `   <B10>${esc(record.firstDayWorked ?? "")}</B10><B11>${esc(record.lastDayPaid ?? "")}</B11>` +
+        `<B12>${esc(record.finalPayPeriodEnd ?? "")}</B12>${tag("B13", record.occupation)}\n` +
+        `   <B14><CD>${recall}</CD>${tag("DT", issue.expectedRecallDate ?? null)}</B14>\n` +
+        `   <B15A>${ceilWhole(record.totalInsurableHours)}</B15A><B15C>\n${periodXml}\n   </B15C>\n` +
+        `   <B16><CD>${esc(reasonCode(issue.reasonCode))}</CD><FN>${esc(contact.first)}</FN>` +
+        `<LN>${esc(contact.last)}</LN><AC>${phone.slice(0, 3)}</AC><TEL>${phone.slice(3)}</TEL></B16>\n` +
+        `${vacationXml ? `   <B17A>${vacationXml}</B17A>\n` : ""}` +
+        `${otherXml ? `   <B17C>\n${otherXml}\n   </B17C>\n` : ""}` +
+        `${tag("B18", comment || null)}\n` +
+        `   <B20>E</B20>\n` +
+        `  </ROE>`,
     );
   }
 
   const xml =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<ROEHEADER FileVersion="W-2.0" SoftwareVendor="OpenBooks" ProductName="OpenBooks">\n` +
-    roeXml.join("\n") + "\n" +
+    roeXml.join("\n") +
+    "\n" +
     `</ROEHEADER>\n`;
 
   return xml;
@@ -322,14 +368,27 @@ function personName(displayName: string): { first: string; middle: string; last:
   };
 }
 
-const reasonCode = (code: RoeReasonCode): string => ({
-  A: "A00", B: "B00", D: "D00", E: "E00", F: "F00", G: "G00", H: "H00",
-  J: "J00", K: "K00", M: "M00", N: "N00", P: "P00", Z: "Z00",
-})[code];
+const reasonCode = (code: RoeReasonCode): string =>
+  ({
+    A: "A00",
+    B: "B00",
+    D: "D00",
+    E: "E00",
+    F: "F00",
+    G: "G00",
+    H: "H00",
+    J: "J00",
+    K: "K00",
+    M: "M00",
+    N: "N00",
+    P: "P00",
+    Z: "Z00",
+  })[code];
 
 function ceilWhole(decimal: string): string {
   const canonical = canonicalNonNegativeDecimal(decimal, Infinity);
-  if (canonical === null) throw new PayrollError("ROE Block 15A hours are not a nonnegative decimal");
+  if (canonical === null)
+    throw new PayrollError("ROE Block 15A hours are not a nonnegative decimal");
   const [whole, fraction = ""] = canonical.split(".");
   return (BigInt(whole!) + (/[1-9]/.test(fraction) ? 1n : 0n)).toString();
 }

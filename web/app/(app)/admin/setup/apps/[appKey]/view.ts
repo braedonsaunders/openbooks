@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { loadSetupEntity, setupEntitySpec, type SetupEntityData } from '../../[entity]/view'
+import type { PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { loadSetupEntity, setupEntitySpec, type SetupEntityData } from "../../[entity]/view";
 
 /**
  * Setup → App settings → one installed app. The settings an app declares use
@@ -12,9 +12,9 @@ export async function loadAppSettings(
   appKey: string,
   sp: Record<string, string | string[] | undefined>,
 ): Promise<SetupEntityData> {
-  return loadSetupEntity('extension-settings', sp, { appKey })
+  return loadSetupEntity("extension-settings", sp, { appKey });
 }
 
 export function appSettingsSpec(data: SetupEntityData): PageSpec {
-  return { ...setupEntitySpec(data), route: '/admin/setup/apps/[appKey]' }
+  return { ...setupEntitySpec(data), route: "/admin/setup/apps/[appKey]" };
 }

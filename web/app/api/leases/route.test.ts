@@ -10,23 +10,16 @@ const _hooks = registerHooks({
     // Resolve framework imports against this real file, not the virtual auth URL.
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
-    if (specifier === "@/lib/feature-gates")
-      return { shortCircuit: true, url: "mock:lease-auth" };
+    if (specifier === "@/lib/feature-gates") return { shortCircuit: true, url: "mock:lease-auth" };
     if (
       specifier === "@openbooks/engine/revenue/leases" ||
       specifier === "@openbooks/engine/revenue/lease-changes"
     )
       return { shortCircuit: true, url: "mock:lease-commands" };
     if (specifier === "@/lib/api/json")
-      return nextResolve(
-        new URL("../../../lib/api/json.ts", import.meta.url).href,
-        context,
-      );
+      return nextResolve(new URL("../../../lib/api/json.ts", import.meta.url).href, context);
     if (specifier === "@/lib/list-params")
-      return nextResolve(
-        new URL("../../../lib/list-params.ts", import.meta.url).href,
-        context,
-      );
+      return nextResolve(new URL("../../../lib/list-params.ts", import.meta.url).href, context);
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -96,10 +89,7 @@ test("a valid contractual advance reaches the service unchanged with the authent
   assert.equal(state.calls.length, 1);
   assert.equal(state.calls[0]![0], "org");
   assert.equal(state.calls[0]![1], "actor");
-  assert.equal(
-    (state.calls[0]![2] as typeof agreement).paymentTiming,
-    "advance",
-  );
+  assert.equal((state.calls[0]![2] as typeof agreement).paymentTiming, "advance");
 });
 test("money precision, impossible calendar dates and invalid references are rejected before persistence", async () => {
   for (const patch of [
@@ -156,10 +146,7 @@ test("permission denial precedes writes and engine refusals reach the operator v
     "select the account holding previously recorded costs, prepayments and incentives";
   const response = await create.POST(request(agreement));
   assert.equal(response.status, 422);
-  assert.equal(
-    ((await response.json()) as { error: string }).error,
-    state.refusal,
-  );
+  assert.equal(((await response.json()) as { error: string }).error, state.refusal);
 });
 test("a modification needs an effective date, reason, assessment and stable request key", async () => {
   const valid = {
@@ -188,13 +175,9 @@ test("a modification needs an effective date, reason, assessment and stable requ
   }
   reset();
   assert.equal(
-    (await change.POST(request(valid), { params: Promise.resolve({ id }) }))
-      .status,
+    (await change.POST(request(valid), { params: Promise.resolve({ id }) })).status,
     200,
   );
   assert.equal(state.calls[0]![2], "actor");
-  assert.equal(
-    (state.calls[0]![3] as typeof valid).settlementPayment,
-    "-100.0000",
-  );
+  assert.equal((state.calls[0]![3] as typeof valid).settlementPayment, "-100.0000");
 });

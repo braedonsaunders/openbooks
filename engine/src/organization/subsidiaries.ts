@@ -1,6 +1,14 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
-import { add, fromUnits, isZero, mulRate, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
+import {
+  add,
+  fromUnits,
+  isZero,
+  mulRate,
+  normalizeDecimal,
+  roundDiv,
+  toUnits,
+} from "../money/money.ts";
 import { addMoney, mulMoneyRate, negMoney, type Money } from "../money/brands.ts";
 import { isUuid } from "../platform/uuid.ts";
 
@@ -39,9 +47,7 @@ export class SubsidiaryError extends Error {}
 export function uuidArray(ids: readonly unknown[]): string {
   for (const [index, id] of ids.entries()) {
     if (!isUuid(id)) {
-      throw new SubsidiaryError(
-        `uuid array element ${index + 1} is not a valid UUID`,
-      );
+      throw new SubsidiaryError(`uuid array element ${index + 1} is not a valid UUID`);
     }
   }
   return `{${ids.join(",")}}`;
@@ -51,10 +57,13 @@ export async function loadSubsidiaryContext(
   runner: Runner,
   orgId: string,
 ): Promise<SubsidiaryContext> {
-  const r = (await runner.execute<SubsidiaryRow>(sql`
+  const r = await runner.execute<SubsidiaryRow>(
+    sql`
     select id, parent_id as "parentId", name, base_currency as "baseCurrency",
            is_elimination as "isElimination", is_active as "isActive"
-      from subsidiaries where org_id = ${orgId}`, "objects"));
+      from subsidiaries where org_id = ${orgId}`,
+    "objects",
+  );
   const byId = new Map(r.map((s) => [s.id, s]));
   const root = r.find((s) => s.parentId === null);
   if (!root) throw new SubsidiaryError(`org ${orgId} has no root subsidiary`);
@@ -136,7 +145,8 @@ async function loadPartySubsidiaries(
   orgId: string,
   partyIds: string[],
 ): Promise<Map<string, PartySubsidiaryRow>> {
-  const r = (await runner.execute<PartySubsidiaryRow>(sql`
+  const r = await runner.execute<PartySubsidiaryRow>(
+    sql`
     select p.id, p.display_name as name, p.subsidiary_id as "subsidiaryId",
            coalesce(json_agg(ps.subsidiary_id) filter (where ps.subsidiary_id is not null), '[]') as extra
       from parties p
@@ -144,7 +154,9 @@ async function loadPartySubsidiaries(
         on ps.party_id = p.id and ps.org_id = p.org_id
      where p.org_id = ${orgId}
        and p.id = any(${uuidArray(partyIds)}::uuid[])
-     group by p.id`, "objects"));
+     group by p.id`,
+    "objects",
+  );
   return new Map(r.map((party) => [party.id, party]));
 }
 
@@ -195,12 +207,20 @@ export async function validateSubsidiaryRestrictions(
 
   const accountIds = [...new Set(lines.map((l) => l.accountId))];
   if (accountIds.length > 0) {
-    const r = (await runner.execute<{ id: string; name: string; subsidiaryId: string; includeChildren: boolean }>(sql`
+    const r = await runner.execute<{
+      id: string;
+      name: string;
+      subsidiaryId: string;
+      includeChildren: boolean;
+    }>(
+      sql`
       select id, name, subsidiary_id as "subsidiaryId",
              subsidiary_include_children as "includeChildren"
         from accounts where id = any(${uuidArray(accountIds)}::uuid[])
          and org_id = ${opts.orgId}
-         and subsidiary_id is not null`, "objects"));
+         and subsidiary_id is not null`,
+      "objects",
+    );
     const restricted = new Map(r.map((a) => [a.id, a]));
     for (const l of lines) {
       const a = restricted.get(l.accountId);
@@ -221,11 +241,9 @@ export async function validateSubsidiaryRestrictions(
   // Validate those line entities against the subsidiary stamped on that same
   // line; checking only the document header party would let a root-only party
   // ride a child-subsidiary AR/AP leg and corrupt per-entity aging.
-  const linePartyIds = [...new Set(
-    lines
-      .map((line) => line.partyId)
-      .filter((id): id is string => Boolean(id)),
-  )];
+  const linePartyIds = [
+    ...new Set(lines.map((line) => line.partyId).filter((id): id is string => Boolean(id))),
+  ];
   if (linePartyIds.length > 0) {
     const byParty = await loadPartySubsidiaries(runner, opts.orgId, linePartyIds);
     for (const line of lines) {
@@ -243,18 +261,29 @@ export async function validateSubsidiaryRestrictions(
   for (const d of dimensions) {
     const ids = [...new Set(lines.map((line) => line[d.key]).filter((id): id is string => !!id))];
     if (ids.length === 0) continue;
-    const r = (await runner.execute<{ id: string; name: string; subsidiaryId: string; includeChildren: boolean }>(sql`
+    const r = await runner.execute<{
+      id: string;
+      name: string;
+      subsidiaryId: string;
+      includeChildren: boolean;
+    }>(
+      sql`
       select id, name, subsidiary_id as "subsidiaryId",
              subsidiary_include_children as "includeChildren"
         from ${sql.raw(d.table)}
        where id = any(${uuidArray(ids)}::uuid[])
          and org_id = ${opts.orgId}
-         and subsidiary_id is not null`, "objects"));
+         and subsidiary_id is not null`,
+      "objects",
+    );
     const restricted = new Map(r.map((row) => [row.id, row]));
     for (const line of lines) {
       const id = line[d.key];
       const row = id ? restricted.get(id) : undefined;
-      if (row && !restrictionAdmits(ctx, row.subsidiaryId, row.includeChildren, line.subsidiaryId)) {
+      if (
+        row &&
+        !restrictionAdmits(ctx, row.subsidiaryId, row.includeChildren, line.subsidiaryId)
+      ) {
         throw new SubsidiaryError(
           `${d.table.slice(0, -1)} "${row.name}" is restricted to another subsidiary and cannot be used by "${ctx.byId.get(line.subsidiaryId)?.name}"`,
         );
@@ -294,7 +323,7 @@ function aggregateFxRate(functionalTotal: string, transactionTotal: string): str
     );
   }
   const functionalMagnitude = functionalUnits < 0n ? -functionalUnits : functionalUnits;
-  if ((functionalUnits < 0n) !== (transactionUnits < 0n)) {
+  if (functionalUnits < 0n !== transactionUnits < 0n) {
     throw new SubsidiaryError(
       "intercompany functional and transaction totals have opposite signs and cannot share a positive FX rate",
     );
@@ -419,7 +448,10 @@ export async function intercompanyBalancingLegs(
   const txnBySub = new Map<string, Money>();
   for (const l of lines) {
     bySub.set(l.subsidiaryId, addMoney(bySub.get(l.subsidiaryId) ?? "0", l.amount));
-    txnBySub.set(l.subsidiaryId, addMoney(txnBySub.get(l.subsidiaryId) ?? "0", l.balanceTxnAmount ?? l.txnAmount ?? l.amount));
+    txnBySub.set(
+      l.subsidiaryId,
+      addMoney(txnBySub.get(l.subsidiaryId) ?? "0", l.balanceTxnAmount ?? l.txnAmount ?? l.amount),
+    );
   }
   if (bySub.size <= 1) return [];
 
@@ -428,13 +460,16 @@ export async function intercompanyBalancingLegs(
   if (unbalanced.length === 0 && isZero(bySub.get(originSubId) ?? "0")) return [];
 
   const pairIds = unbalanced.map(([subId]) => subId);
-  const r = (await runner.execute<{ fromId: string; toId: string; dueFrom: string; dueTo: string }>(sql`
+  const r = await runner.execute<{ fromId: string; toId: string; dueFrom: string; dueTo: string }>(
+    sql`
     select from_subsidiary_id as "fromId", to_subsidiary_id as "toId",
            due_from_account_id as "dueFrom", due_to_account_id as "dueTo"
       from intercompany_pairs
      where org_id = ${opts.orgId} and is_active
        and ((from_subsidiary_id = ${originSubId} and to_subsidiary_id = any(${uuidArray(pairIds)}::uuid[]))
-         or (to_subsidiary_id = ${originSubId} and from_subsidiary_id = any(${uuidArray(pairIds)}::uuid[])))`, "objects"));
+         or (to_subsidiary_id = ${originSubId} and from_subsidiary_id = any(${uuidArray(pairIds)}::uuid[])))`,
+    "objects",
+  );
 
   const legs: IntercompanyLeg[] = [];
   for (const [subId, total] of unbalanced) {
@@ -467,9 +502,9 @@ export async function intercompanyBalancingLegs(
     // line rounding made the source rate unable to represent the net leg.
     const firstFxRate = subLines[0]?.fxRate ?? "1";
     const normalizedFirstFxRate = normalizeDecimal(firstFxRate, 10);
-    const oneFxRate = subLines.every(line => line.currency === transactionCurrency) && subLines.every(
-      (line) => normalizeDecimal(line.fxRate ?? "1", 10) === normalizedFirstFxRate,
-    );
+    const oneFxRate =
+      subLines.every((line) => line.currency === transactionCurrency) &&
+      subLines.every((line) => normalizeDecimal(line.fxRate ?? "1", 10) === normalizedFirstFxRate);
     const subFxRate =
       oneFxRate && mulRate(transactionTotal, firstFxRate) === total
         ? firstFxRate
@@ -513,10 +548,14 @@ export async function intercompanyBalancingLegs(
     // larger residual means the line rates do not reproduce the functional
     // amounts, so it is refused here by name rather than folded into the
     // due-to/from leg for the database to reject.
-    const originRows = [...lines.filter((line) => line.subsidiaryId === originSubId), ...originLegs];
+    const originRows = [
+      ...lines.filter((line) => line.subsidiaryId === originSubId),
+      ...originLegs,
+    ];
     let deviation = 0n;
     for (const row of originRows) {
-      const gap = toUnits(row.amount) - toUnits(mulRate(row.txnAmount ?? row.amount, row.fxRate ?? "1"));
+      const gap =
+        toUnits(row.amount) - toUnits(mulRate(row.txnAmount ?? row.amount, row.fxRate ?? "1"));
       deviation += gap < 0n ? -gap : gap;
     }
     if (2n * deviation > BigInt(originRows.length)) {

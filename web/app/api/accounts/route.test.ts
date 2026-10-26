@@ -59,16 +59,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      return (chunk as { queryChunks?: unknown[] })?.queryChunks
-        ? sqlText(chunk)
-        : "";
+      return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : "";
     })
     .join("");
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksAccountsSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksAccountsSqlText = sqlText;
 
 const dbDoubleBody = `
       const state = globalThis[Symbol.for('openbooks.accounts-route-test')]
@@ -147,10 +143,7 @@ const mockSources = new Map<string, string>([
      export async function findNamedAccounts() { return [] }
      export function duplicateNameRefusal() { throw new Error("the duplicate-name refusal is covered by route-duplicate.integration.test.ts") }`,
   ],
-  [
-    "mock:schema",
-    "export const ACCOUNT_TYPES = ['asset_other', 'income', 'expense']",
-  ],
+  ["mock:schema", "export const ACCOUNT_TYPES = ['asset_other', 'income', 'expense']"],
 ]);
 
 // '@/lib/api/json' is not mocked: a parseJsonBody double can only return
@@ -169,7 +162,7 @@ const _hooks = registerHooks({
     // an unrestricted caller: the idempotency contract never restricts the
     // caller, and a hand-copied guard double could only drift from the
     // production guards the route now calls.
-    if ((specifier === "@/lib/authz" || specifier === "../../../lib/authz")) {
+    if (specifier === "@/lib/authz" || specifier === "../../../lib/authz") {
       const real = nextResolve(specifier, context).url;
       const source = `
         export * from ${JSON.stringify(real)};
@@ -189,10 +182,7 @@ const _hooks = registerHooks({
     }
     if (specifier === "@openbooks/engine/platform/canonical-json") {
       return {
-        url: new URL(
-          "../../../../engine/src/platform/canonical-json.ts",
-          import.meta.url,
-        ).href,
+        url: new URL("../../../../engine/src/platform/canonical-json.ts", import.meta.url).href,
         shortCircuit: true,
       };
     }
@@ -202,8 +192,7 @@ const _hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });

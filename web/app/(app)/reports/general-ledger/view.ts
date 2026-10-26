@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
 import {
   column,
   field,
@@ -19,24 +19,36 @@ import {
   widgetCell,
   type PageSpec,
   type TableSpanRow,
-} from '@braedonsaunders/appkit-viewspec'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getAuthz, can } from '@/lib/authz'
-import { dimensionOptions, generalLedger } from '../../../../lib/reports'
-import { dimensionOptionsScope } from '../../../../lib/reports/filters'
-import { orgInfo } from '../../../../lib/data'
-import { resolveOrgId } from '../../../../lib/org-scope'
-import { AccountingContextError, accountingContextFilter, accountingContextLegend, localizeAccountRows, reportAccountingContext, type ReportAccountingContext } from '../../../../lib/reports/accounting-context'
-import { reportBookSelection } from '../../../../lib/report-books'
-import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
-import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
-import { resolvePeriod } from '../../../../lib/periods'
-import { isReportUuidParam, parseReportQuery } from '../../../../lib/report-filters'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { reportTotalRowClass } from '../ReportTable'
-import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
+} from "@braedonsaunders/appkit-viewspec";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getAuthz, can } from "@/lib/authz";
+import { dimensionOptions, generalLedger } from "../../../../lib/reports";
+import { dimensionOptionsScope } from "../../../../lib/reports/filters";
+import { orgInfo } from "../../../../lib/data";
+import { resolveOrgId } from "../../../../lib/org-scope";
+import {
+  AccountingContextError,
+  accountingContextFilter,
+  accountingContextLegend,
+  localizeAccountRows,
+  reportAccountingContext,
+  type ReportAccountingContext,
+} from "../../../../lib/reports/accounting-context";
+import { reportBookSelection } from "../../../../lib/report-books";
+import {
+  MissingRatesError,
+  reportSubsidiaryView,
+  type CurrencyBasisNotice,
+  type RatesBlockedNotice,
+} from "../../../../lib/consolidation";
+import { ReportCurrencyBasisError } from "../../../../lib/reports/currency-basis";
+import { resolvePeriod } from "../../../../lib/periods";
+import { isReportUuidParam, parseReportQuery } from "../../../../lib/report-filters";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { reportTotalRowClass } from "../ReportTable";
+import { decimalCmp, decimalIsZero } from "../../../../lib/statement-format";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
+import { statementReportSpec, stringReportParams } from "@/lib/reports/statement-report-spec";
 
 /**
  * The general ledger, split into a loader and a spec.
@@ -51,192 +63,211 @@ import { statementReportSpec, stringReportParams } from '@/lib/reports/statement
  * the nested table never needs to reach its parent account's scope.
  */
 
-type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
+type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>;
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
 
 interface TxnTarget {
-  kind: 'transaction'
-  entryId: string
-  docKind: string | null
-  docId: string | null
+  kind: "transaction";
+  entryId: string;
+  docKind: string | null;
+  docId: string | null;
 }
 
 export interface LedgerLine {
-  key: string
-  date: string
-  entryId: string
-  entryNumber: string | null
-  docKind: string | null
-  docId: string | null
-  detail: string
-  debit: string
-  credit: string
-  balance: string
-  balanceTone: 'default' | 'negative'
-  txn: TxnTarget
+  key: string;
+  date: string;
+  entryId: string;
+  entryNumber: string | null;
+  docKind: string | null;
+  docId: string | null;
+  detail: string;
+  debit: string;
+  credit: string;
+  balance: string;
+  balanceTone: "default" | "negative";
+  txn: TxnTarget;
 }
 
 export interface LedgerAccount {
-  id: string
-  number: string | null
-  name: string
-  opening: string
-  openingDrill: ReportDrillTarget
-  closing: string
-  closingTone: 'default' | 'negative'
-  closingDrill: ReportDrillTarget
-  lines: LedgerLine[]
+  id: string;
+  number: string | null;
+  name: string;
+  opening: string;
+  openingDrill: ReportDrillTarget;
+  closing: string;
+  closingTone: "default" | "negative";
+  closingDrill: ReportDrillTarget;
+  lines: LedgerLine[];
 }
 
 export interface GeneralLedgerData {
-  title: string
-  backHref: string
-  backLabel: string
-  company: string
-  periodPhrase: string
-  periodFrom: string
-  periodTo: string
-  truncated: boolean
-  truncatedLabel: string
+  title: string;
+  backHref: string;
+  backLabel: string;
+  company: string;
+  periodPhrase: string;
+  periodFrom: string;
+  periodTo: string;
+  truncated: boolean;
+  truncatedLabel: string;
   /** One page of detail lines; running balances carry across pages. */
-  paged: boolean
-  page: number
-  perPage: number
-  lineCount: number
-  emptyLabel: string
-  openingLabel: string
-  closingLabel: string
-  columnDate: string
-  columnEntry: string
-  columnDetail: string
-  columnDebits: string
-  columnCredits: string
-  columnBalance: string
+  paged: boolean;
+  page: number;
+  perPage: number;
+  lineCount: number;
+  emptyLabel: string;
+  openingLabel: string;
+  closingLabel: string;
+  columnDate: string;
+  columnEntry: string;
+  columnDetail: string;
+  columnDebits: string;
+  columnCredits: string;
+  columnBalance: string;
   /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
-  ratesBlocked: RatesBlockedNotice | null
+  ratesBlocked: RatesBlockedNotice | null;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /** False when either refusal is set; the paper hides with either. */
-  ratesReady: boolean
-  accounts: LedgerAccount[]
-  dimensions: DimensionOptions
-  subsidiaries: SubsidiaryPicker
+  ratesReady: boolean;
+  accounts: LedgerAccount[];
+  dimensions: DimensionOptions;
+  subsidiaries: SubsidiaryPicker;
   /** Book (more than one book) and accounting context (when contexts exist). */
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] }[] | null
+  primaryFilter:
+    | {
+        paramKey: string;
+        label: string;
+        value: string;
+        options: { value: string; label: string }[];
+      }[]
+    | null;
   /** Set when the requested accounting context cannot label the accounts. */
-  contextBlocked: { title: string; description: string } | null
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string>
+  contextBlocked: { title: string; description: string } | null;
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string>;
 }
 
 export async function loadGeneralLedger(
   sp: Record<string, string | undefined>,
 ): Promise<GeneralLedgerData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const tc = await getTranslations('common')
+  const { money: formatMoney } = await getMoneyFormatter();
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const tc = await getTranslations("common");
   // The book label reuses the budgets list's existing filter copy.
-  const tb = await getTranslations('budgets')
-  const scheduleDefId = await reportScheduleAnchor('general-ledger')
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const tb = await getTranslations("budgets");
+  const scheduleDefId = await reportScheduleAnchor("general-ledger");
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  const orgId = await resolveOrgId()
-  const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
+  const orgId = await resolveOrgId();
+  const { books, selectedBook } = await reportBookSelection(orgId, sp.book);
   // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link instead of any
   // numbers. A multi-currency viewed set refuses the same way, with the
   // subsidiary picker as its remedy. Anything else is a real defect and
   // still throws. The ledger runs only with a resolved subsidiary scope —
   // never scope-less.
-  const authz = await getAuthz()
-  const canSeePayroll = !!authz && can(authz, 'payroll.read')
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let ratesBlocked: RatesBlockedNotice | null = null
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
-  let gl: Awaited<ReturnType<typeof generalLedger>> | null = null
+  const authz = await getAuthz();
+  const canSeePayroll = !!authz && can(authz, "payroll.read");
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let ratesBlocked: RatesBlockedNotice | null = null;
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
+  let gl: Awaited<ReturnType<typeof generalLedger>> | null = null;
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id);
     gl = await generalLedger(period.from, period.to, {
       accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       bookId: selectedBook?.id,
       canSeePayroll,
-      page: GL_PAGE_PARAM in sp ? Number.parseInt(sp[GL_PAGE_PARAM] ?? '1', 10) || 1 : 1,
+      page: GL_PAGE_PARAM in sp ? Number.parseInt(sp[GL_PAGE_PARAM] ?? "1", 10) || 1 : 1,
       pageSize: GL_PAGE_SIZE,
-    })
+    });
   } catch (e) {
     if (e instanceof ReportCurrencyBasisError) {
       currencyBasisBlocked = {
-        code: 'multi-currency-basis',
-        title: t('statement.currencyBasisBlockedTitle'),
+        code: "multi-currency-basis",
+        title: t("statement.currencyBasisBlockedTitle"),
         description: e.message,
-      }
+      };
     } else {
-      if (!(e instanceof MissingRatesError)) throw e
+      if (!(e instanceof MissingRatesError)) throw e;
       ratesBlocked = {
-        code: 'rates-not-derived',
-        title: t('statement.ratesBlockedTitle'),
+        code: "rates-not-derived",
+        title: t("statement.ratesBlockedTitle"),
         description: (e as Error).message,
-        deriveLabel: t('statement.ratesBlockedAction'),
-        deriveHref: '/close',
-      }
+        deriveLabel: t("statement.ratesBlockedAction"),
+        deriveHref: "/close",
+      };
     }
   }
-  let accountingContext: ReportAccountingContext | null = null
-  let contextBlocked: GeneralLedgerData['contextBlocked'] = null
+  let accountingContext: ReportAccountingContext | null = null;
+  let contextBlocked: GeneralLedgerData["contextBlocked"] = null;
   try {
-    accountingContext = await reportAccountingContext(orgId, sp.ctx, { asOf: period.to, subsidiaryId: q.subsidiaryId ?? null })
+    accountingContext = await reportAccountingContext(orgId, sp.ctx, {
+      asOf: period.to,
+      subsidiaryId: q.subsidiaryId ?? null,
+    });
   } catch (e) {
-    if (!(e instanceof AccountingContextError)) throw e
-    contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+    if (!(e instanceof AccountingContextError)) throw e;
+    contextBlocked = {
+      title: t("accountingContext.blockedTitle"),
+      description: `${e.message} ${e.remedy}`,
+    };
   }
-  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids };
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds);
   const [opts, org] = await Promise.all([
     dimensionOptions(undefined, dims.projectId, optionScope),
     orgInfo(),
-  ])
+  ]);
   // Figures present in the VIEW's currency (the context node's functional
   // currency), not the org base — a foreign-functional subsidiary view
   // states its own money. Mirrors the P&L and balance sheet.
-  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency })
-  const openingTo = new Date(`${period.from}T00:00:00Z`)
-  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
-  const openingDate = openingTo.toISOString().slice(0, 10)
-  const openingLabel = t('generalLedger.opening')
-  const closingLabel = t('generalLedger.closing')
+  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency });
+  const openingTo = new Date(`${period.from}T00:00:00Z`);
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1);
+  const openingDate = openingTo.toISOString().slice(0, 10);
+  const openingLabel = t("generalLedger.opening");
+  const closingLabel = t("generalLedger.closing");
 
   return {
-    title: t('generalLedger.title'),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
-    company: org?.name ?? '',
-    periodPhrase: [selectedBook.name, t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale)), accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
+    title: t("generalLedger.title"),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
+    company: org?.name ?? "",
+    periodPhrase: [
+      selectedBook.name,
+      t("pnl.dateRange", civilDateParams({ from: period.from, to: period.to }, locale)),
+      accountingContext ? accountingContextLegend(accountingContext, t) : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
     periodFrom: period.from,
     periodTo: period.to,
     truncated: gl?.truncated ?? false,
-    truncatedLabel: t('generalLedger.truncated'),
+    truncatedLabel: t("generalLedger.truncated"),
     paged: (gl?.paging?.lineCount ?? 0) > GL_PAGE_SIZE,
     page: gl?.paging?.page ?? 1,
     perPage: gl?.paging?.pageSize ?? GL_PAGE_SIZE,
     lineCount: gl?.paging?.lineCount ?? 0,
-    emptyLabel: t('generalLedger.empty'),
+    emptyLabel: t("generalLedger.empty"),
     openingLabel,
     closingLabel,
-    columnDate: t('generalLedger.columns.date'),
-    columnEntry: t('generalLedger.columns.entry'),
-    columnDetail: t('generalLedger.columns.detail'),
-    columnDebits: t('trialBalance.columns.debits'),
-    columnCredits: t('trialBalance.columns.credits'),
-    columnBalance: tc('labels.balance'),
+    columnDate: t("generalLedger.columns.date"),
+    columnEntry: t("generalLedger.columns.entry"),
+    columnDetail: t("generalLedger.columns.detail"),
+    columnDebits: t("trialBalance.columns.debits"),
+    columnCredits: t("trialBalance.columns.credits"),
+    columnBalance: tc("labels.balance"),
     ratesBlocked,
     currencyBasisBlocked,
     ratesReady: ratesBlocked === null && currencyBasisBlocked === null && contextBlocked === null,
@@ -247,23 +278,23 @@ export async function loadGeneralLedger(
       name: a.name,
       opening: m(a.opening),
       openingDrill: {
-        kind: 'ledger',
+        kind: "ledger",
         label: `${a.name} · ${openingLabel}`,
         accountIds: [a.id],
         to: openingDate,
-        mode: 'balance',
+        mode: "balance",
         dims,
         bookId: selectedBook.id,
         includePeriodEndJournals: true,
       },
       closing: m(a.closing),
-      closingTone: decimalCmp(a.closing, '0') < 0 ? 'negative' : 'default',
+      closingTone: decimalCmp(a.closing, "0") < 0 ? "negative" : "default",
       closingDrill: {
-        kind: 'ledger',
+        kind: "ledger",
         label: `${a.name} · ${closingLabel}`,
         accountIds: [a.id],
         to: period.to,
-        mode: 'balance',
+        mode: "balance",
         dims,
         bookId: selectedBook.id,
         includePeriodEndJournals: true,
@@ -275,12 +306,12 @@ export async function loadGeneralLedger(
         entryNumber: l.entryNumber,
         docKind: l.docKind,
         docId: l.docId,
-        detail: [l.party, l.memo].filter(Boolean).join(' · '),
-        debit: decimalIsZero(l.debit) ? '' : m(l.debit),
-        credit: decimalIsZero(l.credit) ? '' : m(l.credit),
+        detail: [l.party, l.memo].filter(Boolean).join(" · "),
+        debit: decimalIsZero(l.debit) ? "" : m(l.debit),
+        credit: decimalIsZero(l.credit) ? "" : m(l.credit),
         balance: m(l.balance),
-        balanceTone: decimalCmp(l.balance, '0') < 0 ? 'negative' : 'default',
-        txn: { kind: 'transaction', entryId: l.entryId, docKind: l.docKind, docId: l.docId },
+        balanceTone: decimalCmp(l.balance, "0") < 0 ? "negative" : "default",
+        txn: { kind: "transaction", entryId: l.entryId, docKind: l.docKind, docId: l.docId },
       })),
     })),
     dimensions: opts,
@@ -289,165 +320,173 @@ export async function loadGeneralLedger(
       const filters = [
         books.length > 1
           ? {
-              paramKey: 'book',
-              label: tb('list.bookFilter'),
-              value: selectedBook?.id ?? '',
+              paramKey: "book",
+              label: tb("list.bookFilter"),
+              value: selectedBook?.id ?? "",
               options: books.map((b) => ({ value: b.id, label: b.name })),
             }
           : null,
         accountingContext ? accountingContextFilter(accountingContext, t) : null,
-      ].filter((filter) => filter !== null)
-      return filters.length > 0 ? filters : null
+      ].filter((filter) => filter !== null);
+      return filters.length > 0 ? filters : null;
     })(),
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringReportParams(sp),
-  }
+  };
 }
 
 /** Detail lines per screen; exports and schedules read the full ledger. */
-const GL_PAGE_SIZE = 500
-const GL_PAGE_PARAM = 'glPage'
+const GL_PAGE_SIZE = 500;
+const GL_PAGE_PARAM = "glPage";
 
-const f = ref<GeneralLedgerData>()
-const item = field
+const f = ref<GeneralLedgerData>();
+const item = field;
 /** Page-level labels referenced from inside the per-account repeat. */
-const rootF = rootRef<GeneralLedgerData>()
+const rootF = rootRef<GeneralLedgerData>();
 
 /** Opening balance — five spanned label columns, then the drilled amount. */
 const openingRow: TableSpanRow = {
-  label: rootF('openingLabel'),
+  label: rootF("openingLabel"),
   labelColSpan: 5,
-  labelClassName: 'text-xs font-medium text-slate-500 dark:text-slate-400',
+  labelClassName: "text-xs font-medium text-slate-500 dark:text-slate-400",
   cells: [
     {
-      cell: drill(item('openingDrill'), money(item('opening'))),
-      align: 'right',
-      className: 'font-medium tabular-nums',
+      cell: drill(item("openingDrill"), money(item("opening"))),
+      align: "right",
+      className: "font-medium tabular-nums",
     },
   ],
-}
+};
 
 const closingRow: TableSpanRow = {
-  label: rootF('closingLabel'),
+  label: rootF("closingLabel"),
   labelColSpan: 5,
-  labelClassName: 'text-xs font-semibold',
+  labelClassName: "text-xs font-semibold",
   className: reportTotalRowClass,
   cells: [
     {
-      cell: drill(item('closingDrill'), money(item('closing'), { tone: item('closingTone') })),
-      align: 'right',
-      className: 'font-semibold tabular-nums',
+      cell: drill(item("closingDrill"), money(item("closing"), { tone: item("closingTone") })),
+      align: "right",
+      className: "font-semibold tabular-nums",
     },
   ],
-}
+};
 
 export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
   return statementReportSpec({
-    route: '/reports/general-ledger',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
-    filters: [{
-      controls: { period: true, dimensions: true, subsidiary: true },
-      options: {
-        dimensions: f('dimensions'),
-        subsidiaries: f('subsidiaries'),
-        primaryFilter: f('primaryFilter'),
+    route: "/reports/general-ledger",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
+    filters: [
+      {
+        controls: { period: true, dimensions: true, subsidiary: true },
+        options: {
+          dimensions: f("dimensions"),
+          subsidiaries: f("subsidiaries"),
+          primaryFilter: f("primaryFilter"),
+        },
       },
-    }],
+    ],
     schedule: {
-      definitionId: data.scheduleDefId ?? '',
+      definitionId: data.scheduleDefId ?? "",
       statementParams: data.scheduleParams,
-      when: f('scheduleDefId'),
+      when: f("scheduleDefId"),
     },
-    exportMenu: { kind: 'general-ledger', params: data.exportParams },
-    headerAfterFilters: [textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') })],
+    exportMenu: { kind: "general-ledger", params: data.exportParams },
+    headerAfterFilters: [textBlock(f("truncatedLabel"), { tone: "warning", when: f("truncated") })],
     bodyBeforePaper: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: data.ratesBlocked?.deriveHref ?? "/close",
+            label: data.ratesBlocked?.deriveLabel ?? "",
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
       ...(data.contextBlocked
-        ? [{
-            ...widgetBlock('empty-state', {
-              title: data.contextBlocked.title,
-              description: data.contextBlocked.description,
-            }),
-            when: f('contextBlocked'),
-          }]
+        ? [
+            {
+              ...widgetBlock("empty-state", {
+                title: data.contextBlocked.title,
+                description: data.contextBlocked.description,
+              }),
+              when: f("contextBlocked"),
+            },
+          ]
         : []),
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
       wide: true,
-      when: f('ratesReady'),
+      when: f("ratesReady"),
     },
     blocks: [
       repeat({
-        items: f('accounts'),
-        itemKey: item('id'),
-        className: 'space-y-8',
-        empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
+        items: f("accounts"),
+        itemKey: item("id"),
+        className: "space-y-8",
+        empty: { text: f("emptyLabel"), className: "py-8 text-center text-slate-400 italic" },
         blocks: [
-          widgetBlock('account-heading', {
-            accountId: item('id'),
-            from: rootF('periodFrom'),
-            to: rootF('periodTo'),
-            number: item('number'),
-            name: item('name'),
+          widgetBlock("account-heading", {
+            accountId: item("id"),
+            from: rootF("periodFrom"),
+            to: rootF("periodTo"),
+            number: item("number"),
+            name: item("name"),
           }),
           table({
-            variant: 'report',
-            rows: item('lines'),
-            rowKey: item('key'),
+            variant: "report",
+            rows: item("lines"),
+            rowKey: item("key"),
             leading: [openingRow],
             trailing: [closingRow],
             columns: [
-              column(rootF('columnDate'), text(item('date')), {
-                headerClassName: 'w-28',
-                className: 'tabular-nums',
+              column(rootF("columnDate"), text(item("date")), {
+                headerClassName: "w-28",
+                className: "tabular-nums",
               }),
               column(
-                rootF('columnEntry'),
-                widgetCell('entry-cell', {
-                  entryId: item('entryId'),
-                  docKind: item('docKind'),
-                  docId: item('docId'),
-                  entryNumber: item('entryNumber'),
+                rootF("columnEntry"),
+                widgetCell("entry-cell", {
+                  entryId: item("entryId"),
+                  docKind: item("docKind"),
+                  docId: item("docId"),
+                  entryNumber: item("entryNumber"),
                 }),
-                { headerClassName: 'w-24' },
+                { headerClassName: "w-24" },
               ),
-              column(rootF('columnDetail'), text(item('detail')), {
-                className: 'text-slate-600 dark:text-slate-300',
+              column(rootF("columnDetail"), text(item("detail")), {
+                className: "text-slate-600 dark:text-slate-300",
               }),
-              column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-              column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
+              column(rootF("columnDebits"), txn(item("txn"), money(item("debit"))), {
+                align: "right",
+              }),
+              column(rootF("columnCredits"), txn(item("txn"), money(item("credit"))), {
+                align: "right",
+              }),
               column(
-                rootF('columnBalance'),
-                txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
-                { align: 'right' },
+                rootF("columnBalance"),
+                txn(item("txn"), money(item("balance"), { tone: item("balanceTone") })),
+                { align: "right" },
               ),
             ],
           }),
@@ -455,14 +494,14 @@ export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
       }),
       {
         ...pagination({
-          basePath: '/reports/general-ledger',
-          total: f('lineCount'),
-          page: f('page'),
-          perPage: f('perPage'),
+          basePath: "/reports/general-ledger",
+          total: f("lineCount"),
+          page: f("page"),
+          perPage: f("perPage"),
           pageParamKey: GL_PAGE_PARAM,
         }),
-        when: f('paged'),
+        when: f("paged"),
       },
     ],
-  })
+  });
 }

@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
-import { db } from '@openbooks/engine/platform/db'
-import { registeredListTable } from '../../../lib/list/prepared-spec'
+import { sql } from "drizzle-orm";
+import { getFormatter, getLocale, getTranslations } from "next-intl/server";
+import { notFound } from "next/navigation";
+import { db } from "@openbooks/engine/platform/db";
+import { registeredListTable } from "../../../lib/list/prepared-spec";
 import {
   column,
   field,
@@ -19,17 +19,21 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { guardCloseScope } from '../../../lib/close-scope'
-import { parseLockDates, periodCloser } from '../../../lib/close/period-attribution'
-import { periodDisplayLabel, periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
-import { formatCivilDate } from '../../../lib/format'
-import { can, requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { currentFiscalYear } from '../../../lib/fiscal'
-import { clamp, isUuid, pickString } from '../../../lib/list-params'
-import { featureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../lib/features'
-import type { CloseWizard } from './CloseWizard'
+} from "@braedonsaunders/appkit-viewspec";
+import { guardCloseScope } from "../../../lib/close-scope";
+import { parseLockDates, periodCloser } from "../../../lib/close/period-attribution";
+import { periodDisplayLabel, periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
+import { formatCivilDate } from "../../../lib/format";
+import { can, requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { currentFiscalYear } from "../../../lib/fiscal";
+import { clamp, isUuid, pickString } from "../../../lib/list-params";
+import {
+  featureEnabled,
+  resolvedFeatureState,
+  subsidiaryFeatureEnabled,
+} from "../../../lib/features";
+import type { CloseWizard } from "./CloseWizard";
 import type {
   CloseEventRow,
   CloseEvidenceRow,
@@ -38,7 +42,7 @@ import type {
   CloseRunRow,
   CloseSignoffRow,
   CloseWizardTaskRow,
-} from './CloseWizard'
+} from "./CloseWizard";
 
 /**
  * Period close, split into a loader and a spec.
@@ -68,8 +72,8 @@ import type {
  * Query, permission and formatting logic below are verbatim from page.tsx.
  */
 
-const PER_PAGE = 20
-const BASE = '/close'
+const PER_PAGE = 20;
+const BASE = "/close";
 
 /**
  * The wizard's props, resolved by the loader.
@@ -80,110 +84,110 @@ const BASE = '/close'
  * themselves, and the four `can*` flags are the same resolved-permission
  * booleans every other page binds.
  */
-export type CloseWizardData = Omit<Parameters<typeof CloseWizard>[0], never>
+export type CloseWizardData = Omit<Parameters<typeof CloseWizard>[0], never>;
 
 const STATUS_VALUES = [
-  'not_started',
-  'in_progress',
-  'review',
-  'approved',
-  'closed',
-  'published',
-] as const
+  "not_started",
+  "in_progress",
+  "review",
+  "approved",
+  "closed",
+  "published",
+] as const;
 
-type BadgeVariant = 'success' | 'warning' | 'outline'
+type BadgeVariant = "success" | "warning" | "outline";
 
 export interface ClosePeriodRow {
-  id: string
-  name: string
-  range: string
-  statusLabel: string
-  statusVariant: BadgeVariant
+  id: string;
+  name: string;
+  range: string;
+  statusLabel: string;
+  statusVariant: BadgeVariant;
   /** Localized "which modules are locked (lock date) · on which book" line, or null when
    * the selected book holds no closed locks for the period. Locks can exist
    * without any close run (autopilot/provisioner closes, API closes), so the
    * run badge alone cannot speak for them. */
-  lockLabel: string | null
+  lockLabel: string | null;
   /** "Name · date" of whoever closed the period, or a dash while it is open. */
-  closedByLabel: string
-  readiness: number
-  entries: string
-  actionHref: string | null
-  canStart: boolean
-  startPeriodId: string
-  startDefaultBookId: string
+  closedByLabel: string;
+  readiness: number;
+  entries: string;
+  actionHref: string | null;
+  canStart: boolean;
+  startPeriodId: string;
+  startDefaultBookId: string;
 }
 
 /** `accounting_books` as selected for the book chips. All NOT NULL. */
 type CloseBookRow = {
-  id: string
-  name: string
-  code: string
-  is_primary: boolean
-}
+  id: string;
+  name: string;
+  code: string;
+  is_primary: boolean;
+};
 
 /** Period list query output: `accounting_periods` (dates arrive as ISO-date
  *  strings) left-joined to the selected book's close run. `entries` is a
  *  count so the driver hands back a string; `readiness_score` is an integer. */
 type ClosePeriodDbRow = {
-  id: string
-  name: string
-  starts_on: string
-  ends_on: string
-  fiscal_year: number
-  period_number: number
-  is_adjustment: boolean
-  run_id: string | null
-  status: string | null
-  current_stage: string | null
-  readiness_score: number | null
-  target_close_date: string | null
-  entries: string | number
-  locked_modules: string | null
+  id: string;
+  name: string;
+  starts_on: string;
+  ends_on: string;
+  fiscal_year: number;
+  period_number: number;
+  is_adjustment: boolean;
+  run_id: string | null;
+  status: string | null;
+  current_stage: string | null;
+  readiness_score: number | null;
+  target_close_date: string | null;
+  entries: string | number;
+  locked_modules: string | null;
   /** `module:YYYY-MM-DD` per closed lock, comma separated (UTC lock dates). */
-  lock_dates: string | null
-  lock_closed_on: string | null
-  lock_closer_name: string | null
-  run_closed_on: string | null
-  run_closer_name: string | null
-}
+  lock_dates: string | null;
+  lock_closed_on: string | null;
+  lock_closer_name: string | null;
+  run_closed_on: string | null;
+  run_closer_name: string | null;
+};
 
 export interface CloseData {
-  title: string
-  description: string
-  manageBooksLabel: string
-  canManageBooks: boolean
-  searchPlaceholder: string
-  currentParams: Record<string, string | string[] | undefined>
-  showBookChips: boolean
-  showSingleBook: boolean
-  bookLabel: string
-  bookOptions: { value: string; label: string }[]
-  selectedBookId: string
-  singleBookName: string
-  fyLabel: string
-  fyDefault: string
-  fyOptions: { value: string; label: string }[]
-  statusLabel: string
-  statusOptions: { value: string; label: string }[]
-  columnPeriod: string
-  columnRange: string
-  columnStatus: string
-  columnClosedBy: string
-  columnReadiness: string
-  columnEntries: string
-  columnAction: string
-  resumeLabel: string
-  actionLinkClassName: string
-  startBooks: { id: string; name: string }[]
-  onList: boolean
-  onRun: boolean
+  title: string;
+  description: string;
+  manageBooksLabel: string;
+  canManageBooks: boolean;
+  searchPlaceholder: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  showBookChips: boolean;
+  showSingleBook: boolean;
+  bookLabel: string;
+  bookOptions: { value: string; label: string }[];
+  selectedBookId: string;
+  singleBookName: string;
+  fyLabel: string;
+  fyDefault: string;
+  fyOptions: { value: string; label: string }[];
+  statusLabel: string;
+  statusOptions: { value: string; label: string }[];
+  columnPeriod: string;
+  columnRange: string;
+  columnStatus: string;
+  columnClosedBy: string;
+  columnReadiness: string;
+  columnEntries: string;
+  columnAction: string;
+  resumeLabel: string;
+  actionLinkClassName: string;
+  startBooks: { id: string; name: string }[];
+  onList: boolean;
+  onRun: boolean;
   /** Everything the run wizard renders. Null on the list branch. */
-  wizard: CloseWizardData | null
-  rows: ClosePeriodRow[]
-  total: number
-  currentPage: number
-  perPage: number
+  wizard: CloseWizardData | null;
+  rows: ClosePeriodRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
 }
 
 /**
@@ -199,10 +203,19 @@ async function loadCloseWizard(
   stage: string | undefined,
   authz: Awaited<ReturnType<typeof requirePermission>>,
 ): Promise<CloseWizardData | null> {
-  const { orgId } = authz.user
-  const [runRes, tasksRes, exceptionsRes, evidenceRes, signoffsRes, eventsRes, locksRes, historyRes] =
-    await Promise.all([
-      db.execute<CloseRunRow>(sql`
+  const { orgId } = authz.user;
+  const [
+    runRes,
+    tasksRes,
+    exceptionsRes,
+    evidenceRes,
+    signoffsRes,
+    eventsRes,
+    locksRes,
+    historyRes,
+  ] = await Promise.all([
+    db.execute<CloseRunRow>(
+      sql`
         select r.*, p.name as period_name, p.starts_on, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
                b.name as book_name, b.code as book_code,
                bp.name as blueprint_name, bp.version as blueprint_version,
@@ -218,8 +231,11 @@ async function loadCloseWizard(
           left join users approver on approver.id = r.approved_by
           left join users closer on closer.id = r.closed_by
           left join users publisher on publisher.id = r.published_by
-         where r.id = ${runId} and r.org_id = ${orgId}`, 'objects'),
-      db.execute<CloseWizardTaskRow>(sql`
+         where r.id = ${runId} and r.org_id = ${orgId}`,
+      "objects",
+    ),
+    db.execute<CloseWizardTaskRow>(
+      sql`
         select t.*, owner.name as owner_name, reviewer.name as reviewer_name,
                coalesce(jsonb_agg(distinct dep.key) filter (where dep.id is not null), '[]'::jsonb) as dependencies,
                count(distinct ev.id) as evidence_count
@@ -230,32 +246,42 @@ async function loadCloseWizard(
           left join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id and dep.org_id = t.org_id
           left join close_task_evidence ev on ev.task_id = t.id and ev.org_id = t.org_id
          where t.run_id = ${runId} and t.org_id = ${orgId}
-         group by t.id, owner.name, reviewer.name order by t.sort_order`, 'objects'),
-      db.execute<CloseExceptionRow>(
-        sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by status, case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end, created_at`, 'objects',
-      ),
-      db.execute<CloseEvidenceRow>(
-        sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at desc`, 'objects',
-      ),
-      db.execute<CloseSignoffRow>(
-        sql`select s.*, u.name as signed_by_name from close_signoffs s join users u on u.id = s.signed_by where s.run_id = ${runId} and s.org_id = ${orgId} order by s.signed_at desc`, 'objects',
-      ),
-      db.execute<CloseEventRow>(
-        sql`select e.*, u.name as actor_name from close_events e left join users u on u.id = e.actor_id where e.run_id = ${runId} and e.org_id = ${orgId} order by e.at desc limit 100`, 'objects',
-      ),
-      db.execute<CloseLockRow>(
-        sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId}) and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`, 'objects',
-      ),
-      db.execute<{ key: string; average_days: string }>(sql`
+         group by t.id, owner.name, reviewer.name order by t.sort_order`,
+      "objects",
+    ),
+    db.execute<CloseExceptionRow>(
+      sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by status, case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end, created_at`,
+      "objects",
+    ),
+    db.execute<CloseEvidenceRow>(
+      sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at desc`,
+      "objects",
+    ),
+    db.execute<CloseSignoffRow>(
+      sql`select s.*, u.name as signed_by_name from close_signoffs s join users u on u.id = s.signed_by where s.run_id = ${runId} and s.org_id = ${orgId} order by s.signed_at desc`,
+      "objects",
+    ),
+    db.execute<CloseEventRow>(
+      sql`select e.*, u.name as actor_name from close_events e left join users u on u.id = e.actor_id where e.run_id = ${runId} and e.org_id = ${orgId} order by e.at desc limit 100`,
+      "objects",
+    ),
+    db.execute<CloseLockRow>(
+      sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId}) and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`,
+      "objects",
+    ),
+    db.execute<{ key: string; average_days: string }>(
+      sql`
         select t.key,
                avg(extract(epoch from (t.completed_at - r.started_at)) / 86400.0)::numeric(10,1) as average_days
           from close_run_tasks t join close_runs r on r.id = t.run_id and r.org_id = t.org_id
          where t.org_id = ${orgId} and t.completed_at is not null and r.id <> ${runId}
-         group by t.key`, 'objects'),
-    ])
+         group by t.key`,
+      "objects",
+    ),
+  ]);
 
-  const storedRun = runRes[0]
-  if (!storedRun) return null
+  const storedRun = runRes[0];
+  if (!storedRun) return null;
   // The run reads with the same period label as the close list that opened it.
   const run: CloseRunRow = {
     ...storedRun,
@@ -269,15 +295,13 @@ async function loadCloseWizard(
       },
       await getLocale(),
     ),
-  }
+  };
 
-  const history = new Map(
-    historyRes.map((row) => [row.key, Number(row.average_days)]),
-  )
+  const history = new Map(historyRes.map((row) => [row.key, Number(row.average_days)]));
   const [subsidiaryEnabled, featureState] = await Promise.all([
     subsidiaryFeatureEnabled(orgId),
     resolvedFeatureState(orgId),
-  ])
+  ]);
   return {
     // The requested stage, so `?stage=publish` deep links land where they
     // say. The wizard falls back to the run's current stage when it is
@@ -293,17 +317,17 @@ async function loadCloseWizard(
     signoffs: signoffsRes,
     events: eventsRes,
     locks: locksRes,
-    canRun: can(authz, 'close.run'),
-    canApprove: can(authz, 'close.approve'),
-    canReopen: can(authz, 'close.reopen'),
-    canManageFlows: can(authz, 'flows.manage'),
+    canRun: can(authz, "close.run"),
+    canApprove: can(authz, "close.approve"),
+    canReopen: can(authz, "close.reopen"),
+    canManageFlows: can(authz, "flows.manage"),
     subsidiaryEnabled,
-    multiCurrency: featureEnabled(featureState, 'multiCurrency'),
-    advancedClose: featureEnabled(featureState, 'advancedClose'),
-    canPostGl: can(authz, 'gl.post'),
-    unbilledRevenueAccrual: featureEnabled(featureState, 'unbilledRevenueAccrual'),
-    periodEndJournals: featureEnabled(featureState, 'periodEndJournals'),
-  }
+    multiCurrency: featureEnabled(featureState, "multiCurrency"),
+    advancedClose: featureEnabled(featureState, "advancedClose"),
+    canPostGl: can(authz, "gl.post"),
+    unbilledRevenueAccrual: featureEnabled(featureState, "unbilledRevenueAccrual"),
+    periodEndJournals: featureEnabled(featureState, "periodEndJournals"),
+  };
 }
 
 /**
@@ -325,28 +349,33 @@ function lockModulesLateral(selectedBookId: string) {
            where pl.period_id = p.id and pl.org_id = p.org_id and pl.subsidiary_id is null and pl.state = 'closed'
              and pl.book_id = ${selectedBookId || null}
         ) l on true
-        left join users lock_closer on lock_closer.id = l.lock_closed_by`
+        left join users lock_closer on lock_closer.id = l.lock_closed_by`;
 }
 
 export async function loadClose(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<CloseData> {
-  const authz = await requirePermission('close.read')
-  if (guardCloseScope(authz)) notFound()
-  const { orgId } = authz.user
+  const authz = await requirePermission("close.read");
+  if (guardCloseScope(authz)) notFound();
+  const { orgId } = authz.user;
   // The Continuous Close switch is the authoritative parent gate for the whole
   // /close segment: nav hiding alone leaves direct URLs reachable, which is
   // UI-only enforcement.
-  await requireFeatureEnabled(orgId, 'continuousClose')
-  const t = await getTranslations('close')
-  const format = await getFormatter()
-  let runId = pickString(sp.run)
-  const taskId=pickString(sp.task)
-  if(taskId){
-    if(!isUuid(taskId))notFound()
-    const task=(await db.execute<{run_id:string}>(sql`select run_id from close_run_tasks where org_id=${orgId} and id=${taskId}`, 'objects'))[0]
-    if(!task || (runId && runId!==task.run_id))notFound()
-    runId=task.run_id
+  await requireFeatureEnabled(orgId, "continuousClose");
+  const t = await getTranslations("close");
+  const format = await getFormatter();
+  let runId = pickString(sp.run);
+  const taskId = pickString(sp.task);
+  if (taskId) {
+    if (!isUuid(taskId)) notFound();
+    const task = (
+      await db.execute<{ run_id: string }>(
+        sql`select run_id from close_run_tasks where org_id=${orgId} and id=${taskId}`,
+        "objects",
+      )
+    )[0];
+    if (!task || (runId && runId !== task.run_id)) notFound();
+    runId = task.run_id;
   }
   // The native page renders the wizard only for a UUID run id that names a
   // row; anything else falls through to the list.
@@ -355,40 +384,39 @@ export async function loadClose(
   // check, which meant the page knew it was on the run branch and still had
   // nothing to render it with.
   const wizard =
-    runId && isUuid(runId) ? await loadCloseWizard(runId, pickString(sp.stage), authz) : null
-  const onRun = wizard !== null
-  const onList = !onRun
-  const currentFy = await currentFiscalYear()
+    runId && isUuid(runId) ? await loadCloseWizard(runId, pickString(sp.stage), authz) : null;
+  const onRun = wizard !== null;
+  const onList = !onRun;
+  const currentFy = await currentFiscalYear();
   // A hand-edited or stale fy must fall back like an absent one: NaN (and
   // fractional or out-of-range years) would otherwise ride straight into the
   // fiscal_year predicate and 500 on a database cast error.
-  const fyRaw = pickString(sp.fy)
-  const fyParsed = fyRaw === undefined ? currentFy : Number(fyRaw)
-  const fy = Number.isInteger(fyParsed) && fyParsed >= 1900 && fyParsed <= 9999 ? fyParsed : currentFy
-  const status = pickString(sp.status)
-  const q = pickString(sp.q)?.trim()
-  const pageNum = clamp(Number(pickString(sp.page) ?? 1), 1, 10_000)
-  const offset = (pageNum - 1) * PER_PAGE
+  const fyRaw = pickString(sp.fy);
+  const fyParsed = fyRaw === undefined ? currentFy : Number(fyRaw);
+  const fy =
+    Number.isInteger(fyParsed) && fyParsed >= 1900 && fyParsed <= 9999 ? fyParsed : currentFy;
+  const status = pickString(sp.status);
+  const q = pickString(sp.q)?.trim();
+  const pageNum = clamp(Number(pickString(sp.page) ?? 1), 1, 10_000);
+  const offset = (pageNum - 1) * PER_PAGE;
   const books = await db.execute<CloseBookRow>(
-    sql`select id, name, code, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`, 'objects',
-  )
-  const requestedBookId = pickString(sp.book)
-  const selectedBookId = books.some(
-    (book) => book.id === requestedBookId,
-  )
+    sql`select id, name, code, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`,
+    "objects",
+  );
+  const requestedBookId = pickString(sp.book);
+  const selectedBookId = books.some((book) => book.id === requestedBookId)
     ? requestedBookId!
-    : (books.find((book) => book.is_primary)?.id ??
-      books[0]?.id ??
-      '')
+    : (books.find((book) => book.is_primary)?.id ?? books[0]?.id ?? "");
   // Search matches the label the list shows in the viewer's locale as well as
   // the stored name, so a period listed as "P11 FY2025 · Nov 2025" is found by
   // typing "P11" or "Nov 2025".
-  const locale = await getLocale()
+  const locale = await getLocale();
   const periodSearch = q
     ? sql`and (p.name ilike ${`%${q}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${q}%`})`
-    : sql``
-  const [periods, count, fys] = ((await Promise.all([
-    db.execute<ClosePeriodDbRow>(sql`
+    : sql``;
+  const [periods, count, fys] = await Promise.all([
+    db.execute<ClosePeriodDbRow>(
+      sql`
       select p.id, p.name, p.starts_on, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
              r.id as run_id, r.status, r.current_stage, r.readiness_score, r.target_close_date,
              coalesce(a.entries, 0) as entries,
@@ -403,130 +431,140 @@ export async function loadClose(
         ${lockModulesLateral(selectedBookId)}
        where p.org_id = ${orgId} and p.fiscal_year = ${fy}
          ${periodSearch}
-         ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}
+         ${status && status !== "all" ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}
        order by p.period_number
-       limit ${PER_PAGE} offset ${offset}`, 'objects'),
-    db.execute(sql`
+       limit ${PER_PAGE} offset ${offset}`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select count(*) as count from accounting_periods p
       left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
         and r.book_id = ${selectedBookId || null}
       where p.org_id = ${orgId} and p.fiscal_year = ${fy}
         ${periodSearch}
-        ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}`, 'objects'),
-    db.execute(
-      sql`select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc`, 'objects',
+        ${status && status !== "all" ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}`,
+      "objects",
     ),
-  ])))
-  const canStartClose = can(authz, 'close.run')
+    db.execute(
+      sql`select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc`,
+      "objects",
+    ),
+  ]);
+  const canStartClose = can(authz, "close.run");
   // Every row's locks belong to the selected book; name it so the lock line
   // answers which book is locked without a trip to the filter chips.
   const lockBookName =
-    (books as { id: string; name: string }[]).find((book) => book.id === selectedBookId)?.name ?? ''
+    (books as { id: string; name: string }[]).find((book) => book.id === selectedBookId)?.name ??
+    "";
 
   return {
-    title: t('title'),
-    description: t('workspaceDescription'),
-    manageBooksLabel: t('actions.manageBooks'),
-    canManageBooks: can(authz, 'admin.setup.manage'),
-    searchPlaceholder: t('searchPlaceholder'),
+    title: t("title"),
+    description: t("workspaceDescription"),
+    manageBooksLabel: t("actions.manageBooks"),
+    canManageBooks: can(authz, "admin.setup.manage"),
+    searchPlaceholder: t("searchPlaceholder"),
     currentParams: sp,
     showBookChips: books.length > 1,
     showSingleBook: books.length <= 1 && Boolean(books[0]),
-    bookLabel: t('filters.book'),
+    bookLabel: t("filters.book"),
     bookOptions: books.map((row) => ({
       value: row.id,
       label: row.name,
     })),
     selectedBookId,
-    singleBookName: books[0]?.name ?? '',
-    fyLabel: t('filters.fiscalYear'),
+    singleBookName: books[0]?.name ?? "",
+    fyLabel: t("filters.fiscalYear"),
     fyDefault: String(currentFy),
     fyOptions: fys.map((row) => ({
       value: String(row.fiscal_year),
-      label: t('filters.fyOption', { year: String(row.fiscal_year) }),
+      label: t("filters.fyOption", { year: String(row.fiscal_year) }),
     })),
-    statusLabel: t('filters.status'),
+    statusLabel: t("filters.status"),
     statusOptions: STATUS_VALUES.map((value) => ({ value, label: t(`runStatus.${value}`) })),
-    columnPeriod: t('table.period'),
-    columnRange: t('table.range'),
-    columnStatus: t('table.status'),
-    columnClosedBy: t('table.closedBy'),
-    columnReadiness: t('table.readiness'),
-    columnEntries: t('table.entries'),
-    columnAction: t('table.action'),
-    resumeLabel: t('actions.resume'),
-    actionLinkClassName: 'text-sm font-medium text-teal-700 hover:underline dark:text-teal-300',
+    columnPeriod: t("table.period"),
+    columnRange: t("table.range"),
+    columnStatus: t("table.status"),
+    columnClosedBy: t("table.closedBy"),
+    columnReadiness: t("table.readiness"),
+    columnEntries: t("table.entries"),
+    columnAction: t("table.action"),
+    resumeLabel: t("actions.resume"),
+    actionLinkClassName: "text-sm font-medium text-teal-700 hover:underline dark:text-teal-300",
     startBooks: books.map((row) => ({ id: row.id, name: row.name })),
     onList,
     onRun,
     wizard,
     rows: periods.map((period) => {
-      const lockedModules = String(period.locked_modules ?? '')
-        .split(',')
-        .filter(Boolean)
+      const lockedModules = String(period.locked_modules ?? "")
+        .split(",")
+        .filter(Boolean);
       // Each closed module with the UTC date it was locked, so the lock line
       // names when every module closed rather than only which ones did.
-      const lockDates = parseLockDates(period.lock_dates)
-      const formatDay = (iso: string) => format.dateTime(new Date(`${iso}T00:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })
+      const lockDates = parseLockDates(period.lock_dates);
+      const formatDay = (iso: string) =>
+        format.dateTime(new Date(`${iso}T00:00:00Z`), { dateStyle: "medium", timeZone: "UTC" });
       const closer = periodCloser({
         runStatus: period.status,
         runCloserName: period.run_closer_name,
         runClosedOn: period.run_closed_on,
         lockCloserName: period.lock_closer_name,
         lockClosedOn: period.lock_closed_on,
-      })
+      });
       // One label rule for every period of the calendar, derived from its
       // fiscal year, number and dates rather than its free-text stored name.
       return {
-      id: period.id,
-      name: periodDisplayLabel(
-        {
-          fiscalYear: period.fiscal_year,
-          periodNumber: period.period_number,
-          adjustment: period.is_adjustment,
-          startsOn: period.starts_on,
-          endsOn: period.ends_on,
-        },
-        locale,
-      ),
-      range: `${formatCivilDate(period.starts_on, locale)} → ${formatCivilDate(period.ends_on, locale)}`,
-      statusLabel: t(`runStatus.${period.status ?? 'not_started'}`),
-      statusVariant: (
-        period.status === 'published' || period.status === 'closed'
-          ? 'success'
+        id: period.id,
+        name: periodDisplayLabel(
+          {
+            fiscalYear: period.fiscal_year,
+            periodNumber: period.period_number,
+            adjustment: period.is_adjustment,
+            startsOn: period.starts_on,
+            endsOn: period.ends_on,
+          },
+          locale,
+        ),
+        range: `${formatCivilDate(period.starts_on, locale)} → ${formatCivilDate(period.ends_on, locale)}`,
+        statusLabel: t(`runStatus.${period.status ?? "not_started"}`),
+        statusVariant: (period.status === "published" || period.status === "closed"
+          ? "success"
           : period.status
-            ? 'warning'
-            : 'outline'
-      ) as BadgeVariant,
-      lockLabel: lockedModules.length
-        ? t('table.lockedDetail', {
-            modules: lockedModules
-              .map((module) => {
-                const lockedOn = lockDates.get(module)
-                return lockedOn ? `${t(`modules.${module}`)} (${formatDay(lockedOn)})` : t(`modules.${module}`)
-              })
-              .join(', '),
-            book: lockBookName,
-          })
-        : null,
-      closedByLabel: closer ? t('table.closedByDetail', { name: closer.name, date: formatDay(closer.on) }) : '—',
-      readiness: period.readiness_score ?? 0,
-      entries: format.number(Number(period.entries)),
-      actionHref: period.run_id ? `/close?run=${period.run_id}` : null,
-      canStart: !period.run_id && canStartClose,
-      startPeriodId: period.id,
-      startDefaultBookId: selectedBookId,
-      }
+            ? "warning"
+            : "outline") as BadgeVariant,
+        lockLabel: lockedModules.length
+          ? t("table.lockedDetail", {
+              modules: lockedModules
+                .map((module) => {
+                  const lockedOn = lockDates.get(module);
+                  return lockedOn
+                    ? `${t(`modules.${module}`)} (${formatDay(lockedOn)})`
+                    : t(`modules.${module}`);
+                })
+                .join(", "),
+              book: lockBookName,
+            })
+          : null,
+        closedByLabel: closer
+          ? t("table.closedByDetail", { name: closer.name, date: formatDay(closer.on) })
+          : "—",
+        readiness: period.readiness_score ?? 0,
+        entries: format.number(Number(period.entries)),
+        actionHref: period.run_id ? `/close?run=${period.run_id}` : null,
+        canStart: !period.run_id && canStartClose,
+        startPeriodId: period.id,
+        startDefaultBookId: selectedBookId,
+      };
     }),
     total: Number(count[0]?.count ?? 0),
     currentPage: pageNum,
     perPage: PER_PAGE,
-  }
+  };
 }
 
-const f = ref<CloseData>()
-const item = field
-const rootF = rootRef<CloseData>()
+const f = ref<CloseData>();
+const item = field;
+const rootF = rootRef<CloseData>();
 
 export function closeSpec(data: CloseData): PageSpec {
   // The run branch is its own document, not a `when` inside the list's.
@@ -543,61 +581,61 @@ export function closeSpec(data: CloseData): PageSpec {
   // names blocks and binds resolved fields.
   if (data.wizard) {
     return page({
-      route: '/close',
-      layout: 'bare',
+      route: "/close",
+      layout: "bare",
       header: [],
-      body: [widgetBlock('close-wizard', { wizard: data.wizard })],
-    })
+      body: [widgetBlock("close-wizard", { wizard: data.wizard })],
+    });
   }
   return page({
-    route: '/close',
-    layout: 'list',
+    route: "/close",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
           widget(
-            'manage-books-button',
-            { href: '/admin/setup/accounting-books', label: data.manageBooksLabel },
-            f('canManageBooks'),
+            "manage-books-button",
+            { href: "/admin/setup/accounting-books", label: data.manageBooksLabel },
+            f("canManageBooks"),
           ),
         ],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
         {
-          ...widgetBlock('filter-chips', {
+          ...widgetBlock("filter-chips", {
             basePath: BASE,
             currentParams: data.currentParams,
-            paramKey: 'book',
+            paramKey: "book",
             label: data.bookLabel,
             hideAll: true,
             defaultValue: data.selectedBookId,
             options: data.bookOptions,
           }),
-          when: f('showBookChips'),
+          when: f("showBookChips"),
         },
         {
-          ...widgetBlock('single-book-label', {
+          ...widgetBlock("single-book-label", {
             label: data.bookLabel,
             name: data.singleBookName,
           }),
-          when: f('showSingleBook'),
+          when: f("showSingleBook"),
         },
-        widgetBlock('filter-chips', {
+        widgetBlock("filter-chips", {
           basePath: BASE,
           currentParams: data.currentParams,
-          paramKey: 'fy',
+          paramKey: "fy",
           label: data.fyLabel,
           hideAll: true,
           defaultValue: data.fyDefault,
           options: data.fyOptions,
         }),
-        widgetBlock('filter-chips', {
+        widgetBlock("filter-chips", {
           basePath: BASE,
           currentParams: data.currentParams,
-          paramKey: 'status',
+          paramKey: "status",
           label: data.statusLabel,
           options: data.statusOptions,
         }),
@@ -606,63 +644,63 @@ export function closeSpec(data: CloseData): PageSpec {
     body: [
       {
         ...grid(
-          'overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
+          "overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
           [
-            registeredListTable('close_periods', {
-              variant: 'app',
-              rows: f('rows'),
-              rowKey: item('id'),
+            registeredListTable("close_periods", {
+              variant: "app",
+              rows: f("rows"),
+              rowKey: item("id"),
               columns: [
-                column(rootF('columnPeriod'), text(item('name')), {
-                  className: 'font-medium',
+                column(rootF("columnPeriod"), text(item("name")), {
+                  className: "font-medium",
                 }),
-                column(rootF('columnRange'), text(item('range')), {
-                  className: 'text-slate-500',
+                column(rootF("columnRange"), text(item("range")), {
+                  className: "text-slate-500",
                 }),
                 column(
-                  rootF('columnStatus'),
-                  widgetCell('close-status-cell', {
-                    statusLabel: item('statusLabel'),
-                    statusVariant: item('statusVariant'),
-                    lockLabel: item('lockLabel'),
+                  rootF("columnStatus"),
+                  widgetCell("close-status-cell", {
+                    statusLabel: item("statusLabel"),
+                    statusVariant: item("statusVariant"),
+                    lockLabel: item("lockLabel"),
                   }),
                 ),
-                column(rootF('columnClosedBy'), text(item('closedByLabel')), {
-                  className: 'text-slate-500',
+                column(rootF("columnClosedBy"), text(item("closedByLabel")), {
+                  className: "text-slate-500",
                 }),
                 column(
-                  rootF('columnReadiness'),
-                  widgetCell('close-readiness-cell', { readiness: item('readiness') }),
+                  rootF("columnReadiness"),
+                  widgetCell("close-readiness-cell", { readiness: item("readiness") }),
                 ),
-                column(rootF('columnEntries'), text(item('entries')), {
-                  align: 'right',
-                  className: 'tabular-nums',
+                column(rootF("columnEntries"), text(item("entries")), {
+                  align: "right",
+                  className: "tabular-nums",
                 }),
                 column(
-                  rootF('columnAction'),
-                  widgetCell('close-action-cell', {
-                    actionHref: item('actionHref'),
-                    actionLabel: rootF('resumeLabel'),
-                    actionLinkClassName: rootF('actionLinkClassName'),
-                    canStart: item('canStart'),
-                    startPeriodId: item('startPeriodId'),
-                    startBooks: rootF('startBooks'),
-                    startDefaultBookId: item('startDefaultBookId'),
+                  rootF("columnAction"),
+                  widgetCell("close-action-cell", {
+                    actionHref: item("actionHref"),
+                    actionLabel: rootF("resumeLabel"),
+                    actionLinkClassName: rootF("actionLinkClassName"),
+                    canStart: item("canStart"),
+                    startPeriodId: item("startPeriodId"),
+                    startBooks: rootF("startBooks"),
+                    startDefaultBookId: item("startDefaultBookId"),
                   }),
                 ),
               ],
             }),
             pagination({
               basePath: BASE,
-              total: f('total'),
-              page: f('currentPage'),
-              perPage: f('perPage'),
+              total: f("total"),
+              page: f("currentPage"),
+              perPage: f("perPage"),
               bare: true,
             }),
           ],
         ),
-        when: f('onList'),
+        when: f("onList"),
       },
     ],
-  })
+  });
 }

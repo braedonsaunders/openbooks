@@ -1,5 +1,11 @@
-import { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken } from '@openbooks/engine/records/revision';
-import { createPermission, documentReadPermission } from '@openbooks/engine/records/document-kind-permissions';
+import {
+  DOCUMENT_REVISION_PATTERN,
+  isDocumentRevisionToken,
+} from "@openbooks/engine/records/revision";
+import {
+  createPermission,
+  documentReadPermission,
+} from "@openbooks/engine/records/document-kind-permissions";
 export { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken };
 
 /**
@@ -140,7 +146,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   {
     key: "bills",
     label: "Vendor Bills",
-    description: "Accounts payable documents — invoices received from vendors. Writes create a draft and can submit/post through the posting kernel.",
+    description:
+      "Accounts payable documents — invoices received from vendors. Writes create a draft and can submit/post through the posting kernel.",
     table: "documents",
     searchColumn: "document_number",
     readPermission: "ap.read",
@@ -152,7 +159,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   {
     key: "invoices",
     label: "Customer Invoices",
-    description: "Accounts receivable documents — sales invoices issued to customers. Writes create a draft and can submit/post through the posting kernel.",
+    description:
+      "Accounts receivable documents — sales invoices issued to customers. Writes create a draft and can submit/post through the posting kernel.",
     table: "documents",
     searchColumn: "document_number",
     readPermission: "ar.read",
@@ -164,7 +172,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   {
     key: "payments",
     label: "Payments",
-    description: "Vendor payments and customer receipts, with open-item application. Read-only in v1 — creation goes through the payment/cash-application flow.",
+    description:
+      "Vendor payments and customer receipts, with open-item application. Read-only in v1 — creation goes through the payment/cash-application flow.",
     table: "documents",
     searchColumn: "document_number",
     readPermission: "ap.pay",
@@ -177,7 +186,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   {
     key: "parties",
     label: "Parties",
-    description: "The unified party directory — customers, vendors, and employees. A single record can hold multiple roles.",
+    description:
+      "The unified party directory — customers, vendors, and employees. A single record can hold multiple roles.",
     table: "parties",
     searchColumn: "display_name",
     readPermission: "parties.read",
@@ -189,7 +199,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   {
     key: "accounts",
     label: "Chart of Accounts",
-    description: "The general-ledger chart of accounts — posting, summary, and header accounts. Managed through Setup; read-only here.",
+    description:
+      "The general-ledger chart of accounts — posting, summary, and header accounts. Managed through Setup; read-only here.",
     table: "accounts",
     searchColumn: "name",
     readPermission: "gl.read",
@@ -239,7 +250,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "vendor-credits",
     label: "Vendor Credits",
-    description: "Accounts payable credit memos. Writes create a draft and can submit/post through the posting kernel.",
+    description:
+      "Accounts payable credit memos. Writes create a draft and can submit/post through the posting kernel.",
     docKind: "vendor_credit",
     readPermission: "ap.read",
     writePermission: "ap.create",
@@ -247,7 +259,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "customer-credits",
     label: "Customer Credits",
-    description: "Accounts receivable credit memos. Writes create a draft and can submit/post through the posting kernel.",
+    description:
+      "Accounts receivable credit memos. Writes create a draft and can submit/post through the posting kernel.",
     docKind: "customer_credit",
     readPermission: "ar.read",
     writePermission: "ar.create",
@@ -255,7 +268,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "cash-sales",
     label: "Cash Sales",
-    description: "Paid-at-sale receipts. Writes create a draft and can submit/post through the posting kernel; tenders must sum to the document total.",
+    description:
+      "Paid-at-sale receipts. Writes create a draft and can submit/post through the posting kernel; tenders must sum to the document total.",
     docKind: "cash_sale",
     readPermission: "cash_sales.read",
     writePermission: "cash_sales.create",
@@ -264,7 +278,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "cash-refunds",
     label: "Cash Refunds",
-    description: "Paid-out refund documents reversing a cash sale or invoice. Writes create a draft and can submit/post through the posting kernel; tenders must sum to the refund total.",
+    description:
+      "Paid-out refund documents reversing a cash sale or invoice. Writes create a draft and can submit/post through the posting kernel; tenders must sum to the refund total.",
     docKind: "cash_refund",
     readPermission: "cash_sales.read",
     writePermission: "cash_sales.create",
@@ -273,7 +288,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "card-charges",
     label: "Card Charges",
-    description: "Card-funded expense documents. Writes create a draft and can post through the posting kernel.",
+    description:
+      "Card-funded expense documents. Writes create a draft and can post through the posting kernel.",
     docKind: "card_charge",
     readPermission: "ap.read",
     writePermission: "ap.create",
@@ -281,7 +297,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "card-refunds",
     label: "Card Refunds",
-    description: "Card refund documents. Writes create a draft and can post through the posting kernel.",
+    description:
+      "Card refund documents. Writes create a draft and can post through the posting kernel.",
     docKind: "card_refund",
     readPermission: "ap.read",
     writePermission: "ap.create",
@@ -289,7 +306,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "checks",
     label: "Checks",
-    description: "Bank-funded check documents. Writes create a draft and can post through the posting kernel.",
+    description:
+      "Bank-funded check documents. Writes create a draft and can post through the posting kernel.",
     docKind: "check",
     readPermission: "ap.read",
     writePermission: "ap.create",
@@ -305,7 +323,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "transfers",
     label: "Transfers",
-    description: "Inter-account bank transfers. Writes create a draft and can post through the posting kernel.",
+    description:
+      "Inter-account bank transfers. Writes create a draft and can post through the posting kernel.",
     docKind: "transfer",
     readPermission: "gl.read",
     writePermission: "gl.post",
@@ -313,7 +332,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "project-charges",
     label: "Project Charges",
-    description: "Project resource-usage charges. Writes create a draft and can post through the posting kernel.",
+    description:
+      "Project resource-usage charges. Writes create a draft and can post through the posting kernel.",
     docKind: "project_charge",
     readPermission: "gl.read",
     writePermission: "gl.post",
@@ -322,7 +342,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "vendor-payments",
     label: "Vendor Payments",
-    description: "Vendor payment documents. Read-only here — create and allocate through POST /api/v1/payments.",
+    description:
+      "Vendor payment documents. Read-only here — create and allocate through POST /api/v1/payments.",
     docKind: "vendor_payment",
     readPermission: "ap.pay",
     writePermission: null,
@@ -330,7 +351,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "customer-receipts",
     label: "Customer Receipts",
-    description: "Customer receipt documents. Read-only here — create and allocate through POST /api/v1/payments.",
+    description:
+      "Customer receipt documents. Read-only here — create and allocate through POST /api/v1/payments.",
     docKind: "customer_payment",
     readPermission: "ar.pay",
     writePermission: null,
@@ -338,7 +360,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "journals",
     label: "Journals",
-    description: "Manual journal documents. Create a balanced draft through POST /api/v1/journals (UUID Idempotency-Key becomes the id). Post through POST /api/v1/journals/{id}/post. Posted ledger projections are journal-entries.",
+    description:
+      "Manual journal documents. Create a balanced draft through POST /api/v1/journals (UUID Idempotency-Key becomes the id). Post through POST /api/v1/journals/{id}/post. Posted ledger projections are journal-entries.",
     docKind: "journal",
     readPermission: "gl.read",
     writePermission: null,
@@ -346,7 +369,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "quotes",
     label: "Quotes",
-    description: "Customer estimates. Create an empty draft through POST /api/v1/quotes; convert through POST /api/v1/quotes/{id}/convert.",
+    description:
+      "Customer estimates. Create an empty draft through POST /api/v1/quotes; convert through POST /api/v1/quotes/{id}/convert.",
     docKind: "quote",
     readPermission: "ar.read",
     writePermission: null,
@@ -355,7 +379,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "sales-orders",
     label: "Sales Orders",
-    description: "Customer sales orders. Create an empty draft through POST /api/v1/sales-orders; convert through POST /api/v1/sales-orders/{id}/convert.",
+    description:
+      "Customer sales orders. Create an empty draft through POST /api/v1/sales-orders; convert through POST /api/v1/sales-orders/{id}/convert.",
     docKind: "sales_order",
     readPermission: "ar.read",
     writePermission: null,
@@ -364,7 +389,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "return-authorizations",
     label: "Return Authorizations",
-    description: "Customer return authorizations. Draft creation and edits use the document writer; fulfillment remains an explicit controlled action.",
+    description:
+      "Customer return authorizations. Draft creation and edits use the document writer; fulfillment remains an explicit controlled action.",
     docKind: "rma",
     readPermission: documentReadPermission("rma"),
     writePermission: createPermission("rma"),
@@ -373,7 +399,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "purchase-orders",
     label: "Purchase Orders",
-    description: "Vendor purchase orders. Create an empty draft through POST /api/v1/purchase-orders; convert through POST /api/v1/purchase-orders/{id}/convert.",
+    description:
+      "Vendor purchase orders. Create an empty draft through POST /api/v1/purchase-orders; convert through POST /api/v1/purchase-orders/{id}/convert.",
     docKind: "purchase_order",
     readPermission: "purchase_orders.read",
     writePermission: null,
@@ -382,7 +409,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "sales-fulfillments",
     label: "Sales Fulfillments",
-    description: "Shipments against sales orders. Read-only — operational documents are not edited as commercial commitments.",
+    description:
+      "Shipments against sales orders. Read-only — operational documents are not edited as commercial commitments.",
     docKind: "sales_fulfillment",
     readPermission: "ar.read",
     writePermission: null,
@@ -391,7 +419,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "purchase-receipts",
     label: "Purchase Receipts",
-    description: "Goods receipts against purchase orders. Read-only — operational documents are not edited as commercial commitments.",
+    description:
+      "Goods receipts against purchase orders. Read-only — operational documents are not edited as commercial commitments.",
     docKind: "purchase_receipt",
     readPermission: "purchase_orders.read",
     writePermission: null,
@@ -400,7 +429,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "expense-reports",
     label: "Expense Reports",
-    description: "Employee expense reports. Read-only in v1 — create and submit stay on the expenses workspace.",
+    description:
+      "Employee expense reports. Read-only in v1 — create and submit stay on the expenses workspace.",
     docKind: "expense_report",
     readPermission: "expenses.read",
     writePermission: null,
@@ -409,7 +439,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "field-tickets",
     label: "Field Tickets",
-    description: "Project field tickets. Create a draft through POST /api/v1/field-tickets. Hours and signatures stay on the field-ticket workspace.",
+    description:
+      "Project field tickets. Create a draft through POST /api/v1/field-tickets. Hours and signatures stay on the field-ticket workspace.",
     docKind: "field_ticket",
     readPermission: "projects.read",
     writePermission: null,
@@ -418,7 +449,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "pay-runs",
     label: "Pay Runs",
-    description: "Committed payroll GL documents. Read-only — lines are machine-built by the payroll engine.",
+    description:
+      "Committed payroll GL documents. Read-only — lines are machine-built by the payroll engine.",
     docKind: "pay_run",
     readPermission: "payroll.read",
     writePermission: null,
@@ -479,13 +511,8 @@ export const DOCUMENT_REVISION_WRITE_FIELD: Readonly<ApiField> = Object.freeze({
   custom: false,
 });
 
-export function withDocumentRevisionWriteField(
-  writer: Writer,
-  fields: ApiField[],
-): ApiField[] {
-  return writer.kind === "document"
-    ? [...fields, { ...DOCUMENT_REVISION_WRITE_FIELD }]
-    : fields;
+export function withDocumentRevisionWriteField(writer: Writer, fields: ApiField[]): ApiField[] {
+  return writer.kind === "document" ? [...fields, { ...DOCUMENT_REVISION_WRITE_FIELD }] : fields;
 }
 
 export interface ApiRecordTypeSchema extends ApiRecordType {
@@ -561,7 +588,14 @@ export function pgTypeToOpenApi(pgType: string): string {
   if (pgType.startsWith("timestamp")) return "string (date-time)";
   if (pgType === "date") return "string (date)";
   if (pgType === "boolean") return "boolean";
-  if (pgType.startsWith("numeric") || pgType === "integer" || pgType === "bigint" || pgType === "real" || pgType === "double precision") return "number";
+  if (
+    pgType.startsWith("numeric") ||
+    pgType === "integer" ||
+    pgType === "bigint" ||
+    pgType === "real" ||
+    pgType === "double precision"
+  )
+    return "number";
   if (pgType === "jsonb" || pgType === "json") return "object";
   if (pgType.startsWith("text") || pgType.startsWith("character")) return "string";
   return "string";
@@ -629,7 +663,9 @@ export function resolveDocumentReadKinds(t: ApiRecordType): readonly string[] | 
   if (t.table !== "documents") return null;
   const kinds = t.writer.kind === "document" ? [t.writer.docKind] : t.documentKinds;
   if (!kinds || kinds.length === 0 || kinds.some((kind) => !kind.trim())) {
-    throw new Error(`documents-backed record type ${t.key} requires a nonempty document kind scope`);
+    throw new Error(
+      `documents-backed record type ${t.key} requires a nonempty document kind scope`,
+    );
   }
   return [...new Set(kinds)];
 }

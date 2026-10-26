@@ -20,14 +20,20 @@ export const createAwardBody = z.object({
   periodFrom: civilDate,
   periodTo: civilDate.nullish(),
   value: z.string().trim().min(1).max(64),
-  currency: z.string().trim().regex(/^[A-Z]{3}$/, "currency is a 3-letter ISO code in capitals"),
+  currency: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{3}$/, "currency is a 3-letter ISO code in capitals"),
   evidence: z.record(z.string(), z.unknown()).nullish(),
   sourceKey: z
     .string()
     .trim()
     .min(1)
     .max(200)
-    .refine((key) => !/^(settle|adjust):/i.test(key), "settlement keys are issued by the settlement calculation, not manual awards")
+    .refine(
+      (key) => !/^(settle|adjust):/i.test(key),
+      "settlement keys are issued by the settlement calculation, not manual awards",
+    )
     .nullish(),
 });
 
@@ -48,25 +54,43 @@ export const externalDeliveryBody = z.object({
   action: z.literal("externalDelivery"),
   externalRef: z.string().trim().min(1).max(500),
 });
-export const adjustAwardBody = z.object({
-  action: z.literal("adjust"),
-  correctionId: uuid,
-  value: z.string().trim().min(1).max(64),
-  reason,
-  sourceReference: z.string().trim().min(1).max(500).optional(),
-  periodFrom: civilDate.optional(),
-  periodTo: civilDate.optional(),
-}).superRefine((body, context) => {
-  if ((body.periodFrom === undefined) !== (body.periodTo === undefined)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: [body.periodFrom === undefined ? "periodFrom" : "periodTo"], message: "period overrides require both dates" });
-  }
-  if (body.periodFrom !== undefined && body.periodTo !== undefined && body.periodTo < body.periodFrom) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["periodTo"], message: "period end must not precede its start" });
-  }
-  if (body.periodFrom !== undefined && body.sourceReference === undefined) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["sourceReference"], message: "a dated adjustment needs its source row reference" });
-  }
-});
+export const adjustAwardBody = z
+  .object({
+    action: z.literal("adjust"),
+    correctionId: uuid,
+    value: z.string().trim().min(1).max(64),
+    reason,
+    sourceReference: z.string().trim().min(1).max(500).optional(),
+    periodFrom: civilDate.optional(),
+    periodTo: civilDate.optional(),
+  })
+  .superRefine((body, context) => {
+    if ((body.periodFrom === undefined) !== (body.periodTo === undefined)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [body.periodFrom === undefined ? "periodFrom" : "periodTo"],
+        message: "period overrides require both dates",
+      });
+    }
+    if (
+      body.periodFrom !== undefined &&
+      body.periodTo !== undefined &&
+      body.periodTo < body.periodFrom
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodTo"],
+        message: "period end must not precede its start",
+      });
+    }
+    if (body.periodFrom !== undefined && body.sourceReference === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceReference"],
+        message: "a dated adjustment needs its source row reference",
+      });
+    }
+  });
 export const voidAwardBody = z.object({ action: z.literal("void"), reason });
 
 export const benefitAwardPatchBody = z.discriminatedUnion("action", [

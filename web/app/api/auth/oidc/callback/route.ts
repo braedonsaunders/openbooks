@@ -38,7 +38,10 @@ export async function GET(request: NextRequest) {
     if (result.kind === "invalid" || result.kind === "rate_limited") {
       return NextResponse.redirect(loginRedirect("sso"));
     }
-    const destination = new URL(result.kind === "mfa_required" ? "/login" : oidc.returnTo, oidcAppUrl());
+    const destination = new URL(
+      result.kind === "mfa_required" ? "/login" : oidc.returnTo,
+      oidcAppUrl(),
+    );
     if (result.kind === "mfa_required") {
       destination.searchParams.set("mfa", "1");
       destination.searchParams.set("next", oidc.returnTo);

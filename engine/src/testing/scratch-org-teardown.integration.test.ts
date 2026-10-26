@@ -29,8 +29,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // through the suite-global owner.  Destructive removal is reserved for pool
 // close, so this test asserts exact baseline restoration in pooled mode while
 // retaining the historical zero-row assertion for standalone runs.
-const POOLED_FIXTURES = process.env.OPENBOOKS_TEST_FIXTURE_POOL === "1"
-  || Boolean(process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT);
+const POOLED_FIXTURES =
+  process.env.OPENBOOKS_TEST_FIXTURE_POOL === "1" ||
+  Boolean(process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT);
 
 test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -67,12 +68,21 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
     // Inventory: receipts + an issue → posted inventory_movements, cost
     // layers, consumptions, and their journal entries.
     await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2.00",
-      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "2.00",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
     });
     await issueInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "4",
-      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.cogs, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "4",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.cogs,
+      date: org.date,
     });
 
     // Time entries (the table the stale teardown was missing entirely).
@@ -88,7 +98,10 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
 
     // Guarded evidence: a field-ticket labor snapshot, whose retention guard
     // raises on ANY delete — teardown must take the trigger-disable path.
-    const ticketId = await seedDraftDocument(org.orgId, { kind: "field_ticket", createdBy: actorId });
+    const ticketId = await seedDraftDocument(org.orgId, {
+      kind: "field_ticket",
+      createdBy: actorId,
+    });
     await db.execute(sql`
       insert into field_tickets (document_id, org_id, period, period_start, period_end, created_by, updated_by)
       values (${ticketId}, ${org.orgId}, 'daily', ${org.date}, ${org.date}, ${actorId}, ${actorId})`);
@@ -142,13 +155,23 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
 
     // file_versions/file_blobs carry no org_id, so the invariant above cannot
     // see them — assert the payroll blob chain is gone explicitly.
-    const blobLeft = (await db.execute<{ versions: number; blobs: number }>(sql`
+    const blobLeft = await db.execute<{ versions: number; blobs: number }>(
+      sql`
       select (select count(*)::int from file_versions where id = ${versionId}) as versions,
-             (select count(*)::int from file_blobs where version_id = ${versionId}) as blobs`, "objects"));
+             (select count(*)::int from file_blobs where version_id = ${versionId}) as blobs`,
+      "objects",
+    );
     assert.deepEqual(blobLeft[0], { versions: 0, blobs: 0 });
-    const resetLeft = await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from auth_password_resets where id = ${resetId}`, "objects");
-    assert.equal(resetLeft[0]?.count, 0, "teardown must remove password-reset rows owned by the deleted users");
+    const resetLeft = await db.execute<{ count: number }>(
+      sql`
+      select count(*)::int as count from auth_password_resets where id = ${resetId}`,
+      "objects",
+    );
+    assert.equal(
+      resetLeft[0]?.count,
+      0,
+      "teardown must remove password-reset rows owned by the deleted users",
+    );
 
     // And a second call is an idempotent no-op.
     await dropScratchOrg(org.orgId);
@@ -157,103 +180,137 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
   }
 });
 
-test("dropScratchOrg commits durably from inside a pinned bypass transaction", { skip: !DB }, async () => {
-  // The 2026-08-16 mass-purge phantom: called inside withBypass, the db proxy
-  // used to fold every teardown transaction into the caller's single pinned
-  // transaction — the wipe "succeeded", its own verification passed against
-  // uncommitted state, and the caller's exit rolled the whole thing back. The
-  // teardown must escape that scope, so its work survives even when the
-  // surrounding withBypass block itself fails and rolls back.
-  const org = await createScratchOrg();
-  const baselineCounts = POOLED_FIXTURES ? await orgRowCounts(org.orgId) : undefined;
-  try {
-    const sentinel = new Error("outer transaction rolls back");
-    await assert.rejects(
-      withBypass(async () => {
-        await dropScratchOrg(org.orgId);
-        throw sentinel;
-      }),
-      sentinel,
-    );
-    const r = (await db.execute(sql`select 1 as x from orgs where id = ${org.orgId}`, "objects"));
-    assert.equal(
-      r.length,
-      POOLED_FIXTURES ? 1 : 0,
-      POOLED_FIXTURES
-        ? "pooled drop must commit the reset while retaining the leased baseline org"
-        : "the drop must be committed, not staged in the caller's transaction",
-    );
-    assert.deepEqual(await orgRowCounts(org.orgId), POOLED_FIXTURES ? baselineCounts : {});
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+test(
+  "dropScratchOrg commits durably from inside a pinned bypass transaction",
+  { skip: !DB },
+  async () => {
+    // The 2026-08-16 mass-purge phantom: called inside withBypass, the db proxy
+    // used to fold every teardown transaction into the caller's single pinned
+    // transaction — the wipe "succeeded", its own verification passed against
+    // uncommitted state, and the caller's exit rolled the whole thing back. The
+    // teardown must escape that scope, so its work survives even when the
+    // surrounding withBypass block itself fails and rolls back.
+    const org = await createScratchOrg();
+    const baselineCounts = POOLED_FIXTURES ? await orgRowCounts(org.orgId) : undefined;
+    try {
+      const sentinel = new Error("outer transaction rolls back");
+      await assert.rejects(
+        withBypass(async () => {
+          await dropScratchOrg(org.orgId);
+          throw sentinel;
+        }),
+        sentinel,
+      );
+      const r = await db.execute(sql`select 1 as x from orgs where id = ${org.orgId}`, "objects");
+      assert.equal(
+        r.length,
+        POOLED_FIXTURES ? 1 : 0,
+        POOLED_FIXTURES
+          ? "pooled drop must commit the reset while retaining the leased baseline org"
+          : "the drop must be committed, not staged in the caller's transaction",
+      );
+      assert.deepEqual(await orgRowCounts(org.orgId), POOLED_FIXTURES ? baselineCounts : {});
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("a replacement default calendar releases the lease without tripping the default uniqueness", { skip: !DB }, async () => {
-  // The baseline restore used to UPDATE the saved default back to
-  // is_default BEFORE the delete passes removed the test-installed
-  // replacement, so every bounded retry died on
-  // fiscal_calendars_one_default (23505) and the lease never released. The
-  // restore now clears the test default first, in the same transaction.
-  const org = await createScratchOrg();
-  try {
-    const fixtureDefault = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} and is_default`, "objects"))[0]!.id;
-    await db.execute(sql`update fiscal_calendars set is_default = false where id = ${fixtureDefault}`);
-    const replacement = randomUUID();
-    await db.execute(sql`
+test(
+  "a replacement default calendar releases the lease without tripping the default uniqueness",
+  { skip: !DB },
+  async () => {
+    // The baseline restore used to UPDATE the saved default back to
+    // is_default BEFORE the delete passes removed the test-installed
+    // replacement, so every bounded retry died on
+    // fiscal_calendars_one_default (23505) and the lease never released. The
+    // restore now clears the test default first, in the same transaction.
+    const org = await createScratchOrg();
+    try {
+      const fixtureDefault = (
+        await db.execute<{ id: string }>(
+          sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default`,
+          "objects",
+        )
+      )[0]!.id;
+      await db.execute(
+        sql`update fiscal_calendars set is_default = false where id = ${fixtureDefault}`,
+      );
+      const replacement = randomUUID();
+      await db.execute(sql`
       insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, is_default, is_active)
       values (${replacement}, ${org.orgId}, 'Replacement default', 'monthly', 7, true, true)`);
-    // Must not throw: pre-fix this died on 23505 inside the restore.
-    await dropScratchOrg(org.orgId);
-    if (POOLED_FIXTURES) {
-      const current = await db.execute<{ id: string }>(sql`
-        select id from fiscal_calendars where org_id = ${org.orgId} and is_default`, "objects");
-      assert.equal(current.length, 1, "exactly one default is handed back");
-      assert.equal(current[0]!.id, fixtureDefault, "the baseline default is restored");
-      const leftover = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from fiscal_calendars where id = ${replacement}`, "objects"));
-      assert.equal(leftover[0]!.n, 0, "the replacement row is removed by the delete passes");
+      // Must not throw: pre-fix this died on 23505 inside the restore.
+      await dropScratchOrg(org.orgId);
+      if (POOLED_FIXTURES) {
+        const current = await db.execute<{ id: string }>(
+          sql`
+        select id from fiscal_calendars where org_id = ${org.orgId} and is_default`,
+          "objects",
+        );
+        assert.equal(current.length, 1, "exactly one default is handed back");
+        assert.equal(current[0]!.id, fixtureDefault, "the baseline default is restored");
+        const leftover = await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from fiscal_calendars where id = ${replacement}`,
+          "objects",
+        );
+        assert.equal(leftover[0]!.n, 0, "the replacement row is removed by the delete passes");
+      }
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+  },
+);
 
-test("a colliding BOM replacement releases the lease without tripping the assembly exclusion", { skip: !DB }, async () => {
-  // The BOM exclusion uses org, assembly, component, byproduct, operation,
-  // and effectivity; the last two are expressions. A test that deletes the
-  // seeded recipe and installs its replacement on the same plain columns
-  // used to make baseline restore reinsert the deleted row while the
-  // replacement still stood, so every bounded retry died on 23P01 and the
-  // lease never released. Restore now removes non-baseline rows colliding on
-  // plain unique or exclusion columns first, in the same transaction.
-  const org = await createScratchOrg();
-  try {
-    const seeded = await db.execute<{ id: string }>(sql`
-      select id from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`, "objects");
-    assert.equal(seeded.length, 1, "the fixture seeds one recipe row");
-    await db.execute(sql`
+test(
+  "a colliding BOM replacement releases the lease without tripping the assembly exclusion",
+  { skip: !DB },
+  async () => {
+    // The BOM exclusion uses org, assembly, component, byproduct, operation,
+    // and effectivity; the last two are expressions. A test that deletes the
+    // seeded recipe and installs its replacement on the same plain columns
+    // used to make baseline restore reinsert the deleted row while the
+    // replacement still stood, so every bounded retry died on 23P01 and the
+    // lease never released. Restore now removes non-baseline rows colliding on
+    // plain unique or exclusion columns first, in the same transaction.
+    const org = await createScratchOrg();
+    try {
+      const seeded = await db.execute<{ id: string }>(
+        sql`
+      select id from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`,
+        "objects",
+      );
+      assert.equal(seeded.length, 1, "the fixture seeds one recipe row");
+      await db.execute(sql`
       delete from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
-    const replacement = randomUUID();
-    await db.execute(sql`
+      const replacement = randomUUID();
+      await db.execute(sql`
       insert into bom_components (id, org_id, assembly_item_id, component_item_id, quantity_per, sort_order)
       values (${replacement}, ${org.orgId}, ${org.items.assembly}, ${org.items.component}, '1', 0)`);
-    // Must not throw: before exclusion keys were included, this died on 23P01.
-    await dropScratchOrg(org.orgId);
-    if (POOLED_FIXTURES) {
-      const current = await db.execute<{ id: string }>(sql`
-        select id from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`, "objects");
-      assert.equal(current.length, 1, "exactly one recipe row is handed back");
-      assert.equal(current[0]!.id, seeded[0]!.id, "the baseline recipe row is restored");
-      const leftover = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from bom_components where id = ${replacement}`, "objects"));
-      assert.equal(leftover[0]!.n, 0, "the colliding replacement is removed by the reset");
+      // Must not throw: before exclusion keys were included, this died on 23P01.
+      await dropScratchOrg(org.orgId);
+      if (POOLED_FIXTURES) {
+        const current = await db.execute<{ id: string }>(
+          sql`
+        select id from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`,
+          "objects",
+        );
+        assert.equal(current.length, 1, "exactly one recipe row is handed back");
+        assert.equal(current[0]!.id, seeded[0]!.id, "the baseline recipe row is restored");
+        const leftover = await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from bom_components where id = ${replacement}`,
+          "objects",
+        );
+        assert.equal(leftover[0]!.n, 0, "the colliding replacement is removed by the reset");
+      }
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+  },
+);
 
 test("dropScratchOrg refuses an org not named 'Scratch %'", { skip: !DB }, async () => {
   const orgId = randomUUID();
@@ -263,12 +320,17 @@ test("dropScratchOrg refuses an org not named 'Scratch %'", { skip: !DB }, async
   try {
     await assert.rejects(dropScratchOrg(orgId), /refused/);
     // Still there — the refusal happened before any delete.
-    const r = (await db.execute<{ envKind: string }>(sql`select env_kind as "envKind" from orgs where id = ${orgId}`, "objects"));
+    const r = await db.execute<{ envKind: string }>(
+      sql`select env_kind as "envKind" from orgs where id = ${orgId}`,
+      "objects",
+    );
     assert.equal(r.length, 1);
     assert.equal(r[0]!.envKind, "production", "prep never ran against a refused org");
   } finally {
     // Rename into scope so the guarded teardown can clean up this fixture.
-    await db.execute(sql`update orgs set name = ${"Scratch " + orgId.slice(0, 8)} where id = ${orgId}`);
+    await db.execute(
+      sql`update orgs set name = ${"Scratch " + orgId.slice(0, 8)} where id = ${orgId}`,
+    );
     await dropScratchOrg(orgId);
   }
 });
@@ -278,7 +340,10 @@ test("dropSampleCloneOrg refuses an org with no sample-company marker", { skip: 
   try {
     await assert.rejects(dropSampleCloneOrg(org.orgId), /no sample-company marker/);
     // Still there — the refusal happened before any delete.
-    const r = (await db.execute<{ n: number }>(sql`select count(*)::int as n from orgs where id = ${org.orgId}`, "objects"));
+    const r = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from orgs where id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(r[0]!.n, 1);
   } finally {
     await dropScratchOrg(org.orgId);

@@ -27,8 +27,9 @@ export function taxYearFor(definition: PayrollTaxYearDefinition, payDate: string
   const year = Number(payDate.slice(0, 4));
   const month = Number(payDate.slice(5, 7));
   const day = Number(payDate.slice(8, 10));
-  const opensThisYear = month > definition.startMonth
-    || (month === definition.startMonth && day >= definition.startDay);
+  const opensThisYear =
+    month > definition.startMonth ||
+    (month === definition.startMonth && day >= definition.startDay);
   const openingYear = opensThisYear ? year : year - 1;
   return definition.namedBy === "opening_year" ? openingYear : openingYear + 1;
 }

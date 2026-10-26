@@ -51,10 +51,30 @@ async function expectFrozen(promise: Promise<unknown>): Promise<void> {
 test("system rule heads refuse every rules-API edit", { skip: !DB }, async () => {
   const s = await seed();
   try {
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, name: "Renamed", allowedSubsidiaryIds: null }, AUDIT));
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, description: "x", allowedSubsidiaryIds: null }, AUDIT));
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, sortOrder: 1, allowedSubsidiaryIds: null }, AUDIT));
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, isActive: false, allowedSubsidiaryIds: null }, AUDIT));
+    await expectFrozen(
+      updateRule(
+        s.systemId,
+        { orgId: s.orgId, name: "Renamed", allowedSubsidiaryIds: null },
+        AUDIT,
+      ),
+    );
+    await expectFrozen(
+      updateRule(
+        s.systemId,
+        { orgId: s.orgId, description: "x", allowedSubsidiaryIds: null },
+        AUDIT,
+      ),
+    );
+    await expectFrozen(
+      updateRule(s.systemId, { orgId: s.orgId, sortOrder: 1, allowedSubsidiaryIds: null }, AUDIT),
+    );
+    await expectFrozen(
+      updateRule(
+        s.systemId,
+        { orgId: s.orgId, isActive: false, allowedSubsidiaryIds: null },
+        AUDIT,
+      ),
+    );
   } finally {
     await dropScratchOrg(s.orgId);
   }
@@ -63,12 +83,30 @@ test("system rule heads refuse every rules-API edit", { skip: !DB }, async () =>
 test("system rule versions refuse every rules-API transition", { skip: !DB }, async () => {
   const s = await seed();
   try {
-    await expectFrozen(createDraftVersion(s.systemId, { orgId: s.orgId, effectiveFrom: "2026-06-01", allowedSubsidiaryIds: null }, AUDIT));
+    await expectFrozen(
+      createDraftVersion(
+        s.systemId,
+        { orgId: s.orgId, effectiveFrom: "2026-06-01", allowedSubsidiaryIds: null },
+        AUDIT,
+      ),
+    );
     const draftId = await draftVersion(s.orgId, s.systemId);
-    await expectFrozen(updateDraftVersion(draftId, { orgId: s.orgId, runOffsetDays: 3, allowedSubsidiaryIds: null }, AUDIT));
-    await expectFrozen(replaceTargets(draftId, { orgId: s.orgId, targets: [], allowedSubsidiaryIds: null }, AUDIT));
-    await expectFrozen(publishVersion(draftId, { orgId: s.orgId, actorId: s.actorId, allowedSubsidiaryIds: null }));
-    await expectFrozen(retireVersion(draftId, { orgId: s.orgId, actorId: s.actorId, allowedSubsidiaryIds: null }));
+    await expectFrozen(
+      updateDraftVersion(
+        draftId,
+        { orgId: s.orgId, runOffsetDays: 3, allowedSubsidiaryIds: null },
+        AUDIT,
+      ),
+    );
+    await expectFrozen(
+      replaceTargets(draftId, { orgId: s.orgId, targets: [], allowedSubsidiaryIds: null }, AUDIT),
+    );
+    await expectFrozen(
+      publishVersion(draftId, { orgId: s.orgId, actorId: s.actorId, allowedSubsidiaryIds: null }),
+    );
+    await expectFrozen(
+      retireVersion(draftId, { orgId: s.orgId, actorId: s.actorId, allowedSubsidiaryIds: null }),
+    );
   } finally {
     await dropScratchOrg(s.orgId);
   }
@@ -83,26 +121,53 @@ test("system rules cannot be deleted through the service", { skip: !DB }, async 
   }
 });
 
-test("tenant rules delete with their drafts but never with published history", { skip: !DB }, async () => {
-  const s = await seed();
-  try {
-    const created = await createRule({ orgId: s.orgId, key: "tenant-cleanup", name: "Tenant", mode: "period" }, AUDIT);
-    const draft = await createDraftVersion(created.rule.id, { orgId: s.orgId, effectiveFrom: "2026-01-01", allowedSubsidiaryIds: null }, AUDIT);
-    await deleteRule(created.rule.id, { orgId: s.orgId }, AUDIT);
-    const gone = await db.execute<{ n: string }>(sql`select count(*) as n from allocation_rules
-      where org_id = ${s.orgId} and id = ${created.rule.id}`, "objects");
-    assert.equal(gone[0]?.n, "0");
-    const draftsGone = await db.execute<{ n: string }>(sql`select count(*) as n from allocation_rule_versions
-      where org_id = ${s.orgId} and id = ${draft.version.id}`, "objects");
-    assert.equal(draftsGone[0]?.n, "0");
+test(
+  "tenant rules delete with their drafts but never with published history",
+  { skip: !DB },
+  async () => {
+    const s = await seed();
+    try {
+      const created = await createRule(
+        { orgId: s.orgId, key: "tenant-cleanup", name: "Tenant", mode: "period" },
+        AUDIT,
+      );
+      const draft = await createDraftVersion(
+        created.rule.id,
+        { orgId: s.orgId, effectiveFrom: "2026-01-01", allowedSubsidiaryIds: null },
+        AUDIT,
+      );
+      await deleteRule(created.rule.id, { orgId: s.orgId }, AUDIT);
+      const gone = await db.execute<{ n: string }>(
+        sql`select count(*) as n from allocation_rules
+      where org_id = ${s.orgId} and id = ${created.rule.id}`,
+        "objects",
+      );
+      assert.equal(gone[0]?.n, "0");
+      const draftsGone = await db.execute<{ n: string }>(
+        sql`select count(*) as n from allocation_rule_versions
+      where org_id = ${s.orgId} and id = ${draft.version.id}`,
+        "objects",
+      );
+      assert.equal(draftsGone[0]?.n, "0");
 
-    const kept = await createRule({ orgId: s.orgId, key: "tenant-history", name: "Tenant", mode: "period" }, AUDIT);
-    const keptDraft = await createDraftVersion(kept.rule.id, { orgId: s.orgId, effectiveFrom: "2026-01-01", allowedSubsidiaryIds: null }, AUDIT);
-    await db.execute(sql`update allocation_rule_versions set status = 'published',
+      const kept = await createRule(
+        { orgId: s.orgId, key: "tenant-history", name: "Tenant", mode: "period" },
+        AUDIT,
+      );
+      const keptDraft = await createDraftVersion(
+        kept.rule.id,
+        { orgId: s.orgId, effectiveFrom: "2026-01-01", allowedSubsidiaryIds: null },
+        AUDIT,
+      );
+      await db.execute(sql`update allocation_rule_versions set status = 'published',
       definition_hash = 'x', published_at = now(), published_by = ${s.actorId}
       where org_id = ${s.orgId} and id = ${keptDraft.version.id}`);
-    await assert.rejects(deleteRule(kept.rule.id, { orgId: s.orgId }, AUDIT), /published history/);
-  } finally {
-    await dropScratchOrg(s.orgId);
-  }
-});
+      await assert.rejects(
+        deleteRule(kept.rule.id, { orgId: s.orgId }, AUDIT),
+        /published history/,
+      );
+    } finally {
+      await dropScratchOrg(s.orgId);
+    }
+  },
+);

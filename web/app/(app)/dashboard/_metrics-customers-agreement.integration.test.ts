@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -12,12 +12,18 @@ import test from "node:test";
 // and a widget nobody asked for leaves its field null (its reader never
 // runs).
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
+stubModules({
+  intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}",
+});
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // No request scope here: serve an empty cookie jar like the sibling
     // customer integration suites.
-    if (specifier === "next/headers") return { shortCircuit: true, url: "data:text/javascript,export function cookies() { return { get() { return undefined } } }" };
+    if (specifier === "next/headers")
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function cookies() { return { get() { return undefined } } }",
+      };
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a
     // second db pool without the test bypass). Pin them to this checkout.
@@ -31,9 +37,11 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { customerData, customerSummaryData, rankAtRiskCustomers } = await import("@/lib/analytics/customer-data.ts");
+const { customerData, customerSummaryData, rankAtRiskCustomers } =
+  await import("@/lib/analytics/customer-data.ts");
 const { loadCustomerWidgetMetrics } = await import("./_metrics-customers.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 const { canSeeWidget } = await import("./_widget-access.ts");
@@ -42,15 +50,25 @@ type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const P = { from: "2026-04-01", to: "2026-06-30", label: "Q2 2026" };
 const TODAY = "2026-07-15";
-const WIDGETS = ["kpi-customer-concentration", "kpi-customers-at-risk", "list-customers-at-risk"] as const;
+const WIDGETS = [
+  "kpi-customer-concentration",
+  "kpi-customers-at-risk",
+  "list-customers-at-risk",
+] as const;
 
 function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Customer Watcher", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Customer Watcher",
+      orgId,
       roles: [{ key: "staff", name: "staff" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(permissions),
     allowedSubsidiaryIds: null,
@@ -58,7 +76,11 @@ function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
 }
 
 async function invoice(
-  org: ScratchOrg, actor: string, partyId: string, revenue: string, date: string,
+  org: ScratchOrg,
+  actor: string,
+  partyId: string,
+  revenue: string,
+  date: string,
 ): Promise<void> {
   const id = randomUUID();
   await db.execute(sql`insert into documents
@@ -70,132 +92,204 @@ async function invoice(
     (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${id}, 1, ${org.accounts.revenue}, 1, ${revenue}, ${revenue}, 0, ${revenue})`);
   await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
-  await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await postDocument(id, {
+    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+  });
 }
 
-test("customer widgets agree with the Customer Intelligence engine", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Customer Controller", "admin"));
-    const waning = randomUUID();
-    const fresh = randomUUID();
-    await withBypass(async () => {
-      const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
-      const q2a = randomUUID();
-      const q2b = randomUUID();
-      await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+test(
+  "customer widgets agree with the Customer Intelligence engine",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actor = await withBypass(() =>
+        createScratchUser(org.orgId, "Customer Controller", "admin"),
+      );
+      const waning = randomUUID();
+      const fresh = randomUUID();
+      await withBypass(async () => {
+        const cal = (
+          await db.execute<{ fiscal_calendar_id: string }>(
+            sql`
+        select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
+            "objects",
+          )
+        )[0]!.fiscal_calendar_id;
+        const q2a = randomUUID();
+        const q2b = randomUUID();
+        await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${q2a}, ${org.orgId}, 2026, 4, '2026-04', '2026-04-01', '2026-04-30', false, ${cal}),
                (${q2b}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${cal})`);
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
+        await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${waning}, ${org.orgId}, 'customer', 'Waning Co', true, '{}'::jsonb),
                (${fresh}, ${org.orgId}, 'customer', 'Fresh Co', true, '{}'::jsonb)`);
-      // Recency runs against the period end (the loader clamps "now" to it):
-      // Waning's April invoice is 89 days stale (inactive-high 25 +
-      // single-order 30 = 55, high), Fresh's late-June invoice is 2 days out
-      // (single-order 30 alone = 30, low). A single invoice never earns
-      // cadence points: there is no rhythm to fall behind, so neither score
-      // carries the stale-cadence 30.
-      await invoice(org, actor as unknown as string, waning, "500", "2026-04-02");
-      await invoice(org, actor as unknown as string, fresh, "100", "2026-06-28");
-    });
-
-    // Customer figures need AR visibility, like the top-customers list — and
-    // the analytics gate every analytics-sourced widget clears.
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "ar.read", "reports.read"]);
-    for (const id of WIDGETS) assert.equal(canSeeWidget(authz, id), true, id);
-    const denied = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
-    for (const id of WIDGETS) assert.equal(canSeeWidget(denied, id), false, `${id} needs ar.read`);
-
-    const ctx = {
-      authz, orgId: org.orgId, today: TODAY, subsidiaryIds: undefined,
-      allowedSubsidiaryIds: null,
-      period: async () => ({ presetId: "month", ...P }),
-    };
-    const needAll = (...fields: string[]) => fields.length > 0;
-    const [widgets, summary, loader] = await pinClock(TODAY, () => withOrgContext(org.orgId, () => Promise.all([
-      loadCustomerWidgetMetrics(ctx as never, needAll as never),
-      customerSummaryData(P, org.orgId, null),
-      customerData(P, org.orgId, null),
-    ])));
-
-    assert.ok(!summary.weightsError, `clean config must load, got: ${summary.weightsError}`);
-    assert.ok(!loader.weightsError, `clean config must load, got: ${loader.weightsError}`);
-    // The tiles read the narrow preview, and the preview agrees with the
-    // full loader: one churn model and one concentration, every surface.
-    assert.equal(summary.kpis.atRiskCount, loader.kpis.atRiskCount, "preview count is the loader count");
-    assert.equal(summary.kpis.atRiskRevenue, loader.kpis.atRiskRevenue, "preview revenue is the loader revenue");
-    assert.equal(summary.kpis.hhiScaled, loader.kpis.hhiScaled, "preview HHI is the loader HHI");
-    assert.equal(summary.kpis.top5SharePct, 100, "both customers fit in the top five, so the top-5 share is all of revenue");
-    assert.equal(loader.kpis.top5SharePct, 100, "the loader states the same top-5 share");
-    const concentration = widgets.concentration;
-    assert.ok(concentration?.available, "concentration is available on a customer org");
-    if (concentration?.available) {
-      assert.deepEqual(concentration.value, {
-        hhi: summary.kpis.hhiScaled,
-        level: summary.kpis.hhiLevel,
-        customersFor80Pct: summary.kpis.customersFor80Pct,
-        top5SharePct: summary.kpis.top5SharePct,
-        period: 'Q2 2026',
+        // Recency runs against the period end (the loader clamps "now" to it):
+        // Waning's April invoice is 89 days stale (inactive-high 25 +
+        // single-order 30 = 55, high), Fresh's late-June invoice is 2 days out
+        // (single-order 30 alone = 30, low). A single invoice never earns
+        // cadence points: there is no rhythm to fall behind, so neither score
+        // carries the stale-cadence 30.
+        await invoice(org, actor as unknown as string, waning, "500", "2026-04-02");
+        await invoice(org, actor as unknown as string, fresh, "100", "2026-06-28");
       });
-    }
-    const atRisk = widgets.atRisk;
-    assert.ok(atRisk?.available, "at-risk is available on a customer org");
-    if (atRisk?.available) {
-      assert.equal(atRisk.value.count, summary.kpis.atRiskCount, "tile count is the preview count");
-      assert.equal(atRisk.value.revenue, summary.kpis.atRiskRevenue, "tile revenue is the preview revenue");
-    }
-    const list = widgets.atRiskCustomers;
-    assert.ok(list?.available, "the at-risk list is available on a customer org");
-    if (list?.available) {
-      // Waning is the only high-churn row: Fresh stays off the tile, and
-      // the ranking carries no cadence points for either single-invoice
-      // customer (55 and 30, not 85 and 60).
-      const waningRow = loader.rows.find((r) => r.id === waning)!;
-      const freshRow = loader.rows.find((r) => r.id === fresh)!;
-      assert.equal(waningRow.churnScore, 55, "waning scores inactive-high plus single-order, never cadence");
-      assert.equal(freshRow.churnScore, 30, "fresh scores single-order alone, never cadence");
-      const expected = rankAtRiskCustomers(loader.rows);
-      assert.deepEqual(expected.map((r) => r.id), [waning], "only the high row ranks");
-      assert.deepEqual(summary.atRisk.map((r) => r.id), [waning], "the preview ranks the same row");
-      assert.ok(list.value.length <= 5, "the tile shows five customers at most");
-      assert.deepEqual(list.value.map((c) => c.id), expected.map((r) => r.id), "tile order is the engine ranking");
-      for (const customer of list.value) {
-        const row = loader.rows.find((r) => r.id === customer.id)!;
-        assert.equal(customer.churnScore, row.churnScore, "tile score is the dashboard score");
-        assert.equal(customer.revenue, row.revenue, "tile revenue is the dashboard revenue");
+
+      // Customer figures need AR visibility, like the top-customers list — and
+      // the analytics gate every analytics-sourced widget clears.
+      const authz = authzFor(org.orgId, actor as unknown as string, [
+        "dashboard.read",
+        "ar.read",
+        "reports.read",
+      ]);
+      for (const id of WIDGETS) assert.equal(canSeeWidget(authz, id), true, id);
+      const denied = authzFor(org.orgId, actor as unknown as string, [
+        "dashboard.read",
+        "reports.read",
+      ]);
+      for (const id of WIDGETS)
+        assert.equal(canSeeWidget(denied, id), false, `${id} needs ar.read`);
+
+      const ctx = {
+        authz,
+        orgId: org.orgId,
+        today: TODAY,
+        subsidiaryIds: undefined,
+        allowedSubsidiaryIds: null,
+        period: async () => ({ presetId: "month", ...P }),
+      };
+      const needAll = (...fields: string[]) => fields.length > 0;
+      const [widgets, summary, loader] = await pinClock(TODAY, () =>
+        withOrgContext(org.orgId, () =>
+          Promise.all([
+            loadCustomerWidgetMetrics(ctx as never, needAll as never),
+            customerSummaryData(P, org.orgId, null),
+            customerData(P, org.orgId, null),
+          ]),
+        ),
+      );
+
+      assert.ok(!summary.weightsError, `clean config must load, got: ${summary.weightsError}`);
+      assert.ok(!loader.weightsError, `clean config must load, got: ${loader.weightsError}`);
+      // The tiles read the narrow preview, and the preview agrees with the
+      // full loader: one churn model and one concentration, every surface.
+      assert.equal(
+        summary.kpis.atRiskCount,
+        loader.kpis.atRiskCount,
+        "preview count is the loader count",
+      );
+      assert.equal(
+        summary.kpis.atRiskRevenue,
+        loader.kpis.atRiskRevenue,
+        "preview revenue is the loader revenue",
+      );
+      assert.equal(summary.kpis.hhiScaled, loader.kpis.hhiScaled, "preview HHI is the loader HHI");
+      assert.equal(
+        summary.kpis.top5SharePct,
+        100,
+        "both customers fit in the top five, so the top-5 share is all of revenue",
+      );
+      assert.equal(loader.kpis.top5SharePct, 100, "the loader states the same top-5 share");
+      const concentration = widgets.concentration;
+      assert.ok(concentration?.available, "concentration is available on a customer org");
+      if (concentration?.available) {
+        assert.deepEqual(concentration.value, {
+          hhi: summary.kpis.hhiScaled,
+          level: summary.kpis.hhiLevel,
+          customersFor80Pct: summary.kpis.customersFor80Pct,
+          top5SharePct: summary.kpis.top5SharePct,
+          period: "Q2 2026",
+        });
       }
-    }
+      const atRisk = widgets.atRisk;
+      assert.ok(atRisk?.available, "at-risk is available on a customer org");
+      if (atRisk?.available) {
+        assert.equal(
+          atRisk.value.count,
+          summary.kpis.atRiskCount,
+          "tile count is the preview count",
+        );
+        assert.equal(
+          atRisk.value.revenue,
+          summary.kpis.atRiskRevenue,
+          "tile revenue is the preview revenue",
+        );
+      }
+      const list = widgets.atRiskCustomers;
+      assert.ok(list?.available, "the at-risk list is available on a customer org");
+      if (list?.available) {
+        // Waning is the only high-churn row: Fresh stays off the tile, and
+        // the ranking carries no cadence points for either single-invoice
+        // customer (55 and 30, not 85 and 60).
+        const waningRow = loader.rows.find((r) => r.id === waning)!;
+        const freshRow = loader.rows.find((r) => r.id === fresh)!;
+        assert.equal(
+          waningRow.churnScore,
+          55,
+          "waning scores inactive-high plus single-order, never cadence",
+        );
+        assert.equal(freshRow.churnScore, 30, "fresh scores single-order alone, never cadence");
+        const expected = rankAtRiskCustomers(loader.rows);
+        assert.deepEqual(
+          expected.map((r) => r.id),
+          [waning],
+          "only the high row ranks",
+        );
+        assert.deepEqual(
+          summary.atRisk.map((r) => r.id),
+          [waning],
+          "the preview ranks the same row",
+        );
+        assert.ok(list.value.length <= 5, "the tile shows five customers at most");
+        assert.deepEqual(
+          list.value.map((c) => c.id),
+          expected.map((r) => r.id),
+          "tile order is the engine ranking",
+        );
+        for (const customer of list.value) {
+          const row = loader.rows.find((r) => r.id === customer.id)!;
+          assert.equal(customer.churnScore, row.churnScore, "tile score is the dashboard score");
+          assert.equal(customer.revenue, row.revenue, "tile revenue is the dashboard revenue");
+        }
+      }
 
-    // The full dashboard path serves the same fields as available.
-    const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...WIDGETS])),
-    );
-    assert.ok(metrics.concentration?.available, "dashboard serves concentration");
-    assert.ok(metrics.atRisk?.available, "dashboard serves at-risk");
-    assert.ok(metrics.atRiskCustomers?.available, "dashboard serves the at-risk list");
+      // The full dashboard path serves the same fields as available.
+      const metrics = await pinClock(TODAY, () =>
+        withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...WIDGETS])),
+      );
+      assert.ok(metrics.concentration?.available, "dashboard serves concentration");
+      assert.ok(metrics.atRisk?.available, "dashboard serves at-risk");
+      assert.ok(metrics.atRiskCustomers?.available, "dashboard serves the at-risk list");
 
-    // A widget nobody asked for leaves its field null: its reader never runs.
-    const empty = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [])),
-    );
-    assert.equal(empty.concentration, null);
-    assert.equal(empty.atRisk, null);
-    assert.equal(empty.atRiskCustomers, null);
+      // A widget nobody asked for leaves its field null: its reader never runs.
+      const empty = await pinClock(TODAY, () =>
+        withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [])),
+      );
+      assert.equal(empty.concentration, null);
+      assert.equal(empty.atRisk, null);
+      assert.equal(empty.atRiskCustomers, null);
 
-    // A broken weight sum refuses by name on every widget instead of throwing.
-    await withBypass(() => db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
+      // A broken weight sum refuses by name on every widget instead of throwing.
+      await withBypass(() =>
+        db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
       || '{"analytics":{"customerIntelligence":{"healthWeightRecency":24}}}'::jsonb
-      where id = ${org.orgId}`));
-    const refused = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadCustomerWidgetMetrics(ctx as never, needAll as never)),
-    );
-    assert.deepEqual(Object.keys(refused).sort(), ["atRisk", "atRiskCustomers", "concentration"], "every widget refuses, none renders empty figures");
-    for (const [name, field] of Object.entries(refused) as Array<[string, { available: boolean; reason?: string } | null | undefined]>) {
-      assert.ok(field && !field.available, `${name} refuses instead of rendering empty figures`);
-      assert.ok(typeof field?.reason === "string" && field.reason.length > 0, `${name} says why`);
+      where id = ${org.orgId}`),
+      );
+      const refused = await pinClock(TODAY, () =>
+        withOrgContext(org.orgId, () => loadCustomerWidgetMetrics(ctx as never, needAll as never)),
+      );
+      assert.deepEqual(
+        Object.keys(refused).sort(),
+        ["atRisk", "atRiskCustomers", "concentration"],
+        "every widget refuses, none renders empty figures",
+      );
+      for (const [name, field] of Object.entries(refused) as Array<
+        [string, { available: boolean; reason?: string } | null | undefined]
+      >) {
+        assert.ok(field && !field.available, `${name} refuses instead of rendering empty figures`);
+        assert.ok(typeof field?.reason === "string" && field.reason.length > 0, `${name} says why`);
+      }
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  },
+);

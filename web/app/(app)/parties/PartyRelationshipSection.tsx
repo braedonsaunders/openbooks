@@ -1,16 +1,16 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useFormatter, useTranslations } from 'next-intl'
-import { Badge, Button, Input, Select, Skeleton } from '@openbooks/ui'
-import { Field } from '@/components/field'
-import { useRecordSaveParticipant } from '@/components/record-save-participants'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { useAppAction } from '@/lib/use-app-action'
-import { displayAccountStatusName } from '../../../lib/crm-status-display'
-import { PartyReadOnlyField } from './PartySummary'
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useFormatter, useTranslations } from "next-intl";
+import { Badge, Button, Input, Select, Skeleton } from "@openbooks/ui";
+import { Field } from "@/components/field";
+import { useRecordSaveParticipant } from "@/components/record-save-participants";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { useAppAction } from "@/lib/use-app-action";
+import { displayAccountStatusName } from "../../../lib/crm-status-display";
+import { PartyReadOnlyField } from "./PartySummary";
 
 /**
  * The Relationship tab of the account flyout — the CRM profile that used to
@@ -31,43 +31,55 @@ import { PartyReadOnlyField } from './PartySummary'
  * registry — the section never carries a Save of its own.
  */
 
-interface StatusOption { id: string; name: string; lifecycle_stage: string; is_default: boolean }
-interface Option { id: string; name: string }
+interface StatusOption {
+  id: string;
+  name: string;
+  lifecycle_stage: string;
+  is_default: boolean;
+}
+interface Option {
+  id: string;
+  name: string;
+}
 
 interface RelationshipResponse {
   account: {
-    profile: Record<string, unknown>
-    opportunities: { id: string; opportunity_number: string; title: string }[]
-  } | null
-  options: { statuses: StatusOption[]; owners: Option[]; territories: Option[]; sources: Option[] }
+    profile: Record<string, unknown>;
+    opportunities: { id: string; opportunity_number: string; title: string }[];
+  } | null;
+  options: { statuses: StatusOption[]; owners: Option[]; territories: Option[]; sources: Option[] };
 }
 
-const STAGES = ['lead', 'prospect', 'customer'] as const
-type Stage = (typeof STAGES)[number]
-const RANK: Record<Stage, number> = { lead: 0, prospect: 1, customer: 2 }
+const STAGES = ["lead", "prospect", "customer"] as const;
+type Stage = (typeof STAGES)[number];
+const RANK: Record<Stage, number> = { lead: 0, prospect: 1, customer: 2 };
 
 interface FormState {
-  lifecycleStage: Stage
-  statusId: string
-  ownerUserId: string
-  territoryId: string
-  leadSourceId: string
-  industry: string
-  category: string
-  annualRevenue: string
-  employeeCount: string
-  qualificationScore: string
-  nextActionAt: string
+  lifecycleStage: Stage;
+  statusId: string;
+  ownerUserId: string;
+  territoryId: string;
+  leadSourceId: string;
+  industry: string;
+  category: string;
+  annualRevenue: string;
+  employeeCount: string;
+  qualificationScore: string;
+  nextActionAt: string;
 }
 
-const text = (value: unknown): string => (value == null ? '' : String(value))
+const text = (value: unknown): string => (value == null ? "" : String(value));
 
-function optionName<T extends { id: string; name: string }>(options: T[], id: string, label: (option: T) => string = (option) => option.name): string {
-  const option = options.find((item) => item.id === id)
-  return option ? label(option) : ''
+function optionName<T extends { id: string; name: string }>(
+  options: T[],
+  id: string,
+  label: (option: T) => string = (option) => option.name,
+): string {
+  const option = options.find((item) => item.id === id);
+  return option ? label(option) : "";
 }
 
-const pad2 = (n: number): string => String(n).padStart(2, '0')
+const pad2 = (n: number): string => String(n).padStart(2, "0");
 
 /**
  * A stored UTC instant rendered as the viewer's local wall time for
@@ -75,10 +87,10 @@ const pad2 = (n: number): string => String(n).padStart(2, '0')
  * as local time and shifts the reminder by the zone offset.
  */
 function instantToLocalInput(value: unknown): string {
-  if (value == null || value === '') return ''
-  const at = new Date(String(value))
-  if (Number.isNaN(at.getTime())) return ''
-  return `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())}T${pad2(at.getHours())}:${pad2(at.getMinutes())}`
+  if (value == null || value === "") return "";
+  const at = new Date(String(value));
+  if (Number.isNaN(at.getTime())) return "";
+  return `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())}T${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
 }
 
 /**
@@ -88,14 +100,14 @@ function instantToLocalInput(value: unknown): string {
  * API's named 422 rather than failing silently here.
  */
 function localInputToInstant(value: string): string {
-  const at = new Date(value)
-  return Number.isNaN(at.getTime()) ? value : at.toISOString()
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? value : at.toISOString();
 }
 
 function toForm(profile: Record<string, unknown>): FormState {
-  const stage = String(profile.lifecycle_stage ?? 'lead')
+  const stage = String(profile.lifecycle_stage ?? "lead");
   return {
-    lifecycleStage: (STAGES as readonly string[]).includes(stage) ? (stage as Stage) : 'lead',
+    lifecycleStage: (STAGES as readonly string[]).includes(stage) ? (stage as Stage) : "lead",
     statusId: text(profile.status_id),
     ownerUserId: text(profile.owner_user_id),
     territoryId: text(profile.territory_id),
@@ -108,7 +120,7 @@ function toForm(profile: Record<string, unknown>): FormState {
     // datetime-local wants the viewer's local `YYYY-MM-DDTHH:mm`, while the
     // stamp arrives as a UTC instant (ISO string or serialized Date).
     nextActionAt: instantToLocalInput(profile.next_action_at),
-  }
+  };
 }
 
 export function PartyRelationshipSection({
@@ -116,30 +128,33 @@ export function PartyRelationshipSection({
   canManage,
   editable,
 }: {
-  partyId: string
+  partyId: string;
   /** crm.accounts.manage — may open a relationship profile. */
-  canManage: boolean
+  canManage: boolean;
   /** The record drawer is in edit mode and the viewer may manage accounts. */
-  editable: boolean
+  editable: boolean;
 }) {
-  const t = useTranslations('crm')
-  const tc = useTranslations('common')
-  const format = useFormatter()
-  const router = useRouter()
-  const { busy, refusal, execute, runExclusive, clearRefusal } = useAppAction()
+  const t = useTranslations("crm");
+  const tc = useTranslations("common");
+  const format = useFormatter();
+  const router = useRouter();
+  const { busy, refusal, execute, runExclusive, clearRefusal } = useAppAction();
   // Keyed by party so switching accounts reads as "not loaded yet" without a
   // synchronous reset inside the effect body, which would cascade a render on
   // every mount (react-hooks/set-state-in-effect).
-  const [result, setResult] = useState<{ partyId: string; body: RelationshipResponse | null } | null>(null)
-  const [form, setForm] = useState<FormState | null>(null)
+  const [result, setResult] = useState<{
+    partyId: string;
+    body: RelationshipResponse | null;
+  } | null>(null);
+  const [form, setForm] = useState<FormState | null>(null);
   // The form as last read: the section is dirty only while it differs.
-  const [loadedForm, setLoadedForm] = useState<FormState | null>(null)
-  const [storedStage, setStoredStage] = useState<Stage | null>(null)
+  const [loadedForm, setLoadedForm] = useState<FormState | null>(null);
+  const [storedStage, setStoredStage] = useState<Stage | null>(null);
   // The optimistic-concurrency token for the PATCH below: profile.updated_at
   // arrives in token form (the read rewrites it, like opportunity saves), so
   // this echoes back verbatim and rotates on every re-read.
-  const [storedRevision, setStoredRevision] = useState<string | null>(null)
-  const [stageReason, setStageReason] = useState('')
+  const [storedRevision, setStoredRevision] = useState<string | null>(null);
+  const [stageReason, setStageReason] = useState("");
 
   // The section's own copy of the relationship: the POST below opens the
   // profile server-side, but nothing re-reads it into this local
@@ -149,50 +164,62 @@ export function PartyRelationshipSection({
   // reload fetches and shapes only; the setStates stay at the call sites
   // (the mount effect keeps its promise-chain shape, which never resets
   // state synchronously inside the effect body).
-  const reload = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(`/api/crm/accounts/${partyId}`, { signal })
-    if (!response.ok) throw new Error('load failed')
-    const body = (await response.json()) as RelationshipResponse
-    const form = body.account ? toForm(body.account.profile) : null
-    const revision = body.account && typeof body.account.profile.updated_at === 'string'
-      ? body.account.profile.updated_at
-      : null
-    return { result: { partyId, body }, form, storedStage: form?.lifecycleStage ?? null, revision }
-  }, [partyId])
+  const reload = useCallback(
+    async (signal?: AbortSignal) => {
+      const response = await fetch(`/api/crm/accounts/${partyId}`, { signal });
+      if (!response.ok) throw new Error("load failed");
+      const body = (await response.json()) as RelationshipResponse;
+      const form = body.account ? toForm(body.account.profile) : null;
+      const revision =
+        body.account && typeof body.account.profile.updated_at === "string"
+          ? body.account.profile.updated_at
+          : null;
+      return {
+        result: { partyId, body },
+        form,
+        storedStage: form?.lifecycleStage ?? null,
+        revision,
+      };
+    },
+    [partyId],
+  );
 
   useEffect(() => {
-    const controller = new AbortController()
+    const controller = new AbortController();
     reload(controller.signal).then(
       (applied) => {
-        setResult(applied.result)
-        setForm(applied.form)
-        setLoadedForm(applied.form)
-        setStoredStage(applied.storedStage)
-        setStoredRevision(applied.revision)
+        setResult(applied.result);
+        setForm(applied.form);
+        setLoadedForm(applied.form);
+        setStoredStage(applied.storedStage);
+        setStoredRevision(applied.revision);
       },
       (error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setResult({ partyId, body: null })
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setResult({ partyId, body: null });
       },
-    )
-    return () => controller.abort()
-  }, [partyId, reload])
+    );
+    return () => controller.abort();
+  }, [partyId, reload]);
 
-  const loaded = result?.partyId === partyId ? result.body : undefined
+  const loaded = result?.partyId === partyId ? result.body : undefined;
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((current) => (current ? { ...current, [key]: value } : current))
+    setForm((current) => (current ? { ...current, [key]: value } : current));
 
   // A stage change retires the previous status: the old value names a status
   // from another stage, which the save endpoint rejects. Fall back to the new
   // stage's default so the panel never sends a stale pairing.
   const changeStage = (next: Stage) => {
-    const statuses = loaded?.options.statuses ?? []
-    const fallback = statuses.find((status) => status.lifecycle_stage === next && status.is_default)?.id
-      ?? statuses.find((status) => status.lifecycle_stage === next)?.id
-      ?? ''
-    setForm((current) => (current ? { ...current, lifecycleStage: next, statusId: fallback } : current))
-  }
+    const statuses = loaded?.options.statuses ?? [];
+    const fallback =
+      statuses.find((status) => status.lifecycle_stage === next && status.is_default)?.id ??
+      statuses.find((status) => status.lifecycle_stage === next)?.id ??
+      "";
+    setForm((current) =>
+      current ? { ...current, lifecycleStage: next, statusId: fallback } : current,
+    );
+  };
 
   // Opening the profile refreshes this section's own state from a re-read
   // (the POST answers 200, but router.refresh() never touches this
@@ -202,86 +229,92 @@ export function PartyRelationshipSection({
   // and retires Start tracking instead of inviting a duplicate POST.
   const startTracking = runExclusive(async () => {
     const ok = await execute(
-      () => fetchAction(`/api/crm/accounts/${partyId}`, { method: 'POST' }),
-      { fallbackMessage: tc('feedback.saveFailed'), successMessage: tc('feedback.saved') },
-    )
-    if (!ok) return
+      () => fetchAction(`/api/crm/accounts/${partyId}`, { method: "POST" }),
+      { fallbackMessage: tc("feedback.saveFailed"), successMessage: tc("feedback.saved") },
+    );
+    if (!ok) return;
     try {
-      const applied = await reload()
-      setResult(applied.result)
-      setForm(applied.form)
-      setLoadedForm(applied.form)
-      setStoredStage(applied.storedStage)
-      setStoredRevision(applied.revision)
+      const applied = await reload();
+      setResult(applied.result);
+      setForm(applied.form);
+      setLoadedForm(applied.form);
+      setStoredStage(applied.storedStage);
+      setStoredRevision(applied.revision);
     } catch {
       // The profile exists server-side; a failed re-read keeps the empty
       // state (and its retryable Start tracking) rather than a dead panel.
     }
-    router.refresh()
-  })
+    router.refresh();
+  });
 
   async function save(): Promise<boolean> {
-    if (!form) return true
+    if (!form) return true;
     const ok = await execute(
-      () => fetchAction(`/api/crm/accounts/${partyId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          statusId: form.statusId || null,
-          ownerUserId: form.ownerUserId || null,
-          territoryId: form.territoryId || null,
-          leadSourceId: form.leadSourceId || null,
-          // Local wall time back to a UTC instant: the API stores zone-less
-          // input in the session zone, which would move the reminder.
-          nextActionAt: form.nextActionAt ? localInputToInstant(form.nextActionAt) : null,
-          stageReason: stageReason || null,
-          isActive: true,
-          // The concurrency token the main and bank saves already carry: a
-          // second tab holding older fields 409s instead of replacing them.
-          // A 409 surfaces through the alert below with the server's reload
-          // remedy — the form is deliberately NOT re-read here, because the
-          // form IS the draft and a refresh would discard the edits the
-          // operator must reapply.
-          expectedUpdatedAt: storedRevision,
+      () =>
+        fetchAction(`/api/crm/accounts/${partyId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...form,
+            statusId: form.statusId || null,
+            ownerUserId: form.ownerUserId || null,
+            territoryId: form.territoryId || null,
+            leadSourceId: form.leadSourceId || null,
+            // Local wall time back to a UTC instant: the API stores zone-less
+            // input in the session zone, which would move the reminder.
+            nextActionAt: form.nextActionAt ? localInputToInstant(form.nextActionAt) : null,
+            stageReason: stageReason || null,
+            isActive: true,
+            // The concurrency token the main and bank saves already carry: a
+            // second tab holding older fields 409s instead of replacing them.
+            // A 409 surfaces through the alert below with the server's reload
+            // remedy — the form is deliberately NOT re-read here, because the
+            // form IS the draft and a refresh would discard the edits the
+            // operator must reapply.
+            expectedUpdatedAt: storedRevision,
+          }),
         }),
-      }),
-      { fallbackMessage: tc('feedback.saveFailed') },
-    )
-    if (!ok) return false
-    setStageReason('')
+      { fallbackMessage: tc("feedback.saveFailed") },
+    );
+    if (!ok) return false;
+    setStageReason("");
     // A save rotates the token: re-read so the next save carries the fresh
     // revision instead of 409ing against this one's write.
     try {
-      const applied = await reload()
-      setResult(applied.result)
-      setForm(applied.form)
-      setLoadedForm(applied.form)
-      setStoredStage(applied.storedStage)
-      setStoredRevision(applied.revision)
+      const applied = await reload();
+      setResult(applied.result);
+      setForm(applied.form);
+      setLoadedForm(applied.form);
+      setStoredStage(applied.storedStage);
+      setStoredRevision(applied.revision);
     } catch {
       // The save landed server-side; a failed re-read keeps the saved form
       // as the new baseline and the next save re-checks the token rather
       // than failing silently.
-      setLoadedForm(form)
+      setLoadedForm(form);
     }
-    return true
+    return true;
   }
 
-  const dirty = form !== null && loadedForm !== null
-    && (stageReason !== '' || (Object.keys(form) as (keyof FormState)[]).some((key) => form[key] !== loadedForm[key]))
-  useRecordSaveParticipant('relationship', {
+  const dirty =
+    form !== null &&
+    loadedForm !== null &&
+    (stageReason !== "" ||
+      (Object.keys(form) as (keyof FormState)[]).some((key) => form[key] !== loadedForm[key]));
+  useRecordSaveParticipant("relationship", {
     dirty,
     save,
     reset: () => {
-      setForm(loadedForm)
-      setStageReason('')
-      clearRefusal()
+      setForm(loadedForm);
+      setStageReason("");
+      clearRefusal();
     },
-  })
+  });
 
   if (loaded === null) {
-    return <div className="py-8 text-center text-sm text-slate-500">{tc('feedback.loadFailed')}</div>
+    return (
+      <div className="py-8 text-center text-sm text-slate-500">{tc("feedback.loadFailed")}</div>
+    );
   }
   if (loaded === undefined) {
     return (
@@ -289,7 +322,7 @@ export function PartyRelationshipSection({
         <Skeleton className="h-10 w-full rounded-lg" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </div>
-    )
+    );
   }
 
   // No profile yet: an AR-side or imported customer. Offer to open one rather
@@ -297,126 +330,219 @@ export function PartyRelationshipSection({
   if (!loaded.account || !form) {
     return (
       <section className="space-y-4">
-        <ActionAlert error={refusal} fallbackMessage={tc('feedback.saveFailed')} />
+        <ActionAlert error={refusal} fallbackMessage={tc("feedback.saveFailed")} />
         <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('accounts.untrackedTitle')}</h3>
-          <p className="mx-auto mt-1 max-w-md text-xs text-slate-500">{t('accounts.untrackedDescription')}</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t("accounts.untrackedTitle")}
+          </h3>
+          <p className="mx-auto mt-1 max-w-md text-xs text-slate-500">
+            {t("accounts.untrackedDescription")}
+          </p>
           {canManage ? (
             <Button className="mt-4" disabled={busy} onClick={startTracking}>
-              {busy ? tc('actions.saving') : t('accounts.startTracking')}
+              {busy ? tc("actions.saving") : t("accounts.startTracking")}
             </Button>
           ) : null}
         </div>
       </section>
-    )
+    );
   }
 
-  const statuses = loaded.options.statuses.filter((status) => status.lifecycle_stage === form.lifecycleStage)
-  const statusName = (status: StatusOption) => displayAccountStatusName(status.name, (key) => t(`accounts.statuses.${key}`))
-  const movingBackward = storedStage != null && RANK[form.lifecycleStage] < RANK[storedStage]
-  const opportunities = loaded.account.opportunities ?? []
+  const statuses = loaded.options.statuses.filter(
+    (status) => status.lifecycle_stage === form.lifecycleStage,
+  );
+  const statusName = (status: StatusOption) =>
+    displayAccountStatusName(status.name, (key) => t(`accounts.statuses.${key}`));
+  const movingBackward = storedStage != null && RANK[form.lifecycleStage] < RANK[storedStage];
+  const opportunities = loaded.account.opportunities ?? [];
 
   return (
     <section className="space-y-5">
-      <ActionAlert error={refusal} fallbackMessage={tc('feedback.saveFailed')} />
+      <ActionAlert error={refusal} fallbackMessage={tc("feedback.saveFailed")} />
 
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('accounts.relationshipHeading')}</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t("accounts.relationshipHeading")}
+        </h3>
         <Badge>{t(`stages.${form.lifecycleStage}`)}</Badge>
       </div>
 
       {editable ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('fields.lifecycleStage')}>
-            <Select value={form.lifecycleStage} onChange={(event) => changeStage(event.target.value as Stage)}>
-              {STAGES.map((stage) => <option key={stage} value={stage}>{t(`stages.${stage}`)}</option>)}
-            </Select>
-          </Field>
-          <Field label={t('fields.status')}>
-            <Select value={form.statusId} onChange={(event) => set('statusId', event.target.value)}>
-              <option value="">{tc('labels.none')}</option>
-              {statuses.map((status) => (
-                <option key={status.id} value={status.id}>{statusName(status)}</option>
+          <Field label={t("fields.lifecycleStage")}>
+            <Select
+              value={form.lifecycleStage}
+              onChange={(event) => changeStage(event.target.value as Stage)}
+            >
+              {STAGES.map((stage) => (
+                <option key={stage} value={stage}>
+                  {t(`stages.${stage}`)}
+                </option>
               ))}
             </Select>
           </Field>
-          <Field label={t('fields.owner')}>
-            <Select value={form.ownerUserId} onChange={(event) => set('ownerUserId', event.target.value)}>
-              <option value="">{t('fields.unassigned')}</option>
-              {loaded.options.owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+          <Field label={t("fields.status")}>
+            <Select value={form.statusId} onChange={(event) => set("statusId", event.target.value)}>
+              <option value="">{tc("labels.none")}</option>
+              {statuses.map((status) => (
+                <option key={status.id} value={status.id}>
+                  {statusName(status)}
+                </option>
+              ))}
             </Select>
           </Field>
-          <Field label={t('fields.territory')}>
-            <Select value={form.territoryId} onChange={(event) => set('territoryId', event.target.value)}>
-              <option value="">{tc('labels.none')}</option>
-              {loaded.options.territories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          <Field label={t("fields.owner")}>
+            <Select
+              value={form.ownerUserId}
+              onChange={(event) => set("ownerUserId", event.target.value)}
+            >
+              <option value="">{t("fields.unassigned")}</option>
+              {loaded.options.owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.name}
+                </option>
+              ))}
             </Select>
           </Field>
-          <Field label={t('fields.leadSource')}>
-            <Select value={form.leadSourceId} onChange={(event) => set('leadSourceId', event.target.value)}>
-              <option value="">{tc('labels.none')}</option>
-              {loaded.options.sources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          <Field label={t("fields.territory")}>
+            <Select
+              value={form.territoryId}
+              onChange={(event) => set("territoryId", event.target.value)}
+            >
+              <option value="">{tc("labels.none")}</option>
+              {loaded.options.territories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
             </Select>
           </Field>
-          <Field label={t('fields.qualificationScore')}>
-            <Input type="number" min="0" max="100" value={form.qualificationScore} onChange={(event) => set('qualificationScore', event.target.value)} />
+          <Field label={t("fields.leadSource")}>
+            <Select
+              value={form.leadSourceId}
+              onChange={(event) => set("leadSourceId", event.target.value)}
+            >
+              <option value="">{tc("labels.none")}</option>
+              {loaded.options.sources.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </Select>
           </Field>
-          <Field label={t('fields.industry')}>
-            <Input value={form.industry} onChange={(event) => set('industry', event.target.value)} />
+          <Field label={t("fields.qualificationScore")}>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              value={form.qualificationScore}
+              onChange={(event) => set("qualificationScore", event.target.value)}
+            />
           </Field>
-          <Field label={t('fields.category')}>
-            <Input value={form.category} onChange={(event) => set('category', event.target.value)} />
+          <Field label={t("fields.industry")}>
+            <Input
+              value={form.industry}
+              onChange={(event) => set("industry", event.target.value)}
+            />
           </Field>
-          <Field label={t('fields.annualRevenue')}>
-            <Input inputMode="decimal" value={form.annualRevenue} onChange={(event) => set('annualRevenue', event.target.value)} />
+          <Field label={t("fields.category")}>
+            <Input
+              value={form.category}
+              onChange={(event) => set("category", event.target.value)}
+            />
           </Field>
-          <Field label={t('fields.employeeCount')}>
-            <Input type="number" min="0" value={form.employeeCount} onChange={(event) => set('employeeCount', event.target.value)} />
+          <Field label={t("fields.annualRevenue")}>
+            <Input
+              inputMode="decimal"
+              value={form.annualRevenue}
+              onChange={(event) => set("annualRevenue", event.target.value)}
+            />
           </Field>
-          <Field label={t('fields.nextAction')}>
-            <Input type="datetime-local" value={form.nextActionAt} onChange={(event) => set('nextActionAt', event.target.value)} />
+          <Field label={t("fields.employeeCount")}>
+            <Input
+              type="number"
+              min="0"
+              value={form.employeeCount}
+              onChange={(event) => set("employeeCount", event.target.value)}
+            />
+          </Field>
+          <Field label={t("fields.nextAction")}>
+            <Input
+              type="datetime-local"
+              value={form.nextActionAt}
+              onChange={(event) => set("nextActionAt", event.target.value)}
+            />
           </Field>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2" data-relationship-read-only="">
-          <PartyReadOnlyField label={t('fields.lifecycleStage')} value={t(`stages.${form.lifecycleStage}`)} />
-          <PartyReadOnlyField label={t('fields.status')} value={optionName(loaded.options.statuses, form.statusId, statusName)} />
-          <PartyReadOnlyField label={t('fields.owner')} value={optionName(loaded.options.owners, form.ownerUserId) || t('fields.unassigned')} />
-          <PartyReadOnlyField label={t('fields.territory')} value={optionName(loaded.options.territories, form.territoryId)} />
-          <PartyReadOnlyField label={t('fields.leadSource')} value={optionName(loaded.options.sources, form.leadSourceId)} />
-          <PartyReadOnlyField label={t('fields.qualificationScore')} value={form.qualificationScore} />
-          <PartyReadOnlyField label={t('fields.industry')} value={form.industry} />
-          <PartyReadOnlyField label={t('fields.category')} value={form.category} />
-          <PartyReadOnlyField label={t('fields.annualRevenue')} value={form.annualRevenue} />
-          <PartyReadOnlyField label={t('fields.employeeCount')} value={form.employeeCount} />
           <PartyReadOnlyField
-            label={t('fields.nextAction')}
-            value={form.nextActionAt ? format.dateTime(new Date(form.nextActionAt), { dateStyle: 'medium', timeStyle: 'short' }) : ''}
+            label={t("fields.lifecycleStage")}
+            value={t(`stages.${form.lifecycleStage}`)}
+          />
+          <PartyReadOnlyField
+            label={t("fields.status")}
+            value={optionName(loaded.options.statuses, form.statusId, statusName)}
+          />
+          <PartyReadOnlyField
+            label={t("fields.owner")}
+            value={optionName(loaded.options.owners, form.ownerUserId) || t("fields.unassigned")}
+          />
+          <PartyReadOnlyField
+            label={t("fields.territory")}
+            value={optionName(loaded.options.territories, form.territoryId)}
+          />
+          <PartyReadOnlyField
+            label={t("fields.leadSource")}
+            value={optionName(loaded.options.sources, form.leadSourceId)}
+          />
+          <PartyReadOnlyField
+            label={t("fields.qualificationScore")}
+            value={form.qualificationScore}
+          />
+          <PartyReadOnlyField label={t("fields.industry")} value={form.industry} />
+          <PartyReadOnlyField label={t("fields.category")} value={form.category} />
+          <PartyReadOnlyField label={t("fields.annualRevenue")} value={form.annualRevenue} />
+          <PartyReadOnlyField label={t("fields.employeeCount")} value={form.employeeCount} />
+          <PartyReadOnlyField
+            label={t("fields.nextAction")}
+            value={
+              form.nextActionAt
+                ? format.dateTime(new Date(form.nextActionAt), {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })
+                : ""
+            }
           />
         </div>
       )}
 
       {editable && movingBackward ? (
         <div className="space-y-1.5">
-          <Field label={t('accounts.stageReason')}>
+          <Field label={t("accounts.stageReason")}>
             <Input value={stageReason} onChange={(event) => setStageReason(event.target.value)} />
           </Field>
-          <p className="text-xs text-slate-500">{t('accounts.stageReasonHint')}</p>
+          <p className="text-xs text-slate-500">{t("accounts.stageReasonHint")}</p>
         </div>
       ) : null}
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{t('accounts.opportunities')}</h3>
+        <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t("accounts.opportunities")}
+        </h3>
         {opportunities.length ? (
           <div className="divide-y rounded-md border dark:divide-slate-800 dark:border-slate-800">
             {opportunities.slice(0, 10).map((row) => (
-              <div key={row.id} className="px-3 py-2 text-sm">{row.opportunity_number} · {row.title}</div>
+              <div key={row.id} className="px-3 py-2 text-sm">
+                {row.opportunity_number} · {row.title}
+              </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">{t('accounts.noOpportunities')}</p>
+          <p className="text-sm text-slate-500">{t("accounts.noOpportunities")}</p>
         )}
       </section>
     </section>
-  )
+  );
 }

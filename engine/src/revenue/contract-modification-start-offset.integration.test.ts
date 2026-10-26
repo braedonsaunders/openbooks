@@ -46,9 +46,12 @@ async function fixture(
     await db.execute(
       sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
     );
-    const calendar = (await db.execute<{ id: string }>(
-        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
-      ))[0]!.id;
+    const calendar = (
+      await db.execute<{ id: string }>(
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
+        "objects",
+      )
+    )[0]!.id;
     await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,custom)
    values(${randomUUID()},${org.orgId},${calendar},2026,3,'2026-03','2026-03-01','2026-03-31',false,'{}'::jsonb)`);
     const ruleId = randomUUID(),
@@ -63,12 +66,7 @@ async function fixture(
    values(${contractId},${org.orgId},${org.subsidiaryId},${org.customerId},${`OFF-${contractId}`},'active','2026-03-01','2026-03-31','CAD',3000,${actors.submitterId},${actors.submitterId})`);
     await db.execute(sql`insert into performance_obligations(id,org_id,contract_id,description,recognition_rule_id,allocated_price,standalone_selling_price,recognition_starts_on,recognition_ends_on,deferred_account_id,recognized_account_id,status,created_by,updated_by)
    values(${obligationId},${org.orgId},${contractId},'Offset service',${ruleId},3000,3000,'2026-03-01','2026-03-31',${org.accounts.deferred},${org.accounts.recognized},'open',${actors.submitterId},${actors.submitterId})`);
-    await buildRecognitionSchedule(
-      obligationId,
-      org.orgId,
-      actors.submitterId,
-      org.bookId,
-    );
+    await buildRecognitionSchedule(obligationId, org.orgId, actors.submitterId, org.bookId);
     await grantDecisionDuties(org.orgId, actors.approver1Id, ["ar.post"]);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "financial_change",
@@ -118,9 +116,12 @@ function proposal(f: Fixture, effectiveOn: string): RevenueModificationInput {
 
 async function approve(f: Fixture, id: string) {
   await submitFinancialChange(f.org.orgId, id, f.actors.submitterId);
-  const gate = (await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`, "objects",
-    ))[0];
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`,
+      "objects",
+    )
+  )[0];
   assert.ok(gate);
   await decideGate({
     gateId: gate.id,
@@ -130,9 +131,12 @@ async function approve(f: Fixture, id: string) {
 }
 
 async function earned(f: Fixture) {
-  const row = (await db.execute<{ amount: string }>(
-      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.recognized} and e.status in('posted','reversed')`, "objects",
-    ))[0]!;
+  const row = (
+    await db.execute<{ amount: string }>(
+      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.recognized} and e.status in('posted','reversed')`,
+      "objects",
+    )
+  )[0]!;
   return toUnits(row.amount);
 }
 

@@ -6,8 +6,11 @@ import { PayrollError } from "../error.ts";
 import { isCanadianSin } from "./roexml.ts";
 import { filingAccountRef, filingAccountsById, type FilingAccountRef } from "../filing.ts";
 import {
-  t4Returns, t4Summary,
-  type T4Return, type T4Slip, type T4SummaryTotals,
+  t4Returns,
+  t4Summary,
+  type T4Return,
+  type T4Slip,
+  type T4SummaryTotals,
 } from "../yearend.ts";
 
 /**
@@ -41,8 +44,12 @@ interface TransmitterConfig {
 }
 
 const esc = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 
 /**
  * Exact decimal formatting — NEVER `Number(v).toFixed(2)`.
@@ -111,12 +118,16 @@ export async function buildT4Xml(
    */
   unsupportedFilings: string[];
 }> {
-  const cfgRow = (await db.execute<{ cfg: Partial<TransmitterConfig> | null }>(sql`
+  const cfgRow = await db.execute<{ cfg: Partial<TransmitterConfig> | null }>(
+    sql`
     select settings#>'{payroll,t4Transmitter}' as cfg from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const cfg = cfgRow[0]?.cfg ?? {};
-  const missingCfg = (["bn", "transmitterNumber", "name", "contactName", "contactEmail", "contactPhone"] as const)
-    .filter((key) => !cfg[key] || !String(cfg[key]).trim());
+  const missingCfg = (
+    ["bn", "transmitterNumber", "name", "contactName", "contactEmail", "contactPhone"] as const
+  ).filter((key) => !cfg[key] || !String(cfg[key]).trim());
   if (missingCfg.length > 0) {
     throw new PayrollError(
       `T4 transmitter configuration incomplete (${missingCfg.join(", ")}) — set it under Payroll setup`,
@@ -130,11 +141,14 @@ export async function buildT4Xml(
     : await scopedReturns(orgId, taxYear, options.rowIds);
   const slipCount = returns.reduce((count, ret) => count + ret.slips.length, 0);
 
-  const sins = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
+  const sins = await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(
+    sql`
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sinByEmployee = new Map(sins.map((row) => [row.employee_party_id, row.sin_encrypted]));
 
   const missingSins: string[] = [];
@@ -171,14 +185,15 @@ export async function buildT4Xml(
     filename: `T4-${taxYear}${suffix}.xml`,
     xml: renderT4Xml({ orgId, taxYear, transmitter, returns: withSins, reportTypeCode }),
     slipCount,
-    unsupportedFilings: quebec.length > 0
-      ? [
-        `${quebec.join(", ")} ${quebec.length === 1 ? "is" : "are"} employed in Quebec and also `
-        + "requires an RL-1 from Revenu Québec — the T4 in this file is complete; the RL-1 "
-        + "is its own filing on the payroll year-end page and is transmitted to Revenu "
-        + "Québec separately, never inside this CRA file",
-      ]
-      : [],
+    unsupportedFilings:
+      quebec.length > 0
+        ? [
+            `${quebec.join(", ")} ${quebec.length === 1 ? "is" : "are"} employed in Quebec and also ` +
+              "requires an RL-1 from Revenu Québec — the T4 in this file is complete; the RL-1 " +
+              "is its own filing on the payroll year-end page and is transmitted to Revenu " +
+              "Québec separately, never inside this CRA file",
+          ]
+        : [],
   };
 }
 
@@ -207,9 +222,7 @@ async function scopedReturns(
     scoped.push({
       ...ret,
       slips,
-      summary: await t4Summary(
-        orgId, taxYear, ret.filingAccount.id, slips,
-      ),
+      summary: await t4Summary(orgId, taxYear, ret.filingAccount.id, slips),
     });
   }
   if (scoped.length === 0) {
@@ -247,9 +260,7 @@ async function returnsOfSlips(
   const returns: T4Return[] = [];
   for (const accountId of accountIds) {
     const own = slips.filter((slip) => slip.filingAccountId === accountId);
-    const ledger = await t4Summary(
-      orgId, taxYear, accountId, own,
-    );
+    const ledger = await t4Summary(orgId, taxYear, accountId, own);
     const total = (pick: (slip: T4Slip) => string) =>
       own.reduce((acc, slip) => add(acc, pick(slip)), "0");
     returns.push({
@@ -261,7 +272,10 @@ async function returnsOfSlips(
         employmentIncome: total((slip) => slip.box14EmploymentIncome),
         employeeCpp: total((slip) => slip.box16Cpp),
         employeeCpp2: total((slip) => slip.box16aCpp2),
-        employerCpp: add(total((slip) => slip.employerCpp), total((slip) => slip.employerCpp2)),
+        employerCpp: add(
+          total((slip) => slip.employerCpp),
+          total((slip) => slip.employerCpp2),
+        ),
         employeeEi: total((slip) => slip.box18Ei),
         employerEi: total((slip) => slip.employerEi),
         incomeTax: total((slip) => slip.box22IncomeTax),
@@ -269,7 +283,8 @@ async function returnsOfSlips(
     });
   }
   return returns.sort((a, b) =>
-    (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+    (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""),
+  );
 }
 
 /**
@@ -302,7 +317,10 @@ export function t4SlipFromReported(
     reported.fields.find((field) => field.code == null && field.label === label)?.value ?? "";
   const privateFact = (name: string): string => {
     const value = reported.privateFacts?.[name];
-    if (value == null) throw new PayrollError(`T4 cancellation is missing the previously reported employer ${name} amount`);
+    if (value == null)
+      throw new PayrollError(
+        `T4 cancellation is missing the previously reported employer ${name} amount`,
+      );
     return value;
   };
   const isQuebec = province === "QC";
@@ -381,45 +399,46 @@ export function renderT4Xml(input: {
       // Quebec-only, and simply absent from the file for everyone else rather
       // than reported as a zero the CRA would have to interpret.
       const qpip = slip.isQuebec
-        ? `   <PPIP_AMT>${amt(slip.box55Qpip)}</PPIP_AMT>\n`
-          + `   <PPIP_ERN_AMT>${amt(slip.box56QpipInsurable)}</PPIP_ERN_AMT>\n`
+        ? `   <PPIP_AMT>${amt(slip.box55Qpip)}</PPIP_AMT>\n` +
+          `   <PPIP_ERN_AMT>${amt(slip.box56QpipInsurable)}</PPIP_ERN_AMT>\n`
         : "";
       slipXml.push(
         `  <T4Slip>\n` +
-        `   <EMPE_NM><snm>${esc(surname)}</snm><gvn_nm>${esc(given.join(" ") || surname)}</gvn_nm></EMPE_NM>\n` +
-        `   <SIN>${sin}</SIN>\n` +
-        `   <BN>${esc(bn)}</BN>\n` +
-        `   <EMPT_PROV_CD>${esc(slip.province)}</EMPT_PROV_CD>\n` +
-        `   <RPT_TCD>${rpt}</RPT_TCD>\n` +
-        `   <empt_incamt>${amt(slip.box14EmploymentIncome)}</empt_incamt>\n` +
-        pension +
-        `   <EMPE_CPP2_AMT>${amt(slip.box16aCpp2)}</EMPE_CPP2_AMT>\n` +
-        `   <EIP_AMT>${amt(slip.box18Ei)}</EIP_AMT>\n` +
-        `   <ITX_DDCT_AMT>${amt(slip.box22IncomeTax)}</ITX_DDCT_AMT>\n` +
-        `   <EI_INSU_ERN_AMT>${amt(slip.box24EiInsurable)}</EI_INSU_ERN_AMT>\n` +
-        `   <CPP_QPP_ERN_AMT>${amt(slip.box26CppPensionable)}</CPP_QPP_ERN_AMT>\n` +
-        qpip +
-        `   <UNN_DUES_AMT>${amt(slip.box44UnionDues)}</UNN_DUES_AMT>\n` +
-        `  </T4Slip>`,
+          `   <EMPE_NM><snm>${esc(surname)}</snm><gvn_nm>${esc(given.join(" ") || surname)}</gvn_nm></EMPE_NM>\n` +
+          `   <SIN>${sin}</SIN>\n` +
+          `   <BN>${esc(bn)}</BN>\n` +
+          `   <EMPT_PROV_CD>${esc(slip.province)}</EMPT_PROV_CD>\n` +
+          `   <RPT_TCD>${rpt}</RPT_TCD>\n` +
+          `   <empt_incamt>${amt(slip.box14EmploymentIncome)}</empt_incamt>\n` +
+          pension +
+          `   <EMPE_CPP2_AMT>${amt(slip.box16aCpp2)}</EMPE_CPP2_AMT>\n` +
+          `   <EIP_AMT>${amt(slip.box18Ei)}</EIP_AMT>\n` +
+          `   <ITX_DDCT_AMT>${amt(slip.box22IncomeTax)}</ITX_DDCT_AMT>\n` +
+          `   <EI_INSU_ERN_AMT>${amt(slip.box24EiInsurable)}</EI_INSU_ERN_AMT>\n` +
+          `   <CPP_QPP_ERN_AMT>${amt(slip.box26CppPensionable)}</CPP_QPP_ERN_AMT>\n` +
+          qpip +
+          `   <UNN_DUES_AMT>${amt(slip.box44UnionDues)}</UNN_DUES_AMT>\n` +
+          `  </T4Slip>`,
       );
     }
     returnXml.push(
       ` <T4>\n` +
-      slipXml.join("\n") + "\n" +
-      `  <T4Summary>\n` +
-      `   <bn>${esc(bn)}</bn>\n` +
-      `   <tx_yr>${taxYear}</tx_yr>\n` +
-      `   <slp_cnt>${ret.slips.length}</slp_cnt>\n` +
-      `   <RPT_TCD>${returnRpt}</RPT_TCD>\n` +
-      `   <tot_empt_incamt>${amt(ret.summary.employmentIncome)}</tot_empt_incamt>\n` +
-      `   <TOT_EMPE_CPP_AMT>${amt(ret.summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
-      `   <TOT_EMPE_CPP2_AMT>${amt(ret.summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
-      `   <TOT_EMPR_CPP_AMT>${amt(ret.summary.employerCpp)}</TOT_EMPR_CPP_AMT><tot_empr_cppe_amt>${amt(ret.summary.employerCpp2)}</tot_empr_cppe_amt>\n` +
-      `   <TOT_EMPE_EIP_AMT>${amt(ret.summary.employeeEi)}</TOT_EMPE_EIP_AMT>\n` +
-      `   <TOT_EMPR_EIP_AMT>${amt(ret.summary.employerEi)}</TOT_EMPR_EIP_AMT>\n` +
-      `   <TOT_ITX_DDCT_AMT>${amt(ret.summary.incomeTax)}</TOT_ITX_DDCT_AMT>\n` +
-      `  </T4Summary>\n` +
-      ` </T4>`,
+        slipXml.join("\n") +
+        "\n" +
+        `  <T4Summary>\n` +
+        `   <bn>${esc(bn)}</bn>\n` +
+        `   <tx_yr>${taxYear}</tx_yr>\n` +
+        `   <slp_cnt>${ret.slips.length}</slp_cnt>\n` +
+        `   <RPT_TCD>${returnRpt}</RPT_TCD>\n` +
+        `   <tot_empt_incamt>${amt(ret.summary.employmentIncome)}</tot_empt_incamt>\n` +
+        `   <TOT_EMPE_CPP_AMT>${amt(ret.summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
+        `   <TOT_EMPE_CPP2_AMT>${amt(ret.summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
+        `   <TOT_EMPR_CPP_AMT>${amt(ret.summary.employerCpp)}</TOT_EMPR_CPP_AMT><tot_empr_cppe_amt>${amt(ret.summary.employerCpp2)}</tot_empr_cppe_amt>\n` +
+        `   <TOT_EMPE_EIP_AMT>${amt(ret.summary.employeeEi)}</TOT_EMPE_EIP_AMT>\n` +
+        `   <TOT_EMPR_EIP_AMT>${amt(ret.summary.employerEi)}</TOT_EMPR_EIP_AMT>\n` +
+        `   <TOT_ITX_DDCT_AMT>${amt(ret.summary.incomeTax)}</TOT_ITX_DDCT_AMT>\n` +
+        `  </T4Summary>\n` +
+        ` </T4>`,
     );
   }
   const xml =
@@ -438,7 +457,8 @@ export function renderT4Xml(input: {
     `<cntc_email_area>${esc(transmitter.contactEmail)}</cntc_email_area></CNTC>\n` +
     ` </T619>\n` +
     ` <Return>\n` +
-    returnXml.join("\n") + "\n" +
+    returnXml.join("\n") +
+    "\n" +
     ` </Return>\n` +
     `</Submission>\n`;
 

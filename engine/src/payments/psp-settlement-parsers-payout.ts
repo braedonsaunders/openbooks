@@ -1,7 +1,16 @@
 import { fromUnits, toUnits } from "../money/money.ts";
 import { fromMinorUnits } from "./minor-units.ts";
-import { PspSettlementError, requireFxRate, requireSettlementCurrency, summarizeSettlement } from "./psp-settlement-core.ts";
-import type { ParsedSettlement, ParsedSettlementLine, SettlementLineKind } from "./psp-settlement-core.ts";
+import {
+  PspSettlementError,
+  requireFxRate,
+  requireSettlementCurrency,
+  summarizeSettlement,
+} from "./psp-settlement-core.ts";
+import type {
+  ParsedSettlement,
+  ParsedSettlementLine,
+  SettlementLineKind,
+} from "./psp-settlement-core.ts";
 
 /**
  * Exact decimal from a provider payload: Shopify Money and PayPal API amounts
@@ -10,7 +19,8 @@ import type { ParsedSettlement, ParsedSettlementLine, SettlementLineKind } from 
  * or 1e3 would book money nobody evidenced.
  */
 function requireExactMoney(value: unknown, field: string): string {
-  const raw = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  const raw =
+    typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
   if (!/^\d+(\.\d{1,4})?$/.test(raw)) {
     throw new PspSettlementError(`${field} must be an exact decimal amount with at most 4 places`);
   }
@@ -109,7 +119,10 @@ export function parseShopifyPaymentsPayout(
     const meta: Record<string, unknown> = { shopifyType: rowType };
     if (t.sourceOrderId) meta.sourceOrderId = t.sourceOrderId;
     if (t.exchange_rate != null) {
-      meta.exchangeRate = requireFxRate(t.exchange_rate, `Shopify Payments transaction exchange_rate (${rowLabel})`);
+      meta.exchangeRate = requireFxRate(
+        t.exchange_rate,
+        `Shopify Payments transaction exchange_rate (${rowLabel})`,
+      );
     }
     lines.push({
       kind: mapped,
@@ -119,7 +132,12 @@ export function parseShopifyPaymentsPayout(
       currency,
       meta,
     });
-    if (t.fee != null && String(t.fee).trim() !== "" && String(t.fee).trim() !== "0" && String(t.fee).trim() !== "0.00") {
+    if (
+      t.fee != null &&
+      String(t.fee).trim() !== "" &&
+      String(t.fee).trim() !== "0" &&
+      String(t.fee).trim() !== "0.00"
+    ) {
       const fee = requireExactMoney(t.fee, `Shopify Payments transaction fee (${rowLabel})`);
       lines.push({
         kind: "fee",
@@ -260,7 +278,12 @@ export function parsePaypalTransactions(
       meta: { paypalEventCode: code.trim().toUpperCase() },
     });
     const feeValue = info.fee_amount?.value;
-    if (feeValue != null && String(feeValue).trim() !== "" && String(feeValue).trim() !== "0" && String(feeValue).trim() !== "0.00") {
+    if (
+      feeValue != null &&
+      String(feeValue).trim() !== "" &&
+      String(feeValue).trim() !== "0" &&
+      String(feeValue).trim() !== "0.00"
+    ) {
       lines.push({
         kind: "fee",
         amount: requireExactMoney(feeValue, `PayPal transaction fee (${label})`),
@@ -287,7 +310,11 @@ export function parsePaypalTransactions(
  * header row. The classifier is the Transaction Event Code family (same map
  * as the API parser); Debit/Credit rides the line meta as evidence.
  */
-export function parsePaypalSettlementCsv(csv: string, reference: string, fallbackDate?: string): ParsedSettlement {
+export function parsePaypalSettlementCsv(
+  csv: string,
+  reference: string,
+  fallbackDate?: string,
+): ParsedSettlement {
   const ref = (reference ?? "").trim();
   if (ref === "") throw new PspSettlementError("PayPal settlement reference is required");
   const records = splitCsvRecords(csv);
@@ -300,9 +327,11 @@ export function parsePaypalSettlementCsv(csv: string, reference: string, fallbac
   const idCol = col("transaction id");
   const amountCol = col("gross transaction amount");
   const currencyCol = col("gross transaction currency");
-  const dcCol = ["transaction debit or credit", "debit or credit"].map(col).find((i) => i >= 0) ?? -1;
+  const dcCol =
+    ["transaction debit or credit", "debit or credit"].map(col).find((i) => i >= 0) ?? -1;
   const feeCol = ["fee amount", "fee"].map(col).find((i) => i >= 0) ?? -1;
-  const dateCol = ["transaction completed date", "transaction initiated date"].map(col).find((i) => i >= 0) ?? -1;
+  const dateCol =
+    ["transaction completed date", "transaction initiated date"].map(col).find((i) => i >= 0) ?? -1;
   if (codeCol < 0 || idCol < 0 || amountCol < 0 || currencyCol < 0) {
     throw new PspSettlementError(
       "PayPal settlement CSV must carry Transaction ID, Transaction Event Code, Gross Transaction Amount and Gross Transaction Currency columns",
@@ -314,14 +343,15 @@ export function parsePaypalSettlementCsv(csv: string, reference: string, fallbac
       transaction_event_code: fields[codeCol],
       transaction_initiated_date: dateCol >= 0 ? fields[dateCol] : undefined,
       transaction_amount: { currency_code: fields[currencyCol], value: fields[amountCol] },
-      fee_amount: feeCol >= 0 ? { currency_code: fields[currencyCol], value: fields[feeCol] } : undefined,
+      fee_amount:
+        feeCol >= 0 ? { currency_code: fields[currencyCol], value: fields[feeCol] } : undefined,
     },
   }));
   const parsed = parsePaypalTransactions({ reference: ref, transactions }, fallbackDate);
   return {
     ...parsed,
     lines: parsed.lines.map((line, index) => {
-      const dc = dcCol >= 0 ? (records[index + 1]?.[dcCol]?.trim() || null) : null;
+      const dc = dcCol >= 0 ? records[index + 1]?.[dcCol]?.trim() || null : null;
       return dc ? { ...line, meta: { ...(line.meta ?? {}), paypalDebitOrCredit: dc } } : line;
     }),
   };
@@ -365,7 +395,8 @@ function splitCsvRecords(csv: string): string[][] {
   }
   record.push(field);
   if (!(record.length === 1 && record[0]!.trim() === "")) records.push(record);
-  if (quoted) throw new PspSettlementError("PayPal settlement CSV has an unterminated quoted field");
+  if (quoted)
+    throw new PspSettlementError("PayPal settlement CSV has an unterminated quoted field");
   return records;
 }
 
@@ -408,12 +439,7 @@ export interface SquarePayoutEntryInput {
  * booked as a charge would invent receivables.
  */
 type SquareEntryShape =
-  | "charge"
-  | "refund"
-  | "fee_only"
-  | "adjustment"
-  | "dispute"
-  | "dispute_reversal";
+  "charge" | "refund" | "fee_only" | "adjustment" | "dispute" | "dispute_reversal";
 
 const SQUARE_ENTRY_SHAPES: ReadonlyMap<string, SquareEntryShape> = new Map([
   ["CHARGE", "charge"],
@@ -438,7 +464,11 @@ function nonEmptyId(value: string | null | undefined): string | null {
  * number outside the safe range or a decimal string refuses by name rather
  * than being rounded into a booking.
  */
-function squareMinorUnits(money: SquareMoney | null | undefined, field: string, currency: string): bigint {
+function squareMinorUnits(
+  money: SquareMoney | null | undefined,
+  field: string,
+  currency: string,
+): bigint {
   if (!money) throw new PspSettlementError(`${field} is required`);
   const code = requireProviderCurrency(money.currency, "Square", `${field} currency`);
   if (code !== currency) {
@@ -448,8 +478,12 @@ function squareMinorUnits(money: SquareMoney | null | undefined, field: string, 
   }
   const raw =
     typeof money.amount === "number"
-      ? Number.isSafeInteger(money.amount) ? String(money.amount) : ""
-      : typeof money.amount === "string" ? money.amount.trim() : "";
+      ? Number.isSafeInteger(money.amount)
+        ? String(money.amount)
+        : ""
+      : typeof money.amount === "string"
+        ? money.amount.trim()
+        : "";
   if (!/^-?\d+$/.test(raw)) {
     throw new PspSettlementError(`${field} must be an integer amount in Square minor units`);
   }
@@ -477,9 +511,16 @@ export function parseSquarePayout(
       `Square payout ${payoutId} is ${status} and did not settle to the bank account; import the payout that settled instead`,
     );
   }
-  const currency = requireProviderCurrency(payout.amount_money?.currency, "Square", "payout currency");
+  const currency = requireProviderCurrency(
+    payout.amount_money?.currency,
+    "Square",
+    "payout currency",
+  );
   const payoutTotal = squareMinorUnits(payout.amount_money, "Square payout amount", currency);
-  const settlementDate = (payout.arrival_date ?? fallbackDate ?? new Date().toISOString()).slice(0, 10);
+  const settlementDate = (payout.arrival_date ?? fallbackDate ?? new Date().toISOString()).slice(
+    0,
+    10,
+  );
   if (entries.length === 0) {
     throw new PspSettlementError(
       `settlement batch has no evidence lines: Square payout ${payoutId} carries no entries`,
@@ -490,7 +531,8 @@ export function parseSquarePayout(
   for (const [index, entry] of entries.entries()) {
     const entryId = (entry.id ?? "").trim();
     const label = `entry ${index + 1}${entryId ? ` ${entryId}` : ""}`;
-    if (entryId === "") throw new PspSettlementError(`Square payout entry id is required (${label})`);
+    if (entryId === "")
+      throw new PspSettlementError(`Square payout entry id is required (${label})`);
     const entryPayoutId = (entry.payout_id ?? "").trim();
     if (entryPayoutId !== "" && entryPayoutId !== payoutId) {
       throw new PspSettlementError(
@@ -505,12 +547,20 @@ export function parseSquarePayout(
           `re-export the payout's entries without it, or extend the importer to map it, before importing payout ${payoutId}`,
       );
     }
-    const gross = squareMinorUnits(entry.gross_amount_money, `Square entry gross amount (${label})`, currency);
+    const gross = squareMinorUnits(
+      entry.gross_amount_money,
+      `Square entry gross amount (${label})`,
+      currency,
+    );
     const fee =
       entry.fee_amount_money == null
         ? 0n
         : squareMinorUnits(entry.fee_amount_money, `Square entry fee amount (${label})`, currency);
-    const net = squareMinorUnits(entry.net_amount_money, `Square entry net amount (${label})`, currency);
+    const net = squareMinorUnits(
+      entry.net_amount_money,
+      `Square entry net amount (${label})`,
+      currency,
+    );
     if (gross + fee !== net) {
       throw new PspSettlementError(
         `Square entry ${entryId} does not foot: gross ${fromMinorUnits(gross, currency)} plus fee ${fromMinorUnits(fee, currency)} is not net ${fromMinorUnits(net, currency)}; ` +
@@ -521,7 +571,8 @@ export function parseSquarePayout(
 
     const meta: Record<string, unknown> = { squareType: type };
     const paymentId =
-      nonEmptyId(entry.type_charge_details?.payment_id) ?? nonEmptyId(entry.type_refund_details?.payment_id);
+      nonEmptyId(entry.type_charge_details?.payment_id) ??
+      nonEmptyId(entry.type_refund_details?.payment_id);
     if (paymentId) meta.squarePaymentId = paymentId;
     const disputeId = nonEmptyId(entry.type_dispute_details?.dispute_id);
     if (disputeId) meta.squareDisputeId = disputeId;

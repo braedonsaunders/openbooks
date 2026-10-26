@@ -4,9 +4,17 @@ import { db } from "@openbooks/engine/platform/db";
 import { HistoricalTranslationEvidenceError } from "@openbooks/engine/journal/historical-translation-evidence";
 import { currentUser } from "./auth";
 import type { StatementSubsidiaryContext } from "./statement-matrix";
-import { allowedSubsidiaryIds, subsidiaryOptions, subtreeIds, type SubsidiaryOption } from "./subsidiaries";
+import {
+  allowedSubsidiaryIds,
+  subsidiaryOptions,
+  subtreeIds,
+  type SubsidiaryOption,
+} from "./subsidiaries";
 import { subsidiaryFeatureEnabled } from "./features";
-import { ReportSubsidiarySelectionError, selectReportSubsidiary } from "./report-subsidiary-selection";
+import {
+  ReportSubsidiarySelectionError,
+  selectReportSubsidiary,
+} from "./report-subsidiary-selection";
 
 /**
  * Resolves a report's subsidiary picker value into the statement engine's
@@ -29,35 +37,46 @@ export class MissingRatesError extends Error {}
  * render a localized banner with a derive link instead of throwing.
  */
 export interface RatesBlockedNotice {
-  code: 'rates-not-derived'
-  title: string
-  description: string
-  deriveLabel: string
-  deriveHref: string
+  code: "rates-not-derived";
+  title: string;
+  description: string;
+  deriveLabel: string;
+  deriveHref: string;
 }
 
 export interface HistoricalTranslationBlockedNotice {
-  code: 'historical-evidence-required'
-  title: string
-  description: string
-  actionLabel: string
-  actionHref: string
+  code: "historical-evidence-required";
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionHref: string;
 }
 
-export type StatementTranslationBlockedNotice = RatesBlockedNotice | HistoricalTranslationBlockedNotice
+export type StatementTranslationBlockedNotice =
+  RatesBlockedNotice | HistoricalTranslationBlockedNotice;
 
-export function historicalTranslationBlockedNotice(error: unknown, copy: { title: string; actionLabel: string }): HistoricalTranslationBlockedNotice | null {
-  if (!(error instanceof HistoricalTranslationEvidenceError)) return null
-  const entryId = error.sourceEntryId
-  return { code: 'historical-evidence-required', title: copy.title, description: error.message,
-    actionLabel: copy.actionLabel, actionHref: entryId ? `/journal?journalEntry=${encodeURIComponent(entryId)}` : '/journal' }
+export function historicalTranslationBlockedNotice(
+  error: unknown,
+  copy: { title: string; actionLabel: string },
+): HistoricalTranslationBlockedNotice | null {
+  if (!(error instanceof HistoricalTranslationEvidenceError)) return null;
+  const entryId = error.sourceEntryId;
+  return {
+    code: "historical-evidence-required",
+    title: copy.title,
+    description: error.message,
+    actionLabel: copy.actionLabel,
+    actionHref: entryId ? `/journal?journalEntry=${encodeURIComponent(entryId)}` : "/journal",
+  };
 }
 
-export function statementTranslationBlockedAction(notice: StatementTranslationBlockedNotice | null): { href: string; label: string } {
-  if (!notice) return { href: '/close', label: '' }
-  return notice.code === 'historical-evidence-required'
+export function statementTranslationBlockedAction(
+  notice: StatementTranslationBlockedNotice | null,
+): { href: string; label: string } {
+  if (!notice) return { href: "/close", label: "" };
+  return notice.code === "historical-evidence-required"
     ? { href: notice.actionHref, label: notice.actionLabel }
-    : { href: notice.deriveHref, label: notice.deriveLabel }
+    : { href: notice.deriveHref, label: notice.deriveLabel };
 }
 
 /**
@@ -69,9 +88,9 @@ export function statementTranslationBlockedAction(notice: StatementTranslationBl
  * IS the remedy, so views rendering this must offer that choice.
  */
 export interface CurrencyBasisNotice {
-  code: 'multi-currency-basis'
-  title: string
-  description: string
+  code: "multi-currency-basis";
+  title: string;
+  description: string;
 }
 
 /**
@@ -138,11 +157,14 @@ async function bookMeasurementCurrencies(
   subsidiaryIds: readonly string[],
 ): Promise<Map<string, string> | null> {
   if (!bookId || subsidiaryIds.length === 0) return null;
-  const rows = await db.execute<{ id: string; currency: string | null; is_primary: boolean }>(sql`
+  const rows = await db.execute<{ id: string; currency: string | null; is_primary: boolean }>(
+    sql`
     select s.id, public.accounting_book_currency(s.org_id, b.id, s.id) as currency, b.is_primary
       from subsidiaries s
       join accounting_books b on b.org_id = s.org_id and b.id = ${bookId}
-     where s.id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`, "objects");
+     where s.id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`,
+    "objects",
+  );
   if (rows.length === 0 || rows[0]!.is_primary) return null;
   return new Map(rows.flatMap((row) => (row.currency ? [[row.id, row.currency] as const] : [])));
 }
@@ -154,12 +176,19 @@ export async function resolveSubsidiaryScope(
   bookId?: string | null,
 ): Promise<ResolvedSubsidiaryScope> {
   const listed = await subsidiaryOptions(false, true);
-  const bookCurrencies = await bookMeasurementCurrencies(bookId, listed.map((s) => s.id));
+  const bookCurrencies = await bookMeasurementCurrencies(
+    bookId,
+    listed.map((s) => s.id),
+  );
   const all = bookCurrencies
     ? listed.map((s) => ({ ...s, baseCurrency: bookCurrencies.get(s.id) ?? s.baseCurrency }))
     : listed;
   const { options: pickerOptions, node } = selectReportSubsidiary(subsidiaryId, all, allowed);
-  if (subsidiaryId === undefined && allowed === null && all.filter((s) => !s.isElimination).length <= 1) {
+  if (
+    subsidiaryId === undefined &&
+    allowed === null &&
+    all.filter((s) => !s.isElimination).length <= 1
+  ) {
     // A single-entity organization presents in the book's currency for it.
     const only = all.find((s) => !s.isElimination);
     const listedOnly = listed.find((s) => s.id === only?.id);
@@ -167,7 +196,9 @@ export async function resolveSubsidiaryScope(
       consolidated: false,
       options: [],
       ratesError: null,
-      ...(only && listedOnly && only.baseCurrency !== listedOnly.baseCurrency ? { currency: only.baseCurrency } : {}),
+      ...(only && listedOnly && only.baseCurrency !== listedOnly.baseCurrency
+        ? { currency: only.baseCurrency }
+        : {}),
     };
   }
 
@@ -181,9 +212,7 @@ export async function resolveSubsidiaryScope(
     };
 
   const subtree = subtreeIds(all, node.id);
-  const members = all.filter(
-    (s) => subtree.has(s.id) && (!allowed || allowed.has(s.id)),
-  );
+  const members = all.filter((s) => subtree.has(s.id) && (!allowed || allowed.has(s.id)));
   const nonElim = members.filter((s) => !s.isElimination);
   const consolidated = nonElim.length > 1;
   // Standalone leaf: just that entity. Consolidated: subtree + eliminations.
@@ -192,31 +221,32 @@ export async function resolveSubsidiaryScope(
   let controlLosses: StatementSubsidiaryContext["controlLosses"];
   if (consolidated) {
     const losses = await db.execute<{
-        subsidiary_id: string;
-        effective_on: string;
-        excluded_subsidiary_ids: string[];
-        measurement: {
-          closingRates: { subsidiaryId: string; rate: string }[];
-          factors: Record<string, string>;
-        };
-      }>(
-        sql`select subsidiary_id,effective_on::text,excluded_subsidiary_ids,measurement from consolidation_control_losses where reversed_by_change_id is null and parent_subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(members.map((m) => m.id))}::jsonb)::uuid) order by effective_on`, "objects",
-      );
+      subsidiary_id: string;
+      effective_on: string;
+      excluded_subsidiary_ids: string[];
+      measurement: {
+        closingRates: { subsidiaryId: string; rate: string }[];
+        factors: Record<string, string>;
+      };
+    }>(
+      sql`select subsidiary_id,effective_on::text,excluded_subsidiary_ids,measurement from consolidation_control_losses where reversed_by_change_id is null and parent_subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(members.map((m) => m.id))}::jsonb)::uuid) order by effective_on`,
+      "objects",
+    );
     controlLosses = losses.flatMap((l) =>
       l.excluded_subsidiary_ids
         .filter((id) => members.some((m) => m.id === id))
         .map((subsidiaryId) => ({
           subsidiaryId,
           through: l.effective_on,
-          closingRate: l.measurement.closingRates.find(
-            (r) => r.subsidiaryId === subsidiaryId,
-          )!.rate,
+          closingRate: l.measurement.closingRates.find((r) => r.subsidiaryId === subsidiaryId)!
+            .rate,
           factor: l.measurement.factors[subsidiaryId] ?? "0",
         })),
     );
   }
   if (consolidated) {
-    const ownership = await db.execute<{ id: string; factor: string }>(sql`
+    const ownership = await db.execute<{ id: string; factor: string }>(
+      sql`
       with recursive ownership_scope as (
         select s.id, s.org_id, 1::numeric as factor
           from subsidiaries s where s.id=${node.id}
@@ -241,13 +271,12 @@ export async function resolveSubsidiaryScope(
           ) interest on true
       )
       select id,factor::text from ownership_scope
-    `, "objects");
-    const factorById = new Map(
-      ownership.map((row) => [row.id, row.factor]),
+    `,
+      "objects",
     );
+    const factorById = new Map(ownership.map((row) => [row.id, row.factor]));
     for (const loss of controlLosses ?? [])
-      if (loss.through <= periodTo)
-        factorById.set(loss.subsidiaryId, loss.factor);
+      if (loss.through <= periodTo) factorById.set(loss.subsidiaryId, loss.factor);
     inView = inView.filter((member) => factorById.get(member.id) !== "0");
     weights = inView
       .map((member) => ({
@@ -259,9 +288,7 @@ export async function resolveSubsidiaryScope(
 
   const foreign = [
     ...new Set(
-      inView
-        .filter((s) => s.baseCurrency !== node.baseCurrency)
-        .map((s) => s.baseCurrency),
+      inView.filter((s) => s.baseCurrency !== node.baseCurrency).map((s) => s.baseCurrency),
     ),
   ];
   let rates: StatementSubsidiaryContext["rates"];
@@ -278,12 +305,13 @@ export async function resolveSubsidiaryScope(
     // calendar: an adjustment period shares its final regular period's
     // dates and is excluded — activity dated on that day translates through
     // the regular period's rates, whichever period_id the journal carries.
-    const scope = await db.execute<{ org_id: string }>(sql`
-      select org_id from subsidiaries where id = ${node.id}`, "objects");
+    const scope = await db.execute<{ org_id: string }>(
+      sql`
+      select org_id from subsidiaries where id = ${node.id}`,
+      "objects",
+    );
     if (!scope[0])
-      throw new Error(
-        `subsidiary ${node.id} not found while resolving consolidated rates`,
-      );
+      throw new Error(`subsidiary ${node.id} not found while resolving consolidated rates`);
     const r = await db.execute<{
       from: string;
       pFrom: string;
@@ -311,11 +339,8 @@ export async function resolveSubsidiaryScope(
     const missing = foreign.filter((currency) =>
       inView.some((entity) => {
         if (entity.baseCurrency !== currency) return false;
-        const loss = controlLosses?.find(
-          (value) => value.subsidiaryId === entity.id,
-        );
-        const through =
-          loss && loss.through < periodTo ? loss.through : periodTo;
+        const loss = controlLosses?.find((value) => value.subsidiaryId === entity.id);
+        const through = loss && loss.through < periodTo ? loss.through : periodTo;
         return !(byCcy.get(currency) ?? []).some(
           (row) => row.pFrom <= through && through <= row.pTo,
         );
@@ -424,13 +449,20 @@ export async function reportSubsidiaryScope(
   bookId?: string | null,
 ): Promise<ResolvedSubsidiaryScope & { picker: { id: string; label: string }[] }> {
   const user = await currentUser();
-  const subsidiaryUiEnabled = Boolean(user && await subsidiaryFeatureEnabled(user.orgId));
-  const allowed = user ? (user.isSuperAdmin ? null : await allowedSubsidiaryIds(user.id, user.orgId)) : new Set<string>();
+  const subsidiaryUiEnabled = Boolean(user && (await subsidiaryFeatureEnabled(user.orgId)));
+  const allowed = user
+    ? user.isSuperAdmin
+      ? null
+      : await allowedSubsidiaryIds(user.id, user.orgId)
+    : new Set<string>();
   if (!subsidiaryUiEnabled && allowed === null && subsidiaryId === undefined) {
     // One entity: a secondary book may still present it in its own currency.
     const single = bookId ? await resolveSubsidiaryScope(undefined, periodTo, null, bookId) : null;
     return {
-      consolidated: false, options: [], picker: [], ratesError: null,
+      consolidated: false,
+      options: [],
+      picker: [],
+      ratesError: null,
       ...(single && !single.consolidated && single.currency ? { currency: single.currency } : {}),
     };
   }
@@ -440,7 +472,8 @@ export async function reportSubsidiaryScope(
   } catch (error) {
     // Loaded on the refusal path only: this module also serves non-route
     // readers that run outside Next's request runtime.
-    if (error instanceof ReportSubsidiarySelectionError) (await import("next/navigation")).notFound();
+    if (error instanceof ReportSubsidiarySelectionError)
+      (await import("next/navigation")).notFound();
     throw error;
   }
   if (!subsidiaryUiEnabled) return { ...view, picker: [] };

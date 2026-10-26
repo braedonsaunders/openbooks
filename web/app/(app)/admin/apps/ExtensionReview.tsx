@@ -22,25 +22,16 @@ import { AppOverviewHero } from "./AppOverviewHero";
 import { readApiErrorMessage, refusalMessageFromBody } from "@/lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { parseManifest } from "@/lib/apps/manifest";
-import {
-  ArrowUpRight,
-  ShieldCheck,
-  GitCompareArrows,
-} from "lucide-react";
+import { ArrowUpRight, ShieldCheck, GitCompareArrows } from "lucide-react";
 import { LiveDirectory } from "@/components/module-home/ui";
-import {
-  parseNativeExtension,
-  type NativeExtension,
-} from "@/lib/apps/native-ui";
+import { parseNativeExtension, type NativeExtension } from "@/lib/apps/native-ui";
 import { parseObjectSpecs } from "@/lib/apps/objects";
 
 export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
   const t = useTranslations("admin.extensions.draft");
   const tm = useTranslations("apps.management");
   const router = useRouter();
-  const [tab, setTab] = useState<"overview" | "package" | "changes">(
-    "overview",
-  );
+  const [tab, setTab] = useState<"overview" | "package" | "changes">("overview");
   const editing = tab === "package";
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,9 +41,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
   const objects = parseObjectSpecs(draft.bundle.files);
   let screens: NativeExtension["screens"] = [];
   try {
-    const entry = draft.bundle.files.find(
-      (file) => file.path === manifest.frontend.entry,
-    );
+    const entry = draft.bundle.files.find((file) => file.path === manifest.frontend.entry);
     if (manifest.frontend.renderer === "native" && entry)
       screens = parseNativeExtension(entry.content, manifest).screens;
   } catch {
@@ -87,8 +76,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
       // Status first: a non-JSON 500/HTML refusal from POST /api/apps/drafts
       // must surface the API message (or the fallback with status), never a
       // SyntaxError from response.json() that hides the activate/discard remedy.
-      if (!response.ok)
-        throw new Error(await readApiErrorMessage(response, t("failed")));
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t("failed")));
       const data = await response.json();
       router.push(data.reviewUrl ?? "/admin/apps");
       router.refresh();
@@ -114,8 +102,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
       // Status first: a non-JSON 500/HTML refusal from POST /api/apps/drafts
       // must surface the API message (or the fallback with status), never a
       // SyntaxError from response.json() that hides the preview-page remedy.
-      if (!response.ok)
-        throw new Error(await readApiErrorMessage(response, t("failed")));
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t("failed")));
       const data = await response.json();
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
@@ -138,9 +125,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
       description={`${manifest.key} · ${manifest.version}`}
       headerActions={
         <Button asChild variant="outline">
-          <Link href={`/admin/apps/preview/${draft.id}` as never}>
-            {t("preview")}
-          </Link>
+          <Link href={`/admin/apps/preview/${draft.id}` as never}>{t("preview")}</Link>
         </Button>
       }
       subtabs={
@@ -170,17 +155,10 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
               {t("confirm")}
             </label>
             <div className="flex shrink-0 items-center gap-2">
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => activate("discard")}
-              >
+              <Button variant="outline" disabled={busy} onClick={() => activate("discard")}>
                 {t("discard")}
               </Button>
-              <Button
-                disabled={busy || !reviewed}
-                onClick={() => activate("activate")}
-              >
+              <Button disabled={busy || !reviewed} onClick={() => activate("activate")}>
                 {t("activate")}
               </Button>
             </div>
@@ -206,9 +184,16 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
               description={manifest.description || t("unpublished")}
               version={manifest.version}
               renderer={manifest.frontend.renderer}
-              status={<Badge variant="outline">{t(draft.status === "draft" ? "pending" : "closed")}</Badge>}
+              status={
+                <Badge variant="outline">
+                  {t(draft.status === "draft" ? "pending" : "closed")}
+                </Badge>
+              }
               stats={[
-                { label: t("screenCount"), value: manifest.frontend.renderer === "native" ? screens.length : 1 },
+                {
+                  label: t("screenCount"),
+                  value: manifest.frontend.renderer === "native" ? screens.length : 1,
+                },
                 { label: t("workspaceCount"), value: objects.recordTypes.length },
                 { label: t("actionCount"), value: manifest.endpoints.length },
               ]}
@@ -216,9 +201,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
             <section className="space-y-3">
               <div>
                 <h3 className="text-sm font-semibold">{t("explore")}</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {t("exploreHelp")}
-                </p>
+                <p className="mt-1 text-sm text-slate-500">{t("exploreHelp")}</p>
               </div>
               <LiveDirectory
                 items={
@@ -293,10 +276,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
                     </Badge>
                     <ul className="divide-y rounded-lg border px-3">
                       {draft.changes[kind].map((path) => (
-                        <li
-                          key={path}
-                          className="break-all py-2 font-mono text-xs"
-                        >
+                        <li key={path} className="break-all py-2 font-mono text-xs">
                           {path}
                         </li>
                       ))}
@@ -318,9 +298,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
                   </li>
                 ))}
                 {manifest.endpoints.map((endpoint) => (
-                  <li key={endpoint.name}>
-                    {t("action", { name: endpoint.name })}
-                  </li>
+                  <li key={endpoint.name}>{t("action", { name: endpoint.name })}</li>
                 ))}
                 {(manifest.contributions ?? []).map((item, index) => (
                   <li key={`contribution:${index}`}>
@@ -333,9 +311,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
               </ul>
             </section>
             {(manifest.contributions ?? [])
-              .filter(
-                (item) => item.kind === "page" && !item.route.includes("["),
-              )
+              .filter((item) => item.kind === "page" && !item.route.includes("["))
               .map((item) =>
                 item.kind === "page" ? (
                   <Button
@@ -353,9 +329,8 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
               <p className="text-sm">
                 {t("grants", {
                   permissions:
-                    (
-                      draft.bundle.grantedPermissions ?? manifest.permissions
-                    ).join(", ") || t("noPermissions"),
+                    (draft.bundle.grantedPermissions ?? manifest.permissions).join(", ") ||
+                    t("noPermissions"),
                 })}
               </p>
               {manifest.permissions.length ? (
@@ -369,9 +344,7 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
               )}
             </section>
             <details>
-              <summary className="cursor-pointer text-sm">
-                {t("source")}
-              </summary>
+              <summary className="cursor-pointer text-sm">{t("source")}</summary>
               <pre className="max-h-72 overflow-auto text-xs">
                 {JSON.stringify(draft.bundle, null, 2)}
               </pre>

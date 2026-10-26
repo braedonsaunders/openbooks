@@ -8,4 +8,4 @@ export { runRecordFlows } from "./run.ts";
 export { PREBILL_SUBJECT_KIND } from "./prebills-adapter.ts";
 
 /** Scoped, retained terms for native approval review. */
-export { loadApprovalRequestDetail, type ApprovalRequestDetail } from './submission-review.ts';
+export { loadApprovalRequestDetail, type ApprovalRequestDetail } from "./submission-review.ts";

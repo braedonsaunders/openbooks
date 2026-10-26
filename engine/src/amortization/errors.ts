@@ -9,7 +9,12 @@ export class AmortizationError extends Error {
 
   constructor(
     message: string,
-    options: { status?: AmortizationErrorStatus; code?: string; remedy?: string; cause?: unknown } = {},
+    options: {
+      status?: AmortizationErrorStatus;
+      code?: string;
+      remedy?: string;
+      cause?: unknown;
+    } = {},
   ) {
     super(message, { cause: options.cause });
     this.status = options.status ?? 422;

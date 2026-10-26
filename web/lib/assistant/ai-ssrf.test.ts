@@ -12,12 +12,8 @@ import { createServer, type Server } from "node:http";
 import { test } from "node:test";
 
 // Same module-graph shim as chat-turn: the AI client is server-only.
-const {
-  guardedAiFetch,
-  sanitizeAiError,
-  validateAiBaseUrl,
-  validateAiBaseUrlLive,
-} = await import("./client.ts");
+const { guardedAiFetch, sanitizeAiError, validateAiBaseUrl, validateAiBaseUrlLive } =
+  await import("./client.ts");
 const { fetchJson, listModels } = await import("./models.ts");
 import type { AiConfig } from "./client.ts";
 
@@ -144,7 +140,10 @@ test("error sanitizer hides untrusted bodies, keeps trusted diagnostics", () => 
     sanitizeAiError(customConfig("https://ai.example/v1"), hostile),
     "Request failed — check the base URL, model id and API key.",
   );
-  assert.equal(sanitizeAiError(null, hostile), "Request failed — check the base URL, model id and API key.");
+  assert.equal(
+    sanitizeAiError(null, hostile),
+    "Request failed — check the base URL, model id and API key.",
+  );
   const overridden: AiConfig = {
     provider: "openrouter",
     apiKey: "sk-or-test",

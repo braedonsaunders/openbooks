@@ -1,13 +1,20 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { forbidden } from 'next/navigation'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { guardUnrestrictedScope, requirePermission } from '../../../../lib/authz'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import type { BankRuleView } from './RuleDrawer'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { forbidden } from "next/navigation";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { guardUnrestrictedScope, requirePermission } from "../../../../lib/authz";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import type { BankRuleView } from "./RuleDrawer";
 
 /**
  * The banking-rules list, split into a loader and a spec.
@@ -24,93 +31,140 @@ import type { BankRuleView } from './RuleDrawer'
  * as a prop, exactly like `project-drawer`.
  */
 
-interface AccountRow extends Record<string, unknown> { id: string; number: string | null; name: string }
-interface DimensionRow extends Record<string, unknown> { id: string; code: string | null; name: string }
-interface PartyRow extends Record<string, unknown> { id: string; display_name: string }
-interface SeedLineRow extends Record<string, unknown> { description: string | null; amount: string }
-type BankRuleRow = BankRuleView & Record<string, unknown>
+interface AccountRow extends Record<string, unknown> {
+  id: string;
+  number: string | null;
+  name: string;
+}
+interface DimensionRow extends Record<string, unknown> {
+  id: string;
+  code: string | null;
+  name: string;
+}
+interface PartyRow extends Record<string, unknown> {
+  id: string;
+  display_name: string;
+}
+interface SeedLineRow extends Record<string, unknown> {
+  description: string | null;
+  amount: string;
+}
+type BankRuleRow = BankRuleView & Record<string, unknown>;
 
 // Loader-resolved drawer payload: the drawer's own props minus the client
 // component, plus the remount key (`key={rule.id}` in the native page).
 export interface BankRuleDrawerPayload extends Record<string, unknown> {
-  remountKey: string
-  rule: BankRuleView | null
-  accounts: { value: string; label: string }[]
-  reconAccounts: { id: string; label: string }[]
-  departments: { value: string; label: string }[]
-  locations: { value: string; label: string }[]
-  classes: { value: string; label: string }[]
-  parties: { value: string; label: string }[]
-  seedFromLine: { description: string | null; amount: string } | null
+  remountKey: string;
+  rule: BankRuleView | null;
+  accounts: { value: string; label: string }[];
+  reconAccounts: { id: string; label: string }[];
+  departments: { value: string; label: string }[];
+  locations: { value: string; label: string }[];
+  classes: { value: string; label: string }[];
+  parties: { value: string; label: string }[];
+  seedFromLine: { description: string | null; amount: string } | null;
 }
 
 export interface BankingRulesData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  currentParams: Record<string, string | string[] | undefined>
-  reconAccounts: { id: string; label: string }[]
-  drawerOpen: boolean
-  drawer: BankRuleDrawerPayload | null
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  reconAccounts: { id: string; label: string }[];
+  drawerOpen: boolean;
+  drawer: BankRuleDrawerPayload | null;
 }
 
 export async function loadBankingRules(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingRulesData> {
-  const authz = await requirePermission('banking.reconcile')
-  if (guardUnrestrictedScope(authz)) forbidden()
-  const t = await getTranslations('banking')
-  const openId = pickString(sp.rule)
-  const fromLine = pickString(sp.fromLine)
+  const authz = await requirePermission("banking.reconcile");
+  if (guardUnrestrictedScope(authz)) forbidden();
+  const t = await getTranslations("banking");
+  const openId = pickString(sp.rule);
+  const fromLine = pickString(sp.fromLine);
 
-  const [offsetAccounts, reconAccountsRes, departments, locations, classes, parties, open, seedLine] =
-    (await Promise.all([
-      db.execute<AccountRow>(sql`
+  const [
+    offsetAccounts,
+    reconAccountsRes,
+    departments,
+    locations,
+    classes,
+    parties,
+    open,
+    seedLine,
+  ] = await Promise.all([
+    db.execute<AccountRow>(
+      sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and is_active and not is_summary
          order by number nulls last limit 2000
-      `, 'objects'),
-      db.execute<AccountRow>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<AccountRow>(
+      sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and reconcilable and not is_summary and is_active
          order by number nulls last
-      `, 'objects'),
-      db.execute<DimensionRow>(sql`select id, code, name from departments where org_id = ${authz.user.orgId} and is_active order by name limit 1000`, 'objects'),
-      db.execute<DimensionRow>(sql`select id, code, name from locations where org_id = ${authz.user.orgId} and is_active order by name limit 1000`, 'objects'),
-      db.execute<DimensionRow>(sql`select id, code, name from classes where org_id = ${authz.user.orgId} and is_active order by name limit 1000`, 'objects'),
-      db.execute<PartyRow>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`, 'objects'),
-      openId && openId !== 'new' && isUuid(openId)
-        ? db.execute<BankRuleRow>(sql`
+      `,
+      "objects",
+    ),
+    db.execute<DimensionRow>(
+      sql`select id, code, name from departments where org_id = ${authz.user.orgId} and is_active order by name limit 1000`,
+      "objects",
+    ),
+    db.execute<DimensionRow>(
+      sql`select id, code, name from locations where org_id = ${authz.user.orgId} and is_active order by name limit 1000`,
+      "objects",
+    ),
+    db.execute<DimensionRow>(
+      sql`select id, code, name from classes where org_id = ${authz.user.orgId} and is_active order by name limit 1000`,
+      "objects",
+    ),
+    db.execute<PartyRow>(
+      sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`,
+      "objects",
+    ),
+    openId && openId !== "new" && isUuid(openId)
+      ? db.execute<BankRuleRow>(
+          sql`
             select id, name, criteria, outcome, priority, is_active
               from bank_match_rules where id = ${openId} and org_id = ${authz.user.orgId}
-          `, 'objects')
-        : Promise.resolve([]),
-      fromLine && isUuid(fromLine)
-        ? db.execute<SeedLineRow>(sql`
+          `,
+          "objects",
+        )
+      : Promise.resolve([]),
+    fromLine && isUuid(fromLine)
+      ? db.execute<SeedLineRow>(
+          sql`
             select l.description, l.amount from bank_statement_lines l
              where l.id = ${fromLine} and l.org_id = ${authz.user.orgId} limit 1
-          `, 'objects')
-        : Promise.resolve([]),
-    ]))
+          `,
+          "objects",
+        )
+      : Promise.resolve([]),
+  ]);
 
   const accountOpts = offsetAccounts.map((account) => ({
     value: account.id,
-    label: [account.number, account.name].filter(Boolean).join(' · '),
-  }))
+    label: [account.number, account.name].filter(Boolean).join(" · "),
+  }));
   const reconAccountOpts = reconAccountsRes.map((account) => ({
     id: account.id,
-    label: [account.number, account.name].filter(Boolean).join(' · '),
-  }))
-  const dimensionOptions = (rows: DimensionRow[]) => rows.map((dimension) => ({
-    value: dimension.id,
-    label: [dimension.code, dimension.name].filter(Boolean).join(' · '),
-  }))
-  const openRule = openId === 'new' ? null : (open[0] ?? null)
-  const drawerOpen = openId === 'new' || Boolean(open[0])
+    label: [account.number, account.name].filter(Boolean).join(" · "),
+  }));
+  const dimensionOptions = (rows: DimensionRow[]) =>
+    rows.map((dimension) => ({
+      value: dimension.id,
+      label: [dimension.code, dimension.name].filter(Boolean).join(" · "),
+    }));
+  const openRule = openId === "new" ? null : (open[0] ?? null);
+  const drawerOpen = openId === "new" || Boolean(open[0]);
   const seed = seedLine[0]
     ? { description: seedLine[0].description, amount: seedLine[0].amount }
-    : null
+    : null;
 
   // The `criteria_summary` / `outcome_summary` cell text is produced by the
   // native page's `whenSummary` / `outcomeSummary` closures inside
@@ -120,16 +174,16 @@ export async function loadBankingRules(
   // formats values in the loader.
 
   return {
-    title: t('rules.title'),
-    description: t('rules.description'),
-    backHref: '/banking',
-    backLabel: t('home.title'),
+    title: t("rules.title"),
+    description: t("rules.description"),
+    backHref: "/banking",
+    backLabel: t("home.title"),
     currentParams: sp,
     reconAccounts: reconAccountOpts,
     drawerOpen,
     drawer: drawerOpen
       ? {
-          remountKey: openRule ? String(openRule.id) : 'new',
+          remountKey: openRule ? String(openRule.id) : "new",
           rule: openRule,
           accounts: accountOpts,
           reconAccounts: reconAccountOpts,
@@ -140,37 +194,37 @@ export async function loadBankingRules(
           seedFromLine: seed,
         }
       : null,
-  }
+  };
 }
 
-const f = ref<BankingRulesData>()
+const f = ref<BankingRulesData>();
 
 export function bankingRulesSpec(data: BankingRulesData): PageSpec {
-  const newRule = { widget: 'new-bank-rule', props: {} }
+  const newRule = { widget: "new-bank-rule", props: {} };
   return page({
-    route: '/banking/rules',
-    layout: 'list',
+    route: "/banking/rules",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: f('backHref'), label: f('backLabel') },
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-2',
+        back: { href: f("backHref"), label: f("backLabel") },
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-2",
         actions: [
-          widget('run-bank-rules', { accounts: data.reconAccounts }),
+          widget("run-bank-rules", { accounts: data.reconAccounts }),
           widget(newRule.widget, newRule.props),
         ],
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'bank_rule',
+      widgetBlock("entity-list-view", {
+        recordType: "bank_rule",
         sp: data.currentParams,
         emptyAction: newRule,
         // Rendered in the native page's order: the rule flyout is the only
         // drawer child, present exactly when the native page renders it.
-        drawer: data.drawer ? { widget: 'bank-rule-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer ? { widget: "bank-rule-drawer", props: { drawer: data.drawer } } : null,
       }),
     ],
-  })
+  });
 }

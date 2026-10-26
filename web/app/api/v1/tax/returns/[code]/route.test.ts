@@ -3,7 +3,9 @@ import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-tax-return-route-test");
-interface RouteState { input: unknown }
+interface RouteState {
+  input: unknown;
+}
 const routeState: RouteState = { input: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 

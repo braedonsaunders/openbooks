@@ -17,14 +17,18 @@ test("v1 purchase-order convert without expectedUpdatedAt is refused", { skip: !
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"orders":true}'::jsonb)
-      where id = ${org.orgId}`));
+      where id = ${org.orgId}`),
+    );
     const id = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into documents (id, org_id, kind, document_number, subsidiary_id, document_date, currency, fx_rate, status, subtotal, tax_total, total)
-      values (${id}, ${org.orgId}, 'purchase_order', ${"PO-" + id.slice(0, 8)}, ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'approved', '0', '0', '0')`));
+      values (${id}, ${org.orgId}, 'purchase_order', ${"PO-" + id.slice(0, 8)}, ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'approved', '0', '0', '0')`),
+    );
     const context = applicationContextFromSession(
       {
         user: {
@@ -56,7 +60,10 @@ test("v1 purchase-order convert without expectedUpdatedAt is refused", { skip: !
         (cause) => cause,
       ),
     );
-    assert.ok(error instanceof ApplicationError, `expected an ApplicationError, got ${String(error)}`);
+    assert.ok(
+      error instanceof ApplicationError,
+      `expected an ApplicationError, got ${String(error)}`,
+    );
     assert.equal(error.code, "invalid_input");
     assert.match(error.message, /expectedUpdatedAt/);
   } finally {

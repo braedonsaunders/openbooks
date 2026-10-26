@@ -1,4 +1,4 @@
-import { add, isZero } from '@openbooks/engine/money'
+import { add, isZero } from "@openbooks/engine/money";
 
 /**
  * The statement-of-earnings sections a printed pay stub groups its lines
@@ -18,63 +18,69 @@ import { add, isZero } from '@openbooks/engine/money'
  */
 
 export type StatementLine = {
-  componentId: string | null
-  kind: string
-  paymentKind: string | null
-  description: string
-  systemKey: string | null
-  taxable: boolean | null
-  amount: string
-  hours: string | null
-  rate: string | null
-}
+  componentId: string | null;
+  kind: string;
+  paymentKind: string | null;
+  description: string;
+  systemKey: string | null;
+  taxable: boolean | null;
+  amount: string;
+  hours: string | null;
+  rate: string | null;
+};
 
 export type StatementRow = {
-  key: string
-  description: string
-  hours: string
-  rate: string | null
-  current: string
-  ytd: string
-  ytdHours: string
-}
+  key: string;
+  description: string;
+  hours: string;
+  rate: string | null;
+  current: string;
+  ytd: string;
+  ytdHours: string;
+};
 
 export type PayStubStatement = {
-  earnings: StatementRow[]
-  taxableCompanyItems: StatementRow[]
-  withholdings: StatementRow[]
-  netAdjustments: StatementRow[]
-}
+  earnings: StatementRow[];
+  taxableCompanyItems: StatementRow[];
+  withholdings: StatementRow[];
+  netAdjustments: StatementRow[];
+};
 
-type Section = keyof PayStubStatement
+type Section = keyof PayStubStatement;
 
-function sectionOf(line: StatementLine, withholdingKeys: ReadonlySet<string>, includeNonTaxableCompanyItems: boolean): Section | null {
-  if (line.kind === 'earning') {
-    if (line.paymentKind !== 'non_cash') return 'earnings'
-    return line.taxable || includeNonTaxableCompanyItems ? 'taxableCompanyItems' : null
+function sectionOf(
+  line: StatementLine,
+  withholdingKeys: ReadonlySet<string>,
+  includeNonTaxableCompanyItems: boolean,
+): Section | null {
+  if (line.kind === "earning") {
+    if (line.paymentKind !== "non_cash") return "earnings";
+    return line.taxable || includeNonTaxableCompanyItems ? "taxableCompanyItems" : null;
   }
-  if (line.kind === 'deduction') {
-    return line.systemKey && withholdingKeys.has(line.systemKey) ? 'withholdings' : 'netAdjustments'
+  if (line.kind === "deduction") {
+    return line.systemKey && withholdingKeys.has(line.systemKey)
+      ? "withholdings"
+      : "netAdjustments";
   }
-  return null
+  return null;
 }
 
 function rowKey(line: StatementLine): string {
-  return line.componentId ?? `description:${line.description}`
+  return line.componentId ?? `description:${line.description}`;
 }
 
 export function toStatementLine(row: Record<string, unknown>): StatementLine {
   return {
     componentId: row.component_id == null ? null : String(row.component_id),
-    kind: String(row.kind ?? ''),
+    kind: String(row.kind ?? ""),
     paymentKind: row.payment_kind == null ? null : String(row.payment_kind),
-    description: String(row.component_name ?? row.description ?? ''),
+    description: String(row.component_name ?? row.description ?? ""),
     systemKey: row.system_key == null ? null : String(row.system_key),
     taxable: row.taxable == null ? null : Boolean(row.taxable),
-    amount: String(row.amount ?? '0'),
+    amount: String(row.amount ?? "0"),
     hours: row.hours == null ? null : String(row.hours),
     rate: row.rate == null ? null : String(row.rate),
-  }
+  };
 }
 
 /**
@@ -94,20 +100,24 @@ export function buildPayStubStatement(
     taxableCompanyItems: new Map(),
     withholdings: new Map(),
     netAdjustments: new Map(),
-  }
-  const rates = new Map<string, Set<string | null>>()
+  };
+  const rates = new Map<string, Set<string | null>>();
 
   for (const line of current) {
-    const section = sectionOf(line, withholdingKeys, options.includeNonTaxableCompanyItems === true)
-    if (!section) continue
-    const key = rowKey(line)
-    const existing = sections[section].get(key)
-    const hours = line.hours ?? '0'
+    const section = sectionOf(
+      line,
+      withholdingKeys,
+      options.includeNonTaxableCompanyItems === true,
+    );
+    if (!section) continue;
+    const key = rowKey(line);
+    const existing = sections[section].get(key);
+    const hours = line.hours ?? "0";
     if (existing) {
-      existing.current = add(existing.current, line.amount)
-      existing.ytd = add(existing.ytd, line.amount)
-      existing.hours = add(existing.hours, hours)
-      existing.ytdHours = add(existing.ytdHours, hours)
+      existing.current = add(existing.current, line.amount);
+      existing.ytd = add(existing.ytd, line.amount);
+      existing.hours = add(existing.hours, hours);
+      existing.ytdHours = add(existing.ytdHours, hours);
     } else {
       sections[section].set(key, {
         key,
@@ -117,45 +127,52 @@ export function buildPayStubStatement(
         current: line.amount,
         ytd: line.amount,
         ytdHours: hours,
-      })
+      });
     }
-    const seen = rates.get(key) ?? new Set<string | null>()
-    seen.add(line.rate)
-    rates.set(key, seen)
+    const seen = rates.get(key) ?? new Set<string | null>();
+    seen.add(line.rate);
+    rates.set(key, seen);
   }
 
-  const priorOnly: Array<[Section, StatementRow]> = []
+  const priorOnly: Array<[Section, StatementRow]> = [];
   for (const line of prior) {
-    const section = sectionOf(line, withholdingKeys, options.includeNonTaxableCompanyItems === true)
-    if (!section) continue
-    const key = rowKey(line)
-    const existing = sections[section].get(key)
-    const hours = line.hours ?? '0'
+    const section = sectionOf(
+      line,
+      withholdingKeys,
+      options.includeNonTaxableCompanyItems === true,
+    );
+    if (!section) continue;
+    const key = rowKey(line);
+    const existing = sections[section].get(key);
+    const hours = line.hours ?? "0";
     if (existing) {
-      existing.ytd = add(existing.ytd, line.amount)
-      existing.ytdHours = add(existing.ytdHours, hours)
+      existing.ytd = add(existing.ytd, line.amount);
+      existing.ytdHours = add(existing.ytdHours, hours);
     } else if (!isZero(line.amount) || !isZero(hours)) {
-      priorOnly.push([section, {
-        key,
-        description: line.description,
-        hours: '0',
-        rate: null,
-        current: '0',
-        ytd: line.amount,
-        ytdHours: hours,
-      }])
+      priorOnly.push([
+        section,
+        {
+          key,
+          description: line.description,
+          hours: "0",
+          rate: null,
+          current: "0",
+          ytd: line.amount,
+          ytdHours: hours,
+        },
+      ]);
     }
   }
   priorOnly
     .sort(([, a], [, b]) => a.description.localeCompare(b.description))
-    .forEach(([section, row]) => sections[section].set(row.key, row))
+    .forEach(([section, row]) => sections[section].set(row.key, row));
 
   // A rate prints only when every current line for the component was paid at
   // the same rate; a split across rates (or a lump sum) prints none.
   for (const map of Object.values(sections)) {
     for (const row of map.values()) {
-      const seen = rates.get(row.key)
-      row.rate = seen && seen.size === 1 ? ([...seen][0] ?? null) : null
+      const seen = rates.get(row.key);
+      row.rate = seen && seen.size === 1 ? ([...seen][0] ?? null) : null;
     }
   }
 
@@ -164,5 +181,5 @@ export function buildPayStubStatement(
     taxableCompanyItems: [...sections.taxableCompanyItems.values()],
     withholdings: [...sections.withholdings.values()],
     netAdjustments: [...sections.netAdjustments.values()],
-  }
+  };
 }

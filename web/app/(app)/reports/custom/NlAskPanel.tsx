@@ -1,33 +1,33 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, Input, Label } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button, Input, Label } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
 
 export interface NlAskLabels {
-  title: string
-  description: string
-  placeholder: string
-  ask: string
-  draftsTitle: string
-  empty: string
-  question: string
-  entity: string
-  status: string
-  created: string
-  saveAsView: string
-  discard: string
-  failed: string
-  statuses: { drafted: string; saved: string; discarded: string }
+  title: string;
+  description: string;
+  placeholder: string;
+  ask: string;
+  draftsTitle: string;
+  empty: string;
+  question: string;
+  entity: string;
+  status: string;
+  created: string;
+  saveAsView: string;
+  discard: string;
+  failed: string;
+  statuses: { drafted: string; saved: string; discarded: string };
 }
 
 interface NlDraft {
-  id: string
-  question: string
-  definition: { entity: string; mode: string }
-  status: string
-  createdAt: string
+  id: string;
+  question: string;
+  definition: { entity: string; mode: string };
+  status: string;
+  createdAt: string;
 }
 
 /**
@@ -40,95 +40,95 @@ interface NlDraft {
  * SQL or definitions — the model drafts, the routes validate.
  */
 export function NlAskPanel({ ask, canCreate }: { ask: NlAskLabels | null; canCreate: boolean }) {
-  const router = useRouter()
-  const [question, setQuestion] = useState('')
-  const [drafts, setDrafts] = useState<NlDraft[] | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const [question, setQuestion] = useState("");
+  const [drafts, setDrafts] = useState<NlDraft[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (!ask) return
-    fetch('/api/reports/nl')
+    if (!ask) return;
+    fetch("/api/reports/nl")
       .then(async (res) => {
         if (!res.ok) {
-          setError(await readApiErrorMessage(res, ask.failed))
-          return
+          setError(await readApiErrorMessage(res, ask.failed));
+          return;
         }
-        const body = (await res.json()) as { drafts: NlDraft[] }
-        setDrafts(body.drafts ?? [])
+        const body = (await res.json()) as { drafts: NlDraft[] };
+        setDrafts(body.drafts ?? []);
       })
-      .catch(() => setError(ask.failed))
-  }, [ask])
-  if (!ask) return null
+      .catch(() => setError(ask.failed));
+  }, [ask]);
+  if (!ask) return null;
   const submit = (event: React.FormEvent<HTMLFormElement>): void => {
-    event.preventDefault()
-    const q = question.trim()
-    if (!q) return
-    router.push(`/assistant?q=${encodeURIComponent(q)}`)
-  }
+    event.preventDefault();
+    const q = question.trim();
+    if (!q) return;
+    router.push(`/assistant?q=${encodeURIComponent(q)}`);
+  };
   const saveAsView = async (draft: NlDraft): Promise<void> => {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const created = await fetch('/api/reports/definitions', {
-        method: 'POST',
+      const created = await fetch("/api/reports/definitions", {
+        method: "POST",
         headers: {
-          'content-type': 'application/json',
+          "content-type": "application/json",
           // The draft id remains stable across retries, so a failed status
           // transition cannot create a second report on the next attempt.
-          'Idempotency-Key': draft.id,
+          "Idempotency-Key": draft.id,
         },
         body: JSON.stringify({
           name: draft.question.slice(0, 120),
           description: draft.question,
           query: draft.definition,
         }),
-      })
+      });
       if (!created.ok) {
-        setError(await readApiErrorMessage(created, ask.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(created, ask.failed));
+        setBusy(false);
+        return;
       }
-      const body = (await created.json()) as { definition?: { id?: unknown } }
-      const id = typeof body.definition?.id === 'string' ? body.definition.id : null
-      const transitioned = await fetch('/api/reports/nl', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ draftId: draft.id, status: 'saved' }),
-      })
+      const body = (await created.json()) as { definition?: { id?: unknown } };
+      const id = typeof body.definition?.id === "string" ? body.definition.id : null;
+      const transitioned = await fetch("/api/reports/nl", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id, status: "saved" }),
+      });
       if (!transitioned.ok) {
-        setError(await readApiErrorMessage(transitioned, ask.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(transitioned, ask.failed));
+        setBusy(false);
+        return;
       }
-      setBusy(false)
-      if (id) router.push(`/reports/custom/builder/${id}`)
-      else setDrafts((current) => (current ?? []).filter((d) => d.id !== draft.id))
+      setBusy(false);
+      if (id) router.push(`/reports/custom/builder/${id}`);
+      else setDrafts((current) => (current ?? []).filter((d) => d.id !== draft.id));
     } catch {
-      setError(ask.failed)
-      setBusy(false)
+      setError(ask.failed);
+      setBusy(false);
     }
-  }
+  };
   const discard = async (draft: NlDraft): Promise<void> => {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch('/api/reports/nl', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ draftId: draft.id, status: 'discarded' }),
-      })
+      const res = await fetch("/api/reports/nl", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ draftId: draft.id, status: "discarded" }),
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, ask.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, ask.failed));
+        setBusy(false);
+        return;
       }
-      setDrafts((current) => (current ?? []).filter((d) => d.id !== draft.id))
-      setBusy(false)
+      setDrafts((current) => (current ?? []).filter((d) => d.id !== draft.id));
+      setBusy(false);
     } catch {
-      setError(ask.failed)
-      setBusy(false)
+      setError(ask.failed);
+      setBusy(false);
     }
-  }
+  };
   return (
     <div className="space-y-4">
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
@@ -152,7 +152,9 @@ export function NlAskPanel({ ask, canCreate }: { ask: NlAskLabels | null; canCre
         </p>
       ) : null}
       <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{ask.draftsTitle}</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {ask.draftsTitle}
+        </h3>
         {drafts === null ? null : drafts.length === 0 ? (
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{ask.empty}</p>
         ) : (
@@ -162,18 +164,27 @@ export function NlAskPanel({ ask, canCreate }: { ask: NlAskLabels | null; canCre
                 key={draft.id}
                 className="rounded-md border border-slate-200 p-3 dark:border-slate-800"
               >
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{draft.question}</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {ask.entity}: {draft.definition.entity} · {ask.status}: {ask.statuses[draft.status as keyof typeof ask.statuses] ?? draft.status} · {ask.created}: {draft.createdAt.slice(0, 10)}
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {draft.question}
                 </p>
-                {draft.status === 'drafted' ? (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {ask.entity}: {draft.definition.entity} · {ask.status}:{" "}
+                  {ask.statuses[draft.status as keyof typeof ask.statuses] ?? draft.status} ·{" "}
+                  {ask.created}: {draft.createdAt.slice(0, 10)}
+                </p>
+                {draft.status === "drafted" ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {canCreate ? (
                       <Button size="sm" disabled={busy} onClick={() => void saveAsView(draft)}>
                         {ask.saveAsView}
                       </Button>
                     ) : null}
-                    <Button size="sm" variant="outline" disabled={busy} onClick={() => void discard(draft)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void discard(draft)}
+                    >
                       {ask.discard}
                     </Button>
                   </div>
@@ -184,5 +195,5 @@ export function NlAskPanel({ ask, canCreate }: { ask: NlAskLabels | null; canCre
         )}
       </div>
     </div>
-  )
+  );
 }

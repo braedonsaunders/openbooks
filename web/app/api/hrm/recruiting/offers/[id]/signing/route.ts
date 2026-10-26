@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  sendOfferLink,
-  voidOfferSignature,
-} from "@openbooks/engine/hrm/recruiting/offers-signing";
+import { sendOfferLink, voidOfferSignature } from "@openbooks/engine/hrm/recruiting/offers-signing";
 
 import { recruitingErrorResponse } from "../../../_lib";
 import { offerSigningBody } from "./bodies";
@@ -21,11 +18,7 @@ export const POST = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: offerSigningBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
 
     try {

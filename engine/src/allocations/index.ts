@@ -175,10 +175,7 @@ export {
   type RerunAllocationRunResult,
   type ReverseAllocationRunOptions,
 } from "./period-run.ts";
-export {
-  getRun as getAllocationRun,
-  listRuns as listAllocationRuns,
-} from "./run-queries.ts";
+export { getRun as getAllocationRun, listRuns as listAllocationRuns } from "./run-queries.ts";
 export {
   ALLOCATION_RUN_OUTBOX_KIND,
   allocationRunOccurrenceKey,

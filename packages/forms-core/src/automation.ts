@@ -21,15 +21,15 @@
 // described in the flow execution contract.
 
 import { z } from "zod";
-import { uuidString } from './identifiers'
+import { uuidString } from "./identifiers";
 import {
   defaultValueExpressionSchema,
   logicRuleSchema,
   type DefaultValueExpression,
   type LogicRule,
-} from './schema'
-import { evaluateLogicRule, type EvalContext } from './evaluator'
-import type { FlowSubjectProfile } from './flow-subjects'
+} from "./schema";
+import { evaluateLogicRule, type EvalContext } from "./evaluator";
+import type { FlowSubjectProfile } from "./flow-subjects";
 
 // --- Targets (who / where) --------------------------------------------------
 
@@ -39,51 +39,51 @@ import type { FlowSubjectProfile } from './flow-subjects'
 //   submitter  — the user who created/submitted the record.
 //   supervisor — the submitter's manager (users.partyId → employee supervisor).
 //   field      — a record field holding a user id (e.g. `salesRep`).
-export const assigneeTargetSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('user'), userId: z.string().min(1) }),
-  z.object({ type: z.literal('role'), role: z.string().min(1) }),
-  z.object({ type: z.literal('submitter') }),
-  z.object({ type: z.literal('supervisor') }),
-  z.object({ type: z.literal('field'), field: z.string().min(1).max(128) }),
-])
-export type AssigneeTarget = z.infer<typeof assigneeTargetSchema>
+export const assigneeTargetSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("user"), userId: z.string().min(1) }),
+  z.object({ type: z.literal("role"), role: z.string().min(1) }),
+  z.object({ type: z.literal("submitter") }),
+  z.object({ type: z.literal("supervisor") }),
+  z.object({ type: z.literal("field"), field: z.string().min(1).max(128) }),
+]);
+export type AssigneeTarget = z.infer<typeof assigneeTargetSchema>;
 
 // Someone who can RECEIVE a message: any assignee target, plus a literal
 // email address (which may hold a comma/semicolon-separated list).
-export const recipientTargetSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('user'), userId: z.string().min(1) }),
-  z.object({ type: z.literal('role'), role: z.string().min(1) }),
-  z.object({ type: z.literal('submitter') }),
-  z.object({ type: z.literal('supervisor') }),
-  z.object({ type: z.literal('field'), field: z.string().min(1).max(128) }),
-  z.object({ type: z.literal('email'), email: z.string().min(3).max(1_000) }),
-])
-export type RecipientTarget = z.infer<typeof recipientTargetSchema>
+export const recipientTargetSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("user"), userId: z.string().min(1) }),
+  z.object({ type: z.literal("role"), role: z.string().min(1) }),
+  z.object({ type: z.literal("submitter") }),
+  z.object({ type: z.literal("supervisor") }),
+  z.object({ type: z.literal("field"), field: z.string().min(1).max(128) }),
+  z.object({ type: z.literal("email"), email: z.string().min(3).max(1_000) }),
+]);
+export type RecipientTarget = z.infer<typeof recipientTargetSchema>;
 
 // --- Triggers (entry points) ------------------------------------------------
 
-export const triggerDataSchema = z.discriminatedUnion('trigger', [
+export const triggerDataSchema = z.discriminatedUnion("trigger", [
   // Document lifecycle moments, dispatched by the engine at the same hook
   // sites as trigger scripts (create / submit-for-approval / posting / void).
-  z.object({ trigger: z.literal('on_create') }),
+  z.object({ trigger: z.literal("on_create") }),
   // Fires after a record edit is saved (header/lines). The dispatching event
   // may expose `previousTotal` / `totalChanged` in the eval context so
   // conditions can implement "needs re-approval on material edit".
-  z.object({ trigger: z.literal('on_update') }),
-  z.object({ trigger: z.literal('on_submit') }),
-  z.object({ trigger: z.literal('before_post') }),
-  z.object({ trigger: z.literal('after_post') }),
-  z.object({ trigger: z.literal('before_void') }),
+  z.object({ trigger: z.literal("on_update") }),
+  z.object({ trigger: z.literal("on_submit") }),
+  z.object({ trigger: z.literal("before_post") }),
+  z.object({ trigger: z.literal("after_post") }),
+  z.object({ trigger: z.literal("before_void") }),
   // Fires on a status transition. `from`/`to` narrow which transitions match;
   // both absent ⇒ every transition on the subject fires this trigger.
   z.object({
-    trigger: z.literal('status_change'),
+    trigger: z.literal("status_change"),
     from: z.string().max(64).optional(),
     to: z.string().max(64).optional(),
   }),
   // Fires alongside a lifecycle event when the record matches the rule
   // (evaluated against the record's EvalContext at dispatch time).
-  z.object({ trigger: z.literal('on_field_value'), rule: logicRuleSchema }),
+  z.object({ trigger: z.literal("on_field_value"), rule: logicRuleSchema }),
   // Runs off the 60s scheduler tick in the worker — see
   // `lintWorkerTriggerCompatibility` for what its branch may contain.
   //
@@ -94,7 +94,7 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   // record in hand the branch may also `set_field` (e.g. a sent-latch
   // checkbox); without `select` there is no record, so only send_email/notify.
   z.object({
-    trigger: z.literal('scheduled'),
+    trigger: z.literal("scheduled"),
     cron: z.string().min(1).max(128),
     tz: z.string().max(64).optional(),
     clockSchedule: z
@@ -103,18 +103,12 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
           .array(z.number().int().min(0).max(6))
           .min(1)
           .max(7)
-          .refine(
-            (days) => new Set(days).size === days.length,
-            "Choose distinct weekdays.",
-          ),
+          .refine((days) => new Set(days).size === days.length, "Choose distinct weekdays."),
         times: z
           .array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/))
           .min(1)
           .max(12)
-          .refine(
-            (times) => new Set(times).size === times.length,
-            "Choose distinct send times.",
-          ),
+          .refine((times) => new Set(times).size === times.length, "Choose distinct send times."),
       })
       .optional(),
     select: z
@@ -130,20 +124,20 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   // `{ kind: 'manual', buttonId }` plans just that button's branch.
   // `showIf` / `requirePermission` gate the button's visibility/use.
   z.object({
-    trigger: z.literal('manual'),
+    trigger: z.literal("manual"),
     buttonId: z.string().min(1).max(64),
     label: z.string().min(1).max(120),
     confirm: z.string().max(500).optional(),
     requirePermission: z.string().max(128).optional(),
     showIf: logicRuleSchema.optional(),
   }),
-])
-export type TriggerData = z.infer<typeof triggerDataSchema>
-export type TriggerKind = TriggerData['trigger']
+]);
+export type TriggerData = z.infer<typeof triggerDataSchema>;
+export type TriggerKind = TriggerData["trigger"];
 
 // --- Actions (system side-effects; sinks or chain) --------------------------
 
-export const actionDataSchema = z.discriminatedUnion('action', [
+export const actionDataSchema = z.discriminatedUnion("action", [
   // The recipient audience and report are pinned by the native schedule review.
   z.object({ action: z.literal("distribute_schedule") }),
   z.object({ action: z.literal("send_board_schedule") }),
@@ -153,7 +147,7 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   // and attaches it to the email. When no PDF renderer is registered in the
   // executing process the email still sends, with a recorded warning.
   z.object({
-    action: z.literal('send_email'),
+    action: z.literal("send_email"),
     to: z.array(recipientTargetSchema).min(1).max(20),
     subject: z.string().min(1).max(500),
     body: z.string().max(100_000),
@@ -162,7 +156,7 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   // In-app inbox notification (the `notifications` table). `href` deep-links
   // the notification to a record page.
   z.object({
-    action: z.literal('notify'),
+    action: z.literal("notify"),
     to: z.array(recipientTargetSchema).min(1).max(20),
     title: z.string().min(1).max(200),
     body: z.string().max(2_000).optional(),
@@ -170,27 +164,27 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   }),
   // Persist a new value into a writable header field on the record.
   z.object({
-    action: z.literal('set_field'),
+    action: z.literal("set_field"),
     field: z.string().min(1).max(128),
     value: defaultValueExpressionSchema, // reuse the default-value evaluator
   }),
   // Adapter-mediated document lifecycle transition (draft → approved, …).
-  z.object({ action: z.literal('change_status'), to: z.string().min(1).max(64) }),
+  z.object({ action: z.literal("change_status"), to: z.string().min(1).max(64) }),
   // Post the document to the GL (runs the normal posting pipeline).
-  z.object({ action: z.literal('post_document') }),
+  z.object({ action: z.literal("post_document") }),
   // Hard-lock the record against edits/void/delete until `unlock_record` runs
   // (e.g. an approved payment stays permanently locked except for admins +
   // controllers). Admins are always exempt; `exemptRoles` widens the
   // exemption. Locks persist across status changes.
   z.object({
-    action: z.literal('lock_record'),
+    action: z.literal("lock_record"),
     reason: z.string().max(500).optional(),
     exemptRoles: z.array(z.string().min(1).max(64)).max(10).optional(),
   }),
-  z.object({ action: z.literal('unlock_record') }),
-])
-export type ActionData = z.infer<typeof actionDataSchema>
-export type ActionKind = ActionData['action']
+  z.object({ action: z.literal("unlock_record") }),
+]);
+export type ActionData = z.infer<typeof actionDataSchema>;
+export type ActionKind = ActionData["action"];
 
 // --- Gate (human approve / reject — PAUSES the flow) ------------------------
 
@@ -201,40 +195,48 @@ export type ActionKind = ActionData['action']
 export const gateDataSchema = z.object({
   title: z.string().min(1).max(200),
   assignees: z.array(assigneeTargetSchema).min(1).max(20),
-  mode: z.enum(['any', 'all']),
+  mode: z.enum(["any", "all"]),
   signatureRequired: z.boolean().optional(),
   // When true the engine drops the run's submitter from the resolved
   // assignees; if that empties the list it falls back to the submitter's
   // supervisor, and failing that the run fails loudly rather than letting
   // the submitter sign off their own record.
   preventSelfApproval: z.boolean().optional(),
-  reminderAfterHours: z.number().positive().max(24 * 365).optional(),
-  escalateAfterHours: z.number().positive().max(24 * 365).optional(),
+  reminderAfterHours: z
+    .number()
+    .positive()
+    .max(24 * 365)
+    .optional(),
+  escalateAfterHours: z
+    .number()
+    .positive()
+    .max(24 * 365)
+    .optional(),
   escalateTo: assigneeTargetSchema.optional(),
-})
-export type GateData = z.infer<typeof gateDataSchema>
+});
+export type GateData = z.infer<typeof gateDataSchema>;
 
 // --- Nodes (discriminated by data.kind) -------------------------------------
 
 export const automationNodeSchema = z.object({
   id: z.string().min(1),
   position: z.object({ x: z.number(), y: z.number() }),
-  data: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('trigger'), trigger: triggerDataSchema }),
+  data: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("trigger"), trigger: triggerDataSchema }),
     z.object({
-      kind: z.literal('condition'),
+      kind: z.literal("condition"),
       rule: logicRuleSchema,
       label: z.string().max(200).optional(),
     }),
     z.object({
-      kind: z.literal('action'),
+      kind: z.literal("action"),
       action: actionDataSchema,
       label: z.string().max(200).optional(),
     }),
-    z.object({ kind: z.literal('gate'), gate: gateDataSchema }),
+    z.object({ kind: z.literal("gate"), gate: gateDataSchema }),
   ]),
-})
-export type AutomationNode = z.infer<typeof automationNodeSchema>
+});
+export type AutomationNode = z.infer<typeof automationNodeSchema>;
 
 // Edge branch selector lives on the source handle:
 //   condition → 'then' | 'else'
@@ -244,14 +246,14 @@ export const automationEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
   target: z.string().min(1),
-  sourceHandle: z.enum(['next', 'then', 'else', 'approve', 'reject']).optional(),
-})
-export type AutomationEdge = z.infer<typeof automationEdgeSchema>
+  sourceHandle: z.enum(["next", "then", "else", "approve", "reject"]).optional(),
+});
+export type AutomationEdge = z.infer<typeof automationEdgeSchema>;
 
 export const MAX_FLOW_NODES = 200;
 export const MAX_FLOW_EDGES = 400;
 /** A flow can name at most 100 legal entities in its subject scope. */
-export const MAX_FLOW_SUBJECT_SCOPE_ENTITIES = 100
+export const MAX_FLOW_SUBJECT_SCOPE_ENTITIES = 100;
 
 /**
  * Legal-entity admission for the whole graph. When present, the flow only
@@ -270,21 +272,23 @@ export const flowGraphSubjectScopeSchema = z.object({
     .array(uuidString().transform((id) => id.toLowerCase()))
     .min(1)
     .max(MAX_FLOW_SUBJECT_SCOPE_ENTITIES)
-    .refine((ids) => new Set(ids).size === ids.length, 'Choose each legal entity once.'),
-})
-export type FlowGraphSubjectScope = z.infer<typeof flowGraphSubjectScopeSchema>
+    .refine((ids) => new Set(ids).size === ids.length, "Choose each legal entity once."),
+});
+export type FlowGraphSubjectScope = z.infer<typeof flowGraphSubjectScopeSchema>;
 
-export const automationGraphSchema = z.object({
-  schemaVersion: z.literal(1),
-  /** Legal entities this flow applies to; absent means organization-wide. */
-  subjectScope: flowGraphSubjectScopeSchema.optional(),
-  nodes: z.array(automationNodeSchema).max(MAX_FLOW_NODES),
-  edges: z.array(automationEdgeSchema).max(MAX_FLOW_EDGES),
-}).strict();
-export type AutomationGraph = z.infer<typeof automationGraphSchema>
+export const automationGraphSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    /** Legal entities this flow applies to; absent means organization-wide. */
+    subjectScope: flowGraphSubjectScopeSchema.optional(),
+    nodes: z.array(automationNodeSchema).max(MAX_FLOW_NODES),
+    edges: z.array(automationEdgeSchema).max(MAX_FLOW_EDGES),
+  })
+  .strict();
+export type AutomationGraph = z.infer<typeof automationGraphSchema>;
 
 export function emptyAutomationGraph(): AutomationGraph {
-  return { schemaVersion: 1, nodes: [], edges: [] }
+  return { schemaVersion: 1, nodes: [], edges: [] };
 }
 
 /**
@@ -296,24 +300,26 @@ export function emptyAutomationGraph(): AutomationGraph {
  * proven and callers must fail closed). Unscoped graphs admit every
  * subject, preserving organization-wide semantics.
  */
-export type FlowSubjectAdmission = 'admitted' | 'out-of-scope' | 'unresolved'
+export type FlowSubjectAdmission = "admitted" | "out-of-scope" | "unresolved";
 
 export function flowSubjectAdmission(
   scope: FlowGraphSubjectScope | null | undefined,
   subsidiaryId: unknown,
 ): FlowSubjectAdmission {
-  if (!scope) return 'admitted'
-  if (typeof subsidiaryId !== 'string' || subsidiaryId.trim() === '') return 'unresolved'
-  const resolved = subsidiaryId.trim().toLowerCase()
-  return scope.subsidiaryIds.some((id) => id.toLowerCase() === resolved) ? 'admitted' : 'out-of-scope'
+  if (!scope) return "admitted";
+  if (typeof subsidiaryId !== "string" || subsidiaryId.trim() === "") return "unresolved";
+  const resolved = subsidiaryId.trim().toLowerCase();
+  return scope.subsidiaryIds.some((id) => id.toLowerCase() === resolved)
+    ? "admitted"
+    : "out-of-scope";
 }
 
 /** Admission verdict for one subject against a whole graph. */
 export function graphSubjectAdmission(
-  graph: Pick<AutomationGraph, 'subjectScope'>,
+  graph: Pick<AutomationGraph, "subjectScope">,
   subsidiaryId: unknown,
 ): FlowSubjectAdmission {
-  return flowSubjectAdmission(graph.subjectScope, subsidiaryId)
+  return flowSubjectAdmission(graph.subjectScope, subsidiaryId);
 }
 
 /**
@@ -323,31 +329,29 @@ export function graphSubjectAdmission(
  * renamed or deleted, and no enrichment pass is needed to show them.
  */
 export function nodeDisplayName(node: AutomationNode): string {
-  const data = node.data
+  const data = node.data;
   switch (data.kind) {
-    case 'trigger':
-      return `Trigger "${data.trigger.trigger}"`
-    case 'condition':
-      return data.label ? `Condition "${data.label}"` : 'Condition (unlabeled)'
-    case 'action':
-      return `Action "${data.action.action}"`
-    case 'gate':
-      return data.gate.title ? `Approval "${data.gate.title}"` : 'Approval (untitled)'
+    case "trigger":
+      return `Trigger "${data.trigger.trigger}"`;
+    case "condition":
+      return data.label ? `Condition "${data.label}"` : "Condition (unlabeled)";
+    case "action":
+      return `Action "${data.action.action}"`;
+    case "gate":
+      return data.gate.title ? `Approval "${data.gate.title}"` : "Approval (untitled)";
   }
 }
 
 /** A rule with no leaf comparison matches everything (`and`) or nothing
  * (`or`) — either way the author wrote no real predicate. */
 export function logicRuleIsEmpty(rule: LogicRule): boolean {
-  if ('rules' in rule) return !rule.rules.some((r) => !logicRuleIsEmpty(r))
-  if ('rule' in rule) return logicRuleIsEmpty(rule.rule)
-  return false
+  if ("rules" in rule) return !rule.rules.some((r) => !logicRuleIsEmpty(r));
+  if ("rule" in rule) return logicRuleIsEmpty(rule.rule);
+  return false;
 }
 
 export type FlowReadiness =
-  | { state: 'ready' }
-  | { state: 'disabled' }
-  | { state: 'incomplete'; reasons: string[] }
+  { state: "ready" } | { state: "disabled" } | { state: "incomplete"; reasons: string[] };
 
 /**
  * One shared vocabulary for "can this flow fire": a disabled flow never
@@ -356,21 +360,21 @@ export type FlowReadiness =
  * list status column both render from this so they can never disagree.
  */
 export function flowReadiness(enabled: boolean, errors: readonly string[]): FlowReadiness {
-  if (!enabled) return { state: 'disabled' }
-  if (errors.length > 0) return { state: 'incomplete', reasons: [...errors] }
-  return { state: 'ready' }
+  if (!enabled) return { state: "disabled" };
+  if (errors.length > 0) return { state: "incomplete", reasons: [...errors] };
+  return { state: "ready" };
 }
 
 /** Stable serialization for duplicate-step detection (key order independent). */
 function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
-  if (value !== null && typeof value === 'object') {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value !== null && typeof value === "object") {
     return `{${Object.keys(value)
       .sort()
       .map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
-      .join(',')}}`
+      .join(",")}}`;
   }
-  return JSON.stringify(value) ?? 'null'
+  return JSON.stringify(value) ?? "null";
 }
 
 // --- {{field}} interpolation -------------------------------------------------
@@ -383,9 +387,9 @@ function stableStringify(value: unknown): string {
  */
 export function interpolateTemplate(template: string, ctx: EvalContext): string {
   return template.replace(/\{\{([^{}]+)\}\}/g, (_match, rawKey: string) => {
-    const v = ctx.values[rawKey.trim()]
-    return v === null || v === undefined ? '' : String(v)
-  })
+    const v = ctx.values[rawKey.trim()];
+    return v === null || v === undefined ? "" : String(v);
+  });
 }
 
 // --- Engine: plan which actions/gates fire for a trigger ---------------------
@@ -397,19 +401,19 @@ export function interpolateTemplate(template: string, ctx: EvalContext): string 
  * scheduled nodes are due via `opts.triggerNodeIds`).
  */
 export type FlowEventSource =
-  | 'ui'
-  | 'api'
-  | 'mcp'
-  | 'assistant'
-  | 'sync'
-  | 'script'
-  | 'schedule'
-  | 'close_automation'
-  | 'posted_correction'
-  | 'portal'
+  | "ui"
+  | "api"
+  | "mcp"
+  | "assistant"
+  | "sync"
+  | "script"
+  | "schedule"
+  | "close_automation"
+  | "posted_correction"
+  | "portal";
 
 export type TriggerEvent = (
-  | { kind: 'on_create' }
+  | { kind: "on_create" }
   // The edit shape that fired the event; the engine surfaces these as
   // eval-context values so condition nodes can gate on material changes
   // (e.g. requiring re-approval when an approved record changes):
@@ -422,45 +426,45 @@ export type TriggerEvent = (
   //   { op:'in', field:'changedFields', value:['total','taxTotal'] }
   // reads "total or tax total changed".
   | {
-      kind: 'on_update'
-      previousTotal?: string | number | null
-      totalChanged?: boolean
-      changedFields?: string[]
-      changedLineFields?: string[]
-      old?: Record<string, unknown>
+      kind: "on_update";
+      previousTotal?: string | number | null;
+      totalChanged?: boolean;
+      changedFields?: string[];
+      changedLineFields?: string[];
+      old?: Record<string, unknown>;
     }
-  | { kind: 'on_submit' }
-  | { kind: 'before_post' }
-  | { kind: 'after_post' }
-  | { kind: 'before_void' }
-  | { kind: 'status_change'; from?: string | null; to: string }
-  | { kind: 'on_field_value' }
-  | { kind: 'scheduled' }
-  | { kind: 'manual'; buttonId?: string }
+  | { kind: "on_submit" }
+  | { kind: "before_post" }
+  | { kind: "after_post" }
+  | { kind: "before_void" }
+  | { kind: "status_change"; from?: string | null; to: string }
+  | { kind: "on_field_value" }
+  | { kind: "scheduled" }
+  | { kind: "manual"; buttonId?: string }
 ) & {
   // Where the mutation came from — surfaced as `values.event_source` so
   // conditions can e.g. auto-approve system-generated records. Engine
   // default when absent: 'api'.
-  source?: FlowEventSource
+  source?: FlowEventSource;
   // Optional durable identity for one logical dispatch. When present, every
   // flow run created for this dispatch carries a derived occurrence key, so a
   // resumed attempt (crash recovery) adopts the SAME run rows instead of
   // duplicating the whole dispatch.
-  occurrenceKey?: string
-}
+  occurrenceKey?: string;
+};
 
 // A reached gate carries its node id so the runtime can persist a `flow_gates`
 // row keyed back to the exact node and RESUME the correct branch on a human
 // decision. Actions likewise carry node ids for `flow_run_effects` checkpoints.
-export type PlannedGate = { nodeId: string; gate: GateData }
-export type PlannedAction = { nodeId: string; action: ActionData }
+export type PlannedGate = { nodeId: string; gate: GateData };
+export type PlannedAction = { nodeId: string; action: ActionData };
 export type AutomationPlan = {
   actions: ActionData[];
   actionNodes: PlannedAction[];
   gates: PlannedGate[];
 };
 
-const EMPTY_PLAN: AutomationPlan = Object.freeze({ actions: [], actionNodes: [], gates: [] })
+const EMPTY_PLAN: AutomationPlan = Object.freeze({ actions: [], actionNodes: [], gates: [] });
 
 // Shared traversal: from each start node, collect ordered Actions and pause at
 // Gates. Conditions branch then/else; gates pause (their approve/reject branch
@@ -468,42 +472,42 @@ const EMPTY_PLAN: AutomationPlan = Object.freeze({ actions: [], actionNodes: [],
 // which also dedupes nodes that multiple satisfied triggers converge on.
 // Ordering is deterministic: start ids in graph order, then edge order.
 function collect(graph: AutomationGraph, evalCtx: EvalContext, startIds: string[]): AutomationPlan {
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]))
-  const out = (id: string) => graph.edges.filter((e) => e.source === id)
-  const actions: ActionData[] = []
-  const actionNodes: PlannedAction[] = []
-  const gates: PlannedGate[] = []
-  const seen = new Set<string>()
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const out = (id: string) => graph.edges.filter((e) => e.source === id);
+  const actions: ActionData[] = [];
+  const actionNodes: PlannedAction[] = [];
+  const gates: PlannedGate[] = [];
+  const seen = new Set<string>();
 
   const walk = (id: string) => {
-    if (seen.has(id)) return
-    seen.add(id)
-    const node = byId.get(id)
-    if (!node) return
-    const d = node.data
-    if (d.kind === 'action') {
-      actions.push(d.action)
-      actionNodes.push({ nodeId: id, action: d.action })
-      for (const e of out(id)) walk(e.target)
-      return
+    if (seen.has(id)) return;
+    seen.add(id);
+    const node = byId.get(id);
+    if (!node) return;
+    const d = node.data;
+    if (d.kind === "action") {
+      actions.push(d.action);
+      actionNodes.push({ nodeId: id, action: d.action });
+      for (const e of out(id)) walk(e.target);
+      return;
     }
-    if (d.kind === 'gate') {
-      gates.push({ nodeId: id, gate: d.gate })
-      return // pause — approve/reject branch resumes on human decision
+    if (d.kind === "gate") {
+      gates.push({ nodeId: id, gate: d.gate });
+      return; // pause — approve/reject branch resumes on human decision
     }
-    if (d.kind === 'condition') {
-      const pass = evaluateLogicRule(d.rule, evalCtx)
+    if (d.kind === "condition") {
+      const pass = evaluateLogicRule(d.rule, evalCtx);
       for (const e of out(id)) {
-        const h = e.sourceHandle ?? 'then'
-        if ((pass && (h === 'then' || h === 'next')) || (!pass && h === 'else')) walk(e.target)
+        const h = e.sourceHandle ?? "then";
+        if ((pass && (h === "then" || h === "next")) || (!pass && h === "else")) walk(e.target);
       }
-      return
+      return;
     }
     // trigger node → follow onward
-    for (const e of out(id)) walk(e.target)
-  }
-  for (const id of startIds) walk(id)
-  return { actions, actionNodes, gates }
+    for (const e of out(id)) walk(e.target);
+  };
+  for (const id of startIds) walk(id);
+  return { actions, actionNodes, gates };
 }
 
 /**
@@ -534,28 +538,28 @@ export function planAutomation(
   evalCtx: EvalContext,
   opts?: {
     /** Restrict same-kind planning to these exact trigger node ids. */
-    triggerNodeIds?: string[]
+    triggerNodeIds?: string[];
   },
 ): AutomationPlan {
   const startIds: string[] = [];
   for (const node of graph.nodes) {
-    if (node.data.kind !== 'trigger' || node.data.trigger.trigger !== event.kind) continue
-    if (opts?.triggerNodeIds && !opts.triggerNodeIds.includes(node.id)) continue
-    const td = node.data.trigger
+    if (node.data.kind !== "trigger" || node.data.trigger.trigger !== event.kind) continue;
+    if (opts?.triggerNodeIds && !opts.triggerNodeIds.includes(node.id)) continue;
+    const td = node.data.trigger;
 
-    if (td.trigger === 'manual' && event.kind === 'manual' && event.buttonId !== undefined) {
-      if (td.buttonId !== event.buttonId) continue
+    if (td.trigger === "manual" && event.kind === "manual" && event.buttonId !== undefined) {
+      if (td.buttonId !== event.buttonId) continue;
     }
-    if (td.trigger === 'on_field_value' && !evaluateLogicRule(td.rule, evalCtx)) continue
-    if (td.trigger === 'status_change' && event.kind === 'status_change') {
-      if (td.to !== undefined && td.to !== event.to) continue
-      if (td.from !== undefined && td.from !== (event.from ?? undefined)) continue
+    if (td.trigger === "on_field_value" && !evaluateLogicRule(td.rule, evalCtx)) continue;
+    if (td.trigger === "status_change" && event.kind === "status_change") {
+      if (td.to !== undefined && td.to !== event.to) continue;
+      if (td.from !== undefined && td.from !== (event.from ?? undefined)) continue;
     }
 
-    startIds.push(node.id)
+    startIds.push(node.id);
   }
-  if (startIds.length === 0) return { ...EMPTY_PLAN }
-  const plan = collect(graph, evalCtx, startIds)
+  if (startIds.length === 0) return { ...EMPTY_PLAN };
+  const plan = collect(graph, evalCtx, startIds);
   return plan;
 }
 
@@ -566,13 +570,13 @@ export function planAutomation(
 export function planFromGate(
   graph: AutomationGraph,
   gateNodeId: string,
-  branch: 'approve' | 'reject',
+  branch: "approve" | "reject",
   evalCtx: EvalContext,
 ): AutomationPlan {
   const targets = graph.edges
-    .filter((e) => e.source === gateNodeId && (e.sourceHandle ?? 'approve') === branch)
-    .map((e) => e.target)
-  return collect(graph, evalCtx, targets)
+    .filter((e) => e.source === gateNodeId && (e.sourceHandle ?? "approve") === branch)
+    .map((e) => e.target);
+  return collect(graph, evalCtx, targets);
 }
 
 // --- Static lint (best-effort; surfaced in the builder) ----------------------
@@ -592,60 +596,72 @@ export function lintAutomationGraph(
   const errors: string[] = [];
   if (graph.subjectScope) {
     if (graph.subjectScope.subsidiaryIds.length === 0) {
-      errors.push('Flow is limited by legal entity but names none — choose at least one legal entity or remove the limit.')
+      errors.push(
+        "Flow is limited by legal entity but names none — choose at least one legal entity or remove the limit.",
+      );
     }
-    if (new Set(graph.subjectScope.subsidiaryIds).size !== graph.subjectScope.subsidiaryIds.length) {
-      errors.push('Flow legal-entity limit names the same legal entity more than once — choose each legal entity once.')
+    if (
+      new Set(graph.subjectScope.subsidiaryIds).size !== graph.subjectScope.subsidiaryIds.length
+    ) {
+      errors.push(
+        "Flow legal-entity limit names the same legal entity more than once — choose each legal entity once.",
+      );
     }
     // A record-free scheduled firing has no subject whose legal entity
     // could prove admission, so a scoped flow can never fire it.
     for (const n of graph.nodes) {
-      if (n.data.kind === 'trigger' && n.data.trigger.trigger === 'scheduled' && !n.data.trigger.select) {
-        errors.push(`Trigger ${n.id}: a legal-entity-limited flow cannot run on a schedule without selecting records — add a record selection or remove the legal-entity limit.`)
+      if (
+        n.data.kind === "trigger" &&
+        n.data.trigger.trigger === "scheduled" &&
+        !n.data.trigger.select
+      ) {
+        errors.push(
+          `Trigger ${n.id}: a legal-entity-limited flow cannot run on a schedule without selecting records — add a record selection or remove the legal-entity limit.`,
+        );
       }
     }
   }
 
-  const ids = new Set(graph.nodes.map((n) => n.id))
+  const ids = new Set(graph.nodes.map((n) => n.id));
 
   if (graph.nodes.length > MAX_FLOW_NODES) {
-    errors.push(`Flow has ${graph.nodes.length} nodes — the maximum is ${MAX_FLOW_NODES}.`)
+    errors.push(`Flow has ${graph.nodes.length} nodes — the maximum is ${MAX_FLOW_NODES}.`);
   }
   if (graph.edges.length > MAX_FLOW_EDGES) {
-    errors.push(`Flow has ${graph.edges.length} edges — the maximum is ${MAX_FLOW_EDGES}.`)
+    errors.push(`Flow has ${graph.edges.length} edges — the maximum is ${MAX_FLOW_EDGES}.`);
   }
 
   for (const e of graph.edges) {
-    if (!ids.has(e.source)) errors.push(`Edge ${e.id}: unknown source node`)
-    if (!ids.has(e.target)) errors.push(`Edge ${e.id}: unknown target node`)
+    if (!ids.has(e.source)) errors.push(`Edge ${e.id}: unknown source node`);
+    if (!ids.has(e.target)) errors.push(`Edge ${e.id}: unknown target node`);
   }
 
-  const triggerNodes = graph.nodes.filter((n) => n.data.kind === 'trigger')
-  const triggerIds = triggerNodes.map((n) => n.id)
+  const triggerNodes = graph.nodes.filter((n) => n.data.kind === "trigger");
+  const triggerIds = triggerNodes.map((n) => n.id);
   if (triggerIds.length === 0) {
-    errors.push('Flow has no trigger — add a trigger node to start it.')
+    errors.push("Flow has no trigger — add a trigger node to start it.");
   } else if (triggerNodes.length > 1) {
     // One flow, one entry point: with two triggers both branches would fire
     // on the same record and duplicate every downstream step. Name every
     // trigger by its user-visible kind so the author knows which to remove.
-    const names = triggerNodes.map((n) => nodeDisplayName(n)).join(', ')
+    const names = triggerNodes.map((n) => nodeDisplayName(n)).join(", ");
     errors.push(
       `Flow has ${triggerNodes.length} triggers (${names}) — a flow starts from exactly one trigger; remove all but one.`,
-    )
+    );
   } else {
     // Unreachable nodes: not wired (directly or transitively) to any trigger.
     // Only meaningful once a trigger exists — otherwise EVERYTHING is
     // unreachable and the missing-trigger error already says so.
-    const reachable = new Set<string>()
+    const reachable = new Set<string>();
     const visit = (id: string) => {
-      if (reachable.has(id)) return
-      reachable.add(id)
-      for (const e of graph.edges) if (e.source === id) visit(e.target)
-    }
-    for (const id of triggerIds) visit(id)
+      if (reachable.has(id)) return;
+      reachable.add(id);
+      for (const e of graph.edges) if (e.source === id) visit(e.target);
+    };
+    for (const id of triggerIds) visit(id);
     for (const n of graph.nodes) {
       if (!reachable.has(n.id)) {
-        errors.push(`Node ${n.id}: unreachable — not connected to any trigger.`)
+        errors.push(`Node ${n.id}: unreachable — not connected to any trigger.`);
       }
     }
   }
@@ -655,13 +671,16 @@ export function lintAutomationGraph(
   // connects it to a first step. Only triggers are checked — an action with
   // no outgoing edge is a legitimate terminal step, and a condition or gate
   // with one branch intentionally ends the run on the other.
-  const outboundFrom = new Set(graph.edges.map((e) => e.source))
+  const outboundFrom = new Set(graph.edges.map((e) => e.source));
   for (const n of graph.nodes) {
     if (
-      n.data.kind === 'trigger' && !outboundFrom.has(n.id) &&
-      (n.data.trigger.trigger !== "on_submit" || graph.nodes.some(node=>node.id!==n.id))
+      n.data.kind === "trigger" &&
+      !outboundFrom.has(n.id) &&
+      (n.data.trigger.trigger !== "on_submit" || graph.nodes.some((node) => node.id !== n.id))
     ) {
-      errors.push(`Trigger ${n.id} has no outgoing step — connect it to the first step or the flow never runs.`)
+      errors.push(
+        `Trigger ${n.id} has no outgoing step — connect it to the first step or the flow never runs.`,
+      );
     }
   }
 
@@ -670,15 +689,19 @@ export function lintAutomationGraph(
   // if no flow existed. Name the node and the trigger alongside the remedy
   // (the builder enriches the storage id into the canvas name).
   if (profile) {
-    const canPost = profile.actions.includes('post_document')
+    const canPost = profile.actions.includes("post_document");
     for (const n of graph.nodes) {
-      if (n.data.kind !== 'trigger') continue
-      const trigger = n.data.trigger.trigger
-      if ((trigger === 'before_post' || trigger === 'after_post') && !canPost) {
-        errors.push(`Trigger ${n.id}: "${trigger}" never fires for ${profile.label} — these records never post. Gate their approval with "on_submit" instead.`)
+      if (n.data.kind !== "trigger") continue;
+      const trigger = n.data.trigger.trigger;
+      if ((trigger === "before_post" || trigger === "after_post") && !canPost) {
+        errors.push(
+          `Trigger ${n.id}: "${trigger}" never fires for ${profile.label} — these records never post. Gate their approval with "on_submit" instead.`,
+        );
       }
-      if ((trigger === 'on_create' || trigger === 'on_update') && profile.orderRecord === true) {
-        errors.push(`Trigger ${n.id}: "${trigger}" never fires for ${profile.label} — orders are created and edited through the order pipeline. Gate Issue with "on_submit" instead.`)
+      if ((trigger === "on_create" || trigger === "on_update") && profile.orderRecord === true) {
+        errors.push(
+          `Trigger ${n.id}: "${trigger}" never fires for ${profile.label} — orders are created and edited through the order pipeline. Gate Issue with "on_submit" instead.`,
+        );
       }
     }
   }
@@ -687,77 +710,77 @@ export function lintAutomationGraph(
   // does not support (e.g. a journal flow using `post_document` when journals
   // post immediately) and status values outside the subject's lifecycle.
   if (profile) {
-    const okTriggers = new Set<string>(profile.triggers)
-    const okActions = new Set<string>(profile.actions)
-    const okStatuses = new Set(profile.statuses.map((s) => s.value))
-    const writable = new Set(profile.fields.filter((f) => f.writable).map((f) => f.key))
+    const okTriggers = new Set<string>(profile.triggers);
+    const okActions = new Set<string>(profile.actions);
+    const okStatuses = new Set(profile.statuses.map((s) => s.value));
+    const writable = new Set(profile.fields.filter((f) => f.writable).map((f) => f.key));
     for (const n of graph.nodes) {
-      if (n.data.kind === 'trigger') {
-        const td = n.data.trigger
+      if (n.data.kind === "trigger") {
+        const td = n.data.trigger;
         if (!okTriggers.has(td.trigger)) {
-          errors.push(`Trigger ${n.id}: "${td.trigger}" is not available for ${profile.label}.`)
+          errors.push(`Trigger ${n.id}: "${td.trigger}" is not available for ${profile.label}.`);
         }
-        if (td.trigger === 'status_change') {
+        if (td.trigger === "status_change") {
           if (td.to !== undefined && !okStatuses.has(td.to)) {
-            errors.push(`Trigger ${n.id}: unknown destination status "${td.to}".`)
+            errors.push(`Trigger ${n.id}: unknown destination status "${td.to}".`);
           }
           if (td.from !== undefined && !okStatuses.has(td.from)) {
-            errors.push(`Trigger ${n.id}: unknown source status "${td.from}".`)
+            errors.push(`Trigger ${n.id}: unknown source status "${td.from}".`);
           }
         }
       }
-      if (n.data.kind === 'action') {
-        const ad = n.data.action
+      if (n.data.kind === "action") {
+        const ad = n.data.action;
         if (!okActions.has(ad.action)) {
-          errors.push(`Action ${n.id}: "${ad.action}" is not available for ${profile.label}.`)
+          errors.push(`Action ${n.id}: "${ad.action}" is not available for ${profile.label}.`);
         }
-        if (ad.action === 'change_status' && !okStatuses.has(ad.to)) {
-          errors.push(`Action ${n.id}: unknown destination status "${ad.to}".`)
+        if (ad.action === "change_status" && !okStatuses.has(ad.to)) {
+          errors.push(`Action ${n.id}: unknown destination status "${ad.to}".`);
         }
-        if (ad.action === 'set_field' && fieldIds.has(ad.field) && !writable.has(ad.field)) {
-          errors.push(`Action ${n.id}: field "${ad.field}" is not writable by flows.`)
+        if (ad.action === "set_field" && fieldIds.has(ad.field) && !writable.has(ad.field)) {
+          errors.push(`Action ${n.id}: field "${ad.field}" is not writable by flows.`);
         }
       }
     }
   }
 
   const walkRuleFields = (rule: LogicRule, where: string) => {
-    if ('rules' in rule) rule.rules.forEach((r) => walkRuleFields(r, where))
-    else if ('rule' in rule) walkRuleFields(rule.rule, where)
-    else if ('field' in rule && !fieldIds.has(rule.field)) {
-      errors.push(`${where}: references unknown field "${rule.field}"`)
+    if ("rules" in rule) rule.rules.forEach((r) => walkRuleFields(r, where));
+    else if ("rule" in rule) walkRuleFields(rule.rule, where);
+    else if ("field" in rule && !fieldIds.has(rule.field)) {
+      errors.push(`${where}: references unknown field "${rule.field}"`);
     }
-  }
+  };
   for (const n of graph.nodes) {
-    if (n.data.kind === 'condition') walkRuleFields(n.data.rule, `Condition ${n.id}`)
-    if (n.data.kind === 'trigger' && n.data.trigger.trigger === 'on_field_value') {
-      walkRuleFields(n.data.trigger.rule, `Trigger ${n.id}`)
+    if (n.data.kind === "condition") walkRuleFields(n.data.rule, `Condition ${n.id}`);
+    if (n.data.kind === "trigger" && n.data.trigger.trigger === "on_field_value") {
+      walkRuleFields(n.data.trigger.rule, `Trigger ${n.id}`);
     }
-    if (n.data.kind === 'trigger' && n.data.trigger.trigger === 'manual' && n.data.trigger.showIf) {
-      walkRuleFields(n.data.trigger.showIf, `Trigger ${n.id}`)
+    if (n.data.kind === "trigger" && n.data.trigger.trigger === "manual" && n.data.trigger.showIf) {
+      walkRuleFields(n.data.trigger.showIf, `Trigger ${n.id}`);
     }
     if (
-      n.data.kind === 'action' &&
-      n.data.action.action === 'set_field' &&
+      n.data.kind === "action" &&
+      n.data.action.action === "set_field" &&
       !fieldIds.has(n.data.action.field)
     ) {
-      errors.push(`Action ${n.id}: set_field targets unknown field "${n.data.action.field}"`)
+      errors.push(`Action ${n.id}: set_field targets unknown field "${n.data.action.field}"`);
     }
   }
   // Two payload-identical condition or approval nodes run the same step
   // twice — the usual residue of a duplicated canvas card. Both are named by
   // their user-visible label so the author can tell them apart on the canvas.
-  const seenPayloads = new Map<string, AutomationNode>()
+  const seenPayloads = new Map<string, AutomationNode>();
   for (const n of graph.nodes) {
-    if (n.data.kind !== 'condition' && n.data.kind !== 'gate') continue
-    const key = `${n.data.kind}:${stableStringify(n.data)}`
-    const first = seenPayloads.get(key)
+    if (n.data.kind !== "condition" && n.data.kind !== "gate") continue;
+    const key = `${n.data.kind}:${stableStringify(n.data)}`;
+    const first = seenPayloads.get(key);
     if (first) {
       errors.push(
         `${nodeDisplayName(n)} duplicates ${nodeDisplayName(first)} — identical steps run twice; remove one.`,
-      )
+      );
     } else {
-      seenPayloads.set(key, n)
+      seenPayloads.set(key, n);
     }
   }
 
@@ -765,26 +788,26 @@ export function lintAutomationGraph(
   // record, `or` with no leaves matches none. Either way the step cannot do
   // what the author meant, so a flow carrying one must not read as valid.
   for (const n of graph.nodes) {
-    if (n.data.kind === 'condition' && logicRuleIsEmpty(n.data.rule)) {
+    if (n.data.kind === "condition" && logicRuleIsEmpty(n.data.rule)) {
       errors.push(
         `${nodeDisplayName(n)} has an empty rule — add at least one comparison or remove the step.`,
-      )
+      );
     }
-    if (n.data.kind === 'trigger' && n.data.trigger.trigger === 'on_field_value') {
+    if (n.data.kind === "trigger" && n.data.trigger.trigger === "on_field_value") {
       if (logicRuleIsEmpty(n.data.trigger.rule)) {
         errors.push(
           `${nodeDisplayName(n)} has an empty rule — add at least one comparison or the trigger can never match anything.`,
-        )
+        );
       }
     }
   }
 
-  errors.push(...lintWorkerTriggerCompatibility(graph))
+  errors.push(...lintWorkerTriggerCompatibility(graph));
   return errors;
 }
 
-const WORKER_ONLY_TRIGGERS = new Set<TriggerKind>(['scheduled'])
-const WORKER_SAFE_ACTIONS = new Set<ActionKind>(['send_email', 'notify'])
+const WORKER_ONLY_TRIGGERS = new Set<TriggerKind>(["scheduled"]);
+const WORKER_SAFE_ACTIONS = new Set<ActionKind>(["send_email", "notify"]);
 // With a record fan-out (`select`) each scheduled run HAS a subject record, so
 // persisting into it is well-defined (the EFT "sent" latch pattern). Status
 // pipelines, gates, and posting stay excluded from the tick.
@@ -797,7 +820,7 @@ const WORKER_SAFE_ACTIONS_WITH_RECORD = new Set<ActionKind>([
 
 /** The action vocabulary a scheduled trigger's branch may use at runtime. */
 export function scheduledSafeActions(hasRecordSelect: boolean): Set<ActionKind> {
-  return hasRecordSelect ? WORKER_SAFE_ACTIONS_WITH_RECORD : WORKER_SAFE_ACTIONS
+  return hasRecordSelect ? WORKER_SAFE_ACTIONS_WITH_RECORD : WORKER_SAFE_ACTIONS;
 }
 
 /**
@@ -809,52 +832,52 @@ export function scheduledSafeActions(hasRecordSelect: boolean): Set<ActionKind> 
  * (nothing to pause) and status pipelines (change_status / post_document).
  */
 export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[] {
-  const errors: string[] = []
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]))
-  const outbound = (id: string) => graph.edges.filter((e) => e.source === id)
+  const errors: string[] = [];
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const outbound = (id: string) => graph.edges.filter((e) => e.source === id);
 
   for (const trigger of graph.nodes) {
     if (
-      trigger.data.kind !== 'trigger' ||
+      trigger.data.kind !== "trigger" ||
       !WORKER_ONLY_TRIGGERS.has(trigger.data.trigger.trigger)
     ) {
-      continue
+      continue;
     }
-    const triggerName = trigger.data.trigger.trigger
+    const triggerName = trigger.data.trigger.trigger;
     const safeActions =
-      trigger.data.trigger.trigger === 'scheduled'
+      trigger.data.trigger.trigger === "scheduled"
         ? scheduledSafeActions(!!trigger.data.trigger.select)
-        : WORKER_SAFE_ACTIONS
-    const seen = new Set<string>()
+        : WORKER_SAFE_ACTIONS;
+    const seen = new Set<string>();
     const walk = (nodeId: string) => {
-      if (seen.has(nodeId)) return
-      seen.add(nodeId)
-      const node = byId.get(nodeId)
-      if (!node) return
-      if (node.id !== trigger.id && node.data.kind === 'trigger') return
+      if (seen.has(nodeId)) return;
+      seen.add(nodeId);
+      const node = byId.get(nodeId);
+      if (!node) return;
+      if (node.id !== trigger.id && node.data.kind === "trigger") return;
 
-      if (node.data.kind === 'gate') {
+      if (node.data.kind === "gate") {
         errors.push(
           `Trigger ${trigger.id}: "${triggerName}" runs in the worker and cannot pause for approval gates.`,
-        )
-        return
+        );
+        return;
       }
 
-      if (node.data.kind === 'action' && !safeActions.has(node.data.action.action)) {
+      if (node.data.kind === "action" && !safeActions.has(node.data.action.action)) {
         errors.push(
           `Trigger ${trigger.id}: "${triggerName}" runs in the worker and cannot execute "${node.data.action.action}".`,
-        )
+        );
       }
 
-      for (const edge of outbound(nodeId)) walk(edge.target)
-    }
+      for (const edge of outbound(nodeId)) walk(edge.target);
+    };
 
-    for (const edge of outbound(trigger.id)) walk(edge.target)
+    for (const edge of outbound(trigger.id)) walk(edge.target);
   }
 
-  return Array.from(new Set(errors))
+  return Array.from(new Set(errors));
 }
 
 // Re-export the reused condition/value types so flow consumers import from one
 // module.
-export type { DefaultValueExpression, LogicRule }
+export type { DefaultValueExpression, LogicRule };

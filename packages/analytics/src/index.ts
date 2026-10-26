@@ -8,10 +8,10 @@
 //   ./server   — runInsightQuery (opens the pool; server only)
 //   ./viz      — <InsightChart/> React renderer (echarts; client only)
 
-export * from './types'
-export * from './semantic'
-export * from './catalog'
-export * from './legacy'
-export * from './compile'
-export * from './validate'
-export * from './viz'
+export * from "./types";
+export * from "./semantic";
+export * from "./catalog";
+export * from "./legacy";
+export * from "./compile";
+export * from "./validate";
+export * from "./viz";

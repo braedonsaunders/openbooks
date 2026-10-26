@@ -1,12 +1,5 @@
 export type IndirectTaxType =
-  | "vat"
-  | "gst"
-  | "hst"
-  | "pst"
-  | "qst"
-  | "sales_use"
-  | "consumption"
-  | "other";
+  "vat" | "gst" | "hst" | "pst" | "qst" | "sales_use" | "consumption" | "other";
 
 export interface EffectiveTaxRate {
   ratePercent: string;
@@ -179,7 +172,13 @@ export interface ContractorWithholdingDueRule {
 export interface ContractorWithholdingRemittanceSchedule {
   code: string;
   name: string;
-  kind: "monthly" | "italian_accumulated" | "us_lookback" | "us_monthly" | "us_semiweekly" | "us_annual_small_liability";
+  kind:
+    | "monthly"
+    | "italian_accumulated"
+    | "us_lookback"
+    | "us_monthly"
+    | "us_semiweekly"
+    | "us_annual_small_liability";
   effectiveFrom: string;
   effectiveTo?: string;
   dayOfMonth?: number;
@@ -276,7 +275,9 @@ export interface CountryTaxPackDefinition {
    * sole normalizer of the two shapes, and a second inline reader is the bug
    * this union would otherwise become.
    */
-  returnPackTaxCodes: Readonly<Record<string, CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[]>>;
+  returnPackTaxCodes: Readonly<
+    Record<string, CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[]>
+  >;
   /** Contractor withholding schemes this country operates. */
   contractorWithholdingSchemes?: readonly ContractorWithholdingSchemeDefinition[];
   reverseChargeRules?: readonly ContractorReverseChargeRuleDefinition[];

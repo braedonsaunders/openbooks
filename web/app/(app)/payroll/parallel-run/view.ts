@@ -1,18 +1,25 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
 import {
   comparablePayRuns,
   comparableSlots,
   parallelComparisons,
   parallelTolerances,
   priorRegisters,
-} from '@openbooks/engine/payroll/parallel-run-store'
-import { can, guardRootSubsidiaryScope, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { notFound } from 'next/navigation'
-import type { ParallelRunView } from './ParallelRunView'
+} from "@openbooks/engine/payroll/parallel-run-store";
+import { can, guardRootSubsidiaryScope, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { notFound } from "next/navigation";
+import type { ParallelRunView } from "./ParallelRunView";
 
 /**
  * Parallel run — the adoption control, split into a loader and a spec.
@@ -42,42 +49,42 @@ import type { ParallelRunView } from './ParallelRunView'
  * through and the component does what it always did.
  */
 
-type WorkspaceProps = Parameters<typeof ParallelRunView>[0]
+type WorkspaceProps = Parameters<typeof ParallelRunView>[0];
 
 export interface ParallelRunData {
-  title: string
-  description: string
+  title: string;
+  description: string;
   /** Header actions. Comparing and tolerances are payroll.manage work; a
    * comparison needs an imported register and a comparable run. */
   actions: {
-    importLabel: string
-    exportLabel: string
-    tolerancesLabel: string
-    newComparisonLabel: string
-    canCompare: boolean
-  }
+    importLabel: string;
+    exportLabel: string;
+    tolerancesLabel: string;
+    newComparisonLabel: string;
+    canCompare: boolean;
+  };
   workspace: {
-    registers: WorkspaceProps['registers']
-    runs: WorkspaceProps['runs']
-    comparisons: WorkspaceProps['comparisons']
-    tolerances: WorkspaceProps['tolerances']
-    slots: WorkspaceProps['slots']
-    canManage: boolean
-  }
+    registers: WorkspaceProps["registers"];
+    runs: WorkspaceProps["runs"];
+    comparisons: WorkspaceProps["comparisons"];
+    tolerances: WorkspaceProps["tolerances"];
+    slots: WorkspaceProps["slots"];
+    canManage: boolean;
+  };
 }
 
 export async function loadParallelRun(): Promise<ParallelRunData> {
-  const authz = await requirePermission('payroll.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'payroll')
+  const authz = await requirePermission("payroll.read");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "payroll");
   // Parallel tolerances are one org-wide comparison policy, not subsidiary
   // rows. Keep the server-rendered control surface behind the same root-scope
   // requirement as the tolerance API.
-  if (await guardRootSubsidiaryScope(authz)) notFound()
+  if (await guardRootSubsidiaryScope(authz)) notFound();
 
-  const t = await getTranslations('payroll')
+  const t = await getTranslations("payroll");
   const text = (key: string, fallback: string) =>
-    t.has(key as never) ? t(key as never) : fallback
+    t.has(key as never) ? t(key as never) : fallback;
 
   const [registers, runs, comparisons, tolerances, slots] = await Promise.all([
     priorRegisters(orgId, authz.allowedSubsidiaryIds),
@@ -85,19 +92,19 @@ export async function loadParallelRun(): Promise<ParallelRunData> {
     parallelComparisons(orgId, { allowedSubsidiaryIds: authz.allowedSubsidiaryIds }),
     parallelTolerances(orgId),
     comparableSlots(orgId),
-  ])
-  const canManage = can(authz, 'payroll.manage')
+  ]);
+  const canManage = can(authz, "payroll.manage");
   return {
-    title: text('parallelRun.title', 'Parallel run'),
+    title: text("parallelRun.title", "Parallel run"),
     description: text(
-      'parallelRun.description',
-      'Check a pay period against the payroll system you are leaving, penny by penny. Import the old provider’s register, pick the run that covers the same period, and compare.',
+      "parallelRun.description",
+      "Check a pay period against the payroll system you are leaving, penny by penny. Import the old provider’s register, pick the run that covers the same period, and compare.",
     ),
     actions: {
-      importLabel: text('parallelRun.importRegister', 'Import a register'),
-      exportLabel: text('parallelRun.export', 'Export'),
-      tolerancesLabel: `${text('parallelRun.tolerances', 'Tolerances')} (${tolerances.length})`,
-      newComparisonLabel: text('parallelRun.workspace.newComparison', 'New comparison'),
+      importLabel: text("parallelRun.importRegister", "Import a register"),
+      exportLabel: text("parallelRun.export", "Export"),
+      tolerancesLabel: `${text("parallelRun.tolerances", "Tolerances")} (${tolerances.length})`,
+      newComparisonLabel: text("parallelRun.workspace.newComparison", "New comparison"),
       canCompare: canManage && registers.length > 0 && runs.length > 0,
     },
     workspace: {
@@ -113,27 +120,51 @@ export async function loadParallelRun(): Promise<ParallelRunData> {
       })),
       canManage,
     },
-  }
+  };
 }
 
-const f = ref<ParallelRunData>()
+const f = ref<ParallelRunData>();
 
 export function parallelRunSpec(_data: ParallelRunData): PageSpec {
   return page({
-    route: '/payroll/parallel-run',
-    layout: 'list',
+    route: "/payroll/parallel-run",
+    layout: "list",
     header: [
       // Module tabs live in the shared payroll navigation. The actions sit
       // beside them; the drawers they open belong to the workspace.
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center justify-end gap-2",
         actions: [
-          widget('link-button', { href: '/data/import', label: f('actions.importLabel'), variant: 'outline' }),
-          widget('link-button', { href: '/data/export', label: f('actions.exportLabel'), variant: 'outline' }),
-          widget('link-button', { href: '/payroll/parallel-run?tolerances=1', label: f('actions.tolerancesLabel'), variant: 'outline' }, f('workspace.canManage')),
-          widget('link-button', { href: '/payroll/parallel-run?new=1', label: f('actions.newComparisonLabel'), iconKey: 'plus' }, f('actions.canCompare')),
+          widget("link-button", {
+            href: "/data/import",
+            label: f("actions.importLabel"),
+            variant: "outline",
+          }),
+          widget("link-button", {
+            href: "/data/export",
+            label: f("actions.exportLabel"),
+            variant: "outline",
+          }),
+          widget(
+            "link-button",
+            {
+              href: "/payroll/parallel-run?tolerances=1",
+              label: f("actions.tolerancesLabel"),
+              variant: "outline",
+            },
+            f("workspace.canManage"),
+          ),
+          widget(
+            "link-button",
+            {
+              href: "/payroll/parallel-run?new=1",
+              label: f("actions.newComparisonLabel"),
+              iconKey: "plus",
+            },
+            f("actions.canCompare"),
+          ),
         ],
       }),
     ],
@@ -142,14 +173,14 @@ export function parallelRunSpec(_data: ParallelRunData): PageSpec {
       // findings drawer and the tolerance drawer — placed through one
       // widget. The component owns picker state, fetch mutations and every
       // conditional pair; the spec only names where it lives.
-      widgetBlock('parallel-run-workspace', {
-        registers: f('workspace.registers'),
-        runs: f('workspace.runs'),
-        comparisons: f('workspace.comparisons'),
-        tolerances: f('workspace.tolerances'),
-        slots: f('workspace.slots'),
-        canManage: f('workspace.canManage'),
+      widgetBlock("parallel-run-workspace", {
+        registers: f("workspace.registers"),
+        runs: f("workspace.runs"),
+        comparisons: f("workspace.comparisons"),
+        tolerances: f("workspace.tolerances"),
+        slots: f("workspace.slots"),
+        canManage: f("workspace.canManage"),
       }),
     ],
-  })
+  });
 }

@@ -43,15 +43,18 @@ export function pickPlanLimit(
     if (row.effectiveTo && row.effectiveTo < onDate) continue;
     const scope = limitScopeOf(row);
     if (scope === "employee" && row.employeePartyId !== employee.employeePartyId) continue;
-    if (scope === "job_title"
-      && (employee.jobTitle ?? "").toLowerCase() !== (row.jobTitle ?? "").toLowerCase()) continue;
+    if (
+      scope === "job_title" &&
+      (employee.jobTitle ?? "").toLowerCase() !== (row.jobTitle ?? "").toLowerCase()
+    )
+      continue;
     if (scope === "trade" && row.tradeId !== employee.tradeId) continue;
     if (scope === "department" && row.departmentId !== employee.departmentId) continue;
     if (scope === "subsidiary" && row.subsidiaryId !== employee.subsidiaryId) continue;
     if (
-      best === null
-      || SCOPE_RANK[scope] < SCOPE_RANK[best.scope]
-      || (SCOPE_RANK[scope] === SCOPE_RANK[best.scope] && row.effectiveFrom > best.row.effectiveFrom)
+      best === null ||
+      SCOPE_RANK[scope] < SCOPE_RANK[best.scope] ||
+      (SCOPE_RANK[scope] === SCOPE_RANK[best.scope] && row.effectiveFrom > best.row.effectiveFrom)
     ) {
       best = { row, scope };
     }

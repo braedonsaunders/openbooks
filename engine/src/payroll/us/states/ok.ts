@@ -20,7 +20,10 @@ import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { PayrollError } from "../../error.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, certificateFlag,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -35,17 +38,33 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ok.ts";
 const DOLLAR = 10_000n;
 
 export type OkPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "semiannual" | "annual" | "daily";
+  | "weekly"
+  | "biweekly"
+  | "semimonthly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual"
+  | "daily";
 
 const OK_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 export type OkFilingStatus = "single" | "married" | "married_higher_single";
@@ -75,8 +94,11 @@ const R350 = pctToRate("3.50");
 const R450 = pctToRate("4.50");
 
 function bands(
-  z: string, a: string, b: string,
-  baseB: string, baseC: string,
+  z: string,
+  a: string,
+  b: string,
+  baseB: string,
+  baseC: string,
 ): readonly OkBracket[] {
   return [
     { over: "0", notOver: z, base: "0", rate: R0 },
@@ -137,23 +159,30 @@ const OK_EDITIONS_BY_YEAR: Record<number, OkYearRates> = {
   [OK_RATES_2026.year]: OK_RATES_2026,
 };
 
-export const OK_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Packet OW-2, 2026 Oklahoma Income Tax Withholding Tables",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025) — percentage-method "
-    + "Tables 1–8, printed allowance amounts, $1,825 semi-monthly married "
-    + "two-allowance sample ($36.67 / $37.00)",
-  status: "published",
-  region: "OK",
-}];
+export const OK_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Packet OW-2, 2026 Oklahoma Income Tax Withholding Tables",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025) — percentage-method " +
+      "Tables 1–8, printed allowance amounts, $1,825 semi-monthly married " +
+      "two-allowance sample ($36.67 / $37.00)",
+    status: "published",
+    region: "OK",
+  },
+];
 
 export function okRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
 }
 
-export function okPeriodTax(taxable: bigint, period: OkPeriod, married: boolean, rates: OkYearRates): bigint {
+export function okPeriodTax(
+  taxable: bigint,
+  period: OkPeriod,
+  married: boolean,
+  rates: OkYearRates,
+): bigint {
   if (taxable <= 0n) return 0n;
   const table = rates.periods[period];
   const brackets = married ? table.married : table.single;
@@ -176,16 +205,40 @@ function compute(
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
     const militarySpouseCertificate = input.supportingCertificates?.us_ok_ow9mse;
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Oklahoma", [
-      { key: "employee_is_not_servicemember", description: "the employee is not a military servicemember" },
-      { key: "spouse_is_servicemember", description: "the employee's spouse is a military servicemember" },
-      { key: "current_orders_assign_ok", description: "current military orders assign the spouse to Oklahoma" },
-      { key: "employee_domiciled_outside_ok", description: "the employee's domicile is a state other than Oklahoma" },
-      { key: "spouses_share_tax_domicile", description: "the employee and servicemember share the same state of domicile for tax purposes" },
-      { key: "latest_spouse_les_on_file", description: "the latest servicemember Leave and Earnings Statement is on file and confirms the Oklahoma assignment" },
-      { key: "current_military_id_on_file", description: "the employee's current military spouse ID is on file" },
+      {
+        key: "employee_is_not_servicemember",
+        description: "the employee is not a military servicemember",
+      },
+      {
+        key: "spouse_is_servicemember",
+        description: "the employee's spouse is a military servicemember",
+      },
+      {
+        key: "current_orders_assign_ok",
+        description: "current military orders assign the spouse to Oklahoma",
+      },
+      {
+        key: "employee_domiciled_outside_ok",
+        description: "the employee's domicile is a state other than Oklahoma",
+      },
+      {
+        key: "spouses_share_tax_domicile",
+        description:
+          "the employee and servicemember share the same state of domicile for tax purposes",
+      },
+      {
+        key: "latest_spouse_les_on_file",
+        description:
+          "the latest servicemember Leave and Earnings Statement is on file and confirms the Oklahoma assignment",
+      },
+      {
+        key: "current_military_id_on_file",
+        description: "the employee's current military spouse ID is on file",
+      },
     ]);
     const exempt = context.exemptResult({
-      flagKey: "military_spouse_exempt", factorKey: "OK_MILITARY_SPOUSE_EXEMPT",
+      flagKey: "military_spouse_exempt",
+      factorKey: "OK_MILITARY_SPOUSE_EXEMPT",
       factorFormat: "decimal",
     });
     if (exempt) return exempt;
@@ -202,7 +255,9 @@ function compute(
   // as ordinary wages, and an inconsistent attestation refuses by name.
   const serviceClassCert = input.supportingCertificates?.us_ok_service_class;
   const readAttestedAmount = (
-    cert: NonNullable<typeof serviceClassCert>, key: string, what: string,
+    cert: NonNullable<typeof serviceClassCert>,
+    key: string,
+    what: string,
   ): bigint | null => {
     const raw = certificateAmount(cert, key);
     if (raw == null) return null;
@@ -210,8 +265,8 @@ function compute(
       return U(raw);
     } catch {
       throw new PayrollError(
-        `Oklahoma service-class ${what} "${raw}" is not a valid amount — `
-        + "attest exact decimal dollars before calculating; refused by name",
+        `Oklahoma service-class ${what} "${raw}" is not a valid amount — ` +
+          "attest exact decimal dollars before calculating; refused by name",
       );
     }
   };
@@ -219,49 +274,60 @@ function compute(
   if (serviceClassCert?.onFile) {
     const serviceClass = certificateChoice(serviceClassCert, "service_class");
     if (
-      serviceClass !== "farm_service" && serviceClass !== "domestic_service"
-      && serviceClass !== "nontrade_service" && serviceClass !== "minister_service"
+      serviceClass !== "farm_service" &&
+      serviceClass !== "domestic_service" &&
+      serviceClass !== "nontrade_service" &&
+      serviceClass !== "minister_service"
     ) {
       throw new PayrollError(
-        "Oklahoma service-class attestation names no qualifying 68 O.S. §2385.1 class — "
-        + "attest farm, domestic, non-trade, or minister service before calculating; refused by name",
+        "Oklahoma service-class attestation names no qualifying 68 O.S. §2385.1 class — " +
+          "attest farm, domestic, non-trade, or minister service before calculating; refused by name",
       );
     }
-    const periodQualifying = readAttestedAmount(serviceClassCert, "period_qualifying_wages", "period wages") ?? 0n;
+    const periodQualifying =
+      readAttestedAmount(serviceClassCert, "period_qualifying_wages", "period wages") ?? 0n;
     const periodWages = U(input.wages) + U(input.supplemental ?? "0");
     if (periodQualifying > periodWages) {
       throw new PayrollError(
-        "Oklahoma service-class attested period wages exceed this period's pay — "
-        + "correct the attestation before calculating; refused by name",
+        "Oklahoma service-class attested period wages exceed this period's pay — " +
+          "correct the attestation before calculating; refused by name",
       );
     }
-    const monthQualifying = readAttestedAmount(serviceClassCert, "month_qualifying_wages", "month wages");
+    const monthQualifying = readAttestedAmount(
+      serviceClassCert,
+      "month_qualifying_wages",
+      "month wages",
+    );
     if (monthQualifying !== null && periodQualifying > monthQualifying) {
       throw new PayrollError(
-        "Oklahoma service-class attested period wages exceed the attested month total — "
-        + "correct the attestation before calculating; refused by name",
+        "Oklahoma service-class attested period wages exceed the attested month total — " +
+          "correct the attestation before calculating; refused by name",
       );
     }
-    const quarterQualifying = readAttestedAmount(serviceClassCert, "quarter_qualifying_wages", "quarter wages");
+    const quarterQualifying = readAttestedAmount(
+      serviceClassCert,
+      "quarter_qualifying_wages",
+      "quarter wages",
+    );
     if (quarterQualifying !== null && periodQualifying > quarterQualifying) {
       throw new PayrollError(
-        "Oklahoma service-class attested period wages exceed the attested quarter total — "
-        + "correct the attestation before calculating; refused by name",
+        "Oklahoma service-class attested period wages exceed the attested quarter total — " +
+          "correct the attestation before calculating; refused by name",
       );
     }
     if (serviceClass === "farm_service") {
       if (monthQualifying === null) {
         throw new PayrollError(
-          "Oklahoma farm-service exclusion needs the attested calendar-month total — "
-          + "the $900 monthly test cannot run without it; refused by name",
+          "Oklahoma farm-service exclusion needs the attested calendar-month total — " +
+            "the $900 monthly test cannot run without it; refused by name",
         );
       }
       if (monthQualifying <= U("900")) exemptService = periodQualifying;
     } else if (serviceClass === "nontrade_service") {
       if (quarterQualifying === null) {
         throw new PayrollError(
-          "Oklahoma non-trade-service exclusion needs the attested calendar-quarter total — "
-          + "the $200 quarterly test cannot run without it; refused by name",
+          "Oklahoma non-trade-service exclusion needs the attested calendar-quarter total — " +
+            "the $200 quarterly test cannot run without it; refused by name",
         );
       }
       if (quarterQualifying < U("200")) exemptService = periodQualifying;
@@ -271,7 +337,8 @@ function compute(
     if (exemptService > 0n) trace("OK_EXEMPT_SERVICE_WAGES", exemptService);
   }
 
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as OkFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as OkFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   let wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -322,7 +389,12 @@ export const OK_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const OK_STATE_ENGINE = defineStateEngine({
-  state: { state: "OK", label: "Oklahoma income tax", printedPeriods: OK_PERIODS, fixedPeriodsOnly: true },
+  state: {
+    state: "OK",
+    label: "Oklahoma income tax",
+    printedPeriods: OK_PERIODS,
+    fixedPeriodsOnly: true,
+  },
   editions: pairStateRateEditions(Object.values(OK_EDITIONS_BY_YEAR), OK_TAX_YEAR_EDITIONS),
   compute: compute,
 });
@@ -357,13 +429,13 @@ export const OK_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "OK" },
   purpose: "withholding",
   citation:
-    "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025), 2026 Oklahoma "
-    + "Income Tax Withholding Tables; Form OK-W-4",
+    "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025), 2026 Oklahoma " +
+    "Income Tax Withholding Tables; Form OK-W-4",
   summary:
-    "Sets Oklahoma marital status and the number of $1,000 annual withholding "
-    + "allowances. Packet OW-2 requires the number claimed on Form OK-W-4. "
-    + "A blank certificate uses Single with zero allowances — the form's own "
-    + "empty lines, not an invented higher rate.",
+    "Sets Oklahoma marital status and the number of $1,000 annual withholding " +
+    "allowances. Packet OW-2 requires the number claimed on Form OK-W-4. " +
+    "A blank certificate uses Single with zero allowances — the form's own " +
+    "empty lines, not an invented higher rate.",
   storage: "certificate_rows",
   fields: [
     {
@@ -380,9 +452,9 @@ export const OK_CERTIFICATE: PayrollCertificate = {
         },
       ],
       help:
-        "Packet OW-2 prints Single and Married percentage tables. The "
-        + "\"Married, but withhold at higher Single rate\" election uses the "
-        + "Single table. Default Single is a blank OK-W-4, not an engine guess.",
+        "Packet OW-2 prints Single and Married percentage tables. The " +
+        '"Married, but withhold at higher Single rate" election uses the ' +
+        "Single table. Default Single is a blank OK-W-4, not an engine guess.",
     },
     {
       key: "allowances",
@@ -392,8 +464,8 @@ export const OK_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each allowance is the printed per-period amount ($41.67 "
-        + "semi-monthly, $1,000 annual). Default zero is a blank OK-W-4.",
+        "Each allowance is the printed per-period amount ($41.67 " +
+        "semi-monthly, $1,000 annual). Default zero is a blank OK-W-4.",
     },
     {
       key: "additional_per_period",
@@ -402,16 +474,16 @@ export const OK_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A flat dollar amount requested on Form OK-W-4. Added AFTER the "
-        + "percentage method is rounded to the nearest whole dollar.",
+        "A flat dollar amount requested on Form OK-W-4. Added AFTER the " +
+        "percentage method is rounded to the nearest whole dollar.",
     },
     {
       key: "exempt",
       label: "Line 7 — Exempt because no Oklahoma tax is expected",
       kind: "flag",
       help:
-        "The employee had a right to a full refund of Oklahoma income tax withheld last year "
-        + "because there was no tax liability and expects a full refund this year for the same reason.",
+        "The employee had a right to a full refund of Oklahoma income tax withheld last year " +
+        "because there was no tax liability and expects a full refund this year for the same reason.",
     },
     {
       key: "military_spouse_exempt",
@@ -430,17 +502,61 @@ export const OK_OW9MSE_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "OK" },
   purpose: "exemption",
   validity: { kind: "calendar_year_end" },
-  citation: "Oklahoma Tax Commission Form OW-9-MSE (Rev. 2-2024), https://oklahoma.gov/content/dam/ok/en/tax/documents/forms/businesses/general/OW-9-MSE.pdf",
-  summary: "File a new OW-9-MSE every calendar year with OK-W-4 line 8. The employer must retain the latest spouse LES and current military spouse ID.",
+  citation:
+    "Oklahoma Tax Commission Form OW-9-MSE (Rev. 2-2024), https://oklahoma.gov/content/dam/ok/en/tax/documents/forms/businesses/general/OW-9-MSE.pdf",
+  summary:
+    "File a new OW-9-MSE every calendar year with OK-W-4 line 8. The employer must retain the latest spouse LES and current military spouse ID.",
   storage: "certificate_rows",
   fields: [
-    { key: "employee_is_not_servicemember", label: "Employee is not a military servicemember", kind: "flag", required: true, help: "OW-9-MSE question 1 must be YES." },
-    { key: "spouse_is_servicemember", label: "Employee's spouse is a military servicemember", kind: "flag", required: true, help: "OW-9-MSE question 2 must be YES." },
-    { key: "current_orders_assign_ok", label: "Current military orders assign the spouse to Oklahoma", kind: "flag", required: true, help: "OW-9-MSE question 3 must be YES." },
-    { key: "employee_domiciled_outside_ok", label: "Employee's domicile is a state other than Oklahoma", kind: "flag", required: true, help: "OW-9-MSE question 4; enter the state of domicile on the form." },
-    { key: "spouses_share_tax_domicile", label: "Employee and spouse share the same state of domicile for tax purposes", kind: "flag", required: true, help: "OW-9-MSE question 5 must be YES." },
-    { key: "latest_spouse_les_on_file", label: "Latest servicemember LES is on file and confirms Oklahoma assignment", kind: "flag", required: true, help: "OTC requires the employer to verify and retain the latest LES and match its assignment location to the form." },
-    { key: "current_military_id_on_file", label: "Current military spouse ID is on file", kind: "flag", required: true, help: "OTC requires a current Military ID that identifies the employee as a military spouse." },
+    {
+      key: "employee_is_not_servicemember",
+      label: "Employee is not a military servicemember",
+      kind: "flag",
+      required: true,
+      help: "OW-9-MSE question 1 must be YES.",
+    },
+    {
+      key: "spouse_is_servicemember",
+      label: "Employee's spouse is a military servicemember",
+      kind: "flag",
+      required: true,
+      help: "OW-9-MSE question 2 must be YES.",
+    },
+    {
+      key: "current_orders_assign_ok",
+      label: "Current military orders assign the spouse to Oklahoma",
+      kind: "flag",
+      required: true,
+      help: "OW-9-MSE question 3 must be YES.",
+    },
+    {
+      key: "employee_domiciled_outside_ok",
+      label: "Employee's domicile is a state other than Oklahoma",
+      kind: "flag",
+      required: true,
+      help: "OW-9-MSE question 4; enter the state of domicile on the form.",
+    },
+    {
+      key: "spouses_share_tax_domicile",
+      label: "Employee and spouse share the same state of domicile for tax purposes",
+      kind: "flag",
+      required: true,
+      help: "OW-9-MSE question 5 must be YES.",
+    },
+    {
+      key: "latest_spouse_les_on_file",
+      label: "Latest servicemember LES is on file and confirms Oklahoma assignment",
+      kind: "flag",
+      required: true,
+      help: "OTC requires the employer to verify and retain the latest LES and match its assignment location to the form.",
+    },
+    {
+      key: "current_military_id_on_file",
+      label: "Current military spouse ID is on file",
+      kind: "flag",
+      required: true,
+      help: "OTC requires a current Military ID that identifies the employee as a military spouse.",
+    },
   ],
 };
 
@@ -458,17 +574,18 @@ export const OK_SERVICE_CLASS_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "OK" },
   purpose: "withholding",
   citation:
-    "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025), General Information p. 2, "
-    + "quoting 68 O.S. §2385.1",
+    "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025), General Information p. 2, " +
+    "quoting 68 O.S. §2385.1",
   summary:
-    "The employer attests the employee's qualifying service class and the attested "
-    + "period, month, and quarter qualifying-wage totals so only qualifying wages are excluded.",
+    "The employer attests the employee's qualifying service class and the attested " +
+    "period, month, and quarter qualifying-wage totals so only qualifying wages are excluded.",
   storage: "certificate_rows",
   fields: [
     {
       key: "service_class",
       label: "Qualifying service class",
-      kind: "choice", required: true,
+      kind: "choice",
+      required: true,
       choices: [
         { value: "farm_service", label: "Farm service ($900 or less monthly)" },
         { value: "domestic_service", label: "Domestic service in a qualifying context" },
@@ -480,19 +597,28 @@ export const OK_SERVICE_CLASS_CERTIFICATE: PayrollCertificate = {
     {
       key: "period_qualifying_wages",
       label: "This period's wages in the attested class",
-      kind: "amount", decimals: 4, min: "0", required: true,
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      required: true,
       help: "Must not exceed this period's pay; the excluded amount when the class test passes.",
     },
     {
       key: "month_qualifying_wages",
       label: "Calendar-month qualifying wages including this period",
-      kind: "amount", decimals: 4, min: "0", required: false,
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      required: false,
       help: "Required for farm service: the $900 monthly test runs on this total.",
     },
     {
       key: "quarter_qualifying_wages",
       label: "Calendar-quarter qualifying wages including this period",
-      kind: "amount", decimals: 4, min: "0", required: false,
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      required: false,
       help: "Required for non-trade service: the $200 quarterly test runs on this total.",
     },
   ],
@@ -513,6 +639,5 @@ export const OK_REGION: PayrollRegionWithholding = {
   certificateKey: "us_ok_okw4",
   subRegions: [],
   subRegionConflictRule: "both",
-  citation:
-    "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025); Form OK-W-4",
+  citation: "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025); Form OK-W-4",
 };

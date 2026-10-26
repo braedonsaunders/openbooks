@@ -29,10 +29,7 @@ test("inbox labels name the event and subject, not the raw domain.operation pair
 
 test("the manufacturing domain and restatement operation read as product language", () => {
   assert.equal(financialChangeDomainLabel("manufacturing"), "Manufacturing");
-  assert.equal(
-    FINANCIAL_CHANGE_DOMAIN_LABELS.manufacturing,
-    "Manufacturing",
-  );
+  assert.equal(FINANCIAL_CHANGE_DOMAIN_LABELS.manufacturing, "Manufacturing");
   assert.equal(
     financialChangeEventLabel("scrap_snapshot_restatement"),
     "Scrap snapshot restatement",
@@ -66,9 +63,6 @@ test("every stored operation used by the register has a label", () => {
     "scrap_snapshot_restatement",
   ]) {
     assert.equal(typeof FINANCIAL_CHANGE_OPERATION_LABELS[operation], "string");
-    assert.notEqual(
-      FINANCIAL_CHANGE_OPERATION_LABELS[operation],
-      operation.replaceAll("_", " "),
-    );
+    assert.notEqual(FINANCIAL_CHANGE_OPERATION_LABELS[operation], operation.replaceAll("_", " "));
   }
 });

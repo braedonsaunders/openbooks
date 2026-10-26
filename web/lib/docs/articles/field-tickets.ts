@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const fieldTickets: DocArticle = {
-  slug: 'field-tickets',
-  title: 'Field Tickets',
-  category: 'projects',
+  slug: "field-tickets",
+  title: "Field Tickets",
+  category: "projects",
   order: 4,
   summary:
-    'Capture crew hours, equipment, and materials for time-and-materials work, obtain customer signatures, and generate invoices from approved field tickets.',
-  updated: '2026-07-27',
-  keywords: ['field ticket', 'LEM', 'billable timesheet', 'T&M', 'signature', 'crew', 'foreman', 'work order', 'daily ticket'],
-  related: ['labor-costing', 'item-rates', 'project-types'],
+    "Capture crew hours, equipment, and materials for time-and-materials work, obtain customer signatures, and generate invoices from approved field tickets.",
+  updated: "2026-07-27",
+  keywords: [
+    "field ticket",
+    "LEM",
+    "billable timesheet",
+    "T&M",
+    "signature",
+    "crew",
+    "foreman",
+    "work order",
+    "daily ticket",
+  ],
+  related: ["labor-costing", "item-rates", "project-types"],
   body: `# Field Tickets
 
 A field ticket, also referred to as an **LEM sheet** or billable timesheet,
@@ -106,4 +116,4 @@ PDF Templates → Field ticket**. The default template is a summary. Merge field
 also support a weekly grid with per-crew daily columns, regular, overtime, and
 double-time categories, day headers, and tier-specific rates.
 `,
-}
+};

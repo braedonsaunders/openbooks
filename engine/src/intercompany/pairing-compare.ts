@@ -59,7 +59,8 @@ const POSTED_LIKE = new Set(["approved", "posted"]);
 function units8(value: string): bigint {
   const negative = value.startsWith("-");
   const [whole = "0", fraction = ""] = value.replace(/^[-+]/, "").split(".");
-  const result = BigInt(whole || "0") * 100_000_000n + BigInt((fraction + "00000000").slice(0, 8) || "0");
+  const result =
+    BigInt(whole || "0") * 100_000_000n + BigInt((fraction + "00000000").slice(0, 8) || "0");
   return negative ? -result : result;
 }
 
@@ -68,7 +69,10 @@ function units8(value: string): bigint {
  * documents agree but whose lifecycles differ (an approved invoice against a
  * draft bill) is awaiting its counterpart rather than mismatched.
  */
-export function comparePairedDocuments(seller: PairedDocumentSummary, buyer: PairedDocumentSummary): PairComparison {
+export function comparePairedDocuments(
+  seller: PairedDocumentSummary,
+  buyer: PairedDocumentSummary,
+): PairComparison {
   const mismatches: PairMismatch[] = [];
   if (seller.status === "voided") mismatches.push({ kind: "voided", side: "seller" });
   if (buyer.status === "voided") mismatches.push({ kind: "voided", side: "buyer" });
@@ -87,11 +91,14 @@ export function comparePairedDocuments(seller: PairedDocumentSummary, buyer: Pai
       });
     }
   }
-  const items = [...new Set([...Object.keys(seller.quantities), ...Object.keys(buyer.quantities)])].sort();
+  const items = [
+    ...new Set([...Object.keys(seller.quantities), ...Object.keys(buyer.quantities)]),
+  ].sort();
   for (const itemId of items) {
     const sold = seller.quantities[itemId] ?? "0";
     const bought = buyer.quantities[itemId] ?? "0";
-    if (units8(sold) !== units8(bought)) mismatches.push({ kind: "quantity", itemId, seller: sold, buyer: bought });
+    if (units8(sold) !== units8(bought))
+      mismatches.push({ kind: "quantity", itemId, seller: sold, buyer: bought });
   }
   if (mismatches.length > 0) return { state: "mismatched", mismatches };
   const sellerLive = POSTED_LIKE.has(seller.status);

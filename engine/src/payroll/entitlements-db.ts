@@ -34,11 +34,12 @@ function planFromRow(row: Record<string, unknown>): EntitlementPlan {
   // unmapped (never passed through as a string the engine would then fail to
   // match), so a migration that adds a binding without its code half leaves
   // the plan inert rather than half-bound.
-  const systemKey = row.system_key === VACATION_PLAN_SYSTEM_KEY
-    ? VACATION_PLAN_SYSTEM_KEY
-    : row.system_key === STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY
-      ? STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY
-      : null;
+  const systemKey =
+    row.system_key === VACATION_PLAN_SYSTEM_KEY
+      ? VACATION_PLAN_SYSTEM_KEY
+      : row.system_key === STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY
+        ? STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY
+        : null;
   return {
     id: String(row.id),
     code: String(row.code),
@@ -62,11 +63,14 @@ export async function entitlementPlans(
   orgId: string,
   executor: Executor = db,
 ): Promise<EntitlementPlan[]> {
-  const r = (await executor.execute<Record<string, unknown>>(sql`
+  const r = await executor.execute<Record<string, unknown>>(
+    sql`
     select * from entitlement_plans
      where org_id = ${orgId} and is_active
      order by code
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map(planFromRow);
 }
 
@@ -80,9 +84,7 @@ export async function entitlementPlans(
  * no error anywhere. See `assertVacationPlanResolved` for the other half of
  * that fix: a missing plan is now loud.
  */
-export function vacationPlanOf(
-  plans: readonly EntitlementPlan[],
-): EntitlementPlan | null {
+export function vacationPlanOf(plans: readonly EntitlementPlan[]): EntitlementPlan | null {
   return plans.find((plan) => plan.systemKey === VACATION_PLAN_SYSTEM_KEY) ?? null;
 }
 
@@ -90,43 +92,77 @@ export function vacationPlanOf(
  * The org's statutory alternate-day-off bank (0413), resolved on its ENGINE
  * BINDING like the vacation plan above — never on the operator-typed code.
  */
-export function alternateDayPlanOf(
-  plans: readonly EntitlementPlan[],
-): EntitlementPlan | null {
+export function alternateDayPlanOf(plans: readonly EntitlementPlan[]): EntitlementPlan | null {
   return plans.find((plan) => plan.systemKey === STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY) ?? null;
 }
 
-async function entitlementEmployment(executor: Executor, orgId: string, employeePartyId: string, onDate: string, employmentId?: string) {
-  const employments = await executor.execute<{ id: string; service_start: string | null; employer_subsidiary_id: string }>(sql`
+async function entitlementEmployment(
+  executor: Executor,
+  orgId: string,
+  employeePartyId: string,
+  onDate: string,
+  employmentId?: string,
+) {
+  const employments = await executor.execute<{
+    id: string;
+    service_start: string | null;
+    employer_subsidiary_id: string;
+  }>(
+    sql`
     select e.id, e.service_start, e.employer_subsidiary_id from worker_employments e
     where e.org_id = ${orgId} and e.worker_party_id = ${employeePartyId}
-      and ${employmentId ? sql`e.id = ${employmentId}` : sql`e.id in (
+      and ${
+        employmentId
+          ? sql`e.id = ${employmentId}`
+          : sql`e.id in (
         select employment_id from payroll_vacation_terms where org_id = ${orgId}
           and effective_from <= ${onDate}::date and (effective_to is null or effective_to >= ${onDate}::date)
         union select employment_id from employee_payroll_profiles where org_id = ${orgId} and employee_party_id = ${employeePartyId} and is_active
-      )`}
-  `, "objects");
-  if (employments.length > 1) throw new PayrollError('Multiple employments resolve for this employee; select the specific employment before resolving service entitlements.');
-  if (employmentId && employments.length === 0) throw new PayrollError('Select an employment belonging to this employee and organization before resolving entitlements.');
+      )`
+      }
+  `,
+    "objects",
+  );
+  if (employments.length > 1)
+    throw new PayrollError(
+      "Multiple employments resolve for this employee; select the specific employment before resolving service entitlements.",
+    );
+  if (employmentId && employments.length === 0)
+    throw new PayrollError(
+      "Select an employment belonging to this employee and organization before resolving entitlements.",
+    );
   return employments[0];
 }
 
 /** The scope keys an employee competes on — the wage resolver's inputs. */
 export async function employeeScope(
-  executor: Executor, orgId: string, employeePartyId: string,
+  executor: Executor,
+  orgId: string,
+  employeePartyId: string,
   context?: { onDate: string; employmentId?: string },
 ): Promise<EntitlementScopeKeys> {
-  const r = (await executor.execute<{
-      job_title: string | null; trade_id: string | null;
-      department_id: string | null; subsidiary_id: string | null;
-    }>(sql`
+  const r = await executor.execute<{
+    job_title: string | null;
+    trade_id: string | null;
+    department_id: string | null;
+    subsidiary_id: string | null;
+  }>(
+    sql`
     select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0];
-  const employment = await entitlementEmployment(executor, orgId, employeePartyId, context?.onDate ?? await businessToday(orgId), context?.employmentId);
+  const employment = await entitlementEmployment(
+    executor,
+    orgId,
+    employeePartyId,
+    context?.onDate ?? (await businessToday(orgId)),
+    context?.employmentId,
+  );
   return {
     employeePartyId,
     jobTitle: row?.job_title ?? null,
@@ -151,15 +187,19 @@ export async function resolvePlanLimit(
   knownScope?: EntitlementScopeKeys,
   employmentId?: string,
 ): Promise<EntitlementPlanLimit | null> {
-  const scope = knownScope ?? await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId });
-  const r = (await executor.execute<Record<string, unknown>>(sql`
+  const scope =
+    knownScope ?? (await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId }));
+  const r = await executor.execute<Record<string, unknown>>(
+    sql`
     select id, plan_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id,
            max_balance, notify_balance, effective_from, effective_to, is_active
       from entitlement_plan_limits
      where org_id = ${orgId} and plan_id = ${planId} and is_active
        and effective_from <= ${onDate}
        and (effective_to is null or effective_to >= ${onDate})
-  `, "objects"));
+  `,
+    "objects",
+  );
   const rows: EntitlementLimitRow[] = r.map((row) => ({
     id: String(row.id),
     planId: String(row.plan_id),
@@ -188,29 +228,48 @@ export async function resolveServiceTier(
   onDate: string,
   employmentId?: string,
 ): Promise<ResolvedServiceTiers> {
-  const employment = await entitlementEmployment(executor, orgId, employeePartyId, onDate, employmentId);
+  const employment = await entitlementEmployment(
+    executor,
+    orgId,
+    employeePartyId,
+    onDate,
+    employmentId,
+  );
   const hiredOn = employment?.service_start ? String(employment.service_start).slice(0, 10) : null;
-  const service = employment ? await resolveEmploymentServiceCredit(executor, { orgId, employmentId: employment.id, asOf: onDate }) : null;
-  const tiers = (await executor.execute<Record<string, unknown>>(sql`
+  const service = employment
+    ? await resolveEmploymentServiceCredit(executor, {
+        orgId,
+        employmentId: employment.id,
+        asOf: onDate,
+      })
+    : null;
+  const tiers = await executor.execute<Record<string, unknown>>(
+    sql`
     select id, plan_id, component_id, after_months, accrual_value, eligible, is_active, annual_days, employer_subsidiary_id
       from entitlement_service_tiers
      where org_id = ${orgId} and is_active and effective_from <= ${onDate}::date
        and (effective_to is null or effective_to >= ${onDate}::date)
        and (employer_subsidiary_id is null or employer_subsidiary_id = ${employment?.employer_subsidiary_id ?? null})
      order by after_months
-  `, "objects"));
+  `,
+    "objects",
+  );
   const rows: ServiceTierRow[] = tiers.map((row) => ({
     id: String(row.id),
     planId: row.plan_id != null ? String(row.plan_id) : null,
     componentId: row.component_id != null ? String(row.component_id) : null,
     afterMonths: Number(row.after_months),
     accrualValue: row.accrual_value != null ? String(row.accrual_value) : null,
-    employerSubsidiaryId: row.employer_subsidiary_id == null ? null : String(row.employer_subsidiary_id),
+    employerSubsidiaryId:
+      row.employer_subsidiary_id == null ? null : String(row.employer_subsidiary_id),
     annualDays: row.annual_days != null ? String(row.annual_days) : null,
     eligible: row.eligible == null ? null : row.eligible === true || row.eligible === "true",
     isActive: row.is_active !== false,
   }));
-  if (rows.length > 0 && service == null) throw new PayrollError('Service-based entitlements need credited service or a documented employment service start; record the employee service baseline before calculating payroll.');
+  if (rows.length > 0 && service == null)
+    throw new PayrollError(
+      "Service-based entitlements need credited service or a documented employment service start; record the employee service baseline before calculating payroll.",
+    );
   const months = service?.completedMonths ?? null;
   return resolveServiceTiersFrom(rows, months, hiredOn, employment?.employer_subsidiary_id);
 }
@@ -264,10 +323,15 @@ export async function entitlementBalances(
 ): Promise<EntitlementBalance[]> {
   const executor = opts.executor ?? db;
   const excludeRunDocumentId = opts.excludeRunDocumentId ?? null;
-  const plans = opts.plans ?? await entitlementPlans(orgId, executor);
+  const plans = opts.plans ?? (await entitlementPlans(orgId, executor));
   if (plans.length === 0) return [];
   const onDate = asOf ?? (await businessToday(orgId));
-  const sums = (await executor.execute<{ plan_id: string; balance: string; last_movement: string | null }>(sql`
+  const sums = await executor.execute<{
+    plan_id: string;
+    balance: string;
+    last_movement: string | null;
+  }>(
+    sql`
     select l.plan_id, sum(l.amount) as balance, max(l.movement_date) as last_movement
       from entitlement_ledger l
       left join pay_runs r on r.org_id = l.org_id and r.document_id = l.pay_run_document_id
@@ -277,30 +341,42 @@ export async function entitlementBalances(
        and (${excludeRunDocumentId}::uuid is null
             or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
      group by l.plan_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const byPlan = new Map(sums.map((row) => [row.plan_id, row]));
 
   // One transaction-bound wage lookup serves every plan's hours view.
   const resolved = await resolveEntitlementWage(
-    executor, orgId, employeePartyId, onDate, opts.payCurrency, opts.lockWage ?? false,
+    executor,
+    orgId,
+    employeePartyId,
+    onDate,
+    opts.payCurrency,
+    opts.lockWage ?? false,
   );
   const wage = resolved && cmp(resolved.wage, "0") > 0 ? resolved.wage : null;
-  const scope = await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId: opts.employmentId });
+  const scope = await employeeScope(executor, orgId, employeePartyId, {
+    onDate,
+    employmentId: opts.employmentId,
+  });
 
   const balances: EntitlementBalance[] = [];
   for (const plan of plans) {
     const row = byPlan.get(plan.id);
     const balance = row ? roundMoney(String(row.balance), 4) : "0.0000";
     const limit = await resolvePlanLimit(executor, orgId, plan.id, employeePartyId, onDate, scope);
-    const balanceMoney = plan.unit === "money"
-      ? balance
-      : (wage ? roundMoney(mulDecimal(balance, wage), 2) : null);
-    const balanceHours = plan.unit === "hours"
-      ? balance
-      // `wage ?` does not screen a zero wage — the string "0" is truthy — and
-      // divRate then rejected it as an invalid FX rate. Money cannot be
-      // expressed as hours at a zero wage, so report no hours instead.
-      : (wage && !isZero(String(wage)) ? div(balance, String(wage)) : null);
+    const balanceMoney =
+      plan.unit === "money" ? balance : wage ? roundMoney(mulDecimal(balance, wage), 2) : null;
+    const balanceHours =
+      plan.unit === "hours"
+        ? balance
+        : // `wage ?` does not screen a zero wage — the string "0" is truthy — and
+          // divRate then rejected it as an invalid FX rate. Money cannot be
+          // expressed as hours at a zero wage, so report no hours instead.
+          wage && !isZero(String(wage))
+          ? div(balance, String(wage))
+          : null;
     balances.push({
       plan,
       balance,
@@ -329,7 +405,8 @@ export async function planBalanceExcludingRun(
   onDate: string,
   excludeRunDocumentId: string | null,
 ): Promise<string> {
-  const r = (await executor.execute<{ balance: string }>(sql`
+  const r = await executor.execute<{ balance: string }>(
+    sql`
     select coalesce(sum(l.amount), 0) as balance
       from entitlement_ledger l
       left join pay_runs r on r.org_id = l.org_id and r.document_id = l.pay_run_document_id
@@ -339,6 +416,8 @@ export async function planBalanceExcludingRun(
        and ${committedEntitlementMovementSql(sql`l.pay_run_document_id`, sql`r.run_status`)}
        and (${excludeRunDocumentId}::uuid is null
             or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
-  `, "objects"));
+  `,
+    "objects",
+  );
   return roundMoney(String(r[0]?.balance ?? "0"), 4);
 }

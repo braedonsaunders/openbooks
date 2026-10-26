@@ -22,11 +22,7 @@ export async function SandboxBanner({
   const environment = t("sandbox");
   return (
     <div className="flex items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-center text-sm font-medium text-amber-950">
-      <span>
-        {name
-          ? t("withName", { environment, name })
-          : t("withoutName", { environment })}
-      </span>
+      <span>{name ? t("withName", { environment, name }) : t("withoutName", { environment })}</span>
       <SandboxExitButton productionOrgId={productionOrgId} label={t("exit")} />
     </div>
   );

@@ -1,15 +1,28 @@
 import { buildRbcStd152File } from "../payments-core/rail-rbc-std152.ts";
-import { loadRbcStd152Settings, rbcStd152SettingsDigest } from "../payments-core/rail-rbc-identity.ts";
+import {
+  loadRbcStd152Settings,
+  rbcStd152SettingsDigest,
+} from "../payments-core/rail-rbc-identity.ts";
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { businessTimeZone, businessToday, formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
+import {
+  businessTimeZone,
+  businessToday,
+  formatInZone,
+  formatTimestampInZone,
+} from "../platform/business-date.ts";
 import { civilDateTimeToInstant } from "../platform/time-zone.ts";
 import { toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { buildCpa005File, type Cpa005Payment } from "../payments-core/rail-cpa005.ts";
-import { buildNachaFile, loadNachaSettings, nachaFileIdModifierForRunNumber, type NachaEntry } from "../payments-core/rail-nacha.ts";
+import {
+  buildNachaFile,
+  loadNachaSettings,
+  nachaFileIdModifierForRunNumber,
+  type NachaEntry,
+} from "../payments-core/rail-nacha.ts";
 import { buildSepaFile, loadSepaSettings } from "../payments-core/rail-sepa.ts";
 import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
 // ---------------------------------------------------------------------------
@@ -62,8 +75,11 @@ async function creationStamp(
   // server's, so the stamp cannot fall on a neighbouring day; midday exists
   // on every calendar day in every zone, and re-downloads reproduce their
   // bytes.
-  const instant = fileCreatedAt
-    ?? (typeof fallback === "string" ? civilDateTimeToInstant(`${fallback}T12:00:00`, timeZone) : fallback);
+  const instant =
+    fileCreatedAt ??
+    (typeof fallback === "string"
+      ? civilDateTimeToInstant(`${fallback}T12:00:00`, timeZone)
+      : fallback);
   return { day: formatInZone(instant, timeZone), stamp: formatTimestampInZone(instant, timeZone) };
 }
 
@@ -74,10 +90,14 @@ export async function loadCpa005RunFile(
 ): Promise<{ filename: string; content: string; runNumber: string }> {
   const allowedSubsidiaryIds = opts?.allowedSubsidiaryIds;
   await assertNotSandbox(orgId, "generate EFT payment file");
-  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  const [run] = await db
+    .select()
+    .from(schema.paymentRuns)
+    .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
-  if (run.method !== "eft") throw new PaymentError(`CPA-005 export applies to EFT runs, not ${run.method}`);
+  if (run.method !== "eft")
+    throw new PaymentError(`CPA-005 export applies to EFT runs, not ${run.method}`);
 
   const { eft, blockers } = await paymentRunReadiness(runId, orgId);
   if (!eft.ok) {
@@ -124,7 +144,9 @@ export async function loadCpa005RunFile(
   // the same run reproduce their bytes while distinct runs spread across
   // the 1–9999 alphabet instead of colliding on a fixed cycle.
   const fileCreationNumber =
-    (Number.parseInt(createHash("sha256").update(runId, "utf8").digest("hex").slice(0, 8), 16) % 9999) + 1;
+    (Number.parseInt(createHash("sha256").update(runId, "utf8").digest("hex").slice(0, 8), 16) %
+      9999) +
+    1;
   const stamp = await creationStamp(orgId, today, opts?.fileCreatedAt);
 
   const content = buildCpa005File({
@@ -147,12 +169,19 @@ export async function loadNachaRunFile(
 ): Promise<{ filename: string; content: string; runNumber: string }> {
   const allowedSubsidiaryIds = opts?.allowedSubsidiaryIds;
   await assertNotSandbox(orgId, "generate ACH payment file");
-  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  const [run] = await db
+    .select()
+    .from(schema.paymentRuns)
+    .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
-  if (run.method !== "ach") throw new PaymentError(`NACHA export applies to ACH runs, not ${run.method}`);
+  if (run.method !== "ach")
+    throw new PaymentError(`NACHA export applies to ACH runs, not ${run.method}`);
   const settings = await loadNachaSettings(orgId, runId);
-  if (!settings.ok) throw new PaymentError(`ACH origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
+  if (!settings.ok)
+    throw new PaymentError(
+      `ACH origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`,
+    );
 
   // Bank evidence is locked and approval-checked in the same transaction that
   // feeds the file: a concurrent maker edit either waits behind this snapshot
@@ -162,7 +191,8 @@ export async function loadNachaRunFile(
 
   const entries: NachaEntry[] = evidence.map((e) => {
     const units = toUnits(e.amount);
-    if (units % 100n !== 0n) throw new PaymentError(`instruction for ${e.payee} has sub-cent precision (${e.amount})`);
+    if (units % 100n !== 0n)
+      throw new PaymentError(`instruction for ${e.payee} has sub-cent precision (${e.amount})`);
     return {
       transactionCode: e.detail.savings ? "32" : "22",
       routingNumber: e.detail.routingNumber!,
@@ -204,12 +234,19 @@ export async function loadSepaRunFile(
 ): Promise<{ filename: string; content: string; runNumber: string }> {
   const allowedSubsidiaryIds = opts?.allowedSubsidiaryIds;
   await assertNotSandbox(orgId, "generate SEPA payment file");
-  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  const [run] = await db
+    .select()
+    .from(schema.paymentRuns)
+    .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
-  if (run.method !== "sepa") throw new PaymentError(`SEPA export applies to SEPA runs, not ${run.method}`);
+  if (run.method !== "sepa")
+    throw new PaymentError(`SEPA export applies to SEPA runs, not ${run.method}`);
   const settings = await loadSepaSettings(orgId, runId);
-  if (!settings.ok) throw new PaymentError(`SEPA origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
+  if (!settings.ok)
+    throw new PaymentError(
+      `SEPA origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`,
+    );
 
   // Same locked-evidence mechanism as the ACH and EFT writers: the creditor
   // IBAN/BIC are resolved from bank rows that were approved and active at the
@@ -240,23 +277,53 @@ export async function loadSepaRunFile(
 
 export async function loadRbcStd152RunFile(runId: string, orgId: string, opts?: RunFileOptions) {
   await assertNotSandbox(orgId, "generate RBC payment file");
-  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id,runId),eq(schema.paymentRuns.orgId,orgId)));
-  if (!run || run.status === "cancelled" || run.method !== "eft") throw new PaymentError("RBC STD152 requires an active EFT payment run");
+  const [run] = await db
+    .select()
+    .from(schema.paymentRuns)
+    .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  if (!run || run.status === "cancelled" || run.method !== "eft")
+    throw new PaymentError("RBC STD152 requires an active EFT payment run");
   const settings = await loadRbcStd152Settings(orgId, runId);
-  if (settings.ok && opts?.rbcSettingsDigest !== rbcStd152SettingsDigest(settings.settings)) throw new PaymentError("RBC profile no longer matches the allocated file identity — reload the run or restore its original profile");
-  if (!settings.ok) throw new PaymentError(`RBC STD152 configuration is incomplete: ${settings.missing.join(", ")}`);
-  if (opts?.fileCreationNumber == null) throw new PaymentError("Generate the native payment artifact to allocate an RBC file number before downloading");
-  const readiness = await paymentRunReadiness(runId,orgId);
-  if (readiness.blockers.length) throw new PaymentError(`Cannot generate RBC file: ${readiness.blockers.map(b=>`${b.payee}: ${b.reason}`).join("; ")}`);
-  const evidence = await lockRunBankEvidence("eft",runId,orgId,opts.allowedSubsidiaryIds);
+  if (settings.ok && opts?.rbcSettingsDigest !== rbcStd152SettingsDigest(settings.settings))
+    throw new PaymentError(
+      "RBC profile no longer matches the allocated file identity — reload the run or restore its original profile",
+    );
+  if (!settings.ok)
+    throw new PaymentError(
+      `RBC STD152 configuration is incomplete: ${settings.missing.join(", ")}`,
+    );
+  if (opts?.fileCreationNumber == null)
+    throw new PaymentError(
+      "Generate the native payment artifact to allocate an RBC file number before downloading",
+    );
+  const readiness = await paymentRunReadiness(runId, orgId);
+  if (readiness.blockers.length)
+    throw new PaymentError(
+      `Cannot generate RBC file: ${readiness.blockers.map((b) => `${b.payee}: ${b.reason}`).join("; ")}`,
+    );
+  const evidence = await lockRunBankEvidence("eft", runId, orgId, opts.allowedSubsidiaryIds);
   const today = await businessToday(orgId);
-  const stamp = await creationStamp(orgId,new Date(),opts.fileCreatedAt);
-  const content = buildRbcStd152File({settings:settings.settings,fileCreationNumber:opts.fileCreationNumber,fileCreationDate:stamp.day,payments:evidence.map(e=>{
-    const units = toUnits(e.amount);
-    if (units%100n!==0n) throw new PaymentError(`RBC payment for ${e.payee} contains a fraction of a cent`);
-    return {amountCents:units/100n,fundsDate:run.scheduledFor??today,institution:e.detail.institution!,transit:e.detail.transit!,accountNumber:e.detail.accountNumber,payeeName:e.payee,crossReference:(e.documentNumber??e.id).slice(0,19)};
-  })});
-  return {filename:`RBC-STD152-${run.runNumber}.txt`,content,runNumber:run.runNumber};
+  const stamp = await creationStamp(orgId, new Date(), opts.fileCreatedAt);
+  const content = buildRbcStd152File({
+    settings: settings.settings,
+    fileCreationNumber: opts.fileCreationNumber,
+    fileCreationDate: stamp.day,
+    payments: evidence.map((e) => {
+      const units = toUnits(e.amount);
+      if (units % 100n !== 0n)
+        throw new PaymentError(`RBC payment for ${e.payee} contains a fraction of a cent`);
+      return {
+        amountCents: units / 100n,
+        fundsDate: run.scheduledFor ?? today,
+        institution: e.detail.institution!,
+        transit: e.detail.transit!,
+        accountNumber: e.detail.accountNumber,
+        payeeName: e.payee,
+        crossReference: (e.documentNumber ?? e.id).slice(0, 19),
+      };
+    }),
+  });
+  return { filename: `RBC-STD152-${run.runNumber}.txt`, content, runNumber: run.runNumber };
 }
 
 /** Dispatch a payment run to its bank file by method (eft→CPA-005, ach→NACHA, sepa→pain.001). */
@@ -265,11 +332,43 @@ export async function loadRunFile(
   orgId: string,
   opts?: RunFileOptions,
 ): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
-  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  const [run] = await db
+    .select()
+    .from(schema.paymentRuns)
+    .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
-  const format = (await db.select({rail:schema.paymentFormats.rail}).from(schema.paymentBankProfiles).innerJoin(schema.paymentFormats,and(eq(schema.paymentFormats.id,schema.paymentBankProfiles.paymentFormatId),eq(schema.paymentFormats.orgId,schema.paymentBankProfiles.orgId))).where(and(eq(schema.paymentBankProfiles.id,run.paymentBankProfileId!),eq(schema.paymentBankProfiles.orgId,orgId))))[0];
-  if (format?.rail === "rbc_std152_credit") return {...(await loadRbcStd152RunFile(runId,orgId,opts)),contentType:"text/plain; charset=us-ascii"};
-  if (run.method === "ach") return { ...(await loadNachaRunFile(runId, orgId, opts)), contentType: "text/plain; charset=us-ascii" };
-  if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId, opts)), contentType: "application/xml" };
-  return { ...(await loadCpa005RunFile(runId, orgId, opts)), contentType: "text/plain; charset=us-ascii" };
+  const format = (
+    await db
+      .select({ rail: schema.paymentFormats.rail })
+      .from(schema.paymentBankProfiles)
+      .innerJoin(
+        schema.paymentFormats,
+        and(
+          eq(schema.paymentFormats.id, schema.paymentBankProfiles.paymentFormatId),
+          eq(schema.paymentFormats.orgId, schema.paymentBankProfiles.orgId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.paymentBankProfiles.id, run.paymentBankProfileId!),
+          eq(schema.paymentBankProfiles.orgId, orgId),
+        ),
+      )
+  )[0];
+  if (format?.rail === "rbc_std152_credit")
+    return {
+      ...(await loadRbcStd152RunFile(runId, orgId, opts)),
+      contentType: "text/plain; charset=us-ascii",
+    };
+  if (run.method === "ach")
+    return {
+      ...(await loadNachaRunFile(runId, orgId, opts)),
+      contentType: "text/plain; charset=us-ascii",
+    };
+  if (run.method === "sepa")
+    return { ...(await loadSepaRunFile(runId, orgId, opts)), contentType: "application/xml" };
+  return {
+    ...(await loadCpa005RunFile(runId, orgId, opts)),
+    contentType: "text/plain; charset=us-ascii",
+  };
 }

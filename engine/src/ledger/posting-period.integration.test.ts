@@ -9,19 +9,19 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test(
-  "an explicit adjustment period overrides date-derived posting",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+test("an explicit adjustment period overrides date-derived posting", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+      sql`
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `, "objects"));
-      const adjustmentPeriodId = randomUUID();
-      await db.execute(sql`
+      `,
+      "objects",
+    );
+    const adjustmentPeriodId = randomUUID();
+    await db.execute(sql`
         insert into accounting_periods
           (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
            starts_on, ends_on, is_adjustment, custom)
@@ -33,8 +33,8 @@ test(
         )
       `);
 
-      const documentId = randomUUID();
-      await db.execute(sql`
+    const documentId = randomUUID();
+    await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
            document_date, posting_date, posting_period_id, currency, fx_rate,
@@ -47,7 +47,7 @@ test(
           '{}'::jsonb, '{}'::jsonb
         )
       `);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, quantity,
            unit_price, amount, tax_amount, is_billable, quantity_fulfilled,
@@ -59,32 +59,34 @@ test(
         )
       `);
 
-      await db.execute(sql`
+    await db.execute(sql`
         update documents
            set status = 'approved', updated_at = now()
          where id = ${documentId} and org_id = ${org.orgId}
       `);
 
-      const entryId = await postDocument(documentId, {
-        control: {
-          ar: org.accounts.ar,
-          ap: org.accounts.ap,
-          bank: org.accounts.bank,
-        },
-      });
-      const entry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
+    const entryId = await postDocument(documentId, {
+      control: {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      },
+    });
+    const entry = await db.execute<{ period_id: string; posting_date: string }>(
+      sql`
         select period_id, posting_date::text
           from journal_entries
          where id = ${entryId}
-      `, "objects"));
+      `,
+      "objects",
+    );
 
-      assert.equal(entry[0]!.period_id, adjustmentPeriodId);
-      assert.equal(entry[0]!.posting_date, org.date);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    assert.equal(entry[0]!.period_id, adjustmentPeriodId);
+    assert.equal(entry[0]!.posting_date, org.date);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "connector period references fail closed when they are not unique",
@@ -92,11 +94,14 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+      const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+        sql`
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       await db.execute(sql`
         update accounting_periods
            set custom = '{"nsId":"duplicate-period"}'::jsonb
@@ -124,14 +129,11 @@ test(
   },
 );
 
-test(
-  "connector control accounts fail closed on a cross-tenant UUID",
-  { skip: !DB },
-  async () => {
-    const target = await createScratchOrg();
-    const other = await createScratchOrg();
-    try {
-      await db.execute(sql`
+test("connector control accounts fail closed on a cross-tenant UUID", { skip: !DB }, async () => {
+  const target = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    await db.execute(sql`
         update orgs
            set settings = jsonb_set(
              settings,
@@ -141,13 +143,12 @@ test(
            )
          where id = ${target.orgId}
       `);
-      await assert.rejects(
-        buildNativeContext(target.orgId, "nsId", "CAD"),
-        /control account ap does not belong to organization/,
-      );
-    } finally {
-      await dropScratchOrg(target.orgId);
-      await dropScratchOrg(other.orgId);
-    }
-  },
-);
+    await assert.rejects(
+      buildNativeContext(target.orgId, "nsId", "CAD"),
+      /control account ap does not belong to organization/,
+    );
+  } finally {
+    await dropScratchOrg(target.orgId);
+    await dropScratchOrg(other.orgId);
+  }
+});

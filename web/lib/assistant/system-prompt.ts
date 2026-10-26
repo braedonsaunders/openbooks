@@ -1,10 +1,24 @@
 import type { FiscalContext } from "@openbooks/reports";
-import { FEATURES, featureEnabled, type FeatureState } from "@openbooks/engine/organization/feature-registry";
+import {
+  FEATURES,
+  featureEnabled,
+  type FeatureState,
+} from "@openbooks/engine/organization/feature-registry";
 import { AI_CAPABILITIES, capabilityFeatureOn } from "@openbooks/engine/hrm/ai/registry";
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 /** One authoritative sentence of fiscal position, shared by the interactive
@@ -91,7 +105,10 @@ export function assistantSystemPrompt(args: {
     fiscalCalendarLine(args.fiscal),
     ...(args.features ? [featuresLine(args.features)] : []),
     ...(args.features && aiRailsPromptLines(args.features).length > 0
-      ? [`AI capabilities on for this org:`, ...aiRailsPromptLines(args.features).map((line) => `- ${line}`)]
+      ? [
+          `AI capabilities on for this org:`,
+          ...aiRailsPromptLines(args.features).map((line) => `- ${line}`),
+        ]
       : []),
     ...(memory.length ? [``, `Conversation memory:`, ...memory] : []),
     ``,

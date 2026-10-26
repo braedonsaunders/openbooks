@@ -1,14 +1,23 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const itemRates: DocArticle = {
-  slug: 'item-rates',
-  title: 'Item Rates and Equipment',
-  category: 'projects',
+  slug: "item-rates",
+  title: "Item Rates and Equipment",
+  category: "projects",
   order: 2,
   summary:
-    'Configure effective-dated cost and bill rates on items, assign rate books, and track equipment recovery, billing, utilization, and return.',
-  updated: '2026-07-21',
-  keywords: ['item rates', 'equipment', 'rate book', 'cost rate', 'bill rate', 'charge-out', 'ROI', 'time and materials'],
+    "Configure effective-dated cost and bill rates on items, assign rate books, and track equipment recovery, billing, utilization, and return.",
+  updated: "2026-07-21",
+  keywords: [
+    "item rates",
+    "equipment",
+    "rate book",
+    "cost rate",
+    "bill rate",
+    "charge-out",
+    "ROI",
+    "time and materials",
+  ],
   body: `# Item Rates and Equipment
 
 OpenBooks keeps the financial definition of a charge on an **item** and the
@@ -149,4 +158,4 @@ combine several physical units into a single duration quantity: quantity measure
 the selected unit's usage, while the equipment link identifies the unit that
 earned the recovery and revenue. Reconcile representative usage quantities around
 each tier boundary, including equality cases, before cutover.`,
-}
+};

@@ -1,9 +1,20 @@
 import { sql } from "drizzle-orm";
 import { db, orgContext, withMaintenanceTransaction } from "../platform/db.ts";
-import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
+import {
+  assertUuid,
+  insertionOrder,
+  loadCatalog,
+  PARENT_FILTER,
+  type TableInfo,
+} from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";
-import { copyS3Blob, deleteS3Blobs, fileCabinetObjectKey, MASKED_STORAGE_KIND } from "../platform/file-storage.ts";
+import {
+  copyS3Blob,
+  deleteS3Blobs,
+  fileCabinetObjectKey,
+  MASKED_STORAGE_KIND,
+} from "../platform/file-storage.ts";
 import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
 import { toUnits } from "../money/money.ts";
@@ -22,7 +33,9 @@ export type SandboxTier = "dev" | "masked" | "full" | "as_of";
 
 export function validateSandboxTier(value: unknown): SandboxTier {
   if (value === "dev" || value === "masked" || value === "full" || value === "as_of") return value;
-  throw new Error(`invalid sandbox tier ${JSON.stringify(value)}; choose dev, masked, full, or as_of`);
+  throw new Error(
+    `invalid sandbox tier ${JSON.stringify(value)}; choose dev, masked, full, or as_of`,
+  );
 }
 
 export interface CloneOptions {
@@ -107,17 +120,24 @@ export async function resolveAsOfCutoff(
   periodId: string,
 ): Promise<AsOfCutoff> {
   const res = await db.execute<{
-    id: string; ends_on: string;
-    fiscal_year: number; period_number: number; is_adjustment: boolean;
-    calendar_id: string; calendar_name: string;
-  }>(sql`
+    id: string;
+    ends_on: string;
+    fiscal_year: number;
+    period_number: number;
+    is_adjustment: boolean;
+    calendar_id: string;
+    calendar_name: string;
+  }>(
+    sql`
     select p.id, p.ends_on::text as ends_on,
            p.fiscal_year, p.period_number, p.is_adjustment,
            p.fiscal_calendar_id as calendar_id, fc.name as calendar_name
       from accounting_periods p
       join fiscal_calendars fc
         on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-     where p.id = ${periodId} and p.org_id = ${productionOrgId}`, "objects");
+     where p.id = ${periodId} and p.org_id = ${productionOrgId}`,
+    "objects",
+  );
   const row = res[0];
   if (!row) throw new Error("as-of cutoff period must belong to the production organization");
   return {
@@ -147,11 +167,17 @@ interface SourceOrgConfig {
  * zero-row read is a failure: the caller named a source org that is gone. */
 async function readSourceOrgConfig(productionOrgId: string): Promise<SourceOrgConfig> {
   const res = await db.execute<{
-    legal_name: string | null; base_currency: string;
-    country: string; tax_ids: unknown; settings: Record<string, unknown> | null;
-  }>(sql`
+    legal_name: string | null;
+    base_currency: string;
+    country: string;
+    tax_ids: unknown;
+    settings: Record<string, unknown> | null;
+  }>(
+    sql`
     select legal_name, base_currency, country, tax_ids, settings
-      from orgs where id = ${productionOrgId}`, "objects");
+      from orgs where id = ${productionOrgId}`,
+    "objects",
+  );
   const row = res[0];
   if (!row) throw new Error(`production org not found: ${productionOrgId}`);
   return {
@@ -221,13 +247,19 @@ export const CUSTOMIZATION_LAYER = new Set([
 /** Validate original coordinates against proven bills of the same subcontract.
  * Legacy null evidence stays null; financial strings are never rewritten. */
 export function validateVendorRetainageSourceAllocations(
-  value: unknown, releaseAmount: string, billIds: ReadonlySet<string>, label: string,
+  value: unknown,
+  releaseAmount: string,
+  billIds: ReadonlySet<string>,
+  label: string,
 ): void {
   if (value === null) return;
   function refuse(reason: string): never {
-    throw new Error(`sandbox clone: ${label}: ${reason}; correct the original retainage allocations and include their bills in the document copy before retrying`);
+    throw new Error(
+      `sandbox clone: ${label}: ${reason}; correct the original retainage allocations and include their bills in the document copy before retrying`,
+    );
   }
-  if (!Array.isArray(value) || value.length === 0) refuse("source allocations must be a nonempty array");
+  if (!Array.isArray(value) || value.length === 0)
+    refuse("source allocations must be a nonempty array");
   const exact = (raw: unknown): bigint => {
     const canonical = canonicalNonNegativeDecimal(raw, 4);
     if (canonical === null) refuse("source coordinates must be exact nonnegative decimal strings");
@@ -236,18 +268,26 @@ export function validateVendorRetainageSourceAllocations(
   let allocated = 0n;
   const seen = new Set<string>();
   for (const entry of value) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) refuse("source allocation must be an object");
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      refuse("source allocation must be an object");
     const allocation = entry as Record<string, unknown>;
-    if (Object.keys(allocation).sort().join(",") !== "amount,documentId,held,previousAmount") refuse("source allocation fields are invalid");
+    if (Object.keys(allocation).sort().join(",") !== "amount,documentId,held,previousAmount")
+      refuse("source allocation fields are invalid");
     if (typeof allocation.documentId !== "string") refuse("source bill identity is invalid");
     let documentId: string;
-    try { documentId = assertUuid(allocation.documentId).toLowerCase(); }
-    catch { refuse("source bill identity is invalid"); }
+    try {
+      documentId = assertUuid(allocation.documentId).toLowerCase();
+    } catch {
+      refuse("source bill identity is invalid");
+    }
     if (!billIds.has(documentId)) refuse("source bill has no scoped counterpart in the sandbox");
     if (seen.has(documentId)) refuse("source bill is allocated more than once");
     seen.add(documentId);
-    const held = exact(allocation.held), previous = exact(allocation.previousAmount), amount = exact(allocation.amount);
-    if (amount <= 0n || previous + amount > held) refuse("source coordinates exceed the original retained amount");
+    const held = exact(allocation.held),
+      previous = exact(allocation.previousAmount),
+      amount = exact(allocation.amount);
+    if (amount <= 0n || previous + amount > held)
+      refuse("source coordinates exceed the original retained amount");
     allocated += amount;
   }
   if (allocated !== exact(releaseAmount)) refuse("source amounts do not equal the release amount");
@@ -256,26 +296,41 @@ export function validateVendorRetainageSourceAllocations(
 /** Run after documents have been copied, inside the same clone snapshot.
  * Original bill status may have changed since release; its ownership does not. */
 async function validateVendorRetainageSourcesForClone(opts: CloneOptions): Promise<void> {
-  const releases = await db.execute<{ id: string; subcontract_id: string; amount: string; source_bill_allocations: unknown }>(sql`
+  const releases = await db.execute<{
+    id: string;
+    subcontract_id: string;
+    amount: string;
+    source_bill_allocations: unknown;
+  }>(
+    sql`
     select id, subcontract_id, amount::text as amount, source_bill_allocations
-      from vendor_retainage_releases where org_id = ${opts.productionOrgId}`, "objects");
+      from vendor_retainage_releases where org_id = ${opts.productionOrgId}`,
+    "objects",
+  );
   if (!releases.some((row) => row.source_bill_allocations !== null)) return;
-  const bills = await db.execute<{ subcontract_id: string; document_id: string }>(sql`
+  const bills = await db.execute<{ subcontract_id: string; document_id: string }>(
+    sql`
     select application.subcontract_id, original.id as document_id
       from vendor_pay_applications application
       join documents original on original.org_id = application.org_id and original.id = application.vendor_bill_document_id
       join documents copied on copied.org_id = ${opts.sandboxOrgId}
         and copied.id = ob_rebase(original.id, ${opts.seed}::uuid)
-     where application.org_id = ${opts.productionOrgId}`, "objects");
+     where application.org_id = ${opts.productionOrgId}`,
+    "objects",
+  );
   const ids = new Map<string, Set<string>>();
   for (const bill of bills) {
     const scoped = ids.get(bill.subcontract_id) ?? new Set<string>();
     scoped.add(bill.document_id);
     ids.set(bill.subcontract_id, scoped);
   }
-  for (const release of releases) validateVendorRetainageSourceAllocations(
-    release.source_bill_allocations, release.amount, ids.get(release.subcontract_id) ?? new Set(), `retainage release ${release.id}`,
-  );
+  for (const release of releases)
+    validateVendorRetainageSourceAllocations(
+      release.source_bill_allocations,
+      release.amount,
+      ids.get(release.subcontract_id) ?? new Set(),
+      `retainage release ${release.id}`,
+    );
 }
 
 /** Generate the INSERT..SELECT that copies one table, or null to skip it.
@@ -289,7 +344,9 @@ const EARLY_SEGMENT_TABLES = ["segment_definitions", "segment_values"];
  * SEGMENT_DEFAULTS_RESTORE: each copied segment definition regains its
  * source default, rebased, once its values exist in the sandbox.
  */
-export function segmentDefaultsRestoreSql(opts: Pick<CloneOptions, "seed" | "sandboxOrgId" | "productionOrgId">): string {
+export function segmentDefaultsRestoreSql(
+  opts: Pick<CloneOptions, "seed" | "sandboxOrgId" | "productionOrgId">,
+): string {
   const seed = assertUuid(opts.seed);
   const sbx = assertUuid(opts.sandboxOrgId);
   const prod = assertUuid(opts.productionOrgId);
@@ -324,32 +381,68 @@ export function generateCopySql(
   const exprs: string[] = [];
   for (const c of t.columns) {
     cols.push(`"${c.name}"`);
-    const nativeProductionEvidence=(t.name==='operating_profile_scopes'&&c.name==='profile_ids')
-      || (t.name==='operating_profile_versions'&&c.name==='definition')
-      || (t.name==='inventory_inspection_plans'&&c.name==='measures')
-      || (t.name==='inventory_inspections'&&['plan_snapshot','disposition_result'].includes(c.name))
-      || (t.name==='mfg_wo_operations'&&['inspection_plan_snapshot','standard_labor_burden','overhead_snapshot'].includes(c.name))
-      || (['mfg_subcontracts','mfg_subcontract_returns','mfg_subcontract_material_returns','mfg_subcontract_shipments'].includes(t.name)&&c.name==='request_snapshot')
-      || (t.name==='mfg_subcontract_service_bills'&&c.name==='expense_snapshot')
-      || (t.name==='mfg_mrp_runs'&&c.name==='parameters') || (t.name==='mfg_planned_orders'&&c.name==='demand_ref');
-    if(nativeProductionEvidence&&tableMask?.has(c.name))throw new Error(`Native production evidence ${t.name}.${c.name} cannot use a whole-column masking transform. Remove that policy; masked copies redact its prose while retaining required quantities, criteria and rebased identity.`);
+    const nativeProductionEvidence =
+      (t.name === "operating_profile_scopes" && c.name === "profile_ids") ||
+      (t.name === "operating_profile_versions" && c.name === "definition") ||
+      (t.name === "inventory_inspection_plans" && c.name === "measures") ||
+      (t.name === "inventory_inspections" &&
+        ["plan_snapshot", "disposition_result"].includes(c.name)) ||
+      (t.name === "mfg_wo_operations" &&
+        ["inspection_plan_snapshot", "standard_labor_burden", "overhead_snapshot"].includes(
+          c.name,
+        )) ||
+      ([
+        "mfg_subcontracts",
+        "mfg_subcontract_returns",
+        "mfg_subcontract_material_returns",
+        "mfg_subcontract_shipments",
+      ].includes(t.name) &&
+        c.name === "request_snapshot") ||
+      (t.name === "mfg_subcontract_service_bills" && c.name === "expense_snapshot") ||
+      (t.name === "mfg_mrp_runs" && c.name === "parameters") ||
+      (t.name === "mfg_planned_orders" && c.name === "demand_ref");
+    if (nativeProductionEvidence && tableMask?.has(c.name))
+      throw new Error(
+        `Native production evidence ${t.name}.${c.name} cannot use a whole-column masking transform. Remove that policy; masked copies redact its prose while retaining required quantities, criteria and rebased identity.`,
+      );
 
     if (t.name === "gl_audit_number_assignments" && c.name === "scope_key") {
       exprs.push(auditScope);
       continue;
     }
     if (t.name === "gl_audit_number_assignments" && c.name === "audit_number") {
-      exprs.push(`(select p.prefix from gl_audit_number_policies p where p.org_id='${prod}'::uuid and p.id="gl_audit_number_assignments".policy_id) || '-' || replace(${auditScope}, ':', '-') || '-' || lpad("ordinal"::text, greatest(6,length("ordinal"::text)), '0')`);
+      exprs.push(
+        `(select p.prefix from gl_audit_number_policies p where p.org_id='${prod}'::uuid and p.id="gl_audit_number_assignments".policy_id) || '-' || replace(${auditScope}, ':', '-') || '-' || lpad("ordinal"::text, greatest(6,length("ordinal"::text)), '0')`,
+      );
       continue;
     }
-    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "expense_fx_policies", "payroll_us_filing_account_employer_lineage"].includes(t.name)
-        && c.isUuid && ["created_by", "updated_by"].includes(c.name)) {
-      exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`);
+    if (
+      [
+        "fx_rate_types",
+        "account_translation_policies",
+        "subsidiary_accounting_preferences",
+        "segment_balancing_policies",
+        "gl_audit_number_policies",
+        "project_loss_policies",
+        "expense_fx_policies",
+        "payroll_us_filing_account_employer_lineage",
+      ].includes(t.name) &&
+      c.isUuid &&
+      ["created_by", "updated_by"].includes(c.name)
+    ) {
+      exprs.push(
+        `(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`,
+      );
       continue;
     }
     if (t.name === "documents" && c.name === "payment_terms_snapshot") {
-      if (tableMask?.has(c.name)) throw new Error("Retained payment terms require native identity rebasing; remove their whole-column masking policy.");
-      exprs.push(`public.document_payment_terms_snapshot_for_clone("payment_terms_snapshot", '${prod}'::uuid, "party_id", '${seed}'::uuid)`);
+      if (tableMask?.has(c.name))
+        throw new Error(
+          "Retained payment terms require native identity rebasing; remove their whole-column masking policy.",
+        );
+      exprs.push(
+        `public.document_payment_terms_snapshot_for_clone("payment_terms_snapshot", '${prod}'::uuid, "party_id", '${seed}'::uuid)`,
+      );
       continue;
     }
     // Recorded exchange rate evidence is copied through the same native
@@ -357,44 +450,70 @@ export function generateCopySql(
     // rate, currencies and date, the rebased legal entity, and in a masked
     // copy a redacted source and reason.
     if (t.name === "documents" && c.name === "document_fx_rate_evidence") {
-      if (tableMask?.has(c.name)) throw new Error("Recorded exchange rate evidence requires native identity rebasing; remove its whole-column masking policy.");
+      if (tableMask?.has(c.name))
+        throw new Error(
+          "Recorded exchange rate evidence requires native identity rebasing; remove its whole-column masking policy.",
+        );
       if (!rebaseSet.has("subsidiaries")) {
-        throw new Error("sandbox clone: recorded exchange rate evidence requires subsidiaries in the copy plan; include subsidiaries before retrying");
+        throw new Error(
+          "sandbox clone: recorded exchange rate evidence requires subsidiaries in the copy plan; include subsidiaries before retrying",
+        );
       }
-      exprs.push(`public.document_fx_rate_evidence_for_clone("document_fx_rate_evidence", '${seed}'::uuid, ${opts.masked ? "true" : "false"})`);
+      exprs.push(
+        `public.document_fx_rate_evidence_for_clone("document_fx_rate_evidence", '${seed}'::uuid, ${opts.masked ? "true" : "false"})`,
+      );
       continue;
     }
     // An expense line's exchange-rate evidence names the rate observation it
     // read: the copy points at the rebased observation, and a masked copy
     // redacts an operator's reason for an explicit rate.
     if (t.name === "document_lines" && c.name === "original_fx_evidence") {
-      if (tableMask?.has(c.name)) throw new Error("Expense line exchange rate evidence requires native identity rebasing; remove its whole-column masking policy.");
+      if (tableMask?.has(c.name))
+        throw new Error(
+          "Expense line exchange rate evidence requires native identity rebasing; remove its whole-column masking policy.",
+        );
       const observation = `case when "original_fx_evidence"->>'observationId' is null then null else ob_rebase(("original_fx_evidence"->>'observationId')::uuid, '${seed}'::uuid)::text end`;
       const reason = opts.masked
         ? ` || case when "original_fx_evidence"->>'reason' is null then '{}'::jsonb else jsonb_build_object('reason', 'REDACTED') end`
         : "";
-      exprs.push(`(case when "original_fx_evidence" is null then null else "original_fx_evidence" || jsonb_build_object('observationId', ${observation})${reason} end)`);
+      exprs.push(
+        `(case when "original_fx_evidence" is null then null else "original_fx_evidence" || jsonb_build_object('observationId', ${observation})${reason} end)`,
+      );
       continue;
     }
-    if ((t.name === "performance_obligations" && c.name === "allocation_basis")
-        || (t.name === "recognition_control_events" && ["before_state", "after_state"].includes(c.name))
-        || (t.name === "rebate_cost_attestations" && c.name === "line_basis")
-        || (t.name === "rebate_accruals" && c.name === "basis")
-        || (t.name === "rebate_claims" && ["basis", "settlement_basis"].includes(c.name))) {
-      if (tableMask?.has(c.name)) throw new Error(`Retained financial evidence ${t.name}.${c.name} requires native identity rebasing; remove its whole-column masking policy.`);
-      exprs.push(`public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? 'true' : 'false'})`);
+    if (
+      (t.name === "performance_obligations" && c.name === "allocation_basis") ||
+      (t.name === "recognition_control_events" &&
+        ["before_state", "after_state"].includes(c.name)) ||
+      (t.name === "rebate_cost_attestations" && c.name === "line_basis") ||
+      (t.name === "rebate_accruals" && c.name === "basis") ||
+      (t.name === "rebate_claims" && ["basis", "settlement_basis"].includes(c.name))
+    ) {
+      if (tableMask?.has(c.name))
+        throw new Error(
+          `Retained financial evidence ${t.name}.${c.name} requires native identity rebasing; remove its whole-column masking policy.`,
+        );
+      exprs.push(
+        `public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? "true" : "false"})`,
+      );
       continue;
     }
-    if (opts.masked && t.name === "payroll_us_filing_account_employer_lineage"
-      && ["source_reference", "change_reason"].includes(c.name)) {
+    if (
+      opts.masked &&
+      t.name === "payroll_us_filing_account_employer_lineage" &&
+      ["source_reference", "change_reason"].includes(c.name)
+    ) {
       exprs.push("'REDACTED'::text");
       continue;
     }
     // Closing rate quotes copy so the copied ledger keeps its pricing
     // evidence; a masked copy redacts the authored source and reason while
     // the clone guard admits only the source row's exact projection.
-    if (opts.masked && t.name === "fx_revaluation_rate_evidence"
-      && ["source", "reason"].includes(c.name)) {
+    if (
+      opts.masked &&
+      t.name === "fx_revaluation_rate_evidence" &&
+      ["source", "reason"].includes(c.name)
+    ) {
       exprs.push("'REDACTED'::text");
       continue;
     }
@@ -404,26 +523,59 @@ export function generateCopySql(
     // hashes stay original), and a masked copy redacts the operator's
     // attestation and reason while the clone guard admits only the exact
     // projection.
-    if (t.name === "field_ticket_source_certifications"
-      && ["source_row_snapshot", "reference_map", "native_point_in_time"].includes(c.name)) {
-      if (tableMask?.has(c.name)) throw new Error("Field Ticket source certification evidence requires native identity rebasing; remove its whole-column masking policy.");
-      exprs.push(`public.field_ticket_source_certification_clone_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? "true" : "false"})`);
+    if (
+      t.name === "field_ticket_source_certifications" &&
+      ["source_row_snapshot", "reference_map", "native_point_in_time"].includes(c.name)
+    ) {
+      if (tableMask?.has(c.name))
+        throw new Error(
+          "Field Ticket source certification evidence requires native identity rebasing; remove its whole-column masking policy.",
+        );
+      exprs.push(
+        `public.field_ticket_source_certification_clone_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? "true" : "false"})`,
+      );
       continue;
     }
-    if (opts.masked && t.name === "field_ticket_source_certifications"
-      && ["attestation", "reason"].includes(c.name)) {
+    if (
+      opts.masked &&
+      t.name === "field_ticket_source_certifications" &&
+      ["attestation", "reason"].includes(c.name)
+    ) {
       exprs.push("'REDACTED'::text");
       continue;
     }
-    if (opts.masked && ["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "expense_fx_policies", "rebate_agreements", "rebate_cost_attestations", "rebate_claims", "rebate_settlement_reversals", "recognition_control_events", "journal_lines"].includes(t.name)
-        && ["name", "reason", "memo", "evidence"].includes(c.name)) {
-      const redacted = t.name === "rebate_cost_attestations" && c.name === "evidence" ? "REDACTED FINANCIAL EVIDENCE" : "REDACTED";
+    if (
+      opts.masked &&
+      [
+        "fx_rate_types",
+        "account_translation_policies",
+        "subsidiary_accounting_preferences",
+        "segment_balancing_policies",
+        "gl_audit_number_policies",
+        "project_loss_policies",
+        "expense_fx_policies",
+        "rebate_agreements",
+        "rebate_cost_attestations",
+        "rebate_claims",
+        "rebate_settlement_reversals",
+        "recognition_control_events",
+        "journal_lines",
+      ].includes(t.name) &&
+      ["name", "reason", "memo", "evidence"].includes(c.name)
+    ) {
+      const redacted =
+        t.name === "rebate_cost_attestations" && c.name === "evidence"
+          ? "REDACTED FINANCIAL EVIDENCE"
+          : "REDACTED";
       exprs.push(`(case when "${c.name}" is null then null else '${redacted}' end)`);
       continue;
     }
     // Scope membership is canonical JSON identity data and must be rebased before its ownership trigger runs.
     if (t.name === "operating_profile_scopes" && c.name === "profile_ids") {
-      if (!rebaseSet.has("operating_profiles") || (opts.onlyTables && !opts.onlyTables.has("operating_profiles"))) {
+      if (
+        !rebaseSet.has("operating_profiles") ||
+        (opts.onlyTables && !opts.onlyTables.has("operating_profiles"))
+      ) {
         throw new Error("Workflow scopes require operating profiles in the sandbox copy plan.");
       }
       exprs.push(`(select jsonb_agg(to_jsonb(ob_rebase(value::uuid,'${seed}'::uuid)::text) order by ord)
@@ -434,7 +586,10 @@ export function generateCopySql(
     // under its rebased identity, so every assignment of a source value is
     // rebased with it (codes and other scalars carry over unchanged).
     if (c.name === "extra_dims" && c.udtName === "jsonb" && t.name !== "segment_values") {
-      if (tableMask?.has(c.name)) throw new Error(`Custom-segment assignments ${t.name}.extra_dims require native identity rebasing; remove the whole-column masking policy.`);
+      if (tableMask?.has(c.name))
+        throw new Error(
+          `Custom-segment assignments ${t.name}.extra_dims require native identity rebasing; remove the whole-column masking policy.`,
+        );
       exprs.push(`(case when "extra_dims" is null then null else coalesce((select jsonb_object_agg(dim.key, case
           when jsonb_typeof(dim.value) = 'string' and exists (select 1 from segment_values value_row
             where value_row.org_id = '${prod}'::uuid and value_row.id::text = dim.value #>> '{}')
@@ -449,15 +604,16 @@ export function generateCopySql(
       continue;
     }
     // Automatic delivery never follows copied people or activates in a new environment.
-    if (
-      t.name === "schedule_boards" &&
-      c.name === "automatic_delivery_policy"
-    ) {
+    if (t.name === "schedule_boards" && c.name === "automatic_delivery_policy") {
       exprs.push("null::jsonb");
       continue;
     }
 
-    if (opts.masked && (t.name === "files" || t.name === "file_versions") && c.name === "storage_kind") {
+    if (
+      opts.masked &&
+      (t.name === "files" || t.name === "file_versions") &&
+      c.name === "storage_kind"
+    ) {
       exprs.push(`'${MASKED_STORAGE_KIND}'`);
       continue;
     }
@@ -469,7 +625,9 @@ export function generateCopySql(
     }
     if (t.name === "vendor_retainage_releases" && c.name === "source_bill_allocations") {
       if (!rebaseSet.has("documents") || (opts.onlyTables && !opts.onlyTables.has("documents"))) {
-        throw new Error("sandbox clone: retainage source allocations require documents in the copy plan; include documents before retrying");
+        throw new Error(
+          "sandbox clone: retainage source allocations require documents in the copy plan; include documents before retrying",
+        );
       }
       exprs.push(`(case when "source_bill_allocations" is null then null else (
         select jsonb_agg(jsonb_set(a.value, '{documentId}',
@@ -480,11 +638,15 @@ export function generateCopySql(
     }
     if (t.name === "handling_unit_moves" && ["request", "movements"].includes(c.name)) {
       if (tableMask?.has(c.name)) {
-        throw new Error(`Warehouse movement evidence ${c.name} requires native structured masking; remove the whole-column policy before copying.`);
+        throw new Error(
+          `Warehouse movement evidence ${c.name} requires native structured masking; remove the whole-column policy before copying.`,
+        );
       }
-      exprs.push(opts.masked
-        ? `public.warehouse_execution_mask_json("${c.name}", '${seed}'::uuid, '${c.name}')`
-        : `public.warehouse_execution_clone_json("${c.name}", '${seed}'::uuid)`);
+      exprs.push(
+        opts.masked
+          ? `public.warehouse_execution_mask_json("${c.name}", '${seed}'::uuid, '${c.name}')`
+          : `public.warehouse_execution_clone_json("${c.name}", '${seed}'::uuid)`,
+      );
       continue;
     }
     const fkTarget = t.fks[c.name];
@@ -493,25 +655,73 @@ export function generateCopySql(
     } else if (c.name === "org_id") {
       exprs.push(`'${sbx}'::uuid`);
     } else if (
-      c.isUuid && ["hrm_benefit_enrollments", "hrm_benefit_enrollment_terms", "hrm_benefit_payroll_inputs"].includes(t.name)
+      c.isUuid &&
+      [
+        "hrm_benefit_enrollments",
+        "hrm_benefit_enrollment_terms",
+        "hrm_benefit_payroll_inputs",
+      ].includes(t.name)
     ) {
       // Historical creator/elector fields can predate their tenant FKs.
       // Keep the complete election graph, including its actor identities,
       // on the same deterministic sandbox mapping as the guarded source row.
-      exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
+      exprs.push(
+        `(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`,
+      );
     } else if (
-      c.isUuid && ["inventory_movements", "stock_counts", "stock_count_lines", "journal_entries","mfg_work_orders","mfg_wo_operations","mfg_wo_materials","mfg_scrap_events","mfg_routings","mfg_routing_operations","mfg_work_centers","mfg_work_center_rates","mfg_mrp_runs","mfg_planned_orders","mfg_subcontracts","mfg_subcontract_returns","mfg_subcontract_material_returns","mfg_subcontract_shipments","mfg_subcontract_service_bills","inventory_inspection_plans","inventory_inspections","operating_profiles","operating_profile_versions","operating_profile_scopes"].includes(t.name)
-      && ["created_by", "updated_by", "posted_by","inspected_by","disposed_by","published_by"].includes(c.name)
+      c.isUuid &&
+      [
+        "inventory_movements",
+        "stock_counts",
+        "stock_count_lines",
+        "journal_entries",
+        "mfg_work_orders",
+        "mfg_wo_operations",
+        "mfg_wo_materials",
+        "mfg_scrap_events",
+        "mfg_routings",
+        "mfg_routing_operations",
+        "mfg_work_centers",
+        "mfg_work_center_rates",
+        "mfg_mrp_runs",
+        "mfg_planned_orders",
+        "mfg_subcontracts",
+        "mfg_subcontract_returns",
+        "mfg_subcontract_material_returns",
+        "mfg_subcontract_shipments",
+        "mfg_subcontract_service_bills",
+        "inventory_inspection_plans",
+        "inventory_inspections",
+        "operating_profiles",
+        "operating_profile_versions",
+        "operating_profile_scopes",
+      ].includes(t.name) &&
+      [
+        "created_by",
+        "updated_by",
+        "posted_by",
+        "inspected_by",
+        "disposed_by",
+        "published_by",
+      ].includes(c.name)
     ) {
       // Historical creator/elector fields can predate their tenant FKs.
       // Keep the complete election graph, including its actor identities,
       // on the same deterministic sandbox mapping as the guarded source row.
-      exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
+      exprs.push(
+        `(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`,
+      );
     } else if (
-      c.isUuid && ["flow_runs", "flow_gates"].includes(t.name) && ["created_by", "updated_by", "decided_by"].includes(c.name) && !fkTarget && !t.forceRebase.has(c.name)
+      c.isUuid &&
+      ["flow_runs", "flow_gates"].includes(t.name) &&
+      ["created_by", "updated_by", "decided_by"].includes(c.name) &&
+      !fkTarget &&
+      !t.forceRebase.has(c.name)
     ) {
-      exprs.push(`(case when "subject_kind"='hrm_benefit_enrollment' and "${c.name}" is not null ` +
-        `then ob_rebase("${c.name}", '${seed}') else "${c.name}" end)`);
+      exprs.push(
+        `(case when "subject_kind"='hrm_benefit_enrollment' and "${c.name}" is not null ` +
+          `then ob_rebase("${c.name}", '${seed}') else "${c.name}" end)`,
+      );
     } else if (c.isUuid && fkTarget && retainedTenantTables.has(fkTarget)) {
       if (!c.isNullable) {
         throw new Error(
@@ -519,16 +729,14 @@ export function generateCopySql(
         );
       }
       exprs.push("null");
-    } else if (
-      c.isUuid && ((fkTarget && rebaseSet.has(fkTarget)) || t.forceRebase.has(c.name))
-    ) {
+    } else if (c.isUuid && ((fkTarget && rebaseSet.has(fkTarget)) || t.forceRebase.has(c.name))) {
       // Historical creator/elector fields can predate their tenant FKs.
       // Keep the complete election graph, including its actor identities,
       // on the same deterministic sandbox mapping as the guarded source row.
-      exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
-    } else if (
-      t.name === "hrm_employment_change_requests" && c.name === "decision_snapshot"
-    ) {
+      exprs.push(
+        `(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`,
+      );
+    } else if (t.name === "hrm_employment_change_requests" && c.name === "decision_snapshot") {
       // OM-13c: the decision snapshot binds flow_run_id BY VALUE (storage
       // CHECK ..._snapshot_binding), but the copy rebases flow_run_id to the
       // sandbox run while a verbatim snapshot still names the source run —
@@ -549,9 +757,11 @@ export function generateCopySql(
       // key is cleared: a sandbox never adopts the source's dedup slot, and
       // retried attempts mint their own keys.
       exprs.push("null");
-    } else if (t.name==='journal_entries'&&c.name==='custom') {
-      const rebased=`public.production_clone_journal_evidence("custom", '${seed}'::uuid, '${sbx}'::uuid, ${opts.masked?'true':'false'})`;
-      exprs.push(`(case when "origin"='manufacturing' then ${rebased} else ${opts.masked?maskExpr(c.name,tableMask?.get(c.name)??'null_out','id',c):'"custom"'} end)`);
+    } else if (t.name === "journal_entries" && c.name === "custom") {
+      const rebased = `public.production_clone_journal_evidence("custom", '${seed}'::uuid, '${sbx}'::uuid, ${opts.masked ? "true" : "false"})`;
+      exprs.push(
+        `(case when "origin"='manufacturing' then ${rebased} else ${opts.masked ? maskExpr(c.name, tableMask?.get(c.name) ?? "null_out", "id", c) : '"custom"'} end)`,
+      );
     } else if (t.name === "journal_lines" && c.name === "custom") {
       // Equity lines name the security whose instrument balance they carry
       // (an early-exercise deposit, accrued note interest). The security is
@@ -559,63 +769,90 @@ export function generateCopySql(
       // a masked copy keeps only that identity, which holds no personal data.
       const tagged = `("custom"->>'equitySecurityId') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'`;
       const identity = `jsonb_build_object('equitySecurityId', ob_rebase(("custom"->>'equitySecurityId')::uuid, '${seed}'::uuid)::text, 'equityRole', "custom"->'equityRole')`;
-      const otherwise = opts.masked ? maskExpr(c.name, tableMask?.get(c.name) ?? "null_out", "id", { ...c, tableName: t.name }) : `"custom"`;
-      exprs.push(`(case when ${tagged} then ${opts.masked ? identity : `"custom" || ${identity}`} else ${otherwise} end)`);
+      const otherwise = opts.masked
+        ? maskExpr(c.name, tableMask?.get(c.name) ?? "null_out", "id", { ...c, tableName: t.name })
+        : `"custom"`;
+      exprs.push(
+        `(case when ${tagged} then ${opts.masked ? identity : `"custom" || ${identity}`} else ${otherwise} end)`,
+      );
     } else if (
-      t.name==='mfg_wo_operations'&&['standard_labor_burden','overhead_snapshot'].includes(c.name)
+      t.name === "mfg_wo_operations" &&
+      ["standard_labor_burden", "overhead_snapshot"].includes(c.name)
     ) {
-      exprs.push(`public.production_clone_safe_evidence("${c.name}",'${seed}'::uuid,'${c.name}','${sbx}'::uuid,${opts.masked?'true':'false'})`);
+      exprs.push(
+        `public.production_clone_safe_evidence("${c.name}",'${seed}'::uuid,'${c.name}','${sbx}'::uuid,${opts.masked ? "true" : "false"})`,
+      );
     } else if (
-      t.name==='mfg_wo_operations'&&['standard_labor_burden_hash','overhead_snapshot_hash'].includes(c.name)
+      t.name === "mfg_wo_operations" &&
+      ["standard_labor_burden_hash", "overhead_snapshot_hash"].includes(c.name)
     ) {
-      const document=c.name==='standard_labor_burden_hash'?'standard_labor_burden':'overhead_snapshot';
-      exprs.push(`(case when "${document}" is null then null else 'sha256:'||encode(digest(convert_to(public.production_canonical_json(public.production_clone_safe_evidence("${document}",'${seed}'::uuid,'${document}','${sbx}'::uuid,${opts.masked?'true':'false'})),'UTF8'),'sha256'),'hex') end)`);
+      const document =
+        c.name === "standard_labor_burden_hash" ? "standard_labor_burden" : "overhead_snapshot";
+      exprs.push(
+        `(case when "${document}" is null then null else 'sha256:'||encode(digest(convert_to(public.production_canonical_json(public.production_clone_safe_evidence("${document}",'${seed}'::uuid,'${document}','${sbx}'::uuid,${opts.masked ? "true" : "false"})),'UTF8'),'sha256'),'hex') end)`,
+      );
     } else if (tableMask?.has(c.name)) {
       exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", { ...c, tableName: t.name })} `);
     } else if (
-      (t.name === "operating_profile_scopes" && c.name === "profile_ids")
-      || (["mfg_subcontracts","mfg_subcontract_returns","mfg_subcontract_material_returns","mfg_subcontract_shipments"].includes(t.name) && c.name === "request_snapshot")
-      || (t.name === "mfg_subcontract_service_bills" && c.name === "expense_snapshot")
-      || (t.name === "inventory_inspections" && ["plan_snapshot","disposition_result"].includes(c.name))
-      || (t.name === "mfg_wo_operations" && c.name === "inspection_plan_snapshot")
-      || (t.name === "inventory_inspection_plans" && c.name === "measures")
-      || (t.name === "operating_profile_versions" && c.name === "definition")
-      || (t.name === "mfg_mrp_runs" && c.name === "parameters")
-      || (t.name === "mfg_planned_orders" && c.name === "demand_ref")
+      (t.name === "operating_profile_scopes" && c.name === "profile_ids") ||
+      ([
+        "mfg_subcontracts",
+        "mfg_subcontract_returns",
+        "mfg_subcontract_material_returns",
+        "mfg_subcontract_shipments",
+      ].includes(t.name) &&
+        c.name === "request_snapshot") ||
+      (t.name === "mfg_subcontract_service_bills" && c.name === "expense_snapshot") ||
+      (t.name === "inventory_inspections" &&
+        ["plan_snapshot", "disposition_result"].includes(c.name)) ||
+      (t.name === "mfg_wo_operations" && c.name === "inspection_plan_snapshot") ||
+      (t.name === "inventory_inspection_plans" && c.name === "measures") ||
+      (t.name === "operating_profile_versions" && c.name === "definition") ||
+      (t.name === "mfg_mrp_runs" && c.name === "parameters") ||
+      (t.name === "mfg_planned_orders" && c.name === "demand_ref")
     ) {
-      exprs.push(`public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid,${opts.masked?'true':'false'})`);
+      exprs.push(
+        `public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid,${opts.masked ? "true" : "false"})`,
+      );
     } else if (
       (t.name === "payroll_holiday_obligations" && c.name === "evidence") ||
-        (t.name === "pay_run_holiday_allocations" && c.name === "source_snapshot")
+      (t.name === "pay_run_holiday_allocations" && c.name === "source_snapshot")
     ) {
       exprs.push(`public.holiday_clone_json("${c.name}", '${c.name}', '${seed}'::uuid)`);
     } else if (
-      t.name === "financial_changes" && ["payload", "before_state", "result"].includes(c.name)
+      t.name === "financial_changes" &&
+      ["payload", "before_state", "result"].includes(c.name)
     ) {
       // Only this native event has the declared holiday identity contract.
       // Other accounting events retain their existing copy composition.
       const holidayEvidence = opts.masked
         ? `(case when "${c.name}" is null then null else '{}'::jsonb end)`
         : `public.holiday_clone_json("${c.name}", '${c.name}', '${seed}'::uuid)`;
-      exprs.push(`(case when "domain"='payroll' and "operation"='adjudicated_holiday_hours' ` +
-        `then ${holidayEvidence} when "domain"='manufacturing' then public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid,${opts.masked?'true':'false'}) else "${c.name}" end)`);
+      exprs.push(
+        `(case when "domain"='payroll' and "operation"='adjudicated_holiday_hours' ` +
+          `then ${holidayEvidence} when "domain"='manufacturing' then public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid,${opts.masked ? "true" : "false"}) else "${c.name}" end)`,
+      );
     } else if (t.name === "financial_changes" && c.name === "idempotency_key") {
-      const rebound=`(public.production_clone_safe_evidence(to_jsonb("idempotency_key"),'${seed}'::uuid,'requestKey','${sbx}'::uuid,${opts.masked?'true':'false'})#>>'{}')`;
-      exprs.push(`(case when "domain"='manufacturing' then ${rebound} ${opts.masked?`when "domain"='payroll' and "operation"='adjudicated_holiday_hours' then ('holiday-'||ob_rebase("id",'${seed}'::uuid)::text)`:''} else ${tableMask?.has(c.name)?maskExpr(c.name,tableMask.get(c.name)!,'id',c):'"idempotency_key"'} end)`);
+      const rebound = `(public.production_clone_safe_evidence(to_jsonb("idempotency_key"),'${seed}'::uuid,'requestKey','${sbx}'::uuid,${opts.masked ? "true" : "false"})#>>'{}')`;
+      exprs.push(
+        `(case when "domain"='manufacturing' then ${rebound} ${opts.masked ? `when "domain"='payroll' and "operation"='adjudicated_holiday_hours' then ('holiday-'||ob_rebase("id",'${seed}'::uuid)::text)` : ""} else ${tableMask?.has(c.name) ? maskExpr(c.name, tableMask.get(c.name)!, "id", c) : '"idempotency_key"'} end)`,
+      );
     } else if (opts.masked && t.name === "financial_changes" && c.name === "reason") {
-      const removed = c.name === "reason" ? "'REDACTED'" : `('holiday-' || ob_rebase("id", '${seed}'::uuid)::text)`;
-      exprs.push(`(case when ("domain"='payroll' and "operation"='adjudicated_holiday_hours' or "domain"='manufacturing') then ${removed} else "${c.name}" end)`);
-    } else if (
-      t.name === "hrm_benefit_enrollments" && c.name === "submission_snapshot"
-    ) {
-      exprs.push(`public.benefit_clone_submission_evidence("submission_snapshot", '${seed}'::uuid)`);
-    } else if (
-      t.name === "hrm_benefit_enrollments" && c.name === "decision_snapshot"
-    ) {
+      const removed =
+        c.name === "reason"
+          ? "'REDACTED'"
+          : `('holiday-' || ob_rebase("id", '${seed}'::uuid)::text)`;
+      exprs.push(
+        `(case when ("domain"='payroll' and "operation"='adjudicated_holiday_hours' or "domain"='manufacturing') then ${removed} else "${c.name}" end)`,
+      );
+    } else if (t.name === "hrm_benefit_enrollments" && c.name === "submission_snapshot") {
+      exprs.push(
+        `public.benefit_clone_submission_evidence("submission_snapshot", '${seed}'::uuid)`,
+      );
+    } else if (t.name === "hrm_benefit_enrollments" && c.name === "decision_snapshot") {
       exprs.push(`public.benefit_clone_decision_evidence("decision_snapshot", '${seed}'::uuid)`);
     } else if (
-      (t.name === "flow_submissions" &&
-        ["policy", "context", "graphs"].includes(c.name)) ||
+      (t.name === "flow_submissions" && ["policy", "context", "graphs"].includes(c.name)) ||
       (t.name === "flow_runs" && c.name === "context") ||
       (t.name === "flows" && c.name === "graph") ||
       c.name === "submission_policy"
@@ -623,10 +860,12 @@ export function generateCopySql(
       // Frozen routing keeps its graph structure and decision history, with
       // tenant references rebased by the same seed as the copied records.
       const evidence = `public.flow_clone_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid)`;
-      exprs.push(
-        opts.masked ? `public.production_mask_evidence(${evidence})` : evidence,
-      );
-    } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {
+      exprs.push(opts.masked ? `public.production_mask_evidence(${evidence})` : evidence);
+    } else if (
+      opts.masked &&
+      (c.udtName === "jsonb" || c.udtName === "json") &&
+      c.name === "custom"
+    ) {
       // Custom fields are arbitrary tenant-authored JSON and may contain PII
       // without a schema-level column for a masking policy to name. A masked
       // environment must not carry that payload by default; an explicit
@@ -662,31 +901,46 @@ export function generateCopySql(
 
   // Immediate ownership and reversal guards require ancestors to exist already.
   // Heap/index order and UUID chronology cannot determine retained lineage.
-  const parentColumn = t.name === "subsidiaries" || t.name === "segment_values" ? "parent_id"
-    : t.name === "fx_revaluation_rate_evidence" ? "supersedes_id"
-    : ["project_financial_adjustments", "project_overhead_adjustments"].includes(t.name)
-      ? "reverses_adjustment_id" : null;
-  const tree = parentColumn ? `with recursive source_tree as (
+  const parentColumn =
+    t.name === "subsidiaries" || t.name === "segment_values"
+      ? "parent_id"
+      : t.name === "fx_revaluation_rate_evidence"
+        ? "supersedes_id"
+        : ["project_financial_adjustments", "project_overhead_adjustments"].includes(t.name)
+          ? "reverses_adjustment_id"
+          : null;
+  const tree = parentColumn
+    ? `with recursive source_tree as (
     select id, 0 as depth from "${t.name}" where org_id = '${prod}' and "${parentColumn}" is null
     union all
     select child.id, parent.depth + 1 from "${t.name}" child
       join source_tree parent on parent.id = child."${parentColumn}" where child.org_id = '${prod}'
-  ) ` : "";
-  const order = t.name === "gl_audit_number_assignments"
-    ? " order by book_id, subsidiary_id, scope_key, ordinal"
-    : parentColumn
-    ? ` order by (select depth from source_tree where source_tree.id = "${t.name}".id), id`
+  ) `
     : "";
+  const order =
+    t.name === "gl_audit_number_assignments"
+      ? " order by book_id, subsidiary_id, scope_key, ordinal"
+      : parentColumn
+        ? ` order by (select depth from source_tree where source_tree.id = "${t.name}".id), id`
+        : "";
   // Component insertion creates an empty one-to-one classification row.
   // Its expected conflict must copy every source classification, rather than
   // duplicate the row or retain the empty defaults in the sandbox.
   const conflict =
     t.name === "pay_component_earning_classifications"
-      ? ` on conflict (org_id, pay_component_id) do update set ${t.columns.filter((c) => c.name !== "org_id" && c.name !== "pay_component_id").map((c) => `"${c.name}" = excluded."${c.name}"`).join(", ")}`
+      ? ` on conflict (org_id, pay_component_id) do update set ${t.columns
+          .filter((c) => c.name !== "org_id" && c.name !== "pay_component_id")
+          .map((c) => `"${c.name}" = excluded."${c.name}"`)
+          .join(", ")}`
       : t.name === "fx_rate_types"
         ? // Organization insertion seeds these three logical keys. Only those expected
           // collisions update; custom definitions and unexpected collisions still refuse.
-          ` on conflict (org_id, key) do update set ${t.columns.filter(c => c.name !== "org_id" && c.name !== "key").map(c => `"${c.name}" = excluded."${c.name}"`).join(", ")} where public.financial_history_seeded_rate_clone_conflict(to_jsonb("fx_rate_types"),to_jsonb(excluded))`
+          ` on conflict (org_id, key) do update set ${t.columns
+            .filter((c) => c.name !== "org_id" && c.name !== "key")
+            .map((c) => `"${c.name}" = excluded."${c.name}"`)
+            .join(
+              ", ",
+            )} where public.financial_history_seeded_rate_clone_conflict(to_jsonb("fx_rate_types"),to_jsonb(excluded))`
         : "";
   return `${tree}insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}${order}${conflict}`;
 }
@@ -709,7 +963,12 @@ export function selectCloneTables(
   // Keep them outside CUSTOMIZATION_LAYER so refresh updates reference data
   // without treating source account definitions as promotable customizations.
   let selected =
-    tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name) || t.name === "subsidiaries" || t.name === "accounts") : tables;
+    tier === "dev"
+      ? tables.filter(
+          (t) =>
+            CUSTOMIZATION_LAYER.has(t.name) || t.name === "subsidiaries" || t.name === "accounts",
+        )
+      : tables;
   if (onlyTables) selected = selected.filter((t) => onlyTables.has(t.name));
   return selected;
 }
@@ -739,7 +998,13 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   if (earlySegments.length) {
     const rest = selected.filter((t) => !EARLY_SEGMENT_TABLES.includes(t.name));
     const after = rest.findIndex((t) => t.name === "subsidiaries");
-    selected = [...rest.slice(0, after + 1), ...earlySegments.sort((a, b) => EARLY_SEGMENT_TABLES.indexOf(a.name) - EARLY_SEGMENT_TABLES.indexOf(b.name)), ...rest.slice(after + 1)];
+    selected = [
+      ...rest.slice(0, after + 1),
+      ...earlySegments.sort(
+        (a, b) => EARLY_SEGMENT_TABLES.indexOf(a.name) - EARLY_SEGMENT_TABLES.indexOf(b.name),
+      ),
+      ...rest.slice(after + 1),
+    ];
   }
 
   const perTable: { table: string; rows: number }[] = [];
@@ -757,113 +1022,130 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   // level is requested only when opening the outermost transaction here and
   // the outer unit's snapshot stands otherwise.
   const joinsOuterSnapshot = !!orgContext.getStore()?.txDb;
-  const { cutoff, sourceSettings } = await withMaintenanceTransaction(null, async () => {
-    let cutoff: AsOfCutoff | null = null;
-    let sourceSettings: Record<string, unknown> | null = null;
-    // Resolve the as-of cutoff FIRST: under runClone's own REPEATABLE READ
-    // transaction this statement pins the snapshot; under a refresh reuse it
-    // joins the outer unit's snapshot. Either way the calendar and end date
-    // the preflight and the copy filter share are the snapshot's own — a
-    // concurrent period relabel can neither strand the filter on a stale
-    // ordinal nor slip between the refusal check and the copy.
-    if (opts.tier === "as_of") {
-      if (!opts.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
-      cutoff = await resolveAsOfCutoff(opts.productionOrgId, opts.asOfPeriodId);
-    }
-    // Capture settings in the same snapshot as copied rows. Refresh uses this
-    // captured value to rebase JSON control-account references, avoiding a
-    // live read after the clone commits that could pair snapshot rows with a
-    // newer production control map.
-    const source = await readSourceOrgConfig(opts.productionOrgId);
-    sourceSettings = source.settings;
-    // Create additionally applies that snapshot to its new org row; refresh
-    // preserves the sandbox org row but still consumes sourceSettings below.
-    if (opts.initializeOrg) {
-      await applySandboxOrgConfig(opts.sandboxOrgId, source, opts.masked, opts.settingsOverlay ?? {});
-    }
-    // As-of trims journal entries past the cutoff but copies every document,
-    // so a post-cutoff posted entry would leave its documents pointing at an
-    // entry that was never copied — a deferred-FK failure at commit. Refuse up
-    // front with an actionable error instead. The predicate mirrors the copy
-    // filter exactly: posted/reversed entries with posting_date past the
-    // cutoff end date are precisely the posted entries the copy drops
-    // (posting_date is NOT NULL, so there is no null edge to diverge on).
-    if (opts.tier === "as_of" && cutoff) {
-      const beyond = (await db.execute<{ count: string }>(sql`
+  const { cutoff, sourceSettings } = await withMaintenanceTransaction(
+    null,
+    async () => {
+      let cutoff: AsOfCutoff | null = null;
+      let sourceSettings: Record<string, unknown> | null = null;
+      // Resolve the as-of cutoff FIRST: under runClone's own REPEATABLE READ
+      // transaction this statement pins the snapshot; under a refresh reuse it
+      // joins the outer unit's snapshot. Either way the calendar and end date
+      // the preflight and the copy filter share are the snapshot's own — a
+      // concurrent period relabel can neither strand the filter on a stale
+      // ordinal nor slip between the refusal check and the copy.
+      if (opts.tier === "as_of") {
+        if (!opts.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
+        cutoff = await resolveAsOfCutoff(opts.productionOrgId, opts.asOfPeriodId);
+      }
+      // Capture settings in the same snapshot as copied rows. Refresh uses this
+      // captured value to rebase JSON control-account references, avoiding a
+      // live read after the clone commits that could pair snapshot rows with a
+      // newer production control map.
+      const source = await readSourceOrgConfig(opts.productionOrgId);
+      sourceSettings = source.settings;
+      // Create additionally applies that snapshot to its new org row; refresh
+      // preserves the sandbox org row but still consumes sourceSettings below.
+      if (opts.initializeOrg) {
+        await applySandboxOrgConfig(
+          opts.sandboxOrgId,
+          source,
+          opts.masked,
+          opts.settingsOverlay ?? {},
+        );
+      }
+      // As-of trims journal entries past the cutoff but copies every document,
+      // so a post-cutoff posted entry would leave its documents pointing at an
+      // entry that was never copied — a deferred-FK failure at commit. Refuse up
+      // front with an actionable error instead. The predicate mirrors the copy
+      // filter exactly: posted/reversed entries with posting_date past the
+      // cutoff end date are precisely the posted entries the copy drops
+      // (posting_date is NOT NULL, so there is no null edge to diverge on).
+      if (opts.tier === "as_of" && cutoff) {
+        const beyond = (
+          await db.execute<{ count: string }>(
+            sql`
         select count(*)::text as count
           from journal_entries je
          where je.org_id = ${opts.productionOrgId}
            and je.status in ('posted', 'reversed')
-           and je.posting_date > ${cutoff.endsOn}`, "objects"))[0]?.count;
-      if (beyond !== "0") {
-        throw new Error(
-          `as-of sandbox to period ${cutoff.periodName} ending ${cutoff.endsOn} ` +
-            `(calendar "${cutoff.calendarName}") excludes ${beyond ?? "?"} posted entries ` +
-            `dated after ${cutoff.endsOn}; ` +
-            `their documents would reference entries that were never copied — ` +
-            `choose a cutoff ending on or after the latest posted date, or use a full tier`,
-        );
+           and je.posting_date > ${cutoff.endsOn}`,
+            "objects",
+          )
+        )[0]?.count;
+        if (beyond !== "0") {
+          throw new Error(
+            `as-of sandbox to period ${cutoff.periodName} ending ${cutoff.endsOn} ` +
+              `(calendar "${cutoff.calendarName}") excludes ${beyond ?? "?"} posted entries ` +
+              `dated after ${cutoff.endsOn}; ` +
+              `their documents would reference entries that were never copied — ` +
+              `choose a cutoff ending on or after the latest posted date, or use a full tier`,
+          );
+        }
       }
-    }
-    await db.execute(sql`set constraints all deferred`);
-    // Trusted bulk copy: the deterministic rebase guarantees integrity, so the
-    // kernel guards (account-postability via 'migration', posted-immutability
-    // via 'amend') must stand down while we insert already-posted rows.
-    await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
-    await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-    // Clone authority (OM-13): replaying posted history into target periods
-    // that are already closed there is refused by the closed-period guards
-    // even under the flags above. This transaction-local flag — set ONLY
-    // here, inside runClone's own maintenance transaction — lets those
-    // guards admit INSERTs of posted/reversed rows (see
-    // openbooks_clone_authority()). UPDATE and DELETE of posted history stay
-    // blocked, and the flag is inert outside this transaction: the authority
-    // also requires the migration/amend flags above plus RLS bypass, which a
-    // tenant transaction never holds.
-    await db.execute(sql`select set_config('openbooks.clone', 'on', true)`);
-    // The clone authority is asserted under RLS bypass. This unit runs on the
-    // bypass pool, and its transaction starts with the bypass flag pinned off,
-    // so the clone declares it transaction-locally beside the flags above.
-    await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
-    for (const t of selected) {
-      const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
-      if (!stmt) continue;
+      await db.execute(sql`set constraints all deferred`);
+      // Trusted bulk copy: the deterministic rebase guarantees integrity, so the
+      // kernel guards (account-postability via 'migration', posted-immutability
+      // via 'amend') must stand down while we insert already-posted rows.
+      await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
+      await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+      // Clone authority (OM-13): replaying posted history into target periods
+      // that are already closed there is refused by the closed-period guards
+      // even under the flags above. This transaction-local flag — set ONLY
+      // here, inside runClone's own maintenance transaction — lets those
+      // guards admit INSERTs of posted/reversed rows (see
+      // openbooks_clone_authority()). UPDATE and DELETE of posted history stay
+      // blocked, and the flag is inert outside this transaction: the authority
+      // also requires the migration/amend flags above plus RLS bypass, which a
+      // tenant transaction never holds.
+      await db.execute(sql`select set_config('openbooks.clone', 'on', true)`);
+      // The clone authority is asserted under RLS bypass. This unit runs on the
+      // bypass pool, and its transaction starts with the bypass flag pinned off,
+      // so the clone declares it transaction-locally beside the flags above.
+      await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
+      for (const t of selected) {
+        const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
+        if (!stmt) continue;
         if (
           t.name === "vendor_retainage_releases" &&
           t.columns.some((c) => c.name === "source_bill_allocations")
         ) {
           if (!perTable.some((row) => row.table === "documents")) {
-          throw new Error("sandbox clone: retainage source allocations require the documents copy to finish first; include documents before retrying");
+            throw new Error(
+              "sandbox clone: retainage source allocations require the documents copy to finish first; include documents before retrying",
+            );
+          }
+          await validateVendorRetainageSourcesForClone(opts);
         }
-        await validateVendorRetainageSourcesForClone(opts);
-      }
         const res = await db.execute<Record<string, unknown>>(sql.raw(stmt));
-      const n = res.rowCount ?? 0;
-      perTable.push({ table: t.name, rows: n });
-      rowsCopied += n;
-    }
-      if (perTable.some((row) => row.table === "segment_definitions") && perTable.some((row) => row.table === "segment_values")) {
+        const n = res.rowCount ?? 0;
+        perTable.push({ table: t.name, rows: n });
+        rowsCopied += n;
+      }
+      if (
+        perTable.some((row) => row.table === "segment_definitions") &&
+        perTable.some((row) => row.table === "segment_values")
+      ) {
         await db.execute(sql.raw(segmentDefaultsRestoreSql(opts)));
       }
       await rebaseClonedJsonReferences({
         ...opts,
         copiedTables: new Set(perTable.map((row) => row.table)),
       });
-    // These rollups are intentionally excluded from the clone catalog because
-    // they are maintained projections, not source evidence. Rebuild them after
-    // every copy: application rows can be inserted before their journal-line
-    // endpoints (composite tenant FKs are deferred), so their row trigger may
-    // legitimately have no effect during the bulk load. A rebuild also clears
-    // stale values left by a refresh before applying the new source snapshot.
-    await db.execute(sql`select openbooks_gl_activity_rebuild(${opts.sandboxOrgId})`);
-    await db.execute(sql`select openbooks_party_payment_stats_rebuild(${opts.sandboxOrgId})`);
-    await db.execute(sql`select openbooks_open_item_balances_rebuild(${opts.sandboxOrgId})`);
-    // Evidence for the clone authority asserted above (OM-13): one audit row
-    // in the target org recording the provenance and scope of this copy, so
-    // closed-period history carried under openbooks.clone is attributable.
-    // audit_log is never copied (catalog EXCLUDE), so this insert cannot
-    // collide with the bulk copy; it commits or rolls back with the clone.
-    await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      // These rollups are intentionally excluded from the clone catalog because
+      // they are maintained projections, not source evidence. Rebuild them after
+      // every copy: application rows can be inserted before their journal-line
+      // endpoints (composite tenant FKs are deferred), so their row trigger may
+      // legitimately have no effect during the bulk load. A rebuild also clears
+      // stale values left by a refresh before applying the new source snapshot.
+      await db.execute(sql`select openbooks_gl_activity_rebuild(${opts.sandboxOrgId})`);
+      await db.execute(sql`select openbooks_party_payment_stats_rebuild(${opts.sandboxOrgId})`);
+      await db.execute(sql`select openbooks_open_item_balances_rebuild(${opts.sandboxOrgId})`);
+      // Evidence for the clone authority asserted above (OM-13): one audit row
+      // in the target org recording the provenance and scope of this copy, so
+      // closed-period history carried under openbooks.clone is attributable.
+      // audit_log is never copied (catalog EXCLUDE), so this insert cannot
+      // collide with the bulk copy; it commits or rolls back with the clone.
+      await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${opts.sandboxOrgId}, 'orgs', ${opts.sandboxOrgId}, 'insert',
         ${JSON.stringify({
           mode: "sandbox_clone_authority",
@@ -873,10 +1155,13 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           tablesCopied: perTable.length,
           rowsCopied,
           authority: "openbooks.clone",
-          scope: "INSERT of posted/reversed history into closed periods only; UPDATE and DELETE of posted history stay blocked",
+          scope:
+            "INSERT of posted/reversed history into closed periods only; UPDATE and DELETE of posted history stay blocked",
         })}::jsonb, null)`);
-    return { cutoff, sourceSettings };
-  }, joinsOuterSnapshot ? {} : { isolationLevel: "REPEATABLE READ" });
+      return { cutoff, sourceSettings };
+    },
+    joinsOuterSnapshot ? {} : { isolationLevel: "REPEATABLE READ" },
+  );
 
   return {
     tablesCopied: perTable.length,
@@ -922,7 +1207,8 @@ export async function copyClonedFileObjects(opts: {
   // so they must provably be values, not statements.
   const seed = assertUuid(opts.seed);
   const prod = assertUuid(opts.productionOrgId);
-  const pairs = await db.execute<{ prodVersionId: string; sandboxVersionId: string }>(sql`
+  const pairs = await db.execute<{ prodVersionId: string; sandboxVersionId: string }>(
+    sql`
     select fv.id as "prodVersionId", ob_rebase(fv.id, ${seed}) as "sandboxVersionId"
       from file_versions fv
       join files f on f.id = fv.file_id
@@ -932,7 +1218,9 @@ export async function copyClonedFileObjects(opts: {
          select 1 from file_versions sv
           where sv.id = ob_rebase(fv.id, ${seed}) and sv.storage_kind = 's3'
        )
-  `, "objects");
+  `,
+    "objects",
+  );
   const copied: string[] = [];
   try {
     for (const pair of pairs) {
@@ -966,11 +1254,14 @@ export async function copyClonedFileObjects(opts: {
  */
 export async function listSandboxS3VersionIds(sandboxOrgId: string): Promise<string[]> {
   const org = assertUuid(sandboxOrgId);
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select fv.id as id
       from file_versions fv
       join files f on f.id = fv.file_id
      where f.org_id = ${org} and fv.storage_kind = 's3'
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.id);
 }

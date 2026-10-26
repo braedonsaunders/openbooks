@@ -25,10 +25,16 @@ async function seedDueId(org: Org, actorId: string, value: string): Promise<stri
   return id;
 }
 
-async function readRow(org: Org, id: string): Promise<{ status: string; revalidateAfter: string | null }> {
-  const rows = await db.execute<{ status: string; revalidateAfter: string | null }>(sql`
+async function readRow(
+  org: Org,
+  id: string,
+): Promise<{ status: string; revalidateAfter: string | null }> {
+  const rows = await db.execute<{ status: string; revalidateAfter: string | null }>(
+    sql`
       select status, revalidate_after::text as "revalidateAfter" from party_tax_ids
-       where org_id = ${org.orgId} and id = ${id}`, "objects");
+       where org_id = ${org.orgId} and id = ${id}`,
+    "objects",
+  );
   return { status: rows[0]!.status, revalidateAfter: rows[0]!.revalidateAfter };
 }
 
@@ -38,12 +44,20 @@ test("due IDs revalidate and outages mark unverified without flipping", { skip: 
     const actorId = await createScratchUser(org.orgId, "Tax Controller", "admin");
     const goodId = await seedDueId(org, actorId, "DE123456789");
     const outageId = await seedDueId(org, actorId, "FR123456789");
-    const mixed = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const mixed = (async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
       const body =
         typeof init?.body === "string" ? (JSON.parse(init.body) as { countryCode?: string }) : {};
       if (body.countryCode === "DE") {
         return new Response(
-          JSON.stringify({ countryCode: "DE", vatNumber: "123456789", valid: true, consultationNumber: "W9" }),
+          JSON.stringify({
+            countryCode: "DE",
+            vatNumber: "123456789",
+            valid: true,
+            consultationNumber: "W9",
+          }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }

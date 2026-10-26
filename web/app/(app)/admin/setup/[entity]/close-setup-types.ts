@@ -219,8 +219,7 @@ export interface PackageDraft extends Record<string, unknown> {
   isDefault: boolean;
   isActive: boolean;
 }
-export type ConfigListKey =
-  "calendar" | "blueprint" | "policy" | "automation" | "package";
+export type ConfigListKey = "calendar" | "blueprint" | "policy" | "automation" | "package";
 export type ConfigListMeta = { page: number; total: number };
 export type Props = {
   currentParams: Record<string, string | string[] | undefined>;

@@ -1,7 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
 const production = process.env.E2E_PRODUCTION === "1";
-const baseURL = process.env.E2E_BASE_URL ?? (production ? "https://localhost:4780" : "http://localhost:4780");
+const baseURL =
+  process.env.E2E_BASE_URL ?? (production ? "https://localhost:4780" : "http://localhost:4780");
 
 /**
  * Browser smoke suite for the app shell. CI builds the standalone app and

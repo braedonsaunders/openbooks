@@ -1,23 +1,22 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { createTranslator } from 'next-intl'
-import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createTranslator } from "next-intl";
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config";
 
-const { stubModules } = await import('../../../../testing/stub-modules')
+const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({
-  navigation:
-    `export function usePathname(){return '/reports/aging'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
+  navigation: `export function usePathname(){return '/reports/aging'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
   intl: false,
   authz: false,
   features: false,
-})
+});
 
-const React = await import('react')
+const React = await import("react");
 // Classic-JSX fallback: the shared tsx cache can serve a classic transform,
 // which resolves bare React from the global scope, not the module scope.
-Object.assign(globalThis, { React })
-const { renderToString } = await import('react-dom/server')
-const { PartyLinkCell } = await import('./sections.tsx')
+Object.assign(globalThis, { React });
+const { renderToString } = await import("react-dom/server");
+const { PartyLinkCell } = await import("./sections.tsx");
 
 /**
  * synthetic opening-balance JE lines render as bare no-party amounts
@@ -27,96 +26,118 @@ const { PartyLinkCell } = await import('./sections.tsx')
  * a genuine control break), and the partners drill opens the JE lines
  * behind the row under a provenance title. Totals are untouched.
  */
-test('partyless aging cell names the missing counterparty', () => {
+test("partyless aging cell names the missing counterparty", () => {
   const html = renderToString(
     React.createElement(PartyLinkCell, {
       partyId: null,
-      partyName: '(no party)',
-      href: '/reports/statements/null?side=ar',
-      note: 'No counterparty recorded — for example an opening-balance journal.',
+      partyName: "(no party)",
+      href: "/reports/statements/null?side=ar",
+      note: "No counterparty recorded — for example an opening-balance journal.",
     }),
-  )
-  assert.ok(html.includes('(no party)'), 'the established placeholder stays')
-  assert.ok(html.includes('No counterparty recorded'), 'provenance renders beside the placeholder')
-  assert.ok(!html.includes('href='), 'no statement link for a partyless row')
-})
+  );
+  assert.ok(html.includes("(no party)"), "the established placeholder stays");
+  assert.ok(html.includes("No counterparty recorded"), "provenance renders beside the placeholder");
+  assert.ok(!html.includes("href="), "no statement link for a partyless row");
+});
 
-test('named party cell links with no provenance note', () => {
+test("named party cell links with no provenance note", () => {
   const html = renderToString(
     React.createElement(PartyLinkCell, {
-      partyId: 'p1',
-      partyName: 'Acme',
-      href: '/reports/statements/p1?side=ar',
+      partyId: "p1",
+      partyName: "Acme",
+      href: "/reports/statements/p1?side=ar",
       note: null,
     }),
-  )
-  assert.ok(html.includes('Acme'), 'the party name renders')
-  assert.ok(!html.includes('No counterparty recorded'), 'no provenance on named rows')
-})
+  );
+  assert.ok(html.includes("Acme"), "the party name renders");
+  assert.ok(!html.includes("No counterparty recorded"), "no provenance on named rows");
+});
 
-test('provenance copy is translated in every locale', async () => {
-  const en = (await import('../../../../messages/en/index.ts')).default as Record<string, unknown>
-  const enAging = createTranslator({ locale: 'en', namespace: 'reports', messages: en as never } as never) as unknown as (
-    lookup: string,
-  ) => string
+test("provenance copy is translated in every locale", async () => {
+  const en = (await import("../../../../messages/en/index.ts")).default as Record<string, unknown>;
+  const enAging = createTranslator({
+    locale: "en",
+    namespace: "reports",
+    messages: en as never,
+  } as never) as unknown as (lookup: string) => string;
   assert.equal(
-    enAging('aging.noPartyNote'),
-    'No counterparty recorded — for example an opening-balance journal.',
-  )
-  assert.equal(enAging('partners.noPartyDrillLabel'), 'Control-account lines with no counterparty')
+    enAging("aging.noPartyNote"),
+    "No counterparty recorded — for example an opening-balance journal.",
+  );
+  assert.equal(enAging("partners.noPartyDrillLabel"), "Control-account lines with no counterparty");
   for (const locale of LOCALES) {
-    const messages = (await import(`../../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
-    const t = createTranslator({ locale, namespace: 'reports', messages: messages as never } as never) as unknown as (
-      lookup: string,
-    ) => string
-    for (const key of ['aging.noPartyNote', 'partners.noPartyDrillLabel']) {
-      let rendered: string
+    const messages = (await import(`../../../../messages/${locale}/index.ts`)).default as Record<
+      string,
+      unknown
+    >;
+    const t = createTranslator({
+      locale,
+      namespace: "reports",
+      messages: messages as never,
+    } as never) as unknown as (lookup: string) => string;
+    for (const key of ["aging.noPartyNote", "partners.noPartyDrillLabel"]) {
+      let rendered: string;
       try {
-        rendered = t(key)
+        rendered = t(key);
       } catch (error) {
-        assert.fail(`${key} misses in the ${locale} catalog: ${String(error)}`)
+        assert.fail(`${key} misses in the ${locale} catalog: ${String(error)}`);
       }
-      const leaf = key.split('.').pop()!
+      const leaf = key.split(".").pop()!;
       assert.ok(
-        typeof rendered === 'string' && rendered.length > 0 && !rendered.includes(leaf),
+        typeof rendered === "string" && rendered.length > 0 && !rendered.includes(leaf),
         `${key} must render translated text in ${locale}, got ${JSON.stringify(rendered)}`,
-      )
-      if (locale !== 'en') {
-        assert.notEqual(rendered, enAging(key), `${locale} must localize ${key}`)
+      );
+      if (locale !== "en") {
+        assert.notEqual(rendered, enAging(key), `${locale} must localize ${key}`);
       }
     }
   }
-})
+});
 
 /**
  * The reconciling line and the overdue-push assumption are read by people who
  * decide on the cash position, so every locale states them in its own words.
  * The check reads the raw catalog entries (ICU plurals need values to render).
  */
-test('reconciling-line and overdue-push copy is localized in every locale', async () => {
+test("reconciling-line and overdue-push copy is localized in every locale", async () => {
   const keys: [string, string][] = [
-    ['reports', 'aging.controlEntries.label'],
-    ['reports', 'aging.controlEntries.hint'],
-    ['reports', 'aging.controlEntries.more'],
-    ['analytics', 'cashWeek.methods.pushedAssumption'],
-    ['analytics', 'cashWeek.overduePush.assumption'],
-    ['analytics', 'cashWeek.overduePush.basis'],
-    ['analytics', 'cashWeek.overduePush.basisSameAge'],
-    ['ar', 'cockpit.worklist.overduePush.assumption'],
-    ['ar', 'cockpit.worklist.overduePush.basis'],
-    ['ar', 'cockpit.worklist.overduePush.basisSameAge'],
-  ]
+    ["reports", "aging.controlEntries.label"],
+    ["reports", "aging.controlEntries.hint"],
+    ["reports", "aging.controlEntries.more"],
+    ["analytics", "cashWeek.methods.pushedAssumption"],
+    ["analytics", "cashWeek.overduePush.assumption"],
+    ["analytics", "cashWeek.overduePush.basis"],
+    ["analytics", "cashWeek.overduePush.basisSameAge"],
+    ["ar", "cockpit.worklist.overduePush.assumption"],
+    ["ar", "cockpit.worklist.overduePush.basis"],
+    ["ar", "cockpit.worklist.overduePush.basisSameAge"],
+  ];
   const read = (messages: Record<string, unknown>, namespace: string, key: string): unknown =>
-    `${namespace}.${key}`.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], messages)
-  const en = (await import('../../../../messages/en/index.ts')).default as Record<string, unknown>
+    `${namespace}.${key}`
+      .split(".")
+      .reduce<unknown>(
+        (node, part) => (node as Record<string, unknown> | undefined)?.[part],
+        messages,
+      );
+  const en = (await import("../../../../messages/en/index.ts")).default as Record<string, unknown>;
   for (const locale of LOCALES) {
-    const messages = (await import(`../../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
+    const messages = (await import(`../../../../messages/${locale}/index.ts`)).default as Record<
+      string,
+      unknown
+    >;
     for (const [namespace, key] of keys) {
-      const rendered = read(messages, namespace, key)
-      assert.ok(typeof rendered === 'string' && rendered.length > 0, `${namespace}.${key} must exist in ${locale}`)
-      if (locale !== 'en') {
-        assert.notEqual(rendered, read(en, namespace, key), `${locale} must localize ${namespace}.${key}`)
+      const rendered = read(messages, namespace, key);
+      assert.ok(
+        typeof rendered === "string" && rendered.length > 0,
+        `${namespace}.${key} must exist in ${locale}`,
+      );
+      if (locale !== "en") {
+        assert.notEqual(
+          rendered,
+          read(en, namespace, key),
+          `${locale} must localize ${namespace}.${key}`,
+        );
       }
     }
   }
-})
+});

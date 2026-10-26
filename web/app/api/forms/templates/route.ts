@@ -11,7 +11,11 @@ export const runtime = "nodejs";
 
 const KEY_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 const postBodySchema0 = z.strictObject({
-  key: z.string().trim().toLowerCase().regex(KEY_RE, "key must be 2–64 chars: lowercase letters, numbers, hyphens"),
+  key: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(KEY_RE, "key must be 2–64 chars: lowercase letters, numbers, hyphens"),
   name: z.string().trim().min(1, "name is required").max(200),
   kind: z.enum(["form", "wizard", "checklist", "register"]).optional(),
   category: z.string().trim().max(120).nullable().optional(),
@@ -27,7 +31,8 @@ export const GET = defineRoute({
   handler: async ({ authz: gate }) => {
     const { user } = gate;
 
-    const r = await db.execute(sql`
+    const r = await db.execute(
+      sql`
     select t.id, t.key, t.name, t.category, t.description, t.status, t.kind,
            t.allowed_roles, t.updated_at,
            v.max_version, v.version_count, v.published_version,
@@ -45,7 +50,9 @@ export const GET = defineRoute({
       ) rc on true
      where t.org_id = ${user.orgId}
      order by t.status = 'archived', t.name
-  `, "objects");
+  `,
+      "objects",
+    );
 
     return NextResponse.json({ templates: r });
   },
@@ -73,17 +80,23 @@ export const POST = defineRoute({
     // write fails, and concurrent creators can both pass the dupe check.
     try {
       const outcome = await db.transaction(async (tx) => {
-        const dupe = await tx.execute(sql`
+        const dupe = await tx.execute(
+          sql`
         select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
-      `, "objects");
+      `,
+          "objects",
+        );
         if (dupe.length > 0) return { kind: "dupe" as const };
 
-        const inserted = await tx.execute<{ id: string }>(sql`
+        const inserted = await tx.execute<{ id: string }>(
+          sql`
         insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
         values (${user.orgId}, ${key}, ${name}, ${category?.trim() || null},
                 ${description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
         returning id
-      `, "objects");
+      `,
+          "objects",
+        );
         const templateId = inserted[0]!.id;
 
         await tx.execute(sql`
@@ -110,10 +123,7 @@ export const POST = defineRoute({
           { status: 409 },
         );
       }
-      return NextResponse.json(
-        { id: outcome.templateId, key },
-        { status: 201 },
-      );
+      return NextResponse.json({ id: outcome.templateId, key }, { status: 201 });
     } catch (e) {
       // The in-transaction dupe check loses to a concurrent creator; the
       // unique index is the arbiter and its violation is the same 409.

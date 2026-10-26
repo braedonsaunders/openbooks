@@ -14,7 +14,8 @@ const { entityListSource } = await import("./entity-sources.ts");
 
 const catalog = (locale: string): Record<string, string> => {
   const raw = readFileSync(new URL(`../../messages/${locale}/crm.json`, import.meta.url), "utf8");
-  return (JSON.parse(raw) as { opportunities: { statuses: Record<string, string> } }).opportunities.statuses;
+  return (JSON.parse(raw) as { opportunities: { statuses: Record<string, string> } }).opportunities
+    .statuses;
 };
 const lookup = (locale: string) => {
   const statuses = catalog(locale);
@@ -32,10 +33,26 @@ test("Opportunity list statuses translate seeded names", () => {
   assert.equal(source.statusFilterKey, "status_id", "status picker filter is identified");
   assert.equal(typeof source.statusDisplayName, "function", "source carries a status display hook");
   const display = source.statusDisplayName!;
-  assert.equal(display("Closed lost", lookup("fr")), catalog("fr")["closedLost"], "fr seed renders through the catalog");
-  assert.equal(display("Closed lost", lookup("es")), catalog("es")["closedLost"], "es seed renders through the catalog");
-  assert.equal(display("Closed lost", lookup("en")), catalog("en")["closedLost"], "en seed renders through the catalog");
-  assert.equal(display("My Custom Pipe", lookup("fr")), "My Custom Pipe", "tenant renames keep their stored name");
+  assert.equal(
+    display("Closed lost", lookup("fr")),
+    catalog("fr")["closedLost"],
+    "fr seed renders through the catalog",
+  );
+  assert.equal(
+    display("Closed lost", lookup("es")),
+    catalog("es")["closedLost"],
+    "es seed renders through the catalog",
+  );
+  assert.equal(
+    display("Closed lost", lookup("en")),
+    catalog("en")["closedLost"],
+    "en seed renders through the catalog",
+  );
+  assert.equal(
+    display("My Custom Pipe", lookup("fr")),
+    "My Custom Pipe",
+    "tenant renames keep their stored name",
+  );
   assert.equal(
     display("Closed lost", (fullKey) => fullKey),
     "Closed lost",

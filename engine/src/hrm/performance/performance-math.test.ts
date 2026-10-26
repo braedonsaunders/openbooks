@@ -31,17 +31,33 @@ test("parseRatingScale refuses malformed scales by name", () => {
   // One row per malformed shape; every row keeps its own message patterns —
   // the message is the product of the refusal, so no two rows share asserts.
   const cases: { name: string; input: unknown; patterns: RegExp[] }[] = [
-    { name: "inverted", input: { min: 5, max: 1 }, patterns: [/inverted/, /min 5 is not below max 1/] },
-    { name: "missing", input: null, patterns: [/no readable rating scale/, /before opening the cycle/] },
+    {
+      name: "inverted",
+      input: { min: 5, max: 1 },
+      patterns: [/inverted/, /min 5 is not below max 1/],
+    },
+    {
+      name: "missing",
+      input: null,
+      patterns: [/no readable rating scale/, /before opening the cycle/],
+    },
     { name: "wide span", input: { min: 0, max: 100 }, patterns: [/more than 99 points/] },
-    { name: "non-string labels", input: { min: 1, max: 5, labels: ["ok", 3] }, patterns: [/labels must be an array of strings/] },
+    {
+      name: "non-string labels",
+      input: { min: 1, max: 5, labels: ["ok", 3] },
+      patterns: [/labels must be an array of strings/],
+    },
   ];
   for (const { name, input, patterns } of cases) {
-    assert.throws(() => parseRatingScale(input), (e: unknown) => {
-      assert.ok(e instanceof PerformanceMathError, `${name} refuses as PerformanceMathError`);
-      for (const pattern of patterns) assert.match(e.message, pattern, `${name} names its remedy`);
-      return true;
-    });
+    assert.throws(
+      () => parseRatingScale(input),
+      (e: unknown) => {
+        assert.ok(e instanceof PerformanceMathError, `${name} refuses as PerformanceMathError`);
+        for (const pattern of patterns)
+          assert.match(e.message, pattern, `${name} names its remedy`);
+        return true;
+      },
+    );
   }
 });
 
@@ -54,21 +70,27 @@ test("assertRatingInScale accepts the inclusive bounds", () => {
 
 test("assertRatingInScale names the question outside the scale", () => {
   const scale = parseRatingScale({ min: 1, max: 5, labels: [] });
-  assert.throws(() => assertRatingInScale(scale, "6", "Customer impact"), (e: unknown) => {
-    assert.ok(e instanceof PerformanceMathError);
-    assert.match(e.message, /"Customer impact"/);
-    assert.match(e.message, /outside the template scale 1 to 5/);
-    return true;
-  });
+  assert.throws(
+    () => assertRatingInScale(scale, "6", "Customer impact"),
+    (e: unknown) => {
+      assert.ok(e instanceof PerformanceMathError);
+      assert.match(e.message, /"Customer impact"/);
+      assert.match(e.message, /outside the template scale 1 to 5/);
+      return true;
+    },
+  );
 });
 
 test("assertRatingInScale refuses a non-decimal rating", () => {
   const scale = parseRatingScale({ min: 1, max: 5, labels: [] });
-  assert.throws(() => assertRatingInScale(scale, "excellent", "Impact"), (e: unknown) => {
-    assert.ok(e instanceof PerformanceMathError);
-    assert.match(e.message, /must be a decimal rating/);
-    return true;
-  });
+  assert.throws(
+    () => assertRatingInScale(scale, "excellent", "Impact"),
+    (e: unknown) => {
+      assert.ok(e instanceof PerformanceMathError);
+      assert.match(e.message, /must be a decimal rating/);
+      return true;
+    },
+  );
 });
 
 test("rating values beyond the persisted four-decimal scale are refused instead of truncated", () => {
@@ -87,11 +109,14 @@ test("assertProgressPercent accepts 0 and 100 and refuses the rest", () => {
   assert.equal(assertProgressPercent(0), 0);
   assert.equal(assertProgressPercent(100), 100);
   for (const bad of [-1, 101, 12.5, "50", null]) {
-    assert.throws(() => assertProgressPercent(bad), (e: unknown) => {
-      assert.ok(e instanceof PerformanceMathError);
-      assert.match(e.message, /whole percent from 0 to 100/);
-      return true;
-    });
+    assert.throws(
+      () => assertProgressPercent(bad),
+      (e: unknown) => {
+        assert.ok(e instanceof PerformanceMathError);
+        assert.match(e.message, /whole percent from 0 to 100/);
+        return true;
+      },
+    );
   }
 });
 
@@ -101,19 +126,28 @@ test("parseAppliesScope reads the two slots and refuses unknown keys", () => {
     employerSubsidiaryId: "s1",
     departmentId: null,
   });
-  assert.throws(() => parseAppliesScope({ region: "x" }), (e: unknown) => {
-    assert.ok(e instanceof PerformanceMathError);
-    assert.match(e.message, /unknown key "region"/);
-    return true;
-  });
+  assert.throws(
+    () => parseAppliesScope({ region: "x" }),
+    (e: unknown) => {
+      assert.ok(e instanceof PerformanceMathError);
+      assert.match(e.message, /unknown key "region"/);
+      return true;
+    },
+  );
 });
 
 test("scopeMatchesEmployment filters by the set slots only", () => {
   const all = parseAppliesScope({});
   assert.equal(scopeMatchesEmployment(all, { employerSubsidiaryId: "s", departmentId: "d" }), true);
   const scoped = parseAppliesScope({ employer_subsidiary_id: "s", department_id: null });
-  assert.equal(scopeMatchesEmployment(scoped, { employerSubsidiaryId: "s", departmentId: "d" }), true);
-  assert.equal(scopeMatchesEmployment(scoped, { employerSubsidiaryId: "t", departmentId: "d" }), false);
+  assert.equal(
+    scopeMatchesEmployment(scoped, { employerSubsidiaryId: "s", departmentId: "d" }),
+    true,
+  );
+  assert.equal(
+    scopeMatchesEmployment(scoped, { employerSubsidiaryId: "t", departmentId: "d" }),
+    false,
+  );
 });
 
 test("parseCivilDay refuses non-dates", () => {

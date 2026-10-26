@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
-import { StartCloseButton } from './StartCloseButton'
+import Link from "next/link";
+import { Badge } from "@openbooks/ui";
+import { StartCloseButton } from "./StartCloseButton";
 
 /**
  * Composite cells in the period close list.
@@ -19,7 +19,7 @@ export function SingleBookLabel({ label, name }: { label: string; name: string }
       <span className="text-slate-500 dark:text-slate-400">{label}:</span>
       <span className="truncate font-semibold">{name}</span>
     </div>
-  )
+  );
 }
 
 /** The readiness bar beside its percentage. */
@@ -31,7 +31,7 @@ export function CloseReadinessCell({ readiness }: { readiness: number }) {
       </div>
       <span className="text-xs tabular-nums text-slate-500">{readiness}%</span>
     </div>
-  )
+  );
 }
 
 /**
@@ -45,9 +45,9 @@ export function CloseStatusCell({
   statusVariant,
   lockLabel,
 }: {
-  statusLabel: string
-  statusVariant: 'success' | 'warning' | 'outline'
-  lockLabel: string | null
+  statusLabel: string;
+  statusVariant: "success" | "warning" | "outline";
+  lockLabel: string | null;
 }) {
   return (
     <div className="flex flex-col items-start gap-1">
@@ -56,7 +56,7 @@ export function CloseStatusCell({
         <span className="text-xs text-slate-500 dark:text-slate-400">{lockLabel}</span>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -74,20 +74,20 @@ export function CloseActionCell({
   startBooks,
   startDefaultBookId,
 }: {
-  actionHref: string | null
-  actionLabel: string
-  actionLinkClassName: string
-  canStart: boolean
-  startPeriodId: string
-  startBooks: { id: string; name: string }[]
-  startDefaultBookId: string
+  actionHref: string | null;
+  actionLabel: string;
+  actionLinkClassName: string;
+  canStart: boolean;
+  startPeriodId: string;
+  startBooks: { id: string; name: string }[];
+  startDefaultBookId: string;
 }) {
   if (actionHref) {
     return (
       <Link className={actionLinkClassName} href={actionHref as never}>
         {actionLabel}
       </Link>
-    )
+    );
   }
   if (canStart) {
     return (
@@ -96,7 +96,7 @@ export function CloseActionCell({
         books={startBooks}
         defaultBookId={startDefaultBookId}
       />
-    )
+    );
   }
-  return <>—</>
+  return <>—</>;
 }

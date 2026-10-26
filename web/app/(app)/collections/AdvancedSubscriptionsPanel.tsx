@@ -27,7 +27,7 @@ import { useMoney } from "@/components/money-provider";
 import { fetchAction } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../lib/use-app-action";
 import { amendmentRequestPayload } from "./amendment-payload";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 type BasePlan = {
   id: string;
@@ -159,19 +159,12 @@ export function AdvancedSubscriptionsPanel({
   // response), never synchronously in the effect body. Memoized on the
   // catalog text so the mount effect below stays single-shot per locale.
   const load = useCallback(() => {
-    return Promise.all([
-      fetch("/api/subscriptions"),
-      fetch("/api/subscriptions/advanced"),
-    ])
+    return Promise.all([fetch("/api/subscriptions"), fetch("/api/subscriptions/advanced")])
       .then(async ([baseResponse, advancedResponse]) => {
         if (!baseResponse.ok)
-          throw new Error(
-            await readApiErrorMessage(baseResponse, t("loadFailed")),
-          );
+          throw new Error(await readApiErrorMessage(baseResponse, t("loadFailed")));
         if (!advancedResponse.ok)
-          throw new Error(
-            await readApiErrorMessage(advancedResponse, t("loadFailed")),
-          );
+          throw new Error(await readApiErrorMessage(advancedResponse, t("loadFailed")));
         setError(null);
         return Promise.all([baseResponse.json(), advancedResponse.json()]).then(
           ([base, advanced]) => {
@@ -184,11 +177,7 @@ export function AdvancedSubscriptionsPanel({
         );
       })
       .catch((loadError: unknown) => {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : t("loadFailedFallback"),
-        );
+        setError(loadError instanceof Error ? loadError.message : t("loadFailedFallback"));
       })
       .finally(() => {
         setLoading(false);
@@ -204,21 +193,17 @@ export function AdvancedSubscriptionsPanel({
     let body: Record<string, unknown> | null = null;
     const ok = await action.execute(
       async () => {
-        const result = await fetchAction<Record<string, unknown>>(
-          "/api/subscriptions/advanced",
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload),
-          },
-        );
+        const result = await fetchAction<Record<string, unknown>>("/api/subscriptions/advanced", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
         if (result.ok) body = result.data ?? {};
         return result;
       },
       {
         fallbackMessage: tErrors("actionFailed"),
-        onRefused: (refusal) =>
-          setError(refusal.displayMessage(tErrors("actionFailed"))),
+        onRefused: (refusal) => setError(refusal.displayMessage(tErrors("actionFailed"))),
         onOk: () => {
           void load();
         },
@@ -231,25 +216,17 @@ export function AdvancedSubscriptionsPanel({
     () => new Set(lifecycles.map((row) => row.subscriptionId)),
     [lifecycles],
   );
-  const selectedSubscription = subscriptions.find(
-    (row) => row.id === lifecycleForm.subscriptionId,
-  );
+  const selectedSubscription = subscriptions.find((row) => row.id === lifecycleForm.subscriptionId);
   const eligibleVersions = versions.filter(
     (row) =>
       row.status === "published" &&
       (!selectedSubscription || row.planId === selectedSubscription.planId),
   );
-  const amendmentSubscription = subscriptions.find(
-    (row) => row.id === amendForm.subscriptionId,
-  );
+  const amendmentSubscription = subscriptions.find((row) => row.id === amendForm.subscriptionId);
 
   /** Stored timing/renewal enums render through the catalog; unknown values stay raw. */
   const timingLabel = (value: string) =>
-    value === "advance"
-      ? t("timingAdvance")
-      : value === "arrears"
-        ? t("timingArrears")
-        : value;
+    value === "advance" ? t("timingAdvance") : value === "arrears" ? t("timingArrears") : value;
   const renewalLabel = (value: string) =>
     value === "auto"
       ? t("renewalAuto")
@@ -295,9 +272,7 @@ export function AdvancedSubscriptionsPanel({
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">{t("catalogTitle")}</h3>
-              <p className="text-xs text-muted-foreground">
-                {t("catalogDescription")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("catalogDescription")}</p>
             </div>
             <Badge variant="secondary">
               {t("publishedCount", {
@@ -319,11 +294,7 @@ export function AdvancedSubscriptionsPanel({
                 cell: (version) => (
                   <>
                     <span className="font-medium">{version.name}</span>{" "}
-                    <Badge
-                      variant={
-                        version.status === "published" ? "default" : "secondary"
-                      }
-                    >
+                    <Badge variant={version.status === "published" ? "default" : "secondary"}>
                       v{version.versionNumber} {version.status}
                     </Badge>
                   </>
@@ -343,9 +314,7 @@ export function AdvancedSubscriptionsPanel({
               {
                 key: "components",
                 header: <>{t("colComponents")}</>,
-                cell: (version) => (
-                  <>{version.components.map((c) => c.name).join(", ")}</>
-                ),
+                cell: (version) => <>{version.components.map((c) => c.name).join(", ")}</>,
               },
               {
                 key: "actions",
@@ -356,9 +325,7 @@ export function AdvancedSubscriptionsPanel({
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() =>
-                        setEntVersion({ id: version.id, name: version.name })
-                      }
+                      onClick={() => setEntVersion({ id: version.id, name: version.name })}
                     >
                       {et("versionTitle")}
                     </Button>
@@ -435,9 +402,7 @@ export function AdvancedSubscriptionsPanel({
                   <Select
                     searchable
                     value={versionForm.planId}
-                    onChange={(e) =>
-                      setVersionForm({ ...versionForm, planId: e.target.value })
-                    }
+                    onChange={(e) => setVersionForm({ ...versionForm, planId: e.target.value })}
                   >
                     <option value="">{t("choosePlan")}</option>
                     {plans
@@ -505,9 +470,7 @@ export function AdvancedSubscriptionsPanel({
                         onClick={() =>
                           setVersionForm({
                             ...versionForm,
-                            components: versionForm.components.filter(
-                              (_, i) => i !== index,
-                            ),
+                            components: versionForm.components.filter((_, i) => i !== index),
                           })
                         }
                       >
@@ -537,9 +500,7 @@ export function AdvancedSubscriptionsPanel({
                           setVersionForm({
                             ...versionForm,
                             components: versionForm.components.map((c, i) =>
-                              i === index
-                                ? { ...c, componentKey: e.target.value }
-                                : c,
+                              i === index ? { ...c, componentKey: e.target.value } : c,
                             ),
                           })
                         }
@@ -553,9 +514,7 @@ export function AdvancedSubscriptionsPanel({
                           setVersionForm({
                             ...versionForm,
                             components: versionForm.components.map((c, i) =>
-                              i === index
-                                ? { ...c, quantity: e.target.value }
-                                : c,
+                              i === index ? { ...c, quantity: e.target.value } : c,
                             ),
                           })
                         }
@@ -569,9 +528,7 @@ export function AdvancedSubscriptionsPanel({
                           setVersionForm({
                             ...versionForm,
                             components: versionForm.components.map((c, i) =>
-                              i === index
-                                ? { ...c, unitPrice: e.target.value }
-                                : c,
+                              i === index ? { ...c, unitPrice: e.target.value } : c,
                             ),
                           })
                         }
@@ -617,18 +574,17 @@ export function AdvancedSubscriptionsPanel({
                 key: "customer",
                 header: t("customerFallback"),
                 search: (l) =>
-                  subscriptions.find((s) => s.id === l.subscriptionId)
-                    ?.customerName ?? "",
+                  subscriptions.find((s) => s.id === l.subscriptionId)?.customerName ?? "",
                 cell: (l) =>
-                  subscriptions.find((s) => s.id === l.subscriptionId)
-                    ?.customerName ?? t("customerFallback"),
+                  subscriptions.find((s) => s.id === l.subscriptionId)?.customerName ??
+                  t("customerFallback"),
               },
               {
                 key: "plan",
                 header: t("basePlan"),
                 cell: (l) =>
-                  subscriptions.find((s) => s.id === l.subscriptionId)
-                    ?.planName ?? t("subscriptionFallback"),
+                  subscriptions.find((s) => s.id === l.subscriptionId)?.planName ??
+                  t("subscriptionFallback"),
               },
               {
                 key: "revision",
@@ -681,8 +637,8 @@ export function AdvancedSubscriptionsPanel({
                       setEntSub({
                         id: l.subscriptionId,
                         label:
-                          subscriptions.find((s) => s.id === l.subscriptionId)
-                            ?.customerName ?? t("customerFallback"),
+                          subscriptions.find((s) => s.id === l.subscriptionId)?.customerName ??
+                          t("customerFallback"),
                       })
                     }
                   >
@@ -699,11 +655,7 @@ export function AdvancedSubscriptionsPanel({
             size="xl"
             headerActions={
               <Button
-                disabled={
-                  busy ||
-                  !lifecycleForm.subscriptionId ||
-                  !lifecycleForm.planVersionId
-                }
+                disabled={busy || !lifecycleForm.subscriptionId || !lifecycleForm.planVersionId}
                 onClick={async () => {
                   if (
                     await post({
@@ -750,14 +702,10 @@ export function AdvancedSubscriptionsPanel({
                   >
                     <option value="">{t("choose")}</option>
                     {subscriptions
-                      .filter(
-                        (s) =>
-                          !lifecycleIds.has(s.id) && s.status !== "canceled",
-                      )
+                      .filter((s) => !lifecycleIds.has(s.id) && s.status !== "canceled")
                       .map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.customerName ?? t("customerFallback")} ·{" "}
-                          {s.planName}
+                          {s.customerName ?? t("customerFallback")} · {s.planName}
                         </option>
                       ))}
                   </Select>
@@ -882,8 +830,8 @@ export function AdvancedSubscriptionsPanel({
                 header: <>{t("colSubscription")}</>,
                 cell: (a) => (
                   <>
-                    {subscriptions.find((s) => s.id === a.subscriptionId)
-                      ?.planName ?? t("subscriptionFallback")}
+                    {subscriptions.find((s) => s.id === a.subscriptionId)?.planName ??
+                      t("subscriptionFallback")}
                   </>
                 ),
               },
@@ -924,9 +872,7 @@ export function AdvancedSubscriptionsPanel({
                     ...amendmentRequestPayload(amendForm),
                     action: "amend",
                     idempotencyKey: crypto.randomUUID(),
-                    renewalTermMonths: Number(
-                      amendForm.renewalTermMonths || 12,
-                    ),
+                    renewalTermMonths: Number(amendForm.renewalTermMonths || 12),
                   });
                   if (result) {
                     onClose();
@@ -969,24 +915,18 @@ export function AdvancedSubscriptionsPanel({
                         .map((s) => {
                           const hasContract = lifecycleIds.has(s.id);
                           return (
-                            <option
-                              key={s.id}
-                              value={s.id}
-                              disabled={!hasContract}
-                            >
-                              {s.customerName ?? t("customerFallback")} ·{" "}
-                              {s.planName}
+                            <option key={s.id} value={s.id} disabled={!hasContract}>
+                              {s.customerName ?? t("customerFallback")} · {s.planName}
                               {hasContract ? "" : ` · ${t("noContractSuffix")}`}
                             </option>
                           );
                         })}
                     </Select>
-                    {amendmentSubscription &&
-                      !lifecycleIds.has(amendmentSubscription.id) && (
-                        <p role="note" className="mt-2 text-sm text-muted-foreground">
-                          {t("amendNeedsContract")}
-                        </p>
-                      )}
+                    {amendmentSubscription && !lifecycleIds.has(amendmentSubscription.id) && (
+                      <p role="note" className="mt-2 text-sm text-muted-foreground">
+                        {t("amendNeedsContract")}
+                      </p>
+                    )}
                   </Field>
                   <Field label={t("change")}>
                     <Select
@@ -1006,12 +946,8 @@ export function AdvancedSubscriptionsPanel({
                       }
                     >
                       <option value="add_component">{t("changeAdd")}</option>
-                      <option value="change_component">
-                        {t("changeChange")}
-                      </option>
-                      <option value="remove_component">
-                        {t("changeRemove")}
-                      </option>
+                      <option value="change_component">{t("changeChange")}</option>
+                      <option value="remove_component">{t("changeRemove")}</option>
                       <option value="change_term">{t("changeTerm")}</option>
                       <option value="change_timing">{t("changeTiming")}</option>
                       <option value="renew">{t("changeRenew")}</option>
@@ -1033,9 +969,7 @@ export function AdvancedSubscriptionsPanel({
                   <Field label={t("reason")}>
                     <Input
                       value={amendForm.reason}
-                      onChange={(e) =>
-                        setAmendForm({ ...amendForm, reason: e.target.value })
-                      }
+                      onChange={(e) => setAmendForm({ ...amendForm, reason: e.target.value })}
                     />
                   </Field>
                 </div>
@@ -1043,11 +977,9 @@ export function AdvancedSubscriptionsPanel({
               <InspectorPanel title={changeTypeLabel(amendForm.type)}>
                 <div className="grid gap-5 sm:grid-cols-2">
                   {" "}
-                  {[
-                    "add_component",
-                    "change_component",
-                    "remove_component",
-                  ].includes(amendForm.type) && (
+                  {["add_component", "change_component", "remove_component"].includes(
+                    amendForm.type,
+                  ) && (
                     <>
                       <Field label={t("componentKey")}>
                         <Input
@@ -1199,8 +1131,7 @@ export function AdvancedSubscriptionsPanel({
                               s.id !== amendForm.subscriptionId &&
                               lifecycleIds.has(s.id) &&
                               (!amendmentSubscription ||
-                                s.customerName ===
-                                  amendmentSubscription.customerName),
+                                s.customerName === amendmentSubscription.customerName),
                           )
                           .map((s) => (
                             <option key={s.id} value={s.id}>

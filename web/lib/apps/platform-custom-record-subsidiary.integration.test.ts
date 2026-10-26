@@ -1,53 +1,55 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const { createAppPlatformAdapter } = await import('./platform.ts')
-const { queryAppRecords } = await import('./query.ts')
-const { listRecords: listApplicationRecords, getRecord: getApplicationRecord } = await import('../application/records.ts')
-const { ApplicationError } = await import('../application/errors.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/testing/fixtures',
-)
+const { createAppPlatformAdapter } = await import("./platform.ts");
+const { queryAppRecords } = await import("./query.ts");
+const { listRecords: listApplicationRecords, getRecord: getApplicationRecord } =
+  await import("../application/records.ts");
+const { ApplicationError } = await import("../application/errors.ts");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 test(
-  'restricted platform custom-record reads and writes honor subsidiary_id in JSON data',
+  "restricted platform custom-record reads and writes honor subsidiary_id in JSON data",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const typeKey = `scoped-${randomUUID().replaceAll('-', '').slice(0, 12)}`
+    const typeKey = `scoped-${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const { org, actorId, branchId, visibleId, hiddenId } = await withBypass(async () => {
-      const created = await createScratchOrg()
-      const actor = (await seedFlowActors(created.orgId)).adminId
-      const branch = randomUUID()
-      const typeId = randomUUID()
-      const visible = randomUUID()
-      const hidden = randomUUID()
-      const fields = [{
-        id: 'main',
-        title: 'Details',
-        fields: [
-          { id: 'subsidiary_id', type: 'text', label: 'Subsidiary' },
-          { id: 'title', type: 'text', label: 'Title' },
-        ],
-      }]
+      const created = await createScratchOrg();
+      const actor = (await seedFlowActors(created.orgId)).adminId;
+      const branch = randomUUID();
+      const typeId = randomUUID();
+      const visible = randomUUID();
+      const hidden = randomUUID();
+      const fields = [
+        {
+          id: "main",
+          title: "Details",
+          fields: [
+            { id: "subsidiary_id", type: "text", label: "Subsidiary" },
+            { id: "title", type: "text", label: "Title" },
+          ],
+        },
+      ];
       await db.execute(sql`
         insert into subsidiaries
           (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values
           (${branch}, ${created.orgId}, ${created.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-      `)
+      `);
       await db.execute(sql`
         insert into custom_record_types
           (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
         values
           (${typeId}, ${created.orgId}, ${typeKey}, 'Scoped Record', 'Scoped Records',
            ${JSON.stringify(fields)}::jsonb, 'published', ${actor}, ${actor})
-      `)
+      `);
       for (const [id, subsidiaryId, title] of [
-        [visible, created.subsidiaryId, 'visible'] as const,
-        [hidden, branch, 'hidden'] as const,
+        [visible, created.subsidiaryId, "visible"] as const,
+        [hidden, branch, "hidden"] as const,
       ]) {
         await db.execute(sql`
           insert into custom_records
@@ -56,91 +58,99 @@ test(
             (${id}, ${created.orgId}, ${typeId}, ${typeKey}, ${id},
              ${JSON.stringify({ subsidiary_id: subsidiaryId, title })}::jsonb,
              ${title}, 'active', ${actor}, ${actor})
-        `)
+        `);
       }
-      return { org: created, actorId: actor, branchId: branch, visibleId: visible, hiddenId: hidden }
-    })
+      return {
+        org: created,
+        actorId: actor,
+        branchId: branch,
+        visibleId: visible,
+        hiddenId: hidden,
+      };
+    });
 
     const user = {
       id: actorId,
-      email: 'platform-scope@scratch.test',
-      name: 'Platform Scope Controller',
-      roles: [{ key: 'admin', name: 'Admin' }],
+      email: "platform-scope@scratch.test",
+      name: "Platform Scope Controller",
+      roles: [{ key: "admin", name: "Admin" }],
       orgId: org.orgId,
-      envKind: 'production' as const,
+      envKind: "production" as const,
       productionOrgId: org.orgId,
       isSuperAdmin: false,
       homeUserId: actorId,
       homeOrgId: org.orgId,
-    }
+    };
     const platform = createAppPlatformAdapter({
       orgId: org.orgId,
       user,
-      grantedPermissions: ['records.read', 'records.create'],
+      grantedPermissions: ["records.read", "records.create"],
       userCan: () => true,
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    })
+    });
     try {
       await withOrgContext(org.orgId, async () => {
-        const listed = await platform.list(typeKey, {}) as {
-          records: Array<{ id: string; data: { subsidiary_id: string } }>
-          total: number
-        }
-        assert.equal(listed.total, 1)
-        assert.equal(listed.records[0]?.id, visibleId)
-        assert.equal(listed.records[0]?.data.subsidiary_id, org.subsidiaryId)
+        const listed = (await platform.list(typeKey, {})) as {
+          records: Array<{ id: string; data: { subsidiary_id: string } }>;
+          total: number;
+        };
+        assert.equal(listed.total, 1);
+        assert.equal(listed.records[0]?.id, visibleId);
+        assert.equal(listed.records[0]?.data.subsidiary_id, org.subsidiaryId);
 
-        assert.equal((await platform.get(typeKey, visibleId) as { id: string }).id, visibleId)
-        assert.equal(await platform.get(typeKey, hiddenId), null)
+        assert.equal(((await platform.get(typeKey, visibleId)) as { id: string }).id, visibleId);
+        assert.equal(await platform.get(typeKey, hiddenId), null);
 
         await assert.rejects(
-          platform.create(typeKey, { data: { subsidiary_id: branchId, title: 'smuggled' } }),
+          platform.create(typeKey, { data: { subsidiary_id: branchId, title: "smuggled" } }),
           /outside the caller subsidiary scope/,
-        )
+        );
         await assert.rejects(
-          platform.update(typeKey, hiddenId, { data: { title: 'smuggled' } }),
+          platform.update(typeKey, hiddenId, { data: { title: "smuggled" } }),
           /outside the caller subsidiary scope/,
-        )
-      })
+        );
+      });
     } finally {
-      await withBypass(() => dropScratchOrg(org.orgId))
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);
 
 test(
-  'restricted platform reads and writes still honor stored JSON subsidiary_id after the type drops the field',
+  "restricted platform reads and writes still honor stored JSON subsidiary_id after the type drops the field",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const typeKey = `platdrop-${randomUUID().replaceAll('-', '').slice(0, 12)}`
+    const typeKey = `platdrop-${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const { org, actorId, hiddenId, visibleId } = await withBypass(async () => {
-      const created = await createScratchOrg()
-      const actor = (await seedFlowActors(created.orgId)).adminId
-      const branch = randomUUID()
-      const typeId = randomUUID()
-      const visible = randomUUID()
-      const hidden = randomUUID()
-      const fields = [{
-        id: 'main',
-        title: 'Details',
-        fields: [{ id: 'title', type: 'text', label: 'Title' }],
-      }]
+      const created = await createScratchOrg();
+      const actor = (await seedFlowActors(created.orgId)).adminId;
+      const branch = randomUUID();
+      const typeId = randomUUID();
+      const visible = randomUUID();
+      const hidden = randomUUID();
+      const fields = [
+        {
+          id: "main",
+          title: "Details",
+          fields: [{ id: "title", type: "text", label: "Title" }],
+        },
+      ];
       await db.execute(sql`
         insert into subsidiaries
           (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values
           (${branch}, ${created.orgId}, ${created.subsidiaryId}, 'Platform Drop Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-      `)
+      `);
       await db.execute(sql`
         insert into custom_record_types
           (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
         values
           (${typeId}, ${created.orgId}, ${typeKey}, 'Platform Dropped', 'Platform Dropped',
            ${JSON.stringify(fields)}::jsonb, 'published', ${actor}, ${actor})
-      `)
+      `);
       for (const [id, subsidiaryId, title] of [
-        [visible, created.subsidiaryId, 'visible'] as const,
-        [hidden, branch, 'hidden'] as const,
+        [visible, created.subsidiaryId, "visible"] as const,
+        [hidden, branch, "hidden"] as const,
       ]) {
         await db.execute(sql`
           insert into custom_records
@@ -149,86 +159,101 @@ test(
             (${id}, ${created.orgId}, ${typeId}, ${typeKey}, ${id},
              ${JSON.stringify({ subsidiary_id: subsidiaryId, title })}::jsonb,
              ${title}, 'active', ${actor}, ${actor})
-        `)
+        `);
       }
-      return { org: created, actorId: actor, hiddenId: hidden, visibleId: visible }
-    })
+      return { org: created, actorId: actor, hiddenId: hidden, visibleId: visible };
+    });
 
     const user = {
       id: actorId,
-      email: 'platform-drop@scratch.test',
-      name: 'Platform Drop Controller',
-      roles: [{ key: 'admin', name: 'Admin' }],
+      email: "platform-drop@scratch.test",
+      name: "Platform Drop Controller",
+      roles: [{ key: "admin", name: "Admin" }],
       orgId: org.orgId,
-      envKind: 'production' as const,
+      envKind: "production" as const,
       productionOrgId: org.orgId,
       isSuperAdmin: false,
       homeUserId: actorId,
       homeOrgId: org.orgId,
-    }
+    };
     const platform = createAppPlatformAdapter({
       orgId: org.orgId,
       user,
-      grantedPermissions: ['records.read', 'records.create'],
+      grantedPermissions: ["records.read", "records.create"],
       userCan: () => true,
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    })
-    const allowedSubsidiaryIds = new Set([org.subsidiaryId])
+    });
+    const allowedSubsidiaryIds = new Set([org.subsidiaryId]);
     const applicationContext = {
-      authz: { user, permissions: new Set(['records.read']), allowedSubsidiaryIds },
-      source: 'api' as const,
+      authz: { user, permissions: new Set(["records.read"]), allowedSubsidiaryIds },
+      source: "api" as const,
       requestId: randomUUID(),
       apiKeyId: null,
-    }
+    };
     const queryContext = {
       orgId: org.orgId,
       user,
-      grantedPermissions: ['records.read'],
-      userCan: (permission: string) => permission === 'records.read',
+      grantedPermissions: ["records.read"],
+      userCan: (permission: string) => permission === "records.read",
       allowedSubsidiaryIds,
-    }
+    };
 
     try {
       await withOrgContext(org.orgId, async () => {
-        const listed = await platform.list(typeKey, {}) as {
-          records: Array<{ id: string }>
-          total: number
-        }
-        assert.equal(listed.total, 1)
-        assert.equal(listed.records[0]?.id, visibleId)
-        assert.equal(await platform.get(typeKey, hiddenId), null)
-        const apiListed = await listApplicationRecords(applicationContext, { typeKey })
-        assert.equal(apiListed.total, 1)
-        assert.equal(apiListed.records[0]?.id, visibleId)
+        const listed = (await platform.list(typeKey, {})) as {
+          records: Array<{ id: string }>;
+          total: number;
+        };
+        assert.equal(listed.total, 1);
+        assert.equal(listed.records[0]?.id, visibleId);
+        assert.equal(await platform.get(typeKey, hiddenId), null);
+        const apiListed = await listApplicationRecords(applicationContext, { typeKey });
+        assert.equal(apiListed.total, 1);
+        assert.equal(apiListed.records[0]?.id, visibleId);
         await assert.rejects(
           getApplicationRecord(applicationContext, { typeKey, id: hiddenId }),
-          (error: unknown) => error instanceof ApplicationError && error.code === 'not_found',
-        )
+          (error: unknown) => error instanceof ApplicationError && error.code === "not_found",
+        );
         const queried = await queryAppRecords(queryContext, {
-          from: { type: typeKey, as: 'record' },
+          from: { type: typeKey, as: "record" },
           joins: [],
-          select: [{ source: 'record', field: 'id' }],
+          select: [{ source: "record", field: "id" }],
           limit: 10,
-        })
-        assert.equal(queried.records.length, 1)
-        assert.equal(queried.records[0]?.['record.id'], visibleId)
+        });
+        assert.equal(queried.records.length, 1);
+        assert.equal(queried.records[0]?.["record.id"], visibleId);
 
-        const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
-        const revision = (await db.execute<{ revision: string }>(sql`
+        const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
+        const revision = (
+          await db.execute<{ revision: string }>(
+            sql`
           select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
             from custom_records where id = ${hiddenId}
-        `, 'objects'))[0]!.revision
+        `,
+            "objects",
+          )
+        )[0]!.revision;
         await assert.rejects(
-          platform.update(typeKey, hiddenId, { data: { title: 'smuggled' }, expectedUpdatedAt: revision }),
-          (error: unknown) => error instanceof Error && /not found|outside the caller subsidiary scope/.test(error.message),
-        )
-        const stored = (await db.execute<{ title: string }>(sql`
+          platform.update(typeKey, hiddenId, {
+            data: { title: "smuggled" },
+            expectedUpdatedAt: revision,
+          }),
+          (error: unknown) =>
+            error instanceof Error &&
+            /not found|outside the caller subsidiary scope/.test(error.message),
+        );
+        const stored = (
+          await db.execute<{ title: string }>(
+            sql`
           select data ->> 'title' as title from custom_records where id = ${hiddenId}
-        `, 'objects'))[0]
-        assert.equal(stored?.title, 'hidden')
-      })
+        `,
+            "objects",
+          )
+        )[0];
+        assert.equal(stored?.title, "hidden");
+      });
     } finally {
-      await withBypass(() => dropScratchOrg(org.orgId))
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);

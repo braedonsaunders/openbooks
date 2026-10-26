@@ -7,7 +7,11 @@ describe("inbox due dates are business days", () => {
     assert.equal(priorityForDueDate("2026-10-11", "2026-10-10", "America/Toronto"), "due_soon");
     assert.equal(priorityForDueDate("2026-10-11", "2026-10-11", "America/Toronto"), "due_soon");
     assert.equal(priorityForDueDate("2026-10-11", "2026-10-12", "America/Toronto"), "overdue");
-    assert.equal(dueBusinessDay("2026-10-11", "Pacific/Kiritimati"), "2026-10-11", "a business day is not shifted by any zone");
+    assert.equal(
+      dueBusinessDay("2026-10-11", "Pacific/Kiritimati"),
+      "2026-10-11",
+      "a business day is not shifted by any zone",
+    );
   });
 
   it("a due instant is placed on the organization's business day, not the UTC day", () => {

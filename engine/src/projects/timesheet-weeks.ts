@@ -35,7 +35,9 @@ export async function ensureTimesheetWeeks(
   orgId: string,
   weeks: readonly TimesheetWeekKey[],
   actorId: string | null = null,
-): Promise<Map<string, { id: string; status: TimesheetWeekStatus; rejectionReason: string | null }>> {
+): Promise<
+  Map<string, { id: string; status: TimesheetWeekStatus; rejectionReason: string | null }>
+> {
   const unique = new Map<string, TimesheetWeekKey>();
   for (const week of weeks) {
     if (week.weekStart !== timesheetWeekStart(week.weekStart)) {
@@ -43,7 +45,10 @@ export async function ensureTimesheetWeeks(
     }
     unique.set(timesheetWeekKey(week), week);
   }
-  const result = new Map<string, { id: string; status: TimesheetWeekStatus; rejectionReason: string | null }>();
+  const result = new Map<
+    string,
+    { id: string; status: TimesheetWeekStatus; rejectionReason: string | null }
+  >();
   const keys = [...unique.values()];
   for (let index = 0; index < keys.length; index += 500) {
     const batch = keys.slice(index, index + 500);
@@ -85,20 +90,26 @@ export async function ensureTimesheetWeeks(
       week_start: string;
       status: TimesheetWeekStatus;
       rejection_reason: string | null;
-    }>(sql`
+    }>(
+      sql`
       select tw.id, tw.employee_party_id, to_char(tw.week_start, 'YYYY-MM-DD') as week_start,
              tw.status, tw.rejection_reason
         from timesheet_weeks tw
         join (values ${pairs}) as wanted(employee_party_id, week_start)
           on wanted.employee_party_id = tw.employee_party_id and wanted.week_start = tw.week_start
        where tw.org_id = ${orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of rows) {
-      result.set(timesheetWeekKey({ employeePartyId: row.employee_party_id, weekStart: row.week_start }), {
-        id: row.id,
-        status: row.status,
-        rejectionReason: row.rejection_reason,
-      });
+      result.set(
+        timesheetWeekKey({ employeePartyId: row.employee_party_id, weekStart: row.week_start }),
+        {
+          id: row.id,
+          status: row.status,
+          rejectionReason: row.rejection_reason,
+        },
+      );
     }
     const missing = batch.filter((week) => !result.has(timesheetWeekKey(week)));
     if (missing.length > 0) {

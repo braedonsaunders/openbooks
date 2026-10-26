@@ -42,12 +42,14 @@ export const payrollAnomalyBlockAdapter: InboxAdapter = {
     if (!(await actorPermissionOn(ctx, "payroll.manage"))) return [];
     // The checks queue owns the read (and its legal-entity lens): the
     // inbox projects the same open blocks the actor may open, never more.
-    const rows = (await listFlags(db, {
-      orgId: ctx.orgId,
-      actorId: ctx.actorId,
-      severity: "block",
-      status: "open",
-    })).slice(0, 20);
+    const rows = (
+      await listFlags(db, {
+        orgId: ctx.orgId,
+        actorId: ctx.actorId,
+        severity: "block",
+        status: "open",
+      })
+    ).slice(0, 20);
     return rows.map((row) => ({
       id: inboxItemId("payroll_anomaly_block", row.id),
       kind: "payroll_anomaly_block",
@@ -62,7 +64,10 @@ export const payrollAnomalyBlockAdapter: InboxAdapter = {
     }));
   },
   async act(_ctx, _sourceId, actionKey): Promise<void> {
-    throw new InboxError("UNKNOWN_ACTION", `action ${JSON.stringify(actionKey)} is not available on a blocking check — resolve it in the checks queue`);
+    throw new InboxError(
+      "UNKNOWN_ACTION",
+      `action ${JSON.stringify(actionKey)} is not available on a blocking check — resolve it in the checks queue`,
+    );
   },
 };
 
@@ -78,9 +83,10 @@ export const aiCapabilityReviewAdapter: InboxAdapter = {
       id: inboxItemId("ai_capability_review", cap.key),
       kind: "ai_capability_review",
       title: `Assistant action review due — ${cap.name}`,
-      subtitle: cap.lastReviewedAt === null
-        ? `never reviewed — the declared cadence is every ${settings.reviewMonths} months`
-        : `last reviewed ${cap.lastReviewedAt.slice(0, 10)} — the declared cadence is every ${settings.reviewMonths} months`,
+      subtitle:
+        cap.lastReviewedAt === null
+          ? `never reviewed — the declared cadence is every ${settings.reviewMonths} months`
+          : `last reviewed ${cap.lastReviewedAt.slice(0, 10)} — the declared cadence is every ${settings.reviewMonths} months`,
       dueAt: null,
       createdAt: cap.lastReviewedAt ?? `${ctx.asOf}`,
       priority: "due_soon",
@@ -90,6 +96,9 @@ export const aiCapabilityReviewAdapter: InboxAdapter = {
     }));
   },
   async act(_ctx, _sourceId, actionKey): Promise<void> {
-    throw new InboxError("UNKNOWN_ACTION", `action ${JSON.stringify(actionKey)} is not available on a review nudge — record the review in Assistant action reviews`);
+    throw new InboxError(
+      "UNKNOWN_ACTION",
+      `action ${JSON.stringify(actionKey)} is not available on a review nudge — record the review in Assistant action reviews`,
+    );
   },
 };

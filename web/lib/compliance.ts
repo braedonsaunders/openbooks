@@ -1,9 +1,9 @@
-import 'server-only'
-import { redirect } from 'next/navigation'
-import { NextResponse } from 'next/server'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { formatMoney, mulRate, sum } from '@openbooks/engine/money/money'
+import "server-only";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { formatMoney, mulRate, sum } from "@openbooks/engine/money/money";
 import {
   evaluateBillsForRelease,
   evaluateVendorCompliance,
@@ -15,19 +15,23 @@ import {
   type LienWaiverType,
   type RequirementFinding,
   type RequirementPolicy,
-  type WaiverRecord
-} from '@openbooks/engine/compliance/compliance'
-import { businessTimeZone, businessToday, formatInZone } from '@openbooks/engine/platform/business-date/module'
-import { isLegacyProvenance } from '@openbooks/engine/platform/legacy-provenance'
-import { addMoney, ZERO_MONEY } from './cash/core'
-import { openItems } from './cash/open-items'
-import { featureRequiredHref } from './gate-targets'
+  type WaiverRecord,
+} from "@openbooks/engine/compliance/compliance";
+import {
+  businessTimeZone,
+  businessToday,
+  formatInZone,
+} from "@openbooks/engine/platform/business-date/module";
+import { isLegacyProvenance } from "@openbooks/engine/platform/legacy-provenance";
+import { addMoney, ZERO_MONEY } from "./cash/core";
+import { openItems } from "./cash/open-items";
+import { featureRequiredHref } from "./gate-targets";
 import {
   GENERAL_THRESHOLD_CHANGE_YEAR,
   INFORMATION_RETURN_FORMS,
-} from '@openbooks/engine/compliance/information-returns'
-import type { LienWaiverFormData } from './lien-waiver-form'
-import { isFeatureEnabled } from './features'
+} from "@openbooks/engine/compliance/information-returns";
+import type { LienWaiverFormData } from "./lien-waiver-form";
+import { isFeatureEnabled } from "./features";
 
 /**
  * Visibility policy for subsidiary-aware compliance reads. `undefined` is
@@ -35,7 +39,7 @@ import { isFeatureEnabled } from './features'
  * authenticated web callers should pass the gate's value explicitly (null is
  * unrestricted, a set is restricted).
  */
-export type ComplianceSubsidiaryScope = ReadonlySet<string> | null | undefined
+export type ComplianceSubsidiaryScope = ReadonlySet<string> | null | undefined;
 
 /**
  * SQL predicate shared by compliance loaders and their page-level pickers.
@@ -45,15 +49,15 @@ export type ComplianceSubsidiaryScope = ReadonlySet<string> | null | undefined
 export function complianceSubsidiaryFilter(
   column: SQL,
   allowed: ComplianceSubsidiaryScope,
-  opts: { orgWideNull?: boolean } = {}
+  opts: { orgWideNull?: boolean } = {},
 ): SQL {
-  if (allowed === undefined || allowed === null) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return opts.orgWideNull ? sql` and ${column} is null` : sql` and false`
-  const values = `{${ids.join(',')}}`
+  if (allowed === undefined || allowed === null) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return opts.orgWideNull ? sql` and ${column} is null` : sql` and false`;
+  const values = `{${ids.join(",")}}`;
   return opts.orgWideNull
     ? sql` and (${column} is null or ${column} = any(${values}::uuid[]))`
-    : sql` and ${column} = any(${values}::uuid[])`
+    : sql` and ${column} = any(${values}::uuid[])`;
 }
 
 /**
@@ -75,14 +79,17 @@ export function complianceSubsidiaryFilter(
  * silently landing on the Features switchboard.
  */
 export async function requireComplianceFeature(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'subcontractorCompliance')))
-    redirect(featureRequiredHref('subcontractorCompliance'))
+  if (!(await isFeatureEnabled(orgId, "subcontractorCompliance")))
+    redirect(featureRequiredHref("subcontractorCompliance"));
 }
 
 /** API-boundary gate — a disabled module is indistinguishable from no API. */
 export async function guardComplianceFeature(orgId: string): Promise<NextResponse | null> {
-  if (await isFeatureEnabled(orgId, 'subcontractorCompliance')) return null
-  return NextResponse.json({ error: 'subcontractor compliance feature is disabled' }, { status: 404 })
+  if (await isFeatureEnabled(orgId, "subcontractorCompliance")) return null;
+  return NextResponse.json(
+    { error: "subcontractor compliance feature is disabled" },
+    { status: 404 },
+  );
 }
 
 /**
@@ -92,14 +99,14 @@ export async function guardComplianceFeature(orgId: string): Promise<NextRespons
  * filings. Names its own switch on the feature-required page.
  */
 export async function requireInformationReturnsFeature(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'informationReturns')))
-    redirect(featureRequiredHref('informationReturns'))
+  if (!(await isFeatureEnabled(orgId, "informationReturns")))
+    redirect(featureRequiredHref("informationReturns"));
 }
 
 /** API-boundary gate — a disabled module is indistinguishable from no API. */
 export async function guardInformationReturnsFeature(orgId: string): Promise<NextResponse | null> {
-  if (await isFeatureEnabled(orgId, 'informationReturns')) return null
-  return NextResponse.json({ error: 'information returns feature is disabled' }, { status: 404 })
+  if (await isFeatureEnabled(orgId, "informationReturns")) return null;
+  return NextResponse.json({ error: "information returns feature is disabled" }, { status: 404 });
 }
 
 /**
@@ -108,16 +115,16 @@ export async function guardInformationReturnsFeature(orgId: string): Promise<Nex
  * rides its own tax switch (requireInformationReturnsFeature above).
  */
 export async function guardLienWaiverFeature(orgId: string): Promise<NextResponse | null> {
-  const gate = await guardComplianceFeature(orgId)
-  if (gate) return gate
-  if (await isFeatureEnabled(orgId, 'projects')) return null
-  return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+  const gate = await guardComplianceFeature(orgId);
+  if (gate) return gate;
+  if (await isFeatureEnabled(orgId, "projects")) return null;
+  return NextResponse.json({ error: "projects feature is disabled" }, { status: 404 });
 }
 
 export async function requireLienWaiverFeature(orgId: string): Promise<void> {
-  await requireComplianceFeature(orgId)
+  await requireComplianceFeature(orgId);
   // Name the feature that is actually off — compliance first, then projects.
-  if (!(await isFeatureEnabled(orgId, 'projects'))) redirect(featureRequiredHref('projects'))
+  if (!(await isFeatureEnabled(orgId, "projects"))) redirect(featureRequiredHref("projects"));
 }
 
 // ---------------------------------------------------------------------------
@@ -125,23 +132,23 @@ export async function requireLienWaiverFeature(orgId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export type ComplianceClassRow = {
-  id: string
-  code: string
-  name: string
-  lienWaiverEnforcement: LienWaiverEnforcement
-  defaultLienWaiverType: LienWaiverType | null
-  defaultInformationReturn: string
-}
+  id: string;
+  code: string;
+  name: string;
+  lienWaiverEnforcement: LienWaiverEnforcement;
+  defaultLienWaiverType: LienWaiverType | null;
+  defaultInformationReturn: string;
+};
 
 export interface MatrixRow {
-  partyId: string
-  vendorName: string
-  classId: string | null
-  className: string | null
-  overall: ComplianceState
-  blocksPayment: boolean
-  blocksBill: boolean
-  findings: RequirementFinding[]
+  partyId: string;
+  vendorName: string;
+  classId: string | null;
+  className: string | null;
+  overall: ComplianceState;
+  blocksPayment: boolean;
+  blocksBill: boolean;
+  findings: RequirementFinding[];
   /**
    * Posted, unpaid bill exposure for this vendor, base currency — grouped off
    * the shared as-of open-items reader, the same item set the /ap
@@ -150,32 +157,32 @@ export interface MatrixRow {
    * Meridian: future-dated payments zero the cache while the bill is still
    * open as of the date; future-posted bills count before they post).
    */
-  openBalance: string
+  openBalance: string;
   /** Soonest expiry across satisfied requirements. */
-  nextExpiry: string | null
+  nextExpiry: string | null;
 }
 
 export interface ComplianceMatrix {
-  asOf: string
-  policies: RequirementPolicy[]
-  classes: ComplianceClassRow[]
-  rows: MatrixRow[]
+  asOf: string;
+  policies: RequirementPolicy[];
+  classes: ComplianceClassRow[];
+  rows: MatrixRow[];
 }
 
 /** Masked taxpayer identity for the vendor record's tax-identity section.
  * Ciphertext never leaves the database — only the last four travel. */
 export interface VendorTaxIdentity {
-  tinLast4: string | null
-  tinType: string | null
-  taxClassification: string | null
-  informationReturnForm: string | null
-  informationReturnBox: string | null
-  backupWithholding: boolean
-  reportable: boolean
+  tinLast4: string | null;
+  tinType: string | null;
+  taxClassification: string | null;
+  informationReturnForm: string | null;
+  informationReturnBox: string | null;
+  backupWithholding: boolean;
+  reportable: boolean;
 }
 
 function textOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null
+  return typeof value === "string" && value !== "" ? value : null;
 }
 
 /**
@@ -187,7 +194,7 @@ function textOrNull(value: unknown): string | null {
 export function vendorTaxIdentityFromRole(
   row: Record<string, unknown> | null | undefined,
 ): VendorTaxIdentity | null {
-  if (!row) return null
+  if (!row) return null;
   return {
     tinLast4: textOrNull(row.tin_last4),
     tinType: textOrNull(row.tin_type),
@@ -196,7 +203,7 @@ export function vendorTaxIdentityFromRole(
     informationReturnBox: textOrNull(row.information_return_box),
     backupWithholding: row.backup_withholding === true,
     reportable: row.is_t4a === true,
-  }
+  };
 }
 
 /**
@@ -205,15 +212,22 @@ export function vendorTaxIdentityFromRole(
  * a class" — either way the vendor is outside the matrix until a class is
  * assigned through PATCH /api/compliance/vendors/[partyId].
  */
-export async function loadVendorComplianceClass(orgId: string, partyId: string): Promise<string | null> {
-  const result = await db.execute<{ classId: string | null }>(sql`
+export async function loadVendorComplianceClass(
+  orgId: string,
+  partyId: string,
+): Promise<string | null> {
+  const result = await db.execute<{ classId: string | null }>(
+    sql`
     select compliance_class_id as "classId" from vendor_roles
-     where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects')
-  return result[0]?.classId ?? null
+     where org_id = ${orgId} and party_id = ${partyId} and is_active`,
+    "objects",
+  );
+  return result[0]?.classId ?? null;
 }
 
 export async function loadComplianceClasses(orgId: string): Promise<ComplianceClassRow[]> {
-  const r = await db.execute<ComplianceClassRow>(sql`
+  const r = await db.execute<ComplianceClassRow>(
+    sql`
     select id, code, name,
            lien_waiver_enforcement as "lienWaiverEnforcement",
            default_lien_waiver_type as "defaultLienWaiverType",
@@ -221,8 +235,10 @@ export async function loadComplianceClasses(orgId: string): Promise<ComplianceCl
       from compliance_classes
      where org_id = ${orgId} and is_active
      order by code
-  `, 'objects')
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 /**
@@ -232,29 +248,31 @@ export async function loadComplianceClasses(orgId: string): Promise<ComplianceCl
  * thousands of queries.
  */
 export async function loadComplianceMatrix(args: {
-  orgId: string
-  asOf?: string
-  classId?: string | null
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  orgId: string;
+  asOf?: string;
+  classId?: string | null;
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope;
   /** Only vendors whose worst state is in this set. */
-  states?: readonly ComplianceState[]
+  states?: readonly ComplianceState[];
 }): Promise<ComplianceMatrix> {
-  const asOf = args.asOf ?? (await businessToday(args.orgId))
+  const asOf = args.asOf ?? (await businessToday(args.orgId));
   // Document legs fail closed on null subsidiaries, exactly like the reader's
   // own scope — so the matrix groups the same item set the dashboard does
   // under the same gate.
-  const subIds = args.allowedSubsidiaryIds === null || args.allowedSubsidiaryIds === undefined
-    ? undefined
-    : [...args.allowedSubsidiaryIds]
+  const subIds =
+    args.allowedSubsidiaryIds === null || args.allowedSubsidiaryIds === undefined
+      ? undefined
+      : [...args.allowedSubsidiaryIds];
   const [policies, classes, vendors, apOpen, records, waivers, timeZone] = await Promise.all([
     loadRequirementPolicies(args.orgId),
     loadComplianceClasses(args.orgId),
     db.execute<{
-        partyId: string
-        vendorName: string
-        classId: string | null
-        className: string | null
-      }>(sql`
+      partyId: string;
+      vendorName: string;
+      classId: string | null;
+      className: string | null;
+    }>(
+      sql`
       select p.id as "partyId", p.display_name as "vendorName",
              vr.compliance_class_id as "classId", cc.name as "className"
         from parties p
@@ -265,9 +283,12 @@ export async function loadComplianceMatrix(args: {
          and (${args.classId ?? null}::uuid is null or vr.compliance_class_id = ${args.classId ?? null}::uuid)
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
        order by p.display_name
-    `, 'objects'),
-    openItems(args.orgId, 'ap', asOf, subIds),
-    db.execute<EvidenceRecord & { partyId: string }>(sql`
+    `,
+      "objects",
+    ),
+    openItems(args.orgId, "ap", asOf, subIds),
+    db.execute<EvidenceRecord & { partyId: string }>(
+      sql`
       select cr.party_id as "partyId", cr.id, cr.requirement_id as "requirementId", cr.project_id as "projectId",
              cr.status, cr.effective_from as "effectiveFrom", cr.expires_on as "expiresOn",
              cr.coverage_amount as "coverageAmount", cr.aggregate_amount as "aggregateAmount",
@@ -280,12 +301,15 @@ export async function loadComplianceMatrix(args: {
         left join projects pr on pr.id = cr.project_id and pr.org_id = cr.org_id
        where cr.org_id = ${args.orgId} and cr.status <> 'superseded'
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     // Revoked rows load too: the shared evaluator dates them by the
     // revocation's org-local date, so an as-of read sees each exception
     // exactly while it was in force. Pending requests load too but are
     // never honoured — requesting is not granting.
-    db.execute<Omit<WaiverRecord, "revokedOn"> & { partyId: string }>(sql`
+    db.execute<Omit<WaiverRecord, "revokedOn"> & { partyId: string }>(
+      sql`
       select cw.party_id as "partyId", cw.id, cw.requirement_id as "requirementId", cw.project_id as "projectId",
              cw.effective_from as "effectiveFrom", cw.expires_on as "expiresOn",
              cw.approved_at as "approvedAt", cw.revoked_at as "revokedAt"
@@ -293,42 +317,47 @@ export async function loadComplianceMatrix(args: {
         left join projects pr on pr.id = cw.project_id and pr.org_id = cw.org_id
        where cw.org_id = ${args.orgId}
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     businessTimeZone(args.orgId),
-  ])
+  ]);
 
-  const vendorRows = vendors
+  const vendorRows = vendors;
   // The "Open payable" column groups the shared as-of item set — the same
   // numbers the /ap dashboard shows — not the documents cache.
   // Unapplied credits net against the vendor's bills, exactly like the aging.
-  const openByParty = new Map<string, string>()
+  const openByParty = new Map<string, string>();
   for (const item of apOpen) {
-    if (item.partyId === null) continue
-    openByParty.set(item.partyId, addMoney(openByParty.get(item.partyId) ?? ZERO_MONEY, item.remaining))
+    if (item.partyId === null) continue;
+    openByParty.set(
+      item.partyId,
+      addMoney(openByParty.get(item.partyId) ?? ZERO_MONEY, item.remaining),
+    );
   }
-  const recordsByParty = new Map<string, EvidenceRecord[]>()
+  const recordsByParty = new Map<string, EvidenceRecord[]>();
   for (const row of records) {
-    const list = recordsByParty.get(row.partyId) ?? []
-    list.push(row)
-    recordsByParty.set(row.partyId, list)
+    const list = recordsByParty.get(row.partyId) ?? [];
+    list.push(row);
+    recordsByParty.set(row.partyId, list);
   }
-  const waiversByParty = new Map<string, WaiverRecord[]>()
+  const waiversByParty = new Map<string, WaiverRecord[]>();
   for (const row of waivers) {
-    const revokedAt = row.revokedAt as unknown as string | Date | null
+    const revokedAt = row.revokedAt as unknown as string | Date | null;
     const waiver: WaiverRecord & { partyId: string } = {
       ...row,
       revokedOn:
         revokedAt === null || revokedAt === undefined
           ? null
           : formatInZone(revokedAt instanceof Date ? revokedAt : new Date(revokedAt), timeZone),
-    }
-    const list = waiversByParty.get(row.partyId) ?? []
-    list.push(waiver)
-    waiversByParty.set(row.partyId, list)
+    };
+    const list = waiversByParty.get(row.partyId) ?? [];
+    list.push(waiver);
+    waiversByParty.set(row.partyId, list);
   }
 
-  const stateFilter = args.states && args.states.length > 0 ? new Set(args.states) : null
-  const rows: MatrixRow[] = []
+  const stateFilter = args.states && args.states.length > 0 ? new Set(args.states) : null;
+  const rows: MatrixRow[] = [];
   for (const vendor of vendorRows) {
     const status = evaluateVendorCompliance({
       partyId: vendor.partyId,
@@ -336,13 +365,13 @@ export async function loadComplianceMatrix(args: {
       policies,
       records: recordsByParty.get(vendor.partyId) ?? [],
       waivers: waiversByParty.get(vendor.partyId) ?? [],
-      asOf
-    })
-    if (stateFilter && !stateFilter.has(status.overall)) continue
+      asOf,
+    });
+    if (stateFilter && !stateFilter.has(status.overall)) continue;
     const expiries = status.findings
       .map((f) => f.expiresOn)
       .filter((d): d is string => d !== null)
-      .sort()
+      .sort();
     rows.push({
       partyId: vendor.partyId,
       vendorName: vendor.vendorName,
@@ -353,10 +382,10 @@ export async function loadComplianceMatrix(args: {
       blocksBill: status.blocksBill,
       findings: status.findings,
       openBalance: openByParty.get(vendor.partyId) ?? ZERO_MONEY,
-      nextExpiry: expiries[0] ?? null
-    })
+      nextExpiry: expiries[0] ?? null,
+    });
   }
-  return { asOf, policies, classes, rows }
+  return { asOf, policies, classes, rows };
 }
 
 // ---------------------------------------------------------------------------
@@ -364,42 +393,43 @@ export async function loadComplianceMatrix(args: {
 // ---------------------------------------------------------------------------
 
 export type CertificateRow = {
-  id: string
-  requirementId: string
-  requirementCode: string
-  requirementName: string
-  category: string
-  projectId: string | null
-  projectName: string | null
+  id: string;
+  requirementId: string;
+  requirementCode: string;
+  requirementName: string;
+  category: string;
+  projectId: string | null;
+  projectName: string | null;
   /** Optimistic-concurrency token the certificate PATCH fence requires. */
-  revision: number
-  status: string
-  issuerName: string | null
-  policyNumber: string | null
-  effectiveFrom: string
-  expiresOn: string | null
-  coverageAmount: string | null
-  aggregateAmount: string | null
-  coverageCurrency: string | null
-  additionalInsured: boolean
-  waiverOfSubrogation: boolean
-  primaryNoncontributory: boolean
-  verifiedAt: string | null
-  verifiedByName: string | null
-  rejectedReason: string | null
-  notes: string | null
-  createdAt: string
-  createdById: string | null
-  createdByName: string | null
-  fileCount: number
-}
+  revision: number;
+  status: string;
+  issuerName: string | null;
+  policyNumber: string | null;
+  effectiveFrom: string;
+  expiresOn: string | null;
+  coverageAmount: string | null;
+  aggregateAmount: string | null;
+  coverageCurrency: string | null;
+  additionalInsured: boolean;
+  waiverOfSubrogation: boolean;
+  primaryNoncontributory: boolean;
+  verifiedAt: string | null;
+  verifiedByName: string | null;
+  rejectedReason: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdById: string | null;
+  createdByName: string | null;
+  fileCount: number;
+};
 
 export async function loadVendorCertificates(
   orgId: string,
   partyId: string,
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope,
 ): Promise<CertificateRow[]> {
-  const r = await db.execute<CertificateRow>(sql`
+  const r = await db.execute<CertificateRow>(
+    sql`
     select cr.id, cr.requirement_id as "requirementId", req.code as "requirementCode",
            req.name as "requirementName", req.category, cr.project_id as "projectId",
            case when pj.id is null then null
@@ -428,32 +458,35 @@ export async function loadVendorCertificates(
        ${complianceSubsidiaryFilter(sql`party.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${complianceSubsidiaryFilter(sql`pj.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by req.code, cr.effective_from desc
-  `, 'objects')
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 export type ExceptionRow = {
-  id: string
-  requirementCode: string
-  requirementName: string
-  projectName: string | null
-  reason: string
-  effectiveFrom: string
-  expiresOn: string
+  id: string;
+  requirementCode: string;
+  requirementName: string;
+  projectName: string | null;
+  reason: string;
+  effectiveFrom: string;
+  expiresOn: string;
   /** Pending requests are listed so approvers can see them; they are not in force. */
-  status: 'pending_approval' | 'approved'
+  status: "pending_approval" | "approved";
   /** Who requested the exception — the one person who may not approve it. */
-  requestedById: string | null
-  approvedByName: string | null
-  approvedAt: string | null
-}
+  requestedById: string | null;
+  approvedByName: string | null;
+  approvedAt: string | null;
+};
 
 export async function loadVendorWaivers(
   orgId: string,
   partyId: string,
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope,
 ): Promise<ExceptionRow[]> {
-  const r = await db.execute<ExceptionRow>(sql`
+  const r = await db.execute<ExceptionRow>(
+    sql`
     select w.id, req.code as "requirementCode", req.name as "requirementName",
            case when pj.id is null then null
                 else coalesce(pj.code || ' · ' || pj.name, pj.name) end as "projectName",
@@ -470,8 +503,10 @@ export async function loadVendorWaivers(
        ${complianceSubsidiaryFilter(sql`party.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${complianceSubsidiaryFilter(sql`pj.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by w.expires_on desc
-  `, 'objects')
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -479,13 +514,13 @@ export async function loadVendorWaivers(
 // ---------------------------------------------------------------------------
 
 export interface BlockedBillRow extends BillReleaseDecision {
-  documentDate: string
-  openBalance: string
+  documentDate: string;
+  openBalance: string;
   /** Posted txn-to-base rate: the per-bill display stays document currency,
    *  but cross-bill exposure aggregates convert through this rate. */
-  fxRate: string
-  currency: string
-  projectName: string | null
+  fxRate: string;
+  currency: string;
+  projectName: string | null;
 }
 
 /**
@@ -495,20 +530,21 @@ export interface BlockedBillRow extends BillReleaseDecision {
 export async function loadBlockedBills(
   orgId: string,
   limit = 200,
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope,
 ): Promise<BlockedBillRow[]> {
   const bills = await db.execute<{
-    id: string
-    document_number: string
-    party_id: string
-    vendor: string
-    project_id: string | null
-    document_date: string
-    currency: string
-    open_balance: string
-    fx_rate: string
-    project_name: string | null
-  }>(sql`
+    id: string;
+    document_number: string;
+    party_id: string;
+    vendor: string;
+    project_id: string | null;
+    document_date: string;
+    currency: string;
+    open_balance: string;
+    fx_rate: string;
+    project_name: string | null;
+  }>(
+    sql`
     select d.id, d.document_number, d.party_id, p.display_name as vendor,
            d.project_id, d.document_date, d.currency, coalesce(d.open_balance, 0) as open_balance,
            d.fx_rate as fx_rate,
@@ -524,8 +560,10 @@ export async function loadBlockedBills(
        ${complianceSubsidiaryFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by d.document_date
      limit ${limit}
-  `, 'objects')
-  if (bills.length === 0) return []
+  `,
+    "objects",
+  );
+  if (bills.length === 0) return [];
   const decisions = await evaluateBillsForRelease({
     orgId,
     bills: bills.map((b) => ({
@@ -536,9 +574,9 @@ export async function loadBlockedBills(
       projectId: b.project_id,
       documentDate: b.document_date,
       amount: b.open_balance,
-      currency: b.currency
-    }))
-  })
+      currency: b.currency,
+    })),
+  });
   return decisions
     .map((decision, i) => ({
       ...decision,
@@ -546,10 +584,10 @@ export async function loadBlockedBills(
       openBalance: bills[i]!.open_balance,
       fxRate: bills[i]!.fx_rate,
       currency: bills[i]!.currency,
-      projectName: bills[i]!.project_name
+      projectName: bills[i]!.project_name,
     }))
-    .filter((row) => row.decision !== 'cleared')
-    .sort((a, b) => (a.decision === b.decision ? 0 : a.decision === 'blocked' ? -1 : 1))
+    .filter((row) => row.decision !== "cleared")
+    .sort((a, b) => (a.decision === b.decision ? 0 : a.decision === "blocked" ? -1 : 1));
 }
 
 // ---------------------------------------------------------------------------
@@ -565,13 +603,13 @@ export async function loadBlockedBills(
  * per-migration flag can drift from the snapshot it describes.
  */
 export function isLegacyExecutedLienWaiver(args: {
-  status: string
-  signedAt: string | null
-  hasExecutedSnapshot: boolean
+  status: string;
+  signedAt: string | null;
+  hasExecutedSnapshot: boolean;
 }): boolean {
-  if (args.hasExecutedSnapshot) return false
-  if (args.status === 'signed') return true
-  return args.status === 'void' && args.signedAt !== null
+  if (args.hasExecutedSnapshot) return false;
+  if (args.status === "signed") return true;
+  return args.status === "void" && args.signedAt !== null;
 }
 
 /**
@@ -579,7 +617,7 @@ export function isLegacyExecutedLienWaiver(args: {
  * executed release's own name.
  */
 export function legacyLienWaiverFilename(waiverNumber: string): string {
-  return `${waiverNumber}-legacy-unverified`
+  return `${waiverNumber}-legacy-unverified`;
 }
 
 /**
@@ -596,53 +634,54 @@ export async function isLienWaiverLegacyUnverified(
   orgId: string,
   row: { id: string; status: string; signedAt: string | null; hasExecutedSnapshot: boolean },
 ): Promise<boolean> {
-  const derived = isLegacyExecutedLienWaiver(row)
-  if (derived) return true
-  return isLegacyProvenance(db, orgId, 'lien_waivers', row.id, { fallback: derived })
+  const derived = isLegacyExecutedLienWaiver(row);
+  if (derived) return true;
+  return isLegacyProvenance(db, orgId, "lien_waivers", row.id, { fallback: derived });
 }
 
 export type LienWaiverRow = {
-  id: string
-  waiverNumber: string
-  direction: 'received' | 'issued'
-  partyId: string
-  partyName: string
-  projectId: string
-  projectName: string
-  waiverType: LienWaiverType
-  status: string
+  id: string;
+  waiverNumber: string;
+  direction: "received" | "issued";
+  partyId: string;
+  partyName: string;
+  projectId: string;
+  projectName: string;
+  waiverType: LienWaiverType;
+  status: string;
   /** False for waivers executed before the snapshot freeze — see isLegacyExecutedLienWaiver. */
-  hasExecutedSnapshot: boolean
-  throughDate: string
-  amount: string
-  currency: string
-  jurisdiction: string | null
-  billDocumentId: string | null
-  billNumber: string | null
-  payApplicationId: string | null
-  signedByName: string | null
-  signedByTitle: string | null
-  signedAt: string | null
-  notarized: boolean
-  rejectedReason: string | null
-  voidReason: string | null
-  notes: string | null
-  requestedAt: string | null
-  createdAt: string
-}
+  hasExecutedSnapshot: boolean;
+  throughDate: string;
+  amount: string;
+  currency: string;
+  jurisdiction: string | null;
+  billDocumentId: string | null;
+  billNumber: string | null;
+  payApplicationId: string | null;
+  signedByName: string | null;
+  signedByTitle: string | null;
+  signedAt: string | null;
+  notarized: boolean;
+  rejectedReason: string | null;
+  voidReason: string | null;
+  notes: string | null;
+  requestedAt: string | null;
+  createdAt: string;
+};
 
 export async function loadLienWaivers(args: {
-  orgId: string
+  orgId: string;
   /** Targeted open-record lookup: bypasses the list filters but keeps the org/subsidiary scope. */
-  id?: string | null
-  direction?: 'received' | 'issued' | null
-  status?: string | null
-  projectId?: string | null
-  partyId?: string | null
-  limit?: number
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  id?: string | null;
+  direction?: "received" | "issued" | null;
+  status?: string | null;
+  projectId?: string | null;
+  partyId?: string | null;
+  limit?: number;
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope;
 }): Promise<LienWaiverRow[]> {
-  const r = await db.execute<LienWaiverRow>(sql`
+  const r = await db.execute<LienWaiverRow>(
+    sql`
     select lw.id, lw.waiver_number as "waiverNumber", lw.direction,
            lw.party_id as "partyId", p.display_name as "partyName",
            lw.project_id as "projectId",
@@ -669,8 +708,10 @@ export async function loadLienWaivers(args: {
        ${complianceSubsidiaryFilter(sql`pj.subsidiary_id`, args.allowedSubsidiaryIds)}
      order by lw.through_date desc, lw.waiver_number desc
      limit ${args.limit ?? 300}
-  `, 'objects')
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 /**
@@ -682,35 +723,36 @@ export async function loadLienWaivers(args: {
  * isLegacyExecutedLienWaiver) and its print is bannered as current records.
  */
 export type LienWaiverPrintSource = {
-  status: string
-  waiverNumber: string
-  waiverType: LienWaiverType
-  direction: 'received' | 'issued'
-  throughDate: string
-  amount: string
-  currency: string
-  jurisdiction: string | null
-  notes: string | null
-  signedByName: string | null
-  signedByTitle: string | null
-  signedAt: string | null
-  notarized: boolean
-  signature: { method?: string; attestedAt?: string } | null
-  claimantName: string
-  projectName: string
-  projectSubsidiaryId: string | null
-  projectAddress: string | null
-  ownerName: string | null
-  billNumber: string | null
-  orgName: string
-  executedSnapshot: unknown | null
-}
+  status: string;
+  waiverNumber: string;
+  waiverType: LienWaiverType;
+  direction: "received" | "issued";
+  throughDate: string;
+  amount: string;
+  currency: string;
+  jurisdiction: string | null;
+  notes: string | null;
+  signedByName: string | null;
+  signedByTitle: string | null;
+  signedAt: string | null;
+  notarized: boolean;
+  signature: { method?: string; attestedAt?: string } | null;
+  claimantName: string;
+  projectName: string;
+  projectSubsidiaryId: string | null;
+  projectAddress: string | null;
+  ownerName: string | null;
+  billNumber: string | null;
+  orgName: string;
+  executedSnapshot: unknown | null;
+};
 
 export async function loadLienWaiverPrintSource(
   orgId: string,
   id: string,
 ): Promise<LienWaiverPrintSource | null> {
-  const r = await db.execute<LienWaiverPrintSource>(sql`
+  const r = await db.execute<LienWaiverPrintSource>(
+    sql`
     select lw.status,
            lw.waiver_number as "waiverNumber", lw.waiver_type as "waiverType", lw.direction,
            lw.through_date as "throughDate", lw.amount,
@@ -737,8 +779,10 @@ export async function loadLienWaiverPrintSource(
          order by is_default_shipping desc, created_at limit 1
       ) addr on true
      where lw.org_id = ${orgId} and lw.id = ${id}
-  `, 'objects')
-  return r[0] ?? null
+  `,
+    "objects",
+  );
+  return r[0] ?? null;
 }
 
 /**
@@ -750,13 +794,13 @@ export async function loadLienWaiverPrintSource(
  * drift from what a live print would have shown at signing.
  */
 export function lienWaiverPrintData(source: LienWaiverPrintSource): {
-  data: LienWaiverFormData
-  orgName: string
+  data: LienWaiverFormData;
+  orgName: string;
 } {
   // Who releases and who pays flips with direction: a waiver we RECEIVE is the
   // subcontractor releasing us; one we ISSUE is us releasing the owner.
-  const claimantName = source.direction === 'received' ? source.claimantName : source.orgName
-  const payerName = source.direction === 'received' ? source.orgName : source.claimantName
+  const claimantName = source.direction === "received" ? source.claimantName : source.orgName;
+  const payerName = source.direction === "received" ? source.orgName : source.claimantName;
   return {
     data: {
       waiverNumber: source.waiverNumber,
@@ -778,11 +822,11 @@ export function lienWaiverPrintData(source: LienWaiverPrintSource): {
       signedAt: source.signedAt,
       notarized: source.notarized,
       signatureEvidence: source.signature?.method
-        ? `${source.signature.method} · recorded ${source.signature.attestedAt ?? ''}`.trim()
+        ? `${source.signature.method} · recorded ${source.signature.attestedAt ?? ""}`.trim()
         : null,
     },
     orgName: source.orgName,
-  }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -790,29 +834,30 @@ export function lienWaiverPrintData(source: LienWaiverPrintSource): {
 // ---------------------------------------------------------------------------
 
 export type FilingListRow = {
-  id: string
-  taxYear: number
-  formType: string
-  status: string
-  threshold: string
-  currency: string
-  subsidiaryName: string | null
-  computedAt: string | null
-  finalizedAt: string | null
-  filedAt: string | null
-  filingChannel: string | null
-  filingReference: string | null
-  includedCount: number
-  excludedCount: number
-  missingTinCount: number
-  filedTotal: string
-}
+  id: string;
+  taxYear: number;
+  formType: string;
+  status: string;
+  threshold: string;
+  currency: string;
+  subsidiaryName: string | null;
+  computedAt: string | null;
+  finalizedAt: string | null;
+  filedAt: string | null;
+  filingChannel: string | null;
+  filingReference: string | null;
+  includedCount: number;
+  excludedCount: number;
+  missingTinCount: number;
+  filedTotal: string;
+};
 
 export async function loadFilings(
   orgId: string,
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope,
 ): Promise<FilingListRow[]> {
-  const r = await db.execute<FilingListRow>(sql`
+  const r = await db.execute<FilingListRow>(
+    sql`
     select f.id, f.tax_year as "taxYear", f.form_type as "formType", f.status,
            f.threshold, f.currency, s.name as "subsidiaryName",
            f.computed_at as "computedAt", f.finalized_at as "finalizedAt",
@@ -848,8 +893,10 @@ export async function loadFilings(
      where f.org_id = ${orgId}
        ${complianceSubsidiaryFilter(sql`f.subsidiary_id`, allowedSubsidiaryIds)}
      order by f.tax_year desc, f.form_type
-  `, 'objects')
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 /**
@@ -861,56 +908,63 @@ export async function loadFilings(
  */
 export async function loadInformationReturnFilingScope(
   orgId: string,
-  filingId: string
+  filingId: string,
 ): Promise<{ subsidiaryId: string | null } | null> {
-  const r = await db.execute<{ subsidiaryId: string | null }>(sql`
+  const r = await db.execute<{ subsidiaryId: string | null }>(
+    sql`
     select subsidiary_id as "subsidiaryId"
       from information_return_filings
      where org_id = ${orgId} and id = ${filingId}
-  `, 'objects')
-  return r[0] ?? null
+  `,
+    "objects",
+  );
+  return r[0] ?? null;
 }
 
 export interface RecipientRow {
-  id: string
-  partyId: string
-  vendorName: string
-  legalName: string | null
-  tinLast4: string | null
-  tinType: string | null
-  taxClassification: string | null
-  computedAmounts: Record<string, string>
-  adjustments: Record<string, string>
-  adjustmentReason: string | null
-  taxWithheld: string
-  status: string
-  exclusionReason: string | null
-  paymentIds: string[]
-  address: Record<string, string | null>
-  furnishedAt: string | null
+  id: string;
+  partyId: string;
+  vendorName: string;
+  legalName: string | null;
+  tinLast4: string | null;
+  tinType: string | null;
+  taxClassification: string | null;
+  computedAmounts: Record<string, string>;
+  adjustments: Record<string, string>;
+  adjustmentReason: string | null;
+  taxWithheld: string;
+  status: string;
+  exclusionReason: string | null;
+  paymentIds: string[];
+  address: Record<string, string | null>;
+  furnishedAt: string | null;
 }
 
 export interface FilingDetail extends FilingListRow {
-  payerSnapshot: Record<string, unknown>
-  notes: string | null
-  recipients: RecipientRow[]
+  payerSnapshot: Record<string, unknown>;
+  notes: string | null;
+  recipients: RecipientRow[];
 }
 
 export async function loadFiling(
   orgId: string,
   filingId: string,
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope,
 ): Promise<FilingDetail | null> {
-  const filings = await loadFilings(orgId, allowedSubsidiaryIds)
-  const filing = filings.find((f) => f.id === filingId)
-  if (!filing) return null
+  const filings = await loadFilings(orgId, allowedSubsidiaryIds);
+  const filing = filings.find((f) => f.id === filingId);
+  if (!filing) return null;
   const [meta, recipients] = await Promise.all([
-    db.execute<{ payerSnapshot: Record<string, unknown>; notes: string | null }>(sql`
+    db.execute<{ payerSnapshot: Record<string, unknown>; notes: string | null }>(
+      sql`
       select payer_snapshot as "payerSnapshot", notes
         from information_return_filings
        where org_id = ${orgId} and id = ${filingId}
-         ${complianceSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`, 'objects'),
-    db.execute<RecipientRow>(sql`
+         ${complianceSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`,
+      "objects",
+    ),
+    db.execute<RecipientRow>(
+      sql`
       select r.id, r.party_id as "partyId", p.display_name as "vendorName",
              r.recipient_snapshot->>'legalName' as "legalName",
              r.tin_last4 as "tinLast4", r.tin_type as "tinType",
@@ -925,15 +979,16 @@ export async function loadFiling(
         from information_return_recipients r
         join parties p on p.id = r.party_id and p.org_id = r.org_id
        where r.org_id = ${orgId} and r.filing_id = ${filingId}
-       order by r.status, p.display_name`, 'objects')
-  ])
+       order by r.status, p.display_name`,
+      "objects",
+    ),
+  ]);
   return {
     ...filing,
-    payerSnapshot:
-      meta[0]?.payerSnapshot ?? {},
+    payerSnapshot: meta[0]?.payerSnapshot ?? {},
     notes: meta[0]?.notes ?? null,
-    recipients
-  }
+    recipients,
+  };
 }
 
 /**
@@ -942,21 +997,22 @@ export async function loadFiling(
  * record, not the filing snapshot, so fixing a W-9 clears the row immediately.
  */
 export type ReadinessRow = {
-  partyId: string
-  vendorName: string
-  reportable: boolean
-  resolvedForm: string | null
-  hasTin: boolean
-  taxClassification: string | null
-  paidThisYear: string
-}
+  partyId: string;
+  vendorName: string;
+  reportable: boolean;
+  resolvedForm: string | null;
+  hasTin: boolean;
+  taxClassification: string | null;
+  paidThisYear: string;
+};
 
 export async function loadInformationReturnReadiness(
   orgId: string,
   taxYear: number,
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope,
 ): Promise<ReadinessRow[]> {
-  const r = await db.execute<ReadinessRow>(sql`
+  const r = await db.execute<ReadinessRow>(
+    sql`
     -- The year's bank cash per vendor, aggregated once for the organization.
     -- Bank cash only: a discount is a second negative, non-open-item leg,
     -- but it never leaves the bank and must not inflate the paid figure —
@@ -1005,8 +1061,10 @@ export async function loadInformationReturnReadiness(
        )
      order by coalesce(paid.total, 0) desc, p.display_name
      limit 200
-  `, 'objects')
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,19 +1072,19 @@ export async function loadInformationReturnReadiness(
 // ---------------------------------------------------------------------------
 
 export interface ComplianceOverview {
-  asOf: string
-  taxYear: number
-  trackedVendors: number
-  byState: Record<ComplianceState, number>
-  blockedVendors: number
-  expiringSoon: MatrixRow[]
-  blockedBills: BlockedBillRow[]
-  blockedExposure: string
-  outstandingWaivers: LienWaiverRow[]
-  readiness: ReadinessRow[]
-  filings: FilingListRow[]
-  policyCount: number
-  configured: boolean
+  asOf: string;
+  taxYear: number;
+  trackedVendors: number;
+  byState: Record<ComplianceState, number>;
+  blockedVendors: number;
+  expiringSoon: MatrixRow[];
+  blockedBills: BlockedBillRow[];
+  blockedExposure: string;
+  outstandingWaivers: LienWaiverRow[];
+  readiness: ReadinessRow[];
+  filings: FilingListRow[];
+  policyCount: number;
+  configured: boolean;
 }
 
 const EMPTY_STATES: Record<ComplianceState, number> = {
@@ -1037,35 +1095,33 @@ const EMPTY_STATES: Record<ComplianceState, number> = {
   expired: 0,
   insufficient: 0,
   awaiting_verification: 0,
-  rejected: 0
-}
+  rejected: 0,
+};
 
 /** Everything the /compliance cockpit renders, in one pass. */
 export async function loadComplianceOverview(
   orgId: string,
   taxYear: number,
-  allowedSubsidiaryIds?: ComplianceSubsidiaryScope
+  allowedSubsidiaryIds?: ComplianceSubsidiaryScope,
 ): Promise<ComplianceOverview> {
-  const asOf = await businessToday(orgId)
+  const asOf = await businessToday(orgId);
   const [matrix, blocked, waivers, readiness, filings] = await Promise.all([
     loadComplianceMatrix({ orgId, asOf, allowedSubsidiaryIds }),
     loadBlockedBills(orgId, 200, allowedSubsidiaryIds),
     loadLienWaivers({
       orgId,
-      direction: 'received',
+      direction: "received",
       limit: 50,
-      allowedSubsidiaryIds
+      allowedSubsidiaryIds,
     }),
     loadInformationReturnReadiness(orgId, taxYear, allowedSubsidiaryIds),
-    loadFilings(orgId, allowedSubsidiaryIds)
-  ])
-  const byState = { ...EMPTY_STATES }
-  for (const row of matrix.rows) byState[row.overall] += 1
+    loadFilings(orgId, allowedSubsidiaryIds),
+  ]);
+  const byState = { ...EMPTY_STATES };
+  for (const row of matrix.rows) byState[row.overall] += 1;
   const blockedExposure = sum(
-    blocked
-      .filter((b) => b.decision === 'blocked')
-      .map((b) => mulRate(b.openBalance, b.fxRate)),
-  )
+    blocked.filter((b) => b.decision === "blocked").map((b) => mulRate(b.openBalance, b.fxRate)),
+  );
   return {
     asOf,
     taxYear,
@@ -1073,17 +1129,19 @@ export async function loadComplianceOverview(
     byState,
     blockedVendors: matrix.rows.filter((r) => r.blocksPayment || r.blocksBill).length,
     expiringSoon: matrix.rows
-      .filter((r) => r.overall === 'expiring')
-      .sort((a, b) => (a.nextExpiry ?? '').localeCompare(b.nextExpiry ?? ''))
+      .filter((r) => r.overall === "expiring")
+      .sort((a, b) => (a.nextExpiry ?? "").localeCompare(b.nextExpiry ?? ""))
       .slice(0, 12),
     blockedBills: blocked.slice(0, 12),
     blockedExposure: formatMoney(blockedExposure, 2),
-    outstandingWaivers: waivers.filter((w) => w.status === 'requested' || w.status === 'received').slice(0, 12),
+    outstandingWaivers: waivers
+      .filter((w) => w.status === "requested" || w.status === "received")
+      .slice(0, 12),
     readiness: readiness.slice(0, 12),
     filings,
     policyCount: matrix.policies.length,
-    configured: matrix.policies.length > 0 && matrix.classes.length > 0
-  }
+    configured: matrix.policies.length > 0 && matrix.classes.length > 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1091,16 +1149,18 @@ export async function loadComplianceOverview(
 // ---------------------------------------------------------------------------
 
 /** Badge tone for a compliance state — one mapping, used by every surface. */
-export function stateTone(state: ComplianceState): 'success' | 'warning' | 'destructive' | 'secondary' {
+export function stateTone(
+  state: ComplianceState,
+): "success" | "warning" | "destructive" | "secondary" {
   switch (state) {
-    case 'compliant':
-      return 'success'
-    case 'expiring':
-    case 'awaiting_verification':
-      return 'warning'
-    case 'waived':
-      return 'secondary'
+    case "compliant":
+      return "success";
+    case "expiring":
+    case "awaiting_verification":
+      return "warning";
+    case "waived":
+      return "secondary";
     default:
-      return 'destructive'
+      return "destructive";
   }
 }

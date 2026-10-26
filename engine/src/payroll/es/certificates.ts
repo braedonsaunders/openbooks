@@ -15,10 +15,7 @@
  * degree tables the AEAT algorithm applies to them (ALGORITMO_2026) are NOT
  * transcribed — see ./rates.ts.
  */
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 import { ES_PROVINCIAS } from "./provincias.ts";
 
 const MODELO_145: PayrollCertificate = {
@@ -28,58 +25,78 @@ const MODELO_145: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "AEAT Modelo 145 (art. 88 RIRPF, RD 439/2007); situaciones familiares del art. 81 RIRPF; "
-    + "Resolución de 3 de enero de 2011 (BOE núm. 4, de 5 de enero de 2011)",
+    "AEAT Modelo 145 (art. 88 RIRPF, RD 439/2007); situaciones familiares del art. 81 RIRPF; " +
+    "Resolución de 3 de enero de 2011 (BOE núm. 4, de 5 de enero de 2011)",
   summary:
-    "El perceptor comunica al pagador su situación familiar y sus datos personales para que "
-    + "calcule el tipo de retención. Sin comunicación, la retención practicada puede resultar "
-    + "superior a la procedente y la diferencia se recupera en la declaración del IRPF.",
+    "El perceptor comunica al pagador su situación familiar y sus datos personales para que " +
+    "calcule el tipo de retención. Sin comunicación, la retención practicada puede resultar " +
+    "superior a la procedente y la diferencia se recupera en la declaración del IRPF.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "situacion_familiar", label: "Situación familiar", kind: "choice",
+      key: "situacion_familiar",
+      label: "Situación familiar",
+      kind: "choice",
       choices: [
         {
           value: "1",
           label: "Situación 1 — Soltero, viudo, divorciado o separado legal con hijos a cargo",
-          help: "Art. 81.1 RIRPF: contribuyentes solteros, viudos, divorciados o separados "
-            + "legalmente con hijos que convivan y den derecho al mínimo por descendientes.",
+          help:
+            "Art. 81.1 RIRPF: contribuyentes solteros, viudos, divorciados o separados " +
+            "legalmente con hijos que convivan y den derecho al mínimo por descendientes.",
         },
         {
           value: "2",
           label: "Situación 2 — Casado no separado con cónyuge sin rentas superiores a 1.500 €",
-          help: "Art. 81.2 RIRPF: casados y no separados legalmente cuyo cónyuge no obtiene "
-            + "rentas anuales superiores a 1.500 euros, excluidas las exentas.",
+          help:
+            "Art. 81.2 RIRPF: casados y no separados legalmente cuyo cónyuge no obtiene " +
+            "rentas anuales superiores a 1.500 euros, excluidas las exentas.",
         },
         {
           value: "3",
           label: "Situación 3 — Resto de perceptores",
-          help: "Art. 81.3 RIRPF: la categoría residual — solteros sin hijos, casados cuyo "
-            + "cónyuge supera el límite de rentas, y cualquier otra situación.",
+          help:
+            "Art. 81.3 RIRPF: la categoría residual — solteros sin hijos, casados cuyo " +
+            "cónyuge supera el límite de rentas, y cualquier otra situación.",
         },
       ],
-      default: "3", required: true,
-      help: "La situación familiar del Modelo 145 (art. 81 RIRPF). La situación 3 es la "
-        + "residual que el pagador aplica cuando el perceptor no comunica otra.",
+      default: "3",
+      required: true,
+      help:
+        "La situación familiar del Modelo 145 (art. 81 RIRPF). La situación 3 es la " +
+        "residual que el pagador aplica cuando el perceptor no comunica otra.",
     },
     {
-      key: "hijos_descendientes", label: "Hijos y otros descendientes", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Número de hijos y otros descendientes que dan derecho al mínimo por descendientes "
-        + "y minoran el tipo de retención. Años de nacimiento y grados de discapacidad, sin "
-        + "transcribir (ALGORITMO AEAT pendiente).",
+      key: "hijos_descendientes",
+      label: "Hijos y otros descendientes",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Número de hijos y otros descendientes que dan derecho al mínimo por descendientes " +
+        "y minoran el tipo de retención. Años de nacimiento y grados de discapacidad, sin " +
+        "transcribir (ALGORITMO AEAT pendiente).",
     },
     {
-      key: "ascendientes", label: "Ascendientes a cargo", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Ascendientes que conviven con el perceptor y dan derecho al mínimo por "
-        + "ascendientes. Edades y grados de discapacidad, sin transcribir.",
+      key: "ascendientes",
+      label: "Ascendientes a cargo",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Ascendientes que conviven con el perceptor y dan derecho al mínimo por " +
+        "ascendientes. Edades y grados de discapacidad, sin transcribir.",
     },
     {
-      key: "discapacidad", label: "Discapacidad reconocida del perceptor", kind: "flag",
-      help: "El perceptor tiene reconocido un grado de discapacidad. Los grados (33–64%, "
-        + "65% o superior, con ayuda de tercera persona) determinan las minoraciones del "
-        + "algoritmo AEAT y están sin transcribir.",
+      key: "discapacidad",
+      label: "Discapacidad reconocida del perceptor",
+      kind: "flag",
+      help:
+        "El perceptor tiene reconocido un grado de discapacidad. Los grados (33–64%, " +
+        "65% o superior, con ayuda de tercera persona) determinan las minoraciones del " +
+        "algoritmo AEAT y están sin transcribir.",
     },
   ],
 };
@@ -115,11 +132,11 @@ const ES_DATOS_PERCEPTOR: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "AEAT ALGORITMO de cálculo del tipo de retención 2026 (SITUPER, AÑOPER); Orden PJC/297/2026 "
-    + "art. 33 (grupos de cotización 1–11); LIRPF art. 12 (período impositivo: año natural)",
+    "AEAT ALGORITMO de cálculo del tipo de retención 2026 (SITUPER, AÑOPER); Orden PJC/297/2026 " +
+    "art. 33 (grupos de cotización 1–11); LIRPF art. 12 (período impositivo: año natural)",
   summary:
-    "The labour status, contribution group and birth year the AEAT algorithm prices. Kept apart "
-    + "from the Modelo 145, whose situación familiar is a different fact.",
+    "The labour status, contribution group and birth year the AEAT algorithm prices. Kept apart " +
+    "from the Modelo 145, whose situación familiar is a different fact.",
   storage: "profile_columns",
   fields: [
     {
@@ -136,8 +153,9 @@ const ES_DATOS_PERCEPTOR: PayrollCertificate = {
       // UNANSWERED profile still saves, so readiness names the gap before
       // calculation rather than the save refusing an incomplete setup.
       required: true,
-      help: "SITUPER moves gastos and REDU, so it is never defaulted. This is the LABOUR status, "
-        + "not the Modelo 145 situación familiar.",
+      help:
+        "SITUPER moves gastos and REDU, so it is never defaulted. This is the LABOUR status, " +
+        "not the Modelo 145 situación familiar.",
     },
     {
       key: "grupo_cotizacion",
@@ -147,8 +165,9 @@ const ES_DATOS_PERCEPTOR: PayrollCertificate = {
       max: "11",
       storage: { kind: "column", column: "es_grupo_cotizacion" },
       required: true,
-      help: "The TGSS contribution group from the professional category (Orden PJC/297/2026 art. 33). "
-        + "An undeclared group never falls through to group 1 pricing.",
+      help:
+        "The TGSS contribution group from the professional category (Orden PJC/297/2026 art. 33). " +
+        "An undeclared group never falls through to group 1 pricing.",
     },
     {
       key: "ano_nacimiento",
@@ -170,9 +189,10 @@ const ES_DATOS_PERCEPTOR: PayrollCertificate = {
       // 33.2.a), so an unanswered profile still saves while readiness
       // names the gap before calculation — exactly like SITUPER above.
       required: true,
-      help: "Whether the contract is temporal (fixed-term): \"true\" prices the temporary-contract "
-        + "desempleo rate (8,30% in 2026), \"false\" the indefinite rate (7,05%). An undeclared "
-        + "contract never falls through to indefinite pricing.",
+      help:
+        'Whether the contract is temporal (fixed-term): "true" prices the temporary-contract ' +
+        'desempleo rate (8,30% in 2026), "false" the indefinite rate (7,05%). An undeclared ' +
+        "contract never falls through to indefinite pricing.",
     },
   ],
 };
@@ -184,11 +204,11 @@ const ES_ZONA_IRPF: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "AEAT ALGORITMO de cálculo del tipo de retención 2026, RESICEME y RENCEME; "
-    + "LIRPF art. 68.4 and D.A. 57ª; Real Decreto-ley 23/2026, effective 10 September 2026",
+    "AEAT ALGORITMO de cálculo del tipo de retención 2026, RESICEME y RENCEME; " +
+    "LIRPF art. 68.4 and D.A. 57ª; Real Decreto-ley 23/2026, effective 10 September 2026",
   summary:
-    "The employee declares habitual and effective residence in Ceuta/Melilla or La Palma, and "
-    + "whether the employment income was obtained there. Both conditions control the reduced IRPF type.",
+    "The employee declares habitual and effective residence in Ceuta/Melilla or La Palma, and " +
+    "whether the employment income was obtained there. Both conditions control the reduced IRPF type.",
   storage: "certificate_rows",
   fields: [
     {
@@ -201,8 +221,9 @@ const ES_ZONA_IRPF: PayrollCertificate = {
         { value: "la-palma", label: "La Palma" },
       ],
       required: true,
-      help: "La residencia y la obtención de los rendimientos en la zona se declaran por separado. "
-        + "La Palma solo da acceso al régimen excepcional desde el 10 de septiembre de 2026.",
+      help:
+        "La residencia y la obtención de los rendimientos en la zona se declaran por separado. " +
+        "La Palma solo da acceso al régimen excepcional desde el 10 de septiembre de 2026.",
     },
     {
       key: "rendimientos_en_zona",
@@ -228,12 +249,12 @@ const ES_CONTRATO: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "AEAT ALGORITMO de cálculo del tipo de retención 2026, TIPO mínimo "
-    + "(contratos de duración inferior al año; relaciones laborales especiales)",
+    "AEAT ALGORITMO de cálculo del tipo de retención 2026, TIPO mínimo " +
+    "(contratos de duración inferior al año; relaciones laborales especiales)",
   summary:
-    "The worker's contract category, which selects the statutory minimum "
-    + "withholding rate. An unidentified category never falls through to the "
-    + "general rate.",
+    "The worker's contract category, which selects the statutory minimum " +
+    "withholding rate. An unidentified category never falls through to the " +
+    "general rate.",
   storage: "certificate_rows",
   fields: [
     {
@@ -246,9 +267,10 @@ const ES_CONTRATO: PayrollCertificate = {
         { value: "especial", label: "Relación laboral especial" },
       ],
       required: true,
-      help: "Copy the category off the signed contrato: sub-one-year duration prices "
-        + "the 2% minimum, a special employment relationship the 15% minimum. "
-        + "An undeclared category refuses calculation instead of pricing general.",
+      help:
+        "Copy the category off the signed contrato: sub-one-year duration prices " +
+        "the 2% minimum, a special employment relationship the 15% minimum. " +
+        "An undeclared category refuses calculation instead of pricing general.",
     },
   ],
 };
@@ -261,8 +283,8 @@ const ES_RETRIBUCION_ANUAL: PayrollCertificate = {
   purpose: "withholding",
   citation: "RIRPF art. 83.2.1ª (RD 439/2007): remuneration normally expected in the calendar year",
   summary:
-    "The employer records the total employment remuneration expected for this employee from this payer "
-    + "in the calendar year, based on the effective contract and predictable circumstances.",
+    "The employer records the total employment remuneration expected for this employee from this payer " +
+    "in the calendar year, based on the effective contract and predictable circumstances.",
   storage: "certificate_rows",
   fields: [
     {
@@ -272,8 +294,9 @@ const ES_RETRIBUCION_ANUAL: PayrollCertificate = {
       decimals: 2,
       min: "0.01",
       required: true,
-      help: "Include only remuneration expected from this payer in the current calendar year, including "
-        + "predictable one-off amounts. Update this signed declaration when expected remuneration changes.",
+      help:
+        "Include only remuneration expected from this payer in the current calendar year, including " +
+        "predictable one-off amounts. Update this signed declaration when expected remuneration changes.",
     },
     {
       key: "periodos_recurrentes_esperados",
@@ -282,8 +305,9 @@ const ES_RETRIBUCION_ANUAL: PayrollCertificate = {
       min: "1",
       max: "12",
       required: true,
-      help: "Count the monthly recurring payroll periods in which this employee is expected to be paid "
-        + "during this calendar year, including this period. A December starter normally has one.",
+      help:
+        "Count the monthly recurring payroll periods in which this employee is expected to be paid " +
+        "during this calendar year, including this period. A December starter normally has one.",
     },
   ],
 };
@@ -303,55 +327,65 @@ const ES_RESIDENCIA_FISCAL: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "LIRNR (RD Legislativo 5/2004) arts. 1–13 (contribuyentes, rentas de fuente española); "
-    + "AEAT IRNR rates 19%/24% (LIRNR art. 25) and rendimientos del trabajo guidance "
-    + "(sede.agenciatributaria.gob.es, IRNR sin establecimiento permanente)",
+    "LIRNR (RD Legislativo 5/2004) arts. 1–13 (contribuyentes, rentas de fuente española); " +
+    "AEAT IRNR rates 19%/24% (LIRNR art. 25) and rendimientos del trabajo guidance " +
+    "(sede.agenciatributaria.gob.es, IRNR sin establecimiento permanente)",
   summary:
-    "Whether the perceptor is a Spanish fiscal resident (IRPF) or a nonresident whose "
-    + "Spanish-source wages fall under the IRNR. The pack computes no IRNR levy, so a "
-    + "recorded nonresident refuses by name instead of withholding IRPF on IRNR wages.",
+    "Whether the perceptor is a Spanish fiscal resident (IRPF) or a nonresident whose " +
+    "Spanish-source wages fall under the IRNR. The pack computes no IRNR levy, so a " +
+    "recorded nonresident refuses by name instead of withholding IRPF on IRNR wages.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "residencia", label: "Residencia fiscal", kind: "choice",
+      key: "residencia",
+      label: "Residencia fiscal",
+      kind: "choice",
       choices: [
         {
           value: "residente",
           label: "Residente fiscal en España — tributa por el IRPF",
-          help: "LIRPF (Ley 35/2006): worldwide employment income taxed under IRPF; "
-            + "the AEAT retention algorithm prices the withholding.",
+          help:
+            "LIRPF (Ley 35/2006): worldwide employment income taxed under IRPF; " +
+            "the AEAT retention algorithm prices the withholding.",
         },
         {
           value: "no_residente_ue_eee",
           label: "No residente UE/EEE con intercambio efectivo de información — IRNR 19%",
-          help: "LIRNR art. 25.1.a: Spanish-source employment income withheld at the "
-            + "flat 19% rate, with no personal or family minimums.",
+          help:
+            "LIRNR art. 25.1.a: Spanish-source employment income withheld at the " +
+            "flat 19% rate, with no personal or family minimums.",
         },
         {
           value: "no_residente_otros",
           label: "No residente (resto) — IRNR 24%",
-          help: "LIRNR art. 25.1.a: Spanish-source employment income withheld at the "
-            + "flat 24% rate, with no personal or family minimums.",
+          help:
+            "LIRNR art. 25.1.a: Spanish-source employment income withheld at the " +
+            "flat 24% rate, with no personal or family minimums.",
         },
         {
           value: "no_residente_convenio",
           label: "No residente con convenio de doble imposición aplicable",
-          help: "The applicable treaty sets the withholding rate on Spanish-source "
-            + "employment income: record it in tasa_convenio below. The engine "
-            + "prices the treaty rate, never the 19%/24% general rates.",
+          help:
+            "The applicable treaty sets the withholding rate on Spanish-source " +
+            "employment income: record it in tasa_convenio below. The engine " +
+            "prices the treaty rate, never the 19%/24% general rates.",
         },
       ],
       required: true,
-      help: "IRPF taxes residents; the IRNR taxes nonresidents' Spanish-source wages. "
-        + "The two are different levies — recording the wrong one withholds the wrong tax.",
+      help:
+        "IRPF taxes residents; the IRNR taxes nonresidents' Spanish-source wages. " +
+        "The two are different levies — recording the wrong one withholds the wrong tax.",
     },
     {
-      key: "tasa_convenio", label: "Tipo de retención del convenio (%)", kind: "amount",
+      key: "tasa_convenio",
+      label: "Tipo de retención del convenio (%)",
+      kind: "amount",
       decimals: 2,
-      help: "Treaty withholding rate as a percent (10.00 = 10%, 0.00 = treaty-exempt): "
-        + "the rate the applicable double-taxation treaty sets on Spanish-source "
-        + "employment income. Required when residencia is no_residente_convenio, "
-        + "ignored otherwise.",
+      help:
+        "Treaty withholding rate as a percent (10.00 = 10%, 0.00 = treaty-exempt): " +
+        "the rate the applicable double-taxation treaty sets on Spanish-source " +
+        "employment income. Required when residencia is no_residente_convenio, " +
+        "ignored otherwise.",
     },
   ],
 };
@@ -374,12 +408,12 @@ const ES_DOMICILIO: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "BOE Orden EHA/3127/2009, Modelo 190 registro tipo 2, posiciones 76–77 (provincia del "
-    + "domicilio del perceptor); AEAT diseños lógicos Modelo 190",
+    "BOE Orden EHA/3127/2009, Modelo 190 registro tipo 2, posiciones 76–77 (provincia del " +
+    "domicilio del perceptor); AEAT diseños lógicos Modelo 190",
   summary:
-    "The employee declares the province of their domicile (vivienda habitual) so the payer "
-    + "reports the perceptor row under the legally defined domicile code. The work community "
-    + "on the pay stub is a different fact and never substitutes for it.",
+    "The employee declares the province of their domicile (vivienda habitual) so the payer " +
+    "reports the perceptor row under the legally defined domicile code. The work community " +
+    "on the pay stub is a different fact and never substitutes for it.",
   storage: "certificate_rows",
   fields: [
     {
@@ -391,14 +425,23 @@ const ES_DOMICILIO: PayrollCertificate = {
         label: `${provincia.code} — ${provincia.name}`,
       })),
       required: true,
-      help: "The two-digit province code of the employee's domicile, as filed on the Modelo 190 "
-        + "(posiciones 76–77). Domicile, not workplace: an employee living in Madrid and working "
-        + "in Catalonia files 28.",
+      help:
+        "The two-digit province code of the employee's domicile, as filed on the Modelo 190 " +
+        "(posiciones 76–77). Domicile, not workplace: an employee living in Madrid and working " +
+        "in Catalonia files 28.",
     },
   ],
 };
 
 export const ES_CERTIFICATES: PayrollPackCertificates = {
   country: "ES",
-  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL, ES_CONTRATO, ES_RESIDENCIA_FISCAL, ES_DOMICILIO],
+  certificates: [
+    MODELO_145,
+    ES_DATOS_PERCEPTOR,
+    ES_ZONA_IRPF,
+    ES_RETRIBUCION_ANUAL,
+    ES_CONTRATO,
+    ES_RESIDENCIA_FISCAL,
+    ES_DOMICILIO,
+  ],
 };

@@ -1,58 +1,61 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../testing/stub-modules";
+import test from "node:test";
 
 // Route boundary suite: two overlapping PATCH requests exercise the same row
 // lock and exact revision fence production uses for dashboard autosave.
-const stateKey = Symbol.for('openbooks.dashboard-route-test')
+const stateKey = Symbol.for("openbooks.dashboard-route-test");
 interface DbCall {
-  kind: 'execute' | 'tx-execute'
-  text: string
+  kind: "execute" | "tx-execute";
+  text: string;
 }
 interface Dashboard {
-  id: string
-  name: string
-  description: string | null
-  layout: unknown[]
-  status: 'draft' | 'published'
-  allowed_roles: string[] | null
-  updated_at: string
+  id: string;
+  name: string;
+  description: string | null;
+  layout: unknown[];
+  status: "draft" | "published";
+  allowed_roles: string[] | null;
+  updated_at: string;
 }
 interface RouteState {
-  calls: DbCall[]
-  dashboard: Dashboard | null
-  revision: string
-  nextRevision: string
-  lockCount: number
-  respondExecute: (text: string) => { rows: unknown[] } | Promise<{ rows: unknown[] }>
-  respondTxExecute: (text: string) => { rows: unknown[] } | Promise<{ rows: unknown[] }>
+  calls: DbCall[];
+  dashboard: Dashboard | null;
+  revision: string;
+  nextRevision: string;
+  lockCount: number;
+  respondExecute: (text: string) => { rows: unknown[] } | Promise<{ rows: unknown[] }>;
+  respondTxExecute: (text: string) => { rows: unknown[] } | Promise<{ rows: unknown[] }>;
 }
 const routeState: RouteState = {
   calls: [],
   dashboard: null,
-  revision: '2026-08-24T12:00:00.100001Z',
-  nextRevision: '2026-08-24T12:00:00.100002Z',
+  revision: "2026-08-24T12:00:00.100001Z",
+  nextRevision: "2026-08-24T12:00:00.100002Z",
   lockCount: 0,
   respondExecute: () => ({ rows: [] }),
   respondTxExecute: () => ({ rows: [] }),
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into raw text for deterministic fake replies. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextDashboard?: unknown }).openbooksSqlTextDashboard = sqlText
+(
+  globalThis as typeof globalThis &
+    Record<string, unknown> & { openbooksSqlTextDashboard?: unknown }
+).openbooksSqlTextDashboard = sqlText;
 
 stubModules({
   navigation: false,
@@ -122,106 +125,132 @@ stubModules({
       export function strOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : null }
     `,
   },
-})
+});
 
-const routeUrl = './[id]/route.ts?dashboard-occ-test'
-const { PATCH } = (await import(routeUrl)) as typeof import('./[id]/route.ts')
+const routeUrl = "./[id]/route.ts?dashboard-occ-test";
+const { PATCH } = (await import(routeUrl)) as typeof import("./[id]/route.ts");
 
-const DASHBOARD_ID = '00000000-0000-4000-8000-00000000d001'
+const DASHBOARD_ID = "00000000-0000-4000-8000-00000000d001";
 
 function reset(): void {
-  routeState.calls.length = 0
-  routeState.revision = '2026-08-24T12:00:00.100001Z'
-  routeState.nextRevision = '2026-08-24T12:00:00.100002Z'
+  routeState.calls.length = 0;
+  routeState.revision = "2026-08-24T12:00:00.100001Z";
+  routeState.nextRevision = "2026-08-24T12:00:00.100002Z";
   routeState.dashboard = {
     id: DASHBOARD_ID,
-    name: 'Original dashboard',
+    name: "Original dashboard",
     description: null,
     layout: [],
-    status: 'draft',
+    status: "draft",
     allowed_roles: null,
     updated_at: routeState.revision,
-  }
-  routeState.lockCount = 0
+  };
+  routeState.lockCount = 0;
   routeState.respondExecute = (text) =>
-    text.includes('updatedAt') ? { rows: [{ updatedAt: routeState.revision }] } : { rows: [] }
+    text.includes("updatedAt") ? { rows: [{ updatedAt: routeState.revision }] } : { rows: [] };
   routeState.respondTxExecute = (text) => {
-    if (text.includes('for update')) return { rows: [{ updatedAt: routeState.revision }] }
-    if (text.includes('update insight_dashboards')) {
-      routeState.revision = routeState.nextRevision
+    if (text.includes("for update")) return { rows: [{ updatedAt: routeState.revision }] };
+    if (text.includes("update insight_dashboards")) {
+      routeState.revision = routeState.nextRevision;
       if (routeState.dashboard) {
-        routeState.dashboard = { ...routeState.dashboard, updated_at: routeState.revision }
+        routeState.dashboard = { ...routeState.dashboard, updated_at: routeState.revision };
       }
     }
-    return { rows: text.includes('update insight_dashboards') && routeState.dashboard ? [routeState.dashboard] : [] }
-  }
+    return {
+      rows:
+        text.includes("update insight_dashboards") && routeState.dashboard
+          ? [routeState.dashboard]
+          : [],
+    };
+  };
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/insights/dashboards/${DASHBOARD_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: DASHBOARD_ID }) },
-  )
+  );
 }
 
-test('PATCH rejects a missing revision token before any write', async () => {
-  reset()
+test("PATCH rejects a missing revision token before any write", async () => {
+  reset();
 
-  const response = await patch({ name: 'No token' })
+  const response = await patch({ name: "No token" });
 
-  const body = (await response.json()) as { error: string; issues?: { path: string }[] }
-  assert.deepEqual([response.status, body.issues?.[0]?.path, body.error], [400, 'expectedUpdatedAt', 'expectedUpdatedAt is required; reload and review the latest revision'])
-  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'), 'no transactional write ran')
-})
+  const body = (await response.json()) as { error: string; issues?: { path: string }[] };
+  assert.deepEqual(
+    [response.status, body.issues?.[0]?.path, body.error],
+    [
+      400,
+      "expectedUpdatedAt",
+      "expectedUpdatedAt is required; reload and review the latest revision",
+    ],
+  );
+  assert.ok(
+    !routeState.calls.some((call) => call.kind === "tx-execute"),
+    "no transactional write ran",
+  );
+});
 
-test('overlapping saves commit the fresh request and reject the delayed stale request', async () => {
-  reset()
-  const storedRevision = routeState.revision
-  let releaseStaleLock!: () => void
-  let staleLockEntered!: () => void
+test("overlapping saves commit the fresh request and reject the delayed stale request", async () => {
+  reset();
+  const storedRevision = routeState.revision;
+  let releaseStaleLock!: () => void;
+  let staleLockEntered!: () => void;
   const staleLock = new Promise<void>((resolve) => {
-    releaseStaleLock = resolve
-  })
+    releaseStaleLock = resolve;
+  });
   const entered = new Promise<void>((resolve) => {
-    staleLockEntered = resolve
-  })
+    staleLockEntered = resolve;
+  });
   routeState.respondTxExecute = async (text) => {
-    if (text.includes('for update')) {
-      routeState.lockCount += 1
+    if (text.includes("for update")) {
+      routeState.lockCount += 1;
       if (routeState.lockCount === 1) {
-        staleLockEntered()
-        await staleLock
+        staleLockEntered();
+        await staleLock;
       }
-      return { rows: [{ updatedAt: routeState.revision }] }
+      return { rows: [{ updatedAt: routeState.revision }] };
     }
-    if (text.includes('update insight_dashboards')) {
-      routeState.revision = routeState.nextRevision
+    if (text.includes("update insight_dashboards")) {
+      routeState.revision = routeState.nextRevision;
       if (routeState.dashboard) {
-        routeState.dashboard = { ...routeState.dashboard, name: 'Newest edit', updated_at: routeState.revision }
+        routeState.dashboard = {
+          ...routeState.dashboard,
+          name: "Newest edit",
+          updated_at: routeState.revision,
+        };
       }
     }
-    return { rows: text.includes('update insight_dashboards') && routeState.dashboard ? [routeState.dashboard] : [] }
-  }
+    return {
+      rows:
+        text.includes("update insight_dashboards") && routeState.dashboard
+          ? [routeState.dashboard]
+          : [],
+    };
+  };
 
-  const stale = patch({ name: 'Stale edit', expectedUpdatedAt: storedRevision })
-  await entered
-  const fresh = await patch({ name: 'Newest edit', expectedUpdatedAt: storedRevision })
-  assert.equal(fresh.status, 200)
-  releaseStaleLock()
-  const staleResponse = await stale
+  const stale = patch({ name: "Stale edit", expectedUpdatedAt: storedRevision });
+  await entered;
+  const fresh = await patch({ name: "Newest edit", expectedUpdatedAt: storedRevision });
+  assert.equal(fresh.status, 200);
+  releaseStaleLock();
+  const staleResponse = await stale;
 
-  assert.equal(staleResponse.status, 409)
+  assert.equal(staleResponse.status, 409);
   assert.deepEqual(await staleResponse.json(), {
-    error: 'this dashboard changed after you opened it; reload and review the latest revision',
-  })
+    error: "this dashboard changed after you opened it; reload and review the latest revision",
+  });
   assert.equal(
-    routeState.calls.filter((call) => call.kind === 'tx-execute' && call.text.includes('update insight_dashboards')).length,
+    routeState.calls.filter(
+      (call) => call.kind === "tx-execute" && call.text.includes("update insight_dashboards"),
+    ).length,
     1,
-    'the stale request never overwrote the fresh payload',
-  )
-  assert.equal(routeState.revision, routeState.nextRevision)
-})
+    "the stale request never overwrote the fresh payload",
+  );
+  assert.equal(routeState.revision, routeState.nextRevision);
+});

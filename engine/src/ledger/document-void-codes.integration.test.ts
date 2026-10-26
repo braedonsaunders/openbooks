@@ -57,7 +57,9 @@ async function seedPostedJournal(
       (${org.orgId}, ${entryId}, 1, ${org.accounts.adjustment}, ${org.subsidiaryId}, null, '25', 'CAD', '25', '1'),
       (${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, null, '-25', 'CAD', '-25', '1')
   `);
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+  await db.execute(
+    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`,
+  );
   await db.execute(sql`
     update documents
        set status = 'posted', posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}
@@ -66,37 +68,44 @@ async function seedPostedJournal(
   return { documentId, entryId };
 }
 
-test("voiding into a date with no accounting period refuses with a typed code", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Void Code Controller", "admin");
-    const { documentId } = await seedPostedJournal(org, actorId, "JE-VOID-CODE-1");
-    await assert.rejects(
-      requestDocumentVoid({
-        documentId,
-        orgId: org.orgId,
-        actorId,
-        reason: "Typed refusal for an uncovered reversal date",
-        reversalDate: "2026-09-17",
-        source: "api",
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof DocumentVoidError);
-        assert.match(error.message, /no accounting period covers 2026-09-17/);
-        assert.equal(error.code, "reversal-period-uncovered");
-        assert.equal(error.status, 422);
-        return true;
-      },
-    );
-    const doc = await db.execute<{ status: string; void_requested_at: Date | null }>(sql`
+test(
+  "voiding into a date with no accounting period refuses with a typed code",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Void Code Controller", "admin");
+      const { documentId } = await seedPostedJournal(org, actorId, "JE-VOID-CODE-1");
+      await assert.rejects(
+        requestDocumentVoid({
+          documentId,
+          orgId: org.orgId,
+          actorId,
+          reason: "Typed refusal for an uncovered reversal date",
+          reversalDate: "2026-09-17",
+          source: "api",
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof DocumentVoidError);
+          assert.match(error.message, /no accounting period covers 2026-09-17/);
+          assert.equal(error.code, "reversal-period-uncovered");
+          assert.equal(error.status, 422);
+          return true;
+        },
+      );
+      const doc = await db.execute<{ status: string; void_requested_at: Date | null }>(
+        sql`
       select status, void_requested_at from documents where id = ${documentId} and org_id = ${org.orgId}
-    `, "objects");
-    assert.equal(doc[0]?.status, "posted");
-    assert.equal(doc[0]?.void_requested_at, null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.equal(doc[0]?.status, "posted");
+      assert.equal(doc[0]?.void_requested_at, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("voiding into a locked reversal period refuses with a typed code", { skip: !DB }, async () => {
   const org = await createScratchOrg();

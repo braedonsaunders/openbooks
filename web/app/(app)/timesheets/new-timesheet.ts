@@ -11,14 +11,14 @@
  *   caller shows the named refusal with its remedy.
  */
 
-import { grantsConferring } from '../../../lib/permissions'
+import { grantsConferring } from "../../../lib/permissions";
 
-export type NewTimesheetRefusal = 'unlinked' | 'linkedOutOfScope' | 'noEmployees'
+export type NewTimesheetRefusal = "unlinked" | "linkedOutOfScope" | "noEmployees";
 
 export interface NewTimesheetStart {
-  employeeId: string | null
+  employeeId: string | null;
   /** Set only for a time enterer with nothing to open. */
-  refusal: NewTimesheetRefusal | null
+  refusal: NewTimesheetRefusal | null;
 }
 
 /**
@@ -28,24 +28,24 @@ export interface NewTimesheetStart {
  * implies supervision without naming it.
  */
 export function managesOthersTime(can: (permission: string) => boolean): boolean {
-  return grantsConferring('time.manage', 'all').some((grant) => can(grant))
+  return grantsConferring("time.manage", "all").some((grant) => can(grant));
 }
 
 export async function resolveNewTimesheetStart(input: {
-  canManage: boolean
-  managesOthersTime: boolean
-  linkedEmployeeId: string | null
+  canManage: boolean;
+  managesOthersTime: boolean;
+  linkedEmployeeId: string | null;
   /** Returns the timekeeper id when it is active and inside the caller's scope. */
-  pinInScope: (employeeId: string) => Promise<string | null>
-  firstActiveEmployeeId: string | null
+  pinInScope: (employeeId: string) => Promise<string | null>;
+  firstActiveEmployeeId: string | null;
 }): Promise<NewTimesheetStart> {
-  if (!input.canManage) return { employeeId: null, refusal: null }
-  const own = input.linkedEmployeeId ? await input.pinInScope(input.linkedEmployeeId) : null
-  if (own) return { employeeId: own, refusal: null }
+  if (!input.canManage) return { employeeId: null, refusal: null };
+  const own = input.linkedEmployeeId ? await input.pinInScope(input.linkedEmployeeId) : null;
+  if (own) return { employeeId: own, refusal: null };
   if (input.managesOthersTime) {
     return input.firstActiveEmployeeId
       ? { employeeId: input.firstActiveEmployeeId, refusal: null }
-      : { employeeId: null, refusal: 'noEmployees' }
+      : { employeeId: null, refusal: "noEmployees" };
   }
-  return { employeeId: null, refusal: input.linkedEmployeeId ? 'linkedOutOfScope' : 'unlinked' }
+  return { employeeId: null, refusal: input.linkedEmployeeId ? "linkedOutOfScope" : "unlinked" };
 }

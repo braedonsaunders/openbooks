@@ -4,10 +4,7 @@ import test from "node:test";
 import { isZero, mulRate, sum } from "../money/money.ts";
 import { db } from "../platform/db.ts";
 import { SubsidiaryError } from "../organization/subsidiaries.ts";
-import {
-  assertAccountCurrencyRestrictions,
-  applySubsidiaries,
-} from "./posting-subsidiaries.ts";
+import { assertAccountCurrencyRestrictions, applySubsidiaries } from "./posting-subsidiaries.ts";
 import { PostingError, type Doc, type KernelLine } from "../journal/posting-contracts.ts";
 
 type Runner = Pick<typeof db, "execute">;
@@ -43,7 +40,8 @@ const scripted = (
   const calls: string[] = [];
   const runner = {
     execute: async (query: Parameters<typeof db.execute>[0], mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const built = dialect.sqlToQuery(query);
       const step = steps[index];
       index += 1;
@@ -168,7 +166,10 @@ test("a currency mismatch names the account and both currencies, never an id", a
     },
   ]);
   await assert.rejects(
-    () => assertAccountCurrencyRestrictions(unnumbered.runner, "org-1", [{ accountId, currency: "USD" }]),
+    () =>
+      assertAccountCurrencyRestrictions(unnumbered.runner, "org-1", [
+        { accountId, currency: "USD" },
+      ]),
     (e: unknown) =>
       e instanceof PostingError && /Euro Safe only accepts EUR postings, not USD/.test(e.message),
   );
@@ -186,7 +187,10 @@ test("a same-currency single-entity document stamps subsidiaries with no fx read
     { accountId: a1, amount: "100.0000" as KernelLine["amount"] },
     { accountId: a2, amount: "-100.0000" as KernelLine["amount"] },
   ];
-  const out = await applySubsidiaries(s.runner, docOf({ subsidiaryId: null }), lines, { bookId: null, regeneration: false });
+  const out = await applySubsidiaries(s.runner, docOf({ subsidiaryId: null }), lines, {
+    bookId: null,
+    regeneration: false,
+  });
   assert.equal(out.docSubId, root.id, "a missing header subsidiary defaults to the root");
   assert.equal(out.multi, false);
   assert.equal(out.originBaseCurrency, "USD");
@@ -195,7 +199,10 @@ test("a same-currency single-entity document stamps subsidiaries with no fx read
   const [first, second] = out.lines;
   assert.ok(first);
   assert.ok(second);
-  for (const [stamped, original] of [[first, "100.0000"], [second, "-100.0000"]] as const) {
+  for (const [stamped, original] of [
+    [first, "100.0000"],
+    [second, "-100.0000"],
+  ] as const) {
     assert.equal(stamped.subsidiaryId, root.id);
     assert.equal(stamped.currency, "USD");
     assert.equal(stamped.fxRate, "1");
@@ -242,15 +249,17 @@ test("a default header rate is unset, so one spot read prices every line", async
       sql: /from fx_rates/,
       // The shared spot lookup reads an evidence row (stored/derived rates
       // plus identity), not a bare rate column.
-      rows: [{
-        id: "00000000-0000-4000-8000-000000000001",
-        as_of: "2026-09-15",
-        source: "unit",
-        stored_rate: spot,
-        updated_at: "2026-09-15T00:00:00.000000Z",
-        priority: 0,
-        derived_rate: spot,
-      }],
+      rows: [
+        {
+          id: "00000000-0000-4000-8000-000000000001",
+          as_of: "2026-09-15",
+          source: "unit",
+          stored_rate: spot,
+          updated_at: "2026-09-15T00:00:00.000000Z",
+          priority: 0,
+          derived_rate: spot,
+        },
+      ],
       check: ({ params }) => {
         assert.ok(params.includes("EUR") && params.includes("USD"), "the pair is named");
         assert.ok(params.includes("2026-09-15"), "the rate respects the posting date");
@@ -285,8 +294,15 @@ test("a default header rate is unset, so one spot read prices every line", async
 });
 
 const recordedRate = (over: Record<string, unknown> = {}) => ({
-  version: 1, rate: "1.35", source: "Bank confirmation", reason: "Contracted conversion for this shipment",
-  fromCurrency: "USD", toCurrency: "CAD", rateDate: "2026-09-15", subsidiaryId: "", ...over,
+  version: 1,
+  rate: "1.35",
+  source: "Bank confirmation",
+  reason: "Contracted conversion for this shipment",
+  fromCurrency: "USD",
+  toCurrency: "CAD",
+  rateDate: "2026-09-15",
+  subsidiaryId: "",
+  ...over,
 });
 
 // Internally composed documents may omit the evidence, like journal metadata.
@@ -318,8 +334,13 @@ test("recorded rate evidence prices the origin legs without a rate read, even at
   const s = scripted([subsidiariesStep([root], "org-1"), restrictionStep(), currencyStep()]);
   const out = await applySubsidiaries(
     s.runner,
-    docOf({ kind: "vendor_bill", subsidiaryId: root.id, currency: "USD", fxRate: "1.0000000000",
-      documentFxRateEvidence: recordedRate({ rate: "1", subsidiaryId: root.id }) }),
+    docOf({
+      kind: "vendor_bill",
+      subsidiaryId: root.id,
+      currency: "USD",
+      fxRate: "1.0000000000",
+      documentFxRateEvidence: recordedRate({ rate: "1", subsidiaryId: root.id }),
+    }),
     [
       { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
       { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
@@ -342,22 +363,41 @@ test("recorded rate evidence never prices another entity on the same functional 
     ...postingPreferenceSteps(child.id),
     {
       sql: /from fx_rates/,
-      rows: [{
-        id: "00000000-0000-4000-8000-000000000002", as_of: "2026-09-15", source: "unit",
-        stored_rate: spot, updated_at: "2026-09-15T00:00:00.000000Z", priority: 0, derived_rate: spot,
-      }],
+      rows: [
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          as_of: "2026-09-15",
+          source: "unit",
+          stored_rate: spot,
+          updated_at: "2026-09-15T00:00:00.000000Z",
+          priority: 0,
+          derived_rate: spot,
+        },
+      ],
     },
-    { sql: /from intercompany_pairs/, rows: [{ fromId: root.id, toId: child.id, dueFrom: randomUUID(), dueTo: randomUUID() }] },
+    {
+      sql: /from intercompany_pairs/,
+      rows: [{ fromId: root.id, toId: child.id, dueFrom: randomUUID(), dueTo: randomUUID() }],
+    },
     restrictionStep(),
     currencyStep(),
   ]);
   const out = await applySubsidiaries(
     s.runner,
-    docOf({ kind: "vendor_bill", subsidiaryId: root.id, currency: "USD", fxRate: "1.3500000000",
-      documentFxRateEvidence: recordedRate({ subsidiaryId: root.id }) }),
+    docOf({
+      kind: "vendor_bill",
+      subsidiaryId: root.id,
+      currency: "USD",
+      fxRate: "1.3500000000",
+      documentFxRateEvidence: recordedRate({ subsidiaryId: root.id }),
+    }),
     [
       { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
-      { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"], subsidiaryId: child.id },
+      {
+        accountId: randomUUID(),
+        amount: "-100.0000" as KernelLine["amount"],
+        subsidiaryId: child.id,
+      },
     ],
     { bookId: null, regeneration: false },
   );
@@ -371,12 +411,21 @@ test("recorded rate evidence for another posting date refuses before any rate is
   const root = subRow({ baseCurrency: "CAD" });
   const s = scripted([subsidiariesStep([root], "org-1")]);
   await assert.rejects(
-    () => applySubsidiaries(s.runner,
-      docOf({ kind: "vendor_bill", subsidiaryId: root.id, currency: "USD", fxRate: "1.3500000000",
-        documentFxRateEvidence: recordedRate({ subsidiaryId: root.id, rateDate: "2026-09-14" }) }),
-      [{ accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] }],
-      { bookId: null, regeneration: false }),
-    (e: unknown) => e instanceof PostingError && /no longer matches this document's posting date/.test(e.message),
+    () =>
+      applySubsidiaries(
+        s.runner,
+        docOf({
+          kind: "vendor_bill",
+          subsidiaryId: root.id,
+          currency: "USD",
+          fxRate: "1.3500000000",
+          documentFxRateEvidence: recordedRate({ subsidiaryId: root.id, rateDate: "2026-09-14" }),
+        }),
+        [{ accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] }],
+        { bookId: null, regeneration: false },
+      ),
+    (e: unknown) =>
+      e instanceof PostingError && /no longer matches this document's posting date/.test(e.message),
   );
   s.assertDrained();
 });
@@ -390,10 +439,15 @@ test("a missing spot rate names the pair and the date as a posting refusal", asy
   ]);
   await assert.rejects(
     () =>
-      applySubsidiaries(s.runner, docOf({ currency: "EUR", fxRate: "1.0000000000" }), [
-        { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
-        { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
-      ], { bookId: null, regeneration: false }),
+      applySubsidiaries(
+        s.runner,
+        docOf({ currency: "EUR", fxRate: "1.0000000000" }),
+        [
+          { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+          { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
+        ],
+        { bookId: null, regeneration: false },
+      ),
     (e: unknown) =>
       e instanceof PostingError &&
       !(e instanceof SubsidiaryError) &&
@@ -407,10 +461,14 @@ test("an unknown document subsidiary is refused before any rate is read", async 
   const s = scripted([subsidiariesStep([root], "org-1")]);
   await assert.rejects(
     () =>
-      applySubsidiaries(s.runner, docOf({ subsidiaryId: "missing-sub" }), [
-        { accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"] },
-      ], { bookId: null, regeneration: false }),
-    (e: unknown) => e instanceof PostingError && /subsidiary missing-sub does not exist/.test(e.message),
+      applySubsidiaries(
+        s.runner,
+        docOf({ subsidiaryId: "missing-sub" }),
+        [{ accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"] }],
+        { bookId: null, regeneration: false },
+      ),
+    (e: unknown) =>
+      e instanceof PostingError && /subsidiary missing-sub does not exist/.test(e.message),
   );
   s.assertDrained();
 });
@@ -420,10 +478,20 @@ test("a line stamped to an unknown subsidiary is refused", async () => {
   const s = scripted([subsidiariesStep([root], "org-1")]);
   await assert.rejects(
     () =>
-      applySubsidiaries(s.runner, docOf({ subsidiaryId: root.id }), [
-        { accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"], subsidiaryId: "ghost-sub" },
-      ], { bookId: null, regeneration: false }),
-    (e: unknown) => e instanceof PostingError && /subsidiary ghost-sub does not exist/.test(e.message),
+      applySubsidiaries(
+        s.runner,
+        docOf({ subsidiaryId: root.id }),
+        [
+          {
+            accountId: randomUUID(),
+            amount: "10.0000" as KernelLine["amount"],
+            subsidiaryId: "ghost-sub",
+          },
+        ],
+        { bookId: null, regeneration: false },
+      ),
+    (e: unknown) =>
+      e instanceof PostingError && /subsidiary ghost-sub does not exist/.test(e.message),
   );
   s.assertDrained();
 });
@@ -435,12 +503,25 @@ test("a line on an inactive subsidiary is refused", async () => {
   const s = scripted([subsidiariesStep([root, dormant], "org-1")]);
   await assert.rejects(
     () =>
-      applySubsidiaries(s.runner, docOf({ subsidiaryId: root.id }), [
-        { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
-        { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
-        { accountId: randomUUID(), amount: "50.0000" as KernelLine["amount"], subsidiaryId: dormant.id },
-        { accountId: randomUUID(), amount: "-50.0000" as KernelLine["amount"], subsidiaryId: dormant.id },
-      ], { bookId: null, regeneration: false }),
+      applySubsidiaries(
+        s.runner,
+        docOf({ subsidiaryId: root.id }),
+        [
+          { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+          { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
+          {
+            accountId: randomUUID(),
+            amount: "50.0000" as KernelLine["amount"],
+            subsidiaryId: dormant.id,
+          },
+          {
+            accountId: randomUUID(),
+            amount: "-50.0000" as KernelLine["amount"],
+            subsidiaryId: dormant.id,
+          },
+        ],
+        { bookId: null, regeneration: false },
+      ),
     (e: unknown) => e instanceof PostingError && /"Dormant" is inactive/.test(e.message),
   );
   // Both entity groups net to zero, so no intercompany read issues first:
@@ -458,12 +539,18 @@ test("a currency-restricted account is refused through subsidiary posting", asyn
   ]);
   await assert.rejects(
     () =>
-      applySubsidiaries(s.runner, docOf({ subsidiaryId: root.id }), [
-        { accountId, amount: "100.0000" as KernelLine["amount"] },
-        { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
-      ], { bookId: null, regeneration: false }),
+      applySubsidiaries(
+        s.runner,
+        docOf({ subsidiaryId: root.id }),
+        [
+          { accountId, amount: "100.0000" as KernelLine["amount"] },
+          { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
+        ],
+        { bookId: null, regeneration: false },
+      ),
     (e: unknown) =>
-      e instanceof PostingError && /2000 EUR-only only accepts EUR postings, not USD/.test(e.message),
+      e instanceof PostingError &&
+      /2000 EUR-only only accepts EUR postings, not USD/.test(e.message),
   );
   s.assertDrained();
 });
@@ -493,12 +580,21 @@ test("a two-entity entry balances per subsidiary with intercompany legs", async 
     restrictionStep(),
     currencyStep(),
   ]);
-  const out = await applySubsidiaries(s.runner, docOf({ subsidiaryId: rootId }), [
-    { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
-    { accountId: randomUUID(), amount: "-40.0000" as KernelLine["amount"] },
-    { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"], subsidiaryId: childId },
-    { accountId: randomUUID(), amount: "40.0000" as KernelLine["amount"], subsidiaryId: childId },
-  ], { bookId: null, regeneration: false });
+  const out = await applySubsidiaries(
+    s.runner,
+    docOf({ subsidiaryId: rootId }),
+    [
+      { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+      { accountId: randomUUID(), amount: "-40.0000" as KernelLine["amount"] },
+      {
+        accountId: randomUUID(),
+        amount: "-100.0000" as KernelLine["amount"],
+        subsidiaryId: childId,
+      },
+      { accountId: randomUUID(), amount: "40.0000" as KernelLine["amount"], subsidiaryId: childId },
+    ],
+    { bookId: null, regeneration: false },
+  );
   assert.equal(out.multi, true);
   assert.equal(out.lines.length, 6, "four source lines plus two balancing legs");
   const childLines = out.lines.filter((l) => l.subsidiaryId === childId);
@@ -523,7 +619,12 @@ test("subsidiary refusals arrive as PostingError while foreign failures propagat
   } as unknown as Runner;
   await assert.rejects(
     () =>
-      applySubsidiaries(failing, docOf(), [{ accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"] }], { bookId: null, regeneration: false }),
+      applySubsidiaries(
+        failing,
+        docOf(),
+        [{ accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"] }],
+        { bookId: null, regeneration: false },
+      ),
     (e: unknown) => e instanceof TypeError && !(e instanceof PostingError),
   );
 });

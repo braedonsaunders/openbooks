@@ -9,7 +9,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/purchase-orders?order=019f0000-0000-4000-8000-000000000004", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/purchase-orders?order=019f0000-0000-4000-8000-000000000004",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 Object.assign(globalThis, {
   __orderGateRouter: { push() {}, replace() {}, refresh() {} },
@@ -17,7 +21,10 @@ Object.assign(globalThis, {
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__orderGateRouter}export function usePathname(){return '/purchase-orders'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__orderGateRouter}export function usePathname(){return '/purchase-orders'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
@@ -88,8 +95,11 @@ async function mount(
 ) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url.includes("/api/flows/record-state")) return Response.json({ ...stateFor(approvalState), ...extra });
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (url.includes("/api/flows/record-state"))
+      return Response.json({ ...stateFor(approvalState), ...extra });
     return Response.json({});
   }) as typeof fetch;
   const host = document.createElement("div");
@@ -126,7 +136,8 @@ async function mount(
   // Drawer header actions sit behind the "Actions" menu popover: open it,
   // then wait (bounded) for ApprovalActions to resolve record-state.
   const trigger = [...document.querySelectorAll("button")].find(
-    (button) => (button.textContent ?? "").trim() === "Actions" && button.hasAttribute("aria-expanded"),
+    (button) =>
+      (button.textContent ?? "").trim() === "Actions" && button.hasAttribute("aria-expanded"),
   );
   assert.ok(trigger, "the Actions menu trigger renders");
   await act(async () => {
@@ -138,11 +149,18 @@ async function mount(
   for (let i = 0; i < 40; i++) {
     const names = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim() ?? "");
     const text = document.body.textContent ?? "";
-    if (names.includes("Approve") || names.includes("Reject") || /Awaiting another approver|Pending with/.test(text)) break;
+    if (
+      names.includes("Approve") ||
+      names.includes("Reject") ||
+      /Awaiting another approver|Pending with/.test(text)
+    )
+      break;
     await tick(50);
   }
   // The drawer shell portals to document.body, so assertions read the body.
-  const buttons = [...document.querySelectorAll("button")].map((button) => button.textContent?.trim() ?? "");
+  const buttons = [...document.querySelectorAll("button")].map(
+    (button) => button.textContent?.trim() ?? "",
+  );
   return {
     text: document.body.textContent ?? "",
     buttons,
@@ -160,11 +178,16 @@ async function mount(
 test("PO drawer offers Approve to a read-only gate assignee", async () => {
   const view = await mount({
     status: "pending_approval",
-    pendingWith: [{ name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" }],
+    pendingWith: [
+      { name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" },
+    ],
     myActions: { gateId: "gate-1", signatureRequired: false },
   });
   try {
-    assert.ok(view.buttons.includes("Approve"), "the gate decision must render outside the edit grant");
+    assert.ok(
+      view.buttons.includes("Approve"),
+      "the gate decision must render outside the edit grant",
+    );
     assert.ok(view.buttons.includes("Reject"), "reject renders with its reason field");
   } finally {
     await view.cleanup();
@@ -172,13 +195,22 @@ test("PO drawer offers Approve to a read-only gate assignee", async () => {
 });
 
 test("PO drawer offers Withdraw submission to the submitter who holds the create grant", async () => {
-  const view = await mount({
-    status: "pending_approval",
-    pendingWith: [{ name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" }],
-    myActions: null,
-  }, { submittedByViewer: true }, { canManage: true });
+  const view = await mount(
+    {
+      status: "pending_approval",
+      pendingWith: [
+        { name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" },
+      ],
+      myActions: null,
+    },
+    { submittedByViewer: true },
+    { canManage: true },
+  );
   try {
-    assert.ok(view.buttons.includes("Withdraw submission"), "the native document withdraw must render for a pending purchase order");
+    assert.ok(
+      view.buttons.includes("Withdraw submission"),
+      "the native document withdraw must render for a pending purchase order",
+    );
   } finally {
     await view.cleanup();
   }
@@ -187,14 +219,22 @@ test("PO drawer offers Withdraw submission to the submitter who holds the create
 test("PO drawer withholds Approve from a SoD-blocked viewer", async () => {
   const view = await mount({
     status: "pending_approval",
-    pendingWith: [{ name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" }],
+    pendingWith: [
+      { name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" },
+    ],
     myActions: null,
     awaitingAnotherApprover: true,
   });
   try {
     assert.match(view.text, /Awaiting another approver/, "the SoD outcome renders in advance");
-    assert.ok(!view.buttons.includes("Approve"), "no Approve action is offered to the blocked viewer");
-    assert.ok(!view.buttons.includes("Reject"), "no Reject action is offered to the blocked viewer");
+    assert.ok(
+      !view.buttons.includes("Approve"),
+      "no Approve action is offered to the blocked viewer",
+    );
+    assert.ok(
+      !view.buttons.includes("Reject"),
+      "no Reject action is offered to the blocked viewer",
+    );
   } finally {
     await view.cleanup();
   }

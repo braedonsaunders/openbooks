@@ -1,8 +1,13 @@
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { listInbox, type InboxKind, type InboxSourceNotice } from "@openbooks/engine/inbox/runtime";
-import { inboxContext, inboxCounts, INBOX_FILTER_KINDS, toInboxNoticeViews } from "../../../lib/inbox-context";
+import {
+  inboxContext,
+  inboxCounts,
+  INBOX_FILTER_KINDS,
+  toInboxNoticeViews,
+} from "../../../lib/inbox-context";
 import { pickString } from "../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -24,12 +29,18 @@ const FILTERS = ["all", "approvals", "my_tasks", "signatures", "notices", "overd
  * widen into an unbounded read by accident.
  */
 export const GET = defineRoute({
-  public: 'session',
+  public: "session",
   handler: async ({ request: req, authz }) => {
     const sp = new URL(req.url).searchParams;
     const filter = pickString(sp.get("filter") ?? undefined) ?? "all";
     if (!(FILTERS as readonly string[]).includes(filter)) {
-      return NextResponse.json({ error: "unknown filter — list one of all, approvals, my_tasks, signatures, notices, overdue" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "unknown filter — list one of all, approvals, my_tasks, signatures, notices, overdue",
+        },
+        { status: 400 },
+      );
     }
     const page = parsePage(sp.get("limit"), sp.get("offset"));
     if (page instanceof NextResponse) return page;
@@ -54,7 +65,11 @@ export const GET = defineRoute({
       // One failing source names itself in notices while the healthy legs
       // still list — the page renders them beside the surviving rows.
       const notices: InboxSourceNotice[] = [];
-      const items = await listInbox(ctx, { ...(kinds ? { kinds } : {}), ...(page ? { page } : {}), notices });
+      const items = await listInbox(ctx, {
+        ...(kinds ? { kinds } : {}),
+        ...(page ? { page } : {}),
+        notices,
+      });
       return NextResponse.json({
         items: filter === "overdue" ? items.filter((i) => i.priority === "overdue") : items,
         notices: toInboxNoticeViews(notices),
@@ -62,12 +77,14 @@ export const GET = defineRoute({
     } catch (error) {
       return apiErrorResponse(error);
     }
-
   },
-})
+});
 
 /** Parse an explicit read window: absent means the full working list. */
-function parsePage(limitRaw: string | null, offsetRaw: string | null): { limit?: number; offset?: number } | null | NextResponse {
+function parsePage(
+  limitRaw: string | null,
+  offsetRaw: string | null,
+): { limit?: number; offset?: number } | null | NextResponse {
   if (limitRaw === null && offsetRaw === null) return null;
   const limit = limitRaw === null ? undefined : Number(limitRaw);
   const offset = offsetRaw === null ? 0 : Number(offsetRaw);

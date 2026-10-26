@@ -37,8 +37,6 @@ const { PostingPeriodsView } = await import("./PostingPeriodsView");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-
-
 /** Every decided document kind renders its operator label: a preview row
  * for pick lists, shipments or field tickets must never read Unknown. */
 test("decided inventory and field kinds render labels, never Unknown value", async () => {
@@ -55,7 +53,8 @@ test("decided inventory and field kinds render labels, never Unknown value", asy
   }));
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown) => {
-    if (String(input).includes("/api/close/posting-periods")) return Response.json({ ok: true, rows });
+    if (String(input).includes("/api/close/posting-periods"))
+      return Response.json({ ok: true, rows });
     return Response.json({ ok: true, periods: [] });
   }) as typeof fetch;
   const host = document.createElement("div");
@@ -65,8 +64,15 @@ test("decided inventory and field kinds render labels, never Unknown value", asy
     await act(async () => {
       root.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-          <PostingPeriodsView bookId="b1" runId={null} canManageBooks={false} manageBooksLabel="Manage books"
-            canPreview initialRows={rows} initialError={null} />
+          <PostingPeriodsView
+            bookId="b1"
+            runId={null}
+            canManageBooks={false}
+            manageBooksLabel="Manage books"
+            canPreview
+            initialRows={rows}
+            initialError={null}
+          />
         </NextIntlClientProvider>,
       );
       await tick();

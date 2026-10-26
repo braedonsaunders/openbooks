@@ -60,7 +60,15 @@ test("enabled domains and consolidation reversal access follow enabled features"
     payroll: true,
     manufacturing: true,
   };
-  const candidates = ["lease", "asset", "revenue", "sales", "consolidation", "payroll", "manufacturing"] as const;
+  const candidates = [
+    "lease",
+    "asset",
+    "revenue",
+    "sales",
+    "consolidation",
+    "payroll",
+    "manufacturing",
+  ] as const;
 
   assert.deepEqual(enabledAccountingChangeDomains(candidates, features), candidates);
   assert.equal(canShowNetInvestmentOciReversal(candidates, features), false);

@@ -15,15 +15,24 @@ export async function historicalTranslationAmounts(
   const sources = await tx.execute<{ sourceLineId: string }>(args.sources, "objects");
   if (!sources.length) return sql`null::numeric`;
   if (!args.presentationCurrency || !/^[A-Z]{3}$/.test(args.presentationCurrency))
-    throw new HistoricalTranslationEvidenceError("Select the report's explicit presentation currency before reading historical equity contributions.");
+    throw new HistoricalTranslationEvidenceError(
+      "Select the report's explicit presentation currency before reading historical equity contributions.",
+    );
   const amounts: Array<{ line_id: string; amount: string }> = [];
-  for (const sourceLineId of [...new Set(sources.map(source => source.sourceLineId))].sort()) {
+  for (const sourceLineId of [...new Set(sources.map((source) => source.sourceLineId))].sort()) {
     const contribution = await readHistoricalTranslationContribution(tx, {
-      orgId: args.orgId, sourceLineId, presentationCurrency: args.presentationCurrency,
+      orgId: args.orgId,
+      sourceLineId,
+      presentationCurrency: args.presentationCurrency,
     });
-    amounts.push({ line_id: sourceLineId, amount: sumHistoricalTranslationExactAmounts(
-      "identity" in contribution ? [contribution.translatedAmount] : contribution.layers.map(layer => layer.translatedAmount),
-    ) });
+    amounts.push({
+      line_id: sourceLineId,
+      amount: sumHistoricalTranslationExactAmounts(
+        "identity" in contribution
+          ? [contribution.translatedAmount]
+          : contribution.layers.map((layer) => layer.translatedAmount),
+      ),
+    });
   }
   // Unrounded products enter the account/column aggregate as numeric. A
   // source absent from the validated snapshot yields NULL, which the caller

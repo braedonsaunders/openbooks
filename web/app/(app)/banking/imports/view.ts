@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   page,
   pageHeader,
@@ -10,12 +10,12 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
-import { listReconcilableBankAccounts } from '../../../../lib/banking-accounts'
-import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
-import { mapBankFeedRows } from './feed-rows'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission, subsidiaryScopeAllows } from "../../../../lib/authz";
+import { listReconcilableBankAccounts } from "../../../../lib/banking-accounts";
+import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+import { featureEnabled, resolvedFeatureState } from "../../../../lib/features";
+import { mapBankFeedRows } from "./feed-rows";
 
 /**
  * Statement import history, split into a loader and a spec.
@@ -39,69 +39,71 @@ import { mapBankFeedRows } from './feed-rows'
  */
 
 interface FeedRow extends Record<string, unknown> {
-  name: string
-  provider: string
-  status: string
-  last_sync_at: string | null
-  last_attempt_at: string | null
-  last_error: string | null
-  is_active: boolean
-  account_number: string | null
-  account_name: string
+  name: string;
+  provider: string;
+  status: string;
+  last_sync_at: string | null;
+  last_attempt_at: string | null;
+  last_error: string | null;
+  is_active: boolean;
+  account_number: string | null;
+  account_name: string;
 }
 
 export interface BankingImportsData {
-  title: string
-  description: string
-  homeTitle: string
-  currentParams: Record<string, string | string[] | undefined>
-  feedsEnabled: boolean
-  panelTitle: string
-  manageLabel: string
-  panelEmpty: string
-  lastSyncLabel: string
-  lastAttemptLabel: string
-  neverLabel: string
-  feeds: ReturnType<typeof mapBankFeedRows>
-  canImport: boolean
-  importAccounts: { id: string; label: string }[]
-  importAccountLabel: string
-  importAccountPlaceholder: string
+  title: string;
+  description: string;
+  homeTitle: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  feedsEnabled: boolean;
+  panelTitle: string;
+  manageLabel: string;
+  panelEmpty: string;
+  lastSyncLabel: string;
+  lastAttemptLabel: string;
+  neverLabel: string;
+  feeds: ReturnType<typeof mapBankFeedRows>;
+  canImport: boolean;
+  importAccounts: { id: string; label: string }[];
+  importAccountLabel: string;
+  importAccountPlaceholder: string;
   /** Page-specific empty copy for the unfiltered list. Null when the viewer
    *  cannot import at all — the generic list copy renders instead. */
-  emptyTitle: string | null
-  emptyDescription: string | null
+  emptyTitle: string | null;
+  emptyDescription: string | null;
   /** The Chart-of-Accounts setup path, the same one the bank-feeds setup
    *  names for the same prerequisite. Data, not a branch, the way the
    *  reconciliations page passes its choose-account href. */
-  setupHref: string
-  setupLabel: string
+  setupHref: string;
+  setupLabel: string;
 }
 
 export async function loadBankingImports(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingImportsData> {
-  const authz = await requirePermission('banking.read')
-  const t = await getTranslations('banking')
+  const authz = await requirePermission("banking.read");
+  const t = await getTranslations("banking");
 
   // Live bank-feed connections stay a read-only operational panel above the
   // standardized statement-history list. Connection management remains in setup.
-  const features = await resolvedFeatureState(authz.user.orgId)
-  const feedsEnabled = featureEnabled(features, 'bankFeeds')
+  const features = await resolvedFeatureState(authz.user.orgId);
+  const feedsEnabled = featureEnabled(features, "bankFeeds");
   // The import dialog is per-account, so the history page carries the bank
   // account context as a picker over the ONE reconcilable-membership read
   // every banking surface agrees on — never a second account query.
-  const canImport = can(authz, 'banking.reconcile')
+  const canImport = can(authz, "banking.reconcile");
   // The import picker and the operational panel name only the caller's own
   // subsidiaries' accounts, mirroring the feed API's list filter.
   const [reconAccounts, feeds] = await Promise.all([
     canImport
-      ? listReconcilableBankAccounts(authz.user.orgId).then(accounts =>
-        accounts.filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId)),
-      )
+      ? listReconcilableBankAccounts(authz.user.orgId).then((accounts) =>
+          accounts.filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId)),
+        )
       : [],
     feedsEnabled
-      ? db.execute<FeedRow>(sql`
+      ? db
+          .execute<FeedRow>(
+            sql`
         select c.name, c.provider, c.status, c.last_sync_at, c.last_attempt_at, c.last_error, c.is_active,
                a.number as account_number, a.name as account_name
           from bank_feed_connections c
@@ -109,52 +111,54 @@ export async function loadBankingImports(
          where c.org_id = ${authz.user.orgId} and c.provider in ('plaid','gocardless','truelayer')
            ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
          order by c.created_at desc
-      `).then(result => result.rows)
+      `,
+          )
+          .then((result) => result.rows)
       : [],
-  ])
+  ]);
 
-  const neverLabel = t('bankFeeds.operational.never')
+  const neverLabel = t("bankFeeds.operational.never");
   // With no reconcilable account there is nothing to import INTO: the empty
   // state names the reconcilable prerequisite and links to the Chart of
   // Accounts. With accounts, the unfiltered empty state keeps the
   // "no statements imported" copy beside the import picker.
-  const needsSetup = canImport && reconAccounts.length === 0
+  const needsSetup = canImport && reconAccounts.length === 0;
   return {
-    title: t('imports.title'),
-    description: t('imports.description'),
-    homeTitle: t('home.title'),
+    title: t("imports.title"),
+    description: t("imports.description"),
+    homeTitle: t("home.title"),
     currentParams: sp,
     feedsEnabled,
-    panelTitle: t('bankFeeds.operational.title'),
-    manageLabel: t('bankFeeds.operational.manage'),
-    panelEmpty: t('bankFeeds.operational.none'),
-    lastSyncLabel: t('bankFeeds.operational.lastSync'),
-    lastAttemptLabel: t('bankFeeds.operational.lastAttempt'),
+    panelTitle: t("bankFeeds.operational.title"),
+    manageLabel: t("bankFeeds.operational.manage"),
+    panelEmpty: t("bankFeeds.operational.none"),
+    lastSyncLabel: t("bankFeeds.operational.lastSync"),
+    lastAttemptLabel: t("bankFeeds.operational.lastAttempt"),
     neverLabel,
     feeds: mapBankFeedRows(feeds),
     canImport,
     importAccounts: reconAccounts.map((account) => ({
       id: account.id,
-      label: [account.number, account.name].filter(Boolean).join(' · '),
+      label: [account.number, account.name].filter(Boolean).join(" · "),
     })),
-    importAccountLabel: t('imports.accountLabel'),
-    importAccountPlaceholder: t('imports.accountPlaceholder'),
+    importAccountLabel: t("imports.accountLabel"),
+    importAccountPlaceholder: t("imports.accountPlaceholder"),
     emptyTitle: !canImport
       ? null
       : needsSetup
-        ? t('imports.noAccountsTitle')
-        : t('imports.emptyTitle'),
+        ? t("imports.noAccountsTitle")
+        : t("imports.emptyTitle"),
     emptyDescription: !canImport
       ? null
       : needsSetup
-        ? t('imports.noAccountsDescription')
-        : t('imports.emptyDescription'),
-    setupHref: '/accounts',
-    setupLabel: t('imports.noAccountsLink'),
-  }
+        ? t("imports.noAccountsDescription")
+        : t("imports.emptyDescription"),
+    setupHref: "/accounts",
+    setupLabel: t("imports.noAccountsLink"),
+  };
 }
 
-const f = ref<BankingImportsData>()
+const f = ref<BankingImportsData>();
 
 export function bankingImportsSpec(data: BankingImportsData): PageSpec {
   // One widget serves the header CTA and the empty-state action: an account
@@ -164,35 +168,35 @@ export function bankingImportsSpec(data: BankingImportsData): PageSpec {
   // with none, the action is the Chart-of-Accounts setup link and the copy
   // names the reconcilable prerequisite (both loader-resolved above).
   const importPicker = {
-    widget: 'import-statement-picker',
+    widget: "import-statement-picker",
     props: {
       accounts: data.importAccounts,
       selectLabel: data.importAccountLabel,
       placeholder: data.importAccountPlaceholder,
     },
-  }
+  };
   const setupAction = {
-    widget: 'open-chart-of-accounts',
+    widget: "open-chart-of-accounts",
     props: {
       href: data.setupHref,
       label: data.setupLabel,
     },
-  }
+  };
   return page({
-    route: '/banking/imports',
-    layout: 'list',
+    route: "/banking/imports",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: '/banking', label: f('homeTitle') },
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-2',
-        actions: [widget('import-statement-picker', importPicker.props, f('canImport'))],
+        back: { href: "/banking", label: f("homeTitle") },
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-2",
+        actions: [widget("import-statement-picker", importPicker.props, f("canImport"))],
       }),
     ],
     body: [
       {
-        ...widgetBlock('bank-feed-panel', {
+        ...widgetBlock("bank-feed-panel", {
           title: data.panelTitle,
           manageLabel: data.manageLabel,
           emptyMessage: data.panelEmpty,
@@ -201,15 +205,19 @@ export function bankingImportsSpec(data: BankingImportsData): PageSpec {
           lastAttemptLabel: data.lastAttemptLabel,
           feeds: data.feeds,
         }),
-        when: f('feedsEnabled'),
+        when: f("feedsEnabled"),
       },
-      widgetBlock('entity-list-view', {
-        recordType: 'bank_statement',
+      widgetBlock("entity-list-view", {
+        recordType: "bank_statement",
         sp: data.currentParams,
         emptyTitle: data.emptyTitle,
         emptyDescription: data.emptyDescription,
-        emptyAction: !data.canImport ? null : data.importAccounts.length > 0 ? importPicker : setupAction,
+        emptyAction: !data.canImport
+          ? null
+          : data.importAccounts.length > 0
+            ? importPicker
+            : setupAction,
       }),
     ],
-  })
+  });
 }

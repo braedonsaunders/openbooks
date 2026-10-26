@@ -24,12 +24,29 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // Every key the pre-0176 enumeration admitted: the opening must not narrow
 // what already exists.
 const LEGACY_KEYS = [
-  "base_pay", "overtime", "bonus", "stat_holiday", "stat_holiday_premium",
-  "vacation_accrual", "vacation_payout",
-  "cpp", "cpp2", "ei", "qpip", "income_tax", "qc_income_tax",
-  "fit", "ss", "medicare", "medicare_addl", "futa", "suta",
-  "state_income_tax", "local_income_tax",
-  "wcb", "eht",
+  "base_pay",
+  "overtime",
+  "bonus",
+  "stat_holiday",
+  "stat_holiday_premium",
+  "vacation_accrual",
+  "vacation_payout",
+  "cpp",
+  "cpp2",
+  "ei",
+  "qpip",
+  "income_tax",
+  "qc_income_tax",
+  "fit",
+  "ss",
+  "medicare",
+  "medicare_addl",
+  "futa",
+  "suta",
+  "state_income_tax",
+  "local_income_tax",
+  "wcb",
+  "eht",
 ];
 
 // Pack-declared keys that never appeared in the enumeration: the Québec
@@ -39,7 +56,11 @@ const PACK_DECLARED_KEYS = ["hsf"];
 // The typo class: each must violate pay_components_system_key.
 const TYPO_KEYS = ["CPP", "income tax", "cpp!", "", "2cpp", "eht "];
 
-async function insertComponent(orgId: string, code: string, systemKey: string | null): Promise<void> {
+async function insertComponent(
+  orgId: string,
+  code: string,
+  systemKey: string | null,
+): Promise<void> {
   await withBypassContext(async () => {
     await db.execute(sql`insert into pay_components(id, org_id, code, name, kind, system_key)
       values(${randomUUID()}, ${orgId}, ${code}, ${code}, 'employer_contribution', ${systemKey})`);
@@ -56,10 +77,19 @@ test(
         await insertComponent(org.orgId, `SYSKEY-${key}`, key);
       }
       await insertComponent(org.orgId, "SYSKEY-USER", null);
-      const stored = await withBypassContext(async () => await db.execute<{ system_key: string | null }>(sql`
-        select system_key from pay_components where org_id = ${org.orgId} and code like 'SYSKEY-%'`, "objects"));
+      const stored = await withBypassContext(
+        async () =>
+          await db.execute<{ system_key: string | null }>(
+            sql`
+        select system_key from pay_components where org_id = ${org.orgId} and code like 'SYSKEY-%'`,
+            "objects",
+          ),
+      );
       assert.equal(stored.length, LEGACY_KEYS.length + PACK_DECLARED_KEYS.length + 1);
-      assert.ok(stored.some((row) => row.system_key === "hsf"), "pack-declared 'hsf' must persist");
+      assert.ok(
+        stored.some((row) => row.system_key === "hsf"),
+        "pack-declared 'hsf' must persist",
+      );
 
       let typoSequence = 0;
       for (const typo of TYPO_KEYS) {

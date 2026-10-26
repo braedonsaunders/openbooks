@@ -14,20 +14,29 @@ import { guardChannelScope } from "@/lib/channel-scope";
 export const runtime = "nodejs";
 
 const decisionSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("match"), nativeTable: z.enum(["items", "item_families"]), nativeId: uuidString() }),
+  z.strictObject({
+    kind: z.literal("match"),
+    nativeTable: z.enum(["items", "item_families"]),
+    nativeId: uuidString(),
+  }),
   z.strictObject({
     kind: z.literal("create_item"),
     itemKind: z.string().optional(),
     code: z.string().optional(),
     name: z.string().optional(),
   }),
-  z.strictObject({ kind: z.literal("create_family"), familyKind: z.string().optional(), code: z.string().optional() }),
+  z.strictObject({
+    kind: z.literal("create_family"),
+    familyKind: z.string().optional(),
+    code: z.string().optional(),
+  }),
   z.strictObject({ kind: z.literal("ignore"), reason: z.string().trim().min(1) }),
   z.strictObject({ kind: z.literal("unmatch"), reason: z.string().trim().min(1) }),
 ]);
 
 function notFoundWhenMissing(error: unknown) {
-  if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+  if (error instanceof CommerceError && error.code === "channel_not_found")
+    return notFound("channel");
   throw error;
 }
 
@@ -65,7 +74,13 @@ export const PUT = defineRoute({
     if (outOfScope) return outOfScope;
     try {
       return NextResponse.json(
-        await bulkDecideCatalogMatches(gate.user.orgId, gate.user.id, id, body.entryIds, body.decision),
+        await bulkDecideCatalogMatches(
+          gate.user.orgId,
+          gate.user.id,
+          id,
+          body.entryIds,
+          body.decision,
+        ),
       );
     } catch (error) {
       return notFoundWhenMissing(error);

@@ -1,3 +1,3 @@
-import { appManifest } from '../lib/pwa-manifest'
+import { appManifest } from "../lib/pwa-manifest";
 
-export default appManifest
+export default appManifest;

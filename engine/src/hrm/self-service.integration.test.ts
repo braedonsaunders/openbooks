@@ -4,11 +4,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import {
   DB,
   gateOf,
@@ -21,9 +17,7 @@ import {
 } from "../testing/hrm-harness.ts";
 import { decideGate, ReleaseError } from "../flows/gates.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
-import {
-  createChangeRequestDraft,
-} from "./change-requests.ts";
+import { createChangeRequestDraft } from "./change-requests.ts";
 import { assertHrmFeatureOn, SelfServiceError, setupRemedyFor } from "./self-service/actor.ts";
 import { getMyProfile, getMyRequests, getMySteps } from "./self-service/self-read.ts";
 import { actorHasTeam, getTeamView } from "./self-service/team-read.ts";
@@ -50,22 +44,78 @@ installEngineSeams();
  * profile_changed event with its before-images.
  */
 
-
 /** A live employment identity with one active version from 2026-01-01. */
 const SELF_SERVICE_SPEC = {
   users: [
-    { key: "personAId", name: "Self Person A", handle: "self_a", permissions: ["hrm.self.read", "hrm.self.request"], link: "Person A", partyKey: "partyA" },
-    { key: "personBId", name: "Self Person B", handle: "self_b", permissions: ["hrm.self.read", "hrm.self.request"], link: "Person B", partyKey: "partyB" },
-    { key: "managerId", name: "Self Manager", handle: "self_mgr", permissions: ["hrm.self.read"], link: "Manager M", partyKey: "partyM" },
-    { key: "manager2Id", name: "Self Manager Two", handle: "self_mgr2", permissions: ["hrm.self.read"], link: "Manager Two", partyKey: "partyM2" },
-    { key: "hrId", name: "Self HR", handle: "self_hr", permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"], link: "HR Decider", partyKey: "partyHR" },
-    { key: "hr2Id", name: "Self HR Two", handle: "self_hr2", permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"], link: "HR Decider Two" },
-    { key: "noLinkId", name: "Self No Link", handle: "self_nolink", permissions: ["hrm.self.read", "hrm.self.request"] },
-    { key: "noEmploymentId", name: "Self No Employment", handle: "self_noemp", permissions: ["hrm.self.read", "hrm.self.request"], link: "Person N", partyKey: "partyN" },
+    {
+      key: "personAId",
+      name: "Self Person A",
+      handle: "self_a",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+      link: "Person A",
+      partyKey: "partyA",
+    },
+    {
+      key: "personBId",
+      name: "Self Person B",
+      handle: "self_b",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+      link: "Person B",
+      partyKey: "partyB",
+    },
+    {
+      key: "managerId",
+      name: "Self Manager",
+      handle: "self_mgr",
+      permissions: ["hrm.self.read"],
+      link: "Manager M",
+      partyKey: "partyM",
+    },
+    {
+      key: "manager2Id",
+      name: "Self Manager Two",
+      handle: "self_mgr2",
+      permissions: ["hrm.self.read"],
+      link: "Manager Two",
+      partyKey: "partyM2",
+    },
+    {
+      key: "hrId",
+      name: "Self HR",
+      handle: "self_hr",
+      permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"],
+      link: "HR Decider",
+      partyKey: "partyHR",
+    },
+    {
+      key: "hr2Id",
+      name: "Self HR Two",
+      handle: "self_hr2",
+      permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"],
+      link: "HR Decider Two",
+    },
+    {
+      key: "noLinkId",
+      name: "Self No Link",
+      handle: "self_nolink",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+    },
+    {
+      key: "noEmploymentId",
+      name: "Self No Employment",
+      handle: "self_noemp",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+      link: "Person N",
+      partyKey: "partyN",
+    },
   ],
 } as const;
 
-async function seedLiveEmployment(orgId: string, subsidiaryId: string, workerPartyId: string): Promise<string> {
+async function seedLiveEmployment(
+  orgId: string,
+  subsidiaryId: string,
+  workerPartyId: string,
+): Promise<string> {
   const employmentId = randomUUID();
   await db.execute(sql`
     insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
@@ -132,10 +182,26 @@ async function seedEmployeeStep(
 
 async function setupSelfServiceHarness() {
   return setupHarness(SELF_SERVICE_SPEC, async (base) => {
-    const employmentA = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyA);
-    const employmentB = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyB);
-    const employmentM = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyM);
-    const employmentM2 = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyM2);
+    const employmentA = await seedLiveEmployment(
+      base.org.orgId,
+      base.org.subsidiaryId,
+      base.partyA,
+    );
+    const employmentB = await seedLiveEmployment(
+      base.org.orgId,
+      base.org.subsidiaryId,
+      base.partyB,
+    );
+    const employmentM = await seedLiveEmployment(
+      base.org.orgId,
+      base.org.subsidiaryId,
+      base.partyM,
+    );
+    const employmentM2 = await seedLiveEmployment(
+      base.org.orgId,
+      base.org.subsidiaryId,
+      base.partyM2,
+    );
     const personCId = await createScratchUser(base.org.orgId, "Self Person C", "self_c");
     const partyC = await linkPerson(base.org.orgId, personCId, "Person C");
     const employmentC = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, partyC);
@@ -148,393 +214,642 @@ async function setupSelfServiceHarness() {
 }
 
 test("no linked person is a named refusal, never an empty page", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    for (const call of [
-      () => getMyProfile({ orgId: h.org.orgId, actorId: h.noLinkId }),
-      () => getMySteps({ orgId: h.org.orgId, actorId: h.noLinkId }),
-      () => getMyRequests({ orgId: h.org.orgId, actorId: h.noLinkId }),
-      () => getTeamView({ orgId: h.org.orgId, actorId: h.noLinkId }),
-      () =>
-        fileProfileChangeRequest({
-          orgId: h.org.orgId, actorId: h.noLinkId,
-          employmentId: h.employmentA, changes: { kind: "profile_change", phone: "x" }, reason: "test",
-        }),
-    ]) {
-      await assert.rejects(call, (error: unknown) => {
-        assert.ok(error instanceof SelfServiceError, `expected SelfServiceError, got ${String(error)}`);
-        assert.equal(error.code, "NO_LINK");
-        assert.match(error.message, /Admin → Users → Link person/);
-        return true;
-      });
-    }
-  });
+  await withHarness(
+    () => setupSelfServiceHarness(),
+    async (h) => {
+      for (const call of [
+        () => getMyProfile({ orgId: h.org.orgId, actorId: h.noLinkId }),
+        () => getMySteps({ orgId: h.org.orgId, actorId: h.noLinkId }),
+        () => getMyRequests({ orgId: h.org.orgId, actorId: h.noLinkId }),
+        () => getTeamView({ orgId: h.org.orgId, actorId: h.noLinkId }),
+        () =>
+          fileProfileChangeRequest({
+            orgId: h.org.orgId,
+            actorId: h.noLinkId,
+            employmentId: h.employmentA,
+            changes: { kind: "profile_change", phone: "x" },
+            reason: "test",
+          }),
+      ]) {
+        await assert.rejects(call, (error: unknown) => {
+          assert.ok(
+            error instanceof SelfServiceError,
+            `expected SelfServiceError, got ${String(error)}`,
+          );
+          assert.equal(error.code, "NO_LINK");
+          assert.match(error.message, /Admin → Users → Link person/);
+          return true;
+        });
+      }
+    },
+  );
 });
 
-test("setup remedies are audience-aware: employees hear who can help, setup holders hear the setup step", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    const args = {
-      orgId: h.org.orgId,
-      setupPermission: "hrm.leave.manage",
-      setupRemedy: "create a policy for this type and scope",
-      selfServiceRemedy: "ask HR (or your administrator) to set one up",
-    } as const;
-    // Person A holds only the self-service grants: the remedy names who
-    // can do the setup, never a setup step they cannot access.
-    assert.equal(await setupRemedyFor(db, { ...args, actorId: h.personAId }), args.selfServiceRemedy);
-    // HR holds no policy grant yet either, so they hear the same wording.
-    assert.equal(await setupRemedyFor(db, { ...args, actorId: h.hrId }), args.selfServiceRemedy);
-    // With the setup grant the same call keeps the setup wording.
-    await grantPermissions(h.org.orgId, h.hrId, ["hrm.leave.manage"]);
-    assert.equal(await setupRemedyFor(db, { ...args, actorId: h.hrId }), args.setupRemedy);
-  });
-});
+test(
+  "setup remedies are audience-aware: employees hear who can help, setup holders hear the setup step",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSelfServiceHarness(),
+      async (h) => {
+        const args = {
+          orgId: h.org.orgId,
+          setupPermission: "hrm.leave.manage",
+          setupRemedy: "create a policy for this type and scope",
+          selfServiceRemedy: "ask HR (or your administrator) to set one up",
+        } as const;
+        // Person A holds only the self-service grants: the remedy names who
+        // can do the setup, never a setup step they cannot access.
+        assert.equal(
+          await setupRemedyFor(db, { ...args, actorId: h.personAId }),
+          args.selfServiceRemedy,
+        );
+        // HR holds no policy grant yet either, so they hear the same wording.
+        assert.equal(
+          await setupRemedyFor(db, { ...args, actorId: h.hrId }),
+          args.selfServiceRemedy,
+        );
+        // With the setup grant the same call keeps the setup wording.
+        await grantPermissions(h.org.orgId, h.hrId, ["hrm.leave.manage"]);
+        assert.equal(await setupRemedyFor(db, { ...args, actorId: h.hrId }), args.setupRemedy);
+      },
+    );
+  },
+);
 
 test("the HRM feature gate is audience-aware when the toggle is off", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    // Toggle on: the gate passes silently for everyone.
-    await assertHrmFeatureOn(db, h.org.orgId, h.personAId);
-    await setFeatures(h.org.orgId, { hrm: false });
-    // An employee without the setup grant hears who can turn it on.
-    await assert.rejects(() => assertHrmFeatureOn(db, h.org.orgId, h.personAId), (error: unknown) => {
-      assert.ok(error instanceof SelfServiceError);
-      assert.equal(error.code, "FORBIDDEN");
-      assert.match(error.message, /ask your administrator to turn it on under Company Settings → Features/);
-      return true;
-    });
-    // With the setup grant the same gate keeps the setup wording.
-    await grantPermissions(h.org.orgId, h.hrId, ["admin.setup.manage"]);
-    await assert.rejects(() => assertHrmFeatureOn(db, h.org.orgId, h.hrId), (error: unknown) => {
-      assert.ok(error instanceof SelfServiceError);
-      assert.equal(error.code, "FORBIDDEN");
-      assert.match(error.message, /enable it on Company Settings → Features/);
-      assert.doesNotMatch(error.message, /ask your administrator/);
-      return true;
-    });
-  });
+  await withHarness(
+    () => setupSelfServiceHarness(),
+    async (h) => {
+      // Toggle on: the gate passes silently for everyone.
+      await assertHrmFeatureOn(db, h.org.orgId, h.personAId);
+      await setFeatures(h.org.orgId, { hrm: false });
+      // An employee without the setup grant hears who can turn it on.
+      await assert.rejects(
+        () => assertHrmFeatureOn(db, h.org.orgId, h.personAId),
+        (error: unknown) => {
+          assert.ok(error instanceof SelfServiceError);
+          assert.equal(error.code, "FORBIDDEN");
+          assert.match(
+            error.message,
+            /ask your administrator to turn it on under Company Settings → Features/,
+          );
+          return true;
+        },
+      );
+      // With the setup grant the same gate keeps the setup wording.
+      await grantPermissions(h.org.orgId, h.hrId, ["admin.setup.manage"]);
+      await assert.rejects(
+        () => assertHrmFeatureOn(db, h.org.orgId, h.hrId),
+        (error: unknown) => {
+          assert.ok(error instanceof SelfServiceError);
+          assert.equal(error.code, "FORBIDDEN");
+          assert.match(error.message, /enable it on Company Settings → Features/);
+          assert.doesNotMatch(error.message, /ask your administrator/);
+          return true;
+        },
+      );
+    },
+  );
 });
 
-test("filing with no employment names the hire remedy, never a generic failure", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    await assert.rejects(
-      () =>
-        fileProfileChangeRequest({
-          orgId: h.org.orgId,
-          actorId: h.noEmploymentId,
-          employmentId: h.employmentA,
-          changes: { kind: "profile_change", phone: "x" },
-          reason: "test",
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof SelfServiceError, `expected SelfServiceError, got ${String(error)}`);
-        assert.equal(error.code, "FORBIDDEN");
-        assert.match(error.message, /no employment record/);
-        assert.match(error.message, /HRM Hire action/);
-        return true;
+test(
+  "filing with no employment names the hire remedy, never a generic failure",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSelfServiceHarness(),
+      async (h) => {
+        await assert.rejects(
+          () =>
+            fileProfileChangeRequest({
+              orgId: h.org.orgId,
+              actorId: h.noEmploymentId,
+              employmentId: h.employmentA,
+              changes: { kind: "profile_change", phone: "x" },
+              reason: "test",
+            }),
+          (error: unknown) => {
+            assert.ok(
+              error instanceof SelfServiceError,
+              `expected SelfServiceError, got ${String(error)}`,
+            );
+            assert.equal(error.code, "FORBIDDEN");
+            assert.match(error.message, /no employment record/);
+            assert.match(error.message, /HRM Hire action/);
+            return true;
+          },
+        );
       },
     );
-  });
-});
+  },
+);
 
 test("self scope: a second person's rows are never returned", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    const stepA = await seedEmployeeStep(h.org.orgId, h.employmentA, "Acknowledge the handbook");
-    await seedEmployeeStep(h.org.orgId, h.employmentB, "B's private step");
-    const profile = await getMyProfile({ orgId: h.org.orgId, actorId: h.personAId });
-    assert.equal(profile.partyId, h.partyA);
-    assert.deepEqual(profile.employments.map((row) => row.employmentId), [h.employmentA]);
-    assert.ok(!profile.employments.some((row) => row.employmentId === h.employmentB));
-    const steps = await getMySteps({ orgId: h.org.orgId, actorId: h.personAId });
-    assert.deepEqual(steps.map((row) => row.id), [stepA]);
-    const requests = await getMyRequests({ orgId: h.org.orgId, actorId: h.personAId });
-    assert.deepEqual(requests, []);
-    // The profile names the manager through the live line: M, never M2.
-    assert.deepEqual(profile.employments[0]!.managerNames, ["Manager M"]);
-    // B's mirror image holds none of A's rows.
-    const profileB = await getMyProfile({ orgId: h.org.orgId, actorId: h.personBId });
-    assert.equal(profileB.partyId, h.partyB);
-    assert.deepEqual(profileB.employments.map((row) => row.employmentId), [h.employmentB]);
-  });
+  await withHarness(
+    () => setupSelfServiceHarness(),
+    async (h) => {
+      const stepA = await seedEmployeeStep(h.org.orgId, h.employmentA, "Acknowledge the handbook");
+      await seedEmployeeStep(h.org.orgId, h.employmentB, "B's private step");
+      const profile = await getMyProfile({ orgId: h.org.orgId, actorId: h.personAId });
+      assert.equal(profile.partyId, h.partyA);
+      assert.deepEqual(
+        profile.employments.map((row) => row.employmentId),
+        [h.employmentA],
+      );
+      assert.ok(!profile.employments.some((row) => row.employmentId === h.employmentB));
+      const steps = await getMySteps({ orgId: h.org.orgId, actorId: h.personAId });
+      assert.deepEqual(
+        steps.map((row) => row.id),
+        [stepA],
+      );
+      const requests = await getMyRequests({ orgId: h.org.orgId, actorId: h.personAId });
+      assert.deepEqual(requests, []);
+      // The profile names the manager through the live line: M, never M2.
+      assert.deepEqual(profile.employments[0]!.managerNames, ["Manager M"]);
+      // B's mirror image holds none of A's rows.
+      const profileB = await getMyProfile({ orgId: h.org.orgId, actorId: h.personBId });
+      assert.equal(profileB.partyId, h.partyB);
+      assert.deepEqual(
+        profileB.employments.map((row) => row.employmentId),
+        [h.employmentB],
+      );
+    },
+  );
 });
 
-test("RLS hides one org's self-service rows from another org's session", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    const foreign = await createScratchOrg();
-    try {
-      // Raw constrained sessions (no test bypass): the policy itself is the
-      // oracle here, not the service's org predicate.
-      const url = process.env.OPENBOOKS_RUNTIME_DB_URL || process.env.OPENBOOKS_DB_URL!;
-      const countAs = async (orgId: string): Promise<{ parties: number; employments: number }> => {
-        const client = new Client({ connectionString: url });
-        await client.connect();
+test(
+  "RLS hides one org's self-service rows from another org's session",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSelfServiceHarness(),
+      async (h) => {
+        const foreign = await createScratchOrg();
         try {
-          await client.query("select set_config('app.current_org', $1, false)", [orgId]);
-          const parties = await client.query("select count(*)::int as n from parties where id = $1", [h.partyA]);
-          const employments = await client.query(
-            "select count(*)::int as n from worker_employments where id = $1",
-            [h.employmentA],
-          );
-          return { parties: parties.rows[0].n as number, employments: employments.rows[0].n as number };
+          // Raw constrained sessions (no test bypass): the policy itself is the
+          // oracle here, not the service's org predicate.
+          const url = process.env.OPENBOOKS_RUNTIME_DB_URL || process.env.OPENBOOKS_DB_URL!;
+          const countAs = async (
+            orgId: string,
+          ): Promise<{ parties: number; employments: number }> => {
+            const client = new Client({ connectionString: url });
+            await client.connect();
+            try {
+              await client.query("select set_config('app.current_org', $1, false)", [orgId]);
+              const parties = await client.query(
+                "select count(*)::int as n from parties where id = $1",
+                [h.partyA],
+              );
+              const employments = await client.query(
+                "select count(*)::int as n from worker_employments where id = $1",
+                [h.employmentA],
+              );
+              return {
+                parties: parties.rows[0].n as number,
+                employments: employments.rows[0].n as number,
+              };
+            } finally {
+              await client.end();
+            }
+          };
+          assert.deepEqual(await countAs(h.org.orgId), { parties: 1, employments: 1 });
+          assert.deepEqual(await countAs(foreign.orgId), { parties: 0, employments: 0 });
         } finally {
-          await client.end();
+          await dropScratchOrg(foreign.orgId);
         }
-      };
-      assert.deepEqual(await countAs(h.org.orgId), { parties: 1, employments: 1 });
-      assert.deepEqual(await countAs(foreign.orgId), { parties: 0, employments: 0 });
-    } finally {
-      await dropScratchOrg(foreign.orgId);
-    }
-  });
-});
-
-test("team scope: a manager of A is not a manager of B, and a report's report is not visible", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    assert.equal(await actorHasTeam({ orgId: h.org.orgId, actorId: h.managerId }), true);
-    const teamM = await getTeamView({ orgId: h.org.orgId, actorId: h.managerId });
-    assert.deepEqual(teamM.reports.map((row) => row.employmentId), [h.employmentA]);
-    assert.equal(teamM.reports[0]!.workerPartyId, h.partyA);
-    // B reports to M2: M never sees B, M2 never sees A.
-    assert.ok(!teamM.reports.some((row) => row.employmentId === h.employmentB));
-    const teamM2 = await getTeamView({ orgId: h.org.orgId, actorId: h.manager2Id });
-    assert.deepEqual(teamM2.reports.map((row) => row.employmentId), [h.employmentB]);
-    // C reports to A: A (who holds hrm.self.read as a person) sees C, M does not.
-    await grantPermissions(h.org.orgId, h.personAId, ["hrm.self.read"]);
-    const teamA = await getTeamView({ orgId: h.org.orgId, actorId: h.personAId });
-    assert.deepEqual(teamA.reports.map((row) => row.employmentId), [h.employmentC]);
-    assert.ok(!teamM.reports.some((row) => row.employmentId === h.employmentC));
-    // B manages nobody: the team read refuses by name, never an empty team.
-    await assert.rejects(() => getTeamView({ orgId: h.org.orgId, actorId: h.personBId }), (error: unknown) => {
-      assert.ok(error instanceof SelfServiceError);
-      assert.equal(error.code, "NO_TEAM");
-      return true;
-    });
-    assert.equal(await actorHasTeam({ orgId: h.org.orgId, actorId: h.personBId }), false);
-  });
-});
-
-test("a manager reads a direct report's employment record, and nothing else", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    const { getEmploymentRecord } = await import("./employment-read.ts");
-    const record = await getEmploymentRecord({
-      orgId: h.org.orgId, actorId: h.managerId, employmentId: h.employmentA,
-      effectiveDate: "2026-09-20", knownAt: new Date().toISOString(),
-    });
-    assert.equal(record.employmentId, h.employmentA);
-    assert.equal(record.workerPartyId, h.partyA);
-    assert.equal(record.asOf?.version.status, "active");
-    // B is not M's report: the fallback rethrows the original employment
-    // refusal, so the error shape never changes for strangers.
-    await assert.rejects(
-      getEmploymentRecord({
-        orgId: h.org.orgId, actorId: h.managerId, employmentId: h.employmentB,
-        effectiveDate: "2026-09-20", knownAt: new Date().toISOString(),
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof HrmAuthorizationError);
-        assert.match(error.message, /hrm\.employment\.read/);
-        return true;
       },
     );
-    // A stranger with no grants keeps the same refusal.
-    await assert.rejects(
-      getEmploymentRecord({
-        orgId: h.org.orgId, actorId: h.noLinkId, employmentId: h.employmentA,
-        effectiveDate: "2026-09-20", knownAt: new Date().toISOString(),
-      }),
-      /hrm\.employment\.read/,
-    );
-  });
-});
+  },
+);
 
-test("profile_change files, approves, and applies onto the party with evidence", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    await seedFlow(h.org.orgId, [h.hrId]);
-    const revisionBefore = (await db.execute<{ revision: number }>(sql`
+test(
+  "team scope: a manager of A is not a manager of B, and a report's report is not visible",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSelfServiceHarness(),
+      async (h) => {
+        assert.equal(await actorHasTeam({ orgId: h.org.orgId, actorId: h.managerId }), true);
+        const teamM = await getTeamView({ orgId: h.org.orgId, actorId: h.managerId });
+        assert.deepEqual(
+          teamM.reports.map((row) => row.employmentId),
+          [h.employmentA],
+        );
+        assert.equal(teamM.reports[0]!.workerPartyId, h.partyA);
+        // B reports to M2: M never sees B, M2 never sees A.
+        assert.ok(!teamM.reports.some((row) => row.employmentId === h.employmentB));
+        const teamM2 = await getTeamView({ orgId: h.org.orgId, actorId: h.manager2Id });
+        assert.deepEqual(
+          teamM2.reports.map((row) => row.employmentId),
+          [h.employmentB],
+        );
+        // C reports to A: A (who holds hrm.self.read as a person) sees C, M does not.
+        await grantPermissions(h.org.orgId, h.personAId, ["hrm.self.read"]);
+        const teamA = await getTeamView({ orgId: h.org.orgId, actorId: h.personAId });
+        assert.deepEqual(
+          teamA.reports.map((row) => row.employmentId),
+          [h.employmentC],
+        );
+        assert.ok(!teamM.reports.some((row) => row.employmentId === h.employmentC));
+        // B manages nobody: the team read refuses by name, never an empty team.
+        await assert.rejects(
+          () => getTeamView({ orgId: h.org.orgId, actorId: h.personBId }),
+          (error: unknown) => {
+            assert.ok(error instanceof SelfServiceError);
+            assert.equal(error.code, "NO_TEAM");
+            return true;
+          },
+        );
+        assert.equal(await actorHasTeam({ orgId: h.org.orgId, actorId: h.personBId }), false);
+      },
+    );
+  },
+);
+
+test(
+  "a manager reads a direct report's employment record, and nothing else",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSelfServiceHarness(),
+      async (h) => {
+        const { getEmploymentRecord } = await import("./employment-read.ts");
+        const record = await getEmploymentRecord({
+          orgId: h.org.orgId,
+          actorId: h.managerId,
+          employmentId: h.employmentA,
+          effectiveDate: "2026-09-20",
+          knownAt: new Date().toISOString(),
+        });
+        assert.equal(record.employmentId, h.employmentA);
+        assert.equal(record.workerPartyId, h.partyA);
+        assert.equal(record.asOf?.version.status, "active");
+        // B is not M's report: the fallback rethrows the original employment
+        // refusal, so the error shape never changes for strangers.
+        await assert.rejects(
+          getEmploymentRecord({
+            orgId: h.org.orgId,
+            actorId: h.managerId,
+            employmentId: h.employmentB,
+            effectiveDate: "2026-09-20",
+            knownAt: new Date().toISOString(),
+          }),
+          (error: unknown) => {
+            assert.ok(error instanceof HrmAuthorizationError);
+            assert.match(error.message, /hrm\.employment\.read/);
+            return true;
+          },
+        );
+        // A stranger with no grants keeps the same refusal.
+        await assert.rejects(
+          getEmploymentRecord({
+            orgId: h.org.orgId,
+            actorId: h.noLinkId,
+            employmentId: h.employmentA,
+            effectiveDate: "2026-09-20",
+            knownAt: new Date().toISOString(),
+          }),
+          /hrm\.employment\.read/,
+        );
+      },
+    );
+  },
+);
+
+test(
+  "profile_change files, approves, and applies onto the party with evidence",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSelfServiceHarness(),
+      async (h) => {
+        await seedFlow(h.org.orgId, [h.hrId]);
+        const revisionBefore = (
+          await db.execute<{ revision: number }>(
+            sql`
       select revision from worker_employments where id = ${h.employmentA}
-    `, "objects"))[0]!.revision;
-    const filed = await fileProfileChangeRequest({
-      orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
-      changes: {
-        kind: "profile_change",
-        phone: "+1 555 0100",
-        email: "a.person@example.com",
-        emergencyContact: { name: "Kin A", relationship: "sibling", phone: "+1 555 0101" },
-        address: { line1: "1 Harbour Road", city: "Halifax", country: "CA" },
-      },
-      reason: "moved across town",
-    });
-    assert.equal(filed.request.status, "pending_approval");
-    assert.equal(filed.request.payload.kind, "profile_change");
-    const gate = await gateOf(filed.request.id);
-    await decideGate({ gateId: gate.id, decision: "approved", userId: h.hrId });
-    const party = (await db.execute<{ phone: string | null; email: string | null; emergency_contact: unknown }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!.revision;
+        const filed = await fileProfileChangeRequest({
+          orgId: h.org.orgId,
+          actorId: h.personAId,
+          employmentId: h.employmentA,
+          changes: {
+            kind: "profile_change",
+            phone: "+1 555 0100",
+            email: "a.person@example.com",
+            emergencyContact: { name: "Kin A", relationship: "sibling", phone: "+1 555 0101" },
+            address: { line1: "1 Harbour Road", city: "Halifax", country: "CA" },
+          },
+          reason: "moved across town",
+        });
+        assert.equal(filed.request.status, "pending_approval");
+        assert.equal(filed.request.payload.kind, "profile_change");
+        const gate = await gateOf(filed.request.id);
+        await decideGate({ gateId: gate.id, decision: "approved", userId: h.hrId });
+        const party = (
+          await db.execute<{
+            phone: string | null;
+            email: string | null;
+            emergency_contact: unknown;
+          }>(
+            sql`
       select phone, email, emergency_contact as "emergency_contact" from parties where id = ${h.partyA}
-    `, "objects"))[0]!;
-    assert.equal(party.phone, "+1 555 0100");
-    assert.equal(party.email, "a.person@example.com");
-    assert.deepEqual(party.emergency_contact, { name: "Kin A", relationship: "sibling", phone: "+1 555 0101" });
-    const address = await db.execute<{ line1: string | null; city: string | null; country: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(party.phone, "+1 555 0100");
+        assert.equal(party.email, "a.person@example.com");
+        assert.deepEqual(party.emergency_contact, {
+          name: "Kin A",
+          relationship: "sibling",
+          phone: "+1 555 0101",
+        });
+        const address = await db.execute<{
+          line1: string | null;
+          city: string | null;
+          country: string | null;
+        }>(
+          sql`
       select line1, city, country from addresses where org_id = ${h.org.orgId} and party_id = ${h.partyA}
-    `, "objects");
-    assert.equal(address.length, 1);
-    assert.deepEqual([address[0]!.line1, address[0]!.city, address[0]!.country], ["1 Harbour Road", "Halifax", "CA"]);
-    const revisionAfter = (await db.execute<{ revision: number }>(sql`
+    `,
+          "objects",
+        );
+        assert.equal(address.length, 1);
+        assert.deepEqual(
+          [address[0]!.line1, address[0]!.city, address[0]!.country],
+          ["1 Harbour Road", "Halifax", "CA"],
+        );
+        const revisionAfter = (
+          await db.execute<{ revision: number }>(
+            sql`
       select revision from worker_employments where id = ${h.employmentA}
-    `, "objects"))[0]!.revision;
-    assert.equal(revisionAfter, revisionBefore + 1);
-    const events = await db.execute<{ kind: string; snapshot: unknown; applied: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!.revision;
+        assert.equal(revisionAfter, revisionBefore + 1);
+        const events = await db.execute<{
+          kind: string;
+          snapshot: unknown;
+          applied: string | null;
+        }>(
+          sql`
       select change_kind as kind, prior_snapshot as snapshot,
              (select applied_employment_change_id::text from hrm_employment_change_requests where id = ${filed.request.id}) as applied
         from employment_changes where employment_id = ${h.employmentA} order by revision
-    `, "objects");
-    const profile = events.find((row) => row.kind === "profile_changed");
-    assert.ok(profile, "a profile_changed event evidences the application");
-    assert.deepEqual((profile.snapshot as { party: unknown }).party, {
-      phone: null, email: null, emergencyContact: null,
-    });
-    const status = (await db.execute<{ status: string }>(sql`
+    `,
+          "objects",
+        );
+        const profile = events.find((row) => row.kind === "profile_changed");
+        assert.ok(profile, "a profile_changed event evidences the application");
+        assert.deepEqual((profile.snapshot as { party: unknown }).party, {
+          phone: null,
+          email: null,
+          emergencyContact: null,
+        });
+        const status = (
+          await db.execute<{ status: string }>(
+            sql`
       select status from hrm_employment_change_requests where id = ${filed.request.id}
-    `, "objects"))[0]!.status;
-    assert.equal(status, "applied");
-  });
-});
-
-test("a profile change with no flow applies directly and the address persists", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    const filed = await fileProfileChangeRequest({
-      orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
-      changes: {
-        kind: "profile_change",
-        address: { line1: "4821 19 Street NW", city: "Calgary", region: "AB", postalCode: "T2L 2B7", country: "CA" },
+    `,
+            "objects",
+          )
+        )[0]!.status;
+        assert.equal(status, "applied");
       },
-      reason: "moved across town",
-    });
-    assert.equal(filed.request.status, "applied", "no flow means direct application");
-    // The typed address reaches the stored draft payload verbatim — the
-    // proposal, not just the event's before-image, carries it.
-    const stored = (await db.execute<{ payload: unknown }>(sql`
+    );
+  },
+);
+
+test(
+  "a profile change with no flow applies directly and the address persists",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSelfServiceHarness(),
+      async (h) => {
+        const filed = await fileProfileChangeRequest({
+          orgId: h.org.orgId,
+          actorId: h.personAId,
+          employmentId: h.employmentA,
+          changes: {
+            kind: "profile_change",
+            address: {
+              line1: "4821 19 Street NW",
+              city: "Calgary",
+              region: "AB",
+              postalCode: "T2L 2B7",
+              country: "CA",
+            },
+          },
+          reason: "moved across town",
+        });
+        assert.equal(filed.request.status, "applied", "no flow means direct application");
+        // The typed address reaches the stored draft payload verbatim — the
+        // proposal, not just the event's before-image, carries it.
+        const stored = (
+          await db.execute<{ payload: unknown }>(
+            sql`
       select payload from hrm_employment_change_requests where id = ${filed.request.id}
-    `, "objects"))[0]!.payload as { address?: { line1?: unknown } };
-    assert.equal(stored.address?.line1, "4821 19 Street NW", "the draft payload carries the typed address");
-    const address = await db.execute<{ line1: string | null; city: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!.payload as { address?: { line1?: unknown } };
+        assert.equal(
+          stored.address?.line1,
+          "4821 19 Street NW",
+          "the draft payload carries the typed address",
+        );
+        const address = await db.execute<{ line1: string | null; city: string | null }>(
+          sql`
       select line1, city from addresses where org_id = ${h.org.orgId} and party_id = ${h.partyA}
-    `, "objects");
-    assert.equal(address.length, 1);
-    assert.deepEqual([address[0]!.line1, address[0]!.city], ["4821 19 Street NW", "Calgary"]);
-    const kinds = (await db.execute<{ kind: string }>(sql`
+    `,
+          "objects",
+        );
+        assert.equal(address.length, 1);
+        assert.deepEqual([address[0]!.line1, address[0]!.city], ["4821 19 Street NW", "Calgary"]);
+        const kinds = (
+          await db.execute<{ kind: string }>(
+            sql`
       select change_kind as kind from employment_changes where employment_id = ${h.employmentA}
-    `, "objects")).map((row) => row.kind);
-    assert.ok(kinds.includes("profile_changed"), "a profile_changed event evidences the application");
-  });
-});
+    `,
+            "objects",
+          )
+        ).map((row) => row.kind);
+        assert.ok(
+          kinds.includes("profile_changed"),
+          "a profile_changed event evidences the application",
+        );
+      },
+    );
+  },
+);
 
 test("a stale profile approval refuses with the party untouched", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    await seedFlow(h.org.orgId, [h.hrId, h.hr2Id]);
-    const filed = await fileProfileChangeRequest({
-      orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
-      changes: { kind: "profile_change", phone: "+1 555 0199" },
-      reason: "new number",
-    });
-    // HR lands an employment change first: the profile proposal goes stale.
-    // Submitted by one HR identity, decided by another (the SoD invariant
-    // refuses self-approval before the revision race is even reached).
-    const race = await createChangeRequestDraft({
-      orgId: h.org.orgId, actorId: h.hrId, employmentId: h.employmentA,
-      payload: { kind: "status_change", status: "on_leave", effectiveFrom: "2026-01-01" },
-    });
-    const { submitChangeRequest } = await import("./change-requests.ts");
-    await submitChangeRequest({ orgId: h.org.orgId, actorId: h.hrId, requestId: race.id, reason: "cover" });
-    const { decideGate: decide } = await import("../flows/gates.ts");
-    // Gates are per-assignee: the hr2Id-assigned gate is decided by hr2Id
-    // (hrId submitted the race, so the SoD invariant bars hrId from its
-    // own gate; mode "any" releases on the first approval).
-    const raceGates = await db.execute<{ id: string }>(sql`
+  await withHarness(
+    () => setupSelfServiceHarness(),
+    async (h) => {
+      await seedFlow(h.org.orgId, [h.hrId, h.hr2Id]);
+      const filed = await fileProfileChangeRequest({
+        orgId: h.org.orgId,
+        actorId: h.personAId,
+        employmentId: h.employmentA,
+        changes: { kind: "profile_change", phone: "+1 555 0199" },
+        reason: "new number",
+      });
+      // HR lands an employment change first: the profile proposal goes stale.
+      // Submitted by one HR identity, decided by another (the SoD invariant
+      // refuses self-approval before the revision race is even reached).
+      const race = await createChangeRequestDraft({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        employmentId: h.employmentA,
+        payload: { kind: "status_change", status: "on_leave", effectiveFrom: "2026-01-01" },
+      });
+      const { submitChangeRequest } = await import("./change-requests.ts");
+      await submitChangeRequest({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        requestId: race.id,
+        reason: "cover",
+      });
+      const { decideGate: decide } = await import("../flows/gates.ts");
+      // Gates are per-assignee: the hr2Id-assigned gate is decided by hr2Id
+      // (hrId submitted the race, so the SoD invariant bars hrId from its
+      // own gate; mode "any" releases on the first approval).
+      const raceGates = await db.execute<{ id: string }>(
+        sql`
       select id from flow_gates
        where subject_id = ${race.id} and status = 'pending' and assignee_user_id = ${h.hr2Id}
        order by created_at
-    `, "objects");
-    assert.equal(raceGates.length, 1, "the race submit opens hr2Id's gate");
-    await decide({ gateId: raceGates[0]!.id, decision: "approved", userId: h.hr2Id });
-    const gate = (await db.execute<{ id: string }>(sql`
+    `,
+        "objects",
+      );
+      assert.equal(raceGates.length, 1, "the race submit opens hr2Id's gate");
+      await decide({ gateId: raceGates[0]!.id, decision: "approved", userId: h.hr2Id });
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from flow_gates
        where subject_id = ${filed.request.id} and status = 'pending' and assignee_user_id = ${h.hrId}
        order by created_at limit 1
-    `, "objects"))[0];
-    assert.ok(gate, "the profile submit opens a gate");
-    await assert.rejects(decide({ gateId: gate.id, decision: "approved", userId: h.hrId }), (error: unknown) => {
-      assert.ok(error instanceof ReleaseError);
-      assert.match(String(error), /expected revision/);
-      return true;
-    });
-    const party = (await db.execute<{ phone: string | null }>(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      assert.ok(gate, "the profile submit opens a gate");
+      await assert.rejects(
+        decide({ gateId: gate.id, decision: "approved", userId: h.hrId }),
+        (error: unknown) => {
+          assert.ok(error instanceof ReleaseError);
+          assert.match(String(error), /expected revision/);
+          return true;
+        },
+      );
+      const party = (
+        await db.execute<{ phone: string | null }>(
+          sql`
       select phone from parties where id = ${h.partyA}
-    `, "objects"))[0]!;
-    assert.equal(party.phone, null, "the stale application wrote nothing");
-    const status = (await db.execute<{ status: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(party.phone, null, "the stale application wrote nothing");
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
       select status from hrm_employment_change_requests where id = ${filed.request.id}
-    `, "objects"))[0]!.status;
-    assert.equal(status, "pending_approval", "the refused decision leaves the request pending");
-  });
+    `,
+          "objects",
+        )
+      )[0]!.status;
+      assert.equal(status, "pending_approval", "the refused decision leaves the request pending");
+    },
+  );
 });
 
 test("authoring gates are kind-aware in both directions", { skip: !DB }, async () => {
-  await withHarness(() => setupSelfServiceHarness(), async (h) => {
-    // HR holds employment.manage but no self grant: a profile draft refuses
-    // with the authorization remedy (an HrmAuthorizationError, the same
-    // class every other permission refusal in this service carries).
-    await assert.rejects(
-      createChangeRequestDraft({
-        orgId: h.org.orgId, actorId: h.hrId, employmentId: h.employmentA,
-        payload: { kind: "profile_change", phone: "+1 555 0100" },
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof HrmAuthorizationError);
-        assert.match(error.message, /hrm\.self\.request/);
-        return true;
-      },
-    );
-    // The person holds self.request but no manage grant: an employment
-    // draft refuses, and a foreign employment's profile draft refuses.
-    await assert.rejects(
-      createChangeRequestDraft({
-        orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
-        payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof HrmAuthorizationError);
-        assert.match(error.message, /hrm\.employment\.manage/);
-        return true;
-      },
-    );
-    await assert.rejects(
-      createChangeRequestDraft({
-        orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentB,
-        payload: { kind: "profile_change", phone: "+1 555 0100" },
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof HrmAuthorizationError);
-        assert.match(error.message, /only your own employment/);
-        return true;
-      },
-    );
-    // HR reads every row including profile proposals; the person reads
-    // their own proposal but never another's. The submit inside filing
-    // needs the approval flow seeded like every other submit.
-    await seedFlow(h.org.orgId, [h.hrId]);
-    await grantPermissions(h.org.orgId, h.personAId, ["hrm.self.read"]);
-    const { getChangeRequest } = await import("./change-requests.ts");
-    const filed = await fileProfileChangeRequest({
-      orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
-      changes: { kind: "profile_change", phone: "+1 555 0100" },
-      reason: "read check",
-    });
-    const seenByHr = await getChangeRequest({ orgId: h.org.orgId, actorId: h.hrId, requestId: filed.request.id });
-    assert.equal(seenByHr.id, filed.request.id);
-    const seenBySelf = await getChangeRequest({ orgId: h.org.orgId, actorId: h.personAId, requestId: filed.request.id });
-    assert.equal(seenBySelf.id, filed.request.id);
-    await assert.rejects(
-      getChangeRequest({ orgId: h.org.orgId, actorId: h.personBId, requestId: filed.request.id }),
-      /hrm\.employment\.read|only your own employment/,
-    );
-  });
+  await withHarness(
+    () => setupSelfServiceHarness(),
+    async (h) => {
+      // HR holds employment.manage but no self grant: a profile draft refuses
+      // with the authorization remedy (an HrmAuthorizationError, the same
+      // class every other permission refusal in this service carries).
+      await assert.rejects(
+        createChangeRequestDraft({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          employmentId: h.employmentA,
+          payload: { kind: "profile_change", phone: "+1 555 0100" },
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof HrmAuthorizationError);
+          assert.match(error.message, /hrm\.self\.request/);
+          return true;
+        },
+      );
+      // The person holds self.request but no manage grant: an employment
+      // draft refuses, and a foreign employment's profile draft refuses.
+      await assert.rejects(
+        createChangeRequestDraft({
+          orgId: h.org.orgId,
+          actorId: h.personAId,
+          employmentId: h.employmentA,
+          payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof HrmAuthorizationError);
+          assert.match(error.message, /hrm\.employment\.manage/);
+          return true;
+        },
+      );
+      await assert.rejects(
+        createChangeRequestDraft({
+          orgId: h.org.orgId,
+          actorId: h.personAId,
+          employmentId: h.employmentB,
+          payload: { kind: "profile_change", phone: "+1 555 0100" },
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof HrmAuthorizationError);
+          assert.match(error.message, /only your own employment/);
+          return true;
+        },
+      );
+      // HR reads every row including profile proposals; the person reads
+      // their own proposal but never another's. The submit inside filing
+      // needs the approval flow seeded like every other submit.
+      await seedFlow(h.org.orgId, [h.hrId]);
+      await grantPermissions(h.org.orgId, h.personAId, ["hrm.self.read"]);
+      const { getChangeRequest } = await import("./change-requests.ts");
+      const filed = await fileProfileChangeRequest({
+        orgId: h.org.orgId,
+        actorId: h.personAId,
+        employmentId: h.employmentA,
+        changes: { kind: "profile_change", phone: "+1 555 0100" },
+        reason: "read check",
+      });
+      const seenByHr = await getChangeRequest({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        requestId: filed.request.id,
+      });
+      assert.equal(seenByHr.id, filed.request.id);
+      const seenBySelf = await getChangeRequest({
+        orgId: h.org.orgId,
+        actorId: h.personAId,
+        requestId: filed.request.id,
+      });
+      assert.equal(seenBySelf.id, filed.request.id);
+      await assert.rejects(
+        getChangeRequest({ orgId: h.org.orgId, actorId: h.personBId, requestId: filed.request.id }),
+        /hrm\.employment\.read|only your own employment/,
+      );
+    },
+  );
 });

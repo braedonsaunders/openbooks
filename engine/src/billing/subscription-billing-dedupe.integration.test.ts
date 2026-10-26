@@ -10,7 +10,12 @@ import {
   runDueSubscriptions,
   SubscriptionError,
 } from "./subscription-billing.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -50,28 +55,45 @@ async function seedPlainSubscription(
 }
 
 async function postedInvoiceCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from documents
      where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
 async function journalEntryCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
-async function guardRows(orgId: string, subscriptionId: string): Promise<{ startsOn: string; endsOn: string; revision: number; invoiceId: string }[]> {
-  const r = (await db.execute<{ startsOn: string; endsOn: string; revision: number; invoiceId: string }>(sql`
+async function guardRows(
+  orgId: string,
+  subscriptionId: string,
+): Promise<{ startsOn: string; endsOn: string; revision: number; invoiceId: string }[]> {
+  const r = await db.execute<{
+    startsOn: string;
+    endsOn: string;
+    revision: number;
+    invoiceId: string;
+  }>(
+    sql`
     select period_starts_on as "startsOn", period_ends_on as "endsOn",
            contract_revision as "revision", invoice_id as "invoiceId"
       from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
      order by period_starts_on
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 }
 
@@ -99,16 +121,25 @@ test(
       assert.equal(first.posted, 1);
       assert.equal(await postedInvoiceCount(org.orgId), 1);
       assert.equal(await journalEntryCount(org.orgId), 1);
-      const firstInvoiceId = (await db.execute<{ id: string }>(sql`
+      const firstInvoiceId = (
+        await db.execute<{ id: string }>(
+          sql`
         select last_invoice_id as "id" from subscriptions where id = ${subscriptionId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
 
       // Plain subscriptions now record their period through the SAME
       // subscription_period_invoices guard the advanced lifecycle uses.
       const guard = await guardRows(org.orgId, subscriptionId);
       assert.equal(guard.length, 1);
       assert.equal(guard[0]!.startsOn, org.date);
-      assert.equal(guard[0]!.endsOn, "2026-08-15", "the plain-sub key is the service month starting on the billed date");
+      assert.equal(
+        guard[0]!.endsOn,
+        "2026-08-15",
+        "the plain-sub key is the service month starting on the billed date",
+      );
       assert.equal(guard[0]!.invoiceId, firstInvoiceId);
 
       // The pre-fix double-bill state: success bookkeeping failed after the
@@ -118,13 +149,26 @@ test(
       assert.equal(second.failed, 0);
       assert.equal(second.billed, 1, "the retry still reports the replayed billing");
       assert.equal(second.posted, 1);
-      assert.equal(await postedInvoiceCount(org.orgId), 1, "exactly one invoice exists for the period");
+      assert.equal(
+        await postedInvoiceCount(org.orgId),
+        1,
+        "exactly one invoice exists for the period",
+      );
       assert.equal(await journalEntryCount(org.orgId), 1, "the ledger was hit exactly once");
       assert.equal((await guardRows(org.orgId, subscriptionId)).length, 1);
-      const lastInvoiceId = (await db.execute<{ id: string }>(sql`
+      const lastInvoiceId = (
+        await db.execute<{ id: string }>(
+          sql`
         select last_invoice_id as "id" from subscriptions where id = ${subscriptionId}
-      `, "objects"))[0]!.id;
-      assert.equal(lastInvoiceId, firstInvoiceId, "bookkeeping points at the same committed invoice");
+      `,
+          "objects",
+        )
+      )[0]!.id;
+      assert.equal(
+        lastInvoiceId,
+        firstInvoiceId,
+        "bookkeeping points at the same committed invoice",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -147,26 +191,34 @@ test(
       // claiming and billing — nothing about the claim may become durable,
       // or a crash would strand an advanced next_bill_on with no invoice and
       // permanently lose this billable period.
-      const settings = (await db.execute<{ s: Record<string, unknown> }>(sql`
+      const settings = (
+        await db.execute<{ s: Record<string, unknown> }>(
+          sql`
         select settings as s from orgs where id = ${org.orgId}
-      `, "objects"))[0]!.s;
+      `,
+          "objects",
+        )
+      )[0]!.s;
       await db.execute(sql`
         update orgs set settings = settings - 'controlAccounts' where id = ${org.orgId}
       `);
 
       const run = await runDueSubscriptions(org.date);
       assert.equal(run.failed, 1);
-      const state = (await db.execute<{
+      const state = await db.execute<{
         nextBillOn: string;
         currentPeriodStart: string | null;
         lastError: string | null;
         runCount: number;
         lastInvoiceId: string | null;
-      }>(sql`
+      }>(
+        sql`
         select next_bill_on as "nextBillOn", current_period_start as "currentPeriodStart",
                last_error as "lastError", run_count as "runCount", last_invoice_id as "lastInvoiceId"
           from subscriptions where id = ${subscriptionId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(state[0]!.nextBillOn, org.date, "the occurrence stays due for the next tick");
       assert.equal(state[0]!.currentPeriodStart, null, "the period pointer was never moved");
       assert.ok(state[0]!.lastError, "last_error names the failure");
@@ -174,8 +226,11 @@ test(
       assert.equal(state[0]!.lastInvoiceId, null);
       assert.equal(await postedInvoiceCount(org.orgId), 0);
       assert.equal(await journalEntryCount(org.orgId), 0);
-      assert.equal((await guardRows(org.orgId, subscriptionId)).length, 0,
-        "a failed attempt never consumes the period");
+      assert.equal(
+        (await guardRows(org.orgId, subscriptionId)).length,
+        0,
+        "a failed attempt never consumes the period",
+      );
 
       // The crash-window regression: whatever killed the first attempt (here a
       // mid-billing throw; equally a SIGKILL — no durable claim exists to
@@ -183,7 +238,9 @@ test(
       await db.execute(sql`
         update orgs set settings = ${JSON.stringify(settings)}::jsonb where id = ${org.orgId}
       `);
-      await db.execute(sql`update subscriptions set last_error = null where id = ${subscriptionId}`);
+      await db.execute(
+        sql`update subscriptions set last_error = null where id = ${subscriptionId}`,
+      );
       const retry = await runDueSubscriptions(org.date);
       assert.equal(retry.failed, 0);
       assert.equal(retry.billed, 1, "the retried tick bills the missed occurrence");
@@ -194,9 +251,12 @@ test(
       assert.equal(guard.length, 1);
       assert.equal(guard[0]!.startsOn, org.date);
       assert.equal(guard[0]!.endsOn, "2026-08-15");
-      const retriedState = (await db.execute<{ nextBillOn: string; runCount: number }>(sql`
+      const retriedState = await db.execute<{ nextBillOn: string; runCount: number }>(
+        sql`
         select next_bill_on as "nextBillOn", run_count as "runCount" from subscriptions where id = ${subscriptionId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.notEqual(retriedState[0]!.nextBillOn, org.date, "the claim now advances");
       assert.equal(retriedState[0]!.runCount, 1);
     } finally {
@@ -228,13 +288,23 @@ test(
       // where the poisoned org throws. Both subscriptions are due long ago.
       const run = await runDueSubscriptions();
       assert.equal(await postedInvoiceCount(healthy.orgId), 1, "the healthy org still bills");
-      const poisonedError = (await db.execute<{ lastError: string | null }>(sql`
+      const poisonedError = (
+        await db.execute<{ lastError: string | null }>(
+          sql`
         select last_error as "lastError" from subscriptions where id = ${poisonedSub}
-      `, "objects"))[0]!.lastError;
+      `,
+          "objects",
+        )
+      )[0]!.lastError;
       assert.match(poisonedError ?? "", /business day unavailable.*not a known IANA time zone/);
-      const healthyError = (await db.execute<{ lastError: string | null }>(sql`
+      const healthyError = (
+        await db.execute<{ lastError: string | null }>(
+          sql`
         select last_error as "lastError" from subscriptions where id = ${healthySub}
-      `, "objects"))[0]!.lastError;
+      `,
+          "objects",
+        )
+      )[0]!.lastError;
       assert.equal(healthyError, null);
       assert.ok(run.failed >= 1, "the poisoned org's subscriptions count as failed");
       assert.equal(run.billed, 1);
@@ -297,34 +367,30 @@ test(
   },
 );
 
-test(
-  "a tenant-scoped tick bills only its own org",
-  { skip: !DB },
-  async () => {
-    // runDueSubscriptions reads the ambient tenant when one is set and must
-    // carry it into the candidate scan, so a scoped tick can never bill
-    // another tenant's due subscriptions.
-    const scoped = await createScratchOrg();
-    const other = await createScratchOrg();
-    try {
-      const scopedActor = await createScratchUser(scoped.orgId, "Billing", "admin");
-      const otherActor = await createScratchUser(other.orgId, "Billing", "admin");
-      await seedPlainSubscription(scoped, scopedActor);
-      await seedPlainSubscription(other, otherActor);
+test("a tenant-scoped tick bills only its own org", { skip: !DB }, async () => {
+  // runDueSubscriptions reads the ambient tenant when one is set and must
+  // carry it into the candidate scan, so a scoped tick can never bill
+  // another tenant's due subscriptions.
+  const scoped = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    const scopedActor = await createScratchUser(scoped.orgId, "Billing", "admin");
+    const otherActor = await createScratchUser(other.orgId, "Billing", "admin");
+    await seedPlainSubscription(scoped, scopedActor);
+    await seedPlainSubscription(other, otherActor);
 
-      const run = await orgContext.run({ orgId: scoped.orgId, bypass: false }, () =>
-        runDueSubscriptions(scoped.date),
-      );
-      assert.equal(run.failed, 0);
-      assert.equal(run.billed, 1);
-      assert.equal(await postedInvoiceCount(scoped.orgId), 1, "the scoped org bills");
-      assert.equal(await postedInvoiceCount(other.orgId), 0, "the unscoped org is untouched");
-    } finally {
-      await dropScratchOrgReporting(scoped.orgId);
-      await dropScratchOrgReporting(other.orgId);
-    }
-  },
-);
+    const run = await orgContext.run({ orgId: scoped.orgId, bypass: false }, () =>
+      runDueSubscriptions(scoped.date),
+    );
+    assert.equal(run.failed, 0);
+    assert.equal(run.billed, 1);
+    assert.equal(await postedInvoiceCount(scoped.orgId), 1, "the scoped org bills");
+    assert.equal(await postedInvoiceCount(other.orgId), 0, "the unscoped org is untouched");
+  } finally {
+    await dropScratchOrgReporting(scoped.orgId);
+    await dropScratchOrgReporting(other.orgId);
+  }
+});
 
 test(
   "concurrent identical plan changes cut exactly one proration invoice",
@@ -338,24 +404,50 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const subscriptionId = await seedPlainSubscription(org, actorId, { nextBillOn: "2026-08-15" });
+      const subscriptionId = await seedPlainSubscription(org, actorId, {
+        nextBillOn: "2026-08-15",
+      });
 
       const [a, b] = await Promise.all([
-        changeSubscription(org.orgId, subscriptionId, { quantity: "2" }, org.date, { actorId }, null),
-        changeSubscription(org.orgId, subscriptionId, { quantity: "2" }, org.date, { actorId }, null),
+        changeSubscription(
+          org.orgId,
+          subscriptionId,
+          { quantity: "2" },
+          org.date,
+          { actorId },
+          null,
+        ),
+        changeSubscription(
+          org.orgId,
+          subscriptionId,
+          { quantity: "2" },
+          org.date,
+          { actorId },
+          null,
+        ),
       ]);
       const invoiced = [a.invoiceId, b.invoiceId].filter((id): id is string => id !== null);
       assert.equal(invoiced.length, 1, "exactly one proration invoice across both calls");
       const winner = a.invoiceId ? a : b;
       assert.equal(winner.adjustment, "100.0000", "the winner bills the full remaining slice once");
-      const quantity = (await db.execute<{ quantity: string }>(sql`
+      const quantity = (
+        await db.execute<{ quantity: string }>(
+          sql`
         select quantity from subscriptions where id = ${subscriptionId}
-      `, "objects"))[0]!.quantity;
+      `,
+          "objects",
+        )
+      )[0]!.quantity;
       assert.equal(quantity, "2.0000");
-      const invoices = (await db.execute<{ n: number }>(sql`
+      const invoices = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(invoices, 1, "no duplicate proration invoice exists");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -370,21 +462,41 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const subscriptionId = await seedPlainSubscription(org, actorId, { nextBillOn: "2026-08-15" });
-      const before = (await db.execute<{ quantity: string }>(sql`
+      const subscriptionId = await seedPlainSubscription(org, actorId, {
+        nextBillOn: "2026-08-15",
+      });
+      const before = (
+        await db.execute<{ quantity: string }>(
+          sql`
         select quantity from subscriptions where id = ${subscriptionId}
-      `, "objects"))[0]!.quantity;
+      `,
+          "objects",
+        )
+      )[0]!.quantity;
 
       await assert.rejects(
-        changeSubscription(org.orgId, subscriptionId, { quantity: "1.00001" }, org.date, { actorId }, null),
+        changeSubscription(
+          org.orgId,
+          subscriptionId,
+          { quantity: "1.00001" },
+          org.date,
+          { actorId },
+          null,
+        ),
         (e: unknown) =>
-          e instanceof SubscriptionError && /quantity allows at most 4 decimal places/.test(e.message),
+          e instanceof SubscriptionError &&
+          /quantity allows at most 4 decimal places/.test(e.message),
       );
-      const row = (await db.execute<{ quantity: string; n: number }>(sql`
+      const row = (
+        await db.execute<{ quantity: string; n: number }>(
+          sql`
         select s.quantity,
                (select count(*)::int from documents d where d.org_id = ${org.orgId}) as n
           from subscriptions s where s.id = ${subscriptionId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(row.quantity, before, "the stored quantity is untouched");
       assert.equal(row.n, 0, "no invoice was cut for the refused change");
     } finally {
@@ -401,9 +513,14 @@ test(
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
       await seedPlainSubscription(org, actorId);
-      const currency = (await db.execute<{ base_currency: string }>(sql`
+      const currency = (
+        await db.execute<{ base_currency: string }>(
+          sql`
         select base_currency from orgs where id = ${org.orgId}
-      `, "objects"))[0]!.base_currency;
+      `,
+          "objects",
+        )
+      )[0]!.base_currency;
 
       await assert.rejects(
         createSubscriptionInvoice({
@@ -423,11 +540,17 @@ test(
           autoPost: false,
         }),
         (e: unknown) =>
-          e instanceof SubscriptionError && /unit price allows at most 4 decimal places/.test(e.message),
+          e instanceof SubscriptionError &&
+          /unit price allows at most 4 decimal places/.test(e.message),
       );
-      const documents = (await db.execute<{ n: number }>(sql`
+      const documents = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from documents where org_id = ${org.orgId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(documents, 0, "the refused invoice wrote no document");
     } finally {
       await dropScratchOrgReporting(org.orgId);

@@ -1,26 +1,40 @@
-import 'server-only'
-import { PDFDocument } from 'pdf-lib'
-import { sql } from 'drizzle-orm'
-import { db, inDbTransaction } from '@openbooks/engine/platform/db'
-import { allocateProportionally } from '@openbooks/engine/compliance/information-returns'
-import { can, getAuthz, type Authz } from './authz'
-import { subsidiaryVisibleFilter } from './subsidiaries'
-import { add, normalizeMoney, toUnits } from '@openbooks/engine/money/money'
-import { renderHtmlDocumentPdf } from '@openbooks/pdf'
-import { deleteS3Blobs, enqueueStorageCleanup, fileCabinetObjectKey } from './file-storage'
-import { attachmentReadPermission, getFileBlob, listAttachments, uploadAndAttach, type FileViewer } from './file-cabinet'
-import { recordFileEvent } from './file-audit'
-import { resolvePdfTemplate, type PdfTemplateProvenance, type ResolvedPdfTemplate } from './pdf-templates/store'
+import "server-only";
+import { PDFDocument } from "pdf-lib";
+import { sql } from "drizzle-orm";
+import { db, inDbTransaction } from "@openbooks/engine/platform/db";
+import { allocateProportionally } from "@openbooks/engine/compliance/information-returns";
+import { can, getAuthz, type Authz } from "./authz";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
+import { add, normalizeMoney, toUnits } from "@openbooks/engine/money/money";
+import { renderHtmlDocumentPdf } from "@openbooks/pdf";
+import { deleteS3Blobs, enqueueStorageCleanup, fileCabinetObjectKey } from "./file-storage";
+import {
+  attachmentReadPermission,
+  getFileBlob,
+  listAttachments,
+  uploadAndAttach,
+  type FileViewer,
+} from "./file-cabinet";
+import { recordFileEvent } from "./file-audit";
+import {
+  resolvePdfTemplate,
+  type PdfTemplateProvenance,
+  type ResolvedPdfTemplate,
+} from "./pdf-templates/store";
 
 /** Shape a resolved template's provenance for the archived packet manifest. */
-export function provenanceOf(tpl: ResolvedPdfTemplate): { id: string | null; revision: number | null; hash: string } {
-  const provenance: PdfTemplateProvenance = tpl.provenance
-  return { id: provenance.templateId, revision: provenance.revision, hash: provenance.contentHash }
+export function provenanceOf(tpl: ResolvedPdfTemplate): {
+  id: string | null;
+  revision: number | null;
+  hash: string;
+} {
+  const provenance: PdfTemplateProvenance = tpl.provenance;
+  return { id: provenance.templateId, revision: provenance.revision, hash: provenance.contentHash };
 }
-import { loadPdfRecordValues } from './pdf-templates/values'
-import { mergeAndPrintPdf } from './pdf-templates/render'
-import { getMoneyFormatter } from './money-server'
-import { formatDecimal, type MoneyFormatter } from './money-format'
+import { loadPdfRecordValues } from "./pdf-templates/values";
+import { mergeAndPrintPdf } from "./pdf-templates/render";
+import { getMoneyFormatter } from "./money-server";
+import { formatDecimal, type MoneyFormatter } from "./money-format";
 
 /**
  * Invoice backup PDF package. Assembles, in a configurable order, the invoice
@@ -33,53 +47,58 @@ import { formatDecimal, type MoneyFormatter } from './money-format'
  */
 
 export type BackupType =
-  | 'none'
-  | 'costed_timesheets'
-  | 'quote_only'
-  | 'timesheets_purchases'
-  | 'purchases'
-  | 'purchases_shop_time'
+  | "none"
+  | "costed_timesheets"
+  | "quote_only"
+  | "timesheets_purchases"
+  | "purchases"
+  | "purchases_shop_time";
 
-type ComponentKind = 'invoice' | 'costed_timesheets' | 'shop_time' | 'attachments' | 'field_tickets'
+type ComponentKind =
+  "invoice" | "costed_timesheets" | "shop_time" | "attachments" | "field_tickets";
 
 /** Ordered components per backup type — the configurable matrix. */
 const BACKUP_RECIPES: Record<BackupType, ComponentKind[]> = {
-  none: ['invoice'],
-  costed_timesheets: ['invoice', 'field_tickets', 'costed_timesheets'],
-  quote_only: ['invoice'],
-  timesheets_purchases: ['invoice', 'field_tickets', 'costed_timesheets', 'attachments'],
-  purchases: ['invoice', 'attachments'],
-  purchases_shop_time: ['invoice', 'attachments', 'shop_time'],
-}
+  none: ["invoice"],
+  costed_timesheets: ["invoice", "field_tickets", "costed_timesheets"],
+  quote_only: ["invoice"],
+  timesheets_purchases: ["invoice", "field_tickets", "costed_timesheets", "attachments"],
+  purchases: ["invoice", "attachments"],
+  purchases_shop_time: ["invoice", "attachments", "shop_time"],
+};
 
 export interface BackupManifestEntry {
-  kind: ComponentKind
-  sourceDocumentId?: string
-  sourceFileId?: string
-  pages: number
+  kind: ComponentKind;
+  sourceDocumentId?: string;
+  sourceFileId?: string;
+  pages: number;
   /**
    * Which template design rendered this component: id + revision + content
    * hash, so the archived packet pins the exact design each page was
    * printed with. Present only on template-rendered components.
    */
-  template?: { id: string | null; revision: number | null; hash: string }
+  template?: { id: string | null; revision: number | null; hash: string };
 }
 
 export interface AssembleResult {
-  fileId: string
-  pageCount: number
-  manifest: BackupManifestEntry[]
+  fileId: string;
+  pageCount: number;
+  manifest: BackupManifestEntry[];
 }
 
 export class InvoiceBackupNotFoundError extends Error {
-  constructor() { super('Invoice not found') }
+  constructor() {
+    super("Invoice not found");
+  }
 }
 
 export class InvoiceBackupSourceAccessError extends Error {
   constructor(readonly permission: string | null) {
-    super(permission
-      ? `Missing permission: ${permission} to include this invoice backup source`
-      : 'An invoice backup source file is not visible in File Cabinet — ask an administrator to grant you file access')
+    super(
+      permission
+        ? `Missing permission: ${permission} to include this invoice backup source`
+        : "An invoice backup source file is not visible in File Cabinet — ask an administrator to grant you file access",
+    );
   }
 }
 
@@ -92,15 +111,18 @@ export class InvoiceBackupSourceAccessError extends Error {
  */
 export class InvoiceBackupImmutableError extends Error {
   constructor() {
-    super('This invoice is already issued, so its backup packet cannot be regenerated — issued evidence is immutable')
+    super(
+      "This invoice is already issued, so its backup packet cannot be regenerated — issued evidence is immutable",
+    );
   }
 }
 
-const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
+const esc = (s: unknown) =>
+  String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
 
 /** Backup packets retain the ownership of every underlying financial record. */
 function backupScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | null) {
-  if (allowedSubsidiaryIds === null) return sql``
+  if (allowedSubsidiaryIds === null) return sql``;
   return sql`${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
     and (d.project_id is null or exists (
       select 1 from projects visible_project
@@ -125,11 +147,11 @@ function backupScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | null) {
          and not exists (select 1 where true
            ${subsidiaryVisibleFilter(sql`ticket.subsidiary_id`, allowedSubsidiaryIds)}
          )
-    )`
+    )`;
 }
 
 function backupManifestScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | null) {
-  if (allowedSubsidiaryIds === null) return sql``
+  if (allowedSubsidiaryIds === null) return sql``;
   return sql`and not exists (
     select 1 from jsonb_array_elements(ib.component_manifest) component
      where component->>'sourceDocumentId' is not null
@@ -138,80 +160,99 @@ function backupManifestScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | n
           where manifest_source.id::text = component->>'sourceDocumentId' and manifest_source.org_id = ib.org_id
             ${subsidiaryVisibleFilter(sql`manifest_source.subsidiary_id`, allowedSubsidiaryIds)}
        )
-  )`
+  )`;
 }
 
 /** Backups read through the same live, viewer-gated cabinet byte path as downloads. */
-async function readFileBytes(orgId: string, fileId: string, viewer: FileViewer): Promise<{ bytes: Buffer; contentType: string } | null> {
-  const file = await getFileBlob(orgId, fileId, viewer)
-  return file ? { bytes: file.bytes, contentType: file.contentType } : null
+async function readFileBytes(
+  orgId: string,
+  fileId: string,
+  viewer: FileViewer,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const file = await getFileBlob(orgId, fileId, viewer);
+  return file ? { bytes: file.bytes, contentType: file.contentType } : null;
 }
 
 async function backupViewer(orgId: string, userId: string | null) {
-  const authz = await getAuthz()
-  if (!authz || authz.user.orgId !== orgId || (userId !== null && authz.user.id !== userId)) throw new InvoiceBackupNotFoundError()
-  const viewerUserId = userId ?? authz.user.id
+  const authz = await getAuthz();
+  if (!authz || authz.user.orgId !== orgId || (userId !== null && authz.user.id !== userId))
+    throw new InvoiceBackupNotFoundError();
+  const viewerUserId = userId ?? authz.user.id;
   const viewer: FileViewer = {
     userId: viewerUserId,
-    isAdmin: can(authz, '*'),
-    baseline: 'viewer',
-    canReadApCapture: can(authz, 'ap.read'),
+    isAdmin: can(authz, "*"),
+    baseline: "viewer",
+    canReadApCapture: can(authz, "ap.read"),
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-  }
-  return { authz, viewer }
+  };
+  return { authz, viewer };
 }
 
 async function requireSourceDocumentPermission(orgId: string, documentId: string, authz: Authz) {
-  if (!authz) throw new InvoiceBackupNotFoundError()
-  const source = (await db.execute<{ kind: string }>(sql`
+  if (!authz) throw new InvoiceBackupNotFoundError();
+  const source = (
+    await db.execute<{ kind: string }>(
+      sql`
     select kind from documents where id = ${documentId} and org_id = ${orgId}
-  `, 'objects'))[0]
-  if (!source) throw new InvoiceBackupSourceAccessError(null)
-  const permission = attachmentReadPermission('documents', source.kind)
-  if (!permission || !can(authz, permission)) throw new InvoiceBackupSourceAccessError(permission)
+  `,
+      "objects",
+    )
+  )[0];
+  if (!source) throw new InvoiceBackupSourceAccessError(null);
+  const permission = attachmentReadPermission("documents", source.kind);
+  if (!permission || !can(authz, permission)) throw new InvoiceBackupSourceAccessError(permission);
 }
 
 /** Merge a source PDF buffer into the master document, returning page count. */
 async function mergePdfInto(out: PDFDocument, buf: Buffer): Promise<number> {
-  const src = await PDFDocument.load(buf, { ignoreEncryption: true })
-  const pages = await out.copyPages(src, src.getPageIndices())
-  pages.forEach((p) => out.addPage(p))
-  return pages.length
+  const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+  const pages = await out.copyPages(src, src.getPageIndices());
+  pages.forEach((p) => out.addPage(p));
+  return pages.length;
 }
 
 /** Draw an image (jpg/png) as one full letter page. */
-async function addImagePage(out: PDFDocument, bytes: Buffer, contentType: string): Promise<boolean> {
+async function addImagePage(
+  out: PDFDocument,
+  bytes: Buffer,
+  contentType: string,
+): Promise<boolean> {
   try {
-    const img = contentType.includes('png') ? await out.embedPng(bytes) : await out.embedJpg(bytes)
-    const page = out.addPage([612, 792]) // US Letter, points
-    const scaled = img.scaleToFit(540, 720)
-    page.drawImage(img, { x: (612 - scaled.width) / 2, y: (792 - scaled.height) / 2, width: scaled.width, height: scaled.height })
-    return true
+    const img = contentType.includes("png") ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+    const page = out.addPage([612, 792]); // US Letter, points
+    const scaled = img.scaleToFit(540, 720);
+    page.drawImage(img, {
+      x: (612 - scaled.width) / 2,
+      y: (792 - scaled.height) / 2,
+      width: scaled.width,
+      height: scaled.height,
+    });
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 /** Customer labour rows contain billing evidence, never internal costing. */
-type MoneyInput = string | number | null | undefined
+type MoneyInput = string | number | null | undefined;
 
 export interface CustomerLabourRow extends Record<string, unknown> {
-  time_entry_id: string
-  line_id: string
-  worked_on: string
-  employee: string
-  hours: MoneyInput
-  bill_rate: MoneyInput
-  line_amount: MoneyInput
-  native_bill_amount: MoneyInput
-  item: string
+  time_entry_id: string;
+  line_id: string;
+  worked_on: string;
+  employee: string;
+  hours: MoneyInput;
+  bill_rate: MoneyInput;
+  line_amount: MoneyInput;
+  native_bill_amount: MoneyInput;
+  item: string;
 }
 
 export interface TimesheetBillAllocation {
   /** The posted amount on the rolled-up document line. */
-  lineAmount: MoneyInput
+  lineAmount: MoneyInput;
   /** Native hours × bill-rate amounts for every entry in the line's group. */
-  nativeBillAmounts: readonly MoneyInput[]
+  nativeBillAmounts: readonly MoneyInput[];
 }
 
 /**
@@ -224,46 +265,64 @@ export interface TimesheetBillAllocation {
  * order, which is the query's date/employee/id order.
  */
 export function allocateTimesheetBillAmounts(input: TimesheetBillAllocation): string[] {
-  const lineAmount = normalizeMoney(String(input.lineAmount ?? '0'))
-  const nativeBillAmounts = input.nativeBillAmounts.map((amount) => normalizeMoney(String(amount ?? '0')))
-  if (nativeBillAmounts.length === 0) return []
-  if (nativeBillAmounts.length === 1) return [lineAmount]
+  const lineAmount = normalizeMoney(String(input.lineAmount ?? "0"));
+  const nativeBillAmounts = input.nativeBillAmounts.map((amount) =>
+    normalizeMoney(String(amount ?? "0")),
+  );
+  if (nativeBillAmounts.length === 0) return [];
+  if (nativeBillAmounts.length === 1) return [lineAmount];
 
-  const hasNativeWeight = nativeBillAmounts.some((amount) => toUnits(amount) !== 0n)
-  const weights = hasNativeWeight ? nativeBillAmounts : nativeBillAmounts.map(() => '1.0000')
-  return allocateProportionally(lineAmount, weights)
+  const hasNativeWeight = nativeBillAmounts.some((amount) => toUnits(amount) !== 0n);
+  const weights = hasNativeWeight ? nativeBillAmounts : nativeBillAmounts.map(() => "1.0000");
+  return allocateProportionally(lineAmount, weights);
 }
 
 /** Allocate invoice lines without carrying internal source fields into render data. */
 export function projectCustomerLabourBackup(rows: readonly CustomerLabourRow[]) {
   const entries = rows.map((row) => ({
-    time_entry_id: row.time_entry_id, line_id: row.line_id, worked_on: row.worked_on,
-    employee: row.employee, item: row.item, hours: String(row.hours ?? '0'),
-    bill_rate: row.bill_rate, line_amount: row.line_amount, native_bill_amount: row.native_bill_amount,
-    bill_amount: '0.0000',
-  }))
-  type TimesheetGroup = { lineAmount: MoneyInput; indexes: number[]; nativeBillAmounts: MoneyInput[] }
-  const groups = new Map<string, TimesheetGroup>()
+    time_entry_id: row.time_entry_id,
+    line_id: row.line_id,
+    worked_on: row.worked_on,
+    employee: row.employee,
+    item: row.item,
+    hours: String(row.hours ?? "0"),
+    bill_rate: row.bill_rate,
+    line_amount: row.line_amount,
+    native_bill_amount: row.native_bill_amount,
+    bill_amount: "0.0000",
+  }));
+  type TimesheetGroup = {
+    lineAmount: MoneyInput;
+    indexes: number[];
+    nativeBillAmounts: MoneyInput[];
+  };
+  const groups = new Map<string, TimesheetGroup>();
   entries.forEach((row, index) => {
-    const lineId = String(row.line_id)
-    const group: TimesheetGroup = groups.get(lineId) ?? { lineAmount: row.line_amount, indexes: [], nativeBillAmounts: [] }
-    group.indexes.push(index)
-    group.nativeBillAmounts.push(row.native_bill_amount)
-    groups.set(lineId, group)
-  })
+    const lineId = String(row.line_id);
+    const group: TimesheetGroup = groups.get(lineId) ?? {
+      lineAmount: row.line_amount,
+      indexes: [],
+      nativeBillAmounts: [],
+    };
+    group.indexes.push(index);
+    group.nativeBillAmounts.push(row.native_bill_amount);
+    groups.set(lineId, group);
+  });
   for (const group of groups.values()) {
     const amounts = allocateTimesheetBillAmounts({
       lineAmount: group.lineAmount,
       nativeBillAmounts: group.nativeBillAmounts,
-    })
-    group.indexes.forEach((index, position) => { entries[index]!.bill_amount = amounts[position]! })
+    });
+    group.indexes.forEach((index, position) => {
+      entries[index]!.bill_amount = amounts[position]!;
+    });
   }
 
   const totals = entries.reduce(
     (a, r) => ({ hours: add(a.hours, r.hours), bill: add(a.bill, r.bill_amount) }),
-    { hours: '0.0000', bill: '0.0000' },
-  )
-  return { entries, totals }
+    { hours: "0.0000", bill: "0.0000" },
+  );
+  return { entries, totals };
 }
 
 /** Shared customer-facing labour page for the published labour and shop recipes. */
@@ -271,13 +330,14 @@ export function customerLabourBackupHtml(
   rows: readonly CustomerLabourRow[],
   invoiceNumber: string,
   projectName: string,
-  title: 'Labour Backup' | 'Shop Labour Backup',
+  title: "Labour Backup" | "Shop Labour Backup",
   format: MoneyFormatter,
 ): string {
   // Allocated ledger shares and fractional rates retain their stored precision.
-  const money = (value: MoneyInput) => format.money(value, { maximumFractionDigits: 4 })
-  const hours = (value: string) => formatDecimal(format.locale, value, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-  const { entries, totals } = projectCustomerLabourBackup(rows)
+  const money = (value: MoneyInput) => format.money(value, { maximumFractionDigits: 4 });
+  const hours = (value: string) =>
+    formatDecimal(format.locale, value, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const { entries, totals } = projectCustomerLabourBackup(rows);
   const body = entries
     .map(
       (r) => `<tr>
@@ -285,7 +345,7 @@ export function customerLabourBackupHtml(
       <td class="n">${hours(r.hours)}</td>
       <td class="n">${money(r.bill_rate)}</td><td class="n">${money(r.bill_amount)}</td></tr>`,
     )
-    .join('')
+    .join("");
   const html = `
     <style>
       body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color:#111; }
@@ -308,12 +368,20 @@ export function customerLabourBackupHtml(
         <th class="n">Bill rate</th><th class="n">Amount</th></tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr><td colspan="3">Total</td><td class="n">${hours(totals.hours)}</td><td></td><td class="n">${money(totals.bill)}</td></tr></tfoot>
-    </table>`
-  return html
+    </table>`;
+  return html;
 }
 
-async function customerLabourPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: 'Labour Backup' | 'Shop Labour Backup', format: MoneyFormatter): Promise<Buffer | null> {
-  const rows = (await db.execute<CustomerLabourRow>(sql`
+async function customerLabourPdf(
+  orgId: string,
+  documentId: string,
+  invoiceNumber: string,
+  projectName: string,
+  title: "Labour Backup" | "Shop Labour Backup",
+  format: MoneyFormatter,
+): Promise<Buffer | null> {
+  const rows = await db.execute<CustomerLabourRow>(
+    sql`
     select te.id as time_entry_id, dl.id as line_id,
            te.worked_on::text as worked_on, coalesce(pty.display_name, '') as employee, te.hours,
            te.bill_rate,
@@ -326,11 +394,20 @@ async function customerLabourPdf(orgId: string, documentId: string, invoiceNumbe
       left join items i on i.id = te.item_id and i.org_id = te.org_id
      where dl.document_id = ${documentId} and te.org_id = ${orgId}
      order by te.worked_on, employee, te.id
-  `, 'objects'))
-  if (rows.length === 0) return null
+  `,
+    "objects",
+  );
+  if (rows.length === 0) return null;
 
-  const html = customerLabourBackupHtml(rows, invoiceNumber, projectName, title, format)
-  return renderHtmlDocumentPdf({ bodyHtml: html, paperSize: 'letter', orientation: 'landscape', marginMm: 12, headerHtml: null, footerHtml: null })
+  const html = customerLabourBackupHtml(rows, invoiceNumber, projectName, title, format);
+  return renderHtmlDocumentPdf({
+    bodyHtml: html,
+    paperSize: "letter",
+    orientation: "landscape",
+    marginMm: 12,
+    headerHtml: null,
+    footerHtml: null,
+  });
 }
 
 /**
@@ -343,144 +420,196 @@ export async function assembleInvoiceBackup(
   orgId: string,
   userId: string,
   documentId: string,
-  backupType: BackupType = 'costed_timesheets',
+  backupType: BackupType = "costed_timesheets",
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<AssembleResult> {
-  const invRes = (await db.execute<{ document_number: string; currency: string; project_name: string }>(sql`
+  const invRes = await db.execute<{
+    document_number: string;
+    currency: string;
+    project_name: string;
+  }>(
+    sql`
     select d.document_number, d.currency, coalesce(p.name, '') as project_name
       from documents d left join projects p on p.id = d.project_id and p.org_id = d.org_id
      where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
       ${backupScopeFilter(allowedSubsidiaryIds)}
-  `, 'objects'))
-  const inv = invRes[0]
-  if (!inv) throw new InvoiceBackupNotFoundError()
-  const format = await getMoneyFormatter(orgId, inv.currency)
+  `,
+    "objects",
+  );
+  const inv = invRes[0];
+  if (!inv) throw new InvoiceBackupNotFoundError();
+  const format = await getMoneyFormatter(orgId, inv.currency);
 
-  const recipe = BACKUP_RECIPES[backupType] ?? BACKUP_RECIPES.costed_timesheets
-  const attachmentContext = recipe.includes('attachments') ? await (async () => {
-    const context = await backupViewer(orgId, userId)
-    const sources = await db.execute<{ document_id: string }>(sql`
+  const recipe = BACKUP_RECIPES[backupType] ?? BACKUP_RECIPES.costed_timesheets;
+  const attachmentContext = recipe.includes("attachments")
+    ? await (async () => {
+        const context = await backupViewer(orgId, userId);
+        const sources = await db.execute<{ document_id: string }>(
+          sql`
       select distinct src.document_id
         from document_lines inv_line
         join document_lines src on src.billed_by_line_id = inv_line.id and src.org_id = inv_line.org_id
        where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
-    `, 'objects')
-    for (const source of sources) await requireSourceDocumentPermission(orgId, source.document_id, context.authz)
-    return { viewer: context.viewer, sources }
-  })() : null
-  const out = await PDFDocument.create()
-  const manifest: BackupManifestEntry[] = []
+    `,
+          "objects",
+        );
+        for (const source of sources)
+          await requireSourceDocumentPermission(orgId, source.document_id, context.authz);
+        return { viewer: context.viewer, sources };
+      })()
+    : null;
+  const out = await PDFDocument.create();
+  const manifest: BackupManifestEntry[] = [];
 
   for (const kind of recipe) {
-    if (kind === 'invoice') {
-      const tpl = await resolvePdfTemplate(orgId, 'customer_invoice', null)
-      const record = await loadPdfRecordValues('customer_invoice', orgId, documentId, allowedSubsidiaryIds)
+    if (kind === "invoice") {
+      const tpl = await resolvePdfTemplate(orgId, "customer_invoice", null);
+      const record = await loadPdfRecordValues(
+        "customer_invoice",
+        orgId,
+        documentId,
+        allowedSubsidiaryIds,
+      );
       if (tpl && record) {
-        const buf = await mergeAndPrintPdf(tpl, record.values)
-        const pages = await mergePdfInto(out, buf)
-        manifest.push({ kind, pages, template: provenanceOf(tpl) })
+        const buf = await mergeAndPrintPdf(tpl, record.values);
+        const pages = await mergePdfInto(out, buf);
+        manifest.push({ kind, pages, template: provenanceOf(tpl) });
       }
-    } else if (kind === 'costed_timesheets' || kind === 'shop_time') {
-      const title = kind === 'shop_time' ? 'Shop Labour Backup' : 'Labour Backup'
-      const buf = await customerLabourPdf(orgId, documentId, inv.document_number, inv.project_name, title, format)
+    } else if (kind === "costed_timesheets" || kind === "shop_time") {
+      const title = kind === "shop_time" ? "Shop Labour Backup" : "Labour Backup";
+      const buf = await customerLabourPdf(
+        orgId,
+        documentId,
+        inv.document_number,
+        inv.project_name,
+        title,
+        format,
+      );
       if (buf) {
-        const pages = await mergePdfInto(out, buf)
-        manifest.push({ kind, pages })
+        const pages = await mergePdfInto(out, buf);
+        manifest.push({ kind, pages });
       }
-    } else if (kind === 'field_tickets') {
+    } else if (kind === "field_tickets") {
       // Signed field tickets whose hours this invoice billed — the T&M
       // substantiation packet. Each distinct ticket renders once via the org's
       // ticket template (signature included when present).
-      const tickets = (await db.execute<{ field_ticket_id: string }>(sql`
+      const tickets = await db.execute<{ field_ticket_id: string }>(
+        sql`
         select distinct te.field_ticket_id
           from document_lines inv_line
           join time_entries te on te.invoiced_by_line_id = inv_line.id and te.org_id = inv_line.org_id
          where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
            and te.field_ticket_id is not null
-      `, 'objects'))
+      `,
+        "objects",
+      );
       if (tickets.length > 0) {
-        const tpl = await resolvePdfTemplate(orgId, 'field_ticket', null)
+        const tpl = await resolvePdfTemplate(orgId, "field_ticket", null);
         if (tpl) {
           for (const tk of tickets) {
-            const record = await loadPdfRecordValues('field_ticket', orgId, tk.field_ticket_id, allowedSubsidiaryIds)
-            if (!record) continue
-            const buf = await mergeAndPrintPdf(tpl, record.values)
-            const pages = await mergePdfInto(out, buf)
+            const record = await loadPdfRecordValues(
+              "field_ticket",
+              orgId,
+              tk.field_ticket_id,
+              allowedSubsidiaryIds,
+            );
+            if (!record) continue;
+            const buf = await mergeAndPrintPdf(tpl, record.values);
+            const pages = await mergePdfInto(out, buf);
             if (pages > 0) {
-              manifest.push({ kind, sourceDocumentId: tk.field_ticket_id, pages, template: provenanceOf(tpl) })
+              manifest.push({
+                kind,
+                sourceDocumentId: tk.field_ticket_id,
+                pages,
+                template: provenanceOf(tpl),
+              });
             }
           }
         }
       }
-    } else if (kind === 'attachments') {
+    } else if (kind === "attachments") {
       // Source cost documents this invoice billed → their attachments.
-      if (!attachmentContext) throw new InvoiceBackupNotFoundError()
+      if (!attachmentContext) throw new InvoiceBackupNotFoundError();
       for (const s of attachmentContext.sources) {
-        const atts = await listAttachments(orgId, 'documents', s.document_id)
+        const atts = await listAttachments(orgId, "documents", s.document_id);
         for (const att of atts) {
-          const file = await readFileBytes(orgId, att.id, attachmentContext.viewer)
-          if (!file) throw new InvoiceBackupSourceAccessError(null)
-          let pages = 0
-          if (file.contentType === 'application/pdf') {
-            pages = await mergePdfInto(out, file.bytes)
-          } else if (file.contentType.startsWith('image/')) {
-            pages = (await addImagePage(out, file.bytes, file.contentType)) ? 1 : 0
+          const file = await readFileBytes(orgId, att.id, attachmentContext.viewer);
+          if (!file) throw new InvoiceBackupSourceAccessError(null);
+          let pages = 0;
+          if (file.contentType === "application/pdf") {
+            pages = await mergePdfInto(out, file.bytes);
+          } else if (file.contentType.startsWith("image/")) {
+            pages = (await addImagePage(out, file.bytes, file.contentType)) ? 1 : 0;
           }
-          if (pages > 0) manifest.push({ kind, sourceDocumentId: s.document_id, sourceFileId: att.id, pages })
+          if (pages > 0)
+            manifest.push({ kind, sourceDocumentId: s.document_id, sourceFileId: att.id, pages });
         }
       }
     }
   }
 
-  const pdfBytes = Buffer.from(await out.save())
-  const pageCount = out.getPageCount()
+  const pdfBytes = Buffer.from(await out.save());
+  const pageCount = out.getPageCount();
 
   const persisted = await inDbTransaction(async (tx) => {
     // Lock the invoice row even when no invoice_backups row exists yet. This
     // serializes concurrent generators without relying on a process-local lock.
-    const invoice = (await tx.execute<{ id: string; project_id: string | null; status: string }>(sql`
+    const invoice = (
+      await tx.execute<{ id: string; project_id: string | null; status: string }>(
+        sql`
       select d.id, d.project_id, d.status from documents d
        where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
          ${backupScopeFilter(allowedSubsidiaryIds)}
        for update of d
-    `, 'objects'))[0]
-    if (!invoice) throw new InvoiceBackupNotFoundError()
+    `,
+        "objects",
+      )
+    )[0];
+    if (!invoice) throw new InvoiceBackupNotFoundError();
     if (invoice.project_id) {
-      const project = await tx.execute(sql`select id from projects
+      const project = await tx.execute(
+        sql`select id from projects
         where id = ${invoice.project_id} and org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-        for share`, 'objects')
-      if (!project[0]) throw new InvoiceBackupNotFoundError()
+        for share`,
+        "objects",
+      );
+      if (!project[0]) throw new InvoiceBackupNotFoundError();
     }
 
-    const prior = (await tx.execute<{
-      file_id: string
-      backup_type: string
-      page_count: number
-      component_manifest: unknown
-    }>(sql`
+    const prior = (
+      await tx.execute<{
+        file_id: string;
+        backup_type: string;
+        page_count: number;
+        component_manifest: unknown;
+      }>(
+        sql`
       select file_id, backup_type, page_count, component_manifest from invoice_backups
        where org_id = ${orgId} and document_id = ${documentId}
        for update
-    `, 'objects'))[0]
+    `,
+        "objects",
+      )
+    )[0];
     // Issued evidence is immutable: once the invoice is approved or posted,
     // its packet is frozen — regenerating would replace the file the customer
     // received and delete the old versions. A first packet for an issued
     // invoice (predating this rule, or lost) still generates; only replacing
     // an existing one refuses.
-    if (prior && (invoice.status === 'approved' || invoice.status === 'posted')) {
-      throw new InvoiceBackupImmutableError()
+    if (prior && (invoice.status === "approved" || invoice.status === "posted")) {
+      throw new InvoiceBackupImmutableError();
     }
     const next = await uploadAndAttach({
       orgId,
-      targetTable: 'documents',
+      targetTable: "documents",
       targetId: documentId,
       filename: `${inv.document_number} Backup.pdf`,
-      contentType: 'application/pdf',
+      contentType: "application/pdf",
       bytes: pdfBytes,
       createdBy: userId,
       executor: tx,
-    })
+    });
     await tx.execute(sql`
       insert into invoice_backups (org_id, document_id, backup_type, file_id, page_count, component_manifest, created_by, updated_by)
       values (${orgId}, ${documentId}, ${backupType}, ${next.id}, ${pageCount}, ${JSON.stringify(manifest)}::jsonb, ${userId}, ${userId})
@@ -488,51 +617,58 @@ export async function assembleInvoiceBackup(
         set backup_type = excluded.backup_type, file_id = excluded.file_id, page_count = excluded.page_count,
             component_manifest = excluded.component_manifest, generated_at = now(), updated_by = ${userId}
       where invoice_backups.org_id = ${orgId}
-    `)
+    `);
 
-    const priorS3VersionIds: string[] = []
+    const priorS3VersionIds: string[] = [];
     if (prior?.file_id && prior.file_id !== next.id) {
-      const priorFileId = prior.file_id
-      const priorVersions = await tx.execute<{ id: string }>(sql`
+      const priorFileId = prior.file_id;
+      const priorVersions = await tx.execute<{ id: string }>(
+        sql`
         select fv.id
           from file_versions fv
           join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
          where fv.file_id = ${priorFileId} and fv.storage_kind = 's3'
-      `, 'objects')
-      priorS3VersionIds.push(...priorVersions.map((row) => row.id))
-      await tx.execute(sql`delete from file_attachments where org_id = ${orgId} and file_id = ${priorFileId}`)
+      `,
+        "objects",
+      );
+      priorS3VersionIds.push(...priorVersions.map((row) => row.id));
+      await tx.execute(
+        sql`delete from file_attachments where org_id = ${orgId} and file_id = ${priorFileId}`,
+      );
       await tx.execute(sql`
         delete from file_blobs where version_id in (
           select fv.id from file_versions fv
           join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
           where fv.file_id = ${priorFileId}
         )
-      `)
-      await tx.execute(sql`update files set current_version_id = null where id = ${priorFileId} and org_id = ${orgId}`)
+      `);
+      await tx.execute(
+        sql`update files set current_version_id = null where id = ${priorFileId} and org_id = ${orgId}`,
+      );
       await tx.execute(sql`
         delete from file_versions fv
         using files fi
         where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${priorFileId}
-      `)
-      await tx.execute(sql`delete from files where id = ${priorFileId} and org_id = ${orgId}`)
+      `);
+      await tx.execute(sql`delete from files where id = ${priorFileId} and org_id = ${orgId}`);
       // Durable cleanup intents in the same transaction as
       // the row deletes; the worker duty drains them with retry.
       for (const versionId of priorS3VersionIds) {
         await enqueueStorageCleanup(tx, {
           orgId,
           objectKey: fileCabinetObjectKey(versionId),
-          ownerKind: 'file_version',
+          ownerKind: "file_version",
           ownerId: priorFileId,
-        })
+        });
       }
     }
 
     await recordFileEvent({
       orgId,
       actorId: userId,
-      table: 'files',
+      table: "files",
       rowId: next.id,
-      action: 'replace',
+      action: "replace",
       changes: {
         before: {
           fileId: prior?.file_id ?? null,
@@ -549,15 +685,15 @@ export async function assembleInvoiceBackup(
         },
       },
       executor: tx,
-    })
-    return { next, priorS3VersionIds }
-  })
+    });
+    return { next, priorS3VersionIds };
+  });
 
   // External objects are removed only after the metadata transaction commits;
   // a failed audit/attachment leaves the prior backup and its blobs retryable.
-  await deleteS3Blobs(persisted.priorS3VersionIds)
+  await deleteS3Blobs(persisted.priorS3VersionIds);
 
-  return { fileId: persisted.next.id, pageCount, manifest }
+  return { fileId: persisted.next.id, pageCount, manifest };
 }
 
 /**
@@ -568,9 +704,11 @@ export async function assembleInvoiceBackup(
  * (POST /api/billing-requests/:id/backup), then submit again.
  */
 export class InvoiceBackupRequiredError extends Error {
-  readonly code = 'invoice_backup_required' as const
+  readonly code = "invoice_backup_required" as const;
   constructor() {
-    super('This invoice requires a backup packet before it can be issued — generate it from its billing request, then submit again')
+    super(
+      "This invoice requires a backup packet before it can be issued — generate it from its billing request, then submit again",
+    );
   }
 }
 
@@ -579,11 +717,10 @@ export class InvoiceBackupRequiredError extends Error {
  * the invoice's billing request requires backup, a stored packet must exist.
  * Invoices with no billing request (manual AR) pass untouched.
  */
-export async function requireInvoiceBackup(
-  orgId: string,
-  documentId: string,
-): Promise<void> {
-  const missing = (await db.execute<{ id: string }>(sql`
+export async function requireInvoiceBackup(orgId: string, documentId: string): Promise<void> {
+  const missing = (
+    await db.execute<{ id: string }>(
+      sql`
     select br.id from billing_requests br
      where br.org_id = ${orgId}
        and br.invoice_document_id = ${documentId}
@@ -592,14 +729,27 @@ export async function requireInvoiceBackup(
          select 1 from invoice_backups ib
           where ib.org_id = ${orgId} and ib.document_id = ${documentId}
        )
-  `, 'objects'))[0]
-  if (missing) throw new InvoiceBackupRequiredError()
+  `,
+      "objects",
+    )
+  )[0];
+  if (missing) throw new InvoiceBackupRequiredError();
 }
 
 /** The stored backup (file id + bytes) for an invoice, if assembled. */
-export async function loadInvoiceBackup(orgId: string, documentId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
-  const { authz, viewer } = await backupViewer(orgId, null)
-  const r = (await db.execute<{ file_id: string; name: string; can_read: boolean; component_manifest: unknown }>(sql`
+export async function loadInvoiceBackup(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
+  const { authz, viewer } = await backupViewer(orgId, null);
+  const r = await db.execute<{
+    file_id: string;
+    name: string;
+    can_read: boolean;
+    component_manifest: unknown;
+  }>(
+    sql`
     select ib.file_id, fi.name, ib.component_manifest, exists (
       select 1 from documents d where d.id = ib.document_id and d.org_id = ib.org_id
         ${backupScopeFilter(allowedSubsidiaryIds)}
@@ -607,26 +757,35 @@ export async function loadInvoiceBackup(orgId: string, documentId: string, allow
     ) as can_read
       from invoice_backups ib join files fi on fi.id = ib.file_id and fi.org_id = ib.org_id
      where ib.org_id = ${orgId} and ib.document_id = ${documentId}
-  `, 'objects'))
-  const row = r[0]
-  if (!row) return null
+  `,
+    "objects",
+  );
+  const row = r[0];
+  if (!row) return null;
   // Refused existing artifacts must not be mistaken for a cache miss and
   // regenerated by a reader with narrower access to their original sources.
-  if (!row.can_read) throw new InvoiceBackupNotFoundError()
-  const linkedSources = await db.execute<{ document_id: string }>(sql`
+  if (!row.can_read) throw new InvoiceBackupNotFoundError();
+  const linkedSources = await db.execute<{ document_id: string }>(
+    sql`
     select distinct src.document_id from document_lines invoice_line
       join document_lines src on src.billed_by_line_id = invoice_line.id and src.org_id = invoice_line.org_id
      where invoice_line.org_id = ${orgId} and invoice_line.document_id = ${documentId}
-  `, 'objects')
-  for (const source of linkedSources) await requireSourceDocumentPermission(orgId, source.document_id, authz)
-  const manifest = Array.isArray(row.component_manifest) ? row.component_manifest as BackupManifestEntry[] : []
+  `,
+    "objects",
+  );
+  for (const source of linkedSources)
+    await requireSourceDocumentPermission(orgId, source.document_id, authz);
+  const manifest = Array.isArray(row.component_manifest)
+    ? (row.component_manifest as BackupManifestEntry[])
+    : [];
   for (const component of manifest) {
-    if (component.sourceDocumentId) await requireSourceDocumentPermission(orgId, component.sourceDocumentId, authz)
+    if (component.sourceDocumentId)
+      await requireSourceDocumentPermission(orgId, component.sourceDocumentId, authz);
     if (component.sourceFileId && !(await readFileBytes(orgId, component.sourceFileId, viewer))) {
-      throw new InvoiceBackupSourceAccessError(null)
+      throw new InvoiceBackupSourceAccessError(null);
     }
   }
-  const file = await readFileBytes(orgId, row.file_id, viewer)
-  if (!file) return null
-  return { fileId: row.file_id, filename: row.name, bytes: file.bytes }
+  const file = await readFileBytes(orgId, row.file_id, viewer);
+  if (!file) return null;
+  return { fileId: row.file_id, filename: row.name, bytes: file.bytes };
 }

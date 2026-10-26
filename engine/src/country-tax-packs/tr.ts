@@ -4,23 +4,86 @@ const TR_KDV1_2026: TaxReturnPack = {
   code: "TR_KDV1",
   name: "KDV1 Beyannamesi — Katma Değer Vergisi Beyannamesi (1 No.lu)",
   country: "TR",
-  jurisdiction: { code: "TR", name: "Türkiye — KDV territory", country: "TR", level: "country", taxType: "vat" },
+  jurisdiction: {
+    code: "TR",
+    name: "Türkiye — KDV territory",
+    country: "TR",
+    level: "country",
+    taxType: "vat",
+  },
   defaultFrequency: "monthly",
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://dijital.gib.gov.tr/",
-  watermark: "Working copy — review list I/II classification, then file through Dijital Vergi Dairesi (e-Beyanname); tevkifat (KDV2) and ÖTV are out of scope",
+  watermark:
+    "Working copy — review list I/II classification, then file through Dijital Vergi Dairesi (e-Beyanname); tevkifat (KDV2) and ÖTV are out of scope",
   boxes: [
-    { lineCode: "MATRAH-20", label: "Matrah (taxable base) — genel oranda (%20) vergilendirilen teslim ve hizmetler", sign: 1, sequence: 10 },
-    { lineCode: "HESAPLANAN-20", label: "Hesaplanan KDV (output VAT charged) — %20 genel oran", sign: -1, sequence: 20 },
-    { lineCode: "MATRAH-10", label: "Matrah (taxable base) — %10 indirimli orana tabi teslim ve hizmetler", sign: 1, sequence: 30 },
-    { lineCode: "HESAPLANAN-10", label: "Hesaplanan KDV (output VAT charged) — %10 indirimli oran", sign: -1, sequence: 40 },
-    { lineCode: "MATRAH-1", label: "Matrah (taxable base) — %1 indirimli orana tabi teslim ve hizmetler", sign: 1, sequence: 50 },
-    { lineCode: "HESAPLANAN-1", label: "Hesaplanan KDV (output VAT charged) — %1 indirimli oran", sign: -1, sequence: 60 },
-    { lineCode: "INDIRILECEK-KDV", label: "İndirilecek KDV (deductible VAT) — bu döneme ait indirilecek KDV toplamı, İndirimler kulakçığı (108/109/110 ve diğer indirim türleri)", sign: 1, sequence: 70 },
-    { lineCode: "ODENECEK-KDV", label: "Ödenecek KDV (VAT payable) — hesaplanan KDV toplamından indirilecek KDV düşüldükten sonra kalan", sign: 1, sequence: 80 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 90, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 100, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "MATRAH-20",
+      label: "Matrah (taxable base) — genel oranda (%20) vergilendirilen teslim ve hizmetler",
+      sign: 1,
+      sequence: 10,
+    },
+    {
+      lineCode: "HESAPLANAN-20",
+      label: "Hesaplanan KDV (output VAT charged) — %20 genel oran",
+      sign: -1,
+      sequence: 20,
+    },
+    {
+      lineCode: "MATRAH-10",
+      label: "Matrah (taxable base) — %10 indirimli orana tabi teslim ve hizmetler",
+      sign: 1,
+      sequence: 30,
+    },
+    {
+      lineCode: "HESAPLANAN-10",
+      label: "Hesaplanan KDV (output VAT charged) — %10 indirimli oran",
+      sign: -1,
+      sequence: 40,
+    },
+    {
+      lineCode: "MATRAH-1",
+      label: "Matrah (taxable base) — %1 indirimli orana tabi teslim ve hizmetler",
+      sign: 1,
+      sequence: 50,
+    },
+    {
+      lineCode: "HESAPLANAN-1",
+      label: "Hesaplanan KDV (output VAT charged) — %1 indirimli oran",
+      sign: -1,
+      sequence: 60,
+    },
+    {
+      lineCode: "INDIRILECEK-KDV",
+      label:
+        "İndirilecek KDV (deductible VAT) — bu döneme ait indirilecek KDV toplamı, İndirimler kulakçığı (108/109/110 ve diğer indirim türleri)",
+      sign: 1,
+      sequence: 70,
+    },
+    {
+      lineCode: "ODENECEK-KDV",
+      label:
+        "Ödenecek KDV (VAT payable) — hesaplanan KDV toplamından indirilecek KDV düşüldükten sonra kalan",
+      sign: 1,
+      sequence: 80,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all configured rates",
+      sign: -1,
+      sequence: 90,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all configured rates",
+      sign: 1,
+      sequence: 100,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -84,25 +147,29 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "rg_7346_kdv_2023",
-      title: "Resmî Gazete 07.07.2023 sayı 32241 — 7346 sayılı Cumhurbaşkanı Kararı: genel oran %18'den %20'ye, (II) sayılı liste %8'den %10'a, yürürlük 10.07.2023",
+      title:
+        "Resmî Gazete 07.07.2023 sayı 32241 — 7346 sayılı Cumhurbaşkanı Kararı: genel oran %18'den %20'ye, (II) sayılı liste %8'den %10'a, yürürlük 10.07.2023",
       url: "https://www.resmigazete.gov.tr/eskiler/2023/07/20230707-11.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "rg_2007_13033_baseline",
-      title: "Resmî Gazete 30.12.2007 sayı 26742 — BKK 2007/13033: genel oran %18, (I) sayılı liste %1, (II) sayılı liste %8; Madde 4 ile diğer hükümler 31.12.2007'de yürürlükte",
+      title:
+        "Resmî Gazete 30.12.2007 sayı 26742 — BKK 2007/13033: genel oran %18, (I) sayılı liste %1, (II) sayılı liste %8; Madde 4 ile diğer hükümler 31.12.2007'de yürürlükte",
       url: "https://www.resmigazete.gov.tr/eskiler/2007/12/20071230-4.htm",
       asOf: "2026-09-18",
     },
     {
       id: "gib_dvd_portal",
-      title: "GİB Dijital Vergi Dairesi — live filing portal with user login (Kullanıcı Girişi); e-Beyanname access pages closed into single sign-on per VUK Genel Tebliği 552",
+      title:
+        "GİB Dijital Vergi Dairesi — live filing portal with user login (Kullanıcı Girişi); e-Beyanname access pages closed into single sign-on per VUK Genel Tebliği 552",
       url: "https://dijital.gib.gov.tr/",
       asOf: "2026-09-18",
     },
     {
       id: "gib_ebeyan_doc",
-      title: "GİB e-Beyan dokümantasyon merkezi — publishes the KDV1 beyanname guides and version duyuruları; a document venue, no machine lodging API confirmed",
+      title:
+        "GİB e-Beyan dokümantasyon merkezi — publishes the KDV1 beyanname guides and version duyuruları; a document venue, no machine lodging API confirmed",
       url: "https://ebeyan.gib.gov.tr/beyan-doc/",
       asOf: "2026-09-18",
     },
@@ -117,7 +184,12 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: "20",
         role: "standard",
         rates: [
-          { ratePercent: "18", effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
+          {
+            ratePercent: "18",
+            effectiveFrom: "2007-12-31",
+            effectiveTo: "2023-07-09",
+            sourceId: "rg_2007_13033_baseline",
+          },
           { ratePercent: "20", effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
         ],
       },
@@ -127,7 +199,12 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: "10",
         role: "reduced",
         rates: [
-          { ratePercent: "8", effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
+          {
+            ratePercent: "8",
+            effectiveFrom: "2007-12-31",
+            effectiveTo: "2023-07-09",
+            sourceId: "rg_2007_13033_baseline",
+          },
           { ratePercent: "10", effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
         ],
       },
@@ -136,7 +213,9 @@ export const TURKIYE_TAX_PACK: CountryTaxPackDefinition = {
         name: "Türkiye reduced KDV 1% (liste I, basic foodstuffs)",
         ratePercent: "1",
         role: "reduced",
-        rates: [{ ratePercent: "1", effectiveFrom: "2007-12-31", sourceId: "rg_2007_13033_baseline" }],
+        rates: [
+          { ratePercent: "1", effectiveFrom: "2007-12-31", sourceId: "rg_2007_13033_baseline" },
+        ],
       },
     ],
   },

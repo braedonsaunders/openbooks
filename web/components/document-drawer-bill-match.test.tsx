@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -19,7 +19,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -67,11 +75,18 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
   const prior = globalThis.fetch;
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     calls.push(url);
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
-  return { calls, restore: () => { globalThis.fetch = prior; } };
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = prior;
+    },
+  };
 }
 
 async function mountBill(doc: Record<string, unknown>, createMode: boolean) {
@@ -84,7 +99,8 @@ async function mountBill(doc: Record<string, unknown>, createMode: boolean) {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <DocumentDrawer canPost={false}
+          <DocumentDrawer
+            canPost={false}
             payload={{ doc, lines: [] }}
             config={DOC_KINDS["vendor_bill"]!}
             basePath="/ap/bills"
@@ -153,13 +169,20 @@ test("a persisted draft bill still probes and shows its candidates banner", asyn
   const billId = randomUUID();
   const probe = scriptFetch((url) => {
     if (url === `/api/documents/${billId}/bill-match`) {
-      return Response.json({ lines: [{ matched: false, candidates: [{ orderId: randomUUID() }] }] });
+      return Response.json({
+        lines: [{ matched: false, candidates: [{ orderId: randomUUID() }] }],
+      });
     }
     return null;
   });
   t.after(probe.restore);
   const { host, root } = await mountBill(
-    { ...UNSAVED, id: billId, document_number: "BILL-00001", updated_at: "2026-09-17T12:00:00.000000Z" },
+    {
+      ...UNSAVED,
+      id: billId,
+      document_number: "BILL-00001",
+      updated_at: "2026-09-17T12:00:00.000000Z",
+    },
     false,
   );
   t.after(async () => {

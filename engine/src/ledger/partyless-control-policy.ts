@@ -30,8 +30,13 @@ export async function partylessControlPolicy(
   runner: Pick<SqlExecutor, "execute">,
   orgId: string,
 ): Promise<PartylessControlPolicy> {
-  const row = (await runner.execute<{ policy: string | null }>(sql`
-    select settings->'ledger'->>'partylessControlPolicy' as policy from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await runner.execute<{ policy: string | null }>(
+      sql`
+    select settings->'ledger'->>'partylessControlPolicy' as policy from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return parsePartylessControlPolicy(row?.policy);
 }
 
@@ -51,14 +56,17 @@ export async function partylessControlAccounts(
   runner: Pick<SqlExecutor, "execute">,
   orgId: string,
 ): Promise<Map<string, PartylessControlAccount>> {
-  const rows = await runner.execute<PartylessControlAccount>(sql`
+  const rows = await runner.execute<PartylessControlAccount>(
+    sql`
     select a.id, a.number, a.name, a.type
       from accounts a
       join orgs o on o.id = a.org_id
      where a.org_id = ${orgId}
        and a.type in ('asset_receivable', 'liability_payable')
        and a.id::text is distinct from nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')
-       and a.id::text is distinct from nullif(o.settings->'controlAccounts'->>'retainagePayable', '')`, "objects");
+       and a.id::text is distinct from nullif(o.settings->'controlAccounts'->>'retainagePayable', '')`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.id, row]));
 }
 

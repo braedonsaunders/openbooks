@@ -73,29 +73,25 @@ function suppliedOrigin(value: string): string | null {
   try {
     const url = new URL(value);
     if (
-      (url.protocol !== "http:" && url.protocol !== "https:")
-      || url.username
-      || url.password
-      || url.pathname !== "/"
-      || url.search
-      || url.hash
-    ) return null;
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    )
+      return null;
     return url.origin;
   } catch {
     return null;
   }
 }
 
-function forwardedRequestOrigin(
-  headers: Pick<Headers, "get">,
-  fallbackUrl: string,
-): string | null {
+function forwardedRequestOrigin(headers: Pick<Headers, "get">, fallbackUrl: string): string | null {
   const host = firstForwardedValue(headers.get("x-forwarded-host"));
   if (!host) return null;
 
-  const forwardedProtocol = firstForwardedValue(
-    headers.get("x-forwarded-proto"),
-  );
+  const forwardedProtocol = firstForwardedValue(headers.get("x-forwarded-proto"));
   let protocol = forwardedProtocol?.toLowerCase();
   if (!protocol) {
     try {
@@ -108,13 +104,7 @@ function forwardedRequestOrigin(
 
   try {
     const url = new URL(`${protocol}://${host}`);
-    if (
-      url.username
-      || url.password
-      || url.pathname !== "/"
-      || url.search
-      || url.hash
-    ) return null;
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
     return url.origin;
   } catch {
     return null;
@@ -140,10 +130,7 @@ export function trustedRequestOrigin(
     if (!origin) throw new Error("OPENBOOKS_APP_URL must be a valid HTTP(S) URL");
     return origin;
   }
-  if (
-    trustsForwardedHeaders(environment)
-    && headers.get("x-forwarded-host") !== null
-  ) {
+  if (trustsForwardedHeaders(environment) && headers.get("x-forwarded-host") !== null) {
     return forwardedRequestOrigin(headers, fallbackUrl);
   }
   return httpOrigin(fallbackUrl);

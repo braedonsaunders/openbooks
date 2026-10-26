@@ -34,17 +34,14 @@ const routeState: RouteState = {
   identity: null,
   deny(permission) {
     return permission
-      ? NextResponse.json(
-          { error: `missing permission: ${permission}` },
-          { status: 403 },
-        )
+      ? NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
       : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const permsUrl = new URL("../../../../../engine/src/organization/permissions.ts", import.meta.url).href;
+const permsUrl = new URL("../../../../../engine/src/organization/permissions.ts", import.meta.url)
+  .href;
 const mockAuthz = `
   import { permissionSetCovers } from '${permsUrl}';
   const state = globalThis[Symbol.for('openbooks.sftp-route-test')]
@@ -88,13 +85,11 @@ const hooks = registerHooks({
 const serversUrl = "./route.ts?sftp-access-audit-test";
 const { POST } = (await import(serversUrl)) as typeof import("./route.ts");
 const itemUrl = "./[id]/route.ts?sftp-access-audit-test";
-const { PATCH, DELETE } = (await import(itemUrl)) as typeof import(
-  "./[id]/route.ts"
-);
+const { PATCH, DELETE } = (await import(itemUrl)) as typeof import("./[id]/route.ts");
 const daemonUrl = "../../platform/sftp/daemon/route.ts?sftp-access-audit-test";
-const { PATCH: PLATFORM_PATCH } = (await import(daemonUrl)) as typeof import(
-  "../../platform/sftp/daemon/route.ts"
-);
+const { PATCH: PLATFORM_PATCH } = (await import(
+  daemonUrl
+)) as typeof import("../../platform/sftp/daemon/route.ts");
 
 const { db, env, withBypass, withBypassContext, withOrgContext } =
   await import("@openbooks/engine/platform/db");
@@ -113,11 +108,11 @@ process.env.OPENBOOKS_DATA_DIR = scratchDataDir;
 test.after(() => {
   if (savedProcessDataDir === undefined) delete process.env.OPENBOOKS_DATA_DIR;
   else process.env.OPENBOOKS_DATA_DIR = savedProcessDataDir;
-  if (savedSnapshotDataDir === undefined) delete (env as Record<string, string | undefined>).OPENBOOKS_DATA_DIR;
+  if (savedSnapshotDataDir === undefined)
+    delete (env as Record<string, string | undefined>).OPENBOOKS_DATA_DIR;
   else (env as Record<string, string>).OPENBOOKS_DATA_DIR = savedSnapshotDataDir;
   rmSync(scratchDataDir, { recursive: true, force: true });
 });
-
 
 interface Fixture {
   orgId: string;
@@ -127,11 +122,7 @@ interface Fixture {
 async function seed(): Promise<Fixture> {
   return withBypass(async () => {
     const org = await createScratchOrg();
-    const actorId = await createScratchUser(
-      org.orgId,
-      "SFTP Setup Admin",
-      "sftp_setup_admin",
-    );
+    const actorId = await createScratchUser(org.orgId, "SFTP Setup Admin", "sftp_setup_admin");
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'true'::jsonb)
@@ -164,9 +155,7 @@ function jsonRequest(url: string, method: string, body?: unknown): Request {
 
 const post = (fixture: Fixture, body: unknown) =>
   withOrgContext(fixture.orgId, () =>
-    POST(
-      jsonRequest("http://openbooks.test/api/banking/sftp", "POST", body),
-    ),
+    POST(jsonRequest("http://openbooks.test/api/banking/sftp", "POST", body)),
   );
 
 const patch = (fixture: Fixture, id: string, body: unknown) =>
@@ -190,9 +179,7 @@ const del = (fixture: Fixture, id: string, body?: unknown) =>
 
 const daemonPatch = (fixture: Fixture, body: unknown) =>
   withOrgContext(fixture.orgId, () =>
-    PLATFORM_PATCH(
-      jsonRequest("http://openbooks.test/api/platform/sftp/daemon", "PATCH", body),
-    ),
+    PLATFORM_PATCH(jsonRequest("http://openbooks.test/api/platform/sftp/daemon", "PATCH", body)),
   );
 
 type AuditRow = {
@@ -207,11 +194,14 @@ type AuditRow = {
 
 function auditsFor(fixture: Fixture): Promise<AuditRow[]> {
   return withOrgContext(fixture.orgId, async () => {
-    const r = await db.execute<AuditRow>(sql`
+    const r = await db.execute<AuditRow>(
+      sql`
       select table_name, row_id, action, changes, actor_id, org_id, at
         from audit_log
        where org_id = ${fixture.orgId}
-         and table_name in ('sftp_servers', 'sftp_daemon')`, "objects");
+         and table_name in ('sftp_servers', 'sftp_daemon')`,
+      "objects",
+    );
     return r;
   });
 }
@@ -258,291 +248,298 @@ function isForcedAuditFailure(error: unknown): boolean {
   );
 }
 
-test(
-  "a forced audit-insert failure rolls the SFTP credential mutation back with no evidence written",
-  async () => {
-    const fixture = await seed();
-    let removeFailure: (() => Promise<void>) | undefined;
-    try {
-      authorize(fixture);
-      const serverId = randomUUID();
-      await withBypass(async () => {
-        await db.execute(sql`
+test("a forced audit-insert failure rolls the SFTP credential mutation back with no evidence written", async () => {
+  const fixture = await seed();
+  let removeFailure: (() => Promise<void>) | undefined;
+  try {
+    authorize(fixture);
+    const serverId = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`
           insert into sftp_servers
             (id, org_id, name, username, password_encrypted, backend, root_prefix, created_by, updated_by)
           values
             (${serverId}, ${fixture.orgId}, 'Forced Failure Bank', 'forced-failure-bank',
              'seed-cipher-text', 'local', 'sftp/forced-failure', ${fixture.actorId}, ${fixture.actorId})`);
-      });
-      const before = await withOrgContext(fixture.orgId, async () => {
-        const r = await db.execute<Record<string, unknown>>(sql`
-          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`, "objects");
-        return r[0]!;
-      });
-      removeFailure = await installAuditFailure(fixture.actorId);
-
-      // Password rotation must fail with the credential row untouched.
-      await assert.rejects(
-        () => patch(fixture, serverId, { action: "rotate" }),
-        isForcedAuditFailure,
+    });
+    const before = await withOrgContext(fixture.orgId, async () => {
+      const r = await db.execute<Record<string, unknown>>(
+        sql`
+          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`,
+        "objects",
       );
-      const after = await withOrgContext(fixture.orgId, async () => {
-        const r = await db.execute<Record<string, unknown>>(sql`
-          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`, "objects");
-        return r[0]!;
-      });
-      assert.deepEqual(
-        after,
-        before,
-        "a failed audit insert must leave password_encrypted, attribution, and every other column exactly as it was",
-      );
-      assert.deepEqual(
-        await auditsFor(fixture),
-        [],
-        "no audit evidence may survive the rolled-back rotation",
-      );
-    } finally {
-      routeState.authz = null;
-      routeState.identity = null;
-      await removeFailure?.();
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+      return r[0]!;
+    });
+    removeFailure = await installAuditFailure(fixture.actorId);
 
-test(
-  "the SFTP access lifecycle and daemon configuration leave exact redacted attributable evidence",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      // A REAL generated key: fabricated base64 parses leniently but can
-      // never complete a signed login, so the fixture must carry material a
-      // partner could actually authenticate with.
-      const authorizedKeysBody = `${ssh2.utils.generateKeyPairSync("ed25519").public.trim()} sftp@openbooks.test`;
-      const created = await post(fixture, {
-        name: "Main Bank Feed",
-        authorizedKeys: authorizedKeysBody,
-      });
-      assert.equal(created.status, 200);
-      const creation = (await created.json()) as {
-        id: string;
-        username: string;
-        password: string;
-        rootPrefix: string;
-        backend: string;
-      };
-      assert.match(creation.username, /^main-bank-feed-/);
-      assert.ok(creation.password.length >= 18);
-      assert.equal(creation.backend, "local");
+    // Password rotation must fail with the credential row untouched.
+    await assert.rejects(
+      () => patch(fixture, serverId, { action: "rotate" }),
+      isForcedAuditFailure,
+    );
+    const after = await withOrgContext(fixture.orgId, async () => {
+      const r = await db.execute<Record<string, unknown>>(
+        sql`
+          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`,
+        "objects",
+      );
+      return r[0]!;
+    });
+    assert.deepEqual(
+      after,
+      before,
+      "a failed audit insert must leave password_encrypted, attribution, and every other column exactly as it was",
+    );
+    assert.deepEqual(
+      await auditsFor(fixture),
+      [],
+      "no audit evidence may survive the rolled-back rotation",
+    );
+  } finally {
+    routeState.authz = null;
+    routeState.identity = null;
+    await removeFailure?.();
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
-      const serverRow = await withOrgContext(fixture.orgId, async () => {
-        const r = await db.execute<{
-          password_encrypted: string;
-          authorized_keys: string;
-        }>(sql`
+test("the SFTP access lifecycle and daemon configuration leave exact redacted attributable evidence", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    // A REAL generated key: fabricated base64 parses leniently but can
+    // never complete a signed login, so the fixture must carry material a
+    // partner could actually authenticate with.
+    const authorizedKeysBody = `${ssh2.utils.generateKeyPairSync("ed25519").public.trim()} sftp@openbooks.test`;
+    const created = await post(fixture, {
+      name: "Main Bank Feed",
+      authorizedKeys: authorizedKeysBody,
+    });
+    assert.equal(created.status, 200);
+    const creation = (await created.json()) as {
+      id: string;
+      username: string;
+      password: string;
+      rootPrefix: string;
+      backend: string;
+    };
+    assert.match(creation.username, /^main-bank-feed-/);
+    assert.ok(creation.password.length >= 18);
+    assert.equal(creation.backend, "local");
+
+    const serverRow = await withOrgContext(fixture.orgId, async () => {
+      const r = await db.execute<{
+        password_encrypted: string;
+        authorized_keys: string;
+      }>(
+        sql`
           select password_encrypted, authorized_keys from sftp_servers
-           where id = ${creation.id} and org_id = ${fixture.orgId}`, "objects");
-        return r[0]!;
-      });
-      assert.notEqual(serverRow.password_encrypted, creation.password);
+           where id = ${creation.id} and org_id = ${fixture.orgId}`,
+        "objects",
+      );
+      return r[0]!;
+    });
+    assert.notEqual(serverRow.password_encrypted, creation.password);
 
-      const rotated = await patch(fixture, creation.id, { action: "rotate" });
-      assert.equal(rotated.status, 200);
-      const rotation = (await rotated.json()) as {
-        username: string;
-        password: string;
-      };
-      assert.equal(rotation.username, creation.username);
-      assert.notEqual(rotation.password, creation.password);
+    const rotated = await patch(fixture, creation.id, { action: "rotate" });
+    assert.equal(rotated.status, 200);
+    const rotation = (await rotated.json()) as {
+      username: string;
+      password: string;
+    };
+    assert.equal(rotation.username, creation.username);
+    assert.notEqual(rotation.password, creation.password);
 
-      const toggled = await patch(fixture, creation.id, {
-        action: "toggle",
-        isActive: false,
-      });
-      assert.equal(toggled.status, 200);
-      assert.deepEqual(await toggled.json(), { ok: true });
+    const toggled = await patch(fixture, creation.id, {
+      action: "toggle",
+      isActive: false,
+    });
+    assert.equal(toggled.status, 200);
+    assert.deepEqual(await toggled.json(), { ok: true });
 
-      const deleted = await del(fixture, creation.id, {
-        reason: "quarter-end cleanup",
-      });
-      assert.equal(deleted.status, 200);
-      assert.deepEqual(await deleted.json(), { ok: true });
-      const remaining = await withOrgContext(fixture.orgId, async () => {
-        const r = await db.execute<{ count: number }>(sql`
+    const deleted = await del(fixture, creation.id, {
+      reason: "quarter-end cleanup",
+    });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(await deleted.json(), { ok: true });
+    const remaining = await withOrgContext(fixture.orgId, async () => {
+      const r = await db.execute<{ count: number }>(
+        sql`
           select count(*)::int as count from sftp_servers
-           where id = ${creation.id} and org_id = ${fixture.orgId}`, "objects");
-        return r[0]!.count;
-      });
-      assert.equal(remaining, 0, "the login must actually be deleted");
+           where id = ${creation.id} and org_id = ${fixture.orgId}`,
+        "objects",
+      );
+      return r[0]!.count;
+    });
+    assert.equal(remaining, 0, "the login must actually be deleted");
 
-      // The platform daemon configuration surface, after the tenant lifecycle.
-      // The singleton row is global and survives test runs — reset it so the
-      // evidence's before-state is deterministic.
-      await withBypassContext(() =>
-        db.execute(sql`
+    // The platform daemon configuration surface, after the tenant lifecycle.
+    // The singleton row is global and survives test runs — reset it so the
+    // evidence's before-state is deterministic.
+    await withBypassContext(() =>
+      db.execute(sql`
           update sftp_daemon
              set enabled = false, port = 2222, advertised_host = null,
                  updated_at = now(), updated_by = null
            where id = 'default'`),
+    );
+    const daemon = await daemonPatch(fixture, {
+      advertisedHost: "sftp.openbooks.test",
+    });
+    assert.equal(daemon.status, 200);
+    assert.deepEqual(await daemon.json(), {
+      ok: true,
+      enabled: false,
+      port: 2222,
+      advertisedHost: "sftp.openbooks.test",
+    });
+    const daemonRow = await withOrgContext(fixture.orgId, async () => {
+      const r = await db.execute<{
+        advertised_host: string;
+        updated_by: string;
+        host_key: string;
+      }>(
+        sql`
+          select advertised_host, updated_by, host_key from sftp_daemon where id = 'default'`,
+        "objects",
       );
-      const daemon = await daemonPatch(fixture, {
-        advertisedHost: "sftp.openbooks.test",
-      });
-      assert.equal(daemon.status, 200);
-      assert.deepEqual(await daemon.json(), {
-        ok: true,
+      return r[0]!;
+    });
+    assert.equal(daemonRow.advertised_host, "sftp.openbooks.test");
+    assert.equal(daemonRow.updated_by, fixture.actorId);
+
+    const audits = await auditsFor(fixture);
+    const serverAudits = audits.filter((a) => a.table_name === "sftp_servers");
+    assert.equal(
+      serverAudits.length,
+      4,
+      "create, rotate, toggle, and delete each leave one evidence row",
+    );
+    const byKey = new Map(
+      serverAudits.map((a) => [
+        a.action === "update" && a.changes.credentialRotated === true ? "rotate" : a.action,
+        a,
+      ]),
+    );
+    const insertAudit = byKey.get("insert");
+    const rotateAudit = byKey.get("rotate");
+    const toggleAudit = byKey.get("update");
+    const deleteAudit = byKey.get("delete");
+    assert.ok(insertAudit && rotateAudit && toggleAudit && deleteAudit);
+    for (const audit of audits) {
+      assert.equal(audit.org_id, fixture.orgId);
+      assert.ok(!Number.isNaN(Date.parse(String(audit.at))), "evidence must carry a timestamp");
+    }
+    for (const audit of [insertAudit, rotateAudit, toggleAudit, deleteAudit]) {
+      assert.equal(audit!.actor_id, fixture.actorId);
+      assert.equal(audit!.row_id, creation.id);
+    }
+
+    const redactedServer = (isActive: boolean) => ({
+      name: "Main Bank Feed",
+      username: creation.username,
+      backend: "local",
+      bucket: null,
+      root_prefix: creation.rootPrefix,
+      is_active: isActive,
+      password_encrypted: "[redacted]",
+      authorized_keys: "[redacted]",
+      created_by: fixture.actorId,
+      updated_by: fixture.actorId,
+    });
+    assert.deepEqual(insertAudit!.changes, {
+      after: redactedServer(true),
+    });
+    assert.deepEqual(rotateAudit!.changes, {
+      before: redactedServer(true),
+      after: redactedServer(true),
+      credentialRotated: true,
+    });
+    assert.deepEqual(toggleAudit!.changes, {
+      before: redactedServer(true),
+      after: redactedServer(false),
+    });
+    assert.deepEqual(deleteAudit!.changes, {
+      before: redactedServer(false),
+      reason: "quarter-end cleanup",
+    });
+
+    const daemonAudits = audits.filter((a) => a.table_name === "sftp_daemon");
+    assert.equal(daemonAudits.length, 1);
+    assert.equal(daemonAudits[0]!.actor_id, fixture.actorId);
+    assert.equal(daemonAudits[0]!.org_id, fixture.orgId);
+    assert.ok(isUuid(daemonAudits[0]!.row_id), "expected a real UUID audit row id");
+    assert.deepEqual(daemonAudits[0]!.changes, {
+      before: { enabled: false, port: 2222, advertised_host: null },
+      after: {
         enabled: false,
         port: 2222,
-        advertisedHost: "sftp.openbooks.test",
-      });
-      const daemonRow = await withOrgContext(fixture.orgId, async () => {
-        const r = await db.execute<{
-          advertised_host: string;
-          updated_by: string;
-          host_key: string;
-        }>(sql`
-          select advertised_host, updated_by, host_key from sftp_daemon where id = 'default'`, "objects");
-        return r[0]!;
-      });
-      assert.equal(daemonRow.advertised_host, "sftp.openbooks.test");
-      assert.equal(daemonRow.updated_by, fixture.actorId);
+        advertised_host: "sftp.openbooks.test",
+      },
+    });
 
-      const audits = await auditsFor(fixture);
-      const serverAudits = audits.filter((a) => a.table_name === "sftp_servers");
-      assert.equal(
-        serverAudits.length,
-        4,
-        "create, rotate, toggle, and delete each leave one evidence row",
+    // No secret material — plaintext, ciphertext, key bodies — anywhere in
+    // the evidence, for either surface.
+    const allEvidence = JSON.stringify(
+      audits.map((a) => ({ table: a.table_name, changes: a.changes })),
+    );
+    for (const secret of [
+      creation.password,
+      rotation.password,
+      serverRow.password_encrypted,
+      serverRow.authorized_keys,
+      authorizedKeysBody,
+      daemonRow.host_key,
+      "PRIVATE KEY",
+    ]) {
+      assert.ok(
+        !allEvidence.includes(secret),
+        `audit evidence must never contain secret material (found ${secret.slice(0, 12)}…)`,
       );
-      const byKey = new Map(
-        serverAudits.map((a) => [
-          a.action === "update" && a.changes.credentialRotated === true
-            ? "rotate"
-            : a.action,
-          a,
-        ]),
-      );
-      const insertAudit = byKey.get("insert");
-      const rotateAudit = byKey.get("rotate");
-      const toggleAudit = byKey.get("update");
-      const deleteAudit = byKey.get("delete");
-      assert.ok(insertAudit && rotateAudit && toggleAudit && deleteAudit);
-      for (const audit of audits) {
-        assert.equal(audit.org_id, fixture.orgId);
-        assert.ok(
-          !Number.isNaN(Date.parse(String(audit.at))),
-          "evidence must carry a timestamp",
-        );
-      }
-      for (const audit of [insertAudit, rotateAudit, toggleAudit, deleteAudit]) {
-        assert.equal(audit!.actor_id, fixture.actorId);
-        assert.equal(audit!.row_id, creation.id);
-      }
-
-      const redactedServer = (isActive: boolean) => ({
-        name: "Main Bank Feed",
-        username: creation.username,
-        backend: "local",
-        bucket: null,
-        root_prefix: creation.rootPrefix,
-        is_active: isActive,
-        password_encrypted: "[redacted]",
-        authorized_keys: "[redacted]",
-        created_by: fixture.actorId,
-        updated_by: fixture.actorId,
-      });
-      assert.deepEqual(insertAudit!.changes, {
-        after: redactedServer(true),
-      });
-      assert.deepEqual(rotateAudit!.changes, {
-        before: redactedServer(true),
-        after: redactedServer(true),
-        credentialRotated: true,
-      });
-      assert.deepEqual(toggleAudit!.changes, {
-        before: redactedServer(true),
-        after: redactedServer(false),
-      });
-      assert.deepEqual(deleteAudit!.changes, {
-        before: redactedServer(false),
-        reason: "quarter-end cleanup",
-      });
-
-      const daemonAudits = audits.filter((a) => a.table_name === "sftp_daemon");
-      assert.equal(daemonAudits.length, 1);
-      assert.equal(daemonAudits[0]!.actor_id, fixture.actorId);
-      assert.equal(daemonAudits[0]!.org_id, fixture.orgId);
-      assert.ok(isUuid(daemonAudits[0]!.row_id), "expected a real UUID audit row id");
-      assert.deepEqual(daemonAudits[0]!.changes, {
-        before: { enabled: false, port: 2222, advertised_host: null },
-        after: {
-          enabled: false,
-          port: 2222,
-          advertised_host: "sftp.openbooks.test",
-        },
-      });
-
-      // No secret material — plaintext, ciphertext, key bodies — anywhere in
-      // the evidence, for either surface.
-      const allEvidence = JSON.stringify(
-        audits.map((a) => ({ table: a.table_name, changes: a.changes })),
-      );
-      for (const secret of [
-        creation.password,
-        rotation.password,
-        serverRow.password_encrypted,
-        serverRow.authorized_keys,
-        authorizedKeysBody,
-        daemonRow.host_key,
-        "PRIVATE KEY",
-      ]) {
-        assert.ok(
-          !allEvidence.includes(secret),
-          `audit evidence must never contain secret material (found ${secret.slice(0, 12)}…)`,
-        );
-      }
-    } finally {
-      routeState.authz = null;
-      routeState.identity = null;
-      await dropScratchOrg(fixture.orgId);
     }
-  },
-);
+  } finally {
+    routeState.authz = null;
+    routeState.identity = null;
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
-test(
-  "malformed authorizedKeys are refused at creation, naming the bad lines, and store nothing",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const good = `${ssh2.utils.generateKeyPairSync("ed25519").public.trim()} sftp@openbooks.test`;
-      const refused = await post(fixture, {
-        name: "Bad Keys Bank",
-        authorizedKeys: [good, "hello world", "ssh-ed25519 not-base64!!!"].join("\n"),
-      });
-      assert.equal(refused.status, 400);
-      const body = (await refused.json()) as { error: string };
-      assert.match(body.error, /line 2: /);
-      assert.match(body.error, /line 3: /);
+test("malformed authorizedKeys are refused at creation, naming the bad lines, and store nothing", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const good = `${ssh2.utils.generateKeyPairSync("ed25519").public.trim()} sftp@openbooks.test`;
+    const refused = await post(fixture, {
+      name: "Bad Keys Bank",
+      authorizedKeys: [good, "hello world", "ssh-ed25519 not-base64!!!"].join("\n"),
+    });
+    assert.equal(refused.status, 400);
+    const body = (await refused.json()) as { error: string };
+    assert.match(body.error, /line 2: /);
+    assert.match(body.error, /line 3: /);
 
-      const empty = await post(fixture, { name: "Empty Keys Bank", authorizedKeys: "  \n# nothing here\n" });
-      assert.equal(empty.status, 400);
-      assert.match(((await empty.json()) as { error: string }).error, /contains no public keys/);
+    const empty = await post(fixture, {
+      name: "Empty Keys Bank",
+      authorizedKeys: "  \n# nothing here\n",
+    });
+    assert.equal(empty.status, 400);
+    assert.match(((await empty.json()) as { error: string }).error, /contains no public keys/);
 
-      const rows = await withOrgContext(fixture.orgId, async () => {
-        const r = await db.execute<{ count: number }>(sql`
-          select count(*)::int as count from sftp_servers where org_id = ${fixture.orgId}`, "objects");
-        return r[0]!.count;
-      });
-      assert.equal(rows, 0, "a refused save must leave no login behind");
-    } finally {
-      routeState.authz = null;
-      routeState.identity = null;
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+    const rows = await withOrgContext(fixture.orgId, async () => {
+      const r = await db.execute<{ count: number }>(
+        sql`
+          select count(*)::int as count from sftp_servers where org_id = ${fixture.orgId}`,
+        "objects",
+      );
+      return r[0]!.count;
+    });
+    assert.equal(rows, 0, "a refused save must leave no login behind");
+  } finally {
+    routeState.authz = null;
+    routeState.identity = null;
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

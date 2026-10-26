@@ -25,7 +25,11 @@ const HOURS_PER_MONTH = "173.33"; // 2080 / 12
 
 /** Is this company AUTO-driving revenue from billable time (workforce + engagements)? */
 export function isBottomUp(ctx: SimContext): boolean {
-  return ctx.world.engagements.length > 0 && ctx.world.employees.length > 0 && !!ctx.world.accounts.laborClearing;
+  return (
+    ctx.world.engagements.length > 0 &&
+    ctx.world.employees.length > 0 &&
+    !!ctx.world.accounts.laborClearing
+  );
 }
 
 /**
@@ -45,7 +49,11 @@ export function isLaborBased(ctx: SimContext): boolean {
  * whose revenue emerges from job work, never injected.
  */
 export function hasJobPortfolio(ctx: SimContext): boolean {
-  return ctx.world.jobs.length > 0 && ctx.world.employees.length > 0 && !!ctx.world.accounts.laborClearing;
+  return (
+    ctx.world.jobs.length > 0 &&
+    ctx.world.employees.length > 0 &&
+    !!ctx.world.accounts.laborClearing
+  );
 }
 
 /**
@@ -83,7 +91,12 @@ export async function logDailyCrewTime(ctx: SimContext): Promise<number> {
   for (const [jobId, empIds] of byJob) {
     const r = rng.stream(jobId);
     const hours = Math.min(10, Math.max(4, util * 8 * r.float(0.85, 1.2))).toFixed(2);
-    await logCrewDay(ctx.world, { projectId: jobId, workedOn: ctx.simDate, hours, employeeIds: empIds });
+    await logCrewDay(ctx.world, {
+      projectId: jobId,
+      workedOn: ctx.simDate,
+      hours,
+      employeeIds: empIds,
+    });
     count += empIds.length;
   }
   if (count > 0) mark(ctx, "billable_time");
@@ -135,7 +148,11 @@ export async function monthEndConstructionCosts(ctx: SimContext): Promise<void> 
         referenceNumber: "DEPR",
         lines: [
           { accountId: a.depreciation!, amount: depreciation, description: "Fleet depreciation" },
-          { accountId: a.accumDep!, amount: neg(depreciation), description: "Accumulated depreciation" },
+          {
+            accountId: a.accumDep!,
+            amount: neg(depreciation),
+            description: "Accumulated depreciation",
+          },
         ],
       },
       { post: true },
@@ -155,7 +172,12 @@ export async function logDailyBillableTime(ctx: SimContext): Promise<number> {
     const hours = Math.min(9, Math.max(0, util * 8 * r.float(0.55, 1.3)));
     if (hours < 0.5) continue;
     const eng = r.pick(ctx.world.engagements);
-    await logTime(ctx.world, { projectId: eng.id, employeeId: emp.id, hours: hours.toFixed(2), workedOn: ctx.simDate });
+    await logTime(ctx.world, {
+      projectId: eng.id,
+      employeeId: emp.id,
+      hours: hours.toFixed(2),
+      workedOn: ctx.simDate,
+    });
     count++;
   }
   if (count > 0) mark(ctx, "billable_time");
@@ -172,34 +194,55 @@ export async function monthEndLaborAndPayroll(ctx: SimContext): Promise<void> {
   if (!a.laborClearing || !a.laborWip) return;
 
   // 1. Cost the month's approved time: DR billable labor cost / CR labor clearing.
-  const uncosted = (await db.execute<{ id: string }>(sql`
+  const uncosted = await db.execute<{ id: string }>(
+    sql`
     select id from time_entries
      where org_id = ${ctx.world.orgId} and status = 'approved'
-       and cost_journal_entry_id is null and project_id is not null`, "objects"));
+       and cost_journal_entry_id is null and project_id is not null`,
+    "objects",
+  );
   if (uncosted.length > 0) {
-    await postProjectLaborCost(ctx.world.orgId, ctx.world.actors.controller, uncosted.map((r) => r.id));
+    await postProjectLaborCost(
+      ctx.world.orgId,
+      ctx.world.actors.controller,
+      uncosted.map((r) => r.id),
+    );
   }
 
   // 2. Payroll actuals. Total payroll = headcount × fully-loaded monthly cost.
-  const totalSalary = sum(ctx.world.employees.map((employee) => mul(employee.costRate, HOURS_PER_MONTH)));
-  const bal = (await db.execute<{ s: string }>(sql`
+  const totalSalary = sum(
+    ctx.world.employees.map((employee) => mul(employee.costRate, HOURS_PER_MONTH)),
+  );
+  const bal = await db.execute<{ s: string }>(
+    sql`
     select coalesce(sum(l.amount), 0)::text as s from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${ctx.world.orgId} and l.account_id = ${a.laborClearing}`, "objects"));
+     where l.org_id = ${ctx.world.orgId} and l.account_id = ${a.laborClearing}`,
+    "objects",
+  );
   const clearingCredit = neg(bal[0]?.s ?? "0"); // credit magnitude = billable labor accrued this month
   const salary = roundMoney(totalSalary, 2);
   const wash = cmp(clearingCredit, "0") > 0 ? roundMoney(clearingCredit, 2) : "0.0000";
   const bench = add(salary, neg(wash));
   const lines = [
     { accountId: a.laborClearing!, amount: wash, description: "Clear billable labor (payroll)" },
-    { accountId: (a.payrollOverhead ?? a.payroll)!, amount: bench, description: "Non-billable / bench labor" },
+    {
+      accountId: (a.payrollOverhead ?? a.payroll)!,
+      amount: bench,
+      description: "Non-billable / bench labor",
+    },
     { accountId: a.bank!, amount: neg(add(wash, bench)), description: "Payroll paid" },
   ].filter((line) => !isZero(line.amount)); // a zero leg (no bench, or no billable labor) is dropped, not posted as $0
   if (lines.length >= 2) {
     await createScriptJournal(
       ctx.world.orgId,
       ctx.world.actors.controller,
-      { documentDate: ctx.simDate, memo: `Payroll actuals — ${ctx.simDate.slice(0, 7)}`, referenceNumber: "PAYROLL", lines },
+      {
+        documentDate: ctx.simDate,
+        memo: `Payroll actuals — ${ctx.simDate.slice(0, 7)}`,
+        referenceNumber: "PAYROLL",
+        lines,
+      },
       { post: true },
     );
     mark(ctx, "payroll_run");

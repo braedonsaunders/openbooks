@@ -57,14 +57,17 @@ test("restricted nexus aggregation excludes documents from other subsidiaries", 
   const visibleSubsidiaryId = "00000000-0000-0000-0000-000000000001";
   let documentQuery = "";
   t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     const text = sqlText(query);
     if (text.includes(NO_MARKETPLACE_RULES)) return inMode({ rows: [] });
     documentQuery = text;
     // Model the database applying the generated predicate. Without it this
     // mock returns both legal entities, making the regression fail.
     return inMode({
-      rows: documentQuery.includes("d.subsidiary_id in") ? [visibleSale] : [visibleSale, hiddenSale],
+      rows: documentQuery.includes("d.subsidiary_id in")
+        ? [visibleSale]
+        : [visibleSale, hiddenSale],
     });
   });
 
@@ -83,7 +86,12 @@ test("restricted nexus aggregation excludes documents from other subsidiaries", 
 
 test("unrestricted nexus aggregation retains all organization sales", async (t) => {
   t.mock.method(db, "execute", async (query: unknown, mode?: string) =>
-    Promise.resolve({ rows: sqlText(query).includes(NO_MARKETPLACE_RULES) ? [] : [visibleSale, hiddenSale] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)));
+    Promise.resolve({
+      rows: sqlText(query).includes(NO_MARKETPLACE_RULES) ? [] : [visibleSale, hiddenSale],
+    }).then(<T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result,
+    ),
+  );
 
   const result = await computeUsNexusStatus("org-1", "2026-07-01", "2026-07-31");
 
@@ -102,10 +110,13 @@ test("marketplace-excluded rules omit fully facilitated invoices from the transa
     as_of: `2026-07-${String((index % 28) + 1).padStart(2, "0")}`,
   }));
   t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     const text = sqlText(query);
     if (text.includes(NO_MARKETPLACE_RULES)) {
-      return inMode({ rows: [{ state: "FL", includeInThreshold: false, needsReview: false, source: "verified" }] });
+      return inMode({
+        rows: [{ state: "FL", includeInThreshold: false, needsReview: false, source: "verified" }],
+      });
     }
     return inMode({ rows: marketplaceInvoices });
   });

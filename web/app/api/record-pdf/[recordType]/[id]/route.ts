@@ -1,8 +1,8 @@
-import { printIssuedCheque } from '@/lib/pdf-templates/cheque-print'
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { PdfTemplateValidationError } from '@openbooks/pdf'
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { printIssuedCheque } from "@/lib/pdf-templates/cheque-print";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { PdfTemplateValidationError } from "@openbooks/pdf";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { guardSubsidiaryScope } from "../../../../../lib/authz";
@@ -13,13 +13,15 @@ import { pdfResponse, safeName } from "../../../../../lib/export";
 import { isUuid } from "../../../../../lib/list-params";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../../lib/pdf-templates/render";
-import { loadRecordDesignatedTemplateName, resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
+import {
+  loadRecordDesignatedTemplateName,
+  resolvePdfTemplate,
+} from "../../../../../lib/pdf-templates/store";
 import { loadPdfRecordValues } from "../../../../../lib/pdf-templates/values";
 import { guardRecordTypeRead, loadRecordSubsidiaryScope, recordOwnedByReader } from "../../lib";
 import { notFound } from "@/lib/api/responses";
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 
@@ -74,36 +76,50 @@ async function renderRecordPdf(
   if (!record) return NextResponse.json({ error: "record not found" }, { status: 404 });
 
   try {
-    const pdf = recordType === 'payroll_cheque'
-      ? await printIssuedCheque(user.orgId,id,user.id,gate.allowedSubsidiaryIds??null,tpl,record.values)
-      : await mergeAndPrintPdf(tpl, record.values);
+    const pdf =
+      recordType === "payroll_cheque"
+        ? await printIssuedCheque(
+            user.orgId,
+            id,
+            user.id,
+            gate.allowedSubsidiaryIds ?? null,
+            tpl,
+            record.values,
+          )
+        : await mergeAndPrintPdf(tpl, record.values);
     const stamp = await businessToday(user.orgId);
     // The issued bytes carry their own provenance: which template design
     // produced this PDF, so a disputed print resolves to an exact design
     // version without trusting anyone's memory of the default.
     const response = pdfResponse(pdf, safeName(`${meta.docTitle} ${record.reference}-${stamp}`));
-    if (tpl.provenance.templateId) response.headers.set('x-pdf-template-id', tpl.provenance.templateId);
-    if (tpl.provenance.revision !== null) response.headers.set('x-pdf-template-revision', String(tpl.provenance.revision));
-    response.headers.set('x-pdf-template-hash', tpl.provenance.contentHash);
+    if (tpl.provenance.templateId)
+      response.headers.set("x-pdf-template-id", tpl.provenance.templateId);
+    if (tpl.provenance.revision !== null)
+      response.headers.set("x-pdf-template-revision", String(tpl.provenance.revision));
+    response.headers.set("x-pdf-template-hash", tpl.provenance.contentHash);
     return response;
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return notFound('record');
-    if (e instanceof PayrollError || e instanceof PdfTemplateValidationError) return apiErrorResponse(e,{safeStatus:409});
+    if (e instanceof ScopeNotFoundError) return notFound("record");
+    if (e instanceof PayrollError || e instanceof PdfTemplateValidationError)
+      return apiErrorResponse(e, { safeStatus: 409 });
     const rendererRefusal = rendererUnavailableResponse(e);
     if (rendererRefusal) return rendererRefusal;
-    return unexpectedServerError('record-pdf', e);
+    return unexpectedServerError("record-pdf", e);
   }
 }
 
-const pdfParams = z.object({ recordType: z.string(), id: z.string() })
+const pdfParams = z.object({ recordType: z.string(), id: z.string() });
 export const GET = defineRoute({
   authorize: async ({ params }) => {
-    const recordType = (params as { recordType?: string } | undefined)?.recordType ?? ''
-    const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
-    if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
-    return guardRecordTypeRead(recordType, meta.readPermission)
+    const recordType = (params as { recordType?: string } | undefined)?.recordType ?? "";
+    const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
+    if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+    return guardRecordTypeRead(recordType, meta.readPermission);
   },
-  feature: { none: 'Record-type availability is enforced by the document-kind gate in the PDF handler.' },
+  feature: {
+    none: "Record-type availability is enforced by the document-kind gate in the PDF handler.",
+  },
   params: pdfParams,
-  handler: async ({ request, params }) => renderRecordPdf(request, { params: Promise.resolve(params) }),
-})
+  handler: async ({ request, params }) =>
+    renderRecordPdf(request, { params: Promise.resolve(params) }),
+});

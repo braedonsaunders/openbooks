@@ -1,4 +1,9 @@
-import { cmp as compareMoney, div as divideMoney, formatMoney, mulDecimal } from '@openbooks/engine/money/money'
+import {
+  cmp as compareMoney,
+  div as divideMoney,
+  formatMoney,
+  mulDecimal,
+} from "@openbooks/engine/money/money";
 
 /**
  * Overdue share of open receivables as a bare whole-number percent string
@@ -8,6 +13,6 @@ import { cmp as compareMoney, div as divideMoney, formatMoney, mulDecimal } from
  * throughout — no Number hop.
  */
 export function overdueOpenPct(overdue: string, outstanding: string): string {
-  if (compareMoney(outstanding, '0.0000') <= 0) return '0'
-  return formatMoney(mulDecimal(divideMoney(overdue, outstanding), '100'), 0)
+  if (compareMoney(outstanding, "0.0000") <= 0) return "0";
+  return formatMoney(mulDecimal(divideMoney(overdue, outstanding), "100"), 0);
 }

@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { S3Client } from "@aws-sdk/client-s3";
-import {
-  FileBlobDeleteError,
-  deleteS3Blobs,
-  setFileBlobS3ClientForTests,
-} from "./file-storage.ts";
+import { FileBlobDeleteError, deleteS3Blobs, setFileBlobS3ClientForTests } from "./file-storage.ts";
 import { createFakeS3, sentDeletes } from "../sftp/fake-s3.ts";
 
 // C-45: the S3 blob driver swallowed every delete failure (transport errors
@@ -21,22 +17,38 @@ function storeKey(versionId: string): string {
   return `file-cabinet/${versionId}`;
 }
 
-function seed(fake: { objects: Map<string, { bytes: Buffer; lastModified: Date }> }, versionIds: string[]): void {
+function seed(
+  fake: { objects: Map<string, { bytes: Buffer; lastModified: Date }> },
+  versionIds: string[],
+): void {
   for (const id of versionIds) {
     fake.objects.set(storeKey(id), { bytes: Buffer.from(`bytes-${id}`), lastModified: new Date() });
   }
 }
 
 test("a transport failure rejects with every unconfirmed version named", async () => {
-  const transportFailure = Object.assign(new Error("ServiceUnavailable"), { name: "ServiceUnavailable" });
-  setFileBlobS3ClientForTests({ send: async () => { throw transportFailure; } } as unknown as S3Client);
+  const transportFailure = Object.assign(new Error("ServiceUnavailable"), {
+    name: "ServiceUnavailable",
+  });
+  setFileBlobS3ClientForTests({
+    send: async () => {
+      throw transportFailure;
+    },
+  } as unknown as S3Client);
   const failure = await deleteS3Blobs(["v1", "v2"]).then(
     () => null,
     (error: unknown) => error,
   );
-  assert.ok(failure instanceof FileBlobDeleteError, `expected a named delete refusal, got ${String(failure)}`);
+  assert.ok(
+    failure instanceof FileBlobDeleteError,
+    `expected a named delete refusal, got ${String(failure)}`,
+  );
   assert.deepEqual([...failure.versionIds].sort(), ["v1", "v2"]);
-  assert.match(failure.message, /ServiceUnavailable/, "the cause must be diagnosable from the message");
+  assert.match(
+    failure.message,
+    /ServiceUnavailable/,
+    "the cause must be diagnosable from the message",
+  );
   assert.match(failure.message, /retry/i, "the refusal must name the remedy");
 });
 
@@ -48,7 +60,10 @@ test("per-key errors reject with only the failed versions named", async () => {
     () => null,
     (error: unknown) => error,
   );
-  assert.ok(failure instanceof FileBlobDeleteError, `expected a named delete refusal, got ${String(failure)}`);
+  assert.ok(
+    failure instanceof FileBlobDeleteError,
+    `expected a named delete refusal, got ${String(failure)}`,
+  );
   assert.deepEqual([...failure.versionIds], ["bad"]);
   // The refused bytes stay; the confirmed ones are gone — the refusal's set
   // is exactly the retry set.

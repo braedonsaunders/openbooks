@@ -1,14 +1,4 @@
-import {
-  and,
-  asc,
-  eq,
-  gte,
-  inArray,
-  isNull,
-  lte,
-  notExists,
-  sql,
-} from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, notExists, sql } from "drizzle-orm";
 import {
   projects,
   resRetainerDrawdownEntries,
@@ -16,7 +6,10 @@ import {
   resRetainers,
   timeEntries,
 } from "@openbooks/schema";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, lockProjectForScope } from "../organization/subsidiary-scope.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
@@ -80,10 +73,22 @@ export interface CreateRetainerInput {
   custom?: Record<string, unknown>;
 }
 
-export type UpdateRetainerDraftInput = RetainerWriteInput & Partial<Pick<
-  CreateRetainerInput,
-  "projectId" | "customerPartyId" | "kind" | "currency" | "totalAmount" | "totalHours" | "unitRate" | "startsOn" | "endsOn" | "retainerItemId"
->> & { custom?: Record<string, unknown> };
+export type UpdateRetainerDraftInput = RetainerWriteInput &
+  Partial<
+    Pick<
+      CreateRetainerInput,
+      | "projectId"
+      | "customerPartyId"
+      | "kind"
+      | "currency"
+      | "totalAmount"
+      | "totalHours"
+      | "unitRate"
+      | "startsOn"
+      | "endsOn"
+      | "retainerItemId"
+    >
+  > & { custom?: Record<string, unknown> };
 
 export type NormalizedRetainerTerms = {
   startsOn: string;
@@ -95,7 +100,10 @@ export type NormalizedRetainerTerms = {
 
 /** Apply the same exact-date and cent-rounding rules to new and edited terms. */
 export function normalizeRetainerTerms(
-  input: Pick<CreateRetainerInput, "kind" | "totalAmount" | "totalHours" | "unitRate" | "startsOn" | "endsOn">,
+  input: Pick<
+    CreateRetainerInput,
+    "kind" | "totalAmount" | "totalHours" | "unitRate" | "startsOn" | "endsOn"
+  >,
 ): NormalizedRetainerTerms {
   const startsOn = requireIsoDate(input.startsOn, "startsOn");
   const endsOn = requireIsoDate(input.endsOn, "endsOn");
@@ -113,13 +121,30 @@ export function normalizeRetainerTerms(
   let totalHours: string | null = null;
   let unitRate: string | null = null;
   if (input.kind === "hours") {
-    totalHours = requireDecimal(input.totalHours, "totalHours", "a number of hours", "invalid_hours");
+    totalHours = requireDecimal(
+      input.totalHours,
+      "totalHours",
+      "a number of hours",
+      "invalid_hours",
+    );
     unitRate = requireDecimal(input.unitRate, "unitRate", "a rate per hour", "invalid_unit_rate");
     if (cmp(totalHours, "0") <= 0) {
-      throw new ResourcingRefusal(422, "invalid_hours", "retainer hours must be positive", "enter a positive number of hours", "totalHours");
+      throw new ResourcingRefusal(
+        422,
+        "invalid_hours",
+        "retainer hours must be positive",
+        "enter a positive number of hours",
+        "totalHours",
+      );
     }
     if (cmp(unitRate, "0") <= 0) {
-      throw new ResourcingRefusal(422, "invalid_unit_rate", "retainer unit rate must be positive", "enter a positive rate per hour", "unitRate");
+      throw new ResourcingRefusal(
+        422,
+        "invalid_unit_rate",
+        "retainer unit rate must be positive",
+        "enter a positive rate per hour",
+        "unitRate",
+      );
     }
     totalAmount = roundMoney(mulDecimal(roundMoney(totalHours, 4), roundMoney(unitRate, 4)), 2);
   } else {
@@ -132,7 +157,10 @@ export function normalizeRetainerTerms(
         "kind",
       );
     }
-    totalAmount = roundMoney(requireDecimal(input.totalAmount, "totalAmount", "an amount", "invalid_amount"), 2);
+    totalAmount = roundMoney(
+      requireDecimal(input.totalAmount, "totalAmount", "an amount", "invalid_amount"),
+      2,
+    );
   }
   if (cmp(totalAmount, "0") <= 0) {
     throw new ResourcingRefusal(
@@ -221,7 +249,9 @@ export function priceHoursDrawdown(
     const month = entry.workedOn.slice(0, 7);
     monthTotals.set(month, add(monthTotals.get(month) ?? "0", entry.amount));
   }
-  const byMonth = Object.fromEntries([...monthTotals].sort(([left], [right]) => left.localeCompare(right)));
+  const byMonth = Object.fromEntries(
+    [...monthTotals].sort(([left], [right]) => left.localeCompare(right)),
+  );
   return {
     byEntry,
     byMonth,
@@ -286,7 +316,11 @@ export function assertRetainerCanClose(balance: string): void {
 }
 
 /** Every service write supplies a RETURNING result and must change the exact expected number of rows. */
-export function assertWriteRows(rows: readonly unknown[], expected: number, operation: string): void {
+export function assertWriteRows(
+  rows: readonly unknown[],
+  expected: number,
+  operation: string,
+): void {
   if (rows.length !== expected) {
     throw new Error(`${operation} wrote ${rows.length} rows; expected exactly ${expected}`);
   }
@@ -300,10 +334,14 @@ export async function createRetainer(
 
   return withRetainerWrite(input.orgId, async (tx) => {
     await lockProjectForScope(tx, input.orgId, input.projectId, input.allowedSubsidiaryIds);
-    const [project] = await tx.select({
-      customerId: projects.customerId,
-      status: projects.status,
-    }).from(projects).where(and(eq(projects.orgId, input.orgId), eq(projects.id, input.projectId))).limit(1);
+    const [project] = await tx
+      .select({
+        customerId: projects.customerId,
+        status: projects.status,
+      })
+      .from(projects)
+      .where(and(eq(projects.orgId, input.orgId), eq(projects.id, input.projectId)))
+      .limit(1);
     if (!project) throw new ScopeNotFoundError();
     if (project.status === "closed" || project.status === "cancelled") {
       throw new ResourcingRefusal(
@@ -327,7 +365,8 @@ export async function createRetainer(
 
     let retainer: RetainerRow;
     if (idempotency) {
-      const result = await tx.execute<RetainerWriteRow>(sql`
+      const result = await tx.execute<RetainerWriteRow>(
+        sql`
         insert into res_retainers (
           id, org_id, project_id, customer_party_id, kind, total_amount, currency, total_hours,
           unit_rate, starts_on, ends_on, retainer_item_id, custom, created_by, updated_by
@@ -344,7 +383,9 @@ export async function createRetainer(
           retainer_item_id as "retainerItemId", invoice_document_id as "invoiceDocumentId",
           obligation_id as "obligationId", state, custom, created_at as "createdAt",
           created_by as "createdBy", updated_at as "updatedAt", updated_by as "updatedBy"
-      `, "objects");
+      `,
+        "objects",
+      );
       assertWriteRows(result, 1, "retainer creation");
       retainer = result[0] as RetainerRow;
       await writeIdempotentCreateAudit(tx, {
@@ -356,26 +397,10 @@ export async function createRetainer(
         match: idempotency.match,
       });
     } else {
-      const inserted = await tx.insert(resRetainers).values({
-        orgId: input.orgId,
-        projectId: input.projectId,
-        customerPartyId: input.customerPartyId,
-        kind: input.kind,
-        totalAmount,
-        currency,
-        totalHours,
-        unitRate,
-        startsOn,
-        endsOn,
-        retainerItemId: input.retainerItemId,
-        custom: input.custom ?? {},
-        createdBy: input.actorId,
-        updatedBy: input.actorId,
-      }).returning();
-      assertWriteRows(inserted, 1, "retainer creation");
-      retainer = inserted[0]!;
-      await writeAudit(input.orgId, "res_retainers", retainer.id, "insert", {
-        after: {
+      const inserted = await tx
+        .insert(resRetainers)
+        .values({
+          orgId: input.orgId,
           projectId: input.projectId,
           customerPartyId: input.customerPartyId,
           kind: input.kind,
@@ -386,9 +411,35 @@ export async function createRetainer(
           startsOn,
           endsOn,
           retainerItemId: input.retainerItemId,
-          state: "draft",
+          custom: input.custom ?? {},
+          createdBy: input.actorId,
+          updatedBy: input.actorId,
+        })
+        .returning();
+      assertWriteRows(inserted, 1, "retainer creation");
+      retainer = inserted[0]!;
+      await writeAudit(
+        input.orgId,
+        "res_retainers",
+        retainer.id,
+        "insert",
+        {
+          after: {
+            projectId: input.projectId,
+            customerPartyId: input.customerPartyId,
+            kind: input.kind,
+            totalAmount,
+            currency,
+            totalHours,
+            unitRate,
+            startsOn,
+            endsOn,
+            retainerItemId: input.retainerItemId,
+            state: "draft",
+          },
         },
-      }, input.actorId);
+        input.actorId,
+      );
     }
     return retainer;
   });
@@ -421,16 +472,33 @@ export async function updateRetainerDraft(input: UpdateRetainerDraftInput): Prom
     const customerPartyId = input.customerPartyId ?? current.customerPartyId;
     const kind = input.kind ?? current.kind;
     await lockProjectForScope(tx, input.orgId, projectId, input.allowedSubsidiaryIds);
-    const project = (await tx.execute<{ customer_id: string | null; status: string }>(sql`
+    const project = (
+      await tx.execute<{ customer_id: string | null; status: string }>(
+        sql`
       select customer_id, status from projects
        where id = ${projectId} and org_id = ${input.orgId} for share
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!project) throw new ScopeNotFoundError();
     if (project.status === "closed" || project.status === "cancelled") {
-      throw new ResourcingRefusal(409, "project_not_open", `cannot assign a retainer to a ${project.status} project`, "reopen the project or choose an active one", "projectId");
+      throw new ResourcingRefusal(
+        409,
+        "project_not_open",
+        `cannot assign a retainer to a ${project.status} project`,
+        "reopen the project or choose an active one",
+        "projectId",
+      );
     }
     if (project.customer_id !== customerPartyId) {
-      throw new ResourcingRefusal(422, "retainer_customer_mismatch", "retainer customer does not match the project's customer", "select the customer assigned to this project", "customerPartyId");
+      throw new ResourcingRefusal(
+        422,
+        "retainer_customer_mismatch",
+        "retainer customer does not match the project's customer",
+        "select the customer assigned to this project",
+        "customerPartyId",
+      );
     }
 
     const normalized = normalizeRetainerTerms({
@@ -459,38 +527,53 @@ export async function updateRetainerDraft(input: UpdateRetainerDraftInput): Prom
       currency,
       custom: input.custom ?? current.custom,
     };
-    const updated = await tx.update(resRetainers).set({
-      ...next,
-      updatedAt: new Date(),
-      updatedBy: input.actorId,
-    }).where(and(
-      eq(resRetainers.orgId, input.orgId),
-      eq(resRetainers.id, input.retainerId),
-      eq(resRetainers.state, "draft"),
-      isNull(resRetainers.invoiceDocumentId),
-    )).returning();
+    const updated = await tx
+      .update(resRetainers)
+      .set({
+        ...next,
+        updatedAt: new Date(),
+        updatedBy: input.actorId,
+      })
+      .where(
+        and(
+          eq(resRetainers.orgId, input.orgId),
+          eq(resRetainers.id, input.retainerId),
+          eq(resRetainers.state, "draft"),
+          isNull(resRetainers.invoiceDocumentId),
+        ),
+      )
+      .returning();
     assertWriteRows(updated, 1, "retainer draft update");
-    await writeAudit(input.orgId, "res_retainers", input.retainerId, "update", {
-      before: {
-        projectId: current.projectId,
-        customerPartyId: current.customerPartyId,
-        kind: current.kind,
-        totalAmount: current.totalAmount,
-        totalHours: current.totalHours,
-        unitRate: current.unitRate,
-        startsOn: current.startsOn,
-        endsOn: current.endsOn,
-        retainerItemId: current.retainerItemId,
-        currency: current.currency,
-        custom: current.custom,
+    await writeAudit(
+      input.orgId,
+      "res_retainers",
+      input.retainerId,
+      "update",
+      {
+        before: {
+          projectId: current.projectId,
+          customerPartyId: current.customerPartyId,
+          kind: current.kind,
+          totalAmount: current.totalAmount,
+          totalHours: current.totalHours,
+          unitRate: current.unitRate,
+          startsOn: current.startsOn,
+          endsOn: current.endsOn,
+          retainerItemId: current.retainerItemId,
+          currency: current.currency,
+          custom: current.custom,
+        },
+        after: next,
       },
-      after: next,
-    }, input.actorId);
+      input.actorId,
+    );
     return updated[0]!;
   });
 }
 
-export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promise<DraftDrawdownResult> {
+export async function draftHoursDrawdown(
+  input: DraftHoursDrawdownInput,
+): Promise<DraftDrawdownResult> {
   const dates = requireSunday(input.sunday);
   return withRetainerWrite(input.orgId, async () => {
     await loadRetainerForScope(input);
@@ -510,12 +593,15 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
 
     const firstDate = dates[0]! > retainer.startsOn ? dates[0]! : retainer.startsOn;
     const lastDate = dates[6]! < retainer.endsOn ? dates[6]! : retainer.endsOn;
-    const heldEntries = db.select({ id: resRetainerDrawdownEntries.id })
+    const heldEntries = db
+      .select({ id: resRetainerDrawdownEntries.id })
       .from(resRetainerDrawdownEntries)
-      .where(and(
-        eq(resRetainerDrawdownEntries.orgId, input.orgId),
-        eq(resRetainerDrawdownEntries.timeEntryId, timeEntries.id),
-      ));
+      .where(
+        and(
+          eq(resRetainerDrawdownEntries.orgId, input.orgId),
+          eq(resRetainerDrawdownEntries.timeEntryId, timeEntries.id),
+        ),
+      );
     const prebillReservation = sql`not exists (
       select 1 from prebill_lines reserved
       join prebills worksheet on worksheet.org_id = reserved.org_id and worksheet.id = reserved.prebill_id
@@ -523,24 +609,32 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
         and reserved.time_entry_id = ${timeEntries.id}
         and worksheet.status in ('draft', 'review', 'approved', 'customer_review')
     )`;
-    const entries = firstDate > lastDate
-      ? []
-      : await db.select({
-        id: timeEntries.id,
-        workedOn: timeEntries.workedOn,
-        hours: timeEntries.hours,
-      }).from(timeEntries).where(and(
-        eq(timeEntries.orgId, input.orgId),
-        eq(timeEntries.projectId, retainer.projectId),
-        eq(timeEntries.status, "approved"),
-        eq(timeEntries.isBillable, true),
-        eq(timeEntries.billingStatus, "unbilled"),
-        isNull(timeEntries.invoicedByLineId),
-        gte(timeEntries.workedOn, firstDate),
-        lte(timeEntries.workedOn, lastDate),
-        notExists(heldEntries),
-        prebillReservation,
-      )).orderBy(asc(timeEntries.workedOn), asc(timeEntries.id)).for("update");
+    const entries =
+      firstDate > lastDate
+        ? []
+        : await db
+            .select({
+              id: timeEntries.id,
+              workedOn: timeEntries.workedOn,
+              hours: timeEntries.hours,
+            })
+            .from(timeEntries)
+            .where(
+              and(
+                eq(timeEntries.orgId, input.orgId),
+                eq(timeEntries.projectId, retainer.projectId),
+                eq(timeEntries.status, "approved"),
+                eq(timeEntries.isBillable, true),
+                eq(timeEntries.billingStatus, "unbilled"),
+                isNull(timeEntries.invoicedByLineId),
+                gte(timeEntries.workedOn, firstDate),
+                lte(timeEntries.workedOn, lastDate),
+                notExists(heldEntries),
+                prebillReservation,
+              ),
+            )
+            .orderBy(asc(timeEntries.workedOn), asc(timeEntries.id))
+            .for("update");
     if (entries.length === 0) {
       throw new ResourcingRefusal(
         422,
@@ -562,51 +656,77 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
     const balance = await retainerBalance(input.orgId, retainer);
     assertDrawdownWithinBalance(priced.total, balance.amount, "hours");
 
-    const inserted = await db.insert(resRetainerDrawdowns).values({
-      orgId: input.orgId,
-      retainerId: input.retainerId,
-      weekStart: input.sunday,
-      hours: priced.hours,
-      amount: priced.total,
-      state: "draft",
-      createdBy: input.actorId,
-      updatedBy: input.actorId,
-    }).returning();
-    assertWriteRows(inserted, 1, "hours drawdown creation");
-    const drawdown = inserted[0]!;
-    const linkRows = await db.insert(resRetainerDrawdownEntries).values(priced.byEntry.map((entry) => ({
-      orgId: input.orgId,
-      drawdownId: drawdown.id,
-      timeEntryId: entry.id,
-      createdBy: input.actorId,
-      updatedBy: input.actorId,
-    }))).returning({ id: resRetainerDrawdownEntries.id });
-    assertWriteRows(linkRows, priced.byEntry.length, "hours drawdown evidence links");
-    const claimedEntries = await db.update(timeEntries).set({
-      billingStatus: "billed",
-      updatedAt: new Date(),
-      updatedBy: input.actorId,
-    }).where(and(
-      eq(timeEntries.orgId, input.orgId),
-      inArray(timeEntries.id, priced.byEntry.map((entry) => entry.id)),
-      eq(timeEntries.status, "approved"),
-      eq(timeEntries.isBillable, true),
-      eq(timeEntries.billingStatus, "unbilled"),
-      isNull(timeEntries.invoicedByLineId),
-    )).returning({ id: timeEntries.id });
-    assertWriteRows(claimedEntries, priced.byEntry.length, "hours drawdown time billing claims");
-    await writeAudit(input.orgId, "res_retainer_drawdowns", drawdown.id, "insert", {
-      after: {
+    const inserted = await db
+      .insert(resRetainerDrawdowns)
+      .values({
+        orgId: input.orgId,
         retainerId: input.retainerId,
         weekStart: input.sunday,
         hours: priced.hours,
         amount: priced.total,
         state: "draft",
-        timeEntryIds: priced.byEntry.map((entry) => entry.id),
-        byMonth: priced.byMonth,
-        hoursByMonth: Object.fromEntries([...hoursByMonth].sort(([left], [right]) => left.localeCompare(right))),
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      })
+      .returning();
+    assertWriteRows(inserted, 1, "hours drawdown creation");
+    const drawdown = inserted[0]!;
+    const linkRows = await db
+      .insert(resRetainerDrawdownEntries)
+      .values(
+        priced.byEntry.map((entry) => ({
+          orgId: input.orgId,
+          drawdownId: drawdown.id,
+          timeEntryId: entry.id,
+          createdBy: input.actorId,
+          updatedBy: input.actorId,
+        })),
+      )
+      .returning({ id: resRetainerDrawdownEntries.id });
+    assertWriteRows(linkRows, priced.byEntry.length, "hours drawdown evidence links");
+    const claimedEntries = await db
+      .update(timeEntries)
+      .set({
+        billingStatus: "billed",
+        updatedAt: new Date(),
+        updatedBy: input.actorId,
+      })
+      .where(
+        and(
+          eq(timeEntries.orgId, input.orgId),
+          inArray(
+            timeEntries.id,
+            priced.byEntry.map((entry) => entry.id),
+          ),
+          eq(timeEntries.status, "approved"),
+          eq(timeEntries.isBillable, true),
+          eq(timeEntries.billingStatus, "unbilled"),
+          isNull(timeEntries.invoicedByLineId),
+        ),
+      )
+      .returning({ id: timeEntries.id });
+    assertWriteRows(claimedEntries, priced.byEntry.length, "hours drawdown time billing claims");
+    await writeAudit(
+      input.orgId,
+      "res_retainer_drawdowns",
+      drawdown.id,
+      "insert",
+      {
+        after: {
+          retainerId: input.retainerId,
+          weekStart: input.sunday,
+          hours: priced.hours,
+          amount: priced.total,
+          state: "draft",
+          timeEntryIds: priced.byEntry.map((entry) => entry.id),
+          byMonth: priced.byMonth,
+          hoursByMonth: Object.fromEntries(
+            [...hoursByMonth].sort(([left], [right]) => left.localeCompare(right)),
+          ),
+        },
       },
-    }, input.actorId);
+      input.actorId,
+    );
     return {
       id: drawdown.id,
       retainerId: input.retainerId,
@@ -625,7 +745,13 @@ export async function draftFeeDrawdown(input: DraftFeeDrawdownInput): Promise<Dr
   const rawAmount = requireDecimal(input.rawAmount, "amount", "an amount", "invalid_amount");
   const amount = roundMoney(rawAmount, 2);
   if (cmp(amount, "0") <= 0) {
-    throw new ResourcingRefusal(422, "invalid_amount", "drawdown amount must be positive", "enter a positive amount", "amount");
+    throw new ResourcingRefusal(
+      422,
+      "invalid_amount",
+      "drawdown amount must be positive",
+      "enter a positive amount",
+      "amount",
+    );
   }
 
   return withRetainerWrite(input.orgId, async () => {
@@ -645,27 +771,37 @@ export async function draftFeeDrawdown(input: DraftFeeDrawdownInput): Promise<Dr
     await refuseExistingDrawdown(input.orgId, input.retainerId, input.sunday);
     const balance = await retainerBalance(input.orgId, retainer);
     assertDrawdownWithinBalance(amount, balance.amount, "fees");
-    const inserted = await db.insert(resRetainerDrawdowns).values({
-      orgId: input.orgId,
-      retainerId: input.retainerId,
-      weekStart: input.sunday,
-      hours: "0.0000",
-      amount,
-      state: "draft",
-      createdBy: input.actorId,
-      updatedBy: input.actorId,
-    }).returning();
-    assertWriteRows(inserted, 1, "fee drawdown creation");
-    const drawdown = inserted[0]!;
-    await writeAudit(input.orgId, "res_retainer_drawdowns", drawdown.id, "insert", {
-      after: {
+    const inserted = await db
+      .insert(resRetainerDrawdowns)
+      .values({
+        orgId: input.orgId,
         retainerId: input.retainerId,
         weekStart: input.sunday,
         hours: "0.0000",
         amount,
         state: "draft",
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      })
+      .returning();
+    assertWriteRows(inserted, 1, "fee drawdown creation");
+    const drawdown = inserted[0]!;
+    await writeAudit(
+      input.orgId,
+      "res_retainer_drawdowns",
+      drawdown.id,
+      "insert",
+      {
+        after: {
+          retainerId: input.retainerId,
+          weekStart: input.sunday,
+          hours: "0.0000",
+          amount,
+          state: "draft",
+        },
       },
-    }, input.actorId);
+      input.actorId,
+    );
     return {
       id: drawdown.id,
       retainerId: input.retainerId,
@@ -703,22 +839,35 @@ export async function extendRetainer(
         "newEndsOn",
       );
     }
-    const updated = await db.update(resRetainers).set({
-      endsOn: newEndsOn,
-      state: "active",
-      updatedAt: new Date(),
-      updatedBy: input.actorId,
-    }).where(and(
-      eq(resRetainers.orgId, input.orgId),
-      eq(resRetainers.id, input.retainerId),
-      eq(resRetainers.state, retainer.state),
-      eq(resRetainers.endsOn, retainer.endsOn),
-    )).returning({ id: resRetainers.id });
+    const updated = await db
+      .update(resRetainers)
+      .set({
+        endsOn: newEndsOn,
+        state: "active",
+        updatedAt: new Date(),
+        updatedBy: input.actorId,
+      })
+      .where(
+        and(
+          eq(resRetainers.orgId, input.orgId),
+          eq(resRetainers.id, input.retainerId),
+          eq(resRetainers.state, retainer.state),
+          eq(resRetainers.endsOn, retainer.endsOn),
+        ),
+      )
+      .returning({ id: resRetainers.id });
     assertWriteRows(updated, 1, "retainer extension");
-    await writeAudit(input.orgId, "res_retainers", input.retainerId, "update", {
-      before: { endsOn: retainer.endsOn, state: retainer.state },
-      after: { endsOn: newEndsOn, state: "active" },
-    }, input.actorId);
+    await writeAudit(
+      input.orgId,
+      "res_retainers",
+      input.retainerId,
+      "update",
+      {
+        before: { endsOn: retainer.endsOn, state: retainer.state },
+        after: { endsOn: newEndsOn, state: "active" },
+      },
+      input.actorId,
+    );
     return { id: input.retainerId, state: "active", endsOn: newEndsOn };
   });
 }
@@ -731,27 +880,49 @@ export async function closeRetainer(
     const balance = await retainerBalance(input.orgId, retainer);
     assertRetainerCanClose(balance.amount);
     if (retainer.state === "closed") {
-      throw new ResourcingRefusal(409, "retainer_already_closed", "retainer is already closed", "choose a retainer that is not closed", "retainerId");
+      throw new ResourcingRefusal(
+        409,
+        "retainer_already_closed",
+        "retainer is already closed",
+        "choose a retainer that is not closed",
+        "retainerId",
+      );
     }
-    const updated = await db.update(resRetainers).set({
-      state: "closed",
-      updatedAt: new Date(),
-      updatedBy: input.actorId,
-    }).where(and(
-      eq(resRetainers.orgId, input.orgId),
-      eq(resRetainers.id, input.retainerId),
-      eq(resRetainers.state, retainer.state),
-    )).returning({ id: resRetainers.id });
+    const updated = await db
+      .update(resRetainers)
+      .set({
+        state: "closed",
+        updatedAt: new Date(),
+        updatedBy: input.actorId,
+      })
+      .where(
+        and(
+          eq(resRetainers.orgId, input.orgId),
+          eq(resRetainers.id, input.retainerId),
+          eq(resRetainers.state, retainer.state),
+        ),
+      )
+      .returning({ id: resRetainers.id });
     assertWriteRows(updated, 1, "retainer close");
-    await writeAudit(input.orgId, "res_retainers", input.retainerId, "update", {
-      before: { state: retainer.state, balance },
-      after: { state: "closed", balance },
-    }, input.actorId);
+    await writeAudit(
+      input.orgId,
+      "res_retainers",
+      input.retainerId,
+      "update",
+      {
+        before: { state: retainer.state, balance },
+        after: { state: "closed", balance },
+      },
+      input.actorId,
+    );
     return { id: input.retainerId, state: "closed" };
   });
 }
 
-export async function withRetainerWrite<T>(orgId: string, work: (tx: typeof db) => Promise<T>): Promise<T> {
+export async function withRetainerWrite<T>(
+  orgId: string,
+  work: (tx: typeof db) => Promise<T>,
+): Promise<T> {
   try {
     return await withOrgTransaction(orgId, async () => {
       const tx = db;
@@ -792,7 +963,14 @@ export async function withRetainerWrite<T>(orgId: string, work: (tx: typeof db) 
 
 async function writeIdempotentCreateAudit(
   tx: SqlExecutor,
-  input: { orgId: string; rowId: string; after: object; actorId: string; requestId: string; match: Record<string, unknown> },
+  input: {
+    orgId: string;
+    rowId: string;
+    after: object;
+    actorId: string;
+    requestId: string;
+    match: Record<string, unknown>;
+  },
 ): Promise<void> {
   const result = await tx.execute<RetainerAuditRow>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -802,12 +980,15 @@ async function writeIdempotentCreateAudit(
     returning id
   `);
   if ((result.rowCount ?? 0) !== 1 || result.rows.length !== 1) {
-    throw new Error(`audit record for retainer ${input.rowId} wrote ${result.rows.length} rows; expected exactly one`);
+    throw new Error(
+      `audit record for retainer ${input.rowId} wrote ${result.rows.length} rows; expected exactly one`,
+    );
   }
 }
 
 export async function loadRetainerForScope(input: RetainerWriteInput): Promise<string> {
-  const [candidate] = await db.select({ projectId: resRetainers.projectId })
+  const [candidate] = await db
+    .select({ projectId: resRetainers.projectId })
     .from(resRetainers)
     .where(and(eq(resRetainers.orgId, input.orgId), eq(resRetainers.id, input.retainerId)))
     .limit(1);
@@ -818,7 +999,9 @@ export async function loadRetainerForScope(input: RetainerWriteInput): Promise<s
 
 export async function loadRetainerForUpdate(input: RetainerWriteInput): Promise<RetainerRow> {
   await loadRetainerForScope(input);
-  const [retainer] = await db.select().from(resRetainers)
+  const [retainer] = await db
+    .select()
+    .from(resRetainers)
     .where(and(eq(resRetainers.orgId, input.orgId), eq(resRetainers.id, input.retainerId)))
     .limit(1)
     .for("update");
@@ -830,13 +1013,18 @@ async function resolveRetainerCurrency(
   tx: typeof db,
   input: Pick<CreateRetainerInput, "orgId" | "customerPartyId" | "currency">,
 ): Promise<string> {
-  const context = (await tx.execute<RetainerCurrencyContext>(sql`
+  const context = (
+    await tx.execute<RetainerCurrencyContext>(
+      sql`
     select o.base_currency as "baseCurrency", cr.currency as "customerCurrency"
       from orgs o
       left join customer_roles cr
         on cr.org_id = o.id and cr.party_id = ${input.customerPartyId}
      where o.id = ${input.orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const baseCurrency = context?.baseCurrency?.trim().toUpperCase();
   if (!baseCurrency) throw new Error(`organization ${input.orgId} has no base currency`);
   const customerCurrency = context?.customerCurrency?.trim();
@@ -850,9 +1038,12 @@ async function resolveRetainerCurrency(
       "currency",
     );
   }
-  const registered = await tx.execute<CurrencyRegistryRow>(sql`
+  const registered = await tx.execute<CurrencyRegistryRow>(
+    sql`
     select code from currencies where code = ${currency}
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!registered[0]) {
     throw new ResourcingRefusal(
       422,
@@ -862,7 +1053,10 @@ async function resolveRetainerCurrency(
       "currency",
     );
   }
-  if (!(await lockAndCheckOrgFeature(tx, input.orgId, "multiCurrency")) && currency !== baseCurrency) {
+  if (
+    !(await lockAndCheckOrgFeature(tx, input.orgId, "multiCurrency")) &&
+    currency !== baseCurrency
+  ) {
     throw new ResourcingRefusal(
       422,
       "multi_currency_disabled",
@@ -874,25 +1068,38 @@ async function resolveRetainerCurrency(
   return currency;
 }
 
-export async function retainerBalance(orgId: string, retainer: RetainerRow): Promise<RetainerBalance> {
-  const posted = await db.select({ amount: resRetainerDrawdowns.amount })
+export async function retainerBalance(
+  orgId: string,
+  retainer: RetainerRow,
+): Promise<RetainerBalance> {
+  const posted = await db
+    .select({ amount: resRetainerDrawdowns.amount })
     .from(resRetainerDrawdowns)
-    .where(and(
-      eq(resRetainerDrawdowns.orgId, orgId),
-      eq(resRetainerDrawdowns.retainerId, retainer.id),
-      eq(resRetainerDrawdowns.state, "posted"),
-    ));
+    .where(
+      and(
+        eq(resRetainerDrawdowns.orgId, orgId),
+        eq(resRetainerDrawdowns.retainerId, retainer.id),
+        eq(resRetainerDrawdowns.state, "posted"),
+      ),
+    );
   return balanceOf(retainer, posted);
 }
 
-async function refuseExistingDrawdown(orgId: string, retainerId: string, sunday: string): Promise<void> {
-  const existing = await db.select({ id: resRetainerDrawdowns.id })
+async function refuseExistingDrawdown(
+  orgId: string,
+  retainerId: string,
+  sunday: string,
+): Promise<void> {
+  const existing = await db
+    .select({ id: resRetainerDrawdowns.id })
     .from(resRetainerDrawdowns)
-    .where(and(
-      eq(resRetainerDrawdowns.orgId, orgId),
-      eq(resRetainerDrawdowns.retainerId, retainerId),
-      eq(resRetainerDrawdowns.weekStart, sunday),
-    ))
+    .where(
+      and(
+        eq(resRetainerDrawdowns.orgId, orgId),
+        eq(resRetainerDrawdowns.retainerId, retainerId),
+        eq(resRetainerDrawdowns.weekStart, sunday),
+      ),
+    )
     .limit(1);
   if (existing.length > 0) {
     throw new ResourcingRefusal(
@@ -914,21 +1121,25 @@ export async function writeAudit(
   actorId: string | null,
   runner: SqlExecutor = db,
 ): Promise<void> {
-  const rows = await runner.execute<RetainerAuditLogWriteRow>(sql`
+  const rows = await runner.execute<RetainerAuditLogWriteRow>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, ${tableName}, ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
     returning row_id
-  `, "objects");
+  `,
+    "objects",
+  );
   assertWriteRows(rows, 1, `audit record for ${tableName}`);
 }
 
 export function requireActiveRetainer(retainer: RetainerRow): void {
   if (retainer.state === "active") return;
-  const remedy = retainer.state === "expired"
-    ? "extend the retainer with a later end date"
-    : retainer.state === "draft" && retainer.invoiceDocumentId
-      ? "post the linked invoice to activate the retainer"
-      : "choose an active retainer";
+  const remedy =
+    retainer.state === "expired"
+      ? "extend the retainer with a later end date"
+      : retainer.state === "draft" && retainer.invoiceDocumentId
+        ? "post the linked invoice to activate the retainer"
+        : "choose an active retainer";
   throw new ResourcingRefusal(
     409,
     "retainer_not_active",
@@ -988,7 +1199,8 @@ function postgresUniqueConstraint(error: unknown): string | null {
   while (current && typeof current === "object" && !seen.has(current)) {
     seen.add(current);
     const candidate = current as { code?: unknown; constraint?: unknown; cause?: unknown };
-    if (candidate.code === "23505" && typeof candidate.constraint === "string") return candidate.constraint;
+    if (candidate.code === "23505" && typeof candidate.constraint === "string")
+      return candidate.constraint;
     current = candidate.cause;
   }
   return null;

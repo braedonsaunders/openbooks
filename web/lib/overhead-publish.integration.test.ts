@@ -32,7 +32,7 @@ const routeState: {
     rates: Array<{ departmentId: string; ratePerHour: string }> | undefined;
   }>;
 } = { authz: null, calls: [] };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[routeStateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[routeStateKey] = routeState;
 
 const routeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -47,10 +47,7 @@ const routeHooks = registerHooks({
     // factory loads the real cookie session instead of the test session.
     // The factory imports lazily at request time, so this edge must stay
     // registered while tests run (see the deregistration below).
-    if (
-      specifier === "@/lib/authz" &&
-      context.parentURL?.includes("/lib/api/route")
-    ) {
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) {
       return { url: "mock:overhead-authz", shortCircuit: true };
     }
     if (
@@ -115,9 +112,9 @@ const overheadRouteUrl = new URL(
   "../app/api/admin/setup/overhead/route.ts?overhead-publish-route-test",
   import.meta.url,
 ).href;
-const { POST: overheadRoutePost } = (await import(overheadRouteUrl)) as typeof import(
-  "../app/api/admin/setup/overhead/route.ts"
-);
+const { POST: overheadRoutePost } = (await import(
+  overheadRouteUrl
+)) as typeof import("../app/api/admin/setup/overhead/route.ts");
 // The factory resolves its session import lazily at request time, so the
 // hooks must stay registered while tests run: deregistering here would hand
 // later requests the real cookie session instead of the test session.
@@ -128,22 +125,26 @@ test("manual overhead publishing preserves all four validated decimal places", a
   routeState.authz = { user: { orgId: "org-test", id: "actor-test" } };
   routeState.calls.length = 0;
 
-  const response = await overheadRoutePost(new Request("http://localhost/api/admin/setup/overhead", {
-    method: "POST",
-    body: JSON.stringify({
-      action: "publish",
-      effectiveFrom: "2026-09-01",
-      rates: [{ departmentId: "department-test", ratePerHour: "1.2345" }],
+  const response = await overheadRoutePost(
+    new Request("http://localhost/api/admin/setup/overhead", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "publish",
+        effectiveFrom: "2026-09-01",
+        rates: [{ departmentId: "department-test", ratePerHour: "1.2345" }],
+      }),
     }),
-  }));
+  );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.calls, [{
-    orgId: "org-test",
-    actorId: "actor-test",
-    effectiveFrom: "2026-09-01",
-    rates: [{ departmentId: "department-test", ratePerHour: "1.2345" }],
-  }]);
+  assert.deepEqual(routeState.calls, [
+    {
+      orgId: "org-test",
+      actorId: "actor-test",
+      effectiveFrom: "2026-09-01",
+      rates: [{ departmentId: "department-test", ratePerHour: "1.2345" }],
+    },
+  ]);
   assert.deepEqual(await response.json(), { ok: true, published: 1 });
   routeState.authz = null;
 });

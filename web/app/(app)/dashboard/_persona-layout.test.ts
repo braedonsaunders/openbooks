@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { personaDefaultLayout, type PersonaLayoutFlags } from './_persona-layout'
-import { clampToWidgetMinimums } from './_layout-input'
-import { packDefaultLayout } from './_default-layout'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { personaDefaultLayout, type PersonaLayoutFlags } from "./_persona-layout";
+import { clampToWidgetMinimums } from "./_layout-input";
+import { packDefaultLayout } from "./_default-layout";
 
 /**
  * Persona default layouts: three compositions chosen by what the
@@ -15,82 +15,96 @@ const ALL_ON: PersonaLayoutFlags = {
   hrm: true,
   announcements: true,
   quals: true,
-}
+};
 
 const ALL_OFF: PersonaLayoutFlags = {
   payroll: false,
   hrm: false,
   announcements: false,
   quals: false,
-}
+};
 
-const ids = (persona: 'admin' | 'manager' | 'employee', flags: PersonaLayoutFlags): string[] =>
-  personaDefaultLayout(persona, flags).widgets.map((widget) => widget.id)
+const ids = (persona: "admin" | "manager" | "employee", flags: PersonaLayoutFlags): string[] =>
+  personaDefaultLayout(persona, flags).widgets.map((widget) => widget.id);
 
-test('an actor with nothing gets the employee column only', () => {
-  const layout = ids('employee', ALL_ON)
-  assert.ok(layout.includes('inbox-list'), 'my tasks opens the employee home')
-  assert.ok(layout.includes('home-ask'), 'the ask box closes it')
-  assert.ok(!layout.includes('team-approvals'), 'no manager column without reports or grants')
-  assert.ok(!layout.includes('admin-attention'), 'no admin rail without manage grants')
-})
+test("an actor with nothing gets the employee column only", () => {
+  const layout = ids("employee", ALL_ON);
+  assert.ok(layout.includes("inbox-list"), "my tasks opens the employee home");
+  assert.ok(layout.includes("home-ask"), "the ask box closes it");
+  assert.ok(!layout.includes("team-approvals"), "no manager column without reports or grants");
+  assert.ok(!layout.includes("admin-attention"), "no admin rail without manage grants");
+});
 
-test('a manager adds the second column, never the admin rail', () => {
-  const layout = ids('manager', ALL_ON)
-  assert.ok(layout.includes('inbox-list'), 'the employee base stays')
-  assert.ok(layout.includes('team-approvals'), 'approvals awaiting me')
-  assert.ok(layout.includes('team-headcount'), 'team headcount')
-  assert.ok(layout.includes('team-steps'), 'overdue team steps')
-  assert.ok(layout.includes('team-nudges'), '1:1 prompts and attention items')
-  assert.ok(!layout.includes('admin-attention'), 'no admin rail without manage grants')
-})
+test("a manager adds the second column, never the admin rail", () => {
+  const layout = ids("manager", ALL_ON);
+  assert.ok(layout.includes("inbox-list"), "the employee base stays");
+  assert.ok(layout.includes("team-approvals"), "approvals awaiting me");
+  assert.ok(layout.includes("team-headcount"), "team headcount");
+  assert.ok(layout.includes("team-steps"), "overdue team steps");
+  assert.ok(layout.includes("team-nudges"), "1:1 prompts and attention items");
+  assert.ok(!layout.includes("admin-attention"), "no admin rail without manage grants");
+});
 
-test('an admin adds the rail on top of both columns', () => {
-  const layout = ids('admin', ALL_ON)
-  assert.ok(layout.includes('inbox-list'), 'the employee base stays')
-  assert.ok(layout.includes('team-approvals'), 'the manager column stays')
-  assert.ok(layout.includes('admin-attention'), 'cockpit attention rollup')
-  assert.ok(layout.includes('workflow-errors'), 'workflow errors')
-  assert.ok(layout.includes('admin-calendar'), 'compliance calendar')
-})
+test("an admin adds the rail on top of both columns", () => {
+  const layout = ids("admin", ALL_ON);
+  assert.ok(layout.includes("inbox-list"), "the employee base stays");
+  assert.ok(layout.includes("team-approvals"), "the manager column stays");
+  assert.ok(layout.includes("admin-attention"), "cockpit attention rollup");
+  assert.ok(layout.includes("workflow-errors"), "workflow errors");
+  assert.ok(layout.includes("admin-calendar"), "compliance calendar");
+});
 
-test('feature-off removes the optional widgets, never the core', () => {
-  const off = ids('admin', ALL_OFF)
-  assert.ok(!off.includes('celebrations-list'), 'no hrm means no celebrations')
-  assert.ok(!off.includes('team-nudges'), 'no hrm means no manager nudges')
-  assert.ok(!off.includes('announcements-card'), 'homeAnnouncements off hides announcements')
-  assert.ok(!off.includes('team-quals'), 'no HR-14 table means no qualifications tile')
-  assert.ok(!off.includes('pay-tile'), 'no payroll means no pay tile')
-  assert.ok(!off.includes('balance-tile'), 'no hrm means no balance tile')
-  assert.ok(off.includes('inbox-list'), 'the inbox stays: it is core, not a feature')
-  assert.ok(off.includes('home-ask'), 'the ask box stays')
-  assert.ok(off.includes('admin-attention'), 'the admin rail stays')
-})
+test("feature-off removes the optional widgets, never the core", () => {
+  const off = ids("admin", ALL_OFF);
+  assert.ok(!off.includes("celebrations-list"), "no hrm means no celebrations");
+  assert.ok(!off.includes("team-nudges"), "no hrm means no manager nudges");
+  assert.ok(!off.includes("announcements-card"), "homeAnnouncements off hides announcements");
+  assert.ok(!off.includes("team-quals"), "no HR-14 table means no qualifications tile");
+  assert.ok(!off.includes("pay-tile"), "no payroll means no pay tile");
+  assert.ok(!off.includes("balance-tile"), "no hrm means no balance tile");
+  assert.ok(off.includes("inbox-list"), "the inbox stays: it is core, not a feature");
+  assert.ok(off.includes("home-ask"), "the ask box stays");
+  assert.ok(off.includes("admin-attention"), "the admin rail stays");
+});
 
-test('layouts are stable grids: unique ids, twelve columns, no overlaps', () => {
-  for (const persona of ['employee', 'manager', 'admin'] as const) {
+test("layouts are stable grids: unique ids, twelve columns, no overlaps", () => {
+  for (const persona of ["employee", "manager", "admin"] as const) {
     for (let mask = 0; mask < 16; mask++) {
       const layout = personaDefaultLayout(persona, {
-        payroll: Boolean(mask & 1), hrm: Boolean(mask & 2), announcements: Boolean(mask & 4), quals: Boolean(mask & 8),
-      })
-      const widgets = layout.widgets
-      assert.deepEqual(clampToWidgetMinimums(widgets), widgets, `${persona}/${mask}: actual registry minimums`)
-      assert.deepEqual(packDefaultLayout(layout), layout, 'packing is stable')
-      const seen = new Set(widgets.map((widget) => widget.id))
-      assert.equal(seen.size, widgets.length, `${persona}: widget ids are unique`)
+        payroll: Boolean(mask & 1),
+        hrm: Boolean(mask & 2),
+        announcements: Boolean(mask & 4),
+        quals: Boolean(mask & 8),
+      });
+      const widgets = layout.widgets;
+      assert.deepEqual(
+        clampToWidgetMinimums(widgets),
+        widgets,
+        `${persona}/${mask}: actual registry minimums`,
+      );
+      assert.deepEqual(packDefaultLayout(layout), layout, "packing is stable");
+      const seen = new Set(widgets.map((widget) => widget.id));
+      assert.equal(seen.size, widgets.length, `${persona}: widget ids are unique`);
       for (const widget of widgets) {
-        assert.ok(widget.x >= 0 && widget.x + widget.w <= 12, `${persona}/${widget.id}: inside twelve columns`)
-        assert.ok(widget.w >= 2 && widget.h >= 2, `${persona}/${widget.id}: meets the minimum size`)
+        assert.ok(
+          widget.x >= 0 && widget.x + widget.w <= 12,
+          `${persona}/${widget.id}: inside twelve columns`,
+        );
+        assert.ok(
+          widget.w >= 2 && widget.h >= 2,
+          `${persona}/${widget.id}: meets the minimum size`,
+        );
       }
       // Rectangles are [x, x + w) by [y, y + h), and abutting edges do not overlap.
       for (let i = 0; i < widgets.length; i++) {
         for (let j = i + 1; j < widgets.length; j++) {
-          const a = widgets[i]!
-          const b = widgets[j]!
-          const disjoint = a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y
-          assert.ok(disjoint, `${persona}: ${a.id} overlaps ${b.id}`)
+          const a = widgets[i]!;
+          const b = widgets[j]!;
+          const disjoint =
+            a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+          assert.ok(disjoint, `${persona}: ${a.id} overlaps ${b.id}`);
         }
       }
     }
   }
-})
+});

@@ -1,11 +1,11 @@
-import type { PdfColumnAlign } from '@openbooks/pdf'
-import type { GeneralLedgerResult } from './reports'
-import type { ExportData, Translator } from './report-pdf'
-import type { ExactDecimal } from './statement-format'
-import { decimalIsZero } from './statement-format'
-import { createMoneyFormatter, formatDecimal } from './money-format'
+import type { PdfColumnAlign } from "@openbooks/pdf";
+import type { GeneralLedgerResult } from "./reports";
+import type { ExportData, Translator } from "./report-pdf";
+import type { ExactDecimal } from "./statement-format";
+import { decimalIsZero } from "./statement-format";
+import { createMoneyFormatter, formatDecimal } from "./money-format";
 
-const LEDGER_ALIGN: PdfColumnAlign[] = ['left', 'left', 'left', 'right', 'right', 'right']
+const LEDGER_ALIGN: PdfColumnAlign[] = ["left", "left", "left", "right", "right", "right"];
 
 // --- exact money cells -------------------------------------------------------
 // Ledger decimals arrive as exact numeric(19,4) STRINGS. Coercing them through
@@ -19,13 +19,13 @@ const LEDGER_ALIGN: PdfColumnAlign[] = ['left', 'left', 'left', 'right', 'right'
 // at the spreadsheet boundary in exportDataToRunResult, because .xlsx stores
 // IEEE-754 doubles natively; print never does.
 
-const EXACT_DECIMAL_TEXT = /^[-+]?\d+(?:\.\d+)?$/
-const NEGATIVE_ZERO_TEXT = /^-0(?:\.0*)?$/
+const EXACT_DECIMAL_TEXT = /^[-+]?\d+(?:\.\d+)?$/;
+const NEGATIVE_ZERO_TEXT = /^-0(?:\.0*)?$/;
 
 /** True when a cell is an exact decimal literal (a ledger string), safe to
  *  hand to Intl as a mathematical value. */
 export function isExactDecimalText(v: string): boolean {
-  return EXACT_DECIMAL_TEXT.test(v)
+  return EXACT_DECIMAL_TEXT.test(v);
 }
 
 /** Format one exact ledger decimal for print: thousands separators and two
@@ -33,14 +33,14 @@ export function isExactDecimalText(v: string): boolean {
  *  `2.68`). Non-numeric text renders raw — presentation mirrors
  *  createMoneyFormatter's fallback for non-numeric cells. An optional currency
  *  keeps the General Ledger paper view on this same exact-decimal path. */
-export function pdfMoney(v: ExactDecimal, locale = 'en', currency?: string): string {
-  if (!EXACT_DECIMAL_TEXT.test(v)) return v
+export function pdfMoney(v: ExactDecimal, locale = "en", currency?: string): string {
+  if (!EXACT_DECIMAL_TEXT.test(v)) return v;
   // Collapse "-0"/"-0.0000" so a zeroed account never prints "-0.00".
-  const normalized = NEGATIVE_ZERO_TEXT.test(v) ? '0' : v
-  const options = { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+  const normalized = NEGATIVE_ZERO_TEXT.test(v) ? "0" : v;
+  const options = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
   return currency
     ? createMoneyFormatter(locale, currency).money(normalized, options)
-    : formatDecimal(locale, normalized, options)
+    : formatDecimal(locale, normalized, options);
 }
 
 /**
@@ -55,40 +55,40 @@ export function generalLedgerExportData(
   t: Translator,
 ): ExportData {
   const columns = [
-    t('generalLedger.columns.date'),
-    t('generalLedger.columns.entry'),
-    t('generalLedger.columns.detail'),
-    t('trialBalance.columns.debits'),
-    t('trialBalance.columns.credits'),
-    t('export.columns.balance'),
-  ]
-  const groups: ExportData['groups'] = gl.accounts.map((account) => ({
-    kind: 'section',
-    title: `${account.number ?? ''} ${account.name}`.trim(),
+    t("generalLedger.columns.date"),
+    t("generalLedger.columns.entry"),
+    t("generalLedger.columns.detail"),
+    t("trialBalance.columns.debits"),
+    t("trialBalance.columns.credits"),
+    t("export.columns.balance"),
+  ];
+  const groups: ExportData["groups"] = gl.accounts.map((account) => ({
+    kind: "section",
+    title: `${account.number ?? ""} ${account.name}`.trim(),
     columns,
     rows: [
-      ['', '', t('generalLedger.opening'), null, null, account.opening],
+      ["", "", t("generalLedger.opening"), null, null, account.opening],
       ...account.lines.map((line) => [
         line.date,
-        line.entryNumber ?? '',
-        [line.party, line.memo].filter(Boolean).join(' · '),
+        line.entryNumber ?? "",
+        [line.party, line.memo].filter(Boolean).join(" · "),
         decimalIsZero(line.debit) ? null : line.debit,
         decimalIsZero(line.credit) ? null : line.credit,
         line.balance,
       ]),
-      ['', '', t('generalLedger.closing'), null, null, account.closing],
+      ["", "", t("generalLedger.closing"), null, null, account.closing],
     ],
     // Exact ledger strings stay marked through every print conversion so no
     // renderer has to infer money columns or coerce their values to doubles.
     money: [false, false, false, true, true, true],
     dates: [true, false, false, false, false, false],
     align: LEDGER_ALIGN,
-  }))
+  }));
   return {
     title,
-    dateRangeLabel: t('pnl.dateRange', { from: gl.from, to: gl.to }),
+    dateRangeLabel: t("pnl.dateRange", { from: gl.from, to: gl.to }),
     // A capped export without this notice reads as a complete ledger.
-    summary: gl.truncated ? [{ label: t('generalLedger.truncated'), value: '' }] : [],
+    summary: gl.truncated ? [{ label: t("generalLedger.truncated"), value: "" }] : [],
     groups,
-  }
+  };
 }

@@ -19,7 +19,9 @@
  */
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateCount, type PayrollCertificate,
+  certificateAmount,
+  certificateCount,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -31,16 +33,32 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ri.ts";
 
 export type RiPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "semiannual" | "annual" | "daily";
+  | "weekly"
+  | "biweekly"
+  | "semimonthly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual"
+  | "daily";
 
 const RI_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 interface RiBracket {
@@ -151,17 +169,19 @@ const RI_EDITIONS_BY_YEAR: Record<number, RiYearRates> = {
   [RI_RATES_2026.year]: RI_RATES_2026,
 };
 
-export const RI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "2026 Rhode Island Employer's Income Tax Withholding Tables",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Rhode Island Division of Taxation, 2026 Employer's Income Tax Withholding "
-    + "Tables — percentage-method exemption amounts, eight period tables, "
-    + "$2,195 weekly 1-exemption example",
-  status: "published",
-  region: "RI",
-}];
+export const RI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "2026 Rhode Island Employer's Income Tax Withholding Tables",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Rhode Island Division of Taxation, 2026 Employer's Income Tax Withholding " +
+      "Tables — percentage-method exemption amounts, eight period tables, " +
+      "$2,195 weekly 1-exemption example",
+    status: "published",
+    region: "RI",
+  },
+];
 
 export function riPeriodTax(taxable: bigint, period: RiPeriod): bigint {
   if (taxable <= 0n) return 0n;
@@ -189,9 +209,7 @@ function compute(
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   trace("RI_WAGES", wages);
 
-  const exemption = wages > U(table.phaseOutAbove)
-    ? 0n
-    : U(table.exemption) * BigInt(allowances);
+  const exemption = wages > U(table.phaseOutAbove) ? 0n : U(table.exemption) * BigInt(allowances);
   trace("RI_EXEMPTION", exemption);
   const taxable = max0(wages - exemption);
   trace("RI_TAXABLE", taxable);
@@ -263,13 +281,13 @@ export const RI_CERTIFICATE: PayrollCertificate = {
     appliesWhen: { field: "exempt", values: ["true"] },
   },
   citation:
-    "Rhode Island Division of Taxation, 2026 Employer's Income Tax Withholding "
-    + "Tables; Form RI W-4 (2026), https://tax.ri.gov/sites/g/files/xkgbur541/files/2026-01/RI%20W-4%202026.pdf. "
-    + "Federal Form W-4 can no longer be used for "
-    + "Rhode Island withholding.",
+    "Rhode Island Division of Taxation, 2026 Employer's Income Tax Withholding " +
+    "Tables; Form RI W-4 (2026), https://tax.ri.gov/sites/g/files/xkgbur541/files/2026-01/RI%20W-4%202026.pdf. " +
+    "Federal Form W-4 can no longer be used for " +
+    "Rhode Island withholding.",
   summary:
-    "Sets Rhode Island allowances. A missing RI W-4 is withheld at zero "
-    + "allowances. Annual wages over $290,800 phase the exemption to zero.",
+    "Sets Rhode Island allowances. A missing RI W-4 is withheld at zero " +
+    "allowances. Annual wages over $290,800 phase the exemption to zero.",
   storage: "certificate_rows",
   fields: [
     {
@@ -280,9 +298,9 @@ export const RI_CERTIFICATE: PayrollCertificate = {
       max: "10",
       default: "0",
       help:
-        "Each weekly allowance is $19.23 (the booklet's other frequencies scale "
-        + "the same $1,000 annual exemption). Default zero is a blank RI W-4 — "
-        + "nothing claimed is zero. Federal Form W-4 is not a substitute.",
+        "Each weekly allowance is $19.23 (the booklet's other frequencies scale " +
+        "the same $1,000 annual exemption). Default zero is a blank RI W-4 — " +
+        "nothing claimed is zero. Federal Form W-4 is not a substitute.",
     },
     {
       key: "additional_per_period",
@@ -291,17 +309,17 @@ export const RI_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A flat dollar amount requested on Form RI W-4. Added AFTER the "
-        + "percentage-method table is applied to this period's wages.",
+        "A flat dollar amount requested on Form RI W-4. Added AFTER the " +
+        "percentage-method table is applied to this period's wages.",
     },
     {
       key: "exempt",
       label: "Line 3 — Exempt or Exempt-MS from Rhode Island withholding",
       kind: "flag",
       help:
-        "EXEMPT and EXEMPT-MS on line 3 require a new RI W-4 each year. A "
-        + "current exempt flag withholds zero. Dating the year-end lapse is "
-        + "certificate administration.",
+        "EXEMPT and EXEMPT-MS on line 3 require a new RI W-4 each year. A " +
+        "current exempt flag withholds zero. Dating the year-end lapse is " +
+        "certificate administration.",
     },
   ],
 };
@@ -321,6 +339,6 @@ export const RI_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Rhode Island Division of Taxation, 2026 Employer's Income Tax Withholding "
-    + "Tables; Form RI W-4 (2026)",
+    "Rhode Island Division of Taxation, 2026 Employer's Income Tax Withholding " +
+    "Tables; Form RI W-4 (2026)",
 };

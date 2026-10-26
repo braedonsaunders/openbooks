@@ -15,7 +15,11 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { ACCOUNT_CLASS_TYPES, type AccountClassKey } from "../records/account-types.ts";
-import { loadSubsidiaryContext, restrictionAdmits, type SubsidiaryContext } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  restrictionAdmits,
+  type SubsidiaryContext,
+} from "../organization/subsidiaries.ts";
 
 export class BookAccountMapError extends Error {
   override readonly name = "BookAccountMapError";
@@ -35,7 +39,10 @@ export interface MappableAccount {
 
 /** The statement class an account type belongs to, or null for a type outside the classes. */
 export function accountClassOf(type: string): AccountClassKey | null {
-  for (const [key, types] of Object.entries(ACCOUNT_CLASS_TYPES) as [AccountClassKey, readonly string[]][]) {
+  for (const [key, types] of Object.entries(ACCOUNT_CLASS_TYPES) as [
+    AccountClassKey,
+    readonly string[],
+  ][]) {
     if (types.includes(type)) return key;
   }
   return null;
@@ -45,14 +52,19 @@ export function accountClassOf(type: string): AccountClassKey | null {
  * Why `source` may not be carried as `target` in a book, or null when the
  * mapping is compatible. Pure, so configuration and posting share it.
  */
-export function bookAccountMapRefusal(source: MappableAccount, target: MappableAccount): string | null {
+export function bookAccountMapRefusal(
+  source: MappableAccount,
+  target: MappableAccount,
+): string | null {
   if (source.id === target.id) return `${source.label} cannot map to itself`;
   if (target.isSummary) return `${target.label} is a summary account and cannot be posted to`;
-  if (!target.isActive) return `${target.label} is inactive — reactivate it or map ${source.label} to an active account`;
+  if (!target.isActive)
+    return `${target.label} is inactive — reactivate it or map ${source.label} to an active account`;
   const sourceClass = accountClassOf(source.type);
   const targetClass = accountClassOf(target.type);
   if (sourceClass === null || targetClass === null) {
-    if (source.type !== target.type) return `${source.label} (${source.type}) can only map to an account of the same type`;
+    if (source.type !== target.type)
+      return `${source.label} (${source.type}) can only map to an account of the same type`;
   } else if (sourceClass !== targetClass) {
     return `${source.label} is ${sourceClass} and ${target.label} is ${targetClass} — a book mapping keeps the account's statement class`;
   }
@@ -76,7 +88,11 @@ export function bookAccountMapScopeRefusal(
   const scope = subsidiaryId
     ? [subsidiaryId]
     : [...ctx.byId.values()]
-        .filter((sub) => !sub.isElimination && restrictionAdmits(ctx, source.subsidiaryId, source.subsidiaryIncludeChildren, sub.id))
+        .filter(
+          (sub) =>
+            !sub.isElimination &&
+            restrictionAdmits(ctx, source.subsidiaryId, source.subsidiaryIncludeChildren, sub.id),
+        )
         .map((sub) => sub.id);
   for (const sub of scope) {
     if (!restrictionAdmits(ctx, target.subsidiaryId, target.subsidiaryIncludeChildren, sub)) {
@@ -94,23 +110,38 @@ export async function loadMappableAccounts(
 ): Promise<Map<string, MappableAccount>> {
   if (ids.length === 0) return new Map();
   const rows = await runner.execute<{
-    id: string; number: string | null; name: string; type: string; is_active: boolean; is_summary: boolean;
-    currency_restriction: string | null; subsidiary_id: string | null; subsidiary_include_children: boolean;
-  }>(sql`
+    id: string;
+    number: string | null;
+    name: string;
+    type: string;
+    is_active: boolean;
+    is_summary: boolean;
+    currency_restriction: string | null;
+    subsidiary_id: string | null;
+    subsidiary_include_children: boolean;
+  }>(
+    sql`
     select id, number, name, type, is_active, is_summary, currency_restriction,
            subsidiary_id, subsidiary_include_children
       from accounts
-     where org_id = ${orgId} and id = any(${`{${[...new Set(ids)].join(",")}}`}::uuid[])`, "objects");
-  return new Map(rows.map((row) => [row.id, {
-    id: row.id,
-    label: [row.number, row.name].filter(Boolean).join(" "),
-    type: row.type,
-    isActive: row.is_active,
-    isSummary: row.is_summary,
-    currencyRestriction: row.currency_restriction,
-    subsidiaryId: row.subsidiary_id,
-    subsidiaryIncludeChildren: row.subsidiary_include_children,
-  }]));
+     where org_id = ${orgId} and id = any(${`{${[...new Set(ids)].join(",")}}`}::uuid[])`,
+    "objects",
+  );
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        id: row.id,
+        label: [row.number, row.name].filter(Boolean).join(" "),
+        type: row.type,
+        isActive: row.is_active,
+        isSummary: row.is_summary,
+        currencyRestriction: row.currency_restriction,
+        subsidiaryId: row.subsidiary_id,
+        subsidiaryIncludeChildren: row.subsidiary_include_children,
+      },
+    ]),
+  );
 }
 
 export interface AppliedBookAccountMap {
@@ -128,23 +159,36 @@ export interface AppliedBookAccountMap {
  */
 export async function applyBookAccountMaps<T extends { accountId: string; subsidiaryId: string }>(
   runner: SqlExecutor,
-  args: { orgId: string; bookId: string; bookLabel: string; postingDate: string; entryLabel: string; lines: readonly T[] },
+  args: {
+    orgId: string;
+    bookId: string;
+    bookLabel: string;
+    postingDate: string;
+    entryLabel: string;
+    lines: readonly T[];
+  },
 ): Promise<{ lines: T[]; applied: AppliedBookAccountMap[] }> {
   const sourceIds = [...new Set(args.lines.map((line) => line.accountId))];
   if (sourceIds.length === 0) return { lines: [...args.lines], applied: [] };
   const maps = await runner.execute<{
-    id: string; subsidiary_id: string | null; source_account_id: string; target_account_id: string;
-  }>(sql`
+    id: string;
+    subsidiary_id: string | null;
+    source_account_id: string;
+    target_account_id: string;
+  }>(
+    sql`
     select id, subsidiary_id, source_account_id, target_account_id
       from accounting_book_account_maps
      where org_id = ${args.orgId} and book_id = ${args.bookId}
        and source_account_id = any(${`{${sourceIds.join(",")}}`}::uuid[])
        and effective_from <= ${args.postingDate}::date
-       and (effective_to is null or effective_to >= ${args.postingDate}::date)`, "objects");
+       and (effective_to is null or effective_to >= ${args.postingDate}::date)`,
+    "objects",
+  );
   if (maps.length === 0) return { lines: [...args.lines], applied: [] };
   const pick = (accountId: string, subsidiaryId: string) =>
-    maps.find((map) => map.source_account_id === accountId && map.subsidiary_id === subsidiaryId)
-      ?? maps.find((map) => map.source_account_id === accountId && map.subsidiary_id === null);
+    maps.find((map) => map.source_account_id === accountId && map.subsidiary_id === subsidiaryId) ??
+    maps.find((map) => map.source_account_id === accountId && map.subsidiary_id === null);
   const accounts = await loadMappableAccounts(runner, args.orgId, [
     ...maps.map((map) => map.source_account_id),
     ...maps.map((map) => map.target_account_id),
@@ -161,19 +205,36 @@ export async function applyBookAccountMaps<T extends { accountId: string; subsid
     const source = accounts.get(map.source_account_id);
     const target = accounts.get(map.target_account_id);
     if (!source || !target) {
-      throw new BookAccountMapError(`${args.entryLabel}: book ${args.bookLabel} maps an account that no longer exists in this organization`);
+      throw new BookAccountMapError(
+        `${args.entryLabel}: book ${args.bookLabel} maps an account that no longer exists in this organization`,
+      );
     }
     const refusal = bookAccountMapRefusal(source, target);
-    if (refusal) throw new BookAccountMapError(`${args.entryLabel}: book ${args.bookLabel} account mapping refused — ${refusal}`);
+    if (refusal)
+      throw new BookAccountMapError(
+        `${args.entryLabel}: book ${args.bookLabel} account mapping refused — ${refusal}`,
+      );
     ctx ??= await loadSubsidiaryContext(runner, args.orgId);
-    if (!restrictionAdmits(ctx, target.subsidiaryId, target.subsidiaryIncludeChildren, line.subsidiaryId)) {
+    if (
+      !restrictionAdmits(
+        ctx,
+        target.subsidiaryId,
+        target.subsidiaryIncludeChildren,
+        line.subsidiaryId,
+      )
+    ) {
       const name = ctx.byId.get(line.subsidiaryId)?.name ?? line.subsidiaryId;
       throw new BookAccountMapError(
         `${args.entryLabel}: book ${args.bookLabel} maps ${source.label} to ${target.label}, which is not available to subsidiary "${name}" — correct the mapping in the book's account mappings`,
       );
     }
     lines.push({ ...line, accountId: target.id });
-    applied.push({ mapId: map.id, subsidiaryId: line.subsidiaryId, sourceAccountId: source.id, targetAccountId: target.id });
+    applied.push({
+      mapId: map.id,
+      subsidiaryId: line.subsidiaryId,
+      sourceAccountId: source.id,
+      targetAccountId: target.id,
+    });
   }
   return { lines, applied };
 }

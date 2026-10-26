@@ -16,10 +16,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  IE_PAYE_RECONCILIATION_FILING,
-  parseIeReconciliationRowId,
-} from "./filings.ts";
+import { IE_PAYE_RECONCILIATION_FILING, parseIeReconciliationRowId } from "./filings.ts";
 import { payrollTaxYearProblem } from "../packs.ts";
 
 const EMP = "12345678-1234-1234-1234-1234567890ab";

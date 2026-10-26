@@ -12,8 +12,22 @@ import { decimalToMinorUnits, minorUnitsToLedger, verifyRelaySignature } from ".
 const RATES_FIXTURE = {
   id: "shp_9f3c2a1e4b5d6f7890abcdef12",
   object: "Shipment",
-  to_address: { id: "adr_to", street1: "417 Montgomery St", city: "San Francisco", state: "CA", zip: "94104", country: "US" },
-  from_address: { id: "adr_from", street1: "228 Park Ave S", city: "New York", state: "NY", zip: "10003", country: "US" },
+  to_address: {
+    id: "adr_to",
+    street1: "417 Montgomery St",
+    city: "San Francisco",
+    state: "CA",
+    zip: "94104",
+    country: "US",
+  },
+  from_address: {
+    id: "adr_from",
+    street1: "228 Park Ave S",
+    city: "New York",
+    state: "NY",
+    zip: "10003",
+    country: "US",
+  },
   parcel: { id: "prcl_1", length: 10.2, width: 8.1, height: 4.0, weight: 32.0 },
   rates: [
     {
@@ -143,7 +157,15 @@ test("EasyPost inbound tracker event keeps the provider shipment link", () => {
 });
 
 test("EasyPost inbound parsing ignores non-tracker deliveries without throwing", () => {
-  assert.equal(easyPostAdapter.parseInboundEvent({ id: "evt_1", object: "Event", description: "shipment.created", result: {} }), null);
+  assert.equal(
+    easyPostAdapter.parseInboundEvent({
+      id: "evt_1",
+      object: "Event",
+      description: "shipment.created",
+      result: {},
+    }),
+    null,
+  );
   assert.equal(easyPostAdapter.parseInboundEvent({ nonsense: true }), null);
   assert.equal(easyPostAdapter.parseInboundEvent(null), null);
 });

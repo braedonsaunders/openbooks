@@ -11,7 +11,10 @@ import { fromUnits, toUnits } from "../money/money.ts";
 
 export class StatementSettlementError extends Error {
   override readonly name = "StatementSettlementError";
-  constructor(message: string, readonly remedy: string) {
+  constructor(
+    message: string,
+    readonly remedy: string,
+  ) {
     super(message);
   }
 }
@@ -46,11 +49,13 @@ export interface StatementSettlementPlan {
 
 /** Earliest due first (undated last), then earliest posted, then label: the order cash is applied by default. */
 export function settlementOrder(documents: readonly SettlementDocument[]): SettlementDocument[] {
-  return [...documents].sort((a, b) =>
-    (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31")
-    || a.postingDate.localeCompare(b.postingDate)
-    || a.label.localeCompare(b.label)
-    || (a.openLineId < b.openLineId ? -1 : a.openLineId > b.openLineId ? 1 : 0));
+  return [...documents].sort(
+    (a, b) =>
+      (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31") ||
+      a.postingDate.localeCompare(b.postingDate) ||
+      a.label.localeCompare(b.label) ||
+      (a.openLineId < b.openLineId ? -1 : a.openLineId > b.openLineId ? 1 : 0),
+  );
 }
 
 /**
@@ -59,9 +64,16 @@ export function settlementOrder(documents: readonly SettlementDocument[]): Settl
  * reach receive nothing; an amount larger than every balance leaves the rest
  * unallocated (on account).
  */
-export function allocateOldestFirst(amount: string, documents: readonly SettlementDocument[]): Record<string, string> {
+export function allocateOldestFirst(
+  amount: string,
+  documents: readonly SettlementDocument[],
+): Record<string, string> {
   let remaining = toUnits(amount);
-  if (remaining < 0n) throw new StatementSettlementError("A settlement amount cannot be negative.", "Enter the statement amount as a positive value.");
+  if (remaining < 0n)
+    throw new StatementSettlementError(
+      "A settlement amount cannot be negative.",
+      "Enter the statement amount as a positive value.",
+    );
   const out: Record<string, string> = {};
   for (const doc of settlementOrder(documents)) {
     const open = toUnits(doc.open);
@@ -74,10 +86,16 @@ export function allocateOldestFirst(amount: string, documents: readonly Settleme
 
 function parseApplied(raw: string | undefined, label: string): bigint {
   if (raw === undefined || raw.trim() === "") {
-    throw new StatementSettlementError(`${label} has no amount to apply.`, "Enter the amount this payment applies to each selected document, or deselect it.");
+    throw new StatementSettlementError(
+      `${label} has no amount to apply.`,
+      "Enter the amount this payment applies to each selected document, or deselect it.",
+    );
   }
   if (!/^\d{1,13}(\.\d{1,4})?$/.test(raw.trim())) {
-    throw new StatementSettlementError(`${label}'s amount ${raw} is not a valid amount.`, "Enter a positive amount with at most four decimal places.");
+    throw new StatementSettlementError(
+      `${label}'s amount ${raw} is not a valid amount.`,
+      "Enter a positive amount with at most four decimal places.",
+    );
   }
   return toUnits(raw.trim());
 }
@@ -97,14 +115,24 @@ export function planStatementSettlement(input: {
   writeOff: boolean;
 }): StatementSettlementPlan {
   const line = toUnits(input.lineAmount);
-  if (line <= 0n) throw new StatementSettlementError("The statement line settles nothing.", "Exclude a zero-amount line instead.");
+  if (line <= 0n)
+    throw new StatementSettlementError(
+      "The statement line settles nothing.",
+      "Exclude a zero-amount line instead.",
+    );
   if (input.documents.length === 0) {
-    throw new StatementSettlementError("Select at least one open invoice or bill.", "Choose the documents this line pays.");
+    throw new StatementSettlementError(
+      "Select at least one open invoice or bill.",
+      "Choose the documents this line pays.",
+    );
   }
   const known = new Set(input.documents.map((doc) => doc.openLineId));
   const stray = Object.keys(input.applied).find((id) => !known.has(id));
   if (stray !== undefined) {
-    throw new StatementSettlementError("An amount names a document that is not selected.", "Refresh the proposals and allocate the line again.");
+    throw new StatementSettlementError(
+      "An amount names a document that is not selected.",
+      "Refresh the proposals and allocate the line again.",
+    );
   }
   let appliedTotal = 0n;
   let writeOffTotal = 0n;
@@ -113,7 +141,10 @@ export function planStatementSettlement(input: {
     const open = toUnits(doc.open);
     const applied = parseApplied(input.applied[doc.openLineId], doc.label);
     if (applied <= 0n) {
-      throw new StatementSettlementError(`${doc.label} receives nothing from this line.`, "Enter a positive amount for every selected document, or deselect it.");
+      throw new StatementSettlementError(
+        `${doc.label} receives nothing from this line.`,
+        "Enter a positive amount for every selected document, or deselect it.",
+      );
     }
     if (applied > open) {
       throw new StatementSettlementError(
@@ -125,7 +156,12 @@ export function planStatementSettlement(input: {
     const writeOff = input.writeOff ? shortfall : 0n;
     appliedTotal += applied;
     writeOffTotal += writeOff;
-    documents.push({ openLineId: doc.openLineId, applied: fromUnits(applied), writeOff: fromUnits(writeOff), remaining: fromUnits(shortfall - writeOff) });
+    documents.push({
+      openLineId: doc.openLineId,
+      applied: fromUnits(applied),
+      writeOff: fromUnits(writeOff),
+      remaining: fromUnits(shortfall - writeOff),
+    });
   }
   if (appliedTotal > line) {
     throw new StatementSettlementError(
@@ -136,7 +172,10 @@ export function planStatementSettlement(input: {
   const onAccount = line - appliedTotal;
   if (input.writeOff) {
     if (writeOffTotal === 0n) {
-      throw new StatementSettlementError("Every selected document is paid in full, so there is nothing to write off.", "Clear the write-off option.");
+      throw new StatementSettlementError(
+        "Every selected document is paid in full, so there is nothing to write off.",
+        "Clear the write-off option.",
+      );
     }
     if (onAccount > 0n) {
       throw new StatementSettlementError(
@@ -145,5 +184,10 @@ export function planStatementSettlement(input: {
       );
     }
   }
-  return { documents, appliedTotal: fromUnits(appliedTotal), onAccount: fromUnits(onAccount), writeOffTotal: fromUnits(writeOffTotal) };
+  return {
+    documents,
+    appliedTotal: fromUnits(appliedTotal),
+    onAccount: fromUnits(onAccount),
+    writeOffTotal: fromUnits(writeOffTotal),
+  };
 }

@@ -6,11 +6,38 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Badge, Button, CardDescription, CardHeader, CardTitle, Input, SearchSelect, Select, Textarea, UrlDrawer } from "@openbooks/ui";
+import {
+  Badge,
+  Button,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  SearchSelect,
+  Select,
+  Textarea,
+  UrlDrawer,
+} from "@openbooks/ui";
 import { ChevronRight, FileOutput, Plus, Send } from "lucide-react";
 import { pickString } from "../../../../../lib/list-params";
 import { ReportAttachmentCard } from "./close-setup-report-attachment";
-import { Check, ConfigListControls, EmptyList, Field, KeyValueRows, type Option, RowLink, SectionHeading, dataText, drawerHref, normalizeAttachments, objectToRows, post, pruneEmpty, rowsToObject } from "./close-setup-shared";
+import {
+  Check,
+  ConfigListControls,
+  EmptyList,
+  Field,
+  KeyValueRows,
+  type Option,
+  RowLink,
+  SectionHeading,
+  dataText,
+  drawerHref,
+  normalizeAttachments,
+  objectToRows,
+  post,
+  pruneEmpty,
+  rowsToObject,
+} from "./close-setup-shared";
 import type { PackageDraft, PackageRow, Props, ReportAttachment } from "./close-setup-types";
 
 export function PackagesTab(props: Props) {
@@ -29,14 +56,7 @@ export function PackagesTab(props: Props) {
         description={t("packages.description")}
         action={
           <Button size="sm" asChild>
-            <Link
-              href={drawerHref(
-                props.currentParams,
-                "packages",
-                "package",
-                "new",
-              )}
-            >
+            <Link href={drawerHref(props.currentParams, "packages", "package", "new")}>
               <Plus size={14} />
               {t("actions.newPackage")}
             </Link>
@@ -53,25 +73,14 @@ export function PackagesTab(props: Props) {
         {props.packages.map((item) => (
           <RowLink
             key={item.id}
-            href={drawerHref(
-              props.currentParams,
-              "packages",
-              "package",
-              item.id,
-            )}
+            href={drawerHref(props.currentParams, "packages", "package", item.id)}
           >
             <CardHeader className="p-4">
               <div className="flex justify-between gap-2">
-                <CardTitle className="text-base">
-                  {dataText(td, item.name)}
-                </CardTitle>
+                <CardTitle className="text-base">{dataText(td, item.name)}</CardTitle>
                 <div className="flex gap-1">
-                  {item.is_default ? (
-                    <Badge variant="success">{t("labels.default")}</Badge>
-                  ) : null}
-                  {!item.is_active ? (
-                    <Badge variant="outline">{t("labels.inactive")}</Badge>
-                  ) : null}
+                  {item.is_default ? <Badge variant="success">{t("labels.default")}</Badge> : null}
+                  {!item.is_active ? <Badge variant="outline">{t("labels.inactive")}</Badge> : null}
                   <ChevronRight size={16} className="text-slate-400" />
                 </div>
               </div>
@@ -84,12 +93,8 @@ export function PackagesTab(props: Props) {
           </RowLink>
         ))}
       </div>
-      {props.packages.length === 0 ? (
-        <EmptyList>{t("empty.packages")}</EmptyList>
-      ) : null}
-      {selected ? (
-        <PackageDrawer key={selected} row={row} props={props} />
-      ) : null}
+      {props.packages.length === 0 ? <EmptyList>{t("empty.packages")}</EmptyList> : null}
+      {selected ? <PackageDrawer key={selected} row={row} props={props} /> : null}
     </div>
   );
 }
@@ -98,12 +103,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
   const t = useTranslations("close.setup");
   const td = useTranslations("close");
   const router = useRouter();
-  const closeHref = drawerHref(
-    props.currentParams,
-    "packages",
-    "package",
-    null,
-  );
+  const closeHref = drawerHref(props.currentParams, "packages", "package", null);
   const DELIVERY_KNOWN = ["format", "combine", "coverPage", "cadence"];
   const [draft, setDraft] = useState<PackageDraft>(
     row
@@ -112,9 +112,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
           name: dataText(td, row.name),
           description: dataText(td, row.description) ?? "",
           reports: normalizeAttachments(row.reports),
-          recipientsText: Array.isArray(row.recipients)
-            ? row.recipients.join("\n")
-            : "",
+          recipientsText: Array.isArray(row.recipients) ? row.recipients.join("\n") : "",
           delivery: row.delivery ?? {},
           isDefault: row.is_default,
           isActive: row.is_active,
@@ -135,15 +133,11 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
           isActive: true,
         },
   );
-  const [advancedDelivery, setAdvancedDelivery] = useState<
-    Array<{ key: string; value: string }>
-  >(
+  const [advancedDelivery, setAdvancedDelivery] = useState<Array<{ key: string; value: string }>>(
     objectToRows(
       row?.delivery && typeof row.delivery === "object"
         ? Object.fromEntries(
-            Object.entries(row.delivery).filter(
-              ([key]) => !DELIVERY_KNOWN.includes(key),
-            ),
+            Object.entries(row.delivery).filter(([key]) => !DELIVERY_KNOWN.includes(key)),
           )
         : {},
     ),
@@ -151,9 +145,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [sendPeriod, setSendPeriod] = useState("");
-  const [sendBook, setSendBook] = useState(
-    props.selectedBookId || props.books[0]?.id || "",
-  );
+  const [sendBook, setSendBook] = useState(props.selectedBookId || props.books[0]?.id || "");
   const [sending, setSending] = useState(false);
   // One send-intent key per dialog instance, rotated after success: a
   // double-click reuses the key and dedupes in BullMQ and the email worker.
@@ -176,10 +168,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
       toast.success(t("packages.sendQueued"));
       setSendKey(crypto.randomUUID());
     } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
+      const message = error instanceof ApiResponseError ? error.message : t("errors.actionFailed");
       setActionError(message);
       toast.error(message);
     } finally {
@@ -202,9 +191,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
   const setAttachment = (index: number, patch: Partial<ReportAttachment>) =>
     setDraft({
       ...draft,
-      reports: attachments.map((item, i) =>
-        i === index ? { ...item, ...patch } : item,
-      ),
+      reports: attachments.map((item, i) => (i === index ? { ...item, ...patch } : item)),
     });
   async function save() {
     setBusy(true);
@@ -278,9 +265,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
         <Field label={t("fields.description")}>
           <Textarea
             value={draft.description}
-            onChange={(e) =>
-              setDraft({ ...draft, description: e.target.value })
-            }
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
           />
         </Field>
         <Field label={t("fields.reports")}>
@@ -298,9 +283,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
               ariaLabel={t("packages.addReport")}
             />
             {attachments.length === 0 ? (
-              <p className="text-xs text-slate-400">
-                {t("packages.noReports")}
-              </p>
+              <p className="text-xs text-slate-400">{t("packages.noReports")}</p>
             ) : (
               <div className="space-y-2">
                 {attachments.map((attachment, index) => (
@@ -322,16 +305,11 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
             )}
           </div>
         </Field>
-        <Field
-          label={t("fields.recipients")}
-          hint={t("packages.recipientsHint")}
-        >
+        <Field label={t("fields.recipients")} hint={t("packages.recipientsHint")}>
           <Textarea
             rows={4}
             value={draft.recipientsText}
-            onChange={(e) =>
-              setDraft({ ...draft, recipientsText: e.target.value })
-            }
+            onChange={(e) => setDraft({ ...draft, recipientsText: e.target.value })}
           />
         </Field>
         <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
@@ -339,9 +317,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
               {t("delivery.title")}
             </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t("delivery.intro")}
-            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t("delivery.intro")}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("delivery.format")}>
@@ -386,10 +362,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
               {t("delivery.advanced")}
             </summary>
             <div className="pt-2">
-              <KeyValueRows
-                rows={advancedDelivery}
-                onChange={setAdvancedDelivery}
-              />
+              <KeyValueRows rows={advancedDelivery} onChange={setAdvancedDelivery} />
             </div>
           </details>
         </div>
@@ -418,17 +391,12 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
               </p>
             </div>
             {props.periods.length === 0 ? (
-              <p className="text-xs text-slate-400">
-                {t("packages.sendNoPeriods")}
-              </p>
+              <p className="text-xs text-slate-400">{t("packages.sendNoPeriods")}</p>
             ) : (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label={t("fields.book")}>
-                    <Select
-                      value={sendBook}
-                      onChange={(e) => setSendBook(e.target.value)}
-                    >
+                    <Select value={sendBook} onChange={(e) => setSendBook(e.target.value)}>
                       {props.books.map((book) => (
                         <option key={book.id} value={book.id}>
                           {book.name}
@@ -437,10 +405,7 @@ export function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }
                     </Select>
                   </Field>
                   <Field label={t("packages.sendPeriod")}>
-                    <Select
-                      value={sendPeriod}
-                      onChange={(e) => setSendPeriod(e.target.value)}
-                    >
+                    <Select value={sendPeriod} onChange={(e) => setSendPeriod(e.target.value)}>
                       <option value="">{t("packages.selectPeriod")}</option>
                       {props.periods.map((period) => (
                         <option key={period.id} value={period.id}>

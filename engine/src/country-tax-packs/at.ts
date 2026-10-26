@@ -4,22 +4,79 @@ const AT_U30_2026: TaxReturnPack = {
   code: "AT_U30",
   name: "Umsatzsteuervoranmeldung (U 30) — USt advance return",
   country: "AT",
-  jurisdiction: { code: "AT", name: "Austria — USt territory", country: "AT", level: "country", taxType: "vat" },
+  jurisdiction: {
+    code: "AT",
+    name: "Austria — USt territory",
+    country: "AT",
+    level: "country",
+    taxType: "vat",
+  },
   defaultFrequency: "monthly",
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://finanzonline.bmf.gv.at/",
-  watermark: "Working copy — review reverse-charge, intra-EU and special-scheme treatment, then file through FinanzOnline",
+  watermark:
+    "Working copy — review reverse-charge, intra-EU and special-scheme treatment, then file through FinanzOnline",
   boxes: [
-    { lineCode: "000", label: "KZ 000 — Gesamtbetrag der Bemessungsgrundlage für Lieferungen und sonstige Leistungen", sign: 1, sequence: 10 },
-    { lineCode: "022", label: "KZ 022 — Bemessungsgrundlage 20% Normalsteuersatz", sign: 1, sequence: 20 },
-    { lineCode: "029", label: "KZ 029 — Bemessungsgrundlage 10% ermäßigter Steuersatz", sign: 1, sequence: 30 },
-    { lineCode: "006", label: "KZ 006 — Bemessungsgrundlage 13% ermäßigter Steuersatz", sign: 1, sequence: 40 },
-    { lineCode: "037", label: "KZ 037 — Bemessungsgrundlage 19% Jungholz/Mittelberg (German customs union)", sign: 1, sequence: 45 },
-    { lineCode: "060", label: "KZ 060 — Gesamtbetrag der abziehbaren Vorsteuern", sign: 1, sequence: 50 },
-    { lineCode: "095", label: "KZ 095 — Vorauszahlung (Zahllast) / Überschuss (Gutschrift)", sign: 1, sequence: 60 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 70, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 80, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "000",
+      label:
+        "KZ 000 — Gesamtbetrag der Bemessungsgrundlage für Lieferungen und sonstige Leistungen",
+      sign: 1,
+      sequence: 10,
+    },
+    {
+      lineCode: "022",
+      label: "KZ 022 — Bemessungsgrundlage 20% Normalsteuersatz",
+      sign: 1,
+      sequence: 20,
+    },
+    {
+      lineCode: "029",
+      label: "KZ 029 — Bemessungsgrundlage 10% ermäßigter Steuersatz",
+      sign: 1,
+      sequence: 30,
+    },
+    {
+      lineCode: "006",
+      label: "KZ 006 — Bemessungsgrundlage 13% ermäßigter Steuersatz",
+      sign: 1,
+      sequence: 40,
+    },
+    {
+      lineCode: "037",
+      label: "KZ 037 — Bemessungsgrundlage 19% Jungholz/Mittelberg (German customs union)",
+      sign: 1,
+      sequence: 45,
+    },
+    {
+      lineCode: "060",
+      label: "KZ 060 — Gesamtbetrag der abziehbaren Vorsteuern",
+      sign: 1,
+      sequence: 50,
+    },
+    {
+      lineCode: "095",
+      label: "KZ 095 — Vorauszahlung (Zahllast) / Überschuss (Gutschrift)",
+      sign: 1,
+      sequence: 60,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all configured rates",
+      sign: -1,
+      sequence: 70,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all configured rates",
+      sign: 1,
+      sequence: 80,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -80,19 +137,22 @@ export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "bmf_u30_2023",
-      title: "BMF — U30 Umsatzsteuervoranmeldung 2023 (form U 30-PDF-2023, version 16.12.2022; box applicability)",
+      title:
+        "BMF — U30 Umsatzsteuervoranmeldung 2023 (form U 30-PDF-2023, version 16.12.2022; box applicability)",
       url: "https://www.wko.at/ooe/aussenwirtschaft/importhandbuch/u30-formular-umsatzsteuervoranmeldung.pdf",
       asOf: "2026-08-01",
     },
     {
       id: "bmf_u30a_2026",
-      title: "BMF — Ausfüllhilfe zur Umsatzsteuervoranmeldung (U 30a) für 2026 (filing thresholds and FinanzOnline duty)",
+      title:
+        "BMF — Ausfüllhilfe zur Umsatzsteuervoranmeldung (U 30a) für 2026 (filing thresholds and FinanzOnline duty)",
       url: "https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfd/2026/U30a.pdf",
       asOf: "2026-08-01",
     },
     {
       id: "usp_ust_rates",
-      title: "USP (BMF-responsible) — Steuersätze und Steuerbefreiungen der Umsatzsteuer (20/10/13 bands; schedules open at this applicability, not origin)",
+      title:
+        "USP (BMF-responsible) — Steuersätze und Steuerbefreiungen der Umsatzsteuer (20/10/13 bands; schedules open at this applicability, not origin)",
       url: "https://www.usp.gv.at/themen/steuern-finanzen/umsatzsteuer-ueberblick/steuersaetze-und-steuerbefreiungen-der-umsatzsteuer.html",
       asOf: "2026-08-01",
     },

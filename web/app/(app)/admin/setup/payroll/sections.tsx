@@ -1,39 +1,45 @@
-import 'server-only'
+import "server-only";
 
-import { NavigationPicker } from '@/components/module-home/navigation-picker'
-import { PageHeader } from '@openbooks/ui'
-import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { NavigationPicker } from "@/components/module-home/navigation-picker";
+import { PageHeader } from "@openbooks/ui";
+import { ModuleHomeTabs } from "../../../../../components/module-home/ui";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import { payrollSettings, statutoryHolidayPayEnabled } from "@openbooks/engine/payroll/run-setup";
-import { NET_PAY_CLEARING_SETTINGS_KEY, parseNetPayClearingWindows } from "@openbooks/engine/payroll/net-pay-clearing";
+import {
+  NET_PAY_CLEARING_SETTINGS_KEY,
+  parseNetPayClearingWindows,
+} from "@openbooks/engine/payroll/net-pay-clearing";
 import { type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
-import { payrollPaymentMethodSettings } from '@openbooks/engine/payroll/payment-method'
-import { payrollSetupState } from '@openbooks/engine/payroll/readiness'
-import { payrollBankProfiles } from '@openbooks/engine/payroll/bank-file'
+import { payrollPaymentMethodSettings } from "@openbooks/engine/payroll/payment-method";
+import { payrollSetupState } from "@openbooks/engine/payroll/readiness";
+import { payrollBankProfiles } from "@openbooks/engine/payroll/bank-file";
 import {
   installablePayrollPacks,
   packRemittanceVendorSettingsKeys,
   packSlotState,
   PAYROLL_COUNTRY_PACKS,
-} from '@openbooks/engine/payroll/packs'
-import { payrollTaxYearCoverage } from '@openbooks/engine/payroll/packs'
-import { pdfEncryptionAvailable } from '@openbooks/pdf'
-import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
-import { can, getAuthz } from '../../../../../lib/authz'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
-import { PAYROLL_HOLIDAYS_ENTITY } from '../../../../../lib/setup/payroll-holidays'
-import { SetupEntitySection } from '../[entity]/SetupEntitySection'
-import { DerivedRulePreviewSection } from './DerivedRulePreviewSection'
-import { HolidayCalendarSection } from './HolidayCalendarSection'
-import { PayrollCountryPacks, type PackCoverage } from './PayrollCountryPacks'
-import { PayrollPaydaySettings } from './PayrollPaydaySettings'
-import { PayrollSetupLauncher, PayrollSetupWorkspace } from '../../../../../components/viewspec/native-widgets.client'
-import { StatHolidayPaySection } from './StatHolidayPaySection'
-import { StatutoryRatesSection } from './StatutoryRatesSection'
-import { EmployerFactsSection } from './EmployerFactsSection'
-import { WorkSchedulesSection } from './WorkSchedulesSection'
+} from "@openbooks/engine/payroll/packs";
+import { payrollTaxYearCoverage } from "@openbooks/engine/payroll/packs";
+import { pdfEncryptionAvailable } from "@openbooks/pdf";
+import { stubPasswordPolicy } from "../../../../../lib/payroll-outputs";
+import { can, getAuthz } from "../../../../../lib/authz";
+import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
+import { SETUP_ENTITY_BY_KEY } from "../../../../../lib/setup/registry";
+import { PAYROLL_HOLIDAYS_ENTITY } from "../../../../../lib/setup/payroll-holidays";
+import { SetupEntitySection } from "../[entity]/SetupEntitySection";
+import { DerivedRulePreviewSection } from "./DerivedRulePreviewSection";
+import { HolidayCalendarSection } from "./HolidayCalendarSection";
+import { PayrollCountryPacks, type PackCoverage } from "./PayrollCountryPacks";
+import { PayrollPaydaySettings } from "./PayrollPaydaySettings";
+import {
+  PayrollSetupLauncher,
+  PayrollSetupWorkspace,
+} from "../../../../../components/viewspec/native-widgets.client";
+import { StatHolidayPaySection } from "./StatHolidayPaySection";
+import { StatutoryRatesSection } from "./StatutoryRatesSection";
+import { EmployerFactsSection } from "./EmployerFactsSection";
+import { WorkSchedulesSection } from "./WorkSchedulesSection";
 
 /**
  * Tab-body slots for the payroll setup workspace, including its shared header.
@@ -64,17 +70,25 @@ export function PayrollSetupTabs({
   tabsAria,
   subTabs,
 }: {
-  groups: { key: string; label: string; firstTab: string }[]
-  activeGroup: string
-  tabsAria: string
-  subTabs: { href: string; label: string; active: boolean }[]
+  groups: { key: string; label: string; firstTab: string }[];
+  activeGroup: string;
+  tabsAria: string;
+  subTabs: { href: string; label: string; active: boolean }[];
 }) {
   return (
     <>
-      <NavigationPicker label={tabsAria} value={activeGroup} options={groups.map((group) => ({ key: group.key, label: group.label, href: `/admin/setup/payroll?tab=${group.firstTab}` }))} />
+      <NavigationPicker
+        label={tabsAria}
+        value={activeGroup}
+        options={groups.map((group) => ({
+          key: group.key,
+          label: group.label,
+          href: `/admin/setup/payroll?tab=${group.firstTab}`,
+        }))}
+      />
       <ModuleHomeTabs tabs={subTabs} />
     </>
-  )
+  );
 }
 
 /**
@@ -87,16 +101,18 @@ export function PayrollSetupHeader({
   launcher,
   showLauncher = true,
 }: {
-  title: string
-  description: string
-  launcher: PayrollLauncherData
-  showLauncher?: boolean
+  title: string;
+  description: string;
+  launcher: PayrollLauncherData;
+  showLauncher?: boolean;
 }) {
-  return <PageHeader
-    title={title}
-    description={description}
-    actions={showLauncher ? <PayrollSetupLauncher variant="button" {...launcher} /> : null}
-  />
+  return (
+    <PageHeader
+      title={title}
+      description={description}
+      actions={showLauncher ? <PayrollSetupLauncher variant="button" {...launcher} /> : null}
+    />
+  );
 }
 
 /**
@@ -106,18 +122,18 @@ export function PayrollSetupHeader({
  * both paths share the banner chrome.
  */
 export function PayrollSetupBanner({ launcher }: { launcher: PayrollLauncherData }) {
-  return launcher.missing > 0 ? <PayrollSetupLauncher variant="banner" {...launcher} /> : null
+  return launcher.missing > 0 ? <PayrollSetupLauncher variant="banner" {...launcher} /> : null;
 }
 
 export interface PayrollLauncherData {
-  missing: number
-  vendorKeysByCountry: Record<string, string[]>
-  frequencies: { value: string; labelKey: string }[]
-  canManageEntities: boolean
-  schedules: { id: string; name: string }[]
+  missing: number;
+  vendorKeysByCountry: Record<string, string[]>;
+  frequencies: { value: string; labelKey: string }[];
+  canManageEntities: boolean;
+  schedules: { id: string; name: string }[];
   /** Active legal entities, for the wizard's pay-schedule subsidiary step. */
-  subsidiaries: { id: string; name: string }[]
-  bankProfiles: { id: string; name: string; format: string; configured: boolean }[]
+  subsidiaries: { id: string; name: string }[];
+  bankProfiles: { id: string; name: string; format: string; configured: boolean }[];
 }
 
 /**
@@ -132,32 +148,41 @@ export async function launcherDataFor({
   canManageEntities,
   allowedSubsidiaryIds,
 }: {
-  orgId: string
-  canManageEntities: boolean
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope
+  orgId: string;
+  canManageEntities: boolean;
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<PayrollLauncherData> {
   const [setup, bankProfiles, schedulesRes, subsidiariesRes] = await Promise.all([
     payrollSetupState(orgId, allowedSubsidiaryIds),
     payrollBankProfiles(orgId),
-    db.execute<{ id: string; name: string }>(sql`
+    db.execute<{ id: string; name: string }>(
+      sql`
       select id, name from pay_schedules
-       where org_id = ${orgId} and is_active order by name`, 'objects'),
-    db.execute<{ id: string; name: string }>(sql`
+       where org_id = ${orgId} and is_active order by name`,
+      "objects",
+    ),
+    db.execute<{ id: string; name: string }>(
+      sql`
       select id, name from subsidiaries
-       where org_id = ${orgId} and is_active and not is_elimination order by name`, 'objects'),
-  ])
+       where org_id = ${orgId} and is_active and not is_elimination order by name`,
+      "objects",
+    ),
+  ]);
   // The pay-schedule form options come from the registry entity's OWN field
   // declaration — the wizard renders the same select the setup drawer does.
-  const scheduleEntity = SETUP_ENTITY_BY_KEY.get('pay-schedules')
-  const frequencies = (scheduleEntity?.fields.find((f) => f.key === 'frequency')?.options ?? [])
+  const scheduleEntity = SETUP_ENTITY_BY_KEY.get("pay-schedules");
+  const frequencies = (scheduleEntity?.fields.find((f) => f.key === "frequency")?.options ?? [])
     .filter((option): option is { value: string; labelKey: string } => Boolean(option.labelKey))
-    .map((option) => ({ value: option.value, labelKey: option.labelKey }))
+    .map((option) => ({ value: option.value, labelKey: option.labelKey }));
   // Vendor fields per pack come from the pack declarations, so a new pack's
   // vendors step exists the moment the pack declares its keys.
   const vendorKeysByCountry: Record<string, string[]> = Object.fromEntries(
-    Object.keys(PAYROLL_COUNTRY_PACKS).map((country) => [country, packRemittanceVendorSettingsKeys(country)]),
-  )
-  const missing = setup.checks.filter((check) => !check.ok && check.severity === 'blocker').length
+    Object.keys(PAYROLL_COUNTRY_PACKS).map((country) => [
+      country,
+      packRemittanceVendorSettingsKeys(country),
+    ]),
+  );
+  const missing = setup.checks.filter((check) => !check.ok && check.severity === "blocker").length;
   return {
     missing,
     vendorKeysByCountry,
@@ -171,23 +196,29 @@ export async function launcherDataFor({
       format: p.format,
       configured: p.configured,
     })),
-  }
+  };
 }
 
 /** Country packs tab: installed countries, component count, tax-year coverage. */
 export async function PacksTabSlot() {
-  const authz = await getAuthz()
-  if (!authz) return null
-  const orgId = authz.user.orgId
+  const authz = await getAuthz();
+  if (!authz) return null;
+  const orgId = authz.user.orgId;
   const [countriesRes, componentsRes] = await Promise.all([
-    db.execute<{ countries: unknown }>(sql`select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`, 'objects'),
-    db.execute<{ n: number }>(sql`
+    db.execute<{ countries: unknown }>(
+      sql`select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`,
+      "objects",
+    ),
+    db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from pay_components
-       where org_id = ${orgId} and system_key is not null`, 'objects'),
-  ])
-  const raw = countriesRes[0]?.countries
-  const installedCountries = Array.isArray(raw) ? raw.map(String) : []
-  const componentCount = Number(componentsRes[0]?.n ?? 0)
+       where org_id = ${orgId} and system_key is not null`,
+      "objects",
+    ),
+  ]);
+  const raw = countriesRes[0]?.countries;
+  const installedCountries = Array.isArray(raw) ? raw.map(String) : [];
+  const componentCount = Number(componentsRes[0]?.n ?? 0);
   return (
     <PayrollCountryPacks
       installedCountries={installedCountries}
@@ -195,48 +226,55 @@ export async function PacksTabSlot() {
       componentCount={componentCount}
       /* The packs' OWN tax-year declarations — every installed pack's loaded
          years and editions, not one country's constants imported by name. */
-      coverage={payrollTaxYearCoverage().map(
-        (entry): PackCoverage => ({
-          country: entry.country,
-          supported: entry.supported,
-          draft: entry.draft,
-          ratesModule: entry.ratesModule,
-          editions: entry.editions.map((edition) => ({
-            year: edition.year,
-            label: edition.label,
-            effectiveFrom: edition.effectiveFrom,
-            status: edition.status,
-            region: edition.region ?? null,
-          })),
-        }),
-      )}
+      coverage={payrollTaxYearCoverage().map((entry): PackCoverage => ({
+        country: entry.country,
+        supported: entry.supported,
+        draft: entry.draft,
+        ratesModule: entry.ratesModule,
+        editions: entry.editions.map((edition) => ({
+          year: edition.year,
+          label: edition.label,
+          effectiveFrom: edition.effectiveFrom,
+          status: edition.status,
+          region: edition.region ?? null,
+        })),
+      }))}
     />
-  )
+  );
 }
 
 /** Accounts & posting tab: settings blob, statutory slots, pickers. */
 export async function AccountsTabSlot() {
-  const authz = await getAuthz()
-  if (!authz) return null
-  const orgId = authz.user.orgId
-  const allowedSubsidiaryIds = authz.allowedSubsidiaryIds ?? undefined
+  const authz = await getAuthz();
+  if (!authz) return null;
+  const orgId = authz.user.orgId;
+  const allowedSubsidiaryIds = authz.allowedSubsidiaryIds ?? undefined;
   const [settings, blobRes, accountsRes, vendorsRes] = await Promise.all([
     payrollSettings(orgId, allowedSubsidiaryIds),
-    db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`, 'objects'),
-    db.execute<{ id: string; number: string | null; name: string }>(sql`
+    db.execute<{ p: Record<string, unknown> | null }>(
+      sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+      "objects",
+    ),
+    db.execute<{ id: string; number: string | null; name: string }>(
+      sql`
       select id, number, name from accounts
        where org_id = ${orgId} and not is_summary and is_active
-       order by number nulls last, name`, 'objects'),
-    db.execute<{ id: string; name: string }>(sql`
+       order by number nulls last, name`,
+      "objects",
+    ),
+    db.execute<{ id: string; name: string }>(
+      sql`
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
        where p.org_id = ${orgId} and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null, { orgWideNull: true })}
-       order by p.display_name`, 'objects'),
-  ])
-  const blob = blobRes[0]?.p ?? {}
-  const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const packs = await packSlotState(orgId, installed)
+       order by p.display_name`,
+      "objects",
+    ),
+  ]);
+  const blob = blobRes[0]?.p ?? {};
+  const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : [];
+  const packs = await packSlotState(orgId, installed);
   return (
     <PayrollSetupWorkspace
       settings={settings}
@@ -248,21 +286,22 @@ export async function AccountsTabSlot() {
       vendors={vendorsRes.map((vendor) => ({ id: vendor.id, label: vendor.name }))}
       netPaySettlementClearing={parseNetPayClearingWindows(blob[NET_PAY_CLEARING_SETTINGS_KEY])}
     />
-  )
+  );
 }
 
 /** Payday tab: rails, stub delivery, EFT originators. */
 export async function PaydayTabSlot() {
-  const authz = await getAuthz()
-  if (!authz) return null
-  const orgId = authz.user.orgId
-  const [paymentMethods, stubPassword, encryptionAvailable, bankProfiles, settings] = await Promise.all([
-    payrollPaymentMethodSettings(orgId),
-    stubPasswordPolicy(orgId),
-    pdfEncryptionAvailable(),
-    payrollBankProfiles(orgId),
-    payrollSettings(orgId),
-  ])
+  const authz = await getAuthz();
+  if (!authz) return null;
+  const orgId = authz.user.orgId;
+  const [paymentMethods, stubPassword, encryptionAvailable, bankProfiles, settings] =
+    await Promise.all([
+      payrollPaymentMethodSettings(orgId),
+      stubPasswordPolicy(orgId),
+      pdfEncryptionAvailable(),
+      payrollBankProfiles(orgId),
+      payrollSettings(orgId),
+    ]);
   return (
     <PayrollPaydaySettings
       paymentMethods={paymentMethods}
@@ -276,35 +315,35 @@ export async function PaydayTabSlot() {
         configured: p.configured,
       }))}
     />
-  )
+  );
 }
 
 /** Statutory rates tab: fully client-rendered over pack-declared slots. */
 export function RatesTabSlot() {
-  return <StatutoryRatesSection />
+  return <StatutoryRatesSection />;
 }
 
 /** Pack-declared employer facts tab: audited legal-employer values. */
 export function EmployerFactsTabSlot() {
-  return <EmployerFactsSection />
+  return <EmployerFactsSection />;
 }
 
 /** Work schedules tab: manage gate re-derived from the session. */
 export async function WorkSchedulesTabSlot() {
-  const authz = await getAuthz()
-  if (!authz) return null
-  return <WorkSchedulesSection canManage={can(authz, 'admin.setup.manage')} />
+  const authz = await getAuthz();
+  if (!authz) return null;
+  return <WorkSchedulesSection canManage={can(authz, "admin.setup.manage")} />;
 }
 
 /** Derived-rule preview tab: org-derived server computation over ?rule/?from/?to. */
 export async function DerivedPreviewTabSlot({
   sp,
 }: {
-  sp: Record<string, string | string[] | undefined>
+  sp: Record<string, string | string[] | undefined>;
 }) {
-  const authz = await getAuthz()
-  if (!authz) return null
-  return <DerivedRulePreviewSection authz={authz} orgId={authz.user.orgId} searchParams={sp} />
+  const authz = await getAuthz();
+  if (!authz) return null;
+  return <DerivedRulePreviewSection authz={authz} orgId={authz.user.orgId} searchParams={sp} />;
 }
 
 /** Holidays tab: stat-pay election plus the registry entity list. */
@@ -312,15 +351,19 @@ export async function HolidaysTabSlot({
   sp,
   basePath,
 }: {
-  sp: Record<string, string | string[] | undefined>
-  basePath: string
+  sp: Record<string, string | string[] | undefined>;
+  basePath: string;
 }) {
-  const authz = await getAuthz()
-  if (!authz) return null
+  const authz = await getAuthz();
+  if (!authz) return null;
   // Prefer the registered descriptor the moment it exists so there is never
   // a second copy of the entity's shape in play.
-  const entity = SETUP_ENTITY_BY_KEY.get(PAYROLL_HOLIDAYS_ENTITY.key) ?? PAYROLL_HOLIDAYS_ENTITY
-  const enabled = await statutoryHolidayPayEnabled(authz.user.orgId, undefined, authz.allowedSubsidiaryIds)
+  const entity = SETUP_ENTITY_BY_KEY.get(PAYROLL_HOLIDAYS_ENTITY.key) ?? PAYROLL_HOLIDAYS_ENTITY;
+  const enabled = await statutoryHolidayPayEnabled(
+    authz.user.orgId,
+    undefined,
+    authz.allowedSubsidiaryIds,
+  );
   return (
     <>
       {/* The stat-pay election lives WITH the holiday elections it governs. */}
@@ -330,20 +373,20 @@ export async function HolidaysTabSlot({
         orgId={authz.user.orgId}
         searchParams={sp}
         basePath={basePath}
-        canManage={can(authz, 'admin.setup.manage')}
+        canManage={can(authz, "admin.setup.manage")}
         allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
       />
     </>
-  )
+  );
 }
 
 /** Resolved holiday calendar tab: org-derived server computation. */
 export async function HolidayCalendarTabSlot({
   sp,
 }: {
-  sp: Record<string, string | string[] | undefined>
+  sp: Record<string, string | string[] | undefined>;
 }) {
-  const authz = await getAuthz()
-  if (!authz) return null
-  return <HolidayCalendarSection orgId={authz.user.orgId} searchParams={sp} />
+  const authz = await getAuthz();
+  if (!authz) return null;
+  return <HolidayCalendarSection orgId={authz.user.orgId} searchParams={sp} />;
 }

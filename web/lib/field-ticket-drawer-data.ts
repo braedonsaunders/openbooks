@@ -1,16 +1,19 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import type { FieldTicketDrawerProps, TicketPayload } from '../app/(app)/field-tickets/FieldTicketDrawer'
-import type { FieldTicketCreateDrawerProps } from '../app/(app)/field-tickets/FieldTicketCreateDrawer'
-import { can, type Authz } from './authz'
-import { resolveFormLayout } from './customization/resolve'
-import { isFeatureEnabled } from './features'
-import { FieldTicketError, loadFieldTicket } from './field-tickets'
+import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import type {
+  FieldTicketDrawerProps,
+  TicketPayload,
+} from "../app/(app)/field-tickets/FieldTicketDrawer";
+import type { FieldTicketCreateDrawerProps } from "../app/(app)/field-tickets/FieldTicketCreateDrawer";
+import { can, type Authz } from "./authz";
+import { resolveFormLayout } from "./customization/resolve";
+import { isFeatureEnabled } from "./features";
+import { FieldTicketError, loadFieldTicket } from "./field-tickets";
 
-type ScopeFilter = (column: string) => ReturnType<typeof sql>
+type ScopeFilter = (column: string) => ReturnType<typeof sql>;
 
 /**
  * Project picker rows for a ticket: active projects inside the legal-entity
@@ -18,7 +21,7 @@ type ScopeFilter = (column: string) => ReturnType<typeof sql>
  * proposes (project, then customer, then organization scope).
  */
 function ticketProjectOptions(orgId: string, today: string, legalEntityFilter: ScopeFilter) {
-  return db.execute<(FieldTicketDrawerProps['projects'])[number]>(sql`
+  return db.execute<FieldTicketDrawerProps["projects"][number]>(sql`
     select p.id, coalesce(p.code || ' · ' || p.name, p.name) as name,
            cust.display_name as "customerName",
            coalesce((
@@ -39,11 +42,11 @@ function ticketProjectOptions(orgId: string, today: string, legalEntityFilter: S
            ), 'weekly') as period
       from projects p
       left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
-        ${legalEntityFilter('cust.subsidiary_id')}
+        ${legalEntityFilter("cust.subsidiary_id")}
      where p.org_id = ${orgId} and p.is_active
-       ${legalEntityFilter('p.subsidiary_id')}
+       ${legalEntityFilter("p.subsidiary_id")}
      order by p.name
-     limit 2000`)
+     limit 2000`);
 }
 
 /**
@@ -54,27 +57,27 @@ function ticketProjectOptions(orgId: string, today: string, legalEntityFilter: S
 export async function loadFieldTicketCreateData({
   authz,
 }: {
-  authz: Authz
+  authz: Authz;
 }): Promise<FieldTicketCreateDrawerProps | null> {
-  if (!can(authz, 'time.manage')) return null
-  const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return null
-  const today = await businessToday(orgId)
+  if (!can(authz, "time.manage")) return null;
+  const orgId = authz.user.orgId;
+  if (!(await isFeatureEnabled(orgId, "fieldTickets"))) return null;
+  const today = await businessToday(orgId);
   // A restricted caller picks only projects in their legal entities: the
   // create route refuses any other with the uniform not-found.
-  const scope = authz.allowedSubsidiaryIds
+  const scope = authz.allowedSubsidiaryIds;
   // One pg array literal parameter; an empty scope sees no project. An
   // org-wide customer (no subsidiary) still names its in-scope project.
   const legalEntityFilter: ScopeFilter = (column) => {
-    if (!scope) return sql``
-    if (scope.size === 0) return sql` and false`
-    const inScope = sql`${sql.raw(column)} = any(${`{${[...scope].join(',')}}`}::uuid[])`
-    return column.startsWith('cust.')
+    if (!scope) return sql``;
+    if (scope.size === 0) return sql` and false`;
+    const inScope = sql`${sql.raw(column)} = any(${`{${[...scope].join(",")}}`}::uuid[])`;
+    return column.startsWith("cust.")
       ? sql` and (${sql.raw(column)} is null or ${inScope})`
-      : sql` and ${inScope}`
-  }
-  const projects = await ticketProjectOptions(orgId, today, legalEntityFilter)
-  return { createMode: true, projects: projects.rows, today }
+      : sql` and ${inScope}`;
+  };
+  const projects = await ticketProjectOptions(orgId, today, legalEntityFilter);
+  return { createMode: true, projects: projects.rows, today };
 }
 
 /**
@@ -88,68 +91,86 @@ export async function loadFieldTicketDrawerData({
   ticketId,
   formLayoutId,
 }: {
-  authz: Authz
-  ticketId: string
-  formLayoutId?: string
+  authz: Authz;
+  ticketId: string;
+  formLayoutId?: string;
 }): Promise<FieldTicketDrawerProps | null> {
-  if (!can(authz, 'time.read')) return null
+  if (!can(authz, "time.read")) return null;
 
-  const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return null
+  const orgId = authz.user.orgId;
+  if (!(await isFeatureEnabled(orgId, "fieldTickets"))) return null;
 
-  let ticket: TicketPayload
+  let ticket: TicketPayload;
   try {
     ticket = (await loadFieldTicket(orgId, ticketId, {
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    })) as unknown as TicketPayload
+    })) as unknown as TicketPayload;
   } catch (error) {
-    if (error instanceof FieldTicketError) return null
-    throw error
+    if (error instanceof FieldTicketError) return null;
+    throw error;
   }
 
-  const ticketSubsidiaryId = (ticket as TicketPayload & {
-    fieldTicket: { subsidiaryId?: string | null }
-  }).fieldTicket.subsidiaryId ?? null
+  const ticketSubsidiaryId =
+    (
+      ticket as TicketPayload & {
+        fieldTicket: { subsidiaryId?: string | null };
+      }
+    ).fieldTicket.subsidiaryId ?? null;
   // A non-null ticket subsidiary is authoritative for every legal-entity
   // aware picker. Unrestricted users retain the org-wide picker on an empty
   // draft (whose subsidiary is still null).
-  const legalEntityFilter = (column: string) => ticketSubsidiaryId
-    ? sql` and ${sql.raw(column)} = ${ticketSubsidiaryId}`
-    : sql``
+  const legalEntityFilter = (column: string) =>
+    ticketSubsidiaryId ? sql` and ${sql.raw(column)} = ${ticketSubsidiaryId}` : sql``;
 
-  const [equipmentEnabled, inventoryEnabled, progressEnabled, schedulingEnabled, today] = await Promise.all([
-    isFeatureEnabled(orgId, 'equipment'),
-    isFeatureEnabled(orgId, 'inventory'),
-    isFeatureEnabled(orgId, 'projectProgress'),
-    isFeatureEnabled(orgId, 'hrmShiftPlanning'),
-    businessToday(orgId),
-  ])
+  const [equipmentEnabled, inventoryEnabled, progressEnabled, schedulingEnabled, today] =
+    await Promise.all([
+      isFeatureEnabled(orgId, "equipment"),
+      isFeatureEnabled(orgId, "inventory"),
+      isFeatureEnabled(orgId, "projectProgress"),
+      isFeatureEnabled(orgId, "hrmShiftPlanning"),
+      businessToday(orgId),
+    ]);
   // Inventory and Equipment stay on stored ticket lines. The picker only
   // omits the kind once the Features switch is off so a draft cannot add
   // a new one.
   const catalogItemKinds = [
-    ...(equipmentEnabled ? ['equipment_charge'] : []),
-    'non_inventory',
-    'other_charge',
-    ...(inventoryEnabled ? ['inventory'] : []),
-    'service',
-  ]
-  const [employees, laborItems, timeTypes, catalogItems, projects, projectTasks, equipmentUnits, resolvedForm] =
-    (await Promise.all([
-      db.execute<(FieldTicketDrawerProps['employees'])[number]>(sql`
+    ...(equipmentEnabled ? ["equipment_charge"] : []),
+    "non_inventory",
+    "other_charge",
+    ...(inventoryEnabled ? ["inventory"] : []),
+    "service",
+  ];
+  const [
+    employees,
+    laborItems,
+    timeTypes,
+    catalogItems,
+    projects,
+    projectTasks,
+    equipmentUnits,
+    resolvedForm,
+  ] = await Promise.all([
+    db.execute<FieldTicketDrawerProps["employees"][number]>(
+      sql`
         select p.id, p.display_name as name from parties p
          where p.org_id = ${orgId} and p.is_active
            and exists (
              select 1 from employee_roles r
               where r.party_id = p.id and r.org_id = p.org_id and r.is_active
            )
-           ${legalEntityFilter('p.subsidiary_id')}
-         order by p.display_name`, 'objects'),
-      db.execute<(FieldTicketDrawerProps['laborItems'])[number]>(sql`
+           ${legalEntityFilter("p.subsidiary_id")}
+         order by p.display_name`,
+      "objects",
+    ),
+    db.execute<FieldTicketDrawerProps["laborItems"][number]>(
+      sql`
         select id, name from items
          where org_id = ${orgId} and is_active and kind in ('labor', 'service')
-         order by name`, 'objects'),
-      db.execute<(FieldTicketDrawerProps['timeTypes'])[number]>(sql`
+         order by name`,
+      "objects",
+    ),
+    db.execute<FieldTicketDrawerProps["timeTypes"][number]>(
+      sql`
         select tt.id, tt.name, tt.bill_multiplier
           from time_types tt
          where tt.org_id = ${orgId}
@@ -173,44 +194,62 @@ export async function loadFieldTicketDrawerData({
                   and snapshot.superseded_at is null
              )
            )
-         order by tt.bill_multiplier, tt.name`, 'objects'),
-      db.execute<(FieldTicketDrawerProps['catalogItems'])[number]>(sql`
+         order by tt.bill_multiplier, tt.name`,
+      "objects",
+    ),
+    db.execute<FieldTicketDrawerProps["catalogItems"][number]>(
+      sql`
         select id, name, kind, default_rate from items
          where org_id = ${orgId} and is_active
-           and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
-         order by kind, name`, 'objects'),
-      ticketProjectOptions(orgId, today, legalEntityFilter),
-      ticket.projectId
-        ? db.execute<(FieldTicketDrawerProps['projectTasks'])[number]>(sql`
+           and kind in (${sql.join(
+             catalogItemKinds.map((kind) => sql`${kind}`),
+             sql`, `,
+           )})
+         order by kind, name`,
+      "objects",
+    ),
+    ticketProjectOptions(orgId, today, legalEntityFilter),
+    ticket.projectId
+      ? db.execute<FieldTicketDrawerProps["projectTasks"][number]>(
+          sql`
             select id, code, name, status, estimated_hours as "estimatedHours",
                    budget_quantity::text as "budgetQuantity", budget_unit as "budgetUnit"
               from project_tasks
              where org_id = ${orgId} and project_id = ${ticket.projectId}
-               ${ticketSubsidiaryId ? sql`and exists (
+               ${
+                 ticketSubsidiaryId
+                   ? sql`and exists (
                  select 1 from projects p
                   where p.id = project_tasks.project_id and p.org_id = project_tasks.org_id
                     and p.subsidiary_id = ${ticketSubsidiaryId}
-               )` : sql``}
-             order by code nulls last, name`, 'objects')
-        : Promise.resolve([]),
-      equipmentEnabled
-        ? db.execute<(FieldTicketDrawerProps['equipmentUnits'])[number]>(sql`
+               )`
+                   : sql``
+               }
+             order by code nulls last, name`,
+          "objects",
+        )
+      : Promise.resolve([]),
+    equipmentEnabled
+      ? db.execute<FieldTicketDrawerProps["equipmentUnits"][number]>(
+          sql`
             select id, name, unit_number as "unitNumber", charge_item_id as "chargeItemId"
              from equipment_units
              where org_id = ${orgId} and status = 'active' and charge_item_id is not null
-               ${legalEntityFilter('subsidiary_id')}
-             order by unit_number, name`, 'objects')
-        : Promise.resolve([]),
-      resolveFormLayout({
-        orgId,
-        userId: authz.user.id,
-        recordType: 'field_ticket',
-        userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: [],
-        lineDefs: [],
-        explicitLayoutId: formLayoutId,
-      }),
-    ]))
+               ${legalEntityFilter("subsidiary_id")}
+             order by unit_number, name`,
+          "objects",
+        )
+      : Promise.resolve([]),
+    resolveFormLayout({
+      orgId,
+      userId: authz.user.id,
+      recordType: "field_ticket",
+      userRoles: authz.user.roles.map(({ key }) => key),
+      headerDefs: [],
+      lineDefs: [],
+      explicitLayoutId: formLayoutId,
+    }),
+  ]);
 
   return {
     ticket,
@@ -227,7 +266,7 @@ export async function loadFieldTicketDrawerData({
     layout: resolvedForm.layout,
     availableLayouts: resolvedForm.available,
     currentLayoutId: resolvedForm.row?.id ?? null,
-    canCustomize: can(authz, 'admin.customization.manage'),
-    canManage: can(authz, 'time.manage'),
-  }
+    canCustomize: can(authz, "admin.customization.manage"),
+    canManage: can(authz, "time.manage"),
+  };
 }

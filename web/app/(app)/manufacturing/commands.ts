@@ -4,20 +4,19 @@ import type {
   ManufacturingRow,
   ManufacturingView,
 } from "@openbooks/engine/manufacturing/workspace";
-import { add,neg,cmp,mul,div } from "@openbooks/engine/money/money";
+import { add, neg, cmp, mul, div } from "@openbooks/engine/money/money";
 export type Choice = { value: string; label: string; parentId?: string | null };
 export interface Field {
   key: string;
-  type?:
-    "date" | "decimal" | "integer" | "select" | "boolean" | "text" | "reason";
+  type?: "date" | "decimal" | "integer" | "select" | "boolean" | "text" | "reason";
   required?: boolean;
   nullable?: boolean;
   initial?: unknown;
   options?: Choice[];
   minLength?: number;
-  labelKey?:string;
-  context?:string;
-  section?:"process";
+  labelKey?: string;
+  context?: string;
+  section?: "process";
 }
 export interface Command {
   key: string;
@@ -36,12 +35,7 @@ const field = (
   initial?: unknown,
   extra: Omit<Field, "key" | "initial"> = {},
 ): Field => ({ key, initial, ...extra });
-const select = (
-  key: string,
-  options: Choice[],
-  initial?: unknown,
-  required = false,
-): Field =>
+const select = (key: string, options: Choice[], initial?: unknown, required = false): Field =>
   field(key, initial, {
     type: "select",
     options,
@@ -72,8 +66,7 @@ const date = (key: string, initial?: unknown, required = false): Field =>
   field(key, initial, { type: "date", required, nullable: !required });
 const reason = (key = "reason", required = true, minLength = 5): Field =>
   field(key, "", { type: "reason", required, minLength, nullable: !required });
-const enums = (values: string[]): Choice[] =>
-  values.map((value) => ({ value, label: value }));
+const enums = (values: string[]): Choice[] => values.map((value) => ({ value, label: value }));
 export function headerCommand(
   view: ManufacturingView,
   options: ManufacturingOptions,
@@ -87,18 +80,8 @@ export function headerCommand(
           ...(!existing
             ? [
                 select("producedItemId", options.items, r?.producedItemId, true),
-                select(
-                  "subsidiaryId",
-                  options.subsidiaries,
-                  r?.subsidiaryId,
-                  true,
-                ),
-                select(
-                  "priority",
-                  enums(["low", "normal", "high", "rush"]),
-                  "normal",
-                  true,
-                ),
+                select("subsidiaryId", options.subsidiaries, r?.subsidiaryId, true),
+                select("priority", enums(["low", "normal", "high", "rush"]), "normal", true),
               ]
             : []),
           decimal("quantityOrdered", r?.quantityOrdered),
@@ -107,20 +90,19 @@ export function headerCommand(
           select("receiptLocationId", options.locations, r?.receiptLocationId),
           date("plannedStart", r?.plannedStart),
           date("plannedEnd", r?.plannedEnd),
-          field("productionMode",r?.productionMode,{type:"select",options:enums(["order","batch","continuous"]),section:"process"}),
-          field("campaignReference",r?.campaignReference,{nullable:true,section:"process"}),
+          field("productionMode", r?.productionMode, {
+            type: "select",
+            options: enums(["order", "batch", "continuous"]),
+            section: "process",
+          }),
+          field("campaignReference", r?.campaignReference, { nullable: true, section: "process" }),
         ]
       : view === "work-centers"
         ? [
             field("code", r?.code, { required: true }),
             field("name", r?.name, { required: true }),
             select("subsidiaryId", options.subsidiaries, r?.subsidiaryId, true),
-            select(
-              "kind",
-              enums(["machine", "labor", "cell"]),
-              r?.kind ?? "machine",
-              true,
-            ),
+            select("kind", enums(["machine", "labor", "cell"]), r?.kind ?? "machine", true),
             decimal("capacityHoursPerDay", r?.capacityHoursPerDay ?? "8"),
             decimal("efficiencyPct", r?.efficiencyPct ?? "100"),
             select("departmentId", options.departments, r?.departmentId),
@@ -132,29 +114,14 @@ export function headerCommand(
         : view === "routings"
           ? [
               ...(!existing
-                ? [
-                    select(
-                      "producedItemId",
-                      options.items,
-                      r?.producedItemId,
-                      true,
-                    ),
-                  ]
+                ? [select("producedItemId", options.items, r?.producedItemId, true)]
                 : []),
               field("code", r?.code, { required: true }),
               field("name", r?.name, { required: true }),
               date("effectiveFrom", r?.effectiveFrom, true),
               date("effectiveTo", r?.effectiveTo),
-              select(
-                "defaultIssueLocationId",
-                options.locations,
-                r?.defaultIssueLocationId,
-              ),
-              select(
-                "defaultReceiptLocationId",
-                options.locations,
-                r?.defaultReceiptLocationId,
-              ),
+              select("defaultIssueLocationId", options.locations, r?.defaultIssueLocationId),
+              select("defaultReceiptLocationId", options.locations, r?.defaultReceiptLocationId),
               select(
                 "overheadBasis",
                 enums(["labor_hours", "machine_hours", "units"]),
@@ -168,19 +135,22 @@ export function headerCommand(
               field("capacityCheck", true, { type: "boolean" }),
             ];
   const path =
-    "/api/manufacturing/" +
-    (view === "mrp" ? "mrp/runs" : view) +
-    (record ? "/" + record.id : "");
+    "/api/manufacturing/" + (view === "mrp" ? "mrp/runs" : view) + (record ? "/" + record.id : "");
   return {
     key: existing ? "save" : "create",
     path,
     method: existing ? "PATCH" : "POST",
-    fields: view==="work-orders" && r?.receiptReworkInspectionId ? fields.filter(field=>!["quantityOrdered","issueLocationId"].includes(field.key)) : fields,
+    fields:
+      view === "work-orders" && r?.receiptReworkInspectionId
+        ? fields.filter((field) => !["quantityOrdered", "issueLocationId"].includes(field.key))
+        : fields,
     create: !existing,
     opensRecord: !existing,
     note:
       view === "work-orders"
-        ? r?.receiptReworkInspectionId ? "repairDraftNote" : "draftNote"
+        ? r?.receiptReworkInspectionId
+          ? "repairDraftNote"
+          : "draftNote"
         : view === "mrp"
           ? "mrpNote"
           : undefined,
@@ -195,12 +165,9 @@ export function recordCommands(
   const r = data.record,
     base = "/api/manufacturing/" + view + "/" + r.id,
     commands: Command[] = [];
-  const push = (
-    key: string,
-    fields: Field[] = [],
-    extra: Partial<Command> = {},
-  ) => commands.push({ key, path: base + "/" + key, fields, ...extra });
-  if (view === 'work-orders') {
+  const push = (key: string, fields: Field[] = [], extra: Partial<Command> = {}) =>
+    commands.push({ key, path: base + "/" + key, fields, ...extra });
+  if (view === "work-orders") {
     if (r.status === "draft") {
       if (!r.pendingApproval) {
         commands.push(headerCommand(view, options, r));
@@ -215,35 +182,78 @@ export function recordCommands(
     }
     if (r.status === "on_hold") push("resume");
     if (canPost && (r.status === "released" || r.status === "in_progress")) {
-      const repair=data.sections.repairSource?.[0],material=data.sections.materials?.[0];
-      if(r.receiptReworkInspectionId) {
-        if(repair&&material&&cmp(String(material.issuedQty),"0")===0)
-          push("issue", [], { create:true,note:"repairIssueNote",body:{lines:[{materialId:material.id,quantity:repair.quantity,lotId:repair.lotId??null,serialId:repair.serialId??null}]}});
-      } else push("issue", [date("issuedOn", r.plannedStart ?? null)], { repeat: "issue", create: true, note: "issueNote" });
+      const repair = data.sections.repairSource?.[0],
+        material = data.sections.materials?.[0];
+      if (r.receiptReworkInspectionId) {
+        if (repair && material && cmp(String(material.issuedQty), "0") === 0)
+          push("issue", [], {
+            create: true,
+            note: "repairIssueNote",
+            body: {
+              lines: [
+                {
+                  materialId: material.id,
+                  quantity: repair.quantity,
+                  lotId: repair.lotId ?? null,
+                  serialId: repair.serialId ?? null,
+                },
+              ],
+            },
+          });
+      } else
+        push("issue", [date("issuedOn", r.plannedStart ?? null)], {
+          repeat: "issue",
+          create: true,
+          note: "issueNote",
+        });
       push(
         "complete",
         [
-          decimal("quantity",r.receiptReworkInspectionId?repair?.quantity:undefined),
+          decimal("quantity", r.receiptReworkInspectionId ? repair?.quantity : undefined),
           select("receiptLocationId", options.locations, r.receiptLocationId),
           // Output is received on the day production finished.
           date("receivedOn", lastCompletedOn(data.sections.operations) ?? r.plannedStart ?? null),
         ],
         {
-          ...(r.receiptReworkInspectionId?{}:{repeat:"tracking" as const}),
+          ...(r.receiptReworkInspectionId ? {} : { repeat: "tracking" as const }),
           create: true,
-          byproducts: data.sections.byproducts?.filter(output=>output.outputCostWeight==null),
-          note: r.receiptReworkInspectionId?"repairOutputNote":"outputNote",
+          byproducts: data.sections.byproducts?.filter((output) => output.outputCostWeight == null),
+          note: r.receiptReworkInspectionId ? "repairOutputNote" : "outputNote",
         },
       );
-      push("done", [reason("shortCloseReason",cmp(String(r.quantityCompleted),String(r.quantityOrdered))<0)], { note: "doneNote" });
+      push(
+        "done",
+        [
+          reason(
+            "shortCloseReason",
+            cmp(String(r.quantityCompleted), String(r.quantityOrdered)) < 0,
+          ),
+        ],
+        { note: "doneNote" },
+      );
     }
-    if (canPost && (r.status === "done" || r.status === "closed") && cmp(String(r.quantityCompleted), "0") > 0) {
+    if (
+      canPost &&
+      (r.status === "done" || r.status === "closed") &&
+      cmp(String(r.quantityCompleted), "0") > 0
+    ) {
       // Defaults to the day the last operation finished; the server refuses days before the work it records.
-      push("correctCompletionDate", [date("correctedOn", lastCompletedOn(data.sections.operations) ?? r.plannedStart ?? null, true), reason("reason", true, 5)], {
-        path: base + "/correct-completion-date",
-        create: true,
-        note: "completionDateNote",
-      });
+      push(
+        "correctCompletionDate",
+        [
+          date(
+            "correctedOn",
+            lastCompletedOn(data.sections.operations) ?? r.plannedStart ?? null,
+            true,
+          ),
+          reason("reason", true, 5),
+        ],
+        {
+          path: base + "/correct-completion-date",
+          create: true,
+          note: "completionDateNote",
+        },
+      );
     }
     if (canPost && r.status === "in_progress")
       push(
@@ -270,20 +280,72 @@ export function recordCommands(
         ],
         { create: true, note: "normalScrapNote" },
       );
-    if(canPost&&['released','in_progress','on_hold'].includes(String(r.status))&&cmp(String(r.quantityCompleted),'0')===0) {
-      const unfinished=(data.sections.operations??[]).filter(operation=>['running','paused'].includes(String(operation.status)));
-      push('loss-disposition',[
-        select('operationId',(data.sections.operations??[]).map(operation=>({value:operation.id,label:String(operation.sequence)+' · '+operation.name})),undefined,true),
-        decimal('quantity'),{...select('reasonId',options.reasons.filter(reason=>reason.parentId==='abnormal'),undefined,true),labelKey:'lossReasonId'},reason('reason',true,8),
-        ...unfinished.flatMap(operation=>[
-          field('attemptedQty:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'attemptedQty',context:String(operation.sequence)+' · '+operation.name}),
-          field('actualSetupMinutes:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'actualSetupMinutes',context:String(operation.sequence)+' · '+operation.name}),
-          field('actualRunMinutes:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'actualRunMinutes',context:String(operation.sequence)+' · '+operation.name}),
-          ...(operation.laborTimeSource==='approved_time'?[]:[field('actualLaborMinutes:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'actualLaborMinutes',context:String(operation.sequence)+' · '+operation.name})]),
-        ])
-      ],{create:true,note:'lossDispositionNote'});
+    if (
+      canPost &&
+      ["released", "in_progress", "on_hold"].includes(String(r.status)) &&
+      cmp(String(r.quantityCompleted), "0") === 0
+    ) {
+      const unfinished = (data.sections.operations ?? []).filter((operation) =>
+        ["running", "paused"].includes(String(operation.status)),
+      );
+      push(
+        "loss-disposition",
+        [
+          select(
+            "operationId",
+            (data.sections.operations ?? []).map((operation) => ({
+              value: operation.id,
+              label: String(operation.sequence) + " · " + operation.name,
+            })),
+            undefined,
+            true,
+          ),
+          decimal("quantity"),
+          {
+            ...select(
+              "reasonId",
+              options.reasons.filter((reason) => reason.parentId === "abnormal"),
+              undefined,
+              true,
+            ),
+            labelKey: "lossReasonId",
+          },
+          reason("reason", true, 8),
+          ...unfinished.flatMap((operation) => [
+            field("attemptedQty:" + operation.id, undefined, {
+              type: "decimal",
+              required: true,
+              labelKey: "attemptedQty",
+              context: String(operation.sequence) + " · " + operation.name,
+            }),
+            field("actualSetupMinutes:" + operation.id, undefined, {
+              type: "decimal",
+              required: true,
+              labelKey: "actualSetupMinutes",
+              context: String(operation.sequence) + " · " + operation.name,
+            }),
+            field("actualRunMinutes:" + operation.id, undefined, {
+              type: "decimal",
+              required: true,
+              labelKey: "actualRunMinutes",
+              context: String(operation.sequence) + " · " + operation.name,
+            }),
+            ...(operation.laborTimeSource === "approved_time"
+              ? []
+              : [
+                  field("actualLaborMinutes:" + operation.id, undefined, {
+                    type: "decimal",
+                    required: true,
+                    labelKey: "actualLaborMinutes",
+                    context: String(operation.sequence) + " · " + operation.name,
+                  }),
+                ]),
+          ]),
+        ],
+        { create: true, note: "lossDispositionNote" },
+      );
     }
-  } else if (view === 'work-centers') {
+  } else if (view === "work-centers") {
     commands.push(headerCommand(view, options, r));
     push(r.isActive ? "deactivate" : "reactivate", [], {
       path: base,
@@ -292,18 +354,26 @@ export function recordCommands(
     });
     push(
       "addRate",
-      [
-        decimal("machineRatePerHour"),
-        date("effectiveFrom", undefined, true),
-        date("effectiveTo"),
-      ],
+      [decimal("machineRatePerHour"), date("effectiveFrom", undefined, true), date("effectiveTo")],
       { path: base + "/rates", create: true },
     );
-  } else if (view === 'routings') {
-    if (r.status === 'draft') {
+  } else if (view === "routings") {
+    if (r.status === "draft") {
       commands.push(headerCommand(view, options, r));
       commands.push(operationCommand(String(r.id), options));
-      push("activate", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { note: "activateNote",create:true });
+      push(
+        "activate",
+        [
+          select(
+            "subsidiaryId",
+            options.subsidiaries,
+            options.subsidiaries.length === 1 ? options.subsidiaries[0]!.value : undefined,
+            true,
+          ),
+          reason("reason", true, 8),
+        ],
+        { note: "activateNote", create: true },
+      );
     }
     if (r.status === "active") push("archive");
     push("newVersion", [], {
@@ -313,7 +383,7 @@ export function recordCommands(
       note: "versionNote",
     });
   }
-  return commands
+  return commands;
 }
 export function operationCommand(
   routingId: string,
@@ -323,11 +393,7 @@ export function operationCommand(
   const r = op;
   return {
     key: op ? "editOperation" : "addOperation",
-    path:
-      "/api/manufacturing/routings/" +
-      routingId +
-      "/operations" +
-      (op ? "/" + op.id : ""),
+    path: "/api/manufacturing/routings/" + routingId + "/operations" + (op ? "/" + op.id : ""),
     method: op ? "PATCH" : "POST",
     create: !op,
     fields: [
@@ -337,19 +403,14 @@ export function operationCommand(
       decimal("setupMinutes", r?.setupMinutes ?? "0"),
       decimal("runMinutesPerUnit", r?.runMinutesPerUnit ?? "0"),
       decimal("laborMinutesPerUnit", r?.laborMinutesPerUnit, false),
-      select("laborTimeSource", enums(["operation", "approved_time"]), r?.laborTimeSource ?? "operation", true),
       select(
-        "backflushAt",
-        enums(["none", "start", "finish"]),
-        r?.backflushAt ?? "none",
+        "laborTimeSource",
+        enums(["operation", "approved_time"]),
+        r?.laborTimeSource ?? "operation",
         true,
       ),
-      select(
-        "qualityGate",
-        enums(["none", "measure"]),
-        r?.qualityGate ?? "none",
-        true,
-      ),
+      select("backflushAt", enums(["none", "start", "finish"]), r?.backflushAt ?? "none", true),
+      select("qualityGate", enums(["none", "measure"]), r?.qualityGate ?? "none", true),
     ],
   };
 }
@@ -362,24 +423,31 @@ export function childCommands(
   canPost: boolean,
   canBuy: boolean,
 ): Command[] {
-  if (
-    view === "work-orders" &&
-    canPost &&
-    r.status === "in_progress" &&
-    tab === "operations"
-  ) {
-    const base =
-      "/api/manufacturing/work-orders/" + r.id + "/operations/" + row.id;
+  if (view === "work-orders" && canPost && r.status === "in_progress" && tab === "operations") {
+    const base = "/api/manufacturing/work-orders/" + r.id + "/operations/" + row.id;
     if (row.status === "pending")
-      return [{ key: "startOperation", path: base + "/start", fields: [date("startedOn", r.plannedStart ?? null)] }];
+      return [
+        {
+          key: "startOperation",
+          path: base + "/start",
+          fields: [date("startedOn", r.plannedStart ?? null)],
+        },
+      ];
     if (row.status === "paused")
       return [{ key: "resumeOperation", path: base + "/resume", fields: [] }];
     if (row.status === "running") {
       // Actual minutes open prefilled with the routing standard for the
       // default quantity, so the operator confirms or overrides the time
       // that will be costed instead of leaving a blank that costs standard.
-      const defaultDone = add(String(row.quantityPlanned), neg(String(row.quantityScrappedHere ?? "0")));
-      const standardRun = standardRunMinutes(row.plannedRunMinutes, defaultDone, row.quantityPlanned);
+      const defaultDone = add(
+        String(row.quantityPlanned),
+        neg(String(row.quantityScrappedHere ?? "0")),
+      );
+      const standardRun = standardRunMinutes(
+        row.plannedRunMinutes,
+        defaultDone,
+        row.quantityPlanned,
+      );
       return [
         {
           key: "pauseOperation",
@@ -396,15 +464,16 @@ export function childCommands(
           path: base + "/complete",
           note: "operationNote",
           fields: [
-            decimal("doneQty",add(String(row.quantityPlanned),neg(String(row.quantityScrappedHere??'0')))),
             decimal(
-              "measuredQty",
-              row.measuredQty,
-              row.qualityGate === "measure",
+              "doneQty",
+              add(String(row.quantityPlanned), neg(String(row.quantityScrappedHere ?? "0"))),
             ),
+            decimal("measuredQty", row.measuredQty, row.qualityGate === "measure"),
             decimal("actualSetupMinutes", row.actualSetupMinutes ?? row.plannedSetupMinutes, false),
             decimal("actualRunMinutes", row.actualRunMinutes ?? standardRun, false),
-            ...(row.laborTimeSource === "approved_time" ? [] : [decimal("actualLaborMinutes", row.actualLaborMinutes, false)]),
+            ...(row.laborTimeSource === "approved_time"
+              ? []
+              : [decimal("actualLaborMinutes", row.actualLaborMinutes, false)]),
             date("completedOn", r.plannedStart ?? null),
           ],
         },
@@ -421,12 +490,7 @@ export function childCommands(
     return [
       {
         key: "waive",
-        path:
-          "/api/manufacturing/work-orders/" +
-          r.id +
-          "/materials/" +
-          row.id +
-          "/waive",
+        path: "/api/manufacturing/work-orders/" + r.id + "/materials/" + row.id + "/waive",
         fields: [reason()],
       },
     ];
@@ -492,10 +556,22 @@ export function commandBody(
       if (f.nullable) body[f.key] = null;
     } else body[f.key] = f.type === "integer" ? Number(value) : value;
   }
-  if(command.key==='loss-disposition') {
-    const ids=[...new Set(command.fields.filter(field=>field.key.startsWith('attemptedQty:')).map(field=>field.key.split(':')[1]!))];
-    body.times=ids.map(operationId=>({operationId,attemptedQty:values['attemptedQty:'+operationId],actualSetupMinutes:values['actualSetupMinutes:'+operationId],actualRunMinutes:values['actualRunMinutes:'+operationId],actualLaborMinutes:values['actualLaborMinutes:'+operationId]??null}));
-    for(const key of Object.keys(body))if(key.includes(':'))delete body[key];
+  if (command.key === "loss-disposition") {
+    const ids = [
+      ...new Set(
+        command.fields
+          .filter((field) => field.key.startsWith("attemptedQty:"))
+          .map((field) => field.key.split(":")[1]!),
+      ),
+    ];
+    body.times = ids.map((operationId) => ({
+      operationId,
+      attemptedQty: values["attemptedQty:" + operationId],
+      actualSetupMinutes: values["actualSetupMinutes:" + operationId],
+      actualRunMinutes: values["actualRunMinutes:" + operationId],
+      actualLaborMinutes: values["actualLaborMinutes:" + operationId] ?? null,
+    }));
+    for (const key of Object.keys(body)) if (key.includes(":")) delete body[key];
   }
   return body;
 }

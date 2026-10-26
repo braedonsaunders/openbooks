@@ -18,9 +18,7 @@ const test: TestFn = isVitest
   ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
   : nodeTest;
 const signOffState: SignOffState = { calls: [], mode: { kind: "ok" } };
-(
-  globalThis as typeof globalThis & Record<symbol, unknown>
-)[stateKey] = signOffState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = signOffState;
 
 const mockSources = new Map<string, string>([
   [
@@ -70,7 +68,7 @@ if (!isVitest) {
   });
 
   const routeUrl = "./route.ts?signoff-typed-body";
-  postRoute = (await import(routeUrl) as typeof import("./route.ts")).POST;
+  postRoute = ((await import(routeUrl)) as typeof import("./route.ts")).POST;
 }
 
 const RECON_ID = "01a0ad1a-5e43-768c-a165-c7c2ff7ba17a";
@@ -86,7 +84,10 @@ function post(id: string) {
  * typed 422 carrying the engine message the workspace now surfaces. */
 test("a refused sign-off answers a typed 422 with the engine reason", async () => {
   signOffState.calls = [];
-  signOffState.mode = { kind: "refuse", message: "Cannot sign off: 3 statement line(s) through the cutoff remain unmatched" };
+  signOffState.mode = {
+    kind: "refuse",
+    message: "Cannot sign off: 3 statement line(s) through the cutoff remain unmatched",
+  };
   const res = (await post(RECON_ID)) as NextResponse;
   assert.equal(res.status, 422);
   const body = (await res.json()) as { error?: string };

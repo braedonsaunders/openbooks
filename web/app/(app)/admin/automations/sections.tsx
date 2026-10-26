@@ -1,6 +1,6 @@
-import Link from 'next/link'
+import Link from "next/link";
 
-import { AutomationRowActions, NewAutomationButton } from './AutomationsClient'
+import { AutomationRowActions, NewAutomationButton } from "./AutomationsClient";
 
 /**
  * The automations list's composite cells, mirroring the flows list cells:
@@ -9,32 +9,17 @@ import { AutomationRowActions, NewAutomationButton } from './AutomationsClient'
  * and the widget registry — never a second copy.
  */
 
-export function AutomationNameCell({
-  name,
-  href,
-}: {
-  name: string
-  href: string
-}) {
+export function AutomationNameCell({ name, href }: { name: string; href: string }) {
   return (
-    <Link
-      href={href}
-      className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-    >
+    <Link href={href} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
       {name}
     </Link>
-  )
+  );
 }
 
-export function AutomationLastRunCell({
-  at,
-  fallback,
-}: {
-  at: string | null
-  fallback: string
-}) {
-  if (at === null) return <>{fallback}</>
-  return <span className="tabular-nums">{at}</span>
+export function AutomationLastRunCell({ at, fallback }: { at: string | null; fallback: string }) {
+  if (at === null) return <>{fallback}</>;
+  return <span className="tabular-nums">{at}</span>;
 }
 
 export function AutomationRowActionsCell({
@@ -45,12 +30,12 @@ export function AutomationRowActionsCell({
   disableLabel,
   actionFailed,
 }: {
-  id: string
-  status: string
-  runLabel: string
-  enableLabel: string
-  disableLabel: string
-  actionFailed: string
+  id: string;
+  status: string;
+  runLabel: string;
+  enableLabel: string;
+  disableLabel: string;
+  actionFailed: string;
 }) {
   return (
     <AutomationRowActions
@@ -61,9 +46,9 @@ export function AutomationRowActionsCell({
       disableLabel={disableLabel}
       actionFailed={actionFailed}
     />
-  )
+  );
 }
 
 export function NewAutomationListButton({ label }: { label: string }) {
-  return <NewAutomationButton label={label} />
+  return <NewAutomationButton label={label} />;
 }

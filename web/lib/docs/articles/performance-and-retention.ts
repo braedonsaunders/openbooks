@@ -1,15 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const performanceAndRetention: DocArticle = {
-  slug: 'performance-and-retention',
-  title: 'Performance Reviews, Goals, and Retention',
-  category: 'administration',
+  slug: "performance-and-retention",
+  title: "Performance Reviews, Goals, and Retention",
+  category: "administration",
   order: 12,
   summary:
-    'Review cycles with self and manager assessments, calibration, sharing, and acknowledgement; per-employment goals with progress; exit records and turnover. Who sees each review, and how attrition is measured.',
-  updated: '2026-09-20',
-  keywords: ['performance review', 'calibration', 'goals', 'turnover', 'attrition', 'exit interview', 'retention', 'review cycle'],
-  related: ['hrm-processes', 'payroll', 'setup-company-group'],
+    "Review cycles with self and manager assessments, calibration, sharing, and acknowledgement; per-employment goals with progress; exit records and turnover. Who sees each review, and how attrition is measured.",
+  updated: "2026-09-20",
+  keywords: [
+    "performance review",
+    "calibration",
+    "goals",
+    "turnover",
+    "attrition",
+    "exit interview",
+    "retention",
+    "review cycle",
+  ],
+  related: ["hrm-processes", "payroll", "setup-company-group"],
   body: `# Performance Reviews, Goals, and Retention
 
 Employment records, positions, and checklists say who works where. Reviews say how people are doing, goals say where they are headed, and exit records say why they leave. The Performance tab runs the review cycle; the Retention panel measures attrition from the employment history the system already keeps.
@@ -44,4 +53,4 @@ Turnover is terminations over average headcount per period and department, with 
 
 The Reviews, Goals, and Turnover workforce reports read the same governed rows as the tab: ratings distribution per cycle and department, goal progress, and leaver facts by termination month and department. The assistant read tools answer cycle and attrition questions from the same canonical read services, so the numbers always agree.
 `,
-}
+};

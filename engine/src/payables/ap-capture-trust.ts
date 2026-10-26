@@ -33,22 +33,31 @@ export type AutoPostPolicy = {
 };
 
 /** The policy version in force on a date; null (no version) reads as off. */
-export async function resolveAutoPostPolicy(exec: SqlExecutor, orgId: string, onDate: string): Promise<AutoPostPolicy | null> {
-  const row = (await exec.execute<{
-    id: string;
-    effectiveFrom: string;
-    enabled: boolean;
-    cleanStreak: number;
-    maxAmount: string | null;
-    maxAmountCurrency: string | null;
-  }>(sql`
+export async function resolveAutoPostPolicy(
+  exec: SqlExecutor,
+  orgId: string,
+  onDate: string,
+): Promise<AutoPostPolicy | null> {
+  const row = (
+    await exec.execute<{
+      id: string;
+      effectiveFrom: string;
+      enabled: boolean;
+      cleanStreak: number;
+      maxAmount: string | null;
+      maxAmountCurrency: string | null;
+    }>(
+      sql`
     select id, effective_from::text as "effectiveFrom", enabled, clean_streak as "cleanStreak",
            max_amount::text as "maxAmount", max_amount_currency as "maxAmountCurrency"
       from ap_capture_autopost_policies
      where org_id = ${orgId} and effective_from <= ${onDate}::date
      order by effective_from desc
      limit 1
-  `, 'objects'))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row ? { ...row, cleanStreak: Number(row.cleanStreak) } : null;
 }
 
@@ -88,8 +97,12 @@ function streakBreak(entry: VendorCaptureEvidence): BrokenStreakReason | null {
 }
 
 /** Pure trust derivation over the newest-first capture history. */
-export function evaluateVendorTrust(history: readonly VendorCaptureEvidence[], threshold: number): VendorTrust {
-  if (!Number.isSafeInteger(threshold) || threshold < 1) throw new Error("trust threshold must be a positive integer");
+export function evaluateVendorTrust(
+  history: readonly VendorCaptureEvidence[],
+  threshold: number,
+): VendorTrust {
+  if (!Number.isSafeInteger(threshold) || threshold < 1)
+    throw new Error("trust threshold must be a positive integer");
   const evidence: string[] = [];
   let brokenBy: VendorTrust["brokenBy"] = null;
   for (const entry of history) {
@@ -140,7 +153,8 @@ export async function loadVendorCaptureHistory(
     documentStatus: string | null;
     voided: boolean;
     automated: boolean;
-  }>(sql`
+  }>(
+    sql`
     with history as (
       select ci.id, ci.document_id, ci.materialized_at,
              exists (select 1 from ap_capture_corrections cc
@@ -169,7 +183,9 @@ export async function loadVendorCaptureHistory(
      where (not automated and reviewed_rank <= ${limit})
         or (automated and reviewed_rank < ${limit} and (voided or corrected or draft_edited))
      order by materialized_at desc nulls last, id desc
-  `, 'objects');
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     captureItemId: row.captureItemId,
     documentId: row.documentId,
@@ -189,7 +205,13 @@ export async function vendorCaptureTrust(
   threshold: number,
   excludeCaptureItemId: string | null = null,
 ): Promise<VendorTrust> {
-  const history = await loadVendorCaptureHistory(exec, orgId, vendorId, threshold + 1, excludeCaptureItemId);
+  const history = await loadVendorCaptureHistory(
+    exec,
+    orgId,
+    vendorId,
+    threshold + 1,
+    excludeCaptureItemId,
+  );
   return evaluateVendorTrust(history, threshold);
 }
 
@@ -205,9 +227,7 @@ export type AutoPostSkipReason =
   | "over_limit"
   | "currency_differs";
 
-export type AutoPostDecision =
-  | { eligible: true }
-  | { eligible: false; reason: AutoPostSkipReason };
+export type AutoPostDecision = { eligible: true } | { eligible: false; reason: AutoPostSkipReason };
 
 /**
  * Whether an amount fits the policy's limit. A limit stated in one currency
@@ -257,13 +277,18 @@ export function autoPostEligibility(input: {
   if (!policy?.enabled) return { eligible: false, reason: "policy_off" };
   // The address token alone does not prove who sent an email; only a
   // provider signature does, so unsigned mail always goes to review.
-  if (capture.source !== "upload" && capture.emailVerified !== true) return { eligible: false, reason: "unsigned_email" };
+  if (capture.source !== "upload" && capture.emailVerified !== true)
+    return { eligible: false, reason: "unsigned_email" };
   if (capture.documentKind !== "vendor_bill") return { eligible: false, reason: "not_a_bill" };
-  if (capture.status === "duplicate" || capture.issues.some((issue) => issue.code === "possible_duplicate")) {
+  if (
+    capture.status === "duplicate" ||
+    capture.issues.some((issue) => issue.code === "possible_duplicate")
+  ) {
     return { eligible: false, reason: "duplicate" };
   }
   if (!capture.vendorId) return { eligible: false, reason: "vendor_unmatched" };
-  if (capture.status !== "ready" || capture.issues.length > 0) return { eligible: false, reason: "needs_review" };
+  if (capture.status !== "ready" || capture.issues.length > 0)
+    return { eligible: false, reason: "needs_review" };
   if (!input.trust?.trusted) return { eligible: false, reason: "vendor_not_trusted" };
   return autoPostAmountDecision(policy, capture);
 }
@@ -291,13 +316,23 @@ export async function vendorTrustSummary(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   onDate: string,
 ): Promise<VendorTrustSummary | null> {
-  const vendor = (await exec.execute<{ subsidiaryId: string | null }>(sql`
+  const vendor = (
+    await exec.execute<{ subsidiaryId: string | null }>(
+      sql`
     select p.subsidiary_id as "subsidiaryId" from parties p
       join vendor_roles vr on vr.org_id = p.org_id and vr.party_id = p.id
      where p.org_id = ${orgId} and p.id = ${vendorId}
-  `, 'objects'))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!vendor) return null;
-  if (allowedSubsidiaryIds !== null && vendor.subsidiaryId !== null && !allowedSubsidiaryIds.has(vendor.subsidiaryId)) return null;
+  if (
+    allowedSubsidiaryIds !== null &&
+    vendor.subsidiaryId !== null &&
+    !allowedSubsidiaryIds.has(vendor.subsidiaryId)
+  )
+    return null;
   const policy = await resolveAutoPostPolicy(exec, orgId, onDate);
   const threshold = policy?.cleanStreak ?? DEFAULT_TRUST_STREAK;
   const trust = await vendorCaptureTrust(exec, orgId, vendorId, threshold);

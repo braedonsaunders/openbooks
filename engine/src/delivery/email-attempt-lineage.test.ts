@@ -15,7 +15,12 @@ import { reconcileDeliveryAttempts } from "@openbooks/emails";
 
 test("a dangling start (crash before any outcome) suppresses the retry", () => {
   const raw = [
-    { at: "2026-09-01T00:00:00.000Z", attempt: 1, outcome: "started", detail: "sending via resend" },
+    {
+      at: "2026-09-01T00:00:00.000Z",
+      attempt: 1,
+      outcome: "started",
+      detail: "sending via resend",
+    },
   ];
   const lineage = normalizeAttempts(raw);
   assert.equal(lineage.length, 1);
@@ -26,11 +31,24 @@ test("a dangling start (crash before any outcome) suppresses the retry", () => {
 
 test("a start closed by a definitive failure still allows the retry", () => {
   const raw = [
-    { at: "2026-09-01T00:00:00.000Z", attempt: 1, outcome: "started", detail: "sending via resend" },
-    { at: "2026-09-01T00:00:01.000Z", attempt: 1, outcome: "notSent", detail: "connection refused" },
+    {
+      at: "2026-09-01T00:00:00.000Z",
+      attempt: 1,
+      outcome: "started",
+      detail: "sending via resend",
+    },
+    {
+      at: "2026-09-01T00:00:01.000Z",
+      attempt: 1,
+      outcome: "notSent",
+      detail: "connection refused",
+    },
   ];
   const lineage = normalizeAttempts(raw);
-  assert.deepEqual(lineage.map((r) => r.outcome), ["notSent"]);
+  assert.deepEqual(
+    lineage.map((r) => r.outcome),
+    ["notSent"],
+  );
   assert.deepEqual(reconcileDeliveryAttempts(lineage), { action: "send" });
 });
 
@@ -41,7 +59,10 @@ test("a later dangling start suppresses even after an earlier clean failure", ()
     { attempt: 2, outcome: "started", detail: "sending via resend" },
   ];
   const lineage = normalizeAttempts(raw);
-  assert.deepEqual(lineage.map((r) => r.outcome), ["notSent", "uncertain"]);
+  assert.deepEqual(
+    lineage.map((r) => r.outcome),
+    ["notSent", "uncertain"],
+  );
   assert.equal(reconcileDeliveryAttempts(lineage).action, "suppress");
 });
 

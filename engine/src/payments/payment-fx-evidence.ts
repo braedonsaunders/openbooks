@@ -98,8 +98,8 @@ export function assertPaymentFxQuoteAgrees(args: {
   if (compareDecimal(args.evidence.rate, args.quoteRate) === 0) return;
   throw new PaymentError(
     `the recorded explicit exchange rate ${args.evidence.rate} (${args.evidence.fromCurrency} to ${args.evidence.toCurrency} on ${args.evidence.rateDate}) ` +
-    `differs from the ${args.quoteLabel} rate ${args.quoteRate}; clear the explicit rate in this payment to use the ${args.quoteLabel} rate, ` +
-    `or fund the payment from an account that does not impose that rate, before saving`,
+      `differs from the ${args.quoteLabel} rate ${args.quoteRate}; clear the explicit rate in this payment to use the ${args.quoteLabel} rate, ` +
+      `or fund the payment from an account that does not impose that rate, before saving`,
   );
 }
 

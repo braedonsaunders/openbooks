@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { createRemittanceBill, payrollRemittanceSummary } from "./remittance.ts";
 import {
-  createRemittanceBill,
-  payrollRemittanceSummary,
-} from "./remittance.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -23,7 +25,12 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * own due_date through `createRemittanceBill`.
  */
 
-async function seedQuebecAccelerated2(): Promise<{ orgId: string; actorId: string; accountId: string; vendorId: string }> {
+async function seedQuebecAccelerated2(): Promise<{
+  orgId: string;
+  actorId: string;
+  accountId: string;
+  vendorId: string;
+}> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
 
@@ -112,7 +119,10 @@ test(
   async () => {
     const fx = await seedQuebecAccelerated2();
     try {
-      const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      const groups = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
       assert.equal(groups.length, 1);
       assert.deepEqual(groups[0]!.provinces, ["QC"]);
 
@@ -122,8 +132,13 @@ test(
         to: "2026-07-31",
         filingAccountId: fx.accountId,
       });
-      const billDoc = (await db.execute<Record<string, unknown>>(sql`
-        select due_date from documents where id = ${bill.documentId}`, "objects"))[0]!;
+      const billDoc = (
+        await db.execute<Record<string, unknown>>(
+          sql`
+        select due_date from documents where id = ${bill.documentId}`,
+          "objects",
+        )
+      )[0]!;
       // The July 22-to-31 quarter-month ends Friday July 31 2026. Three
       // working days is August 6 nationally but August 5 in Quebec — the
       // Civic Holiday (Aug 3) is not observed there. A bill stamping the 6th

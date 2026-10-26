@@ -92,38 +92,60 @@ function assistantTurn(toolName: string, output: unknown, answer: string) {
 
 function longConversation() {
   const turns = [
-    assistantTurn("cash_position", cashPositionOutput(), "Cash is negative $185,754.98 across 3 accounts."),
-    assistantTurn("party_concentration", concentrationOutput(), "Top customer is Customer A at 13.7%."),
+    assistantTurn(
+      "cash_position",
+      cashPositionOutput(),
+      "Cash is negative $185,754.98 across 3 accounts.",
+    ),
+    assistantTurn(
+      "party_concentration",
+      concentrationOutput(),
+      "Top customer is Customer A at 13.7%.",
+    ),
     assistantTurn("find_documents", documentsOutput(), "Found 3 bills totalling $48,210.55."),
-    assistantTurn("profit_and_loss", {
-      ok: true,
-      data: {
-        total: "921000.44",
-        lines: Array.from({ length: 20 }, (_, i) => ({
-          account: `Revenue line ${i}`,
-          current: `${(i * 9911.11).toFixed(2)}`,
-          prior: `${(i * 8800.22).toFixed(2)}`,
-        })),
+    assistantTurn(
+      "profit_and_loss",
+      {
+        ok: true,
+        data: {
+          total: "921000.44",
+          lines: Array.from({ length: 20 }, (_, i) => ({
+            account: `Revenue line ${i}`,
+            current: `${(i * 9911.11).toFixed(2)}`,
+            prior: `${(i * 8800.22).toFixed(2)}`,
+          })),
+        },
       },
-    }, "Net income is $921,000.44."),
-    assistantTurn("rank_projects", {
-      ok: true,
-      data: {
-        total: 12,
-        projects: Array.from({ length: 12 }, (_, i) => ({
-          id: `p${i}`,
-          name: `Construction job ${i} — phase two extension`,
-          margin: `${(i * 1500.5).toFixed(2)}`,
-        })),
+      "Net income is $921,000.44.",
+    ),
+    assistantTurn(
+      "rank_projects",
+      {
+        ok: true,
+        data: {
+          total: 12,
+          projects: Array.from({ length: 12 }, (_, i) => ({
+            id: `p${i}`,
+            name: `Construction job ${i} — phase two extension`,
+            margin: `${(i * 1500.5).toFixed(2)}`,
+          })),
+        },
       },
-    }, "12 projects; worst margin is Job X."),
-    assistantTurn("tax_return", {
-      ok: true,
-      data: {
-        total: "44120.10",
-        boxes: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`box${i}`, `${i * 111.11}`])),
+      "12 projects; worst margin is Job X.",
+    ),
+    assistantTurn(
+      "tax_return",
+      {
+        ok: true,
+        data: {
+          total: "44120.10",
+          boxes: Object.fromEntries(
+            Array.from({ length: 20 }, (_, i) => [`box${i}`, `${i * 111.11}`]),
+          ),
+        },
       },
-    }, "Return total is $44,120.10."),
+      "Return total is $44,120.10.",
+    ),
   ];
   const messages: { role: string; parts: Part[] }[] = [];
   turns.forEach((turn, i) => {
@@ -142,11 +164,17 @@ test("older assistant tool parts compact to summaries while recent turns stay fu
   assert.equal(assistantAfter.length, 6);
   // Last N turns keep their full tool parts.
   for (const recent of assistantAfter.slice(-KEEP_FULL_ASSISTANT_TURNS)) {
-    assert.ok(recent.parts.some((p) => String(p.type).startsWith("tool-")), "recent turn lost tool parts");
+    assert.ok(
+      recent.parts.some((p) => String(p.type).startsWith("tool-")),
+      "recent turn lost tool parts",
+    );
   }
   // Older turns carry no tool parts — only text (answer + one summary).
   for (const old of assistantAfter.slice(0, -KEEP_FULL_ASSISTANT_TURNS)) {
-    assert.ok(old.parts.every((p) => p.type === "text"), "old turn still has tool parts");
+    assert.ok(
+      old.parts.every((p) => p.type === "text"),
+      "old turn still has tool parts",
+    );
     assert.ok(
       old.parts.some((p) => textOf(p).startsWith(HISTORY_SUMMARY_PREFIX)),
       "old turn has no history summary",
@@ -160,7 +188,10 @@ test("history summaries preserve key figures and prose answers", () => {
   const after = applyHistoryBudget(longConversation());
   const first = after.filter((m) => m.role === "assistant")[0]!;
   const texts = first.parts.map((p) => textOf(p));
-  assert.ok(texts.some((t) => t.includes("Cash is negative $185,754.98")), "prose answer dropped");
+  assert.ok(
+    texts.some((t) => t.includes("Cash is negative $185,754.98")),
+    "prose answer dropped",
+  );
   const summary = texts.find((t) => t.startsWith(HISTORY_SUMMARY_PREFIX))!;
   assert.match(summary, /cash_position/);
   assert.match(summary, /-185754\.98/);
@@ -173,7 +204,10 @@ test("compaction measurably shrinks a long conversation", () => {
   const afterTokens = estimateHistoryTokens(after);
   console.log(`[history-budget] before=${beforeTokens}t after=${afterTokens}t`);
   assert.ok(beforeTokens > 500, `fixture too small to prove anything (${beforeTokens}t)`);
-  assert.ok(afterTokens <= beforeTokens * 0.6, `no real saving: ${beforeTokens}t -> ${afterTokens}t`);
+  assert.ok(
+    afterTokens <= beforeTokens * 0.6,
+    `no real saving: ${beforeTokens}t -> ${afterTokens}t`,
+  );
 });
 
 test("summarizeToolOutputForHistory surfaces totals and row counts", () => {
@@ -184,7 +218,10 @@ test("summarizeToolOutputForHistory surfaces totals and row counts", () => {
 });
 
 test("summarizeToolOutputForHistory reports errors instead of figures", () => {
-  assert.match(summarizeToolOutputForHistory({ ok: false, error: "forbidden" }), /error: forbidden/);
+  assert.match(
+    summarizeToolOutputForHistory({ ok: false, error: "forbidden" }),
+    /error: forbidden/,
+  );
 });
 
 test("summarizeToolOutputForHistory caps pathological outputs", () => {
@@ -209,7 +246,11 @@ test("budgeted history still converts to model messages", async () => {
   const { convertToModelMessages, tool } = await import("ai");
   const { z } = await import("zod");
   const stub = () =>
-    tool({ description: "stub", inputSchema: z.object({}), execute: async () => ({ ok: true as const, data: {} }) });
+    tool({
+      description: "stub",
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true as const, data: {} }),
+    });
   const tools = {
     cash_position: stub(),
     party_concentration: stub(),

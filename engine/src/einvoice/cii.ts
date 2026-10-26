@@ -24,7 +24,8 @@ const NS = {
   qdt: "urn:un:unece:uncefact:data:standard:QualifiedDataType:100",
 } as const;
 
-const percent = (rate: string) => hasAtMostDecimals(rate, 2) ? fixed(rate, 2) : canonicalDecimal(rate);
+const percent = (rate: string) =>
+  hasAtMostDecimals(rate, 2) ? fixed(rate, 2) : canonicalDecimal(rate);
 
 function dateTime(name: string, iso: string | null | undefined, term: string): XmlElement | null {
   if (!iso) return null;
@@ -59,18 +60,28 @@ function tradeParty(name: string, party: EInvoiceParty, role: "seller" | "buyer"
     ),
     contact
       ? el(
-        "ram:DefinedTradeContact",
-        leaf("ram:PersonName", contact.name),
-        el("ram:TelephoneUniversalCommunication", leaf("ram:CompleteNumber", contact.phone)),
-        el("ram:EmailURIUniversalCommunication", leaf("ram:URIID", contact.email)),
-      )
+          "ram:DefinedTradeContact",
+          leaf("ram:PersonName", contact.name),
+          el("ram:TelephoneUniversalCommunication", leaf("ram:CompleteNumber", contact.phone)),
+          el("ram:EmailURIUniversalCommunication", leaf("ram:URIID", contact.email)),
+        )
       : null,
     address(party.address),
     party.electronicAddress
-      ? el("ram:URIUniversalCommunication", leaf("ram:URIID", party.electronicAddress.id, { schemeID: party.electronicAddress.schemeId }))
+      ? el(
+          "ram:URIUniversalCommunication",
+          leaf("ram:URIID", party.electronicAddress.id, {
+            schemeID: party.electronicAddress.schemeId,
+          }),
+        )
       : null,
     el("ram:SpecifiedTaxRegistration", leaf("ram:ID", party.vatId, { schemeID: "VA" })),
-    role === "seller" ? el("ram:SpecifiedTaxRegistration", leaf("ram:ID", party.taxRegistrationId, { schemeID: "FC" })) : null,
+    role === "seller"
+      ? el(
+          "ram:SpecifiedTaxRegistration",
+          leaf("ram:ID", party.taxRegistrationId, { schemeID: "FC" }),
+        )
+      : null,
   );
 }
 
@@ -97,7 +108,11 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
     required(
       "ram:IncludedSupplyChainTradeLineItem",
       {},
-      el("ram:AssociatedDocumentLineDocument", leaf("ram:LineID", line.id), el("ram:IncludedNote", leaf("ram:Content", line.note))),
+      el(
+        "ram:AssociatedDocumentLineDocument",
+        leaf("ram:LineID", line.id),
+        el("ram:IncludedNote", leaf("ram:Content", line.note)),
+      ),
       el(
         "ram:SpecifiedTradeProduct",
         leaf("ram:SellerAssignedID", line.sellerItemId),
@@ -111,24 +126,38 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
         el(
           "ram:NetPriceProductTradePrice",
           leaf("ram:ChargeAmount", canonicalDecimal(line.netPrice)),
-          line.baseQuantity ? leaf("ram:BasisQuantity", canonicalDecimal(line.baseQuantity), { unitCode: line.unitCode }) : null,
+          line.baseQuantity
+            ? leaf("ram:BasisQuantity", canonicalDecimal(line.baseQuantity), {
+                unitCode: line.unitCode,
+              })
+            : null,
         ),
       ),
-      el("ram:SpecifiedLineTradeDelivery", leaf("ram:BilledQuantity", canonicalDecimal(line.quantity), { unitCode: line.unitCode })),
+      el(
+        "ram:SpecifiedLineTradeDelivery",
+        leaf("ram:BilledQuantity", canonicalDecimal(line.quantity), { unitCode: line.unitCode }),
+      ),
       el(
         "ram:SpecifiedLineTradeSettlement",
         el("ram:ApplicableTradeTax", ...tradeTax(line.vatCategory, line.vatRate)),
         line.period
           ? el(
-            "ram:BillingSpecifiedPeriod",
-            dateTime("StartDateTime", line.period.start, "BT-134"),
-            dateTime("EndDateTime", line.period.end, "BT-135"),
-          )
+              "ram:BillingSpecifiedPeriod",
+              dateTime("StartDateTime", line.period.start, "BT-134"),
+              dateTime("EndDateTime", line.period.end, "BT-135"),
+            )
           : null,
-        el("ram:SpecifiedTradeSettlementLineMonetarySummation", leaf("ram:LineTotalAmount", amount(line.netAmount))),
-        el("ram:ReceivableSpecifiedTradeAccountingAccount", leaf("ram:ID", line.accountingReference)),
+        el(
+          "ram:SpecifiedTradeSettlementLineMonetarySummation",
+          leaf("ram:LineTotalAmount", amount(line.netAmount)),
+        ),
+        el(
+          "ram:ReceivableSpecifiedTradeAccountingAccount",
+          leaf("ram:ID", line.accountingReference),
+        ),
       ),
-    ));
+    ),
+  );
 
   const agreement = required(
     "ram:ApplicableHeaderTradeAgreement",
@@ -140,7 +169,13 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
     el("ram:BuyerOrderReferencedDocument", leaf("ram:IssuerAssignedID", inv.orderReference)),
     el("ram:ContractReferencedDocument", leaf("ram:IssuerAssignedID", inv.contractReference)),
     // D16B makes the project name mandatory; EN 16931 carries only the identifier (BT-11).
-    inv.projectReference ? el("ram:SpecifiedProcuringProject", leaf("ram:ID", inv.projectReference), leaf("ram:Name", "Project")) : null,
+    inv.projectReference
+      ? el(
+          "ram:SpecifiedProcuringProject",
+          leaf("ram:ID", inv.projectReference),
+          leaf("ram:Name", "Project"),
+        )
+      : null,
   );
 
   const delivery = inv.delivery;
@@ -149,9 +184,18 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
     "ram:ApplicableHeaderTradeDelivery",
     {},
     delivery && (delivery.address || delivery.locationName)
-      ? el("ram:ShipToTradeParty", leaf("ram:Name", delivery.locationName), address(delivery.address))
+      ? el(
+          "ram:ShipToTradeParty",
+          leaf("ram:Name", delivery.locationName),
+          address(delivery.address),
+        )
       : null,
-    delivery?.date ? el("ram:ActualDeliverySupplyChainEvent", dateTime("OccurrenceDateTime", delivery.date, "BT-72")) : null,
+    delivery?.date
+      ? el(
+          "ram:ActualDeliverySupplyChainEvent",
+          dateTime("OccurrenceDateTime", delivery.date, "BT-72"),
+        )
+      : null,
   );
 
   const taxCurrency = inv.taxCurrency && inv.taxCurrency !== inv.currency ? inv.taxCurrency : null;
@@ -168,14 +212,19 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
       leaf("ram:Information", inv.payment.meansText),
       transfer
         ? el(
-          "ram:PayeePartyCreditorFinancialAccount",
-          accountIsIban ? leaf("ram:IBANID", accountId.replace(/[\s-]+/g, "").toUpperCase()) : null,
-          leaf("ram:AccountName", transfer.accountName),
-          accountIsIban ? null : leaf("ram:ProprietaryID", accountId),
-        )
+            "ram:PayeePartyCreditorFinancialAccount",
+            accountIsIban
+              ? leaf("ram:IBANID", accountId.replace(/[\s-]+/g, "").toUpperCase())
+              : null,
+            leaf("ram:AccountName", transfer.accountName),
+            accountIsIban ? null : leaf("ram:ProprietaryID", accountId),
+          )
         : null,
       transfer?.providerId && isValidBic(compactPaymentIdentifier(transfer.providerId))
-        ? el("ram:PayeeSpecifiedCreditorFinancialInstitution", leaf("ram:BICID", compactPaymentIdentifier(transfer.providerId)))
+        ? el(
+            "ram:PayeeSpecifiedCreditorFinancialInstitution",
+            leaf("ram:BICID", compactPaymentIdentifier(transfer.providerId)),
+          )
         : null,
     ),
     ...inv.vatBreakdown.map((group) =>
@@ -188,16 +237,20 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
         leaf("ram:CategoryCode", group.category),
         leaf("ram:ExemptionReasonCode", group.exemptionReasonCode),
         inv.taxPointDate
-          ? el("ram:TaxPointDate", leaf("udt:DateString", format102(inv.taxPointDate, "BT-7"), { format: "102" }))
+          ? el(
+              "ram:TaxPointDate",
+              leaf("udt:DateString", format102(inv.taxPointDate, "BT-7"), { format: "102" }),
+            )
           : null,
         group.category === "O" ? null : leaf("ram:RateApplicablePercent", percent(group.rate)),
-      )),
+      ),
+    ),
     inv.invoicePeriod
       ? el(
-        "ram:BillingSpecifiedPeriod",
-        dateTime("StartDateTime", inv.invoicePeriod.start, "BT-73"),
-        dateTime("EndDateTime", inv.invoicePeriod.end, "BT-74"),
-      )
+          "ram:BillingSpecifiedPeriod",
+          dateTime("StartDateTime", inv.invoicePeriod.start, "BT-73"),
+          dateTime("EndDateTime", inv.invoicePeriod.end, "BT-74"),
+        )
       : null,
     ...inv.allowanceCharges.map((entry) =>
       el(
@@ -209,7 +262,8 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
         leaf("ram:ReasonCode", entry.reasonCode),
         leaf("ram:Reason", entry.reason),
         el("ram:CategoryTradeTax", ...tradeTax(entry.vatCategory, entry.vatRate)),
-      )),
+      ),
+    ),
     // A due date without terms text still needs the payment terms container.
     el(
       "ram:SpecifiedTradePaymentTerms",
@@ -236,9 +290,13 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
         "ram:InvoiceReferencedDocument",
         leaf("ram:IssuerAssignedID", entry.number),
         entry.issueDate
-          ? el("ram:FormattedIssueDateTime", leaf("qdt:DateTimeString", format102(entry.issueDate, "BT-26"), { format: "102" }))
+          ? el(
+              "ram:FormattedIssueDateTime",
+              leaf("qdt:DateTimeString", format102(entry.issueDate, "BT-26"), { format: "102" }),
+            )
           : null,
-      )),
+      ),
+    ),
   );
 
   const root = required(
@@ -247,7 +305,10 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
     required(
       "rsm:ExchangedDocumentContext",
       {},
-      el("ram:BusinessProcessSpecifiedDocumentContextParameter", leaf("ram:ID", profile.businessProcessId)),
+      el(
+        "ram:BusinessProcessSpecifiedDocumentContextParameter",
+        leaf("ram:ID", profile.businessProcessId),
+      ),
       el("ram:GuidelineSpecifiedDocumentContextParameter", leaf("ram:ID", profile.guidelineId)),
     ),
     required(
@@ -255,7 +316,10 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
       {},
       leaf("ram:ID", inv.number),
       leaf("ram:TypeCode", inv.typeCode),
-      el("ram:IssueDateTime", leaf("udt:DateTimeString", format102(inv.issueDate, "BT-2"), { format: "102" })),
+      el(
+        "ram:IssueDateTime",
+        leaf("udt:DateTimeString", format102(inv.issueDate, "BT-2"), { format: "102" }),
+      ),
       ...inv.notes.map((note) => el("ram:IncludedNote", leaf("ram:Content", note))),
     ),
     required("rsm:SupplyChainTradeTransaction", {}, ...lines, agreement, deliveryNode, settlement),

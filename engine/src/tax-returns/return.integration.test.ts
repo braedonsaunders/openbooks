@@ -63,40 +63,45 @@ async function seedTaxedDocument(
               ${taxAmount}, '0.0000', 'standard', false, false, 2,
               ${sales ? org.accounts.taxOutput : null}, ${sales ? null : org.accounts.taxInput},
               null, false)`);
-    await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+    await tx.execute(
+      sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+    );
   });
   return documentId;
 }
 
-test("a taxable-base box sums only its declared side and nets credit memos", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // One code that applies to BOTH sides — the shape every provisioned pack code has.
-    const codeId = randomUUID();
-    await db.execute(sql`
+test(
+  "a taxable-base box sums only its declared side and nets credit memos",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // One code that applies to BOTH sides — the shape every provisioned pack code has.
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
       values (${codeId}, ${org.orgId}, 'VAT-STD', 'Standard VAT', 'both', 'standard',
               ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
 
-    const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
-    for (const [kind, number, amount, tax] of [
-      ["customer_invoice", "INV-1", "200.0000", "20.0000"],
-      ["customer_credit", "CN-1", "50.0000", "5.0000"],
-      ["vendor_bill", "BILL-1", "150.0000", "15.0000"],
-      ["vendor_credit", "VC-1", "30.0000", "3.0000"],
-    ] as const) {
-      const id = await seedTaxedDocument(org, kind, number, codeId, amount, tax);
-      await postDocument(id, { control });
-    }
+      const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
+      for (const [kind, number, amount, tax] of [
+        ["customer_invoice", "INV-1", "200.0000", "20.0000"],
+        ["customer_credit", "CN-1", "50.0000", "5.0000"],
+        ["vendor_bill", "BILL-1", "150.0000", "15.0000"],
+        ["vendor_credit", "VC-1", "30.0000", "3.0000"],
+      ] as const) {
+        const id = await seedTaxedDocument(org, kind, number, codeId, amount, tax);
+        await postDocument(id, { control });
+      }
 
-    // The library VAT100: box 6 is the sales base, box 7 the purchases base —
-    // the same code is mapped into both, exactly as installTaxReturnPack seeds it.
-    const formCode = "GB_VAT100";
-    await db.execute(sql`
+      // The library VAT100: box 6 is the sales base, box 7 the purchases base —
+      // the same code is mapped into both, exactly as installTaxReturnPack seeds it.
+      const formCode = "GB_VAT100";
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, 'VAT Return (VAT100)', 'efile_api', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values
@@ -105,18 +110,19 @@ test("a taxable-base box sums only its declared side and nets credit memos", { s
         (${randomUUID()}, ${org.orgId}, ${formCode}, '6', 'Total value of sales excluding VAT', ${codeId}, 'taxable_base', 1, 60),
         (${randomUUID()}, ${org.orgId}, ${formCode}, '7', 'Total value of purchases excluding VAT', ${codeId}, 'taxable_base', 1, 70)`);
 
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
-    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
-    // Sales base: 200 invoice − 50 credit note. Purchases base: 150 bill − 30 vendor credit.
-    assert.equal(values.get("6"), "150.0000");
-    assert.equal(values.get("7"), "120.0000");
-    // The tax boxes were already side-aware and must be unchanged by the fix.
-    assert.equal(values.get("1"), "15.0000");
-    assert.equal(values.get("4"), "12.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+      const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+      // Sales base: 200 invoice − 50 credit note. Purchases base: 150 bill − 30 vendor credit.
+      assert.equal(values.get("6"), "150.0000");
+      assert.equal(values.get("7"), "120.0000");
+      // The tax boxes were already side-aware and must be unchanged by the fix.
+      assert.equal(values.get("1"), "15.0000");
+      assert.equal(values.get("4"), "12.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a tax journal in a secondary book does not leak into the return", { skip: !DB }, async () => {
   // Live-Postgres regression: the journal-backed boxes (tax_collected /
@@ -183,115 +189,132 @@ test("a tax journal in a secondary book does not leak into the return", { skip: 
   }
 });
 
-test("a void after the period reports its reversal in the void's period, not nowhere", { skip: !DB }, async () => {
-  // Returns report posted ledger activity by posting date. A July invoice
-  // voided in August stays on the July return (which may already be filed)
-  // and its reversal corrects the August return. Excluding every line of a
-  // voided document instead dropped the August correction from every return,
-  // so tax already remitted in July was never recovered. When the original
-  // and its reversal share one window they net to zero.
-  const org = await createScratchOrg();
-  try {
-    const codeId = randomUUID();
-    await db.execute(sql`
+test(
+  "a void after the period reports its reversal in the void's period, not nowhere",
+  { skip: !DB },
+  async () => {
+    // Returns report posted ledger activity by posting date. A July invoice
+    // voided in August stays on the July return (which may already be filed)
+    // and its reversal corrects the August return. Excluding every line of a
+    // voided document instead dropped the August correction from every return,
+    // so tax already remitted in July was never recovered. When the original
+    // and its reversal share one window they net to zero.
+    const org = await createScratchOrg();
+    try {
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
       values (${codeId}, ${org.orgId}, 'VAT-VOID', 'Void probe', 'both', 'standard',
               ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
 
-    const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
-    const voidedId = await seedTaxedDocument(org, "customer_invoice", "INV-VOID", codeId, "200.0000", "20.0000");
-    await postDocument(voidedId, { control });
-    await postDocument(
-      await seedTaxedDocument(org, "customer_invoice", "INV-KEPT", codeId, "120.0000", "12.0000"),
-      { control },
-    );
+      const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
+      const voidedId = await seedTaxedDocument(
+        org,
+        "customer_invoice",
+        "INV-VOID",
+        codeId,
+        "200.0000",
+        "20.0000",
+      );
+      await postDocument(voidedId, { control });
+      await postDocument(
+        await seedTaxedDocument(org, "customer_invoice", "INV-KEPT", codeId, "120.0000", "12.0000"),
+        { control },
+      );
 
-    // The void posts its reversal in August, outside the July return window.
-    const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+      // The void posts its reversal in August, outside the July return window.
+      const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+        sql`
       select fiscal_calendar_id
         from accounting_periods
-       where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
-    await db.execute(sql`
+       where id = ${org.periodId} and org_id = ${org.orgId}`,
+        "objects",
+      );
+      await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
          starts_on, ends_on, is_adjustment, custom)
       values (${randomUUID()}, ${org.orgId}, ${calendar[0]!.fiscal_calendar_id},
               2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, '{}'::jsonb)`);
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const voided = await requestDocumentVoid({
-      orgId: org.orgId,
-      documentId: voidedId,
-      actorId: actor,
-      reason: "entered wrong figures",
-      reversalDate: "2026-08-15",
-    });
-    assert.equal(voided.status, "voided");
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const voided = await requestDocumentVoid({
+        orgId: org.orgId,
+        documentId: voidedId,
+        actorId: actor,
+        reason: "entered wrong figures",
+        reversalDate: "2026-08-15",
+      });
+      assert.equal(voided.status, "voided");
 
-    const formCode = "VOID-SCOPE";
-    await db.execute(sql`
+      const formCode = "VOID-SCOPE";
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Void scope probe', 'portal_manual', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values
         (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Tax collected', ${codeId}, 'tax_collected', -1, 10),
         (${randomUUID()}, ${org.orgId}, ${formCode}, '6', 'Sales base', ${codeId}, 'taxable_base', 1, 60)`);
 
-    const boxes = async (from: string, to: string) => {
-      const result = await computeTaxReturn(org.orgId, formCode, from, to);
-      return new Map(result.boxes.map((box) => [box.lineCode, box.value]));
-    };
-    // July: both invoices posted then — 32 collected on a 320 base.
-    const july = await boxes(org.date, org.date);
-    assert.equal(july.get("1"), "32.0000");
-    assert.equal(july.get("6"), "320.0000");
-    // August: the void's reversal corrects by the voided invoice's figures.
-    const august = await boxes("2026-08-01", "2026-08-31");
-    assert.equal(august.get("1"), "-20.0000");
-    assert.equal(august.get("6"), "-200.0000");
-    // One window covering both legs nets the voided invoice to zero.
-    const both = await boxes(org.date, "2026-08-31");
-    assert.equal(both.get("1"), "12.0000");
-    assert.equal(both.get("6"), "120.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const boxes = async (from: string, to: string) => {
+        const result = await computeTaxReturn(org.orgId, formCode, from, to);
+        return new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+      };
+      // July: both invoices posted then — 32 collected on a 320 base.
+      const july = await boxes(org.date, org.date);
+      assert.equal(july.get("1"), "32.0000");
+      assert.equal(july.get("6"), "320.0000");
+      // August: the void's reversal corrects by the voided invoice's figures.
+      const august = await boxes("2026-08-01", "2026-08-31");
+      assert.equal(august.get("1"), "-20.0000");
+      assert.equal(august.get("6"), "-200.0000");
+      // One window covering both legs nets the voided invoice to zero.
+      const both = await boxes(org.date, "2026-08-31");
+      assert.equal(both.get("1"), "12.0000");
+      assert.equal(both.get("6"), "120.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a reverse-charge bill on org-default accounts reports output and input VAT", { skip: !DB }, async () => {
-  // A pack-style code carries no accounts of its own and posts to the org's
-  // control accounts, so its components snapshot no account. The output leg
-  // of a reverse charge used to fall out of the collected box (and cancel
-  // the input VAT in the paid box), understating the VAT due.
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`
+test(
+  "a reverse-charge bill on org-default accounts reports output and input VAT",
+  { skip: !DB },
+  async () => {
+    // A pack-style code carries no accounts of its own and posts to the org's
+    // control accounts, so its components snapshot no account. The output leg
+    // of a reverse charge used to fall out of the collected box (and cancel
+    // the input VAT in the paid box), understating the VAT due.
+    const org = await createScratchOrg();
+    try {
+      await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts}',
         coalesce(settings->'controlAccounts', '{}'::jsonb)
           || ${JSON.stringify({ taxCollected: org.accounts.taxOutput, taxPaid: org.accounts.taxInput })}::jsonb)
        where id = ${org.orgId}`);
-    const codeId = randomUUID();
-    await db.execute(sql`
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes (id, org_id, code, name, applies_to, calculation_type, is_active)
       values (${codeId}, ${org.orgId}, 'VAT-RC', 'Reverse charge 20%', 'purchases', 'reverse_charge', true)`);
-    const documentId = randomUUID();
-    const lineId = randomUUID();
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
+      const documentId = randomUUID();
+      const lineId = randomUUID();
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
            document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
         values (${documentId}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-RC', ${org.subsidiaryId}, ${org.vendorId},
                 ${org.date}, ${org.date}, 'CAD', '1', '10000.0000', '0.0000', '10000.0000')`);
-      await tx.execute(sql`
+        await tx.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
            tax_amount, tax_code_id, quantity, unit_price)
         values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '10000.0000',
                 '10000.0000', '0.0000', ${codeId}, '1', '10000.0000')`);
-      await tx.execute(sql`
+        await tx.execute(sql`
         insert into document_line_tax_components
           (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
            tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -299,78 +322,87 @@ test("a reverse-charge bill on org-default accounts reports output and input VAT
            paid_account_id, withholding_account_id, overridden)
         values (${org.orgId}, ${lineId}, ${codeId}, 1, '20', '10000.0000', '2000.0000',
                 '2000.0000', '0.0000', 'reverse_charge', false, false, 2, null, null, null, false)`);
-      await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
-    });
-    await postDocument(documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+        await tx.execute(
+          sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+        );
+      });
+      await postDocument(documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
 
-    const formCode = "RC-SCOPE";
-    await db.execute(sql`
+      const formCode = "RC-SCOPE";
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Reverse charge probe', 'portal_manual', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values
         (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'VAT due', ${codeId}, 'tax_collected', -1, 10),
         (${randomUUID()}, ${org.orgId}, ${formCode}, '4', 'VAT reclaimed', ${codeId}, 'tax_paid', 1, 40)`);
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
-    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
-    assert.equal(values.get("1"), "2000.0000");
-    assert.equal(values.get("4"), "2000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+      const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+      assert.equal(values.get("1"), "2000.0000");
+      assert.equal(values.get("4"), "2000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a taxable-base box converts foreign-currency lines at the posted rate", { skip: !DB }, async () => {
-  // Live-Postgres regression: the journal-backed boxes (tax_collected /
-  // tax_paid / tax_amount) sum journal_lines.amount — the kernel's
-  // txn→functional conversion — but the taxable-base box summed
-  // document_lines.amount raw, i.e. in TRANSACTION currency. A USD 200
-  // invoice at 1.35 in a CAD org reported a 200.0000 base next to a 27.0000
-  // collected-tax box. The base must convert each line at the document's
-  // posted header rate (documents.fx_rate), the same rate the kernel applied.
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`
+test(
+  "a taxable-base box converts foreign-currency lines at the posted rate",
+  { skip: !DB },
+  async () => {
+    // Live-Postgres regression: the journal-backed boxes (tax_collected /
+    // tax_paid / tax_amount) sum journal_lines.amount — the kernel's
+    // txn→functional conversion — but the taxable-base box summed
+    // document_lines.amount raw, i.e. in TRANSACTION currency. A USD 200
+    // invoice at 1.35 in a CAD org reported a 200.0000 base next to a 27.0000
+    // collected-tax box. The base must convert each line at the document's
+    // posted header rate (documents.fx_rate), the same rate the kernel applied.
+    const org = await createScratchOrg();
+    try {
+      await db.execute(sql`
       insert into currencies (code, name, minor_units)
       values ('USD', 'US Dollar', 2)
       on conflict (code) do nothing`);
-    const codeId = randomUUID();
-    await db.execute(sql`
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
       values (${codeId}, ${org.orgId}, 'GST-FX', 'FX probe', 'both', 'standard',
               ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
-    const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
-    await postDocument(
-      await seedTaxedDocument(org, "customer_invoice", "INV-FX", codeId, "200.0000", "20.0000", {
-        currency: "USD",
-        fxRate: "1.3500000000",
-      }),
-      { control },
-    );
+      const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
+      await postDocument(
+        await seedTaxedDocument(org, "customer_invoice", "INV-FX", codeId, "200.0000", "20.0000", {
+          currency: "USD",
+          fxRate: "1.3500000000",
+        }),
+        { control },
+      );
 
-    const formCode = "FX-BASE";
-    await db.execute(sql`
+      const formCode = "FX-BASE";
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, 'FX base probe', 'portal_manual', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values
         (${randomUUID()}, ${org.orgId}, ${formCode}, 'BASE', 'Taxable base', ${codeId}, 'taxable_base', 1, 10),
         (${randomUUID()}, ${org.orgId}, ${formCode}, 'TAX', 'Tax collected', ${codeId}, 'tax_collected', -1, 20)`);
 
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
-    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
-    // 200 USD × 1.35 = 270 CAD of base; 20 USD × 1.35 = 27 CAD of tax.
-    assert.equal(values.get("BASE"), "270.0000");
-    assert.equal(values.get("TAX"), "27.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+      const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+      // 200 USD × 1.35 = 270 CAD of base; 20 USD × 1.35 = 27 CAD of tax.
+      assert.equal(values.get("BASE"), "270.0000");
+      assert.equal(values.get("TAX"), "27.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("an undescribed box takes its side from a one-sided code", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -384,8 +416,14 @@ test("an undescribed box takes its side from a one-sided code", { skip: !DB }, a
         (${salesOnly}, ${org.orgId}, 'OUT', 'Output only', 'sales', 'standard', ${org.accounts.taxOutput}, null, true),
         (${purchasesOnly}, ${org.orgId}, 'IN', 'Input only', 'purchases', 'standard', null, ${org.accounts.taxInput}, true)`);
     const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
-    await postDocument(await seedTaxedDocument(org, "customer_invoice", "INV-2", salesOnly, "80.0000", "8.0000"), { control });
-    await postDocument(await seedTaxedDocument(org, "vendor_bill", "BILL-2", purchasesOnly, "40.0000", "4.0000"), { control });
+    await postDocument(
+      await seedTaxedDocument(org, "customer_invoice", "INV-2", salesOnly, "80.0000", "8.0000"),
+      { control },
+    );
+    await postDocument(
+      await seedTaxedDocument(org, "vendor_bill", "BILL-2", purchasesOnly, "40.0000", "4.0000"),
+      { control },
+    );
 
     // A tenant-authored form the library knows nothing about.
     const formCode = "CUSTOM-RETURN";
@@ -408,54 +446,62 @@ test("an undescribed box takes its side from a one-sided code", { skip: !DB }, a
   }
 });
 
-test("computeTaxReturn carries the form's registration number for the facsimile", { skip: !DB }, async () => {
-  // Live-Postgres regression: the GST34 facsimile printed a hardcoded
-  // '00000 0000 000000' business number even though the org's real CRA
-  // registration sat in tax_registrations — computeTaxReturn dropped it, so
-  // the printed government-form replica carried a fabricated identifier.
-  const org = await createScratchOrg();
-  try {
-    const formCode = "REG-BN";
-    await db.execute(sql`
+test(
+  "computeTaxReturn carries the form's registration number for the facsimile",
+  { skip: !DB },
+  async () => {
+    // Live-Postgres regression: the GST34 facsimile printed a hardcoded
+    // '00000 0000 000000' business number even though the org's real CRA
+    // registration sat in tax_registrations — computeTaxReturn dropped it, so
+    // the printed government-form replica carried a fabricated identifier.
+    const org = await createScratchOrg();
+    try {
+      const formCode = "REG-BN";
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, 'BN probe return', 'portal_manual', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Probe box', null, null, 1, 10)`);
-    const jurisdictionId = randomUUID();
-    await db.execute(sql`
+      const jurisdictionId = randomUUID();
+      await db.execute(sql`
       insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
       values (${jurisdictionId}, ${org.orgId}, 'PROBE', 'Probe jurisdiction', 'CA', 'country', 'gst')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_registrations
         (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
       values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, '123456789 RT0001', 'quarterly', ${formCode}, true)`);
 
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
-    assert.equal(result.registrationNumber, "123456789 RT0001");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+      assert.equal(result.registrationNumber, "123456789 RT0001");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("computeTaxReturn reports a null registration number when the form is unregistered", { skip: !DB }, async () => {
-  // The facsimile must print a blank identifier — never zeros — when the org
-  // holds no registration for the form.
-  const org = await createScratchOrg();
-  try {
-    const formCode = "REG-BN-ABSENT";
-    await db.execute(sql`
+test(
+  "computeTaxReturn reports a null registration number when the form is unregistered",
+  { skip: !DB },
+  async () => {
+    // The facsimile must print a blank identifier — never zeros — when the org
+    // holds no registration for the form.
+    const org = await createScratchOrg();
+    try {
+      const formCode = "REG-BN-ABSENT";
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Unregistered probe return', 'portal_manual', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Probe box', null, null, 1, 10)`);
 
-    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
-    assert.equal(result.registrationNumber, null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+      assert.equal(result.registrationNumber, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  measureGroupComponent,
-  transferGroupComponent,
-} from "./group-component.ts";
+import { measureGroupComponent, transferGroupComponent } from "./group-component.ts";
 import { groupAssetPlan } from "../money/asset-group-plan.ts";
 import { add, mulRatio, neg, toUnits } from "../money/money.ts";
 import { splitDepreciationPlan } from "../money/depreciation-plan.ts";
@@ -98,10 +95,7 @@ test("later homogeneous disposal uses the corrected group component basis, not o
     add(basis.groupAccumulated, state.accumulatedDelta),
     splitDepreciationPlan(state.plan, "2026-09-01").accrued,
   );
-  assert.equal(
-    retained(add(add(basis.groupCost, state.costDelta), neg(accumulated))),
-    "0.0000",
-  );
+  assert.equal(retained(add(add(basis.groupCost, state.costDelta), neg(accumulated))), "0.0000");
 });
 test("identified disposal rejects invented service totals and a mismatched whole-group disposal", () => {
   assert.throws(

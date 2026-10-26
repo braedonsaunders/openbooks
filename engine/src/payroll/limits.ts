@@ -1,7 +1,15 @@
 import { PayrollError } from "./error.ts";
-import { normalizeDecimal } from '../money/money.ts';
+import { normalizeDecimal } from "../money/money.ts";
 import {
-  add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits,
+  add,
+  cmp,
+  fromUnits,
+  mulPercent,
+  mulRatio,
+  neg,
+  normalizeMoney,
+  sum,
+  toUnits,
 } from "../money/money.ts";
 // Type-only: the classes are DECLARED by the country packs (packs.ts); this
 // module only enforces what the declaration promises, and stays db-free.
@@ -163,14 +171,21 @@ export function protectedBase(
 ): string {
   if (base === "none") return "0";
   if (base === "gross") {
-    return atLeastZero(sum(
-      lines.filter((line) => line.kind === "earning" && !line.accrualOnly).map((line) => line.amount),
-    ));
+    return atLeastZero(
+      sum(
+        lines
+          .filter((line) => line.kind === "earning" && !line.accrualOnly)
+          .map((line) => line.amount),
+      ),
+    );
   }
-  const cashLines = lines.filter((line) => line.kind !== "earning" || line.paymentKind !== "non_cash");
-  const unflagged = base === "net_pay"
-    ? cashLines.map((line) => ({ ...line, includeInDisposableEarnings: true }))
-    : cashLines;
+  const cashLines = lines.filter(
+    (line) => line.kind !== "earning" || line.paymentKind !== "non_cash",
+  );
+  const unflagged =
+    base === "net_pay"
+      ? cashLines.map((line) => ({ ...line, includeInDisposableEarnings: true }))
+      : cashLines;
   return disposableEarnings(unflagged, options);
 }
 
@@ -227,7 +242,8 @@ export interface BasisCapContext {
  */
 function unitRate(component: BasisCapComponent): { numerator: bigint; denominator: bigint } {
   const rateScale = 10_000_000_000n;
-  const rateUnits = (): bigint => BigInt(normalizeDecimal(component.value ?? '0', 10).replace('.', ''));
+  const rateUnits = (): bigint =>
+    BigInt(normalizeDecimal(component.value ?? "0", 10).replace(".", ""));
   if (component.basis === "percent_of_gross") {
     return { numerator: rateUnits(), denominator: 100n * rateScale };
   }
@@ -244,7 +260,11 @@ function unitRate(component: BasisCapComponent): { numerator: bigint; denominato
  * to the registered payable quantum. Existing callers use whole-cent ceilings;
  * rounding at that same precision cannot exceed the retained room.
  */
-function basisWithin(room: string, rate: { numerator: bigint; denominator: bigint }, minorUnits = 2): string {
+function basisWithin(
+  room: string,
+  rate: { numerator: bigint; denominator: bigint },
+  minorUnits = 2,
+): string {
   const quantum = 10n ** BigInt(4 - minorUnits);
   const roomUnits = (toUnits(room) / quantum) * quantum;
   return fromUnits((roomUnits * rate.denominator) / rate.numerator);
@@ -260,9 +280,16 @@ export function applyBasisCaps(
   basis: string,
   context: BasisCapContext = {},
 ): string {
-  const minorUnits = Object.hasOwn(context, 'currencyMinorUnits') ? context.currencyMinorUnits : 2;
-  if (typeof minorUnits !== 'number' || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
-    throw new PayrollLimitError('A component money cap needs supported currency precision — resolve its registered payable quantum before calculating.');
+  const minorUnits = Object.hasOwn(context, "currencyMinorUnits") ? context.currencyMinorUnits : 2;
+  if (
+    typeof minorUnits !== "number" ||
+    !Number.isInteger(minorUnits) ||
+    minorUnits < 0 ||
+    minorUnits > 4
+  ) {
+    throw new PayrollLimitError(
+      "A component money cap needs supported currency precision — resolve its registered payable quantum before calculating.",
+    );
   }
   let capped = requireNonNegative(basis, "a component basis");
 
@@ -270,9 +297,7 @@ export function applyBasisCaps(
   if (hoursCap != null && cmp(hoursCap, "0") >= 0) {
     const lines = context.lines;
     if (!lines) {
-      throw new PayrollLimitError(
-        "an hours-capped component needs the hours behind its basis",
-      );
+      throw new PayrollLimitError("an hours-capped component needs the hours behind its basis");
     }
     const hoursBasis = component.basis === "per_hour";
     let allowance = requireNonNegative(hoursCap, "an hours cap");
@@ -287,10 +312,16 @@ export function applyBasisCaps(
       if (cmp(excess, "0") === 0) continue;
       // Money bases lose the excess hours' share of their own line, so a line
       // billed at a higher rate drops what that line actually cost.
-      dropped = add(dropped, hoursBasis
-        ? excess
-        : mulRatio(requireNonNegative(line.amount ?? "0", "a line amount"),
-                   toUnits(excess), toUnits(hours)));
+      dropped = add(
+        dropped,
+        hoursBasis
+          ? excess
+          : mulRatio(
+              requireNonNegative(line.amount ?? "0", "a line amount"),
+              toUnits(excess),
+              toUnits(hours),
+            ),
+      );
     }
     capped = atLeastZero(add(capped, neg(dropped)));
   }
@@ -302,8 +333,12 @@ export function applyBasisCaps(
       [component.basisCapAmountPerYear, context.yearToDate ?? "0"] as const,
     ]) {
       if (cap == null) continue;
-      const room = atLeastZero(add(requireNonNegative(cap, "an amount cap"),
-                                   neg(requireNonNegative(taken, "an amount already taken"))));
+      const room = atLeastZero(
+        add(
+          requireNonNegative(cap, "an amount cap"),
+          neg(requireNonNegative(taken, "an amount already taken")),
+        ),
+      );
       capped = lesser(capped, basisWithin(room, rate, minorUnits));
     }
   }
@@ -385,8 +420,9 @@ export function applyDeductionProtection(
 
   const ordered = deductions
     .map((deduction, index) => ({ deduction, index }))
-    .sort((a, b) =>
-      (a.deduction.priority ?? 100) - (b.deduction.priority ?? 100) || a.index - b.index);
+    .sort(
+      (a, b) => (a.deduction.priority ?? 100) - (b.deduction.priority ?? 100) || a.index - b.index,
+    );
 
   const applied: AppliedDeduction[] = [];
   const shortfalls: DeductionShortfall[] = [];
@@ -401,10 +437,17 @@ export function applyDeductionProtection(
     }
     const ownBase = requireNonNegative(deduction.base ?? base, "a protected base");
     const percentCap = percentFloorCents(ownBase, deduction.maxPercent);
-    const cap = deduction.exemptFloor === undefined
-      ? percentCap
-      : lesser(percentCap, floorCents(atLeastZero(add(ownBase,
-        neg(requireNonNegative(deduction.exemptFloor, "an exempt floor"))))));
+    const cap =
+      deduction.exemptFloor === undefined
+        ? percentCap
+        : lesser(
+            percentCap,
+            floorCents(
+              atLeastZero(
+                add(ownBase, neg(requireNonNegative(deduction.exemptFloor, "an exempt floor"))),
+              ),
+            ),
+          );
     // One pool, several ceilings: every order competes for the same money, so
     // each one's room is its own ceiling less what the higher-priority orders
     // already took.
@@ -433,14 +476,20 @@ export function applyDeductionProtection(
  * monthly. Exact, and rounded UP to the cent: the floor protects the
  * employee, so rounding never moves money toward the creditor.
  */
-export function protectionExemptFloor(hourlyWage: string, weeklyHours: string, periodsPerYear: number): string {
+export function protectionExemptFloor(
+  hourlyWage: string,
+  weeklyHours: string,
+  periodsPerYear: number,
+): string {
   if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
     throw new PayrollLimitError("an exempt floor needs a whole number of pay periods per year");
   }
   // Both factors carry SCALE units; the product carries SCALE², and one
   // cent is SCALE²/CENT of it.
-  const numerator = toUnits(requireNonNegative(hourlyWage, "a floor wage"))
-    * toUnits(requireNonNegative(weeklyHours, "floor hours")) * 52n;
+  const numerator =
+    toUnits(requireNonNegative(hourlyWage, "a floor wage")) *
+    toUnits(requireNonNegative(weeklyHours, "floor hours")) *
+    52n;
   const denominator = BigInt(periodsPerYear) * SCALE * (SCALE / CENT);
   const cents = (numerator + denominator - 1n) / denominator;
   return fromUnits(cents * (SCALE / CENT));
@@ -490,9 +539,9 @@ export function assertProtectionIsAfterTax(
   for (const component of components) {
     if (component.taxTreatment && component.taxTreatment !== "none") {
       throw new PayrollLimitError(
-        `protected deduction ${component.key} is pre-tax (${component.taxTreatment}) — `
-        + "protection is measured after the statutory pass, so a pre-tax order must "
-        + "be settled by the iterate-to-fixpoint pass, not this one",
+        `protected deduction ${component.key} is pre-tax (${component.taxTreatment}) — ` +
+          "protection is measured after the statutory pass, so a pre-tax order must " +
+          "be settled by the iterate-to-fixpoint pass, not this one",
       );
     }
   }
@@ -552,10 +601,10 @@ export function assertEarningsAssessedStable(
     `${line.projectId ?? "no project"}/${line.departmentId ?? "no department"}`;
   const fail = (component: string, detail: string): never => {
     throw new PayrollLimitError(
-      `earnings-assessed statutory line ${component} for ${employee} ${detail} across the `
-      + "deduction-protection passes — an earnings-assessed levy is computed from earnings, "
-      + "which protection never changes, so it is computed once. If it genuinely depends on "
-      + "the deductions taken, this pack needs a correction; contact support.",
+      `earnings-assessed statutory line ${component} for ${employee} ${detail} across the ` +
+        "deduction-protection passes — an earnings-assessed levy is computed from earnings, " +
+        "which protection never changes, so it is computed once. If it genuinely depends on " +
+        "the deductions taken, this pack needs a correction; contact support.",
     );
   };
   for (const [index, before] of first.entries()) {
@@ -565,7 +614,10 @@ export function assertEarningsAssessedStable(
       fail(before.component, `was replaced by ${after!.component}`);
     }
     if (cmp(after!.amount, before.amount) !== 0) {
-      fail(before.component, `moved from ${normalizeMoney(before.amount)} to ${normalizeMoney(after!.amount)}`);
+      fail(
+        before.component,
+        `moved from ${normalizeMoney(before.amount)} to ${normalizeMoney(after!.amount)}`,
+      );
     }
     if (split(after!) !== split(before)) {
       fail(before.component, `moved from ${split(before)} to ${split(after!)}`);
@@ -630,9 +682,10 @@ export function settleProtectionOscillation(
   for (const entry of current) {
     const amount = before.get(entry.key);
     if (amount == null) return null;
-    const gap = cmp(amount, entry.amount) >= 0
-      ? add(amount, neg(entry.amount))
-      : add(entry.amount, neg(amount));
+    const gap =
+      cmp(amount, entry.amount) >= 0
+        ? add(amount, neg(entry.amount))
+        : add(entry.amount, neg(amount));
     if (cmp(gap, "0.01") > 0) return null;
     settled.push({ key: entry.key, amount: lesser(amount, entry.amount) });
   }

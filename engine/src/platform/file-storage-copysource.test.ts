@@ -24,10 +24,7 @@ test("encodeS3CopySource URL-encodes each key segment and preserves separators",
     encodeS3CopySource("acme-bucket", "sftp/acme/Zürich-contrat.pdf"),
     "acme-bucket/sftp/acme/Z%C3%BCrich-contrat.pdf",
   );
-  assert.equal(
-    encodeS3CopySource("acme-bucket", "plain/key.pdf"),
-    "acme-bucket/plain/key.pdf",
-  );
+  assert.equal(encodeS3CopySource("acme-bucket", "plain/key.pdf"), "acme-bucket/plain/key.pdf");
 });
 
 test("the serialized CopyObject request carries the encoded source", () => {
@@ -63,10 +60,12 @@ test("file-cabinet server-side copy sends an encoded source and preserves its by
   try {
     await copyS3Blob(sourceId, "v2");
 
-    assert.deepEqual(sentCopies(fake), [{
-      CopySource: `${s3Bucket()}/file-cabinet/v%201%23`,
-      Key: "file-cabinet/v2",
-    }]);
+    assert.deepEqual(sentCopies(fake), [
+      {
+        CopySource: `${s3Bucket()}/file-cabinet/v%201%23`,
+        Key: "file-cabinet/v2",
+      },
+    ]);
     assert.deepEqual(await getS3Blob("v2"), Buffer.from("immutable file version"));
     assert.deepEqual(await getS3Blob(sourceId), Buffer.from("immutable file version"));
   } finally {

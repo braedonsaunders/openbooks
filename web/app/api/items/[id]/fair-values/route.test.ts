@@ -19,8 +19,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.fair-values-route-test')]
@@ -45,10 +44,7 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }
-    if (
-      specifier === "@/lib/authz" &&
-      context.parentURL?.endsWith("/web/lib/api/route.ts")
-    ) {
+    if (specifier === "@/lib/authz" && context.parentURL?.endsWith("/web/lib/api/route.ts")) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -65,9 +61,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?fair-values-concurrency-test";
-const { PATCH, DELETE } = (await import(
-  routeUrl
-)) as typeof import("./route.ts");
+const { PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, pool } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
@@ -85,12 +79,15 @@ interface Fixture {
 async function seed(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const row = await db.execute<{ id: string }>(sql`
+  const row = await db.execute<{ id: string }>(
+    sql`
     insert into fair_value_prices
       (org_id, item_id, currency, unit_price, effective_from, is_active, created_by, updated_by)
     values
       (${org.orgId}, ${org.items.service}, 'CAD', '100.0000', '2026-01-01', true, ${actorId}, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   return {
     orgId: org.orgId,
     actorId,
@@ -107,19 +104,16 @@ function authorize(fixture: Fixture): void {
 }
 
 function patchRequest(fixture: Fixture, unitPrice: string): Request {
-  return new Request(
-    `http://openbooks.test/api/items/${fixture.itemId}/fair-values`,
-    {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        id: fixture.priceId,
-        currency: "CAD",
-        unitPrice,
-        effectiveFrom: "2026-01-01",
-      }),
-    },
-  );
+  return new Request(`http://openbooks.test/api/items/${fixture.itemId}/fair-values`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id: fixture.priceId,
+      currency: "CAD",
+      unitPrice,
+      effectiveFrom: "2026-01-01",
+    }),
+  });
 }
 
 function deleteRequest(fixture: Fixture): Request {
@@ -157,9 +151,7 @@ async function holdRowLock(fixture: Fixture): Promise<HeldRowLock> {
       "select id from fair_value_prices where id = $1 and org_id = $2 for update",
       [fixture.priceId, fixture.orgId],
     );
-    const backend = await client.query<{ pid: number }>(
-      "select pg_backend_pid() as pid",
-    );
+    const backend = await client.query<{ pid: number }>("select pg_backend_pid() as pid");
     return { client, pid: Number(backend.rows[0]!.pid) };
   } catch (error) {
     client.release(error as Error);
@@ -188,9 +180,7 @@ async function waitForBlockedRequest(
   );
   for (let attempt = 0; attempt < 400; attempt += 1) {
     if (settled) {
-      throw new Error(
-        "fair-value request completed before reaching the row-lock barrier",
-      );
+      throw new Error("fair-value request completed before reaching the row-lock barrier");
     }
     const waiters = await pool.query<{ waiter: number; blockers: number[] }>(
       `select activity.pid as waiter, pg_blocking_pids(activity.pid) as blockers
@@ -205,9 +195,7 @@ async function waitForBlockedRequest(
     if (waiter) return Number(waiter.waiter);
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error(
-    `timed out waiting for fair-value row lock held by ${blockerPids.join(", ")}`,
-  );
+  throw new Error(`timed out waiting for fair-value row lock held by ${blockerPids.join(", ")}`);
 }
 
 async function auditRows(fixture: Fixture): Promise<
@@ -225,73 +213,62 @@ async function auditRows(fixture: Fixture): Promise<
       before?: { unit_price?: string };
       after?: { unit_price?: string };
     };
-  }>(sql`
+  }>(
+    sql`
     select action, changes
       from audit_log
      where org_id = ${fixture.orgId} and table_name = 'fair_value_prices' and row_id = ${fixture.priceId}
-     order by at, id`, "objects");
+     order by at, id`,
+    "objects",
+  );
   return result;
 }
 
-test.after(() => hooks.deregister())
-test(
-  "concurrent fair-value PATCHes audit each committed before-state",
-  { skip: !DB },
-  async () => {
-    const fixture = await seed();
-    const holder = await holdRowLock(fixture);
-    let holderOpen = true;
-    let first: Promise<Response> | undefined;
-    let second: Promise<Response> | undefined;
-    try {
-      first = patch(fixture, "110.0000");
-      const firstPid = await waitForBlockedRequest(first, [holder.pid]);
-      second = patch(fixture, "120.0000");
-      await waitForBlockedRequest(second, [holder.pid, firstPid]);
+test.after(() => hooks.deregister());
+test("concurrent fair-value PATCHes audit each committed before-state", { skip: !DB }, async () => {
+  const fixture = await seed();
+  const holder = await holdRowLock(fixture);
+  let holderOpen = true;
+  let first: Promise<Response> | undefined;
+  let second: Promise<Response> | undefined;
+  try {
+    first = patch(fixture, "110.0000");
+    const firstPid = await waitForBlockedRequest(first, [holder.pid]);
+    second = patch(fixture, "120.0000");
+    await waitForBlockedRequest(second, [holder.pid, firstPid]);
 
-      await holder.client.query("commit");
-      holderOpen = false;
-      const responses = await Promise.all([first, second]);
-      assert.deepEqual(
-        responses.map((response) => response.status),
-        [200, 200],
-        "both serialized edits must complete successfully",
-      );
+    await holder.client.query("commit");
+    holderOpen = false;
+    const responses = await Promise.all([first, second]);
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 200],
+      "both serialized edits must complete successfully",
+    );
 
-      const audits = await auditRows(fixture);
-      assert.equal(
-        audits.length,
-        2,
-        "each committed edit must have one audit row",
+    const audits = await auditRows(fixture);
+    assert.equal(audits.length, 2, "each committed edit must have one audit row");
+    const beforeByAfter = new Map(
+      audits.map((audit) => [audit.changes.after?.unit_price, audit.changes.before?.unit_price]),
+    );
+    assert.equal(beforeByAfter.get("110.0000"), "100.0000");
+    assert.equal(
+      beforeByAfter.get("120.0000"),
+      "110.0000",
+      "the second audit must snapshot the first committed edit, never its stale pre-race value",
+    );
+  } finally {
+    if (holderOpen) await holder.client.query("rollback").catch(() => undefined);
+    if (first || second) {
+      await Promise.allSettled(
+        [first, second].filter((request): request is Promise<Response> => Boolean(request)),
       );
-      const beforeByAfter = new Map(
-        audits.map((audit) => [
-          audit.changes.after?.unit_price,
-          audit.changes.before?.unit_price,
-        ]),
-      );
-      assert.equal(beforeByAfter.get("110.0000"), "100.0000");
-      assert.equal(
-        beforeByAfter.get("120.0000"),
-        "110.0000",
-        "the second audit must snapshot the first committed edit, never its stale pre-race value",
-      );
-    } finally {
-      if (holderOpen)
-        await holder.client.query("rollback").catch(() => undefined);
-      if (first || second) {
-        await Promise.allSettled(
-          [first, second].filter((request): request is Promise<Response> =>
-            Boolean(request),
-          ),
-        );
-      }
-      holder.client.release();
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
     }
-  },
-);
+    holder.client.release();
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
 test(
   "a fair-value PATCH racing DELETE audits the deleted row after the edit",
@@ -318,11 +295,7 @@ test(
       );
 
       const audits = await auditRows(fixture);
-      assert.equal(
-        audits.length,
-        2,
-        "the edit and delete must each be audited",
-      );
+      assert.equal(audits.length, 2, "the edit and delete must each be audited");
       const updateAudit = audits.find((audit) => audit.action === "update");
       const deleteAudit = audits.find((audit) => audit.action === "delete");
       assert.equal(updateAudit?.changes.before?.unit_price, "100.0000");
@@ -332,13 +305,10 @@ test(
         "the delete audit must snapshot the committed PATCH result",
       );
     } finally {
-      if (holderOpen)
-        await holder.client.query("rollback").catch(() => undefined);
+      if (holderOpen) await holder.client.query("rollback").catch(() => undefined);
       if (edit || deletion) {
         await Promise.allSettled(
-          [edit, deletion].filter((request): request is Promise<Response> =>
-            Boolean(request),
-          ),
+          [edit, deletion].filter((request): request is Promise<Response> => Boolean(request)),
         );
       }
       holder.client.release();
@@ -354,7 +324,10 @@ test("PATCH and DELETE by a scoped catalog manager are refused before any write"
   // No database is touched: the org-wide-policy gate fires before the item
   // lookup, so dummy ids prove the refusal precedes every read and write.
   routeState.authz = {
-    user: { orgId: "00000000-0000-4000-8000-00000000f103", id: "00000000-0000-4000-8000-00000000f104" },
+    user: {
+      orgId: "00000000-0000-4000-8000-00000000f103",
+      id: "00000000-0000-4000-8000-00000000f104",
+    },
     permissions: new Set(["items.manage"]),
     allowedSubsidiaryIds: new Set(["00000000-0000-4000-8000-00000000f105"]),
   };

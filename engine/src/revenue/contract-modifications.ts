@@ -1,25 +1,11 @@
 import type { CreditExposure, CreditGroup } from "./deferred-credit-pool.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  withOrg,
-  withTransactionSavepoint,
-  type SqlExecutor,
-} from "../platform/db.ts";
+import { db, withOrg, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import {
-  add,
-  neg,
-  sum,
-  cmp,
-  isZero,
-  fromUnits,
-  toUnits,
-  roundDiv,
-} from "../money/money.ts";
+import { add, neg, sum, cmp, isZero, fromUnits, toUnits, roundDiv } from "../money/money.ts";
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
 import {
   loadSubsidiaryContext,
@@ -56,7 +42,10 @@ import {
  * the caller, never a bare 500.
  */
 export class RevenueModificationError extends Error {
-  constructor(message: string, readonly status: 404 | 409 | 422 = 422) {
+  constructor(
+    message: string,
+    readonly status: 404 | 409 | 422 = 422,
+  ) {
     super(message);
     this.name = "RevenueModificationError";
   }
@@ -175,8 +164,13 @@ async function lockedContract(tx: SqlExecutor, orgId: string, id: string) {
   await tx.execute(
     sql`select id from performance_obligations where org_id=${orgId} and contract_id=${id} order by id for update`,
   );
-  const c = (await tx.execute<Contract>(sql`select id,customer_id,project_id,contract_number,status,currency,subsidiary_id,revision,last_change_id,total_transaction_price::text,starts_on::text,ends_on::text,pricing
-    from revenue_contracts where org_id=${orgId} and id=${id} for update`, "objects"))[0];
+  const c = (
+    await tx.execute<Contract>(
+      sql`select id,customer_id,project_id,contract_number,status,currency,subsidiary_id,revision,last_change_id,total_transaction_price::text,starts_on::text,ends_on::text,pricing
+    from revenue_contracts where org_id=${orgId} and id=${id} for update`,
+      "objects",
+    )
+  )[0];
   if (!c) throw new RevenueModificationError("revenue contract not found", 404);
   return c;
 }
@@ -190,18 +184,11 @@ function validate(input: RevenueModificationInput) {
     throw new RevenueModificationError(
       "record evidence that the parties approved enforceable amended rights and obligations",
     );
-  if (
-    typeof input.assessment !== "string" ||
-    input.assessment.trim().length < 8
-  )
+  if (typeof input.assessment !== "string" || input.assessment.trim().length < 8)
     throw new RevenueModificationError(
       "record the distinctness, price, progress and recognition-rate assessment",
     );
-  if (
-    !Array.isArray(input.groups) ||
-    !input.groups.length ||
-    input.groups.length > 100
-  )
+  if (!Array.isArray(input.groups) || !input.groups.length || input.groups.length > 100)
     throw new RevenueModificationError("enter between one and 100 modification groups");
   if (!Array.isArray(input.bookRates) || !input.bookRates.length)
     throw new RevenueModificationError(
@@ -210,11 +197,7 @@ function validate(input: RevenueModificationInput) {
   const ids = new Set<string>();
   for (const group of input.groups) {
     modificationMoney(group.considerationChange, "Consideration change");
-    if (
-      !Array.isArray(group.promises) ||
-      !group.promises.length ||
-      group.promises.length > 500
-    )
+    if (!Array.isArray(group.promises) || !group.promises.length || group.promises.length > 500)
       throw new RevenueModificationError("each group requires one to 500 promises");
     for (const id of group.existingObligationIds) {
       if (ids.has(id))
@@ -224,11 +207,7 @@ function validate(input: RevenueModificationInput) {
       ids.add(id);
     }
     for (const p of group.promises) {
-      if (
-        typeof p.description !== "string" ||
-        !p.description.trim() ||
-        p.description.length > 1000
-      )
+      if (typeof p.description !== "string" || !p.description.trim() || p.description.length > 1000)
         throw new RevenueModificationError(
           "each promise needs a description of at most 1,000 characters",
         );
@@ -236,8 +215,7 @@ function validate(input: RevenueModificationInput) {
       modificationMoney(p.percentComplete, "Progress");
       if (
         p.recognitionEndsOn &&
-        (!isIsoCalendarDate(p.recognitionEndsOn) ||
-          p.recognitionEndsOn < input.effectiveOn)
+        (!isIsoCalendarDate(p.recognitionEndsOn) || p.recognitionEndsOn < input.effectiveOn)
       )
         throw new RevenueModificationError(
           "remaining recognition end cannot precede the modification",
@@ -289,10 +267,7 @@ function accruedBeforeChange(
 ) {
   const method = basis?.method ?? o.method;
   if (method === "percent_complete")
-    return add(
-      recognitionProgressTarget(total, o.percent_complete ?? "0", basis),
-      neg(earned),
-    );
+    return add(recognitionProgressTarget(total, o.percent_complete ?? "0", basis), neg(earned));
   const rows = lines.filter(
     (l) =>
       !l.journal_entry_id &&
@@ -301,8 +276,7 @@ function accruedBeforeChange(
       l.ends_on >= effectiveOn,
   );
   if (method === "milestone" || method === "usage") return "0.0000";
-  const anchor =
-    o.recognition_starts_on ?? oldPolicy?.contractStartsOn ?? null;
+  const anchor = o.recognition_starts_on ?? oldPolicy?.contractStartsOn ?? null;
   // A schedule already rewritten by a prior amendment runs from its stored
   // recognition start; only a first-generation schedule still carries the
   // rule offset the builder applied when it planned the lines.
@@ -310,8 +284,7 @@ function accruedBeforeChange(
   return sum(
     rows.map((l) => {
       const ruleStart = anchor ? shiftRecognitionDate(anchor, offset) : null;
-      const start =
-        ruleStart && ruleStart > l.starts_on ? ruleStart : l.starts_on;
+      const start = ruleStart && ruleStart > l.starts_on ? ruleStart : l.starts_on;
       const end =
         o.recognition_ends_on && o.recognition_ends_on < l.ends_on
           ? o.recognition_ends_on
@@ -326,10 +299,7 @@ function accruedBeforeChange(
           "the current revenue schedule has an inverted service interval",
         );
       return fromUnits(
-        roundDiv(
-          toUnits(l.planned_amount) * (elapsed > days ? days : elapsed),
-          days,
-        ),
+        roundDiv(toUnits(l.planned_amount) * (elapsed > days ? days : elapsed), days),
       );
     }),
   );
@@ -354,13 +324,14 @@ async function snapshot(
       );
   }
   const subsidiaries = await tx.execute<{
-      id: string;
-      base_currency: string;
-      is_active: boolean;
-      is_elimination: boolean;
-    }>(
-      sql`select id,base_currency,is_active,is_elimination from subsidiaries where org_id=${orgId} order by id for share`, "objects",
-    );
+    id: string;
+    base_currency: string;
+    is_active: boolean;
+    is_elimination: boolean;
+  }>(
+    sql`select id,base_currency,is_active,is_elimination from subsidiaries where org_id=${orgId} order by id for share`,
+    "objects",
+  );
   const owner = subsidiaries.find((s) => s.id === input.subsidiaryId);
   if (!owner || !owner.is_active || owner.is_elimination)
     throw new RevenueModificationError("select an active operating legal entity");
@@ -368,7 +339,8 @@ async function snapshot(
     throw new RevenueModificationError(
       "a modification cannot move a contract to another legal entity",
     );
-  const obligations = await tx.execute<Obligation>(sql`select o.id,o.contract_id,o.description,o.status,o.allocated_price::text,o.recognition_rule_id,r.start_offset_days,
+  const obligations = await tx.execute<Obligation>(
+    sql`select o.id,o.contract_id,o.description,o.status,o.allocated_price::text,o.recognition_rule_id,r.start_offset_days,
     o.recognition_starts_on::text,o.recognition_ends_on::text,o.percent_complete::text,
     coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id) as deferred_account_id,
     coalesce(o.recognized_account_id,r.recognized_account_id,i.income_account_id) as recognized_account_id,
@@ -378,30 +350,23 @@ async function snapshot(
     left join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id
     left join documents d on d.id=dl.document_id and d.org_id=dl.org_id
     left join projects p on p.id=${c.project_id} and p.org_id=o.org_id
-    where o.contract_id=${c.id} and o.org_id=${orgId} order by o.id for update of o for share of r`, "objects");
-  if (
-    obligations.some(
-      (o) => o.source_subsidiary_id && o.source_subsidiary_id !== owner.id,
-    )
-  )
+    where o.contract_id=${c.id} and o.org_id=${orgId} order by o.id for update of o for share of r`,
+    "objects",
+  );
+  if (obligations.some((o) => o.source_subsidiary_id && o.source_subsidiary_id !== owner.id))
     throw new RevenueModificationError(
       "the contract contains performance in another legal entity; its source legal entities must be reconciled before changing it",
     );
-  const selected = new Set(
-    input.groups.flatMap((g) => g.existingObligationIds),
-  );
+  const selected = new Set(input.groups.flatMap((g) => g.existingObligationIds));
   for (const id of selected)
-    if (
-      !obligations.some(
-        (o) => o.id === id && o.status !== "cancelled" && !o.is_forecast,
-      )
-    )
+    if (!obligations.some((o) => o.id === id && o.status !== "cancelled" && !o.is_forecast))
       throw new RevenueModificationError(
         "each selected obligation must be a live actual-revenue promise in this contract",
       );
   const books = await tx.execute<{ id: string; is_primary: boolean }>(
-      sql`select id,is_primary from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc,id for share`, "objects",
-    );
+    sql`select id,is_primary from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc,id for share`,
+    "objects",
+  );
   if (!books.length || books.filter((b) => b.is_primary).length !== 1)
     throw new RevenueModificationError("configure one authoritative primary posting book");
   if (
@@ -430,37 +395,44 @@ async function snapshot(
       );
   }
   const schedules = await tx.execute<Schedule>(
-      sql`select s.id,s.obligation_id,s.book_id,s.total_amount::text,s.revision,s.change_basis from recognition_schedules s join performance_obligations o on o.id=s.obligation_id and o.org_id=s.org_id where o.contract_id=${c.id} and s.org_id=${orgId} order by s.id for update of s`, "objects",
-    );
-  const lines = await tx.execute<PlanLine>(sql`select l.id,l.schedule_id,l.period_id,l.sequence,l.revision,l.planned_amount::text,l.recognized_amount::text,l.journal_entry_id,l.reversal_journal_entry_id,l.modification_adjustment,l.superseded_by_change_id,p.starts_on::text,p.ends_on::text,e.posting_date::text
+    sql`select s.id,s.obligation_id,s.book_id,s.total_amount::text,s.revision,s.change_basis from recognition_schedules s join performance_obligations o on o.id=s.obligation_id and o.org_id=s.org_id where o.contract_id=${c.id} and s.org_id=${orgId} order by s.id for update of s`,
+    "objects",
+  );
+  const lines = await tx.execute<PlanLine>(
+    sql`select l.id,l.schedule_id,l.period_id,l.sequence,l.revision,l.planned_amount::text,l.recognized_amount::text,l.journal_entry_id,l.reversal_journal_entry_id,l.modification_adjustment,l.superseded_by_change_id,p.starts_on::text,p.ends_on::text,e.posting_date::text
     from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id join performance_obligations o on o.id=s.obligation_id and o.org_id=s.org_id
     join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id left join journal_entries e on e.id=l.journal_entry_id and e.org_id=l.org_id
-    where o.contract_id=${c.id} and l.org_id=${orgId} order by l.id for update of l`, "objects");
+    where o.contract_id=${c.id} and l.org_id=${orgId} order by l.id for update of l`,
+    "objects",
+  );
   const unavailable = await tx.execute<{
-      name: string;
-    }>(sql`select distinct b.name from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id
+    name: string;
+  }>(
+    sql`select distinct b.name from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id
     where s.org_id=${orgId} and s.obligation_id in(select jsonb_array_elements_text(${JSON.stringify([...selected])}::jsonb)::uuid)
-      and (not b.is_active or not b.posts_gl) and exists(select 1 from recognition_schedule_lines l where l.org_id=s.org_id and l.schedule_id=s.id and l.journal_entry_id is null and l.superseded_by_change_id is null and l.planned_amount<>0)`, "objects");
+      and (not b.is_active or not b.posts_gl) and exists(select 1 from recognition_schedule_lines l where l.org_id=s.org_id and l.schedule_id=s.id and l.journal_entry_id is null and l.superseded_by_change_id is null and l.planned_amount<>0)`,
+    "objects",
+  );
   if (unavailable.length)
     throw new RevenueModificationError(
       `The affected recognition plan belongs to an inactive or non-posting book (${unavailable.map((b) => b.name).join(", ")}). Enable its Active and Posts GL settings in Accounting setup → Accounting books before applying a change to that plan.`,
     );
   const events = await tx.execute<{
-      id: string;
-      obligation_id: string;
-      period_month: string;
-      amount: string;
-    }>(
-      sql`select e.id,e.obligation_id,e.period_month,e.amount::text from recognition_events e join performance_obligations o on o.id=e.obligation_id and o.org_id=e.org_id where o.contract_id=${c.id} and e.org_id=${orgId} order by e.id for share of e`, "objects",
-    );
+    id: string;
+    obligation_id: string;
+    period_month: string;
+    amount: string;
+  }>(
+    sql`select e.id,e.obligation_id,e.period_month,e.amount::text from recognition_events e join performance_obligations o on o.id=e.obligation_id and o.org_id=e.org_id where o.contract_id=${c.id} and e.org_id=${orgId} order by e.id for share of e`,
+    "objects",
+  );
   const ruleIds = [
-    ...new Set(
-      input.groups.flatMap((g) => g.promises.map((p) => p.recognitionRuleId)),
-    ),
+    ...new Set(input.groups.flatMap((g) => g.promises.map((p) => p.recognitionRuleId))),
   ];
   const rules = await tx.execute<Rule>(
-      sql`select id,method,is_forecast,is_active,recognition_periods,start_offset_days,period_offset,initial_amount_percent::text from recognition_rules where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(ruleIds)}::jsonb)::uuid) order by id for share`, "objects",
-    );
+    sql`select id,method,is_forecast,is_active,recognition_periods,start_offset_days,period_offset,initial_amount_percent::text from recognition_rules where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(ruleIds)}::jsonb)::uuid) order by id for share`,
+    "objects",
+  );
   for (const g of input.groups)
     for (const promise of g.promises) {
       const rule = rules.find((r) => r.id === promise.recognitionRuleId);
@@ -470,9 +442,7 @@ async function snapshot(
         );
       // Accounts with existing earned history cannot be re-labelled as if prior
       // journals used different accounts. Reclassification is a separate entry.
-      const old = promise.existingId
-        ? obligations.find((o) => o.id === promise.existingId)
-        : null;
+      const old = promise.existingId ? obligations.find((o) => o.id === promise.existingId) : null;
       if (
         old &&
         (old.deferred_account_id !== promise.deferredAccountId ||
@@ -485,10 +455,7 @@ async function snapshot(
         throw new RevenueModificationError(
           "a new performance obligation starts with no prior recognized performance",
         );
-      if (
-        rule.method.startsWith("straight_line_") &&
-        !promise.recognitionEndsOn
-      )
+      if (rule.method.startsWith("straight_line_") && !promise.recognitionEndsOn)
         throw new RevenueModificationError(
           "enter the explicit remaining service end for a time-based amended promise",
         );
@@ -508,14 +475,10 @@ async function snapshot(
     ),
   ];
   const accounts = await tx.execute<{ id: string; is_active: boolean; is_summary: boolean }>(
-      sql`select id,is_active,is_summary from accounts where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(accountIds)}::jsonb)::uuid) order by id for share`, "objects",
-    );
-  if (
-    accountIds.some(
-      (id) =>
-        !accounts.some((a) => a.id === id && a.is_active && !a.is_summary),
-    )
-  )
+    sql`select id,is_active,is_summary from accounts where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(accountIds)}::jsonb)::uuid) order by id for share`,
+    "objects",
+  );
+  if (accountIds.some((id) => !accounts.some((a) => a.id === id && a.is_active && !a.is_summary)))
     throw new RevenueModificationError(
       "revenue accounts must be active non-summary accounts in this organization",
     );
@@ -542,9 +505,7 @@ async function snapshot(
   > = {};
   for (const b of books)
     for (const o of obligations.filter((o) => selected.has(o.id))) {
-      const schedule = schedules.find(
-        (s) => s.obligation_id === o.id && s.book_id === b.id,
-      );
+      const schedule = schedules.find((s) => s.obligation_id === o.id && s.book_id === b.id);
       if (!schedule)
         throw new RevenueModificationError(
           `build the missing recognition schedule for ${o.description} before proposing its modification`,
@@ -605,10 +566,7 @@ async function snapshot(
         stub,
         credits: cap.credited,
         exposure: cap.exposure,
-        creditBaseline: add(
-          schedule.change_basis?.creditBaseline ?? "0",
-          cap.credited,
-        ),
+        creditBaseline: add(schedule.change_basis?.creditBaseline ?? "0", cap.credited),
       };
     }
   const preview = books.map((book) => ({
@@ -717,21 +675,18 @@ async function appendAdjustment(
   },
 ) {
   if (isZero(args.amount)) return;
-  const period = await resolveCoveringPeriod(
-    tx,
-    args.orgId,
-    args.date,
-    args.subsidiaryId,
-  );
+  const period = await resolveCoveringPeriod(tx, args.orgId, args.date, args.subsidiaryId);
   if (!period)
     throw new RevenueModificationError(
       `provision an accounting period on the revenue contract's subsidiary calendar covering ${args.date}`,
     );
-  const inserted =
-    await tx.execute(sql`insert into recognition_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,revision,modification_adjustment,recognition_on,created_by,updated_by)
+  const inserted = await tx.execute(
+    sql`insert into recognition_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,revision,modification_adjustment,recognition_on,created_by,updated_by)
     values(${args.orgId},${args.schedule.id},${period.id},
       (select coalesce(max(sequence),-1)+1 from recognition_schedule_lines where org_id=${args.orgId} and schedule_id=${args.schedule.id}),
-      ${args.amount},${args.schedule.revision},true,${args.date},${args.actorId},${args.actorId}) returning id`, "objects");
+      ${args.amount},${args.schedule.revision},true,${args.date},${args.actorId},${args.actorId}) returning id`,
+    "objects",
+  );
   if (inserted.length !== 1)
     throw new RevenueModificationError("revenue adjustment could not be recorded");
 }
@@ -744,15 +699,16 @@ async function postAdjustments(
 ) {
   const entryIds: string[] = [];
   for (const id of [...new Set(obligationIds)]) {
-    const posted = await runRevenueRecognition(orgId, date, actorId, id, [
-      subsidiaryId,
-    ]);
+    const posted = await runRevenueRecognition(orgId, date, actorId, id, [subsidiaryId]);
     if (posted.problems.length) throw new RevenueModificationError(posted.problems.join("; "));
     entryIds.push(...posted.entries.map((e) => e.entryId));
     const pending = await db.execute<{
-        id: string;
-      }>(sql`select l.id from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-      where s.org_id=${orgId} and s.obligation_id=${id} and l.modification_adjustment and (l.journal_entry_id is null or l.recognized_amount<>l.planned_amount) and l.superseded_by_change_id is null and l.planned_amount<>0 and l.recognition_on<=${date}::date`, "objects");
+      id: string;
+    }>(
+      sql`select l.id from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
+      where s.org_id=${orgId} and s.obligation_id=${id} and l.modification_adjustment and (l.journal_entry_id is null or l.recognized_amount<>l.planned_amount) and l.superseded_by_change_id is null and l.planned_amount<>0 and l.recognition_on<=${date}::date`,
+      "objects",
+    );
     if (pending.length)
       throw new RevenueModificationError(
         "a required amendment adjustment did not post; review the accounting book and period configuration",
@@ -766,9 +722,12 @@ export async function applyRevenueModification(
   actorId: string,
 ): Promise<Record<string, unknown>> {
   return withRevenueChangeTransaction(orgId, async (tx) => {
-    const identity = (await tx.execute<{ subject_id: string }>(
-        sql`select subject_id from financial_changes where org_id=${orgId} and id=${changeId} and domain='revenue'`, "objects",
-      ))[0];
+    const identity = (
+      await tx.execute<{ subject_id: string }>(
+        sql`select subject_id from financial_changes where org_id=${orgId} and id=${changeId} and domain='revenue'`,
+        "objects",
+      )
+    )[0];
     if (!identity) throw new RevenueModificationError("revenue modification not found", 404);
     const contract = await lockedContract(tx, orgId, identity.subject_id);
     const change = await loadFinancialChange(tx, orgId, changeId);
@@ -793,17 +752,17 @@ export async function applyRevenueModification(
     const scheduleIds = state.schedules
       .filter((s) => affected.includes(s.obligation_id))
       .map((s) => s.id);
-    const archived =
-      await tx.execute(sql`update recognition_schedule_lines set superseded_by_change_id=${changeId},updated_by=${actorId},updated_at=now()
+    const archived = await tx.execute(
+      sql`update recognition_schedule_lines set superseded_by_change_id=${changeId},updated_by=${actorId},updated_at=now()
       where org_id=${orgId} and schedule_id in(select jsonb_array_elements_text(${JSON.stringify(scheduleIds)}::jsonb)::uuid)
-      and journal_entry_id is null and superseded_by_change_id is null returning id`, "objects");
+      and journal_entry_id is null and superseded_by_change_id is null returning id`,
+      "objects",
+    );
     if (
       archived.length !==
       state.lines.filter(
         (l) =>
-          scheduleIds.includes(l.schedule_id) &&
-          !l.journal_entry_id &&
-          !l.superseded_by_change_id,
+          scheduleIds.includes(l.schedule_id) && !l.journal_entry_id && !l.superseded_by_change_id,
       ).length
     )
       throw new RevenueModificationError(
@@ -811,12 +770,9 @@ export async function applyRevenueModification(
         409,
       );
     for (const schedule of state.schedules.filter(
-      (s) =>
-        affected.includes(s.obligation_id) &&
-        state.books.some((b) => b.id === s.book_id),
+      (s) => affected.includes(s.obligation_id) && state.books.some((b) => b.id === s.book_id),
     )) {
-      const balance =
-        state.balances[`${schedule.book_id}:${schedule.obligation_id}`]!;
+      const balance = state.balances[`${schedule.book_id}:${schedule.obligation_id}`]!;
       await appendAdjustment(tx, {
         orgId,
         schedule,
@@ -827,13 +783,7 @@ export async function applyRevenueModification(
       });
     }
     entryIds.push(
-      ...(await postAdjustments(
-        orgId,
-        actorId,
-        input.effectiveOn,
-        affected,
-        input.subsidiaryId,
-      )),
+      ...(await postAdjustments(orgId, actorId, input.effectiveOn, affected, input.subsidiaryId)),
     );
     const primary = state.books.find((b) => b.is_primary)!;
     const primaryPreview = state.preview.find((b) => b.bookId === primary.id)!;
@@ -847,14 +797,14 @@ export async function applyRevenueModification(
       let targetContractId = contract.id;
       if (group.treatment === "separate") {
         targetContractId = randomUUID();
-        const inserted =
-          await tx.execute(sql`insert into revenue_contracts(id,org_id,customer_id,contract_number,status,starts_on,currency,total_transaction_price,subsidiary_id,parent_contract_id,pricing,created_by,updated_by)
+        const inserted = await tx.execute(
+          sql`insert into revenue_contracts(id,org_id,customer_id,contract_number,status,starts_on,currency,total_transaction_price,subsidiary_id,parent_contract_id,pricing,created_by,updated_by)
           values(${targetContractId},${orgId},${contract.customer_id},${`${contract.contract_number}-M-${changeId}-${gi + 1}`},'active',${input.effectiveOn},${state.currency},${primaryMeasured.newTotal},${input.subsidiaryId},${contract.id},
-            ${JSON.stringify({ changeId, enforceableRightsEvidence: input.enforceableRightsEvidence, assessment: input.assessment })}::jsonb,${actorId},${actorId}) returning id`, "objects");
+            ${JSON.stringify({ changeId, enforceableRightsEvidence: input.enforceableRightsEvidence, assessment: input.assessment })}::jsonb,${actorId},${actorId}) returning id`,
+          "objects",
+        );
         if (inserted.length !== 1)
-          throw new RevenueModificationError(
-            "the separate revenue contract could not be recorded",
-          );
+          throw new RevenueModificationError("the separate revenue contract could not be recorded");
         newContractIds.push(targetContractId);
       } else
         contractDelta = add(
@@ -866,19 +816,23 @@ export async function applyRevenueModification(
           id = promise.existingId ?? randomUUID(),
           measured = primaryMeasured.promises[pi]!;
         if (promise.existingId) {
-          const updated =
-            await tx.execute(sql`update performance_obligations set description=${promise.description},allocated_price=${measured.allocated},standalone_selling_price=${promise.standaloneSellingPrice},
+          const updated = await tx.execute(
+            sql`update performance_obligations set description=${promise.description},allocated_price=${measured.allocated},standalone_selling_price=${promise.standaloneSellingPrice},
             recognition_rule_id=${promise.recognitionRuleId},recognition_starts_on=${input.effectiveOn},recognition_ends_on=${promise.recognitionEndsOn ?? null},percent_complete=${promise.percentComplete},
             deferred_account_id=${promise.deferredAccountId},recognized_account_id=${promise.recognizedAccountId},status='open',last_change_id=${changeId},updated_by=${actorId},updated_at=now()
-            where org_id=${orgId} and id=${id} and contract_id=${contract.id} returning id`, "objects");
+            where org_id=${orgId} and id=${id} and contract_id=${contract.id} returning id`,
+            "objects",
+          );
           if (updated.length !== 1)
             throw new RevenueModificationError(
               "the revised performance obligation could not be saved",
             );
         } else {
-          const inserted =
-            await tx.execute(sql`insert into performance_obligations(id,org_id,contract_id,description,recognition_rule_id,standalone_selling_price,allocated_price,percent_complete,recognition_starts_on,recognition_ends_on,deferred_account_id,recognized_account_id,last_change_id,status,created_by,updated_by)
-            values(${id},${orgId},${targetContractId},${promise.description},${promise.recognitionRuleId},${promise.standaloneSellingPrice},${measured.allocated},${promise.percentComplete},${input.effectiveOn},${promise.recognitionEndsOn ?? null},${promise.deferredAccountId},${promise.recognizedAccountId},${changeId},'open',${actorId},${actorId}) returning id`, "objects");
+          const inserted = await tx.execute(
+            sql`insert into performance_obligations(id,org_id,contract_id,description,recognition_rule_id,standalone_selling_price,allocated_price,percent_complete,recognition_starts_on,recognition_ends_on,deferred_account_id,recognized_account_id,last_change_id,status,created_by,updated_by)
+            values(${id},${orgId},${targetContractId},${promise.description},${promise.recognitionRuleId},${promise.standaloneSellingPrice},${measured.allocated},${promise.percentComplete},${input.effectiveOn},${promise.recognitionEndsOn ?? null},${promise.deferredAccountId},${promise.recognizedAccountId},${changeId},'open',${actorId},${actorId}) returning id`,
+            "objects",
+          );
           if (inserted.length !== 1)
             throw new RevenueModificationError(
               "the added performance obligation could not be saved",
@@ -889,8 +843,8 @@ export async function applyRevenueModification(
           const oldSchedule = state.schedules.find(
             (s) => s.obligation_id === id && s.book_id === book.id,
           );
-          const bookMeasured = state.preview.find((b) => b.bookId === book.id)!
-            .groups[gi]!.promises[pi]!;
+          const bookMeasured = state.preview.find((b) => b.bookId === book.id)!.groups[gi]!
+            .promises[pi]!;
           const basis: RevenueChangeBasis = {
             changeId,
             effectiveOn: input.effectiveOn,
@@ -907,26 +861,25 @@ export async function applyRevenueModification(
               groupIndex: gi,
               promiseIndex: pi,
             },
-            excludedEventIds: state.events
-              .filter((e) => e.obligation_id === id)
-              .map((e) => e.id),
+            excludedEventIds: state.events.filter((e) => e.obligation_id === id).map((e) => e.id),
             retired: false,
             deferredAccountId: promise.deferredAccountId,
             recognizedAccountId: promise.recognizedAccountId,
             currency: state.currency,
             functionalCurrency: state.owner.base_currency,
-            method: state.rules.find((r) => r.id === promise.recognitionRuleId)!
-              .method,
+            method: state.rules.find((r) => r.id === promise.recognitionRuleId)!.method,
             fxRate: input.bookRates.find((r) => r.bookId === book.id)!.fxRate,
           };
           const scheduleId = oldSchedule?.id ?? randomUUID(),
             revision = (oldSchedule?.revision ?? 0) + 1;
           const written = oldSchedule
             ? await tx.execute(
-                sql`update recognition_schedules set revision=${revision},total_amount=${bookMeasured.allocated},change_basis=${JSON.stringify(basis)}::jsonb,status='planned',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${scheduleId} returning id`, "objects",
+                sql`update recognition_schedules set revision=${revision},total_amount=${bookMeasured.allocated},change_basis=${JSON.stringify(basis)}::jsonb,status='planned',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${scheduleId} returning id`,
+                "objects",
               )
             : await tx.execute(
-                sql`insert into recognition_schedules(id,org_id,obligation_id,book_id,revision,total_amount,change_basis,status,created_by,updated_by) values(${scheduleId},${orgId},${id},${book.id},${revision},${bookMeasured.allocated},${JSON.stringify(basis)}::jsonb,'planned',${actorId},${actorId}) returning id`, "objects",
+                sql`insert into recognition_schedules(id,org_id,obligation_id,book_id,revision,total_amount,change_basis,status,created_by,updated_by) values(${scheduleId},${orgId},${id},${book.id},${revision},${bookMeasured.allocated},${JSON.stringify(basis)}::jsonb,'planned',${actorId},${actorId}) returning id`,
+                "objects",
               );
           if (written.length !== 1)
             throw new RevenueModificationError(
@@ -951,16 +904,19 @@ export async function applyRevenueModification(
         }
         for (let ei = 0; ei < (promise.events?.length ?? 0); ei++) {
           const e = promise.events![ei]!;
-          const inserted =
-            await tx.execute(sql`insert into recognition_events(org_id,obligation_id,period_month,amount,description,source_reference,created_by,updated_by)
-            values(${orgId},${id},${e.periodMonth},${e.amount},${e.description},${`modification:${changeId}:${gi}:${pi}:${ei}`},${actorId},${actorId}) returning id`, "objects");
+          const inserted = await tx.execute(
+            sql`insert into recognition_events(org_id,obligation_id,period_month,amount,description,source_reference,created_by,updated_by)
+            values(${orgId},${id},${e.periodMonth},${e.amount},${e.description},${`modification:${changeId}:${gi}:${pi}:${ei}`},${actorId},${actorId}) returning id`,
+            "objects",
+          );
           if (inserted.length !== 1)
             throw new RevenueModificationError("amended performance event could not be recorded");
         }
       }
       for (const retired of primaryMeasured.retired) {
         const updated = await tx.execute(
-          sql`update performance_obligations set allocated_price=${retired.allocated},status='satisfied',last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${retired.id} returning id`, "objects",
+          sql`update performance_obligations set allocated_price=${retired.allocated},status='satisfied',last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${retired.id} returning id`,
+          "objects",
         );
         if (updated.length !== 1)
           throw new RevenueModificationError("the extinguished promise could not be closed");
@@ -980,9 +936,7 @@ export async function applyRevenueModification(
             progressAtChange: "100",
             creditBaseline: "0",
             creditExposure: { kind: "none" },
-            excludedEventIds: state.events
-              .filter((e) => e.obligation_id === o.id)
-              .map((e) => e.id),
+            excludedEventIds: state.events.filter((e) => e.obligation_id === o.id).map((e) => e.id),
             retired: true,
             deferredAccountId: o.deferred_account_id!,
             recognizedAccountId: o.recognized_account_id!,
@@ -992,7 +946,8 @@ export async function applyRevenueModification(
             fxRate: input.bookRates.find((r) => r.bookId === book.id)!.fxRate,
           };
           const saved = await tx.execute(
-            sql`update recognition_schedules set revision=revision+1,total_amount=${balance.recognized},change_basis=${JSON.stringify(basis)}::jsonb,status='complete',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${old.id} returning id`, "objects",
+            sql`update recognition_schedules set revision=revision+1,total_amount=${balance.recognized},change_basis=${JSON.stringify(basis)}::jsonb,status='complete',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${old.id} returning id`,
+            "objects",
           );
           if (saved.length !== 1)
             throw new RevenueModificationError("the extinguished book plan could not be closed");
@@ -1009,22 +964,17 @@ export async function applyRevenueModification(
       )),
     );
     for (const plan of rebuild)
-      await buildRecognitionScheduleOn(
-        tx,
-        plan.id,
-        orgId,
-        actorId,
-        plan.bookId,
-        input.effectiveOn,
-      );
+      await buildRecognitionScheduleOn(tx, plan.id, orgId, actorId, plan.bookId, input.effectiveOn);
     const newPrice = add(contract.total_transaction_price, contractDelta);
     if (cmp(newPrice, "0") < 0)
       throw new RevenueModificationError(
         "the amendment would leave the contract with a negative transaction price",
       );
-    const updated =
-      await tx.execute(sql`update revenue_contracts set subsidiary_id=${input.subsidiaryId},revision=revision+1,last_change_id=${changeId},total_transaction_price=${newPrice},
-      status=${input.groups.some((g) => g.treatment !== "separate") ? "active" : contract.status},pricing=pricing||${JSON.stringify({ lastModificationId: changeId })}::jsonb,updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${contract.id} and revision=${contract.revision} returning id`, "objects");
+    const updated = await tx.execute(
+      sql`update revenue_contracts set subsidiary_id=${input.subsidiaryId},revision=revision+1,last_change_id=${changeId},total_transaction_price=${newPrice},
+      status=${input.groups.some((g) => g.treatment !== "separate") ? "active" : contract.status},pricing=pricing||${JSON.stringify({ lastModificationId: changeId })}::jsonb,updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${contract.id} and revision=${contract.revision} returning id`,
+      "objects",
+    );
     if (updated.length !== 1)
       throw new RevenueModificationError("the revenue contract revision could not be finalized");
     const result = {

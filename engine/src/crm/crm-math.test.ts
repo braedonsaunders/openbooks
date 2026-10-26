@@ -18,10 +18,13 @@ test("lifecycle promotion is forward-only", () => {
 });
 
 test("opportunity totals and weighting are exact at four decimals", () => {
-  const totals = computeOpportunityTotals([
-    { quantity: "3.0000", unitPrice: "19.9999" },
-    { quantity: "0.3333", unitPrice: "100.0000", probability: 25 },
-  ], 75);
+  const totals = computeOpportunityTotals(
+    [
+      { quantity: "3.0000", unitPrice: "19.9999" },
+      { quantity: "0.3333", unitPrice: "100.0000", probability: 25 },
+    ],
+    75,
+  );
   assert.equal(totals.lines[0]?.amount, "59.9997");
   assert.equal(totals.lines[1]?.amount, "33.3300");
   assert.equal(totals.lines[1]?.expectedAmount, "8.3325");
@@ -33,10 +36,13 @@ test("opportunity totals and weighting are exact at four decimals", () => {
 });
 
 test("weighted totals honor per-line probability overrides with header fallback", () => {
-  const totals = computeOpportunityTotals([
-    { quantity: "100.0000", unitPrice: "1.0000", probability: 100 },
-    { quantity: "40.0000", unitPrice: "1.0000" },
-  ], 20);
+  const totals = computeOpportunityTotals(
+    [
+      { quantity: "100.0000", unitPrice: "1.0000", probability: 100 },
+      { quantity: "40.0000", unitPrice: "1.0000" },
+    ],
+    20,
+  );
   assert.equal(totals.lines[0]?.probability, 100);
   assert.equal(totals.lines[0]?.expectedAmount, "100.0000");
   assert.equal(totals.lines[1]?.probability, 20);
@@ -59,19 +65,36 @@ test("sales-team contributions must total exactly one hundred percent", () => {
 });
 
 test("territory rules support deterministic exact comparisons", () => {
-  const subject = { lifecycleStage: "lead" as const, country: "CA", region: "Ontario", annualRevenue: "2500000.0000", employeeCount: 45 };
-  assert.equal(matchesTerritory(subject, [
-    { field: "country", operator: "equals", value: "ca" },
-    { field: "annualRevenue", operator: "gte", value: "2000000" },
-    { field: "employeeCount", operator: "lte", value: 50 },
-  ], "all"), true);
-  assert.equal(matchesTerritory(subject, [{ field: "region", operator: "equals", value: "Quebec" }], "all"), false);
+  const subject = {
+    lifecycleStage: "lead" as const,
+    country: "CA",
+    region: "Ontario",
+    annualRevenue: "2500000.0000",
+    employeeCount: 45,
+  };
+  assert.equal(
+    matchesTerritory(
+      subject,
+      [
+        { field: "country", operator: "equals", value: "ca" },
+        { field: "annualRevenue", operator: "gte", value: "2000000" },
+        { field: "employeeCount", operator: "lte", value: 50 },
+      ],
+      "all",
+    ),
+    true,
+  );
+  assert.equal(
+    matchesTerritory(subject, [{ field: "region", operator: "equals", value: "Quebec" }], "all"),
+    false,
+  );
 });
 
 test("line cost extends with the writer's rounding and yields an exact margin", () => {
-  const totals = computeOpportunityTotals([
-    { quantity: "3.0000", unitPrice: "100.0000", unitCost: "60.0000" },
-  ], 50);
+  const totals = computeOpportunityTotals(
+    [{ quantity: "3.0000", unitPrice: "100.0000", unitCost: "60.0000" }],
+    50,
+  );
   const line = totals.lines[0]!;
   assert.equal(line.costAmount, "180.0000");
   assert.equal(line.grossProfit, "120.0000");
@@ -99,16 +122,20 @@ test("an uncosted line reports no margin rather than a free one", () => {
 });
 
 test("a zero cost is a real 100% margin, distinct from an uncosted line", () => {
-  const totals = computeOpportunityTotals([{ quantity: "1.0000", unitPrice: "10.0000", unitCost: "0" }], 100);
+  const totals = computeOpportunityTotals(
+    [{ quantity: "1.0000", unitPrice: "10.0000", unitCost: "0" }],
+    100,
+  );
   assert.equal(totals.lines[0]?.costAmount, "0.0000");
   assert.equal(totals.grossMarginPercent, "100.0000");
   assert.equal(totals.isFullyCosted, true);
 });
 
 test("cost above price reports a negative margin instead of clamping at zero", () => {
-  const totals = computeOpportunityTotals([
-    { quantity: "1.0000", unitPrice: "80.0000", unitCost: "100.0000" },
-  ], 50);
+  const totals = computeOpportunityTotals(
+    [{ quantity: "1.0000", unitPrice: "80.0000", unitCost: "100.0000" }],
+    50,
+  );
   assert.equal(totals.lines[0]?.grossProfit, "-20.0000");
   assert.equal(totals.grossProfit, "-20.0000");
   assert.equal(totals.grossMarginPercent, "-25.0000");
@@ -120,17 +147,23 @@ test("no revenue means no margin, whatever the cost, and never 0%", () => {
   assert.equal(grossMarginPercent("0.0000", "0.0000"), null);
   assert.equal(grossMarginPercent("0.0000", "500.0000"), null);
   assert.equal(grossMarginPercent("0.0000", null), null);
-  const totals = computeOpportunityTotals([{ quantity: "5.0000", unitPrice: "0", unitCost: "12.0000" }], 50);
+  const totals = computeOpportunityTotals(
+    [{ quantity: "5.0000", unitPrice: "0", unitCost: "12.0000" }],
+    50,
+  );
   assert.equal(totals.projectedAmount, "0.0000");
   assert.equal(totals.grossProfit, "-60.0000");
   assert.equal(totals.grossMarginPercent, null);
 });
 
 test("a partly costed deal reports no header cost and says how far along it is", () => {
-  const totals = computeOpportunityTotals([
-    { quantity: "1.0000", unitPrice: "100.0000", unitCost: "10.0000" },
-    { quantity: "1.0000", unitPrice: "100.0000" },
-  ], 50);
+  const totals = computeOpportunityTotals(
+    [
+      { quantity: "1.0000", unitPrice: "100.0000", unitCost: "10.0000" },
+      { quantity: "1.0000", unitPrice: "100.0000" },
+    ],
+    50,
+  );
   // Summing only the costed line would present 10.0000 as the deal's cost and
   // flatter the margin by exactly the line nobody has priced out.
   assert.equal(totals.totalCost, null);
@@ -159,10 +192,13 @@ test("margin rounds half away from zero at four decimals", () => {
 });
 
 test("weighted gross profit follows each line's own probability", () => {
-  const totals = computeOpportunityTotals([
-    { quantity: "1.0000", unitPrice: "100.0000", unitCost: "40.0000", probability: 100 },
-    { quantity: "1.0000", unitPrice: "100.0000", unitCost: "40.0000", probability: 50 },
-  ], 10);
+  const totals = computeOpportunityTotals(
+    [
+      { quantity: "1.0000", unitPrice: "100.0000", unitCost: "40.0000", probability: 100 },
+      { quantity: "1.0000", unitPrice: "100.0000", unitCost: "40.0000", probability: 50 },
+    ],
+    10,
+  );
   assert.equal(totals.grossProfit, "120.0000");
   // 60 @ 100% + 60 @ 50%, never 120 @ the header's 10%.
   assert.equal(totals.weightedGrossProfit, "90.0000");
@@ -171,16 +207,21 @@ test("weighted gross profit follows each line's own probability", () => {
 test("a weighted loss rounds away from zero rather than toward break-even", () => {
   // weightAmount's unsigned rounding would report -0.0000 here, quietly
   // erasing a loss; the signed path keeps it.
-  const totals = computeOpportunityTotals([
-    { quantity: "1.0000", unitPrice: "0.0000", unitCost: "0.0001", probability: 50 },
-  ], 50);
+  const totals = computeOpportunityTotals(
+    [{ quantity: "1.0000", unitPrice: "0.0000", unitCost: "0.0001", probability: 50 }],
+    50,
+  );
   assert.equal(totals.lines[0]?.grossProfit, "-0.0001");
   assert.equal(totals.weightedGrossProfit, "-0.0001");
 });
 
 test("a negative unit cost is refused rather than stored as a rebate", () => {
   assert.throws(
-    () => computeOpportunityTotals([{ quantity: "1.0000", unitPrice: "10.0000", unitCost: "-1.0000" }], 50),
+    () =>
+      computeOpportunityTotals(
+        [{ quantity: "1.0000", unitPrice: "10.0000", unitCost: "-1.0000" }],
+        50,
+      ),
     /unit cost cannot be negative/,
   );
 });
@@ -208,7 +249,12 @@ test("each declared stage gate refuses with its own stable code", () => {
     requiresPositiveAmount: false,
     requiresWinLossReason: false,
   };
-  const bare = { lineCount: 0, hasPrimaryContact: false, projectedAmount: "0.0000", winLossReason: null };
+  const bare = {
+    lineCount: 0,
+    hasPrimaryContact: false,
+    projectedAmount: "0.0000",
+    winLossReason: null,
+  };
   assert.equal(
     validateOpportunityStageTransition(bare, { ...off, requiresLines: true }),
     "lines_required",

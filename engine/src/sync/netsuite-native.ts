@@ -58,9 +58,7 @@ export function normalizeMarkupPercent(raw: unknown): string | null {
   }
   if (normalized.startsWith("-")) return null;
   const [whole = "0", fraction = ""] = normalized.split(".");
-  const greaterThanOne =
-    BigInt(whole) > 1n ||
-    (BigInt(whole) === 1n && /[1-9]/.test(fraction));
+  const greaterThanOne = BigInt(whole) > 1n || (BigInt(whole) === 1n && /[1-9]/.test(fraction));
   return mulDecimal(greaterThanOne ? "1" : "100", normalized);
 }
 
@@ -79,10 +77,7 @@ export function netSuiteBillAmount(
   if (!isBillable) return null;
   const normalized = normalizeMoney(amount);
   if (kind === "card_refund") return normalized;
-  return add(
-    normalized,
-    mulPercent(normalized, markupPercent ?? "0"),
-  );
+  return add(normalized, mulPercent(normalized, markupPercent ?? "0"));
 }
 
 export interface NsLine {
@@ -202,9 +197,7 @@ const nsClearedEvidence = (
 
 const glUnits = (l: NsLine): bigint =>
   toUnits(
-    (l.foreignamount != null && l.foreignamount !== ""
-      ? l.foreignamount
-      : l.netamount) ?? "0",
+    (l.foreignamount != null && l.foreignamount !== "" ? l.foreignamount : l.netamount) ?? "0",
   );
 
 /**
@@ -227,11 +220,11 @@ const NETSUITE_CURRENCY_ALIASES: Record<string, string> = {
  * value names no currency — callers fail closed.
  */
 export function netSuiteCurrencyIso(label: unknown): string | null {
-  const text = String(label ?? "").trim().toUpperCase();
+  const text = String(label ?? "")
+    .trim()
+    .toUpperCase();
   if (!text) return null;
-  return (
-    NETSUITE_CURRENCY_ALIASES[text] ?? (/^[A-Z]{3}$/.test(text) ? text : null)
-  );
+  return NETSUITE_CURRENCY_ALIASES[text] ?? (/^[A-Z]{3}$/.test(text) ? text : null);
 }
 
 /**
@@ -259,7 +252,12 @@ function netSuiteDocumentFx(
     }
     return {};
   }
-  if (iso === String(baseCurrency ?? "").trim().toUpperCase()) {
+  if (
+    iso ===
+    String(baseCurrency ?? "")
+      .trim()
+      .toUpperCase()
+  ) {
     return {};
   }
   let fxRate: string;
@@ -308,11 +306,7 @@ export interface BuildNetSuiteOptions {
 }
 
 /** Customer-side document kinds resolve the sales fallback; all others purchase. */
-const SALES_TAX_FALLBACK_KINDS = new Set([
-  "customer_invoice",
-  "customer_credit",
-  "sales_order",
-]);
+const SALES_TAX_FALLBACK_KINDS = new Set(["customer_invoice", "customer_credit", "sales_order"]);
 
 function resolveFallbackTaxCodeId(
   ctx: NativeContext,
@@ -357,8 +351,7 @@ export function buildNativeFromNetSuite(
     const orderKind = ORDER_KIND[tt];
     if (!orderKind) {
       const hasLineLedgerImpact = rawLines.some(
-        (line) =>
-          Boolean(line.account ?? line.expenseaccount) && glUnits(line) !== 0n,
+        (line) => Boolean(line.account ?? line.expenseaccount) && glUnits(line) !== 0n,
       );
       return {
         skip: hasLineLedgerImpact
@@ -378,28 +371,20 @@ export function buildNativeFromNetSuite(
   if (sourcePosts && !postingPeriodRef) {
     return { skip: "posting transaction has no source posting period" };
   }
-  const postingPeriod = postingPeriodRef
-    ? ctx.periodByRef.get(postingPeriodRef)
-    : null;
+  const postingPeriod = postingPeriodRef ? ctx.periodByRef.get(postingPeriodRef) : null;
   if (sourcePosts && !postingPeriod) {
     return { skip: `unmapped posting period ${postingPeriodRef}` };
   }
 
-  const lineTaxCode = (
-    l: NsLine,
-  ): { codeId: string; rateUnits: bigint } | null => {
+  const lineTaxCode = (l: NsLine): { codeId: string; rateUnits: bigint } | null => {
     const tr = l.taxrate1;
     if (tr == null || tr === "") return null;
     const sourceRateUnits = toUnits(mulDecimal(String(tr), "100"));
     if (sourceRateUnits === 0n) return null;
-    const sourceCodeId = l.taxcode
-      ? ctx.taxCodeByRef.get(String(l.taxcode))
-      : null;
-    if (sourceCodeId)
-      return { codeId: sourceCodeId, rateUnits: sourceRateUnits };
+    const sourceCodeId = l.taxcode ? ctx.taxCodeByRef.get(String(l.taxcode)) : null;
+    if (sourceCodeId) return { codeId: sourceCodeId, rateUnits: sourceRateUnits };
     const key = fromUnits(sourceRateUnits);
-    const code =
-      ctx.taxByRate.get(key) ?? ctx.taxByRate.get(key.replace(/\.0+$/, ""));
+    const code = ctx.taxByRate.get(key) ?? ctx.taxByRate.get(key.replace(/\.0+$/, ""));
     if (!code) return null;
     const rateUnits = toUnits(code.rate);
     // A percentage does not uniquely identify a NetSuite tax code. Tenants
@@ -410,8 +395,7 @@ export function buildNativeFromNetSuite(
 
   const partyId = h.entity ? (ctx.partyByRef.get(h.entity) ?? null) : null;
   const sourceSubsidiaryRef =
-    rawLines.find((line) => line.mainline === "T" && line.subsidiary)
-      ?.subsidiary ??
+    rawLines.find((line) => line.mainline === "T" && line.subsidiary)?.subsidiary ??
     rawLines.find((line) => line.subsidiary)?.subsidiary ??
     null;
   const subsidiaryId = sourceSubsidiaryRef
@@ -423,8 +407,7 @@ export function buildNativeFromNetSuite(
   const unmappedLineSubsidiary = rawLines.find(
     (line) => line.subsidiary && !ctx.subsidiaryByRef.has(line.subsidiary),
   )?.subsidiary;
-  if (unmappedLineSubsidiary)
-    return { skip: `unmapped subsidiary ${unmappedLineSubsidiary}` };
+  if (unmappedLineSubsidiary) return { skip: `unmapped subsidiary ${unmappedLineSubsidiary}` };
   const unmappedTaxCode = rawLines.find(
     (line) =>
       line.mainline === "F" &&
@@ -479,9 +462,7 @@ export function buildNativeFromNetSuite(
   const proj = (l: NsLine): string | null =>
     l.entity ? (ctx.projectByRef.get(l.entity) ?? null) : null;
   const sub = (l: NsLine): string | null =>
-    l.subsidiary
-      ? (ctx.subsidiaryByRef.get(l.subsidiary) ?? null)
-      : subsidiaryId;
+    l.subsidiary ? (ctx.subsidiaryByRef.get(l.subsidiary) ?? null) : subsidiaryId;
 
   const lines: NativeDocLine[] = [];
   let lineNo = 0;
@@ -496,9 +477,7 @@ export function buildNativeFromNetSuite(
       l.quantity == null || l.quantity === ""
         ? "1.00000000"
         : normalizeDecimal(String(l.quantity), 8);
-    const quantity = sourceQuantity.startsWith("-")
-      ? sourceQuantity.slice(1)
-      : sourceQuantity;
+    const quantity = sourceQuantity.startsWith("-") ? sourceQuantity.slice(1) : sourceQuantity;
     const normalizedAmount = fromUnits(amtUnits);
     const isBillable = String(l.isbillable ?? "").toUpperCase() === "T";
     const markupPercent = normalizeMarkupPercent(l.markup);
@@ -508,9 +487,7 @@ export function buildNativeFromNetSuite(
       quantity: /^0(?:\.0+)?$/.test(quantity) ? "1.00000000" : quantity,
       unit: l.units ?? null,
       unitPrice:
-        l.rate == null || l.rate === ""
-          ? normalizedAmount
-          : normalizeDecimal(String(l.rate), 8),
+        l.rate == null || l.rate === "" ? normalizedAmount : normalizeDecimal(String(l.rate), 8),
       amount: normalizedAmount,
       taxAmount: "0",
       taxOverridden: false,
@@ -527,12 +504,7 @@ export function buildNativeFromNetSuite(
       sourceLineRef: l.id == null ? null : String(l.id),
       ...nsClearedEvidence(l, documentDate),
       markupPercent,
-      billAmount: netSuiteBillAmount(
-        effKind,
-        normalizedAmount,
-        isBillable,
-        markupPercent,
-      ),
+      billAmount: netSuiteBillAmount(effKind, normalizedAmount, isBillable, markupPercent),
     };
     lines.push(row);
     return row;
@@ -549,21 +521,13 @@ export function buildNativeFromNetSuite(
     const hasLedgerImpact = lines.some(
       (line) => toUnits(line.amount) !== 0n || toUnits(line.taxAmount) !== 0n,
     );
-    const subtotal = lines.reduce(
-      (total, line) => total + toUnits(line.amount),
-      0n,
-    );
-    const taxTotal = lines.reduce(
-      (total, line) => total + toUnits(line.taxAmount),
-      0n,
-    );
+    const subtotal = lines.reduce((total, line) => total + toUnits(line.amount), 0n);
+    const taxTotal = lines.reduce((total, line) => total + toUnits(line.taxAmount), 0n);
     return {
       doc: {
         ...base,
         posting: sourcePosts && hasLedgerImpact,
-        lifecycleStatus: sourcePosts
-          ? "approved"
-          : netSuiteLifecycleStatus(h.approvalstatus),
+        lifecycleStatus: sourcePosts ? "approved" : netSuiteLifecycleStatus(h.approvalstatus),
         kind: effKind,
         controlAccountId,
         subtotal: fromUnits(subtotal),
@@ -578,8 +542,7 @@ export function buildNativeFromNetSuite(
     for (const l of rawLines) {
       if (l.taxline === "T") continue;
       const acct = mkAcct(l);
-      if (!acct)
-        return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
+      if (!acct) return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
       push(acct, glUnits(l), l);
     }
     if (lines.length === 0) return { skip: "no GL lines" };
@@ -587,14 +550,11 @@ export function buildNativeFromNetSuite(
   }
 
   if (kind === "transfer") {
-    const glLines = rawLines
-      .filter((l) => l.taxline !== "T")
-      .map((l) => ({ l, amt: glUnits(l) }));
+    const glLines = rawLines.filter((l) => l.taxline !== "T").map((l) => ({ l, amt: glUnits(l) }));
     glLines.sort((a, b) => (b.amt > a.amt ? 1 : b.amt < a.amt ? -1 : 0));
     const dest = glLines[0],
       src = glLines[glLines.length - 1];
-    if (!dest || !src || dest === src)
-      return { skip: "transfer needs two legs" };
+    if (!dest || !src || dest === src) return { skip: "transfer needs two legs" };
     const dAcct = mkAcct(dest.l),
       sAcct = mkAcct(src.l);
     if (!dAcct || !sAcct) return { skip: "unmapped transfer account" };
@@ -628,8 +588,7 @@ export function buildNativeFromNetSuite(
     for (const l of rawLines) {
       if (l.mainline !== "F" || l.taxline === "T") continue;
       const acct = mkAcct(l);
-      if (!acct)
-        return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
+      if (!acct) return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
       push(acct, -glUnits(l), l);
     }
     if (lines.length === 0) return { skip: "deposit has no source lines" };
@@ -637,16 +596,11 @@ export function buildNativeFromNetSuite(
   }
 
   if (kind === "vendor_payment" || kind === "customer_payment") {
-    const controlId =
-      kind === "vendor_payment" ? ctx.control.ap : ctx.control.ar;
+    const controlId = kind === "vendor_payment" ? ctx.control.ap : ctx.control.ar;
     const controlRef = ctx.accountRefById.get(controlId);
     const nonTax = rawLines.filter((l) => l.taxline !== "T");
-    const controlLines = nonTax.filter(
-      (l) => (l.expenseaccount ?? l.account) === controlRef,
-    );
-    const counterlegs = nonTax.filter(
-      (l) => (l.expenseaccount ?? l.account) !== controlRef,
-    );
+    const controlLines = nonTax.filter((l) => (l.expenseaccount ?? l.account) === controlRef);
+    const counterlegs = nonTax.filter((l) => (l.expenseaccount ?? l.account) !== controlRef);
     // The payment rule has exactly one AP/AR control leg and one bank leg. A
     // source payment can also carry legitimate counterlegs (discounts, fees,
     // withholding, realized FX, ...). Do not collapse those into the bank
@@ -656,12 +610,10 @@ export function buildNativeFromNetSuite(
     if (controlLines.length !== 1 || counterlegs.length !== 1) {
       for (const l of nonTax) {
         const acct = mkAcct(l);
-        if (!acct)
-          return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
+        if (!acct) return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
         push(acct, glUnits(l), l);
       }
-      if (lines.length < 2)
-        return { skip: "payment without control leg or counterlegs" };
+      if (lines.length < 2) return { skip: "payment without control leg or counterlegs" };
       effKind = "journal";
       return finish(nsTaxUnits === 0n);
     }
@@ -684,16 +636,11 @@ export function buildNativeFromNetSuite(
     // A corporate-card/cash settlement is the expense report's balancing
     // account. Keeping it as an expense line and also asking the posting rule
     // to create a control leg duplicates the settlement and misstates cost.
-    if (
-      kind === "expense_report" &&
-      l.settlementamount != null &&
-      l.settlementamount !== ""
-    ) {
+    if (kind === "expense_report" && l.settlementamount != null && l.settlementamount !== "") {
       continue;
     }
     const acct = mkAcct(l);
-    if (!acct)
-      return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
+    if (!acct) return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
     let amtUnits = glUnits(l);
     if (negate) amtUnits = -amtUnits;
     const tc = lineTaxCode(l);
@@ -738,12 +685,8 @@ export function buildNativeFromNetSuite(
       const delta = nsAbs - ourAbs; // ±1 cent (within tolerance by definition)
       if (carriers.length > 0) {
         const carrier = carriers.reduce((a, b) =>
-          (toUnits(b.taxAmount) < 0n
-            ? -toUnits(b.taxAmount)
-            : toUnits(b.taxAmount)) >
-          (toUnits(a.taxAmount) < 0n
-            ? -toUnits(a.taxAmount)
-            : toUnits(a.taxAmount))
+          (toUnits(b.taxAmount) < 0n ? -toUnits(b.taxAmount) : toUnits(b.taxAmount)) >
+          (toUnits(a.taxAmount) < 0n ? -toUnits(a.taxAmount) : toUnits(a.taxAmount))
             ? b
             : a,
         );
@@ -805,20 +748,13 @@ function netSuiteLifecycleStatus(
 }
 
 /** Per-transaction control account, including an expense settlement account. */
-function controlAccountFor(
-  ctx: NativeContext,
-  rawLines: NsLine[],
-  kind: string,
-): string | null {
+function controlAccountFor(ctx: NativeContext, rawLines: NsLine[], kind: string): string | null {
   const ctrl =
     kind === "expense_report"
-      ? rawLines.find(
+      ? (rawLines.find(
           (line) =>
-            line.taxline === "F" &&
-            line.settlementamount != null &&
-            line.settlementamount !== "",
-        ) ??
-        rawLines.find((line) => line.mainline === "T" && line.taxline === "F")
+            line.taxline === "F" && line.settlementamount != null && line.settlementamount !== "",
+        ) ?? rawLines.find((line) => line.mainline === "T" && line.taxline === "F"))
       : rawLines.find((line) => line.mainline === "T" && line.taxline === "F");
   if (!ctrl) return null;
   const ref = ctrl.expenseaccount ?? ctrl.account;
@@ -832,9 +768,7 @@ function buildOrder(
   rawLines: NsLine[],
   orderKind: string,
 ): BuiltNative | { skip: string } {
-  const detail = rawLines.filter(
-    (l) => l.mainline === "F" && l.taxline === "F",
-  );
+  const detail = rawLines.filter((l) => l.mainline === "F" && l.taxline === "F");
   const lines: NativeDocLine[] = [];
   const detailRows: { row: NativeDocLine; codeId: string | null }[] = [];
   const baseByCode = new Map<string, bigint>();
@@ -847,14 +781,10 @@ function buildOrder(
     if (!accountId && !itemId) continue; // a line needs an account OR an item
     const tr = l.taxrate1;
     const normalizedRate =
-      tr != null && tr !== ""
-        ? normalizeMoney(mulDecimal(String(tr), "100"))
-        : null;
+      tr != null && tr !== "" ? normalizeMoney(mulDecimal(String(tr), "100")) : null;
     const rateUnits = normalizedRate ? toUnits(normalizedRate) : 0n;
     const sourceCodeId =
-      rateUnits !== 0n && l.taxcode
-        ? ctx.taxCodeByRef.get(String(l.taxcode))
-        : null;
+      rateUnits !== 0n && l.taxcode ? ctx.taxCodeByRef.get(String(l.taxcode)) : null;
     if (rateUnits !== 0n && l.taxcode && !sourceCodeId) {
       return { skip: `unmapped tax code ${l.taxcode}` };
     }
@@ -865,8 +795,7 @@ function buildOrder(
           ctx.taxByRate.get(normalizedRate.replace(/\.0+$/, "")))
         : null;
     const signedAmount = glUnits(l);
-    const amountUnits =
-      orderKind === "sales_order" ? -signedAmount : signedAmount;
+    const amountUnits = orderKind === "sales_order" ? -signedAmount : signedAmount;
     if (code && rateUnits !== 0n) {
       baseByCode.set(code.id, (baseByCode.get(code.id) ?? 0n) + amountUnits);
       rateByCode.set(code.id, rateUnits);
@@ -882,12 +811,8 @@ function buildOrder(
           l.quantity == null || l.quantity === ""
             ? "1.00000000"
             : normalizeDecimal(String(l.quantity), 8);
-        const magnitude = normalized.startsWith("-")
-          ? normalized.slice(1)
-          : normalized;
-        return /^0(?:\.0+)?$/.test(magnitude)
-          ? "1.00000000"
-          : magnitude;
+        const magnitude = normalized.startsWith("-") ? normalized.slice(1) : normalized;
+        return /^0(?:\.0+)?$/.test(magnitude) ? "1.00000000" : magnitude;
       })(),
       unit: l.units ?? null,
       unitPrice:
@@ -902,24 +827,15 @@ function buildOrder(
       taxOverridden: false,
       taxCodeId: code?.id ?? null,
       partyId: l.entity ? (ctx.partyByRef.get(l.entity) ?? null) : null,
-      departmentId: l.department
-        ? (ctx.deptByRef.get(l.department) ?? null)
-        : null,
+      departmentId: l.department ? (ctx.deptByRef.get(l.department) ?? null) : null,
       projectId: l.entity ? (ctx.projectByRef.get(l.entity) ?? null) : null,
-      subsidiaryId: l.subsidiary
-        ? (ctx.subsidiaryByRef.get(l.subsidiary) ?? null)
-        : null,
+      subsidiaryId: l.subsidiary ? (ctx.subsidiaryByRef.get(l.subsidiary) ?? null) : null,
       description: l.memo ?? null,
       lineNumber: ++n,
       isBillable,
       sourceLineRef: l.id == null ? null : String(l.id),
       markupPercent,
-      billAmount: netSuiteBillAmount(
-        orderKind,
-        normalizedOrderAmount,
-        isBillable,
-        markupPercent,
-      ),
+      billAmount: netSuiteBillAmount(orderKind, normalizedOrderAmount, isBillable, markupPercent),
     };
     lines.push(row);
     detailRows.push({ row, codeId: code?.id ?? null });
@@ -928,9 +844,7 @@ function buildOrder(
   for (const [codeId, base] of baseByCode) {
     const carrier = detailRows.find((detailRow) => detailRow.codeId === codeId);
     if (carrier) {
-      carrier.row.taxAmount = fromUnits(
-        taxOnBase(base, rateByCode.get(codeId) ?? 0n),
-      );
+      carrier.row.taxAmount = fromUnits(taxOnBase(base, rateByCode.get(codeId) ?? 0n));
     }
   }
   const sub = lines.reduce((s, l) => s + toUnits(l.amount), 0n);
@@ -942,14 +856,10 @@ function buildOrder(
       kind: orderKind,
       posting: false,
       lifecycleStatus:
-        h.approvalstatus == null
-          ? "approved"
-          : netSuiteLifecycleStatus(h.approvalstatus),
+        h.approvalstatus == null ? "approved" : netSuiteLifecycleStatus(h.approvalstatus),
       partyId: h.entity ? (ctx.partyByRef.get(h.entity) ?? null) : null,
       subsidiaryId: rawLines.find((line) => line.subsidiary)?.subsidiary
-        ? (ctx.subsidiaryByRef.get(
-            rawLines.find((line) => line.subsidiary)!.subsidiary!,
-          ) ?? null)
+        ? (ctx.subsidiaryByRef.get(rawLines.find((line) => line.subsidiary)!.subsidiary!) ?? null)
         : null,
       documentDate: parseNsDate(h.trandate),
       dueDate: h.duedate ? parseNsDate(h.duedate) : null,

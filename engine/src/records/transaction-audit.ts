@@ -36,7 +36,10 @@ export interface TransactionAuditChanges {
 
 // The SQL JSON is authoritative for persistence and comparison. Its decoded
 // view exposes exact decimal text without changing the stored JSON types.
-const capturedEvidence = new WeakMap<TransactionAuditSnapshot, { json: string; comparableJson: string }>();
+const capturedEvidence = new WeakMap<
+  TransactionAuditSnapshot,
+  { json: string; comparableJson: string }
+>();
 
 function freezeEvidence(value: unknown): void {
   if (value === null || typeof value !== "object") return;
@@ -50,9 +53,16 @@ export async function captureTransactionAuditSnapshot(
   documentId: string,
   orgId: string,
 ): Promise<TransactionAuditSnapshot | null> {
-  const volatileKeys = sql`array[${sql.join([...VOLATILE_SNAPSHOT_KEYS].map((key) => sql`${key}`), sql`, `)}]::text[]`;
-  const lineKeys = sql`array[${sql.join([...VOLATILE_SNAPSHOT_KEYS, ...LINE_IDENTITY_KEYS].map((key) => sql`${key}`), sql`, `)}]::text[]`;
-  const result = (await runner.execute<{ snapshot: string; comparable_snapshot: string }>(sql`
+  const volatileKeys = sql`array[${sql.join(
+    [...VOLATILE_SNAPSHOT_KEYS].map((key) => sql`${key}`),
+    sql`, `,
+  )}]::text[]`;
+  const lineKeys = sql`array[${sql.join(
+    [...VOLATILE_SNAPSHOT_KEYS, ...LINE_IDENTITY_KEYS].map((key) => sql`${key}`),
+    sql`, `,
+  )}]::text[]`;
+  const result = await runner.execute<{ snapshot: string; comparable_snapshot: string }>(
+    sql`
     with captured as (
     select jsonb_build_object(
       'document', to_jsonb(d),
@@ -120,7 +130,9 @@ export async function captureTransactionAuditSnapshot(
         'glImpact', snapshot->'glImpact'
       )::text as comparable_snapshot
       from captured
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) return null;
   const snapshot = parseExactJson(row.snapshot) as TransactionAuditSnapshot;
@@ -167,7 +179,9 @@ function comparableSnapshot(snapshot: TransactionAuditSnapshot): unknown {
   return {
     document: comparableSnapshotRow(snapshot.document),
     lines: snapshot.lines.map((line) => comparableSnapshotRow(line, lineStripped)),
-    taxComponents: snapshot.taxComponents.map((component) => comparableSnapshotRow(component, lineStripped)),
+    taxComponents: snapshot.taxComponents.map((component) =>
+      comparableSnapshotRow(component, lineStripped),
+    ),
     applications: snapshot.applications,
     glImpact: snapshot.glImpact,
   };
@@ -187,7 +201,8 @@ export function transactionSnapshotsMatch(
   const capturedAfter = capturedEvidence.get(after);
   // Compare the original JSON types too: a numeric custom field becoming a
   // string is a material change even when their displayed digits are equal.
-  if (capturedBefore && capturedAfter) return capturedBefore.comparableJson === capturedAfter.comparableJson;
+  if (capturedBefore && capturedAfter)
+    return capturedBefore.comparableJson === capturedAfter.comparableJson;
   return JSON.stringify(comparableSnapshot(before)) === JSON.stringify(comparableSnapshot(after));
 }
 
@@ -226,13 +241,14 @@ export async function recordTransactionAudit(
   },
 ): Promise<void> {
   const changes = buildTransactionAuditChanges({
-    mode: input.action === "delete"
-      ? "transaction_delete"
-      : input.action === "void"
-        ? "transaction_void"
-      : input.action === "post"
-        ? "record_post"
-        : "record_update",
+    mode:
+      input.action === "delete"
+        ? "transaction_delete"
+        : input.action === "void"
+          ? "transaction_void"
+          : input.action === "post"
+            ? "record_post"
+            : "record_update",
     source: input.source,
     reason: input.reason,
     before: input.before,
@@ -240,12 +256,17 @@ export async function recordTransactionAudit(
   });
   const { before, after, ...envelope } = changes;
   const beforeJson = capturedEvidence.get(before)?.json ?? JSON.stringify(before);
-  const afterJson = after === null ? "null" : capturedEvidence.get(after)?.json ?? JSON.stringify(after);
-  const inserted = await runner.execute(sql`
+  const afterJson =
+    after === null ? "null" : (capturedEvidence.get(after)?.json ?? JSON.stringify(after));
+  const inserted = await runner.execute(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${input.orgId}, 'documents', ${input.documentId}, ${input.action},
             ${JSON.stringify(envelope)}::jsonb || jsonb_build_object('before', ${beforeJson}::jsonb, 'after', ${afterJson}::jsonb),
             ${input.actorId ?? null}, ${input.source}) returning id
-  `, "objects");
-  if (inserted.length !== 1) throw new Error("The transaction audit was not retained; retry the transaction.");
+  `,
+    "objects",
+  );
+  if (inserted.length !== 1)
+    throw new Error("The transaction audit was not retained; retry the transaction.");
 }

@@ -1,15 +1,23 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionBackorders: DocArticle = {
-  slug: 'distribution-backorders',
-  title: 'Backorders',
-  category: 'transactions',
+  slug: "distribution-backorders",
+  title: "Backorders",
+  category: "transactions",
   order: 5,
   summary:
-    'See which sales-order stock lines are still owed to customers, and cancel a remainder the business will no longer ship, with a recorded reason.',
-  updated: '2026-09-27',
-  keywords: ['backorder', 'backorders', 'open quantity', 'cancel remainder', 'sales order', 'fulfillment', 'shipment'],
-  related: ['sales-workflow'],
+    "See which sales-order stock lines are still owed to customers, and cancel a remainder the business will no longer ship, with a recorded reason.",
+  updated: "2026-09-27",
+  keywords: [
+    "backorder",
+    "backorders",
+    "open quantity",
+    "cancel remainder",
+    "sales order",
+    "fulfillment",
+    "shipment",
+  ],
+  related: ["sales-workflow"],
   body: `# Backorders
 
 A backorder is the part of an issued sales order that has not shipped yet. Every
@@ -78,4 +86,4 @@ open quantity, a line on an order that is not issued, and a line that is not a
 stock line. If a remainder was cancelled by mistake, enter a new sales order for
 the quantity the customer still wants.
 `,
-}
+};

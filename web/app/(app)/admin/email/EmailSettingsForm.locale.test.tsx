@@ -10,7 +10,11 @@ import test from "node:test";
 
 // jsdom first: the form reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/email", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/email",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -46,7 +50,9 @@ const { EmailSettingsForm } = await import("./EmailSettingsForm");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 async function renderForm(
-  readiness: NonNullable<React.ComponentProps<typeof EmailSettingsForm>["initial"]["readiness"]> = { state: "ready" },
+  readiness: NonNullable<React.ComponentProps<typeof EmailSettingsForm>["initial"]["readiness"]> = {
+    state: "ready",
+  },
   overrides: Partial<React.ComponentProps<typeof EmailSettingsForm>["initial"]> = {},
 ) {
   document.body.innerHTML = "";
@@ -111,7 +117,10 @@ test("the email form renders French chrome with no English literals", async (t) 
     "Send a test email",
     "Send test",
   ]) {
-    assert.ok(!text.includes(leaked), `no English literal may leak into the French form: ${leaked}`);
+    assert.ok(
+      !text.includes(leaked),
+      `no English literal may leak into the French form: ${leaked}`,
+    );
   }
 });
 
@@ -121,15 +130,24 @@ test("an organization that cannot send sees the state and the administrator's re
   t.after(unconfigured.unmount);
   const banner = document.querySelector('[role="status"]');
   assert.ok(banner, "a refused organization must see the readiness banner");
-  assert.ok((banner.textContent ?? "").includes(copy.notEnabled), "the banner names the disabled state");
-  assert.ok(!(banner.textContent ?? "").includes("Email delivery is off"), "no English banner copy may leak");
+  assert.ok(
+    (banner.textContent ?? "").includes(copy.notEnabled),
+    "the banner names the disabled state",
+  );
+  assert.ok(
+    !(banner.textContent ?? "").includes("Email delivery is off"),
+    "no English banner copy may leak",
+  );
 
   const reason = "the stored provider credential could not be unsealed with the current data key";
   const unusable = await renderForm({ state: "unusable", reason });
   t.after(unusable.unmount);
   const unusableBanner = document.querySelector('[role="status"]');
   assert.ok(unusableBanner, "an unusable credential must be shown, not hidden");
-  assert.ok((unusableBanner.textContent ?? "").includes(copy.unusable), "the banner names the unusable state");
+  assert.ok(
+    (unusableBanner.textContent ?? "").includes(copy.unusable),
+    "the banner names the unusable state",
+  );
   assert.ok(
     (unusableBanner.textContent ?? "").includes(copy.unusableDetail.replace("{reason}", reason)),
     "the banner carries the engine reason",
@@ -149,19 +167,24 @@ test("cleared provider fields remain explicit in the save payload", async (t) =>
     payloads.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
     return Response.json({ enabled: true, provider: "smtp", hasSecret: true, updatedAt: "2" });
   }) as typeof fetch;
-  const { unmount } = await renderForm({ state: "ready" }, {
-    provider: "smtp",
-    smtpHost: "smtp.example.com",
-    smtpPort: 587,
-    smtpUsername: "legacy-user",
-  });
+  const { unmount } = await renderForm(
+    { state: "ready" },
+    {
+      provider: "smtp",
+      smtpHost: "smtp.example.com",
+      smtpPort: 587,
+      smtpUsername: "legacy-user",
+    },
+  );
   t.after(async () => {
     globalThis.fetch = priorFetch;
     await unmount();
   });
 
   await act(async () => {
-    const textInputs = [...document.querySelectorAll("input")].filter((input) => input.type === "text");
+    const textInputs = [...document.querySelectorAll("input")].filter(
+      (input) => input.type === "text",
+    );
     const numberInput = document.querySelector('input[type="number"]') as HTMLInputElement | null;
     assert.ok(textInputs.length >= 5, "the SMTP host and username fields are rendered");
     assert.ok(numberInput, "the SMTP port field is rendered");
@@ -175,7 +198,9 @@ test("cleared provider fields remain explicit in the save payload", async (t) =>
     await tick();
   });
   await act(async () => {
-    const save = [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Enregistrer");
+    const save = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Enregistrer",
+    );
     assert.ok(save, "the settings form offers its save action");
     save.click();
     await tick();

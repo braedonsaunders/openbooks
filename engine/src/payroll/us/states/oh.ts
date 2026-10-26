@@ -80,7 +80,9 @@ import { certificateAmount, certificateCount } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  defineStateEngine, pairStateRateEditions, type StateEngineContext,
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
 } from "./state-engine.ts";
 import {
   type UsStatePayPeriod,
@@ -95,7 +97,11 @@ const RATES_MODULE = "engine/src/payroll/us/states/oh.ts";
 type OhPeriod = "weekly" | "biweekly" | "semimonthly" | "monthly" | "daily";
 
 const OH_PRINTED_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "daily",
 ];
 
 /**
@@ -145,9 +151,9 @@ const OH_EDITION_2025_10: OhEdition = {
   effectiveTo: "2026-08-01",
   label: "Ohio withholding tables effective October 1, 2025",
   citation:
-    "Ohio Department of Taxation, Employer Withholding Taxes: Optional Computer Formula "
-    + "(Rev. 09/25) and Employer Withholding Taxes - Percentage Method, both effective "
-    + "October 1, 2025",
+    "Ohio Department of Taxation, Employer Withholding Taxes: Optional Computer Formula " +
+    "(Rev. 09/25) and Employer Withholding Taxes - Percentage Method, both effective " +
+    "October 1, 2025",
   exemptionPerYear: "650",
   formula: [
     { upTo: "26050", over: "0", base: "0", rate: "0.01775" },
@@ -155,7 +161,11 @@ const OH_EDITION_2025_10: OhEdition = {
     { upTo: null, over: "100000", base: "2673.50", rate: "0.03640" },
   ],
   printedExemption: {
-    weekly: "12.50", biweekly: "25.00", semimonthly: "27.08", monthly: "54.17", daily: "2.50",
+    weekly: "12.50",
+    biweekly: "25.00",
+    semimonthly: "27.08",
+    monthly: "54.17",
+    daily: "2.50",
   },
   printedTables: {
     weekly: [
@@ -192,9 +202,9 @@ const OH_EDITION_2026_08: OhEdition = {
   effectiveTo: null,
   label: "Ohio withholding tables effective August 1, 2026 (HB 96)",
   citation:
-    "Ohio Department of Taxation, Employer Withholding Taxes: Optional Computer Formula "
-    + "(Rev. 07/26) and Employer Withholding Taxes - Percentage Method, both effective "
-    + "August 1, 2026, published following the rate reductions in House Bill 96",
+    "Ohio Department of Taxation, Employer Withholding Taxes: Optional Computer Formula " +
+    "(Rev. 07/26) and Employer Withholding Taxes - Percentage Method, both effective " +
+    "August 1, 2026, published following the rate reductions in House Bill 96",
   exemptionPerYear: "650",
   formula: [
     { upTo: "26050", over: "0", base: "0", rate: "0.01600" },
@@ -202,7 +212,11 @@ const OH_EDITION_2026_08: OhEdition = {
     { upTo: null, over: "100000", base: "2627.91", rate: "0.03400" },
   ],
   printedExemption: {
-    weekly: "12.50", biweekly: "25.00", semimonthly: "27.08", monthly: "54.17", daily: "2.50",
+    weekly: "12.50",
+    biweekly: "25.00",
+    semimonthly: "27.08",
+    monthly: "54.17",
+    daily: "2.50",
   },
   printedTables: {
     weekly: [
@@ -302,7 +316,12 @@ export const OH_SCHOOL_DISTRICTS_2026: readonly OhSchoolDistrict[] = schoolDistr
   ["0909", "Talawanda CSD", "1.00", "T"],
   ["1102", "Mechanicsburg EVSD (1.00% expires 2041; 0.50% CPT)", "1.50", "T"],
   ["1103", "Triad LSD (0.50% expires 2030; 1.00% CPT)", "1.50", "T"],
-  ["1105", "West Liberty-Salem LSD (1.00% expires 2027; 0.25% expires 2036; 0.50% CPT)", "1.75", "T"],
+  [
+    "1105",
+    "West Liberty-Salem LSD (1.00% expires 2027; 0.25% expires 2036; 0.50% CPT)",
+    "1.75",
+    "T",
+  ],
   ["1203", "Northeastern LSD (expires 2035)", "1.00", "E"],
   ["1204", "Northwestern LSD", "1.00", "E"],
   ["1205", "Southeastern LSD", "1.00", "T"],
@@ -516,19 +535,21 @@ export function ohSchoolDistrict(payDate: string, code: string): OhSchoolDistric
   const districts = SCHOOL_DISTRICTS_BY_YEAR[year];
   if (!districts) {
     throw new PayrollError(
-      `the ${year} Ohio school district income tax rates are not loaded — the "School Districts `
-      + `With an Income Tax" list for ${year} is published at tax.ohio.gov. `
-      + "This year is not yet supported by the US pack; contact support. "
-      + "Loaded years: " + Object.keys(SCHOOL_DISTRICTS_BY_YEAR).join(", ") + ". Never carry a "
-      + "prior year's list forward: districts are added, renewed and allowed to expire every "
-      + "election cycle.",
+      `the ${year} Ohio school district income tax rates are not loaded — the "School Districts ` +
+        `With an Income Tax" list for ${year} is published at tax.ohio.gov. ` +
+        "This year is not yet supported by the US pack; contact support. " +
+        "Loaded years: " +
+        Object.keys(SCHOOL_DISTRICTS_BY_YEAR).join(", ") +
+        ". Never carry a " +
+        "prior year's list forward: districts are added, renewed and allowed to expire every " +
+        "election cycle.",
     );
   }
   if (!/^\d{4}$/.test(code)) {
     throw new PayrollError(
-      `"${code}" is not an Ohio school district number — the Department numbers every district `
-      + "with four digits (Form IT 4, \"School district number (####)\"). Look the employee's "
-      + "district up in The Finder at tax.ohio.gov.",
+      `"${code}" is not an Ohio school district number — the Department numbers every district ` +
+        'with four digits (Form IT 4, "School district number (####)"). Look the employee\'s ' +
+        "district up in The Finder at tax.ohio.gov.",
     );
   }
   return districts.find((district) => district.code === code) ?? null;
@@ -538,16 +559,20 @@ export function ohSchoolDistrict(payDate: string, code: string): OhSchoolDistric
 // Editions
 // ---------------------------------------------------------------------------
 
-export const OH_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: OH_EDITION_2026_08.label,
-  effectiveFrom: "2026-01-01",
-  citation:
-    OH_EDITION_2025_10.citation + "; " + OH_EDITION_2026_08.citation
-    + "; School Districts With an Income Tax as of January 2026 (December 30, 2025)",
-  status: "published",
-  region: "OH",
-}];
+export const OH_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: OH_EDITION_2026_08.label,
+    effectiveFrom: "2026-01-01",
+    citation:
+      OH_EDITION_2025_10.citation +
+      "; " +
+      OH_EDITION_2026_08.citation +
+      "; School Districts With an Income Tax as of January 2026 (December 30, 2025)",
+    status: "published",
+    region: "OH",
+  },
+];
 
 interface OhYearRates {
   year: number;
@@ -598,15 +623,17 @@ export function ohEditionFor(periodEnd: string): OhEdition {
   if (periodEnd > OH_TRANSCRIBED_THROUGH) {
     OH_STATE_ENGINE.ratesForPayDate(`${periodEnd.slice(0, 4)}-01-01`);
   }
-  const edition = OH_EDITIONS.find((candidate) =>
-    periodEnd >= candidate.effectiveFrom
-    && (candidate.effectiveTo == null || periodEnd < candidate.effectiveTo));
+  const edition = OH_EDITIONS.find(
+    (candidate) =>
+      periodEnd >= candidate.effectiveFrom &&
+      (candidate.effectiveTo == null || periodEnd < candidate.effectiveTo),
+  );
   if (!edition) {
     throw new PayrollError(
-      `no Ohio withholding table is loaded for a payroll period ending ${periodEnd}. This pack `
-      + `carries the sets effective ${OH_TRANSCRIBED_FROM} onwards; the Department revises them `
-      + "mid-year and keys each set to the payroll period's END date, so an earlier period needs "
-      + `the set that was in force then. This date is not yet supported by the US pack; contact support.`,
+      `no Ohio withholding table is loaded for a payroll period ending ${periodEnd}. This pack ` +
+        `carries the sets effective ${OH_TRANSCRIBED_FROM} onwards; the Department revises them ` +
+        "mid-year and keys each set to the payroll period's END date, so an earlier period needs " +
+        `the set that was in force then. This date is not yet supported by the US pack; contact support.`,
     );
   }
   return edition;
@@ -624,10 +651,10 @@ export function ohEditionFor(periodEnd: string): OhEdition {
 function requirePeriodEnd(input: UsStateWithholdingInput): string {
   if (!input.periodEnd) {
     throw new PayrollError(
-      "Ohio withholding tables are keyed to the PAYROLL PERIOD END DATE, not the pay date — the "
-      + "Department's 2026 tables apply to \"any payroll ending on or after Aug. 1, 2026\" "
-      + "regardless of when it is paid. Supply the period end date; substituting the pay date "
-      + "would apply the wrong rate set for one payroll at every mid-year change.",
+      "Ohio withholding tables are keyed to the PAYROLL PERIOD END DATE, not the pay date — the " +
+        'Department\'s 2026 tables apply to "any payroll ending on or after Aug. 1, 2026" ' +
+        "regardless of when it is paid. Supply the period end date; substituting the pay date " +
+        "would apply the wrong rate set for one payroll at every mid-year change.",
     );
   }
   return input.periodEnd;
@@ -648,17 +675,24 @@ function requirePeriodEnd(input: UsStateWithholdingInput): string {
  * conformance test derives all fifteen lines of both editions and proves it).
  * That is why this is the method `compute` runs.
  */
-export function ohOptionalComputerFormula(input: {
-  periodEnd: string;
-  periodsPerYear: number;
-  /** Gross wages for the period. */
-  wages: string;
-  exemptions: number;
-}, context?: StateEngineContext<OhYearRates>): { tax: string; factors: Record<string, string> } {
+export function ohOptionalComputerFormula(
+  input: {
+    periodEnd: string;
+    periodsPerYear: number;
+    /** Gross wages for the period. */
+    wages: string;
+    exemptions: number;
+  },
+  context?: StateEngineContext<OhYearRates>,
+): { tax: string; factors: Record<string, string> } {
   const edition = ohEditionFor(input.periodEnd);
   OH_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
   const factors = context?.factors ?? {};
-  const trace = context?.trace ?? ((key: string, value: bigint) => { factors[key] = D(value); });
+  const trace =
+    context?.trace ??
+    ((key: string, value: bigint) => {
+      factors[key] = D(value);
+    });
   factors.OH_EDITION = edition.effectiveFrom;
 
   const annualWages = U(input.wages) * BigInt(input.periodsPerYear);
@@ -667,8 +701,9 @@ export function ohOptionalComputerFormula(input: {
   trace("OH_ANNUAL_EXEMPTION", exemption);
   trace("OH_TAXABLE_WAGE", taxable);
 
-  const band = edition.formula.find((candidate) =>
-    candidate.upTo == null || taxable <= U(candidate.upTo));
+  const band = edition.formula.find(
+    (candidate) => candidate.upTo == null || taxable <= U(candidate.upTo),
+  );
   if (!band) {
     throw new PayrollError(
       `no Ohio withholding band covers annual taxable wages of ${D(taxable)} — refused by name; contact support`,
@@ -700,17 +735,21 @@ export function ohPercentageMethod(input: {
   const period = OH_STATE_ENGINE.printedPeriod(input.periodsPerYear, OH_PRINTED_PERIODS);
   if (period == null) {
     throw new PayrollError(
-      `Ohio prints percentage-method tables for ${OH_PRINTED_PERIODS.join(", ")} payroll periods, `
-      + `and this payroll runs ${input.periodsPerYear} periods a year. Use the optional computer `
-      + "formula, which annualizes and answers for any frequency.",
+      `Ohio prints percentage-method tables for ${OH_PRINTED_PERIODS.join(", ")} payroll periods, ` +
+        `and this payroll runs ${input.periodsPerYear} periods a year. Use the optional computer ` +
+        "formula, which annualizes and answers for any frequency.",
     );
   }
   const key = period as OhPeriod;
   const exemption = U(edition.printedExemption[key]) * BigInt(Math.max(input.exemptions, 0));
   const taxable = max0(U(input.wages) - exemption);
-  const row = edition.printedTables[key].find((candidate) =>
-    candidate.upTo == null || taxable <= U(candidate.upTo));
-  if (!row) throw new PayrollError(`no Ohio ${key} line covers ${D(taxable)} — refused by name; contact support`);
+  const row = edition.printedTables[key].find(
+    (candidate) => candidate.upTo == null || taxable <= U(candidate.upTo),
+  );
+  if (!row)
+    throw new PayrollError(
+      `no Ohio ${key} line covers ${D(taxable)} — refused by name; contact support`,
+    );
   return D(U(row.base) + mulRateCents(taxable - U(row.over), row.rate));
 }
 
@@ -735,12 +774,15 @@ function computeOh(
   // other published treatment, and the one that needs no election recorded.
   const wages = U(input.wages) + U(input.supplemental ?? "0");
 
-  const { tax, factors } = ohOptionalComputerFormula({
-    periodEnd,
-    periodsPerYear: input.periodsPerYear,
-    wages: D(wages),
-    exemptions,
-  }, context);
+  const { tax, factors } = ohOptionalComputerFormula(
+    {
+      periodEnd,
+      periodsPerYear: input.periodsPerYear,
+      wages: D(wages),
+      exemptions,
+    },
+    context,
+  );
 
   // Form IT 4 line 5 — "Additional Ohio income tax withholding per pay period".
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
@@ -818,9 +860,10 @@ export function ohSchoolDistrictWithholding(input: {
     OH_SD_RATE: input.district.printedPercent,
   };
   const annualWages = U(input.wages) * BigInt(input.periodsPerYear);
-  const base = input.district.base === "traditional"
-    ? max0(annualWages - U(edition.exemptionPerYear) * BigInt(Math.max(input.exemptions, 0)))
-    : max0(annualWages);
+  const base =
+    input.district.base === "traditional"
+      ? max0(annualWages - U(edition.exemptionPerYear) * BigInt(Math.max(input.exemptions, 0)))
+      : max0(annualWages);
   factors.OH_SD_TAXABLE = D(base);
   const annualTax = mulRateCents(base, input.district.rate);
   const tax = divIntCents(annualTax, input.periodsPerYear);
@@ -866,18 +909,21 @@ export function ohMunicipalWithholding(input: {
 }): string {
   if (input.rate == null || input.rate === "") {
     throw new PayrollError(
-      `no income tax rate has been entered for ${input.municipality} (Ohio). Ohio municipalities `
-      + "set their own rates by ordinance and the Department publishes no annual withholding rate "
-      + "table for them, so the rate is employer-entered: record it against the jurisdiction "
-      + "(statutory rate \"us_oh_municipal\") from the municipality's own ordinance or The Finder. "
-      + "Withholding nothing would under-withhold every employee the levy reaches.",
+      `no income tax rate has been entered for ${input.municipality} (Ohio). Ohio municipalities ` +
+        "set their own rates by ordinance and the Department publishes no annual withholding rate " +
+        "table for them, so the rate is employer-entered: record it against the jurisdiction " +
+        '(statutory rate "us_oh_municipal") from the municipality\'s own ordinance or The Finder. ' +
+        "Withholding nothing would under-withhold every employee the levy reaches.",
     );
   }
   const entrant = input.entrant;
   if (
-    entrant && !entrant.residentOfMunicipality
-    && entrant.daysInMunicipality != null && entrant.daysInMunicipality <= 20
-    && entrant.principalWorkOutsideMunicipality && entrant.nonSmallEmployerQualifyingWages
+    entrant &&
+    !entrant.residentOfMunicipality &&
+    entrant.daysInMunicipality != null &&
+    entrant.daysInMunicipality <= 20 &&
+    entrant.principalWorkOutsideMunicipality &&
+    entrant.nonSmallEmployerQualifyingWages
   ) {
     return D(0n);
   }

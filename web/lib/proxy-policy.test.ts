@@ -43,7 +43,8 @@ test("public authentication and hosted-payment routes match complete segments", 
     "/employee-app/icon-512.png",
     "/employee-app/apple-touch-icon.png",
     "/_next/static/chunk.js",
-  ]) assert.equal(isPublicPath(pathname), true, pathname);
+  ])
+    assert.equal(isPublicPath(pathname), true, pathname);
 });
 
 test("near-prefix private routes never bypass the session gate", () => {
@@ -81,7 +82,8 @@ test("near-prefix private routes never bypass the session gate", () => {
     "/pwa/private",
     "/pwa/icon-192.png/extra",
     "/pwa/icon-192.png-extra",
-  ]) assert.equal(isPublicPath(pathname), false, pathname);
+  ])
+    assert.equal(isPublicPath(pathname), false, pathname);
 });
 
 test("installation assets are public while the installed employee workspace still requires a session", async () => {
@@ -93,8 +95,16 @@ test("installation assets are public while the installed employee workspace stil
   assert.equal(employeeMetadata.manifest, "/employee-app/manifest.webmanifest");
   assert.equal(isPublicPath(String(employeeMetadata.manifest)), true);
   assert.equal(metadata.start_url, "/me");
-  assert.equal(isPublicPath(metadata.start_url), false, "installing OpenBooks does not expose the employee start page");
+  assert.equal(
+    isPublicPath(metadata.start_url),
+    false,
+    "installing OpenBooks does not expose the employee start page",
+  );
   for (const icon of metadata.icons ?? []) {
-    assert.equal(isPublicPath(icon.src), true, `${icon.src} must be available to the browser installation process`);
+    assert.equal(
+      isPublicPath(icon.src),
+      true,
+      `${icon.src} must be available to the browser installation process`,
+    );
   }
 });

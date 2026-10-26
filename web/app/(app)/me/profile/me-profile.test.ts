@@ -42,9 +42,12 @@ test("a refused profile read renders the remedy", () => {
   const data = baseData();
   data.refusal = { title: "No profile", message: "ask an administrator for a linked employment" };
   const json = specJson(data);
-  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes('"empty-state"'), "the refusal renders through the empty-state block");
   assert.ok(json.includes("No profile"), "the refusal title reaches the page");
-  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
+  assert.ok(
+    json.includes("ask an administrator for a linked employment"),
+    "the refusal remedy reaches the page",
+  );
 });
 
 test("facts render verbatim with the dialog gated on its data", () => {
@@ -74,7 +77,8 @@ test("the bank panel and dialog wire through masked data only", () => {
 test("a refused bank filing names the refusal instead of the facts empty line", () => {
   const data = baseData();
   data.bankEditHref = null;
-  data.bankRefusal = "Updating direct deposit needs the hrm.self.request permission — ask an administrator";
+  data.bankRefusal =
+    "Updating direct deposit needs the hrm.self.request permission — ask an administrator";
   const json = specJson(data);
   assert.ok(
     json.includes("Updating direct deposit needs the hrm.self.request permission"),
@@ -86,8 +90,12 @@ test("a refusal still shows beside existing bank facts", () => {
   const data = baseData();
   data.bankFacts = [{ label: "First Bank •••• 6789", value: "Active" }];
   data.bankEditHref = null;
-  data.bankRefusal = "Updating direct deposit needs the hrm.self.request permission — ask an administrator";
+  data.bankRefusal =
+    "Updating direct deposit needs the hrm.self.request permission — ask an administrator";
   const json = specJson(data);
   assert.ok(json.includes("•••• 6789"), "existing accounts still render");
-  assert.ok(json.includes('{"$":"bankRefusal"}'), "the refusal binds its own line below the accounts");
+  assert.ok(
+    json.includes('{"$":"bankRefusal"}'),
+    "the refusal binds its own line below the accounts",
+  );
 });

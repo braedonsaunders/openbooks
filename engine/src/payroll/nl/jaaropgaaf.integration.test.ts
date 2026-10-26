@@ -11,7 +11,12 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../../testing/fixtures.ts";
 
 /**
  * The NL jaaropgaaf, ON COMMITTED RUNS.
@@ -150,27 +155,42 @@ async function nlEmployee(
 }
 
 async function monthlyRun(
-  fx: Fixture, periodStart: string, periodEnd: string, commit: boolean,
+  fx: Fixture,
+  periodStart: string,
+  periodEnd: string,
+  commit: boolean,
 ): Promise<void> {
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart, periodEnd,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart,
+    periodEnd,
   });
   const result = await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+    orgId: fx.orgId,
+    documentId: run.documentId,
+    actorId: fx.actorId,
   });
   assert.deepEqual(result.errors, [], `${periodStart} calculates`);
-  if (commit) await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+  if (commit)
+    await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
 }
 
 /** Independent stub sums: the oracle the population must tie to, to the cent. */
 interface IndependentSums {
-  loon: string; ingehouden: string; ark: string; sv: string;
-  zvw: string; premies: string; runs: string;
+  loon: string;
+  ingehouden: string;
+  ark: string;
+  sv: string;
+  zvw: string;
+  premies: string;
+  runs: string;
 }
 
 async function independentSums(orgId: string, employeePartyId: string): Promise<IndependentSums> {
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -197,7 +217,9 @@ async function independentSums(orgId: string, employeePartyId: string): Promise<
             where l.org_id = ${orgId} and l.stub_id in (select id from committed)
               and l.kind = 'employer_contribution' and pc.system_key in ('ww', 'wia', 'wko')) as premies,
            (select count(*)::int from committed) as runs
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = rows[0]!;
   const text = (value: unknown): string => String(value ?? "0");
   return {
@@ -221,16 +243,20 @@ test(
     const fx = await nlPayrollOrg();
     try {
       const jan = await nlEmployee(fx, {
-        name: "Jan Modaal", annualSalary: "11988",
-        opgaaf: { apply_loonheffingskorting: "true", age_class: "under_aow" }, bsn: "111222333",
+        name: "Jan Modaal",
+        annualSalary: "11988",
+        opgaaf: { apply_loonheffingskorting: "true", age_class: "under_aow" },
+        bsn: "111222333",
       });
       const piet = await nlEmployee(fx, {
-        name: "Piet AOW", annualSalary: "38880",
+        name: "Piet AOW",
+        annualSalary: "38880",
         opgaaf: { apply_loonheffingskorting: "true", age_class: "aow_1946" },
         bsn: "123456782",
       });
       const truus = await nlEmployee(fx, {
-        name: "Truus AOW", annualSalary: "11988",
+        name: "Truus AOW",
+        annualSalary: "11988",
         opgaaf: { apply_loonheffingskorting: "true", age_class: "aow_1945" },
         // A verified BSN: without one the engine prices the 52% anonymous
         // tariff (Rekenvoorschriften §7.5), which would mask her AOW arm.
@@ -282,7 +308,8 @@ test(
         assert.equal(cmp(String(row.premies), sums.premies), 0, "premies tie");
         // The row grammar round-trips every emitted id and refuses others.
         assert.deepEqual(filing().parseRowId(String(row.rowId)), {
-          employees: [partyId], accounts: [],
+          employees: [partyId],
+          accounts: [],
         });
       }
       assert.equal(filing().parseRowId("not-a-row"), null);
@@ -299,11 +326,14 @@ test(
     const fx = await nlPayrollOrg();
     try {
       const jan = await nlEmployee(fx, {
-        name: "Jan Modaal", annualSalary: "11988",
-        opgaaf: { apply_loonheffingskorting: "true", age_class: "under_aow" }, bsn: "111222333",
+        name: "Jan Modaal",
+        annualSalary: "11988",
+        opgaaf: { apply_loonheffingskorting: "true", age_class: "under_aow" },
+        bsn: "111222333",
       });
       const piet = await nlEmployee(fx, {
-        name: "Piet AOW", annualSalary: "38880",
+        name: "Piet AOW",
+        annualSalary: "38880",
         opgaaf: { apply_loonheffingskorting: "true", age_class: "aow_1946" },
         bsn: "123456782",
       });
@@ -320,8 +350,14 @@ test(
         slip.boxes.find((entry) => entry.code === code)?.value;
 
       // Per-arm reporting: same pack, different tabeltoepassing, different money.
-      assert.match(header(janSlip, "Tabeltoepassing (leeftijdsklasse, per the opgaaf on file)")!, /Jonger dan de AOW/);
-      assert.match(header(pietSlip, "Tabeltoepassing (leeftijdsklasse, per the opgaaf on file)")!, /1946/);
+      assert.match(
+        header(janSlip, "Tabeltoepassing (leeftijdsklasse, per the opgaaf on file)")!,
+        /Jonger dan de AOW/,
+      );
+      assert.match(
+        header(pietSlip, "Tabeltoepassing (leeftijdsklasse, per the opgaaf on file)")!,
+        /1946/,
+      );
       assert.notEqual(box(janSlip, "15"), box(pietSlip, "15"));
       assert.equal(header(janSlip, "Loonheffingskorting toegepast (per the opgaaf on file)"), "Ja");
 
@@ -346,14 +382,18 @@ test(
          where org_id = ${fx.orgId} and employee_party_id = ${jan.id}`);
       await assert.rejects(
         () => slipOf(jan),
-        (error) => error instanceof PayrollError && /employee BSN is invalid.*correct the BSN/.test(error.message),
+        (error) =>
+          error instanceof PayrollError &&
+          /employee BSN is invalid.*correct the BSN/.test(error.message),
       );
       await db.execute(sql`
         update employee_payroll_profiles set sin_encrypted = null, sin_last3 = null
          where org_id = ${fx.orgId} and employee_party_id = ${jan.id}`);
       await assert.rejects(
         () => slipOf(jan),
-        (error) => error instanceof PayrollError && /employee BSN is missing.*add or correct the BSN/.test(error.message),
+        (error) =>
+          error instanceof PayrollError &&
+          /employee BSN is missing.*add or correct the BSN/.test(error.message),
       );
 
       await assert.rejects(
@@ -372,10 +412,7 @@ test(
   async () => {
     const fx = await nlPayrollOrg();
     try {
-      await assert.rejects(
-        () => filing().population(fx.orgId, 2026),
-        /no committed 2026 pay runs/,
-      );
+      await assert.rejects(() => filing().population(fx.orgId, 2026), /no committed 2026 pay runs/);
       await assert.rejects(
         () => filing().population(fx.orgId, 2025),
         /no transcribed loonheffing tables for 2025/,

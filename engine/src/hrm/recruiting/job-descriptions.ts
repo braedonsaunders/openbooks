@@ -46,7 +46,10 @@ const JOB_DESCRIPTION_COLUMNS = sql`
 function toDTO(row: JobDescriptionRow): JobDescriptionDTO {
   const basis = row.compensationBasis;
   if (basis !== null && basis !== "hourly" && basis !== "annual") {
-    throw new RecruitingError("REFUSED", `job description ${row.name} carries unknown pay basis ${basis} — correct it in Setup`);
+    throw new RecruitingError(
+      "REFUSED",
+      `job description ${row.name} carries unknown pay basis ${basis} — correct it in Setup`,
+    );
   }
   return {
     id: row.id,
@@ -54,8 +57,16 @@ function toDTO(row: JobDescriptionRow): JobDescriptionDTO {
     title: row.title,
     employmentKind: row.employmentKind,
     compensation:
-      row.compensationMin !== null && row.compensationMax !== null && row.compensationCurrency !== null && basis !== null
-        ? { min: row.compensationMin, max: row.compensationMax, currency: row.compensationCurrency, basis }
+      row.compensationMin !== null &&
+      row.compensationMax !== null &&
+      row.compensationCurrency !== null &&
+      basis !== null
+        ? {
+            min: row.compensationMin,
+            max: row.compensationMax,
+            currency: row.compensationCurrency,
+            basis,
+          }
         : null,
     description: row.description,
     isActive: row.isActive,
@@ -73,12 +84,20 @@ export async function loadJobDescriptionForRequisition(
   orgId: string,
   jobDescriptionId: string,
 ): Promise<JobDescriptionDTO> {
-  const row = (await exec.execute<JobDescriptionRow>(sql`
+  const row = (
+    await exec.execute<JobDescriptionRow>(
+      sql`
     select ${JOB_DESCRIPTION_COLUMNS} from hrm_job_descriptions
      where org_id = ${orgId} and id = ${jobDescriptionId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
-    throw new RecruitingError("NOT_FOUND", "job description is not visible in this organization — choose one from the library");
+    throw new RecruitingError(
+      "NOT_FOUND",
+      "job description is not visible in this organization — choose one from the library",
+    );
   }
   if (!row.isActive) {
     throw new RecruitingError(
@@ -101,13 +120,18 @@ export async function jobDescriptionDeleteRefusal(
   orgId: string,
   jobDescriptionId: string,
 ): Promise<string | null> {
-  const row = (await exec.execute<{ name: string; openings: number }>(sql`
+  const row = (
+    await exec.execute<{ name: string; openings: number }>(
+      sql`
     select jd.name,
            (select count(*)::int from hrm_requisitions r
              where r.org_id = jd.org_id and r.job_description_id = jd.id) as openings
       from hrm_job_descriptions jd
      where jd.org_id = ${orgId} and jd.id = ${jobDescriptionId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row || row.openings === 0) return null;
   return `Job description ${row.name} was used by ${row.openings} requisition${row.openings === 1 ? "" : "s"} and is kept as their history — deactivate it instead of deleting it`;
 }
@@ -124,11 +148,14 @@ export async function listActiveJobDescriptions(query: {
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    const rows = await db.execute<JobDescriptionRow>(sql`
+    const rows = await db.execute<JobDescriptionRow>(
+      sql`
       select ${JOB_DESCRIPTION_COLUMNS} from hrm_job_descriptions
        where org_id = ${orgId} and is_active
        order by name, id
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toDTO);
   });
 }

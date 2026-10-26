@@ -5,7 +5,10 @@ import { ApplicationError } from "./errors";
 
 const { listApplicationTrialBalance } = await import("./trial-balance-read");
 
-function context(permissions: string[], allowedSubsidiaryIds: Set<string> | null): ApplicationContext {
+function context(
+  permissions: string[],
+  allowedSubsidiaryIds: Set<string> | null,
+): ApplicationContext {
   return {
     authz: {
       user: { orgId: "trial-balance-unit-test" },
@@ -21,28 +24,31 @@ function context(permissions: string[], allowedSubsidiaryIds: Set<string> | null
 test("trial balance refuses callers without reports.read before reading the ledger", async () => {
   await assert.rejects(
     listApplicationTrialBalance(context(["gl.read"], null), { asOf: "2026-07-31" }),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "forbidden"
-      && error.status === 403
-      && error.details?.permission === "reports.read",
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "forbidden" &&
+      error.status === 403 &&
+      error.details?.permission === "reports.read",
   );
 });
 
 test("trial balance refuses an empty subsidiary scope before reading the ledger", async () => {
   await assert.rejects(
     listApplicationTrialBalance(context(["reports.read"], new Set()), { asOf: "2026-07-31" }),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "forbidden"
-      && error.details?.permission === "subsidiary.restricted",
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "forbidden" &&
+      error.details?.permission === "subsidiary.restricted",
   );
 });
 
 test("trial balance refuses a malformed as-of date", async () => {
   await assert.rejects(
     listApplicationTrialBalance(context(["reports.read"], null), { asOf: "2026-7-31" }),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "invalid_input"
-      && error.status === 422
-      && error.message === "asOf must be YYYY-MM-DD",
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "invalid_input" &&
+      error.status === 422 &&
+      error.message === "asOf must be YYYY-MM-DD",
   );
 });

@@ -10,7 +10,6 @@ import {
 } from "../delivery/outbox-enqueue.ts";
 import { deliverFlowEmail, type OutboxRow } from "./outbox.ts";
 
-
 test("scheduler outbox backoff doubles then caps at one hour", () => {
   assert.equal(schedulerOutboxBackoffMs(1), 60_000);
   assert.equal(schedulerOutboxBackoffMs(2), 120_000);
@@ -51,11 +50,21 @@ test("flow email enqueue refuses an invalid message synchronously, before any ro
   // Shaped like an address but not one: the old includes('@') check let it
   // become a durable row and report success, failing only at drain.
   await assert.rejects(
-    enqueueFlowEmail({ orgId: "org-1", runId: "run-1", occurrenceKey: "k-1", payload: { ...base, to: ["x@"] } }),
+    enqueueFlowEmail({
+      orgId: "org-1",
+      runId: "run-1",
+      occurrenceKey: "k-1",
+      payload: { ...base, to: ["x@"] },
+    }),
     /flow email refused: Email delivery contains an invalid recipient address\./,
   );
   await assert.rejects(
-    enqueueFlowEmail({ orgId: "org-1", runId: "run-1", occurrenceKey: "k-2", payload: { ...base, subject: "" } }),
+    enqueueFlowEmail({
+      orgId: "org-1",
+      runId: "run-1",
+      occurrenceKey: "k-2",
+      payload: { ...base, subject: "" },
+    }),
     /flow email refused: Email subject is required\./,
   );
   await assert.rejects(
@@ -63,7 +72,12 @@ test("flow email enqueue refuses an invalid message synchronously, before any ro
       orgId: "org-1",
       runId: "run-1",
       occurrenceKey: "k-3",
-      payload: { ...base, attachments: [{ filename: "x.pdf", content: "!!!not-base64!!!", contentType: "application/pdf" }] },
+      payload: {
+        ...base,
+        attachments: [
+          { filename: "x.pdf", content: "!!!not-base64!!!", contentType: "application/pdf" },
+        ],
+      },
     }),
     /flow email refused: Email attachment 1 is not valid bounded base64 content\./,
   );

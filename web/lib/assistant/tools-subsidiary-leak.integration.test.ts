@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
-import { stubModules } from '../../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../auth";
+import { stubModules } from "../../testing/stub-modules.ts";
 
 // Regression coverage: several assistant/MCP read tools ran raw SQL
 // without the caller's subsidiary allowlist, so a restricted caller saw
@@ -15,395 +15,570 @@ const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __docScopeLeak: state });
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__docScopeLeak.user}' };
-  return next(specifier, context);
-} });
-const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { getAuthz } = await import('../authz');
-const { executeAssistantTool } = await import('./registry');
-const { voidReportDocument } = await import('../../testing/document-void.ts')
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__docScopeLeak.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { getAuthz } = await import("../authz");
+const { executeAssistantTool } = await import("./registry");
+const { voidReportDocument } = await import("../../testing/document-void.ts");
 
-const PROBE_PERMS = ["ap.read", "purchase_orders.read", "ar.read", "parties.read", "projects.read", "reports.read", "assistant.use"];
+const PROBE_PERMS = [
+  "ap.read",
+  "purchase_orders.read",
+  "ar.read",
+  "parties.read",
+  "projects.read",
+  "reports.read",
+  "assistant.use",
+];
 
 async function seedScopedOrg() {
   const org = await withBypassContext(() => createScratchOrg());
   const seeded = await withBypassContext(async () => {
-    const actor = await createScratchUser(org.orgId, 'Scope prober', 'scope_prober');
+    const actor = await createScratchUser(org.orgId, "Scope prober", "scope_prober");
     const hidden = randomUUID();
-    await db.execute(sql`update app_roles set permissions=${JSON.stringify(PROBE_PERMS)}::jsonb, subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
+    await db.execute(
+      sql`update app_roles set permissions=${JSON.stringify(PROBE_PERMS)}::jsonb, subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='scope_prober'`,
+    );
+    await db.execute(
+      sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`,
+    );
     return { actor, hidden };
   });
-  state.user = { id: seeded.actor, orgId: org.orgId, name: 'Scope prober', email: 'probe@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: seeded.actor };
+  state.user = {
+    id: seeded.actor,
+    orgId: org.orgId,
+    name: "Scope prober",
+    email: "probe@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: org.orgId,
+    homeOrgId: org.orgId,
+    homeUserId: seeded.actor,
+  };
   return { org, actor: seeded.actor, hidden: seeded.hidden };
 }
 
 /** One draft document carrying a label in its number; drafts are listable. */
-async function seedDocument(orgId: string, subsidiaryId: string, kind: string, number: string, total = '100'): Promise<string> {
+async function seedDocument(
+  orgId: string,
+  subsidiaryId: string,
+  kind: string,
+  number: string,
+  total = "100",
+): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
-    values (${id},${orgId},${kind},'draft',${number},${subsidiaryId},'2026-07-15','CAD',${total},'0',${total})`));
+  await withBypassContext(() =>
+    db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
+    values (${id},${orgId},${kind},'draft',${number},${subsidiaryId},'2026-07-15','CAD',${total},'0',${total})`),
+  );
   return id;
 }
 
-for (const mode of ['restricted', 'all'] as const) {
-  test(`find_documents subsidiary scope: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const { org, hidden } = await seedScopedOrg();
+for (const mode of ["restricted", "all"] as const) {
+  test(
+    `find_documents subsidiary scope: ${mode}`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const { org, hidden } = await seedScopedOrg();
+      try {
+        if (mode === "all") {
+          await withBypassContext(() =>
+            db.execute(
+              sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "all" })}::jsonb where org_id=${org.orgId} and key='scope_prober'`,
+            ),
+          );
+        }
+        for (const sub of [org.subsidiaryId, hidden] as const) {
+          const label = sub === org.subsidiaryId ? "VISIBLE" : "HIDDEN";
+          await seedDocument(org.orgId, sub, "vendor_bill", `${label}-BILL`);
+          await seedDocument(org.orgId, sub, "customer_invoice", `${label}-INV`);
+        }
+        await withOrgContext(org.orgId, async () => {
+          const authz = await getAuthz();
+          assert.ok(authz);
+          const result = await executeAssistantTool(authz, "find_documents", {});
+          assert.equal(result.ok, true, JSON.stringify(result));
+          assert.ok(result.ok);
+          const items = (result.data as { items: { documentNumber: string; updatedAt: string }[] })
+            .items;
+          const numbers = items.map((item) => item.documentNumber).sort();
+          assert.deepEqual(
+            numbers,
+            mode === "all"
+              ? ["HIDDEN-BILL", "HIDDEN-INV", "VISIBLE-BILL", "VISIBLE-INV"]
+              : ["VISIBLE-BILL", "VISIBLE-INV"],
+            `${mode}: a restricted caller must not list hidden-subsidiary documents`,
+          );
+          const listed = items.find((item) => item.documentNumber === "VISIBLE-BILL");
+          const persisted = await withBypassContext(() =>
+            db.execute<{ revision: string }>(
+              sql`
+          select revision_seq::text as revision from documents
+           where org_id = ${org.orgId} and document_number = 'VISIBLE-BILL'
+        `,
+              "objects",
+            ),
+          );
+          assert.equal(listed?.updatedAt, persisted[0]?.revision);
+        });
+      } finally {
+        state.user = null;
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
+}
+
+test(
+  "party_concentration scopes posted documents to the caller subsidiary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    // party_concentration summed posted invoices org-wide with no subsidiary
+    // predicate, so a restricted caller saw hidden-subsidiary revenue totals
+    // and party names.
+    const { org, actor, hidden } = await seedScopedOrg();
     try {
-      if (mode === 'all') {
-        await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'all' })}::jsonb where org_id=${org.orgId} and key='scope_prober'`));
-      }
-      for (const sub of [org.subsidiaryId, hidden] as const) {
-        const label = sub === org.subsidiaryId ? 'VISIBLE' : 'HIDDEN';
-        await seedDocument(org.orgId, sub, 'vendor_bill', `${label}-BILL`);
-        await seedDocument(org.orgId, sub, 'customer_invoice', `${label}-INV`);
-      }
+      const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+      const parties: Record<string, string> = {};
+      let visibleInvoiceId = "";
+      await withBypassContext(async () => {
+        for (const [label, sub] of [
+          ["VISIBLE", org.subsidiaryId],
+          ["HIDDEN", hidden],
+        ] as const) {
+          const partyId = randomUUID();
+          await db.execute(
+            sql`insert into parties(id,org_id,kind,display_name) values (${partyId},${org.orgId},'customer',${`${label} Customer`})`,
+          );
+          await db.execute(
+            sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id) values (${org.orgId},${partyId},${sub})`,
+          );
+          parties[label] = partyId;
+          const id = randomUUID();
+          if (label === "VISIBLE") visibleInvoiceId = id;
+          const total = label === "VISIBLE" ? "1000" : "9000";
+          await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
+          values (${id},${org.orgId},'customer_invoice','draft',${`${label}-CONC`},${sub},${partyId},'2026-07-15','2026-07-15','CAD','1',${total},'0',${total},${actor})`);
+          await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount,created_by)
+          values (${org.orgId},${id},1,${org.accounts.revenue},'1',${total},${total},'0','0',${actor})`);
+          await db.execute(
+            sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`,
+          );
+          await postDocument(id, {
+            control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+          });
+        }
+      });
+      await voidReportDocument(org.orgId, visibleInvoiceId, "2026-08-05");
       await withOrgContext(org.orgId, async () => {
         const authz = await getAuthz();
         assert.ok(authz);
-        const result = await executeAssistantTool(authz, 'find_documents', {});
+        const result = await executeAssistantTool(authz, "party_concentration", {
+          side: "customer",
+          fromDate: "2026-07-01",
+          toDate: "2026-07-31",
+        });
         assert.equal(result.ok, true, JSON.stringify(result));
         assert.ok(result.ok);
-        const items = (result.data as { items: { documentNumber: string; updatedAt: string }[] }).items;
-        const numbers = items.map((item) => item.documentNumber).sort();
+        const rows = (result.data as { rows: { display_name: string; amount: string }[] }).rows;
         assert.deepEqual(
-          numbers,
-          mode === 'all'
-            ? ['HIDDEN-BILL', 'HIDDEN-INV', 'VISIBLE-BILL', 'VISIBLE-INV']
-            : ['VISIBLE-BILL', 'VISIBLE-INV'],
-          `${mode}: a restricted caller must not list hidden-subsidiary documents`,
+          rows.map((r) => r.display_name),
+          ["VISIBLE Customer"],
         );
-        const listed = items.find((item) => item.documentNumber === 'VISIBLE-BILL');
-        const persisted = await withBypassContext(() => db.execute<{ revision: string }>(sql`
-          select revision_seq::text as revision from documents
-           where org_id = ${org.orgId} and document_number = 'VISIBLE-BILL'
-        `, 'objects'));
-        assert.equal(listed?.updatedAt, persisted[0]?.revision);
+        assert.equal(rows[0]?.amount, "1000.0000");
       });
     } finally {
       state.user = null;
       await dropScratchOrg(org.orgId);
     }
-  });
-}
+  },
+);
 
-test('party_concentration scopes posted documents to the caller subsidiary', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  // party_concentration summed posted invoices org-wide with no subsidiary
-  // predicate, so a restricted caller saw hidden-subsidiary revenue totals
-  // and party names.
-  const { org, actor, hidden } = await seedScopedOrg();
-  try {
-    const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-    const parties: Record<string, string> = {};
-    let visibleInvoiceId = '';
-    await withBypassContext(async () => {
-      for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
-        const partyId = randomUUID();
-        await db.execute(sql`insert into parties(id,org_id,kind,display_name) values (${partyId},${org.orgId},'customer',${`${label} Customer`})`);
-        await db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id) values (${org.orgId},${partyId},${sub})`);
-        parties[label] = partyId;
-        const id = randomUUID();
-        if (label === 'VISIBLE') visibleInvoiceId = id;
-        const total = label === 'VISIBLE' ? '1000' : '9000';
-        await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
-          values (${id},${org.orgId},'customer_invoice','draft',${`${label}-CONC`},${sub},${partyId},'2026-07-15','2026-07-15','CAD','1',${total},'0',${total},${actor})`);
-        await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount,created_by)
-          values (${org.orgId},${id},1,${org.accounts.revenue},'1',${total},${total},'0','0',${actor})`);
-        await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
-        await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-      }
-    });
-    await voidReportDocument(org.orgId, visibleInvoiceId, '2026-08-05')
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      const result = await executeAssistantTool(authz, 'party_concentration', {
-        side: 'customer', fromDate: '2026-07-01', toDate: '2026-07-31',
+test(
+  "project_profitability scopes projects to the caller subsidiary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    // project_profitability listed every project and opened any of them by id
+    // with no subsidiary predicate, while the UI project loader scopes every
+    // surface to the caller's allowlist.
+    const { org, hidden } = await seedScopedOrg();
+    try {
+      const ids: Record<string, string> = {};
+      await withBypassContext(async () => {
+        for (const [label, sub] of [
+          ["VISIBLE", org.subsidiaryId],
+          ["HIDDEN", hidden],
+        ] as const) {
+          const id = randomUUID();
+          await db.execute(
+            sql`insert into projects(id,org_id,subsidiary_id,name) values (${id},${org.orgId},${sub},${`${label} Project`})`,
+          );
+          ids[label] = id;
+        }
       });
-      assert.equal(result.ok, true, JSON.stringify(result));
-      assert.ok(result.ok);
-      const rows = (result.data as { rows: { display_name: string; amount: string }[] }).rows;
-      assert.deepEqual(rows.map((r) => r.display_name), ['VISIBLE Customer']);
-      assert.equal(rows[0]?.amount, '1000.0000');
-    });
-  } finally {
-    state.user = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const list = await executeAssistantTool(authz, "project_profitability", {});
+        assert.equal(list.ok, true, JSON.stringify(list));
+        assert.ok(list.ok);
+        const names = (list.data as { projects: { name: string }[] }).projects.map((p) => p.name);
+        assert.deepEqual(names, ["VISIBLE Project"]);
+        const hiddenSingle = await executeAssistantTool(authz, "project_profitability", {
+          projectId: ids["HIDDEN"],
+        });
+        assert.equal(
+          hiddenSingle.ok,
+          false,
+          `hidden project must read as missing, got ${JSON.stringify(hiddenSingle)}`,
+        );
+        const visibleSingle = await executeAssistantTool(authz, "project_profitability", {
+          projectId: ids["VISIBLE"],
+        });
+        assert.equal(visibleSingle.ok, true, JSON.stringify(visibleSingle));
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('project_profitability scopes projects to the caller subsidiary', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  // project_profitability listed every project and opened any of them by id
-  // with no subsidiary predicate, while the UI project loader scopes every
-  // surface to the caller's allowlist.
-  const { org, hidden } = await seedScopedOrg();
-  try {
-    const ids: Record<string, string> = {};
-    await withBypassContext(async () => {
-      for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
-        const id = randomUUID();
-        await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${id},${org.orgId},${sub},${`${label} Project`})`);
-        ids[label] = id;
-      }
-    });
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      const list = await executeAssistantTool(authz, 'project_profitability', {});
-      assert.equal(list.ok, true, JSON.stringify(list));
-      assert.ok(list.ok);
-      const names = ((list.data as { projects: { name: string }[] }).projects).map((p) => p.name);
-      assert.deepEqual(names, ['VISIBLE Project']);
-      const hiddenSingle = await executeAssistantTool(authz, 'project_profitability', { projectId: ids['HIDDEN'] });
-      assert.equal(hiddenSingle.ok, false, `hidden project must read as missing, got ${JSON.stringify(hiddenSingle)}`);
-      const visibleSingle = await executeAssistantTool(authz, 'project_profitability', { projectId: ids['VISIBLE'] });
-      assert.equal(visibleSingle.ok, true, JSON.stringify(visibleSingle));
-    });
-  } finally {
-    state.user = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test('project_profitability hides hidden-subsidiary source documents on a visible project', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, hidden } = await seedScopedOrg();
-  const projectId = randomUUID();
-  try {
-    await withBypassContext(async () => {
-      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${projectId},${org.orgId},${org.subsidiaryId},'Visible Detail Project')`);
-      const documentId = randomUUID();
-      await db.execute(sql`insert into documents(
+test(
+  "project_profitability hides hidden-subsidiary source documents on a visible project",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, hidden } = await seedScopedOrg();
+    const projectId = randomUUID();
+    try {
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`insert into projects(id,org_id,subsidiary_id,name) values (${projectId},${org.orgId},${org.subsidiaryId},'Visible Detail Project')`,
+        );
+        const documentId = randomUUID();
+        await db.execute(sql`insert into documents(
         id,org_id,kind,status,document_number,subsidiary_id,project_id,party_id,document_date,currency,subtotal,tax_total,total
       ) values (
         ${documentId},${org.orgId},'vendor_bill','draft','HIDDEN-PROJECT-DOC',${hidden},${projectId},${org.vendorId},'2026-07-15','CAD','900','0','900'
       )`);
-      await db.execute(sql`insert into document_lines(
+        await db.execute(sql`insert into document_lines(
         org_id,document_id,line_number,account_id,amount,tax_amount,project_id,subsidiary_id
       ) values (${org.orgId},${documentId},1,${org.accounts.cogs},'900','0',${projectId},${hidden})`);
-    });
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      const result = await executeAssistantTool(authz, 'project_profitability', { projectId });
-      assert.equal(result.ok, true, JSON.stringify(result));
-      assert.ok(result.ok);
-      const documents = (result.data as { documents: { documentNumber: string }[] }).documents;
-      assert.deepEqual(documents, [], 'a visible project must not expose source documents from hidden subsidiaries');
-    });
-  } finally {
-    state.user = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test('rank_projects excludes hidden-subsidiary commitments through the assistant tool', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, hidden } = await seedScopedOrg();
-  const projectId = randomUUID();
-  try {
-    await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true}'::jsonb,true) where id=${org.orgId}`);
-      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,contract_value)
-        values (${projectId},${org.orgId},${org.subsidiaryId},'SCOPE-RANK','Scope ranking',${org.customerId},'active',true,0)`);
-      for (const [label, subsidiaryId, amount] of [
-        ['VISIBLE', org.subsidiaryId, '100'],
-        ['HIDDEN', hidden, '900'],
-      ] as const) {
-        const documentId = randomUUID();
-        await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,currency,status,party_id,subsidiary_id,subtotal,total)
-          values (${documentId},${org.orgId},'purchase_order',${`${label}-${documentId}`},${org.date},'CAD','draft',${org.vendorId},${subsidiaryId},${amount},${amount})`);
-        await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount,project_id,subsidiary_id)
-          values (${org.orgId},${documentId},1,${org.accounts.cogs},'Open commitment',1,${amount},${amount},${projectId},${subsidiaryId})`);
-        await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${documentId}`);
-      }
-    });
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      const result = await executeAssistantTool(authz, 'rank_projects', { withActivityOnly: false });
-      assert.equal(result.ok, true, JSON.stringify(result));
-      assert.ok(result.ok);
-      const project = (result.data as { projects: { id: string; committedCost: string }[] }).projects.find((row) => row.id === projectId);
-      assert.equal(project?.committedCost, '100.0000');
-    });
-  } finally {
-    state.user = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test('retainage balances total only posted lines in visible subsidiaries', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, hidden } = await seedScopedOrg();
-  try {
-    await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(
-        jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true}'::jsonb,true),
-        '{controlAccounts,retainageReceivable}',to_jsonb(${org.accounts.invAsset}::text),true) where id=${org.orgId}`);
-      for (const [label, subsidiaryId, amount] of [
-        ['VISIBLE', org.subsidiaryId, '100'],
-        ['HIDDEN', hidden, '900'],
-      ] as const) {
-        const entryId = randomUUID();
-        await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
-          values (${entryId},${org.orgId},${org.bookId},${subsidiaryId},${`RET-${label}-${entryId.slice(0,8)}`},${org.date},${org.periodId},'retainage scope fixture','draft','manual')`);
-        await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,party_id,amount,currency,txn_amount,fx_rate)
-          values (${org.orgId},${entryId},1,${org.accounts.invAsset},${subsidiaryId},${org.customerId},${amount},'CAD',${amount},'1'),
-                 (${org.orgId},${entryId},2,${org.accounts.adjustment},${subsidiaryId},${org.customerId},${`-${amount}`},'CAD',${`-${amount}`},'1')`);
-        await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entryId} and org_id=${org.orgId}`);
-      }
-    });
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      const result = await executeAssistantTool(authz, 'retainage_balances', { asOf: org.date });
-      assert.equal(result.ok, true, JSON.stringify(result));
-      assert.ok(result.ok);
-      const data = result.data as { configured: boolean; total: string; lines: number; rows: { party: string; balance: string }[] };
-      assert.equal(data.configured, true);
-      assert.equal(data.total, '100.0000');
-      assert.equal(data.lines, 1);
-      assert.deepEqual(data.rows.map((row) => row.balance), ['100.0000']);
-    });
-  } finally {
-    state.user = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test('tax_return refuses when the caller has no filing-entity scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org } = await seedScopedOrg();
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      const result = await executeAssistantTool({ ...authz, allowedSubsidiaryIds: new Set() }, 'tax_return', {
-        formCode: 'UNCONFIGURED', fromDate: org.date, toDate: org.date,
       });
-      assert.deepEqual(result, { ok: false, error: 'forbidden' });
-    });
-  } finally {
-    state.user = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const result = await executeAssistantTool(authz, "project_profitability", { projectId });
+        assert.equal(result.ok, true, JSON.stringify(result));
+        assert.ok(result.ok);
+        const documents = (result.data as { documents: { documentNumber: string }[] }).documents;
+        assert.deepEqual(
+          documents,
+          [],
+          "a visible project must not expose source documents from hidden subsidiaries",
+        );
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('get_document hides a hidden-subsidiary document from a restricted caller', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, hidden } = await seedScopedOrg();
-  try {
-    const visibleId = await seedDocument(org.orgId, org.subsidiaryId, 'vendor_bill', 'VISIBLE-ONE');
-    const hiddenId = await seedDocument(org.orgId, hidden, 'vendor_bill', 'HIDDEN-ONE');
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz();
-      assert.ok(authz);
-      const visible = await executeAssistantTool(authz, 'get_document', { documentId: visibleId });
-      assert.equal(visible.ok, true, JSON.stringify(visible));
-      assert.ok(visible.ok);
-      const visibleData = visible.data as { updatedAt: string };
-      const persisted = await withBypassContext(() => db.execute<{ revision: string }>(sql`
-        select revision_seq::text as revision from documents where id = ${visibleId}
-      `, 'objects'));
-      assert.equal(visibleData.updatedAt, persisted[0]?.revision);
-      const hiddenResult = await executeAssistantTool(authz, 'get_document', { documentId: hiddenId });
-      assert.equal(hiddenResult.ok, false, `hidden document must read as missing, got ${JSON.stringify(hiddenResult)}`);
-    });
-  } finally {
-    state.user = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "rank_projects excludes hidden-subsidiary commitments through the assistant tool",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, hidden } = await seedScopedOrg();
+    const projectId = randomUUID();
+    try {
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true}'::jsonb,true) where id=${org.orgId}`,
+        );
+        await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,contract_value)
+        values (${projectId},${org.orgId},${org.subsidiaryId},'SCOPE-RANK','Scope ranking',${org.customerId},'active',true,0)`);
+        for (const [label, subsidiaryId, amount] of [
+          ["VISIBLE", org.subsidiaryId, "100"],
+          ["HIDDEN", hidden, "900"],
+        ] as const) {
+          const documentId = randomUUID();
+          await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,currency,status,party_id,subsidiary_id,subtotal,total)
+          values (${documentId},${org.orgId},'purchase_order',${`${label}-${documentId}`},${org.date},'CAD','draft',${org.vendorId},${subsidiaryId},${amount},${amount})`);
+          await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount,project_id,subsidiary_id)
+          values (${org.orgId},${documentId},1,${org.accounts.cogs},'Open commitment',1,${amount},${amount},${projectId},${subsidiaryId})`);
+          await db.execute(
+            sql`update documents set status='approved' where org_id=${org.orgId} and id=${documentId}`,
+          );
+        }
+      });
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const result = await executeAssistantTool(authz, "rank_projects", {
+          withActivityOnly: false,
+        });
+        assert.equal(result.ok, true, JSON.stringify(result));
+        assert.ok(result.ok);
+        const project = (
+          result.data as { projects: { id: string; committedCost: string }[] }
+        ).projects.find((row) => row.id === projectId);
+        assert.equal(project?.committedCost, "100.0000");
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-for (const mode of ['restricted', 'all'] as const) {
-  test(`find_journal_entries total agrees with its listing: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    // The listing joins journal_lines under the caller scope (an entry with
-    // no visible line never appears, like the UI journal list), but the
-    // match count was entry-scoped only — so a restricted caller saw a total
-    // for entries the listing itself could never return.
+test(
+  "retainage balances total only posted lines in visible subsidiaries",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
     const { org, hidden } = await seedScopedOrg();
     try {
-      await withBypassContext(() => db.execute(sql`update app_roles set permissions=${JSON.stringify([...PROBE_PERMS, 'gl.read'])}::jsonb where org_id=${org.orgId} and key='scope_prober'`));
-      if (mode === 'all') {
-        await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'all' })}::jsonb where org_id=${org.orgId} and key='scope_prober'`));
-      }
-      // Fully visible entry: header and line in the visible subsidiary.
-      const fullyVisible = randomUUID();
-      const headerOnly = randomUUID();
       await withBypassContext(async () => {
-      await db.execute(sql`
+        await db.execute(sql`update orgs set settings=jsonb_set(
+        jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true}'::jsonb,true),
+        '{controlAccounts,retainageReceivable}',to_jsonb(${org.accounts.invAsset}::text),true) where id=${org.orgId}`);
+        for (const [label, subsidiaryId, amount] of [
+          ["VISIBLE", org.subsidiaryId, "100"],
+          ["HIDDEN", hidden, "900"],
+        ] as const) {
+          const entryId = randomUUID();
+          await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+          values (${entryId},${org.orgId},${org.bookId},${subsidiaryId},${`RET-${label}-${entryId.slice(0, 8)}`},${org.date},${org.periodId},'retainage scope fixture','draft','manual')`);
+          await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,party_id,amount,currency,txn_amount,fx_rate)
+          values (${org.orgId},${entryId},1,${org.accounts.invAsset},${subsidiaryId},${org.customerId},${amount},'CAD',${amount},'1'),
+                 (${org.orgId},${entryId},2,${org.accounts.adjustment},${subsidiaryId},${org.customerId},${`-${amount}`},'CAD',${`-${amount}`},'1')`);
+          await db.execute(
+            sql`update journal_entries set status='posted',posted_at=now() where id=${entryId} and org_id=${org.orgId}`,
+          );
+        }
+      });
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const result = await executeAssistantTool(authz, "retainage_balances", { asOf: org.date });
+        assert.equal(result.ok, true, JSON.stringify(result));
+        assert.ok(result.ok);
+        const data = result.data as {
+          configured: boolean;
+          total: string;
+          lines: number;
+          rows: { party: string; balance: string }[];
+        };
+        assert.equal(data.configured, true);
+        assert.equal(data.total, "100.0000");
+        assert.equal(data.lines, 1);
+        assert.deepEqual(
+          data.rows.map((row) => row.balance),
+          ["100.0000"],
+        );
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "tax_return refuses when the caller has no filing-entity scope",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org } = await seedScopedOrg();
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const result = await executeAssistantTool(
+          { ...authz, allowedSubsidiaryIds: new Set() },
+          "tax_return",
+          {
+            formCode: "UNCONFIGURED",
+            fromDate: org.date,
+            toDate: org.date,
+          },
+        );
+        assert.deepEqual(result, { ok: false, error: "forbidden" });
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "get_document hides a hidden-subsidiary document from a restricted caller",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, hidden } = await seedScopedOrg();
+    try {
+      const visibleId = await seedDocument(
+        org.orgId,
+        org.subsidiaryId,
+        "vendor_bill",
+        "VISIBLE-ONE",
+      );
+      const hiddenId = await seedDocument(org.orgId, hidden, "vendor_bill", "HIDDEN-ONE");
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const visible = await executeAssistantTool(authz, "get_document", {
+          documentId: visibleId,
+        });
+        assert.equal(visible.ok, true, JSON.stringify(visible));
+        assert.ok(visible.ok);
+        const visibleData = visible.data as { updatedAt: string };
+        const persisted = await withBypassContext(() =>
+          db.execute<{ revision: string }>(
+            sql`
+        select revision_seq::text as revision from documents where id = ${visibleId}
+      `,
+            "objects",
+          ),
+        );
+        assert.equal(visibleData.updatedAt, persisted[0]?.revision);
+        const hiddenResult = await executeAssistantTool(authz, "get_document", {
+          documentId: hiddenId,
+        });
+        assert.equal(
+          hiddenResult.ok,
+          false,
+          `hidden document must read as missing, got ${JSON.stringify(hiddenResult)}`,
+        );
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+for (const mode of ["restricted", "all"] as const) {
+  test(
+    `find_journal_entries total agrees with its listing: ${mode}`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      // The listing joins journal_lines under the caller scope (an entry with
+      // no visible line never appears, like the UI journal list), but the
+      // match count was entry-scoped only — so a restricted caller saw a total
+      // for entries the listing itself could never return.
+      const { org, hidden } = await seedScopedOrg();
+      try {
+        await withBypassContext(() =>
+          db.execute(
+            sql`update app_roles set permissions=${JSON.stringify([...PROBE_PERMS, "gl.read"])}::jsonb where org_id=${org.orgId} and key='scope_prober'`,
+          ),
+        );
+        if (mode === "all") {
+          await withBypassContext(() =>
+            db.execute(
+              sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "all" })}::jsonb where org_id=${org.orgId} and key='scope_prober'`,
+            ),
+          );
+        }
+        // Fully visible entry: header and line in the visible subsidiary.
+        const fullyVisible = randomUUID();
+        const headerOnly = randomUUID();
+        await withBypassContext(async () => {
+          await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
         values
           (${fullyVisible}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
            'JE-VISIBLE', '2026-07-15', ${org.periodId}, 'visible', 'draft', 'manual')`);
-      await db.execute(sql`
+          await db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
         values
           (${org.orgId}, ${fullyVisible}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, '50.00', 'CAD', '50.00', '1'),
           (${org.orgId}, ${fullyVisible}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-50.00', 'CAD', '-50.00', '1')`);
-      // Header-only entry: header in the visible subsidiary, its only line
-      // parked in the hidden one — the listing can never return it.
-      await db.execute(sql`
+          // Header-only entry: header in the visible subsidiary, its only line
+          // parked in the hidden one — the listing can never return it.
+          await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
         values
           (${headerOnly}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
            'JE-HEADER-ONLY', '2026-07-15', ${org.periodId}, 'header only', 'draft', 'manual')`);
-      await db.execute(sql`
+          await db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
         values
           (${org.orgId}, ${headerOnly}, 1, ${org.accounts.bank}, ${hidden}, '75.00', 'CAD', '75.00', '1'),
           (${org.orgId}, ${headerOnly}, 2, ${org.accounts.revenue}, ${hidden}, '-75.00', 'CAD', '-75.00', '1')`);
-      });
-      await withOrgContext(org.orgId, async () => {
-        const authz = await getAuthz();
-        assert.ok(authz);
-        const result = await executeAssistantTool(authz, 'find_journal_entries', {});
-        assert.equal(result.ok, true, JSON.stringify(result));
-        assert.ok(result.ok);
-        const data = result.data as { total: number; items: { entryNumber: string }[] };
-        const numbers = data.items.map((item) => item.entryNumber).sort();
-        assert.deepEqual(
-          [data.total, numbers],
-          mode === 'all'
-            ? [2, ['JE-HEADER-ONLY', 'JE-VISIBLE']]
-            : [1, ['JE-VISIBLE']],
-          `${mode}: total must count exactly the entries the listing returns`,
-        );
-        const visibleDetail = await executeAssistantTool(authz, 'get_journal_entry', { entryId: fullyVisible });
-        assert.equal(visibleDetail.ok, true, JSON.stringify(visibleDetail));
-        assert.ok(visibleDetail.ok);
-        const detail = visibleDetail.data as { lines: { lineNumber: number; amount: string }[] };
-        assert.deepEqual(detail.lines.map((line) => [line.lineNumber, line.amount]), [
-          [1, '50.0000'],
-          [2, '-50.0000'],
-        ]);
+        });
+        await withOrgContext(org.orgId, async () => {
+          const authz = await getAuthz();
+          assert.ok(authz);
+          const result = await executeAssistantTool(authz, "find_journal_entries", {});
+          assert.equal(result.ok, true, JSON.stringify(result));
+          assert.ok(result.ok);
+          const data = result.data as { total: number; items: { entryNumber: string }[] };
+          const numbers = data.items.map((item) => item.entryNumber).sort();
+          assert.deepEqual(
+            [data.total, numbers],
+            mode === "all" ? [2, ["JE-HEADER-ONLY", "JE-VISIBLE"]] : [1, ["JE-VISIBLE"]],
+            `${mode}: total must count exactly the entries the listing returns`,
+          );
+          const visibleDetail = await executeAssistantTool(authz, "get_journal_entry", {
+            entryId: fullyVisible,
+          });
+          assert.equal(visibleDetail.ok, true, JSON.stringify(visibleDetail));
+          assert.ok(visibleDetail.ok);
+          const detail = visibleDetail.data as { lines: { lineNumber: number; amount: string }[] };
+          assert.deepEqual(
+            detail.lines.map((line) => [line.lineNumber, line.amount]),
+            [
+              [1, "50.0000"],
+              [2, "-50.0000"],
+            ],
+          );
 
-        // A hidden header cannot be opened even when its lines are visible.
-        const hiddenHeader = randomUUID();
-        await withBypassContext(async () => {
-          await db.execute(sql`
+          // A hidden header cannot be opened even when its lines are visible.
+          const hiddenHeader = randomUUID();
+          await withBypassContext(async () => {
+            await db.execute(sql`
             insert into journal_entries
               (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
             values
               (${hiddenHeader}, ${org.orgId}, ${org.bookId}, ${hidden},
                'JE-HIDDEN-HEADER', '2026-07-15', ${org.periodId}, 'hidden header', 'draft', 'manual')`);
-          await db.execute(sql`
+            await db.execute(sql`
             insert into journal_lines
               (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
             values
               (${org.orgId}, ${hiddenHeader}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, '25.00', 'CAD', '25.00', '1'),
               (${org.orgId}, ${hiddenHeader}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-25.00', 'CAD', '-25.00', '1')`);
+          });
+          const hiddenDetail = await executeAssistantTool(authz, "get_journal_entry", {
+            entryId: hiddenHeader,
+          });
+          assert.equal(hiddenDetail.ok, mode === "all", JSON.stringify(hiddenDetail));
+          if (mode === "restricted")
+            assert.deepEqual(hiddenDetail, { ok: false, error: "entry_not_found" });
         });
-        const hiddenDetail = await executeAssistantTool(authz, 'get_journal_entry', { entryId: hiddenHeader });
-        assert.equal(hiddenDetail.ok, mode === 'all', JSON.stringify(hiddenDetail));
-        if (mode === 'restricted') assert.deepEqual(hiddenDetail, { ok: false, error: 'entry_not_found' });
-      });
-    } finally {
-      state.user = null;
-      await dropScratchOrg(org.orgId);
-    }
-  });
+      } finally {
+        state.user = null;
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }

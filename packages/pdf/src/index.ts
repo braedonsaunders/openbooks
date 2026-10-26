@@ -1,13 +1,18 @@
 // @openbooks/pdf — the pure-JS PDF document renderer (pdfkit, no Chromium).
 // Server-only: import from route handlers / server components only.
 
-export * from './types'
-export * from './page'
-export { pdfColor, pdfContrastText, pdfColorTint } from './color'
-export { drawTable, computeColumnWidths, pdfCellText, PdfLayoutError } from './table'
-export { renderPdfDocument } from './document'
-export { renderStatementPdf } from './statement'
-export { assertPrintablePage, renderHtmlDocumentPdf, type HtmlDocumentPdfInput, type PdfOrientation } from './html'
+export * from "./types";
+export * from "./page";
+export { pdfColor, pdfContrastText, pdfColorTint } from "./color";
+export { drawTable, computeColumnWidths, pdfCellText, PdfLayoutError } from "./table";
+export { renderPdfDocument } from "./document";
+export { renderStatementPdf } from "./statement";
+export {
+  assertPrintablePage,
+  renderHtmlDocumentPdf,
+  type HtmlDocumentPdfInput,
+  type PdfOrientation,
+} from "./html";
 export {
   PdfBrowserPool,
   RendererUnavailableError,
@@ -17,7 +22,7 @@ export {
   sharedPdfPool,
   type PdfBrowserLauncher,
   type PdfRendererStatus,
-} from './browser-pool'
+} from "./browser-pool";
 export {
   renderTemplate,
   expandRepeatMarkers,
@@ -30,7 +35,7 @@ export {
   escapeTemplateHtml,
   htmlToPlainText,
   TEMPLATE_RENDER_LIMITS,
-} from './template'
+} from "./template";
 // Confidential output: AES-256 encryption (qpdf) + independent certification
 // that bytes are genuinely password-protected, plus the configurable password
 // expression any sensitive record PDF derives its password from.
@@ -40,7 +45,7 @@ export {
   pdfEncryptionAvailable,
   PdfEncryptionError,
   type PdfEncryptionOptions,
-} from './encrypt'
+} from "./encrypt";
 export {
   assertValidPasswordExpression,
   parsePasswordExpression,
@@ -49,14 +54,14 @@ export {
   PASSWORD_DATE_FORMATS,
   type PasswordTokenCatalog,
   type PasswordTokenKind,
-} from './password-expression'
+} from "./password-expression";
 export type {
   StatementPdfInput,
   StatementPdfColumn,
   StatementPdfColumnKind,
   StatementPdfRow,
   StatementPdfStyle,
-} from './statement'
+} from "./statement";
 export {
   CODE128_BAR_HEIGHT_MM,
   CODE128_MODULE_WIDTH_MM,
@@ -64,6 +69,6 @@ export {
   encodeCode128,
   renderCode128Svg,
   type Code128Encoding,
-} from './barcode'
+} from "./barcode";
 
-export { assertMicrFont } from './micr-font'
+export { assertMicrFont } from "./micr-font";

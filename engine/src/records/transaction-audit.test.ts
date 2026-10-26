@@ -96,13 +96,28 @@ test("transaction deletion evidence is a tombstone with a reason", () => {
 function snapshot(overrides: Partial<TransactionAuditSnapshot> = {}): TransactionAuditSnapshot {
   return {
     document: {
-      id: "doc-1", org_id: "org-1", kind: "customer_invoice", status: "posted",
-      document_number: "INV-1", memo: null, total: "100.0000",
-      created_at: "2026-07-15T00:00:00+00:00", created_by: "u1",
-      updated_at: "2026-07-15T00:00:00+00:00", updated_by: "u1", revision_seq: "4",
+      id: "doc-1",
+      org_id: "org-1",
+      kind: "customer_invoice",
+      status: "posted",
+      document_number: "INV-1",
+      memo: null,
+      total: "100.0000",
+      created_at: "2026-07-15T00:00:00+00:00",
+      created_by: "u1",
+      updated_at: "2026-07-15T00:00:00+00:00",
+      updated_by: "u1",
+      revision_seq: "4",
     },
     lines: [
-      { id: "line-1", document_id: "doc-1", line_number: 1, account_id: "a1", amount: "100.0000", description: null },
+      {
+        id: "line-1",
+        document_id: "doc-1",
+        line_number: 1,
+        account_id: "a1",
+        amount: "100.0000",
+        description: null,
+      },
     ],
     taxComponents: [],
     applications: [],
@@ -114,21 +129,42 @@ function snapshot(overrides: Partial<TransactionAuditSnapshot> = {}): Transactio
 test("stamp-only differences match", () => {
   const before = snapshot();
   const after = snapshot({
-    document: { ...before.document, updated_at: "2026-07-16T00:00:00+00:00", updated_by: "u2", revision_seq: "5" },
+    document: {
+      ...before.document,
+      updated_at: "2026-07-16T00:00:00+00:00",
+      updated_by: "u2",
+      revision_seq: "5",
+    },
   });
   assert.equal(transactionSnapshotsMatch(before, after), true);
 });
 
 test("a material header change does not match", () => {
   const before = snapshot();
-  const after = snapshot({ document: { ...before.document, memo: "hello", updated_at: "2026-07-16T00:00:00+00:00", revision_seq: "5" } });
+  const after = snapshot({
+    document: {
+      ...before.document,
+      memo: "hello",
+      updated_at: "2026-07-16T00:00:00+00:00",
+      revision_seq: "5",
+    },
+  });
   assert.equal(transactionSnapshotsMatch(before, after), false);
 });
 
 test("an identical line rewrite with re-minted ids matches", () => {
   const before = snapshot();
   const after = snapshot({
-    lines: [{ id: "line-2", document_id: "doc-1", line_number: 1, account_id: "a1", amount: "100.0000", description: null }],
+    lines: [
+      {
+        id: "line-2",
+        document_id: "doc-1",
+        line_number: 1,
+        account_id: "a1",
+        amount: "100.0000",
+        description: null,
+      },
+    ],
   });
   assert.equal(transactionSnapshotsMatch(before, after), true);
 });
@@ -136,7 +172,16 @@ test("an identical line rewrite with re-minted ids matches", () => {
 test("a line content change does not match", () => {
   const before = snapshot();
   const after = snapshot({
-    lines: [{ id: "line-1", document_id: "doc-1", line_number: 1, account_id: "a1", amount: "200.0000", description: null }],
+    lines: [
+      {
+        id: "line-1",
+        document_id: "doc-1",
+        line_number: 1,
+        account_id: "a1",
+        amount: "200.0000",
+        description: null,
+      },
+    ],
   });
   assert.equal(transactionSnapshotsMatch(before, after), false);
 });

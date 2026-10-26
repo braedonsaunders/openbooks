@@ -1,13 +1,13 @@
-import { normalizeMoney } from '@openbooks/engine/money/money'
-import { canonicalDecimal, compareDecimal } from './exact-decimal'
-import { isUuid } from './list-params'
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { canonicalDecimal, compareDecimal } from "./exact-decimal";
+import { isUuid } from "./list-params";
 import type {
   RuleCriteria,
   RuleOutcome,
   RuleCondition,
   RuleConditionGroup,
   RuleSplitLine,
-} from './banking-rules'
+} from "./banking-rules";
 
 /**
  * Server-side validation + normalization of bank-rule JSON. Turns an untrusted
@@ -18,265 +18,306 @@ import type {
 
 /** Persist a non-negative ledger amount without crossing IEEE-754. */
 function persistNonNegativeMoney(value: unknown): string | null {
-  const exact = canonicalDecimal(value, 4)
-  if (exact === null || compareDecimal(exact, '0') < 0) return null
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null || compareDecimal(exact, "0") < 0) return null;
   try {
-    return normalizeMoney(exact)
+    return normalizeMoney(exact);
   } catch {
-    return null
+    return null;
   }
 }
 
-const TEXT_FIELDS = new Set(['description', 'payee', 'anyText', 'reference'])
-const TEXT_OPS = new Set(['contains', 'notContains', 'equals', 'startsWith', 'endsWith', 'isBlank'])
-const NUMBER_OPS = new Set(['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'between'])
-const DATE_OPS = new Set(['on', 'before', 'after', 'withinDays'])
+const TEXT_FIELDS = new Set(["description", "payee", "anyText", "reference"]);
+const TEXT_OPS = new Set([
+  "contains",
+  "notContains",
+  "equals",
+  "startsWith",
+  "endsWith",
+  "isBlank",
+]);
+const NUMBER_OPS = new Set(["eq", "ne", "gt", "gte", "lt", "lte", "between"]);
+const DATE_OPS = new Set(["on", "before", "after", "withinDays"]);
 
-const MAX_CONDITIONS = 40
-const MAX_DEPTH = 4
-const MAX_SPLIT_LINES = 20
+const MAX_CONDITIONS = 40;
+const MAX_DEPTH = 4;
+const MAX_SPLIT_LINES = 20;
 
-export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string }
+export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /** Split an exact decimal (plain or exponent notation) into integer digits and a base-10 scale. */
 function exactDecimalParts(raw: string): { digits: bigint; scale: number } {
-  let text = raw.trim().toLowerCase()
-  let exp = 0
-  const eIdx = text.indexOf('e')
+  let text = raw.trim().toLowerCase();
+  let exp = 0;
+  const eIdx = text.indexOf("e");
   if (eIdx >= 0) {
-    exp = Number.parseInt(text.slice(eIdx + 1), 10)
-    text = text.slice(0, eIdx)
+    exp = Number.parseInt(text.slice(eIdx + 1), 10);
+    text = text.slice(0, eIdx);
   }
-  const dot = text.indexOf('.')
-  const int = dot >= 0 ? text.slice(0, dot) : text
-  const frac = dot >= 0 ? text.slice(dot + 1) : ''
-  const digits = BigInt(`${int.replace(/^[+-]/, '') || '0'}${frac}`)
-  return { digits, scale: frac.length - exp }
+  const dot = text.indexOf(".");
+  const int = dot >= 0 ? text.slice(0, dot) : text;
+  const frac = dot >= 0 ? text.slice(dot + 1) : "";
+  const digits = BigInt(`${int.replace(/^[+-]/, "") || "0"}${frac}`);
+  return { digits, scale: frac.length - exp };
 }
 
 /** True when the exact decimal sum of `values` exceeds `limit` — no binary-float rounding. */
 function exactDecimalSumCompare(values: (number | string)[], limit: number): number {
-  const parts = values.map((v) => exactDecimalParts(String(v)))
-  const limitPart = exactDecimalParts(String(limit))
-  const maxScale = Math.max(limitPart.scale, 0, ...parts.map((p) => p.scale))
-  const at = (p: { digits: bigint; scale: number }) => p.digits * 10n ** BigInt(maxScale - p.scale)
-  const total = parts.reduce((acc, p) => acc + at(p), 0n)
-  return total === at(limitPart) ? 0 : total > at(limitPart) ? 1 : -1
+  const parts = values.map((v) => exactDecimalParts(String(v)));
+  const limitPart = exactDecimalParts(String(limit));
+  const maxScale = Math.max(limitPart.scale, 0, ...parts.map((p) => p.scale));
+  const at = (p: { digits: bigint; scale: number }) => p.digits * 10n ** BigInt(maxScale - p.scale);
+  const total = parts.reduce((acc, p) => acc + at(p), 0n);
+  return total === at(limitPart) ? 0 : total > at(limitPart) ? 1 : -1;
 }
 
 function exactDecimalSumExceeds(values: (number | string)[], limit: number): boolean {
-  return exactDecimalSumCompare(values, limit) > 0
+  return exactDecimalSumCompare(values, limit) > 0;
 }
 
 function exactDecimalSumEquals(values: (number | string)[], limit: number): boolean {
-  return exactDecimalSumCompare(values, limit) === 0
+  return exactDecimalSumCompare(values, limit) === 0;
 }
 
 // The UUID shape lives in lib/list-params (single source of truth); this
 // guard only adds the unknown-input narrowing the rule-tree callers need.
 function isUuidLike(v: unknown): v is string {
-  return typeof v === 'string' && isUuid(v)
+  return typeof v === "string" && isUuid(v);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function validateCondition(raw: Record<string, unknown>): ValidationResult<RuleCondition> {
-  const field = String(raw.field ?? '')
-  const op = String(raw.op ?? '')
+  const field = String(raw.field ?? "");
+  const op = String(raw.op ?? "");
 
-  if (field === 'flow') {
-    if (op !== 'is') return { ok: false, error: 'flow requires the "is" operator' }
-    const v = String(raw.value ?? 'any')
-    if (!['in', 'out', 'any'].includes(v)) return { ok: false, error: 'flow value must be in / out / any' }
-    return { ok: true, value: { field: 'flow', op: 'is', value: v as 'in' | 'out' } }
+  if (field === "flow") {
+    if (op !== "is") return { ok: false, error: 'flow requires the "is" operator' };
+    const v = String(raw.value ?? "any");
+    if (!["in", "out", "any"].includes(v))
+      return { ok: false, error: "flow value must be in / out / any" };
+    return { ok: true, value: { field: "flow", op: "is", value: v as "in" | "out" } };
   }
-  if (field === 'source') {
-    if (op !== 'equals') return { ok: false, error: 'source requires the "equals" operator' }
-    const value = typeof raw.value === 'string' ? raw.value.trim() : ''
-    if (!value) return { ok: false, error: 'source requires a value' }
-    return { ok: true, value: { field: 'source', op: 'equals', value: value.slice(0, 40) } }
+  if (field === "source") {
+    if (op !== "equals") return { ok: false, error: 'source requires the "equals" operator' };
+    const value = typeof raw.value === "string" ? raw.value.trim() : "";
+    if (!value) return { ok: false, error: "source requires a value" };
+    return { ok: true, value: { field: "source", op: "equals", value: value.slice(0, 40) } };
   }
-  if (field === 'amount') {
-    if (!NUMBER_OPS.has(op)) return { ok: false, error: `invalid amount operator "${op}"` }
-    if (op === 'between') {
-      const arr = raw.value
-      if (!Array.isArray(arr) || arr.length !== 2) return { ok: false, error: 'between needs [min, max]' }
-      const min = persistNonNegativeMoney(arr[0])
-      const max = persistNonNegativeMoney(arr[1])
+  if (field === "amount") {
+    if (!NUMBER_OPS.has(op)) return { ok: false, error: `invalid amount operator "${op}"` };
+    if (op === "between") {
+      const arr = raw.value;
+      if (!Array.isArray(arr) || arr.length !== 2)
+        return { ok: false, error: "between needs [min, max]" };
+      const min = persistNonNegativeMoney(arr[0]);
+      const max = persistNonNegativeMoney(arr[1]);
       if (min === null || max === null) {
-        return { ok: false, error: 'between bounds must be non-negative numbers' }
+        return { ok: false, error: "between bounds must be non-negative numbers" };
       }
-      if (compareDecimal(min, max) > 0) return { ok: false, error: 'between min cannot exceed max' }
-      return { ok: true, value: { field: 'amount', op: 'between', value: [min, max] } }
+      if (compareDecimal(min, max) > 0)
+        return { ok: false, error: "between min cannot exceed max" };
+      return { ok: true, value: { field: "amount", op: "between", value: [min, max] } };
     }
-    const amount = persistNonNegativeMoney(raw.value)
-    if (amount === null) return { ok: false, error: 'amount must be a non-negative number' }
-    return { ok: true, value: { field: 'amount', op: op as RuleCondition['op'], value: amount } }
+    const amount = persistNonNegativeMoney(raw.value);
+    if (amount === null) return { ok: false, error: "amount must be a non-negative number" };
+    return { ok: true, value: { field: "amount", op: op as RuleCondition["op"], value: amount } };
   }
-  if (field === 'date') {
-    if (!DATE_OPS.has(op)) return { ok: false, error: `invalid date operator "${op}"` }
-    if (op === 'withinDays') {
-      const n = Number(raw.value)
-      if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'within days must be a positive number' }
-      return { ok: true, value: { field: 'date', op: 'withinDays', value: n } }
+  if (field === "date") {
+    if (!DATE_OPS.has(op)) return { ok: false, error: `invalid date operator "${op}"` };
+    if (op === "withinDays") {
+      const n = Number(raw.value);
+      if (!Number.isFinite(n) || n <= 0)
+        return { ok: false, error: "within days must be a positive number" };
+      return { ok: true, value: { field: "date", op: "withinDays", value: n } };
     }
-    const v = String(raw.value ?? '')
-    const timestamp = Date.parse(`${v}T00:00:00Z`)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== v) {
-      return { ok: false, error: 'date must be a valid YYYY-MM-DD date' }
+    const v = String(raw.value ?? "");
+    const timestamp = Date.parse(`${v}T00:00:00Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(v) ||
+      !Number.isFinite(timestamp) ||
+      new Date(timestamp).toISOString().slice(0, 10) !== v
+    ) {
+      return { ok: false, error: "date must be a valid YYYY-MM-DD date" };
     }
-    return { ok: true, value: { field: 'date', op: op as RuleCondition['op'], value: v } }
+    return { ok: true, value: { field: "date", op: op as RuleCondition["op"], value: v } };
   }
   if (TEXT_FIELDS.has(field)) {
-    if (!TEXT_OPS.has(op)) return { ok: false, error: `invalid text operator "${op}"` }
-    if (op === 'isBlank') return { ok: true, value: { field: field as RuleCondition['field'], op: 'isBlank' } }
-    const v = String(raw.value ?? '').slice(0, 200)
-    if (v.trim() === '') return { ok: false, error: 'this condition needs a value' }
-    return { ok: true, value: { field: field as RuleCondition['field'], op: op as RuleCondition['op'], value: v } }
+    if (!TEXT_OPS.has(op)) return { ok: false, error: `invalid text operator "${op}"` };
+    if (op === "isBlank")
+      return { ok: true, value: { field: field as RuleCondition["field"], op: "isBlank" } };
+    const v = String(raw.value ?? "").slice(0, 200);
+    if (v.trim() === "") return { ok: false, error: "this condition needs a value" };
+    return {
+      ok: true,
+      value: { field: field as RuleCondition["field"], op: op as RuleCondition["op"], value: v },
+    };
   }
-  return { ok: false, error: `unknown field "${field}"` }
+  return { ok: false, error: `unknown field "${field}"` };
 }
 
-function validateGroup(raw: unknown, depth: number, count: { n: number }): ValidationResult<RuleConditionGroup> {
-  if (depth > MAX_DEPTH) return { ok: false, error: 'condition nesting is too deep' }
-  if (!isRecord(raw)) return { ok: false, error: 'each condition group must be an object' }
-  const g = raw
-  if (g.combinator !== 'and' && g.combinator !== 'or') {
-    return { ok: false, error: 'condition group combinator must be "and" or "or"' }
+function validateGroup(
+  raw: unknown,
+  depth: number,
+  count: { n: number },
+): ValidationResult<RuleConditionGroup> {
+  if (depth > MAX_DEPTH) return { ok: false, error: "condition nesting is too deep" };
+  if (!isRecord(raw)) return { ok: false, error: "each condition group must be an object" };
+  const g = raw;
+  if (g.combinator !== "and" && g.combinator !== "or") {
+    return { ok: false, error: 'condition group combinator must be "and" or "or"' };
   }
-  const combinator = g.combinator
+  const combinator = g.combinator;
   if (!Array.isArray(g.rules) || g.rules.length === 0) {
-    return { ok: false, error: 'each condition group needs at least one condition' }
+    return { ok: false, error: "each condition group needs at least one condition" };
   }
-  const rawRules = g.rules
-  const rules: (RuleCondition | RuleConditionGroup)[] = []
+  const rawRules = g.rules;
+  const rules: (RuleCondition | RuleConditionGroup)[] = [];
   for (const r of rawRules) {
-    if (!isRecord(r)) return { ok: false, error: 'each condition must be an object' }
-    const rec = r
+    if (!isRecord(r)) return { ok: false, error: "each condition must be an object" };
+    const rec = r;
     if (Array.isArray(rec.rules)) {
-      const sub = validateGroup(rec, depth + 1, count)
-      if (!sub.ok) return sub
-      rules.push(sub.value)
+      const sub = validateGroup(rec, depth + 1, count);
+      if (!sub.ok) return sub;
+      rules.push(sub.value);
     } else {
-      count.n++
-      if (count.n > MAX_CONDITIONS) return { ok: false, error: 'too many conditions' }
-      const cond = validateCondition(rec)
-      if (!cond.ok) return cond
-      rules.push(cond.value)
+      count.n++;
+      if (count.n > MAX_CONDITIONS) return { ok: false, error: "too many conditions" };
+      const cond = validateCondition(rec);
+      if (!cond.ok) return cond;
+      rules.push(cond.value);
     }
   }
-  return { ok: true, value: { combinator, rules } }
+  return { ok: true, value: { combinator, rules } };
 }
 
 export function validateCriteria(raw: unknown): ValidationResult<RuleCriteria> {
-  if (!isRecord(raw)) return { ok: false, error: 'criteria must be an object' }
-  const c = raw
-  if (c.version !== 2) return { ok: false, error: 'criteria version must be 2' }
-  const group = validateGroup(c.match, 0, { n: 0 })
-  if (!group.ok) return group
-  const value: RuleCriteria = { version: 2, match: group.value }
+  if (!isRecord(raw)) return { ok: false, error: "criteria must be an object" };
+  const c = raw;
+  if (c.version !== 2) return { ok: false, error: "criteria version must be 2" };
+  const group = validateGroup(c.match, 0, { n: 0 });
+  if (!group.ok) return group;
+  const value: RuleCriteria = { version: 2, match: group.value };
   if (c.accountScope !== undefined) {
     if (!Array.isArray(c.accountScope) || !c.accountScope.every(isUuidLike)) {
-      return { ok: false, error: 'account scope must contain only account IDs' }
+      return { ok: false, error: "account scope must contain only account IDs" };
     }
-    const scope = [...new Set(c.accountScope)]
-    if (scope.length !== c.accountScope.length) return { ok: false, error: 'account scope contains duplicate accounts' }
-    if (scope.length > 0) value.accountScope = scope
+    const scope = [...new Set(c.accountScope)];
+    if (scope.length !== c.accountScope.length)
+      return { ok: false, error: "account scope contains duplicate accounts" };
+    if (scope.length > 0) value.accountScope = scope;
   }
-  return { ok: true, value }
+  return { ok: true, value };
 }
 
 function validateSplitLine(raw: Record<string, unknown>): ValidationResult<RuleSplitLine> {
-  if (!isUuidLike(raw.accountId)) return { ok: false, error: 'each split line needs an account' }
-  if (raw.taxCodeId !== undefined && raw.taxCodeId !== null && raw.taxCodeId !== '') {
+  if (!isUuidLike(raw.accountId)) return { ok: false, error: "each split line needs an account" };
+  if (raw.taxCodeId !== undefined && raw.taxCodeId !== null && raw.taxCodeId !== "") {
     return {
       ok: false,
-      error: 'bank-rule journals cannot calculate tax; clear tax codes from split lines, or create a tax-aware journal in Journals and match it in Match Bank Data',
-    }
+      error:
+        "bank-rule journals cannot calculate tax; clear tax codes from split lines, or create a tax-aware journal in Journals and match it in Match Bank Data",
+    };
   }
-  const p = (raw.portion ?? {}) as Record<string, unknown>
-  let portion: RuleSplitLine['portion']
-  if (p.kind === 'percent') {
-    if (typeof p.value === 'string') {
-      const exact = canonicalDecimal(p.value, 10)
-      if (exact === null) return { ok: false, error: 'percent must be a decimal string with at most 10 decimals' }
-      if (compareDecimal(exact, '0') <= 0 || compareDecimal(exact, '100') > 0) {
-        return { ok: false, error: 'percent must be between 0 and 100' }
+  const p = (raw.portion ?? {}) as Record<string, unknown>;
+  let portion: RuleSplitLine["portion"];
+  if (p.kind === "percent") {
+    if (typeof p.value === "string") {
+      const exact = canonicalDecimal(p.value, 10);
+      if (exact === null)
+        return { ok: false, error: "percent must be a decimal string with at most 10 decimals" };
+      if (compareDecimal(exact, "0") <= 0 || compareDecimal(exact, "100") > 0) {
+        return { ok: false, error: "percent must be between 0 and 100" };
       }
-      portion = { kind: 'percent', value: exact }
+      portion = { kind: "percent", value: exact };
     } else {
-      const v = Number(p.value)
-      if (!Number.isFinite(v) || v <= 0 || v > 100) return { ok: false, error: 'percent must be between 0 and 100' }
-      portion = { kind: 'percent', value: v }
+      const v = Number(p.value);
+      if (!Number.isFinite(v) || v <= 0 || v > 100)
+        return { ok: false, error: "percent must be between 0 and 100" };
+      portion = { kind: "percent", value: v };
     }
-  } else if (p.kind === 'fixed') {
-    const amount = persistNonNegativeMoney(p.value)
-    if (amount === null || compareDecimal(amount, '0') <= 0) {
-      return { ok: false, error: 'fixed amount must be positive' }
+  } else if (p.kind === "fixed") {
+    const amount = persistNonNegativeMoney(p.value);
+    if (amount === null || compareDecimal(amount, "0") <= 0) {
+      return { ok: false, error: "fixed amount must be positive" };
     }
-    portion = { kind: 'fixed', value: amount }
-  } else if (p.kind === 'remainder') {
-    portion = { kind: 'remainder' }
+    portion = { kind: "fixed", value: amount };
+  } else if (p.kind === "remainder") {
+    portion = { kind: "remainder" };
   } else {
-    return { ok: false, error: 'portion kind must be remainder, percent, or fixed' }
+    return { ok: false, error: "portion kind must be remainder, percent, or fixed" };
   }
-  const line: RuleSplitLine = { accountId: raw.accountId, portion }
-  for (const k of ['partyId', 'departmentId', 'projectId', 'locationId', 'classId'] as const) {
+  const line: RuleSplitLine = { accountId: raw.accountId, portion };
+  for (const k of ["partyId", "departmentId", "projectId", "locationId", "classId"] as const) {
     if (raw[k] !== undefined && raw[k] !== null && !isUuidLike(raw[k])) {
-      return { ok: false, error: `${k} must be a valid ID` }
+      return { ok: false, error: `${k} must be a valid ID` };
     }
-    if (isUuidLike(raw[k])) line[k] = raw[k] as string
+    if (isUuidLike(raw[k])) line[k] = raw[k] as string;
   }
-  if (typeof raw.description === 'string' && raw.description.trim()) line.description = raw.description.slice(0, 200)
-  return { ok: true, value: line }
+  if (typeof raw.description === "string" && raw.description.trim())
+    line.description = raw.description.slice(0, 200);
+  return { ok: true, value: line };
 }
 
 export function validateOutcome(raw: unknown): ValidationResult<RuleOutcome> {
-  if (!isRecord(raw)) return { ok: false, error: 'outcome must be an object' }
-  const o = raw
-  if (o.action === 'exclude') return { ok: true, value: { action: 'exclude' } }
-  if (o.action !== 'categorize') return { ok: false, error: 'outcome action must be "exclude" or "categorize"' }
+  if (!isRecord(raw)) return { ok: false, error: "outcome must be an object" };
+  const o = raw;
+  if (o.action === "exclude") return { ok: true, value: { action: "exclude" } };
+  if (o.action !== "categorize")
+    return { ok: false, error: 'outcome action must be "exclude" or "categorize"' };
 
-  if (o.version !== 2) return { ok: false, error: 'categorize outcome version must be 2' }
-  if (o.mode !== 'auto' && o.mode !== 'suggest') return { ok: false, error: 'mode must be "auto" or "suggest"' }
+  if (o.version !== 2) return { ok: false, error: "categorize outcome version must be 2" };
+  if (o.mode !== "auto" && o.mode !== "suggest")
+    return { ok: false, error: 'mode must be "auto" or "suggest"' };
 
-  const rawLines = Array.isArray(o.lines) ? o.lines : []
-  if (rawLines.length === 0) return { ok: false, error: 'a categorize rule needs at least one line' }
-  if (rawLines.length > MAX_SPLIT_LINES) return { ok: false, error: 'too many split lines' }
-  const lines: RuleSplitLine[] = []
-  let remainderCount = 0
+  const rawLines = Array.isArray(o.lines) ? o.lines : [];
+  if (rawLines.length === 0)
+    return { ok: false, error: "a categorize rule needs at least one line" };
+  if (rawLines.length > MAX_SPLIT_LINES) return { ok: false, error: "too many split lines" };
+  const lines: RuleSplitLine[] = [];
+  let remainderCount = 0;
   for (const rl of rawLines) {
-    if (!isRecord(rl)) return { ok: false, error: 'each split line must be an object' }
-    const res = validateSplitLine(rl)
-    if (!res.ok) return res
-    if (res.value.portion.kind === 'remainder') remainderCount++
-    lines.push(res.value)
+    if (!isRecord(rl)) return { ok: false, error: "each split line must be an object" };
+    const res = validateSplitLine(rl);
+    if (!res.ok) return res;
+    if (res.value.portion.kind === "remainder") remainderCount++;
+    lines.push(res.value);
   }
-  if (remainderCount > 1) return { ok: false, error: 'only one line can be the remainder' }
+  if (remainderCount > 1) return { ok: false, error: "only one line can be the remainder" };
   // Percent shares are measured against the same gross the remainder absorbs.
   // Totals above 100 would drive the remainder (or the last line, without one)
   // to a flipped sign that still balances numerically — a silent misstatement.
   // The total is compared as an exact decimal, never a binary float: 33.333 +
   // 66.667 is exactly 100 and accepted, 60 + 60 is exactly 120 and refused.
-  const percents = lines.flatMap((line) => (line.portion.kind === 'percent' ? [line.portion.value] : []))
+  const percents = lines.flatMap((line) =>
+    line.portion.kind === "percent" ? [line.portion.value] : [],
+  );
   if (exactDecimalSumExceeds(percents, 100)) {
-    return { ok: false, error: 'percent portions cannot total more than 100' }
+    return { ok: false, error: "percent portions cannot total more than 100" };
   }
   // Without a remainder line nothing absorbs an unallocated share, so a
   // percent-only split must cover the whole line exactly. (Fixed portions are
   // judged against the actual line amount when the rule applies.)
-  const hasFixed = lines.some((line) => line.portion.kind === 'fixed')
+  const hasFixed = lines.some((line) => line.portion.kind === "fixed");
   if (remainderCount === 0 && !hasFixed && !exactDecimalSumEquals(percents, 100)) {
-    return { ok: false, error: 'percent portions must total exactly 100 unless one line is the remainder' }
+    return {
+      ok: false,
+      error: "percent portions must total exactly 100 unless one line is the remainder",
+    };
   }
 
-  const outcome: Extract<RuleOutcome, { action: 'categorize' }> = { action: 'categorize', version: 2, mode: o.mode, lines }
+  const outcome: Extract<RuleOutcome, { action: "categorize" }> = {
+    action: "categorize",
+    version: 2,
+    mode: o.mode,
+    lines,
+  };
   if (o.partyId !== undefined && o.partyId !== null && !isUuidLike(o.partyId)) {
-    return { ok: false, error: 'partyId must be a valid ID' }
+    return { ok: false, error: "partyId must be a valid ID" };
   }
-  if (isUuidLike(o.partyId)) outcome.partyId = o.partyId
-  if (typeof o.memo === 'string' && o.memo.trim()) outcome.memo = o.memo.slice(0, 300)
-  return { ok: true, value: outcome }
+  if (isUuidLike(o.partyId)) outcome.partyId = o.partyId;
+  if (typeof o.memo === "string" && o.memo.trim()) outcome.memo = o.memo.slice(0, 300);
+  return { ok: true, value: outcome };
 }

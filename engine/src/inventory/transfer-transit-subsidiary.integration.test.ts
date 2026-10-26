@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { receiveInventory } from "./movements.ts";
-import {
-  createTransferOrder,
-  receiveTransferOrder,
-  shipTransferOrder,
-} from "./transfer-orders.ts";
+import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "./transfer-orders.ts";
 import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
@@ -17,7 +13,9 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fix
 // only the order workflow asserts the feature here.
 async function scratchWithWarehousing() {
   const org = await createScratchOrg();
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`);
+  await db.execute(
+    sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`,
+  );
   return org;
 }
 
@@ -66,14 +64,23 @@ async function transitWarehouse(
 }
 
 async function orderTransit(orgId: string, orderId: string): Promise<string | null> {
-  return (await db.execute<{ transit_stock_location_id: string | null }>(sql`
-    select transit_stock_location_id from transfer_orders where org_id = ${orgId} and id = ${orderId}`, "objects"))[0]!
-    .transit_stock_location_id;
+  return (
+    await db.execute<{ transit_stock_location_id: string | null }>(
+      sql`
+    select transit_stock_location_id from transfer_orders where org_id = ${orgId} and id = ${orderId}`,
+      "objects",
+    )
+  )[0]!.transit_stock_location_id;
 }
 
 async function orderCount(orgId: string): Promise<string> {
-  return (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from transfer_orders where org_id = ${orgId}`, "objects"))[0]!.n;
+  return (
+    await db.execute<{ n: string }>(
+      sql`
+    select count(*)::text as n from transfer_orders where org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 test("a B order skips A's older transit warehouse and ships through B's", async () => {
@@ -166,7 +173,10 @@ test("an order with no eligible transit warehouse refuses at creation, by name",
       }),
       (error: unknown) => {
         assert.ok(error instanceof InventoryError);
-        assert.match((error as Error).message, /no active transit warehouse admits this subsidiary/i);
+        assert.match(
+          (error as Error).message,
+          /no active transit warehouse admits this subsidiary/i,
+        );
         assert.match((error as Error).message, /select one on the order/i);
         return true;
       },

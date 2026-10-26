@@ -25,7 +25,13 @@ export function compensationErrorResponse(e: unknown): NextResponse {
   }
   if (e instanceof RecruitingError) {
     const status =
-      e.code === "INVALID_INPUT" ? 400 : e.code === "NOT_FOUND" ? 404 : e.code === "BAD_STATE" || e.code === "STALE_REVISION" ? 409 : 422;
+      e.code === "INVALID_INPUT"
+        ? 400
+        : e.code === "NOT_FOUND"
+          ? 404
+          : e.code === "BAD_STATE" || e.code === "STALE_REVISION"
+            ? 409
+            : 422;
     return NextResponse.json({ error: e.message }, { status });
   }
   if (e instanceof HrmAuthorizationError) {

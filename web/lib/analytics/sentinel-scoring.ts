@@ -54,9 +54,21 @@ export const RISK_SCORING = {
   trap: {
     titleKey: "analytics.sentinel.scoring.trap",
     rules: {
-      ends9999: { labelKey: "analytics.sentinel.scoring.trapPattern", params: { pattern: "9999", points: 65 }, points: 65 },
-      ends999: { labelKey: "analytics.sentinel.scoring.trapPattern", params: { pattern: "999", points: 55 }, points: 55 },
-      ends99: { labelKey: "analytics.sentinel.scoring.trapPattern", params: { pattern: "99", points: 45 }, points: 45 },
+      ends9999: {
+        labelKey: "analytics.sentinel.scoring.trapPattern",
+        params: { pattern: "9999", points: 65 },
+        points: 65,
+      },
+      ends999: {
+        labelKey: "analytics.sentinel.scoring.trapPattern",
+        params: { pattern: "999", points: 55 },
+        points: 55,
+      },
+      ends99: {
+        labelKey: "analytics.sentinel.scoring.trapPattern",
+        params: { pattern: "99", points: 45 },
+        points: 45,
+      },
     },
   },
   duplicate: {
@@ -66,14 +78,51 @@ export const RISK_SCORING = {
       tierCritical: TIER("analytics.sentinel.config.fields.criticalRiskAmount.label", 25),
       tierHigh: TIER("analytics.sentinel.config.fields.highRiskAmount.label", 15),
       tierModerate: TIER("analytics.sentinel.config.fields.moderateRiskAmount.label", 5),
-      span1Day: { labelKey: "analytics.sentinel.scoring.spanBump", params: { days: 1, points: 20 }, days: 1, points: 20 },
-      span3Days: { labelKey: "analytics.sentinel.scoring.spanBump", params: { days: 3, points: 15 }, days: 3, points: 15 },
-      span7Days: { labelKey: "analytics.sentinel.scoring.spanBump", params: { days: 7, points: 10 }, days: 7, points: 10 },
-      sharedReference: { labelKey: "analytics.sentinel.scoring.sharedReference", params: { points: 10 }, points: 10 },
-      confSharedReference: { labelKey: "analytics.sentinel.scoring.confShared", params: {}, confidence: 0.95 },
-      confSpan3Days: { labelKey: "analytics.sentinel.scoring.confSpan", params: { days: 3 }, days: 3, confidence: 0.9 },
-      confSpan7Days: { labelKey: "analytics.sentinel.scoring.confSpan", params: { days: 7 }, days: 7, confidence: 0.85 },
-      confOtherwise: { labelKey: "analytics.sentinel.scoring.confOtherwise", params: {}, confidence: 0.75 },
+      span1Day: {
+        labelKey: "analytics.sentinel.scoring.spanBump",
+        params: { days: 1, points: 20 },
+        days: 1,
+        points: 20,
+      },
+      span3Days: {
+        labelKey: "analytics.sentinel.scoring.spanBump",
+        params: { days: 3, points: 15 },
+        days: 3,
+        points: 15,
+      },
+      span7Days: {
+        labelKey: "analytics.sentinel.scoring.spanBump",
+        params: { days: 7, points: 10 },
+        days: 7,
+        points: 10,
+      },
+      sharedReference: {
+        labelKey: "analytics.sentinel.scoring.sharedReference",
+        params: { points: 10 },
+        points: 10,
+      },
+      confSharedReference: {
+        labelKey: "analytics.sentinel.scoring.confShared",
+        params: {},
+        confidence: 0.95,
+      },
+      confSpan3Days: {
+        labelKey: "analytics.sentinel.scoring.confSpan",
+        params: { days: 3 },
+        days: 3,
+        confidence: 0.9,
+      },
+      confSpan7Days: {
+        labelKey: "analytics.sentinel.scoring.confSpan",
+        params: { days: 7 },
+        days: 7,
+        confidence: 0.85,
+      },
+      confOtherwise: {
+        labelKey: "analytics.sentinel.scoring.confOtherwise",
+        params: {},
+        confidence: 0.75,
+      },
     },
   },
   weekend: {
@@ -89,10 +138,29 @@ export const RISK_SCORING = {
     titleKey: "analytics.sentinel.scoring.rsf",
     rules: {
       base: { labelKey: "analytics.sentinel.scoring.base", params: { points: 40 }, points: 40 },
-      ratio50: { labelKey: "analytics.sentinel.scoring.ratioBump", params: { ratio: 50, points: 40 }, ratio: 50, points: 40 },
-      ratio20: { labelKey: "analytics.sentinel.scoring.ratioBump", params: { ratio: 20, points: 30 }, ratio: 20, points: 30 },
-      ratio15: { labelKey: "analytics.sentinel.scoring.ratioBump", params: { ratio: 15, points: 20 }, ratio: 15, points: 20 },
-      ratioBase: { labelKey: "analytics.sentinel.scoring.ratioOtherwise", params: { points: 10 }, points: 10 },
+      ratio50: {
+        labelKey: "analytics.sentinel.scoring.ratioBump",
+        params: { ratio: 50, points: 40 },
+        ratio: 50,
+        points: 40,
+      },
+      ratio20: {
+        labelKey: "analytics.sentinel.scoring.ratioBump",
+        params: { ratio: 20, points: 30 },
+        ratio: 20,
+        points: 30,
+      },
+      ratio15: {
+        labelKey: "analytics.sentinel.scoring.ratioBump",
+        params: { ratio: 15, points: 20 },
+        ratio: 15,
+        points: 20,
+      },
+      ratioBase: {
+        labelKey: "analytics.sentinel.scoring.ratioOtherwise",
+        params: { points: 10 },
+        points: 10,
+      },
       tierCritical: TIER("analytics.sentinel.config.fields.criticalRiskAmount.label", 15),
       tierHigh: TIER("analytics.sentinel.config.fields.highRiskAmount.label", 10),
     },
@@ -101,17 +169,40 @@ export const RISK_SCORING = {
     titleKey: "analytics.sentinel.scoring.zscore",
     rules: {
       base: { labelKey: "analytics.sentinel.scoring.base", params: { points: 45 }, points: 45 },
-      z5: { labelKey: "analytics.sentinel.scoring.zBump", params: { z: 5, points: 30 }, z: 5, points: 30 },
-      z4: { labelKey: "analytics.sentinel.scoring.zBump", params: { z: 4, points: 20 }, z: 4, points: 20 },
+      z5: {
+        labelKey: "analytics.sentinel.scoring.zBump",
+        params: { z: 5, points: 30 },
+        z: 5,
+        points: 30,
+      },
+      z4: {
+        labelKey: "analytics.sentinel.scoring.zBump",
+        params: { z: 4, points: 20 },
+        z: 4,
+        points: 20,
+      },
       tierCritical: TIER("analytics.sentinel.config.fields.criticalRiskAmount.label", 15),
     },
   },
   sequential: {
     titleKey: "analytics.sentinel.scoring.sequential",
     rules: {
-      highSpan: { labelKey: "analytics.sentinel.scoring.sequentialHighSpan", params: { points: 75 }, points: 75 },
-      baseSpan: { labelKey: "analytics.sentinel.scoring.sequentialBaseSpan", params: { points: 50 }, points: 50 },
-      perInvoice: { labelKey: "analytics.sentinel.scoring.perInvoice", params: { points: 4, cap: 20 }, perUnit: 4, cap: 20 },
+      highSpan: {
+        labelKey: "analytics.sentinel.scoring.sequentialHighSpan",
+        params: { points: 75 },
+        points: 75,
+      },
+      baseSpan: {
+        labelKey: "analytics.sentinel.scoring.sequentialBaseSpan",
+        params: { points: 50 },
+        points: 50,
+      },
+      perInvoice: {
+        labelKey: "analytics.sentinel.scoring.perInvoice",
+        params: { points: 4, cap: 20 },
+        perUnit: 4,
+        cap: 20,
+      },
       tierCritical: TIER("analytics.sentinel.config.fields.aggregateCriticalAmount.label", 10),
       tierHigh: TIER("analytics.sentinel.config.fields.aggregateHighAmount.label", 7),
       tierModerate: TIER("analytics.sentinel.config.fields.criticalRiskAmount.label", 5),
@@ -120,18 +211,39 @@ export const RISK_SCORING = {
   ghost: {
     titleKey: "analytics.sentinel.scoring.ghost",
     rules: {
-      nameAndAddress: { labelKey: "analytics.sentinel.scoring.ghostRow", params: { matchKey: "analytics.sentinel.ghost.matchBoth", points: 95 }, points: 95 },
-      addressOnly: { labelKey: "analytics.sentinel.scoring.ghostRow", params: { matchKey: "analytics.sentinel.ghost.matchAddress", points: 90 }, points: 90 },
-      nameOnly: { labelKey: "analytics.sentinel.scoring.ghostRow", params: { matchKey: "analytics.sentinel.ghost.matchName", points: 75 }, points: 75 },
+      nameAndAddress: {
+        labelKey: "analytics.sentinel.scoring.ghostRow",
+        params: { matchKey: "analytics.sentinel.ghost.matchBoth", points: 95 },
+        points: 95,
+      },
+      addressOnly: {
+        labelKey: "analytics.sentinel.scoring.ghostRow",
+        params: { matchKey: "analytics.sentinel.ghost.matchAddress", points: 90 },
+        points: 90,
+      },
+      nameOnly: {
+        labelKey: "analytics.sentinel.scoring.ghostRow",
+        params: { matchKey: "analytics.sentinel.ghost.matchName", points: 75 },
+        points: 75,
+      },
     },
   },
   vendor: {
     titleKey: "analytics.sentinel.scoring.vendor",
     rules: {
-      perFlag: { labelKey: "analytics.sentinel.scoring.perFlag", params: { points: 8, cap: 40 }, perUnit: 8, cap: 40 },
+      perFlag: {
+        labelKey: "analytics.sentinel.scoring.perFlag",
+        params: { points: 8, cap: 40 },
+        perUnit: 8,
+        cap: 40,
+      },
       tierCritical: TIER("analytics.sentinel.config.fields.aggregateHighAmount.label", 25),
       tierHigh: TIER("analytics.sentinel.config.fields.highRiskAmount.label", 15),
-      tierBase: { labelKey: "analytics.sentinel.scoring.tierOtherwise", params: { points: 5 }, points: 5 },
+      tierBase: {
+        labelKey: "analytics.sentinel.scoring.tierOtherwise",
+        params: { points: 5 },
+        points: 5,
+      },
       perType: { labelKey: "analytics.sentinel.scoring.perType", params: { points: 8 }, points: 8 },
       worstShare: { labelKey: "analytics.sentinel.scoring.worstShare", params: {}, share: 0.3 },
     },
@@ -139,13 +251,47 @@ export const RISK_SCORING = {
   summary: {
     titleKey: "analytics.sentinel.scoring.summary",
     rules: {
-      flaggedHigh: { labelKey: "analytics.sentinel.scoring.summaryVolume", params: { countKey: "summaryFlaggedHigh", points: 15 }, points: 15 },
-      flaggedMedium: { labelKey: "analytics.sentinel.scoring.summaryVolume", params: { countKey: "summaryFlaggedMedium", points: 10 }, points: 10 },
-      dupCritical: { labelKey: "analytics.sentinel.scoring.tierBump", params: { tierKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.label", points: 20 }, points: 20 },
-      dupHigh: { labelKey: "analytics.sentinel.scoring.tierBump", params: { tierKey: "analytics.sentinel.config.fields.aggregateHighAmount.label", points: 15 }, points: 15 },
-      ghostAny: { labelKey: "analytics.sentinel.scoring.ghostAny", params: { points: 25 }, points: 25 },
-      sequentialAny: { labelKey: "analytics.sentinel.scoring.sequentialAny", params: { points: 15 }, points: 15 },
-      benford: { labelKey: "analytics.sentinel.scoring.benfordNonconforming", params: { points: 15 }, points: 15 },
+      flaggedHigh: {
+        labelKey: "analytics.sentinel.scoring.summaryVolume",
+        params: { countKey: "summaryFlaggedHigh", points: 15 },
+        points: 15,
+      },
+      flaggedMedium: {
+        labelKey: "analytics.sentinel.scoring.summaryVolume",
+        params: { countKey: "summaryFlaggedMedium", points: 10 },
+        points: 10,
+      },
+      dupCritical: {
+        labelKey: "analytics.sentinel.scoring.tierBump",
+        params: {
+          tierKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.label",
+          points: 20,
+        },
+        points: 20,
+      },
+      dupHigh: {
+        labelKey: "analytics.sentinel.scoring.tierBump",
+        params: {
+          tierKey: "analytics.sentinel.config.fields.aggregateHighAmount.label",
+          points: 15,
+        },
+        points: 15,
+      },
+      ghostAny: {
+        labelKey: "analytics.sentinel.scoring.ghostAny",
+        params: { points: 25 },
+        points: 25,
+      },
+      sequentialAny: {
+        labelKey: "analytics.sentinel.scoring.sequentialAny",
+        params: { points: 15 },
+        points: 15,
+      },
+      benford: {
+        labelKey: "analytics.sentinel.scoring.benfordNonconforming",
+        params: { points: 15 },
+        points: 15,
+      },
     },
   },
 } as const satisfies Record<RiskScoringSectionKey, RiskScoringSection>;

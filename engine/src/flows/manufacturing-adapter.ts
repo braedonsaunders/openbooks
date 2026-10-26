@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { tableScope } from "./subject-scope.ts";
@@ -73,15 +69,11 @@ type WorkOrderSubjectRow = {
   pending_approval: boolean;
 };
 
-async function loadSubject(
-  subjectId: string,
-): Promise<WorkOrderSubjectRow | null> {
+async function loadSubject(subjectId: string): Promise<WorkOrderSubjectRow | null> {
   const orgId = ambientTenantOrgId();
-  if (!orgId)
-    throw new Error(
-      `work-order flow lookup requires an ambient organization context`,
-    );
-  const result = await db.execute<WorkOrderSubjectRow>(sql`
+  if (!orgId) throw new Error(`work-order flow lookup requires an ambient organization context`);
+  const result = await db.execute<WorkOrderSubjectRow>(
+    sql`
     select order_row.id, order_row.org_id, order_row.number, order_row.produced_item_id,
            item.code as item_code, order_row.quantity_ordered::text, order_row.unit,
            order_row.priority, order_row.status, order_row.subsidiary_id,
@@ -93,7 +85,9 @@ async function loadSubject(
            )) as pending_approval
       from mfg_work_orders order_row
       join items item on item.org_id=order_row.org_id and item.id=order_row.produced_item_id
-     where order_row.org_id=${orgId} and order_row.id=${subjectId}`, "objects");
+     where order_row.org_id=${orgId} and order_row.id=${subjectId}`,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
@@ -101,82 +95,81 @@ async function enabled(row: WorkOrderSubjectRow): Promise<boolean> {
   return orgFeatureEnabled(row.org_id, "manufacturing");
 }
 
-export const manufacturingFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: WORK_ORDER_SUBJECT_KIND,
-    permissions: {
-      read: "manufacturing.read",
-      edit: "manufacturing.manage",
-      approve: "manufacturing.manage",
-    },
-    scope: tableScope("column", "mfg_work_orders", "subsidiary_id"),
-    profile: workOrderSubjectProfile,
-    releaseViaHandler: true,
+export const manufacturingFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: WORK_ORDER_SUBJECT_KIND,
+  permissions: {
+    read: "manufacturing.read",
+    edit: "manufacturing.manage",
+    approve: "manufacturing.manage",
+  },
+  scope: tableScope("column", "mfg_work_orders", "subsidiary_id"),
+  profile: workOrderSubjectProfile,
+  releaseViaHandler: true,
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const order = await loadSubject(subjectId);
-      if (!order || !(await enabled(order))) return null;
-      return {
-        values: {
-          id: order.id,
-          number: order.number,
-          producedItemId: order.produced_item_id,
-          producedItemCode: order.item_code,
-          quantityOrdered: order.quantity_ordered,
-          unit: order.unit,
-          priority: order.priority,
-          status: order.pending_approval ? "pending_approval" : order.status,
-          subsidiaryId: order.subsidiary_id,
-          plannedStart: order.planned_start,
-          plannedEnd: order.planned_end,
-          createdBy: order.created_by,
-        },
-        submitterUserId: order.created_by,
-        makerUserId: order.created_by,
-      };
-    },
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const order = await loadSubject(subjectId);
+    if (!order || !(await enabled(order))) return null;
+    return {
+      values: {
+        id: order.id,
+        number: order.number,
+        producedItemId: order.produced_item_id,
+        producedItemCode: order.item_code,
+        quantityOrdered: order.quantity_ordered,
+        unit: order.unit,
+        priority: order.priority,
+        status: order.pending_approval ? "pending_approval" : order.status,
+        subsidiaryId: order.subsidiary_id,
+        plannedStart: order.planned_start,
+        plannedEnd: order.planned_end,
+        createdBy: order.created_by,
+      },
+      submitterUserId: order.created_by,
+      makerUserId: order.created_by,
+    };
+  },
 
-    label(_subjectId: string, values: Record<string, unknown>): string {
-      return `Work order ${String(values.number ?? "")}`;
-    },
+  label(_subjectId: string, values: Record<string, unknown>): string {
+    return `Work order ${String(values.number ?? "")}`;
+  },
 
-    deepLink(): string {
-      // Work orders have no record page yet; the hub is the landing surface
-      // until one ships (party_bank_account precedent).
-      return "/inbox";
-    },
+  deepLink(): string {
+    // Work orders have no record page yet; the hub is the landing surface
+    // until one ships (party_bank_account precedent).
+    return "/inbox";
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      const order = await loadSubject(subjectId);
-      if (!order || !(await enabled(order))) return null;
-      return order.pending_approval ? "pending_approval" : order.status;
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    const order = await loadSubject(subjectId);
+    if (!order || !(await enabled(order))) return null;
+    return order.pending_approval ? "pending_approval" : order.status;
+  },
 
-    async changeStatus(_subjectId: string, to: string): Promise<void> {
-      throw new Error(
-        `Work-order status cannot be changed to ${to} by a flow action; use the work-order lifecycle actions.`,
-      );
-    },
+  async changeStatus(_subjectId: string, to: string): Promise<void> {
+    throw new Error(
+      `Work-order status cannot be changed to ${to} by a flow action; use the work-order lifecycle actions.`,
+    );
+  },
 
-    async releaseApproval(subjectId, outcome, ctx, detail, run): Promise<void> {
-      await releaseFlowApproval({
-        subjectKind: WORK_ORDER_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        comment: detail?.comment,
-        approvalRunId: run?.id,
-        ctx,
-      });
-    },
+  async releaseApproval(subjectId, outcome, ctx, detail, run): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: WORK_ORDER_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      approvalRunId: run?.id,
+      ctx,
+    });
+  },
 
-    async setField(
-      _subjectId: string,
-      field: string,
-      _value: unknown,
-      _ctx: FlowExecCtx,
-    ): Promise<void> {
-      throw new Error(
-        `Work-order field ${field} cannot be changed by a flow; edit a draft work order.`,
-      );
-    },
-  });
+  async setField(
+    _subjectId: string,
+    field: string,
+    _value: unknown,
+    _ctx: FlowExecCtx,
+  ): Promise<void> {
+    throw new Error(
+      `Work-order field ${field} cannot be changed by a flow; edit a draft work order.`,
+    );
+  },
+});

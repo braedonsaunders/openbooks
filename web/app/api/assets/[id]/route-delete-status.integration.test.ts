@@ -31,8 +31,7 @@ const hooks = registerHooks({
     if (
       (specifier === "../../../../lib/feature-gates" &&
         context.parentURL?.includes("/api/assets/")) ||
-      (specifier === "@/lib/feature-gates" &&
-        context.parentURL?.includes("/lib/api/route"))
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:asset-delete-feature-gates", shortCircuit: true };
     }
@@ -52,10 +51,8 @@ after(() => hooks.deregister());
 
 const { db } = await import("@openbooks/engine/platform/db");
 const { buildSchedule } = await import("@openbooks/engine/assets/depreciation");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -96,64 +93,81 @@ function deleteRequest(fixture: Fixture): Request {
   return new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, { method: "DELETE" });
 }
 
-test(
-  "asset DELETE refuses an in-service asset with only planned lines",
-  async () => {
-    const fixture = await seedAsset("in_service", "INSERVICE-NODELETE");
-    try {
-      const planned = await db.execute(sql`
+test("asset DELETE refuses an in-service asset with only planned lines", async () => {
+  const fixture = await seedAsset("in_service", "INSERVICE-NODELETE");
+  try {
+    const planned = await db.execute(
+      sql`
         select count(*)::int as n
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
          where l.org_id = ${fixture.orgId} and s.asset_id = ${fixture.assetId}
-           and l.posted_amount is null`, "objects");
-      assert.ok((planned[0] as { n: number }).n > 0, "the fixture must carry planned lines");
-      const posted = await db.execute(sql`
+           and l.posted_amount is null`,
+      "objects",
+    );
+    assert.ok((planned[0] as { n: number }).n > 0, "the fixture must carry planned lines");
+    const posted = await db.execute(
+      sql`
         select count(*)::int as n
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
          where l.org_id = ${fixture.orgId} and s.asset_id = ${fixture.assetId}
-           and l.posted_amount is not null`, "objects");
-      assert.equal((posted[0] as { n: number }).n, 0, "the fixture must have no posted lines");
+           and l.posted_amount is not null`,
+      "objects",
+    );
+    assert.equal((posted[0] as { n: number }).n, 0, "the fixture must have no posted lines");
 
-      const response = await DELETE(deleteRequest(fixture), {
-        params: Promise.resolve({ id: fixture.assetId }),
-      });
-      const body = (await response.json()) as { error?: string };
-      assert.equal(response.status, 409, `in-service delete must be refused: ${JSON.stringify(body)}`);
-      assert.match(body.error ?? "", /only draft assets can be deleted/i);
+    const response = await DELETE(deleteRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    const body = (await response.json()) as { error?: string };
+    assert.equal(
+      response.status,
+      409,
+      `in-service delete must be refused: ${JSON.stringify(body)}`,
+    );
+    assert.match(body.error ?? "", /only draft assets can be deleted/i);
 
-      const kept = await db.execute(sql`
-        select count(*)::int as n from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects");
-      assert.equal((kept[0] as { n: number }).n, 1, "the refused delete must keep the asset");
-      const lines = await db.execute(sql`
+    const kept = await db.execute(
+      sql`
+        select count(*)::int as n from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`,
+      "objects",
+    );
+    assert.equal((kept[0] as { n: number }).n, 1, "the refused delete must keep the asset");
+    const lines = await db.execute(
+      sql`
         select count(*)::int as n
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-         where l.org_id = ${fixture.orgId} and s.asset_id = ${fixture.assetId}`, "objects");
-      assert.ok((lines[0] as { n: number }).n > 0, "the refused delete must keep the planned lines");
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+         where l.org_id = ${fixture.orgId} and s.asset_id = ${fixture.assetId}`,
+      "objects",
+    );
+    assert.ok((lines[0] as { n: number }).n > 0, "the refused delete must keep the planned lines");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "asset DELETE still removes a draft asset",
-  async () => {
-    const fixture = await seedAsset("draft", "DRAFT-CANDELETE");
-    try {
-      const response = await DELETE(deleteRequest(fixture), {
-        params: Promise.resolve({ id: fixture.assetId }),
-      });
-      assert.equal(response.status, 200, `draft delete must succeed: ${JSON.stringify(await response.json())}`);
-      const kept = await db.execute(sql`
-        select count(*)::int as n from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects");
-      assert.equal((kept[0] as { n: number }).n, 0, "the draft must be gone");
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+test("asset DELETE still removes a draft asset", async () => {
+  const fixture = await seedAsset("draft", "DRAFT-CANDELETE");
+  try {
+    const response = await DELETE(deleteRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(
+      response.status,
+      200,
+      `draft delete must succeed: ${JSON.stringify(await response.json())}`,
+    );
+    const kept = await db.execute(
+      sql`
+        select count(*)::int as n from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`,
+      "objects",
+    );
+    assert.equal((kept[0] as { n: number }).n, 0, "the draft must be gone");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});

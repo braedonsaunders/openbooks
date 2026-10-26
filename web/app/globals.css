@@ -272,8 +272,7 @@
    no pulse. Used on the login stage. */
 .brand-stroke-intro {
   stroke-dasharray: 1;
-  animation: brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s)
-    backwards;
+  animation: brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) backwards;
 }
 .brand-ray-intro {
   stroke-dasharray: 1;
@@ -298,18 +297,30 @@
    mounted form state stay in place beneath a soft, non-interactive veil. */
 .page-pending-surface {
   isolation: isolate;
-  background: radial-gradient(ellipse at center, rgb(240 253 250 / 0.29), rgb(248 250 252 / 0.21) 42%, rgb(226 232 240 / 0.11));
+  background: radial-gradient(
+    ellipse at center,
+    rgb(240 253 250 / 0.29),
+    rgb(248 250 252 / 0.21) 42%,
+    rgb(226 232 240 / 0.11)
+  );
   backdrop-filter: blur(0.5px);
   animation: page-pending-in 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 .dark .page-pending-surface {
-  background: radial-gradient(ellipse at center, rgb(19 78 74 / 0.14), rgb(15 23 42 / 0.23) 42%, rgb(2 6 23 / 0.16));
+  background: radial-gradient(
+    ellipse at center,
+    rgb(19 78 74 / 0.14),
+    rgb(15 23 42 / 0.23) 42%,
+    rgb(2 6 23 / 0.16)
+  );
 }
 /* The dismissing veil never delays settled content or retains a loading announcement. */
 .page-pending-overlay {
   animation: none;
   opacity: 1;
-  transition: opacity 240ms cubic-bezier(0.4, 0, 0.2, 1), display 240ms allow-discrete;
+  transition:
+    opacity 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    display 240ms allow-discrete;
 }
 .page-pending-overlay[hidden] {
   opacity: 0;
@@ -318,7 +329,9 @@
   transition: none;
 }
 @starting-style {
-  .page-pending-overlay:not([hidden]) { opacity: 0; }
+  .page-pending-overlay:not([hidden]) {
+    opacity: 0;
+  }
 }
 .page-pending-logo {
   position: relative;
@@ -331,11 +344,21 @@
   position: absolute;
   inset: -1rem;
   border-radius: 50%;
-  background: radial-gradient(circle, rgb(45 212 191 / 0.06), rgb(45 212 191 / 0.02) 48%, transparent 72%);
+  background: radial-gradient(
+    circle,
+    rgb(45 212 191 / 0.06),
+    rgb(45 212 191 / 0.02) 48%,
+    transparent 72%
+  );
   animation: page-pending-halo 3.2s ease-in-out infinite;
 }
 .dark .page-pending-logo::before {
-  background: radial-gradient(circle, rgb(45 212 191 / 0.073), rgb(45 212 191 / 0.027) 48%, transparent 72%);
+  background: radial-gradient(
+    circle,
+    rgb(45 212 191 / 0.073),
+    rgb(45 212 191 / 0.027) 48%,
+    transparent 72%
+  );
 }
 .page-pending-logo .brand-stroke-draw {
   animation:
@@ -349,12 +372,23 @@
     brand-pulse 2s ease-in-out var(--bp, 0s) infinite;
 }
 @keyframes page-pending-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes page-pending-halo {
-  0%, 100% { opacity: 0.65; transform: scale(0.94); }
-  50% { opacity: 1; transform: scale(1.06); }
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .page-pending-surface,
@@ -392,8 +426,7 @@
    desktop mouse users keep the denser default. Scoped to `.ff-surface`, which
    wraps the form-fill renderer and the native hazard-assessment page. */
 @media (pointer: coarse), (max-width: 640px) {
-  .ff-surface
-    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  .ff-surface input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   .ff-surface select,
   .ff-surface textarea {
     min-height: 48px;
@@ -507,14 +540,12 @@
 .login-book .book-cover-l {
   transform-box: fill-box;
   transform-origin: right center;
-  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s
-    backwards;
+  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s backwards;
 }
 .login-book .book-cover-r {
   transform-box: fill-box;
   transform-origin: left center;
-  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s
-    backwards;
+  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s backwards;
 }
 /* Ledger lines fade in only after the covers have finished opening (delay set
    inline per line); base opacity stays 1, backwards fill hides them until then. */
@@ -568,7 +599,8 @@
    navigation, and withdraws every other action. The server refuses those
    actions regardless; this keeps the page from advertising them. */
 [data-page-layout]:has([data-route-placement="section"][data-route-state="feature-disabled"])
-  [data-page-actions] > :not([data-subtabs-track]):not(:has([data-subtabs-track])) {
+  [data-page-actions]
+  > :not([data-subtabs-track]):not(:has([data-subtabs-track])) {
   display: none;
 }
 
@@ -699,39 +731,71 @@
 }
 
 @keyframes route-fade-out {
-  to { opacity: 0; }
+  to {
+    opacity: 0;
+  }
 }
 @keyframes route-fade-in {
-  from { opacity: 0; }
+  from {
+    opacity: 0;
+  }
 }
 @keyframes route-lift-out {
-  to { opacity: 0; transform: translateY(-10px) scale(0.985); filter: blur(2px); }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.985);
+    filter: blur(2px);
+  }
 }
 @keyframes route-settle-in {
-  from { opacity: 0; transform: translateY(18px); filter: blur(5px); }
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    filter: blur(5px);
+  }
 }
 @keyframes drawer-view-in {
-  from { opacity: 0; transform: translateY(8px); filter: blur(2px); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(2px);
+  }
 }
 @keyframes route-skeleton-out {
-  to { opacity: 0; transform: scale(0.995); }
+  to {
+    opacity: 0;
+    transform: scale(0.995);
+  }
 }
 @keyframes route-recede-out {
-  to { opacity: 0; transform: scale(0.975); filter: blur(3px); }
+  to {
+    opacity: 0;
+    transform: scale(0.975);
+    filter: blur(3px);
+  }
 }
 @keyframes report-sheet-flight {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
   }
   40% {
     transform: rotate(-0.6deg);
-    box-shadow: 0 28px 60px -16px rgb(15 23 42 / 0.3), 0 10px 20px -10px rgb(15 23 42 / 0.18);
+    box-shadow:
+      0 28px 60px -16px rgb(15 23 42 / 0.3),
+      0 10px 20px -10px rgb(15 23 42 / 0.18);
   }
 }
 /* The rule that sweeps a hub sheet's top edge while its report renders. */
 @keyframes report-sheet-progress {
-  0% { opacity: 1; transform: translateX(-100%); }
-  100% { opacity: 1; transform: translateX(300%); }
+  0% {
+    opacity: 1;
+    transform: translateX(-100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(300%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -753,7 +817,10 @@
   --nav-panel-from: -8px;
 }
 @keyframes nav-panel-in {
-  from { opacity: 0; transform: translateY(var(--nav-panel-from, 8px)); }
+  from {
+    opacity: 0;
+    transform: translateY(var(--nav-panel-from, 8px));
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .nav-panel-switch {

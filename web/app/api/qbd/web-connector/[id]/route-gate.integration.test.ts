@@ -2,15 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { POST } from "./route.ts";
 
-
 function post(connectionId: string, body: string): Promise<Response> {
-  return POST(new Request(`http://localhost/api/qbd/web-connector/${connectionId}`, {
-    method: "POST",
-    headers: { "content-type": "text/xml; charset=utf-8" },
-    body,
-    // @ts-expect-error undici streaming-upload opt-in (ignored for string bodies)
-    duplex: "half",
-  }), { params: Promise.resolve({ id: connectionId }) });
+  return POST(
+    new Request(`http://localhost/api/qbd/web-connector/${connectionId}`, {
+      method: "POST",
+      headers: { "content-type": "text/xml; charset=utf-8" },
+      body,
+      // @ts-expect-error undici streaming-upload opt-in (ignored for string bodies)
+      duplex: "half",
+    }),
+    { params: Promise.resolve({ id: connectionId }) },
+  );
 }
 
 function receiveEnvelope(ticket: string, response: string): string {
@@ -25,15 +27,21 @@ test("a legitimate large receiveResponseXML with a valid ticket still works", as
   const { sql } = await import("drizzle-orm");
   const org = await createScratchOrg();
   const password = "soap-gate-test-password-123";
-  const [connection] = await db.insert(schema.connections).values({
-    orgId: org.orgId,
-    source: "qbd",
-    displayName: `QBD soap gate test ${Date.now()}`,
-    authKind: "token",
-    status: "active",
-    config: { historyStartDate: "2024-01-01", region: "CA", baseCurrency: "CAD" },
-    secrets: sealJson({ webConnectorPassword: password }, { orgId: org.orgId, purpose: "connection.secrets" }),
-  }).returning({ id: schema.connections.id });
+  const [connection] = await db
+    .insert(schema.connections)
+    .values({
+      orgId: org.orgId,
+      source: "qbd",
+      displayName: `QBD soap gate test ${Date.now()}`,
+      authKind: "token",
+      status: "active",
+      config: { historyStartDate: "2024-01-01", region: "CA", baseCurrency: "CAD" },
+      secrets: sealJson(
+        { webConnectorPassword: password },
+        { orgId: org.orgId, purpose: "connection.secrets" },
+      ),
+    })
+    .returning({ id: schema.connections.id });
   assert.ok(connection);
   try {
     const auth = await authenticateWebConnector(connection.id, `qbd:${connection.id}`, password);

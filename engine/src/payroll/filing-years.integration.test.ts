@@ -3,13 +3,14 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  orgFilingYearOptions,
-  orgPayrollDataYears,
-  orgYearEndFilings,
-} from "./yearend.ts";
+import { orgFilingYearOptions, orgPayrollDataYears, orgYearEndFilings } from "./yearend.ts";
 import { payrollFilingYearOptions } from "./packs.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 /**
  * The year-end picker must offer the tax year of any posted run — even when
@@ -151,10 +152,7 @@ test(
     try {
       assert.deepEqual(await orgPayrollDataYears(orgId), [2027]);
       const years = await orgFilingYearOptions(orgId, "2026-09-19");
-      assert.ok(
-        years.includes(2027),
-        `posted tax year 2027 must be offered, got ${years}`,
-      );
+      assert.ok(years.includes(2027), `posted tax year 2027 must be offered, got ${years}`);
       assert.equal(years[0], 2027, `pack year 2027 is the default, got ${years}`);
       // The year the picker hid was servable all along: the enumeration
       // answers 2027 for this org (the STP section carries the pack's own

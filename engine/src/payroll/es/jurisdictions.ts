@@ -62,16 +62,66 @@ export const ES_COMUNIDADES: readonly { code: string; name: string }[] = [
 
 /** The 2026 relation's national fiestas shared by every community. */
 const ES_FIESTAS_NACIONALES: PayrollJurisdiction["holidays"] = [
-  { key: "ano_nuevo", name: "Año Nuevo", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },
-  { key: "epifania", name: "Epifanía del Señor", rule: { kind: "fixed", month: 1, day: 6 }, observance: "none" },
-  { key: "viernes_santo", name: "Viernes Santo", rule: { kind: "easter_offset", days: -2 }, observance: "none" },
-  { key: "fiesta_trabajo", name: "Fiesta del Trabajo", rule: { kind: "fixed", month: 5, day: 1 }, observance: "none" },
-  { key: "asuncion", name: "Asunción de la Virgen", rule: { kind: "fixed", month: 8, day: 15 }, observance: "none" },
-  { key: "fiesta_nacional", name: "Fiesta Nacional de España", rule: { kind: "fixed", month: 10, day: 12 }, observance: "none" },
-  { key: "todos_santos", name: "Todos los Santos", rule: { kind: "fixed", month: 11, day: 1 }, observance: "none" },
-  { key: "constitucion", name: "Día de la Constitución", rule: { kind: "fixed", month: 12, day: 6 }, observance: "none" },
-  { key: "inmaculada", name: "Inmaculada Concepción", rule: { kind: "fixed", month: 12, day: 8 }, observance: "none" },
-  { key: "navidad", name: "Natividad del Señor", rule: { kind: "fixed", month: 12, day: 25 }, observance: "none" },
+  {
+    key: "ano_nuevo",
+    name: "Año Nuevo",
+    rule: { kind: "fixed", month: 1, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "epifania",
+    name: "Epifanía del Señor",
+    rule: { kind: "fixed", month: 1, day: 6 },
+    observance: "none",
+  },
+  {
+    key: "viernes_santo",
+    name: "Viernes Santo",
+    rule: { kind: "easter_offset", days: -2 },
+    observance: "none",
+  },
+  {
+    key: "fiesta_trabajo",
+    name: "Fiesta del Trabajo",
+    rule: { kind: "fixed", month: 5, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "asuncion",
+    name: "Asunción de la Virgen",
+    rule: { kind: "fixed", month: 8, day: 15 },
+    observance: "none",
+  },
+  {
+    key: "fiesta_nacional",
+    name: "Fiesta Nacional de España",
+    rule: { kind: "fixed", month: 10, day: 12 },
+    observance: "none",
+  },
+  {
+    key: "todos_santos",
+    name: "Todos los Santos",
+    rule: { kind: "fixed", month: 11, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "constitucion",
+    name: "Día de la Constitución",
+    rule: { kind: "fixed", month: 12, day: 6 },
+    observance: "none",
+  },
+  {
+    key: "inmaculada",
+    name: "Inmaculada Concepción",
+    rule: { kind: "fixed", month: 12, day: 8 },
+    observance: "none",
+  },
+  {
+    key: "navidad",
+    name: "Natividad del Señor",
+    rule: { kind: "fixed", month: 12, day: 25 },
+    observance: "none",
+  },
 ];
 
 function esJurisdiction(code: string, name: string): PayrollJurisdiction {
@@ -93,6 +143,6 @@ function esJurisdiction(code: string, name: string): PayrollJurisdiction {
   };
 }
 
-export const ES_JURISDICTIONS: readonly PayrollJurisdiction[] = ES_COMUNIDADES.map(
-  (comunidad) => esJurisdiction(comunidad.code, comunidad.name),
+export const ES_JURISDICTIONS: readonly PayrollJurisdiction[] = ES_COMUNIDADES.map((comunidad) =>
+  esJurisdiction(comunidad.code, comunidad.name),
 );

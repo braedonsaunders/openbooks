@@ -1,25 +1,24 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { loadOrder } = await import("./lib.ts");
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { loadOrder } = await import('./lib.ts')
-
-test('order loader refuses documents outside the caller subsidiary scope', async () => {
+test("order loader refuses documents outside the caller subsidiary scope", async () => {
   // Fixture seeds under explicit bypass: the top-level ./lib.ts import pulls
   // in the web request-org resolver, which denies every unscoped query.
-  const org = await withBypassContext(() => createScratchOrg())
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const hiddenSubsidiaryId = randomUUID()
-    const orderId = randomUUID()
+    const hiddenSubsidiaryId = randomUUID();
+    const orderId = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`
         insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
         values (${hiddenSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Private subsidiary', 'CAD', 'CA')
-      `)
+      `);
       await db.execute(sql`
         insert into documents(
           id, org_id, kind, document_number, document_date, party_id, subsidiary_id,
@@ -28,26 +27,27 @@ test('order loader refuses documents outside the caller subsidiary scope', async
           ${orderId}, ${org.orgId}, 'quote', 'PRIVATE-QUOTE', ${org.date}, ${org.customerId},
           ${hiddenSubsidiaryId}, 'CAD', 'draft', 100, 0, 100, 'Private terms'
         )
-      `)
+      `);
       await db.execute(sql`
         insert into document_lines(org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
         values (${org.orgId}, ${orderId}, 1, ${org.accounts.revenue}, 'Private line', 1, 100, 100)
-      `)
-    })
+      `);
+    });
 
     const scopedLoadOrder = loadOrder as unknown as (
       id: string,
       orgId: string,
-      kind: 'quote',
+      kind: "quote",
       allowedSubsidiaryIds: ReadonlySet<string> | null,
-    ) => Promise<unknown>
+    ) => Promise<unknown>;
     // The loader runs in the scratch org's scope (mirroring a production
     // request): the null below is a subsidiary refusal, not an empty read.
     const visible = await withOrgContext(org.orgId, () =>
-      scopedLoadOrder(orderId, org.orgId, 'quote', new Set([org.subsidiaryId])))
+      scopedLoadOrder(orderId, org.orgId, "quote", new Set([org.subsidiaryId])),
+    );
 
-    assert.equal(visible, null, 'out-of-scope order must not be hydrated for a restricted reader')
+    assert.equal(visible, null, "out-of-scope order must not be hydrated for a restricted reader");
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

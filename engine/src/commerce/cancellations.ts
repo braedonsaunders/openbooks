@@ -67,13 +67,18 @@ export async function postChannelCancellation(
         { field: "eventId" },
       );
     }
-    if (event.postingStatus === "posted") return { status: "posted", documentId: event.postingDocumentId };
+    if (event.postingStatus === "posted")
+      return { status: "posted", documentId: event.postingDocumentId };
     if (event.postingStatus === "ignored") return { status: "ignored", documentId: null };
     try {
       const outcome = await withOrgTransaction(orgId, async () => {
         await acquireOrgFeatureGateLock(db, orgId);
         if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
-          throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
+          throw new CommerceError(
+            "feature_off",
+            "Sales Channels is turned off for this organization.",
+            FEATURE_REMEDY,
+          );
         }
         const live = await loadChannelEvent(orgId, eventId);
         if (!live) throw new Error("Channel cancellation left while it posted");
@@ -92,7 +97,9 @@ export async function postChannelCancellation(
                    updated_by = ${actor}, updated_at = now()
              where org_id = ${orgId} and id = ${order.id} and posting_status = 'pending'`);
           if (parked.rowCount !== 1) {
-            throw new Error("Channel order cancellation matched no row; the order posted while it was cancelled");
+            throw new Error(
+              "Channel order cancellation matched no row; the order posted while it was cancelled",
+            );
           }
           await markChannelEventPosted(orgId, eventId, actor, null);
           return { status: "posted", documentId: null as string | null };
@@ -108,8 +115,13 @@ export async function postChannelCancellation(
           // order: the money path below resolves it the same way.
           return cancelSummarizedOrder(orgId, actor, order.id, eventId);
         }
-        const doc = (await db.execute<{ kind: string; status: string }>(sql`
-          select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`, "objects"))[0];
+        const doc = (
+          await db.execute<{ kind: string; status: string }>(
+            sql`
+          select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`,
+            "objects",
+          )
+        )[0];
         if (!doc) throw new Error("Channel cancellation document left while it posted");
         if (doc.kind === "sales_order") {
           if (doc.status === "voided") {
@@ -148,10 +160,15 @@ export async function postChannelCancellation(
         // A posted cash sale (or anything else with money on it) is the
         // refund's job: a posted sibling refund already retired this event,
         // otherwise it waits for the refund to arrive.
-        const refunded = (await db.execute<{ id: string }>(sql`
+        const refunded = (
+          await db.execute<{ id: string }>(
+            sql`
           select id from channel_order_events
            where org_id = ${orgId} and order_id = ${order.id} and kind = 'refund' and posting_status = 'posted'
-           limit 1`, "objects"))[0];
+           limit 1`,
+            "objects",
+          )
+        )[0];
         if (refunded) {
           await markChannelEventIgnored(orgId, eventId, actor);
           return { status: "ignored", documentId: null as string | null };
@@ -188,10 +205,15 @@ async function cancelSummarizedOrder(
   orderId: string,
   eventId: string,
 ): Promise<{ status: string; documentId: string | null }> {
-  const refunded = (await db.execute<{ id: string }>(sql`
+  const refunded = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from channel_order_events
      where org_id = ${orgId} and order_id = ${orderId} and kind = 'refund' and posting_status = 'posted'
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (refunded) {
     await markChannelEventIgnored(orgId, eventId, actor);
     return { status: "ignored", documentId: null };

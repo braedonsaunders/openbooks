@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
-import {orderResourcesVisible} from "@openbooks/engine/organization/production-resource-scope";
+import { orderResourcesVisible } from "@openbooks/engine/organization/production-resource-scope";
 
 const AWAITING_STATUSES = ["draft", "pending", "approved"] as const;
 
@@ -35,10 +35,10 @@ export function financialChangeSubjectExpr(alias: "fc"): SQL {
 }
 
 /** Whole-order event evidence is visible only with all current child resources. */
-export function manufacturingChangeResourcesVisible(scope:ReadonlySet<string>|null):SQL {
+export function manufacturingChangeResourcesVisible(scope: ReadonlySet<string> | null): SQL {
   return sql`and (fc.domain<>'manufacturing' or fc.operation<>'work_order_loss_disposition' or exists (
     select 1 from mfg_work_orders work where work.org_id=fc.org_id and work.id=fc.subject_id
-      ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')}
+      ${subsidiaryVisibleFilter(sql`work.subsidiary_id`, scope)} ${orderResourcesVisible(scope, "work")}
   ))`;
 }
 
@@ -86,7 +86,10 @@ export function lifecycleWhere(
       allowed === undefined ? new Set<string>() : allowed,
     ),
   ];
-  if(alias==="fc") parts.push(manufacturingChangeResourcesVisible(allowed===undefined?new Set<string>():allowed));
+  if (alias === "fc")
+    parts.push(
+      manufacturingChangeResourcesVisible(allowed === undefined ? new Set<string>() : allowed),
+    );
   for (const filter of view.filters) {
     if (filter.key === "status") {
       const pred = equality(sql`${a}.status`, filter.operator, filter.value);
@@ -103,8 +106,7 @@ export function lifecycleWhere(
       parts.push(pred ?? sql`and false`);
     } else parts.push(sql`and false`);
   }
-  if (adhoc.filters?.status)
-    parts.push(sql`and ${a}.status=${adhoc.filters.status}`);
+  if (adhoc.filters?.status) parts.push(sql`and ${a}.status=${adhoc.filters.status}`);
   if (alias === "fc" && adhoc.filters?.queue) {
     const pred = queuePredicate(sql`${a}.status`, adhoc.filters.queue);
     parts.push(pred ?? sql`and false`);

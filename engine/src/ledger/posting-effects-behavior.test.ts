@@ -56,7 +56,8 @@ async function withStubbedDb<T>(
       else delete target.execute;
     }
     if (options.transaction !== undefined) {
-      if (transactionDescriptor) Object.defineProperty(target, "transaction", transactionDescriptor);
+      if (transactionDescriptor)
+        Object.defineProperty(target, "transaction", transactionDescriptor);
       else delete target.transaction;
     }
   }
@@ -92,26 +93,43 @@ test("backoff holds the one-minute floor on the first retry and caps at one hour
 });
 
 test("a completion whose lease is gone is fenced by claim id", async () => {
-  await withStubbedDb({ execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) }, async () => {
-    await markPostingEffectsSucceeded(claim, NOW);
-  });
-  await withStubbedDb({ execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [], rowCount: 0 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) }, async () => {
-    await assert.rejects(
-      () => markPostingEffectsSucceeded(claim, NOW),
-      (error: unknown) => {
-        assert.ok(error instanceof PostingEffectsLeaseFencedError);
-        assert.match(error.message, new RegExp(claim.id));
-        return true;
-      },
-    );
-  });
+  await withStubbedDb(
+    {
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({ rows: [], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result,
+        ),
+    },
+    async () => {
+      await markPostingEffectsSucceeded(claim, NOW);
+    },
+  );
+  await withStubbedDb(
+    {
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({ rows: [], rowCount: 0 }).then(<T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result,
+        ),
+    },
+    async () => {
+      await assert.rejects(
+        () => markPostingEffectsSucceeded(claim, NOW),
+        (error: unknown) => {
+          assert.ok(error instanceof PostingEffectsLeaseFencedError);
+          assert.match(error.message, new RegExp(claim.id));
+          return true;
+        },
+      );
+    },
+  );
 });
 
 test("failure evidence keeps the first 1000 characters of the message", async () => {
   const captured: unknown[] = [];
   const tx: TxStub = {
     execute: async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       captured.push(query);
       return inMode({ rows: [{ becameTerminal: false }], rowCount: 1 });
     },
@@ -124,7 +142,10 @@ test("failure evidence keeps the first 1000 characters of the message", async ()
     );
   });
   const evidence = captured.flatMap(boundParams).filter((p): p is string => typeof p === "string");
-  assert.ok(evidence.some((s) => s === "x".repeat(1000)), "truncated message is bound as evidence");
+  assert.ok(
+    evidence.some((s) => s === "x".repeat(1000)),
+    "truncated message is bound as evidence",
+  );
   assert.ok(
     !evidence.some((s) => s.length > 1000 && s.includes("x".repeat(64))),
     "no bound evidence carries the overflow",
@@ -136,13 +157,18 @@ test("a retry stays retryable below the ceiling and turns terminal at it", async
     const captured: unknown[] = [];
     const tx: TxStub = {
       execute: async (query: unknown, mode?: string) => {
-        const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+        const inMode = <T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result;
         captured.push(query);
         return inMode({ rows: [{ becameTerminal: false }], rowCount: 1 });
       },
     };
     await withStubbedDb({ transaction: async (fn) => fn(tx) }, async () => {
-      await markPostingEffectsFailed({ ...claim, attempt_count: attemptCount }, new Error("boom"), NOW);
+      await markPostingEffectsFailed(
+        { ...claim, attempt_count: attemptCount },
+        new Error("boom"),
+        NOW,
+      );
     });
     return captured.flatMap(boundParams);
   };
@@ -154,20 +180,40 @@ test("a retry stays retryable below the ceiling and turns terminal at it", async
 
 test("a document claim reports terminal poison distinctly from retryable work", async () => {
   const runClaim = async (scripted: StubRows[]): Promise<unknown> => {
-    return withStubbedDb(
-      { execute: scriptedExecute(scripted) },
-      async () => claimPostingEffectsForDocument("33333333-3333-4333-8333-333333333333", NOW),
+    return withStubbedDb({ execute: scriptedExecute(scripted) }, async () =>
+      claimPostingEffectsForDocument("33333333-3333-4333-8333-333333333333", NOW),
     );
   };
   const claimed = await runClaim([{ rows: [{ ...claim }], rowCount: 1 }]);
   assert.equal((claimed as PostingEffectsRow).id, claim.id);
-  assert.equal(await runClaim([{ rows: [], rowCount: 0 }, { rows: [{ status: "succeeded" }], rowCount: 1 }]), "succeeded");
-  assert.equal(await runClaim([{ rows: [], rowCount: 0 }, { rows: [{ status: "failed" }], rowCount: 1 }]), "running");
   assert.equal(
-    await runClaim([{ rows: [], rowCount: 0 }, { rows: [{ status: "terminal_failed" }], rowCount: 1 }]),
+    await runClaim([
+      { rows: [], rowCount: 0 },
+      { rows: [{ status: "succeeded" }], rowCount: 1 },
+    ]),
+    "succeeded",
+  );
+  assert.equal(
+    await runClaim([
+      { rows: [], rowCount: 0 },
+      { rows: [{ status: "failed" }], rowCount: 1 },
+    ]),
+    "running",
+  );
+  assert.equal(
+    await runClaim([
+      { rows: [], rowCount: 0 },
+      { rows: [{ status: "terminal_failed" }], rowCount: 1 },
+    ]),
     "terminal_failed",
   );
-  assert.equal(await runClaim([{ rows: [], rowCount: 0 }, { rows: [], rowCount: 0 }]), null);
+  assert.equal(
+    await runClaim([
+      { rows: [], rowCount: 0 },
+      { rows: [], rowCount: 0 },
+    ]),
+    null,
+  );
 });
 
 test("a short replay reason is refused before any database work", async () => {
@@ -182,7 +228,10 @@ test("a short replay reason is refused before any database work", async () => {
     actorId: "66666666-6666-4666-8666-666666666666",
   };
   await withStubbedDb({ execute: refuse, transaction: refuse }, async () => {
-    await assert.rejects(() => replayTerminalPostingEffect({ ...base, reason: "too short" }), /between 10 and 1000/);
+    await assert.rejects(
+      () => replayTerminalPostingEffect({ ...base, reason: "too short" }),
+      /between 10 and 1000/,
+    );
     await assert.rejects(
       () => replayTerminalPostingEffect({ ...base, reason: "x".repeat(1001) }),
       /between 10 and 1000/,
@@ -219,7 +268,11 @@ test("the terminal notice names the document, the kind, the error, and the retry
   assert.match(notice.body, /INV-1042/, "body names the document");
   assert.match(notice.body, /8 attempts/, "body states the exhausted ceiling");
   assert.match(notice.body, /connection reset by peer/, "body carries the last error");
-  assert.match(notice.body, /Retry posting effects/, "body names the retry action that exists on the document actions route");
+  assert.match(
+    notice.body,
+    /Retry posting effects/,
+    "body names the retry action that exists on the document actions route",
+  );
 });
 
 test("the terminal transition stores the named notice for an operator who can retry", async () => {
@@ -238,11 +291,17 @@ test("the terminal transition stores the named notice for an operator who can re
   };
   const tx: TxStub = {
     // The terminal UPDATE returns the row, then the audit insert lands.
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [terminalRow], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [terminalRow], rowCount: 1 }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      ),
   };
   const notified: unknown[] = [];
   const scripted: StubRows[] = [
-    { rows: [{ document_number: "INV-1042", kind: "customer_invoice", subsidiary_id: null }], rowCount: 1 },
+    {
+      rows: [{ document_number: "INV-1042", kind: "customer_invoice", subsidiary_id: null }],
+      rowCount: 1,
+    },
     { rows: [{ id: "66666666-6666-4666-8666-666666666666" }], rowCount: 1 },
     { rows: [{ isActive: true, isSuperAdmin: true }], rowCount: 1 },
     { rows: [{ isActive: true, isSuperAdmin: true }], rowCount: 1 },
@@ -254,21 +313,36 @@ test("the terminal transition stores the named notice for an operator who can re
     {
       transaction: async (fn) => fn(tx),
       execute: async (query: unknown, mode?: string) => {
-        const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+        const inMode = <T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result;
         notified.push(query);
-        return inMode(await (scripted[call++] ?? (() => { throw new Error("unexpected database query"); })()));
+        return inMode(
+          await (scripted[call++] ??
+            (() => {
+              throw new Error("unexpected database query");
+            })()),
+        );
       },
     },
     async () => {
       await markPostingEffectsFailed(failedClaim, new Error("x"), NOW);
     },
   );
-  assert.equal(call, 6, "document lookup, recipients, effective permission/scope checks, dedup and notice insert all run");
+  assert.equal(
+    call,
+    6,
+    "document lookup, recipients, effective permission/scope checks, dedup and notice insert all run",
+  );
   const bound = notified.flatMap(boundParams).filter((p): p is string => typeof p === "string");
   assert.ok(bound.includes(POSTING_EFFECT_TERMINAL_NOTICE_KIND), "the named notice kind is stored");
-  assert.ok(bound.some((s) => s.includes("INV-1042") && s.includes("customer_invoice")), "the stored notice names the document and kind");
   assert.ok(
-    bound.some((s) => s.includes("connection reset by peer") && s.includes("Retry posting effects")),
+    bound.some((s) => s.includes("INV-1042") && s.includes("customer_invoice")),
+    "the stored notice names the document and kind",
+  );
+  assert.ok(
+    bound.some(
+      (s) => s.includes("connection reset by peer") && s.includes("Retry posting effects"),
+    ),
     "the stored notice carries the last error and the retry remedy",
   );
 });
@@ -283,13 +357,21 @@ test("replay names an inactive actor and a non-terminal row", async () => {
     now: NOW,
   };
   const txDenied: TxStub = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ exists: false }], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [{ exists: false }], rowCount: 1 }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      ),
   };
   await withStubbedDb({ transaction: async (fn) => fn(txDenied) }, async () => {
     await assert.rejects(() => replayTerminalPostingEffect(base), /not an active user/);
   });
   // Zero actor rows (the unscoped shape) is the same refusal, not a success.
-  const txMissing: TxStub = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [], rowCount: 0 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) };
+  const txMissing: TxStub = {
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [], rowCount: 0 }).then(<T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result,
+      ),
+  };
   await withStubbedDb({ transaction: async (fn) => fn(txMissing) }, async () => {
     await assert.rejects(() => replayTerminalPostingEffect(base), /not an active user/);
   });

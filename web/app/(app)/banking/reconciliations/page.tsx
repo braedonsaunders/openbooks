@@ -1,20 +1,22 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { bankingReconciliationsSpec, loadBankingReconciliations } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { bankingReconciliationsSpec, loadBankingReconciliations } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('banking')
-  return { title: t('reconsPage.title') }
+  const t = await getTranslations("banking");
+  return { title: t("reconsPage.title") };
 }
 
 export default async function BankingReconciliations({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadBankingReconciliations(sp)
-  return <ModuleView spec={bankingReconciliationsSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadBankingReconciliations(sp);
+  return (
+    <ModuleView spec={bankingReconciliationsSpec(data)} data={data} searchParams={sp} trusted />
+  );
 }

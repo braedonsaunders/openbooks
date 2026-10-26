@@ -19,7 +19,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.page-layout-revision-integration')]
@@ -33,7 +33,10 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("me/page-layout/route")) {
+    if (
+      specifier === "../../../../lib/authz" &&
+      context.parentURL?.includes("me/page-layout/route")
+    ) {
       return { url: "mock:page-layout-authz", shortCircuit: true };
     }
     // Self-service routes authenticate through the factory, which reads the
@@ -56,9 +59,7 @@ const routeUrl = "./route.ts?page-layout-revision-integration";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db } = await import("@openbooks/engine/platform/db");
 const { mergePageLayouts } = await import("../../../../lib/page-layout-shared.ts");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 const PAGE = "banking-accounts";
 
@@ -85,111 +86,111 @@ function getRequest(): Request {
   return new Request(`http://localhost/api/me/page-layout?page=${PAGE}`, { method: "GET" });
 }
 
-async function storedLayout(orgId: string, actorId: string): Promise<{ layout: unknown; revision: string }> {
-  const r = await db.execute<{ layout: unknown; revision: string }>(sql`
+async function storedLayout(
+  orgId: string,
+  actorId: string,
+): Promise<{ layout: unknown; revision: string }> {
+  const r = await db.execute<{ layout: unknown; revision: string }>(
+    sql`
     select layout,
            to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
       from user_page_layouts
      where org_id = ${orgId} and user_id = ${actorId} and page = ${PAGE}
-  `, "objects");
+  `,
+    "objects",
+  );
   assert.equal(r.length, 1, "exactly one layout row must be stored");
   return { layout: r[0]!.layout, revision: r[0]!.revision };
 }
 
-test(
-  "first save with a null revision creates the row and returns its token",
-  async () => {
-    const f = await seed();
-    const res = await PUT(putRequest({ page: PAGE, layout: { hidden: ["a"] }, expectedRevision: null }));
-    assert.equal(res.status, 200);
-    const body = (await res.json()) as { revision: string };
-    assert.match(body.revision, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+test("first save with a null revision creates the row and returns its token", async () => {
+  const f = await seed();
+  const res = await PUT(
+    putRequest({ page: PAGE, layout: { hidden: ["a"] }, expectedRevision: null }),
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { revision: string };
+  assert.match(body.revision, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
 
-    const get = await GET(getRequest());
-    assert.equal(get.status, 200);
-    assert.deepEqual(await get.json(), { layout: { hidden: ["a"] }, revision: body.revision });
-    assert.deepEqual((await storedLayout(f.orgId, f.actorId)).layout, { hidden: ["a"] });
-  },
-);
+  const get = await GET(getRequest());
+  assert.equal(get.status, 200);
+  assert.deepEqual(await get.json(), { layout: { hidden: ["a"] }, revision: body.revision });
+  assert.deepEqual((await storedLayout(f.orgId, f.actorId)).layout, { hidden: ["a"] });
+});
 
-test(
-  "a stale revision is a 409 carrying current; the current one succeeds",
-  async () => {
-    const f = await seed();
-    const first = (await (
-      await PUT(putRequest({ page: PAGE, layout: { hidden: ["a"] }, expectedRevision: null }))
-    ).json()) as { revision: string };
+test("a stale revision is a 409 carrying current; the current one succeeds", async () => {
+  const f = await seed();
+  const first = (await (
+    await PUT(putRequest({ page: PAGE, layout: { hidden: ["a"] }, expectedRevision: null }))
+  ).json()) as { revision: string };
 
-    // A save that read before the parallel commit must not silently win.
-    const stale2 = await PUT(
-      putRequest({ page: PAGE, layout: { hidden: ["b"] }, expectedRevision: "2000-01-01T00:00:00.000000Z" }),
-    );
-    assert.equal(stale2.status, 409);
-    const conflict = (await stale2.json()) as {
-      error: string;
-      current: { layout: { hidden: string[] }; revision: string };
-    };
-    assert.match(conflict.error, /changed after you opened it/);
-    assert.deepEqual(conflict.current.layout, { hidden: ["a"] });
-    assert.equal(conflict.current.revision, first.revision);
+  // A save that read before the parallel commit must not silently win.
+  const stale2 = await PUT(
+    putRequest({
+      page: PAGE,
+      layout: { hidden: ["b"] },
+      expectedRevision: "2000-01-01T00:00:00.000000Z",
+    }),
+  );
+  assert.equal(stale2.status, 409);
+  const conflict = (await stale2.json()) as {
+    error: string;
+    current: { layout: { hidden: string[] }; revision: string };
+  };
+  assert.match(conflict.error, /changed after you opened it/);
+  assert.deepEqual(conflict.current.layout, { hidden: ["a"] });
+  assert.equal(conflict.current.revision, first.revision);
 
-    const fresh = await PUT(
-      putRequest({ page: PAGE, layout: { hidden: ["a", "b"] }, expectedRevision: first.revision }),
-    );
-    assert.equal(fresh.status, 200);
-    assert.notEqual(
-      ((await fresh.json()) as { revision: string }).revision,
-      first.revision,
-      "a committed save must advance the revision token",
-    );
-    assert.deepEqual((await storedLayout(f.orgId, f.actorId)).layout, { hidden: ["a", "b"] });
-  },
-);
+  const fresh = await PUT(
+    putRequest({ page: PAGE, layout: { hidden: ["a", "b"] }, expectedRevision: first.revision }),
+  );
+  assert.equal(fresh.status, 200);
+  assert.notEqual(
+    ((await fresh.json()) as { revision: string }).revision,
+    first.revision,
+    "a committed save must advance the revision token",
+  );
+  assert.deepEqual((await storedLayout(f.orgId, f.actorId)).layout, { hidden: ["a", "b"] });
+});
 
-test(
-  "a missing revision is a 409 naming the remedy, not a silent overwrite",
-  async () => {
-    await seed();
-    const res = await PUT(putRequest({ page: PAGE, layout: { hidden: ["a"] } }));
-    assert.equal(res.status, 409);
-    assert.match(((await res.json()) as { error: string }).error, /revision is required/);
-  },
-);
+test("a missing revision is a 409 naming the remedy, not a silent overwrite", async () => {
+  await seed();
+  const res = await PUT(putRequest({ page: PAGE, layout: { hidden: ["a"] } }));
+  assert.equal(res.status, 409);
+  assert.match(((await res.json()) as { error: string }).error, /revision is required/);
+});
 
-test(
-  "two writers on one base revision: the second 409s, then reconciles to the union",
-  async () => {
-    const f = await seed();
-    const base = (await (
-      await PUT(putRequest({ page: PAGE, layout: {}, expectedRevision: null }))
-    ).json()) as { revision: string };
+test("two writers on one base revision: the second 409s, then reconciles to the union", async () => {
+  const f = await seed();
+  const base = (await (
+    await PUT(putRequest({ page: PAGE, layout: {}, expectedRevision: null }))
+  ).json()) as { revision: string };
 
-    // Writer A hides account A and commits.
-    const writerA = await PUT(
-      putRequest({ page: PAGE, layout: { hidden: ["a"] }, expectedRevision: base.revision }),
-    );
-    assert.equal(writerA.status, 200);
-    const revisionA = ((await writerA.json()) as { revision: string }).revision;
+  // Writer A hides account A and commits.
+  const writerA = await PUT(
+    putRequest({ page: PAGE, layout: { hidden: ["a"] }, expectedRevision: base.revision }),
+  );
+  assert.equal(writerA.status, 200);
+  const revisionA = ((await writerA.json()) as { revision: string }).revision;
 
-    // Writer B hid account B from the same base — its whole-state write must
-    // not resurrect pre-A state.
-    const writerB = await PUT(
-      putRequest({ page: PAGE, layout: { hidden: ["b"] }, expectedRevision: base.revision }),
-    );
-    assert.equal(writerB.status, 409);
-    const conflict = (await writerB.json()) as {
-      current: { layout: { hidden: string[] }; revision: string };
-    };
-    assert.deepEqual(conflict.current.layout, { hidden: ["a"] });
+  // Writer B hid account B from the same base — its whole-state write must
+  // not resurrect pre-A state.
+  const writerB = await PUT(
+    putRequest({ page: PAGE, layout: { hidden: ["b"] }, expectedRevision: base.revision }),
+  );
+  assert.equal(writerB.status, 409);
+  const conflict = (await writerB.json()) as {
+    current: { layout: { hidden: string[] }; revision: string };
+  };
+  assert.deepEqual(conflict.current.layout, { hidden: ["a"] });
 
-    // Reconcile to the union and retry once with the live token.
-    const merged = mergePageLayouts(conflict.current.layout, { hidden: ["b"] });
-    assert.deepEqual(merged, { hidden: ["a", "b"] });
-    const retry = await PUT(
-      putRequest({ page: PAGE, layout: merged, expectedRevision: conflict.current.revision }),
-    );
-    assert.equal(retry.status, 200);
-    assert.notEqual(((await retry.json()) as { revision: string }).revision, revisionA);
-    assert.deepEqual((await storedLayout(f.orgId, f.actorId)).layout, { hidden: ["a", "b"] });
-  },
-);
+  // Reconcile to the union and retry once with the live token.
+  const merged = mergePageLayouts(conflict.current.layout, { hidden: ["b"] });
+  assert.deepEqual(merged, { hidden: ["a", "b"] });
+  const retry = await PUT(
+    putRequest({ page: PAGE, layout: merged, expectedRevision: conflict.current.revision }),
+  );
+  assert.equal(retry.status, 200);
+  assert.notEqual(((await retry.json()) as { revision: string }).revision, revisionA);
+  assert.deepEqual((await storedLayout(f.orgId, f.actorId)).layout, { hidden: ["a", "b"] });
+});

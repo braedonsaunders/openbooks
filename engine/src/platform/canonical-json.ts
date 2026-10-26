@@ -1,8 +1,6 @@
 type JsonPrimitive = string | number | boolean | null;
 export type CanonicalJsonValue =
-  | JsonPrimitive
-  | CanonicalJsonValue[]
-  | { [key: string]: CanonicalJsonValue };
+  JsonPrimitive | CanonicalJsonValue[] | { [key: string]: CanonicalJsonValue };
 
 export class NonJsonValueError extends Error {
   readonly name = "NonJsonValueError";

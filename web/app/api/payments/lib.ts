@@ -1,26 +1,26 @@
-import { paymentRunScopeSql } from '@/lib/payment-run-access'
-import 'server-only'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
+import { paymentRunScopeSql } from "@/lib/payment-run-access";
+import "server-only";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
 import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
 import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
 import { PostingError } from "@openbooks/engine/journal/contracts";
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { can, getAuthz, guardSubsidiaryScope, type Authz } from '@/lib/authz'
-import { isMaskedFileContentError } from '@/lib/file-storage'
-import { isUuid } from '../../../lib/list-params'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { assertAnyPermission, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { can, getAuthz, guardSubsidiaryScope, type Authz } from "@/lib/authz";
+import { isMaskedFileContentError } from "@/lib/file-storage";
+import { isUuid } from "../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
 /** ap.pay for vendor payments, ar.pay for customer receipts. */
 
-export function paymentPermission(kind: PaymentKind): 'ap.pay' | 'ar.pay' {
-  return kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay'
+export function paymentPermission(kind: PaymentKind): "ap.pay" | "ar.pay" {
+  return kind === "vendor_payment" ? "ap.pay" : "ar.pay";
 }
 
 export function isPaymentKind(kind: unknown): kind is PaymentKind {
-  return kind === 'vendor_payment' || kind === 'customer_payment'
+  return kind === "vendor_payment" || kind === "customer_payment";
 }
 
 /** Uniform error mapping: domain errors are 422, everything else 500. */
@@ -28,17 +28,17 @@ export async function paymentErrorResponse(e: unknown): Promise<NextResponse> {
   // Masked-sandbox file tombstone: a computed refusal, never a 500. The
   // remedy lives in the message and must reach the operator intact.
   if (isMaskedFileContentError(e)) {
-    return apiErrorResponse(e, { safeStatus: 403 })
+    return apiErrorResponse(e, { safeStatus: 403 });
   }
   // Scope denials are record denials: the uniform 404, never a 500 and never
   // a message naming the hidden subsidiary.
   if (e instanceof ScopeNotFoundError) {
-    return notFound("record")
+    return notFound("record");
   }
   if (e instanceof PaymentError || e instanceof PostingError) {
-    return apiErrorResponse(e, { safeStatus: 422 })
+    return apiErrorResponse(e, { safeStatus: 422 });
   }
-  return apiErrorResponse(e)
+  return apiErrorResponse(e);
 }
 
 /** Authorize a run by its actual direction, not by which page called it.
@@ -47,10 +47,10 @@ export async function paymentErrorResponse(e: unknown): Promise<NextResponse> {
  *  outside their subsidiary scope. The SSR views use this same predicate. */
 export async function guardPaymentRunPermission(
   runId: string,
-  capability: 'pay' | 'approve' = 'pay',
+  capability: "pay" | "approve" = "pay",
 ): Promise<Authz | NextResponse> {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await getAuthz();
+  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   // Permission before existence (canonical shape 4 in
   // engine/src/organization/subsidiary-scope.ts): a caller holding neither
   // direction's permission learns nothing — existing and missing ids answer
@@ -58,27 +58,30 @@ export async function guardPaymentRunPermission(
   const payPerm = `ap.${capability}` as const;
   const receivePerm = `ar.${capability}` as const;
   try {
-    assertAnyPermission((permission) => can(authz, permission), [payPerm, receivePerm])
+    assertAnyPermission((permission) => can(authz, permission), [payPerm, receivePerm]);
   } catch (error) {
     if (error instanceof ScopeNotFoundError) {
-      return notFound("record")
+      return notFound("record");
     }
-    throw error
+    throw error;
   }
-  if (!isUuid(runId)) return notFound("record")
-  const row = await db.execute<{ direction: string }>(sql`
+  if (!isUuid(runId)) return notFound("record");
+  const row = await db.execute<{ direction: string }>(
+    sql`
     select r.direction from payment_runs r
      where r.id = ${runId} and ${paymentRunScopeSql(authz)}
-  `, 'objects')
-  const run = row[0]
-  if (!run) return notFound("record")
+  `,
+    "objects",
+  );
+  const run = row[0];
+  if (!run) return notFound("record");
   // Wrong-direction callers learn nothing either: the direction-specific
   // permission fails closed with the same uniform 404, so an ap.pay-only
   // caller cannot distinguish an existing inbound run from a missing id
   // (and symmetrically for ar.pay-only vs outbound, both capabilities).
-  const permission = `${run.direction === 'inbound' ? 'ar' : 'ap'}.${capability}`
-  if (!can(authz, permission)) return notFound("record")
-  return authz
+  const permission = `${run.direction === "inbound" ? "ar" : "ap"}.${capability}`;
+  if (!can(authz, permission)) return notFound("record");
+  return authz;
 }
 
 /**
@@ -90,26 +93,29 @@ export async function assertAllocationTargetsInScope(
   authz: Authz,
   openLineIds: readonly string[],
 ): Promise<NextResponse | null> {
-  if (!authz.allowedSubsidiaryIds || openLineIds.length === 0) return null
+  if (!authz.allowedSubsidiaryIds || openLineIds.length === 0) return null;
   // Malformed ids fail closed exactly like unresolvable ones: the uuid[]
   // interpolation below would otherwise surface a Postgres cast error as a
   // 500. The payment-run bill selection keeps the same boundary (uuidId at
   // the schema, not-found below).
   for (const lineId of openLineIds) {
-    if (!isUuid(lineId)) return notFound("record")
+    if (!isUuid(lineId)) return notFound("record");
   }
-  const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+  const rows = await db.execute<{ id: string; subsidiaryId: string | null }>(
+    sql`
     select jl.id, jl.subsidiary_id as "subsidiaryId"
       from journal_lines jl
-     where jl.id = any(${`{${openLineIds.join(',')}}`}::uuid[]) and jl.org_id = ${authz.user.orgId} and jl.is_open_item
-  `, 'objects'))
-  const byId = new Map(rows.map((row) => [row.id, row.subsidiaryId]))
+     where jl.id = any(${`{${openLineIds.join(",")}}`}::uuid[]) and jl.org_id = ${authz.user.orgId} and jl.is_open_item
+  `,
+    "objects",
+  );
+  const byId = new Map(rows.map((row) => [row.id, row.subsidiaryId]));
   for (const lineId of openLineIds) {
     // An id that does not resolve in this org fails closed the same way —
     // it is indistinguishable from one outside the caller's scope.
-    if (!byId.has(lineId)) return notFound("record")
-    const denied = guardSubsidiaryScope(authz, byId.get(lineId))
-    if (denied) return denied
+    if (!byId.has(lineId)) return notFound("record");
+    const denied = guardSubsidiaryScope(authz, byId.get(lineId));
+    if (denied) return denied;
   }
-  return null
+  return null;
 }

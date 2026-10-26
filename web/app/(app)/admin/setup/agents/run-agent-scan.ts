@@ -1,4 +1,4 @@
-import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { readApiErrorMessage } from "../../../../../lib/api-error";
 
 /**
  * Shared run-now POST for the Agents islands (overview pack actions, activity
@@ -13,17 +13,23 @@ export type AgentScanOutcome =
   | { ok: true; detected: number }
   | { ok: false; alreadyRunning: boolean; code: string | null; error: string | null };
 
-export async function postAgentScan(agentKey: string, failedMessage: string): Promise<AgentScanOutcome> {
-  const res = await fetch(`/api/admin/setup/agents/${agentKey}/run`, { method: 'POST' })
+export async function postAgentScan(
+  agentKey: string,
+  failedMessage: string,
+): Promise<AgentScanOutcome> {
+  const res = await fetch(`/api/admin/setup/agents/${agentKey}/run`, { method: "POST" });
   if (res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { detected?: number }
-    return { ok: true, detected: payload.detected ?? 0 }
+    const payload = (await res.json().catch(() => ({}))) as { detected?: number };
+    return { ok: true, detected: payload.detected ?? 0 };
   }
-  const payload = (await res.clone().json().catch(() => ({}))) as { error?: unknown; status?: string }
+  const payload = (await res
+    .clone()
+    .json()
+    .catch(() => ({}))) as { error?: unknown; status?: string };
   return {
     ok: false,
-    alreadyRunning: res.status === 409 && payload.status === 'claimed_elsewhere',
-    code: typeof payload.error === 'string' ? payload.error : null,
+    alreadyRunning: res.status === 409 && payload.status === "claimed_elsewhere",
+    code: typeof payload.error === "string" ? payload.error : null,
     error: await readApiErrorMessage(res, failedMessage),
-  }
+  };
 }

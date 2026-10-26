@@ -35,10 +35,7 @@ import {
   type ReportDriverRunner,
 } from "./drivers.ts";
 import type { DriverResolver, ReportDriverTemporal } from "./types.ts";
-import {
-  applyReportPeriodWindow,
-  resolveReportPeriodField,
-} from "./report-window.ts";
+import { applyReportPeriodWindow, resolveReportPeriodField } from "./report-window.ts";
 
 /**
  * Engine-side `ReportDriverRunner` for `report_definition` drivers
@@ -69,13 +66,18 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
     throw new DriverNotAvailableError("actor cannot run reports");
   }
   await ensureReportDefinitions(orgId);
-  const def = (await db.execute<{
-    report_type: string;
-    query: unknown;
-    statement: unknown;
-  }>(sql`
+  const def = (
+    await db.execute<{
+      report_type: string;
+      query: unknown;
+      statement: unknown;
+    }>(
+      sql`
     select report_type, query, statement from report_definitions
-     where id = ${reportDefinitionId} and org_id = ${orgId} limit 1`, "objects"))[0];
+     where id = ${reportDefinitionId} and org_id = ${orgId} limit 1`,
+      "objects",
+    )
+  )[0];
   if (!def) throw new DriverAdminError("not_found", "report definition not found");
   if (def.report_type !== "query" || !def.query || typeof def.query !== "object") {
     throw new DriverAdminError(
@@ -87,18 +89,30 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
   try {
     plan = validateCustomQuery(def.query, REPORT_ENTITY_MAP);
   } catch (error) {
-    throw new DriverAdminError("validation", error instanceof Error ? error.message : String(error));
+    throw new DriverAdminError(
+      "validation",
+      error instanceof Error ? error.message : String(error),
+    );
   }
   const baseEntity = REPORT_ENTITY_MAP[plan.entity];
   if (!baseEntity) throw new DriverAdminError("validation", `unknown report entity ${plan.entity}`);
   // The driver measures what the actor may see: a restricted actor's ledger
   // sources arrive pre-collapsed per (entry, account, currency) before the
   // driver aggregation, so no allocation base can isolate one employee's pay.
-  const entity = payrollRestrictedEntity(baseEntity, await actorHasPermission(db, orgId, actorId, "payroll.read"));
+  const entity = payrollRestrictedEntity(
+    baseEntity,
+    await actorHasPermission(db, orgId, actorId, "payroll.read"),
+  );
   if (entity.key.startsWith("custom:")) {
-    throw new DriverAdminError("validation", "custom report entities are not supported as driver sources");
+    throw new DriverAdminError(
+      "validation",
+      "custom report entities are not supported as driver sources",
+    );
   }
-  if (entity.requiredPermission && !(await actorHasPermission(db, orgId, actorId, entity.requiredPermission))) {
+  if (
+    entity.requiredPermission &&
+    !(await actorHasPermission(db, orgId, actorId, entity.requiredPermission))
+  ) {
     throw new DriverNotAvailableError("actor cannot run reports on this entity");
   }
   if (entity.featureKey && !(await reportEntityEnabled(orgId, entity.featureKey))) {
@@ -167,7 +181,10 @@ function applyTemporalContract(
   if (input.temporalMode === "fixed_query") {
     return { query: plan, temporal: { mode: "fixed_query", from: null, to: null, field: null } };
   }
-  return { query: plan, temporal: { mode: "balance_as_of", from: null, to: input.to, field: null } };
+  return {
+    query: plan,
+    temporal: { mode: "balance_as_of", from: null, to: input.to, field: null },
+  };
 }
 
 /**
@@ -181,10 +198,13 @@ function assertSingleDenomination(
   rows: Record<string, unknown>[],
   valueColumn: string,
 ): void {
-  const measure: ReportMeasure = compiled.mode === "summarize"
-    ? (compiled.measures.find((m) => m.column === valueColumn) ??
-      (compiled.measures.length === 1 ? compiled.measures[0]! : { fn: "sum" as const, column: valueColumn }))
-    : { fn: "sum" as const, column: valueColumn };
+  const measure: ReportMeasure =
+    compiled.mode === "summarize"
+      ? (compiled.measures.find((m) => m.column === valueColumn) ??
+        (compiled.measures.length === 1
+          ? compiled.measures[0]!
+          : { fn: "sum" as const, column: valueColumn }))
+      : { fn: "sum" as const, column: valueColumn };
   if (measure.fn !== "sum") return;
   const singles = resolveDenominations(
     entity,
@@ -210,8 +230,11 @@ async function resolveBookScope(
   const entity = REPORT_ENTITY_MAP[plan.entity];
   if (!entity?.bookScope) return null;
   if (customQueryReferencesBook(plan)) return null;
-  const books = await db.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary and is_active`, "objects");
+  const books = await db.execute<{ id: string }>(
+    sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active`,
+    "objects",
+  );
   if (books.length !== 1 || !books[0]) {
     throw new DriverAdminError(
       "validation",
@@ -222,8 +245,11 @@ async function resolveBookScope(
 }
 
 async function fiscalStartMonth(orgId: string): Promise<number> {
-  const r = (await db.execute<{ m: number }>(sql`
-    select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m from orgs where id = ${orgId}`, "objects"));
+  const r = await db.execute<{ m: number }>(
+    sql`
+    select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m from orgs where id = ${orgId}`,
+    "objects",
+  );
   const m = r[0]?.m ?? 1;
   return m >= 1 && m <= 12 ? m : 1;
 }
@@ -235,8 +261,11 @@ async function fiscalStartMonth(orgId: string): Promise<number> {
  * about which entities a driver may measure.
  */
 async function reportEntityEnabled(orgId: string, key: string): Promise<boolean> {
-  const r = (await db.execute<{ f: FeatureState | null }>(sql`
-    select settings->'features' as f from orgs where id = ${orgId}`, "objects"));
+  const r = await db.execute<{ f: FeatureState | null }>(
+    sql`
+    select settings->'features' as f from orgs where id = ${orgId}`,
+    "objects",
+  );
   const state = r[0]?.f ?? {};
   if (key === "multiSubsidiary" || key === "multiCurrency") {
     return dataDependentFeatureDefault(db, orgId, key, state);
@@ -253,7 +282,12 @@ async function reportEntityEnabled(orgId: string, key: string): Promise<boolean>
  */
 export function projectDriverRows(
   rows: Record<string, unknown>[],
-  compiled: { mode: "rows" | "summarize"; columns: string[]; breakouts: { column: string }[]; measures: { column?: string }[] },
+  compiled: {
+    mode: "rows" | "summarize";
+    columns: string[];
+    breakouts: { column: string }[];
+    measures: { column?: string }[];
+  },
   dimensionColumn: string,
   valueColumn: string,
 ): ReportDriverRow[] {
@@ -266,10 +300,16 @@ export function projectDriverRows(
     valKey = `m${valCols.indexOf(resolveSummarizeKey(valCols, valueColumn, "value"))}`;
   } else {
     if (!compiled.columns.includes(dimensionColumn)) {
-      throw new DriverAdminError("validation", `report does not select dimension column ${dimensionColumn}`);
+      throw new DriverAdminError(
+        "validation",
+        `report does not select dimension column ${dimensionColumn}`,
+      );
     }
     if (!compiled.columns.includes(valueColumn)) {
-      throw new DriverAdminError("validation", `report does not select value column ${valueColumn}`);
+      throw new DriverAdminError(
+        "validation",
+        `report does not select value column ${valueColumn}`,
+      );
     }
     dimKey = dimensionColumn;
     valKey = valueColumn;

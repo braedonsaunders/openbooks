@@ -1,8 +1,4 @@
-import {
-  seedAdoption,
-  calculatedRun,
-  markLegacy,
-} from "./filing-test-fixtures.ts";
+import { seedAdoption, calculatedRun, markLegacy } from "./filing-test-fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -14,12 +10,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
 import { payrollRemittanceSummary } from "./remittance.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
-for (const change of [
-  "profile",
-  "default",
-  "delete-profile",
-  "deactivate",
-] as const) {
+for (const change of ["profile", "default", "delete-profile", "deactivate"] as const) {
   test(
     `committed payroll filing attribution survives a later ${change} assignment change`,
     { skip: !process.env.OPENBOOKS_DB_URL },
@@ -101,15 +92,21 @@ test(
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
       const before = await t4Slips(fx.orgId, 2026);
-      const stub = (await db.execute<{ id: string; filing_account_source: string }>(
-          sql`select id,filing_account_source from pay_stubs where org_id=${fx.orgId}`, "objects",
-        ))[0]!;
+      const stub = (
+        await db.execute<{ id: string; filing_account_source: string }>(
+          sql`select id,filing_account_source from pay_stubs where org_id=${fx.orgId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stub.filing_account_source, "calculation");
       const account = randomUUID();
       await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default)
       values(${account},${fx.orgId},'CA','ca_rp','123456789RP0001','Later account','regular',true)`);
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
-      const remittance = await payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      const remittance = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
       assert.equal(remittance[0]?.filingAccount.id, null);
       assert.equal(remittance[0]?.hasUnknownFilingAccount, true);
       await assert.rejects(
@@ -150,10 +147,7 @@ test(
       await commitPayRun(input);
       const before = await t4Slips(fx.orgId, 2026);
       const stubId = await markLegacy(fx.orgId);
-      await assert.rejects(
-        t4Slips(fx.orgId, 2026),
-        /unknown historical filing account/,
-      );
+      await assert.rejects(t4Slips(fx.orgId, 2026), /unknown historical filing account/);
       // The remittance summary must NOT inherit the year-end refusal: one
       // legacy run surfaces unfiled/unknown while the summary keeps working.
       const groups = await payrollRemittanceSummary(fx.orgId, {
@@ -200,17 +194,17 @@ test(
           reconcilePayrollFilingAccounts({
             orgId: fx.orgId,
             actorId: fx.actorId,
-            rows: [
-              row,
-              { ...row, stubId: "ffffffff-ffff-ffff-ffff-ffffffffffff" },
-            ],
+            rows: [row, { ...row, stubId: "ffffffff-ffff-ffff-ffff-ffffffffffff" }],
           }),
           /not visible in this organization and legal-entity scope/,
         );
         assert.equal(
-          (await db.execute<{ source: string }>(
-              sql`select filing_account_source as source from pay_stubs where id=${stubId}`, "objects",
-            ))[0]?.source,
+          (
+            await db.execute<{ source: string }>(
+              sql`select filing_account_source as source from pay_stubs where id=${stubId}`,
+              "objects",
+            )
+          )[0]?.source,
           "unknown",
         );
       });
@@ -230,19 +224,16 @@ test(
           after: { filing_account_source: string };
           evidence: { reference: string };
         };
-      }>(sql`
+      }>(
+        sql`
       select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='pay_stubs' and row_id=${stubId}
-        and changes->>'operation'='reconcile_filing_account'`, "objects");
+        and changes->>'operation'='reconcile_filing_account'`,
+        "objects",
+      );
       assert.equal(audits.length, 1);
       assert.equal(audits[0]?.actor_id, fx.actorId);
-      assert.equal(
-        audits[0]?.changes.before.filing_account_source,
-        "unknown",
-      );
-      assert.equal(
-        audits[0]?.changes.after.filing_account_source,
-        "reconciled",
-      );
+      assert.equal(audits[0]?.changes.before.filing_account_source, "unknown");
+      assert.equal(audits[0]?.changes.after.filing_account_source, "reconciled");
       assert.equal(audits[0]?.changes.evidence.reference, row.reference);
       await assert.rejects(
         reconcilePayrollFilingAccounts({
@@ -283,7 +274,10 @@ test(
       );
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
       const stubId = await markLegacy(fx.orgId);
-      for (const [filingAccountId, refusal] of [[foreign, /holds no filing account with that id/], [us, /Failed query/]] as const) {
+      for (const [filingAccountId, refusal] of [
+        [foreign, /holds no filing account with that id/],
+        [us, /Failed query/],
+      ] as const) {
         await assert.rejects(
           reconcilePayrollFilingAccounts({
             orgId: fx.orgId,

@@ -1,10 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import {
-  RunQueryError,
-  getRun,
-  type RunDetail,
-} from "@openbooks/engine/allocations/run-queries";
+import { RunQueryError, getRun, type RunDetail } from "@openbooks/engine/allocations/run-queries";
 import {
   allocationRuleVisible,
   allocationScopeVisible,

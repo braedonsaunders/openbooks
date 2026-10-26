@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import type { SessionUser } from '../../../../lib/auth'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import type { SessionUser } from "../../../../lib/auth";
 
 /**
  * Journal GET answers the detail from one transaction whose scope predicate
@@ -13,149 +13,217 @@ import type { SessionUser } from '../../../../lib/auth'
  * before the read or the delete commits. Out-of-scope answers exactly like
  * missing.
  */
-const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __journalScopeUser: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __journalScopeUser: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-      return virtual('export async function currentUser(){return globalThis.__journalScopeUser.user}')
+    if (
+      (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
+      context.parentURL?.endsWith("/web/lib/authz.ts")
+    ) {
+      return virtual(
+        "export async function currentUser(){return globalThis.__journalScopeUser.user}",
+      );
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+});
+const { db, pool, withBypassContext, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import('@openbooks/engine/testing/fixtures')
-const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
-const { loadJournalDoc } = await import('../../../../lib/journals')
-const { GET, DELETE } = await import('./route')
+  await import("@openbooks/engine/testing/fixtures");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
+const { loadJournalDoc } = await import("../../../../lib/journals");
+const { GET, DELETE } = await import("./route");
 
 function asUser(id: string, orgId: string): SessionUser {
   return {
-    id, orgId, name: 'Scoped ledger', email: 'scoped-ledger@scratch.test', roles: [],
-    isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: id,
-  }
+    id,
+    orgId,
+    name: "Scoped ledger",
+    email: "scoped-ledger@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: id,
+  };
 }
 
 async function fixture() {
-  const org = await withBypassContext(() => createScratchOrg())
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Scoped ledger', 'reviewer'))
-    await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb, subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='reviewer'`))
-    const hidden = randomUUID()
-    await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`))
+    const actor = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Scoped ledger", "reviewer"),
+    );
+    await withBypassContext(() =>
+      db.execute(
+        sql`update app_roles set permissions='["*"]'::jsonb, subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='reviewer'`,
+      ),
+    );
+    const hidden = randomUUID();
+    await withBypassContext(() =>
+      db.execute(
+        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`,
+      ),
+    );
     const journal = async (number: string, subsidiaryId: string) => {
-      const id = randomUUID()
-      await withBypassContext(() => db.execute(sql`
+      const id = randomUUID();
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, subsidiary_id, document_date,
            currency, fx_rate, status, subtotal, tax_total, total, custom,
            created_by, updated_by)
         values (${id}, ${org.orgId}, 'journal', ${number}, ${subsidiaryId}, ${org.date},
-                'CAD', 1, 'draft', 100, 0, 100, '{}'::jsonb, ${actor}, ${actor})`))
-      return id
-    }
-    const visible = await journal('JE-VIS-1', org.subsidiaryId)
-    const concealed = await journal('JE-HID-1', hidden)
-    state.user = asUser(actor, org.orgId)
-    return { org, visible, concealed }
+                'CAD', 1, 'draft', 100, 0, 100, '{}'::jsonb, ${actor}, ${actor})`),
+      );
+      return id;
+    };
+    const visible = await journal("JE-VIS-1", org.subsidiaryId);
+    const concealed = await journal("JE-HID-1", hidden);
+    state.user = asUser(actor, org.orgId);
+    return { org, visible, concealed };
   } catch (e) {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-    throw e
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+    throw e;
   }
 }
 
 async function revisionToken(documentId: string): Promise<string> {
-  const row = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
-      from documents where id = ${documentId}`, 'objects'))
-  return row[0]!.updatedAt
+  const row = await db.execute<{ updatedAt: string }>(
+    sql`
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
+      from documents where id = ${documentId}`,
+    "objects",
+  );
+  return row[0]!.updatedAt;
 }
 
-const ctxFor = (id: string) => ({ params: Promise.resolve({ id }) })
+const ctxFor = (id: string) => ({ params: Promise.resolve({ id }) });
 
-test('journal drawer loads wait on a rehome before reading detail', async () => {
-  const { org, visible } = await fixture()
-  const writer = await pool.connect()
-  let pending: Promise<Awaited<ReturnType<typeof loadJournalDoc>>> | undefined
+test("journal drawer loads wait on a rehome before reading detail", async () => {
+  const { org, visible } = await fixture();
+  const writer = await pool.connect();
+  let pending: Promise<Awaited<ReturnType<typeof loadJournalDoc>>> | undefined;
   try {
-    const hidden = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and parent_id=${org.subsidiaryId} limit 1`, 'objects'))[0]!.id
-    await writer.query('begin')
-    await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
-    const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
-    await withBypassContext(() => (writer.query('update documents set subsidiary_id=$1 where id=$2', [hidden, visible])))
-    pending = withOrgContext(org.orgId, () => loadJournalDoc(visible, org.orgId, new Set([org.subsidiaryId])))
-    let blocked = false
+    const hidden = (
+      await db.execute<{ id: string }>(
+        sql`select id from subsidiaries where org_id=${org.orgId} and parent_id=${org.subsidiaryId} limit 1`,
+        "objects",
+      )
+    )[0]!.id;
+    await writer.query("begin");
+    await writer.query(
+      "select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)",
+    );
+    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+      .pid;
+    await withBypassContext(() =>
+      writer.query("update documents set subsidiary_id=$1 where id=$2", [hidden, visible]),
+    );
+    pending = withOrgContext(org.orgId, () =>
+      loadJournalDoc(visible, org.orgId, new Set([org.subsidiaryId])),
+    );
+    let blocked = false;
     for (let n = 0; n < 200; n++) {
-      blocked = !!((await pool.query('select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))', [pid])).rowCount)
-      if (blocked) break
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      blocked = !!(
+        await pool.query("select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))", [
+          pid,
+        ])
+      ).rowCount;
+      if (blocked) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    assert.ok(blocked, 'the detail waits on the locked journal instead of reading the pre-rehome row')
-    await writer.query('commit')
-    assert.equal(await pending, null)
+    assert.ok(
+      blocked,
+      "the detail waits on the locked journal instead of reading the pre-rehome row",
+    );
+    await writer.query("commit");
+    assert.equal(await pending, null);
   } finally {
-    await writer.query('rollback').catch(() => {})
-    await pending?.catch(() => {})
-    writer.release()
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await writer.query("rollback").catch(() => {});
+    await pending?.catch(() => {});
+    writer.release();
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('journal GET and DELETE enforce the caller subsidiary scope', async () => {
-  const { org, visible, concealed } = await fixture()
+test("journal GET and DELETE enforce the caller subsidiary scope", async () => {
+  const { org, visible, concealed } = await fixture();
   try {
     await withOrgContext(org.orgId, async () => {
-      const seen = await GET(new Request('http://journals.local/api'), ctxFor(visible))
-      assert.equal(seen.status, 200, JSON.stringify(await seen.clone().json()))
+      const seen = await GET(new Request("http://journals.local/api"), ctxFor(visible));
+      assert.equal(seen.status, 200, JSON.stringify(await seen.clone().json()));
 
-      const hiddenGet = await GET(new Request('http://journals.local/api'), ctxFor(concealed))
-      assert.deepEqual([hiddenGet.status, await hiddenGet.json(), await loadJournalDoc(concealed, org.orgId, new Set([org.subsidiaryId]))], [404, { error: 'not_found' }, null])
+      const hiddenGet = await GET(new Request("http://journals.local/api"), ctxFor(concealed));
+      assert.deepEqual(
+        [
+          hiddenGet.status,
+          await hiddenGet.json(),
+          await loadJournalDoc(concealed, org.orgId, new Set([org.subsidiaryId])),
+        ],
+        [404, { error: "not_found" }, null],
+      );
 
       const hiddenDelete = await DELETE(
-        new Request('http://journals.local/api', {
-          method: 'DELETE',
-          headers: { 'content-type': 'application/json' },
+        new Request("http://journals.local/api", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ expectedUpdatedAt: await revisionToken(concealed) }),
         }),
         ctxFor(concealed),
-      )
-      assert.equal(hiddenDelete.status, 404, JSON.stringify(await hiddenDelete.clone().json()))
+      );
+      assert.equal(hiddenDelete.status, 404, JSON.stringify(await hiddenDelete.clone().json()));
       assert.equal(
-        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where id=${concealed}`, 'objects'))[0]!.n,
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from documents where id=${concealed}`,
+            "objects",
+          )
+        )[0]!.n,
         1,
-        'a refused delete keeps the journal',
-      )
+        "a refused delete keeps the journal",
+      );
 
       const unfenced = await DELETE(
-        new Request('http://journals.local/api', {
-          method: 'DELETE',
-          headers: { 'content-type': 'application/json' },
+        new Request("http://journals.local/api", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({}),
         }),
         ctxFor(visible),
-      )
-      assert.equal(unfenced.status, 409, 'delete without a revision token is fenced like PATCH')
+      );
+      assert.equal(unfenced.status, 409, "delete without a revision token is fenced like PATCH");
 
       const deleted = await DELETE(
-        new Request('http://journals.local/api', {
-          method: 'DELETE',
-          headers: { 'content-type': 'application/json' },
+        new Request("http://journals.local/api", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ expectedUpdatedAt: await revisionToken(visible) }),
         }),
         ctxFor(visible),
-      )
-      assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()))
+      );
+      assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()));
       assert.equal(
-        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where id=${visible}`, 'objects'))[0]!.n,
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from documents where id=${visible}`,
+            "objects",
+          )
+        )[0]!.n,
         0,
-      )
-    })
+      );
+    });
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});

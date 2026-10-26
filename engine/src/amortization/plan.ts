@@ -11,10 +11,24 @@
  * carries weight (the "remainder to last period" rounding policy), so the
  * periods always sum exactly to the amount.
  */
-import { addCalendarDays, addMonthsClamped, addMonthsStart, civilDayIndex, daysInCivilMonth, endOfMonth, isIsoCalendarDate, startOfMonth } from "../platform/civil-date.ts";
+import {
+  addCalendarDays,
+  addMonthsClamped,
+  addMonthsStart,
+  civilDayIndex,
+  daysInCivilMonth,
+  endOfMonth,
+  isIsoCalendarDate,
+  startOfMonth,
+} from "../platform/civil-date.ts";
 import { AmortizationError } from "./errors.ts";
 
-export const AMORTIZATION_METHODS = ["straight_line", "prorated_first_last", "exact_days", "variable"] as const;
+export const AMORTIZATION_METHODS = [
+  "straight_line",
+  "prorated_first_last",
+  "exact_days",
+  "variable",
+] as const;
 export type AmortizationMethod = (typeof AMORTIZATION_METHODS)[number];
 
 export const AMORTIZATION_TERM_SOURCES = ["template", "service_dates"] as const;
@@ -79,7 +93,11 @@ function refuse(message: string, code: string, remedy: string): never {
 
 function requireDate(value: string, label: string): void {
   if (!isIsoCalendarDate(value)) {
-    refuse(`${label} must be a valid YYYY-MM-DD date.`, "amortization_date_invalid", `Enter ${label} as YYYY-MM-DD.`);
+    refuse(
+      `${label} must be a valid YYYY-MM-DD date.`,
+      "amortization_date_invalid",
+      `Enter ${label} as YYYY-MM-DD.`,
+    );
   }
 }
 
@@ -87,11 +105,20 @@ function requireDate(value: string, label: string): void {
 export function monthSpan(fromIso: string, toIso: string): number {
   const from = startOfMonth(fromIso);
   const to = startOfMonth(toIso);
-  return (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + (Number(to.slice(5, 7)) - Number(from.slice(5, 7))) + 1;
+  return (
+    (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 +
+    (Number(to.slice(5, 7)) - Number(from.slice(5, 7))) +
+    1
+  );
 }
 
 function requirePeriodCount(count: number | null, label: string): number {
-  if (count === null || !Number.isSafeInteger(count) || count < 1 || count > MAX_AMORTIZATION_PERIODS) {
+  if (
+    count === null ||
+    !Number.isSafeInteger(count) ||
+    count < 1 ||
+    count > MAX_AMORTIZATION_PERIODS
+  ) {
     refuse(
       `${label} must be a whole number of periods from 1 through ${MAX_AMORTIZATION_PERIODS}.`,
       "amortization_period_count_invalid",
@@ -130,7 +157,10 @@ export function parsePercentageTable(percentages: readonly string[] | null): big
         "Enter each period's percentage as a plain decimal such as 8.333333.",
       );
     }
-    return BigInt(match[1]!) * PERCENT_UNIT + BigInt((match[2] ?? "").padEnd(AMORTIZATION_PERCENT_SCALE, "0"));
+    return (
+      BigInt(match[1]!) * PERCENT_UNIT +
+      BigInt((match[2] ?? "").padEnd(AMORTIZATION_PERCENT_SCALE, "0"))
+    );
   });
   const total = parsed.reduce((acc, value) => acc + value, 0n);
   if (total !== HUNDRED_PERCENT) {
@@ -145,19 +175,34 @@ export function parsePercentageTable(percentages: readonly string[] | null): big
 
 function formatPercent(millionths: bigint): string {
   const whole = millionths / PERCENT_UNIT;
-  const fraction = (millionths % PERCENT_UNIT).toString().padStart(AMORTIZATION_PERCENT_SCALE, "0").replace(/0+$/, "");
+  const fraction = (millionths % PERCENT_UNIT)
+    .toString()
+    .padStart(AMORTIZATION_PERCENT_SCALE, "0")
+    .replace(/0+$/, "");
   return fraction ? `${whole}.${fraction}` : whole.toString();
 }
 
 /** Validate a template policy without any source context. */
 export function validateAmortizationPolicy(policy: AmortizationPolicy): void {
   if (!AMORTIZATION_METHODS.includes(policy.method)) {
-    refuse(`Unknown amortization method ${String(policy.method)}.`, "amortization_method_invalid", "Choose a supported amortization method.");
+    refuse(
+      `Unknown amortization method ${String(policy.method)}.`,
+      "amortization_method_invalid",
+      "Choose a supported amortization method.",
+    );
   }
   if (!AMORTIZATION_TERM_SOURCES.includes(policy.termSource)) {
-    refuse(`Unknown term source ${String(policy.termSource)}.`, "amortization_term_source_invalid", "Choose the template's period count or the line's service dates as the term.");
+    refuse(
+      `Unknown term source ${String(policy.termSource)}.`,
+      "amortization_term_source_invalid",
+      "Choose the template's period count or the line's service dates as the term.",
+    );
   }
-  if (!Number.isSafeInteger(policy.periodOffset) || policy.periodOffset < 0 || policy.periodOffset > MAX_AMORTIZATION_PERIOD_OFFSET) {
+  if (
+    !Number.isSafeInteger(policy.periodOffset) ||
+    policy.periodOffset < 0 ||
+    policy.periodOffset > MAX_AMORTIZATION_PERIOD_OFFSET
+  ) {
     refuse(
       `The period offset must be a whole number from 0 through ${MAX_AMORTIZATION_PERIOD_OFFSET}.`,
       "amortization_offset_invalid",
@@ -189,7 +234,8 @@ export function validateAmortizationPolicy(policy: AmortizationPolicy): void {
       "Clear the percentage table, or switch the method to variable.",
     );
   }
-  if (policy.termSource === "template") requirePeriodCount(policy.periodCount, "The template's number of periods");
+  if (policy.termSource === "template")
+    requirePeriodCount(policy.periodCount, "The template's number of periods");
 }
 
 /**
@@ -197,7 +243,10 @@ export function validateAmortizationPolicy(policy: AmortizationPolicy): void {
  * template term starts on the line's service start (or the transaction date)
  * and spans the template's periods; a service-dates term needs both dates.
  */
-export function resolveAmortizationTerm(policy: AmortizationPolicy, input: AmortizationTermInput): AmortizationTerm {
+export function resolveAmortizationTerm(
+  policy: AmortizationPolicy,
+  input: AmortizationTermInput,
+): AmortizationTerm {
   validateAmortizationPolicy(policy);
   requireDate(input.transactionDate, "the transaction date");
   if (input.serviceStartOn !== null) requireDate(input.serviceStartOn, "the service start date");
@@ -263,7 +312,9 @@ function overlapDays(monthStart: string, startOn: string, endOn: string): bigint
  * months by their share of the month's days; variable uses the table.
  */
 export function termWeights(policy: AmortizationPolicy, term: AmortizationTerm): bigint[] {
-  const months = Array.from({ length: term.periodCount }, (_, i) => addMonthsStart(term.startOn, i));
+  const months = Array.from({ length: term.periodCount }, (_, i) =>
+    addMonthsStart(term.startOn, i),
+  );
   switch (policy.method) {
     case "straight_line":
       return months.map(() => 1n);
@@ -293,10 +344,20 @@ export function termWeights(policy: AmortizationPolicy, term: AmortizationTerm):
  * the last weighted one, which takes the remainder. The parts sum exactly to
  * the total and never go negative.
  */
-export function allocateRemainderToLast(total: bigint, weights: readonly bigint[], quantum: bigint): bigint[] {
-  if (total < 0n) refuse("An amortization amount cannot be negative.", "amortization_amount_negative", "Amortize a positive amount.");
+export function allocateRemainderToLast(
+  total: bigint,
+  weights: readonly bigint[],
+  quantum: bigint,
+): bigint[] {
+  if (total < 0n)
+    refuse(
+      "An amortization amount cannot be negative.",
+      "amortization_amount_negative",
+      "Amortize a positive amount.",
+    );
   if (quantum <= 0n) throw new AmortizationError("The currency quantum must be positive.");
-  if (weights.some((weight) => weight < 0n)) throw new AmortizationError("Amortization weights cannot be negative.");
+  if (weights.some((weight) => weight < 0n))
+    throw new AmortizationError("Amortization weights cannot be negative.");
   const totalWeight = weights.reduce((acc, weight) => acc + weight, 0n);
   if (totalWeight === 0n) {
     refuse(
@@ -306,7 +367,9 @@ export function allocateRemainderToLast(total: bigint, weights: readonly bigint[
     );
   }
   let last = -1;
-  weights.forEach((weight, index) => { if (weight > 0n) last = index; });
+  weights.forEach((weight, index) => {
+    if (weight > 0n) last = index;
+  });
   const parts = weights.map((weight, index) =>
     index === last ? 0n : ((total * weight) / totalWeight / quantum) * quantum,
   );
@@ -338,7 +401,11 @@ export function buildAmortizationPlan(
   quantum: bigint,
 ): PlannedPeriod[] {
   if (total <= 0n) {
-    refuse("Amortize a positive amount.", "amortization_amount_not_positive", "Only a positive deferral can be amortized; post credits as a schedule reduction.");
+    refuse(
+      "Amortize a positive amount.",
+      "amortization_amount_not_positive",
+      "Only a positive deferral can be amortized; post credits as a schedule reduction.",
+    );
   }
   const amounts = allocateRemainderToLast(total, termWeights(policy, term), quantum);
   return amounts.map((amount, index) => {
@@ -363,7 +430,12 @@ export function reforecastAmortizationPlan(input: {
   quantum: bigint;
 }): PlannedPeriod[] {
   const fromPeriod = startOfMonth(input.fromPeriod);
-  if (input.remaining < 0n) refuse("The remaining balance is negative.", "amortization_remaining_negative", "Review the schedule's posted amortization.");
+  if (input.remaining < 0n)
+    refuse(
+      "The remaining balance is negative.",
+      "amortization_remaining_negative",
+      "Review the schedule's posted amortization.",
+    );
   if (input.remaining === 0n) return [];
   let periods: { periodStart: string; weight: bigint }[];
   if (input.newLastPeriod) {
@@ -384,17 +456,30 @@ export function reforecastAmortizationPlan(input: {
       );
     }
     if (count > MAX_AMORTIZATION_PERIODS) {
-      refuse(`The new term spans ${count} periods; at most ${MAX_AMORTIZATION_PERIODS} are supported.`, "amortization_term_too_long", "Choose an earlier last period.");
+      refuse(
+        `The new term spans ${count} periods; at most ${MAX_AMORTIZATION_PERIODS} are supported.`,
+        "amortization_term_too_long",
+        "Choose an earlier last period.",
+      );
     }
-    periods = Array.from({ length: count }, (_, i) => ({ periodStart: addMonthsStart(fromPeriod, i), weight: 1n }));
+    periods = Array.from({ length: count }, (_, i) => ({
+      periodStart: addMonthsStart(fromPeriod, i),
+      weight: 1n,
+    }));
   } else {
-    periods = input.currentPlan.filter((period) => civilDayIndex(period.periodStart) >= civilDayIndex(fromPeriod));
+    periods = input.currentPlan.filter(
+      (period) => civilDayIndex(period.periodStart) >= civilDayIndex(fromPeriod),
+    );
     if (periods.length === 0 || periods.every((period) => period.weight === 0n)) {
       // Past the end of the plan: the balance lands in the change period.
       periods = [{ periodStart: fromPeriod, weight: 1n }];
     }
   }
-  const amounts = allocateRemainderToLast(input.remaining, periods.map((period) => period.weight), input.quantum);
+  const amounts = allocateRemainderToLast(
+    input.remaining,
+    periods.map((period) => period.weight),
+    input.quantum,
+  );
   return periods.map((period, index) => ({
     periodStart: period.periodStart,
     periodEnd: endOfMonth(period.periodStart),

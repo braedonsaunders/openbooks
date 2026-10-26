@@ -9,7 +9,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { accountingPeriods } from "./core";
 import { subsidiaries } from "./subsidiaries";
@@ -43,7 +43,12 @@ export const ALLOCATION_RUN_STATUSES = [
   "failed",
   "superseded",
 ] as const;
-export const ALLOCATION_RUN_TRIGGERS = ["manual", "scheduled", "close_automation", "rerun"] as const;
+export const ALLOCATION_RUN_TRIGGERS = [
+  "manual",
+  "scheduled",
+  "close_automation",
+  "rerun",
+] as const;
 
 /** One computed/posted period-mode run. */
 export const allocationRuns = pgTable(
@@ -59,7 +64,9 @@ export const allocationRuns = pgTable(
     /** null = every subsidiary in scope. */
     subsidiaryId: uuid("subsidiary_id"),
     status: text("status", { enum: ALLOCATION_RUN_STATUSES }).notNull(),
-    triggerKind: text("trigger_kind", { enum: ALLOCATION_RUN_TRIGGERS }).notNull().default("manual"),
+    triggerKind: text("trigger_kind", { enum: ALLOCATION_RUN_TRIGGERS })
+      .notNull()
+      .default("manual"),
     sourceTotal: money("source_total").notNull().default("0"),
     allocatedTotal: money("allocated_total").notNull().default("0"),
     residual: money("residual").notNull().default("0"),
@@ -83,9 +90,14 @@ export const allocationRuns = pgTable(
     index("allocation_runs_rule_period").on(t.orgId, t.ruleId, t.periodId, t.bookId),
     index("allocation_runs_status").on(t.orgId, t.status, t.createdAt),
     uniqueIndex("allocation_runs_one_posted")
-      .on(t.orgId, t.ruleId, t.periodId, t.bookId, sql`coalesce(${t.subsidiaryId}, '00000000-0000-0000-0000-000000000000'::uuid)`)
+      .on(
+        t.orgId,
+        t.ruleId,
+        t.periodId,
+        t.bookId,
+        sql`coalesce(${t.subsidiaryId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      )
       .where(sql`${t.status} = 'posted'`),
-
 
     foreignKey({
       name: "allocation_runs_period_id_fkey",
@@ -146,7 +158,6 @@ export const allocationLineage = pgTable(
     index("allocation_lineage_time_entry")
       .on(t.orgId, t.sourceTimeEntryId)
       .where(sql`${t.sourceTimeEntryId} is not null`),
-
 
     foreignKey({
       name: "allocation_lineage_run_id_fkey",

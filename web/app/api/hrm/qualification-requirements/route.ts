@@ -17,17 +17,13 @@ export const GET = defineRoute({
     const subjectKind =
       subjectKindRaw === null
         ? undefined
-        : ["project", "equipment", "position", "classification"].includes(
-              subjectKindRaw,
-            )
-          ? (subjectKindRaw as
-              "project" | "equipment" | "position" | "classification")
+        : ["project", "equipment", "position", "classification"].includes(subjectKindRaw)
+          ? (subjectKindRaw as "project" | "equipment" | "position" | "classification")
           : null;
     if (subjectKind === null) {
       return NextResponse.json(
         {
-          error:
-            "subjectKind must be one of project, equipment, position, classification",
+          error: "subjectKind must be one of project, equipment, position, classification",
         },
         { status: 400 },
       );

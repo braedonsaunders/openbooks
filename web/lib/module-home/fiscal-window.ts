@@ -6,10 +6,10 @@
  * closed year, or one ending today, keeps its own end date and needs no cut-off.
  */
 export interface HomeFiscalWindow {
-  from: string
-  to: string
+  from: string;
+  to: string;
   /** The business day the window is cut at, or null when the year has closed. */
-  throughDate: string | null
+  throughDate: string | null;
 }
 
 export function homeFiscalWindow(
@@ -19,10 +19,10 @@ export function homeFiscalWindow(
   if (today < period.from) {
     throw new Error(
       `business date '${today}' precedes the fiscal window starting '${period.from}'`,
-    )
+    );
   }
   if (period.to >= today) {
-    return { from: period.from, to: today, throughDate: today }
+    return { from: period.from, to: today, throughDate: today };
   }
-  return { from: period.from, to: period.to, throughDate: null }
+  return { from: period.from, to: period.to, throughDate: null };
 }

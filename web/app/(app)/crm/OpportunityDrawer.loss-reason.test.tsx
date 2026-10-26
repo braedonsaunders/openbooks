@@ -7,14 +7,21 @@ import test from "node:test";
 // the only thing pointing the operator at the field they must fill.
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/crm/opportunities?view=list", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/crm/opportunities?view=list",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -81,7 +88,10 @@ test("a reworded loss refusal still highlights the reason field by code", async 
   const refusal = { error: "ein Abschlussgrund ist anzugeben", code: "win_loss_reason_required" };
   const realFetch = globalThis.fetch;
   (globalThis as Record<string, unknown>).fetch = async () =>
-    new Response(JSON.stringify(refusal), { status: 422, headers: { "content-type": "application/json" } });
+    new Response(JSON.stringify(refusal), {
+      status: 422,
+      headers: { "content-type": "application/json" },
+    });
   t.after(() => {
     (globalThis as Record<string, unknown>).fetch = realFetch;
   });

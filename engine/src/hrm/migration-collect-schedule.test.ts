@@ -46,7 +46,9 @@ test("a profile whose schedule the org-scoped read cannot find is refused with i
     () => assertScheduleObservable(dangling),
     (error: unknown) =>
       error instanceof EmploymentCollectionError &&
-      new RegExp(`names pay schedule ${SCHEDULE_ID} which no read can observe`).test(error.message) &&
+      new RegExp(`names pay schedule ${SCHEDULE_ID} which no read can observe`).test(
+        error.message,
+      ) &&
       /reconcile employee_payroll_profiles/.test(error.message),
   );
 });

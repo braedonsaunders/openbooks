@@ -1,10 +1,10 @@
 // source-pin-contract: setup-label coverage invariant — every registry entity mounted on a Setup surface has a title and description in every locale; mounted keys derived by walking web/app and web/components, never hand-listed.
-import assert from 'node:assert/strict'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import test from 'node:test'
-import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
-import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
+import assert from "node:assert/strict";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import test from "node:test";
+import { SETUP_ENTITY_BY_KEY } from "../../../../lib/setup/registry";
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config";
 
 /**
  * F5 + follow-up: /admin/setup rendered raw keys for entities the registry
@@ -23,157 +23,190 @@ import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
  * forces a conscious decision instead of silently skipping coverage.
  */
 
-const ROOT = process.cwd()
+const ROOT = process.cwd();
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry)
+    const path = join(dir, entry);
     if (statSync(path).isDirectory()) {
-      sourceFiles(path, out)
-    } else if ((path.endsWith('.ts') || path.endsWith('.tsx')) && !path.endsWith('.test.ts')) {
-      out.push(path)
+      sourceFiles(path, out);
+    } else if ((path.endsWith(".ts") || path.endsWith(".tsx")) && !path.endsWith(".test.ts")) {
+      out.push(path);
     }
   }
-  return out
+  return out;
 }
 
 /** Every registry key mounted on a Setup surface, derived from the sources. */
 function mountedKeys(): Set<string> {
-  const mounted = new Set<string>()
+  const mounted = new Set<string>();
   for (const entity of SETUP_ENTITY_BY_KEY.values()) {
-    if ((!entity.rehomed && !entity.nestedUnder) || entity.parentRecords?.length) mounted.add(entity.key)
+    if ((!entity.rehomed && !entity.nestedUnder) || entity.parentRecords?.length)
+      mounted.add(entity.key);
   }
-  const trees = [join(ROOT, 'web', 'app'), join(ROOT, 'web', 'components')].flatMap((dir) => sourceFiles(dir))
+  const trees = [join(ROOT, "web", "app"), join(ROOT, "web", "components")].flatMap((dir) =>
+    sourceFiles(dir),
+  );
   for (const file of trees) {
-    const source = readFileSync(file, 'utf8')
-    for (const match of source.matchAll(/entityKey:\s*'([^']+)'/g)) mounted.add(match[1]!)
-    for (const match of source.matchAll(/SETUP_ENTITY_BY_KEY\.get\('([^']+)'\)/g)) mounted.add(match[1]!)
+    const source = readFileSync(file, "utf8");
+    for (const match of source.matchAll(/entityKey:\s*'([^']+)'/g)) mounted.add(match[1]!);
+    for (const match of source.matchAll(/SETUP_ENTITY_BY_KEY\.get\('([^']+)'\)/g))
+      mounted.add(match[1]!);
     for (const match of source.matchAll(/\b([A-Z][A-Z0-9]*_ENTITY)\.key\b/g)) {
-      const name = match[1]!
-      const from = source.match(new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*'([^']+)'`))
-      assert.ok(from, `${file}: cannot trace ${name} to its defining module`)
-      const defining = resolve(dirname(file), from[1]!)
-      const candidates = [defining, `${defining}.ts`, `${defining}.tsx`]
-      const found = candidates.find((candidate) => existsSync(candidate))
-      assert.ok(found, `${file}: defining module for ${name} not found`)
-      const key = readFileSync(found, 'utf8').match(new RegExp(`${name.replace(/[A-Z_]+/, '[A-Z_]+')}\\s*=\\s*\\{[^}]*key:\\s*'([^']+)'`, 's'))
-        ?? readFileSync(found, 'utf8').match(/key:\s*'([^']+)'/)
-      assert.ok(key, `${file}: no key literal for ${name} in ${found}`)
-      mounted.add(key[1]!)
+      const name = match[1]!;
+      const from = source.match(
+        new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*'([^']+)'`),
+      );
+      assert.ok(from, `${file}: cannot trace ${name} to its defining module`);
+      const defining = resolve(dirname(file), from[1]!);
+      const candidates = [defining, `${defining}.ts`, `${defining}.tsx`];
+      const found = candidates.find((candidate) => existsSync(candidate));
+      assert.ok(found, `${file}: defining module for ${name} not found`);
+      const key =
+        readFileSync(found, "utf8").match(
+          new RegExp(
+            `${name.replace(/[A-Z_]+/, "[A-Z_]+")}\\s*=\\s*\\{[^}]*key:\\s*'([^']+)'`,
+            "s",
+          ),
+        ) ?? readFileSync(found, "utf8").match(/key:\s*'([^']+)'/);
+      assert.ok(key, `${file}: no key literal for ${name} in ${found}`);
+      mounted.add(key[1]!);
     }
   }
   // The [entity] page itself renders SetupEntitySection for any key the URL
   // names, so nav reachability is already covered above; nothing to add.
-  return mounted
+  return mounted;
 }
 
 function entitiesOf(locale: string): Record<string, { title?: unknown; description?: unknown }> {
-  const catalog = JSON.parse(readFileSync(join(ROOT, 'web', 'messages', locale, 'admin.json'), 'utf8'))
-  return catalog.setup.entities as Record<string, { title?: unknown; description?: unknown }>
+  const catalog = JSON.parse(
+    readFileSync(join(ROOT, "web", "messages", locale, "admin.json"), "utf8"),
+  );
+  return catalog.setup.entities as Record<string, { title?: unknown; description?: unknown }>;
 }
 
 function optionsOf(locale: string): Record<string, Record<string, unknown>> {
-  const catalog = JSON.parse(readFileSync(join(ROOT, 'web', 'messages', locale, 'admin.json'), 'utf8'))
-  return catalog.setup.options as Record<string, Record<string, unknown>>
+  const catalog = JSON.parse(
+    readFileSync(join(ROOT, "web", "messages", locale, "admin.json"), "utf8"),
+  );
+  return catalog.setup.options as Record<string, Record<string, unknown>>;
 }
 
-test('every Setup-mounted registry entity has a title in every locale', () => {
-  const violations: string[] = []
+test("every Setup-mounted registry entity has a title in every locale", () => {
+  const violations: string[] = [];
   for (const locale of LOCALES) {
-    const entities = entitiesOf(locale)
+    const entities = entitiesOf(locale);
     for (const key of [...mountedKeys()].sort()) {
-      const title = entities[key]?.title
-      if (typeof title !== 'string' || title.length === 0) {
-        violations.push(`${locale}: entities.${key}.title is missing (renders as a raw key)`)
+      const title = entities[key]?.title;
+      if (typeof title !== "string" || title.length === 0) {
+        violations.push(`${locale}: entities.${key}.title is missing (renders as a raw key)`);
       }
     }
   }
-  assert.deepEqual(violations, [], `Setup surfaces without a title:\n${violations.join('\n')}`)
-})
+  assert.deepEqual(violations, [], `Setup surfaces without a title:\n${violations.join("\n")}`);
+});
 
-test('every Setup-mounted registry entity has a description in every locale', () => {
-  const violations: string[] = []
+test("every Setup-mounted registry entity has a description in every locale", () => {
+  const violations: string[] = [];
   for (const locale of LOCALES) {
-    const entities = entitiesOf(locale)
+    const entities = entitiesOf(locale);
     for (const key of [...mountedKeys()].sort()) {
-      const description = entities[key]?.description
-      if (typeof description !== 'string' || description.length === 0) {
-        violations.push(`${locale}: entities.${key}.description is missing`)
+      const description = entities[key]?.description;
+      if (typeof description !== "string" || description.length === 0) {
+        violations.push(`${locale}: entities.${key}.description is missing`);
       }
     }
   }
-  assert.deepEqual(violations, [], `Setup surfaces without a description:\n${violations.join('\n')}`)
-})
+  assert.deepEqual(
+    violations,
+    [],
+    `Setup surfaces without a description:\n${violations.join("\n")}`,
+  );
+});
 
-test('every Setup mount names a real registry entity', () => {
+test("every Setup mount names a real registry entity", () => {
   // SetupSectionSlot returns null for an unknown key: a renamed entity
   // would silently empty its surface instead of failing loudly.
-  const mounted = mountedKeys()
+  const mounted = mountedKeys();
   for (const key of [...mounted].sort()) {
-    assert.ok(SETUP_ENTITY_BY_KEY.has(key), `Setup surface mounts unknown entity '${key}'`)
+    assert.ok(SETUP_ENTITY_BY_KEY.has(key), `Setup surface mounts unknown entity '${key}'`);
   }
-})
+});
 
-test('overhead rates carry their exact entity and unit labels', () => {
+test("overhead rates carry their exact entity and unit labels", () => {
   // The single card serves Projects and Manufacturing alike, so its title
   // and its kind/method units are pinned exactly: a reworded unit
   // (notably an abbreviated hour) would misprice a manufacturing basis.
-  const entities = entitiesOf('en')
-  assert.equal(entities['overhead-rates']?.title, 'Overhead rates')
-  const options = optionsOf('en')
-  assert.deepEqual(options['overheadRateKind'], {
-    per_hour: '$/labor hour',
-    per_machine_hour: '$/machine hour',
-    per_unit: '$/unit',
-    percent: '%',
-  })
-  assert.deepEqual(options['overheadMethod'], {
-    three_year_average: 'Three-year average (historical)',
-    live: 'Live (recomputed from actuals)',
-    standard: 'Standard (effective-dated rate card)',
-  })
-})
+  const entities = entitiesOf("en");
+  assert.equal(entities["overhead-rates"]?.title, "Overhead rates");
+  const options = optionsOf("en");
+  assert.deepEqual(options["overheadRateKind"], {
+    per_hour: "$/labor hour",
+    per_machine_hour: "$/machine hour",
+    per_unit: "$/unit",
+    percent: "%",
+  });
+  assert.deepEqual(options["overheadMethod"], {
+    three_year_average: "Three-year average (historical)",
+    live: "Live (recomputed from actuals)",
+    standard: "Standard (effective-dated rate card)",
+  });
+});
 
-test('every locale names every overhead kind and method', () => {
+test("every locale names every overhead kind and method", () => {
   // The drawer resolves each option through its labelKey: a locale missing a
   // key renders the raw key, the missing-label failure this suite guards.
   for (const locale of LOCALES) {
-    const options = optionsOf(locale)
-    for (const key of ['per_hour', 'per_machine_hour', 'per_unit', 'percent']) {
-      assert.equal(typeof options['overheadRateKind']?.[key], 'string', `${locale}: options.overheadRateKind.${key} is missing`)
+    const options = optionsOf(locale);
+    for (const key of ["per_hour", "per_machine_hour", "per_unit", "percent"]) {
+      assert.equal(
+        typeof options["overheadRateKind"]?.[key],
+        "string",
+        `${locale}: options.overheadRateKind.${key} is missing`,
+      );
     }
-    for (const key of ['three_year_average', 'live', 'standard']) {
-      assert.equal(typeof options['overheadMethod']?.[key], 'string', `${locale}: options.overheadMethod.${key} is missing`)
+    for (const key of ["three_year_average", "live", "standard"]) {
+      assert.equal(
+        typeof options["overheadMethod"]?.[key],
+        "string",
+        `${locale}: options.overheadMethod.${key} is missing`,
+      );
     }
   }
-})
+});
 
-test('the overhead descriptor options match the locale catalog', () => {
+test("the overhead descriptor options match the locale catalog", () => {
   // Code/i18n drift guard: every kind/method value the entity offers must
   // resolve to a label, and every catalogued kind must be offered — an
   // offered value with no label (or a labelled value with no offer) is a
   // refusal or a raw key waiting to happen.
-  const entity = SETUP_ENTITY_BY_KEY.get('overhead-rates')
-  assert.ok(entity, 'overhead-rates must be registered')
-  const offered: Array<{ value: string; labelKey: string }> = []
+  const entity = SETUP_ENTITY_BY_KEY.get("overhead-rates");
+  assert.ok(entity, "overhead-rates must be registered");
+  const offered: Array<{ value: string; labelKey: string }> = [];
   for (const field of entity.fields) {
-    if (field.key !== 'rateKind' && field.key !== 'method') continue
+    if (field.key !== "rateKind" && field.key !== "method") continue;
     for (const option of field.options ?? []) {
-      assert.ok(option.labelKey, `${option.value} must resolve through a labelKey, never a literal`)
-      offered.push({ value: option.value, labelKey: option.labelKey })
+      assert.ok(
+        option.labelKey,
+        `${option.value} must resolve through a labelKey, never a literal`,
+      );
+      offered.push({ value: option.value, labelKey: option.labelKey });
     }
   }
-  const kinds = optionsOf('en')['overheadRateKind'] ?? {}
-  const methods = optionsOf('en')['overheadMethod'] ?? {}
-  assert.deepEqual(offered.map((option) => option.value).sort(), [...Object.keys(kinds), ...Object.keys(methods)].sort())
+  const kinds = optionsOf("en")["overheadRateKind"] ?? {};
+  const methods = optionsOf("en")["overheadMethod"] ?? {};
+  assert.deepEqual(
+    offered.map((option) => option.value).sort(),
+    [...Object.keys(kinds), ...Object.keys(methods)].sort(),
+  );
   for (const { value, labelKey } of offered) {
-    const group = labelKey.startsWith('options.overheadRateKind.') ? kinds : methods
-    const leaf = labelKey.split('.').pop() ?? ''
-    assert.equal(typeof group[leaf], 'string', `${value} resolves through ${labelKey}`)
+    const group = labelKey.startsWith("options.overheadRateKind.") ? kinds : methods;
+    const leaf = labelKey.split(".").pop() ?? "";
+    assert.equal(typeof group[leaf], "string", `${value} resolves through ${labelKey}`);
   }
-})
+});
 
-test('the keys that shipped without labels stay covered', () => {
+test("the keys that shipped without labels stay covered", () => {
   // ai-rails-settings, hrm-action-reasons and qualification-types/settings
   // (the same missing-label failure): each rendered through a Setup surface
   // with no locale copy. If any of them ever leaves
@@ -181,13 +214,13 @@ test('the keys that shipped without labels stay covered', () => {
   // so explicitly, never silently. (hrm-pipeline-templates/stages left the
   // set on purpose: the hiring-pipeline builder renders them with its own
   // admin.setup.pipelineBuilder catalog.)
-  const mounted = mountedKeys()
+  const mounted = mountedKeys();
   for (const key of [
-    'ai-rails-settings',
-    'hrm-action-reasons',
-    'qualification-types',
-    'qualification-settings',
+    "ai-rails-settings",
+    "hrm-action-reasons",
+    "qualification-types",
+    "qualification-settings",
   ]) {
-    assert.ok(mounted.has(key), `${key} must stay in the label-covered set`)
+    assert.ok(mounted.has(key), `${key} must stay in the label-covered set`);
   }
-})
+});

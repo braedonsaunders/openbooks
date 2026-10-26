@@ -2,12 +2,19 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { v1ListRecords } from "../../../../lib/api/v1-records";
-import { readV1JsonObject, requireV1IdempotencyKey, withV1Request } from "../../../../lib/api/v1-request";
+import {
+  readV1JsonObject,
+  requireV1IdempotencyKey,
+  withV1Request,
+} from "../../../../lib/api/v1-request";
 import { invalidInput } from "../../../../lib/application/errors";
 import { createApplicationFieldTicket } from "../../../../lib/application/field-tickets";
 
 const createFieldTicketBody = z.looseObject({
-  projectId: z.string().trim().min(1, "projectId is required; list projects from GET /api/v1/projects"),
+  projectId: z
+    .string()
+    .trim()
+    .min(1, "projectId is required; list projects from GET /api/v1/projects"),
   date: z.string().optional(),
   period: z.string().optional(),
 });
@@ -28,9 +35,10 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     const parsed = createFieldTicketBody.safeParse(await readV1JsonObject(request));
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
-      const message = issue?.path[0] === "projectId"
-        ? "projectId is required; list projects from GET /api/v1/projects"
-        : `${issue?.path.join(".") || "request body"}: ${issue?.message || "invalid value"}`;
+      const message =
+        issue?.path[0] === "projectId"
+          ? "projectId is required; list projects from GET /api/v1/projects"
+          : `${issue?.path.join(".") || "request body"}: ${issue?.message || "invalid value"}`;
       throw invalidInput(message, {
         issues: parsed.error.issues.map((entry) => ({
           path: entry.path.map(String).join("."),

@@ -163,7 +163,8 @@ export function buildTaxFilingSnapshot(
   };
   let snapshot: TaxFilingSnapshot;
   if (version === 1) {
-    if (Array.isArray(adjustments)) throw new Error("snapshot version 1 records adjustments as amounts per line");
+    if (Array.isArray(adjustments))
+      throw new Error("snapshot version 1 records adjustments as amounts per line");
     snapshot = { ...identity, boxes, adjustments: { ...(adjustments as Record<string, string>) } };
   } else {
     // v2 and v3 share the identity and posture fields; v3 swaps the amount
@@ -185,15 +186,19 @@ export function buildTaxFilingSnapshot(
       translation: result.translation
         ? {
             ...result.translation,
-            entities: result.translation.entities.map((entity) => ({
-              ...entity, boxes: entity.boxes.map((box) => ({ ...box })),
-            })).sort((a, b) => a.subsidiaryId.localeCompare(b.subsidiaryId)),
+            entities: result.translation.entities
+              .map((entity) => ({
+                ...entity,
+                boxes: entity.boxes.map((box) => ({ ...box })),
+              }))
+              .sort((a, b) => a.subsidiaryId.localeCompare(b.subsidiaryId)),
           }
         : null,
       boxes,
-      adjustments: version === 3
-        ? sortTaxFilingAdjustments(adjustments as readonly TaxFilingAdjustment[])
-        : { ...(adjustments as Record<string, string>) },
+      adjustments:
+        version === 3
+          ? sortTaxFilingAdjustments(adjustments as readonly TaxFilingAdjustment[])
+          : { ...(adjustments as Record<string, string>) },
     };
   }
   // JSONB does not preserve object insertion order. Canonicalize before
@@ -209,15 +214,19 @@ function compareCodeUnits(a: string, b: string): number {
 }
 
 /** Deterministic order for recorded entries: line, then time, reason, amount and author. */
-export function sortTaxFilingAdjustments(entries: readonly TaxFilingAdjustment[]): TaxFilingAdjustment[] {
-  return entries.map((entry) => ({ ...entry })).sort(
-    (a, b) =>
-      compareCodeUnits(a.lineCode, b.lineCode) ||
-      compareCodeUnits(a.enteredAt, b.enteredAt) ||
-      compareCodeUnits(a.reason, b.reason) ||
-      compareCodeUnits(a.amount, b.amount) ||
-      compareCodeUnits(a.enteredBy, b.enteredBy),
-  );
+export function sortTaxFilingAdjustments(
+  entries: readonly TaxFilingAdjustment[],
+): TaxFilingAdjustment[] {
+  return entries
+    .map((entry) => ({ ...entry }))
+    .sort(
+      (a, b) =>
+        compareCodeUnits(a.lineCode, b.lineCode) ||
+        compareCodeUnits(a.enteredAt, b.enteredAt) ||
+        compareCodeUnits(a.reason, b.reason) ||
+        compareCodeUnits(a.amount, b.amount) ||
+        compareCodeUnits(a.enteredBy, b.enteredBy),
+    );
 }
 
 type FilingRow = {
@@ -293,9 +302,14 @@ async function assertCoveredPeriodsClosed(
   } else if (subsidiaryIds.length === 0) {
     coveredWhere = sql`where false`;
   } else {
-    const known = (await db.execute<{ id: string }>(sql`
+    const known = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from subsidiaries
-       where org_id = ${orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])`, "objects")).map((r) => r.id);
+       where org_id = ${orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])`,
+        "objects",
+      )
+    ).map((r) => r.id);
     const missing = subsidiaryIds.filter((id) => !known.includes(id));
     if (missing.length > 0) {
       throw new TaxFilingError(
@@ -308,11 +322,12 @@ async function assertCoveredPeriodsClosed(
 
   for (const module of ["gl", "tax"] as const) {
     for (const period of periods) {
-      const closure = (await db.execute<{
+      const closure = await db.execute<{
         covered: number;
         closed: number;
         org_wide_closed: number;
-      }>(sql`
+      }>(
+        sql`
         with covered_entities as (
           select s.id
             from subsidiaries s
@@ -345,7 +360,9 @@ async function assertCoveredPeriodsClosed(
            and org_wide.period_id = ${period.id}
            and org_wide.book_id = ${bookId}
            and org_wide.module = ${module}
-           and org_wide.subsidiary_id is null`, "objects"));
+           and org_wide.subsidiary_id is null`,
+        "objects",
+      );
       const row = closure[0];
       const covered = Number(row?.covered ?? 0);
       const closed = Number(row?.closed ?? 0);
@@ -403,32 +420,58 @@ function frozenReturnOpts(row: FilingRow): {
 function frozenSnapshotVersion(stored: number | null): TaxFilingSnapshotVersion {
   if (stored === null || stored === 1) return 1;
   if (stored === 2 || stored === 3) return stored;
-  throw new TaxFilingError("stale", "this filing uses an unsupported snapshot version — use an application version that supports it");
+  throw new TaxFilingError(
+    "stale",
+    "this filing uses an unsupported snapshot version — use an application version that supports it",
+  );
 }
 
 /** The recorded entries of a v3 filing; the amount map of an earlier one. */
-function frozenAdjustmentEntries(row: FilingRow, version: TaxFilingSnapshotVersion): Record<string, string> | TaxFilingAdjustment[] {
+function frozenAdjustmentEntries(
+  row: FilingRow,
+  version: TaxFilingSnapshotVersion,
+): Record<string, string> | TaxFilingAdjustment[] {
   if (version === 3) {
     if (!Array.isArray(row.adjustments)) {
-      throw new TaxFilingError("stale", "the filing's recorded adjustment evidence is missing — prepare a new version");
+      throw new TaxFilingError(
+        "stale",
+        "the filing's recorded adjustment evidence is missing — prepare a new version",
+      );
     }
-    if (row.adjustments.some((entry) =>
-      !entry || typeof entry.lineCode !== "string" || typeof entry.amount !== "string" ||
-      typeof entry.reason !== "string" || typeof entry.enteredBy !== "string" || !entry.enteredBy.trim() ||
-      typeof entry.enteredAt !== "string" || Number.isNaN(Date.parse(entry.enteredAt))
-    )) {
-      throw new TaxFilingError("stale", "the filing's recorded adjustment evidence is incomplete — prepare a new version");
+    if (
+      row.adjustments.some(
+        (entry) =>
+          !entry ||
+          typeof entry.lineCode !== "string" ||
+          typeof entry.amount !== "string" ||
+          typeof entry.reason !== "string" ||
+          typeof entry.enteredBy !== "string" ||
+          !entry.enteredBy.trim() ||
+          typeof entry.enteredAt !== "string" ||
+          Number.isNaN(Date.parse(entry.enteredAt)),
+      )
+    ) {
+      throw new TaxFilingError(
+        "stale",
+        "the filing's recorded adjustment evidence is incomplete — prepare a new version",
+      );
     }
     try {
       normalizeTaxReturnAdjustments(row.adjustments);
     } catch (error) {
       if (!(error instanceof TaxReturnError)) throw error;
-      throw new TaxFilingError("stale", `the filing's recorded adjustment evidence cannot be verified (${error.message}) — prepare a new version`);
+      throw new TaxFilingError(
+        "stale",
+        `the filing's recorded adjustment evidence cannot be verified (${error.message}) — prepare a new version`,
+      );
     }
     return row.adjustments;
   }
   if (!row.adjustments || Array.isArray(row.adjustments) || typeof row.adjustments !== "object") {
-    throw new TaxFilingError("stale", "the filing's recorded adjustment amounts cannot be verified — prepare a new version");
+    throw new TaxFilingError(
+      "stale",
+      "the filing's recorded adjustment amounts cannot be verified — prepare a new version",
+    );
   }
   return row.adjustments;
 }
@@ -459,42 +502,64 @@ export async function prepareTaxFiling(
   for (const [lineCode, total] of Object.entries(totals)) {
     const box = result.boxes.find((candidate) => candidate.lineCode === lineCode);
     if (!box || !box.editable || box.computed || box.inputKey) {
-      throw new TaxReturnError(`line ${lineCode} is not an adjustment line of this return — enter adjustments only on lines that take a manual amount`);
+      throw new TaxReturnError(
+        `line ${lineCode} is not an adjustment line of this return — enter adjustments only on lines that take a manual amount`,
+      );
     }
     if (box.value !== fromUnits(toUnits(total))) {
-      throw new TaxReturnError(`the return on line ${lineCode} no longer matches the entered adjustments — recompute the return before saving`);
+      throw new TaxReturnError(
+        `the return on line ${lineCode} no longer matches the entered adjustments — recompute the return before saving`,
+      );
     }
   }
   for (const box of result.boxes.filter((box) => box.editable && !box.computed && !box.inputKey)) {
     if (box.value !== fromUnits(toUnits(totals[box.lineCode] ?? "0"))) {
-      throw new TaxReturnError(`the return on line ${box.lineCode} has an amount without matching adjustment evidence — recompute the return before saving`);
+      throw new TaxReturnError(
+        `the return on line ${box.lineCode} has an amount without matching adjustment evidence — recompute the return before saving`,
+      );
     }
   }
   const enteredAt = new Date().toISOString();
   const adjustments = sortTaxFilingAdjustments(
     entries.map((entry) => ({ ...entry, enteredBy: actorId, enteredAt })),
   );
-  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, adjustments, TAX_FILING_SNAPSHOT_VERSION);
+  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(
+    result,
+    adjustments,
+    TAX_FILING_SNAPSHOT_VERSION,
+  );
 
   return await withOrg(orgId, async () => {
     await db.execute(sql`
       select pg_advisory_xact_lock(
         hashtext(${`tax-filing:${orgId}:${snapshot.formCode}:${snapshot.from}:${snapshot.to}`}))`);
-    const form = (await db.execute<{ country: string | null }>(sql`
+    const form = (
+      await db.execute<{ country: string | null }>(
+        sql`
       select country from tax_return_forms
-       where org_id = ${orgId} and code = ${snapshot.formCode} limit 1`, "objects"))[0];
-    if (!form) throw new TaxReturnError("the return form is no longer available — choose an available form and recompute");
-    const versions = (await db.execute<{ version: number }>(sql`
+       where org_id = ${orgId} and code = ${snapshot.formCode} limit 1`,
+        "objects",
+      )
+    )[0];
+    if (!form)
+      throw new TaxReturnError(
+        "the return form is no longer available — choose an available form and recompute",
+      );
+    const versions = await db.execute<{ version: number }>(
+      sql`
       select coalesce(max(version), 0)::int + 1 as version
         from tax_filings
        where org_id = ${orgId} and form_code = ${snapshot.formCode}
-         and period_from = ${snapshot.from} and period_to = ${snapshot.to}`, "objects"));
+         and period_from = ${snapshot.from} and period_to = ${snapshot.to}`,
+      "objects",
+    );
     const version = Number(versions[0]?.version ?? 1);
     // The filing freezes the return's identity and currency posture alongside
     // its boxes: the export reprint and the mark-filed staleness check read
     // these columns, never the org's live configuration. An org-wide return
     // stores an empty scope, not NULL — NULL means pre-snapshot.
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into tax_filings
         (org_id, form_code, form_name, country, period_from, period_to, version,
          status, submission_channel, boxes, adjustments, snapshot_hash,
@@ -510,7 +575,9 @@ export async function prepareTaxFiling(
               ${`{${snapshot.subsidiaryIds!.join(",")}}`}::uuid[],
               ${snapshot.registrationId ?? null}, ${snapshot.registrationNumber ?? null}, ${TAX_FILING_SNAPSHOT_VERSION},
               ${actorId}, ${actorId})
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     const row = inserted[0];
     if (inserted.length !== 1 || !row) {
       throw new TaxReturnError("the filing could not be recorded — prepare it again");
@@ -533,7 +600,11 @@ export async function prepareTaxFiling(
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'tax_filings', ${row.id}, 'insert',
                 ${JSON.stringify({
-                  adjustment: { lineCode: entry.lineCode, amount: entry.amount, reason: entry.reason },
+                  adjustment: {
+                    lineCode: entry.lineCode,
+                    amount: entry.amount,
+                    reason: entry.reason,
+                  },
                   before: null,
                   after: entry,
                 })}::jsonb,
@@ -559,12 +630,15 @@ export async function markTaxFilingFiled(
     throw new TaxFilingError("not-found", "an attributable filing actor is required");
   }
   return await withOrg(orgId, async () => {
-    const filing = (await db.execute<FilingRow>(sql`
+    const filing = await db.execute<FilingRow>(
+      sql`
       select id, form_code, period_from, period_to, status, adjustments, snapshot_hash,
              snapshot_version, subsidiary_ids, registration_id, translation
         from tax_filings
        where id = ${filingId} and org_id = ${orgId}
-         for update`, "objects"));
+         for update`,
+      "objects",
+    );
     const row = filing[0];
     if (!row) throw new TaxFilingError("not-found", "tax filing not found");
     if (row.status !== "prepared") {
@@ -630,14 +704,20 @@ export async function markTaxFilingFiled(
       );
     }
 
-    const updated = (await db.execute<{ id: string; filed_at: Date }>(sql`
+    const updated = await db.execute<{ id: string; filed_at: Date }>(
+      sql`
       update tax_filings
          set status = 'filed', filing_reference = ${filingReference}, filed_at = now(),
              updated_at = now(), updated_by = ${actorId}
        where id = ${row.id} and org_id = ${orgId}
-      returning id, filed_at`, "objects"));
+      returning id, filed_at`,
+      "objects",
+    );
     if (updated.length !== 1 || !updated[0]) {
-      throw new TaxFilingError("stale", "the filing could not be marked filed — reload it before retrying");
+      throw new TaxFilingError(
+        "stale",
+        "the filing could not be marked filed — reload it before retrying",
+      );
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

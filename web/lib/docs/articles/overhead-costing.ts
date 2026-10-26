@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const overheadCosting: DocArticle = {
-  slug: 'overhead-costing',
-  title: 'Setting Up Overhead Costing',
-  category: 'projects',
+  slug: "overhead-costing",
+  title: "Setting Up Overhead Costing",
+  category: "projects",
   order: 2,
   summary:
-    'A step-by-step guide to allocating company overhead to projects: classify costs, review computed rates, publish the rate card, and apply a method to your project types.',
-  updated: '2026-09-16',
-  keywords: ['overhead', 'burden', 'rate card', 'cost pools', 'departments', 'fully burdened', 'margin', 'wizard', 'publish'],
-  related: ['project-types'],
+    "A step-by-step guide to allocating company overhead to projects: classify costs, review computed rates, publish the rate card, and apply a method to your project types.",
+  updated: "2026-09-16",
+  keywords: [
+    "overhead",
+    "burden",
+    "rate card",
+    "cost pools",
+    "departments",
+    "fully burdened",
+    "margin",
+    "wizard",
+    "publish",
+  ],
+  related: ["project-types"],
   body: `# Setting Up Overhead Costing
 
 Overhead costing allocates indirect company costs to projects, including rent,
@@ -117,4 +127,4 @@ read-only evidence on the Ledger application tab — it can never be edited
 or deleted there; changing the policy or publishing new rates derives a new
 version automatically, and prior periods keep the version that priced them.
 `,
-}
+};

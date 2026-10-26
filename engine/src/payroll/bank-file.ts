@@ -1,16 +1,71 @@
-import { buildRbcStd152File, validateRbcStd152Settings, type RbcStd152Settings } from "../payments-core/rail-rbc-std152.ts";
+import {
+  buildRbcStd152File,
+  validateRbcStd152Settings,
+  type RbcStd152Settings,
+} from "../payments-core/rail-rbc-std152.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
 import { buildCpa005File, type Cpa005Payment } from "../payments-core/rail-cpa005.ts";
-import { buildNachaFile, type NachaEntry, type NachaSettings } from "../payments-core/rail-nacha.ts";
-import { buildSepaFile, validateSepaSettings, type SepaSettings } from "../payments-core/rail-sepa.ts";
-import { buildCemtexFile, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, type CemtexPayment, type CemtexSettings } from "../payments-core/rail-cemtex.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, type EftSettings } from "../payments-core/rail-settings.ts";
-import { buildBacsFile, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, type BacsPayment, type BacsSettings } from "../payments-core/rail-bacs.ts";
-import { buildZenginFile, encodeZenginFile, normalizeBankCode, normalizeBranchCode, normalizeZenginAccount, toZenginKana, validateZenginSettings, type ZenginPayment, type ZenginSettings } from "../payments-core/rail-zengin.ts";
-import { buildCnab240BbFile, inscricaoTipoFor, isValidBancoCode, isValidContaDv, normalizeAgencia, normalizeContaNumero, normalizeCpfCnpj, validateCnab240BbSettings, type Cnab240BbPayment, type Cnab240BbSettings } from "../payments-core/rail-cnab240-bb.ts";
-import { PAYMENT_RAIL_DESCRIPTORS, type PaymentRailDescriptorKey } from "../payments-core/rail-descriptors.ts";
+import {
+  buildNachaFile,
+  type NachaEntry,
+  type NachaSettings,
+} from "../payments-core/rail-nacha.ts";
+import {
+  buildSepaFile,
+  validateSepaSettings,
+  type SepaSettings,
+} from "../payments-core/rail-sepa.ts";
+import {
+  buildCemtexFile,
+  normalizeBsb,
+  normalizeCemtexAccount,
+  validateCemtexSettings,
+  type CemtexPayment,
+  type CemtexSettings,
+} from "../payments-core/rail-cemtex.ts";
+import {
+  decryptAccountNumber,
+  isValidBic,
+  isValidIban,
+  type EftSettings,
+} from "../payments-core/rail-settings.ts";
+import {
+  buildBacsFile,
+  normalizeGbAccountNumber,
+  normalizeSortCode,
+  validateBacsSettings,
+  type BacsPayment,
+  type BacsSettings,
+} from "../payments-core/rail-bacs.ts";
+import {
+  buildZenginFile,
+  encodeZenginFile,
+  normalizeBankCode,
+  normalizeBranchCode,
+  normalizeZenginAccount,
+  toZenginKana,
+  validateZenginSettings,
+  type ZenginPayment,
+  type ZenginSettings,
+} from "../payments-core/rail-zengin.ts";
+import {
+  buildCnab240BbFile,
+  inscricaoTipoFor,
+  isValidBancoCode,
+  isValidContaDv,
+  normalizeAgencia,
+  normalizeContaNumero,
+  normalizeCpfCnpj,
+  validateCnab240BbSettings,
+  type Cnab240BbPayment,
+  type Cnab240BbSettings,
+} from "../payments-core/rail-cnab240-bb.ts";
+import {
+  PAYMENT_RAIL_DESCRIPTORS,
+  type PaymentRailDescriptorKey,
+} from "../payments-core/rail-descriptors.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
@@ -417,18 +472,29 @@ function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "c
 }
 
 /** Active payroll-capable originator profiles, for the operator's picker. */
-export async function payrollBankProfiles(orgId: string): Promise<
-  { id: string; name: string; format: PayRunBankFileFormat; currency: string | null; configured: boolean }[]
+export async function payrollBankProfiles(
+  orgId: string,
+): Promise<
+  {
+    id: string;
+    name: string;
+    format: PayRunBankFileFormat;
+    currency: string | null;
+    configured: boolean;
+  }[]
 > {
   const rails = Object.values(PAYROLL_BANK_FILE_FORMATS).flatMap((spec) => spec.rails);
-  const rows = (await db.execute<ProfileRow>(sql`
+  const rows = await db.execute<ProfileRow>(
+    sql`
     select p.id, p.org_id as "orgId", p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active and f.is_active
        and f.rail = any(${`{${rails.join(",")}}`}::text[])
      order by p.name
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => {
     const format = formatForRail(row.rail)!;
     return {
@@ -475,20 +541,54 @@ const FILL_ME = (value: unknown) =>
  * the AP code misdescribes the credit on the employee's statement.
  */
 function resolveRbcStd152(row: ProfileRow): PayrollOriginatorResult {
-  const raw = row.originator_secrets_encrypted == null ? {} : unsealJson<Partial<RbcStd152Settings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+  const raw =
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<RbcStd152Settings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const result = validateRbcStd152Settings(raw);
   if (!result.ok) return { ok: false, profileName: row.name, missing: result.missing };
-  if (row.currency !== "CAD" || result.settings.serviceCurrency !== "CAD") return { ok: false, profileName: row.name, missing: ["the available RBC STD152 format requires a CAD service and profile"] };
-  if (result.settings.transactionCode !== "200") return { ok: false, profileName: row.name, missing: ["transactionCode must be 200 for payroll credits"] };
-  if (result.settings.serviceCurrency !== row.currency) return { ok: false, profileName: row.name, missing: ["serviceCurrency must match the payment bank profile currency"] };
-  return { ok: true, config: { paymentBankProfileId: row.id, profileName: row.name, format: "rbc_std152", currency: result.settings.serviceCurrency, lineEnding: "crlf", rbcStd152: result.settings } };
+  if (row.currency !== "CAD" || result.settings.serviceCurrency !== "CAD")
+    return {
+      ok: false,
+      profileName: row.name,
+      missing: ["the available RBC STD152 format requires a CAD service and profile"],
+    };
+  if (result.settings.transactionCode !== "200")
+    return {
+      ok: false,
+      profileName: row.name,
+      missing: ["transactionCode must be 200 for payroll credits"],
+    };
+  if (result.settings.serviceCurrency !== row.currency)
+    return {
+      ok: false,
+      profileName: row.name,
+      missing: ["serviceCurrency must match the payment bank profile currency"],
+    };
+  return {
+    ok: true,
+    config: {
+      paymentBankProfileId: row.id,
+      profileName: row.name,
+      format: "rbc_std152",
+      currency: result.settings.serviceCurrency,
+      lineEnding: "crlf",
+      rbcStd152: result.settings,
+    },
+  };
 }
 
 function resolveCpa005(row: ProfileRow): PayrollOriginatorResult {
   const raw =
-      row.originator_secrets_encrypted == null
-        ? {}
-        : unsealJson<Partial<EftSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<EftSettings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const required: (keyof EftSettings)[] = [
     "originatorId",
     "originatorShortName",
@@ -572,9 +672,12 @@ export const NACHA_PAYROLL_ENTRY_DESCRIPTION = "PAYROLL";
 
 function resolveNacha(row: ProfileRow): PayrollOriginatorResult {
   const raw =
-      row.originator_secrets_encrypted == null
-        ? {}
-        : unsealJson<Partial<NachaSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<NachaSettings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const required: (keyof NachaSettings)[] = [
     "odfiRouting",
     "immediateDestination",
@@ -630,16 +733,20 @@ function resolveNacha(row: ProfileRow): PayrollOriginatorResult {
  */
 function resolveSepa(row: ProfileRow): PayrollOriginatorResult {
   const raw =
-      row.originator_secrets_encrypted == null
-        ? {}
-        : unsealJson<Partial<SepaSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<SepaSettings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const checked = validateSepaSettings(raw);
   if (!checked.ok) {
     return {
       ok: false,
       profileName: row.name,
       missing: checked.missing.map(
-        (key) => `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
+        (key) =>
+          `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
       ),
     };
   }
@@ -670,16 +777,20 @@ function resolveSepa(row: ProfileRow): PayrollOriginatorResult {
  */
 function resolveCemtex(row: ProfileRow): PayrollOriginatorResult {
   const raw =
-      row.originator_secrets_encrypted == null
-        ? {}
-        : unsealJson<Partial<CemtexSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<CemtexSettings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const checked = validateCemtexSettings(raw);
   if (!checked.ok) {
     return {
       ok: false,
       profileName: row.name,
       missing: checked.missing.map(
-        (key) => `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
+        (key) =>
+          `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
       ),
     };
   }
@@ -713,16 +824,20 @@ function resolveCemtex(row: ProfileRow): PayrollOriginatorResult {
  */
 function resolveBacs(row: ProfileRow): PayrollOriginatorResult {
   const raw =
-      row.originator_secrets_encrypted == null
-        ? {}
-        : unsealJson<Partial<BacsSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<BacsSettings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const checked = validateBacsSettings(raw);
   if (!checked.ok) {
     return {
       ok: false,
       profileName: row.name,
       missing: checked.missing.map(
-        (key) => `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
+        (key) =>
+          `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
       ),
     };
   }
@@ -752,16 +867,20 @@ function resolveBacs(row: ProfileRow): PayrollOriginatorResult {
  */
 function resolveZengin(row: ProfileRow): PayrollOriginatorResult {
   const raw =
-      row.originator_secrets_encrypted == null
-        ? {}
-        : unsealJson<Partial<ZenginSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<ZenginSettings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const checked = validateZenginSettings(raw);
   if (!checked.ok) {
     return {
       ok: false,
       profileName: row.name,
       missing: checked.missing.map(
-        (key) => `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
+        (key) =>
+          `${key} (Setup → Payment operations, on this profile; assigned by your financial institution, never defaulted)`,
       ),
     };
   }
@@ -795,16 +914,20 @@ function resolveZengin(row: ProfileRow): PayrollOriginatorResult {
  */
 function resolveCnab240Bb(row: ProfileRow): PayrollOriginatorResult {
   const raw =
-      row.originator_secrets_encrypted == null
-        ? {}
-        : unsealJson<Partial<Cnab240BbSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+    row.originator_secrets_encrypted == null
+      ? {}
+      : unsealJson<Partial<Cnab240BbSettings>>(row.originator_secrets_encrypted, {
+          orgId: row.orgId,
+          purpose: "payment.originator.secrets",
+        });
   const checked = validateCnab240BbSettings(raw);
   if (!checked.ok) {
     return {
       ok: false,
       profileName: row.name,
       missing: checked.missing.map(
-        (key) => `${key} (Setup → Payment operations, on this profile; assigned by Banco do Brasil with your convênio, never defaulted)`,
+        (key) =>
+          `${key} (Setup → Payment operations, on this profile; assigned by Banco do Brasil with your convênio, never defaulted)`,
       ),
     };
   }
@@ -858,12 +981,15 @@ export async function payrollOriginatorConfig(
   orgId: string,
   paymentBankProfileId: string,
 ): Promise<PayrollOriginatorResult & { format?: PayRunBankFileFormat }> {
-  const rows = (await db.execute<ProfileRow>(sql`
+  const rows = await db.execute<ProfileRow>(
+    sql`
     select p.id, p.org_id as "orgId", p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${paymentBankProfileId} and p.is_active and f.is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = rows[0];
   if (!row) throw new PayrollError("payment bank profile not found or inactive");
   const format = formatForRail(row.rail);
@@ -928,7 +1054,6 @@ export interface Cnab240CreditorAddress {
   inscricaoTipo: "1" | "2";
   inscricaoNumero: string;
 }
-
 
 /**
  * The SEPA address of one payroll credit, resolved purely.
@@ -1020,7 +1145,9 @@ export function resolveBacsCreditor(
   routing: Record<string, string>,
   accountNumber: string,
 ): { ok: true; sortCode: string; accountNumber: string } | { ok: false; reason: string } {
-  const sortCode = normalizeSortCode(routing.sortCode ?? routing.sort_code ?? routing.sortcode ?? "");
+  const sortCode = normalizeSortCode(
+    routing.sortCode ?? routing.sort_code ?? routing.sortcode ?? "",
+  );
   if (!sortCode) {
     return {
       ok: false,
@@ -1058,7 +1185,16 @@ export function resolveZenginCreditor(
   employeeName: string,
   routing: Record<string, string>,
   accountNumber: string,
-): { ok: true; bankCode: string; branchCode: string; depositType: string; accountNumber: string; payeeKana: string } | { ok: false; reason: string } {
+):
+  | {
+      ok: true;
+      bankCode: string;
+      branchCode: string;
+      depositType: string;
+      accountNumber: string;
+      payeeKana: string;
+    }
+  | { ok: false; reason: string } {
   const bankCode = normalizeBankCode(routing.bankCode ?? routing.bank_code ?? routing.bank ?? "");
   if (!bankCode) {
     return {
@@ -1066,14 +1202,21 @@ export function resolveZenginCreditor(
       reason: `${employeeName}: Zengin needs a 4-digit bank code (金融機関コード) on the employee's approved bank account — add one or pay this employee by cheque`,
     };
   }
-  const branchCode = normalizeBranchCode(routing.branchCode ?? routing.branch_code ?? routing.branch ?? "");
+  const branchCode = normalizeBranchCode(
+    routing.branchCode ?? routing.branch_code ?? routing.branch ?? "",
+  );
   if (!branchCode) {
     return {
       ok: false,
       reason: `${employeeName}: Zengin needs a 3-digit branch code (支店コード) on the employee's approved bank account — add one or pay this employee by cheque`,
     };
   }
-  const depositType = (routing.depositType ?? routing.deposit_type ?? routing.accountType ?? "").trim();
+  const depositType = (
+    routing.depositType ??
+    routing.deposit_type ??
+    routing.accountType ??
+    ""
+  ).trim();
   if (depositType !== "1" && depositType !== "2") {
     return {
       ok: false,
@@ -1095,7 +1238,14 @@ export function resolveZenginCreditor(
       reason: `${employeeName}: the payee name cannot be expressed in half-width katakana — register the payee's katakana name (フリガナ) as payeeKana on the employee's approved bank account or pay this employee by cheque`,
     };
   }
-  return { ok: true, bankCode, branchCode, depositType, accountNumber: normalized, payeeKana: kana };
+  return {
+    ok: true,
+    bankCode,
+    branchCode,
+    depositType,
+    accountNumber: normalized,
+    payeeKana: kana,
+  };
 }
 
 /**
@@ -1115,7 +1265,8 @@ export function resolveCnab240Creditor(
   routing: Record<string, string>,
   accountNumber: string,
 ): { ok: true; address: Cnab240CreditorAddress } | { ok: false; reason: string } {
-  const chequeRemedy = " — correct it on the employee's approved bank account or pay this employee by cheque";
+  const chequeRemedy =
+    " — correct it on the employee's approved bank account or pay this employee by cheque";
   const banco = (routing.banco ?? routing.bankCode ?? "").trim();
   if (!isValidBancoCode(banco)) {
     return {
@@ -1199,14 +1350,15 @@ export async function loadCredits(
     );
   }
   const partyIds = population.entries.map((entry) => entry.employeePartyId);
-  const rows = (await db.execute<{
-      party_id: string;
-      employee_number: string | null;
-      routing: Record<string, string> | null;
-      account_number_encrypted: string | null;
-      bank_account_id: string | null;
-      bank_account_updated_at: string | null;
-    }>(sql`
+  const rows = await db.execute<{
+    party_id: string;
+    employee_number: string | null;
+    routing: Record<string, string> | null;
+    account_number_encrypted: string | null;
+    bank_account_id: string | null;
+    bank_account_updated_at: string | null;
+  }>(
+    sql`
     select p.id as party_id, er.employee_number,
            b.routing, b.account_number_encrypted,
            b.id as bank_account_id, b.updated_at::text as bank_account_updated_at
@@ -1221,12 +1373,17 @@ export async function loadCredits(
          limit 1) b on true
      where p.org_id = ${orgId}
        and p.id = any(${`{${partyIds.join(",")}}`}::uuid[])
-  `, "objects"));
+  `,
+    "objects",
+  );
   const byParty = new Map(rows.map((row) => [row.party_id, row]));
 
   const problems: string[] = [];
   const credits: PayRunBankFileCredit[] = [];
-  const bankEvidenceByParty = new Map<string, { bankAccountId: string; bankAccountUpdatedAt: string }>();
+  const bankEvidenceByParty = new Map<
+    string,
+    { bankAccountId: string; bankAccountUpdatedAt: string }
+  >();
   for (const entry of population.entries) {
     const row = byParty.get(entry.employeePartyId);
     const routing = row?.routing ?? {};
@@ -1375,7 +1532,9 @@ export async function loadCredits(
       }
     }
     if (toUnits(entry.amount) % 100n !== 0n) {
-      problems.push(`${entry.employeeName}: net pay ${entry.amount} is not a whole number of cents`);
+      problems.push(
+        `${entry.employeeName}: net pay ${entry.amount} is not a whole number of cents`,
+      );
       continue;
     }
     if (toUnits(entry.amount) <= 0n) {
@@ -1392,7 +1551,10 @@ export async function loadCredits(
   if (problems.length > 0) {
     throw new PayrollError(`cannot build the payroll bank file: ${problems.join("; ")}`);
   }
-  return credits.map((credit) => ({ ...credit, ...bankEvidenceByParty.get(credit.employeePartyId)! }));
+  return credits.map((credit) => ({
+    ...credit,
+    ...bankEvidenceByParty.get(credit.employeePartyId)!,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1420,7 +1582,13 @@ interface BankFileTrailerSource {
  */
 function readRbcStd152Trailer({ records }: BankFileTrailerSource): TrailerTotals {
   const trailer = records.at(-1);
-  if (!trailer || trailer.length !== 152 || trailer.slice(6, 10) !== "ZTRL" || !/^\d{20}$/.test(trailer.slice(20, 40))) throw new PayrollError("Generated RBC STD152 file has no readable Z trailer");
+  if (
+    !trailer ||
+    trailer.length !== 152 ||
+    trailer.slice(6, 10) !== "ZTRL" ||
+    !/^\d{20}$/.test(trailer.slice(20, 40))
+  )
+    throw new PayrollError("Generated RBC STD152 file has no readable Z trailer");
   return { count: Number(trailer.slice(20, 26)), totalCents: BigInt(trailer.slice(26, 40)) };
 }
 
@@ -1729,18 +1897,31 @@ export async function lockPayRunBankFileAccounts(
     updated_at: string;
     is_active: boolean;
     approval_status: string;
-  }>(sql`
+  }>(
+    sql`
     select id, party_id, updated_at::text as updated_at, is_active, approval_status
       from party_bank_accounts
      where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])
      order by id for update
-  `, "objects");
-  if (rows.length !== expected.size || rows.some((row) => {
-    const credit = expected.get(row.id);
-    return !credit || row.party_id !== credit.employeePartyId || !row.is_active ||
-      row.approval_status !== "approved" || row.updated_at !== credit.bankAccountUpdatedAt;
-  })) {
-    throw new PayrollError("an employee's approved bank details changed; review the bank file and generate it again");
+  `,
+    "objects",
+  );
+  if (
+    rows.length !== expected.size ||
+    rows.some((row) => {
+      const credit = expected.get(row.id);
+      return (
+        !credit ||
+        row.party_id !== credit.employeePartyId ||
+        !row.is_active ||
+        row.approval_status !== "approved" ||
+        row.updated_at !== credit.bankAccountUpdatedAt
+      );
+    })
+  ) {
+    throw new PayrollError(
+      "an employee's approved bank details changed; review the bank file and generate it again",
+    );
   }
 }
 
@@ -1850,15 +2031,22 @@ export function renderPayRunBankFile(
   const spec = PAYROLL_BANK_FILE_FORMATS[format];
   if (!spec) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
   if (!spec.enabled) {
-    throw new PayrollError(spec.disabledReason ?? `the ${format} payroll bank-file format is not enabled`);
+    throw new PayrollError(
+      spec.disabledReason ?? `the ${format} payroll bank-file format is not enabled`,
+    );
   }
   if (input.originator.format !== format) {
     throw new PayrollError(
       `payment bank profile "${input.originator.profileName}" originates ${input.originator.format}, not ${format}`,
     );
   }
-  if (format === "rbc_std152" && (input.originator.currency !== "CAD" || input.originator.rbcStd152?.serviceCurrency !== "CAD")) {
-    throw new PayrollError("the available RBC STD152 payroll format requires a CAD service and profile");
+  if (
+    format === "rbc_std152" &&
+    (input.originator.currency !== "CAD" || input.originator.rbcStd152?.serviceCurrency !== "CAD")
+  ) {
+    throw new PayrollError(
+      "the available RBC STD152 payroll format requires a CAD service and profile",
+    );
   }
   const { population, credits } = inputs;
 
@@ -1951,15 +2139,31 @@ export function renderPayRunBankFile(
   };
 }
 
-function buildRbcStd152Payroll(input: PayRunBankFileBuildInput, credits: PayRunBankFileCredit[]): string {
+function buildRbcStd152Payroll(
+  input: PayRunBankFileBuildInput,
+  credits: PayRunBankFileCredit[],
+): string {
   const settings = input.originator.rbcStd152;
-  if (settings && settings.transactionCode !== "200") throw new PayrollError("RBC STD152 payroll requires transaction code 200 on its bank profile");
-  if (!settings || input.fileCreationNumber == null) throw new PayrollError("RBC STD152 requires configured originator details and an allocated file creation number");
-  return buildRbcStd152File({ settings, fileCreationNumber: input.fileCreationNumber, fileCreationDate: creationDay(input), payments: credits.map(credit => ({
-    amountCents: toUnits(credit.amount) / 100n, fundsDate: input.fundsDate,
-    institution: credit.routing.institution!, transit: credit.routing.transit!, accountNumber: credit.accountNumber,
-    payeeName: credit.employeeName, crossReference: `PAY ${credit.employeeNumber}`.slice(0,19),
-  })) });
+  if (settings && settings.transactionCode !== "200")
+    throw new PayrollError("RBC STD152 payroll requires transaction code 200 on its bank profile");
+  if (!settings || input.fileCreationNumber == null)
+    throw new PayrollError(
+      "RBC STD152 requires configured originator details and an allocated file creation number",
+    );
+  return buildRbcStd152File({
+    settings,
+    fileCreationNumber: input.fileCreationNumber,
+    fileCreationDate: creationDay(input),
+    payments: credits.map((credit) => ({
+      amountCents: toUnits(credit.amount) / 100n,
+      fundsDate: input.fundsDate,
+      institution: credit.routing.institution!,
+      transit: credit.routing.transit!,
+      accountNumber: credit.accountNumber,
+      payeeName: credit.employeeName,
+      crossReference: `PAY ${credit.employeeNumber}`.slice(0, 19),
+    })),
+  });
 }
 
 function buildCpa005Payroll(
@@ -2251,17 +2455,14 @@ function buildCnab240Payroll(
  * savings account as checking, which the bank may reject or misroute. The
  * Zengin path refuses its deposit type the same way (resolveZenginCreditor).
  */
-function nachaTransactionCode(
-  employeeName: string,
-  routing: Record<string, string>,
-): "22" | "32" {
+function nachaTransactionCode(employeeName: string, routing: Record<string, string>): "22" | "32" {
   const accountType = (routing.accountType ?? "").trim();
   if (accountType === "checking") return "22";
   if (accountType === "savings") return "32";
   throw new PayrollError(
-    `${employeeName}: NACHA needs an account type of "checking" or "savings" on the `
-    + `employee's approved bank account (got ${JSON.stringify(accountType)}) — correct it `
-    + `on the employee's approved bank account or pay this employee by cheque`,
+    `${employeeName}: NACHA needs an account type of "checking" or "savings" on the ` +
+      `employee's approved bank account (got ${JSON.stringify(accountType)}) — correct it ` +
+      `on the employee's approved bank account or pay this employee by cheque`,
   );
 }
 

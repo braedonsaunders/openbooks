@@ -1,11 +1,10 @@
-import 'server-only'
-import { notFound } from 'next/navigation'
-import { reportBookSelection } from '../../../../../lib/report-books'
-import { isUuid } from '../../../../../lib/list-params'
+import "server-only";
+import { notFound } from "next/navigation";
+import { reportBookSelection } from "../../../../../lib/report-books";
+import { isUuid } from "../../../../../lib/list-params";
 
-
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../../lib/format";
 import {
   column,
   drill,
@@ -21,19 +20,19 @@ import {
   widgetCell,
   type PageSpec,
   type TableSpanRow,
-} from '@braedonsaunders/appkit-viewspec'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { partnerStatement, type AgingSide } from '../../../../../lib/reports'
-import { reportSubsidiaryView, type CurrencyBasisNotice } from '../../../../../lib/consolidation'
-import { ReportCurrencyBasisError } from '../../../../../lib/reports/currency-basis'
-import { orgInfo } from '../../../../../lib/data'
-import { resolvePeriod } from '../../../../../lib/periods'
-import { parseReportQuery, toSearchParams } from '../../../../../lib/report-filters'
-import { reportTotalRowClass } from '../../ReportTable'
-import { decimalCmp, decimalIsZero } from '../../../../../lib/statement-format'
-import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
-import type { ReportDrillTarget } from '../../../../../lib/report-drill'
+} from "@braedonsaunders/appkit-viewspec";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { partnerStatement, type AgingSide } from "../../../../../lib/reports";
+import { reportSubsidiaryView, type CurrencyBasisNotice } from "../../../../../lib/consolidation";
+import { ReportCurrencyBasisError } from "../../../../../lib/reports/currency-basis";
+import { orgInfo } from "../../../../../lib/data";
+import { resolvePeriod } from "../../../../../lib/periods";
+import { parseReportQuery, toSearchParams } from "../../../../../lib/report-filters";
+import { reportTotalRowClass } from "../../ReportTable";
+import { decimalCmp, decimalIsZero } from "../../../../../lib/statement-format";
+import { statementReportSpec, stringReportParams } from "@/lib/reports/statement-report-spec";
+import type { ReportDrillTarget } from "../../../../../lib/report-drill";
 
 /**
  * A party statement, split into a loader and a spec.
@@ -44,101 +43,106 @@ import type { ReportDrillTarget } from '../../../../../lib/report-drill'
  * it is a component placed as a widget.
  */
 
-const BUCKETS = ['current', 'b1', 'b2', 'b3', 'b4'] as const
+const BUCKETS = ["current", "b1", "b2", "b3", "b4"] as const;
 
 interface TxnTarget {
-  kind: 'transaction'
-  entryId: string
-  docKind: string | null
-  docId: string | null
+  kind: "transaction";
+  entryId: string;
+  docKind: string | null;
+  docId: string | null;
 }
 
 export interface StatementLine {
-  key: string
-  date: string
-  entryId: string
-  entryNumber: string | null
-  docKind: string | null
-  docId: string | null
-  memo: string | null
-  debit: string
-  credit: string
-  balance: string
-  balanceTone: 'default' | 'negative'
-  txn: TxnTarget
+  key: string;
+  date: string;
+  entryId: string;
+  entryNumber: string | null;
+  docKind: string | null;
+  docId: string | null;
+  memo: string | null;
+  debit: string;
+  credit: string;
+  balance: string;
+  balanceTone: "default" | "negative";
+  txn: TxnTarget;
 }
 
 export interface StatementData {
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
-  title: string
-  backHref: string
-  backLabel: string
-  company: string
-  periodPhrase: string
-  receivablesHref: string
-  payablesHref: string
-  receivablesLabel: string
-  payablesLabel: string
-  isReceivable: boolean
-  isPayable: boolean
-  agingCells: { key: string; label: string; value: string; drill: ReportDrillTarget }[]
-  agingAsOfLabel: string
-  agingTotalLabel: string
-  agingTotal: string
-  agingTotalDrill: ReportDrillTarget
-  openingLabel: string
-  opening: string
-  openingDrill: ReportDrillTarget
-  closingLabel: string
-  closing: string
-  closingTone: 'default' | 'negative'
-  closingDrill: ReportDrillTarget
-  columnDate: string
-  columnEntry: string
-  columnMemo: string
-  columnDebits: string
-  columnCredits: string
-  columnBalance: string
-  lines: StatementLine[]
-  exportParams: Record<string, string>
-  subsidiaries: SubsidiaryPicker
+  primaryFilter: {
+    paramKey: string;
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  } | null;
+  title: string;
+  backHref: string;
+  backLabel: string;
+  company: string;
+  periodPhrase: string;
+  receivablesHref: string;
+  payablesHref: string;
+  receivablesLabel: string;
+  payablesLabel: string;
+  isReceivable: boolean;
+  isPayable: boolean;
+  agingCells: { key: string; label: string; value: string; drill: ReportDrillTarget }[];
+  agingAsOfLabel: string;
+  agingTotalLabel: string;
+  agingTotal: string;
+  agingTotalDrill: ReportDrillTarget;
+  openingLabel: string;
+  opening: string;
+  openingDrill: ReportDrillTarget;
+  closingLabel: string;
+  closing: string;
+  closingTone: "default" | "negative";
+  closingDrill: ReportDrillTarget;
+  columnDate: string;
+  columnEntry: string;
+  columnMemo: string;
+  columnDebits: string;
+  columnCredits: string;
+  columnBalance: string;
+  lines: StatementLine[];
+  exportParams: Record<string, string>;
+  subsidiaries: SubsidiaryPicker;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /** False exactly when the multi-currency refusal is set. */
-  currencyBasisReady: boolean
+  currencyBasisReady: boolean;
 }
 
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
 
 export async function loadStatement(
   partyId: string,
   sp: Record<string, string | undefined>,
 ): Promise<StatementData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const tc = await getTranslations('common')
-  const authz = await requirePermission('reports.read')
+  const { money: formatMoney } = await getMoneyFormatter();
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const tc = await getTranslations("common");
+  const authz = await requirePermission("reports.read");
   // A malformed party id is not-found, never a 500 from the uuid cast in
   // the statement reader.
-  if (!isUuid(partyId)) notFound()
-  const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
-  const tb = await getTranslations('budgets')
-  const { books, selectedBook } = await reportBookSelection(authz.user.orgId, sp.book)
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  if (!isUuid(partyId)) notFound();
+  const side: AgingSide = sp.side === "ap" ? "ap" : "ar";
+  const tb = await getTranslations("budgets");
+  const { books, selectedBook } = await reportBookSelection(authz.user.orgId, sp.book);
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
   // Legal-entity scope resolves through the subsidiary view — the same
   // contract as the statement pages: a restricted reader's view resolves to
   // the subsidiaries they may see, and the picker offers the
   // single-currency choice a multi-currency viewed set refuses with.
-  const orgPromise = orgInfo()
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let st: Awaited<ReturnType<typeof partnerStatement>> | null = null
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  const orgPromise = orgInfo();
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let st: Awaited<ReturnType<typeof partnerStatement>> | null = null;
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id);
     st = await partnerStatement(partyId, authz.user.orgId, {
       bookId: selectedBook.id,
       from: period.from,
@@ -147,65 +151,65 @@ export async function loadStatement(
       dims: {
         subsidiaryIds: subView.subsidiary?.ids,
       },
-      canSeePayroll: can(authz, 'payroll.read'),
-    })
+      canSeePayroll: can(authz, "payroll.read"),
+    });
   } catch (e) {
     // A multi-currency viewed set is a NAMED refusal, not a defect: the
     // banner carries the remedy (choose a single-currency subsidiary view)
     // and the filter-bar picker beside it offers that choice.
-    if (!(e instanceof ReportCurrencyBasisError)) throw e
+    if (!(e instanceof ReportCurrencyBasisError)) throw e;
     currencyBasisBlocked = {
-      code: 'multi-currency-basis',
-      title: t('statement.currencyBasisBlockedTitle'),
+      code: "multi-currency-basis",
+      title: t("statement.currencyBasisBlockedTitle"),
       description: e.message,
-    }
+    };
   }
-  const org = await orgPromise
+  const org = await orgPromise;
   // Figures present in the VIEW's currency (the context node's functional
   // currency), not the org base — a foreign-functional subsidiary view
   // states its own money. Mirrors the P&L and balance sheet.
-  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency })
-  const keepParams = toSearchParams(q)
-  keepParams.set('book', selectedBook.id)
-  const keep = keepParams.toString()
-  const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
-  const openingTo = new Date(`${period.from}T00:00:00Z`)
-  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
-  const openingDate = openingTo.toISOString().slice(0, 10)
+  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency });
+  const keepParams = toSearchParams(q);
+  keepParams.set("book", selectedBook.id);
+  const keep = keepParams.toString();
+  const accountTypes = [side === "ap" ? "liability_payable" : "asset_receivable"];
+  const openingTo = new Date(`${period.from}T00:00:00Z`);
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1);
+  const openingDate = openingTo.toISOString().slice(0, 10);
   // Null exactly when the multi-currency refusal is set; the paper hides
   // with it, so these read as zeros that never render.
-  const name = st?.party.name ?? t('statements.title')
-  const openingLabel = t('statements.opening')
-  const closingLabel = t('statements.closing')
+  const name = st?.party.name ?? t("statements.title");
+  const openingLabel = t("statements.opening");
+  const closingLabel = t("statements.closing");
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
-    current: t('aging.buckets.current'),
-    b1: t('aging.buckets.b1'),
-    b2: t('aging.buckets.b2'),
-    b3: t('aging.buckets.b3'),
-    b4: t('aging.buckets.b4'),
-  }
+    current: t("aging.buckets.current"),
+    b1: t("aging.buckets.b1"),
+    b2: t("aging.buckets.b2"),
+    b3: t("aging.buckets.b3"),
+    b4: t("aging.buckets.b4"),
+  };
 
   return {
     title: name,
     // Back returns to the register on the side the operator came from — a
     // bare /reports/registers always opens A/R (F1T-6).
     backHref: `/reports/registers?side=${side}`,
-    backLabel: side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
-    company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
+    backLabel: side === "ap" ? t("registers.apTitle") : t("registers.arTitle"),
+    company: org?.name ?? "",
+    periodPhrase: `${selectedBook.name} · ${t("pnl.dateRange", civilDateParams({ from: period.from, to: period.to }, locale))}`,
     receivablesHref: `/reports/statements/${partyId}?side=ar&${keep}`,
     payablesHref: `/reports/statements/${partyId}?side=ap&${keep}`,
-    receivablesLabel: t('registers.receivables'),
-    payablesLabel: t('registers.payables'),
-    isReceivable: side === 'ar',
-    isPayable: side === 'ap',
+    receivablesLabel: t("registers.receivables"),
+    payablesLabel: t("registers.payables"),
+    isReceivable: side === "ar",
+    isPayable: side === "ap",
     agingCells: BUCKETS.map((b) => ({
       key: b,
       label: bucketLabels[b],
-      value: m(st?.aging[b] ?? '0.0000'),
+      value: m(st?.aging[b] ?? "0.0000"),
       drill: {
-        kind: 'aging',
+        kind: "aging",
         label: `${name} · ${bucketLabels[b]}`,
         side,
         asOf: period.to,
@@ -213,39 +217,41 @@ export async function loadStatement(
         bucket: b,
       },
     })),
-    agingAsOfLabel: t('statements.agingAsOf', civilDateParams({ date: period.to }, locale)),
-    agingTotalLabel: t('aging.columns.total'),
-    agingTotal: m(st?.aging.total ?? '0.0000'),
-    agingTotalDrill: { kind: 'aging', label: name, side, asOf: period.to, partyId },
+    agingAsOfLabel: t("statements.agingAsOf", civilDateParams({ date: period.to }, locale)),
+    agingTotalLabel: t("aging.columns.total"),
+    agingTotal: m(st?.aging.total ?? "0.0000"),
+    agingTotalDrill: { kind: "aging", label: name, side, asOf: period.to, partyId },
     openingLabel,
-    opening: m(st?.opening ?? '0.0000'),
+    opening: m(st?.opening ?? "0.0000"),
     openingDrill: {
-      kind: 'ledger', bookId: selectedBook.id,
+      kind: "ledger",
+      bookId: selectedBook.id,
       label: openingLabel,
       accountTypes,
       partyIds: [partyId],
       to: openingDate,
-      mode: 'balance',
+      mode: "balance",
       includePeriodEndJournals: true,
     },
     closingLabel,
-    closing: m(st?.closing ?? '0.0000'),
-    closingTone: decimalCmp(st?.closing ?? '0.0000', '0') < 0 ? 'negative' : 'default',
+    closing: m(st?.closing ?? "0.0000"),
+    closingTone: decimalCmp(st?.closing ?? "0.0000", "0") < 0 ? "negative" : "default",
     closingDrill: {
-      kind: 'ledger', bookId: selectedBook.id,
+      kind: "ledger",
+      bookId: selectedBook.id,
       label: closingLabel,
       accountTypes,
       partyIds: [partyId],
       to: period.to,
-      mode: 'balance',
+      mode: "balance",
       includePeriodEndJournals: true,
     },
-    columnDate: t('generalLedger.columns.date'),
-    columnEntry: t('generalLedger.columns.entry'),
-    columnMemo: tc('labels.memo'),
-    columnDebits: t('trialBalance.columns.debits'),
-    columnCredits: t('trialBalance.columns.credits'),
-    columnBalance: tc('labels.balance'),
+    columnDate: t("generalLedger.columns.date"),
+    columnEntry: t("generalLedger.columns.entry"),
+    columnMemo: tc("labels.memo"),
+    columnDebits: t("trialBalance.columns.debits"),
+    columnCredits: t("trialBalance.columns.credits"),
+    columnBalance: tc("labels.balance"),
     lines: (st?.lines ?? []).map((l, i) => ({
       key: `${l.entryId}-${i}`,
       date: l.date,
@@ -254,94 +260,108 @@ export async function loadStatement(
       docKind: l.docKind,
       docId: l.docId,
       memo: l.memo,
-      debit: decimalIsZero(l.debit) ? '' : m(l.debit),
-      credit: decimalIsZero(l.credit) ? '' : m(l.credit),
+      debit: decimalIsZero(l.debit) ? "" : m(l.debit),
+      credit: decimalIsZero(l.credit) ? "" : m(l.credit),
       balance: m(l.balance),
-      balanceTone: decimalCmp(l.balance, '0') < 0 ? 'negative' : 'default',
-      txn: { kind: 'transaction', entryId: l.entryId, docKind: l.docKind, docId: l.docId },
+      balanceTone: decimalCmp(l.balance, "0") < 0 ? "negative" : "default",
+      txn: { kind: "transaction", entryId: l.entryId, docKind: l.docKind, docId: l.docId },
     })),
-    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
+    primaryFilter:
+      books.length > 1
+        ? {
+            paramKey: "book",
+            label: tb("list.bookFilter"),
+            value: selectedBook.id,
+            options: books.map((book) => ({ value: book.id, label: book.name })),
+          }
+        : null,
     exportParams: { ...stringReportParams(sp), party: partyId, side },
     subsidiaries: subView?.picker ?? [],
     currencyBasisBlocked,
     currencyBasisReady: currencyBasisBlocked === null,
-  }
+  };
 }
 
-const f = ref<StatementData>()
-const item = field
-const rootF = rootRef<StatementData>()
+const f = ref<StatementData>();
+const item = field;
+const rootF = rootRef<StatementData>();
 
 const openingRow: TableSpanRow = {
-  label: rootF('openingLabel'),
+  label: rootF("openingLabel"),
   labelColSpan: 5,
-  labelClassName: 'text-xs font-medium text-slate-500 dark:text-slate-400',
+  labelClassName: "text-xs font-medium text-slate-500 dark:text-slate-400",
   cells: [
     {
-      cell: drill(rootF('openingDrill'), money(rootF('opening'))),
-      align: 'right',
-      className: 'font-medium tabular-nums',
+      cell: drill(rootF("openingDrill"), money(rootF("opening"))),
+      align: "right",
+      className: "font-medium tabular-nums",
     },
   ],
-}
+};
 
 const closingRow: TableSpanRow = {
-  label: rootF('closingLabel'),
+  label: rootF("closingLabel"),
   labelColSpan: 5,
-  labelClassName: 'text-xs font-semibold',
+  labelClassName: "text-xs font-semibold",
   className: reportTotalRowClass,
   cells: [
     {
-      cell: drill(rootF('closingDrill'), money(rootF('closing'), { tone: rootF('closingTone') })),
-      align: 'right',
-      className: 'font-semibold tabular-nums',
+      cell: drill(rootF("closingDrill"), money(rootF("closing"), { tone: rootF("closingTone") })),
+      align: "right",
+      className: "font-semibold tabular-nums",
     },
   ],
-}
+};
 
 export function statementSpec(data: StatementData): PageSpec {
   return statementReportSpec({
-    route: '/reports/statements/[partyId]',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
-    filters: [{
-      controls: { period: true, subsidiary: true },
-      options: {
-        subsidiaries: f('subsidiaries'),
-        leading: {
-          ...toggleLinks([
-            { href: f('receivablesHref'), label: f('receivablesLabel'), activeWhen: f('isReceivable') },
-            { href: f('payablesHref'), label: f('payablesLabel'), activeWhen: f('isPayable') },
-          ]),
-          divider: true,
+    route: "/reports/statements/[partyId]",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
+    filters: [
+      {
+        controls: { period: true, subsidiary: true },
+        options: {
+          subsidiaries: f("subsidiaries"),
+          leading: {
+            ...toggleLinks([
+              {
+                href: f("receivablesHref"),
+                label: f("receivablesLabel"),
+                activeWhen: f("isReceivable"),
+              },
+              { href: f("payablesHref"), label: f("payablesLabel"), activeWhen: f("isPayable") },
+            ]),
+            divider: true,
+          },
+          primaryFilter: f("primaryFilter"),
         },
-        primaryFilter: f('primaryFilter'),
       },
-    }],
-    exportMenu: { kind: 'partner-statement', params: data.exportParams },
+    ],
+    exportMenu: { kind: "partner-statement", params: data.exportParams },
     bodyBeforePaper: [
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
       wide: true,
-      when: f('currencyBasisReady'),
+      when: f("currencyBasisReady"),
     },
     blocks: [
-      widgetBlock('aging-strip', {
+      widgetBlock("aging-strip", {
         cells: data.agingCells,
         asOfLabel: data.agingAsOfLabel,
         totalLabel: data.agingTotalLabel,
@@ -349,38 +369,40 @@ export function statementSpec(data: StatementData): PageSpec {
         totalDrill: data.agingTotalDrill,
       }),
       table({
-        variant: 'report',
-        rows: f('lines'),
-        rowKey: item('key'),
+        variant: "report",
+        rows: f("lines"),
+        rowKey: item("key"),
         leading: [openingRow],
         trailing: [closingRow],
         columns: [
-          column(rootF('columnDate'), text(item('date')), {
-            headerClassName: 'w-28',
-            className: 'tabular-nums',
+          column(rootF("columnDate"), text(item("date")), {
+            headerClassName: "w-28",
+            className: "tabular-nums",
           }),
           column(
-            rootF('columnEntry'),
-            widgetCell('entry-cell', {
-              entryId: item('entryId'),
-              docKind: item('docKind'),
-              docId: item('docId'),
-              entryNumber: item('entryNumber'),
+            rootF("columnEntry"),
+            widgetCell("entry-cell", {
+              entryId: item("entryId"),
+              docKind: item("docKind"),
+              docId: item("docId"),
+              entryNumber: item("entryNumber"),
             }),
-            { headerClassName: 'w-24' },
+            { headerClassName: "w-24" },
           ),
-          column(rootF('columnMemo'), text(item('memo')), {
-            className: 'text-slate-600 dark:text-slate-300',
+          column(rootF("columnMemo"), text(item("memo")), {
+            className: "text-slate-600 dark:text-slate-300",
           }),
-          column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-          column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
+          column(rootF("columnDebits"), txn(item("txn"), money(item("debit"))), { align: "right" }),
+          column(rootF("columnCredits"), txn(item("txn"), money(item("credit"))), {
+            align: "right",
+          }),
           column(
-            rootF('columnBalance'),
-            txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
-            { align: 'right' },
+            rootF("columnBalance"),
+            txn(item("txn"), money(item("balance"), { tone: item("balanceTone") })),
+            { align: "right" },
           ),
         ],
       }),
     ],
-  })
+  });
 }

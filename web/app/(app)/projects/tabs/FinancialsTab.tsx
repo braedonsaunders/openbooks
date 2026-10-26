@@ -1,60 +1,85 @@
-'use client'
+"use client";
 
-import { useMoney } from '@/components/money-provider'
-import { useState, type ReactNode } from 'react'
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { Card, CardContent, cn, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
-import type { PnlLine } from '@openbooks/schema'
-import { PagedTable } from '../../../../components/paged-table'
-import { add, cmp, neg, roundDiv, toUnits } from '@openbooks/engine/money/money'
+import { useMoney } from "@/components/money-provider";
+import { useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import {
+  Card,
+  CardContent,
+  cn,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@openbooks/ui";
+import type { PnlLine } from "@openbooks/schema";
+import { PagedTable } from "../../../../components/paged-table";
+import { add, cmp, neg, roundDiv, toUnits } from "@openbooks/engine/money/money";
 
-interface CategoryRow { category: string; amount: string }
-interface AccountRow { accountId: string; number: string | null; name: string; amount: string }
+interface CategoryRow {
+  category: string;
+  amount: string;
+}
+interface AccountRow {
+  accountId: string;
+  number: string | null;
+  name: string;
+  amount: string;
+}
 
 /** How Total job price is determined — the project type's pricing method. */
-export type PricingMethod = 'contract_field' | 'billable_value' | 'not_to_exceed' | 'cost_plus'
+export type PricingMethod = "contract_field" | "billable_value" | "not_to_exceed" | "cost_plus";
 
 /** Pricing methods whose price is built from rated work (bill rates). */
-export const RATED_WORK_METHODS: ReadonlySet<PricingMethod> = new Set(['billable_value', 'not_to_exceed'])
+export const RATED_WORK_METHODS: ReadonlySet<PricingMethod> = new Set([
+  "billable_value",
+  "not_to_exceed",
+]);
 
 export interface FinancialsData {
   /** measure key → dollar value (margin_pct is a percentage). */
-  measures: Record<string, string | number>
+  measures: Record<string, string | number>;
   /** ordered P&L lines from the project type's financial profile. */
-  layout: PnlLine[]
-  costByCategory: CategoryRow[]
-  costByAccount: AccountRow[]
-  projectType: string | null
+  layout: PnlLine[];
+  costByCategory: CategoryRow[];
+  costByAccount: AccountRow[];
+  projectType: string | null;
   /** A tenant-configured capped project type owns cost-budget semantics. */
-  costBudgetApplies: boolean
+  costBudgetApplies: boolean;
   /** Whether statistical overhead is already a component of total job cost. */
-  overheadIncludedInTotalCost: boolean
+  overheadIncludedInTotalCost: boolean;
   /** How Total job price is priced, so the figure names its basis. */
-  pricingMethod: PricingMethod
+  pricingMethod: PricingMethod;
   /** The saved Contract value — a reference figure, not the priced total (except for fixed-price types). */
-  contractValue: string
+  contractValue: string;
   /** Original (sold) versus current budget versus actual, project totals. */
-  budgetVsActual?: BudgetVsActualSummary | null
+  budgetVsActual?: BudgetVsActualSummary | null;
 }
 
-interface BudgetFigures { hours: string; cost: string; price: string }
+interface BudgetFigures {
+  hours: string;
+  cost: string;
+  price: string;
+}
 
 export interface BudgetVsActualSummary {
-  reportHref: string
-  originalSource: string | null
-  originalCapturedAt: string | null
+  reportHref: string;
+  originalSource: string | null;
+  originalCapturedAt: string | null;
   /** Null until an original budget is captured. */
-  original: BudgetFigures | null
-  current: BudgetFigures
-  actual: { hours: string; cost: string }
-  invoicedToDate: string
-  asOf: string
+  original: BudgetFigures | null;
+  current: BudgetFigures;
+  actual: { hours: string; cost: string };
+  invoicedToDate: string;
+  asOf: string;
 }
 
 /** Hours without trailing fractional zeros ("24.0000" → "24"). */
 function hoursText(value: string): string {
-  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
+  return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
 }
 
 /**
@@ -62,48 +87,104 @@ function hoursText(value: string): string {
  * glance; the per-task view is the Project budget vs actual report.
  */
 function BudgetVsActualCard({ data }: { data: BudgetVsActualSummary }) {
-  const { money } = useMoney()
-  const t = useTranslations('projects.budget')
-  const dash = '—'
-  const rows: { label: string; original: string; current: string; actual: string; actualLabel?: string }[] = [
-    { label: t('card.hours'), original: data.original ? hoursText(data.original.hours) : dash, current: hoursText(data.current.hours), actual: hoursText(data.actual.hours) },
-    { label: t('card.cost'), original: data.original ? money(data.original.cost) : dash, current: money(data.current.cost), actual: money(data.actual.cost) },
-    { label: t('card.price'), original: data.original ? money(data.original.price) : dash, current: money(data.current.price), actual: money(data.invoicedToDate), actualLabel: t('card.invoiced') },
-  ]
+  const { money } = useMoney();
+  const t = useTranslations("projects.budget");
+  const dash = "—";
+  const rows: {
+    label: string;
+    original: string;
+    current: string;
+    actual: string;
+    actualLabel?: string;
+  }[] = [
+    {
+      label: t("card.hours"),
+      original: data.original ? hoursText(data.original.hours) : dash,
+      current: hoursText(data.current.hours),
+      actual: hoursText(data.actual.hours),
+    },
+    {
+      label: t("card.cost"),
+      original: data.original ? money(data.original.cost) : dash,
+      current: money(data.current.cost),
+      actual: money(data.actual.cost),
+    },
+    {
+      label: t("card.price"),
+      original: data.original ? money(data.original.price) : dash,
+      current: money(data.current.price),
+      actual: money(data.invoicedToDate),
+      actualLabel: t("card.invoiced"),
+    },
+  ];
   return (
     <Card>
       <CardContent className="p-0">
         <div className="flex items-baseline justify-between gap-4 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('card.title')}</h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("card.title")}
+            </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {data.original
-                ? data.originalSource ? t('card.soldOn', { source: data.originalSource }) : t('card.originalFromWbs')
-                : t('card.noOriginal')}
+                ? data.originalSource
+                  ? t("card.soldOn", { source: data.originalSource })
+                  : t("card.originalFromWbs")
+                : t("card.noOriginal")}
             </p>
           </div>
-          <Link href={data.reportHref} className="shrink-0 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
-            {t('card.openReport')}
+          <Link
+            href={data.reportHref}
+            className="shrink-0 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {t("card.openReport")}
           </Link>
         </div>
-        <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">
+        <Table
+          containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none"
+          className="w-full text-sm"
+        >
           <TableHeader>
-            <TableRow noAnimate className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              <TableHead className="px-4 py-2 text-left font-semibold"><span className="sr-only">{t('card.measure')}</span></TableHead>
-              <TableHead className="px-4 py-2 text-right font-semibold">{t('card.original')}</TableHead>
-              <TableHead className="px-4 py-2 text-right font-semibold">{t('card.current')}</TableHead>
-              <TableHead className="px-4 py-2 text-right font-semibold">{t('card.actual')}</TableHead>
+            <TableRow
+              noAnimate
+              className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500"
+            >
+              <TableHead className="px-4 py-2 text-left font-semibold">
+                <span className="sr-only">{t("card.measure")}</span>
+              </TableHead>
+              <TableHead className="px-4 py-2 text-right font-semibold">
+                {t("card.original")}
+              </TableHead>
+              <TableHead className="px-4 py-2 text-right font-semibold">
+                {t("card.current")}
+              </TableHead>
+              <TableHead className="px-4 py-2 text-right font-semibold">
+                {t("card.actual")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {rows.map((row) => (
               <TableRow noAnimate key={row.label}>
-                <TableHead scope="row" className="px-4 py-2 text-left font-normal text-slate-600 dark:text-slate-300">{row.label}</TableHead>
-                <TableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.original}</TableCell>
-                <TableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.current}</TableCell>
+                <TableHead
+                  scope="row"
+                  className="px-4 py-2 text-left font-normal text-slate-600 dark:text-slate-300"
+                >
+                  {row.label}
+                </TableHead>
+                <TableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                  {row.original}
+                </TableCell>
+                <TableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                  {row.current}
+                </TableCell>
                 <TableCell className="px-4 py-2 text-right tabular-nums text-slate-900 dark:text-slate-100">
                   {row.actual}
-                  {row.actualLabel ? <span className="ml-1 text-[11px] text-slate-400 dark:text-slate-500">{row.actualLabel}</span> : null}
+                  {row.actualLabel ? (
+                    <span className="ml-1 text-[11px] text-slate-400 dark:text-slate-500">
+                      {row.actualLabel}
+                    </span>
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}
@@ -111,13 +192,21 @@ function BudgetVsActualCard({ data }: { data: BudgetVsActualSummary }) {
         </Table>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 /** Measures that read better as "good when positive, bad when negative". */
-const SIGNED_GOOD = new Set(['gross_profit', 'could_be_invoiced', 'remaining_budget'])
+const SIGNED_GOOD = new Set(["gross_profit", "could_be_invoiced", "remaining_budget"]);
 /** Measures that carry an explanatory hint. */
-const HINTED = new Set(['invoiced_to_date', 'could_be_invoiced', 'committed_cost', 'total_price', 'total_cost', 'overhead', 'gross_profit'])
+const HINTED = new Set([
+  "invoiced_to_date",
+  "could_be_invoiced",
+  "committed_cost",
+  "total_price",
+  "total_cost",
+  "overhead",
+  "gross_profit",
+]);
 
 /**
  * Cost-budget line visibility. A ceiling (remaining budget + the bar below)
@@ -131,110 +220,162 @@ export function budgetAwareFinancialLayout(
   costBudgetApplies: boolean,
   costBudget: string | number,
 ): PnlLine[] {
-  if (costBudgetApplies) return layout
-  const hasBudget = cmp(String(costBudget ?? 0), '0') > 0
+  if (costBudgetApplies) return layout;
+  const hasBudget = cmp(String(costBudget ?? 0), "0") > 0;
   return layout.filter(
-    (line) => line.measure !== 'remaining_budget' && (line.measure !== 'cost_budget' || hasBudget),
-  )
+    (line) => line.measure !== "remaining_budget" && (line.measure !== "cost_budget" || hasBudget),
+  );
 }
 
 export function shouldHideFinancialLine(hideWhenZero: boolean, value: string | number): boolean {
-  return hideWhenZero && cmp(String(value), '0') === 0
+  return hideWhenZero && cmp(String(value), "0") === 0;
 }
 
 /** Convert an exact money ratio to a bounded CSS coordinate (millionths of a percent). */
 function budgetPercent(value: string | number, scale: string | number): bigint {
-  const amount = toUnits(String(value))
-  const denominator = toUnits(String(scale))
-  if (amount <= 0n || denominator <= 0n) return 0n
-  const percentUnits = roundDiv(amount * 100_000_000n, denominator)
-  return percentUnits > 100_000_000n ? 100_000_000n : percentUnits
+  const amount = toUnits(String(value));
+  const denominator = toUnits(String(scale));
+  if (amount <= 0n || denominator <= 0n) return 0n;
+  const percentUnits = roundDiv(amount * 100_000_000n, denominator);
+  return percentUnits > 100_000_000n ? 100_000_000n : percentUnits;
 }
 
 function percentCss(units: bigint): string {
-  return `${units / 1_000_000n}.${(units % 1_000_000n).toString().padStart(6, '0')}%`
+  return `${units / 1_000_000n}.${(units % 1_000_000n).toString().padStart(6, "0")}%`;
 }
 
-function Line({ label, hint, value, variant, tone }: {
-  label: string; hint?: string; value: ReactNode; variant: 'line' | 'subtotal' | 'total'; tone?: 'good' | 'bad'
+function Line({
+  label,
+  hint,
+  value,
+  variant,
+  tone,
+}: {
+  label: string;
+  hint?: string;
+  value: ReactNode;
+  variant: "line" | "subtotal" | "total";
+  tone?: "good" | "bad";
 }) {
   return (
-    <div className={cn('flex items-baseline justify-between gap-4 px-4 py-2',
-      variant === 'subtotal' && 'bg-slate-50/60 dark:bg-slate-800/40',
-      variant === 'total' && 'bg-slate-50 dark:bg-slate-800/60')}>
+    <div
+      className={cn(
+        "flex items-baseline justify-between gap-4 px-4 py-2",
+        variant === "subtotal" && "bg-slate-50/60 dark:bg-slate-800/40",
+        variant === "total" && "bg-slate-50 dark:bg-slate-800/60",
+      )}
+    >
       <div className="min-w-0">
-        <div className={cn('text-sm', variant === 'line' ? 'text-slate-600 dark:text-slate-300' : 'font-semibold text-slate-900 dark:text-slate-100', variant === 'total' && 'text-base')}>{label}</div>
+        <div
+          className={cn(
+            "text-sm",
+            variant === "line"
+              ? "text-slate-600 dark:text-slate-300"
+              : "font-semibold text-slate-900 dark:text-slate-100",
+            variant === "total" && "text-base",
+          )}
+        >
+          {label}
+        </div>
         {hint ? <div className="text-xs text-slate-400 dark:text-slate-500">{hint}</div> : null}
       </div>
-      <div className={cn('shrink-0 tabular-nums',
-        variant === 'line' ? 'text-sm text-slate-700 dark:text-slate-200' : 'font-semibold text-slate-900 dark:text-slate-100',
-        variant === 'total' && 'text-lg',
-        tone === 'good' && '!text-teal-700 dark:!text-teal-300',
-        tone === 'bad' && '!text-red-600 dark:!text-red-400')}>{value}</div>
+      <div
+        className={cn(
+          "shrink-0 tabular-nums",
+          variant === "line"
+            ? "text-sm text-slate-700 dark:text-slate-200"
+            : "font-semibold text-slate-900 dark:text-slate-100",
+          variant === "total" && "text-lg",
+          tone === "good" && "!text-teal-700 dark:!text-teal-300",
+          tone === "bad" && "!text-red-600 dark:!text-red-400",
+        )}
+      >
+        {value}
+      </div>
     </div>
-  )
+  );
 }
 
-export function FinancialsTab({ data }: {
-  data: FinancialsData
-}) {
-  const { money } = useMoney()
-  const t = useTranslations('projects')
-  const tCommon = useTranslations('common')
-  const [inner, setInner] = useState<'category' | 'account'>('category')
+export function FinancialsTab({ data }: { data: FinancialsData }) {
+  const { money } = useMoney();
+  const t = useTranslations("projects");
+  const tCommon = useTranslations("common");
+  const [inner, setInner] = useState<"category" | "account">("category");
 
-  const m = data.measures
+  const m = data.measures;
   const measureLabel = (key: string) => {
-    try { return t(`measures.${key}` as never) } catch { return key.replace(/_/g, ' ') }
-  }
+    try {
+      return t(`measures.${key}` as never);
+    } catch {
+      return key.replace(/_/g, " ");
+    }
+  };
   const measureHint = (key: string) => {
-    if (!HINTED.has(key)) return undefined
-    try { return t(`measures.hints.${key}` as never) } catch { return undefined }
-  }
-  const measureTone = (key: string, v: string | number): 'good' | 'bad' | undefined => {
-    if (SIGNED_GOOD.has(key)) return cmp(String(v), '0') > 0 ? 'good' : cmp(String(v), '0') < 0 ? 'bad' : undefined
-    return undefined
-  }
-  const fmt = (key: string, v: string | number): string => (key === 'margin_pct' ? `${Number(v).toFixed(1)}%` : money(v))
+    if (!HINTED.has(key)) return undefined;
+    try {
+      return t(`measures.hints.${key}` as never);
+    } catch {
+      return undefined;
+    }
+  };
+  const measureTone = (key: string, v: string | number): "good" | "bad" | undefined => {
+    if (SIGNED_GOOD.has(key))
+      return cmp(String(v), "0") > 0 ? "good" : cmp(String(v), "0") < 0 ? "bad" : undefined;
+    return undefined;
+  };
+  const fmt = (key: string, v: string | number): string =>
+    key === "margin_pct" ? `${Number(v).toFixed(1)}%` : money(v);
 
   // Budget bar (derived from measures).
-  const costBudget = m.cost_budget ?? 0
-  const actualCost = m.actual_cost ?? 0
-  const committedCost = m.committed_cost ?? 0
-  const totalCost = m.total_cost ?? 0
-  const scale = cmp(String(costBudget), '1') > 0
-    ? String(costBudget)
-    : cmp(String(totalCost), '1') > 0 ? String(totalCost) : '1'
-  const actualPct = budgetPercent(actualCost, scale)
-  const committedPctRaw = budgetPercent(committedCost, scale)
-  const committedPct = committedPctRaw > 100_000_000n - actualPct ? 100_000_000n - actualPct : committedPctRaw
-  const budgetMarkerPct = budgetPercent(costBudget, scale)
-  const overBudget = cmp(String(totalCost), String(costBudget)) > 0 && cmp(String(costBudget), '0') > 0
+  const costBudget = m.cost_budget ?? 0;
+  const actualCost = m.actual_cost ?? 0;
+  const committedCost = m.committed_cost ?? 0;
+  const totalCost = m.total_cost ?? 0;
+  const scale =
+    cmp(String(costBudget), "1") > 0
+      ? String(costBudget)
+      : cmp(String(totalCost), "1") > 0
+        ? String(totalCost)
+        : "1";
+  const actualPct = budgetPercent(actualCost, scale);
+  const committedPctRaw = budgetPercent(committedCost, scale);
+  const committedPct =
+    committedPctRaw > 100_000_000n - actualPct ? 100_000_000n - actualPct : committedPctRaw;
+  const budgetMarkerPct = budgetPercent(costBudget, scale);
+  const overBudget =
+    cmp(String(totalCost), String(costBudget)) > 0 && cmp(String(costBudget), "0") > 0;
 
   const innerTabs = [
-    { key: 'category' as const, label: t('cockpit.costByCategory') },
-    { key: 'account' as const, label: t('cockpit.costByAccount') },
-  ]
-  const budgetAwareLayout = budgetAwareFinancialLayout(data.layout, data.costBudgetApplies, m.cost_budget ?? 0)
+    { key: "category" as const, label: t("cockpit.costByCategory") },
+    { key: "account" as const, label: t("cockpit.costByAccount") },
+  ];
+  const budgetAwareLayout = budgetAwareFinancialLayout(
+    data.layout,
+    data.costBudgetApplies,
+    m.cost_budget ?? 0,
+  );
   // Overhead is a component of total cost for profiles that opt into it. Some
   // older saved profiles appended the display line after gross profit, which
   // visually implied a second deduction even though the calculation already
   // included it. Keep the tenant-authored line treatment, but place it inside
   // the cost block immediately before Total job cost.
-  const overheadLine = budgetAwareLayout.find((line) => line.measure === 'overhead')
+  const overheadLine = budgetAwareLayout.find((line) => line.measure === "overhead");
   const layoutWithoutIncludedOverhead = overheadLine
-    ? budgetAwareLayout.filter((line) => line.measure !== 'overhead')
-    : budgetAwareLayout
-  const totalCostIndex = layoutWithoutIncludedOverhead.findIndex((line) => line.measure === 'total_cost')
-  const visibleLayout = overheadLine && data.overheadIncludedInTotalCost && totalCostIndex >= 0
-    ? [
-        ...layoutWithoutIncludedOverhead.slice(0, totalCostIndex),
-        overheadLine,
-        ...layoutWithoutIncludedOverhead.slice(totalCostIndex),
-      ]
-    : overheadLine && !data.overheadIncludedInTotalCost
-      ? layoutWithoutIncludedOverhead
-      : budgetAwareLayout
+    ? budgetAwareLayout.filter((line) => line.measure !== "overhead")
+    : budgetAwareLayout;
+  const totalCostIndex = layoutWithoutIncludedOverhead.findIndex(
+    (line) => line.measure === "total_cost",
+  );
+  const visibleLayout =
+    overheadLine && data.overheadIncludedInTotalCost && totalCostIndex >= 0
+      ? [
+          ...layoutWithoutIncludedOverhead.slice(0, totalCostIndex),
+          overheadLine,
+          ...layoutWithoutIncludedOverhead.slice(totalCostIndex),
+        ]
+      : overheadLine && !data.overheadIncludedInTotalCost
+        ? layoutWithoutIncludedOverhead
+        : budgetAwareLayout;
 
   return (
     <div className="space-y-6">
@@ -243,42 +384,56 @@ export function FinancialsTab({ data }: {
       <Card>
         <CardContent className="p-0">
           <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.pnlTitle')}</h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("cockpit.pnlTitle")}
+            </h2>
           </div>
           {/* Pricing basis: a $0 Total job price is method-consistent for
               Time & Materials with no rated work yet — but only when the
               figure names its method and basis next to itself. */}
           <div className="border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
             <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
-              {t(`cockpit.pricingMethod.${data.pricingMethod}` as never)} · {t(`cockpit.pricingBasis.${data.pricingMethod}` as never)}
+              {t(`cockpit.pricingMethod.${data.pricingMethod}` as never)} ·{" "}
+              {t(`cockpit.pricingBasis.${data.pricingMethod}` as never)}
             </p>
             {RATED_WORK_METHODS.has(data.pricingMethod) ? (
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('cockpit.unratedWorkNote')}</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                {t("cockpit.unratedWorkNote")}
+              </p>
             ) : null}
           </div>
           {/* Reference Contract value, kept visibly distinct from the priced
               total. For fixed-price types the two are the same figure, so no
               second line. */}
-          {data.pricingMethod !== 'contract_field' ? (
+          {data.pricingMethod !== "contract_field" ? (
             <div className="flex items-baseline justify-between gap-4 border-b border-slate-200 px-4 py-2 dark:border-slate-800">
               <div className="min-w-0">
-                <div className="text-sm text-slate-600 dark:text-slate-300">{t('cockpit.contractValueReference')}</div>
-                <div className="text-xs text-slate-400 dark:text-slate-500">{t('cockpit.contractValueReferenceHint')}</div>
+                <div className="text-sm text-slate-600 dark:text-slate-300">
+                  {t("cockpit.contractValueReference")}
+                </div>
+                <div className="text-xs text-slate-400 dark:text-slate-500">
+                  {t("cockpit.contractValueReferenceHint")}
+                </div>
               </div>
-              <div className="shrink-0 text-sm tabular-nums text-slate-700 dark:text-slate-200">{money(data.contractValue)}</div>
+              <div className="shrink-0 text-sm tabular-nums text-slate-700 dark:text-slate-200">
+                {money(data.contractValue)}
+              </div>
             </div>
           ) : null}
           <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {visibleLayout.map((line, i) => {
-              const v = m[line.measure] ?? 0
-              if (shouldHideFinancialLine(line.hideWhenZero === true, v)) return null
+              const v = m[line.measure] ?? 0;
+              if (shouldHideFinancialLine(line.hideWhenZero === true, v)) return null;
               // Total job price carries its pricing basis (not the generic
               // contract-price hint): the figure and its method read as one.
-              const lineHint = line.measure === 'total_price'
-                ? t(`cockpit.pricingBasis.${data.pricingMethod}` as never)
-                : line.measure === 'gross_profit'
-                  ? measureHint(line.measure)
-                  : line.variant === 'line' ? measureHint(line.measure) : undefined
+              const lineHint =
+                line.measure === "total_price"
+                  ? t(`cockpit.pricingBasis.${data.pricingMethod}` as never)
+                  : line.measure === "gross_profit"
+                    ? measureHint(line.measure)
+                    : line.variant === "line"
+                      ? measureHint(line.measure)
+                      : undefined;
               return (
                 <Line
                   key={`${line.measure}-${i}`}
@@ -286,11 +441,17 @@ export function FinancialsTab({ data }: {
                   hint={lineHint}
                   value={fmt(line.measure, v)}
                   variant={line.variant}
-                  tone={line.variant === 'total' && line.measure === 'gross_profit'
-                    ? (cmp(String(v), '0') > 0 ? 'good' : cmp(String(v), '0') < 0 ? 'bad' : undefined)
-                    : measureTone(line.measure, v)}
+                  tone={
+                    line.variant === "total" && line.measure === "gross_profit"
+                      ? cmp(String(v), "0") > 0
+                        ? "good"
+                        : cmp(String(v), "0") < 0
+                          ? "bad"
+                          : undefined
+                      : measureTone(line.measure, v)
+                  }
                 />
-              )
+              );
             })}
           </div>
         </CardContent>
@@ -300,33 +461,43 @@ export function FinancialsTab({ data }: {
           Gross profit) when standard-cost posting is off. It reads as its own
           labelled component — the same informational treatment as overhead —
           so an owner never mistakes posted GL cost for the whole job cost. */}
-      {cmp(String(m.approved_unposted_labor ?? 0), '0') !== 0 ? (
+      {cmp(String(m.approved_unposted_labor ?? 0), "0") !== 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-y border-slate-200 py-2.5 dark:border-slate-800">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t('cockpit.approvedUnpostedLabor')}
+              {t("cockpit.approvedUnpostedLabor")}
             </span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              {t('cockpit.informationalOnly')}
+              {t("cockpit.informationalOnly")}
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('cockpit.approvedUnpostedLaborHint')}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {t("cockpit.approvedUnpostedLaborHint")}
+            </span>
           </div>
-          <div className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money(m.approved_unposted_labor ?? 0)}</div>
+          <div className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+            {money(m.approved_unposted_labor ?? 0)}
+          </div>
         </div>
       ) : null}
 
-      {overheadLine && !data.overheadIncludedInTotalCost && cmp(String(m.overhead ?? 0), '0') !== 0 ? (
+      {overheadLine &&
+      !data.overheadIncludedInTotalCost &&
+      cmp(String(m.overhead ?? 0), "0") !== 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-y border-slate-200 py-2.5 dark:border-slate-800">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {overheadLine.label ?? measureLabel('overhead')}
+              {overheadLine.label ?? measureLabel("overhead")}
             </span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              {t('cockpit.informationalOnly')}
+              {t("cockpit.informationalOnly")}
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('measures.hints.overhead_informational')}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {t("measures.hints.overhead_informational")}
+            </span>
           </div>
-          <div className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money(m.overhead ?? 0)}</div>
+          <div className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+            {money(m.overhead ?? 0)}
+          </div>
         </div>
       ) : null}
 
@@ -337,22 +508,60 @@ export function FinancialsTab({ data }: {
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.budgetBarTitle')}</h2>
-              <span className={cn('text-sm font-medium tabular-nums', overBudget ? 'text-red-600 dark:text-red-400' : 'text-teal-700 dark:text-teal-300')}>
-                {overBudget ? t('cockpit.overBudget', { amount: money(add(String(totalCost), neg(String(costBudget)))) })
-                  : cmp(String(costBudget), '0') > 0 ? t('cockpit.underBudget', { amount: money(add(String(costBudget), neg(String(totalCost)))) })
-                    : t('cockpit.noCostBudget')}
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("cockpit.budgetBarTitle")}
+              </h2>
+              <span
+                className={cn(
+                  "text-sm font-medium tabular-nums",
+                  overBudget
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-teal-700 dark:text-teal-300",
+                )}
+              >
+                {overBudget
+                  ? t("cockpit.overBudget", {
+                      amount: money(add(String(totalCost), neg(String(costBudget)))),
+                    })
+                  : cmp(String(costBudget), "0") > 0
+                    ? t("cockpit.underBudget", {
+                        amount: money(add(String(costBudget), neg(String(totalCost)))),
+                      })
+                    : t("cockpit.noCostBudget")}
               </span>
             </div>
             <div className="relative h-6 w-full overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800">
-              <div className="absolute inset-y-0 left-0 bg-teal-500" style={{ width: percentCss(actualPct) }} title={t('cockpit.actualAmount', { amount: money(actualCost) })} />
-              <div className="absolute inset-y-0 bg-amber-400" style={{ left: percentCss(actualPct), width: percentCss(committedPct) }} title={t('cockpit.committedAmount', { amount: money(committedCost) })} />
-              {cmp(String(costBudget), '0') > 0 ? <div className="absolute inset-y-0 w-0.5 bg-slate-900 dark:bg-white" style={{ left: percentCss(budgetMarkerPct) }} title={t('cockpit.costBudgetAmount', { amount: money(costBudget) })} /> : null}
+              <div
+                className="absolute inset-y-0 left-0 bg-teal-500"
+                style={{ width: percentCss(actualPct) }}
+                title={t("cockpit.actualAmount", { amount: money(actualCost) })}
+              />
+              <div
+                className="absolute inset-y-0 bg-amber-400"
+                style={{ left: percentCss(actualPct), width: percentCss(committedPct) }}
+                title={t("cockpit.committedAmount", { amount: money(committedCost) })}
+              />
+              {cmp(String(costBudget), "0") > 0 ? (
+                <div
+                  className="absolute inset-y-0 w-0.5 bg-slate-900 dark:bg-white"
+                  style={{ left: percentCss(budgetMarkerPct) }}
+                  title={t("cockpit.costBudgetAmount", { amount: money(costBudget) })}
+                />
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-teal-500" /> {t('cockpit.actualAmount', { amount: money(actualCost) })}</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-400" /> {t('cockpit.committedAmount', { amount: money(committedCost) })}</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-0.5 bg-slate-900 dark:bg-white" /> {t('cockpit.costBudgetAmount', { amount: money(costBudget) })}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-teal-500" />{" "}
+                {t("cockpit.actualAmount", { amount: money(actualCost) })}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-400" />{" "}
+                {t("cockpit.committedAmount", { amount: money(committedCost) })}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3 w-0.5 bg-slate-900 dark:bg-white" />{" "}
+                {t("cockpit.costBudgetAmount", { amount: money(costBudget) })}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -362,35 +571,90 @@ export function FinancialsTab({ data }: {
 
       {/* Cost breakdown — subtabs, never side-by-side (repository conventions). */}
       <div className="space-y-3">
-        <nav className="-mb-px flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={t('cockpit.costBreakdownAria')}>
+        <nav
+          className="-mb-px flex gap-1 border-b border-slate-200 dark:border-slate-800"
+          aria-label={t("cockpit.costBreakdownAria")}
+        >
           {innerTabs.map((tab) => (
-            <button key={tab.key} type="button" onClick={() => setInner(tab.key)} aria-current={inner === tab.key}
-              className={cn('border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-                inner === tab.key ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setInner(tab.key)}
+              aria-current={inner === tab.key}
+              className={cn(
+                "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                inner === tab.key
+                  ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
+                  : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
+              )}
+            >
               {tab.label}
             </button>
           ))}
         </nav>
         <div className="pt-2">
-          {inner === 'category' ? (
-            <PagedTable rows={data.costByCategory} rowKey={(r) => r.category} searchable
-              empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('cockpit.noPostedCosts')}</p>}
+          {inner === "category" ? (
+            <PagedTable
+              rows={data.costByCategory}
+              rowKey={(r) => r.category}
+              searchable
+              empty={
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t("cockpit.noPostedCosts")}
+                </p>
+              }
               columns={[
-                { key: 'category', header: t('cockpit.category'), search: (r) => r.category, cell: (r) => (r.category === 'cogs' || r.category === 'operating_expense' ? t(`cockpit.categories.${r.category}`) : r.category) },
-                { key: 'amount', header: tCommon('labels.amount'), align: 'right', cell: (r) => money(r.amount) },
-              ]} />
+                {
+                  key: "category",
+                  header: t("cockpit.category"),
+                  search: (r) => r.category,
+                  cell: (r) =>
+                    r.category === "cogs" || r.category === "operating_expense"
+                      ? t(`cockpit.categories.${r.category}`)
+                      : r.category,
+                },
+                {
+                  key: "amount",
+                  header: tCommon("labels.amount"),
+                  align: "right",
+                  cell: (r) => money(r.amount),
+                },
+              ]}
+            />
           ) : (
-            <PagedTable rows={data.costByAccount} rowKey={(r) => r.accountId} searchable
-              empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('cockpit.noPostedCosts')}</p>}
+            <PagedTable
+              rows={data.costByAccount}
+              rowKey={(r) => r.accountId}
+              searchable
+              empty={
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t("cockpit.noPostedCosts")}
+                </p>
+              }
               columns={[
-                { key: 'number', header: tCommon('labels.account'), cell: (r) => <span className="font-mono text-[13px]">{r.number}</span>, search: (r) => r.number ?? '' },
-                { key: 'name', header: tCommon('labels.name'), cell: (r) => r.name, search: (r) => r.name },
-                { key: 'amount', header: tCommon('labels.amount'), align: 'right', cell: (r) => money(r.amount) },
-              ]} />
+                {
+                  key: "number",
+                  header: tCommon("labels.account"),
+                  cell: (r) => <span className="font-mono text-[13px]">{r.number}</span>,
+                  search: (r) => r.number ?? "",
+                },
+                {
+                  key: "name",
+                  header: tCommon("labels.name"),
+                  cell: (r) => r.name,
+                  search: (r) => r.name,
+                },
+                {
+                  key: "amount",
+                  header: tCommon("labels.amount"),
+                  align: "right",
+                  cell: (r) => money(r.amount),
+                },
+              ]}
+            />
           )}
         </div>
       </div>
     </div>
-  )
+  );
 }

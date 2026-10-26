@@ -1,8 +1,6 @@
 import { sql } from "drizzle-orm";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
-import {
-  subsidiaryScopeAllows,
-} from "../organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { db } from "../platform/db.ts";
 
 /**
@@ -78,7 +76,11 @@ export async function resolveRunSubjectSubsidiaries(
   const bucket = (kinds: readonly string[]): string[] => {
     const ids: string[] = [];
     for (const run of runs) {
-      if (run.subjectKind && run.subjectId && (kinds as readonly string[]).includes(run.subjectKind)) {
+      if (
+        run.subjectKind &&
+        run.subjectId &&
+        (kinds as readonly string[]).includes(run.subjectKind)
+      ) {
         ids.push(run.subjectId);
       }
     }
@@ -89,46 +91,61 @@ export async function resolveRunSubjectSubsidiaries(
   };
   const documents = bucket(["document", "expense_report"]);
   if (documents.length > 0) {
-    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
       select id, subsidiary_id from documents
        where org_id = ${orgId} and id = any(${`{${documents.join(",")}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of rows) store("document", row.id, row.subsidiary_id);
     // Expense reports live in documents; keep the run's own kind on the key.
     for (const row of rows) store("expense_report", row.id, row.subsidiary_id);
   }
   const projects = bucket(["project"]);
   if (projects.length > 0) {
-    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
       select id, subsidiary_id from projects
        where org_id = ${orgId} and id = any(${`{${projects.join(",")}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of rows) store("project", row.id, row.subsidiary_id);
   }
   const parties = bucket(["party"]);
   if (parties.length > 0) {
-    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
       select id, subsidiary_id from parties
        where org_id = ${orgId} and id = any(${`{${parties.join(",")}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of rows) store("party", row.id, row.subsidiary_id);
   }
   const employments = bucket(["employment"]);
   if (employments.length > 0) {
-    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
       select id, employer_subsidiary_id as subsidiary_id from worker_employments
        where org_id = ${orgId} and id = any(${`{${employments.join(",")}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of rows) store("employment", row.id, row.subsidiary_id);
   }
   const leaves = bucket(["leave_request"]);
   if (leaves.length > 0) {
-    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
       select r.id, w.employer_subsidiary_id as subsidiary_id
         from hrm_leave_requests r
         join worker_employments w on w.org_id = r.org_id and w.id = r.employment_id
        where r.org_id = ${orgId} and r.id = any(${`{${leaves.join(",")}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of rows) store("leave_request", row.id, row.subsidiary_id);
   }
   return resolved;

@@ -20,10 +20,7 @@ function isCellUniquenessViolation(error: unknown): boolean {
   return false;
 }
 
-async function seedComparison(
-  orgId: string,
-  token: string,
-): Promise<string> {
+async function seedComparison(orgId: string, token: string): Promise<string> {
   const registerId = randomUUID();
   await db.execute(sql`
     insert into payroll_prior_registers
@@ -52,30 +49,28 @@ async function seedComparison(
   return comparisonId;
 }
 
-test(
-  "an unattributed finding cell is unique per tenant and run",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    const otherOrg = await createScratchOrg();
-    try {
-      const comparisonId = await seedComparison(org.orgId, randomUUID());
-      const otherRunComparisonId = await seedComparison(org.orgId, randomUUID());
-      const otherTenantComparisonId = await seedComparison(otherOrg.orgId, randomUUID());
-      const employeePartyId = randomUUID();
-      await db.execute(sql`
+test("an unattributed finding cell is unique per tenant and run", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const otherOrg = await createScratchOrg();
+  try {
+    const comparisonId = await seedComparison(org.orgId, randomUUID());
+    const otherRunComparisonId = await seedComparison(org.orgId, randomUUID());
+    const otherTenantComparisonId = await seedComparison(otherOrg.orgId, randomUUID());
+    const employeePartyId = randomUUID();
+    await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeePartyId}, ${org.orgId}, 'person', 'Attributed finding', true, '{}'::jsonb)
       `);
 
-      const insertFinding = (
-        orgId: string,
-        comparison: string,
-        id: string,
-        slot: string,
-        employee: string | null = null,
-        classification = "unattributed",
-      ) => db.execute(sql`
+    const insertFinding = (
+      orgId: string,
+      comparison: string,
+      id: string,
+      slot: string,
+      employee: string | null = null,
+      classification = "unattributed",
+    ) =>
+      db.execute(sql`
         insert into payroll_parallel_findings
           (id, org_id, comparison_id, employee_party_id, employee_name,
            kind, slot, slot_label, classification, prior_amount, our_amount, difference)
@@ -85,38 +80,59 @@ test(
            'total', ${slot}, ${slot}, ${classification}, '100.0000', '90.0000', '10.0000')
       `);
 
-      await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross");
-      await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:net_pay");
-      await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross", employeePartyId, "difference");
+    await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross");
+    await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:net_pay");
+    await insertFinding(
+      org.orgId,
+      comparisonId,
+      randomUUID(),
+      "unattributed:gross",
+      employeePartyId,
+      "difference",
+    );
 
-      // A NULL employee key is one unattributed cell, not a fresh value:
-      // ordinary UNIQUE semantics would admit a second row for the same
-      // comparison/kind/slot.
-      await assert.rejects(
-        insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross"),
-        isCellUniquenessViolation,
-      );
-      const cells = await db.execute<{ n: number }>(sql`
+    // A NULL employee key is one unattributed cell, not a fresh value:
+    // ordinary UNIQUE semantics would admit a second row for the same
+    // comparison/kind/slot.
+    await assert.rejects(
+      insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross"),
+      isCellUniquenessViolation,
+    );
+    const cells = await db.execute<{ n: number }>(
+      sql`
         select count(*)::int as n
           from payroll_parallel_findings
          where comparison_id = ${comparisonId}
-      `, "objects");
-      assert.equal(cells[0]?.n, 3, "the refused duplicate leaves both unattributed cells and the attributed row");
+      `,
+      "objects",
+    );
+    assert.equal(
+      cells[0]?.n,
+      3,
+      "the refused duplicate leaves both unattributed cells and the attributed row",
+    );
 
-      // The cell identity is run- and tenant-scoped.
-      await insertFinding(org.orgId, otherRunComparisonId, randomUUID(), "unattributed:gross");
-      await insertFinding(otherOrg.orgId, otherTenantComparisonId, randomUUID(), "unattributed:gross");
-      const independentRuns = await db.execute<{ n: number }>(sql`
+    // The cell identity is run- and tenant-scoped.
+    await insertFinding(org.orgId, otherRunComparisonId, randomUUID(), "unattributed:gross");
+    await insertFinding(
+      otherOrg.orgId,
+      otherTenantComparisonId,
+      randomUUID(),
+      "unattributed:gross",
+    );
+    const independentRuns = await db.execute<{ n: number }>(
+      sql`
         select count(*)::int as n
           from payroll_parallel_findings
          where comparison_id in (${otherRunComparisonId}, ${otherTenantComparisonId})
            and employee_party_id is null
            and kind = 'total' and slot = 'unattributed:gross'
-      `, "objects");
-      assert.equal(independentRuns[0]?.n, 2, "the cell identity remains run- and tenant-scoped");
-    } finally {
-      await dropScratchOrgReporting(otherOrg.orgId);
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+      `,
+      "objects",
+    );
+    assert.equal(independentRuns[0]?.n, 2, "the cell identity remains run- and tenant-scoped");
+  } finally {
+    await dropScratchOrgReporting(otherOrg.orgId);
+    await dropScratchOrgReporting(org.orgId);
+  }
+});

@@ -1,8 +1,17 @@
 /** Equity and cap table: the public engine contract for the application. */
-export { EquityError, EQUITY_FEATURE_KEY, type EquityRefusalKey, type RefusalValue } from "./errors.ts";
+export {
+  EquityError,
+  EQUITY_FEATURE_KEY,
+  type EquityRefusalKey,
+  type RefusalValue,
+} from "./errors.ts";
 export { EQUITY_REFUSALS } from "./refusals/index.ts";
 export { EQUITY_TERMS } from "./refusals/terms.ts";
-export { equityAccountPolicyRefusal, EQUITY_POLICY_ACCOUNT_FIELDS, EQUITY_POLICY_OPTIONAL_ACCOUNT_FIELDS } from "./account-policy.ts";
+export {
+  equityAccountPolicyRefusal,
+  EQUITY_POLICY_ACCOUNT_FIELDS,
+  EQUITY_POLICY_OPTIONAL_ACCOUNT_FIELDS,
+} from "./account-policy.ts";
 export { EQUITY_JOURNAL_ORIGIN, CONSIDERATION_ACCOUNT_TYPES } from "./posting.ts";
 export {
   SECURITY_KINDS,
@@ -41,12 +50,34 @@ export {
 } from "./structure.ts";
 export { amendRound, voidRound, type AmendRoundInput, type VoidRoundInput } from "./rounds.ts";
 export { issueSecurity, type IssueSecurityInput, type ValuationInput } from "./securities.ts";
-export { recordSecurityEvent, governedEventAction, type RecordEventInput, type RecordEventResult } from "./events.ts";
-export { EQUITY_ACTIONS, locateEquityAction, pendingEquityActions, withdrawEquityAction, type EquityAction, type GovernedStatus, type PendingRequest, type WithdrawnEquityAction } from "./governance.ts";
+export {
+  recordSecurityEvent,
+  governedEventAction,
+  type RecordEventInput,
+  type RecordEventResult,
+} from "./events.ts";
+export {
+  EQUITY_ACTIONS,
+  locateEquityAction,
+  pendingEquityActions,
+  withdrawEquityAction,
+  type EquityAction,
+  type GovernedStatus,
+  type PendingRequest,
+  type WithdrawnEquityAction,
+} from "./governance.ts";
 export { recordEquityAccountPolicy, type RecordAccountPolicyInput } from "./account-policy.ts";
 export { listRestrictedReleases, type RestrictedReleaseRow } from "./release-history.ts";
 export { syncPositionLedger } from "./positions.ts";
-export { electMfnTerms, mfnCandidates, reverseMfnElection, type ElectMfnInput, type MfnCandidate, type MfnTerm, type ReverseMfnInput } from "./mfn.ts";
+export {
+  electMfnTerms,
+  mfnCandidates,
+  reverseMfnElection,
+  type ElectMfnInput,
+  type MfnCandidate,
+  type MfnTerm,
+  type ReverseMfnInput,
+} from "./mfn.ts";
 export {
   previewInterestRun,
   postInterestRun,
@@ -93,8 +124,32 @@ export {
   type EquityActivity,
   type OwnershipSlice,
 } from "./overview.ts";
-export { equityRunCatchUp, nextEquityRunPeriod, type EquityCatchUp, type EquityPostingDue, type EquityPostingsDue, type EquityRunPeriod } from "./period-postings.ts";
-export type { CapTable, ClassRow, HolderRow, PlanRow, HoldingRow, ConvertibleRow, UnallocatedPoolRow } from "./cap-table.ts";
+export {
+  equityRunCatchUp,
+  nextEquityRunPeriod,
+  type EquityCatchUp,
+  type EquityPostingDue,
+  type EquityPostingsDue,
+  type EquityRunPeriod,
+} from "./period-postings.ts";
+export type {
+  CapTable,
+  ClassRow,
+  HolderRow,
+  PlanRow,
+  HoldingRow,
+  ConvertibleRow,
+  UnallocatedPoolRow,
+} from "./cap-table.ts";
 export type { RoundModelResult, RoundModelDilutionRow } from "./round-model.ts";
-export type { WaterfallResult, WaterfallClassRow, WaterfallPayout, WaterfallSafeRow } from "./waterfall.ts";
-export { blackScholesCall, type BlackScholesInputs, type BlackScholesResult } from "./black-scholes.ts";
+export type {
+  WaterfallResult,
+  WaterfallClassRow,
+  WaterfallPayout,
+  WaterfallSafeRow,
+} from "./waterfall.ts";
+export {
+  blackScholesCall,
+  type BlackScholesInputs,
+  type BlackScholesResult,
+} from "./black-scholes.ts";

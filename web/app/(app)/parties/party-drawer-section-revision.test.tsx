@@ -6,11 +6,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-declare global { var __payrollTabProps: { onPartyRecordChanged: () => void } | undefined; }
+declare global {
+  var __payrollTabProps: { onPartyRecordChanged: () => void } | undefined;
+}
 import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/parties?mode=edit", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/parties?mode=edit",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
@@ -43,10 +48,16 @@ registerHooks({
       };
     }
     if (specifier.endsWith("/EmployeePayComponents")) {
-      return { shortCircuit: true, url: "data:text/javascript,export function EmployeePayComponents(){return null}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function EmployeePayComponents(){return null}",
+      };
     }
     if (specifier.endsWith("/PartyBankAccountsPanel")) {
-      return { shortCircuit: true, url: "data:text/javascript,export function BankAccountsPanel(){return null}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function BankAccountsPanel(){return null}",
+      };
     }
     return next(specifier, context);
   },
@@ -77,7 +88,10 @@ interface ServerEmployee {
 
 interface PatchRecord {
   status: number;
-  body: { expectedUpdatedAt?: string; roles?: { employee?: { workerCompGroupId?: string | null } } };
+  body: {
+    expectedUpdatedAt?: string;
+    roles?: { employee?: { workerCompGroupId?: string | null } };
+  };
 }
 
 const state: { server: ServerEmployee; patches: PatchRecord[] } = {
@@ -152,7 +166,9 @@ async function mount() {
   });
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handleFetch(url, init) ?? Response.json({});
   }) as typeof fetch;
   const host = document.createElement("div");
@@ -168,7 +184,10 @@ async function mount() {
               paymentTerms={[]}
               departments={[]}
               trades={[]}
-              workerCompGroups={[{ id: "wc-old", name: "Old" }, { id: "wc-new", name: "New" }]}
+              workerCompGroups={[
+                { id: "wc-old", name: "Old" },
+                { id: "wc-new", name: "New" },
+              ]}
               fieldDefs={[]}
               subsidiaries={[]}
               canManage
@@ -226,7 +245,11 @@ test("the drawer Save uses the revision a payroll section save produced", async 
   await clickSave();
   assert.equal(state.patches.length, 1, "the drawer must issue one party save");
   assert.equal(state.patches[0]?.status, 200, "the save must not be refused as a concurrent edit");
-  assert.equal(state.patches[0]?.body.expectedUpdatedAt, SECTION_SAVED_AT, "the save must carry the post-section revision");
+  assert.equal(
+    state.patches[0]?.body.expectedUpdatedAt,
+    SECTION_SAVED_AT,
+    "the save must carry the post-section revision",
+  );
   assert.equal(
     state.patches[0]?.body.roles?.employee?.workerCompGroupId,
     "wc-new",
@@ -240,6 +263,14 @@ test("a genuine concurrent edit by another user still refuses the drawer Save", 
   state.server = { updatedAt: OTHER_EDIT_AT, workerCompGroupId: "wc-old" };
   await clickSave();
   assert.equal(state.patches.length, 1, "the drawer must issue one party save");
-  assert.equal(state.patches[0]?.status, 409, "a revision another editor moved must still be refused");
-  assert.equal(state.patches[0]?.body.expectedUpdatedAt, OPENED_AT, "the refused save carries the revision from open");
+  assert.equal(
+    state.patches[0]?.status,
+    409,
+    "a revision another editor moved must still be refused",
+  );
+  assert.equal(
+    state.patches[0]?.body.expectedUpdatedAt,
+    OPENED_AT,
+    "the refused save carries the revision from open",
+  );
 });

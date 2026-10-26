@@ -1,35 +1,71 @@
 import { createHash } from "node:crypto";
-import { type PayRunCalculationSourceSnapshot, canonicalJson } from "./run-calculation-source-shape.ts";
+import {
+  type PayRunCalculationSourceSnapshot,
+  canonicalJson,
+} from "./run-calculation-source-shape.ts";
 
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean; openingBalances: boolean; incomeTaxOverrides: boolean; bankCashInputs: boolean; declaredVacationAccruals: boolean; employerLevyAdjustments: boolean } {
+): {
+  time: boolean;
+  timeTypes: boolean;
+  wages: boolean;
+  items: boolean;
+  components: boolean;
+  compensationPackages: boolean;
+  holidayObligations: boolean;
+  roster: boolean;
+  openingBalances: boolean;
+  incomeTaxOverrides: boolean;
+  bankCashInputs: boolean;
+  declaredVacationAccruals: boolean;
+  employerLevyAdjustments: boolean;
+} {
   return {
-    openingBalances: canonicalJson(stored.openingEmployerAuthorities) !== canonicalJson(current.openingEmployerAuthorities)
-      || canonicalJson(stored.openingLevySourceAuthorities) !== canonicalJson(current.openingLevySourceAuthorities)
-      || canonicalJson(stored.openingBalanceSources) !== canonicalJson(current.openingBalanceSources),
-    incomeTaxOverrides: canonicalJson(stored.incomeTaxOverrides) !== canonicalJson(current.incomeTaxOverrides),
+    openingBalances:
+      canonicalJson(stored.openingEmployerAuthorities) !==
+        canonicalJson(current.openingEmployerAuthorities) ||
+      canonicalJson(stored.openingLevySourceAuthorities) !==
+        canonicalJson(current.openingLevySourceAuthorities) ||
+      canonicalJson(stored.openingBalanceSources) !== canonicalJson(current.openingBalanceSources),
+    incomeTaxOverrides:
+      canonicalJson(stored.incomeTaxOverrides) !== canonicalJson(current.incomeTaxOverrides),
     bankCashInputs: canonicalJson(stored.bankCashInputs) !== canonicalJson(current.bankCashInputs),
-    employerLevyAdjustments: canonicalJson(stored.employerLevyAdjustments) !== canonicalJson(current.employerLevyAdjustments),
-    declaredVacationAccruals: canonicalJson(stored.declaredVacationAccruals) !== canonicalJson(current.declaredVacationAccruals),
-    time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
-      || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
+    employerLevyAdjustments:
+      canonicalJson(stored.employerLevyAdjustments) !==
+      canonicalJson(current.employerLevyAdjustments),
+    declaredVacationAccruals:
+      canonicalJson(stored.declaredVacationAccruals) !==
+      canonicalJson(current.declaredVacationAccruals),
+    time:
+      canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries) ||
+      canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
-    wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates)
-      || canonicalJson(stored.bonusIncomeReferences) !== canonicalJson(current.bonusIncomeReferences),
-    compensationPackages: canonicalJson(stored.compensationPackages) !== canonicalJson(current.compensationPackages),
-    components: canonicalJson(stored.assignmentRunPolicies) !== canonicalJson(current.assignmentRunPolicies)
-      || canonicalJson(stored.payComponentStatutoryTreatments) !== canonicalJson(current.payComponentStatutoryTreatments)
-      || canonicalJson(stored.entitlementSettlementPlans) !== canonicalJson(current.entitlementSettlementPlans),
-    holidayObligations: canonicalJson(stored.holidayFacts) !== canonicalJson(current.holidayFacts)
-      || canonicalJson(stored.holidayObligations) !== canonicalJson(current.holidayObligations)
-      || canonicalJson(stored.holidayEmployments) !== canonicalJson(current.holidayEmployments),
-    roster: canonicalJson(stored.holidayFacts) !== canonicalJson(current.holidayFacts)
-      || canonicalJson(stored.holidayEmployments) !== canonicalJson(current.holidayEmployments)
-      || canonicalJson(stored.usFilingAccountLineages) !== canonicalJson(current.usFilingAccountLineages)
-      || canonicalJson(stored.employerAssignments) !== canonicalJson(current.employerAssignments)
-      || canonicalJson(stored.historicalEmploymentRoster) !== canonicalJson(current.historicalEmploymentRoster),
+    wages:
+      canonicalJson(stored.payRates) !== canonicalJson(current.payRates) ||
+      canonicalJson(stored.bonusIncomeReferences) !== canonicalJson(current.bonusIncomeReferences),
+    compensationPackages:
+      canonicalJson(stored.compensationPackages) !== canonicalJson(current.compensationPackages),
+    components:
+      canonicalJson(stored.assignmentRunPolicies) !==
+        canonicalJson(current.assignmentRunPolicies) ||
+      canonicalJson(stored.payComponentStatutoryTreatments) !==
+        canonicalJson(current.payComponentStatutoryTreatments) ||
+      canonicalJson(stored.entitlementSettlementPlans) !==
+        canonicalJson(current.entitlementSettlementPlans),
+    holidayObligations:
+      canonicalJson(stored.holidayFacts) !== canonicalJson(current.holidayFacts) ||
+      canonicalJson(stored.holidayObligations) !== canonicalJson(current.holidayObligations) ||
+      canonicalJson(stored.holidayEmployments) !== canonicalJson(current.holidayEmployments),
+    roster:
+      canonicalJson(stored.holidayFacts) !== canonicalJson(current.holidayFacts) ||
+      canonicalJson(stored.holidayEmployments) !== canonicalJson(current.holidayEmployments) ||
+      canonicalJson(stored.usFilingAccountLineages) !==
+        canonicalJson(current.usFilingAccountLineages) ||
+      canonicalJson(stored.employerAssignments) !== canonicalJson(current.employerAssignments) ||
+      canonicalJson(stored.historicalEmploymentRoster) !==
+        canonicalJson(current.historicalEmploymentRoster),
     items: canonicalJson(stored.itemAccounts) !== canonicalJson(current.itemAccounts),
   };
 }
@@ -106,25 +142,29 @@ export function payRunRefusalDigest(refusals: PayRunCalculationError[]): string 
  * must send the run through a recalculation rather than assume nobody was
  * refused. Corrupt entries fail the same closed way.
  */
-export function parsePayRunCalculationErrors(
-  value: unknown,
-): PayRunCalculationError[] | null {
+export function parsePayRunCalculationErrors(value: unknown): PayRunCalculationError[] | null {
   if (value == null) return null;
-  const raw = typeof value === "string" ? (() => {
-    try {
-      return JSON.parse(value) as unknown;
-    } catch {
-      return undefined;
-    }
-  })() : value;
+  const raw =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value) as unknown;
+          } catch {
+            return undefined;
+          }
+        })()
+      : value;
   if (!Array.isArray(raw)) return null;
   const parsed: PayRunCalculationError[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
     const record = entry as Record<string, unknown>;
-    if (typeof record.employeePartyId !== "string" || typeof record.employee !== "string"
-        || typeof record.message !== "string"
-        || (record.kind !== "refusal" && record.kind !== "warning" && record.kind !== "out-of-scope")) {
+    if (
+      typeof record.employeePartyId !== "string" ||
+      typeof record.employee !== "string" ||
+      typeof record.message !== "string" ||
+      (record.kind !== "refusal" && record.kind !== "warning" && record.kind !== "out-of-scope")
+    ) {
       return null;
     }
     parsed.push({ ...record } as PayRunCalculationError);
@@ -137,18 +177,25 @@ export function parsePayRunRefusalAcknowledgement(
   value: unknown,
 ): PayRunRefusalAcknowledgement | null {
   if (value == null) return null;
-  const raw = typeof value === "string" ? (() => {
-    try {
-      return JSON.parse(value) as unknown;
-    } catch {
-      return undefined;
-    }
-  })() : value;
+  const raw =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value) as unknown;
+          } catch {
+            return undefined;
+          }
+        })()
+      : value;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
-  if (record.version !== 1 || typeof record.acknowledgedBy !== "string"
-      || typeof record.acknowledgedAt !== "string" || typeof record.errorsDigest !== "string"
-      || parsePayRunCalculationErrors(record.refusals) == null) {
+  if (
+    record.version !== 1 ||
+    typeof record.acknowledgedBy !== "string" ||
+    typeof record.acknowledgedAt !== "string" ||
+    typeof record.errorsDigest !== "string" ||
+    parsePayRunCalculationErrors(record.refusals) == null
+  ) {
     return null;
   }
   return {

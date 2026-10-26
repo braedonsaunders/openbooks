@@ -45,11 +45,21 @@ export function PageHeader({
           The shared route switch occupies the right end of the action rail. */}
       <header className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:items-start sm:gap-4">
         <div className="min-w-0 flex-1 basis-40 space-y-1 sm:min-w-56">
-          <Heading className={cn("truncate font-semibold text-slate-900 dark:text-slate-100", section ? "text-lg" : "text-xl sm:text-2xl")}>
+          <Heading
+            className={cn(
+              "truncate font-semibold text-slate-900 dark:text-slate-100",
+              section ? "text-lg" : "text-xl sm:text-2xl",
+            )}
+          >
             {titleContent ?? title}
           </Heading>
           {description ? (
-            <p className={cn("text-sm text-slate-500 dark:text-slate-400", !section && "hidden sm:block")}>
+            <p
+              className={cn(
+                "text-sm text-slate-500 dark:text-slate-400",
+                !section && "hidden sm:block",
+              )}
+            >
               {description}
             </p>
           ) : null}
@@ -101,12 +111,16 @@ export function DetailHeader({
           {badge}
         </div>
         {actions || navigation ? (
-          <div data-page-actions className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}{navigation}</div>
+          <div
+            data-page-actions
+            className="flex max-w-full flex-wrap items-center justify-end gap-2"
+          >
+            {actions}
+            {navigation}
+          </div>
         ) : null}
       </div>
-      {subtitle ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
-      ) : null}
+      {subtitle ? <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
     </header>
   );
 }

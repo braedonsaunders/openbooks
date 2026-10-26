@@ -1,14 +1,14 @@
-import { redirect } from 'next/navigation'
-import { aiSettingsDestination } from '../../../../lib/setup/ai-settings-links'
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadAdminAi, adminAiSpec } from './view'
+import { redirect } from "next/navigation";
+import { aiSettingsDestination } from "../../../../lib/setup/ai-settings-links";
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadAdminAi, adminAiSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('admin.ai')
-  return { title: t('metaTitle') }
+  const t = await getTranslations("admin.ai");
+  return { title: t("metaTitle") };
 }
 
 /**
@@ -17,10 +17,14 @@ export async function generateMetadata() {
  * environment. The client form only ever sees non-secret fields (hasKey, not
  * the key itself). Background agent packs moved to Setup → Agents.
  */
-export default async function AiSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const sp = await searchParams
-  const destination = aiSettingsDestination(sp)
-  if (destination) redirect(destination)
-  const data = await loadAdminAi(sp)
-  return <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />
+export default async function AiSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const destination = aiSettingsDestination(sp);
+  if (destination) redirect(destination);
+  const data = await loadAdminAi(sp);
+  return <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />;
 }

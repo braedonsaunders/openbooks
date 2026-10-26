@@ -26,12 +26,16 @@ import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
 
 function esResolvedCertificate(key: string) {
   if (key === "es_residencia_fiscal") return { answers: { residencia: "residente" } };
-  if (key !== "es_retribucion_anual") return key === "es_zona_irpf"
-    ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
-    : null;
+  if (key !== "es_retribucion_anual")
+    return key === "es_zona_irpf"
+      ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
+      : null;
   return {
     certificate: ES_CERTIFICATES.certificates.find((item) => item.key === key)!,
-    onFile: true, effectiveFrom: null, answers: { importe_anual_previsto: "24000.00", periodos_recurrentes_esperados: "12" }, missing: [],
+    onFile: true,
+    effectiveFrom: null,
+    answers: { importe_anual_previsto: "24000.00", periodos_recurrentes_esperados: "12" },
+    missing: [],
   };
 }
 
@@ -64,26 +68,56 @@ test("ES slots name IRPF withholding and Seguridad Social, every pushed key decl
   // push only when classified overtime pay is priced; the two ss_solidaridad
   // keys push only above the tope máximo (the push path skips zero lines).
   assert.deepEqual(systems, [
-    "irpf", "irnr",
-    "ss_cc", "ss_des", "ss_for", "ss_mei", "ss_hex_resto", "ss_hex_fm", "ss_solidaridad",
-    "ss_cc_er", "ss_des_er", "ss_fogasa_er", "ss_for_er", "ss_mei_er",
-    "ss_atep_er", "ss_corta_er", "ss_hex_resto_er", "ss_hex_fm_er", "ss_solidaridad_er",
+    "irpf",
+    "irnr",
+    "ss_cc",
+    "ss_des",
+    "ss_for",
+    "ss_mei",
+    "ss_hex_resto",
+    "ss_hex_fm",
+    "ss_solidaridad",
+    "ss_cc_er",
+    "ss_des_er",
+    "ss_fogasa_er",
+    "ss_for_er",
+    "ss_mei_er",
+    "ss_atep_er",
+    "ss_corta_er",
+    "ss_hex_resto_er",
+    "ss_hex_fm_er",
+    "ss_solidaridad_er",
   ]);
   const kinds = ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
     slot.components.map((component) => component.kind),
   );
   assert.deepEqual(kinds, [
-    "deduction", "deduction", "deduction",
-    "deduction", "deduction", "deduction", "deduction", "deduction", "deduction",
-    "employer_contribution", "employer_contribution", "employer_contribution", "employer_contribution",
-    "employer_contribution", "employer_contribution", "employer_contribution", "employer_contribution",
-    "employer_contribution", "employer_contribution",
+    "deduction",
+    "deduction",
+    "deduction",
+    "deduction",
+    "deduction",
+    "deduction",
+    "deduction",
+    "deduction",
+    "deduction",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
+    "employer_contribution",
   ]);
   // IRPF moves with pre-tax deductions; every SS cuota is rate × base.
   const assessed = new Map(
     ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
-      slot.components.map((component) =>
-        [`${component.systemKey}|${component.kind}`, component.assessedOn] as const),
+      slot.components.map(
+        (component) => [`${component.systemKey}|${component.kind}`, component.assessedOn] as const,
+      ),
     ),
   );
   assert.equal(assessed.get("irpf|deduction"), "taxable_income");
@@ -104,7 +138,10 @@ test("ES profile jurisdictions resolve to declared employment calendars", () => 
     assert.equal(jurisdictionKey("ES", code), `ES-${code}`);
     assert.equal(payrollJurisdictionDeclared(`ES-${code}`), true, code);
     assert.equal(byKey.get(`ES-${code}`)?.holidays.length, 10, code);
-    assert.deepEqual(byKey.get(`ES-${code}`)?.holidays.find((holiday) => holiday.key === "epifania")?.rule, { kind: "fixed", month: 1, day: 6 });
+    assert.deepEqual(
+      byKey.get(`ES-${code}`)?.holidays.find((holiday) => holiday.key === "epifania")?.rule,
+      { kind: "fixed", month: 1, day: 6 },
+    );
   }
   assert.equal(
     undeclaredJurisdictionHolidayConflict({
@@ -124,8 +161,23 @@ test("ES regions list all 19 communities and support the 17 AEAT ones", () => {
     assert.ok(regions.known.includes(code), code);
   }
   assert.deepEqual([...regions.supported].sort(), [
-    "AN", "AR", "AS", "CB", "CE", "CL", "CM", "CN", "CT", "EX", "GA",
-    "IB", "MC", "MD", "ML", "RI", "VC",
+    "AN",
+    "AR",
+    "AS",
+    "CB",
+    "CE",
+    "CL",
+    "CM",
+    "CN",
+    "CT",
+    "EX",
+    "GA",
+    "IB",
+    "MC",
+    "MD",
+    "ML",
+    "RI",
+    "VC",
   ]);
   const withholding = new Map(ES_WITHHOLDING.regions.map((region) => [region.region, region]));
   for (const code of [...regions.supported]) {
@@ -149,7 +201,10 @@ test("ES foral territories are refused by name, never covered by AEAT", () => {
     assert.match(reasons[code] ?? "", /foral retention tables.*aren't in this pack/);
     assert.match(reasons[code] ?? "", /AEAT tables never cover/);
     assert.match(reasons[code] ?? "", /not yet supported by the ES pack; contact support/);
-    assert.ok(!reasons[code]!.includes("engine/src/"), `refusal must not name a source path:\n${reasons[code]}`);
+    assert.ok(
+      !reasons[code]!.includes("engine/src/"),
+      `refusal must not name a source path:\n${reasons[code]}`,
+    );
   }
   const withholding = new Map(ES_WITHHOLDING.regions.map((region) => [region.region, region]));
   for (const code of ["NC", "PV"]) {
@@ -174,7 +229,15 @@ test("ES certificates keep Modelo 145 distinct from payer-held facts", () => {
   // and its situación familiar is distinct from SITUPER.
   assert.deepEqual(
     ES_CERTIFICATES.certificates.map((entry) => [entry.key, entry.storage]),
-    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"], ["es_contrato", "certificate_rows"], ["es_residencia_fiscal", "certificate_rows"], ["es_domicilio", "certificate_rows"]],
+    [
+      ["es_145", "certificate_rows"],
+      ["es_datos_perceptor", "profile_columns"],
+      ["es_zona_irpf", "certificate_rows"],
+      ["es_retribucion_anual", "certificate_rows"],
+      ["es_contrato", "certificate_rows"],
+      ["es_residencia_fiscal", "certificate_rows"],
+      ["es_domicilio", "certificate_rows"],
+    ],
   );
   const certificate = ES_CERTIFICATES.certificates[0]!;
   assert.equal(certificate.form, "145");
@@ -240,7 +303,13 @@ test("ES filings declare the TGSS account plus the 190/111 (IRPF) and 296/216 (I
   );
   assert.deepEqual(
     filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["190", "annual"], ["111", "quarterly"], ["111-mensual", "monthly"], ["216", "quarterly"], ["296", "annual"]],
+    [
+      ["190", "annual"],
+      ["111", "quarterly"],
+      ["111-mensual", "monthly"],
+      ["216", "quarterly"],
+      ["296", "annual"],
+    ],
   );
   assert.deepEqual(ES_PAYROLL_PACK.filings(), filings);
 });
@@ -252,14 +321,24 @@ test("ES statutory rates carry no tenant slots: every rate is a published consta
 
 test("ES computeStatutory refuses foral regions, off-year runs and off-monthly payroll", async () => {
   const base = {
-    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ changed: false }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) },
+    tx: {
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({ rows: [{ changed: false }] }).then(
+          <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+        ),
+    },
     orgId: "org",
     employeePartyId: "employee",
     documentId: "run",
     taxYear: 2026,
     region: "MD",
     run: { pay_date: "2026-03-15" },
-    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990", es_contrato_temporal: "false" },
+    emp: {
+      es_situacion_laboral: "activo",
+      es_grupo_cotizacion: "7",
+      es_ano_nacimiento: "1990",
+      es_contrato_temporal: "false",
+    },
     income: "2000.00",
     nonPeriodic: "0.00",
     pensionableNonPeriodic: "0.00",
@@ -283,7 +362,10 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
       assert.match((error as Error).message, /foral/);
       assert.match((error as Error).message, /AEAT tables never cover/);
       assert.match((error as Error).message, /not yet supported by the ES pack; contact support/);
-      assert.ok(!(error as Error).message.includes("engine/src/"), `refusal must not name a source path:\n${(error as Error).message}`);
+      assert.ok(
+        !(error as Error).message.includes("engine/src/"),
+        `refusal must not name a source path:\n${(error as Error).message}`,
+      );
       return true;
     },
   );
@@ -308,7 +390,9 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
       irnrPushed.push({ key, amount });
     },
     certificateFor: () => ({
-      certificate: ES_CERTIFICATES.certificates.find((item) => item.key === "es_residencia_fiscal")!,
+      certificate: ES_CERTIFICATES.certificates.find(
+        (item) => item.key === "es_residencia_fiscal",
+      )!,
       onFile: true,
       effectiveFrom: null,
       answers: { residencia: "no_residente_ue_eee" },
@@ -326,7 +410,12 @@ test("ES employee facts refuse absence as missing and bad values as out-of-band"
     taxYear: 2026,
     region: "MD",
     run: { pay_date: "2026-03-15" },
-    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990", es_contrato_temporal: "false" },
+    emp: {
+      es_situacion_laboral: "activo",
+      es_grupo_cotizacion: "7",
+      es_ano_nacimiento: "1990",
+      es_contrato_temporal: "false",
+    },
     income: "2000.00",
     nonPeriodic: "0.00",
     pensionableNonPeriodic: "0.00",
@@ -339,7 +428,11 @@ test("ES employee facts refuse absence as missing and bad values as out-of-band"
     assertRegionSupported: () => {},
   } as unknown as Parameters<typeof computeEsStatutory>[0];
   const factCases = [
-    ["es_situacion_laboral", /es_situacion_laboral is missing/, /is not activo\/pensionista\/desempleado/],
+    [
+      "es_situacion_laboral",
+      /es_situacion_laboral is missing/,
+      /is not activo\/pensionista\/desempleado/,
+    ],
     ["es_grupo_cotizacion", /es_grupo_cotizacion is missing/, /is not an integer 1–11/],
     ["es_ano_nacimiento", /es_ano_nacimiento is missing/, /is out of range 1906–2026/],
     ["es_contrato_temporal", /es_contrato_temporal is missing/, /is not "true"\/"false"/],

@@ -4,7 +4,10 @@ import { resolveEngineSpecifier } from "../../../../testing/engine-resolve-hooks
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){}}}", intl: true });
+stubModules({
+  navigation: "export function useRouter(){return {push(){},refresh(){},replace(){}}}",
+  intl: true,
+});
 registerHooks({
   resolve(specifier, context, next) {
     // Engine contracts resolve to this checkout, not a symlinked install.
@@ -44,12 +47,7 @@ test("pending accounting events direct their decision to the Inbox", () => {
       }}
       timeZone="UTC"
     >
-      <ChangeActions
-        id="change-1"
-        status="pending"
-        canSubmit
-        canApply
-      />
+      <ChangeActions id="change-1" status="pending" canSubmit canApply />
     </NextIntlClientProvider>,
   );
 
@@ -61,12 +59,18 @@ test("accounting event history is not offered as a daily group tab", async () =>
   // The accounting group strip is retired: the cockpit and the main menu own
   // cross-module discovery. The register is listed beside Period Close in the
   // accounting menu, so Period Close is where it is opened from.
-  const tabs = await groupTabs("accounting", "/accounting/changes", { orgId: "00000000-0000-4000-8000-000000000000" });
+  const tabs = await groupTabs("accounting", "/accounting/changes", {
+    orgId: "00000000-0000-4000-8000-000000000000",
+  });
   assert.deepEqual(tabs, [], "accounting has no daily group strip");
 
   const register = NAV_MODULES.find((module) => module.key === "accounting-changes");
   const close = NAV_MODULES.find((module) => module.key === "close");
   assert.equal(register?.group, "accounting");
   assert.ok(close, "period close is a registered accounting destination");
-  assert.equal(register?.subgroup, close.subgroup, "accounting events sit with Period Close in the menu");
+  assert.equal(
+    register?.subgroup,
+    close.subgroup,
+    "accounting events sit with Period Close in the menu",
+  );
 });

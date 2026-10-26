@@ -6,10 +6,10 @@
  * so it runs client-side off the monthly GL series.
  */
 
-import { zScoreForConfidence } from '../../../../lib/analytics/forecast-levels'
+import { zScoreForConfidence } from "../../../../lib/analytics/forecast-levels";
 
-export type ForecastMethod = 'ets' | 'ets_damped' | 'linear' | 'seasonal' | 'moving_avg' | 'arima'
-export type Seasonality = 'auto' | 'none' | 'monthly' | 'quarterly'
+export type ForecastMethod = "ets" | "ets_damped" | "linear" | "seasonal" | "moving_avg" | "arima";
+export type Seasonality = "auto" | "none" | "monthly" | "quarterly";
 
 /**
  * The sign domain a forecasted metric may take. Revenue is nonnegative —
@@ -17,38 +17,38 @@ export type Seasonality = 'auto' | 'none' | 'monthly' | 'quarterly'
  * model's trend carried past the domain's edge. Margins and income can
  * genuinely go negative, so they declare 'any' and never breach.
  */
-export type SignDomain = 'nonnegative' | 'any'
+export type SignDomain = "nonnegative" | "any";
 
 export interface DomainBreach {
-  breached: boolean
+  breached: boolean;
   /** Index into the projected values of the first out-of-domain point (-1). */
-  firstIndex: number
+  firstIndex: number;
 }
 
 /** Whether the central projection leaves the metric's sign domain. Bands
  * are uncertainty, not projection — only `values` can breach. */
 export function checkSignDomain(values: number[], domain: SignDomain): DomainBreach {
-  if (domain !== 'nonnegative') return { breached: false, firstIndex: -1 }
-  const firstIndex = values.findIndex((v) => v < 0)
-  return firstIndex === -1 ? { breached: false, firstIndex: -1 } : { breached: true, firstIndex }
+  if (domain !== "nonnegative") return { breached: false, firstIndex: -1 };
+  const firstIndex = values.findIndex((v) => v < 0);
+  return firstIndex === -1 ? { breached: false, firstIndex: -1 } : { breached: true, firstIndex };
 }
 
 export interface ForecastResult {
-  values: number[]
-  low: number[]
-  high: number[]
-  fitted: number[]
-  trend: number
-  seasonal: boolean
-  seasonalPeriod: number
+  values: number[];
+  low: number[];
+  high: number[];
+  fitted: number[];
+  trend: number;
+  seasonal: boolean;
+  seasonalPeriod: number;
 }
 
 export interface ForecastDiagnostics {
-  mape: number
-  rmse: number
-  r2: number
-  trendDir: 'Upward' | 'Downward' | 'Flat'
-  seasonLabel: string
+  mape: number;
+  rmse: number;
+  r2: number;
+  trendDir: "Upward" | "Downward" | "Flat";
+  seasonLabel: string;
 }
 
 /**
@@ -58,41 +58,41 @@ export interface ForecastDiagnostics {
  * of its own, so a tuned policy can never be shadowed by a silent default.
  */
 export interface ForecastModelParams {
-  alpha: number
-  beta: number
-  gamma: number
-  dampedPhi: number
-  ma1: number
+  alpha: number;
+  beta: number;
+  gamma: number;
+  dampedPhi: number;
+  ma1: number;
   /** Minimum lag correlation that counts as seasonality. */
-  minCorrelation: number
+  minCorrelation: number;
   /** Fewest history points before auto-detection runs. */
-  minPeriods: number
+  minPeriods: number;
 }
 
 function sum(a: number[]): number {
-  return a.reduce((x, y) => x + y, 0)
+  return a.reduce((x, y) => x + y, 0);
 }
 
 export function calculateTrend(data: number[]): { slope: number; intercept: number } {
-  const n = data.length
-  if (n < 2) return { slope: 0, intercept: data[0] || 0 }
-  const xMean = (n - 1) / 2
-  const yMean = sum(data) / n
-  let numerator = 0
-  let denominator = 0
+  const n = data.length;
+  if (n < 2) return { slope: 0, intercept: data[0] || 0 };
+  const xMean = (n - 1) / 2;
+  const yMean = sum(data) / n;
+  let numerator = 0;
+  let denominator = 0;
   data.forEach((val, i) => {
-    numerator += (i - xMean) * (val - yMean)
-    denominator += (i - xMean) ** 2
-  })
-  const slope = denominator !== 0 ? numerator / denominator : 0
-  return { slope, intercept: yMean - slope * xMean }
+    numerator += (i - xMean) * (val - yMean);
+    denominator += (i - xMean) ** 2;
+  });
+  const slope = denominator !== 0 ? numerator / denominator : 0;
+  return { slope, intercept: yMean - slope * xMean };
 }
 
 export function calculateStdDev(data: number[]): number {
-  if (data.length < 2) return 0
-  const mean = sum(data) / data.length
-  const variance = data.reduce((s, v) => s + (v - mean) ** 2, 0) / data.length
-  return Math.sqrt(variance)
+  if (data.length < 2) return 0;
+  const mean = sum(data) / data.length;
+  const variance = data.reduce((s, v) => s + (v - mean) ** 2, 0) / data.length;
+  return Math.sqrt(variance);
 }
 
 /**
@@ -102,41 +102,46 @@ export function calculateStdDev(data: number[]): number {
  * classic monthly set.
  */
 export function seasonalityCandidates(periodsPerYear: number): number[] {
-  if (periodsPerYear === 12) return [3, 4, 6, 12]
-  const half = Math.max(2, Math.round(periodsPerYear / 2))
-  return half === periodsPerYear ? [periodsPerYear] : [half, periodsPerYear]
+  if (periodsPerYear === 12) return [3, 4, 6, 12];
+  const half = Math.max(2, Math.round(periodsPerYear / 2));
+  return half === periodsPerYear ? [periodsPerYear] : [half, periodsPerYear];
 }
 
 export function detectSeasonality(
   data: number[],
   opts: { minPeriods: number; minCorrelation: number; candidates: number[] },
 ): number {
-  const { minPeriods, minCorrelation, candidates } = opts
-  const n = data.length
-  if (n < minPeriods) return 0
-  const mean = sum(data) / n
-  const variance = data.reduce((s, x) => s + (x - mean) ** 2, 0) / n
-  let bestPeriod = 0
-  let bestCorr = 0
+  const { minPeriods, minCorrelation, candidates } = opts;
+  const n = data.length;
+  if (n < minPeriods) return 0;
+  const mean = sum(data) / n;
+  const variance = data.reduce((s, x) => s + (x - mean) ** 2, 0) / n;
+  let bestPeriod = 0;
+  let bestCorr = 0;
   for (const period of candidates) {
     if (n >= period * 2) {
-      let sumCorr = 0
-      for (let i = period; i < n; i++) sumCorr += (data[i]! - mean) * (data[i - period]! - mean)
-      const corr = variance > 0 ? sumCorr / ((n - period) * variance) : 0
+      let sumCorr = 0;
+      for (let i = period; i < n; i++) sumCorr += (data[i]! - mean) * (data[i - period]! - mean);
+      const corr = variance > 0 ? sumCorr / ((n - period) * variance) : 0;
       if (corr > bestCorr && corr > minCorrelation) {
-        bestCorr = corr
-        bestPeriod = period
+        bestCorr = corr;
+        bestPeriod = period;
       }
     }
   }
-  return bestPeriod
+  return bestPeriod;
 }
 
-function band(values: number[], sd: number, z: number, spread: number): { low: number[]; high: number[] } {
+function band(
+  values: number[],
+  sd: number,
+  z: number,
+  spread: number,
+): { low: number[]; high: number[] } {
   return {
     low: values.map((v, i) => v - sd * z * (1 + i * spread)),
     high: values.map((v, i) => v + sd * z * (1 + i * spread)),
-  }
+  };
 }
 
 export function forecastETS(
@@ -147,122 +152,164 @@ export function forecastETS(
   phi: number,
   model: { alpha: number; beta: number; gamma: number },
 ): ForecastResult {
-  const n = data.length
-  const { alpha, beta, gamma } = model
-  let level = data[0]!
-  let trend = n > 1 ? data[1]! - data[0]! : 0
-  const seasonal: number[] = []
+  const n = data.length;
+  const { alpha, beta, gamma } = model;
+  let level = data[0]!;
+  let trend = n > 1 ? data[1]! - data[0]! : 0;
+  const seasonal: number[] = [];
   if (seasonalPeriod > 0 && n >= seasonalPeriod * 2) {
     for (let i = 0; i < seasonalPeriod; i++) {
-      let s = 0
-      let count = 0
+      let s = 0;
+      let count = 0;
       for (let j = i; j < n; j += seasonalPeriod) {
-        s += data[j]!
-        count++
+        s += data[j]!;
+        count++;
       }
-      seasonal.push(count > 0 ? s / count / (sum(data) / n) : 1)
+      seasonal.push(count > 0 ? s / count / (sum(data) / n) : 1);
     }
   }
-  const fitted: number[] = []
+  const fitted: number[] = [];
   for (let t = 0; t < n; t++) {
-    const seasonFactor = seasonal.length > 0 ? seasonal[t % seasonalPeriod]! : 1
-    const newLevel = alpha * (data[t]! / seasonFactor) + (1 - alpha) * (level + trend)
-    const newTrend = beta * (newLevel - level) + (1 - beta) * trend
-    if (seasonal.length > 0) seasonal[t % seasonalPeriod] = gamma * (data[t]! / newLevel) + (1 - gamma) * seasonal[t % seasonalPeriod]!
-    level = newLevel
-    trend = newTrend
-    fitted.push(level * seasonFactor)
+    const seasonFactor = seasonal.length > 0 ? seasonal[t % seasonalPeriod]! : 1;
+    const newLevel = alpha * (data[t]! / seasonFactor) + (1 - alpha) * (level + trend);
+    const newTrend = beta * (newLevel - level) + (1 - beta) * trend;
+    if (seasonal.length > 0)
+      seasonal[t % seasonalPeriod] =
+        gamma * (data[t]! / newLevel) + (1 - gamma) * seasonal[t % seasonalPeriod]!;
+    level = newLevel;
+    trend = newTrend;
+    fitted.push(level * seasonFactor);
   }
-  const values: number[] = []
+  const values: number[] = [];
   for (let h = 1; h <= horizon; h++) {
-    const seasonFactor = seasonal.length > 0 ? seasonal[(n + h - 1) % seasonalPeriod]! : 1
+    const seasonFactor = seasonal.length > 0 ? seasonal[(n + h - 1) % seasonalPeriod]! : 1;
     // phi = 1 is the classic linear-trend extrapolation; phi < 1 damps the
     // trend geometrically (sum of phi^i), so a steep decline levels off
     // instead of crossing the domain edge in a straight line. phi is a
     // documented model choice, never a silent clamp: the caller names it.
-    const trendTerm = phi === 1 ? trend * h : trend * (phi * (1 - phi ** h)) / (1 - phi)
-    values.push((level + trendTerm) * seasonFactor)
+    const trendTerm = phi === 1 ? trend * h : (trend * (phi * (1 - phi ** h))) / (1 - phi);
+    values.push((level + trendTerm) * seasonFactor);
   }
-  const sd = calculateStdDev(data)
-  return { values, ...band(values, sd, z, 0.1), fitted, trend, seasonal: seasonal.length > 0, seasonalPeriod }
+  const sd = calculateStdDev(data);
+  return {
+    values,
+    ...band(values, sd, z, 0.1),
+    fitted,
+    trend,
+    seasonal: seasonal.length > 0,
+    seasonalPeriod,
+  };
 }
 
 export function forecastLinear(data: number[], horizon: number, z: number): ForecastResult {
-  const n = data.length
-  const trend = calculateTrend(data)
-  const fitted = data.map((_, i) => trend.intercept + trend.slope * i)
-  const values: number[] = []
-  for (let h = 0; h < horizon; h++) values.push(trend.intercept + trend.slope * (n + h))
-  const sd = calculateStdDev(data)
-  return { values, ...band(values, sd, z, 0.15), fitted, trend: trend.slope, seasonal: false, seasonalPeriod: 0 }
+  const n = data.length;
+  const trend = calculateTrend(data);
+  const fitted = data.map((_, i) => trend.intercept + trend.slope * i);
+  const values: number[] = [];
+  for (let h = 0; h < horizon; h++) values.push(trend.intercept + trend.slope * (n + h));
+  const sd = calculateStdDev(data);
+  return {
+    values,
+    ...band(values, sd, z, 0.15),
+    fitted,
+    trend: trend.slope,
+    seasonal: false,
+    seasonalPeriod: 0,
+  };
 }
 
-export function forecastSeasonal(data: number[], horizon: number, period: number, z: number): ForecastResult {
-  const n = data.length
-  const trend = calculateTrend(data)
-  const seasonalIdx: number[] = []
+export function forecastSeasonal(
+  data: number[],
+  horizon: number,
+  period: number,
+  z: number,
+): ForecastResult {
+  const n = data.length;
+  const trend = calculateTrend(data);
+  const seasonalIdx: number[] = [];
   for (let i = 0; i < period; i++) {
-    const vals: number[] = []
-    for (let j = i; j < n; j += period) vals.push(data[j]! - (trend.intercept + trend.slope * j))
-    seasonalIdx.push(vals.length > 0 ? sum(vals) / vals.length : 0)
+    const vals: number[] = [];
+    for (let j = i; j < n; j += period) vals.push(data[j]! - (trend.intercept + trend.slope * j));
+    seasonalIdx.push(vals.length > 0 ? sum(vals) / vals.length : 0);
   }
-  const fitted = data.map((_, i) => trend.intercept + trend.slope * i + seasonalIdx[i % period]!)
-  const values: number[] = []
-  for (let h = 0; h < horizon; h++) values.push(trend.intercept + trend.slope * (n + h) + seasonalIdx[(n + h) % period]!)
-  const sd = calculateStdDev(data)
-  return { values, ...band(values, sd, z, 0.12), fitted, trend: trend.slope, seasonal: true, seasonalPeriod: period }
+  const fitted = data.map((_, i) => trend.intercept + trend.slope * i + seasonalIdx[i % period]!);
+  const values: number[] = [];
+  for (let h = 0; h < horizon; h++)
+    values.push(trend.intercept + trend.slope * (n + h) + seasonalIdx[(n + h) % period]!);
+  const sd = calculateStdDev(data);
+  return {
+    values,
+    ...band(values, sd, z, 0.12),
+    fitted,
+    trend: trend.slope,
+    seasonal: true,
+    seasonalPeriod: period,
+  };
 }
 
 export function forecastMovingAvg(data: number[], horizon: number, z: number): ForecastResult {
-  const n = data.length
+  const n = data.length;
   // A moving window always spans at least one point; the floor keeps the
   // loop meaningful on the shortest admissible series, never a figure.
-  const windowSize = Math.max(1, Math.min(6, Math.floor(n / 2)))
-  const ma: number[] = []
+  const windowSize = Math.max(1, Math.min(6, Math.floor(n / 2)));
+  const ma: number[] = [];
   for (let i = 0; i < n; i++) {
-    const start = Math.max(0, i - windowSize + 1)
-    const slice = data.slice(start, i + 1)
-    ma.push(sum(slice) / slice.length)
+    const start = Math.max(0, i - windowSize + 1);
+    const slice = data.slice(start, i + 1);
+    ma.push(sum(slice) / slice.length);
   }
-  const trend = calculateTrend(ma.slice(-windowSize))
-  const lastMA = ma[ma.length - 1]!
-  const values: number[] = []
-  for (let h = 0; h < horizon; h++) values.push(lastMA + trend.slope * h)
-  const sd = calculateStdDev(data)
-  return { values, ...band(values, sd, z, 0.2), fitted: ma, trend: trend.slope, seasonal: false, seasonalPeriod: 0 }
+  const trend = calculateTrend(ma.slice(-windowSize));
+  const lastMA = ma[ma.length - 1]!;
+  const values: number[] = [];
+  for (let h = 0; h < horizon; h++) values.push(lastMA + trend.slope * h);
+  const sd = calculateStdDev(data);
+  return {
+    values,
+    ...band(values, sd, z, 0.2),
+    fitted: ma,
+    trend: trend.slope,
+    seasonal: false,
+    seasonalPeriod: 0,
+  };
 }
 
-export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: number, z: number, ma1: number): ForecastResult {
-  const n = data.length
-  const diff: number[] = []
-  for (let i = 1; i < n; i++) diff.push(data[i]! - data[i - 1]!)
-  let ar1 = 0
+export function forecastARIMA(
+  data: number[],
+  horizon: number,
+  seasonalPeriod: number,
+  z: number,
+  ma1: number,
+): ForecastResult {
+  const n = data.length;
+  const diff: number[] = [];
+  for (let i = 1; i < n; i++) diff.push(data[i]! - data[i - 1]!);
+  let ar1 = 0;
   if (diff.length > 1) {
-    let sumXY = 0
-    let sumX2 = 0
+    let sumXY = 0;
+    let sumX2 = 0;
     for (let i = 1; i < diff.length; i++) {
-      sumXY += diff[i]! * diff[i - 1]!
-      sumX2 += diff[i - 1]! * diff[i - 1]!
+      sumXY += diff[i]! * diff[i - 1]!;
+      sumX2 += diff[i - 1]! * diff[i - 1]!;
     }
-    ar1 = sumX2 > 0 ? sumXY / sumX2 : 0
+    ar1 = sumX2 > 0 ? sumXY / sumX2 : 0;
   }
-  ar1 = Math.max(-0.9, Math.min(0.9, ar1))
-  let lastDiff = diff[diff.length - 1] || 0
-  let lastValue = data[n - 1]!
-  const values: number[] = []
+  ar1 = Math.max(-0.9, Math.min(0.9, ar1));
+  let lastDiff = diff[diff.length - 1] || 0;
+  let lastValue = data[n - 1]!;
+  const values: number[] = [];
   for (let h = 0; h < horizon; h++) {
-    const nextDiff = ar1 * lastDiff + ma1 * (lastDiff - ar1 * (diff[diff.length - 2] || 0))
-    lastValue = lastValue + nextDiff
-    values.push(lastValue)
-    lastDiff = nextDiff
+    const nextDiff = ar1 * lastDiff + ma1 * (lastDiff - ar1 * (diff[diff.length - 2] || 0));
+    lastValue = lastValue + nextDiff;
+    values.push(lastValue);
+    lastDiff = nextDiff;
   }
-  const fitted = [data[0]!]
-  lastDiff = 0
+  const fitted = [data[0]!];
+  lastDiff = 0;
   for (let i = 1; i < n; i++) {
-    fitted.push(fitted[i - 1]! + ar1 * lastDiff)
-    lastDiff = diff[i - 1] || 0
+    fitted.push(fitted[i - 1]! + ar1 * lastDiff);
+    lastDiff = diff[i - 1] || 0;
   }
-  const sd = calculateStdDev(diff) || calculateStdDev(data)
+  const sd = calculateStdDev(diff) || calculateStdDev(data);
   return {
     values,
     low: values.map((v, i) => v - sd * z * Math.sqrt(i + 1)),
@@ -271,7 +318,7 @@ export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: n
     trend: diff.length > 0 ? sum(diff) / diff.length : 0,
     seasonal: seasonalPeriod > 0,
     seasonalPeriod,
-  }
+  };
 }
 
 export function applyForecastMethod(
@@ -283,107 +330,111 @@ export function applyForecastMethod(
   growthOverride: number | null = null,
   opts: { modelParams: ForecastModelParams; periodsPerYear: number },
 ): ForecastResult {
-  const n = data.length
+  const n = data.length;
   // Fail closed: an unlisted confidence level has no band multiplier.
-  const z = zScoreForConfidence(confidence)
-  const { modelParams, periodsPerYear } = opts
+  const z = zScoreForConfidence(confidence);
+  const { modelParams, periodsPerYear } = opts;
   // Seasonal cycles count fiscal periods, never assumed months: "monthly"
   // repeats every fiscal year, "quarterly" every quarter of one. A cycle
   // shorter than two periods carries no seasonal variation — a quarterly
   // cycle on a quarterly calendar is a single bucket — so it collapses to
   // the underlying trend: ETS/ARIMA run unseasonal, the seasonal method
   // falls back to linear, instead of inventing a two-period cycle.
-  const quarterlyRaw = Math.round(periodsPerYear / 4)
-  const quarterlyPeriod = quarterlyRaw < 2 ? 0 : quarterlyRaw
-  let seasonalPeriod = 0
-  if (seasonality === 'auto') {
+  const quarterlyRaw = Math.round(periodsPerYear / 4);
+  const quarterlyPeriod = quarterlyRaw < 2 ? 0 : quarterlyRaw;
+  let seasonalPeriod = 0;
+  if (seasonality === "auto") {
     seasonalPeriod = detectSeasonality(data, {
       minPeriods: modelParams.minPeriods,
       minCorrelation: modelParams.minCorrelation,
       candidates: seasonalityCandidates(periodsPerYear),
-    })
-  }
-  else if (seasonality === 'monthly') seasonalPeriod = periodsPerYear
-  else if (seasonality === 'quarterly') seasonalPeriod = quarterlyPeriod
+    });
+  } else if (seasonality === "monthly") seasonalPeriod = periodsPerYear;
+  else if (seasonality === "quarterly") seasonalPeriod = quarterlyPeriod;
   // A detected or declared cycle shorter than two periods is no cycle.
-  const effectiveSeasonal = seasonalPeriod < 2 ? 0 : seasonalPeriod
+  const effectiveSeasonal = seasonalPeriod < 2 ? 0 : seasonalPeriod;
 
-  let result: ForecastResult
+  let result: ForecastResult;
   switch (method) {
-    case 'ets':
-      result = forecastETS(data, horizon, effectiveSeasonal, z, 1, modelParams)
-      break
-    case 'ets_damped':
-      result = forecastETS(data, horizon, effectiveSeasonal, z, modelParams.dampedPhi, modelParams)
-      break
-    case 'linear':
-      result = forecastLinear(data, horizon, z)
-      break
-    case 'seasonal': {
-      const period = effectiveSeasonal || (seasonality === 'quarterly' ? 0 : periodsPerYear)
-      result = period < 2 ? forecastLinear(data, horizon, z) : forecastSeasonal(data, horizon, period, z)
-      break
+    case "ets":
+      result = forecastETS(data, horizon, effectiveSeasonal, z, 1, modelParams);
+      break;
+    case "ets_damped":
+      result = forecastETS(data, horizon, effectiveSeasonal, z, modelParams.dampedPhi, modelParams);
+      break;
+    case "linear":
+      result = forecastLinear(data, horizon, z);
+      break;
+    case "seasonal": {
+      const period = effectiveSeasonal || (seasonality === "quarterly" ? 0 : periodsPerYear);
+      result =
+        period < 2 ? forecastLinear(data, horizon, z) : forecastSeasonal(data, horizon, period, z);
+      break;
     }
-    case 'moving_avg':
-      result = forecastMovingAvg(data, horizon, z)
-      break
-    case 'arima':
-      result = forecastARIMA(data, horizon, effectiveSeasonal, z, modelParams.ma1)
-      break
+    case "moving_avg":
+      result = forecastMovingAvg(data, horizon, z);
+      break;
+    case "arima":
+      result = forecastARIMA(data, horizon, effectiveSeasonal, z, modelParams.ma1);
+      break;
     default:
-      result = forecastLinear(data, horizon, z)
+      result = forecastLinear(data, horizon, z);
   }
 
   if (growthOverride !== null && !Number.isNaN(growthOverride)) {
-    const baseValue = data[n - 1]!
-    const perPeriodGrowth = growthOverride / 100 / periodsPerYear
-    result.values = Array.from({ length: horizon }, (_, i) => baseValue * (1 + perPeriodGrowth) ** (i + 1))
+    const baseValue = data[n - 1]!;
+    const perPeriodGrowth = growthOverride / 100 / periodsPerYear;
+    result.values = Array.from(
+      { length: horizon },
+      (_, i) => baseValue * (1 + perPeriodGrowth) ** (i + 1),
+    );
   }
-  return result
+  return result;
 }
 
 /** Macro adjustment (Optimistic/Recession/…): scale every forecast month. */
 export function applyForecastAdjustment(values: number[], macroAdjustment: number): number[] {
-  if (macroAdjustment === 0) return values
-  return values.map((v) => v * (1 + macroAdjustment))
+  if (macroAdjustment === 0) return values;
+  return values.map((v) => v * (1 + macroAdjustment));
 }
 
 export function calculateMAPE(actual: number[], predicted: number[]): number {
-  const n = Math.min(actual.length, predicted.length)
-  if (n === 0) return 0
-  let s = 0
-  for (let i = 0; i < n; i++) if (actual[i] !== 0) s += Math.abs((actual[i]! - predicted[i]!) / actual[i]!)
-  return (s / n) * 100
+  const n = Math.min(actual.length, predicted.length);
+  if (n === 0) return 0;
+  let s = 0;
+  for (let i = 0; i < n; i++)
+    if (actual[i] !== 0) s += Math.abs((actual[i]! - predicted[i]!) / actual[i]!);
+  return (s / n) * 100;
 }
 
 export function calculateRMSE(actual: number[], predicted: number[]): number {
-  const n = Math.min(actual.length, predicted.length)
-  if (n === 0) return 0
-  let sumSq = 0
-  for (let i = 0; i < n; i++) sumSq += (actual[i]! - predicted[i]!) ** 2
-  return Math.sqrt(sumSq / n)
+  const n = Math.min(actual.length, predicted.length);
+  if (n === 0) return 0;
+  let sumSq = 0;
+  for (let i = 0; i < n; i++) sumSq += (actual[i]! - predicted[i]!) ** 2;
+  return Math.sqrt(sumSq / n);
 }
 
 export function calculateR2(actual: number[], predicted: number[]): number {
-  const n = Math.min(actual.length, predicted.length)
-  if (n === 0) return 0
-  const mean = sum(actual.slice(0, n)) / n
-  let ssTot = 0
-  let ssRes = 0
+  const n = Math.min(actual.length, predicted.length);
+  if (n === 0) return 0;
+  const mean = sum(actual.slice(0, n)) / n;
+  let ssTot = 0;
+  let ssRes = 0;
   for (let i = 0; i < n; i++) {
-    ssTot += (actual[i]! - mean) ** 2
-    ssRes += (actual[i]! - predicted[i]!) ** 2
+    ssTot += (actual[i]! - mean) ** 2;
+    ssRes += (actual[i]! - predicted[i]!) ** 2;
   }
-  return ssTot > 0 ? 1 - ssRes / ssTot : 0
+  return ssTot > 0 ? 1 - ssRes / ssTot : 0;
 }
 
 export function diagnostics(actual: number[], result: ForecastResult): ForecastDiagnostics {
-  const fitted = result.fitted.length ? result.fitted : actual
+  const fitted = result.fitted.length ? result.fitted : actual;
   return {
     mape: calculateMAPE(actual, fitted),
     rmse: calculateRMSE(actual, fitted),
     r2: calculateR2(actual, fitted),
-    trendDir: result.trend > 0 ? 'Upward' : result.trend < 0 ? 'Downward' : 'Flat',
-    seasonLabel: result.seasonal ? `Detected (${result.seasonalPeriod}mo)` : 'None',
-  }
+    trendDir: result.trend > 0 ? "Upward" : result.trend < 0 ? "Downward" : "Flat",
+    seasonLabel: result.seasonal ? `Detected (${result.seasonalPeriod}mo)` : "None",
+  };
 }

@@ -20,7 +20,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.form-layout-patch-bool-test')]
@@ -38,7 +38,8 @@ const mockAuthz = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("customization/form-layouts")) ||
+      (specifier === "../../../../../lib/authz" &&
+        context.parentURL?.includes("customization/form-layouts")) ||
       (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
@@ -57,9 +58,7 @@ const routeUrl = "./route.ts?form-layout-patch-bool-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 const LAYOUT_ID = "00000000-0000-4000-8000-000000000041";
 const DEFAULT_ID = "00000000-0000-4000-8000-000000000042";
@@ -89,151 +88,137 @@ function patchRequest(body: unknown): Request {
 }
 
 async function storedFlags(orgId: string): Promise<{ isDefault: boolean; isActive: boolean }> {
-  const r = await db.execute<{ isDefault: boolean; isActive: boolean }>(sql`
+  const r = await db.execute<{ isDefault: boolean; isActive: boolean }>(
+    sql`
     select is_default as "isDefault", is_active as "isActive"
-      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`, "objects");
+      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!;
 }
 
-test(
-  "PATCH refuses a non-boolean isDefault with a 400, never a storage 500",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isDefault: "sometimes" }), {
-      params: Promise.resolve({ id: LAYOUT_ID }),
-    });
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /isDefault/);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+test("PATCH refuses a non-boolean isDefault with a 400, never a storage 500", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isDefault: "sometimes" }), {
+    params: Promise.resolve({ id: LAYOUT_ID }),
+  });
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /isDefault/);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
-test(
-  "PATCH refuses a non-boolean isActive with a 400, never a storage 500",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isActive: "eventually" }), {
-      params: Promise.resolve({ id: LAYOUT_ID }),
-    });
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /isActive/);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+test("PATCH refuses a non-boolean isActive with a 400, never a storage 500", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isActive: "eventually" }), {
+    params: Promise.resolve({ id: LAYOUT_ID }),
+  });
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /isActive/);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
-test(
-  "PATCH still accepts real booleans for both flags",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isDefault: true, isActive: true }), {
-      params: Promise.resolve({ id: LAYOUT_ID }),
-    });
-    assert.equal(res.status, 200);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: true });
-  },
-);
+test("PATCH still accepts real booleans for both flags", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isDefault: true, isActive: true }), {
+    params: Promise.resolve({ id: LAYOUT_ID }),
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: true });
+});
 
-test(
-  "PATCH refuses an inactive default instead of storing a row resolve cannot see",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
-      params: Promise.resolve({ id: LAYOUT_ID }),
-    });
-    assert.equal(res.status, 400);
-    const body = await res.json();
-    assert.match(String(body.error), /inactive form cannot be the default/i);
-    assert.match(String(body.error), /activate it/i);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+test("PATCH refuses an inactive default instead of storing a row resolve cannot see", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
+    params: Promise.resolve({ id: LAYOUT_ID }),
+  });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(String(body.error), /inactive form cannot be the default/i);
+  assert.match(String(body.error), /activate it/i);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
 async function storedRoles(orgId: string): Promise<unknown> {
-  const r = await db.execute<{ allowedRoles: unknown }>(sql`
+  const r = await db.execute<{ allowedRoles: unknown }>(
+    sql`
     select allowed_roles as "allowedRoles"
-      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`, "objects");
+      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]?.allowedRoles ?? null;
 }
 
-test(
-  "PATCH refuses a truthy non-array allowedRoles and does not persist it",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ allowedRoles: { admin: true } }), {
-      params: Promise.resolve({ id: LAYOUT_ID }),
-    });
-    assert.equal(res.status, 400);
-    assert.deepEqual(await res.json(), {
-      error: "allowedRoles must be a list of UUID role ids",
-      issues: [{ path: "allowedRoles", message: "allowedRoles must be a list of UUID role ids" }],
-    });
-    assert.equal(await storedRoles(f.orgId), null);
-  },
-);
+test("PATCH refuses a truthy non-array allowedRoles and does not persist it", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ allowedRoles: { admin: true } }), {
+    params: Promise.resolve({ id: LAYOUT_ID }),
+  });
+  assert.equal(res.status, 400);
+  assert.deepEqual(await res.json(), {
+    error: "allowedRoles must be a list of UUID role ids",
+    issues: [{ path: "allowedRoles", message: "allowedRoles must be a list of UUID role ids" }],
+  });
+  assert.equal(await storedRoles(f.orgId), null);
+});
 
-test(
-  "PATCH refuses a non-UUID allowedRoles string and does not persist it",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ allowedRoles: ["admin"] }), {
-      params: Promise.resolve({ id: LAYOUT_ID }),
-    });
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /allowedRoles/);
-    assert.equal(await storedRoles(f.orgId), null);
-  },
-);
+test("PATCH refuses a non-UUID allowedRoles string and does not persist it", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ allowedRoles: ["admin"] }), {
+    params: Promise.resolve({ id: LAYOUT_ID }),
+  });
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /allowedRoles/);
+  assert.equal(await storedRoles(f.orgId), null);
+});
 
-test(
-  "PATCH persists a UUID allowedRoles list",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ allowedRoles: [ROLE_ID] }), {
-      params: Promise.resolve({ id: LAYOUT_ID }),
-    });
-    assert.equal(res.status, 200);
-    assert.deepEqual(await storedRoles(f.orgId), [ROLE_ID]);
-  },
-);
+test("PATCH persists a UUID allowedRoles list", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ allowedRoles: [ROLE_ID] }), {
+    params: Promise.resolve({ id: LAYOUT_ID }),
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await storedRoles(f.orgId), [ROLE_ID]);
+});
 
-test(
-  "PATCH {isDefault:true} on a row that vanishes after loadOwn 404s and keeps the org default",
-  async () => {
-    const f = await seed();
-    await db.execute(sql`
+test("PATCH {isDefault:true} on a row that vanishes after loadOwn 404s and keeps the org default", async () => {
+  const f = await seed();
+  await db.execute(sql`
       insert into form_layouts (id, org_id, record_type, name, is_default, layout, created_by, updated_by)
       values (${DEFAULT_ID}, ${f.orgId}, 'vendor_bill', 'Org Default', true,
               '{"schemaVersion": 1, "recordType": "vendor_bill"}'::jsonb, ${f.actorId}, ${f.actorId})
       on conflict (id) do update
         set org_id = excluded.org_id, is_default = true, is_active = true`);
-    const original = db.execute.bind(db);
-    let deleted = false;
-    db.execute = (async (query: Parameters<typeof original>[0], mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
-      const result = await original<Record<string, unknown>>(query);
-      const row = result.rows[0] as { id?: string } | undefined;
-      if (!deleted && row?.id === LAYOUT_ID) {
-        deleted = true;
-        await original(sql`delete from form_layouts where id = ${LAYOUT_ID} and org_id = ${f.orgId}`);
-      }
-      return inMode(result);
-    }) as typeof db.execute;
-    try {
-      const res = await PATCH(patchRequest({ isDefault: true }), {
-        params: Promise.resolve({ id: LAYOUT_ID }),
-      });
-      const body = await res.json();
-      assert.equal(res.status, 404, `expected 404, got ${res.status}: ${JSON.stringify(body)}`);
-      assert.notEqual((body as { ok?: unknown }).ok, true);
-      const def = await db.execute<{ isDefault: boolean }>(sql`
-        select is_default as "isDefault"
-          from form_layouts where id = ${DEFAULT_ID} and org_id = ${f.orgId}`, "objects");
-      assert.equal(def[0]?.isDefault, true, "org default must survive a zero-row PATCH");
-    } finally {
-      db.execute = original;
+  const original = db.execute.bind(db);
+  let deleted = false;
+  db.execute = (async (query: Parameters<typeof original>[0], mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
+    const result = await original<Record<string, unknown>>(query);
+    const row = result.rows[0] as { id?: string } | undefined;
+    if (!deleted && row?.id === LAYOUT_ID) {
+      deleted = true;
+      await original(sql`delete from form_layouts where id = ${LAYOUT_ID} and org_id = ${f.orgId}`);
     }
-  },
-);
+    return inMode(result);
+  }) as typeof db.execute;
+  try {
+    const res = await PATCH(patchRequest({ isDefault: true }), {
+      params: Promise.resolve({ id: LAYOUT_ID }),
+    });
+    const body = await res.json();
+    assert.equal(res.status, 404, `expected 404, got ${res.status}: ${JSON.stringify(body)}`);
+    assert.notEqual((body as { ok?: unknown }).ok, true);
+    const def = await db.execute<{ isDefault: boolean }>(
+      sql`
+        select is_default as "isDefault"
+          from form_layouts where id = ${DEFAULT_ID} and org_id = ${f.orgId}`,
+      "objects",
+    );
+    assert.equal(def[0]?.isDefault, true, "org default must survive a zero-row PATCH");
+  } finally {
+    db.execute = original;
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

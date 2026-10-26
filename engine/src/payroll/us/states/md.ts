@@ -50,7 +50,11 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCode, certificateCount, certificateFlag,
+  certificateAmount,
+  certificateChoice,
+  certificateCode,
+  certificateCount,
+  certificateFlag,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollReciprocityAgreement } from "../../reciprocity.ts";
@@ -64,14 +68,17 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/md.ts";
 
 export type MdSchedule = "single" | "joint";
 
 export type MdPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "annual" | "daily";
+  "weekly" | "biweekly" | "semimonthly" | "monthly" | "quarterly" | "annual" | "daily";
 
 /** One state-withholding band. Rates below 4.75% are not used. */
 export interface MdStateBand {
@@ -241,20 +248,22 @@ const MD_EDITIONS_BY_YEAR: Record<number, MdYearRates> = {
   [MD_RATES_2026.year]: MD_RATES_2026,
 };
 
-export const MD_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Maryland Employer Withholding Guide (Revised December 2025)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Comptroller of Maryland, 2026 Maryland Employer Withholding Guide, Revised December "
-    + "2025 — percentage method (p. 6), $3,400 standard deduction, $3,200 exemption, "
-    + "combined state+local tables; 2026 Delaware schedule for Maryland residents working "
-    + "in Delaware (pp. 10–12, 3.30% state+local less Delaware credit); Withholding Tax "
-    + "Facts January 2026–December 2026 (COM/RAD-098 Revised 12/25) county local rates; "
-    + "Form MW507 (COM/RAD-036 07/25)",
-  status: "published",
-  region: "MD",
-}];
+export const MD_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Maryland Employer Withholding Guide (Revised December 2025)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Comptroller of Maryland, 2026 Maryland Employer Withholding Guide, Revised December " +
+      "2025 — percentage method (p. 6), $3,400 standard deduction, $3,200 exemption, " +
+      "combined state+local tables; 2026 Delaware schedule for Maryland residents working " +
+      "in Delaware (pp. 10–12, 3.30% state+local less Delaware credit); Withholding Tax " +
+      "Facts January 2026–December 2026 (COM/RAD-098 Revised 12/25) county local rates; " +
+      "Form MW507 (COM/RAD-036 07/25)",
+    status: "published",
+    region: "MD",
+  },
+];
 
 /**
  * Form MW507's three filing-status checkboxes onto the Guide's two schedules.
@@ -280,15 +289,16 @@ export function mdScheduleFor(filingStatus: string | null): MdSchedule {
 export function mdCounty(code: string): MdCounty {
   const trimmed = code.trim();
   const padded = /^\d{1,2}$/.test(trimmed) ? trimmed.padStart(2, "0") : trimmed;
-  const county = MD_COUNTY_BY_CODE.get(padded)
-    ?? MD_COUNTY_BY_CODE.get(padded.toUpperCase())
-    ?? MD_COUNTY_BY_CODE.get(padded.toLowerCase());
+  const county =
+    MD_COUNTY_BY_CODE.get(padded) ??
+    MD_COUNTY_BY_CODE.get(padded.toUpperCase()) ??
+    MD_COUNTY_BY_CODE.get(padded.toLowerCase());
   if (!county) {
     throw new PayrollError(
-      `"${code}" is not a Maryland county published in Withholding Tax Facts `
-      + `January 2026–December 2026 (${RATES_MODULE}). The Comptroller lists `
-      + "23 counties and Baltimore City (codes 01–24). An unknown code is not "
-      + "a zero rate and is not the 3.30% maximum.",
+      `"${code}" is not a Maryland county published in Withholding Tax Facts ` +
+        `January 2026–December 2026 (${RATES_MODULE}). The Comptroller lists ` +
+        "23 counties and Baltimore City (codes 01–24). An unknown code is not " +
+        "a zero rate and is not the 3.30% maximum.",
     );
   }
   return county;
@@ -323,11 +333,17 @@ export function mdAnnualCombinedTax(input: {
     const ceiling = band.upTo == null ? null : U(band.upTo);
     if (ceiling == null || input.taxable <= ceiling) {
       const excess = max0(input.taxable - U(band.over));
-      return { tax: taxAtFloor + mulRateCents(excess, combined), bandOver: band.over, combinedRate: combined };
+      return {
+        tax: taxAtFloor + mulRateCents(excess, combined),
+        bandOver: band.over,
+        combinedRate: combined,
+      };
     }
     taxAtFloor = taxAtFloor + mulRateCents(U(band.upTo!) - U(band.over), combined);
   }
-  throw new PayrollError(`no Maryland withholding band covers taxable wages of ${D(input.taxable)}`);
+  throw new PayrollError(
+    `no Maryland withholding band covers taxable wages of ${D(input.taxable)}`,
+  );
 }
 
 /**
@@ -338,23 +354,22 @@ export function mdAnnualCombinedTax(input: {
  */
 export function mdAnneArundelLocal(taxable: bigint, schedule: MdSchedule): bigint {
   if (taxable <= 0n) return 0n;
-  const bands = schedule === "joint"
-    ? [
-      { over: "0", upTo: "75000", percent: "2.70" },
-      { over: "75000", upTo: "480000", percent: "2.94" },
-      { over: "480000", upTo: null, percent: "3.20" },
-    ]
-    : [
-      { over: "0", upTo: "50000", percent: "2.70" },
-      { over: "50000", upTo: "400000", percent: "2.94" },
-      { over: "400000", upTo: null, percent: "3.20" },
-    ];
+  const bands =
+    schedule === "joint"
+      ? [
+          { over: "0", upTo: "75000", percent: "2.70" },
+          { over: "75000", upTo: "480000", percent: "2.94" },
+          { over: "480000", upTo: null, percent: "3.20" },
+        ]
+      : [
+          { over: "0", upTo: "50000", percent: "2.70" },
+          { over: "50000", upTo: "400000", percent: "2.94" },
+          { over: "400000", upTo: null, percent: "3.20" },
+        ];
   let tax = 0n;
   let remaining = taxable;
   for (const band of bands) {
-    const width = band.upTo == null
-      ? remaining
-      : bmin(remaining, U(band.upTo) - U(band.over));
+    const width = band.upTo == null ? remaining : bmin(remaining, U(band.upTo) - U(band.over));
     if (width <= 0n) continue;
     tax += mulRateCents(width, pctToRate(band.percent));
     remaining -= width;
@@ -373,19 +388,20 @@ export function mdAnneArundelLocal(taxable: bigint, schedule: MdSchedule): bigin
  */
 export function mdFrederickLocal(taxable: bigint, schedule: MdSchedule): bigint {
   if (taxable <= 0n) return 0n;
-  const bands = schedule === "joint"
-    ? [
-      { upTo: "25000", percent: "2.25" },
-      { upTo: "100000", percent: "2.75" },
-      { upTo: "250000", percent: "2.96" },
-      { upTo: null, percent: "3.20" },
-    ]
-    : [
-      { upTo: "25000", percent: "2.25" },
-      { upTo: "50000", percent: "2.75" },
-      { upTo: "150000", percent: "2.96" },
-      { upTo: null, percent: "3.20" },
-    ];
+  const bands =
+    schedule === "joint"
+      ? [
+          { upTo: "25000", percent: "2.25" },
+          { upTo: "100000", percent: "2.75" },
+          { upTo: "250000", percent: "2.96" },
+          { upTo: null, percent: "3.20" },
+        ]
+      : [
+          { upTo: "25000", percent: "2.25" },
+          { upTo: "50000", percent: "2.75" },
+          { upTo: "150000", percent: "2.96" },
+          { upTo: null, percent: "3.20" },
+        ];
   for (const band of bands) {
     if (band.upTo == null || taxable <= U(band.upTo)) {
       return mulRateCents(taxable, pctToRate(band.percent));
@@ -458,7 +474,9 @@ export function mdDelawareRatesForPayDate(payDate: string): MdDelawareSchedule {
   const year = MD_STATE_ENGINE.ratesForPayDate(payDate).year;
   const schedule = MD_DELAWARE_BY_YEAR[year];
   if (!schedule) {
-    throw new PayrollError(`Maryland Delaware withholding schedule is not transcribed for ${year} — ${RATES_MODULE}`);
+    throw new PayrollError(
+      `Maryland Delaware withholding schedule is not transcribed for ${year} — ${RATES_MODULE}`,
+    );
   }
   return schedule;
 }
@@ -518,32 +536,56 @@ export function mdDelawareResidentTax(input: {
   const rateYear = rates.year;
   const P = MD_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
   const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const trace = (key: string, value: bigint) => {
+    factors[key] = D(value);
+  };
   const zeroed = (key: string): UsStateWithholdingResult => {
     trace(key, 1n);
     return {
-      state: "MD", year: rateYear, tax: D(0n), statutoryTax: D(0n),
-      additionalWithholding: D(0n), taxSupplemental: D(0n), factors,
+      state: "MD",
+      year: rateYear,
+      tax: D(0n),
+      statutoryTax: D(0n),
+      additionalWithholding: D(0n),
+      taxSupplemental: D(0n),
+      factors,
     };
   };
 
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
     const militarySpouseCertificate = input.supportingCertificates?.us_md_mw507m;
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Maryland", [
-      { key: "employee_married_to_servicemember", description: "the employee is married to a servicemember" },
-      { key: "employee_domiciled_outside_md", description: "the employee is domiciled in a state other than Maryland" },
-      { key: "servicemember_duty_station_qualifies", description: "the spouse's permanent duty station is in Maryland, an immediate neighboring state, or the District of Columbia" },
-      { key: "employee_in_md_only_to_be_with_spouse", description: "the employee resides and works in Maryland only to be with the servicemember spouse" },
-      { key: "spousal_military_id_on_file", description: "a copy of the military ID card is attached" },
+      {
+        key: "employee_married_to_servicemember",
+        description: "the employee is married to a servicemember",
+      },
+      {
+        key: "employee_domiciled_outside_md",
+        description: "the employee is domiciled in a state other than Maryland",
+      },
+      {
+        key: "servicemember_duty_station_qualifies",
+        description:
+          "the spouse's permanent duty station is in Maryland, an immediate neighboring state, or the District of Columbia",
+      },
+      {
+        key: "employee_in_md_only_to_be_with_spouse",
+        description:
+          "the employee resides and works in Maryland only to be with the servicemember spouse",
+      },
+      {
+        key: "spousal_military_id_on_file",
+        description: "a copy of the military ID card is attached",
+      },
     ]);
     return zeroed("MD_MILITARY_SPOUSE_EXEMPT");
   }
 
   if (
-    certificateFlag(input.certificate, "exempt")
-    || certificateFlag(input.certificate, "reciprocal_exempt")
-    || certificateFlag(input.certificate, "pa_york_adams_local_exempt")
-    || certificateFlag(input.certificate, "pa_other_local_exempt")
+    certificateFlag(input.certificate, "exempt") ||
+    certificateFlag(input.certificate, "reciprocal_exempt") ||
+    certificateFlag(input.certificate, "pa_york_adams_local_exempt") ||
+    certificateFlag(input.certificate, "pa_other_local_exempt")
   ) {
     return zeroed("MD_EXEMPT");
   }
@@ -562,20 +604,31 @@ export function mdDelawareResidentTax(input: {
     factors.MD_BELOW_MINIMUM = "1";
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MD", year: rateYear, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra),
-      taxSupplemental: D(0n), factors: { ...factors, MD_WITHHELD: D(extra) },
+      state: "MD",
+      year: rateYear,
+      tax: D(extra),
+      statutoryTax: D(0n),
+      additionalWithholding: D(extra),
+      taxSupplemental: D(0n),
+      factors: { ...factors, MD_WITHHELD: D(extra) },
     };
   }
   if (!periodName && annualWages < U(rates.annualMinimum)) {
     factors.MD_BELOW_MINIMUM = "1";
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MD", year: rateYear, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra),
-      taxSupplemental: D(0n), factors: { ...factors, MD_WITHHELD: D(extra) },
+      state: "MD",
+      year: rateYear,
+      tax: D(extra),
+      statutoryTax: D(0n),
+      additionalWithholding: D(extra),
+      taxSupplemental: D(0n),
+      factors: { ...factors, MD_WITHHELD: D(extra) },
     };
   }
 
-  const annualExemption = U(rates.standardDeduction) + U(rates.exemption) * BigInt(Math.max(exemptions, 0));
+  const annualExemption =
+    U(rates.standardDeduction) + U(rates.exemption) * BigInt(Math.max(exemptions, 0));
   trace("MD_ANNUAL_EXEMPTION", annualExemption);
   const taxable = max0(annualWages - annualExemption);
   trace("MD_TAXABLE", taxable);
@@ -599,7 +652,11 @@ export function mdDelawareResidentTax(input: {
 }
 
 /** State withholding only — the 4.75%+ schedule, no local. */
-export function mdAnnualStateTax(taxable: bigint, schedule: MdSchedule, rates = MD_RATES_2026): bigint {
+export function mdAnnualStateTax(
+  taxable: bigint,
+  schedule: MdSchedule,
+  rates = MD_RATES_2026,
+): bigint {
   return mdAnnualCombinedTax({ taxable, schedule, localPercent: "0", rates }).tax;
 }
 
@@ -622,16 +679,19 @@ export function mdLumpSumBonus(input: {
   basis: "resident" | "nonresident";
 }): string {
   const rates = MD_STATE_ENGINE.ratesForPayDate(input.payDate);
-  const localPercent = input.basis === "nonresident"
-    ? "2.25"
-    : input.county == null
-      ? null
-      : input.county.rate === "graduated" ? "3.20" : input.county.rate;
+  const localPercent =
+    input.basis === "nonresident"
+      ? "2.25"
+      : input.county == null
+        ? null
+        : input.county.rate === "graduated"
+          ? "3.20"
+          : input.county.rate;
   if (localPercent == null) {
     throw new PayrollError(
-      "Maryland lump-sum bonus withholding needs the employee's county of residence "
-      + "(Guide p. 9: highest state rate plus the highest local rate for the county "
-      + "of residence). A missing county is not a zero local rate.",
+      "Maryland lump-sum bonus withholding needs the employee's county of residence " +
+        "(Guide p. 9: highest state rate plus the highest local rate for the county " +
+        "of residence). A missing county is not a zero local rate.",
     );
   }
   const combined = mdCombinedRate(rates.lumpSumStatePercent, localPercent);
@@ -650,15 +710,35 @@ function compute(
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
     const militarySpouseCertificate = input.supportingCertificates?.us_md_mw507m;
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Maryland", [
-      { key: "employee_married_to_servicemember", description: "the employee is married to a servicemember" },
-      { key: "employee_domiciled_outside_md", description: "the employee is domiciled in a state other than Maryland" },
-      { key: "servicemember_duty_station_qualifies", description: "the spouse's permanent duty station is in Maryland, an immediate neighboring state, or the District of Columbia" },
-      { key: "employee_in_md_only_to_be_with_spouse", description: "the employee resides and works in Maryland only to be with the servicemember spouse" },
-      { key: "spousal_military_id_on_file", description: "a copy of the military ID card is attached" },
+      {
+        key: "employee_married_to_servicemember",
+        description: "the employee is married to a servicemember",
+      },
+      {
+        key: "employee_domiciled_outside_md",
+        description: "the employee is domiciled in a state other than Maryland",
+      },
+      {
+        key: "servicemember_duty_station_qualifies",
+        description:
+          "the spouse's permanent duty station is in Maryland, an immediate neighboring state, or the District of Columbia",
+      },
+      {
+        key: "employee_in_md_only_to_be_with_spouse",
+        description:
+          "the employee resides and works in Maryland only to be with the servicemember spouse",
+      },
+      {
+        key: "spousal_military_id_on_file",
+        description: "a copy of the military ID card is attached",
+      },
     ]);
     const militarySpouseExempt = context.exemptResult({
-      flagKey: "military_spouse_exempt", factorKey: "MD_MILITARY_SPOUSE_EXEMPT",
-      factorFormat: "decimal", statutoryTax: true, additionalWithholding: true,
+      flagKey: "military_spouse_exempt",
+      factorKey: "MD_MILITARY_SPOUSE_EXEMPT",
+      factorFormat: "decimal",
+      statutoryTax: true,
+      additionalWithholding: true,
     });
     if (militarySpouseExempt) return militarySpouseExempt;
   }
@@ -696,15 +776,22 @@ function compute(
   // `mdLumpSumBonus` rather than pricing a zero local rate.
   const supplementalAmount = U(input.supplemental ?? "0");
   if (input.supplementalPaymentTiming === "separate" && supplementalAmount > 0n) {
-    const regular = MD_STATE_ENGINE.compute({ ...input, supplemental: "0", supplementalPaymentTiming: undefined });
-    const lumpSum = U(mdLumpSumBonus({
-      payDate: input.payDate,
-      amount: input.supplemental!,
-      county: input.basis === "nonresident"
-        ? null
-        : requireCounty(input.certificate, "lump-sum annual bonus withholding"),
-      basis: input.basis,
-    }));
+    const regular = MD_STATE_ENGINE.compute({
+      ...input,
+      supplemental: "0",
+      supplementalPaymentTiming: undefined,
+    });
+    const lumpSum = U(
+      mdLumpSumBonus({
+        payDate: input.payDate,
+        amount: input.supplemental!,
+        county:
+          input.basis === "nonresident"
+            ? null
+            : requireCounty(input.certificate, "lump-sum annual bonus withholding"),
+        basis: input.basis,
+      }),
+    );
     return {
       state: "MD",
       year: rates.year,
@@ -728,7 +815,12 @@ function compute(
     factors.MD_BELOW_MINIMUM = "1";
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MD", year: rates.year, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra), taxSupplemental: D(0n),
+      state: "MD",
+      year: rates.year,
+      tax: D(extra),
+      statutoryTax: D(0n),
+      additionalWithholding: D(extra),
+      taxSupplemental: D(0n),
       factors: { ...factors, MD_WITHHELD: D(extra) },
     };
   }
@@ -736,12 +828,18 @@ function compute(
     factors.MD_BELOW_MINIMUM = "1";
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MD", year: rates.year, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra), taxSupplemental: D(0n),
+      state: "MD",
+      year: rates.year,
+      tax: D(extra),
+      statutoryTax: D(0n),
+      additionalWithholding: D(extra),
+      taxSupplemental: D(0n),
       factors: { ...factors, MD_WITHHELD: D(extra) },
     };
   }
 
-  const annualExemption = U(rates.standardDeduction) + U(rates.exemption) * BigInt(Math.max(exemptions, 0));
+  const annualExemption =
+    U(rates.standardDeduction) + U(rates.exemption) * BigInt(Math.max(exemptions, 0));
   trace("MD_ANNUAL_EXEMPTION", annualExemption);
   const taxable = max0(annualWages - annualExemption);
   trace("MD_TAXABLE", taxable);
@@ -772,9 +870,10 @@ function compute(
     factors.MD_COUNTY = county.code;
     if (county.rate === "graduated") {
       const state = mdAnnualStateTax(taxable, schedule, rates);
-      const local = county.code === "02"
-        ? mdAnneArundelLocal(taxable, schedule)
-        : mdFrederickLocal(taxable, schedule);
+      const local =
+        county.code === "02"
+          ? mdAnneArundelLocal(taxable, schedule)
+          : mdFrederickLocal(taxable, schedule);
       trace("MD_STATE_TAX", state);
       trace("MD_LOCAL_TAX", local);
       annualTax = state + local;
@@ -815,17 +914,14 @@ function localOnly(taxable: bigint, schedule: MdSchedule, county: MdCounty): big
   return mulRateCents(taxable, pctToRate(county.rate));
 }
 
-function requireCounty(
-  certificate: UsStateWithholdingInput["certificate"],
-  why: string,
-): MdCounty {
+function requireCounty(certificate: UsStateWithholdingInput["certificate"], why: string): MdCounty {
   const raw = certificateCode(certificate, "residence_county");
   if (raw == null || raw.trim() === "" || /^n\/?a$/i.test(raw.trim())) {
     throw new PayrollError(
-      `Maryland ${why} needs the MW507 county of residence (nonresidents enter the `
-      + "Maryland county of employment). The Employer Withholding Guide does not "
-      + "name a default local rate when the county is blank — Tax Facts lists a "
-      + "rate for each county, and an omitted county is not 3.30%.",
+      `Maryland ${why} needs the MW507 county of residence (nonresidents enter the ` +
+        "Maryland county of employment). The Employer Withholding Guide does not " +
+        "name a default local rate when the county is blank — Tax Facts lists a " +
+        "rate for each county, and an omitted county is not 3.30%.",
     );
   }
   return mdCounty(raw);
@@ -833,14 +929,22 @@ function requireCounty(
 
 function periodNameFor(periodsPerYear: number): MdPeriod | null {
   switch (periodsPerYear) {
-    case 52: return "weekly";
-    case 26: return "biweekly";
-    case 24: return "semimonthly";
-    case 12: return "monthly";
-    case 4: return "quarterly";
-    case 1: return "annual";
-    case 365: return "daily";
-    default: return null;
+    case 52:
+      return "weekly";
+    case 26:
+      return "biweekly";
+    case 24:
+      return "semimonthly";
+    case 12:
+      return "monthly";
+    case 4:
+      return "quarterly";
+    case 1:
+      return "annual";
+    case 365:
+      return "daily";
+    default:
+      return null;
   }
 }
 
@@ -911,13 +1015,13 @@ export const MD_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "MD" },
   purpose: "withholding",
   citation:
-    "Maryland Form MW507 (COM/RAD-036 07/25); 2026 Maryland Employer Withholding Guide, "
-    + "Revised December 2025; Withholding Tax Facts January 2026–December 2026 "
-    + "(COM/RAD-098 Revised 12/25)",
+    "Maryland Form MW507 (COM/RAD-036 07/25); 2026 Maryland Employer Withholding Guide, " +
+    "Revised December 2025; Withholding Tax Facts January 2026–December 2026 " +
+    "(COM/RAD-098 Revised 12/25)",
   summary:
-    "Sets Maryland state and local withholding. If the employee does not furnish MW507, "
-    + "the employer withholds as if one exemption was claimed. County of residence "
-    + "selects the local rate; a blank county is refused, not defaulted to 3.30%.",
+    "Sets Maryland state and local withholding. If the employee does not furnish MW507, " +
+    "the employer withholds as if one exemption was claimed. County of residence " +
+    "selects the local rate; a blank county is refused, not defaulted to 3.30%.",
   storage: "certificate_rows",
   fields: [
     {
@@ -934,30 +1038,34 @@ export const MD_CERTIFICATE: PayrollCertificate = {
         { value: "married_single_rate", label: "Married, but withhold at Single rate" },
       ],
       help:
-        "The Guide's SINGLE schedule is for Single, Married Filing Separately, a dependent "
-        + "taxpayer, or this form's \"Married, but withhold at Single rate\" box. The JOINT "
-        + "schedule is the middle box — married filing jointly, head of household, or "
-        + "qualifying surviving spouse. Default Single: the form's first box, and the "
-        + "Guide does not name a joint default when no certificate is on file.",
+        "The Guide's SINGLE schedule is for Single, Married Filing Separately, a dependent " +
+        'taxpayer, or this form\'s "Married, but withhold at Single rate" box. The JOINT ' +
+        "schedule is the middle box — married filing jointly, head of household, or " +
+        "qualifying surviving spouse. Default Single: the form's first box, and the " +
+        "Guide does not name a joint default when no certificate is on file.",
     },
     {
       key: "exemptions",
       label: "Line 1 — Total number of exemptions",
       kind: "count",
-      min: "0", max: "99", default: "1",
+      min: "0",
+      max: "99",
+      default: "1",
       help:
-        "MW507 line 1, not more than worksheet line f. Each exemption is worth $3,200 a "
-        + "year in the percentage method. Default ONE: \"If an employee fails to furnish a "
-        + "certificate, the employer is required to withhold the tax as if the employee "
-        + "had claimed one withholding exemption.\"",
+        "MW507 line 1, not more than worksheet line f. Each exemption is worth $3,200 a " +
+        'year in the percentage method. Default ONE: "If an employee fails to furnish a ' +
+        "certificate, the employer is required to withhold the tax as if the employee " +
+        'had claimed one withholding exemption."',
     },
     {
       key: "additional_per_period",
       label: "Line 2 — Additional withholding per pay period under agreement with employer",
-      kind: "amount", decimals: 4, min: "0",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help:
-        "Added AFTER the percentage-method combined state+local tax — a flat dollar "
-        + "amount the employee and employer have agreed, not a taxable-wage adjustment.",
+        "Added AFTER the percentage-method combined state+local tax — a flat dollar " +
+        "amount the employee and employer have agreed, not a taxable-wage adjustment.",
     },
     {
       key: "residence_county",
@@ -965,67 +1073,67 @@ export const MD_CERTIFICATE: PayrollCertificate = {
       kind: "code",
       subRegion: { side: "residence" },
       help:
-        "The two-digit Comptroller county code (01–24) or the two-letter pay-stub code. "
-        + "Local tax follows the county of residence; a nonresident enters the Maryland "
-        + "county where they work. Anne Arundel (02) and Frederick (11) use the Guide's "
-        + "graduated local rates, not a single table. A blank county is refused.",
+        "The two-digit Comptroller county code (01–24) or the two-letter pay-stub code. " +
+        "Local tax follows the county of residence; a nonresident enters the Maryland " +
+        "county where they work. Anne Arundel (02) and Frederick (11) use the Guide's " +
+        "graduated local rates, not a single table. A blank county is refused.",
     },
     {
       key: "exempt",
       label: "Line 3 — Exempt because no Maryland tax is expected",
       kind: "flag",
       help:
-        "Both of line 3's boxes: no Maryland income tax last year with a right to a full "
-        + "refund of everything withheld, AND none expected this year. Seasonal and "
-        + "student employees below the filing threshold use this line. A new MW507 is "
-        + "due by February 15 to keep the claim.",
+        "Both of line 3's boxes: no Maryland income tax last year with a right to a full " +
+        "refund of everything withheld, AND none expected this year. Seasonal and " +
+        "student employees below the filing threshold use this line. A new MW507 is " +
+        "due by February 15 to keep the claim.",
     },
     {
       key: "reciprocal_exempt",
       label: "Line 4 — Domiciled in the District of Columbia, Virginia or West Virginia",
       kind: "flag",
       help:
-        "MW507 line 4: the employee is domiciled in DC, Virginia or West Virginia and "
-        + "does not maintain a place of abode in Maryland for 183 days or more. The "
-        + "Guide then makes no Maryland withholding. Pennsylvania is NOT this line — "
-        + "use lines 5–7. The matching non-residence certificate is us_md_mw507_nr.",
+        "MW507 line 4: the employee is domiciled in DC, Virginia or West Virginia and " +
+        "does not maintain a place of abode in Maryland for 183 days or more. The " +
+        "Guide then makes no Maryland withholding. Pennsylvania is NOT this line — " +
+        "use lines 5–7. The matching non-residence certificate is us_md_mw507_nr.",
     },
     {
       key: "pa_state_exempt",
       label: "Line 5 — Domiciled in Pennsylvania (state withholding only)",
       kind: "flag",
       help:
-        "MW507 line 5: a Pennsylvania domiciliary who does not maintain a Maryland "
-        + "place of abode for 183 days or more is exempt from the STATE portion only. "
-        + "Local tax is still withheld at the Maryland county of employment unless "
-        + "line 6 or line 7 also applies. This is not a full reciprocal wipe.",
+        "MW507 line 5: a Pennsylvania domiciliary who does not maintain a Maryland " +
+        "place of abode for 183 days or more is exempt from the STATE portion only. " +
+        "Local tax is still withheld at the Maryland county of employment unless " +
+        "line 6 or line 7 also applies. This is not a full reciprocal wipe.",
     },
     {
       key: "pa_york_adams_local_exempt",
       label: "Line 6 — Pennsylvania resident of York or Adams County (local too)",
       kind: "flag",
       help:
-        "MW507 line 6: lives in a local Pennsylvania jurisdiction within York or Adams "
-        + "County and claims exemption from Maryland local tax as well. Enter EXEMPT "
-        + "on line 4 of the paper form. Withholding stops completely.",
+        "MW507 line 6: lives in a local Pennsylvania jurisdiction within York or Adams " +
+        "County and claims exemption from Maryland local tax as well. Enter EXEMPT " +
+        "on line 4 of the paper form. Withholding stops completely.",
     },
     {
       key: "pa_other_local_exempt",
       label: "Line 7 — Other Pennsylvania locality that does not tax Maryland residents",
       kind: "flag",
       help:
-        "MW507 line 7: lives in a local Pennsylvania jurisdiction that does not impose "
-        + "an earnings or income tax on Maryland residents, and claims exemption from "
-        + "Maryland local tax as well. Enter EXEMPT on line 4 of the paper form.",
+        "MW507 line 7: lives in a local Pennsylvania jurisdiction that does not impose " +
+        "an earnings or income tax on Maryland residents, and claims exemption from " +
+        "Maryland local tax as well. Enter EXEMPT on line 4 of the paper form.",
     },
     {
       key: "military_spouse_exempt",
       label: "Line 8 — Military spouse (SCRA / MSRRA)",
       kind: "flag",
       help:
-        "The employee is in Maryland solely to be with a servicemember spouse stationed "
-        + "here under orders and maintains a domicile in another state. Attach Form "
-        + "MW507M and a copy of the spousal military identification card.",
+        "The employee is in Maryland solely to be with a servicemember spouse stationed " +
+        "here under orders and maintains a domicile in another state. Attach Form " +
+        "MW507M and a copy of the spousal military identification card.",
     },
   ],
 };
@@ -1037,15 +1145,47 @@ export const MD_MW507M: PayrollCertificate = {
   label: "Exemption from Maryland Withholding — Qualified Spouse of a Servicemember",
   scope: { level: "region", region: "MD" },
   purpose: "exemption",
-  citation: "Maryland Form MW507M (COM/RAD-048 07/25), https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/forms/2026/mw507m.pdf",
-  summary: "File with MW507 line 8 and attach a copy of the military ID card. Each eligibility statement must be true.",
+  citation:
+    "Maryland Form MW507M (COM/RAD-048 07/25), https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/forms/2026/mw507m.pdf",
+  summary:
+    "File with MW507 line 8 and attach a copy of the military ID card. Each eligibility statement must be true.",
   storage: "certificate_rows",
   fields: [
-    { key: "employee_married_to_servicemember", label: "Employee is married to the servicemember", kind: "flag", required: true, help: "MW507M Part 1, item 1(a)." },
-    { key: "employee_domiciled_outside_md", label: "Employee is domiciled in a state other than Maryland", kind: "flag", required: true, help: "MW507M Part 1, item 1(b)." },
-    { key: "servicemember_duty_station_qualifies", label: "Spouse's permanent duty station is Maryland, a neighboring state, or DC", kind: "flag", required: true, help: "MW507M Part 1, item 1(c)." },
-    { key: "employee_in_md_only_to_be_with_spouse", label: "Employee resides and works in Maryland only to be with the spouse", kind: "flag", required: true, help: "MW507M Part 1, item 1(d)." },
-    { key: "spousal_military_id_on_file", label: "Copy of military ID card is attached", kind: "flag", required: true, help: "MW507M requires the employee to attach a copy of the military ID card." },
+    {
+      key: "employee_married_to_servicemember",
+      label: "Employee is married to the servicemember",
+      kind: "flag",
+      required: true,
+      help: "MW507M Part 1, item 1(a).",
+    },
+    {
+      key: "employee_domiciled_outside_md",
+      label: "Employee is domiciled in a state other than Maryland",
+      kind: "flag",
+      required: true,
+      help: "MW507M Part 1, item 1(b).",
+    },
+    {
+      key: "servicemember_duty_station_qualifies",
+      label: "Spouse's permanent duty station is Maryland, a neighboring state, or DC",
+      kind: "flag",
+      required: true,
+      help: "MW507M Part 1, item 1(c).",
+    },
+    {
+      key: "employee_in_md_only_to_be_with_spouse",
+      label: "Employee resides and works in Maryland only to be with the spouse",
+      kind: "flag",
+      required: true,
+      help: "MW507M Part 1, item 1(d).",
+    },
+    {
+      key: "spousal_military_id_on_file",
+      label: "Copy of military ID card is attached",
+      kind: "flag",
+      required: true,
+      help: "MW507M requires the employee to attach a copy of the military ID card.",
+    },
   ],
 };
 
@@ -1067,13 +1207,13 @@ export const MD_MW507_NR: PayrollCertificate = {
   scope: { level: "region", region: "MD" },
   purpose: "non_residence",
   citation:
-    "Maryland Form MW507 (COM/RAD-036 07/25) line 4; 2026 Maryland Employer Withholding "
-    + "Guide, Revised December 2025 p. 5",
+    "Maryland Form MW507 (COM/RAD-036 07/25) line 4; 2026 Maryland Employer Withholding " +
+    "Guide, Revised December 2025 p. 5",
   summary:
-    "Claims exemption from Maryland withholding because the employee is domiciled in "
-    + "the District of Columbia, Virginia or West Virginia and does not maintain a "
-    + "Maryland place of abode for 183 days or more. Must be on file — the Guide "
-    + "does not apply the agreement from residence alone.",
+    "Claims exemption from Maryland withholding because the employee is domiciled in " +
+    "the District of Columbia, Virginia or West Virginia and does not maintain a " +
+    "Maryland place of abode for 183 days or more. Must be on file — the Guide " +
+    "does not apply the agreement from residence alone.",
   storage: "certificate_rows",
   fields: [
     {
@@ -1087,9 +1227,9 @@ export const MD_MW507_NR: PayrollCertificate = {
         { value: "WV", label: "West Virginia" },
       ],
       help:
-        "MW507 line 4's three reciprocal jurisdictions. Pennsylvania is not listed "
-        + "here: line 5 exempts only Maryland STATE tax and leaves local tax in force "
-        + "unless line 6 or 7 is also completed.",
+        "MW507 line 4's three reciprocal jurisdictions. Pennsylvania is not listed " +
+        "here: line 5 exempts only Maryland STATE tax and leaves local tax in force " +
+        "unless line 6 or 7 is also completed.",
     },
   ],
 };
@@ -1113,8 +1253,8 @@ export const MD_RECIPROCITY_AGREEMENTS: readonly PayrollReciprocityAgreement[] =
   // Line 4 stops all Maryland withholding, local included.
   relievesSubRegionLevies: true,
   citation:
-    "2026 Maryland Employer Withholding Guide, Revised December 2025 p. 5; Form MW507 "
-    + `(COM/RAD-036 07/25) line 4 — ${residence} domiciliary`,
+    "2026 Maryland Employer Withholding Guide, Revised December 2025 p. 5; Form MW507 " +
+    `(COM/RAD-036 07/25) line 4 — ${residence} domiciliary`,
 }));
 
 const MD_COUNTY_LEVIES = MD_COUNTIES_2026.map((county) => ({
@@ -1131,9 +1271,9 @@ const MD_COUNTY_LEVIES = MD_COUNTIES_2026.map((county) => ({
   // A separate county posting would withhold the same tax twice.
   computedByParent: "SIT_MD",
   citation:
-    `Withholding Tax Facts January 2026–December 2026 (COM/RAD-098 Revised 12/25) — `
-    + `${county.name} (code ${county.code})`
-    + (county.rate === "graduated"
+    `Withholding Tax Facts January 2026–December 2026 (COM/RAD-098 Revised 12/25) — ` +
+    `${county.name} (code ${county.code})` +
+    (county.rate === "graduated"
       ? ", graduated local rates as printed in the 2026 Employer Withholding Guide p. 9"
       : `, actual local rate ${county.rate}%, percentage-method table ${county.tablePercent}%`),
   implemented: true,
@@ -1162,7 +1302,7 @@ export const MD_REGION: PayrollRegionWithholding = {
   // certificate answer, not a higher-of comparison.
   subRegionConflictRule: "residence_only",
   citation:
-    "Comptroller of Maryland, 2026 Maryland Employer Withholding Guide, Revised "
-    + "December 2025; Withholding Tax Facts January 2026–December 2026 "
-    + "(COM/RAD-098 Revised 12/25); Form MW507 (COM/RAD-036 07/25)",
+    "Comptroller of Maryland, 2026 Maryland Employer Withholding Guide, Revised " +
+    "December 2025; Withholding Tax Facts January 2026–December 2026 " +
+    "(COM/RAD-098 Revised 12/25); Form MW507 (COM/RAD-036 07/25)",
 };

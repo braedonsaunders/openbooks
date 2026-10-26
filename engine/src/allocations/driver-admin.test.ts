@@ -44,13 +44,20 @@ test("gl configs require a well-formed account scope", () => {
     accountScope: { kind: "any" },
   });
   assert.throws(() => validateDriverConfig("gl_balance", {}), /accountScope/);
-  assert.throws(() => validateDriverConfig("gl_activity", { accountScope: { kind: "bogus" } }), /accountScope/);
   assert.throws(
-    () => validateDriverConfig("gl_activity", { accountScope: { kind: "accounts", accountIds: [] } }),
+    () => validateDriverConfig("gl_activity", { accountScope: { kind: "bogus" } }),
+    /accountScope/,
+  );
+  assert.throws(
+    () =>
+      validateDriverConfig("gl_activity", { accountScope: { kind: "accounts", accountIds: [] } }),
     /accountIds/,
   );
   assert.throws(
-    () => validateDriverConfig("gl_activity", { accountScope: { kind: "accounts", accountIds: ["nope"] } }),
+    () =>
+      validateDriverConfig("gl_activity", {
+        accountScope: { kind: "accounts", accountIds: ["nope"] },
+      }),
     /accountIds/,
   );
 });
@@ -126,8 +133,16 @@ test("manual values keep exact decimals, never negative", () => {
 
 test("vector shares are exact decimals, zero-safe", () => {
   assert.deepEqual(
-    vectorShares(new Map([["a", "1.0000"], ["b", "3.0000"]])),
-    new Map([["a", "0.2500"], ["b", "0.7500"]]),
+    vectorShares(
+      new Map([
+        ["a", "1.0000"],
+        ["b", "3.0000"],
+      ]),
+    ),
+    new Map([
+      ["a", "0.2500"],
+      ["b", "0.7500"],
+    ]),
   );
   assert.deepEqual(vectorShares(new Map([["a", "0.0000"]])), new Map([["a", "0.0000"]]));
   assert.deepEqual(vectorShares(new Map()), new Map());
@@ -136,8 +151,16 @@ test("vector shares are exact decimals, zero-safe", () => {
 test("vector share totals keep the sign of a negative weight (canonical add, not whole-part BigInt)", () => {
   // The old addDecimal parsed BigInt("-5") * 10000 + 2500 → -4.7500.
   assert.deepEqual(
-    vectorShares(new Map([["credit", "-5.2500"], ["debit", "10.2500"]])),
-    new Map([["credit", "-1.0500"], ["debit", "2.0500"]]),
+    vectorShares(
+      new Map([
+        ["credit", "-5.2500"],
+        ["debit", "10.2500"],
+      ]),
+    ),
+    new Map([
+      ["credit", "-1.0500"],
+      ["debit", "2.0500"],
+    ]),
   );
 });
 
@@ -147,11 +170,17 @@ test("effective windows overlap on shared days", () => {
     true,
   );
   assert.equal(
-    driverValueWindowsOverlap({ from: "2026-01-01", to: "2026-03-31" }, { from: "2026-04-01", to: null }),
+    driverValueWindowsOverlap(
+      { from: "2026-01-01", to: "2026-03-31" },
+      { from: "2026-04-01", to: null },
+    ),
     false,
   );
   assert.equal(
-    driverValueWindowsOverlap({ from: "2026-01-01", to: "2026-04-01" }, { from: "2026-04-01", to: null }),
+    driverValueWindowsOverlap(
+      { from: "2026-01-01", to: "2026-04-01" },
+      { from: "2026-04-01", to: null },
+    ),
     true,
   );
 });

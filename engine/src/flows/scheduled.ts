@@ -79,7 +79,12 @@ interface FlowOccurrenceClaim {
  * resolves to the SAME flow_runs row via flow_runs.occurrence_key (migration
  * 0052), collapsing effect checkpoints and email deferrals onto one identity.
  */
-function flowRunOccurrenceKey(flowId: string, nodeId: string, occurredAt: Date, subjectId: string): string {
+function flowRunOccurrenceKey(
+  flowId: string,
+  nodeId: string,
+  occurredAt: Date,
+  subjectId: string,
+): string {
   return `sched|${flowId}|${nodeId}|${occurredAt.toISOString()}|${subjectId}`;
 }
 
@@ -141,10 +146,7 @@ export function invalidScheduledTriggerCronReason(cron: string, tz?: string): st
 
 /** Expand configured native wall-clock times without cross-pairing hours and minutes. */
 export function scheduledTriggerCrons(
-  trigger: Extract<
-    import("@openbooks/forms-core").TriggerData,
-    { trigger: "scheduled" }
-  >,
+  trigger: Extract<import("@openbooks/forms-core").TriggerData, { trigger: "scheduled" }>,
 ): string[] {
   return trigger.clockSchedule
     ? trigger.clockSchedule.times.map((time) => {
@@ -189,31 +191,20 @@ function dueScheduledNodes(
         });
         continue;
       }
-      const reason = invalidScheduledTriggerCronReason(
-        cron,
-        node.data.trigger.tz,
-      );
-    if (reason) {
+      const reason = invalidScheduledTriggerCronReason(cron, node.data.trigger.tz);
+      if (reason) {
         invalid.push({ nodeId: node.id, cron, reason });
-      continue;
-    }
-      const occ = lastCronOccurrenceBetween(
-        cron,
-        anchor,
-        now,
-        node.data.trigger.tz,
-      );
-    if (!occ) continue;
+        continue;
+      }
+      const occ = lastCronOccurrenceBetween(cron, anchor, now, node.data.trigger.tz);
+      if (!occ) continue;
       if (!nodeIds.includes(node.id)) nodeIds.push(node.id);
       if (
-        !occurrences.some(
-          (o) =>
-            o.nodeId === node.id && o.occurredAt.getTime() === occ.getTime(),
-        )
+        !occurrences.some((o) => o.nodeId === node.id && o.occurredAt.getTime() === occ.getTime())
       )
         occurrences.push({ nodeId: node.id, occurredAt: occ });
-    if (!latest || occ.getTime() > latest.getTime()) latest = occ;
-  }
+      if (!latest || occ.getTime() > latest.getTime()) latest = occ;
+    }
   }
   return { nodeIds, occurrences, latest, invalid };
 }
@@ -231,7 +222,8 @@ async function claimDueFlowOccurrences(
   due: { occurrences: { nodeId: string; occurredAt: Date }[]; latest: Date },
 ): Promise<FlowOccurrenceClaim[]> {
   const inserted = await withOrgContext(flow.orgId, () =>
-    db.execute<{ id: string; node_id: string; occurred_at: Date | string }>(sql`
+    db.execute<{ id: string; node_id: string; occurred_at: Date | string }>(
+      sql`
       with advanced as (
         update flows set last_scheduled_run_at = ${due.latest}
          where id = ${flow.id} and org_id = ${flow.orgId}
@@ -240,9 +232,7 @@ async function claimDueFlowOccurrences(
       ),
       due_nodes(node_id,occurred_at) as (
         values ${sql.join(
-          due.occurrences.map(
-            (o) => sql`(${o.nodeId}::text,${o.occurredAt}::timestamptz)`,
-          ),
+          due.occurrences.map((o) => sql`(${o.nodeId}::text,${o.occurredAt}::timestamptz)`),
           sql`, `,
         )}
       )
@@ -252,7 +242,10 @@ async function claimDueFlowOccurrences(
        -- A repeated due-node scan retains the one occurrence already created for this timestamp.
        on conflict (flow_id, node_id, occurred_at) do nothing
       returning id, node_id,occurred_at
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   return inserted.map((row) => ({
     id: row.id,
     orgId: flow.orgId,
@@ -287,7 +280,8 @@ async function takeOccurrenceForFiring(
     : sql``;
   // bypass: scheduler-tick — takes a claimed occurrence by id before its organization is in scope.
   const taken = await withBypassContext(() =>
-    db.execute<{ attempt_count: number }>(sql`
+    db.execute<{ attempt_count: number }>(
+      sql`
       update flow_scheduled_occurrences
          set status = 'firing',
              attempt_count = attempt_count + 1,
@@ -298,12 +292,19 @@ async function takeOccurrenceForFiring(
          and attempt_count = ${fence.attemptCount}
          ${expectedUpdatedAt}
       returning attempt_count
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   return taken[0]?.attempt_count ?? null;
 }
 
 /** Close a claim that cannot be fired to completion. */
-async function stampOccurrenceLost(claimId: string, reason: string, result?: Record<string, unknown>): Promise<void> {
+async function stampOccurrenceLost(
+  claimId: string,
+  reason: string,
+  result?: Record<string, unknown>,
+): Promise<void> {
   // bypass: scheduler-tick — closes a claimed occurrence by id before its organization is in scope.
   await withBypassContext(() =>
     db.execute(sql`
@@ -312,20 +313,31 @@ async function stampOccurrenceLost(claimId: string, reason: string, result?: Rec
              result = ${JSON.stringify({ error: reason, ...result })}::jsonb,
              updated_at = now()
        where id = ${claimId} and status <> 'lost'
-    `));
+    `),
+  );
 }
 
 /** Rethrow-less failure bookkeeping shared by both firing entry points. */
-async function handleFiringFailure(claim: FlowOccurrenceClaim, attempt: number | null, e: unknown): Promise<void> {
+async function handleFiringFailure(
+  claim: FlowOccurrenceClaim,
+  attempt: number | null,
+  e: unknown,
+): Promise<void> {
   // The claim stays 'firing' — its update chain already rolled back. A crash
   // between commit points leaves recovery to pick it up; an exhausted retry
   // budget goes visibly terminal immediately instead of waiting for stale.
   const message = rootErrorMessage(e);
   if (attempt !== null && attempt >= MAX_FLOW_OCCURRENCE_ATTEMPTS) {
-    await stampOccurrenceLost(claim.id, `scheduled flow occurrence lost after final attempt: ${message}`);
+    await stampOccurrenceLost(
+      claim.id,
+      `scheduled flow occurrence lost after final attempt: ${message}`,
+    );
     return;
   }
-  console.error(`[flows] scheduled occurrence ${claim.id} of flow ${claim.flowId} ("${claim.nodeId}") failed; recovery will retry:`, e);
+  console.error(
+    `[flows] scheduled occurrence ${claim.id} of flow ${claim.flowId} ("${claim.nodeId}") failed; recovery will retry:`,
+    e,
+  );
 }
 
 /** Drizzle wraps driver errors; surface the whole causal chain's messages. */
@@ -347,12 +359,13 @@ function rootErrorMessage(e: unknown): string {
  * it behind for recovery. Every run created here carries the deterministic
  * flowRuns.occurrence_key so retried/resumed attempts adopt the same rows.
  */
-async function fireScheduledOccurrence(
-  claim: FlowOccurrenceClaim,
-): Promise<number> {
+async function fireScheduledOccurrence(claim: FlowOccurrenceClaim): Promise<number> {
   const [flow] = await withOrgContext(claim.orgId, () =>
-    db.select().from(schema.flows)
-      .where(and(eq(schema.flows.id, claim.flowId), eq(schema.flows.orgId, claim.orgId))));
+    db
+      .select()
+      .from(schema.flows)
+      .where(and(eq(schema.flows.id, claim.flowId), eq(schema.flows.orgId, claim.orgId))),
+  );
   // Claimed before the flow disappeared/was disabled: never ghost-fire a
   // switched-off automation, but do not strand the claim either.
   if (!flow || !flow.enabled) {
@@ -366,12 +379,7 @@ async function fireScheduledOccurrence(
   }
 
   return withOrg(flow.orgId, async () => {
-    const failures = await runScheduledNode(
-      flow,
-      graph,
-      claim.nodeId,
-      claim.occurredAt,
-    );
+    const failures = await runScheduledNode(flow, graph, claim.nodeId, claim.occurredAt);
     // Completion commits WITH the runs/effects/outbox emails this firing
     // produced: a crash before here rolls those back AND leaves the claim
     // unfired; a crash after leaves them durably delivered.
@@ -403,7 +411,8 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
   // denies by default and no scheduled flow is ever found.
   // bypass: scheduler-tick — enabled scheduled flows are found across every production organization.
   const candidates = await withBypassContext(() =>
-    db.execute<{ id: string }>(sql`
+    db.execute<{ id: string }>(
+      sql`
     select flow.id
       from flows flow
       join orgs organization on organization.id = flow.org_id
@@ -412,12 +421,16 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
        -- the default instead of throwing 22P02 like the previous cast.
        and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
        and flow.graph::text like '%"scheduled"%'
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
 
   for (const { id } of candidates) {
     // bypass: scheduler-tick — the candidate scan returns flow ids only; this load discovers the owning organization.
     const [flow] = await withBypassContext(() =>
-      db.select().from(schema.flows).where(eq(schema.flows.id, id)));
+      db.select().from(schema.flows).where(eq(schema.flows.id, id)),
+    );
     if (!flow || !flow.enabled) continue;
     const graph = parseFlowGraph(flow.id, flow.graph);
     if (!graph) {
@@ -426,7 +439,9 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       // name it where scheduled-flow failures surface instead of skipping
       // silently (a skip would read as "nothing due" forever).
       result.errors++;
-      console.error(`[flows] scheduled flow ${flow.id} ("${flow.name}") has an invalid graph — occurrence not claimed`);
+      console.error(
+        `[flows] scheduled flow ${flow.id} ("${flow.name}") has an invalid graph — occurrence not claimed`,
+      );
       continue;
     }
 
@@ -439,7 +454,9 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       // (a skip would read as "nothing due" forever).
       result.errors++;
       const named = due.invalid.map((n) => `node "${n.nodeId}": ${n.reason}`).join("; ");
-      console.error(`[flows] scheduled flow ${flow.id} ("${flow.name}") has invalid schedule(s) — occurrence not claimed: ${named}`);
+      console.error(
+        `[flows] scheduled flow ${flow.id} ("${flow.name}") has invalid schedule(s) — occurrence not claimed: ${named}`,
+      );
     }
     const latest = due.latest;
     if (due.nodeIds.length === 0 || !latest) continue;
@@ -504,7 +521,8 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
        where status = 'firing'
          and attempt_count >= ${MAX_FLOW_OCCURRENCE_ATTEMPTS}
          and updated_at < ${staleBefore}
-    `));
+    `),
+  );
 
   // 2) Resume open ('open' = died between claim and take; 'firing' = died mid
   //    firing) stale occurrences within the retry budget, oldest first.
@@ -518,7 +536,8 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
       occurred_at: Date | string;
       attempt_count: number;
       updated_at: string;
-    }>(sql`
+    }>(
+      sql`
       select occ.id, occ.org_id, occ.flow_id, occ.node_id, occ.occurred_at,
              occ.attempt_count, occ.updated_at::text as updated_at
         from flow_scheduled_occurrences occ
@@ -531,7 +550,10 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
          and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
        order by occ.updated_at
        limit ${RECOVERY_BATCH}
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   for (const row of stale) {
     const claim: FlowOccurrenceClaim = {
       id: row.id,
@@ -565,14 +587,12 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
  * non-safe actions with a recorded warning. `hasRecord` widens the safe set
  * (fan-out runs have a real subject, so set_field is well-defined).
  */
-function toSafePlan(
-  plan: AutomationPlan,
-  hasRecord: boolean,
-  warnings: string[],
-): AutomationPlan {
+function toSafePlan(plan: AutomationPlan, hasRecord: boolean, warnings: string[]): AutomationPlan {
   const safe = scheduledSafeActions(hasRecord);
   if (plan.gates.length > 0) {
-    warnings.push(`skipped ${plan.gates.length} gate(s) — scheduled runs cannot pause for approval`);
+    warnings.push(
+      `skipped ${plan.gates.length} gate(s) — scheduled runs cannot pause for approval`,
+    );
   }
   const actionNodes = plan.actionNodes.filter((n) => {
     if (safe.has(n.action.action)) return true;
@@ -604,13 +624,9 @@ async function executeScheduledRun(
   // second send.
   const adapter = getFlowAdapter(flow.subjectKind);
   const actorId =
-    timer && adapter?.scheduledActorId
-      ? await adapter.scheduledActorId(subjectId)
-      : null;
+    timer && adapter?.scheduledActorId ? await adapter.scheduledActorId(subjectId) : null;
   if (flow.subjectKind === "schedule_board" && !actorId)
-    throw new Error(
-      "Configure the native board delivery operator before enabling this Flow.",
-    );
+    throw new Error("Configure the native board delivery operator before enabling this Flow.");
   const [existing] = await db
     .select({
       id: schema.flowRuns.id,
@@ -625,10 +641,7 @@ async function executeScheduledRun(
       throw new Error(
         "The configured schedule operator changed during occurrence recovery. Review the failed native run.",
       );
-    if (
-      existing.context.deliveryPolicyVersion !==
-      evalCtx.values.deliveryPolicyVersion
-    )
+    if (existing.context.deliveryPolicyVersion !== evalCtx.values.deliveryPolicyVersion)
       throw new Error(
         "The board delivery policy changed during occurrence recovery. Review a new occurrence.",
       );
@@ -698,13 +711,14 @@ async function executeScheduledRun(
         },
         adapter,
         {
-        flow: { id: flow.id, name: flow.name, subjectKind: flow.subjectKind, graph: flow.graph },
-        runId,
-        subjectId,
-        plan,
-        evalCtx,
-        submitterUserId,
-      });
+          flow: { id: flow.id, name: flow.name, subjectKind: flow.subjectKind, graph: flow.graph },
+          runId,
+          subjectId,
+          plan,
+          evalCtx,
+          submitterUserId,
+        },
+      );
       if (res.failed.length > 0) failedText = res.failed.join("; ");
     }
   }
@@ -739,9 +753,7 @@ async function runScheduledNode(
 
     const select = node.data.trigger.select;
     if (flow.subjectKind === "schedule_board" && !select)
-      throw new Error(
-        "Schedule board delivery requires native record selection.",
-      );
+      throw new Error("Schedule board delivery requires native record selection.");
     // A record-free firing has no subject whose legal entity could prove
     // admission to a scoped flow, so it never fires (author-time lint
     // refuses this shape; this is the runtime backstop).
@@ -787,7 +799,13 @@ async function runScheduledNode(
       // transaction commits, so a rehome cannot move the record out of
       // the flow's scope between admission and its effects.
       if (graph.subjectScope) {
-        const admission = await lockFlowSubjectAdmission(flow.orgId, adapter, flow.subjectKind, subjectId, graph);
+        const admission = await lockFlowSubjectAdmission(
+          flow.orgId,
+          adapter,
+          flow.subjectKind,
+          subjectId,
+          graph,
+        );
         if (admission.admission !== "admitted") continue;
       }
       const evalCtx: EvalContext = {

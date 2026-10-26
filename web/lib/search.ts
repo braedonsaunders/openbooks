@@ -1,22 +1,25 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import type { Authz } from './authz'
-import { can } from './authz'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import type { Authz } from "./authz";
+import { can } from "./authz";
 import { disabledDocKinds } from "./documents.ts";
-import { isFeatureEnabled } from './features'
-import { subsidiaryVisibleFilter } from './subsidiaries'
-import { formatMoney } from '@openbooks/engine/money/money'
-import { JOURNAL_GL_NATIVE_ORIGINS, journalScopeWhere } from './customization/entity-list-query/journal-entries'
-import { canonicalDecimal } from './exact-decimal'
-import { expenseAccess } from './expense-access'
-import type { RecentRef, SearchGroup, SearchHit, SearchResponse, SearchType } from './search-types'
+import { isFeatureEnabled } from "./features";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
+import { formatMoney } from "@openbooks/engine/money/money";
+import {
+  JOURNAL_GL_NATIVE_ORIGINS,
+  journalScopeWhere,
+} from "./customization/entity-list-query/journal-entries";
+import { canonicalDecimal } from "./exact-decimal";
+import { expenseAccess } from "./expense-access";
+import type { RecentRef, SearchGroup, SearchHit, SearchResponse, SearchType } from "./search-types";
 import {
   moduleDrawerHref,
   TRANSACTION_KINDS,
   transactionNavigationOnlyFeature,
   transactionModule,
-} from './txn-links'
+} from "./txn-links";
 
 /**
  * Global search — one query fans out across every primary entity (contacts,
@@ -39,50 +42,56 @@ import {
  * at scale.
  */
 
-export type { SearchBadge, SearchGroup, SearchHit, SearchResponse, SearchType } from './search-types'
+export type {
+  SearchBadge,
+  SearchGroup,
+  SearchHit,
+  SearchResponse,
+  SearchType,
+} from "./search-types";
 
 type SearchContactRow = {
-  id: string
-  display_name: string
-  email: string | null
-  legal_name: string | null
-  is_customer: boolean
-  is_vendor: boolean
-  is_employee: boolean
-  matched_contact: string | null
-}
+  id: string;
+  display_name: string;
+  email: string | null;
+  legal_name: string | null;
+  is_customer: boolean;
+  is_vendor: boolean;
+  is_employee: boolean;
+  matched_contact: string | null;
+};
 
 type SearchTransactionRow = {
-  id: string
-  kind: string
-  document_number: string
-  reference_number: string | null
-  memo: string | null
-  status: string | null
-  project_id: string | null
-  party_name: string | null
-  amount: unknown
-  line_match: string | null
-}
+  id: string;
+  kind: string;
+  document_number: string;
+  reference_number: string | null;
+  memo: string | null;
+  status: string | null;
+  project_id: string | null;
+  party_name: string | null;
+  amount: unknown;
+  line_match: string | null;
+};
 
 type SearchAccountRow = {
-  id: string
-  number: string | null
-  name: string
-  type: string
-}
+  id: string;
+  number: string | null;
+  name: string;
+  type: string;
+};
 
 type SearchItemRow = {
-  id: string
-  code: string | null
-  name: string
-}
+  id: string;
+  code: string | null;
+  name: string;
+};
 
 type SearchProjectRow = {
-  id: string
-  code: string | null
-  name: string
-}
+  id: string;
+  code: string | null;
+  name: string;
+};
 
 // Master data (parties, accounts) is usable org-wide when its subsidiary is
 // null — the canonical list predicate is `is null or = any(...)`, not the
@@ -92,10 +101,10 @@ function masterDataSubsidiaryFilter(
   column: SQL,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): SQL {
-  if (allowedSubsidiaryIds === null) return sql``
-  const ids = [...allowedSubsidiaryIds]
-  if (ids.length === 0) return sql`and false`
-  return sql`and (${column} is null or ${column} = any(${`{${ids.join(',')}}`}::uuid[]))`
+  if (allowedSubsidiaryIds === null) return sql``;
+  const ids = [...allowedSubsidiaryIds];
+  if (ids.length === 0) return sql`and false`;
+  return sql`and (${column} is null or ${column} = any(${`{${ids.join(",")}}`}::uuid[]))`;
 }
 
 /**
@@ -106,16 +115,16 @@ function masterDataSubsidiaryFilter(
  * deterministic everywhere.
  */
 function money(v: unknown): string {
-  if (typeof v !== 'string' && typeof v !== 'number') return ''
-  let rounded: string
+  if (typeof v !== "string" && typeof v !== "number") return "";
+  let rounded: string;
   try {
-    rounded = formatMoney(v, 2)
+    rounded = formatMoney(v, 2);
   } catch {
-    return ''
+    return "";
   }
-  const negative = rounded.startsWith('-')
-  const [whole = '', fraction = ''] = (negative ? rounded.slice(1) : rounded).split('.')
-  return `${negative ? '-' : ''}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction}`
+  const negative = rounded.startsWith("-");
+  const [whole = "", fraction = ""] = (negative ? rounded.slice(1) : rounded).split(".");
+  return `${negative ? "-" : ""}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${fraction}`;
 }
 
 /**
@@ -128,12 +137,12 @@ function money(v: unknown): string {
  * amount the leg compares, so the leg binds the exact decimal string.
  */
 function parseSearchAmount(q: string): string | null {
-  const compact = q.trim().replace(/^\$\s*/, '')
-  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(compact)) return null
-  return canonicalDecimal(compact.replace(/,/g, ''), 2)
+  const compact = q.trim().replace(/^\$\s*/, "");
+  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(compact)) return null;
+  return canonicalDecimal(compact.replace(/,/g, ""), 2);
 }
 
-const PER_GROUP = 6
+const PER_GROUP = 6;
 
 /**
  * What one search leg matches: the typed query, or — when the header search
@@ -142,18 +151,18 @@ const PER_GROUP = 6
  * a fresh search could surface it.
  */
 type Match =
-  | { kind: 'text'; q: string; like: string; amount: string | null; phoneDigits: string | null }
-  | { kind: 'ids'; ids: string[] }
+  | { kind: "text"; q: string; like: string; amount: string | null; phoneDigits: string | null }
+  | { kind: "ids"; ids: string[] };
 
-function textMatch(rawQ: string): Extract<Match, { kind: 'text' }> {
-  const q = rawQ.trim().slice(0, 80)
+function textMatch(rawQ: string): Extract<Match, { kind: "text" }> {
+  const q = rawQ.trim().slice(0, 80);
   return {
-    kind: 'text',
+    kind: "text",
     q,
     like: `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`,
     amount: parseSearchAmount(q),
     phoneDigits: phoneSearchDigits(q),
-  }
+  };
 }
 
 /**
@@ -163,13 +172,13 @@ function textMatch(rawQ: string): Extract<Match, { kind: 'text' }> {
  * shorter is far likelier an amount or a document number.
  */
 function phoneSearchDigits(q: string): string | null {
-  if (!/^\+?[\d\s().-]+$/.test(q)) return null
-  const digits = q.replace(/[^0-9]/g, '')
-  return digits.length >= 7 ? digits : null
+  if (!/^\+?[\d\s().-]+$/.test(q)) return null;
+  const digits = q.replace(/[^0-9]/g, "");
+  return digits.length >= 7 ? digits : null;
 }
 
 function uuidArray(ids: readonly string[]): SQL {
-  return sql`${`{${ids.join(',')}}`}::uuid[]`
+  return sql`${`{${ids.join(",")}}`}::uuid[]`;
 }
 
 // Per-kind authorization comes from the native module's own read permission
@@ -178,18 +187,18 @@ function uuidArray(ids: readonly string[]): SQL {
 // Kinds without an authorizing module never enter the allowlist at all.
 function allowedTransactionKinds(authz: Authz): string[] {
   return TRANSACTION_KINDS.filter((kind) => {
-    const permission = transactionModule(kind)?.requiredPermission
-    return Boolean(permission && can(authz, permission))
-  })
+    const permission = transactionModule(kind)?.requiredPermission;
+    return Boolean(permission && can(authz, permission));
+  });
 }
 
 type CoreLegs = {
-  contacts: SearchHit[]
-  transactions: SearchHit[]
-  accounts: SearchHit[]
-  items: SearchHit[]
-  projects: SearchHit[]
-}
+  contacts: SearchHit[];
+  transactions: SearchHit[];
+  accounts: SearchHit[];
+  items: SearchHit[];
+  projects: SearchHit[];
+};
 
 /**
  * Run every core leg the reader is entitled to. `matchFor` names the match
@@ -198,26 +207,28 @@ type CoreLegs = {
  */
 async function coreLegs(
   authz: Authz,
-  matchFor: (type: 'contact' | 'transaction' | 'account' | 'item' | 'project') => Match | null,
+  matchFor: (type: "contact" | "transaction" | "account" | "item" | "project") => Match | null,
 ): Promise<CoreLegs> {
-  const orgId = authz.user.orgId
+  const orgId = authz.user.orgId;
 
   // Permission gates per entity.
-  const transactionKinds = allowedTransactionKinds(authz)
-  const contactMatch = can(authz, 'parties.read') ? matchFor('contact') : null
-  const transactionMatch = matchFor('transaction')
-  const accountMatch = can(authz, 'gl.read') ? matchFor('account') : null
-  const itemMatch = can(authz, 'items.read') ? matchFor('item') : null
-  const projectMatch = can(authz, 'projects.read') ? matchFor('project') : null
-  const canProjects = projectMatch !== null && await isFeatureEnabled(orgId, 'projects')
+  const transactionKinds = allowedTransactionKinds(authz);
+  const contactMatch = can(authz, "parties.read") ? matchFor("contact") : null;
+  const transactionMatch = matchFor("transaction");
+  const accountMatch = can(authz, "gl.read") ? matchFor("account") : null;
+  const itemMatch = can(authz, "items.read") ? matchFor("item") : null;
+  const projectMatch = can(authz, "projects.read") ? matchFor("project") : null;
+  const canProjects = projectMatch !== null && (await isFeatureEnabled(orgId, "projects"));
   // Journal entries carry their own numbers in journal_entries; the gate is
   // the journal module's own read permission, like every other entity above.
-  const journalPermission = transactionModule('journal')?.requiredPermission
-  const canJournals = Boolean(transactionMatch && journalPermission && can(authz, journalPermission))
+  const journalPermission = transactionModule("journal")?.requiredPermission;
+  const canJournals = Boolean(
+    transactionMatch && journalPermission && can(authz, journalPermission),
+  );
 
   // Subsidiary visibility rides alongside permissions: a restricted caller's
   // search must never surface records their lists would hide.
-  const scope = authz.allowedSubsidiaryIds
+  const scope = authz.allowedSubsidiaryIds;
 
   // One shared kind allowlist for the documents legs AND the journal exact
   // arm: an exact JE number for a subledger posting resolves only when the
@@ -225,55 +236,60 @@ async function coreLegs(
   const visibleKinds =
     transactionMatch && (transactionKinds.length > 0 || canJournals)
       ? visibleTransactionKinds(orgId, transactionKinds)
-      : Promise.resolve([] as string[])
+      : Promise.resolve([] as string[]);
   // A self-service expense reader finds their own expense reports, and no
   // other employee's, beside whatever their module grants show.
-  const ownExpenses = transactionMatch && !transactionKinds.includes('expense_report')
-    ? await ownExpenseSearchScope(authz)
-    : null
+  const ownExpenses =
+    transactionMatch && !transactionKinds.includes("expense_report")
+      ? await ownExpenseSearchScope(authz)
+      : null;
 
   const [contacts, txns, accounts, items, projects, journals] = await Promise.all([
     contactMatch ? searchContacts(orgId, contactMatch, scope) : empty(),
     transactionMatch && (transactionKinds.length || ownExpenses)
-      ? visibleKinds.then((kinds) => searchTransactions(orgId, transactionMatch, scope, kinds, ownExpenses?.partyId))
+      ? visibleKinds.then((kinds) =>
+          searchTransactions(orgId, transactionMatch, scope, kinds, ownExpenses?.partyId),
+        )
       : empty(),
     accountMatch ? searchAccounts(orgId, accountMatch, scope) : empty(),
     itemMatch ? searchItems(orgId, itemMatch) : empty(),
     canProjects && projectMatch ? searchProjects(orgId, projectMatch, scope) : empty(),
-    canJournals && transactionMatch ? visibleKinds.then((kinds) => searchJournalEntries(orgId, transactionMatch, scope, kinds)) : empty(),
-  ])
-  return { contacts, transactions: [...txns, ...journals], accounts, items, projects }
+    canJournals && transactionMatch
+      ? visibleKinds.then((kinds) => searchJournalEntries(orgId, transactionMatch, scope, kinds))
+      : empty(),
+  ]);
+  return { contacts, transactions: [...txns, ...journals], accounts, items, projects };
 }
 
 /** Run the full multi-entity search. `q` should already be trimmed. */
 export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchResponse> {
-  const match = textMatch(rawQ)
-  const q = match.q
-  if (q.length < 2) return { q, groups: [], total: 0 }
-  const numeric = match.amount !== null
+  const match = textMatch(rawQ);
+  const q = match.q;
+  if (q.length < 2) return { q, groups: [], total: 0 };
+  const numeric = match.amount !== null;
 
-  const legs = await coreLegs(authz, () => match)
+  const legs = await coreLegs(authz, () => match);
 
   // Numeric queries most likely want a transaction; else contacts lead.
   // Journal entries ride inside the transactions group (each leg internally
   // exact-first) rather than growing a sixth group the palette would have
   // to learn. An exact document/entry number tops the merged group no
   // matter which leg produced it.
-  const txnHits = exactNumberFirst(legs.transactions, q)
+  const txnHits = exactNumberFirst(legs.transactions, q);
   const ordered: SearchGroup[] = numeric
-    ? [group('transaction', 'transactions', txnHits), group('contact', 'contacts', legs.contacts)]
-    : [group('contact', 'contacts', legs.contacts), group('transaction', 'transactions', txnHits)]
+    ? [group("transaction", "transactions", txnHits), group("contact", "contacts", legs.contacts)]
+    : [group("contact", "contacts", legs.contacts), group("transaction", "transactions", txnHits)];
   ordered.push(
-    group('account', 'accounts', legs.accounts),
-    group('item', 'items', legs.items),
-    group('project', 'projects', legs.projects),
-  )
+    group("account", "accounts", legs.accounts),
+    group("item", "items", legs.items),
+    group("project", "projects", legs.projects),
+  );
 
-  const groups = ordered.filter((g) => g.hits.length > 0)
-  return { q, groups, total: groups.reduce((n, g) => n + g.hits.length, 0) }
+  const groups = ordered.filter((g) => g.hits.length > 0);
+  return { q, groups, total: groups.reduce((n, g) => n + g.hits.length, 0) };
 }
 
-const CORE_TYPES = new Set<SearchType>(['contact', 'transaction', 'account', 'item', 'project'])
+const CORE_TYPES = new Set<SearchType>(["contact", "transaction", "account", "item", "project"]);
 
 /**
  * Re-resolve recently opened core records under the reader's CURRENT
@@ -281,22 +297,31 @@ const CORE_TYPES = new Set<SearchType>(['contact', 'transaction', 'account', 'it
  * resolves to nothing; titles and amounts are read fresh, never replayed
  * from the browser.
  */
-export async function resolveRecentCoreRecords(authz: Authz, refs: readonly RecentRef[]): Promise<SearchHit[]> {
-  const idsByType = new Map<string, string[]>()
+export async function resolveRecentCoreRecords(
+  authz: Authz,
+  refs: readonly RecentRef[],
+): Promise<SearchHit[]> {
+  const idsByType = new Map<string, string[]>();
   for (const ref of refs) {
-    if (!CORE_TYPES.has(ref.type)) continue
-    idsByType.set(ref.type, [...(idsByType.get(ref.type) ?? []), ref.id])
+    if (!CORE_TYPES.has(ref.type)) continue;
+    idsByType.set(ref.type, [...(idsByType.get(ref.type) ?? []), ref.id]);
   }
-  if (idsByType.size === 0) return []
+  if (idsByType.size === 0) return [];
   const legs = await coreLegs(authz, (type) => {
-    const ids = idsByType.get(type)
-    return ids?.length ? { kind: 'ids', ids } : null
-  })
-  return [...legs.contacts, ...legs.transactions, ...legs.accounts, ...legs.items, ...legs.projects]
+    const ids = idsByType.get(type);
+    return ids?.length ? { kind: "ids", ids } : null;
+  });
+  return [
+    ...legs.contacts,
+    ...legs.transactions,
+    ...legs.accounts,
+    ...legs.items,
+    ...legs.projects,
+  ];
 }
 
 function group(type: SearchType, labelKey: string, hits: SearchHit[]): SearchGroup {
-  return { type, labelKey, hits }
+  return { type, labelKey, hits };
 }
 
 /**
@@ -306,17 +331,20 @@ function group(type: SearchType, labelKey: string, hits: SearchHit[]): SearchGro
  * above fuzzy neighbors from every leg. Otherwise a no-op.
  */
 function exactNumberFirst(hits: SearchHit[], q: string): SearchHit[] {
-  const suffix = ` ${q}`
-  if (!hits.some((hit) => hit.title.endsWith(suffix))) return hits
-  return [...hits.filter((hit) => hit.title.endsWith(suffix)), ...hits.filter((hit) => !hit.title.endsWith(suffix))]
+  const suffix = ` ${q}`;
+  if (!hits.some((hit) => hit.title.endsWith(suffix))) return hits;
+  return [
+    ...hits.filter((hit) => hit.title.endsWith(suffix)),
+    ...hits.filter((hit) => !hit.title.endsWith(suffix)),
+  ];
 }
 async function empty(): Promise<SearchHit[]> {
-  return []
+  return [];
 }
 
 /** A document's lifecycle status as a badge; posted is the norm and shows none. */
-function statusBadge(status: string | null): SearchHit['badge'] {
-  return status && status !== 'posted' ? { kind: 'status', value: status } : undefined
+function statusBadge(status: string | null): SearchHit["badge"] {
+  return status && status !== "posted" ? { kind: "status", value: status } : undefined;
 }
 
 async function searchContacts(
@@ -326,16 +354,16 @@ async function searchContacts(
 ): Promise<SearchHit[]> {
   // Parties are org-wide when their primary subsidiary is null — the exact
   // predicate the party lists use (`is null or = any(...)`).
-  const subsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope)
-  let candidates: SQL
-  let ranking: SQL
-  let matchedContact: SQL
-  if (match.kind === 'ids') {
-    candidates = sql`select p.id from parties p where p.org_id = ${orgId} and p.id = any(${uuidArray(match.ids)})`
-    ranking = sql`0`
-    matchedContact = sql`null`
+  const subsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope);
+  let candidates: SQL;
+  let ranking: SQL;
+  let matchedContact: SQL;
+  if (match.kind === "ids") {
+    candidates = sql`select p.id from parties p where p.org_id = ${orgId} and p.id = any(${uuidArray(match.ids)})`;
+    ranking = sql`0`;
+    matchedContact = sql`null`;
   } else {
-    const { q, like, phoneDigits } = match
+    const { q, like, phoneDigits } = match;
     // Independent capped legs keep each predicate on its own index: the
     // party name/email trigram indexes, the contact-person trigram indexes,
     // and the source-identity index for ids carried over from a migrated or
@@ -354,7 +382,7 @@ async function searchContacts(
             and (regexp_replace(coalesce(c.phone, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}
                  or regexp_replace(coalesce(c.mobile_phone, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`})
           limit 20)`
-      : sql``
+      : sql``;
     candidates = sql`
       (select p.id from parties p
         where p.org_id = ${orgId} ${subsidiaryFilter}
@@ -371,16 +399,17 @@ async function searchContacts(
       (select p.id from parties p
         where p.org_id = ${orgId} ${subsidiaryFilter}
           and p.custom -> 'source' ->> 'externalId' = ${q}
-        limit 5)${phoneLegs}`
-    ranking = sql`greatest(similarity(p.display_name, ${q}), similarity(coalesce(p.legal_name, ''), ${q}))`
+        limit 5)${phoneLegs}`;
+    ranking = sql`greatest(similarity(p.display_name, ${q}), similarity(coalesce(p.legal_name, ''), ${q}))`;
     // A party found through one of its people names that person, so the
     // reader sees why "Jane" surfaced Acme Corp.
     matchedContact = sql`(select c.name from contacts c
        where c.org_id = p.org_id and c.party_id = p.id
          and (c.name ilike ${like} or c.email ilike ${like})
-       order by c.is_primary desc, c.name limit 1)`
+       order by c.is_primary desc, c.name limit 1)`;
   }
-  const r = (await db.execute<SearchContactRow>(sql`
+  const r = await db.execute<SearchContactRow>(
+    sql`
     with party_cand as (${candidates})
     select p.id, p.display_name, p.email, p.legal_name,
            exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
@@ -393,22 +422,24 @@ async function searchContacts(
      where p.org_id = ${orgId}
        ${subsidiaryFilter}
      order by sim desc, p.display_name
-     limit ${PER_GROUP}`, 'objects'))
+     limit ${PER_GROUP}`,
+    "objects",
+  );
   return r.map((row): SearchHit => ({
     id: row.id,
-    type: 'contact',
+    type: "contact",
     title: row.display_name,
     subtitle: row.matched_contact || row.email || row.legal_name || undefined,
     href: `/parties?party=${row.id}`,
-    iconKey: row.is_employee ? 'clipboard-check' : 'users',
+    iconKey: row.is_employee ? "clipboard-check" : "users",
     badge: row.is_customer
-      ? { kind: 'role', value: 'customer' }
+      ? { kind: "role", value: "customer" }
       : row.is_vendor
-        ? { kind: 'role', value: 'vendor' }
+        ? { kind: "role", value: "vendor" }
         : row.is_employee
-          ? { kind: 'role', value: 'employee' }
+          ? { kind: "role", value: "employee" }
           : undefined,
-  }))
+  }));
 }
 
 /**
@@ -421,30 +452,41 @@ async function searchContacts(
  */
 /** The employee whose expense reports a self-service reader may find, when expense reports are enabled. */
 async function ownExpenseSearchScope(authz: Authz): Promise<{ partyId: string | null } | null> {
-  const access = await expenseAccess(authz, 'read')
-  if (access?.scope !== 'own') return null
-  if (!(await visibleTransactionKinds(authz.user.orgId, ['expense_report'])).includes('expense_report')) return null
-  return { partyId: access.partyId }
+  const access = await expenseAccess(authz, "read");
+  if (access?.scope !== "own") return null;
+  if (
+    !(await visibleTransactionKinds(authz.user.orgId, ["expense_report"])).includes(
+      "expense_report",
+    )
+  )
+    return null;
+  return { partyId: access.partyId };
 }
 
 async function visibleTransactionKinds(orgId: string, allowedKinds: string[]): Promise<string[]> {
-  const navigationFeatures = [...new Set(allowedKinds.flatMap((kind) => {
-    const feature = transactionNavigationOnlyFeature(kind)
-    return feature ? [feature] : []
-  }))]
+  const navigationFeatures = [
+    ...new Set(
+      allowedKinds.flatMap((kind) => {
+        const feature = transactionNavigationOnlyFeature(kind);
+        return feature ? [feature] : [];
+      }),
+    ),
+  ];
   const [hiddenKinds, navigationFeatureStates] = await Promise.all([
     disabledDocKinds(orgId),
-    Promise.all(navigationFeatures.map(async (feature) => (
-      [feature, await isFeatureEnabled(orgId, feature)] as const
-    ))),
-  ])
-  const hiddenKindSet = new Set(hiddenKinds)
-  const navigationFeatureEnabled = new Map(navigationFeatureStates)
+    Promise.all(
+      navigationFeatures.map(
+        async (feature) => [feature, await isFeatureEnabled(orgId, feature)] as const,
+      ),
+    ),
+  ]);
+  const hiddenKindSet = new Set(hiddenKinds);
+  const navigationFeatureEnabled = new Map(navigationFeatureStates);
   return allowedKinds.filter((kind) => {
-    if (hiddenKindSet.has(kind)) return false
-    const feature = transactionNavigationOnlyFeature(kind)
-    return !feature || navigationFeatureEnabled.get(feature) === true
-  })
+    if (hiddenKindSet.has(kind)) return false;
+    const feature = transactionNavigationOnlyFeature(kind);
+    return !feature || navigationFeatureEnabled.get(feature) === true;
+  });
 }
 
 async function searchTransactions(
@@ -471,25 +513,31 @@ async function searchTransactions(
   // Visibility is the shared POSITIVE kind allowlist: every candidate leg
   // and the final sensitive-field read repeat the same allowlist — a shared
   // CTE alone would leak across module boundaries.
-  const ownExpenses = ownExpenseParty !== undefined
-  if (visibleKinds.length === 0 && !ownExpenses) return []
-  const kindAllowlist = visibleKinds.length > 0
-    ? sql`d.kind in (${sql.join(visibleKinds.map((value) => sql`${value}`), sql`, `)})`
-    : sql`false`
-  const ownExpenseArm = ownExpenses && ownExpenseParty !== null
-    ? sql` or (d.kind = 'expense_report' and d.party_id = ${ownExpenseParty})`
-    : sql``
-  const visibleKindFilter = sql`and (${kindAllowlist}${ownExpenseArm})`
+  const ownExpenses = ownExpenseParty !== undefined;
+  if (visibleKinds.length === 0 && !ownExpenses) return [];
+  const kindAllowlist =
+    visibleKinds.length > 0
+      ? sql`d.kind in (${sql.join(
+          visibleKinds.map((value) => sql`${value}`),
+          sql`, `,
+        )})`
+      : sql`false`;
+  const ownExpenseArm =
+    ownExpenses && ownExpenseParty !== null
+      ? sql` or (d.kind = 'expense_report' and d.party_id = ${ownExpenseParty})`
+      : sql``;
+  const visibleKindFilter = sql`and (${kindAllowlist}${ownExpenseArm})`;
   // Fail closed exactly like the documents lists (`d.subsidiary_id = any(...)`
   // — null-subsidiary documents are invisible to restricted callers); parties
   // keep their org-wide-null master-data semantics.
-  const documentSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)
-  const partySubsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope)
-  const resultPartySubsidiaryFilter = masterDataSubsidiaryFilter(sql`pr.subsidiary_id`, scope)
-  const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
+  const documentSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope);
+  const partySubsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope);
+  const resultPartySubsidiaryFilter = masterDataSubsidiaryFilter(sql`pr.subsidiary_id`, scope);
+  const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`;
 
-  if (match.kind === 'ids') {
-    const r = (await db.execute<SearchTransactionRow>(sql`
+  if (match.kind === "ids") {
+    const r = await db.execute<SearchTransactionRow>(
+      sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status, d.project_id,
              pr.display_name as party_name,
              ${amtExpr} as amount,
@@ -497,11 +545,13 @@ async function searchTransactions(
         from documents d
         left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
        where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
-         and d.id = any(${uuidArray(match.ids)})`, 'objects'))
-    return transactionHits(r)
+         and d.id = any(${uuidArray(match.ids)})`,
+      "objects",
+    );
+    return transactionHits(r);
   }
 
-  const { q, like, amount } = match
+  const { q, like, amount } = match;
   const amtLeg =
     amount != null
       ? sql`
@@ -510,8 +560,8 @@ async function searchTransactions(
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
           where dl.org_id = ${orgId} and dl.amount in (${amount}::numeric, ${`-${amount}`}::numeric) ${visibleKindFilter}${documentSubsidiaryFilter}
           limit 200)`
-      : sql``
-  const numOrder = amount != null ? sql`(${amtExpr} = ${amount}::numeric) desc, ` : sql``
+      : sql``;
+  const numOrder = amount != null ? sql`(${amtExpr} = ${amount}::numeric) desc, ` : sql``;
   // Exact document numbers bypass the recency-capped fuzzy legs: on a large
   // tenant the newest-200 cap can exclude an old exact row (and admit a
   // different neighbor set as new documents arrive), so an exact query
@@ -524,7 +574,7 @@ async function searchTransactions(
         (select d.id from documents d
           where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
             and (d.document_number = ${q} or d.external_ref = ${q})
-          limit 5)`
+          limit 5)`;
   // Line descriptions name what was bought or sold ("forklift rental"),
   // which neither the number nor the header memo carries.
   const lineLeg = sql`
@@ -532,8 +582,9 @@ async function searchTransactions(
         (select dl.document_id as id from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
           where dl.org_id = ${orgId} and dl.description ilike ${like} ${visibleKindFilter}${documentSubsidiaryFilter}
-          limit 200)`
-  const r = (await db.execute<SearchTransactionRow>(sql`
+          limit 200)`;
+  const r = await db.execute<SearchTransactionRow>(
+    sql`
     with cand as (
       (select d.id from documents d
         where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
@@ -561,40 +612,47 @@ async function searchTransactions(
       left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
      where true ${visibleKindFilter}${documentSubsidiaryFilter}
      order by (d.document_number = ${q} or d.external_ref = ${q}) desc, ${numOrder}sim desc, d.created_at desc
-     limit ${PER_GROUP + 2}`, 'objects'))
-  return transactionHits(r)
+     limit ${PER_GROUP + 2}`,
+    "objects",
+  );
+  return transactionHits(r);
 }
 
 function transactionHits(rows: SearchTransactionRow[]): SearchHit[] {
   // No generic journal fallback: a stored kind without an authorized native
   // module is dropped rather than linked into the wrong module's ledger view.
   return rows.flatMap((row): SearchHit[] => {
-    const module = transactionModule(row.kind)
-    const href = moduleDrawerHref(row.kind, row.id, { projectId: row.project_id })
-    if (!module || !href) return []
+    const module = transactionModule(row.kind);
+    const href = moduleDrawerHref(row.kind, row.id, { projectId: row.project_id });
+    if (!module || !href) return [];
     // A document found through one of its lines shows that line, so the
     // reader sees why "forklift" surfaced it.
-    const context = row.line_match || row.memo
-    return [{
-      id: row.id,
-      type: 'transaction',
-      title: `${module.label} ${row.document_number}`,
-      subtitle: (row.line_match && row.party_name ? `${row.party_name} · ${row.line_match}` : row.party_name || context) || undefined,
-      href,
-      iconKey: module.iconKey,
-      badge: statusBadge(row.status),
-      amount: money(row.amount),
-    }]
-  })
+    const context = row.line_match || row.memo;
+    return [
+      {
+        id: row.id,
+        type: "transaction",
+        title: `${module.label} ${row.document_number}`,
+        subtitle:
+          (row.line_match && row.party_name
+            ? `${row.party_name} · ${row.line_match}`
+            : row.party_name || context) || undefined,
+        href,
+        iconKey: module.iconKey,
+        badge: statusBadge(row.status),
+        amount: money(row.amount),
+      },
+    ];
+  });
 }
 
 type SearchJournalEntryRow = {
-  id: string
-  entry_number: string
-  memo: string | null
-  status: string
-  created_at: string
-}
+  id: string;
+  entry_number: string;
+  memo: string | null;
+  status: string;
+  created_at: string;
+};
 
 /**
  * Journal entries carry their own numbers (JE-…) in journal_entries, and
@@ -624,15 +682,18 @@ async function searchJournalEntries(
   // visible when a LINE is visible (journalScopeWhere, shared with the
   // journal list) — never the header's subsidiary alone. A header in scope
   // whose lines are all out of scope must not disclose its memo here.
-  const visibility = journalScopeWhere(orgId, scope)
+  const visibility = journalScopeWhere(orgId, scope);
   // The linked-document gate for the exact arm: the posting document must
   // be one the caller could open themselves — same kind allowlist and the
   // same document subsidiary fence the documents legs enforce.
   const linkedKindGate =
     visibleKinds.length === 0
       ? sql`and false`
-      : sql`and d.kind in (${sql.join(visibleKinds.map((value) => sql`${value}`), sql`, `)})`
-  const linkedDocSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)
+      : sql`and d.kind in (${sql.join(
+          visibleKinds.map((value) => sql`${value}`),
+          sql`, `,
+        )})`;
+  const linkedDocSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope);
   const exactArmLinkRule = sql`(not exists (select 1 from documents d
                             where d.posted_entry_id = e.id and d.org_id = e.org_id)
                or exists (select 1 from documents d
@@ -640,20 +701,24 @@ async function searchJournalEntries(
                              and d.kind in ('journal', 'pay_run'))
                or exists (select 1 from documents d
                            where d.posted_entry_id = e.id and d.org_id = e.org_id
-                             ${linkedDocSubsidiaryFilter} ${linkedKindGate}))`
-  if (match.kind === 'ids') {
-    const r = (await db.execute<SearchJournalEntryRow>(sql`
+                             ${linkedDocSubsidiaryFilter} ${linkedKindGate}))`;
+  if (match.kind === "ids") {
+    const r = await db.execute<SearchJournalEntryRow>(
+      sql`
       select e.id, e.entry_number, e.memo, e.status, e.created_at
         from journal_entries e
        where ${visibility}
          and e.id = any(${uuidArray(match.ids)})
-         and ${exactArmLinkRule}`, 'objects'))
-    return journalHits(r)
+         and ${exactArmLinkRule}`,
+      "objects",
+    );
+    return journalHits(r);
   }
-  const { q, like } = match
+  const { q, like } = match;
   // UNION forbids expression ORDER BY, so the merged legs sit in a
   // subquery and the exact-first ordering applies outside it.
-  const r = (await db.execute<SearchJournalEntryRow>(sql`
+  const r = await db.execute<SearchJournalEntryRow>(
+    sql`
     select u.id, u.entry_number, u.memo, u.status, u.created_at from (
       select e.id, e.entry_number, e.memo, e.status, e.created_at
         from journal_entries e
@@ -663,7 +728,10 @@ async function searchJournalEntries(
                        where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
               or (not exists (select 1 from documents d
                                where d.posted_entry_id = e.id and d.org_id = e.org_id)
-                  and e.origin in (${sql.join(JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`), sql`, `)})))
+                  and e.origin in (${sql.join(
+                    JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`),
+                    sql`, `,
+                  )})))
       union
       (select e.id, e.entry_number, e.memo, e.status, e.created_at
          from journal_entries e
@@ -673,20 +741,22 @@ async function searchJournalEntries(
         limit 5)
     ) u
      order by (u.entry_number = ${q}) desc, similarity(u.entry_number, ${q}) desc, u.created_at desc
-     limit ${PER_GROUP}`, 'objects'))
-  return journalHits(r)
+     limit ${PER_GROUP}`,
+    "objects",
+  );
+  return journalHits(r);
 }
 
 function journalHits(rows: SearchJournalEntryRow[]): SearchHit[] {
   return rows.map((row): SearchHit => ({
     id: row.id,
-    type: 'transaction',
+    type: "transaction",
     title: `Journal ${row.entry_number}`,
     subtitle: row.memo || undefined,
     href: `/journal?journalEntry=${row.id}`,
-    iconKey: 'journal',
+    iconKey: "journal",
     badge: statusBadge(row.status),
-  }))
+  }));
 }
 
 async function searchAccounts(
@@ -694,57 +764,69 @@ async function searchAccounts(
   match: Match,
   scope: ReadonlySet<string> | null,
 ): Promise<SearchHit[]> {
-  const subsidiaryFilter = masterDataSubsidiaryFilter(sql`subsidiary_id`, scope)
-  const predicate = match.kind === 'ids'
-    ? sql`id = any(${uuidArray(match.ids)})`
-    : sql`(name % ${match.q} or name ilike ${match.like} or number ilike ${match.like})`
-  const order = match.kind === 'ids' ? sql`number nulls last` : sql`similarity(name, ${match.q}) desc, number nulls last`
-  const r = (await db.execute<SearchAccountRow>(sql`
+  const subsidiaryFilter = masterDataSubsidiaryFilter(sql`subsidiary_id`, scope);
+  const predicate =
+    match.kind === "ids"
+      ? sql`id = any(${uuidArray(match.ids)})`
+      : sql`(name % ${match.q} or name ilike ${match.like} or number ilike ${match.like})`;
+  const order =
+    match.kind === "ids"
+      ? sql`number nulls last`
+      : sql`similarity(name, ${match.q}) desc, number nulls last`;
+  const r = await db.execute<SearchAccountRow>(
+    sql`
     select id, number, name, type from accounts
      where org_id = ${orgId} and not is_summary
        ${subsidiaryFilter}
        and ${predicate}
      order by ${order}
-     limit ${PER_GROUP}`, 'objects'))
+     limit ${PER_GROUP}`,
+    "objects",
+  );
   return r.map((row): SearchHit => ({
     id: row.id,
-    type: 'account',
-    title: `${row.number ? `${row.number} · ` : ''}${row.name}`,
+    type: "account",
+    title: `${row.number ? `${row.number} · ` : ""}${row.name}`,
     subtitle: row.type,
     href: `/accounts?accountRegister=${row.id}`,
-    iconKey: 'layers',
-  }))
+    iconKey: "layers",
+  }));
 }
 
 async function searchItems(orgId: string, match: Match): Promise<SearchHit[]> {
   // A scanned barcode (GTIN/UPC/EAN) or a customer's own part number names
   // the item exactly; each resolves through its unique per-org index.
-  const candidates = match.kind === 'ids'
-    ? sql`select id from items where org_id = ${orgId} and id = any(${uuidArray(match.ids)})`
-    : sql`
+  const candidates =
+    match.kind === "ids"
+      ? sql`select id from items where org_id = ${orgId} and id = any(${uuidArray(match.ids)})`
+      : sql`
       (select id from items
         where org_id = ${orgId} and (name % ${match.q} or name ilike ${match.like} or code ilike ${match.like})
         limit 50)
       union
       (select item_id as id from item_identifiers where org_id = ${orgId} and value = ${match.q})
       union
-      (select item_id as id from customer_item_refs where org_id = ${orgId} and customer_sku = ${match.q} limit 5)`
-  const order = match.kind === 'ids' ? sql`i.name` : sql`similarity(i.name, ${match.q}) desc, i.name`
-  const r = (await db.execute<SearchItemRow>(sql`
+      (select item_id as id from customer_item_refs where org_id = ${orgId} and customer_sku = ${match.q} limit 5)`;
+  const order =
+    match.kind === "ids" ? sql`i.name` : sql`similarity(i.name, ${match.q}) desc, i.name`;
+  const r = await db.execute<SearchItemRow>(
+    sql`
     with item_cand as (${candidates})
     select i.id, i.code, i.name from items i
       join item_cand on item_cand.id = i.id
      where i.org_id = ${orgId}
      order by ${order}
-     limit ${PER_GROUP}`, 'objects'))
+     limit ${PER_GROUP}`,
+    "objects",
+  );
   return r.map((row): SearchHit => ({
     id: row.id,
-    type: 'item',
+    type: "item",
     title: row.name,
     subtitle: row.code || undefined,
     href: `/items?item=${row.id}`,
-    iconKey: 'grid',
-  }))
+    iconKey: "grid",
+  }));
 }
 
 async function searchProjects(
@@ -754,23 +836,27 @@ async function searchProjects(
 ): Promise<SearchHit[]> {
   // Project records behave like documents: restricted callers see only their
   // subsidiaries (no org-wide null escape hatch).
-  const subsidiaryFilter = subsidiaryVisibleFilter(sql`subsidiary_id`, scope)
-  const predicate = match.kind === 'ids'
-    ? sql`id = any(${uuidArray(match.ids)})`
-    : sql`(name % ${match.q} or name ilike ${match.like} or code ilike ${match.like})`
-  const order = match.kind === 'ids' ? sql`name` : sql`similarity(name, ${match.q}) desc, name`
-  const r = (await db.execute<SearchProjectRow>(sql`
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`subsidiary_id`, scope);
+  const predicate =
+    match.kind === "ids"
+      ? sql`id = any(${uuidArray(match.ids)})`
+      : sql`(name % ${match.q} or name ilike ${match.like} or code ilike ${match.like})`;
+  const order = match.kind === "ids" ? sql`name` : sql`similarity(name, ${match.q}) desc, name`;
+  const r = await db.execute<SearchProjectRow>(
+    sql`
     select id, code, name from projects
      where org_id = ${orgId} ${subsidiaryFilter}
        and ${predicate}
      order by ${order}
-     limit ${PER_GROUP}`, 'objects'))
+     limit ${PER_GROUP}`,
+    "objects",
+  );
   return r.map((row): SearchHit => ({
     id: row.id,
-    type: 'project',
+    type: "project",
     title: row.name,
     subtitle: row.code || undefined,
     href: `/projects?project=${row.id}`,
-    iconKey: 'timer',
-  }))
+    iconKey: "timer",
+  }));
 }

@@ -36,10 +36,13 @@ export async function defaultCloseFeatureContext(
   executor: SqlExecutor,
   orgId: string,
 ): Promise<DefaultCloseFeatureContext> {
-  const result = (await executor.execute<{ features: FeatureState | null }>(sql`
+  const result = await executor.execute<{ features: FeatureState | null }>(
+    sql`
     select coalesce(o.settings->'features', '{}'::jsonb) as features
       from orgs o where o.id=${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) throw new CloseError("organization not found");
   const features = row.features ?? {};
@@ -47,10 +50,17 @@ export async function defaultCloseFeatureContext(
     advancedClose: featureEnabled(features, "flows") && features.advancedClose === true,
     banking: featureEnabled(features, "banking"),
     fixedAssets: featureEnabled(features, "fixedAssets"),
-    assetCapitalization: featureEnabled(features, "assetProposals") || featureEnabled(features, "constructionInProgress"),
+    assetCapitalization:
+      featureEnabled(features, "assetProposals") ||
+      featureEnabled(features, "constructionInProgress"),
     revenueRecognition: featureEnabled(features, "revenueRecognition"),
     multiCurrency: await dataDependentFeatureDefault(executor, orgId, "multiCurrency", features),
-    multiSubsidiary: await dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", features),
+    multiSubsidiary: await dataDependentFeatureDefault(
+      executor,
+      orgId,
+      "multiSubsidiary",
+      features,
+    ),
     salesChannels: featureEnabled(features, "salesChannels"),
     unbilledRevenueAccrual: featureEnabled(features, "unbilledRevenueAccrual"),
     periodEndJournals: featureEnabled(features, "periodEndJournals"),
@@ -77,7 +87,8 @@ export function defaultCloseStepEnabled(
   if (key === "period-end-journals") return features.periodEndJournals;
   if (key === "book-replication-complete") return features.multiBookAccounting === true;
   if (key === "prepaid-amortized") return features.expenseAmortization;
-  if (key === "equity-compensation-posted" || key === "equity-interest-accrued") return features.equity === true;
+  if (key === "equity-compensation-posted" || key === "equity-interest-accrued")
+    return features.equity === true;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;

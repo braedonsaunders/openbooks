@@ -17,7 +17,9 @@ const script = { pushes: [] as string[] };
 Object.assign(globalThis, {
   __gridWeekJump: script,
   __gridWeekJumpRouter: {
-    push(url: string) { script.pushes.push(url); },
+    push(url: string) {
+      script.pushes.push(url);
+    },
     replace() {},
     refresh() {},
   },
@@ -34,8 +36,7 @@ stubModules({
     "next/link": "export default function Link(p){return p.children}",
     sonner:
       "export const toast={success(){},error(){},warning(){},info(){}};export function Toaster(){return null}",
-    "../../../lib/confirm":
-      "export async function confirmDialog(){return true}",
+    "../../../lib/confirm": "export async function confirmDialog(){return true}",
     "../../../lib/prompt": "export async function promptDialog(){return null}",
   },
 });
@@ -52,13 +53,30 @@ const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (_ms = 30) => new Promise((resolve) => setTimeout(resolve, 30));
 
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 const PICKERS = {
   employees: [{ value: "emp-6", label: "Jump Worker" }],
   projects: [],
   items: [],
-  timeTypes: [{ value: "tt-1", label: "Regular", classification: "regular", costMultiplier: "1", isBillableDefault: true, isDefault: true }],
+  timeTypes: [
+    {
+      value: "tt-1",
+      label: "Regular",
+      classification: "regular",
+      costMultiplier: "1",
+      isBillableDefault: true,
+      isDefault: true,
+    },
+  ],
   departments: [],
 };
 
@@ -109,10 +127,15 @@ test("picking a date jumps to its Sunday through the drawer id", async (t) => {
     for (const node of [...document.body.children]) node.remove();
   });
 
-  const picker = document.querySelector('input[aria-label="Go to week"]') as HTMLInputElement | null;
+  const picker = document.querySelector(
+    'input[aria-label="Go to week"]',
+  ) as HTMLInputElement | null;
   assert.ok(picker, "the grid header offers the week picker");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     // A Wednesday: the jump snaps back to its Sunday.
     setter.call(picker, "2026-06-10");
     picker.dispatchEvent(new window.Event("input", { bubbles: true }));

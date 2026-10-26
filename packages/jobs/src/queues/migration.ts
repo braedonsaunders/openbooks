@@ -1,7 +1,7 @@
-import { Queue, type JobsOptions } from 'bullmq'
-import { getConnection } from '../connection'
+import { Queue, type JobsOptions } from "bullmq";
+import { getConnection } from "../connection";
 
-export const MIGRATION_QUEUE = 'migration'
+export const MIGRATION_QUEUE = "migration";
 
 /**
  * One external-system migration/mirror/attachment pass for a tenant connection.
@@ -15,19 +15,25 @@ export const MIGRATION_QUEUE = 'migration'
  * an HTTP request timeout.
  */
 export type MigrationJobData = {
-  orgId: string
-  connectionId: string
-  mode: 'full_migration' | 'preflight' | 'mirror' | 'project_financials' | 'attachments' | 'targeted_repair'
-  triggeredBy?: string
+  orgId: string;
+  connectionId: string;
+  mode:
+    | "full_migration"
+    | "preflight"
+    | "mirror"
+    | "project_financials"
+    | "attachments"
+    | "targeted_repair";
+  triggeredBy?: string;
   /** Operationally retry only these upstream file identities. The worker
    * accepts this scope solely for attachment jobs; ordinary UI-triggered
    * attachment syncs omit it and retain full reconciliation semantics. */
-  sourceFileIds?: string[]
+  sourceFileIds?: string[];
   /** Exact upstream transaction identities for a bounded source repair. */
-  sourceRefs?: string[]
-}
+  sourceRefs?: string[];
+};
 
-let migrationQueue: Queue<MigrationJobData> | undefined
+let migrationQueue: Queue<MigrationJobData> | undefined;
 
 export function getMigrationQueue(): Queue<MigrationJobData> {
   migrationQueue ??= new Queue<MigrationJobData>(MIGRATION_QUEUE, {
@@ -35,14 +41,14 @@ export function getMigrationQueue(): Queue<MigrationJobData> {
     defaultJobOptions: {
       // Migrations are long and idempotent; retry once, keep history a while.
       attempts: 2,
-      backoff: { type: 'exponential', delay: 120_000 },
+      backoff: { type: "exponential", delay: 120_000 },
       removeOnComplete: { age: 30 * 24 * 3600 },
       removeOnFail: { age: 30 * 24 * 3600 },
     },
-  })
-  return migrationQueue
+  });
+  return migrationQueue;
 }
 
 export async function enqueueMigration(data: MigrationJobData, options?: JobsOptions) {
-  return getMigrationQueue().add(data.mode, data, options)
+  return getMigrationQueue().add(data.mode, data, options);
 }

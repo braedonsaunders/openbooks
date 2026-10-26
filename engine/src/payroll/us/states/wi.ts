@@ -30,7 +30,9 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -43,7 +45,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/wi.ts";
 
 export type WiSchedule = "single" | "married";
@@ -106,16 +112,18 @@ const WI_EDITIONS_BY_YEAR: Record<number, WiYearRates> = {
   [WI_RATES_2026.year]: WI_RATES_2026,
 };
 
-export const WI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Publication W-166 (January 2026), Alternate Method",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Wisconsin Department of Revenue, Publication W-166, Withholding Tax Guide (January 2026), "
-    + "Alternate Method of Withholding Wisconsin Income Tax (pp. 25–26); Form WT-4 (W-204 R. 8-23)",
-  status: "published",
-  region: "WI",
-}];
+export const WI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Publication W-166 (January 2026), Alternate Method",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Wisconsin Department of Revenue, Publication W-166, Withholding Tax Guide (January 2026), " +
+      "Alternate Method of Withholding Wisconsin Income Tax (pp. 25–26); Form WT-4 (W-204 R. 8-23)",
+    status: "published",
+    region: "WI",
+  },
+];
 
 /**
  * WT-4 marital-status boxes onto the two deduction formulas.
@@ -168,21 +176,42 @@ function compute(
   const militarySpouseCertificate = input.supportingCertificates?.us_wi_w221;
   if (militarySpouseCertificate?.onFile) {
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Wisconsin", [
-      { key: "employee_is_servicemember_spouse", description: "the employee is the spouse of a servicemember" },
-      { key: "servicemember_present_under_orders", description: "the servicemember is present in Wisconsin in compliance with military orders" },
-      { key: "spouse_present_solely_to_accompany", description: "the spouse is in Wisconsin solely to be with the servicemember" },
-      { key: "spouse_resides_with_servicemember", description: "the spouse resides with the servicemember" },
-      { key: "elected_domicile_not_wisconsin", description: "the spouse elected a qualifying domicile that is not Wisconsin" },
+      {
+        key: "employee_is_servicemember_spouse",
+        description: "the employee is the spouse of a servicemember",
+      },
+      {
+        key: "servicemember_present_under_orders",
+        description: "the servicemember is present in Wisconsin in compliance with military orders",
+      },
+      {
+        key: "spouse_present_solely_to_accompany",
+        description: "the spouse is in Wisconsin solely to be with the servicemember",
+      },
+      {
+        key: "spouse_resides_with_servicemember",
+        description: "the spouse resides with the servicemember",
+      },
+      {
+        key: "elected_domicile_not_wisconsin",
+        description: "the spouse elected a qualifying domicile that is not Wisconsin",
+      },
     ]);
     return {
-      state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-      statutoryTax: D(0n), additionalWithholding: D(0n),
+      state: "WI",
+      year: rates.year,
+      tax: D(0n),
+      taxSupplemental: D(0n),
+      statutoryTax: D(0n),
+      additionalWithholding: D(0n),
       factors: { WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "1" },
     };
   }
 
   const exempt = context.exemptResult({
-    factorKey: "WI_EXEMPT", statutoryTax: true, additionalWithholding: true,
+    factorKey: "WI_EXEMPT",
+    statutoryTax: true,
+    additionalWithholding: true,
   });
   if (exempt) return exempt;
 
@@ -190,7 +219,10 @@ function compute(
   if (withholdingAgreement?.onFile) {
     const agreedAmount = U(certificateAmount(withholdingAgreement, "agreed_per_period") ?? "0");
     return {
-      state: "WI", year: rates.year, tax: D(agreedAmount), taxSupplemental: D(0n),
+      state: "WI",
+      year: rates.year,
+      tax: D(agreedAmount),
+      taxSupplemental: D(0n),
       factors: { WI_WT4A_AGREED_WITHHOLDING: D(agreedAmount) },
     };
   }
@@ -207,15 +239,18 @@ function compute(
     const ytd = input.nonresidentYtdWages;
     if (expected == null || ytd == null) {
       throw new PayrollError(
-        "Wisconsin withholding for a nonresident needs the expected annual Wisconsin wages "
-        + "and the year-to-date Wisconsin wages (W-166: under $1,500 expected is exempt until "
-        + "the running total reaches $1,500). Record both figures before calculating — refused by name",
+        "Wisconsin withholding for a nonresident needs the expected annual Wisconsin wages " +
+          "and the year-to-date Wisconsin wages (W-166: under $1,500 expected is exempt until " +
+          "the running total reaches $1,500). Record both figures before calculating — refused by name",
       );
     }
     const current = U(input.wages) + U(input.supplemental ?? "0");
     if (U(expected) < U("1500") && U(ytd) + current < U("1500")) {
       return {
-        state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+        state: "WI",
+        year: rates.year,
+        tax: D(0n),
+        taxSupplemental: D(0n),
         factors: { WI_NONRESIDENT_THRESHOLD_EXEMPT: "1", WI_NONRESIDENT_WAGES: D(current) },
       };
     }
@@ -244,8 +279,12 @@ function compute(
     trace("WI_EXPECTED_ANNUAL_WAGES", expected);
     if (expected < U("1500")) {
       return {
-        state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-        statutoryTax: D(0n), additionalWithholding: D(0n),
+        state: "WI",
+        year: rates.year,
+        tax: D(0n),
+        taxSupplemental: D(0n),
+        statutoryTax: D(0n),
+        additionalWithholding: D(0n),
         factors: { ...factors, WI_UNDER_1500_EXEMPT: "1" },
       };
     }
@@ -288,7 +327,10 @@ function compute(
   if (catchUpBase > 0n) {
     const cumulativeGross = annualGross + catchUpBase;
     const cumulativeDeduction = wiDeduction(cumulativeGross, schedule, rates);
-    const cumulativeTax = wiAnnualTax(max0(cumulativeGross - cumulativeDeduction - exemption), rates);
+    const cumulativeTax = wiAnnualTax(
+      max0(cumulativeGross - cumulativeDeduction - exemption),
+      rates,
+    );
     catchUp = max0(cumulativeTax - annualTax);
     if (catchUp > 0n) trace("WI_CATCHUP", catchUp);
   }
@@ -313,7 +355,8 @@ function compute(
  * header.
  */
 export const WI_FACTOR_LABELS: Readonly<Record<string, string>> = {
-  WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "Wisconsin qualifying military-spouse wages exempt from withholding",
+  WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT:
+    "Wisconsin qualifying military-spouse wages exempt from withholding",
   WI_NONRESIDENT_THRESHOLD_EXEMPT: "Wisconsin nonresident wages exempt under the $1,500 threshold",
   WI_NONRESIDENT_WAGES: "Wisconsin nonresident wages this period",
   WI_EXEMPT: "Exempt from Wisconsin withholding",
@@ -377,12 +420,14 @@ export const WI_CERTIFICATE: PayrollCertificate = {
   citation:
     "Wisconsin Form WT-4 (W-204 R. 8-23); Publication W-166, Withholding Tax Guide (January 2026), p. 8, https://www.revenue.wi.gov/DOR%20Publications/pb166.pdf",
   summary:
-    "Sets Wisconsin withholding exemptions and marital status. W-166: if the employee fails to "
-    + "furnish a WT-4, \"the employee shall be considered as claiming zero withholding exemptions.\"",
+    "Sets Wisconsin withholding exemptions and marital status. W-166: if the employee fails to " +
+    'furnish a WT-4, "the employee shall be considered as claiming zero withholding exemptions."',
   storage: "certificate_rows",
   fields: [
     {
-      key: "marital_status", label: "Withholding status", kind: "choice",
+      key: "marital_status",
+      label: "Withholding status",
+      kind: "choice",
       choices: [
         { value: "single", label: "Single (or married but legally separated)" },
         { value: "married", label: "Married" },
@@ -392,27 +437,39 @@ export const WI_CERTIFICATE: PayrollCertificate = {
           help: "Uses the Single deduction formula.",
         },
       ],
-      default: "single", required: true,
-      help: "W-166 names zero exemptions as the no-certificate rule and does not name a marital "
-        + "status; Single is the form's first box and the higher-tax default.",
+      default: "single",
+      required: true,
+      help:
+        "W-166 names zero exemptions as the no-certificate rule and does not name a marital " +
+        "status; Single is the form's first box and the higher-tax default.",
     },
     {
-      key: "exemptions", label: "Line 1(d) — Total withholding exemptions", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Lines 1(a)–(c) added: self, spouse, dependents. Worth $400 a year each. Default "
-        + "zero: W-166 p. 8.",
+      key: "exemptions",
+      label: "Line 1(d) — Total withholding exemptions",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Lines 1(a)–(c) added: self, spouse, dependents. Worth $400 a year each. Default " +
+        "zero: W-166 p. 8.",
     },
     {
       key: "additional_per_period",
       label: "Line 2 — Additional amount per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Only if the employer agrees. Added after the formula.",
     },
     {
-      key: "exempt", label: "Line 3 — Complete exemption from withholding", kind: "flag",
-      help: "No Wisconsin liability last year and none expected this year. Expires April 30 of "
-        + "the next year unless a new WT-4 is filed. Federal Form W-4 cannot claim this. "
-        + "Reciprocity is Form W-220, not this line.",
+      key: "exempt",
+      label: "Line 3 — Complete exemption from withholding",
+      kind: "flag",
+      help:
+        "No Wisconsin liability last year and none expected this year. Expires April 30 of " +
+        "the next year unless a new WT-4 is filed. Federal Form W-4 cannot claim this. " +
+        "Reciprocity is Form W-220, not this line.",
     },
   ],
 };
@@ -426,18 +483,23 @@ export const WI_WT4A: PayrollCertificate = {
   purpose: "withholding",
   validity: { kind: "following_year_date", monthDay: "04-30" },
   citation:
-    "Wisconsin Form WT-4A, Employee Withholding Agreement (W-234 R. 11-25), lines 1–3 and employer instructions; "
-    + "Publication W-166 (January 2026), §3.B p. 8, https://www.revenue.wi.gov/TaxForms2017through2019/w-234f.pdf",
+    "Wisconsin Form WT-4A, Employee Withholding Agreement (W-234 R. 11-25), lines 1–3 and employer instructions; " +
+    "Publication W-166 (January 2026), §3.B p. 8, https://www.revenue.wi.gov/TaxForms2017through2019/w-234f.pdf",
   summary:
-    "Records an employee and employer agreement to withhold a lesser per-pay-period amount than the Wisconsin table, "
-    + "when the employee has claimed the maximum WT-4 exemptions and still expects overwithholding.",
+    "Records an employee and employer agreement to withhold a lesser per-pay-period amount than the Wisconsin table, " +
+    "when the employee has claimed the maximum WT-4 exemptions and still expects overwithholding.",
   storage: "certificate_rows",
-  fields: [{
-    key: "agreed_per_period",
-    label: "Line 3 — Amount to be withheld each payroll period",
-    kind: "amount", decimals: 4, min: "0", required: true,
-    help: "Enter the amount on line 3 of the filed WT-4A agreement. This replaces Wisconsin table withholding.",
-  }],
+  fields: [
+    {
+      key: "agreed_per_period",
+      label: "Line 3 — Amount to be withheld each payroll period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      required: true,
+      help: "Enter the amount on line 3 of the filed WT-4A agreement. This replaces Wisconsin table withholding.",
+    },
+  ],
 };
 
 /**
@@ -454,16 +516,17 @@ export const WI_W220: PayrollCertificate = {
   scope: { level: "region", region: "WI" },
   purpose: "non_residence",
   citation:
-    "Wisconsin Form W-220 (R. 7-20); Publication W-166 (January 2026) p. 8; Publication 121 "
-    + "Reciprocity (January 2026)",
+    "Wisconsin Form W-220 (R. 7-20); Publication W-166 (January 2026) p. 8; Publication 121 " +
+    "Reciprocity (January 2026)",
   summary:
-    "Claims exemption from Wisconsin withholding under a reciprocal agreement. Residence in "
-    + "Illinois, Indiana, Kentucky or Michigan is not enough on its own: written verification "
-    + "is required.",
+    "Claims exemption from Wisconsin withholding under a reciprocal agreement. Residence in " +
+    "Illinois, Indiana, Kentucky or Michigan is not enough on its own: written verification " +
+    "is required.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "resident_state", label: "I declare that while working in Wisconsin I am a legal resident of",
+      key: "resident_state",
+      label: "I declare that while working in Wisconsin I am a legal resident of",
       kind: "choice",
       choices: [
         { value: "IL", label: "Illinois" },
@@ -485,44 +548,49 @@ export const WI_W221: PayrollCertificate = {
   scope: { level: "region", region: "WI" },
   purpose: "exemption",
   citation:
-    "Wisconsin Form W-221 (R. 11/2024); Wisconsin DOR Nonresident Military Spouse Withholding "
-    + "Exemption FAQ (Oct. 9, 2025); 50 U.S.C. 4001(a)(3)",
+    "Wisconsin Form W-221 (R. 11/2024); Wisconsin DOR Nonresident Military Spouse Withholding " +
+    "Exemption FAQ (Oct. 9, 2025); 50 U.S.C. 4001(a)(3)",
   summary:
-    "The W-221 election remains effective until revoked. It exempts the employee's Wisconsin "
-    + "service income only while every statutory military-spouse condition remains true.",
+    "The W-221 election remains effective until revoked. It exempts the employee's Wisconsin " +
+    "service income only while every statutory military-spouse condition remains true.",
   storage: "certificate_rows",
   fields: [
     {
       key: "employee_is_servicemember_spouse",
       label: "Employee is the spouse of a servicemember",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "W-221 Part II eligibility certification.",
     },
     {
       key: "servicemember_present_under_orders",
       label: "Servicemember is present in Wisconsin in compliance with military orders",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "W-221 Part II eligibility certification.",
     },
     {
       key: "spouse_present_solely_to_accompany",
       label: "Spouse is in Wisconsin solely to be with the servicemember",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "W-221 Part II eligibility certification.",
     },
     {
       key: "spouse_resides_with_servicemember",
       label: "Spouse resides with the servicemember",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "Wisconsin DOR's W-221 eligibility guidance requires that the spouse and servicemember reside together.",
     },
     {
       key: "elected_domicile_not_wisconsin",
       label: "Spouse elected a qualifying domicile that is not Wisconsin",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help:
-        "W-221 election may use the servicemember's domicile, the spouse's domicile, or the "
-        + "servicemember's permanent duty station; the elected domicile cannot be Wisconsin.",
+        "W-221 election may use the servicemember's domicile, the spouse's domicile, or the " +
+        "servicemember's permanent duty station; the elected domicile cannot be Wisconsin.",
     },
   ],
 };
@@ -547,6 +615,6 @@ export const WI_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Wisconsin Department of Revenue, Publication W-166, Withholding Tax Guide (January 2026), "
-    + "Alternate Method (pp. 25–26); Form WT-4 (W-204 R. 8-23)",
+    "Wisconsin Department of Revenue, Publication W-166, Withholding Tax Guide (January 2026), " +
+    "Alternate Method (pp. 25–26); Form WT-4 (W-204 R. 8-23)",
 };

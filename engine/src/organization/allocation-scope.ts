@@ -150,7 +150,9 @@ export function targetPinViolation(
   targetSubsidiaryIds: (string | null)[],
 ): string | null {
   if (subsidiaryId === null) return null;
-  const outside = [...new Set(targetSubsidiaryIds.filter((sub) => sub !== null && sub !== subsidiaryId))];
+  const outside = [
+    ...new Set(targetSubsidiaryIds.filter((sub) => sub !== null && sub !== subsidiaryId)),
+  ];
   if (outside.length === 0) return null;
   return (
     `allocation rule ${ruleKey} targets ` +

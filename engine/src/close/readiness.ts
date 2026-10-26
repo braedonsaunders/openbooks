@@ -1,5 +1,9 @@
 import { CloseError, NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
-import { projectLossPolicyMode, unassessedLossContracts, unownedContractProjects } from "../projects/loss-contracts.ts";
+import {
+  projectLossPolicyMode,
+  unassessedLossContracts,
+  unownedContractProjects,
+} from "../projects/loss-contracts.ts";
 import { incompletePostingEffectsCount } from "../periods/period-locks.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -16,7 +20,11 @@ import { bookReplicationReadiness } from "../journal/book-replication.ts";
 import { dueUnpostedAmortization } from "../amortization/reconciliation.ts";
 import { closeEquityPostings } from "../equity/period-postings.ts";
 import { closeBankStatementScope, closeEntityScope } from "./close-scope.ts";
-const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
+const nonPostingKindList = () =>
+  sql.join(
+    NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`),
+    sql`, `,
+  );
 
 type ReadinessCheck = {
   code: string;
@@ -29,23 +37,21 @@ type ReadinessCheck = {
   details?: Record<string, unknown>;
 };
 
-export async function readinessChecks(
-  orgId: string,
-  runId: string,
-): Promise<ReadinessCheck[]> {
-  const context = (await db.execute<{
-      period_id: string;
-      book_id: string;
-      scope: { subsidiaryIds?: string[] };
-      system_blueprint: boolean;
-      starts_on: string;
-      ends_on: string;
-      fiscal_calendar_id: string;
-      period_number: number;
-      is_adjustment: boolean;
-      base_currency: string;
-      elimination_currency: string;
-    }>(sql`
+export async function readinessChecks(orgId: string, runId: string): Promise<ReadinessCheck[]> {
+  const context = await db.execute<{
+    period_id: string;
+    book_id: string;
+    scope: { subsidiaryIds?: string[] };
+    system_blueprint: boolean;
+    starts_on: string;
+    ends_on: string;
+    fiscal_calendar_id: string;
+    period_number: number;
+    is_adjustment: boolean;
+    base_currency: string;
+    elimination_currency: string;
+  }>(
+    sql`
     select r.period_id, r.book_id, r.scope, p.starts_on, p.ends_on,
            b.name = 'close.defaultData.blueprint.name' as system_blueprint,
            p.fiscal_calendar_id, p.period_number, p.is_adjustment,
@@ -59,7 +65,9 @@ export async function readinessChecks(
       join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
       join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       join orgs o on o.id = r.org_id
-     where r.id = ${runId} and r.org_id = ${orgId}`, "objects"));
+     where r.id = ${runId} and r.org_id = ${orgId}`,
+    "objects",
+  );
   const ctx = context[0];
   if (!ctx) throw new CloseError("close run not found");
   const subsidiaryIds = ctx.scope?.subsidiaryIds ?? [];
@@ -82,10 +90,26 @@ export async function readinessChecks(
   // period end: revaluation and consolidation refuse it, so coverage does too.
   const closingRateLimit = await resolveFxRateAgeLimit(db, orgId, "closing", ctx.ends_on);
 
-  const [postingEffects, drafts, missingPeriod, bank, depreciation, recognition, fx, fxReval, intercompany, variancePolicy] =
-    (await Promise.all([
-      incompletePostingEffectsCount(db, { orgId, periodId: ctx.period_id, bookId: ctx.book_id, subsidiaryIds }),
-      db.execute(sql`
+  const [
+    postingEffects,
+    drafts,
+    missingPeriod,
+    bank,
+    depreciation,
+    recognition,
+    fx,
+    fxReval,
+    intercompany,
+    variancePolicy,
+  ] = await Promise.all([
+    incompletePostingEffectsCount(db, {
+      orgId,
+      periodId: ctx.period_id,
+      bookId: ctx.book_id,
+      subsidiaryIds,
+    }),
+    db.execute(
+      sql`
       select
         (select count(*) from journal_entries e where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status = 'draft'
           and (exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id and ${inScope(sql`l.subsidiary_id`)})
@@ -100,8 +124,11 @@ export async function readinessChecks(
             and (d.posting_period_id = ${ctx.period_id}
               or (d.posting_period_id is null and d.status in ('draft','pending_approval')
                 and coalesce(d.posting_date, d.document_date) between ${ctx.starts_on} and ${ctx.ends_on}))
-            and ${documentScope}) as count`, "objects"),
-      db.execute(sql`
+            and ${documentScope}) as count`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select count(*) as count
         from documents d
        where d.org_id = ${orgId}
@@ -115,11 +142,14 @@ export async function readinessChecks(
          and d.kind not in (${nonPostingKindList()})
          and d.posting_period_id is null
          and coalesce(d.posting_date, d.document_date) between ${ctx.starts_on} and ${ctx.ends_on}
-         and ${documentScope}`, "objects"),
-      // Bank-unreconciled returns the open accounts themselves (not just a
-      // count) with per-account source-evidence coverage, so the close
-      // detail names each account with cleared/uncleared line counts.
-      db.execute(sql`
+         and ${documentScope}`,
+      "objects",
+    ),
+    // Bank-unreconciled returns the open accounts themselves (not just a
+    // count) with per-account source-evidence coverage, so the close
+    // detail names each account with cleared/uncleared line counts.
+    db.execute(
+      sql`
       with open_accounts as (
         select a.id, a.number, a.name
           from accounts a
@@ -175,21 +205,27 @@ export async function readinessChecks(
         ) jl on jl.account_id = o.id
         left join source_reconciliation_state s on s.org_id = ${orgId} and s.account_id = o.id
        group by o.id, o.number, o.name, s.connector, s.reconciled_through
-       order by o.number nulls last, o.name`, "objects"),
-      db.execute(sql`
+       order by o.number nulls last, o.name`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select count(*) as count
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
         join fixed_assets a on a.id=s.asset_id and a.org_id=s.org_id
        where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
          and s.book_id = ${ctx.book_id} and l.posted_amount is null and l.planned_amount <> 0
-         and ${inScope(sql`a.subsidiary_id`)}`, "objects"),
-      // Unposted revenue recognition, measured the way runRevenueRecognition
-      // measures due lines: unposted, nonzero, non-cancelled, non-forecast,
-      // and due by period end (percent-complete catch-up is due as soon as
-      // its period has started). Subsidiary attribution follows the runner's
-      // own coalesce chain so entity-scoped runs see the same population.
-      db.execute(sql`
+         and ${inScope(sql`a.subsidiary_id`)}`,
+      "objects",
+    ),
+    // Unposted revenue recognition, measured the way runRevenueRecognition
+    // measures due lines: unposted, nonzero, non-cancelled, non-forecast,
+    // and due by period end (percent-complete catch-up is due as soon as
+    // its period has started). Subsidiary attribution follows the runner's
+    // own coalesce chain so entity-scoped runs see the same population.
+    db.execute(
+      sql`
       select count(*) as count
         from recognition_schedule_lines l
         join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
@@ -205,8 +241,11 @@ export async function readinessChecks(
          and o.status <> 'cancelled' and not r.is_forecast
          and (p.ends_on <= ${ctx.ends_on}
               or (r.method = 'percent_complete' and p.starts_on <= ${ctx.ends_on}))
-         and ${inScope(sql`coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})`)}`, "objects"),
-      db.execute(sql`
+         and ${inScope(sql`coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})`)}`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select count(*) as count
         from (
           select distinct l.currency, l.subsidiary_id,
@@ -233,29 +272,34 @@ export async function readinessChecks(
               select 1 from fx_revaluation_rate_evidence successor
                where successor.org_id = evidence.org_id and successor.supersedes_id = evidence.id
             )
-       )`, "objects"),
-      // The revaluation ENGINE decides fx readiness: the same monetary
-      // population, spot-rate lookup, and delta arithmetic runRevaluation
-      // posts from. A position already at the period-end rate needs no entry
-      // (the engine skips it), so it is not an exception; a position the
-      // engine cannot reverse (no following period) is reported as its own
-      // actionable exception below rather than as "unrevalued".
-      revaluationReadiness(orgId, ctx.book_id, ctx.period_id, scoped ? subsidiaryIds : undefined),
-      // Entity closes do not certify consolidated elimination. Only an org-wide
-      // run evaluates this complete-group assertion; filtering its ledger would
-      // manufacture a residual by omitting the counterparty.
-      // Intercompany residuals are measured the way runAutoElimination
-      // eliminates them: balance-sheet accounts as cumulative balances through
-      // this period translated at the period's current rate, flow accounts as
-      // this period's activity at its average rate, each (account,
-      // subsidiary) total translated once into the elimination subsidiary's
-      // currency, with the elimination subsidiary's own lines included at
-      // par — so a group that eliminates cleanly reads zero per account,
-      // whatever functional currencies its entities keep and however the
-      // rate has moved since earlier eliminations. A foreign entity with no
-      // consolidated rate cannot be measured at all; that is counted
-      // separately, never as a residual.
-      scoped && ctx.system_blueprint ? Promise.resolve([{ count: 0, missing_rates: 0 }]) : db.execute(sql`
+       )`,
+      "objects",
+    ),
+    // The revaluation ENGINE decides fx readiness: the same monetary
+    // population, spot-rate lookup, and delta arithmetic runRevaluation
+    // posts from. A position already at the period-end rate needs no entry
+    // (the engine skips it), so it is not an exception; a position the
+    // engine cannot reverse (no following period) is reported as its own
+    // actionable exception below rather than as "unrevalued".
+    revaluationReadiness(orgId, ctx.book_id, ctx.period_id, scoped ? subsidiaryIds : undefined),
+    // Entity closes do not certify consolidated elimination. Only an org-wide
+    // run evaluates this complete-group assertion; filtering its ledger would
+    // manufacture a residual by omitting the counterparty.
+    // Intercompany residuals are measured the way runAutoElimination
+    // eliminates them: balance-sheet accounts as cumulative balances through
+    // this period translated at the period's current rate, flow accounts as
+    // this period's activity at its average rate, each (account,
+    // subsidiary) total translated once into the elimination subsidiary's
+    // currency, with the elimination subsidiary's own lines included at
+    // par — so a group that eliminates cleanly reads zero per account,
+    // whatever functional currencies its entities keep and however the
+    // rate has moved since earlier eliminations. A foreign entity with no
+    // consolidated rate cannot be measured at all; that is counted
+    // separately, never as a residual.
+    scoped && ctx.system_blueprint
+      ? Promise.resolve([{ count: 0, missing_rates: 0 }])
+      : db.execute(
+          sql`
       select count(*) filter (where residual <> 0 and not coalesce(missing_rate, false)) as count,
              count(*) filter (where missing_rate) as missing_rates
         from (
@@ -287,30 +331,42 @@ export async function readinessChecks(
            group by a.id, l.subsidiary_id
           ) by_subsidiary
          group by account_id
-      ) residuals`, "objects"),
-      db.execute(sql`
+      ) residuals`,
+          "objects",
+        ),
+    db.execute(
+      sql`
       select coalesce(rules->>'amount', '10000.0000') as amount,
              coalesce((rules->>'percent')::numeric, 20) as percent
-        from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`, "objects"),
-    ]));
+        from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`,
+      "objects",
+    ),
+  ]);
 
   // Name the documents behind an incomplete-effects count: the exception
   // tells the operator to retry terminal failures from the document, so it
   // must say which documents to open. Only queried on the failure path.
   let effectDocuments: string[] = [];
   if (postingEffects > 0) {
-    effectDocuments = (await db.execute<{ document_number: string }>(sql`
+    effectDocuments = (
+      await db.execute<{ document_number: string }>(
+        sql`
       select distinct d.document_number
         from posting_effects pe
         join journal_entries e on e.id = pe.entry_id and e.org_id = pe.org_id
         join documents d on d.id = pe.document_id and d.org_id = pe.org_id
        where pe.org_id = ${orgId} and e.period_id = ${ctx.period_id}
          and e.book_id = ${ctx.book_id} and pe.status <> 'succeeded'
-         and ${subsidiaryIds.length
-           ? sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)}
+         and ${
+           subsidiaryIds.length
+             ? sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)}
              or exists (select 1 from journal_lines l where l.org_id = e.org_id and l.entry_id = e.id and ${inScope(sql`l.subsidiary_id`)}))`
-           : sql`true`}
-       order by d.document_number limit 10`, "objects")).map((row) => row.document_number);
+             : sql`true`
+         }
+       order by d.document_number limit 10`,
+        "objects",
+      )
+    ).map((row) => row.document_number);
   }
 
   // Commerce completeness runs only when the run carries the task: the
@@ -318,9 +374,14 @@ export async function readinessChecks(
   // reads clean on an org with no channel data — so a run without the task
   // skips the storefront calls entirely instead of proving nothing.
   let commerce: CommerceCloseCheck[] = [];
-  const commerceTask = (await db.execute<{ id: string }>(sql`
+  const commerceTask = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'commerce-complete' limit 1`, "objects"))[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'commerce-complete' limit 1`,
+      "objects",
+    )
+  )[0];
   if (commerceTask) {
     commerce = await commerceCloseChecks(orgId, {
       startsOn: ctx.starts_on,
@@ -334,42 +395,78 @@ export async function readinessChecks(
   // the accrual engine's own preview decides, so the step and the poster
   // agree to the cent. Only runs that carry the task pay for the valuation.
   let unbilledAccrual: { applies: boolean; pendingKeys: number; problem: string | null } = {
-    applies: false, pendingKeys: 0, problem: null,
+    applies: false,
+    pendingKeys: 0,
+    problem: null,
   };
-  const unbilledAccrualTask = (await db.execute<{ id: string }>(sql`
+  const unbilledAccrualTask = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'unbilled-revenue-accrued' limit 1`, "objects"))[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'unbilled-revenue-accrued' limit 1`,
+      "objects",
+    )
+  )[0];
   if (unbilledAccrualTask) {
-    unbilledAccrual = await unbilledAccrualReadiness(orgId, ctx.period_id, scoped ? subsidiaryIds : undefined);
+    unbilledAccrual = await unbilledAccrualReadiness(
+      orgId,
+      ctx.period_id,
+      scoped ? subsidiaryIds : undefined,
+    );
   }
 
   // The year-end step is current when every legal entity's period-end
   // journals match what the generator would post now. Only runs that carry
   // the task pay for the measurement.
   let periodEnd: PeriodEndCloseCheck = { count: 0 };
-  const periodEndTask = (await db.execute<{ id: string }>(sql`
+  const periodEndTask = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'period-end-journals' limit 1`, "objects"))[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'period-end-journals' limit 1`,
+      "objects",
+    )
+  )[0];
   if (periodEndTask) {
-    periodEnd = await periodEndJournalCloseCheck(orgId, { periodId: ctx.period_id, bookId: ctx.book_id, subsidiaryIds });
+    periodEnd = await periodEndJournalCloseCheck(orgId, {
+      periodId: ctx.period_id,
+      bookId: ctx.book_id,
+      subsidiaryIds,
+    });
   }
 
   // Full books must hold every replicable primary entry through period end.
-  let bookReplication: Awaited<ReturnType<typeof bookReplicationReadiness>> = { missing: 0, books: [] };
-  const bookReplicationTask = (await db.execute<{ id: string }>(sql`
+  let bookReplication: Awaited<ReturnType<typeof bookReplicationReadiness>> = {
+    missing: 0,
+    books: [],
+  };
+  const bookReplicationTask = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'book-replication-complete' limit 1`, "objects"))[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'book-replication-complete' limit 1`,
+      "objects",
+    )
+  )[0];
   if (bookReplicationTask) {
     bookReplication = await bookReplicationReadiness(db, {
-      orgId, bookId: ctx.book_id, through: ctx.ends_on, subsidiaryIds: scoped ? subsidiaryIds : undefined,
+      orgId,
+      bookId: ctx.book_id,
+      through: ctx.ends_on,
+      subsidiaryIds: scoped ? subsidiaryIds : undefined,
     });
   }
   // Prepaid amortization is current when no active schedule holds a planned
   // period ending on or before the period end in this book and scope. Only
   // runs that carry the step pay for the count.
-  const prepaidTask = (await db.execute<{ id: string }>(sql`
+  const prepaidTask = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'prepaid-amortized' limit 1`, "objects"))[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'prepaid-amortized' limit 1`,
+      "objects",
+    )
+  )[0];
   const prepaidDue = prepaidTask
     ? await dueUnpostedAmortization(db, orgId, {
         endsOn: ctx.ends_on,
@@ -381,18 +478,28 @@ export async function readinessChecks(
   // Equity runs are current when no legal entity in scope with equity
   // records has a stock compensation or note interest change due through
   // period end. Only runs that carry the steps pay for the measurement.
-  const equityTasks = (await db.execute<{ key: string }>(sql`
+  const equityTasks = (
+    await db.execute<{ key: string }>(
+      sql`
       select key from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key in ('equity-compensation-posted', 'equity-interest-accrued')`, "objects")).map((row) => row.key);
-  const equityDue = equityTasks.length > 0
-    ? await closeEquityPostings(orgId, { through: ctx.ends_on, subsidiaryIds: scoped ? subsidiaryIds : [] })
-    : { compensation: [], interest: [] };
+       where run_id = ${runId} and org_id = ${orgId} and key in ('equity-compensation-posted', 'equity-interest-accrued')`,
+      "objects",
+    )
+  ).map((row) => row.key);
+  const equityDue =
+    equityTasks.length > 0
+      ? await closeEquityPostings(orgId, {
+          through: ctx.ends_on,
+          subsidiaryIds: scoped ? subsidiaryIds : [],
+        })
+      : { compensation: [], interest: [] };
 
   const threshold = variancePolicy[0] ?? {
     amount: "10000.0000",
     percent: 20,
   };
-  const variances = (await db.execute<{ count: string }>(sql`
+  const variances = await db.execute<{ count: string }>(
+    sql`
     with current_activity as (
       select l.account_id, l.subsidiary_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -422,9 +529,14 @@ export async function readinessChecks(
       from entity_activity v join accounts a on a.id=v.account_id and a.org_id=${orgId}
      where not a.is_summary
        and abs(v.current_amount-v.prior_amount) >= ${threshold.amount}::numeric
-       and (v.prior_amount=0 or abs((v.current_amount-v.prior_amount)/nullif(abs(v.prior_amount),0)*100) >= ${threshold.percent}::numeric)`, "objects"));
+       and (v.prior_amount=0 or abs((v.current_amount-v.prior_amount)/nullif(abs(v.prior_amount),0)*100) >= ${threshold.percent}::numeric)`,
+    "objects",
+  );
 
-  const segmentResiduals=(await db.execute<{count:string}>(sql`select count(*)::text as count from (
+  const segmentResiduals =
+    (
+      await db.execute<{ count: string }>(
+        sql`select count(*)::text as count from (
     select d.key,l.subsidiary_id from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
     join segment_definitions d on d.org_id=l.org_id and d.is_active and d.is_balancing
     where l.org_id=${orgId} and e.book_id=${ctx.book_id} and e.status in ('posted','reversed') and e.posting_date<=${ctx.ends_on}
@@ -433,44 +545,70 @@ export async function readinessChecks(
       when 'department_id' then l.department_id::text when 'project_id' then l.project_id::text
       when 'location_id' then l.location_id::text when 'class_id' then l.class_id::text else l.extra_dims->>d.key end
     having sum(l.amount)<>0
-  ) residuals`, "objects"))[0]?.count ?? '0';
+  ) residuals`,
+        "objects",
+      )
+    )[0]?.count ?? "0";
 
   // Loss contracts: the effective project loss policy decides whether a
   // project forecasting a loss without a loss assessment applied in the
   // period is reported, and whether that finding blocks the close.
-  const isoDay = (value: unknown) => value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  const isoDay = (value: unknown) =>
+    value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
   const lossMode = await projectLossPolicyMode(db, orgId, isoDay(ctx.ends_on));
-  const lossContracts = lossMode === "off" ? [] : await unassessedLossContracts(db, orgId, {
-    periodStartsOn: isoDay(ctx.starts_on), periodEndsOn: isoDay(ctx.ends_on), bookId: ctx.book_id, subsidiaryIds,
-  });
+  const lossContracts =
+    lossMode === "off"
+      ? []
+      : await unassessedLossContracts(db, orgId, {
+          periodStartsOn: isoDay(ctx.starts_on),
+          periodEndsOn: isoDay(ctx.ends_on),
+          bookId: ctx.book_id,
+          subsidiaryIds,
+        });
   // A project with no resolvable owner cannot be measured in any entity, so
   // no close scope can show it is out of reach: every close counts it, and
   // only an organization-wide close names the projects.
   const unownedProjects = lossMode === "off" ? [] : await unownedContractProjects(db, orgId);
-  const lossChecks: ReadinessCheck[] = lossMode === "off" ? [] : [{
-    code: "project-loss-owner-unresolved",
-    taskKey: "recognition-posted",
-    category: "revenue",
-    severity: lossMode === "require" ? "critical" : "warning",
-    title: "close.diagnostics.project-loss-owner-unresolved.title",
-    message: "close.diagnostics.project-loss-owner-unresolved.message",
-    count: unownedProjects.length,
-    details: unownedProjects.length > 0 && subsidiaryIds.length === 0 ? { projects: unownedProjects } : undefined,
-  }, {
-    code: "project-loss-unassessed",
-    taskKey: "recognition-posted",
-    category: "revenue",
-    severity: lossMode === "require" ? "critical" : "warning",
-    title: "close.diagnostics.project-loss-unassessed.title",
-    message: "close.diagnostics.project-loss-unassessed.message",
-    count: lossContracts.length,
-    details: lossContracts.length > 0 ? { projects: lossContracts } : undefined,
-  }];
+  const lossChecks: ReadinessCheck[] =
+    lossMode === "off"
+      ? []
+      : [
+          {
+            code: "project-loss-owner-unresolved",
+            taskKey: "recognition-posted",
+            category: "revenue",
+            severity: lossMode === "require" ? "critical" : "warning",
+            title: "close.diagnostics.project-loss-owner-unresolved.title",
+            message: "close.diagnostics.project-loss-owner-unresolved.message",
+            count: unownedProjects.length,
+            details:
+              unownedProjects.length > 0 && subsidiaryIds.length === 0
+                ? { projects: unownedProjects }
+                : undefined,
+          },
+          {
+            code: "project-loss-unassessed",
+            taskKey: "recognition-posted",
+            category: "revenue",
+            severity: lossMode === "require" ? "critical" : "warning",
+            title: "close.diagnostics.project-loss-unassessed.title",
+            message: "close.diagnostics.project-loss-unassessed.message",
+            count: lossContracts.length,
+            details: lossContracts.length > 0 ? { projects: lossContracts } : undefined,
+          },
+        ];
 
   return [
     ...lossChecks,
-    {code:'balancing-segment-residual',taskKey:'drafts-cleared',category:'readiness',severity:'critical',
-      title:'close.diagnostics.balancing-segment-residual.title',message:'close.diagnostics.balancing-segment-residual.message',count:Number(segmentResiduals)},
+    {
+      code: "balancing-segment-residual",
+      taskKey: "drafts-cleared",
+      category: "readiness",
+      severity: "critical",
+      title: "close.diagnostics.balancing-segment-residual.title",
+      message: "close.diagnostics.balancing-segment-residual.message",
+      count: Number(segmentResiduals),
+    },
     {
       code: "posting-effects-incomplete",
       taskKey: "drafts-cleared",
@@ -507,17 +645,20 @@ export async function readinessChecks(
       title: "close.diagnostics.bank-unreconciled.title",
       message: "close.diagnostics.bank-unreconciled.message",
       count: bank.length,
-      details: bank.length > 0 ? {
-        accounts: bank.map((row: Record<string, unknown>) => ({
-          accountId: row.account_id as string,
-          number: row.number as string | null,
-          name: row.name as string,
-          clearedLines: Number(row.cleared),
-          unclearedLines: Number(row.uncleared),
-          sourceConnector: row.source_connector as string | null,
-          sourceThrough: row.source_through as string | null,
-        })),
-      } : undefined,
+      details:
+        bank.length > 0
+          ? {
+              accounts: bank.map((row: Record<string, unknown>) => ({
+                accountId: row.account_id as string,
+                number: row.number as string | null,
+                name: row.name as string,
+                clearedLines: Number(row.cleared),
+                unclearedLines: Number(row.uncleared),
+                sourceConnector: row.source_connector as string | null,
+                sourceThrough: row.source_through as string | null,
+              })),
+            }
+          : undefined,
     },
     {
       code: "depreciation-unposted",
@@ -644,7 +785,10 @@ export async function readinessChecks(
       title: "close.diagnostics.intercompany-unreconciled.title",
       message: "close.diagnostics.intercompany-unreconciled.message",
       count: await unreconciledIntercompanyCount(orgId, {
-        asOfDate: (ctx.ends_on as unknown) instanceof Date ? (ctx.ends_on as unknown as Date).toISOString().slice(0, 10) : String(ctx.ends_on).slice(0, 10),
+        asOfDate:
+          (ctx.ends_on as unknown) instanceof Date
+            ? (ctx.ends_on as unknown as Date).toISOString().slice(0, 10)
+            : String(ctx.ends_on).slice(0, 10),
         bookId: ctx.book_id,
         subsidiaryIds,
       }),

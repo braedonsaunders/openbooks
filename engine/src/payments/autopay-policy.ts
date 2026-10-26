@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { type AcceptanceProvider, type OffSessionChargeOutcome, type OffSessionChargeRequest } from "./acceptance.ts";
+import {
+  type AcceptanceProvider,
+  type OffSessionChargeOutcome,
+  type OffSessionChargeRequest,
+} from "./acceptance.ts";
 
 /** Autopay policy: decline classification, the effective policy resolver and its refusals, and the feature gate every autopay write passes through. */
 
@@ -151,12 +155,18 @@ export function retryLadderForClass(policy: AutopayPolicy, declineClass: Decline
  * charge loop. Pure — throws AutopayError naming the fix.
  */
 export function parseRetryOffsetsDays(value: unknown): number[] {
-  if (!Array.isArray(value)) throw new AutopayError("retry offsets must be a list of whole days, e.g. [1, 3, 7]");
-  if (value.length > 8) throw new AutopayError("retry offsets hold at most 8 entries; shorten the schedule in Setup → Collections");
+  if (!Array.isArray(value))
+    throw new AutopayError("retry offsets must be a list of whole days, e.g. [1, 3, 7]");
+  if (value.length > 8)
+    throw new AutopayError(
+      "retry offsets hold at most 8 entries; shorten the schedule in Setup → Collections",
+    );
   const offsets: number[] = [];
   for (const entry of value) {
     if (typeof entry !== "number" || !Number.isInteger(entry) || entry < 1 || entry > 90) {
-      throw new AutopayError(`retry offset ${JSON.stringify(entry)} is not a whole day between 1 and 90; fix it in Setup → Collections`);
+      throw new AutopayError(
+        `retry offset ${JSON.stringify(entry)} is not a whole day between 1 and 90; fix it in Setup → Collections`,
+      );
     }
     offsets.push(entry);
   }
@@ -165,7 +175,9 @@ export function parseRetryOffsetsDays(value: unknown): number[] {
 
 export function parseFinalAction(value: unknown): AutopayFinalAction {
   if (value === "none" || value === "suspend" || value === "cancel") return value;
-  throw new AutopayError(`final action ${JSON.stringify(value)} is not one of none, suspend or cancel; fix it in Setup → Collections`);
+  throw new AutopayError(
+    `final action ${JSON.stringify(value)} is not one of none, suspend or cancel; fix it in Setup → Collections`,
+  );
 }
 
 /**
@@ -175,7 +187,9 @@ export function parseFinalAction(value: unknown): AutopayFinalAction {
  */
 export function parseExpiryNoticeDays(value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 90) {
-    throw new AutopayError(`pre-expiry notice window ${JSON.stringify(value)} is not a whole day between 1 and 90; fix it in Setup → Collections`);
+    throw new AutopayError(
+      `pre-expiry notice window ${JSON.stringify(value)} is not a whole day between 1 and 90; fix it in Setup → Collections`,
+    );
   }
   return value;
 }
@@ -195,7 +209,8 @@ export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy
     finalAction: unknown;
     gracePeriodDays: number;
     expiryNoticeDays: unknown;
-  }>(sql`
+  }>(
+    sql`
     select id as "policyId", name as "policyName",
            autopay_retry_offsets_days as "retryOffsets",
            autopay_insufficient_funds_offsets_days as "insufficientFundsOffsets",
@@ -205,10 +220,14 @@ export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy
       from dunning_policies
      where org_id = ${orgId} and is_active and applies_to_kind = 'customer_invoice'
      order by updated_at desc limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const policy = rows[0];
   if (!policy) {
-    const missing = new AutopayError("no active collection policy for customer invoices; activate one in Setup → Collections before enrolling customers in autopay");
+    const missing = new AutopayError(
+      "no active collection policy for customer invoices; activate one in Setup → Collections before enrolling customers in autopay",
+    );
     missing.code = MISSING_COLLECTION_POLICY;
     throw missing;
   }
@@ -226,7 +245,9 @@ export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy
 /** Fail closed when the autopay surface is off: hidden means refused, never charged. */
 export async function requireAutopayFeature(orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(db, orgId, "autopay"))) {
-    throw new AutopayError("Autopay is disabled; enable it in Company Settings → Features before changing payment methods or enrollments");
+    throw new AutopayError(
+      "Autopay is disabled; enable it in Company Settings → Features before changing payment methods or enrollments",
+    );
   }
 }
 
@@ -250,20 +271,40 @@ export function auditAutopay(
  */
 export async function saveAutopayPolicy(
   orgId: string,
-  input: { policyId: string; retryOffsetsDays: unknown; insufficientFundsOffsetsDays?: unknown; expiryNoticeDays?: unknown; finalAction: unknown; actorId?: string | null },
+  input: {
+    policyId: string;
+    retryOffsetsDays: unknown;
+    insufficientFundsOffsetsDays?: unknown;
+    expiryNoticeDays?: unknown;
+    finalAction: unknown;
+    actorId?: string | null;
+  },
 ): Promise<AutopayPolicy> {
   const offsets = parseRetryOffsetsDays(input.retryOffsetsDays);
-  const insufficientOffsets = input.insufficientFundsOffsetsDays === undefined
-    ? null
-    : parseRetryOffsetsDays(input.insufficientFundsOffsetsDays);
-  const expiryNoticeDays = input.expiryNoticeDays === undefined ? null : parseExpiryNoticeDays(input.expiryNoticeDays);
+  const insufficientOffsets =
+    input.insufficientFundsOffsetsDays === undefined
+      ? null
+      : parseRetryOffsetsDays(input.insufficientFundsOffsetsDays);
+  const expiryNoticeDays =
+    input.expiryNoticeDays === undefined ? null : parseExpiryNoticeDays(input.expiryNoticeDays);
   const finalAction = parseFinalAction(input.finalAction);
-  const offsetsList = (list: number[]) => list.length > 0
-    ? sql`ARRAY[${sql.join(list.map((offset) => sql`${offset}`), sql`, `)}]`
-    : sql`'{}'::integer[]`;
+  const offsetsList = (list: number[]) =>
+    list.length > 0
+      ? sql`ARRAY[${sql.join(
+          list.map((offset) => sql`${offset}`),
+          sql`, `,
+        )}]`
+      : sql`'{}'::integer[]`;
   return withOrg(orgId, async () => {
     await requireAutopayFeature(orgId);
-    const updated = (await db.execute<{ id: string; name: string; grace_period_days: number; insufficient_funds_offsets: unknown; expiry_notice_days: number }>(sql`
+    const updated = await db.execute<{
+      id: string;
+      name: string;
+      grace_period_days: number;
+      insufficient_funds_offsets: unknown;
+      expiry_notice_days: number;
+    }>(
+      sql`
       update dunning_policies
          set autopay_retry_offsets_days = ${offsetsList(offsets)},
              autopay_insufficient_funds_offsets_days = coalesce(${insufficientOffsets === null ? sql`null::integer[]` : offsetsList(insufficientOffsets)}, autopay_insufficient_funds_offsets_days),
@@ -274,17 +315,39 @@ export async function saveAutopayPolicy(
        returning id, name, grace_period_days as "grace_period_days",
                  autopay_insufficient_funds_offsets_days as "insufficient_funds_offsets",
                  autopay_expiry_notice_days as "expiry_notice_days"
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = updated[0];
     if (!row) throw new AutopayError("collection policy not found");
-    const resolvedInsufficient = insufficientOffsets ?? parseRetryOffsetsDays(row.insufficient_funds_offsets);
+    const resolvedInsufficient =
+      insufficientOffsets ?? parseRetryOffsetsDays(row.insufficient_funds_offsets);
     const resolvedExpiry = expiryNoticeDays ?? parseExpiryNoticeDays(row.expiry_notice_days);
-    await auditAutopay(orgId, "dunning_policies", row.id, {
-      event: "autopay_policy_saved",
-      after: { retryOffsetsDays: offsets, insufficientFundsOffsetsDays: resolvedInsufficient, expiryNoticeDays: resolvedExpiry, finalAction },
-      reason: "Operator changed the autopay retry schedule or final action.",
-    }, input.actorId ?? null);
-    return { policyId: row.id, policyName: row.name, retryOffsetsDays: offsets, insufficientFundsOffsetsDays: resolvedInsufficient, finalAction, gracePeriodDays: row.grace_period_days, expiryNoticeDays: resolvedExpiry };
+    await auditAutopay(
+      orgId,
+      "dunning_policies",
+      row.id,
+      {
+        event: "autopay_policy_saved",
+        after: {
+          retryOffsetsDays: offsets,
+          insufficientFundsOffsetsDays: resolvedInsufficient,
+          expiryNoticeDays: resolvedExpiry,
+          finalAction,
+        },
+        reason: "Operator changed the autopay retry schedule or final action.",
+      },
+      input.actorId ?? null,
+    );
+    return {
+      policyId: row.id,
+      policyName: row.name,
+      retryOffsetsDays: offsets,
+      insufficientFundsOffsetsDays: resolvedInsufficient,
+      finalAction,
+      gracePeriodDays: row.grace_period_days,
+      expiryNoticeDays: resolvedExpiry,
+    };
   });
 }
 

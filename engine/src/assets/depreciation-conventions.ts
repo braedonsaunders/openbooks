@@ -58,9 +58,10 @@ export const CONVENTION_SHAPES: Record<DepreciationConvention, ConventionShape> 
  * The reduced window in the BOOK engine's terms: how many leading monthly
  * periods to scale, and by how much.
  */
-export function bookConventionWindow(
-  convention: BookDepreciationConvention | null | undefined,
-): { firstPeriodFraction: string; firstFractionPeriods: number } {
+export function bookConventionWindow(convention: BookDepreciationConvention | null | undefined): {
+  firstPeriodFraction: string;
+  firstFractionPeriods: number;
+} {
   const shape = convention ? CONVENTION_SHAPES[convention] : undefined;
   if (!shape || shape.reducedMonths === 0) {
     return { firstPeriodFraction: "1", firstFractionPeriods: 1 };

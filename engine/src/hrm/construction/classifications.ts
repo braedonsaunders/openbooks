@@ -53,15 +53,16 @@ export async function listClassifications(
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   const rows = await exec.execute<{
-      id: string;
-      code: string;
-      name: string;
-      trade: string;
-      isApprentice: boolean;
-      apprenticeProgramRef: string | null;
-      journeyClassificationId: string | null;
-      isActive: boolean;
-    }>(sql`
+    id: string;
+    code: string;
+    name: string;
+    trade: string;
+    isApprentice: boolean;
+    apprenticeProgramRef: string | null;
+    journeyClassificationId: string | null;
+    isActive: boolean;
+  }>(
+    sql`
       select id::text as id, code, name, trade,
              is_apprentice as "isApprentice",
              apprentice_program_ref as "apprenticeProgramRef",
@@ -70,22 +71,25 @@ export async function listClassifications(
         from hrm_work_classifications
        where org_id = ${orgId}::uuid
        order by code
-    `, "objects");
+    `,
+    "objects",
+  );
   return rows;
 }
 
 export async function createClassification(
   exec: SqlExecutor,
   input: {
-  orgId: string;
-  actorId: string;
-  code: string;
-  name: string;
-  trade: string;
-  isApprentice?: boolean;
-  apprenticeProgramRef?: string | null;
-  journeyClassificationId?: string | null;
-}): Promise<WorkClassification> {
+    orgId: string;
+    actorId: string;
+    code: string;
+    name: string;
+    trade: string;
+    isApprentice?: boolean;
+    apprenticeProgramRef?: string | null;
+    journeyClassificationId?: string | null;
+  },
+): Promise<WorkClassification> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const code = requireText(input.code, "code");
@@ -111,7 +115,9 @@ export async function createClassification(
     await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await requireUnrestrictedHrmScope(exec, orgId, actorId);
     try {
-      const created = (await exec.execute<{ id: string }>(sql`
+      const created = (
+        await exec.execute<{ id: string }>(
+          sql`
           insert into hrm_work_classifications
             (org_id, code, name, trade, is_apprentice, apprentice_program_ref,
              journey_classification_id, created_by, updated_by)
@@ -119,11 +125,20 @@ export async function createClassification(
                   ${input.apprenticeProgramRef ?? null}, ${journeyClassificationId}::uuid,
                   ${actorId}::uuid, ${actorId}::uuid)
           returning id::text as id
-        `, "objects"))[0];
-      if (!created) throw new HrmConstructionError(`Classification ${code} was not created — no row was written.`);
+        `,
+          "objects",
+        )
+      )[0];
+      if (!created)
+        throw new HrmConstructionError(
+          `Classification ${code} was not created — no row was written.`,
+        );
       const rows = await listClassifications(exec, orgId, actorId);
       const found = rows.find((row) => row.id === created.id);
-      if (!found) throw new HrmConstructionError(`Classification ${code} was not created — it cannot be read back.`);
+      if (!found)
+        throw new HrmConstructionError(
+          `Classification ${code} was not created — it cannot be read back.`,
+        );
       return found;
     } catch (error) {
       if (error instanceof HrmConstructionError) throw error;
@@ -137,13 +152,14 @@ export async function createClassification(
 export async function assignClassification(
   exec: SqlExecutor,
   input: {
-  orgId: string;
-  actorId: string;
-  employmentId: string;
-  classificationId: string;
-  effectiveFrom: string;
-  homeScheduleId?: string | null;
-}): Promise<EmploymentClassification> {
+    orgId: string;
+    actorId: string;
+    employmentId: string;
+    classificationId: string;
+    effectiveFrom: string;
+    homeScheduleId?: string | null;
+  },
+): Promise<EmploymentClassification> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const employmentId = requireId(input.employmentId, "employmentId");
@@ -157,10 +173,15 @@ export async function assignClassification(
     // refuse identically.
     const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await assertEmploymentInScope(exec, orgId, employmentId, allowed, true);
-    const classification = (await exec.execute<{ id: string }>(sql`
+    const classification = (
+      await exec.execute<{ id: string }>(
+        sql`
         select id from hrm_work_classifications
          where org_id = ${orgId}::uuid and id = ${classificationId}::uuid and is_active
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!classification) {
       throw new HrmConstructionError(
         `Classification ${classificationId} does not exist or is retired in this organization — activate it before assigning.`,
@@ -183,14 +204,19 @@ export async function assignClassification(
          and effective_from <= ${effectiveFrom}::date
          and (effective_to is null or effective_to >= ${effectiveFrom}::date)
     `);
-    const created = (await exec.execute<{ id: string }>(sql`
+    const created = (
+      await exec.execute<{ id: string }>(
+        sql`
         insert into hrm_employment_classifications
           (org_id, employment_id, classification_id, effective_from, home_schedule_id, created_by, updated_by)
         values (${orgId}::uuid, ${employmentId}::uuid, ${classificationId}::uuid,
                 ${effectiveFrom}::date, ${homeScheduleId}::uuid,
                 ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!created) {
       throw new HrmConstructionError(
         `The classification assignment for employment ${employmentId} was not written — no row was created.`,
@@ -219,12 +245,14 @@ export async function classificationAsOf(
   journeyClassificationId: string | null;
   homeScheduleId: string | null;
 } | null> {
-  const row = (await exec.execute<{
+  const row = (
+    await exec.execute<{
       classificationId: string;
       isApprentice: boolean;
       journeyClassificationId: string | null;
       homeScheduleId: string | null;
-    }>(sql`
+    }>(
+      sql`
       select ec.classification_id::text as "classificationId",
              c.is_apprentice as "isApprentice",
              c.journey_classification_id::text as "journeyClassificationId",
@@ -236,6 +264,9 @@ export async function classificationAsOf(
          and ec.effective_from <= ${workedOn}::date
          and (ec.effective_to is null or ec.effective_to >= ${workedOn}::date)
        order by ec.effective_from desc limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   return row ?? null;
 }

@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { Button, EmptyState, UrlDrawer } from '@openbooks/ui'
-import { CalibrationSessionTable } from './CalibrationSessionTable'
+import Link from "next/link";
+import { Button, EmptyState, UrlDrawer } from "@openbooks/ui";
+import { CalibrationSessionTable } from "./CalibrationSessionTable";
 import {
   CalibrationEntryEditor,
   FeedbackDialog,
@@ -9,9 +9,9 @@ import {
   SessionActions,
   SessionCreateForm,
   TalentDialog,
-} from './continuous-islands'
-import type { MeOneOnOnesData } from '../../me/one-on-ones/view'
-import type { ContinuousData } from './continuous-view'
+} from "./continuous-islands";
+import type { MeOneOnOnesData } from "../../me/one-on-ones/view";
+import type { ContinuousData } from "./continuous-view";
 
 /**
  * HR-17 continuous-performance server shells: the calibration entry row
@@ -22,11 +22,15 @@ import type { ContinuousData } from './continuous-view'
  * render.
  */
 
-type Calibration = NonNullable<ContinuousData['calibration']>
-type CalibrationDetail = NonNullable<Calibration['detail']>
-type Talent = NonNullable<ContinuousData['talent']>
+type Calibration = NonNullable<ContinuousData["calibration"]>;
+type CalibrationDetail = NonNullable<Calibration["detail"]>;
+type Talent = NonNullable<ContinuousData["talent"]>;
 
-export function CalibrationEntryShell({ editor }: { editor: CalibrationDetail['entries'][number]['editor'] }) {
+export function CalibrationEntryShell({
+  editor,
+}: {
+  editor: CalibrationDetail["entries"][number]["editor"];
+}) {
   return (
     <CalibrationEntryEditor
       entryId={editor.entryId}
@@ -42,7 +46,7 @@ export function CalibrationEntryShell({ editor }: { editor: CalibrationDetail['e
       revertReasonLabel={editor.revertReasonLabel}
       failed={editor.failed}
     />
-  )
+  );
 }
 
 export function SessionActionsShell({ detail }: { detail: CalibrationDetail }) {
@@ -55,14 +59,10 @@ export function SessionActionsShell({ detail }: { detail: CalibrationDetail }) {
       closeLabel={detail.closeLabel}
       failed={detail.failed}
     />
-  )
+  );
 }
 
-export function CalibrationSessionShell({
-  detail,
-}: {
-  detail: CalibrationDetail
-}) {
+export function CalibrationSessionShell({ detail }: { detail: CalibrationDetail }) {
   return (
     <UrlDrawer
       open
@@ -77,51 +77,64 @@ export function CalibrationSessionShell({
           distribution={detail.distribution}
         />
         <CalibrationSessionTable detail={detail} />
-        <CalibrationMissingShell
-          title={detail.missingTitle}
-          missing={detail.missing}
-        />
+        <CalibrationMissingShell title={detail.missingTitle} missing={detail.missing} />
       </div>
     </UrlDrawer>
-  )
+  );
 }
 
 export function SessionDialogShell({
   create,
 }: {
-  create: NonNullable<NonNullable<ContinuousData['calibration']>['create']>
+  create: NonNullable<NonNullable<ContinuousData["calibration"]>["create"]>;
 }) {
   return (
     <UrlDrawer open closeHref={create.closeHref} title={create.submitLabel}>
-      {create.cycles.length === 0 ? <EmptyState title={create.emptyLabel} action={<Button asChild variant="outline"><Link href="/hrm/performance?cycle=new">{create.newCycleLabel}</Link></Button>} /> : <SessionCreateForm
-        cycles={create.cycles}
-        nameLabel={create.nameLabel}
-        cycleLabel={create.cycleLabel}
-        submitLabel={create.submitLabel}
-        cancelLabel={create.cancelLabel}
-        closeHref={create.closeHref}
-        failed={create.failed}
-      />}
+      {create.cycles.length === 0 ? (
+        <EmptyState
+          title={create.emptyLabel}
+          action={
+            <Button asChild variant="outline">
+              <Link href="/hrm/performance?cycle=new">{create.newCycleLabel}</Link>
+            </Button>
+          }
+        />
+      ) : (
+        <SessionCreateForm
+          cycles={create.cycles}
+          nameLabel={create.nameLabel}
+          cycleLabel={create.cycleLabel}
+          submitLabel={create.submitLabel}
+          cancelLabel={create.cancelLabel}
+          closeHref={create.closeHref}
+          failed={create.failed}
+        />
+      )}
     </UrlDrawer>
-  )
+  );
 }
 
 export function CalibrationDistributionShell({
   title,
   distribution,
 }: {
-  title: string
-  distribution: { key: string; count: number; width: number }[]
+  title: string;
+  distribution: { key: string; count: number; width: number }[];
 }) {
-  if (distribution.length === 0) return null
+  if (distribution.length === 0) return null;
   return (
     <section aria-label={title} className="space-y-1.5">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
       {distribution.map((bar) => (
         <div key={bar.key} className="flex items-center gap-2">
-          <span className="w-24 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300">{bar.key}</span>
+          <span className="w-24 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300">
+            {bar.key}
+          </span>
           <div className="h-2 min-w-0 flex-1 rounded bg-slate-100 dark:bg-slate-800">
-            <div className="h-2 rounded bg-slate-500 dark:bg-slate-400" style={{ width: `${bar.width}%` }} />
+            <div
+              className="h-2 rounded bg-slate-500 dark:bg-slate-400"
+              style={{ width: `${bar.width}%` }}
+            />
           </div>
           <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">
             {bar.count}
@@ -129,17 +142,17 @@ export function CalibrationDistributionShell({
         </div>
       ))}
     </section>
-  )
+  );
 }
 
 export function CalibrationMissingShell({
   title,
   missing,
 }: {
-  title: string
-  missing: { review: string; reason: string }[]
+  title: string;
+  missing: { review: string; reason: string }[];
 }) {
-  if (missing.length === 0) return null
+  if (missing.length === 0) return null;
   return (
     <section aria-label={title} className="space-y-1.5">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
@@ -151,10 +164,10 @@ export function CalibrationMissingShell({
         ))}
       </ul>
     </section>
-  )
+  );
 }
 
-export function TalentDialogShell({ dialog }: { dialog: Talent['dialog'] }) {
+export function TalentDialogShell({ dialog }: { dialog: Talent["dialog"] }) {
   return (
     <TalentDialog
       initialMode={dialog.initialMode}
@@ -182,13 +195,13 @@ export function TalentDialogShell({ dialog }: { dialog: Talent['dialog'] }) {
       employeeLabel={dialog.employeeLabel}
       positionLabel={dialog.positionLabel}
     />
-  )
+  );
 }
 
 export function FeedbackSettingsShell({
   settings,
 }: {
-  settings: NonNullable<ContinuousData['feedbackSettings']>
+  settings: NonNullable<ContinuousData["feedbackSettings"]>;
 }) {
   return (
     <section aria-label={settings.title} className="space-y-2">
@@ -202,7 +215,7 @@ export function FeedbackSettingsShell({
         failed={settings.failed}
       />
     </section>
-  )
+  );
 }
 
 export function FeedbackDialogShell({
@@ -222,23 +235,23 @@ export function FeedbackDialogShell({
   failed,
   openLabel,
 }: {
-  subjectEmploymentId: string
-  requestedFromPartyId?: string | null
-  subjectLabel: string
-  requestId: string | null
-  kinds: { value: string; label: string }[]
-  kindLabel: string
-  visibilities: { value: string; label: string }[]
-  visibilityLabel: string
-  bodyLabel: string
-  bodyPlaceholder: string
-  submitLabel: string
-  cancelLabel: string
-  closeHref: string
-  failed: string
-  openLabel: string
+  subjectEmploymentId: string;
+  requestedFromPartyId?: string | null;
+  subjectLabel: string;
+  requestId: string | null;
+  kinds: { value: string; label: string }[];
+  kindLabel: string;
+  visibilities: { value: string; label: string }[];
+  visibilityLabel: string;
+  bodyLabel: string;
+  bodyPlaceholder: string;
+  submitLabel: string;
+  cancelLabel: string;
+  closeHref: string;
+  failed: string;
+  openLabel: string;
 }) {
-  if (!subjectEmploymentId && !requestId) return null
+  if (!subjectEmploymentId && !requestId) return null;
   return (
     <FeedbackDialog
       subjectEmploymentId={subjectEmploymentId}
@@ -257,28 +270,19 @@ export function FeedbackDialogShell({
       failed={failed}
       openLabel={openLabel}
     />
-  )
+  );
 }
 
 export function NoteShell({ note }: { note: string | null }) {
-  if (!note) return null
-  return <p className="text-xs text-slate-500 dark:text-slate-400">{note}</p>
+  if (!note) return null;
+  return <p className="text-xs text-slate-500 dark:text-slate-400">{note}</p>;
 }
 
 /** The 1:1 agenda flyout: a URL drawer around the agenda island that closes by navigation. */
-export function OneOnOneDrawer({
-  detail,
-}: {
-  detail: MeOneOnOnesData['detail']
-}) {
-  if (!detail) return null
+export function OneOnOneDrawer({ detail }: { detail: MeOneOnOnesData["detail"] }) {
+  if (!detail) return null;
   return (
-    <UrlDrawer
-      open
-      closeHref={detail.closeHref}
-      title={detail.title}
-      description={detail.when}
-    >
+    <UrlDrawer open closeHref={detail.closeHref} title={detail.title} description={detail.when}>
       <OneOnOneAgenda
         oneOnOneId={detail.id}
         status={detail.status}
@@ -299,5 +303,5 @@ export function OneOnOneDrawer({
         failed={detail.failed}
       />
     </UrlDrawer>
-  )
+  );
 }

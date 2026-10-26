@@ -1,14 +1,23 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const recordCustomization: DocArticle = {
-  slug: 'record-customization',
-  title: 'Record Forms and Views',
-  category: 'administration',
+  slug: "record-customization",
+  title: "Record Forms and Views",
+  category: "administration",
   order: 1,
-  summary: 'Customize tenant-wide record forms and searchable list views for transactions, customers, vendors, employees, projects, and operational records.',
-  updated: '2026-07-21',
-  keywords: ['custom form', 'customer form', 'vendor form', 'employee form', 'saved view', 'field layout', 'record customization'],
-  related: ['company-settings', 'parties-items-and-projects', 'labor-pricing'],
+  summary:
+    "Customize tenant-wide record forms and searchable list views for transactions, customers, vendors, employees, projects, and operational records.",
+  updated: "2026-07-21",
+  keywords: [
+    "custom form",
+    "customer form",
+    "vendor form",
+    "employee form",
+    "saved view",
+    "field layout",
+    "record customization",
+  ],
+  related: ["company-settings", "parties-items-and-projects", "labor-pricing"],
   body: `# Record Forms and Views
 
 **Administration → Forms & Views** controls the forms and lists used throughout
@@ -52,4 +61,4 @@ views can be shared and marked as defaults; personal defaults override the
 organization choice for that user. A view never grants access to records or
 fields that the user cannot otherwise read.
 `,
-}
+};

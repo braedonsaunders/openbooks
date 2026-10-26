@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { MAX_UPLOAD_BYTES, isUploadContentType, listApplicationFiles, validateCabinetUpload } = await import("./files.ts");
+const { MAX_UPLOAD_BYTES, isUploadContentType, listApplicationFiles, validateCabinetUpload } =
+  await import("./files.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context").ApplicationContext;
 
@@ -27,16 +28,29 @@ test("cabinet upload accepts the route's allowlisted types and rejects the rest"
 });
 
 test("cabinet upload validation refuses blank names, bad payloads, and oversize files", () => {
-  const good = { filename: "note.txt", contentType: "text/plain", contentBase64: Buffer.from("hi").toString("base64") };
+  const good = {
+    filename: "note.txt",
+    contentType: "text/plain",
+    contentBase64: Buffer.from("hi").toString("base64"),
+  };
   assert.deepEqual(validateCabinetUpload(good), {
     filename: "note.txt",
     contentType: "text/plain",
     bytes: Buffer.from("hi"),
   });
   assert.throws(() => validateCabinetUpload({ ...good, filename: "  " }), /filename is required/);
-  assert.throws(() => validateCabinetUpload({ ...good, contentType: "application/x-sh" }), /unsupported file type/);
-  assert.throws(() => validateCabinetUpload({ ...good, contentBase64: "!!!not-base64!!!" }), /not valid base64/);
-  assert.throws(() => validateCabinetUpload({ ...good, contentBase64: "YQ==Yg==" }), /not valid base64/);
+  assert.throws(
+    () => validateCabinetUpload({ ...good, contentType: "application/x-sh" }),
+    /unsupported file type/,
+  );
+  assert.throws(
+    () => validateCabinetUpload({ ...good, contentBase64: "!!!not-base64!!!" }),
+    /not valid base64/,
+  );
+  assert.throws(
+    () => validateCabinetUpload({ ...good, contentBase64: "YQ==Yg==" }),
+    /not valid base64/,
+  );
   assert.throws(() => validateCabinetUpload({ ...good, contentBase64: "" }), /file is empty/);
   const over = Buffer.alloc(MAX_UPLOAD_BYTES + 1, 7).toString("base64");
   assert.throws(
@@ -48,19 +62,21 @@ test("cabinet upload validation refuses blank names, bad payloads, and oversize 
 test("file list rejects a malformed folder id before reading the cabinet", async () => {
   await assert.rejects(
     listApplicationFiles(context(["documents.read"]), { folderId: "not-a-uuid" }),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "invalid_input"
-      && error.status === 422
-      && error.message === "folderId must be a UUID",
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "invalid_input" &&
+      error.status === 422 &&
+      error.message === "folderId must be a UUID",
   );
 });
 
 test("file list refuses callers without document read permission", async () => {
   await assert.rejects(
     listApplicationFiles(context([]), {}),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "forbidden"
-      && error.status === 403
-      && error.details?.permission === "documents.read",
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "forbidden" &&
+      error.status === 403 &&
+      error.details?.permission === "documents.read",
   );
 });

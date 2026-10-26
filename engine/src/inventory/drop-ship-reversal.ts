@@ -1,14 +1,21 @@
-import { isAgencyConfirmationLine } from './drop-ship-agency.ts';
+import { isAgencyConfirmationLine } from "./drop-ship-agency.ts";
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
+import {
+  assertPeriodModulesOpen,
+  CloseError,
+  periodClosedDetailsOf,
+} from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { reversalPostEntryLine } from "../journal/reversal-posting-lines.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "../records/transaction-audit.ts";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -59,32 +66,44 @@ export async function reverseDropShipConfirmationPair(
     actorId: string;
     reversalDate: string;
     reason: string;
-    reverseDocument: (documentId: string, kind: "purchase_receipt" | "sales_fulfillment") => Promise<void>;
+    reverseDocument: (
+      documentId: string,
+      kind: "purchase_receipt" | "sales_fulfillment",
+    ) => Promise<void>;
   },
 ): Promise<{ pairedDocumentId: string; reversalEntryId: string | null } | null> {
   const kind = String(input.document.kind);
-  const confirmation = input.document.custom && typeof input.document.custom === "object"
-    ? (input.document.custom as Record<string, unknown>).dropShipConfirmation
-    : null;
-  const receiptId = kind === "purchase_receipt"
-    ? input.documentId
-    : nestedString(input.document.custom, "dropShipConfirmation", "purchaseReceiptId");
+  const confirmation =
+    input.document.custom && typeof input.document.custom === "object"
+      ? (input.document.custom as Record<string, unknown>).dropShipConfirmation
+      : null;
+  const receiptId =
+    kind === "purchase_receipt"
+      ? input.documentId
+      : nestedString(input.document.custom, "dropShipConfirmation", "purchaseReceiptId");
   if (!receiptId || !confirmation) return null;
 
   let pair: DropShipPairDocument | undefined;
   try {
-    pair = (await tx.execute<DropShipPairDocument>(kind === "purchase_receipt" ? sql`
+    pair = (
+      await tx.execute<DropShipPairDocument>(
+        kind === "purchase_receipt"
+          ? sql`
       select id, document_number, kind, status, subsidiary_id, void_requested_at, custom
         from documents
        where org_id = ${input.orgId} and kind = 'sales_fulfillment'
          and custom->'dropShipConfirmation'->>'purchaseReceiptId' = ${receiptId}
        order by id limit 1 for update nowait
-    ` : sql`
+    `
+          : sql`
       select id, document_number, kind, status, subsidiary_id, void_requested_at, custom
         from documents
        where org_id = ${input.orgId} and id = ${receiptId} and kind = 'purchase_receipt'
        for update nowait
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
   } catch (error) {
     if (isLockNotAvailable(error)) {
       throw new DropShipPairVoidRefusal(
@@ -93,7 +112,10 @@ export async function reverseDropShipConfirmationPair(
     }
     throw error;
   }
-  if (!pair) throw new DropShipPairVoidRefusal("The paired drop-ship document is missing; restore the confirmation pair before voiding");
+  if (!pair)
+    throw new DropShipPairVoidRefusal(
+      "The paired drop-ship document is missing; restore the confirmation pair before voiding",
+    );
   if (pair.status === "voided") {
     throw new DropShipPairVoidRefusal(
       `Cannot void this drop-ship confirmation because paired document ${pair.document_number} is already voided`,
@@ -105,8 +127,9 @@ export async function reverseDropShipConfirmationPair(
     );
   }
 
-  const receipt = kind === "purchase_receipt" ? input.document as DropShipPairDocument : pair;
-  const fulfillment = kind === "sales_fulfillment" ? input.document as DropShipPairDocument : pair;
+  const receipt = kind === "purchase_receipt" ? (input.document as DropShipPairDocument) : pair;
+  const fulfillment =
+    kind === "sales_fulfillment" ? (input.document as DropShipPairDocument) : pair;
   const sourceEntries = await tx.execute<{
     id: string;
     entry_number: string;
@@ -114,24 +137,41 @@ export async function reverseDropShipConfirmationPair(
     book_id: string;
     subsidiary_id: string;
     origin: string;
-  }>(sql`
+  }>(
+    sql`
     select id, entry_number, status, book_id, subsidiary_id, origin
       from journal_entries
      where org_id = ${input.orgId}
        and custom->'dropShipConfirmation'->>'receiptId' = ${receiptId}
      order by id
      for update
-  `, "objects");
-  const receiptLines = await tx.execute<{id:string}>(sql`select id from document_lines where org_id=${input.orgId} and document_id=${receiptId}`, "objects");
+  `,
+    "objects",
+  );
+  const receiptLines = await tx.execute<{ id: string }>(
+    sql`select id from document_lines where org_id=${input.orgId} and document_id=${receiptId}`,
+    "objects",
+  );
   let agencyOnly = receiptLines.length > 0;
-  for (const line of receiptLines) if (!await isAgencyConfirmationLine(tx,input.orgId,receiptId,line.id)) agencyOnly=false;
-  if (agencyOnly && (await tx.execute(sql`select 1 from drop_ship_agent_allocations allocation
+  for (const line of receiptLines)
+    if (!(await isAgencyConfirmationLine(tx, input.orgId, receiptId, line.id))) agencyOnly = false;
+  if (
+    agencyOnly &&
+    (
+      await tx.execute(
+        sql`select 1 from drop_ship_agent_allocations allocation
     join documents invoice on invoice.org_id=allocation.org_id and invoice.id=allocation.document_id
     join financial_changes change on change.org_id=allocation.org_id and change.id=allocation.change_id
     join document_lines receipt_line on receipt_line.org_id=change.org_id and receipt_line.document_id=${receiptId}
       and receipt_line.custom->'receipt'->>'sourceLineId'=change.before_state->>'purchase_line_id'
-    where allocation.org_id=${input.orgId} and allocation.kind='customer_invoice' and invoice.status='posted' limit 1`, "objects")).length) {
-    throw new DropShipPairVoidRefusal('Void or correct the posted agency customer invoices through their controlled document workflow before reversing this vendor shipment');
+    where allocation.org_id=${input.orgId} and allocation.kind='customer_invoice' and invoice.status='posted' limit 1`,
+        "objects",
+      )
+    ).length
+  ) {
+    throw new DropShipPairVoidRefusal(
+      "Void or correct the posted agency customer invoices through their controlled document workflow before reversing this vendor shipment",
+    );
   }
   if (sourceEntries.length === 0 && !agencyOnly) {
     throw new DropShipPairVoidRefusal(
@@ -144,24 +184,34 @@ export async function reverseDropShipConfirmationPair(
     );
   }
   for (const entry of sourceEntries) {
-    const reconciliation = (await tx.execute(sql`
+    const reconciliation = (
+      await tx.execute(
+        sql`
       select 1 from reconciliation_matches rm
        where rm.org_id = ${input.orgId}
          and rm.journal_line_id in (select id from journal_lines where org_id = ${input.orgId} and entry_id = ${entry.id})
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (reconciliation) {
       throw new DropShipPairVoidRefusal(
         `Drop-ship confirmation entry ${entry.entry_number} is bank-reconciled; remove its reconciliation match before voiding ${receipt.document_number}`,
       );
     }
-    const applications = (await tx.execute(sql`
+    const applications = (
+      await tx.execute(
+        sql`
       select 1 from applications a
        where a.org_id = ${input.orgId} and a.unapplied_at is null
          and (a.from_line_id in (select id from journal_lines where org_id = ${input.orgId} and entry_id = ${entry.id})
            or a.to_line_id in (select id from journal_lines where org_id = ${input.orgId} and entry_id = ${entry.id}))
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (applications) {
       throw new DropShipPairVoidRefusal(
         `Drop-ship confirmation entry ${entry.entry_number} has a live application; unapply it before voiding ${receipt.document_number}`,
@@ -204,7 +254,9 @@ export async function reverseDropShipConfirmationPair(
     const lines = await tx
       .select()
       .from(schema.journalLines)
-      .where(and(eq(schema.journalLines.entryId, entry.id), eq(schema.journalLines.orgId, input.orgId)));
+      .where(
+        and(eq(schema.journalLines.entryId, entry.id), eq(schema.journalLines.orgId, input.orgId)),
+      );
     const mirror = reversalJournalLines(lines, { entryId: "", orgId: input.orgId });
     const posted = await postEntry(tx, {
       orgId: input.orgId,
@@ -226,8 +278,12 @@ export async function reverseDropShipConfirmationPair(
   }
 
   const before = await captureTransactionAuditSnapshot(tx, pair.id, input.orgId);
-  if (!before) throw new DropShipPairVoidRefusal(`Paired document ${pair.document_number} disappeared while voiding`);
-  const pairUpdate = await tx.execute<{ id: string }>(sql`
+  if (!before)
+    throw new DropShipPairVoidRefusal(
+      `Paired document ${pair.document_number} disappeared while voiding`,
+    );
+  const pairUpdate = await tx.execute<{ id: string }>(
+    sql`
     update documents
        set status = 'voided', voided_at = now(), voided_by = ${input.actorId},
            void_reason = ${input.reason},
@@ -237,9 +293,13 @@ export async function reverseDropShipConfirmationPair(
      where org_id = ${input.orgId} and id = ${pair.id} and status = 'approved'
        and void_requested_at is null
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (pairUpdate.length !== 1) {
-    throw new DropShipPairVoidRefusal(`Paired document ${pair.document_number} changed while the confirmation was being voided`);
+    throw new DropShipPairVoidRefusal(
+      `Paired document ${pair.document_number} changed while the confirmation was being voided`,
+    );
   }
   const after = await captureTransactionAuditSnapshot(tx, pair.id, input.orgId);
   await recordTransactionAudit(tx, {
@@ -254,4 +314,3 @@ export async function reverseDropShipConfirmationPair(
   });
   return { pairedDocumentId: pair.id, reversalEntryId: reversalIds[0] ?? null };
 }
-

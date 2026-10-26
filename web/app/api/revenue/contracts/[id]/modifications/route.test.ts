@@ -21,15 +21,9 @@ registerHooks({
     if (specifier === "@openbooks/engine/revenue/contract-modifications")
       return { shortCircuit: true, url: "mock:revenue-change-command" };
     if (specifier === "@/lib/api/json")
-      return next(
-        new URL("../../../../../../lib/api/json.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../../lib/api/json.ts", import.meta.url).href, context);
     if (specifier === "@/lib/list-params")
-      return next(
-        new URL("../../../../../../lib/list-params.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../../lib/list-params.ts", import.meta.url).href, context);
     return next(specifier, context);
   },
   load(url, context, next) {
@@ -106,10 +100,10 @@ test("disabled revenue recognition refuses before body parsing or proposing an a
   state.calls = [];
   try {
     const response = await route.POST(
-      new Request(
-        "http://openbooks.test/api/revenue/contracts/x/modifications",
-        { method: "POST", body: "malformed JSON" },
-      ),
+      new Request("http://openbooks.test/api/revenue/contracts/x/modifications", {
+        method: "POST",
+        body: "malformed JSON",
+      }),
       context,
     );
     assert.equal(response.status, 404);

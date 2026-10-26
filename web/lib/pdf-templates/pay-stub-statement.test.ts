@@ -1,87 +1,204 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { buildPayStubStatement, toStatementLine, type StatementLine } from './pay-stub-statement'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { buildPayStubStatement, toStatementLine, type StatementLine } from "./pay-stub-statement";
 
 const line = (over: Partial<StatementLine>): StatementLine => ({
-  componentId: null, kind: 'earning', paymentKind: 'cash', description: '', systemKey: null,
-  taxable: true, amount: '0', hours: null, rate: null, ...over,
-})
-const WITHHOLDING = new Set(['federal_tax', 'provincial_tax'])
+  componentId: null,
+  kind: "earning",
+  paymentKind: "cash",
+  description: "",
+  systemKey: null,
+  taxable: true,
+  amount: "0",
+  hours: null,
+  rate: null,
+  ...over,
+});
+const WITHHOLDING = new Set(["federal_tax", "provincial_tax"]);
 /** Engine money helpers keep four places; compare at the cent. */
-const c = (value: string | null) => (value == null ? null : Number(value).toFixed(2))
+const c = (value: string | null) => (value == null ? null : Number(value).toFixed(2));
 
-test('printed component labels exclude adjustment provenance while preserving exact grouped values', () => {
+test("printed component labels exclude adjustment provenance while preserving exact grouped values", () => {
   const rows = [
-    toStatementLine({ component_id: 'allowance', component_name: 'Site allowance', kind: 'earning', payment_kind: 'cash', description: 'Source document reference and digest', amount: '39.0000', hours: '1.0000', rate: '39.0000' }),
-    toStatementLine({ component_id: 'allowance', component_name: 'Site allowance', kind: 'earning', payment_kind: 'cash', description: 'Second source document reference', amount: '39.0000', hours: '1.0000', rate: '39.0000' }),
-  ]
-  const statement = buildPayStubStatement(rows, [], WITHHOLDING)
-  assert.equal(statement.earnings.length, 1)
-  assert.equal(statement.earnings[0]!.description, 'Site allowance')
-  assert.equal(statement.earnings[0]!.current, '78.0000')
-  assert.equal(statement.earnings[0]!.hours, '2.0000')
-  assert.equal(statement.earnings[0]!.rate, '39.0000')
-  assert.equal(toStatementLine({ description: 'Manual earning' }).description, 'Manual earning')
-})
+    toStatementLine({
+      component_id: "allowance",
+      component_name: "Site allowance",
+      kind: "earning",
+      payment_kind: "cash",
+      description: "Source document reference and digest",
+      amount: "39.0000",
+      hours: "1.0000",
+      rate: "39.0000",
+    }),
+    toStatementLine({
+      component_id: "allowance",
+      component_name: "Site allowance",
+      kind: "earning",
+      payment_kind: "cash",
+      description: "Second source document reference",
+      amount: "39.0000",
+      hours: "1.0000",
+      rate: "39.0000",
+    }),
+  ];
+  const statement = buildPayStubStatement(rows, [], WITHHOLDING);
+  assert.equal(statement.earnings.length, 1);
+  assert.equal(statement.earnings[0]!.description, "Site allowance");
+  assert.equal(statement.earnings[0]!.current, "78.0000");
+  assert.equal(statement.earnings[0]!.hours, "2.0000");
+  assert.equal(statement.earnings[0]!.rate, "39.0000");
+  assert.equal(toStatementLine({ description: "Manual earning" }).description, "Manual earning");
+});
 
-test('cheque remittance retains non-taxable non-cash gross without changing the standard pay statement', () => {
+test("cheque remittance retains non-taxable non-cash gross without changing the standard pay statement", () => {
   const current = [
-    line({ componentId: 'cash', amount: '500.00', hours: '10', rate: '50' }),
-    line({ componentId: 'noncash', paymentKind: 'non_cash', taxable: false, amount: '20.01' }),
-    line({ componentId: 'noncash', paymentKind: 'non_cash', taxable: false, amount: '0.09' }),
-  ]
-  assert.equal(buildPayStubStatement(current, [], WITHHOLDING).taxableCompanyItems.length, 0)
-  const cheque = buildPayStubStatement(current, [], WITHHOLDING, { includeNonTaxableCompanyItems: true })
-  assert.equal(cheque.earnings[0]!.current, '500.00')
-  assert.equal(cheque.taxableCompanyItems.length, 1)
-  assert.equal(cheque.taxableCompanyItems[0]!.current, '20.1000')
-})
+    line({ componentId: "cash", amount: "500.00", hours: "10", rate: "50" }),
+    line({ componentId: "noncash", paymentKind: "non_cash", taxable: false, amount: "20.01" }),
+    line({ componentId: "noncash", paymentKind: "non_cash", taxable: false, amount: "0.09" }),
+  ];
+  assert.equal(buildPayStubStatement(current, [], WITHHOLDING).taxableCompanyItems.length, 0);
+  const cheque = buildPayStubStatement(current, [], WITHHOLDING, {
+    includeNonTaxableCompanyItems: true,
+  });
+  assert.equal(cheque.earnings[0]!.current, "500.00");
+  assert.equal(cheque.taxableCompanyItems.length, 1);
+  assert.equal(cheque.taxableCompanyItems[0]!.current, "20.1000");
+});
 
-test('lines are grouped into the printed sections and carry year-to-date', () => {
+test("lines are grouped into the printed sections and carry year-to-date", () => {
   const statement = buildPayStubStatement(
     [
-      line({ componentId: 'reg', description: 'Regular Wages', amount: '720.00', hours: '24', rate: '30.00' }),
-      line({ componentId: 'reg', description: 'Regular Wages', amount: '480.00', hours: '16', rate: '30.00' }),
-      line({ componentId: 'life', description: 'Group life', paymentKind: 'non_cash', amount: '5.00' }),
-      line({ componentId: 'health', description: 'Health premium', paymentKind: 'non_cash', taxable: false, amount: '90.00' }),
-      line({ componentId: 'fit', kind: 'deduction', systemKey: 'federal_tax', description: 'Federal Income Tax', amount: '110.00' }),
-      line({ componentId: 'cpp', kind: 'deduction', systemKey: 'cpp', description: 'CPP', amount: '67.39' }),
-      line({ componentId: 'er', kind: 'employer_contribution', description: 'CPP (employer)', amount: '67.39' }),
+      line({
+        componentId: "reg",
+        description: "Regular Wages",
+        amount: "720.00",
+        hours: "24",
+        rate: "30.00",
+      }),
+      line({
+        componentId: "reg",
+        description: "Regular Wages",
+        amount: "480.00",
+        hours: "16",
+        rate: "30.00",
+      }),
+      line({
+        componentId: "life",
+        description: "Group life",
+        paymentKind: "non_cash",
+        amount: "5.00",
+      }),
+      line({
+        componentId: "health",
+        description: "Health premium",
+        paymentKind: "non_cash",
+        taxable: false,
+        amount: "90.00",
+      }),
+      line({
+        componentId: "fit",
+        kind: "deduction",
+        systemKey: "federal_tax",
+        description: "Federal Income Tax",
+        amount: "110.00",
+      }),
+      line({
+        componentId: "cpp",
+        kind: "deduction",
+        systemKey: "cpp",
+        description: "CPP",
+        amount: "67.39",
+      }),
+      line({
+        componentId: "er",
+        kind: "employer_contribution",
+        description: "CPP (employer)",
+        amount: "67.39",
+      }),
     ],
     [
-      line({ componentId: 'reg', description: 'Regular Wages', amount: '15600.00', hours: '520' }),
-      line({ componentId: 'stat', description: 'Statutory Holiday', amount: '720.00', hours: '24' }),
-      line({ componentId: 'fit', kind: 'deduction', systemKey: 'federal_tax', description: 'Federal Income Tax', amount: '1430.00' }),
+      line({ componentId: "reg", description: "Regular Wages", amount: "15600.00", hours: "520" }),
+      line({
+        componentId: "stat",
+        description: "Statutory Holiday",
+        amount: "720.00",
+        hours: "24",
+      }),
+      line({
+        componentId: "fit",
+        kind: "deduction",
+        systemKey: "federal_tax",
+        description: "Federal Income Tax",
+        amount: "1430.00",
+      }),
     ],
     WITHHOLDING,
-  )
-  assert.deepEqual(statement.earnings.map((r) => [r.description, c(r.current), c(r.ytd), c(r.hours), c(r.rate)]), [
-    ['Regular Wages', '1200.00', '16800.00', '40.00', '30.00'],
-    ['Statutory Holiday', '0.00', '720.00', '0.00', null],
-  ])
-  assert.deepEqual(statement.taxableCompanyItems.map((r) => r.description), ['Group life'],
-    'a non-taxable non-cash premium is employer cost, not part of the statement')
-  assert.deepEqual(statement.withholdings.map((r) => [r.description, c(r.current), c(r.ytd)]), [['Federal Income Tax', '110.00', '1540.00']])
-  assert.deepEqual(statement.netAdjustments.map((r) => r.description), ['CPP'])
-})
+  );
+  assert.deepEqual(
+    statement.earnings.map((r) => [r.description, c(r.current), c(r.ytd), c(r.hours), c(r.rate)]),
+    [
+      ["Regular Wages", "1200.00", "16800.00", "40.00", "30.00"],
+      ["Statutory Holiday", "0.00", "720.00", "0.00", null],
+    ],
+  );
+  assert.deepEqual(
+    statement.taxableCompanyItems.map((r) => r.description),
+    ["Group life"],
+    "a non-taxable non-cash premium is employer cost, not part of the statement",
+  );
+  assert.deepEqual(
+    statement.withholdings.map((r) => [r.description, c(r.current), c(r.ytd)]),
+    [["Federal Income Tax", "110.00", "1540.00"]],
+  );
+  assert.deepEqual(
+    statement.netAdjustments.map((r) => r.description),
+    ["CPP"],
+  );
+});
 
-test('a component paid at two rates prints no single rate', () => {
-  const statement = buildPayStubStatement([
-    line({ componentId: 'reg', description: 'Regular Wages', amount: '300.00', hours: '10', rate: '30.00' }),
-    line({ componentId: 'reg', description: 'Regular Wages', amount: '320.00', hours: '10', rate: '32.00' }),
-  ], [], WITHHOLDING)
-  assert.equal(statement.earnings[0]!.rate, null)
-  assert.equal(c(statement.earnings[0]!.current), '620.00')
-})
+test("a component paid at two rates prints no single rate", () => {
+  const statement = buildPayStubStatement(
+    [
+      line({
+        componentId: "reg",
+        description: "Regular Wages",
+        amount: "300.00",
+        hours: "10",
+        rate: "30.00",
+      }),
+      line({
+        componentId: "reg",
+        description: "Regular Wages",
+        amount: "320.00",
+        hours: "10",
+        rate: "32.00",
+      }),
+    ],
+    [],
+    WITHHOLDING,
+  );
+  assert.equal(statement.earnings[0]!.rate, null);
+  assert.equal(c(statement.earnings[0]!.current), "620.00");
+});
 
-test('hourly pay and a lump sum for one component print no misleading hourly rate', () => {
-  const statement = buildPayStubStatement([
-    line({ componentId: 'reg', description: 'Regular Wages', amount: '300.00', hours: '10', rate: '30.00' }),
-    line({ componentId: 'reg', description: 'Regular Wages', amount: '250.00' }),
-  ], [], WITHHOLDING)
-  const earning = statement.earnings[0]!
-  assert.equal(earning.rate, null)
-  assert.equal(c(earning.current), '550.00')
-  assert.equal(c(earning.ytd), '550.00')
-  assert.equal(c(earning.hours), '10.00')
-})
+test("hourly pay and a lump sum for one component print no misleading hourly rate", () => {
+  const statement = buildPayStubStatement(
+    [
+      line({
+        componentId: "reg",
+        description: "Regular Wages",
+        amount: "300.00",
+        hours: "10",
+        rate: "30.00",
+      }),
+      line({ componentId: "reg", description: "Regular Wages", amount: "250.00" }),
+    ],
+    [],
+    WITHHOLDING,
+  );
+  const earning = statement.earnings[0]!;
+  assert.equal(earning.rate, null);
+  assert.equal(c(earning.current), "550.00");
+  assert.equal(c(earning.ytd), "550.00");
+  assert.equal(c(earning.hours), "10.00");
+});

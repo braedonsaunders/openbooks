@@ -4,9 +4,7 @@ import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const {
   FeedbackFilingRefusedError,
   createIntentFirstPublisher,
@@ -44,11 +42,7 @@ test("the payload hash binds the exact outbound bytes, not the labels", () => {
     hash,
     "title is bound",
   );
-  assert.notEqual(
-    feedbackPayloadHash({ ...DRAFT, body: DRAFT.body + " " }),
-    hash,
-    "body is bound",
-  );
+  assert.notEqual(feedbackPayloadHash({ ...DRAFT, body: DRAFT.body + " " }), hash, "body is bound");
   assert.equal(
     feedbackPayloadHash({ ...DRAFT, labels: ["other", "area:ar", "extra"] }),
     hash,
@@ -79,7 +73,9 @@ test("an unwritable intent publishes nothing and raises the named refusal", asyn
       return { id: "1", number: 1, url: "https://example.invalid/1", title: "t" };
     },
   };
-  const refusal: { error: InstanceType<typeof FeedbackFilingRefusedError> | null } = { error: null };
+  const refusal: { error: InstanceType<typeof FeedbackFilingRefusedError> | null } = {
+    error: null,
+  };
   const publisher = createIntentFirstPublisher(
     inner,
     {
@@ -113,7 +109,9 @@ test("a writable intent publishes once with the bound hash, keeping search scope
     },
   };
   const recorded: unknown[] = [];
-  const refusal: { error: InstanceType<typeof FeedbackFilingRefusedError> | null } = { error: null };
+  const refusal: { error: InstanceType<typeof FeedbackFilingRefusedError> | null } = {
+    error: null,
+  };
   const ctx = {
     orgId: randomUUID(),
     actorId: randomUUID(),
@@ -156,12 +154,15 @@ type AuditRow = {
 };
 
 async function reportRows(orgId: string, reportId: string): Promise<AuditRow[]> {
-  const rows = await db.execute<AuditRow>(sql`
+  const rows = await db.execute<AuditRow>(
+    sql`
     select action, changes, actor_id
     from audit_log
     where org_id = ${orgId} and table_name = 'feedback_report' and row_id = ${reportId}
     order by at asc
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -173,44 +174,56 @@ test("intent first, then exactly one row with the issue id; reconcile closes a g
   });
   const actorId = randomUUID();
 
-  await t.test("the normal path writes an intent plus exactly one row with the issue id", async () => {
-    const reportId = randomUUID();
-    const hash = feedbackPayloadHash(DRAFT);
-    await recordFeedbackFileIntent({
-      orgId,
-      actorId,
-      reportId,
-      owner: "acme",
-      repo: "tracker",
-      payloadHash: hash,
-      pathname: "/ar/invoices",
-    });
-    await recordFeedbackFiledAudit({
-      orgId,
-      actorId,
-      reportId,
-      result: {
-        kind: "filed",
-        issue: { id: "418", number: 418, url: "https://github.com/acme/tracker/issues/418", title: DRAFT.title },
-        stripped: ["customer name"],
-      },
-      pathname: "/ar/invoices",
-    });
-    const rows = await reportRows(orgId, reportId);
-    assert.equal(rows.length, 2);
-    assert.equal(rows[0]?.changes.status, "file-intent");
-    assert.deepEqual(rows[0]?.changes.destination, { owner: "acme", repo: "tracker" });
-    assert.equal(rows[0]?.changes.payloadHash, hash);
-    assert.equal(rows[0]?.actor_id, actorId);
-    const withIssue = rows.filter((row) => (row.changes.issue as { number?: number } | undefined)?.number === 418);
-    assert.equal(withIssue.length, 1, "exactly one audited row carries the issue id");
-    assert.equal(withIssue[0]?.changes.status, "filed");
-    assert.deepEqual(withIssue[0]?.changes.stripped, ["customer name"]);
-  });
+  await t.test(
+    "the normal path writes an intent plus exactly one row with the issue id",
+    async () => {
+      const reportId = randomUUID();
+      const hash = feedbackPayloadHash(DRAFT);
+      await recordFeedbackFileIntent({
+        orgId,
+        actorId,
+        reportId,
+        owner: "acme",
+        repo: "tracker",
+        payloadHash: hash,
+        pathname: "/ar/invoices",
+      });
+      await recordFeedbackFiledAudit({
+        orgId,
+        actorId,
+        reportId,
+        result: {
+          kind: "filed",
+          issue: {
+            id: "418",
+            number: 418,
+            url: "https://github.com/acme/tracker/issues/418",
+            title: DRAFT.title,
+          },
+          stripped: ["customer name"],
+        },
+        pathname: "/ar/invoices",
+      });
+      const rows = await reportRows(orgId, reportId);
+      assert.equal(rows.length, 2);
+      assert.equal(rows[0]?.changes.status, "file-intent");
+      assert.deepEqual(rows[0]?.changes.destination, { owner: "acme", repo: "tracker" });
+      assert.equal(rows[0]?.changes.payloadHash, hash);
+      assert.equal(rows[0]?.actor_id, actorId);
+      const withIssue = rows.filter(
+        (row) => (row.changes.issue as { number?: number } | undefined)?.number === 418,
+      );
+      assert.equal(withIssue.length, 1, "exactly one audited row carries the issue id");
+      assert.equal(withIssue[0]?.changes.status, "filed");
+      assert.deepEqual(withIssue[0]?.changes.stripped, ["customer name"]);
+    },
+  );
 
   await t.test("a real insert failure refuses the publish through the default wiring", async () => {
     let published = 0;
-    const refusal: { error: InstanceType<typeof FeedbackFilingRefusedError> | null } = { error: null };
+    const refusal: { error: InstanceType<typeof FeedbackFilingRefusedError> | null } = {
+      error: null,
+    };
     const publisher = createIntentFirstPublisher(
       {
         create: async () => {
@@ -258,7 +271,12 @@ test("intent first, then exactly one row with the issue id; reconcile closes a g
     const closed = await reconcileFeedbackFiledAudits({
       orgId,
       listIssues: async () => [
-        { number: 1, url: "https://github.com/acme/tracker/issues/1", title: "Unrelated", body: "other" },
+        {
+          number: 1,
+          url: "https://github.com/acme/tracker/issues/1",
+          title: "Unrelated",
+          body: "other",
+        },
         {
           number: 419,
           url: "https://github.com/acme/tracker/issues/419",

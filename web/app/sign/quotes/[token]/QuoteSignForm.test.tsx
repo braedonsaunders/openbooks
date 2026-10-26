@@ -8,7 +8,16 @@ const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
 });
 const globals = globalThis as Record<string, unknown>;
 const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+for (const key of [
+  "window",
+  "document",
+  "navigator",
+  "Node",
+  "Element",
+  "HTMLElement",
+  "Event",
+  "self",
+]) {
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
 if (typeof window.matchMedia !== "function") {
@@ -67,7 +76,8 @@ function fullView() {
       signerName: "Ada Customer",
       signerEmail: "ada@example.com",
       expiresAt: "2026-10-19T15:30:57.884Z",
-      consentText: "By typing my name below I accept this order as the customer's authorized signatory.",
+      consentText:
+        "By typing my name below I accept this order as the customer's authorized signatory.",
     },
   };
 }

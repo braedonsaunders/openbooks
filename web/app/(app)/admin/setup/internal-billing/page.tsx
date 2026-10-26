@@ -1,19 +1,22 @@
-import { ListPageLayout } from '@/components/page-layout'
-import { PageHeader } from '@openbooks/ui'
-import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/platform/business-date'
-import { SetupEntitySection } from '../[entity]/SetupEntitySection'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { suggestInternalBillingAccounts } from '../../../../../lib/internal-billing'
-import { pickString } from '../../../../../lib/list-params'
-import { INTERNAL_BILLING_RULES_ENTITY, internalBillingCreateChooser } from '../../../../../lib/setup/entities/internal-billing'
+import { ListPageLayout } from "@/components/page-layout";
+import { PageHeader } from "@openbooks/ui";
+import { getTranslations } from "next-intl/server";
+import { businessToday } from "@openbooks/engine/platform/business-date";
+import { SetupEntitySection } from "../[entity]/SetupEntitySection";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { suggestInternalBillingAccounts } from "../../../../../lib/internal-billing";
+import { pickString } from "../../../../../lib/list-params";
+import {
+  INTERNAL_BILLING_RULES_ENTITY,
+  internalBillingCreateChooser,
+} from "../../../../../lib/setup/entities/internal-billing";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('admin.setup.entities.internal-billing')
-  return { title: t('title') }
+  const t = await getTranslations("admin.setup.entities.internal-billing");
+  return { title: t("title") };
 }
 
 /**
@@ -25,31 +28,38 @@ export async function generateMetadata() {
 export default async function InternalBillingSetupPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const authz = await requirePermission('admin.setup.manage')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'internalBilling')
-  const creating = pickString(sp.row) === 'new'
+  const sp = await searchParams;
+  const authz = await requirePermission("admin.setup.manage");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "internalBilling");
+  const creating = pickString(sp.row) === "new";
   const entity = {
     ...INTERNAL_BILLING_RULES_ENTITY,
     // Activity is a property of a saved version; a new one starts active.
-    fields: creating ? INTERNAL_BILLING_RULES_ENTITY.fields.filter((field) => field.key !== 'isActive') : INTERNAL_BILLING_RULES_ENTITY.fields,
+    fields: creating
+      ? INTERNAL_BILLING_RULES_ENTITY.fields.filter((field) => field.key !== "isActive")
+      : INTERNAL_BILLING_RULES_ENTITY.fields,
     createChooser: creating
-      ? internalBillingCreateChooser(await businessToday(orgId), await suggestInternalBillingAccounts(orgId))
+      ? internalBillingCreateChooser(
+          await businessToday(orgId),
+          await suggestInternalBillingAccounts(orgId),
+        )
       : undefined,
-  }
-  const t = await getTranslations('admin')
+  };
+  const t = await getTranslations("admin");
   return (
-    <ListPageLayout header={<PageHeader title={t('setup.entities.internal-billing.title')} />}><SetupEntitySection
-      entity={entity}
-      orgId={orgId}
-      actorId={authz.user.id}
-      searchParams={sp}
-      basePath="/admin/setup/internal-billing"
-      canManage={can(authz, 'admin.setup.manage')}
-      allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-    /></ListPageLayout>
-  )
+    <ListPageLayout header={<PageHeader title={t("setup.entities.internal-billing.title")} />}>
+      <SetupEntitySection
+        entity={entity}
+        orgId={orgId}
+        actorId={authz.user.id}
+        searchParams={sp}
+        basePath="/admin/setup/internal-billing"
+        canManage={can(authz, "admin.setup.manage")}
+        allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
+      />
+    </ListPageLayout>
+  );
 }

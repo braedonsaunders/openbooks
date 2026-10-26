@@ -33,9 +33,12 @@ function rateFor(tier: RateTier, role: RateRole): string | null {
 }
 
 function availableTiers(tiers: RateTier[], role: RateRole): RateTier[] {
-  const usable = tiers.filter((t) => rateFor(t, role) != null).sort((a, b) => cmp(a.baseQuantity, b.baseQuantity));
+  const usable = tiers
+    .filter((t) => rateFor(t, role) != null)
+    .sort((a, b) => cmp(a.baseQuantity, b.baseQuantity));
   if (!usable.length) throw new Error(`No ${role} rates are configured`);
-  if (toUnits(usable[0]!.baseQuantity) <= 0n) throw new Error("Rate tier quantities must be positive");
+  if (toUnits(usable[0]!.baseQuantity) <= 0n)
+    throw new Error("Rate tier quantities must be positive");
   for (let i = 1; i < usable.length; i++) {
     if (cmp(usable[i - 1]!.baseQuantity, usable[i]!.baseQuantity) === 0) {
       throw new Error("Rate tier quantities must be unique");
@@ -62,7 +65,11 @@ function component(tier: RateTier, role: RateRole, quantityUnits: bigint): RateC
  * strictly greater than one next-tier price. Equality remains on the lower
  * package; 1/4/12 tiers reproduce day/week/month exactly.
  */
-export function priceCappedLadder(baseQuantity: string, tiers: RateTier[], role: RateRole): RatePrice {
+export function priceCappedLadder(
+  baseQuantity: string,
+  tiers: RateTier[],
+  role: RateRole,
+): RatePrice {
   const target = toUnits(baseQuantity);
   if (target < 0n) throw new Error("Usage quantity cannot be negative");
   if (target === 0n) return { amount: "0.0000", components: [] };
@@ -79,11 +86,16 @@ export function priceCappedLadder(baseQuantity: string, tiers: RateTier[], role:
   // The smallest tier can be fractional (hours, partial days, kilometres).
   counts[0] = roundDiv(remaining * 10_000n, smallest);
   let fractional = remaining > 0n;
-  const fractionalAmount = fromUnits(roundDiv(remaining * toUnits(rateFor(usable[0]!, role)!), smallest));
+  const fractionalAmount = fromUnits(
+    roundDiv(remaining * toUnits(rateFor(usable[0]!, role)!), smallest),
+  );
 
   for (let i = 0; i < usable.length - 1; i++) {
     if (counts[i] === 0n && !(i === 0 && fractional)) continue;
-    const lowerSubtotal = i === 0 && fractional ? fractionalAmount : mul(fromUnits(counts[i]!), rateFor(usable[i]!, role)!);
+    const lowerSubtotal =
+      i === 0 && fractional
+        ? fractionalAmount
+        : mul(fromUnits(counts[i]!), rateFor(usable[i]!, role)!);
     const upperRate = rateFor(usable[i + 1]!, role)!;
     if (cmp(lowerSubtotal, upperRate) > 0) {
       counts[i] = 0n;
@@ -93,18 +105,23 @@ export function priceCappedLadder(baseQuantity: string, tiers: RateTier[], role:
   }
 
   const fractionalUnits = roundDiv(remaining * 100_000_000n, smallest);
-  if (fractional && fractionalUnits === 0n) throw new Error("Package fraction is below supported quantity precision");
-  const fractionalQuantity = `${fractionalUnits / 100_000_000n}.${(fractionalUnits % 100_000_000n).toString().padStart(8, '0')}`;
+  if (fractional && fractionalUnits === 0n)
+    throw new Error("Package fraction is below supported quantity precision");
+  const fractionalQuantity = `${fractionalUnits / 100_000_000n}.${(fractionalUnits % 100_000_000n).toString().padStart(8, "0")}`;
   const components = usable
     .map((tier, i) => ({ tier, quantity: counts[i]!, fractional: i === 0 && fractional }))
     .filter((x) => x.quantity !== 0n || x.fractional)
     .reverse()
-    .map((x) => x.fractional ? {
-      ...component(x.tier, role, x.quantity),
-      quantity: fractionalQuantity,
-      amount: fractionalAmount,
-      quantityRatio: { numerator: remaining.toString(), denominator: smallest.toString() },
-    } : component(x.tier, role, x.quantity));
+    .map((x) =>
+      x.fractional
+        ? {
+            ...component(x.tier, role, x.quantity),
+            quantity: fractionalQuantity,
+            amount: fractionalAmount,
+            quantityRatio: { numerator: remaining.toString(), denominator: smallest.toString() },
+          }
+        : component(x.tier, role, x.quantity),
+    );
   return { amount: sum(components.map((c) => c.amount)), components };
 }
 
@@ -118,7 +135,11 @@ function gcd(a: bigint, b: bigint): bigint {
 /** True minimum-cost package cover. Intended for configurable arbitrary
  * ladders; it may cover slightly more than the entered usage, like rental
  * package pricing. */
-export function priceLowestCost(baseQuantity: string, tiers: RateTier[], role: RateRole): RatePrice {
+export function priceLowestCost(
+  baseQuantity: string,
+  tiers: RateTier[],
+  role: RateRole,
+): RatePrice {
   const targetUnits = toUnits(baseQuantity);
   if (targetUnits < 0n) throw new Error("Usage quantity cannot be negative");
   if (targetUnits === 0n) return { amount: "0.0000", components: [] };
@@ -128,7 +149,8 @@ export function priceLowestCost(baseQuantity: string, tiers: RateTier[], role: R
   const target = Number((targetUnits + step - 1n) / step);
   const packageSizes = sizes.map((s) => Number(s / step));
   const maxPackage = Math.max(...packageSizes);
-  if (target + maxPackage > 100_000) throw new Error("Rate ladder is too granular for lowest-cost pricing");
+  if (target + maxPackage > 100_000)
+    throw new Error("Rate ladder is too granular for lowest-cost pricing");
 
   const limit = target + maxPackage;
   const best: Array<bigint | null> = new Array(limit + 1).fill(null);
@@ -152,7 +174,7 @@ export function priceLowestCost(baseQuantity: string, tiers: RateTier[], role: R
   }
   if (winner < 0) throw new Error("Rate ladder cannot cover the usage quantity");
   const counts = new Array<bigint>(usable.length).fill(0n);
-  for (let at = winner; at > 0; ) {
+  for (let at = winner; at > 0;) {
     const p = prior[at];
     if (!p) throw new Error("Invalid rate ladder solution");
     counts[p.tier] = counts[p.tier]! + 10_000n;
@@ -182,15 +204,12 @@ export function priceItemRate(
 /** Price an explicitly selected package unit. Unlike the automatic ladder,
  * this never promotes or decomposes the user's choice: 2 Weeks remains two
  * weekly packages even when a monthly package would be cheaper. */
-export function priceSelectedRateUnit(
-  quantity: string,
-  tier: RateTier,
-  role: RateRole,
-): RatePrice {
+export function priceSelectedRateUnit(quantity: string, tier: RateTier, role: RateRole): RatePrice {
   const quantityUnits = toUnits(quantity);
   if (quantityUnits <= 0n) throw new Error("Rate-unit quantity must be positive");
   if (toUnits(tier.baseQuantity) <= 0n) throw new Error("Rate tier quantities must be positive");
-  if (rateFor(tier, role) == null) throw new Error(`No ${role} rate is configured for ${tier.unitName}`);
+  if (rateFor(tier, role) == null)
+    throw new Error(`No ${role} rate is configured for ${tier.unitName}`);
   const selected = component(tier, role, quantityUnits);
   return { amount: selected.amount, components: [selected] };
 }

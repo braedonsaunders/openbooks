@@ -1,9 +1,9 @@
 /** Split from RunWizard.tsx; moved without behavior changes. */
-import type { useTranslations } from 'next-intl'
-import { decimalSum } from '../../../../../lib/statement-format'
-import { bucketAmounts, type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
+import type { useTranslations } from "next-intl";
+import { decimalSum } from "../../../../../lib/statement-format";
+import { bucketAmounts, type RegisterBucket } from "../../../../../lib/payroll-register-buckets";
 
-export type WizardStep = 'period' | 'readiness' | 'review' | 'gl' | 'finish'
+export type WizardStep = "period" | "readiness" | "review" | "gl" | "finish";
 
 /**
  * English fallbacks for codes whose message has not landed in web/messages yet.
@@ -15,180 +15,181 @@ export type WizardStep = 'period' | 'readiness' | 'review' | 'gl' | 'finish'
  * Empty is the correct steady state: every readiness code the engine emits now
  * has a message under `payroll.wizard.readiness.codes`.
  */
-export const READINESS_CODE_FALLBACK: Record<string, (count: number, detail: string) => string> = {}
+export const READINESS_CODE_FALLBACK: Record<string, (count: number, detail: string) => string> =
+  {};
 
 export const STALE_REASON_FALLBACK: Record<string, string> = {
-  missing: 'the run itself',
-  components: 'employee pay components',
-  componentDefinitions: 'pay component setup',
-  derivedRules: 'derived earnings rules',
-  entitlements: 'pay banks',
+  missing: "the run itself",
+  components: "employee pay components",
+  componentDefinitions: "pay component setup",
+  derivedRules: "derived earnings rules",
+  entitlements: "pay banks",
   workerComp: "workers' compensation rates",
-  settings: 'payroll settings',
+  settings: "payroll settings",
   ytd: "another run's year-to-date",
-}
+};
 
 export interface ReadinessItem {
-  severity: 'blocker' | 'warning'
-  code: string
-  employees: { partyId: string; name: string }[]
-  detail?: string
-  href?: string
+  severity: "blocker" | "warning";
+  code: string;
+  employees: { partyId: string; name: string }[];
+  detail?: string;
+  href?: string;
   /** One-click engine resolution, posted to the matching run action. */
-  action?: string
+  action?: string;
 }
 
 export interface Readiness {
-  items: ReadinessItem[]
-  blockers: number
-  warnings: number
-  included: number
+  items: ReadinessItem[];
+  blockers: number;
+  warnings: number;
+  included: number;
 }
 
 export interface Staleness {
-  stale: boolean
-  reasons: string[]
-  calculatedAt: string | null
+  stale: boolean;
+  reasons: string[];
+  calculatedAt: string | null;
 }
 
 export interface Funding {
-  netPay: string
+  netPay: string;
   /** Net pay split by how it leaves the bank — a controller funds each rail differently. */
-  rails: { method: 'eft' | 'cheque'; netPay: string; employees: number }[]
-  liabilities: string
-  totalCost: string
-  payDate: string
-  businessDaysToPayDate: number
-  accounts: { id: string; label: string; balance: string; sufficient: boolean }[]
+  rails: { method: "eft" | "cheque"; netPay: string; employees: number }[];
+  liabilities: string;
+  totalCost: string;
+  payDate: string;
+  businessDaysToPayDate: number;
+  accounts: { id: string; label: string; balance: string; sufficient: boolean }[];
 }
 
 export interface StubChange {
-  employeePartyId: string
-  employeeName: string
-  previousPayDate: string | null
-  netDelta: string
-  grossDelta: string
-  hoursDelta: string
+  employeePartyId: string;
+  employeeName: string;
+  previousPayDate: string | null;
+  netDelta: string;
+  grossDelta: string;
+  hoursDelta: string;
   changes: {
-    kind: 'added' | 'removed' | 'changed'
-    component: string
-    from: string | null
-    to: string | null
-  }[]
+    kind: "added" | "removed" | "changed";
+    component: string;
+    from: string | null;
+    to: string | null;
+  }[];
 }
 
 export type RunHeader = {
-  document_id: string
-  document_number: string
-  document_status: string
+  document_id: string;
+  document_number: string;
+  document_status: string;
   /** The run document's optimistic-concurrency token, sent back on void. */
-  document_revision: string
-  currency: string
+  document_revision: string;
+  currency: string;
   /** Legal entity the run books into; null on legacy entityless runs. */
-  subsidiary_id: string | null
-  posted_entry_id: string | null
-  paid_at: string | null
-  paid_entry_id: string | null
-  schedule_name: string | null
-  period_start: string
-  period_end: string
-  pay_date: string
-  tax_year: number
-  run_status: 'draft' | 'calculated' | 'committed'
-  run_type: 'regular' | 'bonus' | 'termination'
-  pay_schedule_id: string
-  gross_total: string
-  net_total: string
-  employer_cost_total: string
-  employee_count: number
+  subsidiary_id: string | null;
+  posted_entry_id: string | null;
+  paid_at: string | null;
+  paid_entry_id: string | null;
+  schedule_name: string | null;
+  period_start: string;
+  period_end: string;
+  pay_date: string;
+  tax_year: number;
+  run_status: "draft" | "calculated" | "committed";
+  run_type: "regular" | "bonus" | "termination";
+  pay_schedule_id: string;
+  gross_total: string;
+  net_total: string;
+  employer_cost_total: string;
+  employee_count: number;
 };
 
 export type StubRow = {
-  id: string
-  employee_party_id: string
-  employee_name: string
-  province: string
+  id: string;
+  employee_party_id: string;
+  employee_name: string;
+  province: string;
   /** Employee payroll-profile country (CA/US), for pack-driven presentation. */
-  country: string | null
-  gross: string
-  net_pay: string
-  employer_cost: string
-  vacation_accrued: string
-  pensionable_earnings: string
-  insurable_earnings: string
-  factors: Record<string, string>
+  country: string | null;
+  gross: string;
+  net_pay: string;
+  employer_cost: string;
+  vacation_accrued: string;
+  pensionable_earnings: string;
+  insurable_earnings: string;
+  factors: Record<string, string>;
   lines: {
-    stub_id: string
-    kind: 'earning' | 'deduction' | 'employer_contribution'
-    description: string
-    hours: string | null
-    rate: string | null
-    amount: string
-    payment_kind?: 'cash' | 'non_cash'
-    sequence: number
-    component_code: string | null
-    project_name: string | null
-    department_name: string | null
-  }[]
+    stub_id: string;
+    kind: "earning" | "deduction" | "employer_contribution";
+    description: string;
+    hours: string | null;
+    rate: string | null;
+    amount: string;
+    payment_kind?: "cash" | "non_cash";
+    sequence: number;
+    component_code: string | null;
+    project_name: string | null;
+    department_name: string | null;
+  }[];
 };
 
 export type RosterRow = {
-  employee_party_id: string
-  name: string
-  pay_basis: 'hourly' | 'salary'
-  approved_hours: string
-  has_wage: boolean
-  department: string | null
-  trade: string | null
-  job_title: string | null
-  subsidiary: string | null
+  employee_party_id: string;
+  name: string;
+  pay_basis: "hourly" | "salary";
+  approved_hours: string;
+  has_wage: boolean;
+  department: string | null;
+  trade: string | null;
+  job_title: string | null;
+  subsidiary: string | null;
   /** Resolved by the engine's one ladder — how this pay will leave the bank. */
-  payment_method: 'eft' | 'cheque'
-  terminated_on: string | null
-  hired_on: string | null
+  payment_method: "eft" | "cheque";
+  terminated_on: string | null;
+  hired_on: string | null;
   /** Another committed run's period already covers this one — double-pay risk. */
-  paid_in_period: boolean
+  paid_in_period: boolean;
 };
 
 export type RemittanceRow = {
-  account_label: string
-  amount: string
+  account_label: string;
+  amount: string;
 };
 
 export interface GlLeg {
-  accountId: string
-  accountLabel: string
-  amount: string
-  partyId: string | null
-  partyName: string | null
-  projectId: string | null
-  projectName: string | null
-  departmentId: string | null
-  description: string
+  accountId: string;
+  accountLabel: string;
+  amount: string;
+  partyId: string | null;
+  partyName: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  departmentId: string | null;
+  description: string;
 }
 
 export interface AdjustmentRow {
-  id: string
-  employee_party_id: string
-  adjustment_type: 'line' | 'exclude'
-  component_id: string | null
-  amount: string | null
-  hours: string | null
-  earned_from?: string | null
-  earned_to?: string | null
-  replace_component: boolean
-  note: string | null
-  employee_name: string
-  component_name: string | null
+  id: string;
+  employee_party_id: string;
+  adjustment_type: "line" | "exclude";
+  component_id: string | null;
+  amount: string | null;
+  hours: string | null;
+  earned_from?: string | null;
+  earned_to?: string | null;
+  replace_component: boolean;
+  note: string | null;
+  employee_name: string;
+  component_name: string | null;
 }
 
 export interface ComponentOption {
-  id: string
-  code: string
-  name: string
-  kind: string
-  bank_cash_component?: boolean
-  declared_vacation_accrual_enabled?: boolean
+  id: string;
+  code: string;
+  name: string;
+  kind: string;
+  bank_cash_component?: boolean;
+  declared_vacation_accrual_enabled?: boolean;
 }
 
 /**
@@ -196,8 +197,14 @@ export interface ComponentOption {
  * genuinely carries — department was never "dimensions", and a schedule where
  * nobody has one is not a schedule with no way to slice its people.
  */
-export const ROSTER_DIMENSIONS = ['department', 'trade', 'job_title', 'subsidiary', 'payment_method'] as const
-export type RosterDimension = (typeof ROSTER_DIMENSIONS)[number]
+export const ROSTER_DIMENSIONS = [
+  "department",
+  "trade",
+  "job_title",
+  "subsidiary",
+  "payment_method",
+] as const;
+export type RosterDimension = (typeof ROSTER_DIMENSIONS)[number];
 
 /** Distinct values of one axis, with how many people carry each. */
 export function dimensionOptions(
@@ -205,19 +212,19 @@ export function dimensionOptions(
   axis: RosterDimension,
   label: (value: string) => string,
 ): { value: string; label: string; count: number }[] {
-  const counts = new Map<string, number>()
+  const counts = new Map<string, number>();
   for (const row of roster) {
-    const value = row[axis]
-    if (!value) continue
-    counts.set(value, (counts.get(value) ?? 0) + 1)
+    const value = row[axis];
+    if (!value) continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
   }
   return [...counts.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([value, count]) => ({ value, label: label(value), count }))
+    .map(([value, count]) => ({ value, label: label(value), count }));
 }
 
 /** Net-pay variance beyond this (either direction) flags a stub for review. */
-export const VARIANCE_FLAG_PERCENT = 15
+export const VARIANCE_FLAG_PERCENT = 15;
 
 /**
  * The only trace factors NO pack declares: the deduction-protection
@@ -228,8 +235,8 @@ export const VARIANCE_FLAG_PERCENT = 15
  * California's CA_TAX from Canada's CA, so it is gone.
  */
 export const GENERIC_FACTOR_LABELS: Record<string, string> = {
-  PROT_SHORT: 'Protected-earnings shortfall (unpaid this period)',
-}
+  PROT_SHORT: "Protected-earnings shortfall (unpaid this period)",
+};
 
 /**
  * Withholding splits surfaced as stub-roster columns, read off the stub's
@@ -240,10 +247,14 @@ export const GENERIC_FACTOR_LABELS: Record<string, string> = {
  */
 export function withholding(stub: StubRow, buckets: readonly RegisterBucket[]) {
   const amounts = bucketAmounts(
-    stub.lines.map((line) => ({ componentCode: line.component_code, kind: line.kind, amount: line.amount })),
+    stub.lines.map((line) => ({
+      componentCode: line.component_code,
+      kind: line.kind,
+      amount: line.amount,
+    })),
     buckets,
-  )
-  return { amounts, total: decimalSum(amounts) }
+  );
+  return { amounts, total: decimalSum(amounts) };
 }
 
 /**
@@ -255,9 +266,9 @@ export function withholding(stub: StubRow, buckets: readonly RegisterBucket[]) {
  * safe to run is worse than the bare word.
  */
 export function runTypeLabel(
-  t: ReturnType<typeof useTranslations<'payroll'>>,
+  t: ReturnType<typeof useTranslations<"payroll">>,
   runType: string,
 ): string {
-  const key = `runType.${runType}`
-  return t.has(key as never) ? t(key as never) : runType
+  const key = `runType.${runType}`;
+  return t.has(key as never) ? t(key as never) : runType;
 }

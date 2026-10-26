@@ -49,7 +49,12 @@ test("re-entering the stored balance bills only the increment", () => {
   // Application #2: the PM re-enters the same cumulative 500 stored balance, so
   // only this period's work bills — the stored materials are not billed twice.
   const r = computeApplication([
-    line({ previousCompleted: "1500", previousMaterialsStored: "500", thisPeriodCompleted: "1000", materialsStored: "500" }),
+    line({
+      previousCompleted: "1500",
+      previousMaterialsStored: "500",
+      thisPeriodCompleted: "1000",
+      materialsStored: "500",
+    }),
   ]);
   assert.equal(r.lines[0]!.grossThisPeriod, "1000.0000");
   assert.equal(r.lines[0]!.retainageThisPeriod, "100.0000");
@@ -61,7 +66,12 @@ test("re-entering the stored balance bills only the increment", () => {
 
 test("a rising stored balance bills only the delta", () => {
   const r = computeApplication([
-    line({ previousCompleted: "2500", previousMaterialsStored: "500", thisPeriodCompleted: "0", materialsStored: "800" }),
+    line({
+      previousCompleted: "2500",
+      previousMaterialsStored: "500",
+      thisPeriodCompleted: "0",
+      materialsStored: "800",
+    }),
   ]);
   assert.equal(r.lines[0]!.grossThisPeriod, "300.0000");
   assert.equal(r.lines[0]!.retainageThisPeriod, "30.0000");
@@ -79,7 +89,12 @@ test("stored below the previously billed balance is rejected", () => {
 
 test("work-only path is byte-identical when nothing was stored before", () => {
   const r = computeApplication([
-    line({ previousCompleted: "2000", previousMaterialsStored: "0", thisPeriodCompleted: "3000", materialsStored: "0" }),
+    line({
+      previousCompleted: "2000",
+      previousMaterialsStored: "0",
+      thisPeriodCompleted: "3000",
+      materialsStored: "0",
+    }),
   ]);
   assert.equal(r.lines[0]!.grossThisPeriod, "3000.0000");
   assert.equal(r.lines[0]!.retainageThisPeriod, "300.0000");
@@ -107,11 +122,14 @@ test("totals sum exactly across mixed lines (no drift)", () => {
 });
 
 test("two-decimal settlement rounds the cumulative retained amount and carries the residual", () => {
-  const r = computeApplication([
-    line({ sovLineId: "a", thisPeriodCompleted: "3333.33", retainagePercent: "10" }),
-    line({ sovLineId: "b", thisPeriodCompleted: "3333.33", retainagePercent: "5" }),
-    line({ sovLineId: "c", thisPeriodCompleted: "3333.34", retainagePercent: "0" }),
-  ], { minorUnits: 2 });
+  const r = computeApplication(
+    [
+      line({ sovLineId: "a", thisPeriodCompleted: "3333.33", retainagePercent: "10" }),
+      line({ sovLineId: "b", thisPeriodCompleted: "3333.33", retainagePercent: "5" }),
+      line({ sovLineId: "c", thisPeriodCompleted: "3333.34", retainagePercent: "0" }),
+    ],
+    { minorUnits: 2 },
+  );
   // Exact line retainage 333.333 + 166.6665: line a settles 333.33, line b
   // absorbs the residual (166.67), line c settles nothing. The settled total
   // is the rounded cumulative amount exactly — no fractional cents.
@@ -124,10 +142,13 @@ test("two-decimal settlement rounds the cumulative retained amount and carries t
 });
 
 test("zero-decimal settlement keeps whole yen with the residual carried", () => {
-  const r = computeApplication([
-    line({ sovLineId: "a", thisPeriodCompleted: "333.33", retainagePercent: "10" }),
-    line({ sovLineId: "b", thisPeriodCompleted: "333.33", retainagePercent: "10" }),
-  ], { minorUnits: 0 });
+  const r = computeApplication(
+    [
+      line({ sovLineId: "a", thisPeriodCompleted: "333.33", retainagePercent: "10" }),
+      line({ sovLineId: "b", thisPeriodCompleted: "333.33", retainagePercent: "10" }),
+    ],
+    { minorUnits: 0 },
+  );
   // Exact 33.333 + 33.333: cumulative 66.666 rounds to 67 whole yen.
   assert.equal(r.lines[0]!.retainageThisPeriod, "33.0000");
   assert.equal(r.lines[1]!.retainageThisPeriod, "34.0000");
@@ -136,10 +157,13 @@ test("zero-decimal settlement keeps whole yen with the residual carried", () => 
 });
 
 test("three-decimal settlement settles to fils with the residual carried", () => {
-  const r = computeApplication([
-    line({ sovLineId: "a", thisPeriodCompleted: "100.5555", retainagePercent: "10" }),
-    line({ sovLineId: "b", thisPeriodCompleted: "100.5555", retainagePercent: "10" }),
-  ], { minorUnits: 3 });
+  const r = computeApplication(
+    [
+      line({ sovLineId: "a", thisPeriodCompleted: "100.5555", retainagePercent: "10" }),
+      line({ sovLineId: "b", thisPeriodCompleted: "100.5555", retainagePercent: "10" }),
+    ],
+    { minorUnits: 3 },
+  );
   // Exact 10.05555 + 10.05555: cumulative 20.1111 rounds to 20.111.
   assert.equal(r.lines[0]!.retainageThisPeriod, "10.0560");
   assert.equal(r.lines[1]!.retainageThisPeriod, "10.0550");
@@ -153,7 +177,14 @@ test("prior-draw replay carries the residual across draws", () => {
   );
   assert.equal(first.retainageThisPeriod, "33.3300");
   const second = computeApplication(
-    [line({ sovLineId: "a", previousCompleted: "333.33", thisPeriodCompleted: "333.33", retainagePercent: "10" })],
+    [
+      line({
+        sovLineId: "a",
+        previousCompleted: "333.33",
+        thisPeriodCompleted: "333.33",
+        retainagePercent: "10",
+      }),
+    ],
     { minorUnits: 2, priorExactRetainage: ["33.3333"] },
   );
   // Cumulative exact 66.6666 rounds to 66.67; 33.33 already settled, so this
@@ -163,36 +194,55 @@ test("prior-draw replay carries the residual across draws", () => {
 });
 
 test("four minor units preserve exact ledger precision", () => {
-  const r = computeApplication([
-    line({ sovLineId: "a", thisPeriodCompleted: "3333.33", retainagePercent: "10" }),
-  ], { minorUnits: 4 });
+  const r = computeApplication(
+    [line({ sovLineId: "a", thisPeriodCompleted: "3333.33", retainagePercent: "10" })],
+    { minorUnits: 4 },
+  );
   assert.equal(r.retainageThisPeriod, "333.3330");
 });
 
 test("rejects overbilling beyond the schedule of values", () => {
   assert.throws(
-    () => computeApplication([line({ scheduledValue: "10000", previousCompleted: "9000", thisPeriodCompleted: "1001" })]),
+    () =>
+      computeApplication([
+        line({ scheduledValue: "10000", previousCompleted: "9000", thisPeriodCompleted: "1001" }),
+      ]),
     /exceeds the scheduled value/,
   );
 });
 
 test("scheduled-value cap still bounds completedToDate with stored increments", () => {
-  const args = { scheduledValue: "10000", previousCompleted: "9500", previousMaterialsStored: "500" };
+  const args = {
+    scheduledValue: "10000",
+    previousCompleted: "9500",
+    previousMaterialsStored: "500",
+  };
   // Stored rising 500 → 600 adds only 100 to the draw: 9500 + 400 + 100 lands
   // exactly on the schedule and is allowed.
-  const atCap = computeApplication([line({ ...args, thisPeriodCompleted: "400", materialsStored: "600" })]);
+  const atCap = computeApplication([
+    line({ ...args, thisPeriodCompleted: "400", materialsStored: "600" }),
+  ]);
   assert.equal(atCap.lines[0]!.completedToDate, "10000.0000");
   assert.equal(atCap.lines[0]!.grossThisPeriod, "500.0000");
   // One cent past the cap is refused.
   assert.throws(
-    () => computeApplication([line({ ...args, thisPeriodCompleted: "400.01", materialsStored: "600" })]),
+    () =>
+      computeApplication([
+        line({ ...args, thisPeriodCompleted: "400.01", materialsStored: "600" }),
+      ]),
     /exceeds the scheduled value/,
   );
 });
 
 test("rejects negative application amounts and invalid retainage", () => {
-  assert.throws(() => computeApplication([line({ thisPeriodCompleted: "-1" })]), /cannot be negative/);
-  assert.throws(() => computeApplication([line({ thisPeriodCompleted: "1", retainagePercent: "101" })]), /between 0 and 100/);
+  assert.throws(
+    () => computeApplication([line({ thisPeriodCompleted: "-1" })]),
+    /cannot be negative/,
+  );
+  assert.throws(
+    () => computeApplication([line({ thisPeriodCompleted: "1", retainagePercent: "101" })]),
+    /between 0 and 100/,
+  );
 });
 
 test("change orders revise an SOV line exactly without binary rounding", () => {
@@ -228,7 +278,10 @@ test("createPayApplication rejects a period before the previous invoiced Date", 
   ];
   let responseIndex = 0;
   const tx = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve(responses[responseIndex++] ?? { rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve(responses[responseIndex++] ?? { rows: [] }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      ),
   };
   const transactionDb = db as unknown as {
     transaction(callback: (transaction: typeof tx) => Promise<unknown>): Promise<unknown>;
@@ -270,7 +323,8 @@ test("createPayApplication takes the feature-gate fence and rechecks Projects un
   const seen: string[] = [];
   const tx = {
     execute: async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       seen.push(sqlText(query));
       return inMode({ rows: [{ features: { projects: false } }] });
     },
@@ -305,7 +359,8 @@ test("createPayApplication proceeds past an enabled gate to the procedure check"
   let calls = 0;
   const tx = {
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       calls += 1;
       if (calls === 1) return inMode({ rows: [] });
       if (calls === 2) return inMode({ rows: [{ features: { projects: true } }] });
@@ -322,7 +377,10 @@ test("createPayApplication proceeds past an enabled gate to the procedure check"
   );
 
   // An enabled gate must not refuse: the flow continues to the next check.
-  await assert.rejects(createPayApplication("org-1", "user-1", "project-1", "2026-08-31", "10", null), /beyond-gate/);
+  await assert.rejects(
+    createPayApplication("org-1", "user-1", "project-1", "2026-08-31", "10", null),
+    /beyond-gate/,
+  );
 });
 
 test("period-ending dates are validated as calendar days before any database work", async (t) => {
@@ -332,9 +390,24 @@ test("period-ending dates are validated as calendar days before any database wor
   });
   const isDateError = (error: unknown) =>
     error instanceof ConstructionBillingError && /valid calendar date/.test(error.message);
-  for (const bad of ["undefined", "", "2026-02-30", "07/31/2026", "2026-7-1", "2026-07-01T00:00:00Z"]) {
-    await assert.rejects(releaseRetainage("org-1", "user-1", "project-1", bad, "100", null), isDateError, `releaseRetainage(${bad})`);
-    await assert.rejects(createPayApplication("org-1", "user-1", "project-1", bad, "10", null), isDateError, `createPayApplication(${bad})`);
+  for (const bad of [
+    "undefined",
+    "",
+    "2026-02-30",
+    "07/31/2026",
+    "2026-7-1",
+    "2026-07-01T00:00:00Z",
+  ]) {
+    await assert.rejects(
+      releaseRetainage("org-1", "user-1", "project-1", bad, "100", null),
+      isDateError,
+      `releaseRetainage(${bad})`,
+    );
+    await assert.rejects(
+      createPayApplication("org-1", "user-1", "project-1", bad, "10", null),
+      isDateError,
+      `createPayApplication(${bad})`,
+    );
   }
   assert.equal(requireIsoDate("2026-07-31", "Period ending"), "2026-07-31");
 });

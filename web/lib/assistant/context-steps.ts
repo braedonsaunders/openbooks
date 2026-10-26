@@ -27,7 +27,8 @@ const DEEP_MODULES: ReadonlySet<string> = new Set(["close", "continuousClose", "
  * analytics; only this narrow, vendor-neutral slice earns the deep budget —
  * plain dashboards stay standard.
  */
-const FORENSICS_PATTERN = /\b(sentinel|forensic|fraud|suspicious|anomal|round-dollar|round dollar)\b/i;
+const FORENSICS_PATTERN =
+  /\b(sentinel|forensic|fraud|suspicious|anomal|round-dollar|round dollar)\b/i;
 
 /**
  * Resolve the turn's max agent steps from the user message plus the tools

@@ -120,9 +120,7 @@ function readAllowlist(functionSql) {
     /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
   );
   if (!safeRelations) throw new Error("reviewed query relation allowlist is missing");
-  return new Set(
-    [...safeRelations[1].matchAll(/'([a-z0-9_]+)'/g)].map((match) => match[1]),
-  );
+  return new Set([...safeRelations[1].matchAll(/'([a-z0-9_]+)'/g)].map((match) => match[1]));
 }
 
 function assertNoUnreviewedExposure(allowlist) {
@@ -147,8 +145,8 @@ function assertCuratedQueryViews(functionSql) {
   for (const relation of CURATED_QUERY_RELATIONS) {
     const view = functionSql.match(
       new RegExp(
-        `create view openbooks_query\\.${relation} with \\(security_barrier=true\\) as\\s*\\n`
-          + `\\s*select\\s+([\\s\\S]*?)\\n\\s*from public\\.${relation}\\b`,
+        `create view openbooks_query\\.${relation} with \\(security_barrier=true\\) as\\s*\\n` +
+          `\\s*select\\s+([\\s\\S]*?)\\n\\s*from public\\.${relation}\\b`,
       ),
     );
     if (!view) {
@@ -175,14 +173,19 @@ function addReviewedPayrollRelations(source, registryRelations) {
 
   let functionSql = functionMatch[0];
   if (registryRelations !== undefined) {
-    if (!/select relation\s+from public\.openbooks_query_catalog_relations\s+order by relation/i.test(functionSql)) {
+    if (
+      !/select relation\s+from public\.openbooks_query_catalog_relations\s+order by relation/i.test(
+        functionSql,
+      )
+    ) {
       throw new Error("query-catalog refresh must read the module registry");
     }
     const present = new Set(registryRelations);
     assertNoUnreviewedExposure(present);
     assertCuratedQueryViews(functionSql);
     for (const relation of PAYROLL_QUERY_RELATIONS) {
-      if (!present.has(relation)) throw new Error(`reviewed query relation is missing: ${relation}`);
+      if (!present.has(relation))
+        throw new Error(`reviewed query relation is missing: ${relation}`);
     }
     return source;
   }
@@ -243,8 +246,8 @@ function restoreHandwrittenAnnotations(source, annotations) {
   const orphaned = [...annotations.keys()].filter((name) => !restored.has(name));
   if (orphaned.length > 0) {
     throw new Error(
-      "hand-written annotation has no object in this dump; move or delete it in the "
-        + `previous baseline first: ${orphaned.join("; ")}`,
+      "hand-written annotation has no object in this dump; move or delete it in the " +
+        `previous baseline first: ${orphaned.join("; ")}`,
     );
   }
   return annotated;
@@ -252,8 +255,10 @@ function restoreHandwrittenAnnotations(source, annotations) {
 
 export function canonicalizePgDump(rawDump, { annotations = new Map(), registryRelations } = {}) {
   let source = rawDump.replace(/\r\n?/g, "\n");
-  if (!/Dumped from database version 16\.9(?:\D|$)/.test(source)
-      || !/Dumped by pg_dump version 16\.9(?:\D|$)/.test(source)) {
+  if (
+    !/Dumped from database version 16\.9(?:\D|$)/.test(source) ||
+    !/Dumped by pg_dump version 16\.9(?:\D|$)/.test(source)
+  ) {
     throw new Error("pg_dump source and client must use the pinned PostgreSQL 16.9 image");
   }
   const settingsStart = source.indexOf("SET statement_timeout = 0;");
@@ -275,10 +280,17 @@ export function canonicalizePgDump(rawDump, { annotations = new Map(), registryR
   // as extension installation on restricted PostgreSQL providers.
   // Host administrators own installed extensions; their descriptions are not
   // application schema and require ownership the migration role lacks.
-  source = source.replace(/^CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n/gm, "")
-    .replace(/--\n-- Name: EXTENSION [a-z_]+; Type: COMMENT; Schema: -; Owner: -\n--\n\nCOMMENT ON EXTENSION [a-z_]+ IS '[^\n]*';\n\n\n/g, "")
-    .replace(/^CREATE INDEX [^\n]*\bpublic\.(?:gin|gist)_trgm_ops[^\n]*;$/gm,
-      (statement) => `DO $trigram_index$\nBEGIN\n  IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_trgm') THEN\n    ${statement}\n  END IF;\nEND\n$trigram_index$;`);
+  source = source
+    .replace(/^CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n/gm, "")
+    .replace(
+      /--\n-- Name: EXTENSION [a-z_]+; Type: COMMENT; Schema: -; Owner: -\n--\n\nCOMMENT ON EXTENSION [a-z_]+ IS '[^\n]*';\n\n\n/g,
+      "",
+    )
+    .replace(
+      /^CREATE INDEX [^\n]*\bpublic\.(?:gin|gist)_trgm_ops[^\n]*;$/gm,
+      (statement) =>
+        `DO $trigram_index$\nBEGIN\n  IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_trgm') THEN\n    ${statement}\n  END IF;\nEND\n$trigram_index$;`,
+    );
 
   source = replaceExactly(
     source,
@@ -294,13 +306,20 @@ export function canonicalizePgDump(rawDump, { annotations = new Map(), registryR
     [/\bCREATE DATABASE\b/i, "database creation"],
     [/\bTABLESPACE\b/i, "tablespace"],
     [/\b(?:GRANT|REVOKE)[^;]*\bopenbooks_app\b/i, "runtime-role ACL"],
-    [/\b(?:CREATE TABLE|ALTER TABLE)\s+(?:ONLY\s+)?public\._applied_migrations\b/i, "migration ledger DDL"],
+    [
+      /\b(?:CREATE TABLE|ALTER TABLE)\s+(?:ONLY\s+)?public\._applied_migrations\b/i,
+      "migration ledger DDL",
+    ],
     [/\bCREATE SCHEMA public\b/i, "public schema creation"],
   ];
   for (const [pattern, label] of forbidden) {
     if (pattern.test(source)) throw new Error(`canonical baseline contains forbidden ${label}`);
   }
-  if (splitSqlStatements(source).some((statement) => /^\s*(?:COPY|INSERT\s+INTO)\s+public\./i.test(stripSqlComments(statement)))) {
+  if (
+    splitSqlStatements(source).some((statement) =>
+      /^\s*(?:COPY|INSERT\s+INTO)\s+public\./i.test(stripSqlComments(statement)),
+    )
+  ) {
     throw new Error("canonical baseline contains forbidden data statement");
   }
 

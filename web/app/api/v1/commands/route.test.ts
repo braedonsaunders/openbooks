@@ -51,11 +51,15 @@ test("GET /api/v1/commands lists the visible application catalog", async () => {
     }),
   );
   assert.equal(response.status, 200);
-  const body = await response.json() as { commands: Array<{ name: string; href: string }> };
+  const body = (await response.json()) as { commands: Array<{ name: string; href: string }> };
   assert.deepEqual(
     body.commands.map((command) => command.name),
     ["list_records", "post_journal"],
   );
   assert.equal(body.commands[1]?.href, "/api/v1/commands/post_journal");
-  assert.equal(routeState.listed, true, "visibility must be evaluated before a command is advertised");
+  assert.equal(
+    routeState.listed,
+    true,
+    "visibility must be evaluated before a command is advertised",
+  );
 });

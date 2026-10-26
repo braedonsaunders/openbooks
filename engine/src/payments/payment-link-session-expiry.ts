@@ -7,7 +7,8 @@ export async function loadPaymentProviderConfig<T extends Record<string, unknown
   provider: string,
   runner: SqlExecutor = db,
 ): Promise<T | null> {
-  const result = await runner.execute<T>(sql`
+  const result = await runner.execute<T>(
+    sql`
     select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
            publishable_key, settings, surcharge_rule_id, secrets,
            default_disputed_funds_account_id, default_chargeback_loss_account_id,
@@ -15,7 +16,9 @@ export async function loadPaymentProviderConfig<T extends Record<string, unknown
       from psp_provider_configs
      where org_id = ${orgId} and provider = ${provider}
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   return (result[0] as T | undefined) ?? null;
 }
 
@@ -25,7 +28,9 @@ type StripeSessionConfig = {
 };
 
 async function loadStripeSessionConfig(orgId: string): Promise<StripeSessionConfig | null> {
-  return withOrgContext(orgId, () => loadPaymentProviderConfig<StripeSessionConfig>(orgId, "stripe"));
+  return withOrgContext(orgId, () =>
+    loadPaymentProviderConfig<StripeSessionConfig>(orgId, "stripe"),
+  );
 }
 
 function stripeApiBase(settings: Record<string, unknown>): string | null {
@@ -34,10 +39,16 @@ function stripeApiBase(settings: Record<string, unknown>): string | null {
   try {
     const endpoint = new URL(settings.apiBase.trim());
     if (
-      endpoint.protocol !== "https:" || endpoint.username !== "" || endpoint.password !== "" ||
-      endpoint.port !== "" || endpoint.search !== "" || endpoint.hash !== "" ||
-      endpoint.hostname.toLowerCase() !== "api.stripe.com" || endpoint.pathname.replace(/\/+$/, "") !== ""
-    ) return null;
+      endpoint.protocol !== "https:" ||
+      endpoint.username !== "" ||
+      endpoint.password !== "" ||
+      endpoint.port !== "" ||
+      endpoint.search !== "" ||
+      endpoint.hash !== "" ||
+      endpoint.hostname.toLowerCase() !== "api.stripe.com" ||
+      endpoint.pathname.replace(/\/+$/, "") !== ""
+    )
+      return null;
     return `${endpoint.origin}${endpoint.pathname.replace(/\/+$/, "")}`;
   } catch {
     return null;
@@ -51,11 +62,13 @@ export async function expireStalePaymentLinkSessions(
   invoiceIds: readonly string[],
 ): Promise<void> {
   if (invoiceIds.length === 0) return;
-  const attempts = await withOrgContext(orgId, () => db.execute<{
-    id: string;
-    externalRef: string;
-    invoiceId: string;
-  }>(sql`
+  const attempts = await withOrgContext(orgId, () =>
+    db.execute<{
+      id: string;
+      externalRef: string;
+      invoiceId: string;
+    }>(
+      sql`
     select attempt.id, attempt.external_ref as "externalRef",
            link.document_id as "invoiceId"
       from payment_attempts attempt
@@ -65,7 +78,10 @@ export async function expireStalePaymentLinkSessions(
        and link.document_id in ${invoiceIds}
        and attempt.status = 'initiated' and link.amount is not null
        and link.amount > invoice.open_balance
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   if (attempts.length === 0) return;
 
   const config = await loadStripeSessionConfig(orgId);
@@ -73,18 +89,24 @@ export async function expireStalePaymentLinkSessions(
   const apiKey =
     config?.secrets == null
       ? undefined
-      : unsealJson<{ apiKey?: string }>(config.secrets, { orgId, purpose: "payment.provider.secrets" }).apiKey;
+      : unsealJson<{ apiKey?: string }>(config.secrets, {
+          orgId,
+          purpose: "payment.provider.secrets",
+        }).apiKey;
   if (!config) return;
   for (const attempt of attempts) {
     let expired = false;
     try {
       if (!apiBase) throw new Error("stripe API endpoint is not allowlisted");
       if (apiKey) {
-        const response = await fetch(`${apiBase}/v1/checkout/sessions/${encodeURIComponent(attempt.externalRef)}/expire`, {
-          method: "POST",
-          redirect: "error",
-          headers: { authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}` },
-        });
+        const response = await fetch(
+          `${apiBase}/v1/checkout/sessions/${encodeURIComponent(attempt.externalRef)}/expire`,
+          {
+            method: "POST",
+            redirect: "error",
+            headers: { authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}` },
+          },
+        );
         expired = response.status < 400;
       }
     } catch {
@@ -96,14 +118,17 @@ export async function expireStalePaymentLinkSessions(
         outcome: expired ? "provider_session_expired" : "provider_session_expiry_failed",
         invoiceId: attempt.invoiceId,
       };
-      const updated = await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(
+        sql`
         update payment_attempts
            set status = ${expired ? "cancelled" : "initiated"},
                event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify({ sessionInvalidation: evidence })}::jsonb,
                updated_at = now()
          where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
          returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!updated[0]) return;
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

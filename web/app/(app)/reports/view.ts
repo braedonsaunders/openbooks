@@ -1,17 +1,21 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { REPORT_ENTITY_MAP } from '@openbooks/reports'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { frame, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { ensureReportDefinitions } from '@openbooks/engine/reports/ensure-report-definitions'
-import { getAuthz, can, type Authz } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { canAccessStatement, hiddenReportEntityKeys, isStatementKind } from '../../../lib/report-authz'
-import { savedReportPathVisible } from '../../../lib/report-feature-gates'
-import '../../../lib/resourcing/report-facts'
-import type { HubCard, HubGroup, PaperForm } from './ReportsHub'
+import { sql } from "drizzle-orm";
+import { REPORT_ENTITY_MAP } from "@openbooks/reports";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { frame, page, ref, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { ensureReportDefinitions } from "@openbooks/engine/reports/ensure-report-definitions";
+import { getAuthz, can, type Authz } from "../../../lib/authz";
+import { isFeatureEnabled } from "../../../lib/features";
+import {
+  canAccessStatement,
+  hiddenReportEntityKeys,
+  isStatementKind,
+} from "../../../lib/report-authz";
+import { savedReportPathVisible } from "../../../lib/report-feature-gates";
+import "../../../lib/resourcing/report-facts";
+import type { HubCard, HubGroup, PaperForm } from "./ReportsHub";
 
 /**
  * The reports hub, split into a loader and a spec.
@@ -36,14 +40,14 @@ import type { HubCard, HubGroup, PaperForm } from './ReportsHub'
  */
 
 export interface ReportsHubData {
-  title: string
-  description: string
-  groups: HubGroup[]
-  canCreate: boolean
+  title: string;
+  description: string;
+  groups: HubGroup[];
+  canCreate: boolean;
 }
 
 export async function loadReportsHub(): Promise<ReportsHubData> {
-  return reportsHubFor(await getAuthz(), { materialize: true })
+  return reportsHubFor(await getAuthz(), { materialize: true });
 }
 
 /**
@@ -56,15 +60,15 @@ export async function reportsHubFor(
   authz: Authz | null,
   { materialize }: { materialize: boolean },
 ): Promise<ReportsHubData> {
-  const t = await getTranslations('reports')
-  const tc = await getTranslations('analytics.trueCost')
-  const tw = await getTranslations('warehouse')
-  const tp = await getTranslations('payroll.supportReport')
-  const tev = await getTranslations('reports.earnedValue')
-  const tae = await getTranslations('reports.attendanceExceptions')
-  const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
+  const t = await getTranslations("reports");
+  const tc = await getTranslations("analytics.trueCost");
+  const tw = await getTranslations("warehouse");
+  const tp = await getTranslations("payroll.supportReport");
+  const tev = await getTranslations("reports.earnedValue");
+  const tae = await getTranslations("reports.attendanceExceptions");
+  const canCreate = !!authz && (can(authz, "reports.create") || can(authz, "*"));
 
-  const orgId = authz?.user.orgId
+  const orgId = authz?.user.orgId;
   // Materialise the built-in catalog before reading it. The hub reads
   // `report_definitions` rows, and those rows only exist once something has
   // called `ensureReportDefinitions` — the builder, the definitions API, the
@@ -72,17 +76,42 @@ export async function reportsHubFor(
   // hub with NO built-in reports on it: no Payroll group, no Human-resources
   // group, and nothing to say they were missing. The call is idempotent and
   // refuses to overwrite org-tuned rows.
-  if (orgId && materialize) await ensureReportDefinitions(orgId)
-  const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
-  const emptyDefs = Promise.resolve({ rows: [] as { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[] })
-  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, inventoryEnabled, hiddenEntities, hrmEnabled, warehousingEnabled, resourcingEnabled] = await Promise.all([
+  if (orgId && materialize) await ensureReportDefinitions(orgId);
+  const emptySaved = Promise.resolve({
+    rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[],
+  });
+  const emptyDefs = Promise.resolve({
+    rows: [] as {
+      id: string;
+      slug: string;
+      name: string;
+      description: string | null;
+      kind: string;
+      entity: string | null;
+    }[],
+  });
+  const [
+    saved,
+    custom,
+    projectsEnabled,
+    payrollEnabled,
+    budgetsEnabled,
+    ordersEnabled,
+    inventoryEnabled,
+    hiddenEntities,
+    hrmEnabled,
+    warehousingEnabled,
+    resourcingEnabled,
+  ] = await Promise.all([
     orgId
-      ? db.execute(sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`) as Promise<{
-          rows: { id: string; name: string; path: string; params: Record<string, string> }[]
-        }>
+      ? (db.execute(
+          sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`,
+        ) as Promise<{
+          rows: { id: string; name: string; path: string; params: Record<string, string> }[];
+        }>)
       : emptySaved,
     orgId
-      ? db.execute(
+      ? (db.execute(
           // No LIMIT. The catalog is the point of this page: a cap ordered by
           // `updated_at` meant a module's entire group could vanish because
           // twelve unrelated reports had been edited more recently, and the
@@ -90,40 +119,60 @@ export async function reportsHubFor(
           // their cap — those really are "the twelve most recent".
           sql`select id, slug, name, description, kind, query->>'entity' as entity from report_definitions where org_id = ${orgId} and archived_at is null and coalesce(report_type, 'query') = 'query' order by name`,
         ) as Promise<{
-          rows: { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[]
-        }>
+          rows: {
+            id: string;
+            slug: string;
+            name: string;
+            description: string | null;
+            kind: string;
+            entity: string | null;
+          }[];
+        }>)
       : emptyDefs,
-    authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
-    authz ? isFeatureEnabled(authz.user.orgId, 'payroll') : Promise.resolve(false),
-    authz ? isFeatureEnabled(authz.user.orgId, 'budgets') : Promise.resolve(false),
-    authz ? isFeatureEnabled(authz.user.orgId, 'orders') : Promise.resolve(false),
-    authz ? isFeatureEnabled(authz.user.orgId, 'inventory') : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, "projects") : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, "payroll") : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, "budgets") : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, "orders") : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, "inventory") : Promise.resolve(false),
     authz ? hiddenReportEntityKeys(authz) : Promise.resolve<string[]>([]),
-    authz ? isFeatureEnabled(authz.user.orgId, 'hrm') : Promise.resolve(false),
-    authz ? isFeatureEnabled(authz.user.orgId, 'warehousing') : Promise.resolve(false),
-    authz && can(authz, 'resourcing.read') ? isFeatureEnabled(authz.user.orgId, 'resourcing') : Promise.resolve(false),
-  ])
+    authz ? isFeatureEnabled(authz.user.orgId, "hrm") : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, "warehousing") : Promise.resolve(false),
+    authz && can(authz, "resourcing.read")
+      ? isFeatureEnabled(authz.user.orgId, "resourcing")
+      : Promise.resolve(false),
+  ]);
   // Intercompany reconciliation reads every multi-entity ledger.
-  const multiSubsidiaryEnabled = authz ? await isFeatureEnabled(authz.user.orgId, 'multiSubsidiary') : false
-  const intercompanyReportVisible = multiSubsidiaryEnabled && Boolean(authz && can(authz, 'intercompany.read'))
+  const multiSubsidiaryEnabled = authz
+    ? await isFeatureEnabled(authz.user.orgId, "multiSubsidiary")
+    : false;
+  const intercompanyReportVisible =
+    multiSubsidiaryEnabled && Boolean(authz && can(authz, "intercompany.read"));
   // Multi-book accounting gates the book-to-book comparison.
-  const multiBookEnabled = authz && can(authz, 'gl.read')
-    ? await isFeatureEnabled(authz.user.orgId, 'multiBookAccounting')
-    : false
+  const multiBookEnabled =
+    authz && can(authz, "gl.read")
+      ? await isFeatureEnabled(authz.user.orgId, "multiBookAccounting")
+      : false;
   // Projects → Progress tracking gates the Earned value report.
-  const progressEnabled = projectsEnabled && authz && can(authz, 'projects.read')
-    ? await isFeatureEnabled(authz.user.orgId, 'projectProgress')
-    : false
+  const progressEnabled =
+    projectsEnabled && authz && can(authz, "projects.read")
+      ? await isFeatureEnabled(authz.user.orgId, "projectProgress")
+      : false;
   // Device attendance on shift rosters gates the Attendance exceptions report.
-  const attendanceVisible = hrmEnabled && authz && can(authz, 'hrm.attendance.read')
-    ? (await Promise.all([isFeatureEnabled(authz.user.orgId, 'hrmAttendance'), isFeatureEnabled(authz.user.orgId, 'hrmShiftPlanning')])).every(Boolean)
-    : false
+  const attendanceVisible =
+    hrmEnabled && authz && can(authz, "hrm.attendance.read")
+      ? (
+          await Promise.all([
+            isFeatureEnabled(authz.user.orgId, "hrmAttendance"),
+            isFeatureEnabled(authz.user.orgId, "hrmShiftPlanning"),
+          ])
+        ).every(Boolean)
+      : false;
 
   // Hide definitions over permission-gated or feature-off entities from
   // users who could not run them anyway. A payroll built-in must not fall
   // into the Custom group when Payroll is off.
-  const hidden = new Set(hiddenEntities)
-  const visibleDefinitions = custom.rows.filter((row) => !row.entity || !hidden.has(row.entity))
+  const hidden = new Set(hiddenEntities);
+  const visibleDefinitions = custom.rows.filter((row) => !row.entity || !hidden.has(row.entity));
 
   // Built-ins and user-authored reports share ONE definition catalog, but
   // they do not share a hub section. Every built-in is classified into a
@@ -131,56 +180,65 @@ export async function reportsHubFor(
   // organization actually authored plus saved views. The old catch-all made
   // CRM, inventory, allocations and AI governance look like custom reports.
   const entityCategory = (row: { entity: string | null }) =>
-    row.entity ? REPORT_ENTITY_MAP[row.entity]?.category?.toLowerCase() : undefined
-  const builtInDefinitions = visibleDefinitions.filter((row) => row.kind === 'built_in')
-  const customDefinitions = visibleDefinitions.filter((row) => row.kind !== 'built_in')
-  const receivablesPayablesDefinitions = builtInDefinitions.filter((row) =>
-    row.slug === 'ap-aging-by-vendor' || row.slug === 'open-ar-by-customer',
-  )
-  const allocationDefinitions = builtInDefinitions.filter((row) => row.slug.startsWith('allocation-'))
-  const ledgerDefinitions = builtInDefinitions.filter((row) =>
-    entityCategory(row) === 'general_ledger'
-    && !receivablesPayablesDefinitions.some((item) => item.id === row.id)
-    && !allocationDefinitions.some((item) => item.id === row.id),
-  )
-  const crmDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'crm')
-  const inventoryDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'inventory')
+    row.entity ? REPORT_ENTITY_MAP[row.entity]?.category?.toLowerCase() : undefined;
+  const builtInDefinitions = visibleDefinitions.filter((row) => row.kind === "built_in");
+  const customDefinitions = visibleDefinitions.filter((row) => row.kind !== "built_in");
+  const receivablesPayablesDefinitions = builtInDefinitions.filter(
+    (row) => row.slug === "ap-aging-by-vendor" || row.slug === "open-ar-by-customer",
+  );
+  const allocationDefinitions = builtInDefinitions.filter((row) =>
+    row.slug.startsWith("allocation-"),
+  );
+  const ledgerDefinitions = builtInDefinitions.filter(
+    (row) =>
+      entityCategory(row) === "general_ledger" &&
+      !receivablesPayablesDefinitions.some((item) => item.id === row.id) &&
+      !allocationDefinitions.some((item) => item.id === row.id),
+  );
+  const crmDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === "crm");
+  const inventoryDefinitions = builtInDefinitions.filter(
+    (row) => entityCategory(row) === "inventory",
+  );
   const orderDefinitions = ordersEnabled
-    ? builtInDefinitions.filter((row) => entityCategory(row) === 'orders')
-    : []
-  const aiDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'ai governance')
+    ? builtInDefinitions.filter((row) => entityCategory(row) === "orders")
+    : [];
+  const aiDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === "ai governance");
   const payrollDefinitions = payrollEnabled
-    ? builtInDefinitions.filter((row) => entityCategory(row) === 'payroll')
-    : []
+    ? builtInDefinitions.filter((row) => entityCategory(row) === "payroll")
+    : [];
   // Workforce reports are the HR module's reports — the Reports module is
   // their ONE home (by review: no HR-side reports page), so every definition
   // over a governed HRM entity gets a group of its own here. The definitions
   // themselves are ordinary rows in the one report catalog; there is no
   // parallel HRM source catalog.
   const hrmDefinitions = hrmEnabled
-    ? builtInDefinitions.filter((row) => entityCategory(row) === 'hrm')
-    : []
-  const fixedAssetDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'fixed_assets')
-  const serviceDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'service')
-  const classifiedBuiltInIds = new Set([
-    ...fixedAssetDefinitions,
-    ...serviceDefinitions,
-    ...receivablesPayablesDefinitions,
-    ...allocationDefinitions,
-    ...ledgerDefinitions,
-    ...crmDefinitions,
-    ...inventoryDefinitions,
-    ...orderDefinitions,
-    ...aiDefinitions,
-    ...payrollDefinitions,
-    ...hrmDefinitions,
-  ].map((row) => row.id))
+    ? builtInDefinitions.filter((row) => entityCategory(row) === "hrm")
+    : [];
+  const fixedAssetDefinitions = builtInDefinitions.filter(
+    (row) => entityCategory(row) === "fixed_assets",
+  );
+  const serviceDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === "service");
+  const classifiedBuiltInIds = new Set(
+    [
+      ...fixedAssetDefinitions,
+      ...serviceDefinitions,
+      ...receivablesPayablesDefinitions,
+      ...allocationDefinitions,
+      ...ledgerDefinitions,
+      ...crmDefinitions,
+      ...inventoryDefinitions,
+      ...orderDefinitions,
+      ...aiDefinitions,
+      ...payrollDefinitions,
+      ...hrmDefinitions,
+    ].map((row) => row.id),
+  );
   // A future built-in category must still never leak into Custom & Saved.
   // Until it receives a more specific domain placement it is visibly listed
   // under Other reports, making the missing classification reviewable.
   const otherBuiltInDefinitions = builtInDefinitions.filter(
     (row) => !classifiedBuiltInIds.has(row.id),
-  )
+  );
 
   const card = (key: string, href: string, icon: string, form: PaperForm): HubCard => ({
     href,
@@ -188,286 +246,465 @@ export async function reportsHubFor(
     desc: t(`hub.cards.${key}Description`),
     icon,
     form,
-  })
+  });
 
   // AR/AP aging split into four distinct reports (side × summary/detail).
-  const agingCard = (side: 'ar' | 'ap', view: 'summary' | 'detail'): HubCard => ({
-    href: `/reports/aging?side=${side}${view === 'detail' ? '&view=detail' : ''}`,
-    title: `${side === 'ap' ? t('aging.payablesTitle') : t('aging.receivablesTitle')} · ${view === 'detail' ? t('aging.detail') : t('aging.summary')}`,
-    desc: t('hub.cards.agingDescription'),
-    icon: 'CalendarClock',
-    form: 'aging',
-  })
+  const agingCard = (side: "ar" | "ap", view: "summary" | "detail"): HubCard => ({
+    href: `/reports/aging?side=${side}${view === "detail" ? "&view=detail" : ""}`,
+    title: `${side === "ap" ? t("aging.payablesTitle") : t("aging.receivablesTitle")} · ${view === "detail" ? t("aging.detail") : t("aging.summary")}`,
+    desc: t("hub.cards.agingDescription"),
+    icon: "CalendarClock",
+    form: "aging",
+  });
 
   const definitionCards = (
     definitions: typeof builtInDefinitions,
     icon: string,
     fallbackDescription: string,
-  ): HubCard[] => definitions.map((definition) => ({
-    href: `/reports/custom/run/${definition.id}`,
-    title: definition.name,
-    desc: definition.description ?? fallbackDescription,
-    icon,
-    form: 'list',
-  }))
+  ): HubCard[] =>
+    definitions.map((definition) => ({
+      href: `/reports/custom/run/${definition.id}`,
+      title: definition.name,
+      desc: definition.description ?? fallbackDescription,
+      icon,
+      form: "list",
+    }));
 
   // Availability and Replenishment compute from the stock engine, so they
   // are pages of their own rather than definitions; both need Warehousing and
   // the item read permission their pages require.
-  const stockReportCards: HubCard[] = warehousingEnabled && authz && can(authz, 'items.read')
-    ? [
-        { href: '/reports/availability', title: tw('availability.title'), desc: tw('availability.hubDescription'), icon: 'Boxes', form: 'list' },
-        { href: '/reports/replenishment', title: tw('replenishment.title'), desc: tw('replenishment.hubDescription'), icon: 'ClipboardList', form: 'list' },
-      ]
-    : []
+  const stockReportCards: HubCard[] =
+    warehousingEnabled && authz && can(authz, "items.read")
+      ? [
+          {
+            href: "/reports/availability",
+            title: tw("availability.title"),
+            desc: tw("availability.hubDescription"),
+            icon: "Boxes",
+            form: "list",
+          },
+          {
+            href: "/reports/replenishment",
+            title: tw("replenishment.title"),
+            desc: tw("replenishment.hubDescription"),
+            icon: "ClipboardList",
+            form: "list",
+          },
+        ]
+      : [];
 
   const groups: HubGroup[] = [
     {
-      key: 'financial',
-      label: t('hub.groups.financial'),
-      accent: 'teal',
+      key: "financial",
+      label: t("hub.groups.financial"),
+      accent: "teal",
       cards: [
-        card('pnl', '/reports/pnl', 'FileText', 'statement'),
-        card('balanceSheet', '/reports/balance-sheet', 'Scale', 'statement'),
-        card('cashFlow', '/reports/cash-flow', 'Waves', 'statement'),
-        card('cashFlowIndirect', '/reports/cash-flow-indirect', 'Waves', 'statement'),
-        card('trialBalance', '/reports/trial-balance', 'ClipboardList', 'ledger'),
-        ...(multiBookEnabled ? [card('bookDifferences', '/reports/book-differences', 'BookOpen', 'ledger')] : []),
+        card("pnl", "/reports/pnl", "FileText", "statement"),
+        card("balanceSheet", "/reports/balance-sheet", "Scale", "statement"),
+        card("cashFlow", "/reports/cash-flow", "Waves", "statement"),
+        card("cashFlowIndirect", "/reports/cash-flow-indirect", "Waves", "statement"),
+        card("trialBalance", "/reports/trial-balance", "ClipboardList", "ledger"),
+        ...(multiBookEnabled
+          ? [card("bookDifferences", "/reports/book-differences", "BookOpen", "ledger")]
+          : []),
       ],
     },
     {
-      key: 'ledger',
-      label: t('hub.groups.ledger'),
-      accent: 'sky',
+      key: "ledger",
+      label: t("hub.groups.ledger"),
+      accent: "sky",
       cards: [
-        card('generalLedger', '/reports/general-ledger', 'BookOpen', 'ledger'),
-        card('journal', '/reports/journal', 'NotebookPen', 'ledger'),
-        card('statisticalJournal', '/reports/statistical-journal', 'ClipboardList', 'ledger'),
-        card('glAuditNumbers', '/reports/gl-audit-numbers', 'BookOpen', 'ledger'),
-        ...(intercompanyReportVisible ? [card('intercompanyReconciliation', '/reports/intercompany-reconciliation', 'Scale', 'ledger')] : []),
-        ...definitionCards(ledgerDefinitions, 'BookOpen', t('hub.cards.builtInDescription')),
+        card("generalLedger", "/reports/general-ledger", "BookOpen", "ledger"),
+        card("journal", "/reports/journal", "NotebookPen", "ledger"),
+        card("statisticalJournal", "/reports/statistical-journal", "ClipboardList", "ledger"),
+        card("glAuditNumbers", "/reports/gl-audit-numbers", "BookOpen", "ledger"),
+        ...(intercompanyReportVisible
+          ? [
+              card(
+                "intercompanyReconciliation",
+                "/reports/intercompany-reconciliation",
+                "Scale",
+                "ledger",
+              ),
+            ]
+          : []),
+        ...definitionCards(ledgerDefinitions, "BookOpen", t("hub.cards.builtInDescription")),
       ],
     },
     {
-      key: 'receivablesPayables',
-      label: t('hub.groups.receivablesPayables'),
-      accent: 'violet',
+      key: "receivablesPayables",
+      label: t("hub.groups.receivablesPayables"),
+      accent: "violet",
       cards: [
-        agingCard('ar', 'summary'),
-        agingCard('ar', 'detail'),
-        agingCard('ap', 'summary'),
-        agingCard('ap', 'detail'),
-        card('registers', '/reports/registers?side=ar', 'Receipt', 'ledger'),
-        card('receivables', '/reports/partners?kind=receivable', 'Wallet', 'aging'),
-        card('payables', '/reports/partners?kind=payable', 'Landmark', 'aging'),
+        agingCard("ar", "summary"),
+        agingCard("ar", "detail"),
+        agingCard("ap", "summary"),
+        agingCard("ap", "detail"),
+        card("registers", "/reports/registers?side=ar", "Receipt", "ledger"),
+        card("receivables", "/reports/partners?kind=receivable", "Wallet", "aging"),
+        card("payables", "/reports/partners?kind=payable", "Landmark", "aging"),
         // Customer statements pick a customer, then open that customer's
         // statement for the chosen period — the hub entry accountants look
         // for, on AR read like the receivables report beside it.
-        ...(authz && can(authz, 'ar.read')
-          ? [card('statements', '/reports/statements', 'FileText', 'aging')]
+        ...(authz && can(authz, "ar.read")
+          ? [card("statements", "/reports/statements", "FileText", "aging")]
           : []),
         // Statement batches send every balanced customer at once and follow
         // each run to delivered — the batch counterpart to the picker above.
-        ...(authz && can(authz, 'ar.read')
-          ? [card('statementBatches', '/reports/statements/sends', 'FileText', 'aging')]
+        ...(authz && can(authz, "ar.read")
+          ? [card("statementBatches", "/reports/statements/sends", "FileText", "aging")]
           : []),
         // 1099-NEC preparation reads vendor payments + masked TIN status on
         // AP read: no feature switch, so the accountant reaches it whenever
         // the compliance workspace is off.
-        ...(authz && can(authz, 'ap.read')
-          ? [card('necPreparation', '/reports/1099-preparation', 'FileText', 'list')]
+        ...(authz && can(authz, "ap.read")
+          ? [card("necPreparation", "/reports/1099-preparation", "FileText", "list")]
           : []),
-        ...definitionCards(receivablesPayablesDefinitions, 'Receipt', t('hub.cards.builtInDescription')),
+        ...definitionCards(
+          receivablesPayablesDefinitions,
+          "Receipt",
+          t("hub.cards.builtInDescription"),
+        ),
       ],
     },
-    ...(allocationDefinitions.length > 0 ? [{
-      key: 'allocations',
-      label: t('hub.groups.allocations'),
-      accent: 'violet',
-      cards: definitionCards(allocationDefinitions, 'Network', t('hub.cards.builtInDescription')),
-    } satisfies HubGroup] : []),
-    ...(crmDefinitions.length > 0 ? [{
-      key: 'crm',
-      label: t('hub.groups.crm'),
-      accent: 'teal',
-      cards: definitionCards(crmDefinitions, 'BriefcaseBusiness', t('hub.cards.builtInDescription')),
-    } satisfies HubGroup] : []),
-    ...(inventoryDefinitions.length > 0 || stockReportCards.length > 0 ? [{
-      key: 'inventory',
-      label: t('hub.groups.inventory'),
-      accent: 'amber',
-      cards: [
-        ...stockReportCards,
-        ...definitionCards(inventoryDefinitions, 'Boxes', t('hub.cards.builtInDescription')),
-      ],
-    } satisfies HubGroup] : []),
-    ...(aiDefinitions.length > 0 ? [{
-      key: 'aiGovernance',
-      label: t('hub.groups.aiGovernance'),
-      accent: 'sky',
-      cards: definitionCards(aiDefinitions, 'BrainCircuit', t('hub.cards.builtInDescription')),
-    } satisfies HubGroup] : []),
-    ...(ordersEnabled ? [{
-      key: 'orders',
-      label: t('hub.groups.orders'),
-      accent: 'teal',
-      cards: [
-        card('orders', '/reports/orders', 'ClipboardList', 'chart'),
-        ...definitionCards(orderDefinitions, 'Boxes', t('hub.cards.builtInDescription')),
-      ],
-    } satisfies HubGroup] : []),
-    ...(budgetsEnabled ? [{
-      key: 'budgeting',
-      label: t('hub.groups.budgeting'),
-      accent: 'amber',
-      cards: [card('budget', '/reports/budget', 'Target', 'statement')],
-    } satisfies HubGroup] : []),
-    ...(projectsEnabled ? [{
-      key: 'projects',
-      label: t('hub.groups.projects'),
-      accent: 'sky',
-      cards: [card('projectProfitability', '/reports/project-profitability', 'Coins', 'chart'),
-        card('projectBudgetVsActual', '/reports/project-budget-vs-actual', 'Target', 'list'),
-        { href: '/reports/true-cost', title: tc('title'), desc: tc('summary.compositeRate'), icon: 'Calculator', form: 'statement' },
-        ...(progressEnabled ? [{ href: '/reports/earned-value', title: tev('title'), desc: tev('hubDescription'), icon: 'Gauge', form: 'list' as const }] : [])],
-    } satisfies HubGroup] : []),
-    ...(resourcingEnabled ? [{
-      key: 'resourcing',
-      label: t('hub.groups.resourcing'),
-      accent: 'teal',
-      cards: [
-        card('resourcingUtilization', '/reports/resourcing/utilization', 'Gauge', 'chart'),
-        card('resourcingBench', '/reports/resourcing/bench', 'Users', 'list'),
-        card('resourcingCapacityDemand', '/reports/resourcing/capacity-demand', 'Scale', 'chart'),
-        card('resourcingEngagement', '/reports/resourcing/engagement', 'BriefcaseBusiness', 'list'),
-      ],
-    } satisfies HubGroup] : []),
-    ...(payrollDefinitions.length > 0 || (payrollEnabled && authz && can(authz, 'payroll.read')) ? [{
-      key: 'payroll',
-      label: t('hub.groups.payroll'),
-      accent: 'emerald',
-      cards: [
-        ...(payrollEnabled && authz && can(authz, 'payroll.read') ? [{ href: '/reports/payroll-support',
-          title: tp('title'), desc: tp('description'), icon: 'Globe', form: 'list' as const }] : []),
-        ...definitionCards(payrollDefinitions, 'HandCoins', t('hub.cards.payrollDescription')),
-      ],
-    } satisfies HubGroup] : []),
-    ...(hrmDefinitions.length > 0 || attendanceVisible ? [{
-      key: 'hrm',
-      label: t('hub.groups.hrm'),
-      accent: 'teal',
-      cards: [
-        ...(attendanceVisible ? [{ href: '/reports/attendance-exceptions', title: tae('title'), desc: tae('hubDescription'), icon: 'Timer', form: 'list' as const }] : []),
-        ...definitionCards(hrmDefinitions, 'Users', t('hub.cards.hrmDescription')),
-      ],
-    } satisfies HubGroup] : []),
-    ...(fixedAssetDefinitions.length > 0 ? [{
-      key: 'fixedAssets',
-      label: t('hub.groups.fixedAssets'),
-      accent: 'slate',
-      cards: definitionCards(fixedAssetDefinitions, 'Landmark', t('hub.cards.builtInDescription')),
-    } satisfies HubGroup] : []),
-    ...(serviceDefinitions.length > 0 ? [{
-      key: 'service',
-      label: t('hub.groups.service'),
-      accent: 'amber',
-      cards: definitionCards(serviceDefinitions, 'ClipboardList', t('hub.cards.builtInDescription')),
-    } satisfies HubGroup] : []),
-    ...(otherBuiltInDefinitions.length > 0 ? [{
-      key: 'otherBuiltIns',
-      label: t('hub.groups.other'),
-      accent: 'slate',
-      cards: definitionCards(otherBuiltInDefinitions, 'FileText', t('hub.cards.builtInDescription')),
-    } satisfies HubGroup] : []),
+    ...(allocationDefinitions.length > 0
+      ? [
+          {
+            key: "allocations",
+            label: t("hub.groups.allocations"),
+            accent: "violet",
+            cards: definitionCards(
+              allocationDefinitions,
+              "Network",
+              t("hub.cards.builtInDescription"),
+            ),
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(crmDefinitions.length > 0
+      ? [
+          {
+            key: "crm",
+            label: t("hub.groups.crm"),
+            accent: "teal",
+            cards: definitionCards(
+              crmDefinitions,
+              "BriefcaseBusiness",
+              t("hub.cards.builtInDescription"),
+            ),
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(inventoryDefinitions.length > 0 || stockReportCards.length > 0
+      ? [
+          {
+            key: "inventory",
+            label: t("hub.groups.inventory"),
+            accent: "amber",
+            cards: [
+              ...stockReportCards,
+              ...definitionCards(inventoryDefinitions, "Boxes", t("hub.cards.builtInDescription")),
+            ],
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(aiDefinitions.length > 0
+      ? [
+          {
+            key: "aiGovernance",
+            label: t("hub.groups.aiGovernance"),
+            accent: "sky",
+            cards: definitionCards(
+              aiDefinitions,
+              "BrainCircuit",
+              t("hub.cards.builtInDescription"),
+            ),
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(ordersEnabled
+      ? [
+          {
+            key: "orders",
+            label: t("hub.groups.orders"),
+            accent: "teal",
+            cards: [
+              card("orders", "/reports/orders", "ClipboardList", "chart"),
+              ...definitionCards(orderDefinitions, "Boxes", t("hub.cards.builtInDescription")),
+            ],
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(budgetsEnabled
+      ? [
+          {
+            key: "budgeting",
+            label: t("hub.groups.budgeting"),
+            accent: "amber",
+            cards: [card("budget", "/reports/budget", "Target", "statement")],
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(projectsEnabled
+      ? [
+          {
+            key: "projects",
+            label: t("hub.groups.projects"),
+            accent: "sky",
+            cards: [
+              card("projectProfitability", "/reports/project-profitability", "Coins", "chart"),
+              card("projectBudgetVsActual", "/reports/project-budget-vs-actual", "Target", "list"),
+              {
+                href: "/reports/true-cost",
+                title: tc("title"),
+                desc: tc("summary.compositeRate"),
+                icon: "Calculator",
+                form: "statement",
+              },
+              ...(progressEnabled
+                ? [
+                    {
+                      href: "/reports/earned-value",
+                      title: tev("title"),
+                      desc: tev("hubDescription"),
+                      icon: "Gauge",
+                      form: "list" as const,
+                    },
+                  ]
+                : []),
+            ],
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(resourcingEnabled
+      ? [
+          {
+            key: "resourcing",
+            label: t("hub.groups.resourcing"),
+            accent: "teal",
+            cards: [
+              card("resourcingUtilization", "/reports/resourcing/utilization", "Gauge", "chart"),
+              card("resourcingBench", "/reports/resourcing/bench", "Users", "list"),
+              card(
+                "resourcingCapacityDemand",
+                "/reports/resourcing/capacity-demand",
+                "Scale",
+                "chart",
+              ),
+              card(
+                "resourcingEngagement",
+                "/reports/resourcing/engagement",
+                "BriefcaseBusiness",
+                "list",
+              ),
+            ],
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(payrollDefinitions.length > 0 || (payrollEnabled && authz && can(authz, "payroll.read"))
+      ? [
+          {
+            key: "payroll",
+            label: t("hub.groups.payroll"),
+            accent: "emerald",
+            cards: [
+              ...(payrollEnabled && authz && can(authz, "payroll.read")
+                ? [
+                    {
+                      href: "/reports/payroll-support",
+                      title: tp("title"),
+                      desc: tp("description"),
+                      icon: "Globe",
+                      form: "list" as const,
+                    },
+                  ]
+                : []),
+              ...definitionCards(
+                payrollDefinitions,
+                "HandCoins",
+                t("hub.cards.payrollDescription"),
+              ),
+            ],
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(hrmDefinitions.length > 0 || attendanceVisible
+      ? [
+          {
+            key: "hrm",
+            label: t("hub.groups.hrm"),
+            accent: "teal",
+            cards: [
+              ...(attendanceVisible
+                ? [
+                    {
+                      href: "/reports/attendance-exceptions",
+                      title: tae("title"),
+                      desc: tae("hubDescription"),
+                      icon: "Timer",
+                      form: "list" as const,
+                    },
+                  ]
+                : []),
+              ...definitionCards(hrmDefinitions, "Users", t("hub.cards.hrmDescription")),
+            ],
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(fixedAssetDefinitions.length > 0
+      ? [
+          {
+            key: "fixedAssets",
+            label: t("hub.groups.fixedAssets"),
+            accent: "slate",
+            cards: definitionCards(
+              fixedAssetDefinitions,
+              "Landmark",
+              t("hub.cards.builtInDescription"),
+            ),
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(serviceDefinitions.length > 0
+      ? [
+          {
+            key: "service",
+            label: t("hub.groups.service"),
+            accent: "amber",
+            cards: definitionCards(
+              serviceDefinitions,
+              "ClipboardList",
+              t("hub.cards.builtInDescription"),
+            ),
+          } satisfies HubGroup,
+        ]
+      : []),
+    ...(otherBuiltInDefinitions.length > 0
+      ? [
+          {
+            key: "otherBuiltIns",
+            label: t("hub.groups.other"),
+            accent: "slate",
+            cards: definitionCards(
+              otherBuiltInDefinitions,
+              "FileText",
+              t("hub.cards.builtInDescription"),
+            ),
+          } satisfies HubGroup,
+        ]
+      : []),
     {
-      key: 'custom',
-      label: t('hub.groups.custom'),
-      accent: 'slate',
+      key: "custom",
+      label: t("hub.groups.custom"),
+      accent: "slate",
       cards: [
-        { href: '/reports/custom', title: t('hub.customStudio.title'), desc: t('hub.customStudio.description'), icon: 'Sparkles', form: 'studio' },
-        ...customDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c): HubCard => ({
-          href: `/reports/custom/run/${c.id}`,
-          title: c.name,
-          desc: c.description ?? t('custom.kind.custom'),
-          icon: 'Coins',
-          form: c.kind === 'project-profitability' ? 'chart' : 'list',
-        })),
+        {
+          href: "/reports/custom",
+          title: t("hub.customStudio.title"),
+          desc: t("hub.customStudio.description"),
+          icon: "Sparkles",
+          form: "studio",
+        },
+        ...customDefinitions
+          .filter((c) => projectsEnabled || c.kind !== "project-profitability")
+          .map((c): HubCard => ({
+            href: `/reports/custom/run/${c.id}`,
+            title: c.name,
+            desc: c.description ?? t("custom.kind.custom"),
+            icon: "Coins",
+            form: c.kind === "project-profitability" ? "chart" : "list",
+          })),
         // Saved views hide by the route-gate registry (F1T-16): a view whose
         // route would refuse the operator never lists. The registry derives
         // the filter, never a hand-maintained prefix list.
-        ...saved.rows.filter((s) =>
-          savedReportPathVisible(s.path, {
-            projects: projectsEnabled,
-            projectProgress: progressEnabled,
-            hrmAttendance: attendanceVisible,
-            budgets: budgetsEnabled,
-            orders: ordersEnabled,
-            inventory: inventoryEnabled,
-            warehousing: warehousingEnabled,
-            resourcing: resourcingEnabled,
-            payroll: payrollEnabled && Boolean(authz && can(authz, 'payroll.read')),
-            multiSubsidiary: intercompanyReportVisible,
-            multiBookAccounting: multiBookEnabled,
+        ...saved.rows
+          .filter((s) =>
+            savedReportPathVisible(s.path, {
+              projects: projectsEnabled,
+              projectProgress: progressEnabled,
+              hrmAttendance: attendanceVisible,
+              budgets: budgetsEnabled,
+              orders: ordersEnabled,
+              inventory: inventoryEnabled,
+              warehousing: warehousingEnabled,
+              resourcing: resourcingEnabled,
+              payroll: payrollEnabled && Boolean(authz && can(authz, "payroll.read")),
+              multiSubsidiary: intercompanyReportVisible,
+              multiBookAccounting: multiBookEnabled,
+            }),
+          )
+          .map((s) => {
+            const qs = new URLSearchParams(s.params ?? {}).toString();
+            return {
+              href: `${s.path}${qs ? `?${qs}` : ""}`,
+              title: s.name,
+              desc: t("hub.savedViews"),
+              icon: "Bookmark",
+              form: "list",
+              saved: true,
+            } satisfies HubCard;
           }),
-        ).map((s) => {
-          const qs = new URLSearchParams(s.params ?? {}).toString()
-          return { href: `${s.path}${qs ? `?${qs}` : ''}`, title: s.name, desc: t('hub.savedViews'), icon: 'Bookmark', form: 'list', saved: true } satisfies HubCard
-        }),
       ],
     },
-  ]
+  ];
 
   // A saved view is a sheet of the report it was saved from, so it is drawn
   // in that report's form. The lookup derives from the cards above rather
   // than a second path list; a view over a definition stays a plain list.
-  const formByPath = new Map<string, PaperForm>()
+  const formByPath = new Map<string, PaperForm>();
   for (const hubCard of groups.flatMap((group) => group.cards)) {
-    const path = hubCard.href.split('?')[0]!
-    if (!hubCard.saved && !formByPath.has(path)) formByPath.set(path, hubCard.form)
+    const path = hubCard.href.split("?")[0]!;
+    if (!hubCard.saved && !formByPath.has(path)) formByPath.set(path, hubCard.form);
   }
   // A statement card (or a saved view of one) lists only when the reader
   // holds the statement's own grant — the ledger for financial statements,
   // the side's grant for receivables and payables — the same rule its page
   // and exports enforce. A group left with no card disappears.
   const statementAllowed = (href: string): boolean => {
-    const url = new URL(href, 'https://reports.invalid')
-    const kind = url.pathname.startsWith('/reports/') ? url.pathname.slice('/reports/'.length) : ''
-    return !isStatementKind(kind) || (!!authz && canAccessStatement(authz, kind, url.searchParams))
-  }
-  const sheetGroups = groups.map((group) => ({
-    ...group,
-    cards: group.cards.filter((hubCard) => statementAllowed(hubCard.href)).map((hubCard) => hubCard.saved
-      ? { ...hubCard, form: formByPath.get(hubCard.href.split('?')[0]!) ?? hubCard.form }
-      : hubCard),
-  })).filter((group) => group.cards.length > 0 || group.key === 'custom')
+    const url = new URL(href, "https://reports.invalid");
+    const kind = url.pathname.startsWith("/reports/") ? url.pathname.slice("/reports/".length) : "";
+    return !isStatementKind(kind) || (!!authz && canAccessStatement(authz, kind, url.searchParams));
+  };
+  const sheetGroups = groups
+    .map((group) => ({
+      ...group,
+      cards: group.cards
+        .filter((hubCard) => statementAllowed(hubCard.href))
+        .map((hubCard) =>
+          hubCard.saved
+            ? { ...hubCard, form: formByPath.get(hubCard.href.split("?")[0]!) ?? hubCard.form }
+            : hubCard,
+        ),
+    }))
+    .filter((group) => group.cards.length > 0 || group.key === "custom");
 
   return {
-    title: t('hub.title'),
-    description: t('hub.description'),
+    title: t("hub.title"),
+    description: t("hub.description"),
     groups: sheetGroups,
     canCreate,
-  }
+  };
 }
 
-const f = ref<ReportsHubData>()
+const f = ref<ReportsHubData>();
 
 export function reportsHubSpec(): PageSpec {
   return page({
-    route: '/reports',
+    route: "/reports",
     // The hub content is one client-interactive island (search and tab
     // state, the header, the New-report create flow); the PageContainer shell is
     // chrome around it. Both arrive whole — the spec owns neither.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      frame('page-container', [
-        widgetBlock('reports-hub', {
-          title: f('title'),
-          description: f('description'),
-          groups: f('groups'),
-          canCreate: f('canCreate'),
+      frame("page-container", [
+        widgetBlock("reports-hub", {
+          title: f("title"),
+          description: f("description"),
+          groups: f("groups"),
+          canCreate: f("canCreate"),
         }),
       ]),
     ],
-  })
+  });
 }

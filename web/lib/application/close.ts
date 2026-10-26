@@ -1,13 +1,14 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
+import "server-only";
+import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { requestCloseApproval } from '@openbooks/engine/close/approvals'
+import { requestCloseApproval } from "@openbooks/engine/close/approvals";
 import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
-import { CloseError, type CloseModule, type PeriodDisplayInput } from "@openbooks/engine/periods/period-policy";
 import {
-  submitPeriodReopen,
-  requestPeriodReopen,
-} from '@openbooks/engine/close/reopening'
+  CloseError,
+  type CloseModule,
+  type PeriodDisplayInput,
+} from "@openbooks/engine/periods/period-policy";
+import { submitPeriodReopen, requestPeriodReopen } from "@openbooks/engine/close/reopening";
 import { refreshCloseRun } from "@openbooks/engine/close/run-automation";
 import { startCloseRun } from "@openbooks/engine/close/run-start";
 import {
@@ -30,7 +31,7 @@ import {
   type ExactPeriodLockRead,
 } from "@openbooks/engine/close/period-lock-read";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { can } from '../authz'
+import { can } from "../authz";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
@@ -96,12 +97,10 @@ function mapCloseError(error: unknown): never {
   throw error;
 }
 
-async function closeRun(
-  context: ApplicationContext,
-  runId: string,
-): Promise<CloseRunRow> {
-  assertSubsidiaryAccess(context, null)
-  const result = await db.execute<CloseRunDbRow>(sql`
+async function closeRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
+  assertSubsidiaryAccess(context, null);
+  const result = await db.execute<CloseRunDbRow>(
+    sql`
     select r.id, r.period_id as "periodId", p.name as "periodName", ${PERIOD_REF_COLUMNS},
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
@@ -111,10 +110,12 @@ async function closeRun(
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
      where r.id = ${runId} and r.org_id = ${context.authz.user.orgId}
      limit 1
-  `, "objects")
-  const row = result[0]
-  if (!row) throw notFound('close run')
-  return closeRunRow(row)
+  `,
+    "objects",
+  );
+  const row = result[0];
+  if (!row) throw notFound("close run");
+  return closeRunRow(row);
 }
 
 type CloseRunDbRow = Omit<CloseRunRow, "periodRef"> & {
@@ -126,10 +127,23 @@ type CloseRunDbRow = Omit<CloseRunRow, "periodRef"> & {
 };
 
 function closeRunRow(row: CloseRunDbRow): CloseRunRow {
-  const { period_fiscal_year, period_number, period_is_adjustment, period_starts_on, period_ends_on, ...run } = row;
+  const {
+    period_fiscal_year,
+    period_number,
+    period_is_adjustment,
+    period_starts_on,
+    period_ends_on,
+    ...run
+  } = row;
   return {
     ...run,
-    periodRef: periodRef({ period_fiscal_year, period_number, period_is_adjustment, period_starts_on, period_ends_on }),
+    periodRef: periodRef({
+      period_fiscal_year,
+      period_number,
+      period_is_adjustment,
+      period_starts_on,
+      period_ends_on,
+    }),
   };
 }
 
@@ -141,7 +155,8 @@ export async function listCloseRuns(
   // Declared lock targets do not narrow the organization-wide diagnostics.
   assertUnrestrictedCloseDiagnostics(context);
   const limit = clamp(input.limit ?? 50, 1, 100);
-  const result = await db.execute<CloseRunDbRow>(sql`
+  const result = await db.execute<CloseRunDbRow>(
+    sql`
     select r.id, r.period_id as "periodId", p.name as "periodName", ${PERIOD_REF_COLUMNS},
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
@@ -153,8 +168,10 @@ export async function listCloseRuns(
        ${input.status ? sql`and r.status = ${input.status}` : sql``}
      order by p.ends_on desc, r.started_at desc
      limit ${limit}
-  `, "objects")
-  return result.map(closeRunRow)
+  `,
+    "objects",
+  );
+  return result.map(closeRunRow);
 }
 
 const LOCK_STATES = new Set(["open", "soft_closed", "closed"]);
@@ -171,7 +188,11 @@ export async function listPeriodLocks(
     throw new ApplicationError("invalid_input", "state must be open, soft_closed, or closed", 422);
   }
   if (input.module && !LOCK_MODULES.has(input.module)) {
-    throw new ApplicationError("invalid_input", "module must be ar, ap, banking, assets, tax, or gl", 422);
+    throw new ApplicationError(
+      "invalid_input",
+      "module must be ar, ap, banking, assets, tax, or gl",
+      422,
+    );
   }
   const limit = clamp(input.limit ?? 50, 1, 200);
   let where = sql`l.org_id = ${context.authz.user.orgId}`;
@@ -179,7 +200,8 @@ export async function listPeriodLocks(
   if (input.state) where = sql`${where} and l.state = ${input.state}`;
   if (input.module) where = sql`${where} and l.module = ${input.module}`;
   const [rows, count] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select l.id, l.module, l.state, l.locked_at, l.reason, l.reopen_expires_at,
              p.name as period_name, p.starts_on, p.ends_on, ${PERIOD_REF_COLUMNS},
              b.name as book_name, b.code as book_code,
@@ -193,8 +215,13 @@ export async function listPeriodLocks(
        where ${where}
        order by p.ends_on desc, l.subsidiary_id nulls first, l.module
        limit ${limit}
-    `, "objects"),
-    db.execute<{ n: string }>(sql`select count(*) as n from period_locks l where ${where}`, "objects"),
+    `,
+      "objects",
+    ),
+    db.execute<{ n: string }>(
+      sql`select count(*) as n from period_locks l where ${where}`,
+      "objects",
+    ),
   ]);
   return {
     total: Number(count[0]?.n ?? 0),
@@ -261,12 +288,25 @@ export async function readApplicationPeriodLocks(
   }
 }
 
-const REOPEN_STATUSES = new Set(["requested", "approved", "rejected", "withdrawn", "expired", "reclosed"]);
+const REOPEN_STATUSES = new Set([
+  "requested",
+  "approved",
+  "rejected",
+  "withdrawn",
+  "expired",
+  "reclosed",
+]);
 
 /** Reopen requests — same query shape as `list_period_reopen_requests`. Org-wide diagnostics. */
 export async function listPeriodReopenRequests(
   context: ApplicationContext,
-  input: { status?: string; periodId?: string; requestId?: string; limit?: number; offset?: number },
+  input: {
+    status?: string;
+    periodId?: string;
+    requestId?: string;
+    limit?: number;
+    offset?: number;
+  },
 ) {
   if (!can(context.authz, "close.reopen") && !can(context.authz, "periods.manage")) {
     throw forbidden("close.reopen");
@@ -284,9 +324,11 @@ export async function listPeriodReopenRequests(
   let where = sql`r.org_id = ${context.authz.user.orgId}`;
   if (input.status) where = sql`${where} and r.status = ${input.status}`;
   if (input.periodId) where = sql`${where} and r.period_id = ${input.periodId}`;
-  if (input.requestId) where = sql`${where} and r.id = ${canonicalApplicationUuid(input.requestId, 'requestId')}`;
+  if (input.requestId)
+    where = sql`${where} and r.id = ${canonicalApplicationUuid(input.requestId, "requestId")}`;
   const [rows, count] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at, r.requested_by,
              r.approved_by,
              p.name as period_name, ${PERIOD_REF_COLUMNS}, b.name as book_name, b.code as book_code,
@@ -318,8 +360,13 @@ export async function listPeriodReopenRequests(
        where ${where}
        order by r.created_at desc
        limit ${limit} offset ${offset}
-    `, "objects"),
-    db.execute<{ n: string }>(sql`select count(*) as n from close_reopen_requests r where ${where}`, "objects"),
+    `,
+      "objects",
+    ),
+    db.execute<{ n: string }>(
+      sql`select count(*) as n from close_reopen_requests r where ${where}`,
+      "objects",
+    ),
   ]);
   return {
     total: Number(count[0]?.n ?? 0),
@@ -349,20 +396,26 @@ export async function listPeriodReopenRequests(
   };
 }
 
-export async function getCloseRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
+export async function getCloseRun(
+  context: ApplicationContext,
+  runId: string,
+): Promise<CloseRunRow> {
   assertApplicationPermission(context, "close.run");
   return closeRun(context, runId);
 }
 
-export async function startApplicationCloseRun(context: ApplicationContext, input: {
-  periodId: string;
-  bookId: string;
-  blueprintId?: string;
-  reportingPackageId?: string;
-  targetCloseDate?: string;
-  subsidiaryIds?: string[];
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: { runId: string } }> {
+export async function startApplicationCloseRun(
+  context: ApplicationContext,
+  input: {
+    periodId: string;
+    bookId: string;
+    blueprintId?: string;
+    reportingPackageId?: string;
+    targetCloseDate?: string;
+    subsidiaryIds?: string[];
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: { runId: string } }> {
   assertApplicationPermission(context, "close.run");
   assertSubsidiaryAccess(context, null);
   const outcome = await executeIdempotent({
@@ -372,16 +425,18 @@ export async function startApplicationCloseRun(context: ApplicationContext, inpu
     request: input,
     execute: async () => {
       try {
-        return { runId: await startCloseRun({
-          orgId: context.authz.user.orgId,
-          actorId: context.authz.user.id,
-          periodId: input.periodId,
-          bookId: input.bookId,
-          blueprintId: input.blueprintId,
-          reportingPackageId: input.reportingPackageId,
-          targetCloseDate: input.targetCloseDate,
-          subsidiaryIds: input.subsidiaryIds,
-        }) };
+        return {
+          runId: await startCloseRun({
+            orgId: context.authz.user.orgId,
+            actorId: context.authz.user.id,
+            periodId: input.periodId,
+            bookId: input.bookId,
+            blueprintId: input.blueprintId,
+            reportingPackageId: input.reportingPackageId,
+            targetCloseDate: input.targetCloseDate,
+            subsidiaryIds: input.subsidiaryIds,
+          }),
+        };
       } catch (error) {
         mapCloseError(error);
       }
@@ -393,20 +448,20 @@ export async function startApplicationCloseRun(context: ApplicationContext, inpu
 export async function advanceCloseRun(
   context: ApplicationContext,
   input: {
-    runId: string
-    action: 'refresh' | 'request_approval' | 'close' | 'publish'
-    comment?: string
-    idempotencyKey: string
+    runId: string;
+    action: "refresh" | "request_approval" | "close" | "publish";
+    comment?: string;
+    idempotencyKey: string;
   },
 ): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
-  assertApplicationPermission(
-    context,
-    input.action === 'close' ? 'close.approve' : 'close.run',
-  )
-  if (input.action === "publish" && !(await isFeatureEnabled(context.authz.user.orgId, "advancedClose"))) {
+  assertApplicationPermission(context, input.action === "close" ? "close.approve" : "close.run");
+  if (
+    input.action === "publish" &&
+    !(await isFeatureEnabled(context.authz.user.orgId, "advancedClose"))
+  ) {
     throw notFound("close package");
   }
-  await closeRun(context, input.runId)
+  await closeRun(context, input.runId);
   const outcome = await executeIdempotent({
     context,
     operation: `close.${input.action}`,
@@ -414,40 +469,60 @@ export async function advanceCloseRun(
     request: input,
     execute: async (): Promise<Record<string, unknown>> => {
       try {
-        if (input.action === 'refresh') {
+        if (input.action === "refresh") {
           return {
             refreshed: true,
-            ...(await refreshCloseRun(context.authz.user.orgId, input.runId, context.authz.user.id)),
-          }
+            ...(await refreshCloseRun(
+              context.authz.user.orgId,
+              input.runId,
+              context.authz.user.id,
+            )),
+          };
         }
-        if (input.action === 'request_approval') {
+        if (input.action === "request_approval") {
           await requestCloseApproval(context.authz.user.orgId, input.runId, context.authz.user.id);
         } else if (input.action === "close") {
           await closeApprovedRun(context.authz.user.orgId, input.runId, context.authz.user.id);
         } else {
-          await publishCloseRun(context.authz.user.orgId, input.runId, context.authz.user.id, input.comment);
+          await publishCloseRun(
+            context.authz.user.orgId,
+            input.runId,
+            context.authz.user.id,
+            input.comment,
+          );
         }
         return { action: input.action, run: await closeRun(context, input.runId) };
       } catch (error) {
         mapCloseError(error);
       }
     },
-  })
+  });
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-export async function runPeriodRevaluation(context: ApplicationContext, input: {
-  periodId: string;
-  bookId?: string;
-  subsidiaryIds?: string[];
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+export async function runPeriodRevaluation(
+  context: ApplicationContext,
+  input: {
+    periodId: string;
+    bookId?: string;
+    subsidiaryIds?: string[];
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "close.run");
   let selected: string[] | undefined;
   try {
-    selected = revaluationSubsidiarySelection(context.authz.allowedSubsidiaryIds, input.subsidiaryIds);
+    selected = revaluationSubsidiarySelection(
+      context.authz.allowedSubsidiaryIds,
+      input.subsidiaryIds,
+    );
   } catch (error) {
-    if (error instanceof RevaluationScopeError) throw new ApplicationError(error.status === 403 ? "forbidden" : "invalid_input", error.message, error.status);
+    if (error instanceof RevaluationScopeError)
+      throw new ApplicationError(
+        error.status === 403 ? "forbidden" : "invalid_input",
+        error.message,
+        error.status,
+      );
     throw error;
   }
   const outcome = await executeIdempotent({
@@ -541,7 +616,8 @@ export async function recordApplicationClosingFxRateEvidence(
     });
     return { replayed: outcome.replayed, result: outcome.evidence };
   } catch (error) {
-    if (error instanceof ClosingFxEvidenceFeatureDisabledError) throw notFound("closing rate evidence");
+    if (error instanceof ClosingFxEvidenceFeatureDisabledError)
+      throw notFound("closing rate evidence");
     if (error instanceof ScopeNotFoundError) throw notFound("closing rate evidence");
     if (error instanceof ClosingFxEvidenceError) {
       throw new ApplicationError("invalid_input", error.message, 422);
@@ -553,21 +629,21 @@ export async function recordApplicationClosingFxRateEvidence(
 export async function createReopenRequest(
   context: ApplicationContext,
   input: {
-    periodId: string
-    bookId: string
-    subsidiaryId?: string
-    modules: CloseModule[]
-    reason: string
-    hours?: number
-    idempotencyKey: string
+    periodId: string;
+    bookId: string;
+    subsidiaryId?: string;
+    modules: CloseModule[];
+    reason: string;
+    hours?: number;
+    idempotencyKey: string;
   },
 ): Promise<{ replayed: boolean; result: { requestId: string } }> {
   assertApplicationPermission(context, "close.reopen");
-  assertSubsidiaryAccess(context, null)
+  assertSubsidiaryAccess(context, null);
   assertSubsidiaryAccess(context, input.subsidiaryId);
   const outcome = await executeIdempotent({
     context,
-    operation: 'close.reopen.request',
+    operation: "close.reopen.request",
     idempotencyKey: input.idempotencyKey,
     request: input,
     execute: async () => {
@@ -583,12 +659,12 @@ export async function createReopenRequest(
             reason: input.reason,
             hours: input.hours,
           }),
-        }
+        };
       } catch (error) {
         mapCloseError(error);
       }
     },
-  })
+  });
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
@@ -596,18 +672,21 @@ export async function submitReopenRequest(
   context: ApplicationContext,
   input: { requestId: string; hours?: number; idempotencyKey: string },
 ): Promise<{
-  replayed: boolean
-  result: { requestId: string; gated: boolean }
+  replayed: boolean;
+  result: { requestId: string; gated: boolean };
 }> {
   assertApplicationPermission(context, "close.reopen");
-  const scope = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from close_reopen_requests where org_id=${context.authz.user.orgId} and id=${input.requestId}`, "objects",
-    ))[0]
-  if (!scope) throw notFound('reopen request')
-  assertSubsidiaryAccess(context, scope.subsidiaryId)
+  const scope = (
+    await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from close_reopen_requests where org_id=${context.authz.user.orgId} and id=${input.requestId}`,
+      "objects",
+    )
+  )[0];
+  if (!scope) throw notFound("reopen request");
+  assertSubsidiaryAccess(context, scope.subsidiaryId);
   const outcome = await executeIdempotent({
     context,
-    operation: 'close.reopen.submit',
+    operation: "close.reopen.submit",
     idempotencyKey: input.idempotencyKey,
     request: input,
     execute: async () => {
@@ -617,12 +696,12 @@ export async function submitReopenRequest(
           actorId: context.authz.user.id,
           requestId: input.requestId,
           hours: input.hours,
-        })
-        return { requestId: input.requestId, gated: result.gated }
+        });
+        return { requestId: input.requestId, gated: result.gated };
       } catch (error) {
         mapCloseError(error);
       }
     },
-  })
+  });
   return { replayed: outcome.replayed, result: outcome.value };
 }

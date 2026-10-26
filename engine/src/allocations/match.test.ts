@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {
-  AllocationRuleVersion,
-  LineCoordinate,
-  RuleInEffect,
-} from "./types.ts";
+import type { AllocationRuleVersion, LineCoordinate, RuleInEffect } from "./types.ts";
 import { matchLine, selectRule } from "./match.ts";
 
 let ruleSeq = 0;
@@ -94,31 +90,73 @@ test("matchLine matches an unconstrained version with zero specificity", () => {
 });
 
 test("payroll expense rules require an expense leg and every selected component and dimension", () => {
-  const rule = version({ documentKinds: ["pay_run"], dimensionFilters: {
-    payrollExpensesOnly: true, payComponentIds: ["wages"], departmentIds: ["field"], extraDims: { crew: ["north"] },
-  } });
-  const source = line({ documentKind: "pay_run", payrollExpense: true, payComponentId: "wages", departmentId: "field", extraDims: { crew: "north" } });
+  const rule = version({
+    documentKinds: ["pay_run"],
+    dimensionFilters: {
+      payrollExpensesOnly: true,
+      payComponentIds: ["wages"],
+      departmentIds: ["field"],
+      extraDims: { crew: ["north"] },
+    },
+  });
+  const source = line({
+    documentKind: "pay_run",
+    payrollExpense: true,
+    payComponentId: "wages",
+    departmentId: "field",
+    extraDims: { crew: "north" },
+  });
   assert.equal(matchLine(rule, source).matched, true);
   for (const changed of [
-    { payrollExpense: false }, { payrollExpense: undefined }, { payComponentId: "benefit" },
-    { documentKind: "journal" }, { departmentId: "office" }, { extraDims: { crew: "south" } },
-  ]) assert.equal(matchLine(rule, { ...source, ...changed }).matched, false);
+    { payrollExpense: false },
+    { payrollExpense: undefined },
+    { payComponentId: "benefit" },
+    { documentKind: "journal" },
+    { departmentId: "office" },
+    { extraDims: { crew: "south" } },
+  ])
+    assert.equal(matchLine(rule, { ...source, ...changed }).matched, false);
 });
 
 test("payroll expense rules can select the stub line's employee, time type and service item", () => {
-  const rule = version({ documentKinds: ["pay_run"], dimensionFilters: {
-    payrollExpensesOnly: true, payComponentIds: ["base"], payrollEmployeeIds: ["employee-a"],
-    timeTypeIds: ["admin-time"], itemIds: ["item-1"],
-  } });
-  const source = line({ documentKind: "pay_run", payrollExpense: true, payComponentId: "base",
-    payrollEmployeeId: "employee-a", timeTypeId: "admin-time", itemId: "item-1" });
+  const rule = version({
+    documentKinds: ["pay_run"],
+    dimensionFilters: {
+      payrollExpensesOnly: true,
+      payComponentIds: ["base"],
+      payrollEmployeeIds: ["employee-a"],
+      timeTypeIds: ["admin-time"],
+      itemIds: ["item-1"],
+    },
+  });
+  const source = line({
+    documentKind: "pay_run",
+    payrollExpense: true,
+    payComponentId: "base",
+    payrollEmployeeId: "employee-a",
+    timeTypeId: "admin-time",
+    itemId: "item-1",
+  });
   assert.equal(matchLine(rule, source).matched, true);
   for (const changed of [
-    { payrollEmployeeId: "employee-b" }, { payrollEmployeeId: null }, { timeTypeId: "field-time" },
-    { timeTypeId: null }, { itemId: "item-2" }, { payrollExpense: false },
-  ]) assert.equal(matchLine(rule, { ...source, ...changed }).matched, false);
-  assert.ok(matchLine(rule, source).specificity > matchLine(version({ documentKinds: ["pay_run"],
-    dimensionFilters: { payrollExpensesOnly: true, payComponentIds: ["base"] } }), source).specificity);
+    { payrollEmployeeId: "employee-b" },
+    { payrollEmployeeId: null },
+    { timeTypeId: "field-time" },
+    { timeTypeId: null },
+    { itemId: "item-2" },
+    { payrollExpense: false },
+  ])
+    assert.equal(matchLine(rule, { ...source, ...changed }).matched, false);
+  assert.ok(
+    matchLine(rule, source).specificity >
+      matchLine(
+        version({
+          documentKinds: ["pay_run"],
+          dimensionFilters: { payrollExpensesOnly: true, payComponentIds: ["base"] },
+        }),
+        source,
+      ).specificity,
+  );
 });
 
 test("matchLine document_kinds: null matches any kind, list requires membership", () => {
@@ -170,18 +208,12 @@ test("matchLine dimension id filters match per dimension with AND semantics", ()
   const v = version({
     dimensionFilters: { departmentIds: ["d1"], locationIds: ["l1"] },
   });
-  assert.deepEqual(
-    matchLine(v, line({ departmentId: "d1", locationId: "l1" })),
-    { matched: true, specificity: 2 },
-  );
-  assert.equal(
-    matchLine(v, line({ departmentId: "d1", locationId: "l9" })).matched,
-    false,
-  );
-  assert.equal(
-    matchLine(v, line({ departmentId: "d1", locationId: null })).matched,
-    false,
-  );
+  assert.deepEqual(matchLine(v, line({ departmentId: "d1", locationId: "l1" })), {
+    matched: true,
+    specificity: 2,
+  });
+  assert.equal(matchLine(v, line({ departmentId: "d1", locationId: "l9" })).matched, false);
+  assert.equal(matchLine(v, line({ departmentId: "d1", locationId: null })).matched, false);
 });
 
 test("matchLine covers class, project, subsidiary, party, and item filters", () => {
@@ -210,31 +242,19 @@ test("matchLine extraDims filters match per segment key with AND semantics", () 
   const v = version({
     dimensionFilters: { extraDims: { region: ["r1"], channel: ["ch1", "ch2"] } },
   });
-  assert.deepEqual(
-    matchLine(v, line({ extraDims: { region: "r1", channel: "ch2" } })),
-    { matched: true, specificity: 2 },
-  );
-  assert.equal(
-    matchLine(v, line({ extraDims: { region: "r1" } })).matched,
-    false,
-  );
-  assert.equal(
-    matchLine(v, line({ extraDims: { region: "r9", channel: "ch1" } })).matched,
-    false,
-  );
+  assert.deepEqual(matchLine(v, line({ extraDims: { region: "r1", channel: "ch2" } })), {
+    matched: true,
+    specificity: 2,
+  });
+  assert.equal(matchLine(v, line({ extraDims: { region: "r1" } })).matched, false);
+  assert.equal(matchLine(v, line({ extraDims: { region: "r9", channel: "ch1" } })).matched, false);
 });
 
 test("matchLine requireUntagged matches only lines with no value in each listed dimension", () => {
   const v = version({ dimensionFilters: { requireUntagged: ["department", "project"] } });
   assert.deepEqual(matchLine(v, line()), { matched: true, specificity: 1 });
-  assert.equal(
-    matchLine(v, line({ departmentId: "d1" })).matched,
-    false,
-  );
-  assert.equal(
-    matchLine(v, line({ projectId: "p1" })).matched,
-    false,
-  );
+  assert.equal(matchLine(v, line({ departmentId: "d1" })).matched, false);
+  assert.equal(matchLine(v, line({ projectId: "p1" })).matched, false);
 });
 
 test("matchLine combines requireUntagged with positive filters under AND", () => {
@@ -284,7 +304,10 @@ test("selectRule breaks specificity ties by sort_order then key", () => {
   const late = candidate("late", 99, { dimensionFilters: { classIds: ["c1"] } });
   const l = line({ departmentId: "d1", locationId: "l1", classId: "c1" });
   assert.equal(selectRule([b, a], l)?.rule.key, "a-rule");
-  assert.equal(selectRule([late, b], line({ departmentId: "d1", classId: "c1" }))?.rule.key, "b-rule");
+  assert.equal(
+    selectRule([late, b], line({ departmentId: "d1", classId: "c1" }))?.rule.key,
+    "b-rule",
+  );
 });
 
 test("selectRule applies the applyPolicy filter when given", () => {
@@ -310,8 +333,8 @@ test("selectRule forwards the account group resolver to every candidate", () => 
   const plain = candidate("plain", 50);
   const resolve = () => new Set(["a1"]);
   assert.equal(
-    selectRule([grouped, plain], line({ accountId: "a1" }), { resolveAccountGroup: resolve })
-      ?.rule.key,
+    selectRule([grouped, plain], line({ accountId: "a1" }), { resolveAccountGroup: resolve })?.rule
+      .key,
     "grouped",
   );
   assert.equal(selectRule([grouped, plain], line({ accountId: "a1" }))?.rule.key, "plain");

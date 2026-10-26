@@ -1,32 +1,39 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
-import { NextResponse } from 'next/server'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
+import { NextResponse } from "next/server";
 import {
   accountNameKey,
   type DuplicateAccountNameHolder,
   type DuplicateAccountNameWarning,
   DUPLICATE_ACCOUNT_NAME,
-} from '../../../lib/accounts-hygiene'
-import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from '../../../lib/custom-fields'
+} from "../../../lib/accounts-hygiene";
+import {
+  loadCustomFieldAccessDefs,
+  redactHiddenCustomValues,
+  type CustomFieldViewer,
+} from "../../../lib/custom-fields";
 
 export interface AccountPayload {
-  account: Record<string, unknown>
-  parentName: string | null
-  subsidiaryName: string | null
-  hasTransactions: boolean
-  childCount: number
-  activeChildCount: number
+  account: Record<string, unknown>;
+  parentName: string | null;
+  subsidiaryName: string | null;
+  hasTransactions: boolean;
+  childCount: number;
+  activeChildCount: number;
 }
 
 /** Org base currency code (e.g. USD) — the only settlement currency a
  * single-currency org can carry. */
 export async function orgBaseCurrency(orgId: string): Promise<string | null> {
-  const result = await db.execute<{ base_currency: string | null }>(sql`
+  const result = await db.execute<{ base_currency: string | null }>(
+    sql`
     select base_currency from orgs where id = ${orgId}
-  `, 'objects')
-  return result[0]?.base_currency ?? null
+  `,
+    "objects",
+  );
+  return result[0]?.base_currency ?? null;
 }
 
 /**
@@ -40,19 +47,28 @@ export async function loadAccount(
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<AccountPayload | null> {
-  const subsidiaryScope = allowedSubsidiaryIds === undefined
-    ? sql``
-    : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
-  const childScope = allowedSubsidiaryIds === undefined
-    ? sql``
-    : subsidiaryVisibleFilter(sql`child.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
-  const parentScope = allowedSubsidiaryIds === undefined
-    ? sql``
-    : subsidiaryVisibleFilter(sql`parent.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
-  const transactionScope = allowedSubsidiaryIds === undefined
-    ? sql``
-    : subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)
-  const result = (await db.execute<Record<string, unknown>>(sql`
+  const subsidiaryScope =
+    allowedSubsidiaryIds === undefined
+      ? sql``
+      : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true });
+  const childScope =
+    allowedSubsidiaryIds === undefined
+      ? sql``
+      : subsidiaryVisibleFilter(sql`child.subsidiary_id`, allowedSubsidiaryIds, {
+          orgWideNull: true,
+        });
+  const parentScope =
+    allowedSubsidiaryIds === undefined
+      ? sql``
+      : subsidiaryVisibleFilter(sql`parent.subsidiary_id`, allowedSubsidiaryIds, {
+          orgWideNull: true,
+        });
+  const transactionScope =
+    allowedSubsidiaryIds === undefined
+      ? sql``
+      : subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds);
+  const result = await db.execute<Record<string, unknown>>(
+    sql`
     select a.*,
            case when parent.id is null then null else concat_ws(' ', parent.number, parent.name) end as parent_name,
            s.name as subsidiary_name,
@@ -65,10 +81,19 @@ export async function loadAccount(
       left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id ${parentScope}
       left join subsidiaries s on s.id = a.subsidiary_id and s.org_id = a.org_id
      where a.id = ${id} and a.org_id = ${orgId} ${subsidiaryScope}
-  `, 'objects'))
-  const row = result[0]
-  if (!row) return null
-  const { parent_name, subsidiary_name, has_transactions, child_count, active_child_count, ...account } = row
+  `,
+    "objects",
+  );
+  const row = result[0];
+  if (!row) return null;
+  const {
+    parent_name,
+    subsidiary_name,
+    has_transactions,
+    child_count,
+    active_child_count,
+    ...account
+  } = row;
   return {
     account,
     parentName: (parent_name as string | null) ?? null,
@@ -76,7 +101,7 @@ export async function loadAccount(
     hasTransactions: has_transactions === true,
     childCount: Number(child_count ?? 0),
     activeChildCount: Number(active_child_count ?? 0),
-  }
+  };
 }
 
 /** The account payload as the reader may see it: restricted custom values removed. */
@@ -84,15 +109,19 @@ export async function redactAccountCustomFields(
   payload: AccountPayload,
   viewer: CustomFieldViewer,
 ): Promise<AccountPayload> {
-  if (!('custom' in payload.account)) return payload
-  const defs = await loadCustomFieldAccessDefs('accounts')
+  if (!("custom" in payload.account)) return payload;
+  const defs = await loadCustomFieldAccessDefs("accounts");
   return {
     ...payload,
     account: {
       ...payload.account,
-      custom: redactHiddenCustomValues(defs, viewer, payload.account.custom as Record<string, unknown> | null),
+      custom: redactHiddenCustomValues(
+        defs,
+        viewer,
+        payload.account.custom as Record<string, unknown> | null,
+      ),
     },
-  }
+  };
 }
 
 /**
@@ -116,10 +145,14 @@ export async function findNamedAccounts(
 ): Promise<DuplicateAccountNameHolder[]> {
   const excludeId = opts.excludeId ?? null;
   const subsidiaryId = opts.subsidiaryId ?? null;
-  const visible = opts.allowedSubsidiaryIds === undefined
-    ? sql``
-    : subsidiaryVisibleFilter(sql`a.subsidiary_id`, opts.allowedSubsidiaryIds, { orgWideNull: true });
-  const result = await executor.execute<{ id: string; number: string | null; name: string }>(sql`
+  const visible =
+    opts.allowedSubsidiaryIds === undefined
+      ? sql``
+      : subsidiaryVisibleFilter(sql`a.subsidiary_id`, opts.allowedSubsidiaryIds, {
+          orgWideNull: true,
+        });
+  const result = await executor.execute<{ id: string; number: string | null; name: string }>(
+    sql`
     select a.id, a.number, a.name
       from accounts a
      where a.org_id = ${opts.orgId}
@@ -130,7 +163,9 @@ export async function findNamedAccounts(
        ${visible}
      order by a.number nulls last, a.name
      limit 5
-  `, 'objects');
+  `,
+    "objects",
+  );
   return result;
 }
 

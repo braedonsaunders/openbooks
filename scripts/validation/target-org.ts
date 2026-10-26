@@ -26,9 +26,19 @@ export interface TargetOrg {
  * caller passed --production, so the default stays safe and the exception is
  * visible in the command that was actually run.
  */
-export async function resolveTargetOrg(orgId: string, argv: string[] = process.argv): Promise<TargetOrg> {
-  const row = (await retry(() => db.execute(sql`
-    select id, name, env_kind from orgs where id = ${orgId}`, "objects")))[0];
+export async function resolveTargetOrg(
+  orgId: string,
+  argv: string[] = process.argv,
+): Promise<TargetOrg> {
+  const row = (
+    await retry(() =>
+      db.execute(
+        sql`
+    select id, name, env_kind from orgs where id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0];
   if (!row) throw new Error(`no such org: ${orgId}`);
 
   const target: TargetOrg = {
@@ -40,7 +50,7 @@ export async function resolveTargetOrg(orgId: string, argv: string[] = process.a
   if (target.isProduction && !argv.includes("--production")) {
     throw new Error(
       `refusing: ${target.name} is ${target.envKind}, not a sandbox. ` +
-      `Pass --production to write to a live tenant on purpose.`,
+        `Pass --production to write to a live tenant on purpose.`,
     );
   }
   console.log(

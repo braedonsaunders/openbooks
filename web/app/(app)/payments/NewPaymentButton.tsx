@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { UnsavedCreateButton } from '@/components/unsaved-create-button'
+import { UnsavedCreateButton } from "@/components/unsaved-create-button";
 
 /**
  * Unsaved-create: opens a URL-controlled unsaved drawer (`?paymentNew=1`).
@@ -16,17 +16,17 @@ export function NewPaymentButton({
   // Kind stays in the contract (the section fixes it per surface) but the
   // button itself no longer needs it: opening writes nothing, and the drawer
   // derives the kind from its own `side`.
-  kind: 'vendor_payment' | 'customer_payment'
-  basePath: string
-  label: string
+  kind: "vendor_payment" | "customer_payment";
+  basePath: string;
+  label: string;
 }) {
   return (
     <UnsavedCreateButton
       base={basePath}
       param="paymentNew"
-      clear={['payment']}
+      clear={["payment"]}
       label={label}
-      extra={{ mode: 'edit' }}
+      extra={{ mode: "edit" }}
     />
-  )
+  );
 }

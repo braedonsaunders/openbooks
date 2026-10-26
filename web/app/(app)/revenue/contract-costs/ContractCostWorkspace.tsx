@@ -39,8 +39,14 @@ export function ContractCostWorkspace({
     <div className="space-y-4">
       <KpiStrip
         items={[
-          { label: t("workspace.assetBalance"), value: money(data.assetBalance, { currency: data.baseCurrency }) },
-          { label: t("workspace.periodAmortization"), value: money(data.periodAmortized, { currency: data.baseCurrency }) },
+          {
+            label: t("workspace.assetBalance"),
+            value: money(data.assetBalance, { currency: data.baseCurrency }),
+          },
+          {
+            label: t("workspace.periodAmortization"),
+            value: money(data.periodAmortized, { currency: data.baseCurrency }),
+          },
           {
             label: t("workspace.unlinked"),
             value: String(unlinked.length),
@@ -54,10 +60,7 @@ export function ContractCostWorkspace({
         ]}
       />
       {data.attention.length === 0 ? (
-        <EmptyState
-          title={t("queue.emptyTitle")}
-          description={t("queue.emptyDescription")}
-        />
+        <EmptyState title={t("queue.emptyTitle")} description={t("queue.emptyDescription")} />
       ) : (
         <section aria-label={t("queue.title")} className="space-y-2">
           {data.attention.map((item) => (

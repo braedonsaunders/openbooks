@@ -21,7 +21,11 @@ test("a sent offer past its expiry reads expired; every other status reads throu
     "sent",
   );
   assert.equal(
-    effectiveOfferStatus({ status: "accepted", expiresOn: "2026-09-01", businessToday: "2026-09-20" }),
+    effectiveOfferStatus({
+      status: "accepted",
+      expiresOn: "2026-09-01",
+      businessToday: "2026-09-20",
+    }),
     "accepted",
   );
   assert.equal(
@@ -31,7 +35,10 @@ test("a sent offer past its expiry reads expired; every other status reads throu
 });
 
 test("an unknown stored offer status is a failure, not a silent pass-through", () => {
-  assert.throws(() => effectiveOfferStatus({ status: "lost", expiresOn: null, businessToday: "2026-09-20" }), /unknown offer status/);
+  assert.throws(
+    () => effectiveOfferStatus({ status: "lost", expiresOn: null, businessToday: "2026-09-20" }),
+    /unknown offer status/,
+  );
 });
 
 test("time-to-fill counts whole days from opening to hire", () => {

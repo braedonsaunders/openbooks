@@ -1,79 +1,100 @@
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function redirect(url){ throw new Error("REDIRECT:" + url) }', extra: { 'server-only': 'export {}' } })
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation: 'export function redirect(url){ throw new Error("REDIRECT:" + url) }',
+  extra: { "server-only": "export {}" },
+});
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 
-import test from 'node:test'
+import test from "node:test";
 
 // The detail loader must forward the caller's subsidiary scope into the
 // filing read: an entity-restricted caller opening another legal entity's
 // filing URL must see "not found", never the filing. (Was FilingDetail.scope
 // source pins on the loadFiling call.)
 
-const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} = await import('@openbooks/engine/testing/fixtures')
-const { ensureFiling } = await import('@openbooks/engine/compliance/information-returns')
-const { loadFiling } = await import('../../../../lib/compliance')
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { ensureFiling } = await import("@openbooks/engine/compliance/information-returns");
+const { loadFiling } = await import("../../../../lib/compliance");
 
 async function seedFilings() {
-  const org = await withBypassContext(() => createScratchOrg())
-  const hidden = randomUUID()
-  const taxYear = Number(org.date.slice(0, 4)) - 1
-  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'IR reader', 'admin'))
+  const org = await withBypassContext(() => createScratchOrg());
+  const hidden = randomUUID();
+  const taxYear = Number(org.date.slice(0, 4)) - 1;
+  const actor = await withBypassContext(() => createScratchUser(org.orgId, "IR reader", "admin"));
   await withBypassContext(async () => {
     await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,informationReturns}', 'true'::jsonb, true)
-       where id = ${org.orgId}`)
+       where id = ${org.orgId}`);
     await db.execute(sql`
       insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-      values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`)
-  })
+      values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`);
+  });
   const hiddenFiling = await withBypassContext(() =>
-    ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: hidden, currency: 'USD', actorId: actor }),
-  )
+    ensureFiling({
+      orgId: org.orgId,
+      taxYear,
+      formType: "1099-NEC",
+      subsidiaryId: hidden,
+      currency: "USD",
+      actorId: actor,
+    }),
+  );
   const rootFiling = await withBypassContext(() =>
-    ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: null, currency: 'USD', actorId: actor }),
-  )
+    ensureFiling({
+      orgId: org.orgId,
+      taxYear,
+      formType: "1099-NEC",
+      subsidiaryId: null,
+      currency: "USD",
+      actorId: actor,
+    }),
+  );
   const visibleFiling = await withBypassContext(() =>
-    ensureFiling({ orgId: org.orgId, taxYear, formType: '1099-NEC', subsidiaryId: org.subsidiaryId, currency: 'USD', actorId: actor }),
-  )
-  return { org, hiddenFiling, rootFiling, visibleFiling }
+    ensureFiling({
+      orgId: org.orgId,
+      taxYear,
+      formType: "1099-NEC",
+      subsidiaryId: org.subsidiaryId,
+      currency: "USD",
+      actorId: actor,
+    }),
+  );
+  return { org, hiddenFiling, rootFiling, visibleFiling };
 }
 
-test('the detail read returns nothing outside the caller subsidiary scope', async () => {
-  const { org, hiddenFiling, rootFiling, visibleFiling } = await seedFilings()
+test("the detail read returns nothing outside the caller subsidiary scope", async () => {
+  const { org, hiddenFiling, rootFiling, visibleFiling } = await seedFilings();
   try {
-    const scope = new Set([org.subsidiaryId])
-    const own = await withBypassContext(() => loadFiling(org.orgId, visibleFiling.id, scope))
-    assert.equal(own?.id, visibleFiling.id, 'the caller entity filing must load')
+    const scope = new Set([org.subsidiaryId]);
+    const own = await withBypassContext(() => loadFiling(org.orgId, visibleFiling.id, scope));
+    assert.equal(own?.id, visibleFiling.id, "the caller entity filing must load");
     assert.equal(
       await withBypassContext(() => loadFiling(org.orgId, hiddenFiling.id, scope)),
       null,
       "another entity's filing must read as missing",
-    )
+    );
     assert.equal(
       await withBypassContext(() => loadFiling(org.orgId, rootFiling.id, scope)),
       null,
-      'an org-root filing must read as missing for a restricted caller',
-    )
+      "an org-root filing must read as missing for a restricted caller",
+    );
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('the detail read returns every filing without a scope restriction', async () => {
-  const { org, hiddenFiling, rootFiling, visibleFiling } = await seedFilings()
+test("the detail read returns every filing without a scope restriction", async () => {
+  const { org, hiddenFiling, rootFiling, visibleFiling } = await seedFilings();
   try {
     for (const filing of [hiddenFiling, rootFiling, visibleFiling]) {
-      const loaded = await withBypassContext(() => loadFiling(org.orgId, filing.id, null))
-      assert.equal(loaded?.id, filing.id, 'an unrestricted read must load every filing')
+      const loaded = await withBypassContext(() => loadFiling(org.orgId, filing.id, null));
+      assert.equal(loaded?.id, filing.id, "an unrestricted read must load every filing");
     }
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});

@@ -11,9 +11,10 @@ export const metricsNormalizationSubjectProfile: FlowSubjectProfile = {
   pinsSubmissionPolicy: true,
   triggers: ["on_submit"],
   actions: ["notify", "send_email"],
-  statuses: ["pending", "running", "succeeded", "failed", "cancelled"].map(
-    (value) => ({ value, label: value }),
-  ),
+  statuses: ["pending", "running", "succeeded", "failed", "cancelled"].map((value) => ({
+    value,
+    label: value,
+  })),
   fields: [
     { key: "month", label: "Reporting month", type: "date" },
     { key: "reason", label: "Reason", type: "text" },
@@ -23,13 +24,18 @@ export const metricsNormalizationSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (await db.execute<{
+    (
+      await db.execute<{
         requestedBy: string;
         status: string;
         [key: string]: unknown;
-      }>(sql`
+      }>(
+        sql`
  select id,month::text,reason,status,requested_by as "requestedBy",request_hash as "requestHash"
- from saas_metrics_normalization_requests where id=${id}`, "objects"))[0] ?? null
+ from saas_metrics_normalization_requests where id=${id}`,
+        "objects",
+      )
+    )[0] ?? null
   );
 }
 export const metricsNormalizationFlowAdapter = defineTableSubjectAdapter({
@@ -59,15 +65,13 @@ export const metricsNormalizationFlowAdapter = defineTableSubjectAdapter({
     return `SaaS metrics · ${String(values.month ?? id)}`;
   },
   deepLink(id) {
-    return approvalRequestHref(METRICS_NORMALIZATION_SUBJECT_KIND,id);
+    return approvalRequestHref(METRICS_NORMALIZATION_SUBJECT_KIND, id);
   },
   async changeStatus() {
     throw new Error("Use the native correction lifecycle and Flow gates.");
   },
   async setField() {
-    throw new Error(
-      "Correction requests are immutable; cancel and file a new request.",
-    );
+    throw new Error("Correction requests are immutable; cancel and file a new request.");
   },
   async releaseApproval(subjectId, outcome, ctx, detail, run) {
     await releaseFlowApproval({

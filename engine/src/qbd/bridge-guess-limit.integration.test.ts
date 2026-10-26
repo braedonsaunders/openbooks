@@ -19,15 +19,21 @@ test("Web Connector password guessing is bounded per connection", { skip: !DB },
   try {
     const password = "guess-limit-test-password-123";
     for (const label of ["guess-flood", "guess-sibling"]) {
-      const [connection] = await db.insert(schema.connections).values({
-        orgId: org.orgId,
-        source: "qbd",
-        displayName: `QBD guess test ${label} ${Date.now()}`,
-        authKind: "token",
-        status: "active",
-        config: { historyStartDate: "2026-01-01", region: "CA", baseCurrency: "CAD" },
-        secrets: sealJson({ webConnectorPassword: password }, { orgId: org.orgId, purpose: "connection.secrets" }),
-      }).returning({ id: schema.connections.id });
+      const [connection] = await db
+        .insert(schema.connections)
+        .values({
+          orgId: org.orgId,
+          source: "qbd",
+          displayName: `QBD guess test ${label} ${Date.now()}`,
+          authKind: "token",
+          status: "active",
+          config: { historyStartDate: "2026-01-01", region: "CA", baseCurrency: "CAD" },
+          secrets: sealJson(
+            { webConnectorPassword: password },
+            { orgId: org.orgId, purpose: "connection.secrets" },
+          ),
+        })
+        .returning({ id: schema.connections.id });
       assert.ok(connection);
       connectionIds.push(connection.id);
     }
@@ -65,24 +71,38 @@ test("an expired guess window stops refusing the correct password", { skip: !DB 
   let connectionId = "";
   try {
     const password = "guess-window-expiry-password-123";
-    const [connection] = await db.insert(schema.connections).values({
-      orgId: org.orgId,
-      source: "qbd",
-      displayName: `QBD guess expiry test ${Date.now()}`,
-      authKind: "token",
-      status: "active",
-      config: { historyStartDate: "2026-01-01", region: "CA", baseCurrency: "CAD" },
-      secrets: sealJson({ webConnectorPassword: password }, { orgId: org.orgId, purpose: "connection.secrets" }),
-    }).returning({ id: schema.connections.id });
+    const [connection] = await db
+      .insert(schema.connections)
+      .values({
+        orgId: org.orgId,
+        source: "qbd",
+        displayName: `QBD guess expiry test ${Date.now()}`,
+        authKind: "token",
+        status: "active",
+        config: { historyStartDate: "2026-01-01", region: "CA", baseCurrency: "CAD" },
+        secrets: sealJson(
+          { webConnectorPassword: password },
+          { orgId: org.orgId, purpose: "connection.secrets" },
+        ),
+      })
+      .returning({ id: schema.connections.id });
     assert.ok(connection);
     connectionId = connection.id;
 
     for (let i = 0; i < 50; i += 1) {
-      const bad = await authenticateWebConnector(connectionId, `qbd:${connectionId}`, `wrong-password-${i}`);
+      const bad = await authenticateWebConnector(
+        connectionId,
+        `qbd:${connectionId}`,
+        `wrong-password-${i}`,
+      );
       assert.deepEqual(bad, { ticket: "", companyFile: "nvu" });
     }
     const locked = await authenticateWebConnector(connectionId, `qbd:${connectionId}`, password);
-    assert.deepEqual(locked, { ticket: "", companyFile: "nvu" }, "in-window flood refuses the correct password");
+    assert.deepEqual(
+      locked,
+      { ticket: "", companyFile: "nvu" },
+      "in-window flood refuses the correct password",
+    );
 
     // Age the bucket past the window: the trip must lapse with the window.
     await db.execute(sql`
@@ -93,15 +113,25 @@ test("an expired guess window stops refusing the correct password", { skip: !DB 
 
     // A fresh flood inside the new window still locks out.
     for (let i = 0; i < 50; i += 1) {
-      await authenticateWebConnector(connectionId, `qbd:${connectionId}`, `wrong-password-again-${i}`);
+      await authenticateWebConnector(
+        connectionId,
+        `qbd:${connectionId}`,
+        `wrong-password-again-${i}`,
+      );
     }
     const relocked = await authenticateWebConnector(connectionId, `qbd:${connectionId}`, password);
-    assert.deepEqual(relocked, { ticket: "", companyFile: "nvu" }, "an in-window flood still refuses the correct password");
+    assert.deepEqual(
+      relocked,
+      { ticket: "", companyFile: "nvu" },
+      "an in-window flood still refuses the correct password",
+    );
   } finally {
     if (connectionId) {
       await db.execute(sql`delete from qbd_sessions where connection_id = ${connectionId}`);
       await db.execute(sql`delete from connections where id = ${connectionId}`);
-      await db.execute(sql`delete from auth_rate_limit_buckets where bucket_key = ${`qbwc:${connectionId}`}`);
+      await db.execute(
+        sql`delete from auth_rate_limit_buckets where bucket_key = ${`qbwc:${connectionId}`}`,
+      );
     }
     await dropScratchOrg(org.orgId);
   }

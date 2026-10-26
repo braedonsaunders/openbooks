@@ -59,11 +59,14 @@ registerHooks({
 const patchRouteUrl = "./route.ts?journal-accountless-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 
-
-function patchRequest(id: string, body: unknown): { req: Request; ctx: { params: Promise<{ id: string }> } } {
+function patchRequest(
+  id: string,
+  body: unknown,
+): { req: Request; ctx: { params: Promise<{ id: string }> } } {
   return {
     req: new Request(`http://localhost/api/journals/${id}`, {
       method: "PATCH",
@@ -75,16 +78,25 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
 }
 
 async function revisionToken(orgId: string, documentId: string): Promise<string> {
-  const row = (await withOrgContext(orgId, () => db.execute<{ updatedAt: string }>(sql`
+  const row = await withOrgContext(orgId, () =>
+    db.execute<{ updatedAt: string }>(
+      sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `, "objects")));
+  `,
+      "objects",
+    ),
+  );
   return row[0]!.updatedAt;
 }
 
-async function seedDraftJournal(org: { orgId: string; subsidiaryId: string; date: string }, actorId: string): Promise<string> {
+async function seedDraftJournal(
+  org: { orgId: string; subsidiaryId: string; date: string },
+  actorId: string,
+): Promise<string> {
   const documentId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, subsidiary_id, document_date,
        currency, fx_rate, status, subtotal, tax_total, total, custom,
@@ -94,96 +106,106 @@ async function seedDraftJournal(org: { orgId: string; subsidiaryId: string; date
       ${org.subsidiaryId}, ${org.date}, 'CAD', 1, 'draft', 100, 0, 100,
       '{}'::jsonb, ${actorId}, ${actorId}
     )
-  `));
+  `),
+  );
   return documentId;
 }
 
-async function storedState(orgId: string, documentId: string): Promise<{ total: string; n: number; amounts: string[] }> {
-  const doc = (await withOrgContext(orgId, () => db.execute<{ total: string }>(sql`
+async function storedState(
+  orgId: string,
+  documentId: string,
+): Promise<{ total: string; n: number; amounts: string[] }> {
+  const doc = (
+    await withOrgContext(orgId, () =>
+      db.execute<{ total: string }>(
+        sql`
     select total::text as total from documents where id = ${documentId} and org_id = ${orgId}
-  `, "objects")))[0]!;
-  const lines = await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`
+  `,
+        "objects",
+      ),
+    )
+  )[0]!;
+  const lines = await withOrgContext(orgId, () =>
+    db.execute<{ amount: string }>(
+      sql`
     select amount::text as amount from document_lines
      where document_id = ${documentId} and org_id = ${orgId} order by line_number
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   return { total: doc.total, n: lines.length, amounts: lines.map((l) => l.amount) };
 }
 
-test(
-  "journals PATCH refuses an account-less contentful leg with its line number and writes nothing",
-  async () => {
-    const org = await withBypassContext(() => createScratchOrg());
-    try {
-      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-      routeState.authz = {
-        user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
-        permissions: new Set(),
-        allowedSubsidiaryIds: null,
-      };
-      const documentId = await seedDraftJournal(org, adminId);
-      const attempt = patchRequest(documentId, {
-        expectedUpdatedAt: await revisionToken(org.orgId, documentId),
-        lines: [
-          { accountId: org.accounts.cogs, amount: "100", description: "leg one" },
-          { accountId: "", amount: "100", description: "mystery leg" },
-          { accountId: org.accounts.bank, amount: "-200", description: "leg three" },
-        ],
-      });
-      const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
-      assert.equal(refused.status, 422, `expected 422, got ${refused.status}`);
-      const body = (await refused.json()) as { error?: unknown };
-      assert.match(
-        String(body.error ?? ""),
-        /Line 2: an account is required/,
-        "the refusal must name the offending leg and the remedy",
-      );
-      assert.deepEqual(await storedState(org.orgId, documentId), {
-        total: "100.0000",
-        n: 0,
-        amounts: [],
-      });
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("journals PATCH refuses an account-less contentful leg with its line number and writes nothing", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    const documentId = await seedDraftJournal(org, adminId);
+    const attempt = patchRequest(documentId, {
+      expectedUpdatedAt: await revisionToken(org.orgId, documentId),
+      lines: [
+        { accountId: org.accounts.cogs, amount: "100", description: "leg one" },
+        { accountId: "", amount: "100", description: "mystery leg" },
+        { accountId: org.accounts.bank, amount: "-200", description: "leg three" },
+      ],
+    });
+    const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
+    assert.equal(refused.status, 422, `expected 422, got ${refused.status}`);
+    const body = (await refused.json()) as { error?: unknown };
+    assert.match(
+      String(body.error ?? ""),
+      /Line 2: an account is required/,
+      "the refusal must name the offending leg and the remedy",
+    );
+    assert.deepEqual(await storedState(org.orgId, documentId), {
+      total: "100.0000",
+      n: 0,
+      amounts: [],
+    });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "journals PATCH refuses a malformed line account with its line number",
-  async () => {
-    const org = await withBypassContext(() => createScratchOrg());
-    try {
-      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-      routeState.authz = {
-        user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
-        permissions: new Set(),
-        allowedSubsidiaryIds: null,
-      };
-      const documentId = await seedDraftJournal(org, adminId);
-      const attempt = patchRequest(documentId, {
-        expectedUpdatedAt: await revisionToken(org.orgId, documentId),
-        lines: [
-          { accountId: org.accounts.cogs, amount: "100", description: "leg one" },
-          { accountId: "not-a-uuid", amount: "-100", description: "leg two" },
-        ],
-      });
-      const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
-      assert.equal(refused.status, 422, `expected 422, got ${refused.status}`);
-      const body = (await refused.json()) as { error?: unknown };
-      assert.match(
-        String(body.error ?? ""),
-        /Line 2: invalid account/,
-        "a malformed account must name the line instead of failing anonymously at the boundary",
-      );
-      assert.deepEqual(await storedState(org.orgId, documentId), {
-        total: "100.0000",
-        n: 0,
-        amounts: [],
-      });
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("journals PATCH refuses a malformed line account with its line number", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    const documentId = await seedDraftJournal(org, adminId);
+    const attempt = patchRequest(documentId, {
+      expectedUpdatedAt: await revisionToken(org.orgId, documentId),
+      lines: [
+        { accountId: org.accounts.cogs, amount: "100", description: "leg one" },
+        { accountId: "not-a-uuid", amount: "-100", description: "leg two" },
+      ],
+    });
+    const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
+    assert.equal(refused.status, 422, `expected 422, got ${refused.status}`);
+    const body = (await refused.json()) as { error?: unknown };
+    assert.match(
+      String(body.error ?? ""),
+      /Line 2: invalid account/,
+      "a malformed account must name the line instead of failing anonymously at the boundary",
+    );
+    assert.deepEqual(await storedState(org.orgId, documentId), {
+      total: "100.0000",
+      n: 0,
+      amounts: [],
+    });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

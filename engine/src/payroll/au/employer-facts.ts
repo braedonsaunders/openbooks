@@ -18,12 +18,12 @@ export const AU_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     kind: "choice",
     label: "State payroll tax position",
     refusalReason:
-      "state and territory payroll tax is assessed on the employer's Australian group wages "
-      + "above each jurisdiction's annual threshold, and the pack cannot tell a below-threshold "
-      + "ungrouped employer from a liable one",
+      "state and territory payroll tax is assessed on the employer's Australian group wages " +
+      "above each jurisdiction's annual threshold, and the pack cannot tell a below-threshold " +
+      "ungrouped employer from a liable one",
     legalBasis:
-      "State and territory payroll tax acts (Payroll Tax Act 2007 (NSW) and equivalents); "
-      + "thresholds and rates published per jurisdiction (e.g. Revenue NSW thresholds and rates)",
+      "State and territory payroll tax acts (Payroll Tax Act 2007 (NSW) and equivalents); " +
+      "thresholds and rates published per jurisdiction (e.g. Revenue NSW thresholds and rates)",
     required: true,
     effectivePeriod: "date",
     choices: [

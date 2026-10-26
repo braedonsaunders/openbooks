@@ -16,10 +16,7 @@ export const GET = defineRoute({
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "request id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
     try {
       const request = await getChangeRequest({
         orgId: gate.user.orgId,
@@ -40,10 +37,7 @@ export const PATCH = defineRoute({
   handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "request id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
     try {
       const request = await updateChangeRequestPayload({
         orgId: gate.user.orgId,

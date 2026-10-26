@@ -3,7 +3,11 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 
-import { upsertLock, periodScopeAdvisoryLock, tightenNarrowerLocks } from "../periods/period-locks.ts";
+import {
+  upsertLock,
+  periodScopeAdvisoryLock,
+  tightenNarrowerLocks,
+} from "../periods/period-locks.ts";
 import { CloseReopenRequestRow, lockReopenRequestScope } from "./reopen-approvals.ts";
 
 async function recloseApprovedReopenRow(args: {
@@ -14,10 +18,7 @@ async function recloseApprovedReopenRow(args: {
   automatic: boolean;
 }): Promise<void> {
   const modules = args.row.modules;
-  if (
-    modules.length === 0 ||
-    modules.some((module) => !CLOSE_MODULES.includes(module))
-  ) {
+  if (modules.length === 0 || modules.some((module) => !CLOSE_MODULES.includes(module))) {
     throw new CloseError("reopen request contains an invalid module");
   }
   await args.tx.execute(sql`
@@ -28,7 +29,8 @@ async function recloseApprovedReopenRow(args: {
       )
     )
   `);
-  const overlapping = await args.tx.execute<{ id: string; modules: CloseModule[] }>(sql`
+  const overlapping = await args.tx.execute<{ id: string; modules: CloseModule[] }>(
+    sql`
     select id, modules
       from close_reopen_requests
      where org_id = ${args.row.org_id}
@@ -38,11 +40,11 @@ async function recloseApprovedReopenRow(args: {
        and id <> ${args.row.id}
        and status = 'approved'
        and expires_at > now()
-     for update`, "objects");
+     for update`,
+    "objects",
+  );
   const coveredModules = new Set(
-    overlapping.flatMap((request) =>
-      request.modules.filter((module) => modules.includes(module)),
-    ),
+    overlapping.flatMap((request) => request.modules.filter((module) => modules.includes(module))),
   );
   const modulesToClose = modules.filter((module) => !coveredModules.has(module));
 
@@ -56,10 +58,12 @@ async function recloseApprovedReopenRow(args: {
       module,
       state: "closed",
       actorId: args.actorId,
-      reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}` });
+      reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}`,
+    });
   }
   if (modulesToClose.includes("gl")) {
-    const openSubledgers = await args.tx.execute<{ module: CloseModule }>(sql`
+    const openSubledgers = await args.tx.execute<{ module: CloseModule }>(
+      sql`
       select module
         from period_locks
        where org_id = ${args.row.org_id}
@@ -68,7 +72,9 @@ async function recloseApprovedReopenRow(args: {
          and subsidiary_id is not distinct from ${args.row.subsidiary_id}
          and module <> 'gl'
          and state <> 'closed'
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     if (openSubledgers.length > 0) {
       throw new CloseError(
         `cannot re-close GL while ${openSubledgers
@@ -85,7 +91,8 @@ async function recloseApprovedReopenRow(args: {
       module: "gl",
       state: "closed",
       actorId: args.actorId,
-      reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}` });
+      reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}`,
+    });
   }
   if (args.row.subsidiary_id == null) {
     // Mirror of the approve-time relaxation above (and of the scope-wide
@@ -103,19 +110,22 @@ async function recloseApprovedReopenRow(args: {
         module,
         state: "closed",
         actorId: args.actorId,
-        reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}` });
+        reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}`,
+      });
     }
   }
-  const finalStatus =
-    args.automatic && coveredModules.size > 0 ? "expired" : "reclosed";
-  const updated = await args.tx.execute(sql`
+  const finalStatus = args.automatic && coveredModules.size > 0 ? "expired" : "reclosed";
+  const updated = await args.tx.execute(
+    sql`
     update close_reopen_requests
        set status = ${finalStatus},
            reclosed_at = ${finalStatus === "reclosed" ? sql`now()` : sql`null`},
            updated_at = now(),
            updated_by = ${args.actorId ?? null}
      where id = ${args.row.id} and org_id = ${args.row.org_id} and status = 'approved'
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (updated.length !== 1) {
     throw new CloseError("approved reopen request changed during re-close");
   }
@@ -140,7 +150,8 @@ async function recloseApprovedReopenRow(args: {
               modulesClosed: modulesToClose,
               modulesStillOpen: [...coveredModules],
               overlappingRequestIds: overlapping.map((row) => row.id),
-              reason: args.reason })}::jsonb)`);
+              reason: args.reason,
+            })}::jsonb)`);
 }
 
 /** End an approved reopen window early with a stated reason.
@@ -163,13 +174,16 @@ export async function recloseApprovedReopen(args: {
   }
   await db.transaction(async (tx) => {
     await lockReopenRequestScope(tx, args.orgId, args.requestId);
-    const request = await tx.execute<CloseReopenRequestRow>(sql`
+    const request = await tx.execute<CloseReopenRequestRow>(
+      sql`
       select *
         from close_reopen_requests
        where id = ${args.requestId}
          and org_id = ${args.orgId}
          and status = 'approved'
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     const row = request[0];
     if (!row) throw new CloseError("approved reopen request not found");
     // Ending a window closes modules, so the gate is the reopen-approval
@@ -187,7 +201,8 @@ export async function recloseApprovedReopen(args: {
       row,
       actorId: args.actorId,
       reason,
-      automatic: false });
+      automatic: false,
+    });
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${args.orgId}, 'close_reopen_requests', ${args.requestId}, 'end',
@@ -198,7 +213,9 @@ export async function recloseApprovedReopen(args: {
                   periodId: row.period_id,
                   bookId: row.book_id,
                   subsidiaryId: row.subsidiary_id,
-                  modules: row.modules } })}::jsonb, ${args.actorId})`);
+                  modules: row.modules,
+                },
+              })}::jsonb, ${args.actorId})`);
   });
 }
 
@@ -217,13 +234,17 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
       subsidiary_id: string | null;
       modules: CloseModule[];
       reason: string;
-    }>(sql`
+    }>(
+      sql`
     select request.id, request.org_id, request.period_id, request.book_id,
            request.subsidiary_id, request.modules, request.reason
       from close_reopen_requests request
       join orgs organization on organization.id = request.org_id
      where request.status = 'approved' and request.expires_at <= now()
-       and organization.env_kind = 'production'`, "objects"));
+       and organization.env_kind = 'production'`,
+      "objects",
+    ),
+  );
   // A concurrent tick may lock a candidate first: its re-close commits and
   // this tick's lock finds no approved row. Only committed re-closes count —
   // returning the candidate count would double-count the same window across
@@ -234,14 +255,17 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
       const didReclose = await withOrgContext(row.org_id, () =>
         db.transaction(async (tx) => {
           await periodScopeAdvisoryLock(tx, row.org_id, row.period_id, row.book_id);
-          const locked = await tx.execute<CloseReopenRequestRow>(sql`
+          const locked = await tx.execute<CloseReopenRequestRow>(
+            sql`
             select *
               from close_reopen_requests
              where id = ${row.id}
                and org_id = ${row.org_id}
                and status = 'approved'
                and expires_at <= now()
-             for update`, "objects");
+             for update`,
+            "objects",
+          );
           const lockedRow = locked[0];
           if (!lockedRow) return false;
           await recloseApprovedReopenRow({
@@ -249,14 +273,16 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
             row: lockedRow,
             actorId,
             reason: lockedRow.reason,
-            automatic: true });
+            automatic: true,
+          });
           return true;
         }),
       );
       if (didReclose) reclosed += 1;
     } catch (error) {
       if (!(error instanceof CloseError)) throw error;
-      await withOrgContext(row.org_id, () => db.execute(sql`
+      await withOrgContext(row.org_id, () =>
+        db.execute(sql`
         insert into close_events (org_id, event_type, actor_id, payload)
         values (${row.org_id}, 'period.reopen_expiry_blocked', ${actorId ?? null},
           ${JSON.stringify({
@@ -265,7 +291,9 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
             bookId: row.book_id,
             subsidiaryId: row.subsidiary_id,
             modules: row.modules,
-            reason: error.message })}::jsonb)`));
+            reason: error.message,
+          })}::jsonb)`),
+      );
     }
   }
   return reclosed;

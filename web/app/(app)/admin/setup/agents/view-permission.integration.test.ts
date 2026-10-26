@@ -39,15 +39,18 @@ const mockIntl = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-
-    if (context.parentURL?.includes("/admin/setup/agents/") && context.parentURL.endsWith('/view.ts')) {
+    if (
+      context.parentURL?.includes("/admin/setup/agents/") &&
+      context.parentURL.endsWith("/view.ts")
+    ) {
       if (specifier.endsWith("/lib/authz")) {
         return { url: "mock:agents-overview-authz", shortCircuit: true };
       }
       if (specifier === "next-intl/server") {
         return { url: "mock:agents-overview-intl", shortCircuit: true };
       }
-      if (specifier === 'next/navigation') return { url: 'mock:agents-overview-navigation', shortCircuit: true };
+      if (specifier === "next/navigation")
+        return { url: "mock:agents-overview-navigation", shortCircuit: true };
     }
     if (context.parentURL?.startsWith("mock:") && specifier.startsWith("@openbooks/")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
@@ -61,21 +64,23 @@ const hooks = registerHooks({
     if (url === "mock:agents-overview-intl") {
       return { format: "module", source: mockIntl, shortCircuit: true };
     }
-    if (url === 'mock:agents-overview-navigation') {
-      return { format: 'module', source: 'export function notFound(){ throw new Error("NEXT_NOT_FOUND") }', shortCircuit: true };
+    if (url === "mock:agents-overview-navigation") {
+      return {
+        format: "module",
+        source: 'export function notFound(){ throw new Error("NEXT_NOT_FOUND") }',
+        shortCircuit: true,
+      };
     }
     return nextLoad(url, context);
   },
 });
 
 const { loadAgentsOverview } = await import("./view.ts");
-const { loadAgentsActivity } = await import('./activity/view.ts');
+const { loadAgentsActivity } = await import("./activity/view.ts");
 hooks.deregister();
 
 const { withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import("../../../../../lib/setup/agents.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -87,7 +92,7 @@ function asManager(orgId: string) {
 }
 
 test("a setup manager sees one overview row per registered pack", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() => loadAgentsOverview());
@@ -107,25 +112,38 @@ test("a setup manager sees one overview row per registered pack", { skip: !DB },
 });
 
 test("without the setup key the overview redirects", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
     loaderState.permissions = new Set(["assistant.use"]);
-    await assert.rejects(withBypassContext(() => loadAgentsOverview()), /NEXT_REDIRECT:\// );
+    await assert.rejects(
+      withBypassContext(() => loadAgentsOverview()),
+      /NEXT_REDIRECT:\//,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test('restricted setup managers cannot load organization-wide agent activity', { skip: !DB }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  try {
-    asManager(org.orgId);
-    loaderState.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    await assert.rejects(withBypassContext(() => loadAgentsOverview()), /NEXT_NOT_FOUND/);
-    await assert.rejects(withBypassContext(() => loadAgentsActivity()), /NEXT_NOT_FOUND/);
-  } finally {
-    loaderState.allowedSubsidiaryIds = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "restricted setup managers cannot load organization-wide agent activity",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      asManager(org.orgId);
+      loaderState.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+      await assert.rejects(
+        withBypassContext(() => loadAgentsOverview()),
+        /NEXT_NOT_FOUND/,
+      );
+      await assert.rejects(
+        withBypassContext(() => loadAgentsActivity()),
+        /NEXT_NOT_FOUND/,
+      );
+    } finally {
+      loaderState.allowedSubsidiaryIds = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -41,7 +41,11 @@ test("an uncited month band derives nothing, never a guessed century", () => {
 test("PESEL validation checks the encoded calendar date and statutory control digit", () => {
   assert.equal(isValidPesel("44051401359"), true);
   assert.equal(isValidPesel("44051401350"), false, "incorrect control digit is refused");
-  assert.equal(isValidPesel("44023101353"), false, "February 31 is refused even with a matching control digit");
+  assert.equal(
+    isValidPesel("44023101353"),
+    false,
+    "February 31 is refused even with a matching control digit",
+  );
   assert.equal(isValidPesel("00222900009"), true, "29 February 2000 is a valid encoded date");
   assert.equal(isValidPesel("00222900008"), false, "the checksum still applies on leap day");
 });
@@ -54,6 +58,14 @@ test("a malformed value derives nothing", () => {
   assert.equal(peselBirthYear("440514013599"), null);
   assert.equal(peselBirthYear("44051A01359"), null);
   assert.equal(peselBirthYear(" 44051401359"), null);
-  assert.equal(peselBirthYear("44051401350"), null, "a PESEL with an invalid control digit derives no birth year");
-  assert.equal(peselBirthYear("44023101353"), null, "an impossible encoded date derives no birth year");
+  assert.equal(
+    peselBirthYear("44051401350"),
+    null,
+    "a PESEL with an invalid control digit derives no birth year",
+  );
+  assert.equal(
+    peselBirthYear("44023101353"),
+    null,
+    "an impossible encoded date derives no birth year",
+  );
 });

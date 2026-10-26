@@ -4,30 +4,30 @@
  */
 
 export const SEARCH_RECORD_TYPES = [
-  'transaction',
-  'contact',
-  'account',
-  'item',
-  'project',
-  'asset',
-  'equipment',
-  'opportunity',
-  'activity',
-  'subscription',
-  'timesheet',
-  'record',
-  'file',
-  'dashboard',
-  'location',
-  'warehouse',
-  'work_order',
-] as const
+  "transaction",
+  "contact",
+  "account",
+  "item",
+  "project",
+  "asset",
+  "equipment",
+  "opportunity",
+  "activity",
+  "subscription",
+  "timesheet",
+  "record",
+  "file",
+  "dashboard",
+  "location",
+  "warehouse",
+  "work_order",
+] as const;
 
-export const SEARCH_CATALOG_TYPES = ['report', 'setting', 'help'] as const
+export const SEARCH_CATALOG_TYPES = ["report", "setting", "help"] as const;
 
-export type SearchRecordType = (typeof SEARCH_RECORD_TYPES)[number]
-export type SearchCatalogType = (typeof SEARCH_CATALOG_TYPES)[number]
-export type SearchType = SearchRecordType | SearchCatalogType
+export type SearchRecordType = (typeof SEARCH_RECORD_TYPES)[number];
+export type SearchCatalogType = (typeof SEARCH_CATALOG_TYPES)[number];
+export type SearchType = SearchRecordType | SearchCatalogType;
 
 /**
  * A small label beside a hit. The server sends a stable value and the client
@@ -35,30 +35,29 @@ export type SearchType = SearchRecordType | SearchCatalogType
  * language: a party's role, or a document's lifecycle status.
  */
 export type SearchBadge =
-  | { kind: 'role'; value: 'customer' | 'vendor' | 'employee' }
-  | { kind: 'status'; value: string }
+  { kind: "role"; value: "customer" | "vendor" | "employee" } | { kind: "status"; value: string };
 
 export interface SearchHit {
-  id: string
-  type: SearchType
-  title: string
-  subtitle?: string
-  href: string
-  iconKey: string
-  badge?: SearchBadge
-  amount?: string
+  id: string;
+  type: SearchType;
+  title: string;
+  subtitle?: string;
+  href: string;
+  iconKey: string;
+  badge?: SearchBadge;
+  amount?: string;
 }
 
 export interface SearchGroup {
-  type: SearchType
-  labelKey: string
-  hits: SearchHit[]
+  type: SearchType;
+  labelKey: string;
+  hits: SearchHit[];
 }
 
 export interface SearchResponse {
-  q: string
-  groups: SearchGroup[]
-  total: number
+  q: string;
+  groups: SearchGroup[];
+  total: number;
 }
 
 /**
@@ -68,8 +67,8 @@ export interface SearchResponse {
  * name and a record the reader can no longer see is simply absent.
  */
 export interface RecentRef {
-  type: SearchType
-  id: string
+  type: SearchType;
+  id: string;
 }
 
-export const RECENT_LIMIT = 8
+export const RECENT_LIMIT = 8;

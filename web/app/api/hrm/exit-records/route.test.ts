@@ -74,7 +74,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmExitRecordsRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmExitRecordsRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
@@ -85,22 +87,23 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-exit-records-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-exit-records-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000081";
 
@@ -133,7 +136,9 @@ test("a missing feature flag 404s before the service runs", async () => {
 test("an unauthenticated caller never reaches the service", async () => {
   reset();
   routeState.gate = { status: 401 };
-  const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/exit-records"));
+  const response = await collectionRoute!.GET(
+    new Request("http://openbooks.test/api/hrm/exit-records"),
+  );
   assert.equal(response.status, 401);
   assert.deepEqual(routeState.calls, []);
 });
@@ -151,7 +156,10 @@ test("listing reads through the retention gate and narrows by employment", async
 
 test("recording validates the body through the real parser before the service runs", async () => {
   reset();
-  assert.equal((await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status, 400);
+  assert.equal(
+    (await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status,
+    400,
+  );
   // Interview date without interviewer passes the boundary (the service
   // refuses the unpaired interview by name); a bad reason does not.
   assert.equal(

@@ -61,11 +61,9 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET, POST } = await import("./route.ts");
-
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -74,19 +72,23 @@ async function fixture() {
   // actor holds the domain permission: the test isolates the scope layer,
   // not the permission layer.
   for (const permission of ["hrm.certifications.read", "hrm.certifications.manage"]) {
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into user_permission_overrides (org_id, user_id, permission, effect)
       values (${org.orgId}, ${actorId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'`));
+      on conflict (user_id, permission) do update set effect = 'grant'`),
+    );
   }
   state.orgId = org.orgId;
   state.actorId = actorId;
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs
        set settings = jsonb_set(
          jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true),
          '{features,hrmCertifications}', 'true'::jsonb, true)
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   return { org };
 }
 
@@ -100,10 +102,15 @@ const post = (body: unknown) =>
   );
 
 async function storedLeadDays(orgId: string): Promise<number[] | null> {
-  const row = (await withBypassContext(() =>
-      db.execute<{ alert_lead_days: number[] | null }>(sql`
-        select alert_lead_days from hrm_qualification_settings where org_id = ${orgId}::uuid`, "objects"),
-    ))[0];
+  const row = (
+    await withBypassContext(() =>
+      db.execute<{ alert_lead_days: number[] | null }>(
+        sql`
+        select alert_lead_days from hrm_qualification_settings where org_id = ${orgId}::uuid`,
+        "objects",
+      ),
+    )
+  )[0];
   return row?.alert_lead_days ?? null;
 }
 

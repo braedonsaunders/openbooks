@@ -21,15 +21,7 @@
  */
 import { canonicalDecimal, fixedDecimal } from "./exact-decimal.ts";
 import { suppliedValue } from "./decimal-refusal.ts";
-import {
-  add,
-  cmp,
-  div,
-  mul,
-  mulRate,
-  neg,
-  sum,
-} from "./money.ts";
+import { add, cmp, div, mul, mulRate, neg, sum } from "./money.ts";
 
 export type Money = string & { readonly __brand: "Money" };
 export type Rate = string & { readonly __brand: "Rate" };

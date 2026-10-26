@@ -22,7 +22,9 @@ export function collectTestFiles(root = ROOT) {
   for (const sub of ["engine/src", "web", "packages", "schema", "e2e", "scripts"]) {
     try {
       if (statSync(join(root, sub)).isDirectory()) walk(join(root, sub));
-    } catch { /* optional tree absent */ }
+    } catch {
+      /* optional tree absent */
+    }
   }
   return out;
 }
@@ -67,11 +69,25 @@ export function scanFile(path, root = ROOT) {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (lineHasSwallow(line)) {
-      findings.push({ file: rel, line: lineOf(index), kind: "teardown-swallow", value: line.trim().slice(0, 120) });
+      findings.push({
+        file: rel,
+        line: lineOf(index),
+        kind: "teardown-swallow",
+        value: line.trim().slice(0, 120),
+      });
       continue;
     }
-    if (DROP_RE.test(line) && index + 1 < lines.length && /^\s*\.catch\s*\(/.test(lines[index + 1])) {
-      findings.push({ file: rel, line: lineOf(index + 1), kind: "teardown-swallow", value: lines[index + 1].trim().slice(0, 120) });
+    if (
+      DROP_RE.test(line) &&
+      index + 1 < lines.length &&
+      /^\s*\.catch\s*\(/.test(lines[index + 1])
+    ) {
+      findings.push({
+        file: rel,
+        line: lineOf(index + 1),
+        kind: "teardown-swallow",
+        value: lines[index + 1].trim().slice(0, 120),
+      });
     }
   }
   return findings;
@@ -85,7 +101,9 @@ export function scanTree(root = ROOT) {
   return findings;
 }
 
-const invoked = process.argv[1] ? process.argv[1].endsWith("check-test-teardown-swallow.mjs") : false;
+const invoked = process.argv[1]
+  ? process.argv[1].endsWith("check-test-teardown-swallow.mjs")
+  : false;
 if (invoked) {
   const root = process.argv[2] ?? ROOT;
   const findings = scanTree(root);

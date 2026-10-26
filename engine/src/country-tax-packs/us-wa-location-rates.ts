@@ -73,7 +73,10 @@ const QUARTER_MONTHS: Readonly<Record<string, { from: string; to: string }>> = {
 };
 
 /** Effective window of a Washington sales-tax quarter such as "2026-Q4". */
-export function waLocationQuarterWindow(quarter: string): { effectiveFrom: string; effectiveTo: string } {
+export function waLocationQuarterWindow(quarter: string): {
+  effectiveFrom: string;
+  effectiveTo: string;
+} {
   const match = /^(\d{4})-Q([1-4])$/.exec(quarter);
   if (!match) {
     throw new Error(
@@ -95,7 +98,9 @@ function toBasisPoints(value: string): number | null {
 function toPercent(decimal: string): string {
   const basisPoints = toBasisPoints(decimal)!;
   const whole = Math.trunc(basisPoints / 100);
-  const rest = String(basisPoints % 100).padStart(2, "0").replace(/0+$/, "");
+  const rest = String(basisPoints % 100)
+    .padStart(2, "0")
+    .replace(/0+$/, "");
   return rest === "" ? String(whole) : `${whole}.${rest}`;
 }
 
@@ -136,20 +141,36 @@ export function loadWaLocationRateQuarter(spec: WaLocationRateQuarterSpec): WaLo
     const label = `"${row.locationName}" (${row.locationCode || "no code"})`;
     const code = row.locationCode.trim();
     if (!/^\d{1,4}$/.test(code)) {
-      throw problem(label, "has no numeric DOR location code", "re-export the department sheet without editing codes");
+      throw problem(
+        label,
+        "has no numeric DOR location code",
+        "re-export the department sheet without editing codes",
+      );
     }
     if (seen.has(code)) {
-      throw problem(label, `repeats location code ${code} in ${spec.quarter}`, "keep one row per location code per quarter");
+      throw problem(
+        label,
+        `repeats location code ${code} in ${spec.quarter}`,
+        "keep one row per location code per quarter",
+      );
     }
     seen.add(code);
     const local = toBasisPoints(row.localRate);
     const state = toBasisPoints(row.stateRate);
     const combined = toBasisPoints(row.combinedRate);
     if (local === null || local < 0 || local > 200000) {
-      throw problem(label, `carries an unusable local rate "${row.localRate}"`, "re-export the department sheet without editing rates");
+      throw problem(
+        label,
+        `carries an unusable local rate "${row.localRate}"`,
+        "re-export the department sheet without editing rates",
+      );
     }
     if (state === null || combined === null) {
-      throw problem(label, "carries an unusable state or combined rate", "re-export the department sheet without editing rates");
+      throw problem(
+        label,
+        "carries an unusable state or combined rate",
+        "re-export the department sheet without editing rates",
+      );
     }
     if (local + state !== combined) {
       throw problem(
@@ -166,7 +187,11 @@ export function loadWaLocationRateQuarter(spec: WaLocationRateQuarterSpec): WaLo
       );
     }
     if (!row.county.trim() || !row.locationName.trim()) {
-      throw problem(label, "names no county or location", "re-export the department sheet without editing names");
+      throw problem(
+        label,
+        "names no county or location",
+        "re-export the department sheet without editing names",
+      );
     }
     return {
       county: row.county.trim(),
@@ -219,7 +244,9 @@ function splitCsvLine(line: string): string[] {
 
 function isHeaderRow(fields: readonly string[]): boolean {
   const joined = fields.join(" ").toLowerCase();
-  return joined.includes("location code") && joined.includes("local") && joined.includes("combined");
+  return (
+    joined.includes("location code") && joined.includes("local") && joined.includes("combined")
+  );
 }
 
 function columnIndex(fields: readonly string[], ...names: readonly string[]): number {
@@ -258,29 +285,30 @@ export function parseWaLocationRateCsv(csvText: string): WaLocationRateInputRow[
     const localRate = roundArtifact(fields[columnIndex(header, "local rate")] ?? "");
     const stateRate = roundArtifact(fields[columnIndex(header, "state rate")] ?? "");
     const combinedRate = roundArtifact(fields[columnIndex(header, "combined")] ?? "");
-    const looksLikeData = /^\d{1,4}$/.test(locationCode.trim())
-      && toBasisPoints(localRate) !== null
-      && toBasisPoints(stateRate) !== null
-      && toBasisPoints(combinedRate) !== null;
+    const looksLikeData =
+      /^\d{1,4}$/.test(locationCode.trim()) &&
+      toBasisPoints(localRate) !== null &&
+      toBasisPoints(stateRate) !== null &&
+      toBasisPoints(combinedRate) !== null;
     if (!looksLikeData) continue;
     if (!county.trim() || !locationName.trim()) {
       throw new Error(
-        `Washington location CSV line ${lineNumber + 1} has rates but names no county or location — `
-        + `re-export the department sheet without editing names`,
+        `Washington location CSV line ${lineNumber + 1} has rates but names no county or location — ` +
+          `re-export the department sheet without editing names`,
       );
     }
     rows.push({ county, locationName, locationCode, localRate, stateRate, combinedRate });
   }
   if (!header) {
     throw new Error(
-      "Washington location CSV has no department header row (County, Location name, Location code, Local rate, State rate, Combined sales tax) — "
-      + "export the quarterly rate sheet to CSV without rearranging columns",
+      "Washington location CSV has no department header row (County, Location name, Location code, Local rate, State rate, Combined sales tax) — " +
+        "export the quarterly rate sheet to CSV without rearranging columns",
     );
   }
   if (rows.length === 0) {
     throw new Error(
-      "Washington location CSV carries no location rows past the header — "
-      + "export the full quarterly rate sheet, not the change flyer",
+      "Washington location CSV carries no location rows past the header — " +
+        "export the full quarterly rate sheet, not the change flyer",
     );
   }
   return rows;
@@ -298,7 +326,10 @@ export function waLocationRateOn(
   date: string,
 ): WaLocationRateRow | undefined {
   return table.find(
-    (row) => row.locationCode === locationCode.trim() && row.effectiveFrom <= date && date <= row.effectiveTo,
+    (row) =>
+      row.locationCode === locationCode.trim() &&
+      row.effectiveFrom <= date &&
+      date <= row.effectiveTo,
   );
 }
 
@@ -313,19 +344,22 @@ export function waLocationRateOn(
 const WA_LOCATION_RATE_SOURCES = {
   wa_dor_lsu_q2_2026: {
     id: "wa_dor_lsu_q2_2026",
-    title: "Washington Department of Revenue — City of Tacoma local law enforcement programs change notice, quarter 2 (April 1 – June 30, 2026)",
+    title:
+      "Washington Department of Revenue — City of Tacoma local law enforcement programs change notice, quarter 2 (April 1 – June 30, 2026)",
     url: "https://dor.wa.gov/sites/default/files/2026-01/Q226_Tacoma_LLEP.pdf",
     asOf: "2026-10-10",
   },
   wa_dor_lsu_q3_2026: {
     id: "wa_dor_lsu_q3_2026",
-    title: "Washington Department of Revenue — Local sales and use tax rates, quarter 3 (July 1 – September 30, 2026)",
+    title:
+      "Washington Department of Revenue — Local sales and use tax rates, quarter 3 (July 1 – September 30, 2026)",
     url: "https://dor.wa.gov/sites/default/files/2026-05/Q326_Excel_LSU-rates-alpha.xlsx",
     asOf: "2026-10-10",
   },
   wa_dor_lsu_q4_2026: {
     id: "wa_dor_lsu_q4_2026",
-    title: "Washington Department of Revenue — Local sales and use tax rates, quarter 4 (October 1 – December 31, 2026)",
+    title:
+      "Washington Department of Revenue — Local sales and use tax rates, quarter 4 (October 1 – December 31, 2026)",
     url: "https://dor.wa.gov/sites/default/files/2026-08/Q426_Excel_LSU-rates-alpha.xlsx",
     asOf: "2026-10-10",
   },
@@ -335,7 +369,13 @@ function quarterFixture(
   quarter: string,
   sourceId: keyof typeof WA_LOCATION_RATE_SOURCES,
   rows: ReadonlyArray<
-    [county: string, locationName: string, locationCode: string, localRate: string, combinedRate: string]
+    [
+      county: string,
+      locationName: string,
+      locationCode: string,
+      localRate: string,
+      combinedRate: string,
+    ]
   >,
 ): WaLocationRateTable {
   return loadWaLocationRateQuarter({
@@ -354,7 +394,9 @@ function quarterFixture(
 }
 
 export const WA_LOCATION_RATE_FIXTURE: WaLocationRateTable = [
-  ...quarterFixture("2026-Q2", "wa_dor_lsu_q2_2026", [["Pierce", "Tacoma", "2717", "0.039", "0.104"]]),
+  ...quarterFixture("2026-Q2", "wa_dor_lsu_q2_2026", [
+    ["Pierce", "Tacoma", "2717", "0.039", "0.104"],
+  ]),
   ...quarterFixture("2026-Q3", "wa_dor_lsu_q3_2026", [
     ["Pierce", "Tacoma", "2717", "0.04", "0.105"],
     ["Pierce", "Puyallup Tribe - Tacoma", "2741", "0.04", "0.105"],
@@ -368,4 +410,3 @@ export const WA_LOCATION_RATE_FIXTURE: WaLocationRateTable = [
     ["Adams", "Adams County Unincorp. Areas", "100", "0.015", "0.08"],
   ]),
 ];
-

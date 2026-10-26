@@ -11,7 +11,8 @@ export function qpipReportingBasisColumns(factors: SQL): SQL {
 }
 
 export function assertQpipReportingBasis(employeeName: string, invalidBases: number): void {
-  if (invalidBases !== 0) throw new PayrollError(
-    `${employeeName}: committed payroll is missing valid program-specific QPIP wage evidence. Review the retained pay run and use the governed payroll reversal and replacement workflow before generating T4 or RL-1 slips.`,
-  );
+  if (invalidBases !== 0)
+    throw new PayrollError(
+      `${employeeName}: committed payroll is missing valid program-specific QPIP wage evidence. Review the retained pay run and use the governed payroll reversal and replacement workflow before generating T4 or RL-1 slips.`,
+    );
 }

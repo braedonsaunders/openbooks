@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -18,7 +18,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -71,7 +79,9 @@ const SEGMENTS: never[] = [];
 function scriptFetch(handler: (url: string) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -79,7 +89,7 @@ function scriptFetch(handler: (url: string) => Response | null) {
   };
 }
 
-async function mountDraftInvoice(initialMode?: 'view' | 'edit') {
+async function mountDraftInvoice(initialMode?: "view" | "edit") {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
   globalThis.__confirmCalls = [];
@@ -128,7 +138,13 @@ async function mountDraftInvoice(initialMode?: 'view' | 'edit') {
             segments={SEGMENTS}
             canCreate
             canPost
-            layout={{ header: { groups: [{ fields: [{ key: "memo", visible: true }] }] }, lines: { columns: [] }, actions: [] } as never}
+            layout={
+              {
+                header: { groups: [{ fields: [{ key: "memo", visible: true }] }] },
+                lines: { columns: [] },
+                actions: [],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -143,8 +159,8 @@ async function mountDraftInvoice(initialMode?: 'view' | 'edit') {
 function buttonsNamed(name: string): HTMLButtonElement[] {
   // A drawer that can also post labels its draft save "Save draft".
   const names = name === "Save" ? ["Save", "Save draft"] : [name];
-  return [...document.querySelectorAll("button")].filter(
-    (b) => names.includes(b.textContent?.trim() ?? ""),
+  return [...document.querySelectorAll("button")].filter((b) =>
+    names.includes(b.textContent?.trim() ?? ""),
   ) as HTMLButtonElement[];
 }
 
@@ -155,7 +171,8 @@ function memoInput(): HTMLInputElement {
   assert.equal(labels.length, 1, "the memo field must render in edit mode");
   const label = labels[0]!;
   const following = [...document.querySelectorAll("input")].filter(
-    (input) => (label.compareDocumentPosition(input) & window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    (input) =>
+      (label.compareDocumentPosition(input) & window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
   );
   assert.ok(following.length > 0, "the memo field must be an input in edit mode");
   return following[0] as HTMLInputElement;
@@ -164,7 +181,10 @@ function memoInput(): HTMLInputElement {
 async function typeMemo(value: string) {
   const input = memoInput();
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     setter.call(input, value);
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
     await tick();
@@ -201,7 +221,9 @@ test("edit mode offers Save as a header action without an empty Actions menu", a
   assert.equal(buttonsNamed("Cancel").length, 1, "Cancel stays beside Save in edit mode");
   // While editing, the menu holds only the form-designer shortcut. Without
   // that entry the shell renders no Actions button at all.
-  const actions = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Actions"));
+  const actions = [...document.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Actions"),
+  );
   assert.equal(actions, undefined, "no empty Actions menu is offered while editing");
 });
 
@@ -216,14 +238,26 @@ test("cancelling a dirty editor asks first; declining keeps the edits", async (t
     restoreFetch();
   });
   await typeMemo("do not lose me");
-  assert.match(document.body.textContent ?? "", /Unsaved changes/, "the footer must flag dirty state");
+  assert.match(
+    document.body.textContent ?? "",
+    /Unsaved changes/,
+    "the footer must flag dirty state",
+  );
   globalThis.__confirmVerdict = false;
   await click(buttonsNamed("Cancel")[0]!);
   assert.equal(globalThis.__confirmCalls?.length, 1, "Cancel on a dirty editor must ask");
   const call = globalThis.__confirmCalls?.[0] as { confirmLabel?: string };
-  assert.equal(call.confirmLabel, "Discard changes", "the confirm offers an explicit discard choice");
+  assert.equal(
+    call.confirmLabel,
+    "Discard changes",
+    "the confirm offers an explicit discard choice",
+  );
   assert.equal(buttonsNamed("Save").length, 1, "declining the discard must stay in edit mode");
-  assert.equal(memoInput().value, "do not lose me", "declining the discard must keep the typed edits");
+  assert.equal(
+    memoInput().value,
+    "do not lose me",
+    "declining the discard must keep the typed edits",
+  );
 });
 
 test("cancelling a clean editor does not prompt", async (t) => {
@@ -276,7 +310,11 @@ test("opening directly in edit mode does not prompt on close without edits", asy
   });
   assert.equal(buttonsNamed("Save").length, 1, "an explicit edit request must open editing");
   await click(buttonsNamed("Cancel")[0]!);
-  assert.equal(globalThis.__confirmCalls?.length ?? 0, 0, "closing an unedited editor must not prompt");
+  assert.equal(
+    globalThis.__confirmCalls?.length ?? 0,
+    0,
+    "closing an unedited editor must not prompt",
+  );
   assert.equal(buttonsNamed("Edit").length, 1, "closing an unedited editor returns to view mode");
 });
 

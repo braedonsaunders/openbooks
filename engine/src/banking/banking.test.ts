@@ -14,20 +14,27 @@ test("CSV refuses incomplete quoted fields before returning any transaction rows
         "2026-07-02,20,Second",
       ].join(newline);
       assert.throws(
-        () => parseCsv(source, {date: 0, amount: 1, description: 2}),
-        (error: unknown) => error instanceof BankingError && /unterminated quoted field/.test(error.message),
+        () => parseCsv(source, { date: 0, amount: 1, description: 2 }),
+        (error: unknown) =>
+          error instanceof BankingError && /unterminated quoted field/.test(error.message),
       );
     }
-    const parsed = parseCsv([
-      "date,amount,description",
-      '2026-07-01,10,"First ""quoted""',
-      'continued"',
-      "2026-07-02,20,Second",
-    ].join(newline), {date: 0, amount: 1, description: 2});
-    assert.deepEqual(parsed.lines.map(line => [line.postedOn, line.amount, line.description]), [
-      ["2026-07-01", "10.0000", `First "quoted"${newline}continued`],
-      ["2026-07-02", "20.0000", "Second"],
-    ]);
+    const parsed = parseCsv(
+      [
+        "date,amount,description",
+        '2026-07-01,10,"First ""quoted""',
+        'continued"',
+        "2026-07-02,20,Second",
+      ].join(newline),
+      { date: 0, amount: 1, description: 2 },
+    );
+    assert.deepEqual(
+      parsed.lines.map((line) => [line.postedOn, line.amount, line.description]),
+      [
+        ["2026-07-01", "10.0000", `First "quoted"${newline}continued`],
+        ["2026-07-02", "20.0000", "Second"],
+      ],
+    );
   }
 });
 
@@ -36,8 +43,7 @@ test("BAI2 rejects amount fields containing anything beyond an optional sign and
     const source = [baiHeader, `16,165,${amount},Z,REF,,deposit/`].join("\n");
     assert.throws(
       () => parseBai2(source),
-      (error: unknown) =>
-        error instanceof BankingError && /unparseable amount/.test(error.message),
+      (error: unknown) => error instanceof BankingError && /unparseable amount/.test(error.message),
       `expected malformed BAI2 amount ${JSON.stringify(amount)} to be rejected`,
     );
   }
@@ -45,11 +51,7 @@ test("BAI2 rejects amount fields containing anything beyond an optional sign and
 
 test("BAI2 preserves the sign on exact integer-cent amounts", () => {
   const parsed = parseBai2(
-    [
-      baiHeader,
-      "16,165,+150000,Z,REF,,deposit/",
-      "16,495,-500,Z,REF2,,withdrawal/",
-    ].join("\n"),
+    [baiHeader, "16,165,+150000,Z,REF,,deposit/", "16,495,-500,Z,REF2,,withdrawal/"].join("\n"),
   );
   assert.deepEqual(
     parsed.lines.map((line) => line.amount),
@@ -74,7 +76,9 @@ test("human statement amounts refuse a lone comma two locales could read differe
       () => parseCsv(source, { date: 0, amount: 1, description: 2 }),
       (error: unknown) =>
         error instanceof BankingError &&
-        error.message.includes(`could mean ${grouped} (thousands separator) or ${dotted} (decimal comma)`),
+        error.message.includes(
+          `could mean ${grouped} (thousands separator) or ${dotted} (decimal comma)`,
+        ),
       `expected ${raw} to be refused naming both readings`,
     );
   }
@@ -105,10 +109,11 @@ test("an ordinary column-header row is consumed, never warned about", () => {
   // number) beside a description is the header in ANY language: numericity,
   // not vocabulary, is the test, so the German header classifies alike.
   for (const header of ["Date,Amount,Description", "Datum,Betrag,Beschreibung"]) {
-    const parsed = parseCsv(
-      `${header}\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n`,
-      { date: 0, amount: 1, description: 2 },
-    );
+    const parsed = parseCsv(`${header}\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n`, {
+      date: 0,
+      amount: 1,
+      description: 2,
+    });
     assert.deepEqual(
       parsed.lines.map((line) => line.amount),
       ["12.5000", "-5.0000"],
@@ -222,7 +227,12 @@ test("a transaction-looking first row with a bad date refuses by name", () => {
   // the row would lose real money, so the parse refuses with the row number
   // and the remedy instead of skipping it.
   assert.throws(
-    () => parseCsv("oops,12.50,salary\n2026-07-01,5.00,coffee\n", { date: 0, amount: 1, description: 2 }),
+    () =>
+      parseCsv("oops,12.50,salary\n2026-07-01,5.00,coffee\n", {
+        date: 0,
+        amount: 1,
+        description: 2,
+      }),
     (error: unknown) =>
       error instanceof BankingError &&
       /CSV row 1 looks like a transaction/.test(error.message) &&
@@ -238,7 +248,10 @@ test("human statement amounts still accept the unambiguous comma readings", () =
     'date,amount,description\n2026-07-01,"123,45",salary\n2026-07-02,"1,234,567",refund\n',
     { date: 0, amount: 1, description: 2 },
   );
-  assert.deepEqual(parsed.lines.map((line) => line.amount), ["123.4500", "1234567.0000"]);
+  assert.deepEqual(
+    parsed.lines.map((line) => line.amount),
+    ["123.4500", "1234567.0000"],
+  );
 });
 
 test("statement amounts wider than numeric(19,4) fail closed at parse time", () => {
@@ -246,7 +259,12 @@ test("statement amounts wider than numeric(19,4) fail closed at parse time", () 
   // numeric(19,4) insert with a storage error. Every format funnels through
   // the same column, so every parser refuses the same way.
   assert.throws(
-    () => parseCsv("date,amount,description\n2026-07-01,99999999999999999999,salary\n", { date: 0, amount: 1, description: 2 }),
+    () =>
+      parseCsv("date,amount,description\n2026-07-01,99999999999999999999,salary\n", {
+        date: 0,
+        amount: 1,
+        description: 2,
+      }),
     (error: unknown) => error instanceof BankingError && /out of range/.test(error.message),
   );
   assert.throws(
@@ -254,7 +272,11 @@ test("statement amounts wider than numeric(19,4) fail closed at parse time", () 
     (error: unknown) => error instanceof BankingError && /out of range/.test(error.message),
   );
   // The column maximum itself still parses in both spellings.
-  const csv = parseCsv("date,amount,description\n2026-07-01,999999999999999.9999,salary\n", { date: 0, amount: 1, description: 2 });
+  const csv = parseCsv("date,amount,description\n2026-07-01,999999999999999.9999,salary\n", {
+    date: 0,
+    amount: 1,
+    description: 2,
+  });
   assert.equal(csv.lines[0]!.amount, "999999999999999.9999");
   const bai = parseBai2([baiHeader, "16,165,99999999999999999,Z,REF,,deposit/"].join("\n"));
   assert.equal(bai.lines[0]!.amount, "999999999999999.9900");

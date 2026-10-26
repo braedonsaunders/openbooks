@@ -1,35 +1,60 @@
-import 'server-only'
-import { reportBookSelection } from '../../../../lib/report-books'
-import { resolveOrgId } from '../../../../lib/org-scope'
+import "server-only";
+import { reportBookSelection } from "../../../../lib/report-books";
+import { resolveOrgId } from "../../../../lib/org-scope";
 
-
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
-import { AS_OF_DEFAULT_PERIOD_PRESET, fiscalYearStartOn, priorFiscalYearEndOn } from '@openbooks/reports'
-import { dimensionOptions, trialBalance } from '../../../../lib/reports'
-import { PNL_TYPES } from '../../../../lib/account-types'
-import { COMPUTED_RETAINED_EARNINGS_PRIOR_ID } from '../../../../lib/computed-earnings'
-import { orgInfo } from '../../../../lib/data'
-import { fiscalStartMonth } from '../../../../lib/fiscal'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { MissingRatesError, reportSubsidiaryView, historicalTranslationBlockedNotice, statementTranslationBlockedAction, type CurrencyBasisNotice, type StatementTranslationBlockedNotice } from '../../../../lib/consolidation'
-import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
+import {
+  AS_OF_DEFAULT_PERIOD_PRESET,
+  fiscalYearStartOn,
+  priorFiscalYearEndOn,
+} from "@openbooks/reports";
+import { dimensionOptions, trialBalance } from "../../../../lib/reports";
+import { PNL_TYPES } from "../../../../lib/account-types";
+import { COMPUTED_RETAINED_EARNINGS_PRIOR_ID } from "../../../../lib/computed-earnings";
+import { orgInfo } from "../../../../lib/data";
+import { fiscalStartMonth } from "../../../../lib/fiscal";
+import { resolvePeriod } from "../../../../lib/periods";
+import { parseReportQuery } from "../../../../lib/report-filters";
+import {
+  MissingRatesError,
+  reportSubsidiaryView,
+  historicalTranslationBlockedNotice,
+  statementTranslationBlockedAction,
+  type CurrencyBasisNotice,
+  type StatementTranslationBlockedNotice,
+} from "../../../../lib/consolidation";
+import { ReportCurrencyBasisError } from "../../../../lib/reports/currency-basis";
 import {
   baseCurrencyNotice,
   hasBaseCurrency,
   type BaseCurrencyNotice,
-} from '../../../../lib/reports/base-currency'
-import { orgBranding } from '../../../../lib/report-pdf'
-import { decimalAdd, decimalNeg, decimalSum } from '../../../../lib/statement-format'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { getAuthz } from '@/lib/authz'
-import { dimensionOptionsScope } from '../../../../lib/reports/filters'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import type { PaperCell } from '../PaperView'
-import { mergeHref } from '../../../../lib/list-params'
-import { AccountingContextError, accountingContextFilter, accountingContextLegend, localizeAccountRows, reportAccountingContext, type ReportAccountingContext } from '../../../../lib/reports/accounting-context'
-import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+} from "../../../../lib/reports/base-currency";
+import { orgBranding } from "../../../../lib/report-pdf";
+import { decimalAdd, decimalNeg, decimalSum } from "../../../../lib/statement-format";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { getAuthz } from "@/lib/authz";
+import { dimensionOptionsScope } from "../../../../lib/reports/filters";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
+import type { PaperCell } from "../PaperView";
+import { mergeHref } from "../../../../lib/list-params";
+import {
+  AccountingContextError,
+  accountingContextFilter,
+  accountingContextLegend,
+  localizeAccountRows,
+  reportAccountingContext,
+  type ReportAccountingContext,
+} from "../../../../lib/reports/accounting-context";
+import {
+  filterBar,
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
 
 /**
  * The trial balance, split into a loader and a spec.
@@ -41,69 +66,76 @@ import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } 
  */
 
 export interface TrialBalanceData {
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] }[] | null
+  primaryFilter:
+    | {
+        paramKey: string;
+        label: string;
+        value: string;
+        options: { value: string; label: string }[];
+      }[]
+    | null;
   /** Set when the requested accounting context cannot label the accounts (unknown or ambiguous). */
-  contextBlocked: { title: string; description: string } | null
-  title: string
-  backHref: string
-  backLabel: string
-  dimensions: unknown
-  subsidiaries: unknown
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string | undefined>
-  exportParams: Record<string, string | undefined>
-  company: string
-  currency: string | undefined
-  emptyLabel: string
+  contextBlocked: { title: string; description: string } | null;
+  title: string;
+  backHref: string;
+  backLabel: string;
+  dimensions: unknown;
+  subsidiaries: unknown;
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string | undefined>;
+  exportParams: Record<string, string | undefined>;
+  company: string;
+  currency: string | undefined;
+  emptyLabel: string;
   /** Set when translation prerequisites block the statement:
    * the native banner directs the operator to rates or retained source evidence. */
-  ratesBlocked: StatementTranslationBlockedNotice | null
+  ratesBlocked: StatementTranslationBlockedNotice | null;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /**
    * False when rates are blocked, the base currency is missing, or the
    * viewed set spans more than one functional currency; the paper hides
    * with any of them. Set alongside the notice below.
    */
-  ratesReady: boolean
-  baseCurrencyNotice: BaseCurrencyNotice | null
-  baseCurrencyReady: boolean
-  paper: unknown
+  ratesReady: boolean;
+  baseCurrencyNotice: BaseCurrencyNotice | null;
+  baseCurrencyReady: boolean;
+  paper: unknown;
 }
 
 export async function loadTrialBalance(
   sp: Record<string, string | undefined>,
 ): Promise<TrialBalanceData> {
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const scheduleDefId = await reportScheduleAnchor('trial-balance')
-  const tb = await getTranslations('budgets')
-  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const scheduleDefId = await reportScheduleAnchor("trial-balance");
+  const tb = await getTranslations("budgets");
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book);
   // Point-in-time: an unfiltered statement is dated today, never at a
   // fiscal year end that has not happened yet.
-  const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET })
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const date = period.to
+  const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET });
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
+  const date = period.to;
   // The base currency gates every money figure below: refuse before the
   // subsidiary and rates queries run, never after them, and never by
   // throwing — the boundary swallows thrown messages.
-  const org = await orgInfo()
+  const org = await orgInfo();
   if (!org || !hasBaseCurrency(org.base_currency)) {
     return {
-      title: t('trialBalance.title'),
-      backHref: '/reports',
-      backLabel: t('hub.title'),
+      title: t("trialBalance.title"),
+      backHref: "/reports",
+      backLabel: t("hub.title"),
       dimensions: null,
       subsidiaries: [],
       ratesBlocked: null,
       currencyBasisBlocked: null,
       ratesReady: false,
       baseCurrencyNotice: baseCurrencyNotice({
-        title: t('baseCurrency.title'),
-        description: t('baseCurrency.description'),
-        actionLabel: t('baseCurrency.action'),
+        title: t("baseCurrency.title"),
+        description: t("baseCurrency.description"),
+        actionLabel: t("baseCurrency.action"),
       }),
       baseCurrencyReady: false,
       primaryFilter: null,
@@ -111,19 +143,24 @@ export async function loadTrialBalance(
       scheduleDefId,
       scheduleParams: scheduleParamsFrom(sp),
       exportParams: sp,
-      company: '',
+      company: "",
       currency: undefined,
-      emptyLabel: t('generalLedger.empty'),
+      emptyLabel: t("generalLedger.empty"),
       paper: null,
-    }
+    };
   }
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let rows: Awaited<ReturnType<typeof trialBalance>> = []
-  let ratesBlocked: StatementTranslationBlockedNotice | null = null
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let rows: Awaited<ReturnType<typeof trialBalance>> = [];
+  let ratesBlocked: StatementTranslationBlockedNotice | null = null;
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, date, selectedBook.id)
-    rows = await trialBalance(date, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
+    subView = await reportSubsidiaryView(q.subsidiaryId, date, selectedBook.id);
+    rows = await trialBalance(
+      date,
+      { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
+      undefined,
+      selectedBook.id,
+    );
   } catch (e) {
     // Underived consolidated rates must not throw out of SSR:
     // the page renders a typed banner with a derive link instead of any
@@ -132,98 +169,134 @@ export async function loadTrialBalance(
     // Anything else is a real defect and still throws.
     if (e instanceof ReportCurrencyBasisError) {
       currencyBasisBlocked = {
-        code: 'multi-currency-basis',
-        title: t('statement.currencyBasisBlockedTitle'),
+        code: "multi-currency-basis",
+        title: t("statement.currencyBasisBlockedTitle"),
         description: e.message,
-      }
+      };
     } else {
       const historicalNotice = historicalTranslationBlockedNotice(e, {
-        title: t('statement.historicalEvidenceBlockedTitle'),
-        actionLabel: t('statement.historicalEvidenceBlockedAction'),
-      })
-      if (historicalNotice) ratesBlocked = historicalNotice
+        title: t("statement.historicalEvidenceBlockedTitle"),
+        actionLabel: t("statement.historicalEvidenceBlockedAction"),
+      });
+      if (historicalNotice) ratesBlocked = historicalNotice;
       else {
-        if (!(e instanceof MissingRatesError)) throw e
+        if (!(e instanceof MissingRatesError)) throw e;
         ratesBlocked = {
-          code: 'rates-not-derived',
-          title: t('statement.ratesBlockedTitle'),
+          code: "rates-not-derived",
+          title: t("statement.ratesBlockedTitle"),
           description: (e as Error).message,
-          deriveLabel: t('statement.ratesBlockedAction'),
-          deriveHref: '/close',
-        }
+          deriveLabel: t("statement.ratesBlockedAction"),
+          deriveHref: "/close",
+        };
       }
     }
   }
-  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const authz = await getAuthz()
-  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids };
+  const authz = await getAuthz();
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds);
   const [opts, branding, startMonth] = await Promise.all([
-    dimensionOptions(undefined, undefined, optionScope), orgBranding(), fiscalStartMonth(),
-  ])
-  const fyStart = fiscalYearStartOn(date, startMonth)
-  const priorEnd = priorFiscalYearEndOn(date, startMonth)
+    dimensionOptions(undefined, undefined, optionScope),
+    orgBranding(),
+    fiscalStartMonth(),
+  ]);
+  const fyStart = fiscalYearStartOn(date, startMonth);
+  const priorEnd = priorFiscalYearEndOn(date, startMonth);
   // Accounting context: localized numbers and names, ordered by them.
-  let accountingContext: ReportAccountingContext | null = null
-  let contextBlocked: TrialBalanceData['contextBlocked'] = null
+  let accountingContext: ReportAccountingContext | null = null;
+  let contextBlocked: TrialBalanceData["contextBlocked"] = null;
   try {
-    accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, { asOf: date, subsidiaryId: q.subsidiaryId ?? null })
+    accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, {
+      asOf: date,
+      subsidiaryId: q.subsidiaryId ?? null,
+    });
   } catch (e) {
-    if (!(e instanceof AccountingContextError)) throw e
-    contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+    if (!(e instanceof AccountingContextError)) throw e;
+    contextBlocked = {
+      title: t("accountingContext.blockedTitle"),
+      description: `${e.message} ${e.remedy}`,
+    };
   }
-  const displayRows = localizeAccountRows(rows, accountingContext?.labels).map((r) => (
+  const displayRows = localizeAccountRows(rows, accountingContext?.labels).map((r) =>
     r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID
-      ? { ...r, name: t('statement.retainedEarningsPrior') }
-      : r
-  ))
-  const contextLegend = accountingContext ? accountingContextLegend(accountingContext, t) : null
-  const contextFilter = accountingContext ? accountingContextFilter(accountingContext, t) : null
-  const bookFilter = books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null
-  const primaryFilters = [bookFilter, contextFilter].filter((filter) => filter !== null)
-  const totalDebits = decimalSum(displayRows.map((r) => r.debits))
-  const totalCredits = decimalSum(displayRows.map((r) => r.credits))
+      ? { ...r, name: t("statement.retainedEarningsPrior") }
+      : r,
+  );
+  const contextLegend = accountingContext ? accountingContextLegend(accountingContext, t) : null;
+  const contextFilter = accountingContext ? accountingContextFilter(accountingContext, t) : null;
+  const bookFilter =
+    books.length > 1
+      ? {
+          paramKey: "book",
+          label: tb("list.bookFilter"),
+          value: selectedBook.id,
+          options: books.map((book) => ({ value: book.id, label: book.name })),
+        }
+      : null;
+  const primaryFilters = [bookFilter, contextFilter].filter((filter) => filter !== null);
+  const totalDebits = decimalSum(displayRows.map((r) => r.debits));
+  const totalCredits = decimalSum(displayRows.map((r) => r.credits));
 
   // The unified report shape: every value drills to the account register as of
   // the report date (five-cell rows share one href). P&L registers start at
   // the fiscal year; the prior-year RE placeholder has no register.
-  const dataRows: PaperCell[][] = displayRows.map((r) => [r.number, r.name, r.debits, r.credits, r.balance])
+  const dataRows: PaperCell[][] = displayRows.map((r) => [
+    r.number,
+    r.name,
+    r.debits,
+    r.credits,
+    r.balance,
+  ]);
   const links = displayRows.map((r) => {
-    if (r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID) return [null, null, null, null, null]
-    const registerHref = mergeHref('/reports/trial-balance', sp, {
+    if (r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID) return [null, null, null, null, null];
+    const registerHref = mergeHref("/reports/trial-balance", sp, {
       accountRegister: r.id,
       accountRegisterPage: undefined,
       accountRegisterFrom: PNL_TYPES.includes(r.type) ? fyStart : undefined,
       accountRegisterTo: date,
-    })
-    return [registerHref, registerHref, null, null, null]
-  })
+    });
+    return [registerHref, registerHref, null, null, null];
+  });
   const drills: (ReportDrillTarget | null)[][] = displayRows.map((r) => {
-    const prior = r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID
-    const pnl = PNL_TYPES.includes(r.type)
+    const prior = r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID;
+    const pnl = PNL_TYPES.includes(r.type);
     const target: ReportDrillTarget = {
-      kind: 'ledger', bookId: selectedBook.id,
-      label: `${r.number ?? ''} ${r.name}`.trim(),
+      kind: "ledger",
+      bookId: selectedBook.id,
+      label: `${r.number ?? ""} ${r.name}`.trim(),
       accountIds: prior ? undefined : [r.id],
       accountTypes: prior ? [...PNL_TYPES] : undefined,
       profitSigned: prior ? true : undefined,
       from: prior ? undefined : pnl ? fyStart : undefined,
       to: prior ? priorEnd : date,
-      mode: prior || !pnl ? 'balance' : 'flow',
+      mode: prior || !pnl ? "balance" : "flow",
       dims,
       subsidiaryId: q.subsidiaryId,
-    }
-    return [null, null, target, target, target]
-  })
-  dataRows.push(['', t('trialBalance.totals'), totalDebits, totalCredits, decimalAdd(totalDebits, decimalNeg(totalCredits))])
-  links.push([null, null, null, null, null])
-  const totalsTarget: ReportDrillTarget = { kind: 'ledger', bookId: selectedBook.id, label: t('trialBalance.totals'), to: date, mode: 'balance', dims, subsidiaryId: q.subsidiaryId }
-  drills.push([null, null, totalsTarget, totalsTarget, totalsTarget])
-
+    };
+    return [null, null, target, target, target];
+  });
+  dataRows.push([
+    "",
+    t("trialBalance.totals"),
+    totalDebits,
+    totalCredits,
+    decimalAdd(totalDebits, decimalNeg(totalCredits)),
+  ]);
+  links.push([null, null, null, null, null]);
+  const totalsTarget: ReportDrillTarget = {
+    kind: "ledger",
+    bookId: selectedBook.id,
+    label: t("trialBalance.totals"),
+    to: date,
+    mode: "balance",
+    dims,
+    subsidiaryId: q.subsidiaryId,
+  };
+  drills.push([null, null, totalsTarget, totalsTarget, totalsTarget]);
 
   return {
-    title: t('trialBalance.title'),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
+    title: t("trialBalance.title"),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
     ratesBlocked,
@@ -241,20 +314,26 @@ export async function loadTrialBalance(
     // org base — a foreign-functional subsidiary view states its own money.
     // Mirrors the P&L and balance sheet.
     currency: subView?.currency ?? org.base_currency,
-    emptyLabel: t('generalLedger.empty'),
+    emptyLabel: t("generalLedger.empty"),
     paper: {
-      title: t('trialBalance.title'),
-      periodPhrase: [selectedBook.name, t('trialBalance.description', civilDateParams({ date, count: rows.length }, locale)), contextLegend].filter(Boolean).join(' · '),
+      title: t("trialBalance.title"),
+      periodPhrase: [
+        selectedBook.name,
+        t("trialBalance.description", civilDateParams({ date, count: rows.length }, locale)),
+        contextLegend,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       groups: [
         {
           columns: [
-            t('export.columns.accountNumber'),
-            t('export.columns.accountName'),
-            t('trialBalance.columns.debits'),
-            t('trialBalance.columns.credits'),
-            t('export.columns.balance'),
+            t("export.columns.accountNumber"),
+            t("export.columns.accountName"),
+            t("trialBalance.columns.debits"),
+            t("trialBalance.columns.credits"),
+            t("export.columns.balance"),
           ],
-          align: ['left', 'left', 'right', 'right', 'right'],
+          align: ["left", "left", "right", "right", "right"],
           money: [false, false, true, true, true],
           rows: dataRows,
           links,
@@ -263,32 +342,32 @@ export async function loadTrialBalance(
         },
       ],
     },
-  }
+  };
 }
 
-const f = ref<TrialBalanceData>()
+const f = ref<TrialBalanceData>();
 
 export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
   return page({
-    route: '/reports/trial-balance',
-    layout: 'list',
+    route: "/reports/trial-balance",
+    layout: "list",
     header: [
-      pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
+      pageHeader({ title: f("title"), back: { href: f("backHref"), label: f("backLabel") } }),
       filterBar(
         { period: true, asOf: true, dimensions: true, subsidiary: true },
         {
-          dimensions: f('dimensions'),
-          subsidiaries: f('subsidiaries'),
-          primaryFilter: f('primaryFilter'),
+          dimensions: f("dimensions"),
+          subsidiaries: f("subsidiaries"),
+          primaryFilter: f("primaryFilter"),
           defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET,
           actions: [
             widget(
-              'schedule-report',
-              { definitionId: data.scheduleDefId ?? '', statementParams: data.scheduleParams },
-              f('scheduleDefId'),
+              "schedule-report",
+              { definitionId: data.scheduleDefId ?? "", statementParams: data.scheduleParams },
+              f("scheduleDefId"),
             ),
-            widget('save-view'),
-            widget('export-menu', { kind: 'trial-balance', params: data.exportParams }),
+            widget("save-view"),
+            widget("export-menu", { kind: "trial-balance", params: data.exportParams }),
           ],
         },
       ),
@@ -301,30 +380,30 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
       ...(data.baseCurrencyNotice
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.baseCurrencyNotice?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.baseCurrencyNotice?.title ?? "",
                 description: data.baseCurrencyNotice?.description,
-                action: 'link-button',
+                action: "link-button",
                 actionProps: {
-                  href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
-                  label: data.baseCurrencyNotice?.actionLabel ?? '',
+                  href: data.baseCurrencyNotice?.actionHref ?? "/admin/setup/company",
+                  label: data.baseCurrencyNotice?.actionLabel ?? "",
                 },
               }),
-              when: f('baseCurrencyNotice'),
+              when: f("baseCurrencyNotice"),
             },
           ]
         : []),
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
             href: statementTranslationBlockedAction(data.ratesBlocked).href,
             label: statementTranslationBlockedAction(data.ratesBlocked).label,
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link. Included
@@ -332,11 +411,11 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
@@ -345,23 +424,23 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
       ...(data.contextBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.contextBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.contextBlocked?.title ?? "",
                 description: data.contextBlocked?.description,
               }),
-              when: f('contextBlocked'),
+              when: f("contextBlocked"),
             },
           ]
         : []),
       {
-        ...widgetBlock('paper-view', {
+        ...widgetBlock("paper-view", {
           company: data.company,
           currency: data.currency,
           emptyLabel: data.emptyLabel,
           data: data.paper,
         }),
-        when: f('ratesReady'),
+        when: f("ratesReady"),
       },
     ],
-  })
+  });
 }

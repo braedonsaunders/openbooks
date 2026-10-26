@@ -26,29 +26,16 @@ test("quotas preserve exact decimals and reject ambiguous financial input with a
   }
 });
 test("quota target and calendar invariants refuse invalid declarations", () => {
+  assert.equal(salesCommandSchema.safeParse({ ...quota, salesTeamId: id }).success, false);
+  assert.equal(salesCommandSchema.safeParse({ ...quota, employeeId: null }).success, false);
   assert.equal(
-    salesCommandSchema.safeParse({ ...quota, salesTeamId: id }).success,
+    salesCommandSchema.safeParse({ ...quota, periodStart: "2026-02-30" }).success,
     false,
   );
-  assert.equal(
-    salesCommandSchema.safeParse({ ...quota, employeeId: null }).success,
-    false,
-  );
-  assert.equal(
-    salesCommandSchema.safeParse({ ...quota, periodStart: "2026-02-30" })
-      .success,
-    false,
-  );
-  assert.equal(
-    salesCommandSchema.safeParse({ ...quota, periodEnd: "2025-12-31" }).success,
-    false,
-  );
+  assert.equal(salesCommandSchema.safeParse({ ...quota, periodEnd: "2025-12-31" }).success, false);
 });
 test("sales commands refuse login identities and undeclared writes", () => {
-  assert.equal(
-    salesCommandSchema.safeParse({ ...quota, ownerUserId: id }).success,
-    false,
-  );
+  assert.equal(salesCommandSchema.safeParse({ ...quota, ownerUserId: id }).success, false);
   assert.equal(
     salesCommandSchema.safeParse({
       action: "team",

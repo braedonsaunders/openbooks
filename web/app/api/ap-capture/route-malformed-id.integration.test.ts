@@ -15,7 +15,10 @@ registerHooks({
     // The route factory imports the gate by @/ alias at request time, from
     // web/lib/api/route.ts rather than the route directory; serve it the
     // same intended session as the route's own import.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/ap-capture/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/ap-capture/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -46,7 +49,10 @@ test("ap-capture item routes return 404 for a malformed capture id", async () =>
     assert.equal(detail.status, 404, `GET detail ${id}`);
     const patched = await patchDetail(patchBody(), params(id));
     assert.equal(patched.status, 404, `PATCH detail ${id}`);
-    const materialized = await materialize(new Request("http://audit.local/x", { method: "POST" }), params(id));
+    const materialized = await materialize(
+      new Request("http://audit.local/x", { method: "POST" }),
+      params(id),
+    );
     assert.equal(materialized.status, 404, `POST materialize ${id}`);
     const file = await getFile(new Request("http://audit.local/x"), params(id));
     assert.equal(file.status, 404, `GET file ${id}`);
@@ -55,6 +61,10 @@ test("ap-capture item routes return 404 for a malformed capture id", async () =>
   // shape (materialize maps the engine's missing-item error to 422 today).
   const missing = randomUUID();
   assert.equal((await getDetail(new Request("http://audit.local/x"), params(missing))).status, 404);
-  assert.equal((await materialize(new Request("http://audit.local/x", { method: "POST" }), params(missing))).status, 422);
+  assert.equal(
+    (await materialize(new Request("http://audit.local/x", { method: "POST" }), params(missing)))
+      .status,
+    422,
+  );
   assert.equal((await getFile(new Request("http://audit.local/x"), params(missing))).status, 404);
 });

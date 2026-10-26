@@ -23,7 +23,8 @@ export function tableScope(
   column: string,
 ): FlowSubjectTableScope {
   for (const name of [table, column]) {
-    if (!SQL_IDENT.test(name)) throw new Error(`flow subject scope: "${name}" is not a plain SQL identifier`);
+    if (!SQL_IDENT.test(name))
+      throw new Error(`flow subject scope: "${name}" is not a plain SQL identifier`);
   }
   return { via, table, column };
 }
@@ -53,7 +54,10 @@ const OWNERS = {
   party: { table: sql`parties`, subsidiary: sql`o.subsidiary_id` },
   project: { table: sql`projects`, subsidiary: sql`o.subsidiary_id` },
   employment: { table: sql`worker_employments`, subsidiary: sql`o.employer_subsidiary_id` },
-} as const satisfies Record<Exclude<FlowSubjectTableScope["via"], "column">, { table: SQL; subsidiary: SQL }>;
+} as const satisfies Record<
+  Exclude<FlowSubjectTableScope["via"], "column">,
+  { table: SQL; subsidiary: SQL }
+>;
 
 /**
  * Owning subsidiary of each subject id, in one query. Ids with no row are
@@ -116,16 +120,22 @@ export function subjectSubsidiarySql(
   const arms = kinds.flatMap(({ subjectKind, scope }): SQL[] => {
     switch (scope.via) {
       case "document":
-        return [sql`when ${ref.kind} = ${subjectKind} then (select o.subsidiary_id from documents o where o.org_id = ${ref.org} and o.id = ${ref.id})`];
+        return [
+          sql`when ${ref.kind} = ${subjectKind} then (select o.subsidiary_id from documents o where o.org_id = ${ref.org} and o.id = ${ref.id})`,
+        ];
       case "column":
-        return [sql`when ${ref.kind} = ${subjectKind} then (select o.${sql.identifier(scope.column)} from ${sql.identifier(scope.table)} o where o.org_id = ${ref.org} and o.id = ${ref.id})`];
+        return [
+          sql`when ${ref.kind} = ${subjectKind} then (select o.${sql.identifier(scope.column)} from ${sql.identifier(scope.table)} o where o.org_id = ${ref.org} and o.id = ${ref.id})`,
+        ];
       case "party":
       case "project":
       case "employment": {
         const owner = OWNERS[scope.via];
-        return [sql`when ${ref.kind} = ${subjectKind} then (select ${owner.subsidiary} from ${sql.identifier(scope.table)} s
+        return [
+          sql`when ${ref.kind} = ${subjectKind} then (select ${owner.subsidiary} from ${sql.identifier(scope.table)} s
           join ${owner.table} o on o.id = s.${sql.identifier(scope.column)} and o.org_id = s.org_id
-         where s.org_id = ${ref.org} and s.id = ${ref.id})`];
+         where s.org_id = ${ref.org} and s.id = ${ref.id})`,
+        ];
       }
       case "custom":
       case "none":
@@ -160,13 +170,21 @@ export async function lockSubjectScope(
       return;
     case "column":
     case "custom": {
-      const owners = scope.via === "custom"
-        ? await scope.subsidiaryOf(orgId, [subjectId], allowed, true)
-        : new Map((await db.execute<{ subsidiaryId: string | null }>(sql`
+      const owners =
+        scope.via === "custom"
+          ? await scope.subsidiaryOf(orgId, [subjectId], allowed, true)
+          : new Map(
+              (
+                await db.execute<{ subsidiaryId: string | null }>(
+                  sql`
             select ${sql.identifier(scope.column)} as "subsidiaryId" from ${sql.identifier(scope.table)}
              where id = ${subjectId} and org_id = ${orgId}
              for share
-          `, "objects")).map((row) => [subjectId, row.subsidiaryId]));
+          `,
+                  "objects",
+                )
+              ).map((row) => [subjectId, row.subsidiaryId]),
+            );
       if (!owners.has(subjectId)) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId);
       if (!subsidiaryScopeAllows(allowed, owners.get(subjectId))) throw new ScopeNotFoundError();
       return;
@@ -181,11 +199,16 @@ export async function lockSubjectScope(
       // lock on the subject row holds the relationship itself until the
       // caller's transaction ends; the owner id is then read from the
       // locked row, and the owner's share lock freezes its subsidiary.
-      const row = (await db.execute<{ ownerId: string }>(sql`
+      const row = (
+        await db.execute<{ ownerId: string }>(
+          sql`
         select ${sql.identifier(scope.column)} as "ownerId" from ${sql.identifier(scope.table)}
          where id = ${subjectId} and org_id = ${orgId}
          for share
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!row) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId);
       await lockScopeRow(db, orgId, scope.via, row.ownerId, allowed, "share");
       return;

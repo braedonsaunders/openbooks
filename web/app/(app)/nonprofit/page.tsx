@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadNonprofit, nonprofitSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadNonprofit, nonprofitSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('nonprofit')
-  return { title: t('home.title') }
+  const t = await getTranslations("nonprofit");
+  return { title: t("home.title") };
 }
 
 /**
@@ -19,6 +19,6 @@ export async function generateMetadata() {
  * are sibling pages sharing one strip.
  */
 export default async function NonprofitHomePage() {
-  const data = await loadNonprofit()
-  return <ModuleView spec={nonprofitSpec(data)} data={data} searchParams={{}} trusted />
+  const data = await loadNonprofit();
+  return <ModuleView spec={nonprofitSpec(data)} data={data} searchParams={{}} trusted />;
 }

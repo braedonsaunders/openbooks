@@ -14,11 +14,17 @@ export const POST = defineRoute({
   handler: async ({ request, authz, params, body }) => {
     const scope = await dropShipRecordScope(authz.user.orgId, params.id, "sales_order");
     if (!scope || guardSubsidiaryScope(authz, scope.subsidiaryId)) return notFound("record");
-    const context = applicationContextFromSession(authz, "api", request.headers.get("x-request-id") ?? "drop-ship-route");
-    return Response.json(await routeSalesOrderLine(context, {
-      salesOrderId: params.id,
-      salesOrderLineId: body.salesOrderLineId,
-      routed: body.routed,
-    }));
+    const context = applicationContextFromSession(
+      authz,
+      "api",
+      request.headers.get("x-request-id") ?? "drop-ship-route",
+    );
+    return Response.json(
+      await routeSalesOrderLine(context, {
+        salesOrderId: params.id,
+        salesOrderLineId: body.salesOrderLineId,
+        routed: body.routed,
+      }),
+    );
   },
 });

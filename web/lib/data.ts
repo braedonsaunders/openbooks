@@ -2,7 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "./payroll-confidentiality";
+import {
+  PAYROLL_RESTRICTED_PARTY_LABEL,
+  collapseRestrictedPayrollLines,
+} from "./payroll-confidentiality";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { fiscalYearOf, fiscalYearRangeFor } from "@openbooks/reports";
 import { fiscalStartMonth } from "./fiscal";
@@ -15,30 +18,39 @@ export const runtime = "nodejs";
 // The shell and most pages read the organization header in the same render.
 export const orgInfo = cache(async (orgId?: string) => {
   const activeOrgId = await resolveOrgId(orgId);
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     select o.name, o.base_currency,
            (select b.name from accounting_books b
              where b.org_id = o.id and b.is_primary limit 1) as book
       from orgs o
      where o.id = ${activeOrgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0] as { name: string; base_currency: string; book: string } | undefined;
 });
 
 export async function dashboardData(orgId?: string) {
   const activeOrgId = await resolveOrgId(orgId);
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     select
       (select count(*) from journal_entries where org_id = ${activeOrgId}) as entries,
       (select count(*) from journal_lines where org_id = ${activeOrgId}) as lines,
       (select count(*) from accounts where org_id = ${activeOrgId} and is_active) as accounts,
       (select count(*) from parties where org_id = ${activeOrgId}) as parties,
       (select coalesce(sum(amount), 0) from journal_lines where org_id = ${activeOrgId}) as ledger_sum
-  `, "objects"));
-  const runs = (await db.execute(sql`
+  `,
+    "objects",
+  );
+  const runs = await db.execute(
+    sql`
     select id, source, status, started_at, finished_at, stats, error_message, triggered_by
       from sync_runs where org_id = ${activeOrgId} order by started_at desc limit 8
-  `, "objects"));
+  `,
+    "objects",
+  );
   return { totals: r[0], runs };
 }
 
@@ -54,33 +66,45 @@ export async function accountsWithBalances(
   asOf?: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ) {
-  const asOfDate = asOf ?? await businessToday(orgId);
+  const asOfDate = asOf ?? (await businessToday(orgId));
   const startMonth = await fiscalStartMonth(orgId);
   const fyStart = fiscalYearRangeFor(fiscalYearOf(asOfDate, startMonth), startMonth).from;
 
   // `undefined`/`null` are the explicit unrestricted sentinels. A present,
   // empty set must deny all subsidiary-owned activity rather than silently
   // widening the query to the whole organization.
-  const accountSubsidiaryScope = allowedSubsidiaryIds == null
-    ? sql``
-    : allowedSubsidiaryIds.size === 0
-      ? sql`and false`
-      : sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[]))`;
-  const glSubsidiaryScope = subsidiaryVisibleFilter(sql`g.subsidiary_id`, allowedSubsidiaryIds ?? null);
-  const lineSubsidiaryScope = subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds ?? null);
+  const accountSubsidiaryScope =
+    allowedSubsidiaryIds == null
+      ? sql``
+      : allowedSubsidiaryIds.size === 0
+        ? sql`and false`
+        : sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...allowedSubsidiaryIds].join(",")}}`}::uuid[]))`;
+  const glSubsidiaryScope = subsidiaryVisibleFilter(
+    sql`g.subsidiary_id`,
+    allowedSubsidiaryIds ?? null,
+  );
+  const lineSubsidiaryScope = subsidiaryVisibleFilter(
+    sql`l.subsidiary_id`,
+    allowedSubsidiaryIds ?? null,
+  );
 
   const CREDIT_NORMAL = [
-    'income', 'income_other',
-    'liability_payable', 'liability_card', 'liability_current_other', 'liability_long_term',
-    'equity',
+    "income",
+    "income_other",
+    "liability_payable",
+    "liability_card",
+    "liability_current_other",
+    "liability_long_term",
+    "equity",
   ];
-  const PNL = ['income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred'];
+  const PNL = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"];
 
   // Balances come from the gl_month_activity summary (whole months) plus the
   // as-of month's lines; the correlated per-account scan of journal_lines this
   // replaces cost seconds on a large ledger. P&L accounts measure from the
   // fiscal-year start, balance-sheet accounts from inception.
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, a.is_active,
            coalesce(case when a.type in ${PNL} then s.fy_amount else s.all_amount end, 0)
            * case when a.type in ${CREDIT_NORMAL} then -1 else 1 end as balance
@@ -109,10 +133,18 @@ export async function accountsWithBalances(
       ) s on s.account_id = a.id
      where a.org_id = ${orgId} ${accountSubsidiaryScope}
      order by a.number nulls last, a.name
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r as {
-    id: string; parent_id: string | null; number: string | null; name: string;
-    type: string; is_summary: boolean; is_active: boolean; balance: string;
+    id: string;
+    parent_id: string | null;
+    number: string | null;
+    name: string;
+    type: string;
+    is_summary: boolean;
+    is_active: boolean;
+    balance: string;
   }[];
 }
 
@@ -151,21 +183,19 @@ export async function entryDetail(
   // payroll lines collapse into one restricted line per account.
   canSeePayroll?: boolean,
 ) {
-  const entrySubsidiaryFilter = subsidiaryVisibleFilter(
-    sql`e.subsidiary_id`,
-    allowedSubsidiaryIds,
-  );
-  const lineSubsidiaryFilter = subsidiaryVisibleFilter(
-    sql`l.subsidiary_id`,
-    allowedSubsidiaryIds,
-  );
-  const e = (await db.execute<JournalEntryDetailRow>(sql`
+  const entrySubsidiaryFilter = subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowedSubsidiaryIds);
+  const lineSubsidiaryFilter = subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds);
+  const e = await db.execute<JournalEntryDetailRow>(
+    sql`
     select e.*, re.entry_number as reverses_number
       from journal_entries e
       left join journal_entries re on re.id = e.reverses_entry_id and re.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${orgId}${entrySubsidiaryFilter}
-  `, "objects"));
-  const lines = (await db.execute<JournalEntryDetailLineRow>(sql`
+  `,
+    "objects",
+  );
+  const lines = await db.execute<JournalEntryDetailLineRow>(
+    sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
            a.number as account_number, a.name as account_name, l.account_id,
            p.display_name as party, l.party_id, d.name as department,
@@ -178,7 +208,9 @@ export async function entryDetail(
       left join documents doc on doc.id = e.source_document_id and doc.org_id = e.org_id
      where l.entry_id = ${id} and l.org_id = ${orgId}${lineSubsidiaryFilter}
      order by l.line_number
-  `, "objects"));
+  `,
+    "objects",
+  );
   // Without payroll.read the collapsed line keeps the account and the summed
   // amount but names no employee and shows no per-employee memo or amount.
   const mapped = lines.map((x) => ({
@@ -186,23 +218,33 @@ export async function entryDetail(
     entryId: id,
     accountId: x.account_id,
     partyId: x.party_id,
-    payrollOrigin: x.doc_kind === 'pay_run' || x.entry_origin === 'payroll',
-  }))
-  const confidential = canSeePayroll === true ? mapped : collapseRestrictedPayrollLines(
-    mapped,
-    (first, total) => ({
-      ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, amount: total,
-    }),
-  )
+    payrollOrigin: x.doc_kind === "pay_run" || x.entry_origin === "payroll",
+  }));
+  const confidential =
+    canSeePayroll === true
+      ? mapped
+      : collapseRestrictedPayrollLines(mapped, (first, total) => ({
+          ...first,
+          party: PAYROLL_RESTRICTED_PARTY_LABEL,
+          party_id: null,
+          memo: null,
+          amount: total,
+        }));
   // Strip every collapse input/output key so callers keep the original shape:
   // no party ids and no origin markers reach API responses.
   const shaped = confidential.map((row) => {
     const {
-      account_id: _accountId, party_id: _partyId, doc_kind: _docKind, entry_origin: _entryOrigin,
-      entryId: _entryId, accountId: _accountUuid, partyId: _partyUuid, payrollOrigin: _payrollOrigin,
+      account_id: _accountId,
+      party_id: _partyId,
+      doc_kind: _docKind,
+      entry_origin: _entryOrigin,
+      entryId: _entryId,
+      accountId: _accountUuid,
+      partyId: _partyUuid,
+      payrollOrigin: _payrollOrigin,
       ...rest
-    } = row
-    return rest
-  })
+    } = row;
+    return rest;
+  });
   return { entry: e[0] ?? null, lines: shaped };
 }

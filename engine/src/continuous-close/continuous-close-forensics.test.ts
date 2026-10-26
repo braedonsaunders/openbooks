@@ -33,4 +33,3 @@ test("forensic items escalate at the exact materiality multiple", () => {
     "critical",
   );
 });
-

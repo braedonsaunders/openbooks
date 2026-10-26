@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * PDF encryption for the shared PDF layer.
@@ -40,29 +40,29 @@ export class PdfEncryptionError extends Error {}
  * never extends a success.
  */
 function qpdfTimeoutMs(): number {
-  const fromEnv = Number(process.env.OPENBOOKS_QPDF_TIMEOUT_MS)
-  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.floor(fromEnv)
-  return 60_000
+  const fromEnv = Number(process.env.OPENBOOKS_QPDF_TIMEOUT_MS);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.floor(fromEnv);
+  return 60_000;
 }
 
 export interface PdfEncryptionOptions {
   /** Password required to OPEN the document. */
-  userPassword: string
+  userPassword: string;
   /**
    * Password required to change permissions. Defaults to the user password,
    * which is what an employer distributing stubs wants: no second secret to
    * manage, and no owner-password bypass of the permissions below.
    */
-  ownerPassword?: string
+  ownerPassword?: string;
   /** Allow printing (default true — a stub is meant to be printable). */
-  allowPrinting?: boolean
+  allowPrinting?: boolean;
   /** Allow content extraction/copy (default false). */
-  allowExtraction?: boolean
+  allowExtraction?: boolean;
 }
 
 /** qpdf binary path: explicit override, else the one on PATH. */
 function qpdfExecutable(): string {
-  return process.env.OPENBOOKS_QPDF_PATH?.trim() || 'qpdf'
+  return process.env.OPENBOOKS_QPDF_PATH?.trim() || "qpdf";
 }
 
 /**
@@ -81,7 +81,7 @@ function assertNoControlCharacters(password: string, which: string): void {
   if (/[\u0000-\u001f\u007f]/.test(password)) {
     throw new PdfEncryptionError(
       `the ${which} contains a line break or other control character, which would split qpdf's password argument — remove it and try again`,
-    )
+    );
   }
 }
 
@@ -89,17 +89,18 @@ export async function encryptPdf(
   pdf: Buffer | Uint8Array,
   options: PdfEncryptionOptions,
 ): Promise<Buffer> {
-  const userPassword = options.userPassword
-  if (!userPassword) throw new PdfEncryptionError('an empty password would not protect the document')
-  assertNoControlCharacters(userPassword, 'user password')
-  const ownerPassword = options.ownerPassword || userPassword
-  if (options.ownerPassword) assertNoControlCharacters(ownerPassword, 'owner password')
+  const userPassword = options.userPassword;
+  if (!userPassword)
+    throw new PdfEncryptionError("an empty password would not protect the document");
+  assertNoControlCharacters(userPassword, "user password");
+  const ownerPassword = options.ownerPassword || userPassword;
+  if (options.ownerPassword) assertNoControlCharacters(ownerPassword, "owner password");
 
-  const dir = await mkdtemp(join(tmpdir(), 'openbooks-pdf-'))
-  const input = join(dir, 'in.pdf')
-  const output = join(dir, 'out.pdf')
+  const dir = await mkdtemp(join(tmpdir(), "openbooks-pdf-"));
+  const input = join(dir, "in.pdf");
+  const output = join(dir, "out.pdf");
   try {
-    await writeFile(input, pdf, { mode: 0o600 })
+    await writeFile(input, pdf, { mode: 0o600 });
     // One argument per line, read from stdin: qpdf's @- form. Order matters —
     // --encrypt takes the user password, the owner password, the key length,
     // then its own options, terminated by `--`. Object streams stay off: with
@@ -108,26 +109,26 @@ export async function encryptPdf(
     // re-ingestion of protected files; plain object layout does not weaken
     // the AES-256 protection in any way.
     const args = [
-      '--object-streams=disable',
-      '--encrypt',
+      "--object-streams=disable",
+      "--encrypt",
       userPassword,
       ownerPassword,
-      '256',
-      `--print=${options.allowPrinting === false ? 'none' : 'full'}`,
-      `--extract=${options.allowExtraction === true ? 'y' : 'n'}`,
-      '--',
+      "256",
+      `--print=${options.allowPrinting === false ? "none" : "full"}`,
+      `--extract=${options.allowExtraction === true ? "y" : "n"}`,
+      "--",
       input,
       output,
-    ]
-    await runQpdf(args)
-    const encrypted = await readFile(output)
+    ];
+    await runQpdf(args);
+    const encrypted = await readFile(output);
     // Certify our own product before releasing it: qpdf must refuse to open
     // the result without the secret, so a broken or hostile qpdf can never
     // smuggle marker-only bytes out through this function as "encrypted".
-    await verifyPdfEncryption(encrypted)
-    return encrypted
+    await verifyPdfEncryption(encrypted);
+    return encrypted;
   } finally {
-    await rm(dir, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true });
   }
 }
 
@@ -154,38 +155,40 @@ export async function encryptPdf(
  * own output with the live password before releasing it.
  */
 export async function verifyPdfEncryption(pdf: Buffer | Uint8Array): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'openbooks-pdf-verify-'))
-  const input = join(dir, 'candidate.pdf')
+  const dir = await mkdtemp(join(tmpdir(), "openbooks-pdf-verify-"));
+  const input = join(dir, "candidate.pdf");
   try {
-    await writeFile(input, pdf, { mode: 0o600 })
-    let locked = false
-    let failure: Error | null = null
+    await writeFile(input, pdf, { mode: 0o600 });
+    let locked = false;
+    let failure: Error | null = null;
     try {
-      await runQpdf(['--check', input])
+      await runQpdf(["--check", input]);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
+      const message = e instanceof Error ? e.message : String(e);
       // The empty-password attempt failing authentication is the one verdict
       // that proves protection; every other failure means we cannot certify.
-      locked = /invalid password/i.test(message)
-      if (!locked) failure = new Error(message)
+      locked = /invalid password/i.test(message);
+      if (!locked) failure = new Error(message);
     }
-    if (locked) return
+    if (locked) return;
     if (failure) {
-      throw new PdfEncryptionError(`the document could not be verified as encrypted (${failure.message})`)
+      throw new PdfEncryptionError(
+        `the document could not be verified as encrypted (${failure.message})`,
+      );
     }
-    throw new PdfEncryptionError('the document opens without a password')
+    throw new PdfEncryptionError("the document opens without a password");
   } finally {
-    await rm(dir, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true });
   }
 }
 
 /** True when a qpdf binary is callable — for setup screens and diagnostics. */
 export async function pdfEncryptionAvailable(): Promise<boolean> {
   try {
-    await runQpdf(['--version'])
-    return true
+    await runQpdf(["--version"]);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
@@ -200,53 +203,68 @@ function runQpdf(args: string[]): Promise<void> {
     // killing only the direct child leaves grandchildren holding the stdio
     // pipes open — 'close' (which this promise awaits) then arrives when the
     // grandchild exits, not when the child dies, and the timeout is a lie.
-    const child = spawn(/* turbopackIgnore: true */ qpdfExecutable(), ['@-'], {
-      stdio: ['pipe', 'ignore', 'pipe'],
+    const child = spawn(/* turbopackIgnore: true */ qpdfExecutable(), ["@-"], {
+      stdio: ["pipe", "ignore", "pipe"],
       detached: true,
-    })
-    let stderr = ''
-    let timedOut = false
+    });
+    let stderr = "";
+    let timedOut = false;
     const timer = setTimeout(() => {
       // A child that already exited won its race with this timer: killing
       // (and blaming the timeout) would turn a success into a refusal.
-      if (child.exitCode !== null || child.signalCode !== null) return
-      timedOut = true
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      timedOut = true;
       try {
-        if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL')
-        else child.kill('SIGKILL')
+        if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
       } catch {
-        child.kill('SIGKILL')
+        child.kill("SIGKILL");
       }
-    }, qpdfTimeoutMs())
-    timer.unref?.()
+    }, qpdfTimeoutMs());
+    timer.unref?.();
     const settle = (fn: () => void): void => {
-      clearTimeout(timer)
-      fn()
-    }
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk: string) => {
+      clearTimeout(timer);
+      fn();
+    };
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
       // Bounded: a runaway diagnostic stream must not grow without limit.
-      if (stderr.length < 4096) stderr += chunk
-    })
-    child.on('error', (error) => {
-      settle(() => reject(new PdfEncryptionError(
-        `PDF encryption needs the qpdf binary (${(error as Error).message}) — install qpdf or set OPENBOOKS_QPDF_PATH`,
-      )))
-    })
-    child.on('close', (code) => {
+      if (stderr.length < 4096) stderr += chunk;
+    });
+    child.on("error", (error) => {
+      settle(() =>
+        reject(
+          new PdfEncryptionError(
+            `PDF encryption needs the qpdf binary (${(error as Error).message}) — install qpdf or set OPENBOOKS_QPDF_PATH`,
+          ),
+        ),
+      );
+    });
+    child.on("close", (code) => {
       if (timedOut) {
-        settle(() => reject(new PdfEncryptionError(
-          `qpdf did not finish within ${qpdfTimeoutMs()} ms and was killed; refusing instead of waiting forever`,
-        )))
-        return
+        settle(() =>
+          reject(
+            new PdfEncryptionError(
+              `qpdf did not finish within ${qpdfTimeoutMs()} ms and was killed; refusing instead of waiting forever`,
+            ),
+          ),
+        );
+        return;
       }
       // qpdf exit 3 is "completed with warnings", which still writes the file.
-      if (code === 0 || code === 3) settle(resolve)
-      else settle(() => reject(new PdfEncryptionError(`qpdf could not encrypt the document (exit ${code}): ${stderr.trim()}`)))
-    })
-    child.stdin.on('error', () => {
+      if (code === 0 || code === 3) settle(resolve);
+      else
+        settle(() =>
+          reject(
+            new PdfEncryptionError(
+              `qpdf could not encrypt the document (exit ${code}): ${stderr.trim()}`,
+            ),
+          ),
+        );
+    });
+    child.stdin.on("error", () => {
       /* surfaced by the 'error'/'close' handlers above */
-    })
-    child.stdin.end(`${args.join('\n')}\n`)
-  })
+    });
+    child.stdin.end(`${args.join("\n")}\n`);
+  });
 }

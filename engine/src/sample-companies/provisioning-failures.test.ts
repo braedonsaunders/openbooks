@@ -14,15 +14,10 @@ import {
 // whose body carries no SQL or internal detail — the full cause stays in the
 // server logs and on `cause`, never in the message the API returns.
 
-const STAGES: SampleCompanyProvisioningStage[] = [
-  "template",
-  "clone",
-  "finalize",
-  "numbering",
-];
+const STAGES: SampleCompanyProvisioningStage[] = ["template", "clone", "finalize", "numbering"];
 
 const SQL_LADEN_DB_ERROR = new Error(
-  "duplicate key value violates unique constraint \"journal_entries_org_id_doc_no_key\" " +
+  'duplicate key value violates unique constraint "journal_entries_org_id_doc_no_key" ' +
     "DETAIL: Key (org_id, doc_no)=(abc, INV-0001) already exists. " +
     "STATEMENT: INSERT INTO journal_entries (org_id, doc_no) SELECT $1, $2",
 );
@@ -45,7 +40,10 @@ test("a stage alone never certifies company absence or readiness", () => {
   for (const stage of STAGES) {
     assert.match(sampleCompanyStageMessage(stage), /Company readiness is unconfirmed/);
     assert.match(sampleCompanyStageMessage(stage), /contact support before creating another copy/);
-    assert.doesNotMatch(sampleCompanyStageMessage(stage), /Nothing was created|you can retry|retry resumes/);
+    assert.doesNotMatch(
+      sampleCompanyStageMessage(stage),
+      /Nothing was created|you can retry|retry resumes/,
+    );
   }
 });
 
@@ -95,7 +93,7 @@ test("a precondition refusal keeps its specific message past the stage wrapper",
   // fixed per-stage string would hide both, so it must pass through with
   // its message intact (the API returns it as a 409 known refusal).
   const blocked = new SampleCompanyPreconditionError(
-    'sample template preparation found an incomplete previous attempt (org abc) that could not be removed automatically; remove it, then retry',
+    "sample template preparation found an incomplete previous attempt (org abc) that could not be removed automatically; remove it, then retry",
   );
   await assert.rejects(
     runProvisioningStage("template", async () => {
@@ -132,9 +130,7 @@ test("an already-staged refusal is never relabelled by an outer stage", async ()
 test("a known validation refusal raised inside a stage is still reported by stage", async () => {
   await assert.rejects(
     runProvisioningStage("template", async () => {
-      throw new SampleCompanyError(
-        "sample template sim-atlas did not pass its simulator oracle",
-      );
+      throw new SampleCompanyError("sample template sim-atlas did not pass its simulator oracle");
     }),
     (error: unknown) => {
       assert.ok(error instanceof SampleCompanyProvisioningError);
@@ -169,14 +165,8 @@ test("a deterministic guard refusal keeps the guard message, never the retry tex
     }),
     (error: unknown) => {
       assert.ok(error instanceof SampleCompanyProvisioningError);
-      assert.equal(
-        (error as SampleCompanyProvisioningError).code,
-        "sample-company-clone-failed",
-      );
-      assert.match(
-        (error as Error).message,
-        /must be inserted as draft, then submitted/,
-      );
+      assert.equal((error as SampleCompanyProvisioningError).code, "sample-company-clone-failed");
+      assert.match((error as Error).message, /must be inserted as draft, then submitted/);
       assert.doesNotMatch((error as Error).message, /you can retry/);
       assert.equal((error as { cause?: unknown }).cause, guardError);
       return true;
@@ -198,10 +188,7 @@ test("a driver-wrapped guard refusal is still recognized as deterministic", asyn
     }),
     (error: unknown) => {
       assert.ok(error instanceof SampleCompanyProvisioningError);
-      assert.match(
-        (error as Error).message,
-        /financial changes must start as draft/,
-      );
+      assert.match((error as Error).message, /financial changes must start as draft/);
       assert.doesNotMatch((error as Error).message, /you can retry/);
       return true;
     },

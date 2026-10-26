@@ -29,12 +29,12 @@ export function persistReceiptMoney(value: unknown, label: string): string {
 }
 
 /** Primary accounting book id. */
-export async function primaryBookId(
-  orgId: string,
-  runner: Runner = db,
-): Promise<string> {
-  const r = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`, "objects"));
+export async function primaryBookId(orgId: string, runner: Runner = db): Promise<string> {
+  const r = await runner.execute<{ id: string }>(
+    sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`,
+    "objects",
+  );
   if (!r[0]) throw new InventoryError("no active primary posting book");
   return r[0].id;
 }
@@ -55,8 +55,11 @@ export async function subsidiaryCurrency(
   subsidiaryId: string,
   runner: Runner = db,
 ): Promise<string> {
-  const r = (await runner.execute<{ base_currency: string }>(sql`
-    select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`, "objects"));
+  const r = await runner.execute<{ base_currency: string }>(
+    sql`
+    select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`,
+    "objects",
+  );
   if (!r[0]) throw new InventoryError("subsidiary not found");
   return r[0].base_currency;
 }
@@ -108,10 +111,14 @@ export async function getOnHandWith(
   // and the average cost a receipt inherits, can never be driven by another
   // entity's stock sharing the same warehouse.
   const layerScope = sql`${subId ? sql`and cost_layers.subsidiary_id = ${subId}` : sql``}
-    ${selection.saleableOnly ? sql`and ${saleableLocation(sql`cost_layers.org_id`,sql`cost_layers.stock_location_id`)}
+    ${
+      selection.saleableOnly
+        ? sql`and ${saleableLocation(sql`cost_layers.org_id`, sql`cost_layers.stock_location_id`)}
       and exists(select 1 from inventory_movements eligibility where eligibility.org_id=cost_layers.org_id
         and eligibility.id=cost_layers.source_movement_id
-        and ${unheldTracking(sql`eligibility.org_id`,sql`eligibility.lot_id`,sql`eligibility.serial_id`)})` : sql``}`;
+        and ${unheldTracking(sql`eligibility.org_id`, sql`eligibility.lot_id`, sql`eligibility.serial_id`)})`
+        : sql``
+    }`;
   const provisionalOwnerScope = subId
     ? sql`and exists (
             select 1 from inventory_movements owner_mv
@@ -120,8 +127,9 @@ export async function getOnHandWith(
                and owner_mv.subsidiary_id = ${subId})`
     : sql``;
   const provisionalScope = sql`${provisionalOwnerScope}
-    ${selection.saleableOnly ? sql`and ${saleableLocation(sql`inventory_provisional_costs.org_id`,sql`inventory_provisional_costs.stock_location_id`)}` : sql``}`;
-  const r = (await runner.execute<{ quantity: string; value: string }>(sql`
+    ${selection.saleableOnly ? sql`and ${saleableLocation(sql`inventory_provisional_costs.org_id`, sql`inventory_provisional_costs.stock_location_id`)}` : sql``}`;
+  const r = await runner.execute<{ quantity: string; value: string }>(
+    sql`
     select (coalesce((select sum(remaining_quantity) from cost_layers
                        where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
                          ${layerScope}
@@ -155,12 +163,12 @@ export async function getOnHandWith(
                          where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
                            ${provisionalScope}
                            and ${sourceReceiptMovementId}::uuid is null
-                           and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as value`, "objects"));
+                           and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as value`,
+    "objects",
+  );
   const quantity = r[0]?.quantity ?? "0";
   const value = r[0]?.value ?? "0";
-  const unitCost = isZero(quantity)
-    ? "0"
-    : unitCostPerQuantity(value, quantity)!;
+  const unitCost = isZero(quantity) ? "0" : unitCostPerQuantity(value, quantity)!;
   return {
     quantity: fromUnits(toUnits(quantity)),
     value: fromUnits(toUnits(value)),
@@ -238,7 +246,12 @@ export async function backdatedIssueShortage(
   const lotId = scope.lotId ?? null;
   const serialId = scope.serialId ?? null;
   const receiptId = scope.sourceReceiptMovementId ?? null;
-  const r = (await runner.execute<{ backdated: boolean; on_hand: string; receipt_dated: boolean | null }>(sql`
+  const r = await runner.execute<{
+    backdated: boolean;
+    on_hand: string;
+    receipt_dated: boolean | null;
+  }>(
+    sql`
     select exists (
              select 1 from inventory_movements later
               where later.org_id = ${orgId} and later.item_id = ${scope.itemId}
@@ -252,7 +265,9 @@ export async function backdatedIssueShortage(
                         and (${lotId}::uuid is null or m.lot_id = ${lotId}::uuid)
                         and (${serialId}::uuid is null or m.serial_id = ${serialId}::uuid)), 0)::text as on_hand,
            (select r.moved_at::date <= ${date}::date from inventory_movements r
-             where r.org_id = ${orgId} and r.id = ${receiptId}::uuid) as receipt_dated`, "objects"));
+             where r.org_id = ${orgId} and r.id = ${receiptId}::uuid) as receipt_dated`,
+    "objects",
+  );
   const row = r[0];
   if (!row || !row.backdated) return null;
 
@@ -263,14 +278,20 @@ export async function backdatedIssueShortage(
   let requested = toUnits(quantity);
   const overlaps = (a: string | null, b: string | null) => a === null || b === null || a === b;
   for (const draw of priorDraws) {
-    if (overlaps(lotId, draw.lotId) && overlaps(serialId, draw.serialId)) requested += toUnits(draw.quantity);
+    if (overlaps(lotId, draw.lotId) && overlaps(serialId, draw.serialId))
+      requested += toUnits(draw.quantity);
   }
   if (onHand >= requested) return null;
 
-  const labels = (await runner.execute<{ item: string; location: string | null }>(sql`
+  const labels = (
+    await runner.execute<{ item: string; location: string | null }>(
+      sql`
     select coalesce(nullif(btrim(i.code), ''), i.name) as item, l.code as location
       from items i left join stock_locations l on l.org_id = i.org_id and l.id = ${scope.stockLocationId}
-     where i.org_id = ${orgId} and i.id = ${scope.itemId}`, "objects"))[0];
+     where i.org_id = ${orgId} and i.id = ${scope.itemId}`,
+      "objects",
+    )
+  )[0];
   const item = labels?.item ?? scope.itemId;
   const location = labels?.location ? ` at ${labels.location}` : "";
   return `Item ${item}${location} had ${fromUnits(onHand)} on hand on ${date} but the ${movement} needs ${fromUnits(requested)} — date the ${movement} on or after the receipt that brings the stock in, or receive it first.`;

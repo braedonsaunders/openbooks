@@ -1,8 +1,4 @@
-import {
-  addCalendarDays,
-  calendarDaysBetween,
-  parseIsoDate,
-} from "../platform/business-date.ts";
+import { addCalendarDays, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
 import { ResourcingRefusal } from "./errors.ts";
 
 /** Sunday that starts the timesheet week containing a civil date. */
@@ -31,9 +27,8 @@ export function weeksBetween(firstSunday: string, lastSunday: string): string[] 
   if (dayCount < 0 || dayCount % 7 !== 0) {
     throw new RangeError("last Sunday must be on or after first Sunday");
   }
-  return Array.from(
-    { length: dayCount / 7 + 1 },
-    (_, index) => addCalendarDays(firstSunday, index * 7),
+  return Array.from({ length: dayCount / 7 + 1 }, (_, index) =>
+    addCalendarDays(firstSunday, index * 7),
   );
 }
 

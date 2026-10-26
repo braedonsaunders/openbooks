@@ -4,7 +4,15 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { withOrg } from "@openbooks/engine/platform/db";
 import { burdenRateFor } from "@openbooks/engine/hrm/compensation";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, numberValue, capList, decimalText, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
+import {
+  dateInput,
+  numberValue,
+  capList,
+  decimalText,
+  rangeInputFields,
+  resolveToolRange,
+  type RangeArgs,
+} from "./tools-shared";
 import { healthData } from "../analytics/health-data";
 import { customerData, customerProfitability } from "../analytics/customer-data";
 import { vendorData } from "../analytics/vendor-data";
@@ -57,7 +65,10 @@ type PeriodArgs = RangeArgs;
 
 async function requestAnalyticsStrings() {
   const [translate, locale] = await Promise.all([getTranslations("analytics"), getLocale()]);
-  return { locale, translate: (key: string, values?: Record<string, string | number>) => translate(key, values) };
+  return {
+    locale,
+    translate: (key: string, values?: Record<string, string | number>) => translate(key, values),
+  };
 }
 
 /** Compact map of a shared-engine forecast entry (AR/AP schedule line). */
@@ -108,12 +119,20 @@ function slimCategory(c: CategoryWeekly) {
 /** The org's AP capacity-scheduling knobs, exactly as the AP/AR/Cash pages
  *  build them from the cashflow analytics config — plus the configured
  *  default horizon and runway caution the cash position status reads. */
-async function loadApSettings(orgId: string): Promise<{ weeklyCap: string; restrictToSafe: boolean; runwayCautionWeeks: number; horizonWeeks: number }> {
+async function loadApSettings(
+  orgId: string,
+): Promise<{
+  weeklyCap: string;
+  restrictToSafe: boolean;
+  runwayCautionWeeks: number;
+  horizonWeeks: number;
+}> {
   const cfg = await analyticsConfig(orgId, "cashflow");
   return {
     weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
     restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
-    runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+    runwayCautionWeeks:
+      cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
     horizonWeeks: cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
   };
 }
@@ -128,13 +147,15 @@ const financialHealthTool: AssistantToolDef = {
     "Financial Health dashboard for a period: health score, benchmark-graded ratios, 12-month P&L, margin waterfall, segment performance, drivers, insights. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
-    inputSchema: periodInput,
+  inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const { locale, translate } = await requestAnalyticsStrings();
     const strings = healthStrings(translate, locale);
-    const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings));
+    const r = await withOrg(authz.user.orgId, () =>
+      healthData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
+    );
     // soft-feature: only drops the budget section when the module is off; the dashboard stays.
     const budgetsOn = await isFeatureEnabled(authz.user.orgId, "budgets");
     const ratios = Object.fromEntries(
@@ -162,7 +183,12 @@ const financialHealthTool: AssistantToolDef = {
         currency: r.currency,
         hasBalanceSheet: r.hasBalanceSheet,
         figures: r.figures,
-        ratioInputs: Object.fromEntries(Object.entries(r.ratioInputs).map(([key, ids]) => [key, ids === null ? "not classified" : `${ids.length} accounts`])),
+        ratioInputs: Object.fromEntries(
+          Object.entries(r.ratioInputs).map(([key, ids]) => [
+            key,
+            ids === null ? "not classified" : `${ids.length} accounts`,
+          ]),
+        ),
         categoryScores: r.categoryScores,
         ratios,
         benchmarks: r.benchmarks,
@@ -223,10 +249,18 @@ const customerIntelligenceTool: AssistantToolDef = {
     const projectsOn = await isFeatureEnabled(orgId, "projects");
     // The leak share divides by the loader's scoped, customer-attributed
     // period total — passed in, never a second unscoped query.
-    const r = await withOrg(orgId, () => customerData(period, orgId, authz.allowedSubsidiaryIds, strings));
+    const r = await withOrg(orgId, () =>
+      customerData(period, orgId, authz.allowedSubsidiaryIds, strings),
+    );
     const prof = await withOrg(orgId, () =>
       projectsOn
-        ? customerProfitability(period, orgId, authz.allowedSubsidiaryIds, strings, r.kpis.totalRevenue)
+        ? customerProfitability(
+            period,
+            orgId,
+            authz.allowedSubsidiaryIds,
+            strings,
+            r.kpis.totalRevenue,
+          )
         : Promise.resolve(null),
     );
     // A broken weight sum refuses in the loader payload: fail the tool with
@@ -278,24 +312,25 @@ const customerIntelligenceTool: AssistantToolDef = {
           })),
           50,
         ),
-        profitability: projectsOn && prof
-          ? {
-              summary: prof.summary,
-              customers: capList(
-                prof.customers.map((c) => ({
-                  customerId: c.customerId,
-                  customerName: c.customerName,
-                  totalRevenue: numberValue(c.totalRevenue),
-                  totalCost: numberValue(c.totalCost),
-                  grossProfit: numberValue(c.grossProfit),
-                  marginPct: c.marginPct,
-                  profitTier: c.profitTier,
-                  isFakeChampion: c.isFakeChampion,
-                })),
-                50,
-              ),
-            }
-          : null,
+        profitability:
+          projectsOn && prof
+            ? {
+                summary: prof.summary,
+                customers: capList(
+                  prof.customers.map((c) => ({
+                    customerId: c.customerId,
+                    customerName: c.customerName,
+                    totalRevenue: numberValue(c.totalRevenue),
+                    totalCost: numberValue(c.totalCost),
+                    grossProfit: numberValue(c.grossProfit),
+                    marginPct: c.marginPct,
+                    profitTier: c.profitTier,
+                    isFakeChampion: c.isFakeChampion,
+                  })),
+                  50,
+                ),
+              }
+            : null,
         href: "/analytics/customer-intelligence",
       },
     };
@@ -318,7 +353,9 @@ const vendorPerformanceTool: AssistantToolDef = {
     if ("error" in period) return { ok: false, error: period.error };
     const { locale, translate } = await requestAnalyticsStrings();
     const strings = vendorStrings(translate, locale);
-    const r = await withOrg(authz.user.orgId, () => vendorData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings));
+    const r = await withOrg(authz.user.orgId, () =>
+      vendorData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
+    );
     return {
       ok: true,
       data: {
@@ -366,7 +403,12 @@ const cashflowTool: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    horizonWeeks: z.number().int().min(1).max(MAX_CASH_HORIZON_WEEKS).optional()
+    horizonWeeks: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_CASH_HORIZON_WEEKS)
+      .optional()
       .describe("Forecast horizon in weeks, 1–52 (default the org's configured cashflow horizon)"),
     asOfDate: dateInput.optional().describe("Forecast start date; defaults to today"),
   }),
@@ -376,7 +418,14 @@ const cashflowTool: AssistantToolDef = {
       const cfg = await analyticsConfig(authz.user.orgId, "cashflow");
       const horizon = Math.min(
         MAX_CASH_HORIZON_WEEKS,
-        Math.max(1, Math.trunc(a.horizonWeeks ?? cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks)),
+        Math.max(
+          1,
+          Math.trunc(
+            a.horizonWeeks ??
+              cfg.defaultHorizonWeeks ??
+              ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+          ),
+        ),
       );
       return cashflowData(authz.user.orgId, horizon, a.asOfDate, authz.allowedSubsidiaryIds);
     });
@@ -392,7 +441,12 @@ const cashflowTool: AssistantToolDef = {
         apSettings: r.apSettings,
         deferredBeyondHorizon: r.deferredBeyondHorizon,
         bankAccounts: capList(
-          r.bankAccounts.map((b) => ({ id: b.id, name: b.name, number: b.number, balance: b.balance })),
+          r.bankAccounts.map((b) => ({
+            id: b.id,
+            name: b.name,
+            number: b.number,
+            balance: b.balance,
+          })),
           50,
         ),
         weeks: r.weeks.map(slimWeek),
@@ -422,8 +476,14 @@ const trueCostTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const { locale, translate } = await requestAnalyticsStrings();
-    const strings = trueCostStrings(translate, locale, await presentationCurrency(authz.user.orgId));
-    const r = await withOrg(authz.user.orgId, () => trueCostData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings));
+    const strings = trueCostStrings(
+      translate,
+      locale,
+      await presentationCurrency(authz.user.orgId),
+    );
+    const r = await withOrg(authz.user.orgId, () =>
+      trueCostData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings),
+    );
     return {
       ok: true,
       data: {
@@ -459,14 +519,26 @@ const trueCostTool: AssistantToolDef = {
             rateFormat: c.rateFormat,
             includeInComposite: c.includeInComposite,
             accounts: capList(
-              c.accounts.map((x) => ({ id: x.id, number: x.number, name: x.name, amount: decimalText(x.amount), pinned: x.pinned })),
+              c.accounts.map((x) => ({
+                id: x.id,
+                number: x.number,
+                name: x.name,
+                amount: decimalText(x.amount),
+                pinned: x.pinned,
+              })),
               10,
             ),
           })),
           50,
         ),
         unassigned: capList(
-          r.unassigned.map((x) => ({ id: x.id, number: x.number, name: x.name, amount: decimalText(x.amount), pinned: x.pinned })),
+          r.unassigned.map((x) => ({
+            id: x.id,
+            number: x.number,
+            name: x.name,
+            amount: decimalText(x.amount),
+            pinned: x.pinned,
+          })),
           25,
         ),
         totals: r.totals,
@@ -524,7 +596,9 @@ const utilizationTool: AssistantToolDef = {
     if ("error" in period) return { ok: false, error: period.error };
     const { locale, translate } = await requestAnalyticsStrings();
     const strings = utilizationStrings(translate, locale);
-    const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings));
+    const r = await withOrg(authz.user.orgId, () =>
+      utilizationData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings),
+    );
     const slimGroup = (g: (typeof r.departments)[number]) => ({
       id: g.id,
       name: g.name,
@@ -573,7 +647,11 @@ const spendVelocityTool: AssistantToolDef = {
     const denied = analyticsDashboardDenied(authz, ANALYTICS_DASHBOARD_MAP["spend-velocity"]!);
     if (denied !== null) return { ok: false, error: `Spend Velocity requires ${denied}.` };
     const expenseAccess = await reportExpenseAccess(authz);
-    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings, { expenseAccess }));
+    const r = await withOrg(authz.user.orgId, () =>
+      spendVelocityData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings, {
+        expenseAccess,
+      }),
+    );
     const slimVelocity = (v: (typeof r.accountVelocity)[number]) => ({
       id: v.id,
       name: v.name,
@@ -622,10 +700,19 @@ const spendVelocityTool: AssistantToolDef = {
             25,
           ),
         },
-        zombies: { summary: r.zombies.summary, subscriptions: capList(r.zombies.subscriptions, 25) },
-        fragmentation: { summary: r.fragmentation.summary, categories: capList(r.fragmentation.categories, 25) },
+        zombies: {
+          summary: r.zombies.summary,
+          subscriptions: capList(r.zombies.subscriptions, 25),
+        },
+        fragmentation: {
+          summary: r.fragmentation.summary,
+          categories: capList(r.fragmentation.categories, 25),
+        },
         shadowIT: r.shadowIT,
-        commitmentCliff: { summary: r.commitmentCliff.summary, months: capList(r.commitmentCliff.months, 24) },
+        commitmentCliff: {
+          summary: r.commitmentCliff.summary,
+          months: capList(r.commitmentCliff.months, 24),
+        },
         revenue: r.revenue,
         insights: capList(r.insights, 25),
         periodComparison: {
@@ -648,12 +735,14 @@ const spendVelocityTool: AssistantToolDef = {
           ),
         },
         // Who spent what on expense reports needs org-wide expense read.
-        expenseAnalysis: r.expenseAnalysis ? {
-          summary: r.expenseAnalysis.summary,
-          topSpenders: capList(r.expenseAnalysis.topSpenders, 25),
-          categories: capList(r.expenseAnalysis.categories, 25),
-          monthlyTrends: capList(r.expenseAnalysis.monthlyTrends, 24),
-        } : { omitted: "Expense report analysis requires the expenses.read permission." },
+        expenseAnalysis: r.expenseAnalysis
+          ? {
+              summary: r.expenseAnalysis.summary,
+              topSpenders: capList(r.expenseAnalysis.topSpenders, 25),
+              categories: capList(r.expenseAnalysis.categories, 25),
+              monthlyTrends: capList(r.expenseAnalysis.monthlyTrends, 24),
+            }
+          : { omitted: "Expense report analysis requires the expenses.read permission." },
         href: "/analytics/spend-velocity",
       },
     };
@@ -677,7 +766,9 @@ const sentinelTool: AssistantToolDef = {
     if ("error" in period) return { ok: false, error: period.error };
     const { locale, translate } = await requestAnalyticsStrings();
     const strings = sentinelStrings(translate, locale);
-    const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, period, authz, strings));
+    const r = await withOrg(authz.user.orgId, () =>
+      sentinelData(authz.user.orgId, period, authz, strings),
+    );
     return {
       ok: true,
       data: {
@@ -717,8 +808,16 @@ const sentinelTool: AssistantToolDef = {
           sunday: r.weekend.sunday,
           items: capList(r.weekend.items, 50),
         },
-        rsf: { total: r.rsf.total, items: capList(r.rsf.items, 50), unavailable: r.rsf.unavailable },
-        zscore: { total: r.zscore.total, items: capList(r.zscore.items, 50), unavailable: r.zscore.unavailable },
+        rsf: {
+          total: r.rsf.total,
+          items: capList(r.rsf.items, 50),
+          unavailable: r.rsf.unavailable,
+        },
+        zscore: {
+          total: r.zscore.total,
+          items: capList(r.zscore.items, 50),
+          unavailable: r.zscore.unavailable,
+        },
         sequential: capList(
           r.sequential.map((g) => ({
             partyId: g.partyId,
@@ -763,13 +862,21 @@ const apPositionTool: AssistantToolDef = {
     "AP position (the AP cockpit): outstanding/overdue payables, aging, payment schedule over the configured horizon, vendor groups, priority worklist, pay-run recommendation. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ap.read"] },
-  inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
+  inputSchema: z.object({
+    asOfDate: dateInput.optional().describe("Position date; defaults to today"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOfDate?: string };
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      return apPosition(orgId, apSettings.horizonWeeks, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
+      return apPosition(
+        orgId,
+        apSettings.horizonWeeks,
+        apSettings,
+        a.asOfDate,
+        authz.allowedSubsidiaryIds,
+      );
     });
     return {
       ok: true,
@@ -831,13 +938,21 @@ const arPositionTool: AssistantToolDef = {
     "AR position (the AR cockpit): outstanding/overdue receivables, aging, collection schedule over the configured horizon, customer groups, most-overdue-first worklist. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read"] },
-  inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
+  inputSchema: z.object({
+    asOfDate: dateInput.optional().describe("Position date; defaults to today"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOfDate?: string };
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      return arPosition(orgId, apSettings.horizonWeeks, apSettings, a.asOfDate, authz.allowedSubsidiaryIds);
+      return arPosition(
+        orgId,
+        apSettings.horizonWeeks,
+        apSettings,
+        a.asOfDate,
+        authz.allowedSubsidiaryIds,
+      );
     });
     return {
       ok: true,
@@ -891,17 +1006,36 @@ const cashPositionTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["banking.read"] },
   feature: "banking",
   inputSchema: z.object({
-    horizonWeeks: z.number().int().min(1).max(MAX_CASH_HORIZON_WEEKS).optional().describe("Forecast horizon in weeks, 1–52 (default the org's configured cashflow horizon; 13 = standard 13-week forecast)"),
+    horizonWeeks: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_CASH_HORIZON_WEEKS)
+      .optional()
+      .describe(
+        "Forecast horizon in weeks, 1–52 (default the org's configured cashflow horizon; 13 = standard 13-week forecast)",
+      ),
     asOfDate: dateInput.optional().describe("Forecast start date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "banking")))
+      return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { horizonWeeks?: number; asOfDate?: string };
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
-      const horizon = Math.min(MAX_CASH_HORIZON_WEEKS, Math.max(1, Math.trunc(a.horizonWeeks ?? apSettings.horizonWeeks)));
-      return cashPosition(orgId, horizon, apSettings, a.asOfDate, undefined, authz.allowedSubsidiaryIds);
+      const horizon = Math.min(
+        MAX_CASH_HORIZON_WEEKS,
+        Math.max(1, Math.trunc(a.horizonWeeks ?? apSettings.horizonWeeks)),
+      );
+      return cashPosition(
+        orgId,
+        horizon,
+        apSettings,
+        a.asOfDate,
+        undefined,
+        authz.allowedSubsidiaryIds,
+      );
     });
     return {
       ok: true,
@@ -927,7 +1061,12 @@ const cashPositionTool: AssistantToolDef = {
         arCoverage: r.arCoverage,
         apSettings: r.apSettings,
         bankAccounts: capList(
-          r.bankAccounts.map((b) => ({ id: b.id, name: b.name, number: b.number, balance: b.balance })),
+          r.bankAccounts.map((b) => ({
+            id: b.id,
+            name: b.name,
+            number: b.number,
+            balance: b.balance,
+          })),
           50,
         ),
         weeks: r.weeks.map(slimWeek),

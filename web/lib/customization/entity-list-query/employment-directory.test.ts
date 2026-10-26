@@ -11,13 +11,8 @@ import { sql, type SQL } from "drizzle-orm";
 // employees-where-fail-closed.integration.test.ts, which needs a fixture
 // database.
 const { db } = await import("@openbooks/engine/platform/db");
-const {
-  employeeBaseJoins,
-  employeeBuiltInExpr,
-  employeeSorts,
-  employeeWhere,
-  liveVersionAsOf,
-} = await import("./employment-directory.ts");
+const { employeeBaseJoins, employeeBuiltInExpr, employeeSorts, employeeWhere, liveVersionAsOf } =
+  await import("./employment-directory.ts");
 const { PARTY_BUILT_IN_EXPR, PARTY_SORTS } = await import("./customers.ts");
 const { defaultListView } = await import("@openbooks/customization");
 
@@ -38,7 +33,11 @@ function whereText(
     ORG,
     allowed,
   );
-  return db.select({ n: sql`count(*)` }).from(sql.raw("parties p")).where(where).toSQL().sql;
+  return db
+    .select({ n: sql`count(*)` })
+    .from(sql.raw("parties p"))
+    .where(where)
+    .toSQL().sql;
 }
 
 function joinsText(hrmOn: boolean, allowed: Set<string> | null = null): string {
@@ -49,7 +48,11 @@ function joinsText(hrmOn: boolean, allowed: Set<string> | null = null): string {
 }
 
 function predicateText(fragment: SQL): string {
-  return db.select({ one: sql`1` }).from(sql.raw("parties p")).where(fragment).toSQL().sql;
+  return db
+    .select({ one: sql`1` })
+    .from(sql.raw("parties p"))
+    .where(fragment)
+    .toSQL().sql;
 }
 
 test("the shared as-of predicate carries the live-version rule", () => {
@@ -72,8 +75,17 @@ test("show inactive admits former employees whose role is inactive", () => {
   const current = whereText();
   assert.match(current, /r\.is_active/, "the default list holds current employees only");
   assert.match(current, /p\.is_active/);
-  const where = employeeWhere({ ...defaultListView("employee"), filters: [] }, { filters: {}, hrmEnabled: true, showInactive: true }, ORG, null);
-  const all = db.select({ n: sql`count(*)` }).from(sql.raw("parties p")).where(where).toSQL().sql;
+  const where = employeeWhere(
+    { ...defaultListView("employee"), filters: [] },
+    { filters: {}, hrmEnabled: true, showInactive: true },
+    ORG,
+    null,
+  );
+  const all = db
+    .select({ n: sql`count(*)` })
+    .from(sql.raw("parties p"))
+    .where(where)
+    .toSQL().sql;
   assert.match(all, /employee_roles/, "a party never holding the role stays out");
   assert.doesNotMatch(all, /r\.is_active/, "an ended role no longer hides the person");
   assert.doesNotMatch(all, /p\.is_active/);
@@ -178,7 +190,14 @@ test("directory columns read the shared joins, gated by the switch", () => {
   const on = employeeBuiltInExpr(true);
   assert.deepEqual(
     Object.keys(on).sort(),
-    [...Object.keys(PARTY_BUILT_IN_EXPR), "department", "job_title", "employment_status", "employer", "service_start"].sort(),
+    [
+      ...Object.keys(PARTY_BUILT_IN_EXPR),
+      "department",
+      "job_title",
+      "employment_status",
+      "employer",
+      "service_start",
+    ].sort(),
     "hrm-on keeps every party column and adds the five directory columns",
   );
   for (const key of ["department", "job_title", "employment_status", "employer", "service_start"]) {
@@ -231,13 +250,15 @@ test("the employment joins stay single-row and fenced", () => {
   );
 });
 
-
 // The default is closed: a caller that never says hrmEnabled gets predicates
 // that match nothing, because only the caller knows whether it emitted the
 // employment joins the predicates would otherwise name.
 test("an unstated HRM flag fails closed exactly like HRM off", () => {
   const where = employeeWhere(
-    { ...defaultListView("employee"), filters: [{ key: "department", operator: "eq", value: DEPT }] as never },
+    {
+      ...defaultListView("employee"),
+      filters: [{ key: "department", operator: "eq", value: DEPT }] as never,
+    },
     { filters: { employment_status: "active" } },
     ORG,
     null,

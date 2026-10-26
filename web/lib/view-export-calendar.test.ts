@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import ExcelJS from 'exceljs'
-import { stubModules } from '../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import ExcelJS from "exceljs";
+import { stubModules } from "../testing/stub-modules.ts";
 
 /**
  * Saved-view export stamping: the PDF generation stamp and the workbook
@@ -11,18 +11,18 @@ import { stubModules } from '../testing/stub-modules.ts'
  * instant's UTC day.
  */
 
-const STAMP = '2026-03-15'
-const EXPECTED_STAMP = new Date(`${STAMP}T00:00:00Z`)
-const viewKey = Symbol.for('openbooks.view-export-stamp-test')
-const viewState: { pdfStamps: unknown[] } = { pdfStamps: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[viewKey] = viewState
+const STAMP = "2026-03-15";
+const EXPECTED_STAMP = new Date(`${STAMP}T00:00:00Z`);
+const viewKey = Symbol.for("openbooks.view-export-stamp-test");
+const viewState: { pdfStamps: unknown[] } = { pdfStamps: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[viewKey] = viewState;
 
-const reportPdfUrl = new URL('./report-pdf.ts', import.meta.url).href
-const businessDateUrl = import.meta.resolve('@openbooks/engine/platform/business-date/module')
+const reportPdfUrl = new URL("./report-pdf.ts", import.meta.url).href;
+const businessDateUrl = import.meta.resolve("@openbooks/engine/platform/business-date/module");
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       import { NextResponse } from 'next/server'
       export async function guardPermission() {
@@ -30,12 +30,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ["mock:report-authz", "export async function canRunReportEntity() { return true }"],
   [
-    'mock:report-authz',
-    'export async function canRunReportEntity() { return true }',
-  ],
-  [
-    'mock:views',
+    "mock:views",
     `
       export async function loadView() {
         return {
@@ -53,7 +50,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:report-pdf',
+    "mock:report-pdf",
     `
       export * from '${reportPdfUrl}'
       const state = globalThis[Symbol.for('openbooks.view-export-stamp-test')]
@@ -64,83 +61,99 @@ const mockSources = new Map<string, string>([
       export async function orgBranding() { return { orgName: 'Test Org', primaryColor: '#111827' } }
     `,
   ],
-])
+]);
 
-const SELF_URL = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
+const SELF_URL = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['../../../../../lib/authz', mockUrl('authz')],
-  ['@/lib/authz', mockUrl('authz')],
-  ['../../../../../lib/report-authz', mockUrl('report-authz')],
-  ['../../../../../lib/views', mockUrl('views')],
-  ['../../../../../lib/report-pdf', mockUrl('report-pdf')],
-])
+  ["../../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["../../../../../lib/report-authz", mockUrl("report-authz")],
+  ["../../../../../lib/views", mockUrl("views")],
+  ["../../../../../lib/report-pdf", mockUrl("report-pdf")],
+]);
 
-stubModules({ database: `export * from '${import.meta.resolve('@openbooks/engine/platform/db')}';export const db={execute:async (q, mode)=>{ const inMode = (result) => (mode === 'objects' ? result.rows : result);const text=JSON.stringify(q);if(text.includes('from currencies'))returninMode({rows:[{code:'EUR',minor_units:2},{code:'CAD',minor_units:2}]});if(text.includes('from orgs'))returninMode({rows:[{name:'Test Org',base_currency:'CAD',book:'Primary'}]});throw Error('unexpected export metadata query')}}`, intl: true, navigation: false, authz: false, features: false });
+stubModules({
+  database: `export * from '${import.meta.resolve("@openbooks/engine/platform/db")}';export const db={execute:async (q, mode)=>{ const inMode = (result) => (mode === 'objects' ? result.rows : result);const text=JSON.stringify(q);if(text.includes('from currencies'))returninMode({rows:[{code:'EUR',minor_units:2},{code:'CAD',minor_units:2}]});if(text.includes('from orgs'))returninMode({rows:[{name:'Test Org',base_currency:'CAD',book:'Primary'}]});throw Error('unexpected export metadata query')}}`,
+  intl: true,
+  navigation: false,
+  authz: false,
+  features: false,
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/platform/business-date/module') {
+    if (specifier === "@openbooks/engine/platform/business-date/module") {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export * from '${businessDateUrl}'; export async function businessToday() { return '${STAMP}' }`,
-      }
+      };
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    const name = parsed.searchParams.get('mock')
-    const source = name ? mockSources.get(`mock:${name}`) : undefined
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const parsed = new URL(url);
+    const name = parsed.searchParams.get("mock");
+    const source = name ? mockSources.get(`mock:${name}`) : undefined;
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const viewExportUrl = '../app/api/views/[id]/export/route.ts?view-export-stamp'
-const { GET } = (await import(viewExportUrl)) as typeof import('../app/api/views/[id]/export/route.ts')
-after(() => hooks.deregister())
+const viewExportUrl = "../app/api/views/[id]/export/route.ts?view-export-stamp";
+const { GET } = (await import(
+  viewExportUrl
+)) as typeof import("../app/api/views/[id]/export/route.ts");
+after(() => hooks.deregister());
 
-const VIEW_ID = '00000000-0000-4000-8000-00000000c001'
+const VIEW_ID = "00000000-0000-4000-8000-00000000c001";
 const get = (format: string) =>
   GET(new Request(`http://openbooks.test/api/views/${VIEW_ID}/export?format=${format}`), {
     params: Promise.resolve({ id: VIEW_ID }),
-  })
+  });
 
-test('view PDF export stamps generation from the org business day', async () => {
-  viewState.pdfStamps = []
+test("view PDF export stamps generation from the org business day", async () => {
+  viewState.pdfStamps = [];
 
-  const response = await get('pdf')
+  const response = await get("pdf");
 
-  assert.equal(response.status, 200)
-  assert.match(response.headers.get('content-type') ?? '', /application\/pdf/)
-  assert.match(response.headers.get('content-disposition') ?? '', new RegExp(STAMP))
-  assert.deepEqual(viewState.pdfStamps, [EXPECTED_STAMP])
-})
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/pdf/);
+  assert.match(response.headers.get("content-disposition") ?? "", new RegExp(STAMP));
+  assert.deepEqual(viewState.pdfStamps, [EXPECTED_STAMP]);
+});
 
-test('view xlsx export stamps workbook created and modified from the org business day', async () => {
-  const response = await get('xlsx')
+test("view xlsx export stamps workbook created and modified from the org business day", async () => {
+  const response = await get("xlsx");
 
-  assert.equal(response.status, 200)
-  assert.match(response.headers.get('content-disposition') ?? '', new RegExp(STAMP))
-  const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()) as unknown as ArrayBuffer)
-  assert.deepEqual(workbook.created, EXPECTED_STAMP)
-  assert.deepEqual(workbook.modified, EXPECTED_STAMP)
-})
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-disposition") ?? "", new RegExp(STAMP));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()) as unknown as ArrayBuffer);
+  assert.deepEqual(workbook.created, EXPECTED_STAMP);
+  assert.deepEqual(workbook.modified, EXPECTED_STAMP);
+});
 
-const exportFilenameCases = [{ label: 'export filename response', register: async () => {
-  test('export responses support Unicode filenames with an ASCII-safe header', () => {
-    const source = `import assert from "node:assert/strict"; import { pdfResponse } from "./web/lib/export.ts";
+const exportFilenameCases = [
+  {
+    label: "export filename response",
+    register: async () => {
+      test("export responses support Unicode filenames with an ASCII-safe header", () => {
+        const source = `import assert from "node:assert/strict"; import { pdfResponse } from "./web/lib/export.ts";
       const response=pdfResponse(Buffer.from("pdf"),"Résumé — Direction");
       const value=response.headers.get("content-disposition");
       assert.equal(value,"inline; filename=\\\"Resume Direction.pdf\\\"; filename*=UTF-8''R%C3%A9sum%C3%A9%20%E2%80%94%20Direction.pdf");
-      assert.match(value,/^[\\x00-\\x7f]+$/);`
-    const result = spawnSync(process.execPath, ['--conditions=react-server', '--import', 'tsx', '--input-type=module', '-e', source],
-      { cwd: process.cwd(), env: process.env, encoding: 'utf8' })
-    assert.equal(result.status, 0, result.stderr || result.stdout)
-  })
-}}] as const
-for (const row of exportFilenameCases) await row.register()
+      assert.match(value,/^[\\x00-\\x7f]+$/);`;
+        const result = spawnSync(
+          process.execPath,
+          ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+          { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+        );
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+      });
+    },
+  },
+] as const;
+for (const row of exportFilenameCases) await row.register();

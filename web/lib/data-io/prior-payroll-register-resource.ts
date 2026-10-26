@@ -1,8 +1,15 @@
-import { importRowError } from './row-error'
-import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { importRowError } from "./row-error";
+import {
+  readExportWindow,
+  transferId,
+  transferWhere,
+  transferOrder,
+  transferLimit,
+  finishExportPage,
+} from "./export-page";
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   comparableSlots,
   savePriorStub,
@@ -12,8 +19,8 @@ import {
   TOTAL_FIELD_KEYS,
   type ComparableSlot,
   type PriorStubWrite,
-} from '@openbooks/engine/payroll/parallel-run-store'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+} from "@openbooks/engine/payroll/parallel-run-store";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
 import {
   SOURCE_COLUMNS_KEY,
   UNMAPPED_COLUMNS_KEY,
@@ -22,15 +29,15 @@ import {
   type ResourceDescriptor,
   type ResourceField,
   type WriteOutcome,
-} from './types'
-import type { DataResource, WriteCtx } from './resources'
+} from "./types";
+import type { DataResource, WriteCtx } from "./resources";
 import {
   duplicateImportRowIndexes,
   importRowAction,
   subsidiaryReadFilterWithUnassigned,
   type ReadCtx,
-} from './resource-core'
-import { employeeWriteScopeError } from './write-scope'
+} from "./resource-core";
+import { employeeWriteScopeError } from "./write-scope";
 
 /**
  * The prior payroll provider's register, as an import/export resource.
@@ -62,41 +69,41 @@ import { employeeWriteScopeError } from './write-scope'
 
 // Row cap is the canonical MAX_EXPORT_ROWS from ./resource-core (a second
 // local copy would let the two caps drift, silently reintroducing this bug).
-export const PRIOR_PAYROLL_REGISTER_KEY = 'prior-payroll-register'
+export const PRIOR_PAYROLL_REGISTER_KEY = "prior-payroll-register";
 
 export const PRIOR_PAYROLL_REGISTER_DESCRIPTOR: ResourceDescriptor = {
   key: PRIOR_PAYROLL_REGISTER_KEY,
-  label: 'Prior payroll register (parallel run)',
-  group: 'Setup',
-  iconKey: 'clipboard-check',
-  readPermission: 'payroll.read',
-  writePermission: 'payroll.manage',
+  label: "Prior payroll register (parallel run)",
+  group: "Setup",
+  iconKey: "clipboard-check",
+  readPermission: "payroll.read",
+  writePermission: "payroll.manage",
   supportsImport: true,
-  naturalKey: 'register + employee',
+  naturalKey: "register + employee",
   scopedWrite: true,
-}
+};
 
 /** Header fields every register row carries, before the component columns. */
 const HEADER_FIELDS: ResourceField[] = [
   {
-    key: 'register',
+    key: "register",
     label: 'Register name (e.g. "Prior provider — 2026-07-14")',
-    kind: 'text',
+    kind: "text",
     required: true,
   },
-  { key: 'providerName', label: 'Prior provider', kind: 'text' },
+  { key: "providerName", label: "Prior provider", kind: "text" },
   {
-    key: 'employee',
-    label: 'Employee (payroll number, code, or name)',
-    kind: 'reference',
+    key: "employee",
+    label: "Employee (payroll number, code, or name)",
+    kind: "reference",
     required: true,
-    ref: { resource: 'parties', by: 'short_code' },
+    ref: { resource: "parties", by: "short_code" },
   },
-  { key: 'employeeName', label: 'Employee name', kind: 'text', readOnly: true },
-  { key: 'periodStart', label: 'Period start', kind: 'date', required: true },
-  { key: 'periodEnd', label: 'Period end', kind: 'date', required: true },
-  { key: 'payDate', label: 'Pay date', kind: 'date', required: true },
-]
+  { key: "employeeName", label: "Employee name", kind: "text", readOnly: true },
+  { key: "periodStart", label: "Period start", kind: "date", required: true },
+  { key: "periodEnd", label: "Period end", kind: "date", required: true },
+  { key: "payDate", label: "Pay date", kind: "date", required: true },
+];
 
 /**
  * Resolve whatever the prior provider's register calls a person.
@@ -117,9 +124,10 @@ async function resolveEmployee(
   orgId: string,
   raw: unknown,
 ): Promise<{ id: string } | { error: string }> {
-  const value = String(raw ?? '').trim()
-  if (!value) return { error: 'employee is required' }
-  const matches = await db.execute<{ id: string; display_name: string }>(sql`
+  const value = String(raw ?? "").trim();
+  if (!value) return { error: "employee is required" };
+  const matches = await db.execute<{ id: string; display_name: string }>(
+    sql`
     select distinct p.id, p.display_name
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
@@ -132,14 +140,16 @@ async function resolveEmployee(
             or p.short_code = ${value}
             or p.display_name = ${value})
      limit 3
-  `, 'objects')
+  `,
+    "objects",
+  );
   if (matches.length === 0) {
-    return { error: `employee "${value}" not found — no payroll number, code, or name matches` }
+    return { error: `employee "${value}" not found — no payroll number, code, or name matches` };
   }
   if (matches.length > 1) {
-    return { error: `employee "${value}" matches more than one person — use the payroll number` }
+    return { error: `employee "${value}" matches more than one person — use the payroll number` };
   }
-  return { id: matches[0]!.id }
+  return { id: matches[0]!.id };
 }
 
 /**
@@ -147,11 +157,11 @@ async function resolveEmployee(
  * the raw value it carried in this row.
  */
 function unmappedFrom(src: Record<string, unknown>): [string, unknown][] {
-  const raw = src[UNMAPPED_COLUMNS_KEY]
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return []
+  const raw = src[UNMAPPED_COLUMNS_KEY];
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return [];
   return Object.entries(raw as Record<string, unknown>).filter(
     ([header]) => header.trim().length > 0,
-  )
+  );
 }
 
 /**
@@ -162,71 +172,73 @@ function unmappedFrom(src: Record<string, unknown>): [string, unknown][] {
  * the operator's own header is what makes it actionable.
  */
 function sourceColumnsFrom(src: Record<string, unknown>): Record<string, string> {
-  const raw = src[SOURCE_COLUMNS_KEY]
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  const out: Record<string, string> = {}
+  const raw = src[SOURCE_COLUMNS_KEY];
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
   for (const [field, column] of Object.entries(raw as Record<string, unknown>)) {
-    const header = String(column ?? '').trim()
-    if (header) out[field] = header
+    const header = String(column ?? "").trim();
+    if (header) out[field] = header;
   }
-  return out
+  return out;
 }
 
 function money(value: unknown): string | null {
-  const raw = String(value ?? '').trim()
-  return raw === '' ? null : raw
+  const raw = String(value ?? "").trim();
+  return raw === "" ? null : raw;
 }
 
 export function priorPayrollRegisterResource(orgId: string): DataResource {
   // One query per resource instance, not per row. `fields()` is called on every
   // parse and on every export-page selection.
-  let slotCache: ComparableSlot[] | null = null
+  let slotCache: ComparableSlot[] | null = null;
   const slots = async (): Promise<ComparableSlot[]> => {
-    slotCache ??= await comparableSlots(orgId)
-    return slotCache
-  }
+    slotCache ??= await comparableSlots(orgId);
+    return slotCache;
+  };
 
   const buildFields = async (): Promise<ResourceField[]> => {
-    const all = await slots()
+    const all = await slots();
     return [
       ...HEADER_FIELDS,
       // The register's OWN stated totals. Required, because the comparison
       // reconciles them against the sum of the mapped components — that
       // identity is what surfaces an amount column nobody mapped.
       ...all
-        .filter((slot) => slot.kind === 'total')
+        .filter((slot) => slot.kind === "total")
         .map((slot) => ({
           key: slot.fieldKey,
           label: slot.label,
-          kind: 'currency' as const,
-          required: slot.slot !== 'employer_cost',
+          kind: "currency" as const,
+          required: slot.slot !== "employer_cost",
         })),
       ...all
-        .filter((slot) => slot.kind !== 'total')
+        .filter((slot) => slot.kind !== "total")
         .map((slot) => ({
           key: slot.fieldKey,
           label: slot.label,
-          kind: 'currency' as const,
+          kind: "currency" as const,
         })),
-    ]
-  }
+    ];
+  };
 
   return {
     descriptor: PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
     async fields() {
-      return buildFields()
+      return buildFields();
     },
     async columns() {
-      const fields = await buildFields()
-      return fields.map((f) => ({ key: f.key, label: f.label }))
+      const fields = await buildFields();
+      return fields.map((f) => ({ key: f.key, label: f.label }));
     },
     async read(readCtx?: ReadCtx) {
-      const [fields, all] = await Promise.all([buildFields(), slots()])
-      const columns = fields.map((f) => ({ key: f.key, label: f.label }))
+      const [fields, all] = await Promise.all([buildFields(), slots()]);
+      const columns = fields.map((f) => ({ key: f.key, label: f.label }));
       // Identity-based employee scope: the register stores its own employee
       // label per stub, so a post-filter on that label cannot tell two
       // same-named employees apart — the party join decides, in SQL.
-      const rows = (await readExportWindow(db, sql`
+      const rows = (await readExportWindow(
+        db,
+        sql`
         select g.name as "register", g.provider_name as "providerName",
                coalesce(er.employee_number, p.short_code, s.employee_label) as "employee",
                p.display_name as "employeeName",
@@ -241,327 +253,386 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           left join employee_roles er on er.party_id = s.employee_party_id and er.org_id = s.org_id
          where s.org_id = ${orgId}${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          ${transferWhere(readCtx, sql`s.id`)} order by ${transferOrder(readCtx, sql`s.id`, sql`g.pay_date desc, p.display_name, s.id`)}
-         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
+         limit ${transferLimit(readCtx)}`,
+        readCtx,
+      )) as { rows: Record<string, CellValue>[] };
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      finishExportPage(rows.rows, PRIOR_PAYROLL_REGISTER_DESCRIPTOR.label, readCtx)
+      finishExportPage(rows.rows, PRIOR_PAYROLL_REGISTER_DESCRIPTOR.label, readCtx);
 
-      const amounts = await db.execute<{ prior_stub_id: string; kind: string; slot: string; amount: string }>(sql`
+      const amounts = await db.execute<{
+        prior_stub_id: string;
+        kind: string;
+        slot: string;
+        amount: string;
+      }>(
+        sql`
         select a.prior_stub_id, a.kind, a.slot, a.amount
           from payroll_prior_amounts a
           join payroll_prior_stubs s on s.id = a.prior_stub_id and s.org_id = a.org_id
-         where a.org_id = ${orgId}${readCtx?.page ? (rows.rows.length ? sql` and a.prior_stub_id in (${sql.join(rows.rows.map((row) => sql`${row.stubId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
+         where a.org_id = ${orgId}${
+           readCtx?.page
+             ? rows.rows.length
+               ? sql` and a.prior_stub_id in (${sql.join(
+                   rows.rows.map((row) => sql`${row.stubId}::uuid`),
+                   sql`, `,
+                 )})`
+               : sql` and false`
+             : sql``
+         }`,
+        "objects",
+      );
       // Slot → the field key it exports under, so an export re-imports cleanly.
       const fieldKeyBySlot = new Map(
-        all.filter((s) => s.kind !== 'total').map((s) => [`${s.kind}/${s.slot}`, s.fieldKey]),
-      )
-      const bySt = new Map<string, Record<string, CellValue>>()
+        all.filter((s) => s.kind !== "total").map((s) => [`${s.kind}/${s.slot}`, s.fieldKey]),
+      );
+      const bySt = new Map<string, Record<string, CellValue>>();
       for (const row of amounts) {
-        const fieldKey = fieldKeyBySlot.get(`${row.kind}/${row.slot}`)
-        if (!fieldKey) continue
-        const bucket = bySt.get(row.prior_stub_id) ?? {}
-        bucket[fieldKey] = row.amount
-        bySt.set(row.prior_stub_id, bucket)
+        const fieldKey = fieldKeyBySlot.get(`${row.kind}/${row.slot}`);
+        if (!fieldKey) continue;
+        const bucket = bySt.get(row.prior_stub_id) ?? {};
+        bucket[fieldKey] = row.amount;
+        bySt.set(row.prior_stub_id, bucket);
       }
 
       const totalKeyBySlot = new Map(
         Object.entries(TOTAL_FIELD_KEYS).map(([fieldKey, slot]) => [slot, fieldKey]),
-      )
+      );
       return {
         fields,
         columns,
         rows: rows.rows.map((row) => {
-          const stubId = String(row.stubId)
-          const out: Record<string, CellValue> = { ...row }
-          delete out.stubId
-          out[totalKeyBySlot.get('gross')!] = row.gross!
-          out[totalKeyBySlot.get('net_pay')!] = row.net_pay!
-          out[totalKeyBySlot.get('employer_cost')!] = row.employer_cost!
-          delete out.gross
-          delete out.net_pay
-          delete out.employer_cost
-          return { ...out, ...(bySt.get(stubId) ?? {}) }
+          const stubId = String(row.stubId);
+          const out: Record<string, CellValue> = { ...row };
+          delete out.stubId;
+          out[totalKeyBySlot.get("gross")!] = row.gross!;
+          out[totalKeyBySlot.get("net_pay")!] = row.net_pay!;
+          out[totalKeyBySlot.get("employer_cost")!] = row.employer_cost!;
+          delete out.gross;
+          delete out.net_pay;
+          delete out.employer_cost;
+          return { ...out, ...(bySt.get(stubId) ?? {}) };
         }),
-      }
+      };
     },
     async write(rows, mode: ImportMode, ctx: WriteCtx) {
       // Fail closed before any database access: an unscoped caller must be
       // refused by name, never queried with (see the feature fence below,
       // which touches orgs and would otherwise leak a driver error).
-      const allowedSubsidiaryIds = ctx.allowedSubsidiaryIds
+      const allowedSubsidiaryIds = ctx.allowedSubsidiaryIds;
       if (allowedSubsidiaryIds === undefined) {
-        throw new Error('prior payroll register import requires an explicit subsidiary scope')
+        throw new Error("prior payroll register import requires an explicit subsidiary scope");
       }
       return db.transaction(async (tx) => {
-      const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
-      if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, 'payroll'))) {
-        outcome.failed = rows.length
-        outcome.errors.push(...rows.map((_, index) => ({ row: index + 1, message: 'Payroll feature is disabled' })))
-        return outcome
-      }
-      const all = await slots()
-      const componentSlots = all.filter((slot) => slot.kind !== 'total')
-
-      // A register whose amount columns are ALL unmapped is not an import, it
-      // is a population list — and it would reconcile to a pile of one-sided
-      // findings nobody can act on. Refuse the whole load, once, up front.
-      const mappedComponentKeys = new Set<string>()
-      for (const src of rows) {
-        for (const slot of componentSlots) {
-          if (src[slot.fieldKey] !== undefined) mappedComponentKeys.add(slot.fieldKey)
+        const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] };
+        if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, "payroll"))) {
+          outcome.failed = rows.length;
+          outcome.errors.push(
+            ...rows.map((_, index) => ({ row: index + 1, message: "Payroll feature is disabled" })),
+          );
+          return outcome;
         }
-      }
-      if (rows.length > 0 && mappedComponentKeys.size === 0) {
-        outcome.failed += rows.length
-        outcome.errors.push({
-          row: 0,
-          message:
-            'no component column was mapped — map the prior register\'s earning, deduction and contribution columns onto this payroll\'s components, or the comparison has nothing to reconcile',
-        })
-        return outcome
-      }
+        const all = await slots();
+        const componentSlots = all.filter((slot) => slot.kind !== "total");
 
-      // Unmapped source columns, counted across the whole file, reported once
-      // per column rather than once per row.
-      const unmappedCounts = new Map<string, number>()
-      for (const src of rows) {
-        for (const [column, value] of unmappedFrom(src)) {
-          const carriesValue = String(value ?? '').trim() !== ''
-          unmappedCounts.set(column, (unmappedCounts.get(column) ?? 0) + (carriesValue ? 1 : 0))
-        }
-      }
-
-      // Resolve natural keys and one-header-per-name consistency for the
-      // entire file before any row can create a register or replace a stub.
-      const resolvedKeys: (string | null)[] = []
-      const tuplesByName = new Map<string, Set<string>>()
-      for (const src of rows) {
-        const registerName = String(src.register ?? '').trim()
-        if (!registerName) {
-          resolvedKeys.push(null)
-          continue
-        }
-        const employee = await resolveEmployee(ctx.orgId, src.employee)
-        if ('error' in employee) {
-          resolvedKeys.push(null)
-          continue
-        }
-        if (await employeeWriteScopeError(ctx.orgId, employee.id, allowedSubsidiaryIds)) {
-          resolvedKeys.push(null)
-          continue
-        }
-        resolvedKeys.push(`${registerName}\0${employee.id}`)
-        const tuple = [src.periodStart, src.periodEnd, src.payDate].map((value) => String(value ?? '').trim()).join('\0')
-        const tuples = tuplesByName.get(registerName) ?? new Set<string>()
-        tuples.add(tuple)
-        tuplesByName.set(registerName, tuples)
-      }
-      await ctx.recordKeys?.(resolvedKeys)
-      await ctx.recordConstraints?.(rows.map((src, index) => resolvedKeys[index] ? {
-        key: String(src.register ?? '').trim(),
-        value: [src.periodStart, src.periodEnd, src.payDate].map((value) => String(value ?? '').trim()).join('\0'),
-        label: `Register "${String(src.register ?? '').trim()}" has conflicting period start, period end, or pay date values — use one period tuple per register name and upload the corrected file.`,
-      } : null))
-      const duplicateRows = duplicateImportRowIndexes(resolvedKeys)
-      const conflictingNames = new Set([...tuplesByName].filter(([, tuples]) => tuples.size > 1).map(([name]) => name))
-      const refusedRows = new Set<number>()
-      for (let index = 0; index < rows.length; index++) {
-        const name = String(rows[index]!.register ?? '').trim()
-        if (conflictingNames.has(name)) {
-          refusedRows.add(index)
-          outcome.failed++
-          outcome.errors.push({
-            row: index + 1,
-            field: 'register',
-            message: `register "${name}" has conflicting period start, period end, or pay date values in this load — use one period tuple per register name`,
-          })
-        } else if (duplicateRows.has(index)) {
-          refusedRows.add(index)
-          outcome.failed++
-          // Name every row sharing this key: the operator
-          // sees all copies to delete, not just the one being refused.
-          // (Null keys never match: only rows in duplicateRows reach here,
-          // and duplicateImportRowIndexes skips nulls.)
-          const key = resolvedKeys[index]!
-          const rowsForKey = resolvedKeys
-            .map((other, otherIndex) => (other === key ? otherIndex + 1 : -1))
-            .filter((rowNo) => rowNo > 0)
-            .join(', ')
-          outcome.errors.push({
-            row: index + 1,
-            field: 'employee',
-            message: `this register and employee appear more than once in this load (rows ${rowsForKey}) — keep one row per register and employee`,
-          })
-        }
-      }
-
-      // Registers are per (name, period); cache so a 400-row file is not 400
-      // upserts of the same header.
-      const registerCache = new Map<string, string>()
-      const touchedRegisters = new Set<string>()
-
-      for (let index = 0; index < rows.length; index++) {
-        if (refusedRows.has(index)) continue
-        const rowNo = index + 1
-        const src = rows[index]!
-        try {
-          const registerName = String(src.register ?? '').trim()
-          if (!registerName) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: 'register is required', field: 'register' })
-            continue
-          }
-          const employee = await resolveEmployee(ctx.orgId, src.employee)
-          if ('error' in employee) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: employee.error, field: 'employee' })
-            continue
-          }
-          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, allowedSubsidiaryIds)
-          if (scopeError) {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: scopeError, field: 'employee' })
-            continue
-          }
-
-          const sourceColumns = sourceColumnsFrom(src)
-          const rawAmounts: PriorStubWrite['amounts'] = []
+        // A register whose amount columns are ALL unmapped is not an import, it
+        // is a population list — and it would reconcile to a pile of one-sided
+        // findings nobody can act on. Refuse the whole load, once, up front.
+        const mappedComponentKeys = new Set<string>();
+        for (const src of rows) {
           for (const slot of componentSlots) {
-            const raw = money(src[slot.fieldKey])
-            if (raw === null) continue
-            rawAmounts.push({
-              fieldKey: slot.fieldKey,
-              amount: raw,
-              sourceColumn: sourceColumns[slot.fieldKey] ?? slot.label,
-            })
+            if (src[slot.fieldKey] !== undefined) mappedComponentKeys.add(slot.fieldKey);
           }
+        }
+        if (rows.length > 0 && mappedComponentKeys.size === 0) {
+          outcome.failed += rows.length;
+          outcome.errors.push({
+            row: 0,
+            message:
+              "no component column was mapped — map the prior register's earning, deduction and contribution columns onto this payroll's components, or the comparison has nothing to reconcile",
+          });
+          return outcome;
+        }
 
-          const gross = money(src['total:gross'])
-          const netPay = money(src['total:net_pay'])
-          if (gross === null || netPay === null) {
-            outcome.failed++
+        // Unmapped source columns, counted across the whole file, reported once
+        // per column rather than once per row.
+        const unmappedCounts = new Map<string, number>();
+        for (const src of rows) {
+          for (const [column, value] of unmappedFrom(src)) {
+            const carriesValue = String(value ?? "").trim() !== "";
+            unmappedCounts.set(column, (unmappedCounts.get(column) ?? 0) + (carriesValue ? 1 : 0));
+          }
+        }
+
+        // Resolve natural keys and one-header-per-name consistency for the
+        // entire file before any row can create a register or replace a stub.
+        const resolvedKeys: (string | null)[] = [];
+        const tuplesByName = new Map<string, Set<string>>();
+        for (const src of rows) {
+          const registerName = String(src.register ?? "").trim();
+          if (!registerName) {
+            resolvedKeys.push(null);
+            continue;
+          }
+          const employee = await resolveEmployee(ctx.orgId, src.employee);
+          if ("error" in employee) {
+            resolvedKeys.push(null);
+            continue;
+          }
+          if (await employeeWriteScopeError(ctx.orgId, employee.id, allowedSubsidiaryIds)) {
+            resolvedKeys.push(null);
+            continue;
+          }
+          resolvedKeys.push(`${registerName}\0${employee.id}`);
+          const tuple = [src.periodStart, src.periodEnd, src.payDate]
+            .map((value) => String(value ?? "").trim())
+            .join("\0");
+          const tuples = tuplesByName.get(registerName) ?? new Set<string>();
+          tuples.add(tuple);
+          tuplesByName.set(registerName, tuples);
+        }
+        await ctx.recordKeys?.(resolvedKeys);
+        await ctx.recordConstraints?.(
+          rows.map((src, index) =>
+            resolvedKeys[index]
+              ? {
+                  key: String(src.register ?? "").trim(),
+                  value: [src.periodStart, src.periodEnd, src.payDate]
+                    .map((value) => String(value ?? "").trim())
+                    .join("\0"),
+                  label: `Register "${String(src.register ?? "").trim()}" has conflicting period start, period end, or pay date values — use one period tuple per register name and upload the corrected file.`,
+                }
+              : null,
+          ),
+        );
+        const duplicateRows = duplicateImportRowIndexes(resolvedKeys);
+        const conflictingNames = new Set(
+          [...tuplesByName].filter(([, tuples]) => tuples.size > 1).map(([name]) => name),
+        );
+        const refusedRows = new Set<number>();
+        for (let index = 0; index < rows.length; index++) {
+          const name = String(rows[index]!.register ?? "").trim();
+          if (conflictingNames.has(name)) {
+            refusedRows.add(index);
+            outcome.failed++;
             outcome.errors.push({
-              row: rowNo,
-              message:
-                'the register must state its own gross and net for this employee — the reconciliation proves them against the mapped components, which is how an unmapped amount column is caught',
-            })
-            continue
+              row: index + 1,
+              field: "register",
+              message: `register "${name}" has conflicting period start, period end, or pay date values in this load — use one period tuple per register name`,
+            });
+          } else if (duplicateRows.has(index)) {
+            refusedRows.add(index);
+            outcome.failed++;
+            // Name every row sharing this key: the operator
+            // sees all copies to delete, not just the one being refused.
+            // (Null keys never match: only rows in duplicateRows reach here,
+            // and duplicateImportRowIndexes skips nulls.)
+            const key = resolvedKeys[index]!;
+            const rowsForKey = resolvedKeys
+              .map((other, otherIndex) => (other === key ? otherIndex + 1 : -1))
+              .filter((rowNo) => rowNo > 0)
+              .join(", ");
+            outcome.errors.push({
+              row: index + 1,
+              field: "employee",
+              message: `this register and employee appear more than once in this load (rows ${rowsForKey}) — keep one row per register and employee`,
+            });
           }
+        }
 
-          // One preflight for BOTH modes: the engine's own date and amount
-          // validation, run BEFORE any header row is written and BEFORE the
-          // preview counts the row. It throws with the exact message the
-          // commit path produces, so preview and commit agree on dates and
-          // amounts. Per-row, so one bad row still does not fail its
-          // neighbours; scope, state, or storage failures can still refuse
-          // a row at commit time.
-          const checked = preflightPriorRegisterRow(
-            {
-              periodStart: src.periodStart,
-              periodEnd: src.periodEnd,
-              payDate: src.payDate,
-              gross,
-              netPay,
-              employerCost: money(src['total:employer_cost']),
-              amounts: rawAmounts,
-            },
-            all,
-          )
-          const stub: PriorStubWrite = {
-            employeePartyId: employee.id,
-            employeeLabel: String(src.employee ?? '').trim(),
-            gross: checked.gross,
-            netPay: checked.netPay,
-            employerCost: checked.employerCost,
-            amounts: checked.amounts,
-          }
+        // Registers are per (name, period); cache so a 400-row file is not 400
+        // upserts of the same header.
+        const registerCache = new Map<string, string>();
+        const touchedRegisters = new Set<string>();
 
-          // Classify before touching the header: insert mode must not mutate an
-          // existing register before the stub writer refuses its duplicate.
-          const existing = await db.execute(sql`
+        for (let index = 0; index < rows.length; index++) {
+          if (refusedRows.has(index)) continue;
+          const rowNo = index + 1;
+          const src = rows[index]!;
+          try {
+            const registerName = String(src.register ?? "").trim();
+            if (!registerName) {
+              outcome.failed++;
+              outcome.errors.push({
+                row: rowNo,
+                message: "register is required",
+                field: "register",
+              });
+              continue;
+            }
+            const employee = await resolveEmployee(ctx.orgId, src.employee);
+            if ("error" in employee) {
+              outcome.failed++;
+              outcome.errors.push({ row: rowNo, message: employee.error, field: "employee" });
+              continue;
+            }
+            const scopeError = await employeeWriteScopeError(
+              ctx.orgId,
+              employee.id,
+              allowedSubsidiaryIds,
+            );
+            if (scopeError) {
+              outcome.failed++;
+              outcome.errors.push({ row: rowNo, message: scopeError, field: "employee" });
+              continue;
+            }
+
+            const sourceColumns = sourceColumnsFrom(src);
+            const rawAmounts: PriorStubWrite["amounts"] = [];
+            for (const slot of componentSlots) {
+              const raw = money(src[slot.fieldKey]);
+              if (raw === null) continue;
+              rawAmounts.push({
+                fieldKey: slot.fieldKey,
+                amount: raw,
+                sourceColumn: sourceColumns[slot.fieldKey] ?? slot.label,
+              });
+            }
+
+            const gross = money(src["total:gross"]);
+            const netPay = money(src["total:net_pay"]);
+            if (gross === null || netPay === null) {
+              outcome.failed++;
+              outcome.errors.push({
+                row: rowNo,
+                message:
+                  "the register must state its own gross and net for this employee — the reconciliation proves them against the mapped components, which is how an unmapped amount column is caught",
+              });
+              continue;
+            }
+
+            // One preflight for BOTH modes: the engine's own date and amount
+            // validation, run BEFORE any header row is written and BEFORE the
+            // preview counts the row. It throws with the exact message the
+            // commit path produces, so preview and commit agree on dates and
+            // amounts. Per-row, so one bad row still does not fail its
+            // neighbours; scope, state, or storage failures can still refuse
+            // a row at commit time.
+            const checked = preflightPriorRegisterRow(
+              {
+                periodStart: src.periodStart,
+                periodEnd: src.periodEnd,
+                payDate: src.payDate,
+                gross,
+                netPay,
+                employerCost: money(src["total:employer_cost"]),
+                amounts: rawAmounts,
+              },
+              all,
+            );
+            const stub: PriorStubWrite = {
+              employeePartyId: employee.id,
+              employeeLabel: String(src.employee ?? "").trim(),
+              gross: checked.gross,
+              netPay: checked.netPay,
+              employerCost: checked.employerCost,
+              amounts: checked.amounts,
+            };
+
+            // Classify before touching the header: insert mode must not mutate an
+            // existing register before the stub writer refuses its duplicate.
+            const existing = await db.execute(
+              sql`
             select 1 from payroll_prior_stubs s
               join payroll_prior_registers g on g.id = s.register_id and g.org_id = s.org_id
              where s.org_id = ${ctx.orgId} and g.name = ${registerName}
                and s.employee_party_id = ${employee.id}
-             limit 1`, 'objects')
-          const action = importRowAction(mode, existing.length > 0)
-          if (action === 'conflict') {
-            outcome.failed++
-            outcome.errors.push({ row: rowNo, message: 'a prior register row already exists for this employee — choose upsert to replace it' })
-            continue
-          }
-          // A dry run validates everything and writes nothing, so the wizard's
-          // preview is a real preview rather than a row count.
-          if (ctx.dryRun) {
-            if (action === 'update') outcome.updated++
-            else outcome.created++
-            continue
-          }
+             limit 1`,
+              "objects",
+            );
+            const action = importRowAction(mode, existing.length > 0);
+            if (action === "conflict") {
+              outcome.failed++;
+              outcome.errors.push({
+                row: rowNo,
+                message:
+                  "a prior register row already exists for this employee — choose upsert to replace it",
+              });
+              continue;
+            }
+            // A dry run validates everything and writes nothing, so the wizard's
+            // preview is a real preview rather than a row count.
+            if (ctx.dryRun) {
+              if (action === "update") outcome.updated++;
+              else outcome.created++;
+              continue;
+            }
 
-          const registerId = registerCache.get(registerName) ?? await upsertPriorRegister({
-              orgId: ctx.orgId,
-              actorId: ctx.actorId,
-              name: registerName,
-              providerName: String(src.providerName ?? '').trim() || null,
-              periodStart: checked.periodStart,
-              periodEnd: checked.periodEnd,
-              payDate: checked.payDate,
-              allowedSubsidiaryIds,
-            }, tx)
-          const saved = await savePriorStub(
-              { orgId: ctx.orgId, actorId: ctx.actorId, registerId, row: stub, allowedSubsidiaryIds },
+            const registerId =
+              registerCache.get(registerName) ??
+              (await upsertPriorRegister(
+                {
+                  orgId: ctx.orgId,
+                  actorId: ctx.actorId,
+                  name: registerName,
+                  providerName: String(src.providerName ?? "").trim() || null,
+                  periodStart: checked.periodStart,
+                  periodEnd: checked.periodEnd,
+                  payDate: checked.payDate,
+                  allowedSubsidiaryIds,
+                },
+                tx,
+              ));
+            const saved = await savePriorStub(
+              {
+                orgId: ctx.orgId,
+                actorId: ctx.actorId,
+                registerId,
+                row: stub,
+                allowedSubsidiaryIds,
+              },
               all,
               { mode, runner: tx },
-            )
-          registerCache.set(registerName, registerId)
-          touchedRegisters.add(registerId)
-          if (saved.created) outcome.created++
-          else outcome.updated++
-        } catch (error) {
-          outcome.failed++
-          outcome.errors.push({
-            row: rowNo,
-            message: importRowError(error),
-          })
-        }
-      }
-
-      // Record the unmapped columns on every register this load touched, and
-      // report them. This is NOT a row failure: a register legitimately carries
-      // department, cost centre and hour columns that map onto nothing. It is
-      // an unavoidable statement that an amount may be unaccounted for.
-      if (unmappedCounts.size > 0) {
-        if (!ctx.dryRun) {
-          const columns = [...unmappedCounts.entries()].map(([column, valuedRows]) => ({
-            column,
-            valuedRows,
-          }))
-          for (const registerId of touchedRegisters) {
-            await recordUnmappedColumns(ctx.orgId, registerId, columns, allowedSubsidiaryIds, tx)
+            );
+            registerCache.set(registerName, registerId);
+            touchedRegisters.add(registerId);
+            if (saved.created) outcome.created++;
+            else outcome.updated++;
+          } catch (error) {
+            outcome.failed++;
+            outcome.errors.push({
+              row: rowNo,
+              message: importRowError(error),
+            });
           }
         }
-        for (const [column, valuedRows] of [...unmappedCounts.entries()].sort()) {
+
+        // Record the unmapped columns on every register this load touched, and
+        // report them. This is NOT a row failure: a register legitimately carries
+        // department, cost centre and hour columns that map onto nothing. It is
+        // an unavoidable statement that an amount may be unaccounted for.
+        if (unmappedCounts.size > 0) {
+          if (!ctx.dryRun) {
+            const columns = [...unmappedCounts.entries()].map(([column, valuedRows]) => ({
+              column,
+              valuedRows,
+            }));
+            for (const registerId of touchedRegisters) {
+              await recordUnmappedColumns(ctx.orgId, registerId, columns, allowedSubsidiaryIds, tx);
+            }
+          }
+          for (const [column, valuedRows] of [...unmappedCounts.entries()].sort()) {
+            outcome.errors.push({
+              row: 0,
+              field: column,
+              message:
+                `column "${column}" was not mapped onto a component (a value in ${valuedRows} row(s)). ` +
+                "Nothing in it is compared, and the reconciliation will report it as unmapped. " +
+                "Map it, or confirm it carries no amount.",
+            });
+          }
+        }
+
+        // Prove the load is not silently empty. An import that resolved nobody is
+        // exactly what makes a later comparison look clean for the wrong reason.
+        if (rows.length > 0 && outcome.created + outcome.updated === 0 && outcome.failed === 0) {
           outcome.errors.push({
             row: 0,
-            field: column,
-            message:
-              `column "${column}" was not mapped onto a component (a value in ${valuedRows} row(s)). ` +
-              'Nothing in it is compared, and the reconciliation will report it as unmapped. ' +
-              'Map it, or confirm it carries no amount.',
-          })
+            message: "no register row was written — nothing in this file resolved to an employee",
+          });
         }
-      }
 
-      // Prove the load is not silently empty. An import that resolved nobody is
-      // exactly what makes a later comparison look clean for the wrong reason.
-      if (rows.length > 0 && outcome.created + outcome.updated === 0 && outcome.failed === 0) {
-        outcome.errors.push({
-          row: 0,
-          message: 'no register row was written — nothing in this file resolved to an employee',
-        })
-      }
-
-      return outcome
-      })
+        return outcome;
+      });
     },
-  }
+  };
 }

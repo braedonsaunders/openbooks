@@ -1,4 +1,4 @@
-import { cmp } from '@openbooks/engine/money/money'
+import { cmp } from "@openbooks/engine/money/money";
 
 /**
  * Depreciation-basis edit control for the fixed-asset PATCH route.
@@ -13,17 +13,17 @@ import { cmp } from '@openbooks/engine/money/money'
 
 /** The stored fixed_assets columns a schedule is computed from. */
 export interface AssetDepreciationBasis {
-  acquisition_cost: string
-  salvage_value: string
-  useful_life_months: number | null
-  in_service_on: string | null
-  depreciation_rate_percent: string | null
-  depreciation_units_total: string | null
-  depreciation_convention: string | null
-  depreciation_method: string | null
-  depreciation_method_id: string | null
-  opening_accumulated_depreciation: string | null
-  opening_accumulated_as_of: string | null
+  acquisition_cost: string;
+  salvage_value: string;
+  useful_life_months: number | null;
+  in_service_on: string | null;
+  depreciation_rate_percent: string | null;
+  depreciation_units_total: string | null;
+  depreciation_convention: string | null;
+  depreciation_method: string | null;
+  depreciation_method_id: string | null;
+  opening_accumulated_depreciation: string | null;
+  opening_accumulated_as_of: string | null;
 }
 
 /**
@@ -32,17 +32,17 @@ export interface AssetDepreciationBasis {
  * is compared against the stored basis.
  */
 export interface RequestedAssetBasis {
-  cost?: string
-  salvage?: string
-  lifeMonths?: number | null
-  inServiceOn?: string | null
-  ratePercent?: string | null
-  unitsTotal?: string | null
-  convention?: string | null
-  method?: string | null
-  depreciationMethodId?: string | null
-  openingAccumulated?: string | null
-  openingAsOf?: string | null
+  cost?: string;
+  salvage?: string;
+  lifeMonths?: number | null;
+  inServiceOn?: string | null;
+  ratePercent?: string | null;
+  unitsTotal?: string | null;
+  convention?: string | null;
+  method?: string | null;
+  depreciationMethodId?: string | null;
+  openingAccumulated?: string | null;
+  openingAsOf?: string | null;
 }
 
 /** The basis after applying the request to the stored row. */
@@ -53,22 +53,39 @@ export function mergedAssetBasis(
   return {
     acquisition_cost: requested.cost !== undefined ? requested.cost : existing.acquisition_cost,
     salvage_value: requested.salvage !== undefined ? requested.salvage : existing.salvage_value,
-    useful_life_months: requested.lifeMonths !== undefined ? requested.lifeMonths : existing.useful_life_months,
-    in_service_on: requested.inServiceOn !== undefined ? requested.inServiceOn : existing.in_service_on,
-    depreciation_rate_percent: requested.ratePercent !== undefined ? requested.ratePercent : existing.depreciation_rate_percent,
-    depreciation_units_total: requested.unitsTotal !== undefined ? requested.unitsTotal : existing.depreciation_units_total,
-    depreciation_convention: requested.convention !== undefined ? requested.convention : existing.depreciation_convention,
-    depreciation_method: requested.method !== undefined ? requested.method : existing.depreciation_method,
-    depreciation_method_id: requested.depreciationMethodId !== undefined ? requested.depreciationMethodId : existing.depreciation_method_id,
-    opening_accumulated_depreciation: requested.openingAccumulated !== undefined ? requested.openingAccumulated : existing.opening_accumulated_depreciation,
-    opening_accumulated_as_of: requested.openingAsOf !== undefined ? requested.openingAsOf : existing.opening_accumulated_as_of,
-  }
+    useful_life_months:
+      requested.lifeMonths !== undefined ? requested.lifeMonths : existing.useful_life_months,
+    in_service_on:
+      requested.inServiceOn !== undefined ? requested.inServiceOn : existing.in_service_on,
+    depreciation_rate_percent:
+      requested.ratePercent !== undefined
+        ? requested.ratePercent
+        : existing.depreciation_rate_percent,
+    depreciation_units_total:
+      requested.unitsTotal !== undefined ? requested.unitsTotal : existing.depreciation_units_total,
+    depreciation_convention:
+      requested.convention !== undefined ? requested.convention : existing.depreciation_convention,
+    depreciation_method:
+      requested.method !== undefined ? requested.method : existing.depreciation_method,
+    depreciation_method_id:
+      requested.depreciationMethodId !== undefined
+        ? requested.depreciationMethodId
+        : existing.depreciation_method_id,
+    opening_accumulated_depreciation:
+      requested.openingAccumulated !== undefined
+        ? requested.openingAccumulated
+        : existing.opening_accumulated_depreciation,
+    opening_accumulated_as_of:
+      requested.openingAsOf !== undefined
+        ? requested.openingAsOf
+        : existing.opening_accumulated_as_of,
+  };
 }
 
 /** Exact decimal-string comparison; null participates as a value of its own. */
 function exactChanged(next: string | null, stored: string | null): boolean {
-  if (next === null || stored === null) return next !== stored
-  return cmp(next, stored) !== 0
+  if (next === null || stored === null) return next !== stored;
+  return cmp(next, stored) !== 0;
 }
 
 /**
@@ -80,29 +97,38 @@ export function assetBasisChanges(
   existing: AssetDepreciationBasis,
   requested: RequestedAssetBasis,
 ): string[] {
-  const next = mergedAssetBasis(existing, requested)
-  const changes: string[] = []
-  if (exactChanged(next.acquisition_cost, existing.acquisition_cost)) changes.push('acquisition_cost')
-  if (exactChanged(next.salvage_value, existing.salvage_value)) changes.push('salvage_value')
-  if (next.useful_life_months !== existing.useful_life_months) changes.push('useful_life_months')
-  if (next.in_service_on !== existing.in_service_on) changes.push('in_service_on')
-  if (exactChanged(next.depreciation_rate_percent, existing.depreciation_rate_percent)) changes.push('depreciation_rate_percent')
-  if (exactChanged(next.depreciation_units_total, existing.depreciation_units_total)) changes.push('depreciation_units_total')
-  if (next.depreciation_convention !== existing.depreciation_convention) changes.push('depreciation_convention')
-  if (next.depreciation_method !== existing.depreciation_method) changes.push('depreciation_method')
-  if (next.depreciation_method_id !== existing.depreciation_method_id) changes.push('depreciation_method_id')
+  const next = mergedAssetBasis(existing, requested);
+  const changes: string[] = [];
+  if (exactChanged(next.acquisition_cost, existing.acquisition_cost))
+    changes.push("acquisition_cost");
+  if (exactChanged(next.salvage_value, existing.salvage_value)) changes.push("salvage_value");
+  if (next.useful_life_months !== existing.useful_life_months) changes.push("useful_life_months");
+  if (next.in_service_on !== existing.in_service_on) changes.push("in_service_on");
+  if (exactChanged(next.depreciation_rate_percent, existing.depreciation_rate_percent))
+    changes.push("depreciation_rate_percent");
+  if (exactChanged(next.depreciation_units_total, existing.depreciation_units_total))
+    changes.push("depreciation_units_total");
+  if (next.depreciation_convention !== existing.depreciation_convention)
+    changes.push("depreciation_convention");
+  if (next.depreciation_method !== existing.depreciation_method)
+    changes.push("depreciation_method");
+  if (next.depreciation_method_id !== existing.depreciation_method_id)
+    changes.push("depreciation_method_id");
   // The opening carry-in figures select which months schedule at all: editing
   // them after posting would replan the recognised past, so they are basis.
-  if (exactChanged(next.opening_accumulated_depreciation, existing.opening_accumulated_depreciation)) {
-    changes.push('opening_accumulated_depreciation')
+  if (
+    exactChanged(next.opening_accumulated_depreciation, existing.opening_accumulated_depreciation)
+  ) {
+    changes.push("opening_accumulated_depreciation");
   }
-  if (next.opening_accumulated_as_of !== existing.opening_accumulated_as_of) changes.push('opening_accumulated_as_of')
-  return changes
+  if (next.opening_accumulated_as_of !== existing.opening_accumulated_as_of)
+    changes.push("opening_accumulated_as_of");
+  return changes;
 }
 
 export const POSTED_BASIS_EDIT_ERROR =
-  'The depreciation basis of this asset is fixed once depreciation has posted. ' +
-  'Correct it with a controlled adjustment (impairment, revaluation or disposal) instead of editing the asset.'
+  "The depreciation basis of this asset is fixed once depreciation has posted. " +
+  "Correct it with a controlled adjustment (impairment, revaluation or disposal) instead of editing the asset.";
 
 /**
  * Fail-closed gate: refuse a basis change once depreciation has posted for the
@@ -114,7 +140,7 @@ export function postedAssetBasisEditRefusal(
   existing: AssetDepreciationBasis,
   requested: RequestedAssetBasis,
 ): string | null {
-  if (!hasPostedDepreciation) return null
-  if (assetBasisChanges(existing, requested).length === 0) return null
-  return POSTED_BASIS_EDIT_ERROR
+  if (!hasPostedDepreciation) return null;
+  if (assetBasisChanges(existing, requested).length === 0) return null;
+  return POSTED_BASIS_EDIT_ERROR;
 }

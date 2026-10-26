@@ -20,9 +20,7 @@ export interface BodyIssue {
   message: string;
 }
 
-export type ParsedBody<T> =
-  | { ok: true; data: T }
-  | { ok: false; response: NextResponse };
+export type ParsedBody<T> = { ok: true; data: T } | { ok: false; response: NextResponse };
 
 const INVALID_BODY = "invalid request body";
 
@@ -121,6 +119,5 @@ export function validateJsonBody<S extends z.ZodType>(
   }
   return { ok: true, data: parsed.data };
 }
-
 
 export * from "./json-schema";

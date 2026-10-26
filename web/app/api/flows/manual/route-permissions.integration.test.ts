@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import type { SessionUser } from '../../../../lib/auth'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../../../../lib/auth";
 
 /**
  * Manual flow triggers enforce the SUBJECT's action authority, independent
@@ -16,29 +16,44 @@ import type { SessionUser } from '../../../../lib/auth'
  * session is stubbed; handler, permission resolution, planning and the
  * engine are real.
  */
-const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __manualFlowPermissionsUser: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __manualFlowPermissionsUser: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-      return virtual('export async function currentUser(){return globalThis.__manualFlowPermissionsUser.user}')
+    if (
+      (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
+      context.parentURL?.endsWith("/web/lib/authz.ts")
+    ) {
+      return virtual(
+        "export async function currentUser(){return globalThis.__manualFlowPermissionsUser.user}",
+      );
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedDraftDocument } =
-  await import('@openbooks/engine/testing/fixtures')
-const { GET, POST } = await import('./route')
+  await import("@openbooks/engine/testing/fixtures");
+const { GET, POST } = await import("./route");
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
-    id, orgId, name: 'tester', email: `tester-${id.slice(0, 8)}@scratch.test`, roles: [],
-    isSuperAdmin: false, envKind: 'production', productionOrgId: orgId,
-    homeOrgId: orgId, homeUserId: id,
-  }
+    id,
+    orgId,
+    name: "tester",
+    email: `tester-${id.slice(0, 8)}@scratch.test`,
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: id,
+  };
 }
 
 async function enableFlows(orgId: string): Promise<void> {
@@ -48,7 +63,7 @@ async function enableFlows(orgId: string): Promise<void> {
         settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"flows":true}'::jsonb, true)
       where id = ${orgId}`),
-  )
+  );
 }
 
 /** A manual button with NO requirePermission, wired to a field write. */
@@ -57,168 +72,220 @@ async function seedTagManualFlow(orgId: string): Promise<void> {
     schemaVersion: 1,
     nodes: [
       {
-        id: 'trigger', position: { x: 0, y: 0 },
-        data: { kind: 'trigger', trigger: { trigger: 'manual', buttonId: 'tag', label: 'Tag' } },
+        id: "trigger",
+        position: { x: 0, y: 0 },
+        data: { kind: "trigger", trigger: { trigger: "manual", buttonId: "tag", label: "Tag" } },
       },
       {
-        id: 'set', position: { x: 220, y: 0 },
+        id: "set",
+        position: { x: 220, y: 0 },
         data: {
-          kind: 'action',
-          action: { action: 'set_field', field: 'memo', value: { kind: 'literal', value: 'tagged' } },
+          kind: "action",
+          action: {
+            action: "set_field",
+            field: "memo",
+            value: { kind: "literal", value: "tagged" },
+          },
         },
       },
     ],
-    edges: [{ id: 'e1', source: 'trigger', target: 'set', sourceHandle: 'next' }],
-  }
+    edges: [{ id: "e1", source: "trigger", target: "set", sourceHandle: "next" }],
+  };
   await withBypassContext(() =>
     db.execute(sql`
       insert into flows (id, org_id, name, subject_kind, enabled, graph)
       values (${randomUUID()}, ${orgId}, 'Manual tag flow', 'vendor_bill', true,
               ${JSON.stringify(graph)}::jsonb)`),
-  )
+  );
 }
 
 /** A role key with exactly the given permission grants. */
 async function seedRole(orgId: string, key: string, permissions: string[]): Promise<void> {
-  const userId = await withBypassContext(() => createScratchUser(orgId, key, key))
-  await withBypassContext(() => db.execute(sql`
+  const userId = await withBypassContext(() => createScratchUser(orgId, key, key));
+  await withBypassContext(() =>
+    db.execute(sql`
     update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
-     where org_id = ${orgId} and key = ${key}`))
-  state.user = sessionUser(userId, orgId)
+     where org_id = ${orgId} and key = ${key}`),
+  );
+  state.user = sessionUser(userId, orgId);
 }
 
 async function runCount(orgId: string, subjectId: string): Promise<number> {
-  const rows = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-    select count(*) as n from flow_runs where org_id = ${orgId} and subject_id = ${subjectId}`, 'objects')))
-  return Number(rows[0]?.n ?? 0)
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: string }>(
+      sql`
+    select count(*) as n from flow_runs where org_id = ${orgId} and subject_id = ${subjectId}`,
+      "objects",
+    ),
+  );
+  return Number(rows[0]?.n ?? 0);
 }
 
 async function billMemo(orgId: string, id: string): Promise<string | null> {
-  const rows = (await withBypassContext(() => db.execute<{ memo: string | null }>(sql`
-    select memo from documents where id = ${id} and org_id = ${orgId}`, 'objects')))
-  return rows[0]?.memo ?? null
+  const rows = await withBypassContext(() =>
+    db.execute<{ memo: string | null }>(
+      sql`
+    select memo from documents where id = ${id} and org_id = ${orgId}`,
+      "objects",
+    ),
+  );
+  return rows[0]?.memo ?? null;
 }
 
-test('a read-only role is refused a field-writing manual trigger', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("a read-only role is refused a field-writing manual trigger", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    await enableFlows(org.orgId)
-    await seedTagManualFlow(org.orgId)
-    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    await enableFlows(org.orgId);
+    await seedTagManualFlow(org.orgId);
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, "maker", "maker"));
     const docId = await withBypassContext(() =>
-      seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: maker }))
-    await seedRole(org.orgId, 'bill_reader', ['ap.read'])
+      seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: maker }),
+    );
+    await seedRole(org.orgId, "bill_reader", ["ap.read"]);
 
     const list = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
-      )))
-    assert.equal(list.status, 200)
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
+        ),
+      ),
+    );
+    assert.equal(list.status, 200);
     assert.deepEqual(
-      (await list.json() as { buttons: unknown[] }).buttons, [],
-      'the field-writing button stays hidden without edit authority',
-    )
+      ((await list.json()) as { buttons: unknown[] }).buttons,
+      [],
+      "the field-writing button stays hidden without edit authority",
+    );
 
     const res = await withOrgContext(org.orgId, () =>
-      POST(new Request('http://manual.test/api/flows/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjectKind: 'vendor_bill', subjectId: docId, buttonId: 'tag' }),
-      })))
+      POST(
+        new Request("http://manual.test/api/flows/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subjectKind: "vendor_bill", subjectId: docId, buttonId: "tag" }),
+        }),
+      ),
+    );
     if (res.status !== 404) {
-      assert.fail(`read-only manual POST must be 404 unavailability, got ${res.status}: ${JSON.stringify(await res.json())}`)
+      assert.fail(
+        `read-only manual POST must be 404 unavailability, got ${res.status}: ${JSON.stringify(await res.json())}`,
+      );
     }
     assert.match(
-      ((await res.json()) as { error?: string }).error ?? '',
+      ((await res.json()) as { error?: string }).error ?? "",
       /not available/,
-      'the refusal reads exactly like a missing button',
-    )
-    assert.equal(await runCount(org.orgId, docId), 0, 'no flow run may start')
-    assert.equal(await billMemo(org.orgId, docId), null, 'the field is untouched')
+      "the refusal reads exactly like a missing button",
+    );
+    assert.equal(await runCount(org.orgId, docId), 0, "no flow run may start");
+    assert.equal(await billMemo(org.orgId, docId), null, "the field is untouched");
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('an edit grant runs the same trigger and writes the field', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("an edit grant runs the same trigger and writes the field", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    await enableFlows(org.orgId)
-    await seedTagManualFlow(org.orgId)
-    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    await enableFlows(org.orgId);
+    await seedTagManualFlow(org.orgId);
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, "maker", "maker"));
     const docId = await withBypassContext(() =>
-      seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: maker }))
-    await seedRole(org.orgId, 'bill_editor', ['ap.read', 'ap.create'])
+      seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: maker }),
+    );
+    await seedRole(org.orgId, "bill_editor", ["ap.read", "ap.create"]);
 
     const list = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
-      )))
-    assert.equal(list.status, 200)
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
+        ),
+      ),
+    );
+    assert.equal(list.status, 200);
     assert.deepEqual(
       ((await list.json()) as { buttons: { buttonId: string }[] }).buttons.map((b) => b.buttonId),
-      ['tag'],
-      'the button is offered with edit authority',
-    )
+      ["tag"],
+      "the button is offered with edit authority",
+    );
 
     const res = await withOrgContext(org.orgId, () =>
-      POST(new Request('http://manual.test/api/flows/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjectKind: 'vendor_bill', subjectId: docId, buttonId: 'tag' }),
-      })))
-    assert.equal(res.status, 200, `edit-granted POST must dispatch: ${JSON.stringify(await res.clone().json())}`)
-    assert.equal(((await res.json()) as { ok?: boolean }).ok, true)
-    assert.equal(await billMemo(org.orgId, docId), 'tagged')
+      POST(
+        new Request("http://manual.test/api/flows/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subjectKind: "vendor_bill", subjectId: docId, buttonId: "tag" }),
+        }),
+      ),
+    );
+    assert.equal(
+      res.status,
+      200,
+      `edit-granted POST must dispatch: ${JSON.stringify(await res.clone().json())}`,
+    );
+    assert.equal(((await res.json()) as { ok?: boolean }).ok, true);
+    assert.equal(await billMemo(org.orgId, docId), "tagged");
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('an edit grant outside the record subsidiary still cannot run it', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("an edit grant outside the record subsidiary still cannot run it", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    await enableFlows(org.orgId)
-    await seedTagManualFlow(org.orgId)
-    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    await enableFlows(org.orgId);
+    await seedTagManualFlow(org.orgId);
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, "maker", "maker"));
     const docId = await withBypassContext(() =>
-      seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: maker }))
-    const branch = randomUUID()
-    await withBypassContext(() => db.execute(sql`
+      seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: maker }),
+    );
+    const branch = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into subsidiaries
         (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-      values (${branch}, ${org.orgId}, ${org.subsidiaryId}, 'Manual Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`))
-    const userId = await withBypassContext(() => createScratchUser(org.orgId, 'branch editor', 'branch_editor'))
-    await withBypassContext(() => db.execute(sql`
+      values (${branch}, ${org.orgId}, ${org.subsidiaryId}, 'Manual Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+    );
+    const userId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "branch editor", "branch_editor"),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update app_roles set permissions = '["ap.read", "ap.create"]'::jsonb,
-        subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [branch] })}::jsonb
-       where org_id = ${org.orgId} and key = 'branch_editor'`))
-    state.user = sessionUser(userId, org.orgId)
+        subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [branch] })}::jsonb
+       where org_id = ${org.orgId} and key = 'branch_editor'`),
+    );
+    state.user = sessionUser(userId, org.orgId);
 
     const list = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
-      )))
-    assert.equal(list.status, 404, 'out-of-scope manual GET answers as missing')
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
+        ),
+      ),
+    );
+    assert.equal(list.status, 404, "out-of-scope manual GET answers as missing");
 
     const res = await withOrgContext(org.orgId, () =>
-      POST(new Request('http://manual.test/api/flows/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjectKind: 'vendor_bill', subjectId: docId, buttonId: 'tag' }),
-      })))
-    assert.equal(res.status, 404, 'out-of-scope manual POST answers as missing')
-    assert.equal(await runCount(org.orgId, docId), 0, 'no flow run may start')
+      POST(
+        new Request("http://manual.test/api/flows/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subjectKind: "vendor_bill", subjectId: docId, buttonId: "tag" }),
+        }),
+      ),
+    );
+    assert.equal(res.status, 404, "out-of-scope manual POST answers as missing");
+    assert.equal(await runCount(org.orgId, docId), 0, "no flow run may start");
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('with Flows off a visible record lists no buttons and a hidden one stays missing', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("with Flows off a visible record lists no buttons and a hidden one stays missing", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     await withBypassContext(() =>
       db.execute(sql`
@@ -226,52 +293,70 @@ test('with Flows off a visible record lists no buttons and a hidden one stays mi
           settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"flows":false}'::jsonb, true)
         where id = ${org.orgId}`),
-    )
-    await seedTagManualFlow(org.orgId)
-    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    );
+    await seedTagManualFlow(org.orgId);
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, "maker", "maker"));
     const docId = await withBypassContext(() =>
-      seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: maker }))
-    await seedRole(org.orgId, 'bill_editor', ['ap.read', 'ap.create'])
+      seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: maker }),
+    );
+    await seedRole(org.orgId, "bill_editor", ["ap.read", "ap.create"]);
 
     const list = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
-      )))
-    assert.equal(list.status, 200, 'Flows off is an empty state, not a refusal')
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
+        ),
+      ),
+    );
+    assert.equal(list.status, 200, "Flows off is an empty state, not a refusal");
     assert.deepEqual(
-      ((await list.json()) as { buttons: unknown[] }).buttons, [],
-      'an enabled flow graph offers nothing while the feature is off',
-    )
+      ((await list.json()) as { buttons: unknown[] }).buttons,
+      [],
+      "an enabled flow graph offers nothing while the feature is off",
+    );
 
     const missing = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${randomUUID()}`,
-      )))
-    assert.equal(missing.status, 404, 'a record that does not exist still answers as missing')
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${randomUUID()}`,
+        ),
+      ),
+    );
+    assert.equal(missing.status, 404, "a record that does not exist still answers as missing");
 
     const res = await withOrgContext(org.orgId, () =>
-      POST(new Request('http://manual.test/api/flows/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjectKind: 'vendor_bill', subjectId: docId, buttonId: 'tag' }),
-      })))
-    assert.notEqual(res.status, 200, 'a manual run cannot dispatch while Flows is off')
-    assert.equal(await runCount(org.orgId, docId), 0, 'no flow run may start')
+      POST(
+        new Request("http://manual.test/api/flows/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subjectKind: "vendor_bill", subjectId: docId, buttonId: "tag" }),
+        }),
+      ),
+    );
+    assert.notEqual(res.status, 200, "a manual run cannot dispatch while Flows is off");
+    assert.equal(await runCount(org.orgId, docId), 0, "no flow run may start");
 
-    await seedRole(org.orgId, 'no_ap', [])
+    await seedRole(org.orgId, "no_ap", []);
     const noGrant = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
-      )))
-    assert.equal(noGrant.status, 404, 'a caller without the read grant meets the missing-record answer')
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
+        ),
+      ),
+    );
+    assert.equal(
+      noGrant.status,
+      404,
+      "a caller without the read grant meets the missing-record answer",
+    );
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('with Flows off a vendor payment lists no buttons', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("with Flows off a vendor payment lists no buttons", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     await withBypassContext(() =>
       db.execute(sql`
@@ -279,30 +364,35 @@ test('with Flows off a vendor payment lists no buttons', async () => {
           settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"flows":false}'::jsonb, true)
         where id = ${org.orgId}`),
-    )
-    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    );
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, "maker", "maker"));
     const docId = await withBypassContext(() =>
-      seedDraftDocument(org.orgId, { kind: 'vendor_payment', createdBy: maker }))
+      seedDraftDocument(org.orgId, { kind: "vendor_payment", createdBy: maker }),
+    );
     // Vendor payments read under ap.pay, not ap.read (the payment permission catalog).
-    await seedRole(org.orgId, 'payment_reader', ['ap.pay'])
+    await seedRole(org.orgId, "payment_reader", ["ap.pay"]);
 
     const list = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=vendor_payment&subjectId=${docId}`,
-      )))
-    assert.equal(list.status, 200, 'Flows off is an empty state, not a refusal')
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=vendor_payment&subjectId=${docId}`,
+        ),
+      ),
+    );
+    assert.equal(list.status, 200, "Flows off is an empty state, not a refusal");
     assert.deepEqual(
-      ((await list.json()) as { buttons: unknown[] }).buttons, [],
-      'a payment offers no manual buttons while the feature is off',
-    )
+      ((await list.json()) as { buttons: unknown[] }).buttons,
+      [],
+      "a payment offers no manual buttons while the feature is off",
+    );
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('with Flows off a customer payment lists no buttons', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("with Flows off a customer payment lists no buttons", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     await withBypassContext(() =>
       db.execute(sql`
@@ -310,24 +400,29 @@ test('with Flows off a customer payment lists no buttons', async () => {
           settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"flows":false}'::jsonb, true)
         where id = ${org.orgId}`),
-    )
-    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    );
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, "maker", "maker"));
     const docId = await withBypassContext(() =>
-      seedDraftDocument(org.orgId, { kind: 'customer_payment', createdBy: maker }))
+      seedDraftDocument(org.orgId, { kind: "customer_payment", createdBy: maker }),
+    );
     // Receipts read under ar.pay, not ar.read (the payment permission catalog).
-    await seedRole(org.orgId, 'receipt_reader', ['ar.pay'])
+    await seedRole(org.orgId, "receipt_reader", ["ar.pay"]);
 
     const list = await withOrgContext(org.orgId, () =>
-      GET(new Request(
-        `http://manual.test/api/flows/manual?subjectKind=customer_payment&subjectId=${docId}`,
-      )))
-    assert.equal(list.status, 200, 'Flows off is an empty state, not a refusal')
+      GET(
+        new Request(
+          `http://manual.test/api/flows/manual?subjectKind=customer_payment&subjectId=${docId}`,
+        ),
+      ),
+    );
+    assert.equal(list.status, 200, "Flows off is an empty state, not a refusal");
     assert.deepEqual(
-      ((await list.json()) as { buttons: unknown[] }).buttons, [],
-      'a receipt offers no manual buttons while the feature is off',
-    )
+      ((await list.json()) as { buttons: unknown[] }).buttons,
+      [],
+      "a receipt offers no manual buttons while the feature is off",
+    );
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});

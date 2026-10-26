@@ -14,7 +14,9 @@ export function qualificationErrorResponse(e: unknown): NextResponse {
     const message = e.message;
     const status = /must be|Unknown|needs|blank|at least|requires evidence/i.test(message)
       ? 400
-      : /does not exist|no longer|not exist here|not found|cannot be read back|no row was written/i.test(message)
+      : /does not exist|no longer|not exist here|not found|cannot be read back|no row was written/i.test(
+            message,
+          )
         ? 404
         : 422;
     return NextResponse.json({ error: message }, { status });

@@ -55,16 +55,22 @@ export function parseFieldTicketSourceHeaderTsv(text: string): FieldTicketSource
     const columns = line.split("\t");
     if (!/^\d+$/.test(columns[0]!)) continue;
     if (columns.length !== 13 && columns.length !== 14) {
-      throw new FieldTicketSourceHeaderError(`source ticket ${columns[0]} has ${columns.length} columns in the source export; retain the exact 13- or 14-column source export`);
+      throw new FieldTicketSourceHeaderError(
+        `source ticket ${columns[0]} has ${columns.length} columns in the source export; retain the exact 13- or 14-column source export`,
+      );
     }
     if (!["Yes", "No"].includes(columns[7]!) || !["Yes", "No"].includes(columns[8]!)) {
-      throw new FieldTicketSourceHeaderError(`source ticket ${columns[0]} has a malformed billed or final flag in the source export; retain the exact source export`);
+      throw new FieldTicketSourceHeaderError(
+        `source ticket ${columns[0]} has a malformed billed or final flag in the source export; retain the exact source export`,
+      );
     }
   }
   return text
     .split("\n")
     .map((line) => line.split("\t"))
-    .filter((columns) => (columns.length === 13 || columns.length === 14) && /^\d+$/.test(columns[0]!))
+    .filter(
+      (columns) => (columns.length === 13 || columns.length === 14) && /^\d+$/.test(columns[0]!),
+    )
     .map((columns) => ({
       sourceId: columns[0]!,
       number: columns[1]!,
@@ -80,16 +86,29 @@ export function parseFieldTicketSourceHeaderTsv(text: string): FieldTicketSource
       // The original connector-neutral export has 13 columns. New exports
       // carry SuperintendentID after ForemanID; both formats remain readable.
       ...(columns.length >= 14 ? { superintendentRef: sourceRef(columns[11]) } : {}),
-      po: (columns[columns.length >= 14 ? 12 : 11] ?? "").toUpperCase() === "NULL"
-        ? null
-        : columns[columns.length >= 14 ? 12 : 11] ?? null,
+      po:
+        (columns[columns.length >= 14 ? 12 : 11] ?? "").toUpperCase() === "NULL"
+          ? null
+          : (columns[columns.length >= 14 ? 12 : 11] ?? null),
       description: (columns[columns.length >= 14 ? 13 : 12] ?? "").trim() || null,
     }));
 }
 
 const JSON_ROW_KEYS = new Set([
-  "sourceId", "number", "jobRef", "empRef", "customerRef", "begin", "end",
-  "billed", "final", "approval", "foremanRef", "superintendentRef", "po", "description",
+  "sourceId",
+  "number",
+  "jobRef",
+  "empRef",
+  "customerRef",
+  "begin",
+  "end",
+  "billed",
+  "final",
+  "approval",
+  "foremanRef",
+  "superintendentRef",
+  "po",
+  "description",
 ]);
 
 /**
@@ -104,10 +123,14 @@ function parseFieldTicketSourceHeaderJson(text: string): FieldTicketSourceHeader
   try {
     value = JSON.parse(text);
   } catch {
-    throw new FieldTicketSourceHeaderError("source file is not valid JSON; retain the exact source export and certify against its pinned version");
+    throw new FieldTicketSourceHeaderError(
+      "source file is not valid JSON; retain the exact source export and certify against its pinned version",
+    );
   }
   if (!Array.isArray(value)) {
-    throw new FieldTicketSourceHeaderError("source JSON file must contain an array of source ticket header rows");
+    throw new FieldTicketSourceHeaderError(
+      "source JSON file must contain an array of source ticket header rows",
+    );
   }
   return value.map((raw, index) => {
     const label = `source row ${index + 1}`;
@@ -117,7 +140,9 @@ function parseFieldTicketSourceHeaderJson(text: string): FieldTicketSourceHeader
     const row = raw as Record<string, unknown>;
     for (const key of Object.keys(row)) {
       if (!JSON_ROW_KEYS.has(key)) {
-        throw new FieldTicketSourceHeaderError(`${label} carries unsupported field ${key}; retain the canonical source header export`);
+        throw new FieldTicketSourceHeaderError(
+          `${label} carries unsupported field ${key}; retain the canonical source header export`,
+        );
       }
     }
     const textField = (key: string): string => {
@@ -132,7 +157,9 @@ function parseFieldTicketSourceHeaderJson(text: string): FieldTicketSourceHeader
     const blankableTextField = (key: string): string => {
       const field = row[key];
       if (typeof field !== "string") {
-        throw new FieldTicketSourceHeaderError(`${label} has a malformed ${key}; retain the exact source export`);
+        throw new FieldTicketSourceHeaderError(
+          `${label} has a malformed ${key}; retain the exact source export`,
+        );
       }
       return field;
     };
@@ -140,19 +167,25 @@ function parseFieldTicketSourceHeaderJson(text: string): FieldTicketSourceHeader
       const field = row[key];
       if (field === null) return null;
       if (typeof field !== "string") {
-        throw new FieldTicketSourceHeaderError(`${label} has a malformed ${key} reference; retain the exact source export`);
+        throw new FieldTicketSourceHeaderError(
+          `${label} has a malformed ${key} reference; retain the exact source export`,
+        );
       }
       return field;
     };
     const flagField = (key: string): boolean => {
       const field = row[key];
       if (typeof field !== "boolean") {
-        throw new FieldTicketSourceHeaderError(`${label} has a malformed ${key} flag; retain the exact source export`);
+        throw new FieldTicketSourceHeaderError(
+          `${label} has a malformed ${key} flag; retain the exact source export`,
+        );
       }
       return field;
     };
     if (typeof row.customerRef !== "string") {
-      throw new FieldTicketSourceHeaderError(`${label} has a malformed customerRef reference; retain the exact source export`);
+      throw new FieldTicketSourceHeaderError(
+        `${label} has a malformed customerRef reference; retain the exact source export`,
+      );
     }
     const superintendentPresent = "superintendentRef" in row;
     return {
@@ -184,7 +217,9 @@ export function parseFieldTicketSourceHeaders(bytes: Uint8Array): FieldTicketSou
   try {
     decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    throw new FieldTicketSourceHeaderError("source file is not valid UTF-8; retain the exact source export without repairing its bytes");
+    throw new FieldTicketSourceHeaderError(
+      "source file is not valid UTF-8; retain the exact source export without repairing its bytes",
+    );
   }
   const text = decoded.replace(/^\uFEFF/, "");
   const isJson = text.trimStart().startsWith("[") || text.trimStart().startsWith("{");
@@ -194,11 +229,15 @@ export function parseFieldTicketSourceHeaders(bytes: Uint8Array): FieldTicketSou
   const seen = new Set<string>();
   for (const row of rows) {
     if (!row.sourceId.trim() || seen.has(row.sourceId)) {
-      throw new FieldTicketSourceHeaderError("source file ticket identities must be nonempty and appear once; retain an exact, unduplicated source export");
+      throw new FieldTicketSourceHeaderError(
+        "source file ticket identities must be nonempty and appear once; retain an exact, unduplicated source export",
+      );
     }
     seen.add(row.sourceId);
     if (!isIsoCalendarDate(row.begin) || !isIsoCalendarDate(row.end) || row.end < row.begin) {
-      throw new FieldTicketSourceHeaderError(`source ticket ${row.sourceId} has an invalid work period in the retained source file`);
+      throw new FieldTicketSourceHeaderError(
+        `source ticket ${row.sourceId} has an invalid work period in the retained source file`,
+      );
     }
   }
   return rows;
@@ -216,23 +255,39 @@ export function findFieldTicketSourceHeaderRow(
     );
   }
   if (matches.length > 1) {
-    throw new FieldTicketSourceHeaderError(`source ticket ${sourceTicketId} appears more than once in the retained source file`);
+    throw new FieldTicketSourceHeaderError(
+      `source ticket ${sourceTicketId} appears more than once in the retained source file`,
+    );
   }
   const row = matches[0]!;
   if (!row.number.trim() || !row.jobRef.trim() || !row.approval.trim()) {
-    throw new FieldTicketSourceHeaderError(`source ticket ${sourceTicketId} has a missing number, job or approval fact in the retained source file; a certification cannot manufacture its reviewed facts`);
+    throw new FieldTicketSourceHeaderError(
+      `source ticket ${sourceTicketId} has a missing number, job or approval fact in the retained source file; a certification cannot manufacture its reviewed facts`,
+    );
   }
   return row;
 }
 
 /** Fingerprint of one parsed source row, from its exact source facts. */
 export function fieldTicketSourceHeaderRowSha256(row: FieldTicketSourceHeaderRow): string {
-  return createHash("sha256").update(JSON.stringify({
-    sourceId: row.sourceId, number: row.number, jobRef: row.jobRef,
-    empRef: row.empRef, customerRef: row.customerRef,
-    begin: row.begin, end: row.end, billed: row.billed, final: row.final,
-    approval: row.approval, foremanRef: row.foremanRef,
-    superintendentRef: row.superintendentRef, po: row.po,
-    description: row.description,
-  })).digest("hex");
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        sourceId: row.sourceId,
+        number: row.number,
+        jobRef: row.jobRef,
+        empRef: row.empRef,
+        customerRef: row.customerRef,
+        begin: row.begin,
+        end: row.end,
+        billed: row.billed,
+        final: row.final,
+        approval: row.approval,
+        foremanRef: row.foremanRef,
+        superintendentRef: row.superintendentRef,
+        po: row.po,
+        description: row.description,
+      }),
+    )
+    .digest("hex");
 }

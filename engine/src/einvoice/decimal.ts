@@ -15,7 +15,9 @@ import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
 const PLAIN_DECIMAL = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
 
 export function isPlainDecimal(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length <= 128 && PLAIN_DECIMAL.test(value.trim());
+  return (
+    typeof value === "string" && value.trim().length <= 128 && PLAIN_DECIMAL.test(value.trim())
+  );
 }
 
 /** An exact rational view of a plain decimal: value = units / 10^scale. */
@@ -26,7 +28,8 @@ export interface ExactDecimal {
 
 export function exact(value: string): ExactDecimal {
   const raw = value.trim();
-  if (raw.length > 128 || !PLAIN_DECIMAL.test(raw)) throw new Error(`not a plain decimal number: "${value}"`);
+  if (raw.length > 128 || !PLAIN_DECIMAL.test(raw))
+    throw new Error(`not a plain decimal number: "${value}"`);
   const negative = raw.startsWith("-");
   const [whole = "", fraction = ""] = raw.replace(/^[-+]/, "").split(".");
   const units = BigInt(`${whole || "0"}${fraction}`);
@@ -116,9 +119,21 @@ export function productWithin(
   baseQuantity: string,
   tolerance: string,
 ): boolean {
-  const values = [exact(amount), exact(quantity), exact(price), exact(baseQuantity), exact(tolerance)];
+  const values = [
+    exact(amount),
+    exact(quantity),
+    exact(price),
+    exact(baseQuantity),
+    exact(tolerance),
+  ];
   const scale = Math.max(...values.map((value) => value.scale));
-  const [a, q, p, b, t] = values.map((value) => rescale(value, scale)) as [bigint, bigint, bigint, bigint, bigint];
+  const [a, q, p, b, t] = values.map((value) => rescale(value, scale)) as [
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+  ];
   const difference = a * b - q * p;
   const magnitude = difference < 0n ? -difference : difference;
   return magnitude <= t * (b < 0n ? -b : b);
@@ -128,10 +143,20 @@ export function productWithin(
  * base × percent ÷ 100 compared with an amount, within a tolerance:
  * |amount·100 − base·percent| ≤ tol·100.
  */
-export function percentOfWithin(amount: string, base: string, percent: string, tolerance: string): boolean {
+export function percentOfWithin(
+  amount: string,
+  base: string,
+  percent: string,
+  tolerance: string,
+): boolean {
   const values = [exact(amount), exact(base), exact(percent), exact(tolerance)];
   const scale = Math.max(...values.map((value) => value.scale));
-  const [a, b, p, t] = values.map((value) => rescale(value, scale)) as [bigint, bigint, bigint, bigint];
+  const [a, b, p, t] = values.map((value) => rescale(value, scale)) as [
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+  ];
   const unit = 10n ** BigInt(scale);
   const difference = a * 100n * unit - b * p;
   const magnitude = difference < 0n ? -difference : difference;

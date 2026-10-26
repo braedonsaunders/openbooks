@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/agents?item=00000000-0000-4000-8000-000000000001", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/agents?item=00000000-0000-4000-8000-000000000001",
+  matchMediaMatches: false,
+});
 
-stubModules({ navigation: { pathname: '/agents' }, intl: false, authz: false, features: false });
+stubModules({ navigation: { pathname: "/agents" }, intl: false, authz: false, features: false });
 
 const React = await import("react");
 Object.assign(globalThis, { React });

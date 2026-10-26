@@ -7,7 +7,11 @@ import {
 import { db } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
-import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "../tax-returns/return.ts";
+import {
+  computeTaxReturn,
+  filterTaxReturnFormsByFeatures,
+  TaxReturnError,
+} from "../tax-returns/return.ts";
 import { absoluteUnits, classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 
@@ -31,16 +35,25 @@ export async function taxFindings(
   const findings: AgentFinding[] = [];
   const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
 
-  const activeForms = await filterTaxReturnFormsByFeatures(orgId, await db.execute<{ code: string; name: string }>(sql`
+  const activeForms = await filterTaxReturnFormsByFeatures(
+    orgId,
+    await db.execute<{ code: string; name: string }>(
+      sql`
     select code, name from tax_return_forms where org_id = ${orgId} and is_active order by code
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
 
   const formRegistration = async (formCode: string): Promise<string | null> => {
-    const reg = (await db.execute<{ id: string }>(sql`
+    const reg = await db.execute<{ id: string }>(
+      sql`
       select id from tax_registrations
        where org_id = ${orgId} and is_active and return_form_code = ${formCode}
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     return reg[0]?.id ?? null;
   };
 
@@ -48,8 +61,18 @@ export async function taxFindings(
   if (codesPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(codesPolicy, agentThreshold);
     const from = addCalendarDays(today, -codesPolicy.parameters.lookbackDays!);
-    for (const kind of ["customer_invoice", "customer_credit", "cash_sale", "cash_refund", "vendor_bill", "vendor_credit", "expense_report", "card_charge"]) {
-      const agg = (await db.execute<{ documents: number; untaxed_amount: string }>(sql`
+    for (const kind of [
+      "customer_invoice",
+      "customer_credit",
+      "cash_sale",
+      "cash_refund",
+      "vendor_bill",
+      "vendor_credit",
+      "expense_report",
+      "card_charge",
+    ]) {
+      const agg = await db.execute<{ documents: number; untaxed_amount: string }>(
+        sql`
         select count(distinct d.id)::int as documents, coalesce(sum(dl.amount), 0)::text as untaxed_amount
           from documents d
           join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
@@ -57,19 +80,22 @@ export async function taxFindings(
          where d.org_id = ${orgId} and d.kind = ${kind} and d.status = 'posted'
            and d.document_date between ${from} and ${today}
            and dl.tax_code_id is null and dl.amount <> 0
-      `, "objects"));
+      `,
+        "objects",
+      );
       const row = agg[0];
       if (!row || Number(row.documents) === 0) continue;
       const materiality = moneyAbs(row.untaxed_amount);
       if (absoluteUnits(materiality) < absoluteUnits(threshold)) continue;
-      const docs = (await db.execute<{
-          id: string;
-          document_number: string | null;
-          document_date: string;
-          untaxed_lines: number;
-          untaxed_amount: string;
-          party: string;
-        }>(sql`
+      const docs = await db.execute<{
+        id: string;
+        document_number: string | null;
+        document_date: string;
+        untaxed_lines: number;
+        untaxed_amount: string;
+        party: string;
+      }>(
+        sql`
         select d.id, d.document_number, d.document_date::text as document_date,
                count(dl.id)::int as untaxed_lines, sum(dl.amount)::text as untaxed_amount,
                coalesce(p.display_name, '') as party
@@ -82,12 +108,18 @@ export async function taxFindings(
            and dl.tax_code_id is null and dl.amount <> 0
          group by d.id, d.document_number, d.document_date, p.display_name
          order by sum(abs(dl.amount)) desc limit 5
-      `, "objects"));
+      `,
+        "objects",
+      );
       findings.push({
         agentKey: "tax",
         findingType: "tax_missing_codes",
         fingerprint: `tax-missing-codes:${kind}`,
-        severity: classifyForensicItem({ materiality, threshold, criticalMaterialityMultiple: codesPolicy.parameters.criticalMaterialityMultiple }),
+        severity: classifyForensicItem({
+          materiality,
+          threshold,
+          criticalMaterialityMultiple: codesPolicy.parameters.criticalMaterialityMultiple,
+        }),
         confidence: "1.0000",
         materiality,
         subjectType: "documents",
@@ -188,27 +220,38 @@ export async function taxFindings(
 
   const unlockPolicy = byKey.get("tax_unlocked_period");
   if (unlockPolicy?.enabled && activeForms.length > 0) {
-    const periods = (await db.execute<{ id: string; label: string; starts_on: string; ends_on: string }>(sql`
+    const periods = await db.execute<{
+      id: string;
+      label: string;
+      starts_on: string;
+      ends_on: string;
+    }>(
+      sql`
       select p.id, ${canonicalPeriodLabelSql("p")} as label, p.starts_on, p.ends_on
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${orgId} and fc.is_default and fc.is_active
          and not p.is_adjustment and p.ends_on < ${today}
        order by p.ends_on desc limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const period = periods[0];
     if (period) {
       // The shared active posting primary: lock scoping must read the live
       // book, never a deactivated primary.
       const bookId = await activePostingPrimaryBookId(orgId);
       const locked = bookId
-        ? (await db.execute<{ id: string }>(sql`
+        ? await db.execute<{ id: string }>(
+            sql`
             select id from period_locks
              where org_id = ${orgId} and period_id = ${period.id}
                and book_id = ${bookId} and module = 'tax' and state = 'closed'
              limit 1
-          `, "objects"))
-        : [] as { id: string }[];
+          `,
+            "objects",
+          )
+        : ([] as { id: string }[]);
       if (locked.length === 0) {
         findings.push({
           agentKey: "tax",

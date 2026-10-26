@@ -1,23 +1,37 @@
-import { currentWeekStart, pinTimekeeper, userEmployeeId } from '../../api/timesheets/_lib'
-import 'server-only'
+import { currentWeekStart, pinTimekeeper, userEmployeeId } from "../../api/timesheets/_lib";
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requireProjectsFeature } from '../../../lib/projects-gate'
-import { isFeatureEnabled } from '../../../lib/features'
-import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
-import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
-import { listScopedPartyOptions } from '../../../lib/scoped-options'
-import { listInternalPersonOptions } from '@openbooks/engine/organization/internal-person'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
-import { loadProject } from '../../api/projects/_lib'
-import { loadProjectCockpit } from './_cockpit-data'
-import type { ProjectDrawer } from './ProjectDrawer'
-import { listOperatingProfileChoices, readPinnedOperatingProfile } from '@openbooks/engine/organization/operating-profiles'
+import { getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { requireProjectsFeature } from "../../../lib/projects-gate";
+import { isFeatureEnabled } from "../../../lib/features";
+import { can, requirePermission } from "../../../lib/authz";
+import { isUuid, mergeHref, pickString } from "../../../lib/list-params";
+import { subsidiaryUiOptions } from "../../../lib/subsidiaries";
+import { listScopedPartyOptions } from "../../../lib/scoped-options";
+import { listInternalPersonOptions } from "@openbooks/engine/organization/internal-person";
+import { resolveFormLayout } from "../../../lib/customization/resolve";
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../lib/custom-fields";
+import { loadProject } from "../../api/projects/_lib";
+import { loadProjectCockpit } from "./_cockpit-data";
+import type { ProjectDrawer } from "./ProjectDrawer";
+import {
+  listOperatingProfileChoices,
+  readPinnedOperatingProfile,
+} from "@openbooks/engine/organization/operating-profiles";
 
 /**
  * The project list, split into a loader and a spec.
@@ -33,255 +47,294 @@ import { listOperatingProfileChoices, readPinnedOperatingProfile } from '@openbo
  * before the loader reads anything, not after the spec decides not to render.
  */
 
-type ProjectDrawerProps = Parameters<typeof ProjectDrawer>[0]
+type ProjectDrawerProps = Parameters<typeof ProjectDrawer>[0];
 
 type ProjectTypeOption = {
-  id: string
-  name: string
-  billingMethod: string | null
-  billingProcedure: string
-  [key: string]: unknown
-}
+  id: string;
+  name: string;
+  billingMethod: string | null;
+  billingProcedure: string;
+  [key: string]: unknown;
+};
 
 export interface ProjectsData {
-  title: string
-  defaultPresentation: string
-  description: string
-  canManage: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  showNewRedirect: boolean
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
-  txnDrawer: { id: string; kind: string; projectId: string; formLayoutId?: string } | null
+  title: string;
+  defaultPresentation: string;
+  description: string;
+  canManage: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  showNewRedirect: boolean;
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
+  txnDrawer: { id: string; kind: string; projectId: string; formLayoutId?: string } | null;
 }
 
 export async function loadProjects(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ProjectsData> {
-  const t = await getTranslations('projects')
+  const t = await getTranslations("projects");
 
-  const authz = await requirePermission('projects.read')
-  const canManage = can(authz, 'projects.manage')
-  const canViewGl = can(authz, 'gl.read')
-  const orgId = authz.user.orgId
-  await requireProjectsFeature(orgId)
+  const authz = await requirePermission("projects.read");
+  const canManage = can(authz, "projects.manage");
+  const canViewGl = can(authz, "gl.read");
+  const orgId = authz.user.orgId;
+  await requireProjectsFeature(orgId);
   return withOrgTransaction(orgId, async () => {
-  const applicationPermissions = {
-    canRead: can(authz, 'ar.read'),
-    canCreate: can(authz, 'ar.create'),
-    canApprove: can(authz, 'ar.approve'),
-    canInvoice: can(authz, 'ar.post'),
-  }
+    const applicationPermissions = {
+      canRead: can(authz, "ar.read"),
+      canCreate: can(authz, "ar.create"),
+      canApprove: can(authz, "ar.approve"),
+      canInvoice: can(authz, "ar.post"),
+    };
 
-  const projectId = typeof sp.project === 'string' ? sp.project : undefined
-  const projectTransactionId = pickString(sp.projectTxn)
-  const projectTransactionKind = pickString(sp.projectTxnKind)
-  // Unsaved-create: ?projectNew=1 opens an editable drawer on no persisted
-  // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
-  const creating = pickString(sp.projectNew) === '1' && canManage
+    const projectId = typeof sp.project === "string" ? sp.project : undefined;
+    const projectTransactionId = pickString(sp.projectTxn);
+    const projectTransactionKind = pickString(sp.projectTxnKind);
+    // Unsaved-create: ?projectNew=1 opens an editable drawer on no persisted
+    // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
+    const creating = pickString(sp.projectNew) === "1" && canManage;
 
-  // Header and cockpit load in ONE tenant transaction. The
-  // header FOR SHARE lock is therefore held across every cockpit read, so a
-  // concurrent project rehome serializes instead of moving rows between the
-  // header read and the financials/time/billing reads of one response.
-  const openSnapshot =
-    projectId && projectId !== 'new' && isUuid(projectId)
-      ? await withOrgTransaction(orgId, async () => {
-          const header = await loadProject(projectId, orgId, authz.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(authz) })
-          const cockpit = header
-            ? await loadProjectCockpit(orgId, header.project.id as string, {
-                allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-                includeApplicationBilling: applicationPermissions.canRead,
-              })
-            : null
-          return header ? { header, cockpit } : null
-        })
-      : null
-  const openProject = openSnapshot?.header ?? null
-  const openCockpit = openSnapshot?.cockpit ?? null
-  const requestedDepartment=pickString(sp.departmentId);
-  const operatingDepartmentId=creating&&requestedDepartment&&isUuid(requestedDepartment)?requestedDepartment:null;
-  const operatingChoices = await listOperatingProfileChoices(db, orgId, authz.user.id, 'project',operatingDepartmentId)
-  const initialOperatingChoice=creating?operatingChoices.find(choice=>choice.value===pickString(sp.workflow))??null:null
-  const timeEmployee = openProject && can(authz,'time.manage') && can(authz,'time.read') && await isFeatureEnabled(orgId,'timeTracking') ? await userEmployeeId(orgId,authz.user.id) : null
-  const ownTimeEmployee = timeEmployee ? await pinTimekeeper(orgId,timeEmployee,authz.allowedSubsidiaryIds) : null
-  const quickTimeHref = openProject?.project.is_active===true && ownTimeEmployee ? `/timesheets?timesheet=${ownTimeEmployee}:${await currentWeekStart(orgId)}&job=${openProject.project.id}` : null
-  const operatingDefinition = openProject ? await readPinnedOperatingProfile(db, orgId, openProject.project.operating_profile_version_id as string | null, 'project') : null
+    // Header and cockpit load in ONE tenant transaction. The
+    // header FOR SHARE lock is therefore held across every cockpit read, so a
+    // concurrent project rehome serializes instead of moving rows between the
+    // header read and the financials/time/billing reads of one response.
+    const openSnapshot =
+      projectId && projectId !== "new" && isUuid(projectId)
+        ? await withOrgTransaction(orgId, async () => {
+            const header = await loadProject(projectId, orgId, authz.allowedSubsidiaryIds, {
+              customFieldViewer: customFieldViewerFor(authz),
+            });
+            const cockpit = header
+              ? await loadProjectCockpit(orgId, header.project.id as string, {
+                  allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+                  includeApplicationBilling: applicationPermissions.canRead,
+                })
+              : null;
+            return header ? { header, cockpit } : null;
+          })
+        : null;
+    const openProject = openSnapshot?.header ?? null;
+    const openCockpit = openSnapshot?.cockpit ?? null;
+    const requestedDepartment = pickString(sp.departmentId);
+    const operatingDepartmentId =
+      creating && requestedDepartment && isUuid(requestedDepartment) ? requestedDepartment : null;
+    const operatingChoices = await listOperatingProfileChoices(
+      db,
+      orgId,
+      authz.user.id,
+      "project",
+      operatingDepartmentId,
+    );
+    const initialOperatingChoice = creating
+      ? (operatingChoices.find((choice) => choice.value === pickString(sp.workflow)) ?? null)
+      : null;
+    const timeEmployee =
+      openProject &&
+      can(authz, "time.manage") &&
+      can(authz, "time.read") &&
+      (await isFeatureEnabled(orgId, "timeTracking"))
+        ? await userEmployeeId(orgId, authz.user.id)
+        : null;
+    const ownTimeEmployee = timeEmployee
+      ? await pinTimekeeper(orgId, timeEmployee, authz.allowedSubsidiaryIds)
+      : null;
+    const quickTimeHref =
+      openProject?.project.is_active === true && ownTimeEmployee
+        ? `/timesheets?timesheet=${ownTimeEmployee}:${await currentWeekStart(orgId)}&job=${openProject.project.id}`
+        : null;
+    const operatingDefinition = openProject
+      ? await readPinnedOperatingProfile(
+          db,
+          orgId,
+          openProject.project.operating_profile_version_id as string | null,
+          "project",
+        )
+      : null;
 
-  // party pickers + resolved form layout + cockpit data for the flyout
-  // (only when a project is open; creation loads the form inputs but no
-  // cockpit — those tabs need a persisted project and stay hidden).
-  const [parties, managerParties, subsidiaries, projectTypesRes] = openProject || creating
-    ? await Promise.all([
-        // Customer picker: only parties the caller may see.
-        listScopedPartyOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true }),
-        // Manager and foreman pickers: internal people only — the same
-        // predicate the write path enforces, so a choice here always saves.
-        listInternalPersonOptions(db, orgId, authz.allowedSubsidiaryIds),
-        subsidiaryUiOptions(orgId),
-        db.execute<ProjectTypeOption>(sql`
+    // party pickers + resolved form layout + cockpit data for the flyout
+    // (only when a project is open; creation loads the form inputs but no
+    // cockpit — those tabs need a persisted project and stay hidden).
+    const [parties, managerParties, subsidiaries, projectTypesRes] =
+      openProject || creating
+        ? await Promise.all([
+            // Customer picker: only parties the caller may see.
+            listScopedPartyOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true }),
+            // Manager and foreman pickers: internal people only — the same
+            // predicate the write path enforces, so a choice here always saves.
+            listInternalPersonOptions(db, orgId, authz.allowedSubsidiaryIds),
+            subsidiaryUiOptions(orgId),
+            db.execute<ProjectTypeOption>(sql`
           select id, name, billing_method as "billingMethod",
                  invoicing_profile->>'billingProcedure' as "billingProcedure"
             from project_types where org_id = ${orgId} and is_active order by sort_order, name`),
-      ])
-    : [null, [], [], null]
-  const projectTypes = projectTypesRes?.rows ?? []
+          ])
+        : [null, [], [], null];
+    const projectTypes = projectTypesRes?.rows ?? [];
 
-  // The Schedule and Staffing tabs are Projects sub-capabilities: resolved on
-  // the server so a client-side layout choice can never surface a gated
-  // feature. Staffing additionally needs the reader grant.
-  const [schedulingEnabled, resourcingEnabled, progressEnabled, locale] = await Promise.all([
-    isFeatureEnabled(orgId, 'projectScheduling'),
-    isFeatureEnabled(orgId, 'resourcing').then((enabled) => enabled && can(authz, 'resourcing.read')),
-    isFeatureEnabled(orgId, 'projectProgress'),
-    getLocale(),
-  ])
+    // The Schedule and Staffing tabs are Projects sub-capabilities: resolved on
+    // the server so a client-side layout choice can never surface a gated
+    // feature. Staffing additionally needs the reader grant.
+    const [schedulingEnabled, resourcingEnabled, progressEnabled, locale] = await Promise.all([
+      isFeatureEnabled(orgId, "projectScheduling"),
+      isFeatureEnabled(orgId, "resourcing").then(
+        (enabled) => enabled && can(authz, "resourcing.read"),
+      ),
+      isFeatureEnabled(orgId, "projectProgress"),
+      getLocale(),
+    ]);
 
-  // Custom-field definitions serve both the form layout and the create
-  // payload: a required project custom field must render in the create
-  // drawer, or creation is impossible and the server refuses unnamed.
-  const projectFieldDefs = openProject || creating
-    ? visibleCustomFieldDefs(await loadFieldDefs('projects'), customFieldViewerFor(authz))
-    : []
-  const createFieldDefs = projectFieldDefs.map((d) => ({
-    key: d.key,
-    label: d.label,
-    fieldType: d.fieldType,
-    config: d.config,
-    isRequired: d.isRequired,
-  }))
-  const defaultPresentation = operatingChoices.find(choice=>choice.isDefault)?.definition.presentation.defaultView ?? 'list'
-  const resolvedForm = openProject || creating
-    ? await resolveFormLayout({
-        orgId,
-        userId: authz.user.id,
-        recordType: 'project',
-        userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: projectFieldDefs,
-        lineDefs: [],
-        explicitLayoutId: pickString(sp.form),
-      })
-    : null
+    // Custom-field definitions serve both the form layout and the create
+    // payload: a required project custom field must render in the create
+    // drawer, or creation is impossible and the server refuses unnamed.
+    const projectFieldDefs =
+      openProject || creating
+        ? visibleCustomFieldDefs(await loadFieldDefs("projects"), customFieldViewerFor(authz))
+        : [];
+    const createFieldDefs = projectFieldDefs.map((d) => ({
+      key: d.key,
+      label: d.label,
+      fieldType: d.fieldType,
+      config: d.config,
+      isRequired: d.isRequired,
+    }));
+    const defaultPresentation =
+      operatingChoices.find((choice) => choice.isDefault)?.definition.presentation.defaultView ??
+      "list";
+    const resolvedForm =
+      openProject || creating
+        ? await resolveFormLayout({
+            orgId,
+            userId: authz.user.id,
+            recordType: "project",
+            userRoles: authz.user.roles.map(({ key }) => key),
+            headerDefs: projectFieldDefs,
+            lineDefs: [],
+            explicitLayoutId: pickString(sp.form),
+          })
+        : null;
 
-  return {
-    defaultPresentation,
-    title: t('list.title'),
-    description: t('list.description'),
-    canManage,
-    currentParams: sp,
-    showNewRedirect: projectId === 'new' && canManage,
-    drawer:
-      (openProject || creating) && parties
-        ? {
-            remountKey: creating ? 'new-project' : String(openProject!.project.id),
-            // The unsaved-create payload: no row exists, so the drawer edits
-            // blanks and posts them once. Active defaults true; no
-            // placeholder name ever persists — the server refuses it.
-            payload: (creating
-              ? {
-                  project: {
-                    id: '',
-                    code: null,
-                    name: '',
-                    is_active: true,
-                    is_internal: false,
-                    custom: {},
-                    customer_id: null,
-                    foreman_id: null,
-                    manager_id: null,
-                    status: 'active',
-                    customer_po_number: null,
-                    starts_on: null,
-                    ends_on: null,
-                    notes: null,
-                    subsidiary_id: null,
-                    subsidiary_include_children: true,
-                    project_type_id: null,
-                    invoicing_preference: null,
-                  },
-                  contractValue: null,
-                  customerName: null,
-                  foremanName: null,
-                  managerName: null,
-                  tasks: [],
-                  customFieldDefs: createFieldDefs,
-                }
-              : openProject) as unknown as ProjectDrawerProps['payload'],
-            parties,
-            managerParties,
-            foremanParties: managerParties,
-            subsidiaries,
-            canManage,
-            canViewGl,
-            quickTimeHref,
-            layout: resolvedForm?.layout,
-            cockpit: openProject ? openCockpit : null,
-            projectTypes,
-            operatingChoices,
-            operatingDefinition,
-            initialOperatingChoice,
-            initialOperatingDepartmentId:operatingDepartmentId??'',
-            schedulingEnabled,
-            resourcingEnabled,
-            progressEnabled,
-            locale,
-            initialTab: creating ? 'overview' : (pickString(sp.projectTab) ?? 'overview'),
-            createMode: creating,
-            closeHref: mergeHref('/projects', sp, {
-              project: undefined,
-              projectNew: undefined,
-              workflow: undefined,
-              departmentId: undefined,
-              projectTab: undefined,
-              form: undefined,
-              projectTxn: undefined,
-              projectTxnKind: undefined,
-            }),
-            applicationPermissions,
-          }
-        : null,
-    txnDrawer:
-      openProject && projectTransactionId && isUuid(projectTransactionId) && projectTransactionKind
-        ? {
-            id: projectTransactionId,
-            kind: projectTransactionKind,
-            projectId: String(openProject.project.id),
-            formLayoutId: pickString(sp.form),
-          }
-        : null,
-  }
-  })
+    return {
+      defaultPresentation,
+      title: t("list.title"),
+      description: t("list.description"),
+      canManage,
+      currentParams: sp,
+      showNewRedirect: projectId === "new" && canManage,
+      drawer:
+        (openProject || creating) && parties
+          ? {
+              remountKey: creating ? "new-project" : String(openProject!.project.id),
+              // The unsaved-create payload: no row exists, so the drawer edits
+              // blanks and posts them once. Active defaults true; no
+              // placeholder name ever persists — the server refuses it.
+              payload: (creating
+                ? {
+                    project: {
+                      id: "",
+                      code: null,
+                      name: "",
+                      is_active: true,
+                      is_internal: false,
+                      custom: {},
+                      customer_id: null,
+                      foreman_id: null,
+                      manager_id: null,
+                      status: "active",
+                      customer_po_number: null,
+                      starts_on: null,
+                      ends_on: null,
+                      notes: null,
+                      subsidiary_id: null,
+                      subsidiary_include_children: true,
+                      project_type_id: null,
+                      invoicing_preference: null,
+                    },
+                    contractValue: null,
+                    customerName: null,
+                    foremanName: null,
+                    managerName: null,
+                    tasks: [],
+                    customFieldDefs: createFieldDefs,
+                  }
+                : openProject) as unknown as ProjectDrawerProps["payload"],
+              parties,
+              managerParties,
+              foremanParties: managerParties,
+              subsidiaries,
+              canManage,
+              canViewGl,
+              quickTimeHref,
+              layout: resolvedForm?.layout,
+              cockpit: openProject ? openCockpit : null,
+              projectTypes,
+              operatingChoices,
+              operatingDefinition,
+              initialOperatingChoice,
+              initialOperatingDepartmentId: operatingDepartmentId ?? "",
+              schedulingEnabled,
+              resourcingEnabled,
+              progressEnabled,
+              locale,
+              initialTab: creating ? "overview" : (pickString(sp.projectTab) ?? "overview"),
+              createMode: creating,
+              closeHref: mergeHref("/projects", sp, {
+                project: undefined,
+                projectNew: undefined,
+                workflow: undefined,
+                departmentId: undefined,
+                projectTab: undefined,
+                form: undefined,
+                projectTxn: undefined,
+                projectTxnKind: undefined,
+              }),
+              applicationPermissions,
+            }
+          : null,
+      txnDrawer:
+        openProject &&
+        projectTransactionId &&
+        isUuid(projectTransactionId) &&
+        projectTransactionKind
+          ? {
+              id: projectTransactionId,
+              kind: projectTransactionKind,
+              projectId: String(openProject.project.id),
+              formLayoutId: pickString(sp.form),
+            }
+          : null,
+    };
+  });
 }
 
-const f = ref<ProjectsData>()
+const f = ref<ProjectsData>();
 
 export function projectsSpec(data: ProjectsData): PageSpec {
-  const newProject = { widget: 'new-project', props: {} }
+  const newProject = { widget: "new-project", props: {} };
   return page({
-    route: '/projects',
-    layout: 'list',
+    route: "/projects",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget(newProject.widget, newProject.props, f('canManage'))],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget(newProject.widget, newProject.props, f("canManage"))],
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'project',
+      widgetBlock("entity-list-view", {
+        recordType: "project",
         defaultPresentation: data.defaultPresentation,
         sp: data.currentParams,
         emptyAction: data.canManage ? newProject : null,
         // Rendered in the native page's order: the create-redirect first, then
         // the record flyout, then the transaction flyout stacked over it.
         drawer: [
-          data.showNewRedirect ? { widget: 'new-project-redirect', props: {} } : null,
-          data.drawer ? { widget: 'project-drawer', props: { drawer: data.drawer } } : null,
+          data.showNewRedirect ? { widget: "new-project-redirect", props: {} } : null,
+          data.drawer ? { widget: "project-drawer", props: { drawer: data.drawer } } : null,
           data.txnDrawer
-            ? { widget: 'related-txn-drawer', props: { drawer: data.txnDrawer } }
+            ? { widget: "related-txn-drawer", props: { drawer: data.txnDrawer } }
             : null,
         ].filter(Boolean),
       }),
     ],
-  })
+  });
 }

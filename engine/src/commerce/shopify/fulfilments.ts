@@ -202,7 +202,9 @@ export async function createShopifyFulfillment(
   if (Object.keys(trackingInfo).length > 0) fulfillment.trackingInfo = trackingInfo;
   let data: FulfillmentCreateData;
   try {
-    ({ data } = await client.graphql<FulfillmentCreateData>(FULFILLMENT_CREATE_MUTATION, { fulfillment }));
+    ({ data } = await client.graphql<FulfillmentCreateData>(FULFILLMENT_CREATE_MUTATION, {
+      fulfillment,
+    }));
   } catch (error) {
     fail(
       `Shopify refused the fulfilment for order ${input.orderRestId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -232,39 +234,55 @@ export async function createShopifyFulfillment(
  * against a realistic payload. A cancelled fulfilment normalizes with its
  * flag set: posting reverses the issue instead of issuing again.
  */
-export function normalizeShopifyFulfilment(payload: unknown, orderExternalId: string): ChannelFulfilment {
+export function normalizeShopifyFulfilment(
+  payload: unknown,
+  orderExternalId: string,
+): ChannelFulfilment {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    fail("The Shopify fulfilment payload is not an object.", "Replay the fulfillments delivery from Shopify, then ingest it again.");
+    fail(
+      "The Shopify fulfilment payload is not an object.",
+      "Replay the fulfillments delivery from Shopify, then ingest it again.",
+    );
   }
   const fulfilment = payload as Record<string, unknown>;
   const externalId = text(
     fulfilment.id !== undefined && fulfilment.id !== null ? String(fulfilment.id) : null,
   );
   if (!externalId) {
-    fail("The Shopify fulfilment carries no id.", "Replay the fulfillments delivery from Shopify, then ingest it again.");
+    fail(
+      "The Shopify fulfilment carries no id.",
+      "Replay the fulfillments delivery from Shopify, then ingest it again.",
+    );
   }
   const status = text(fulfilment.status) ?? "";
   const lineItems = Array.isArray(fulfilment.line_items)
     ? (fulfilment.line_items as Array<Record<string, unknown>>)
     : [];
   const trackingNumbers = Array.isArray(fulfilment.tracking_numbers)
-    ? (fulfilment.tracking_numbers as unknown[]).map((number) => String(number)).filter((number) => number.trim() !== "")
+    ? (fulfilment.tracking_numbers as unknown[])
+        .map((number) => String(number))
+        .filter((number) => number.trim() !== "")
     : [];
   const trackingUrls = Array.isArray(fulfilment.tracking_urls)
-    ? (fulfilment.tracking_urls as unknown[]).map((url) => String(url)).filter((url) => url.trim() !== "")
+    ? (fulfilment.tracking_urls as unknown[])
+        .map((url) => String(url))
+        .filter((url) => url.trim() !== "")
     : [];
   return {
     externalId,
     orderExternalId,
     locationExternalId:
-      fulfilment.location_id !== undefined && fulfilment.location_id !== null ? String(fulfilment.location_id) : null,
+      fulfilment.location_id !== undefined && fulfilment.location_id !== null
+        ? String(fulfilment.location_id)
+        : null,
     status,
     cancelled: status.toLowerCase() === "cancelled",
     trackingNumber: text(fulfilment.tracking_number) ?? trackingNumbers[0] ?? null,
     trackingUrl: trackingUrls[0] ?? null,
     carrierName: text(fulfilment.tracking_company),
     lines: lineItems.map((entry) => {
-      const rawQuantity = entry.quantity !== undefined && entry.quantity !== null ? String(entry.quantity) : "";
+      const rawQuantity =
+        entry.quantity !== undefined && entry.quantity !== null ? String(entry.quantity) : "";
       if (!/^\d+$/.test(rawQuantity.trim()) || rawQuantity.trim() === "0") {
         fail(
           "A Shopify fulfilment line carries an unusable quantity.",
@@ -274,10 +292,14 @@ export function normalizeShopifyFulfilment(payload: unknown, orderExternalId: st
       return {
         lineExternalId: entry.id !== undefined && entry.id !== null ? String(entry.id) : null,
         sku: text(entry.sku),
-        variantExternalId: entry.variant_id !== undefined && entry.variant_id !== null ? String(entry.variant_id) : null,
+        variantExternalId:
+          entry.variant_id !== undefined && entry.variant_id !== null
+            ? String(entry.variant_id)
+            : null,
         quantity: rawQuantity.trim(),
       };
     }),
-    fulfilledAt: text(fulfilment.created_at) ?? text(fulfilment.updated_at) ?? new Date().toISOString(),
+    fulfilledAt:
+      text(fulfilment.created_at) ?? text(fulfilment.updated_at) ?? new Date().toISOString(),
   };
 }

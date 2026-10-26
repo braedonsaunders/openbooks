@@ -13,7 +13,11 @@ const uuid = z.string().refine(isUuid, "must be a valid id");
 const recurrence = z.object({
   every_weeks: z.number().int().min(1).max(12),
   weekday: z.number().int().min(0).max(6),
-  time: z.string().regex(/^\d{2}:\d{2}$/, "must be HH:MM").nullable().optional(),
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "must be HH:MM")
+    .nullable()
+    .optional(),
 });
 
 export const scheduleOneOnOneBody = z.object({

@@ -2,7 +2,12 @@ import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { add, isZero, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  uuidArray,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { assertAssetPeriodOpen, AssetLifecycleError } from "./asset-lifecycle.ts";
 import { refuse } from "./asset-refusal.ts";
@@ -30,10 +35,15 @@ export interface CapitalizationLine {
 }
 
 async function primaryPostingBook(tx: SqlExecutor, orgId: string): Promise<string> {
-  const book = (await tx.execute<{ id: string }>(sql`
+  const book = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1 for share`, "objects"))[0];
+     limit 1 for share`,
+      "objects",
+    )
+  )[0];
   if (!book) {
     refuse("primary_book_missing", "the organization has no active primary posting book", {
       remedy: "Mark one active accounting book as primary and posting in Setup → Accounting books.",
@@ -46,11 +56,13 @@ async function openPeriodFor(
   tx: SqlExecutor,
   args: { orgId: string; bookId: string; subsidiaryId: string; date: string },
 ): Promise<string> {
-  if (!isIsoCalendarDate(args.date)) refuse("date_invalid", "the posting date must be a calendar date (YYYY-MM-DD)");
+  if (!isIsoCalendarDate(args.date))
+    refuse("date_invalid", "the posting date must be a calendar date (YYYY-MM-DD)");
   const period = await resolveCoveringPeriod(tx, args.orgId, args.date, args.subsidiaryId);
   if (!period) {
     refuse("period_missing", `no single accounting period covers ${args.date}`, {
-      remedy: "Create the accounting period in Setup → Fiscal calendars, or choose a date inside an existing period.",
+      remedy:
+        "Create the accounting period in Setup → Fiscal calendars, or choose a date inside an existing period.",
     });
   }
   try {
@@ -64,7 +76,8 @@ async function openPeriodFor(
     if (error instanceof AssetLifecycleError) {
       refuse("period_closed", error.message, {
         status: 409,
-        remedy: "Choose a date in an open period, or reopen the period for the assets module in Close.",
+        remedy:
+          "Choose a date in an open period, or reopen the period for the assets module in Close.",
       });
     }
     throw error;
@@ -79,18 +92,32 @@ async function assertPostableAccounts(
   lines: readonly CapitalizationLine[],
 ): Promise<void> {
   const ids = [...new Set(lines.map((line) => line.accountId))];
-  const accounts = await tx.execute<{ id: string; is_active: boolean; is_summary: boolean; number: string | null; name: string }>(sql`
+  const accounts = await tx.execute<{
+    id: string;
+    is_active: boolean;
+    is_summary: boolean;
+    number: string | null;
+    name: string;
+  }>(
+    sql`
     select id, is_active, is_summary, number, name from accounts
      where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])
-     for share`, "objects");
+     for share`,
+    "objects",
+  );
   const byId = new Map(accounts.map((account) => [account.id, account]));
   for (const id of ids) {
     const account = byId.get(id);
-    if (!account) refuse("account_invalid", "a capitalization account does not exist in this organization");
+    if (!account)
+      refuse("account_invalid", "a capitalization account does not exist in this organization");
     if (!account.is_active || account.is_summary) {
-      refuse("account_not_postable", `account ${[account.number, account.name].filter(Boolean).join(" ")} is inactive or a summary account`, {
-        remedy: "Reactivate the account or point the asset category at a postable account.",
-      });
+      refuse(
+        "account_not_postable",
+        `account ${[account.number, account.name].filter(Boolean).join(" ")} is inactive or a summary account`,
+        {
+          remedy: "Reactivate the account or point the asset category at a postable account.",
+        },
+      );
     }
   }
   try {
@@ -126,17 +153,35 @@ export async function postCapitalizationEntry(
     idempotencyKey: string;
     lines: readonly CapitalizationLine[];
   },
-): Promise<{ entryId: string; lines: { id: string; lineNumber: number; accountId: string; amount: string }[] } | null> {
+): Promise<{
+  entryId: string;
+  lines: { id: string; lineNumber: number; accountId: string; amount: string }[];
+} | null> {
   const lines = args.lines.filter((line) => !isZero(line.amount));
   if (lines.length === 0) return null;
   const residual = lines.reduce((sum, line) => add(sum, line.amount), "0");
-  if (!isZero(residual)) refuse("reclass_unbalanced", `the capitalization entry does not balance (residual ${residual})`);
+  if (!isZero(residual))
+    refuse(
+      "reclass_unbalanced",
+      `the capitalization entry does not balance (residual ${residual})`,
+    );
   const bookId = await primaryPostingBook(tx, args.orgId);
-  const periodId = await openPeriodFor(tx, { orgId: args.orgId, bookId, subsidiaryId: args.subsidiaryId, date: args.date });
+  const periodId = await openPeriodFor(tx, {
+    orgId: args.orgId,
+    bookId,
+    subsidiaryId: args.subsidiaryId,
+    date: args.date,
+  });
   await assertPostableAccounts(tx, args.orgId, args.subsidiaryId, lines);
-  const currency = (await tx.execute<{ base_currency: string }>(sql`
-    select base_currency from subsidiaries where org_id = ${args.orgId} and id = ${args.subsidiaryId}`, "objects"))[0]?.base_currency;
-  if (!currency) refuse("subsidiary_invalid", "the legal entity does not exist in this organization");
+  const currency = (
+    await tx.execute<{ base_currency: string }>(
+      sql`
+    select base_currency from subsidiaries where org_id = ${args.orgId} and id = ${args.subsidiaryId}`,
+      "objects",
+    )
+  )[0]?.base_currency;
+  if (!currency)
+    refuse("subsidiary_invalid", "the legal entity does not exist in this organization");
   const posted = await postEntry(tx, {
     orgId: args.orgId,
     bookId,
@@ -181,22 +226,37 @@ export async function postCapitalizationReversal(
   tx: SqlExecutor,
   args: { orgId: string; actorId: string; entryId: string; date: string; reason: string },
 ): Promise<string> {
-  const source = (await tx.execute<{
-    entry_number: string;
-    subsidiary_id: string;
-    book_id: string;
-    status: string;
-    posting_date: string;
-    origin: string;
-  }>(sql`
+  const source = (
+    await tx.execute<{
+      entry_number: string;
+      subsidiary_id: string;
+      book_id: string;
+      status: string;
+      posting_date: string;
+      origin: string;
+    }>(
+      sql`
     select entry_number, subsidiary_id, book_id, status, posting_date::text as posting_date, origin
-      from journal_entries where org_id = ${args.orgId} and id = ${args.entryId} for update`, "objects"))[0];
-  if (!source || source.origin !== CAPITALIZATION_ORIGIN) refuse("entry_not_found", "the capitalization journal was not found", { status: 404 });
-  if (source.status !== "posted") refuse("entry_not_posted", `journal ${source.entry_number} is ${source.status}, not posted`);
+      from journal_entries where org_id = ${args.orgId} and id = ${args.entryId} for update`,
+      "objects",
+    )
+  )[0];
+  if (!source || source.origin !== CAPITALIZATION_ORIGIN)
+    refuse("entry_not_found", "the capitalization journal was not found", { status: 404 });
+  if (source.status !== "posted")
+    refuse("entry_not_posted", `journal ${source.entry_number} is ${source.status}, not posted`);
   if (args.date < source.posting_date) {
-    refuse("reversal_before_entry", `the reversal date cannot precede the original posting date ${source.posting_date}`);
+    refuse(
+      "reversal_before_entry",
+      `the reversal date cannot precede the original posting date ${source.posting_date}`,
+    );
   }
-  const periodId = await openPeriodFor(tx, { orgId: args.orgId, bookId: source.book_id, subsidiaryId: source.subsidiary_id, date: args.date });
+  const periodId = await openPeriodFor(tx, {
+    orgId: args.orgId,
+    bookId: source.book_id,
+    subsidiaryId: source.subsidiary_id,
+    date: args.date,
+  });
   const lines = await tx.execute<{
     line_number: number;
     account_id: string;
@@ -209,12 +269,15 @@ export async function postCapitalizationReversal(
     department_id: string | null;
     project_id: string | null;
     location_id: string | null;
-  }>(sql`
+  }>(
+    sql`
     select line_number, account_id, subsidiary_id, amount::text as amount, currency,
            txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo,
            department_id, project_id, location_id
       from journal_lines where org_id = ${args.orgId} and entry_id = ${args.entryId}
-     order by line_number`, "objects");
+     order by line_number`,
+    "objects",
+  );
   const posted = await postEntry(tx, {
     orgId: args.orgId,
     bookId: source.book_id,

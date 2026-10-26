@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // F5-6: CustomFieldInput hardcoded 'No options defined' and the reference
 // placeholder/fallback ('Select a record…' / 'Could not load records')
@@ -55,7 +55,13 @@ async function mountDe(def: CustomFieldDefClient, value: unknown) {
 
 test("F5-6: an optionless multi-select explains itself in the session locale", async () => {
   const { host, root } = await mountDe(
-    { key: "tags", label: "Schlagwörter", fieldType: "multi_select", config: { options: [] }, isRequired: false },
+    {
+      key: "tags",
+      label: "Schlagwörter",
+      fieldType: "multi_select",
+      config: { options: [] },
+      isRequired: false,
+    },
     [],
   );
   try {

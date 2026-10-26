@@ -93,7 +93,11 @@ function post(name: string, body: unknown, idempotencyKey?: string): Promise<Res
 
 test("POST /api/v1/commands/:name executes a visible catalog command", async () => {
   routeState.executed.length = 0;
-  const response = await post("post_journal", { documentId: "123e4567-e89b-12d3-a456-426614174000" }, "cmd-key-1");
+  const response = await post(
+    "post_journal",
+    { documentId: "123e4567-e89b-12d3-a456-426614174000" },
+    "cmd-key-1",
+  );
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual(await response.json(), { ok: true, status: "posted" });
   assert.equal(routeState.executed[0]?.name, "post_journal");
@@ -106,7 +110,7 @@ test("POST /api/v1/commands/:name executes a visible catalog command", async () 
 test("POST /api/v1/commands/:name refuses an unknown command by name", async () => {
   const response = await post("not_a_command", {}, "cmd-key-2");
   assert.equal(response.status, 404);
-  const body = await response.json() as { error: string; message: string };
+  const body = (await response.json()) as { error: string; message: string };
   assert.equal(body.error, "not_found");
   assert.match(body.message, /not_a_command/);
 });

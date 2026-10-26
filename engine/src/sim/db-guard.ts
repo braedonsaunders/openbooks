@@ -75,11 +75,7 @@ export function assertDisposableDatabaseUrl(
   options: { requireLoopback?: boolean } = {},
 ): DisposableDatabaseUrl {
   const parsed = parseDatabaseUrl(url);
-  if (
-    options.requireLoopback &&
-    parsed.host !== "127.0.0.1" &&
-    parsed.host !== "localhost"
-  ) {
+  if (options.requireLoopback && parsed.host !== "127.0.0.1" && parsed.host !== "localhost") {
     throw new Error(
       `refusing "${op}": OPENBOOKS_DB_URL host must be 127.0.0.1 or localhost (got ${parsed.host || "<empty>"})`,
     );
@@ -137,9 +133,12 @@ export function assertSimEnabled(): void {
  * under the caller's context; assumes bypass/org scope is already established.
  */
 export async function assertSimOrg(orgId: string): Promise<void> {
-  const r = (await db.execute<{ name: string; tagged: boolean }>(sql`
+  const r = await db.execute<{ name: string; tagged: boolean }>(
+    sql`
     select name, coalesce((settings->>'simHarness')::boolean, false) as tagged
-      from orgs where id = ${orgId}`, "objects"));
+      from orgs where id = ${orgId}`,
+    "objects",
+  );
   const row = r[0];
   if (!row) throw new Error(`org ${orgId} not found`);
   if (!row.tagged) {

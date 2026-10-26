@@ -46,4 +46,3 @@ export function windowsOverlap(a: WindowShape, b: WindowShape): boolean {
   if ((a.departmentId ?? null) !== (b.departmentId ?? null)) return false;
   return overlapDays(a.opensOn, a.closesOn, b.opensOn, b.closesOn) > 0;
 }
-

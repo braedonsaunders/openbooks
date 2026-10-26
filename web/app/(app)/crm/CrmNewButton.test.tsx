@@ -7,14 +7,21 @@ import test from "node:test";
 // unparseable bodies must fall back to the caller's message with the status.
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/crm/opportunities?view=list", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/crm/opportunities?view=list",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return {push(){},refresh(){},replace(){},prefetch(){},back(){},forward(){}}}export function usePathname(){return '/crm/opportunities'}export function useSearchParams(){return new URLSearchParams()}export function redirect(){throw new Error('redirect')}export function notFound(){throw new Error('not-found')}export function permanentRedirect(){throw new Error('redirect')}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -52,7 +59,13 @@ async function clickCreate(fetchImpl: () => Promise<Response>) {
     const root = createRoot(host);
     await act(async () => {
       root.render(
-        <CrmNewButton apiPath="/api/crm/opportunities/draft" basePath="/crm/opportunities" param="opportunity" label="New" failed="Create failed" />,
+        <CrmNewButton
+          apiPath="/api/crm/opportunities/draft"
+          basePath="/crm/opportunities"
+          param="opportunity"
+          label="New"
+          failed="Create failed"
+        />,
       );
       await tick();
     });
@@ -80,10 +93,13 @@ async function clickCreate(fetchImpl: () => Promise<Response>) {
 test("a named create refusal toasts the server reason, not the generic fallback", async () => {
   await clickCreate(
     async () =>
-      new Response(JSON.stringify({ error: "The period is closed — reopen it to create records" }), {
-        status: 422,
-        headers: { "content-type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({ error: "The period is closed — reopen it to create records" }),
+        {
+          status: 422,
+          headers: { "content-type": "application/json" },
+        },
+      ),
   );
   assert.deepEqual(errors(), ["The period is closed — reopen it to create records"]);
 });

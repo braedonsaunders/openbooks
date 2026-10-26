@@ -18,15 +18,21 @@ import { db, type SqlExecutor } from "./db.ts";
  */
 export type ReportingFramework = "us_gaap" | "ifrs";
 
-export async function orgReportingFramework(orgId: string, options: {
-  runner?: SqlExecutor;
-  requireConfigured?: boolean;
-  lock?: boolean;
-} = {}): Promise<ReportingFramework> {
-  const r = (await (options.runner ?? db).execute<{ rf: string | null }>(sql`
+export async function orgReportingFramework(
+  orgId: string,
+  options: {
+    runner?: SqlExecutor;
+    requireConfigured?: boolean;
+    lock?: boolean;
+  } = {},
+): Promise<ReportingFramework> {
+  const r = await (options.runner ?? db).execute<{ rf: string | null }>(
+    sql`
     select settings->>'reportingFramework' as rf
       from orgs where id = ${orgId} ${options.lock ? sql`for share` : sql``}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0];
   // A missing org row is a caller bug (wrong id, wrong tenant), never a
   // US-GAAP org: refuse it by name instead of defaulting a framework for an
@@ -37,7 +43,9 @@ export async function orgReportingFramework(orgId: string, options: {
     );
   }
   if (options.requireConfigured && row.rf !== "ifrs" && row.rf !== "us_gaap") {
-    throw new Error("Choose the financial reporting framework in Company Settings before assessing a provision");
+    throw new Error(
+      "Choose the financial reporting framework in Company Settings before assessing a provision",
+    );
   }
   // 0033 backfills every persisted organization and setup writes the policy
   // for new ones. Keep the historical default for a persisted row whose

@@ -20,11 +20,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { runSync } from "./sync.ts";
-import type {
-  MigrationSource,
-  NativeChanges,
-  SourceEntity,
-} from "./source.ts";
+import type { MigrationSource, NativeChanges, SourceEntity } from "./source.ts";
 import type { NativeDocument } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -79,20 +75,22 @@ class CodelessTaxSource implements MigrationSource {
       controlAccountId: null,
       subtotal: "100",
       total: "113",
-      lines: [{
-        accountId: this.o.accounts.revenue,
-        itemId: null,
-        quantity: "1",
-        unitPrice: "100",
-        amount: "100",
-        taxAmount: "13",
-        taxOverridden: true,
-        taxCodeId: null,
-        departmentId: null,
-        projectId: null,
-        description: "codeless-tax probe",
-        lineNumber: 1,
-      }],
+      lines: [
+        {
+          accountId: this.o.accounts.revenue,
+          itemId: null,
+          quantity: "1",
+          unitPrice: "100",
+          amount: "100",
+          taxAmount: "13",
+          taxOverridden: true,
+          taxCodeId: null,
+          departmentId: null,
+          projectId: null,
+          description: "codeless-tax probe",
+          lineNumber: 1,
+        },
+      ],
     };
   }
 
@@ -164,13 +162,12 @@ test(
       "phantom tax on an order must fail the run instead of persisting silently",
     );
 
-    const rows = await db.execute(sql`
+    const rows = await db.execute(
+      sql`
       select id from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-TAX'`, "objects");
-    assert.equal(
-      rows.length,
-      0,
-      "the refused order leaves no stored document behind",
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-TAX'`,
+      "objects",
     );
+    assert.equal(rows.length, 0, "the refused order leaves no stored document behind");
   },
 );

@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import type { SessionUser } from '../auth'
-import { stubModules } from '../../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../auth";
+import { stubModules } from "../../testing/stub-modules.ts";
 
 /**
  * Base-currency refusal contract (F1T-11).
@@ -22,127 +22,175 @@ import { stubModules } from '../../testing/stub-modules.ts'
  * (mock the database, never the validation). The loaders, the specs,
  * the refusal copy keys and the href run REAL against scratch orgs.
  */
-const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __baseCurrencyRefusalUser: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-stubModules({ intl: true, navigation: false, authz: false, features: false, extra: {
-    '../../../../lib/feature-gates': 'export async function requireFeatureEnabled(){}',
-  } });
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __baseCurrencyRefusalUser: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
+stubModules({
+  intl: true,
+  navigation: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/feature-gates": "export async function requireFeatureEnabled(){}",
+  },
+});
 
 registerHooks({
   resolve(specifier, context, next) {
-    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && (context.parentURL?.endsWith('/web/lib/authz.ts') || context.parentURL?.endsWith('/web/lib/consolidation.ts'))) {
-      return virtual('export async function currentUser(){return globalThis.__baseCurrencyRefusalUser.user}')
+    if (
+      (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
+      (context.parentURL?.endsWith("/web/lib/authz.ts") ||
+        context.parentURL?.endsWith("/web/lib/consolidation.ts"))
+    ) {
+      return virtual(
+        "export async function currentUser(){return globalThis.__baseCurrencyRefusalUser.user}",
+      );
     }
     // Feature gates are authz: the currency branch under test sits behind
     // them and is independent of their verdict.
-    if (specifier === '../../../../lib/projects-gate') {
-      return virtual('export async function requireProjectsFeature(){}')
+    if (specifier === "../../../../lib/projects-gate") {
+      return virtual("export async function requireProjectsFeature(){}");
     }
     // The refused condition itself: the org row carries no base currency.
     // Nothing else in these chains reads lib/data before the refusal
     // returns, so no other reader can observe the stub.
-    if (specifier === '../../../../lib/data') {
-      return virtual('export async function orgInfo(){return undefined}')
+    if (specifier === "../../../../lib/data") {
+      return virtual("export async function orgInfo(){return undefined}");
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { env } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { BASE_CURRENCY_SETTINGS_HREF, baseCurrencyNotice, hasBaseCurrency } = await import('./base-currency')
-const { loadProjectProfitability, projectProfitabilitySpec } = await import('../../app/(app)/reports/project-profitability/view')
-const { loadBudgetReport, budgetReportSpec } = await import('../../app/(app)/reports/budget/view')
-const { loadTrialBalance, trialBalanceSpec } = await import('../../app/(app)/reports/trial-balance/view')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { env } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { BASE_CURRENCY_SETTINGS_HREF, baseCurrencyNotice, hasBaseCurrency } =
+  await import("./base-currency");
+const { loadProjectProfitability, projectProfitabilitySpec } =
+  await import("../../app/(app)/reports/project-profitability/view");
+const { loadBudgetReport, budgetReportSpec } = await import("../../app/(app)/reports/budget/view");
+const { loadTrialBalance, trialBalanceSpec } =
+  await import("../../app/(app)/reports/trial-balance/view");
 
 const sessionFor = (orgId: string, actor: string): SessionUser => ({
-  id: actor, orgId, name: 'Loader', email: 'loader@scratch.test',
-  roles: [], isSuperAdmin: false, envKind: 'production',
-  productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor,
-})
+  id: actor,
+  orgId,
+  name: "Loader",
+  email: "loader@scratch.test",
+  roles: [],
+  isSuperAdmin: false,
+  envKind: "production",
+  productionOrgId: orgId,
+  homeOrgId: orgId,
+  homeUserId: actor,
+});
 
 async function setupOrg() {
-  const org = await withBypassContext(() => createScratchOrg())
-  const reader = await withBypassContext(() => createScratchUser(org.orgId, 'Reader', 'reader'))
+  const org = await withBypassContext(() => createScratchOrg());
+  const reader = await withBypassContext(() => createScratchUser(org.orgId, "Reader", "reader"));
   await withBypassContext(() =>
-    db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='reader'`),
-  )
-  return { org, reader }
+    db.execute(
+      sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='reader'`,
+    ),
+  );
+  return { org, reader };
 }
 
-test('the refusal names its code and the Company settings remedy', async () => {
-  const notice = baseCurrencyNotice({ title: 't', description: 'd', actionLabel: 'a' })
-  assert.equal(notice.code, 'base-currency-not-configured')
-  assert.equal(notice.actionHref, BASE_CURRENCY_SETTINGS_HREF)
-  assert.equal(BASE_CURRENCY_SETTINGS_HREF, '/admin/setup/company')
-  assert.equal(hasBaseCurrency(undefined), false)
-  assert.equal(hasBaseCurrency(null), false)
-  assert.equal(hasBaseCurrency(''), false)
-  assert.equal(hasBaseCurrency('USD'), true)
-})
+test("the refusal names its code and the Company settings remedy", async () => {
+  const notice = baseCurrencyNotice({ title: "t", description: "d", actionLabel: "a" });
+  assert.equal(notice.code, "base-currency-not-configured");
+  assert.equal(notice.actionHref, BASE_CURRENCY_SETTINGS_HREF);
+  assert.equal(BASE_CURRENCY_SETTINGS_HREF, "/admin/setup/company");
+  assert.equal(hasBaseCurrency(undefined), false);
+  assert.equal(hasBaseCurrency(null), false);
+  assert.equal(hasBaseCurrency(""), false);
+  assert.equal(hasBaseCurrency("USD"), true);
+});
 
-test('project profitability refuses without a base currency instead of throwing', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, reader } = await setupOrg()
-  try {
-    state.user = sessionFor(org.orgId, reader)
-    const data = await withOrgContext(org.orgId, () => loadProjectProfitability({}))
-    assert.equal(data.baseCurrencyNotice?.code, 'base-currency-not-configured')
-    assert.equal(data.baseCurrencyNotice?.title, 'baseCurrency.title')
-    assert.equal(data.baseCurrencyNotice?.actionHref, '/admin/setup/company')
-    assert.equal(data.baseCurrencyReady, false)
-    const spec = projectProfitabilitySpec(data) as unknown as {
-      body: { widget?: string; props?: { action?: string; actionProps?: { href?: string } }; when?: { $?: string } }[]
+test(
+  "project profitability refuses without a base currency instead of throwing",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, reader } = await setupOrg();
+    try {
+      state.user = sessionFor(org.orgId, reader);
+      const data = await withOrgContext(org.orgId, () => loadProjectProfitability({}));
+      assert.equal(data.baseCurrencyNotice?.code, "base-currency-not-configured");
+      assert.equal(data.baseCurrencyNotice?.title, "baseCurrency.title");
+      assert.equal(data.baseCurrencyNotice?.actionHref, "/admin/setup/company");
+      assert.equal(data.baseCurrencyReady, false);
+      const spec = projectProfitabilitySpec(data) as unknown as {
+        body: {
+          widget?: string;
+          props?: { action?: string; actionProps?: { href?: string } };
+          when?: { $?: string };
+        }[];
+      };
+      assert.equal(spec.body[0]?.widget, "empty-state");
+      assert.equal(spec.body[0]?.props?.action, "link-button");
+      assert.equal(spec.body[0]?.props?.actionProps?.href, "/admin/setup/company");
+      assert.equal(spec.body[0]?.when?.$, "baseCurrencyNotice");
+      assert.equal(spec.body[1]?.when?.$, "baseCurrencyReady");
+    } finally {
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-    assert.equal(spec.body[0]?.widget, 'empty-state')
-    assert.equal(spec.body[0]?.props?.action, 'link-button')
-    assert.equal(spec.body[0]?.props?.actionProps?.href, '/admin/setup/company')
-    assert.equal(spec.body[0]?.when?.$, 'baseCurrencyNotice')
-    assert.equal(spec.body[1]?.when?.$, 'baseCurrencyReady')
-  } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+  },
+);
 
-test('the budget report refuses without a base currency', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, reader } = await setupOrg()
-  try {
-    state.user = sessionFor(org.orgId, reader)
-    const data = await withOrgContext(org.orgId, () => loadBudgetReport({}))
-    assert.equal(data.baseCurrencyNotice?.code, 'base-currency-not-configured')
-    assert.equal(data.baseCurrencyReady, false)
-    const spec = budgetReportSpec(data) as unknown as {
-      body: { widget?: string; props?: { actionProps?: { href?: string } }; when?: { $?: string } }[]
+test(
+  "the budget report refuses without a base currency",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, reader } = await setupOrg();
+    try {
+      state.user = sessionFor(org.orgId, reader);
+      const data = await withOrgContext(org.orgId, () => loadBudgetReport({}));
+      assert.equal(data.baseCurrencyNotice?.code, "base-currency-not-configured");
+      assert.equal(data.baseCurrencyReady, false);
+      const spec = budgetReportSpec(data) as unknown as {
+        body: {
+          widget?: string;
+          props?: { actionProps?: { href?: string } };
+          when?: { $?: string };
+        }[];
+      };
+      assert.equal(spec.body.length, 1);
+      assert.equal(spec.body[0]?.widget, "empty-state");
+      assert.equal(spec.body[0]?.props?.actionProps?.href, "/admin/setup/company");
+      assert.equal(spec.body[0]?.when?.$, "baseCurrencyNotice");
+    } finally {
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-    assert.equal(spec.body.length, 1)
-    assert.equal(spec.body[0]?.widget, 'empty-state')
-    assert.equal(spec.body[0]?.props?.actionProps?.href, '/admin/setup/company')
-    assert.equal(spec.body[0]?.when?.$, 'baseCurrencyNotice')
-  } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+  },
+);
 
-test('trial balance refuses without a base currency and hides the paper', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, reader } = await setupOrg()
-  try {
-    state.user = sessionFor(org.orgId, reader)
-    const data = await withOrgContext(org.orgId, () => loadTrialBalance({}))
-    assert.equal(data.baseCurrencyNotice?.code, 'base-currency-not-configured')
-    assert.equal(data.ratesReady, false)
-    const spec = trialBalanceSpec(data) as unknown as {
-      body: { kind?: string; when?: { $?: string } }[]
+test(
+  "trial balance refuses without a base currency and hides the paper",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, reader } = await setupOrg();
+    try {
+      state.user = sessionFor(org.orgId, reader);
+      const data = await withOrgContext(org.orgId, () => loadTrialBalance({}));
+      assert.equal(data.baseCurrencyNotice?.code, "base-currency-not-configured");
+      assert.equal(data.ratesReady, false);
+      const spec = trialBalanceSpec(data) as unknown as {
+        body: { kind?: string; when?: { $?: string } }[];
+      };
+      assert.equal(spec.body[0]?.when?.$, "baseCurrencyNotice");
+      assert.ok(
+        spec.body.filter((b) => b.kind === "paper-view").every((b) => b.when?.$ === "ratesReady"),
+        "the paper stays gated on readiness, which is false under refusal",
+      );
+    } finally {
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-    assert.equal(spec.body[0]?.when?.$, 'baseCurrencyNotice')
-    assert.ok(
-      spec.body.filter((b) => b.kind === 'paper-view').every((b) => b.when?.$ === 'ratesReady'),
-      'the paper stays gated on readiness, which is false under refusal',
-    )
-  } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+  },
+);

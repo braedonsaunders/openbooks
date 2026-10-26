@@ -9,5 +9,3 @@ import { fiscalStartMonth, fiscalYearRangeFor } from "../fiscal";
 export async function fiscalYearRange(fyEndYear: number) {
   return fiscalYearRangeFor(fyEndYear, await fiscalStartMonth());
 }
-
-

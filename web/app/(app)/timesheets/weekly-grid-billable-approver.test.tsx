@@ -35,8 +35,7 @@ stubModules({
       "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
     sonner:
       "export const toast={success(m){globalThis.__gridBillableApprover.toasts.push({kind:'success',message:m})},error(m,o){globalThis.__gridBillableApprover.toasts.push({kind:'error',message:m,options:o})},warning(){},info(){}};export function Toaster(){return null}",
-    "../../../lib/confirm":
-      "export async function confirmDialog(){return true}",
+    "../../../lib/confirm": "export async function confirmDialog(){return true}",
     "../../../lib/prompt": "export async function promptDialog(){return null}",
   },
 });
@@ -52,7 +51,15 @@ const { BusinessDateProvider } = await import("../../../components/business-date
 const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 function submittedPayload(): React.ComponentProps<typeof WeeklyGrid>["payload"] {
   return {
@@ -74,7 +81,9 @@ function submittedPayload(): React.ComponentProps<typeof WeeklyGrid>["payload"] 
         immutable: true,
       },
     ],
-    planned: [], scheduled: [], leaveCover: [],
+    planned: [],
+    scheduled: [],
+    leaveCover: [],
     status: "submitted",
     hasApproved: false,
     lockReasons: [],
@@ -90,16 +99,30 @@ const PICKERS = {
   employees: [{ value: "emp-9", label: "Billable Approver Worker" }],
   projects: [{ value: "proj-9", label: "Client job" }],
   items: [{ value: "item-9", label: "Service" }],
-  timeTypes: [{ value: "tt-9", label: "Regular", classification: "regular", costMultiplier: "1", isBillableDefault: true, isDefault: true }],
+  timeTypes: [
+    {
+      value: "tt-9",
+      label: "Regular",
+      classification: "regular",
+      costMultiplier: "1",
+      isBillableDefault: true,
+      isDefault: true,
+    },
+  ],
   departments: [],
 };
 
-async function mountGrid(status: React.ComponentProps<typeof WeeklyGrid>["payload"]["status"], entryStatuses: string[]) {
+async function mountGrid(
+  status: React.ComponentProps<typeof WeeklyGrid>["payload"]["status"],
+  entryStatuses: string[],
+) {
   script.toasts = [];
   script.posts = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.startsWith("/api/timesheets/billable") && init?.method === "POST") {
       script.posts.push({ url, body: JSON.parse(String(init.body)) });
       return new Response(JSON.stringify(script.billableBody), {
@@ -150,7 +173,9 @@ async function mountGrid(status: React.ComponentProps<typeof WeeklyGrid>["payloa
 }
 
 function billableBox(): HTMLInputElement {
-  const box = document.querySelector('input[aria-label="Line 1 billable"]') as HTMLInputElement | null;
+  const box = document.querySelector(
+    'input[aria-label="Line 1 billable"]',
+  ) as HTMLInputElement | null;
   assert.ok(box, "the review grid offers the line billable checkbox");
   return box;
 }
@@ -168,7 +193,11 @@ test("an approver retargets billable on a submitted line through the billable ro
   const { cleanup } = await mountGrid("submitted", ["submitted"]);
   t.after(cleanup);
   const box = billableBox();
-  assert.equal(box.disabled, false, "the approver's BILL checkbox stays enabled on a submitted line");
+  assert.equal(
+    box.disabled,
+    false,
+    "the approver's BILL checkbox stays enabled on a submitted line",
+  );
   assert.equal(box.checked, true);
   // Hours stay read-only: only the flag is approver-editable.
   const hourInputs = [...document.querySelectorAll('input[type="number"]')];
@@ -179,7 +208,12 @@ test("an approver retargets billable on a submitted line through the billable ro
   });
   await tick(120);
   assert.equal(script.posts.length, 1, "the flag posts immediately, never as a local draft");
-  const sent = script.posts[0]!.body as { employee: string; week: string; line: Record<string, unknown>; isBillable: boolean };
+  const sent = script.posts[0]!.body as {
+    employee: string;
+    week: string;
+    line: Record<string, unknown>;
+    isBillable: boolean;
+  };
   assert.equal(sent.employee, "emp-9");
   assert.equal(sent.week, "2026-07-12");
   assert.equal(sent.isBillable, false, "unchecking marks the write-off");
@@ -222,7 +256,11 @@ test("an approved week's BILL checkbox is withdrawn from the approver", async (t
   const { cleanup } = await mountGrid("approved", ["approved"]);
   t.after(cleanup);
   const box = billableBox();
-  assert.equal(box.disabled, true, "approved lines refuse the flag change in the grid; the route refuses it too");
+  assert.equal(
+    box.disabled,
+    true,
+    "approved lines refuse the flag change in the grid; the route refuses it too",
+  );
   box.click();
   await tick(60);
   assert.equal(script.posts.length, 0, "a disabled checkbox posts nothing");

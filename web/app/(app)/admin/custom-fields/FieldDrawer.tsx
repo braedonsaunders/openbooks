@@ -1,59 +1,65 @@
-'use client'
+"use client";
 
-import { useId, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { GripVertical, Plus, X } from 'lucide-react'
-import { toast } from 'sonner'
-import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
-import { CUSTOM_FIELD_TARGETS as TARGETS, CUSTOM_FIELD_REFERENCE_TABLES } from '@openbooks/customization'
-import { CustomFieldInput } from '@/components/custom-field-input'
-import type { CustomFieldDefClient } from '@/components/custom-field-inputs'
-import { customFieldEditorConfig } from '@/lib/custom-field-editor-config'
-import { ApiResponseError, apiJson } from '@/lib/api-error'
+import { useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { GripVertical, Plus, X } from "lucide-react";
+import { toast } from "sonner";
+import { Badge, Button, Input, Label, Select, UrlDrawer } from "@openbooks/ui";
+import {
+  CUSTOM_FIELD_TARGETS as TARGETS,
+  CUSTOM_FIELD_REFERENCE_TABLES,
+} from "@openbooks/customization";
+import { CustomFieldInput } from "@/components/custom-field-input";
+import type { CustomFieldDefClient } from "@/components/custom-field-inputs";
+import { customFieldEditorConfig } from "@/lib/custom-field-editor-config";
+import { ApiResponseError, apiJson } from "@/lib/api-error";
 
 const DISPLAY_MODES = [
-  { value: 'always', labelKey: 'drawer.displayNormal' },
-  { value: 'readonly', labelKey: 'drawer.displayDisabled' },
-  { value: 'hidden', labelKey: 'drawer.displayHidden' },
-]
+  { value: "always", labelKey: "drawer.displayNormal" },
+  { value: "readonly", labelKey: "drawer.displayDisabled" },
+  { value: "hidden", labelKey: "drawer.displayHidden" },
+];
 
 const TYPES: { value: string; labelKey: string; helpKey: string }[] = [
-  { value: 'text', labelKey: 'types.text.label', helpKey: 'types.text.help' },
-  { value: 'long_text', labelKey: 'types.longText.label', helpKey: 'types.longText.help' },
-  { value: 'number', labelKey: 'types.number.label', helpKey: 'types.number.help' },
-  { value: 'currency', labelKey: 'types.currency.label', helpKey: 'types.currency.help' },
-  { value: 'date', labelKey: 'types.date.label', helpKey: 'types.date.help' },
-  { value: 'boolean', labelKey: 'types.boolean.label', helpKey: 'types.boolean.help' },
-  { value: 'select', labelKey: 'types.select.label', helpKey: 'types.select.help' },
-  { value: 'multi_select', labelKey: 'types.multiSelect.label', helpKey: 'types.multiSelect.help' },
-  { value: 'reference', labelKey: 'types.reference.label', helpKey: 'types.reference.help' },
-]
+  { value: "text", labelKey: "types.text.label", helpKey: "types.text.help" },
+  { value: "long_text", labelKey: "types.longText.label", helpKey: "types.longText.help" },
+  { value: "number", labelKey: "types.number.label", helpKey: "types.number.help" },
+  { value: "currency", labelKey: "types.currency.label", helpKey: "types.currency.help" },
+  { value: "date", labelKey: "types.date.label", helpKey: "types.date.help" },
+  { value: "boolean", labelKey: "types.boolean.label", helpKey: "types.boolean.help" },
+  { value: "select", labelKey: "types.select.label", helpKey: "types.select.help" },
+  { value: "multi_select", labelKey: "types.multiSelect.label", helpKey: "types.multiSelect.help" },
+  { value: "reference", labelKey: "types.reference.label", helpKey: "types.reference.help" },
+];
 
 export function NewFieldButton() {
-  const t = useTranslations('admin.customFields')
-  const router = useRouter()
+  const t = useTranslations("admin.customFields");
+  const router = useRouter();
   return (
-    <Button onClick={() => router.push('/admin/custom-fields?field=new')}>
-      <Plus size={15} /> {t('newField')}
+    <Button onClick={() => router.push("/admin/custom-fields?field=new")}>
+      <Plus size={15} /> {t("newField")}
     </Button>
-  )
+  );
 }
 
 /** A `custom_field_defs` row: text/boolean columns plus the JSONB `config`
  *  object. Reads below narrow each field to the shape the schema gives it. */
-type FieldDefRow = Record<string, unknown>
+type FieldDefRow = Record<string, unknown>;
 
-const fieldText = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
-const fieldFlag = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback)
+const fieldText = (v: unknown, fallback = ""): string => (typeof v === "string" ? v : fallback);
+const fieldFlag = (v: unknown, fallback: boolean): boolean =>
+  typeof v === "boolean" ? v : fallback;
 function isFieldMap(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
+  return typeof v === "object" && v !== null;
 }
 function fieldConfig(v: unknown): Record<string, unknown> {
-  return isFieldMap(v) ? v : {}
+  return isFieldMap(v) ? v : {};
 }
 function fieldStringList(v: unknown): string[] {
-  return Array.isArray(v) && v.every((item): item is string => typeof item === 'string') ? [...v] : []
+  return Array.isArray(v) && v.every((item): item is string => typeof item === "string")
+    ? [...v]
+    : [];
 }
 
 export function FieldDrawer({
@@ -62,115 +68,160 @@ export function FieldDrawer({
   hiddenTables = [],
   roleOptions = [],
 }: {
-  def: FieldDefRow | null
-  hiddenKinds?: string[]
-  hiddenTables?: string[]
-  roleOptions?: { value: string; label: string }[]
+  def: FieldDefRow | null;
+  hiddenKinds?: string[];
+  hiddenTables?: string[];
+  roleOptions?: { value: string; label: string }[];
 }) {
-  const targets = TARGETS
-    .filter((item) => !hiddenTables.includes(item.table))
-    .map((item) => ({
-      ...item,
-      kinds: item.kinds.filter((kind) => !hiddenKinds.includes(kind.value)),
-    }))
-  const t = useTranslations('admin.customFields')
-  const tCommon = useTranslations('common')
-  const tTarget = useTranslations()
-  const formId = useId()
-  const creating = !def
-  const router = useRouter()
-  const config = fieldConfig(def?.config)
+  const targets = TARGETS.filter((item) => !hiddenTables.includes(item.table)).map((item) => ({
+    ...item,
+    kinds: item.kinds.filter((kind) => !hiddenKinds.includes(kind.value)),
+  }));
+  const t = useTranslations("admin.customFields");
+  const tCommon = useTranslations("common");
+  const tTarget = useTranslations();
+  const formId = useId();
+  const creating = !def;
+  const router = useRouter();
+  const config = fieldConfig(def?.config);
 
-  const [targetTable, setTargetTable] = useState<string>(fieldText(def?.target_table, 'documents'))
-  const [targetKind, setTargetKind] = useState<string>(fieldText(def?.target_kind))
-  const [key, setKey] = useState<string>(fieldText(def?.key))
-  const [label, setLabel] = useState<string>(fieldText(def?.label))
-  const [fieldType, setFieldType] = useState<string>(fieldText(def?.field_type, 'text'))
-  const [options, setOptions] = useState<string[]>(fieldStringList(config.options))
-  const [optionDraft, setOptionDraft] = useState('')
-  const [helpText, setHelpText] = useState<string>(fieldText(config.helpText))
-  const [placeholder, setPlaceholder] = useState<string>(fieldText(config.placeholder))
-  const [defaultValue, setDefaultValue] = useState<unknown>(config.defaultValue ?? '')
-  const [referenceTable, setReferenceTable] = useState<string>(fieldText(config.referenceTable))
-  const [minValue, setMinValue] = useState<string>(config.min != null ? String(config.min) : '')
-  const [maxValue, setMaxValue] = useState<string>(config.max != null ? String(config.max) : '')
-  const [isRequired, setIsRequired] = useState<boolean>(fieldFlag(def?.is_required, false))
-  const [showInList, setShowInList] = useState<boolean>(fieldFlag(config.showInList, false))
-  const [displayMode, setDisplayMode] = useState<string>(config.displayMode === 'disabled' ? 'readonly' : config.displayMode === 'normal' ? 'always' : fieldText(config.displayMode, 'always'))
-  const [allowedRoles, setAllowedRoles] = useState<string[]>(fieldStringList(config.allowedRoles))
-  const [isActive, setIsActive] = useState<boolean>(fieldFlag(def?.is_active, true))
+  const [targetTable, setTargetTable] = useState<string>(fieldText(def?.target_table, "documents"));
+  const [targetKind, setTargetKind] = useState<string>(fieldText(def?.target_kind));
+  const [key, setKey] = useState<string>(fieldText(def?.key));
+  const [label, setLabel] = useState<string>(fieldText(def?.label));
+  const [fieldType, setFieldType] = useState<string>(fieldText(def?.field_type, "text"));
+  const [options, setOptions] = useState<string[]>(fieldStringList(config.options));
+  const [optionDraft, setOptionDraft] = useState("");
+  const [helpText, setHelpText] = useState<string>(fieldText(config.helpText));
+  const [placeholder, setPlaceholder] = useState<string>(fieldText(config.placeholder));
+  const [defaultValue, setDefaultValue] = useState<unknown>(config.defaultValue ?? "");
+  const [referenceTable, setReferenceTable] = useState<string>(fieldText(config.referenceTable));
+  const [minValue, setMinValue] = useState<string>(config.min != null ? String(config.min) : "");
+  const [maxValue, setMaxValue] = useState<string>(config.max != null ? String(config.max) : "");
+  const [isRequired, setIsRequired] = useState<boolean>(fieldFlag(def?.is_required, false));
+  const [showInList, setShowInList] = useState<boolean>(fieldFlag(config.showInList, false));
+  const [displayMode, setDisplayMode] = useState<string>(
+    config.displayMode === "disabled"
+      ? "readonly"
+      : config.displayMode === "normal"
+        ? "always"
+        : fieldText(config.displayMode, "always"),
+  );
+  const [allowedRoles, setAllowedRoles] = useState<string[]>(fieldStringList(config.allowedRoles));
+  const [isActive, setIsActive] = useState<boolean>(fieldFlag(def?.is_active, true));
   // Pin the revision to the values loaded for this editor. A background refresh
   // must not upgrade a stale draft to another administrator's revision.
-  const [expectedUpdatedAt] = useState<string | undefined>(fieldText(def?.updated_at) || undefined)
-  const saving = useRef(false)
-  const [busy, setBusy] = useState(false)
+  const [expectedUpdatedAt] = useState<string | undefined>(fieldText(def?.updated_at) || undefined);
+  const saving = useRef(false);
+  const [busy, setBusy] = useState(false);
 
-  const target = targets.find((x) => x.table === targetTable)
-  const needsOptions = fieldType === 'select' || fieldType === 'multi_select'
-  const isNumeric = fieldType === 'number' || fieldType === 'currency'
+  const target = targets.find((x) => x.table === targetTable);
+  const needsOptions = fieldType === "select" || fieldType === "multi_select";
+  const isNumeric = fieldType === "number" || fieldType === "currency";
   const slug = (s: string) =>
-    s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60);
 
   // "Transaction header · Vendor bills" badge text for the locked edit view.
   function targetLabel(table: string, kind: string | null): string {
-    const tgt = TARGETS.find((x) => x.table === table)
-    const k = tgt?.kinds.find((x) => x.value === kind)
-    const base = tgt ? tTarget(tgt.labelKey) : table
-    if (k) return `${base} · ${tTarget(k.labelKey)}`
-    if (tgt?.kinds.length) return `${base} · ${t('drawer.allKindsSuffix')}`
-    return base
+    const tgt = TARGETS.find((x) => x.table === table);
+    const k = tgt?.kinds.find((x) => x.value === kind);
+    const base = tgt ? tTarget(tgt.labelKey) : table;
+    if (k) return `${base} · ${tTarget(k.labelKey)}`;
+    if (tgt?.kinds.length) return `${base} · ${t("drawer.allKindsSuffix")}`;
+    return base;
   }
 
   function buildConfig() {
-    return customFieldEditorConfig(config, { fieldType, options, helpText, placeholder,
-      defaultValue, minValue, maxValue, showInList, displayMode, allowedRoles, referenceTable })
+    return customFieldEditorConfig(config, {
+      fieldType,
+      options,
+      helpText,
+      placeholder,
+      defaultValue,
+      minValue,
+      maxValue,
+      showInList,
+      displayMode,
+      allowedRoles,
+      referenceTable,
+    });
   }
 
   async function save() {
-    if (saving.current) return
-    saving.current = true
-    setBusy(true)
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
     try {
       const body = creating
-        ? { targetTable, targetKind: targetKind || null, key: key || slug(label), label, fieldType, config: buildConfig(), isRequired }
-        : { id: def!.id, expectedUpdatedAt, label, fieldType, config: buildConfig(), isRequired, isActive }
+        ? {
+            targetTable,
+            targetKind: targetKind || null,
+            key: key || slug(label),
+            label,
+            fieldType,
+            config: buildConfig(),
+            isRequired,
+          }
+        : {
+            id: def!.id,
+            expectedUpdatedAt,
+            label,
+            fieldType,
+            config: buildConfig(),
+            isRequired,
+            isActive,
+          };
       await apiJson<unknown>(
-        '/api/admin/custom-fields',
+        "/api/admin/custom-fields",
         {
-          method: creating ? 'POST' : 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: creating ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         },
-        t('drawer.saveFailed'),
-      )
-      toast.success(creating ? t('drawer.created') : t('drawer.updated'))
-      router.push('/admin/custom-fields')
-      router.refresh()
+        t("drawer.saveFailed"),
+      );
+      toast.success(creating ? t("drawer.created") : t("drawer.updated"));
+      router.push("/admin/custom-fields");
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.saveFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t("drawer.saveFailed"));
     } finally {
-      saving.current = false
-      setBusy(false)
+      saving.current = false;
+      setBusy(false);
     }
   }
 
-  const section = 'space-y-1.5'
+  const section = "space-y-1.5";
 
   return (
     <UrlDrawer
       open
       closeHref="/admin/custom-fields"
       size="lg"
-      title={creating ? t('drawer.newTitle') : t('drawer.editTitle', { label: fieldText(def!.label) })}
-      description={creating ? t('drawer.newDescription') : undefined}
+      title={
+        creating ? t("drawer.newTitle") : t("drawer.editTitle", { label: fieldText(def!.label) })
+      }
+      description={creating ? t("drawer.newDescription") : undefined}
       headerActions={
         <>
-          <Button disabled={busy || !label || (needsOptions && options.length === 0) || (fieldType === 'reference' && !referenceTable)} onClick={save}>
+          <Button
+            disabled={
+              busy ||
+              !label ||
+              (needsOptions && options.length === 0) ||
+              (fieldType === "reference" && !referenceTable)
+            }
+            onClick={save}
+          >
             {busy
-              ? tCommon('actions.saving')
+              ? tCommon("actions.saving")
               : creating
-                ? t('drawer.createField')
-                : t('drawer.saveChanges')}
+                ? t("drawer.createField")
+                : t("drawer.saveChanges")}
           </Button>
         </>
       }
@@ -185,7 +236,7 @@ export function FieldDrawer({
                 onChange={(e) => setIsActive(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
               />
-              {tCommon('labels.active')}
+              {tCommon("labels.active")}
             </label>
           ) : (
             <span />
@@ -197,18 +248,18 @@ export function FieldDrawer({
         {/* Applies to — editable on create, shown clearly (locked) on edit */}
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
           <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            {t('drawer.appliesTo')}
+            {t("drawer.appliesTo")}
           </div>
           {creating ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className={section}>
-                <Label htmlFor={`${formId}-target`}>{t('drawer.recordType')}</Label>
+                <Label htmlFor={`${formId}-target`}>{t("drawer.recordType")}</Label>
                 <Select
                   id={`${formId}-target`}
                   value={targetTable}
                   onChange={(e) => {
-                    setTargetTable(e.target.value)
-                    setTargetKind('')
+                    setTargetTable(e.target.value);
+                    setTargetKind("");
                   }}
                 >
                   {targets.map((tgt) => (
@@ -223,9 +274,13 @@ export function FieldDrawer({
               </div>
               {target && target.kinds.length > 0 ? (
                 <div className={section}>
-                  <Label htmlFor={`${formId}-kind`}>{t('drawer.whichTransactions')}</Label>
-                  <Select id={`${formId}-kind`} value={targetKind} onChange={(e) => setTargetKind(e.target.value)}>
-                    <option value="">{t('drawer.allTypes')}</option>
+                  <Label htmlFor={`${formId}-kind`}>{t("drawer.whichTransactions")}</Label>
+                  <Select
+                    id={`${formId}-kind`}
+                    value={targetKind}
+                    onChange={(e) => setTargetKind(e.target.value)}
+                  >
+                    <option value="">{t("drawer.allTypes")}</option>
                     {target.kinds.map((k) => (
                       <option key={k.value} value={k.value}>
                         {tTarget(k.labelKey)}
@@ -233,16 +288,18 @@ export function FieldDrawer({
                     ))}
                   </Select>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {t('drawer.allTypesHint')}
+                    {t("drawer.allTypesHint")}
                   </p>
                 </div>
               ) : null}
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{targetLabel(fieldText(def!.target_table), fieldText(def!.target_kind) || null)}</Badge>
+              <Badge variant="secondary">
+                {targetLabel(fieldText(def!.target_table), fieldText(def!.target_kind) || null)}
+              </Badge>
               <span className="font-mono text-xs text-slate-400">{fieldText(def!.key)}</span>
-              <span className="text-xs text-slate-400">{t('drawer.lockedAfterCreation')}</span>
+              <span className="text-xs text-slate-400">{t("drawer.lockedAfterCreation")}</span>
             </div>
           )}
         </div>
@@ -250,36 +307,43 @@ export function FieldDrawer({
         {/* Identity */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
-            <Label htmlFor={`${formId}-label`}>{t('drawer.label')}</Label>
+            <Label htmlFor={`${formId}-label`}>{t("drawer.label")}</Label>
             <Input
               id={`${formId}-label`}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder={t('drawer.labelPlaceholder')}
+              placeholder={t("drawer.labelPlaceholder")}
             />
           </div>
           {creating ? (
             <div className={section}>
               <Label htmlFor={`${formId}-key`}>
-                {t('drawer.fieldKey')}{' '}
-                <span className="font-normal text-slate-400">{t('drawer.permanent')}</span>
+                {t("drawer.fieldKey")}{" "}
+                <span className="font-normal text-slate-400">{t("drawer.permanent")}</span>
               </Label>
               <Input
                 id={`${formId}-key`}
                 value={key}
                 onChange={(e) => setKey(slug(e.target.value))}
-                placeholder={label ? slug(label) : t('drawer.keyPlaceholder')}
+                placeholder={label ? slug(label) : t("drawer.keyPlaceholder")}
                 className="font-mono"
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.keyHint')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("drawer.keyHint")}</p>
             </div>
           ) : null}
         </div>
 
         {/* Type */}
         <div className={section}>
-          <Label htmlFor={`${formId}-type`}>{t('drawer.type')}</Label>
-          <Select id={`${formId}-type`} value={fieldType} onChange={(e) => { setFieldType(e.target.value); setDefaultValue('') }}>
+          <Label htmlFor={`${formId}-type`}>{t("drawer.type")}</Label>
+          <Select
+            id={`${formId}-type`}
+            value={fieldType}
+            onChange={(e) => {
+              setFieldType(e.target.value);
+              setDefaultValue("");
+            }}
+          >
             {TYPES.map((ty) => (
               <option key={ty.value} value={ty.value}>
                 {t(ty.labelKey)}
@@ -288,29 +352,42 @@ export function FieldDrawer({
           </Select>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {(() => {
-              const ty = TYPES.find((x) => x.value === fieldType)
-              return ty ? t(ty.helpKey) : null
+              const ty = TYPES.find((x) => x.value === fieldType);
+              return ty ? t(ty.helpKey) : null;
             })()}
           </p>
         </div>
 
-        {fieldType === 'reference' ? (
+        {fieldType === "reference" ? (
           <div className={section}>
-            <Label htmlFor={`${formId}-reference`}>{t('drawer.referenceTable')}</Label>
-            <Select id={`${formId}-reference`} value={referenceTable} onChange={(e) => { setReferenceTable(e.target.value); setDefaultValue('') }}>
-              <option value="">{tCommon('labels.none')}</option>
-              {TARGETS.filter(target => (CUSTOM_FIELD_REFERENCE_TABLES as readonly string[]).includes(target.table)).map(target => (
-                <option key={target.table} value={target.table}>{tTarget(target.labelKey)}</option>
+            <Label htmlFor={`${formId}-reference`}>{t("drawer.referenceTable")}</Label>
+            <Select
+              id={`${formId}-reference`}
+              value={referenceTable}
+              onChange={(e) => {
+                setReferenceTable(e.target.value);
+                setDefaultValue("");
+              }}
+            >
+              <option value="">{tCommon("labels.none")}</option>
+              {TARGETS.filter((target) =>
+                (CUSTOM_FIELD_REFERENCE_TABLES as readonly string[]).includes(target.table),
+              ).map((target) => (
+                <option key={target.table} value={target.table}>
+                  {tTarget(target.labelKey)}
+                </option>
               ))}
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.referenceTableHint')}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t("drawer.referenceTableHint")}
+            </p>
           </div>
         ) : null}
 
         {/* Options editor */}
         {needsOptions ? (
           <div className={section}>
-            <Label htmlFor={`${formId}-option`}>{t('drawer.options')}</Label>
+            <Label htmlFor={`${formId}-option`}>{t("drawer.options")}</Label>
             {options.length > 0 ? (
               <ul className="divide-y divide-slate-100 rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                 {options.map((o) => (
@@ -319,7 +396,7 @@ export function FieldDrawer({
                     <span className="flex-1">{o}</span>
                     <button
                       type="button"
-                      aria-label={t('drawer.removeOption', { option: o })}
+                      aria-label={t("drawer.removeOption", { option: o })}
                       className="text-slate-400 hover:text-red-600"
                       onClick={() => setOptions(options.filter((x) => x !== o))}
                     >
@@ -329,19 +406,20 @@ export function FieldDrawer({
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-slate-400">{t('drawer.noOptions')}</p>
+              <p className="text-xs text-slate-400">{t("drawer.noOptions")}</p>
             )}
             <div className="flex gap-2">
               <Input
                 id={`${formId}-option`}
                 value={optionDraft}
                 onChange={(e) => setOptionDraft(e.target.value)}
-                placeholder={t('drawer.addOptionPlaceholder')}
+                placeholder={t("drawer.addOptionPlaceholder")}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && optionDraft.trim()) {
-                    e.preventDefault()
-                    if (!options.includes(optionDraft.trim())) setOptions([...options, optionDraft.trim()])
-                    setOptionDraft('')
+                  if (e.key === "Enter" && optionDraft.trim()) {
+                    e.preventDefault();
+                    if (!options.includes(optionDraft.trim()))
+                      setOptions([...options, optionDraft.trim()]);
+                    setOptionDraft("");
                   }
                 }}
               />
@@ -349,12 +427,12 @@ export function FieldDrawer({
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  const v = optionDraft.trim()
-                  if (v && !options.includes(v)) setOptions([...options, v])
-                  setOptionDraft('')
+                  const v = optionDraft.trim();
+                  if (v && !options.includes(v)) setOptions([...options, v]);
+                  setOptionDraft("");
                 }}
               >
-                {tCommon('actions.add')}
+                {tCommon("actions.add")}
               </Button>
             </div>
           </div>
@@ -364,30 +442,38 @@ export function FieldDrawer({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
             <Label htmlFor={`${formId}-help`}>
-              {t('drawer.helpText')}{' '}
-              <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
+              {t("drawer.helpText")}{" "}
+              <span className="font-normal text-slate-400">{t("drawer.optionalSuffix")}</span>
             </Label>
             <Input
               id={`${formId}-help`}
               value={helpText}
               onChange={(e) => setHelpText(e.target.value)}
-              placeholder={t('drawer.helpTextPlaceholder')}
+              placeholder={t("drawer.helpTextPlaceholder")}
             />
           </div>
-          {!needsOptions && fieldType !== 'boolean' ? (
+          {!needsOptions && fieldType !== "boolean" ? (
             <div className={section}>
               <Label htmlFor={`${formId}-placeholder`}>
-                {t('drawer.placeholder')}{' '}
-                <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
+                {t("drawer.placeholder")}{" "}
+                <span className="font-normal text-slate-400">{t("drawer.optionalSuffix")}</span>
               </Label>
-              <Input id={`${formId}-placeholder`} value={placeholder} onChange={(e) => setPlaceholder(e.target.value)} />
+              <Input
+                id={`${formId}-placeholder`}
+                value={placeholder}
+                onChange={(e) => setPlaceholder(e.target.value)}
+              />
             </div>
           ) : null}
           <div className={section}>
             <CustomFieldInput
-              def={{ key: 'default_value', label: `${t('drawer.defaultValue')} ${t('drawer.optionalSuffix')}`,
-                fieldType: fieldType as CustomFieldDefClient['fieldType'], isRequired: false,
-                config: { options, referenceTable } }}
+              def={{
+                key: "default_value",
+                label: `${t("drawer.defaultValue")} ${t("drawer.optionalSuffix")}`,
+                fieldType: fieldType as CustomFieldDefClient["fieldType"],
+                isRequired: false,
+                config: { options, referenceTable },
+              }}
               value={defaultValue}
               onChange={setDefaultValue}
             />
@@ -395,12 +481,22 @@ export function FieldDrawer({
           {isNumeric ? (
             <div className="grid grid-cols-2 gap-2">
               <div className={section}>
-                <Label htmlFor={`${formId}-min`}>{t('drawer.min')}</Label>
-                <Input id={`${formId}-min`} inputMode="decimal" value={minValue} onChange={(e) => setMinValue(e.target.value)} />
+                <Label htmlFor={`${formId}-min`}>{t("drawer.min")}</Label>
+                <Input
+                  id={`${formId}-min`}
+                  inputMode="decimal"
+                  value={minValue}
+                  onChange={(e) => setMinValue(e.target.value)}
+                />
               </div>
               <div className={section}>
-                <Label htmlFor={`${formId}-max`}>{t('drawer.max')}</Label>
-                <Input id={`${formId}-max`} inputMode="decimal" value={maxValue} onChange={(e) => setMaxValue(e.target.value)} />
+                <Label htmlFor={`${formId}-max`}>{t("drawer.max")}</Label>
+                <Input
+                  id={`${formId}-max`}
+                  inputMode="decimal"
+                  value={maxValue}
+                  onChange={(e) => setMaxValue(e.target.value)}
+                />
               </div>
             </div>
           ) : null}
@@ -415,7 +511,7 @@ export function FieldDrawer({
               onChange={(e) => setIsRequired(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            {tCommon('labels.required')}
+            {tCommon("labels.required")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -424,15 +520,19 @@ export function FieldDrawer({
               onChange={(e) => setShowInList(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            {t('drawer.showInList')}
+            {t("drawer.showInList")}
           </label>
         </div>
 
         {/* Display mode & role access */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
-            <Label htmlFor={`${formId}-display`}>{t('drawer.displayMode')}</Label>
-            <Select id={`${formId}-display`} value={displayMode} onChange={(e) => setDisplayMode(e.target.value)}>
+            <Label htmlFor={`${formId}-display`}>{t("drawer.displayMode")}</Label>
+            <Select
+              id={`${formId}-display`}
+              value={displayMode}
+              onChange={(e) => setDisplayMode(e.target.value)}
+            >
               {DISPLAY_MODES.map((dm) => (
                 <option key={dm.value} value={dm.value}>
                   {t(dm.labelKey)}
@@ -442,8 +542,8 @@ export function FieldDrawer({
           </div>
           <div className={section}>
             <Label>
-              {t('drawer.allowedRoles')}{' '}
-              <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
+              {t("drawer.allowedRoles")}{" "}
+              <span className="font-normal text-slate-400">{t("drawer.optionalSuffix")}</span>
             </Label>
             <div className="flex flex-wrap gap-2">
               {roleOptions.map((r) => (
@@ -467,10 +567,12 @@ export function FieldDrawer({
                 </label>
               ))}
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.allowedRolesHint')}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t("drawer.allowedRolesHint")}
+            </p>
           </div>
         </div>
       </fieldset>
     </UrlDrawer>
-  )
+  );
 }

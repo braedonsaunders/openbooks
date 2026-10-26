@@ -1,202 +1,239 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
-import { grid, page, pageHeader, ref, statTile, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { ResourcingRefusal } from '@openbooks/engine/resourcing/errors'
-import { balanceOf } from '@openbooks/engine/resourcing/retainers'
-import { syncRetainerActivation } from '@openbooks/engine/resourcing/retainer-billing'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { loadFieldDefs } from '../../../../lib/custom-fields'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
-import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import type { FormLayoutConfig } from '@openbooks/customization'
-import type { CustomFieldDefClient } from '../../../../components/custom-field-inputs'
-import { loadRetainerKpis } from '../../../../lib/resourcing/retainer-kpis'
-import { isRetainerItemEligible, type RetainerItemRule } from '../../../../lib/resourcing/retainer-items'
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { notFound } from "next/navigation";
+import {
+  grid,
+  page,
+  pageHeader,
+  ref,
+  statTile,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { ResourcingRefusal } from "@openbooks/engine/resourcing/errors";
+import { balanceOf } from "@openbooks/engine/resourcing/retainers";
+import { syncRetainerActivation } from "@openbooks/engine/resourcing/retainer-billing";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { loadFieldDefs } from "../../../../lib/custom-fields";
+import { resolveFormLayout } from "../../../../lib/customization/resolve";
+import { isUuid, mergeHref, pickString } from "../../../../lib/list-params";
+import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+import type { FormLayoutConfig } from "@openbooks/customization";
+import type { CustomFieldDefClient } from "../../../../components/custom-field-inputs";
+import { loadRetainerKpis } from "../../../../lib/resourcing/retainer-kpis";
+import {
+  isRetainerItemEligible,
+  type RetainerItemRule,
+} from "../../../../lib/resourcing/retainer-items";
 
 export type RetainerRecord = {
-  id: string
-  projectId: string
-  customerPartyId: string
-  kind: 'hours' | 'fees'
-  totalAmount: string
-  currency: string
-  totalHours: string | null
-  unitRate: string | null
-  startsOn: string
-  endsOn: string
-  retainerItemId: string
-  invoiceDocumentId: string | null
-  obligationId: string | null
-  state: string
-  balance: string
-  custom: Record<string, unknown>
-}
+  id: string;
+  projectId: string;
+  customerPartyId: string;
+  kind: "hours" | "fees";
+  totalAmount: string;
+  currency: string;
+  totalHours: string | null;
+  unitRate: string | null;
+  startsOn: string;
+  endsOn: string;
+  retainerItemId: string;
+  invoiceDocumentId: string | null;
+  obligationId: string | null;
+  state: string;
+  balance: string;
+  custom: Record<string, unknown>;
+};
 
 export type RetainerDrawdownRow = {
-  id: string
-  weekStart: string
-  hours: string
-  amount: string
-  state: string
-}
+  id: string;
+  weekStart: string;
+  hours: string;
+  amount: string;
+  state: string;
+};
 
 export type RetainerEvidenceRow = {
-  timeEntryId: string
-  workedOn: string
-  hours: string
-  personName: string | null
-  weekStart: string
-  drawdownId: string
-}
+  timeEntryId: string;
+  workedOn: string;
+  hours: string;
+  personName: string | null;
+  weekStart: string;
+  drawdownId: string;
+};
 
 export type RetainerRecognitionRow = {
-  periodMonth: string
-  amount: string
-  posted: boolean
-  reversed: boolean
-}
+  periodMonth: string;
+  amount: string;
+  posted: boolean;
+  reversed: boolean;
+};
 
 export type RetainerItemOption = {
-  id: string
-  name: string
-  code: string | null
-  rule: RetainerItemRule | null
-  eligibleHours: boolean
-  eligibleFees: boolean
-}
+  id: string;
+  name: string;
+  code: string | null;
+  rule: RetainerItemRule | null;
+  eligibleHours: boolean;
+  eligibleFees: boolean;
+};
 
 export type RetainerDrawerData = {
-  remountKey: string
-  contractId: string | null
-  retainer: RetainerRecord | null
-  projectName: string | null
-  customerName: string | null
-  itemName: string | null
-  invoice: { id: string; number: string; status: string } | null
-  activationRefusal: { message: string; remedy?: string } | null
-  projects: { id: string; name: string }[]
-  customers: { id: string; name: string }[]
-  items: RetainerItemOption[]
-  drawdowns: RetainerDrawdownRow[]
-  evidence: RetainerEvidenceRow[]
-  recognition: RetainerRecognitionRow[]
-  headerDefs: CustomFieldDefClient[]
-  canManage: boolean
-  createMode: boolean
-  closeHref: string
-  layout: FormLayoutConfig
-}
+  remountKey: string;
+  contractId: string | null;
+  retainer: RetainerRecord | null;
+  projectName: string | null;
+  customerName: string | null;
+  itemName: string | null;
+  invoice: { id: string; number: string; status: string } | null;
+  activationRefusal: { message: string; remedy?: string } | null;
+  projects: { id: string; name: string }[];
+  customers: { id: string; name: string }[];
+  items: RetainerItemOption[];
+  drawdowns: RetainerDrawdownRow[];
+  evidence: RetainerEvidenceRow[];
+  recognition: RetainerRecognitionRow[];
+  headerDefs: CustomFieldDefClient[];
+  canManage: boolean;
+  createMode: boolean;
+  closeHref: string;
+  layout: FormLayoutConfig;
+};
 
 export type RetainerKpiTile = {
-  icon: string
-  accent: string
-  label: string
-  value: string
-  sub?: string
-  tone?: 'default' | 'positive' | 'warning' | 'negative'
-}
+  icon: string;
+  accent: string;
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "default" | "positive" | "warning" | "negative";
+};
 
 export type RetainersData = {
-  title: string
-  description: string
-  newLabel: string
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
-  tiles: RetainerKpiTile[]
-  drawer: RetainerDrawerData | null
-}
+  title: string;
+  description: string;
+  newLabel: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
+  tiles: RetainerKpiTile[];
+  drawer: RetainerDrawerData | null;
+};
 
 type RetainerReadRow = {
-  id: string
-  projectId: string
-  customerPartyId: string
-  kind: 'hours' | 'fees'
-  totalAmount: string
-  currency: string
-  totalHours: string | null
-  unitRate: string | null
-  startsOn: string
-  endsOn: string
-  retainerItemId: string
-  invoiceDocumentId: string | null
-  obligationId: string | null
-  state: string
-  custom: unknown
-}
+  id: string;
+  projectId: string;
+  customerPartyId: string;
+  kind: "hours" | "fees";
+  totalAmount: string;
+  currency: string;
+  totalHours: string | null;
+  unitRate: string | null;
+  startsOn: string;
+  endsOn: string;
+  retainerItemId: string;
+  invoiceDocumentId: string | null;
+  obligationId: string | null;
+  state: string;
+  custom: unknown;
+};
 
-type DrawdownReadRow = { id: string; weekStart: string; hours: string; amount: string; state: string }
+type DrawdownReadRow = {
+  id: string;
+  weekStart: string;
+  hours: string;
+  amount: string;
+  state: string;
+};
 type EvidenceReadRow = {
-  timeEntryId: string
-  workedOn: string
-  hours: string
-  personName: string | null
-  weekStart: string
-  drawdownId: string
-}
-type RecognitionReadRow = { periodMonth: string; amount: string; posted: boolean; reversed: boolean }
-type ItemReadRow = { id: string; name: string; code: string | null; method: string | null; isForecast: boolean | null }
+  timeEntryId: string;
+  workedOn: string;
+  hours: string;
+  personName: string | null;
+  weekStart: string;
+  drawdownId: string;
+};
+type RecognitionReadRow = {
+  periodMonth: string;
+  amount: string;
+  posted: boolean;
+  reversed: boolean;
+};
+type ItemReadRow = {
+  id: string;
+  name: string;
+  code: string | null;
+  method: string | null;
+  isForecast: boolean | null;
+};
 
 function customRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
-const RECOGNITION_PREFIX = 'resourcing:retainer-drawdown:'
+const RECOGNITION_PREFIX = "resourcing:retainer-drawdown:";
 
 export async function loadRetainersPage(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<RetainersData> {
-  const t = await getTranslations('resourcing.retainers')
-  const authz = await requirePermission('retainers.read')
-  await requireFeatureEnabled(authz.user.orgId, 'retainerBilling')
-  const canManage = can(authz, 'retainers.manage')
-  const { money } = await getMoneyFormatter()
-  const today = await businessToday(authz.user.orgId)
-  const kpis = await loadRetainerKpis(authz.user.orgId, authz.allowedSubsidiaryIds, today)
+  const t = await getTranslations("resourcing.retainers");
+  const authz = await requirePermission("retainers.read");
+  await requireFeatureEnabled(authz.user.orgId, "retainerBilling");
+  const canManage = can(authz, "retainers.manage");
+  const { money } = await getMoneyFormatter();
+  const today = await businessToday(authz.user.orgId);
+  const kpis = await loadRetainerKpis(authz.user.orgId, authz.allowedSubsidiaryIds, today);
 
   const tiles: RetainerKpiTile[] = [
-    ...kpis.perCurrency.flatMap((entry) => ([
+    ...kpis.perCurrency.flatMap((entry) => [
       {
-        icon: 'wallet',
-        accent: 'teal',
-        label: t('kpi.balance', { currency: entry.currency }),
+        icon: "wallet",
+        accent: "teal",
+        label: t("kpi.balance", { currency: entry.currency }),
         value: money(entry.balance, { currency: entry.currency }),
       },
       {
-        icon: 'trending-up',
-        accent: 'sky',
-        label: t('kpi.drawn', { currency: entry.currency }),
+        icon: "trending-up",
+        accent: "sky",
+        label: t("kpi.drawn", { currency: entry.currency }),
         value: money(entry.drawn, { currency: entry.currency }),
       },
-    ])),
+    ]),
     {
-      icon: 'triangle-alert',
-      accent: 'amber',
-      label: t('kpi.expiring'),
+      icon: "triangle-alert",
+      accent: "amber",
+      label: t("kpi.expiring"),
       value: String(kpis.expiringCount),
-      sub: t('kpi.expiringSub'),
-      tone: kpis.expiringCount > 0 ? 'warning' : undefined,
+      sub: t("kpi.expiringSub"),
+      tone: kpis.expiringCount > 0 ? "warning" : undefined,
     },
-  ]
+  ];
 
-  const requested = pickString(sp.retainer)
-  const createMode = requested === 'new'
-  if (createMode && !canManage) notFound()
-  if (requested && !createMode && !isUuid(requested)) notFound()
+  const requested = pickString(sp.retainer);
+  const createMode = requested === "new";
+  if (createMode && !canManage) notFound();
+  if (requested && !createMode && !isUuid(requested)) notFound();
 
-  let drawer: RetainerDrawerData | null = null
+  let drawer: RetainerDrawerData | null = null;
   if (requested) {
     const loaded = !createMode
-      ? (await db.execute<RetainerReadRow & { projectName: string; customerName: string | null; itemName: string | null }>(sql`
+      ? ((
+          await db.execute<
+            RetainerReadRow & {
+              projectName: string;
+              customerName: string | null;
+              itemName: string | null;
+            }
+          >(
+            sql`
           select r.id, r.project_id as "projectId", r.customer_party_id as "customerPartyId", r.kind,
                  r.total_amount::text as "totalAmount", r.currency,
                  r.total_hours::text as "totalHours", r.unit_rate::text as "unitRate",
@@ -212,65 +249,78 @@ export async function loadRetainersPage(
            where r.org_id = ${authz.user.orgId} and r.id = ${requested}
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
            limit 1
-        `, 'objects'))[0] ?? null
-      : null
-    if (requested && !createMode && !loaded) notFound()
+        `,
+            "objects",
+          )
+        )[0] ?? null)
+      : null;
+    if (requested && !createMode && !loaded) notFound();
 
     // The loader syncs activation first, so the state shown is current: once
     // the linked invoice posts, the retainer is active. A refused activation
     // surfaces its reason instead of the drawdown controls.
-    let activationRefusal: RetainerDrawerData['activationRefusal'] = null
-    let state = loaded?.state ?? 'draft'
-    let obligationId = loaded?.obligationId ?? null
+    let activationRefusal: RetainerDrawerData["activationRefusal"] = null;
+    let state = loaded?.state ?? "draft";
+    let obligationId = loaded?.obligationId ?? null;
     if (loaded) {
       try {
         const synced = await withOrgTransaction(authz.user.orgId, () =>
-          syncRetainerActivation(db, authz.user.orgId, loaded.id, authz.user.id))
+          syncRetainerActivation(db, authz.user.orgId, loaded.id, authz.user.id),
+        );
         if (synced) {
-          state = synced.state
-          obligationId = synced.obligationId
+          state = synced.state;
+          obligationId = synced.obligationId;
         }
       } catch (error) {
         if (error instanceof ResourcingRefusal) {
-          activationRefusal = { message: error.message, remedy: error.remedy }
+          activationRefusal = { message: error.message, remedy: error.remedy };
         } else {
-          throw error
+          throw error;
         }
       }
     }
 
-    const retainerId = loaded?.id ?? null
+    const retainerId = loaded?.id ?? null;
     const drawdownRows = retainerId
-      ? (await db.execute<DrawdownReadRow>(sql`
+      ? await db.execute<DrawdownReadRow>(
+          sql`
           select id, week_start::text as "weekStart", hours::text as hours,
                  amount::text as amount, state
             from res_retainer_drawdowns
            where org_id = ${authz.user.orgId} and retainer_id = ${retainerId}
            order by week_start
-        `, 'objects'))
-      : []
+        `,
+          "objects",
+        )
+      : [];
     // The displayed balance is the landed engine policy, never a local
     // formula: total minus posted drawdowns for this retainer.
     const balance = loaded
       ? balanceOf(
           { totalAmount: loaded.totalAmount, currency: loaded.currency },
-          drawdownRows.filter((row) => row.state === 'posted'),
+          drawdownRows.filter((row) => row.state === "posted"),
         ).amount
-      : '0'
+      : "0";
 
     // The recognition rows link into the existing Revenue contract drawer,
     // resolved from the retainer's performance obligation.
     const contractId = obligationId
-      ? (await db.execute<{ contractId: string }>(sql`
+      ? ((
+          await db.execute<{ contractId: string }>(
+            sql`
           select contract_id as "contractId"
             from performance_obligations
            where org_id = ${authz.user.orgId} and id = ${obligationId}
            limit 1
-        `, 'objects'))[0]?.contractId ?? null
-      : null
+        `,
+            "objects",
+          )
+        )[0]?.contractId ?? null)
+      : null;
 
     const evidence = retainerId
-      ? (await db.execute<EvidenceReadRow>(sql`
+      ? await db.execute<EvidenceReadRow>(
+          sql`
           select e.time_entry_id as "timeEntryId", te.worked_on::text as "workedOn",
                  te.hours::text as hours, p.display_name as "personName",
                  d.week_start::text as "weekStart", d.id as "drawdownId"
@@ -280,15 +330,18 @@ export async function loadRetainersPage(
             left join parties p on p.org_id = e.org_id and p.id = te.employee_party_id
            where e.org_id = ${authz.user.orgId} and d.retainer_id = ${retainerId}
            order by te.worked_on, p.display_name
-        `, 'objects'))
-      : []
+        `,
+          "objects",
+        )
+      : [];
 
     // Recognition events carry the deterministic source reference
     // resourcing:retainer-drawdown:<drawdownId>:<YYYY-MM>. Posted means a
     // recognition journal for the obligation's period is posted or reversed;
     // a reversed recognition shows as reversed, never as missing.
     const recognition = obligationId
-      ? (await db.execute<RecognitionReadRow>(sql`
+      ? await db.execute<RecognitionReadRow>(
+          sql`
           select ev.period_month as "periodMonth", ev.amount::text as amount,
                  exists(select 1
                           from recognition_schedules s
@@ -309,19 +362,27 @@ export async function loadRetainersPage(
            where ev.org_id = ${authz.user.orgId} and ev.obligation_id = ${obligationId}
              and ev.source_reference like ${`${RECOGNITION_PREFIX}%`}
            order by ev.period_month
-        `, 'objects'))
-      : []
+        `,
+          "objects",
+        )
+      : [];
 
     const invoice = loaded?.invoiceDocumentId
-      ? (await db.execute<{ id: string; number: string; status: string }>(sql`
+      ? ((
+          await db.execute<{ id: string; number: string; status: string }>(
+            sql`
           select id, document_number as number, status
             from documents
            where org_id = ${authz.user.orgId} and id = ${loaded.invoiceDocumentId}
            limit 1
-        `, 'objects'))[0] ?? null
-      : null
+        `,
+            "objects",
+          )
+        )[0] ?? null)
+      : null;
 
-    const editable = canManage && (createMode || (state === 'draft' && loaded?.invoiceDocumentId === null))
+    const editable =
+      canManage && (createMode || (state === "draft" && loaded?.invoiceDocumentId === null));
     const [projectRows, customerRows, itemRows] = editable
       ? await Promise.all([
           db.execute<{ id: string; name: string }>(sql`
@@ -343,21 +404,21 @@ export async function loadRetainersPage(
              where i.org_id = ${authz.user.orgId} and i.is_active and i.kind = 'service'
              order by i.name`),
         ])
-      : [{ rows: [] }, { rows: [] }, { rows: [] }]
+      : [{ rows: [] }, { rows: [] }, { rows: [] }];
 
-    const headerDefs = await loadFieldDefs('res_retainers', 'retainer')
+    const headerDefs = await loadFieldDefs("res_retainers", "retainer");
     const resolved = await resolveFormLayout({
       orgId: authz.user.orgId,
       userId: authz.user.id,
-      recordType: 'retainer',
+      recordType: "retainer",
       userRoles: authz.user.roles.map(({ key }) => key),
       headerDefs,
       lineDefs: [],
       explicitLayoutId: pickString(sp.form),
-    })
+    });
 
     drawer = {
-      remountKey: loaded?.id ?? 'new-retainer',
+      remountKey: loaded?.id ?? "new-retainer",
       contractId,
       retainer: loaded
         ? {
@@ -387,17 +448,18 @@ export async function loadRetainersPage(
       projects: projectRows.rows,
       customers: customerRows.rows,
       items: itemRows.rows.map((item) => {
-        const rule = item.method === null && item.isForecast === null
-          ? null
-          : { method: item.method, isForecast: item.isForecast }
+        const rule =
+          item.method === null && item.isForecast === null
+            ? null
+            : { method: item.method, isForecast: item.isForecast };
         return {
           id: item.id,
           name: item.name,
           code: item.code,
           rule,
-          eligibleHours: isRetainerItemEligible('hours', rule),
-          eligibleFees: isRetainerItemEligible('fees', rule),
-        }
+          eligibleHours: isRetainerItemEligible("hours", rule),
+          eligibleFees: isRetainerItemEligible("fees", rule),
+        };
       }),
       drawdowns: drawdownRows,
       evidence,
@@ -405,49 +467,61 @@ export async function loadRetainersPage(
       headerDefs: headerDefs as unknown as CustomFieldDefClient[],
       canManage,
       createMode,
-      closeHref: mergeHref('/resourcing/retainers', sp, { retainer: undefined, form: undefined }),
+      closeHref: mergeHref("/resourcing/retainers", sp, { retainer: undefined, form: undefined }),
       layout: resolved.layout,
-    }
+    };
   }
 
   return {
-    title: t('title'),
-    description: t('description'),
-    newLabel: t('newRetainer'),
+    title: t("title"),
+    description: t("description"),
+    newLabel: t("newRetainer"),
     currentParams: sp,
     canManage,
     tiles,
     drawer,
-  }
+  };
 }
 
-const f = ref<RetainersData>()
+const f = ref<RetainersData>();
 
 export function retainersSpec(data: RetainersData): PageSpec {
   const newRetainer = {
-    widget: 'link-button',
-    props: { href: '/resourcing/retainers?retainer=new', label: data.newLabel },
-  }
+    widget: "link-button",
+    props: { href: "/resourcing/retainers?retainer=new", label: data.newLabel },
+  };
   return page({
-    route: '/resourcing/retainers',
-    layout: 'list',
-    header: [pageHeader({ title: f('title'), description: f('description'), actions: [widget(newRetainer.widget, newRetainer.props, f('canManage'))] })],
+    route: "/resourcing/retainers",
+    layout: "list",
+    header: [
+      pageHeader({
+        title: f("title"),
+        description: f("description"),
+        actions: [widget(newRetainer.widget, newRetainer.props, f("canManage"))],
+      }),
+    ],
     body: [
-      grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', data.tiles.map((tile) =>
-        statTile({
-          iconKey: tile.icon,
-          accent: tile.accent,
-          label: tile.label,
-          value: tile.value,
-          ...(tile.sub ? { sub: tile.sub } : {}),
-          ...(tile.tone ? { tone: tile.tone } : {}),
-        }))),
-      widgetBlock('entity-list-view', {
-        recordType: 'retainer',
+      grid(
+        "grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5",
+        data.tiles.map((tile) =>
+          statTile({
+            iconKey: tile.icon,
+            accent: tile.accent,
+            label: tile.label,
+            value: tile.value,
+            ...(tile.sub ? { sub: tile.sub } : {}),
+            ...(tile.tone ? { tone: tile.tone } : {}),
+          }),
+        ),
+      ),
+      widgetBlock("entity-list-view", {
+        recordType: "retainer",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'resourcing-retainer-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer
+          ? { widget: "resourcing-retainer-drawer", props: { drawer: data.drawer } }
+          : null,
         emptyAction: data.canManage ? newRetainer : null,
       }),
     ],
-  })
+  });
 }

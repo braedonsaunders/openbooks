@@ -1,43 +1,43 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
-import { useFormatter, useTranslations } from 'next-intl'
-import { Settings2 } from 'lucide-react'
-import { Badge, Button } from '@openbooks/ui'
-import { useMoney } from '../../../components/money-provider'
-import { PagedTable } from '../../../components/paged-table'
-import { compareDecimal } from '../../../lib/exact-decimal'
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useFormatter, useTranslations } from "next-intl";
+import { Settings2 } from "lucide-react";
+import { Badge, Button } from "@openbooks/ui";
+import { useMoney } from "../../../components/money-provider";
+import { PagedTable } from "../../../components/paged-table";
+import { compareDecimal } from "../../../lib/exact-decimal";
 
 interface BalanceRow {
-  planId: string
-  planCode: string
-  planName: string
-  unit: 'money' | 'hours'
-  direction: 'accrue' | 'owe'
-  balance: string
-  balanceMoney: string | null
-  balanceHours: string | null
-  wage: string | null
-  maxBalance: string | null
-  notifyBalance: string | null
-  limitScope: string | null
-  overLimit: boolean
-  nearLimit: boolean
-  lastMovementDate: string | null
+  planId: string;
+  planCode: string;
+  planName: string;
+  unit: "money" | "hours";
+  direction: "accrue" | "owe";
+  balance: string;
+  balanceMoney: string | null;
+  balanceHours: string | null;
+  wage: string | null;
+  maxBalance: string | null;
+  notifyBalance: string | null;
+  limitScope: string | null;
+  overLimit: boolean;
+  nearLimit: boolean;
+  lastMovementDate: string | null;
 }
 
 interface MovementRow {
-  id: string
-  plan_code: string
-  plan_name: string
-  unit: 'money' | 'hours'
-  movement_date: string
-  amount: string
-  hours: string | null
-  kind: string
-  note: string | null
-  run_number: string | null
+  id: string;
+  plan_code: string;
+  plan_name: string;
+  unit: "money" | "hours";
+  movement_date: string;
+  amount: string;
+  hours: string | null;
+  kind: string;
+  note: string | null;
+  run_number: string | null;
 }
 
 /**
@@ -49,99 +49,122 @@ interface MovementRow {
  * which is the honest way round: the dollars are what the employer owes, the
  * hours are what they currently buy.
  */
-export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: string; readOnly?: boolean }) {
-  const t = useTranslations('payroll.entitlements')
-  const tc = useTranslations('common')
-  const format = useFormatter()
-  const { money: formatMoney } = useMoney()
+export function EmployeeEntitlementBalances({
+  partyId,
+  readOnly,
+}: {
+  partyId: string;
+  readOnly?: boolean;
+}) {
+  const t = useTranslations("payroll.entitlements");
+  const tc = useTranslations("common");
+  const format = useFormatter();
+  const { money: formatMoney } = useMoney();
   const [data, setData] = useState<{
-    currency: string
-    balances: BalanceRow[]
-    movements: MovementRow[]
-  } | null>(null)
-  const [loadError, setLoadError] = useState(false)
+    currency: string;
+    balances: BalanceRow[];
+    movements: MovementRow[];
+  } | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body. The loading reset lives
   // with the triggers (below, and the retry button) instead of a mount effect.
-  const load = useCallback((signal?: AbortSignal) => {
-    fetch(`/api/payroll/entitlements?employee=${encodeURIComponent(partyId)}`, { signal })
-      .then((response) => {
-        if (!response.ok) throw new Error('load failed')
-        return response.json()
-      })
-      .then((payload) => setData(payload))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setLoadError(true)
-        setData(null)
-      })
-  }, [partyId])
+  const load = useCallback(
+    (signal?: AbortSignal) => {
+      fetch(`/api/payroll/entitlements?employee=${encodeURIComponent(partyId)}`, { signal })
+        .then((response) => {
+          if (!response.ok) throw new Error("load failed");
+          return response.json();
+        })
+        .then((payload) => setData(payload))
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setLoadError(true);
+          setData(null);
+        });
+    },
+    [partyId],
+  );
 
   // Reset when the employee changes, during render (same committed values, no
   // extra render — and no one-commit flash of a stale error banner).
-  const [prevPartyId, setPrevPartyId] = useState(partyId)
+  const [prevPartyId, setPrevPartyId] = useState(partyId);
   if (prevPartyId !== partyId) {
-    setPrevPartyId(partyId)
-    setData(null)
-    setLoadError(false)
+    setPrevPartyId(partyId);
+    setData(null);
+    setLoadError(false);
   }
 
   useEffect(() => {
-    const controller = new AbortController()
-    void load(controller.signal)
-    return () => controller.abort()
-  }, [load])
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
-  const hours = (value: string) => format.number(Number(value), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  const formatDate = (value: string) => format.dateTime(new Date(`${value}T12:00:00Z`), {
-    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
-  })
+  const hours = (value: string) =>
+    format.number(Number(value), {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  const formatDate = (value: string) =>
+    format.dateTime(new Date(`${value}T12:00:00Z`), {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
 
   if (loadError) {
     return (
       <section className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-center dark:border-rose-900 dark:bg-rose-950/30">
-        <p className="text-sm text-rose-700 dark:text-rose-300">{tc('feedback.loadFailed')}</p>
-        <Button size="sm" variant="outline" className="mt-3" onClick={() => { setLoadError(false); void load() }}>
-          {tc('actions.retry')}
+        <p className="text-sm text-rose-700 dark:text-rose-300">{tc("feedback.loadFailed")}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-3"
+          onClick={() => {
+            setLoadError(false);
+            void load();
+          }}
+        >
+          {tc("actions.retry")}
         </Button>
       </section>
-    )
+    );
   }
   if (data === null) {
-    return <p className="py-6 text-center text-sm text-slate-400">{tc('feedback.loading')}</p>
+    return <p className="py-6 text-center text-sm text-slate-400">{tc("feedback.loading")}</p>;
   }
 
-  const money = (value: string) => formatMoney(value, {
-    currency: data.currency,
-    currencyDisplay: 'narrowSymbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  const inUnit = (row: { unit: 'money' | 'hours' }, value: string) =>
-    row.unit === 'hours' ? `${hours(value)} ${t('hoursSuffix')}` : money(value)
+  const money = (value: string) =>
+    formatMoney(value, {
+      currency: data.currency,
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  const inUnit = (row: { unit: "money" | "hours" }, value: string) =>
+    row.unit === "hours" ? `${hours(value)} ${t("hoursSuffix")}` : money(value);
 
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("title")}</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("hint")}</p>
         </div>
         <Link
-          href={'/hrm/benefits?view=programs&type=time_off' as never}
+          href={"/hrm/benefits?view=programs&type=time_off" as never}
           className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
         >
-          <Settings2 size={13} aria-hidden /> {t('managePlans')}
+          <Settings2 size={13} aria-hidden /> {t("managePlans")}
         </Link>
       </div>
 
       {data.balances.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 py-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {t('noPlans')}
+          {t("noPlans")}
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -152,36 +175,47 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <Link href={`/hrm/benefits?view=programs&program=${encodeURIComponent(row.planId)}` as never} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">{row.planName}</Link>
-                  <p className="font-mono text-xs text-slate-500 dark:text-slate-400">{row.planCode}</p>
+                  <Link
+                    href={
+                      `/hrm/benefits?view=programs&program=${encodeURIComponent(row.planId)}` as never
+                    }
+                    className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+                  >
+                    {row.planName}
+                  </Link>
+                  <p className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                    {row.planCode}
+                  </p>
                 </div>
-                {row.overLimit ? <Badge variant="destructive">{t('overLimit')}</Badge>
-                  : row.nearLimit ? <Badge variant="warning">{t('nearLimit')}</Badge>
-                  : null}
+                {row.overLimit ? (
+                  <Badge variant="destructive">{t("overLimit")}</Badge>
+                ) : row.nearLimit ? (
+                  <Badge variant="warning">{t("nearLimit")}</Badge>
+                ) : null}
               </div>
               <p className="mt-2 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
                 {inUnit(row, row.balance)}
               </p>
               {/* The hours view is a display of the money at today's wage —
                   never a second stored figure. */}
-              {row.unit === 'money' && row.balanceHours && row.wage ? (
+              {row.unit === "money" && row.balanceHours && row.wage ? (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('hoursAtWage', { hours: hours(row.balanceHours), wage: money(row.wage) })}
+                  {t("hoursAtWage", { hours: hours(row.balanceHours), wage: money(row.wage) })}
                 </p>
               ) : null}
-              {row.unit === 'hours' && row.balanceMoney ? (
+              {row.unit === "hours" && row.balanceMoney ? (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('worthToday', { amount: money(row.balanceMoney) })}
+                  {t("worthToday", { amount: money(row.balanceMoney) })}
                 </p>
               ) : null}
-              {row.direction === 'owe' && compareDecimal(row.balance, '0') < 0 ? (
-                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{t('owedBack')}</p>
+              {row.direction === "owe" && compareDecimal(row.balance, "0") < 0 ? (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{t("owedBack")}</p>
               ) : null}
               {row.maxBalance ? (
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {t('limitLine', {
+                  {t("limitLine", {
                     limit: inUnit(row, row.maxBalance),
-                    scope: row.limitScope ? t(`scope.${row.limitScope}`) : '',
+                    scope: row.limitScope ? t(`scope.${row.limitScope}`) : "",
                   })}
                 </p>
               ) : null}
@@ -198,40 +232,40 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
           // stays an edit-mode affordance.
           searchable={!readOnly}
           pageSize={10}
-          empty={<p className="py-6 text-center text-sm text-slate-400">{t('noMovements')}</p>}
+          empty={<p className="py-6 text-center text-sm text-slate-400">{t("noMovements")}</p>}
           columns={[
             {
-              key: 'date',
-              header: t('movementDate'),
+              key: "date",
+              header: t("movementDate"),
               search: (row) => row.movement_date,
               cell: (row) => <span className="tabular-nums">{formatDate(row.movement_date)}</span>,
             },
             {
-              key: 'plan',
-              header: t('plan'),
+              key: "plan",
+              header: t("plan"),
               search: (row) => `${row.plan_code} ${row.plan_name}`,
               cell: (row) => row.plan_name,
             },
             {
-              key: 'kind',
-              header: t('movementKind'),
+              key: "kind",
+              header: t("movementKind"),
               search: (row) => row.kind,
               cell: (row) => <Badge variant="secondary">{t(`kind.${row.kind}`)}</Badge>,
             },
             {
-              key: 'amount',
-              header: t('amount'),
-              align: 'right',
+              key: "amount",
+              header: t("amount"),
+              align: "right",
               search: (row) => row.amount,
               cell: (row) => <span className="tabular-nums">{inUnit(row, row.amount)}</span>,
             },
             {
-              key: 'source',
-              header: t('source'),
-              search: (row) => row.run_number ?? row.note ?? '',
+              key: "source",
+              header: t("source"),
+              search: (row) => row.run_number ?? row.note ?? "",
               cell: (row) => (
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {row.run_number ?? row.note ?? '—'}
+                  {row.run_number ?? row.note ?? "—"}
                 </span>
               ),
             },
@@ -239,5 +273,5 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
         />
       ) : null}
     </section>
-  )
+  );
 }

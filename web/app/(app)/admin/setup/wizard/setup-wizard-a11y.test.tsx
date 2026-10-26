@@ -16,7 +16,11 @@ declare global {
 
 // jsdom first: the wizard reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/wizard", scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/wizard",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 // Reduced-motion matches so step transitions swap synchronously: jsdom
 // never completes the exit tween that AnimatePresence mode="wait" holds the
 // next step behind.
@@ -27,27 +31,39 @@ window.matchMedia = ((query: string) => ({
   removeEventListener() {},
 })) as unknown as typeof window.matchMedia;
 if (typeof window.requestAnimationFrame !== "function") {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
+  window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
+    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
+  window.cancelAnimationFrame = ((id: number) =>
+    clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
 }
 // jsdom ships no native <dialog> imperative API: WizardShell opens its modal
 // through showModal/close. Mirror the open-attribute contract
 // so the shell mounts exactly as in a browser.
 const dialogProto = window.HTMLDialogElement?.prototype;
 if (dialogProto && typeof dialogProto.showModal !== "function") {
-  dialogProto.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
+  dialogProto.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
 }
 if (dialogProto && typeof dialogProto.close !== "function") {
-  dialogProto.close = function (this: HTMLDialogElement) { this.removeAttribute("open"); };
+  dialogProto.close = function (this: HTMLDialogElement) {
+    this.removeAttribute("open");
+  };
 }
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__wizardRouter}export function usePathname(){return globalThis.__wizardPath ?? '/'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__wizardRouter}export function usePathname(){return globalThis.__wizardPath ?? '/'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier.endsWith("workspace-switch")) return { shortCircuit: true, url: "data:text/javascript,export async function switchWorkspace(orgId){globalThis.__wizardEnteredOrg=orgId};export function workspaceSwitchMessageKey(){return 'switchFailed'}" };
+    if (specifier.endsWith("workspace-switch"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function switchWorkspace(orgId){globalThis.__wizardEnteredOrg=orgId};export function workspaceSwitchMessageKey(){return 'switchFailed'}",
+      };
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -136,7 +152,7 @@ async function renderWizard(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <SetupWizard
           open
-          launchActions={['invoice', 'migrate', 'demo']}
+          launchActions={["invoice", "migrate", "demo"]}
           industries={INDUSTRIES}
           initial={{
             name: "Acme",
@@ -204,8 +220,15 @@ test("company selections are stated as announced text and track changes", async 
   const country = document.getElementById("setup-country") as HTMLSelectElement;
   const currency = document.getElementById("setup-currency") as HTMLSelectElement;
   const fiscal = document.getElementById("setup-fiscal-month") as HTMLSelectElement;
-  assert.ok(country && currency && fiscal, "country/currency/fiscal comboboxes must render with labels");
-  assert.equal(country.getAttribute("aria-label"), null, "native selects carry their <label>, not a redundant override");
+  assert.ok(
+    country && currency && fiscal,
+    "country/currency/fiscal comboboxes must render with labels",
+  );
+  assert.equal(
+    country.getAttribute("aria-label"),
+    null,
+    "native selects carry their <label>, not a redundant override",
+  );
   const summary = document.querySelector('[aria-live="polite"]');
   assert.ok(summary, "the step must state its selections in a live region");
   const stated = summary.textContent ?? "";
@@ -238,7 +261,9 @@ test("skipping lands on the canonical home naming the resume", async (t) => {
     push(url: string) {
       pushes.push(url);
     },
-    refresh() { refreshes++; },
+    refresh() {
+      refreshes++;
+    },
   };
   const prior = globalThis.fetch;
   globalThis.fetch = (async () => Response.json({ ok: true })) as typeof fetch;
@@ -263,7 +288,11 @@ test("skipping lands on the canonical home naming the resume", async (t) => {
   assert.equal(refreshes, 1, "Skip rereads durable deferral even when already on the dashboard");
   const successes = (globalThis.__wizardToasts ?? []).filter((toast) => toast.kind === "success");
   assert.equal(successes.length, 1, "Skip names the resume in exactly one toast");
-  assert.match(successes[0]!.message, /Company Setup/, "the toast says setup resumes from Company Setup");
+  assert.match(
+    successes[0]!.message,
+    /Company Setup/,
+    "the toast says setup resumes from Company Setup",
+  );
 });
 
 /** TZ1: the company step offers the business time zone from the
@@ -323,7 +352,11 @@ test("the business time zone defaults from the chosen country", async (t) => {
     country.dispatchEvent(new window.Event("change", { bubbles: true }));
   });
   await tick();
-  assert.equal(zone().value, "America/Toronto", "changing the country moves an unchosen zone with it");
+  assert.equal(
+    zone().value,
+    "America/Toronto",
+    "changing the country moves an unchosen zone with it",
+  );
   await act(async () => {
     zone().value = "UTC";
     zone().dispatchEvent(new window.Event("change", { bubbles: true }));
@@ -334,7 +367,11 @@ test("the business time zone defaults from the chosen country", async (t) => {
     country.dispatchEvent(new window.Event("change", { bubbles: true }));
   });
   await tick();
-  assert.equal(zone().value, "UTC", "a zone the operator chose is never overwritten by a country change");
+  assert.equal(
+    zone().value,
+    "UTC",
+    "a zone the operator chose is never overwritten by a country change",
+  );
 });
 
 /** TZ1: apply sends the chosen business time zone to the wizard route. */
@@ -388,9 +425,16 @@ test("apply sends the chosen business time zone", async (t) => {
   await tick(STEP_WAIT);
   const puts = seen.filter((request) => request.method === "PUT");
   assert.equal(puts.length, 1, "applying writes the company once");
-  assert.ok(buttonsNamed('Create your first invoice')[0], 'setup offers the first useful action');
-  assert.ok(buttonsNamed('Continue with the setup checklist')[0], 'unfinished setup remains reachable');
-  assert.equal(buttonsNamed('Import a bank statement').length, 0, 'unavailable actions are omitted');
+  assert.ok(buttonsNamed("Create your first invoice")[0], "setup offers the first useful action");
+  assert.ok(
+    buttonsNamed("Continue with the setup checklist")[0],
+    "unfinished setup remains reachable",
+  );
+  assert.equal(
+    buttonsNamed("Import a bank statement").length,
+    0,
+    "unavailable actions are omitted",
+  );
   assert.equal(
     (puts[0]!.body as Record<string, unknown>).timeZone,
     "America/Toronto",
@@ -411,7 +455,7 @@ test("industry cards announce selection through aria-pressed", async (t) => {
   await renderWizard(host, root);
   await cont(); // welcome → company
   await cont(); // company → industry
-  const cards = [...document.querySelectorAll('button[aria-pressed]')].filter((b) =>
+  const cards = [...document.querySelectorAll("button[aria-pressed]")].filter((b) =>
     b.textContent?.includes("Manufacturing"),
   ) as HTMLButtonElement[];
   assert.ok(cards.length > 0, "the manufacturing card must render as a pressable button");
@@ -445,7 +489,7 @@ test("review badges click-through defaults and spares deliberate choices", async
   });
   await tick();
   await cont(); // company → industry
-  const card = [...document.querySelectorAll('button[aria-pressed]')].filter((b) =>
+  const card = [...document.querySelectorAll("button[aria-pressed]")].filter((b) =>
     b.textContent?.includes("Manufacturing"),
   )[0] as HTMLButtonElement;
   await act(async () => {
@@ -458,7 +502,11 @@ test("review badges click-through defaults and spares deliberate choices", async
   await cont(); // launch → review
   const review = document.body.textContent ?? "";
   assert.match(review, /Review your setup/, "the walk must reach the review step");
-  assert.match(review, /kept their pre-selected value/, "the review must explain the default badges");
+  assert.match(
+    review,
+    /kept their pre-selected value/,
+    "the review must explain the default badges",
+  );
   // Untouched consequentials carry the badge …
   assert.match(review, /Default/, "untouched defaults must be badged");
   // … while the deliberately changed currency row does not.
@@ -473,41 +521,76 @@ test("review badges click-through defaults and spares deliberate choices", async
   );
 });
 
-
 test("optional industry data installs a separate workspace and offers direct entry", async (t) => {
   const { host, root } = mount();
   const requests: { url: string; body: Record<string, unknown> }[] = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : {} });
-    return Response.json(String(input) === '/api/data/sample-companies' ? { ok: true, orgId: '00000000-0000-4000-8000-000000000003', created: true } : { ok: true });
+    return Response.json(
+      String(input) === "/api/data/sample-companies"
+        ? { ok: true, orgId: "00000000-0000-4000-8000-000000000003", created: true }
+        : { ok: true },
+    );
   }) as typeof fetch;
-  t.after(async () => { globalThis.fetch = prior; await act(async () => { root.unmount(); }); host.remove(); });
+  t.after(async () => {
+    globalThis.fetch = prior;
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
   await renderWizard(host, root);
-  await cont(); await cont();
-  const industry = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Manufacturing'))!;
-  await act(async () => { industry.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+  await cont();
+  await cont();
+  const industry = [...document.querySelectorAll("button[aria-pressed]")].find((button) =>
+    button.textContent?.includes("Manufacturing"),
+  )!;
+  await act(async () => {
+    industry.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
   await tick();
-  await cont(); await cont(); await cont();
-  const sample = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Create an industry sample company'));
-  assert.ok(sample, 'launch offers the optional industry sample');
-  assert.equal(sample.getAttribute('aria-pressed'), 'false');
-  await act(async () => { sample.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
-  await tick(); await cont();
-  await act(async () => { buttonsNamed('Set up my books')[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
-  await tick(STEP_WAIT); await tick(STEP_WAIT);
-  const installation = requests.filter((request) => request.url === '/api/data/sample-companies');
+  await cont();
+  await cont();
+  await cont();
+  const sample = [...document.querySelectorAll("button[aria-pressed]")].find((button) =>
+    button.textContent?.includes("Create an industry sample company"),
+  );
+  assert.ok(sample, "launch offers the optional industry sample");
+  assert.equal(sample.getAttribute("aria-pressed"), "false");
+  await act(async () => {
+    sample.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await cont();
+  await act(async () => {
+    buttonsNamed("Set up my books")[0]!.dispatchEvent(
+      new window.MouseEvent("click", { bubbles: true }),
+    );
+  });
+  await tick(STEP_WAIT);
+  await tick(STEP_WAIT);
+  const installation = requests.filter((request) => request.url === "/api/data/sample-companies");
   assert.equal(installation.length, 1);
-  assert.deepEqual(installation[0]!.body, { industry: 'manufacturing' });
-  const entries = buttonsNamed('Explore a separate demo company');
-  assert.equal(entries.length, 1, 'completion offers one demo entry action');
+  assert.deepEqual(installation[0]!.body, { industry: "manufacturing" });
+  const entries = buttonsNamed("Explore a separate demo company");
+  assert.equal(entries.length, 1, "completion offers one demo entry action");
   const enter = entries[0]!;
-  await act(async () => { enter.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
-  assert.equal((globalThis as { __wizardEnteredOrg?: string }).__wizardEnteredOrg, '00000000-0000-4000-8000-000000000003', 'entry switches to the installed sample workspace');
-  assert.ok(buttonsNamed('Create your first invoice')[0], 'the live-company next action remains available');
+  await act(async () => {
+    enter.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  assert.equal(
+    (globalThis as { __wizardEnteredOrg?: string }).__wizardEnteredOrg,
+    "00000000-0000-4000-8000-000000000003",
+    "entry switches to the installed sample workspace",
+  );
+  assert.ok(
+    buttonsNamed("Create your first invoice")[0],
+    "the live-company next action remains available",
+  );
 });
 
-for (const outcome of ['refused', 'transport'] as const) {
+for (const outcome of ["refused", "transport"] as const) {
   test(`optional sample ${outcome} keeps saved setup and blocks a repeated provisioning request`, async (t) => {
     const { host, root } = mount();
     const requests: string[] = [];
@@ -515,46 +598,89 @@ for (const outcome of ['refused', 'transport'] as const) {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       requests.push(url);
-      if (url === '/api/data/sample-companies') {
-        if (outcome === 'transport') throw new Error('connection dropped');
-        return Response.json({ error: 'sample-company-clone-failed', stage: 'clone', message: 'Copying requires a compatible schema.', requestId: '9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9' }, { status: 500 });
+      if (url === "/api/data/sample-companies") {
+        if (outcome === "transport") throw new Error("connection dropped");
+        return Response.json(
+          {
+            error: "sample-company-clone-failed",
+            stage: "clone",
+            message: "Copying requires a compatible schema.",
+            requestId: "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9",
+          },
+          { status: 500 },
+        );
       }
       return Response.json({ ok: true });
     }) as typeof fetch;
-    t.after(async () => { globalThis.fetch = prior; await act(async () => { root.unmount(); }); host.remove(); });
+    t.after(async () => {
+      globalThis.fetch = prior;
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    });
     await renderWizard(host, root);
-    await cont(); await cont();
-    const industry = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Manufacturing'))!;
-    await act(async () => { industry.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+    await cont();
+    await cont();
+    const industry = [...document.querySelectorAll("button[aria-pressed]")].find((button) =>
+      button.textContent?.includes("Manufacturing"),
+    )!;
+    await act(async () => {
+      industry.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
     await tick();
-    await cont(); await cont(); await cont();
-    const sample = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Create an industry sample company'))!;
-    await act(async () => { sample.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
-    await tick(); await cont();
-    await act(async () => { buttonsNamed('Set up my books')[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
-    await tick(STEP_WAIT); await tick(STEP_WAIT);
-    assert.equal(requests.filter((url) => url === '/api/admin/setup/wizard').length, 1);
-    assert.equal(requests.filter((url) => url === '/api/data/sample-companies').length, 1);
-    const failure = document.querySelector('[role="alert"]')?.textContent ?? '';
+    await cont();
+    await cont();
+    await cont();
+    const sample = [...document.querySelectorAll("button[aria-pressed]")].find((button) =>
+      button.textContent?.includes("Create an industry sample company"),
+    )!;
+    await act(async () => {
+      sample.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    await tick();
+    await cont();
+    await act(async () => {
+      buttonsNamed("Set up my books")[0]!.dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await tick(STEP_WAIT);
+    await tick(STEP_WAIT);
+    assert.equal(requests.filter((url) => url === "/api/admin/setup/wizard").length, 1);
+    assert.equal(requests.filter((url) => url === "/api/data/sample-companies").length, 1);
+    const failure = document.querySelector('[role="alert"]')?.textContent ?? "";
     assert.match(failure, /Company setup was saved/);
-    if (outcome === 'refused') {
+    if (outcome === "refused") {
       assert.match(failure, /Copying requires a compatible schema/);
       assert.match(failure, /Support reference: 9cfa2170/);
     } else {
       assert.match(failure, /readiness is unconfirmed/);
     }
     assert.doesNotMatch(failure, /Nothing was created/);
-    const apply = buttonsNamed('Set up my books')[0]!;
+    const apply = buttonsNamed("Set up my books")[0]!;
     assert.equal(apply.disabled, false);
-    await act(async () => { apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+    await act(async () => {
+      apply.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
     await tick(STEP_WAIT);
-    assert.equal(requests.filter((url) => url === '/api/admin/setup/wizard').length, 1, 'failed sample readiness does not redo the already saved setup');
-    assert.equal(requests.filter((url) => url === '/api/data/sample-companies').length, 1, 'same-industry Apply never replays the failed sample request');
+    assert.equal(
+      requests.filter((url) => url === "/api/admin/setup/wizard").length,
+      1,
+      "failed sample readiness does not redo the already saved setup",
+    );
+    assert.equal(
+      requests.filter((url) => url === "/api/data/sample-companies").length,
+      1,
+      "same-industry Apply never replays the failed sample request",
+    );
   });
 }
 
 const switchNamed = (label: string) =>
-  document.querySelector(`button[role="switch"][aria-label="${label}"]`) as HTMLButtonElement | null;
+  document.querySelector(
+    `button[role="switch"][aria-label="${label}"]`,
+  ) as HTMLButtonElement | null;
 
 async function click(element: Element) {
   await act(async () => {
@@ -572,7 +698,11 @@ test("none-of-these-fit picks features on the switchboard with parent rules enfo
   const seen: { url: string; method: string; body: unknown }[] = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    seen.push({ url: String(input), method: (init?.method ?? "GET").toUpperCase(), body: init?.body ? JSON.parse(String(init.body)) : null });
+    seen.push({
+      url: String(input),
+      method: (init?.method ?? "GET").toUpperCase(),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
     return Response.json({ ok: true });
   }) as typeof fetch;
   t.after(async () => {
@@ -594,7 +724,9 @@ test("none-of-these-fit picks features on the switchboard with parent rules enfo
   await cont(); // industry → profile
   await cont(); // profile → features (the switchboard replaces Operations)
   assert.match(document.body.textContent ?? "", /Choose your features/);
-  const projectsTab = [...document.querySelectorAll('button[role="tab"]')].find((tab) => tab.textContent?.startsWith("Projects"))!;
+  const projectsTab = [...document.querySelectorAll('button[role="tab"]')].find((tab) =>
+    tab.textContent?.startsWith("Projects"),
+  )!;
   await click(projectsTab);
   const projects = switchNamed("Projects & job costing");
   assert.ok(projects, "the Projects row renders");
@@ -615,7 +747,11 @@ test("none-of-these-fit picks features on the switchboard with parent rules enfo
   await tick(STEP_WAIT);
   const put = seen.find((request) => request.method === "PUT");
   assert.ok(put, "applying writes the setup");
-  const body = put.body as { industry: string; featureSelection: string; features: Record<string, boolean> };
+  const body = put.body as {
+    industry: string;
+    featureSelection: string;
+    features: Record<string, boolean>;
+  };
   assert.equal(body.industry, "general_business", "the neutral base chart is installed");
   assert.equal(body.featureSelection, "custom");
   assert.equal(body.features.projects, false);
@@ -642,12 +778,24 @@ test("industry search finds the nearest templates by everyday words and offers t
     });
     await tick();
   };
-  const cards = () => [...document.querySelectorAll("button[aria-pressed]")].map((button) => button.textContent ?? "");
+  const cards = () =>
+    [...document.querySelectorAll("button[aria-pressed]")].map(
+      (button) => button.textContent ?? "",
+    );
   await type("beverage");
-  assert.ok(cards().some((text) => text.includes("Manufacturing")), "beverage reaches Manufacturing");
+  assert.ok(
+    cards().some((text) => text.includes("Manufacturing")),
+    "beverage reaches Manufacturing",
+  );
   await type("café");
-  assert.ok(cards().some((text) => text.includes("General Business")), "café reaches General Business");
+  assert.ok(
+    cards().some((text) => text.includes("General Business")),
+    "café reaches General Business",
+  );
   await type("zzzz-nothing");
   assert.match(document.body.textContent ?? "", /No industry template matches/);
-  assert.ok(cards().some((text) => text.includes("None of these fit")), "the custom path stays available on a miss");
+  assert.ok(
+    cards().some((text) => text.includes("None of these fit")),
+    "the custom path stays available on a miss",
+  );
 });

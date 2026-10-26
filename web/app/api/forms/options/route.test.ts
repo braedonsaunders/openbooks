@@ -1,25 +1,25 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.form-options-permission-test')
+const stateKey = Symbol.for("openbooks.form-options-permission-test");
 interface RouteState {
-  permissions: Set<string>
-  signedIn: boolean
-  scope: Set<string> | null
-  queries: number
+  permissions: Set<string>;
+  signedIn: boolean;
+  scope: Set<string> | null;
+  queries: number;
 }
 const routeState: RouteState = {
   permissions: new Set(),
   signedIn: true,
   scope: null,
   queries: 0,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.form-options-permission-test')]
       export async function getAuthz() {
@@ -32,7 +32,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:subsidiaries',
+    "mock:subsidiaries",
     `
       // Scope SHAPE is preserved (null passthrough vs empty-set fence) while
       // the SQL fragment is a stub: the mock db never executes the query.
@@ -43,13 +43,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:projects-gate',
+    "mock:projects-gate",
     `
       export async function guardProjectsFeature() { return null }
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.form-options-permission-test')]
       export const ambientTenantOrgId = () => null
@@ -66,124 +66,127 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../../lib/subsidiaries', 'mock:subsidiaries'],
-  ['../../../../lib/projects-gate', 'mock:projects-gate'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../../lib/subsidiaries", "mock:subsidiaries"],
+  ["../../../../lib/projects-gate", "mock:projects-gate"],
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?form-options-permission-test'
-const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?form-options-permission-test";
+const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(permissions: string[] = [], scope: Set<string> | null = null): void {
-  routeState.permissions = new Set(permissions)
-  routeState.signedIn = true
-  routeState.scope = scope
-  routeState.queries = 0
+  routeState.permissions = new Set(permissions);
+  routeState.signedIn = true;
+  routeState.scope = scope;
+  routeState.queries = 0;
 }
 
 function get(url: string): Promise<Response> {
-  return GET(new Request(`http://openbooks.test${url}`))
+  return GET(new Request(`http://openbooks.test${url}`));
 }
 
-test('signed-out callers are 401s', async () => {
-  reset()
-  routeState.signedIn = false
+test("signed-out callers are 401s", async () => {
+  reset();
+  routeState.signedIn = false;
 
-  const response = await get('/api/forms/options?source=parties')
+  const response = await get("/api/forms/options?source=parties");
 
-  assert.equal(response.status, 401)
-  assert.equal(routeState.queries, 0)
-})
+  assert.equal(response.status, 401);
+  assert.equal(routeState.queries, 0);
+});
 
-test('parties enumeration without parties.read is a 403', async () => {
-  reset(['records.read'])
+test("parties enumeration without parties.read is a 403", async () => {
+  reset(["records.read"]);
 
-  const response = await get('/api/forms/options?source=parties')
+  const response = await get("/api/forms/options?source=parties");
 
-  assert.equal(response.status, 403)
-  assert.match(((await response.json()) as { error: string }).error, /parties\.read/)
-  assert.equal(routeState.queries, 0)
-})
+  assert.equal(response.status, 403);
+  assert.match(((await response.json()) as { error: string }).error, /parties\.read/);
+  assert.equal(routeState.queries, 0);
+});
 
-test('parties.read unlocks the parties picker', async () => {
-  reset(['parties.read'])
+test("parties.read unlocks the parties picker", async () => {
+  reset(["parties.read"]);
 
-  const response = await get('/api/forms/options?source=parties')
+  const response = await get("/api/forms/options?source=parties");
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { options: [] })
-  assert.equal(routeState.queries, 1)
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { options: [] });
+  assert.equal(routeState.queries, 1);
+});
 
-test('gl_accounts enumeration without gl.read is a 403', async () => {
-  reset(['parties.read'])
+test("gl_accounts enumeration without gl.read is a 403", async () => {
+  reset(["parties.read"]);
 
-  const response = await get('/api/forms/options?source=gl_accounts')
+  const response = await get("/api/forms/options?source=gl_accounts");
 
-  assert.equal(response.status, 403)
-  assert.match(((await response.json()) as { error: string }).error, /gl\.read/)
-  assert.equal(routeState.queries, 0)
-})
+  assert.equal(response.status, 403);
+  assert.match(((await response.json()) as { error: string }).error, /gl\.read/);
+  assert.equal(routeState.queries, 0);
+});
 
-test('gl.read unlocks the accounts picker', async () => {
-  reset(['gl.read'])
+test("gl.read unlocks the accounts picker", async () => {
+  reset(["gl.read"]);
 
-  const response = await get('/api/forms/options?source=gl_accounts')
+  const response = await get("/api/forms/options?source=gl_accounts");
 
-  assert.equal(response.status, 200)
-  assert.equal(routeState.queries, 1)
-})
+  assert.equal(response.status, 200);
+  assert.equal(routeState.queries, 1);
+});
 
-test('reference tables demand their own read permission', async () => {
+test("reference tables demand their own read permission", async () => {
   for (const [table, permission] of [
-    ['parties', 'parties.read'],
-    ['accounts', 'gl.read'],
-    ['projects', 'projects.read'],
-    ['items', 'items.read'],
+    ["parties", "parties.read"],
+    ["accounts", "gl.read"],
+    ["projects", "projects.read"],
+    ["items", "items.read"],
   ] as const) {
-    reset(['records.read'])
-    const denied = await get(`/api/forms/options?source=reference&table=${table}`)
-    assert.equal(denied.status, 403)
-    assert.match(((await denied.json()) as { error: string }).error, new RegExp(permission.replace('.', '\\.')))
+    reset(["records.read"]);
+    const denied = await get(`/api/forms/options?source=reference&table=${table}`);
+    assert.equal(denied.status, 403);
+    assert.match(
+      ((await denied.json()) as { error: string }).error,
+      new RegExp(permission.replace(".", "\\.")),
+    );
 
-    reset([permission])
-    const allowed = await get(`/api/forms/options?source=reference&table=${table}`)
-    assert.equal(allowed.status, 200)
+    reset([permission]);
+    const allowed = await get(`/api/forms/options?source=reference&table=${table}`);
+    assert.equal(allowed.status, 200);
   }
-})
+});
 
-test('an empty subsidiary scope still discloses nothing', async () => {
-  reset(['parties.read'], new Set())
+test("an empty subsidiary scope still discloses nothing", async () => {
+  reset(["parties.read"], new Set());
 
-  const response = await get('/api/forms/options?source=parties')
+  const response = await get("/api/forms/options?source=parties");
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { options: [] })
-  assert.equal(routeState.queries, 0)
-})
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { options: [] });
+  assert.equal(routeState.queries, 0);
+});
 
-test('unknown sources stay 400s', async () => {
-  reset(['*'])
+test("unknown sources stay 400s", async () => {
+  reset(["*"]);
 
-  const response = await get('/api/forms/options?source=bogus')
+  const response = await get("/api/forms/options?source=bogus");
 
-  assert.equal(response.status, 400)
-})
+  assert.equal(response.status, 400);
+});

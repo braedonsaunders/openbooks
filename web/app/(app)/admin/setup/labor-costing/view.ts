@@ -1,20 +1,34 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { laborCostingSettings, type LaborCostingSettings } from '@openbooks/engine/projects/labor-costing/operations'
-import { previewUnpostedLaborCost, type UnpostedLaborCostPreview } from '@openbooks/engine/projects/labor-costing'
-import { guardRootSubsidiaryScope, requirePermission } from '../../../../../lib/authz'
-import { notFound } from 'next/navigation'
-import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
-import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import { requireAnyFeatureEnabled } from '../../../../../lib/feature-gates'
-import { grid, heading, page, ref, textBlock, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import type { RateRow } from './LaborCostingWorkspace'
-import { CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/records/control-accounts'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  laborCostingSettings,
+  type LaborCostingSettings,
+} from "@openbooks/engine/projects/labor-costing/operations";
+import {
+  previewUnpostedLaborCost,
+  type UnpostedLaborCostPreview,
+} from "@openbooks/engine/projects/labor-costing";
+import { guardRootSubsidiaryScope, requirePermission } from "../../../../../lib/authz";
+import { notFound } from "next/navigation";
+import { isUuid, mergeHref, parseListParams, pickString } from "../../../../../lib/list-params";
+import { subsidiaryFeatureEnabled } from "../../../../../lib/features";
+import { isFeatureEnabled } from "../../../../../lib/features";
+import { requireAnyFeatureEnabled } from "../../../../../lib/feature-gates";
+import {
+  grid,
+  heading,
+  page,
+  ref,
+  textBlock,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import type { RateRow } from "./LaborCostingWorkspace";
+import { CONTROL_ACCOUNT_TYPE_POLICY } from "@openbooks/engine/records/control-accounts";
 
 /**
  * Labor Costing setup — ONE workspace answering "what does an hour of labor
@@ -47,103 +61,121 @@ import { CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/records/control-a
  * loader-resolved presence strings — the spec never branches.
  */
 
-const BASE = '/admin/setup/labor-costing'
-const VIEWS = ['rates', 'components', 'posting', 'reconciliation'] as const
-export type LaborCostingView = (typeof VIEWS)[number]
+const BASE = "/admin/setup/labor-costing";
+const VIEWS = ["rates", "components", "posting", "reconciliation"] as const;
+export type LaborCostingView = (typeof VIEWS)[number];
 
 /** The control accounts the labor costing save owns. */
-const LABOR_CONTROL_ROLES = ['laborWip', 'laborClearing', 'payrollVariance'] as const
-export type LaborControlRole = (typeof LABOR_CONTROL_ROLES)[number]
-export interface LaborControlAccountOption { id: string; label: string; roles: LaborControlRole[] }
+const LABOR_CONTROL_ROLES = ["laborWip", "laborClearing", "payrollVariance"] as const;
+export type LaborControlRole = (typeof LABOR_CONTROL_ROLES)[number];
+export interface LaborControlAccountOption {
+  id: string;
+  label: string;
+  roles: LaborControlRole[];
+}
 
 export interface LaborCostingData {
-  title: string
-  description: string
-  projectPostingAvailable: boolean
-  guideHref: string
-  guideLabel: string
-  docsLabel: string
-  overheadLabel: string
-  tabs: { href: string; label: string; active: boolean }[]
-  currentParams: Record<string, string | string[] | undefined>
-  view: LaborCostingView
-  settings: LaborCostingSettings
-  rates: RateRow[]
-  selectedRate: RateRow | null
-  creatingRate: boolean
-  guideOpen: boolean
-  totalRates: number
-  ratePage: number
-  ratePerPage: number
-  trades: { id: string; name: string }[]
-  departments: { id: string; name: string }[]
-  subsidiaries: { id: string; name: string; currency: string }[]
-  defaultSubsidiary: { id: string; name: string; currency: string } | null
-  jobTitles: string[]
+  title: string;
+  description: string;
+  projectPostingAvailable: boolean;
+  guideHref: string;
+  guideLabel: string;
+  docsLabel: string;
+  overheadLabel: string;
+  tabs: { href: string; label: string; active: boolean }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  view: LaborCostingView;
+  settings: LaborCostingSettings;
+  rates: RateRow[];
+  selectedRate: RateRow | null;
+  creatingRate: boolean;
+  guideOpen: boolean;
+  totalRates: number;
+  ratePage: number;
+  ratePerPage: number;
+  trades: { id: string; name: string }[];
+  departments: { id: string; name: string }[];
+  subsidiaries: { id: string; name: string; currency: string }[];
+  defaultSubsidiary: { id: string; name: string; currency: string } | null;
+  jobTitles: string[];
   /** Postable accounts, each with the labor control roles its type may fill. */
-  accounts: LaborControlAccountOption[]
-  currencies: string[]
-  orgCurrency: string
-  laborWip: string | null
-  laborClearing: string | null
-  payrollVariance: string | null
-  coverage: { employees: number; covered: number; hasOrgDefault: boolean }
+  accounts: LaborControlAccountOption[];
+  currencies: string[];
+  orgCurrency: string;
+  laborWip: string | null;
+  laborClearing: string | null;
+  payrollVariance: string | null;
+  coverage: { employees: number; covered: number; hasOrgDefault: boolean };
   /** Approved time not yet costed. Computed on the posting tab only. */
-  unposted: UnpostedLaborCostPreview | null
+  unposted: UnpostedLaborCostPreview | null;
 }
 
 export async function loadLaborCosting(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<LaborCostingData> {
-  const authz = await requirePermission('admin.setup.manage')
-  if (await guardRootSubsidiaryScope(authz)) notFound()
-  const orgId = authz.user.orgId
-  const today = await businessToday(orgId)
-  const projectsEnabled = await isFeatureEnabled(orgId, 'projects')
-  await requireAnyFeatureEnabled(orgId, ['projects', 'manufacturing'])
-  const availableViews = projectsEnabled ? VIEWS : VIEWS.filter(item => item !== 'posting')
-  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
-  const t = await getTranslations('admin')
-  const rawView = pickString(sp.view) ?? ''
-  const view: LaborCostingView = (availableViews as readonly string[]).includes(rawView) ? (rawView as LaborCostingView) : 'rates'
+  const authz = await requirePermission("admin.setup.manage");
+  if (await guardRootSubsidiaryScope(authz)) notFound();
+  const orgId = authz.user.orgId;
+  const today = await businessToday(orgId);
+  const projectsEnabled = await isFeatureEnabled(orgId, "projects");
+  await requireAnyFeatureEnabled(orgId, ["projects", "manufacturing"]);
+  const availableViews = projectsEnabled ? VIEWS : VIEWS.filter((item) => item !== "posting");
+  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId);
+  const t = await getTranslations("admin");
+  const rawView = pickString(sp.view) ?? "";
+  const view: LaborCostingView = (availableViews as readonly string[]).includes(rawView)
+    ? (rawView as LaborCostingView)
+    : "rates";
   const list = parseListParams(sp, {
-    sort: 'scope',
-    allowedSorts: ['scope'] as const,
-    dir: 'asc',
+    sort: "scope",
+    allowedSorts: ["scope"] as const,
+    dir: "asc",
     perPage: 25,
-  })
-  const RATE_STATUSES = ['all', 'active', 'current', 'scheduled', 'ended'] as const
-  type RateStatus = (typeof RATE_STATUSES)[number]
-  const RATE_SCOPES = ['all', 'job_title', 'trade', 'department', 'subsidiary', 'org'] as const
-  type RateScope = (typeof RATE_SCOPES)[number]
-  const rawStatus = pickString(sp.rateStatus) ?? 'active'
-  const rateStatus: RateStatus = (RATE_STATUSES as readonly string[]).includes(rawStatus) ? (rawStatus as RateStatus) : 'active'
-  const rawScope = pickString(sp.rateScope) ?? 'all'
-  const rateScope: RateScope = (RATE_SCOPES as readonly string[]).includes(rawScope) ? (rawScope as RateScope) : 'all'
-  const rateParam = pickString(sp.rate)
-  const creatingRate = rateParam === 'new'
+  });
+  const RATE_STATUSES = ["all", "active", "current", "scheduled", "ended"] as const;
+  type RateStatus = (typeof RATE_STATUSES)[number];
+  const RATE_SCOPES = ["all", "job_title", "trade", "department", "subsidiary", "org"] as const;
+  type RateScope = (typeof RATE_SCOPES)[number];
+  const rawStatus = pickString(sp.rateStatus) ?? "active";
+  const rateStatus: RateStatus = (RATE_STATUSES as readonly string[]).includes(rawStatus)
+    ? (rawStatus as RateStatus)
+    : "active";
+  const rawScope = pickString(sp.rateScope) ?? "all";
+  const rateScope: RateScope = (RATE_SCOPES as readonly string[]).includes(rawScope)
+    ? (rawScope as RateScope)
+    : "all";
+  const rateParam = pickString(sp.rate);
+  const creatingRate = rateParam === "new";
 
   const statusFilter =
-    rateStatus === 'current'
+    rateStatus === "current"
       ? sql`and r.effective_from <= ${today} and (r.effective_to is null or r.effective_to >= ${today})`
-      : rateStatus === 'scheduled'
+      : rateStatus === "scheduled"
         ? sql`and r.effective_from > ${today} and (r.effective_to is null or r.effective_to >= r.effective_from)`
-        : rateStatus === 'ended'
+        : rateStatus === "ended"
           ? sql`and r.effective_to < ${today}`
-          : rateStatus === 'active'
+          : rateStatus === "active"
             ? sql`and (r.effective_to is null or r.effective_to >= ${today})`
-            : sql``
-  const scopeFilter = rateScope === 'job_title' ? sql`and r.job_title is not null`
-    : rateScope === 'trade' ? sql`and r.trade_id is not null`
-      : rateScope === 'department' ? sql`and r.department_id is not null`
-        : rateScope === 'subsidiary' ? sql`and r.subsidiary_id is not null`
-          : rateScope === 'org' ? sql`and num_nonnulls(r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0`
-            : sql``
-  const searchFilter = list.q ? sql`and (coalesce(r.job_title, '') ilike ${`%${list.q}%`} or coalesce(tr.name, '') ilike ${`%${list.q}%`} or coalesce(dep.name, '') ilike ${`%${list.q}%`} or coalesce(sub.name, '') ilike ${`%${list.q}%`} or cast(r.rate as text) ilike ${`%${list.q}%`} or r.currency ilike ${`%${list.q}%`} or coalesce(r.notes, '') ilike ${`%${list.q}%`})` : sql``
+            : sql``;
+  const scopeFilter =
+    rateScope === "job_title"
+      ? sql`and r.job_title is not null`
+      : rateScope === "trade"
+        ? sql`and r.trade_id is not null`
+        : rateScope === "department"
+          ? sql`and r.department_id is not null`
+          : rateScope === "subsidiary"
+            ? sql`and r.subsidiary_id is not null`
+            : rateScope === "org"
+              ? sql`and num_nonnulls(r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0`
+              : sql``;
+  const searchFilter = list.q
+    ? sql`and (coalesce(r.job_title, '') ilike ${`%${list.q}%`} or coalesce(tr.name, '') ilike ${`%${list.q}%`} or coalesce(dep.name, '') ilike ${`%${list.q}%`} or coalesce(sub.name, '') ilike ${`%${list.q}%`} or cast(r.rate as text) ilike ${`%${list.q}%`} or r.currency ilike ${`%${list.q}%`} or coalesce(r.notes, '') ilike ${`%${list.q}%`})`
+    : sql``;
   const rateFilter = sql`
     where r.org_id = ${orgId} and r.is_active and r.employee_party_id is null
       ${subsidiaryUiEnabled ? sql`` : sql`and r.subsidiary_id is null`}
-      ${statusFilter} ${scopeFilter} ${searchFilter}`
+      ${statusFilter} ${scopeFilter} ${searchFilter}`;
   const rateSelect = sql`
     select r.id, r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id,
            r.currency, r.rate, r.basis, r.annual_hours, r.payroll_rate_scale, r.payroll_amount_rounding,
@@ -152,31 +184,71 @@ export async function loadLaborCosting(
       from labor_cost_rates r
       left join trades tr on tr.id = r.trade_id and tr.org_id = r.org_id
       left join departments dep on dep.id = r.department_id and dep.org_id = r.org_id
-      left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id`
+      left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id`;
 
-  const [settings, ratesRes, rateCountRes, selectedRateRes, tradesRes, departmentsRes, subsidiariesRes, jobTitlesRes, accountsRes, orgRes, coverageRes] = await Promise.all([
+  const [
+    settings,
+    ratesRes,
+    rateCountRes,
+    selectedRateRes,
+    tradesRes,
+    departmentsRes,
+    subsidiariesRes,
+    jobTitlesRes,
+    accountsRes,
+    orgRes,
+    coverageRes,
+  ] = await Promise.all([
     laborCostingSettings(orgId),
-    db.execute<RateRow>(sql`${rateSelect} ${rateFilter}
+    db.execute<RateRow>(
+      sql`${rateSelect} ${rateFilter}
       order by case when r.job_title is not null then 0 when r.trade_id is not null then 1
                     when r.department_id is not null then 2 when r.subsidiary_id is not null then 3 else 4 end,
                coalesce(r.job_title, tr.name, dep.name, sub.name, ''), r.effective_from desc
-      limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
-    db.execute<{ n: number }>(sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id and tr.org_id = r.org_id left join departments dep on dep.id = r.department_id and dep.org_id = r.org_id left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id ${rateFilter}`, 'objects'),
-    rateParam && rateParam !== 'new' && isUuid(rateParam)
-      ? db.execute<RateRow>(sql`${rateSelect}
+      limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`,
+      "objects",
+    ),
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id and tr.org_id = r.org_id left join departments dep on dep.id = r.department_id and dep.org_id = r.org_id left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id ${rateFilter}`,
+      "objects",
+    ),
+    rateParam && rateParam !== "new" && isUuid(rateParam)
+      ? db.execute<RateRow>(
+          sql`${rateSelect}
           where r.org_id = ${orgId} and r.id = ${rateParam} and r.is_active and r.employee_party_id is null
             ${subsidiaryUiEnabled ? sql`` : sql`and r.subsidiary_id is null`}
-          limit 1`, 'objects')
+          limit 1`,
+          "objects",
+        )
       : Promise.resolve([]),
-    db.execute<Record<string, unknown>>(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`, 'objects'),
-    db.execute<Record<string, unknown>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`, 'objects'),
-    db.execute<Record<string, unknown>>(sql`select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by parent_id nulls first, name`, 'objects'),
-    db.execute<{ name: string }>(sql`select distinct job_title as name from employee_roles where org_id = ${orgId} and is_active and nullif(trim(job_title), '') is not null order by job_title`, 'objects'),
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`select id, name from trades where org_id = ${orgId} and is_active order by name`,
+      "objects",
+    ),
+    db.execute<Record<string, unknown>>(
+      sql`select id, name from departments where org_id = ${orgId} and is_active order by name`,
+      "objects",
+    ),
+    db.execute<Record<string, unknown>>(
+      sql`select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by parent_id nulls first, name`,
+      "objects",
+    ),
+    db.execute<{ name: string }>(
+      sql`select distinct job_title as name from employee_roles where org_id = ${orgId} and is_active and nullif(trim(job_title), '') is not null order by job_title`,
+      "objects",
+    ),
+    db.execute<Record<string, unknown>>(
+      sql`
       select id, number, name, type from accounts
-       where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`, 'objects'),
-    db.execute<{ c: Record<string, string> | null; base_currency: string }>(sql`select settings->'controlAccounts' as c, base_currency from orgs where id = ${orgId}`, 'objects'),
-    db.execute<{ employees: number; covered: number; has_org_default: boolean }>(sql`
+       where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`,
+      "objects",
+    ),
+    db.execute<{ c: Record<string, string> | null; base_currency: string }>(
+      sql`select settings->'controlAccounts' as c, base_currency from orgs where id = ${orgId}`,
+      "objects",
+    ),
+    db.execute<{ employees: number; covered: number; has_org_default: boolean }>(
+      sql`
       with active_emp as (
         select p.id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = ${orgId} and er.is_active
@@ -197,47 +269,53 @@ export async function loadLaborCosting(
            or exists (select 1 from current_rates r where r.employee_party_id is null and r.subsidiary_id = e.subsidiary_id and r.subsidiary_id is not null)
            or exists (select 1 from current_rates r where num_nonnulls(r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0)
         ) as covered,
-        exists (select 1 from current_rates where num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0) as has_org_default`, 'objects'),
-  ])
+        exists (select 1 from current_rates where num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0) as has_org_default`,
+      "objects",
+    ),
+  ]);
 
   // The catch-up preview is period-scoped by its through date, which lives in
   // the URL so the server render and the card can never disagree.
-  const rawThrough = pickString(sp.catchUpThrough) ?? ''
-  const catchUpThrough = /^\d{4}-\d{2}-\d{2}$/.test(rawThrough) && isIsoCalendarDate(rawThrough) ? rawThrough : today
-  const unposted = projectsEnabled && view === 'posting'
-    ? await previewUnpostedLaborCost(orgId, { through: catchUpThrough })
-    : null
+  const rawThrough = pickString(sp.catchUpThrough) ?? "";
+  const catchUpThrough =
+    /^\d{4}-\d{2}-\d{2}$/.test(rawThrough) && isIsoCalendarDate(rawThrough) ? rawThrough : today;
+  const unposted =
+    projectsEnabled && view === "posting"
+      ? await previewUnpostedLaborCost(orgId, { through: catchUpThrough })
+      : null;
 
   const org = orgRes[0] ?? {
     c: null,
-    base_currency: 'CAD',
-  }
-  const control = (org.c ?? {}) as Record<string, string>
-  const coverageRow = coverageRes[0] ?? { employees: 0, covered: 0, has_org_default: false }
+    base_currency: "CAD",
+  };
+  const control = (org.c ?? {}) as Record<string, string>;
+  const coverageRow = coverageRes[0] ?? { employees: 0, covered: 0, has_org_default: false };
   const opt = (r: Record<string, unknown>) => ({
     id: String(r.id),
-    name: String(r.name ?? ''),
-  })
+    name: String(r.name ?? ""),
+  });
   const allSubsidiaryOptions = subsidiariesRes.map((row) => ({
     id: String(row.id),
     name: String(row.name),
     currency: String(row.currency),
-  }))
-  const subsidiaryOptions = subsidiaryUiEnabled ? allSubsidiaryOptions : []
-  const currencies = Array.from(new Set([org.base_currency, ...subsidiaryOptions.map((row) => row.currency)])).sort()
+  }));
+  const subsidiaryOptions = subsidiaryUiEnabled ? allSubsidiaryOptions : [];
+  const currencies = Array.from(
+    new Set([org.base_currency, ...subsidiaryOptions.map((row) => row.currency)]),
+  ).sort();
   const guideHref = mergeHref(BASE, sp, {
-    guide: 'setup',
+    guide: "setup",
     rate: undefined,
-  })
+  });
 
   return {
     projectPostingAvailable: projectsEnabled,
-    title: t('setup.laborCosting.title'),
-    description: t('setup.laborCosting.description'),
+    title: t("setup.laborCosting.title"),
+    description: t("setup.laborCosting.description"),
     guideHref,
-    guideLabel: t('setup.laborCosting.checklist.launchWizard'),
-    docsLabel: t('setup.laborCosting.docs'),
-    overheadLabel: t('setup.entities.overhead-model.title'),
+    guideLabel: t("setup.laborCosting.checklist.launchWizard"),
+    docsLabel: t("setup.laborCosting.docs"),
+    overheadLabel: t("setup.entities.overhead-model.title"),
     tabs: availableViews.map((item) => ({
       href: `${BASE}?view=${item}`,
       label: t(`setup.laborCosting.tabs.${item}`),
@@ -249,7 +327,7 @@ export async function loadLaborCosting(
     rates: ratesRes,
     selectedRate: selectedRateRes[0] ?? null,
     creatingRate,
-    guideOpen: projectsEnabled && pickString(sp.guide) === 'setup',
+    guideOpen: projectsEnabled && pickString(sp.guide) === "setup",
     totalRates: Number(rateCountRes[0]?.n ?? 0),
     ratePage: list.page,
     ratePerPage: list.perPage,
@@ -260,8 +338,10 @@ export async function loadLaborCosting(
     jobTitles: jobTitlesRes.map((row) => row.name),
     accounts: accountsRes.map((r) => ({
       id: String(r.id),
-      label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
-      roles: LABOR_CONTROL_ROLES.filter((role) => (CONTROL_ACCOUNT_TYPE_POLICY[role] as readonly string[]).includes(String(r.type))),
+      label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ""),
+      roles: LABOR_CONTROL_ROLES.filter((role) =>
+        (CONTROL_ACCOUNT_TYPE_POLICY[role] as readonly string[]).includes(String(r.type)),
+      ),
     })),
     currencies,
     orgCurrency: org.base_currency,
@@ -274,27 +354,29 @@ export async function loadLaborCosting(
       hasOrgDefault: coverageRow.has_org_default === true,
     },
     unposted,
-  }
+  };
 }
 
-const f = ref<LaborCostingData>()
+const f = ref<LaborCostingData>();
 
 export function laborCostingSpec(data: LaborCostingData): PageSpec {
   return page({
-    route: '/admin/setup/labor-costing',
+    route: "/admin/setup/labor-costing",
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('space-y-4', [
-        grid('flex flex-wrap items-start justify-between gap-3', [
+      grid("space-y-4", [
+        grid("flex flex-wrap items-start justify-between gap-3", [
           // Bare div: the native wrapper carries no class.
           grid(undefined, [
-            heading(2, f('title'), 'text-base font-semibold text-slate-900 dark:text-slate-100'),
-            textBlock(f('description'), { className: 'max-w-4xl text-sm text-slate-500 dark:text-slate-400' }),
+            heading(2, f("title"), "text-base font-semibold text-slate-900 dark:text-slate-100"),
+            textBlock(f("description"), {
+              className: "max-w-4xl text-sm text-slate-500 dark:text-slate-400",
+            }),
           ]),
-          widgetBlock('labor-costing-header-actions', {
+          widgetBlock("labor-costing-header-actions", {
             guideHref: data.guideHref,
             showGuide: data.projectPostingAvailable,
             guideLabel: data.guideLabel,
@@ -302,8 +384,8 @@ export function laborCostingSpec(data: LaborCostingData): PageSpec {
             overheadLabel: data.overheadLabel,
           }),
         ]),
-        widgetBlock('labor-costing-tabs', { tabs: data.tabs }),
-        widgetBlock('labor-costing-workspace', {
+        widgetBlock("labor-costing-tabs", { tabs: data.tabs }),
+        widgetBlock("labor-costing-workspace", {
           view: data.view,
           settings: data.settings,
           rates: data.rates,
@@ -330,5 +412,5 @@ export function laborCostingSpec(data: LaborCostingData): PageSpec {
         }),
       ]),
     ],
-  })
+  });
 }

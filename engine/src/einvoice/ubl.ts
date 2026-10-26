@@ -26,7 +26,8 @@ const NS = {
   cbc: "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
 } as const;
 
-const percent = (rate: string) => hasAtMostDecimals(rate, 2) ? fixed(rate, 2) : canonicalDecimal(rate);
+const percent = (rate: string) =>
+  hasAtMostDecimals(rate, 2) ? fixed(rate, 2) : canonicalDecimal(rate);
 
 function date(name: string, value: string | null | undefined, term: string): XmlElement | null {
   return value ? leaf(`cbc:${name}`, isoDate(value, term)) : null;
@@ -45,7 +46,13 @@ function postalAddress(name: string, value: EInvoiceAddress | null | undefined):
   );
 }
 
-function taxCategory(name: string, category: VatCategory, rate: string, extra: XmlElement[] = [], schemeId = "VAT"): XmlElement {
+function taxCategory(
+  name: string,
+  category: VatCategory,
+  rate: string,
+  extra: XmlElement[] = [],
+  schemeId = "VAT",
+): XmlElement {
   return required(
     `cac:${name}`,
     {},
@@ -57,7 +64,12 @@ function taxCategory(name: string, category: VatCategory, rate: string, extra: X
   );
 }
 
-function party(wrapper: string, value: EInvoiceParty, role: "seller" | "buyer", taxSchemeId: string): XmlElement {
+function party(
+  wrapper: string,
+  value: EInvoiceParty,
+  role: "seller" | "buyer",
+  taxSchemeId: string,
+): XmlElement {
   const legal = value.legalRegistration;
   const contact = value.contact;
   return required(
@@ -67,14 +79,27 @@ function party(wrapper: string, value: EInvoiceParty, role: "seller" | "buyer", 
       "cac:Party",
       {},
       value.electronicAddress
-        ? leaf("cbc:EndpointID", value.electronicAddress.id, { schemeID: value.electronicAddress.schemeId })
+        ? leaf("cbc:EndpointID", value.electronicAddress.id, {
+            schemeID: value.electronicAddress.schemeId,
+          })
         : null,
-      el("cac:PartyIdentification", leaf("cbc:ID", value.identifier?.id, { schemeID: value.identifier?.schemeId })),
+      el(
+        "cac:PartyIdentification",
+        leaf("cbc:ID", value.identifier?.id, { schemeID: value.identifier?.schemeId }),
+      ),
       el("cac:PartyName", leaf("cbc:Name", value.tradingName || value.name)),
       postalAddress("PostalAddress", value.address),
-      el("cac:PartyTaxScheme", leaf("cbc:CompanyID", value.vatId), value.vatId ? el("cac:TaxScheme", leaf("cbc:ID", taxSchemeId)) : null),
+      el(
+        "cac:PartyTaxScheme",
+        leaf("cbc:CompanyID", value.vatId),
+        value.vatId ? el("cac:TaxScheme", leaf("cbc:ID", taxSchemeId)) : null,
+      ),
       role === "seller" && value.taxRegistrationId
-        ? el("cac:PartyTaxScheme", leaf("cbc:CompanyID", value.taxRegistrationId), el("cac:TaxScheme", leaf("cbc:ID", "FC")))
+        ? el(
+            "cac:PartyTaxScheme",
+            leaf("cbc:CompanyID", value.taxRegistrationId),
+            el("cac:TaxScheme", leaf("cbc:ID", "FC")),
+          )
         : null,
       el(
         "cac:PartyLegalEntity",
@@ -83,11 +108,11 @@ function party(wrapper: string, value: EInvoiceParty, role: "seller" | "buyer", 
       ),
       contact
         ? el(
-          "cac:Contact",
-          leaf("cbc:Name", contact.name),
-          leaf("cbc:Telephone", contact.phone),
-          leaf("cbc:ElectronicMail", contact.email),
-        )
+            "cac:Contact",
+            leaf("cbc:Name", contact.name),
+            leaf("cbc:Telephone", contact.phone),
+            leaf("cbc:ElectronicMail", contact.email),
+          )
         : null,
     ),
   );
@@ -112,11 +137,19 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
       {},
       leaf("cbc:ID", line.id),
       leaf("cbc:Note", line.note),
-      leaf(creditNote ? "cbc:CreditedQuantity" : "cbc:InvoicedQuantity", canonicalDecimal(line.quantity), { unitCode: line.unitCode }),
+      leaf(
+        creditNote ? "cbc:CreditedQuantity" : "cbc:InvoicedQuantity",
+        canonicalDecimal(line.quantity),
+        { unitCode: line.unitCode },
+      ),
       money("LineExtensionAmount", line.netAmount),
       leaf("cbc:AccountingCost", line.accountingReference),
       line.period
-        ? el("cac:InvoicePeriod", date("StartDate", line.period.start, "BT-134"), date("EndDate", line.period.end, "BT-135"))
+        ? el(
+            "cac:InvoicePeriod",
+            date("StartDate", line.period.start, "BT-134"),
+            date("EndDate", line.period.end, "BT-135"),
+          )
         : null,
       el("cac:OrderLineReference", leaf("cbc:LineID", line.orderLineReference)),
       required(
@@ -126,14 +159,25 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
         leaf("cbc:Name", line.name),
         el("cac:BuyersItemIdentification", leaf("cbc:ID", line.buyerItemId)),
         el("cac:SellersItemIdentification", leaf("cbc:ID", line.sellerItemId)),
-        taxCategory("ClassifiedTaxCategory", line.vatCategory, line.vatRate, [], profile.taxSchemeId),
+        taxCategory(
+          "ClassifiedTaxCategory",
+          line.vatCategory,
+          line.vatRate,
+          [],
+          profile.taxSchemeId,
+        ),
       ),
       el(
         "cac:Price",
         leaf("cbc:PriceAmount", canonicalDecimal(line.netPrice), { currencyID: currency }),
-        line.baseQuantity ? leaf("cbc:BaseQuantity", canonicalDecimal(line.baseQuantity), { unitCode: line.unitCode }) : null,
+        line.baseQuantity
+          ? leaf("cbc:BaseQuantity", canonicalDecimal(line.baseQuantity), {
+              unitCode: line.unitCode,
+            })
+          : null,
       ),
-    ));
+    ),
+  );
 
   const header: Array<XmlElement | null> = [
     leaf("cbc:CustomizationID", profile.guidelineId),
@@ -142,7 +186,10 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
     leaf("cbc:UUID", inv.uuid),
     date("IssueDate", inv.issueDate, "BT-2"),
     ...(creditNote
-      ? [date("TaxPointDate", inv.taxPointDate, "BT-7"), leaf("cbc:CreditNoteTypeCode", inv.typeCode)]
+      ? [
+          date("TaxPointDate", inv.taxPointDate, "BT-7"),
+          leaf("cbc:CreditNoteTypeCode", inv.typeCode),
+        ]
       : [date("DueDate", inv.dueDate, "BT-9"), leaf("cbc:InvoiceTypeCode", inv.typeCode)]),
     ...inv.notes.map((note) => leaf("cbc:Note", note)),
     creditNote ? null : date("TaxPointDate", inv.taxPointDate, "BT-7"),
@@ -150,25 +197,54 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
     leaf("cbc:TaxCurrencyCode", taxCurrency),
     leaf("cbc:BuyerReference", inv.buyerReference),
     inv.invoicePeriod
-      ? el("cac:InvoicePeriod", date("StartDate", inv.invoicePeriod.start, "BT-73"), date("EndDate", inv.invoicePeriod.end, "BT-74"))
+      ? el(
+          "cac:InvoicePeriod",
+          date("StartDate", inv.invoicePeriod.start, "BT-73"),
+          date("EndDate", inv.invoicePeriod.end, "BT-74"),
+        )
       : null,
     // UBL requires OrderReference/ID; a sales order reference alone is written against the "NA" placeholder Peppol prescribes.
     inv.orderReference || inv.salesOrderReference
-      ? el("cac:OrderReference", leaf("cbc:ID", inv.orderReference || "NA"), leaf("cbc:SalesOrderID", inv.salesOrderReference))
+      ? el(
+          "cac:OrderReference",
+          leaf("cbc:ID", inv.orderReference || "NA"),
+          leaf("cbc:SalesOrderID", inv.salesOrderReference),
+        )
       : null,
     ...inv.precedingInvoices.map((entry) =>
       el(
         "cac:BillingReference",
-        el("cac:InvoiceDocumentReference", leaf("cbc:ID", entry.number), date("IssueDate", entry.issueDate, "BT-26")),
-      )),
+        el(
+          "cac:InvoiceDocumentReference",
+          leaf("cbc:ID", entry.number),
+          date("IssueDate", entry.issueDate, "BT-26"),
+        ),
+      ),
+    ),
     el("cac:ContractDocumentReference", leaf("cbc:ID", inv.contractReference)),
-    ...(profile.taxSchemeId === "GST" && inv.accountingCurrencyTotals ? [
-      el("cac:AdditionalDocumentReference", leaf("cbc:ID", "SGD"), leaf("cbc:DocumentTypeCode", "sgdtotal-excl-gst"), leaf("cbc:DocumentDescription", fixed(inv.accountingCurrencyTotals.taxExclusive, d))),
-      el("cac:AdditionalDocumentReference", leaf("cbc:ID", "SGD"), leaf("cbc:DocumentTypeCode", "sgdtotal-incl-gst"), leaf("cbc:DocumentDescription", fixed(inv.accountingCurrencyTotals.taxInclusive, d))),
-    ] : []),
+    ...(profile.taxSchemeId === "GST" && inv.accountingCurrencyTotals
+      ? [
+          el(
+            "cac:AdditionalDocumentReference",
+            leaf("cbc:ID", "SGD"),
+            leaf("cbc:DocumentTypeCode", "sgdtotal-excl-gst"),
+            leaf("cbc:DocumentDescription", fixed(inv.accountingCurrencyTotals.taxExclusive, d)),
+          ),
+          el(
+            "cac:AdditionalDocumentReference",
+            leaf("cbc:ID", "SGD"),
+            leaf("cbc:DocumentTypeCode", "sgdtotal-incl-gst"),
+            leaf("cbc:DocumentDescription", fixed(inv.accountingCurrencyTotals.taxInclusive, d)),
+          ),
+        ]
+      : []),
     // A UBL CreditNote has no ProjectReference; EN 16931 carries BT-11 there as a document reference of type 50.
     creditNote
-      ? el("cac:AdditionalDocumentReference", leaf("cbc:ID", inv.projectReference), inv.projectReference ? leaf("cbc:DocumentTypeCode", "50") : null)
+      ? el(
+          "cac:AdditionalDocumentReference",
+          leaf("cbc:ID", inv.projectReference),
+          inv.projectReference ? leaf("cbc:DocumentTypeCode", "50") : null,
+        )
       : el("cac:ProjectReference", leaf("cbc:ID", inv.projectReference)),
   ];
 
@@ -178,11 +254,11 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
     party("AccountingCustomerParty", inv.buyer, "buyer", profile.taxSchemeId),
     delivery
       ? el(
-        "cac:Delivery",
-        date("ActualDeliveryDate", delivery.date, "BT-72"),
-        el("cac:DeliveryLocation", postalAddress("Address", delivery.address)),
-        el("cac:DeliveryParty", el("cac:PartyName", leaf("cbc:Name", delivery.locationName))),
-      )
+          "cac:Delivery",
+          date("ActualDeliveryDate", delivery.date, "BT-72"),
+          el("cac:DeliveryLocation", postalAddress("Address", delivery.address)),
+          el("cac:DeliveryParty", el("cac:PartyName", leaf("cbc:Name", delivery.locationName))),
+        )
       : null,
     el(
       "cac:PaymentMeans",
@@ -191,11 +267,17 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
       leaf("cbc:PaymentID", inv.payment.remittanceInformation),
       transfer
         ? el(
-          "cac:PayeeFinancialAccount",
-          leaf("cbc:ID", transfer.accountId?.replace(/[\s-]+/g, "").toUpperCase()),
-          leaf("cbc:Name", transfer.accountName),
-          el("cac:FinancialInstitutionBranch", leaf("cbc:ID", transfer.providerId ? compactPaymentIdentifier(transfer.providerId) : null)),
-        )
+            "cac:PayeeFinancialAccount",
+            leaf("cbc:ID", transfer.accountId?.replace(/[\s-]+/g, "").toUpperCase()),
+            leaf("cbc:Name", transfer.accountName),
+            el(
+              "cac:FinancialInstitutionBranch",
+              leaf(
+                "cbc:ID",
+                transfer.providerId ? compactPaymentIdentifier(transfer.providerId) : null,
+              ),
+            ),
+          )
         : null,
     ),
     el("cac:PaymentTerms", leaf("cbc:Note", inv.payment.terms)),
@@ -209,7 +291,8 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
         money("Amount", entry.amount),
         entry.baseAmount ? money("BaseAmount", entry.baseAmount) : null,
         taxCategory("TaxCategory", entry.vatCategory, entry.vatRate, [], profile.taxSchemeId),
-      )),
+      ),
+    ),
     required(
       "cac:TaxTotal",
       {},
@@ -219,11 +302,18 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
           "cac:TaxSubtotal",
           money("TaxableAmount", group.taxableAmount),
           money("TaxAmount", group.taxAmount),
-          taxCategory("TaxCategory", group.category, group.rate, [
-            leaf("cbc:TaxExemptionReasonCode", group.exemptionReasonCode),
-            leaf("cbc:TaxExemptionReason", group.exemptionReason),
-          ].filter((node): node is XmlElement => node !== null), profile.taxSchemeId),
-        )),
+          taxCategory(
+            "TaxCategory",
+            group.category,
+            group.rate,
+            [
+              leaf("cbc:TaxExemptionReasonCode", group.exemptionReasonCode),
+              leaf("cbc:TaxExemptionReason", group.exemptionReason),
+            ].filter((node): node is XmlElement => node !== null),
+            profile.taxSchemeId,
+          ),
+        ),
+      ),
     ),
     taxCurrency && inv.taxTotalInTaxCurrency
       ? el("cac:TaxTotal", money("TaxAmount", inv.taxTotalInTaxCurrency, taxCurrency))

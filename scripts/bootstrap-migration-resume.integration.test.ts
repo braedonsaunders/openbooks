@@ -65,8 +65,13 @@ const BODY = [
   "$$;",
 ].join("\n");
 
-async function ledgerRows(client: { query: (sql: string, values?: unknown[]) => Promise<{ rows: { sha256: string }[] }> }): Promise<{ sha256: string }[]> {
-  const found = await client.query("select sha256 from public._applied_migrations where filename = $1", [FILENAME]);
+async function ledgerRows(client: {
+  query: (sql: string, values?: unknown[]) => Promise<{ rows: { sha256: string }[] }>;
+}): Promise<{ sha256: string }[]> {
+  const found = await client.query(
+    "select sha256 from public._applied_migrations where filename = $1",
+    [FILENAME],
+  );
   return found.rows;
 }
 
@@ -91,7 +96,9 @@ test("a kill mid-file leaves objects but no ledger row; the resume heals to a va
           executeBody: async (client, fileBody, step) => {
             const statements = splitSqlStatements(fileBody);
             const seededThrough =
-              statements.findIndex((statement) => /insert\s+into\s+probe_g43_resume/i.test(statement)) + 1;
+              statements.findIndex((statement) =>
+                /insert\s+into\s+probe_g43_resume/i.test(statement),
+              ) + 1;
             assert.ok(seededThrough > 1 && seededThrough < statements.length);
             for (const statement of statements.slice(0, seededThrough)) {
               await client.query(statement);
@@ -143,7 +150,9 @@ test("a kill mid-file leaves objects but no ledger row; the resume heals to a va
     assert.equal(healed.rows[0]!.seeded, true, "the idempotent seed ran once");
   } finally {
     await setup.query("drop table if exists probe_g43_resume").catch(() => {});
-    await setup.query("delete from public._applied_migrations where filename = $1", [FILENAME]).catch(() => {});
+    await setup
+      .query("delete from public._applied_migrations where filename = $1", [FILENAME])
+      .catch(() => {});
     await releaseMigrationClient(setup);
   }
 });

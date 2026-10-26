@@ -14,7 +14,10 @@ const BAD_DEBT = "22222222-2222-4222-8222-222222222222";
 
 test("write-off debits the allowance when one is configured, otherwise bad debt expense", () => {
   assert.deepEqual(
-    resolveInvoiceWriteOffAccount({ allowanceForDoubtfulAccounts: ALLOWANCE, badDebtExpense: BAD_DEBT }),
+    resolveInvoiceWriteOffAccount({
+      allowanceForDoubtfulAccounts: ALLOWANCE,
+      badDebtExpense: BAD_DEBT,
+    }),
     { role: "allowanceForDoubtfulAccounts", accountId: ALLOWANCE },
   );
   assert.deepEqual(resolveInvoiceWriteOffAccount({ badDebtExpense: BAD_DEBT }), {
@@ -43,12 +46,18 @@ test("write-off amount is an exact positive decimal with at most four places", (
   assert.equal(normalizeInvoiceWriteOffAmount("125.125"), "125.1250");
   assert.equal(normalizeInvoiceWriteOffAmount("125.1234"), "125.1234");
   for (const refused of ["", "0", "0.00", "-1.00", "1.12345", "1e3", "12,50", "abc", 125, null]) {
-    assert.throws(() => normalizeInvoiceWriteOffAmount(refused), PaymentError, `expected refusal for ${String(refused)}`);
+    assert.throws(
+      () => normalizeInvoiceWriteOffAmount(refused),
+      PaymentError,
+      `expected refusal for ${String(refused)}`,
+    );
   }
 });
 
 test("write-off cannot exceed the open balance; equal to the balance is allowed", () => {
-  assert.doesNotThrow(() => assertInvoiceWriteOffWithinOpenBalance("250.0000", "250.0000", "INV-1"));
+  assert.doesNotThrow(() =>
+    assertInvoiceWriteOffWithinOpenBalance("250.0000", "250.0000", "INV-1"),
+  );
   assert.throws(
     () => assertInvoiceWriteOffWithinOpenBalance("250.0100", "250.0000", "INV-1"),
     (error: unknown) => {
@@ -62,8 +71,14 @@ test("write-off cannot exceed the open balance; equal to the balance is allowed"
 test("write-off date must be a calendar date on or after the invoice date", () => {
   assert.equal(validateInvoiceWriteOffDate("2026-10-11", "INV-1", "2026-10-01"), "2026-10-11");
   assert.equal(validateInvoiceWriteOffDate("2026-10-01", "INV-1", "2026-10-01"), "2026-10-01");
-  assert.throws(() => validateInvoiceWriteOffDate("2026-09-30", "INV-1", "2026-10-01"), PaymentError);
-  assert.throws(() => validateInvoiceWriteOffDate("2026-02-30", "INV-1", "2026-01-01"), PaymentError);
+  assert.throws(
+    () => validateInvoiceWriteOffDate("2026-09-30", "INV-1", "2026-10-01"),
+    PaymentError,
+  );
+  assert.throws(
+    () => validateInvoiceWriteOffDate("2026-02-30", "INV-1", "2026-01-01"),
+    PaymentError,
+  );
   assert.throws(() => validateInvoiceWriteOffDate(undefined, "INV-1", "2026-01-01"), PaymentError);
 });
 

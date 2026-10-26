@@ -1,43 +1,42 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { createTranslator } from 'next-intl'
-import { LOCALE_CODES as LOCALES } from "../../../../../i18n/config"
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createTranslator } from "next-intl";
+import { LOCALE_CODES as LOCALES } from "../../../../../i18n/config";
 
-const { stubModules } = await import('../../../../../testing/stub-modules')
+const { stubModules } = await import("../../../../../testing/stub-modules");
 stubModules({
-  navigation:
-    `export function usePathname(){return '/reports/statements/p1'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
+  navigation: `export function usePathname(){return '/reports/statements/p1'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
   intl: false,
   authz: false,
   features: false,
-})
+});
 
-const React = await import('react')
+const React = await import("react");
 // Classic-JSX fallback: the shared tsx cache can serve a classic transform,
 // which resolves bare React from the global scope, not the module scope.
-Object.assign(globalThis, { React })
-const { renderToString } = await import('react-dom/server')
-const { AgingStrip } = await import('./sections.tsx')
+Object.assign(globalThis, { React });
+const { renderToString } = await import("react-dom/server");
+const { AgingStrip } = await import("./sections.tsx");
 
 function stripProps(asOfLabel: string) {
-  const drill = (bucket?: 'current' | 'b1' | 'b2' | 'b3' | 'b4') => ({
-    kind: 'aging' as const,
-    label: 'Acme · Current',
-    side: 'ar' as const,
-    asOf: '2026-09-30',
-    partyId: 'p1',
+  const drill = (bucket?: "current" | "b1" | "b2" | "b3" | "b4") => ({
+    kind: "aging" as const,
+    label: "Acme · Current",
+    side: "ar" as const,
+    asOf: "2026-09-30",
+    partyId: "p1",
     ...(bucket ? { bucket } : {}),
-  })
+  });
   return {
     cells: [
-      { key: 'current', label: 'Current', value: '$100.00', drill: drill('current') },
-      { key: 'b1', label: '1–30', value: '$50.00', drill: drill('b1') },
+      { key: "current", label: "Current", value: "$100.00", drill: drill("current") },
+      { key: "b1", label: "1–30", value: "$50.00", drill: drill("b1") },
     ],
-    totalLabel: 'Total',
-    total: '$150.00',
+    totalLabel: "Total",
+    total: "$150.00",
     totalDrill: drill(),
     asOfLabel,
-  }
+  };
 }
 
 /**
@@ -45,43 +44,60 @@ function stripProps(asOfLabel: string) {
  * different bucket views appear inconsistent. The strip must show the
  * selected period-end date beside the buckets, without changing any amount.
  */
-test('aging strip shows the selected period-end date beside the buckets', () => {
-  const html = renderToString(React.createElement(AgingStrip, stripProps('Aging as of 2026-09-30')))
-  assert.ok(html.includes('Aging as of 2026-09-30'), 'the as-of caption must render')
-  const captionIndex = html.indexOf('Aging as of 2026-09-30')
-  const firstBucketIndex = html.indexOf('Current')
-  assert.ok(captionIndex < firstBucketIndex, 'the as-of date must sit adjacent to (before) the bucket strip')
-})
+test("aging strip shows the selected period-end date beside the buckets", () => {
+  const html = renderToString(
+    React.createElement(AgingStrip, stripProps("Aging as of 2026-09-30")),
+  );
+  assert.ok(html.includes("Aging as of 2026-09-30"), "the as-of caption must render");
+  const captionIndex = html.indexOf("Aging as of 2026-09-30");
+  const firstBucketIndex = html.indexOf("Current");
+  assert.ok(
+    captionIndex < firstBucketIndex,
+    "the as-of date must sit adjacent to (before) the bucket strip",
+  );
+});
 
-test('as-of caption changes no amount', () => {
-  const html = renderToString(React.createElement(AgingStrip, stripProps('Aging as of 2026-09-30')))
-  for (const amount of ['$100.00', '$50.00', '$150.00']) {
-    assert.ok(html.includes(amount), `amount ${amount} must still render`)
+test("as-of caption changes no amount", () => {
+  const html = renderToString(
+    React.createElement(AgingStrip, stripProps("Aging as of 2026-09-30")),
+  );
+  for (const amount of ["$100.00", "$50.00", "$150.00"]) {
+    assert.ok(html.includes(amount), `amount ${amount} must still render`);
   }
-})
+});
 
-test('statements.agingAsOf is translated in every locale', async () => {
+test("statements.agingAsOf is translated in every locale", async () => {
   for (const locale of LOCALES) {
-    const messages = (await import(`../../../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
-    const t = createTranslator({ locale, namespace: 'reports', messages: messages as never } as never) as unknown as (
-      lookup: string,
-      values?: Record<string, string>,
-    ) => string
-    let rendered: string
+    const messages = (await import(`../../../../../messages/${locale}/index.ts`)).default as Record<
+      string,
+      unknown
+    >;
+    const t = createTranslator({
+      locale,
+      namespace: "reports",
+      messages: messages as never,
+    } as never) as unknown as (lookup: string, values?: Record<string, string>) => string;
+    let rendered: string;
     try {
-      rendered = t('statements.agingAsOf', { date: '2026-09-30' })
+      rendered = t("statements.agingAsOf", { date: "2026-09-30" });
     } catch (error) {
-      assert.fail(`statements.agingAsOf misses in the ${locale} catalog: ${String(error)}`)
+      assert.fail(`statements.agingAsOf misses in the ${locale} catalog: ${String(error)}`);
     }
     assert.ok(
-      typeof rendered === 'string' && rendered.includes('2026-09-30') && !rendered.includes('agingAsOf'),
+      typeof rendered === "string" &&
+        rendered.includes("2026-09-30") &&
+        !rendered.includes("agingAsOf"),
       `statements.agingAsOf must render the date in ${locale}, got ${JSON.stringify(rendered)}`,
-    )
+    );
   }
-  const en = (await import('../../../../../messages/en/index.ts')).default as Record<string, unknown>
-  const enT = createTranslator({ locale: 'en', namespace: 'reports', messages: en as never } as never) as unknown as (
-    lookup: string,
-    values?: Record<string, string>,
-  ) => string
-  assert.equal(enT('statements.agingAsOf', { date: '2026-09-30' }), 'Aging as of 2026-09-30')
-})
+  const en = (await import("../../../../../messages/en/index.ts")).default as Record<
+    string,
+    unknown
+  >;
+  const enT = createTranslator({
+    locale: "en",
+    namespace: "reports",
+    messages: en as never,
+  } as never) as unknown as (lookup: string, values?: Record<string, string>) => string;
+  assert.equal(enT("statements.agingAsOf", { date: "2026-09-30" }), "Aging as of 2026-09-30");
+});

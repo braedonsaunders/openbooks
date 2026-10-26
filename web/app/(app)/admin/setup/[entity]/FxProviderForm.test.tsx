@@ -8,14 +8,18 @@ declare global {
 
 // jsdom first: the form reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/fx-provider", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/fx-provider",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
 stubModules({ navigation: "export function useRouter(){return globalThis.__fxTestRouter}" });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -53,7 +57,12 @@ async function mountEmptyForm(t: TestContext) {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <FxProviderForm initial={null} currencies={CAD_ONLY} recommendedCurrencies={["CAD"]} lastRun={null} />
+        <FxProviderForm
+          initial={null}
+          currencies={CAD_ONLY}
+          recommendedCurrencies={["CAD"]}
+          lastRun={null}
+        />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -62,7 +71,9 @@ async function mountEmptyForm(t: TestContext) {
 }
 
 function testButton(host: HTMLElement): HTMLButtonElement {
-  const button = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Test provider"));
+  const button = [...host.querySelectorAll("button")].find((el) =>
+    el.textContent?.includes("Test provider"),
+  );
   assert.ok(button, "test provider button must render");
   return button as HTMLButtonElement;
 }

@@ -1,14 +1,27 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const batchBillEntry: DocArticle = {
-  slug: 'batch-bill-entry',
-  title: 'Entering many bills at once',
-  category: 'transactions',
+  slug: "batch-bill-entry",
+  title: "Entering many bills at once",
+  category: "transactions",
   order: 3,
-  summary: 'Key a stack of vendor bills on one keyboard-driven grid, prove it against control totals, and save or post every bill together.',
-  updated: '2026-10-21',
-  keywords: ['batch', 'batch entry', 'vendor bill', 'bills', 'control total', 'paste', 'spreadsheet', 'duplicate', 'keyboard', 'accounts payable', 'data entry'],
-  related: ['purchasing-workflow', 'transaction-lifecycle', 'payments-and-applications'],
+  summary:
+    "Key a stack of vendor bills on one keyboard-driven grid, prove it against control totals, and save or post every bill together.",
+  updated: "2026-10-21",
+  keywords: [
+    "batch",
+    "batch entry",
+    "vendor bill",
+    "bills",
+    "control total",
+    "paste",
+    "spreadsheet",
+    "duplicate",
+    "keyboard",
+    "accounts payable",
+    "data entry",
+  ],
+  related: ["purchasing-workflow", "transaction-lifecycle", "payments-and-applications"],
   body: `# Entering many bills at once
 
 **Batch bill entry** puts one vendor bill on each row of a single grid, so a
@@ -116,4 +129,4 @@ totals. If you close the tab or lose power, reopening batch entry restores the
 unsaved bills and offers to discard them. The copy is cleared once every bill
 is saved, and leaving the page with unsaved bills asks for confirmation.
 `,
-}
+};

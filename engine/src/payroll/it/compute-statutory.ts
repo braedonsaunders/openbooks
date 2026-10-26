@@ -133,7 +133,11 @@ export interface ItYearTables {
     readonly bandC_base: string;
     readonly bandC_span: string;
   };
-  readonly detrazioneC2: { readonly amount: string; readonly fromExclusive: string; readonly toInclusive: string };
+  readonly detrazioneC2: {
+    readonly amount: string;
+    readonly fromExclusive: string;
+    readonly toInclusive: string;
+  };
   readonly ulterioreDetrazione: {
     readonly amount: string;
     readonly bandA_fromExclusive: string;
@@ -234,10 +238,7 @@ function truncRatio4(num: bigint, den: bigint, decimals: number): bigint {
   return (num * 10n ** BigInt(decimals)) / den;
 }
 
-function marginalTax(
-  baseUnits: bigint,
-  bands: ItYearTables["bands"],
-): bigint {
+function marginalTax(baseUnits: bigint, bands: ItYearTables["bands"]): bigint {
   let tax = ZERO;
   let lower = ZERO;
   for (const band of bands) {
@@ -508,18 +509,18 @@ function enforceIt2026SubstituteRegimes(input: It2025Input): void {
   };
   if (positive(input.renewalIncrease2026, "renewalIncrease2026") > ZERO) {
     refuse(
-      `IT 2026 refuses ${input.renewalIncrease2026} of contractual-renewal increases in ordinary pay: L. 199/2025 `
-      + "art. 1 c. 7 prices them under a 5% imposta sostitutiva (private-sector, 2025 lavoro income ≤ 33.000; "
-      + `AdE Circ. 2/E/2026), which the engine does not compute — see ${refused}. Price renewal increases `
-      + "outside ordinary IRPEF through a pay-run adjustment",
+      `IT 2026 refuses ${input.renewalIncrease2026} of contractual-renewal increases in ordinary pay: L. 199/2025 ` +
+        "art. 1 c. 7 prices them under a 5% imposta sostitutiva (private-sector, 2025 lavoro income ≤ 33.000; " +
+        `AdE Circ. 2/E/2026), which the engine does not compute — see ${refused}. Price renewal increases ` +
+        "outside ordinary IRPEF through a pay-run adjustment",
     );
   }
   if (positive(input.shiftAllowances2026, "shiftAllowances2026") > ZERO) {
     refuse(
-      `IT 2026 refuses ${input.shiftAllowances2026} of night/holiday/rest-day/shift allowances in ordinary pay: `
-      + "L. 199/2025 art. 1 c. 10–11 prices them under a 15% imposta sostitutiva (cap 1.500/year; AdE FAQ Circ. "
-      + `3/E/2026), which the engine does not compute — see ${refused}. Price qualifying allowances outside `
-      + "ordinary IRPEF through a pay-run adjustment",
+      `IT 2026 refuses ${input.shiftAllowances2026} of night/holiday/rest-day/shift allowances in ordinary pay: ` +
+        "L. 199/2025 art. 1 c. 10–11 prices them under a 15% imposta sostitutiva (cap 1.500/year; AdE FAQ Circ. " +
+        `3/E/2026), which the engine does not compute — see ${refused}. Price qualifying allowances outside ` +
+        "ordinary IRPEF through a pay-run adjustment",
     );
   }
   // c. 18–21 tourism speciale is NOT refused here: it prices inside
@@ -538,15 +539,15 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   const refused = tables.refusedListName;
   if (input.isPensioner) {
     refuse(
-      `IT ${year} engine refuses pension income (art. 49 c. 2 lett. a)): pensionati use the `
-      + `TABELLA 7 detrazioni, not transcribed — see ${refused}`,
+      `IT ${year} engine refuses pension income (art. 49 c. 2 lett. a)): pensionati use the ` +
+        `TABELLA 7 detrazioni, not transcribed — see ${refused}`,
     );
   }
   if (input.isFixedTerm == null) {
     refuse(
-      `IT ${year} refuses: employment term is unknown. A fixed-term contract owes the NASpI add-on `
-      + "of 1.40% plus 0.50 percentage points per qualifying renewal, and the required renewal and exemption "
-      + "facts are not priced; declare the contract term before calculating payroll.",
+      `IT ${year} refuses: employment term is unknown. A fixed-term contract owes the NASpI add-on ` +
+        "of 1.40% plus 0.50 percentage points per qualifying renewal, and the required renewal and exemption " +
+        "facts are not priced; declare the contract term before calculating payroll.",
     );
   }
   if (input.isFixedTerm) {
@@ -557,9 +558,9 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2023/02/Circolare_14062/Allegati/14019_Circolare-numero-13-del-02-02-2023.pdf
     // https://servizi2.inps.it/servizi/Bussola/VisualizzaDoc.aspx?sVirtualURL=%2FCircolari%2FCircolare+numero+91+del+04-08-2020.htm
     refuse(
-      `IT ${year} refuses tempo determinato: NASpI addizionale 1.40% plus 0.50 points per qualifying renewal `
-      + "and contract-specific exclusions are not priced — the pack does not carry renewal count or the "
-      + `required exemption facts; see ${refused}`,
+      `IT ${year} refuses tempo determinato: NASpI addizionale 1.40% plus 0.50 points per qualifying renewal ` +
+        "and contract-specific exclusions are not priced — the pack does not carry renewal count or the " +
+        `required exemption facts; see ${refused}`,
     );
   }
   // 2026 substitute regimes: price the carved-out bases at their flat rates
@@ -578,29 +579,30 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   const hasSubst = rPlus > ZERO || aPlus > ZERO || pPlus > ZERO;
   if (hasSubst && year !== 2026) {
     refuse(
-      `IT ${year} refuses 2026 substitute-regime pay: the 5%/15%/1% imposte sostitutive have no legal basis `
-      + `outside 2026 — see ${refused}`,
+      `IT ${year} refuses 2026 substitute-regime pay: the 5%/15%/1% imposte sostitutive have no legal basis ` +
+        `outside 2026 — see ${refused}`,
     );
   }
-  const priorIncome = input.priorYearEmploymentIncome == null || input.priorYearEmploymentIncome === ""
-    ? null
-    : needNonNegative(input.priorYearEmploymentIncome, "priorYearEmploymentIncome", year);
+  const priorIncome =
+    input.priorYearEmploymentIncome == null || input.priorYearEmploymentIncome === ""
+      ? null
+      : needNonNegative(input.priorYearEmploymentIncome, "priorYearEmploymentIncome", year);
   if (rPlus > ZERO) {
     // L. 199/2025 art. 1 c. 7: 5% on renewal increases, private-sector, 2025
     // lavoro income ≤ 33.000 (AdE Circ. 2/E/2026). No amount cap.
     if (priorIncome == null) {
       refuse(
-        `IT ${year} refuses renewal increases without the 2025 lavoro income: the 33.000 ceiling decides `
-        + "eligibility for the 5% substitute tax — declare reddito_lavoro_2025 before pricing; "
-        + `see ${refused}`,
+        `IT ${year} refuses renewal increases without the 2025 lavoro income: the 33.000 ceiling decides ` +
+          "eligibility for the 5% substitute tax — declare reddito_lavoro_2025 before pricing; " +
+          `see ${refused}`,
       );
     }
     if (priorIncome > U("33000")) {
       refuse(
-        `IT ${year} refuses renewal increases for 2025 lavoro income ${D(priorIncome)}: above the 33.000 `
-        + "ceiling the 5% substitute tax does not apply — remove the amounts from the substitute channel "
-        + "and price them as ordinary wages; "
-        + `see ${refused}`,
+        `IT ${year} refuses renewal increases for 2025 lavoro income ${D(priorIncome)}: above the 33.000 ` +
+          "ceiling the 5% substitute tax does not apply — remove the amounts from the substitute channel " +
+          "and price them as ordinary wages; " +
+          `see ${refused}`,
       );
     }
   }
@@ -609,17 +611,17 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     // annual base cap 1.500, 2025 lavoro income ≤ 40.000.
     if (priorIncome == null) {
       refuse(
-        `IT ${year} refuses shift allowances without the 2025 lavoro income: the 40.000 ceiling decides `
-        + "eligibility for the 15% substitute tax — declare reddito_lavoro_2025 before pricing; "
-        + `see ${refused}`,
+        `IT ${year} refuses shift allowances without the 2025 lavoro income: the 40.000 ceiling decides ` +
+          "eligibility for the 15% substitute tax — declare reddito_lavoro_2025 before pricing; " +
+          `see ${refused}`,
       );
     }
     if (priorIncome > U("40000")) {
       refuse(
-        `IT ${year} refuses shift allowances for 2025 lavoro income ${D(priorIncome)}: above the 40.000 `
-        + "ceiling the 15% substitute tax does not apply — remove the amounts from the substitute channel "
-        + "and price them as ordinary wages; "
-        + `see ${refused}`,
+        `IT ${year} refuses shift allowances for 2025 lavoro income ${D(priorIncome)}: above the 40.000 ` +
+          "ceiling the 15% substitute tax does not apply — remove the amounts from the substitute channel " +
+          "and price them as ordinary wages; " +
+          `see ${refused}`,
       );
     }
   }
@@ -627,9 +629,9 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     // L. 208/2015 art. 1 c. 182–189 at the 2026–2027 1% rate, annual base cap
     // 5.000: the incrementality and registered-contract criteria decide.
     refuse(
-      `IT ${year} refuses performance bonuses with undeclared regime eligibility: assert `
-      + "premi_risultato_ammissibili once the L. 208/2015 criteria are met before pricing the 1% "
-      + `substitute tax; see ${refused}`,
+      `IT ${year} refuses performance bonuses with undeclared regime eligibility: assert ` +
+        "premi_risultato_ammissibili once the L. 208/2015 criteria are met before pricing the 1% " +
+        `substitute tax; see ${refused}`,
     );
   }
   const ALLOW_CAP = U("1500");
@@ -657,25 +659,30 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     // https://www.normattiva.it/eli/id/2024/12/31/24G00229/CONSOLIDATED/20251219
     // https://www.normattiva.it/atto/caricaDettaglioAtto?atto.codiceRedazionale=25G00202&atto.dataPubblicazioneGazzetta=2025-12-19&qId=&tipoDettaglio=originario
     refuse(
-      `IT ${year} refuses a declared art. 12 TUIR family deduction: the pack lacks the dependent's `
-      + "relationship, income, age/disability, and deduction-allocation facts needed to calculate it. "
-      + `Obtain a supported art. 12 calculation before finalizing the payroll; see ${refused}`,
+      `IT ${year} refuses a declared art. 12 TUIR family deduction: the pack lacks the dependent's ` +
+        "relationship, income, age/disability, and deduction-allocation facts needed to calculate it. " +
+        `Obtain a supported art. 12 calculation before finalizing the payroll; see ${refused}`,
     );
   }
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
-    refuse(`IT ${year} annualisation needs a positive integer periodsPerYear, got ${input.periodsPerYear}`);
+    refuse(
+      `IT ${year} annualisation needs a positive integer periodsPerYear, got ${input.periodsPerYear}`,
+    );
   }
   if (!IT_REGION_CODES.includes(input.regionCode)) {
     refuse(
-      `unknown IT regione "${input.regionCode || "(unset)"}": the IT payroll pack knows `
-      + `${IT_REGION_CODES.join(", ")}`,
+      `unknown IT regione "${input.regionCode || "(unset)"}": the IT payroll pack knows ` +
+        `${IT_REGION_CODES.join(", ")}`,
     );
   }
   if (year === 2026) enforceIt2026SubstituteRegimes(input);
   // Art. 51 fringe exclusion: eligible benefits within the
   // 1.000 / 2.000 cap never enter employment taxable income; above the cap
   // the whole amount is taxable (L. 207/2024 art. 1 c. 390).
-  const fringeRaw = input.excludedFringeAnnual == null || input.excludedFringeAnnual === "" ? ZERO : needNonNegative(input.excludedFringeAnnual, "excludedFringeAnnual", year);
+  const fringeRaw =
+    input.excludedFringeAnnual == null || input.excludedFringeAnnual === ""
+      ? ZERO
+      : needNonNegative(input.excludedFringeAnnual, "excludedFringeAnnual", year);
   let gross = needNonNegative(input.annualGrossEmployment, "annualGrossEmployment", year);
   if (fringeRaw > ZERO) {
     const fringeCap = U(input.fringeDependentChild ? "2000" : "1000");
@@ -699,36 +706,44 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       const date = special.workDate ?? "(date unstated)";
       if (special.eligibleSector !== true) {
         refuse(
-          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
-          + "integrativo speciale: the eligible establishment was not attested (somministrazione di alimenti e "
-          + `bevande, turismo, termale) — see ${refused}. Attest eligibleSector or price the amount as ordinary pay`,
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento ` +
+            "integrativo speciale: the eligible establishment was not attested (somministrazione di alimenti e " +
+            `bevande, turismo, termale) — see ${refused}. Attest eligibleSector or price the amount as ordinary pay`,
         );
       }
       if (special.workerRequested !== true) {
         refuse(
-          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
-          + "integrativo speciale: the worker's request with autocertified 2025 income is constitutive (AdE Circ. "
-          + `3/E/2026) — see ${refused}. File the request or price the amount as ordinary pay`,
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento ` +
+            "integrativo speciale: the worker's request with autocertified 2025 income is constitutive (AdE Circ. " +
+            `3/E/2026) — see ${refused}. File the request or price the amount as ordinary pay`,
         );
       }
-      if (special.workDate == null || special.workDate === "" || special.workDate < "2026-01-01" || special.workDate > "2026-09-30") {
+      if (
+        special.workDate == null ||
+        special.workDate === "" ||
+        special.workDate < "2026-01-01" ||
+        special.workDate > "2026-09-30"
+      ) {
         refuse(
-          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
-          + "integrativo speciale: the prestazioni must fall in 1 January–30 September 2026 (L. 199/2025 art. 1 "
-          + `c. 18) — see ${refused}. Verify the work date, or price out-of-window pay as ordinary`,
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento ` +
+            "integrativo speciale: the prestazioni must fall in 1 January–30 September 2026 (L. 199/2025 art. 1 " +
+            `c. 18) — see ${refused}. Verify the work date, or price out-of-window pay as ordinary`,
         );
       }
       if (special.priorYearIncome == null || special.priorYearIncome === "") {
         refuse(
-          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
-          + "integrativo speciale: the autocertified 2025 lavoro income (all employers, cassa allargata to "
-          + `12 Jan 2026) is missing — see ${refused}. Carry priorYearIncome or price the amount as ordinary pay`,
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento ` +
+            "integrativo speciale: the autocertified 2025 lavoro income (all employers, cassa allargata to " +
+            `12 Jan 2026) is missing — see ${refused}. Carry priorYearIncome or price the amount as ordinary pay`,
         );
       }
       // Over EUR 40,000 of 2025 lavoro income the worker is ineligible: the
       // amount stays ordinary taxable and no credit prices (deterministic
       // rule application, not silence).
-      if (needNonNegative(special.priorYearIncome, "tourismSpecialPay2026.priorYearIncome", year) <= U("40000")) {
+      if (
+        needNonNegative(special.priorYearIncome, "tourismSpecialPay2026.priorYearIncome", year) <=
+        U("40000")
+      ) {
         trattamentoSpeciale = r2(mulPct(qualifying, "15"));
       }
     }
@@ -750,10 +765,10 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   const annualFullTimeMinimum = U(tables.minimaleGiornaliero) * 312n;
   if (annualPensionable > ZERO && annualPensionable < annualFullTimeMinimum) {
     refuse(
-      `IT ${year} IVS refuses annual pensionable earnings ${D(annualPensionable)} below the full-time daily-minimum `
-      + `base ${D(annualFullTimeMinimum)} (${tables.minimaleGiornaliero} × 26 days × 12 months): contribution days, `
-      + "part-time hours and the applicable CCNL minimum are not carried, so the statutory base cannot be prorated safely. "
-      + "Provide those contract and period facts or have a qualified Italian payroll provider calculate IVS before posting.",
+      `IT ${year} IVS refuses annual pensionable earnings ${D(annualPensionable)} below the full-time daily-minimum ` +
+        `base ${D(annualFullTimeMinimum)} (${tables.minimaleGiornaliero} × 26 days × 12 months): contribution days, ` +
+        "part-time hours and the applicable CCNL minimum are not carried, so the statutory base cannot be prorated safely. " +
+        "Provide those contract and period facts or have a qualified Italian payroll provider calculate IVS before posting.",
     );
   }
 
@@ -764,24 +779,31 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2026/02/Circolare_15162/Allegati/16561_Circolare-numero-14-del-09-02-2026.pdf
   if (input.isPost1995 == null && pensBase > U(tables.massimalePost1995)) {
     refuse(
-      `IT ${year} IVS base ${D(pensBase)} exceeds the ${tables.massimalePost1995} annual massimale, but `
-      + `the employee's anzianita_post_1995 status is unknown — declare whether the worker first joined `
-      + "after 31 December 1995 (or opted into the contributory system) before pricing IVS; "
-      + "see L. 335/1995 art. 2 c. 18 and the annual INPS massimale",
+      `IT ${year} IVS base ${D(pensBase)} exceeds the ${tables.massimalePost1995} annual massimale, but ` +
+        `the employee's anzianita_post_1995 status is unknown — declare whether the worker first joined ` +
+        "after 31 December 1995 (or opted into the contributory system) before pricing IVS; " +
+        "see L. 335/1995 art. 2 c. 18 and the annual INPS massimale",
     );
   }
   const cap = input.isPost1995 ? U(tables.massimalePost1995) : null;
   const ivsBase = cap === null ? pensBase : bmin(pensBase, cap);
-  const inpsWorker = r2(mulFrac(ivsBase, tables.inpsIvs.worker))
-    + r2(mulFrac(max0(bmin(pensBase, cap ?? pensBase) - U(tables.primaFascia.annual)), tables.primaFascia.additionalWorker));
+  const inpsWorker =
+    r2(mulFrac(ivsBase, tables.inpsIvs.worker)) +
+    r2(
+      mulFrac(
+        max0(bmin(pensBase, cap ?? pensBase) - U(tables.primaFascia.annual)),
+        tables.primaFascia.additionalWorker,
+      ),
+    );
   const inpsEmployer = r2(mulFrac(ivsBase, tables.inpsIvs.employer));
 
   // Reddito di lavoro netto (category level, contributions already out) and
   // the complessivo the thresholds read (presunto raises, never lowers).
   const lavoroNet = max0(gross + oneOff - inpsWorker);
-  const presunto = input.presumedTotalIncome == null || input.presumedTotalIncome === ""
-    ? ZERO
-    : needNonNegative(input.presumedTotalIncome, "presumedTotalIncome", year);
+  const presunto =
+    input.presumedTotalIncome == null || input.presumedTotalIncome === ""
+      ? ZERO
+      : needNonNegative(input.presumedTotalIncome, "presumedTotalIncome", year);
   const R = presunto > lavoroNet ? presunto : lavoroNet;
 
   // Substitute-taxed bases leave ordinary IRPEF (and its addizionali, priced
@@ -799,10 +821,14 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     const floor = U(input.isFixedTerm ? L.floorFixedTerm : L.floor);
     if (detC1 < floor) detC1 = floor;
   } else if (R <= U(L.bandB_cap)) {
-    detC1 = U(L.bandB_base)
-      + (U(L.bandB_factor) * truncRatio4(U(L.bandB_cap) - R, U(L.bandB_span), tables.ratioDecimals)) / 10_000n;
+    detC1 =
+      U(L.bandB_base) +
+      (U(L.bandB_factor) * truncRatio4(U(L.bandB_cap) - R, U(L.bandB_span), tables.ratioDecimals)) /
+        10_000n;
   } else if (R <= U(L.bandC_cap)) {
-    detC1 = (U(L.bandC_base) * truncRatio4(U(L.bandC_cap) - R, U(L.bandC_span), tables.ratioDecimals)) / 10_000n;
+    detC1 =
+      (U(L.bandC_base) * truncRatio4(U(L.bandC_cap) - R, U(L.bandC_span), tables.ratioDecimals)) /
+      10_000n;
   }
   detC1 = r2(detC1);
   const C2 = tables.detrazioneC2;
@@ -816,7 +842,10 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   if (R > U(UD.bandA_fromExclusive) && R <= U(UD.bandA_toInclusive)) {
     ulteriore = U(UD.amount);
   } else if (R > U(UD.bandA_toInclusive) && R < U(UD.bandB_toExclusive)) {
-    ulteriore = (U(UD.amount) * truncRatio4(U(UD.bandB_toExclusive) - R, U(UD.bandB_span), tables.ratioDecimals)) / 10_000n;
+    ulteriore =
+      (U(UD.amount) *
+        truncRatio4(U(UD.bandB_toExclusive) - R, U(UD.bandB_span), tables.ratioDecimals)) /
+      10_000n;
   }
   ulteriore = r2(ulteriore);
 
@@ -826,12 +855,19 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   // keep the documented full-year assumption.
   if (input.taxYearWorkDays != null) {
     const yearDays = daysInTaxYear(year);
-    if (!Number.isInteger(input.taxYearWorkDays) || input.taxYearWorkDays <= 0 || input.taxYearWorkDays > yearDays) {
-      refuse(`IT ${year} rapportatura needs taxYearWorkDays as whole days of employment from 1 to ${yearDays}, got ${input.taxYearWorkDays}`);
+    if (
+      !Number.isInteger(input.taxYearWorkDays) ||
+      input.taxYearWorkDays <= 0 ||
+      input.taxYearWorkDays > yearDays
+    ) {
+      refuse(
+        `IT ${year} rapportatura needs taxYearWorkDays as whole days of employment from 1 to ${yearDays}, got ${input.taxYearWorkDays}`,
+      );
     }
     if (input.taxYearWorkDays < yearDays) {
       const workDays = input.taxYearWorkDays;
-      const factor = (amount: bigint): bigint => r2(roundDiv(amount * BigInt(workDays), BigInt(yearDays)));
+      const factor = (amount: bigint): bigint =>
+        r2(roundDiv(amount * BigInt(workDays), BigInt(yearDays)));
       detLavoro = factor(detLavoro);
       ulteriore = factor(ulteriore);
     }
@@ -865,9 +901,10 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   const S = tables.somma;
   let somma = ZERO;
   if (R <= U(S.incomeCap)) {
-    const bandBase = input.sommaBandBase == null || input.sommaBandBase === ""
-      ? gross
-      : needNonNegative(input.sommaBandBase, "sommaBandBase", year);
+    const bandBase =
+      input.sommaBandBase == null || input.sommaBandBase === ""
+        ? gross
+        : needNonNegative(input.sommaBandBase, "sommaBandBase", year);
     const band = S.bands.find((b) => b.upTo === null || bandBase <= U(b.upTo));
     if (!band) refuse(`IT ${year} somma band resolution failed — internal error, not a table gap`);
     somma = r2(mulFrac(lavoroNet, band.rate));
@@ -880,26 +917,29 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   const hasMunicipalBrackets = (input.municipalBrackets?.length ?? 0) > 0;
   if (!hasRegionalBrackets && (input.regionalRate == null || input.regionalRate === "")) {
     refuse(
-      `no it_addizionale_regionale rate is configured for regione ${input.regionCode} in ${year} — `
-      + "the domicile region's deliberated rate must be entered; the pack computes no surtax without it",
+      `no it_addizionale_regionale rate is configured for regione ${input.regionCode} in ${year} — ` +
+        "the domicile region's deliberated rate must be entered; the pack computes no surtax without it",
     );
   }
   if (input.comuneCode == null || input.comuneCode === "") {
     refuse(
-      `the domicile comune is unknown for regione ${input.regionCode} — the addizionale comunale `
-      + "follows the fiscal domicile comune (codice catastale) and the pack attributes none without it",
+      `the domicile comune is unknown for regione ${input.regionCode} — the addizionale comunale ` +
+        "follows the fiscal domicile comune (codice catastale) and the pack attributes none without it",
     );
   }
   if (!/^[A-Z][0-9]{3}$/.test(input.comuneCode)) {
     refuse(
-      `domicile comune "${input.comuneCode}" is not a codice catastale (expected one letter and three `
-      + "digits, e.g. H501) — the pack looks no rate up by address",
+      `domicile comune "${input.comuneCode}" is not a codice catastale (expected one letter and three ` +
+        "digits, e.g. H501) — the pack looks no rate up by address",
     );
   }
-  if (!hasMunicipalBrackets && (input.municipalSurtax == null || input.municipalSurtax.rate === "")) {
+  if (
+    !hasMunicipalBrackets &&
+    (input.municipalSurtax == null || input.municipalSurtax.rate === "")
+  ) {
     refuse(
-      `no it_addizionale_comunale rate is configured for comune ${input.comuneCode} (regione `
-      + `${input.regionCode}) in ${year} — the domicile comune's deliberated rate must be entered`,
+      `no it_addizionale_comunale rate is configured for comune ${input.comuneCode} (regione ` +
+        `${input.regionCode}) in ${year} — the domicile comune's deliberated rate must be entered`,
     );
   }
   // Bracketed deliberations: a domicile whose region or
@@ -915,42 +955,50 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   // explicit Bolzano domicile attribution — so unattributed 04 refuses.
   if (input.regionalRate != null && input.regionalRate !== "" && hasRegionalBrackets) {
     refuse(
-      `IT ${year} regionale computation is ambiguous for regione ${input.regionCode}: both a scalar rate `
-      + `(${input.regionalRate}) and ${input.regionalBrackets?.length} deliberated brackets were supplied — `
-      + `enter one schedule, never both; see ${refused}`,
+      `IT ${year} regionale computation is ambiguous for regione ${input.regionCode}: both a scalar rate ` +
+        `(${input.regionalRate}) and ${input.regionalBrackets?.length} deliberated brackets were supplied — ` +
+        `enter one schedule, never both; see ${refused}`,
     );
   }
-  if (input.municipalSurtax?.rate != null && input.municipalSurtax.rate !== "" && hasMunicipalBrackets) {
+  if (
+    input.municipalSurtax?.rate != null &&
+    input.municipalSurtax.rate !== "" &&
+    hasMunicipalBrackets
+  ) {
     refuse(
-      `IT ${year} comunale computation is ambiguous for comune ${input.comuneCode}: both a scalar rate `
-      + `(${input.municipalSurtax.rate}) and ${input.municipalBrackets?.length} deliberated brackets were supplied — `
-      + `enter one schedule, never both; see ${refused}`,
+      `IT ${year} comunale computation is ambiguous for comune ${input.comuneCode}: both a scalar rate ` +
+        `(${input.municipalSurtax.rate}) and ${input.municipalBrackets?.length} deliberated brackets were supplied — ` +
+        `enter one schedule, never both; see ${refused}`,
     );
   }
   // Regione 04 covers Trento and Bolzano on different timetables and the
   // pack carries no comuni map to tell them apart — so "04" without the
   // Bolzano domicile attribution refuses instead of guessing, and a "true"
   // outside 04 refuses as contradictory.
-  if (input.regionCode === "04" && input.domicileBolzano !== true && input.domicileBolzano !== false) {
+  if (
+    input.regionCode === "04" &&
+    input.domicileBolzano !== true &&
+    input.domicileBolzano !== false
+  ) {
     refuse(
-      `regione 04 needs the Bolzano domicile attribution: the addizionale regionale there is set `
-      + `separately by Trento and Bolzano, and the pack attributes no province without it. Declare `
-      + `domicilio_bolzano "true" or "false" on the it_detrazioni certificate before calculating; see ${refused}`,
+      `regione 04 needs the Bolzano domicile attribution: the addizionale regionale there is set ` +
+        `separately by Trento and Bolzano, and the pack attributes no province without it. Declare ` +
+        `domicilio_bolzano "true" or "false" on the it_detrazioni certificate before calculating; see ${refused}`,
     );
   }
   if (input.domicileBolzano === true && input.regionCode !== "04") {
     refuse(
-      `domicilio_bolzano "true" contradicts regione ${input.regionCode}: only the autonomous province `
-      + `of Bolzano (regione 04) grants this credit — correct the region or the attribution; see ${refused}`,
+      `domicilio_bolzano "true" contradicts regione ${input.regionCode}: only the autonomous province ` +
+        `of Bolzano (regione 04) grants this credit — correct the region or the attribution; see ${refused}`,
     );
   }
   if (input.regionCode === "03" && !hasRegionalBrackets) {
     refuse(
-      `IT ${year} refuses a scalar addizionale regionale for Lombardia domicile: the region deliberates a `
-      + "progressive scaglioni schedule (1.23% / 1.58% / 1.72% by bracket), which no single rate can represent — "
-      + `a scalar silently misprices every Lombardia payroll; see ${refused}. Enter the deliberated brackets as `
-      + "regionalBrackets, or price the surtax outside the pack "
-      + "through a pay-run adjustment",
+      `IT ${year} refuses a scalar addizionale regionale for Lombardia domicile: the region deliberates a ` +
+        "progressive scaglioni schedule (1.23% / 1.58% / 1.72% by bracket), which no single rate can represent — " +
+        `a scalar silently misprices every Lombardia payroll; see ${refused}. Enter the deliberated brackets as ` +
+        "regionalBrackets, or price the surtax outside the pack " +
+        "through a pay-run adjustment",
     );
   }
   let addRegionale = hasRegionalBrackets
@@ -962,14 +1010,16 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     // surtax owed, never below zero.
     addRegionale = max0(addRegionale - U(bolzano.amount));
   }
-  const exemption = input.municipalSurtax?.exemption == null || input.municipalSurtax.exemption === ""
-    ? null
-    : needNonNegative(input.municipalSurtax.exemption, "municipalExemption", year);
-  const addComunale = exemption !== null && imponibile <= exemption
-    ? ZERO
-    : hasMunicipalBrackets
-      ? r2(marginalPctTax(imponibile, input.municipalBrackets ?? []))
-      : r2(mulPct(imponibile, input.municipalSurtax?.rate ?? ""));
+  const exemption =
+    input.municipalSurtax?.exemption == null || input.municipalSurtax.exemption === ""
+      ? null
+      : needNonNegative(input.municipalSurtax.exemption, "municipalExemption", year);
+  const addComunale =
+    exemption !== null && imponibile <= exemption
+      ? ZERO
+      : hasMunicipalBrackets
+        ? r2(marginalPctTax(imponibile, input.municipalBrackets ?? []))
+        : r2(mulPct(imponibile, input.municipalSurtax?.rate ?? ""));
 
   const P = BigInt(input.periodsPerYear);
   const per = (annual: bigint): string => D(r2(roundDiv(annual, P * CENT) * CENT));
@@ -1067,7 +1117,8 @@ export const IT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CONG_SOMMA_ANNUAL: "Conguaglio — somma annua verificata (L. 207/2024)",
   CONG_SOMMA_PAID: "Conguaglio — somma erogata nell'anno",
   IT_SUBST_RINNOVI: "Sostitutiva 5% aumenti rinnovo CCNL — base realizzata (L. 199/2025)",
-  IT_SUBST_TURNI: "Sostitutiva 15% indennità notturne/festive/turni — base realizzata (L. 199/2025)",
+  IT_SUBST_TURNI:
+    "Sostitutiva 15% indennità notturne/festive/turni — base realizzata (L. 199/2025)",
   IT_SUBST_PREMI: "Sostitutiva 1% premi di risultato — base realizzata (L. 208/2015)",
   CONG_SUBST_RINNOVI_ANNUAL: "Conguaglio — sostitutiva 5% rinnovi annuale ricalcolata",
   CONG_SUBST_RINNOVI_YTD: "Conguaglio — sostitutiva 5% rinnovi trattenuta nell'anno",
@@ -1094,7 +1145,8 @@ export async function itSubstituteYtd(input: {
   payDate: string;
   excludeDocumentId: string;
 }): Promise<{ rinovi: string; turni: string; premi: string }> {
-  const rows = await input.tx.execute<{ rinovi: string; turni: string; premi: string }>(sql`
+  const rows = await input.tx.execute<{ rinovi: string; turni: string; premi: string }>(
+    sql`
     select round(coalesce(sum((s.factors->>'IT_SUBST_RINNOVI')::numeric), 0), 4)::text as rinovi,
            round(coalesce(sum((s.factors->>'IT_SUBST_TURNI')::numeric), 0), 4)::text as turni,
            round(coalesce(sum((s.factors->>'IT_SUBST_PREMI')::numeric), 0), 4)::text as premi
@@ -1107,7 +1159,9 @@ export async function itSubstituteYtd(input: {
        and s.country = 'IT'
        and s.tax_year = ${input.taxYear}
        and s.pay_date <= ${input.payDate}::date
-       and s.pay_run_document_id <> ${input.excludeDocumentId}`, "objects");
+       and s.pay_run_document_id <> ${input.excludeDocumentId}`,
+    "objects",
+  );
   return rows[0] ?? { rinovi: "0", turni: "0", premi: "0" };
 }
 
@@ -1115,14 +1169,23 @@ export async function computeItStatutoryWithRates(
   ctx: PayrollStatutoryComputeContext,
   rates: ItStatutoryRates,
 ): Promise<Record<string, string>> {
-  const { taxYear, income, pensionable, nonPeriodic, periodsPerYear, pushStatutory, certificateFor, bool } = ctx;
+  const {
+    taxYear,
+    income,
+    pensionable,
+    nonPeriodic,
+    periodsPerYear,
+    pushStatutory,
+    certificateFor,
+    bool,
+  } = ctx;
   // The classified one-off share is already included in the total pensionable base.
   const pensionableOneOff = U(ctx.pensionableNonPeriodic);
   if (taxYear !== 2025 && taxYear !== 2026) {
     throw new ItPayrollRefusal(
-      `IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `
-      + "editions. This year is not yet supported by the IT pack; contact support before "
-      + `paying into ${taxYear}.`,
+      `IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed ` +
+        "editions. This year is not yet supported by the IT pack; contact support before " +
+        `paying into ${taxYear}.`,
     );
   }
   const cert = certificateFor("it_detrazioni");
@@ -1149,28 +1212,30 @@ export async function computeItStatutoryWithRates(
   const renewalIncrease = substAmount("importo_aumenti_rinnovo");
   const shiftAllowance = substAmount("importo_indennita_turni");
   const premiRisultato = substAmount("importo_premi_risultato");
-  const hasSubst = U(renewalIncrease) > ZERO
-    || U(shiftAllowance) > ZERO
-    || U(premiRisultato) > ZERO;
+  const hasSubst =
+    U(renewalIncrease) > ZERO || U(shiftAllowance) > ZERO || U(premiRisultato) > ZERO;
   let substYtd = { rinovi: "0", turni: "0", premi: "0" };
   if (hasSubst) {
-    const carry = await ctx.tx.execute(sql`
+    const carry = await ctx.tx.execute(
+      sql`
       select 1 from payroll_opening_balances
        where org_id = ${ctx.orgId}
          and employee_party_id = ${ctx.employeePartyId}
-         and tax_year = ${taxYear} limit 1`, "objects");
+         and tax_year = ${taxYear} limit 1`,
+      "objects",
+    );
     if (carry.length > 0) {
       throw new ItPayrollRefusal(
-        `IT ${taxYear} refuses substitute-regime pay with a pre-adoption carry-in: prior-provider `
-        + "substitute bases are unknown, so the 1.500/5.000 annual caps cannot bind — settle the "
-        + "substitute amounts externally until carry-in support lands.",
+        `IT ${taxYear} refuses substitute-regime pay with a pre-adoption carry-in: prior-provider ` +
+          "substitute bases are unknown, so the 1.500/5.000 annual caps cannot bind — settle the " +
+          "substitute amounts externally until carry-in support lands.",
       );
     }
     const payDate = ctx.run.pay_date;
     if (payDate == null || payDate === "") {
       throw new ItPayrollRefusal(
-        `IT ${taxYear} substitute-regime pay needs the run versement date (run pay_date) to bound the `
-        + "annual caps' year-to-date bases.",
+        `IT ${taxYear} substitute-regime pay needs the run versement date (run pay_date) to bound the ` +
+          "annual caps' year-to-date bases.",
       );
     }
     substYtd = await itSubstituteYtd({
@@ -1189,17 +1254,18 @@ export async function computeItStatutoryWithRates(
   // selected percentage to `lavoroNet` inside calculateItWithTables.
   // https://www.gazzettaufficiale.it/eli/id/2024/12/31/24G00229/sg
   const result = calculate({
-    hasFamilyCharges: bool(answers["coniuge_a_carico"] ?? null)
-      || countOf("figli_a_carico") > 0
-      || countOf("altri_familiari_a_carico") > 0,
+    hasFamilyCharges:
+      bool(answers["coniuge_a_carico"] ?? null) ||
+      countOf("figli_a_carico") > 0 ||
+      countOf("altri_familiari_a_carico") > 0,
     annualGrossEmployment: D(U(income) * BigInt(periodsPerYear)),
     sommaBandBase: D(U(income) * BigInt(periodsPerYear) + U(nonPeriodic)),
     // Annualise the recurring leg only; a non-taxable one-off (inside the
     // leg but outside nonPeriodic) still occurs once, so its excess over the
     // taxable one-offs rides as a flat annual add rather than per period.
     annualPensionable: D(
-      max0(U(pensionable) - pensionableOneOff) * BigInt(periodsPerYear)
-        + max0(pensionableOneOff - U(nonPeriodic)),
+      max0(U(pensionable) - pensionableOneOff) * BigInt(periodsPerYear) +
+        max0(pensionableOneOff - U(nonPeriodic)),
     ),
     nonPeriodicAnnual: nonPeriodic,
     presumedTotalIncome: presumed && presumed !== "0" ? presumed : null,
@@ -1207,22 +1273,25 @@ export async function computeItStatutoryWithRates(
     regionCode: ctx.region,
     // Tri-state like tempo_determinato below: answered "true"/"false" rides
     // through, anything else is unattributed (regione 04 then refuses).
-    domicileBolzano: answers["domicilio_bolzano"] === "true"
-      ? true
-      : answers["domicilio_bolzano"] === "false"
-        ? false
-        : null,
+    domicileBolzano:
+      answers["domicilio_bolzano"] === "true"
+        ? true
+        : answers["domicilio_bolzano"] === "false"
+          ? false
+          : null,
     comuneCode: (answers["domicilio_comune"] ?? null) as string | null,
     regionalRate: rates.regionalRate,
-    municipalSurtax: rates.municipalRate == null
-      ? null
-      : { rate: rates.municipalRate, exemption: rates.municipalExemption },
+    municipalSurtax:
+      rates.municipalRate == null
+        ? null
+        : { rate: rates.municipalRate, exemption: rates.municipalExemption },
     hasDetrazioniDeclaration: cert !== null,
-    isFixedTerm: answers["tempo_determinato"] === "true"
-      ? true
-      : answers["tempo_determinato"] === "false"
-        ? false
-        : null,
+    isFixedTerm:
+      answers["tempo_determinato"] === "true"
+        ? true
+        : answers["tempo_determinato"] === "false"
+          ? false
+          : null,
     renewalIncrease: substAmount("importo_aumenti_rinnovo"),
     shiftAllowance: substAmount("importo_indennita_turni"),
     premiRisultato: substAmount("importo_premi_risultato"),
@@ -1230,14 +1299,16 @@ export async function computeItStatutoryWithRates(
     shiftAllowanceYtd: substYtd.turni,
     premiRisultatoYtd: substYtd.premi,
     priorYearEmploymentIncome: substIncome,
-    premiRisultatoEligible: answers["premi_risultato_ammissibili"] === "true"
-      ? true
-      : answers["premi_risultato_ammissibili"] === "false"
-        ? false
-        : null,
-    isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
-      ? undefined
-      : bool(answers["anzianita_post_1995"]),
+    premiRisultatoEligible:
+      answers["premi_risultato_ammissibili"] === "true"
+        ? true
+        : answers["premi_risultato_ammissibili"] === "false"
+          ? false
+          : null,
+    isPost1995:
+      answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
+        ? undefined
+        : bool(answers["anzianita_post_1995"]),
     // Tourism speciale claim (IT-TOURISM-2026-IMPL): the worker's request
     // with autocertified facts rides it_turismo_speciale; absent, the
     // engine prices ordinary (no claim, no credit, no refusal).
@@ -1249,8 +1320,14 @@ export async function computeItStatutoryWithRates(
         amount: t["importo_qualificante"] ?? "",
         sector: null,
         workDate: t["data_prestazione"] ?? null,
-        eligibleSector: t["settore_ammesso"] === "true" ? true : t["settore_ammesso"] === "false" ? false : undefined,
-        workerRequested: t["richiesta"] === "true" ? true : t["richiesta"] === "false" ? false : undefined,
+        eligibleSector:
+          t["settore_ammesso"] === "true"
+            ? true
+            : t["settore_ammesso"] === "false"
+              ? false
+              : undefined,
+        workerRequested:
+          t["richiesta"] === "true" ? true : t["richiesta"] === "false" ? false : undefined,
         priorYearIncome: t["reddito_2025"] ?? null,
       };
     })(),
@@ -1266,18 +1343,78 @@ export async function computeItStatutoryWithRates(
   // domicilio comune refuse by name there, before this point.
   // https://www.inps.it/it/it/dettaglio-approfondimento.schede-informative.53546.pensioni-addizionali-irpef-regionali-e-comunali.html
   pushStatutory("income_tax", "deduction", "IRPEF", result.period.irpef, 110);
-  pushStatutory("regional_surtax", "deduction", "Addizionale regionale all'IRPEF", result.period.addizionaleRegionale, 115);
-  pushStatutory("municipal_surtax", "deduction", "Addizionale comunale all'IRPEF", result.period.addizionaleComunale, 120);
-  pushStatutory("inps", "deduction", "INPS — contributi IVS a carico del lavoratore", result.period.inpsWorker, 130);
-  pushStatutory("sostitutiva_rinnovi", "deduction", "Sostitutiva 5% aumenti rinnovo CCNL", result.period.sostitutivaRinnovi, 111);
-  pushStatutory("sostitutiva_turni", "deduction", "Sostitutiva 15% indennità notturne/festive/turni", result.period.sostitutivaTurni, 112);
-  pushStatutory("sostitutiva_premi", "deduction", "Sostitutiva 1% premi di risultato", result.period.sostitutivaPremi, 113);
-  pushStatutory("ti_payout", "credit", "Trattamento integrativo", result.period.trattamentoIntegrativo, 140);
-  pushStatutory("somma_payout", "credit", "Somma di cui al comma 4 (L. 207/2024)", result.period.somma, 145);
+  pushStatutory(
+    "regional_surtax",
+    "deduction",
+    "Addizionale regionale all'IRPEF",
+    result.period.addizionaleRegionale,
+    115,
+  );
+  pushStatutory(
+    "municipal_surtax",
+    "deduction",
+    "Addizionale comunale all'IRPEF",
+    result.period.addizionaleComunale,
+    120,
+  );
+  pushStatutory(
+    "inps",
+    "deduction",
+    "INPS — contributi IVS a carico del lavoratore",
+    result.period.inpsWorker,
+    130,
+  );
+  pushStatutory(
+    "sostitutiva_rinnovi",
+    "deduction",
+    "Sostitutiva 5% aumenti rinnovo CCNL",
+    result.period.sostitutivaRinnovi,
+    111,
+  );
+  pushStatutory(
+    "sostitutiva_turni",
+    "deduction",
+    "Sostitutiva 15% indennità notturne/festive/turni",
+    result.period.sostitutivaTurni,
+    112,
+  );
+  pushStatutory(
+    "sostitutiva_premi",
+    "deduction",
+    "Sostitutiva 1% premi di risultato",
+    result.period.sostitutivaPremi,
+    113,
+  );
+  pushStatutory(
+    "ti_payout",
+    "credit",
+    "Trattamento integrativo",
+    result.period.trattamentoIntegrativo,
+    140,
+  );
+  pushStatutory(
+    "somma_payout",
+    "credit",
+    "Somma di cui al comma 4 (L. 207/2024)",
+    result.period.somma,
+    145,
+  );
   if (result.trattamentoSpeciale !== "0.0000") {
-    pushStatutory("speciale_payout", "credit", "Trattamento integrativo speciale (turismo)", result.period.trattamentoSpeciale, 147);
+    pushStatutory(
+      "speciale_payout",
+      "credit",
+      "Trattamento integrativo speciale (turismo)",
+      result.period.trattamentoSpeciale,
+      147,
+    );
   }
-  pushStatutory("inps", "employer_contribution", "INPS — contributi IVS a carico del datore", result.period.inpsEmployer, 230);
+  pushStatutory(
+    "inps",
+    "employer_contribution",
+    "INPS — contributi IVS a carico del datore",
+    result.period.inpsEmployer,
+    230,
+  );
   return {
     I: income,
     PI: pensionable,
@@ -1313,7 +1450,12 @@ export async function computeItStatutory(
       municipalExemption: null,
     });
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, IT_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
+  const resolution = await resolveStatutoryRates(
+    ctx.orgId,
+    IT_PACK_RATES,
+    ctx.taxYear,
+    ctx.run.pay_date,
+  );
   const region = ctx.region;
   const cert = ctx.certificateFor("it_detrazioni");
   const comune = cert?.answers["domicilio_comune"] ?? null;
@@ -1329,8 +1471,8 @@ export async function computeItStatutory(
   const payDate = ctx.run.pay_date;
   if (payDate == null || payDate === "") {
     throw new ItPayrollRefusal(
-      `IT ${ctx.taxYear} saldo installments accrue against the run versement date (run pay_date), `
-      + "which the run did not resolve — engine defect",
+      `IT ${ctx.taxYear} saldo installments accrue against the run versement date (run pay_date), ` +
+        "which the run did not resolve — engine defect",
     );
   }
   return {

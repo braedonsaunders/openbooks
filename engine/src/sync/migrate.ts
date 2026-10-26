@@ -1,4 +1,9 @@
-import { ensureTimesheetWeeks, timesheetWeekKey, timesheetWeekStart, type TimesheetWeekKey } from "../projects/timesheet-weeks.ts";
+import {
+  ensureTimesheetWeeks,
+  timesheetWeekKey,
+  timesheetWeekStart,
+  type TimesheetWeekKey,
+} from "../projects/timesheet-weeks.ts";
 import { stableMappingSnapshot } from "./operational-entity-mappings.ts";
 import { syncSourcePartyPhotos, type PartyPhotoSummary } from "./party-photos.ts";
 import { sql } from "drizzle-orm";
@@ -10,11 +15,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { assertProjectHeaderChangeAllowed } from "../projects/header-controls.ts";
 import { paymentTermsDueRuleRefusal } from "../ledger/payment-terms-due-date.ts";
-import type {
-  EntityStream,
-  MigrationSource,
-  SourceEntity,
-} from "./source.ts";
+import type { EntityStream, MigrationSource, SourceEntity } from "./source.ts";
 import {
   applySourcePartyMerge,
   findPartyReferences,
@@ -52,8 +53,19 @@ export type EntityLoadStats = Record<string, ResourceLoadStats>;
 
 /** Resources this loader knows how to land. */
 const KNOWN = new Set([
-  "accounting_periods", "subsidiaries", "accounts", "departments", "payment_terms", "time_types", "tax_codes", "items",
-  "parties", "projects", "addresses", "contacts", "time_entries",
+  "accounting_periods",
+  "subsidiaries",
+  "accounts",
+  "departments",
+  "payment_terms",
+  "time_types",
+  "tax_codes",
+  "items",
+  "parties",
+  "projects",
+  "addresses",
+  "contacts",
+  "time_entries",
 ]);
 
 type RefMaps = {
@@ -84,7 +96,7 @@ interface Ctx {
 }
 
 const ref = (m: Map<string, string>, v: unknown): string | null =>
-  v == null || v === "" ? null : m.get(String(v)) ?? null;
+  v == null || v === "" ? null : (m.get(String(v)) ?? null);
 const str = (v: unknown): string | null => {
   const t = v == null ? "" : String(v);
   return t.trim() === "" ? null : t;
@@ -97,20 +109,18 @@ const migrationErrorMessage = (error: unknown): string => {
   const head =
     error instanceof Error && error.message
       ? error.message.replace(/\s+/g, " ").trim()
-      : typeof error === "object" && error !== null && "message" in error &&
+      : typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
           typeof (error as { message?: unknown }).message === "string"
-        ? ((error as { message: string }).message.replace(/\s+/g, " ").trim() ||
-          "write failed")
+        ? (error as { message: string }).message.replace(/\s+/g, " ").trim() || "write failed"
         : "write failed";
   let cause: unknown =
-    error instanceof Error
-      ? (error as Error & { cause?: unknown }).cause
-      : undefined;
+    error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
   for (let depth = 0; depth < 3 && cause instanceof Error; depth++) {
     const detail = cause.message.replace(/\s+/g, " ").trim();
     const code = (cause as { code?: unknown }).code;
-    const suffix =
-      typeof code === "string" && code ? `${detail} (SQLSTATE ${code})` : detail;
+    const suffix = typeof code === "string" && code ? `${detail} (SQLSTATE ${code})` : detail;
     if (suffix && suffix !== head) return `${head} — caused by: ${suffix}`.slice(0, 1000);
     cause = (cause as Error & { cause?: unknown }).cause;
   }
@@ -163,10 +173,13 @@ function persistPaymentTermDiscountPercent(value: unknown): string {
 /** A source day count: absent is null, anything but a whole number of days is refused. */
 function sourceTermDays(value: unknown, field: string, sourceRef: string): number | null {
   if (value === undefined || value === null || value === "") return null;
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  const text =
+    typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
   const exact = /^\d+(?:\.0+)?$/.test(text) ? Number(text) : Number.NaN;
   if (!Number.isSafeInteger(exact)) {
-    throw new Error(`payment terms ${sourceRef}: ${field} must be a whole number of days; the source states ${JSON.stringify(value)}`);
+    throw new Error(
+      `payment terms ${sourceRef}: ${field} must be a whole number of days; the source states ${JSON.stringify(value)}`,
+    );
   }
   return exact;
 }
@@ -179,13 +192,21 @@ function sourceTermDays(value: unknown, field: string, sourceRef: string): numbe
  * rather than imported with a different discount window.
  */
 function sourcePaymentTerms(f: Record<string, unknown>, sourceRef: string) {
-  const discountPercent = f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent);
+  const discountPercent =
+    f.discountPercent == null || f.discountPercent === ""
+      ? null
+      : persistPaymentTermDiscountPercent(f.discountPercent);
   const netDays = sourceTermDays(f.netDays, "net days", sourceRef);
-  if (netDays === null) throw new Error(`payment terms ${sourceRef} state no net days; the source must supply when its documents fall due`);
+  if (netDays === null)
+    throw new Error(
+      `payment terms ${sourceRef} state no net days; the source must supply when its documents fall due`,
+    );
   const dueDayOfMonth = sourceTermDays(f.dueDayOfMonth, "due day of month", sourceRef);
   const discountDays = sourceTermDays(f.discountDays, "discount days", sourceRef);
   if (sourceTermDays(f.discountDayOfMonth, "discount day of month", sourceRef) !== null) {
-    throw new Error(`payment terms ${sourceRef} grant an early-payment discount that expires on a day of the month, which OpenBooks payment terms cannot represent; give the source terms a discount counted in days, or remove the discount, then sync again`);
+    throw new Error(
+      `payment terms ${sourceRef} grant an early-payment discount that expires on a day of the month, which OpenBooks payment terms cannot represent; give the source terms a discount counted in days, or remove the discount, then sync again`,
+    );
   }
   const refusal = paymentTermsDueRuleRefusal({ netDays, dueDayOfMonth });
   if (refusal) throw new Error(`payment terms ${sourceRef}: ${refusal}`);
@@ -282,10 +303,13 @@ async function reconcileSourceParties(
   }
   if (signals.size > 0) {
     const involved = [...new Set([...signals.keys(), ...signals.values()])];
-    const stored = await db.execute<{ id: string; ref: string; survivor: string | null }>(sql`
+    const stored = await db.execute<{ id: string; ref: string; survivor: string | null }>(
+      sql`
       select id, custom->>${refKey} as ref, custom->'merged_into'->>'survivor' as survivor
         from parties
-       where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(involved)}::text[])`, "objects");
+       where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(involved)}::text[])`,
+      "objects",
+    );
     const idByRef = new Map(stored.map((r) => [r.ref, r.id]));
     const markerById = new Map(stored.map((r) => [r.id, r.survivor]));
     const alreadyFailed = new Set(s.errors.map((e) => e.sourceRef));
@@ -365,7 +389,11 @@ async function reconcileSourceParties(
           outcome?.merges.push({ absorbedRef, survivorRef });
         }
       } catch (e) {
-        fail(e instanceof Error && e.message ? e.message : "party merge failed; held for controller review");
+        fail(
+          e instanceof Error && e.message
+            ? e.message
+            : "party merge failed; held for controller review",
+        );
       }
     }
   }
@@ -374,16 +402,27 @@ async function reconcileSourceParties(
     const pulled = new Set(records.map((r) => r.sourceRef));
     const missing = [...ctx.maps.parties.keys()].filter((k) => !pulled.has(k));
     if (missing.length > 0) {
-      const rows = await db.execute<{ id: string; display_name: string; ref: string; custom: Record<string, unknown> }>(sql`
+      const rows = await db.execute<{
+        id: string;
+        display_name: string;
+        ref: string;
+        custom: Record<string, unknown>;
+      }>(
+        sql`
         select id, display_name, custom->>${refKey} as ref, custom
           from parties
-         where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(missing)}::text[])`, "objects");
+         where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(missing)}::text[])`,
+        "objects",
+      );
       for (const row of rows) {
         if (storedMergeSurvivor(row.custom)) continue;
         const refs = await findPartyReferences(db, orgId, row.id);
         if (refs.length === 0) continue;
         const total = refs.reduce((n, r) => n + r.rows, 0);
-        const tables = refs.slice(0, 3).map((r) => r.table).join(", ");
+        const tables = refs
+          .slice(0, 3)
+          .map((r) => r.table)
+          .join(", ");
         const message =
           `source party "${row.display_name}" (${row.ref}) is no longer reported by the source` +
           ` but is still referenced by ${total} record${total === 1 ? "" : "s"} (${tables});` +
@@ -398,14 +437,15 @@ async function reconcileSourceParties(
 
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
-  const rows = await db.execute<{ id: string; ns: string }>(sql`
+  const rows = await db.execute<{ id: string; ns: string }>(
+    sql`
     select id, custom->>${refKey} ns from ${sql.raw(table)}
-     where org_id = ${orgId} and custom->>${refKey} is not null`, "objects");
+     where org_id = ${orgId} and custom->>${refKey} is not null`,
+    "objects",
+  );
   for (const r of rows) {
     if (m.has(r.ns)) {
-      throw new Error(
-        `${table} contains multiple rows for connector identity ${refKey}:${r.ns}`,
-      );
+      throw new Error(`${table} contains multiple rows for connector identity ${refKey}:${r.ns}`);
     }
     m.set(r.ns, r.id);
   }
@@ -419,20 +459,35 @@ async function loadMap(table: string, orgId: string, refKey: string): Promise<Ma
  * parentless row by ref.
  */
 async function ensureRootSubsidiary(orgId: string, fallbackCurrency: string): Promise<void> {
-  const existing = await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects");
+  const existing = await db.execute<{ id: string }>(
+    sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`,
+    "objects",
+  );
   if (existing[0]) return;
-  const org = await db.execute<{ name: string; legal_name: string | null; base_currency: string | null; country: string | null }>(sql`
-    select name, legal_name, base_currency, country from orgs where id = ${orgId}`, "objects");
+  const org = await db.execute<{
+    name: string;
+    legal_name: string | null;
+    base_currency: string | null;
+    country: string | null;
+  }>(
+    sql`
+    select name, legal_name, base_currency, country from orgs where id = ${orgId}`,
+    "objects",
+  );
   const o = org[0];
   if (!o) throw new Error(`organization ${orgId} does not exist`);
   const name = String(o.legal_name || o.name).trim();
   if (!name) throw new Error(`organization ${orgId} has no configured name`);
-  const currency = String(o.base_currency || fallbackCurrency).trim().toUpperCase();
+  const currency = String(o.base_currency || fallbackCurrency)
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) {
     throw new Error(`organization ${orgId} has no valid base currency`);
   }
-  const country = String(o.country || "").trim().toUpperCase();
+  const country = String(o.country || "")
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z]{2}$/.test(country)) {
     throw new Error(`organization ${orgId} has no valid country`);
   }
@@ -460,7 +515,11 @@ export async function loadEntities(
     throw new Error("connector name must be a stable source namespace");
   }
   const ctx: Ctx = {
-    orgId, refKey, sourceName: source.name, currency: source.baseCurrency, incremental: since != null || scope !== undefined,
+    orgId,
+    refKey,
+    sourceName: source.name,
+    currency: source.baseCurrency,
+    incremental: since != null || scope !== undefined,
     usedShortCodes: new Set(),
     audit,
     maps: {
@@ -483,19 +542,24 @@ export async function loadEntities(
   await ensureRootSubsidiary(orgId, source.baseCurrency);
 
   onProgress?.("Pulling master data from the source…", 0, 1);
-  const streams =
-    providedStreams ??
-    [
-      {
-        resource: "accounting_periods",
-        records: await source.accountingPeriods(),
-      },
-      ...(await source.entities!(since)),
-    ];
+  const streams = providedStreams ?? [
+    {
+      resource: "accounting_periods",
+      records: await source.accountingPeriods(),
+    },
+    ...(await source.entities!(since)),
+  ];
   const stats: EntityLoadStats = {};
-  if (scope && (streams.some(stream => stream.resource !== 'parties')
-    || streams.flatMap(stream => stream.records).some(record => !scope.employeeRefs.includes(record.sourceRef) || !record.fields.employeeRole))) {
-    throw new Error('A scoped employee refresh may contain only requested source employee records');
+  if (
+    scope &&
+    (streams.some((stream) => stream.resource !== "parties") ||
+      streams
+        .flatMap((stream) => stream.records)
+        .some(
+          (record) => !scope.employeeRefs.includes(record.sourceRef) || !record.fields.employeeRole,
+        ))
+  ) {
+    throw new Error("A scoped employee refresh may contain only requested source employee records");
   }
 
   let streamIndex = 0;
@@ -551,17 +615,31 @@ export async function loadEntities(
     // time_entries is high-volume — bulk path (batched inserts, skip unchanged
     // on a full load, update on an incremental pull).
     if (stream.resource === "time_entries") {
-      if (stream.records.some(record => record.mappingApplied)) {
+      if (stream.records.some((record) => record.mappingApplied)) {
         await withOrg(orgId, async () => {
-          if (!ctx.audit?.connectionId) throw new Error('Connection mappings require the native sync-run audit context');
-          const mapped = stream.records.filter(record => record.mappingApplied);
-          const before = new Map((await db.execute<{ ref: string; snapshot: Record<string, unknown> }>(sql`select custom->>${ctx.refKey} as ref,to_jsonb(t) as snapshot from time_entries t where org_id=${orgId} and custom->>${ctx.refKey}=any(${textArrayLiteral(mapped.map(record => record.sourceRef))}::text[]) for update`, "objects")).map(row => [row.ref, row.snapshot]));
+          if (!ctx.audit?.connectionId)
+            throw new Error("Connection mappings require the native sync-run audit context");
+          const mapped = stream.records.filter((record) => record.mappingApplied);
+          const before = new Map(
+            (
+              await db.execute<{ ref: string; snapshot: Record<string, unknown> }>(
+                sql`select custom->>${ctx.refKey} as ref,to_jsonb(t) as snapshot from time_entries t where org_id=${orgId} and custom->>${ctx.refKey}=any(${textArrayLiteral(mapped.map((record) => record.sourceRef))}::text[]) for update`,
+                "objects",
+              )
+            ).map((row) => [row.ref, row.snapshot]),
+          );
           await loadTimeEntries(stream.records, ctx, s);
           for (const rec of mapped) {
-            if (s.errors.some(error => error.sourceRef === rec.sourceRef)) continue;
-            const id = await findByRef('time_entries', orgId, ctx.refKey, rec.sourceRef);
-            if (!id) throw new Error('Mapped time entry was not saved');
-            await completeMappedRecord('time_entries', ctx, rec, id, before.get(rec.sourceRef) ?? null);
+            if (s.errors.some((error) => error.sourceRef === rec.sourceRef)) continue;
+            const id = await findByRef("time_entries", orgId, ctx.refKey, rec.sourceRef);
+            if (!id) throw new Error("Mapped time entry was not saved");
+            await completeMappedRecord(
+              "time_entries",
+              ctx,
+              rec,
+              id,
+              before.get(rec.sourceRef) ?? null,
+            );
           }
         });
       } else await loadTimeEntries(stream.records, ctx, s);
@@ -575,9 +653,8 @@ export async function loadEntities(
         const id = await upsert(stream.resource, ctx, rec, s);
         if (id) {
           idByRef.set(rec.sourceRef, id);
-          const map = stream.resource in ctx.maps
-            ? ctx.maps[stream.resource as keyof RefMaps]
-            : undefined;
+          const map =
+            stream.resource in ctx.maps ? ctx.maps[stream.resource as keyof RefMaps] : undefined;
           if (map) map.set(rec.sourceRef, id);
         }
       } catch (e) {
@@ -594,7 +671,10 @@ export async function loadEntities(
         if (!rec.parentRef) continue;
         const child = idByRef.get(rec.sourceRef);
         const parent = idByRef.get(rec.parentRef);
-        if (child && parent) await db.execute(sql`update accounts set parent_id = ${parent} where id = ${child} and org_id = ${orgId}`);
+        if (child && parent)
+          await db.execute(
+            sql`update accounts set parent_id = ${parent} where id = ${child} and org_id = ${orgId}`,
+          );
       }
     }
     if (stream.resource === "parties") {
@@ -603,16 +683,29 @@ export async function loadEntities(
     stats[stream.resource] = s;
   }
   if (source.partyPhotos) {
-    if (!audit?.connectionId) throw new Error("Employee photo synchronization needs the native connector identity");
+    if (!audit?.connectionId)
+      throw new Error("Employee photo synchronization needs the native connector identity");
     const photos = await syncSourcePartyPhotos(source, {
-      orgId, connectionId: audit.connectionId, actorId: audit.actorId, runId: audit.runId, execute: true,
+      orgId,
+      connectionId: audit.connectionId,
+      actorId: audit.actorId,
+      runId: audit.runId,
+      execute: true,
       employeeRefs: scope?.employeeRefs,
-      onProgress: (current, total) => onProgress?.("Synchronizing employee photos…", current, total),
+      onProgress: (current, total) =>
+        onProgress?.("Synchronizing employee photos…", current, total),
     });
     stats.employee_photos = {
-      created: photos.attached, updated: 0, skipped: 0, failed: photos.errors + photos.unmatched,
-      errors: photos.details.filter(row => row.status === 'error' || row.status === 'unmatched')
-        .map(row => ({ sourceRef: row.sourceRef, message: row.reason ?? "Employee photo failed" })),
+      created: photos.attached,
+      updated: 0,
+      skipped: 0,
+      failed: photos.errors + photos.unmatched,
+      errors: photos.details
+        .filter((row) => row.status === "error" || row.status === "unmatched")
+        .map((row) => ({
+          sourceRef: row.sourceRef,
+          message: row.reason ?? "Employee photo failed",
+        })),
       photos,
     };
   }
@@ -627,9 +720,7 @@ export async function syncSourceTransactionReferenceEntities(
 ): Promise<EntityLoadStats> {
   if (!source.transactionReferenceEntities) return {};
   const streams = await source.transactionReferenceEntities();
-  return withOrg(orgId, () =>
-    loadEntities(source, orgId, null, undefined, audit, streams),
-  );
+  return withOrg(orgId, () => loadEntities(source, orgId, null, undefined, audit, streams));
 }
 
 /**
@@ -646,11 +737,14 @@ async function loadAccountingPeriods(
   s: ResourceLoadStats,
 ): Promise<void> {
   const defaults = await ensureCloseDefaults(orgId);
-  const books = await db.execute<{ id: string }>(sql`
+  const books = await db.execute<{ id: string }>(
+    sql`
     select id from accounting_books
      where org_id = ${orgId} and is_active
      order by id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (books.length === 0) {
     s.skipped += records.length;
     return;
@@ -664,8 +758,11 @@ async function loadAccountingPeriods(
     const startsOn = str(f.startsOn);
     const endsOn = str(f.endsOn);
     if (
-      !name || !startsOn || !endsOn ||
-      !Number.isInteger(fiscalYear) || !Number.isInteger(periodNumber) ||
+      !name ||
+      !startsOn ||
+      !endsOn ||
+      !Number.isInteger(fiscalYear) ||
+      !Number.isInteger(periodNumber) ||
       periodNumber < 1
     ) {
       s.skipped++;
@@ -680,14 +777,17 @@ async function loadAccountingPeriods(
     // boundary while the mirror changes it. Books iterate by id, matching
     // calendar generation's lock order and preventing cross-writer deadlocks.
     await db.transaction(async (tx) => {
-      const existing = await tx.execute<{ id: string }>(sql`
+      const existing = await tx.execute<{ id: string }>(
+        sql`
         select id from accounting_periods
          where org_id = ${orgId}
            and fiscal_calendar_id = ${defaults.calendarId}
            and fiscal_year = ${fiscalYear}
            and period_number = ${periodNumber}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const existingPeriodId = existing[0]?.id;
       if (existingPeriodId) {
         // Existing period definitions can change the date window a tax filing
@@ -697,16 +797,22 @@ async function loadAccountingPeriods(
         for (const book of books) {
           await periodScopeAdvisoryLock(tx, orgId, existingPeriodId, book.id);
         }
-        const lockedPeriod = await tx.execute<{ id: string }>(sql`
+        const lockedPeriod = await tx.execute<{ id: string }>(
+          sql`
           select id from accounting_periods
            where org_id = ${orgId} and id = ${existingPeriodId}
            for update
-        `, "objects");
+        `,
+          "objects",
+        );
         if (!lockedPeriod[0]) {
-          throw new Error(`accounting period ${existingPeriodId} disappeared while waiting for its scope fence`);
+          throw new Error(
+            `accounting period ${existingPeriodId} disappeared while waiting for its scope fence`,
+          );
         }
       }
-      const period = await tx.execute<{ id: string }>(sql`
+      const period = await tx.execute<{ id: string }>(
+        sql`
         insert into accounting_periods
           (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
            starts_on, ends_on, is_adjustment, custom)
@@ -720,7 +826,9 @@ async function loadAccountingPeriods(
           updated_at = now()
         where accounting_periods.org_id = ${orgId}
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       const periodId = period[0]?.id;
       if (!periodId) {
         s.skipped++;
@@ -730,20 +838,27 @@ async function loadAccountingPeriods(
       else s.created++;
 
       const fullyClosed = f.closed === true || f.allLocked === true;
-      const moduleStates = f.moduleStates && typeof f.moduleStates === "object" && !Array.isArray(f.moduleStates)
-        ? f.moduleStates as Record<string, unknown>
-        : {};
+      const moduleStates =
+        f.moduleStates && typeof f.moduleStates === "object" && !Array.isArray(f.moduleStates)
+          ? (f.moduleStates as Record<string, unknown>)
+          : {};
       const closedAt = str(f.closedAt);
       for (const book of books) {
         if (!existingPeriodId) await periodScopeAdvisoryLock(tx, orgId, periodId, book.id);
         for (const module of CLOSE_MODULES) {
-          const closed = fullyClosed ||
+          const closed =
+            fullyClosed ||
             (module === "ar" && f.arLocked === true) ||
             (module === "ap" && f.apLocked === true);
           const explicitState = moduleStates[module];
-          const state = explicitState === "closed" || explicitState === "soft_closed" || explicitState === "open"
-            ? explicitState
-            : closed ? "closed" : "open";
+          const state =
+            explicitState === "closed" ||
+            explicitState === "soft_closed" ||
+            explicitState === "open"
+              ? explicitState
+              : closed
+                ? "closed"
+                : "open";
           await tx.execute(sql`
             insert into period_locks
               (org_id, period_id, book_id, module, state, locked_at, reason)
@@ -785,15 +900,16 @@ export async function syncSourceAccountingPeriods(
   // unit. Commit them atomically so a failed refresh cannot leave only part of
   // the source calendar mapped; the single commit also avoids one synchronous
   // replication round trip per lock row on institutional deployments.
-  await withOrg(orgId, () =>
-    loadAccountingPeriods(records, orgId, source.refKey, stats),
-  );
+  await withOrg(orgId, () => loadAccountingPeriods(records, orgId, source.refKey, stats));
   return stats;
 }
 
 async function findByRef(table: string, orgId: string, refKey: string, sourceRef: string) {
-  const existing = await db.execute<{ id: string }>(sql`
-    select id from ${sql.raw(table)} where org_id = ${orgId} and custom->>${refKey} = ${sourceRef} limit 2`, "objects");
+  const existing = await db.execute<{ id: string }>(
+    sql`
+    select id from ${sql.raw(table)} where org_id = ${orgId} and custom->>${refKey} = ${sourceRef} limit 2`,
+    "objects",
+  );
   if (existing.length > 1) {
     throw new Error(
       `${table} contains multiple rows for connector identity ${refKey}:${sourceRef}`,
@@ -811,7 +927,11 @@ async function findProjectByRef(orgId: string, refKey: string, sourceRef: string
   return findByRef("projects", orgId, refKey, sourceRef);
 }
 
-async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLoadStats): Promise<void> {
+async function loadSubsidiaries(
+  records: SourceEntity[],
+  ctx: Ctx,
+  s: ResourceLoadStats,
+): Promise<void> {
   const pending = [...records];
   while (pending.length > 0) {
     let progressed = false;
@@ -838,53 +958,113 @@ async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLo
   }
 }
 
-async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: ResourceLoadStats): Promise<string | null> {
+async function upsert(
+  resource: string,
+  ctx: Ctx,
+  rec: SourceEntity,
+  s: ResourceLoadStats,
+): Promise<string | null> {
   if (!rec.mappingApplied) return upsertBase(resource, ctx, rec, s);
-  if (!ctx.audit?.connectionId) throw new Error('Connection mappings require the native sync-run audit context');
-  const priorStats = { created: s.created, updated: s.updated, skipped: s.skipped, failed: s.failed, errors: s.errors.length };
+  if (!ctx.audit?.connectionId)
+    throw new Error("Connection mappings require the native sync-run audit context");
+  const priorStats = {
+    created: s.created,
+    updated: s.updated,
+    skipped: s.skipped,
+    failed: s.failed,
+    errors: s.errors.length,
+  };
   return withOrg(ctx.orgId, async () => {
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${ctx.orgId}:${ctx.refKey}:${resource}:${rec.sourceRef}`},0))`);
-    const adoption = resource === 'payment_terms' ? sql`or name=${String(rec.fields.name ?? `Term ${rec.sourceRef}`)}`
-      : resource === 'tax_codes' ? sql`or code=${String(rec.fields.code ?? rec.sourceRef)}`
-      : resource === 'subsidiaries' && !rec.parentRef ? sql`or (parent_id is null and not exists(select 1 from subsidiaries where org_id=${ctx.orgId} and custom->>${ctx.refKey}=${rec.sourceRef}))` : sql``;
-    const before = await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(resource)} t where org_id=${ctx.orgId} and (custom->>${ctx.refKey}=${rec.sourceRef} ${adoption}) for update`, "objects");
-    if (before.length > 1) throw new Error('Entity mapping identity is ambiguous');
-    const rolesBefore = resource === 'parties' && before[0]?.snapshot.id ? await mappedPartyRoles(ctx.orgId, String(before[0].snapshot.id)) : undefined;
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`${ctx.orgId}:${ctx.refKey}:${resource}:${rec.sourceRef}`},0))`,
+    );
+    const adoption =
+      resource === "payment_terms"
+        ? sql`or name=${String(rec.fields.name ?? `Term ${rec.sourceRef}`)}`
+        : resource === "tax_codes"
+          ? sql`or code=${String(rec.fields.code ?? rec.sourceRef)}`
+          : resource === "subsidiaries" && !rec.parentRef
+            ? sql`or (parent_id is null and not exists(select 1 from subsidiaries where org_id=${ctx.orgId} and custom->>${ctx.refKey}=${rec.sourceRef}))`
+            : sql``;
+    const before = await db.execute<{ snapshot: Record<string, unknown> }>(
+      sql`select to_jsonb(t) as snapshot from ${sql.identifier(resource)} t where org_id=${ctx.orgId} and (custom->>${ctx.refKey}=${rec.sourceRef} ${adoption}) for update`,
+      "objects",
+    );
+    if (before.length > 1) throw new Error("Entity mapping identity is ambiguous");
+    const rolesBefore =
+      resource === "parties" && before[0]?.snapshot.id
+        ? await mappedPartyRoles(ctx.orgId, String(before[0].snapshot.id))
+        : undefined;
     const id = await upsertBase(resource, ctx, rec, s);
-    if (!id) throw new Error('Mapped entity was not saved');
+    if (!id) throw new Error("Mapped entity was not saved");
     await completeMappedRecord(resource, ctx, rec, id, before[0]?.snapshot ?? null, rolesBefore);
     return id;
-  }).catch(cause => {
-    s.created = priorStats.created; s.updated = priorStats.updated; s.skipped = priorStats.skipped; s.failed = priorStats.failed; s.errors.length = priorStats.errors;
+  }).catch((cause) => {
+    s.created = priorStats.created;
+    s.updated = priorStats.updated;
+    s.skipped = priorStats.skipped;
+    s.failed = priorStats.failed;
+    s.errors.length = priorStats.errors;
     throw cause;
   });
 }
 
-async function completeMappedRecord(table: string, ctx: Ctx, rec: SourceEntity, id: string, before: Record<string, unknown> | null, rolesBefore?: Record<string, unknown>): Promise<void> {
+async function completeMappedRecord(
+  table: string,
+  ctx: Ctx,
+  rec: SourceEntity,
+  id: string,
+  before: Record<string, unknown> | null,
+  rolesBefore?: Record<string, unknown>,
+): Promise<void> {
   const values = rec.mappedCustom ?? {};
-  const saved = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`update ${sql.identifier(table)} t
+  const saved = (
+    await db.execute<{ snapshot: Record<string, unknown> }>(
+      sql`update ${sql.identifier(table)} t
     set custom=(custom - 'connectorMappedValues')
       || ${JSON.stringify(Object.keys(values).length ? { ...values, connectorMappedValues: values } : {})}::jsonb
-    where id=${id} and org_id=${ctx.orgId} returning to_jsonb(t) as snapshot`, "objects"))[0];
-  if (!saved) throw new Error('Mapped entity disappeared before its custom values were saved');
-  const rolesAfter = table === 'parties' ? await mappedPartyRoles(ctx.orgId, id) : undefined;
-  const previous = table === 'parties' && before ? { ...before, roles: rolesBefore ?? {} } : before;
+    where id=${id} and org_id=${ctx.orgId} returning to_jsonb(t) as snapshot`,
+      "objects",
+    )
+  )[0];
+  if (!saved) throw new Error("Mapped entity disappeared before its custom values were saved");
+  const rolesAfter = table === "parties" ? await mappedPartyRoles(ctx.orgId, id) : undefined;
+  const previous = table === "parties" && before ? { ...before, roles: rolesBefore ?? {} } : before;
   const next = rolesAfter ? { ...saved.snapshot, roles: rolesAfter } : saved.snapshot;
-  if (JSON.stringify(stableMappingSnapshot(previous)) === JSON.stringify(stableMappingSnapshot(next))) return;
-  const audit = (await db.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${ctx.orgId},${table},${id},${before ? 'update' : 'insert'},${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId: ctx.audit?.connectionId, sourceRef: rec.sourceRef, before: previous, after: next })}::jsonb,${ctx.audit?.actorId ?? null}) returning id`, "objects"))[0];
-  if (!audit) throw new Error('The native mapping audit was not saved');
+  if (
+    JSON.stringify(stableMappingSnapshot(previous)) === JSON.stringify(stableMappingSnapshot(next))
+  )
+    return;
+  const audit = (
+    await db.execute<{ id: string }>(
+      sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    values(${ctx.orgId},${table},${id},${before ? "update" : "insert"},${JSON.stringify({ event: "connector_entity_mapping_applied", connectionId: ctx.audit?.connectionId, sourceRef: rec.sourceRef, before: previous, after: next })}::jsonb,${ctx.audit?.actorId ?? null}) returning id`,
+      "objects",
+    )
+  )[0];
+  if (!audit) throw new Error("The native mapping audit was not saved");
 }
 
 async function mappedPartyRoles(orgId: string, partyId: string): Promise<Record<string, unknown>> {
   const roles: Record<string, unknown> = {};
-  for (const table of ['customer_roles', 'vendor_roles', 'employee_roles']) {
-    roles[table] = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(table)} t where org_id=${orgId} and party_id=${partyId} for update`, "objects"))[0]?.snapshot ?? null;
+  for (const table of ["customer_roles", "vendor_roles", "employee_roles"]) {
+    roles[table] =
+      (
+        await db.execute<{ snapshot: Record<string, unknown> }>(
+          sql`select to_jsonb(t) as snapshot from ${sql.identifier(table)} t where org_id=${orgId} and party_id=${partyId} for update`,
+          "objects",
+        )
+      )[0]?.snapshot ?? null;
   }
   return roles;
 }
 
-async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: ResourceLoadStats): Promise<string | null> {
+async function upsertBase(
+  resource: string,
+  ctx: Ctx,
+  rec: SourceEntity,
+  s: ResourceLoadStats,
+): Promise<string | null> {
   const f = rec.fields;
   const { orgId, refKey } = ctx;
   const custom = JSON.stringify({
@@ -897,11 +1077,14 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     const legalName = str(f.legalName);
     const baseCurrency = String(f.baseCurrency ?? ctx.currency).toUpperCase();
     const country = String(f.country ?? "US").toUpperCase();
-    const parentId = rec.parentRef ? ctx.maps.subsidiaries.get(rec.parentRef) ?? null : null;
+    const parentId = rec.parentRef ? (ctx.maps.subsidiaries.get(rec.parentRef) ?? null) : null;
     let id = await findByRef("subsidiaries", orgId, refKey, rec.sourceRef);
     if (!id && !rec.parentRef) {
-      const root = await db.execute<{ id: string }>(sql`
-        select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects");
+      const root = await db.execute<{ id: string }>(
+        sql`
+        select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`,
+        "objects",
+      );
       id = root[0]?.id ?? null;
     }
     if (id) {
@@ -912,12 +1095,16 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       // including the reused posting root), but never restate it silently
       // afterwards: hold the stored value, converge the descriptive fields,
       // and report the held change for controller review.
-      const current = (await db.execute<{ base_currency: string; ns: string | null }>(sql`
+      const current = (
+        await db.execute<{ base_currency: string; ns: string | null }>(
+          sql`
         select base_currency, custom->>${refKey} as ns from subsidiaries
-         where id = ${id} and org_id = ${orgId}`, "objects"))[0];
+         where id = ${id} and org_id = ${orgId}`,
+          "objects",
+        )
+      )[0];
       const storedCurrency = String(current?.base_currency ?? "").toUpperCase();
-      const heldCurrency =
-        current?.ns != null && storedCurrency !== baseCurrency;
+      const heldCurrency = current?.ns != null && storedCurrency !== baseCurrency;
       await db.execute(sql`
         update subsidiaries set name = ${name}, legal_name = ${legalName},
           base_currency = ${heldCurrency ? storedCurrency : baseCurrency}, country = ${country},
@@ -939,57 +1126,91 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       }
       return id;
     }
-    if (rec.parentRef && !parentId) throw new Error(`subsidiary parent ${rec.parentRef} is not loaded`);
-    const ins = await db.execute<{ id: string }>(sql`
+    if (rec.parentRef && !parentId)
+      throw new Error(`subsidiary parent ${rec.parentRef} is not loaded`);
+    const ins = await db.execute<{ id: string }>(
+      sql`
       insert into subsidiaries
         (org_id, parent_id, name, legal_name, base_currency, country, is_elimination, is_active, custom)
       values (${orgId}, ${parentId}, ${name}, ${legalName}, ${baseCurrency}, ${country},
               ${!!f.isElimination}, ${f.isActive !== false}, ${custom}::jsonb)
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     s.created++;
     return ins[0]?.id ?? null;
   }
 
   if (resource === "accounts") {
     const type = String(f.type ?? "");
-    if (!type) { s.skipped++; return null; }
+    if (!type) {
+      s.skipped++;
+      return null;
+    }
     const id = await findByRef("accounts", orgId, refKey, rec.sourceRef);
     const suppliedCurrency = str(f.currencyRestriction);
     if (suppliedCurrency && !/^[A-Z]{3}$/.test(suppliedCurrency)) {
-      throw new Error(`account ${rec.sourceRef} currency must be an explicit ISO code; correct the source currency before retrying`);
+      throw new Error(
+        `account ${rec.sourceRef} currency must be an explicit ISO code; correct the source currency before retrying`,
+      );
     }
     const vals = {
-      name: String(f.name ?? `Account ${rec.sourceRef}`), type,
-      isSummary: !!f.isSummary, isActive: f.isActive !== false, eliminate: !!f.eliminate, reconcilable: !!f.reconcilable,
+      name: String(f.name ?? `Account ${rec.sourceRef}`),
+      type,
+      isSummary: !!f.isSummary,
+      isActive: f.isActive !== false,
+      eliminate: !!f.eliminate,
+      reconcilable: !!f.reconcilable,
     };
     if (id) {
-      const changed = await db.execute(sql`update accounts set name=${vals.name}, type=${vals.type}::text,
+      const changed = await db.execute(
+        sql`update accounts set name=${vals.name}, type=${vals.type}::text,
         number=case when ${rec.mappedFields?.includes("number") ?? false} then ${str(f.number)} else number end,
         is_summary=${vals.isSummary}, is_active=${vals.isActive}, eliminate=${vals.eliminate}, reconcilable=${vals.reconcilable}
         where id=${id} and org_id=${orgId}
           and (${suppliedCurrency}::text is null or currency_restriction = ${suppliedCurrency}::text)
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (changed.length !== 1) {
-        throw new Error(`account ${rec.sourceRef} was not updated: source currency conflicts with its existing currency control or the account is unavailable; review the account currency configuration before retrying`);
+        throw new Error(
+          `account ${rec.sourceRef} was not updated: source currency conflicts with its existing currency control or the account is unavailable; review the account currency configuration before retrying`,
+        );
       }
-      s.updated++; return id;
+      s.updated++;
+      return id;
     }
     if (vals.reconcilable && !suppliedCurrency) {
-      throw new Error(`reconcilable account ${rec.sourceRef} requires an explicit currency; the connector must supply its verified ISO currency before retrying`);
+      throw new Error(
+        `reconcilable account ${rec.sourceRef} requires an explicit currency; the connector must supply its verified ISO currency before retrying`,
+      );
     }
-    const ins = await db.execute<{ id: string }>(sql`insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, custom)
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, custom)
       values (${orgId}, ${(f.number as string) ?? null}, ${vals.name}, ${vals.type}::text, ${vals.isSummary}, ${vals.isActive}, ${vals.eliminate}, ${vals.reconcilable}, ${suppliedCurrency}, ${custom}::jsonb)
-      returning id`, "objects");
-    if (!ins[0]?.id) throw new Error(`account ${rec.sourceRef} was not created; retry the source import`);
-    s.created++; return ins[0].id;
+      returning id`,
+      "objects",
+    );
+    if (!ins[0]?.id)
+      throw new Error(`account ${rec.sourceRef} was not created; retry the source import`);
+    s.created++;
+    return ins[0].id;
   }
 
   if (resource === "departments") {
     const name = String(f.name ?? `Department ${rec.sourceRef}`);
     const id = await findByRef("departments", orgId, refKey, rec.sourceRef);
-    if (id) { await db.execute(sql`update departments set name=${name} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
-    const ins = await db.execute<{ id: string }>(sql`insert into departments (org_id, name, custom) values (${orgId}, ${name}, ${custom}::jsonb) returning id`, "objects");
-    s.created++; return ins[0]?.id ?? null;
+    if (id) {
+      await db.execute(sql`update departments set name=${name} where id=${id} and org_id=${orgId}`);
+      s.updated++;
+      return id;
+    }
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into departments (org_id, name, custom) values (${orgId}, ${name}, ${custom}::jsonb) returning id`,
+      "objects",
+    );
+    s.created++;
+    return ins[0]?.id ?? null;
   }
 
   if (resource === "payment_terms") {
@@ -997,7 +1218,10 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     // match by nsId, else by name (reconciles with name-seeded rows).
     let id = await findByRef("payment_terms", orgId, refKey, rec.sourceRef);
     if (!id) {
-      const byName = await db.execute<{ id: string }>(sql`select id from payment_terms where org_id=${orgId} and name=${name} limit 1`, "objects");
+      const byName = await db.execute<{ id: string }>(
+        sql`select id from payment_terms where org_id=${orgId} and name=${name} limit 1`,
+        "objects",
+      );
       id = byName[0]?.id ?? null;
     }
     const terms = sourcePaymentTerms(f, rec.sourceRef);
@@ -1006,35 +1230,71 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       // before and after state in the same transaction; a mapped record is
       // audited once, by the mapping path, instead.
       await withOrg(orgId, async () => {
-        const before = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`
+        const before = (
+          await db.execute<{ snapshot: Record<string, unknown> }>(
+            sql`
           select to_jsonb(t) - 'custom' as snapshot from payment_terms t
-           where t.id = ${id} and t.org_id = ${orgId} for update`, "objects"))[0];
-        const after = before && (await db.execute<{ snapshot: Record<string, unknown> }>(sql`
+           where t.id = ${id} and t.org_id = ${orgId} for update`,
+            "objects",
+          )
+        )[0];
+        const after =
+          before &&
+          (
+            await db.execute<{ snapshot: Record<string, unknown> }>(
+              sql`
           update payment_terms set name=${name}, net_days=${terms.netDays}, due_day_of_month=${terms.dueDayOfMonth},
             discount_days=${terms.discountDays}, discount_percent=${terms.discountPercent},
             custom=(${custom}::jsonb || payment_terms.custom)
               || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
            where id=${id} and org_id=${orgId}
-          returning to_jsonb(payment_terms) - 'custom' as snapshot`, "objects"))[0];
-        if (!before || !after) throw new Error(`payment terms ${rec.sourceRef} were not updated; the stored terms are unavailable in this organization`);
-        if (rec.mappingApplied || JSON.stringify(before.snapshot) === JSON.stringify(after.snapshot)) return;
-        const audit = await db.execute<{ id: string }>(sql`
+          returning to_jsonb(payment_terms) - 'custom' as snapshot`,
+              "objects",
+            )
+          )[0];
+        if (!before || !after)
+          throw new Error(
+            `payment terms ${rec.sourceRef} were not updated; the stored terms are unavailable in this organization`,
+          );
+        if (
+          rec.mappingApplied ||
+          JSON.stringify(before.snapshot) === JSON.stringify(after.snapshot)
+        )
+          return;
+        const audit = await db.execute<{ id: string }>(
+          sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values (${orgId}, 'payment_terms', ${id}, 'update', ${JSON.stringify({
             event: "source_payment_terms_updated",
             before: before.snapshot,
             after: after.snapshot,
-            source: { system: ctx.sourceName, ref: rec.sourceRef, connectionId: ctx.audit?.connectionId ?? null, syncRunId: ctx.audit?.runId ?? null },
+            source: {
+              system: ctx.sourceName,
+              ref: rec.sourceRef,
+              connectionId: ctx.audit?.connectionId ?? null,
+              syncRunId: ctx.audit?.runId ?? null,
+            },
           })}::jsonb, ${ctx.audit?.actorId ?? null}, ${ctx.audit?.runId ?? null})
-          returning id`, "objects");
-        if (audit.length !== 1) throw new Error(`payment terms ${rec.sourceRef} changed but the audit record was not saved`);
+          returning id`,
+          "objects",
+        );
+        if (audit.length !== 1)
+          throw new Error(
+            `payment terms ${rec.sourceRef} changed but the audit record was not saved`,
+          );
       });
-      s.updated++; return id;
+      s.updated++;
+      return id;
     }
-    const ins = await db.execute<{ id: string }>(sql`insert into payment_terms (org_id, name, net_days, due_day_of_month, discount_days, discount_percent, custom)
-      values (${orgId}, ${name}, ${terms.netDays}, ${terms.dueDayOfMonth}, ${terms.discountDays}, ${terms.discountPercent}, ${custom}::jsonb) returning id`, "objects");
-    if (!ins[0]?.id) throw new Error(`payment terms ${rec.sourceRef} were not created; retry the source import`);
-    s.created++; return ins[0].id;
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into payment_terms (org_id, name, net_days, due_day_of_month, discount_days, discount_percent, custom)
+      values (${orgId}, ${name}, ${terms.netDays}, ${terms.dueDayOfMonth}, ${terms.discountDays}, ${terms.discountPercent}, ${custom}::jsonb) returning id`,
+      "objects",
+    );
+    if (!ins[0]?.id)
+      throw new Error(`payment terms ${rec.sourceRef} were not created; retry the source import`);
+    s.created++;
+    return ins[0].id;
   }
 
   if (resource === "time_types") {
@@ -1043,10 +1303,20 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       f.costMultiplier == null || f.costMultiplier === "" ? "1" : f.costMultiplier,
     );
     const id = await findByRef("time_types", orgId, refKey, rec.sourceRef);
-    if (id) { await db.execute(sql`update time_types set name=${name}, cost_multiplier=${mult}, is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
-    const ins = await db.execute<{ id: string }>(sql`insert into time_types (org_id, name, cost_multiplier, is_active, custom)
-      values (${orgId}, ${name}, ${mult}, ${f.isActive !== false}, ${custom}::jsonb) returning id`, "objects");
-    s.created++; return ins[0]?.id ?? null;
+    if (id) {
+      await db.execute(
+        sql`update time_types set name=${name}, cost_multiplier=${mult}, is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`,
+      );
+      s.updated++;
+      return id;
+    }
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into time_types (org_id, name, cost_multiplier, is_active, custom)
+      values (${orgId}, ${name}, ${mult}, ${f.isActive !== false}, ${custom}::jsonb) returning id`,
+      "objects",
+    );
+    s.created++;
+    return ins[0]?.id ?? null;
   }
 
   if (resource === "tax_codes") {
@@ -1061,20 +1331,24 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     const taxCustom = JSON.stringify({
       [refKey]: rec.sourceRef,
       source: { system: ctx.sourceName, externalId: rec.sourceRef },
-      ...(typeof f.sourceRecordKind === "string"
-        ? { sourceRecordKind: f.sourceRecordKind }
-        : {}),
+      ...(typeof f.sourceRecordKind === "string" ? { sourceRecordKind: f.sourceRecordKind } : {}),
     });
     let id = await findByRef("tax_codes", orgId, refKey, rec.sourceRef);
     if (!id) {
-      const byCode = await db.execute<{ id: string }>(sql`select id from tax_codes where org_id=${orgId} and code=${code} limit 1`, "objects");
+      const byCode = await db.execute<{ id: string }>(
+        sql`select id from tax_codes where org_id=${orgId} and code=${code} limit 1`,
+        "objects",
+      );
       id = byCode[0]?.id ?? null;
     }
     // Optional per-code control accounts (source refs → openbooks ids).
     const acctId = async (ref: unknown): Promise<string | null> => {
       if (!ref) return null;
-      const r = await db.execute<{ id: string }>(sql`
-        select id from accounts where org_id=${orgId} and custom->>${refKey} = ${String(ref)} limit 1`, "objects");
+      const r = await db.execute<{ id: string }>(
+        sql`
+        select id from accounts where org_id=${orgId} and custom->>${refKey} = ${String(ref)} limit 1`,
+        "objects",
+      );
       return r[0]?.id ?? null;
     };
     const collected = await acctId(f.collectedAccountRef);
@@ -1094,42 +1368,66 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       await db.execute(sql`update tax_rates set rate_percent=${rate}
         where tax_code_id=${id} and org_id=${orgId}
           and effective_to is null and effective_from <= current_date`);
-      s.updated++; return id;
+      s.updated++;
+      return id;
     }
-    const ins = await db.execute<{ id: string }>(sql`insert into tax_codes (org_id, code, name, applies_to, collected_account_id, paid_account_id, custom)
-      values (${orgId}, ${code}, ${name}, ${appliesTo}::text, ${collected}, ${paid}, ${taxCustom}::jsonb) returning id`, "objects");
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into tax_codes (org_id, code, name, applies_to, collected_account_id, paid_account_id, custom)
+      values (${orgId}, ${code}, ${name}, ${appliesTo}::text, ${collected}, ${paid}, ${taxCustom}::jsonb) returning id`,
+      "objects",
+    );
     const newId = ins[0]?.id ?? null;
     if (newId) {
       await db.execute(sql`insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
         values (${orgId}, ${newId}, ${rate}, '1970-01-01')`);
     }
-    s.created++; return newId;
+    s.created++;
+    return newId;
   }
 
   if (resource === "items") {
     const name = String(f.name ?? `Item ${rec.sourceRef}`);
-    const defaultCost = f.defaultCost == null || f.defaultCost === "" ? null : persistItemDefaultCost(f.defaultCost);
-    const defaultRate = f.defaultRate == null || f.defaultRate === "" ? null : persistItemDefaultRate(f.defaultRate);
+    const defaultCost =
+      f.defaultCost == null || f.defaultCost === "" ? null : persistItemDefaultCost(f.defaultCost);
+    const defaultRate =
+      f.defaultRate == null || f.defaultRate === "" ? null : persistItemDefaultRate(f.defaultRate);
     const unit = str(f.unit);
     const id = await findByRef("items", orgId, refKey, rec.sourceRef);
-    if (id) { await db.execute(sql`update items set name=${name}, code=case when ${rec.mappedFields?.includes("code") ?? false} then ${str(f.code)} else code end, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
+    if (id) {
+      await db.execute(sql`update items set name=${name}, code=case when ${rec.mappedFields?.includes("code") ?? false} then ${str(f.code)} else code end, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
       default_cost=coalesce(${defaultCost}, default_cost), default_rate=coalesce(${defaultRate}, default_rate),
-      unit=coalesce(${unit}, unit), is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
-    const ins = await db.execute<{ id: string }>(sql`insert into items (org_id, kind, code, name, category, default_cost, default_rate, unit, is_active, custom)
+      unit=coalesce(${unit}, unit), is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`);
+      s.updated++;
+      return id;
+    }
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into items (org_id, kind, code, name, category, default_cost, default_rate, unit, is_active, custom)
       values (${orgId}, ${String(f.kind ?? "service")}::text, ${(f.code as string) ?? null}, ${name}, ${str(f.category)},
-              ${defaultCost}, ${defaultRate}, ${unit}, ${f.isActive !== false}, ${custom}::jsonb) returning id`, "objects");
-    s.created++; return ins[0]?.id ?? null;
+              ${defaultCost}, ${defaultRate}, ${unit}, ${f.isActive !== false}, ${custom}::jsonb) returning id`,
+      "objects",
+    );
+    s.created++;
+    return ins[0]?.id ?? null;
   }
 
   if (resource === "projects") {
     const name = String(f.name ?? `Project ${rec.sourceRef}`);
     const vals = {
-      code: str(f.code), status: String(f.status ?? "active"), billing: str(f.billingMethod),
-      customer: ref(ctx.maps.parties, f.customerRef), foreman: ref(ctx.maps.parties, f.foremanRef),
-      manager: ref(ctx.maps.parties, f.managerRef), po: str(f.customerPoNumber),
-      starts: str(f.startsOn), ends: str(f.endsOn), isActive: f.isActive !== false,
+      code: str(f.code),
+      status: String(f.status ?? "active"),
+      billing: str(f.billingMethod),
+      customer: ref(ctx.maps.parties, f.customerRef),
+      foreman: ref(ctx.maps.parties, f.foremanRef),
+      manager: ref(ctx.maps.parties, f.managerRef),
+      po: str(f.customerPoNumber),
+      starts: str(f.startsOn),
+      ends: str(f.endsOn),
+      isActive: f.isActive !== false,
     };
-    const contractValue = f.contractValue == null || f.contractValue === "" ? null : persistProjectContractValue(f.contractValue);
+    const contractValue =
+      f.contractValue == null || f.contractValue === ""
+        ? null
+        : persistProjectContractValue(f.contractValue);
     const id = await findProjectByRef(orgId, refKey, rec.sourceRef);
     if (id) {
       // The contract-value control runs on the same transaction as the
@@ -1137,7 +1435,8 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       // contract sum moves only through an approved change order, and a
       // source re-pull is not one. The refusal lands in this record's error.
       await db.transaction(async (tx) => {
-        if (contractValue !== null) await assertProjectHeaderChangeAllowed(tx, orgId, id, { contractValue });
+        if (contractValue !== null)
+          await assertProjectHeaderChangeAllowed(tx, orgId, id, { contractValue });
         await tx.execute(sql`update projects set name=${name}, code=${vals.code}, status=${vals.status}::text,
           project_type_id=coalesce((select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), project_type_id),
           customer_id=${vals.customer}, foreman_id=${vals.foreman}, manager_id=${vals.manager},
@@ -1153,50 +1452,82 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
             else custom end
           where id=${id} and org_id=${orgId}`);
       });
-      s.updated++; return id;
+      s.updated++;
+      return id;
     }
-    const ins = await db.execute<{ id: string }>(sql`insert into projects (org_id, name, code, status, project_type_id, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
-      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, (select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${contractValue}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`, "objects");
-    s.created++; return ins[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into projects (org_id, name, code, status, project_type_id, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
+      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, (select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${contractValue}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`,
+      "objects",
+    );
+    s.created++;
+    return ins[0]?.id ?? null;
   }
 
   if (resource === "addresses") {
     const pid = ref(ctx.maps.parties, f.entityRef);
-    if (!pid) { s.skipped++; return null; }
+    if (!pid) {
+      s.skipped++;
+      return null;
+    }
     const v = {
-      label: str(f.label), line1: str(f.line1), line2: str(f.line2), city: str(f.city),
-      region: str(f.region), postal: str(f.postalCode), country: str(f.country),
-      db: !!f.isDefaultBilling, ds: !!f.isDefaultShipping,
+      label: str(f.label),
+      line1: str(f.line1),
+      line2: str(f.line2),
+      city: str(f.city),
+      region: str(f.region),
+      postal: str(f.postalCode),
+      country: str(f.country),
+      db: !!f.isDefaultBilling,
+      ds: !!f.isDefaultShipping,
     };
     const id = await findByRef("addresses", orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update addresses set party_id=${pid}, label=${v.label}, line1=${v.line1}, line2=${v.line2},
         city=${v.city}, region=${v.region}, postal_code=${v.postal}, country=${v.country},
         is_default_billing=${v.db}, is_default_shipping=${v.ds} where id=${id} and org_id=${orgId}`);
-      s.updated++; return id;
+      s.updated++;
+      return id;
     }
-    const ins = await db.execute<{ id: string }>(sql`insert into addresses (org_id, party_id, label, line1, line2, city, region, postal_code, country, is_default_billing, is_default_shipping, custom)
-      values (${orgId}, ${pid}, ${v.label}, ${v.line1}, ${v.line2}, ${v.city}, ${v.region}, ${v.postal}, ${v.country}, ${v.db}, ${v.ds}, ${custom}::jsonb) returning id`, "objects");
-    s.created++; return ins[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into addresses (org_id, party_id, label, line1, line2, city, region, postal_code, country, is_default_billing, is_default_shipping, custom)
+      values (${orgId}, ${pid}, ${v.label}, ${v.line1}, ${v.line2}, ${v.city}, ${v.region}, ${v.postal}, ${v.country}, ${v.db}, ${v.ds}, ${custom}::jsonb) returning id`,
+      "objects",
+    );
+    s.created++;
+    return ins[0]?.id ?? null;
   }
 
   if (resource === "contacts") {
     const pid = ref(ctx.maps.parties, f.companyRef);
     const v = {
-      name: String(f.name ?? "Contact"), first: str(f.firstName), last: str(f.lastName), title: str(f.title),
-      role: str(f.role), email: str(f.email), phone: str(f.phone), mobile: str(f.mobilePhone), fax: str(f.fax),
-      primary: !!f.isPrimary, isActive: f.isActive !== false,
+      name: String(f.name ?? "Contact"),
+      first: str(f.firstName),
+      last: str(f.lastName),
+      title: str(f.title),
+      role: str(f.role),
+      email: str(f.email),
+      phone: str(f.phone),
+      mobile: str(f.mobilePhone),
+      fax: str(f.fax),
+      primary: !!f.isPrimary,
+      isActive: f.isActive !== false,
     };
     const id = await findByRef("contacts", orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update contacts set party_id=${pid}, name=${v.name}, first_name=${v.first}, last_name=${v.last},
         title=${v.title}, role=${v.role}, email=${v.email}, phone=${v.phone}, mobile_phone=${v.mobile}, fax=${v.fax},
         is_primary=${v.primary}, is_active=${v.isActive} where id=${id} and org_id=${orgId}`);
-      s.updated++; return id;
+      s.updated++;
+      return id;
     }
-    const ins = await db.execute<{ id: string }>(sql`insert into contacts (org_id, party_id, name, first_name, last_name, title, role, email, phone, mobile_phone, fax, is_primary, is_active, custom)
-      values (${orgId}, ${pid}, ${v.name}, ${v.first}, ${v.last}, ${v.title}, ${v.role}, ${v.email}, ${v.phone}, ${v.mobile}, ${v.fax}, ${v.primary}, ${v.isActive}, ${custom}::jsonb) returning id`, "objects");
-    s.created++; return ins[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into contacts (org_id, party_id, name, first_name, last_name, title, role, email, phone, mobile_phone, fax, is_primary, is_active, custom)
+      values (${orgId}, ${pid}, ${v.name}, ${v.first}, ${v.last}, ${v.title}, ${v.role}, ${v.email}, ${v.phone}, ${v.mobile}, ${v.fax}, ${v.primary}, ${v.isActive}, ${custom}::jsonb) returning id`,
+      "objects",
+    );
+    s.created++;
+    return ins[0]?.id ?? null;
   }
 
   // parties (+ role)
@@ -1221,8 +1552,11 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       where id=${pid} and org_id=${orgId}`);
     s.updated++;
   } else {
-    const ins = await db.execute<{ id: string }>(sql`insert into parties (org_id, kind, display_name, is_active, subsidiary_id, email, phone, website, legal_name, tax_ids, custom)
-      values (${orgId}, ${kind}::text, ${displayName}, ${isActive}, ${subsidiaryId}, ${str(f.email)}, ${str(f.phone)}, ${str(f.website)}, ${str(f.legalName)}, ${taxIds}::jsonb, ${custom}::jsonb) returning id`, "objects");
+    const ins = await db.execute<{ id: string }>(
+      sql`insert into parties (org_id, kind, display_name, is_active, subsidiary_id, email, phone, website, legal_name, tax_ids, custom)
+      values (${orgId}, ${kind}::text, ${displayName}, ${isActive}, ${subsidiaryId}, ${str(f.email)}, ${str(f.phone)}, ${str(f.website)}, ${str(f.legalName)}, ${taxIds}::jsonb, ${custom}::jsonb) returning id`,
+      "objects",
+    );
     pid = ins[0]?.id ?? null;
     s.created++;
   }
@@ -1241,9 +1575,11 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     await upsertRole("customer_roles", orgId, pid, {
       ar_account_id: ref(ctx.maps.accounts, r.arAccountRef),
       payment_terms_id: ref(ctx.maps.payment_terms, r.termsRef),
-      credit_limit: str(r.creditLimit), currency: ctx.currency,
+      credit_limit: str(r.creditLimit),
+      currency: ctx.currency,
       sales_rep_id: ref(ctx.maps.parties, r.salesRepRef),
-      tax_code_id: ref(ctx.maps.tax_codes, r.taxCodeRef), is_active: isActive,
+      tax_code_id: ref(ctx.maps.tax_codes, r.taxCodeRef),
+      is_active: isActive,
     });
   }
   if (f.vendorRole) {
@@ -1252,7 +1588,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       ap_account_id: ref(ctx.maps.accounts, r.apAccountRef),
       payment_terms_id: ref(ctx.maps.payment_terms, r.termsRef),
       default_expense_account_id: ref(ctx.maps.accounts, r.defaultExpenseAccountRef),
-      currency: ctx.currency, is_t4a: !!r.is1099OrT4a, is_active: isActive,
+      currency: ctx.currency,
+      is_t4a: !!r.is1099OrT4a,
+      is_active: isActive,
     });
   }
   if (f.employeeRole) {
@@ -1261,15 +1599,22 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       employee_number: str(r.employeeNumber),
       department_id: ref(ctx.maps.departments, r.departmentRef),
       supervisor_id: ref(ctx.maps.parties, r.supervisorRef),
-      hired_on: str(r.hiredOn), terminated_on: str(r.terminatedOn),
-      has_benefits: !!r.hasBenefits, is_active: isActive,
+      hired_on: str(r.hiredOn),
+      terminated_on: str(r.terminatedOn),
+      has_benefits: !!r.hasBenefits,
+      is_active: isActive,
     });
   }
   return pid;
 }
 
 /** Insert/update a role row keyed on the unique party_id. */
-async function upsertRole(table: string, orgId: string, partyId: string, cols: Record<string, unknown>) {
+async function upsertRole(
+  table: string,
+  orgId: string,
+  partyId: string,
+  cols: Record<string, unknown>,
+) {
   const keys = Object.keys(cols);
   const colList = keys.map((k) => sql.raw(k));
   const valList = keys.map((k) => sql`${cols[k]}`);
@@ -1278,12 +1623,15 @@ async function upsertRole(table: string, orgId: string, partyId: string, cols: R
   // (excluded) row, so a bare org_id is ambiguous (42702) and every role
   // write fails. Qualify to the stored row: the guard keeps 5c54bd4d1's
   // intent (never overwrite another tenant's role on a party_id hit).
-  const written = await db.execute(sql`
+  const written = await db.execute(
+    sql`
     insert into ${sql.raw(table)} (org_id, party_id, ${sql.join(colList, sql`, `)})
     values (${orgId}, ${partyId}, ${sql.join(valList, sql`, `)})
     on conflict (party_id) do update set ${sql.join(setList, sql`, `)}
-    where ${sql.raw(table)}.org_id = ${orgId} returning party_id`, "objects");
-  if (written.length !== 1) throw new Error('The source role did not persist in this organization');
+    where ${sql.raw(table)}.org_id = ${orgId} returning party_id`,
+    "objects",
+  );
+  if (written.length !== 1) throw new Error("The source role did not persist in this organization");
 }
 
 async function auditTimeBillingChange(
@@ -1344,16 +1692,19 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     }
   >();
   const rows = await db.execute<{
-      id: string;
-      ns: string;
-      billing_status: "unbilled" | "billed";
-      costing_basis: "actual" | "estimated";
-      source_billing_status: string | null;
-    }>(sql`
+    id: string;
+    ns: string;
+    billing_status: "unbilled" | "billed";
+    costing_basis: "actual" | "estimated";
+    source_billing_status: string | null;
+  }>(
+    sql`
     select id, custom->>${refKey} ns, billing_status, costing_basis,
            custom->>'sourceBillingStatus' as source_billing_status
       from time_entries
-     where org_id=${orgId} and custom->>${refKey} is not null`, "objects");
+     where org_id=${orgId} and custom->>${refKey} is not null`,
+    "objects",
+  );
   for (const r of rows) {
     existing.set(r.ns, {
       id: r.id,
@@ -1367,7 +1718,8 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
   let batch: SourceEntity[] = [];
   const flush = async () => {
     if (!batch.length) return;
-    const b = batch; batch = [];
+    const b = batch;
+    batch = [];
     const values = b.map((rec) => {
       const f = rec.fields;
       return sql`(${orgId}, ${ref(ctx.maps.parties, f.employeeRef)!}, ${str(f.workedOn) ?? "1970-01-01"},
@@ -1396,7 +1748,10 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
   for (const rec of records) {
     const f = rec.fields;
     const empId = ref(ctx.maps.parties, f.employeeRef);
-    if (!empId) { s.skipped++; continue; }
+    if (!empId) {
+      s.skipped++;
+      continue;
+    }
     const workedOn = str(f.workedOn);
     if (workedOn) {
       const week = { employeePartyId: empId, weekStart: timesheetWeekStart(workedOn) };
@@ -1406,13 +1761,9 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     if (prior) {
       const id = prior.id;
       const sourceBillingStatus =
-        f.billingStatus === "billed" || f.billingStatus === "unbilled"
-          ? f.billingStatus
-          : null;
-      const sourceCostingBasis =
-        f.costingBasis === "estimated" ? "estimated" : "actual";
-      const effectiveBillingStatus =
-        sourceBillingStatus ?? prior.billingStatus;
+        f.billingStatus === "billed" || f.billingStatus === "unbilled" ? f.billingStatus : null;
+      const sourceCostingBasis = f.costingBasis === "estimated" ? "estimated" : "actual";
+      const effectiveBillingStatus = sourceBillingStatus ?? prior.billingStatus;
       // A full load re-emits everything. Billing state is still reconciled:
       // historical source time may have been loaded before OpenBooks had a
       // first-class billing lifecycle, and treating it as unbilled would
@@ -1427,7 +1778,8 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
           continue;
         }
         const changed = await db.transaction(async (tx) => {
-          const updated = (await tx.execute<{ id: string }>(sql`
+          const updated = await tx.execute<{ id: string }>(
+            sql`
             update time_entries
                set billing_status = ${effectiveBillingStatus},
                    costing_basis = ${sourceCostingBasis},
@@ -1440,7 +1792,9 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
                  billing_status is distinct from ${effectiveBillingStatus}
                  or costing_basis is distinct from ${sourceCostingBasis}
                )
-             returning id`, "objects"));
+             returning id`,
+            "objects",
+          );
           if (updated.length) {
             await auditTimeBillingChange(
               tx,
@@ -1461,8 +1815,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         else s.skipped++;
         continue;
       }
-      const billingChanged =
-        effectiveBillingStatus !== prior.billingStatus;
+      const billingChanged = effectiveBillingStatus !== prior.billingStatus;
       const costingChanged = sourceCostingBasis !== prior.costingBasis;
       const update = (tx: SqlExecutor) =>
         tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${persistTimeEntryHours(f.hours == null || f.hours === "" ? "0" : f.hours)},

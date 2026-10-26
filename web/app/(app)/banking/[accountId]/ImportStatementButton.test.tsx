@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // (statement-import Preview on junk CSV): the preview POST 422s
 // with a typed { error } body, but the dialog neither toasts usefully nor
@@ -7,17 +7,22 @@ import test from 'node:test'
 // typed refusal as a role=alert (cleared on the next edit) and toast it,
 // mirroring the RunBuilder pattern; an unreadable error body must
 // fall back to the generic request-failed copy instead of a SyntaxError.
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/banking/acc-1', scrollIntoView: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/banking/acc-1", scrollIntoView: false });
 
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   previewStatus: 422 as number,
-  previewBody: { error: 'CSV has a header but no data rows' } as unknown,
+  previewBody: { error: "CSV has a header but no data rows" } as unknown,
   previewPayload: { lines: [], imported: 0, duplicates: 0 } as unknown,
-  importPayload: { statementId: 'stmt-1', imported: 1, duplicates: 0, possibleDuplicates: 0 } as unknown,
+  importPayload: {
+    statementId: "stmt-1",
+    imported: 1,
+    duplicates: 0,
+    possibleDuplicates: 0,
+  } as unknown,
   requests: [] as Array<Record<string, unknown>>,
-}
+};
 Object.assign(globalThis, {
   __importTestToasts: script.toasts,
   __importTestRouter: {
@@ -27,63 +32,63 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__importTestRouter}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return globalThis.__importTestRouter}" });
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export const toast={success(m){globalThis.__importTestToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__importTestToasts.push({kind:"error",message:String(m)})}};export function Toaster(){return null}',
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { ImportStatementButton } = await import('./ImportStatementButton')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../../components/money-provider");
+const { ImportStatementButton } = await import("./ImportStatementButton");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 function setNativeValue(el: HTMLElement, value: string) {
-  const proto = el instanceof window.HTMLTextAreaElement
-    ? window.HTMLTextAreaElement.prototype
-    : window.HTMLSelectElement.prototype
-  const setter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!
-  setter.call(el, value)
+  const proto =
+    el instanceof window.HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLSelectElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
+  setter.call(el, value);
 }
 
 async function mount() {
   globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
-    const body = JSON.parse(String((init?.body as string) ?? '{}')) as { mode?: string }
-    if (url === '/api/banking/import' && body.mode === 'columns') {
-      return Response.json({ header: ['hello', 'not', 'a', 'statement'] })
+    const body = JSON.parse(String((init?.body as string) ?? "{}")) as { mode?: string };
+    if (url === "/api/banking/import" && body.mode === "columns") {
+      return Response.json({ header: ["hello", "not", "a", "statement"] });
     }
-    if (url === '/api/banking/import' && body.mode === 'preview') {
-      script.requests.push(body as Record<string, unknown>)
-      if (script.previewStatus === 200) return Response.json(script.previewPayload)
-      return Response.json(script.previewBody, { status: script.previewStatus })
+    if (url === "/api/banking/import" && body.mode === "preview") {
+      script.requests.push(body as Record<string, unknown>);
+      if (script.previewStatus === 200) return Response.json(script.previewPayload);
+      return Response.json(script.previewBody, { status: script.previewStatus });
     }
-    if (url === '/api/banking/import' && body.mode === 'import') {
-      script.requests.push(body as Record<string, unknown>)
-      return Response.json(script.importPayload)
+    if (url === "/api/banking/import" && body.mode === "import") {
+      script.requests.push(body as Record<string, unknown>);
+      return Response.json(script.importPayload);
     }
-    throw new Error(`unexpected fetch ${String(url)} ${body.mode}`)
-  }) as typeof fetch
-  script.toasts.length = 0
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    throw new Error(`unexpected fetch ${String(url)} ${body.mode}`);
+  }) as typeof fetch;
+  script.toasts.length = 0;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -91,128 +96,135 @@ async function mount() {
           <ImportStatementButton accountId="acc-1" />
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+  });
+  return { host, root };
 }
 
 function clickButton(text: string) {
-  const btn = [...document.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === text,
-  ) as HTMLButtonElement | undefined
-  assert.ok(btn, `button "${text}" must render`)
-  return btn
+  const btn = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === text,
+  ) as HTMLButtonElement | undefined;
+  assert.ok(btn, `button "${text}" must render`);
+  return btn;
 }
 
-test('statement import controls are associated with their visible labels', async (t) => {
-  const { host, root } = await mount()
+test("statement import controls are associated with their visible labels", async (t) => {
+  const { host, root } = await mount();
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
   await act(async () => {
-    clickButton('Import statement').click()
-    await tick()
-  })
-  for (const name of ['Format', 'File', 'Statement text']) {
-    const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === name)
-    assert.ok(label, `${name} label renders`)
-    assert.ok(label.control, `${name} label controls an input`)
+    clickButton("Import statement").click();
+    await tick();
+  });
+  for (const name of ["Format", "File", "Statement text"]) {
+    const label = [...document.querySelectorAll("label")].find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
+    assert.ok(label, `${name} label renders`);
+    assert.ok(label.control, `${name} label controls an input`);
   }
-})
+});
 
 /** Drive the dialog to a mapped junk-CSV CSV state with Preview enabled. */
 async function mapJunkCsv() {
   await act(async () => {
-    clickButton('Import statement').click()
-    await tick()
-    await tick()
-  })
-  const formatSelect = document.querySelector('select') as HTMLSelectElement
-  assert.ok(formatSelect, 'the format picker must render')
+    clickButton("Import statement").click();
+    await tick();
+    await tick();
+  });
+  const formatSelect = document.querySelector("select") as HTMLSelectElement;
+  assert.ok(formatSelect, "the format picker must render");
   await act(async () => {
-    setNativeValue(formatSelect, 'csv')
-    formatSelect.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
-  const area = document.querySelector('textarea') as HTMLTextAreaElement
-  assert.ok(area, 'the statement text box must render')
+    setNativeValue(formatSelect, "csv");
+    formatSelect.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  const area = document.querySelector("textarea") as HTMLTextAreaElement;
+  assert.ok(area, "the statement text box must render");
   await act(async () => {
-    setNativeValue(area, 'hello,not,a,statement')
-    area.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-  })
+    setNativeValue(area, "hello,not,a,statement");
+    area.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
   await act(async () => {
-    clickButton('Detect columns').click()
-    await tick()
-    await tick()
-  })
-  const selects = [...document.querySelectorAll('select')]
+    clickButton("Detect columns").click();
+    await tick();
+    await tick();
+  });
+  const selects = [...document.querySelectorAll("select")];
   // format + date + amount + description (+ optional debit/ref/txn-id)
-  assert.ok(selects.length >= 4, 'the column mapping selects must render')
-  const [, dateSel, amountSel, descSel] = selects as HTMLSelectElement[]
+  assert.ok(selects.length >= 4, "the column mapping selects must render");
+  const [, dateSel, amountSel, descSel] = selects as HTMLSelectElement[];
   await act(async () => {
-    for (const [sel, value] of [[dateSel, '0'], [amountSel, '1'], [descSel, '2']] as const) {
-      setNativeValue(sel!, value)
-      sel!.dispatchEvent(new window.Event('change', { bubbles: true }))
-      await tick()
+    for (const [sel, value] of [
+      [dateSel, "0"],
+      [amountSel, "1"],
+      [descSel, "2"],
+    ] as const) {
+      setNativeValue(sel!, value);
+      sel!.dispatchEvent(new window.Event("change", { bubbles: true }));
+      await tick();
     }
-  })
+  });
 }
 
-test('a refused import preview persists the typed server reason as a dialog alert', async (t) => {
-  script.previewStatus = 422
-  script.previewBody = { error: 'CSV has a header but no data rows' }
-  const { host, root } = await mount()
+test("a refused import preview persists the typed server reason as a dialog alert", async (t) => {
+  script.previewStatus = 422;
+  script.previewBody = { error: "CSV has a header but no data rows" };
+  const { host, root } = await mount();
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await mapJunkCsv()
+      root.unmount();
+    });
+    host.remove();
+  });
+  await mapJunkCsv();
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the refused preview must persist a dialog-level alert')
-  assert.match(alert.textContent ?? '', /header but no data rows/)
-  const errors = script.toasts.filter((toast) => toast.kind === 'error')
-  assert.equal(errors.length, 1, 'the refused preview must also toast once')
-  assert.match(errors[0]!.message, /header but no data rows/)
-})
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused preview must persist a dialog-level alert");
+  assert.match(alert.textContent ?? "", /header but no data rows/);
+  const errors = script.toasts.filter((toast) => toast.kind === "error");
+  assert.equal(errors.length, 1, "the refused preview must also toast once");
+  assert.match(errors[0]!.message, /header but no data rows/);
+});
 
-test('an unreadable preview refusal falls back to the generic copy', async (t) => {
-  script.previewStatus = 500
-  script.previewBody = '<html>proxy boom</html>'
-  const { host, root } = await mount()
+test("an unreadable preview refusal falls back to the generic copy", async (t) => {
+  script.previewStatus = 500;
+  script.previewBody = "<html>proxy boom</html>";
+  const { host, root } = await mount();
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await mapJunkCsv()
+      root.unmount();
+    });
+    host.remove();
+  });
+  await mapJunkCsv();
   // Non-JSON body: override fetch to return raw HTML for the preview call.
   globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
-    const body = JSON.parse(String((init?.body as string) ?? '{}')) as { mode?: string }
-    if (body.mode === 'columns') return Response.json({ header: ['hello', 'not', 'a', 'statement'] })
-    return new Response('<html>proxy boom</html>', { status: 500 })
-  }) as typeof fetch
+    const body = JSON.parse(String((init?.body as string) ?? "{}")) as { mode?: string };
+    if (body.mode === "columns")
+      return Response.json({ header: ["hello", "not", "a", "statement"] });
+    return new Response("<html>proxy boom</html>", { status: 500 });
+  }) as typeof fetch;
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'an unreadable refusal must still persist an alert')
-  assert.doesNotMatch(alert.textContent ?? '', /Unexpected token/)
-  const errors = script.toasts.filter((toast) => toast.kind === 'error')
-  assert.equal(errors.length, 1, 'an unreadable refusal must toast once')
-})
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "an unreadable refusal must still persist an alert");
+  assert.doesNotMatch(alert.textContent ?? "", /Unexpected token/);
+  const errors = script.toasts.filter((toast) => toast.kind === "error");
+  assert.equal(errors.length, 1, "an unreadable refusal must toast once");
+});
 
 // ---------------------------------------------------------------------------
 // Account picker, format memory, next-step guidance, balance candidates.
@@ -221,51 +233,59 @@ test('an unreadable preview refusal falls back to the generic copy', async (t) =
 const dialogScript = {
   bodies: [] as { url: string; body: string }[],
   accounts: [
-    { id: 'acc-1', label: '1000 Operating Cash', currency: 'CAD', type: 'asset_bank' },
-    { id: 'acc-2', label: '2050 Corporate Card', currency: 'CAD', type: 'liability_card' },
+    { id: "acc-1", label: "1000 Operating Cash", currency: "CAD", type: "asset_bank" },
+    { id: "acc-2", label: "2050 Corporate Card", currency: "CAD", type: "liability_card" },
   ] as { id: string; label: string; currency: string; type: string }[],
   previewImpl: (_parsed: Record<string, unknown>) => ({
-    lines: [{ postedOn: '2026-11-02', amount: '-45.00', description: 'Card payment' }],
+    lines: [{ postedOn: "2026-11-02", amount: "-45.00", description: "Card payment" }],
     imported: 1,
     duplicates: 0,
     possibleDuplicates: 0,
     skipped: [],
-    balanceCandidates: [] as { postedOn: string; amount: string; description: string; role: string }[],
-    statementDate: '2026-11-30',
+    balanceCandidates: [] as {
+      postedOn: string;
+      amount: string;
+      description: string;
+      role: string;
+    }[],
+    statementDate: "2026-11-30",
     closingBalance: null as string | null,
-    currency: 'CAD',
+    currency: "CAD",
   }),
-}
+};
 
 function clearFormatMemory() {
-  const doomed: string[] = []
+  const doomed: string[] = [];
   for (let i = 0; i < window.localStorage.length; i++) {
-    const key = window.localStorage.key(i)
-    if (key?.startsWith('openbooks.statementImport.format.')) doomed.push(key)
+    const key = window.localStorage.key(i);
+    if (key?.startsWith("openbooks.statementImport.format.")) doomed.push(key);
   }
-  for (const key of doomed) window.localStorage.removeItem(key)
+  for (const key of doomed) window.localStorage.removeItem(key);
 }
 
 async function mountDialog() {
-  dialogScript.bodies.length = 0
-  script.toasts.length = 0
+  dialogScript.bodies.length = 0;
+  script.toasts.length = 0;
   // Format memory is per account and persists across mounts in this file:
   // start hermetic (the remembers-format test presets after mounting).
-  clearFormatMemory()
+  clearFormatMemory();
   globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
-    const target = String(url)
-    const raw = String((init?.body as string) ?? '{}')
-    dialogScript.bodies.push({ url: target, body: raw })
-    if (target === '/api/banking/accounts') return Response.json({ ok: true, accounts: dialogScript.accounts })
-    const parsed = JSON.parse(raw) as { mode?: string }
-    if (parsed.mode === 'columns') return Response.json({ header: ['Date', 'Amount', 'Description'] })
-    if (parsed.mode === 'preview') return Response.json(dialogScript.previewImpl(parsed))
-    if (parsed.mode === 'import') return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 })
-    throw new Error(`unexpected fetch ${target} ${parsed.mode}`)
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    const target = String(url);
+    const raw = String((init?.body as string) ?? "{}");
+    dialogScript.bodies.push({ url: target, body: raw });
+    if (target === "/api/banking/accounts")
+      return Response.json({ ok: true, accounts: dialogScript.accounts });
+    const parsed = JSON.parse(raw) as { mode?: string };
+    if (parsed.mode === "columns")
+      return Response.json({ header: ["Date", "Amount", "Description"] });
+    if (parsed.mode === "preview") return Response.json(dialogScript.previewImpl(parsed));
+    if (parsed.mode === "import")
+      return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 });
+    throw new Error(`unexpected fetch ${target} ${parsed.mode}`);
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -273,472 +293,593 @@ async function mountDialog() {
           <ImportStatementButton accountId="acc-1" />
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+  });
+  return { host, root };
 }
 
 async function openDialog() {
   await act(async () => {
-    clickButton('Import statement').click()
-    await tick()
-    await tick()
-    await tick()
-  })
+    clickButton("Import statement").click();
+    await tick();
+    await tick();
+    await tick();
+  });
 }
 
 // The app-wide Select is a typeahead with a visually-hidden native select
 // underneath (no id forwarded): drive the hidden selects positionally, as the
 // original tests do. The account picker renders first, then format.
 function hiddenSelects(): HTMLSelectElement[] {
-  return [...document.querySelectorAll('select')]
+  return [...document.querySelectorAll("select")];
 }
 
 function accountSelect(): HTMLSelectElement {
-  const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === 'Account')
-  assert.ok(label, 'the dialog must require its account visibly')
-  const selects = hiddenSelects()
-  assert.ok(selects.length >= 1, 'the account options must render')
-  return selects[0]!
+  const label = [...document.querySelectorAll("label")].find(
+    (candidate) => candidate.textContent?.trim() === "Account",
+  );
+  assert.ok(label, "the dialog must require its account visibly");
+  const selects = hiddenSelects();
+  assert.ok(selects.length >= 1, "the account options must render");
+  return selects[0]!;
 }
 
 function formatSelect(): HTMLSelectElement {
-  const selects = hiddenSelects()
-  assert.ok(selects.length >= 2, 'the format options must render')
-  return selects[1]!
+  const selects = hiddenSelects();
+  assert.ok(selects.length >= 2, "the format options must render");
+  return selects[1]!;
 }
 
 async function pasteText(value: string) {
-  const area = document.querySelector('textarea') as HTMLTextAreaElement
-  assert.ok(area, 'the statement text box must render')
+  const area = document.querySelector("textarea") as HTMLTextAreaElement;
+  assert.ok(area, "the statement text box must render");
   await act(async () => {
-    setNativeValue(area, value)
-    area.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-  })
+    setNativeValue(area, value);
+    area.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
 }
 
-function dialogCleanup(t: { after: (fn: () => unknown) => void }, host: HTMLElement, root: { unmount: () => void }) {
+function dialogCleanup(
+  t: { after: (fn: () => unknown) => void },
+  host: HTMLElement,
+  root: { unmount: () => void },
+) {
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-    clearFormatMemory()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+    clearFormatMemory();
+  });
 }
 
-test('the dialog requires its account visibly, defaulted from the page', async (t) => {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
-  const select = accountSelect()
-  assert.equal(select.value, 'acc-1', 'the picker defaults to the page account')
+test("the dialog requires its account visibly, defaulted from the page", async (t) => {
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
+  const select = accountSelect();
+  assert.equal(select.value, "acc-1", "the picker defaults to the page account");
   assert.ok(
-    (document.body.textContent ?? '').includes('1000 Operating Cash') ||
-    [...select.options].some((o) => o.text.includes('Corporate Card')),
-    'the picker must list the reconcilable accounts',
-  )
-  assert.ok((document.body.textContent ?? '').includes('CAD'), 'the choice must show its currency visibly')
+    (document.body.textContent ?? "").includes("1000 Operating Cash") ||
+      [...select.options].some((o) => o.text.includes("Corporate Card")),
+    "the picker must list the reconcilable accounts",
+  );
+  assert.ok(
+    (document.body.textContent ?? "").includes("CAD"),
+    "the choice must show its currency visibly",
+  );
   await act(async () => {
-    setNativeValue(select, 'acc-2')
-    select.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-    await tick()
-  })
-  assert.equal(accountSelect().value, 'acc-2', 'the operator can retarget the import')
-  await pasteText('OFXHEADER:100\nDATA:OFXSGML')
+    setNativeValue(select, "acc-2");
+    select.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+    await tick();
+  });
+  assert.equal(accountSelect().value, "acc-2", "the operator can retarget the import");
+  await pasteText("OFXHEADER:100\nDATA:OFXSGML");
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  const previewed = dialogScript.bodies.find((b) => b.body.includes('"mode":"preview"'))
-  assert.ok(previewed, 'the preview must post')
-  assert.ok(previewed.body.includes('"accountId":"acc-2"'), `the preview must target the picked account, got ${previewed.body}`)
-})
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  const previewed = dialogScript.bodies.find((b) => b.body.includes('"mode":"preview"'));
+  assert.ok(previewed, "the preview must post");
+  assert.ok(
+    previewed.body.includes('"accountId":"acc-2"'),
+    `the preview must target the picked account, got ${previewed.body}`,
+  );
+});
 
-test('an EUR statement preview displays its retained currency in a CAD organization', async (t) => {
-  const priorAccounts = dialogScript.accounts
-  const priorPreview = dialogScript.previewImpl
-  t.after(() => { dialogScript.accounts = priorAccounts; dialogScript.previewImpl = priorPreview })
-  dialogScript.accounts = [{ id: 'acc-1', label: '1000 EUR Cash', currency: 'EUR', type: 'asset_bank' }]
+test("an EUR statement preview displays its retained currency in a CAD organization", async (t) => {
+  const priorAccounts = dialogScript.accounts;
+  const priorPreview = dialogScript.previewImpl;
+  t.after(() => {
+    dialogScript.accounts = priorAccounts;
+    dialogScript.previewImpl = priorPreview;
+  });
+  dialogScript.accounts = [
+    { id: "acc-1", label: "1000 EUR Cash", currency: "EUR", type: "asset_bank" },
+  ];
   dialogScript.previewImpl = () => ({
-    lines: [{ postedOn: '2026-11-02', amount: '525.00', description: 'EUR receipt' }],
-    imported: 1, duplicates: 0, possibleDuplicates: 0, skipped: [], balanceCandidates: [],
-    statementDate: '2026-11-30', closingBalance: null, currency: 'EUR',
-  })
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
-  await pasteText('OFXHEADER:100\nDATA:OFXSGML')
-  await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  const text = document.body.textContent ?? ''
-  assert.ok(text.includes('€525.00'), 'the real import preview honors the source currency')
-  assert.ok(!text.includes('$525.00'), 'the organization currency cannot relabel an EUR receipt')
-})
-
-test('a statement currency mismatch warns before the engine refuses', async (t) => {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  dialogScript.previewImpl = (_parsed: Record<string, unknown>) => ({
-    lines: [{ postedOn: '2026-11-02', amount: '100.00', description: 'Deposit' }],
+    lines: [{ postedOn: "2026-11-02", amount: "525.00", description: "EUR receipt" }],
     imported: 1,
     duplicates: 0,
     possibleDuplicates: 0,
     skipped: [],
-    balanceCandidates: [] as { postedOn: string; amount: string; description: string; role: string }[],
-    statementDate: '2026-11-30',
-    closingBalance: null as string | null,
-    currency: 'USD',
-  })
-  await openDialog()
-  await pasteText('OFXHEADER:100\nDATA:OFXSGML')
+    balanceCandidates: [],
+    statementDate: "2026-11-30",
+    closingBalance: null,
+    currency: "EUR",
+  });
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
+  await pasteText("OFXHEADER:100\nDATA:OFXSGML");
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  const alert = [...document.querySelectorAll('[role="alert"]')].find((el) =>
-    (el.textContent ?? '').includes('does not match account currency'),
-  )
-  assert.ok(alert, `the currency mismatch must warn in the dialog, got ${document.body.textContent}`)
-})
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  const text = document.body.textContent ?? "";
+  assert.ok(text.includes("€525.00"), "the real import preview honors the source currency");
+  assert.ok(!text.includes("$525.00"), "the organization currency cannot relabel an EUR receipt");
+});
 
-test('editing the statement date after preview disables import with a notice', async (t) => {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
-  await pasteText('OFXHEADER:100\nDATA:OFXSGML')
-  await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  const importButton = [...document.querySelectorAll('button')].find((b) =>
-    (b.textContent ?? '').trim().startsWith('Import 1 line'),
-  ) as HTMLButtonElement | undefined
-  assert.ok(importButton, 'the fresh preview must enable Import')
-  assert.equal(importButton.disabled, false)
-  const dateInput = document.querySelector('input[data-date-field]') as HTMLInputElement | null
-  assert.ok(dateInput, 'the preview must offer the statement date')
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-    setter.call(dateInput, '2026-11-29')
-    dateInput.dispatchEvent(new window.Event('input', { bubbles: true }))
-    dateInput.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
-  assert.ok(
-    (document.body.textContent ?? '').includes('run Preview again to enable Import'),
-    'editing after preview must say import needs a re-preview',
-  )
-  assert.equal(importButton.disabled, true, 'import must stay disabled until re-preview')
-})
-
-test('pasted CSV names Detect columns as the next step', async (t) => {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
-  assert.ok(
-    (document.body.textContent ?? '').includes('paste statement text or choose a file'),
-    'an empty dialog must name its first step',
-  )
-  await act(async () => {
-    const format = formatSelect()
-    setNativeValue(format, 'csv')
-    format.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
-  await pasteText('Date,Amount,Description\n2026-11-02,-45.00,Card payment')
-  assert.ok(
-    (document.body.textContent ?? '').includes('run Detect columns to map Date, Amount and Description'),
-    'pasted CSV must name Detect columns as the next step',
-  )
-})
-
-test('a balance candidate offers one-click balance fills', async (t) => {
+test("a statement currency mismatch warns before the engine refuses", async (t) => {
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
   dialogScript.previewImpl = (_parsed: Record<string, unknown>) => ({
-    lines: [{ postedOn: '2026-11-02', amount: '100.00', description: 'Receipt' }],
+    lines: [{ postedOn: "2026-11-02", amount: "100.00", description: "Deposit" }],
+    imported: 1,
+    duplicates: 0,
+    possibleDuplicates: 0,
+    skipped: [],
+    balanceCandidates: [] as {
+      postedOn: string;
+      amount: string;
+      description: string;
+      role: string;
+    }[],
+    statementDate: "2026-11-30",
+    closingBalance: null as string | null,
+    currency: "USD",
+  });
+  await openDialog();
+  await pasteText("OFXHEADER:100\nDATA:OFXSGML");
+  await act(async () => {
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  const alert = [...document.querySelectorAll('[role="alert"]')].find((el) =>
+    (el.textContent ?? "").includes("does not match account currency"),
+  );
+  assert.ok(
+    alert,
+    `the currency mismatch must warn in the dialog, got ${document.body.textContent}`,
+  );
+});
+
+test("editing the statement date after preview disables import with a notice", async (t) => {
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
+  await pasteText("OFXHEADER:100\nDATA:OFXSGML");
+  await act(async () => {
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  const importButton = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").trim().startsWith("Import 1 line"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(importButton, "the fresh preview must enable Import");
+  assert.equal(importButton.disabled, false);
+  const dateInput = document.querySelector("input[data-date-field]") as HTMLInputElement | null;
+  assert.ok(dateInput, "the preview must offer the statement date");
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(dateInput, "2026-11-29");
+    dateInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+    dateInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  assert.ok(
+    (document.body.textContent ?? "").includes("run Preview again to enable Import"),
+    "editing after preview must say import needs a re-preview",
+  );
+  assert.equal(importButton.disabled, true, "import must stay disabled until re-preview");
+});
+
+test("pasted CSV names Detect columns as the next step", async (t) => {
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
+  assert.ok(
+    (document.body.textContent ?? "").includes("paste statement text or choose a file"),
+    "an empty dialog must name its first step",
+  );
+  await act(async () => {
+    const format = formatSelect();
+    setNativeValue(format, "csv");
+    format.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  await pasteText("Date,Amount,Description\n2026-11-02,-45.00,Card payment");
+  assert.ok(
+    (document.body.textContent ?? "").includes(
+      "run Detect columns to map Date, Amount and Description",
+    ),
+    "pasted CSV must name Detect columns as the next step",
+  );
+});
+
+test("a balance candidate offers one-click balance fills", async (t) => {
+  dialogScript.previewImpl = (_parsed: Record<string, unknown>) => ({
+    lines: [{ postedOn: "2026-11-02", amount: "100.00", description: "Receipt" }],
     imported: 1,
     duplicates: 0,
     possibleDuplicates: 0,
     skipped: [],
     balanceCandidates: [
-      { postedOn: '2026-11-01', amount: '3068.57', description: 'Opening balance', role: 'opening' },
+      {
+        postedOn: "2026-11-01",
+        amount: "3068.57",
+        description: "Opening balance",
+        role: "opening",
+      },
     ],
-    statementDate: '2026-11-30',
+    statementDate: "2026-11-30",
     closingBalance: null as string | null,
-    currency: 'CAD',
-  })
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
-  await pasteText('OFXHEADER:100\nDATA:OFXSGML')
+    currency: "CAD",
+  });
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
+  await pasteText("OFXHEADER:100\nDATA:OFXSGML");
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
   assert.ok(
-    (document.body.textContent ?? '').includes('look like statement balances'),
-    'the preview must call out balance rows',
-  )
-  const use = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Use as opening') as HTMLButtonElement | undefined
-  assert.ok(use, 'the candidate must offer Use as opening')
+    (document.body.textContent ?? "").includes("look like statement balances"),
+    "the preview must call out balance rows",
+  );
+  const use = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Use as opening",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(use, "the candidate must offer Use as opening");
   await act(async () => {
-    use.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  const opening = [...document.querySelectorAll('input')].find((i) => i.getAttribute('inputmode') === 'decimal') as HTMLInputElement | undefined
-  assert.ok(opening && opening.value.includes('3068.57'), `the opening balance must fill, got ${opening?.value}`)
+    use.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  const opening = [...document.querySelectorAll("input")].find(
+    (i) => i.getAttribute("inputmode") === "decimal",
+  ) as HTMLInputElement | undefined;
   assert.ok(
-    (document.body.textContent ?? '').includes('run Preview again to enable Import'),
-    'using a candidate must require a re-preview',
-  )
-})
+    opening && opening.value.includes("3068.57"),
+    `the opening balance must fill, got ${opening?.value}`,
+  );
+  assert.ok(
+    (document.body.textContent ?? "").includes("run Preview again to enable Import"),
+    "using a candidate must require a re-preview",
+  );
+});
 
-test('each account remembers its own last used format', async (t) => {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  window.localStorage.setItem('openbooks.statementImport.format.acc-2', 'csv')
-  await openDialog()
-  assert.equal(formatSelect().value, 'ofx', 'the page account starts from its own memory (none: OFX)')
-  await act(async () => {
-    const select = accountSelect()
-    setNativeValue(select, 'acc-2')
-    select.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
-  assert.equal(formatSelect().value, 'csv', 'switching accounts recalls that account’s format')
-  await act(async () => {
-    const format = formatSelect()
-    setNativeValue(format, 'bai2')
-    format.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
+test("each account remembers its own last used format", async (t) => {
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  window.localStorage.setItem("openbooks.statementImport.format.acc-2", "csv");
+  await openDialog();
   assert.equal(
-    window.localStorage.getItem('openbooks.statementImport.format.acc-2'),
-    'bai2',
-    'choosing a format remembers it for the account',
-  )
-})
+    formatSelect().value,
+    "ofx",
+    "the page account starts from its own memory (none: OFX)",
+  );
+  await act(async () => {
+    const select = accountSelect();
+    setNativeValue(select, "acc-2");
+    select.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  assert.equal(formatSelect().value, "csv", "switching accounts recalls that account’s format");
+  await act(async () => {
+    const format = formatSelect();
+    setNativeValue(format, "bai2");
+    format.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  assert.equal(
+    window.localStorage.getItem("openbooks.statementImport.format.acc-2"),
+    "bai2",
+    "choosing a format remembers it for the account",
+  );
+});
 
 async function openCsvWithHeader(t: { after: (fn: () => unknown) => void }, header: string[]) {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
   // Past this point the columns call serves this test's header, not the
   // shared ['Date', 'Amount', 'Description'] fixture.
   globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
-    const target = String(url)
-    const raw = String((init?.body as string) ?? '{}')
-    if (target === '/api/banking/accounts') return Response.json({ ok: true, accounts: dialogScript.accounts })
-    const parsed = JSON.parse(raw) as { mode?: string }
-    if (parsed.mode === 'columns') return Response.json({ header })
-    if (parsed.mode === 'preview') return Response.json(dialogScript.previewImpl(parsed))
-    if (parsed.mode === 'import') return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 })
-    throw new Error(`unexpected fetch ${target} ${parsed.mode}`)
-  }) as typeof fetch
+    const target = String(url);
+    const raw = String((init?.body as string) ?? "{}");
+    if (target === "/api/banking/accounts")
+      return Response.json({ ok: true, accounts: dialogScript.accounts });
+    const parsed = JSON.parse(raw) as { mode?: string };
+    if (parsed.mode === "columns") return Response.json({ header });
+    if (parsed.mode === "preview") return Response.json(dialogScript.previewImpl(parsed));
+    if (parsed.mode === "import")
+      return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 });
+    throw new Error(`unexpected fetch ${target} ${parsed.mode}`);
+  }) as typeof fetch;
   await act(async () => {
-    const format = formatSelect()
-    setNativeValue(format, 'csv')
-    format.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
-  await pasteText(`${header.join(',')}\n2026-11-02,Store purchase,500.00,,2414.90,1234`)
+    const format = formatSelect();
+    setNativeValue(format, "csv");
+    format.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  await pasteText(`${header.join(",")}\n2026-11-02,Store purchase,500.00,,2414.90,1234`);
   await act(async () => {
-    clickButton('Detect columns').click()
-    await tick()
-    await tick()
-  })
-  return { host, root }
+    clickButton("Detect columns").click();
+    await tick();
+    await tick();
+  });
+  return { host, root };
 }
 
 // A Visa export in the same six-column layout as the chequing file names
 // its money columns Charges/Payments: Detect columns must map those without
 // manual picks, or Preview stays disabled with no reason given.
-test('a card-style Charges/Payments header maps without manual columns', async (t) => {
-  await openCsvWithHeader(t, ['Posted Date', 'Description', 'Charges', 'Payments', 'Balance', 'Reference'])
-  const preview = clickButton('Preview')
-  assert.equal(preview.disabled, false, 'a mapped card header must enable Preview')
+test("a card-style Charges/Payments header maps without manual columns", async (t) => {
+  await openCsvWithHeader(t, [
+    "Posted Date",
+    "Description",
+    "Charges",
+    "Payments",
+    "Balance",
+    "Reference",
+  ]);
+  const preview = clickButton("Preview");
+  assert.equal(preview.disabled, false, "a mapped card header must enable Preview");
   assert.ok(
-    !((document.body.textContent ?? '').includes('Column mapping still needs')),
-    'a mapped card header must not report missing columns',
-  )
-})
+    !(document.body.textContent ?? "").includes("Column mapping still needs"),
+    "a mapped card header must not report missing columns",
+  );
+});
 
-test('an unmappable header names the missing roles instead of stranding Preview', async (t) => {
-  await openCsvWithHeader(t, ['Foo', 'Bar', 'Baz', 'Qux', 'Quux', 'Corge'])
+test("an unmappable header names the missing roles instead of stranding Preview", async (t) => {
+  await openCsvWithHeader(t, ["Foo", "Bar", "Baz", "Qux", "Quux", "Corge"]);
   assert.ok(
-    (document.body.textContent ?? '').includes('Column mapping still needs Date, Amount, Description'),
-    'an unmapped header must name the missing roles',
-  )
-  const preview = clickButton('Preview')
-  assert.equal(preview.disabled, true, 'Preview must stay disabled until the mapping names its columns')
-})
+    (document.body.textContent ?? "").includes(
+      "Column mapping still needs Date, Amount, Description",
+    ),
+    "an unmapped header must name the missing roles",
+  );
+  const preview = clickButton("Preview");
+  assert.equal(
+    preview.disabled,
+    true,
+    "Preview must stay disabled until the mapping names its columns",
+  );
+});
 
-test('import says preview is required before the first preview', async (t) => {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
+test("import says preview is required before the first preview", async (t) => {
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
   assert.ok(
-    (document.body.textContent ?? '').includes('Run Preview before Import.'),
-    'the dialog must say Preview comes first',
-  )
-})
+    (document.body.textContent ?? "").includes("Run Preview before Import."),
+    "the dialog must say Preview comes first",
+  );
+});
 
 function openingInput(): HTMLInputElement | null {
-  const label = [...document.querySelectorAll('label')].find(
-    (l) => (l.textContent ?? '').trim() === 'Opening balance',
-  )
-  const id = label?.getAttribute('for')
-  return id ? document.getElementById(id) as HTMLInputElement | null : null
+  const label = [...document.querySelectorAll("label")].find(
+    (l) => (l.textContent ?? "").trim() === "Opening balance",
+  );
+  const id = label?.getAttribute("for");
+  return id ? (document.getElementById(id) as HTMLInputElement | null) : null;
 }
 
 // The prior signed-off closing chains into an empty opening field — still
 // editable — and a typed opening that differs stays flagged, never refused.
-test('opening defaults from the prior closing and flags a mismatch', async (t) => {
-  const { host, root } = await mountDialog()
-  dialogCleanup(t, host, root)
-  await openDialog()
+test("opening defaults from the prior closing and flags a mismatch", async (t) => {
+  const { host, root } = await mountDialog();
+  dialogCleanup(t, host, root);
+  await openDialog();
   globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
-    const target = String(url)
-    const raw = String((init?.body as string) ?? '{}')
-    if (target === '/api/banking/accounts') return Response.json({ ok: true, accounts: dialogScript.accounts })
-    const parsed = JSON.parse(raw) as { mode?: string; openingBalance?: string | null }
-    if (parsed.mode === 'preview') {
+    const target = String(url);
+    const raw = String((init?.body as string) ?? "{}");
+    if (target === "/api/banking/accounts")
+      return Response.json({ ok: true, accounts: dialogScript.accounts });
+    const parsed = JSON.parse(raw) as { mode?: string; openingBalance?: string | null };
+    if (parsed.mode === "preview") {
       return Response.json({
         ...dialogScript.previewImpl(parsed),
-        suggestedOpening: { balance: '1150.00', sourceStatementId: '00000000-0000-4000-8000-000000000001', sourceStatementDate: '2026-10-31' },
+        suggestedOpening: {
+          balance: "1150.00",
+          sourceStatementId: "00000000-0000-4000-8000-000000000001",
+          sourceStatementDate: "2026-10-31",
+        },
         openingMismatch:
-          parsed.openingBalance && parsed.openingBalance !== '1150.00'
-            ? { expected: '1150.00', supplied: parsed.openingBalance }
+          parsed.openingBalance && parsed.openingBalance !== "1150.00"
+            ? { expected: "1150.00", supplied: parsed.openingBalance }
             : null,
-      })
+      });
     }
-    if (parsed.mode === 'import') return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 })
-    throw new Error(`unexpected fetch ${target} ${parsed.mode}`)
-  }) as typeof fetch
-  await pasteText('not ofx at all')
+    if (parsed.mode === "import")
+      return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 });
+    throw new Error(`unexpected fetch ${target} ${parsed.mode}`);
+  }) as typeof fetch;
+  await pasteText("not ofx at all");
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  const opening = openingInput()
-  assert.ok(opening, 'the dialog offers an opening field')
-  assert.equal(opening.value, '1150.00', 'an empty opening prefills from the prior closing')
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  const opening = openingInput();
+  assert.ok(opening, "the dialog offers an opening field");
+  assert.equal(opening.value, "1150.00", "an empty opening prefills from the prior closing");
   assert.ok(
-    (document.body.textContent ?? '').includes('Opening defaulted from the 2026-10-31 closing balance'),
-    'the prefill names its source',
-  )
+    (document.body.textContent ?? "").includes(
+      "Opening defaulted from the 2026-10-31 closing balance",
+    ),
+    "the prefill names its source",
+  );
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-    setter.call(opening, '900.00')
-    opening.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  assert.equal(openingInput()?.value, '900.00', 'a typed opening is never overwritten')
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(opening, "900.00");
+    opening.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  assert.equal(openingInput()?.value, "900.00", "a typed opening is never overwritten");
   assert.ok(
-    (document.body.textContent ?? '').includes('Opening 900.00 differs from the 2026-10-31 closing balance 1150.00'),
-    'a differing opening flags instead of refusing',
-  )
-})
+    (document.body.textContent ?? "").includes(
+      "Opening 900.00 differs from the 2026-10-31 closing balance 1150.00",
+    ),
+    "a differing opening flags instead of refusing",
+  );
+});
 
 const DUPLICATE_PREVIEW = {
-  lines: [{ postedOn: '2026-11-03', amount: '20.0000', description: 'REFUND' }],
+  lines: [{ postedOn: "2026-11-03", amount: "20.0000", description: "REFUND" }],
   imported: 1,
   duplicates: 0,
   possibleDuplicates: 1,
   possibleDuplicateLines: [
-    { postedOn: '2026-11-02', amount: '-5.0000', description: 'COFFEE SHOP', possibleDuplicateOf: 'line-coffee' },
+    {
+      postedOn: "2026-11-02",
+      amount: "-5.0000",
+      description: "COFFEE SHOP",
+      possibleDuplicateOf: "line-coffee",
+    },
   ],
   skipped: [],
-  balanceCandidates: [] as { postedOn: string; amount: string; description: string; role: string }[],
-}
+  balanceCandidates: [] as {
+    postedOn: string;
+    amount: string;
+    description: string;
+    role: string;
+  }[],
+};
 
-test('possible duplicates are listed in the preview and held out of the default import', async (t) => {
-  script.previewStatus = 200
-  script.previewPayload = DUPLICATE_PREVIEW
-  script.importPayload = { statementId: 'stmt-1', imported: 1, duplicates: 0, possibleDuplicates: 1 }
-  script.requests.length = 0
-  const { host, root } = await mount()
+test("possible duplicates are listed in the preview and held out of the default import", async (t) => {
+  script.previewStatus = 200;
+  script.previewPayload = DUPLICATE_PREVIEW;
+  script.importPayload = {
+    statementId: "stmt-1",
+    imported: 1,
+    duplicates: 0,
+    possibleDuplicates: 1,
+  };
+  script.requests.length = 0;
+  const { host, root } = await mount();
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await mapJunkCsv()
+      root.unmount();
+    });
+    host.remove();
+  });
+  await mapJunkCsv();
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
-  assert.match(document.body.textContent ?? '', /Matches a line already on this account/, 'the duplicate is named in the preview')
-  const optIn = document.querySelector('input[type="checkbox"]') as HTMLInputElement | null
-  assert.ok(optIn, 'the preview must offer the explicit opt-in')
-  assert.equal(optIn.checked, false, 'possible duplicates are excluded by default')
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
+  assert.match(
+    document.body.textContent ?? "",
+    /Matches a line already on this account/,
+    "the duplicate is named in the preview",
+  );
+  const optIn = document.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+  assert.ok(optIn, "the preview must offer the explicit opt-in");
+  assert.equal(optIn.checked, false, "possible duplicates are excluded by default");
   await act(async () => {
-    clickButton('Import 1 line').click()
-    await tick()
-    await tick()
-  })
-  const commit = script.requests.find((body) => body.mode === 'import')
-  assert.ok(commit, 'the import must post a commit')
-  assert.equal(commit.includePossibleDuplicates, false, 'the default commit leaves possible duplicates out')
-})
+    clickButton("Import 1 line").click();
+    await tick();
+    await tick();
+  });
+  const commit = script.requests.find((body) => body.mode === "import");
+  assert.ok(commit, "the import must post a commit");
+  assert.equal(
+    commit.includePossibleDuplicates,
+    false,
+    "the default commit leaves possible duplicates out",
+  );
+});
 
-test('opting in re-previews the duplicates and the commit imports exactly that choice', async (t) => {
-  script.previewStatus = 200
-  script.previewPayload = DUPLICATE_PREVIEW
-  script.importPayload = { statementId: 'stmt-2', imported: 2, duplicates: 0, possibleDuplicates: 1 }
-  script.requests.length = 0
-  const { host, root } = await mount()
+test("opting in re-previews the duplicates and the commit imports exactly that choice", async (t) => {
+  script.previewStatus = 200;
+  script.previewPayload = DUPLICATE_PREVIEW;
+  script.importPayload = {
+    statementId: "stmt-2",
+    imported: 2,
+    duplicates: 0,
+    possibleDuplicates: 1,
+  };
+  script.requests.length = 0;
+  const { host, root } = await mount();
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await mapJunkCsv()
+      root.unmount();
+    });
+    host.remove();
+  });
+  await mapJunkCsv();
   await act(async () => {
-    clickButton('Preview').click()
-    await tick()
-    await tick()
-  })
+    clickButton("Preview").click();
+    await tick();
+    await tick();
+  });
   script.previewPayload = {
     ...DUPLICATE_PREVIEW,
     imported: 2,
     lines: [
       ...DUPLICATE_PREVIEW.lines,
-      { postedOn: '2026-11-02', amount: '-5.0000', description: 'COFFEE SHOP', possibleDuplicateOf: 'line-coffee' },
+      {
+        postedOn: "2026-11-02",
+        amount: "-5.0000",
+        description: "COFFEE SHOP",
+        possibleDuplicateOf: "line-coffee",
+      },
     ],
-  }
+  };
   await act(async () => {
-    ;(document.querySelector('input[type="checkbox"]') as HTMLInputElement).click()
-    await tick()
-    await tick()
-  })
-  const previews = script.requests.filter((body) => body.mode === 'preview')
-  assert.equal(previews.at(-1)?.includePossibleDuplicates, true, 'opting in re-previews with the choice')
+    (document.querySelector('input[type="checkbox"]') as HTMLInputElement).click();
+    await tick();
+    await tick();
+  });
+  const previews = script.requests.filter((body) => body.mode === "preview");
+  assert.equal(
+    previews.at(-1)?.includePossibleDuplicates,
+    true,
+    "opting in re-previews with the choice",
+  );
   assert.equal(
     (document.querySelector('input[type="checkbox"]') as HTMLInputElement).checked,
     true,
-    'the opt-in stays on for the previewed choice',
-  )
+    "the opt-in stays on for the previewed choice",
+  );
   await act(async () => {
-    clickButton('Import 2 lines').click()
-    await tick()
-    await tick()
-  })
-  const commit = script.requests.find((body) => body.mode === 'import')
-  assert.equal(commit?.includePossibleDuplicates, true, 'the commit imports the reviewed duplicates')
-})
+    clickButton("Import 2 lines").click();
+    await tick();
+    await tick();
+  });
+  const commit = script.requests.find((body) => body.mode === "import");
+  assert.equal(
+    commit?.includePossibleDuplicates,
+    true,
+    "the commit imports the reviewed duplicates",
+  );
+});

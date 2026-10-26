@@ -34,7 +34,9 @@ export async function countBandHolders(query: {
   // The allowlist crosses as JSON (bare JS arrays interpolate as row
   // constructors, never PostgreSQL arrays); an empty set is handled
   // above so this branch always matches at least one id when fenced.
-  const row = (await db.execute<{ n: string }>(sql`
+  const row = (
+    await db.execute<{ n: string }>(
+      sql`
     select count(distinct aav.employment_id)::text as n
       from employment_assignment_versions aav
       join position_versions pv on pv.org_id = aav.org_id and pv.position_id = aav.position_id
@@ -54,6 +56,9 @@ export async function countBandHolders(query: {
        and (${allowed === null}::boolean
             or e.employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
-            ))`, "objects"))[0];
+            ))`,
+      "objects",
+    )
+  )[0];
   return Number(row?.n ?? "0");
 }

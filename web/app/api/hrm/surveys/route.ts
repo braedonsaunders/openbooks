@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  listSurveys,
-  saveSurvey,
-} from "@openbooks/engine/hrm/surveys/surveys";
+import { listSurveys, saveSurvey } from "@openbooks/engine/hrm/surveys/surveys";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveSurveyBody } from "./bodies";
 export function resolveAppBaseUrl(req: Request): string {
@@ -49,10 +46,7 @@ export const POST = defineRoute({
         minGroupSize: body.minGroupSize,
         questions: body.questions,
       });
-      return NextResponse.json(
-        { survey },
-        { status: body.surveyId ? 200 : 201 },
-      );
+      return NextResponse.json({ survey }, { status: body.surveyId ? 200 : 201 });
     } catch (e) {
       return hrmDocumentsErrorResponse(e);
     }

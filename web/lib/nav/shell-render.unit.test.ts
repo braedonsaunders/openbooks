@@ -1,18 +1,31 @@
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
 
 // React's cache must be exercised by an actual server render. The standalone
 // runner deliberately has no request cache and cannot prove these boundaries.
-test('menus share source reads within a render and recheck organization and role authority on the next render', () => {
-  const result = spawnSync(process.execPath, [
-    '--no-concurrent-sparkplug', '--no-concurrent-recompilation',
-    '--conditions=react-server', '--import=tsx', '--import=../scripts/test-hooks.mjs', '--input-type=module',
-  ], {
-    cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', timeout: 30_000,
-    env: { ...process.env, OPENBOOKS_DB_URL: '', TSX_TSCONFIG_PATH: fileURLToPath(new URL('../../tsconfig.json', import.meta.url)) },
-    input: `
+test("menus share source reads within a render and recheck organization and role authority on the next render", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--no-concurrent-sparkplug",
+      "--no-concurrent-recompilation",
+      "--conditions=react-server",
+      "--import=tsx",
+      "--import=../scripts/test-hooks.mjs",
+      "--input-type=module",
+    ],
+    {
+      cwd: fileURLToPath(new URL("../../", import.meta.url)),
+      encoding: "utf8",
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        OPENBOOKS_DB_URL: "",
+        TSX_TSCONFIG_PATH: fileURLToPath(new URL("../../tsconfig.json", import.meta.url)),
+      },
+      input: `
       import assert from 'node:assert/strict';
       import {registerHooks,createRequire} from 'node:module';
       import {PassThrough} from 'node:stream';
@@ -75,7 +88,8 @@ test('menus share source reads within a render and recheck organization and role
       await savedNavigationConfig('company-a');await savedNavigationConfig('company-a');
       assert.equal(count('company-a','from org_nav_configs'),before+2,'standalone calls keep live reads');
     `,
-  })
-  assert.equal(result.error, undefined)
-  assert.equal(result.status, 0, result.stderr || result.stdout)
-})
+    },
+  );
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

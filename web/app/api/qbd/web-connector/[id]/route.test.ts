@@ -6,13 +6,16 @@ import { QBD_MAX_BODY_BYTES } from "./body-limit.ts";
 const CONNECTION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
 function post(body: BodyInit, headers?: Record<string, string>): Promise<Response> {
-  return POST(new Request(`http://localhost/api/qbd/web-connector/${CONNECTION_ID}`, {
-    method: "POST",
-    headers: { "content-type": "text/xml; charset=utf-8", ...headers },
-    body,
-    // @ts-expect-error undici streaming-upload opt-in (ignored for string bodies)
-    duplex: "half",
-  }), { params: Promise.resolve({ id: CONNECTION_ID }) });
+  return POST(
+    new Request(`http://localhost/api/qbd/web-connector/${CONNECTION_ID}`, {
+      method: "POST",
+      headers: { "content-type": "text/xml; charset=utf-8", ...headers },
+      body,
+      // @ts-expect-error undici streaming-upload opt-in (ignored for string bodies)
+      duplex: "half",
+    }),
+    { params: Promise.resolve({ id: CONNECTION_ID }) },
+  );
 }
 
 test("an oversized declared length is refused with 413 without waiting on the body", async () => {
@@ -72,13 +75,15 @@ test("the version handshake is answered, not faulted", async () => {
 });
 
 test("the client version handshake is answered, not faulted", async () => {
-  const client = await post(soapEnvelope('<clientVersion>1.5</clientVersion>'));
+  const client = await post(soapEnvelope("<clientVersion>1.5</clientVersion>"));
   assert.equal(client.status, 200);
   assert.match(await client.text(), /<clientVersionResult><\/clientVersionResult>/);
 });
 
 test("an oversized unauthenticated authenticate is refused with 413 and a SOAP fault", async () => {
-  const big = soapEnvelope(`<authenticate xmlns="http://developer.intuit.com/"><strUserName>qbd:x</strUserName><strPassword>${"p".repeat(100 * 1024)}</strPassword></authenticate>`);
+  const big = soapEnvelope(
+    `<authenticate xmlns="http://developer.intuit.com/"><strUserName>qbd:x</strUserName><strPassword>${"p".repeat(100 * 1024)}</strPassword></authenticate>`,
+  );
   assert.ok(big.length > 64 * 1024);
   const response = await post(big);
   assert.equal(response.status, 413);
@@ -88,7 +93,9 @@ test("an oversized unauthenticated authenticate is refused with 413 and a SOAP f
 });
 
 test("an oversized receiveResponseXML with a dead ticket is refused before buffering", async () => {
-  const big = soapEnvelope(`<receiveResponseXML xmlns="http://developer.intuit.com/"><ticket>00000000-0000-4000-8000-000000000000</ticket><response>${"x".repeat(100 * 1024)}</response><hresult></hresult><message></message></receiveResponseXML>`);
+  const big = soapEnvelope(
+    `<receiveResponseXML xmlns="http://developer.intuit.com/"><ticket>00000000-0000-4000-8000-000000000000</ticket><response>${"x".repeat(100 * 1024)}</response><hresult></hresult><message></message></receiveResponseXML>`,
+  );
   assert.ok(big.length > 64 * 1024);
   const response = await post(big);
   assert.equal(response.status, 413);
@@ -96,7 +103,9 @@ test("an oversized receiveResponseXML with a dead ticket is refused before buffe
 });
 
 test("a deeply nested envelope is refused before full parsing", async () => {
-  const deep = soapEnvelope(`<receiveResponseXML>${"<level>".repeat(200)}x${"</level>".repeat(200)}</receiveResponseXML>`);
+  const deep = soapEnvelope(
+    `<receiveResponseXML>${"<level>".repeat(200)}x${"</level>".repeat(200)}</receiveResponseXML>`,
+  );
   const response = await post(deep);
   assert.equal(response.status, 400);
   assert.match(await response.text(), /nests deeper than 128 elements/);

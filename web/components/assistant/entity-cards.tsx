@@ -1,34 +1,34 @@
-'use client'
+"use client";
 
-import { ArrowUpRight, Building2, CalendarDays, FileText } from 'lucide-react'
-import { useLocale, useTranslations } from 'next-intl'
-import { cn } from '@openbooks/ui'
-import { TxnLink } from '@/app/(app)/reports/TxnLink'
-import { RelatedPartyLink } from '@/components/related-party-link'
-import { docTypeMeta } from '../doc-type-badge'
-import { createMoneyFormatter } from '@/lib/money-format'
+import { ArrowUpRight, Building2, CalendarDays, FileText } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { cn } from "@openbooks/ui";
+import { TxnLink } from "@/app/(app)/reports/TxnLink";
+import { RelatedPartyLink } from "@/components/related-party-link";
+import { docTypeMeta } from "../doc-type-badge";
+import { createMoneyFormatter } from "@/lib/money-format";
 import {
   assistantEntitiesFromToolOutput,
   type AssistantDocumentEntity,
   type AssistantPartyEntity,
-} from '@/lib/assistant/entities'
+} from "@/lib/assistant/entities";
 
-const DISPLAY_LIMIT = 6
+const DISPLAY_LIMIT = 6;
 
 /**
  * Assistant tool outputs predate the canonical `quote` kind: an estimate
  * arrives as `estimate`. Alias it onto the shared primitive's entry so the
  * card resolves the translated estimate label instead of English fallback.
  */
-const KIND_ALIASES: Record<string, string> = { estimate: 'quote' }
+const KIND_ALIASES: Record<string, string> = { estimate: "quote" };
 
 function translatedKind(
   kind: string,
   has: (key: string) => boolean,
   get: (key: string) => string,
 ): string {
-  const meta = docTypeMeta(KIND_ALIASES[kind] ?? kind)
-  return has(meta.labelKey) ? get(meta.labelKey) : meta.labelKey
+  const meta = docTypeMeta(KIND_ALIASES[kind] ?? kind);
+  return has(meta.labelKey) ? get(meta.labelKey) : meta.labelKey;
 }
 
 function translatedStatus(
@@ -36,53 +36,53 @@ function translatedStatus(
   has: (key: string) => boolean,
   get: (key: string) => string,
 ): string {
-  return has(status) ? get(status) : status.replaceAll('_', ' ')
+  return has(status) ? get(status) : status.replaceAll("_", " ");
 }
 
 function statusClass(status: string | undefined): string {
-  if (status === 'posted' || status === 'approved') {
-    return 'bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-400/20'
+  if (status === "posted" || status === "approved") {
+    return "bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-400/20";
   }
-  if (status === 'voided') {
-    return 'bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-400/20'
+  if (status === "voided") {
+    return "bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-400/20";
   }
-  return 'bg-amber-50 text-amber-700 ring-amber-600/15 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-400/20'
+  return "bg-amber-50 text-amber-700 ring-amber-600/15 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-400/20";
 }
 
 function formattedDate(value: string | undefined, locale: string): string | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null
-  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
-  if (Number.isNaN(date.valueOf())) return value
+  if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
+  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(date.valueOf())) return value;
   return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(date)
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function DocumentCard({ document }: { document: AssistantDocumentEntity }) {
-  const locale = useLocale()
-  const tTypes = useTranslations('common.transactionTypes')
-  const tStatus = useTranslations('common.status')
-  const tEntities = useTranslations('assistant.entities')
-  const hasType = tTypes.has as (key: string) => boolean
-  const getType = (key: string): string => tTypes(key as never)
-  const hasStatus = tStatus.has as (key: string) => boolean
-  const getStatus = (key: string): string => tStatus(key as never)
-  const date = formattedDate(document.documentDate, locale)
-  const dueDate = formattedDate(document.dueDate, locale)
+  const locale = useLocale();
+  const tTypes = useTranslations("common.transactionTypes");
+  const tStatus = useTranslations("common.status");
+  const tEntities = useTranslations("assistant.entities");
+  const hasType = tTypes.has as (key: string) => boolean;
+  const getType = (key: string): string => tTypes(key as never);
+  const hasStatus = tStatus.has as (key: string) => boolean;
+  const getStatus = (key: string): string => tStatus(key as never);
+  const date = formattedDate(document.documentDate, locale);
+  const dueDate = formattedDate(document.dueDate, locale);
   const amount =
     document.total !== undefined && document.currency
       ? createMoneyFormatter(locale, document.currency).money(document.total, {
-          currencyDisplay: 'code',
+          currencyDisplay: "code",
         })
-      : null
+      : null;
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-teal-300 dark:border-slate-800 dark:bg-slate-900/80 dark:hover:border-teal-800">
       <TxnLink
-        entryId={document.postedEntryId ?? ''}
+        entryId={document.postedEntryId ?? ""}
         docKind={document.kind}
         docId={document.id}
         className="group flex min-w-0 items-start gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
@@ -99,7 +99,7 @@ function DocumentCard({ document }: { document: AssistantDocumentEntity }) {
             {document.status ? (
               <span
                 className={cn(
-                  'rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ring-1 ring-inset',
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ring-1 ring-inset",
                   statusClass(document.status),
                 )}
               >
@@ -109,7 +109,9 @@ function DocumentCard({ document }: { document: AssistantDocumentEntity }) {
           </div>
           <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             {translatedKind(document.kind, hasType, getType)}
-            {document.referenceNumber ? ` · ${tEntities('reference', { ref: document.referenceNumber })}` : ''}
+            {document.referenceNumber
+              ? ` · ${tEntities("reference", { ref: document.referenceNumber })}`
+              : ""}
           </div>
         </div>
         {amount ? (
@@ -144,12 +146,14 @@ function DocumentCard({ document }: { document: AssistantDocumentEntity }) {
             </span>
           ) : null}
           {dueDate ? (
-            <span className="text-slate-400 dark:text-slate-500">{tEntities('dueOn', { date: dueDate })}</span>
+            <span className="text-slate-400 dark:text-slate-500">
+              {tEntities("dueOn", { date: dueDate })}
+            </span>
           ) : null}
         </div>
       ) : null}
     </article>
-  )
+  );
 }
 
 function PartyCard({ party }: { party: AssistantPartyEntity }) {
@@ -166,19 +170,19 @@ function PartyCard({ party }: { party: AssistantPartyEntity }) {
           {party.displayName}
         </span>
         <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-          {[party.kind?.replaceAll('_', ' '), party.shortCode, party.email]
+          {[party.kind?.replaceAll("_", " "), party.shortCode, party.email]
             .filter(Boolean)
-            .join(' · ')}
+            .join(" · ")}
         </span>
       </span>
       <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-300" />
     </RelatedPartyLink>
-  )
+  );
 }
 
 export function AssistantEntityCards({ name, output }: { name: string; output: unknown }) {
-  const { documents, parties } = assistantEntitiesFromToolOutput(name, output)
-  if (documents.length === 0 && parties.length === 0) return null
+  const { documents, parties } = assistantEntitiesFromToolOutput(name, output);
+  if (documents.length === 0 && parties.length === 0) return null;
 
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -189,5 +193,5 @@ export function AssistantEntityCards({ name, output }: { name: string; output: u
         <PartyCard key={party.id} party={party} />
       ))}
     </div>
-  )
+  );
 }

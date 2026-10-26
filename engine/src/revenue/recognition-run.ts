@@ -3,13 +3,26 @@ import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "../platform/db.ts";
 import { arePeriodModulesOpen, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { defaultPostingSubsidiaryId, loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  defaultPostingSubsidiaryId,
+  loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { recognitionDate } from "./recognition-dates.ts";
-import { assertEnabled, recognitionBaseAmount, RevenueRecognitionError } from "./recognition-transaction-price.ts";
+import {
+  assertEnabled,
+  recognitionBaseAmount,
+  RevenueRecognitionError,
+} from "./recognition-transaction-price.ts";
 import { lockObligationContract } from "./recognition-schedule-build.ts";
 import { previewRevenueRecognition, type RecognitionPreviewInput } from "./recognition-preview.ts";
-import { recognitionNetRecognized, recognitionObligationScope, recognitionPostingRows, recognitionUnearnedRemaining } from "./recognition-posting-rows.ts";
+import {
+  recognitionNetRecognized,
+  recognitionObligationScope,
+  recognitionPostingRows,
+  recognitionUnearnedRemaining,
+} from "./recognition-posting-rows.ts";
 
 // ---------------------------------------------------------------------------
 // runRevenueRecognition — post due periods through the kernel
@@ -31,9 +44,7 @@ export interface RevenueRecognitionEntryIdentity {
  * several obligations, every obligation can have a schedule on several books,
  * and percent-complete schedules can post several lines in one period.
  */
-export function revenueRecognitionEntryNumber(
-  identity: RevenueRecognitionEntryIdentity,
-): string {
+export function revenueRecognitionEntryNumber(identity: RevenueRecognitionEntryIdentity): string {
   return [
     "REV",
     identity.contractNumber,
@@ -50,7 +61,14 @@ export interface RunRecognitionResult {
   skipped: number;
   totalAmount: string;
   /** `period` is the locale-free period label; `periodRef` lets presenters label it in the viewer's locale. */
-  entries: { contract: string; obligation: string; period: string; periodRef: PeriodDisplayInput; amount: string; entryId: string }[];
+  entries: {
+    contract: string;
+    obligation: string;
+    period: string;
+    periodRef: PeriodDisplayInput;
+    amount: string;
+    entryId: string;
+  }[];
   problems: string[];
 }
 /**
@@ -98,9 +116,13 @@ export async function runRevenueRecognition(
   // Unattributed obligations default to the hierarchy root through the
   // shared resolver — never the oldest subsidiary.
   const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
-  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds, fallbackSubsidiaryId);
+  const obligationScope = recognitionObligationScope(
+    orgId,
+    allowedSubsidiaryIds,
+    fallbackSubsidiaryId,
+  );
 
-  const effectiveMethod=sql`coalesce((select s.change_basis->>'method' from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary and b.is_active and b.posts_gl where s.obligation_id=o.id and s.org_id=o.org_id limit 1),r.method)`;
+  const effectiveMethod = sql`coalesce((select s.change_basis->>'method' from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary and b.is_active and b.posts_gl where s.obligation_id=o.id and s.org_id=o.org_id limit 1),r.method)`;
 
   let confirmedLineIds: Set<string> | null = null;
   if (confirm) {
@@ -113,159 +135,218 @@ export async function runRevenueRecognition(
     confirmedLineIds = new Set(
       current.rows.filter((row) => row.skipReason === null).map((row) => row.lineId),
     );
-    if (confirmedLineIds.size === 0) return { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
+    if (confirmedLineIds.size === 0)
+      return { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
   }
 
-  const due = (await recognitionPostingRows(db, orgId, asOfDate, fallbackSubsidiaryId, obligationId, allowedSubsidiaryIds))
-    .filter((row) => confirmedLineIds === null || confirmedLineIds.has(row.line_id));
+  const due = (
+    await recognitionPostingRows(
+      db,
+      orgId,
+      asOfDate,
+      fallbackSubsidiaryId,
+      obligationId,
+      allowedSubsidiaryIds,
+    )
+  ).filter((row) => confirmedLineIds === null || confirmedLineIds.has(row.line_id));
 
-  const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
+  const result: RunRecognitionResult = {
+    posted: 0,
+    skipped: 0,
+    totalAmount: "0",
+    entries: [],
+    problems: [],
+  };
 
   for (const candidate of due) {
     try {
-      const posted = await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
-        await lockObligationContract(tx,orgId,candidate.obligation_id);
-        // Rebuilds, event writes and cancellation share this aggregate lock.
-        // Nothing from the preliminary scan is a financial posting input.
-        const obligation = await tx.execute<{ id: string }>(sql`
+      const posted = await db.transaction(async (tx) =>
+        withTransactionSavepoint(tx, async () => {
+          await lockObligationContract(tx, orgId, candidate.obligation_id);
+          // Rebuilds, event writes and cancellation share this aggregate lock.
+          // Nothing from the preliminary scan is a financial posting input.
+          const obligation = await tx.execute<{ id: string }>(
+            sql`
           select o.id from performance_obligations o
            where o.org_id = ${orgId} and o.id = ${candidate.obligation_id}
-           for update of o`, "objects");
-        if (!obligation[0]) return { status: "already_posted" as const };
-        await assertEnabled(tx, orgId);
-        const row = (await recognitionPostingRows(
-          tx, orgId, asOfDate, fallbackSubsidiaryId, candidate.obligation_id, allowedSubsidiaryIds,
-          candidate.line_id, true,
-        ))[0];
-        if (!row) return { status: "already_posted" as const };
-        if (row.recognition_held || row.delivery_pending) return { status: 'held' as const, row };
-        // One period gate: the shared GL check replaces the raw
-        // period_module_is_closed projection. Discovery stays advisory — a
-        // closed line is skipped, not fatal — and source-owned imported
-        // locks skip exactly like user locks.
-        if (!(await arePeriodModulesOpen(tx, {
-          orgId,
-          periodId: row.period_id,
-          bookId: row.book_id,
-          subsidiaryIds: row.subsidiary_id ? [row.subsidiary_id] : [],
-          modules: ["gl"],
-        }))) return { status: "period_closed" as const };
-        const planned = row.planned;
-        if (isZero(planned)) {
-          await tx.execute(sql`
+           for update of o`,
+            "objects",
+          );
+          if (!obligation[0]) return { status: "already_posted" as const };
+          await assertEnabled(tx, orgId);
+          const row = (
+            await recognitionPostingRows(
+              tx,
+              orgId,
+              asOfDate,
+              fallbackSubsidiaryId,
+              candidate.obligation_id,
+              allowedSubsidiaryIds,
+              candidate.line_id,
+              true,
+            )
+          )[0];
+          if (!row) return { status: "already_posted" as const };
+          if (row.recognition_held || row.delivery_pending) return { status: "held" as const, row };
+          // One period gate: the shared GL check replaces the raw
+          // period_module_is_closed projection. Discovery stays advisory — a
+          // closed line is skipped, not fatal — and source-owned imported
+          // locks skip exactly like user locks.
+          if (
+            !(await arePeriodModulesOpen(tx, {
+              orgId,
+              periodId: row.period_id,
+              bookId: row.book_id,
+              subsidiaryIds: row.subsidiary_id ? [row.subsidiary_id] : [],
+              modules: ["gl"],
+            }))
+          )
+            return { status: "period_closed" as const };
+          const planned = row.planned;
+          if (isZero(planned)) {
+            await tx.execute(sql`
             update recognition_schedule_lines set recognized_amount = '0',
                    updated_at = now(), updated_by = ${actorId}
              where id = ${row.line_id} and org_id = ${orgId} and journal_entry_id is null`);
-          return { status: "zero" as const };
-        }
-        const deferredAccountId = row.obl_deferred ?? row.item_deferred ?? row.rule_deferred;
-        const recognizedAccountId = row.obl_recognized ?? row.rule_recognized ?? row.item_income;
-        if (!deferredAccountId || !recognizedAccountId) {
-          return { status: "not_configured" as const, row };
-        }
-        // A manual credit memo relieves deferred without touching
-        // the plan. Never post more than what remains genuinely unearned; a
-        // fully-credited obligation holds its plan lines, a partially-credited
-        // one posts only the remainder (the final line may post partial).
-        // A negative plan line is a same-period correction that reduces earned
-        // revenue — it can never breach the unearned ceiling, so the cap
-        // constrains positive postings only. Capping a correction at an
-        // exhausted remainder would silently drop legitimate evidence.
-        const cap = await recognitionUnearnedRemaining(tx, {
-          orgId, obligationId: row.obligation_id, bookId: row.book_id, deferredAccountId,
-        });
-        let posting = planned;
-        if (cmp(planned, "0") > 0) {
-          if (cmp(cap.remaining, "0") <= 0) {
-            return { status: "credit_capped" as const, credited: cap.credited, row };
+            return { status: "zero" as const };
           }
-          posting = cmp(planned, cap.remaining) > 0 ? cap.remaining : planned;
-        } else if (cmp(planned, "0") < 0) {
-          // A negative plan line is a correction reversing earned revenue. It
-          // can never drive cumulative net earned negative on its book: with
-          // nothing (or too little) earned, the correction reverses unearned
-          // revenue that was never recognized. Hold the whole line unposted
-          // with an explanatory problem — never floor it at zero, which would
-          // silently drop the operator's evidence. The unearned cap above
-          // constrains positive postings only, so an exhausted remainder never
-          // blocks a legitimate negative.
-          const net = await recognitionNetRecognized(tx, {
-            orgId, obligationId: row.obligation_id, bookId: row.book_id,
-          });
-          if (cmp(add(net, planned), "0") < 0) {
-            return { status: "negative_floor" as const, net, planned, row };
+          const deferredAccountId = row.obl_deferred ?? row.item_deferred ?? row.rule_deferred;
+          const recognizedAccountId = row.obl_recognized ?? row.rule_recognized ?? row.item_income;
+          if (!deferredAccountId || !recognizedAccountId) {
+            return { status: "not_configured" as const, row };
           }
-        }
-        if (!row.subsidiary_id || !row.base_currency) {
-          throw new RevenueRecognitionError("recognition legal entity and functional currency are required");
-        }
-        if(row.functional_currency && row.functional_currency!==row.base_currency) throw new RevenueRecognitionError("complete the legal entity functional-currency transition before posting this amended contract");
-        const subsidiaryId = row.subsidiary_id;
-        // Hold the legal-entity tree while validating the current account and
-        // dimension restrictions; discovery-time validation is not sufficient.
-        await tx.execute(sql`select id from subsidiaries where org_id = ${orgId} order by id for share`);
-        const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
-        const basePosting = mulRate(posting, row.recognition_fx_rate);
-        const lines = [
-          { accountId: deferredAccountId, amount: basePosting, txnAmount: posting },
-          { accountId: recognizedAccountId, amount: neg(basePosting), txnAmount: neg(posting) },
-        ];
-        await validateSubsidiaryRestrictions(tx, {
-          orgId, ctx: subsidiaryContext, docSubsidiaryId: subsidiaryId,
-          lines: lines.map(line => ({
-            ...line, subsidiaryId,
-            departmentId: row.department_id, projectId: row.project_id,
-            locationId: row.location_id, classId: row.class_id,
-          })),
-        });
-        const balance = sum(lines.map(line => line.amount));
-        if (!isZero(balance)) throw new RevenueRecognitionError(`unbalanced (${balance})`);
-        const postingDate = row.recognition_on ?? (row.method === "percent_complete" && asOfDate < row.period_ends_on
-          ? asOfDate : row.period_ends_on);
-        // Every journal write routes through the ONE ledger API.
-        const postedRecognition = await postEntry(tx, {
-          orgId,
-          bookId: row.book_id,
-          subsidiaryId: row.subsidiary_id,
-          entryNumber: revenueRecognitionEntryNumber({
-            contractNumber: row.contract_number,
-            periodName: row.period_name,
+          // A manual credit memo relieves deferred without touching
+          // the plan. Never post more than what remains genuinely unearned; a
+          // fully-credited obligation holds its plan lines, a partially-credited
+          // one posts only the remainder (the final line may post partial).
+          // A negative plan line is a same-period correction that reduces earned
+          // revenue — it can never breach the unearned ceiling, so the cap
+          // constrains positive postings only. Capping a correction at an
+          // exhausted remainder would silently drop legitimate evidence.
+          const cap = await recognitionUnearnedRemaining(tx, {
+            orgId,
             obligationId: row.obligation_id,
             bookId: row.book_id,
-            sequence: row.sequence,
-            lineId: row.line_id,
-          }),
-          postingDate,
-          periodId: row.period_id,
-          memo: `Revenue recognition — ${row.obligation_desc} (${row.period_label})`,
-          origin: "revenue_recognition",
-          actorId,
-          currency: row.recognition_currency ?? row.base_currency,
-          lines: lines.map((l) => ({
-            accountId: l.accountId,
-            amount: l.amount,
-            txnAmount: l.txnAmount,
-            fxRate: row.recognition_fx_rate,
-            departmentId: row.department_id,
-            projectId: row.project_id,
-            locationId: row.location_id,
-            classId: row.class_id,
-            equipmentUnitId: row.equipment_unit_id,
-            extraDims: row.extra_dims ?? {},
-            memo: `Revenue recognition ${row.period_label}`,
-          })),
-        });
-        const eid = postedRecognition.entryId;
-        const linked=await tx.execute(sql`
+            deferredAccountId,
+          });
+          let posting = planned;
+          if (cmp(planned, "0") > 0) {
+            if (cmp(cap.remaining, "0") <= 0) {
+              return { status: "credit_capped" as const, credited: cap.credited, row };
+            }
+            posting = cmp(planned, cap.remaining) > 0 ? cap.remaining : planned;
+          } else if (cmp(planned, "0") < 0) {
+            // A negative plan line is a correction reversing earned revenue. It
+            // can never drive cumulative net earned negative on its book: with
+            // nothing (or too little) earned, the correction reverses unearned
+            // revenue that was never recognized. Hold the whole line unposted
+            // with an explanatory problem — never floor it at zero, which would
+            // silently drop the operator's evidence. The unearned cap above
+            // constrains positive postings only, so an exhausted remainder never
+            // blocks a legitimate negative.
+            const net = await recognitionNetRecognized(tx, {
+              orgId,
+              obligationId: row.obligation_id,
+              bookId: row.book_id,
+            });
+            if (cmp(add(net, planned), "0") < 0) {
+              return { status: "negative_floor" as const, net, planned, row };
+            }
+          }
+          if (!row.subsidiary_id || !row.base_currency) {
+            throw new RevenueRecognitionError(
+              "recognition legal entity and functional currency are required",
+            );
+          }
+          if (row.functional_currency && row.functional_currency !== row.base_currency)
+            throw new RevenueRecognitionError(
+              "complete the legal entity functional-currency transition before posting this amended contract",
+            );
+          const subsidiaryId = row.subsidiary_id;
+          // Hold the legal-entity tree while validating the current account and
+          // dimension restrictions; discovery-time validation is not sufficient.
+          await tx.execute(
+            sql`select id from subsidiaries where org_id = ${orgId} order by id for share`,
+          );
+          const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
+          const basePosting = mulRate(posting, row.recognition_fx_rate);
+          const lines = [
+            { accountId: deferredAccountId, amount: basePosting, txnAmount: posting },
+            { accountId: recognizedAccountId, amount: neg(basePosting), txnAmount: neg(posting) },
+          ];
+          await validateSubsidiaryRestrictions(tx, {
+            orgId,
+            ctx: subsidiaryContext,
+            docSubsidiaryId: subsidiaryId,
+            lines: lines.map((line) => ({
+              ...line,
+              subsidiaryId,
+              departmentId: row.department_id,
+              projectId: row.project_id,
+              locationId: row.location_id,
+              classId: row.class_id,
+            })),
+          });
+          const balance = sum(lines.map((line) => line.amount));
+          if (!isZero(balance)) throw new RevenueRecognitionError(`unbalanced (${balance})`);
+          const postingDate =
+            row.recognition_on ??
+            (row.method === "percent_complete" && asOfDate < row.period_ends_on
+              ? asOfDate
+              : row.period_ends_on);
+          // Every journal write routes through the ONE ledger API.
+          const postedRecognition = await postEntry(tx, {
+            orgId,
+            bookId: row.book_id,
+            subsidiaryId: row.subsidiary_id,
+            entryNumber: revenueRecognitionEntryNumber({
+              contractNumber: row.contract_number,
+              periodName: row.period_name,
+              obligationId: row.obligation_id,
+              bookId: row.book_id,
+              sequence: row.sequence,
+              lineId: row.line_id,
+            }),
+            postingDate,
+            periodId: row.period_id,
+            memo: `Revenue recognition — ${row.obligation_desc} (${row.period_label})`,
+            origin: "revenue_recognition",
+            actorId,
+            currency: row.recognition_currency ?? row.base_currency,
+            lines: lines.map((l) => ({
+              accountId: l.accountId,
+              amount: l.amount,
+              txnAmount: l.txnAmount,
+              fxRate: row.recognition_fx_rate,
+              departmentId: row.department_id,
+              projectId: row.project_id,
+              locationId: row.location_id,
+              classId: row.class_id,
+              equipmentUnitId: row.equipment_unit_id,
+              extraDims: row.extra_dims ?? {},
+              memo: `Revenue recognition ${row.period_label}`,
+            })),
+          });
+          const eid = postedRecognition.entryId;
+          const linked = await tx.execute(
+            sql`
           update recognition_schedule_lines
              set recognized_amount = ${posting}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
-           where id = ${row.line_id} and org_id = ${orgId} and journal_entry_id is null and superseded_by_change_id is null returning id`, "objects");
-        if(linked.length!==1)throw new RevenueRecognitionError('recognition journal could not be linked to its plan');
-        return { status: "posted" as const, entryId: eid, planned: posting, row };
-      }));
-      if (posted.status === 'held') {
+           where id = ${row.line_id} and org_id = ${orgId} and journal_entry_id is null and superseded_by_change_id is null returning id`,
+            "objects",
+          );
+          if (linked.length !== 1)
+            throw new RevenueRecognitionError(
+              "recognition journal could not be linked to its plan",
+            );
+          return { status: "posted" as const, entryId: eid, planned: posting, row };
+        }),
+      );
+      if (posted.status === "held") {
         result.skipped++;
-        result.problems.push(`${posted.row.contract_number} ${posted.row.obligation_desc}: ${posted.row.recognition_held ? posted.row.hold_reason : 'software bundle awaits delivery acceptance for all elements'}`);
+        result.problems.push(
+          `${posted.row.contract_number} ${posted.row.obligation_desc}: ${posted.row.recognition_held ? posted.row.hold_reason : "software bundle awaits delivery acceptance for all elements"}`,
+        );
         continue;
       }
       if (posted.status === "already_posted" || posted.status === "zero") {
@@ -288,16 +369,23 @@ export async function runRevenueRecognition(
       }
       if (posted.status === "not_configured") {
         result.skipped++;
-        result.problems.push(`${posted.row.contract_number} ${posted.row.obligation_desc}: deferred/recognized account not configured`);
+        result.problems.push(
+          `${posted.row.contract_number} ${posted.row.obligation_desc}: deferred/recognized account not configured`,
+        );
         continue;
       }
       if (posted.status === "period_closed") {
         result.skipped++;
-        result.problems.push(`${candidate.contract_number} ${candidate.period_label}: GL period closed`);
+        result.problems.push(
+          `${candidate.contract_number} ${candidate.period_label}: GL period closed`,
+        );
         continue;
       }
       result.posted++;
-      result.totalAmount = add(result.totalAmount, recognitionBaseAmount(posted.planned, posted.row.recognition_fx_rate));
+      result.totalAmount = add(
+        result.totalAmount,
+        recognitionBaseAmount(posted.planned, posted.row.recognition_fx_rate),
+      );
       result.entries.push({
         contract: posted.row.contract_number,
         obligation: posted.row.obligation_desc,
@@ -308,7 +396,9 @@ export async function runRevenueRecognition(
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      result.problems.push(`${candidate.contract_number} ${candidate.period_label}: ${msg.slice(0, 120)}`);
+      result.problems.push(
+        `${candidate.contract_number} ${candidate.period_label}: ${msg.slice(0, 120)}`,
+      );
     }
   }
 
@@ -316,7 +406,8 @@ export async function runRevenueRecognition(
   // built with none carries zero lines: nothing ever posts, nothing ever
   // satisfies, and the invoiced amount sits parked in deferred revenue
   // indefinitely. Surface the gap instead of skipping it silently.
-  const emptyPlans = (await db.execute<{ contract_number: string; description: string }>(sql`
+  const emptyPlans = await db.execute<{ contract_number: string; description: string }>(
+    sql`
     select c.contract_number, o.description
       from performance_obligations o
       join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
@@ -334,7 +425,9 @@ export async function runRevenueRecognition(
                join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
               where s.obligation_id = o.id and s.org_id = o.org_id and l.superseded_by_change_id is null)
          )
-       )`, "objects"));
+       )`,
+    "objects",
+  );
   for (const row of emptyPlans) {
     result.problems.push(
       `${row.contract_number} ${row.description}: milestone/usage obligation has no recognition events recorded`,

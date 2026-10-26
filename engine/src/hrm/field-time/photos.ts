@@ -39,49 +39,97 @@ export function isClockPhotoSql(orgId: SQL, fileId: SQL): SQL {
  * and the service verifies the file on the clock event.
  */
 export async function ensureOrgClockPhotoFolder(orgId: string): Promise<string> {
-  const root = (await db.execute<{ id: string }>(sql`
+  const root = (
+    await db.execute<{ id: string }>(
+      sql`
     select id::text as id from folders
-     where org_id = ${orgId} and system_kind = 'attachments' limit 1`, "objects"))[0];
+     where org_id = ${orgId} and system_kind = 'attachments' limit 1`,
+      "objects",
+    )
+  )[0];
   if (!root) {
-    throw new Error("the File Cabinet attachments root is missing — open the File Cabinet once before clocking with photos");
+    throw new Error(
+      "the File Cabinet attachments root is missing — open the File Cabinet once before clocking with photos",
+    );
   }
   await db.execute(sql`select pg_advisory_xact_lock(hashtext(${"field-clock-photos:" + orgId}))`);
-  const existing = (await db.execute<{ id: string }>(sql`
+  const existing = (
+    await db.execute<{ id: string }>(
+      sql`
     select id::text as id from folders
      where org_id = ${orgId} and parent_folder_id = ${root.id}
-       and name = 'Field time photos' and is_system`, "objects"))[0];
-  const folderId = existing?.id ?? (await db.execute<{ id: string }>(sql`
+       and name = 'Field time photos' and is_system`,
+      "objects",
+    )
+  )[0];
+  const folderId =
+    existing?.id ??
+    (
+      await db.execute<{ id: string }>(
+        sql`
     insert into folders (org_id, parent_folder_id, name, is_system, created_by, updated_by)
     values (${orgId}, ${root.id}, 'Field time photos', true, null, null)
-    returning id::text as id`, "objects"))[0]?.id;
+    returning id::text as id`,
+        "objects",
+      )
+    )[0]?.id;
   if (!folderId) throw new Error("the field-time photo folder was not stored — retry");
   return folderId;
 }
 
 export async function ensureClockPhotoFolder(orgId: string, userId: string): Promise<string> {
-  const root = (await db.execute<{ id: string }>(sql`
+  const root = (
+    await db.execute<{ id: string }>(
+      sql`
     select id::text as id from folders
-     where org_id = ${orgId} and system_kind = 'attachments' limit 1`, "objects"))[0];
+     where org_id = ${orgId} and system_kind = 'attachments' limit 1`,
+      "objects",
+    )
+  )[0];
   if (!root) {
-    throw new Error("the File Cabinet attachments root is missing — open the File Cabinet once before clocking with photos");
+    throw new Error(
+      "the File Cabinet attachments root is missing — open the File Cabinet once before clocking with photos",
+    );
   }
   await db.execute(sql`select pg_advisory_xact_lock(hashtext(${"field-clock-photos:" + orgId}))`);
-  const existing = (await db.execute<{ id: string }>(sql`
+  const existing = (
+    await db.execute<{ id: string }>(
+      sql`
     select id::text as id from folders
      where org_id = ${orgId} and parent_folder_id = ${root.id}
-       and name = 'Field time photos' and is_system`, "objects"))[0];
-  const folderId = existing?.id ?? (await db.execute<{ id: string }>(sql`
+       and name = 'Field time photos' and is_system`,
+      "objects",
+    )
+  )[0];
+  const folderId =
+    existing?.id ??
+    (
+      await db.execute<{ id: string }>(
+        sql`
     insert into folders (org_id, parent_folder_id, name, is_system, created_by, updated_by)
     values (${orgId}, ${root.id}, 'Field time photos', true, ${userId}, ${userId})
-    returning id::text as id`, "objects"))[0]?.id;
-  if (!folderId) throw new Error("the field-time photo folder was not stored — retry opening the clock page");
+    returning id::text as id`,
+        "objects",
+      )
+    )[0]?.id;
+  if (!folderId)
+    throw new Error("the field-time photo folder was not stored — retry opening the clock page");
   // Grants have no unique key, so each is an explicit existence check:
   // a present grant means a previous page load already converged.
-  async function grantOnce(principalType: string, principalId: string, access: string): Promise<void> {
-    const seen = (await db.execute<{ id: string }>(sql`
+  async function grantOnce(
+    principalType: string,
+    principalId: string,
+    access: string,
+  ): Promise<void> {
+    const seen = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from resource_grants
        where org_id = ${orgId} and resource_type = 'folder' and resource_id = ${folderId}
-         and principal_type = ${principalType} and principal_id = ${principalId}`, "objects"))[0];
+         and principal_type = ${principalType} and principal_id = ${principalId}`,
+        "objects",
+      )
+    )[0];
     if (seen) return;
     await db.execute(sql`
       insert into resource_grants
@@ -93,8 +141,11 @@ export async function ensureClockPhotoFolder(orgId: string, userId: string): Pro
   // HR roles that approve time read the captures: viewer. One parameter
   // per key: bare JS arrays must never be interpolated into ANY().
   const keys = HR_ROLE_KEYS.map((key) => sql`${key}`);
-  const roles = await db.execute<{ id: string }>(sql`
-    select id::text as id from app_roles where org_id = ${orgId} and key in (${sql.join(keys, sql`, `)})`, "objects");
+  const roles = await db.execute<{ id: string }>(
+    sql`
+    select id::text as id from app_roles where org_id = ${orgId} and key in (${sql.join(keys, sql`, `)})`,
+    "objects",
+  );
   for (const role of roles) {
     await grantOnce("role", role.id, "viewer");
   }

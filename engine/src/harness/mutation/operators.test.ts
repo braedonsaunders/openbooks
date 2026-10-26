@@ -16,7 +16,8 @@ function descriptions(mutants: GeneratedMutant[]): string[] {
 }
 
 test("maskSource blanks strings and comments while preserving offsets", () => {
-  const source = "const a = \"x + y\"; // a - b\nconst c = 'it\\'s'; /* < > === */\nconst d = `tpl ${1 + 2}`;\n";
+  const source =
+    "const a = \"x + y\"; // a - b\nconst c = 'it\\'s'; /* < > === */\nconst d = `tpl ${1 + 2}`;\n";
   const masked = maskSource(source);
   assert.equal(masked.length, source.length);
   for (let i = 0; i < source.length; i += 1) {
@@ -58,7 +59,10 @@ test("arith-sign-flip swaps binary operators and spares increments, assignment, 
 
 test("arith-sign-flip spares scientific-notation exponents", () => {
   const source = "const rate = 1e+10;\nconst tiny = 2E-4;\n";
-  assert.equal(byOperator(generateMutants("engine/src/probe.ts", source), "arith-sign-flip").length, 0);
+  assert.equal(
+    byOperator(generateMutants("engine/src/probe.ts", source), "arith-sign-flip").length,
+    0,
+  );
 });
 
 test("comparison-flip swaps strict and ordered comparisons but not arrows or shifts", () => {
@@ -113,7 +117,7 @@ test("boundary-shift nudges integer limits both ways and ignores floats and free
 
 test("rounding-swap replaces roundDiv calls with truncating division", () => {
   const source = [
-    "import { roundDiv } from \"./money.ts\";",
+    'import { roundDiv } from "./money.ts";',
     "export function share(amount: bigint, parts: bigint): bigint {",
     "  return roundDiv(amount, parts);",
     "}",
@@ -183,8 +187,8 @@ test("guard-negation wraps single-line if and while conditions", () => {
 test("guard-negation preserves string literals from the original source", () => {
   const source = [
     "export function route(mode: string): string {",
-    "  if (mode !== \"reverse_charge\") {",
-    "    return \"standard\";",
+    '  if (mode !== "reverse_charge") {',
+    '    return "standard";',
     "  }",
     "  return mode;",
     "}",
@@ -199,8 +203,8 @@ test("guard-negation preserves string literals from the original source", () => 
 
 test("comparison-flip spares generic angle brackets but keeps spaced comparisons", () => {
   const source = [
-    "import { db } from \"./db.ts\";",
-    "export async function load(tx: Pick<typeof db, \"execute\">): Promise<void> {",
+    'import { db } from "./db.ts";',
+    'export async function load(tx: Pick<typeof db, "execute">): Promise<void> {',
     "  const index = new Map<string, number>();",
     "  const limit: Record<string, string> | undefined = undefined;",
     "  if (index.size > 0) return;",
@@ -214,8 +218,8 @@ test("comparison-flip spares generic angle brackets but keeps spaced comparisons
 
 test("comparison-flip tells generic brackets from runtime comparisons, spaced or not", () => {
   const source = [
-    "import { db } from \"./db.ts\";",
-    "type LedgerRow = Pick<typeof db, \"execute\">;",
+    'import { db } from "./db.ts";',
+    'type LedgerRow = Pick<typeof db, "execute">;',
     "type FirstLimit = Parameters<typeof fetchLimit>[0];",
     "export function settle(balance: bigint, cap: bigint, ledger: Map<string, bigint>): boolean {",
     "  if(balance<cap) return true;",
@@ -282,7 +286,10 @@ test("early-return-before-write fires only under a provable void return type", (
     "}",
     "",
   ].join("\n");
-  const mutants = byOperator(generateMutants("engine/src/probe.ts", source), "early-return-before-write");
+  const mutants = byOperator(
+    generateMutants("engine/src/probe.ts", source),
+    "early-return-before-write",
+  );
   assert.equal(mutants.length, 1);
   assert.equal(mutants[0]!.line, 3);
   assert.ok(mutants[0]!.mutatedSource.includes("  return;\n  db.insert(1);"));
@@ -299,8 +306,14 @@ test("generateMutants is deterministic and keys are unique and stable", () => {
   ].join("\n");
   const first = generateMutants("engine/src/probe.ts", source);
   const second = generateMutants("engine/src/probe.ts", source);
-  assert.deepEqual(first.map((m) => m.key), second.map((m) => m.key));
-  assert.deepEqual(first.map((m) => m.mutatedSource), second.map((m) => m.mutatedSource));
+  assert.deepEqual(
+    first.map((m) => m.key),
+    second.map((m) => m.key),
+  );
+  assert.deepEqual(
+    first.map((m) => m.mutatedSource),
+    second.map((m) => m.mutatedSource),
+  );
   assert.equal(new Set(first.map((m) => m.key)).size, first.length);
   assert.ok(first.length > 0);
   for (const m of first) {
@@ -319,7 +332,9 @@ test("lineRanges scope generation to the requested file regions", () => {
     "}",
     "",
   ].join("\n");
-  const scoped = generateMutants("engine/src/probe.ts", source, { lineRanges: [{ start: 4, end: 6 }] });
+  const scoped = generateMutants("engine/src/probe.ts", source, {
+    lineRanges: [{ start: 4, end: 6 }],
+  });
   assert.ok(scoped.length > 0);
   assert.ok(scoped.every((m) => m.line >= 4 && m.line <= 6));
 });
@@ -332,13 +347,17 @@ test("maxPerOperator caps prolific operators deterministically", () => {
   const capped = generateMutants("engine/src/probe.ts", source, { maxPerOperator: 5 });
   assert.ok(byOperator(capped, "arith-sign-flip").length <= 5);
   const recapped = generateMutants("engine/src/probe.ts", source, { maxPerOperator: 5 });
-  assert.deepEqual(capped.map((m) => m.key), recapped.map((m) => m.key));
+  assert.deepEqual(
+    capped.map((m) => m.key),
+    recapped.map((m) => m.key),
+  );
 });
-
 
 test("negative literal types never become financial sign mutants", () => {
   const source = "type Direction = -1 | 1;\nconst signed = -amount;\n";
-  const mutants = generateMutants("sign.ts", source).filter(m => m.operator === "arith-sign-flip");
+  const mutants = generateMutants("sign.ts", source).filter(
+    (m) => m.operator === "arith-sign-flip",
+  );
   assert.equal(mutants.length, 1);
   assert.equal(mutants[0]?.line, 2);
   assert.match(mutants[0]!.mutatedSource, /signed = \+amount/);

@@ -9,10 +9,7 @@ import {
   seedDraftDocument,
   seedFlowActors,
 } from "../testing/fixtures.ts";
-import {
-  submitAndReleaseIfUngated,
-  withdrawDocumentSubmission,
-} from "./submit.ts";
+import { submitAndReleaseIfUngated, withdrawDocumentSubmission } from "./submit.ts";
 import { decideGate } from "./gates.ts";
 import { completedGateDecisionPolicy } from "./approval-decision-policy.ts";
 
@@ -29,20 +26,19 @@ test(
         kind: "vendor_bill",
         createdBy: actors.submitterId,
       });
-      const result = await submitAndReleaseIfUngated(
-        "vendor_bill",
-        id,
-        actors.submitterId,
-      );
+      const result = await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
       assert.equal(result.autoApproved, true);
-      const receipt = (await db.execute<{
+      const receipt = (
+        await db.execute<{
           id: string;
           actor_id: string;
           policy: { kind: string; runIds: string[] };
           graphs: unknown[];
         }>(
-          sql`select id,actor_id,policy,graphs from flow_submissions where org_id=${org.orgId} and subject_id=${id}`, "objects",
-        ))[0];
+          sql`select id,actor_id,policy,graphs from flow_submissions where org_id=${org.orgId} and subject_id=${id}`,
+          "objects",
+        )
+      )[0];
       assert.ok(receipt);
       assert.equal(receipt.actor_id, actors.submitterId);
       assert.deepEqual(receipt.policy.runIds, []);
@@ -54,12 +50,19 @@ test(
             sql`update flow_submissions set context='{}'::jsonb where org_id=${org.orgId} and id=${receipt.id}`,
           ),
         ),
-        (error:unknown)=>error instanceof Error && /immutable/.test(error.message+" "+((error as {cause?:Error}).cause?.message??"")),
+        (error: unknown) =>
+          error instanceof Error &&
+          /immutable/.test(
+            error.message + " " + ((error as { cause?: Error }).cause?.message ?? ""),
+          ),
       );
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from documents where org_id=${org.orgId} and id=${id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${org.orgId} and id=${id}`,
+            "objects",
+          )
+        )[0]?.status,
         "approved",
       );
     } finally {
@@ -87,8 +90,9 @@ test(
       });
       await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
       const gates = await db.execute<{ id: string; run_id: string }>(
-          sql`select id,run_id from flow_gates where org_id=${org.orgId} and subject_id=${id} order by id`, "objects",
-        );
+        sql`select id,run_id from flow_gates where org_id=${org.orgId} and subject_id=${id} order by id`,
+        "objects",
+      );
       assert.equal(gates.length, 2);
       await decideGate({
         gateId: gates[0]!.id,
@@ -112,11 +116,7 @@ test(
           approvalRunId: gates[0]!.run_id,
         }),
       );
-      assert.equal(
-        proof,
-        null,
-        "completed sibling evidence cannot release a withdrawn submission",
-      );
+      assert.equal(proof, null, "completed sibling evidence cannot release a withdrawn submission");
       await assert.rejects(
         decideGate({
           gateId: gates[1]!.id,
@@ -127,8 +127,9 @@ test(
       );
       await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
       const receipts = await db.execute<{ id: string }>(
-          sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`, "objects",
-        );
+        sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`,
+        "objects",
+      );
       assert.equal(receipts.length, 2, "resubmission appends policy evidence");
       const oldProof = await withOrgTransaction(org.orgId, () =>
         completedGateDecisionPolicy(db, {
@@ -140,11 +141,7 @@ test(
           approvalRunId: gates[0]!.run_id,
         }),
       );
-      assert.equal(
-        oldProof,
-        null,
-        "superseded run cannot decide the new submission",
-      );
+      assert.equal(oldProof, null, "superseded run cannot decide the new submission");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -168,9 +165,12 @@ test(
         createdBy: actors.submitterId,
       });
       await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
-      const gate = (await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, "objects",
-        ))[0];
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`,
+          "objects",
+        )
+      )[0];
       assert.ok(gate);
       await assert.rejects(
         decideGate({
@@ -181,9 +181,12 @@ test(
         /not an approver/,
       );
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from documents where org_id=${org.orgId} and id=${id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${org.orgId} and id=${id}`,
+            "objects",
+          )
+        )[0]?.status,
         "pending_approval",
       );
     } finally {
@@ -237,8 +240,9 @@ test(
         values(${randomUUID()},${org.orgId},${id},1,${org.accounts.cogs},'1','100','100','0')`);
         await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
         const gates = await db.execute<{ id: string; run_id: string }>(
-            sql`select id,run_id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending' order by id`, "objects",
-          );
+          sql`select id,run_id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending' order by id`,
+          "objects",
+        );
         assert.equal(gates.length, 2);
         return { id, gates };
       }
@@ -250,15 +254,21 @@ test(
       });
       assert.equal(partial.runStatus, "waiting");
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from documents where org_id=${org.orgId} and id=${first.id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${org.orgId} and id=${first.id}`,
+            "objects",
+          )
+        )[0]?.status,
         "pending_approval",
       );
       assert.equal(
-        (await db.execute(
-            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${first.id}`, "objects",
-          )).length,
+        (
+          await db.execute(
+            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${first.id}`,
+            "objects",
+          )
+        ).length,
         0,
       );
       await decideGate({
@@ -267,34 +277,87 @@ test(
         userId: actors.approver1Id,
       });
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from documents where org_id=${org.orgId} and id=${first.id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${org.orgId} and id=${first.id}`,
+            "objects",
+          )
+        )[0]?.status,
         "posted",
       );
       assert.equal(
-        (await db.execute(
-            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${first.id}`, "objects",
-          )).length,
+        (
+          await db.execute(
+            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${first.id}`,
+            "objects",
+          )
+        ).length,
         1,
       );
       const runs = await db.execute<{ status: string; deferred: boolean }>(
-          sql`select status,context ? 'approvalContinuation' as deferred from flow_runs where org_id=${org.orgId} and subject_id=${first.id}`, "objects",
-        );
-      assert.equal(runs.length, 2);
-      assert.ok(
-        runs.every((run) => run.status === "completed" && !run.deferred),
+        sql`select status,context ? 'approvalContinuation' as deferred from flow_runs where org_id=${org.orgId} and subject_id=${first.id}`,
+        "objects",
       );
+      assert.equal(runs.length, 2);
+      assert.ok(runs.every((run) => run.status === "completed" && !run.deferred));
       const held = await bill();
-      await decideGate({gateId:held.gates[0]!.id,decision:'approved',userId:actors.approver1Id});
-      await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.approver1Id},'ap.post','deny') on conflict(user_id,permission) do update set effect='deny'`);
-      await assert.rejects(decideGate({gateId:held.gates[1]!.id,decision:'approved',userId:actors.approver1Id}),/posting|permission|ap.post|branch/i);
-      assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${org.orgId} and id=${held.gates[1]!.id}`, "objects"))[0]?.status,'pending','a refused posting leaves the final gate undecided');
-      assert.equal((await db.execute<{status:string}>(sql`select status from documents where org_id=${org.orgId} and id=${held.id}`, "objects"))[0]?.status,'pending_approval');
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${held.id}`, "objects")).length,0,'posting and release roll back together');
-      await grantScratchPermissions(org.orgId,actors.approver1Id,['ap.post']);
-      await decideGate({gateId:held.gates[1]!.id,decision:'approved',userId:actors.approver1Id});
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${held.id}`, "objects")).length,1,'retry retains one journal across both native branches');
+      await decideGate({
+        gateId: held.gates[0]!.id,
+        decision: "approved",
+        userId: actors.approver1Id,
+      });
+      await db.execute(
+        sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.approver1Id},'ap.post','deny') on conflict(user_id,permission) do update set effect='deny'`,
+      );
+      await assert.rejects(
+        decideGate({ gateId: held.gates[1]!.id, decision: "approved", userId: actors.approver1Id }),
+        /posting|permission|ap.post|branch/i,
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from flow_gates where org_id=${org.orgId} and id=${held.gates[1]!.id}`,
+            "objects",
+          )
+        )[0]?.status,
+        "pending",
+        "a refused posting leaves the final gate undecided",
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${org.orgId} and id=${held.id}`,
+            "objects",
+          )
+        )[0]?.status,
+        "pending_approval",
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${held.id}`,
+            "objects",
+          )
+        ).length,
+        0,
+        "posting and release roll back together",
+      );
+      await grantScratchPermissions(org.orgId, actors.approver1Id, ["ap.post"]);
+      await decideGate({
+        gateId: held.gates[1]!.id,
+        decision: "approved",
+        userId: actors.approver1Id,
+      });
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${held.id}`,
+            "objects",
+          )
+        ).length,
+        1,
+        "retry retains one journal across both native branches",
+      );
       const rejected = await bill();
       await decideGate({
         gateId: rejected.gates[0]!.id,
@@ -308,21 +371,30 @@ test(
         comment: "The second policy refused this purchase.",
       });
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from documents where org_id=${org.orgId} and id=${rejected.id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${org.orgId} and id=${rejected.id}`,
+            "objects",
+          )
+        )[0]?.status,
         "draft",
       );
       assert.equal(
-        (await db.execute(
-            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${rejected.id}`, "objects",
-          )).length,
+        (
+          await db.execute(
+            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${rejected.id}`,
+            "objects",
+          )
+        ).length,
         0,
       );
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from flow_runs where org_id=${org.orgId} and id=${rejected.gates[0]!.run_id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from flow_runs where org_id=${org.orgId} and id=${rejected.gates[0]!.run_id}`,
+            "objects",
+          )
+        )[0]?.status,
         "cancelled",
       );
     } finally {
@@ -348,12 +420,19 @@ test(
         createdBy: actors.submitterId,
       });
       await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
-      const gate = (await db.execute<{ id: string; run_id: string }>(sql`
+      const gate = (
+        await db.execute<{ id: string; run_id: string }>(
+          sql`
         select id,run_id from flow_gates where org_id=${org.orgId} and subject_id=${id}
-      `, "objects"))[0]!;
-      const immutable = (error: unknown) => error instanceof Error &&
-        /immutable|retains its submitted policy/.test(error.message + " " +
-          ((error as { cause?: Error }).cause?.message ?? ""));
+      `,
+          "objects",
+        )
+      )[0]!;
+      const immutable = (error: unknown) =>
+        error instanceof Error &&
+        /immutable|retains its submitted policy/.test(
+          error.message + " " + ((error as { cause?: Error }).cause?.message ?? ""),
+        );
       for (const mutation of [
         sql`update flow_runs set context=jsonb_set(context,'{submissionPolicy,graph}', '{"nodes":[],"edges":[]}'::jsonb)
           where org_id=${org.orgId} and id=${gate.run_id}`,
@@ -362,16 +441,29 @@ test(
         sql`update flow_gates set quorum='any' where org_id=${org.orgId} and id=${gate.id}`,
         sql`update flow_gates set signature_required=not signature_required where org_id=${org.orgId} and id=${gate.id}`,
       ]) {
-        await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(mutation)), immutable);
+        await assert.rejects(
+          withOrgTransaction(org.orgId, () => db.execute(mutation)),
+          immutable,
+        );
       }
       await decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id });
-      await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () =>
+          db.execute(sql`
         update flow_gates set decided_by=${actors.submitterId}
           where org_id=${org.orgId} and id=${gate.id}
-      `)), immutable);
-      const record = (await db.execute<{ status: string }>(sql`
+      `),
+        ),
+        immutable,
+      );
+      const record = (
+        await db.execute<{ status: string }>(
+          sql`
         select status from documents where org_id=${org.orgId} and id=${id}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       assert.equal(record?.status, "approved");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -379,31 +471,71 @@ test(
   },
 );
 
-test("a switched-tenant submission retains its active native home identity without changing tenant scope", DB, async () => {
-  const home=await createScratchOrg(),target=await createScratchOrg();
-  try {
-    const actor=(await seedFlowActors(home.orgId)).adminId;
-    await withBypassContext(()=>db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actor}`));
-    const targetActor=(await seedFlowActors(target.orgId)).submitterId;
-    const docId=await seedDraftDocument(target.orgId,{kind:"vendor_bill",createdBy:targetActor});
-    await withOrgTransaction(target.orgId,async()=>{
-      const result=await submitAndReleaseIfUngated("vendor_bill",docId,actor);
-      assert.equal(result.autoApproved,true);
-      const receipt=(await db.execute<{actor_id:string;home:string;scope:string}>(sql`
+test(
+  "a switched-tenant submission retains its active native home identity without changing tenant scope",
+  DB,
+  async () => {
+    const home = await createScratchOrg(),
+      target = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(home.orgId)).adminId;
+      await withBypassContext(() =>
+        db.execute(
+          sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actor}`,
+        ),
+      );
+      const targetActor = (await seedFlowActors(target.orgId)).submitterId;
+      const docId = await seedDraftDocument(target.orgId, {
+        kind: "vendor_bill",
+        createdBy: targetActor,
+      });
+      await withOrgTransaction(target.orgId, async () => {
+        const result = await submitAndReleaseIfUngated("vendor_bill", docId, actor);
+        assert.equal(result.autoApproved, true);
+        const receipt = (
+          await db.execute<{ actor_id: string; home: string; scope: string }>(
+            sql`
         select actor_id,context->>'submissionActorHomeOrgId' as home,current_setting('app.current_org') as scope
           from flow_submissions where org_id=${target.orgId} and subject_id=${docId}
-      `, "objects"))[0]!;
-      assert.equal(receipt.actor_id,actor);
-      assert.equal(receipt.home,home.orgId);
-      assert.equal(receipt.scope,target.orgId);
-    });
-    await withBypassContext(()=>db.execute(sql`update users set is_active=false where org_id=${home.orgId} and id=${actor}`));
-    const second=await seedDraftDocument(target.orgId,{kind:"vendor_bill",createdBy:targetActor});
-    await assert.rejects(submitAndReleaseIfUngated("vendor_bill",second,actor));
-    assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${target.orgId} and subject_id=${second}`, "objects")).length,0);
-    assert.equal((await db.execute<{status:string}>(sql`select status from documents where org_id=${target.orgId} and id=${second}`, "objects"))[0]?.status,"draft");
-  } finally {
-    await dropScratchOrg(target.orgId);
-    await dropScratchOrg(home.orgId);
-  }
-});
+      `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(receipt.actor_id, actor);
+        assert.equal(receipt.home, home.orgId);
+        assert.equal(receipt.scope, target.orgId);
+      });
+      await withBypassContext(() =>
+        db.execute(
+          sql`update users set is_active=false where org_id=${home.orgId} and id=${actor}`,
+        ),
+      );
+      const second = await seedDraftDocument(target.orgId, {
+        kind: "vendor_bill",
+        createdBy: targetActor,
+      });
+      await assert.rejects(submitAndReleaseIfUngated("vendor_bill", second, actor));
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from flow_submissions where org_id=${target.orgId} and subject_id=${second}`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${target.orgId} and id=${second}`,
+            "objects",
+          )
+        )[0]?.status,
+        "draft",
+      );
+    } finally {
+      await dropScratchOrg(target.orgId);
+      await dropScratchOrg(home.orgId);
+    }
+  },
+);

@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { InviteLinkDrawer } from './InviteLinkDrawer'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button, Drawer, Input, Label, Select } from "@openbooks/ui";
+import { InviteLinkDrawer } from "./InviteLinkDrawer";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * Invite-user entry point for the Users page header. Mirrors the roles
@@ -17,37 +17,42 @@ import { readApiErrorMessage } from '@/lib/api-error'
 export function InviteUserButton({
   allRoles,
 }: {
-  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[];
 }) {
-  const t = useTranslations('admin.users')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const t = useTranslations("admin.users");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
   return (
     <>
       {/* Refresh on open so roles created since this page loaded are offered. */}
-      <Button onClick={() => { router.refresh(); setOpen(true) }}>{t('inviteButton')}</Button>
-      {open ? (
-        <InviteDrawer allRoles={allRoles} onClose={() => setOpen(false)} />
-      ) : null}
+      <Button
+        onClick={() => {
+          router.refresh();
+          setOpen(true);
+        }}
+      >
+        {t("inviteButton")}
+      </Button>
+      {open ? <InviteDrawer allRoles={allRoles} onClose={() => setOpen(false)} /> : null}
     </>
-  )
+  );
 }
 
 function InviteDrawer({
   allRoles,
   onClose,
 }: {
-  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
-  onClose: () => void
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[];
+  onClose: () => void;
 }) {
-  const t = useTranslations('admin.users')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [email, setEmail] = useState('')
+  const t = useTranslations("admin.users");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [email, setEmail] = useState("");
   // No role is preselected: the inviter chooses one deliberately.
-  const [roleId, setRoleId] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [link, setLink] = useState<{ url: string; emailFailed: boolean } | null>(null)
+  const [roleId, setRoleId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState<{ url: string; emailFailed: boolean } | null>(null);
 
   // The one-time link replaces the form: it is shown once and never stored,
   // so navigating away before copying loses it.
@@ -58,53 +63,57 @@ function InviteDrawer({
         url={link.url}
         emailFailed={link.emailFailed}
         onClose={() => {
-          setLink(null)
-          onClose()
-          router.refresh()
+          setLink(null);
+          onClose();
+          router.refresh();
         }}
       />
-    )
+    );
   }
 
   async function send() {
     if (!email.trim()) {
-      toast.error(t('inviteEmailRequired'))
-      return
+      toast.error(t("inviteEmailRequired"));
+      return;
     }
     if (!roleId) {
-      toast.error(t('inviteRoleRequired'))
-      return
+      toast.error(t("inviteRoleRequired"));
+      return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'invite', email: email.trim(), roleId }),
-      })
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "invite", email: email.trim(), roleId }),
+      });
       if (!res.ok) {
         // The rate-limit copy stays domain-owned while every other refusal
         // reads through the shared helper with message, remedy and code.
-        toast.error(res.status === 429 ? t('inviteTooManyAttempts') : await readApiErrorMessage(res, t('requestFailed')))
-        return
+        toast.error(
+          res.status === 429
+            ? t("inviteTooManyAttempts")
+            : await readApiErrorMessage(res, t("requestFailed")),
+        );
+        return;
       }
-      const payload = await res.json().catch(() => ({}))
-      if (typeof payload.setPasswordUrl === 'string') {
-        setLink({ url: payload.setPasswordUrl, emailFailed: payload.emailFailed === true })
-        return
+      const payload = await res.json().catch(() => ({}));
+      if (typeof payload.setPasswordUrl === "string") {
+        setLink({ url: payload.setPasswordUrl, emailFailed: payload.emailFailed === true });
+        return;
       }
-      toast.success(t('inviteSent', { email: email.trim() }))
-      onClose()
-      router.refresh()
+      toast.success(t("inviteSent", { email: email.trim() }));
+      onClose();
+      router.refresh();
     } catch {
       // A rejected transport leaves no link and no confirmation, while the
       // server may have committed the invite: name the failure and keep the
       // dialog open with the entered address so the operator can retry or
       // reconcile against the user list. The one-time link still appears
       // only on a confirmed success.
-      toast.error(t('requestFailed'))
+      toast.error(t("requestFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -113,22 +122,22 @@ function InviteDrawer({
       open
       onClose={onClose}
       size="md"
-      title={t('inviteTitle')}
-      description={t('inviteDescription')}
+      title={t("inviteTitle")}
+      description={t("inviteDescription")}
       headerActions={
         <>
           <Button variant="outline" disabled={busy} onClick={onClose}>
-            {tCommon('actions.cancel')}
+            {tCommon("actions.cancel")}
           </Button>
           <Button disabled={busy} onClick={send}>
-            {t('inviteSend')}
+            {t("inviteSend")}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
         <div className="space-y-1.5">
-          <Label htmlFor="invite-email">{t('inviteEmailLabel')}</Label>
+          <Label htmlFor="invite-email">{t("inviteEmailLabel")}</Label>
           <Input
             id="invite-email"
             type="email"
@@ -136,13 +145,13 @@ function InviteDrawer({
             value={email}
             disabled={busy}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder={t('inviteEmailPlaceholder')}
+            placeholder={t("inviteEmailPlaceholder")}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="invite-role">{t('table.roles')}</Label>
+          <Label htmlFor="invite-role">{t("table.roles")}</Label>
           {allRoles.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('noRoles')}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t("noRoles")}</p>
           ) : (
             <Select
               id="invite-role"
@@ -150,7 +159,9 @@ function InviteDrawer({
               disabled={busy}
               onChange={(e) => setRoleId(e.target.value)}
             >
-              <option value="" disabled>{t('inviteChooseRole')}</option>
+              <option value="" disabled>
+                {t("inviteChooseRole")}
+              </option>
               {allRoles.map((role) => (
                 <option key={role.id} value={role.id}>
                   {role.name}
@@ -166,5 +177,5 @@ function InviteDrawer({
         </div>
       </div>
     </Drawer>
-  )
+  );
 }

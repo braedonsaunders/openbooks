@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { postDocument } from "../ledger/posting-document.ts";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 import { previewRevenueRecognition, runRevenueRecognition } from "./recognition.ts";
 import type { ScratchOrg } from "../testing/fixtures.ts";
 
@@ -73,22 +69,25 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
   return r.rows[0]!.balance;
 }
 
-test("a euro invoice recognizes out its full dollar-deferred balance at the historical rate", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await db.execute(sql`
+test(
+  "a euro invoice recognizes out its full dollar-deferred balance at the historical rate",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      await db.execute(sql`
       insert into currencies (code, name, minor_units)
       values ('EUR', 'Euro', 2) on conflict (code) do nothing`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId}, 'EUR', 'CAD', ${org.date}, 'spot', '1.1000000000', 'manual')`);
-    // One-period term keeps the arithmetic exact: EUR 1,000 @ 1.10 defers
-    // CAD 1,100 and must recognize exactly CAD 1,100.
-    await db.execute(sql`
+      // One-period term keeps the arithmetic exact: EUR 1,000 @ 1.10 defers
+      // CAD 1,100 and must recognize exactly CAD 1,100.
+      await db.execute(sql`
       update recognition_rules set recognition_periods = 1 where org_id = ${org.orgId}`);
-    const documentId = randomUUID();
-    await db.execute(sql`
+      const documentId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, party_id, subsidiary_id,
          document_date, posting_date, due_date, currency, fx_rate, status,
@@ -100,7 +99,7 @@ test("a euro invoice recognizes out its full dollar-deferred balance at the hist
          ${org.date}, 'EUR', '1.10', 'draft', 1000, 0, 1000, false,
          '{}'::jsonb, '{}'::jsonb, ${actors.adminId}, ${actors.adminId})
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, item_id, account_id,
          quantity, unit_price, amount, tax_amount, is_billable,
@@ -112,81 +111,105 @@ test("a euro invoice recognizes out its full dollar-deferred balance at the hist
          false, 0, 0, '{}'::jsonb, false, '{}'::jsonb,
          ${actors.adminId}, ${actors.adminId})
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       update documents set status = 'approved', updated_at = now()
        where id = ${documentId} and org_id = ${org.orgId}
     `);
-    await postDocument(
-      documentId,
-      { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } },
-      { audit: { actorId: actors.adminId, source: "test" } },
-    );
+      await postDocument(
+        documentId,
+        { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } },
+        { audit: { actorId: actors.adminId, source: "test" } },
+      );
 
-    // The invoice credited deferred revenue at its own rate.
-    assert.equal(await glBalance(org.orgId, org.accounts.deferred), "-1100.0000");
+      // The invoice credited deferred revenue at its own rate.
+      assert.equal(await glBalance(org.orgId, org.accounts.deferred), "-1100.0000");
 
-    // The schedule stamped the invoice currency and historical rate at creation.
-    const schedule = (await db.execute<{ transaction_currency: string | null; transaction_fx_rate: string | null }>(sql`
+      // The schedule stamped the invoice currency and historical rate at creation.
+      const schedule = (
+        await db.execute<{
+          transaction_currency: string | null;
+          transaction_fx_rate: string | null;
+        }>(sql`
       select transaction_currency, transaction_fx_rate::text as transaction_fx_rate
-        from recognition_schedules where org_id = ${org.orgId} limit 1`)).rows[0];
-    assert.equal(schedule?.transaction_currency, "EUR");
-    assert.equal(schedule?.transaction_fx_rate, "1.1000000000");
+        from recognition_schedules where org_id = ${org.orgId} limit 1`)
+      ).rows[0];
+      assert.equal(schedule?.transaction_currency, "EUR");
+      assert.equal(schedule?.transaction_fx_rate, "1.1000000000");
 
-    const run = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
-    assert.equal(run.posted, 1);
+      const run = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
+      assert.equal(run.posted, 1);
 
-    // The full deferred balance drains: recognizing at rate 1 would post
-    // CAD 1,000 against CAD 1,100 deferred, stranding CAD 100 forever.
-    assert.equal(await glBalance(org.orgId, org.accounts.deferred), "0.0000");
-    assert.equal(await glBalance(org.orgId, org.accounts.recognized), "-1100.0000");
+      // The full deferred balance drains: recognizing at rate 1 would post
+      // CAD 1,000 against CAD 1,100 deferred, stranding CAD 100 forever.
+      assert.equal(await glBalance(org.orgId, org.accounts.deferred), "0.0000");
+      assert.equal(await glBalance(org.orgId, org.accounts.recognized), "-1100.0000");
 
-    // Every deferred-side line converts in invoice currency at the
-    // historical rate — no rate-1 functional-currency leg remains.
-    const legs = (await db.execute<{ currency: string; fx_rate: string }>(sql`
+      // Every deferred-side line converts in invoice currency at the
+      // historical rate — no rate-1 functional-currency leg remains.
+      const legs = (
+        await db.execute<{ currency: string; fx_rate: string }>(sql`
       select distinct currency, fx_rate::text as fx_rate from journal_lines
-       where org_id = ${org.orgId} and account_id = ${org.accounts.deferred}`)).rows;
-    assert.deepEqual(legs, [{ currency: "EUR", fx_rate: "1.1000000000" }]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and account_id = ${org.accounts.deferred}`)
+      ).rows;
+      assert.deepEqual(legs, [{ currency: "EUR", fx_rate: "1.1000000000" }]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a mixed-currency run totals the posted base amounts, like the preview", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await db.execute(sql`
+test(
+  "a mixed-currency run totals the posted base amounts, like the preview",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      await db.execute(sql`
       insert into currencies (code, name, minor_units)
       values ('EUR', 'Euro', 2) on conflict (code) do nothing`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId}, 'EUR', 'CAD', ${org.date}, 'spot', '1.1000000000', 'manual')`);
-    // One-period terms keep the arithmetic exact: EUR 1,000 @ 1.10 posts
-    // CAD 1,100 and CAD 1,000 @ 1 posts CAD 1,000.
-    await db.execute(sql`
+      // One-period terms keep the arithmetic exact: EUR 1,000 @ 1.10 posts
+      // CAD 1,100 and CAD 1,000 @ 1 posts CAD 1,000.
+      await db.execute(sql`
       update recognition_rules set recognition_periods = 1 where org_id = ${org.orgId}`);
-    await postForeignInvoice(org, actors.adminId, { number: "INV-FX-EUR", currency: "EUR", fx: "1.10", total: 1000 });
-    await postForeignInvoice(org, actors.adminId, { number: "INV-FX-CAD", currency: "CAD", fx: "1", total: 1000 });
+      await postForeignInvoice(org, actors.adminId, {
+        number: "INV-FX-EUR",
+        currency: "EUR",
+        fx: "1.10",
+        total: 1000,
+      });
+      await postForeignInvoice(org, actors.adminId, {
+        number: "INV-FX-CAD",
+        currency: "CAD",
+        fx: "1",
+        total: 1000,
+      });
 
-    const preview = await previewRevenueRecognition(org.orgId, { asOfDate: "2026-07-31" });
-    const run = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
-    assert.equal(run.posted, 2);
+      const preview = await previewRevenueRecognition(org.orgId, { asOfDate: "2026-07-31" });
+      const run = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
+      assert.equal(run.posted, 2);
 
-    // The run total is the base total the journals post — never the
-    // mixed-currency transaction sum (which would read 2000.0000 here).
-    assert.equal(run.totalAmount, "2100.0000");
-    assert.equal(preview.totalAmount, run.totalAmount);
+      // The run total is the base total the journals post — never the
+      // mixed-currency transaction sum (which would read 2000.0000 here).
+      assert.equal(run.totalAmount, "2100.0000");
+      assert.equal(preview.totalAmount, run.totalAmount);
 
-    const postedBase = (await db.execute<{ total: string }>(sql`
+      const postedBase = (
+        await db.execute<{ total: string }>(sql`
       select coalesce(sum(line.amount), 0)::text as total
         from journal_lines line
         join journal_entries entry on entry.id = line.entry_id
        where line.org_id = ${org.orgId}
          and line.account_id = ${org.accounts.deferred}
          and entry.status = 'posted'
-         and entry.origin = 'revenue_recognition'`)).rows[0]!.total;
-    assert.equal(postedBase, run.totalAmount);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+         and entry.origin = 'revenue_recognition'`)
+      ).rows[0]!.total;
+      assert.equal(postedBase, run.totalAmount);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

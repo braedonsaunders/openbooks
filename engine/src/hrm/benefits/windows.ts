@@ -2,10 +2,7 @@ import { cancelEnrollmentFlows } from "./enrollments.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
-import {
-  requireHrmBenefitsManage,
-  requireUnrestrictedHrmScope,
-} from "../authorization.ts";
+import { requireHrmBenefitsManage, requireUnrestrictedHrmScope } from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
 import { windowsOverlap, type WindowShape } from "./benefits-math.ts";
 import {
@@ -55,7 +52,10 @@ function toWindowDTO(row: Record<string, unknown>): EnrollmentWindowDTO {
   }
   const status = String(row.status);
   if (status !== "draft" && status !== "open" && status !== "closed") {
-    throw new BenefitsError("REFUSED", "enrollment window carries an unknown status — re-save it as draft, open, or closed");
+    throw new BenefitsError(
+      "REFUSED",
+      "enrollment window carries an unknown status — re-save it as draft, open, or closed",
+    );
   }
   const applies = (row.appliesTo ?? {}) as Record<string, unknown>;
   return {
@@ -82,11 +82,16 @@ async function loadWindow(
 ): Promise<EnrollmentWindowDTO> {
   // Zero rows is a failure with the same uniform message the scope check
   // below uses: a missing window is indistinguishable from a hidden one.
-  const row = (await exec.execute<Record<string, unknown>>(sql`
+  const row = (
+    await exec.execute<Record<string, unknown>>(
+      sql`
       select ${WINDOW_COLUMNS} from hrm_enrollment_windows
        where org_id = ${orgId} and id = ${windowId}
        ${forUpdate ? sql`for update` : sql``}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new BenefitsError(
       "NOT_FOUND",
@@ -115,10 +120,15 @@ async function assertWindowVisible(
   const departmentId = window.appliesTo.department_id;
   let departmentSubsidiaryId: string | null = null;
   if (departmentId !== null) {
-    const department = (await exec.execute<{ subsidiaryId: string | null }>(sql`
+    const department = (
+      await exec.execute<{ subsidiaryId: string | null }>(
+        sql`
       select subsidiary_id as "subsidiaryId" from departments
        where org_id = ${orgId} and id = ${departmentId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!department) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -234,10 +244,15 @@ export async function openEnrollmentWindow(query: {
       );
     }
     const shape = toWindowShape(window);
-    const open = (await db.execute<Record<string, unknown>>(sql`
+    const open = (
+      await db.execute<Record<string, unknown>>(
+        sql`
         select ${WINDOW_COLUMNS} from hrm_enrollment_windows
          where org_id = ${orgId} and status = 'open' and kind = ${window.kind} and id <> ${windowId}
-      `, "objects")).map(toWindowDTO);
+      `,
+        "objects",
+      )
+    ).map(toWindowDTO);
     for (const other of open) {
       if (windowsOverlap(shape, toWindowShape(other))) {
         throw new BenefitsError(
@@ -246,12 +261,15 @@ export async function openEnrollmentWindow(query: {
         );
       }
     }
-    const updated = await db.execute<Record<string, unknown>>(sql`
+    const updated = await db.execute<Record<string, unknown>>(
+      sql`
         update hrm_enrollment_windows
            set status = 'open', updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${windowId} and status = 'draft'
         returning ${WINDOW_COLUMNS}
-      `, "objects");
+      `,
+      "objects",
+    );
     return toWindowDTO(requireOneRow(updated, "opening the enrollment window"));
   });
 }
@@ -291,21 +309,27 @@ export async function closeEnrollmentWindow(query: {
         `enrollment window ${window.name} is ${window.status} — only an open window closes`,
       );
     }
-    const closed = await db.execute<Record<string, unknown>>(sql`
+    const closed = await db.execute<Record<string, unknown>>(
+      sql`
         update hrm_enrollment_windows
            set status = 'closed', updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${windowId} and status = 'open'
         returning ${WINDOW_COLUMNS}
-      `, "objects");
+      `,
+      "objects",
+    );
     const result = toWindowDTO(requireOneRow(closed, "closing the enrollment window"));
-    const pending = await db.execute<{ id: string }>(sql`
+    const pending = await db.execute<{ id: string }>(
+      sql`
         update hrm_benefit_enrollments
            set status = 'cancelled', updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and window_id = ${windowId} and status = 'pending_approval'
         returning id
-      `, "objects");
+      `,
+      "objects",
+    );
     for (const row of pending) {
-      await cancelEnrollmentFlows(orgId,actorId,row.id);
+      await cancelEnrollmentFlows(orgId, actorId, row.id);
       await db.execute(sql`
         insert into hrm_benefit_events (org_id, enrollment_id, kind, reason, actor, created_by)
         values (${orgId}, ${row.id}, 'cancelled',
@@ -333,13 +357,18 @@ export interface CreateEnrollmentWindowQuery {
  * an unknown subsidiary or department is refused at save, so a window
  * that can never apply is never saved as applicable (0193 rule).
  */
-export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery): Promise<EnrollmentWindowDTO> {
+export async function createEnrollmentWindow(
+  query: CreateEnrollmentWindowQuery,
+): Promise<EnrollmentWindowDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const name =
     typeof query.name === "string" && query.name.trim().length > 0 ? query.name.trim() : null;
   if (!name) {
-    throw new BenefitsError("INVALID_INPUT", "a window carries a name — record which enrolment round this is");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "a window carries a name — record which enrolment round this is",
+    );
   }
   const kind = query.kind;
   if (kind !== "open_enrollment" && kind !== "new_hire" && kind !== "life_event") {
@@ -371,10 +400,13 @@ export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery)
       // out-of-scope subsidiaries identically: a B subsidiary reads to an
       // A-scoped actor exactly like a fabricated id.
       const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-      const sub = await db.execute(sql`
+      const sub = await db.execute(
+        sql`
           select id from subsidiaries
            where org_id = ${orgId} and id = ${employerSubsidiaryId}
-             ${allowed === null ? sql`` : sql`and id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}`, "objects");
+             ${allowed === null ? sql`` : sql`and id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}`,
+        "objects",
+      );
       if (sub.length !== 1) {
         throw new BenefitsError(
           "NOT_FOUND",
@@ -383,10 +415,15 @@ export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery)
       }
     }
     if (departmentId !== null) {
-      const dept = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      const dept = (
+        await db.execute<{ subsidiaryId: string | null }>(
+          sql`
         select subsidiary_id as "subsidiaryId" from departments
          where org_id = ${orgId} and id = ${departmentId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!dept) {
         throw new BenefitsError(
           "NOT_FOUND",
@@ -404,7 +441,8 @@ export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery)
         );
       }
       if (
-        employerSubsidiaryId !== null && dept.subsidiaryId !== null &&
+        employerSubsidiaryId !== null &&
+        dept.subsidiaryId !== null &&
         employerSubsidiaryId !== dept.subsidiaryId
       ) {
         throw new BenefitsError(
@@ -413,8 +451,9 @@ export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery)
         );
       }
     }
-const inserted = requireOneRow(
-      await db.execute<Record<string, unknown>>(sql`
+    const inserted = requireOneRow(
+      await db.execute<Record<string, unknown>>(
+        sql`
           insert into hrm_enrollment_windows
             (org_id, name, kind, opens_on, closes_on, plan_year_start_on, applies_to, status, created_by, updated_by)
           values (${orgId}, ${name}, ${kind}, ${opensOn}::date, ${closesOn}::date,
@@ -423,7 +462,9 @@ const inserted = requireOneRow(
                                      'department_id', ${departmentId}::uuid),
                   'draft', ${actorId}, ${actorId})
           returning ${WINDOW_COLUMNS}
-        `, "objects"),
+        `,
+        "objects",
+      ),
       "creating the enrollment window",
     );
     return toWindowDTO(inserted);

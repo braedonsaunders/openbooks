@@ -1,17 +1,22 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 // A-S03: running rules parsed the response body BEFORE checking the status,
 // so a non-JSON 502 page threw a SyntaxError out of the handler — no refusal
 // toast — and the Run button wedged on "Running…". Mounts the real
 // RunRulesButton under jsdom and drives the failure paths with scripted
 // fetches.
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/banking/rules', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/banking/rules",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const script = {
   errors: [] as string[],
-}
+};
 Object.assign(globalThis, {
   __rulesTestRouter: {
     push() {},
@@ -20,170 +25,199 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__rulesTestRouter}export function usePathname(){return "/banking/rules"}export function useSearchParams(){return new URLSearchParams()}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__rulesTestRouter}export function usePathname(){return "/banking/rules"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},info(){},message(){},error(m){(globalThis.__rulesErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},info(){},message(){},error(m){(globalThis.__rulesErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { RuleDrawer, RunRulesButton } = await import('./RuleDrawer')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../../components/money-provider");
+const { RuleDrawer, RunRulesButton } = await import("./RuleDrawer");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
-const ACCOUNTS = [{ id: 'acc-1', label: 'Operating' }]
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
+const ACCOUNTS = [{ id: "acc-1", label: "Operating" }];
 
-test('bank rule name, priority, payee, and memo are associated with their labels', async (t) => {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+test("bank rule name, priority, payee, and memo are associated with their labels", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="CAD">
           <RuleDrawer
             rule={null}
-            accounts={[{ value: 'expense', label: 'Expense' }]}
-            reconAccounts={[{ id: 'bank-1', label: 'Operating' }]}
+            accounts={[{ value: "expense", label: "Expense" }]}
+            reconAccounts={[{ id: "bank-1", label: "Operating" }]}
             departments={[]}
             locations={[]}
             classes={[]}
-            parties={[{ value: 'party-1', label: 'Supplier' }]}
+            parties={[{ value: "party-1", label: "Supplier" }]}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
-  for (const name of ['Name', 'Priority', 'Assign payee', 'Memo']) {
-    const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === name)
-    assert.ok(label, `${name} label renders`)
-    assert.ok(label.control, `${name} label controls its input`)
+    );
+    await tick();
+    await tick();
+  });
+  for (const name of ["Name", "Priority", "Assign payee", "Memo"]) {
+    const label = [...document.querySelectorAll("label")].find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
+    assert.ok(label, `${name} label renders`);
+    assert.ok(label.control, `${name} label controls its input`);
   }
-})
+});
 
 async function mount(t: TestContext, responder: () => Response): Promise<void> {
-  script.errors = []
-  ;(globalThis as Record<string, unknown>).__rulesErrorToasts = script.errors
-  const prior = globalThis.fetch
+  script.errors = [];
+  (globalThis as Record<string, unknown>).__rulesErrorToasts = script.errors;
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    if ((init?.method ?? 'GET') === 'POST' && String(input).includes('/api/banking/rules/apply')) {
-      return responder()
+    if ((init?.method ?? "GET") === "POST" && String(input).includes("/api/banking/rules/apply")) {
+      return responder();
     }
-    throw new Error(`unexpected fetch ${String(input)}`)
-  }) as typeof fetch
+    throw new Error(`unexpected fetch ${String(input)}`);
+  }) as typeof fetch;
   t.after(() => {
-    globalThis.fetch = prior
-  })
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+    globalThis.fetch = prior;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const node of [...document.body.children]) node.remove()
-  })
+      rootHandle.unmount();
+    });
+    host.remove();
+    for (const node of [...document.body.children]) node.remove();
+  });
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <RunRulesButton accounts={ACCOUNTS} />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 function findButton(text: string): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined
+  return [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === text,
+  ) as HTMLButtonElement | undefined;
 }
 
 /** The dialog carries its own Run button after the outer opener. */
 function findDialogButton(text: string): HTMLButtonElement | undefined {
-  const matches = [...document.querySelectorAll('button')].filter(
-    (b) => (b.textContent ?? '').trim() === text,
-  )
-  return matches[matches.length - 1] as HTMLButtonElement | undefined
+  const matches = [...document.querySelectorAll("button")].filter(
+    (b) => (b.textContent ?? "").trim() === text,
+  );
+  return matches[matches.length - 1] as HTMLButtonElement | undefined;
 }
 
 async function click(button: HTMLButtonElement): Promise<void> {
   await act(async () => {
-    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
 }
 
 /** Open the run dialog; the dialog's Run button carries the same label. */
 async function openDialog(): Promise<void> {
-  const open = findButton('Run rules')
-  assert.ok(open, 'the run button must render')
-  await click(open)
+  const open = findButton("Run rules");
+  assert.ok(open, "the run button must render");
+  await click(open);
   await act(async () => {
-    await tick()
-    await tick()
-  })
+    await tick();
+    await tick();
+  });
 }
 
-test('a non-JSON 502 toasts the named failure and releases Run', async (t) => {
-  await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
-  await openDialog()
-  const run = findDialogButton('Run rules')
-  assert.ok(run && !run.disabled, 'Run must enable once an account is selected')
-  await click(run)
-  assert.deepEqual(script.errors, ['Could not run rules (status 502)'])
-  const again = findDialogButton('Run rules')
-  assert.ok(again && !again.disabled, 'busy must release after a transport failure')
-})
+test("a non-JSON 502 toasts the named failure and releases Run", async (t) => {
+  await mount(
+    t,
+    () =>
+      new Response("<html>Bad Gateway</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+  );
+  await openDialog();
+  const run = findDialogButton("Run rules");
+  assert.ok(run && !run.disabled, "Run must enable once an account is selected");
+  await click(run);
+  assert.deepEqual(script.errors, ["Could not run rules (status 502)"]);
+  const again = findDialogButton("Run rules");
+  assert.ok(again && !again.disabled, "busy must release after a transport failure");
+});
 
-test('a named 422 refusal surfaces the server message', async (t) => {
-  await mount(t, () => Response.json({ error: 'rules are disabled for this account' }, { status: 422 }))
-  await openDialog()
-  const run = findDialogButton('Run rules')
-  assert.ok(run, 'Run must render')
-  await click(run)
-  assert.deepEqual(script.errors, ['rules are disabled for this account'])
-})
+test("a named 422 refusal surfaces the server message", async (t) => {
+  await mount(t, () =>
+    Response.json({ error: "rules are disabled for this account" }, { status: 422 }),
+  );
+  await openDialog();
+  const run = findDialogButton("Run rules");
+  assert.ok(run, "Run must render");
+  await click(run);
+  assert.deepEqual(script.errors, ["rules are disabled for this account"]);
+});
 
-test('a clean dry run toasts the match summary', async (t) => {
-  await mount(t, () => Response.json({ matched: 2, excluded: 1, suggested: 0, scanned: 9 }))
-  await openDialog()
-  const run = findDialogButton('Run rules')
-  assert.ok(run, 'Run must render')
-  await click(run)
-  assert.deepEqual(script.errors, [], 'a successful run toasts nothing as an error')
-})
+test("a clean dry run toasts the match summary", async (t) => {
+  await mount(t, () => Response.json({ matched: 2, excluded: 1, suggested: 0, scanned: 9 }));
+  await openDialog();
+  const run = findDialogButton("Run rules");
+  assert.ok(run, "Run must render");
+  await click(run);
+  assert.deepEqual(script.errors, [], "a successful run toasts nothing as an error");
+});
 
-test('lines a rule refused are reported with the refusal, not hidden behind the match summary', async (t) => {
-  await mount(t, () => Response.json({
-    matched: 1, excluded: 0, suggested: 0, scanned: 3,
-    refused: [{ lineId: 'l2', ruleId: 'r1', ruleName: 'Meals', reason: 'no open accounting period for 2026-01-31' }],
-  }))
-  await openDialog()
-  const run = findDialogButton('Run rules')
-  assert.ok(run, 'Run must render')
-  await click(run)
-  assert.deepEqual(script.errors, ['1 line was refused and left unmatched: no open accounting period for 2026-01-31'])
-})
+test("lines a rule refused are reported with the refusal, not hidden behind the match summary", async (t) => {
+  await mount(t, () =>
+    Response.json({
+      matched: 1,
+      excluded: 0,
+      suggested: 0,
+      scanned: 3,
+      refused: [
+        {
+          lineId: "l2",
+          ruleId: "r1",
+          ruleName: "Meals",
+          reason: "no open accounting period for 2026-01-31",
+        },
+      ],
+    }),
+  );
+  await openDialog();
+  const run = findDialogButton("Run rules");
+  assert.ok(run, "Run must render");
+  await click(run);
+  assert.deepEqual(script.errors, [
+    "1 line was refused and left unmatched: no open accounting period for 2026-01-31",
+  ]);
+});

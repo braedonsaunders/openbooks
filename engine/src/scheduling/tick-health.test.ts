@@ -54,7 +54,9 @@ test("failed worker duties are stored and cleared with the next tick", () => {
   resetSchedulerTickHealth();
   try {
     recordTickDutyFailures([{ key: "automation-tick", error: "boom" }]);
-    assert.deepEqual(getSchedulerTickHealth().lastDutyFailures, [{ key: "automation-tick", error: "boom" }]);
+    assert.deepEqual(getSchedulerTickHealth().lastDutyFailures, [
+      { key: "automation-tick", error: "boom" },
+    ]);
     recordTickDutyFailures([]);
     assert.deepEqual(getSchedulerTickHealth().lastDutyFailures, []);
   } finally {

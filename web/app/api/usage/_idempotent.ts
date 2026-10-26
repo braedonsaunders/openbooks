@@ -18,11 +18,15 @@ export async function idempotentUsageCreate<T extends Record<string, unknown>>(i
 }): Promise<Response> {
   const key = input.request.headers.get("Idempotency-Key")?.trim() ?? "";
   if (!KEY.test(key)) {
-    return Response.json({
-      error: "A valid Idempotency-Key header is required.",
-      code: "invalid_idempotency_key",
-      remedy: "Retry the create with a new key containing 8 to 200 letters, numbers, or . _ : - characters.",
-    }, { status: 400 });
+    return Response.json(
+      {
+        error: "A valid Idempotency-Key header is required.",
+        code: "invalid_idempotency_key",
+        remedy:
+          "Retry the create with a new key containing 8 to 200 letters, numbers, or . _ : - characters.",
+      },
+      { status: 400 },
+    );
   }
   try {
     const outcome = await executeIdempotent({

@@ -19,8 +19,11 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type Filter = { key: string; operator: string; value?: string | null; to?: string | null };
 
 async function projectCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from projects p
-      where ${projectWhere({ ...defaultListView("project"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from projects p
+      where ${projectWhere({ ...defaultListView("project"), filters: viewFilters as never }, {}, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -45,33 +48,59 @@ test("malformed project filters match nothing instead of throwing", { skip: !DB 
   }
 });
 
-test('saved billing classifications resolve custom types and keep entity scope', { skip: !DB }, async () => {
-  await withBypassContext(async () => {
-    const org = await createScratchOrg();
-    try {
-      const fixed = BUILTIN_PROJECT_TYPES.find(type => type.key === 'fixed_price')!;
-      const typeId = randomUUID(), other = randomUUID();
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+test(
+  "saved billing classifications resolve custom types and keep entity scope",
+  { skip: !DB },
+  async () => {
+    await withBypassContext(async () => {
+      const org = await createScratchOrg();
+      try {
+        const fixed = BUILTIN_PROJECT_TYPES.find((type) => type.key === "fixed_price")!;
+        const typeId = randomUUID(),
+          other = randomUUID();
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
         values(${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`);
-      await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+        await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
         values(${typeId},${org.orgId},'tenant_service','Tenant service','fixed_price',
           ${JSON.stringify(fixed.invoicingProfile)}::jsonb,${JSON.stringify(fixed.backupProfile)}::jsonb)`);
-      for (const [name,owner,type] of [['Visible fixed',org.subsidiaryId,typeId],['Visible unconfigured',org.subsidiaryId,null],['Hidden fixed',other,typeId]]) {
-        await db.execute(sql`insert into projects(org_id,subsidiary_id,name,project_type_id)
+        for (const [name, owner, type] of [
+          ["Visible fixed", org.subsidiaryId, typeId],
+          ["Visible unconfigured", org.subsidiaryId, null],
+          ["Hidden fixed", other, typeId],
+        ]) {
+          await db.execute(sql`insert into projects(org_id,subsidiary_id,name,project_type_id)
           values(${org.orgId},${owner},${name},${type})`);
-      }
-      const view = {...defaultListView('project'),filters:[{key:'billing_method',operator:'eq' as const,value:'fixed_price'}]};
-      const read = async (scope:Set<string>) => await db.execute<{name:string;method:string}>(sql`
+        }
+        const view = {
+          ...defaultListView("project"),
+          filters: [{ key: "billing_method", operator: "eq" as const, value: "fixed_price" }],
+        };
+        const read = async (scope: Set<string>) =>
+          await db.execute<{ name: string; method: string }>(
+            sql`
         select p.name,${PROJECT_BUILT_IN_EXPR.billing_method!} as method from projects p
-        where ${projectWhere(view,{},org.orgId,scope)}
-        order by ${PROJECT_SORTS.billing_method!},p.name`, "objects");
-      assert.deepEqual(await read(new Set([org.subsidiaryId])),[{name:'Visible fixed',method:'fixed_price'}]);
-      assert.deepEqual(await read(new Set()),[]);
-      const unfiltered = await db.execute<{method:string}>(sql`
+        where ${projectWhere(view, {}, org.orgId, scope)}
+        order by ${PROJECT_SORTS.billing_method!},p.name`,
+            "objects",
+          );
+        assert.deepEqual(await read(new Set([org.subsidiaryId])), [
+          { name: "Visible fixed", method: "fixed_price" },
+        ]);
+        assert.deepEqual(await read(new Set()), []);
+        const unfiltered = await db.execute<{ method: string }>(
+          sql`
         select ${PROJECT_BUILT_IN_EXPR.billing_method!} as method from projects p
-        where ${projectWhere({...view,filters:[]},{},org.orgId,new Set([org.subsidiaryId]))}
-        order by ${PROJECT_SORTS.billing_method!},p.name`, "objects");
-      assert.deepEqual(unfiltered.map(row=>row.method),['fixed_price','time_and_materials']);
-    } finally { await dropScratchOrg(org.orgId); }
-  });
-});
+        where ${projectWhere({ ...view, filters: [] }, {}, org.orgId, new Set([org.subsidiaryId]))}
+        order by ${PROJECT_SORTS.billing_method!},p.name`,
+          "objects",
+        );
+        assert.deepEqual(
+          unfiltered.map((row) => row.method),
+          ["fixed_price", "time_and_materials"],
+        );
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    });
+  },
+);

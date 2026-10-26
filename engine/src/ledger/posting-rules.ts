@@ -1,12 +1,49 @@
 /** Pure document-to-ledger projection rules. Posting phases are coordinated by posting-document.ts. */
 import { abs, add, cmp, isZero, neg, toUnits } from "../money/money.ts";
-import { addMoney, negMoney, parseMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
+import {
+  addMoney,
+  negMoney,
+  parseMoney,
+  sumMoney,
+  ZERO_MONEY,
+  type Money,
+} from "../money/brands.ts";
 import { type DocLine, type KernelLine, PostingError } from "../journal/posting-contracts.ts";
-import { assertCashTendersPresent, assertCloseoutTendersMatchTotal, assertTendersMatchTotal, expectedTenderedForCloseout } from "../sales/cash-tenders.ts";
-import { internalBillingKernelLines, InternalBillingPolicyError } from "./internal-billing-policy.ts";
-import { type RuleFn, resolvedLineAccount, cardRule, tenderMemo, dims, lineTotal, controlOverride, settlementOf, personalReceivableAmount, purchaseBaseAmount, purchaseTaxLines, salesTaxLines } from "./posting-rule-builders.ts";
-import { controlLineIsOpenItem, settledAtNoCharge, amortizationSource, projectChargeKernelLines } from "./posting-rule-support.ts";
-export { controlLineIsOpenItem, noChargeMeasurementLegs, projectChargeKernelLines } from "./posting-rule-support.ts";
+import {
+  assertCashTendersPresent,
+  assertCloseoutTendersMatchTotal,
+  assertTendersMatchTotal,
+  expectedTenderedForCloseout,
+} from "../sales/cash-tenders.ts";
+import {
+  internalBillingKernelLines,
+  InternalBillingPolicyError,
+} from "./internal-billing-policy.ts";
+import {
+  type RuleFn,
+  resolvedLineAccount,
+  cardRule,
+  tenderMemo,
+  dims,
+  lineTotal,
+  controlOverride,
+  settlementOf,
+  personalReceivableAmount,
+  purchaseBaseAmount,
+  purchaseTaxLines,
+  salesTaxLines,
+} from "./posting-rule-builders.ts";
+import {
+  controlLineIsOpenItem,
+  settledAtNoCharge,
+  amortizationSource,
+  projectChargeKernelLines,
+} from "./posting-rule-support.ts";
+export {
+  controlLineIsOpenItem,
+  noChargeMeasurementLegs,
+  projectChargeKernelLines,
+} from "./posting-rule-support.ts";
 
 export const RULES: Record<string, RuleFn> = {
   vendor_bill: (doc, lines, deps) => {
@@ -15,8 +52,10 @@ export const RULES: Record<string, RuleFn> = {
       // the stock); all other lines DR their expense account.
       accountId: resolvedLineAccount(
         l,
-        deps.agencyByLine?.get(l.id)?.accountId ?? deps.inventoryAssetByLine?.get(l.id) ??
-          deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId,
+        deps.agencyByLine?.get(l.id)?.accountId ??
+          deps.inventoryAssetByLine?.get(l.id) ??
+          deps.amortizationByLine?.get(l.id)?.deferralAccountId ??
+          l.accountId,
       ),
       amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
       memo: l.description,
@@ -43,27 +82,47 @@ export const RULES: Record<string, RuleFn> = {
   customer_invoice: (doc, lines, deps) => {
     const income: KernelLine[] = lines.flatMap((l): KernelLine[] => {
       const agency = deps.agencyByLine?.get(l.id);
-      if (agency) return [{accountId: resolvedLineAccount(l), amount: negMoney(add(l.amount,neg(agency.vendorAmount))),memo: l.description,partyId:l.partyId ?? doc.partyId,...dims(doc,l)},
-        {accountId:agency.accountId,amount:negMoney(agency.vendorAmount),memo:"Vendor pass-through consideration",partyId:l.partyId ?? doc.partyId,...dims(doc,l)}];
-      return [{
-      // Rev-rec lines credit deferred revenue; recognition drains it over the
-      // term. Gift card lines credit the stored-value liability instead of
-      // revenue or deferred revenue: the consideration is owed back to the
-      // customer, so it must never read as earned. All other lines credit
-      // income directly.
-      accountId: resolvedLineAccount(
-        l,
-        deps.storedValueLiabilityByLine?.get(l.id) ?? deps.deferralAccountByLine?.get(l.id) ?? l.accountId,
-      ),
-      amount: negMoney(l.amount), // credit income / deferred revenue
-      memo: l.description,
-      partyId: l.partyId ?? doc.partyId,
-      // A line earned by another legal entity keeps that entity (consolidated
-      // billing across entities); null defaults to the document subsidiary,
-      // so single-entity documents post exactly as before.
-      subsidiaryId: l.subsidiaryId ?? null,
-      ...dims(doc, l),
-    }]; });
+      if (agency)
+        return [
+          {
+            accountId: resolvedLineAccount(l),
+            amount: negMoney(add(l.amount, neg(agency.vendorAmount))),
+            memo: l.description,
+            partyId: l.partyId ?? doc.partyId,
+            ...dims(doc, l),
+          },
+          {
+            accountId: agency.accountId,
+            amount: negMoney(agency.vendorAmount),
+            memo: "Vendor pass-through consideration",
+            partyId: l.partyId ?? doc.partyId,
+            ...dims(doc, l),
+          },
+        ];
+      return [
+        {
+          // Rev-rec lines credit deferred revenue; recognition drains it over the
+          // term. Gift card lines credit the stored-value liability instead of
+          // revenue or deferred revenue: the consideration is owed back to the
+          // customer, so it must never read as earned. All other lines credit
+          // income directly.
+          accountId: resolvedLineAccount(
+            l,
+            deps.storedValueLiabilityByLine?.get(l.id) ??
+              deps.deferralAccountByLine?.get(l.id) ??
+              l.accountId,
+          ),
+          amount: negMoney(l.amount), // credit income / deferred revenue
+          memo: l.description,
+          partyId: l.partyId ?? doc.partyId,
+          // A line earned by another legal entity keeps that entity (consolidated
+          // billing across entities); null defaults to the document subsidiary,
+          // so single-entity documents post exactly as before.
+          subsidiaryId: l.subsidiaryId ?? null,
+          ...dims(doc, l),
+        },
+      ];
+    });
     const tax = salesTaxLines(doc, lines, deps, 1);
     const total = sumMoney([...income, ...tax].map((l) => l.amount));
     return [
@@ -92,20 +151,35 @@ export const RULES: Record<string, RuleFn> = {
   cash_sale: (doc, lines, deps) => {
     const income: KernelLine[] = lines.flatMap((l): KernelLine[] => {
       const agency = deps.agencyByLine?.get(l.id);
-      if (agency) return [{accountId: resolvedLineAccount(l), amount: negMoney(add(l.amount,neg(agency.vendorAmount))),memo: l.description,partyId:l.partyId ?? doc.partyId,...dims(doc,l)},
-        {accountId:agency.accountId,amount:negMoney(agency.vendorAmount),memo:"Vendor pass-through consideration",partyId:l.partyId ?? doc.partyId,...dims(doc,l)}];
-      return [{
-      // Rev-rec lines credit deferred revenue; recognition drains it over the
-      // term. All other lines credit income directly.
-      accountId: resolvedLineAccount(
-        l,
-        deps.deferralAccountByLine?.get(l.id) ?? l.accountId,
-      ),
-      amount: negMoney(l.amount), // credit income / deferred revenue
-      memo: l.description,
-      partyId: l.partyId ?? doc.partyId,
-      ...dims(doc, l),
-    }]; });
+      if (agency)
+        return [
+          {
+            accountId: resolvedLineAccount(l),
+            amount: negMoney(add(l.amount, neg(agency.vendorAmount))),
+            memo: l.description,
+            partyId: l.partyId ?? doc.partyId,
+            ...dims(doc, l),
+          },
+          {
+            accountId: agency.accountId,
+            amount: negMoney(agency.vendorAmount),
+            memo: "Vendor pass-through consideration",
+            partyId: l.partyId ?? doc.partyId,
+            ...dims(doc, l),
+          },
+        ];
+      return [
+        {
+          // Rev-rec lines credit deferred revenue; recognition drains it over the
+          // term. All other lines credit income directly.
+          accountId: resolvedLineAccount(l, deps.deferralAccountByLine?.get(l.id) ?? l.accountId),
+          amount: negMoney(l.amount), // credit income / deferred revenue
+          memo: l.description,
+          partyId: l.partyId ?? doc.partyId,
+          ...dims(doc, l),
+        },
+      ];
+    });
     const tax = salesTaxLines(doc, lines, deps, 1);
     const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
     // Tenders arrive resolved from document_tenders (prepare/replay); an
@@ -119,12 +193,18 @@ export const RULES: Record<string, RuleFn> = {
     assertCashTendersPresent(
       tenders,
       closeout
-        ? expectedTenderedForCloseout(abs(incomeAndTax), closeout.tipsTotal, closeout.feeTotal, closeout.overShort)
+        ? expectedTenderedForCloseout(
+            abs(incomeAndTax),
+            closeout.tipsTotal,
+            closeout.feeTotal,
+            closeout.overShort,
+          )
         : abs(incomeAndTax),
       doc.documentNumber,
       "cash sale",
     );
-    if (tenders.length === 0) return settledAtNoCharge(doc, lines, [...income, ...tax], deps, "1", "cash sale");
+    if (tenders.length === 0)
+      return settledAtNoCharge(doc, lines, [...income, ...tax], deps, "1", "cash sale");
     if (closeout) {
       assertCloseoutTendersMatchTotal(tenders, incomeAndTax, closeout, doc.documentNumber);
       if (cmp(closeout.tipsTotal, "0") !== 0 && !closeout.tipsPayableAccountId) {
@@ -162,35 +242,42 @@ export const RULES: Record<string, RuleFn> = {
       // liability tagged with the server's party when the sale names one
       // (payroll pays per employee), otherwise pooled for the house split.
       ...(closeout && cmp(closeout.tipsTotal, "0") !== 0
-        ? [{
-            accountId: closeout.tipsPayableAccountId!,
-            amount: negMoney(closeout.tipsTotal),
-            memo: `Card tips — cash sale ${doc.documentNumber}`,
-            partyId: closeout.serverPartyId,
-            ...dims(doc),
-          } satisfies KernelLine]
+        ? [
+            {
+              accountId: closeout.tipsPayableAccountId!,
+              amount: negMoney(closeout.tipsTotal),
+              memo: `Card tips — cash sale ${doc.documentNumber}`,
+              partyId: closeout.serverPartyId,
+              ...dims(doc),
+            } satisfies KernelLine,
+          ]
         : []),
       // Processor fees are a selling cost of this sale, booked gross so the
       // deposit reconciles net — never netted against revenue.
       ...(closeout && cmp(closeout.feeTotal, "0") !== 0
-        ? [{
-            accountId: closeout.processorFeeAccountId!,
-            amount: closeout.feeTotal,
-            memo: `Processor fees — cash sale ${doc.documentNumber}`,
-            ...dims(doc),
-          } satisfies KernelLine]
+        ? [
+            {
+              accountId: closeout.processorFeeAccountId!,
+              amount: closeout.feeTotal,
+              memo: `Processor fees — cash sale ${doc.documentNumber}`,
+              ...dims(doc),
+            } satisfies KernelLine,
+          ]
         : []),
       // The counted over/short: an over credits the account as other income,
       // a short debits it as an expense — one signed leg either way.
       ...(closeout && cmp(closeout.overShort, "0") !== 0
-        ? [{
-            accountId: closeout.cashOverShortAccountId!,
-            amount: negMoney(closeout.overShort),
-            memo: cmp(closeout.overShort, "0") > 0
-              ? `Cash over — cash sale ${doc.documentNumber}`
-              : `Cash short — cash sale ${doc.documentNumber}`,
-            ...dims(doc),
-          } satisfies KernelLine]
+        ? [
+            {
+              accountId: closeout.cashOverShortAccountId!,
+              amount: negMoney(closeout.overShort),
+              memo:
+                cmp(closeout.overShort, "0") > 0
+                  ? `Cash over — cash sale ${doc.documentNumber}`
+                  : `Cash short — cash sale ${doc.documentNumber}`,
+              ...dims(doc),
+            } satisfies KernelLine,
+          ]
         : []),
       ...income,
       ...tax,
@@ -200,12 +287,9 @@ export const RULES: Record<string, RuleFn> = {
   vendor_payment: (doc, lines, deps) => {
     const cash = sumMoney(lines.map(lineTotal));
     const custom = (doc.custom ?? {}) as Record<string, unknown>;
-    const discount =
-      typeof custom.discountAmount === "string" ? custom.discountAmount : "0";
+    const discount = typeof custom.discountAmount === "string" ? custom.discountAmount : "0";
     const discountAccountId =
-      typeof custom.discountAccountId === "string"
-        ? custom.discountAccountId
-        : null;
+      typeof custom.discountAccountId === "string" ? custom.discountAccountId : null;
     if (toUnits(discount) < 0n)
       throw new PostingError("vendor payment discount cannot be negative");
     if (!isZero(discount) && !discountAccountId)
@@ -215,17 +299,33 @@ export const RULES: Record<string, RuleFn> = {
     // relieved by cash + discount + tax withheld.
     const withholdingLegs = new Map<string, Money>();
     const rawWithholdings = custom.withholdings;
-    if (rawWithholdings !== undefined && rawWithholdings !== null && !Array.isArray(rawWithholdings))
+    if (
+      rawWithholdings !== undefined &&
+      rawWithholdings !== null &&
+      !Array.isArray(rawWithholdings)
+    )
       throw new PostingError("vendor payment withholdings are malformed");
     for (const entry of (rawWithholdings as unknown[] | undefined) ?? []) {
       const row = entry as { liabilityAccountId?: unknown; deducted?: unknown };
       if (typeof row.liabilityAccountId !== "string" || typeof row.deducted !== "string")
-        throw new PostingError("vendor payment withholding needs a liability account and an amount");
-      if (toUnits(row.deducted) < 0n) throw new PostingError("vendor payment withholding cannot be negative");
-      withholdingLegs.set(row.liabilityAccountId, addMoney(withholdingLegs.get(row.liabilityAccountId) ?? ZERO_MONEY, parseMoney(row.deducted)));
+        throw new PostingError(
+          "vendor payment withholding needs a liability account and an amount",
+        );
+      if (toUnits(row.deducted) < 0n)
+        throw new PostingError("vendor payment withholding cannot be negative");
+      withholdingLegs.set(
+        row.liabilityAccountId,
+        addMoney(
+          withholdingLegs.get(row.liabilityAccountId) ?? ZERO_MONEY,
+          parseMoney(row.deducted),
+        ),
+      );
     }
     const withheld = sumMoney([...withholdingLegs.values()]);
-    if (typeof custom.withholdingAmount === "string" && toUnits(custom.withholdingAmount) !== toUnits(withheld))
+    if (
+      typeof custom.withholdingAmount === "string" &&
+      toUnits(custom.withholdingAmount) !== toUnits(withheld)
+    )
       throw new PostingError("vendor payment withholding total does not match its deductions");
     const payable = addMoney(addMoney(cash, discount), withheld);
     return [
@@ -275,11 +375,8 @@ export const RULES: Record<string, RuleFn> = {
     // instead of AR, so the AR leg cross-foots to the open-item applications.
     const fee = typeof custom.feeAmount === "string" ? custom.feeAmount : "0";
     const feeAccountId =
-      typeof custom.feeIncomeAccountId === "string"
-        ? custom.feeIncomeAccountId
-        : null;
-    if (toUnits(fee) < 0n)
-      throw new PostingError("customer payment fee cannot be negative");
+      typeof custom.feeIncomeAccountId === "string" ? custom.feeIncomeAccountId : null;
+    if (toUnits(fee) < 0n) throw new PostingError("customer payment fee cannot be negative");
     if (cmp(total, "0") < 0) {
       // A refund pays cash OUT (negative total): no payment-acceptance
       // surcharge exists on money returned to the customer, so any fee riding
@@ -316,9 +413,7 @@ export const RULES: Record<string, RuleFn> = {
         isOpenItem: true,
         ...dims(doc),
       }, // credit AR
-      ...(!isZero(fee)
-        ? [{ accountId: feeAccountId!, amount: negMoney(fee), ...dims(doc) }]
-        : []), // credit fee income
+      ...(!isZero(fee) ? [{ accountId: feeAccountId!, amount: negMoney(fee), ...dims(doc) }] : []), // credit fee income
     ];
   },
 
@@ -345,7 +440,10 @@ export const RULES: Record<string, RuleFn> = {
     }
     const bookExpense = (ls: DocLine[], cardStamp: boolean): KernelLine[] =>
       ls.map((l) => ({
-        accountId: resolvedLineAccount(l, deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId),
+        accountId: resolvedLineAccount(
+          l,
+          deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId,
+        ),
         amount: purchaseBaseAmount(l, deps),
         memo: l.description,
         partyId: l.partyId ?? doc.partyId,
@@ -356,10 +454,7 @@ export const RULES: Record<string, RuleFn> = {
     const oopExpense = bookExpense(oop, false);
     const oopTax = purchaseTaxLines(doc, oop, deps, 1);
     const oopTotal = sumMoney([...oopExpense, ...oopTax].map((l) => l.amount));
-    const oopControlId =
-      controlOverride(doc) ??
-      deps.control.employeePayable ??
-      deps.control.ap;
+    const oopControlId = controlOverride(doc) ?? deps.control.employeePayable ?? deps.control.ap;
     const cardExpense = bookExpense(card, true);
     const cardTax = purchaseTaxLines(doc, card, deps, 1);
     // Personal lines post gross (net + every recoverable input component) to
@@ -374,7 +469,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: l.partyId ?? doc.partyId,
       isOpenItem: controlLineIsOpenItem(
         deps.control.employeeReceivable!,
-        (l.partyId ?? doc.partyId),
+        l.partyId ?? doc.partyId,
         deps.openItemAccountIds,
       ),
       ...dims(doc, l),
@@ -397,11 +492,7 @@ export const RULES: Record<string, RuleFn> = {
               accountId: oopControlId,
               amount: negMoney(oopTotal),
               partyId: doc.partyId,
-              isOpenItem: controlLineIsOpenItem(
-                oopControlId,
-                doc.partyId,
-                deps.openItemAccountIds,
-              ),
+              isOpenItem: controlLineIsOpenItem(oopControlId, doc.partyId, deps.openItemAccountIds),
               ...dims(doc),
             },
           ]),
@@ -438,13 +529,19 @@ export const RULES: Record<string, RuleFn> = {
       // systems put the entity on the LINE, e.g. opening-balance journals).
       // Falls back to the header party when the line has none.
       const partyId = l.partyId ?? doc.partyId;
-      const accountId = resolvedLineAccount(l, deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId);
+      const accountId = resolvedLineAccount(
+        l,
+        deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId,
+      );
       return {
         ...amortizationSource(l, deps),
         accountId,
         amount: parseMoney(l.amount),
-        currency: doc.journalMode === "currency_adjustment" ? l.journalCurrency ?? doc.currency : l.journalCurrency ?? undefined,
-        fxRate: doc.journalMode === "currency_adjustment" ? "1" : l.journalFxRate ?? undefined,
+        currency:
+          doc.journalMode === "currency_adjustment"
+            ? (l.journalCurrency ?? doc.currency)
+            : (l.journalCurrency ?? undefined),
+        fxRate: doc.journalMode === "currency_adjustment" ? "1" : (l.journalFxRate ?? undefined),
         txnAmount: doc.journalMode === "currency_adjustment" && l.journalCurrency ? "0" : l.amount,
         isCurrencyAdjustment: doc.journalMode === "currency_adjustment" && !!l.journalCurrency,
         eliminate: l.journalEliminate ?? false,
@@ -455,11 +552,10 @@ export const RULES: Record<string, RuleFn> = {
         // Entity-bearing AR/AP journal legs are open items. A party-less leg is
         // a direct GL control-account posting and intentionally stays outside
         // aging; manufacturing an anonymous subledger balance would be false.
-        isOpenItem: doc.journalMode === "currency_adjustment" || doc.journalMode === "statistical" ? false : controlLineIsOpenItem(
-          accountId,
-          partyId,
-          deps.openItemAccountIds,
-        ),
+        isOpenItem:
+          doc.journalMode === "currency_adjustment" || doc.journalMode === "statistical"
+            ? false
+            : controlLineIsOpenItem(accountId, partyId, deps.openItemAccountIds),
         ...dims(doc, l),
       };
     }),
@@ -481,10 +577,18 @@ export const RULES: Record<string, RuleFn> = {
         memo: l.description,
         partyId,
         payrollExpense: payrollSource?.["payrollExpense"] === true,
-        payComponentId: typeof payrollSource?.["payComponentId"] === "string" ? payrollSource["payComponentId"] : null,
-        payrollEmployeePartyId: typeof payrollSource?.["employeePartyId"] === "string" ? payrollSource["employeePartyId"] : null,
-        payrollTimeTypeId: typeof payrollSource?.["timeTypeId"] === "string" ? payrollSource["timeTypeId"] : null,
-        payrollItemId: typeof payrollSource?.["itemId"] === "string" ? payrollSource["itemId"] : null,
+        payComponentId:
+          typeof payrollSource?.["payComponentId"] === "string"
+            ? payrollSource["payComponentId"]
+            : null,
+        payrollEmployeePartyId:
+          typeof payrollSource?.["employeePartyId"] === "string"
+            ? payrollSource["employeePartyId"]
+            : null,
+        payrollTimeTypeId:
+          typeof payrollSource?.["timeTypeId"] === "string" ? payrollSource["timeTypeId"] : null,
+        payrollItemId:
+          typeof payrollSource?.["itemId"] === "string" ? payrollSource["itemId"] : null,
         // commitPayRun puts a party ONLY on the per-employee net-pay legs —
         // those are open items by construction (settled by the payment
         // journal), regardless of the payable account's configured type.
@@ -552,11 +656,7 @@ export const RULES: Record<string, RuleFn> = {
         // A deposit can settle an AR/AP credit (for example cash received for
         // a vendor credit). Preserve that entity-bearing control leg as an
         // application source; ordinary income/clearing sources stay non-open.
-        isOpenItem: controlLineIsOpenItem(
-          accountId,
-          partyId,
-          deps.openItemAccountIds,
-        ),
+        isOpenItem: controlLineIsOpenItem(accountId, partyId, deps.openItemAccountIds),
         ...dims(doc, l),
       };
     });
@@ -587,17 +687,15 @@ export const RULES: Record<string, RuleFn> = {
       throw new PostingError(
         "transfer needs exactly two lines: the destination line carries the amount, the source line carries zero",
       );
-    const dest = lines[0]!, src = lines[1]!;
+    const dest = lines[0]!,
+      src = lines[1]!;
     if (!dest.accountId || !src.accountId)
       throw new PostingError(
         "transfer lines must name both the destination and the source account",
       );
     if (dest.accountId === src.accountId)
-      throw new PostingError(
-        "transfer destination and source must be different accounts",
-      );
-    if (toUnits(dest.amount) <= 0n)
-      throw new PostingError("transfer amount must be positive");
+      throw new PostingError("transfer destination and source must be different accounts");
+    if (toUnits(dest.amount) <= 0n) throw new PostingError("transfer amount must be positive");
     if (!isZero(src.amount))
       throw new PostingError(
         "transfer amount must ride exactly one line: the source leg must carry zero",
@@ -620,10 +718,7 @@ export const RULES: Record<string, RuleFn> = {
   /** Vendor credit memo: DR AP / CR expense or inventory-return variance + tax. */
   vendor_credit: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
-      accountId: resolvedLineAccount(
-        l,
-        deps.inventoryReturnOffsetByLine?.get(l.id) ?? l.accountId,
-      ),
+      accountId: resolvedLineAccount(l, deps.inventoryReturnOffsetByLine?.get(l.id) ?? l.accountId),
       amount: negMoney(purchaseBaseAmount(l, deps)), // credit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
@@ -661,24 +756,20 @@ export const RULES: Record<string, RuleFn> = {
     // mints the customer account against this journal.
     const creditLeg: KernelLine = deps.storeCreditLiabilityAccountId
       ? {
-        accountId: deps.storeCreditLiabilityAccountId,
-        amount: negMoney(total), // credit store-credit liability
-        partyId: doc.partyId,
-        ...dims(doc),
-      }
+          accountId: deps.storeCreditLiabilityAccountId,
+          amount: negMoney(total), // credit store-credit liability
+          partyId: doc.partyId,
+          ...dims(doc),
+        }
       : {
-        accountId: controlOverride(doc) ?? deps.control.ar,
-        amount: negMoney(total), // credit AR (total is positive)
-        partyId: doc.partyId,
-        dueDate: doc.dueDate,
-        isOpenItem: true,
-        ...dims(doc),
-      };
-    return [
-      creditLeg,
-      ...income,
-      ...tax,
-    ];
+          accountId: controlOverride(doc) ?? deps.control.ar,
+          amount: negMoney(total), // credit AR (total is positive)
+          partyId: doc.partyId,
+          dueDate: doc.dueDate,
+          isOpenItem: true,
+          ...dims(doc),
+        };
+    return [creditLeg, ...income, ...tax];
   },
 
   /**
@@ -701,7 +792,8 @@ export const RULES: Record<string, RuleFn> = {
     const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
     const tenders = deps.cashTenders ?? [];
     assertCashTendersPresent(tenders, abs(incomeAndTax), doc.documentNumber, "cash refund");
-    if (tenders.length === 0) return settledAtNoCharge(doc, lines, [...income, ...tax], deps, "-1", "cash refund");
+    if (tenders.length === 0)
+      return settledAtNoCharge(doc, lines, [...income, ...tax], deps, "-1", "cash refund");
     assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash refund");
     return [
       // Payout legs mirror the sale's tender legs: no party, never open items.

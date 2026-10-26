@@ -17,8 +17,7 @@ interface Gate {
   allowedSubsidiaryIds: null;
 }
 const routeState = { gate: null as Gate | null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuth = `const state = globalThis[Symbol.for('openbooks.statement-delete-route-test')]
 export async function guardFeaturePermission() { return state.gate }
@@ -27,10 +26,7 @@ export async function getAuthz() { return state.gate }`;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "@/lib/feature-gates" ||
-      specifier === "@/lib/authz"
-    ) {
+    if (specifier === "@/lib/feature-gates" || specifier === "@/lib/authz") {
       return { url: "mock:banking-auth", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -47,17 +43,11 @@ const routeUrl = "./route.ts?statement-delete-route-test";
 const { DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
-const {
-  createMatch,
-  importStatement,
-  startReconciliation,
-} = await import("@openbooks/engine/banking/banking");
+const { createMatch, importStatement, startReconciliation } =
+  await import("@openbooks/engine/banking/banking");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -78,10 +68,9 @@ async function postBankLine(
          ${`QADEL-${label}-${entryId.slice(0, 8)}`}, ${org.date}, ${org.periodId},
          ${`QA delete ${label}`}, 'draft', 'manual', ${actorId}, ${actorId})
     `);
-    const offsetAmount = bankAmount.startsWith("-")
-      ? bankAmount.slice(1)
-      : `-${bankAmount}`;
-    const [bankLine] = await tx.execute<{ id: string }>(sql`
+    const offsetAmount = bankAmount.startsWith("-") ? bankAmount.slice(1) : `-${bankAmount}`;
+    const [bankLine] = await tx.execute<{ id: string }>(
+      sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -93,7 +82,9 @@ async function postBankLine(
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD',
          ${offsetAmount}, 1, ${label})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -131,7 +122,12 @@ function importCsv(
     [
       "date,amount,description,bank_transaction_id",
       ...input.lines.map((line) =>
-        [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
+        [
+          line.postedOn,
+          line.amount,
+          quote(line.description ?? ""),
+          line.bankTransactionId ?? "",
+        ].join(","),
       ),
     ].join("\n") + "\n";
   return importStatement(
@@ -178,15 +174,25 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "r1" },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "Client receipt",
+              bankTransactionId: "r1",
+            },
           ],
         },
         ctx,
       );
-      const [lineId] = (await db.execute<{ id: string }>(sql`
+      const [lineId] = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `, "objects")).map((row) => row.id);
+      `,
+          "objects",
+        )
+      ).map((row) => row.id);
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100.00" },
         ctx,
@@ -196,16 +202,25 @@ test(
         ctx,
       );
       const outcome = await deleteStatus(imported.statementId!);
-      assert.equal(outcome.status, 422, `matched-open delete must refuse typed, got ${outcome.status}`);
+      assert.equal(
+        outcome.status,
+        422,
+        `matched-open delete must refuse typed, got ${outcome.status}`,
+      );
       assert.match(
         String((outcome.body as { error?: string } | null)?.error ?? ""),
         /unmatch them first/,
         "the refusal names its remedy",
       );
-      const survivors = (await db.execute<{ n: number }>(sql`
+      const survivors = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from bank_statement_lines
          where statement_id = ${imported.statementId!} and org_id = ${org.orgId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(survivors, 1, "the refused delete leaves every line untouched");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -213,29 +228,30 @@ test(
   },
 );
 
-test(
-  "DELETE removes an untouched import with 200",
-  { skip: !DB },
-  async () => {
-    const { org, ctx } = await setup();
-    try {
-      const imported = await importCsv(
-        {
-          accountId: org.accounts.bank,
-          source: "csv" as const,
-          statementDate: org.date,
-          currency: "CAD",
-          lines: [
-            { postedOn: org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "r1" },
-          ],
-        },
-        ctx,
-      );
-      const outcome = await deleteStatus(imported.statementId!);
-      assert.equal(outcome.status, 200, `clean delete must succeed, got ${outcome.status}`);
-      assert.equal((outcome.body as { deletedLines?: number } | null)?.deletedLines, 1);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("DELETE removes an untouched import with 200", { skip: !DB }, async () => {
+  const { org, ctx } = await setup();
+  try {
+    const imported = await importCsv(
+      {
+        accountId: org.accounts.bank,
+        source: "csv" as const,
+        statementDate: org.date,
+        currency: "CAD",
+        lines: [
+          {
+            postedOn: org.date,
+            amount: "100.00",
+            description: "Client receipt",
+            bankTransactionId: "r1",
+          },
+        ],
+      },
+      ctx,
+    );
+    const outcome = await deleteStatus(imported.statementId!);
+    assert.equal(outcome.status, 200, `clean delete must succeed, got ${outcome.status}`);
+    assert.equal((outcome.body as { deletedLines?: number } | null)?.deletedLines, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

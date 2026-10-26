@@ -20,17 +20,13 @@ export async function routeStockCount(
   actorId: string | null,
   countId: string,
 ): Promise<FlowSubmissionPolicy> {
-  if (!actorId)
-    throw new InventoryError(
-      "A named inventory operator must submit this count.",
-    );
+  if (!actorId) throw new InventoryError("A named inventory operator must submit this count.");
   if (!routing)
     throw new InventoryError(
       "Stock count Flow routing is unavailable; retry after the application starts.",
     );
   const policy = await routing({ orgId, actorId, countId });
-  if (!policy)
-    throw new InventoryError("The stock count received no submission verdict.");
+  if (!policy) throw new InventoryError("The stock count received no submission verdict.");
   return policy;
 }
 export async function cancelStockCountRouting(
@@ -52,14 +48,16 @@ export async function releaseStockCountReview(input: {
   outcome: "approved" | "rejected";
 }): Promise<void> {
   await withOrgTransaction(input.orgId, async () => {
-    const row = (await db.execute<{
+    const row = (
+      await db.execute<{
         subsidiary_id: string;
-      }>(sql`select subsidiary_id from stock_counts
-      where org_id=${input.orgId} and id=${input.countId} and status='review' for update`, "objects"))[0];
-    if (!row)
-      throw new InventoryError(
-        "The count left review; reopen its current version.",
-      );
+      }>(
+        sql`select subsidiary_id from stock_counts
+      where org_id=${input.orgId} and id=${input.countId} and status='review' for update`,
+        "objects",
+      )
+    )[0];
+    if (!row) throw new InventoryError("The count left review; reopen its current version.");
     await lockActorCommandAuthority(
       db,
       input.orgId,
@@ -67,15 +65,16 @@ export async function releaseStockCountReview(input: {
       row.subsidiary_id,
       "items.post",
     );
-    const result = await db.execute(sql`update stock_counts set
+    const result = await db.execute(
+      sql`update stock_counts set
       review_released=${input.outcome === "approved"},
       status=${input.outcome === "approved" ? "review" : "counting"},
       updated_at=now(),updated_by=${input.actorId}
-      where org_id=${input.orgId} and id=${input.countId} and status='review' returning id`, "objects");
+      where org_id=${input.orgId} and id=${input.countId} and status='review' returning id`,
+      "objects",
+    );
     if (result.length !== 1)
-      throw new InventoryError(
-        "The stock count changed during its Flow decision.",
-      );
+      throw new InventoryError("The stock count changed during its Flow decision.");
     await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,actor_id,changes)
       values(${input.orgId},'stock_counts',${input.countId},${input.outcome === "approved" ? "approve" : "reject"},${input.actorId},
         ${JSON.stringify({ review: input.outcome, source: "flow" })}::jsonb)`);

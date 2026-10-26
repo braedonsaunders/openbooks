@@ -132,10 +132,7 @@ export const salesChannels = pgTable(
     ),
     check("sales_channels_name_nonblank", sql`length(btrim(${t.name})) > 0`),
     check("sales_channels_currency_nonblank", sql`length(btrim(${t.currency})) > 0`),
-    check(
-      "sales_channels_external_account_nonblank",
-      sql`length(btrim(${t.externalAccount})) > 0`,
-    ),
+    check("sales_channels_external_account_nonblank", sql`length(btrim(${t.externalAccount})) > 0`),
     foreignKey({ name: "sales_channels_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
     foreignKey({
       name: "sales_channels_subsidiary_tenant_fk",
@@ -225,10 +222,7 @@ export const salesChannelLocations = pgTable(
       "sales_channel_locations_external_name_nonblank",
       sql`length(btrim(${t.externalName})) > 0`,
     ),
-    check(
-      "sales_channel_locations_buffer_nonnegative",
-      sql`${t.bufferQuantity} >= 0`,
-    ),
+    check("sales_channel_locations_buffer_nonnegative", sql`${t.bufferQuantity} >= 0`),
     foreignKey({
       name: "sales_channel_locations_org_fk",
       columns: [t.orgId],
@@ -305,7 +299,9 @@ export const channelInventoryPushStates = pgTable(
     lastPushedAt: timestamp("last_pushed_at", { withTimezone: true }),
     lastStatus: text("last_status", {
       enum: ["pending", "ok", "conflict", "error"],
-    }).notNull().default("pending"),
+    })
+      .notNull()
+      .default("pending"),
     lastError: text("last_error"),
     ...auditColumns,
   },
@@ -364,7 +360,9 @@ export const channelInventoryConflicts = pgTable(
     itemId: uuid("item_id").notNull(),
     openbooksQuantity: integer("openbooks_quantity").notNull(),
     shopifyQuantity: integer("shopify_quantity").notNull(),
-    status: text("status", { enum: ["open", "resolved"] }).notNull().default("open"),
+    status: text("status", { enum: ["open", "resolved"] })
+      .notNull()
+      .default("open"),
     resolution: text("resolution", { enum: ["pushed_openbooks", "accepted_shopify"] }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     resolvedBy: uuid("resolved_by"),
@@ -376,10 +374,7 @@ export const channelInventoryConflicts = pgTable(
       .on(t.orgId, t.channelId, t.stockLocationId, t.itemId)
       .where(sql`${t.status} = 'open'`),
     index("channel_inventory_conflicts_channel_scan").on(t.orgId, t.channelId, t.status),
-    check(
-      "channel_inventory_conflicts_status_valid",
-      sql`${t.status} in ('open', 'resolved')`,
-    ),
+    check("channel_inventory_conflicts_status_valid", sql`${t.status} in ('open', 'resolved')`),
     check(
       "channel_inventory_conflicts_resolution_valid",
       sql`${t.resolution} is null or ${t.resolution} in ('pushed_openbooks', 'accepted_shopify')`,
@@ -449,7 +444,10 @@ export const externalLinks = pgTable(
       t.objectType,
       t.nativeId,
     ),
-    check("external_links_provider_valid", sql`${t.provider} in ('shopify', 'stripe', 'chargebee', 'recurly', 'maxio', 'zuora')`),
+    check(
+      "external_links_provider_valid",
+      sql`${t.provider} in ('shopify', 'stripe', 'chargebee', 'recurly', 'maxio', 'zuora')`,
+    ),
     check(
       "external_links_object_type_valid",
       sql`${t.objectType} in ('product', 'variant', 'customer', 'order', 'refund', 'fulfillment', 'payout', 'location', 'gift_card', 'subscription', 'price', 'meter', 'subscription_item', 'invoice', 'credit_note', 'payment', 'coupon')`,
@@ -458,14 +456,8 @@ export const externalLinks = pgTable(
       "external_links_native_table_valid",
       sql`${t.nativeTable} in ('items', 'item_families', 'parties', 'documents', 'stock_locations', 'stored_value_accounts', 'subscriptions', 'subscription_items', 'subscription_usage_links', 'usage_meters', 'usage_rating_plan_versions', 'promotions')`,
     ),
-    check(
-      "external_links_account_nonblank",
-      sql`length(btrim(${t.externalAccount})) > 0`,
-    ),
-    check(
-      "external_links_external_id_nonblank",
-      sql`length(btrim(${t.externalId})) > 0`,
-    ),
+    check("external_links_account_nonblank", sql`length(btrim(${t.externalAccount})) > 0`),
+    check("external_links_external_id_nonblank", sql`length(btrim(${t.externalId})) > 0`),
     foreignKey({ name: "external_links_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
     foreignKey({
       name: "external_links_channel_tenant_fk",
@@ -505,7 +497,9 @@ export const channelDailySummaries = pgTable(
     shippingMinor: bigint("shipping_minor", { mode: "bigint" }).notNull().default(0n),
     discountMinor: bigint("discount_minor", { mode: "bigint" }).notNull().default(0n),
     totalMinor: bigint("total_minor", { mode: "bigint" }).notNull().default(0n),
-    status: text("status", { enum: ["open", "posted"] }).notNull().default("open"),
+    status: text("status", { enum: ["open", "posted"] })
+      .notNull()
+      .default("open"),
     postingDocumentId: uuid("posting_document_id"),
     ...auditColumns,
   },
@@ -571,7 +565,10 @@ export const channelOrders = pgTable(
     totalMinor: bigint("total_minor", { mode: "bigint" }).notNull(),
     financialStatus: text("financial_status").notNull().default(""),
     fulfilmentStatus: text("fulfilment_status").notNull().default(""),
-    orderTags: text("order_tags").array().notNull().default(sql`'{}'`),
+    orderTags: text("order_tags")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     orderSource: text("order_source"),
     lines: jsonb("lines").notNull().default([]),
     shippingLines: jsonb("shipping_lines").notNull().default([]),
@@ -655,7 +652,10 @@ export const channelOrderEvents = pgTable(
   (t) => [
     uniqueIndex("channel_order_events_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("channel_order_events_order_external_unique").on(t.orgId, t.orderId, t.externalId),
-    check("channel_order_events_kind_valid", sql`${t.kind} in ('refund', 'cancellation', 'edit', 'fulfilment')`),
+    check(
+      "channel_order_events_kind_valid",
+      sql`${t.kind} in ('refund', 'cancellation', 'edit', 'fulfilment')`,
+    ),
     check("channel_order_events_external_id_nonblank", sql`length(btrim(${t.externalId})) > 0`),
     check(
       "channel_order_events_posting_status_valid",
@@ -699,8 +699,14 @@ export const salesChannelPostingPolicies = pgTable(
     guestCustomerPartyId: uuid("guest_customer_party_id"),
     createPromotionOnMatchMiss: boolean("create_promotion_on_match_miss").notNull().default(false),
     cutoffTz: text("cutoff_tz").notNull().default("UTC"),
-    excludedTags: text("excluded_tags").array().notNull().default(sql`'{}'`),
-    excludedSources: text("excluded_sources").array().notNull().default(sql`'{}'`),
+    excludedTags: text("excluded_tags")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
+    excludedSources: text("excluded_sources")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     ...auditColumns,
@@ -708,7 +714,10 @@ export const salesChannelPostingPolicies = pgTable(
   (t) => [
     uniqueIndex("sales_channel_posting_policies_org_id_id_unique").on(t.orgId, t.id),
     index("sales_channel_posting_policies_lookup").on(t.orgId, t.channelId, t.effectiveFrom),
-    check("sales_channel_posting_policies_mode_valid", sql`${t.mode} in ('per_order', 'daily_summary')`),
+    check(
+      "sales_channel_posting_policies_mode_valid",
+      sql`${t.mode} in ('per_order', 'daily_summary')`,
+    ),
     check("sales_channel_posting_policies_tz_nonblank", sql`length(btrim(${t.cutoffTz})) > 0`),
     check(
       "sales_channel_posting_policies_window_valid",
@@ -812,18 +821,12 @@ export const shopifyCatalogEntries = pgTable(
     uniqueIndex("shopify_catalog_entries_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("shopify_catalog_entries_external_unique").on(t.orgId, t.channelId, t.externalId),
     index("shopify_catalog_entries_queue").on(t.orgId, t.channelId, t.status),
-    check(
-      "shopify_catalog_entries_object_valid",
-      sql`${t.objectType} in ('product', 'variant')`,
-    ),
+    check("shopify_catalog_entries_object_valid", sql`${t.objectType} in ('product', 'variant')`),
     check(
       "shopify_catalog_entries_status_valid",
       sql`${t.status} in ('queued', 'matched', 'ignored')`,
     ),
-    check(
-      "shopify_catalog_entries_external_id_nonblank",
-      sql`length(btrim(${t.externalId})) > 0`,
-    ),
+    check("shopify_catalog_entries_external_id_nonblank", sql`length(btrim(${t.externalId})) > 0`),
     check("shopify_catalog_entries_title_nonblank", sql`length(btrim(${t.title})) > 0`),
     check(
       "shopify_catalog_entries_native_valid",
@@ -898,8 +901,12 @@ export const channelOrderEconomics = pgTable(
     uniqueIndex("channel_order_economics_current_unique")
       .on(t.orgId, t.orderId, t.lineKey, t.component, t.sourceKind, t.sourceRef)
       .where(sql`${t.isCurrent}`),
-    index("channel_order_economics_order_current").on(t.orgId, t.orderId).where(sql`${t.isCurrent}`),
-    index("channel_order_economics_channel_day").on(t.orgId, t.channelId, t.asOf).where(sql`${t.isCurrent}`),
+    index("channel_order_economics_order_current")
+      .on(t.orgId, t.orderId)
+      .where(sql`${t.isCurrent}`),
+    index("channel_order_economics_channel_day")
+      .on(t.orgId, t.channelId, t.asOf)
+      .where(sql`${t.isCurrent}`),
     check("channel_order_economics_line_key_nonblank", sql`length(btrim(${t.lineKey})) > 0`),
     check("channel_order_economics_currency_nonblank", sql`length(btrim(${t.currency})) > 0`),
     check("channel_order_economics_version_valid", sql`${t.version} >= 1`),

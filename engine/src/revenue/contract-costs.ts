@@ -43,7 +43,12 @@ import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { addMonthsStart, daysInCivilMonth, startOfMonth } from "../platform/civil-date.ts";
-import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
+import {
+  db,
+  withOrgTransaction,
+  withTransactionSavepoint,
+  type SqlExecutor,
+} from "../platform/db.ts";
 
 export type ContractCostType = "commission" | "fulfilment";
 export type ContractCostMethod = "straight_line" | "pattern";
@@ -62,12 +67,12 @@ export class ContractCostError extends Error {
     super(message);
     this.status = options.status ?? 422;
     this.code = options.code ?? "contract_cost_invalid";
-    this.remedy =
-      options.remedy ?? "Correct the contract cost input and submit it again.";
+    this.remedy = options.remedy ?? "Correct the contract cost input and submit it again.";
   }
 }
 
-const FEATURE_REMEDY = "Enable Contract costs in Company Settings → Features (it requires Revenue recognition).";
+const FEATURE_REMEDY =
+  "Enable Contract costs in Company Settings → Features (it requires Revenue recognition).";
 
 /** Registry default is off — absence must not capitalize costs. */
 export async function contractCostsFeatureEnabled(
@@ -107,14 +112,11 @@ async function requireCostAuthority(
     granted = false;
   }
   if (!granted) {
-    throw new ContractCostError(
-      `This action requires the ${permission} permission.`,
-      {
-        status: 403,
-        code: "contract_cost_forbidden",
-        remedy: `Ask an administrator to grant ${permission} (Company Settings → Roles), then try again.`,
-      },
-    );
+    throw new ContractCostError(`This action requires the ${permission} permission.`, {
+      status: 403,
+      code: "contract_cost_forbidden",
+      remedy: `Ask an administrator to grant ${permission} (Company Settings → Roles), then try again.`,
+    });
   }
   return allowed;
 }
@@ -139,26 +141,31 @@ async function activePolicy(
   orgId: string,
   onDate: string,
 ): Promise<ContractCostPolicy> {
-  const row = (await runner.execute<{
-    id: string;
-    effective_from: string;
-    capitalize_commissions: boolean;
-    capitalize_fulfilment: boolean;
-    practical_expedient: boolean;
-    basis: ContractCostPolicy["basis"];
-    customer_life_source: ContractCostPolicy["customerLifeSource"];
-    customer_life_months: number | null;
-    renewal_commensurate_threshold_percent: string;
-    asset_account_id: string | null;
-    amortization_expense_account_id: string | null;
-  }>(sql`
+  const row = (
+    await runner.execute<{
+      id: string;
+      effective_from: string;
+      capitalize_commissions: boolean;
+      capitalize_fulfilment: boolean;
+      practical_expedient: boolean;
+      basis: ContractCostPolicy["basis"];
+      customer_life_source: ContractCostPolicy["customerLifeSource"];
+      customer_life_months: number | null;
+      renewal_commensurate_threshold_percent: string;
+      asset_account_id: string | null;
+      amortization_expense_account_id: string | null;
+    }>(
+      sql`
     select id, effective_from::text, capitalize_commissions, capitalize_fulfilment,
            practical_expedient, basis, customer_life_source, customer_life_months,
            renewal_commensurate_threshold_percent::text,
            asset_account_id, amortization_expense_account_id
       from contract_cost_policies
      where org_id = ${orgId} and effective_from <= ${onDate}
-     order by effective_from desc limit 1`, "objects"))[0];
+     order by effective_from desc limit 1`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new ContractCostError(`No contract cost policy is in effect on ${onDate}.`, {
       code: "contract_cost_policy_missing",
@@ -213,7 +220,8 @@ function requirePolicyAccounts(policy: ContractCostPolicy): {
 export function allocateMinorUnits(totalMinor: bigint, weights: bigint[]): bigint[] {
   if (totalMinor < 0n) throw new ContractCostError("Cannot allocate a negative cost.");
   if (weights.length === 0) throw new ContractCostError("Cannot allocate across no periods.");
-  if (weights.some((w) => w < 0n)) throw new ContractCostError("Cannot allocate across negative weights.");
+  if (weights.some((w) => w < 0n))
+    throw new ContractCostError("Cannot allocate across negative weights.");
   const totalWeight = weights.reduce((acc, w) => acc + w, 0n);
   if (totalWeight <= 0n) {
     throw new ContractCostError("Cannot allocate: every period weight is zero.", {
@@ -296,8 +304,13 @@ export function minorUnitsToCanonical(amountMinor: bigint, exponent: number): st
  * restoration the seed cannot perform.
  */
 export async function currencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
-  const row = (await runner.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${currency}`, "objects"))[0];
+  const row = (
+    await runner.execute<{ minor_units: number }>(
+      sql`
+    select minor_units from currencies where code = ${currency}`,
+      "objects",
+    )
+  )[0];
   const restoreRemedy =
     "When the code is a supported ISO currency, restore its row with the canonical registry seed " +
     "(seedCurrencies), which restores its precision without changing posted history; " +
@@ -311,10 +324,13 @@ export async function currencyExponent(runner: SqlExecutor, currency: string): P
   }
   const precision = row.minor_units;
   if (!Number.isInteger(precision) || (precision as number) < 0 || (precision as number) > 4) {
-    throw new ContractCostError(`Currency ${currency} has an unsupported precision ${String(precision)}.`, {
-      code: "contract_cost_currency_exponent",
-      remedy: restoreRemedy,
-    });
+    throw new ContractCostError(
+      `Currency ${currency} has an unsupported precision ${String(precision)}.`,
+      {
+        code: "contract_cost_currency_exponent",
+        remedy: restoreRemedy,
+      },
+    );
   }
   return precision;
 }
@@ -346,14 +362,23 @@ async function postingBookId(runner: SqlExecutor, orgId: string): Promise<string
 async function postingSubsidiaryId(
   runner: SqlExecutor,
   orgId: string,
-  context: { revenueContractId?: string | null; customerPartyId?: string | null; repPartyId?: string | null },
+  context: {
+    revenueContractId?: string | null;
+    customerPartyId?: string | null;
+    repPartyId?: string | null;
+  },
 ): Promise<string> {
   let subsidiaryId: string | null | undefined;
   if (context.revenueContractId) {
-    const contract = (await runner.execute<{ subsidiary_id: string | null }>(sql`
+    const contract = (
+      await runner.execute<{ subsidiary_id: string | null }>(
+        sql`
       select subsidiary_id from revenue_contracts
        where org_id = ${orgId} and id = ${context.revenueContractId}
-       for share`, "objects"))[0];
+       for share`,
+        "objects",
+      )
+    )[0];
     if (!contract) {
       throw new ContractCostError("The revenue contract does not exist in this organization.", {
         code: "contract_cost_contract_unknown",
@@ -364,20 +389,32 @@ async function postingSubsidiaryId(
   } else {
     const partyId = context.customerPartyId ?? context.repPartyId;
     if (!partyId) {
-      throw new ContractCostError("The cost has no customer or sales representative to determine its legal entity.", {
-        code: "contract_cost_subsidiary_missing",
-        remedy: "Select the customer or sales representative before recording an unlinked cost.",
-      });
+      throw new ContractCostError(
+        "The cost has no customer or sales representative to determine its legal entity.",
+        {
+          code: "contract_cost_subsidiary_missing",
+          remedy: "Select the customer or sales representative before recording an unlinked cost.",
+        },
+      );
     }
-    const party = (await runner.execute<{ subsidiary_id: string | null }>(sql`
+    const party = (
+      await runner.execute<{ subsidiary_id: string | null }>(
+        sql`
       select subsidiary_id from parties
        where org_id = ${orgId} and id = ${partyId}
-       for share`, "objects"))[0];
+       for share`,
+        "objects",
+      )
+    )[0];
     if (!party) {
-      throw new ContractCostError("The customer or sales representative does not exist in this organization.", {
-        code: "contract_cost_party_unknown",
-        remedy: "Select a customer or sales representative from this organization, then submit the cost again.",
-      });
+      throw new ContractCostError(
+        "The customer or sales representative does not exist in this organization.",
+        {
+          code: "contract_cost_party_unknown",
+          remedy:
+            "Select a customer or sales representative from this organization, then submit the cost again.",
+        },
+      );
     }
     subsidiaryId = party.subsidiary_id;
   }
@@ -389,15 +426,20 @@ async function assetPostingSubsidiaryId(
   orgId: string,
   assetId: string,
 ): Promise<string> {
-  const asset = (await runner.execute<{
-    revenue_contract_id: string | null;
-    customer_party_id: string | null;
-    rep_party_id: string | null;
-  }>(sql`
+  const asset = (
+    await runner.execute<{
+      revenue_contract_id: string | null;
+      customer_party_id: string | null;
+      rep_party_id: string | null;
+    }>(
+      sql`
     select revenue_contract_id, customer_party_id, rep_party_id
       from contract_cost_assets
      where org_id = ${orgId} and id = ${assetId}
-     for update`, "objects"))[0];
+     for update`,
+      "objects",
+    )
+  )[0];
   if (!asset) {
     throw new ContractCostError("The contract cost asset does not exist in this organization.", {
       code: "contract_cost_asset_unknown",
@@ -423,8 +465,13 @@ async function coveringPeriodId(runner: SqlExecutor, orgId: string, date: string
 }
 
 async function orgBaseCurrency(runner: SqlExecutor, orgId: string): Promise<string> {
-  const row = (await runner.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await runner.execute<{ base_currency: string }>(
+      sql`
+    select base_currency from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new ContractCostError("Organization not found.");
   return row.base_currency;
 }
@@ -441,8 +488,13 @@ export async function assetCarryingMinor(
   assetId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<bigint> {
-  const asset = (await runner.execute<{ currency: string }>(sql`
-    select currency from contract_cost_assets where org_id = ${orgId} and id = ${assetId}`, "objects"))[0];
+  const asset = (
+    await runner.execute<{ currency: string }>(
+      sql`
+    select currency from contract_cost_assets where org_id = ${orgId} and id = ${assetId}`,
+      "objects",
+    )
+  )[0];
   if (!asset) {
     throw new ContractCostError("The contract cost asset does not exist in this organization.", {
       code: "contract_cost_asset_unknown",
@@ -450,7 +502,9 @@ export async function assetCarryingMinor(
     });
   }
   const exponent = await currencyExponent(runner, asset.currency);
-  const row = (await runner.execute<{ carrying: string }>(sql`
+  const row = (
+    await runner.execute<{ carrying: string }>(
+      sql`
     select coalesce(round(sum(jl.amount) * power(10::numeric, ${exponent})), 0)::text as carrying
       from journal_lines jl
       join journal_entries je
@@ -462,7 +516,10 @@ export async function assetCarryingMinor(
        and jl.contributor_ref = ${assetId}
        and jl.currency = ${asset.currency}
        and je.status in ('posted', 'reversed')
-       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, allowedSubsidiaryIds)}`, "objects"))[0];
+       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, allowedSubsidiaryIds)}`,
+      "objects",
+    )
+  )[0];
   return BigInt(row?.carrying ?? "0");
 }
 
@@ -476,11 +533,14 @@ async function writeAudit(
   changes: Record<string, unknown>,
 ): Promise<void> {
   const { randomUUID } = await import("node:crypto");
-  const written = await runner.execute<{ id: string }>(sql`
+  const written = await runner.execute<{ id: string }>(
+    sql`
     insert into audit_log (id, org_id, table_name, row_id, action, changes, actor_id)
     values (${randomUUID()}, ${orgId}, ${table}, ${rowId}, ${action},
       ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (written.length !== 1) {
     throw new ContractCostError("The audit write matched no rows; the change was not recorded.");
   }
@@ -502,30 +562,35 @@ export async function deriveCustomerLifeMonths(
   runner: SqlExecutor,
   orgId: string,
 ): Promise<number> {
-  const row = (await runner.execute<{ started: string; churned: string; months: string }>(sql`
+  const row = (
+    await runner.execute<{ started: string; churned: string; months: string }>(
+      sql`
     select coalesce(sum(customers_start), 0)::text as started,
            coalesce(sum(customers_churned), 0)::text as churned,
            count(*)::text as months
       from saas_metrics_facts_monthly
      where org_id = ${orgId}
-       and month >= (current_date - interval '12 months')`, "objects"))[0];
+       and month >= (current_date - interval '12 months')`,
+      "objects",
+    )
+  )[0];
   const started = BigInt(row?.started ?? "0");
   const churned = BigInt(row?.churned ?? "0");
   if ((row?.months ?? "0") === "0" || started <= 0n) {
-    throw new ContractCostError(
-      "No SaaS metrics facts cover the trailing twelve months.",
-      {
-        code: "contract_cost_life_no_metrics",
-        remedy:
-          "Compute SaaS metrics for recent months (Reports → SaaS metrics), or enter a manual customer life on the contract cost policy.",
-      },
-    );
+    throw new ContractCostError("No SaaS metrics facts cover the trailing twelve months.", {
+      code: "contract_cost_life_no_metrics",
+      remedy:
+        "Compute SaaS metrics for recent months (Reports → SaaS metrics), or enter a manual customer life on the contract cost policy.",
+    });
   }
   if (churned <= 0n) {
-    throw new ContractCostError("Recorded churn is zero, so no finite customer life derives from it.", {
-      code: "contract_cost_life_no_churn",
-      remedy: "Enter a manual customer life on the contract cost policy.",
-    });
+    throw new ContractCostError(
+      "Recorded churn is zero, so no finite customer life derives from it.",
+      {
+        code: "contract_cost_life_no_churn",
+        remedy: "Enter a manual customer life on the contract cost policy.",
+      },
+    );
   }
   const life = roundDiv(started, churned);
   return life < 1n ? 1 : Number(life);
@@ -549,7 +614,12 @@ export interface CapitalizeContractCostInput {
   originalExpenseAccountId: string;
   /** Current-period renewal commission, for the commensurate test. */
   renewalCommissionMinor?: bigint;
-  source: { kind: "manual" | "import" | "payroll_earning" | "vendor_bill"; ref?: string | null; contractNumber?: string | null; [key: string]: unknown };
+  source: {
+    kind: "manual" | "import" | "payroll_earning" | "vendor_bill";
+    ref?: string | null;
+    contractNumber?: string | null;
+    [key: string]: unknown;
+  };
 }
 
 export interface CapitalizeContractCostResult {
@@ -585,18 +655,26 @@ async function resolveBenefitWindow(
         "Link the commission to its revenue contract (Contract costs → Needs attention → Link), or capitalize it directly from the contract.",
     });
   }
-  const contract = (await runner.execute<{
-    starts_on: string | null;
-    ends_on: string | null;
-    number: string;
-  }>(sql`
+  const contract = (
+    await runner.execute<{
+      starts_on: string | null;
+      ends_on: string | null;
+      number: string;
+    }>(
+      sql`
     select starts_on::text, ends_on::text, contract_number as number
-      from revenue_contracts where org_id = ${orgId} and id = ${contractId}`, "objects"))[0];
+      from revenue_contracts where org_id = ${orgId} and id = ${contractId}`,
+      "objects",
+    )
+  )[0];
   if (!contract) {
-    throw new ContractCostError("The linked revenue contract does not exist in this organization.", {
-      code: "contract_cost_contract_unknown",
-      remedy: "Link a revenue contract from this organization, then capitalize again.",
-    });
+    throw new ContractCostError(
+      "The linked revenue contract does not exist in this organization.",
+      {
+        code: "contract_cost_contract_unknown",
+        remedy: "Link a revenue contract from this organization, then capitalize again.",
+      },
+    );
   }
   if (!contract.starts_on || !contract.ends_on) {
     throw new ContractCostError(`Revenue contract ${contract.number} names no start or end date.`, {
@@ -641,7 +719,10 @@ async function resolveBenefitWindow(
       count = life;
     }
   }
-  return { months: monthStartsFrom(monthStartOf(capitalizedOn), count).map((m) => m.slice(0, 7)), basisApplied };
+  return {
+    months: monthStartsFrom(monthStartOf(capitalizedOn), count).map((m) => m.slice(0, 7)),
+    basisApplied,
+  };
 }
 
 /** Pattern weights per period from the contract's live revenue schedule. */
@@ -657,7 +738,8 @@ async function patternWeights(
     periodIds.push(period?.id ?? null);
   }
   const bookId = await postingBookId(runner, orgId);
-  const rows = await runner.execute<{ period_id: string; planned: string }>(sql`
+  const rows = await runner.execute<{ period_id: string; planned: string }>(
+    sql`
     select line.period_id, sum(line.planned_amount)::text as planned
       from recognition_schedule_lines line
       join recognition_schedules schedule
@@ -671,9 +753,11 @@ async function patternWeights(
        and obligation.status <> 'cancelled'
        and line.superseded_by_change_id is null
        and line.reversal_journal_entry_id is null
-     group by line.period_id`, "objects");
+     group by line.period_id`,
+    "objects",
+  );
   const byPeriod = new Map(rows.map((r) => [r.period_id, toUnits(r.planned)]));
-  const weights = periodIds.map((id) => (id ? byPeriod.get(id) ?? 0n : 0n));
+  const weights = periodIds.map((id) => (id ? (byPeriod.get(id) ?? 0n) : 0n));
   const totalWeight = weights.reduce((acc, w) => acc + w, 0n);
   if (totalWeight <= 0n) {
     throw new ContractCostError("The contract's revenue schedule carries no planned amounts.", {
@@ -715,7 +799,8 @@ function validateCapitalizeInput(input: CapitalizeContractCostInput): void {
   if (input.source.kind === undefined) {
     throw new ContractCostError("Name the cost source.", {
       code: "contract_cost_source_missing",
-      remedy: "Record whether the cost was entered manually, imported, or came from a payroll earning or vendor bill line.",
+      remedy:
+        "Record whether the cost was entered manually, imported, or came from a payroll earning or vendor bill line.",
     });
   }
 }
@@ -778,7 +863,8 @@ async function capitalizeOnRunner(
         event: "cost_expensed_policy_excluded",
         costType: input.costType,
         amountMinor: input.amountMinor.toString(),
-        reason: "The policy does not capitalize this cost type, so the cost stays in its original account.",
+        reason:
+          "The policy does not capitalize this cost type, so the cost stays in its original account.",
       });
       return {
         assetId,
@@ -820,7 +906,8 @@ async function capitalizeOnRunner(
         event: "cost_expensed_practical_expedient",
         months: window.months.length,
         amountMinor: input.amountMinor.toString(),
-        reason: "The one-year practical expedient applies: the benefit period is twelve months or less.",
+        reason:
+          "The one-year practical expedient applies: the benefit period is twelve months or less.",
       });
       return {
         assetId,
@@ -867,13 +954,19 @@ async function capitalizeOnRunner(
     });
     const startMonth = `${window.months[0]}-01`;
     const endMonth = `${window.months[window.months.length - 1]}-01`;
-    const stored = await insertAsset(runner, orgId, actorId, { ...input, }, {
-      id: assetId,
-      startOn: startMonth,
-      endOn: lastDayOfMonth(endMonth),
-      status: "active",
-      entryId: posted.entryId,
-    });
+    const stored = await insertAsset(
+      runner,
+      orgId,
+      actorId,
+      { ...input },
+      {
+        id: assetId,
+        startOn: startMonth,
+        endOn: lastDayOfMonth(endMonth),
+        status: "active",
+        entryId: posted.entryId,
+      },
+    );
     if (stored !== assetId) {
       throw new ContractCostError("The capitalized cost was not stored; nothing was saved.");
     }
@@ -904,11 +997,18 @@ async function insertAsset(
   orgId: string,
   actorId: string,
   input: CapitalizeContractCostInput,
-  fixed: { id?: string; startOn: string; endOn: string; status: ContractCostStatus; entryId: string | null },
+  fixed: {
+    id?: string;
+    startOn: string;
+    endOn: string;
+    status: ContractCostStatus;
+    entryId: string | null;
+  },
 ): Promise<string> {
   const { randomUUID } = await import("node:crypto");
   const id = fixed.id ?? randomUUID();
-  const rows = await runner.execute<{ id: string }>(sql`
+  const rows = await runner.execute<{ id: string }>(
+    sql`
     insert into contract_cost_assets
       (id, org_id, revenue_contract_id, rep_party_id, customer_party_id,
        cost_type, amount_minor, currency, capitalized_on, amort_start_on, amort_end_on,
@@ -918,7 +1018,9 @@ async function insertAsset(
       ${input.currency}, ${input.capitalizedOn}, ${fixed.startOn}, ${fixed.endOn},
       ${input.method ?? "straight_line"}, ${fixed.status},
       ${JSON.stringify(input.source)}::jsonb, ${fixed.entryId}, ${actorId}, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   // A write that matches zero rows is a failure, never a success.
   if (rows.length !== 1 || !rows[0]) {
     throw new ContractCostError("The capitalized cost was not stored; nothing was saved.");
@@ -952,25 +1054,34 @@ interface StoredAsset {
   source: Record<string, unknown>;
 }
 
-async function loadAsset(runner: SqlExecutor, orgId: string, assetId: string): Promise<StoredAsset> {
-  const row = (await runner.execute<{
-    id: string;
-    revenue_contract_id: string | null;
-    cost_type: ContractCostType;
-    amount_minor: string;
-    currency: string;
-    capitalized_on: string;
-    amort_start_on: string;
-    amort_end_on: string;
-    method: ContractCostMethod;
-    status: ContractCostStatus;
-    capitalize_entry_id: string | null;
-    source: Record<string, unknown>;
-  }>(sql`
+async function loadAsset(
+  runner: SqlExecutor,
+  orgId: string,
+  assetId: string,
+): Promise<StoredAsset> {
+  const row = (
+    await runner.execute<{
+      id: string;
+      revenue_contract_id: string | null;
+      cost_type: ContractCostType;
+      amount_minor: string;
+      currency: string;
+      capitalized_on: string;
+      amort_start_on: string;
+      amort_end_on: string;
+      method: ContractCostMethod;
+      status: ContractCostStatus;
+      capitalize_entry_id: string | null;
+      source: Record<string, unknown>;
+    }>(
+      sql`
     select id, revenue_contract_id, cost_type, amount_minor::text, currency,
            capitalized_on::text, amort_start_on::text, amort_end_on::text, method, status,
            capitalize_entry_id, source
-      from contract_cost_assets where org_id = ${orgId} and id = ${assetId}`, "objects"))[0];
+      from contract_cost_assets where org_id = ${orgId} and id = ${assetId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new ContractCostError("The contract cost asset does not exist in this organization.", {
       code: "contract_cost_asset_unknown",
@@ -1009,21 +1120,25 @@ export async function scheduleForAsset(
     monthStartOf(asset.startOn),
     monthsBetweenInclusive(monthStartOf(asset.startOn), monthStartOf(asset.endOn)),
   ).map((m) => m.slice(0, 7));
-  const postedRows = await runner.execute<{ month: string; amount: string }>(sql`
+  const postedRows = await runner.execute<{ month: string; amount: string }>(
+    sql`
       select to_char(p.starts_on, 'YYYY-MM') as month,
              sum(a.amount_minor)::text as amount
         from contract_cost_amortization a
         join accounting_periods p on p.org_id = a.org_id and p.id = a.period_id
        where a.org_id = ${orgId} and a.asset_id = ${assetId}
-       group by to_char(p.starts_on, 'YYYY-MM')`, "objects");
+       group by to_char(p.starts_on, 'YYYY-MM')`,
+    "objects",
+  );
   const postedByMonth = new Map(postedRows.map((row) => [row.month, BigInt(row.amount)]));
   const postedMonths = new Set(postedByMonth.keys());
   const remainingMonths = months.filter((month) => !postedMonths.has(month));
-  const remainingCarrying = asset.status === "expensed"
-    ? 0n
-    : asset.capitalizeEntryId
-      ? await assetCarryingMinor(runner, orgId, assetId)
-      : asset.amountMinor;
+  const remainingCarrying =
+    asset.status === "expensed"
+      ? 0n
+      : asset.capitalizeEntryId
+        ? await assetCarryingMinor(runner, orgId, assetId)
+        : asset.amountMinor;
   const futureAmounts = new Map<string, bigint>();
   const periodIdsByMonth = new Map<string, string | null>();
   for (const month of months) {
@@ -1098,13 +1213,24 @@ export async function runContractCostAmortization(input: {
   const { orgId, actorId, periodId } = input;
   return withOrgTransaction(orgId, async () => {
     await assertFeatureOn(db, orgId);
-    const allowedSubsidiaryIds = await requireCostAuthority(db, orgId, actorId, null, "contract_costs.manage");
-    const period = (await db.execute<{
-      starts_on: string;
-      ends_on: string;
-    }>(sql`
+    const allowedSubsidiaryIds = await requireCostAuthority(
+      db,
+      orgId,
+      actorId,
+      null,
+      "contract_costs.manage",
+    );
+    const period = (
+      await db.execute<{
+        starts_on: string;
+        ends_on: string;
+      }>(
+        sql`
       select starts_on::text, ends_on::text from accounting_periods
-       where org_id = ${orgId} and id = ${periodId}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${periodId}`,
+        "objects",
+      )
+    )[0];
     if (!period) {
       throw new ContractCostError("The amortization period does not exist in this organization.", {
         code: "contract_cost_period_unknown",
@@ -1113,9 +1239,16 @@ export async function runContractCostAmortization(input: {
     }
     const bookId = await postingBookId(db, orgId);
     const rootId = (await loadSubsidiaryContext(db, orgId)).rootId;
-    const result: RunAmortizationResult = { posted: 0, skipped: 0, totalMinor: "0", entries: [], problems: [] };
+    const result: RunAmortizationResult = {
+      posted: 0,
+      skipped: 0,
+      totalMinor: "0",
+      entries: [],
+      problems: [],
+    };
     let total = 0n;
-    const candidates = await db.execute<{ id: string; revenue_contract_id: string }>(sql`
+    const candidates = await db.execute<{ id: string; revenue_contract_id: string }>(
+      sql`
       select asset.id, asset.revenue_contract_id
         from contract_cost_assets asset
         join revenue_contracts contract
@@ -1123,13 +1256,22 @@ export async function runContractCostAmortization(input: {
        where asset.org_id = ${orgId} and asset.status = 'active'
          and asset.amort_start_on <= ${period.ends_on} and asset.amort_end_on >= ${period.starts_on}
          ${subsidiaryVisibleFilter(sql`coalesce(contract.subsidiary_id, ${rootId}::uuid)`, allowedSubsidiaryIds)}
-       for update of asset`, "objects");
+       for update of asset`,
+      "objects",
+    );
     for (const { id: assetId, revenue_contract_id: revenueContractId } of candidates) {
       try {
         const subsidiaryId = await postingSubsidiaryId(db, orgId, { revenueContractId });
         await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
         const posted = await amortizeAssetInPeriod(
-          db, orgId, actorId, assetId, periodId, period.starts_on, bookId, subsidiaryId,
+          db,
+          orgId,
+          actorId,
+          assetId,
+          periodId,
+          period.starts_on,
+          bookId,
+          subsidiaryId,
         );
         if (posted) {
           result.posted += 1;
@@ -1148,7 +1290,9 @@ export async function runContractCostAmortization(input: {
         throw error;
       }
     }
-    const unlinked = (await db.execute<{ n: string }>(sql`
+    const unlinked = (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n
         from contract_cost_assets asset
         left join parties customer
@@ -1156,13 +1300,20 @@ export async function runContractCostAmortization(input: {
         left join parties rep
           on rep.org_id = asset.org_id and rep.id = asset.rep_party_id
        where asset.org_id = ${orgId} and asset.status = 'active' and asset.revenue_contract_id is null
-         ${allowedSubsidiaryIds === null ? sql`` : sql`
+         ${
+           allowedSubsidiaryIds === null
+             ? sql``
+             : sql`
          and (customer.id is not null or rep.id is not null)
          and case when customer.id is not null
                   then coalesce(customer.subsidiary_id, ${rootId}::uuid)
                   else coalesce(rep.subsidiary_id, ${rootId}::uuid)
              end = any(${`{${[...allowedSubsidiaryIds].join(",")}}`}::uuid[])
-         `}`, "objects"))[0];
+         `
+         }`,
+        "objects",
+      )
+    )[0];
     if (unlinked && unlinked.n !== "0") {
       result.problems.push(
         `${unlinked.n} capitalized cost(s) are not linked to a revenue contract and were not amortized — link them from Contract costs → Needs attention.`,
@@ -1189,17 +1340,33 @@ async function amortizeAssetInPeriod(
   bookId: string,
   subsidiaryId: string,
 ): Promise<AmortizationRunEntry | null> {
-  const locked = (await runner.execute<{ id: string }>(sql`
+  const locked = (
+    await runner.execute<{ id: string }>(
+      sql`
     select id from contract_cost_assets
-     where org_id = ${orgId} and id = ${assetId} and status = 'active' for update of contract_cost_assets`, "objects"))[0];
+     where org_id = ${orgId} and id = ${assetId} and status = 'active' for update of contract_cost_assets`,
+      "objects",
+    )
+  )[0];
   if (!locked) return null;
-  const existing = (await runner.execute<{ id: string }>(sql`
+  const existing = (
+    await runner.execute<{ id: string }>(
+      sql`
     select id from contract_cost_amortization
-     where org_id = ${orgId} and asset_id = ${assetId} and period_id = ${periodId}`, "objects"))[0];
+     where org_id = ${orgId} and asset_id = ${assetId} and period_id = ${periodId}`,
+      "objects",
+    )
+  )[0];
   if (existing) return null;
-  if (!(await arePeriodModulesOpen(runner, {
-    orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: ["gl"],
-  }))) {
+  if (
+    !(await arePeriodModulesOpen(runner, {
+      orgId,
+      periodId,
+      bookId,
+      subsidiaryIds: [subsidiaryId],
+      modules: ["gl"],
+    }))
+  ) {
     return null;
   }
   const schedule = await scheduleForAsset(runner, orgId, assetId);
@@ -1247,12 +1414,15 @@ async function amortizeAssetInPeriod(
       },
     ],
   });
-  const inserted = await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(
+    sql`
     insert into contract_cost_amortization
       (id, org_id, asset_id, period_id, amount_minor, journal_entry_id, created_by, updated_by)
     values (uuid_generate_v7(), ${orgId}, ${assetId}, ${periodId},
       ${amount.toString()}::bigint, ${posted.entryId}, ${actorId}, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (inserted.length !== 1) {
     throw new ContractCostError("The amortization row was not stored; the entry was rolled back.");
   }
@@ -1269,11 +1439,14 @@ async function markFullyAmortized(
   actorId: string,
   assetId: string,
 ): Promise<void> {
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
     update contract_cost_assets
        set status = 'fully_amortized', updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and id = ${assetId} and status = 'active'
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (updated.length !== 1) {
     throw new ContractCostError("The asset status change matched no rows; nothing was saved.", {
       code: "contract_cost_status_race",
@@ -1314,13 +1487,16 @@ export async function recognizeContractCostImpairment(input: {
 }): Promise<ImpairmentAssessment> {
   const { orgId, actorId, assetId } = input;
   if (input.remainingConsiderationMinor < 0n || input.costsNotYetRecognizedMinor < 0n) {
-    throw new ContractCostError("Remaining consideration and unrecognized costs cannot be negative.");
+    throw new ContractCostError(
+      "Remaining consideration and unrecognized costs cannot be negative.",
+    );
   }
   checkDate(input.assessedOn, "assessment date");
   if (input.reason.trim().length < 8) {
     throw new ContractCostError("Record an impairment reason of at least 8 characters.", {
       code: "contract_cost_impairment_reason",
-      remedy: "Describe what changed (churn, contraction, cancelled renewal) in at least 8 characters.",
+      remedy:
+        "Describe what changed (churn, contraction, cancelled renewal) in at least 8 characters.",
     });
   }
   return withOrgTransaction(orgId, async () => {
@@ -1328,9 +1504,14 @@ export async function recognizeContractCostImpairment(input: {
     await requireCostAuthority(db, orgId, actorId, null, "contract_costs.approve");
     const subsidiaryId = await assetPostingSubsidiaryId(db, orgId, assetId);
     await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.approve");
-    const locked = (await db.execute<{ id: string }>(sql`
+    const locked = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from contract_cost_assets
-       where org_id = ${orgId} and id = ${assetId} for update of contract_cost_assets`, "objects"))[0];
+       where org_id = ${orgId} and id = ${assetId} for update of contract_cost_assets`,
+        "objects",
+      )
+    )[0];
     if (!locked) {
       throw new ContractCostError("The contract cost asset does not exist in this organization.", {
         code: "contract_cost_asset_unknown",
@@ -1339,10 +1520,14 @@ export async function recognizeContractCostImpairment(input: {
     }
     const asset = await loadAsset(db, orgId, assetId);
     if (asset.status !== "active") {
-      throw new ContractCostError(`Only an active asset can be impaired; this one is ${asset.status}.`, {
-        code: "contract_cost_impairment_state",
-        remedy: "Impairment applies to active assets. A fully amortized or expensed cost carries nothing to write down.",
-      });
+      throw new ContractCostError(
+        `Only an active asset can be impaired; this one is ${asset.status}.`,
+        {
+          code: "contract_cost_impairment_state",
+          remedy:
+            "Impairment applies to active assets. A fully amortized or expensed cost carries nothing to write down.",
+        },
+      );
     }
     const carrying = await assetCarryingMinor(db, orgId, assetId);
     const recoverable = input.remainingConsiderationMinor - input.costsNotYetRecognizedMinor;
@@ -1399,11 +1584,14 @@ export async function recognizeContractCostImpairment(input: {
     });
     const remainingCarrying = carrying - writeDown;
     const nextStatus: ContractCostStatus = remainingCarrying === 0n ? "impaired" : "active";
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update contract_cost_assets
          set status = ${nextStatus}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${assetId} and status = 'active'
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (updated.length !== 1) {
       throw new ContractCostError("The asset status change matched no rows; nothing was saved.", {
         code: "contract_cost_status_race",
@@ -1454,15 +1642,20 @@ export async function linkContractCostAsset(input: {
     await requireCostAuthority(db, orgId, actorId, sourceSubsidiaryId, "contract_costs.manage");
     const subsidiaryId = await postingSubsidiaryId(db, orgId, { revenueContractId });
     await requireCostAuthority(db, orgId, actorId, subsidiaryId, "contract_costs.manage");
-    const locked = (await db.execute<{
-      status: string;
-      capitalized_on: string;
-      amount_minor: string;
-      method: ContractCostMethod;
-    }>(sql`
+    const locked = (
+      await db.execute<{
+        status: string;
+        capitalized_on: string;
+        amount_minor: string;
+        method: ContractCostMethod;
+      }>(
+        sql`
       select status, capitalized_on::text, amount_minor::text, method
         from contract_cost_assets
-       where org_id = ${orgId} and id = ${assetId} for update of contract_cost_assets`, "objects"))[0];
+       where org_id = ${orgId} and id = ${assetId} for update of contract_cost_assets`,
+        "objects",
+      )
+    )[0];
     if (!locked) {
       throw new ContractCostError("The contract cost asset does not exist in this organization.", {
         code: "contract_cost_asset_unknown",
@@ -1470,41 +1663,59 @@ export async function linkContractCostAsset(input: {
       });
     }
     if (locked.status !== "active") {
-      throw new ContractCostError(`Only an active asset can be linked; this one is ${locked.status}.`, {
-        code: "contract_cost_link_state",
-        remedy: "Link commissions before the amortization run reaches them.",
-      });
+      throw new ContractCostError(
+        `Only an active asset can be linked; this one is ${locked.status}.`,
+        {
+          code: "contract_cost_link_state",
+          remedy: "Link commissions before the amortization run reaches them.",
+        },
+      );
     }
-    const posted = (await db.execute<{ n: string }>(sql`
+    const posted = (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from contract_cost_amortization
-       where org_id = ${orgId} and asset_id = ${assetId}`, "objects"))[0];
+       where org_id = ${orgId} and asset_id = ${assetId}`,
+        "objects",
+      )
+    )[0];
     if (posted && posted.n !== "0") {
-      throw new ContractCostError("This asset already carries posted amortization; its window is fixed.", {
-        code: "contract_cost_link_posted",
-        remedy: "Leave the window and recognize later insight as impairment instead.",
-      });
+      throw new ContractCostError(
+        "This asset already carries posted amortization; its window is fixed.",
+        {
+          code: "contract_cost_link_posted",
+          remedy: "Leave the window and recognize later insight as impairment instead.",
+        },
+      );
     }
     const policy = await activePolicy(db, orgId, locked.capitalized_on);
     const asset = await loadAsset(db, orgId, assetId);
-    const contract = (await db.execute<{ id: string }>(sql`
+    const contract = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from revenue_contracts
-       where org_id = ${orgId} and id = ${revenueContractId}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${revenueContractId}`,
+        "objects",
+      )
+    )[0];
     if (!contract) {
       throw new ContractCostError("The revenue contract does not exist in this organization.", {
         code: "contract_cost_contract_unknown",
         remedy: "Select a revenue contract from this organization, then link the cost again.",
       });
     }
-    const capitalizes = asset.costType === "fulfilment"
-      ? policy.capitalizeFulfilment
-      : policy.capitalizeCommissions;
+    const capitalizes =
+      asset.costType === "fulfilment" ? policy.capitalizeFulfilment : policy.capitalizeCommissions;
     if (!capitalizes) {
-      const updated = await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(
+        sql`
         update contract_cost_assets
            set revenue_contract_id = ${revenueContractId}, status = 'expensed',
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${assetId} and status = 'active'
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (updated.length !== 1) {
         throw new ContractCostError("Linking the contract matched no rows; nothing was saved.", {
           code: "contract_cost_status_race",
@@ -1516,7 +1727,8 @@ export async function linkContractCostAsset(input: {
         costType: asset.costType,
         amountMinor: asset.amountMinor.toString(),
         revenueContractId,
-        reason: "The policy does not capitalize this cost type, so the cost stays in its original account.",
+        reason:
+          "The policy does not capitalize this cost type, so the cost stays in its original account.",
       });
       return { assetId, months: [asset.capitalizedOn.slice(0, 7)] };
     }
@@ -1531,17 +1743,26 @@ export async function linkContractCostAsset(input: {
       );
     }
     const window = await resolveBenefitWindow(
-      db, orgId, policy, revenueContractId, locked.capitalized_on, undefined, BigInt(locked.amount_minor),
+      db,
+      orgId,
+      policy,
+      revenueContractId,
+      locked.capitalized_on,
+      undefined,
+      BigInt(locked.amount_minor),
     );
     if (policy.practicalExpedient && window.months.length <= 12) {
-      const updated = await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(
+        sql`
         update contract_cost_assets
            set revenue_contract_id = ${revenueContractId}, status = 'expensed',
                amort_start_on = ${`${window.months[0]}-01`},
                amort_end_on = ${lastDayOfMonth(`${window.months[window.months.length - 1]}-01`)},
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${assetId} and status = 'active'
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (updated.length !== 1) {
         throw new ContractCostError("Linking the contract matched no rows; nothing was saved.", {
           code: "contract_cost_status_race",
@@ -1553,7 +1774,8 @@ export async function linkContractCostAsset(input: {
         months: window.months.length,
         amountMinor: asset.amountMinor.toString(),
         revenueContractId,
-        reason: "The one-year practical expedient applies: the benefit period is twelve months or less.",
+        reason:
+          "The one-year practical expedient applies: the benefit period is twelve months or less.",
       });
       return { assetId, months: window.months };
     }
@@ -1564,57 +1786,65 @@ export async function linkContractCostAsset(input: {
     if (!entryId) {
       const originalExpense = asset.source["originalExpenseAccountId"];
       if (typeof originalExpense !== "string" || !originalExpense) {
-        throw new ContractCostError("The asset names no original expense account for its capitalization.", {
-          code: "contract_cost_link_account_missing",
-          remedy:
-            "Re-record the cost with its original expense (or accrual) account, then link it to the contract.",
-        });
+        throw new ContractCostError(
+          "The asset names no original expense account for its capitalization.",
+          {
+            code: "contract_cost_link_account_missing",
+            remedy:
+              "Re-record the cost with its original expense (or accrual) account, then link it to the contract.",
+          },
+        );
       }
       const accounts = requirePolicyAccounts(policy);
       const exponent = await currencyExponent(db, asset.currency);
       const canonical = minorUnitsToCanonical(asset.amountMinor, exponent);
       const bookId = await postingBookId(db, orgId);
       const periodId = await coveringPeriodId(db, orgId, asset.capitalizedOn);
-      entryId = (await postEntry(db, {
-        orgId,
-        bookId,
-        subsidiaryId,
-        entryNumber: `CC-CAP-${assetId}`,
-        postingDate: asset.capitalizedOn,
-        periodId,
-        origin: "contract_cost_capitalize",
-        idempotencyKey: `contract-cost:capitalize:${assetId}`,
-        currency: asset.currency,
-        actorId,
-        auditAction: "contract_cost.capitalize",
-        lines: [
-          {
-            accountId: accounts.assetAccountId,
-            amount: canonical,
-            currency: asset.currency,
-            txnAmount: canonical,
-            contributorKind: "contract_cost_asset",
-            contributorRef: assetId,
-          },
-          {
-            accountId: originalExpense,
-            amount: fromUnits(-toUnits(canonical)),
-            currency: asset.currency,
-            txnAmount: fromUnits(-toUnits(canonical)),
-          },
-        ],
-      })).entryId;
+      entryId = (
+        await postEntry(db, {
+          orgId,
+          bookId,
+          subsidiaryId,
+          entryNumber: `CC-CAP-${assetId}`,
+          postingDate: asset.capitalizedOn,
+          periodId,
+          origin: "contract_cost_capitalize",
+          idempotencyKey: `contract-cost:capitalize:${assetId}`,
+          currency: asset.currency,
+          actorId,
+          auditAction: "contract_cost.capitalize",
+          lines: [
+            {
+              accountId: accounts.assetAccountId,
+              amount: canonical,
+              currency: asset.currency,
+              txnAmount: canonical,
+              contributorKind: "contract_cost_asset",
+              contributorRef: assetId,
+            },
+            {
+              accountId: originalExpense,
+              amount: fromUnits(-toUnits(canonical)),
+              currency: asset.currency,
+              txnAmount: fromUnits(-toUnits(canonical)),
+            },
+          ],
+        })
+      ).entryId;
     }
     const startMonth = `${window.months[0]}-01`;
     const endMonth = `${window.months[window.months.length - 1]}-01`;
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update contract_cost_assets
          set revenue_contract_id = ${revenueContractId},
              amort_start_on = ${startMonth}, amort_end_on = ${lastDayOfMonth(endMonth)},
              capitalize_entry_id = ${entryId},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${assetId} and status = 'active'
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (updated.length !== 1) {
       throw new ContractCostError("Linking the contract matched no rows; nothing was saved.", {
         code: "contract_cost_status_race",
@@ -1623,7 +1853,12 @@ export async function linkContractCostAsset(input: {
     }
     await writeAudit(db, orgId, "contract_cost_assets", assetId, "update", actorId, {
       event: "cost_linked",
-      after: { revenueContractId, months: window.months.length, basis: window.basisApplied, entryId },
+      after: {
+        revenueContractId,
+        months: window.months.length,
+        basis: window.basisApplied,
+        entryId,
+      },
       reason: "Imported commission linked to its revenue contract.",
     });
     return { assetId, months: window.months };
@@ -1678,9 +1913,14 @@ export async function importCommissionCosts(input: {
         const capitalized = await withTransactionSavepoint(db, async () => {
           let contractId: string | null = null;
           if (row.contractNumber) {
-            const found = (await db.execute<{ id: string }>(sql`
+            const found = (
+              await db.execute<{ id: string }>(
+                sql`
               select id from revenue_contracts
-               where org_id = ${orgId} and contract_number = ${row.contractNumber}`, "objects"))[0];
+               where org_id = ${orgId} and contract_number = ${row.contractNumber}`,
+                "objects",
+              )
+            )[0];
             contractId = found?.id ?? null;
           }
           const subsidiaryId = await postingSubsidiaryId(db, orgId, {
@@ -1757,7 +1997,8 @@ export async function contractCostAttentionItems(
     contract_number: string | null;
     contract_status: string | null;
     capitalized_on: string;
-  }>(sql`
+  }>(
+    sql`
     select asset.id, asset.revenue_contract_id, asset.amount_minor::text,
            asset.capitalize_entry_id,
            contract.contract_number, contract.status as contract_status,
@@ -1768,7 +2009,10 @@ export async function contractCostAttentionItems(
        ${subsidiaryVisibleFilter(sql`contract.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      where asset.org_id = ${orgId} and asset.status = 'active'
        and (
-         ${allowedSubsidiaryIds === null ? sql`true` : sql`(
+         ${
+           allowedSubsidiaryIds === null
+             ? sql`true`
+             : sql`(
            (asset.revenue_contract_id is not null and exists (
              select 1 from revenue_contracts scoped_contract
               where scoped_contract.org_id = asset.org_id
@@ -1792,8 +2036,11 @@ export async function contractCostAttentionItems(
             where scoped_entry.org_id = asset.org_id
               and scoped_entry.id = asset.capitalize_entry_id
               ${subsidiaryVisibleFilter(sql`scoped_entry.subsidiary_id`, allowedSubsidiaryIds)}
-         ))`}
-       )`, "objects");
+         ))`
+         }
+       )`,
+    "objects",
+  );
   const out: AttentionItem[] = [];
   for (const row of rows) {
     if (!row.revenue_contract_id) {
@@ -1822,4 +2069,3 @@ export async function contractCostAttentionItems(
   }
   return out;
 }
-

@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { fieldSetupSpec, fieldSetupTitle, loadFieldSetupPage } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { fieldSetupSpec, fieldSetupTitle, loadFieldSetupPage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await fieldSetupTitle() }
+  return { title: await fieldSetupTitle() };
 }
 
 /**
@@ -14,9 +14,9 @@ export async function generateMetadata() {
 export default async function FieldSetupPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadFieldSetupPage()
-  return <ModuleView spec={fieldSetupSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadFieldSetupPage();
+  return <ModuleView spec={fieldSetupSpec(data)} data={data} searchParams={sp} trusted />;
 }

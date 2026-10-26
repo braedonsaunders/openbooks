@@ -56,14 +56,23 @@ export interface UserSqlOptions {
  * reports, whose payroll totals are masked before filtering and aggregation.
  */
 const PAYROLL_SHARED_RELATIONS = new Set([
-  "journal_entries", "journal_lines", "documents", "document_lines",
-  "time_entries", "labor_cost_rates", "field_ticket_labor_lines",
-  "hrm_benefit_program_revisions", "hrm_benefit_awards", "hrm_benefit_award_lines",
+  "journal_entries",
+  "journal_lines",
+  "documents",
+  "document_lines",
+  "time_entries",
+  "labor_cost_rates",
+  "field_ticket_labor_lines",
+  "hrm_benefit_program_revisions",
+  "hrm_benefit_awards",
+  "hrm_benefit_award_lines",
 ]);
 
 export function isPayrollRelation(table: string): boolean {
-  return /^(?:payroll_|employee_pay|pay_(?!application))/.test(table)
-    || PAYROLL_SHARED_RELATIONS.has(table);
+  return (
+    /^(?:payroll_|employee_pay|pay_(?!application))/.test(table) ||
+    PAYROLL_SHARED_RELATIONS.has(table)
+  );
 }
 
 /**
@@ -71,16 +80,26 @@ export function isPayrollRelation(table: string): boolean {
  * kind. Raw SQL cannot be narrowed to the reader's own reports, so these need
  * org-wide expense read; governed reports narrow them row by row instead.
  */
-const EXPENSE_RELATIONS = new Set(["documents", "document_lines", "document_line_tax_components", "document_links"]);
+const EXPENSE_RELATIONS = new Set([
+  "documents",
+  "document_lines",
+  "document_line_tax_components",
+  "document_links",
+]);
 
 export function isExpenseRelation(table: string): boolean {
   return EXPENSE_RELATIONS.has(table);
 }
 
 /** Relations a caller may not read or list, given its payroll and expense authority. */
-function refusedRelation(table: string, options: { payrollRead?: boolean; expenseRead?: boolean }): boolean {
-  return (options.payrollRead !== true && isPayrollRelation(table))
-    || (options.expenseRead !== true && isExpenseRelation(table));
+function refusedRelation(
+  table: string,
+  options: { payrollRead?: boolean; expenseRead?: boolean },
+): boolean {
+  return (
+    (options.payrollRead !== true && isPayrollRelation(table)) ||
+    (options.expenseRead !== true && isExpenseRelation(table))
+  );
 }
 
 /** Every base relation a plan reads, from EXPLAIN (FORMAT JSON). */
@@ -107,7 +126,8 @@ export interface UserSqlResult {
   durationMs: number;
 }
 
-const FORBIDDEN_PREFIX = /^\s*(insert|update|delete|create|alter|drop|grant|revoke|truncate|copy|vacuum|set|call|do)\b/i;
+const FORBIDDEN_PREFIX =
+  /^\s*(insert|update|delete|create|alter|drop|grant|revoke|truncate|copy|vacuum|set|call|do)\b/i;
 /**
  * Functions user SQL may never name. set_config can reassign the session role
  * or tenant setting; the others execute SQL supplied as a STRING, which the
@@ -120,12 +140,22 @@ const FORBIDDEN_PREFIX = /^\s*(insert|update|delete|create|alter|drop|grant|revo
  * openbooks_read can still execute any of them.
  */
 export const SQL_TEXT_EXECUTING_FUNCTIONS = [
-  "query_to_xml", "query_to_xmlschema", "query_to_xml_and_xmlschema",
-  "cursor_to_xml", "cursor_to_xmlschema",
-  "table_to_xml", "table_to_xmlschema", "table_to_xml_and_xmlschema",
-  "schema_to_xml", "schema_to_xmlschema", "schema_to_xml_and_xmlschema",
-  "database_to_xml", "database_to_xmlschema", "database_to_xml_and_xmlschema",
-  "ts_stat", "ts_rewrite",
+  "query_to_xml",
+  "query_to_xmlschema",
+  "query_to_xml_and_xmlschema",
+  "cursor_to_xml",
+  "cursor_to_xmlschema",
+  "table_to_xml",
+  "table_to_xmlschema",
+  "table_to_xml_and_xmlschema",
+  "schema_to_xml",
+  "schema_to_xmlschema",
+  "schema_to_xml_and_xmlschema",
+  "database_to_xml",
+  "database_to_xmlschema",
+  "database_to_xml_and_xmlschema",
+  "ts_stat",
+  "ts_rewrite",
 ] as const;
 const FORBIDDEN_FUNCTIONS = ["set_config", ...SQL_TEXT_EXECUTING_FUNCTIONS];
 const FORBIDDEN_BODY = new RegExp(
@@ -167,10 +197,15 @@ function atUnicodeQuoted(input: string, i: number): boolean {
   return !isIdentChar(input[i - 1]);
 }
 
-function parseQuoted(input: string, start: number, quote: "'" | '"'): { raw: string; next: number } {
+function parseQuoted(
+  input: string,
+  start: number,
+  quote: "'" | '"',
+): { raw: string; next: number } {
   let i = start + 1;
   let raw = "";
-  const escapedString = quote === "'" && /[eE]/.test(input[start - 1] ?? "") && !isIdentChar(input[start - 2]);
+  const escapedString =
+    quote === "'" && /[eE]/.test(input[start - 1] ?? "") && !isIdentChar(input[start - 2]);
   while (i < input.length) {
     if (escapedString && input[i] === "\\") {
       raw += input.slice(i, i + 2);
@@ -320,9 +355,13 @@ function executableSql(input: string): string {
       let depth = 1;
       i += 2;
       while (i < input.length && depth) {
-        if (input.startsWith("/*", i)) { depth++; i += 2; }
-        else if (input.startsWith("*/", i)) { depth--; i += 2; }
-        else i++;
+        if (input.startsWith("/*", i)) {
+          depth++;
+          i += 2;
+        } else if (input.startsWith("*/", i)) {
+          depth--;
+          i += 2;
+        } else i++;
       }
       if (depth) throw new UserSqlRefusal(UNCLOSED_SQL, 400);
       out += " ";
@@ -355,12 +394,17 @@ export function validateUserSql(sqlText: string): string {
   const executable = executableSql(sqlText);
   const stripped = stripSqlNoise(executable).trim();
   if (!stripped) throw new UserSqlRefusal("empty query", 400);
-  if (FORBIDDEN_PREFIX.test(stripped)) throw new UserSqlRefusal("read-only: queries must be SELECT (or WITH … SELECT)", 400);
+  if (FORBIDDEN_PREFIX.test(stripped))
+    throw new UserSqlRefusal("read-only: queries must be SELECT (or WITH … SELECT)", 400);
   const forbidden = FORBIDDEN_BODY.exec(stripped);
   if (forbidden) {
-    throw new UserSqlRefusal(`read-only: ${forbidden[1]!.toLowerCase()}() is not allowed in user SQL`, 400);
+    throw new UserSqlRefusal(
+      `read-only: ${forbidden[1]!.toLowerCase()}() is not allowed in user SQL`,
+      400,
+    );
   }
-  if (!/^\s*(select|with)\b/i.test(stripped)) throw new UserSqlRefusal("queries must start with SELECT or WITH", 400);
+  if (!/^\s*(select|with)\b/i.test(stripped))
+    throw new UserSqlRefusal("queries must start with SELECT or WITH", 400);
   return executable;
 }
 
@@ -415,7 +459,7 @@ function collectMeasuredRows(
   return { rows: kept, truncated: false };
 }
 
-async function prepareQueryContext(client: import('pg').PoolClient, orgId: string): Promise<void> {
+async function prepareQueryContext(client: import("pg").PoolClient, orgId: string): Promise<void> {
   // The tenant identity is connection-local and owned by the application role.
   // openbooks_read runs inside READ ONLY and has no privilege on this temp table;
   // governed views can read it only through openbooks_query_org_id().
@@ -428,7 +472,7 @@ async function prepareQueryContext(client: import('pg').PoolClient, orgId: strin
   await client.query("insert into pg_temp.openbooks_query_context (org_id) values ($1)", [orgId]);
 }
 
-async function clearQueryContext(client: import('pg').PoolClient): Promise<void> {
+async function clearQueryContext(client: import("pg").PoolClient): Promise<void> {
   await client.query("truncate table pg_temp.openbooks_query_context");
 }
 
@@ -440,7 +484,7 @@ async function clearQueryContext(client: import('pg').PoolClient): Promise<void>
  * closed until a superuser does, rather than relying on the text checker alone.
  * Runs as openbooks_read, so has_function_privilege answers for that role.
  */
-async function refuseTextExecutionPrivileges(client: import('pg').PoolClient): Promise<void> {
+async function refuseTextExecutionPrivileges(client: import("pg").PoolClient): Promise<void> {
   const executable = await client.query<{ fn: string }>(
     `select p.oid::pg_catalog.regprocedure::pg_catalog.text as fn
        from pg_catalog.pg_proc p
@@ -453,9 +497,9 @@ async function refuseTextExecutionPrivileges(client: import('pg').PoolClient): P
   if (executable.rows.length === 0) return;
   const names = executable.rows.map((row) => `pg_catalog.${row.fn}`);
   throw new UserSqlRefusal(
-    `query console is unavailable: the read-only query role can still execute ${names.join(", ")}, `
-      + "which run SQL text outside the console's checks. A database superuser must run "
-      + `"revoke execute on function ${names[0]} from public" (and likewise for each function listed) before queries can run.`,
+    `query console is unavailable: the read-only query role can still execute ${names.join(", ")}, ` +
+      "which run SQL text outside the console's checks. A database superuser must run " +
+      `"revoke execute on function ${names[0]} from public" (and likewise for each function listed) before queries can run.`,
     409,
   );
 }
@@ -468,7 +512,7 @@ async function refuseTextExecutionPrivileges(client: import('pg').PoolClient): P
  * result and discards the connection if anything unforeseen got through.
  */
 async function assertGovernedSessionIntact(
-  client: import('pg').PoolClient,
+  client: import("pg").PoolClient,
   orgId: string,
 ): Promise<void> {
   const check = await client.query<{ intact: boolean | null }>(
@@ -480,12 +524,14 @@ async function assertGovernedSessionIntact(
     [orgId],
   );
   if (check.rows[0]?.intact !== true) {
-    throw new UserSqlRefusal("query result withheld: the query changed the session role or organization scope");
+    throw new UserSqlRefusal(
+      "query result withheld: the query changed the session role or organization scope",
+    );
   }
 }
 
 async function beginGovernedReadTransaction(
-  client: import('pg').PoolClient,
+  client: import("pg").PoolClient,
   orgId: string,
   timeoutMs: number,
 ): Promise<void> {
@@ -532,20 +578,20 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
   // values: []. The CASE keeps an oversized or over-budget row_to_json
   // payload on the server — the host only sees the byte count and a null.
   const wrapped =
-    "select __bytes as __ob_row_bytes, "
-    + "case when __bytes > $2::pg_catalog.int8 then null "
-    + "when __running > $2::pg_catalog.int8 then null "
-    + "else pg_catalog.row_to_json(__q) end as __ob_row "
-    + "from ("
-    + "select __q, __bytes, "
-    + "sum(__bytes) over (order by __rn rows between unbounded preceding and current row) as __running "
-    + "from ("
-    + "select __q, "
-    + "octet_length(pg_catalog.row_to_json(__q)::pg_catalog.text)::pg_catalog.int8 as __bytes, "
-    + "row_number() over () as __rn "
-    + `from (\n${body}\n) __q limit $1::pg_catalog.int4`
-    + ") __numbered"
-    + ") __sized";
+    "select __bytes as __ob_row_bytes, " +
+    "case when __bytes > $2::pg_catalog.int8 then null " +
+    "when __running > $2::pg_catalog.int8 then null " +
+    "else pg_catalog.row_to_json(__q) end as __ob_row " +
+    "from (" +
+    "select __q, __bytes, " +
+    "sum(__bytes) over (order by __rn rows between unbounded preceding and current row) as __running " +
+    "from (" +
+    "select __q, " +
+    "octet_length(pg_catalog.row_to_json(__q)::pg_catalog.text)::pg_catalog.int8 as __bytes, " +
+    "row_number() over () as __rn " +
+    `from (\n${body}\n) __q limit $1::pg_catalog.int4` +
+    ") __numbered" +
+    ") __sized";
 
   const client = await connectGovernedReadClient();
   const started = Date.now();
@@ -562,20 +608,21 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
         values: [maxRows + 1, maxBytes],
       });
       const plan = explained.rows[0]?.["QUERY PLAN"];
-      if (plan === undefined) throw new UserSqlRefusal("query refused: the relations it reads could not be determined");
+      if (plan === undefined)
+        throw new UserSqlRefusal("query refused: the relations it reads could not be determined");
       const relations = [...planRelations(plan)];
       const payroll = opts.payrollRead === true ? [] : relations.filter(isPayrollRelation).sort();
       if (payroll.length > 0) {
         throw new UserSqlRefusal(
-          `payroll data requires the payroll.read permission: this query reads ${payroll.join(", ")}. `
-            + "Use financial reports for masked totals, or ask an administrator for payroll.read to query raw payroll-bearing relations.",
+          `payroll data requires the payroll.read permission: this query reads ${payroll.join(", ")}. ` +
+            "Use financial reports for masked totals, or ask an administrator for payroll.read to query raw payroll-bearing relations.",
         );
       }
       const expenses = opts.expenseRead === true ? [] : relations.filter(isExpenseRelation).sort();
       if (expenses.length > 0) {
         throw new UserSqlRefusal(
-          `expense reports require the expenses.read permission: this query reads ${expenses.join(", ")}. `
-            + "Use reports, which show the expense reports you may read, or ask an administrator for expenses.read to query raw document relations.",
+          `expense reports require the expenses.read permission: this query reads ${expenses.join(", ")}. ` +
+            "Use reports, which show the expense reports you may read, or ask an administrator for expenses.read to query raw document relations.",
         );
       }
     }
@@ -590,11 +637,7 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
       throw error;
     }
     await client.query("rollback");
-    const bounded = collectMeasuredRows(
-      res.rows as Record<string, unknown>[],
-      maxRows,
-      maxBytes,
-    );
+    const bounded = collectMeasuredRows(res.rows as Record<string, unknown>[], maxRows, maxBytes);
     const columns = bounded.rows.length > 0 ? Object.keys(bounded.rows[0]!) : [];
     return {
       columns,
@@ -640,7 +683,10 @@ export interface SchemaTable {
  * inside a READ ONLY transaction, so it lists exactly what a user could
  * actually query — nothing they lack privileges on leaks through.
  */
-export async function listSchema(orgId: string, options: { payrollRead?: boolean; expenseRead?: boolean } = {}): Promise<SchemaTable[]> {
+export async function listSchema(
+  orgId: string,
+  options: { payrollRead?: boolean; expenseRead?: boolean } = {},
+): Promise<SchemaTable[]> {
   const client = await connectGovernedReadClient();
   try {
     await prepareQueryContext(client, orgId);
@@ -742,7 +788,9 @@ export async function ensureReadRole(): Promise<void> {
        where r.rolname = 'openbooks_read' and u.rolname = current_user`,
     );
     if (r.rowCount === 0) {
-      throw new Error("openbooks_read role missing or not granted — run the bootstrap grant as superuser");
+      throw new Error(
+        "openbooks_read role missing or not granted — run the bootstrap grant as superuser",
+      );
     }
   } finally {
     client.release();

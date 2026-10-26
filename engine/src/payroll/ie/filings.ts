@@ -88,7 +88,8 @@ export async function iePayeReconciliation(
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
   const stepDate = iePrsiStepDate(taxYear);
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            s.filing_account_id as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -136,11 +137,13 @@ export async function iePayeReconciliation(
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'IE'
      group by s.employee_party_id, p.display_name, s.filing_account_id
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed IE pay stubs for tax year ${taxYear} — run, calculate and commit `
-      + "an IE pay run before reconciling the year's PAYE, PRSI and USC",
+      `no committed IE pay stubs for tax year ${taxYear} — run, calculate and commit ` +
+        "an IE pay run before reconciling the year's PAYE, PRSI and USC",
     );
   }
   return rows.map((row) => ({
@@ -183,8 +186,14 @@ async function iePopulation(orgId: string, taxYear: number): Promise<PayrollFili
   const total = (pick: (row: IeReconciliationRow) => string): string =>
     reconciliation.reduce((acc, row) => add(acc, pick(row)), "0");
   const totalPrsi = add(
-    add(total((row) => row.prsiEmployeePre), total((row) => row.prsiEmployeePost)),
-    add(total((row) => row.prsiEmployerPre), total((row) => row.prsiEmployerPost)),
+    add(
+      total((row) => row.prsiEmployeePre),
+      total((row) => row.prsiEmployeePost),
+    ),
+    add(
+      total((row) => row.prsiEmployerPre),
+      total((row) => row.prsiEmployerPost),
+    ),
   );
   return {
     rowKey: "rowId",
@@ -232,32 +241,33 @@ export function iePayeReconciliationFiling(): PayrollYearEndFiling {
     key: "paye-reconciliation",
     label: "PAYE Modernisation reconciliation",
     cadence: "annual",
-    description: "Year-end reconciliation of PAYE, PRSI and USC withheld on committed IE pay runs. "
-      + "Ireland issues no employer annual slip: the P60 was abolished with PAYE Modernisation "
-      + "(1 January 2019) and the Employment Detail Summary is produced by Revenue from the "
-      + "employer's per-pay-period payroll submissions — collect it via Revenue myAccount. "
-      + "PRSI splits pre/post 1 October by pay date against the year's mid-year step.",
+    description:
+      "Year-end reconciliation of PAYE, PRSI and USC withheld on committed IE pay runs. " +
+      "Ireland issues no employer annual slip: the P60 was abolished with PAYE Modernisation " +
+      "(1 January 2019) and the Employment Detail Summary is produced by Revenue from the " +
+      "employer's per-pay-period payroll submissions — collect it via Revenue myAccount. " +
+      "PRSI splits pre/post 1 October by pay date against the year's mid-year step.",
     emptyText: "No committed IE pay stubs for this year.",
     population: (orgId, taxYear) => iePopulation(orgId, taxYear),
     parseRowId: parseIeReconciliationRowId,
     downloadRefusal:
-      "the IE pack produces no ROS payroll-submission file — the reconciliation above is the "
-      + "source data; submit each pay period's payroll to Revenue through Revenue Online "
-      + "Service (ROS)",
+      "the IE pack produces no ROS payroll-submission file — the reconciliation above is the " +
+      "source data; submit each pay period's payroll to Revenue through Revenue Online " +
+      "Service (ROS)",
     // An issued submission is corrected by sending a corrected payroll
     // submission for the same pay period — there is no separate correction
     // form, and this product does not transmit. `supported: false` with the
     // real remedy, never another agency's mechanics.
     amendment: {
       supported: false,
-      refusal: "the IE pack does not correct an issued submission in-product — correct the pay "
-        + "period in payroll and send a corrected payroll submission for that period to Revenue "
-        + "through Revenue Online Service (ROS); the reconciliation above carries what was withheld",
+      refusal:
+        "the IE pack does not correct an issued submission in-product — correct the pay " +
+        "period in payroll and send a corrected payroll submission for that period to Revenue " +
+        "through Revenue Online Service (ROS); the reconciliation above carries what was withheld",
     },
   };
   return cached;
 }
 
 /** The declaration object, for the pack and for tests. */
-export const IE_PAYE_RECONCILIATION_FILING: PayrollYearEndFiling =
-  iePayeReconciliationFiling();
+export const IE_PAYE_RECONCILIATION_FILING: PayrollYearEndFiling = iePayeReconciliationFiling();

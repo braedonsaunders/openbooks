@@ -66,7 +66,11 @@ export function maskExpr(
       return `(case when ${q} is null then null else round(${q} * (0.5 + (abs(hashtext(${idExpr}::text)) % 1000) / 1000.0), 4) end)`;
     case "null_out":
       // Preserve dated statutory amounts while removing source prose from a masked copy.
-      if (column?.tableName === 'payroll_prior_earnings' && col === 'periods' && column.udtName === 'jsonb') {
+      if (
+        column?.tableName === "payroll_prior_earnings" &&
+        col === "periods" &&
+        column.udtName === "jsonb"
+      ) {
         return `(select jsonb_agg((p.value - 'sourceReference' - 'lines') || jsonb_build_object(
           'sourceReference','REDACTED','lines',(select coalesce(jsonb_agg(
             (e.value - 'sourceKey' - 'sourceLabel') || jsonb_build_object(
@@ -83,7 +87,11 @@ export function maskExpr(
       // Historical compensation cycles require a source key and an object
       // together. Remove the employee evidence while retaining its presence;
       // native cycles without source evidence must remain without it.
-      if (column?.tableName === "hrm_comp_cycles" && col === "source_evidence" && column.udtName === "jsonb") {
+      if (
+        column?.tableName === "hrm_comp_cycles" &&
+        col === "source_evidence" &&
+        column.udtName === "jsonb"
+      ) {
         return `(case when ${q} is null then null else '{"redacted":true}'::jsonb end)`;
       }
       // information_return_filings_finalized requires payer_snapshot <> '{}'
@@ -94,7 +102,11 @@ export function maskExpr(
       // masking_policies enum in schema/src/sandboxes.ts.
       // A program revision's prior policy governs settlement of earlier
       // periods in the copy; only its descriptive prose is removed.
-      if (column?.tableName === "hrm_benefit_program_revisions" && col === "prior_policy" && column.udtName === "jsonb") {
+      if (
+        column?.tableName === "hrm_benefit_program_revisions" &&
+        col === "prior_policy" &&
+        column.udtName === "jsonb"
+      ) {
         return `jsonb_set(jsonb_set(${q}, '{program,name}', '"REDACTED"'::jsonb, false), '{program,description}', 'null'::jsonb, false)`;
       }
       if (col === "payer_snapshot" && (column?.udtName === "jsonb" || column?.udtName === "json")) {
@@ -114,17 +126,22 @@ export interface MaskingPolicy {
 }
 
 type MaskingPolicyRow = Record<string, unknown> & {
-  table_name: string; column_name: string; transform: MaskTransform;
-}
+  table_name: string;
+  column_name: string;
+  transform: MaskTransform;
+};
 
 /** Load active masking policies for a production org as table → column → transform. */
 export async function loadMaskingPolicies(
   prodOrgId: string,
 ): Promise<Map<string, Map<string, MaskTransform>>> {
-  const res = await db.execute<MaskingPolicyRow>(sql`
+  const res = await db.execute<MaskingPolicyRow>(
+    sql`
     select table_name, column_name, transform
       from masking_policies
-     where org_id = ${prodOrgId} and is_active = true`, "objects");
+     where org_id = ${prodOrgId} and is_active = true`,
+    "objects",
+  );
   const map = new Map<string, Map<string, MaskTransform>>();
   for (const r of res) {
     if (!map.has(r.table_name)) map.set(r.table_name, new Map());
@@ -166,7 +183,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "lots", columnName: "hold_reason", transform: "redact" },
   { tableName: "serials", columnName: "hold_reason", transform: "redact" },
   { tableName: "pick_execution_lines", columnName: "reason", transform: "redact" },
-  {tableName:"mfg_work_orders",columnName:"campaign_reference",transform:"hash"},
+  { tableName: "mfg_work_orders", columnName: "campaign_reference", transform: "hash" },
   // Workflow and quality prose may name people; typed operational evidence is masked by clone construction.
   { tableName: "operating_profiles", columnName: "name", transform: "redact" },
   { tableName: "operating_profile_versions", columnName: "reason", transform: "redact" },
@@ -175,7 +192,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "inventory_inspections", columnName: "reason", transform: "redact" },
   { tableName: "inventory_inspections", columnName: "disposition_reason", transform: "redact" },
   { tableName: "mfg_subcontracts", columnName: "cancel_reason", transform: "redact" },
-  { tableName: "mfg_subcontract_service_bills", columnName: "reversal_reason", transform: "redact" },
+  {
+    tableName: "mfg_subcontract_service_bills",
+    columnName: "reversal_reason",
+    transform: "redact",
+  },
   { tableName: "mfg_subcontract_returns", columnName: "finish_reason", transform: "redact" },
   // The seller contact and payee account printed on e-invoices.
   { tableName: "einvoice_settings", columnName: "contact_name", transform: "faker_name" },
@@ -232,7 +253,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // Checklist responses are employee-authored evidence; publication reasons may name people.
   { tableName: "hrm_process_steps", columnName: "response", transform: "null_out" },
   { tableName: "hrm_process_template_versions", columnName: "reason", transform: "redact" },
-  { tableName: "hrm_leave_payroll_entitlement_mappings", columnName: "reason", transform: "redact" },
+  {
+    tableName: "hrm_leave_payroll_entitlement_mappings",
+    columnName: "reason",
+    transform: "redact",
+  },
   // Sales target names, reasons and authored coverage can contain personal
   // details. Published definitions are removed from masked sandboxes so
   // routing cannot act on a partially anonymized definition.
@@ -245,7 +270,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "addresses", columnName: "location_verified_at", transform: "null_out" },
   { tableName: "addresses", columnName: "location_verified_by", transform: "null_out" },
   { tableName: "rma_documents", columnName: "rejection_reason", transform: "redact" },
-  { tableName: "party_bank_accounts", columnName: "account_number_encrypted", transform: "reseal_secret" },
+  {
+    tableName: "party_bank_accounts",
+    columnName: "account_number_encrypted",
+    transform: "reseal_secret",
+  },
   { tableName: "party_bank_accounts", columnName: "account_last_four", transform: "null_out" },
   { tableName: "party_bank_accounts", columnName: "routing", transform: "null_out" },
   // D2b: corporate card labels read "Visa …4821 — K. Laroche": the holder
@@ -272,12 +301,28 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "saas_metrics_normalization_requests", columnName: "reason", transform: "redact" },
   { tableName: "saas_metrics_normalization_requests", columnName: "failure", transform: "redact" },
   { tableName: "saas_metrics_normalization_requests", columnName: "remedy", transform: "redact" },
-  { tableName: "saas_metrics_normalization_requests", columnName: "progress", transform: "null_out" },
+  {
+    tableName: "saas_metrics_normalization_requests",
+    columnName: "progress",
+    transform: "null_out",
+  },
   { tableName: "saas_metrics_normalization_requests", columnName: "result", transform: "null_out" },
   { tableName: "saas_metrics_fx_evidence", columnName: "evidence", transform: "null_out" },
-  { tableName: "saas_metrics_monthly", columnName: "normalization_evidence", transform: "null_out" },
-  { tableName: "saas_metrics_facts_monthly", columnName: "normalization_evidence", transform: "null_out" },
-  { tableName: "saas_metrics_cohort_monthly", columnName: "normalization_evidence", transform: "null_out" },
+  {
+    tableName: "saas_metrics_monthly",
+    columnName: "normalization_evidence",
+    transform: "null_out",
+  },
+  {
+    tableName: "saas_metrics_facts_monthly",
+    columnName: "normalization_evidence",
+    transform: "null_out",
+  },
+  {
+    tableName: "saas_metrics_cohort_monthly",
+    columnName: "normalization_evidence",
+    transform: "null_out",
+  },
   // 0195: candidate PII masks exactly like parties (a prospect's contact
   // identity is as sensitive as a worker's). Columns absent from the schema
   // are skipped by the clone generator, so ordering with the migration is
@@ -302,15 +347,39 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_benefit_awards", columnName: "source_snapshot", transform: "null_out" },
   // Election evidence may contain employee source records and personal explanations.
   { tableName: "hrm_benefit_enrollment_terms", columnName: "provenance", transform: "null_out" },
-  { tableName: "hrm_benefit_enrollment_terms", columnName: "source_decimal", transform: "null_out" },
-  { tableName: "hrm_benefit_enrollment_terms", columnName: "override_reason", transform: "null_out" },
+  {
+    tableName: "hrm_benefit_enrollment_terms",
+    columnName: "source_decimal",
+    transform: "null_out",
+  },
+  {
+    tableName: "hrm_benefit_enrollment_terms",
+    columnName: "override_reason",
+    transform: "null_out",
+  },
   { tableName: "hrm_benefit_contribution_rules", columnName: "provenance", transform: "null_out" },
-  { tableName: "hrm_benefit_contribution_rules", columnName: "source_decimal", transform: "null_out" },
-  { tableName: "hrm_benefit_enrollments", columnName: "submission_snapshot", transform: "null_out" },
+  {
+    tableName: "hrm_benefit_contribution_rules",
+    columnName: "source_decimal",
+    transform: "null_out",
+  },
+  {
+    tableName: "hrm_benefit_enrollments",
+    columnName: "submission_snapshot",
+    transform: "null_out",
+  },
   { tableName: "hrm_benefit_enrollments", columnName: "decision_snapshot", transform: "null_out" },
-  { tableName: "pay_run_benefit_allocations", columnName: "source_snapshot", transform: "null_out" },
+  {
+    tableName: "pay_run_benefit_allocations",
+    columnName: "source_snapshot",
+    transform: "null_out",
+  },
   { tableName: "payroll_holiday_obligations", columnName: "evidence", transform: "null_out" },
-  { tableName: "pay_run_holiday_allocations", columnName: "source_snapshot", transform: "null_out" },
+  {
+    tableName: "pay_run_holiday_allocations",
+    columnName: "source_snapshot",
+    transform: "null_out",
+  },
   { tableName: "pay_runs", columnName: "benefit_source_snapshot", transform: "null_out" },
   { tableName: "payroll_service_credits", columnName: "source_snapshot", transform: "null_out" },
   { tableName: "payroll_vacation_terms", columnName: "source_snapshot", transform: "null_out" },
@@ -326,13 +395,21 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // consistently across recipient positions and their dated assignments.
   { tableName: "hrm_benefit_transaction_positions", columnName: "name", transform: "faker_name" },
   { tableName: "hrm_benefit_transaction_positions", columnName: "position_key", transform: "hash" },
-  { tableName: "hrm_benefit_transaction_responsibilities", columnName: "position_key", transform: "hash" },
+  {
+    tableName: "hrm_benefit_transaction_responsibilities",
+    columnName: "position_key",
+    transform: "hash",
+  },
   { tableName: "hrm_benefit_transaction_policies", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_program_revisions", columnName: "prior_policy", transform: "null_out" },
   { tableName: "hrm_benefit_program_revisions", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_transaction_items", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_transaction_positions", columnName: "reason", transform: "redact" },
-  { tableName: "hrm_benefit_transaction_responsibilities", columnName: "reason", transform: "redact" },
+  {
+    tableName: "hrm_benefit_transaction_responsibilities",
+    columnName: "reason",
+    transform: "redact",
+  },
   { tableName: "hrm_benefit_transaction_limits", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_programs", columnName: "name", transform: "faker_name" },
   { tableName: "hrm_benefit_programs", columnName: "description", transform: "redact" },
@@ -363,11 +440,19 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "vendor_roles", columnName: "tin_encrypted", transform: "reseal_secret" },
   { tableName: "vendor_roles", columnName: "tin_last4", transform: "null_out" },
   { tableName: "vendor_roles", columnName: "tin_type", transform: "null_out" },
-  { tableName: "employee_payroll_profiles", columnName: "sin_encrypted", transform: "reseal_secret" },
+  {
+    tableName: "employee_payroll_profiles",
+    columnName: "sin_encrypted",
+    transform: "reseal_secret",
+  },
   { tableName: "employee_payroll_profiles", columnName: "sin_last3", transform: "null_out" },
   { tableName: "information_return_recipients", columnName: "tin_last4", transform: "null_out" },
   { tableName: "information_return_recipients", columnName: "tin_type", transform: "null_out" },
-  { tableName: "information_return_recipients", columnName: "recipient_snapshot", transform: "null_out" },
+  {
+    tableName: "information_return_recipients",
+    columnName: "recipient_snapshot",
+    transform: "null_out",
+  },
   { tableName: "information_return_filings", columnName: "payer_snapshot", transform: "null_out" },
   { tableName: "subsidiaries", columnName: "tax_ids", transform: "null_out" },
   { tableName: "addresses", columnName: "line1", transform: "redact" },
@@ -424,7 +509,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "statement_batch_items", columnName: "error", transform: "redact" },
   // Remove authored filter payloads and captured delivery authority from masked copies.
   { tableName: "statement_batch_runs", columnName: "filters", transform: "null_out" },
-  { tableName: "statement_batch_runs", columnName: "authorization_snapshot", transform: "null_out" },
+  {
+    tableName: "statement_batch_runs",
+    columnName: "authorization_snapshot",
+    transform: "null_out",
+  },
   { tableName: "vendor_roles", columnName: "eft_notification_email", transform: "faker_email" },
   { tableName: "report_runs", columnName: "recipient_emails", transform: "null_out" },
   { tableName: "report_schedules", columnName: "recipient_emails", transform: "null_out" },
@@ -452,26 +541,54 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // Participant observations and feedback can contain personal or medical information.
   { tableName: "hrm_training_participants", columnName: "notes", transform: "redact" },
   { tableName: "payroll_compensation_packages", columnName: "name", transform: "redact" },
-  { tableName: 'payroll_period_openings', columnName: 'source_reference', transform: 'redact' },
-  { tableName: 'payroll_period_openings', columnName: 'reason', transform: 'redact' },
-  { tableName: 'payroll_prior_earnings', columnName: 'source_reference', transform: 'redact' },
-  { tableName: 'payroll_prior_earnings', columnName: 'reason', transform: 'redact' },
-  { tableName: 'payroll_prior_earnings', columnName: 'periods', transform: 'null_out' },
-  { tableName: 'payroll_employee_employer_assignments', columnName: 'source_reference', transform: 'redact' },
-  { tableName: 'payroll_roe_separation_events', columnName: 'source_reference', transform: 'redact' },
-  { tableName: 'payroll_employee_employer_assignments', columnName: 'reason', transform: 'redact' },
+  { tableName: "payroll_period_openings", columnName: "source_reference", transform: "redact" },
+  { tableName: "payroll_period_openings", columnName: "reason", transform: "redact" },
+  { tableName: "payroll_prior_earnings", columnName: "source_reference", transform: "redact" },
+  { tableName: "payroll_prior_earnings", columnName: "reason", transform: "redact" },
+  { tableName: "payroll_prior_earnings", columnName: "periods", transform: "null_out" },
+  {
+    tableName: "payroll_employee_employer_assignments",
+    columnName: "source_reference",
+    transform: "redact",
+  },
+  {
+    tableName: "payroll_roe_separation_events",
+    columnName: "source_reference",
+    transform: "redact",
+  },
+  { tableName: "payroll_employee_employer_assignments", columnName: "reason", transform: "redact" },
   { tableName: "payroll_compensation_packages", columnName: "description", transform: "redact" },
   { tableName: "payroll_compensation_packages", columnName: "reason", transform: "redact" },
   { tableName: "payroll_compensation_versions", columnName: "definition", transform: "null_out" },
   { tableName: "payroll_compensation_versions", columnName: "authorship", transform: "null_out" },
-  { tableName: "payroll_compensation_versions", columnName: "submission_policy", transform: "null_out" },
+  {
+    tableName: "payroll_compensation_versions",
+    columnName: "submission_policy",
+    transform: "null_out",
+  },
   { tableName: "payroll_compensation_versions", columnName: "reason", transform: "redact" },
   { tableName: "payroll_compensation_assignments", columnName: "inputs", transform: "null_out" },
-  { tableName: "payroll_compensation_assignments", columnName: "authorship", transform: "null_out" },
-  { tableName: "payroll_compensation_assignments", columnName: "submission_policy", transform: "null_out" },
+  {
+    tableName: "payroll_compensation_assignments",
+    columnName: "authorship",
+    transform: "null_out",
+  },
+  {
+    tableName: "payroll_compensation_assignments",
+    columnName: "submission_policy",
+    transform: "null_out",
+  },
   { tableName: "payroll_compensation_assignments", columnName: "reason", transform: "redact" },
-  { tableName: "payroll_compensation_calculations", columnName: "source_snapshot", transform: "null_out" },
-  { tableName: "payroll_compensation_calculations", columnName: "result_snapshot", transform: "null_out" },
+  {
+    tableName: "payroll_compensation_calculations",
+    columnName: "source_snapshot",
+    transform: "null_out",
+  },
+  {
+    tableName: "payroll_compensation_calculations",
+    columnName: "result_snapshot",
+    transform: "null_out",
+  },
   { tableName: "hrm_training_courses", columnName: "name", transform: "redact" },
   { tableName: "hrm_training_courses", columnName: "description", transform: "redact" },
   { tableName: "hrm_training_courses", columnName: "reason", transform: "redact" },
@@ -496,7 +613,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_exit_record_events", columnName: "after_snapshot", transform: "null_out" },
   // 0291: a scheduled SFTP import binds to the bank account number its
   // statements carry — a real account identifier, never copied verbatim.
-  { tableName: "sftp_import_schedules", columnName: "expected_external_account_id", transform: "redact" },
+  {
+    tableName: "sftp_import_schedules",
+    columnName: "expected_external_account_id",
+    transform: "redact",
+  },
   // 0292: the executed lien waiver's frozen print image carries every
   // name, figure and signature line exactly as signed.
   { tableName: "lien_waivers", columnName: "executed_snapshot", transform: "null_out" },

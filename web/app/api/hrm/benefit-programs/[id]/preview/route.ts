@@ -19,7 +19,8 @@ export const GET = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ authz: gate, params: routeParams, request: req }) => {
     const { id } = routeParams;
-    if (!isUuid(id)) return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
+    if (!isUuid(id))
+      return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
     const url = new URL(req.url);
     const periodFrom = url.searchParams.get("periodFrom") ?? "";
     const periodTo = url.searchParams.get("periodTo") ?? "";

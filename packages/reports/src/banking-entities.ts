@@ -48,9 +48,21 @@ export const BANKING_REPORT_ENTITIES: ReportEntity[] = [
         options: ["draft", "posted", "void"],
       },
       { key: "currency", label: "Currency", kind: "text", expr: "b.currency" },
-      { key: "line_number", label: "Line", kind: "number", identifier: true, expr: "l.line_number" },
+      {
+        key: "line_number",
+        label: "Line",
+        kind: "number",
+        identifier: true,
+        expr: "l.line_number",
+      },
       { key: "line_kind", label: "Line kind", kind: "text", expr: "l.kind" },
-      { key: "line_amount", label: "Line amount", kind: "money", expr: "l.amount", txnCurrency: true },
+      {
+        key: "line_amount",
+        label: "Line amount",
+        kind: "money",
+        expr: "l.amount",
+        txnCurrency: true,
+      },
       {
         key: "match_status",
         label: "Match status",
@@ -69,7 +81,13 @@ export const BANKING_REPORT_ENTITIES: ReportEntity[] = [
           when coalesce(dep.n, 0) = 0 then 'untied' else 'tied' end`,
         options: ["tied", "untied", "not_posted"],
       },
-      { key: "deposit_total", label: "Deposit total", kind: "money", expr: "coalesce(dep.total, 0)", txnCurrency: true },
+      {
+        key: "deposit_total",
+        label: "Deposit total",
+        kind: "money",
+        expr: "coalesce(dep.total, 0)",
+        txnCurrency: true,
+      },
       {
         key: "gap",
         label: "Gap",
@@ -78,7 +96,13 @@ export const BANKING_REPORT_ENTITIES: ReportEntity[] = [
           when b.status = 'posted' then b.net_amount else 0 end`,
         txnCurrency: true,
       },
-      { key: "accrued_amount", label: "In-transit accrued", kind: "money", expr: "coalesce(a.amount, 0)", txnCurrency: true },
+      {
+        key: "accrued_amount",
+        label: "In-transit accrued",
+        kind: "money",
+        expr: "coalesce(a.amount, 0)",
+        txnCurrency: true,
+      },
     ],
   },
 ];

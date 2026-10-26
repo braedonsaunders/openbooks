@@ -1,74 +1,78 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { DOC_KIND_FEATURE } from './document-kinds'
-import { MODULE_BY_KEY } from './nav/registry'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { DOC_KIND_FEATURE } from "./document-kinds";
+import { MODULE_BY_KEY } from "./nav/registry";
 import {
   moduleDrawerHref,
   TRANSACTION_KINDS,
   TRANSACTION_MODULE_BY_KIND,
   transactionModule,
-} from './txn-links'
+} from "./txn-links";
 
 interface CapturedQuery {
-  text: string
-  values: unknown[]
+  text: string;
+  values: unknown[];
 }
 
 interface SearchFixture {
-  id: string
-  kind: string
-  document_number: string
-  reference_number: null
-  memo: string
-  status: 'posted'
-  party_name: string | null
-  amount: string
-  subsidiary_id: string
-  project_id: string | null
+  id: string;
+  kind: string;
+  document_number: string;
+  reference_number: null;
+  memo: string;
+  status: "posted";
+  party_name: string | null;
+  amount: string;
+  subsidiary_id: string;
+  project_id: string | null;
 }
 
 interface ProjectFixture {
-  id: string
-  code: string | null
-  name: string
+  id: string;
+  code: string | null;
+  name: string;
 }
 
 interface JournalEntryFixture {
-  id: string
-  entry_number: string
-  memo: string | null
-  status: string
-  subsidiary_id: string
+  id: string;
+  entry_number: string;
+  memo: string | null;
+  status: string;
+  subsidiary_id: string;
   /** Subsidiaries of the entry's lines — visibility follows these, never the header. */
-  lineSubsidiaryIds: string[]
+  lineSubsidiaryIds: string[];
 }
 
 interface SearchTestState {
-  disabledKinds: string[]
-  documents: SearchFixture[]
-  entries: JournalEntryFixture[]
-  featureChecks: string[]
-  features: Record<string, boolean>
-  kindFeatures: Record<string, string>
-  projectRows: ProjectFixture[]
-  queries: CapturedQuery[]
+  disabledKinds: string[];
+  documents: SearchFixture[];
+  entries: JournalEntryFixture[];
+  featureChecks: string[];
+  features: Record<string, boolean>;
+  kindFeatures: Record<string, string>;
+  projectRows: ProjectFixture[];
+  queries: CapturedQuery[];
 }
 
-const ALLOWED_SUBSIDIARY = '00000000-0000-0000-0000-000000000001'
-const DENIED_SUBSIDIARY = '00000000-0000-0000-0000-000000000002'
-const PROJECT_ID = '00000000-0000-0000-0000-000000000003'
+const ALLOWED_SUBSIDIARY = "00000000-0000-0000-0000-000000000001";
+const DENIED_SUBSIDIARY = "00000000-0000-0000-0000-000000000002";
+const PROJECT_ID = "00000000-0000-0000-0000-000000000003";
 
 const PROJECT_FIXTURE: ProjectFixture = {
   id: PROJECT_ID,
-  code: 'PRJ-001',
-  name: 'Headquarters Build-out',
-}
+  code: "PRJ-001",
+  name: "Headquarters Build-out",
+};
 
-const TRANSACTION_PERMISSIONS = [...new Set(TRANSACTION_KINDS.flatMap((kind) => {
-  const permission = transactionModule(kind)?.requiredPermission
-  return permission ? [permission] : []
-}))]
+const TRANSACTION_PERMISSIONS = [
+  ...new Set(
+    TRANSACTION_KINDS.flatMap((kind) => {
+      const permission = transactionModule(kind)?.requiredPermission;
+      return permission ? [permission] : [];
+    }),
+  ),
+];
 
 const BASE_DOCUMENTS: SearchFixture[] = TRANSACTION_KINDS.map((kind, index) => ({
   id: kind,
@@ -76,42 +80,42 @@ const BASE_DOCUMENTS: SearchFixture[] = TRANSACTION_KINDS.map((kind, index) => (
   document_number: kind.toUpperCase(),
   reference_number: null,
   memo: `${kind}:memo:confidential`,
-  status: 'posted',
+  status: "posted",
   party_name: `${kind}:counterparty:confidential`,
   amount: `${100 + index}.25`,
   subsidiary_id: ALLOWED_SUBSIDIARY,
-  project_id: kind === 'project_charge' ? PROJECT_ID : null,
-}))
-const customerPayment = BASE_DOCUMENTS.find((row) => row.kind === 'customer_payment')!
-customerPayment.party_name = null
-customerPayment.memo = 'customer_payment:memo:confidential'
-customerPayment.amount = '902.22'
-const vendorPayment = BASE_DOCUMENTS.find((row) => row.kind === 'vendor_payment')!
-vendorPayment.party_name = 'vendor_payment:counterparty:confidential'
-vendorPayment.amount = '701.11'
+  project_id: kind === "project_charge" ? PROJECT_ID : null,
+}));
+const customerPayment = BASE_DOCUMENTS.find((row) => row.kind === "customer_payment")!;
+customerPayment.party_name = null;
+customerPayment.memo = "customer_payment:memo:confidential";
+customerPayment.amount = "902.22";
+const vendorPayment = BASE_DOCUMENTS.find((row) => row.kind === "vendor_payment")!;
+vendorPayment.party_name = "vendor_payment:counterparty:confidential";
+vendorPayment.amount = "701.11";
 
 const UNMAPPED_DOCUMENT: SearchFixture = {
-  id: 'unmapped_document',
-  kind: 'unmapped_document',
-  document_number: 'UNMAPPED',
+  id: "unmapped_document",
+  kind: "unmapped_document",
+  document_number: "UNMAPPED",
   reference_number: null,
-  memo: 'unmapped:memo:confidential',
-  status: 'posted',
-  party_name: 'unmapped:counterparty:confidential',
-  amount: '999.99',
+  memo: "unmapped:memo:confidential",
+  status: "posted",
+  party_name: "unmapped:counterparty:confidential",
+  amount: "999.99",
   subsidiary_id: ALLOWED_SUBSIDIARY,
   project_id: null,
-}
+};
 
-const stateKey = Symbol.for('openbooks.search-permission-test')
+const stateKey = Symbol.for("openbooks.search-permission-test");
 const JE_POSTED: JournalEntryFixture = {
-  id: 'je-posted',
-  entry_number: 'JE-26188661',
-  memo: 'je-posted:memo:confidential',
-  status: 'posted',
+  id: "je-posted",
+  entry_number: "JE-26188661",
+  memo: "je-posted:memo:confidential",
+  status: "posted",
   subsidiary_id: ALLOWED_SUBSIDIARY,
   lineSubsidiaryIds: [ALLOWED_SUBSIDIARY],
-}
+};
 
 const state: SearchTestState = {
   disabledKinds: [],
@@ -122,12 +126,12 @@ const state: SearchTestState = {
   kindFeatures: { ...DOC_KIND_FEATURE } as Record<string, string>,
   projectRows: [PROJECT_FIXTURE],
   queries: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
       function isFragment(value) {
         return value && typeof value === 'object'
@@ -164,7 +168,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.search-permission-test')]
 
@@ -236,7 +240,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       export function can(authz, permission) {
         if (authz.permissions.has('*') || authz.permissions.has(permission)) return true
@@ -248,13 +252,13 @@ const mockSources = new Map<string, string>([
   [
     // Self-service expense search is covered with the expense routes; these
     // readers search through module grants alone.
-    'mock:expense-access',
+    "mock:expense-access",
     `
       export async function expenseAccess() { return null }
     `,
   ],
   [
-    'mock:documents',
+    "mock:documents",
     `
       const state = globalThis[Symbol.for('openbooks.search-permission-test')]
       export async function disabledDocKinds() {
@@ -266,7 +270,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:features',
+    "mock:features",
     `
       const state = globalThis[Symbol.for('openbooks.search-permission-test')]
       export async function isFeatureEnabled(_orgId, feature) {
@@ -280,44 +284,46 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
-      ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/platform/db', 'mock:db'],
-      ['./authz', 'mock:authz'],
-      ['./expense-access', 'mock:expense-access'],
-      ['./documents.ts', 'mock:documents'],
-      ['./features', 'mock:features'],
-    ]).get(specifier)
+      ["drizzle-orm", "mock:drizzle"],
+      ["@openbooks/engine/platform/db", "mock:db"],
+      ["./authz", "mock:authz"],
+      ["./expense-access", "mock:expense-access"],
+      ["./documents.ts", "mock:documents"],
+      ["./features", "mock:features"],
+    ]).get(specifier);
     // The './documents' mock stands in for web/lib/documents.ts only: schema
     // table modules (schema/src/*.ts) import the same literal specifier for
     // the real documents table, and hijacking those breaks their bindings.
-    if (mockUrl === 'mock:documents' && (context.parentURL ?? '').includes('/schema/src/')) {
-      return nextResolve(specifier, context)
+    if (mockUrl === "mock:documents" && (context.parentURL ?? "").includes("/schema/src/")) {
+      return nextResolve(specifier, context);
     }
-    if (mockUrl) return { url: mockUrl, shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (mockUrl) return { url: mockUrl, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const searchUrl = './search.ts?permission-regression'
-const { globalSearch, resolveRecentCoreRecords } = await import(searchUrl) as typeof import('./search.ts')
-hooks.deregister()
+const searchUrl = "./search.ts?permission-regression";
+const { globalSearch, resolveRecentCoreRecords } = (await import(
+  searchUrl
+)) as typeof import("./search.ts");
+hooks.deregister();
 
 function authz(...permissions: string[]): Parameters<typeof globalSearch>[0] {
   return {
-    user: { orgId: 'org-1' },
+    user: { orgId: "org-1" },
     permissions: new Set(permissions),
     allowedSubsidiaryIds: null,
-  } as unknown as Parameters<typeof globalSearch>[0]
+  } as unknown as Parameters<typeof globalSearch>[0];
 }
 
 function scopedAuthz(
@@ -327,7 +333,7 @@ function scopedAuthz(
   return {
     ...authz(...permissions),
     allowedSubsidiaryIds: new Set(allowedSubsidiaryIds),
-  }
+  };
 }
 
 function reset({
@@ -337,571 +343,626 @@ function reset({
   features = {},
   projects = [PROJECT_FIXTURE],
 }: {
-  disabledKinds?: string[]
-  documents?: SearchFixture[]
-  entries?: JournalEntryFixture[]
-  features?: Record<string, boolean>
-  projects?: ProjectFixture[]
+  disabledKinds?: string[];
+  documents?: SearchFixture[];
+  entries?: JournalEntryFixture[];
+  features?: Record<string, boolean>;
+  projects?: ProjectFixture[];
 } = {}): void {
-  state.disabledKinds = disabledKinds
-  state.documents = documents
-  state.entries = entries
-  state.featureChecks.length = 0
-  state.features = { banking: true, fieldTickets: true, projects: true, ...features }
-  state.kindFeatures = { ...DOC_KIND_FEATURE } as Record<string, string>
-  state.projectRows = projects
-  state.queries.length = 0
+  state.disabledKinds = disabledKinds;
+  state.documents = documents;
+  state.entries = entries;
+  state.featureChecks.length = 0;
+  state.features = { banking: true, fieldTickets: true, projects: true, ...features };
+  state.kindFeatures = { ...DOC_KIND_FEATURE } as Record<string, string>;
+  state.projectRows = projects;
+  state.queries.length = 0;
 }
 
 function transactionHits(response: Awaited<ReturnType<typeof globalSearch>>) {
-  return response.groups.find((group) => group.type === 'transaction')?.hits ?? []
+  return response.groups.find((group) => group.type === "transaction")?.hits ?? [];
 }
 
 function transactionHitIds(response: Awaited<ReturnType<typeof globalSearch>>): string[] {
-  return transactionHits(response).map((hit) => hit.id)
+  return transactionHits(response).map((hit) => hit.id);
 }
 
 function transactionQuery(): CapturedQuery {
-  const matches = state.queries.filter((query) => query.text.includes('with cand as'))
-  assert.equal(matches.length, 1, 'global search must issue exactly one transaction query')
-  return matches[0]!
+  const matches = state.queries.filter((query) => query.text.includes("with cand as"));
+  assert.equal(matches.length, 1, "global search must issue exactly one transaction query");
+  return matches[0]!;
 }
 
 function boundKinds(query: CapturedQuery): string[] {
-  const known = new Set(state.documents.map((row) => row.kind))
-  return [...new Set(query.values.filter((value): value is string => (
-    typeof value === 'string' && known.has(value)
-  )))]
+  const known = new Set(state.documents.map((row) => row.kind));
+  return [
+    ...new Set(
+      query.values.filter(
+        (value): value is string => typeof value === "string" && known.has(value),
+      ),
+    ),
+  ];
 }
 
 function fixture(kind: string): SearchFixture {
-  const row = BASE_DOCUMENTS.find((candidate) => candidate.kind === kind)
-  assert.ok(row, `missing registry-derived fixture for ${kind}`)
-  return row
+  const row = BASE_DOCUMENTS.find((candidate) => candidate.kind === kind);
+  assert.ok(row, `missing registry-derived fixture for ${kind}`);
+  return row;
 }
 
 function kindsForPermission(permission: string): string[] {
-  return TRANSACTION_KINDS.filter((kind) => transactionModule(kind)?.requiredPermission === permission)
+  return TRANSACTION_KINDS.filter(
+    (kind) => transactionModule(kind)?.requiredPermission === permission,
+  );
 }
 
 function nativeHref(kind: string): string {
   const href = moduleDrawerHref(kind, kind, {
-    projectId: kind === 'project_charge' ? PROJECT_ID : null,
-  })
-  assert.ok(href, `missing native href for ${kind}`)
-  return href
+    projectId: kind === "project_charge" ? PROJECT_ID : null,
+  });
+  assert.ok(href, `missing native href for ${kind}`);
+  return href;
 }
 
-test('fixtures derive from the runtime transaction registry and every kind has an authorized native destination', () => {
-  assert.deepEqual(BASE_DOCUMENTS.map((row) => row.kind), [...TRANSACTION_KINDS])
+test("fixtures derive from the runtime transaction registry and every kind has an authorized native destination", () => {
+  assert.deepEqual(
+    BASE_DOCUMENTS.map((row) => row.kind),
+    [...TRANSACTION_KINDS],
+  );
   for (const kind of TRANSACTION_KINDS) {
-    const moduleKey = TRANSACTION_MODULE_BY_KIND[kind]
-    const module = MODULE_BY_KEY.get(moduleKey)
-    assert.ok(module, `${kind}: missing ${moduleKey}`)
-    assert.ok(module.requiredPermission, `${kind}: native module must authorize reads`)
-    assert.ok(module.recordTarget, `${kind}: native module must address records`)
-    const domainFeature = DOC_KIND_FEATURE[kind]
-    if (domainFeature) assert.equal(module.featureKey, domainFeature, `${kind}: domain feature drift`)
+    const moduleKey = TRANSACTION_MODULE_BY_KIND[kind];
+    const module = MODULE_BY_KEY.get(moduleKey);
+    assert.ok(module, `${kind}: missing ${moduleKey}`);
+    assert.ok(module.requiredPermission, `${kind}: native module must authorize reads`);
+    assert.ok(module.recordTarget, `${kind}: native module must address records`);
+    const domainFeature = DOC_KIND_FEATURE[kind];
+    if (domainFeature)
+      assert.equal(module.featureKey, domainFeature, `${kind}: domain feature drift`);
 
-    const url = new URL(nativeHref(kind), 'https://openbooks.example')
+    const url = new URL(nativeHref(kind), "https://openbooks.example");
     assert.ok(
       url.pathname === module.href || url.pathname.startsWith(`${module.href}/`),
       `${kind}: ${url.pathname} must stay inside ${module.href}`,
-    )
-    if (kind !== 'journal') assert.notEqual(url.pathname, '/journal', `${kind}: no GL fallback`)
+    );
+    if (kind !== "journal") assert.notEqual(url.pathname, "/journal", `${kind}: no GL fallback`);
   }
-})
+});
 
-test('search follows shared navigation policy and metadata instead of a private copy', async () => {
-  const module = MODULE_BY_KEY.get(TRANSACTION_MODULE_BY_KIND.vendor_payment)
-  assert.ok(module)
+test("search follows shared navigation policy and metadata instead of a private copy", async () => {
+  const module = MODULE_BY_KEY.get(TRANSACTION_MODULE_BY_KIND.vendor_payment);
+  assert.ok(module);
   const original = {
     href: module.href,
     label: module.label,
     iconKey: module.iconKey,
     requiredPermission: module.requiredPermission,
-  }
+  };
 
   Object.assign(module, {
-    href: '/mutated-vendor-payments',
-    label: 'Mutated Vendor Payments',
-    iconKey: 'activity',
-    requiredPermission: 'ar.pay',
-  })
+    href: "/mutated-vendor-payments",
+    label: "Mutated Vendor Payments",
+    iconKey: "activity",
+    requiredPermission: "ar.pay",
+  });
   try {
-    reset({ documents: [fixture('vendor_payment')] })
-    const stalePermission = await globalSearch(authz('ap.pay'), 'needle')
-    assert.deepEqual(transactionHitIds(stalePermission), [])
-    assert.equal(state.queries.filter((query) => query.text.includes('with cand as')).length, 0)
+    reset({ documents: [fixture("vendor_payment")] });
+    const stalePermission = await globalSearch(authz("ap.pay"), "needle");
+    assert.deepEqual(transactionHitIds(stalePermission), []);
+    assert.equal(state.queries.filter((query) => query.text.includes("with cand as")).length, 0);
 
-    reset({ documents: [fixture('vendor_payment')] })
-    const sharedPermission = await globalSearch(authz('ar.pay'), 'needle')
-    const hit = transactionHits(sharedPermission)[0]
-    assert.equal(hit?.id, 'vendor_payment')
-    assert.equal(hit?.href, '/mutated-vendor-payments?payment=vendor_payment')
-    assert.equal(hit?.title, 'Mutated Vendor Payments VENDOR_PAYMENT')
-    assert.equal(hit?.iconKey, 'activity')
+    reset({ documents: [fixture("vendor_payment")] });
+    const sharedPermission = await globalSearch(authz("ar.pay"), "needle");
+    const hit = transactionHits(sharedPermission)[0];
+    assert.equal(hit?.id, "vendor_payment");
+    assert.equal(hit?.href, "/mutated-vendor-payments?payment=vendor_payment");
+    assert.equal(hit?.title, "Mutated Vendor Payments VENDOR_PAYMENT");
+    assert.equal(hit?.iconKey, "activity");
   } finally {
-    Object.assign(module, original)
+    Object.assign(module, original);
   }
-})
+});
 
-test('each transaction module permission exposes only its own document kinds', async () => {
+test("each transaction module permission exposes only its own document kinds", async () => {
   for (const permission of TRANSACTION_PERMISSIONS) {
-    const expectedKinds = kindsForPermission(permission)
-    reset()
-    const response = await globalSearch(authz(permission), 'needle')
-    assert.deepEqual(transactionHitIds(response), expectedKinds, permission)
+    const expectedKinds = kindsForPermission(permission);
+    reset();
+    const response = await globalSearch(authz(permission), "needle");
+    assert.deepEqual(transactionHitIds(response), expectedKinds, permission);
 
-    const query = transactionQuery()
-    assert.deepEqual(boundKinds(query), expectedKinds, `${permission}: SQL kind allowlist`)
+    const query = transactionQuery();
+    assert.deepEqual(boundKinds(query), expectedKinds, `${permission}: SQL kind allowlist`);
     assert.equal(
       query.text.match(/d\.kind in/g)?.length,
       5,
       `${permission}: both candidate legs, the line-description leg, the exact-number leg, and the final read must be permission-filtered`,
-    )
+    );
   }
-})
+});
 
-test('AP and AR documents open the list-owned native drawers, never cockpit routes', async () => {
-  reset()
-  const apHits = transactionHits(await globalSearch(authz('ap.read'), 'needle'))
-  const apByKind = Object.fromEntries(apHits.map((hit) => [hit.id, hit.href]))
-  for (const kind of ['vendor_bill', 'vendor_credit'] as const) {
-    assert.equal(apByKind[kind], `/ap/bills?doc=${kind}`)
-    assert.doesNotMatch(apByKind[kind]!, /^\/ap\?doc=/)
+test("AP and AR documents open the list-owned native drawers, never cockpit routes", async () => {
+  reset();
+  const apHits = transactionHits(await globalSearch(authz("ap.read"), "needle"));
+  const apByKind = Object.fromEntries(apHits.map((hit) => [hit.id, hit.href]));
+  for (const kind of ["vendor_bill", "vendor_credit"] as const) {
+    assert.equal(apByKind[kind], `/ap/bills?doc=${kind}`);
+    assert.doesNotMatch(apByKind[kind]!, /^\/ap\?doc=/);
   }
 
-  reset()
-  const arHits = transactionHits(await globalSearch(authz('ar.read'), 'needle'))
-  const arByKind = Object.fromEntries(arHits.map((hit) => [hit.id, hit.href]))
-  for (const kind of ['customer_invoice', 'customer_credit'] as const) {
-    assert.equal(arByKind[kind], `/ar/invoices?doc=${kind}`)
-    assert.doesNotMatch(arByKind[kind]!, /^\/ar\?doc=/)
+  reset();
+  const arHits = transactionHits(await globalSearch(authz("ar.read"), "needle"));
+  const arByKind = Object.fromEntries(arHits.map((hit) => [hit.id, hit.href]));
+  for (const kind of ["customer_invoice", "customer_credit"] as const) {
+    assert.equal(arByKind[kind], `/ar/invoices?doc=${kind}`);
+    assert.doesNotMatch(arByKind[kind]!, /^\/ar\?doc=/);
   }
-})
+});
 
-test('mixed and wildcard permissions compose with a native destination for every production kind', async () => {
-  reset()
-  const mixed = await globalSearch(authz('ap.read', 'ar.pay'), 'needle')
+test("mixed and wildcard permissions compose with a native destination for every production kind", async () => {
+  reset();
+  const mixed = await globalSearch(authz("ap.read", "ar.pay"), "needle");
   assert.deepEqual(transactionHitIds(mixed), [
-    ...kindsForPermission('ap.read'),
-    ...kindsForPermission('ar.pay'),
-  ])
+    ...kindsForPermission("ap.read"),
+    ...kindsForPermission("ar.pay"),
+  ]);
 
-  reset()
-  const superAdmin = await globalSearch(authz('*'), 'needle')
-  assert.deepEqual(transactionHitIds(superAdmin), [...TRANSACTION_KINDS])
-  assert.ok(!transactionHitIds(superAdmin).includes('unmapped_document'))
+  reset();
+  const superAdmin = await globalSearch(authz("*"), "needle");
+  assert.deepEqual(transactionHitIds(superAdmin), [...TRANSACTION_KINDS]);
+  assert.ok(!transactionHitIds(superAdmin).includes("unmapped_document"));
   for (const hit of transactionHits(superAdmin)) {
-    const module = transactionModule(hit.id)
-    assert.ok(module)
-    assert.equal(hit.href, nativeHref(hit.id))
-    assert.equal(hit.iconKey, module.iconKey)
-    assert.ok(hit.title.startsWith(`${module.label} `))
+    const module = transactionModule(hit.id);
+    assert.ok(module);
+    assert.equal(hit.href, nativeHref(hit.id));
+    assert.equal(hit.iconKey, module.iconKey);
+    assert.ok(hit.title.startsWith(`${module.label} `));
   }
-})
+});
 
-test('numeric amount candidates carry the same permission allowlist as text candidates', async () => {
-  reset()
-  const response = await globalSearch(authz('ap.read'), '12.34')
-  const expectedKinds = kindsForPermission('ap.read')
-  assert.deepEqual(transactionHitIds(response), expectedKinds)
+test("numeric amount candidates carry the same permission allowlist as text candidates", async () => {
+  reset();
+  const response = await globalSearch(authz("ap.read"), "12.34");
+  const expectedKinds = kindsForPermission("ap.read");
+  assert.deepEqual(transactionHitIds(response), expectedKinds);
 
-  const query = transactionQuery()
+  const query = transactionQuery();
   assert.equal(
     query.text.match(/d\.kind in/g)?.length,
     6,
-    'text, party, line-description, amount, exact-number, and final result legs must all be permission-filtered',
-  )
+    "text, party, line-description, amount, exact-number, and final result legs must all be permission-filtered",
+  );
   for (const kind of expectedKinds) {
-    assert.equal(query.values.filter((value) => value === kind).length, 6, kind)
+    assert.equal(query.values.filter((value) => value === kind).length, 6, kind);
   }
-})
+});
 
-test('malformed comma amounts stay text queries instead of inventing a number', async () => {
-  for (const ambiguous of ['1,2', '12,34', '1,23,4']) {
-    reset()
-    await globalSearch(authz('ap.read'), ambiguous)
-    const query = transactionQuery()
+test("malformed comma amounts stay text queries instead of inventing a number", async () => {
+  for (const ambiguous of ["1,2", "12,34", "1,23,4"]) {
+    reset();
+    await globalSearch(authz("ap.read"), ambiguous);
+    const query = transactionQuery();
     assert.equal(
       query.text.match(/d\.kind in/g)?.length,
       5,
       `${ambiguous}: text, party, line-description, exact-number, and final legs only — no amount leg`,
-    )
+    );
     assert.ok(
-      !query.values.some((value) => value === 12 || value === '12' || value === '12.34'),
+      !query.values.some((value) => value === 12 || value === "12" || value === "12.34"),
       `${ambiguous}: no invented amount bound`,
-    )
+    );
   }
-})
+});
 
-test('well-formed amounts bind exactly, never through Number', async () => {
-  reset()
-  await globalSearch(authz('ap.read'), '$1,234.56')
-  assert.ok(transactionQuery().values.includes('1234.56'), 'grouped amount binds its exact value')
+test("well-formed amounts bind exactly, never through Number", async () => {
+  reset();
+  await globalSearch(authz("ap.read"), "$1,234.56");
+  assert.ok(transactionQuery().values.includes("1234.56"), "grouped amount binds its exact value");
 
-  reset()
-  await globalSearch(authz('ap.read'), '9007199254740993')
-  const big = transactionQuery()
-  assert.equal(big.text.match(/d\.kind in/g)?.length, 6, 'huge input still runs the amount leg')
-  assert.ok(big.values.includes('9007199254740993'), 'amount binds exactly past 2^53')
-  assert.ok(!big.values.some((value) => value === 9007199254740992), 'no rounded float bound')
-})
+  reset();
+  await globalSearch(authz("ap.read"), "9007199254740993");
+  const big = transactionQuery();
+  assert.equal(big.text.match(/d\.kind in/g)?.length, 6, "huge input still runs the amount leg");
+  assert.ok(big.values.includes("9007199254740993"), "amount binds exactly past 2^53");
+  assert.ok(!big.values.some((value) => value === 9007199254740992), "no rounded float bound");
+});
 
-test('amounts display exactly, never through Number', async () => {
+test("amounts display exactly, never through Number", async () => {
   const big: SearchFixture = {
-    ...fixture('vendor_bill'),
-    id: 'vendor_bill-big',
-    document_number: 'BIG',
-    memo: 'big:memo',
+    ...fixture("vendor_bill"),
+    id: "vendor_bill-big",
+    document_number: "BIG",
+    memo: "big:memo",
     party_name: null,
-    amount: '9007199254740993',
-  }
-  reset({ documents: [big] })
-  const response = await globalSearch(authz('ap.read'), 'BIG')
+    amount: "9007199254740993",
+  };
+  reset({ documents: [big] });
+  const response = await globalSearch(authz("ap.read"), "BIG");
   assert.equal(
     transactionHits(response)[0]?.amount,
-    '9,007,199,254,740,993.00',
-    'past 2^53 the display must not round like a float',
-  )
+    "9,007,199,254,740,993.00",
+    "past 2^53 the display must not round like a float",
+  );
 
   const grouped: SearchFixture = {
-    ...fixture('vendor_bill'),
-    id: 'vendor_bill-grouped',
-    document_number: 'GROUPED',
-    memo: 'grouped:memo',
+    ...fixture("vendor_bill"),
+    id: "vendor_bill-grouped",
+    document_number: "GROUPED",
+    memo: "grouped:memo",
     party_name: null,
-    amount: '987654.32',
-  }
-  reset({ documents: [grouped] })
-  const groupedResponse = await globalSearch(authz('ap.read'), 'GROUPED')
-  assert.equal(groupedResponse.groups.length > 0 && transactionHits(groupedResponse)[0]?.amount, '987,654.32')
-})
+    amount: "987654.32",
+  };
+  reset({ documents: [grouped] });
+  const groupedResponse = await globalSearch(authz("ap.read"), "GROUPED");
+  assert.equal(
+    groupedResponse.groups.length > 0 && transactionHits(groupedResponse)[0]?.amount,
+    "987,654.32",
+  );
+});
 
-test('feature-disabled document kinds remain hidden inside an allowed module', async () => {
-  reset({ disabledKinds: ['pay_run'] })
-  const response = await globalSearch(authz('gl.read', 'payroll.read'), 'needle')
-  assert.deepEqual(transactionHitIds(response), kindsForPermission('gl.read'))
-  assert.deepEqual(boundKinds(transactionQuery()), kindsForPermission('gl.read'))
-})
+test("feature-disabled document kinds remain hidden inside an allowed module", async () => {
+  reset({ disabledKinds: ["pay_run"] });
+  const response = await globalSearch(authz("gl.read", "payroll.read"), "needle");
+  assert.deepEqual(transactionHitIds(response), kindsForPermission("gl.read"));
+  assert.deepEqual(boundKinds(transactionQuery()), kindsForPermission("gl.read"));
+});
 
-test('field tickets require time access and their feature before linking to the native drawer', async () => {
-  reset({ features: { fieldTickets: false } })
-  const disabled = await globalSearch(authz('time.read'), 'needle')
-  assert.deepEqual(transactionHitIds(disabled), [])
-  assert.equal(state.queries.filter((query) => query.text.includes('with cand as')).length, 0)
+test("field tickets require time access and their feature before linking to the native drawer", async () => {
+  reset({ features: { fieldTickets: false } });
+  const disabled = await globalSearch(authz("time.read"), "needle");
+  assert.deepEqual(transactionHitIds(disabled), []);
+  assert.equal(state.queries.filter((query) => query.text.includes("with cand as")).length, 0);
 
-  reset()
-  const enabled = await globalSearch(authz('time.read'), 'needle')
-  assert.deepEqual(transactionHitIds(enabled), ['field_ticket'])
-  assert.equal(transactionHits(enabled)[0]?.href, '/field-tickets?ticket=field_ticket')
+  reset();
+  const enabled = await globalSearch(authz("time.read"), "needle");
+  assert.deepEqual(transactionHitIds(enabled), ["field_ticket"]);
+  assert.equal(transactionHits(enabled)[0]?.href, "/field-tickets?ticket=field_ticket");
 
-  reset()
-  const denied = await globalSearch(authz('projects.read'), 'needle')
-  assert.ok(!transactionHitIds(denied).includes('field_ticket'))
-})
+  reset();
+  const denied = await globalSearch(authz("projects.read"), "needle");
+  assert.ok(!transactionHitIds(denied).includes("field_ticket"));
+});
 
-test('banking-off suppresses only Banking search results through navigation visibility', async () => {
-  const bankingKinds = kindsForPermission('banking.read')
-  reset({ features: { banking: false } })
-  const mixed = await globalSearch(authz('banking.read', 'ap.read'), 'needle')
-  assert.deepEqual(transactionHitIds(mixed), kindsForPermission('ap.read'))
-  assert.deepEqual(boundKinds(transactionQuery()), kindsForPermission('ap.read'))
-  assert.ok(state.featureChecks.includes('banking'))
+test("banking-off suppresses only Banking search results through navigation visibility", async () => {
+  const bankingKinds = kindsForPermission("banking.read");
+  reset({ features: { banking: false } });
+  const mixed = await globalSearch(authz("banking.read", "ap.read"), "needle");
+  assert.deepEqual(transactionHitIds(mixed), kindsForPermission("ap.read"));
+  assert.deepEqual(boundKinds(transactionQuery()), kindsForPermission("ap.read"));
+  assert.ok(state.featureChecks.includes("banking"));
 
-  reset({ features: { banking: false } })
-  const bankingOnly = await globalSearch(authz('banking.read'), 'needle')
-  assert.deepEqual(transactionHitIds(bankingOnly), [])
-  assert.equal(state.queries.filter((query) => query.text.includes('with cand as')).length, 0)
-  assert.ok(state.featureChecks.includes('banking'))
+  reset({ features: { banking: false } });
+  const bankingOnly = await globalSearch(authz("banking.read"), "needle");
+  assert.deepEqual(transactionHitIds(bankingOnly), []);
+  assert.equal(state.queries.filter((query) => query.text.includes("with cand as")).length, 0);
+  assert.ok(state.featureChecks.includes("banking"));
 
-  reset()
-  const enabled = await globalSearch(authz('banking.read'), 'needle')
-  assert.deepEqual(transactionHitIds(enabled), bankingKinds)
+  reset();
+  const enabled = await globalSearch(authz("banking.read"), "needle");
+  assert.deepEqual(transactionHitIds(enabled), bankingKinds);
   assert.deepEqual(
     transactionHits(enabled).map((hit) => hit.href),
     bankingKinds.map(nativeHref),
-  )
-})
+  );
+});
 
-test('vendor payments and customer receipts keep separate permissions, destinations, and secrets', async () => {
-  reset()
-  const apResponse = await globalSearch(authz('ap.pay'), 'needle')
-  const apHits = transactionHits(apResponse)
-  assert.deepEqual(apHits.map((hit) => hit.id), ['vendor_payment'])
-  assert.equal(apHits[0]?.href, '/payments?payment=vendor_payment')
-  assert.equal(apHits[0]?.subtitle, fixture('vendor_payment').party_name)
-  assert.equal(apHits[0]?.amount, '701.11')
-  const apPayload = JSON.stringify(apResponse)
-  assert.ok(!apPayload.includes(fixture('customer_payment').memo))
-  assert.ok(!apPayload.includes('902.22'))
+test("vendor payments and customer receipts keep separate permissions, destinations, and secrets", async () => {
+  reset();
+  const apResponse = await globalSearch(authz("ap.pay"), "needle");
+  const apHits = transactionHits(apResponse);
+  assert.deepEqual(
+    apHits.map((hit) => hit.id),
+    ["vendor_payment"],
+  );
+  assert.equal(apHits[0]?.href, "/payments?payment=vendor_payment");
+  assert.equal(apHits[0]?.subtitle, fixture("vendor_payment").party_name);
+  assert.equal(apHits[0]?.amount, "701.11");
+  const apPayload = JSON.stringify(apResponse);
+  assert.ok(!apPayload.includes(fixture("customer_payment").memo));
+  assert.ok(!apPayload.includes("902.22"));
 
-  reset()
-  const arResponse = await globalSearch(authz('ar.pay'), 'needle')
-  const arHits = transactionHits(arResponse)
-  assert.deepEqual(arHits.map((hit) => hit.id), ['customer_payment'])
-  assert.equal(arHits[0]?.href, '/receipts?payment=customer_payment')
-  assert.equal(arHits[0]?.subtitle, fixture('customer_payment').memo)
-  assert.equal(arHits[0]?.amount, '902.22')
-  const arPayload = JSON.stringify(arResponse)
-  assert.ok(!arPayload.includes(String(fixture('vendor_payment').party_name)))
-  assert.ok(!arPayload.includes('701.11'))
-})
+  reset();
+  const arResponse = await globalSearch(authz("ar.pay"), "needle");
+  const arHits = transactionHits(arResponse);
+  assert.deepEqual(
+    arHits.map((hit) => hit.id),
+    ["customer_payment"],
+  );
+  assert.equal(arHits[0]?.href, "/receipts?payment=customer_payment");
+  assert.equal(arHits[0]?.subtitle, fixture("customer_payment").memo);
+  assert.equal(arHits[0]?.amount, "902.22");
+  const arPayload = JSON.stringify(arResponse);
+  assert.ok(!arPayload.includes(String(fixture("vendor_payment").party_name)));
+  assert.ok(!arPayload.includes("701.11"));
+});
 
-test('subsidiary restrictions fence documents before sensitive fields are returned', async () => {
+test("subsidiary restrictions fence documents before sensitive fields are returned", async () => {
   const deniedDocument: SearchFixture = {
-    ...fixture('vendor_bill'),
-    id: 'vendor_bill-denied-subsidiary',
-    document_number: 'DENIED-SUBSIDIARY',
-    memo: 'denied-subsidiary:memo:confidential',
-    party_name: 'denied-subsidiary:counterparty:confidential',
-    amount: '987654.32',
+    ...fixture("vendor_bill"),
+    id: "vendor_bill-denied-subsidiary",
+    document_number: "DENIED-SUBSIDIARY",
+    memo: "denied-subsidiary:memo:confidential",
+    party_name: "denied-subsidiary:counterparty:confidential",
+    amount: "987654.32",
     subsidiary_id: DENIED_SUBSIDIARY,
-  }
-  reset({ documents: [...BASE_DOCUMENTS, UNMAPPED_DOCUMENT, deniedDocument] })
+  };
+  reset({ documents: [...BASE_DOCUMENTS, UNMAPPED_DOCUMENT, deniedDocument] });
 
-  const response = await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], 'ap.read'), 'needle')
-  assert.deepEqual(transactionHitIds(response), kindsForPermission('ap.read'))
-  const payload = JSON.stringify(response)
-  assert.ok(!payload.includes(deniedDocument.memo))
-  assert.ok(!payload.includes(String(deniedDocument.party_name)))
-  assert.ok(!payload.includes(Number(deniedDocument.amount).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })))
+  const response = await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], "ap.read"), "needle");
+  assert.deepEqual(transactionHitIds(response), kindsForPermission("ap.read"));
+  const payload = JSON.stringify(response);
+  assert.ok(!payload.includes(deniedDocument.memo));
+  assert.ok(!payload.includes(String(deniedDocument.party_name)));
+  assert.ok(
+    !payload.includes(
+      Number(deniedDocument.amount).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    ),
+  );
 
-  const query = transactionQuery()
+  const query = transactionQuery();
   assert.equal(
     query.text.match(/d\.subsidiary_id = any/g)?.length,
     5,
-    'both text candidates, the line-description leg, the exact-number leg, and the final sensitive-field read must be subsidiary scoped',
-  )
-  assert.ok(query.values.includes(`{${ALLOWED_SUBSIDIARY}}`))
+    "both text candidates, the line-description leg, the exact-number leg, and the final sensitive-field read must be subsidiary scoped",
+  );
+  assert.ok(query.values.includes(`{${ALLOWED_SUBSIDIARY}}`));
 
-  reset({ documents: [deniedDocument] })
-  const noSubsidiaries = await globalSearch(scopedAuthz([], 'ap.read'), 'needle')
-  assert.deepEqual(transactionHitIds(noSubsidiaries), [])
-  assert.match(transactionQuery().text, /and false/)
-})
+  reset({ documents: [deniedDocument] });
+  const noSubsidiaries = await globalSearch(scopedAuthz([], "ap.read"), "needle");
+  assert.deepEqual(transactionHitIds(noSubsidiaries), []);
+  assert.match(transactionQuery().text, /and false/);
+});
 
-test('subsidiary-aware contacts, accounts, and projects use their canonical scope semantics', async () => {
-  reset()
+test("subsidiary-aware contacts, accounts, and projects use their canonical scope semantics", async () => {
+  reset();
   await globalSearch(
-    scopedAuthz([ALLOWED_SUBSIDIARY], 'parties.read', 'gl.read', 'projects.read'),
-    'needle',
-  )
+    scopedAuthz([ALLOWED_SUBSIDIARY], "parties.read", "gl.read", "projects.read"),
+    "needle",
+  );
 
-  const contacts = state.queries.find((query) => query.text.includes('select p.id, p.display_name'))
-  const accounts = state.queries.find((query) => query.text.includes('select id, number, name, type from accounts'))
-  const projects = state.queries.find((query) => query.text.includes('select id, code, name from projects'))
-  assert.ok(contacts)
-  assert.ok(accounts)
-  assert.ok(projects)
-  assert.match(contacts.text, /p\.subsidiary_id is null or p\.subsidiary_id = any/)
-  assert.match(accounts.text, /subsidiary_id is null or subsidiary_id = any/)
-  assert.match(projects.text, /subsidiary_id = any/)
-  assert.doesNotMatch(projects.text, /subsidiary_id is null/)
-})
-
+  const contacts = state.queries.find((query) =>
+    query.text.includes("select p.id, p.display_name"),
+  );
+  const accounts = state.queries.find((query) =>
+    query.text.includes("select id, number, name, type from accounts"),
+  );
+  const projects = state.queries.find((query) =>
+    query.text.includes("select id, code, name from projects"),
+  );
+  assert.ok(contacts);
+  assert.ok(accounts);
+  assert.ok(projects);
+  assert.match(contacts.text, /p\.subsidiary_id is null or p\.subsidiary_id = any/);
+  assert.match(accounts.text, /subsidiary_id is null or subsidiary_id = any/);
+  assert.match(projects.text, /subsidiary_id = any/);
+  assert.doesNotMatch(projects.text, /subsidiary_id is null/);
+});
 
 function projectGroup(response: Awaited<ReturnType<typeof globalSearch>>) {
-  return response.groups.find((group) => group.type === 'project')
+  return response.groups.find((group) => group.type === "project");
 }
 
-test('project hits open the native projects drawer through the query-parameter record target', async () => {
-  reset()
-  const response = await globalSearch(authz('projects.read'), 'headquarters')
-  const hit = projectGroup(response)?.hits[0]
-  assert.ok(hit, 'an authorized project search must surface the project group')
+test("project hits open the native projects drawer through the query-parameter record target", async () => {
+  reset();
+  const response = await globalSearch(authz("projects.read"), "headquarters");
+  const hit = projectGroup(response)?.hits[0];
+  assert.ok(hit, "an authorized project search must surface the project group");
   assert.deepEqual(hit, {
     id: PROJECT_ID,
-    type: 'project',
+    type: "project",
     title: PROJECT_FIXTURE.name,
     subtitle: PROJECT_FIXTURE.code,
     href: `/projects?project=${PROJECT_ID}`,
-    iconKey: 'timer',
-  })
+    iconKey: "timer",
+  });
 
   // The drawer contract is a query parameter on the module list route; a
   // deep path (/projects/<id>) has no page and strands the user on a 404.
-  assert.equal(new URL(hit.href, 'https://openbooks.example').pathname, '/projects')
-  assert.doesNotMatch(hit.href, /^\/projects\//)
-})
+  assert.equal(new URL(hit.href, "https://openbooks.example").pathname, "/projects");
+  assert.doesNotMatch(hit.href, /^\/projects\//);
+});
 
-test('project hits stay gated by permission and the projects feature flag', async () => {
-  reset()
-  const denied = await globalSearch(authz(), 'needle')
-  assert.ok(!projectGroup(denied))
-  assert.ok(!state.queries.some((query) => query.text.includes('select id, code, name from projects')))
+test("project hits stay gated by permission and the projects feature flag", async () => {
+  reset();
+  const denied = await globalSearch(authz(), "needle");
+  assert.ok(!projectGroup(denied));
+  assert.ok(
+    !state.queries.some((query) => query.text.includes("select id, code, name from projects")),
+  );
 
-  reset({ features: { projects: false } })
-  const featureOff = await globalSearch(authz('projects.read'), 'needle')
-  assert.ok(!projectGroup(featureOff))
-  assert.ok(state.featureChecks.includes('projects'))
-  assert.ok(!state.queries.some((query) => query.text.includes('select id, code, name from projects')))
-})
+  reset({ features: { projects: false } });
+  const featureOff = await globalSearch(authz("projects.read"), "needle");
+  assert.ok(!projectGroup(featureOff));
+  assert.ok(state.featureChecks.includes("projects"));
+  assert.ok(
+    !state.queries.some((query) => query.text.includes("select id, code, name from projects")),
+  );
+});
 
 // An exact document number must escape the recency-capped fuzzy
 // legs (the newest-200 cap excluded old exact rows and ranked unstably as
 // new documents arrived) and order first.
-test('exact document numbers bypass the candidate cap and order first', async () => {
-  reset()
-  const response = await globalSearch(authz('ap.pay'), 'VENDOR_PAYMENT')
-  assert.ok(transactionHitIds(response).includes('vendor_payment'))
+test("exact document numbers bypass the candidate cap and order first", async () => {
+  reset();
+  const response = await globalSearch(authz("ap.pay"), "VENDOR_PAYMENT");
+  assert.ok(transactionHitIds(response).includes("vendor_payment"));
 
-  const query = transactionQuery()
-  assert.match(query.text, /d\.document_number = \?/, 'exact-equality candidate leg')
+  const query = transactionQuery();
+  assert.match(query.text, /d\.document_number = \?/, "exact-equality candidate leg");
   assert.match(
     query.text,
     /order by \(d\.document_number = \? or d\.external_ref = \?\) desc/,
-    'exact matches order before fuzzy neighbors',
-  )
-  assert.ok(query.values.includes('VENDOR_PAYMENT'), 'exact leg binds the raw query')
-})
+    "exact matches order before fuzzy neighbors",
+  );
+  assert.ok(query.values.includes("VENDOR_PAYMENT"), "exact leg binds the raw query");
+});
 
 // Journal entries were unindexed — an exact JE number searched
 // total zero because only documents was queried. Entries surface inside the
 // transactions group through the shared journal-entry drawer.
-test('journal entries are indexed and open the shared entry drawer', async () => {
-  reset({ entries: [JE_POSTED] })
-  const response = await globalSearch(authz('gl.read'), 'JE-26188661')
-  const hits = transactionHits(response)
-  const hit = hits.find((candidate) => candidate.id === 'je-posted')
-  assert.ok(hit, 'the exact journal entry must surface')
-  assert.equal(hit.title, 'Journal JE-26188661')
-  assert.equal(hit.href, '/journal?journalEntry=je-posted')
-  assert.equal(hit.iconKey, 'journal')
-  assert.equal(hit.subtitle, 'je-posted:memo:confidential')
+test("journal entries are indexed and open the shared entry drawer", async () => {
+  reset({ entries: [JE_POSTED] });
+  const response = await globalSearch(authz("gl.read"), "JE-26188661");
+  const hits = transactionHits(response);
+  const hit = hits.find((candidate) => candidate.id === "je-posted");
+  assert.ok(hit, "the exact journal entry must surface");
+  assert.equal(hit.title, "Journal JE-26188661");
+  assert.equal(hit.href, "/journal?journalEntry=je-posted");
+  assert.equal(hit.iconKey, "journal");
+  assert.equal(hit.subtitle, "je-posted:memo:confidential");
 
-  const entriesQuery = state.queries.find((query) => query.text.includes('from journal_entries'))
-  assert.ok(entriesQuery, 'entries must be queried')
+  const entriesQuery = state.queries.find((query) => query.text.includes("from journal_entries"));
+  assert.ok(entriesQuery, "entries must be queried");
   // The merged legs sit in a subquery (UNION forbids expression ORDER BY),
   // so the exact-first ordering addresses the subquery alias.
-  assert.match(entriesQuery.text, /\(u\.entry_number = \?\) desc/, 'exact entries order first')
-})
+  assert.match(entriesQuery.text, /\(u\.entry_number = \?\) desc/, "exact entries order first");
+});
 
-test('journal entries stay gated by the journal read permission', async () => {
-  reset({ entries: [JE_POSTED] })
-  const denied = await globalSearch(authz('ap.read'), 'JE-26188661')
-  assert.ok(!transactionHitIds(denied).includes('je-posted'))
+test("journal entries stay gated by the journal read permission", async () => {
+  reset({ entries: [JE_POSTED] });
+  const denied = await globalSearch(authz("ap.read"), "JE-26188661");
+  assert.ok(!transactionHitIds(denied).includes("je-posted"));
   assert.ok(
-    !state.queries.some((query) => query.text.includes('from journal_entries')),
-    'no entries query without gl.read',
-  )
-})
+    !state.queries.some((query) => query.text.includes("from journal_entries")),
+    "no entries query without gl.read",
+  );
+});
 
-test('exact JE arm gates subledger-linked entries by the linked document kind', async () => {
-  reset({ entries: [JE_POSTED] })
-  const response = await globalSearch(authz('gl.read'), 'JE-26188661')
-  assert.ok(transactionHitIds(response).includes('je-posted'))
+test("exact JE arm gates subledger-linked entries by the linked document kind", async () => {
+  reset({ entries: [JE_POSTED] });
+  const response = await globalSearch(authz("gl.read"), "JE-26188661");
+  assert.ok(transactionHitIds(response).includes("je-posted"));
 
-  const entriesQuery = state.queries.find((query) => query.text.includes('from journal_entries'))
-  assert.ok(entriesQuery, 'entries must be queried')
+  const entriesQuery = state.queries.find((query) => query.text.includes("from journal_entries"));
+  assert.ok(entriesQuery, "entries must be queried");
   assert.match(
     entriesQuery.text,
     /not exists \(select 1 from documents d/,
-    'unlinked entries resolve under the journal gate alone',
-  )
+    "unlinked entries resolve under the journal gate alone",
+  );
   assert.match(
     entriesQuery.text,
     /d\.kind in \('journal', 'pay_run'\)/,
-    'journal/pay_run link scope matches the fuzzy leg',
-  )
+    "journal/pay_run link scope matches the fuzzy leg",
+  );
   // A linked subledger posting resolves only inside the posting module's
   // own gate: the caller's full kind allowlist rides the exact arm.
-  for (const kind of kindsForPermission('gl.read')) {
-    assert.ok(entriesQuery.values.includes(kind), `exact arm binds the caller's kind ${kind}`)
+  for (const kind of kindsForPermission("gl.read")) {
+    assert.ok(entriesQuery.values.includes(kind), `exact arm binds the caller's kind ${kind}`);
   }
-})
+});
 
-test('journal entries keep the canonical line-visibility subsidiary rule', async () => {
+test("journal entries keep the canonical line-visibility subsidiary rule", async () => {
   const deniedEntry: JournalEntryFixture = {
     ...JE_POSTED,
-    id: 'je-denied',
-    entry_number: 'JE-DENIED',
-    memo: 'denied:memo:confidential',
+    id: "je-denied",
+    entry_number: "JE-DENIED",
+    memo: "denied:memo:confidential",
     subsidiary_id: DENIED_SUBSIDIARY,
     lineSubsidiaryIds: [DENIED_SUBSIDIARY],
-  }
+  };
   // The leak: a header in scope whose lines are ALL out of scope must not
   // disclose its memo — visibility follows the lines, never the header.
   const headerAllowedLinesDenied: JournalEntryFixture = {
     ...JE_POSTED,
-    id: 'je-header-only',
-    entry_number: 'JE-HEADER-ONLY',
-    memo: 'header-only:memo:confidential',
+    id: "je-header-only",
+    entry_number: "JE-HEADER-ONLY",
+    memo: "header-only:memo:confidential",
     subsidiary_id: ALLOWED_SUBSIDIARY,
     lineSubsidiaryIds: [DENIED_SUBSIDIARY],
-  }
-  reset({ entries: [JE_POSTED, deniedEntry, headerAllowedLinesDenied] })
-  const response = await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], 'gl.read'), 'JE-')
-  assert.ok(transactionHitIds(response).includes('je-posted'))
-  assert.ok(!transactionHitIds(response).includes('je-denied'))
-  assert.ok(!transactionHitIds(response).includes('je-header-only'))
-  const payload = JSON.stringify(response)
-  assert.ok(!payload.includes('denied:memo:confidential'))
-  assert.ok(!payload.includes('header-only:memo:confidential'))
+  };
+  reset({ entries: [JE_POSTED, deniedEntry, headerAllowedLinesDenied] });
+  const response = await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], "gl.read"), "JE-");
+  assert.ok(transactionHitIds(response).includes("je-posted"));
+  assert.ok(!transactionHitIds(response).includes("je-denied"));
+  assert.ok(!transactionHitIds(response).includes("je-header-only"));
+  const payload = JSON.stringify(response);
+  assert.ok(!payload.includes("denied:memo:confidential"));
+  assert.ok(!payload.includes("header-only:memo:confidential"));
 
-  const entriesQuery = state.queries.find((query) => query.text.includes('from journal_entries'))
-  assert.ok(entriesQuery, 'entries must be queried')
-  assert.match(entriesQuery.text, /journal_lines visible/, 'canonical line-visibility fence')
-  assert.doesNotMatch(entriesQuery.text, /\be\.subsidiary_id/, 'no header-subsidiary predicate')
-})
+  const entriesQuery = state.queries.find((query) => query.text.includes("from journal_entries"));
+  assert.ok(entriesQuery, "entries must be queried");
+  assert.match(entriesQuery.text, /journal_lines visible/, "canonical line-visibility fence");
+  assert.doesNotMatch(entriesQuery.text, /\be\.subsidiary_id/, "no header-subsidiary predicate");
+});
 
-test('contacts are found through their people and a migrated system id, inside the party fence', async () => {
-  reset()
-  await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], 'parties.read'), 'needle')
-  const contacts = state.queries.find((query) => query.text.includes('select p.id, p.display_name'))
-  assert.ok(contacts)
-  assert.match(contacts.text, /from contacts c\s+join parties p on p\.id = c\.party_id/, 'contact people reach their party')
-  assert.match(contacts.text, /custom -> 'source' ->> 'externalId' = \?/, 'a migrated or mirrored id matches exactly')
+test("contacts are found through their people and a migrated system id, inside the party fence", async () => {
+  reset();
+  await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], "parties.read"), "needle");
+  const contacts = state.queries.find((query) =>
+    query.text.includes("select p.id, p.display_name"),
+  );
+  assert.ok(contacts);
+  assert.match(
+    contacts.text,
+    /from contacts c\s+join parties p on p\.id = c\.party_id/,
+    "contact people reach their party",
+  );
+  assert.match(
+    contacts.text,
+    /custom -> 'source' ->> 'externalId' = \?/,
+    "a migrated or mirrored id matches exactly",
+  );
   assert.equal(
     contacts.text.match(/p\.subsidiary_id is null or p\.subsidiary_id = any/g)?.length,
     4,
-    'the name, contact-person and external-id legs and the final read must all be subsidiary scoped',
-  )
-  assert.doesNotMatch(contacts.text, /regexp_replace/, 'a word is not a phone number')
+    "the name, contact-person and external-id legs and the final read must all be subsidiary scoped",
+  );
+  assert.doesNotMatch(contacts.text, /regexp_replace/, "a word is not a phone number");
   // Tax identifiers are sealed server-side: search must never match on them.
-  assert.doesNotMatch(contacts.text, /tax_ids|tin_encrypted|tin_last4|party_tax_ids/)
-})
+  assert.doesNotMatch(contacts.text, /tax_ids|tin_encrypted|tin_last4|party_tax_ids/);
+});
 
-test('a query written like a phone number matches stored phones digit for digit', async () => {
-  reset()
-  await globalSearch(authz('parties.read'), '(555) 123-4567')
-  const contacts = state.queries.find((query) => query.text.includes('select p.id, p.display_name'))
-  assert.ok(contacts)
-  assert.match(contacts.text, /regexp_replace\(p\.phone, '\[\^0-9\]', '', 'g'\)/)
-  assert.match(contacts.text, /regexp_replace\(coalesce\(c\.mobile_phone, ''\)/)
-  assert.ok(contacts.values.includes('%5551234567%'), 'punctuation is ignored on both sides')
-})
+test("a query written like a phone number matches stored phones digit for digit", async () => {
+  reset();
+  await globalSearch(authz("parties.read"), "(555) 123-4567");
+  const contacts = state.queries.find((query) =>
+    query.text.includes("select p.id, p.display_name"),
+  );
+  assert.ok(contacts);
+  assert.match(contacts.text, /regexp_replace\(p\.phone, '\[\^0-9\]', '', 'g'\)/);
+  assert.match(contacts.text, /regexp_replace\(coalesce\(c\.mobile_phone, ''\)/);
+  assert.ok(contacts.values.includes("%5551234567%"), "punctuation is ignored on both sides");
+});
 
-test('an integrator\'s own document reference resolves exactly, like a document number', async () => {
-  reset()
-  await globalSearch(authz('ap.read'), 'needle')
-  assert.match(transactionQuery().text, /\(d\.document_number = \? or d\.external_ref = \?\)/)
-})
+test("an integrator's own document reference resolves exactly, like a document number", async () => {
+  reset();
+  await globalSearch(authz("ap.read"), "needle");
+  assert.match(transactionQuery().text, /\(d\.document_number = \? or d\.external_ref = \?\)/);
+});
 
-test('recent transactions re-resolve under the reader\'s current permissions and subsidiary scope', async () => {
-  const apKind = kindsForPermission('ap.read')[0]!
-  const arKind = kindsForPermission('ar.read')[0]!
+test("recent transactions re-resolve under the reader's current permissions and subsidiary scope", async () => {
+  const apKind = kindsForPermission("ap.read")[0]!;
+  const arKind = kindsForPermission("ar.read")[0]!;
   const deniedDocument: SearchFixture = {
     ...fixture(apKind),
     id: `${apKind}-denied-subsidiary`,
-    memo: 'recent-denied:memo:confidential',
+    memo: "recent-denied:memo:confidential",
     subsidiary_id: DENIED_SUBSIDIARY,
-  }
-  reset({ documents: [...BASE_DOCUMENTS, deniedDocument] })
+  };
+  reset({ documents: [...BASE_DOCUMENTS, deniedDocument] });
   const refs = [
-    { type: 'transaction' as const, id: apKind },
-    { type: 'transaction' as const, id: arKind },
-    { type: 'transaction' as const, id: deniedDocument.id },
-  ]
-  const hits = await resolveRecentCoreRecords(scopedAuthz([ALLOWED_SUBSIDIARY], 'ap.read'), refs)
-  assert.deepEqual(hits.map((hit) => hit.id), [apKind], 'only what the reader may open now resolves')
-  assert.ok(!JSON.stringify(hits).includes(deniedDocument.memo))
+    { type: "transaction" as const, id: apKind },
+    { type: "transaction" as const, id: arKind },
+    { type: "transaction" as const, id: deniedDocument.id },
+  ];
+  const hits = await resolveRecentCoreRecords(scopedAuthz([ALLOWED_SUBSIDIARY], "ap.read"), refs);
+  assert.deepEqual(
+    hits.map((hit) => hit.id),
+    [apKind],
+    "only what the reader may open now resolves",
+  );
+  assert.ok(!JSON.stringify(hits).includes(deniedDocument.memo));
 
-  reset({ documents: [...BASE_DOCUMENTS, deniedDocument] })
-  assert.deepEqual(await resolveRecentCoreRecords(authz(), refs), [], 'a revoked permission resolves nothing')
-  assert.ok(!state.queries.some((query) => query.text.includes('from documents')), 'and reads nothing')
-})
+  reset({ documents: [...BASE_DOCUMENTS, deniedDocument] });
+  assert.deepEqual(
+    await resolveRecentCoreRecords(authz(), refs),
+    [],
+    "a revoked permission resolves nothing",
+  );
+  assert.ok(
+    !state.queries.some((query) => query.text.includes("from documents")),
+    "and reads nothing",
+  );
+});

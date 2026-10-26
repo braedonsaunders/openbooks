@@ -19,10 +19,17 @@ import { hygieneFindings } from "./hygiene.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-async function seedAccount(orgId: string, number: string, name: string, type: string): Promise<string> {
+async function seedAccount(
+  orgId: string,
+  number: string,
+  name: string,
+  type: string,
+): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(() => db.execute(sql`
-    insert into accounts (id, org_id, number, name, type) values (${id}, ${orgId}, ${number}, ${name}, ${type})`));
+  await withBypassContext(() =>
+    db.execute(sql`
+    insert into accounts (id, org_id, number, name, type) values (${id}, ${orgId}, ${number}, ${name}, ${type})`),
+  );
   return id;
 }
 
@@ -34,26 +41,39 @@ test(
     const other = await withBypass(() => createScratchOrg());
     try {
       const cashMisfiled = await seedAccount(org.orgId, "1999", "Harbor Cash", "expense");
-      const provisionMisfiled = await seedAccount(org.orgId, "1998", "Harbor Provision", "asset_bank");
+      const provisionMisfiled = await seedAccount(
+        org.orgId,
+        "1998",
+        "Harbor Provision",
+        "asset_bank",
+      );
       const foreignCash = await seedAccount(other.orgId, "1999", "Foreign Cash", "expense");
 
       for (const name of ["Harbor Foods", "HARBOR  Foods"]) {
-        await withBypassContext(() => db.execute(sql`
-          insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${org.orgId}, 'customer', ${name})`));
+        await withBypassContext(() =>
+          db.execute(sql`
+          insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${org.orgId}, 'customer', ${name})`),
+        );
       }
       for (const name of ["Tax Twin A", "Tax Twin B"]) {
-        await withBypassContext(() => db.execute(sql`
+        await withBypassContext(() =>
+          db.execute(sql`
           insert into parties (id, org_id, kind, display_name, tax_ids)
-          values (${randomUUID()}, ${org.orgId}, 'vendor', ${name}, '{"gst":"R123"}')`));
+          values (${randomUUID()}, ${org.orgId}, 'vendor', ${name}, '{"gst":"R123"}')`),
+        );
       }
 
       const itemId = randomUUID();
-      await withBypassContext(() => db.execute(sql`
-        insert into items (id, org_id, kind, name) values (${itemId}, ${org.orgId}, 'sale', 'Widget')`));
+      await withBypassContext(() =>
+        db.execute(sql`
+        insert into items (id, org_id, kind, name) values (${itemId}, ${org.orgId}, 'sale', 'Widget')`),
+      );
 
       const projectId = randomUUID();
-      await withBypassContext(() => db.execute(sql`
-        insert into projects (id, org_id, code, name) values (${projectId}, ${org.orgId}, 'HT-1', 'Harbor Tower')`));
+      await withBypassContext(() =>
+        db.execute(sql`
+        insert into projects (id, org_id, code, name) values (${projectId}, ${org.orgId}, 'HT-1', 'Harbor Tower')`),
+      );
 
       // An empty APPROVED scenario is guard-forbidden (the scenario trigger
       // requires a non-zero line and lines freeze outside draft), so the
@@ -62,22 +82,42 @@ test(
       // positive (the positive path is covered in hygiene.test.ts with
       // injected rows).
       const scenarioId = randomUUID();
-      const fiscalYear = (await withBypassContext(() => db.execute<{ fiscal_year: number }>(sql`
-        select fiscal_year from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`, "objects")))[0]!.fiscal_year;
-      await withBypassContext(() => db.execute(sql`
+      const fiscalYear = (
+        await withBypassContext(() =>
+          db.execute<{ fiscal_year: number }>(
+            sql`
+        select fiscal_year from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.fiscal_year;
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-        values (${scenarioId}, ${org.orgId}, ${org.bookId}, ${fiscalYear}, 'Plan', 'budget', 'draft')`));
-      const revenueAccount = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-        select id from accounts where org_id = ${org.orgId} and type = 'income' limit 1`, "objects")))[0]?.id
-        ?? org.accounts.revenue;
-      await withBypassContext(() => db.execute(sql`
+        values (${scenarioId}, ${org.orgId}, ${org.bookId}, ${fiscalYear}, 'Plan', 'budget', 'draft')`),
+      );
+      const revenueAccount =
+        (
+          await withBypassContext(() =>
+            db.execute<{ id: string }>(
+              sql`
+        select id from accounts where org_id = ${org.orgId} and type = 'income' limit 1`,
+              "objects",
+            ),
+          )
+        )[0]?.id ?? org.accounts.revenue;
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into budget_lines (id, org_id, scenario_id, account_id, period_id, amount)
-        values (${randomUUID()}, ${org.orgId}, ${scenarioId}, ${revenueAccount}, ${org.periodId}, '100')`));
+        values (${randomUUID()}, ${org.orgId}, ${scenarioId}, ${revenueAccount}, ${org.periodId}, '100')`),
+      );
       await approveBudgetScenarioFixture(org.orgId, scenarioId);
 
       const componentId = randomUUID();
-      await withBypassContext(() => db.execute(sql`
-        insert into pay_components (id, org_id, code, name, kind) values (${componentId}, ${org.orgId}, 'GARN', 'Garnishment', 'deduction')`));
+      await withBypassContext(() =>
+        db.execute(sql`
+        insert into pay_components (id, org_id, code, name, kind) values (${componentId}, ${org.orgId}, 'GARN', 'Garnishment', 'deduction')`),
+      );
 
       const findings = await withBypassContext(() =>
         hygieneFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("hygiene")),
@@ -97,13 +137,23 @@ test(
         "the foreign gap is detectable in its own tenant (absence above is isolation, not a broken seed)",
       );
       assert.ok(
-        byType("control_account_type_mismatch").every((finding) => finding.severity === "warning" && finding.materiality === "0.0000"),
+        byType("control_account_type_mismatch").every(
+          (finding) => finding.severity === "warning" && finding.materiality === "0.0000",
+        ),
         "hygiene carries no measured exposure",
       );
 
       const dupes = byType("duplicate_party_identity");
-      assert.equal(dupes.filter((finding) => finding.summary.matchOn === "name").length, 1, "one normalized-name group");
-      assert.equal(dupes.filter((finding) => finding.summary.matchOn === "tax_id").length, 1, "one shared-tax-id group");
+      assert.equal(
+        dupes.filter((finding) => finding.summary.matchOn === "name").length,
+        1,
+        "one normalized-name group",
+      );
+      assert.equal(
+        dupes.filter((finding) => finding.summary.matchOn === "tax_id").length,
+        1,
+        "one shared-tax-id group",
+      );
 
       assert.ok(subjects("item_missing_tax_code").has(itemId), "untaxed sale item flags");
       assert.ok(subjects("project_missing_cost_budget").has(projectId), "unbudgeted project flags");
@@ -124,7 +174,10 @@ test(
         "master-data fixes need judgment: reviews, not pre-filled commands",
       );
       assert.ok(
-        findings.every((finding) => typeof finding.summary.href === "string" && finding.summary.href.startsWith("/")),
+        findings.every(
+          (finding) =>
+            typeof finding.summary.href === "string" && finding.summary.href.startsWith("/"),
+        ),
         "every gap names its review path",
       );
     } finally {
@@ -148,29 +201,46 @@ test(
   async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      const seedBank = async (number: string, name: string, reconcilable: boolean): Promise<string> => {
+      const seedBank = async (
+        number: string,
+        name: string,
+        reconcilable: boolean,
+      ): Promise<string> => {
         const id = randomUUID();
-        await withBypassContext(() => db.execute(sql`
+        await withBypassContext(() =>
+          db.execute(sql`
           insert into accounts (id, org_id, number, name, type, reconcilable, currency_restriction)
-          values (${id}, ${org.orgId}, ${number}, ${name}, 'asset_bank', ${reconcilable}, ${reconcilable ? "CAD" : null})`));
+          values (${id}, ${org.orgId}, ${number}, ${name}, 'asset_bank', ${reconcilable}, ${reconcilable ? "CAD" : null})`),
+        );
         return id;
       };
-      const postBalanced = async (postingDate: string, debitAccount: string, creditAccount: string, amount: string) => {
+      const postBalanced = async (
+        postingDate: string,
+        debitAccount: string,
+        creditAccount: string,
+        amount: string,
+      ) => {
         const entryId = randomUUID();
-        await withBypassContext(() => db.execute(sql`
+        await withBypassContext(() =>
+          db.execute(sql`
           insert into journal_entries
             (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
           values
             (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`HX-${entryId.slice(0, 8)}`},
-             ${postingDate}, ${org.periodId}, 'hygiene bank-credit seed', 'draft', 'manual')`));
-        await withBypassContext(() => db.execute(sql`
+             ${postingDate}, ${org.periodId}, 'hygiene bank-credit seed', 'draft', 'manual')`),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`
           insert into journal_lines
             (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
           values
             (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${debitAccount}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, '1'),
-            (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${creditAccount}, ${org.subsidiaryId}, ${`-${amount}`}, 'CAD', ${`-${amount}`}, '1')`));
-        await withBypassContext(() => db.execute(sql`
-          update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`));
+            (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${creditAccount}, ${org.subsidiaryId}, ${`-${amount}`}, 'CAD', ${`-${amount}`}, '1')`),
+        );
+        await withBypassContext(() =>
+          db.execute(sql`
+          update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`),
+        );
       };
       const oldDate = addCalendarDays(org.date, -120);
 
@@ -191,7 +261,8 @@ test(
 
       const findings = await withBypassContext(() =>
         withSimClock(`${org.date}T12:00:00.000Z`, () =>
-          hygieneFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("hygiene"))),
+          hygieneFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("hygiene")),
+        ),
       );
       const subjects = new Set(
         findings

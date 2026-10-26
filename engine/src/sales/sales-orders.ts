@@ -9,10 +9,7 @@ import {
   lockCustomerRole,
   measureCustomerExposure,
 } from "../receivables/credit-policy.ts";
-import {
-  submitAndReleaseIfUngated,
-  type SubmissionReleaseResult,
-} from "../flows/index.ts";
+import { submitAndReleaseIfUngated, type SubmissionReleaseResult } from "../flows/index.ts";
 import { ensureBookingContract } from "../revenue/contract-scope.ts";
 
 export type SalesOrderIssueErrorCode =
@@ -226,22 +223,26 @@ export async function issueSalesOrder(input: {
   creditOverrideReason?: string;
 }): Promise<IssueSalesOrderResult> {
   return withOrgTransaction(input.orgId, async () => {
-    const order = (await db.execute<SalesOrderRow>(sql`
+    const order = (
+      await db.execute<SalesOrderRow>(
+        sql`
       select id, status, party_id, currency, total, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
         from documents
        where id = ${input.salesOrderId}
          and org_id = ${input.orgId}
          and kind = 'sales_order'
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!order) {
-      throw new SalesOrderIssueError(
-        "sales order not found",
-        "SALES_ORDER_NOT_FOUND",
-        404,
-      );
+      throw new SalesOrderIssueError("sales order not found", "SALES_ORDER_NOT_FOUND", 404);
     }
-    if (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== order.updated_at) {
+    if (
+      !isDocumentRevisionToken(input.expectedUpdatedAt) ||
+      input.expectedUpdatedAt !== order.updated_at
+    ) {
       throw new SalesOrderIssueError(
         "this order changed after you opened it; reload and review the latest revision",
         "SALES_ORDER_STALE_REVISION",
@@ -249,10 +250,7 @@ export async function issueSalesOrder(input: {
       );
     }
     if (order.status !== "draft") {
-      throw new SalesOrderIssueError(
-        "only a draft can be issued",
-        "SALES_ORDER_NOT_DRAFT",
-      );
+      throw new SalesOrderIssueError("only a draft can be issued", "SALES_ORDER_NOT_DRAFT");
     }
     if (!order.party_id || cmp(order.total, "0") <= 0) {
       throw new SalesOrderIssueError(

@@ -5,14 +5,28 @@ import { registerHooks } from "node:module";
 import { createTranslator, type AbstractIntlMessages } from "next-intl";
 import messages from "../../messages/en/index.ts";
 
-Object.assign(globalThis, { __assistantContractTranslations: (input: string | { namespace?: string }) =>
-  createTranslator({ locale: "en", messages: messages as unknown as AbstractIntlMessages, namespace: typeof input === "string" ? input : input?.namespace }) });
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-    'export async function getTranslations(input){return globalThis.__assistantContractTranslations(input)}; export async function getLocale(){return "en"}'
-  ) };
-  return next(specifier, context);
-} });
+Object.assign(globalThis, {
+  __assistantContractTranslations: (input: string | { namespace?: string }) =>
+    createTranslator({
+      locale: "en",
+      messages: messages as unknown as AbstractIntlMessages,
+      namespace: typeof input === "string" ? input : input?.namespace,
+    }),
+});
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "next-intl/server")
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            'export async function getTranslations(input){return globalThis.__assistantContractTranslations(input)}; export async function getLocale(){return "en"}',
+          ),
+      };
+    return next(specifier, context);
+  },
+});
 import type { Authz } from "../authz";
 import type { SessionUser } from "../auth";
 
@@ -20,7 +34,8 @@ import type { SessionUser } from "../auth";
 // server-only and the transitively imported app modules use the `@/` alias.
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { ASSISTANT_TOOLS, executeAssistantTool } = await import("./registry");
 const { MAX_ROW_STRING } = await import("./tools-shared");
 const { SETUP_ENTITY_BY_KEY } = await import("../setup/registry");
@@ -58,7 +73,11 @@ test("restricted assistant report tools refuse an empty subsidiary scope", async
     ["partner_statement", { side: "ar", partyId, period: "this_fiscal_year_to_date" }],
     ["run_report", { definitionId: randomUUID() }],
   ] as const) {
-    assert.deepEqual(await executeAssistantTool(authz, name, input), { ok: false, error: "forbidden" }, name);
+    assert.deepEqual(
+      await executeAssistantTool(authz, name, input),
+      { ok: false, error: "forbidden" },
+      name,
+    );
   }
 });
 
@@ -108,8 +127,10 @@ const EMPTY_STORE: Record<string, string> = {
   // HR-19: the survey read refuses an unknown survey by name, and the
   // refusal reaches the caller through hrmRefusal unchanged.
   hrm_survey_results: "survey is not visible in this organization",
-  hrm_explain_pay: "no calculated payslip exists for this employment yet — explanations appear after the first pay run calculates",
-  get_resourcing_assignment: "resourcing_assignment_not_found: the assignment is unavailable or outside your subsidiary scope",
+  hrm_explain_pay:
+    "no calculated payslip exists for this employment yet — explanations appear after the first pay run calculates",
+  get_resourcing_assignment:
+    "resourcing_assignment_not_found: the assignment is unavailable or outside your subsidiary scope",
 };
 
 const FEATURE_OFF = new Set([
@@ -158,7 +179,10 @@ test("contract reader holds every permission declared by read-tool gates", () =>
     if (tool.gate.mode === "public") continue;
     assert.ok(tool.gate.perms.length > 0, `${tool.name} gate declares no permissions`);
     for (const permission of tool.gate.perms) {
-      assert.ok(authz.permissions.has(permission), `${tool.name} gate is missing permission ${permission}`);
+      assert.ok(
+        authz.permissions.has(permission),
+        `${tool.name} gate is missing permission ${permission}`,
+      );
     }
   }
 });
@@ -226,22 +250,29 @@ const HARNESS_FEATURES = [
 ];
 
 test("assistant read-tool contract harness", DB_ONLY, async (t) => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   const sizes: { tool: string; bytes: number; outcome: string }[] = [];
   try {
     const flags = Object.fromEntries(HARNESS_FEATURES.map((key) => [key, true]));
     // The registry import replaces the test bypass process-wide, so this
     // seed UPDATE must carry explicit bypass scope: unscoped it matches zero
     // rows and every module-gated tool refuses with *_feature_disabled.
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(flags)}::jsonb)
       where id = ${org.orgId}
-    `));
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Contract reader", "contract-reader"));
+    `),
+    );
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Contract reader", "contract-reader"),
+    );
     const authz = readerAuthz(org.orgId, actorId);
     await withBypassContext(async () => {
       await grantScratchPermissions(org.orgId, authz.user.id, [...READER_PERMS]);
-      const item = await db.execute(sql`update items set code='CONTRACT-FIFO' where org_id=${org.orgId} and id=${org.items.fifo} returning id`, "objects");
+      const item = await db.execute(
+        sql`update items set code='CONTRACT-FIFO' where org_id=${org.orgId} and id=${org.items.fifo} returning id`,
+        "objects",
+      );
       assert.equal(item.length, 1);
     });
     await withOrgContext(org.orgId, async () => {
@@ -282,7 +313,11 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_journal_entry: { entryId: randomUUID() },
         get_document: { documentId: randomUUID() },
         inspect_import_file: { transferId: randomUUID() },
-        preview_opening_balances: { transferId: randomUUID(), columns: { account: "Account", amount: "Amount" }, documentDate: "2026-09-30" },
+        preview_opening_balances: {
+          transferId: randomUUID(),
+          columns: { account: "Account", amount: "Amount" },
+          documentDate: "2026-09-30",
+        },
         get_bank_reconciliation: { reconciliationId: randomUUID() },
         get_pay_run: { documentId: randomUUID() },
         payroll_year_end: { taxYear: 2026 },
@@ -311,7 +346,11 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
           question: "how many employees are active",
           // A syntactically valid definition naming a real entity: the
           // point is to reach the validator, not to pass it.
-          definitionJson: JSON.stringify({ entity: "hrm_headcount", mode: "rows", columns: ["id"] }),
+          definitionJson: JSON.stringify({
+            entity: "hrm_headcount",
+            mode: "rows",
+            columns: ["id"],
+          }),
         },
         get_lease: { leaseId: randomUUID() },
         get_lease_agreement: { id: randomUUID() },
@@ -349,7 +388,10 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_bench_summary: { firstSunday: "2026-07-05", lastSunday: "2026-07-26" },
       };
 
-      assert.ok(READ_TOOLS.length > 0, "the contract harness covers the read tools; an empty selection would vacate every tool check");
+      assert.ok(
+        READ_TOOLS.length > 0,
+        "the contract harness covers the read tools; an empty selection would vacate every tool check",
+      );
       for (const tool of READ_TOOLS) {
         const args = inputs[tool.name] ?? {};
         await t.test(`${tool.name} honours the tool contract`, async () => {
@@ -361,7 +403,9 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
           try {
             result = await executeAssistantTool(authz, tool.name, args);
           } catch (error) {
-            assert.fail(`tool ${tool.name} threw instead of returning { ok: false }: ${String(error).slice(0, 200)}`);
+            assert.fail(
+              `tool ${tool.name} threw instead of returning { ok: false }: ${String(error).slice(0, 200)}`,
+            );
           }
           const record = result as { ok: boolean; data?: unknown; error?: unknown; note?: unknown };
           assert.equal(typeof record.ok, "boolean", `tool ${tool.name} returned no ok flag`);
@@ -374,9 +418,16 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
               const data = record.data as Record<string, unknown>;
               for (const group of ["adjustments", "workingCapital", "investing", "financing"]) {
                 assert.equal(typeof data[`${group}Total`], "number", `${group} total missing`);
-                assert.equal(typeof data[`${group}Truncated`], "boolean", `${group} truncation signal missing`);
+                assert.equal(
+                  typeof data[`${group}Truncated`],
+                  "boolean",
+                  `${group} truncation signal missing`,
+                );
                 assert.ok((data[`${group}Total`] as number) >= (data[group] as unknown[]).length);
-                assert.equal(data[`${group}Truncated`], (data[`${group}Total`] as number) > (data[group] as unknown[]).length);
+                assert.equal(
+                  data[`${group}Truncated`],
+                  (data[`${group}Total`] as number) > (data[group] as unknown[]).length,
+                );
               }
             }
           } else {
@@ -384,10 +435,14 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
             const documented =
               (typeof error === "string" && FEATURE_OFF.has(error)) ||
               EMPTY_STORE[tool.name] === error ||
-              (tool.name === "tax_return" && typeof error === "string" && error.startsWith("tax_return: ")) ||
+              (tool.name === "tax_return" &&
+                typeof error === "string" &&
+                error.startsWith("tax_return: ")) ||
               // The harness entity is an HRM one and HRM is off here, so the
               // validator refuses it by name, listing the visible catalog.
-              (tool.name === "nl_report" && typeof error === "string" && error.startsWith("report definition refused: unknown report entity"));
+              (tool.name === "nl_report" &&
+                typeof error === "string" &&
+                error.startsWith("report definition refused: unknown report entity"));
             assert.ok(
               documented,
               `tool ${tool.name} refused with an undocumented error: ${JSON.stringify(error)}`,
@@ -419,29 +474,32 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         });
       }
 
-      await t.test("range tools refuse an empty input with a stable error (never a throw)", async () => {
-        const rangeTools = [
-          "profit_and_loss",
-          "cash_flow",
-          "party_concentration",
-          "tax_return",
-          "documents_missing_tax_code",
-          "analytics_financial_health",
-          "analytics_customer_intelligence",
-          "analytics_vendor_performance",
-          "analytics_true_cost",
-          "analytics_utilization",
-          "analytics_spend_velocity",
-          "analytics_sentinel",
-          "general_ledger",
-          "cash_flow_indirect",
-          "partner_statement",
-        ];
-        for (const name of rangeTools) {
-          const result = await executeAssistantTool(authz, name, {});
-          assert.deepEqual(result, { ok: false, error: "period_or_date_range_required" }, name);
-        }
-      });
+      await t.test(
+        "range tools refuse an empty input with a stable error (never a throw)",
+        async () => {
+          const rangeTools = [
+            "profit_and_loss",
+            "cash_flow",
+            "party_concentration",
+            "tax_return",
+            "documents_missing_tax_code",
+            "analytics_financial_health",
+            "analytics_customer_intelligence",
+            "analytics_vendor_performance",
+            "analytics_true_cost",
+            "analytics_utilization",
+            "analytics_spend_velocity",
+            "analytics_sentinel",
+            "general_ledger",
+            "cash_flow_indirect",
+            "partner_statement",
+          ];
+          for (const name of rangeTools) {
+            const result = await executeAssistantTool(authz, name, {});
+            assert.deepEqual(result, { ok: false, error: "period_or_date_range_required" }, name);
+          }
+        },
+      );
 
       await t.test("reports per-tool output sizes", () => {
         const rows = [...sizes].sort((a, b) => b.bytes - a.bytes);
@@ -449,9 +507,15 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
           console.log(`[contract] ${row.tool}: ${row.bytes} bytes (${row.outcome})`);
         }
         const over = rows.filter((row) => row.bytes > OUTPUT_BUDGET_BYTES);
-        assert.equal(over.length, 0, `over-budget tools: ${over.map((row) => row.tool).join(", ")}`);
+        assert.equal(
+          over.length,
+          0,
+          `over-budget tools: ${over.map((row) => row.tool).join(", ")}`,
+        );
         const widest = rows.filter((row) => row.bytes > MAX_ROW_STRING * 10);
-        console.log(`[contract] ${rows.length} tools measured, ${widest.length} above ${MAX_ROW_STRING * 10} bytes`);
+        console.log(
+          `[contract] ${rows.length} tools measured, ${widest.length} above ${MAX_ROW_STRING * 10} bytes`,
+        );
       });
     });
   } finally {
@@ -477,10 +541,12 @@ function registerAssistantProbe(key: string, featureKeysAny: string[]): void {
 }
 
 async function setAssistantFeatures(orgId: string, flags: Record<string, boolean>): Promise<void> {
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(flags)}::jsonb)
     where id = ${orgId}
-  `));
+  `),
+  );
 }
 
 interface SetupEntityItem {
@@ -492,7 +558,9 @@ async function listSetupEntityItems(authz: Authz, orgId: string): Promise<SetupE
   const items: SetupEntityItem[] = [];
   let offset = 0;
   for (;;) {
-    const result = await withOrgContext(orgId, () => executeAssistantTool(authz, "list_setup_entities", { offset }));
+    const result = await withOrgContext(orgId, () =>
+      executeAssistantTool(authz, "list_setup_entities", { offset }),
+    );
     if (!result.ok) assert.fail(`list_setup_entities refused: ${JSON.stringify(result)}`);
     assert.ok(Buffer.byteLength(JSON.stringify(result)) <= OUTPUT_BUDGET_BYTES);
     const data = result.data as { nextOffset: number | null; items: SetupEntityItem[] };
@@ -503,30 +571,35 @@ async function listSetupEntityItems(authz: Authz, orgId: string): Promise<SetupE
   }
 }
 
-test("setup assistant tools honor an any-of descriptor through the shared gate", DB_ONLY, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  const probeKey = "c7a-assistant-any-of-probe";
-  registerAssistantProbe(probeKey, ["projects", "manufacturing"]);
-  try {
-    await setAssistantFeatures(org.orgId, { projects: false, manufacturing: false });
-    const authz = readerAuthz(org.orgId);
-    const closed = await listSetupEntityItems(authz, org.orgId);
-    assert.equal(closed.find((item) => item.key === probeKey)?.enabled, false);
-    const refused = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, "list_setup_records", { entityKey: probeKey }));
-    assert.deepEqual(refused, { ok: false, error: "feature_disabled" });
-    // Either member on admits through the same helper.
-    await setAssistantFeatures(org.orgId, { projects: false, manufacturing: true });
-    const admitted = await listSetupEntityItems(authz, org.orgId);
-    assert.equal(admitted.find((item) => item.key === probeKey)?.enabled, true);
-  } finally {
-    SETUP_ENTITY_BY_KEY.delete(probeKey);
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "setup assistant tools honor an any-of descriptor through the shared gate",
+  DB_ONLY,
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const probeKey = "c7a-assistant-any-of-probe";
+    registerAssistantProbe(probeKey, ["projects", "manufacturing"]);
+    try {
+      await setAssistantFeatures(org.orgId, { projects: false, manufacturing: false });
+      const authz = readerAuthz(org.orgId);
+      const closed = await listSetupEntityItems(authz, org.orgId);
+      assert.equal(closed.find((item) => item.key === probeKey)?.enabled, false);
+      const refused = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(authz, "list_setup_records", { entityKey: probeKey }),
+      );
+      assert.deepEqual(refused, { ok: false, error: "feature_disabled" });
+      // Either member on admits through the same helper.
+      await setAssistantFeatures(org.orgId, { projects: false, manufacturing: true });
+      const admitted = await listSetupEntityItems(authz, org.orgId);
+      assert.equal(admitted.find((item) => item.key === probeKey)?.enabled, true);
+    } finally {
+      SETUP_ENTITY_BY_KEY.delete(probeKey);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("setup assistant tools fail closed on unknown keys", DB_ONLY, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   const probeKey = "c7a-assistant-unknown-probe";
   registerAssistantProbe(probeKey, ["no-such-feature"]);
   try {
@@ -535,7 +608,8 @@ test("setup assistant tools fail closed on unknown keys", DB_ONLY, async () => {
     const listed = await listSetupEntityItems(authz, org.orgId);
     assert.equal(listed.find((item) => item.key === probeKey)?.enabled, false);
     const refused = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, "list_setup_records", { entityKey: probeKey }));
+      executeAssistantTool(authz, "list_setup_records", { entityKey: probeKey }),
+    );
     assert.deepEqual(refused, { ok: false, error: "feature_disabled" });
   } finally {
     SETUP_ENTITY_BY_KEY.delete(probeKey);
@@ -544,21 +618,24 @@ test("setup assistant tools fail closed on unknown keys", DB_ONLY, async () => {
 });
 
 test("setup assistant tools keep single-key behavior", DB_ONLY, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const authz = readerAuthz(org.orgId);
     await setAssistantFeatures(org.orgId, { projects: false });
     const closed = await listSetupEntityItems(authz, org.orgId);
     assert.equal(closed.find((item) => item.key === "overhead-rates")?.enabled, false);
     const refused = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, "list_setup_records", { entityKey: "overhead-rates" }));
+      executeAssistantTool(authz, "list_setup_records", { entityKey: "overhead-rates" }),
+    );
     assert.deepEqual(refused, { ok: false, error: "feature_disabled" });
     await setAssistantFeatures(org.orgId, { projects: true });
     const admitted = await listSetupEntityItems(authz, org.orgId);
     assert.equal(admitted.find((item) => item.key === "overhead-rates")?.enabled, true);
     const records = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, "list_setup_records", { entityKey: "overhead-rates" }));
-    if (!records.ok) assert.fail(`list_setup_records refused an enabled entity: ${JSON.stringify(records)}`);
+      executeAssistantTool(authz, "list_setup_records", { entityKey: "overhead-rates" }),
+    );
+    if (!records.ok)
+      assert.fail(`list_setup_records refused an enabled entity: ${JSON.stringify(records)}`);
     assert.equal((records.data as { entityKey: string }).entityKey, "overhead-rates");
   } finally {
     await dropScratchOrg(org.orgId);

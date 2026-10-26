@@ -1,52 +1,61 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
 
-const { generateApiKey } = await import('../api-auth')
+const { generateApiKey } = await import("../api-auth");
 const {
   v1CreateAliasedRecord,
   v1DeleteAliasedRecord,
   v1GetAliasedRecord,
   v1ListAliasedRecords,
   v1UpdateAliasedRecord,
-} = await import('./v1-records')
+} = await import("./v1-records");
 
-test('reserved v1 aliases refuse before list, body parsing, or item commands', async () => {
-  const org = await withBypassContext(() => (createScratchOrg()))
+test("reserved v1 aliases refuse before list, body parsing, or item commands", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
-    const generated = generateApiKey()
+    const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    const generated = generateApiKey();
     await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"apiAccess":true}'::jsonb, true) where id = ${org.orgId}`)
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"apiAccess":true}'::jsonb, true) where id = ${org.orgId}`,
+      );
       await db.execute(sql`
         insert into api_keys (org_id,user_id,name,key_prefix,key_hash,key_preview,scopes,is_active)
         values (${org.orgId},${actor},'reserved alias test',${generated.keyPrefix},${generated.keyHash},${generated.keyPreview},'["parties.read","parties.manage"]'::jsonb,true)
-      `)
-    })
-    const request = (method: string, body?: string) => new Request('http://openbooks.test/api/v1/records', {
-      method,
-      headers: {
-        authorization: `Bearer ${generated.plaintext}`,
-        ...(body === undefined ? {} : {'content-type':'application/json'}),
-      },
-      ...(body === undefined ? {} : {body}),
-    })
-    const responses = await withOrgContext(org.orgId, async () => Promise.all([
-      v1ListAliasedRecords(request('GET'), 'records'),
-      v1CreateAliasedRecord(request('POST', '{broken'), 'records'),
-      v1GetAliasedRecord(request('GET'), 'records', 'record-1'),
-      v1UpdateAliasedRecord(request('PATCH', '{broken'), 'records', 'record-1'),
-      v1DeleteAliasedRecord(request('DELETE'), 'records', 'record-1'),
-    ]))
+      `);
+    });
+    const request = (method: string, body?: string) =>
+      new Request("http://openbooks.test/api/v1/records", {
+        method,
+        headers: {
+          authorization: `Bearer ${generated.plaintext}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body }),
+      });
+    const responses = await withOrgContext(org.orgId, async () =>
+      Promise.all([
+        v1ListAliasedRecords(request("GET"), "records"),
+        v1CreateAliasedRecord(request("POST", "{broken"), "records"),
+        v1GetAliasedRecord(request("GET"), "records", "record-1"),
+        v1UpdateAliasedRecord(request("PATCH", "{broken"), "records", "record-1"),
+        v1DeleteAliasedRecord(request("DELETE"), "records", "record-1"),
+      ]),
+    );
 
-    assert.ok(responses.length > 0, 'the iterated collection must contain expected rows')
+    assert.ok(responses.length > 0, "the iterated collection must contain expected rows");
     for (const response of responses) {
-      assert.equal(response.status, 404)
-      assert.equal((await response.json() as {error:string}).error, 'not_found')
+      assert.equal(response.status, 404);
+      assert.equal(((await response.json()) as { error: string }).error, "not_found");
     }
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

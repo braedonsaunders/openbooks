@@ -9,11 +9,7 @@ import {
 } from "../application/records";
 import { notFound } from "../application/errors";
 import { clamp } from "../list-params";
-import {
-  readV1JsonObject,
-  requireV1IdempotencyKey,
-  withV1Request,
-} from "./v1-request";
+import { readV1JsonObject, requireV1IdempotencyKey, withV1Request } from "./v1-request";
 import { V1_RESERVED_STATIC_SEGMENTS } from "./registry-data";
 
 const RESERVED = new Set<string>(V1_RESERVED_STATIC_SEGMENTS);
@@ -82,14 +78,22 @@ export function v1CreateAliasedRecord(request: Request, typeKey: string): Promis
   });
 }
 
-export function v1GetAliasedRecord(request: Request, typeKey: string, id: string): Promise<NextResponse> {
+export function v1GetAliasedRecord(
+  request: Request,
+  typeKey: string,
+  id: string,
+): Promise<NextResponse> {
   return withV1Request(request, `api/v1/${typeKey}/:id`, async (_auth, context) => {
     assertAliasedTypeKey(typeKey);
     return { status: 200, body: await getRecord(context, { typeKey, id }) };
   });
 }
 
-export function v1UpdateAliasedRecord(request: Request, typeKey: string, id: string): Promise<NextResponse> {
+export function v1UpdateAliasedRecord(
+  request: Request,
+  typeKey: string,
+  id: string,
+): Promise<NextResponse> {
   return withV1Request(request, `api/v1/${typeKey}/:id`, async (_auth, context) => {
     assertAliasedTypeKey(typeKey);
     const outcome = await updateApplicationRecord(context, {
@@ -102,7 +106,11 @@ export function v1UpdateAliasedRecord(request: Request, typeKey: string, id: str
   });
 }
 
-export function v1DeleteAliasedRecord(request: Request, typeKey: string, id: string): Promise<NextResponse> {
+export function v1DeleteAliasedRecord(
+  request: Request,
+  typeKey: string,
+  id: string,
+): Promise<NextResponse> {
   return withV1Request(request, `api/v1/${typeKey}/:id`, async (_auth, context) => {
     assertAliasedTypeKey(typeKey);
     const outcome = await deleteApplicationRecord(context, {

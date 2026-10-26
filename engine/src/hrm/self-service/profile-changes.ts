@@ -1,12 +1,21 @@
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { HrmAuthorizationError, requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
+import {
+  HrmAuthorizationError,
+  requireHrmSelfRead,
+  requireHrmSelfRequest,
+} from "../authorization.ts";
 import {
   createChangeRequestDraft,
   HrmChangeRequestError,
   submitChangeRequest,
   type ChangeRequestDTO,
 } from "../change-requests.ts";
-import { actorPartyOf, assertHrmFeatureOn, ownEmploymentOrHireRemedy, SelfServiceError } from "./actor.ts";
+import {
+  actorPartyOf,
+  assertHrmFeatureOn,
+  ownEmploymentOrHireRemedy,
+  SelfServiceError,
+} from "./actor.ts";
 
 import {
   profileChangePayloadSchema,
@@ -36,7 +45,9 @@ import { inputGuards } from "../input-guards.ts";
 export type { ProfileAddress, ProfileChangePayload };
 export { profileChangePayloadSchema };
 
-const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
+const { requireOrgId, requireActorId, requireId } = inputGuards(
+  (message) => new SelfServiceError("REFUSED", message),
+);
 
 function requireReason(reason: unknown): string {
   if (typeof reason !== "string" || reason.trim().length === 0) {
@@ -63,7 +74,9 @@ export function validateProfileChange(raw: unknown): ProfileChangePayload {
   if (!parsed.success) {
     const fields = parsed.error.issues
       .map((issue) =>
-        issue.path.length > 0 ? `${issue.path.map(String).join(".")}: ${issue.message}` : issue.message,
+        issue.path.length > 0
+          ? `${issue.path.map(String).join(".")}: ${issue.message}`
+          : issue.message,
       )
       .join("; ");
     throw new SelfServiceError("REFUSED", `profile change refused: ${fields}`);
@@ -173,7 +186,8 @@ export interface ProfileApplication {
   readonly phone: string | null | undefined;
   readonly email: string | null | undefined;
   readonly address: ProfileAddress | undefined;
-  readonly emergencyContact: { name: string | null; relationship: string | null; phone: string | null } | null | undefined;
+  readonly emergencyContact:
+    { name: string | null; relationship: string | null; phone: string | null } | null | undefined;
 }
 
 /** The current profile state an application diffs against. */

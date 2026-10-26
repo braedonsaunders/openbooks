@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const softHardBookings: DocArticle = {
-  slug: 'soft-hard-bookings',
-  title: 'Soft versus Hard Bookings',
-  category: 'projects',
+  slug: "soft-hard-bookings",
+  title: "Soft versus Hard Bookings",
+  category: "projects",
   order: 5,
   summary:
-    'What soft and hard bookings promise, how each moves through the staffing workflow, and how they compare across systems.',
-  updated: '2026-09-28',
-  keywords: ['soft booking', 'hard booking', 'tentative', 'confirmed', 'staffing', 'planning'],
-  related: ['busy-season-capacity', 'staffing-board-evidence', 'project-types'],
+    "What soft and hard bookings promise, how each moves through the staffing workflow, and how they compare across systems.",
+  updated: "2026-09-28",
+  keywords: ["soft booking", "hard booking", "tentative", "confirmed", "staffing", "planning"],
+  related: ["busy-season-capacity", "staffing-board-evidence", "project-types"],
   body: `# Soft versus Hard Bookings
 
 Every assignment carries a booking type: soft or hard. The distinction is a
@@ -58,4 +58,4 @@ Nothing in this mapping is a connector: these are operator migration
 readings, applied row by row through the assignment plan import, so every
 mapped booking carries its evidence from the first day.
 `,
-}
+};

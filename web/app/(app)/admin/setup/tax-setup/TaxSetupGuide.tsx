@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { Check, ChevronDown, Search } from 'lucide-react'
-import { toast } from 'sonner'
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { Check, ChevronDown, Search } from "lucide-react";
+import { toast } from "sonner";
 import {
   Badge,
   Button,
@@ -14,22 +14,22 @@ import {
   CardHeader,
   CardTitle,
   Input,
-} from '@openbooks/ui'
-import { countryOptions } from '../../../../../lib/countries'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
+} from "@openbooks/ui";
+import { countryOptions } from "../../../../../lib/countries";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
 
 export interface SupportedSubJurisdiction {
-  packCode: string
-  region: string
-  name: string
-  coverage: 'detailed_pack' | 'country_tax_setup' | 'jurisdiction_setup'
+  packCode: string;
+  region: string;
+  name: string;
+  coverage: "detailed_pack" | "country_tax_setup" | "jurisdiction_setup";
 }
 export interface SupportedCountry {
-  country: string
-  name: string
-  countryPack: string | null
-  countryStatus: 'ready' | 'subdivisions' | 'in_development'
-  subs: SupportedSubJurisdiction[]
+  country: string;
+  name: string;
+  countryPack: string | null;
+  countryStatus: "ready" | "subdivisions" | "in_development";
+  subs: SupportedSubJurisdiction[];
 }
 
 /**
@@ -44,106 +44,121 @@ export function TaxSetupGuide({
   step2,
   step3,
 }: {
-  countries: SupportedCountry[]
-  installedCodes: string[]
-  step2: React.ReactNode
-  step3: React.ReactNode
+  countries: SupportedCountry[];
+  installedCodes: string[];
+  step2: React.ReactNode;
+  step3: React.ReactNode;
 }) {
-  const t = useTranslations('admin.setup.taxSetup')
-  const tCommon = useTranslations('common')
-  const locale = useLocale()
-  const router = useRouter()
-  const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
-  const [installed, setInstalled] = useState<Set<string>>(() => new Set(installedCodes))
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("admin.setup.taxSetup");
+  const tCommon = useTranslations("common");
+  const locale = useLocale();
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [installed, setInstalled] = useState<Set<string>>(() => new Set(installedCodes));
+  const [busy, setBusy] = useState(false);
 
   const countryNames = useMemo(
     () => new Map(countryOptions(locale).map((c) => [c.value, c.label])),
     [locale],
-  )
-  const label = (c: SupportedCountry) => countryNames.get(c.country) ?? c.name
+  );
+  const label = (c: SupportedCountry) => countryNames.get(c.country) ?? c.name;
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase(locale)
-    if (!needle) return countries
+    const needle = query.trim().toLocaleLowerCase(locale);
+    if (!needle) return countries;
     return countries.flatMap((c) => {
       const countryMatches = [label(c), c.country].some((v) =>
-        String(v ?? '').toLocaleLowerCase(locale).includes(needle),
-      )
-      if (countryMatches) return [c]
+        String(v ?? "")
+          .toLocaleLowerCase(locale)
+          .includes(needle),
+      );
+      if (countryMatches) return [c];
       const matchingSubs = c.subs.filter((s) =>
         [s.name, s.region].some((v) => String(v).toLocaleLowerCase(locale).includes(needle)),
-      )
-      return matchingSubs.length ? [{ ...c, subs: matchingSubs }] : []
-    })
+      );
+      return matchingSubs.length ? [{ ...c, subs: matchingSubs }] : [];
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countries, countryNames, locale, query])
+  }, [countries, countryNames, locale, query]);
 
   // Selecting a country selects its country pack; expand to add state packs.
   function toggleCountry(c: SupportedCountry) {
     if (!c.countryPack) {
       if (c.subs.length) {
         setExpanded((cur) => {
-          const next = new Set(cur)
-          if (next.has(c.country)) next.delete(c.country); else next.add(c.country)
-          return next
-        })
+          const next = new Set(cur);
+          if (next.has(c.country)) next.delete(c.country);
+          else next.add(c.country);
+          return next;
+        });
       }
-      return
+      return;
     }
-    const countryPack = c.countryPack
+    const countryPack = c.countryPack;
     setSelected((cur) => {
-      const next = new Set(cur)
-      const anySelected = next.has(countryPack)
+      const next = new Set(cur);
+      const anySelected = next.has(countryPack);
       if (anySelected) {
         // Deselect the country and all its subs.
-        next.delete(countryPack)
-        countries.find((country) => country.country === c.country)?.subs.forEach((s) => next.delete(s.packCode))
+        next.delete(countryPack);
+        countries
+          .find((country) => country.country === c.country)
+          ?.subs.forEach((s) => next.delete(s.packCode));
       } else {
-        next.add(countryPack)
+        next.add(countryPack);
       }
-      return next
-    })
-    if (c.subs.length) setExpanded((cur) => new Set(cur).add(c.country))
+      return next;
+    });
+    if (c.subs.length) setExpanded((cur) => new Set(cur).add(c.country));
   }
 
   function toggleSub(packCode: string) {
     setSelected((cur) => {
-      const next = new Set(cur)
-      if (next.has(packCode)) next.delete(packCode)
-      else next.add(packCode)
-      return next
-    })
+      const next = new Set(cur);
+      if (next.has(packCode)) next.delete(packCode);
+      else next.add(packCode);
+      return next;
+    });
   }
 
-  const toProvision = useMemo(() => [...selected].filter((c) => !installed.has(c)), [selected, installed])
+  const toProvision = useMemo(
+    () => [...selected].filter((c) => !installed.has(c)),
+    [selected, installed],
+  );
 
   async function provision() {
-    if (toProvision.length === 0) return
-    setBusy(true)
+    if (toProvision.length === 0) return;
+    setBusy(true);
     try {
-      const res = await fetch('/api/tax/provision', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/tax/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ packs: toProvision }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
-      const data = (await res.json()) as { jurisdictionsCreated: number; taxCodesCreated: number; taxGroupsCreated: number; registrationsCreated: number }
-      setInstalled((cur) => new Set([...cur, ...toProvision]))
-      setSelected(new Set())
-      toast.success(t('provisionSuccess', {
-        jurisdictions: data.jurisdictionsCreated,
-        codes: data.taxCodesCreated,
-        groups: data.taxGroupsCreated,
-        nexus: data.registrationsCreated,
-      }))
-      router.refresh()
+      });
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon("feedback.saveFailed")));
+      const data = (await res.json()) as {
+        jurisdictionsCreated: number;
+        taxCodesCreated: number;
+        taxGroupsCreated: number;
+        registrationsCreated: number;
+      };
+      setInstalled((cur) => new Set([...cur, ...toProvision]));
+      setSelected(new Set());
+      toast.success(
+        t("provisionSuccess", {
+          jurisdictions: data.jurisdictionsCreated,
+          codes: data.taxCodesCreated,
+          groups: data.taxGroupsCreated,
+          nexus: data.registrationsCreated,
+        }),
+      );
+      router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : tCommon('feedback.saveFailed'))
+      toast.error(e instanceof Error ? e.message : tCommon("feedback.saveFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -154,76 +169,108 @@ export function TaxSetupGuide({
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-600 text-xs font-bold text-white">1</span>
-                {t('step1.title')}
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-600 text-xs font-bold text-white">
+                  1
+                </span>
+                {t("step1.title")}
               </CardTitle>
-              <CardDescription className="mt-1">{t('step1.description')}</CardDescription>
+              <CardDescription className="mt-1">{t("step1.description")}</CardDescription>
             </div>
             <Button onClick={provision} disabled={busy || toProvision.length === 0}>
-              {busy ? t('provisioning') : t('provisionSelected', { count: toProvision.length })}
+              {busy ? t("provisioning") : t("provisionSelected", { count: toProvision.length })}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="relative">
-            <Search className="pointer-events-none absolute top-2.5 left-3 text-slate-400" size={16} />
+            <Search
+              className="pointer-events-none absolute top-2.5 left-3 text-slate-400"
+              size={16}
+            />
             <Input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('searchPlaceholder')}
-              aria-label={t('searchPlaceholder')}
+              placeholder={t("searchPlaceholder")}
+              aria-label={t("searchPlaceholder")}
               className="pl-9"
             />
           </div>
           <ul className="grid gap-2 sm:grid-cols-2">
             {filtered.map((c) => {
-              const countrySelected = c.countryPack ? selected.has(c.countryPack) : c.subs.some((s) => selected.has(s.packCode))
+              const countrySelected = c.countryPack
+                ? selected.has(c.countryPack)
+                : c.subs.some((s) => selected.has(s.packCode));
               const countryInstalled = c.countryPack
                 ? installed.has(c.countryPack)
-                : c.subs.length > 0 && c.subs.every((s) => installed.has(s.packCode))
-              const isOpen = expanded.has(c.country) || (query.trim().length > 0 && c.subs.length > 0)
-              const selectedSubs = c.subs.filter((s) => selected.has(s.packCode)).length
+                : c.subs.length > 0 && c.subs.every((s) => installed.has(s.packCode));
+              const isOpen =
+                expanded.has(c.country) || (query.trim().length > 0 && c.subs.length > 0);
+              const selectedSubs = c.subs.filter((s) => selected.has(s.packCode)).length;
               return (
-                <li key={c.country} className={`rounded-xl border ${countrySelected ? 'border-teal-500' : 'border-slate-200 dark:border-slate-800'}`}>
+                <li
+                  key={c.country}
+                  className={`rounded-xl border ${countrySelected ? "border-teal-500" : "border-slate-200 dark:border-slate-800"}`}
+                >
                   <div className="flex items-center gap-2 p-3">
                     <button
                       type="button"
                       onClick={() => toggleCountry(c)}
-                      disabled={c.countryStatus === 'in_development'}
+                      disabled={c.countryStatus === "in_development"}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${countrySelected ? 'border-teal-500 bg-teal-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                      <span
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${countrySelected ? "border-teal-500 bg-teal-500 text-white" : "border-slate-300 dark:border-slate-600"}`}
+                      >
                         {countrySelected ? <Check size={13} /> : null}
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-slate-900 dark:text-slate-100">{label(c)}</span>
+                        <span className="block truncate font-medium text-slate-900 dark:text-slate-100">
+                          {label(c)}
+                        </span>
                         <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                           {c.subs.length
-                            ? t('statesAvailable', { count: c.subs.length })
-                            : c.countryStatus === 'in_development'
-                              ? t('packInDevelopment')
-                              : t('countryPackReady')}
+                            ? t("statesAvailable", { count: c.subs.length })
+                            : c.countryStatus === "in_development"
+                              ? t("packInDevelopment")
+                              : t("countryPackReady")}
                         </span>
                       </span>
                     </button>
-                    {countryInstalled ? <Badge variant="success" className="shrink-0"><Check size={12} className="mr-0.5" />{t('installed')}</Badge> : null}
+                    {countryInstalled ? (
+                      <Badge variant="success" className="shrink-0">
+                        <Check size={12} className="mr-0.5" />
+                        {t("installed")}
+                      </Badge>
+                    ) : null}
                     {c.subs.length ? (
                       <button
                         type="button"
-                        onClick={() => setExpanded((cur) => { const n = new Set(cur); if (n.has(c.country)) n.delete(c.country); else n.add(c.country); return n })}
+                        onClick={() =>
+                          setExpanded((cur) => {
+                            const n = new Set(cur);
+                            if (n.has(c.country)) n.delete(c.country);
+                            else n.add(c.country);
+                            return n;
+                          })
+                        }
                         className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                        aria-label={t('toggleStates', { country: label(c) })}
+                        aria-label={t("toggleStates", { country: label(c) })}
                       >
-                        <ChevronDown size={16} className={isOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                        <ChevronDown
+                          size={16}
+                          className={
+                            isOpen ? "rotate-180 transition-transform" : "transition-transform"
+                          }
+                        />
                       </button>
                     ) : null}
                   </div>
                   {c.subs.length && isOpen ? (
                     <ul className="max-h-80 overflow-y-auto border-t border-slate-100 px-3 py-2 dark:border-slate-800">
                       {c.subs.map((s) => {
-                        const on = selected.has(s.packCode)
-                        const sInstalled = installed.has(s.packCode)
+                        const on = selected.has(s.packCode);
+                        const sInstalled = installed.has(s.packCode);
                         return (
                           <li key={s.packCode}>
                             <button
@@ -232,45 +279,54 @@ export function TaxSetupGuide({
                               disabled={sInstalled}
                               className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-sm hover:bg-slate-50 disabled:opacity-60 dark:hover:bg-slate-900/40"
                             >
-                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on || sInstalled ? 'border-teal-500 bg-teal-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                              <span
+                                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on || sInstalled ? "border-teal-500 bg-teal-500 text-white" : "border-slate-300 dark:border-slate-600"}`}
+                              >
                                 {on || sInstalled ? <Check size={11} /> : null}
                               </span>
                               <span className="text-slate-700 dark:text-slate-200">{s.name}</span>
                               {!sInstalled ? (
                                 <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400">
-                                  {t(s.coverage === 'detailed_pack'
-                                    ? 'detailedPack'
-                                    : s.coverage === 'country_tax_setup'
-                                      ? 'countryTaxSetup'
-                                      : 'jurisdictionSetup')}
+                                  {t(
+                                    s.coverage === "detailed_pack"
+                                      ? "detailedPack"
+                                      : s.coverage === "country_tax_setup"
+                                        ? "countryTaxSetup"
+                                        : "jurisdictionSetup",
+                                  )}
                                 </span>
                               ) : null}
-                              {sInstalled ? <span className="ml-auto text-xs text-teal-600">{t('installed')}</span> : null}
+                              {sInstalled ? (
+                                <span className="ml-auto text-xs text-teal-600">
+                                  {t("installed")}
+                                </span>
+                              ) : null}
                             </button>
                           </li>
-                        )
+                        );
                       })}
                     </ul>
                   ) : null}
                   {selectedSubs > 0 && !isOpen ? (
                     <div className="border-t border-slate-100 px-3 py-1.5 text-xs text-teal-700 dark:border-slate-800 dark:text-teal-300">
-                      {t('statesSelected', { count: selectedSubs })}
+                      {t("statesSelected", { count: selectedSubs })}
                     </div>
                   ) : null}
                 </li>
-              )
+              );
             })}
             {filtered.length === 0 ? (
-              <li className="col-span-full py-8 text-center text-sm text-slate-500">{tCommon('feedback.noResults')}</li>
+              <li className="col-span-full py-8 text-center text-sm text-slate-500">
+                {tCommon("feedback.noResults")}
+              </li>
             ) : null}
           </ul>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('provisionHint')}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("provisionHint")}</p>
         </CardContent>
       </Card>
 
       {step2}
       {step3}
     </div>
-  )
+  );
 }
-

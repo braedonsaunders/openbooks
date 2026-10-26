@@ -1,5 +1,5 @@
-import { sql } from 'drizzle-orm'
-import { db, orgContext, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { sql } from "drizzle-orm";
+import { db, orgContext, type SqlExecutor } from "@openbooks/engine/platform/db";
 
 /**
  * Serialize rule-set edits with each bulk apply decision for this tenant.
@@ -13,7 +13,11 @@ import { db, orgContext, type SqlExecutor } from '@openbooks/engine/platform/db'
  */
 export async function lockBankMatchRuleSet(tx: SqlExecutor, orgId: string): Promise<void> {
   if (tx === db && !orgContext.getStore()?.txDb) {
-    throw new Error('the bank rule-set lock must be taken on the transaction that performs the edit or apply')
+    throw new Error(
+      "the bank rule-set lock must be taken on the transaction that performs the edit or apply",
+    );
   }
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'bank-match-rule-set:' + orgId}, 0))`)
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${"bank-match-rule-set:" + orgId}, 0))`,
+  );
 }

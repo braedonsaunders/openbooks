@@ -114,16 +114,26 @@ async function performanceManageScope(
 }
 
 /** The report employment's employer subsidiary (the 1:1's owning scope), if it exists. */
-async function reportEmployer(db: SqlExecutor, orgId: string, reportEmploymentId: string): Promise<string | null> {
-  const rows = await db.execute<{ employerSubsidiaryId: string | null }>(sql`
+async function reportEmployer(
+  db: SqlExecutor,
+  orgId: string,
+  reportEmploymentId: string,
+): Promise<string | null> {
+  const rows = await db.execute<{ employerSubsidiaryId: string | null }>(
+    sql`
     select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
      where org_id = ${orgId} and id = ${reportEmploymentId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0]?.employerSubsidiaryId ?? null;
 }
 
 function reportNotVisible(): HrmPerformanceError {
-  return new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+  return new HrmPerformanceError(
+    "NOT_FOUND",
+    "1:1 was not found — it may belong to another organization",
+  );
 }
 
 /** Read only the report id, then lock and scope-check it before loading a 1:1's joined data. */
@@ -133,9 +143,14 @@ async function lockOneOnOneReport(
   actorId: string,
   oneOnOneId: string,
 ): Promise<void> {
-  const reportEmploymentId = (await db.execute<{ report_employment_id: string }>(sql`
+  const reportEmploymentId = (
+    await db.execute<{ report_employment_id: string }>(
+      sql`
     select report_employment_id from hrm_one_on_ones where org_id = ${orgId} and id = ${oneOnOneId}
-  `, "objects"))[0]?.report_employment_id;
+  `,
+      "objects",
+    )
+  )[0]?.report_employment_id;
   if (!reportEmploymentId) throw reportNotVisible();
   try {
     await lockEmploymentsForScope(db, [reportEmploymentId], { orgId, actorId });
@@ -162,8 +177,13 @@ type StoredOneOnOne = {
   series_id: string | null;
 };
 
-async function loadOneOnOne(db: SqlExecutor, orgId: string, id: string): Promise<StoredOneOnOne | null> {
-  const rows = await db.execute<StoredOneOnOne & { recurrence: unknown }>(sql`
+async function loadOneOnOne(
+  db: SqlExecutor,
+  orgId: string,
+  id: string,
+): Promise<StoredOneOnOne | null> {
+  const rows = await db.execute<StoredOneOnOne & { recurrence: unknown }>(
+    sql`
     select o.id, o.manager_employment_id, o.report_employment_id,
            r.employer_subsidiary_id as report_employer_subsidiary_id,
            m.worker_party_id as manager_party_id, r.worker_party_id as report_party_id,
@@ -176,7 +196,9 @@ async function loadOneOnOne(db: SqlExecutor, orgId: string, id: string): Promise
       left join parties mp on mp.org_id = o.org_id and mp.id = m.worker_party_id
       left join parties rp on rp.org_id = o.org_id and rp.id = r.worker_party_id
      where o.org_id = ${orgId} and o.id = ${id}
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = rows[0];
   if (!row) return null;
   return { ...row, recurrence: (row.recurrence ?? null) as StoredOneOnOne["recurrence"] };
@@ -206,10 +228,16 @@ async function canSeeOneOnOne(
   return canParticipateInOneOnOne(db, orgId, actorId, one);
 }
 
-async function canParticipateInOneOnOne(db: SqlExecutor, orgId: string, actorId: string, one: StoredOneOnOne): Promise<boolean> {
+async function canParticipateInOneOnOne(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  one: StoredOneOnOne,
+): Promise<boolean> {
   const person = await loadApprovalPerson(db, orgId, actorId);
   if (!person.partyId) return false;
-  if (person.partyId === one.manager_party_id || person.partyId === one.report_party_id) return true;
+  if (person.partyId === one.manager_party_id || person.partyId === one.report_party_id)
+    return true;
   if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) return false;
   const today = await businessToday(orgId);
   const own = await loadOwnEmploymentIds(db, orgId, actorId);
@@ -231,7 +259,8 @@ async function requireWriteAuthority(
     // or add items on another subsidiary's pairs.
     if (
       manageScope === null ||
-      (one.report_employer_subsidiary_id !== null && manageScope.has(one.report_employer_subsidiary_id))
+      (one.report_employer_subsidiary_id !== null &&
+        manageScope.has(one.report_employer_subsidiary_id))
     ) {
       return;
     }
@@ -294,7 +323,11 @@ async function loadItems(
   oneOnOneId: string,
   authorPartyId: string | null,
 ): Promise<OneOnOneItemDTO[]> {
-  return (await loadItemsByMeeting(db, orgId, [oneOnOneId], authorPartyId)).get(oneOnOneId.toLowerCase()) ?? [];
+  return (
+    (await loadItemsByMeeting(db, orgId, [oneOnOneId], authorPartyId)).get(
+      oneOnOneId.toLowerCase(),
+    ) ?? []
+  );
 }
 
 async function loadItemsByMeeting(
@@ -305,15 +338,21 @@ async function loadItemsByMeeting(
 ): Promise<Map<string, OneOnOneItemDTO[]>> {
   const items = new Map<string, OneOnOneItemDTO[]>();
   if (!oneOnOneIds.length) return items;
-  const rows = await db.execute<StoredItem & { one_on_one_id: string }>(sql`
+  const rows = await db.execute<StoredItem & { one_on_one_id: string }>(
+    sql`
     select one_on_one_id, id, kind, author_party_id, body, visibility, status,
            assignee_party_id, due_on::text as due_on, position,
            carried_from_item_id::text as carried_from_item_id
       from hrm_one_on_one_items
      where org_id = ${orgId}
-       and one_on_one_id in (${sql.join(oneOnOneIds.map(id => sql`${id}::uuid`), sql`, `)})
+       and one_on_one_id in (${sql.join(
+         oneOnOneIds.map((id) => sql`${id}::uuid`),
+         sql`, `,
+       )})
      order by one_on_one_id, position, created_at
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const row of rows) {
     // Private notes stay author-only for both lists and selected meetings.
     if (row.visibility === "private" && row.author_party_id !== authorPartyId) continue;
@@ -352,10 +391,17 @@ function toDTO(one: StoredOneOnOne, items: readonly OneOnOneItemDTO[]): OneOnOne
   };
 }
 
-async function employmentParty(db: SqlExecutor, orgId: string, employmentId: string): Promise<string | null> {
-  const rows = await db.execute<{ worker_party_id: string | null }>(sql`
+async function employmentParty(
+  db: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+): Promise<string | null> {
+  const rows = await db.execute<{ worker_party_id: string | null }>(
+    sql`
     select worker_party_id from worker_employments where org_id = ${orgId} and id = ${employmentId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0]?.worker_party_id ?? null;
 }
 
@@ -372,7 +418,10 @@ export async function scheduleOneOnOne(args: {
   const managerEmploymentId = requireUuid(args.managerEmploymentId, "managerEmploymentId");
   const reportEmploymentId = requireUuid(args.reportEmploymentId, "reportEmploymentId");
   if (managerEmploymentId === reportEmploymentId) {
-    throw new HrmPerformanceError("INVALID_INPUT", "a 1:1 needs two different employments — manager and report cannot be the same person");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "a 1:1 needs two different employments — manager and report cannot be the same person",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
@@ -431,15 +480,28 @@ export async function scheduleOneOnOne(args: {
       }
     }
     try {
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into hrm_one_on_ones (org_id, manager_employment_id, report_employment_id, scheduled_at, recurrence, created_by, updated_by)
         values (${orgId}, ${managerEmploymentId}, ${reportEmploymentId}, ${args.scheduledAt}::timestamptz,
                 ${args.recurrence ? JSON.stringify(args.recurrence) : null}::jsonb, ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
-      if (!inserted) throw new HrmPerformanceError("REFUSED", "the 1:1 was not stored — no row was written; retry the action");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!inserted)
+        throw new HrmPerformanceError(
+          "REFUSED",
+          "the 1:1 was not stored — no row was written; retry the action",
+        );
       const one = await loadOneOnOne(db, orgId, inserted.id);
-      if (!one) throw new HrmPerformanceError("REFUSED", "the 1:1 was not stored — no row can be read back; retry the action");
+      if (!one)
+        throw new HrmPerformanceError(
+          "REFUSED",
+          "the 1:1 was not stored — no row can be read back; retry the action",
+        );
       const person = await loadApprovalPerson(db, orgId, actorId);
       return toDTO(one, await loadItems(db, orgId, one.id, person.partyId));
     } catch (e) {
@@ -463,10 +525,18 @@ async function nextOccurrenceAt(
   if (Number.isNaN(base.getTime())) {
     throw new HrmPerformanceError("INVALID_INPUT", "scheduled_at is not a readable timestamp");
   }
-  if (!Number.isInteger(recurrence.every_weeks) || recurrence.every_weeks < 1 ||
-      !Number.isInteger(recurrence.weekday) || recurrence.weekday < 0 || recurrence.weekday > 6 ||
-      (recurrence.time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(recurrence.time))) {
-    throw new HrmPerformanceError("INVALID_INPUT", "the stored 1:1 recurrence is invalid — set a positive week interval, weekday 0–6, and a valid local time");
+  if (
+    !Number.isInteger(recurrence.every_weeks) ||
+    recurrence.every_weeks < 1 ||
+    !Number.isInteger(recurrence.weekday) ||
+    recurrence.weekday < 0 ||
+    recurrence.weekday > 6 ||
+    (recurrence.time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(recurrence.time))
+  ) {
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "the stored 1:1 recurrence is invalid — set a positive week interval, weekday 0–6, and a valid local time",
+    );
   }
   const timeZone = await businessTimeZone(orgId);
   const targetDate = parseIsoDate(formatInZone(base, timeZone));
@@ -489,7 +559,11 @@ async function nextOccurrenceAt(
   }
 }
 
-export async function holdOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO> {
+export async function holdOneOnOne(args: {
+  orgId: string;
+  actorId: string;
+  id: string;
+}): Promise<OneOnOneDTO> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   const id = requireUuid(args.id, "id");
@@ -505,14 +579,20 @@ export async function holdOneOnOne(args: { orgId: string; actorId: string; id: s
         `only a scheduled 1:1 can be held — this one is ${one.status}; reopen it by scheduling a new occurrence`,
       );
     }
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update hrm_one_on_ones set status = 'held', held_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id} and status = 'scheduled'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     // A write that matches zero rows is a failure, not a success.
     if (updated.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the 1:1 changed under you — reload it and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the 1:1 changed under you — reload it and try again",
+      );
     }
     // Carry open items forward: COPIED to the next occurrence, the
     // original marked carried — never moved, so history stays put. The
@@ -522,7 +602,9 @@ export async function holdOneOnOne(args: { orgId: string; actorId: string; id: s
     if (one.recurrence) {
       const nextAt = await nextOccurrenceAt(orgId, one.scheduled_at, one.recurrence);
       const seriesId = one.series_id ?? one.id;
-      const next = (await db.execute<{ id: string }>(sql`
+      const next = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into hrm_one_on_ones (org_id, manager_employment_id, report_employment_id, scheduled_at, recurrence, series_id, created_by, updated_by)
         values (${orgId}, ${one.manager_employment_id}, ${one.report_employment_id}, ${nextAt}::timestamptz,
                 ${JSON.stringify(one.recurrence)}::jsonb, ${seriesId}, ${actorId}, ${actorId})
@@ -533,40 +615,64 @@ export async function holdOneOnOne(args: { orgId: string; actorId: string; id: s
         -- carried and skipping them again is correct.
         on conflict do nothing
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (next) {
-        const open = await db.execute<StoredItem>(sql`
+        const open = await db.execute<StoredItem>(
+          sql`
           select id, kind, author_party_id, body, visibility, status, assignee_party_id,
                  due_on::text as due_on, position, carried_from_item_id::text as carried_from_item_id
             from hrm_one_on_one_items
            where org_id = ${orgId} and one_on_one_id = ${id} and status = 'open'
-        `, "objects");
+        `,
+          "objects",
+        );
         for (const item of open) {
           // Carry-forward copies, never moves: the just-written next id
           // is the only fresh row, so a conflict here is unexpected and
           // must surface rather than absorb.
-          const copied = (await db.execute<{ id: string }>(sql`
+          const copied = (
+            await db.execute<{ id: string }>(
+              sql`
             insert into hrm_one_on_one_items (org_id, one_on_one_id, kind, author_party_id, body, visibility, status, carried_from_item_id, assignee_party_id, due_on, position, created_by, updated_by)
             values (${orgId}, ${next.id}, ${item.kind}, ${item.author_party_id}, ${item.body}, ${item.visibility},
                     'open', ${item.id}, ${item.assignee_party_id}, ${item.due_on}::date, ${item.position}, ${actorId}, ${actorId})
             returning id
-          `, "objects"))[0];
+          `,
+              "objects",
+            )
+          )[0];
           if (!copied) {
-            throw new HrmPerformanceError("REFUSED", "an agenda item could not be carried forward — no row was written; retry the action");
+            throw new HrmPerformanceError(
+              "REFUSED",
+              "an agenda item could not be carried forward — no row was written; retry the action",
+            );
           }
-          const marked = await db.execute<{ id: string }>(sql`
+          const marked = await db.execute<{ id: string }>(
+            sql`
             update hrm_one_on_one_items set status = 'carried', updated_by = ${actorId}, updated_at = now()
              where org_id = ${orgId} and id = ${item.id} and status = 'open'
             returning id
-          `, "objects");
+          `,
+            "objects",
+          );
           if (marked.length !== 1) {
-            throw new HrmPerformanceError("STALE_REVISION", "an agenda item changed under you — reload the 1:1 and try again");
+            throw new HrmPerformanceError(
+              "STALE_REVISION",
+              "an agenda item changed under you — reload the 1:1 and try again",
+            );
           }
         }
       }
     }
     const held = await loadOneOnOne(db, orgId, id);
-    if (!held) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!held)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "1:1 was not found — it may belong to another organization",
+      );
     return toDTO(held, await loadItems(db, orgId, id, person.partyId));
   });
 }
@@ -581,7 +687,10 @@ export async function skipOneOnOne(args: {
   const actorId = requireUuid(args.actorId, "actorId");
   const id = requireUuid(args.id, "id");
   if (typeof args.reason !== "string" || args.reason.trim().length === 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "skipping a 1:1 needs a reason — say why this occurrence is skipped");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "skipping a 1:1 needs a reason — say why this occurrence is skipped",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
@@ -590,15 +699,24 @@ export async function skipOneOnOne(args: {
     if (!one) throw reportNotVisible();
     await requireWriteAuthority(db, orgId, actorId, one);
     if (one.status !== "scheduled") {
-      throw new HrmPerformanceError("BAD_STATE", `only a scheduled 1:1 can be skipped — this one is ${one.status}`);
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        `only a scheduled 1:1 can be skipped — this one is ${one.status}`,
+      );
     }
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update hrm_one_on_ones set status = 'skipped', skip_reason = ${args.reason.trim()}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id} and status = 'scheduled'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the 1:1 changed under you — reload it and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the 1:1 changed under you — reload it and try again",
+      );
     }
     if (one.recurrence) {
       const nextAt = await nextOccurrenceAt(orgId, one.scheduled_at, one.recurrence);
@@ -614,13 +732,21 @@ export async function skipOneOnOne(args: {
       `);
     }
     const skipped = await loadOneOnOne(db, orgId, id);
-    if (!skipped) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!skipped)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "1:1 was not found — it may belong to another organization",
+      );
     const person = await loadApprovalPerson(db, orgId, actorId);
     return toDTO(skipped, await loadItems(db, orgId, id, person.partyId));
   });
 }
 
-export async function cancelOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<void> {
+export async function cancelOneOnOne(args: {
+  orgId: string;
+  actorId: string;
+  id: string;
+}): Promise<void> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   const id = requireUuid(args.id, "id");
@@ -631,15 +757,24 @@ export async function cancelOneOnOne(args: { orgId: string; actorId: string; id:
     if (!one) throw reportNotVisible();
     await requireWriteAuthority(db, orgId, actorId, one);
     if (one.status !== "scheduled") {
-      throw new HrmPerformanceError("BAD_STATE", `only a scheduled 1:1 can be cancelled — this one is ${one.status}`);
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        `only a scheduled 1:1 can be cancelled — this one is ${one.status}`,
+      );
     }
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update hrm_one_on_ones set status = 'cancelled', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id} and status = 'scheduled'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the 1:1 changed under you — reload it and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the 1:1 changed under you — reload it and try again",
+      );
     }
   });
 }
@@ -658,10 +793,16 @@ export async function addOneOnOneItem(args: {
   const actorId = requireUuid(args.actorId, "actorId");
   const oneOnOneId = requireUuid(args.oneOnOneId, "oneOnOneId");
   if (!["talking_point", "action_item", "note"].includes(args.kind)) {
-    throw new HrmPerformanceError("INVALID_INPUT", "item kind must be talking_point, action_item, or note");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "item kind must be talking_point, action_item, or note",
+    );
   }
   if (typeof args.body !== "string" || args.body.trim().length === 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "an agenda item needs a body — say what the point is");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "an agenda item needs a body — say what the point is",
+    );
   }
   const visibility = args.visibility ?? "shared";
   if (visibility !== "shared" && visibility !== "private") {
@@ -675,33 +816,68 @@ export async function addOneOnOneItem(args: {
     // Either party adds items; a private item belongs to its author.
     await requireWriteAuthority(db, orgId, actorId, one);
     if (one.status !== "scheduled") {
-      throw new HrmPerformanceError("BAD_STATE", `only a scheduled 1:1 takes new agenda items — this one is ${one.status}`);
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        `only a scheduled 1:1 takes new agenda items — this one is ${one.status}`,
+      );
     }
     const person = await loadApprovalPerson(db, orgId, actorId);
     if (!person.partyId) {
-      throw new HrmPerformanceError("FORBIDDEN", "your user has no person identity in this organization — ask an administrator to link it before adding agenda items");
+      throw new HrmPerformanceError(
+        "FORBIDDEN",
+        "your user has no person identity in this organization — ask an administrator to link it before adding agenda items",
+      );
     }
-    const maxPos = (await db.execute<{ max: number }>(sql`
+    const maxPos =
+      (
+        await db.execute<{ max: number }>(
+          sql`
       select coalesce(max(position), -1) as max from hrm_one_on_one_items where org_id = ${orgId} and one_on_one_id = ${oneOnOneId}
-    `, "objects"))[0]?.max ?? -1;
-    const inserted = (await db.execute<{ id: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]?.max ?? -1;
+    const inserted = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into hrm_one_on_one_items (org_id, one_on_one_id, kind, author_party_id, body, visibility, assignee_party_id, due_on, position, created_by, updated_by)
       values (${orgId}, ${oneOnOneId}, ${args.kind}, ${person.partyId}, ${args.body.trim()}, ${visibility},
               ${args.assigneePartyId ?? null}, ${args.dueOn ?? null}::date, ${maxPos + 1}, ${actorId}, ${actorId})
       returning id
-    `, "objects"))[0];
-    if (!inserted) throw new HrmPerformanceError("REFUSED", "the agenda item was not stored — no row was written; retry the action");
-    const rows = await db.execute<StoredItem>(sql`
+    `,
+        "objects",
+      )
+    )[0];
+    if (!inserted)
+      throw new HrmPerformanceError(
+        "REFUSED",
+        "the agenda item was not stored — no row was written; retry the action",
+      );
+    const rows = await db.execute<StoredItem>(
+      sql`
       select id, kind, author_party_id, body, visibility, status, assignee_party_id,
              due_on::text as due_on, position, carried_from_item_id::text as carried_from_item_id
         from hrm_one_on_one_items where org_id = ${orgId} and id = ${inserted.id}
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = rows[0];
-    if (!row) throw new HrmPerformanceError("REFUSED", "the agenda item was not stored — no row can be read back; retry the action");
+    if (!row)
+      throw new HrmPerformanceError(
+        "REFUSED",
+        "the agenda item was not stored — no row can be read back; retry the action",
+      );
     return {
-      id: row.id, kind: row.kind, authorPartyId: row.author_party_id, body: row.body,
-      visibility: row.visibility, status: row.status, assigneePartyId: row.assignee_party_id,
-      dueOn: row.due_on, position: row.position, carriedFromItemId: row.carried_from_item_id,
+      id: row.id,
+      kind: row.kind,
+      authorPartyId: row.author_party_id,
+      body: row.body,
+      visibility: row.visibility,
+      status: row.status,
+      assigneePartyId: row.assignee_party_id,
+      dueOn: row.due_on,
+      position: row.position,
+      carriedFromItemId: row.carried_from_item_id,
     };
   });
 }
@@ -724,11 +900,14 @@ export async function setOneOnOneItemDone(args: {
     if (!one) throw reportNotVisible();
     await requireWriteAuthority(db, orgId, actorId, one);
     const target = args.done ? "done" : "open";
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update hrm_one_on_one_items set status = ${target}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${itemId} and one_on_one_id = ${oneOnOneId} and status in ('open', 'done')
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
       throw new HrmPerformanceError(
         "NOT_FOUND",
@@ -752,10 +931,16 @@ export async function listOneOnOneDirectory(args: {
 }): Promise<{ employments: readonly { id: string; name: string; mine: boolean }[] }> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
-  if (args.limit !== undefined && (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 50))
+  if (
+    args.limit !== undefined &&
+    (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 50)
+  )
     throw new HrmPerformanceError("INVALID_INPUT", "Choose between 1 and 50 employee matches.");
   if (args.q !== undefined && args.q.length > 200)
-    throw new HrmPerformanceError("INVALID_INPUT", "Search for an employee using 200 characters or fewer.");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "Search for an employee using 200 characters or fewer.",
+    );
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     const readScope = await performanceReadScope(db, orgId, actorId);
@@ -773,21 +958,28 @@ export async function listOneOnOneDirectory(args: {
         readScope === null
           ? sql``
           : sql`and ${employerSubsidiaryScope(readScope, "e.employer_subsidiary_id")}`;
-      const rows = await db.execute<{ id: string; name: string }>(sql`
+      const rows = await db.execute<{ id: string; name: string }>(
+        sql`
         select e.id, coalesce(p.display_name, '—') as name
           from worker_employments e
           left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
          where e.org_id = ${orgId}
          ${scopeFilter} ${actorScope} ${searchFilter}
          order by name, e.id ${limit}
-      `, "objects");
+      `,
+        "objects",
+      );
       const scoped = await lockEmploymentsForScope(
         db,
         rows.map((row) => row.id),
         { orgId, actorId, outOfScope: "filter" },
       );
       const visibleIds = new Set(scoped.map((employment) => employment.id));
-      return { employments: rows.filter((row) => visibleIds.has(row.id)).map((row) => ({ ...row, mine: false })) };
+      return {
+        employments: rows
+          .filter((row) => visibleIds.has(row.id))
+          .map((row) => ({ ...row, mine: false })),
+      };
     }
     if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
       throw new HrmPerformanceError(
@@ -801,14 +993,17 @@ export async function listOneOnOneDirectory(args: {
     const ids = [...new Set([...own, ...team])];
     if (ids.length === 0) return { employments: [] };
     const params = ids.map((id) => sql`${id}::uuid`);
-    const rows = await db.execute<{ id: string; name: string }>(sql`
+    const rows = await db.execute<{ id: string; name: string }>(
+      sql`
       select e.id, coalesce(p.display_name, '—') as name
         from worker_employments e
         left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
        where e.org_id = ${orgId} and e.id in (${sql.join(params, sql`, `)})
        ${actorScope} ${searchFilter}
        order by name, e.id ${limit}
-    `, "objects");
+    `,
+      "objects",
+    );
     const scoped = await lockEmploymentsForScope(
       db,
       rows.map((row) => row.id),
@@ -816,11 +1011,19 @@ export async function listOneOnOneDirectory(args: {
     );
     const visibleIds = new Set(scoped.map((employment) => employment.id));
     const mine = new Set(own);
-    return { employments: rows.filter((row) => visibleIds.has(row.id)).map((row) => ({ id: row.id, name: row.name, mine: mine.has(row.id) })) };
+    return {
+      employments: rows
+        .filter((row) => visibleIds.has(row.id))
+        .map((row) => ({ id: row.id, name: row.name, mine: mine.has(row.id) })),
+    };
   });
 }
 
-export async function getOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO & { canWrite: boolean }> {
+export async function getOneOnOne(args: {
+  orgId: string;
+  actorId: string;
+  id: string;
+}): Promise<OneOnOneDTO & { canWrite: boolean }> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   const id = requireUuid(args.id, "id");
@@ -831,7 +1034,10 @@ export async function getOneOnOne(args: { orgId: string; actorId: string; id: st
     if (!one) throw reportNotVisible();
     if (!(await canSeeOneOnOne(db, orgId, actorId, one))) {
       // Uniform NOT_FOUND so existence cannot be probed across the pair boundary.
-      throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "1:1 was not found — it may belong to another organization",
+      );
     }
     const person = await loadApprovalPerson(db, orgId, actorId);
     let canWrite = false;
@@ -864,8 +1070,11 @@ export async function listOneOnOnes(args: {
     const own = await loadOwnEmploymentIds(db, orgId, actorId);
     const team = privileged ? [] : await loadManagedEmploymentIds(db, orgId, actorId, today);
     const statusFilter = args.status ? sql` and o.status = ${args.status}` : sql``;
-    const employmentFilter = args.employmentId ? sql` and (o.manager_employment_id = ${args.employmentId} or o.report_employment_id = ${args.employmentId})` : sql``;
-    const rows = await db.execute<StoredOneOnOne & { recurrence: unknown }>(sql`
+    const employmentFilter = args.employmentId
+      ? sql` and (o.manager_employment_id = ${args.employmentId} or o.report_employment_id = ${args.employmentId})`
+      : sql``;
+    const rows = await db.execute<StoredOneOnOne & { recurrence: unknown }>(
+      sql`
       select o.id, o.manager_employment_id, o.report_employment_id,
              r.employer_subsidiary_id as report_employer_subsidiary_id,
              m.worker_party_id as manager_party_id, r.worker_party_id as report_party_id,
@@ -879,7 +1088,9 @@ export async function listOneOnOnes(args: {
         left join parties rp on rp.org_id = o.org_id and rp.id = r.worker_party_id
        where o.org_id = ${orgId}${statusFilter}${employmentFilter}
        order by o.scheduled_at desc
-    `, "objects");
+    `,
+      "objects",
+    );
     const visibleEmployments = await lockEmploymentsForScope(
       db,
       rows.map((row) => row.report_employment_id),
@@ -888,7 +1099,10 @@ export async function listOneOnOnes(args: {
     const visibleEmploymentIds = new Set(visibleEmployments.map((employment) => employment.id));
     const visibleMeetings: StoredOneOnOne[] = [];
     for (const raw of rows) {
-      const one: StoredOneOnOne = { ...raw, recurrence: (raw.recurrence ?? null) as StoredOneOnOne["recurrence"] };
+      const one: StoredOneOnOne = {
+        ...raw,
+        recurrence: (raw.recurrence ?? null) as StoredOneOnOne["recurrence"],
+      };
       if (!visibleEmploymentIds.has(one.report_employment_id)) continue;
       // HR sees only pairs whose report sits inside their allowed
       // subsidiaries — the privileged flag alone is never enough.
@@ -905,11 +1119,15 @@ export async function listOneOnOnes(args: {
       if (!visible) continue;
       visibleMeetings.push(one);
     }
-    const items = await loadItemsByMeeting(db, orgId, visibleMeetings.map(one => one.id), person.partyId);
-    return visibleMeetings.map(one => toDTO(one, items.get(one.id) ?? []));
+    const items = await loadItemsByMeeting(
+      db,
+      orgId,
+      visibleMeetings.map((one) => one.id),
+      person.partyId,
+    );
+    return visibleMeetings.map((one) => toDTO(one, items.get(one.id) ?? []));
   });
 }
-
 
 /** One bounded organization worklist. Agenda contents are read only for a selected meeting. */
 export async function listConversationPage(args: {
@@ -927,7 +1145,13 @@ export async function listConversationPage(args: {
     actorId = requireUuid(args.actorId, "actorId");
   const page = args.page ?? 1,
     perPage = args.perPage ?? 25;
-  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(perPage) || perPage < 5 || perPage > 100)
+  if (
+    !Number.isInteger(page) ||
+    page < 1 ||
+    !Number.isInteger(perPage) ||
+    perPage < 5 ||
+    perPage > 100
+  )
     throw new HrmPerformanceError(
       "INVALID_INPUT",
       "Choose a positive page and between 5 and 100 conversations per page.",
@@ -935,9 +1159,15 @@ export async function listConversationPage(args: {
   if (args.status && !["scheduled", "held", "skipped", "cancelled"].includes(args.status))
     throw new HrmPerformanceError("INVALID_INPUT", "Choose an available conversation status.");
   if (args.sort && !["when", "manager", "employee"].includes(args.sort))
-    throw new HrmPerformanceError("INVALID_INPUT", "Sort conversations by date, manager or employee.");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "Sort conversations by date, manager or employee.",
+    );
   if (args.dir && !["asc", "desc"].includes(args.dir))
-    throw new HrmPerformanceError("INVALID_INPUT", "Choose ascending or descending conversation order.");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "Choose ascending or descending conversation order.",
+    );
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     const readScope = await performanceReadScope(db, orgId, actorId);
@@ -945,7 +1175,9 @@ export async function listConversationPage(args: {
     const person = await loadApprovalPerson(db, orgId, actorId);
     const own = await loadOwnEmploymentIds(db, orgId, actorId);
     const selfRead = await actorHasPermission(db, orgId, actorId, "hrm.self.read");
-    const team = selfRead ? await loadManagedEmploymentIds(db, orgId, actorId, await businessToday(orgId)) : [];
+    const team = selfRead
+      ? await loadManagedEmploymentIds(db, orgId, actorId, await businessToday(orgId))
+      : [];
     const personal = sql`(
       ${person.partyId ? sql`m.worker_party_id=${person.partyId} or r.worker_party_id=${person.partyId}` : sql`false`}
       or ${
@@ -978,7 +1210,9 @@ export async function listConversationPage(args: {
       where o.org_id=${orgId} and ${scope} ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)}
       ${args.status ? sql`and o.status=${args.status}` : sql``}
       ${search ? sql`and (mp.display_name ilike ${"%" + search + "%"} or rp.display_name ilike ${"%" + search + "%"})` : sql``}`;
-    const total = (await db.execute<{ total: number }>(sql`select count(*)::int as total ${from}`, "objects"))[0]!.total;
+    const total = (
+      await db.execute<{ total: number }>(sql`select count(*)::int as total ${from}`, "objects")
+    )[0]!.total;
     const currentPage = Math.min(page, Math.max(1, Math.ceil(total / perPage)));
     const sort =
       args.sort === "manager"
@@ -988,22 +1222,26 @@ export async function listConversationPage(args: {
           : sql`o.scheduled_at`;
     const dir = args.dir === "desc" ? sql`desc` : sql`asc`;
     const rows = await db.execute<{
-        id: string;
-        manager: string;
-        employee: string;
-        scheduledAt: string;
-        status: OneOnOneStatus;
-      }>(sql`
+      id: string;
+      manager: string;
+      employee: string;
+      scheduledAt: string;
+      status: OneOnOneStatus;
+    }>(
+      sql`
       select o.id,mp.display_name as manager,rp.display_name as employee,o.scheduled_at::text as "scheduledAt",o.status
       ${from} order by ${sort} ${dir},o.id ${dir} limit ${perPage} offset ${(currentPage - 1) * perPage}
-    `, "objects");
+    `,
+      "objects",
+    );
     return {
       rows,
       total,
       currentPage,
       perPage,
       canSchedule:
-        (await actorHasPermission(db, orgId, actorId, "hrm.performance.manage")) || (own.length > 0 && team.length > 0),
+        (await actorHasPermission(db, orgId, actorId, "hrm.performance.manage")) ||
+        (own.length > 0 && team.length > 0),
     };
   });
 }

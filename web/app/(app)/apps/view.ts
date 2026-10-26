@@ -1,10 +1,24 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { grid, heading, page, pageHeader, pagination, ref, repeat, field, textBlock, widget, widgetBlock, type FieldRef, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { parseListParams } from '../../../lib/list-params'
-import { can, requirePermission } from '../../../lib/authz'
-import { listApps } from '../../../lib/apps/store'
+import { getTranslations } from "next-intl/server";
+import {
+  grid,
+  heading,
+  page,
+  pageHeader,
+  pagination,
+  ref,
+  repeat,
+  field,
+  textBlock,
+  widget,
+  widgetBlock,
+  type FieldRef,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { parseListParams } from "../../../lib/list-params";
+import { can, requirePermission } from "../../../lib/authz";
+import { listApps } from "../../../lib/apps/store";
 
 /**
  * The app launcher, split into a loader and a spec.
@@ -28,37 +42,37 @@ import { listApps } from '../../../lib/apps/store'
  */
 
 export interface AppLauncherCardRow {
-  key: string
-  href: string
-  ariaLabel: string
-  iconKey: string
-  name: string
-  versionLine: string
-  description: string
-  openLabel: string
+  key: string;
+  href: string;
+  ariaLabel: string;
+  iconKey: string;
+  name: string;
+  versionLine: string;
+  description: string;
+  openLabel: string;
 }
 
 export interface AppsLauncherData {
-  title: string
-  description: string
-  searchPlaceholder: string
-  docsHref: string
-  docsLabel: string
-  manageLabel: string
-  libraryHref: string
-  libraryLabel: string
-  canManage: boolean
-  hasCards: boolean
-  noResults: boolean
-  emptyNoCta: boolean
-  emptyWithCta: boolean
-  cards: AppLauncherCardRow[]
-  emptyTitle: string
-  emptyDescription: string
-  emptyActionLabel: string
-  total: number
-  currentPage: number
-  perPage: number
+  title: string;
+  description: string;
+  searchPlaceholder: string;
+  docsHref: string;
+  docsLabel: string;
+  manageLabel: string;
+  libraryHref: string;
+  libraryLabel: string;
+  canManage: boolean;
+  hasCards: boolean;
+  noResults: boolean;
+  emptyNoCta: boolean;
+  emptyWithCta: boolean;
+  cards: AppLauncherCardRow[];
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyActionLabel: string;
+  total: number;
+  currentPage: number;
+  perPage: number;
 }
 
 export async function loadAppsLauncher(
@@ -67,34 +81,38 @@ export async function loadAppsLauncher(
   // Gate: the launcher refuses without `apps.use`. The layout adds the
   // `apps` feature gate for the whole /apps segment, so the loader does
   // not repeat it here.
-  const authz = await requirePermission('apps.use')
-  const t = await getTranslations('apps')
+  const authz = await requirePermission("apps.use");
+  const t = await getTranslations("apps");
   const params = parseListParams(sp, {
-    sort: 'name',
-    dir: 'asc',
+    sort: "name",
+    dir: "asc",
     perPage: 12,
-    allowedSorts: ['name'] as const,
-  })
-  const query = params.q?.toLocaleLowerCase()
-  const allApps = await listApps(authz.user.orgId)
-  const availableApps = allApps.filter((app) => app.status === 'installed' && app.activeVersionId)
+    allowedSorts: ["name"] as const,
+  });
+  const query = params.q?.toLocaleLowerCase();
+  const allApps = await listApps(authz.user.orgId);
+  const availableApps = allApps.filter((app) => app.status === "installed" && app.activeVersionId);
   const installed = availableApps
-    .filter((app) => !query || `${app.name} ${app.key} ${app.description ?? ''}`.toLocaleLowerCase().includes(query))
-    .sort((a, b) => a.name.localeCompare(b.name))
-  const total = installed.length
-  const apps = installed.slice((params.page - 1) * params.perPage, params.page * params.perPage)
-  const hasAnyInstalled = availableApps.length > 0
-  const canManage = can(authz, 'apps.manage')
+    .filter(
+      (app) =>
+        !query ||
+        `${app.name} ${app.key} ${app.description ?? ""}`.toLocaleLowerCase().includes(query),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const total = installed.length;
+  const apps = installed.slice((params.page - 1) * params.perPage, params.page * params.perPage);
+  const hasAnyInstalled = availableApps.length > 0;
+  const canManage = can(authz, "apps.manage");
 
   return {
-    title: t('title'),
-    description: t('description'),
-    searchPlaceholder: t('searchPlaceholder'),
-    docsHref: '/docs/app-authoring',
-    manageLabel: t('actions.manage'),
-    docsLabel: t('actions.documentation'),
-    libraryHref: '/apps/library',
-    libraryLabel: t('actions.library'),
+    title: t("title"),
+    description: t("description"),
+    searchPlaceholder: t("searchPlaceholder"),
+    docsHref: "/docs/app-authoring",
+    manageLabel: t("actions.manage"),
+    docsLabel: t("actions.documentation"),
+    libraryHref: "/apps/library",
+    libraryLabel: t("actions.library"),
     canManage,
     hasCards: apps.length > 0,
     noResults: apps.length === 0 && hasAnyInstalled,
@@ -104,109 +122,116 @@ export async function loadAppsLauncher(
       key: app.key,
       // Keys are URL slugs; the native page encodes them the same way.
       href: `/apps/${encodeURIComponent(app.key)}`,
-      ariaLabel: t('actions.openAria', { name: app.name }),
+      ariaLabel: t("actions.openAria", { name: app.name }),
       iconKey: app.iconKey,
       name: app.name,
-      versionLine: t('version', { version: app.version ?? '—' }),
-      description: app.description || t('noDescription'),
-      openLabel: t('actions.open'),
+      versionLine: t("version", { version: app.version ?? "—" }),
+      description: app.description || t("noDescription"),
+      openLabel: t("actions.open"),
     })),
-    emptyTitle: hasAnyInstalled ? t('noResults.title') : t('empty.title'),
-    emptyDescription: hasAnyInstalled ? t('noResults.description') : t('empty.description'),
-    emptyActionLabel: t('empty.action'),
+    emptyTitle: hasAnyInstalled ? t("noResults.title") : t("empty.title"),
+    emptyDescription: hasAnyInstalled ? t("noResults.description") : t("empty.description"),
+    emptyActionLabel: t("empty.action"),
     total,
     currentPage: params.page,
     perPage: params.perPage,
-  }
+  };
 }
 
-const f = ref<AppsLauncherData>()
-const item = field
+const f = ref<AppsLauncherData>();
+const item = field;
 
 // Shared empty-note title/description blocks: the three note bodies differ
 // only in their presence flag and (for one) the trailing CTA.
 function emptyNoteBody(when: FieldRef, data: AppsLauncherData, withCta: boolean) {
   return {
-    ...grid('flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-700', [
-      widgetBlock('apps-empty-icon'),
-      heading(2, f('emptyTitle'), 'font-medium text-slate-900 dark:text-slate-100'),
-      textBlock(f('emptyDescription'), {
-        className: 'mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400',
-      }),
-      ...(withCta
-        ? [
-            widgetBlock('apps-launcher-button', {
-              href: data.libraryHref,
-              label: data.emptyActionLabel,
-              icon: 'library',
-              size: 'sm',
-              className: 'mt-4',
-            }),
-          ]
-        : []),
-    ]),
+    ...grid(
+      "flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-700",
+      [
+        widgetBlock("apps-empty-icon"),
+        heading(2, f("emptyTitle"), "font-medium text-slate-900 dark:text-slate-100"),
+        textBlock(f("emptyDescription"), {
+          className: "mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400",
+        }),
+        ...(withCta
+          ? [
+              widgetBlock("apps-launcher-button", {
+                href: data.libraryHref,
+                label: data.emptyActionLabel,
+                icon: "library",
+                size: "sm",
+                className: "mt-4",
+              }),
+            ]
+          : []),
+      ],
+    ),
     when,
-  }
+  };
 }
 
 export function appsLauncherSpec(data: AppsLauncherData): PageSpec {
   return page({
-    route: '/apps',
-    layout: 'list',
+    route: "/apps",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
-          widget('link-button', { href: '/admin/apps', label: data.manageLabel, variant: 'outline', size: 'sm' }, f('canManage')),
-          widget('apps-launcher-button', {
+          widget(
+            "link-button",
+            { href: "/admin/apps", label: data.manageLabel, variant: "outline", size: "sm" },
+            f("canManage"),
+          ),
+          widget("apps-launcher-button", {
             href: data.docsHref,
             label: data.docsLabel,
-            icon: 'book',
-            variant: 'outline',
-            size: 'sm',
+            icon: "book",
+            variant: "outline",
+            size: "sm",
           }),
           widget(
-            'apps-launcher-button',
-            { href: data.libraryHref, label: data.libraryLabel, icon: 'library' },
-            f('canManage'),
+            "apps-launcher-button",
+            { href: data.libraryHref, label: data.libraryLabel, icon: "library" },
+            f("canManage"),
           ),
         ],
       }),
-      widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
+      widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
     ],
     body: [
       {
         ...repeat({
-          items: f('cards'),
-          itemKey: item('key'),
-          className: 'grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3',
+          items: f("cards"),
+          itemKey: item("key"),
+          className: "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3",
           unwrapped: true,
           blocks: [
-            widgetBlock('app-launcher-card', {
-              href: item('href'),
-              ariaLabel: item('ariaLabel'),
-              iconKey: item('iconKey'),
-              name: item('name'),
-              versionLine: item('versionLine'),
-              description: item('description'),
-              openLabel: item('openLabel'),
+            widgetBlock("app-launcher-card", {
+              href: item("href"),
+              ariaLabel: item("ariaLabel"),
+              iconKey: item("iconKey"),
+              name: item("name"),
+              versionLine: item("versionLine"),
+              description: item("description"),
+              openLabel: item("openLabel"),
             }),
           ],
         }),
-        when: f('hasCards'),
+        when: f("hasCards"),
       },
-      emptyNoteBody(f('noResults'), data, false),
-      emptyNoteBody(f('emptyNoCta'), data, false),
-      emptyNoteBody(f('emptyWithCta'), data, true),
+      emptyNoteBody(f("noResults"), data, false),
+      emptyNoteBody(f("emptyNoCta"), data, false),
+      emptyNoteBody(f("emptyWithCta"), data, true),
       pagination({
-        basePath: '/apps',
-        total: f('total'),
-        page: f('currentPage'),
-        perPage: f('perPage'),
+        basePath: "/apps",
+        total: f("total"),
+        page: f("currentPage"),
+        perPage: f("perPage"),
         // The native pager sits flush under the grid — no `mt-3` spacer.
         bare: true,
       }),
     ],
-  })
+  });
 }

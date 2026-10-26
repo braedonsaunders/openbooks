@@ -1,27 +1,27 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
-import test from 'node:test'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../testing/stub-modules";
+import test from "node:test";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 
 interface RemeasurementCall {
-  orgId: string
-  assetId: string
-  options: Record<string, unknown>
+  orgId: string;
+  assetId: string;
+  options: Record<string, unknown>;
 }
 
 interface RouteState {
-  isIsoCalendarDate: typeof isIsoCalendarDate
-  businessTodayCalls: string[]
-  remeasureCalls: RemeasurementCall[]
+  isIsoCalendarDate: typeof isIsoCalendarDate;
+  businessTodayCalls: string[];
+  remeasureCalls: RemeasurementCall[];
 }
 
-const stateKey = Symbol.for('openbooks.asset-remeasurement-route-test')
+const stateKey = Symbol.for("openbooks.asset-remeasurement-route-test");
 const routeState: RouteState = {
   isIsoCalendarDate,
   businessTodayCalls: [],
   remeasureCalls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 // Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
 // mocked: hand doubles cannot produce the refusals the real modules enforce.
@@ -30,11 +30,13 @@ stubModules({
   navigation: false,
   intl: false,
   authz: false,
-  features: { source: `
+  features: {
+    source: `
     export async function guardFeaturePermission() {
       return { user: { orgId: 'org-1', id: 'user-1' } }
     }
-  ` },
+  `,
+  },
   extra: {
     "../../../../../lib/feature-gates": `
       export async function guardFeaturePermission() {
@@ -57,64 +59,64 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?asset-remeasurement-date-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?asset-remeasurement-date-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const ASSET_ID = '00000000-0000-4000-8000-00000000a001'
+const ASSET_ID = "00000000-0000-4000-8000-00000000a001";
 
 function reset(): void {
-  routeState.businessTodayCalls.length = 0
-  routeState.remeasureCalls.length = 0
+  routeState.businessTodayCalls.length = 0;
+  routeState.remeasureCalls.length = 0;
 }
 
 function post(body: unknown): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/assets/${ASSET_ID}/remeasure`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ newCarryingValue: '800', ...(body as Record<string, unknown>) }),
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newCarryingValue: "800", ...(body as Record<string, unknown>) }),
     }),
     { params: Promise.resolve({ id: ASSET_ID }) },
-  )
+  );
 }
 
-test('an omitted remeasurement date alone defaults to the organization business day', async () => {
-  reset()
+test("an omitted remeasurement date alone defaults to the organization business day", async () => {
+  reset();
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(routeState.businessTodayCalls, ['org-1'])
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.businessTodayCalls, ["org-1"]);
   assert.deepEqual(routeState.remeasureCalls, [
     {
-      orgId: 'org-1',
+      orgId: "org-1",
       assetId: ASSET_ID,
       options: {
-newCarryingValue: '800.0000',
-        date: '2026-08-31',
-        actorId: 'user-1',
+        newCarryingValue: "800.0000",
+        date: "2026-08-31",
+        actorId: "user-1",
       },
     },
-  ])
-})
+  ]);
+});
 
-test('invalid remeasurement dates return 422 before reaching the remeasurement engine', async () => {
+test("invalid remeasurement dates return 422 before reaching the remeasurement engine", async () => {
   const cases: Array<{ label: string; date: unknown }> = [
-    { label: 'empty', date: '' },
-    { label: 'non-string', date: 20260831 },
-    { label: 'malformed format', date: '31-08-2026' },
-    { label: 'impossible calendar date', date: '2026-02-30' },
-  ]
+    { label: "empty", date: "" },
+    { label: "non-string", date: 20260831 },
+    { label: "malformed format", date: "31-08-2026" },
+    { label: "impossible calendar date", date: "2026-02-30" },
+  ];
 
   for (const { label, date } of cases) {
-    reset()
+    reset();
 
-    const response = await post({ date })
+    const response = await post({ date });
 
-    assert.equal(response.status, 422, label)
-    assert.deepEqual(routeState.businessTodayCalls, [], `${label} date must not default`)
-    assert.deepEqual(routeState.remeasureCalls, [], `${label} date must not reach remeasureAsset`)
+    assert.equal(response.status, 422, label);
+    assert.deepEqual(routeState.businessTodayCalls, [], `${label} date must not default`);
+    assert.deepEqual(routeState.remeasureCalls, [], `${label} date must not reach remeasureAsset`);
   }
-})
+});

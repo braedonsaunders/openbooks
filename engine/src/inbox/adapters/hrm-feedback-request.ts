@@ -15,7 +15,10 @@
  */
 
 import { HrmAuthorizationError } from "../../hrm/authorization.ts";
-import { feedbackFeatureEnabled, listOpenRequestsForParty } from "../../hrm/performance/feedback.ts";
+import {
+  feedbackFeatureEnabled,
+  listOpenRequestsForParty,
+} from "../../hrm/performance/feedback.ts";
 import { db } from "../../platform/db.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
@@ -37,20 +40,18 @@ export const hrmFeedbackRequestAdapter: InboxAdapter = {
       if (error instanceof HrmAuthorizationError) return [];
       throw error;
     }
-    return requests.map(
-      (request): InboxItem => ({
-        id: inboxItemId("hrm_feedback_request", request.id),
-        kind: "hrm_feedback_request",
-        title: "Feedback requested",
-        subtitle: "a colleague asked for your feedback — respond from the feedback surface",
-        dueAt: null,
-        createdAt: request.recordedAt,
-        priority: "normal",
-        subjectHref: `/me/one-on-ones?request=${request.id}`,
-        actions: [],
-        source: { kind: "hrm_feedback_request", id: request.id },
-      }),
-    );
+    return requests.map((request): InboxItem => ({
+      id: inboxItemId("hrm_feedback_request", request.id),
+      kind: "hrm_feedback_request",
+      title: "Feedback requested",
+      subtitle: "a colleague asked for your feedback — respond from the feedback surface",
+      dueAt: null,
+      createdAt: request.recordedAt,
+      priority: "normal",
+      subjectHref: `/me/one-on-ones?request=${request.id}`,
+      actions: [],
+      source: { kind: "hrm_feedback_request", id: request.id },
+    }));
   },
   async act(): Promise<void> {
     throw new Error(

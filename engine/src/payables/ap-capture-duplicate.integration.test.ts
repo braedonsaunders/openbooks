@@ -34,19 +34,21 @@ function normalized(invoiceNumber: string, accountId: string): NormalizedCapture
     taxTotal: "0.0000",
     total: "10.0000",
     memo: null,
-    lines: [{
-      description: "Duplicate-source line",
-      productCode: null,
-      quantity: "1.0000",
-      unit: "ea",
-      unitPrice: "10.0000",
-      amount: "10.0000",
-      taxAmount: "0.0000",
-      accountId,
-      itemId: null,
-      purchaseOrderLineId: null,
-      confidence: "1.0000",
-    }],
+    lines: [
+      {
+        description: "Duplicate-source line",
+        productCode: null,
+        quantity: "1.0000",
+        unit: "ea",
+        unitPrice: "10.0000",
+        amount: "10.0000",
+        taxAmount: "0.0000",
+        accountId,
+        itemId: null,
+        purchaseOrderLineId: null,
+        confidence: "1.0000",
+      },
+    ],
   };
 }
 
@@ -108,11 +110,19 @@ async function racePair(
   secondId: string,
 ): Promise<[PromiseSettledResult<Materialized>, PromiseSettledResult<Materialized>]> {
   let release!: () => void;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
-  const run = (captureItemId: string): Promise<Materialized> => (async () => {
-    await gate;
-    return materializeCapture({ orgId, captureItemId, actorId: null, allowedSubsidiaryIds: null });
-  })();
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = (captureItemId: string): Promise<Materialized> =>
+    (async () => {
+      await gate;
+      return materializeCapture({
+        orgId,
+        captureItemId,
+        actorId: null,
+        allowedSubsidiaryIds: null,
+      });
+    })();
   const first = run(firstId);
   const second = run(secondId);
   release();
@@ -133,7 +143,9 @@ function assertExactlyOneDuplicateRefusal(
     `the loser gets a usable duplicate refusal, got ${String(refusal)}`,
   );
   assert.match(refusal.message, /already uses this source or vendor invoice number/);
-  return { documentId: (won[0] as PromiseFulfilledResult<{ documentId: string }>).value.documentId };
+  return {
+    documentId: (won[0] as PromiseFulfilledResult<{ documentId: string }>).value.documentId,
+  };
 }
 
 async function cleanup(orgId: string): Promise<void> {
@@ -144,52 +156,93 @@ async function cleanup(orgId: string): Promise<void> {
   await dropScratchOrg(orgId);
 }
 
-test("same source file with divergent invoice numbers admits exactly one draft", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { fileId } = await seedOrg(org);
-    // One upload; the second copy carries a review-corrected invoice number
-    // plus the stored possible_duplicate verdict, mirroring production.
-    const contentHash = `dupfence-${randomUUID().replaceAll("-", "")}`;
-    const itemA = await insertCapture(org, fileId, "DUP-INV-A", contentHash, true);
-    const itemB = await insertCapture(org, fileId, "DUP-INV-B", contentHash, false);
-    const raced = await racePair(org.orgId, itemA, itemB);
-    const { documentId } = assertExactlyOneDuplicateRefusal(raced);
-    const loserId = ((await db.execute<{ id: string }>(sql`
+test(
+  "same source file with divergent invoice numbers admits exactly one draft",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { fileId } = await seedOrg(org);
+      // One upload; the second copy carries a review-corrected invoice number
+      // plus the stored possible_duplicate verdict, mirroring production.
+      const contentHash = `dupfence-${randomUUID().replaceAll("-", "")}`;
+      const itemA = await insertCapture(org, fileId, "DUP-INV-A", contentHash, true);
+      const itemB = await insertCapture(org, fileId, "DUP-INV-B", contentHash, false);
+      const raced = await racePair(org.orgId, itemA, itemB);
+      const { documentId } = assertExactlyOneDuplicateRefusal(raced);
+      const loserId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from ap_capture_items where org_id = ${org.orgId} and document_id is null
-    `, "objects")).map((row) => row.id));
-    assert.equal(loserId.length, 1, "the loser stays unmaterialized and reusable");
-    // No orphan writes on the loser: one bill, its lines, its attachment,
-    // and exactly one draft_created event for the winner.
-    const bills = await db.execute<{ id: string }>(sql`
+    `,
+          "objects",
+        )
+      ).map((row) => row.id);
+      assert.equal(loserId.length, 1, "the loser stays unmaterialized and reusable");
+      // No orphan writes on the loser: one bill, its lines, its attachment,
+      // and exactly one draft_created event for the winner.
+      const bills = await db.execute<{ id: string }>(
+        sql`
       select id from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-    `, "objects");
-    assert.equal(bills.length, 1, "one source file produces one draft bill");
-    assert.equal(bills[0]!.id, documentId);
-    const lines = (await db.execute<{ n: string }>(sql`
+    `,
+        "objects",
+      );
+      assert.equal(bills.length, 1, "one source file produces one draft bill");
+      assert.equal(bills[0]!.id, documentId);
+      const lines = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from document_lines where org_id = ${org.orgId}
-    `, "objects"))[0]!.n;
-    assert.equal(lines, "1");
-    const attachments = (await db.execute<{ n: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(lines, "1");
+      const attachments = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from file_attachments
        where org_id = ${org.orgId} and target_table = 'documents'
-    `, "objects"))[0]!.n;
-    assert.equal(attachments, "1");
-    const drafts = (await db.execute<{ n: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(attachments, "1");
+      const drafts = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from ap_capture_events
        where org_id = ${org.orgId} and event_kind = 'draft_created'
-    `, "objects"))[0]!.n;
-    assert.equal(drafts, "1", "only the winner records a draft_created event");
-    // Sequential replay of the winner stays idempotent on the existing path.
-    const replay = await materializeCapture({ orgId: org.orgId, captureItemId: (await db.execute<{ id: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(drafts, "1", "only the winner records a draft_created event");
+      // Sequential replay of the winner stays idempotent on the existing path.
+      const replay = await materializeCapture({
+        orgId: org.orgId,
+        captureItemId: (
+          await db.execute<{ id: string }>(
+            sql`
       select id from ap_capture_items where org_id = ${org.orgId} and document_id = ${documentId}
-    `, "objects"))[0]!.id, actorId: null, allowedSubsidiaryIds: null });
-    assert.equal(replay.documentId, documentId, "replaying a materialized capture returns the same draft");
-  } finally {
-    await cleanup(org.orgId);
-  }
-});
+    `,
+            "objects",
+          )
+        )[0]!.id,
+        actorId: null,
+        allowedSubsidiaryIds: null,
+      });
+      assert.equal(
+        replay.documentId,
+        documentId,
+        "replaying a materialized capture returns the same draft",
+      );
+    } finally {
+      await cleanup(org.orgId);
+    }
+  },
+);
 
 test("sequential duplicate of the same source file is refused", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -198,91 +251,177 @@ test("sequential duplicate of the same source file is refused", { skip: !DB }, a
     const contentHash = `dupseq-${randomUUID().replaceAll("-", "")}`;
     const first = await insertCapture(org, fileId, "SEQ-INV-A", contentHash, false);
     const second = await insertCapture(org, fileId, "SEQ-INV-B", contentHash, true);
-    const won = await materializeCapture({ orgId: org.orgId, captureItemId: first, actorId: null, allowedSubsidiaryIds: null });
+    const won = await materializeCapture({
+      orgId: org.orgId,
+      captureItemId: first,
+      actorId: null,
+      allowedSubsidiaryIds: null,
+    });
     assert.ok(won.documentId);
     await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: second, actorId: null, allowedSubsidiaryIds: null }),
-      (error: unknown) => error instanceof CaptureMaterializationError
-        && /already uses this source or vendor invoice number/.test(error.message),
+      materializeCapture({
+        orgId: org.orgId,
+        captureItemId: second,
+        actorId: null,
+        allowedSubsidiaryIds: null,
+      }),
+      (error: unknown) =>
+        error instanceof CaptureMaterializationError &&
+        /already uses this source or vendor invoice number/.test(error.message),
     );
-    const count = (await db.execute<{ n: string }>(sql`
+    const count = (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-    `, "objects"))[0]!.n;
+    `,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, "1");
   } finally {
     await cleanup(org.orgId);
   }
 });
 
-test("same vendor invoice from different source files still admits exactly one draft", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { fileId } = await seedOrg(org);
-    const itemA = await insertCapture(org, fileId, "SAME-INV", `hash-a-${randomUUID().replaceAll("-", "")}`, false);
-    const itemB = await insertCapture(org, fileId, "SAME-INV", `hash-b-${randomUUID().replaceAll("-", "")}`, false);
-    const raced = await racePair(org.orgId, itemA, itemB);
-    assertExactlyOneDuplicateRefusal(raced);
-    const count = (await db.execute<{ n: string }>(sql`
+test(
+  "same vendor invoice from different source files still admits exactly one draft",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { fileId } = await seedOrg(org);
+      const itemA = await insertCapture(
+        org,
+        fileId,
+        "SAME-INV",
+        `hash-a-${randomUUID().replaceAll("-", "")}`,
+        false,
+      );
+      const itemB = await insertCapture(
+        org,
+        fileId,
+        "SAME-INV",
+        `hash-b-${randomUUID().replaceAll("-", "")}`,
+        false,
+      );
+      const raced = await racePair(org.orgId, itemA, itemB);
+      assertExactlyOneDuplicateRefusal(raced);
+      const count = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
          and regexp_replace(lower(nullif(reference_number, '')), '[^a-z0-9]', '', 'g') = 'sameinv'
-    `, "objects"))[0]!.n;
-    assert.equal(count, "1", "exactly one draft bill survives the same-invoice race");
-  } finally {
-    await cleanup(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(count, "1", "exactly one draft bill survives the same-invoice race");
+    } finally {
+      await cleanup(org.orgId);
+    }
+  },
+);
 
 test("unrelated captures both materialize", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const { fileId } = await seedOrg(org);
-    const itemA = await insertCapture(org, fileId, "UNRELATED-A", `hash-u-a-${randomUUID().replaceAll("-", "")}`, false);
-    const itemB = await insertCapture(org, fileId, "UNRELATED-B", `hash-u-b-${randomUUID().replaceAll("-", "")}`, false);
+    const itemA = await insertCapture(
+      org,
+      fileId,
+      "UNRELATED-A",
+      `hash-u-a-${randomUUID().replaceAll("-", "")}`,
+      false,
+    );
+    const itemB = await insertCapture(
+      org,
+      fileId,
+      "UNRELATED-B",
+      `hash-u-b-${randomUUID().replaceAll("-", "")}`,
+      false,
+    );
     const raced = await racePair(org.orgId, itemA, itemB);
-    assert.equal(raced.filter((result) => result.status === "fulfilled").length, 2, "unrelated captures both pass");
-    const count = (await db.execute<{ n: string }>(sql`
+    assert.equal(
+      raced.filter((result) => result.status === "fulfilled").length,
+      2,
+      "unrelated captures both pass",
+    );
+    const count = (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-    `, "objects"))[0]!.n;
+    `,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, "2");
   } finally {
     await cleanup(org.orgId);
   }
 });
 
-test("the source fence is org-scoped: identical hash and invoice in two orgs both pass", { skip: !DB }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
-  try {
-    const seedA = await seedOrg(orgA);
-    const seedB = await seedOrg(orgB);
-    const contentHash = `xorg-${randomUUID().replaceAll("-", "")}`;
-    const itemA = await insertCapture(orgA, seedA.fileId, "XORG-INV", contentHash, false);
-    const itemB = await insertCapture(orgB, seedB.fileId, "XORG-INV", contentHash, false);
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const runA = (async () => {
-      await gate;
-      return materializeCapture({ orgId: orgA.orgId, captureItemId: itemA, actorId: null, allowedSubsidiaryIds: null });
-    })();
-    const runB = (async () => {
-      await gate;
-      return materializeCapture({ orgId: orgB.orgId, captureItemId: itemB, actorId: null, allowedSubsidiaryIds: null });
-    })();
-    release();
-    const raced = await Promise.allSettled([runA, runB]);
-    assert.equal(raced.filter((result) => result.status === "fulfilled").length, 2, "no false cross-org collision");
-    for (const [org, label] of [[orgA, "A"], [orgB, "B"]] as const) {
-      const count = (await db.execute<{ n: string }>(sql`
+test(
+  "the source fence is org-scoped: identical hash and invoice in two orgs both pass",
+  { skip: !DB },
+  async () => {
+    const orgA = await createScratchOrg();
+    const orgB = await createScratchOrg();
+    try {
+      const seedA = await seedOrg(orgA);
+      const seedB = await seedOrg(orgB);
+      const contentHash = `xorg-${randomUUID().replaceAll("-", "")}`;
+      const itemA = await insertCapture(orgA, seedA.fileId, "XORG-INV", contentHash, false);
+      const itemB = await insertCapture(orgB, seedB.fileId, "XORG-INV", contentHash, false);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const runA = (async () => {
+        await gate;
+        return materializeCapture({
+          orgId: orgA.orgId,
+          captureItemId: itemA,
+          actorId: null,
+          allowedSubsidiaryIds: null,
+        });
+      })();
+      const runB = (async () => {
+        await gate;
+        return materializeCapture({
+          orgId: orgB.orgId,
+          captureItemId: itemB,
+          actorId: null,
+          allowedSubsidiaryIds: null,
+        });
+      })();
+      release();
+      const raced = await Promise.allSettled([runA, runB]);
+      assert.equal(
+        raced.filter((result) => result.status === "fulfilled").length,
+        2,
+        "no false cross-org collision",
+      );
+      for (const [org, label] of [
+        [orgA, "A"],
+        [orgB, "B"],
+      ] as const) {
+        const count = (
+          await db.execute<{ n: string }>(
+            sql`
         select count(*)::text as n from documents
          where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-      `, "objects"))[0]!.n;
-      assert.equal(count, "1", `org ${label} holds its own draft`);
+      `,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(count, "1", `org ${label} holds its own draft`);
+      }
+    } finally {
+      await cleanup(orgA.orgId);
+      await cleanup(orgB.orgId);
     }
-  } finally {
-    await cleanup(orgA.orgId);
-    await cleanup(orgB.orgId);
-  }
-});
+  },
+);

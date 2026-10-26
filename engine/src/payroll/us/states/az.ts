@@ -39,7 +39,10 @@
 import { PayrollError } from "../../error.ts";
 import { D, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateFlag, type PayrollCertificate,
+  certificateAmount,
+  certificateChoice,
+  certificateFlag,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -54,7 +57,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/az.ts";
 
 const AZ_NONRESIDENT_SERVICE_DAY_RULE: UsNonresidentThresholdRule = {
@@ -66,9 +73,7 @@ const AZ_NONRESIDENT_SERVICE_DAY_RULE: UsNonresidentThresholdRule = {
 };
 
 /** Line 1 percents, exactly as Form A-4 2026 prints them. */
-export const AZ_PRINTED_PERCENTS = [
-  "0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "3.5",
-] as const;
+export const AZ_PRINTED_PERCENTS = ["0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "3.5"] as const;
 
 export type AzPrintedPercent = (typeof AZ_PRINTED_PERCENTS)[number];
 
@@ -91,17 +96,19 @@ const AZ_EDITIONS_BY_YEAR: Record<number, AzYearRates> = {
   [AZ_RATES_2026.year]: AZ_RATES_2026,
 };
 
-export const AZ_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Arizona Form A-4 (2026), published 01/01/2026",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Arizona Department of Revenue, Form A-4 Employee's Arizona Withholding Election 2026 "
-    + "(published 01/01/2026), line 1 percents of gross taxable wages and the 2.0% no-form "
-    + "default; A.R.S. § 43-401(E); azdor.gov/business/withholding-tax",
-  status: "published",
-  region: "AZ",
-}];
+export const AZ_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Arizona Form A-4 (2026), published 01/01/2026",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Arizona Department of Revenue, Form A-4 Employee's Arizona Withholding Election 2026 " +
+      "(published 01/01/2026), line 1 percents of gross taxable wages and the 2.0% no-form " +
+      "default; A.R.S. § 43-401(E); azdor.gov/business/withholding-tax",
+    status: "published",
+    region: "AZ",
+  },
+];
 
 export function azRateForPrintedPercent(printed: string): string {
   return pctToRate(printed);
@@ -120,22 +127,26 @@ function compute(
   if (certificateFlag(input.certificate, "zero_percent")) {
     factors.AZ_ZERO = "1";
     return {
-      state: "AZ", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors,
+      state: "AZ",
+      year: rates.year,
+      tax: D(0n),
+      taxSupplemental: D(0n),
+      factors,
     };
   }
 
   const printed = certificateChoice(input.certificate, "withholding_percent");
   if (printed == null) {
     throw new PayrollError(
-      "Arizona Form A-4 withholding percentage is missing — the form and A.R.S. "
-      + "§ 43-401(E) prescribe 2.0% of gross taxable wages when no A-4 is on file, "
-      + "and that default lives on the certificate. The engine will not invent a percent.",
+      "Arizona Form A-4 withholding percentage is missing — the form and A.R.S. " +
+        "§ 43-401(E) prescribe 2.0% of gross taxable wages when no A-4 is on file, " +
+        "and that default lives on the certificate. The engine will not invent a percent.",
     );
   }
   if (!(rates.printedPercents as readonly string[]).includes(printed)) {
     throw new PayrollError(
-      `Arizona Form A-4 does not offer a ${printed}% withholding election — `
-      + `printed percents: ${rates.printedPercents.join(", ")}`,
+      `Arizona Form A-4 does not offer a ${printed}% withholding election — ` +
+        `printed percents: ${rates.printedPercents.join(", ")}`,
     );
   }
 
@@ -152,7 +163,9 @@ function compute(
   if (input.basis === "nonresident") {
     const allocation = requireUsWageAllocation(input.wageAllocations, "AZ", null);
     const threshold = evaluateUsNonresidentThreshold(
-      allocation, AZ_NONRESIDENT_SERVICE_DAY_RULE, input.periodsPerYear ?? 0,
+      allocation,
+      AZ_NONRESIDENT_SERVICE_DAY_RULE,
+      input.periodsPerYear ?? 0,
     );
     if (!threshold.crossed && !input.certificate.onFile) {
       factors.AZ_NONRESIDENT_UNDER_60_DAYS = "1";
@@ -236,12 +249,12 @@ export const AZ_CERTIFICATE: PayrollCertificate = {
     appliesWhen: { field: "zero_percent", values: ["true"] },
   },
   citation:
-    "Arizona Form A-4, Employee's Arizona Withholding Election 2026 (published 01/01/2026); "
-    + "A.R.S. § 43-401(E); azdor.gov/business/withholding-tax",
+    "Arizona Form A-4, Employee's Arizona Withholding Election 2026 (published 01/01/2026); " +
+    "A.R.S. § 43-401(E); azdor.gov/business/withholding-tax",
   summary:
-    "Elects an Arizona withholding percent of gross taxable wages. If no A-4 is on file "
-    + "within five days of hire, A.R.S. § 43-401(E) and ADOR require the employer to "
-    + "withhold 2.0%.",
+    "Elects an Arizona withholding percent of gross taxable wages. If no A-4 is on file " +
+    "within five days of hire, A.R.S. § 43-401(E) and ADOR require the employer to " +
+    "withhold 2.0%.",
   storage: "certificate_rows",
   fields: [
     {
@@ -260,9 +273,9 @@ export const AZ_CERTIFICATE: PayrollCertificate = {
       default: "2.0",
       required: true,
       help:
-        "A percent of GROSS TAXABLE WAGES, not of federal withholding. Form A-4 2026 "
-        + "line 1. Default 2.0% is ADOR's prescribed rate when no A-4 is on file — not "
-        + "an engine guess.",
+        "A percent of GROSS TAXABLE WAGES, not of federal withholding. Form A-4 2026 " +
+        "line 1. Default 2.0% is ADOR's prescribed rate when no A-4 is on file — not " +
+        "an engine guess.",
     },
     {
       key: "additional_per_period",
@@ -270,8 +283,7 @@ export const AZ_CERTIFICATE: PayrollCertificate = {
       kind: "amount",
       decimals: 4,
       min: "0",
-      help:
-        "Optional extra dollars after the elected percent. Added, not multiplied.",
+      help: "Optional extra dollars after the elected percent. Added, not multiplied.",
     },
     {
       key: "zero_percent",
@@ -279,8 +291,8 @@ export const AZ_CERTIFICATE: PayrollCertificate = {
         "Line 2 — I elect an Arizona withholding percentage of zero (no Arizona tax liability)",
       kind: "flag",
       help:
-        "The employee certifies they expect no Arizona tax liability for the current "
-        + "taxable year. Must be renewed each year. The employer withholds nothing.",
+        "The employee certifies they expect no Arizona tax liability for the current " +
+        "taxable year. Must be renewed each year. The employer withholds nothing.",
     },
   ],
 };
@@ -299,6 +311,5 @@ export const AZ_REGION: PayrollRegionWithholding = {
   certificateKey: "us_az_a4",
   subRegions: [],
   subRegionConflictRule: "both",
-  citation:
-    "Arizona Form A-4 (2026); A.R.S. § 43-401; azdor.gov/business/withholding-tax",
+  citation: "Arizona Form A-4 (2026); A.R.S. § 43-401; azdor.gov/business/withholding-tax",
 };

@@ -26,7 +26,7 @@ export const formLayouts = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("form_layouts_org_id_id_unique").on(t.orgId,t.id),
+    uniqueIndex("form_layouts_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("form_layouts_org_type_name").on(t.orgId, t.recordType, t.name),
     index("form_layouts_org_type").on(t.orgId, t.recordType, t.isDefault),
   ],
@@ -58,6 +58,8 @@ export const listViews = pgTable(
   (t) => [
     uniqueIndex("list_views_org_scope_type_name").on(t.orgId, t.scope, t.recordType, t.name),
     index("list_views_org_type").on(t.orgId, t.recordType, t.scope),
-    uniqueIndex("list_views_one_live_personal_default").on(t.orgId, t.ownerId, t.recordType).where(sql`${t.scope} = 'user' AND ${t.isDefault} AND ${t.isActive}`),
+    uniqueIndex("list_views_one_live_personal_default")
+      .on(t.orgId, t.ownerId, t.recordType)
+      .where(sql`${t.scope} = 'user' AND ${t.isDefault} AND ${t.isActive}`),
   ],
 );

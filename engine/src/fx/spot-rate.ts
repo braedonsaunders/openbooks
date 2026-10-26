@@ -94,7 +94,13 @@ export interface FxMonthAverageEvidence extends FxEvidenceBase {
  * winner is unchanged: direct (priority 0) beats inverse (priority 1), and
  * the unique index on (org, pair, as_of, rate_type) leaves no further tie.
  */
-function spotEvidenceCandidates(orgId: string, from: string, to: string, dateCond: SQL, rateType = "spot"): SQL {
+function spotEvidenceCandidates(
+  orgId: string,
+  from: string,
+  to: string,
+  dateCond: SQL,
+  rateType = "spot",
+): SQL {
   return sql`
     select id::text as id, as_of, source, rate::text as stored_rate,
            to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
@@ -186,7 +192,10 @@ function sameCurrencyDigest(
  * calendar month — an accounting period that starts or ends mid-month never
  * narrows or widens it.
  */
-export function fxCalendarMonthBounds(year: number, month: number): { monthStart: string; monthEnd: string } {
+export function fxCalendarMonthBounds(
+  year: number,
+  month: number,
+): { monthStart: string; monthEnd: string } {
   if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
     throw new Error(`invalid calendar month ${year}-${month}: pass a 1-12 month`);
   }
@@ -231,10 +240,13 @@ export async function lookupSpotRateWithEvidence(
     };
   }
   const candidates = spotEvidenceCandidates(orgId, from, to, sql`as_of <= ${asOf}`, rateType);
-  const r = await runner.execute<EvidenceRow>(sql`
+  const r = await runner.execute<EvidenceRow>(
+    sql`
     select id, as_of::text as as_of, source, stored_rate, updated_at, priority, derived_rate
       from (${candidates}) candidates
-     order by as_of desc, priority asc limit 1`, "objects");
+     order by as_of desc, priority asc limit 1`,
+    "objects",
+  );
   const row = r[0];
   if (!row) {
     return {
@@ -280,8 +292,14 @@ async function selectWindowObservations(
   fromDate: string,
   toDate: string,
 ): Promise<{ observations: FxObservationEvidence[]; average: string | null }> {
-  const candidates = spotEvidenceCandidates(orgId, from, to, sql`as_of between ${fromDate} and ${toDate}`);
-  const r = await runner.execute<EvidenceRow & { average: string | null }>(sql`
+  const candidates = spotEvidenceCandidates(
+    orgId,
+    from,
+    to,
+    sql`as_of between ${fromDate} and ${toDate}`,
+  );
+  const r = await runner.execute<EvidenceRow & { average: string | null }>(
+    sql`
     with per_date as (
       select distinct on (as_of) id, as_of, source, stored_rate, updated_at, priority, derived_rate
         from (${candidates}) candidates
@@ -290,7 +308,9 @@ async function selectWindowObservations(
     select id, as_of::text as as_of, source, stored_rate, updated_at, priority, derived_rate,
            (select avg(derived_rate::numeric)::numeric(19,10)::text from per_date) as average
       from per_date
-     order by as_of asc, id asc`, "objects");
+     order by as_of asc, id asc`,
+    "objects",
+  );
   const observations = r.map(toObservation);
   return { observations, average: observations.length === 0 ? null : (r[0]!.average ?? null) };
 }
@@ -330,7 +350,14 @@ export async function averageSpotRateForMonthWithEvidence(
       digest: sameCurrencyDigest("calendar-month-average", scope, from),
     };
   }
-  const { observations, average } = await selectWindowObservations(runner, orgId, from, to, monthStart, monthEnd);
+  const { observations, average } = await selectWindowObservations(
+    runner,
+    orgId,
+    from,
+    to,
+    monthStart,
+    monthEnd,
+  );
   return {
     ...base,
     kind: "calendar-month-average",
@@ -377,7 +404,14 @@ export async function averageSpotRateWindow(
   toDate: string,
 ): Promise<{ rate: string | null; newestAsOf: string | null }> {
   if (from === to) return { rate: "1", newestAsOf: null };
-  const { observations, average } = await selectWindowObservations(runner, orgId, from, to, fromDate, toDate);
+  const { observations, average } = await selectWindowObservations(
+    runner,
+    orgId,
+    from,
+    to,
+    fromDate,
+    toDate,
+  );
   return { rate: average, newestAsOf: observations.at(-1)?.asOf ?? null };
 }
 
@@ -404,6 +438,13 @@ export async function averageSpotRate(
 }
 
 /** Named series shares the spot reader's direct/inverse precedence and exact evidence. */
-export async function lookupExchangeRate(runner: Runner, orgId: string, from: string, to: string, asOf: string, rateType = "spot"): Promise<string | null> {
+export async function lookupExchangeRate(
+  runner: Runner,
+  orgId: string,
+  from: string,
+  to: string,
+  asOf: string,
+  rateType = "spot",
+): Promise<string | null> {
   return (await lookupSpotRateWithEvidence(runner, orgId, from, to, asOf, rateType)).rate;
 }

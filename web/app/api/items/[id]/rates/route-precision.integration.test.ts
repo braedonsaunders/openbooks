@@ -1,58 +1,77 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const stateKey = Symbol.for('openbooks.item-rates-precision-route-test')
+const stateKey = Symbol.for("openbooks.item-rates-precision-route-test");
 const routeState: {
-  gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: null } | null
-} = { gate: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+  gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: null } | null;
+} = { gate: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith('/lib/feature-gates')) return { shortCircuit: true, url: 'mock:item-rates-precision-gates' }
-    if (specifier.endsWith('/lib/features')) return { shortCircuit: true, url: 'mock:item-rates-precision-features' }
-    return nextResolve(specifier, context)
+    if (specifier.endsWith("/lib/feature-gates"))
+      return { shortCircuit: true, url: "mock:item-rates-precision-gates" };
+    if (specifier.endsWith("/lib/features"))
+      return { shortCircuit: true, url: "mock:item-rates-precision-features" };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:item-rates-precision-gates') {
+    if (url === "mock:item-rates-precision-gates") {
       return {
         shortCircuit: true,
-        format: 'module',
+        format: "module",
         source: `export async function guardFeaturePermission() { return globalThis[Symbol.for('openbooks.item-rates-precision-route-test')].gate }`,
-      }
+      };
     }
-    if (url === 'mock:item-rates-precision-features') {
-      return { shortCircuit: true, format: 'module', source: 'export async function isFeatureEnabled() { return true }' }
+    if (url === "mock:item-rates-precision-features") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        source: "export async function isFeatureEnabled() { return true }",
+      };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?item-rates-precision-route-integration'
-const { POST } = (await import(routeUrl)) as typeof import('./route')
+const routeUrl = "./route.ts?item-rates-precision-route-integration";
+const { POST } = (await import(routeUrl)) as typeof import("./route");
 
-const { withBypassContext, withOrgContext, db } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-test.after(() => hooks.deregister())
-
+const { withBypassContext, withOrgContext, db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+test.after(() => hooks.deregister());
 
 function post(itemId: string, body: Record<string, unknown>) {
-  return POST(new Request(`http://openbooks.test/api/items/${itemId}/rates`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  }), { params: Promise.resolve({ id: itemId }) })
+  return POST(
+    new Request(`http://openbooks.test/api/items/${itemId}/rates`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ id: itemId }) },
+  );
 }
 
 function versioned(itemId: string, book: string, quantity: string, from: string) {
   return {
-    rateBookId: book, effectiveFrom: from, baseUnit: 'hour',
-    pricingPolicy: 'capped_ladder', invoicePresentation: 'rate_components',
-    tiers: [{ unitCode: 'hour', unitName: 'Hour', baseQuantity: quantity, costRate: '100', billRate: '100' }],
-  }
+    rateBookId: book,
+    effectiveFrom: from,
+    baseUnit: "hour",
+    pricingPolicy: "capped_ladder",
+    invoicePresentation: "rate_components",
+    tiers: [
+      {
+        unitCode: "hour",
+        unitName: "Hour",
+        baseQuantity: quantity,
+        costRate: "100",
+        billRate: "100",
+      },
+    ],
+  };
 }
 
 /**
@@ -60,35 +79,62 @@ function versioned(itemId: string, book: string, quantity: string, from: string)
  * by name instead of rounding silently to 1.0001 in PostgreSQL, and the
  * refusal must leave the prior version intact.
  */
-test('a five-decimal base quantity is refused and the prior version stands', async () => {
-  const org = await withBypassContext(() => (createScratchOrg()))
+test("a five-decimal base quantity is refused and the prior version stands", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    routeState.gate = { user: { orgId: org.orgId, id: org.orgId }, allowedSubsidiaryIds: null }
-    const book = randomUUID()
-    await withBypassContext(() => (db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
-      values (${book}, ${org.orgId}, 'PRECISION', 'Precision book', 'CAD', false, true)`)))
+    routeState.gate = { user: { orgId: org.orgId, id: org.orgId }, allowedSubsidiaryIds: null };
+    const book = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
+      values (${book}, ${org.orgId}, 'PRECISION', 'Precision book', 'CAD', false, true)`),
+    );
 
-    const first = await post(org.items.service, versioned(org.items.service, book, '1', '2026-01-01'))
-    assert.equal(first.status, 200, await first.text())
+    const first = await post(
+      org.items.service,
+      versioned(org.items.service, book, "1", "2026-01-01"),
+    );
+    assert.equal(first.status, 200, await first.text());
 
-    const precise = await post(org.items.service, versioned(org.items.service, book, '1.00005', '2026-02-01'))
-    assert.equal(precise.status, 422)
-    assert.match(String((await precise.json()).error), /at most 4 decimal places/)
+    const precise = await post(
+      org.items.service,
+      versioned(org.items.service, book, "1.00005", "2026-02-01"),
+    );
+    assert.equal(precise.status, 422);
+    assert.match(String((await precise.json()).error), /at most 4 decimal places/);
 
-    const versions = await withOrgContext(org.orgId, () => db.execute<{ effective_from: string }>(sql`
+    const versions = await withOrgContext(org.orgId, () =>
+      db.execute<{ effective_from: string }>(
+        sql`
       select effective_from::text from item_rate_versions
        where org_id = ${org.orgId} and rate_book_id = ${book} and status = 'active'
-       order by effective_from`, 'objects'))
-    assert.deepEqual(versions.map((v) => String(v.effective_from).slice(0, 10)), ['2026-01-01'])
-    const stored = await withOrgContext(org.orgId, () => db.execute<{ base_quantity: string }>(sql`
+       order by effective_from`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(
+      versions.map((v) => String(v.effective_from).slice(0, 10)),
+      ["2026-01-01"],
+    );
+    const stored = await withOrgContext(org.orgId, () =>
+      db.execute<{ base_quantity: string }>(
+        sql`
       select base_quantity::text from item_rate_lines
-       where org_id = ${org.orgId} and item_id = ${org.items.service}`, 'objects'))
-    assert.deepEqual(stored.map((r) => r.base_quantity), ['1.0000'])
+       where org_id = ${org.orgId} and item_id = ${org.items.service}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(
+      stored.map((r) => r.base_quantity),
+      ["1.0000"],
+    );
 
-    const valid = await post(org.items.service, versioned(org.items.service, book, '1.0001', '2026-02-01'))
-    assert.equal(valid.status, 200, await valid.text())
+    const valid = await post(
+      org.items.service,
+      versioned(org.items.service, book, "1.0001", "2026-02-01"),
+    );
+    assert.equal(valid.status, 200, await valid.text());
   } finally {
-    routeState.gate = null
-    await dropScratchOrg(org.orgId)
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});

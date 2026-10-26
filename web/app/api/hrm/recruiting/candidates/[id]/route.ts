@@ -20,8 +20,7 @@ export const GET = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid candidate" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid candidate" }, { status: 400 });
     try {
       const candidate = await getCandidateDetail({
         orgId: gate.user.orgId,

@@ -1,11 +1,21 @@
 import "server-only";
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { weekStartOf } from "@openbooks/engine/resourcing/weeks";
 import { can, requirePermission } from "../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../lib/feature-gates";
 import { isUuid, pickString } from "../../../../lib/list-params";
-import { loadAssignmentDrawerData, type AssignmentDrawerData } from "../../../../lib/resourcing/assignment-drawer";
+import {
+  loadAssignmentDrawerData,
+  type AssignmentDrawerData,
+} from "../../../../lib/resourcing/assignment-drawer";
 
 export type ResourcingAssignmentsPageData = {
   title: string;
@@ -13,11 +23,14 @@ export type ResourcingAssignmentsPageData = {
   newLabel: string;
   currentParams: Record<string, string | string[] | undefined>;
   canManage: boolean;
-  drawer: (AssignmentDrawerData & { remountKey: string; closeHref: string }) | {
-    notFound: true;
-    remountKey: string;
-    closeHref: string;
-  } | null;
+  drawer:
+    | (AssignmentDrawerData & { remountKey: string; closeHref: string })
+    | {
+        notFound: true;
+        remountKey: string;
+        closeHref: string;
+      }
+    | null;
 };
 
 export async function loadResourcingAssignmentsPage(
@@ -72,20 +85,42 @@ const f = ref<ResourcingAssignmentsPageData>();
 
 export function resourcingAssignmentsSpec(data: ResourcingAssignmentsPageData): PageSpec {
   return page({
-    route: '/resourcing/assignments',
+    route: "/resourcing/assignments",
     layout: "list",
-    header: [pageHeader({
-      title: f("title"),
-      description: f("description"),
-      actions: [widget("link-button", { href: "/resourcing/assignments?assignment=new", label: data.newLabel, variant: "outline" }, f("canManage"))],
-    })],
-    body: [widgetBlock("entity-list-view", {
-      recordType: "resourcing_assignment",
-      sp: data.currentParams,
-      drawer: data.drawer ? { widget: "resourcing-assignment-drawer", props: { drawer: data.drawer, canManage: data.canManage } } : null,
-      emptyAction: data.canManage
-        ? { widget: "link-button", props: { href: "/resourcing/assignments?assignment=new", label: data.newLabel } }
-        : null,
-    })],
+    header: [
+      pageHeader({
+        title: f("title"),
+        description: f("description"),
+        actions: [
+          widget(
+            "link-button",
+            {
+              href: "/resourcing/assignments?assignment=new",
+              label: data.newLabel,
+              variant: "outline",
+            },
+            f("canManage"),
+          ),
+        ],
+      }),
+    ],
+    body: [
+      widgetBlock("entity-list-view", {
+        recordType: "resourcing_assignment",
+        sp: data.currentParams,
+        drawer: data.drawer
+          ? {
+              widget: "resourcing-assignment-drawer",
+              props: { drawer: data.drawer, canManage: data.canManage },
+            }
+          : null,
+        emptyAction: data.canManage
+          ? {
+              widget: "link-button",
+              props: { href: "/resourcing/assignments?assignment=new", label: data.newLabel },
+            }
+          : null,
+      }),
+    ],
   });
 }

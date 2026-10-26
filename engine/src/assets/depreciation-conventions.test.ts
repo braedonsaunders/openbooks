@@ -110,5 +110,8 @@ test("the book engine cannot be handed a convention it has no representation for
   // window falls back to a full first period rather than inventing a meaning.
   assert.ok(!(BOOK_DEPRECIATION_CONVENTIONS as readonly string[]).includes("mid_quarter"));
   assert.ok((TAX_DEPRECIATION_CONVENTIONS as readonly string[]).includes("mid_quarter"));
-  assert.deepEqual(bookConventionWindow(null), { firstPeriodFraction: "1", firstFractionPeriods: 1 });
+  assert.deepEqual(bookConventionWindow(null), {
+    firstPeriodFraction: "1",
+    firstFractionPeriods: 1,
+  });
 });

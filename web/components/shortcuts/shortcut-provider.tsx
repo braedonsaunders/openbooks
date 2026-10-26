@@ -1,7 +1,18 @@
-'use client'
+"use client";
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { useTranslations } from 'next-intl'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { useTranslations } from "next-intl";
 import {
   availableShortcuts,
   currentPlatform,
@@ -9,37 +20,41 @@ import {
   resolveShortcut,
   type RegisteredShortcut,
   type ShortcutCommand,
-} from './shortcut-keys'
-import { ShortcutHelpSheet } from './shortcut-help-sheet'
-import { openFocusedFieldHelp } from './field-help'
+} from "./shortcut-keys";
+import { ShortcutHelpSheet } from "./shortcut-help-sheet";
+import { openFocusedFieldHelp } from "./field-help";
 
 interface ShortcutEntry {
-  order: number
-  read: () => ShortcutCommand | null
+  order: number;
+  read: () => ShortcutCommand | null;
 }
 
 interface ShortcutRegistry {
-  register: (read: () => ShortcutCommand | null) => () => void
-  openHelp: (target?: Element | null) => void
-  apple: boolean
+  register: (read: () => ShortcutCommand | null) => () => void;
+  openHelp: (target?: Element | null) => void;
+  apple: boolean;
 }
 
-const ShortcutContext = createContext<ShortcutRegistry | null>(null)
+const ShortcutContext = createContext<ShortcutRegistry | null>(null);
 
-const subscribeNever = () => () => {}
+const subscribeNever = () => () => {};
 
 /** Whether the viewer is on an Apple platform; false during server render. */
 function useApplePlatform(): boolean {
-  return useSyncExternalStore(subscribeNever, () => isApplePlatform(currentPlatform()), () => false)
+  return useSyncExternalStore(
+    subscribeNever,
+    () => isApplePlatform(currentPlatform()),
+    () => false,
+  );
 }
 
 function snapshot(entries: Iterable<ShortcutEntry>): RegisteredShortcut[] {
-  const commands: RegisteredShortcut[] = []
+  const commands: RegisteredShortcut[] = [];
   for (const entry of entries) {
-    const command = entry.read()
-    if (command) commands.push({ ...command, order: entry.order })
+    const command = entry.read();
+    if (command) commands.push({ ...command, order: entry.order });
   }
-  return commands
+  return commands;
 }
 
 /**
@@ -50,75 +65,99 @@ function snapshot(entries: Iterable<ShortcutEntry>): RegisteredShortcut[] {
  * where focus stands.
  */
 export function ShortcutProvider({ children }: { children: ReactNode }) {
-  const t = useTranslations('shell.shortcuts')
-  const entries = useRef(new Set<ShortcutEntry>())
-  const sequence = useRef(0)
-  const apple = useApplePlatform()
-  const [help, setHelp] = useState<{ commands: RegisteredShortcut[] } | null>(null)
+  const t = useTranslations("shell.shortcuts");
+  const entries = useRef(new Set<ShortcutEntry>());
+  const sequence = useRef(0);
+  const apple = useApplePlatform();
+  const [help, setHelp] = useState<{ commands: RegisteredShortcut[] } | null>(null);
 
   const register = useCallback((read: () => ShortcutCommand | null) => {
-    const entry: ShortcutEntry = { order: ++sequence.current, read }
-    entries.current.add(entry)
+    const entry: ShortcutEntry = { order: ++sequence.current, read };
+    entries.current.add(entry);
     return () => {
-      entries.current.delete(entry)
-    }
-  }, [])
+      entries.current.delete(entry);
+    };
+  }, []);
 
   const openHelp = useCallback((target: Element | null = null) => {
-    setHelp({ commands: availableShortcuts(snapshot(entries.current), target) })
-  }, [])
+    setHelp({ commands: availableShortcuts(snapshot(entries.current), target) });
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.isComposing || event.repeat) return
-      const command = resolveShortcut(snapshot(entries.current), event, isApplePlatform(currentPlatform()))
-      if (!command) return
-      event.preventDefault()
+      if (event.defaultPrevented || event.isComposing || event.repeat) return;
+      const command = resolveShortcut(
+        snapshot(entries.current),
+        event,
+        isApplePlatform(currentPlatform()),
+      );
+      if (!command) return;
+      event.preventDefault();
       // Any other command acts on the application: the help sheet steps aside.
-      if (command.id !== 'help') setHelp(null)
-      command.run()
+      if (command.id !== "help") setHelp(null);
+      command.run();
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [])
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
-  const registry = useMemo<ShortcutRegistry>(() => ({ register, openHelp, apple }), [register, openHelp, apple])
+  const registry = useMemo<ShortcutRegistry>(
+    () => ({ register, openHelp, apple }),
+    [register, openHelp, apple],
+  );
 
   return (
     <ShortcutContext.Provider value={registry}>
-      <HelpShortcut label={t('commands.help')} fieldHelpLabel={t('commands.fieldHelp')} onOpen={openHelp} />
+      <HelpShortcut
+        label={t("commands.help")}
+        fieldHelpLabel={t("commands.fieldHelp")}
+        onOpen={openHelp}
+      />
       {children}
-      <ShortcutHelpSheet open={help !== null} commands={help?.commands ?? []} apple={apple} onClose={() => setHelp(null)} />
+      <ShortcutHelpSheet
+        open={help !== null}
+        commands={help?.commands ?? []}
+        apple={apple}
+        onClose={() => setHelp(null)}
+      />
     </ShortcutContext.Provider>
-  )
+  );
 }
 
-function HelpShortcut({ label, fieldHelpLabel, onOpen }: { label: string; fieldHelpLabel: string; onOpen: (target: Element | null) => void }) {
+function HelpShortcut({
+  label,
+  fieldHelpLabel,
+  onOpen,
+}: {
+  label: string;
+  fieldHelpLabel: string;
+  onOpen: (target: Element | null) => void;
+}) {
   useShortcuts([
     {
-      id: 'help',
+      id: "help",
       label,
-      binding: { character: '?' },
-      scope: 'global',
+      binding: { character: "?" },
+      scope: "global",
       run: () => onOpen(document.activeElement),
     },
     {
-      id: 'fieldHelp',
+      id: "fieldHelp",
       label: fieldHelpLabel,
-      binding: { modifier: 'none', code: 'F1' },
-      scope: 'global',
+      binding: { modifier: "none", code: "F1" },
+      scope: "global",
       allowInEditable: true,
       // A field without help falls back to the shortcut sheet, so F1 always answers.
       run: () => {
-        if (!openFocusedFieldHelp(document.activeElement)) onOpen(document.activeElement)
+        if (!openFocusedFieldHelp(document.activeElement)) onOpen(document.activeElement);
       },
     },
-  ])
-  return null
+  ]);
+  return null;
 }
 
 function signature(commands: readonly ShortcutCommand[]): string {
-  return commands.map((command) => `${command.id}:${command.scope}`).join('|')
+  return commands.map((command) => `${command.id}:${command.scope}`).join("|");
 }
 
 /**
@@ -128,28 +167,30 @@ function signature(commands: readonly ShortcutCommand[]): string {
  * the set of ids or scopes does. Outside a ShortcutProvider this is a no-op.
  */
 export function useShortcuts(commands: readonly ShortcutCommand[]): void {
-  const registry = useContext(ShortcutContext)
-  const latest = useRef(commands)
+  const registry = useContext(ShortcutContext);
+  const latest = useRef(commands);
   useLayoutEffect(() => {
-    latest.current = commands
-  })
-  const key = signature(commands)
+    latest.current = commands;
+  });
+  const key = signature(commands);
   useEffect(() => {
-    if (!registry || key === '') return
-    const ids = key.split('|').map((part) => part.slice(0, part.lastIndexOf(':')))
-    const releases = ids.map((id) => registry.register(() => latest.current.find((command) => command.id === id) ?? null))
+    if (!registry || key === "") return;
+    const ids = key.split("|").map((part) => part.slice(0, part.lastIndexOf(":")));
+    const releases = ids.map((id) =>
+      registry.register(() => latest.current.find((command) => command.id === id) ?? null),
+    );
     return () => {
-      for (const release of releases) release()
-    }
-  }, [registry, key])
+      for (const release of releases) release();
+    };
+  }, [registry, key]);
 }
 
 /** Opens the help sheet from a menu entry; null outside a ShortcutProvider. */
 export function useShortcutHelp(): ((target?: Element | null) => void) | null {
-  return useContext(ShortcutContext)?.openHelp ?? null
+  return useContext(ShortcutContext)?.openHelp ?? null;
 }
 
 /** Whether key caps should render with Apple glyphs. */
 export function useShortcutPlatform(): boolean {
-  return useContext(ShortcutContext)?.apple ?? false
+  return useContext(ShortcutContext)?.apple ?? false;
 }

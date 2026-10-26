@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  FIELD_TICKET_SUBJECT_KIND,
-  fieldTicketSubjectProfile,
-} from "./field-tickets-adapter.ts";
+import { FIELD_TICKET_SUBJECT_KIND, fieldTicketSubjectProfile } from "./field-tickets-adapter.ts";
 import {
   registerFlowApprovalReleaseHandler,
   releaseFlowApproval,
@@ -24,20 +21,14 @@ test("field tickets are an authorable Flows subject with no hardcoded approver",
     profile?.fields.some((field) => field.key === "projectId"),
     true,
   );
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(profile ?? {}, "approver"),
-    false,
-  );
+  assert.equal(Object.prototype.hasOwnProperty.call(profile ?? {}, "approver"), false);
 });
 
 test("field-ticket release delegates to the registered atomic product handler", async () => {
   const calls: unknown[] = [];
-  registerFlowApprovalReleaseHandler(
-    FIELD_TICKET_SUBJECT_KIND,
-    async (args) => {
-      calls.push(args);
-    },
-  );
+  registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async (args) => {
+    calls.push(args);
+  });
   await releaseFlowApproval({
     subjectKind: FIELD_TICKET_SUBJECT_KIND,
     subjectId: "00000000-0000-4000-8000-000000000001",

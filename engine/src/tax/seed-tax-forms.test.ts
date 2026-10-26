@@ -28,8 +28,15 @@ test("every tax return library pack has unique, evaluable box definitions", () =
 test("Canada GST34 library pack balances collected tax, adjustments and ITCs", () => {
   const result = assembleReturn(
     defs("CA_GST34"),
-    new Map([["101", "100000.0000"], ["103", "-13000.0000"], ["106", "4000.0000"]]),
-    new Map([["104", "500.0000"], ["107", "200.0000"]]),
+    new Map([
+      ["101", "100000.0000"],
+      ["103", "-13000.0000"],
+      ["106", "4000.0000"],
+    ]),
+    new Map([
+      ["104", "500.0000"],
+      ["107", "200.0000"],
+    ]),
   );
   const value = (code: string) => result.find((box) => box.lineCode === code)?.value;
   assert.equal(value("101"), "100000.0000");
@@ -40,18 +47,36 @@ test("Canada GST34 library pack balances collected tax, adjustments and ITCs", (
 });
 
 test("UK and New Zealand packs report unsigned payable-or-refund differences", () => {
-  const uk = assembleReturn(defs("GB_VAT100"), new Map([["1", "-2000.0000"], ["4", "2750.0000"]]));
+  const uk = assembleReturn(
+    defs("GB_VAT100"),
+    new Map([
+      ["1", "-2000.0000"],
+      ["4", "2750.0000"],
+    ]),
+  );
   assert.equal(uk.find((box) => box.lineCode === "5")?.value, "750.0000");
 
-  const nz = assembleReturn(defs("NZ_GST101A"), new Map([["8", "-1200.0000"], ["12", "1800.0000"]]));
+  const nz = assembleReturn(
+    defs("NZ_GST101A"),
+    new Map([
+      ["8", "-1200.0000"],
+      ["12", "1800.0000"],
+    ]),
+  );
   assert.equal(nz.find((box) => box.lineCode === "15")?.value, "600.0000");
 });
 
 test("Australia BAS maps ledger tax while preserving filer-entered reporting labels", () => {
   const result = assembleReturn(
     defs("AU_BAS_GST"),
-    new Map([["1A", "-1100.0000"], ["1B", "450.0000"]]),
-    new Map([["G1", "12100.0000"], ["G10", "3300.0000"]]),
+    new Map([
+      ["1A", "-1100.0000"],
+      ["1B", "450.0000"],
+    ]),
+    new Map([
+      ["G1", "12100.0000"],
+      ["G10", "3300.0000"],
+    ]),
   );
   const value = (code: string) => result.find((box) => box.lineCode === code)?.value;
   assert.equal(value("G1"), "12100.0000");
@@ -68,7 +93,10 @@ test("Washington combined return totals B&O, state, local, and use tax less the 
   assert.equal(empty.find((box) => box.lineCode === "TOTAL_DUE")?.value, "0.0000");
   const result = assembleReturn(
     defs("US_WA_CET"),
-    new Map([["WA_GROSS", "20000.0000"], ["WA_TAX", "-737.1000"]]),
+    new Map([
+      ["WA_GROSS", "20000.0000"],
+      ["WA_TAX", "-737.1000"],
+    ]),
     new Map([
       ["ST_TAX", "650.0000"],
       ["USE_TAX", "0.0000"],
@@ -119,7 +147,10 @@ test("United States pack is an adaptable workpaper, not a fake federal return", 
   assert.match(pack.watermark, /Not a government return/);
   const result = assembleReturn(
     defs(pack.code),
-    new Map([["TAXABLE_SALES", "20000.0000"], ["TAX_COLLECTED", "-1650.0000"]]),
+    new Map([
+      ["TAXABLE_SALES", "20000.0000"],
+      ["TAX_COLLECTED", "-1650.0000"],
+    ]),
     new Map([["ADJUSTMENTS", "25.0000"]]),
   );
   assert.equal(result.find((box) => box.lineCode === "TAX_DUE")?.value, "1675.0000");

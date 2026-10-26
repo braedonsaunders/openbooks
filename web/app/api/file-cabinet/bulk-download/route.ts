@@ -46,11 +46,7 @@ export const POST = defineRoute({
       }
       throw error;
     }
-    if (included === 0)
-      return NextResponse.json(
-        { error: "nothing to download" },
-        { status: 404 },
-      );
+    if (included === 0) return NextResponse.json({ error: "nothing to download" }, { status: 404 });
 
     const stamp = await businessToday(gate.user.orgId);
     return new NextResponse(new Uint8Array(bytes), {

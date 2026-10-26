@@ -1,9 +1,14 @@
 /** CSV statement parsing. Split from banking.ts (pure moves only). */
-import { BankingError, type ParsedStatementLine, type StatementSourceContent, type CsvMapping, type SkippedStatementRow } from "../banking-core"
-import { decodeStatementSourceText } from "../statement-encoding"
-import { assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./shared"
-import { fromUnits, toUnits } from "../../money/money.ts"
-
+import {
+  BankingError,
+  type ParsedStatementLine,
+  type StatementSourceContent,
+  type CsvMapping,
+  type SkippedStatementRow,
+} from "../banking-core";
+import { decodeStatementSourceText } from "../statement-encoding";
+import { assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./shared";
+import { fromUnits, toUnits } from "../../money/money.ts";
 
 // ---------------------------------------------------------------------------
 // CSV parsing
@@ -47,7 +52,9 @@ export function parseCsvRows(source: StatementSourceContent): string[][] {
     }
   }
   if (inQuotes) {
-    throw new BankingError("CSV contains an unterminated quoted field. Export the complete statement again or correct the closing quote before importing.");
+    throw new BankingError(
+      "CSV contains an unterminated quoted field. Export the complete statement again or correct the closing quote before importing.",
+    );
   }
   row.push(field);
   if (row.some((f) => f.trim() !== "")) rows.push(row);
@@ -56,8 +63,18 @@ export function parseCsvRows(source: StatementSourceContent): string[][] {
 }
 
 const MONTHS: Record<string, number> = {
-  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
-  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
 };
 
 /**
@@ -74,9 +91,7 @@ export function parseCsvDate(raw: string): string | null {
   if (m) {
     // first part >12 ⇒ it is the day (DD/MM/YYYY); otherwise MM/DD/YYYY
     // (documented import assumption for ambiguous dates).
-    return Number(m[1]) > 12
-      ? safeDate(m[3]!, m[2]!, m[1]!)
-      : safeDate(m[3]!, m[1]!, m[2]!);
+    return Number(m[1]) > 12 ? safeDate(m[3]!, m[2]!, m[1]!) : safeDate(m[3]!, m[1]!, m[2]!);
   }
   m = s.match(/^(\d{1,2})[ -]([A-Za-z]{3,})[ -,]+(\d{4})$/);
   if (m) {
@@ -178,9 +193,7 @@ function csvCellIsLabel(cell: string | undefined): boolean {
 function csvRowLooksLikeHeader(cols: string[], mapping: CsvMapping): boolean {
   if (!(cols[mapping.description] ?? "").trim()) return false;
   if (mapping.debitAmount !== undefined) {
-    return (
-      csvCellIsLabel(cols[mapping.amount]) || csvCellIsLabel(cols[mapping.debitAmount])
-    );
+    return csvCellIsLabel(cols[mapping.amount]) || csvCellIsLabel(cols[mapping.debitAmount]);
   }
   return csvCellIsLabel(cols[mapping.amount]);
 }
@@ -238,7 +251,13 @@ export function parseCsv(
     if (leadingRole) {
       const balanceAmount = csvBalanceRowAmount(rows[start]!, mapping, rowNo);
       if (balanceAmount !== null) {
-        skipped.push({ line: rowNo, code: "csv_balance_row", dateCell: rawDate, amount: balanceAmount, balanceRole: leadingRole });
+        skipped.push({
+          line: rowNo,
+          code: "csv_balance_row",
+          dateCell: rawDate,
+          amount: balanceAmount,
+          balanceRole: leadingRole,
+        });
         continue;
       }
     }

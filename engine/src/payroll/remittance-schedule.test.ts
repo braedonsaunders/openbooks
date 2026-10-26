@@ -117,15 +117,16 @@ test("an unknown frequency falls back to the schedule default rather than throwi
 });
 
 test("frequency resolution prefers configuration, then the schedule default", () => {
-  assert.deepEqual(
-    scheduledRemittanceFrequency(RQ, { rqRemittanceFrequency: "twice_monthly" }),
-    { frequency: "twice_monthly", source: "configured" },
-  );
+  assert.deepEqual(scheduledRemittanceFrequency(RQ, { rqRemittanceFrequency: "twice_monthly" }), {
+    frequency: "twice_monthly",
+    source: "configured",
+  });
   // Unknown, missing, or mistyped values all fall back to monthly — Revenu
   // Québec's new-employer frequency — and say so.
   for (const settings of [{}, { rqRemittanceFrequency: "weekly" }, { rqRemittanceFrequency: 3 }]) {
     assert.deepEqual(scheduledRemittanceFrequency(RQ, settings), {
-      frequency: "monthly", source: "default",
+      frequency: "monthly",
+      source: "default",
     });
   }
 });
@@ -136,8 +137,11 @@ test("schedule resolution prefers provenance, then the configured party", () => 
   // Rows that arrived through the RQ vendor key are RQ-governed even when the
   // party is unassigned (the org has not configured its RQ vendor yet).
   const unassigned = scheduleForRemittanceGroup({
-    vendorKeys: ["rqRemittancePartyId"], partyId: null, periodTo: "2026-07-31",
-    payrollSettings: {}, schedules,
+    vendorKeys: ["rqRemittancePartyId"],
+    partyId: null,
+    periodTo: "2026-07-31",
+    payrollSettings: {},
+    schedules,
   });
   assert.equal(unassigned?.authority, "Revenu Québec");
   assert.equal(unassigned?.frequency, "monthly");
@@ -145,77 +149,131 @@ test("schedule resolution prefers provenance, then the configured party", () => 
   assert.equal(unassigned?.dueDate, "2026-08-17");
   // An `external` component pointed at the RQ vendor resolves through the party.
   const byParty = scheduleForRemittanceGroup({
-    vendorKeys: [], partyId: RQ_VENDOR, periodTo: "2026-07-31",
-    payrollSettings: { ...settings, rqRemittanceFrequency: "quarterly" }, schedules,
+    vendorKeys: [],
+    partyId: RQ_VENDOR,
+    periodTo: "2026-07-31",
+    payrollSettings: { ...settings, rqRemittanceFrequency: "quarterly" },
+    schedules,
   });
   assert.equal(byParty?.vendorSettingsKey, "rqRemittancePartyId");
   assert.equal(byParty?.frequency, "quarterly");
   assert.equal(byParty?.frequencySource, "configured");
   assert.equal(byParty?.dueDate, "2026-10-15");
   const cra = scheduleForRemittanceGroup({
-    vendorKeys: ["craRemittancePartyId"], partyId: CRA_VENDOR, periodTo: "2026-07-31",
+    vendorKeys: ["craRemittancePartyId"],
+    partyId: CRA_VENDOR,
+    periodTo: "2026-07-31",
     payrollSettings: { ...settings, craRemittancePartyId: CRA_VENDOR },
-    filingAccount: ACCOUNT, schedules,
+    filingAccount: ACCOUNT,
+    schedules,
   });
   assert.equal(cra?.frequency, "accelerated_2");
   assert.equal(cra?.frequencySource, "filing_account");
   assert.equal(cra?.dueDate, "2026-08-06");
   assert.throws(
-    () => scheduleForRemittanceGroup({
-      vendorKeys: ["craRemittancePartyId"], partyId: CRA_VENDOR, periodTo: "2026-07-31",
-      payrollSettings: {}, schedules,
-    }),
+    () =>
+      scheduleForRemittanceGroup({
+        vendorKeys: ["craRemittancePartyId"],
+        partyId: CRA_VENDOR,
+        periodTo: "2026-07-31",
+        payrollSettings: {},
+        schedules,
+      }),
     /assign a CRA filing account and set its remitter type in Payroll Setup → Filing accounts/,
   );
   // Groups with no declared provenance are unresolved and refuse when dated.
-  assert.equal(scheduleForRemittanceGroup({
-    vendorKeys: [], partyId: null, periodTo: "2026-07-31",
-    payrollSettings: settings, schedules,
-  }), null);
+  assert.equal(
+    scheduleForRemittanceGroup({
+      vendorKeys: [],
+      partyId: null,
+      periodTo: "2026-07-31",
+      payrollSettings: settings,
+      schedules,
+    }),
+    null,
+  );
 });
 
 test("one group cannot combine two authorities with declared schedules", () => {
   assert.throws(
-    () => scheduleForRemittanceGroup({
-      vendorKeys: ["craRemittancePartyId", "rqRemittancePartyId"],
-      partyId: RQ_VENDOR, periodTo: "2026-07-31",
-      payrollSettings: { rqRemittancePartyId: RQ_VENDOR, craRemittancePartyId: RQ_VENDOR },
-      filingAccount: ACCOUNT, schedules: [RQ, CRA_REMITTANCE_SCHEDULE],
-    }),
+    () =>
+      scheduleForRemittanceGroup({
+        vendorKeys: ["craRemittancePartyId", "rqRemittancePartyId"],
+        partyId: RQ_VENDOR,
+        periodTo: "2026-07-31",
+        payrollSettings: { rqRemittancePartyId: RQ_VENDOR, craRemittancePartyId: RQ_VENDOR },
+        filingAccount: ACCOUNT,
+        schedules: [RQ, CRA_REMITTANCE_SCHEDULE],
+      }),
     /multiple declared destination schedules.*Payroll Setup → Accounts/,
   );
 });
 
 test("no schedule governs before its effective date", () => {
-  assert.equal(scheduleForRemittanceGroup({
-    vendorKeys: ["rqRemittancePartyId"], partyId: RQ_VENDOR, periodTo: "2023-12-31",
-    payrollSettings: { rqRemittancePartyId: RQ_VENDOR }, schedules: [RQ],
-  }), null);
+  assert.equal(
+    scheduleForRemittanceGroup({
+      vendorKeys: ["rqRemittancePartyId"],
+      partyId: RQ_VENDOR,
+      periodTo: "2023-12-31",
+      payrollSettings: { rqRemittancePartyId: RQ_VENDOR },
+      schedules: [RQ],
+    }),
+    null,
+  );
 });
 
 const ACCOUNT: PayrollFilingAccount = {
-  id: "acct-1", country: "CA", programType: "ca_rp", accountNumber: "123456789RP0001",
-  name: "Head office", remitterType: "accelerated_2", subsidiaryId: null, stateCode: null,
-  isDefault: true, isActive: true,
+  id: "acct-1",
+  country: "CA",
+  programType: "ca_rp",
+  accountNumber: "123456789RP0001",
+  name: "Head office",
+  remitterType: "accelerated_2",
+  subsidiaryId: null,
+  stateCode: null,
+  isDefault: true,
+  isActive: true,
 };
 
 test("an undated destination refuses instead of using a registration timetable", () => {
   assert.throws(
-    () => remittanceGroupDueDate({
-      schedule: null, vendorKeys: ["craRemittancePartyId"],
-      filingAccount: { id: ACCOUNT.id, accountNumber: ACCOUNT.accountNumber, name: ACCOUNT.name, remitterType: ACCOUNT.remitterType },
-      regionalCalendar: null,
-    }, "2026-07-31"),
+    () =>
+      remittanceGroupDueDate(
+        {
+          schedule: null,
+          vendorKeys: ["craRemittancePartyId"],
+          filingAccount: {
+            id: ACCOUNT.id,
+            accountNumber: ACCOUNT.accountNumber,
+            name: ACCOUNT.name,
+            remitterType: ACCOUNT.remitterType,
+          },
+          regionalCalendar: null,
+        },
+        "2026-07-31",
+      ),
     /no remittance schedule is declared.*assign a pack-declared remittance destination in Payroll Setup → Accounts/,
   );
 });
 
 const ROW: RemittanceRow = {
-  component_id: "qpip", code: "QPIP", name: "QPIP", kind: "deduction",
-  system_key: "qpip", country: "CA", remittance_party_id: null, component_party_id: null,
-  covered_party_id: null, liability_account_id: "liab-1",
-  filing_account_id: ACCOUNT.id, filingUnknown: false, province: "QC", amount: "100.00",
-  subsidiary_id: "sub-1", currency: "CAD", sliceAmount: "100.00",
+  component_id: "qpip",
+  code: "QPIP",
+  name: "QPIP",
+  kind: "deduction",
+  system_key: "qpip",
+  country: "CA",
+  remittance_party_id: null,
+  component_party_id: null,
+  covered_party_id: null,
+  liability_account_id: "liab-1",
+  filing_account_id: ACCOUNT.id,
+  filingUnknown: false,
+  province: "QC",
+  amount: "100.00",
+  subsidiary_id: "sub-1",
+  currency: "CAD",
+  sliceAmount: "100.00",
 };
 
 test("grouping carries each group's schedule provenance", () => {

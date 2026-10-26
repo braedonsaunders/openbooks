@@ -59,7 +59,8 @@ export async function reconcileDeferralAccounts(
     ledger: string;
     subledger: string;
     open_schedules: string;
-  }>(sql`
+  }>(
+    sql`
     with deferral_accounts as (
       select deferral_account_id as account_id from expense_amortization_schedules where org_id = ${orgId}
       union
@@ -106,7 +107,9 @@ export async function reconcileDeferralAccounts(
       from keys k
       left join ledger l on l.book_id = k.book_id and l.subsidiary_id = k.subsidiary_id
         and l.currency = k.currency and l.account_id = k.account_id
-     order by k.book_id, k.subsidiary_id, k.currency, k.account_id`, "objects");
+     order by k.book_id, k.subsidiary_id, k.currency, k.account_id`,
+    "objects",
+  );
   return rows.map((row) => {
     const ledger = toUnits(row.ledger);
     const subledger = toUnits(row.subledger);
@@ -133,12 +136,17 @@ export async function dueUnpostedAmortization(
   orgId: string,
   scope: { endsOn: string; bookId: string; subsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<{ lines: number; schedules: number }> {
-  const row = (await runner.execute<{ lines: string; schedules: string }>(sql`
+  const row = (
+    await runner.execute<{ lines: string; schedules: string }>(
+      sql`
     select count(*)::text as lines, count(distinct s.id)::text as schedules
       from expense_amortization_schedule_lines l
       join expense_amortization_schedules s on s.org_id = l.org_id and s.id = l.schedule_id
      where l.org_id = ${orgId} and l.status = 'planned' and s.status = 'active'
        and l.period_end <= ${scope.endsOn} and s.book_id = ${scope.bookId}
-       ${subsidiaryClause(sql`s.subsidiary_id`, scope.subsidiaryIds)}`, "objects"))[0];
+       ${subsidiaryClause(sql`s.subsidiary_id`, scope.subsidiaryIds)}`,
+      "objects",
+    )
+  )[0];
   return { lines: Number(row?.lines ?? "0"), schedules: Number(row?.schedules ?? "0") };
 }

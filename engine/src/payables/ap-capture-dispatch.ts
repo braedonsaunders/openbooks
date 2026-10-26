@@ -43,30 +43,37 @@ export async function recoverUnenqueuedApCaptures(
   // bypass: scheduler-tick — unenqueued capture items are found across every organization.
   await withBypassContext(async () => {
     const stale = await db.execute<{
-        id: string;
-        org_id: string;
-        updated_by: string | null;
-        attempts: number;
-      }>(sql`
+      id: string;
+      org_id: string;
+      updated_by: string | null;
+      attempts: number;
+    }>(
+      sql`
         select id, org_id, updated_by, attempts from ap_capture_items
          where status = 'queued'
            and updated_at < now() - make_interval(mins => ${DISPATCH_GRACE_MINUTES})
          order by updated_at
          limit ${limit}
-      `, "objects");
+      `,
+      "objects",
+    );
     summary.candidates = stale.length;
     if (stale.length === 0) return;
     const queue = getApCaptureQueue();
     for (const row of stale) {
       const jobId =
-        row.attempts === 0 ? apCaptureUploadJobId(row.id) : apCaptureReprocessJobId(row.id, row.attempts);
+        row.attempts === 0
+          ? apCaptureUploadJobId(row.id)
+          : apCaptureReprocessJobId(row.id, row.attempts);
       const existing = await queue.getJob(jobId);
       if (existing) {
         summary.skippedDispatched += 1;
         console.warn(
           `[ap-capture-dispatch] item ${row.id} is queued with job ${jobId} in state ${await existing
             .getState()
-            .catch(() => "unknown")}; leaving it for the claim path (reprocess manually for a fresh generation)`,
+            .catch(
+              () => "unknown",
+            )}; leaving it for the claim path (reprocess manually for a fresh generation)`,
         );
         continue;
       }

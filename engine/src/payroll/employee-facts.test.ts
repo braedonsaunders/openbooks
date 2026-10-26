@@ -37,9 +37,10 @@ test("required employee facts refuse missing values and name the producer remedy
   registerEmployeeFacts("ZZ", FIXTURE_FACTS);
   assert.throws(
     () => resolveEmployeeFact("ZZ", "fixture_contract_type", null),
-    (error) => error instanceof PayrollPackError
-      && /employment contract type/.test(error.message)
-      && /declared producer/.test(error.message),
+    (error) =>
+      error instanceof PayrollPackError &&
+      /employment contract type/.test(error.message) &&
+      /declared producer/.test(error.message),
   );
 });
 
@@ -47,7 +48,10 @@ test("employee-fact resolution validates closed choices, flags and numeric bound
   registerEmployeeFacts("ZZ", FIXTURE_FACTS);
   assert.equal(resolveEmployeeFact("ZZ", "fixture_contract_type", " temporary "), "temporary");
   assert.equal(resolveEmployeeFact("ZZ", "fixture_weekly_hours", "40"), "40");
-  assert.throws(() => resolveEmployeeFact("ZZ", "fixture_contract_type", "unknown"), /permanent, temporary/);
+  assert.throws(
+    () => resolveEmployeeFact("ZZ", "fixture_contract_type", "unknown"),
+    /permanent, temporary/,
+  );
   assert.throws(() => resolveEmployeeFact("ZZ", "fixture_weekly_hours", "0"), /between 1 and 60/);
   assert.throws(() => resolveEmployeeFact("ZZ", "fixture_weekly_hours", "40.5"), /whole number/);
   assert.equal(resolveEmployeeFact("ZZ", "fixture_optional_flag", null), null);

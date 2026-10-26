@@ -1,96 +1,106 @@
-import { nullableExactMoney } from '@/lib/api/json'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { defineRoute } from '@/lib/api/route'
-import { conflict, notFound, unprocessable } from '@/lib/api/responses'
-import { isFeatureEnabled } from '../../../lib/features'
-import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../lib/custom-fields'
-import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
-import { isUuid } from '../../../lib/list-params'
-import { loadItem } from './_lib'
-import { parseItemShippingFields, type ItemShippingValues } from './shipping-item-fields'
-import { resolveIdempotentReplay } from '@/lib/api/idempotency'
-import { wholeDigits } from '@openbooks/engine/money'
-
+import { nullableExactMoney } from "@/lib/api/json";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { defineRoute } from "@/lib/api/route";
+import { conflict, notFound, unprocessable } from "@/lib/api/responses";
+import { isFeatureEnabled } from "../../../lib/features";
+import {
+  customFieldViewerFor,
+  findUnownedCustomReferences,
+  hiddenCustomFieldRefusal,
+  loadFieldDefs,
+  validateCustomValues,
+  visibleCustomFieldDefs,
+} from "../../../lib/custom-fields";
+import { canonicalDecimal, compareDecimal, fixedDecimal } from "../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
+import { isUuid } from "../../../lib/list-params";
+import { loadItem } from "./_lib";
+import { parseItemShippingFields, type ItemShippingValues } from "./shipping-item-fields";
+import { resolveIdempotentReplay } from "@/lib/api/idempotency";
+import { wholeDigits } from "@openbooks/engine/money";
 
 const ITEM_KINDS = [
-  'service',
-  'non_inventory',
-  'inventory',
-  'assembly',
-  'kit',
-  'other_charge',
-  'equipment_charge',
-  'labor',
-  'absence',
-  'discount',
-] as const
-const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+  "service",
+  "non_inventory",
+  "inventory",
+  "assembly",
+  "kit",
+  "other_charge",
+  "equipment_charge",
+  "labor",
+  "absence",
+  "discount",
+] as const;
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 const PAYROLL_COSTING_ACCOUNT_TYPES = new Set([
-  'expense',
-  'expense_other',
-  'expense_deferred',
-  'cogs',
-  'asset_current_other',
-])
-const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
-const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
+  "expense",
+  "expense_other",
+  "expense_deferred",
+  "cogs",
+  "asset_current_other",
+]);
+const CREATE_PLANS_ON = ["billing", "fulfillment", "arrangement"] as const;
+const REVENUE_ALLOCATION = ["normal", "exclude", "software"] as const;
 
-const nullableText = z.string().nullable().optional()
-const nullableMoney = z.preprocess(
-  (value) => typeof value === 'string' && value.trim() === '' ? null : value,
-  nullableExactMoney(),
-).optional()
+const nullableText = z.string().nullable().optional();
+const nullableMoney = z
+  .preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+    nullableExactMoney(),
+  )
+  .optional();
 
-const itemCreateSchema = z.object({
-  kind: z.enum(ITEM_KINDS),
-  code: nullableText,
-  name: z.string(),
-  description: nullableText,
-  category: nullableText,
-  unit: nullableText,
-  defaultRate: nullableMoney,
-  defaultCost: nullableMoney,
-  incomeAccountId: nullableText,
-  expenseAccountId: nullableText,
-  payrollExpenseAccountId: nullableText,
-  costRecoveryAccountId: nullableText,
-  taxCodeId: nullableText,
-  showOnTimesheet: z.boolean().optional(),
-  weight: nullableText,
-  weightUnit: nullableText,
-  dimensions: z.unknown().nullable().optional(),
-  hsCode: nullableText,
-  countryOfOrigin: nullableText,
-  isActive: z.boolean().optional(),
-  custom: z.record(z.string(), z.json()).optional(),
-  recognitionRuleId: nullableText,
-  deferredAccountId: nullableText,
-  createPlansOn: z.string().optional(),
-  revenueAllocation: z.string().optional(),
-  standaloneSellingPrice: nullableMoney,
-}).strict()
+const itemCreateSchema = z
+  .object({
+    kind: z.enum(ITEM_KINDS),
+    code: nullableText,
+    name: z.string(),
+    description: nullableText,
+    category: nullableText,
+    unit: nullableText,
+    defaultRate: nullableMoney,
+    defaultCost: nullableMoney,
+    incomeAccountId: nullableText,
+    expenseAccountId: nullableText,
+    payrollExpenseAccountId: nullableText,
+    costRecoveryAccountId: nullableText,
+    taxCodeId: nullableText,
+    showOnTimesheet: z.boolean().optional(),
+    weight: nullableText,
+    weightUnit: nullableText,
+    dimensions: z.unknown().nullable().optional(),
+    hsCode: nullableText,
+    countryOfOrigin: nullableText,
+    isActive: z.boolean().optional(),
+    custom: z.record(z.string(), z.json()).optional(),
+    recognitionRuleId: nullableText,
+    deferredAccountId: nullableText,
+    createPlansOn: z.string().optional(),
+    revenueAllocation: z.string().optional(),
+    standaloneSellingPrice: nullableMoney,
+  })
+  .strict();
 
 function bad(error: string, status = 422) {
-  if (status === 400) return unprocessable(error, { status })
-  if (status === 409) return conflict(error)
-  if (status === 422) return unprocessable(error)
-  return NextResponse.json({ error }, { status })
+  if (status === 400) return unprocessable(error, { status });
+  if (status === 409) return conflict(error);
+  if (status === 422) return unprocessable(error);
+  return NextResponse.json({ error }, { status });
 }
 
 function textOrNull(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed || null
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
-function uuidOrNull(value: unknown): string | null | 'invalid' {
-  const normalized = textOrNull(value)
-  if (normalized === null) return null
-  return isUuid(normalized) ? normalized : 'invalid'
+function uuidOrNull(value: unknown): string | null | "invalid" {
+  const normalized = textOrNull(value);
+  if (normalized === null) return null;
+  return isUuid(normalized) ? normalized : "invalid";
 }
 
 function money(
@@ -98,19 +108,25 @@ function money(
   label: string,
   options: { nonNegative?: boolean } = {},
 ): { ok: true; value: string | null } | { ok: false; response: NextResponse } {
-  const raw = textOrNull(value)
-  if (raw === null) return { ok: true, value: null }
-  const exact = canonicalDecimal(raw, 4)
+  const raw = textOrNull(value);
+  if (raw === null) return { ok: true, value: null };
+  const exact = canonicalDecimal(raw, 4);
   if (exact === null) {
-    return { ok: false, response: bad(moneyRefusal(label, raw)) }
+    return { ok: false, response: bad(moneyRefusal(label, raw)) };
   }
-  if (options.nonNegative && compareDecimal(exact, '0') < 0) {
-    return { ok: false, response: bad(`${label} must be a non-negative number with no more than four decimal places`) }
+  if (options.nonNegative && compareDecimal(exact, "0") < 0) {
+    return {
+      ok: false,
+      response: bad(`${label} must be a non-negative number with no more than four decimal places`),
+    };
   }
   if (wholeDigits(exact) > 15) {
-    return { ok: false, response: bad(`${label} is out of range — at most 15 whole digits fit the ledger`) }
+    return {
+      ok: false,
+      response: bad(`${label} is out of range — at most 15 whole digits fit the ledger`),
+    };
   }
-  return { ok: true, value: fixedDecimal(exact, 4) }
+  return { ok: true, value: fixedDecimal(exact, 4) };
 }
 
 /**
@@ -118,170 +134,242 @@ function money(
  * and idempotency key, so a retried Save cannot create a second item or audit.
  */
 export const POST = defineRoute({
-  permission: 'items.manage',
-  feature: { none: 'The item catalog is available independently of optional item capabilities.' },
-  scope: 'unrestricted',
+  permission: "items.manage",
+  feature: { none: "The item catalog is available independently of optional item capabilities." },
+  scope: "unrestricted",
   body: itemCreateSchema,
   opaque: {
-    dimensions: "shipping dimensions are validated by parseItemShippingFields, refusing unusable values by name",
+    dimensions:
+      "shipping dimensions are validated by parseItemShippingFields, refusing unusable values by name",
   },
   handler: async ({ request, authz: gate, body }) => {
-  const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
-  if (!isUuid(requestId)) return bad('invalid_idempotency_key', 400)
+    const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
+    if (!isUuid(requestId)) return bad("invalid_idempotency_key", 400);
 
-  const name = body.name.trim()
-  if (!name) return bad('Name is required')
-  if (!ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) return bad('Invalid item kind')
-  if (body.createPlansOn !== undefined && !CREATE_PLANS_ON.includes(body.createPlansOn as (typeof CREATE_PLANS_ON)[number])) {
-    return bad('Invalid "create plans on" value')
-  }
-  if (body.revenueAllocation !== undefined && !REVENUE_ALLOCATION.includes(body.revenueAllocation as (typeof REVENUE_ALLOCATION)[number])) {
-    return bad('Invalid revenue allocation')
-  }
+    const name = body.name.trim();
+    if (!name) return bad("Name is required");
+    if (!ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number]))
+      return bad("Invalid item kind");
+    if (
+      body.createPlansOn !== undefined &&
+      !CREATE_PLANS_ON.includes(body.createPlansOn as (typeof CREATE_PLANS_ON)[number])
+    ) {
+      return bad('Invalid "create plans on" value');
+    }
+    if (
+      body.revenueAllocation !== undefined &&
+      !REVENUE_ALLOCATION.includes(body.revenueAllocation as (typeof REVENUE_ALLOCATION)[number])
+    ) {
+      return bad("Invalid revenue allocation");
+    }
 
-  const defaultRateResult = money(body.defaultRate, 'Default rate')
-  if (!defaultRateResult.ok) return defaultRateResult.response
-  const defaultCostResult = money(body.defaultCost, 'Default cost', { nonNegative: true })
-  if (!defaultCostResult.ok) return defaultCostResult.response
-  const standalonePriceResult = money(body.standaloneSellingPrice, 'Standalone selling price')
-  if (!standalonePriceResult.ok) return standalonePriceResult.response
+    const defaultRateResult = money(body.defaultRate, "Default rate");
+    if (!defaultRateResult.ok) return defaultRateResult.response;
+    const defaultCostResult = money(body.defaultCost, "Default cost", { nonNegative: true });
+    if (!defaultCostResult.ok) return defaultCostResult.response;
+    const standalonePriceResult = money(body.standaloneSellingPrice, "Standalone selling price");
+    if (!standalonePriceResult.ok) return standalonePriceResult.response;
 
-  const references = {
-    incomeAccountId: uuidOrNull(body.incomeAccountId),
-    expenseAccountId: uuidOrNull(body.expenseAccountId),
-    payrollExpenseAccountId: uuidOrNull(body.payrollExpenseAccountId),
-    costRecoveryAccountId: uuidOrNull(body.costRecoveryAccountId),
-    taxCodeId: uuidOrNull(body.taxCodeId),
-    recognitionRuleId: uuidOrNull(body.recognitionRuleId),
-    deferredAccountId: uuidOrNull(body.deferredAccountId),
-  }
-  const invalidReference = Object.entries(references).find(([, value]) => value === 'invalid')
-  if (invalidReference) return bad(`Invalid ${invalidReference[0]}`)
+    const references = {
+      incomeAccountId: uuidOrNull(body.incomeAccountId),
+      expenseAccountId: uuidOrNull(body.expenseAccountId),
+      payrollExpenseAccountId: uuidOrNull(body.payrollExpenseAccountId),
+      costRecoveryAccountId: uuidOrNull(body.costRecoveryAccountId),
+      taxCodeId: uuidOrNull(body.taxCodeId),
+      recognitionRuleId: uuidOrNull(body.recognitionRuleId),
+      deferredAccountId: uuidOrNull(body.deferredAccountId),
+    };
+    const invalidReference = Object.entries(references).find(([, value]) => value === "invalid");
+    if (invalidReference) return bad(`Invalid ${invalidReference[0]}`);
 
-  const code = textOrNull(body.code)
-  const description = textOrNull(body.description)
-  const category = textOrNull(body.category)
-  const unit = textOrNull(body.unit)
-  const isActive = body.isActive !== false
-  const createPlansOn = body.createPlansOn ?? 'billing'
-  const revenueAllocation = body.revenueAllocation ?? 'normal'
+    const code = textOrNull(body.code);
+    const description = textOrNull(body.description);
+    const category = textOrNull(body.category);
+    const unit = textOrNull(body.unit);
+    const isActive = body.isActive !== false;
+    const createPlansOn = body.createPlansOn ?? "billing";
+    const revenueAllocation = body.revenueAllocation ?? "normal";
 
-  let snapshot: Record<string, unknown> | null = null
-  let created = false
-  try {
-    created = await withOrgTransaction(gate.user.orgId, async () => {
-      if (INVENTORY_ITEM_KINDS.has(body.kind) && !(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
-        throw new CreateNotFound()
-      }
-      if (body.kind === 'equipment_charge' && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
-        throw new CreateNotFound()
-      }
-      if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'timeTracking'))) {
-        throw new CreateNotFound()
-      }
-      const touchesShipping = body.weight !== undefined
-        || body.weightUnit !== undefined
-        || body.dimensions !== undefined
-        || body.hsCode !== undefined
-        || body.countryOfOrigin !== undefined
-      if (touchesShipping && !(await isFeatureEnabled(gate.user.orgId, 'shippingHub'))) {
-        throw new CreateNotFound()
-      }
-      const shippingValues: ItemShippingValues = {}
-      if (touchesShipping) {
-        const parsed = parseItemShippingFields({
-          weight: body.weight,
-          weightUnit: body.weightUnit,
-          dimensions: body.dimensions,
-          hsCode: body.hsCode,
-          countryOfOrigin: body.countryOfOrigin,
-        })
-        if (!parsed.ok) throw new CreateInvalid(parsed.message)
-        Object.assign(shippingValues, parsed.values)
-      }
-      const touchesRevenueRecognition = body.recognitionRuleId !== undefined
-        || body.deferredAccountId !== undefined
-        || body.createPlansOn !== undefined
-        || body.revenueAllocation !== undefined
-        || body.standaloneSellingPrice !== undefined
-      if (touchesRevenueRecognition && !(await isFeatureEnabled(gate.user.orgId, 'revenueRecognition'))) {
-        throw new CreateNotFound()
-      }
+    let snapshot: Record<string, unknown> | null = null;
+    let created = false;
+    try {
+      created = await withOrgTransaction(gate.user.orgId, async () => {
+        if (
+          INVENTORY_ITEM_KINDS.has(body.kind) &&
+          !(await isFeatureEnabled(gate.user.orgId, "inventory"))
+        ) {
+          throw new CreateNotFound();
+        }
+        if (
+          body.kind === "equipment_charge" &&
+          !(await isFeatureEnabled(gate.user.orgId, "equipment"))
+        ) {
+          throw new CreateNotFound();
+        }
+        if (
+          body.showOnTimesheet !== undefined &&
+          !(await isFeatureEnabled(gate.user.orgId, "timeTracking"))
+        ) {
+          throw new CreateNotFound();
+        }
+        const touchesShipping =
+          body.weight !== undefined ||
+          body.weightUnit !== undefined ||
+          body.dimensions !== undefined ||
+          body.hsCode !== undefined ||
+          body.countryOfOrigin !== undefined;
+        if (touchesShipping && !(await isFeatureEnabled(gate.user.orgId, "shippingHub"))) {
+          throw new CreateNotFound();
+        }
+        const shippingValues: ItemShippingValues = {};
+        if (touchesShipping) {
+          const parsed = parseItemShippingFields({
+            weight: body.weight,
+            weightUnit: body.weightUnit,
+            dimensions: body.dimensions,
+            hsCode: body.hsCode,
+            countryOfOrigin: body.countryOfOrigin,
+          });
+          if (!parsed.ok) throw new CreateInvalid(parsed.message);
+          Object.assign(shippingValues, parsed.values);
+        }
+        const touchesRevenueRecognition =
+          body.recognitionRuleId !== undefined ||
+          body.deferredAccountId !== undefined ||
+          body.createPlansOn !== undefined ||
+          body.revenueAllocation !== undefined ||
+          body.standaloneSellingPrice !== undefined;
+        if (
+          touchesRevenueRecognition &&
+          !(await isFeatureEnabled(gate.user.orgId, "revenueRecognition"))
+        ) {
+          throw new CreateNotFound();
+        }
 
-      const viewer = customFieldViewerFor(gate)
-      const activeCustomDefs = await loadFieldDefs('items')
-      const hiddenCustom = hiddenCustomFieldRefusal(activeCustomDefs, viewer, body.custom ?? {}, null)
-      if (hiddenCustom) throw new CreateForbidden(hiddenCustom.message)
-      const customDefs = visibleCustomFieldDefs(activeCustomDefs, viewer)
-      const validatedCustom = validateCustomValues(customDefs, body.custom ?? {})
-      if (!validatedCustom.ok) throw new CreateInvalid(Object.values(validatedCustom.errors)[0] ?? 'Invalid custom fields')
-      const unowned = await findUnownedCustomReferences(gate.user.orgId, customDefs, validatedCustom.cleaned)
-      if (unowned.length > 0) throw new CreateInvalid(`${unowned[0]!.label} not found in this organization`)
+        const viewer = customFieldViewerFor(gate);
+        const activeCustomDefs = await loadFieldDefs("items");
+        const hiddenCustom = hiddenCustomFieldRefusal(
+          activeCustomDefs,
+          viewer,
+          body.custom ?? {},
+          null,
+        );
+        if (hiddenCustom) throw new CreateForbidden(hiddenCustom.message);
+        const customDefs = visibleCustomFieldDefs(activeCustomDefs, viewer);
+        const validatedCustom = validateCustomValues(customDefs, body.custom ?? {});
+        if (!validatedCustom.ok)
+          throw new CreateInvalid(
+            Object.values(validatedCustom.errors)[0] ?? "Invalid custom fields",
+          );
+        const unowned = await findUnownedCustomReferences(
+          gate.user.orgId,
+          customDefs,
+          validatedCustom.cleaned,
+        );
+        if (unowned.length > 0)
+          throw new CreateInvalid(`${unowned[0]!.label} not found in this organization`);
 
-      const accountReference = async (id: string | null, label: string, payroll = false): Promise<void> => {
-        if (!id) return
-        const result = await db.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
+        const accountReference = async (
+          id: string | null,
+          label: string,
+          payroll = false,
+        ): Promise<void> => {
+          if (!id) return;
+          const result = await db.execute<{
+            type: string;
+            is_active: boolean;
+            is_summary: boolean;
+          }>(
+            sql`
           select type, is_active, is_summary
             from accounts
            where id = ${id} and org_id = ${gate.user.orgId}
-        `, 'objects')
-        const row = result[0]
-        if (!row) throw new CreateInvalid(`${label} not found`)
-        if (payroll && !row.is_active) throw new CreateInvalid('Payroll costing account is inactive')
-        if (payroll && row.is_summary) throw new CreateInvalid('Summary accounts cannot receive worked-hours cost')
-        if (payroll && !PAYROLL_COSTING_ACCOUNT_TYPES.has(row.type)) {
-          throw new CreateInvalid(`Payroll costing account type ${row.type} cannot receive worked-hours cost`)
-        }
-      }
-      await accountReference(references.incomeAccountId as string | null, 'Income account')
-      await accountReference(references.expenseAccountId as string | null, 'Expense account')
-      await accountReference(references.payrollExpenseAccountId as string | null, 'Payroll costing account', true)
-      await accountReference(references.costRecoveryAccountId as string | null, 'Recovery account')
-      await accountReference(references.deferredAccountId as string | null, 'Deferred revenue account')
+        `,
+            "objects",
+          );
+          const row = result[0];
+          if (!row) throw new CreateInvalid(`${label} not found`);
+          if (payroll && !row.is_active)
+            throw new CreateInvalid("Payroll costing account is inactive");
+          if (payroll && row.is_summary)
+            throw new CreateInvalid("Summary accounts cannot receive worked-hours cost");
+          if (payroll && !PAYROLL_COSTING_ACCOUNT_TYPES.has(row.type)) {
+            throw new CreateInvalid(
+              `Payroll costing account type ${row.type} cannot receive worked-hours cost`,
+            );
+          }
+        };
+        await accountReference(references.incomeAccountId as string | null, "Income account");
+        await accountReference(references.expenseAccountId as string | null, "Expense account");
+        await accountReference(
+          references.payrollExpenseAccountId as string | null,
+          "Payroll costing account",
+          true,
+        );
+        await accountReference(
+          references.costRecoveryAccountId as string | null,
+          "Recovery account",
+        );
+        await accountReference(
+          references.deferredAccountId as string | null,
+          "Deferred revenue account",
+        );
 
-      const assertOwned = async (table: 'tax_codes' | 'recognition_rules', id: string | null, label: string): Promise<void> => {
-        if (!id) return
-        const result = await db.execute(sql`select 1 from ${sql.raw(table)} where id = ${id} and org_id = ${gate.user.orgId}`, 'objects')
-        if (!result[0]) throw new CreateInvalid(`${label} not found`)
-      }
-      await assertOwned('tax_codes', references.taxCodeId as string | null, 'Tax code')
-      await assertOwned('recognition_rules', references.recognitionRuleId as string | null, 'Recognition rule')
+        const assertOwned = async (
+          table: "tax_codes" | "recognition_rules",
+          id: string | null,
+          label: string,
+        ): Promise<void> => {
+          if (!id) return;
+          const result = await db.execute(
+            sql`select 1 from ${sql.raw(table)} where id = ${id} and org_id = ${gate.user.orgId}`,
+            "objects",
+          );
+          if (!result[0]) throw new CreateInvalid(`${label} not found`);
+        };
+        await assertOwned("tax_codes", references.taxCodeId as string | null, "Tax code");
+        await assertOwned(
+          "recognition_rules",
+          references.recognitionRuleId as string | null,
+          "Recognition rule",
+        );
 
-      snapshot = {
-        id: requestId,
-        org_id: gate.user.orgId,
-        kind: body.kind,
-        code,
-        name,
-        description,
-        category,
-        unit,
-        default_rate: defaultRateResult.value,
-        default_cost: defaultCostResult.value,
-        income_account_id: references.incomeAccountId,
-        expense_account_id: references.expenseAccountId,
-        payroll_expense_account_id: references.payrollExpenseAccountId,
-        cost_recovery_account_id: references.costRecoveryAccountId,
-        tax_code_id: references.taxCodeId,
-        show_on_timesheet: body.showOnTimesheet === true,
-        weight: shippingValues.weight ?? null,
-        weight_unit: shippingValues.weightUnit ?? null,
-        dimensions: shippingValues.dimensions ?? null,
-        hs_code: shippingValues.hsCode ?? null,
-        country_of_origin: shippingValues.countryOfOrigin ?? null,
-        recognition_rule_id: references.recognitionRuleId,
-        deferred_account_id: references.deferredAccountId,
-        create_plans_on: createPlansOn,
-        revenue_allocation: revenueAllocation,
-        standalone_selling_price: standalonePriceResult.value,
-        is_active: isActive,
-        custom: validatedCustom.cleaned,
-      }
+        snapshot = {
+          id: requestId,
+          org_id: gate.user.orgId,
+          kind: body.kind,
+          code,
+          name,
+          description,
+          category,
+          unit,
+          default_rate: defaultRateResult.value,
+          default_cost: defaultCostResult.value,
+          income_account_id: references.incomeAccountId,
+          expense_account_id: references.expenseAccountId,
+          payroll_expense_account_id: references.payrollExpenseAccountId,
+          cost_recovery_account_id: references.costRecoveryAccountId,
+          tax_code_id: references.taxCodeId,
+          show_on_timesheet: body.showOnTimesheet === true,
+          weight: shippingValues.weight ?? null,
+          weight_unit: shippingValues.weightUnit ?? null,
+          dimensions: shippingValues.dimensions ?? null,
+          hs_code: shippingValues.hsCode ?? null,
+          country_of_origin: shippingValues.countryOfOrigin ?? null,
+          recognition_rule_id: references.recognitionRuleId,
+          deferred_account_id: references.deferredAccountId,
+          create_plans_on: createPlansOn,
+          revenue_allocation: revenueAllocation,
+          standalone_selling_price: standalonePriceResult.value,
+          is_active: isActive,
+          custom: validatedCustom.cleaned,
+        };
 
-      // A duplicate id is an expected HTTP retry, never a dropped business
-      // write: the immutable insert audit below proves whether it is the same
-      // command before we return success.
-      const inserted = await db.execute<{ id: string }>(sql`
+        // A duplicate id is an expected HTTP retry, never a dropped business
+        // write: the immutable insert audit below proves whether it is the same
+        // command before we return success.
+        const inserted = await db.execute<{ id: string }>(
+          sql`
         insert into items
           (id, org_id, kind, code, name, description, category, unit,
            default_rate, default_cost, income_account_id, expense_account_id,
@@ -304,45 +392,51 @@ export const POST = defineRoute({
         -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
-      `, 'objects')
-      if (!inserted[0]) {
-        const replay = await resolveIdempotentReplay(db, {
-          orgId: gate.user.orgId,
-          table: 'items',
-          key: requestId,
-          match: snapshot,
-        })
-        if (replay !== 'replay') throw new CreateConflict()
-        return false
-      }
+      `,
+          "objects",
+        );
+        if (!inserted[0]) {
+          const replay = await resolveIdempotentReplay(db, {
+            orgId: gate.user.orgId,
+            table: "items",
+            key: requestId,
+            match: snapshot,
+          });
+          if (replay !== "replay") throw new CreateConflict();
+          return false;
+        }
 
-      await db.execute(sql`
+        await db.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values
           (${gate.user.orgId}, 'items', ${requestId}, 'insert',
            ${JSON.stringify({ before: null, after: snapshot })}::jsonb,
            ${gate.user.id}, ${requestId})
-      `)
-      return true
-    })
-  } catch (error) {
-    if (error instanceof CreateNotFound) return notFound("record")
-    if (error instanceof CreateInvalid) return bad(error.message)
-    if (error instanceof CreateForbidden) return NextResponse.json({ error: error.message }, { status: 403 })
-    if (error instanceof CreateConflict) throw error
-    const message = error instanceof Error
-      ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}`
-      : String(error)
-    if (message.includes('items_org_code')) return bad('Code already in use')
-    throw error
-  }
+      `);
+        return true;
+      });
+    } catch (error) {
+      if (error instanceof CreateNotFound) return notFound("record");
+      if (error instanceof CreateInvalid) return bad(error.message);
+      if (error instanceof CreateForbidden)
+        return NextResponse.json({ error: error.message }, { status: 403 });
+      if (error instanceof CreateConflict) throw error;
+      const message =
+        error instanceof Error
+          ? `${error.message} ${String((error as { cause?: unknown }).cause ?? "")}`
+          : String(error);
+      if (message.includes("items_org_code")) return bad("Code already in use");
+      throw error;
+    }
 
-  const payload = await loadItem(requestId, gate.user.orgId, { customFieldViewer: customFieldViewerFor(gate) })
-  if (!payload) return bad('The item was saved but could not be read back', 500)
-  return NextResponse.json(payload, { status: created ? 201 : 200 })
+    const payload = await loadItem(requestId, gate.user.orgId, {
+      customFieldViewer: customFieldViewerFor(gate),
+    });
+    if (!payload) return bad("The item was saved but could not be read back", 500);
+    return NextResponse.json(payload, { status: created ? 201 : 200 });
   },
-})
+});
 
 class CreateInvalid extends Error {}
 
@@ -350,11 +444,11 @@ class CreateInvalid extends Error {}
 class CreateForbidden extends Error {}
 class CreateNotFound extends Error {}
 class CreateConflict extends Error {
-  readonly status = 409 as const
-  readonly code = 'idempotency_key_conflict' as const
-  readonly remedy = 'Close and reopen the item form to retry with a fresh idempotency key.'
+  readonly status = 409 as const;
+  readonly code = "idempotency_key_conflict" as const;
+  readonly remedy = "Close and reopen the item form to retry with a fresh idempotency key.";
 
   constructor() {
-    super('idempotency_key_conflict')
+    super("idempotency_key_conflict");
   }
 }

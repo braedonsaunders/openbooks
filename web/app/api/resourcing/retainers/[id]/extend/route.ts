@@ -11,11 +11,14 @@ export const POST = defineRoute({
   feature: "retainerBilling",
   params: Params,
   body: Body,
-  handler: async ({ authz, params, body }) => Response.json(await extendRetainer({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    retainerId: params.id,
-    newEndsOn: body.newEndsOn,
-  })),
+  handler: async ({ authz, params, body }) =>
+    Response.json(
+      await extendRetainer({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        retainerId: params.id,
+        newEndsOn: body.newEndsOn,
+      }),
+    ),
 });

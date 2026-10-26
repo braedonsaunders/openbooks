@@ -4,7 +4,11 @@ import { db } from "../platform/db.ts";
 import { add, cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
-import { buildAllRecognitionSchedulesInTransaction, legacyRebuildBlock, revenueRecognitionFeatureEnabled } from "../revenue/recognition.ts";
+import {
+  buildAllRecognitionSchedulesInTransaction,
+  legacyRebuildBlock,
+  revenueRecognitionFeatureEnabled,
+} from "../revenue/recognition.ts";
 import { recognitionAccounts } from "./recognition.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadEarnedValue } from "./earned-value.ts";
@@ -103,10 +107,20 @@ export function costToCostPercent(budget: string, actual: string): string | null
 export async function projectCostEstimate(
   tx: Pick<typeof db, "execute">,
   orgId: string,
-  input: { projectId: string; subsidiaryId: string; bookId: string; laborWipAccountId: string | null; asOfDate: string; progressOn: boolean },
+  input: {
+    projectId: string;
+    subsidiaryId: string;
+    bookId: string;
+    laborWipAccountId: string | null;
+    asOfDate: string;
+    progressOn: boolean;
+  },
 ): Promise<{ estimatedTotal: string; actual: string }> {
-  const laborWipScope = input.laborWipAccountId ? sql`or l.account_id = ${input.laborWipAccountId}` : sql``;
-  const cc = (await tx.execute<{ budget: string; actual: string }>(sql`
+  const laborWipScope = input.laborWipAccountId
+    ? sql`or l.account_id = ${input.laborWipAccountId}`
+    : sql``;
+  const cc = await tx.execute<{ budget: string; actual: string }>(
+    sql`
     select
       coalesce((select sum(t.estimated_cost) from project_tasks t
                  where t.project_id = ${input.projectId} and t.org_id = ${orgId}), 0) as budget,
@@ -117,11 +131,17 @@ export async function projectCostEstimate(
                  and e.book_id = ${input.bookId}
                  and ${excludePeriodEndJournals(sql`e.origin`)}
                  and l.subsidiary_id = ${input.subsidiaryId} and e.posting_date <= ${input.asOfDate}::date
-                 and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`, "objects"));
+                 and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`,
+    "objects",
+  );
   const actual = normalizeMoney(cc[0]?.actual ?? "0");
   let estimatedTotal = normalizeMoney(cc[0]?.budget ?? "0");
   if (input.progressOn) {
-    const [earned] = await loadEarnedValue(tx, orgId, { asOf: input.asOfDate, projectIds: [input.projectId], allowedSubsidiaryIds: null });
+    const [earned] = await loadEarnedValue(tx, orgId, {
+      asOf: input.asOfDate,
+      projectIds: [input.projectId],
+      allowedSubsidiaryIds: null,
+    });
     if (earned?.hasForecasts) estimatedTotal = add(actual, earned.totals.estimateToComplete);
   }
   return { estimatedTotal, actual };
@@ -132,21 +152,31 @@ export async function projectCostEstimate(
  * rule stays fully editable under Setup → Recognition Rules (accounts left to
  * the obligation, which carries the org control accounts).
  */
-async function ensureProjectPocRule(orgId: string, actorId: string | null, runner: Pick<typeof db, "execute"> = db): Promise<string> {
+async function ensureProjectPocRule(
+  orgId: string,
+  actorId: string | null,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<string> {
   // Rule versions form a successor chain per code (0297): the unique index
   // covers current rows only, so the upsert targets it with its predicate
   // and always resolves the CURRENT version, never a superseded row.
-  const existing = (await runner.execute<{ id: string }>(sql`
+  const existing = await runner.execute<{ id: string }>(
+    sql`
     select id from recognition_rules
      where org_id = ${orgId} and code = ${PROJECT_POC_RULE_CODE} and superseded_by is null
-     limit 1`, "objects"));
+     limit 1`,
+    "objects",
+  );
   if (existing[0]) return existing[0].id;
-  const ins = (await runner.execute<{ id: string }>(sql`
+  const ins = await runner.execute<{ id: string }>(
+    sql`
     insert into recognition_rules (org_id, code, name, method, is_active, created_by, updated_by)
     values (${orgId}, ${PROJECT_POC_RULE_CODE}, 'Project percent complete', 'percent_complete', true, ${actorId}, ${actorId})
     on conflict (org_id, code) where superseded_by is null do update set updated_at = now()
     where recognition_rules.org_id = ${orgId}
-    returning id`, "objects"));
+    returning id`,
+    "objects",
+  );
   return ins[0]!.id;
 }
 
@@ -206,21 +236,29 @@ export async function syncProjectRevenueContractsInTransaction(
   const recognitionOn = await revenueRecognitionFeatureEnabled(tx, orgId);
   // With Progress tracking on, recorded estimates to complete replace the
   // static task budget as the cost-to-cost denominator (see below).
-  const progressOn = projectsOn && await lockAndCheckOrgFeature(tx, orgId, "projectProgress");
+  const progressOn = projectsOn && (await lockAndCheckOrgFeature(tx, orgId, "projectProgress"));
 
   // `undefined` is the unrestricted policy; a present (including empty) list
   // is a restricted policy. Keep the empty case fail-closed rather than
   // interpolating an invalid PostgreSQL array literal.
-  const subsidiaryScope = allowedSubsidiaryIds == null
-    ? sql``
-    : allowedSubsidiaryIds.length > 0
-      ? sql`and p.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])`
-      : sql`and false`;
+  const subsidiaryScope =
+    allowedSubsidiaryIds == null
+      ? sql``
+      : allowedSubsidiaryIds.length > 0
+        ? sql`and p.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])`
+        : sql`and false`;
 
-  const projects = (await tx.execute<{
-      id: string; code: string; name: string; customer_id: string | null; subsidiary_id: string | null;
-      starts_on: string | null; contract_value: string; pct_override: string | null;
-    }>(sql`
+  const projects = await tx.execute<{
+    id: string;
+    code: string;
+    name: string;
+    customer_id: string | null;
+    subsidiary_id: string | null;
+    starts_on: string | null;
+    contract_value: string;
+    pct_override: string | null;
+  }>(
+    sql`
     select p.id, p.code, p.name, p.customer_id, p.subsidiary_id, p.starts_on,
            coalesce(p.contract_value, 0)::numeric(19,4) as contract_value,
            nullif(p.custom->>'percentCompleteOverride', '')::numeric as pct_override
@@ -231,7 +269,9 @@ export async function syncProjectRevenueContractsInTransaction(
        ${projectId ? sql`and p.id = ${projectId}` : sql``}
        ${subsidiaryScope}
      order by p.code, p.id
-     for update of p`, "objects"));
+     for update of p`,
+    "objects",
+  );
 
   // No qualifying project: an empty sync, not a skip — the run posts its
   // non-project lines with nothing to warn about.
@@ -261,8 +301,7 @@ export async function syncProjectRevenueContractsInTransaction(
     ].filter((name): name is string => name !== null);
     return {
       ...result,
-      skipped:
-        `project revenue sync skipped: control accounts unmapped: ${missing.join(", ")} — map them in Company & Accounting`,
+      skipped: `project revenue sync skipped: control accounts unmapped: ${missing.join(", ")} — map them in Company & Accounting`,
     };
   }
 
@@ -287,14 +326,19 @@ export async function syncProjectRevenueContractsInTransaction(
     // An explicit owner must resolve in this organization. Only legacy null
     // ownership may resolve to the unique active, non-elimination root; never
     // borrow a root's currency for an invalid explicit owner.
-    const owners = await tx.execute<{ id: string; base_currency: string }>(sql`
+    const owners = await tx.execute<{ id: string; base_currency: string }>(
+      sql`
       select id, base_currency from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination
          ${p.subsidiary_id ? sql`and id = ${p.subsidiary_id}` : sql`and parent_id is null`}
-       order by id for share`, "objects");
+       order by id for share`,
+      "objects",
+    );
     const owner = owners.length === 1 ? owners[0] : undefined;
     if (!owner?.base_currency) {
-      result.problems.push(`${p.code}: project has no unique authoritative legal entity and functional currency`);
+      result.problems.push(
+        `${p.code}: project has no unique authoritative legal entity and functional currency`,
+      );
       continue;
     }
 
@@ -314,22 +358,33 @@ export async function syncProjectRevenueContractsInTransaction(
         result.problems.push(`${p.code}: percent-complete override must be an exact decimal`);
         continue;
       }
-      percent = cmp(override, "0") < 0 ? "0.0000" : cmp(override, "100") > 0 ? "100.0000" : override;
+      percent =
+        cmp(override, "0") < 0 ? "0.0000" : cmp(override, "100") > 0 ? "100.0000" : override;
       overridden = true;
     } else {
       // Book flags, not a mutable display code, identify the shared progress
       // authority. Reject ambiguous identity even if only one candidate is
       // active/posting, and retain its lock through all schedule writes.
-      const primaryBooks = await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+      const primaryBooks = await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(
+        sql`
         select id, is_active, posts_gl from accounting_books
-         where org_id = ${orgId} and is_primary order by id for share`, "objects");
+         where org_id = ${orgId} and is_primary order by id for share`,
+        "objects",
+      );
       const primary = primaryBooks.length === 1 ? primaryBooks[0] : undefined;
       if (!primary?.is_active || !primary.posts_gl) {
-        result.problems.push(`${p.code}: cost-to-cost progress requires one authoritative active posting primary accounting book`);
+        result.problems.push(
+          `${p.code}: cost-to-cost progress requires one authoritative active posting primary accounting book`,
+        );
         continue;
       }
       const { estimatedTotal, actual } = await projectCostEstimate(tx, orgId, {
-        projectId: p.id, subsidiaryId: owner.id, bookId: primary.id, laborWipAccountId: accts.laborWip ?? null, asOfDate, progressOn,
+        projectId: p.id,
+        subsidiaryId: owner.id,
+        bookId: primary.id,
+        laborWipAccountId: accts.laborWip ?? null,
+        asOfDate,
+        progressOn,
       });
       const measured = costToCostPercent(estimatedTotal, actual);
       if (measured === null) {
@@ -351,30 +406,43 @@ export async function syncProjectRevenueContractsInTransaction(
     // -- ensure the contract --------------------------------------------------
     const startsOn = p.starts_on ?? asOfDate;
     let created = false;
-    const existing = (await tx.execute<{ id: string; last_change_id: string | null; total_transaction_price: string }>(sql`
-      select id,last_change_id,total_transaction_price from revenue_contracts where org_id = ${orgId} and project_id = ${p.id} limit 1`, "objects"));
+    const existing = await tx.execute<{
+      id: string;
+      last_change_id: string | null;
+      total_transaction_price: string;
+    }>(
+      sql`
+      select id,last_change_id,total_transaction_price from revenue_contracts where org_id = ${orgId} and project_id = ${p.id} limit 1`,
+      "objects",
+    );
     let contractId: string;
     if (existing[0]) {
       contractId = existing[0].id;
-      await lockRevenueContract(tx,orgId,contractId);
+      await lockRevenueContract(tx, orgId, contractId);
       await tx.execute(sql`
         update revenue_contracts
            set total_transaction_price = case when last_change_id is null then ${p.contract_value} else total_transaction_price end, customer_id = ${p.customer_id},
                starts_on = coalesce(starts_on, ${startsOn}), updated_at = now(), updated_by = ${actorId}
          where id = ${contractId} and org_id = ${orgId}`);
     } else {
-      const ins = (await tx.execute<{ id: string }>(sql`
+      const ins = await tx.execute<{ id: string }>(
+        sql`
         insert into revenue_contracts
           (org_id, subsidiary_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
         values (${orgId}, ${owner.id}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${owner.base_currency}, ${p.contract_value}, ${actorId}, ${actorId})
-        returning id`, "objects"));
+        returning id`,
+        "objects",
+      );
       contractId = ins[0]!.id;
       created = true;
     }
 
     // -- ensure the (single) obligation --------------------------------------
-    const existingObl = (await tx.execute<{ id: string }>(sql`
-      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} order by created_at,id limit 1`, "objects"));
+    const existingObl = await tx.execute<{ id: string }>(
+      sql`
+      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} order by created_at,id limit 1`,
+      "objects",
+    );
     let obligationId: string;
     if (existingObl[0]) {
       obligationId = existingObl[0].id;
@@ -397,7 +465,8 @@ export async function syncProjectRevenueContractsInTransaction(
                updated_at = now(), updated_by = ${actorId}
          where id = ${obligationId} and org_id = ${orgId}`);
     } else {
-      const ins = (await tx.execute<{ id: string }>(sql`
+      const ins = await tx.execute<{ id: string }>(
+        sql`
         insert into performance_obligations
           (org_id, contract_id, item_id, description, recognition_rule_id,
            booked_amount, standalone_selling_price, allocated_price, percent_complete,
@@ -405,7 +474,9 @@ export async function syncProjectRevenueContractsInTransaction(
         values (${orgId}, ${contractId}, null, ${p.name}, ${ruleId},
                 ${p.contract_value}, ${p.contract_value}, ${p.contract_value}, ${percent},
                 ${startsOn}, ${accts.unbilledReceivable}, ${accts.projectRevenue}, 'open', ${actorId}, ${actorId})
-        returning id`, "objects"));
+        returning id`,
+        "objects",
+      );
       obligationId = ins[0]!.id;
     }
 
@@ -416,7 +487,9 @@ export async function syncProjectRevenueContractsInTransaction(
       projectCode: p.code,
       contractId,
       obligationId,
-      contractValue: existing[0]?.last_change_id ? existing[0].total_transaction_price : p.contract_value,
+      contractValue: existing[0]?.last_change_id
+        ? existing[0].total_transaction_price
+        : p.contract_value,
       percentComplete: formatMoney(percent, 4),
       overridden,
       created,

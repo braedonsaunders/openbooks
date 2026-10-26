@@ -41,10 +41,11 @@ export function defaultContinuousCloseAnalysisSettings(): ContinuousCloseAnalysi
 }
 
 /** Canonicalize persisted/API analysis controls and clamp the agent loop. */
-export function normalizeContinuousCloseAnalysisSettings(raw: unknown): ContinuousCloseAnalysisSettings {
-  const row = raw && typeof raw === "object" && !Array.isArray(raw)
-    ? raw as Record<string, unknown>
-    : {};
+export function normalizeContinuousCloseAnalysisSettings(
+  raw: unknown,
+): ContinuousCloseAnalysisSettings {
+  const row =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const maxToolSteps = row.maxToolSteps === undefined ? 16 : Number(row.maxToolSteps);
   if (!Number.isInteger(maxToolSteps) || maxToolSteps < 4 || maxToolSteps > 30) {
     throw new Error("invalid agent tool step limit");
@@ -151,7 +152,9 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
     detectorKey: "stranded_background_work",
     agentKey: "accounting",
     supportsMateriality: false,
-    parameters: [{ key: "staleAfterDays", defaultValue: 1, min: 1, max: 365, step: 1, unit: "days" }],
+    parameters: [
+      { key: "staleAfterDays", defaultValue: 1, min: 1, max: 365, step: 1, unit: "days" },
+    ],
   },
   {
     detectorKey: "overdue_customer_balance",
@@ -825,7 +828,8 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
   },
 ] as const satisfies readonly ContinuousCloseDetectorSpec[];
 
-export type ContinuousCloseDetectorKey = (typeof CONTINUOUS_CLOSE_DETECTOR_SPECS)[number]["detectorKey"];
+export type ContinuousCloseDetectorKey =
+  (typeof CONTINUOUS_CLOSE_DETECTOR_SPECS)[number]["detectorKey"];
 
 export type ContinuousCloseDetectorPolicy = {
   detectorKey: ContinuousCloseDetectorKey;
@@ -835,21 +839,30 @@ export type ContinuousCloseDetectorPolicy = {
   parameters: Record<string, number>;
 };
 
-export function detectorSpecsForAgent(agentKey: ContinuousCloseAgentKey): ContinuousCloseDetectorSpec[] {
+export function detectorSpecsForAgent(
+  agentKey: ContinuousCloseAgentKey,
+): ContinuousCloseDetectorSpec[] {
   return CONTINUOUS_CLOSE_DETECTOR_SPECS.filter((spec) => spec.agentKey === agentKey);
 }
 
-export function defaultContinuousCloseDetectors(agentKey: ContinuousCloseAgentKey): ContinuousCloseDetectorPolicy[] {
+export function defaultContinuousCloseDetectors(
+  agentKey: ContinuousCloseAgentKey,
+): ContinuousCloseDetectorPolicy[] {
   return detectorSpecsForAgent(agentKey).map((spec) => ({
     detectorKey: spec.detectorKey as ContinuousCloseDetectorKey,
     enabled: true,
     materialityThreshold: null,
-    parameters: Object.fromEntries(spec.parameters.map((parameter) => [parameter.key, parameter.defaultValue])),
+    parameters: Object.fromEntries(
+      spec.parameters.map((parameter) => [parameter.key, parameter.defaultValue]),
+    ),
   }));
 }
 
 /** Canonicalize untrusted API or persisted JSON against the detector registry. */
-export function normalizeContinuousCloseDetectors(agentKey: ContinuousCloseAgentKey, raw: unknown): ContinuousCloseDetectorPolicy[] {
+export function normalizeContinuousCloseDetectors(
+  agentKey: ContinuousCloseAgentKey,
+  raw: unknown,
+): ContinuousCloseDetectorPolicy[] {
   const input = new Map<string, Record<string, unknown>>();
   if (Array.isArray(raw)) {
     for (const value of raw) {
@@ -869,7 +882,12 @@ export function normalizeContinuousCloseDetectors(agentKey: ContinuousCloseAgent
     const row = input.get(spec.detectorKey) ?? {};
     const rawMateriality = row.materialityThreshold;
     let materialityThreshold: string | null = null;
-    if (spec.supportsMateriality && rawMateriality !== undefined && rawMateriality !== null && String(rawMateriality).trim() !== "") {
+    if (
+      spec.supportsMateriality &&
+      rawMateriality !== undefined &&
+      rawMateriality !== null &&
+      String(rawMateriality).trim() !== ""
+    ) {
       try {
         const units = toUnits(String(rawMateriality).trim());
         if (units < 0n) throw new Error("negative");
@@ -879,11 +897,22 @@ export function normalizeContinuousCloseDetectors(agentKey: ContinuousCloseAgent
       }
     }
 
-    const rawParameters = row.parameters && typeof row.parameters === "object" && !Array.isArray(row.parameters) ? (row.parameters as Record<string, unknown>) : {};
+    const rawParameters =
+      row.parameters && typeof row.parameters === "object" && !Array.isArray(row.parameters)
+        ? (row.parameters as Record<string, unknown>)
+        : {};
     const parameters = Object.fromEntries(
       spec.parameters.map((parameter) => {
-        const value = rawParameters[parameter.key] === undefined ? parameter.defaultValue : Number(rawParameters[parameter.key]);
-        if (!Number.isFinite(value) || !Number.isInteger(value) || value < parameter.min || value > parameter.max) {
+        const value =
+          rawParameters[parameter.key] === undefined
+            ? parameter.defaultValue
+            : Number(rawParameters[parameter.key]);
+        if (
+          !Number.isFinite(value) ||
+          !Number.isInteger(value) ||
+          value < parameter.min ||
+          value > parameter.max
+        ) {
           throw new Error(`invalid detector parameter ${spec.detectorKey}.${parameter.key}`);
         }
         return [parameter.key, value];
@@ -895,7 +924,11 @@ export function normalizeContinuousCloseDetectors(agentKey: ContinuousCloseAgent
       ["minimumDropPoints", "criticalDropPoints"],
     ];
     for (const [minimum, critical] of orderedPairs) {
-      if (parameters[minimum] !== undefined && parameters[critical] !== undefined && parameters[critical] < parameters[minimum]) {
+      if (
+        parameters[minimum] !== undefined &&
+        parameters[critical] !== undefined &&
+        parameters[critical] < parameters[minimum]
+      ) {
         throw new Error(`invalid detector parameter order ${spec.detectorKey}.${critical}`);
       }
     }
@@ -908,14 +941,21 @@ export function normalizeContinuousCloseDetectors(agentKey: ContinuousCloseAgent
   });
 }
 
-export function serializeContinuousCloseDetectors(detectors: readonly ContinuousCloseDetectorPolicy[]): Record<string, Omit<ContinuousCloseDetectorPolicy, "detectorKey">> {
+export function serializeContinuousCloseDetectors(
+  detectors: readonly ContinuousCloseDetectorPolicy[],
+): Record<string, Omit<ContinuousCloseDetectorPolicy, "detectorKey">> {
   return Object.fromEntries(detectors.map(({ detectorKey, ...policy }) => [detectorKey, policy]));
 }
 
-export function effectiveDetectorMateriality(detector: ContinuousCloseDetectorPolicy, agentThreshold: string): string {
+export function effectiveDetectorMateriality(
+  detector: ContinuousCloseDetectorPolicy,
+  agentThreshold: string,
+): string {
   return detector.materialityThreshold ?? agentThreshold;
 }
 
-export function enabledDetectorKeys(detectors: readonly ContinuousCloseDetectorPolicy[]): ContinuousCloseDetectorKey[] {
+export function enabledDetectorKeys(
+  detectors: readonly ContinuousCloseDetectorPolicy[],
+): ContinuousCloseDetectorKey[] {
   return detectors.filter((detector) => detector.enabled).map((detector) => detector.detectorKey);
 }

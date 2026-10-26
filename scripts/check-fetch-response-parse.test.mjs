@@ -1,6 +1,11 @@
-import { test } from 'node:test'
-import assert from 'node:assert/strict'
-import { ALLOWLIST_CEILING, auditRepository, loadAllowlist, reconcile } from './check-fetch-response-parse.mjs'
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  ALLOWLIST_CEILING,
+  auditRepository,
+  loadAllowlist,
+  reconcile,
+} from "./check-fetch-response-parse.mjs";
 
 /**
  * The guard exists because three client saves in one day parsed the response
@@ -16,9 +21,9 @@ import { ALLOWLIST_CEILING, auditRepository, loadAllowlist, reconcile } from './
  */
 
 function auditOne(path, source) {
-  const { violations, syntaxErrors } = auditRepository([path], () => source)
-  assert.deepEqual(syntaxErrors, [], `the snippet must parse cleanly: ${path}`)
-  return violations
+  const { violations, syntaxErrors } = auditRepository([path], () => source);
+  assert.deepEqual(syntaxErrors, [], `the snippet must parse cleanly: ${path}`);
+  return violations;
 }
 
 // The profile-tab load shape: body parsed, status asked afterwards.
@@ -32,7 +37,7 @@ export function PayrollProfileTab({ partyId }: { partyId: string }) {
   }
   return loadProfile
 }
-`
+`;
 
 // The certificate-save shape: error extracted from a body that may not parse.
 const CERTIFICATE_SAVE_SHAPE = `
@@ -48,7 +53,7 @@ export function CertificateForm({ partyId }: { partyId: string }) {
   }
   return saveCertificate
 }
-`
+`;
 
 // The run-wizard chain shape: the check runs in a downstream continuation,
 // so it executes AFTER the parse, not before it.
@@ -67,7 +72,7 @@ export function commitRun(runId: string) {
     }),
   )
 }
-`
+`;
 
 // The banking rule-run shape: body parsed, a toast-and-return check after.
 // The branch exits, but the parse still throws first on a non-JSON body.
@@ -88,7 +93,7 @@ export function RunRulesButton({ ruleId }: { ruleId: string }) {
   }
   return run
 }
-`
+`;
 
 // The banking rule-delete shape: the parse sits IN the failure branch, so
 // the ordering rule excuses it — but a non-JSON error body still throws
@@ -106,62 +111,75 @@ export function RuleDeleteButton({ ruleId }: { ruleId: string }) {
   }
   return remove
 }
-`
+`;
 
-test('flags the profile-load shape: parse before the status check', () => {
-  const violations = auditOne('web/app/(app)/payroll/_ui/PayrollProfileTab.tsx', PROFILE_LOAD_SHAPE)
-  assert.equal(violations.length, 1, 'one parse-before-check site must flag exactly once')
-  assert.equal(violations[0].path, 'web/app/(app)/payroll/_ui/PayrollProfileTab.tsx')
-  assert.equal(violations[0].fn, 'loadProfile', 'the violation must name the owning operation, not the file')
-  assert.equal(typeof violations[0].line, 'number')
-  assert.ok(violations[0].line > 0, 'the violation must carry the line so the message identifies the site')
-})
-
-test('flags the rule-run shape: a toast-and-return check still runs after the parse', () => {
-  const violations = auditOne('web/app/(app)/banking/rules/RuleDrawer.tsx', RULE_RUN_SHAPE)
-  assert.equal(violations.length, 1, 'the exiting branch does not excuse the earlier parse')
-  assert.equal(violations[0].fn, 'run')
-})
-
-test('flags the rule-delete shape: a bare parse inside the failure branch', () => {
-  const violations = auditOne('web/app/(app)/banking/rules/RuleDrawer.tsx', RULE_DELETE_SHAPE)
-  assert.equal(violations.length, 1, 'the failure branch cannot read a body that never parsed')
-  assert.equal(violations[0].fn, 'remove')
-})
-
-test('does not flag a failure-branch parse that cannot throw', () => {
+test("flags the profile-load shape: parse before the status check", () => {
   const violations = auditOne(
-    'web/app/(app)/banking/rules/RuleDrawer.tsx',
-    RULE_DELETE_SHAPE.replace('await res.json()', 'await res.json().catch(() => null)').replace(
-      'data.error',
-      'data?.error',
+    "web/app/(app)/payroll/_ui/PayrollProfileTab.tsx",
+    PROFILE_LOAD_SHAPE,
+  );
+  assert.equal(violations.length, 1, "one parse-before-check site must flag exactly once");
+  assert.equal(violations[0].path, "web/app/(app)/payroll/_ui/PayrollProfileTab.tsx");
+  assert.equal(
+    violations[0].fn,
+    "loadProfile",
+    "the violation must name the owning operation, not the file",
+  );
+  assert.equal(typeof violations[0].line, "number");
+  assert.ok(
+    violations[0].line > 0,
+    "the violation must carry the line so the message identifies the site",
+  );
+});
+
+test("flags the rule-run shape: a toast-and-return check still runs after the parse", () => {
+  const violations = auditOne("web/app/(app)/banking/rules/RuleDrawer.tsx", RULE_RUN_SHAPE);
+  assert.equal(violations.length, 1, "the exiting branch does not excuse the earlier parse");
+  assert.equal(violations[0].fn, "run");
+});
+
+test("flags the rule-delete shape: a bare parse inside the failure branch", () => {
+  const violations = auditOne("web/app/(app)/banking/rules/RuleDrawer.tsx", RULE_DELETE_SHAPE);
+  assert.equal(violations.length, 1, "the failure branch cannot read a body that never parsed");
+  assert.equal(violations[0].fn, "remove");
+});
+
+test("does not flag a failure-branch parse that cannot throw", () => {
+  const violations = auditOne(
+    "web/app/(app)/banking/rules/RuleDrawer.tsx",
+    RULE_DELETE_SHAPE.replace("await res.json()", "await res.json().catch(() => null)").replace(
+      "data.error",
+      "data?.error",
     ),
-  )
-  assert.deepEqual(violations, [], 'the converted failure branch must stay clean')
-})
+  );
+  assert.deepEqual(violations, [], "the converted failure branch must stay clean");
+});
 
-test('flags the certificate-save shape: error read off a maybe-unparseable body', () => {
+test("flags the certificate-save shape: error read off a maybe-unparseable body", () => {
   const violations = auditOne(
-    'web/app/(app)/payroll/_ui/PackCertificateForms.tsx',
+    "web/app/(app)/payroll/_ui/PackCertificateForms.tsx",
     CERTIFICATE_SAVE_SHAPE,
-  )
-  assert.equal(violations.length, 1)
-  assert.equal(violations[0].fn, 'saveCertificate')
-})
+  );
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].fn, "saveCertificate");
+});
 
-test('flags the chained shape: a downstream continuation check runs after the parse', () => {
-  const violations = auditOne('web/app/(app)/payroll/runs/[id]/RunWizard.tsx', RUN_WIZARD_CHAIN_SHAPE)
+test("flags the chained shape: a downstream continuation check runs after the parse", () => {
+  const violations = auditOne(
+    "web/app/(app)/payroll/runs/[id]/RunWizard.tsx",
+    RUN_WIZARD_CHAIN_SHAPE,
+  );
   assert.equal(
     violations.length,
     1,
-    'a status check in a downstream .then() executes after the parse, so it guards nothing',
-  )
-  assert.equal(violations[0].fn, 'commitRun')
-})
+    "a status check in a downstream .then() executes after the parse, so it guards nothing",
+  );
+  assert.equal(violations[0].fn, "commitRun");
+});
 
-test('flags a status read that merely toasts and falls through', () => {
+test("flags a status read that merely toasts and falls through", () => {
   const violations = auditOne(
-    'web/app/(app)/sync/PlatformClient.tsx',
+    "web/app/(app)/sync/PlatformClient.tsx",
     `
 export function SyncPanel() {
   async function reload() {
@@ -175,17 +193,17 @@ export function SyncPanel() {
   return reload
 }
 `,
-  )
+  );
   assert.equal(
     violations.length,
     1,
-    'a check whose branch neither throws nor returns lets the parse run on the failure path',
-  )
-})
+    "a check whose branch neither throws nor returns lets the parse run on the failure path",
+  );
+});
 
-test('does not flag a compound guard that still routes every failure out', () => {
+test("does not flag a compound guard that still routes every failure out", () => {
   const violations = auditOne(
-    'web/components/assistant/assistant-app.tsx',
+    "web/components/assistant/assistant-app.tsx",
     `
 export function AssistantApp() {
   async function refreshConversations(activeId: string, cancelled: boolean) {
@@ -197,13 +215,13 @@ export function AssistantApp() {
   return refreshConversations
 }
 `,
-  )
-  assert.deepEqual(violations, [])
-})
+  );
+  assert.deepEqual(violations, []);
+});
 
-test('does not flag a parse nested in the success branch of a compound check', () => {
+test("does not flag a parse nested in the success branch of a compound check", () => {
   const violations = auditOne(
-    'web/components/assistant/assistant-app.tsx',
+    "web/components/assistant/assistant-app.tsx",
     `
 export function AssistantApp() {
   async function adoptConversation(conversationId: string, cancelled: boolean) {
@@ -216,13 +234,13 @@ export function AssistantApp() {
   return adoptConversation
 }
 `,
-  )
-  assert.deepEqual(violations, [])
-})
+  );
+  assert.deepEqual(violations, []);
+});
 
-test('does not flag a ternary that parses only on success', () => {
+test("does not flag a ternary that parses only on success", () => {
   const violations = auditOne(
-    'web/app/(app)/admin/flows/FlowsClient.tsx',
+    "web/app/(app)/admin/flows/FlowsClient.tsx",
     `
 export function FlowsAdmin() {
   function openDrawer() {
@@ -234,13 +252,13 @@ export function FlowsAdmin() {
   return openDrawer
 }
 `,
-  )
-  assert.deepEqual(violations, [])
-})
+  );
+  assert.deepEqual(violations, []);
+});
 
-test('flags a conjunctive guard that lets failures fall through', () => {
+test("flags a conjunctive guard that lets failures fall through", () => {
   const violations = auditOne(
-    'web/app/(app)/sync/PlatformClient.tsx',
+    "web/app/(app)/sync/PlatformClient.tsx",
     `
 export function SyncPanel() {
   async function reload(retryable: boolean) {
@@ -252,17 +270,17 @@ export function SyncPanel() {
   return reload
 }
 `,
-  )
+  );
   assert.equal(
     violations.length,
     1,
-    'a failure without retry rights falls past the throw straight into the parse',
-  )
-})
+    "a failure without retry rights falls past the throw straight into the parse",
+  );
+});
 
-test('does not flag res.json().catch(...): the parse cannot throw', () => {
+test("does not flag res.json().catch(...): the parse cannot throw", () => {
   const violations = auditOne(
-    'web/app/(app)/payroll/runs/[id]/RunWizard.tsx',
+    "web/app/(app)/payroll/runs/[id]/RunWizard.tsx",
     `
 export function downloadCheques(documentId: string) {
   return fetch('/api/payroll/runs/' + documentId + '/cheques-pdf', { method: 'POST' }).then(
@@ -276,13 +294,13 @@ export function downloadCheques(documentId: string) {
   )
 }
 `,
-  )
-  assert.deepEqual(violations, [])
-})
+  );
+  assert.deepEqual(violations, []);
+});
 
-test('does not flag a status guard before the parse', () => {
+test("does not flag a status guard before the parse", () => {
   const violations = auditOne(
-    'web/app/(app)/payroll/_ui/EmployeesPanel.tsx',
+    "web/app/(app)/payroll/_ui/EmployeesPanel.tsx",
     `
 import { readApiErrorMessage } from '../../../../lib/api-error'
 export function ProfileEditor({ partyId }: { partyId: string }) {
@@ -299,22 +317,22 @@ export function ProfileEditor({ partyId }: { partyId: string }) {
   return saveProfile
 }
 `,
-  )
-  assert.deepEqual(violations, [])
-})
+  );
+  assert.deepEqual(violations, []);
+});
 
-test('does not flag the sanctioned helper itself', () => {
+test("does not flag the sanctioned helper itself", () => {
   // The convention file parses inside readApiErrorMessage; the audit runs
   // against the real file so a rewrite of the helper that reintroduces
   // parse-before-check is measured here too. The helper takes a bare
   // Response parameter — never fetch-assigned — so its parse is out of scope.
-  const { violations } = auditRepository(['web/lib/api-error.ts'])
-  assert.deepEqual(violations, [])
-})
+  const { violations } = auditRepository(["web/lib/api-error.ts"]);
+  assert.deepEqual(violations, []);
+});
 
-test('does not flag server-side request parsing', () => {
+test("does not flag server-side request parsing", () => {
   const violations = auditOne(
-    'web/app/api/payroll/settings/route.ts',
+    "web/app/api/payroll/settings/route.ts",
     `
 import { NextResponse } from 'next/server'
 export async function POST(req: Request) {
@@ -323,17 +341,17 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true })
 }
 `,
-  )
-  assert.deepEqual(violations, [], 'req.json() parses the request, not a fetch Response')
-})
+  );
+  assert.deepEqual(violations, [], "req.json() parses the request, not a fetch Response");
+});
 
-test('does not flag the guarded-parse helper shape', () => {
+test("does not flag the guarded-parse helper shape", () => {
   // The local fetchJson/postJson choke points convert the SyntaxError to a
   // null body at the parse site and return the status for the CALLER to
   // check — the same contract readApiErrorMessage offers. Their try block
   // checks no status and their catch does not rethrow.
   const violations = auditOne(
-    'web/app/(app)/admin/setup/allocations/RuleDrawer.tsx',
+    "web/app/(app)/admin/setup/allocations/RuleDrawer.tsx",
     `
 async function fetchJson(url: string, init?: RequestInit): Promise<{ status: number; body: unknown }> {
   const res = await fetch(url, { ...init })
@@ -347,17 +365,17 @@ async function fetchJson(url: string, init?: RequestInit): Promise<{ status: num
 }
 export { fetchJson }
 `,
-  )
-  assert.deepEqual(violations, [])
-})
+  );
+  assert.deepEqual(violations, []);
+});
 
-test('does not flag a success-path parse the flow never status-checks', () => {
+test("does not flag a success-path parse the flow never status-checks", () => {
   // Boundary, pinned deliberately: with no status read anywhere in the flow
   // the checker cannot tell a checked parse from an assumed one, so it stays
   // silent. Extending the guard to unchecked parses is a conscious scope
   // change — this test forces it to be one.
   const violations = auditOne(
-    'web/app/(app)/insights/CardTile.tsx',
+    "web/app/(app)/insights/CardTile.tsx",
     `
 export function CardTile({ id }: { id: string }) {
   async function loadCard() {
@@ -368,65 +386,81 @@ export function CardTile({ id }: { id: string }) {
   return loadCard
 }
 `,
-  )
-  assert.deepEqual(violations, [])
-})
+  );
+  assert.deepEqual(violations, []);
+});
 
-test('a broken file reports a syntax error, never a clean pass', () => {
-  const { violations, syntaxErrors } = auditRepository(['web/app/(app)/Broken.tsx'], () => `export async function broken() {\n  const res = await fetch('/api/broken')\n  const j = await res.json(;\n  if (!res.ok) throw new Error('broken')\n}`)
-  assert.deepEqual(violations, [])
-  assert.deepEqual(syntaxErrors, ['web/app/(app)/Broken.tsx'])
-})
+test("a broken file reports a syntax error, never a clean pass", () => {
+  const { violations, syntaxErrors } = auditRepository(
+    ["web/app/(app)/Broken.tsx"],
+    () =>
+      `export async function broken() {\n  const res = await fetch('/api/broken')\n  const j = await res.json(;\n  if (!res.ok) throw new Error('broken')\n}`,
+  );
+  assert.deepEqual(violations, []);
+  assert.deepEqual(syntaxErrors, ["web/app/(app)/Broken.tsx"]);
+});
 
-test('the allow-list exempts a listed site and keeps its reason', () => {
-  const violations = auditOne('web/app/(app)/payroll/_ui/PayrollProfileTab.tsx', PROFILE_LOAD_SHAPE)
-  assert.equal(violations.length, 1)
+test("the allow-list exempts a listed site and keeps its reason", () => {
+  const violations = auditOne(
+    "web/app/(app)/payroll/_ui/PayrollProfileTab.tsx",
+    PROFILE_LOAD_SHAPE,
+  );
+  assert.equal(violations.length, 1);
   const { knownGaps, newViolations, staleEntries } = reconcile(violations, [
     {
-      path: 'web/app/(app)/payroll/_ui/PayrollProfileTab.tsx',
-      fn: 'loadProfile',
-      reason: 'test-only entry',
+      path: "web/app/(app)/payroll/_ui/PayrollProfileTab.tsx",
+      fn: "loadProfile",
+      reason: "test-only entry",
     },
-  ])
-  assert.equal(newViolations.length, 0)
-  assert.equal(staleEntries.length, 0)
-  assert.equal(knownGaps.length, 1)
-  assert.equal(knownGaps[0].reason, 'test-only entry')
-})
+  ]);
+  assert.equal(newViolations.length, 0);
+  assert.equal(staleEntries.length, 0);
+  assert.equal(knownGaps.length, 1);
+  assert.equal(knownGaps[0].reason, "test-only entry");
+});
 
-test('a fixed site fails as a stale allow-list entry, not a silent pass', () => {
-  const { knownGaps, newViolations, staleEntries } = reconcile([], [
-    {
-      path: 'web/app/(app)/payroll/_ui/PayrollProfileTab.tsx',
-      fn: 'loadProfile',
-      reason: 'test-only entry',
-    },
-  ])
-  assert.deepEqual(knownGaps, [])
-  assert.deepEqual(newViolations, [])
+test("a fixed site fails as a stale allow-list entry, not a silent pass", () => {
+  const { knownGaps, newViolations, staleEntries } = reconcile(
+    [],
+    [
+      {
+        path: "web/app/(app)/payroll/_ui/PayrollProfileTab.tsx",
+        fn: "loadProfile",
+        reason: "test-only entry",
+      },
+    ],
+  );
+  assert.deepEqual(knownGaps, []);
+  assert.deepEqual(newViolations, []);
   assert.deepEqual(
     staleEntries.map((entry) => `${entry.path}::${entry.fn}`),
-    ['web/app/(app)/payroll/_ui/PayrollProfileTab.tsx::loadProfile'],
-  )
-})
+    ["web/app/(app)/payroll/_ui/PayrollProfileTab.tsx::loadProfile"],
+  );
+});
 
-test('an allow-list entry without a reviewed reason is rejected', () => {
+test("an allow-list entry without a reviewed reason is rejected", () => {
   assert.throws(
-    () => loadAllowlist(() => JSON.stringify([{ path: 'a.tsx', fn: 'f', reason: '  ' }])),
+    () => loadAllowlist(() => JSON.stringify([{ path: "a.tsx", fn: "f", reason: "  " }])),
     /no reviewed reason/,
-  )
+  );
   assert.throws(
-    () => loadAllowlist(() => JSON.stringify([{ path: 'a.tsx', fn: 'f' }])),
+    () => loadAllowlist(() => JSON.stringify([{ path: "a.tsx", fn: "f" }])),
     /no reviewed reason/,
-  )
-})
+  );
+});
 
 // The list may only shrink: the ceiling is the guard-first landing count and
 // every batch that converts sites lowers it. A larger list is a new
 // exemption, which is exactly what the guard refuses.
-test('the allow-list is at or under its ceiling and the ceiling is the landing count', () => {
-  const entries = loadAllowlist()
-  assert.ok(entries.length <= ALLOWLIST_CEILING, `${entries.length} entries exceed the ceiling ${ALLOWLIST_CEILING}`)
-  assert.equal(ALLOWLIST_CEILING, 129, 'lower the ceiling with each converted batch; never raise it')
-})
-
+test("the allow-list is at or under its ceiling and the ceiling is the landing count", () => {
+  const entries = loadAllowlist();
+  assert.ok(
+    entries.length <= ALLOWLIST_CEILING,
+    `${entries.length} entries exceed the ceiling ${ALLOWLIST_CEILING}`,
+  );
+  assert.equal(
+    ALLOWLIST_CEILING,
+    129,
+    "lower the ceiling with each converted batch; never raise it",
+  );
+});

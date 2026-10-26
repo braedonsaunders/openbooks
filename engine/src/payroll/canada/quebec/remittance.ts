@@ -1,6 +1,4 @@
-import type {
-  PayrollRemittanceSchedule,
-} from "../../packs.ts";
+import type { PayrollRemittanceSchedule } from "../../packs.ts";
 
 /**
  * Revenu Québec source-deductions remittance schedule (form TPZ-1015.R) —
@@ -80,8 +78,9 @@ export const RQ_REMITTANCE_SCHEDULE: PayrollRemittanceSchedule = {
       label: "Quarterly",
       averageMonthlyMaxExclusive: "3000",
       due: { kind: "quarter_day", day: 15, monthsAfterQuarterEnd: 1 },
-      rule: "Revenu Québec quarterly remitter (average monthly remittance under $3,000) — "
-        + "the 15th of the month following the end of the quarter",
+      rule:
+        "Revenu Québec quarterly remitter (average monthly remittance under $3,000) — " +
+        "the 15th of the month following the end of the quarter",
     },
     {
       frequency: "monthly",
@@ -89,8 +88,9 @@ export const RQ_REMITTANCE_SCHEDULE: PayrollRemittanceSchedule = {
       averageMonthlyMin: "3000",
       averageMonthlyMaxExclusive: "25000",
       due: { kind: "month_day", day: 15, monthsAfterPeriodMonth: 1 },
-      rule: "Revenu Québec monthly remitter (average monthly remittance $3,000 to under $25,000) — "
-        + "the 15th of the month following the month of the pay date",
+      rule:
+        "Revenu Québec monthly remitter (average monthly remittance $3,000 to under $25,000) — " +
+        "the 15th of the month following the month of the pay date",
     },
     {
       frequency: "twice_monthly",
@@ -104,10 +104,12 @@ export const RQ_REMITTANCE_SCHEDULE: PayrollRemittanceSchedule = {
         secondDueDay: 10,
         secondDueMonthOffset: 1,
       },
-      rule: "Revenu Québec twice-monthly remitter (average monthly remittance $25,000 or more) — "
-        + "remuneration paid the 1st to the 15th, due the 25th of the same month",
-      ruleSecondHalf: "Revenu Québec twice-monthly remitter (average monthly remittance $25,000 or more) — "
-        + "remuneration paid the 16th to month end, due the 10th of the following month",
+      rule:
+        "Revenu Québec twice-monthly remitter (average monthly remittance $25,000 or more) — " +
+        "remuneration paid the 1st to the 15th, due the 25th of the same month",
+      ruleSecondHalf:
+        "Revenu Québec twice-monthly remitter (average monthly remittance $25,000 or more) — " +
+        "remuneration paid the 16th to month end, due the 10th of the following month",
     },
   ],
 };

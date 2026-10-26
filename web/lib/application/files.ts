@@ -66,7 +66,8 @@ export function validateCabinetUpload(input: {
   if (!filename) throw invalidInput("filename is required");
   if (filename.length > 255) throw invalidInput("filename exceeds 255 characters");
   const contentType = input.contentType.split(";")[0]!.trim().toLowerCase();
-  if (!isUploadContentType(contentType)) throw invalidInput(`unsupported file type: ${input.contentType || "unknown"}`);
+  if (!isUploadContentType(contentType))
+    throw invalidInput(`unsupported file type: ${input.contentType || "unknown"}`);
   const compact = input.contentBase64.replace(/\s+/g, "");
   if (!compact) throw invalidInput("file is empty");
   if (!BASE64.test(compact)) throw invalidInput("contentBase64 is not valid base64");
@@ -189,13 +190,38 @@ function cabinetViewer(authz: Authz): FileViewer {
     : can(authz, "documents.read")
       ? "viewer"
       : "none";
-  return { userId: authz.user.id, isAdmin: can(authz, "*"), baseline, canReadApCapture: can(authz, "ap.read"), allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
+  return {
+    userId: authz.user.id,
+    isAdmin: can(authz, "*"),
+    baseline,
+    canReadApCapture: can(authz, "ap.read"),
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  };
 }
 
 export async function uploadCabinetFile(
   authz: Authz,
-  input: { folderId: string; filename: string; contentType: string; contentBase64: string; sourceSystem?: string; sourceId?: string; auditReason?: string },
-): Promise<{ id: string; name: string; folderId: string; folderName: string | null; contentType: string; sizeBytes: number; currentVersionId: string | null; contentHash?: string | null; sourceSystem?: string | null; sourceId?: string | null }> {
+  input: {
+    folderId: string;
+    filename: string;
+    contentType: string;
+    contentBase64: string;
+    sourceSystem?: string;
+    sourceId?: string;
+    auditReason?: string;
+  },
+): Promise<{
+  id: string;
+  name: string;
+  folderId: string;
+  folderName: string | null;
+  contentType: string;
+  sizeBytes: number;
+  currentVersionId: string | null;
+  contentHash?: string | null;
+  sourceSystem?: string | null;
+  sourceId?: string | null;
+}> {
   const { filename, contentType, bytes } = validateCabinetUpload(input);
   await assertCabinetUploadAccess(authz, input.folderId);
   const meta = await createFile({

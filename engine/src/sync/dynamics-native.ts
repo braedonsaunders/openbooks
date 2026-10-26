@@ -95,7 +95,8 @@ export function buildNativeFromBC(
   if (!id) return { skip: "missing id" };
   const sourceRef = `${entity}:${id}`;
   const home = (v: number | undefined): bigint => toUnits(String(v ?? 0));
-  const byId = (aid?: string): string | null => (aid ? ctx.accountByRef.get(aid)?.id ?? null : null);
+  const byId = (aid?: string): string | null =>
+    aid ? (ctx.accountByRef.get(aid)?.id ?? null) : null;
 
   const docDate = isoDay(t.invoiceDate ?? t.creditMemoDate ?? t.postingDate ?? t.documentDate);
   if (!docDate) return { skip: "missing date" };
@@ -109,7 +110,9 @@ export function buildNativeFromBC(
   if (currency !== ctx.baseCurrency.toUpperCase()) {
     const rate = opts.fxRateFor?.(currency, docDate) ?? null;
     if (!rate) {
-      return { skip: `source transaction ${sourceRef} states currency ${currency} with no exchange rate to ${ctx.baseCurrency} on ${docDate} — add the dated rate in Business Central currencyExchangeRates and re-run` };
+      return {
+        skip: `source transaction ${sourceRef} states currency ${currency} with no exchange rate to ${ctx.baseCurrency} on ${docDate} — add the dated rate in Business Central currencyExchangeRates and re-run`,
+      };
     }
     fxRate = rate;
   }
@@ -127,9 +130,21 @@ export function buildNativeFromBC(
     referenceNumber: t.number ?? sourceRef,
   };
   let n = 0;
-  const mk = (accountId: string, units: bigint, description: string | null = null): NativeDocLine => ({
-    accountId, itemId: null, amount: fromUnits(units), taxAmount: "0", taxOverridden: false,
-    taxCodeId: null, departmentId: null, projectId: null, description, lineNumber: ++n,
+  const mk = (
+    accountId: string,
+    units: bigint,
+    description: string | null = null,
+  ): NativeDocLine => ({
+    accountId,
+    itemId: null,
+    amount: fromUnits(units),
+    taxAmount: "0",
+    taxOverridden: false,
+    taxCodeId: null,
+    departmentId: null,
+    projectId: null,
+    description,
+    lineNumber: ++n,
   });
 
   /** Detail lines from a document's line entities (income/expense side only). */
@@ -142,15 +157,22 @@ export function buildNativeFromBC(
       let acct: string | null = null;
       if (l.lineType === "Account") acct = byId(l.accountId);
       else if (l.lineType === "Item" && l.itemId) {
-        const ref = (side === "sales" ? opts.itemSalesAccount : opts.itemPurchaseAccount).get(l.itemId);
+        const ref = (side === "sales" ? opts.itemSalesAccount : opts.itemPurchaseAccount).get(
+          l.itemId,
+        );
         // API omits the item line's account → fall back to the account BC posted
         // this document to in the GL (per-document income/expense).
         acct =
           (ref ? byId(ref) : null) ??
-          (side === "sales" ? opts.docIncomeAccount : opts.docExpenseAccount)?.get(t.number ?? "") ??
+          (side === "sales" ? opts.docIncomeAccount : opts.docExpenseAccount)?.get(
+            t.number ?? "",
+          ) ??
           null;
       } else if (l.accountId) acct = byId(l.accountId);
-      if (!acct) return { skip: `unresolved ${l.lineType} line account (${l.lineObjectNumber ?? l.itemId ?? "?"})` };
+      if (!acct)
+        return {
+          skip: `unresolved ${l.lineType} line account (${l.lineObjectNumber ?? l.itemId ?? "?"})`,
+        };
       out.push(mk(acct, home(l.amountExcludingTax), l.description ?? null));
       // Tax keeps its sign: a −20 line with −2 tax reduces the +100/+10
       // line, so the code nets to 8 — abs()'ing here overstated AR and tax.
@@ -209,7 +231,8 @@ export function buildNativeFromBC(
       return {
         ...base,
         kind: isAR ? "customer_payment" : "vendor_payment",
-        partyId: ctx.partyByRef.get((isAR ? t.customerId : t.vendorId) ?? t.contactId ?? "") ?? null,
+        partyId:
+          ctx.partyByRef.get((isAR ? t.customerId : t.vendorId) ?? t.contactId ?? "") ?? null,
         controlAccountId: null,
         lines: [mk(bank, home(t.amount))],
       };

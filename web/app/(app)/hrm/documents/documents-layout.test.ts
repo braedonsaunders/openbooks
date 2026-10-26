@@ -1,10 +1,12 @@
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ intl: 'export async function getTranslations(){return (s)=>s;}export async function getLocale(){return "en"}export async function getFormatter(){return new Intl.DateTimeFormat("en")}' })
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  intl: 'export async function getTranslations(){return (s)=>s;}export async function getLocale(){return "en"}export async function getFormatter(){return new Intl.DateTimeFormat("en")}',
+});
 
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const { documentsSpec } = await import('./view.ts')
+const { documentsSpec } = await import("./view.ts");
 
 /**
  * The signed-document rows were visually overlapped by the
@@ -26,94 +28,129 @@ function stubData(): Record<string, unknown> {
   return {
     tabs: [],
     currentParams: {},
-    segmentsLabel: 'Status',
-    allLabel: 'All',
+    segmentsLabel: "Status",
+    allLabel: "All",
     segmentOptions: [],
-    columns: { title: 'Title', person: 'Person', category: 'Category', sent: 'Sent', expires: 'Expires', status: 'Status' },
+    columns: {
+      title: "Title",
+      person: "Person",
+      category: "Category",
+      sent: "Sent",
+      expires: "Expires",
+      status: "Status",
+    },
     drawer: null,
     generate: null,
-  }
+  };
 }
 
-type Block = { kind: string; className?: unknown; blocks?: Block[]; widget?: unknown; props?: Record<string, unknown> }
+type Block = {
+  kind: string;
+  className?: unknown;
+  blocks?: Block[];
+  widget?: unknown;
+  props?: Record<string, unknown>;
+};
 
 function bodyBlocks(): Block[] {
-  const spec = documentsSpec(stubData() as never) as { body: Block[] }
-  return spec.body
+  const spec = documentsSpec(stubData() as never) as { body: Block[] };
+  return spec.body;
 }
 
 function findBlocks(blocks: Block[], kind: string, out: Block[] = []): Block[] {
   for (const block of blocks) {
-    if (block.kind === kind) out.push(block)
+    if (block.kind === kind) out.push(block);
     // A registered record list carries its table block in its widget props.
-    findBlocks([...(block.blocks ?? []), ...(block.props?.table ? [block.props.table as Block] : [])], kind, out)
+    findBlocks(
+      [...(block.blocks ?? []), ...(block.props?.table ? [block.props.table as Block] : [])],
+      kind,
+      out,
+    );
   }
-  return out
+  return out;
 }
 
 function tokens(className: unknown): string[] {
-  return String(className ?? '').split(/\s+/).filter(Boolean)
+  return String(className ?? "")
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
 function registerGrid(): Block {
-  const grids = findBlocks(bodyBlocks(), 'grid')
-  const registerGrids = grids.filter((grid) =>
-    findBlocks(grid.blocks ?? [], 'table').length > 0,
-  )
-  assert.equal(registerGrids.length, 1, 'the register table must live in exactly one grid')
-  return registerGrids[0]!
+  const grids = findBlocks(bodyBlocks(), "grid");
+  const registerGrids = grids.filter((grid) => findBlocks(grid.blocks ?? [], "table").length > 0);
+  assert.equal(registerGrids.length, 1, "the register table must live in exactly one grid");
+  return registerGrids[0]!;
 }
 
-test('the page body is not a viewport-locked flex column', () => {
-  const spec = documentsSpec(stubData() as never) as { bodyClassName?: unknown }
-  const className = String(spec.bodyClassName ?? '')
-  for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'h-svh', 'max-h-', 'min-h-screen']) {
-    assert.ok(!className.includes(clamp), `the page body must not lock to the viewport (${clamp} compresses the register under the sections)`)
+test("the page body is not a viewport-locked flex column", () => {
+  const spec = documentsSpec(stubData() as never) as { bodyClassName?: unknown };
+  const className = String(spec.bodyClassName ?? "");
+  for (const clamp of ["h-full", "h-screen", "h-dvh", "h-svh", "max-h-", "min-h-screen"]) {
+    assert.ok(
+      !className.includes(clamp),
+      `the page body must not lock to the viewport (${clamp} compresses the register under the sections)`,
+    );
   }
-  const names = tokens(className)
-  assert.ok(!names.includes('flex-col'), 'the page body must stack sections in normal block flow, not as flex items')
-})
+  const names = tokens(className);
+  assert.ok(
+    !names.includes("flex-col"),
+    "the page body must stack sections in normal block flow, not as flex items",
+  );
+});
 
-test('the register grid sizes to content, never to the viewport', () => {
-  const className = String(registerGrid().className ?? '')
-  for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'max-h-']) {
-    assert.ok(!className.includes(clamp), `the register grid must not clamp height (${clamp} overflows rows under the sections)`)
+test("the register grid sizes to content, never to the viewport", () => {
+  const className = String(registerGrid().className ?? "");
+  for (const clamp of ["h-full", "h-screen", "h-dvh", "max-h-"]) {
+    assert.ok(
+      !className.includes(clamp),
+      `the register grid must not clamp height (${clamp} overflows rows under the sections)`,
+    );
   }
-  const names = tokens(className)
-  assert.ok(!names.includes('flex'), 'the register grid must not be a shrinkable flex item (it compresses under the sections)')
-  assert.ok(!names.includes('min-h-0'), 'the register grid must not opt into shrinking below its content (min-h-0 overflows rows under the sections)')
-})
+  const names = tokens(className);
+  assert.ok(
+    !names.includes("flex"),
+    "the register grid must not be a shrinkable flex item (it compresses under the sections)",
+  );
+  assert.ok(
+    !names.includes("min-h-0"),
+    "the register grid must not opt into shrinking below its content (min-h-0 overflows rows under the sections)",
+  );
+});
 
-test('the templates section stacks after the register as a sibling', () => {
-  const body = bodyBlocks()
+test("the templates section stacks after the register as a sibling", () => {
+  const body = bodyBlocks();
   const registerIndex = body.findIndex(
-    (block) => block.kind === 'grid' && findBlocks(block.blocks ?? [], 'table').length > 0,
-  )
+    (block) => block.kind === "grid" && findBlocks(block.blocks ?? [], "table").length > 0,
+  );
   const templatesIndex = body.findIndex(
     (block) =>
-      block.kind === 'widget' &&
-      (block as { widget?: unknown }).widget === 'setup-section' &&
-      (block.props as { entityKey?: unknown } | undefined)?.entityKey === 'hrm-document-templates',
-  )
-  assert.ok(registerIndex >= 0, 'the register grid must be a top-level body block')
-  assert.ok(templatesIndex >= 0, 'the templates section must be a top-level body block')
-  assert.ok(templatesIndex > registerIndex, 'the templates section must stack after the register, never over it')
-})
+      block.kind === "widget" &&
+      (block as { widget?: unknown }).widget === "setup-section" &&
+      (block.props as { entityKey?: unknown } | undefined)?.entityKey === "hrm-document-templates",
+  );
+  assert.ok(registerIndex >= 0, "the register grid must be a top-level body block");
+  assert.ok(templatesIndex >= 0, "the templates section must be a top-level body block");
+  assert.ok(
+    templatesIndex > registerIndex,
+    "the templates section must stack after the register, never over it",
+  );
+});
 
-test('no block positions itself out of flow', () => {
-  const outOfFlow: string[] = []
+test("no block positions itself out of flow", () => {
+  const outOfFlow: string[] = [];
   const walk = (blocks: Block[], path: string) => {
     for (const block of blocks) {
-      for (const key of ['className', 'actionsClassName', 'bodyClassName'] as const) {
-        const value = (block as Record<string, unknown>)[key]
-        if (typeof value === 'string' && /(?:^|\s)(?:absolute|fixed)(?:\s|$)/.test(value)) {
-          outOfFlow.push(`${path}/${block.kind}.${key}`)
+      for (const key of ["className", "actionsClassName", "bodyClassName"] as const) {
+        const value = (block as Record<string, unknown>)[key];
+        if (typeof value === "string" && /(?:^|\s)(?:absolute|fixed)(?:\s|$)/.test(value)) {
+          outOfFlow.push(`${path}/${block.kind}.${key}`);
         }
       }
-      if (Array.isArray(block.blocks)) walk(block.blocks, `${path}/${block.kind}`)
+      if (Array.isArray(block.blocks)) walk(block.blocks, `${path}/${block.kind}`);
     }
-  }
-  const spec = documentsSpec(stubData() as never) as { header: Block[]; body: Block[] }
-  walk([...spec.header, ...spec.body], 'page')
-  assert.deepEqual(outOfFlow, [], 'no block may take itself out of normal flow')
-})
+  };
+  const spec = documentsSpec(stubData() as never) as { header: Block[]; body: Block[] };
+  walk([...spec.header, ...spec.body], "page");
+  assert.deepEqual(outOfFlow, [], "no block may take itself out of normal flow");
+});

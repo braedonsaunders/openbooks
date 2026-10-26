@@ -1,11 +1,11 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db, orgContext, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/money/money'
-import { directSubcontractOpenCommitment } from './subcontract-commitments'
-import { pgTextArrayLiteral } from './pg-array'
-import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
-import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db, orgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { add, fromUnits, neg, normalizeMoney, toUnits } from "@openbooks/engine/money/money";
+import { directSubcontractOpenCommitment } from "./subcontract-commitments";
+import { pgTextArrayLiteral } from "./pg-array";
+import { orderedNetOfCancelledSql } from "@openbooks/engine/records/order-line-remainders";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 
 /**
  * Job-costing rollup for a single project — the heart of project accounting.
@@ -27,56 +27,91 @@ import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-o
  */
 
 // GL account types (see accounts.type) that count as job COST vs REVENUE.
-const COST_TYPES = ['expense', 'cogs', 'expense_other', 'expense_deferred']
-const REVENUE_TYPES = ['income', 'income_other']
+const COST_TYPES = ["expense", "cogs", "expense_other", "expense_deferred"];
+const REVENUE_TYPES = ["income", "income_other"];
 
-const COST_SET = sql`(${sql.join(COST_TYPES.map((t) => sql`${t}`), sql`, `)})`
-const REVENUE_SET = sql`(${sql.join(REVENUE_TYPES.map((t) => sql`${t}`), sql`, `)})`
+const COST_SET = sql`(${sql.join(
+  COST_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+)})`;
+const REVENUE_SET = sql`(${sql.join(
+  REVENUE_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+)})`;
 
-function projectSubsidiaryFilter(
-  column: SQL,
-  allowed: ReadonlySet<string> | null,
-): SQL {
-  if (allowed === null) return sql``
-  if (allowed.size === 0) return sql` and false`
-  return sql` and ${column} = any(${pgTextArrayLiteral([...allowed])}::uuid[])`
+function projectSubsidiaryFilter(column: SQL, allowed: ReadonlySet<string> | null): SQL {
+  if (allowed === null) return sql``;
+  if (allowed.size === 0) return sql` and false`;
+  return sql` and ${column} = any(${pgTextArrayLiteral([...allowed])}::uuid[])`;
 }
 
 export interface ProjectCostSummary {
-  budget: { cost: string; contractValue: string }
-  actual: { cost: string; revenue: string; margin: string }
-  committed: { cost: string; revenue: string }
+  budget: { cost: string; contractValue: string };
+  actual: { cost: string; revenue: string; margin: string };
+  committed: { cost: string; revenue: string };
   /** Budget vs (actual + committed). */
-  forecast: { projectedCost: string; remainingBudget: string; percentSpent: number | null }
-  costByAccount: { accountId: string; number: string | null; name: string; type: string; amount: string }[]
+  forecast: { projectedCost: string; remainingBudget: string; percentSpent: number | null };
+  costByAccount: {
+    accountId: string;
+    number: string | null;
+    name: string;
+    type: string;
+    amount: string;
+  }[];
   /** `category` is a stable code ('cogs' | 'operating_expense') — render sites translate it. */
-  costByCategory: { category: string; amount: string }[]
+  costByCategory: { category: string; amount: string }[];
   documents: {
-    id: string
-    kind: string
-    documentNumber: string
-    documentDate: string
-    status: string
-    partyName: string | null
-    amount: string
-  }[]
+    id: string;
+    kind: string;
+    documentNumber: string;
+    documentDate: string;
+    status: string;
+    partyName: string | null;
+    amount: string;
+  }[];
 }
 
-const m = (v: unknown) => normalizeMoney(v == null ? '0' : String(v))
-const n = (v: unknown) => (v == null ? 0 : Number(v))
+const m = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
+const n = (v: unknown) => (v == null ? 0 : Number(v));
 
-interface QueryRows<T> { rows: T[] }
-interface ProjectSummaryRow { contract_value: unknown; cost_budget: unknown }
-interface ProjectActualRow { cost: unknown; revenue: unknown }
-interface ProjectCommittedRow { committed_cost: unknown; committed_revenue: unknown }
-interface ProjectAccountRow { account_id: string; number: string | null; name: string; type: string; amount: unknown }
+interface QueryRows<T> {
+  rows: T[];
+}
+interface ProjectSummaryRow {
+  contract_value: unknown;
+  cost_budget: unknown;
+}
+interface ProjectActualRow {
+  cost: unknown;
+  revenue: unknown;
+}
+interface ProjectCommittedRow {
+  committed_cost: unknown;
+  committed_revenue: unknown;
+}
+interface ProjectAccountRow {
+  account_id: string;
+  number: string | null;
+  name: string;
+  type: string;
+  amount: unknown;
+}
 interface ProjectDocumentRow {
-  id: string; kind: string; document_number: string; document_date: string;
-  status: string; party_name: string | null; amount: unknown
+  id: string;
+  kind: string;
+  document_number: string;
+  document_date: string;
+  status: string;
+  party_name: string | null;
+  amount: unknown;
 }
 interface ProjectTimeSqlRow {
-  key: string | null; label: string; hours: unknown; billable_hours: unknown;
-  cost: unknown; bill: unknown
+  key: string | null;
+  label: string;
+  hours: unknown;
+  billable_hours: unknown;
+  cost: unknown;
+  bill: unknown;
 }
 
 /**
@@ -100,7 +135,7 @@ async function projectCostSummaryInSnapshot(
     select coalesce(p.contract_value, 0) as contract_value,
            coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
       from projects p where p.id = ${projectId} and p.org_id = ${orgId}
-  `)
+  `);
   // posted actuals split into cost vs revenue
   const actualRows = await db.execute(sql`
     select
@@ -114,7 +149,7 @@ async function projectCostSummaryInSnapshot(
       and e.book_id = (select b.id from accounting_books b
                          where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
       ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
-  `)
+  `);
   // committed: open order remainders tagged to the project. Order amounts
   // are transaction-currency facts; translate each contribution through the
   // document's txn→functional rate before combining it with posted actuals.
@@ -125,7 +160,7 @@ async function projectCostSummaryInSnapshot(
         4
       )) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
       coalesce(sum(round(
-        (${orderedNetOfCancelledSql('dl')} - dl.quantity_billed) * dl.unit_price * d.fx_rate,
+        (${orderedNetOfCancelledSql("dl")} - dl.quantity_billed) * dl.unit_price * d.fx_rate,
         4
       )) filter (where d.kind = 'sales_order'), 0) as committed_revenue
     from document_lines dl
@@ -133,10 +168,10 @@ async function projectCostSummaryInSnapshot(
     where dl.org_id = ${orgId}
       and coalesce(dl.project_id, d.project_id) = ${projectId}
       and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
-      and ${orderedNetOfCancelledSql('dl')} > dl.quantity_billed
+      and ${orderedNetOfCancelledSql("dl")} > dl.quantity_billed
       ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
-  `)
-  const directSubcontractCommitment = await directSubcontractOpenCommitment(orgId, projectId)
+  `);
+  const directSubcontractCommitment = await directSubcontractOpenCommitment(orgId, projectId);
   // actual cost broken down by account
   const byAccountRows = await db.execute(sql`
     select a.id as account_id, a.number, a.name, a.type, sum(l.amount) as amount
@@ -152,7 +187,7 @@ async function projectCostSummaryInSnapshot(
     group by a.id, a.number, a.name, a.type
     having sum(l.amount) <> 0
     order by sum(l.amount) desc
-  `)
+  `);
   // documents with at least one line tagged to the project (job cost detail)
   const docRows = await db.execute(sql`
     select d.id, d.kind, d.document_number, d.document_date, d.status,
@@ -169,7 +204,7 @@ async function projectCostSummaryInSnapshot(
     group by d.id, d.kind, d.document_number, d.document_date, d.status, pt.display_name
     order by d.document_date desc
     limit 500
-  `)
+  `);
 
   return assembleSummary(
     proj as unknown as QueryRows<ProjectSummaryRow>,
@@ -178,7 +213,7 @@ async function projectCostSummaryInSnapshot(
     directSubcontractCommitment,
     byAccountRows as unknown as QueryRows<ProjectAccountRow>,
     docRows as unknown as QueryRows<ProjectDocumentRow>,
-  )
+  );
 }
 
 /**
@@ -203,19 +238,19 @@ export async function projectCostSummary(
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<ProjectCostSummary> {
-  const active = orgContext.getStore()
+  const active = orgContext.getStore();
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
-      throw new Error('cannot change organization inside an active tenant transaction')
+      throw new Error("cannot change organization inside an active tenant transaction");
     }
-    return projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds)
+    return projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds);
   }
 
   return withOrgTransaction(
     orgId,
     () => projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds),
-    { isolationLevel: 'REPEATABLE READ', readOnly: true },
-  )
+    { isolationLevel: "REPEATABLE READ", readOnly: true },
+  );
 }
 
 function assembleSummary(
@@ -226,13 +261,13 @@ function assembleSummary(
   byAccountRows: QueryRows<ProjectAccountRow>,
   docRows: QueryRows<ProjectDocumentRow>,
 ): ProjectCostSummary {
-  const p = proj.rows[0] ?? { contract_value: 0, cost_budget: 0 }
-  const contractValue = m(p.contract_value)
-  const costBudget = m(p.cost_budget)
-  const cost = m(actualRows.rows[0]?.cost)
-  const revenue = m(actualRows.rows[0]?.revenue)
-  const committedCost = add(m(committedRows.rows[0]?.committed_cost), directSubcontractCommitment)
-  const committedRevenue = m(committedRows.rows[0]?.committed_revenue)
+  const p = proj.rows[0] ?? { contract_value: 0, cost_budget: 0 };
+  const contractValue = m(p.contract_value);
+  const costBudget = m(p.cost_budget);
+  const cost = m(actualRows.rows[0]?.cost);
+  const revenue = m(actualRows.rows[0]?.revenue);
+  const committedCost = add(m(committedRows.rows[0]?.committed_cost), directSubcontractCommitment);
+  const committedRevenue = m(committedRows.rows[0]?.committed_revenue);
 
   const costByAccount = byAccountRows.rows.map((r) => ({
     accountId: r.account_id,
@@ -240,16 +275,16 @@ function assembleSummary(
     name: r.name,
     type: r.type,
     amount: m(r.amount),
-  }))
-  const catMap = new Map<string, string>()
+  }));
+  const catMap = new Map<string, string>();
   for (const r of costByAccount) {
-    const cat = r.type === 'cogs' ? 'cogs' : 'operating_expense'
-    catMap.set(cat, add(catMap.get(cat) ?? '0', r.amount))
+    const cat = r.type === "cogs" ? "cogs" : "operating_expense";
+    catMap.set(cat, add(catMap.get(cat) ?? "0", r.amount));
   }
-  const costByCategory = [...catMap.entries()].map(([category, amount]) => ({ category, amount }))
+  const costByCategory = [...catMap.entries()].map(([category, amount]) => ({ category, amount }));
 
-  const projectedCost = add(cost, committedCost)
-  const costBudgetUnits = toUnits(costBudget)
+  const projectedCost = add(cost, committedCost);
+  const costBudgetUnits = toUnits(costBudget);
   return {
     budget: { cost: costBudget, contractValue },
     actual: { cost, revenue, margin: add(revenue, neg(cost)) },
@@ -257,9 +292,10 @@ function assembleSummary(
     forecast: {
       projectedCost,
       remainingBudget: add(costBudget, neg(projectedCost)),
-      percentSpent: costBudgetUnits > 0n
-        ? Number(fromUnits((toUnits(projectedCost) * 10_000n) / costBudgetUnits))
-        : null,
+      percentSpent:
+        costBudgetUnits > 0n
+          ? Number(fromUnits((toUnits(projectedCost) * 10_000n) / costBudgetUnits))
+          : null,
     },
     costByAccount,
     costByCategory,
@@ -272,7 +308,7 @@ function assembleSummary(
       partyName: r.party_name,
       amount: m(r.amount),
     })),
-  }
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -280,21 +316,21 @@ function assembleSummary(
 /* ------------------------------------------------------------------ */
 
 export interface ProjectTimeRow {
-  key: string | null
-  label: string
-  hours: number
-  billableHours: number
-  cost: string
-  bill: string
+  key: string | null;
+  label: string;
+  hours: number;
+  billableHours: number;
+  cost: string;
+  bill: string;
 }
 
 export interface ProjectTimeSummary {
-  byTask: ProjectTimeRow[]
-  byEmployee: ProjectTimeRow[]
-  byItem: ProjectTimeRow[]
-  totals: { hours: number; billableHours: number; cost: string; bill: string }
+  byTask: ProjectTimeRow[];
+  byEmployee: ProjectTimeRow[];
+  byItem: ProjectTimeRow[];
+  totals: { hours: number; billableHours: number; cost: string; bill: string };
   /** An active labor rate card exists, so bill value is priced — not merely zero. */
-  laborPricingConfigured: boolean
+  laborPricingConfigured: boolean;
 }
 
 /**
@@ -305,11 +341,15 @@ export interface ProjectTimeSummary {
  * project drawer can drill back to its canonical records without reconstructing
  * membership from display labels.
  */
-export async function projectTimeSummary(orgId: string, projectId: string): Promise<ProjectTimeSummary> {
+export async function projectTimeSummary(
+  orgId: string,
+  projectId: string,
+): Promise<ProjectTimeSummary> {
   // Sequential like the cost rollup above: the cockpit fans these loaders
   // out, and any one of them may one day run under a caller-owned
   // transaction, where concurrent queries share one pg client.
-  const byTaskRows = await db.execute(sql`
+  const byTaskRows = await db.execute(
+    sql`
     select te.project_task_id as key, coalesce(pt.name, '') as label,
            coalesce(sum(te.hours), 0) as hours,
            coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
@@ -321,8 +361,11 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
      group by te.project_task_id, pt.name
      order by hours desc
-  `, 'objects')
-  const byEmpRows = await db.execute(sql`
+  `,
+    "objects",
+  );
+  const byEmpRows = await db.execute(
+    sql`
     select te.employee_party_id as key, coalesce(pty.display_name, '') as label,
            coalesce(sum(te.hours), 0) as hours,
            coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
@@ -333,8 +376,11 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
      group by te.employee_party_id, pty.display_name
      order by hours desc
-  `, 'objects')
-  const byItemRows = await db.execute(sql`
+  `,
+    "objects",
+  );
+  const byItemRows = await db.execute(
+    sql`
     select te.item_id as key, coalesce(i.name, '') as label,
            coalesce(sum(te.hours), 0) as hours,
            coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
@@ -345,36 +391,51 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
      group by te.item_id, i.name
      order by hours desc
-  `, 'objects')
-  const totalRow = await db.execute(sql`
+  `,
+    "objects",
+  );
+  const totalRow = await db.execute(
+    sql`
     select coalesce(sum(te.hours), 0) as hours,
            coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
            coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
            coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
       from time_entries te
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-  `, 'objects')
+  `,
+    "objects",
+  );
   const row = (r: ProjectTimeSqlRow): ProjectTimeRow => ({
     key: r.key,
-    label: r.label || '',
+    label: r.label || "",
     hours: n(r.hours),
     billableHours: n(r.billable_hours),
     cost: m(r.cost),
     bill: m(r.bill),
-  })
-  const tot = totalRow[0] ?? {}
+  });
+  const tot = totalRow[0] ?? {};
   // Bill value prices hours through active labor rate cards; with none
   // configured every bill_rate is null and the zero total means "unpriced",
   // which the cockpit states explicitly instead of printing 0.00.
-  const pricing = await db.execute(sql`select exists(
-    select 1 from item_rate_versions where org_id = ${orgId} and status = 'active') as configured`, 'objects')
+  const pricing = await db.execute(
+    sql`select exists(
+    select 1 from item_rate_versions where org_id = ${orgId} and status = 'active') as configured`,
+    "objects",
+  );
   return {
     byTask: (byTaskRows as unknown as ProjectTimeSqlRow[]).map(row),
     byEmployee: (byEmpRows as unknown as ProjectTimeSqlRow[]).map(row),
     byItem: (byItemRows as unknown as ProjectTimeSqlRow[]).map(row),
-    totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: m(tot.cost), bill: m(tot.bill) },
-    laborPricingConfigured: Boolean((pricing[0] as { configured: boolean } | undefined)?.configured),
-  }
+    totals: {
+      hours: n(tot.hours),
+      billableHours: n(tot.billable_hours),
+      cost: m(tot.cost),
+      bill: m(tot.bill),
+    },
+    laborPricingConfigured: Boolean(
+      (pricing[0] as { configured: boolean } | undefined)?.configured,
+    ),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -383,19 +444,19 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
 
 export interface ProjectUnbilled {
   /** Billable value of work performed but not yet invoiced (bill rate / markup). */
-  revenue: string
+  revenue: string;
   /** Cost basis of that unbilled work. */
-  cost: string
-  hours: number
-  timeEntryCount: number
-  costLineCount: number
+  cost: string;
+  hours: number;
+  timeEntryCount: number;
+  costLineCount: number;
 }
 
 export interface UnbilledOpts {
   /** Restrict to time worked on/after this date (YYYY-MM-DD). */
-  startDate?: string
+  startDate?: string;
   /** Restrict to time worked on/before this date (YYYY-MM-DD). */
-  cutoffDate?: string
+  cutoffDate?: string;
 }
 
 /**
@@ -417,33 +478,41 @@ export interface UnbilledOpts {
  * both halves observe one committed generation. If a caller already owns a
  * tenant transaction, participate in that transaction instead.
  */
-export async function projectUnbilled(orgId: string, projectId: string, opts: UnbilledOpts = {}): Promise<ProjectUnbilled> {
-  const active = orgContext.getStore()
+export async function projectUnbilled(
+  orgId: string,
+  projectId: string,
+  opts: UnbilledOpts = {},
+): Promise<ProjectUnbilled> {
+  const active = orgContext.getStore();
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
-      throw new Error('cannot change organization inside an active tenant transaction')
+      throw new Error("cannot change organization inside an active tenant transaction");
     }
-    return projectUnbilledInSnapshot(orgId, projectId, opts)
+    return projectUnbilledInSnapshot(orgId, projectId, opts);
   }
 
-  return withOrgTransaction(
-    orgId,
-    () => projectUnbilledInSnapshot(orgId, projectId, opts),
-    { isolationLevel: 'REPEATABLE READ', readOnly: true },
-  )
+  return withOrgTransaction(orgId, () => projectUnbilledInSnapshot(orgId, projectId, opts), {
+    isolationLevel: "REPEATABLE READ",
+    readOnly: true,
+  });
 }
 
-async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts: UnbilledOpts = {}): Promise<ProjectUnbilled> {
+async function projectUnbilledInSnapshot(
+  orgId: string,
+  projectId: string,
+  opts: UnbilledOpts = {},
+): Promise<ProjectUnbilled> {
   const dateFilter = sql.join(
     [
       opts.startDate ? sql` and te.worked_on >= ${opts.startDate}` : sql``,
       opts.cutoffDate ? sql` and te.worked_on <= ${opts.cutoffDate}` : sql``,
     ],
     sql``,
-  )
+  );
   // Sequential, like the loaders above: never fan concurrent queries out over
   // a possibly caller-owned transaction connection.
-  const timeRow = await db.execute(sql`
+  const timeRow = await db.execute(
+    sql`
     select coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as revenue,
            coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
            coalesce(sum(te.hours), 0) as hours,
@@ -451,11 +520,14 @@ async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts:
       from time_entries te
      where te.org_id = ${orgId} and te.project_id = ${projectId}
        and te.status = 'approved' and te.is_billable and te.billing_status = 'unbilled'${dateFilter}
-  `, 'objects')
+  `,
+    "objects",
+  );
   // Document-backed billable costs and charges are transaction-currency
   // facts too. Convert each source line before summing so unbilled revenue
   // and cost stay in the same functional currency as the time rollup.
-  const lineRow = await db.execute(sql`
+  const lineRow = await db.execute(
+    sql`
     select coalesce(sum(case when d.kind = 'project_charge'
                              then round(coalesce(dl.bill_amount, 0) * d.fx_rate, 4)
                              else round(dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) * d.fx_rate, 4)
@@ -469,14 +541,16 @@ async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts:
        and dl.is_billable and dl.billed_by_line_id is null
        and ((d.kind = 'project_charge' and d.status in ('approved','posted')) -- Live entries only: unbilled project work includes currently approved and posted charges
          or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check'))) -- Live entries only: unbilled project work includes currently posted costs
-  `, 'objects')
-  const tr = timeRow[0] ?? {}
-  const lr = lineRow[0] ?? {}
+  `,
+    "objects",
+  );
+  const tr = timeRow[0] ?? {};
+  const lr = lineRow[0] ?? {};
   return {
     revenue: add(m(tr.revenue), m(lr.revenue)),
     cost: add(m(tr.cost), m(lr.cost)),
     hours: n(tr.hours),
     timeEntryCount: Number(tr.cnt ?? 0),
     costLineCount: Number(lr.cnt ?? 0),
-  }
+  };
 }

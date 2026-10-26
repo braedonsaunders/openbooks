@@ -6,7 +6,11 @@ import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { endOfMonth } from "../platform/civil-date.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { enrollAutopay, findCardsExpiringSoon, markExpiryOutreachSent } from "./autopay-enrollment.ts";
+import {
+  enrollAutopay,
+  findCardsExpiringSoon,
+  markExpiryOutreachSent,
+} from "./autopay-enrollment.ts";
 import { getRecoveryMetrics } from "./autopay-recovery.ts";
 import { recordCardUpdaterEvent } from "./autopay-methods.ts";
 import { retryAttemptNow } from "./autopay-attempts.ts";
@@ -65,7 +69,12 @@ async function seedRecoveryOrg(): Promise<RecoveryFixture> {
   return { org, userId };
 }
 
-async function seedPolicy(orgId: string, userId: string, retryOffsets: number[], finalAction: string): Promise<void> {
+async function seedPolicy(
+  orgId: string,
+  userId: string,
+  retryOffsets: number[],
+  finalAction: string,
+): Promise<void> {
   await db.execute(sql`
     insert into dunning_policies
       (org_id, name, applies_to_kind, is_active, autopay_retry_offsets_days, autopay_final_action, created_by, updated_by)
@@ -75,7 +84,12 @@ async function seedPolicy(orgId: string, userId: string, retryOffsets: number[],
 }
 
 /** Posted customer invoice for the scratch customer, due on the given date. */
-async function seedInvoice(fixture: RecoveryFixture, memo: string, total: string, dueDate: string): Promise<string> {
+async function seedInvoice(
+  fixture: RecoveryFixture,
+  memo: string,
+  total: string,
+  dueDate: string,
+): Promise<string> {
   const { org, userId } = fixture;
   const invoiceId = randomUUID();
   await db.execute(sql`
@@ -92,7 +106,9 @@ async function seedInvoice(fixture: RecoveryFixture, memo: string, total: string
   await db.execute(sql`
     update documents set status = 'approved', updated_at = now()
      where id = ${invoiceId} and org_id = ${org.orgId}`);
-  await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await postDocument(invoiceId, {
+    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+  });
   return invoiceId;
 }
 
@@ -102,7 +118,8 @@ async function seedMethod(
   opts?: { providerMethodId?: string; isDefault?: boolean; priority?: number; last4?: string },
 ): Promise<string> {
   const { org, userId } = fixture;
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     insert into customer_payment_methods
       (org_id, party_id, provider, provider_customer_id, provider_method_id,
        brand, last4, exp_month, exp_year, is_default, fallback_priority, status, created_by, updated_by)
@@ -110,49 +127,82 @@ async function seedMethod(
             'visa', ${opts?.last4 ?? "4242"}, 12, 2030, ${opts?.isDefault ?? true}, ${opts?.priority ?? 0},
             'active', ${userId}, ${userId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0]!.id;
 }
 
 async function openBalance(orgId: string, invoiceId: string): Promise<string> {
-  return (await db.execute<{ open_balance: string }>(sql`
+  return (
+    await db.execute<{ open_balance: string }>(
+      sql`
     select open_balance from documents where id = ${invoiceId} and org_id = ${orgId}
-  `, "objects"))[0]!.open_balance;
+  `,
+      "objects",
+    )
+  )[0]!.open_balance;
 }
 
-test("an insufficient-funds decline retries on the payday ladder, not the generic cadence", { skip: !DB }, async () => {
-  const fixture = await seedRecoveryOrg();
-  const { org, userId } = fixture;
-  try {
-    await seedPolicy(org.orgId, userId, [1, 3], "none");
-    await seedMethod(fixture);
-    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
-    const invoiceId = await seedInvoice(fixture, "INV-REC-NSF", "80", "2026-07-15");
+test(
+  "an insufficient-funds decline retries on the payday ladder, not the generic cadence",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedRecoveryOrg();
+    const { org, userId } = fixture;
+    try {
+      await seedPolicy(org.orgId, userId, [1, 3], "none");
+      await seedMethod(fixture);
+      await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+      const invoiceId = await seedInvoice(fixture, "INV-REC-NSF", "80", "2026-07-15");
 
-    const charge: ChargeFn = async () => ({ status: "failed", providerRef: "ch_nsf", declineCode: "insufficient_funds" });
-    const run = await runAutopayCollectionForOrg(org.orgId, { asOf: "2026-07-15", charge });
-    assert.equal(run.retried, 1);
-    const attempt = (await db.execute<{ decline_kind: string | null; next_retry_on: string | null }>(sql`
+      const charge: ChargeFn = async () => ({
+        status: "failed",
+        providerRef: "ch_nsf",
+        declineCode: "insufficient_funds",
+      });
+      const run = await runAutopayCollectionForOrg(org.orgId, { asOf: "2026-07-15", charge });
+      assert.equal(run.retried, 1);
+      const attempt = (
+        await db.execute<{ decline_kind: string | null; next_retry_on: string | null }>(
+          sql`
       select decline_kind, next_retry_on::text as "next_retry_on" from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId} and retry_position = 0
-    `, "objects"))[0]!;
-    assert.equal(attempt.decline_kind, "insufficient_funds");
-    // The default payday ladder is [3, 7, 14]: position 0 lands 2026-07-18,
-    // while the generic [1, 3] ladder would have landed 2026-07-16.
-    assert.equal(attempt.next_retry_on, "2026-07-18");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(attempt.decline_kind, "insufficient_funds");
+      // The default payday ladder is [3, 7, 14]: position 0 lands 2026-07-18,
+      // while the generic [1, 3] ladder would have landed 2026-07-16.
+      assert.equal(attempt.next_retry_on, "2026-07-18");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a hard decline on the primary charges the ordered backup method", { skip: !DB }, async () => {
   const fixture = await seedRecoveryOrg();
   const { org, userId } = fixture;
   try {
     await seedPolicy(org.orgId, userId, [1, 3], "none");
-    const primaryId = await seedMethod(fixture, { providerMethodId: "pm_old", isDefault: true, last4: "1111" });
-    const backupId = await seedMethod(fixture, { providerMethodId: "pm_new", isDefault: false, priority: 0, last4: "2222" });
-    await enrollAutopay(org.orgId, { partyId: org.customerId, paymentMethodId: primaryId, actorId: userId });
+    const primaryId = await seedMethod(fixture, {
+      providerMethodId: "pm_old",
+      isDefault: true,
+      last4: "1111",
+    });
+    const backupId = await seedMethod(fixture, {
+      providerMethodId: "pm_new",
+      isDefault: false,
+      priority: 0,
+      last4: "2222",
+    });
+    await enrollAutopay(org.orgId, {
+      partyId: org.customerId,
+      paymentMethodId: primaryId,
+      actorId: userId,
+    });
     const invoiceId = await seedInvoice(fixture, "INV-REC-FALLBACK", "90", "2026-07-15");
 
     const charge: ChargeFn = async (_provider, req) => {
@@ -171,12 +221,15 @@ test("a hard decline on the primary charges the ordered backup method", { skip: 
       decline_kind: string | null;
       payment_method_id: string;
       fallback_method_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select retry_position, status, decline_kind, payment_method_id, fallback_method_id
         from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId}
        order by retry_position
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal(attempts.length, 2);
     assert.equal(attempts[0]!.status, "failed");
     assert.equal(attempts[0]!.decline_kind, "hard");
@@ -189,41 +242,50 @@ test("a hard decline on the primary charges the ordered backup method", { skip: 
   }
 });
 
-test("an authentication-required charge keeps the link and waits for the customer", { skip: !DB }, async () => {
-  const fixture = await seedRecoveryOrg();
-  const { org, userId } = fixture;
-  try {
-    await seedPolicy(org.orgId, userId, [1, 3], "none");
-    await seedMethod(fixture);
-    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
-    const invoiceId = await seedInvoice(fixture, "INV-REC-3DS", "70", "2026-07-15");
+test(
+  "an authentication-required charge keeps the link and waits for the customer",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedRecoveryOrg();
+    const { org, userId } = fixture;
+    try {
+      await seedPolicy(org.orgId, userId, [1, 3], "none");
+      await seedMethod(fixture);
+      await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+      const invoiceId = await seedInvoice(fixture, "INV-REC-3DS", "70", "2026-07-15");
 
-    const charge: ChargeFn = async () => ({
-      status: "requires_action",
-      providerRef: "pi_3ds",
-      authUrl: "https://pay.example/verify/pi_3ds",
-      declineCode: "authentication_required",
-    });
-    const run = await runAutopayCollectionForOrg(org.orgId, { asOf: "2026-07-15", charge });
-    assert.equal(run.failed, 1);
-    assert.equal(run.retried, 0);
-    const attempt = (await db.execute<{
-      status: string;
-      decline_kind: string | null;
-      auth_url: string | null;
-      next_retry_on: string | null;
-    }>(sql`
+      const charge: ChargeFn = async () => ({
+        status: "requires_action",
+        providerRef: "pi_3ds",
+        authUrl: "https://pay.example/verify/pi_3ds",
+        declineCode: "authentication_required",
+      });
+      const run = await runAutopayCollectionForOrg(org.orgId, { asOf: "2026-07-15", charge });
+      assert.equal(run.failed, 1);
+      assert.equal(run.retried, 0);
+      const attempt = (
+        await db.execute<{
+          status: string;
+          decline_kind: string | null;
+          auth_url: string | null;
+          next_retry_on: string | null;
+        }>(
+          sql`
       select status, decline_kind, auth_url, next_retry_on::text as "next_retry_on" from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId} and retry_position = 0
-    `, "objects"))[0]!;
-    assert.equal(attempt.status, "failed");
-    assert.equal(attempt.decline_kind, "needs_authentication");
-    assert.equal(attempt.auth_url, "https://pay.example/verify/pi_3ds");
-    assert.equal(attempt.next_retry_on, null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(attempt.status, "failed");
+      assert.equal(attempt.decline_kind, "needs_authentication");
+      assert.equal(attempt.auth_url, "https://pay.example/verify/pi_3ds");
+      assert.equal(attempt.next_retry_on, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a card updater event refreshes the stored method", { skip: !DB }, async () => {
   const fixture = await seedRecoveryOrg();
@@ -238,17 +300,22 @@ test("a card updater event refreshes the stored method", { skip: !DB }, async ()
       expYear: 2031,
     });
     assert.equal(refreshed, "card_refreshed");
-    const row = (await db.execute<{
-      brand: string | null;
-      last4: string | null;
-      exp_month: number | null;
-      exp_year: number | null;
-      refreshed_at: string | null;
-    }>(sql`
+    const row = (
+      await db.execute<{
+        brand: string | null;
+        last4: string | null;
+        exp_month: number | null;
+        exp_year: number | null;
+        refreshed_at: string | null;
+      }>(
+        sql`
       select brand, last4, exp_month, exp_year,
              last_updater_refresh_at::text as "refreshed_at"
         from customer_payment_methods where id = ${methodId} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(row.brand, "mastercard");
     assert.equal(row.last4, "9999");
     assert.equal(row.exp_month, 5);
@@ -285,7 +352,11 @@ test("recovery metrics come from stored attempts", { skip: !DB }, async () => {
     await seedPolicy(org.orgId, userId, [1, 3], "none");
     const primaryId = await seedMethod(fixture, { providerMethodId: "pm_old", isDefault: true });
     await seedMethod(fixture, { providerMethodId: "pm_new", isDefault: false });
-    await enrollAutopay(org.orgId, { partyId: org.customerId, paymentMethodId: primaryId, actorId: userId });
+    await enrollAutopay(org.orgId, {
+      partyId: org.customerId,
+      paymentMethodId: primaryId,
+      actorId: userId,
+    });
     await seedInvoice(fixture, "INV-REC-M1", "90", "2026-07-15");
     await seedInvoice(fixture, "INV-REC-M2", "60", "2026-07-15");
     await seedInvoice(fixture, "INV-REC-M3", "70", "2026-07-15");
@@ -350,108 +421,212 @@ test("recovery metrics come from stored attempts", { skip: !DB }, async () => {
   }
 });
 
-test("expiring card reads and outreach writes enforce subsidiary visibility", { skip: !DB }, async () => {
-  const fixture = await seedRecoveryOrg();
-  const { org, userId } = fixture;
-  try {
-    await db.execute(sql`update parties set subsidiary_id = ${org.subsidiaryId} where org_id = ${org.orgId} and id = ${org.customerId}`);
-    const methodId = await seedMethod(fixture);
-    await db.execute(sql`update customer_payment_methods set exp_month = 7, exp_year = 2026 where org_id = ${org.orgId} and id = ${methodId}`);
+test(
+  "expiring card reads and outreach writes enforce subsidiary visibility",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedRecoveryOrg();
+    const { org, userId } = fixture;
+    try {
+      await db.execute(
+        sql`update parties set subsidiary_id = ${org.subsidiaryId} where org_id = ${org.orgId} and id = ${org.customerId}`,
+      );
+      const methodId = await seedMethod(fixture);
+      await db.execute(
+        sql`update customer_payment_methods set exp_month = 7, exp_year = 2026 where org_id = ${org.orgId} and id = ${methodId}`,
+      );
 
-    const unrestricted = await findCardsExpiringSoon(org.orgId, {
-      asOf: "2026-06-01", withinDays: 60, allowedSubsidiaryIds: null,
-    });
-    assert.equal(unrestricted.some((card) => card.methodId === methodId), true);
-    const restricted = await findCardsExpiringSoon(org.orgId, {
-      asOf: "2026-06-01", withinDays: 60, allowedSubsidiaryIds: new Set(),
-    });
-    assert.equal(restricted.some((card) => card.methodId === methodId), false);
+      const unrestricted = await findCardsExpiringSoon(org.orgId, {
+        asOf: "2026-06-01",
+        withinDays: 60,
+        allowedSubsidiaryIds: null,
+      });
+      assert.equal(
+        unrestricted.some((card) => card.methodId === methodId),
+        true,
+      );
+      const restricted = await findCardsExpiringSoon(org.orgId, {
+        asOf: "2026-06-01",
+        withinDays: 60,
+        allowedSubsidiaryIds: new Set(),
+      });
+      assert.equal(
+        restricted.some((card) => card.methodId === methodId),
+        false,
+      );
 
-    await assert.rejects(
-      markExpiryOutreachSent(org.orgId, [methodId], "2026-06-01", new Set(), userId),
-      AutopayError,
-    );
-    const untouched = (await db.execute<{ expiry_notified_on: string | null }>(sql`
+      await assert.rejects(
+        markExpiryOutreachSent(org.orgId, [methodId], "2026-06-01", new Set(), userId),
+        AutopayError,
+      );
+      const untouched = (
+        await db.execute<{ expiry_notified_on: string | null }>(
+          sql`
       select expiry_notified_on::text as expiry_notified_on from customer_payment_methods
        where org_id = ${org.orgId} and id = ${methodId}
-    `, "objects"))[0];
-    assert.equal(untouched?.expiry_notified_on, null);
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(untouched?.expiry_notified_on, null);
 
-    await assert.rejects(
-      markExpiryOutreachSent(org.orgId, [methodId], "2026-02-30", new Set([org.subsidiaryId]), userId),
-      AutopayError,
-    );
+      await assert.rejects(
+        markExpiryOutreachSent(
+          org.orgId,
+          [methodId],
+          "2026-02-30",
+          new Set([org.subsidiaryId]),
+          userId,
+        ),
+        AutopayError,
+      );
 
-    await markExpiryOutreachSent(org.orgId, [methodId], "2026-06-01", new Set([org.subsidiaryId]), userId);
-    const stamped = (await db.execute<{ expiry_notified_on: string | null }>(sql`
+      await markExpiryOutreachSent(
+        org.orgId,
+        [methodId],
+        "2026-06-01",
+        new Set([org.subsidiaryId]),
+        userId,
+      );
+      const stamped = (
+        await db.execute<{ expiry_notified_on: string | null }>(
+          sql`
       select expiry_notified_on::text as expiry_notified_on from customer_payment_methods
        where org_id = ${org.orgId} and id = ${methodId}
-    `, "objects"))[0];
-    assert.equal(stamped?.expiry_notified_on, "2026-06-01");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(stamped?.expiry_notified_on, "2026-06-01");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-
-test("operator retries authorize the invoice entity and fresh grants before any provider charge", { skip: !DB }, async () => {
-  const fixture = await seedRecoveryOrg();
-  const { org, userId } = fixture;
-  try {
-    await seedPolicy(org.orgId, userId, [1, 3], "none");
-    await db.execute(sql`update parties set subsidiary_id = null where org_id = ${org.orgId} and id = ${org.customerId}`);
-    await seedMethod(fixture);
-    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
-    const invoiceId = await seedInvoice(fixture, "INV-RETRY-SCOPE", "80", "2026-07-15");
-    await runAutopayCollectionForOrg(org.orgId, {
-      asOf: "2026-07-15", charge: async () => ({ status: "failed", providerRef: "ch_scope_failed", declineCode: "processing_error" }),
-    });
-    const attemptId = (await db.execute<{ id: string }>(sql`
+test(
+  "operator retries authorize the invoice entity and fresh grants before any provider charge",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedRecoveryOrg();
+    const { org, userId } = fixture;
+    try {
+      await seedPolicy(org.orgId, userId, [1, 3], "none");
+      await db.execute(
+        sql`update parties set subsidiary_id = null where org_id = ${org.orgId} and id = ${org.customerId}`,
+      );
+      await seedMethod(fixture);
+      await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+      const invoiceId = await seedInvoice(fixture, "INV-RETRY-SCOPE", "80", "2026-07-15");
+      await runAutopayCollectionForOrg(org.orgId, {
+        asOf: "2026-07-15",
+        charge: async () => ({
+          status: "failed",
+          providerRef: "ch_scope_failed",
+          declineCode: "processing_error",
+        }),
+      });
+      const attemptId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from collection_attempts where org_id = ${org.orgId} and invoice_id = ${invoiceId} and retry_position = 0
-    `, "objects"))[0]!.id;
-    const childId = randomUUID();
-    await db.execute(sql`
+    `,
+          "objects",
+        )
+      )[0]!.id;
+      const childId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${childId}, ${org.orgId}, ${org.subsidiaryId}, 'Retry child', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const collector = await createScratchUser(org.orgId, "Restricted retry", "retry_collector");
-    const rolePolicy = async (permissions: string[], scope: { mode: string; subsidiaryIds?: string[] }) => {
-      const changed = await db.execute(sql`
+      const collector = await createScratchUser(org.orgId, "Restricted retry", "retry_collector");
+      const rolePolicy = async (
+        permissions: string[],
+        scope: { mode: string; subsidiaryIds?: string[] },
+      ) => {
+        const changed = await db.execute(
+          sql`
         update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb,
           subsidiary_restriction = ${JSON.stringify(scope)}::jsonb
-         where org_id = ${org.orgId} and key = 'retry_collector' returning id`, "objects");
-      assert.equal(changed.length, 1);
-    };
-    await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [childId] });
-    const snapshot = async () => (await db.execute(sql`
+         where org_id = ${org.orgId} and key = 'retry_collector' returning id`,
+          "objects",
+        );
+        assert.equal(changed.length, 1);
+      };
+      await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [childId] });
+      const snapshot = async () =>
+        (
+          await db.execute(
+            sql`
       select (select count(*)::text from collection_attempts where org_id = ${org.orgId}) as attempts,
              (select count(*)::text from documents where org_id = ${org.orgId}) as documents,
              (select count(*)::text from audit_log where org_id = ${org.orgId}) as audits
-    `, "objects"))[0];
-    const before = await snapshot();
-    let charges = 0;
-    const charge: ChargeFn = async () => { charges += 1; return { status: "processing", providerRef: "ch_retry_scoped" }; };
-    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, null, charge), ScopeNotFoundError);
-    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, new Set([org.subsidiaryId]), charge), ScopeNotFoundError);
-    await assert.rejects(retryAttemptNow(org.orgId, attemptId, userId, new Set([childId]), charge), ScopeNotFoundError);
-    await assert.rejects(retryAttemptNow(org.orgId, attemptId, randomUUID(), null, charge), ScopeNotFoundError);
-    await rolePolicy([], { mode: "all" });
-    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, null, charge), ScopeNotFoundError);
-    await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [] });
-    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, null, charge), ScopeNotFoundError);
-    assert.equal(charges, 0);
-    assert.deepEqual(await snapshot(), before);
-    await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [org.subsidiaryId] });
-    const result = await retryAttemptNow(org.orgId, attemptId, collector, new Set([org.subsidiaryId]), charge);
-    assert.equal(result.charged, 1);
-    assert.equal(charges, 1);
-    const rows = await db.execute<{ status: string; created_by: string | null; retry_position: number }>(sql`
+    `,
+            "objects",
+          )
+        )[0];
+      const before = await snapshot();
+      let charges = 0;
+      const charge: ChargeFn = async () => {
+        charges += 1;
+        return { status: "processing", providerRef: "ch_retry_scoped" };
+      };
+      await assert.rejects(
+        retryAttemptNow(org.orgId, attemptId, collector, null, charge),
+        ScopeNotFoundError,
+      );
+      await assert.rejects(
+        retryAttemptNow(org.orgId, attemptId, collector, new Set([org.subsidiaryId]), charge),
+        ScopeNotFoundError,
+      );
+      await assert.rejects(
+        retryAttemptNow(org.orgId, attemptId, userId, new Set([childId]), charge),
+        ScopeNotFoundError,
+      );
+      await assert.rejects(
+        retryAttemptNow(org.orgId, attemptId, randomUUID(), null, charge),
+        ScopeNotFoundError,
+      );
+      await rolePolicy([], { mode: "all" });
+      await assert.rejects(
+        retryAttemptNow(org.orgId, attemptId, collector, null, charge),
+        ScopeNotFoundError,
+      );
+      await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [] });
+      await assert.rejects(
+        retryAttemptNow(org.orgId, attemptId, collector, null, charge),
+        ScopeNotFoundError,
+      );
+      assert.equal(charges, 0);
+      assert.deepEqual(await snapshot(), before);
+      await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [org.subsidiaryId] });
+      const result = await retryAttemptNow(
+        org.orgId,
+        attemptId,
+        collector,
+        new Set([org.subsidiaryId]),
+        charge,
+      );
+      assert.equal(result.charged, 1);
+      assert.equal(charges, 1);
+      const rows = await db.execute<{
+        status: string;
+        created_by: string | null;
+        retry_position: number;
+      }>(
+        sql`
       select status, created_by, retry_position from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId} order by retry_position
-    `, "objects");
-    assert.deepEqual(rows.map(row => row.status), ["failed", "processing"]);
-    assert.equal(rows[1]!.created_by, collector);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.deepEqual(
+        rows.map((row) => row.status),
+        ["failed", "processing"],
+      );
+      assert.equal(rows[1]!.created_by, collector);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

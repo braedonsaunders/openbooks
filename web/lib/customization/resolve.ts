@@ -155,7 +155,10 @@ function storedAllowedRoles(allowedRoles: unknown): string[] | null | "malformed
   return allowedRoles;
 }
 
-function rowIsAccessible(row: { allowedRoles: unknown }, heldRoleIds: ReadonlySet<string>): boolean {
+function rowIsAccessible(
+  row: { allowedRoles: unknown },
+  heldRoleIds: ReadonlySet<string>,
+): boolean {
   const roles = storedAllowedRoles(row.allowedRoles);
   if (roles === "malformed") return false;
   if (!roles || roles.length === 0) return true;
@@ -183,20 +186,26 @@ export const resolveFormLayout = cache(
   }): Promise<ResolvedFormLayout> => {
     const { orgId, userId, recordType, userRoles, headerDefs, lineDefs, explicitLayoutId } = args;
 
-    const rows = (await db.execute<(FormLayoutRow & { layout: unknown })>(sql`
+    const rows = await db.execute<FormLayoutRow & { layout: unknown }>(
+      sql`
       select id, name, record_type as "recordType", is_default as "isDefault",
              is_active as "isActive", allowed_roles as "allowedRoles", layout
         from form_layouts
        where org_id = ${orgId} and record_type = ${recordType} and is_active
        order by is_default desc, name
-    `, "objects"));
+    `,
+      "objects",
+    );
 
-    const held = (await db.execute<{ id: string }>(sql`
+    const held = await db.execute<{ id: string }>(
+      sql`
       select r.id
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.org_id = ${orgId} and a.user_id = ${userId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const heldRoleIds = new Set(held.map((r) => r.id.toLowerCase()));
 
     const accessible = rows.filter((r) => {
@@ -215,10 +224,13 @@ export const resolveFormLayout = cache(
     }));
 
     // user preference
-    const pref = (await db.execute<{ layoutId: string | null }>(sql`
+    const pref = await db.execute<{ layoutId: string | null }>(
+      sql`
       select layout_id as "layoutId" from user_form_preferences
        where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const prefId = pref[0]?.layoutId;
 
     let chosen: (FormLayoutRow & { layout: unknown }) | undefined;
@@ -233,7 +245,8 @@ export const resolveFormLayout = cache(
       if (chosen && !accessible.includes(chosen)) chosen = undefined;
     }
     // 2. an accessible entity default, preserving explicit and user choices
-    if (!chosen && args.subsidiaryDefaultLayoutId) chosen = accessible.find(row => row.id === args.subsidiaryDefaultLayoutId);
+    if (!chosen && args.subsidiaryDefaultLayoutId)
+      chosen = accessible.find((row) => row.id === args.subsidiaryDefaultLayoutId);
     // 3. org default
     if (!chosen) chosen = rows.find((r) => r.isDefault && accessible.includes(r));
     // 4. first accessible — never leave a user formless
@@ -241,7 +254,7 @@ export const resolveFormLayout = cache(
 
     if (!chosen) {
       const defaults = defaultFormLayout(recordType);
-      const sys = await essentialsWorkspace(orgId) ? essentialsFormLayout(defaults) : defaults;
+      const sys = (await essentialsWorkspace(orgId)) ? essentialsFormLayout(defaults) : defaults;
       return {
         layout: mergeCustomFieldsIntoLayout(sys, headerDefs, lineDefs),
         source: "system",
@@ -294,7 +307,9 @@ function mergeCustomFieldsIntoView(
     }
   }
   const live = new Set(showInListDefs.map((d) => `cf_${d.key}`));
-  view.columns = registeredListColumns(view.recordType, view.columns).filter((c) => !isCustomFieldKey(c.key) || live.has(c.key));
+  view.columns = registeredListColumns(view.recordType, view.columns).filter(
+    (c) => !isCustomFieldKey(c.key) || live.has(c.key),
+  );
   return view;
 }
 
@@ -313,10 +328,11 @@ export const resolveListView = cache(
     const { orgId, userId, recordType, viewId, showInListDefs } = args;
     const context: ListViewContext = {
       multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
-      multiBook: await isFeatureEnabled(orgId, 'multiBookAccounting'),
+      multiBook: await isFeatureEnabled(orgId, "multiBookAccounting"),
     };
 
-    const rows = (await db.execute<(ListViewRow & { config: unknown })>(sql`
+    const rows = await db.execute<ListViewRow & { config: unknown }>(
+      sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",
              is_default as "isDefault", is_active as "isActive", config,
              created_at as "createdAt", updated_at as "updatedAt"
@@ -324,7 +340,9 @@ export const resolveListView = cache(
        where org_id = ${orgId} and record_type = ${recordType} and is_active
          and (scope = 'org' or owner_id = ${userId})
        order by scope asc, is_default desc, name
-    `, "objects"));
+    `,
+      "objects",
+    );
 
     const available: ListViewRow[] = rows.map((r) => ({
       id: r.id,
@@ -354,10 +372,13 @@ export const resolveListView = cache(
     // org/system. A missing row is not a refusal — then a unique personal
     // default still applies.
     if (!chosen) {
-      const pref = (await db.execute<{ viewId: string | null; selectionExplicit: boolean }>(sql`
+      const pref = await db.execute<{ viewId: string | null; selectionExplicit: boolean }>(
+        sql`
         select view_id as "viewId", view_selection_explicit as "selectionExplicit" from user_list_preferences
          where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
-      `, "objects"));
+      `,
+        "objects",
+      );
       const prefRow = pref[0];
       if (prefRow && prefRow.selectionExplicit !== false) {
         const pid = prefRow.viewId;
@@ -375,7 +396,11 @@ export const resolveListView = cache(
 
     if (!chosen) {
       return {
-        view: mergeCustomFieldsIntoView(defaultListView(recordType, context), showInListDefs, context),
+        view: mergeCustomFieldsIntoView(
+          defaultListView(recordType, context),
+          showInListDefs,
+          context,
+        ),
         source: "system",
         row: null,
         available,

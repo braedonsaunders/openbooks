@@ -12,10 +12,16 @@ import test from "node:test";
 const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __subscriptionPriceState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     // The route declares permission plus a feature key, so the route factory
     // lazily imports `@/lib/feature-gates` at request time. Serve the same
     // test session there; nothing else in this file changes.
@@ -44,7 +50,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createPlanVersion } = await import("@openbooks/engine/billing/advanced-subscriptions");
 const { POST } = await import("./route.ts");
 
@@ -53,37 +60,50 @@ async function fixture() {
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;
   state.actorId = actorId;
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = settings || '{"features":{"subscriptionBilling":true,"advancedSubscriptions":true}}'::jsonb
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   const planId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subscription_plans (id, org_id, name, amount, currency_code, interval, interval_count,
                                     income_account_id, is_active, created_by)
-    values (${planId}, ${org.orgId}, 'Price Plan', '0', 'CAD', 'monthly', 1, ${org.accounts.revenue}, true, ${actorId})`));
+    values (${planId}, ${org.orgId}, 'Price Plan', '0', 'CAD', 'monthly', 1, ${org.accounts.revenue}, true, ${actorId})`),
+  );
   return { org, planId };
 }
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://subs.test/api/subscriptions/advanced", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://subs.test/api/subscriptions/advanced", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function versionCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
 async function storedComponent(orgId: string): Promise<{ quantity: string; unitPrice: string }> {
-  const rows = await withBypassContext(() => db.execute<{ quantity: string; unitPrice: string }>(
-    sql`select quantity::text as "quantity", unit_price::text as "unitPrice"
-          from subscription_plan_version_components where org_id = ${orgId} limit 1`, "objects",
-  ));
+  const rows = await withBypassContext(() =>
+    db.execute<{ quantity: string; unitPrice: string }>(
+      sql`select quantity::text as "quantity", unit_price::text as "unitPrice"
+          from subscription_plan_version_components where org_id = ${orgId} limit 1`,
+      "objects",
+    ),
+  );
   return { quantity: rows[0]!.quantity, unitPrice: rows[0]!.unitPrice };
 }
 
@@ -91,12 +111,29 @@ for (const unitPrice of [undefined, null, ""]) {
   test(`createVersion refuses an omitted unit price (${JSON.stringify(unitPrice)}) with 422 and no draft`, async () => {
     const { org, planId } = await fixture();
     try {
-      const component: Record<string, unknown> = { componentKey: "fee", name: "Fee", quantity: "1" };
+      const component: Record<string, unknown> = {
+        componentKey: "fee",
+        name: "Fee",
+        quantity: "1",
+      };
       if (unitPrice !== undefined) component.unitPrice = unitPrice;
-      const response = await post({ action: "createVersion", planId, effectiveFrom: "2026-10-01", components: [component] });
+      const response = await post({
+        action: "createVersion",
+        planId,
+        effectiveFrom: "2026-10-01",
+        components: [component],
+      });
       const json = (await response.json().catch(() => null)) as { error?: string } | null;
-      assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-      assert.match(json?.error ?? "", /unit price is required/, `the refusal must name the price: ${JSON.stringify(json)}`);
+      assert.equal(
+        response.status,
+        422,
+        `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+      );
+      assert.match(
+        json?.error ?? "",
+        /unit price is required/,
+        `the refusal must name the price: ${JSON.stringify(json)}`,
+      );
       assert.equal(await versionCount(org.orgId), 0);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -108,12 +145,22 @@ test("createVersion refuses a non-canonical unit price with 422 and no draft", a
   const { org, planId } = await fixture();
   try {
     const response = await post({
-      action: "createVersion", planId, effectiveFrom: "2026-10-01",
+      action: "createVersion",
+      planId,
+      effectiveFrom: "2026-10-01",
       components: [{ componentKey: "fee", name: "Fee", quantity: "1", unitPrice: "12,34" }],
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /unit price/, `the refusal must name the price: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.match(
+      json?.error ?? "",
+      /unit price/,
+      `the refusal must name the price: ${JSON.stringify(json)}`,
+    );
     assert.equal(await versionCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -124,7 +171,9 @@ test('an explicit "0" unit price is accepted as a free component', async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post({
-      action: "createVersion", planId, effectiveFrom: "2026-10-01",
+      action: "createVersion",
+      planId,
+      effectiveFrom: "2026-10-01",
       components: [{ componentKey: "fee", name: "Fee", quantity: "1", unitPrice: "0" }],
     });
     assert.equal(response.status, 201, JSON.stringify(await response.json().catch(() => null)));
@@ -138,11 +187,16 @@ test("an omitted quantity still defaults to one", async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post({
-      action: "createVersion", planId, effectiveFrom: "2026-10-01",
+      action: "createVersion",
+      planId,
+      effectiveFrom: "2026-10-01",
       components: [{ componentKey: "fee", name: "Fee", unitPrice: "10.00" }],
     });
     assert.equal(response.status, 201, JSON.stringify(await response.json().catch(() => null)));
-    assert.deepEqual(await storedComponent(org.orgId), { quantity: "1.0000", unitPrice: "10.0000" });
+    assert.deepEqual(await storedComponent(org.orgId), {
+      quantity: "1.0000",
+      unitPrice: "10.0000",
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -152,11 +206,20 @@ test("createPlanVersion refuses an omitted unit price without writing", async ()
   const { org, planId } = await fixture();
   try {
     await assert.rejects(
-      withOrgContext(state.orgId, () => createPlanVersion(org.orgId, state.actorId, {
-        planId,
-        effectiveFrom: "2026-10-01",
-        components: [{ componentKey: "fee", name: "Fee", unitPrice: undefined as unknown as string }],
-      }, null)),
+      withOrgContext(state.orgId, () =>
+        createPlanVersion(
+          org.orgId,
+          state.actorId,
+          {
+            planId,
+            effectiveFrom: "2026-10-01",
+            components: [
+              { componentKey: "fee", name: "Fee", unitPrice: undefined as unknown as string },
+            ],
+          },
+          null,
+        ),
+      ),
       /component price/,
     );
     assert.equal(await versionCount(org.orgId), 0);
@@ -169,11 +232,18 @@ test("createPlanVersion refuses a subsidiary-restricted scope by name without wr
   const { org, planId } = await fixture();
   try {
     await assert.rejects(
-      withOrgContext(state.orgId, () => createPlanVersion(org.orgId, state.actorId, {
-        planId,
-        effectiveFrom: "2026-10-01",
-        components: [{ componentKey: "fee", name: "Fee", unitPrice: "10.0000" }],
-      }, new Set([randomUUID()]))),
+      withOrgContext(state.orgId, () =>
+        createPlanVersion(
+          org.orgId,
+          state.actorId,
+          {
+            planId,
+            effectiveFrom: "2026-10-01",
+            components: [{ componentKey: "fee", name: "Fee", unitPrice: "10.0000" }],
+          },
+          new Set([randomUUID()]),
+        ),
+      ),
       /requires unrestricted subsidiary access/,
     );
     assert.equal(await versionCount(org.orgId), 0);

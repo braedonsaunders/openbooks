@@ -1,12 +1,21 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { ArrowUpDown, Columns3, Database, Filter, ListTree, Play, Settings2, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, SearchSelect, Select, cn } from '@openbooks/ui'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ArrowUpDown,
+  Columns3,
+  Database,
+  Filter,
+  ListTree,
+  Play,
+  Settings2,
+  Trash2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { Badge, Button, Input, Label, SearchSelect, Select, cn } from "@openbooks/ui";
 import {
   REPORT_ENTITIES,
   type ReportEntity,
@@ -15,16 +24,16 @@ import {
   type ReportCustomQuery,
   type ReportLayoutConfig,
   type ReportRunResult,
-} from '@openbooks/reports'
-import { DetailPageLayout } from '../../../../../../components/page-layout'
-import { confirmDialog } from '../../../../../../lib/confirm'
-import { readApiErrorMessage } from '../../../../../../lib/api-error'
-import { FilterTree } from '../../FilterTree'
-import { PaperView, type PaperData } from '../../../PaperView'
-import { RowsConfig, SortConfig, SummarizeConfig } from '../../../query-config'
-import { availableReportEntities } from '../../../../../../lib/report-builder-catalog'
+} from "@openbooks/reports";
+import { DetailPageLayout } from "../../../../../../components/page-layout";
+import { confirmDialog } from "../../../../../../lib/confirm";
+import { readApiErrorMessage } from "../../../../../../lib/api-error";
+import { FilterTree } from "../../FilterTree";
+import { PaperView, type PaperData } from "../../../PaperView";
+import { RowsConfig, SortConfig, SummarizeConfig } from "../../../query-config";
+import { availableReportEntities } from "../../../../../../lib/report-builder-catalog";
 
-type Tab = 'source' | 'columns' | 'grouping' | 'sorting' | 'filter' | 'format'
+type Tab = "source" | "columns" | "grouping" | "sorting" | "filter" | "format";
 
 export function ReportBuilder({
   definition,
@@ -35,338 +44,356 @@ export function ReportBuilder({
   createMode = false,
 }: {
   definition: {
-    id: string
-    kind: 'built_in' | 'custom'
-    name: string
-    description: string | null
-    query: ReportCustomQuery
-    layout?: Record<string, unknown> | null
-  }
-  company: string
+    id: string;
+    kind: "built_in" | "custom";
+    name: string;
+    description: string | null;
+    query: ReportCustomQuery;
+    layout?: Record<string, unknown> | null;
+  };
+  company: string;
   /** Entities the user lacks permission for (e.g. payroll wages) — hidden from the picker. */
-  customEntities?: ReportEntity[]
-  hiddenEntityKeys?: string[]
-  inventoryEnabled: boolean
+  customEntities?: ReportEntity[];
+  hiddenEntityKeys?: string[];
+  inventoryEnabled: boolean;
   /** `builder/new`: local-only until the operator explicitly saves. */
-  createMode?: boolean
+  createMode?: boolean;
 }) {
-  const entities = useMemo(() => [...REPORT_ENTITIES, ...customEntities], [customEntities])
-  const entityMap = useMemo(() => Object.fromEntries(entities.map(e => [e.key,e])), [entities])
+  const entities = useMemo(() => [...REPORT_ENTITIES, ...customEntities], [customEntities]);
+  const entityMap = useMemo(() => Object.fromEntries(entities.map((e) => [e.key, e])), [entities]);
   const visibleEntities = useMemo(
     () => availableReportEntities(entities, hiddenEntityKeys),
     [entities, hiddenEntityKeys],
-  )
-  const t = useTranslations('reports.custom.builder')
-  const tk = useTranslations('reports.custom')
-  const ta = useTranslations('reports.custom.actions')
-  const tc = useTranslations('common')
-  const tReports = useTranslations('reports')
-  const router = useRouter()
-  const [name, setName] = useState(definition.name)
-  const [description, setDescription] = useState(definition.description ?? '')
-  const [query, setQuery] = useState<ReportCustomQuery>(definition.query)
+  );
+  const t = useTranslations("reports.custom.builder");
+  const tk = useTranslations("reports.custom");
+  const ta = useTranslations("reports.custom.actions");
+  const tc = useTranslations("common");
+  const tReports = useTranslations("reports");
+  const router = useRouter();
+  const [name, setName] = useState(definition.name);
+  const [description, setDescription] = useState(definition.description ?? "");
+  const [query, setQuery] = useState<ReportCustomQuery>(definition.query);
   const [layout, setLayout] = useState<ReportLayoutConfig>(
     resolveReportLayout(definition.layout as Partial<ReportLayoutConfig> | null | undefined),
-  )
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>(createMode ? 'dirty' : 'saved')
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<ReportRunResult | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [previewing, setPreviewing] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [tab, setTab] = useState<Tab>('source')
+  );
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">(
+    createMode ? "dirty" : "saved",
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ReportRunResult | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState<Tab>("source");
 
   // PATCH requests can outlive the debounce timer that created them. Keep an
   // exact server revision and serialize saves so a late response can never
   // overwrite a newer definition (or report stale work as saved).
-  const revisionRef = useRef<string | null>(null)
-  const revisionRequestRef = useRef<Promise<string | null> | null>(null)
-  const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const saveGenerationRef = useRef(0)
-  const createRequestIdRef = useRef<string | null>(null)
-  const createInFlightRef = useRef(false)
+  const revisionRef = useRef<string | null>(null);
+  const revisionRequestRef = useRef<Promise<string | null> | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveGenerationRef = useRef(0);
+  const createRequestIdRef = useRef<string | null>(null);
+  const createInFlightRef = useRef(false);
 
   const ensureRevision = useCallback(async (): Promise<string | null> => {
-    if (createMode) return null
-    if (revisionRef.current) return revisionRef.current
+    if (createMode) return null;
+    if (revisionRef.current) return revisionRef.current;
     if (!revisionRequestRef.current) {
       const request = fetch(`/api/reports/definitions/${definition.id}`)
         .then(async (res) => {
-          if (!res.ok) return null
-          const data = (await res.json()) as { definition?: { updated_at?: unknown } }
-          const revision = data.definition?.updated_at
-          return typeof revision === 'string' ? revision : null
+          if (!res.ok) return null;
+          const data = (await res.json()) as { definition?: { updated_at?: unknown } };
+          const revision = data.definition?.updated_at;
+          return typeof revision === "string" ? revision : null;
         })
-        .catch(() => null)
-      revisionRequestRef.current = request
+        .catch(() => null);
+      revisionRequestRef.current = request;
     }
-    const revision = await revisionRequestRef.current
-    if (!revision) revisionRequestRef.current = null
-    revisionRef.current = revision
-    return revision
-  }, [createMode, definition.id])
+    const revision = await revisionRequestRef.current;
+    if (!revision) revisionRequestRef.current = null;
+    revisionRef.current = revision;
+    return revision;
+  }, [createMode, definition.id]);
 
   // Declared before the autosave effect so its teardown runs first: the
   // debounce cleanup can then tell a re-run (re-arm the timer) from an
   // unmount (flush the latest payload, never drop it).
-  const mountedRef = useRef(true)
-  useEffect(() => () => {
-    mountedRef.current = false
-  }, [])
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   // The debounced timer only SCHEDULES this; the unmount flush calls it
   // directly with the latest payload, so an edit followed by "Run &
   // schedule" saves the new definition instead of running the old one.
-  const enqueueSave = useCallback((payload: {
-    name: string
-    description: string
-    query: ReportCustomQuery
-    layout: ReportLayoutConfig
-  }, generation: number) => {
-    saveQueueRef.current = saveQueueRef.current
-      .catch(() => undefined)
-      .then(async () => {
-        // A newer debounce superseded this payload before the queue reached
-        // it. Skip the stale write entirely and let the latest generation
-        // carry the current state to the server.
-        if (generation !== saveGenerationRef.current) return
-        const expectedUpdatedAt = await ensureRevision()
-        // Editing while the revision GET was in flight supersedes this save.
-        if (generation !== saveGenerationRef.current) return
-        if (!expectedUpdatedAt) {
-          setSaveState('error')
-          toast.error(tc('feedback.saveFailed'))
-          return
-        }
-        setSaveState('saving')
-        try {
-          const res = await fetch(`/api/reports/definitions/${definition.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...payload, expectedUpdatedAt }),
-          })
-          if (!res.ok) {
-            const message = await readApiErrorMessage(res, tc('feedback.saveFailed'))
-            if (generation === saveGenerationRef.current) {
-              setSaveState('error')
-              setSaveError(message)
-              toast.error(message)
+  const enqueueSave = useCallback(
+    (
+      payload: {
+        name: string;
+        description: string;
+        query: ReportCustomQuery;
+        layout: ReportLayoutConfig;
+      },
+      generation: number,
+    ) => {
+      saveQueueRef.current = saveQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          // A newer debounce superseded this payload before the queue reached
+          // it. Skip the stale write entirely and let the latest generation
+          // carry the current state to the server.
+          if (generation !== saveGenerationRef.current) return;
+          const expectedUpdatedAt = await ensureRevision();
+          // Editing while the revision GET was in flight supersedes this save.
+          if (generation !== saveGenerationRef.current) return;
+          if (!expectedUpdatedAt) {
+            setSaveState("error");
+            toast.error(tc("feedback.saveFailed"));
+            return;
+          }
+          setSaveState("saving");
+          try {
+            const res = await fetch(`/api/reports/definitions/${definition.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...payload, expectedUpdatedAt }),
+            });
+            if (!res.ok) {
+              const message = await readApiErrorMessage(res, tc("feedback.saveFailed"));
+              if (generation === saveGenerationRef.current) {
+                setSaveState("error");
+                setSaveError(message);
+                toast.error(message);
+              }
+              return;
             }
-            return
+            const data = (await res.json().catch(() => ({}))) as {
+              definition?: { updated_at?: unknown };
+            };
+            const savedRevision = data.definition?.updated_at;
+            if (typeof savedRevision === "string") revisionRef.current = savedRevision;
+            if (generation === saveGenerationRef.current) {
+              setSaveState("saved");
+              setSaveError(null);
+              router.refresh();
+            }
+          } catch {
+            if (generation !== saveGenerationRef.current) return;
+            setSaveState("error");
+            toast.error(tc("feedback.saveFailed"));
           }
-          const data = (await res.json().catch(() => ({}))) as {
-            definition?: { updated_at?: unknown }
-          }
-          const savedRevision = data.definition?.updated_at
-          if (typeof savedRevision === 'string') revisionRef.current = savedRevision
-          if (generation === saveGenerationRef.current) {
-            setSaveState('saved')
-            setSaveError(null)
-            router.refresh()
-          }
-        } catch {
-          if (generation !== saveGenerationRef.current) return
-          setSaveState('error')
-          toast.error(tc('feedback.saveFailed'))
-        }
-      })
-  }, [definition.id, ensureRevision, router, tc])
+        });
+    },
+    [definition.id, ensureRevision, router, tc],
+  );
 
-  const entity = entityMap[query.entity] ?? entityMap.ledger_lines!
-  const mode = query.mode ?? 'rows'
+  const entity = entityMap[query.entity] ?? entityMap.ledger_lines!;
+  const mode = query.mode ?? "rows";
 
   const patch = useCallback((next: Partial<ReportCustomQuery>) => {
-    setPreviewError(null)
-    setSaveError(null)
-    setQuery((q) => ({ ...q, ...next }))
-  }, [])
+    setPreviewError(null);
+    setSaveError(null);
+    setQuery((q) => ({ ...q, ...next }));
+  }, []);
 
   // -- entity change resets column/breakout/measure/sort selections ----------
   function changeEntity(key: string) {
-    const e = entityMap[key]
-    if (!e) return
+    const e = entityMap[key];
+    if (!e) return;
     setQuery({
       entity: key,
       mode,
       columns: defaultColumnsFor(e),
       breakouts: [],
-      measures: [{ fn: 'count', key: 'm1' }],
+      measures: [{ fn: "count", key: "m1" }],
       filters: null,
       groupBy: null,
       sorts: e.defaultSort ? [e.defaultSort] : null,
       limit: query.limit ?? 1000,
-    })
+    });
   }
 
   // -- live preview (debounced) ----------------------------------------------
   // Each run carries a request id and aborts its predecessor: without both,
   // a slow earlier preview resolves last and overwrites the newer one.
-  const previewRequestRef = useRef(0)
-  const previewAbortRef = useRef<AbortController | null>(null)
+  const previewRequestRef = useRef(0);
+  const previewAbortRef = useRef<AbortController | null>(null);
   const runPreview = useCallback(
     async (plan: ReportCustomQuery) => {
-      const requestId = ++previewRequestRef.current
-      previewAbortRef.current?.abort()
-      const controller = new AbortController()
-      previewAbortRef.current = controller
-      setPreviewing(true)
+      const requestId = ++previewRequestRef.current;
+      previewAbortRef.current?.abort();
+      const controller = new AbortController();
+      previewAbortRef.current = controller;
+      setPreviewing(true);
       try {
-        const res = await fetch('/api/reports/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/reports/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: plan }),
           signal: controller.signal,
-        })
+        });
         // A newer run superseded this one while it was in flight: its result
         // is stale by construction, never the preview.
-        if (requestId !== previewRequestRef.current) return
+        if (requestId !== previewRequestRef.current) return;
         if (!res.ok) {
-          setPreview(null)
-          setPreviewError(await readApiErrorMessage(res, t('previewFailed')))
-          return
+          setPreview(null);
+          setPreviewError(await readApiErrorMessage(res, t("previewFailed")));
+          return;
         }
-        const data = (await res.json()) as { result: ReportRunResult }
-        if (requestId !== previewRequestRef.current) return
-        setPreview(data.result)
-        setPreviewError(null)
+        const data = (await res.json()) as { result: ReportRunResult };
+        if (requestId !== previewRequestRef.current) return;
+        setPreview(data.result);
+        setPreviewError(null);
       } catch (err) {
         // Aborts are supersession, not failure: the newer run owns the UI.
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        if (requestId !== previewRequestRef.current) return
-        setPreview(null)
-        setPreviewError(t('previewFailed'))
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (requestId !== previewRequestRef.current) return;
+        setPreview(null);
+        setPreviewError(t("previewFailed"));
       } finally {
-        if (requestId === previewRequestRef.current) setPreviewing(false)
+        if (requestId === previewRequestRef.current) setPreviewing(false);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
-  )
+  );
 
-  const firstPreview = useRef(true)
+  const firstPreview = useRef(true);
   useEffect(() => {
-    const timer = setTimeout(() => runPreview(query), firstPreview.current ? 0 : 500)
-    firstPreview.current = false
-    return () => clearTimeout(timer)
+    const timer = setTimeout(() => runPreview(query), firstPreview.current ? 0 : 500);
+    firstPreview.current = false;
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query]);
 
   // -- autosave (debounced PATCH) --------------------------------------------
-  const firstSave = useRef(true)
+  const firstSave = useRef(true);
   useEffect(() => {
     // The `new` sentinel has no database row. Its edits stay in memory until
     // the explicit Save POST below; opening and cancelling are zero-write.
     if (createMode) {
-      firstSave.current = false
-      return
+      firstSave.current = false;
+      return;
     }
     if (firstSave.current) {
-      firstSave.current = false
-      return
+      firstSave.current = false;
+      return;
     }
-    const generation = ++saveGenerationRef.current
-    setSaveState('dirty')
-    const payload = { name, description, query, layout }
-    let sent = false
+    const generation = ++saveGenerationRef.current;
+    setSaveState("dirty");
+    const payload = { name, description, query, layout };
+    let sent = false;
     const timer = setTimeout(() => {
-      sent = true
-      enqueueSave(payload, generation)
-    }, 700)
+      sent = true;
+      enqueueSave(payload, generation);
+    }, 700);
     return () => {
-      clearTimeout(timer)
-      if (mountedRef.current || createMode) return
+      clearTimeout(timer);
+      if (mountedRef.current || createMode) return;
       // Unmount ("Run & schedule", or any navigation) with a debounced edit
       // that never sent: queue the latest payload and flush instead of
       // dropping it. An in-flight save is left to finish; the queue
       // serializes this next write behind it under the same revision guard.
-      if (!sent) enqueueSave(payload, generation)
-    }
-  }, [name, description, query, layout, ensureRevision, createMode, enqueueSave])
+      if (!sent) enqueueSave(payload, generation);
+    };
+  }, [name, description, query, layout, ensureRevision, createMode, enqueueSave]);
 
   useEffect(() => {
-    if (createMode || saveState === 'saved') return
+    if (createMode || saveState === "saved") return;
     // A full unload (refresh, tab close) would drop a debounced edit the
     // unmount flush cannot send: warn first, never lose silently.
     const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-    }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [createMode, saveState])
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [createMode, saveState]);
 
   async function createReport() {
-    if (!createMode || createInFlightRef.current) return
-    createInFlightRef.current = true
-    setCreating(true)
-    if (!createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
+    if (!createMode || createInFlightRef.current) return;
+    createInFlightRef.current = true;
+    setCreating(true);
+    if (!createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID();
     try {
-      const res = await fetch('/api/reports/definitions', {
-        method: 'POST',
+      const res = await fetch("/api/reports/definitions", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': createRequestIdRef.current,
+          "Content-Type": "application/json",
+          "Idempotency-Key": createRequestIdRef.current,
         },
         body: JSON.stringify({ name: name.trim(), description: description.trim(), query, layout }),
-      })
+      });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, tk('newButton.createFailed'))
-        setSaveError(message)
-        toast.error(message)
-        return
+        const message = await readApiErrorMessage(res, tk("newButton.createFailed"));
+        setSaveError(message);
+        toast.error(message);
+        return;
       }
-      const data = (await res.json()) as { definition?: { id?: unknown } }
-      const id = data.definition?.id
-      if (typeof id !== 'string' || !id) {
-        toast.error(tk('newButton.createFailed'))
-        return
+      const data = (await res.json()) as { definition?: { id?: unknown } };
+      const id = data.definition?.id;
+      if (typeof id !== "string" || !id) {
+        toast.error(tk("newButton.createFailed"));
+        return;
       }
-      toast.success(t('allChangesSaved'))
-      router.replace(`/reports/custom/builder/${id}`)
-      router.refresh()
+      toast.success(t("allChangesSaved"));
+      router.replace(`/reports/custom/builder/${id}`);
+      router.refresh();
     } catch {
-      toast.error(tk('newButton.createFailed'))
+      toast.error(tk("newButton.createFailed"));
     } finally {
-      createInFlightRef.current = false
-      setCreating(false)
+      createInFlightRef.current = false;
+      setCreating(false);
     }
   }
 
   async function removeReport() {
     const confirmed = await confirmDialog({
-      message: ta('deleteConfirm'),
-      tone: 'danger',
-    })
-    if (!confirmed) return
+      message: ta("deleteConfirm"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
 
-    setDeleting(true)
+    setDeleting(true);
     try {
       const res = await fetch(`/api/reports/definitions/${definition.id}`, {
-        method: 'DELETE',
-      })
+        method: "DELETE",
+      });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, ta('deleteFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, ta("deleteFailed")));
+        return;
       }
 
-      toast.success(ta('deleted'))
-      router.push('/reports/custom')
-      router.refresh()
+      toast.success(ta("deleted"));
+      router.push("/reports/custom");
+      router.refresh();
     } catch {
-      toast.error(ta('deleteFailed'))
+      toast.error(ta("deleteFailed"));
     } finally {
-      setDeleting(false)
+      setDeleting(false);
     }
   }
 
   // ReportRunResult → the unified PaperView shape (same contract statements use).
   const paper: PaperData | null = preview
     ? {
-        title: name || t('namePlaceholder'),
+        title: name || t("namePlaceholder"),
         periodPhrase: description || undefined,
         ...(createMode
           ? {}
-          : { defaultDrillTarget: { kind: 'custom' as const, source: 'definition' as const, id: definition.id, label: name || t('namePlaceholder') } }),
+          : {
+              defaultDrillTarget: {
+                kind: "custom" as const,
+                source: "definition" as const,
+                id: definition.id,
+                label: name || t("namePlaceholder"),
+              },
+            }),
         summary: preview.summary,
         groups: preview.groups.map((g) => ({
           title: g.title,
@@ -376,41 +403,43 @@ export function ReportBuilder({
           isEmpty: g.isEmpty,
         })),
       }
-    : null
+    : null;
 
-  const field = 'space-y-1.5'
+  const field = "space-y-1.5";
   const sourceGroupLabel = (category: string) => {
-    const normalized = category.toLocaleLowerCase()
-    if (normalized === 'general_ledger') return tReports('hub.groups.ledger')
-    if (normalized === 'transactions') return tReports('hub.groups.receivablesPayables')
-    if (normalized === 'inventory') return tReports('hub.groups.inventory')
-    if (normalized === 'payroll') return tReports('hub.groups.payroll')
-    if (normalized === 'hrm') return tReports('hub.groups.hrm')
-    if (normalized === 'crm') return tReports('hub.groups.crm')
-    if (normalized === 'ai governance') return tReports('hub.groups.aiGovernance')
-    if (normalized === 'catalog') return tReports('hub.groups.custom')
-    return category.replaceAll('_', ' ').replace(/^./, (letter) => letter.toLocaleUpperCase())
-  }
-  const entityLabel = (candidate: ReportEntity) => (
-    candidate.key.startsWith('custom:') ? candidate.label : tReports(`catalog.entities.${candidate.key}.label`)
-  )
-  const entityDescription = (candidate: ReportEntity) => (
-    candidate.key.startsWith('custom:') ? candidate.description : tReports(`catalog.entities.${candidate.key}.description`)
-  )
+    const normalized = category.toLocaleLowerCase();
+    if (normalized === "general_ledger") return tReports("hub.groups.ledger");
+    if (normalized === "transactions") return tReports("hub.groups.receivablesPayables");
+    if (normalized === "inventory") return tReports("hub.groups.inventory");
+    if (normalized === "payroll") return tReports("hub.groups.payroll");
+    if (normalized === "hrm") return tReports("hub.groups.hrm");
+    if (normalized === "crm") return tReports("hub.groups.crm");
+    if (normalized === "ai governance") return tReports("hub.groups.aiGovernance");
+    if (normalized === "catalog") return tReports("hub.groups.custom");
+    return category.replaceAll("_", " ").replace(/^./, (letter) => letter.toLocaleUpperCase());
+  };
+  const entityLabel = (candidate: ReportEntity) =>
+    candidate.key.startsWith("custom:")
+      ? candidate.label
+      : tReports(`catalog.entities.${candidate.key}.label`);
+  const entityDescription = (candidate: ReportEntity) =>
+    candidate.key.startsWith("custom:")
+      ? candidate.description
+      : tReports(`catalog.entities.${candidate.key}.description`);
   const sourceOptions = visibleEntities.map((candidate) => ({
     value: candidate.key,
     label: entityLabel(candidate),
     hint: entityDescription(candidate),
     group: sourceGroupLabel(candidate.category),
-  }))
+  }));
   const tabs: { key: Tab; label: string; icon: typeof Database }[] = [
-    { key: 'source', label: t('tabs.source'), icon: Database },
-    { key: 'columns', label: t('tabs.columns'), icon: Columns3 },
-    { key: 'grouping', label: t('tabs.grouping'), icon: ListTree },
-    { key: 'sorting', label: t('tabs.sorting'), icon: ArrowUpDown },
-    { key: 'filter', label: t('tabs.filter'), icon: Filter },
-    { key: 'format', label: t('tabs.format'), icon: Settings2 },
-  ]
+    { key: "source", label: t("tabs.source"), icon: Database },
+    { key: "columns", label: t("tabs.columns"), icon: Columns3 },
+    { key: "grouping", label: t("tabs.grouping"), icon: ListTree },
+    { key: "sorting", label: t("tabs.sorting"), icon: ArrowUpDown },
+    { key: "filter", label: t("tabs.filter"), icon: Filter },
+    { key: "format", label: t("tabs.format"), icon: Settings2 },
+  ];
 
   return (
     <DetailPageLayout
@@ -421,14 +450,18 @@ export function ReportBuilder({
               className="h-9 w-full text-base font-semibold sm:w-64 sm:shrink-0"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t('namePlaceholder')}
+              placeholder={t("namePlaceholder")}
             />
-            {definition.kind === 'built_in' ? <Badge className="shrink-0" variant="secondary">{tk('kind.builtIn')}</Badge> : null}
+            {definition.kind === "built_in" ? (
+              <Badge className="shrink-0" variant="secondary">
+                {tk("kind.builtIn")}
+              </Badge>
+            ) : null}
             <Input
               className="h-9 min-w-56 flex-1 text-sm"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={t('descriptionPlaceholder')}
+              placeholder={t("descriptionPlaceholder")}
             />
           </div>
           <div className="flex items-center gap-3">
@@ -438,40 +471,50 @@ export function ReportBuilder({
                   id="custom-report-save-hint"
                   className="text-xs text-slate-500 dark:text-slate-400"
                 >
-                  {!name.trim() && !creating ? t('nameRequired') : t('unsavedChanges')}
+                  {!name.trim() && !creating ? t("nameRequired") : t("unsavedChanges")}
                 </span>
-                <Button type="button" variant="outline" disabled={creating} onClick={() => router.push('/reports/custom')}>
-                  {tc('actions.cancel')}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={creating}
+                  onClick={() => router.push("/reports/custom")}
+                >
+                  {tc("actions.cancel")}
                 </Button>
                 <Button
                   type="button"
                   disabled={creating || !name.trim()}
-                  title={!name.trim() && !creating ? t('nameRequired') : undefined}
-                  aria-describedby={!name.trim() && !creating ? 'custom-report-save-hint' : undefined}
+                  title={!name.trim() && !creating ? t("nameRequired") : undefined}
+                  aria-describedby={
+                    !name.trim() && !creating ? "custom-report-save-hint" : undefined
+                  }
                   onClick={createReport}
                 >
-                  {creating ? tc('actions.saving') : tc('actions.save')}
+                  {creating ? tc("actions.saving") : tc("actions.save")}
                 </Button>
               </>
             ) : (
               <>
                 <span
                   className={
-                    'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+                    "text-xs " +
+                    (saveState === "error"
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-slate-500 dark:text-slate-400")
                   }
                 >
-                  {saveState === 'saved'
-                    ? t('allChangesSaved')
-                    : saveState === 'saving'
-                      ? tc('actions.saving')
-                      : saveState === 'error'
-                        ? tc('feedback.saveFailed')
-                        : t('unsavedChanges')}
+                  {saveState === "saved"
+                    ? t("allChangesSaved")
+                    : saveState === "saving"
+                      ? tc("actions.saving")
+                      : saveState === "error"
+                        ? tc("feedback.saveFailed")
+                        : t("unsavedChanges")}
                 </span>
                 <Button variant="outline" asChild>
-                  <Link href={`/reports/custom/run/${definition.id}`}>{t('runAndSchedule')}</Link>
+                  <Link href={`/reports/custom/run/${definition.id}`}>{t("runAndSchedule")}</Link>
                 </Button>
-                {definition.kind === 'custom' ? (
+                {definition.kind === "custom" ? (
                   <Button
                     type="button"
                     variant="destructive"
@@ -480,7 +523,7 @@ export function ReportBuilder({
                     onClick={removeReport}
                   >
                     <Trash2 size={14} />
-                    {deleting ? tc('actions.deleting') : tc('actions.delete')}
+                    {deleting ? tc("actions.deleting") : tc("actions.delete")}
                   </Button>
                 ) : null}
               </>
@@ -494,7 +537,7 @@ export function ReportBuilder({
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-0.5 rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
             {tabs.map((tb) => {
-              const Icon = tb.icon
+              const Icon = tb.icon;
               return (
                 <button
                   key={tb.key}
@@ -502,129 +545,199 @@ export function ReportBuilder({
                   onClick={() => setTab(tb.key)}
                   aria-pressed={tab === tb.key}
                   className={cn(
-                    'flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:text-sm',
+                    "flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:text-sm",
                     tab === tb.key
-                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
+                      ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100",
                   )}
                 >
                   <Icon size={14} /> {tb.label}
                 </button>
-              )
+              );
             })}
           </div>
 
-          {tab === 'source' ? (
+          {tab === "source" ? (
             <div className="space-y-5">
               <div className={field}>
-                <Label>{t('source')}</Label>
+                <Label>{t("source")}</Label>
                 <SearchSelect
                   value={query.entity}
                   onChange={changeEntity}
                   options={sourceOptions}
                   searchable
-                  searchPlaceholder={t('sourceSearchPlaceholder')}
-                  sheetTitle={t('source')}
-                  ariaLabel={t('source')}
+                  searchPlaceholder={t("sourceSearchPlaceholder")}
+                  sheetTitle={t("source")}
+                  ariaLabel={t("source")}
                 />
-                <p className="text-xs text-slate-500 dark:text-slate-400">{entityDescription(entity)}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {entityDescription(entity)}
+                </p>
               </div>
 
               <div className={field}>
-                <Label>{t('mode')}</Label>
+                <Label>{t("mode")}</Label>
                 <div className="flex gap-2">
-                  <Button type="button" variant={mode === 'rows' ? 'default' : 'outline'} size="sm" onClick={() => patch({ mode: 'rows' })}>
-                    {t('detailRows')}
+                  <Button
+                    type="button"
+                    variant={mode === "rows" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => patch({ mode: "rows" })}
+                  >
+                    {t("detailRows")}
                   </Button>
                   <Button
                     type="button"
-                    variant={mode === 'summarize' ? 'default' : 'outline'}
+                    variant={mode === "summarize" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => patch({ mode: 'summarize', measures: query.measures?.length ? query.measures : [{ fn: 'count', key: 'm1' }] })}
+                    onClick={() =>
+                      patch({
+                        mode: "summarize",
+                        measures: query.measures?.length
+                          ? query.measures
+                          : [{ fn: "count", key: "m1" }],
+                      })
+                    }
                   >
-                    {t('summarize')}
+                    {t("summarize")}
                   </Button>
                 </div>
               </div>
 
               <div className={field}>
-                <Label>{t('rowLimit')}</Label>
+                <Label>{t("rowLimit")}</Label>
                 <Input
                   type="number"
                   min={1}
                   step={1}
                   value={query.limit ?? 1000}
                   onChange={(event) => {
-                    const requested = Number(event.target.value)
+                    const requested = Number(event.target.value);
                     patch({
                       limit: Number.isFinite(requested)
                         ? Math.min(Math.max(Math.trunc(requested), 1), Number.MAX_SAFE_INTEGER)
                         : 1,
-                    })
+                    });
                   }}
                 />
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('rowLimitHint', { previewRows: 200 })}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t("rowLimitHint", { previewRows: 200 })}
+                </p>
               </div>
             </div>
-          ) : tab === 'columns' ? (
-            mode === 'rows' ? (
-              <RowsConfig entity={entity} query={query} patch={patch} columns={entity.columns} section="columns" />
+          ) : tab === "columns" ? (
+            mode === "rows" ? (
+              <RowsConfig
+                entity={entity}
+                query={query}
+                patch={patch}
+                columns={entity.columns}
+                section="columns"
+              />
             ) : (
-                  <SummarizeConfig entity={entity} query={query} patch={patch} section="measures" inventoryEnabled={inventoryEnabled} error={previewError ?? saveError} />
+              <SummarizeConfig
+                entity={entity}
+                query={query}
+                patch={patch}
+                section="measures"
+                inventoryEnabled={inventoryEnabled}
+                error={previewError ?? saveError}
+              />
             )
-          ) : tab === 'grouping' ? (
-            mode === 'rows' ? (
-              <RowsConfig entity={entity} query={query} patch={patch} columns={entity.columns} section="grouping" />
+          ) : tab === "grouping" ? (
+            mode === "rows" ? (
+              <RowsConfig
+                entity={entity}
+                query={query}
+                patch={patch}
+                columns={entity.columns}
+                section="grouping"
+              />
             ) : (
-                  <SummarizeConfig entity={entity} query={query} patch={patch} section="grouping" inventoryEnabled={inventoryEnabled} />
+              <SummarizeConfig
+                entity={entity}
+                query={query}
+                patch={patch}
+                section="grouping"
+                inventoryEnabled={inventoryEnabled}
+              />
             )
-          ) : tab === 'sorting' ? (
+          ) : tab === "sorting" ? (
             <SortConfig entity={entity} query={query} patch={patch} />
-          ) : tab === 'filter' ? (
+          ) : tab === "filter" ? (
             <div className={field}>
-              <Label>{tc('labels.filters')}</Label>
+              <Label>{tc("labels.filters")}</Label>
               <FilterTree
                 entity={entity}
                 inventoryEnabled={inventoryEnabled}
-                group={query.filters ?? { combinator: 'and', rules: [] }}
+                group={query.filters ?? { combinator: "and", rules: [] }}
                 onChange={(g) => patch({ filters: g.rules.length ? g : null })}
               />
             </div>
           ) : (
             <div className={field}>
-              <Label>{t('pageSetup.title')}</Label>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('pageSetup.hint')}</p>
+              <Label>{t("pageSetup.title")}</Label>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("pageSetup.hint")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">{t('pageSetup.paper')}</Label>
-                  <Select value={layout.paperSize} onChange={(e) => setLayout((l) => ({ ...l, paperSize: e.target.value as ReportLayoutConfig['paperSize'] }))}>
-                    <option value="letter">{t('pageSetup.paperLetter')}</option>
-                    <option value="a4">{t('pageSetup.paperA4')}</option>
-                    <option value="legal">{t('pageSetup.paperLegal')}</option>
+                  <Label className="text-xs">{t("pageSetup.paper")}</Label>
+                  <Select
+                    value={layout.paperSize}
+                    onChange={(e) =>
+                      setLayout((l) => ({
+                        ...l,
+                        paperSize: e.target.value as ReportLayoutConfig["paperSize"],
+                      }))
+                    }
+                  >
+                    <option value="letter">{t("pageSetup.paperLetter")}</option>
+                    <option value="a4">{t("pageSetup.paperA4")}</option>
+                    <option value="legal">{t("pageSetup.paperLegal")}</option>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs">{t('pageSetup.orientation')}</Label>
-                  <Select value={layout.orientation} onChange={(e) => setLayout((l) => ({ ...l, orientation: e.target.value as 'portrait' | 'landscape' }))}>
-                    <option value="landscape">{t('pageSetup.landscape')}</option>
-                    <option value="portrait">{t('pageSetup.portrait')}</option>
+                  <Label className="text-xs">{t("pageSetup.orientation")}</Label>
+                  <Select
+                    value={layout.orientation}
+                    onChange={(e) =>
+                      setLayout((l) => ({
+                        ...l,
+                        orientation: e.target.value as "portrait" | "landscape",
+                      }))
+                    }
+                  >
+                    <option value="landscape">{t("pageSetup.landscape")}</option>
+                    <option value="portrait">{t("pageSetup.portrait")}</option>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs">{t('pageSetup.density')}</Label>
-                  <Select value={layout.density} onChange={(e) => setLayout((l) => ({ ...l, density: e.target.value as ReportLayoutConfig['density'] }))}>
-                    <option value="standard">{t('pageSetup.densityStandard')}</option>
-                    <option value="compact">{t('pageSetup.densityCompact')}</option>
+                  <Label className="text-xs">{t("pageSetup.density")}</Label>
+                  <Select
+                    value={layout.density}
+                    onChange={(e) =>
+                      setLayout((l) => ({
+                        ...l,
+                        density: e.target.value as ReportLayoutConfig["density"],
+                      }))
+                    }
+                  >
+                    <option value="standard">{t("pageSetup.densityStandard")}</option>
+                    <option value="compact">{t("pageSetup.densityCompact")}</option>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs">{t('pageSetup.marginMm')}</Label>
+                  <Label className="text-xs">{t("pageSetup.marginMm")}</Label>
                   <Input
                     type="number"
                     min={5}
                     max={30}
                     value={layout.marginMm}
-                    onChange={(e) => setLayout((l) => ({ ...l, marginMm: Math.min(Math.max(Number(e.target.value) || 15, 5), 30) }))}
+                    onChange={(e) =>
+                      setLayout((l) => ({
+                        ...l,
+                        marginMm: Math.min(Math.max(Number(e.target.value) || 15, 5), 30),
+                      }))
+                    }
                   />
                 </div>
               </div>
@@ -633,9 +746,14 @@ export function ReportBuilder({
                   type="checkbox"
                   className="h-4 w-4 rounded border-slate-300 accent-teal-600"
                   checked={layout.showSummary !== false}
-                  onChange={(event) => setLayout((current) => ({ ...current, showSummary: event.currentTarget.checked }))}
+                  onChange={(event) =>
+                    setLayout((current) => ({
+                      ...current,
+                      showSummary: event.currentTarget.checked,
+                    }))
+                  }
                 />
-                {t('pageSetup.showSummary')}
+                {t("pageSetup.showSummary")}
               </label>
             </div>
           )}
@@ -644,9 +762,16 @@ export function ReportBuilder({
         {/* --- live paper preview (2/3) --- */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('livePreview')}</h2>
-            <Button variant="outline" size="sm" disabled={previewing} onClick={() => runPreview(query)}>
-              <Play size={14} /> {previewing ? tk('running') : tc('actions.refresh')}
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {t("livePreview")}
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={previewing}
+              onClick={() => runPreview(query)}
+            >
+              <Play size={14} /> {previewing ? tk("running") : tc("actions.refresh")}
             </Button>
           </div>
           {previewError ? (
@@ -655,17 +780,17 @@ export function ReportBuilder({
             </div>
           ) : paper ? (
             <div className="rounded-xl bg-slate-100/70 p-4 sm:p-6 dark:bg-slate-950/40">
-              <PaperView company={company} data={paper} emptyLabel={tk('resultView.noRows')} />
+              <PaperView company={company} data={paper} emptyLabel={tk("resultView.noRows")} />
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {previewing ? t('runningPreview') : t('previewEmptyHint')}
+              {previewing ? t("runningPreview") : t("previewEmptyHint")}
             </div>
           )}
         </div>
       </div>
     </DetailPageLayout>
-  )
+  );
 }
 
 // RowsConfig + SummarizeConfig live in ../../../query-config and are shared with

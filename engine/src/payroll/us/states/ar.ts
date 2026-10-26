@@ -24,12 +24,20 @@ import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, rate6, U } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, certificateFlag, type PayrollCertificate,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import {
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -62,17 +70,19 @@ const AR_EDITIONS_BY_YEAR: Record<number, ArYearRates> = {
   [AR_RATES_2026.year]: AR_RATES_2026,
 };
 
-export const AR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Arkansas Act 2 of the First Extraordinary Session, 2026",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Arkansas Act 2 of the First Extraordinary Session, 2026, §1, amending "
-    + "Ark. Code §26-51-201(a)(4), effective for tax years beginning 01/01/2026; "
-    + "2026 withholding formula for the $2,470 standard deduction and $29 credit",
-  status: "published",
-  region: "AR",
-}];
+export const AR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Arkansas Act 2 of the First Extraordinary Session, 2026",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Arkansas Act 2 of the First Extraordinary Session, 2026, §1, amending " +
+      "Ark. Code §26-51-201(a)(4), effective for tax years beginning 01/01/2026; " +
+      "2026 withholding formula for the $2,470 standard deduction and $29 credit",
+    status: "published",
+    region: "AR",
+  },
+];
 
 /** Round half-up to the nearest whole dollar — Step 3 "round that result". */
 export function arRoundToDollar(units: bigint): bigint {
@@ -107,11 +117,12 @@ function arBracket(income: bigint): ArBracket {
   if (income <= U("5599")) return { through: "5599", rate: pctToRate("0"), adjustment: "0" };
   if (income <= U("11199")) return { through: "11199", rate: pctToRate("2"), adjustment: "111.98" };
   if (income <= U("15999")) return { through: "15999", rate: pctToRate("3"), adjustment: "223.97" };
-  if (income <= U("26399")) return { through: "26399", rate: pctToRate("3.4"), adjustment: "287.97" };
-  if (income <= U("94700")) return { through: "94700", rate: pctToRate("3.7"), adjustment: "367.20" };
-  const statutoryAdjustment = income <= U("97600")
-    ? U("290") - U("10") * BigInt((income - U("94701")) / U("100"))
-    : 0n;
+  if (income <= U("26399"))
+    return { through: "26399", rate: pctToRate("3.4"), adjustment: "287.97" };
+  if (income <= U("94700"))
+    return { through: "94700", rate: pctToRate("3.7"), adjustment: "367.20" };
+  const statutoryAdjustment =
+    income <= U("97600") ? U("290") - U("10") * BigInt((income - U("94701")) / U("100")) : 0n;
   return {
     through: null,
     rate: pctToRate("3.7"),
@@ -261,14 +272,14 @@ export const AR_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "AR" },
   purpose: "withholding",
   citation:
-    "Arkansas Department of Finance and Administration, Withholding Tax Formula "
-    + "Method, Effective 01/01/2026; Employer's Instructions, Effective 01/01/2026; "
-    + "Form AR4EC / AR4ECSP / AR-TX-4EC",
+    "Arkansas Department of Finance and Administration, Withholding Tax Formula " +
+    "Method, Effective 01/01/2026; Employer's Instructions, Effective 01/01/2026; " +
+    "Form AR4EC / AR4ECSP / AR-TX-4EC",
   summary:
-    "Sets the number of Arkansas withholding exemptions. A missing AR4EC is "
-    + "withheld at zero exemptions (nothing claimed on the certificate). It also "
-    + "records the low-income election and status. AR4ECSP and Texarkana "
-    + "AR-TX-4EC are the exempt paths.",
+    "Sets the number of Arkansas withholding exemptions. A missing AR4EC is " +
+    "withheld at zero exemptions (nothing claimed on the certificate). It also " +
+    "records the low-income election and status. AR4ECSP and Texarkana " +
+    "AR-TX-4EC are the exempt paths.",
   storage: "certificate_rows",
   fields: [
     {
@@ -279,9 +290,9 @@ export const AR_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each exemption is a $29.00 annual personal tax credit subtracted AFTER "
-        + "the rounded annual gross tax. Default zero is a blank AR4EC — the "
-        + "publication multiplies exemptions claimed, and none claimed is zero.",
+        "Each exemption is a $29.00 annual personal tax credit subtracted AFTER " +
+        "the rounded annual gross tax. Default zero is a blank AR4EC — the " +
+        "publication multiplies exemptions claimed, and none claimed is zero.",
     },
     {
       key: "additional_per_period",
@@ -298,8 +309,8 @@ export const AR_CERTIFICATE: PayrollCertificate = {
       kind: "flag",
       default: "false",
       help:
-        "Record the employee's signed Yes/No election. A Yes uses the NFC low-income "
-        + "tax credit formula for the elected filing status and claimed exemptions.",
+        "Record the employee's signed Yes/No election. A Yes uses the NFC low-income " +
+        "tax credit formula for the elected filing status and claimed exemptions.",
     },
     {
       key: "filing_status",
@@ -311,18 +322,18 @@ export const AR_CERTIFICATE: PayrollCertificate = {
         { value: "head_household", label: "Head of Household" },
       ],
       help:
-        "Required with a low-income election. NFC's 2026 credit formula uses this "
-        + "status and the AR4EC exemption count to select its income band.",
+        "Required with a low-income election. NFC's 2026 credit formula uses this " +
+        "status and the AR4EC exemption count to select its income band.",
     },
     {
       key: "exempt",
       label: "AR4ECSP or AR-TX-4EC — Exempt from Arkansas withholding",
       kind: "flag",
       help:
-        "Form AR4ECSP is the special withholding exemption certificate. Form "
-        + "AR-TX-4EC is the Texarkana border-city exemption. A current exempt "
-        + "flag withholds zero. Dating the year-end lapse of AR-TX-4EC is "
-        + "certificate administration.",
+        "Form AR4ECSP is the special withholding exemption certificate. Form " +
+        "AR-TX-4EC is the Texarkana border-city exemption. A current exempt " +
+        "flag withholds zero. Dating the year-end lapse of AR-TX-4EC is " +
+        "certificate administration.",
     },
   ],
 };
@@ -343,6 +354,6 @@ export const AR_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Arkansas Act 2 of the First Extraordinary Session, 2026; "
-    + "Employer's Instructions, Effective 01/01/2026; Form AR4EC",
+    "Arkansas Act 2 of the First Extraordinary Session, 2026; " +
+    "Employer's Instructions, Effective 01/01/2026; Form AR4EC",
 };

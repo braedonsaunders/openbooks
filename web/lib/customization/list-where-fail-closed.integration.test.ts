@@ -18,35 +18,65 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const KINDS = ["vendor_bill", "vendor_credit"] as const;
 const view = { ...defaultListView("vendor_bill"), filters: [] };
 
-async function countRows(orgId: string, adhoc: Parameters<typeof documentWhere>[2]): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+async function countRows(
+  orgId: string,
+  adhoc: Parameters<typeof documentWhere>[2],
+): Promise<number> {
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      where ${documentWhere([...KINDS], { ...view, filters: [] }, adhoc, orgId, null)}`, "objects");
+      where ${documentWhere([...KINDS], { ...view, filters: [] }, adhoc, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test("malformed list date and reference filters match nothing instead of throwing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const id = randomUUID();
-    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+test(
+  "malformed list date and reference filters match nothing instead of throwing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const id = randomUUID();
+      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
       values (${id}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-F', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`);
-    assert.equal(await countRows(org.orgId, {}), 1, "unfiltered list sees the bill");
-    assert.equal(await countRows(org.orgId, { vendor: "not-a-uuid" }), 0, "malformed vendor matches nothing");
-    assert.equal(await countRows(org.orgId, { from: "not-a-date" }), 0, "malformed from matches nothing");
-    assert.equal(await countRows(org.orgId, { to: "2026-02-30" }), 0, "impossible to matches nothing");
-    assert.equal(
-      await countRows(org.orgId, { filters: { party_id: "not-a-uuid" } }),
-      0,
-      "malformed party filter matches nothing",
-    );
-    // Well-formed values keep working: own vendor matches, unknown vendor is empty.
-    assert.equal(await countRows(org.orgId, { vendor: org.vendorId }), 0, "unrelated own-org vendor is empty");
-    assert.equal(await countRows(org.orgId, { from: "2020-01-01", to: "2030-01-01" }), 1, "covering range sees the bill");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.equal(await countRows(org.orgId, {}), 1, "unfiltered list sees the bill");
+      assert.equal(
+        await countRows(org.orgId, { vendor: "not-a-uuid" }),
+        0,
+        "malformed vendor matches nothing",
+      );
+      assert.equal(
+        await countRows(org.orgId, { from: "not-a-date" }),
+        0,
+        "malformed from matches nothing",
+      );
+      assert.equal(
+        await countRows(org.orgId, { to: "2026-02-30" }),
+        0,
+        "impossible to matches nothing",
+      );
+      assert.equal(
+        await countRows(org.orgId, { filters: { party_id: "not-a-uuid" } }),
+        0,
+        "malformed party filter matches nothing",
+      );
+      // Well-formed values keep working: own vendor matches, unknown vendor is empty.
+      assert.equal(
+        await countRows(org.orgId, { vendor: org.vendorId }),
+        0,
+        "unrelated own-org vendor is empty",
+      );
+      assert.equal(
+        await countRows(org.orgId, { from: "2020-01-01", to: "2030-01-01" }),
+        1,
+        "covering range sees the bill",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("free-text search matches the storefront reference and source", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -58,83 +88,109 @@ test("free-text search matches the storefront reference and source", { skip: !DB
         (${plain}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-P', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb, null, null),
         (${linked}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-L', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb, 'SHOP-7701', 'shopify')`);
     assert.equal(await countRows(org.orgId, { q: "BILL-" }), 2, "number search still sees both");
-    assert.equal(await countRows(org.orgId, { q: "SHOP-7701" }), 1, "reference search finds the linked bill");
-    assert.equal(await countRows(org.orgId, { q: "shopify" }), 1, "source search finds the linked bill");
-    assert.equal(await countRows(org.orgId, { q: "SHOP-7702" }), 0, "an unknown reference is empty, not an error");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("malformed saved-view structured filters match nothing instead of throwing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const id = randomUUID();
-    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
-      values (${id}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-F', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`);
-    const run = async (filters: FilterClause[]): Promise<number> => {
-      const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
-          left join parties p on p.id = d.party_id and p.org_id = d.org_id
-          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`, "objects");
-      return rows[0]!.n;
-    };
     assert.equal(
-      await run([{ key: "party_id", operator: "eq", value: "not-a-uuid" }]),
-      0,
-      "malformed saved party filter matches nothing",
-    );
-    assert.equal(
-      await run([{ key: "document_date", operator: "gte", value: "not-a-date" }]),
-      0,
-      "malformed saved date filter matches nothing",
-    );
-    assert.equal(
-      await run([{ key: "status", operator: "eq", value: "draft" }]),
+      await countRows(org.orgId, { q: "SHOP-7701" }),
       1,
-      "well-formed saved filters keep working",
+      "reference search finds the linked bill",
+    );
+    assert.equal(
+      await countRows(org.orgId, { q: "shopify" }),
+      1,
+      "source search finds the linked bill",
+    );
+    assert.equal(
+      await countRows(org.orgId, { q: "SHOP-7702" }),
+      0,
+      "an unknown reference is empty, not an error",
     );
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("saved custom-field filters restrict the document list instead of dropping", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const west = randomUUID();
-    const east = randomUUID();
-    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+test(
+  "malformed saved-view structured filters match nothing instead of throwing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const id = randomUUID();
+      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+      values (${id}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-F', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`);
+      const run = async (filters: FilterClause[]): Promise<number> => {
+        const rows = await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from documents d
+          left join parties p on p.id = d.party_id and p.org_id = d.org_id
+          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`,
+          "objects",
+        );
+        return rows[0]!.n;
+      };
+      assert.equal(
+        await run([{ key: "party_id", operator: "eq", value: "not-a-uuid" }]),
+        0,
+        "malformed saved party filter matches nothing",
+      );
+      assert.equal(
+        await run([{ key: "document_date", operator: "gte", value: "not-a-date" }]),
+        0,
+        "malformed saved date filter matches nothing",
+      );
+      assert.equal(
+        await run([{ key: "status", operator: "eq", value: "draft" }]),
+        1,
+        "well-formed saved filters keep working",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "saved custom-field filters restrict the document list instead of dropping",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const west = randomUUID();
+      const east = randomUUID();
+      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
       values
         (${west}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-W', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"west"}'}::jsonb),
         (${east}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-E', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"east"}'}::jsonb)`);
-    const run = async (filters: FilterClause[]): Promise<number> => {
-      const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+      const run = async (filters: FilterClause[]): Promise<number> => {
+        const rows = await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
-          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`, "objects");
-      return rows[0]!.n;
-    };
-    assert.equal(await run([]), 2, "unfiltered list sees both bills");
-    assert.equal(
-      await run([{ key: "cf_region", operator: "eq", value: "west" }]),
-      1,
-      "eq on a custom field must AND, not drop",
-    );
-    assert.equal(
-      await run([{ key: "cf_region", operator: "eq", value: "south" }]),
-      0,
-      "a non-matching custom-field filter must empty the list, not return the tenant",
-    );
-    assert.equal(
-      await run([{ key: "cf_region", operator: "in", value: ["west", "east"] }]),
-      2,
-      "in on a custom field keeps matching rows",
-    );
-    assert.equal(
-      await run([{ key: "cf_region", operator: "between", value: "east", to: "west" }]),
-      0,
-      "an untyped range operator fails closed to empty, never drops",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`,
+          "objects",
+        );
+        return rows[0]!.n;
+      };
+      assert.equal(await run([]), 2, "unfiltered list sees both bills");
+      assert.equal(
+        await run([{ key: "cf_region", operator: "eq", value: "west" }]),
+        1,
+        "eq on a custom field must AND, not drop",
+      );
+      assert.equal(
+        await run([{ key: "cf_region", operator: "eq", value: "south" }]),
+        0,
+        "a non-matching custom-field filter must empty the list, not return the tenant",
+      );
+      assert.equal(
+        await run([{ key: "cf_region", operator: "in", value: ["west", "east"] }]),
+        2,
+        "in on a custom field keeps matching rows",
+      );
+      assert.equal(
+        await run([{ key: "cf_region", operator: "between", value: "east", to: "west" }]),
+        0,
+        "an untyped range operator fails closed to empty, never drops",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

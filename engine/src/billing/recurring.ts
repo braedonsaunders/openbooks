@@ -6,7 +6,12 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { DOCUMENT_KINDS } from "../periods/period-policy.ts";
 import { DOC_KIND_FEATURE } from "../records/document-kind-features.ts";
-import { addCalendarDays, businessToday, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
+import {
+  addCalendarDays,
+  businessToday,
+  calendarDaysBetween,
+  parseIsoDate,
+} from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
@@ -50,16 +55,13 @@ import { computeNextRunAt } from "../scripting/scripting.ts";
  * never restores next_run_on.
  */
 
-export type Cadence =
-  | "weekly"
-  | "biweekly"
-  | "monthly"
-  | "quarterly"
-  | "annually"
-  | "custom_cron";
+export type Cadence = "weekly" | "biweekly" | "monthly" | "quarterly" | "annually" | "custom_cron";
 
 export class RecurringError extends Error {
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
     super(message);
     this.name = "RecurringError";
   }
@@ -96,7 +98,12 @@ export interface PeriodTokenContext {
 
 function formatTokenDate(isoDate: string, locale: string): string {
   const date = parseIsoDate(isoDate);
-  return date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+  return date.toLocaleDateString(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function formatTokenMonth(isoDate: string, locale: string): string {
@@ -132,9 +139,17 @@ export function findUnknownPeriodTokens(text: string): string[] {
 }
 
 /** The org's configured locale for customer-facing text, English unless set. */
-export async function orgDefaultLocale(runner: Pick<typeof db, "execute">, orgId: string): Promise<string> {
-  const row = (await runner.execute<{ locale: string | null }>(sql`
-    select settings->>'defaultLocale' as "locale" from orgs where id = ${orgId}`, "objects"))[0];
+export async function orgDefaultLocale(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+): Promise<string> {
+  const row = (
+    await runner.execute<{ locale: string | null }>(
+      sql`
+    select settings->>'defaultLocale' as "locale" from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   const locale = (row?.locale ?? "").trim();
   return locale || "en";
 }
@@ -150,13 +165,23 @@ export async function assertTemplateTokensKnown(
   orgId: string,
   templateId: string,
 ): Promise<void> {
-  const lines = await runner.execute<{ description: string | null }>(sql`
-    select description from document_lines where org_id = ${orgId} and document_id = ${templateId}`, "objects");
-  const memo = (await runner.execute<{ memo: string | null }>(sql`
-    select memo from documents where id = ${templateId} and org_id = ${orgId}`, "objects"))[0]?.memo ?? null;
+  const lines = await runner.execute<{ description: string | null }>(
+    sql`
+    select description from document_lines where org_id = ${orgId} and document_id = ${templateId}`,
+    "objects",
+  );
+  const memo =
+    (
+      await runner.execute<{ memo: string | null }>(
+        sql`
+    select memo from documents where id = ${templateId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.memo ?? null;
   const unknown = new Set<string>();
   for (const row of lines) {
-    if (row.description) for (const token of findUnknownPeriodTokens(row.description)) unknown.add(token);
+    if (row.description)
+      for (const token of findUnknownPeriodTokens(row.description)) unknown.add(token);
   }
   if (memo) for (const token of findUnknownPeriodTokens(memo)) unknown.add(token);
   if (unknown.size > 0) {
@@ -184,14 +209,16 @@ export interface RunTokenSample {
 export async function previewRunTokens(
   runner: Pick<typeof db, "execute">,
   orgId: string,
-  input: { scheduleId: string } | {
-    templateId: string;
-    cadence: Cadence;
-    cron: string | null;
-    nextRunOn: string;
-    endsOn: string | null;
-    maxOccurrences?: number | null;
-  },
+  input:
+    | { scheduleId: string }
+    | {
+        templateId: string;
+        cadence: Cadence;
+        cron: string | null;
+        nextRunOn: string;
+        endsOn: string | null;
+        maxOccurrences?: number | null;
+      },
   opts?: { locale?: string },
 ): Promise<RunTokenSample | null> {
   let templateId: string;
@@ -203,15 +230,26 @@ export async function previewRunTokens(
   let anchorDay: number | null;
   let maxOccurrences: number | null;
   if ("scheduleId" in input) {
-    const row = (await runner.execute<{
-      templateId: string; cadence: string; cron: string | null; nextRunOn: string;
-      endsOn: string | null; runCount: number; anchorDay: number | null; maxOccurrences: number | null;
-    }>(sql`
+    const row = (
+      await runner.execute<{
+        templateId: string;
+        cadence: string;
+        cron: string | null;
+        nextRunOn: string;
+        endsOn: string | null;
+        runCount: number;
+        anchorDay: number | null;
+        maxOccurrences: number | null;
+      }>(
+        sql`
       select template_document_id as "templateId", cadence, cron,
              next_run_on::text as "nextRunOn", ends_on::text as "endsOn",
              run_count as "runCount", anchor_day as "anchorDay", max_occurrences as "maxOccurrences"
         from recurring_schedules where id = ${input.scheduleId} and org_id = ${orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) return null;
     templateId = row.templateId;
     cadence = row.cadence as Cadence;
@@ -231,17 +269,15 @@ export async function previewRunTokens(
   const periodEnd = advanceCadence(nextRunOn, cadence, cron, undefined, anchorDay);
   const sequenceNumber = runCount + 1;
   const endsTotal = endsOn
-    ? sequenceNumber + pendingOccurrences(
-        { cadence, cron, nextRunOn: periodEnd, endsOn, anchorDay },
-        endsOn,
-      ).occurrences.length
+    ? sequenceNumber +
+      pendingOccurrences({ cadence, cron, nextRunOn: periodEnd, endsOn, anchorDay }, endsOn)
+        .occurrences.length
     : null;
   // The instalment count is whichever bound stops generation first: the
   // occurrence limit wins over a longer-dated end date, and the end date
   // wins over a roomier limit. Neither bound means an open-ended schedule.
-  const totalOccurrences = maxOccurrences != null
-    ? Math.min(maxOccurrences, endsTotal ?? maxOccurrences)
-    : endsTotal;
+  const totalOccurrences =
+    maxOccurrences != null ? Math.min(maxOccurrences, endsTotal ?? maxOccurrences) : endsTotal;
   const locale = opts?.locale?.trim() || (await orgDefaultLocale(runner, orgId));
   const ctx: PeriodTokenContext = {
     periodStart: nextRunOn,
@@ -250,15 +286,27 @@ export async function previewRunTokens(
     totalOccurrences,
     locale,
   };
-  const line = (await runner.execute<{ description: string | null }>(sql`
+  const line = (
+    await runner.execute<{ description: string | null }>(
+      sql`
     select description from document_lines
      where org_id = ${orgId} and document_id = ${templateId}
-     order by line_number limit 1`, "objects"))[0];
-  const memo = (await runner.execute<{ memo: string | null }>(sql`
-    select memo from documents where id = ${templateId} and org_id = ${orgId}`, "objects"))[0]?.memo ?? null;
+     order by line_number limit 1`,
+      "objects",
+    )
+  )[0];
+  const memo =
+    (
+      await runner.execute<{ memo: string | null }>(
+        sql`
+    select memo from documents where id = ${templateId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.memo ?? null;
   return {
     occurrenceOn: nextRunOn,
-    description: typeof line?.description === "string" ? resolvePeriodTokens(line.description, ctx) : null,
+    description:
+      typeof line?.description === "string" ? resolvePeriodTokens(line.description, ctx) : null,
     memo: typeof memo === "string" ? resolvePeriodTokens(memo, ctx) : null,
   };
 }
@@ -267,7 +315,10 @@ export async function previewRunTokens(
  * A standing intercompany journal must not act in a hidden entity merely
  * because its header is visible. Template parent locks fence line edits. */
 export function recurringTemplateScopeFilter(
-  orgId: string, documentId: SQL, subsidiaryId: SQL, allowed: ReadonlySet<string> | null,
+  orgId: string,
+  documentId: SQL,
+  subsidiaryId: SQL,
+  allowed: ReadonlySet<string> | null,
 ): SQL {
   if (allowed === null) return sql``;
   if (!allowed.size) return sql` and false`;
@@ -308,7 +359,11 @@ function toIso(d: Date): string {
  * day anchors the step (the historical behavior).
  */
 export function advanceCadence(
-  isoDate: string, cadence: Cadence, cron?: string | null, from?: Date, anchorDay?: number | null,
+  isoDate: string,
+  cadence: Cadence,
+  cron?: string | null,
+  from?: Date,
+  anchorDay?: number | null,
 ): string {
   try {
     const base = parseIsoDate(isoDate);
@@ -320,7 +375,8 @@ export function advanceCadence(
       // tomorrow. Every occurrence must advance strictly beyond this date.
       const nextDay = parseIsoDate(addCalendarDays(isoDate, 1));
       const next = computeNextRunAt(cron ?? "", from ?? new Date(nextDay.getTime() - 1));
-      if (!next || toIso(next) <= isoDate) throw new RecurringError("invalid recurring cron or non-advancing occurrence");
+      if (!next || toIso(next) <= isoDate)
+        throw new RecurringError("invalid recurring cron or non-advancing occurrence");
       return toIso(next);
     }
     if (!["monthly", "quarterly", "annually"].includes(cadence)) {
@@ -337,7 +393,9 @@ export function advanceCadence(
     );
   } catch (error) {
     if (error instanceof RecurringError) throw error;
-    throw new RecurringError("invalid recurring calendar date or cadence outside the supported date range");
+    throw new RecurringError(
+      "invalid recurring calendar date or cadence outside the supported date range",
+    );
   }
 }
 
@@ -413,16 +471,23 @@ async function findOccurrenceDocument(
   scheduleId: string,
   occurrenceOn: string,
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean } | null> {
-  const prior = (await db.execute<{ id: string; documentNumber: string; status: string }>(sql`
+  const prior = await db.execute<{ id: string; documentNumber: string; status: string }>(
+    sql`
     select d.id, d.document_number as "documentNumber", d.status
       from recurring_occurrence_documents g
       join documents d on d.id = g.document_id and d.org_id = g.org_id
      where g.org_id = ${orgId} and g.schedule_id = ${scheduleId} and g.occurrence_on = ${occurrenceOn}
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = prior[0];
   if (!row) return null;
-  return { documentId: row.id, documentNumber: row.documentNumber, posted: row.status === "posted" };
+  return {
+    documentId: row.id,
+    documentNumber: row.documentNumber,
+    posted: row.status === "posted",
+  };
 }
 
 /**
@@ -442,17 +507,17 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
 
   // bypass: scheduler-tick — the scan finds due recurring schedules across every organization.
   const due = await withBypass(async () => {
-    return (await db.execute<{
-        id: string;
-        orgId: string;
-        templateId: string;
-        kind: string;
-        cadence: Cadence;
-        cron: string | null;
-        nextRunOn: string;
-        endsOn: string | null;
-        autoPost: boolean;
-      }>(sql`
+    return await db.execute<{
+      id: string;
+      orgId: string;
+      templateId: string;
+      kind: string;
+      cadence: Cadence;
+      cron: string | null;
+      nextRunOn: string;
+      endsOn: string | null;
+      autoPost: boolean;
+    }>(sql`
       select rs.id, rs.org_id as "orgId", rs.template_document_id as "templateId",
              d.kind as "kind",
              rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
@@ -461,7 +526,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
        where rs.is_active and rs.next_run_on <= ${scanCutoff}
        order by rs.next_run_on
-    `));
+    `);
   });
 
   for (const s of due.rows) {
@@ -484,7 +549,12 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     // re-evaluates the WHERE against the advanced value and claims zero rows.
     // Deactivating a final occurrence shares the same fate — it lands only if
     // the document did.
-    let gen: { documentId: string; documentNumber: string; posted: boolean; created: boolean } | null = null;
+    let gen: {
+      documentId: string;
+      documentNumber: string;
+      posted: boolean;
+      created: boolean;
+    } | null = null;
     try {
       gen = await claimAndGenerateOccurrence(s.orgId, s.id, occurrenceDate, {
         autoPost: null,
@@ -510,7 +580,10 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     result.generated += 1;
     if (gen.posted) result.posted += 1;
     result.documents.push({
-      scheduleId: s.id, documentId: gen.documentId, documentNumber: gen.documentNumber, posted: gen.posted,
+      scheduleId: s.id,
+      documentId: gen.documentId,
+      documentNumber: gen.documentNumber,
+      posted: gen.posted,
     });
     // Success bookkeeping deliberately lives OUTSIDE the catch above. By this
     // point the occurrence durably produced exactly one document (the
@@ -540,20 +613,38 @@ async function claimAndGenerateOccurrence(
   scheduleId: string,
   occurrenceDate: string,
   opts: { autoPost: boolean | null; actorId: string | null; runSource: RecurringRunSource },
-): Promise<{ documentId: string; documentNumber: string; posted: boolean; created: boolean } | null> {
+): Promise<{
+  documentId: string;
+  documentNumber: string;
+  posted: boolean;
+  created: boolean;
+} | null> {
   return withOrg(orgId, async () => {
-    const current = (await db.execute<{
-      templateId: string; autoPost: boolean; isActive: boolean; nextRunOn: string;
-      cadence: Cadence; cron: string | null; endsOn: string | null; anchorDay: number;
-      runCount: number; maxOccurrences: number | null; skippedRunOns: string[] | null;
-    }>(sql`
+    const current = (
+      await db.execute<{
+        templateId: string;
+        autoPost: boolean;
+        isActive: boolean;
+        nextRunOn: string;
+        cadence: Cadence;
+        cron: string | null;
+        endsOn: string | null;
+        anchorDay: number;
+        runCount: number;
+        maxOccurrences: number | null;
+        skippedRunOns: string[] | null;
+      }>(
+        sql`
       select template_document_id as "templateId", auto_post as "autoPost", is_active as "isActive",
              next_run_on::text as "nextRunOn", cadence, cron, ends_on::text as "endsOn",
              coalesce(anchor_day, extract(day from next_run_on)::int) as "anchorDay",
              run_count as "runCount", max_occurrences as "maxOccurrences",
              skipped_run_ons::text[] as "skippedRunOns"
         from recurring_schedules where id = ${scheduleId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!current?.isActive || current.nextRunOn !== occurrenceDate) return null;
     if (current.endsOn && occurrenceDate > current.endsOn) {
       throw new RecurringError("recurring occurrence is after the schedule end date");
@@ -561,7 +652,13 @@ async function claimAndGenerateOccurrence(
     // Month-end starts keep their anchor day: a schedule anchored on the
     // 31st steps Feb 28 → Mar 31, never Mar 28. Anchor-less rows fall back
     // to the occurrence day (the historical behavior).
-    const advanced = advanceCadence(occurrenceDate, current.cadence, current.cron, undefined, current.anchorDay);
+    const advanced = advanceCadence(
+      occurrenceDate,
+      current.cadence,
+      current.cron,
+      undefined,
+      current.anchorDay,
+    );
     const stillActive = !current.endsOn || advanced <= current.endsOn;
     // A season the operator switched off never generates: advance past it
     // with no document and no counter, exactly as the catch-up run does.
@@ -586,14 +683,17 @@ async function claimAndGenerateOccurrence(
       `);
       return null;
     }
-    const claimed = (await db.execute<{ id: string }>(sql`
+    const claimed = await db.execute<{ id: string }>(
+      sql`
       update recurring_schedules
          set next_run_on = ${advanced},
              is_active = ${stillActive},
              last_run_at = now()
        where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${occurrenceDate}
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!claimed.length) return null; // another worker won it
     // Date the document with its OCCURRENCE date, not today: after a
     // scheduler outage (or for a back-dated schedule) the catch-up
@@ -601,12 +701,18 @@ async function claimAndGenerateOccurrence(
     // occurrences all dated September would book into the wrong period.
     // A closed occurrence period refuses through postDocument exactly
     // like a subscription billing into a closed period does.
-    return generateFromTemplate(orgId, current.templateId, occurrenceDate, opts.autoPost ?? current.autoPost, {
-      scheduleId,
-      occurrenceOn: occurrenceDate,
-      actorId: opts.actorId,
-      runSource: opts.runSource,
-    });
+    return generateFromTemplate(
+      orgId,
+      current.templateId,
+      occurrenceDate,
+      opts.autoPost ?? current.autoPost,
+      {
+        scheduleId,
+        occurrenceOn: occurrenceDate,
+        actorId: opts.actorId,
+        runSource: opts.runSource,
+      },
+    );
   });
 }
 
@@ -667,7 +773,11 @@ const CATCH_UP_WALK_LIMIT = 1000;
  */
 export function pendingOccurrences(
   spec: {
-    cadence: Cadence; cron: string | null; nextRunOn: string; endsOn: string | null; anchorDay?: number | null;
+    cadence: Cadence;
+    cron: string | null;
+    nextRunOn: string;
+    endsOn: string | null;
+    anchorDay?: number | null;
     skippedRunOns?: readonly string[] | null;
     /** Billable occurrences still allowed (the occurrence limit minus run_count); null means unlimited. */
     remaining?: number | null;
@@ -680,7 +790,8 @@ export function pendingOccurrences(
   for (let i = 0; i < CATCH_UP_WALK_LIMIT; i++) {
     if (date > asOf) return { occurrences, truncated: false };
     if (spec.endsOn && date > spec.endsOn) return { occurrences, truncated: false };
-    if (spec.remaining != null && occurrences.length >= spec.remaining) return { occurrences, truncated: false };
+    if (spec.remaining != null && occurrences.length >= spec.remaining)
+      return { occurrences, truncated: false };
     if (!skipped.has(date)) occurrences.push(date);
     date = advanceCadence(date, spec.cadence, spec.cron, undefined, spec.anchorDay ?? null);
   }
@@ -688,7 +799,10 @@ export function pendingOccurrences(
 }
 
 /** Billable occurrences left under an occurrence limit; null means unlimited. */
-export function remainingOccurrences(maxOccurrences: number | null, runCount: number): number | null {
+export function remainingOccurrences(
+  maxOccurrences: number | null,
+  runCount: number,
+): number | null {
   if (maxOccurrences == null) return null;
   return Math.max(0, maxOccurrences - runCount);
 }
@@ -751,11 +865,15 @@ export async function runScheduleCatchUp(
   const selectedList = [...new Set(input.selectedDates ?? [])];
   if (input.mode === "selected") {
     if (selectedList.length === 0) {
-      throw new RecurringError("selected catch-up needs at least one period date — choose from the preview list");
+      throw new RecurringError(
+        "selected catch-up needs at least one period date — choose from the preview list",
+      );
     }
     for (const selected of selectedList) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(selected)) {
-        throw new RecurringError(`selected catch-up date ${selected} is not a calendar date (YYYY-MM-DD)`);
+        throw new RecurringError(
+          `selected catch-up date ${selected} is not a calendar date (YYYY-MM-DD)`,
+        );
       }
     }
   } else if (selectedList.length > 0) {
@@ -769,24 +887,43 @@ export async function runScheduleCatchUp(
   }
   const asOf = input.asOf ?? (await withOrg(orgId, () => businessToday(orgId)));
   const results: CatchUpResultRow[] = [];
-  const finish = (stopped: CatchUpOutcome["stopped"], error?: string): CatchUpOutcome =>
-    ({ results, stopped, ...(error ? { error } : {}) });
+  const finish = (stopped: CatchUpOutcome["stopped"], error?: string): CatchUpOutcome => ({
+    results,
+    stopped,
+    ...(error ? { error } : {}),
+  });
   let outcome: CatchUpOutcome | null = null;
   let selectedValidated = false;
   let firstPass = true;
   for (;;) {
-    const row = await withOrgContext(orgId, async () => (await db.execute<{
-      templateId: string; isActive: boolean; nextRunOn: string; endsOn: string | null;
-      cadence: Cadence; cron: string | null; anchorDay: number | null;
-      runCount: number; maxOccurrences: number | null; skippedRunOns: string[] | null;
-    }>(sql`
+    const row = await withOrgContext(
+      orgId,
+      async () =>
+        (
+          await db.execute<{
+            templateId: string;
+            isActive: boolean;
+            nextRunOn: string;
+            endsOn: string | null;
+            cadence: Cadence;
+            cron: string | null;
+            anchorDay: number | null;
+            runCount: number;
+            maxOccurrences: number | null;
+            skippedRunOns: string[] | null;
+          }>(
+            sql`
       select template_document_id as "templateId", is_active as "isActive",
              next_run_on::text as "nextRunOn", ends_on::text as "endsOn",
              cadence, cron, anchor_day as "anchorDay",
              run_count as "runCount", max_occurrences as "maxOccurrences",
              skipped_run_ons::text[] as "skippedRunOns"
         from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
-    `, "objects"))[0]);
+    `,
+            "objects",
+          )
+        )[0],
+    );
     if (!row) throw new RecurringError("recurring schedule not found", 404);
     const runCount = Number(row.runCount);
     const maxOccurrences = row.maxOccurrences == null ? null : Number(row.maxOccurrences);
@@ -794,8 +931,13 @@ export async function runScheduleCatchUp(
     const remaining = remainingOccurrences(maxOccurrences, runCount);
     const upcoming = pendingOccurrences(
       {
-        cadence: row.cadence, cron: row.cron, nextRunOn: row.nextRunOn, endsOn: row.endsOn, anchorDay: row.anchorDay,
-        skippedRunOns: [...standingSkips], remaining,
+        cadence: row.cadence,
+        cron: row.cron,
+        nextRunOn: row.nextRunOn,
+        endsOn: row.endsOn,
+        anchorDay: row.anchorDay,
+        skippedRunOns: [...standingSkips],
+        remaining,
       },
       asOf,
     );
@@ -807,28 +949,47 @@ export async function runScheduleCatchUp(
       throw new RecurringError("recurring schedule is paused — resume it to catch up");
     }
     firstPass = false;
-    const template = (await db.execute<{ kind: string }>(sql`
+    const template = (
+      await db.execute<{ kind: string }>(
+        sql`
       select d.kind from documents d
        where d.id = ${row.templateId} and d.org_id = ${orgId}
          ${recurringTemplateScopeFilter(orgId, sql`d.id`, sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!template) throw new RecurringError("recurring schedule not found", 404);
-    if (!(await isRecurringKindEnabled(orgId, template.kind))) throw new RecurringError("template document kind is disabled", 404);
+    if (!(await isRecurringKindEnabled(orgId, template.kind)))
+      throw new RecurringError("template document kind is disabled", 404);
     // Advancing past one occurrence without generating: the skip-all choice,
     // every unlisted period of a selected run, and every standing seasonal
     // skip share this unit, with the same end-date deactivation a tick
     // applies.
     const advancePast = async (target: string): Promise<boolean> => {
-      const advanced = advanceCadence(target, row.cadence, row.cron, undefined, row.anchorDay ?? null);
+      const advanced = advanceCadence(
+        target,
+        row.cadence,
+        row.cron,
+        undefined,
+        row.anchorDay ?? null,
+      );
       const stillActive = !row.endsOn || advanced <= row.endsOn;
-      const moved = await withOrg(orgId, async () => (await db.execute<{ id: string }>(sql`
+      const moved = await withOrg(
+        orgId,
+        async () =>
+          await db.execute<{ id: string }>(
+            sql`
         update recurring_schedules
            set next_run_on = ${advanced},
                is_active = ${stillActive},
                last_run_at = now()
          where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${target}
         returning id
-      `, "objects")));
+      `,
+            "objects",
+          ),
+      );
       return moved.length > 0;
     };
     // upcoming (computed above for the paused guard) is this pass's pending
@@ -843,21 +1004,36 @@ export async function runScheduleCatchUp(
       const pendingSet = new Set(pending.occurrences);
       for (const selected of selectedList) {
         if (!pendingSet.has(selected)) {
-          throw new RecurringError(`selected catch-up date ${selected} is not a pending occurrence — choose from the preview list`);
+          throw new RecurringError(
+            `selected catch-up date ${selected} is not a pending occurrence — choose from the preview list`,
+          );
         }
       }
     }
     if (pending.occurrences.length === 0) {
-      const done = await withOrgContext(orgId, async () => (await db.execute<{
-        endsOn: string | null; nextRunOn: string; runCount: number; maxOccurrences: number | null;
-      }>(sql`
+      const done = await withOrgContext(
+        orgId,
+        async () =>
+          (
+            await db.execute<{
+              endsOn: string | null;
+              nextRunOn: string;
+              runCount: number;
+              maxOccurrences: number | null;
+            }>(
+              sql`
         select ends_on::text as "endsOn", next_run_on::text as "nextRunOn",
                run_count as "runCount", max_occurrences as "maxOccurrences"
           from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
-      `, "objects"))[0]);
+      `,
+              "objects",
+            )
+          )[0],
+      );
       // An exhausted occurrence limit ends the run exactly as the end date
       // does, deactivating the schedule so the tick stays quiet too.
-      const limitReached = done?.maxOccurrences != null && Number(done.runCount) >= done.maxOccurrences;
+      const limitReached =
+        done?.maxOccurrences != null && Number(done.runCount) >= done.maxOccurrences;
       if (limitReached) {
         await withOrg(orgId, async () => {
           await db.execute(sql`
@@ -879,7 +1055,12 @@ export async function runScheduleCatchUp(
     // future skips wait for their own tick instead of advancing early.
     if (standingSkips.has(row.nextRunOn)) {
       if (!(await advancePast(row.nextRunOn))) continue; // another worker advanced it; recompute
-      results.push({ date: row.nextRunOn, status: "skipped", documentId: null, documentNumber: null });
+      results.push({
+        date: row.nextRunOn,
+        status: "skipped",
+        documentId: null,
+        documentNumber: null,
+      });
       continue;
     }
     const date = pending.occurrences[0]!;
@@ -896,7 +1077,9 @@ export async function runScheduleCatchUp(
     // An already-billed occurrence replays instead of billing again — the
     // retry path after a crash between billing and advancing, or a rewound
     // cursor — and the cursor still advances past it.
-    const already = await withOrgContext(orgId, () => findOccurrenceDocument(orgId, scheduleId, date));
+    const already = await withOrgContext(orgId, () =>
+      findOccurrenceDocument(orgId, scheduleId, date),
+    );
     if (already) {
       if (!(await advancePast(date))) continue; // another worker advanced it; recompute
       results.push({
@@ -915,7 +1098,9 @@ export async function runScheduleCatchUp(
       });
       if (!gen) {
         // Another worker won this occurrence: replay whatever it committed.
-        const replay = await withOrgContext(orgId, () => findOccurrenceDocument(orgId, scheduleId, date));
+        const replay = await withOrgContext(orgId, () =>
+          findOccurrenceDocument(orgId, scheduleId, date),
+        );
         results.push({
           date,
           status: "replayed",
@@ -982,23 +1167,32 @@ export async function runScheduleNow(
   authority?: { allowedSubsidiaryIds: ReadonlySet<string> | null; canPost: boolean },
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
   const s = await withOrgContext(orgId, async () => {
-    return (await db.execute<{ orgId: string; templateId: string; autoPost: boolean }>(sql`
+    return await db.execute<{ orgId: string; templateId: string; autoPost: boolean }>(sql`
       select org_id as "orgId", template_document_id as "templateId", auto_post as "autoPost"
         from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
-    `));
+    `);
   });
   const row = s.rows[0];
   if (!row) throw new RecurringError("recurring schedule not found", 404);
   const today = asOf ?? (await businessToday(row.orgId));
   const gen = await withOrg(row.orgId, async () => {
-    const current = (await db.execute<{
-      templateId: string; autoPost: boolean; isActive: boolean; name: string | null;
-      runCount: number; maxOccurrences: number | null;
-    }>(sql`
+    const current = (
+      await db.execute<{
+        templateId: string;
+        autoPost: boolean;
+        isActive: boolean;
+        name: string | null;
+        runCount: number;
+        maxOccurrences: number | null;
+      }>(
+        sql`
       select template_document_id as "templateId", auto_post as "autoPost",
              is_active as "isActive", name, run_count as "runCount", max_occurrences as "maxOccurrences"
         from recurring_schedules where id = ${scheduleId} and org_id = ${row.orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!current) throw new RecurringError("recurring schedule not found", 404);
     if (!(await actorHasPermission(db, row.orgId, actorId, "documents.manage"))) {
       throw new RecurringError("missing permission: documents.manage", 403);
@@ -1020,28 +1214,45 @@ export async function runScheduleNow(
     const scope = await actorAllowedSubsidiaryIds(db, row.orgId, actorId);
     await db.execute(sql`select id from documents
       where id = ${current.templateId} and org_id = ${row.orgId} for share`);
-    const template = (await db.execute<{ kind: string }>(sql`
+    const template = (
+      await db.execute<{ kind: string }>(
+        sql`
       select d.kind from documents d
        where d.id = ${current.templateId} and d.org_id = ${row.orgId}
          ${recurringTemplateScopeFilter(row.orgId, sql`d.id`, sql`d.subsidiary_id`, scope)}
          ${authority ? recurringTemplateScopeFilter(row.orgId, sql`d.id`, sql`d.subsidiary_id`, authority.allowedSubsidiaryIds) : sql``}
        for share of d
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!template) throw new RecurringError("recurring schedule not found", 404);
     if (!(await isRecurringKindEnabled(row.orgId, template.kind))) {
       throw new RecurringError("template document kind is disabled", 404);
     }
-    if (current.autoPost && ((authority && !authority.canPost)
-        || !(await actorHasPermission(db, row.orgId, actorId, "gl.post")))) {
+    if (
+      current.autoPost &&
+      ((authority && !authority.canPost) ||
+        !(await actorHasPermission(db, row.orgId, actorId, "gl.post")))
+    ) {
       throw new RecurringError("missing permission: gl.post", 403);
     }
     // The counter advances in the SAME transaction as the document: a manual
     // run either commits both together or rolls both back, so the count can
     // never drift ahead of the documents the way a split commit could. A
     // replayed double-click keeps the first run's count.
-    const created = await generateFromTemplate(row.orgId, current.templateId, today, current.autoPost, {
-      scheduleId, occurrenceOn: today, actorId, runSource: "run_now",
-    });
+    const created = await generateFromTemplate(
+      row.orgId,
+      current.templateId,
+      today,
+      current.autoPost,
+      {
+        scheduleId,
+        occurrenceOn: today,
+        actorId,
+        runSource: "run_now",
+      },
+    );
     if (created.created) {
       await db.execute(sql`
         update recurring_schedules
@@ -1076,7 +1287,7 @@ async function generateFromTemplate(
   const prior = await findOccurrenceDocument(orgId, context.scheduleId, context.occurrenceOn);
   if (prior) return { ...prior, created: false };
 
-  const tplRes = (await db.execute<{
+  const tplRes = await db.execute<{
     kind: string;
     document_date: string | null;
     journal_mode: string;
@@ -1095,28 +1306,39 @@ async function generateFromTemplate(
     extra_dims: Record<string, unknown> | null;
     payment_card_id: string | null;
     custom: Record<string, unknown> | null;
-  }>(sql`
+  }>(
+    sql`
     select * from documents where id = ${templateId} and org_id = ${orgId} for share
-  `, "objects"));
+  `,
+    "objects",
+  );
   const tpl = tplRes[0];
   if (!tpl) throw new Error("recurring template document not found");
   if (!(await isRecurringKindEnabled(orgId, String(tpl.kind)))) {
     throw new Error("template document kind is disabled");
   }
 
-  const lineRes = (await db.execute<Record<string, unknown>>(sql`
+  const lineRes = await db.execute<Record<string, unknown>>(
+    sql`
     select * from document_lines where document_id = ${templateId} and org_id = ${orgId}
      order by line_number
-  `, "objects"));
+  `,
+    "objects",
+  );
   // Stored templates and existing generated documents stay. Turning Inventory
   // off must refuse a generate that would persist inventory / assembly / kit.
   if (!(await inventoryFeatureEnabled(db, orgId))) {
-    const itemIds = [...new Set(
-      lineRes.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
-    )];
+    const itemIds = [
+      ...new Set(
+        lineRes.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
+      ),
+    ];
     for (const itemId of itemIds) {
-      const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${orgId}`, "objects"));
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${itemId} and org_id = ${orgId}`,
+        "objects",
+      );
       if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         throw new RecurringError("Inventory is disabled", 404);
       }
@@ -1127,12 +1349,17 @@ async function generateFromTemplate(
   // Canonical switchboard read (::boolean casts threw on non-boolean imports).
   const equipmentOn = await orgFeatureEnabled(orgId, "equipment");
   if (!equipmentOn) {
-    const itemIds = [...new Set(
-      lineRes.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
-    )];
+    const itemIds = [
+      ...new Set(
+        lineRes.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
+      ),
+    ];
     for (const itemId of itemIds) {
-      const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${orgId}`, "objects"));
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${itemId} and org_id = ${orgId}`,
+        "objects",
+      );
       if (item[0] && item[0].kind === "equipment_charge") {
         throw new RecurringError("Equipment is disabled", 404);
       }
@@ -1141,32 +1368,51 @@ async function generateFromTemplate(
 
   // Period tokens resolve from this run's own service period and sequence
   // number — a catch-up run uses its period, never the generation date.
-  const sched = (await db.execute<{
-    runCount: number; endsOn: string | null; cadence: Cadence; cron: string | null; anchorDay: number | null;
-    maxOccurrences: number | null;
-  }>(sql`
+  const sched = (
+    await db.execute<{
+      runCount: number;
+      endsOn: string | null;
+      cadence: Cadence;
+      cron: string | null;
+      anchorDay: number | null;
+      maxOccurrences: number | null;
+    }>(
+      sql`
     select run_count as "runCount", ends_on::text as "endsOn", cadence, cron, anchor_day as "anchorDay",
            max_occurrences as "maxOccurrences"
       from recurring_schedules where id = ${context.scheduleId} and org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!sched) throw new RecurringError("recurring schedule not found", 404);
   const cadence = sched.cadence as Cadence;
   const periodEnd = advanceCadence(
-    documentDate, cadence, sched.cron, undefined, sched.anchorDay ?? Number(documentDate.slice(8, 10)),
+    documentDate,
+    cadence,
+    sched.cron,
+    undefined,
+    sched.anchorDay ?? Number(documentDate.slice(8, 10)),
   );
   const sequenceNumber = sched.runCount + 1;
   const endsTotal = sched.endsOn
-    ? sequenceNumber + pendingOccurrences(
-        { cadence, cron: sched.cron, nextRunOn: periodEnd, endsOn: sched.endsOn, anchorDay: sched.anchorDay },
+    ? sequenceNumber +
+      pendingOccurrences(
+        {
+          cadence,
+          cron: sched.cron,
+          nextRunOn: periodEnd,
+          endsOn: sched.endsOn,
+          anchorDay: sched.anchorDay,
+        },
         sched.endsOn,
       ).occurrences.length
     : null;
   // Whichever bound stops generation first sets the instalment count, so
   // {total} on the final document still matches the runs that happened.
   const maxOccurrences = sched.maxOccurrences == null ? null : Number(sched.maxOccurrences);
-  const totalOccurrences = maxOccurrences != null
-    ? Math.min(maxOccurrences, endsTotal ?? maxOccurrences)
-    : endsTotal;
+  const totalOccurrences =
+    maxOccurrences != null ? Math.min(maxOccurrences, endsTotal ?? maxOccurrences) : endsTotal;
   const tokenCtx: PeriodTokenContext = {
     periodStart: documentDate,
     periodEnd,
@@ -1180,10 +1426,16 @@ async function generateFromTemplate(
   // A template without its own term spread falls back to the party's payment
   // terms — the same default a hand-entered invoice receives. An explicit
   // template spread stays authoritative for the schedule.
-  const termsDue = termDays == null
-    ? await resolveTermsDueDate(db, orgId, { kind: tpl.kind, partyId: tpl.party_id, documentDate })
-    : null;
-  const dueDate = termDays != null ? addCalendarDays(documentDate, termDays) : (termsDue?.dueDate ?? null);
+  const termsDue =
+    termDays == null
+      ? await resolveTermsDueDate(db, orgId, {
+          kind: tpl.kind,
+          partyId: tpl.party_id,
+          documentDate,
+        })
+      : null;
+  const dueDate =
+    termDays != null ? addCalendarDays(documentDate, termDays) : (termsDue?.dueDate ?? null);
 
   const documentNumber = await nextNumber(orgId, tpl.kind);
   const { controlAccountId, ...templateCustom } = tpl.custom ?? {};
@@ -1192,18 +1444,15 @@ async function generateFromTemplate(
     recurringScheduleId: context.scheduleId,
     recurringOccurrenceOn: context.occurrenceOn,
     recurringRunSource: context.runSource,
-    ...(context.actorId === null
-      ? { actorKind: "system", actorReason: "recurring schedule" }
-      : {}),
+    ...(context.actorId === null ? { actorKind: "system", actorReason: "recurring schedule" } : {}),
     // The template's receivable/payable account choice is part of what the
     // schedule bills: each occurrence posts to the same account.
-    ...(typeof controlAccountId === "string" && controlAccountId
-      ? { controlAccountId }
-      : {}),
+    ...(typeof controlAccountId === "string" && controlAccountId ? { controlAccountId } : {}),
   };
   // 0171: an expense report's funding card lives on the header — carry it so
   // company-paid lines keep their card liability instead of mis-posting.
-  const created = (await db.execute<{ id: string }>(sql`
+  const created = await db.execute<{ id: string }>(
+    sql`
     insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            journal_mode, accounting_book_id,
                            due_date, currency, status, project_id, department_id, location_id, class_id,
@@ -1216,7 +1465,9 @@ async function generateFromTemplate(
             ${JSON.stringify(tpl.extra_dims ?? {})}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${context.actorId},
             ${tpl.payment_card_id})
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const newId = created[0]!.id;
 
   const amounts: string[] = [];
@@ -1226,24 +1477,34 @@ async function generateFromTemplate(
     const profileKey = `${l.tax_code_id ?? ""}:${l.tax_group_id ?? ""}`;
     let configs = taxProfiles.get(profileKey);
     if (!configs) {
-      configs = await loadTaxProfileConfig(orgId, {
-        taxCodeId: l.tax_code_id ? String(l.tax_code_id) : null,
-        taxGroupId: l.tax_group_id ? String(l.tax_group_id) : null,
-      }, documentDate);
+      configs = await loadTaxProfileConfig(
+        orgId,
+        {
+          taxCodeId: l.tax_code_id ? String(l.tax_code_id) : null,
+          taxGroupId: l.tax_group_id ? String(l.tax_group_id) : null,
+        },
+        documentDate,
+      );
       taxProfiles.set(profileKey, configs);
     }
-    if (configs.some(config => config.priceIncludesTax) && l.tax_input_amount == null) {
-      throw new RecurringError(`template line ${l.line_number} is missing its tax-inclusive input amount`);
+    if (configs.some((config) => config.priceIncludesTax) && l.tax_input_amount == null) {
+      throw new RecurringError(
+        `template line ${l.line_number} is missing its tax-inclusive input amount`,
+      );
     }
-    const tax = configs.length ? computeLineTaxes(String(l.tax_input_amount ?? l.amount), configs, {
-      overridden: l.tax_overridden === true, taxAmount: String(l.tax_amount ?? "0"),
-    }) : null;
+    const tax = configs.length
+      ? computeLineTaxes(String(l.tax_input_amount ?? l.amount), configs, {
+          overridden: l.tax_overridden === true,
+          taxAmount: String(l.tax_amount ?? "0"),
+        })
+      : null;
     const amount = tax?.netAmount ?? String(l.amount);
     const taxAmount = tax?.taxTotal ?? String(l.tax_amount ?? "0");
     // 0171 settlement_type is template semantics; the kernel defaults an
     // unrecorded settlement to out_of_pocket, so carry it verbatim (inert for
     // other kinds, which never read it).
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
             quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount, tax_overridden, tax_amount, department_id, project_id,
             location_id, class_id, subsidiary_id, extra_dims, party_id, is_billable, custom, created_by, settlement_type, journal_eliminate)
@@ -1252,8 +1513,11 @@ async function generateFromTemplate(
             ${taxAmount}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
             ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId}, ${l.settlement_type}, ${l.journal_eliminate ?? false})
       returning id
-    `, "objects");
-    if (tax) await persistLineTaxComponents(orgId, inserted[0]!.id, tax.components, context.actorId);
+    `,
+      "objects",
+    );
+    if (tax)
+      await persistLineTaxComponents(orgId, inserted[0]!.id, tax.components, context.actorId);
     amounts.push(amount);
     taxes.push(taxAmount);
   }
@@ -1266,15 +1530,13 @@ async function generateFromTemplate(
   // payroll commits produce.
   const taxTotal = taxes.length ? sum(taxes) : "0";
   const journalShaped = tpl.kind === "journal" || tpl.kind === "pay_run";
-  const debitSum = journalShaped
-    ? sum(amounts.filter((amount) => cmp(amount, "0") > 0))
-    : "";
+  const debitSum = journalShaped ? sum(amounts.filter((amount) => cmp(amount, "0") > 0)) : "";
   const subtotal = amounts.length
-    ? (journalShaped ? add(debitSum, neg(taxTotal)) : sum(amounts))
+    ? journalShaped
+      ? add(debitSum, neg(taxTotal))
+      : sum(amounts)
     : "0";
-  const total = amounts.length
-    ? (journalShaped ? debitSum : add(subtotal, taxTotal))
-    : "0";
+  const total = amounts.length ? (journalShaped ? debitSum : add(subtotal, taxTotal)) : "0";
   await db.execute(sql`
     update documents set subtotal = ${subtotal}, tax_total = ${taxTotal}, total = ${total}
      where id = ${newId} and org_id = ${orgId}

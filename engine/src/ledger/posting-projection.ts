@@ -1,15 +1,18 @@
 import { isZero, normalizeDecimal, sum, toUnits } from "../money/money.ts";
-import { type Doc, type DocLine, type KernelLine, type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
+import {
+  type Doc,
+  type DocLine,
+  type KernelLine,
+  type PostingDeps,
+  PostingError,
+} from "../journal/posting-contracts.ts";
 import { RULES } from "./posting-rules.ts";
 import { retainedKernelLines } from "../journal/posting-invariants.ts";
 export function glProjectionScopeUnchanged(
   existing: { periodId: string; postingDate: string },
   next: { periodId: string; postingDate: string },
 ): boolean {
-  return (
-    existing.periodId === next.periodId &&
-    existing.postingDate === next.postingDate
-  );
+  return existing.periodId === next.periodId && existing.postingDate === next.postingDate;
 }
 
 /** Build + validate the GL-Impact projection (kernel lines) for a document. */
@@ -20,8 +23,7 @@ export function buildProjection(
   options: { deferCurrencyBalance?: boolean } = {},
 ): KernelLine[] {
   const rule = RULES[doc.kind];
-  if (!rule)
-    throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
+  if (!rule) throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
   const kl = retainedKernelLines(rule(doc, lines, deps), doc.journalMode === "statistical");
   if (!options.deferCurrencyBalance && !isZero(sum(kl.map((l) => l.amount)))) {
     throw new PostingError(`posting rule for ${doc.kind} does not balance`);
@@ -56,7 +58,10 @@ export function glLineKey(line: {
   currency?: string | null;
   txnAmount?: string | null;
   fxRate?: string | null;
-  quantity?:string|null;unit?:string|null;eliminate?:boolean;isCurrencyAdjustment?:boolean;
+  quantity?: string | null;
+  unit?: string | null;
+  eliminate?: boolean;
+  isCurrencyAdjustment?: boolean;
 }): string {
   return JSON.stringify([
     line.accountId,
@@ -70,9 +75,7 @@ export function glLineKey(line: {
     line.equipmentUnitId ?? null,
     JSON.stringify(
       Object.fromEntries(
-        Object.entries(line.extraDims ?? {}).sort(([a], [b]) =>
-          a.localeCompare(b),
-        ),
+        Object.entries(line.extraDims ?? {}).sort(([a], [b]) => a.localeCompare(b)),
       ),
     ),
     line.taxCodeId ?? null,
@@ -82,9 +85,11 @@ export function glLineKey(line: {
     line.currency ?? null,
     line.txnAmount == null ? null : toUnits(line.txnAmount).toString(),
     line.fxRate == null ? null : normalizeDecimal(line.fxRate, 10),
-    ...(line.eliminate ? ['eliminate'] : []),
-    ...(line.isCurrencyAdjustment ? ['currency_adjustment'] : []),
-    ...(isZero(line.amount) && line.quantity!=null && line.unit ? ['measurement',normalizeDecimal(line.quantity,4),line.unit] : []),
+    ...(line.eliminate ? ["eliminate"] : []),
+    ...(line.isCurrencyAdjustment ? ["currency_adjustment"] : []),
+    ...(isZero(line.amount) && line.quantity != null && line.unit
+      ? ["measurement", normalizeDecimal(line.quantity, 4), line.unit]
+      : []),
   ]);
 }
 
@@ -94,10 +99,6 @@ export function glLineKey(line: {
  * the same ledger regardless of sequence — so the key sorts per-line keys,
  * making projection equality line-order-insensitive.
  */
-export function glProjectionKey(
-  lines: Parameters<typeof glLineKey>[0][],
-): string {
-  return JSON.stringify(
-    lines.map((line) => glLineKey(line)).sort(),
-  );
+export function glProjectionKey(lines: Parameters<typeof glLineKey>[0][]): string {
+  return JSON.stringify(lines.map((line) => glLineKey(line)).sort());
 }

@@ -20,4 +20,3 @@ test("payroll detector parameter validation still refuses a zero due window", ()
     /invalid detector parameter/,
   );
 });
-

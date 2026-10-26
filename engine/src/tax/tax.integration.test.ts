@@ -7,7 +7,17 @@ import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
 import { computeTaxReturn } from "../tax-returns/return.ts";
-import { providerEvidenceMismatch, quoteExternalTax, readTaxRateProviderConfig, readTaxRateProviderConfigForPosting, resolveCounterpartyTaxAddress, resolveEntityTaxAddress, resolveProviderTaxComponents, saveTaxRateProviderConfig, type TaxQuoteResult } from "./rate-providers.ts";
+import {
+  providerEvidenceMismatch,
+  quoteExternalTax,
+  readTaxRateProviderConfig,
+  readTaxRateProviderConfigForPosting,
+  resolveCounterpartyTaxAddress,
+  resolveEntityTaxAddress,
+  resolveProviderTaxComponents,
+  saveTaxRateProviderConfig,
+  type TaxQuoteResult,
+} from "./rate-providers.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { businessToday } from "../platform/business-date.ts";
 
@@ -25,23 +35,28 @@ async function listenTaxServer(server: Server): Promise<string> {
 
 async function closeTaxServer(server: Server): Promise<void> {
   if (!server.listening) return;
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
 }
 
 function bodyOf(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = "";
-    req.on("data", (chunk) => body += chunk);
+    req.on("data", (chunk) => (body += chunk));
     req.on("end", () => resolve(body));
     req.on("error", reject);
   });
 }
 
-test("component tax evidence posts exact recoverability, withholding, and reverse charge", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const codeIds = { standard: randomUUID(), withholding: randomUUID(), reverse: randomUUID() };
-    await db.execute(sql`
+test(
+  "component tax evidence posts exact recoverability, withholding, and reverse charge",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const codeIds = { standard: randomUUID(), withholding: randomUUID(), reverse: randomUUID() };
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, calculation_type, collected_account_id, paid_account_id,
          withholding_account_id, recoverable_percent, is_active)
@@ -49,36 +64,63 @@ test("component tax evidence posts exact recoverability, withholding, and revers
         (${codeIds.standard}, ${org.orgId}, 'STD', 'Standard', 'standard', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, null, '50', true),
         (${codeIds.withholding}, ${org.orgId}, 'WHT', 'Withholding', 'withholding', null, null, ${org.accounts.withholding}, '100', true),
         (${codeIds.reverse}, ${org.orgId}, 'RC', 'Reverse charge', 'reverse_charge', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, null, '80', true)`);
-    const configs: TaxComponentConfig[] = [
-      { taxCodeId: codeIds.standard, sequence: 1, ratePercent: "10", recoverablePercent: "50", calculationType: "standard", collectedAccountId: org.accounts.taxOutput, paidAccountId: org.accounts.taxInput },
-      { taxCodeId: codeIds.withholding, sequence: 2, ratePercent: "3", recoverablePercent: "100", calculationType: "withholding", withholdingAccountId: org.accounts.withholding },
-      { taxCodeId: codeIds.reverse, sequence: 3, ratePercent: "5", recoverablePercent: "80", calculationType: "reverse_charge", collectedAccountId: org.accounts.taxOutput, paidAccountId: org.accounts.taxInput },
-    ];
-    const calculated = computeLineTaxes("100", configs);
-    assert.equal(calculated.taxTotal, "7.0000");
+      const configs: TaxComponentConfig[] = [
+        {
+          taxCodeId: codeIds.standard,
+          sequence: 1,
+          ratePercent: "10",
+          recoverablePercent: "50",
+          calculationType: "standard",
+          collectedAccountId: org.accounts.taxOutput,
+          paidAccountId: org.accounts.taxInput,
+        },
+        {
+          taxCodeId: codeIds.withholding,
+          sequence: 2,
+          ratePercent: "3",
+          recoverablePercent: "100",
+          calculationType: "withholding",
+          withholdingAccountId: org.accounts.withholding,
+        },
+        {
+          taxCodeId: codeIds.reverse,
+          sequence: 3,
+          ratePercent: "5",
+          recoverablePercent: "80",
+          calculationType: "reverse_charge",
+          collectedAccountId: org.accounts.taxOutput,
+          paidAccountId: org.accounts.taxInput,
+        },
+      ];
+      const calculated = computeLineTaxes("100", configs);
+      assert.equal(calculated.taxTotal, "7.0000");
 
-    const groupId = randomUUID();
-    const documentId = randomUUID();
-    const lineId = randomUUID();
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`insert into tax_groups (id, org_id, code, name, is_active) values (${groupId}, ${org.orgId}, 'COMBINED', 'Combined taxes', true)`);
-      for (const component of calculated.components) {
-        await tx.execute(sql`insert into tax_group_members (tax_group_id, tax_code_id, sequence) values (${groupId}, ${component.taxCodeId}, ${component.sequence})`);
-      }
-      await tx.execute(sql`
+      const groupId = randomUUID();
+      const documentId = randomUUID();
+      const lineId = randomUUID();
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`insert into tax_groups (id, org_id, code, name, is_active) values (${groupId}, ${org.orgId}, 'COMBINED', 'Combined taxes', true)`,
+        );
+        for (const component of calculated.components) {
+          await tx.execute(
+            sql`insert into tax_group_members (tax_group_id, tax_code_id, sequence) values (${groupId}, ${component.taxCodeId}, ${component.sequence})`,
+          );
+        }
+        await tx.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
            currency, fx_rate, subtotal, tax_total, total)
         values (${documentId}, ${org.orgId}, 'vendor_bill', 'draft', 'TAX-CONTRACT', ${org.subsidiaryId},
                 ${org.vendorId}, ${org.date}, 'CAD', '1', ${calculated.netAmount}, ${calculated.taxTotal}, ${calculated.total})`);
-      await tx.execute(sql`
+        await tx.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
            tax_amount, tax_group_id, quantity, unit_price)
         values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, ${calculated.netAmount},
                 ${calculated.inputAmount}, ${calculated.taxTotal}, ${groupId}, '1', ${calculated.inputAmount})`);
-      for (const component of calculated.components) {
-        await tx.execute(sql`
+        for (const component of calculated.components) {
+          await tx.execute(sql`
           insert into document_line_tax_components
             (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
              tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -91,37 +133,45 @@ test("component tax evidence posts exact recoverability, withholding, and revers
                   ${component.compoundOnPrevious}, ${component.roundingScale},
                   ${component.collectedAccountId}, ${component.paidAccountId},
                   ${component.withholdingAccountId}, false)`);
-      }
-      await tx.execute(sql`
+        }
+        await tx.execute(sql`
         update documents set status = 'approved' where id = ${documentId}
       `);
-    });
+      });
 
-    const entryId = await postDocument(documentId, {
-      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    });
-    const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const entryId = await postDocument(documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      const gl = await db.execute<{ account_id: string; amount: string }>(
+        sql`
       select account_id, amount from journal_lines where entry_id = ${entryId} order by line_number
-    `, "objects"));
-    assert.deepEqual(gl, [
-      { account_id: org.accounts.cogs, amount: "106.0000" },
-      { account_id: org.accounts.taxInput, amount: "5.0000" },
-      { account_id: org.accounts.withholding, amount: "-3.0000" },
-      { account_id: org.accounts.taxInput, amount: "4.0000" },
-      { account_id: org.accounts.taxOutput, amount: "-5.0000" },
-      { account_id: org.accounts.ap, amount: "-107.0000" },
-    ]);
-    await assert.rejects(
-      db.execute(sql`update document_line_tax_components set tax_amount = '99' where document_line_id = ${lineId}`),
-      (error: unknown) => {
-        const wrapped = error as { message?: string; cause?: { message?: string } };
-        return /posted tax calculation evidence is immutable/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
-      },
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.deepEqual(gl, [
+        { account_id: org.accounts.cogs, amount: "106.0000" },
+        { account_id: org.accounts.taxInput, amount: "5.0000" },
+        { account_id: org.accounts.withholding, amount: "-3.0000" },
+        { account_id: org.accounts.taxInput, amount: "4.0000" },
+        { account_id: org.accounts.taxOutput, amount: "-5.0000" },
+        { account_id: org.accounts.ap, amount: "-107.0000" },
+      ]);
+      await assert.rejects(
+        db.execute(
+          sql`update document_line_tax_components set tax_amount = '99' where document_line_id = ${lineId}`,
+        ),
+        (error: unknown) => {
+          const wrapped = error as { message?: string; cause?: { message?: string } };
+          return /posted tax calculation evidence is immutable/.test(
+            `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 type TaxFixtureComponent = {
   taxCodeId: string;
@@ -177,7 +227,9 @@ async function seedTaxDocument(
               ${component.collectedAccountId}, ${component.paidAccountId},
               ${component.withholdingAccountId ?? null}, false)`);
     if (approve) {
-      await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+      await tx.execute(
+        sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+      );
     }
   });
   return { documentId, lineId };
@@ -195,7 +247,9 @@ async function seedGroupedTaxDocument(
   const documentId = randomUUID();
   const lineId = randomUUID();
   const accountId = kind === "customer_invoice" ? org.accounts.revenue : org.accounts.cogs;
-  const taxAmount = components.reduce((sum, component) => sum + Number(component.taxAmount), 0).toFixed(4);
+  const taxAmount = components
+    .reduce((sum, component) => sum + Number(component.taxAmount), 0)
+    .toFixed(4);
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into documents
@@ -224,86 +278,143 @@ async function seedGroupedTaxDocument(
                 ${component.collectedAccountId}, ${component.paidAccountId},
                 ${component.withholdingAccountId ?? null}, false)`);
     }
-    await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+    await tx.execute(
+      sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+    );
   });
   return documentId;
 }
 
-test("taxable sales and purchases fail closed before journals or posting effects", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const taxCodeId = randomUUID();
-    await db.execute(sql`
+test(
+  "taxable sales and purchases fail closed before journals or posting effects",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const taxCodeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, applies_to, calculation_type, collected_account_id,
          paid_account_id, is_active)
       values (${taxCodeId}, ${org.orgId}, 'MISSING-CONTROL', 'Missing control', 'both',
               'standard', null, null, true)`);
-    const component: TaxFixtureComponent = {
-      taxCodeId,
-      sequence: 1,
-      ratePercent: "13.0000",
-      taxableAmount: "100.0000",
-      taxAmount: "13.0000",
-      recoverableAmount: "13.0000",
-      nonrecoverableAmount: "0.0000",
-      collectedAccountId: null,
-      paidAccountId: null,
-    };
-    const sale = await seedTaxDocument(org, "customer_invoice", "TAX-MISSING-SALE", taxCodeId, component);
-    const purchase = await seedTaxDocument(org, "vendor_bill", "TAX-MISSING-PURCHASE", taxCodeId, component);
-    const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
-    await assert.rejects(postDocument(sale.documentId, deps), /collected tax .*no configured tax control account/);
-    await assert.rejects(postDocument(purchase.documentId, deps), /paid tax .*no configured tax control account/);
-    const counts = await db.execute<{ journals: string; effects: string; approved: string }>(sql`
+      const component: TaxFixtureComponent = {
+        taxCodeId,
+        sequence: 1,
+        ratePercent: "13.0000",
+        taxableAmount: "100.0000",
+        taxAmount: "13.0000",
+        recoverableAmount: "13.0000",
+        nonrecoverableAmount: "0.0000",
+        collectedAccountId: null,
+        paidAccountId: null,
+      };
+      const sale = await seedTaxDocument(
+        org,
+        "customer_invoice",
+        "TAX-MISSING-SALE",
+        taxCodeId,
+        component,
+      );
+      const purchase = await seedTaxDocument(
+        org,
+        "vendor_bill",
+        "TAX-MISSING-PURCHASE",
+        taxCodeId,
+        component,
+      );
+      const deps = {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      };
+      await assert.rejects(
+        postDocument(sale.documentId, deps),
+        /collected tax .*no configured tax control account/,
+      );
+      await assert.rejects(
+        postDocument(purchase.documentId, deps),
+        /paid tax .*no configured tax control account/,
+      );
+      const counts = await db.execute<{ journals: string; effects: string; approved: string }>(
+        sql`
       select
         (select count(*) from journal_entries where org_id = ${org.orgId} and source_document_id in (${sale.documentId}, ${purchase.documentId}))::text as journals,
         (select count(*) from posting_effects where org_id = ${org.orgId} and document_id in (${sale.documentId}, ${purchase.documentId}))::text as effects,
-        (select count(*) from documents where org_id = ${org.orgId} and id in (${sale.documentId}, ${purchase.documentId}) and status = 'approved')::text as approved`, "objects");
-    assert.deepEqual(counts[0], { journals: "0", effects: "0", approved: "2" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        (select count(*) from documents where org_id = ${org.orgId} and id in (${sale.documentId}, ${purchase.documentId}) and status = 'approved')::text as approved`,
+        "objects",
+      );
+      assert.deepEqual(counts[0], { journals: "0", effects: "0", approved: "2" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("posted tax returns use immutable accounts and include grouped-line bases", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const taxA = randomUUID();
-    const taxB = randomUUID();
-    const groupId = randomUUID();
-    await db.execute(sql`
+test(
+  "posted tax returns use immutable accounts and include grouped-line bases",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const taxA = randomUUID();
+      const taxB = randomUUID();
+      const groupId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, applies_to, calculation_type, collected_account_id,
          paid_account_id, is_active)
       values
         (${taxA}, ${org.orgId}, 'IMM-A', 'Immutable A', 'both', 'standard', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true),
         (${taxB}, ${org.orgId}, 'IMM-B', 'Immutable B', 'both', 'standard', null, null, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       update orgs
          set settings = jsonb_set(
            jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts,taxCollected}', to_jsonb(${org.accounts.taxOutput}::text), true),
            '{controlAccounts,taxPaid}', to_jsonb(${org.accounts.taxInput}::text), true)
        where id = ${org.orgId}`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_groups (id, org_id, code, name, is_active)
       values (${groupId}, ${org.orgId}, 'IMM-GROUP', 'Immutable group', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_group_members (tax_group_id, tax_code_id, sequence)
       values (${groupId}, ${taxA}, 1), (${groupId}, ${taxB}, 2)`);
 
-    const saleA = await seedTaxDocument(org, "customer_invoice", "TAX-IMM-A", taxA, {
-      taxCodeId: taxA, sequence: 1, ratePercent: "10", taxableAmount: "100", taxAmount: "10",
-      recoverableAmount: "10", nonrecoverableAmount: "0", collectedAccountId: org.accounts.taxOutput, paidAccountId: org.accounts.taxInput,
-    });
-    // A grouped line carries no document_lines.tax_code_id; both components
-    // must still contribute the source base once to their configured boxes.
-    const grouped = await seedTaxDocument(org, "customer_invoice", "TAX-IMM-GROUP", taxA, {
-      taxCodeId: taxA, sequence: 1, ratePercent: "5", taxableAmount: "100", taxAmount: "5",
-      recoverableAmount: "5", nonrecoverableAmount: "0", collectedAccountId: org.accounts.taxOutput, paidAccountId: org.accounts.taxInput,
-    }, "100.0000", false);
-    await db.execute(sql`update document_lines set tax_code_id = null, tax_group_id = ${groupId} where id = ${grouped.lineId}`);
-    const groupedB = await db.execute(sql`
+      const saleA = await seedTaxDocument(org, "customer_invoice", "TAX-IMM-A", taxA, {
+        taxCodeId: taxA,
+        sequence: 1,
+        ratePercent: "10",
+        taxableAmount: "100",
+        taxAmount: "10",
+        recoverableAmount: "10",
+        nonrecoverableAmount: "0",
+        collectedAccountId: org.accounts.taxOutput,
+        paidAccountId: org.accounts.taxInput,
+      });
+      // A grouped line carries no document_lines.tax_code_id; both components
+      // must still contribute the source base once to their configured boxes.
+      const grouped = await seedTaxDocument(
+        org,
+        "customer_invoice",
+        "TAX-IMM-GROUP",
+        taxA,
+        {
+          taxCodeId: taxA,
+          sequence: 1,
+          ratePercent: "5",
+          taxableAmount: "100",
+          taxAmount: "5",
+          recoverableAmount: "5",
+          nonrecoverableAmount: "0",
+          collectedAccountId: org.accounts.taxOutput,
+          paidAccountId: org.accounts.taxInput,
+        },
+        "100.0000",
+        false,
+      );
+      await db.execute(
+        sql`update document_lines set tax_code_id = null, tax_group_id = ${groupId} where id = ${grouped.lineId}`,
+      );
+      const groupedB = await db.execute(
+        sql`
       insert into document_line_tax_components
         (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
          tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -311,17 +422,40 @@ test("posted tax returns use immutable accounts and include grouped-line bases",
          paid_account_id, overridden)
       values (${org.orgId}, ${grouped.lineId}, ${taxB}, 2, '7.5', '100', '7.5000', '7.5000', '0',
               'standard', false, false, 2, null, null, false)
-      returning tax_code_id`, "objects");
-    assert.equal(groupedB[0]?.tax_code_id, taxB);
-    await db.execute(sql`update document_lines set tax_amount = '12.5000' where id = ${grouped.lineId}`);
-    await db.execute(sql`update documents set tax_total = '12.5000', total = '112.5000', status = 'approved' where id = ${grouped.documentId}`);
+      returning tax_code_id`,
+        "objects",
+      );
+      assert.equal(groupedB[0]?.tax_code_id, taxB);
+      await db.execute(
+        sql`update document_lines set tax_amount = '12.5000' where id = ${grouped.lineId}`,
+      );
+      await db.execute(
+        sql`update documents set tax_total = '12.5000', total = '112.5000', status = 'approved' where id = ${grouped.documentId}`,
+      );
 
-    const purchaseGrouped = await seedTaxDocument(org, "vendor_bill", "TAX-IMM-PURCHASE", taxA, {
-      taxCodeId: taxA, sequence: 1, ratePercent: "2", taxableAmount: "100", taxAmount: "2",
-      recoverableAmount: "2", nonrecoverableAmount: "0", collectedAccountId: org.accounts.taxOutput, paidAccountId: org.accounts.taxInput,
-    }, "100.0000", false);
-    await db.execute(sql`update document_lines set tax_code_id = null, tax_group_id = ${groupId} where id = ${purchaseGrouped.lineId}`);
-    await db.execute(sql`
+      const purchaseGrouped = await seedTaxDocument(
+        org,
+        "vendor_bill",
+        "TAX-IMM-PURCHASE",
+        taxA,
+        {
+          taxCodeId: taxA,
+          sequence: 1,
+          ratePercent: "2",
+          taxableAmount: "100",
+          taxAmount: "2",
+          recoverableAmount: "2",
+          nonrecoverableAmount: "0",
+          collectedAccountId: org.accounts.taxOutput,
+          paidAccountId: org.accounts.taxInput,
+        },
+        "100.0000",
+        false,
+      );
+      await db.execute(
+        sql`update document_lines set tax_code_id = null, tax_group_id = ${groupId} where id = ${purchaseGrouped.lineId}`,
+      );
+      await db.execute(sql`
       insert into document_line_tax_components
         (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
          tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -329,17 +463,27 @@ test("posted tax returns use immutable accounts and include grouped-line bases",
          paid_account_id, overridden)
       values (${org.orgId}, ${purchaseGrouped.lineId}, ${taxB}, 2, '3', '100', '3.0000', '3.0000', '0',
               'standard', false, false, 2, null, null, false)`);
-    await db.execute(sql`update document_lines set tax_amount = '5.0000' where id = ${purchaseGrouped.lineId}`);
-    await db.execute(sql`update documents set tax_total = '5.0000', total = '105.0000', status = 'approved' where id = ${purchaseGrouped.documentId}`);
+      await db.execute(
+        sql`update document_lines set tax_amount = '5.0000' where id = ${purchaseGrouped.lineId}`,
+      );
+      await db.execute(
+        sql`update documents set tax_total = '5.0000', total = '105.0000', status = 'approved' where id = ${purchaseGrouped.documentId}`,
+      );
 
-    await postDocument(saleA.documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-    await postDocument(grouped.documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-    await postDocument(purchaseGrouped.documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      await postDocument(saleA.documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      await postDocument(grouped.documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      await postDocument(purchaseGrouped.documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
 
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
       values (${randomUUID()}, ${org.orgId}, 'IMM-RETURN', 'Immutable return', 'portal_manual', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
       values
@@ -349,30 +493,33 @@ test("posted tax returns use immutable accounts and include grouped-line bases",
         (${randomUUID()}, ${org.orgId}, 'IMM-RETURN', 'B_BASE', 'B base', ${taxB}, 'taxable_base', 1, 4),
         (${randomUUID()}, ${org.orgId}, 'IMM-RETURN', 'B_TAX', 'B tax', ${taxB}, 'tax_collected', -1, 5),
         (${randomUUID()}, ${org.orgId}, 'IMM-RETURN', 'B_PAID', 'B paid', ${taxB}, 'tax_paid', 1, 6)`);
-    const before = await computeTaxReturn(org.orgId, 'IMM-RETURN', org.date, org.date);
-    const beforeValues = new Map(before.boxes.map((box) => [box.lineCode, box.value]));
-    assert.equal(beforeValues.get("A_BASE"), "300.0000");
-    assert.equal(beforeValues.get("A_TAX"), "15.0000");
-    assert.equal(beforeValues.get("A_PAID"), "2.0000");
-    assert.equal(beforeValues.get("B_BASE"), "200.0000");
-    assert.equal(beforeValues.get("B_TAX"), "7.5000");
-    assert.equal(beforeValues.get("B_PAID"), "3.0000");
+      const before = await computeTaxReturn(org.orgId, "IMM-RETURN", org.date, org.date);
+      const beforeValues = new Map(before.boxes.map((box) => [box.lineCode, box.value]));
+      assert.equal(beforeValues.get("A_BASE"), "300.0000");
+      assert.equal(beforeValues.get("A_TAX"), "15.0000");
+      assert.equal(beforeValues.get("A_PAID"), "2.0000");
+      assert.equal(beforeValues.get("B_BASE"), "200.0000");
+      assert.equal(beforeValues.get("B_TAX"), "7.5000");
+      assert.equal(beforeValues.get("B_PAID"), "3.0000");
 
-    // Repoint both the code and org fallback. Historical lines must continue
-    // to classify through their posting-time component account (taxOutput).
-    await db.execute(sql`update tax_codes set collected_account_id = ${org.accounts.taxInput}, paid_account_id = ${org.accounts.taxOutput} where id in (${taxA}, ${taxB})`);
-    await db.execute(sql`
+      // Repoint both the code and org fallback. Historical lines must continue
+      // to classify through their posting-time component account (taxOutput).
+      await db.execute(
+        sql`update tax_codes set collected_account_id = ${org.accounts.taxInput}, paid_account_id = ${org.accounts.taxOutput} where id in (${taxA}, ${taxB})`,
+      );
+      await db.execute(sql`
       update orgs
          set settings = jsonb_set(
            jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts,taxCollected}', to_jsonb(${org.accounts.taxInput}::text), true),
            '{controlAccounts,taxPaid}', to_jsonb(${org.accounts.taxOutput}::text), true)
        where id = ${org.orgId}`);
-    const after = await computeTaxReturn(org.orgId, 'IMM-RETURN', org.date, org.date);
-    assert.deepEqual(after.boxes, before.boxes);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const after = await computeTaxReturn(org.orgId, "IMM-RETURN", org.date, org.date);
+      assert.deepEqual(after.boxes, before.boxes);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("multi-code tax groups feed each taxable-base box exactly once", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -401,30 +548,68 @@ test("multi-code tax groups feed each taxable-base box exactly once", { skip: !D
         (${saleGroupId}, ${saleCode1}, 1), (${saleGroupId}, ${saleCode2}, 2),
         (${purchaseGroupId}, ${purchaseCode1}, 1), (${purchaseGroupId}, ${purchaseCode2}, 2)`);
 
-    const saleId = await seedGroupedTaxDocument(org, "customer_invoice", "GROUP-SALE", saleGroupId, "200.0000", [
-      {
-        taxCodeId: saleCode1, sequence: 1, ratePercent: "5", taxableAmount: "200.0000",
-        taxAmount: "10.0000", recoverableAmount: "10.0000", nonrecoverableAmount: "0.0000",
-        collectedAccountId: org.accounts.taxOutput, paidAccountId: null,
-      },
-      {
-        taxCodeId: saleCode2, sequence: 2, ratePercent: "10", taxableAmount: "200.0000",
-        taxAmount: "20.0000", recoverableAmount: "20.0000", nonrecoverableAmount: "0.0000",
-        collectedAccountId: org.accounts.taxOutput, paidAccountId: null,
-      },
-    ]);
-    const purchaseId = await seedGroupedTaxDocument(org, "vendor_bill", "GROUP-PURCHASE", purchaseGroupId, "150.0000", [
-      {
-        taxCodeId: purchaseCode1, sequence: 1, ratePercent: "5", taxableAmount: "150.0000",
-        taxAmount: "7.5000", recoverableAmount: "7.5000", nonrecoverableAmount: "0.0000",
-        collectedAccountId: null, paidAccountId: org.accounts.taxInput,
-      },
-      {
-        taxCodeId: purchaseCode2, sequence: 2, ratePercent: "10", taxableAmount: "150.0000",
-        taxAmount: "15.0000", recoverableAmount: "15.0000", nonrecoverableAmount: "0.0000",
-        collectedAccountId: null, paidAccountId: org.accounts.taxInput,
-      },
-    ]);
+    const saleId = await seedGroupedTaxDocument(
+      org,
+      "customer_invoice",
+      "GROUP-SALE",
+      saleGroupId,
+      "200.0000",
+      [
+        {
+          taxCodeId: saleCode1,
+          sequence: 1,
+          ratePercent: "5",
+          taxableAmount: "200.0000",
+          taxAmount: "10.0000",
+          recoverableAmount: "10.0000",
+          nonrecoverableAmount: "0.0000",
+          collectedAccountId: org.accounts.taxOutput,
+          paidAccountId: null,
+        },
+        {
+          taxCodeId: saleCode2,
+          sequence: 2,
+          ratePercent: "10",
+          taxableAmount: "200.0000",
+          taxAmount: "20.0000",
+          recoverableAmount: "20.0000",
+          nonrecoverableAmount: "0.0000",
+          collectedAccountId: org.accounts.taxOutput,
+          paidAccountId: null,
+        },
+      ],
+    );
+    const purchaseId = await seedGroupedTaxDocument(
+      org,
+      "vendor_bill",
+      "GROUP-PURCHASE",
+      purchaseGroupId,
+      "150.0000",
+      [
+        {
+          taxCodeId: purchaseCode1,
+          sequence: 1,
+          ratePercent: "5",
+          taxableAmount: "150.0000",
+          taxAmount: "7.5000",
+          recoverableAmount: "7.5000",
+          nonrecoverableAmount: "0.0000",
+          collectedAccountId: null,
+          paidAccountId: org.accounts.taxInput,
+        },
+        {
+          taxCodeId: purchaseCode2,
+          sequence: 2,
+          ratePercent: "10",
+          taxableAmount: "150.0000",
+          taxAmount: "15.0000",
+          recoverableAmount: "15.0000",
+          nonrecoverableAmount: "0.0000",
+          collectedAccountId: null,
+          paidAccountId: org.accounts.taxInput,
+        },
+      ],
+    );
     const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
     await postDocument(saleId, { control });
     await postDocument(purchaseId, { control });
@@ -481,149 +666,181 @@ test("manual aggregate overrides preserve recovery ratio when rounded tax is zer
   assert.equal(negative.components[0]?.nonrecoverableAmount, "-6.0000");
 });
 
-test("provider posting fences config and every mapped tax code through commit", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const configId = randomUUID();
-    const codeIds = [randomUUID(), randomUUID()];
-    await db.execute(sql`
+test(
+  "provider posting fences config and every mapped tax code through commit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const configId = randomUUID();
+      const codeIds = [randomUUID(), randomUUID()];
+      await db.execute(sql`
       insert into tax_codes (id, org_id, code, name, calculation_type, recoverable_percent, is_active)
       values (${codeIds[0]}, ${org.orgId}, 'RACE-A', 'Race A', 'standard', '100', true),
              (${codeIds[1]}, ${org.orgId}, 'RACE-B', 'Race B', 'standard', '100', true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_rate_provider_configs
         (id, org_id, provider, display_name, is_enabled, prefer_provider, settings)
       values (${configId}, ${org.orgId}, 'avalara', 'Race provider', true, true,
               ${JSON.stringify({ jurisdictionTaxCodes: { A: codeIds[0], B: codeIds[1] } })}::jsonb)`);
 
-    // Enumerate both mutation classes protected by posting's config read:
-    // the provider row (which serializes mapping edits) and every tax code
-    // referenced by that mapping. The poster must hold each FOR SHARE until
-    // its ambient transaction commits.
-    const targets: Array<{ label: string; resource: "config" | "tax_code"; id?: string }> = [
-      { label: 'provider config', resource: "config" },
-      ...codeIds.map((id) => ({ label: `mapped tax code ${id}`, resource: "tax_code" as const, id })),
-    ];
-    for (const target of targets) {
-      let releaseHolder!: () => void;
-      let holderReady!: (pid: number) => void;
-      let writerStarted!: () => void;
-      const held = new Promise<void>((resolve) => { releaseHolder = resolve; });
-      const ready = new Promise<number>((resolve) => { holderReady = resolve; });
-      const writerReady = new Promise<void>((resolve) => { writerStarted = resolve; });
-      const holding = db.transaction(async (tx) => {
-        const config = await readTaxRateProviderConfigForPosting(org.orgId, tx);
-        assert.equal(config?.id, configId);
-        const holder = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0];
-        assert.ok(holder);
-        holderReady(Number(holder.pid));
-        await held;
-      });
-      const holderPid = await ready;
-      const writing = db.transaction(async (tx) => {
-        writerStarted();
-        if (target.resource === "config") {
-          await tx.execute(sql`
+      // Enumerate both mutation classes protected by posting's config read:
+      // the provider row (which serializes mapping edits) and every tax code
+      // referenced by that mapping. The poster must hold each FOR SHARE until
+      // its ambient transaction commits.
+      const targets: Array<{ label: string; resource: "config" | "tax_code"; id?: string }> = [
+        { label: "provider config", resource: "config" },
+        ...codeIds.map((id) => ({
+          label: `mapped tax code ${id}`,
+          resource: "tax_code" as const,
+          id,
+        })),
+      ];
+      for (const target of targets) {
+        let releaseHolder!: () => void;
+        let holderReady!: (pid: number) => void;
+        let writerStarted!: () => void;
+        const held = new Promise<void>((resolve) => {
+          releaseHolder = resolve;
+        });
+        const ready = new Promise<number>((resolve) => {
+          holderReady = resolve;
+        });
+        const writerReady = new Promise<void>((resolve) => {
+          writerStarted = resolve;
+        });
+        const holding = db.transaction(async (tx) => {
+          const config = await readTaxRateProviderConfigForPosting(org.orgId, tx);
+          assert.equal(config?.id, configId);
+          const holder = (
+            await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects")
+          )[0];
+          assert.ok(holder);
+          holderReady(Number(holder.pid));
+          await held;
+        });
+        const holderPid = await ready;
+        const writing = db.transaction(async (tx) => {
+          writerStarted();
+          if (target.resource === "config") {
+            await tx.execute(sql`
             update tax_rate_provider_configs set display_name = display_name
              where org_id = ${org.orgId}`);
-        } else {
-          await tx.execute(sql`
+          } else {
+            await tx.execute(sql`
             update tax_codes set name = name where org_id = ${org.orgId} and id = ${target.id}`);
-        }
-      });
-      await writerReady;
-      let blocked = false;
-      try {
-        const deadline = Date.now() + 3_000;
-        while (Date.now() < deadline) {
-          blocked = (await db.execute<{ blocked: boolean }>(sql`
+          }
+        });
+        await writerReady;
+        let blocked = false;
+        try {
+          const deadline = Date.now() + 3_000;
+          while (Date.now() < deadline) {
+            blocked = (
+              await db.execute<{ blocked: boolean }>(
+                sql`
             select exists (
               select 1 from pg_stat_activity
                where ${holderPid} = any(pg_blocking_pids(pid))
             ) as blocked
-          `, "objects"))[0]!.blocked;
-          if (blocked) break;
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          `,
+                "objects",
+              )
+            )[0]!.blocked;
+            if (blocked) break;
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+        } finally {
+          releaseHolder();
         }
-      } finally {
-        releaseHolder();
+        await holding;
+        await writing;
+        assert.equal(blocked, true, `posting did not fence ${target.label} until commit`);
       }
-      await holding;
-      await writing;
-      assert.equal(blocked, true, `posting did not fence ${target.label} until commit`);
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("approved sales and purchases use the configured provider atomically and retain line provenance", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let provider: Server | null = null;
-  let calls = 0;
-  try {
-    const taxCodeId = randomUUID();
-    await db.execute(sql`
+test(
+  "approved sales and purchases use the configured provider atomically and retain line provenance",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let provider: Server | null = null;
+    let calls = 0;
+    try {
+      const taxCodeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
       values (${taxCodeId}, ${org.orgId}, 'EXT', 'External tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_rates (id, org_id, tax_code_id, rate_percent, effective_from)
       values (${randomUUID()}, ${org.orgId}, ${taxCodeId}, '13', ${org.date})`);
 
-    provider = createServer(async (req, res) => {
-      calls++;
-      await bodyOf(req);
-      if (req.url === "/outage") {
-        res.writeHead(502, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "offline" }));
-        return;
-      }
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
-        taxAmount: "9.5000",
-        components: [{ jurisdiction: "CA", ratePercent: "9.5000", taxAmount: "9.5000" }],
-        externalRef: `QUOTE-${calls}`,
-      }));
-    });
-    const origin = await listenTaxServer(provider);
-    // Local stub on loopback: the explicit per-call test switch, exactly as
-    // the wire tests use — production callers never pass it.
-    const stubOutbound = { allowPrivateEndpoints: true } as const;
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      {
-        provider: "custom_http", isEnabled: true, preferProvider: true,
-        // The stub declares historical support so the fixture-dated documents
-        // below quote at all; as-of refusal is covered by its own test.
-        settings: { quoteUrl: `${origin}/quote`, jurisdictionTaxCodes: { CA: taxCodeId }, supportsHistoricalDates: true },
-      },
-      null,
-      stubOutbound,
-    );
+      provider = createServer(async (req, res) => {
+        calls++;
+        await bodyOf(req);
+        if (req.url === "/outage") {
+          res.writeHead(502, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "offline" }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            taxAmount: "9.5000",
+            components: [{ jurisdiction: "CA", ratePercent: "9.5000", taxAmount: "9.5000" }],
+            externalRef: `QUOTE-${calls}`,
+          }),
+        );
+      });
+      const origin = await listenTaxServer(provider);
+      // Local stub on loopback: the explicit per-call test switch, exactly as
+      // the wire tests use — production callers never pass it.
+      const stubOutbound = { allowPrivateEndpoints: true } as const;
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          // The stub declares historical support so the fixture-dated documents
+          // below quote at all; as-of refusal is covered by its own test.
+          settings: {
+            quoteUrl: `${origin}/quote`,
+            jurisdictionTaxCodes: { CA: taxCodeId },
+            supportsHistoricalDates: true,
+          },
+        },
+        null,
+        stubOutbound,
+      );
 
-    async function seedDocument(
-      kind: "customer_invoice" | "vendor_bill",
-      number: string,
-      taxAmount = "13.0000",
-    ): Promise<{ id: string; lineId: string }> {
-      const id = randomUUID();
-      const lineId = randomUUID();
-      const partyId = kind === "customer_invoice" ? org.customerId : org.vendorId;
-      const accountId = kind === "customer_invoice" ? org.accounts.revenue : org.accounts.cogs;
-      const total = taxAmount === "9.5000" ? "109.5000" : "113.0000";
-      await db.execute(sql`
+      async function seedDocument(
+        kind: "customer_invoice" | "vendor_bill",
+        number: string,
+        taxAmount = "13.0000",
+      ): Promise<{ id: string; lineId: string }> {
+        const id = randomUUID();
+        const lineId = randomUUID();
+        const partyId = kind === "customer_invoice" ? org.customerId : org.vendorId;
+        const accountId = kind === "customer_invoice" ? org.accounts.revenue : org.accounts.cogs;
+        const total = taxAmount === "9.5000" ? "109.5000" : "113.0000";
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
            currency, subtotal, tax_total, total)
         values (${id}, ${org.orgId}, ${kind}, 'draft', ${number}, ${partyId}, ${org.subsidiaryId}, ${org.date},
                 'CAD', '100', ${taxAmount}, ${total})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
            tax_amount, tax_code_id, quantity, unit_price)
         values (${lineId}, ${org.orgId}, ${id}, 1, ${accountId}, '100', '100', ${taxAmount}, ${taxCodeId}, '1', '100')`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_line_tax_components
           (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
            tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -631,286 +848,397 @@ test("approved sales and purchases use the configured provider atomically and re
            collected_account_id, paid_account_id, overridden)
         values (${org.orgId}, ${lineId}, ${taxCodeId}, 1, '13', '100', ${taxAmount}, ${taxAmount}, '0', 'standard',
                 false, false, 2, ${org.accounts.taxOutput}, ${org.accounts.taxInput}, false)`);
-      await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
-      return { id, lineId };
-    }
+        await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
+        return { id, lineId };
+      }
 
-    const sales = await seedDocument("customer_invoice", "EXT-SALE", "9.5000");
-    const purchase = await seedDocument("vendor_bill", "EXT-PURCHASE", "9.5000");
-    // Draft calculation is the only provider call and persists the immutable
-    // line quote before approval. Posting must only replay this evidence.
-    await quoteExternalTax(
-      org.orgId,
-      {
-        taxableAmount: "100.0000",
-        currency: "CAD",
-        shipFrom: {},
-        shipTo: {},
-        quotedOn: org.date,
-        documentLineId: sales.lineId,
-      },
-      null,
-      { allowPrivateEndpoints: true },
-    );
-    await quoteExternalTax(
-      org.orgId,
-      {
-        taxableAmount: "100.0000",
-        currency: "CAD",
-        shipFrom: {},
-        shipTo: {},
-        quotedOn: org.date,
-        documentLineId: purchase.lineId,
-      },
-      null,
-      { allowPrivateEndpoints: true },
-    );
-    assert.equal(calls, 2, "draft calculation invokes the configured provider for sales and purchases");
-    const deps = { control: {
-      ar: org.accounts.ar,
-      ap: org.accounts.ap,
-      bank: org.accounts.bank,
-      taxCollected: org.accounts.taxOutput,
-      taxPaid: org.accounts.taxInput,
-    } };
-    await postDocument(sales.id, deps, { deferEffects: true, suppressAutomation: true });
-    await postDocument(purchase.id, deps, { deferEffects: true, suppressAutomation: true });
-    assert.equal(calls, 2, "posting reuses the immutable draft quotes without provider calls");
+      const sales = await seedDocument("customer_invoice", "EXT-SALE", "9.5000");
+      const purchase = await seedDocument("vendor_bill", "EXT-PURCHASE", "9.5000");
+      // Draft calculation is the only provider call and persists the immutable
+      // line quote before approval. Posting must only replay this evidence.
+      await quoteExternalTax(
+        org.orgId,
+        {
+          taxableAmount: "100.0000",
+          currency: "CAD",
+          shipFrom: {},
+          shipTo: {},
+          quotedOn: org.date,
+          documentLineId: sales.lineId,
+        },
+        null,
+        { allowPrivateEndpoints: true },
+      );
+      await quoteExternalTax(
+        org.orgId,
+        {
+          taxableAmount: "100.0000",
+          currency: "CAD",
+          shipFrom: {},
+          shipTo: {},
+          quotedOn: org.date,
+          documentLineId: purchase.lineId,
+        },
+        null,
+        { allowPrivateEndpoints: true },
+      );
+      assert.equal(
+        calls,
+        2,
+        "draft calculation invokes the configured provider for sales and purchases",
+      );
+      const deps = {
+        control: {
+          ar: org.accounts.ar,
+          ap: org.accounts.ap,
+          bank: org.accounts.bank,
+          taxCollected: org.accounts.taxOutput,
+          taxPaid: org.accounts.taxInput,
+        },
+      };
+      await postDocument(sales.id, deps, { deferEffects: true, suppressAutomation: true });
+      await postDocument(purchase.id, deps, { deferEffects: true, suppressAutomation: true });
+      assert.equal(calls, 2, "posting reuses the immutable draft quotes without provider calls");
 
-    const evidence = await db.execute<{ document_line_id: string; tax_amount: string; external_ref: string | null }>(sql`
+      const evidence = await db.execute<{
+        document_line_id: string;
+        tax_amount: string;
+        external_ref: string | null;
+      }>(
+        sql`
       select document_line_id, tax_amount::text, external_ref
         from tax_rate_quotes
        where org_id = ${org.orgId}
-       order by created_at, id`, "objects");
-    assert.equal(evidence.length, 2);
-    assert.deepEqual(evidence.map((row) => row.document_line_id), [sales.lineId, purchase.lineId]);
-    assert.deepEqual(evidence.map((row) => row.tax_amount), ["9.5000", "9.5000"]);
-    assert.deepEqual(evidence.map((row) => row.external_ref), ["QUOTE-1", "QUOTE-2"]);
+       order by created_at, id`,
+        "objects",
+      );
+      assert.equal(evidence.length, 2);
+      assert.deepEqual(
+        evidence.map((row) => row.document_line_id),
+        [sales.lineId, purchase.lineId],
+      );
+      assert.deepEqual(
+        evidence.map((row) => row.tax_amount),
+        ["9.5000", "9.5000"],
+      );
+      assert.deepEqual(
+        evidence.map((row) => row.external_ref),
+        ["QUOTE-1", "QUOTE-2"],
+      );
 
-    const salesLine = (await db.execute<{ amount: string; tax_amount: string }>(sql`
-      select amount::text, tax_amount::text from document_lines where id = ${sales.lineId}`, "objects"))[0]!;
-    assert.deepEqual(salesLine, { amount: "100.0000", tax_amount: "9.5000" });
+      const salesLine = (
+        await db.execute<{ amount: string; tax_amount: string }>(
+          sql`
+      select amount::text, tax_amount::text from document_lines where id = ${sales.lineId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(salesLine, { amount: "100.0000", tax_amount: "9.5000" });
 
-    // A persisted line quote is the replay authority. Once it exists, a retry
-    // does not call a changed/outage endpoint and reuses the same provenance.
-    const replay = await seedDocument("customer_invoice", "EXT-REPLAY", "9.5000");
-    await quoteExternalTax(
-      org.orgId,
-      {
-        taxableAmount: "100.0000",
-        currency: "CAD",
-        shipFrom: {},
-        shipTo: {},
-        quotedOn: org.date,
-        documentLineId: replay.lineId,
-      },
-      null,
-      { allowPrivateEndpoints: true },
-    );
-    assert.equal(calls, 3);
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      {
-        provider: "custom_http", isEnabled: true, preferProvider: true,
-        settings: { quoteUrl: `${origin}/outage`, jurisdictionTaxCodes: { CA: taxCodeId } },
-      },
-      null,
-      stubOutbound,
-    );
-    await postDocument(replay.id, deps, { deferEffects: true, suppressAutomation: true });
-    assert.equal(calls, 3, "retry uses the persisted quote instead of re-firing the provider");
+      // A persisted line quote is the replay authority. Once it exists, a retry
+      // does not call a changed/outage endpoint and reuses the same provenance.
+      const replay = await seedDocument("customer_invoice", "EXT-REPLAY", "9.5000");
+      await quoteExternalTax(
+        org.orgId,
+        {
+          taxableAmount: "100.0000",
+          currency: "CAD",
+          shipFrom: {},
+          shipTo: {},
+          quotedOn: org.date,
+          documentLineId: replay.lineId,
+        },
+        null,
+        { allowPrivateEndpoints: true },
+      );
+      assert.equal(calls, 3);
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { quoteUrl: `${origin}/outage`, jurisdictionTaxCodes: { CA: taxCodeId } },
+        },
+        null,
+        stubOutbound,
+      );
+      await postDocument(replay.id, deps, { deferEffects: true, suppressAutomation: true });
+      assert.equal(calls, 3, "retry uses the persisted quote instead of re-firing the provider");
 
-    // Explicit local-provider selection means no HTTP call and no external
-    // quote is stamped; the statutory local evidence remains authoritative.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: false },
-      null,
-      // Inherits the loopback stub URL from the previous save, which
-      // re-validates: same explicit switch.
-      stubOutbound,
-    );
-    const local = await seedDocument("customer_invoice", "LOCAL-TAX");
-    await postDocument(local.id, deps, { deferEffects: true, suppressAutomation: true });
-    assert.equal(calls, 3);
-    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where org_id = ${org.orgId} and document_line_id = ${local.lineId}`, "objects"))[0]?.count, "0");
+      // Explicit local-provider selection means no HTTP call and no external
+      // quote is stamped; the statutory local evidence remains authoritative.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        { provider: "custom_http", isEnabled: true, preferProvider: false },
+        null,
+        // Inherits the loopback stub URL from the previous save, which
+        // re-validates: same explicit switch.
+        stubOutbound,
+      );
+      const local = await seedDocument("customer_invoice", "LOCAL-TAX");
+      await postDocument(local.id, deps, { deferEffects: true, suppressAutomation: true });
+      assert.equal(calls, 3);
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from tax_rate_quotes where org_id = ${org.orgId} and document_line_id = ${local.lineId}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
 
-    // An approved document without draft provider evidence fails closed before
-    // the posting transaction starts: no endpoint call or journal is emitted.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/outage` } },
-      null,
-      stubOutbound,
-    );
-    const failed = await seedDocument("vendor_bill", "EXT-OUTAGE");
-    await assert.rejects(
-      postDocument(failed.id, deps, { deferEffects: true, suppressAutomation: true }),
-      /no immutable tax-provider quote/,
-    );
-    assert.equal(calls, 3);
-    const failedState = (await db.execute<{ status: string; posted_entry_id: string | null }>(sql`
-      select status, posted_entry_id from documents where id = ${failed.id}`, "objects"))[0]!;
-    assert.deepEqual(failedState, { status: "approved", posted_entry_id: null });
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${failed.id}`, "objects"))[0]?.count, "0");
-    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where document_line_id = ${failed.lineId}`, "objects"))[0]?.count, "0");
-  } finally {
-    if (provider) await closeTaxServer(provider);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // An approved document without draft provider evidence fails closed before
+      // the posting transaction starts: no endpoint call or journal is emitted.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { quoteUrl: `${origin}/outage` },
+        },
+        null,
+        stubOutbound,
+      );
+      const failed = await seedDocument("vendor_bill", "EXT-OUTAGE");
+      await assert.rejects(
+        postDocument(failed.id, deps, { deferEffects: true, suppressAutomation: true }),
+        /no immutable tax-provider quote/,
+      );
+      assert.equal(calls, 3);
+      const failedState = (
+        await db.execute<{ status: string; posted_entry_id: string | null }>(
+          sql`
+      select status, posted_entry_id from documents where id = ${failed.id}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(failedState, { status: "approved", posted_entry_id: null });
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from journal_entries where source_document_id = ${failed.id}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from tax_rate_quotes where document_line_id = ${failed.lineId}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
+    } finally {
+      if (provider) await closeTaxServer(provider);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("provider quotes book per-jurisdiction amounts under mapped tax codes, never the local split", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const stateCode = randomUUID();
-    const cityCode = randomUUID();
-    const cityAccount = randomUUID();
-    await db.execute(sql`
+test(
+  "provider quotes book per-jurisdiction amounts under mapped tax codes, never the local split",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const stateCode = randomUUID();
+      const cityCode = randomUUID();
+      const cityAccount = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${cityAccount}, ${org.orgId}, '2265', 'City Tax Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
       values
         (${stateCode}, ${org.orgId}, 'STATE', 'State tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true),
         (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
-    const settings = { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } };
-    const quote: TaxQuoteResult = {
-      provider: "custom_http",
-      taxAmount: "8.2500",
-      components: [
-        { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
-        { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
-      ],
-      externalRef: "Q-1",
-      raw: null,
-    };
-    // The provider says state 7.00 + city 1.25: the booked evidence carries
-    // those amounts under the mapped codes even though no local profile does.
-    const components = await resolveProviderTaxComponents(org.orgId, "100.0000", quote, settings);
-    assert.equal(components.length, 2);
-    assert.deepEqual(
-      components.map((c) => ({ code: c.code, taxAmount: c.taxAmount, sequence: c.sequence, overridden: c.overridden })),
-      [
-        { code: "STATE", taxAmount: "7.0000", sequence: 1, overridden: true },
-        { code: "CITY", taxAmount: "1.2500", sequence: 2, overridden: true },
-      ],
-    );
-    assert.equal(components[0]?.taxCodeId, stateCode);
-    assert.equal(components[1]?.taxCodeId, cityCode);
+      const settings = { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } };
+      const quote: TaxQuoteResult = {
+        provider: "custom_http",
+        taxAmount: "8.2500",
+        components: [
+          { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+          { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+        ],
+        externalRef: "Q-1",
+        raw: null,
+      };
+      // The provider says state 7.00 + city 1.25: the booked evidence carries
+      // those amounts under the mapped codes even though no local profile does.
+      const components = await resolveProviderTaxComponents(org.orgId, "100.0000", quote, settings);
+      assert.equal(components.length, 2);
+      assert.deepEqual(
+        components.map((c) => ({
+          code: c.code,
+          taxAmount: c.taxAmount,
+          sequence: c.sequence,
+          overridden: c.overridden,
+        })),
+        [
+          { code: "STATE", taxAmount: "7.0000", sequence: 1, overridden: true },
+          { code: "CITY", taxAmount: "1.2500", sequence: 2, overridden: true },
+        ],
+      );
+      assert.equal(components[0]?.taxCodeId, stateCode);
+      assert.equal(components[1]?.taxCodeId, cityCode);
 
-    // A jurisdiction the mapping does not name refuses before approval, with
-    // the remedy — it must never post under a wrong code or as a zero.
-    await assert.rejects(
-      resolveProviderTaxComponents(org.orgId, "100.0000", quote, { jurisdictionTaxCodes: { STATE: stateCode } }),
-      /CITY.*no mapped tax code/,
-    );
-    // Components that do not reconcile to the headline refuse as well.
-    await assert.rejects(
-      resolveProviderTaxComponents(org.orgId, "100.0000", { ...quote, taxAmount: "8.2600" }, settings),
-      /components sum to 8.2500/,
-    );
-    // An empty component list cannot be split across local codes.
-    await assert.rejects(
-      resolveProviderTaxComponents(org.orgId, "100.0000", { ...quote, components: [] }, settings),
-      /with no components/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // A jurisdiction the mapping does not name refuses before approval, with
+      // the remedy — it must never post under a wrong code or as a zero.
+      await assert.rejects(
+        resolveProviderTaxComponents(org.orgId, "100.0000", quote, {
+          jurisdictionTaxCodes: { STATE: stateCode },
+        }),
+        /CITY.*no mapped tax code/,
+      );
+      // Components that do not reconcile to the headline refuse as well.
+      await assert.rejects(
+        resolveProviderTaxComponents(
+          org.orgId,
+          "100.0000",
+          { ...quote, taxAmount: "8.2600" },
+          settings,
+        ),
+        /components sum to 8.2500/,
+      );
+      // An empty component list cannot be split across local codes.
+      await assert.rejects(
+        resolveProviderTaxComponents(org.orgId, "100.0000", { ...quote, components: [] }, settings),
+        /with no components/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("provider settings refuse jurisdiction mappings to unusable tax codes", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const activeCode = randomUUID();
-    const inactiveCode = randomUUID();
-    await db.execute(sql`
+test(
+  "provider settings refuse jurisdiction mappings to unusable tax codes",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const activeCode = randomUUID();
+      const inactiveCode = randomUUID();
+      await db.execute(sql`
       insert into tax_codes (id, org_id, code, name, is_active)
       values (${activeCode}, ${org.orgId}, 'OK', 'Active', true),
              (${inactiveCode}, ${org.orgId}, 'OLD', 'Inactive', false)`);
-    const base = { provider: "custom_http" as const, isEnabled: true, preferProvider: false };
-    await assert.rejects(
-      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: { STATE: randomUUID() } } }, null),
-      /does not exist in this organization/,
-    );
-    await assert.rejects(
-      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: { STATE: inactiveCode } } }, null),
-      /inactive tax code "OLD"/,
-    );
-    await assert.rejects(
-      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: { STATE: "not-a-code" } } }, null),
-      /not a tax code id/,
-    );
-    await assert.rejects(
-      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: "STATE" } }, null),
-      /must be an object/,
-    );
-    // A valid mapping saves and reads back normalized.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { ...base, settings: { jurisdictionTaxCodes: { " STATE ": activeCode } } },
-      null,
-    );
-    const saved = await readTaxRateProviderConfig(org.orgId);
-    assert.deepEqual(saved?.settings.jurisdictionTaxCodes, { STATE: activeCode });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const base = { provider: "custom_http" as const, isEnabled: true, preferProvider: false };
+      await assert.rejects(
+        saveTaxRateProviderConfig(
+          org.orgId,
+          { ...base, settings: { jurisdictionTaxCodes: { STATE: randomUUID() } } },
+          null,
+        ),
+        /does not exist in this organization/,
+      );
+      await assert.rejects(
+        saveTaxRateProviderConfig(
+          org.orgId,
+          { ...base, settings: { jurisdictionTaxCodes: { STATE: inactiveCode } } },
+          null,
+        ),
+        /inactive tax code "OLD"/,
+      );
+      await assert.rejects(
+        saveTaxRateProviderConfig(
+          org.orgId,
+          { ...base, settings: { jurisdictionTaxCodes: { STATE: "not-a-code" } } },
+          null,
+        ),
+        /not a tax code id/,
+      );
+      await assert.rejects(
+        saveTaxRateProviderConfig(
+          org.orgId,
+          { ...base, settings: { jurisdictionTaxCodes: "STATE" } },
+          null,
+        ),
+        /must be an object/,
+      );
+      // A valid mapping saves and reads back normalized.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        { ...base, settings: { jurisdictionTaxCodes: { " STATE ": activeCode } } },
+        null,
+      );
+      const saved = await readTaxRateProviderConfig(org.orgId);
+      assert.deepEqual(saved?.settings.jurisdictionTaxCodes, { STATE: activeCode });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("posting books the provider's per-jurisdiction amounts and refuses a locally re-split line", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const stateCode = randomUUID();
-    const cityCode = randomUUID();
-    const cityAccount = randomUUID();
-    await db.execute(sql`
+test(
+  "posting books the provider's per-jurisdiction amounts and refuses a locally re-split line",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const stateCode = randomUUID();
+      const cityCode = randomUUID();
+      const cityAccount = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${cityAccount}, ${org.orgId}, '2265', 'City Tax Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
       values
         (${stateCode}, ${org.orgId}, 'STATE', 'State tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true),
         (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      {
-        provider: "custom_http", isEnabled: true, preferProvider: true,
-        settings: { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } },
-      },
-      null,
-      // Documentation-only hostname: resolve it to a public stub address so
-      // the save-time DNS check stays hermetic.
-      { lookup: async () => ["93.184.216.34"] },
-    );
-    const config = await readTaxRateProviderConfig(org.orgId);
-    const quoteComponents = [
-      { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
-      { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
-    ];
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } },
+        },
+        null,
+        // Documentation-only hostname: resolve it to a public stub address so
+        // the save-time DNS check stays hermetic.
+        { lookup: async () => ["93.184.216.34"] },
+      );
+      const config = await readTaxRateProviderConfig(org.orgId);
+      const quoteComponents = [
+        { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+        { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+      ];
 
-    async function seedSale(
-      number: string,
-      evidence: Array<{ taxCodeId: string; sequence: number; rate: string; amount: string; collected: string }>,
-    ): Promise<{ id: string; lineId: string }> {
-      const id = randomUUID();
-      const lineId = randomUUID();
-      await db.execute(sql`
+      async function seedSale(
+        number: string,
+        evidence: Array<{
+          taxCodeId: string;
+          sequence: number;
+          rate: string;
+          amount: string;
+          collected: string;
+        }>,
+      ): Promise<{ id: string; lineId: string }> {
+        const id = randomUUID();
+        const lineId = randomUUID();
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
            currency, subtotal, tax_total, total)
         values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${number}, ${org.customerId}, ${org.subsidiaryId}, ${org.date},
                 'CAD', '100', '8.2500', '108.2500')`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
            tax_amount, tax_code_id, quantity, unit_price)
         values (${lineId}, ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '100', '100', '8.2500', ${stateCode}, '1', '100')`);
-      for (const component of evidence) {
-        await db.execute(sql`
+        for (const component of evidence) {
+          await db.execute(sql`
           insert into document_line_tax_components
             (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
              tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -919,290 +1247,456 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
           values (${org.orgId}, ${lineId}, ${component.taxCodeId}, ${component.sequence}, ${component.rate},
                   '100', ${component.amount}, ${component.amount}, '0', 'standard',
                   false, false, 2, ${component.collected}, ${org.accounts.taxInput}, true)`);
-      }
-      await db.execute(sql`
+        }
+        await db.execute(sql`
         insert into tax_rate_quotes
           (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
            taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id)
         values (${org.orgId}, ${config!.id}, 'custom_http', ${org.date}, 'CAD', '{}'::jsonb, '{}'::jsonb,
                 '100.0000', '8.2500', ${JSON.stringify(quoteComponents)}::jsonb, 'Q-1', null, ${lineId})`);
-      await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
-      return { id, lineId };
-    }
+        await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
+        return { id, lineId };
+      }
 
-    const deps = { control: {
-      ar: org.accounts.ar,
-      ap: org.accounts.ap,
-      bank: org.accounts.bank,
-      taxCollected: org.accounts.taxOutput,
-      taxPaid: org.accounts.taxInput,
-    } };
-    // The old shape — one local component carrying the whole headline —
-    // shares the total but misattributes every jurisdiction: posting refuses
-    // with the recalculation remedy instead of booking it.
-    const legacy = await seedSale("PROV-LEGACY", [
-      { taxCodeId: stateCode, sequence: 1, rate: "8.25", amount: "8.2500", collected: org.accounts.taxOutput },
-    ]);
-    await assert.rejects(
-      postDocument(legacy.id, deps, { deferEffects: true, suppressAutomation: true }),
-      /booked 1 tax component\(s\) but the provider quote has 2.*recalculate the draft/,
-    );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${legacy.id}`, "objects"))[0]?.count, "0");
+      const deps = {
+        control: {
+          ar: org.accounts.ar,
+          ap: org.accounts.ap,
+          bank: org.accounts.bank,
+          taxCollected: org.accounts.taxOutput,
+          taxPaid: org.accounts.taxInput,
+        },
+      };
+      // The old shape — one local component carrying the whole headline —
+      // shares the total but misattributes every jurisdiction: posting refuses
+      // with the recalculation remedy instead of booking it.
+      const legacy = await seedSale("PROV-LEGACY", [
+        {
+          taxCodeId: stateCode,
+          sequence: 1,
+          rate: "8.25",
+          amount: "8.2500",
+          collected: org.accounts.taxOutput,
+        },
+      ]);
+      await assert.rejects(
+        postDocument(legacy.id, deps, { deferEffects: true, suppressAutomation: true }),
+        /booked 1 tax component\(s\) but the provider quote has 2.*recalculate the draft/,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from journal_entries where source_document_id = ${legacy.id}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
 
-    // Equal dollars with swapped codes add up fine but book every dollar to
-    // the wrong jurisdiction liability: posting refuses instead of booking.
-    const swapped = await seedSale("PROV-SWAPPED", [
-      { taxCodeId: cityCode, sequence: 1, rate: "7", amount: "7.0000", collected: cityAccount },
-      { taxCodeId: stateCode, sequence: 2, rate: "1.25", amount: "1.2500", collected: org.accounts.taxOutput },
-    ]);
-    await assert.rejects(
-      postDocument(swapped.id, deps, { deferEffects: true, suppressAutomation: true }),
-      /component 1 books the wrong tax code for provider jurisdiction "STATE" \(mapped to "STATE"\).*re-quote the draft/,
-    );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${swapped.id}`, "objects"))[0]?.count, "0");
+      // Equal dollars with swapped codes add up fine but book every dollar to
+      // the wrong jurisdiction liability: posting refuses instead of booking.
+      const swapped = await seedSale("PROV-SWAPPED", [
+        { taxCodeId: cityCode, sequence: 1, rate: "7", amount: "7.0000", collected: cityAccount },
+        {
+          taxCodeId: stateCode,
+          sequence: 2,
+          rate: "1.25",
+          amount: "1.2500",
+          collected: org.accounts.taxOutput,
+        },
+      ]);
+      await assert.rejects(
+        postDocument(swapped.id, deps, { deferEffects: true, suppressAutomation: true }),
+        /component 1 books the wrong tax code for provider jurisdiction "STATE" \(mapped to "STATE"\).*re-quote the draft/,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from journal_entries where source_document_id = ${swapped.id}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
 
-    // The mapped shape posts state 7.00 and city 1.25 to their own accounts.
-    const mapped = await seedSale("PROV-MAPPED", [
-      { taxCodeId: stateCode, sequence: 1, rate: "7", amount: "7.0000", collected: org.accounts.taxOutput },
-      { taxCodeId: cityCode, sequence: 2, rate: "1.25", amount: "1.2500", collected: cityAccount },
-    ]);
-    const entryId = await postDocument(mapped.id, deps, { deferEffects: true, suppressAutomation: true });
-    const taxLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      // The mapped shape posts state 7.00 and city 1.25 to their own accounts.
+      const mapped = await seedSale("PROV-MAPPED", [
+        {
+          taxCodeId: stateCode,
+          sequence: 1,
+          rate: "7",
+          amount: "7.0000",
+          collected: org.accounts.taxOutput,
+        },
+        {
+          taxCodeId: cityCode,
+          sequence: 2,
+          rate: "1.25",
+          amount: "1.2500",
+          collected: cityAccount,
+        },
+      ]);
+      const entryId = await postDocument(mapped.id, deps, {
+        deferEffects: true,
+        suppressAutomation: true,
+      });
+      const taxLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
       select account_id, amount::text as amount from journal_lines
        where entry_id = ${entryId} and account_id in (${org.accounts.taxOutput}, ${cityAccount})
-       order by account_id`, "objects");
-    assert.equal(taxLines.length, 2);
-    const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
-    assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
-    assert.equal(byAccount.get(cityAccount), "-1.2500");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       order by account_id`,
+        "objects",
+      );
+      assert.equal(taxLines.length, 2);
+      const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
+      assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
+      assert.equal(byAccount.get(cityAccount), "-1.2500");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // Local stub servers on loopback need the explicit per-call test switch
 // (never persisted, never passed by production callers).
 const LOCAL_STUB = { allowPrivateEndpoints: true } as const;
 
-test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones pass", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let mode = "match";
-  let provider: Server | null = null;
-  try {
-    provider = createServer(async (req, res) => {
-      const body = await bodyOf(req);
-      assert.ok(body.length > 0);
-      const bad = mode === "bad";
-      res.writeHead(200, { "content-type": "application/json" });
-      if (req.url === "/api/v2/transactions/create") {
-        res.end(JSON.stringify({
-          totalTax: 8.25,
-          code: "Q",
-          summary: [
-            { jurisdictionType: "STATE", rate: 0.07, tax: 7.0, taxName: "State" },
-            { jurisdictionType: "CITY", rate: 0.0125, tax: bad ? 1.24 : 1.25, taxName: "City" },
-          ],
-        }));
-      } else if (req.url === "/v2/taxes") {
-        res.end(JSON.stringify({
-          tax: {
-            amount_to_collect: 8.25,
-            rate: 0.0825,
-            breakdown: {
-              state_tax_collectable: 7.0,
-              state_tax_rate: 0.07,
-              county_tax_collectable: bad ? 1.24 : 1.25,
-              county_tax_rate: 0.0125,
-            },
+test(
+  "mismatched Avalara and TaxJar quotes refuse at quote time; matching ones pass",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let mode = "match";
+    let provider: Server | null = null;
+    try {
+      provider = createServer(async (req, res) => {
+        const body = await bodyOf(req);
+        assert.ok(body.length > 0);
+        const bad = mode === "bad";
+        res.writeHead(200, { "content-type": "application/json" });
+        if (req.url === "/api/v2/transactions/create") {
+          res.end(
+            JSON.stringify({
+              totalTax: 8.25,
+              code: "Q",
+              summary: [
+                { jurisdictionType: "STATE", rate: 0.07, tax: 7.0, taxName: "State" },
+                { jurisdictionType: "CITY", rate: 0.0125, tax: bad ? 1.24 : 1.25, taxName: "City" },
+              ],
+            }),
+          );
+        } else if (req.url === "/v2/taxes") {
+          res.end(
+            JSON.stringify({
+              tax: {
+                amount_to_collect: 8.25,
+                rate: 0.0825,
+                breakdown: {
+                  state_tax_collectable: 7.0,
+                  state_tax_rate: 0.07,
+                  county_tax_collectable: bad ? 1.24 : 1.25,
+                  county_tax_rate: 0.0125,
+                },
+              },
+            }),
+          );
+        } else {
+          res.writeHead(404, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "unknown" }));
+        }
+      });
+      const origin = await listenTaxServer(provider);
+      const address = {
+        shipFrom: { country: "US", region: "WA", postalCode: "98101" },
+        shipTo: {
+          line1: "1 Main St",
+          city: "Seattle",
+          region: "WA",
+          postalCode: "98101",
+          country: "US",
+        },
+      };
+      // Quote the business today: the cross-foot under test is orthogonal to
+      // as-of support, and a fixture-dated quote would (correctly) refuse.
+      const today = await businessToday(org.orgId);
+
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "avalara",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { baseUrl: origin },
+          accountId: "A",
+          licenseKey: "L",
+        },
+        null,
+        LOCAL_STUB,
+      );
+      const matched = await quoteExternalTax(
+        org.orgId,
+        {
+          taxableAmount: "100.0000",
+          currency: "USD",
+          ...address,
+          quotedOn: today,
+        },
+        null,
+        LOCAL_STUB,
+      );
+      assert.equal(matched.taxAmount, "8.2500");
+      mode = "bad";
+      await assert.rejects(
+        quoteExternalTax(
+          org.orgId,
+          {
+            taxableAmount: "100.0000",
+            currency: "USD",
+            ...address,
+            quotedOn: today,
           },
-        }));
-      } else {
-        res.writeHead(404, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "unknown" }));
-      }
-    });
-    const origin = await listenTaxServer(provider);
-    const address = {
-      shipFrom: { country: "US", region: "WA", postalCode: "98101" },
-      shipTo: { line1: "1 Main St", city: "Seattle", region: "WA", postalCode: "98101", country: "US" },
-    };
-    // Quote the business today: the cross-foot under test is orthogonal to
-    // as-of support, and a fixture-dated quote would (correctly) refuse.
-    const today = await businessToday(org.orgId);
+          null,
+          LOCAL_STUB,
+        ),
+        /avalara returned tax 8.2500 but its components sum to 8.2400/,
+      );
 
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "avalara", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, accountId: "A", licenseKey: "L" },
-      null,
-      LOCAL_STUB,
-    );
-    const matched = await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
-    }, null, LOCAL_STUB);
-    assert.equal(matched.taxAmount, "8.2500");
-    mode = "bad";
-    await assert.rejects(
-      quoteExternalTax(org.orgId, {
-        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
-      }, null, LOCAL_STUB),
-      /avalara returned tax 8.2500 but its components sum to 8.2400/,
-    );
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "taxjar",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { baseUrl: origin },
+          apiKey: "K",
+        },
+        null,
+        LOCAL_STUB,
+      );
+      mode = "match";
+      const tjMatched = await quoteExternalTax(
+        org.orgId,
+        {
+          taxableAmount: "100.0000",
+          currency: "USD",
+          ...address,
+          quotedOn: today,
+        },
+        null,
+        LOCAL_STUB,
+      );
+      assert.equal(tjMatched.taxAmount, "8.2500");
+      mode = "bad";
+      await assert.rejects(
+        quoteExternalTax(
+          org.orgId,
+          {
+            taxableAmount: "100.0000",
+            currency: "USD",
+            ...address,
+            quotedOn: today,
+          },
+          null,
+          LOCAL_STUB,
+        ),
+        /taxjar returned tax 8.2500 but its components sum to 8.2400/,
+      );
+    } finally {
+      if (provider) await closeTaxServer(provider);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "taxjar", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, apiKey: "K" },
-      null,
-      LOCAL_STUB,
-    );
-    mode = "match";
-    const tjMatched = await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
-    }, null, LOCAL_STUB);
-    assert.equal(tjMatched.taxAmount, "8.2500");
-    mode = "bad";
-    await assert.rejects(
-      quoteExternalTax(org.orgId, {
-        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
-      }, null, LOCAL_STUB),
-      /taxjar returned tax 8.2500 but its components sum to 8.2400/,
-    );
-  } finally {
-    if (provider) await closeTaxServer(provider);
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("headline-only custom hook quotes synthesize a mapped component, or refuse", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let hookBody: Record<string, unknown> = { taxAmount: "8.2500", externalRef: "H-1" };
-  let provider: Server | null = null;
-  try {
-    const codeId = randomUUID();
-    await db.execute(sql`
+test(
+  "headline-only custom hook quotes synthesize a mapped component, or refuse",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let hookBody: Record<string, unknown> = { taxAmount: "8.2500", externalRef: "H-1" };
+    let provider: Server | null = null;
+    try {
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
       values (${codeId}, ${org.orgId}, 'CUSTOM', 'Custom hook tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
-    provider = createServer(async (req, res) => {
-      await bodyOf(req);
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(hookBody));
-    });
-    const origin = await listenTaxServer(provider);
-    // Quote the business today: the headline rule under test is orthogonal
-    // to as-of support, and a fixture-dated quote would (correctly) refuse.
-    const request = {
-      taxableAmount: "100.0000", currency: "CAD", shipFrom: {}, shipTo: {}, quotedOn: await businessToday(org.orgId),
-    };
+      provider = createServer(async (req, res) => {
+        await bodyOf(req);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(hookBody));
+      });
+      const origin = await listenTaxServer(provider);
+      // Quote the business today: the headline rule under test is orthogonal
+      // to as-of support, and a fixture-dated quote would (correctly) refuse.
+      const request = {
+        taxableAmount: "100.0000",
+        currency: "CAD",
+        shipFrom: {},
+        shipTo: {},
+        quotedOn: await businessToday(org.orgId),
+      };
 
-    // No headline mapping configured: a nonzero bare headline refuses by name.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook` } },
-      null,
-      LOCAL_STUB,
-    );
-    await assert.rejects(
-      quoteExternalTax(org.orgId, request, null, LOCAL_STUB),
-      /custom tax hook returned tax 8.2500 with no components.*customHeadlineJurisdiction/,
-    );
-    // A headline key outside the mapping refuses too.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook`, customHeadlineJurisdiction: "OTHER" } },
-      null,
-      LOCAL_STUB,
-    );
-    await assert.rejects(
-      quoteExternalTax(org.orgId, request, null, LOCAL_STUB),
-      /headline jurisdiction "OTHER" has no mapped tax code/,
-    );
+      // No headline mapping configured: a nonzero bare headline refuses by name.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { quoteUrl: `${origin}/hook` },
+        },
+        null,
+        LOCAL_STUB,
+      );
+      await assert.rejects(
+        quoteExternalTax(org.orgId, request, null, LOCAL_STUB),
+        /custom tax hook returned tax 8.2500 with no components.*customHeadlineJurisdiction/,
+      );
+      // A headline key outside the mapping refuses too.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { quoteUrl: `${origin}/hook`, customHeadlineJurisdiction: "OTHER" },
+        },
+        null,
+        LOCAL_STUB,
+      );
+      await assert.rejects(
+        quoteExternalTax(org.orgId, request, null, LOCAL_STUB),
+        /headline jurisdiction "OTHER" has no mapped tax code/,
+      );
 
-    // With the mapping, the headline synthesizes one attributed component
-    // carrying the exact implied rate — quotable, approvable, and postable.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      {
-        provider: "custom_http", isEnabled: true, preferProvider: true,
-        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM" },
-      },
-      null,
-      LOCAL_STUB,
-    );
-    const quote = await quoteExternalTax(org.orgId, request, null, LOCAL_STUB);
-    assert.deepEqual(quote.components, [
-      { jurisdiction: "CUSTOM", ratePercent: "8.2500", taxAmount: "8.2500" },
-    ]);
+      // With the mapping, the headline synthesizes one attributed component
+      // carrying the exact implied rate — quotable, approvable, and postable.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: {
+            quoteUrl: `${origin}/hook`,
+            jurisdictionTaxCodes: { CUSTOM: codeId },
+            customHeadlineJurisdiction: "CUSTOM",
+          },
+        },
+        null,
+        LOCAL_STUB,
+      );
+      const quote = await quoteExternalTax(org.orgId, request, null, LOCAL_STUB);
+      assert.deepEqual(quote.components, [
+        { jurisdiction: "CUSTOM", ratePercent: "8.2500", taxAmount: "8.2500" },
+      ]);
 
-    // A headline that does not divide its base evenly synthesizes an
-    // explicitly flagged zero rate rather than invented precision.
-    hookBody = { taxAmount: "1.0000", externalRef: "H-2" };
-    const inexact = await quoteExternalTax(org.orgId, { ...request, taxableAmount: "3.0000" }, null, LOCAL_STUB);
-    assert.deepEqual(inexact.components, [
-      { jurisdiction: "CUSTOM", ratePercent: "0.0000", taxAmount: "1.0000", rateIsBlendedFallback: true },
-    ]);
+      // A headline that does not divide its base evenly synthesizes an
+      // explicitly flagged zero rate rather than invented precision.
+      hookBody = { taxAmount: "1.0000", externalRef: "H-2" };
+      const inexact = await quoteExternalTax(
+        org.orgId,
+        { ...request, taxableAmount: "3.0000" },
+        null,
+        LOCAL_STUB,
+      );
+      assert.deepEqual(inexact.components, [
+        {
+          jurisdiction: "CUSTOM",
+          ratePercent: "0.0000",
+          taxAmount: "1.0000",
+          rateIsBlendedFallback: true,
+        },
+      ]);
 
-    // A zero headline with no components is genuinely nil and passes through.
-    hookBody = { taxAmount: "0.0000", externalRef: "H-3" };
-    const nil = await quoteExternalTax(org.orgId, request, null, LOCAL_STUB);
-    assert.deepEqual(nil.components, []);
-    assert.equal(nil.taxAmount, "0.0000");
-  } finally {
-    if (provider) await closeTaxServer(provider);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // A zero headline with no components is genuinely nil and passes through.
+      hookBody = { taxAmount: "0.0000", externalRef: "H-3" };
+      const nil = await quoteExternalTax(org.orgId, request, null, LOCAL_STUB);
+      assert.deepEqual(nil.components, []);
+      assert.equal(nil.taxAmount, "0.0000");
+    } finally {
+      if (provider) await closeTaxServer(provider);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a synthesized headline component is booked, approved, and posted under its mapped code", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let provider: Server | null = null;
-  try {
-    const codeId = randomUUID();
-    await db.execute(sql`
+test(
+  "a synthesized headline component is booked, approved, and posted under its mapped code",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let provider: Server | null = null;
+    try {
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
       values (${codeId}, ${org.orgId}, 'CUSTOM', 'Custom hook tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
-    provider = createServer(async (req, res) => {
-      await bodyOf(req);
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ taxAmount: "8.2500", externalRef: "H-9" }));
-    });
-    const origin = await listenTaxServer(provider);
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      {
-        provider: "custom_http", isEnabled: true, preferProvider: true,
-        // The stub declares historical support so the fixture-dated document
-        // below quotes at all; as-of refusal is covered by its own test.
-        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM", supportsHistoricalDates: true },
-      },
-      null,
-      LOCAL_STUB,
-    );
-    const config = await readTaxRateProviderConfig(org.orgId);
-    // The draft path: quote (persisted with the synthesized component),
-    // then book the provider amounts under the mapped code.
-    const documentId = randomUUID();
-    const lineId = randomUUID();
-    await db.execute(sql`
+      provider = createServer(async (req, res) => {
+        await bodyOf(req);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ taxAmount: "8.2500", externalRef: "H-9" }));
+      });
+      const origin = await listenTaxServer(provider);
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          // The stub declares historical support so the fixture-dated document
+          // below quotes at all; as-of refusal is covered by its own test.
+          settings: {
+            quoteUrl: `${origin}/hook`,
+            jurisdictionTaxCodes: { CUSTOM: codeId },
+            customHeadlineJurisdiction: "CUSTOM",
+            supportsHistoricalDates: true,
+          },
+        },
+        null,
+        LOCAL_STUB,
+      );
+      const config = await readTaxRateProviderConfig(org.orgId);
+      // The draft path: quote (persisted with the synthesized component),
+      // then book the provider amounts under the mapped code.
+      const documentId = randomUUID();
+      const lineId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
          currency, subtotal, tax_total, total)
       values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'HOOK-1', ${org.customerId}, ${org.subsidiaryId}, ${org.date},
               'CAD', '100', '8.2500', '108.2500')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
          tax_amount, tax_code_id, quantity, unit_price)
       values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '100', '100', '8.2500', ${codeId}, '1', '100')`);
-    const quote = await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000", currency: "CAD", shipFrom: {}, shipTo: {},
-      quotedOn: org.date, documentLineId: lineId,
-    }, null, LOCAL_STUB);
-    assert.equal(quote.components.length, 1);
-    const booked = await resolveProviderTaxComponents(org.orgId, "100.0000", quote, config!.settings);
-    assert.equal(booked.length, 1);
-    assert.equal(booked[0]?.taxCodeId, codeId);
-    assert.equal(booked[0]?.taxAmount, "8.2500");
-    for (const component of booked) {
-      await db.execute(sql`
+      const quote = await quoteExternalTax(
+        org.orgId,
+        {
+          taxableAmount: "100.0000",
+          currency: "CAD",
+          shipFrom: {},
+          shipTo: {},
+          quotedOn: org.date,
+          documentLineId: lineId,
+        },
+        null,
+        LOCAL_STUB,
+      );
+      assert.equal(quote.components.length, 1);
+      const booked = await resolveProviderTaxComponents(
+        org.orgId,
+        "100.0000",
+        quote,
+        config!.settings,
+      );
+      assert.equal(booked.length, 1);
+      assert.equal(booked[0]?.taxCodeId, codeId);
+      assert.equal(booked[0]?.taxAmount, "8.2500");
+      for (const component of booked) {
+        await db.execute(sql`
         insert into document_line_tax_components
           (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
            tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -1211,54 +1705,71 @@ test("a synthesized headline component is booked, approved, and posted under its
         values (${org.orgId}, ${lineId}, ${component.taxCodeId}, ${component.sequence}, ${component.ratePercent},
                 ${component.taxableAmount}, ${component.taxAmount}, ${component.recoverableAmount}, ${component.nonrecoverableAmount},
                 'standard', false, false, 2, ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
-    }
-    await db.execute(sql`update documents set status = 'approved' where id = ${documentId}`);
-    const entryId = await postDocument(documentId, {
-      control: {
-        ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
-        taxCollected: org.accounts.taxOutput, taxPaid: org.accounts.taxInput,
-      },
-    }, { deferEffects: true, suppressAutomation: true });
-    const taxLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      }
+      await db.execute(sql`update documents set status = 'approved' where id = ${documentId}`);
+      const entryId = await postDocument(
+        documentId,
+        {
+          control: {
+            ar: org.accounts.ar,
+            ap: org.accounts.ap,
+            bank: org.accounts.bank,
+            taxCollected: org.accounts.taxOutput,
+            taxPaid: org.accounts.taxInput,
+          },
+        },
+        { deferEffects: true, suppressAutomation: true },
+      );
+      const taxLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
       select account_id, amount::text as amount from journal_lines
-       where entry_id = ${entryId} and account_id = ${org.accounts.taxOutput}`, "objects");
-    assert.deepEqual(taxLines.map((row) => row.amount), ["-8.2500"]);
-  } finally {
-    if (provider) await closeTaxServer(provider);
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where entry_id = ${entryId} and account_id = ${org.accounts.taxOutput}`,
+        "objects",
+      );
+      assert.deepEqual(
+        taxLines.map((row) => row.amount),
+        ["-8.2500"],
+      );
+    } finally {
+      if (provider) await closeTaxServer(provider);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("legacy evidence without a jurisdiction binding refuses instead of booking", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const codeId = randomUUID();
-    await db.execute(sql`
+test(
+  "legacy evidence without a jurisdiction binding refuses instead of booking",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
       values (${codeId}, ${org.orgId}, 'EXT', 'External tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
-    // No jurisdiction mapping configured: a pre-mapping draft whose amounts
-    // match the quote still refuses, because nothing binds its codes to the
-    // quote's jurisdictions.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: {} },
-      null,
-    );
-    const config = await readTaxRateProviderConfig(org.orgId);
-    const documentId = randomUUID();
-    const lineId = randomUUID();
-    await db.execute(sql`
+      // No jurisdiction mapping configured: a pre-mapping draft whose amounts
+      // match the quote still refuses, because nothing binds its codes to the
+      // quote's jurisdictions.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        { provider: "custom_http", isEnabled: true, preferProvider: true, settings: {} },
+        null,
+      );
+      const config = await readTaxRateProviderConfig(org.orgId);
+      const documentId = randomUUID();
+      const lineId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
          currency, subtotal, tax_total, total)
       values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'LEGACY-1', ${org.customerId}, ${org.subsidiaryId}, ${org.date},
               'CAD', '100', '9.5000', '109.5000')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
          tax_amount, tax_code_id, quantity, unit_price)
       values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '100', '100', '9.5000', ${codeId}, '1', '100')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_line_tax_components
         (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
          tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -1266,117 +1777,163 @@ test("legacy evidence without a jurisdiction binding refuses instead of booking"
          collected_account_id, paid_account_id, overridden)
       values (${org.orgId}, ${lineId}, ${codeId}, 1, '9.5', '100', '9.5000', '9.5000', '0', 'standard',
               false, false, 2, ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_rate_quotes
         (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
          taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id)
       values (${org.orgId}, ${config!.id}, 'custom_http', ${org.date}, 'CAD', '{}'::jsonb, '{}'::jsonb,
               '100.0000', '9.5000', '[{"jurisdiction": "CA", "ratePercent": "9.5000", "taxAmount": "9.5000"}]'::jsonb,
               'Q-LEG', null, ${lineId})`);
-    await db.execute(sql`update documents set status = 'approved' where id = ${documentId}`);
-    await assert.rejects(
-      postDocument(documentId, {
-        control: {
-          ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
-          taxCollected: org.accounts.taxOutput, taxPaid: org.accounts.taxInput,
-        },
-      }, { deferEffects: true, suppressAutomation: true }),
-      /provider jurisdiction "CA" has no mapped tax code.*re-quote the draft/,
-    );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${documentId}`, "objects"))[0]?.count, "0");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await db.execute(sql`update documents set status = 'approved' where id = ${documentId}`);
+      await assert.rejects(
+        postDocument(
+          documentId,
+          {
+            control: {
+              ar: org.accounts.ar,
+              ap: org.accounts.ap,
+              bank: org.accounts.bank,
+              taxCollected: org.accounts.taxOutput,
+              taxPaid: org.accounts.taxInput,
+            },
+          },
+          { deferEffects: true, suppressAutomation: true },
+        ),
+        /provider jurisdiction "CA" has no mapped tax code.*re-quote the draft/,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from journal_entries where source_document_id = ${documentId}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("provider tax locations resolve from subsidiary, org, and party records — or refuse by name", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // The fixture subsidiary (Main Co, CA) and org (CA) resolve country-level.
-    assert.deepEqual((await resolveEntityTaxAddress(org.orgId, org.subsidiaryId)).address, { country: "CA" });
-    assert.deepEqual((await resolveEntityTaxAddress(org.orgId, null)).address, { country: "CA" });
-    // A subsidiary id that resolves nowhere refuses instead of silently
-    // falling back to the org's country.
-    await assert.rejects(
-      resolveEntityTaxAddress(org.orgId, randomUUID()),
-      /receiving entity.*no tax address.*Setup → Subsidiaries/,
-    );
-    // No party, no address, and country-less address all refuse by name.
-    await assert.rejects(
-      resolveCounterpartyTaxAddress(org.orgId, null, "vendor"),
-      /document has no vendor/,
-    );
-    await assert.rejects(
-      resolveCounterpartyTaxAddress(org.orgId, org.vendorId, "vendor"),
-      /vendor "Acme Vendor" has no tax address/,
-    );
-    await db.execute(sql`
+test(
+  "provider tax locations resolve from subsidiary, org, and party records — or refuse by name",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // The fixture subsidiary (Main Co, CA) and org (CA) resolve country-level.
+      assert.deepEqual((await resolveEntityTaxAddress(org.orgId, org.subsidiaryId)).address, {
+        country: "CA",
+      });
+      assert.deepEqual((await resolveEntityTaxAddress(org.orgId, null)).address, { country: "CA" });
+      // A subsidiary id that resolves nowhere refuses instead of silently
+      // falling back to the org's country.
+      await assert.rejects(
+        resolveEntityTaxAddress(org.orgId, randomUUID()),
+        /receiving entity.*no tax address.*Setup → Subsidiaries/,
+      );
+      // No party, no address, and country-less address all refuse by name.
+      await assert.rejects(
+        resolveCounterpartyTaxAddress(org.orgId, null, "vendor"),
+        /document has no vendor/,
+      );
+      await assert.rejects(
+        resolveCounterpartyTaxAddress(org.orgId, org.vendorId, "vendor"),
+        /vendor "Acme Vendor" has no tax address/,
+      );
+      await db.execute(sql`
       insert into addresses (id, org_id, party_id, line1, city, region, postal_code, country, is_default_shipping, is_default_billing)
       values (${randomUUID()}, ${org.orgId}, ${org.vendorId}, '1 Yonge St', 'Toronto', 'ON', 'M5E 1E5', 'CA', true, true)`);
-    assert.deepEqual(await resolveCounterpartyTaxAddress(org.orgId, org.vendorId, "vendor"), {
-      line1: "1 Yonge St", city: "Toronto", region: "ON", postalCode: "M5E 1E5", country: "CA",
-    });
-    await db.execute(sql`
+      assert.deepEqual(await resolveCounterpartyTaxAddress(org.orgId, org.vendorId, "vendor"), {
+        line1: "1 Yonge St",
+        city: "Toronto",
+        region: "ON",
+        postalCode: "M5E 1E5",
+        country: "CA",
+      });
+      await db.execute(sql`
       insert into addresses (id, org_id, party_id, line1, city, is_default_shipping, is_default_billing)
       values (${randomUUID()}, ${org.orgId}, ${org.customerId}, '5 King St', 'Toronto', true, true)`);
-    await assert.rejects(
-      resolveCounterpartyTaxAddress(org.orgId, org.customerId, "customer"),
-      /customer "Acme Customer" has a tax address without a country/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        resolveCounterpartyTaxAddress(org.orgId, org.customerId, "customer"),
+        /customer "Acme Customer" has a tax address without a country/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a party address edited after approval does not break posting; the document's own move does", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const stateCode = randomUUID();
-    const cityCode = randomUUID();
-    const cityAccount = randomUUID();
-    await db.execute(sql`
+test(
+  "a party address edited after approval does not break posting; the document's own move does",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const stateCode = randomUUID();
+      const cityCode = randomUUID();
+      const cityAccount = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${cityAccount}, ${org.orgId}, '2265', 'City Tax Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
       values
         (${stateCode}, ${org.orgId}, 'STATE', 'State tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true),
         (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      {
-        provider: "custom_http", isEnabled: true, preferProvider: true,
-        settings: { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } },
-      },
-      null,
-    );
-    const config = await readTaxRateProviderConfig(org.orgId);
-    const quoteComponents = [
-      { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
-      { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
-    ];
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } },
+        },
+        null,
+      );
+      const config = await readTaxRateProviderConfig(org.orgId);
+      const quoteComponents = [
+        { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+        { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+      ];
 
-    async function seedSale(number: string, custom: Record<string, unknown>): Promise<{ id: string; lineId: string }> {
-      const id = randomUUID();
-      const lineId = randomUUID();
-      await db.execute(sql`
+      async function seedSale(
+        number: string,
+        custom: Record<string, unknown>,
+      ): Promise<{ id: string; lineId: string }> {
+        const id = randomUUID();
+        const lineId = randomUUID();
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
            currency, subtotal, tax_total, total, custom)
         values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${number}, ${org.customerId}, ${org.subsidiaryId}, ${org.date},
                 'CAD', '100', '8.2500', '108.2500', ${JSON.stringify(custom)}::jsonb)`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
            tax_amount, tax_code_id, quantity, unit_price)
         values (${lineId}, ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '100', '100', '8.2500', ${stateCode}, '1', '100')`);
-      const evidence = [
-        { taxCodeId: stateCode, sequence: 1, rate: "7", amount: "7.0000", collected: org.accounts.taxOutput },
-        { taxCodeId: cityCode, sequence: 2, rate: "1.25", amount: "1.2500", collected: cityAccount },
-      ];
-      for (const component of evidence) {
-        await db.execute(sql`
+        const evidence = [
+          {
+            taxCodeId: stateCode,
+            sequence: 1,
+            rate: "7",
+            amount: "7.0000",
+            collected: org.accounts.taxOutput,
+          },
+          {
+            taxCodeId: cityCode,
+            sequence: 2,
+            rate: "1.25",
+            amount: "1.2500",
+            collected: cityAccount,
+          },
+        ];
+        for (const component of evidence) {
+          await db.execute(sql`
           insert into document_line_tax_components
             (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
              tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -1385,147 +1942,232 @@ test("a party address edited after approval does not break posting; the document
           values (${org.orgId}, ${lineId}, ${component.taxCodeId}, ${component.sequence}, ${component.rate},
                   '100', ${component.amount}, ${component.amount}, '0', 'standard',
                   false, false, 2, ${component.collected}, ${org.accounts.taxInput}, true)`);
-      }
-      await db.execute(sql`
+        }
+        await db.execute(sql`
         insert into tax_rate_quotes
           (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
            taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id)
         values (${org.orgId}, ${config!.id}, 'custom_http', ${org.date}, 'CAD', '{"country": "CA"}'::jsonb, '{}'::jsonb,
                 '100.0000', '8.2500', ${JSON.stringify(quoteComponents)}::jsonb, 'Q-FROZEN', null, ${lineId})`);
-      await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
-      return { id, lineId };
-    }
+        await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
+        return { id, lineId };
+      }
 
-    const deps = { control: {
-      ar: org.accounts.ar,
-      ap: org.accounts.ap,
-      bank: org.accounts.bank,
-      taxCollected: org.accounts.taxOutput,
-      taxPaid: org.accounts.taxInput,
-    } };
-    // The customer gains a US default address AFTER approval, with no change
-    // to the approved document: posting replays the frozen snapshot and
-    // succeeds with the quoted locations.
-    const frozen = await seedSale("FROZEN-1", {});
-    await db.execute(sql`
+      const deps = {
+        control: {
+          ar: org.accounts.ar,
+          ap: org.accounts.ap,
+          bank: org.accounts.bank,
+          taxCollected: org.accounts.taxOutput,
+          taxPaid: org.accounts.taxInput,
+        },
+      };
+      // The customer gains a US default address AFTER approval, with no change
+      // to the approved document: posting replays the frozen snapshot and
+      // succeeds with the quoted locations.
+      const frozen = await seedSale("FROZEN-1", {});
+      await db.execute(sql`
       insert into addresses (id, org_id, party_id, line1, city, region, postal_code, country, is_default_shipping, is_default_billing)
       values (${randomUUID()}, ${org.orgId}, ${org.customerId}, '1 Main St', 'Austin', 'TX', '78701', 'US', true, true)`);
-    const entryId = await postDocument(frozen.id, deps, { deferEffects: true, suppressAutomation: true });
-    const taxLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      const entryId = await postDocument(frozen.id, deps, {
+        deferEffects: true,
+        suppressAutomation: true,
+      });
+      const taxLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
       select account_id, amount::text as amount from journal_lines
        where entry_id = ${entryId} and account_id in (${org.accounts.taxOutput}, ${cityAccount})
-       order by account_id`, "objects");
-    assert.equal(taxLines.length, 2);
-    const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
-    assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
-    assert.equal(byAccount.get(cityAccount), "-1.2500");
+       order by account_id`,
+        "objects",
+      );
+      assert.equal(taxLines.length, 2);
+      const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
+      assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
+      assert.equal(byAccount.get(cityAccount), "-1.2500");
 
-    // The document's OWN location moves after the quote: posting refuses
-    // until the draft is recalculated and re-approved.
-    const moved = await seedSale("MOVED-1", {
-      taxProviderAddresses: { shipTo: { country: "US", region: "NY" } },
-    });
-    await assert.rejects(
-      postDocument(moved.id, deps, { deferEffects: true, suppressAutomation: true }),
-      /document tax location changed after the quote \(shipTo address changed after the quote\); recalculate the draft and re-approve/,
-    );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${moved.id}`, "objects"))[0]?.count, "0");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // The document's OWN location moves after the quote: posting refuses
+      // until the draft is recalculated and re-approved.
+      const moved = await seedSale("MOVED-1", {
+        taxProviderAddresses: { shipTo: { country: "US", region: "NY" } },
+      });
+      await assert.rejects(
+        postDocument(moved.id, deps, { deferEffects: true, suppressAutomation: true }),
+        /document tax location changed after the quote \(shipTo address changed after the quote\); recalculate the draft and re-approve/,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from journal_entries where source_document_id = ${moved.id}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("providers that cannot quote as of the document date refuse; Avalara sends and records it", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const seenDates: Array<unknown> = [];
-  let provider: Server | null = null;
-  try {
-    provider = createServer(async (req, res) => {
-      const body = JSON.parse(await bodyOf(req)) as Record<string, unknown>;
-      res.writeHead(200, { "content-type": "application/json" });
-      if (req.url === "/api/v2/transactions/create") {
-        seenDates.push(body.date);
-        res.end(JSON.stringify({
-          totalTax: 8.25,
-          code: "Q",
-          summary: [{ jurisdictionType: "STATE", rate: 0.0825, tax: 8.25 }],
-        }));
-      } else {
-        seenDates.push(body.quotedOn);
-        res.end(JSON.stringify({
-          taxAmount: "8.2500",
-          components: [{ jurisdiction: "CUSTOM", ratePercent: "8.2500", taxAmount: "8.2500" }],
-          externalRef: "H",
-        }));
-      }
-    });
-    const origin = await listenTaxServer(provider);
-    const address = {
-      shipFrom: { country: "US", region: "WA", postalCode: "98101" },
-      shipTo: { line1: "1 Main St", city: "Seattle", region: "WA", postalCode: "98101", country: "US" },
-    };
-    const backDated = { taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: "2024-03-01" };
+test(
+  "providers that cannot quote as of the document date refuse; Avalara sends and records it",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const seenDates: Array<unknown> = [];
+    let provider: Server | null = null;
+    try {
+      provider = createServer(async (req, res) => {
+        const body = JSON.parse(await bodyOf(req)) as Record<string, unknown>;
+        res.writeHead(200, { "content-type": "application/json" });
+        if (req.url === "/api/v2/transactions/create") {
+          seenDates.push(body.date);
+          res.end(
+            JSON.stringify({
+              totalTax: 8.25,
+              code: "Q",
+              summary: [{ jurisdictionType: "STATE", rate: 0.0825, tax: 8.25 }],
+            }),
+          );
+        } else {
+          seenDates.push(body.quotedOn);
+          res.end(
+            JSON.stringify({
+              taxAmount: "8.2500",
+              components: [{ jurisdiction: "CUSTOM", ratePercent: "8.2500", taxAmount: "8.2500" }],
+              externalRef: "H",
+            }),
+          );
+        }
+      });
+      const origin = await listenTaxServer(provider);
+      const address = {
+        shipFrom: { country: "US", region: "WA", postalCode: "98101" },
+        shipTo: {
+          line1: "1 Main St",
+          city: "Seattle",
+          region: "WA",
+          postalCode: "98101",
+          country: "US",
+        },
+      };
+      const backDated = {
+        taxableAmount: "100.0000",
+        currency: "USD",
+        ...address,
+        quotedOn: "2024-03-01",
+      };
 
-    // TaxJar has no as-of parameter: a 2024 document refuses before any
-    // provider call and persists no quote.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "taxjar", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, apiKey: "K" },
-      null,
-      LOCAL_STUB,
-    );
-    const refusedLine = randomUUID();
-    await assert.rejects(
-      quoteExternalTax(org.orgId, { ...backDated, documentLineId: refusedLine }, null, LOCAL_STUB),
-      /TaxJar can't calculate tax as of 2024-03-01 — enter tax manually for this back-dated document/,
-    );
-    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where document_line_id = ${refusedLine}`, "objects"))[0]?.count, "0");
+      // TaxJar has no as-of parameter: a 2024 document refuses before any
+      // provider call and persists no quote.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "taxjar",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { baseUrl: origin },
+          apiKey: "K",
+        },
+        null,
+        LOCAL_STUB,
+      );
+      const refusedLine = randomUUID();
+      await assert.rejects(
+        quoteExternalTax(
+          org.orgId,
+          { ...backDated, documentLineId: refusedLine },
+          null,
+          LOCAL_STUB,
+        ),
+        /TaxJar can't calculate tax as of 2024-03-01 — enter tax manually for this back-dated document/,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select count(*) from tax_rate_quotes where document_line_id = ${refusedLine}`,
+            "objects",
+          )
+        )[0]?.count,
+        "0",
+      );
 
-    // Avalara takes the as-of date on the wire and the evidence records it.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "avalara", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, accountId: "A", licenseKey: "L" },
-      null,
-      LOCAL_STUB,
-    );
-    const lineId = randomUUID();
-    const avalaraQuote = await quoteExternalTax(org.orgId, { ...backDated, documentLineId: lineId }, null, LOCAL_STUB);
-    assert.equal(avalaraQuote.taxAmount, "8.2500");
-    assert.deepEqual(seenDates, ["2024-03-01"]);
-    const recorded = (await db.execute<{ quotedOn: string }>(sql`
-      select quoted_on as "quotedOn" from tax_rate_quotes where document_line_id = ${lineId}`, "objects"))[0];
-    assert.equal(recorded?.quotedOn, "2024-03-01");
+      // Avalara takes the as-of date on the wire and the evidence records it.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "avalara",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { baseUrl: origin },
+          accountId: "A",
+          licenseKey: "L",
+        },
+        null,
+        LOCAL_STUB,
+      );
+      const lineId = randomUUID();
+      const avalaraQuote = await quoteExternalTax(
+        org.orgId,
+        { ...backDated, documentLineId: lineId },
+        null,
+        LOCAL_STUB,
+      );
+      assert.equal(avalaraQuote.taxAmount, "8.2500");
+      assert.deepEqual(seenDates, ["2024-03-01"]);
+      const recorded = (
+        await db.execute<{ quotedOn: string }>(
+          sql`
+      select quoted_on as "quotedOn" from tax_rate_quotes where document_line_id = ${lineId}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(recorded?.quotedOn, "2024-03-01");
 
-    // A custom hook is current-rates-only until it declares otherwise.
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook` } },
-      null,
-      LOCAL_STUB,
-    );
-    await assert.rejects(
-      quoteExternalTax(org.orgId, backDated, null, LOCAL_STUB),
-      /custom tax hook can't calculate tax as of 2024-03-01/,
-    );
-    await saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook`, supportsHistoricalDates: true } },
-      null,
-      LOCAL_STUB,
-    );
-    const hookQuote = await quoteExternalTax(org.orgId, backDated, null, LOCAL_STUB);
-    assert.equal(hookQuote.taxAmount, "8.2500");
-    assert.deepEqual(seenDates, ["2024-03-01", "2024-03-01"]);
-  } finally {
-    if (provider) await closeTaxServer(provider);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // A custom hook is current-rates-only until it declares otherwise.
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { quoteUrl: `${origin}/hook` },
+        },
+        null,
+        LOCAL_STUB,
+      );
+      await assert.rejects(
+        quoteExternalTax(org.orgId, backDated, null, LOCAL_STUB),
+        /custom tax hook can't calculate tax as of 2024-03-01/,
+      );
+      await saveTaxRateProviderConfig(
+        org.orgId,
+        {
+          provider: "custom_http",
+          isEnabled: true,
+          preferProvider: true,
+          settings: { quoteUrl: `${origin}/hook`, supportsHistoricalDates: true },
+        },
+        null,
+        LOCAL_STUB,
+      );
+      const hookQuote = await quoteExternalTax(org.orgId, backDated, null, LOCAL_STUB);
+      assert.equal(hookQuote.taxAmount, "8.2500");
+      assert.deepEqual(seenDates, ["2024-03-01", "2024-03-01"]);
+    } finally {
+      if (provider) await closeTaxServer(provider);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("provider evidence comparison is order-sensitive and amount-exact", () => {
   assert.equal(
     providerEvidenceMismatch(
-      [{ sequence: 2, taxAmount: "1.2500" }, { sequence: 1, taxAmount: "7.0000" }],
+      [
+        { sequence: 2, taxAmount: "1.2500" },
+        { sequence: 1, taxAmount: "7.0000" },
+      ],
       [
         { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
         { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
@@ -1534,15 +2176,21 @@ test("provider evidence comparison is order-sensitive and amount-exact", () => {
     null,
   );
   assert.match(
-    providerEvidenceMismatch([{ sequence: 1, taxAmount: "8.2500" }], [
-      { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
-      { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
-    ]) ?? "",
+    providerEvidenceMismatch(
+      [{ sequence: 1, taxAmount: "8.2500" }],
+      [
+        { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+        { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+      ],
+    ) ?? "",
     /booked 1 tax component\(s\) but the provider quote has 2/,
   );
   assert.match(
     providerEvidenceMismatch(
-      [{ sequence: 1, taxAmount: "7.0000" }, { sequence: 2, taxAmount: "1.7500" }],
+      [
+        { sequence: 1, taxAmount: "7.0000" },
+        { sequence: 2, taxAmount: "1.7500" },
+      ],
       [
         { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
         { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },

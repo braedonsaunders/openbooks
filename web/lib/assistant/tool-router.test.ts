@@ -67,7 +67,11 @@ test("pre-router: bench questions route to the module that answers them", () => 
   assert.ok(preRouteModules("What was our net income for 2025?").includes("ledger"));
   assert.ok(preRouteModules("Which active projects have negative margin?").includes("projects"));
   assert.ok(preRouteModules("Prepare the GST/HST figures for last quarter.").includes("tax"));
-  assert.ok(preRouteModules("Look for duplicate vendor bills and round-dollar payments.").includes("analytics"));
+  assert.ok(
+    preRouteModules("Look for duplicate vendor bills and round-dollar payments.").includes(
+      "analytics",
+    ),
+  );
   assert.ok(
     preRouteModules("We are closing the fiscal month; build a close checklist.").includes("close"),
   );
@@ -75,8 +79,12 @@ test("pre-router: bench questions route to the module that answers them", () => 
   assert.ok(preRouteModules("Give me budget vs actual by department.").includes("budgets"));
   assert.ok(preRouteModules("Show my open sales orders.").includes("orders"));
   assert.ok(preRouteModules("List employees missing statutory elections.").includes("payroll"));
-  assert.ok(preRouteModules("Which allocation rules apportion overhead to jobs?").includes("allocations"));
-  assert.ok(!preRouteModules("Apply the payment allocations to the open invoices.").includes("allocations"));
+  assert.ok(
+    preRouteModules("Which allocation rules apportion overhead to jobs?").includes("allocations"),
+  );
+  assert.ok(
+    !preRouteModules("Apply the payment allocations to the open invoices.").includes("allocations"),
+  );
 });
 
 test("pre-router: capability questions stay core-only", () => {
@@ -119,10 +127,11 @@ test("resolveActiveToolNames sends core plus activated modules only", () => {
     "whoami",
     "find_accounts",
   ]);
-  assert.deepEqual(
-    resolveActiveToolNames(catalog, { preRouted: ["inventory"], activated: [] }),
-    ["whoami", "find_accounts", "inventory_levels"],
-  );
+  assert.deepEqual(resolveActiveToolNames(catalog, { preRouted: ["inventory"], activated: [] }), [
+    "whoami",
+    "find_accounts",
+    "inventory_levels",
+  ]);
 });
 
 test("isCoreTier defaults absent tier to module", () => {
@@ -134,13 +143,20 @@ test("isCoreTier defaults absent tier to module", () => {
 test("matchTools ranks name hits above blurb hits and respects the limit", () => {
   const catalog = [
     { name: "inventory_levels", blurb: "On-hand quantities by location.", module: "inventory" },
-    { name: "general_ledger", blurb: "Full journal detail including inventory revaluations.", module: "ledger" },
+    {
+      name: "general_ledger",
+      blurb: "Full journal detail including inventory revaluations.",
+      module: "ledger",
+    },
     { name: "profit_and_loss", blurb: "Revenue and expenses.", module: "ledger" },
   ];
   const hits = matchTools(catalog, "inventory", 8);
   assert.equal(hits[0]?.name, "inventory_levels");
   assert.equal(hits.length, 2);
-  assert.deepEqual(matchTools(catalog, "inventory", 1).map((h) => h.name), ["inventory_levels"]);
+  assert.deepEqual(
+    matchTools(catalog, "inventory", 1).map((h) => h.name),
+    ["inventory_levels"],
+  );
   assert.deepEqual(matchTools(catalog, "", 8), []);
   assert.deepEqual(matchTools(catalog, "zzz-no-such-capability", 8), []);
 });
@@ -171,7 +187,10 @@ test("priorToolNames ignores malformed parts instead of throwing", () => {
 
 test("findToolsModules reads activation modules off success results only", () => {
   assert.deepEqual(
-    findToolsModules({ ok: true, data: { tools: [], modules: ["payroll", "core", "payroll"], total: 3 } }),
+    findToolsModules({
+      ok: true,
+      data: { tools: [], modules: ["payroll", "core", "payroll"], total: 3 },
+    }),
     ["payroll"],
   );
   assert.deepEqual(findToolsModules({ ok: false, error: "unknown module" }), []);

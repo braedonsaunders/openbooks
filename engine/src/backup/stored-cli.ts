@@ -38,40 +38,59 @@ if (!s3Enabled) {
 // The standalone CLI starts with no request org context. Resolve only the
 // operator-supplied organization id across the trusted boundary, then keep
 // all actor and backup-ledger access inside that tenant's RLS scope.
-const org = await withOrgContext(orgId, () => db.execute<{ id: string; name: string; env_kind: string }>(sql`
+const org = await withOrgContext(orgId, () =>
+  db.execute<{ id: string; name: string; env_kind: string }>(
+    sql`
   select id, name, env_kind from orgs where id = ${orgId}
-`, "objects"));
+`,
+    "objects",
+  ),
+);
 if (!org[0]) throw new Error("organization not found");
 if (org[0].env_kind !== "sandbox" && !args.has("production")) {
   throw new Error("--production is required for a live tenant");
 }
 const runId = await withOrgTransaction(orgId, async () => {
-  const actor = (await db.execute<{ id: string }>(sql`
+  const actor = await db.execute<{ id: string }>(
+    sql`
     select id from users where id = ${actorId} and org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!actor[0]) throw new Error("audit actor does not belong to organization");
 
-  const active = (await db.execute<{ id: string }>(sql`
+  const active = await db.execute<{ id: string }>(
+    sql`
     select id from backup_runs
      where org_id = ${orgId} and status in ('queued', 'running')
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (active[0]) {
     throw new Error(`backup ${active[0].id} is already in progress`);
   }
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into backup_runs (org_id, kind, status, actor_id)
     values (${orgId}, 'manual', 'queued', ${actorId})
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return inserted[0]!.id;
 });
 await executeBackupRun(runId);
-const result = await withOrgContext(orgId, () => db.execute<Record<string, unknown>>(sql`
+const result = await withOrgContext(orgId, () =>
+  db.execute<Record<string, unknown>>(
+    sql`
   select id, org_id, kind, status, object_key, file_name, byte_size::text,
          sha256, table_count, row_count, started_at, completed_at, error
     from backup_runs where id = ${runId} and org_id = ${orgId}
-`, "objects"));
+`,
+    "objects",
+  ),
+);
 const report = result[0];
 writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, {
   encoding: "utf8",
@@ -79,6 +98,8 @@ writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, {
   flag: "wx",
 });
 if (report?.status !== "completed" || !report.sha256 || !report.object_key) {
-  throw new Error(`stored backup ${runId} did not complete: ${String(report?.error ?? report?.status)}`);
+  throw new Error(
+    `stored backup ${runId} did not complete: ${String(report?.error ?? report?.status)}`,
+  );
 }
 console.log(JSON.stringify(report));

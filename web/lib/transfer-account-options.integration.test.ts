@@ -28,17 +28,33 @@ async function insertAccount(
 test("a reconcilable credit line is a Banking account; other liabilities need the reconcilable flag", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const creditLine = await withBypassContext(() => insertAccount(org.orgId, "2650", "liability_current_other"));
-    const loan = await withBypassContext(() => insertAccount(org.orgId, "2700", "liability_long_term", { reconcilable: false }));
-    const payable = await withBypassContext(() => insertAccount(org.orgId, "9250", "liability_payable", { reconcilable: false }));
+    const creditLine = await withBypassContext(() =>
+      insertAccount(org.orgId, "2650", "liability_current_other"),
+    );
+    const loan = await withBypassContext(() =>
+      insertAccount(org.orgId, "2700", "liability_long_term", { reconcilable: false }),
+    );
+    const payable = await withBypassContext(() =>
+      insertAccount(org.orgId, "9250", "liability_payable", { reconcilable: false }),
+    );
 
-    const transferIds = (await withBypassContext(() => transferAccountOptions(org.orgId))).map((option) => option.id);
+    const transferIds = (await withBypassContext(() => transferAccountOptions(org.orgId))).map(
+      (option) => option.id,
+    );
     assert.ok(transferIds.includes(creditLine), "a reconcilable credit line is a transfer leg");
     assert.ok(!transferIds.includes(loan), "a non-reconcilable loan is not a Banking account");
-    assert.ok(!transferIds.includes(payable), "a non-reconcilable payable is not a Banking account");
+    assert.ok(
+      !transferIds.includes(payable),
+      "a non-reconcilable payable is not a Banking account",
+    );
 
-    const reconcilableIds = (await withBypassContext(() => listReconcilableBankAccounts(org.orgId))).map((account) => account.id);
-    assert.ok(reconcilableIds.includes(creditLine), "statement import and reconciliation offer the credit line");
+    const reconcilableIds = (
+      await withBypassContext(() => listReconcilableBankAccounts(org.orgId))
+    ).map((account) => account.id);
+    assert.ok(
+      reconcilableIds.includes(creditLine),
+      "statement import and reconciliation offer the credit line",
+    );
     assert.ok(!reconcilableIds.includes(loan));
     assert.ok(!reconcilableIds.includes(payable));
   } finally {
@@ -50,24 +66,40 @@ test("transfer legs list bank and credit-card accounts, and nothing else", async
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const bank = await withBypassContext(() => insertAccount(org.orgId, "9100", "asset_bank"));
-    const unreconciledBank = await withBypassContext(() => insertAccount(org.orgId, "9101", "asset_bank", { reconcilable: false }));
+    const unreconciledBank = await withBypassContext(() =>
+      insertAccount(org.orgId, "9101", "asset_bank", { reconcilable: false }),
+    );
     const card = await withBypassContext(() => insertAccount(org.orgId, "9200", "liability_card"));
-    const inactiveCard = await withBypassContext(() => insertAccount(org.orgId, "9201", "liability_card", { isActive: false }));
-    const summaryBank = await withBypassContext(() => insertAccount(org.orgId, "9102", "asset_bank", { isSummary: true }));
+    const inactiveCard = await withBypassContext(() =>
+      insertAccount(org.orgId, "9201", "liability_card", { isActive: false }),
+    );
+    const summaryBank = await withBypassContext(() =>
+      insertAccount(org.orgId, "9102", "asset_bank", { isSummary: true }),
+    );
     const income = await withBypassContext(() => insertAccount(org.orgId, "4900", "income"));
 
-    const transferIds = (await withBypassContext(() => transferAccountOptions(org.orgId))).map((option) => option.id);
+    const transferIds = (await withBypassContext(() => transferAccountOptions(org.orgId))).map(
+      (option) => option.id,
+    );
     assert.ok(transferIds.includes(bank), "reconcilable bank accounts are transfer legs");
-    assert.ok(transferIds.includes(unreconciledBank), "banking-managed bank accounts need not be reconcilable");
+    assert.ok(
+      transferIds.includes(unreconciledBank),
+      "banking-managed bank accounts need not be reconcilable",
+    );
     assert.ok(transferIds.includes(card), "a credit-card account can be the destination or source");
     assert.ok(!transferIds.includes(inactiveCard), "inactive cards are not offered");
     assert.ok(!transferIds.includes(summaryBank), "summary accounts cannot be posted to");
     assert.ok(!transferIds.includes(income), "non-banking accounts are not transfer legs");
 
-    const fundingIds = (await withBypassContext(() => bankAccountOptions(org.orgId))).map((option) => option.id);
+    const fundingIds = (await withBypassContext(() => bankAccountOptions(org.orgId))).map(
+      (option) => option.id,
+    );
     assert.ok(fundingIds.includes(bank));
     assert.ok(!fundingIds.includes(card), "deposit and check funding stays bank-only");
-    assert.ok(!fundingIds.includes(unreconciledBank), "deposit and check funding stays reconcilable-only");
+    assert.ok(
+      !fundingIds.includes(unreconciledBank),
+      "deposit and check funding stays reconcilable-only",
+    );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

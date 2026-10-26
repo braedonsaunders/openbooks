@@ -4,15 +4,8 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { waitForLockWaiter } from "../testing/lock-wait.ts";
 import { db, pool } from "../platform/db.ts";
-import {
-  createScratchUser,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
-import {
-  DB,
-  setupHarness,
-  withHarness,
-} from "../testing/hrm-harness.ts";
+import { createScratchUser, type ScratchOrg } from "../testing/fixtures.ts";
+import { DB, setupHarness, withHarness } from "../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { HrmSurveysError } from "./documents/errors.ts";
 import { closeSurvey, getSurvey, openSurvey, saveSurvey } from "./surveys/surveys.ts";
@@ -25,7 +18,6 @@ import { getSurveyResults, submitResponse } from "./surveys/responses.ts";
  * links sealed, token replay and closed-survey refusals, and the manage
  * gate on results. Proofs are read back from storage.
  */
-
 
 const SURVEYS_FEATURES = ["hrm", "hrmSurveys"] as const;
 
@@ -73,198 +65,230 @@ test("anonymous responses store no link and results aggregate", { skip: !DB }, a
   await withHarness(
     () => setupSurveysHarness(),
     async (h) => {
-    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
-    const opened = await openSurvey({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      surveyId: survey.id,
-      partyIds: h.parties,
-    });
-    assert.equal(opened.deliveries.length, 2);
-    const fetched = await getSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id });
-    assert.equal(fetched.status, "open");
-    const questions = fetched.questions;
-    const scaleId = questions.find((q) => q.kind === "scale")!.id;
-    const enpsId = questions.find((q) => q.kind === "enps")!.id;
-    const textId = questions.find((q) => q.kind === "text")!.id;
-    const [tokenA, tokenB] = opened.deliveries.map((d) => d.token);
-    await submitResponse({
-      token: tokenA!,
-      today: "2026-09-21",
-      answers: [
-        { questionId: scaleId, value: 5 },
-        { questionId: enpsId, value: 10 },
-        { questionId: textId, value: "Great place" },
-      ],
-    });
-    await submitResponse({
-      token: tokenB!,
-      today: "2026-09-21",
-      answers: [
-        { questionId: scaleId, value: 3 },
-        { questionId: enpsId, value: 6 },
-        { questionId: textId, value: "Okay place" },
-      ],
-    });
-    // The anonymity guarantee is the COLUMN, asserted null for every row.
-    const links = await db.execute<{ respondent_link_enc: Buffer | null; segment_snapshot: unknown }>(sql`
+      const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
+      const opened = await openSurvey({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: survey.id,
+        partyIds: h.parties,
+      });
+      assert.equal(opened.deliveries.length, 2);
+      const fetched = await getSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id });
+      assert.equal(fetched.status, "open");
+      const questions = fetched.questions;
+      const scaleId = questions.find((q) => q.kind === "scale")!.id;
+      const enpsId = questions.find((q) => q.kind === "enps")!.id;
+      const textId = questions.find((q) => q.kind === "text")!.id;
+      const [tokenA, tokenB] = opened.deliveries.map((d) => d.token);
+      await submitResponse({
+        token: tokenA!,
+        today: "2026-09-21",
+        answers: [
+          { questionId: scaleId, value: 5 },
+          { questionId: enpsId, value: 10 },
+          { questionId: textId, value: "Great place" },
+        ],
+      });
+      await submitResponse({
+        token: tokenB!,
+        today: "2026-09-21",
+        answers: [
+          { questionId: scaleId, value: 3 },
+          { questionId: enpsId, value: 6 },
+          { questionId: textId, value: "Okay place" },
+        ],
+      });
+      // The anonymity guarantee is the COLUMN, asserted null for every row.
+      const links = await db.execute<{
+        respondent_link_enc: Buffer | null;
+        segment_snapshot: unknown;
+      }>(
+        sql`
       select respondent_link_enc, segment_snapshot from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${survey.id}
-    `, "objects");
-    assert.equal(links.length, 2);
-    for (const row of links) {
-      assert.equal(row.respondent_link_enc, null);
-    }
-    // Token replay is refused, never double-counted.
-    await assert.rejects(
-      submitResponse({ token: tokenA!, today: "2026-09-21", answers: [{ questionId: scaleId, value: 1 }] }),
-      (e: unknown) => e instanceof HrmSurveysError && /already responded/.test(e.message),
-    );
-    const results = await getSurveyResults({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id });
-    assert.equal(results.responded, 2);
-    assert.equal(results.participationPct, 100);
-    // eNPS through the service: promoters 10, detractors 6 → 50 − 50 = 0.
-    assert.equal(results.enps!.score, 0);
-    assert.equal(results.drivers[0]!.mean, 4);
-    assert.equal(results.comments.length, 1);
-    assert.equal(results.comments[0]!.texts.length, 2);
-  });
+    `,
+        "objects",
+      );
+      assert.equal(links.length, 2);
+      for (const row of links) {
+        assert.equal(row.respondent_link_enc, null);
+      }
+      // Token replay is refused, never double-counted.
+      await assert.rejects(
+        submitResponse({
+          token: tokenA!,
+          today: "2026-09-21",
+          answers: [{ questionId: scaleId, value: 1 }],
+        }),
+        (e: unknown) => e instanceof HrmSurveysError && /already responded/.test(e.message),
+      );
+      const results = await getSurveyResults({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: survey.id,
+      });
+      assert.equal(results.responded, 2);
+      assert.equal(results.participationPct, 100);
+      // eNPS through the service: promoters 10, detractors 6 → 50 − 50 = 0.
+      assert.equal(results.enps!.score, 0);
+      assert.equal(results.drivers[0]!.mean, 4);
+      assert.equal(results.comments.length, 1);
+      assert.equal(results.comments[0]!.texts.length, 2);
+    },
+  );
 });
 
 test("concurrent opens of one draft commit a single audience", { skip: !DB }, async () => {
   await withHarness(
     () => setupSurveysHarness(),
     async (h) => {
-    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
-    const outcomes = await Promise.allSettled([
-      openSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id, partyIds: [h.parties[0]!] }),
-      openSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id, partyIds: [h.parties[1]!] }),
-    ]);
-    assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
-    assert.equal(outcomes.filter((outcome) => outcome.status === "rejected").length, 1);
-    const persisted = (await db.execute<{ status: string; invitees: string }>(sql`
+      const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
+      const outcomes = await Promise.allSettled([
+        openSurvey({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          surveyId: survey.id,
+          partyIds: [h.parties[0]!],
+        }),
+        openSurvey({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          surveyId: survey.id,
+          partyIds: [h.parties[1]!],
+        }),
+      ]);
+      assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+      assert.equal(outcomes.filter((outcome) => outcome.status === "rejected").length, 1);
+      const persisted = (
+        await db.execute<{ status: string; invitees: string }>(
+          sql`
       select s.status, count(i.id)::text as invitees
         from hrm_surveys s left join hrm_survey_invitations i
           on i.org_id = s.org_id and i.survey_id = s.id
        where s.org_id = ${h.org.orgId} and s.id = ${survey.id}
        group by s.id
-    `, "objects"))[0]!;
-    assert.equal(persisted.status, "open");
-    assert.equal(persisted.invitees, "1", "only the audience chosen by the winning open is committed");
-  });
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(persisted.status, "open");
+      assert.equal(
+        persisted.invitees,
+        "1",
+        "only the audience chosen by the winning open is committed",
+      );
+    },
+  );
 });
 
 test("heatmap suppresses below min_group_size and comments hide", { skip: !DB }, async () => {
   await withHarness(
     () => setupSurveysHarness(),
     async (h) => {
-    // min_group_size 3 with 2 respondents: min − 1 everywhere.
-    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 3);
-    const opened = await openSurvey({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      surveyId: survey.id,
-      partyIds: h.parties,
-    });
-    const scaleId = survey.questions.find((q) => q.kind === "scale")!.id;
-    for (const delivery of opened.deliveries) {
-      await submitResponse({
-        token: delivery.token,
-        today: "2026-09-21",
-        answers: [{ questionId: scaleId, value: 4 }],
+      // min_group_size 3 with 2 respondents: min − 1 everywhere.
+      const survey = await makeSurvey(h.org, h.hrId, "anonymous", 3);
+      const opened = await openSurvey({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: survey.id,
+        partyIds: h.parties,
       });
-    }
-    const results = await getSurveyResults({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id });
-    assert.equal(results.suppressed, true);
-    assert.equal(results.invitations, 0);
-    assert.equal(results.responded, 0);
-    assert.equal(results.participationPct, null);
-    assert.equal(results.enps, null);
-    assert.ok(results.questions.every((question) =>
-      question.aggregate.responses === 0 && question.aggregate.mean === null && question.aggregate.distribution.length === 0,
-    ));
-    assert.deepEqual(results.drivers, []);
-    assert.deepEqual(results.heat, { drivers: [], segments: [], cells: {} });
-    assert.equal(results.comments.length, 0);
-  });
+      const scaleId = survey.questions.find((q) => q.kind === "scale")!.id;
+      for (const delivery of opened.deliveries) {
+        await submitResponse({
+          token: delivery.token,
+          today: "2026-09-21",
+          answers: [{ questionId: scaleId, value: 4 }],
+        });
+      }
+      const results = await getSurveyResults({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: survey.id,
+      });
+      assert.equal(results.suppressed, true);
+      assert.equal(results.invitations, 0);
+      assert.equal(results.responded, 0);
+      assert.equal(results.participationPct, null);
+      assert.equal(results.enps, null);
+      assert.ok(
+        results.questions.every(
+          (question) =>
+            question.aggregate.responses === 0 &&
+            question.aggregate.mean === null &&
+            question.aggregate.distribution.length === 0,
+        ),
+      );
+      assert.deepEqual(results.drivers, []);
+      assert.deepEqual(results.heat, { drivers: [], segments: [], cells: {} });
+      assert.equal(results.comments.length, 0);
+    },
+  );
 });
 
 test("confidential links are sealed and named links are plain", { skip: !DB }, async () => {
   await withHarness(
     () => setupSurveysHarness(1),
     async (h) => {
-    const confidential = await makeSurvey(h.org, h.hrId, "confidential", 2);
-    const opened = await openSurvey({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      surveyId: confidential.id,
-      partyIds: [h.parties[0]!],
-    });
-    const scaleId = confidential.questions.find((q) => q.kind === "scale")!.id;
-    await submitResponse({
-      token: opened.deliveries[0]!.token,
-      today: "2026-09-21",
-      answers: [{ questionId: scaleId, value: 2 }],
-    });
-    const sealed = (await db.execute<{ respondent_link_enc: Buffer | null }>(sql`
+      const confidential = await makeSurvey(h.org, h.hrId, "confidential", 2);
+      const opened = await openSurvey({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: confidential.id,
+        partyIds: [h.parties[0]!],
+      });
+      const scaleId = confidential.questions.find((q) => q.kind === "scale")!.id;
+      await submitResponse({
+        token: opened.deliveries[0]!.token,
+        today: "2026-09-21",
+        answers: [{ questionId: scaleId, value: 2 }],
+      });
+      const sealed = (
+        await db.execute<{ respondent_link_enc: Buffer | null }>(
+          sql`
       select respondent_link_enc from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${confidential.id}
-    `, "objects"))[0]!.respondent_link_enc;
-    assert.ok(sealed);
-    assert.ok(!Buffer.from(sealed).toString("utf8").includes(h.parties[0]!));
+    `,
+          "objects",
+        )
+      )[0]!.respondent_link_enc;
+      assert.ok(sealed);
+      assert.ok(!Buffer.from(sealed).toString("utf8").includes(h.parties[0]!));
 
-    const named = await makeSurvey(h.org, h.hrId, "named", 2);
-    const openedNamed = await openSurvey({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      surveyId: named.id,
-      partyIds: [h.parties[0]!],
-    });
-    const namedScale = named.questions.find((q) => q.kind === "scale")!.id;
-    await submitResponse({
-      token: openedNamed.deliveries[0]!.token,
-      today: "2026-09-21",
-      answers: [{ questionId: namedScale, value: 5 }],
-    });
-    const plain = (await db.execute<{ respondent_link_enc: Buffer | null }>(sql`
+      const named = await makeSurvey(h.org, h.hrId, "named", 2);
+      const openedNamed = await openSurvey({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: named.id,
+        partyIds: [h.parties[0]!],
+      });
+      const namedScale = named.questions.find((q) => q.kind === "scale")!.id;
+      await submitResponse({
+        token: openedNamed.deliveries[0]!.token,
+        today: "2026-09-21",
+        answers: [{ questionId: namedScale, value: 5 }],
+      });
+      const plain = (
+        await db.execute<{ respondent_link_enc: Buffer | null }>(
+          sql`
       select respondent_link_enc from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${named.id}
-    `, "objects"))[0]!.respondent_link_enc;
-    assert.equal(Buffer.from(plain!).toString("utf8"), h.parties[0]!);
-  });
+    `,
+          "objects",
+        )
+      )[0]!.respondent_link_enc;
+      assert.equal(Buffer.from(plain!).toString("utf8"), h.parties[0]!);
+    },
+  );
 });
 
 test("survey lifecycle and answer refusals fire by name", { skip: !DB }, async () => {
   await withHarness(
     () => setupSurveysHarness(),
     async (h) => {
-    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
-    // Editing the draft works; opening to a foreign party is refused.
-    const edited = await saveSurvey({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      surveyId: survey.id,
-      name: survey.name,
-      kind: "engagement",
-      anonymity: "anonymous",
-      minGroupSize: 2,
-      questions: QUESTIONS,
-    });
-    assert.equal(edited.status, "draft");
-    await assert.rejects(
-      openSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id, partyIds: [randomUUID()] }),
-      (e: unknown) => e instanceof HrmSurveysError && /not in this organization/.test(e.message),
-    );
-    const opened = await openSurvey({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      surveyId: survey.id,
-      partyIds: [h.parties[0]!],
-    });
-    // An opened survey is history: no edits, no second open to new parties
-    // without going through open again (which converges on duplicates).
-    await assert.rejects(
-      saveSurvey({
+      const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
+      // Editing the draft works; opening to a foreign party is refused.
+      const edited = await saveSurvey({
         orgId: h.org.orgId,
         actorId: h.hrId,
         surveyId: survey.id,
@@ -273,116 +297,177 @@ test("survey lifecycle and answer refusals fire by name", { skip: !DB }, async (
         anonymity: "anonymous",
         minGroupSize: 2,
         questions: QUESTIONS,
-      }),
-      (e: unknown) => e instanceof HrmSurveysError && /history/.test(e.message),
-    );
-    // The draft edit above re-issues question ids (delete + re-insert),
-    // so answer against the fresh cards, not the stale save.
-    const scaleId = edited.questions.find((q) => q.kind === "scale")!.id;
-    // Answer validation names the question and the rule.
-    await assert.rejects(
-      submitResponse({
-        token: opened.deliveries[0]!.token,
-        today: "2026-09-21",
-        answers: [{ questionId: scaleId, value: 9 }],
-      }),
-      (e: unknown) => e instanceof HrmSurveysError && /1 to 5/.test(e.message),
-    );
-    await assert.rejects(
-      submitResponse({
-        token: opened.deliveries[0]!.token,
-        today: "2026-09-21",
-        answers: [{ questionId: randomUUID(), value: 3 }],
-      }),
-      (e: unknown) => e instanceof HrmSurveysError && /not on this survey/.test(e.message),
-    );
-    await assert.rejects(
-      submitResponse({
-        token: opened.deliveries[0]!.token,
-        today: "2026-09-21",
-        answers: [
-          { questionId: scaleId, value: 3 },
-          { questionId: scaleId, value: 5 },
-        ],
-      }),
-      (e: unknown) => e instanceof HrmSurveysError && /answered more than once/.test(e.message),
-    );
-    const untouched = (await db.execute<{ responses: string; responded_at: string | null }>(sql`
+      });
+      assert.equal(edited.status, "draft");
+      await assert.rejects(
+        openSurvey({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          surveyId: survey.id,
+          partyIds: [randomUUID()],
+        }),
+        (e: unknown) => e instanceof HrmSurveysError && /not in this organization/.test(e.message),
+      );
+      const opened = await openSurvey({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: survey.id,
+        partyIds: [h.parties[0]!],
+      });
+      // An opened survey is history: no edits, no second open to new parties
+      // without going through open again (which converges on duplicates).
+      await assert.rejects(
+        saveSurvey({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          surveyId: survey.id,
+          name: survey.name,
+          kind: "engagement",
+          anonymity: "anonymous",
+          minGroupSize: 2,
+          questions: QUESTIONS,
+        }),
+        (e: unknown) => e instanceof HrmSurveysError && /history/.test(e.message),
+      );
+      // The draft edit above re-issues question ids (delete + re-insert),
+      // so answer against the fresh cards, not the stale save.
+      const scaleId = edited.questions.find((q) => q.kind === "scale")!.id;
+      // Answer validation names the question and the rule.
+      await assert.rejects(
+        submitResponse({
+          token: opened.deliveries[0]!.token,
+          today: "2026-09-21",
+          answers: [{ questionId: scaleId, value: 9 }],
+        }),
+        (e: unknown) => e instanceof HrmSurveysError && /1 to 5/.test(e.message),
+      );
+      await assert.rejects(
+        submitResponse({
+          token: opened.deliveries[0]!.token,
+          today: "2026-09-21",
+          answers: [{ questionId: randomUUID(), value: 3 }],
+        }),
+        (e: unknown) => e instanceof HrmSurveysError && /not on this survey/.test(e.message),
+      );
+      await assert.rejects(
+        submitResponse({
+          token: opened.deliveries[0]!.token,
+          today: "2026-09-21",
+          answers: [
+            { questionId: scaleId, value: 3 },
+            { questionId: scaleId, value: 5 },
+          ],
+        }),
+        (e: unknown) => e instanceof HrmSurveysError && /answered more than once/.test(e.message),
+      );
+      const untouched = (
+        await db.execute<{ responses: string; responded_at: string | null }>(
+          sql`
       select (select count(*)::text from hrm_survey_responses where org_id = ${h.org.orgId} and survey_id = ${survey.id}) as responses,
              responded_at::text as responded_at
         from hrm_survey_invitations where org_id = ${h.org.orgId} and id = ${opened.deliveries[0]!.invitationId}
-    `, "objects"))[0]!;
-    assert.equal(untouched.responses, "0");
-    assert.equal(untouched.responded_at, null);
-    await assert.rejects(db.execute(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(untouched.responses, "0");
+      assert.equal(untouched.responded_at, null);
+      await assert.rejects(
+        db.execute(sql`
       insert into hrm_survey_responses (org_id, survey_id, answers)
       values (${h.org.orgId}, ${survey.id}, ${JSON.stringify([
         { questionId: scaleId, kind: "scale", value: 3 },
         { questionId: scaleId, kind: "scale", value: 5 },
       ])}::jsonb)
-    `));
-    // Closing freezes the survey: submit and re-close both refused.
-    const closed = await closeSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id });
-    assert.equal(closed.status, "closed");
-    await assert.rejects(
-      submitResponse({
-        token: opened.deliveries[0]!.token,
-        today: "2026-09-21",
-        answers: [{ questionId: scaleId, value: 3 }],
-      }),
-      (e: unknown) => e instanceof HrmSurveysError && /not open/.test(e.message),
-    );
-    await assert.rejects(
-      closeSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id }),
-      (e: unknown) => e instanceof HrmSurveysError && /only open surveys close/.test(e.message),
-    );
-    // Results need the manage grant.
-    const outsider = await createScratchUser(h.org.orgId, "Outsider", "outsider_self");
-    await assert.rejects(
-      getSurveyResults({ orgId: h.org.orgId, actorId: outsider, surveyId: survey.id }),
-      (e: unknown) => e instanceof HrmAuthorizationError,
-    );
-  });
+    `),
+      );
+      // Closing freezes the survey: submit and re-close both refused.
+      const closed = await closeSurvey({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        surveyId: survey.id,
+      });
+      assert.equal(closed.status, "closed");
+      await assert.rejects(
+        submitResponse({
+          token: opened.deliveries[0]!.token,
+          today: "2026-09-21",
+          answers: [{ questionId: scaleId, value: 3 }],
+        }),
+        (e: unknown) => e instanceof HrmSurveysError && /not open/.test(e.message),
+      );
+      await assert.rejects(
+        closeSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id }),
+        (e: unknown) => e instanceof HrmSurveysError && /only open surveys close/.test(e.message),
+      );
+      // Results need the manage grant.
+      const outsider = await createScratchUser(h.org.orgId, "Outsider", "outsider_self");
+      await assert.rejects(
+        getSurveyResults({ orgId: h.org.orgId, actorId: outsider, surveyId: survey.id }),
+        (e: unknown) => e instanceof HrmAuthorizationError,
+      );
+    },
+  );
 });
 
-test("a response waits for the close transition and refuses after it commits", { skip: !DB }, async () => {
-  await withHarness(
-    () => setupSurveysHarness(1),
-    async (h) => {
-    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
-    const opened = await openSurvey({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      surveyId: survey.id,
-      partyIds: h.parties,
-    });
-    const scaleId = survey.questions.find((question) => question.kind === "scale")!.id;
-    let submission: Promise<unknown> | undefined;
-    const holder = await pool.connect();
-    try {
-      await holder.query("begin");
-      await holder.query("select id from hrm_surveys where org_id=$1 and id=$2 for update", [h.org.orgId, survey.id]);
-      // A separate checkout holds the lock; the native submit command owns
-      // its own tenant transaction rather than joining the test's transaction.
-      submission = submitResponse({
-        token: opened.deliveries[0]!.token, today: "2026-09-21",
-        answers: [{ questionId: scaleId, value: 4 }],
-      }).then(() => "submitted", (error: unknown) => error);
-      await waitForLockWaiter(holder, { label: "survey response submission" });
-      await holder.query("update hrm_surveys set status='closed',closes_at=now() where org_id=$1 and id=$2", [h.org.orgId, survey.id]);
-      await holder.query("commit");
-    } finally {
-      await holder.query("rollback");
-      holder.release();
-      if (submission) await Promise.allSettled([submission]);
-    }
-    const outcome = await submission!;
-    assert.ok(outcome instanceof HrmSurveysError);
-    assert.match(outcome.message, /not open for responses/);
-    const responses = (await db.execute<{ count: string }>(sql`
+test(
+  "a response waits for the close transition and refuses after it commits",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupSurveysHarness(1),
+      async (h) => {
+        const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
+        const opened = await openSurvey({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          surveyId: survey.id,
+          partyIds: h.parties,
+        });
+        const scaleId = survey.questions.find((question) => question.kind === "scale")!.id;
+        let submission: Promise<unknown> | undefined;
+        const holder = await pool.connect();
+        try {
+          await holder.query("begin");
+          await holder.query("select id from hrm_surveys where org_id=$1 and id=$2 for update", [
+            h.org.orgId,
+            survey.id,
+          ]);
+          // A separate checkout holds the lock; the native submit command owns
+          // its own tenant transaction rather than joining the test's transaction.
+          submission = submitResponse({
+            token: opened.deliveries[0]!.token,
+            today: "2026-09-21",
+            answers: [{ questionId: scaleId, value: 4 }],
+          }).then(
+            () => "submitted",
+            (error: unknown) => error,
+          );
+          await waitForLockWaiter(holder, { label: "survey response submission" });
+          await holder.query(
+            "update hrm_surveys set status='closed',closes_at=now() where org_id=$1 and id=$2",
+            [h.org.orgId, survey.id],
+          );
+          await holder.query("commit");
+        } finally {
+          await holder.query("rollback");
+          holder.release();
+          if (submission) await Promise.allSettled([submission]);
+        }
+        const outcome = await submission!;
+        assert.ok(outcome instanceof HrmSurveysError);
+        assert.match(outcome.message, /not open for responses/);
+        const responses = (
+          await db.execute<{ count: string }>(
+            sql`
       select count(*)::text as count from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${survey.id}
-    `, "objects"))[0]!.count;
-    assert.equal(responses, "0");
-  });
-});
+    `,
+            "objects",
+          )
+        )[0]!.count;
+        assert.equal(responses, "0");
+      },
+    );
+  },
+);

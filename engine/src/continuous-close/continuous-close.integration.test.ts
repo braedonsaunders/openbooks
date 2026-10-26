@@ -27,46 +27,46 @@ import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fi
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-test(
-  "unmatched bank aging follows the organization's business date",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    const statementId = randomUUID();
-    try {
-      await withBypassContext(async () => {
-        await db.execute(sql`
+test("unmatched bank aging follows the organization's business date", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  const statementId = randomUUID();
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`
           update orgs
              set settings = settings || ${JSON.stringify({ timeZone: "Pacific/Auckland" })}::jsonb
            where id = ${org.orgId}
         `);
-        await db.execute(sql`
+      await db.execute(sql`
           insert into bank_statements
             (id, org_id, account_id, source, statement_date, opening_balance, closing_balance, raw_file_ref)
           values (${statementId}, ${org.orgId}, ${org.accounts.bank}, 'test', '2026-06-16', '0', '1', 'business-date-test')
         `);
-        await db.execute(sql`
+      await db.execute(sql`
           insert into bank_statement_lines
             (org_id, statement_id, account_id, line_number, posted_on, amount, currency, description)
           values (${org.orgId}, ${statementId}, ${org.accounts.bank}, 1, '2026-06-16', '1.00', 'CAD', 'One unmatched deposit')
         `);
-      });
+    });
 
-      const detectors = defaultContinuousCloseDetectors("accounting").map((detector) => ({
-        ...detector,
-        enabled: detector.detectorKey === "unmatched_bank_activity",
-      }));
-      const findings = await withSimClock("2026-06-15T13:00:00Z", () =>
-        withBypassContext(() => accountingFindings(org.orgId, "1000.0000", detectors)),
-      );
-      assert.equal(findings.length, 1);
-      assert.equal(findings[0]!.severity, "warning", "June 16 is the org's current day at 01:00 in Auckland");
-      assert.equal(findings[0]!.summary.oldestDate, "2026-06-16");
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+    const detectors = defaultContinuousCloseDetectors("accounting").map((detector) => ({
+      ...detector,
+      enabled: detector.detectorKey === "unmatched_bank_activity",
+    }));
+    const findings = await withSimClock("2026-06-15T13:00:00Z", () =>
+      withBypassContext(() => accountingFindings(org.orgId, "1000.0000", detectors)),
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(
+      findings[0]!.severity,
+      "warning",
+      "June 16 is the org's current day at 01:00 in Auckland",
+    );
+    assert.equal(findings[0]!.summary.oldestDate, "2026-06-16");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 type RunRow = {
   id: string;
@@ -91,11 +91,20 @@ async function seedManualPolicy(org: ScratchOrg): Promise<void> {
   });
 }
 
-async function runStatus(orgId: string, runId: string): Promise<{ status: string; stats: Record<string, unknown> }> {
-  const row = (await withBypassContext(() =>
-    db.execute<{ status: string; stats: Record<string, unknown> }>(sql`
+async function runStatus(
+  orgId: string,
+  runId: string,
+): Promise<{ status: string; stats: Record<string, unknown> }> {
+  const row = (
+    await withBypassContext(() =>
+      db.execute<{ status: string; stats: Record<string, unknown> }>(
+        sql`
       select status, stats from ai_agent_runs where id = ${runId} and org_id = ${orgId}
-    `, "objects")))[0]!;
+    `,
+        "objects",
+      ),
+    )
+  )[0]!;
   return { status: row.status, stats: row.stats };
 }
 
@@ -120,24 +129,37 @@ async function seedDuePolicy(
 }
 
 async function runs(orgId: string): Promise<RunRow[]> {
-  return withBypassContext(async () =>
-    await db.execute<RunRow>(sql`
+  return withBypassContext(
+    async () =>
+      await db.execute<RunRow>(
+        sql`
       select id::text as id, trigger, status, stats, error_code as "error_code"
         from ai_agent_runs
        where org_id = ${orgId}
        order by started_at, id
-    `, "objects"));
+    `,
+        "objects",
+      ),
+  );
 }
 
 async function scheduledRuns(orgId: string): Promise<RunRow[]> {
   return (await runs(orgId)).filter((run) => run.trigger === "scheduler");
 }
 
-async function policyCursor(orgId: string): Promise<{ nextRunAt: Date | null; lastRunAt: Date | null }> {
-  const row = (await withBypassContext(() =>
-    db.execute<{ next_run_at: Date | string | null; last_run_at: Date | string | null }>(sql`
+async function policyCursor(
+  orgId: string,
+): Promise<{ nextRunAt: Date | null; lastRunAt: Date | null }> {
+  const row = (
+    await withBypassContext(() =>
+      db.execute<{ next_run_at: Date | string | null; last_run_at: Date | string | null }>(
+        sql`
       select next_run_at, last_run_at from ai_agent_policies where org_id = ${orgId}
-    `, "objects")))[0]!;
+    `,
+        "objects",
+      ),
+    )
+  )[0]!;
   return {
     nextRunAt: row.next_run_at === null ? null : new Date(row.next_run_at),
     lastRunAt: row.last_run_at === null ? null : new Date(row.last_run_at),
@@ -153,20 +175,24 @@ async function failRunInserts(orgId: string): Promise<() => Promise<void>> {
   const suffix = orgId.replaceAll("-", "").slice(0, 12);
   const fn = `openbooks_test_fail_cc_run_${suffix}`;
   const trigger = `openbooks_test_fail_cc_run_${suffix}`;
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     create function public.${fn}() returns trigger
     language plpgsql as $$
     begin
       raise exception 'forced continuous-close run insert failure';
     end
     $$
-  `));
-  await db.execute(sql.raw(`
+  `),
+  );
+  await db.execute(
+    sql.raw(`
     create trigger ${trigger}
     before insert on public.ai_agent_runs
     for each row when (new.org_id = '${orgId}'::uuid)
     execute function public.${fn}()
-  `));
+  `),
+  );
   return async () => {
     await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.ai_agent_runs`));
     await db.execute(sql.raw(`drop function if exists public.${fn}()`));
@@ -191,12 +217,17 @@ test(
       await runDueContinuousCloseAgents(new Date());
 
       // Nothing is stranded: no run row survives...
-      assert.equal((await runs(org.orgId)).length, 0,
-        "a crashed claim leaves no half-written run record");
+      assert.equal(
+        (await runs(org.orgId)).length,
+        0,
+        "a crashed claim leaves no half-written run record",
+      );
       // ...and the cursor was NOT advanced — the occurrence is still due.
       const afterCrash = await policyCursor(org.orgId);
-      assert.ok(afterCrash.nextRunAt && afterCrash.nextRunAt <= new Date(),
-        "the crashed tick did not consume the occurrence");
+      assert.ok(
+        afterCrash.nextRunAt && afterCrash.nextRunAt <= new Date(),
+        "the crashed tick did not consume the occurrence",
+      );
 
       await dropFailureTrigger();
       dropFailureTrigger = () => Promise.resolve();
@@ -207,18 +238,26 @@ test(
       const resumed = await scheduledRuns(org.orgId);
       assert.equal(resumed.length, 1, "exactly one scheduler run after the resume");
       assert.equal(resumed[0]!.status, "completed");
-      assert.equal(resumed[0]!.stats.scheduled_for, fireAt.toISOString(),
-        "the run retains its occurrence's scheduled-for timestamp");
+      assert.equal(
+        resumed[0]!.stats.scheduled_for,
+        fireAt.toISOString(),
+        "the run retains its occurrence's scheduled-for timestamp",
+      );
 
       const recovered = await policyCursor(org.orgId);
-      assert.ok(recovered.nextRunAt && recovered.nextRunAt > fireAt,
-        "the cursor advanced past the fired occurrence only once it has evidence");
+      assert.ok(
+        recovered.nextRunAt && recovered.nextRunAt > fireAt,
+        "the cursor advanced past the fired occurrence only once it has evidence",
+      );
       assert.ok(recovered.lastRunAt, "last_run_at recorded with the committed scan");
 
       // The advanced cursor throttles an immediate re-tick — no second firing.
       await runDueContinuousCloseAgents(new Date());
-      assert.equal((await scheduledRuns(org.orgId)).length, 1,
-        "no duplicate execution once the occurrence fired");
+      assert.equal(
+        (await scheduledRuns(org.orgId)).length,
+        1,
+        "no duplicate execution once the occurrence fired",
+      );
     } finally {
       await dropFailureTrigger();
       await withBypass(() => dropScratchOrg(org.orgId));
@@ -236,10 +275,7 @@ test(
       await seedDuePolicy(org, { fireAt });
       const now = new Date();
 
-      await Promise.all([
-        runDueContinuousCloseAgents(now),
-        runDueContinuousCloseAgents(now),
-      ]);
+      await Promise.all([runDueContinuousCloseAgents(now), runDueContinuousCloseAgents(now)]);
 
       const executed = (await scheduledRuns(org.orgId)).filter(
         (run) => run.stats.reason !== "already_running" && run.status !== "skipped",
@@ -249,8 +285,10 @@ test(
       assert.equal(executed[0]!.stats.scheduled_for, fireAt.toISOString());
 
       const cursor = await policyCursor(org.orgId);
-      assert.ok(cursor.nextRunAt && cursor.nextRunAt > fireAt,
-        "the winner's cursor advance survived the race");
+      assert.ok(
+        cursor.nextRunAt && cursor.nextRunAt > fireAt,
+        "the winner's cursor advance survived the race",
+      );
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -278,89 +316,113 @@ test(
       assert.equal(failed.length, 1, "the failed scan has its own durable record");
       assert.equal(failed[0]!.status, "failed", "detector failure is recorded as failed");
       assert.equal(failed[0]!.error_code, "detector_failed");
-      assert.equal(failed[0]!.stats.scheduled_for, fireAt.toISOString(),
-        "even a failure keeps the occurrence's scheduled-for timestamp");
+      assert.equal(
+        failed[0]!.stats.scheduled_for,
+        fireAt.toISOString(),
+        "even a failure keeps the occurrence's scheduled-for timestamp",
+      );
 
       const cursor = await policyCursor(org.orgId);
-      assert.ok(cursor.nextRunAt && cursor.nextRunAt > fireAt,
-        "the failing attempt consumed exactly its own cadence slot");
+      assert.ok(
+        cursor.nextRunAt && cursor.nextRunAt > fireAt,
+        "the failing attempt consumed exactly its own cadence slot",
+      );
 
       // An immediate re-tick neither retries nor doubles: the slot was consumed
       // by one loud, visible failed record.
       await runDueContinuousCloseAgents(new Date());
       const afterRetick = await scheduledRuns(org.orgId);
-      assert.equal(afterRetick.length, 1,
-        "an immediate re-tick adds nothing — the failure is durably accounted for");
+      assert.equal(
+        afterRetick.length,
+        1,
+        "an immediate re-tick adds nothing — the failure is durably accounted for",
+      );
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
 );
 
-test(
-  "a second scan is refused while the first run is still enriching",
-  { skip: !DB },
-  async () => {
-    // The defect: the first run flipped to 'completed' before its
-    // network-bound enrichment, so a second scan during the model call was
-    // admitted, refreshed the same fingerprints, and the first enrichment's
-    // work-item UPDATEs matched zero rows — silently discarding its
-    // analysis. The run must stay 'running' (the overlap lease) until
-    // enrichment appends and releases it.
-    const org = await withBypass(() => createScratchOrg());
-    let releaseEnricher!: () => void;
-    const enricherGate = new Promise<void>((resolve) => { releaseEnricher = resolve; });
-    const enricherEntered = new Promise<{ runId: string }>((resolve) => {
-      let calls = 0;
-      registerContinuousCloseEnricher(async (input) => {
-        calls += 1;
-        // Only the first enrichment pauses: a second admitted scan would
-        // call the enricher again, and the test must observe that admission
-        // (as a skipped refusal) instead of deadlocking on the same gate.
-        if (calls === 1) {
-          resolve({ runId: input.runId });
-          await enricherGate;
-        }
-        return { status: "completed", analyzedFindings: 0 };
-      });
+test("a second scan is refused while the first run is still enriching", { skip: !DB }, async () => {
+  // The defect: the first run flipped to 'completed' before its
+  // network-bound enrichment, so a second scan during the model call was
+  // admitted, refreshed the same fingerprints, and the first enrichment's
+  // work-item UPDATEs matched zero rows — silently discarding its
+  // analysis. The run must stay 'running' (the overlap lease) until
+  // enrichment appends and releases it.
+  const org = await withBypass(() => createScratchOrg());
+  let releaseEnricher!: () => void;
+  const enricherGate = new Promise<void>((resolve) => {
+    releaseEnricher = resolve;
+  });
+  const enricherEntered = new Promise<{ runId: string }>((resolve) => {
+    let calls = 0;
+    registerContinuousCloseEnricher(async (input) => {
+      calls += 1;
+      // Only the first enrichment pauses: a second admitted scan would
+      // call the enricher again, and the test must observe that admission
+      // (as a skipped refusal) instead of deadlocking on the same gate.
+      if (calls === 1) {
+        resolve({ runId: input.runId });
+        await enricherGate;
+      }
+      return { status: "completed", analyzedFindings: 0 };
     });
-    try {
-      await seedManualPolicy(org);
+  });
+  try {
+    await seedManualPolicy(org);
 
-      const first = runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
-      const { runId: firstRunId } = await enricherEntered;
+    const first = runContinuousCloseAgent({
+      orgId: org.orgId,
+      agentKey: "accounting",
+      trigger: "manual",
+      allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */,
+    });
+    const { runId: firstRunId } = await enricherEntered;
 
-      // The detectors committed but enrichment is paused: the lease is held.
-      assert.equal((await runStatus(org.orgId, firstRunId)).status, "running",
-        "the first run stays running while it enriches");
+    // The detectors committed but enrichment is paused: the lease is held.
+    assert.equal(
+      (await runStatus(org.orgId, firstRunId)).status,
+      "running",
+      "the first run stays running while it enriches",
+    );
 
-      const second = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
-      assert(second.status === "skipped", "the overlapping scan is refused");
-      const secondRow = await runStatus(org.orgId, second.runId);
-      assert.equal((secondRow.stats as { reason: string }).reason, "already_running");
-      assert.equal((secondRow.stats as { activeRunId: string }).activeRunId, firstRunId,
-        "the refusal names the run still holding the lease");
+    const second = await runContinuousCloseAgent({
+      orgId: org.orgId,
+      agentKey: "accounting",
+      trigger: "manual",
+      allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */,
+    });
+    assert(second.status === "skipped", "the overlapping scan is refused");
+    const secondRow = await runStatus(org.orgId, second.runId);
+    assert.equal((secondRow.stats as { reason: string }).reason, "already_running");
+    assert.equal(
+      (secondRow.stats as { activeRunId: string }).activeRunId,
+      firstRunId,
+      "the refusal names the run still holding the lease",
+    );
 
-      releaseEnricher();
-      const completed = await first;
-      assert.equal(completed.status, "completed");
-      const finalRow = await runStatus(org.orgId, firstRunId);
-      assert.equal(finalRow.status, "completed", "the lease releases after enrichment");
-      assert.equal(
-        (finalRow.stats as { enrichment: { status: string; analyzedFindings: number } }).enrichment.status,
-        "completed",
-      );
-      assert.equal(
-        (finalRow.stats as { enrichment: { status: string; analyzedFindings: number } }).enrichment.analyzedFindings,
-        0,
-        "only the enricher's own applied count is reported — nothing invented",
-      );
-    } finally {
-      registerContinuousCloseEnricher(null);
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+    releaseEnricher();
+    const completed = await first;
+    assert.equal(completed.status, "completed");
+    const finalRow = await runStatus(org.orgId, firstRunId);
+    assert.equal(finalRow.status, "completed", "the lease releases after enrichment");
+    assert.equal(
+      (finalRow.stats as { enrichment: { status: string; analyzedFindings: number } }).enrichment
+        .status,
+      "completed",
+    );
+    assert.equal(
+      (finalRow.stats as { enrichment: { status: string; analyzedFindings: number } }).enrichment
+        .analyzedFindings,
+      0,
+      "only the enricher's own applied count is reported — nothing invented",
+    );
+  } finally {
+    registerContinuousCloseEnricher(null);
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 async function setContinuousCloseFeature(orgId: string, enabled: boolean): Promise<void> {
   return withBypassContext(async () => {
@@ -373,8 +435,16 @@ async function setContinuousCloseFeature(orgId: string, enabled: boolean): Promi
 }
 
 async function workItemCount(orgId: string): Promise<number> {
-  return Number((await withBypassContext(() =>
-    db.execute<{ n: string }>(sql`select count(*) as n from ai_work_items where org_id = ${orgId}`, "objects")))[0]!.n);
+  return Number(
+    (
+      await withBypassContext(() =>
+        db.execute<{ n: string }>(
+          sql`select count(*) as n from ai_work_items where org_id = ${orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n,
+  );
 }
 
 test(
@@ -394,7 +464,10 @@ test(
       const cursorBefore = await policyCursor(org.orgId);
 
       // Preflight observes what the scheduler saw: due, and the feature on.
-      assert.ok(cursorBefore.nextRunAt && cursorBefore.nextRunAt <= new Date(), "the occurrence is due");
+      assert.ok(
+        cursorBefore.nextRunAt && cursorBefore.nextRunAt <= new Date(),
+        "the occurrence is due",
+      );
       // Company Settings disables the feature before the scan starts.
       await setContinuousCloseFeature(org.orgId, false);
 
@@ -413,21 +486,33 @@ test(
         // Test setup: system provenance, unrestricted by construction.
         allowedSubsidiaryIds: null,
       });
-      assert(outcome.status !== "claimed_elsewhere", "the occurrence was not lost to a phantom claim");
+      assert(
+        outcome.status !== "claimed_elsewhere",
+        "the occurrence was not lost to a phantom claim",
+      );
       if (outcome.status === "skipped") {
         const row = await runStatus(org.orgId, outcome.runId);
-        assert.equal((row.stats as { reason: string }).reason, "feature_disabled",
-          "the skip records why");
-        assert.equal((row.stats as { scheduled_for: string }).scheduled_for, fireAt.toISOString(),
-          "even the refusal keeps the occurrence's scheduled-for timestamp");
+        assert.equal(
+          (row.stats as { reason: string }).reason,
+          "feature_disabled",
+          "the skip records why",
+        );
+        assert.equal(
+          (row.stats as { scheduled_for: string }).scheduled_for,
+          fireAt.toISOString(),
+          "even the refusal keeps the occurrence's scheduled-for timestamp",
+        );
       } else {
         assert.fail(`a disabled feature must not execute a scan, got ${outcome.status}`);
       }
 
       assert.equal(await workItemCount(org.orgId), 0, "no findings while disabled");
       const cursorAfter = await policyCursor(org.orgId);
-      assert.equal(cursorAfter.nextRunAt?.toISOString(), cursorBefore.nextRunAt?.toISOString(),
-        "the cadence slot survives for re-enable");
+      assert.equal(
+        cursorAfter.nextRunAt?.toISOString(),
+        cursorBefore.nextRunAt?.toISOString(),
+        "the cadence slot survives for re-enable",
+      );
       assert.equal(cursorAfter.lastRunAt, null, "no last-run stamp without a scan");
       const executed = (await scheduledRuns(org.orgId)).filter((run) => run.status !== "skipped");
       assert.equal(executed.length, 0, "no scan executed while disabled");
@@ -456,7 +541,13 @@ test(
       await setContinuousCloseFeature(org.orgId, false);
 
       await assert.rejects(
-        runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ }),
+        runContinuousCloseAgent({
+          orgId: org.orgId,
+          agentKey: "accounting",
+          trigger: "manual",
+          allowedSubsidiaryIds:
+            null /* test setup: system provenance, unrestricted by construction */,
+        }),
         /feature_disabled/,
         "the refusal names the disabled feature",
       );
@@ -480,12 +571,20 @@ test(
     try {
       await seedManualPolicy(org);
       const staleRunId = randomUUID();
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into ai_agent_runs (id, org_id, agent_key, trigger, status, detector_version, started_at)
         values (${staleRunId}, ${org.orgId}, 'accounting', 'manual', 'running', 'test', now() - interval '1 hour')
-      `));
+      `),
+      );
 
-      const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
+      const result = await runContinuousCloseAgent({
+        orgId: org.orgId,
+        agentKey: "accounting",
+        trigger: "manual",
+        allowedSubsidiaryIds:
+          null /* test setup: system provenance, unrestricted by construction */,
+      });
       assert.equal(result.status, "completed", "the scan proceeds once the stale lease expired");
 
       const stale = await runStatus(org.orgId, staleRunId);
@@ -513,7 +612,10 @@ test(
       await withBypassContext(async () => {
         for (const agentKey of CONTINUOUS_CLOSE_AGENT_KEYS) {
           const detectorSettings = Object.fromEntries(
-            defaultContinuousCloseDetectors(agentKey).map((detector) => [detector.detectorKey, { enabled: false }]),
+            defaultContinuousCloseDetectors(agentKey).map((detector) => [
+              detector.detectorKey,
+              { enabled: false },
+            ]),
           );
           await db.execute(sql`
             insert into ai_agent_policies
@@ -528,10 +630,24 @@ test(
       });
 
       for (const agentKey of CONTINUOUS_CLOSE_AGENT_KEYS) {
-        const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey, trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
-        assert.equal(result.status, "completed", `${agentKey} completes through the registry dispatch`);
+        const result = await runContinuousCloseAgent({
+          orgId: org.orgId,
+          agentKey,
+          trigger: "manual",
+          allowedSubsidiaryIds:
+            null /* test setup: system provenance, unrestricted by construction */,
+        });
+        assert.equal(
+          result.status,
+          "completed",
+          `${agentKey} completes through the registry dispatch`,
+        );
       }
-      assert.equal(await workItemCount(org.orgId), 0, "disabled detectors detect nothing on any agent");
+      assert.equal(
+        await workItemCount(org.orgId),
+        0,
+        "disabled detectors detect nothing on any agent",
+      );
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -580,11 +696,18 @@ test(
       });
       assert.equal(result.status, "completed");
       assert.equal(result.detected, 1);
-      const item = (await withBypassContext(() => db.execute<{ summary: Record<string, unknown> }>(sql`
+      const item = (
+        await withBypassContext(() =>
+          db.execute<{ summary: Record<string, unknown> }>(
+            sql`
         select summary from ai_work_items
          where org_id = ${org.orgId} and subject_id = ${reconciliationId}
            and finding_type = 'stale_reconciliation'
-      `, "objects")))[0];
+      `,
+            "objects",
+          ),
+        )
+      )[0];
       assert.ok(item, "the scan persists its stale reconciliation finding");
       assert.deepEqual(item.summary.proposedCommand, {
         tool: "sign_off_reconciliation",
@@ -629,9 +752,12 @@ test(
         "the refusal names its remedy",
       );
       const items = await withBypassContext(() =>
-        db.execute<{ id: string; status: string }>(sql`
+        db.execute<{ id: string; status: string }>(
+          sql`
           select id, status from ai_work_items where org_id = ${org.orgId}
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(
         items,
@@ -639,7 +765,10 @@ test(
         "the other entity's unmatched item is neither resolved nor touched",
       );
       const runs = await withBypassContext(() =>
-        db.execute<{ n: string }>(sql`select count(*) as n from ai_agent_runs where org_id = ${org.orgId}`, "objects"),
+        db.execute<{ n: string }>(
+          sql`select count(*) as n from ai_agent_runs where org_id = ${org.orgId}`,
+          "objects",
+        ),
       );
       assert.equal(Number(runs[0]!.n), 0, "a refused scan leaves no run row behind");
     } finally {

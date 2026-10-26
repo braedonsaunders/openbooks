@@ -1,21 +1,20 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { PayrollError } from '@openbooks/engine/payroll/error'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import {
   deletePriorRegister,
   PriorRegisterNotFoundError,
-} from '@openbooks/engine/payroll/parallel-run-store'
-import { isUuid } from '../../../../../../lib/list-params'
-import { guardSubsidiaryScope } from '../../../../../../lib/authz'
+} from "@openbooks/engine/payroll/parallel-run-store";
+import { isUuid } from "../../../../../../lib/list-params";
+import { guardSubsidiaryScope } from "../../../../../../lib/authz";
 import { notFound } from "@/lib/api/responses";
 
-
-export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * Discard an imported register.
@@ -27,16 +26,18 @@ export const runtime = 'nodejs'
  * evidence. The audit log records the discard.
  */
 export const DELETE = defineRoute({
-  permission: 'payroll.manage',
-  feature: 'payroll',
-  params: z.object({ "id": z.string() }),
+  permission: "payroll.manage",
+  feature: "payroll",
+  params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const ctx = { params: Promise.resolve(routeParams) };
-    const { id } = await ctx.params
-    if (!isUuid(id)) return notFound("record")
+    const { id } = await ctx.params;
+    if (!isUuid(id)) return notFound("record");
     if (gate.allowedSubsidiaryIds !== null) {
-      const ids = [...gate.allowedSubsidiaryIds]
-      const register = (await db.execute<{ id: string }>(sql`
+      const ids = [...gate.allowedSubsidiaryIds];
+      const register = (
+        await db.execute<{ id: string }>(
+          sql`
         select r.id
           from payroll_prior_registers r
          where r.org_id = ${gate.user.orgId} and r.id = ${id}
@@ -46,22 +47,30 @@ export const DELETE = defineRoute({
                left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
               where s.org_id = r.org_id and s.register_id = r.id
                 and (p.id is null or p.subsidiary_id is null
-                  or not (p.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])))
-         }`, 'objects'))[0]
+                  or not (p.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])))
+         }`,
+          "objects",
+        )
+      )[0];
       // The direct probe is intentionally indistinguishable from a nonexistent
       // register. An empty allowed set therefore denies every register.
-      if (!register) return notFound("record")
+      if (!register) return notFound("record");
       // Keep the direct record twin explicit as well as the aggregate NOT EXISTS
       // probe above; both paths intentionally return the same 404 response.
-      const sample = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      const sample = (
+        await db.execute<{ subsidiaryId: string | null }>(
+          sql`
         select p.subsidiary_id as "subsidiaryId"
           from payroll_prior_stubs s
           left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
          where s.org_id = ${gate.user.orgId} and s.register_id = ${id}
-         limit 1`, 'objects'))[0]
+         limit 1`,
+          "objects",
+        )
+      )[0];
       if (sample) {
-        const denied = guardSubsidiaryScope(gate, sample.subsidiaryId)
-        if (denied) return denied
+        const denied = guardSubsidiaryScope(gate, sample.subsidiaryId);
+        if (denied) return denied;
       }
     }
     // A discard naming nothing is a named 404 with no audit row — never
@@ -70,17 +79,16 @@ export const DELETE = defineRoute({
       // The probe above reads scoped; the engine fence re-checks under the
       // parallel-run input lock inside the delete transaction, so a register
       // rehomed between probe and delete still refuses instead of cascading.
-      await deletePriorRegister(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds)
+      await deletePriorRegister(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds);
     } catch (error) {
       if (error instanceof PriorRegisterNotFoundError) {
-        return apiErrorResponse(error, { safeStatus: 404 })
+        return apiErrorResponse(error, { safeStatus: 404 });
       }
       if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 })
+        return apiErrorResponse(error, { safeStatus: 422 });
       }
-      throw error
+      throw error;
     }
-    return NextResponse.json({ ok: true })
-
+    return NextResponse.json({ ok: true });
   },
-})
+});

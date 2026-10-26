@@ -43,10 +43,10 @@ const FIELD_TIME_TABLES =
 function recording() {
   const seen: string[] = [];
   const exec = {
-    execute: (async (query: SQL, mode?: string) => {
+    execute: async (query: SQL, mode?: string) => {
       seen.push(new PgDialect().sqlToQuery(query).sql);
       return db.execute(query as unknown as Parameters<typeof db.execute>[0], mode as never);
-    }),
+    },
   } as unknown as SqlExecutor;
   return { exec, seen };
 }
@@ -80,7 +80,10 @@ function refusesCode(promise: Promise<unknown>): Promise<string> {
       throw new Error("expected a refusal");
     },
     (error) => {
-      assert.ok(error instanceof FieldTimeError, `refusal is a FieldTimeError, got ${String(error)}`);
+      assert.ok(
+        error instanceof FieldTimeError,
+        `refusal is a FieldTimeError, got ${String(error)}`,
+      );
       return (error as FieldTimeError).code;
     },
   );
@@ -93,7 +96,11 @@ test("feature-off: timesheet and cockpit reads observe nothing", { skip: !DB }, 
     await withOrg(org.orgId, async () => {
       const { exec, seen } = recording();
       assert.deepEqual(
-        await approvalFlags(org.orgId, { weekStart: "2026-09-14", employeePartyId: randomUUID() }, exec),
+        await approvalFlags(
+          org.orgId,
+          { weekStart: "2026-09-14", employeePartyId: randomUUID() },
+          exec,
+        ),
         [],
       );
       assert.deepEqual(await crewToday(org.orgId, randomUUID(), exec), []);
@@ -116,8 +123,28 @@ test("feature-off: self and crew reads refuse by name", { skip: !DB }, async () 
     await withOrg(org.orgId, async () => {
       const { exec, seen } = recording();
       assert.equal(await refusesCode(myClockDay(org.orgId, randomUUID(), exec)), "field_time_off");
-      assert.equal(await refusesCode(listCrewBatches(org.orgId, {}, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, exec)), "field_time_off");
-      assert.equal(await refusesCode(getBatchDetail(org.orgId, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, randomUUID(), exec)), "field_time_off");
+      assert.equal(
+        await refusesCode(
+          listCrewBatches(
+            org.orgId,
+            {},
+            { actorUserId: randomUUID(), allowedSubsidiaryIds: null },
+            exec,
+          ),
+        ),
+        "field_time_off",
+      );
+      assert.equal(
+        await refusesCode(
+          getBatchDetail(
+            org.orgId,
+            { actorUserId: randomUUID(), allowedSubsidiaryIds: null },
+            randomUUID(),
+            exec,
+          ),
+        ),
+        "field_time_off",
+      );
       assert.deepEqual(
         gatedStatements(seen),
         [],
@@ -129,49 +156,61 @@ test("feature-off: self and crew reads refuse by name", { skip: !DB }, async () 
   }
 });
 
-test("feature-off: inbox lists no crew items without touching crew tables", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await disableFieldTime(org.orgId);
-    await withOrg(org.orgId, async () => {
-      const { exec, seen } = recording();
-      const items = await crewTimeBatchAdapter.list({
-        orgId: org.orgId,
-        actorId: randomUUID(),
-        asOf: new Date().toISOString(),
-        exec,
+test(
+  "feature-off: inbox lists no crew items without touching crew tables",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await disableFieldTime(org.orgId);
+      await withOrg(org.orgId, async () => {
+        const { exec, seen } = recording();
+        const items = await crewTimeBatchAdapter.list({
+          orgId: org.orgId,
+          actorId: randomUUID(),
+          asOf: new Date().toISOString(),
+          exec,
+        });
+        assert.deepEqual(items, []);
+        assert.deepEqual(
+          gatedStatements(seen),
+          [],
+          `inbox reached gated tables while fieldTime is off:\n${gatedStatements(seen).join("\n")}`,
+        );
       });
-      assert.deepEqual(items, []);
-      assert.deepEqual(
-        gatedStatements(seen),
-        [],
-        `inbox reached gated tables while fieldTime is off:\n${gatedStatements(seen).join("\n")}`,
-      );
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("feature-on: the same doubles observe the gated tables (red-proof)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enableFieldTime(org.orgId);
-    await withOrg(org.orgId, async () => {
-      const flags = recording();
-      await approvalFlags(org.orgId, { weekStart: "2026-09-14", employeePartyId: randomUUID() }, flags.exec);
-      assert.ok(
-        gatedStatements(flags.seen).length > 0,
-        "the double sees no gated table with the feature on — the off-assertions above prove nothing",
-      );
-      const today = recording();
-      await crewToday(org.orgId, randomUUID(), today.exec);
-      assert.ok(
-        gatedStatements(today.seen).length > 0,
-        "the double sees no gated table with the feature on — the off-assertions above prove nothing",
-      );
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "feature-on: the same doubles observe the gated tables (red-proof)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enableFieldTime(org.orgId);
+      await withOrg(org.orgId, async () => {
+        const flags = recording();
+        await approvalFlags(
+          org.orgId,
+          { weekStart: "2026-09-14", employeePartyId: randomUUID() },
+          flags.exec,
+        );
+        assert.ok(
+          gatedStatements(flags.seen).length > 0,
+          "the double sees no gated table with the feature on — the off-assertions above prove nothing",
+        );
+        const today = recording();
+        await crewToday(org.orgId, randomUUID(), today.exec);
+        assert.ok(
+          gatedStatements(today.seen).length > 0,
+          "the double sees no gated table with the feature on — the off-assertions above prove nothing",
+        );
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

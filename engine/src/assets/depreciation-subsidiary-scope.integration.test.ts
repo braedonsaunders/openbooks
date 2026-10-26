@@ -10,11 +10,7 @@ import {
   recordDepreciationInput,
   runDepreciation,
 } from "./depreciation.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -68,7 +64,9 @@ test(
         "an out-of-scope schedule build is refused",
       );
       // Positive control: the owning scope still builds.
-      const built = await buildSchedule(assetId, org.orgId, actorId, org.bookId, [org.subsidiaryId]);
+      const built = await buildSchedule(assetId, org.orgId, actorId, org.bookId, [
+        org.subsidiaryId,
+      ]);
       assert.ok(built.lineCount > 0, "the owning scope builds the schedule");
 
       // With a schedule in place, an input carrying a scope that excludes the
@@ -108,11 +106,16 @@ test(
                false
           from accounting_periods where id = ${org.periodId}
       `);
-      const beforeLines = (await db.execute<{ n: number }>(sql`
+      const beforeLines = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from depreciation_schedule_lines l
         join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
         where s.org_id=${org.orgId} and s.asset_id=${assetId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       const originalExecute = db.execute.bind(db);
       let rehomed = false;
       Object.defineProperty(db, "execute", {
@@ -147,15 +150,32 @@ test(
       } finally {
         Reflect.deleteProperty(db, "execute");
       }
-      assert.equal(rehomed, true, "the stale schedule candidate must be selected before the simulated rehome");
-      assert.equal(run.problems.length, 1, "the extension must refuse after the locked scope recheck");
+      assert.equal(
+        rehomed,
+        true,
+        "the stale schedule candidate must be selected before the simulated rehome",
+      );
+      assert.equal(
+        run.problems.length,
+        1,
+        "the extension must refuse after the locked scope recheck",
+      );
       assert.match(run.problems[0]!, /outside your subsidiary scope/);
-      const afterLines = (await db.execute<{ n: number }>(sql`
+      const afterLines = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from depreciation_schedule_lines l
         join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
         where s.org_id=${org.orgId} and s.asset_id=${assetId}
-      `, "objects"))[0]!.n;
-      assert.equal(afterLines, beforeLines, "the stale extension must not rewrite an asset after its rehome");
+      `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(
+        afterLines,
+        beforeLines,
+        "the stale extension must not rewrite an asset after its rehome",
+      );
       await db.transaction(async (tx) => {
         await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
         await tx.execute(sql`

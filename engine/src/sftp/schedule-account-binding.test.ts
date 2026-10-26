@@ -27,7 +27,10 @@ test("a stranger file for another account refuses naming both sides", () => {
         foundExternalAccountId: "222",
       }),
     (e: unknown) =>
-      e instanceof Error && /stmt-b\.ofx/.test(e.message) && /222/.test(e.message) && /111/.test(e.message),
+      e instanceof Error &&
+      /stmt-b\.ofx/.test(e.message) &&
+      /222/.test(e.message) &&
+      /111/.test(e.message),
     "the refusal must name the file, the found account, and the expected one",
   );
 });
@@ -41,13 +44,18 @@ test("an identified file with no binding refuses with the schedule remedy", () =
         expectedExternalAccountId: null,
         foundExternalAccountId: "12345678",
       }),
-    (e: unknown) => e instanceof Error && /expected.*account/i.test(e.message) && /12345678/.test(e.message),
+    (e: unknown) =>
+      e instanceof Error && /expected.*account/i.test(e.message) && /12345678/.test(e.message),
     "an unconfigured schedule must pause with the binding remedy, not import strangers",
   );
 });
 
 test("an unidentified file relies on folder isolation and passes", () => {
-  assert.ok(findSftpWatchFolderOverlap("bank", [{ id: "schedule-child", folder: "bank/east", accountLabel: "A" }]));
+  assert.ok(
+    findSftpWatchFolderOverlap("bank", [
+      { id: "schedule-child", folder: "bank/east", accountLabel: "A" },
+    ]),
+  );
   assertScheduleAccountBinding({
     scheduleId: "sched-1",
     filename: "statement.csv",

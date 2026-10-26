@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /** One read-only QuickBooks Desktop extraction capture. */
@@ -9,7 +18,9 @@ export const qbdCaptures = pgTable(
     id: id(),
     orgId: orgRef(),
     connectionId: uuid("connection_id").notNull(),
-    status: text("status", { enum: ["queued", "running", "complete", "failed", "cancelled"] }).notNull().default("queued"),
+    status: text("status", { enum: ["queued", "running", "complete", "failed", "cancelled"] })
+      .notNull()
+      .default("queued"),
     since: timestamp("since", { withTimezone: true }),
     capturedThrough: timestamp("captured_through", { withTimezone: true }).notNull(),
     progress: jsonb("progress").notNull().default({}),
@@ -36,7 +47,9 @@ export const qbdRequests = pgTable(
     requestKind: text("request_kind").notNull(),
     sequence: integer("sequence").notNull(),
     page: integer("page").notNull().default(0),
-    status: text("status", { enum: ["queued", "sent", "complete", "failed", "cancelled"] }).notNull().default("queued"),
+    status: text("status", { enum: ["queued", "sent", "complete", "failed", "cancelled"] })
+      .notNull()
+      .default("queued"),
     requestXml: text("request_xml").notNull(),
     responseXml: text("response_xml"),
     responseSha256: text("response_sha256"),
@@ -54,7 +67,9 @@ export const qbdRequests = pgTable(
     // a sendRequestXML retry re-sends the outstanding request, and storage
     // refuses the second claim that a READ COMMITTED race could otherwise
     // commit.
-    uniqueIndex("qbd_requests_one_sent_per_session").on(t.sessionId).where(sql`${t.status} = 'sent'`),
+    uniqueIndex("qbd_requests_one_sent_per_session")
+      .on(t.sessionId)
+      .where(sql`${t.status} = 'sent'`),
   ],
 );
 
@@ -65,7 +80,9 @@ export const qbdSessions = pgTable(
     id: id(),
     orgId: orgRef(),
     connectionId: uuid("connection_id").notNull(),
-    status: text("status", { enum: ["open", "closed", "error"] }).notNull().default("open"),
+    status: text("status", { enum: ["open", "closed", "error"] })
+      .notNull()
+      .default("open"),
     companyFile: text("company_file"),
     country: text("country"),
     qbxmlMajor: integer("qbxml_major"),

@@ -51,7 +51,8 @@ export function summarizeToolOutputForHistory(output: unknown): string {
     return `error: ${error}`.slice(0, HISTORY_SUMMARY_CHARS);
   }
   const data = wrapper && isRecord(wrapper.data) ? wrapper.data : isRecord(output) ? output : null;
-  if (!data) return typeof output === "string" ? output.slice(0, HISTORY_SUMMARY_CHARS) : "no result";
+  if (!data)
+    return typeof output === "string" ? output.slice(0, HISTORY_SUMMARY_CHARS) : "no result";
   const figures: string[] = [];
   for (const [key, value] of Object.entries(data)) {
     if (!FIGURE_KEY.test(key)) continue;
@@ -64,12 +65,15 @@ export function summarizeToolOutputForHistory(output: unknown): string {
     }
   }
   if (typeof data.truncated === "boolean" && data.truncated) figures.push("truncated page");
-  const note = typeof data.note === "undefined" && wrapper && typeof wrapper.note === "string"
-    ? wrapper.note
-    : null;
+  const note =
+    typeof data.note === "undefined" && wrapper && typeof wrapper.note === "string"
+      ? wrapper.note
+      : null;
   if (note) figures.push(`note: ${note.slice(0, 80)}`);
   const line = figures.length ? figures.join("; ") : "ok";
-  return line.length > HISTORY_SUMMARY_CHARS ? `${line.slice(0, HISTORY_SUMMARY_CHARS - 1)}…` : line;
+  return line.length > HISTORY_SUMMARY_CHARS
+    ? `${line.slice(0, HISTORY_SUMMARY_CHARS - 1)}…`
+    : line;
 }
 
 function toolNameOf(part: HistoryPart): string {
@@ -143,9 +147,10 @@ export function applyHistoryBudget(
   const assistantIndexes = messages
     .map((message, index) => (message.role === "assistant" ? index : -1))
     .filter((index) => index >= 0);
-  const fullFrom = assistantIndexes.length <= keepFullAssistantTurns
-    ? -1
-    : assistantIndexes[assistantIndexes.length - keepFullAssistantTurns]!;
+  const fullFrom =
+    assistantIndexes.length <= keepFullAssistantTurns
+      ? -1
+      : assistantIndexes[assistantIndexes.length - keepFullAssistantTurns]!;
   return messages.map((message, index) => {
     if (message.role !== "assistant" || index >= fullFrom) return message;
     return { ...message, parts: compactAssistantTurn(message.parts) };

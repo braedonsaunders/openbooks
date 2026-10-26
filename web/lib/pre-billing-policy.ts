@@ -1,1 +1,1 @@
-export * from '@openbooks/engine/projects/pre-billing-policy'
+export * from "@openbooks/engine/projects/pre-billing-policy";

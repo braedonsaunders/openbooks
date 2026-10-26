@@ -1,60 +1,69 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import React from 'react'
+import assert from "node:assert/strict";
+import test from "node:test";
+import React from "react";
 
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })', extra: { 'next-intl': 'export function useLocale(){return "fr-CA"};export function useTimeZone(){return "America/Toronto"};export function useTranslations(){return (key)=>key}' } })
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation: "export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })",
+  extra: {
+    "next-intl":
+      'export function useLocale(){return "fr-CA"};export function useTimeZone(){return "America/Toronto"};export function useTranslations(){return (key)=>key}',
+  },
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
+    if (specifier === "sonner") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export const toast = { success(){}, error(){} }",
+      };
     }
 
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { DocumentDrawerBody } = await import('./sections')
+});
+const { DocumentDrawerBody } = await import("./sections");
 // tsx compiles JSX classic: the island never imports React, so the test bridges it.
-Object.assign(globalThis, { React })
+Object.assign(globalThis, { React });
 
-type Drawer = Parameters<typeof DocumentDrawerBody>[0]['drawer']
+type Drawer = Parameters<typeof DocumentDrawerBody>[0]["drawer"];
 
 const labels: Record<string, string> = {
-  send: 'Send',
-  remind: 'Remind',
-  hold: 'Hold',
-  releaseHold: 'Release hold',
-  void: 'Void',
-  signers: 'Signers',
-  noSigners: 'No signers.',
-  events: 'Events',
-  noEvents: 'No events.',
-  eventCreated: 'Created',
-  eventSent: 'Sent',
-  eventViewed: 'Viewed',
-  eventSigned: 'Signed',
-  eventDeclined: 'Declined',
-  eventAcknowledged: 'Acknowledged',
-  eventVoided: 'Voided',
-  eventReminded: 'Reminded',
-  eventExpired: 'Expired',
-  eventRetentionFlagged: 'Flagged for retention',
-  eventDeleted: 'Deleted',
-  actionFailed: 'Failed.',
-  retentionActionDelete: 'Delete document',
-  retentionActionAnonymize: 'Anonymize document',
-}
+  send: "Send",
+  remind: "Remind",
+  hold: "Hold",
+  releaseHold: "Release hold",
+  void: "Void",
+  signers: "Signers",
+  noSigners: "No signers.",
+  events: "Events",
+  noEvents: "No events.",
+  eventCreated: "Created",
+  eventSent: "Sent",
+  eventViewed: "Viewed",
+  eventSigned: "Signed",
+  eventDeclined: "Declined",
+  eventAcknowledged: "Acknowledged",
+  eventVoided: "Voided",
+  eventReminded: "Reminded",
+  eventExpired: "Expired",
+  eventRetentionFlagged: "Flagged for retention",
+  eventDeleted: "Deleted",
+  actionFailed: "Failed.",
+  retentionActionDelete: "Delete document",
+  retentionActionAnonymize: "Anonymize document",
+};
 
 function drawerWith(events: { kind: string; recordedAt: string }[], canManage = true): Drawer {
   return {
-    closeHref: '/hrm/documents',
-    title: 'Offer letter',
+    closeHref: "/hrm/documents",
+    title: "Offer letter",
     // The write actions follow the loader grant.
     canManage,
     document: {
-      id: 'doc-1',
-      status: 'sent',
+      id: "doc-1",
+      status: "sent",
       legalHold: false,
       fileId: null,
       retainUntil: null,
@@ -69,122 +78,158 @@ function drawerWith(events: { kind: string; recordedAt: string }[], canManage = 
     signerNames: {},
     missingDetail: null,
     labels,
-  } as unknown as Drawer
+  } as unknown as Drawer;
 }
 
-async function renderText(drawer: Drawer): Promise<{ text: string; doc: Document; unmount: () => Promise<void> }> {
-  const { JSDOM } = await import('jsdom')
+async function renderText(
+  drawer: Drawer,
+): Promise<{ text: string; doc: Document; unmount: () => Promise<void> }> {
+  const { JSDOM } = await import("jsdom");
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
-    url: 'http://localhost/hrm/documents',
-  })
+    url: "http://localhost/hrm/documents",
+  });
   const previous = {
     window: (globalThis as Record<string, unknown>).window,
     document: (globalThis as Record<string, unknown>).document,
     navigator: (globalThis as Record<string, unknown>).navigator,
     self: (globalThis as Record<string, unknown>).self,
-  }
-  Object.defineProperty(globalThis, 'window', { value: dom.window, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'document', { value: dom.window.document, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'self', { value: dom.window, configurable: true, writable: true })
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  const doc = dom.window.document
-  const { createRoot } = await import('react-dom/client')
-  const { act } = await import('react')
-  const root = createRoot(doc.getElementById('root')!)
+  };
+  Object.defineProperty(globalThis, "window", {
+    value: dom.window,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "document", {
+    value: dom.window.document,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    value: dom.window.navigator,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "self", {
+    value: dom.window,
+    configurable: true,
+    writable: true,
+  });
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const doc = dom.window.document;
+  const { createRoot } = await import("react-dom/client");
+  const { act } = await import("react");
+  const root = createRoot(doc.getElementById("root")!);
   await act(async () => {
-    root.render(<DocumentDrawerBody drawer={drawer} />)
-  })
+    root.render(<DocumentDrawerBody drawer={drawer} />);
+  });
   return {
-    text: doc.body.textContent ?? '',
+    text: doc.body.textContent ?? "",
     doc: doc as unknown as Document,
     unmount: async () => {
       await act(async () => {
-        root.unmount()
-      })
-      Object.defineProperty(globalThis, 'window', { value: previous.window, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'document', { value: previous.document, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'navigator', { value: previous.navigator, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'self', { value: previous.self, configurable: true, writable: true })
+        root.unmount();
+      });
+      Object.defineProperty(globalThis, "window", {
+        value: previous.window,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, "document", {
+        value: previous.document,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, "navigator", {
+        value: previous.navigator,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, "self", {
+        value: previous.self,
+        configurable: true,
+        writable: true,
+      });
     },
-  }
+  };
 }
 
-test('document events render translated labels, never raw codes', async () => {
+test("document events render translated labels, never raw codes", async () => {
   const m = await renderText(
     drawerWith([
-      { kind: 'created', recordedAt: '2026-09-01' },
-      { kind: 'sent', recordedAt: '2026-09-02' },
-      { kind: 'retention_flagged', recordedAt: '2026-09-03' },
+      { kind: "created", recordedAt: "2026-09-01" },
+      { kind: "sent", recordedAt: "2026-09-02" },
+      { kind: "retention_flagged", recordedAt: "2026-09-03" },
     ]),
-  )
+  );
   try {
-    assert.match(m.text, /Created/, 'the created event renders its label')
-    assert.match(m.text, /Sent/, 'the sent event renders its label')
-    assert.match(m.text, /Flagged for retention/, 'the retention event renders its label')
-    assert.ok(!m.text.includes('retention_flagged'), 'no raw event code leaks into the display')
+    assert.match(m.text, /Created/, "the created event renders its label");
+    assert.match(m.text, /Sent/, "the sent event renders its label");
+    assert.match(m.text, /Flagged for retention/, "the retention event renders its label");
+    assert.ok(!m.text.includes("retention_flagged"), "no raw event code leaks into the display");
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});
 
-test('an unrecognized event kind falls back to its code, never blank', async () => {
-  const m = await renderText(drawerWith([{ kind: 'mystery_kind', recordedAt: '2026-09-04' }]))
+test("an unrecognized event kind falls back to its code, never blank", async () => {
+  const m = await renderText(drawerWith([{ kind: "mystery_kind", recordedAt: "2026-09-04" }]));
   try {
-    assert.match(m.text, /mystery_kind/, 'an unknown kind stays visible as its code')
+    assert.match(m.text, /mystery_kind/, "an unknown kind stays visible as its code");
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});
 
-test('event instants render in the viewer locale and organization time zone', async () => {
-  const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02T01:30:00.000Z' }]))
+test("event instants render in the viewer locale and organization time zone", async () => {
+  const m = await renderText(
+    drawerWith([{ kind: "sent", recordedAt: "2026-09-02T01:30:00.000Z" }]),
+  );
   try {
-    assert.match(m.text, /1 sept\. 2026/)
-    assert.match(m.text, /21 h 30/)
+    assert.match(m.text, /1 sept\. 2026/);
+    assert.match(m.text, /21 h 30/);
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});
 
-test('retention actions render their translated action label', async () => {
-  const drawer = drawerWith([], true)
-  drawer.document!.retentionAction = 'delete'
-  const m = await renderText(drawer)
+test("retention actions render their translated action label", async () => {
+  const drawer = drawerWith([], true);
+  drawer.document!.retentionAction = "delete";
+  const m = await renderText(drawer);
   try {
-    assert.match(m.text, /Delete document/)
-    assert.doesNotMatch(m.text, /\bdelete\b/)
+    assert.match(m.text, /Delete document/);
+    assert.doesNotMatch(m.text, /\bdelete\b/);
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});
 
-test('a sent document offers Remind, Hold and Void to the manage grant', async () => {
-  const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02' }], true))
+test("a sent document offers Remind, Hold and Void to the manage grant", async () => {
+  const m = await renderText(drawerWith([{ kind: "sent", recordedAt: "2026-09-02" }], true));
   try {
-    const buttons = [...m.doc.querySelectorAll('button')].map((b) => b.textContent ?? '')
+    const buttons = [...m.doc.querySelectorAll("button")].map((b) => b.textContent ?? "");
     // The service accepts Send only on drafts, so a sent
     // document offers Remind, Hold and Void — never Send again.
-    for (const label of ['Remind', 'Hold', 'Void']) {
-      assert.ok(buttons.includes(label), `${label} renders for the manage grant`)
+    for (const label of ["Remind", "Hold", "Void"]) {
+      assert.ok(buttons.includes(label), `${label} renders for the manage grant`);
     }
-    assert.ok(!buttons.includes('Send'), 'Send never re-renders on a sent document')
+    assert.ok(!buttons.includes("Send"), "Send never re-renders on a sent document");
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});
 
-test('a read-only viewer sees the document with no Send, Remind, Hold or Void', async () => {
-  const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02' }], false))
+test("a read-only viewer sees the document with no Send, Remind, Hold or Void", async () => {
+  const m = await renderText(drawerWith([{ kind: "sent", recordedAt: "2026-09-02" }], false));
   try {
     // The body carries no title (the UrlDrawer owns it) — Signers/Events
     // prove the detail still renders without the grant.
-    assert.match(m.text, /Signers/, 'the document detail stays readable without the grant')
-    const buttons = [...m.doc.querySelectorAll('button')].map((b) => b.textContent ?? '')
-    for (const label of ['Send', 'Remind', 'Hold', 'Void']) {
-      assert.ok(!buttons.includes(label), `${label} never renders without the manage grant`)
+    assert.match(m.text, /Signers/, "the document detail stays readable without the grant");
+    const buttons = [...m.doc.querySelectorAll("button")].map((b) => b.textContent ?? "");
+    for (const label of ["Send", "Remind", "Hold", "Void"]) {
+      assert.ok(!buttons.includes(label), `${label} never renders without the manage grant`);
     }
   } finally {
-    await m.unmount()
+    await m.unmount();
   }
-})
+});

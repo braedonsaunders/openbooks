@@ -31,8 +31,25 @@ import type {
 } from "../withholding-jurisdictions.ts";
 
 const ES_REGION_CODES = [
-  "AN", "AR", "AS", "CN", "CB", "CL", "CM", "CT", "EX", "GA",
-  "IB", "RI", "MD", "MC", "NC", "PV", "VC", "CE", "ML",
+  "AN",
+  "AR",
+  "AS",
+  "CN",
+  "CB",
+  "CL",
+  "CM",
+  "CT",
+  "EX",
+  "GA",
+  "IB",
+  "RI",
+  "MD",
+  "MC",
+  "NC",
+  "PV",
+  "VC",
+  "CE",
+  "ML",
 ] as const;
 
 const ES_REGION_NAMES: Readonly<Record<string, string>> = {
@@ -58,13 +75,15 @@ const ES_REGION_NAMES: Readonly<Record<string, string>> = {
 };
 
 const FORAL_REASONS: Readonly<Record<string, string>> = {
-  NC: "Navarra applies the foral IRPF regime: foral retention tables for Navarra "
-    + "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. "
-    + "These territories are not yet supported by the ES pack; contact support.",
-  PV: "the Basque Historical Territories — Álava/Araba, Gipuzkoa and Bizkaia — apply the foral "
-    + "IRPF regime: foral retention tables for the three Haciendas Forales aren't in this pack "
-    + "(e.g. Bizkaia's 2026 table) — AEAT tables never cover them. "
-    + "These territories are not yet supported by the ES pack; contact support.",
+  NC:
+    "Navarra applies the foral IRPF regime: foral retention tables for Navarra " +
+    "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. " +
+    "These territories are not yet supported by the ES pack; contact support.",
+  PV:
+    "the Basque Historical Territories — Álava/Araba, Gipuzkoa and Bizkaia — apply the foral " +
+    "IRPF regime: foral retention tables for the three Haciendas Forales aren't in this pack " +
+    "(e.g. Bizkaia's 2026 table) — AEAT tables never cover them. " +
+    "These territories are not yet supported by the ES pack; contact support.",
 };
 
 const ES_REGIONS: readonly PayrollRegionWithholding[] = ES_REGION_CODES.map(

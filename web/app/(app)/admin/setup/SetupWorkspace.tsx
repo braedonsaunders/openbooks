@@ -1,33 +1,33 @@
-import { type ReactNode } from 'react'
-import { getTranslations } from 'next-intl/server'
-import { PageHeader, PagePresentationProvider } from '@openbooks/ui'
-import type { Authz } from '../../../../lib/authz'
-import { resolvedFeatureState } from '../../../../lib/features'
-import { setupRailFlags } from '../../../../lib/setup/rail-flags'
-import { SetupNav } from './SetupNav'
+import { type ReactNode } from "react";
+import { getTranslations } from "next-intl/server";
+import { PageHeader, PagePresentationProvider } from "@openbooks/ui";
+import type { Authz } from "../../../../lib/authz";
+import { resolvedFeatureState } from "../../../../lib/features";
+import { setupRailFlags } from "../../../../lib/setup/rail-flags";
+import { SetupNav } from "./SetupNav";
 
 /** Shared Company Setup chrome, content width, spacing and scrolling. */
 export async function SetupWorkspace({
   authz,
   children,
-  contentLayout = 'form',
+  contentLayout = "form",
 }: {
-  authz: Authz
-  children: ReactNode
-  contentLayout?: 'form' | 'section'
+  authz: Authz;
+  children: ReactNode;
+  contentLayout?: "form" | "section";
 }) {
-  const t = await getTranslations('admin')
-  const features = await resolvedFeatureState(authz.user.orgId)
-  const railFlags = await setupRailFlags(authz, features)
+  const t = await getTranslations("admin");
+  const features = await resolvedFeatureState(authz.user.orgId);
+  const railFlags = await setupRailFlags(authz, features);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Fixed header — never scrolls */}
       <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
         <PageHeader
-          title={t('setup.title')}
-          description={t('setup.description')}
-          back={{ href: '/admin', label: t('hub.title') }}
+          title={t("setup.title")}
+          description={t("setup.description")}
+          back={{ href: "/admin", label: t("hub.title") }}
         />
       </div>
 
@@ -39,12 +39,14 @@ export async function SetupWorkspace({
         </aside>
         <div className="app-scroll min-h-0 min-w-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
           <div className="mx-auto w-full max-w-5xl p-4 sm:p-6">
-            <PagePresentationProvider presentation={contentLayout === 'section' ? 'section' : 'page'}>
+            <PagePresentationProvider
+              presentation={contentLayout === "section" ? "section" : "page"}
+            >
               {children}
             </PagePresentationProvider>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

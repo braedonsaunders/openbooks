@@ -1,19 +1,19 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { Button, Input, Label } from '@openbooks/ui'
-import { Switch } from '@/components/switch'
-import { DisclosureSection } from '@openbooks/ui'
+import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { Button, Input, Label } from "@openbooks/ui";
+import { Switch } from "@/components/switch";
+import { DisclosureSection } from "@openbooks/ui";
 
 interface ChannelSettings {
-  autoImportProducts: boolean
-  syncInventory: boolean
-  pushCatalog: boolean
-  apiVersion: string
-  rateLimitBudget: number
+  autoImportProducts: boolean;
+  syncInventory: boolean;
+  pushCatalog: boolean;
+  apiVersion: string;
+  rateLimitBudget: number;
 }
 
 /**
@@ -24,12 +24,12 @@ interface ChannelSettings {
  * the connector behaves.
  */
 export function SettingsTab({ channelId, canManage }: { channelId: string; canManage: boolean }) {
-  const t = useTranslations('channels')
-  const tc = useTranslations('common')
-  const [settings, setSettings] = useState<ChannelSettings | null>(null)
-  const [topics, setTopics] = useState<string[]>([])
-  const [isShopify, setIsShopify] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const t = useTranslations("channels");
+  const tc = useTranslations("common");
+  const [settings, setSettings] = useState<ChannelSettings | null>(null);
+  const [topics, setTopics] = useState<string[]>([]);
+  const [isShopify, setIsShopify] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Fetch kickoff: every update sits in a promise continuation, never
   // synchronously in the effect body (react-hooks/set-state-in-effect).
@@ -39,104 +39,150 @@ export function SettingsTab({ channelId, canManage }: { channelId: string; canMa
     return fetch(`/api/channels/${channelId}`)
       .then(async (res) => {
         if (!res.ok) {
-          toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
-          return
+          toast.error(await readApiErrorMessage(res, t("toast.loadFailed")));
+          return;
         }
         const body = (await res.json()) as {
-          channel: { kind: string; settings: ChannelSettings }
-          topics: string[]
-        }
-        setIsShopify(body.channel.kind === 'shopify')
-        setSettings(body.channel.settings)
-        setTopics(body.topics)
+          channel: { kind: string; settings: ChannelSettings };
+          topics: string[];
+        };
+        setIsShopify(body.channel.kind === "shopify");
+        setSettings(body.channel.settings);
+        setTopics(body.topics);
       })
       .catch(() => {
-        toast.error(t('toast.loadFailed'))
-      })
-  }, [channelId, t])
+        toast.error(t("toast.loadFailed"));
+      });
+  }, [channelId, t]);
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load();
+  }, [load]);
 
   async function saveSettings() {
-    if (!settings || !canManage) return
-    setSaving(true)
+    if (!settings || !canManage) return;
+    setSaving(true);
     try {
       const res = await fetch(`/api/channels/${channelId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ settings }),
-      })
-      if (!res.ok) toast.error(await readApiErrorMessage(res, t('toast.loadFailed')))
-      else toast.success(tc('actions.save'))
+      });
+      if (!res.ok) toast.error(await readApiErrorMessage(res, t("toast.loadFailed")));
+      else toast.success(tc("actions.save"));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   // Connector-specific tunables: other kinds keep the Setup sections
   // above, so this form stays out of their way entirely.
-  if (!settings || !isShopify) return null
+  if (!settings || !isShopify) return null;
   const advancedInvalid =
-    !/^\d{4}-\d{2}$/.test(settings.apiVersion) || !Number.isInteger(settings.rateLimitBudget) || settings.rateLimitBudget <= 0
-  const webhookUrl = typeof window === 'undefined' ? '' : `${window.location.origin}/api/channels/${channelId}/webhooks`
+    !/^\d{4}-\d{2}$/.test(settings.apiVersion) ||
+    !Number.isInteger(settings.rateLimitBudget) ||
+    settings.rateLimitBudget <= 0;
+  const webhookUrl =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.origin}/api/channels/${channelId}/webhooks`;
 
   return (
     <div className="max-w-2xl space-y-6">
       <section className="space-y-4">
-        <h2 className="text-base font-medium">{t('settings.title')}</h2>
+        <h2 className="text-base font-medium">{t("settings.title")}</h2>
         <label className="flex items-start gap-2">
-          <Switch on={settings.autoImportProducts} onToggle={() => setSettings((prev) => (prev ? { ...prev, autoImportProducts: !prev.autoImportProducts } : prev))} disabled={!canManage || saving} label={t('settings.autoImport')} />
+          <Switch
+            on={settings.autoImportProducts}
+            onToggle={() =>
+              setSettings((prev) =>
+                prev ? { ...prev, autoImportProducts: !prev.autoImportProducts } : prev,
+              )
+            }
+            disabled={!canManage || saving}
+            label={t("settings.autoImport")}
+          />
           <span>
-            <span className="block text-sm font-medium">{t('settings.autoImport')}</span>
-            <span className="block text-sm text-slate-500">{t('settings.autoImportHint')}</span>
+            <span className="block text-sm font-medium">{t("settings.autoImport")}</span>
+            <span className="block text-sm text-slate-500">{t("settings.autoImportHint")}</span>
           </span>
         </label>
         <label className="flex items-start gap-2">
-          <Switch on={settings.syncInventory} onToggle={() => setSettings((prev) => (prev ? { ...prev, syncInventory: !prev.syncInventory } : prev))} disabled={!canManage || saving} label={t('settings.syncInventory')} />
+          <Switch
+            on={settings.syncInventory}
+            onToggle={() =>
+              setSettings((prev) => (prev ? { ...prev, syncInventory: !prev.syncInventory } : prev))
+            }
+            disabled={!canManage || saving}
+            label={t("settings.syncInventory")}
+          />
           <span>
-            <span className="block text-sm font-medium">{t('settings.syncInventory')}</span>
-            <span className="block text-sm text-slate-500">{t('settings.syncInventoryHint')}</span>
+            <span className="block text-sm font-medium">{t("settings.syncInventory")}</span>
+            <span className="block text-sm text-slate-500">{t("settings.syncInventoryHint")}</span>
           </span>
         </label>
         <label className="flex items-start gap-2">
-          <Switch on={settings.pushCatalog} onToggle={() => setSettings((prev) => (prev ? { ...prev, pushCatalog: !prev.pushCatalog } : prev))} disabled={!canManage || saving} label={t('settings.push')} />
+          <Switch
+            on={settings.pushCatalog}
+            onToggle={() =>
+              setSettings((prev) => (prev ? { ...prev, pushCatalog: !prev.pushCatalog } : prev))
+            }
+            disabled={!canManage || saving}
+            label={t("settings.push")}
+          />
           <span>
-            <span className="block text-sm font-medium">{t('settings.push')}</span>
-            <span className="block text-sm text-slate-500">{t('settings.pushHint')}</span>
+            <span className="block text-sm font-medium">{t("settings.push")}</span>
+            <span className="block text-sm text-slate-500">{t("settings.pushHint")}</span>
           </span>
         </label>
       </section>
-      <DisclosureSection title={t('settings.advanced')} summary={t('settings.advancedSummary')} forceOpen={advancedInvalid}>
+      <DisclosureSection
+        title={t("settings.advanced")}
+        summary={t("settings.advancedSummary")}
+        forceOpen={advancedInvalid}
+      >
         <div className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label htmlFor="channel-api-version">{t('settings.apiVersion')}</Label>
-            <Input id="channel-api-version" value={settings.apiVersion} onChange={(event) => setSettings((prev) => (prev ? { ...prev, apiVersion: event.target.value } : prev))} disabled={!canManage || saving} />
-            <p className="text-sm text-slate-500">{t('settings.apiVersionHint')}</p>
+            <Label htmlFor="channel-api-version">{t("settings.apiVersion")}</Label>
+            <Input
+              id="channel-api-version"
+              value={settings.apiVersion}
+              onChange={(event) =>
+                setSettings((prev) => (prev ? { ...prev, apiVersion: event.target.value } : prev))
+              }
+              disabled={!canManage || saving}
+            />
+            <p className="text-sm text-slate-500">{t("settings.apiVersionHint")}</p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="channel-rate-limit">{t('settings.rateLimit')}</Label>
+            <Label htmlFor="channel-rate-limit">{t("settings.rateLimit")}</Label>
             <Input
               id="channel-rate-limit"
               type="number"
               min={1}
               value={settings.rateLimitBudget}
-              onChange={(event) => setSettings((prev) => (prev ? { ...prev, rateLimitBudget: Number(event.target.value) } : prev))}
+              onChange={(event) =>
+                setSettings((prev) =>
+                  prev ? { ...prev, rateLimitBudget: Number(event.target.value) } : prev,
+                )
+              }
               disabled={!canManage || saving}
             />
-            <p className="text-sm text-slate-500">{t('settings.rateLimitHint')}</p>
+            <p className="text-sm text-slate-500">{t("settings.rateLimitHint")}</p>
           </div>
           <div className="space-y-2">
-            <Label>{t('settings.webhookUrl')}</Label>
+            <Label>{t("settings.webhookUrl")}</Label>
             <p className="font-mono text-xs break-all">{webhookUrl}</p>
-            <p className="text-sm text-slate-500">{t('settings.webhookUrlHint')}</p>
+            <p className="text-sm text-slate-500">{t("settings.webhookUrlHint")}</p>
           </div>
           <div className="space-y-2">
-            <Label>{t('settings.topics')}</Label>
+            <Label>{t("settings.topics")}</Label>
             <ul className="flex flex-wrap gap-1">
               {topics.map((topic) => (
-                <li key={topic} className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs dark:bg-slate-800">
+                <li
+                  key={topic}
+                  className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs dark:bg-slate-800"
+                >
                   {topic}
                 </li>
               ))}
@@ -146,9 +192,9 @@ export function SettingsTab({ channelId, canManage }: { channelId: string; canMa
       </DisclosureSection>
       <div className="flex justify-end">
         <Button disabled={!canManage || saving || advancedInvalid} onClick={saveSettings}>
-          {t('settings.saveSettings')}
+          {t("settings.saveSettings")}
         </Button>
       </div>
     </div>
-  )
+  );
 }

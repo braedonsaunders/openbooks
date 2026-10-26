@@ -1,69 +1,74 @@
-'use client'
+"use client";
 
-import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '@/lib/segment-assignments'
+import {
+  CLEAR_SEGMENT,
+  INHERIT_SEGMENT,
+  segmentCellValue,
+  segmentAssignmentsFromCells,
+} from "@/lib/segment-assignments";
 
-import { useMoney } from '@/components/money-provider'
-import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { refusalMessageFromBody } from '@/lib/api-error'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { ActionError } from '@braedonsaunders/appkit-errors'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { readApiErrorMessage, readAppActionResult, fetchAppAction } from '@/lib/api-error'
-import { useAppAction } from '@/lib/use-app-action'
-import { basisForResolvedRow, parsePriceBasis, type PriceBasis } from '@/lib/price-basis'
-import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
-import { PromotionApplyControl } from '@/components/promotion-apply'
-import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { optionalScanResolver } from '../../../lib/scan'
-import { TransactionDrawer } from '../../../components/transaction-drawer'
-import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
-import { ExternalRefChip } from '../../../components/external-ref-chip'
-import { PdfButton } from '../../../components/pdf-button'
-import { SendButton } from '../../../components/send-button'
-import { confirmDialog } from '../../../lib/confirm'
-import { isDocumentRevisionToken } from '@/lib/api/registry-data'
-import { promptDialog } from '../../../lib/prompt'
-import { PermissionHint } from '../../../components/permission-hint'
-import { FlowManualButtons } from '../../../components/flow-manual-buttons'
-import { ApprovalActions } from '../../../components/approval-actions'
-import { AssignWarehousePanel } from './AssignWarehousePanel'
-import { GoodsReceiptForm } from './GoodsReceiptForm'
-import { VoidReceiptDialog } from './VoidReceiptDialog'
-import { ApprovalHistory } from '../../../components/approval-history'
-import { EnteredAfterOrderDateNotice } from './EnteredAfterOrderDateNotice'
-import { DropShipAssessmentButton } from './DropShipAssessmentButton'
-import { OrderBackorders } from './OrderBackorders'
-import { QuoteCashSection } from './QuoteCashSection'
-import { QuoteAwardAction } from './QuoteAwardAction'
-import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
-import { HeaderFields } from '../../../components/transaction-form/header-fields'
-import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
-import { cmp, fromUnits, mul, sum, toUnits } from '@openbooks/engine/money/money'
-import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/tax/tax'
-import { fromQuantityUnits, toQuantityUnits } from '../../../lib/order-cycle-math'
-import { viewerDateTime } from '@/lib/format'
-import { DateField } from '@/components/date-field'
+import { useMoney } from "@/components/money-provider";
+import { initialDrawerMode, type DrawerMode } from "@/lib/drawer-mode";
+import { refusalMessageFromBody } from "@/lib/api-error";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { ActionError } from "@braedonsaunders/appkit-errors";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { readApiErrorMessage, readAppActionResult, fetchAppAction } from "@/lib/api-error";
+import { useAppAction } from "@/lib/use-app-action";
+import { basisForResolvedRow, parsePriceBasis, type PriceBasis } from "@/lib/price-basis";
+import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from "@openbooks/ui";
+import { PromotionApplyControl } from "@/components/promotion-apply";
+import { LineGrid, type LineGridColumn } from "../../../components/line-grid";
+import { optionalScanResolver } from "../../../lib/scan";
+import { TransactionDrawer } from "../../../components/transaction-drawer";
+import { DocTypeBadge, docTypeMeta } from "../../../components/doc-type-badge";
+import { ExternalRefChip } from "../../../components/external-ref-chip";
+import { PdfButton } from "../../../components/pdf-button";
+import { SendButton } from "../../../components/send-button";
+import { confirmDialog } from "../../../lib/confirm";
+import { isDocumentRevisionToken } from "@/lib/api/registry-data";
+import { promptDialog } from "../../../lib/prompt";
+import { PermissionHint } from "../../../components/permission-hint";
+import { FlowManualButtons } from "../../../components/flow-manual-buttons";
+import { ApprovalActions } from "../../../components/approval-actions";
+import { AssignWarehousePanel } from "./AssignWarehousePanel";
+import { GoodsReceiptForm } from "./GoodsReceiptForm";
+import { VoidReceiptDialog } from "./VoidReceiptDialog";
+import { ApprovalHistory } from "../../../components/approval-history";
+import { EnteredAfterOrderDateNotice } from "./EnteredAfterOrderDateNotice";
+import { DropShipAssessmentButton } from "./DropShipAssessmentButton";
+import { OrderBackorders } from "./OrderBackorders";
+import { QuoteCashSection } from "./QuoteCashSection";
+import { QuoteAwardAction } from "./QuoteAwardAction";
+import { CONVERSION_TARGETS, type OrderKind } from "../../../lib/order-kinds";
+import { HeaderFields } from "../../../components/transaction-form/header-fields";
+import type { FormLayoutConfig, HeaderFieldPlacement } from "@openbooks/customization";
+import { cmp, fromUnits, mul, sum, toUnits } from "@openbooks/engine/money/money";
+import { computeLineTaxes, type TaxComponentConfig } from "@openbooks/engine/tax/tax";
+import { fromQuantityUnits, toQuantityUnits } from "../../../lib/order-cycle-math";
+import { viewerDateTime } from "@/lib/format";
+import { DateField } from "@/components/date-field";
 type Opt = {
-  id: string
-  display_name?: string
-  number?: string
-  name?: string
-  code?: string
-  rate?: string
-  default_rate?: string | null
+  id: string;
+  display_name?: string;
+  number?: string;
+  name?: string;
+  code?: string;
+  rate?: string;
+  default_rate?: string | null;
   /** Purchase cost per unit: the only catalog price a purchase line may default from. */
-  default_cost?: string | null
-  income_account_id?: string | null
-  expense_account_id?: string | null
-  tax_code_id?: string | null
-  unit?: string | null
-  tax_components?: TaxComponentConfig[]
+  default_cost?: string | null;
+  income_account_id?: string | null;
+  expense_account_id?: string | null;
+  tax_code_id?: string | null;
+  unit?: string | null;
+  tax_components?: TaxComponentConfig[];
   /** True when the item carries an inventory costing profile (line pickers). */
-  has_inventory_profile?: boolean | null
+  has_inventory_profile?: boolean | null;
 };
 interface LineRow extends Record<string, unknown> {
   /**
@@ -72,111 +77,123 @@ interface LineRow extends Record<string, unknown> {
    * tracking follow the row across reorder/duplicate/remove instead of the
    * position it used to occupy.
    */
-  clientKey: string
+  clientKey: string;
   /** Persisted parent identity for row-scoped fulfillment controls; never sent by the draft serializer. */
-  persistedLineId: string
-  itemId: string
-  accountId: string
-  description: string
-  quantity: string
-  unit: string
+  persistedLineId: string;
+  itemId: string;
+  accountId: string;
+  description: string;
+  quantity: string;
+  unit: string;
   /** Item id whose alternate unit came from a barcode identifier. */
-  scanUnitItemId?: string
-  unitPrice: string
-  taxProfileId: string
-  departmentId: string
-  projectId: string
+  scanUnitItemId?: string;
+  unitPrice: string;
+  taxProfileId: string;
+  departmentId: string;
+  projectId: string;
   /** Work period the line bills (sales orders), YYYY-MM-DD or blank. */
-  workFrom: string
-  workTo: string
+  workFrom: string;
+  workTo: string;
   /** Warehouse for fulfil/receipt effects; blank unless the line's item is
    *  stocked. */
-  stockLocationId: string
+  stockLocationId: string;
   /** Pricing lineage the line loaded with (client-only, never serialized —
    *  the save payload picks explicit fields). Lets a reopened draft re-send
    *  its stored basis when the row is untouched, instead of nulling it. */
-  loadedPrice: { itemId: string; unitPrice: string; quantity: string; basis: PriceBasis } | null
+  loadedPrice: { itemId: string; unitPrice: string; quantity: string; basis: PriceBasis } | null;
   /** Promotion code carried by a discount line; blank on ordinary lines. */
-  promotionCode: string
+  promotionCode: string;
 }
-type OrderLineValidationInput = Pick<LineRow, 'itemId' | 'accountId' | 'description' | 'quantity' | 'unitPrice'>
+type OrderLineValidationInput = Pick<
+  LineRow,
+  "itemId" | "accountId" | "description" | "quantity" | "unitPrice"
+>;
 
 function orderLineIsPopulated(row: OrderLineValidationInput): boolean {
-  return Boolean(row.itemId || row.accountId || row.description.trim() || row.quantity.trim() || row.unitPrice.trim())
+  return Boolean(
+    row.itemId ||
+    row.accountId ||
+    row.description.trim() ||
+    row.quantity.trim() ||
+    row.unitPrice.trim(),
+  );
 }
 
-export function findInvalidOrderLine(rows: readonly OrderLineValidationInput[]): { row: number; field: 'quantity' | 'unitPrice' | 'amount' } | null {
+export function findInvalidOrderLine(
+  rows: readonly OrderLineValidationInput[],
+): { row: number; field: "quantity" | "unitPrice" | "amount" } | null {
   for (const [index, row] of rows.entries()) {
-    if (!orderLineIsPopulated(row)) continue
+    if (!orderLineIsPopulated(row)) continue;
     try {
-      if (cmp(row.quantity, '0') <= 0) return { row: index + 1, field: 'quantity' }
+      if (cmp(row.quantity, "0") <= 0) return { row: index + 1, field: "quantity" };
     } catch {
-      return { row: index + 1, field: 'quantity' }
+      return { row: index + 1, field: "quantity" };
     }
     try {
-      if (cmp(row.unitPrice, '0') < 0) return { row: index + 1, field: 'unitPrice' }
+      if (cmp(row.unitPrice, "0") < 0) return { row: index + 1, field: "unitPrice" };
     } catch {
-      return { row: index + 1, field: 'unitPrice' }
+      return { row: index + 1, field: "unitPrice" };
     }
     try {
-      if (cmp(mul(row.quantity, row.unitPrice), '0') <= 0) return { row: index + 1, field: 'amount' }
+      if (cmp(mul(row.quantity, row.unitPrice), "0") <= 0)
+        return { row: index + 1, field: "amount" };
     } catch {
-      return { row: index + 1, field: 'amount' }
+      return { row: index + 1, field: "amount" };
     }
   }
-  return null
+  return null;
 }
 interface SegmentOption {
-  key: string
-  name: string
-  showOnHeader: boolean
-  showOnLines: boolean
-  values: { id: string; name: string }[]
+  key: string;
+  name: string;
+  showOnHeader: boolean;
+  showOnLines: boolean;
+  values: { id: string; name: string }[];
 }
 interface LinkRow {
-  direction: 'from' | 'to'
-  link_type: string
-  id: string
-  kind: string
-  document_number: string
-  status: string
+  direction: "from" | "to";
+  link_type: string;
+  id: string;
+  kind: string;
+  document_number: string;
+  status: string;
 }
 export interface OrderPayload {
-  doc: Record<string, unknown>
-  lines: Record<string, unknown>[]
-  links: LinkRow[]
+  doc: Record<string, unknown>;
+  lines: Record<string, unknown>[];
+  links: LinkRow[];
   /** Purchase orders only: days entered after the order date, when notable. */
-  enteredAfterOrderDays?: number | null
+  enteredAfterOrderDays?: number | null;
 }
 
 type DropShipRoute = {
-  salesOrderLineId: string
-  purchaseOrderLineId: string | null
-  purchaseOrderId: string | null
-}
+  salesOrderLineId: string;
+  purchaseOrderLineId: string | null;
+  purchaseOrderId: string | null;
+};
 
 /** The order header: `documents` plus the loader's joins. Dates, uuids and
  *  numerics arrive from the driver as strings; nullable columns and
  *  left-join columns stay nullable. Column nullability per schema. */
 export interface OrderDoc extends Record<string, unknown> {
-  id: string
-  status: string
-  currency: string
-  subsidiary_id: string | null
-  project_id: string | null
-  department_id: string | null
-  memo: string | null
-  due_date: string | null
-  work_completed_on: string | null
-  document_date: string | null
-  updated_at: string
-  subtotal: string
-  tax_total: string
-  total: string
-  party_id: string | null
-  party_name: string | null
-  document_number: string | null
-  extra_dims: Record<string, string | null>
+  id: string;
+  status: string;
+  currency: string;
+  subsidiary_id: string | null;
+  project_id: string | null;
+  department_id: string | null;
+  memo: string | null;
+  due_date: string | null;
+  work_completed_on: string | null;
+  document_date: string | null;
+  updated_at: string;
+  subtotal: string;
+  tax_total: string;
+  total: string;
+  party_id: string | null;
+  party_name: string | null;
+  document_number: string | null;
+  extra_dims: Record<string, string | null>;
 }
 
 /** Narrow the engine loader's untyped document row to the header fields
@@ -184,21 +201,21 @@ export interface OrderDoc extends Record<string, unknown> {
  *  payloads pass through unchanged; anything else falls back to null (or
  *  '' for the NOT NULL columns). */
 export function asOrderDoc(raw: Record<string, unknown>): OrderDoc {
-  const text = (value: unknown): string | null =>
-    typeof value === 'string' ? value : null
+  const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
   const dims = (value: unknown): Record<string, string | null> => {
-    if (!isLineMap(value)) return {}
+    if (!isLineMap(value)) return {};
     return Object.fromEntries(
       Object.entries(value).filter(
-        (entry): entry is [string, string | null] => entry[1] === null || typeof entry[1] === 'string',
+        (entry): entry is [string, string | null] =>
+          entry[1] === null || typeof entry[1] === "string",
       ),
-    )
-  }
+    );
+  };
   return {
     ...raw,
-    id: text(raw.id) ?? '',
-    status: text(raw.status) ?? '',
-    currency: text(raw.currency) ?? '',
+    id: text(raw.id) ?? "",
+    status: text(raw.status) ?? "",
+    currency: text(raw.currency) ?? "",
     subsidiary_id: text(raw.subsidiary_id),
     project_id: text(raw.project_id),
     department_id: text(raw.department_id),
@@ -206,47 +223,47 @@ export function asOrderDoc(raw: Record<string, unknown>): OrderDoc {
     due_date: text(raw.due_date),
     work_completed_on: text(raw.work_completed_on),
     document_date: text(raw.document_date),
-    updated_at: text(raw.updated_at) ?? '',
-    subtotal: text(raw.subtotal) ?? '0',
-    tax_total: text(raw.tax_total) ?? '0',
-    total: text(raw.total) ?? '0',
+    updated_at: text(raw.updated_at) ?? "",
+    subtotal: text(raw.subtotal) ?? "0",
+    tax_total: text(raw.tax_total) ?? "0",
+    total: text(raw.total) ?? "0",
     party_id: text(raw.party_id),
     party_name: text(raw.party_name),
     document_number: text(raw.document_number),
     extra_dims: dims(raw.extra_dims),
-  }
+  };
 }
 
-type DraftSaveResponse = Pick<Response, 'ok' | 'json'>
+type DraftSaveResponse = Pick<Response, "ok" | "json">;
 
 export async function persistOrderDraft({
   request,
   setState,
   onError,
 }: {
-  request: () => Promise<DraftSaveResponse>
-  setState: (state: 'saving' | 'saved' | 'error') => void
-  onError: (message?: string) => void
+  request: () => Promise<DraftSaveResponse>;
+  setState: (state: "saving" | "saved" | "error") => void;
+  onError: (message?: string) => void;
 }): Promise<OrderPayload | null> {
-  setState('saving')
+  setState("saving");
   try {
-    const response = await request()
+    const response = await request();
     // The refusal reads through the shared helper so message, remedy and
     // code reach onError instead of only the bare `error` field.
     if (!response.ok) {
-      const data: unknown = await response.json().catch(() => null)
-      setState('error')
-      onError(refusalMessageFromBody(data, { fallback: '' }) ?? undefined)
-      return null
+      const data: unknown = await response.json().catch(() => null);
+      setState("error");
+      onError(refusalMessageFromBody(data, { fallback: "" }) ?? undefined);
+      return null;
     }
 
-    const order = (await response.json()) as OrderPayload
-    setState('saved')
-    return order
+    const order = (await response.json()) as OrderPayload;
+    setState("saved");
+    return order;
   } catch {
-    setState('error')
-    onError()
-    return null
+    setState("error");
+    onError();
+    return null;
   }
 }
 
@@ -254,13 +271,13 @@ export async function issueSavedOrder({
   persistDraft,
   requestApproval,
 }: {
-  persistDraft: () => Promise<OrderPayload | null>
-  requestApproval: () => Promise<void>
+  persistDraft: () => Promise<OrderPayload | null>;
+  requestApproval: () => Promise<void>;
 }): Promise<boolean> {
-  const saved = await persistDraft()
-  if (!saved) return false
-  await requestApproval()
-  return true
+  const saved = await persistDraft();
+  if (!saved) return false;
+  await requestApproval();
+  return true;
 }
 
 /**
@@ -271,54 +288,54 @@ export async function issueSavedOrder({
  * ('new' for unsaved-create). Restoring only fills the form — saving stays
  * explicit, and a successful save or an explicit discard clears the key.
  */
-const ORDER_DRAFT_VERSION = 1
+const ORDER_DRAFT_VERSION = 1;
 /** A save that stalls longer than this fails into the refusal path (state
  *  kept, Retry offered) instead of hanging the drawer on 'saving' forever. */
-const ORDER_SAVE_TIMEOUT_MS = 60_000
+const ORDER_SAVE_TIMEOUT_MS = 60_000;
 interface OrderDraftSnapshot {
-  version: 1
-  savedAt: string
+  version: 1;
+  savedAt: string;
   header: {
-    partyId: string
-    documentDate: string
-    dueDate: string
-    workCompletedOn: string
-    memo: string
-    departmentId: string
-    projectId: string
-    subsidiaryId: string
-    extraDims: Record<string, string | null>
-  }
-  rows: LineRow[]
+    partyId: string;
+    documentDate: string;
+    dueDate: string;
+    workCompletedOn: string;
+    memo: string;
+    departmentId: string;
+    projectId: string;
+    subsidiaryId: string;
+    extraDims: Record<string, string | null>;
+  };
+  rows: LineRow[];
 }
 function orderDraftKey(orgId: string, kind: OrderKind, recordId: string): string {
-  return `openbooks:order-draft:${orgId}:${kind}:${recordId}`
+  return `openbooks:order-draft:${orgId}:${kind}:${recordId}`;
 }
 /** Tab-local storage for retained drafts (null on the server or when disabled). */
 function draftStorage(): Storage | null {
   try {
-    if (typeof window !== 'undefined' && window.sessionStorage) return window.sessionStorage
-    if (typeof sessionStorage !== 'undefined') return sessionStorage
+    if (typeof window !== "undefined" && window.sessionStorage) return window.sessionStorage;
+    if (typeof sessionStorage !== "undefined") return sessionStorage;
   } catch {
-    return null
+    return null;
   }
-  return null
+  return null;
 }
 function readOrderDraft(key: string): OrderDraftSnapshot | null {
   try {
-    const raw = draftStorage()?.getItem(key)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<OrderDraftSnapshot>
-    if (parsed?.version !== ORDER_DRAFT_VERSION || typeof parsed.savedAt !== 'string') return null
-    if (!parsed.header || !Array.isArray(parsed.rows)) return null
-    return parsed as OrderDraftSnapshot
+    const raw = draftStorage()?.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<OrderDraftSnapshot>;
+    if (parsed?.version !== ORDER_DRAFT_VERSION || typeof parsed.savedAt !== "string") return null;
+    if (!parsed.header || !Array.isArray(parsed.rows)) return null;
+    return parsed as OrderDraftSnapshot;
   } catch {
-    return null
+    return null;
   }
 }
 function writeOrderDraft(key: string, snapshot: OrderDraftSnapshot): void {
   try {
-    draftStorage()?.setItem(key, JSON.stringify(snapshot))
+    draftStorage()?.setItem(key, JSON.stringify(snapshot));
   } catch {
     // Retention is best-effort (private-mode quota, disabled storage): the
     // save path itself is unaffected.
@@ -326,71 +343,73 @@ function writeOrderDraft(key: string, snapshot: OrderDraftSnapshot): void {
 }
 function clearOrderDraft(key: string): void {
   try {
-    draftStorage()?.removeItem(key)
+    draftStorage()?.removeItem(key);
   } catch {
     // Best-effort, as above.
   }
 }
 
-const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
-  approved: 'success',
-  pending_approval: 'warning',
-  draft: 'secondary',
-  voided: 'outline',
-}
+const STATUS_VARIANT: Record<string, "default" | "success" | "secondary" | "warning" | "outline"> =
+  {
+    approved: "success",
+    pending_approval: "warning",
+    draft: "secondary",
+    voided: "outline",
+  };
 
 /** Per-kind base list route/param for the flyout close href (wording lives in the catalog, keyed by kind). */
 const KIND_META: Record<OrderKind, { base: string; param: string }> = {
-  quote: { base: '/estimates', param: 'estimate' },
-  sales_order: { base: '/sales-orders', param: 'order' },
-  purchase_order: { base: '/purchase-orders', param: 'order' },
-}
+  quote: { base: "/estimates", param: "estimate" },
+  sales_order: { base: "/sales-orders", param: "order" },
+  purchase_order: { base: "/purchase-orders", param: "order" },
+};
 
 /** documents.status values with a generic label in common.status (camelCased key). */
 const STATUS_LABEL_KEYS = new Set([
-  'draft',
-  'pendingApproval',
-  'approved',
-  'rejected',
-  'posted',
-  'paid',
-  'partiallyPaid',
-  'open',
-  'closed',
-  'voided',
-  'reversed',
-  'cancelled',
-])
-const toStatusKey = (status: string) => status.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+  "draft",
+  "pendingApproval",
+  "approved",
+  "rejected",
+  "posted",
+  "paid",
+  "partiallyPaid",
+  "open",
+  "closed",
+  "voided",
+  "reversed",
+  "cancelled",
+]);
+const toStatusKey = (status: string) =>
+  status.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 
 /** Where a freshly-created document opens (drawer deep-link per kind). */
 /** The convert endpoint's answer: the created document, plus every open
  *  line a receipt- or shipment-governed billing conversion did not carry. */
 interface ConvertedDocument {
-  kind: string
-  id: string
-  documentNumber: string
-  withheldTotal?: string
+  kind: string;
+  id: string;
+  documentNumber: string;
+  withheldTotal?: string;
   withheldLines?: Array<{
-    lineNumber: number
-    itemName: string | null
-    description: string | null
-    orderedQuantity: string
-    fulfilledQuantity: string
-    withheldQuantity: string
-  }>
+    lineNumber: number;
+    itemName: string | null;
+    description: string | null;
+    orderedQuantity: string;
+    fulfilledQuantity: string;
+    withheldQuantity: string;
+  }>;
 }
 
 /** An exact decimal quantity string without trailing fractional zeros. */
 function plainQuantity(value: string): string {
-  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
+  return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
 }
 
 /** The item a refused receipt names, for the costing-profile next step. */
 interface RnbRemedyTarget {
-  itemId: string
-  itemName: string | null
-  lineNumber: number | null
+  itemId: string;
+  itemName: string | null;
+  lineNumber: number | null;
 }
 
 /**
@@ -409,160 +428,200 @@ interface RnbRemedyTarget {
  * only, before the action reader consumes the body.
  */
 async function readReceiptRefusalMessage(res: Response, fallback: string): Promise<string> {
-  if (typeof res.clone !== 'function') return fallback
-  const message = await readApiErrorMessage(res.clone(), fallback)
-  const body = (await res.clone().json().catch(() => null)) as {
-    remedy?: unknown
-    details?: unknown
-  } | null
-  const details = body && typeof body === 'object' && !Array.isArray(body)
-    ? (body.details as { remedy?: unknown } | null)
-    : null
-  const remedy = details && typeof details === 'object' && !Array.isArray(details)
-    && typeof details.remedy === 'string' && details.remedy.trim() !== ''
-    ? details.remedy.trim()
-    : null
-  return remedy && !message.includes(remedy) ? `${message} — ${remedy}` : message
+  if (typeof res.clone !== "function") return fallback;
+  const message = await readApiErrorMessage(res.clone(), fallback);
+  const body = (await res
+    .clone()
+    .json()
+    .catch(() => null)) as {
+    remedy?: unknown;
+    details?: unknown;
+  } | null;
+  const details =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body.details as { remedy?: unknown } | null)
+      : null;
+  const remedy =
+    details &&
+    typeof details === "object" &&
+    !Array.isArray(details) &&
+    typeof details.remedy === "string" &&
+    details.remedy.trim() !== ""
+      ? details.remedy.trim()
+      : null;
+  return remedy && !message.includes(remedy) ? `${message} — ${remedy}` : message;
 }
 
 interface UnitConversionRemedyTarget {
-  itemId: string
-  itemName: string | null
-  unit: string | null
+  itemId: string;
+  itemName: string | null;
+  unit: string | null;
 }
 
-async function readUnitConversionRemedyTarget(res: Response): Promise<UnitConversionRemedyTarget | null> {
-  if (res.ok || typeof res.clone !== 'function') return null
-  const body = (await res.clone().json().catch(() => null)) as {
-    code?: unknown
-    details?: unknown
-  } | null
-  if (!body || typeof body !== 'object' || body.code !== 'ITEM_MISSING_UNIT_CONVERSION') return null
-  const details = body.details as { itemId?: unknown; itemName?: unknown; unit?: unknown } | null
-  if (!details || typeof details !== 'object' || typeof details.itemId !== 'string' || details.itemId === '') {
-    return null
+async function readUnitConversionRemedyTarget(
+  res: Response,
+): Promise<UnitConversionRemedyTarget | null> {
+  if (res.ok || typeof res.clone !== "function") return null;
+  const body = (await res
+    .clone()
+    .json()
+    .catch(() => null)) as {
+    code?: unknown;
+    details?: unknown;
+  } | null;
+  if (!body || typeof body !== "object" || body.code !== "ITEM_MISSING_UNIT_CONVERSION")
+    return null;
+  const details = body.details as { itemId?: unknown; itemName?: unknown; unit?: unknown } | null;
+  if (
+    !details ||
+    typeof details !== "object" ||
+    typeof details.itemId !== "string" ||
+    details.itemId === ""
+  ) {
+    return null;
   }
   return {
     itemId: details.itemId,
-    itemName: typeof details.itemName === 'string' && details.itemName !== '' ? details.itemName : null,
-    unit: typeof details.unit === 'string' && details.unit !== '' ? details.unit : null,
-  }
+    itemName:
+      typeof details.itemName === "string" && details.itemName !== "" ? details.itemName : null,
+    unit: typeof details.unit === "string" && details.unit !== "" ? details.unit : null,
+  };
 }
 
 async function readRnbRemedyTarget(res: Response): Promise<RnbRemedyTarget | null> {
-  if (res.ok || typeof res.clone !== 'function') return null
-  const body = (await res.clone().json().catch(() => null)) as {
-    code?: unknown
-    details?: unknown
-  } | null
-  if (!body || typeof body !== 'object' || body.code !== 'ITEM_MISSING_RNB_ACCOUNT') return null
-  const details = body.details as { itemId?: unknown; itemName?: unknown; lineNumber?: unknown } | null
-  if (!details || typeof details !== 'object' || typeof details.itemId !== 'string' || details.itemId === '') {
-    return null
+  if (res.ok || typeof res.clone !== "function") return null;
+  const body = (await res
+    .clone()
+    .json()
+    .catch(() => null)) as {
+    code?: unknown;
+    details?: unknown;
+  } | null;
+  if (!body || typeof body !== "object" || body.code !== "ITEM_MISSING_RNB_ACCOUNT") return null;
+  const details = body.details as {
+    itemId?: unknown;
+    itemName?: unknown;
+    lineNumber?: unknown;
+  } | null;
+  if (
+    !details ||
+    typeof details !== "object" ||
+    typeof details.itemId !== "string" ||
+    details.itemId === ""
+  ) {
+    return null;
   }
   return {
     itemId: details.itemId,
-    itemName: typeof details.itemName === 'string' && details.itemName !== '' ? details.itemName : null,
-    lineNumber: typeof details.lineNumber === 'number' ? details.lineNumber : null,
-  }
+    itemName:
+      typeof details.itemName === "string" && details.itemName !== "" ? details.itemName : null,
+    lineNumber: typeof details.lineNumber === "number" ? details.lineNumber : null,
+  };
 }
 
 function targetHref(kind: string, id: string): string {
   switch (kind) {
-    case 'customer_invoice':
-      return `/ar/invoices?doc=${id}&mode=edit`
-    case 'vendor_bill':
-      return `/ap/bills?doc=${id}&mode=edit`
-    case 'sales_order':
-      return `/sales-orders?order=${id}&mode=edit`
-    case 'purchase_order':
-      return `/purchase-orders?order=${id}&mode=edit`
-    case 'quote':
-      return `/estimates?estimate=${id}&mode=edit`
-    case 'sales_fulfillment':
-    case 'purchase_receipt':
+    case "customer_invoice":
+      return `/ar/invoices?doc=${id}&mode=edit`;
+    case "vendor_bill":
+      return `/ap/bills?doc=${id}&mode=edit`;
+    case "sales_order":
+      return `/sales-orders?order=${id}&mode=edit`;
+    case "purchase_order":
+      return `/purchase-orders?order=${id}&mode=edit`;
+    case "quote":
+      return `/estimates?estimate=${id}&mode=edit`;
+    case "sales_fulfillment":
+    case "purchase_receipt":
       // Fulfilments and receipts are immutable evidence on the order they
       // move stock for; the inventory ledger is where their movements are
       // inspected (docHref).
-      return '/inventory'
+      return "/inventory";
     default:
-      return '/'
+      return "/";
   }
 }
 
 /** Where an existing linked document opens (used by the links section). */
 function docHref(kind: string, id: string): string {
   switch (kind) {
-    case 'customer_invoice':
-      return `/ar/invoices?doc=${id}`
-    case 'vendor_bill':
-      return `/ap/bills?doc=${id}`
-    case 'sales_order':
-      return `/sales-orders?order=${id}`
-    case 'purchase_order':
-      return `/purchase-orders?order=${id}`
-    case 'quote':
-      return `/estimates?estimate=${id}`
-    case 'purchase_receipt':
+    case "customer_invoice":
+      return `/ar/invoices?doc=${id}`;
+    case "vendor_bill":
+      return `/ap/bills?doc=${id}`;
+    case "sales_order":
+      return `/sales-orders?order=${id}`;
+    case "purchase_order":
+      return `/purchase-orders?order=${id}`;
+    case "quote":
+      return `/estimates?estimate=${id}`;
+    case "purchase_receipt":
       // Goods receipts are immutable evidence on the order they receive; the
       // inventory ledger is where their movements are inspected.
-      return '/inventory'
-    case 'sales_fulfillment':
-      return '/inventory'
-    case 'pick_list':
-      return `/picks?pick=${id}`
-    case 'shipment':
-      return `/shipments?shipment=${id}`
+      return "/inventory";
+    case "sales_fulfillment":
+      return "/inventory";
+    case "pick_list":
+      return `/picks?pick=${id}`;
+    case "shipment":
+      return `/shipments?shipment=${id}`;
     default:
-      return '/'
+      return "/";
   }
 }
 
 const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   clientKey: crypto.randomUUID(),
-  persistedLineId: '',
-  itemId: '',
-  accountId: '',
-  description: '',
-  quantity: '',
-  unit: '',
-  unitPrice: '',
-  taxProfileId: '',
-  departmentId: '',
-  projectId: '',
-  workFrom: '',
-  workTo: '',
-  stockLocationId: '',
+  persistedLineId: "",
+  itemId: "",
+  accountId: "",
+  description: "",
+  quantity: "",
+  unit: "",
+  unitPrice: "",
+  taxProfileId: "",
+  departmentId: "",
+  projectId: "",
+  workFrom: "",
+  workTo: "",
+  stockLocationId: "",
   loadedPrice: null,
-  promotionCode: '',
+  promotionCode: "",
   ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, INHERIT_SEGMENT])),
-})
+});
 
 /** Line text columns are uuids/text-or-null; numerics are handled with String(). */
 function lineText(v: unknown): string {
-  return typeof v === 'string' ? v : v == null ? '' : String(v)
+  return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
 function isLineMap(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
+  return typeof v === "object" && v !== null;
 }
 
 /** Stored pricing lineage for a freshly loaded line: the validated basis plus
  * the item/price/quantity it was stored against. A row that still shows
  * exactly this re-sends the basis; anything touched prices by hand or by a
  * new session resolution. Unparseable lineage loads as none (hand-priced). */
-function loadedPriceOf(l: Record<string, unknown>): LineRow['loadedPrice'] {
-  const raw = l.price_basis
-  const parsed = typeof raw === 'string'
-    ? (() => { try { return parsePriceBasis(JSON.parse(raw)) } catch { return null } })()
-    : parsePriceBasis(raw ?? null)
-  if (!parsed || typeof parsed !== 'object' || 'error' in parsed) return null
+function loadedPriceOf(l: Record<string, unknown>): LineRow["loadedPrice"] {
+  const raw = l.price_basis;
+  const parsed =
+    typeof raw === "string"
+      ? (() => {
+          try {
+            return parsePriceBasis(JSON.parse(raw));
+          } catch {
+            return null;
+          }
+        })()
+      : parsePriceBasis(raw ?? null);
+  if (!parsed || typeof parsed !== "object" || "error" in parsed) return null;
   return {
     itemId: lineText(l.item_id),
-    unitPrice: l.unit_price != null ? String(l.unit_price) : '',
-    quantity: l.quantity != null ? String(l.quantity) : '',
+    unitPrice: l.unit_price != null ? String(l.unit_price) : "",
+    quantity: l.quantity != null ? String(l.quantity) : "",
     basis: parsed,
-  }
+  };
 }
 
 /** Project one grid row to its wire shape (no provenance — attached at save
@@ -575,19 +634,22 @@ function projectLine(r: LineRow, segments: SegmentOption[]): Record<string, unkn
     quantity: r.quantity,
     unit: r.unit || null,
     unitPrice: r.unitPrice,
-    taxCodeId: r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
-    taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
+    taxCodeId: r.taxProfileId.startsWith("code:") ? r.taxProfileId.slice(5) : null,
+    taxGroupId: r.taxProfileId.startsWith("group:") ? r.taxProfileId.slice(6) : null,
     departmentId: r.departmentId || null,
     projectId: r.projectId || null,
     workFrom: r.workFrom || null,
     workTo: r.workTo || null,
     stockLocationId: r.stockLocationId || null,
-    extraDims: segmentAssignmentsFromCells(r, segments.map(segment => segment.key)),
-  }
+    extraDims: segmentAssignmentsFromCells(
+      r,
+      segments.map((segment) => segment.key),
+    ),
+  };
 }
 
 function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
-  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
+  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null;
   return {
     // Fresh client identity on every load (see the field comment): the
     // grid's React key must be unique among the live rows.
@@ -596,10 +658,14 @@ function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
     itemId: lineText(l.item_id),
     accountId: lineText(l.account_id),
     description: lineText(l.description),
-    quantity: l.quantity != null ? String(l.quantity) : '',
+    quantity: l.quantity != null ? String(l.quantity) : "",
     unit: lineText(l.unit),
-    unitPrice: l.unit_price != null ? String(l.unit_price) : '',
-    taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
+    unitPrice: l.unit_price != null ? String(l.unit_price) : "",
+    taxProfileId: l.tax_group_id
+      ? `group:${l.tax_group_id}`
+      : l.tax_code_id
+        ? `code:${l.tax_code_id}`
+        : "",
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
     workFrom: lineText(l.work_from),
@@ -607,13 +673,15 @@ function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
     stockLocationId: lineText(l.stock_location_id),
     loadedPrice: loadedPriceOf(l),
     promotionCode: lineText(l.promotion_code),
-    ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, segmentCellValue(extraDims, segment.key)])),
-  }
+    ...Object.fromEntries(
+      segments.map((segment) => [`seg_${segment.key}`, segmentCellValue(extraDims, segment.key)]),
+    ),
+  };
 }
 
 export function OrderDrawer({
   order,
-  initialMode = 'view',
+  initialMode = "view",
   kind,
   parties,
   accounts,
@@ -654,38 +722,38 @@ export function OrderDrawer({
   quoteAwardEnabled = false,
   quoteAwardAvailable = false,
 }: {
-  order: OrderPayload
-  initialMode?: DrawerMode
-  kind: OrderKind
-  parties: Opt[]
-  accounts: Opt[]
-  items: Opt[]
+  order: OrderPayload;
+  initialMode?: DrawerMode;
+  kind: OrderKind;
+  parties: Opt[];
+  accounts: Opt[];
+  items: Opt[];
   /** Active warehouses for the line-level stock-location picker. Empty (or a
    *  single location, stamped silently by the draft writer) renders NO picker.
    *  subsidiaryId scopes the assign-warehouse panel to the line's entity. */
-  stockLocations?: { id: string; code: string | null; subsidiaryId: string | null }[]
-  taxCodes: Opt[]
-  taxGroups: Opt[]
-  departments: Opt[]
-  projects: Opt[]
-  subsidiaries: Opt[]
-  segments: SegmentOption[]
-  canManage: boolean
+  stockLocations?: { id: string; code: string | null; subsidiaryId: string | null }[];
+  taxCodes: Opt[];
+  taxGroups: Opt[];
+  departments: Opt[];
+  projects: Opt[];
+  subsidiaries: Opt[];
+  segments: SegmentOption[];
+  canManage: boolean;
   /**
    * The kind's approve grant (quotes: estimates.issue; sales and purchase
    * orders: their create grant). Lets the approver withdraw a pending
    * submission they did not make. Absent means no approve grant.
    */
-  canApprove?: boolean
+  canApprove?: boolean;
   /**
    * Conversion targets this caller may run on an approved order, when they
    * are granted separately from authoring the order (purchase orders:
    * receiving and billing). Absent means every target rides canManage.
    */
-  allowedConvertKinds?: readonly string[]
+  allowedConvertKinds?: readonly string[];
   /** AR approvers may supply a reasoned credit-limit exception after refusal. */
-  canOverrideCredit?: boolean
-  layout?: FormLayoutConfig
+  canOverrideCredit?: boolean;
+  layout?: FormLayoutConfig;
   /**
    * Unsaved-create: the drawer opens editable on an in-memory payload with
    * no persisted row. Cancel and close navigate away with zero writes; Save
@@ -693,15 +761,15 @@ export function OrderDrawer({
    * surfaces (issue/convert/void/delete, approvals, attachments, audit)
    * stay hidden until the row exists.
    */
-  createMode?: boolean
+  createMode?: boolean;
   /** List URL (filters preserved) that Cancel and the close affordance return to. */
-  closeHref?: string
+  closeHref?: string;
   /**
    * Open with the goods-receipt form raised (the inventory "receive against
    * this order" entry). Honored only for an approved purchase order the
    * viewer may receive; anything else opens the drawer normally.
    */
-  initialReceiveOpen?: boolean
+  initialReceiveOpen?: boolean;
   /**
    * The viewer holds the receipt-void grant (receiving plus reversal when
    * Inventory is on — the same authority the void route enforces, resolved
@@ -709,143 +777,152 @@ export function OrderDrawer({
    * the shared missing-grant hint. Defaults off: a caller that never
    * resolves the grant cannot surface a Void that only fails.
    */
-  canVoidReceipt?: boolean
+  canVoidReceipt?: boolean;
   /**
    * Calling organization for unsaved-draft retention (sessionStorage is
    * keyed by org + kind + record). Absent means no retention: the drawer
    * still saves explicitly, it just cannot offer a restore on reopen.
    */
-  orgId?: string
+  orgId?: string;
   /** Show the Backorders tab: the page resolved Fulfillment on and the
    *  fulfil-orders permission. The tab's route enforces both again. */
-  backorders?: boolean
+  backorders?: boolean;
   /** Offer Create pick list on an issued sales order: the page resolved
    *  Fulfillment on and the fulfil-orders permission. The pick-list form and
    *  its routes enforce both again. */
-  pickLists?: boolean
-  returnAuthorizations?: boolean
-  dropShipping?: boolean
-  canAssessDropShip?: boolean
-  dropShipLiabilityAccounts?: {id:string;label:string}[]
-  dropShipLines?: DropShipRoute[]
-  dropShipVendors?: Opt[]
-  canRouteDropShip?: boolean
-  canCreateDropShipPurchaseOrder?: boolean
-  canConfirmDropShip?: boolean
-  isDropShipPurchaseOrder?: boolean
-  barcodeScanningEnabled?: boolean
-  customerItemRefs?: { customerId: string; itemId: string; customerSku: string }[]
+  pickLists?: boolean;
+  returnAuthorizations?: boolean;
+  dropShipping?: boolean;
+  canAssessDropShip?: boolean;
+  dropShipLiabilityAccounts?: { id: string; label: string }[];
+  dropShipLines?: DropShipRoute[];
+  dropShipVendors?: Opt[];
+  canRouteDropShip?: boolean;
+  canCreateDropShipPurchaseOrder?: boolean;
+  canConfirmDropShip?: boolean;
+  isDropShipPurchaseOrder?: boolean;
+  barcodeScanningEnabled?: boolean;
+  customerItemRefs?: { customerId: string; itemId: string; customerSku: string }[];
   /** Server-known promotions gate for the apply-promotion action and chip. */
-  promotionsEnabled?: boolean
+  promotionsEnabled?: boolean;
   /** Show the quote Subscription tab: the page resolved quoteToCash on.
    *  The tab's routes enforce the feature again. Defaults off so a caller
    *  that never resolves the feature cannot surface a tab that only fails. */
-  quoteToCashEnabled?: boolean
+  quoteToCashEnabled?: boolean;
   /** Award an issued quote: the viewer holds the project-management grant
    *  (the award route enforces it again). Without the grant the action
    *  renders disabled with the shared missing-grant hint — see
    *  quoteAwardAvailable. */
-  quoteAwardEnabled?: boolean
+  quoteAwardEnabled?: boolean;
   /** Award surface available: the page resolved the Projects (and Orders)
    *  features on. The action renders whenever available; quoteAwardEnabled
    *  decides whether it is live or disabled-with-hint. */
-  quoteAwardAvailable?: boolean
+  quoteAwardAvailable?: boolean;
 }) {
-  const { money } = useMoney()
-  const t = useTranslations('purchaseOrders.shared')
-  const viewerLocale = useLocale()
-  const tEstimates = useTranslations('estimates')
-  const tCommon = useTranslations('common')
-  const tFulfillment = useTranslations('fulfillment')
-  const tReturns = useTranslations('returns')
-  const tSales = useTranslations('salesOrders')
+  const { money } = useMoney();
+  const t = useTranslations("purchaseOrders.shared");
+  const viewerLocale = useLocale();
+  const tEstimates = useTranslations("estimates");
+  const tCommon = useTranslations("common");
+  const tFulfillment = useTranslations("fulfillment");
+  const tReturns = useTranslations("returns");
+  const tSales = useTranslations("salesOrders");
   const statusLabel = (status: string) => {
-    const key = toStatusKey(String(status))
-    return STATUS_LABEL_KEYS.has(key) ? tCommon(`status.${key}`) : String(status).replace('_', ' ')
-  }
-  const router = useRouter()
-  const doc = asOrderDoc(order.doc)
-  const meta = KIND_META[kind]
-  const isDraft = doc.status === 'draft'
-  const isApproved = doc.status === 'approved'
+    const key = toStatusKey(String(status));
+    return STATUS_LABEL_KEYS.has(key) ? tCommon(`status.${key}`) : String(status).replace("_", " ");
+  };
+  const router = useRouter();
+  const doc = asOrderDoc(order.doc);
+  const meta = KIND_META[kind];
+  const isDraft = doc.status === "draft";
+  const isApproved = doc.status === "approved";
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Only DRAFT orders
   // are editable (Issue is terminal for the header). Save is EXPLICIT — one Save
   // button, no per-field autosave.
-  const canEditStatus = isDraft && canManage
-  const [mode, setMode] = useState<DrawerMode>(
-    initialDrawerMode(initialMode, canEditStatus),
-  )
+  const canEditStatus = isDraft && canManage;
+  const [mode, setMode] = useState<DrawerMode>(initialDrawerMode(initialMode, canEditStatus));
   // The action hook sits above its first use: editable freezes while busy
   // below, and a later declaration would be a TDZ use-before-assign.
   // Saves, statuses, issues, deletes and converts run on the shared action
   // path: a refusal pins here (role=alert) until the next action — a toast
   // alone never survives attention — AND toasts, and busy always
   // releases through the package's finally.
-  const { busy, refusal, execute, refuse, clearRefusal } = useAppAction()
+  const { busy, refusal, execute, refuse, clearRefusal } = useAppAction();
   // The item a refused receipt names: kept beside the pinned refusal so the
   // panel below can link its costing profile. Cleared with every new convert
   // and shown only while the matching refusal is pinned.
-  const [rnbRemedy, setRnbRemedy] = useState<RnbRemedyTarget | null>(null)
+  const [rnbRemedy, setRnbRemedy] = useState<RnbRemedyTarget | null>(null);
   // Unit-conversion remedy: the refused response names the item whose
   // costing section gains the conversion row; the section links there.
-  const [unitConversionRemedy, setUnitConversionRemedy] = useState<UnitConversionRemedyTarget | null>(null)
+  const [unitConversionRemedy, setUnitConversionRemedy] =
+    useState<UnitConversionRemedyTarget | null>(null);
   // Frozen while an action is in flight (the same busy convention the buttons
   // already use): the grid otherwise accepts typing during the save PATCH,
   // and those un-sent edits would be shown as saved and lost on close.
-  const editable = mode === 'edit' && canEditStatus && !busy
+  const editable = mode === "edit" && canEditStatus && !busy;
 
-  const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
-  const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
-  const [dueDate, setDueDate] = useState<string>(doc.due_date ?? '')
-  const [workCompletedOn, setWorkCompletedOn] = useState<string>(doc.work_completed_on ?? '')
-  const [memo, setMemo] = useState<string>(doc.memo ?? '')
-  const [departmentId, setDepartmentId] = useState<string>(doc.department_id ?? '')
-  const [projectId, setProjectId] = useState<string>(doc.project_id ?? '')
-  const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
-  const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {})
+  const [partyId, setPartyId] = useState<string>(doc.party_id ?? "");
+  const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? "");
+  const [dueDate, setDueDate] = useState<string>(doc.due_date ?? "");
+  const [workCompletedOn, setWorkCompletedOn] = useState<string>(doc.work_completed_on ?? "");
+  const [memo, setMemo] = useState<string>(doc.memo ?? "");
+  const [departmentId, setDepartmentId] = useState<string>(doc.department_id ?? "");
+  const [projectId, setProjectId] = useState<string>(doc.project_id ?? "");
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? "");
+  const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {});
   const [rows, setRows] = useState<LineRow[]>(
-    order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)],
-  )
-  const resolvedPriceRef = useRef(new Map<number, { itemId: string; unitPrice: string; basis: PriceBasis }>())
-  const priceRequestRef = useRef(new Map<string, string>())
-  const priceRequestSequence = useRef(0)
+    order.lines.length > 0
+      ? order.lines.map((line) => toRow(line, segments))
+      : [emptyLine(segments)],
+  );
+  const resolvedPriceRef = useRef(
+    new Map<number, { itemId: string; unitPrice: string; basis: PriceBasis }>(),
+  );
+  const priceRequestRef = useRef(new Map<string, string>());
+  const priceRequestSequence = useRef(0);
   // Selling-price lookups that have not settled (pending) or were refused
   // (failures, keyed by row): either blocks Save and Issue until every
   // lookup resolves or the operator corrects the line price — a refused
   // lookup must never post silently at the item default rate.
-  const [priceLookupPending, setPriceLookupPending] = useState<Set<string>>(new Set())
-  const [priceLookupFailures, setPriceLookupFailures] = useState<Map<string, string>>(new Map())
-  const priceLookupBlocked = priceLookupPending.size > 0 || priceLookupFailures.size > 0
+  const [priceLookupPending, setPriceLookupPending] = useState<Set<string>>(new Set());
+  const [priceLookupFailures, setPriceLookupFailures] = useState<Map<string, string>>(new Map());
+  const priceLookupBlocked = priceLookupPending.size > 0 || priceLookupFailures.size > 0;
   // Row values at response time: a manual edit between request and response
   // supersedes the lookup, so a late failure must neither pin nor overwrite it.
-  const latestRowsRef = useRef(rows)
+  const latestRowsRef = useRef(rows);
   useLayoutEffect(() => {
-    latestRowsRef.current = rows
-  })
-  const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+    latestRowsRef.current = rows;
+  });
+  const [totals, setTotals] = useState({
+    subtotal: doc.subtotal,
+    taxTotal: doc.tax_total,
+    total: doc.total,
+  });
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   // Goods-receipt draft: "Convert to Goods receipt" opens the prefilled form
   // instead of receiving the full remainder blindly; the receipt posts only
   // on the form's explicit Save through the native receive path. The
   // inventory receive entry deep-links here with the form already raised.
   const [receiveOpen, setReceiveOpen] = useState(
-    initialReceiveOpen && kind === 'purchase_order' && doc.status === 'approved',
-  )
+    initialReceiveOpen && kind === "purchase_order" && doc.status === "approved",
+  );
   // Governed receipt void: the dialog carries reason, reversal date and the
   // refusal in one place and closes only on an ok response — never silently
   // on a denial.
-  const [voidTarget, setVoidTarget] = useState<{ id: string; number: string } | null>(null)
+  const [voidTarget, setVoidTarget] = useState<{ id: string; number: string } | null>(null);
   // Amendment: an approved order with received or billed lines cannot return
   // to draft, so quantity/price changes go through the amend endpoint with a
   // reason instead of the draft PATCH. The reason is prompted up front
   // (void/return-to-draft convention); the panel edits only qty/price while
   // the header and grid stay read-only.
-  const [amendReason, setAmendReason] = useState<string | null>(null)
-  const [amendRows, setAmendRows] = useState<{ id: string; description: string; quantity: string; unitPrice: string }[] | null>(null)
+  const [amendReason, setAmendReason] = useState<string | null>(null);
+  const [amendRows, setAmendRows] = useState<
+    { id: string; description: string; quantity: string; unitPrice: string }[] | null
+  >(null);
   // Unsaved-draft retention state lives below, next to the dirty tracker.
-  const [dropShipRoutes, setDropShipRoutes] = useState<DropShipRoute[]>(dropShipLines)
-  const [dropShipVendorId, setDropShipVendorId] = useState('')
+  const [dropShipRoutes, setDropShipRoutes] = useState<DropShipRoute[]>(dropShipLines);
+  const [dropShipVendorId, setDropShipVendorId] = useState("");
 
   // Optimistic-concurrency token (documents.updated_at). Every mutating
   // request echoes it; the server refuses any mutation whose view of the
@@ -855,41 +932,54 @@ export function OrderDrawer({
   // round it through Date (toISOString truncates to millis and every
   // mutation fails closed with a 409).
   const revisionOf = (value: unknown) => {
-    if (!isDocumentRevisionToken(value)) throw new Error('DOCUMENT_REVISION_REQUIRED')
-    return value
-  }
+    if (!isDocumentRevisionToken(value)) throw new Error("DOCUMENT_REVISION_REQUIRED");
+    return value;
+  };
   // Unsaved-create has no persisted revision to fence on: the first Save is
   // a collection POST (no token), and every later mutation runs on the
   // persisted id the Save navigates to. The placeholder is never sent — and
   // any revision-fenced request carrying it would fail closed with a 409.
-  const revisionRef = useRef<string>(createMode ? '' : revisionOf(doc.updated_at))
+  const revisionRef = useRef<string>(createMode ? "" : revisionOf(doc.updated_at));
   // Stable idempotency key for the create POST, minted once per drawer
   // session: a lost response retried from this drawer replays instead of
   // minting a second order.
-  const createKeyRef = useRef<string | null>(null)
+  const createKeyRef = useRef<string | null>(null);
   const createKey = () => {
-    if (!createKeyRef.current) createKeyRef.current = crypto.randomUUID()
-    return createKeyRef.current
-  }
+    if (!createKeyRef.current) createKeyRef.current = crypto.randomUUID();
+    return createKeyRef.current;
+  };
 
   const apiBase = `/api/${
-    kind === 'quote' ? 'estimates' : kind === 'sales_order' ? 'sales-orders' : 'purchase-orders'
-  }`
+    kind === "quote" ? "estimates" : kind === "sales_order" ? "sales-orders" : "purchase-orders"
+  }`;
 
-  const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
-  const taxProfiles = useMemo(() => [
-    ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
-    ...taxGroups.map((profile) => ({ ...profile, value: `group:${profile.id}` })),
-  ], [taxCodes, taxGroups])
-  const taxByProfile = useMemo(() => new Map(taxProfiles.map((profile) => [profile.value, profile.tax_components ?? []])), [taxProfiles])
+  const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const taxProfiles = useMemo(
+    () => [
+      ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
+      ...taxGroups.map((profile) => ({ ...profile, value: `group:${profile.id}` })),
+    ],
+    [taxCodes, taxGroups],
+  );
+  const taxByProfile = useMemo(
+    () => new Map(taxProfiles.map((profile) => [profile.value, profile.tax_components ?? []])),
+    [taxProfiles],
+  );
 
   const lineAmount = (row: LineRow) => {
-    try { return mul(row.quantity || '0', row.unitPrice || '0') } catch { return '0.0000' }
-  }
+    try {
+      return mul(row.quantity || "0", row.unitPrice || "0");
+    } catch {
+      return "0.0000";
+    }
+  };
   const lineTax = (row: LineRow) => {
-    try { return computeLineTaxes(lineAmount(row), taxByProfile.get(row.taxProfileId) ?? []).taxTotal }
-    catch { return '0.0000' }
-  }
+    try {
+      return computeLineTaxes(lineAmount(row), taxByProfile.get(row.taxProfileId) ?? []).taxTotal;
+    } catch {
+      return "0.0000";
+    }
+  };
 
   /**
    * Footer totals for a live draft: the same per-line amount and tax the
@@ -899,60 +989,69 @@ export function OrderDrawer({
    * already compute. On save the footer adopts the server's stored totals.
    */
   const draftTotals = useMemo(() => {
-    const amounts: string[] = []
-    const taxes: string[] = []
+    const amounts: string[] = [];
+    const taxes: string[] = [];
     for (const row of rows) {
-      if (!orderLineIsPopulated(row)) continue
-      amounts.push(lineAmount(row))
-      taxes.push(lineTax(row))
+      if (!orderLineIsPopulated(row)) continue;
+      amounts.push(lineAmount(row));
+      taxes.push(lineTax(row));
     }
-    const subtotal = amounts.length > 0 ? sum(amounts) : '0'
-    const taxTotal = taxes.length > 0 ? sum(taxes) : '0'
-    return { subtotal, taxTotal, total: sum([subtotal, taxTotal]) }
+    const subtotal = amounts.length > 0 ? sum(amounts) : "0";
+    const taxTotal = taxes.length > 0 ? sum(taxes) : "0";
+    return { subtotal, taxTotal, total: sum([subtotal, taxTotal]) };
     // lineAmount/lineTax close over the same rows + tax profiles below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, taxByProfile])
+  }, [rows, taxByProfile]);
 
   /** Converted progress across all lines: billed against the ordered
    *  quantity net of cancellations, which is never billed. */
   const converted = useMemo(() => {
-    let ordered = 0n
-    let billed = 0n
+    let ordered = 0n;
+    let billed = 0n;
     for (const l of order.lines) {
-      ordered += toUnits(String(l.quantity ?? 0)) - toUnits(String(l.quantity_cancelled ?? 0))
-      billed += toUnits(String(l.quantity_billed ?? 0))
+      ordered += toUnits(String(l.quantity ?? 0)) - toUnits(String(l.quantity_cancelled ?? 0));
+      billed += toUnits(String(l.quantity_billed ?? 0));
     }
-    return { ordered: fromUnits(ordered), billed: fromUnits(billed), partial: billed > 0n && billed < ordered, full: ordered > 0n && billed >= ordered }
-  }, [order.lines])
+    return {
+      ordered: fromUnits(ordered),
+      billed: fromUnits(billed),
+      partial: billed > 0n && billed < ordered,
+      full: ordered > 0n && billed >= ordered,
+    };
+  }, [order.lines]);
 
   // -- selecting an item defaults description/price/account/tax/unit ----------
   // A row with no lookupable price leaves no lookup state behind: the
   // request (if any) is stale, and a stuck pending entry would block Save
   // long after the row stopped asking.
   const clearPriceLookup = (rowKey: string) => {
-    priceRequestRef.current.delete(rowKey)
+    priceRequestRef.current.delete(rowKey);
     setPriceLookupPending((current) => {
-      if (!current.has(rowKey)) return current
-      const next = new Set(current)
-      next.delete(rowKey)
-      return next
-    })
-  }
+      if (!current.has(rowKey)) return current;
+      const next = new Set(current);
+      next.delete(rowKey);
+      return next;
+    });
+  };
   const resolveSellingPrice = (index: number, row: LineRow, allRows: LineRow[]) => {
-    if (kind === 'purchase_order' || !row.itemId || !row.quantity) {
-      clearPriceLookup(row.clientKey)
-      return
+    if (kind === "purchase_order" || !row.itemId || !row.quantity) {
+      clearPriceLookup(row.clientKey);
+      return;
     }
-    let overallItemQuantity: string
+    let overallItemQuantity: string;
     try {
-      overallItemQuantity = sum(allRows.filter((candidate) => candidate.itemId === row.itemId).map((candidate) => candidate.quantity || '0'))
-      if (cmp(row.quantity, '0') <= 0 || cmp(overallItemQuantity, '0') <= 0) {
-        clearPriceLookup(row.clientKey)
-        return
+      overallItemQuantity = sum(
+        allRows
+          .filter((candidate) => candidate.itemId === row.itemId)
+          .map((candidate) => candidate.quantity || "0"),
+      );
+      if (cmp(row.quantity, "0") <= 0 || cmp(overallItemQuantity, "0") <= 0) {
+        clearPriceLookup(row.clientKey);
+        return;
       }
     } catch {
-      clearPriceLookup(row.clientKey)
-      return
+      clearPriceLookup(row.clientKey);
+      return;
     }
     const priceInputs = JSON.stringify({
       itemId: row.itemId,
@@ -961,52 +1060,65 @@ export function OrderDrawer({
       onDate: documentDate,
       lineQuantity: row.quantity,
       overallItemQuantity,
-    })
-    const requestIdentity = `${priceInputs}:${++priceRequestSequence.current}`
-    priceRequestRef.current.set(row.clientKey, requestIdentity)
+    });
+    const requestIdentity = `${priceInputs}:${++priceRequestSequence.current}`;
+    priceRequestRef.current.set(row.clientKey, requestIdentity);
     // The response lands asynchronously: bind it to the row and every
     // pricing input, not just the row's former position.
-    const rowKey = row.clientKey
-    setPriceLookupPending((current) => new Set(current).add(rowKey))
+    const rowKey = row.clientKey;
+    setPriceLookupPending((current) => new Set(current).add(rowKey));
     setPriceLookupFailures((current) => {
-      if (!current.has(rowKey)) return current
-      const next = new Map(current)
-      next.delete(rowKey)
-      return next
-    })
-    clearRefusal()
-    void fetchAppAction<{ price: {
-      unitPrice: string
-      source: PriceBasis['kind']
-      scheduleId: string | null
-      priceLevelId: string | null
-      assignmentId: string | null
-      resolvedAt: string
-    } | null }>('/api/items/price', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: priceInputs,
-    }, { fallback: t('actionFailed') }).then((result) => {
-      if (priceRequestRef.current.get(rowKey) !== requestIdentity) return
+      if (!current.has(rowKey)) return current;
+      const next = new Map(current);
+      next.delete(rowKey);
+      return next;
+    });
+    clearRefusal();
+    void fetchAppAction<{
+      price: {
+        unitPrice: string;
+        source: PriceBasis["kind"];
+        scheduleId: string | null;
+        priceLevelId: string | null;
+        assignmentId: string | null;
+        resolvedAt: string;
+      } | null;
+    }>(
+      "/api/items/price",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: priceInputs,
+      },
+      { fallback: t("actionFailed") },
+    ).then((result) => {
+      if (priceRequestRef.current.get(rowKey) !== requestIdentity) return;
       setPriceLookupPending((current) => {
-        if (!current.has(rowKey)) return current
-        const next = new Set(current)
-        next.delete(rowKey)
-        return next
-      })
+        if (!current.has(rowKey)) return current;
+        const next = new Set(current);
+        next.delete(rowKey);
+        return next;
+      });
       if (!result.ok) {
         // A manually corrected price replaces the failed lookup: pin the
         // failure only while the row still shows exactly what was asked for,
         // so a late refusal never blocks or overwrites a newer line edit.
-        const currentRow = latestRowsRef.current.find((candidate) => candidate.clientKey === rowKey)
-        if (currentRow?.itemId === row.itemId && currentRow.quantity === row.quantity && currentRow.unitPrice === row.unitPrice) {
-          const message = result.error.displayMessage(t('actionFailed'))
-          setPriceLookupFailures((current) => new Map(current).set(rowKey, message))
-          refuse(message, t('actionFailed'))
+        const currentRow = latestRowsRef.current.find(
+          (candidate) => candidate.clientKey === rowKey,
+        );
+        if (
+          currentRow?.itemId === row.itemId &&
+          currentRow.quantity === row.quantity &&
+          currentRow.unitPrice === row.unitPrice
+        ) {
+          const message = result.error.displayMessage(t("actionFailed"));
+          setPriceLookupFailures((current) => new Map(current).set(rowKey, message));
+          refuse(message, t("actionFailed"));
         }
-        return
+        return;
       }
-      if (!result.data.price) return
-      const price = result.data.price
+      if (!result.data.price) return;
+      const price = result.data.price;
       const basis: PriceBasis = {
         kind: price.source,
         scheduleId: price.scheduleId,
@@ -1014,102 +1126,126 @@ export function OrderDrawer({
         assignmentId: price.assignmentId,
         unitPrice: price.unitPrice,
         resolvedAt: price.resolvedAt,
-      }
-      setRows((current) => current.map((candidate, rowIndex) => {
-        if (candidate.clientKey !== rowKey || candidate.itemId !== row.itemId || candidate.quantity !== row.quantity) return candidate
-        resolvedPriceRef.current.set(rowIndex, { itemId: row.itemId, unitPrice: price.unitPrice, basis })
-        return { ...candidate, unitPrice: price.unitPrice }
-      }))
-    })
-  }
+      };
+      setRows((current) =>
+        current.map((candidate, rowIndex) => {
+          if (
+            candidate.clientKey !== rowKey ||
+            candidate.itemId !== row.itemId ||
+            candidate.quantity !== row.quantity
+          )
+            return candidate;
+          resolvedPriceRef.current.set(rowIndex, {
+            itemId: row.itemId,
+            unitPrice: price.unitPrice,
+            basis,
+          });
+          return { ...candidate, unitPrice: price.unitPrice };
+        }),
+      );
+    });
+  };
 
   useLayoutEffect(() => {
     for (const [index, tracked] of resolvedPriceRef.current) {
-      const row = rows[index]
-      if (row?.itemId === tracked.itemId) resolveSellingPrice(index, row, rows)
+      const row = rows[index];
+      if (row?.itemId === tracked.itemId) resolveSellingPrice(index, row, rows);
     }
     rows.forEach((row, index) => {
       if (priceRequestRef.current.has(row.clientKey) && !resolvedPriceRef.current.has(index)) {
-        resolveSellingPrice(index, row, rows)
+        resolveSellingPrice(index, row, rows);
       }
-    })
+    });
     // Only customer, currency, and pricing date changes re-resolve rows whose
     // price still came from the hierarchy. Row edits are handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyId, doc.currency, documentDate])
+  }, [partyId, doc.currency, documentDate]);
 
   const onRowsChange = (next: LineRow[]) => {
-    const prev = rows
+    const prev = rows;
     // Match the previous row by client identity: after a reorder, prev[i]
     // is a different line, and comparing against it would "detect" an item
     // change and overwrite the moved line's price/account/tax from defaults.
-    const prevByKey = new Map(prev.map((r) => [r.clientKey, r] as const))
+    const prevByKey = new Map(prev.map((r) => [r.clientKey, r] as const));
     const priorOf = (row: LineRow, i: number): LineRow | undefined =>
-      (row.clientKey !== '' ? prevByKey.get(row.clientKey) : undefined) ?? prev[i]
+      (row.clientKey !== "" ? prevByKey.get(row.clientKey) : undefined) ?? prev[i];
     const merged = next.map((row, i) => {
       if (row.itemId && row.itemId !== priorOf(row, i)?.itemId) {
-        const it = itemById.get(row.itemId)
+        const it = itemById.get(row.itemId);
         if (it) {
           // A purchase line costs; a sales line prices. The item's sales
           // rate must never seed a vendor cost, so a purchase line with no
           // recorded cost keeps a blank price for the operator to enter
           // rather than inheriting the sell price.
-          const catalogPrice = kind === 'purchase_order' ? it.default_cost : it.default_rate
+          const catalogPrice = kind === "purchase_order" ? it.default_cost : it.default_rate;
           return {
             ...row,
-            description: row.description || (it.name ?? ''),
+            description: row.description || (it.name ?? ""),
             unitPrice: catalogPrice != null ? String(catalogPrice) : row.unitPrice,
             accountId:
-              (kind === 'purchase_order' ? it.expense_account_id : it.income_account_id) ?? row.accountId,
+              (kind === "purchase_order" ? it.expense_account_id : it.income_account_id) ??
+              row.accountId,
             taxProfileId: it.tax_code_id ? `code:${it.tax_code_id}` : row.taxProfileId,
-            unit: row.scanUnitItemId === row.itemId ? row.unit : it.unit ?? row.unit,
-            quantity: row.quantity || '1',
-          }
+            unit: row.scanUnitItemId === row.itemId ? row.unit : (it.unit ?? row.unit),
+            quantity: row.quantity || "1",
+          };
         }
       }
-      return row
-    })
+      return row;
+    });
     // Position-keyed price tracking goes stale on any membership or order
     // change: drop it so a later resolution can never land on the row that
     // merely inherited the position.
-    if (merged.length !== prev.length || merged.some((row, i) => row.clientKey !== prev[i]?.clientKey)) {
-      resolvedPriceRef.current.clear()
-      const liveKeys = new Set(merged.map((row) => row.clientKey))
+    if (
+      merged.length !== prev.length ||
+      merged.some((row, i) => row.clientKey !== prev[i]?.clientKey)
+    ) {
+      resolvedPriceRef.current.clear();
+      const liveKeys = new Set(merged.map((row) => row.clientKey));
       for (const key of priceRequestRef.current.keys()) {
-        if (!liveKeys.has(key)) clearPriceLookup(key)
+        if (!liveKeys.has(key)) clearPriceLookup(key);
       }
       // A removed row takes its lookup state with it: neither a pending
       // request nor a pinned failure for a deleted line may block Save.
       setPriceLookupFailures((current) => {
-        if ([...current.keys()].every((key) => liveKeys.has(key))) return current
-        return new Map([...current].filter(([key]) => liveKeys.has(key)))
-      })
+        if ([...current.keys()].every((key) => liveKeys.has(key))) return current;
+        return new Map([...current].filter(([key]) => liveKeys.has(key)));
+      });
     }
-    setRows(merged)
+    setRows(merged);
     merged.forEach((row, index) => {
-      const prior = priorOf(row, index)
-      const itemChanged = Boolean(row.itemId && row.itemId !== prior?.itemId)
-      const tracked = resolvedPriceRef.current.get(index)
-      const manuallyChanged = Boolean(prior && row.unitPrice !== prior.unitPrice && !itemChanged)
+      const prior = priorOf(row, index);
+      const itemChanged = Boolean(row.itemId && row.itemId !== prior?.itemId);
+      const tracked = resolvedPriceRef.current.get(index);
+      const manuallyChanged = Boolean(prior && row.unitPrice !== prior.unitPrice && !itemChanged);
       if (manuallyChanged) {
         // A hand-entered price replaces whatever the lookup said or would
         // have said: drop the request (its response is now stale) and the
         // row's failure, so the correction unblocks Save.
-        resolvedPriceRef.current.delete(index)
-        clearPriceLookup(row.clientKey)
+        resolvedPriceRef.current.delete(index);
+        clearPriceLookup(row.clientKey);
         setPriceLookupFailures((current) => {
-          if (!current.has(row.clientKey)) return current
-          const next = new Map(current)
-          next.delete(row.clientKey)
-          return next
-        })
-        clearRefusal()
+          if (!current.has(row.clientKey)) return current;
+          const next = new Map(current);
+          next.delete(row.clientKey);
+          return next;
+        });
+        clearRefusal();
       }
-      const trackedQuantityChanged = Boolean(tracked && tracked.itemId === row.itemId && prior && row.quantity !== prior.quantity && prior.unitPrice === tracked.unitPrice)
-      const pendingQuantityChanged = Boolean(priceRequestRef.current.has(row.clientKey) && prior && row.quantity !== prior.quantity)
-      if (itemChanged || trackedQuantityChanged || pendingQuantityChanged) resolveSellingPrice(index, row, merged)
-    })
-  }
+      const trackedQuantityChanged = Boolean(
+        tracked &&
+        tracked.itemId === row.itemId &&
+        prior &&
+        row.quantity !== prior.quantity &&
+        prior.unitPrice === tracked.unitPrice,
+      );
+      const pendingQuantityChanged = Boolean(
+        priceRequestRef.current.has(row.clientKey) && prior && row.quantity !== prior.quantity,
+      );
+      if (itemChanged || trackedQuantityChanged || pendingQuantityChanged)
+        resolveSellingPrice(index, row, merged);
+    });
+  };
 
   // -- explicit save (no autosave) -------------------------------------------
   const payload = useMemo(
@@ -1117,7 +1253,7 @@ export function OrderDrawer({
       partyId: partyId || null,
       documentDate: documentDate || undefined,
       dueDate: dueDate || null,
-      ...(kind === 'sales_order' ? { workCompletedOn: workCompletedOn || null } : {}),
+      ...(kind === "sales_order" ? { workCompletedOn: workCompletedOn || null } : {}),
       memo,
       departmentId: departmentId || null,
       projectId: projectId || null,
@@ -1125,64 +1261,88 @@ export function OrderDrawer({
       extraDims,
       lines: rows.filter(orderLineIsPopulated).map((r) => projectLine(r, segments)),
     }),
-    [partyId, documentDate, dueDate, kind, workCompletedOn, memo, departmentId, projectId, subsidiaryId, subsidiaries.length, extraDims, rows, segments],
-  )
+    [
+      partyId,
+      documentDate,
+      dueDate,
+      kind,
+      workCompletedOn,
+      memo,
+      departmentId,
+      projectId,
+      subsidiaryId,
+      subsidiaries.length,
+      extraDims,
+      rows,
+      segments,
+    ],
+  );
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render).
-  const [dirty, setDirty] = useState(false)
-  const [prevPayload, setPrevPayload] = useState(payload)
+  const [dirty, setDirty] = useState(false);
+  const [prevPayload, setPrevPayload] = useState(payload);
   if (prevPayload !== payload) {
-    setPrevPayload(payload)
-    if (editable) setDirty(true)
+    setPrevPayload(payload);
+    if (editable) setDirty(true);
   }
   // Unsaved-draft retention key: org + kind + record ('new' for create).
   // Without the calling org there is no retention — saving stays explicit.
-  const draftKey = orgId ? orderDraftKey(orgId, kind, createMode ? 'new' : String(doc.id ?? '')) : null
-  const restoreOfferedRef = useRef(false)
+  const draftKey = orgId
+    ? orderDraftKey(orgId, kind, createMode ? "new" : String(doc.id ?? ""))
+    : null;
+  const restoreOfferedRef = useRef(false);
   async function offerDraftRestore(): Promise<OrderDraftSnapshot | null> {
-    if (!draftKey || restoreOfferedRef.current) return null
-    restoreOfferedRef.current = true
-    const snapshot = readOrderDraft(draftKey)
-    if (!snapshot) return null
+    if (!draftKey || restoreOfferedRef.current) return null;
+    restoreOfferedRef.current = true;
+    const snapshot = readOrderDraft(draftKey);
+    if (!snapshot) return null;
     const restore = await confirmDialog({
-      title: t('restoreDraftTitle'),
-      message: t('restoreDraftPrompt', { time: viewerDateTime(snapshot.savedAt, viewerLocale, Intl.DateTimeFormat(viewerLocale).resolvedOptions().timeZone) }),
-      confirmLabel: t('restoreDraftConfirm'),
-    })
+      title: t("restoreDraftTitle"),
+      message: t("restoreDraftPrompt", {
+        time: viewerDateTime(
+          snapshot.savedAt,
+          viewerLocale,
+          Intl.DateTimeFormat(viewerLocale).resolvedOptions().timeZone,
+        ),
+      }),
+      confirmLabel: t("restoreDraftConfirm"),
+    });
     if (!restore) {
       // Declining discards the retained draft; the pristine form is untouched.
-      clearOrderDraft(draftKey)
-      return null
+      clearOrderDraft(draftKey);
+      return null;
     }
-    return snapshot
+    return snapshot;
   }
   function restoreDraft(snapshot: OrderDraftSnapshot) {
-    setPartyId(snapshot.header.partyId)
-    setDocumentDate(snapshot.header.documentDate)
-    setDueDate(snapshot.header.dueDate)
-    setWorkCompletedOn(snapshot.header.workCompletedOn)
-    setMemo(snapshot.header.memo)
-    setDepartmentId(snapshot.header.departmentId)
-    setProjectId(snapshot.header.projectId)
-    setSubsidiaryId(snapshot.header.subsidiaryId)
-    setExtraDims(snapshot.header.extraDims ?? {})
+    setPartyId(snapshot.header.partyId);
+    setDocumentDate(snapshot.header.documentDate);
+    setDueDate(snapshot.header.dueDate);
+    setWorkCompletedOn(snapshot.header.workCompletedOn);
+    setMemo(snapshot.header.memo);
+    setDepartmentId(snapshot.header.departmentId);
+    setProjectId(snapshot.header.projectId);
+    setSubsidiaryId(snapshot.header.subsidiaryId);
+    setExtraDims(snapshot.header.extraDims ?? {});
     // Normalize stored rows over a blank row: storage predates code, so a
     // missing field must fall back instead of crashing the grid below.
-    const blank = emptyLine(segments)
+    const blank = emptyLine(segments);
     const restored = snapshot.rows
-      .filter((row) => row !== null && typeof row === 'object')
-      .map((row) => ({ ...blank, ...(row as Record<string, unknown>) }))
-    setRows((restored.length > 0 ? restored : [{ ...blank }]) as LineRow[])
-    setDirty(true)
+      .filter((row) => row !== null && typeof row === "object")
+      .map((row) => ({ ...blank, ...(row as Record<string, unknown>) }));
+    setRows((restored.length > 0 ? restored : [{ ...blank }]) as LineRow[]);
+    setDirty(true);
   }
   function maybeOfferDraftRestore() {
-    return offerDraftRestore().then(snapshot => { if (snapshot) restoreDraft(snapshot) })
+    return offerDraftRestore().then((snapshot) => {
+      if (snapshot) restoreDraft(snapshot);
+    });
   }
   // Retain unsaved create/edit state locally on every dirty change, so a
   // failed save, a stall, or navigating away loses nothing. Restoring only
   // fills the form — it never submits.
   useEffect(() => {
-    if (!draftKey || !(createMode || mode === 'edit') || !dirty) return
+    if (!draftKey || !(createMode || mode === "edit") || !dirty) return;
     writeOrderDraft(draftKey, {
       version: ORDER_DRAFT_VERSION,
       savedAt: new Date().toISOString(),
@@ -1198,39 +1358,54 @@ export function OrderDrawer({
         extraDims,
       },
       rows,
-    })
-  }, [draftKey, createMode, mode, dirty, partyId, documentDate, dueDate, workCompletedOn, memo, departmentId, projectId, subsidiaryId, extraDims, rows])
+    });
+  }, [
+    draftKey,
+    createMode,
+    mode,
+    dirty,
+    partyId,
+    documentDate,
+    dueDate,
+    workCompletedOn,
+    memo,
+    departmentId,
+    projectId,
+    subsidiaryId,
+    extraDims,
+    rows,
+  ]);
   useEffect(() => {
     // Mount-only: reopening offers the retained draft once.
-    if (createMode || initialMode === 'edit') void maybeOfferDraftRestore()
+    if (createMode || initialMode === "edit") void maybeOfferDraftRestore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
   // Latest committed payload identity for the in-flight-save guard below:
   // async price resolutions can still land while busy (user input is frozen,
   // but fetches are not), and those edits are not in the PATCH body. Written
   // in a layout effect — never during render — and read at save time.
-  const latestPayloadRef = useRef(payload)
+  const latestPayloadRef = useRef(payload);
   useLayoutEffect(() => {
-    latestPayloadRef.current = payload
-  })
+    latestPayloadRef.current = payload;
+  });
   // Whether the last persist covered the current form. persistDraft sets it;
   // save() reads it to decide between view mode and staying dirty.
-  const saveCoveredRef = useRef(true)
+  const saveCoveredRef = useRef(true);
 
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || !dirty) return true
+    if (mode !== "edit" || !dirty) return true;
     return confirmDialog({
-      message: tCommon('feedback.unsavedChanges'),
-      confirmLabel: tCommon('confirm.discardChanges'),
-      tone: 'danger',
-    })
+      message: tCommon("feedback.unsavedChanges"),
+      confirmLabel: tCommon("confirm.discardChanges"),
+      tone: "danger",
+    });
   }
 
   async function cancelWithConfirm() {
-    if (!(await confirmDiscard())) return
-    cancel()
+    if (!(await confirmDiscard())) return;
+    cancel();
   }
 
   /** Reset every field back to the loaded document (used by Cancel). */
@@ -1238,19 +1413,23 @@ export function OrderDrawer({
     // Cancel discards the edits the lookups were for: a failure that lands
     // afterwards belongs to discarded rows and must not block Issue from
     // view mode.
-    setPriceLookupPending(new Set())
-    setPriceLookupFailures(new Map())
-    setPartyId(doc.party_id ?? '')
-    setDocumentDate(doc.document_date ?? '')
-    setDueDate(doc.due_date ?? '')
-    setWorkCompletedOn(doc.work_completed_on ?? '')
-    setMemo(doc.memo ?? '')
-    setDepartmentId(doc.department_id ?? '')
-    setProjectId(doc.project_id ?? '')
-    setSubsidiaryId(doc.subsidiary_id ?? '')
-    setExtraDims(doc.extra_dims ?? {})
-    setRows(order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)])
-    setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
+    setPriceLookupPending(new Set());
+    setPriceLookupFailures(new Map());
+    setPartyId(doc.party_id ?? "");
+    setDocumentDate(doc.document_date ?? "");
+    setDueDate(doc.due_date ?? "");
+    setWorkCompletedOn(doc.work_completed_on ?? "");
+    setMemo(doc.memo ?? "");
+    setDepartmentId(doc.department_id ?? "");
+    setProjectId(doc.project_id ?? "");
+    setSubsidiaryId(doc.subsidiary_id ?? "");
+    setExtraDims(doc.extra_dims ?? {});
+    setRows(
+      order.lines.length > 0
+        ? order.lines.map((line) => toRow(line, segments))
+        : [emptyLine(segments)],
+    );
+    setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total });
   }
 
   /**
@@ -1270,216 +1449,248 @@ export function OrderDrawer({
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => orderLineIsPopulated(row))
       .map(({ row, index }) => {
-        const session = basisForResolvedRow({ row, resolved: resolvedPriceRef.current.get(index) })
-        const loaded = row.loadedPrice
-        const stored = loaded
-          && row.itemId === loaded.itemId
-          && row.unitPrice === loaded.unitPrice
-          && row.quantity === loaded.quantity
-          ? loaded.basis
-          : null
-        return { ...projectLine(row, segments), priceBasis: session ?? stored }
-      })
+        const session = basisForResolvedRow({ row, resolved: resolvedPriceRef.current.get(index) });
+        const loaded = row.loadedPrice;
+        const stored =
+          loaded &&
+          row.itemId === loaded.itemId &&
+          row.unitPrice === loaded.unitPrice &&
+          row.quantity === loaded.quantity
+            ? loaded.basis
+            : null;
+        return { ...projectLine(row, segments), priceBasis: session ?? stored };
+      });
   }
 
   // A line whose selling price never resolved (or was refused) must not
   // post at the item default rate. execute() clears the pinned refusal on
   // entry, so re-pin here rather than relying on the failure-time pin.
   function refuseUnresolvedPriceLookup(): boolean {
-    if (!priceLookupBlocked) return false
-    if (priceLookupPending.size > 0) refuse(t('pricingResolving'), t('actionFailed'))
+    if (!priceLookupBlocked) return false;
+    if (priceLookupPending.size > 0) refuse(t("pricingResolving"), t("actionFailed"));
     else {
-      const first = priceLookupFailures.values().next().value
-      if (first) refuse(first, t('actionFailed'))
+      const first = priceLookupFailures.values().next().value;
+      if (first) refuse(first, t("actionFailed"));
     }
-    return true
+    return true;
   }
 
   async function persistDraft() {
-    if (refuseUnresolvedPriceLookup()) return null
-    const sent = payload
-    const sentRows = rows
+    if (refuseUnresolvedPriceLookup()) return null;
+    const sent = payload;
+    const sentRows = rows;
     const saved = await persistOrderDraft({
-      request: () => fetch(`${apiBase}/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...sent, lines: withPriceBasis(sentRows), expectedUpdatedAt: revisionRef.current }),
-        // A stalled save fails into the refusal path (state kept, Retry
-        // offered) instead of hanging the drawer on 'saving' forever.
-        signal: AbortSignal.timeout(ORDER_SAVE_TIMEOUT_MS),
-      }),
+      request: () =>
+        fetch(`${apiBase}/${doc.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...sent,
+            lines: withPriceBasis(sentRows),
+            expectedUpdatedAt: revisionRef.current,
+          }),
+          // A stalled save fails into the refusal path (state kept, Retry
+          // offered) instead of hanging the drawer on 'saving' forever.
+          signal: AbortSignal.timeout(ORDER_SAVE_TIMEOUT_MS),
+        }),
       setState: setSaveState,
       // The callback-style helper cannot return its refusal into execute:
       // pin and toast it through the same refusal state instead, so saves
       // and issues share one presentation with every other action.
-      onError: (message) => refuse(message, t('actionFailed')),
-    })
+      onError: (message) => refuse(message, t("actionFailed")),
+    });
     if (saved) {
       // Adopt the server's post-save revision so the next mutation (e.g. an
       // issue right after this save) fences on what is actually stored.
-      if (saved.doc?.updated_at != null) revisionRef.current = revisionOf(saved.doc.updated_at)
+      if (saved.doc?.updated_at != null) revisionRef.current = revisionOf(saved.doc.updated_at);
       // The form may have moved after the body was built (an async price
       // resolution landing mid-flight): those edits were never sent, so
       // clearing dirty would show them as saved and lose them on close.
-      saveCoveredRef.current = latestPayloadRef.current === sent
-      setDirty(!saveCoveredRef.current)
+      saveCoveredRef.current = latestPayloadRef.current === sent;
+      setDirty(!saveCoveredRef.current);
     }
-    return saved
+    return saved;
   }
 
   /** Unsaved-create Save: one idempotent collection POST (status=draft).
    *  The document number allocates inside that transaction — nothing before
    *  this call wrote a row or burned a sequence value. */
   async function persistCreate(): Promise<{ id: string; number: string } | null> {
-    if (refuseUnresolvedPriceLookup()) return null
-    const sentRows = rows
+    if (refuseUnresolvedPriceLookup()) return null;
+    const sentRows = rows;
     const saved = await persistOrderDraft({
-      request: () => fetch(apiBase, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createKey() },
-        body: JSON.stringify({ ...payload, lines: withPriceBasis(sentRows) }),
-        // A stalled save fails into the refusal path (state kept, Retry
-        // offered) instead of hanging the drawer on 'saving' forever. The
-        // idempotency key survives the retry, so a save the server actually
-        // stored replays instead of creating a second record.
-        signal: AbortSignal.timeout(ORDER_SAVE_TIMEOUT_MS),
-      }),
+      request: () =>
+        fetch(apiBase, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": createKey() },
+          body: JSON.stringify({ ...payload, lines: withPriceBasis(sentRows) }),
+          // A stalled save fails into the refusal path (state kept, Retry
+          // offered) instead of hanging the drawer on 'saving' forever. The
+          // idempotency key survives the retry, so a save the server actually
+          // stored replays instead of creating a second record.
+          signal: AbortSignal.timeout(ORDER_SAVE_TIMEOUT_MS),
+        }),
       setState: setSaveState,
-      onError: (message) => refuse(message, t('actionFailed')),
-    })
-    if (!saved) return null
-    const created = asOrderDoc(saved.doc)
+      onError: (message) => refuse(message, t("actionFailed")),
+    });
+    if (!saved) return null;
+    const created = asOrderDoc(saved.doc);
     if (!created.id) {
-      refuse(undefined, t('actionFailed'))
-      return null
+      refuse(undefined, t("actionFailed"));
+      return null;
     }
     // A successful save retires the retained draft.
-    if (draftKey) clearOrderDraft(draftKey)
-    return { id: created.id, number: created.document_number ?? '' }
+    if (draftKey) clearOrderDraft(draftKey);
+    return { id: created.id, number: created.document_number ?? "" };
   }
 
   async function save() {
     // persistDraft/persistCreate pin and toast their own refusal through the
     // shared state, so the save reports success-shaped around them: a second
     // pin here would overwrite the specific reason with the generic fallback.
-    const invalidLine = findInvalidOrderLine(rows)
+    const invalidLine = findInvalidOrderLine(rows);
     if (invalidLine) {
-      const field = invalidLine.field === 'quantity'
-        ? t('columns.qty')
-        : invalidLine.field === 'unitPrice'
-          ? t('columns.unitPrice')
-          : tCommon('labels.amount')
-      refuse(undefined, t('invalidLineSave', { row: invalidLine.row, field }))
-      return
+      const field =
+        invalidLine.field === "quantity"
+          ? t("columns.qty")
+          : invalidLine.field === "unitPrice"
+            ? t("columns.unitPrice")
+            : tCommon("labels.amount");
+      refuse(undefined, t("invalidLineSave", { row: invalidLine.row, field }));
+      return;
     }
-    await execute(async () => {
-      if (createMode) {
-        const created = await persistCreate()
-        if (!created) return { ok: true as const, status: 200, data: null }
-        toast.success(t('savedToast', { target: t('docKind', { kind }), number: created.number }))
-        // Land on the persisted record in view mode: the drawer remounts
-        // clean with the stored revision, so Issue/Send/PDF are available
-        // at once instead of needing a reload to leave edit mode behind.
-        router.push(`${meta.base}?${meta.param}=${created.id}`)
-        router.refresh()
-        return { ok: true as const, status: 200, data: null }
-      }
-      const saved = await persistDraft()
-      if (!saved) return { ok: true as const, status: 200, data: null }
-      const savedDoc = asOrderDoc(saved.doc)
-      setTotals({ subtotal: savedDoc.subtotal, taxTotal: savedDoc.tax_total, total: savedDoc.total })
-      if (!saveCoveredRef.current) {
-        // Edits landed after the PATCH body was built and were never sent:
-        // stay in edit mode, still dirty, so the next Save persists them —
-        // switching to view mode would show them as saved and lose them.
-        return { ok: true as const, status: 200, data: null }
-      }
-      // A successful save retires the retained draft.
-      if (draftKey) clearOrderDraft(draftKey)
-      setMode('view')
-      toast.success(t('savedToast', { target: t('docKind', { kind }), number: savedDoc.document_number ?? '' }))
-      router.refresh()
-      return { ok: true as const, status: 200, data: null }
-    }, { fallbackMessage: t('actionFailed') })
+    await execute(
+      async () => {
+        if (createMode) {
+          const created = await persistCreate();
+          if (!created) return { ok: true as const, status: 200, data: null };
+          toast.success(
+            t("savedToast", { target: t("docKind", { kind }), number: created.number }),
+          );
+          // Land on the persisted record in view mode: the drawer remounts
+          // clean with the stored revision, so Issue/Send/PDF are available
+          // at once instead of needing a reload to leave edit mode behind.
+          router.push(`${meta.base}?${meta.param}=${created.id}`);
+          router.refresh();
+          return { ok: true as const, status: 200, data: null };
+        }
+        const saved = await persistDraft();
+        if (!saved) return { ok: true as const, status: 200, data: null };
+        const savedDoc = asOrderDoc(saved.doc);
+        setTotals({
+          subtotal: savedDoc.subtotal,
+          taxTotal: savedDoc.tax_total,
+          total: savedDoc.total,
+        });
+        if (!saveCoveredRef.current) {
+          // Edits landed after the PATCH body was built and were never sent:
+          // stay in edit mode, still dirty, so the next Save persists them —
+          // switching to view mode would show them as saved and lose them.
+          return { ok: true as const, status: 200, data: null };
+        }
+        // A successful save retires the retained draft.
+        if (draftKey) clearOrderDraft(draftKey);
+        setMode("view");
+        toast.success(
+          t("savedToast", {
+            target: t("docKind", { kind }),
+            number: savedDoc.document_number ?? "",
+          }),
+        );
+        router.refresh();
+        return { ok: true as const, status: 200, data: null };
+      },
+      { fallbackMessage: t("actionFailed") },
+    );
   }
 
   function cancel() {
     // An explicit discard retires the retained draft with the form state.
-    if (draftKey) clearOrderDraft(draftKey)
+    if (draftKey) clearOrderDraft(draftKey);
     // Unsaved-create Cancel writes nothing: there is no row to reset to, so
     // leave by navigation instead of restoring form state.
     if (createMode) {
-      clearRefusal()
-      router.push(closeHref ?? meta.base)
-      return
+      clearRefusal();
+      router.push(closeHref ?? meta.base);
+      return;
     }
-    resetForm()
-    setDirty(false)
-    clearRefusal()
-    setSaveState('saved')
-    setMode('view')
+    resetForm();
+    setDirty(false);
+    clearRefusal();
+    setSaveState("saved");
+    setMode("view");
   }
 
   async function setStatus(
-    status: 'approved' | 'voided',
+    status: "approved" | "voided",
     reason?: string,
     creditOverrideReason?: string,
   ) {
-    await execute<{
-      doc?: { updated_at?: unknown }
-      approvalPending?: boolean
-      voidPending?: boolean
-    } | { creditOverrideNeeded: true }>(async () => {
-      const res = await fetch(`${apiBase}/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status,
-          reason,
-          creditOverrideReason,
-          expectedUpdatedAt: revisionRef.current,
-        }),
-      })
-      const result = await readAppActionResult<{
-        doc?: { updated_at?: unknown }
-        approvalPending?: boolean
-        voidPending?: boolean
-      }>(res, { fallback: t('actionFailed') })
-      if (
-        !result.ok
-        && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
-        && status === 'approved'
-        && kind === 'sales_order'
-        && canOverrideCredit
-        && !creditOverrideReason
-      ) {
-        // Not a refusal: the override prompt supersedes the pin, so carry a
-        // marker through the success path instead of letting execute pin it.
-        return { ok: true as const, status: res.status, data: { creditOverrideNeeded: true as const } }
-      }
-      return result
-    }, {
-      fallbackMessage: t('actionFailed'),
-      onOk: async (data) => {
-        if ('creditOverrideNeeded' in data) {
-          const overrideReason = await promptDialog({
-            title: t('creditOverrideTitle'),
-            label: t('creditOverrideReasonLabel'),
-            placeholder: t('creditOverrideReasonPlaceholder'),
-            confirmLabel: t('creditOverrideConfirm'),
-          })
-          if (overrideReason) await setStatus(status, reason, overrideReason)
-          return
+    await execute<
+      | {
+          doc?: { updated_at?: unknown };
+          approvalPending?: boolean;
+          voidPending?: boolean;
         }
-        if (data.doc?.updated_at != null) revisionRef.current = revisionOf(data.doc.updated_at)
-        if (data.approvalPending || data.voidPending) {
-          toast.success(tCommon('actions.submitForApproval'))
-        } else {
-          toast.success(status === 'approved' ? t('toastIssued') : t('toastVoided'))
+      | { creditOverrideNeeded: true }
+    >(
+      async () => {
+        const res = await fetch(`${apiBase}/${doc.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status,
+            reason,
+            creditOverrideReason,
+            expectedUpdatedAt: revisionRef.current,
+          }),
+        });
+        const result = await readAppActionResult<{
+          doc?: { updated_at?: unknown };
+          approvalPending?: boolean;
+          voidPending?: boolean;
+        }>(res, { fallback: t("actionFailed") });
+        if (
+          !result.ok &&
+          result.error.code === "CUSTOMER_CREDIT_LIMIT_EXCEEDED" &&
+          status === "approved" &&
+          kind === "sales_order" &&
+          canOverrideCredit &&
+          !creditOverrideReason
+        ) {
+          // Not a refusal: the override prompt supersedes the pin, so carry a
+          // marker through the success path instead of letting execute pin it.
+          return {
+            ok: true as const,
+            status: res.status,
+            data: { creditOverrideNeeded: true as const },
+          };
         }
-        router.refresh()
+        return result;
       },
-    })
+      {
+        fallbackMessage: t("actionFailed"),
+        onOk: async (data) => {
+          if ("creditOverrideNeeded" in data) {
+            const overrideReason = await promptDialog({
+              title: t("creditOverrideTitle"),
+              label: t("creditOverrideReasonLabel"),
+              placeholder: t("creditOverrideReasonPlaceholder"),
+              confirmLabel: t("creditOverrideConfirm"),
+            });
+            if (overrideReason) await setStatus(status, reason, overrideReason);
+            return;
+          }
+          if (data.doc?.updated_at != null) revisionRef.current = revisionOf(data.doc.updated_at);
+          if (data.approvalPending || data.voidPending) {
+            toast.success(tCommon("actions.submitForApproval"));
+          } else {
+            toast.success(status === "approved" ? t("toastIssued") : t("toastVoided"));
+          }
+          router.refresh();
+        },
+      },
+    );
   }
 
   async function issue() {
@@ -1488,44 +1699,47 @@ export function OrderDrawer({
     // shared state, so the issue reports success-shaped around them: a second
     // pin here would overwrite their specific reason with the generic
     // fallback. Only a helper-shaped throw — a bug, not a refusal — pins.
-    await execute(async () => {
-      try {
-        await issueSavedOrder({
-          persistDraft,
-          requestApproval: () => setStatus('approved'),
-        })
-        return { ok: true as const, status: 200, data: null }
-      } catch (detail) {
-        return {
-          ok: false as const,
-          error: new ActionError({
-            kind: 'unexpected',
-            serverMessage: null,
-            detail: detail instanceof Error ? detail.message : String(detail),
-          }),
+    await execute(
+      async () => {
+        try {
+          await issueSavedOrder({
+            persistDraft,
+            requestApproval: () => setStatus("approved"),
+          });
+          return { ok: true as const, status: 200, data: null };
+        } catch (detail) {
+          return {
+            ok: false as const,
+            error: new ActionError({
+              kind: "unexpected",
+              serverMessage: null,
+              detail: detail instanceof Error ? detail.message : String(detail),
+            }),
+          };
         }
-      }
-    }, { fallbackMessage: t('actionFailed') })
+      },
+      { fallbackMessage: t("actionFailed") },
+    );
   }
 
   async function voidOrder() {
     if (
       !(await confirmDialog({
-        title: t('voidConfirmTitle'),
-        message: t('voidConfirmMessage'),
-        confirmLabel: tCommon('actions.void'),
-        tone: 'danger',
+        title: t("voidConfirmTitle"),
+        message: t("voidConfirmMessage"),
+        confirmLabel: tCommon("actions.void"),
+        tone: "danger",
       }))
     )
-      return
+      return;
     const reason = await promptDialog({
-      title: tCommon('amendment.voidTitle'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.voidPlaceholder'),
-      confirmLabel: tCommon('actions.void'),
-    })
-    if (!reason) return
-    await setStatus('voided', reason)
+      title: tCommon("amendment.voidTitle"),
+      label: tCommon("amendment.reason"),
+      placeholder: tCommon("amendment.voidPlaceholder"),
+      confirmLabel: tCommon("actions.void"),
+    });
+    if (!reason) return;
+    await setStatus("voided", reason);
   }
 
   async function returnToDraft() {
@@ -1534,201 +1748,256 @@ export function OrderDrawer({
     // approved-only gate, the approve-level permission, and the
     // received/billed refusal; refusals pin beside the record.
     const reason = await promptDialog({
-      title: tCommon('actions.returnToDraft'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.returnToDraftPlaceholder'),
-      confirmLabel: tCommon('actions.returnToDraft'),
-    })
-    if (reason === null) return
+      title: tCommon("actions.returnToDraft"),
+      label: tCommon("amendment.reason"),
+      placeholder: tCommon("amendment.returnToDraftPlaceholder"),
+      confirmLabel: tCommon("actions.returnToDraft"),
+    });
+    if (reason === null) return;
     if (reason.trim().length < 5 || reason.trim().length > 500) {
-      refuse(tCommon('amendment.returnToDraftPlaceholder'), t('actionFailed'))
-      return
+      refuse(tCommon("amendment.returnToDraftPlaceholder"), t("actionFailed"));
+      return;
     }
     await execute(
-      () => fetchAppAction(`${apiBase}/${doc.id}/return-to-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason, expectedUpdatedAt: revisionRef.current }),
-      }, { fallback: t('actionFailed') }),
+      () =>
+        fetchAppAction(
+          `${apiBase}/${doc.id}/return-to-draft`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason, expectedUpdatedAt: revisionRef.current }),
+          },
+          { fallback: t("actionFailed") },
+        ),
       {
-        fallbackMessage: t('actionFailed'),
-        successMessage: tCommon('status.draft'),
+        fallbackMessage: t("actionFailed"),
+        successMessage: tCommon("status.draft"),
         onOk: () => router.refresh(),
       },
-    )
+    );
   }
 
   async function openAmend() {
     // The amendment carries its reason into the audit entry; prompt it
     // before opening the panel so Cancel never leaves a half-reasoned edit.
     const reason = await promptDialog({
-      title: t('amend'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.returnToDraftPlaceholder'),
-      confirmLabel: tCommon('actions.confirm'),
-    })
-    if (reason === null) return
+      title: t("amend"),
+      label: tCommon("amendment.reason"),
+      placeholder: tCommon("amendment.returnToDraftPlaceholder"),
+      confirmLabel: tCommon("actions.confirm"),
+    });
+    if (reason === null) return;
     if (reason.trim().length < 5 || reason.trim().length > 500) {
-      refuse(tCommon('amendment.returnToDraftPlaceholder'), t('actionFailed'))
-      return
+      refuse(tCommon("amendment.returnToDraftPlaceholder"), t("actionFailed"));
+      return;
     }
-    setAmendReason(reason)
+    setAmendReason(reason);
     setAmendRows(
       rows
-        .filter((row) => row.persistedLineId !== '')
+        .filter((row) => row.persistedLineId !== "")
         .map((row) => ({
           id: row.persistedLineId,
-          description: row.description || items.find((item) => item.id === row.itemId)?.name || '',
+          description: row.description || items.find((item) => item.id === row.itemId)?.name || "",
           quantity: row.quantity,
           unitPrice: row.unitPrice,
         })),
-    )
+    );
   }
 
   async function saveAmend() {
-    if (amendReason === null || amendRows === null) return
+    if (amendReason === null || amendRows === null) return;
     await execute(
-      () => fetchAppAction(`${apiBase}/${doc.id}/amend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reason: amendReason,
-          expectedUpdatedAt: revisionRef.current,
-          lines: amendRows.map((row) => ({ lineId: row.id, quantity: row.quantity, unitPrice: row.unitPrice })),
-        }),
-      }, { fallback: t('amendFailed') }),
+      () =>
+        fetchAppAction(
+          `${apiBase}/${doc.id}/amend`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reason: amendReason,
+              expectedUpdatedAt: revisionRef.current,
+              lines: amendRows.map((row) => ({
+                lineId: row.id,
+                quantity: row.quantity,
+                unitPrice: row.unitPrice,
+              })),
+            }),
+          },
+          { fallback: t("amendFailed") },
+        ),
       {
-        fallbackMessage: t('amendFailed'),
-        successMessage: t('amendSaved'),
+        fallbackMessage: t("amendFailed"),
+        successMessage: t("amendSaved"),
         onOk: () => {
-          setAmendReason(null)
-          setAmendRows(null)
-          router.refresh()
+          setAmendReason(null);
+          setAmendRows(null);
+          router.refresh();
         },
       },
-    )
+    );
   }
 
   async function setDropShipRoute(salesOrderLineId: string, routed: boolean) {
     await execute(
-      () => fetchAppAction(`/api/sales-orders/${doc.id}/drop-ship`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ salesOrderLineId, routed }),
-      }, { fallback: t('actionFailed') }),
+      () =>
+        fetchAppAction(
+          `/api/sales-orders/${doc.id}/drop-ship`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ salesOrderLineId, routed }),
+          },
+          { fallback: t("actionFailed") },
+        ),
       {
-        fallbackMessage: t('actionFailed'),
+        fallbackMessage: t("actionFailed"),
         onOk: () => {
-          setDropShipRoutes((current) => routed
-            ? [...current.filter((row) => row.salesOrderLineId !== salesOrderLineId), {
-                salesOrderLineId,
-                purchaseOrderLineId: null,
-                purchaseOrderId: null,
-              }]
-            : current.filter((row) => row.salesOrderLineId !== salesOrderLineId))
-          toast.success(routed ? t('dropShip.routed') : t('dropShip.unrouted'))
+          setDropShipRoutes((current) =>
+            routed
+              ? [
+                  ...current.filter((row) => row.salesOrderLineId !== salesOrderLineId),
+                  {
+                    salesOrderLineId,
+                    purchaseOrderLineId: null,
+                    purchaseOrderId: null,
+                  },
+                ]
+              : current.filter((row) => row.salesOrderLineId !== salesOrderLineId),
+          );
+          toast.success(routed ? t("dropShip.routed") : t("dropShip.unrouted"));
         },
       },
-    )
+    );
   }
 
   async function createDropShipPurchaseOrder() {
-    if (!dropShipVendorId) return
-    const key = crypto.randomUUID()
+    if (!dropShipVendorId) return;
+    const key = crypto.randomUUID();
     await execute<{ id: string; documentNumber: string }>(
-      () => fetchAppAction(`/api/sales-orders/${doc.id}/drop-ship/purchase-orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-        body: JSON.stringify({ vendorId: dropShipVendorId }),
-      }, { fallback: t('actionFailed') }),
+      () =>
+        fetchAppAction(
+          `/api/sales-orders/${doc.id}/drop-ship/purchase-orders`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+            body: JSON.stringify({ vendorId: dropShipVendorId }),
+          },
+          { fallback: t("actionFailed") },
+        ),
       {
-        fallbackMessage: t('actionFailed'),
+        fallbackMessage: t("actionFailed"),
         onOk: (created) => {
-          toast.success(t('dropShip.purchaseOrderCreated', { number: created.documentNumber }))
-          router.push(`/purchase-orders?order=${encodeURIComponent(created.id)}`)
-          router.refresh()
+          toast.success(t("dropShip.purchaseOrderCreated", { number: created.documentNumber }));
+          router.push(`/purchase-orders?order=${encodeURIComponent(created.id)}`);
+          router.refresh();
         },
       },
-    )
+    );
   }
 
   async function confirmDropShipShipment() {
-    const paired = new Set(dropShipRoutes
-      .filter((row) => row.purchaseOrderLineId && row.purchaseOrderId === doc.id)
-      .map((row) => row.purchaseOrderLineId!))
+    const paired = new Set(
+      dropShipRoutes
+        .filter((row) => row.purchaseOrderLineId && row.purchaseOrderId === doc.id)
+        .map((row) => row.purchaseOrderLineId!),
+    );
     const lines = order.lines.flatMap((line) => {
-      const id = String(line.id ?? '')
-      if (!paired.has(id)) return []
-      const open = toQuantityUnits(String(line.quantity ?? '0'))
-        - toQuantityUnits(String(line.quantity_fulfilled ?? '0'))
-        - toQuantityUnits(String(line.quantity_cancelled ?? '0'))
-      return open > 0n ? [{ purchaseOrderLineId: id, quantity: fromQuantityUnits(open) }] : []
-    })
-    if (lines.length === 0) return
-    if (!(await confirmDialog({
-      title: t('dropShip.confirmTitle'),
-      message: t('dropShip.confirmAllMessage', { count: lines.length }),
-      confirmLabel: t('dropShip.confirm'),
-    }))) return
+      const id = String(line.id ?? "");
+      if (!paired.has(id)) return [];
+      const open =
+        toQuantityUnits(String(line.quantity ?? "0")) -
+        toQuantityUnits(String(line.quantity_fulfilled ?? "0")) -
+        toQuantityUnits(String(line.quantity_cancelled ?? "0"));
+      return open > 0n ? [{ purchaseOrderLineId: id, quantity: fromQuantityUnits(open) }] : [];
+    });
+    if (lines.length === 0) return;
+    if (
+      !(await confirmDialog({
+        title: t("dropShip.confirmTitle"),
+        message: t("dropShip.confirmAllMessage", { count: lines.length }),
+        confirmLabel: t("dropShip.confirm"),
+      }))
+    )
+      return;
     await execute<{ salesFulfillment: { documentNumber: string } }>(
-      () => fetchAppAction(`/api/purchase-orders/${doc.id}/drop-ship-confirmation`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ lines }),
-      }, { fallback: t('actionFailed') }),
+      () =>
+        fetchAppAction(
+          `/api/purchase-orders/${doc.id}/drop-ship-confirmation`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ lines }),
+          },
+          { fallback: t("actionFailed") },
+        ),
       {
-        fallbackMessage: t('actionFailed'),
+        fallbackMessage: t("actionFailed"),
         onOk: (result) => {
-          toast.success(t('dropShip.confirmed', { number: result.salesFulfillment.documentNumber }))
-          router.refresh()
+          toast.success(
+            t("dropShip.confirmed", { number: result.salesFulfillment.documentNumber }),
+          );
+          router.refresh();
         },
       },
-    )
+    );
   }
 
   async function submitReceipt(input: {
-    receiptDate: string
-    lines: { sourceLineId: string; quantity: string }[]
-    idempotencyKey: string
+    receiptDate: string;
+    lines: { sourceLineId: string; quantity: string }[];
+    idempotencyKey: string;
   }): Promise<{ ok: true } | { ok: false; message: string }> {
     // The outcome crosses the execute boundary through this cell: on failure
     // execute pins (and toasts) the typed refusal — a warehouse refusal opens
     // the assign panel — while the form stays open on its own state, so Save
     // retries with the same idempotency key and replays instead of doubling.
-    let outcome: { ok: true } | { ok: false; message: string } = { ok: false, message: t('receive.receiptFailed') }
-    setRnbRemedy(null)
-    setUnitConversionRemedy(null)
-    await execute<ConvertedDocument>(async () => {
-      const res = await fetch(`${apiBase}/${doc.id}/receive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey },
-        body: JSON.stringify({ receiptDate: input.receiptDate, lines: input.lines }),
-      })
-      // The status decides refused vs saved — never a bespoke body field.
-      // Clone reads run before the action reader consumes the body.
-      const remedy = await readRnbRemedyTarget(res)
-      const conversionRemedy = await readUnitConversionRemedyTarget(res)
-      const refusalMessage = !res.ok ? await readReceiptRefusalMessage(res, t('receive.receiptFailed')) : null
-      const result = await readAppActionResult<ConvertedDocument>(res, { fallback: t('receive.receiptFailed') })
-      if (!result.ok && remedy) setRnbRemedy(remedy)
-      if (!result.ok && conversionRemedy) setUnitConversionRemedy(conversionRemedy)
-      outcome = result.ok || refusalMessage === null
-        ? { ok: true }
-        : { ok: false, message: refusalMessage }
-      return result
-    }, {
-      fallbackMessage: t('receive.receiptFailed'),
-      onOk: (data) => {
-        if (!data || typeof data.id !== 'string' || !data.id) {
-          refuse(null, t('receive.receiptFailed'))
-          return
-        }
-        toast.success(t('convertCreated', { target: t('kinds.receipt'), number: data.documentNumber }))
-        router.push(targetHref(data.kind, data.id))
-        router.refresh()
+    let outcome: { ok: true } | { ok: false; message: string } = {
+      ok: false,
+      message: t("receive.receiptFailed"),
+    };
+    setRnbRemedy(null);
+    setUnitConversionRemedy(null);
+    await execute<ConvertedDocument>(
+      async () => {
+        const res = await fetch(`${apiBase}/${doc.id}/receive`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
+          body: JSON.stringify({ receiptDate: input.receiptDate, lines: input.lines }),
+        });
+        // The status decides refused vs saved — never a bespoke body field.
+        // Clone reads run before the action reader consumes the body.
+        const remedy = await readRnbRemedyTarget(res);
+        const conversionRemedy = await readUnitConversionRemedyTarget(res);
+        const refusalMessage = !res.ok
+          ? await readReceiptRefusalMessage(res, t("receive.receiptFailed"))
+          : null;
+        const result = await readAppActionResult<ConvertedDocument>(res, {
+          fallback: t("receive.receiptFailed"),
+        });
+        if (!result.ok && remedy) setRnbRemedy(remedy);
+        if (!result.ok && conversionRemedy) setUnitConversionRemedy(conversionRemedy);
+        outcome =
+          result.ok || refusalMessage === null
+            ? { ok: true }
+            : { ok: false, message: refusalMessage };
+        return result;
       },
-    })
-    return outcome
+      {
+        fallbackMessage: t("receive.receiptFailed"),
+        onOk: (data) => {
+          if (!data || typeof data.id !== "string" || !data.id) {
+            refuse(null, t("receive.receiptFailed"));
+            return;
+          }
+          toast.success(
+            t("convertCreated", { target: t("kinds.receipt"), number: data.documentNumber }),
+          );
+          router.push(targetHref(data.kind, data.id));
+          router.refresh();
+        },
+      },
+    );
+    return outcome;
   }
 
   /**
@@ -1742,124 +2011,146 @@ export function OrderDrawer({
    * stock was consumed or billed.
    */
   function closeVoidDialog() {
-    setVoidTarget(null)
+    setVoidTarget(null);
   }
 
   async function remove() {
     if (
       !(await confirmDialog({
-        title: t('deleteConfirmTitle'),
-        message: t('deleteConfirmMessage'),
-        confirmLabel: tCommon('actions.delete'),
-        tone: 'danger',
+        title: t("deleteConfirmTitle"),
+        message: t("deleteConfirmMessage"),
+        confirmLabel: tCommon("actions.delete"),
+        tone: "danger",
       }))
     )
-      return
+      return;
     await execute(
       () =>
-        fetchAppAction(`${apiBase}/${doc.id}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ expectedUpdatedAt: revisionRef.current }),
-        }, { fallback: t('actionFailed') }),
+        fetchAppAction(
+          `${apiBase}/${doc.id}`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ expectedUpdatedAt: revisionRef.current }),
+          },
+          { fallback: t("actionFailed") },
+        ),
       {
-        fallbackMessage: t('actionFailed'),
-        successMessage: t('toastDeleted'),
+        fallbackMessage: t("actionFailed"),
+        successMessage: t("toastDeleted"),
         onOk: () => {
           // The record is gone: its retained draft goes with it.
-          if (draftKey) clearOrderDraft(draftKey)
-          router.push(meta.base)
-          router.refresh()
+          if (draftKey) clearOrderDraft(draftKey);
+          router.push(meta.base);
+          router.refresh();
         },
       },
-    )
+    );
   }
 
-  async function convert(
-    targetKind: string,
-    label: string,
-    creditOverrideReason?: string,
-  ) {
+  async function convert(targetKind: string, label: string, creditOverrideReason?: string) {
     // Goods receipts never post from here: "Convert to Goods receipt" opens
     // the prefilled receipt form, which posts only on explicit save.
-    setRnbRemedy(null)
-    setUnitConversionRemedy(null)
-    await execute<ConvertedDocument | { creditOverrideNeeded: true }>(async () => {
-      const res = await fetch(`${apiBase}/${doc.id}/convert`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetKind,
-          creditOverrideReason,
-          expectedUpdatedAt: revisionRef.current,
-        }),
-      })
-      const remedy = await readRnbRemedyTarget(res)
-      const conversionRemedy = await readUnitConversionRemedyTarget(res)
-      const result = await readAppActionResult<ConvertedDocument>(res, { fallback: t('convertFailed') })
-      if (!result.ok && remedy) setRnbRemedy(remedy)
-      if (!result.ok && conversionRemedy) setUnitConversionRemedy(conversionRemedy)
-      if (
-        !result.ok
-        && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
-        && targetKind === 'sales_order'
-        && canOverrideCredit
-        && !creditOverrideReason
-      ) {
-        // Not a refusal: the override prompt supersedes the pin, so carry a
-        // marker through the success path instead of letting execute pin it.
-        return { ok: true as const, status: res.status, data: { creditOverrideNeeded: true as const } }
-      }
-      return result
-    }, {
-      fallbackMessage: t('convertFailed'),
-      onOk: async (data) => {
-        // The override marker rides the success path but carries no
-        // kind/id: decide it before the malformed-success guard below, or a
-        // credit-limit refusal pins convertFailed instead of prompting.
-        if (data !== null && typeof data === 'object' && 'creditOverrideNeeded' in data) {
-          const overrideReason = await promptDialog({
-            title: t('creditOverrideTitle'),
-            label: t('creditOverrideReasonLabel'),
-            placeholder: t('creditOverrideReasonPlaceholder'),
-            confirmLabel: t('creditOverrideConfirm'),
-          })
-          if (overrideReason) await convert(targetKind, label, overrideReason)
-          return
+    setRnbRemedy(null);
+    setUnitConversionRemedy(null);
+    await execute<ConvertedDocument | { creditOverrideNeeded: true }>(
+      async () => {
+        const res = await fetch(`${apiBase}/${doc.id}/convert`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetKind,
+            creditOverrideReason,
+            expectedUpdatedAt: revisionRef.current,
+          }),
+        });
+        const remedy = await readRnbRemedyTarget(res);
+        const conversionRemedy = await readUnitConversionRemedyTarget(res);
+        const result = await readAppActionResult<ConvertedDocument>(res, {
+          fallback: t("convertFailed"),
+        });
+        if (!result.ok && remedy) setRnbRemedy(remedy);
+        if (!result.ok && conversionRemedy) setUnitConversionRemedy(conversionRemedy);
+        if (
+          !result.ok &&
+          result.error.code === "CUSTOMER_CREDIT_LIMIT_EXCEEDED" &&
+          targetKind === "sales_order" &&
+          canOverrideCredit &&
+          !creditOverrideReason
+        ) {
+          // Not a refusal: the override prompt supersedes the pin, so carry a
+          // marker through the success path instead of letting execute pin it.
+          return {
+            ok: true as const,
+            status: res.status,
+            data: { creditOverrideNeeded: true as const },
+          };
         }
-        if (!data || typeof data !== 'object' || typeof (data as { kind?: unknown }).kind !== 'string' || typeof (data as { id?: unknown }).id !== 'string' || !(data as { id?: string }).id) {
-          // Success trusts the status, but navigation needs a destination:
-          // a malformed success body pins instead of bouncing anywhere.
-          refuse(null, t('convertFailed'))
-          return
-        }
-        const withheld = data.withheldLines ?? []
-        if (withheld.length > 0) {
-          // A partial bill or invoice is never a plain success: name every
-          // open line it left on the order, with its quantities and amount.
-          toast.warning(t('convertCreatedWithShortfall', {
-            target: label,
-            number: data.documentNumber,
-            amount: money(data.withheldTotal ?? '0', { currency: doc.currency }),
-          }), {
-            description: withheld.map((line) => t('convertWithheldLine', {
-              kind,
-              line: line.lineNumber,
-              item: line.itemName ?? line.description ?? '',
-              withheld: plainQuantity(line.withheldQuantity),
-              fulfilled: plainQuantity(line.fulfilledQuantity),
-              ordered: plainQuantity(line.orderedQuantity),
-            })).join('\n'),
-            duration: Infinity,
-            closeButton: true,
-          })
-        } else {
-          toast.success(t('convertCreated', { target: label, number: data.documentNumber }))
-        }
-        router.push(targetHref(data.kind, data.id))
-        router.refresh()
+        return result;
       },
-    })
+      {
+        fallbackMessage: t("convertFailed"),
+        onOk: async (data) => {
+          // The override marker rides the success path but carries no
+          // kind/id: decide it before the malformed-success guard below, or a
+          // credit-limit refusal pins convertFailed instead of prompting.
+          if (data !== null && typeof data === "object" && "creditOverrideNeeded" in data) {
+            const overrideReason = await promptDialog({
+              title: t("creditOverrideTitle"),
+              label: t("creditOverrideReasonLabel"),
+              placeholder: t("creditOverrideReasonPlaceholder"),
+              confirmLabel: t("creditOverrideConfirm"),
+            });
+            if (overrideReason) await convert(targetKind, label, overrideReason);
+            return;
+          }
+          if (
+            !data ||
+            typeof data !== "object" ||
+            typeof (data as { kind?: unknown }).kind !== "string" ||
+            typeof (data as { id?: unknown }).id !== "string" ||
+            !(data as { id?: string }).id
+          ) {
+            // Success trusts the status, but navigation needs a destination:
+            // a malformed success body pins instead of bouncing anywhere.
+            refuse(null, t("convertFailed"));
+            return;
+          }
+          const withheld = data.withheldLines ?? [];
+          if (withheld.length > 0) {
+            // A partial bill or invoice is never a plain success: name every
+            // open line it left on the order, with its quantities and amount.
+            toast.warning(
+              t("convertCreatedWithShortfall", {
+                target: label,
+                number: data.documentNumber,
+                amount: money(data.withheldTotal ?? "0", { currency: doc.currency }),
+              }),
+              {
+                description: withheld
+                  .map((line) =>
+                    t("convertWithheldLine", {
+                      kind,
+                      line: line.lineNumber,
+                      item: line.itemName ?? line.description ?? "",
+                      withheld: plainQuantity(line.withheldQuantity),
+                      fulfilled: plainQuantity(line.fulfilledQuantity),
+                      ordered: plainQuantity(line.orderedQuantity),
+                    }),
+                  )
+                  .join("\n"),
+                duration: Infinity,
+                closeButton: true,
+              },
+            );
+          } else {
+            toast.success(t("convertCreated", { target: label, number: data.documentNumber }));
+          }
+          router.push(targetHref(data.kind, data.id));
+          router.refresh();
+        },
+      },
+    );
   }
 
   // -- line warehouse picker ------------------------------------
@@ -1868,210 +2159,472 @@ export function OrderDrawer({
   // choice is real (several active locations) and only on stocked rows; a
   // single location is stamped silently by the draft writer instead.
   const stockedItemIds = useMemo(
-    () => new Set(items.filter((item) => item.has_inventory_profile === true).map((item) => item.id)),
+    () =>
+      new Set(items.filter((item) => item.has_inventory_profile === true).map((item) => item.id)),
     [items],
-  )
-  const customerSkuByItem = useMemo(() => new Map(
-    customerItemRefs.filter((ref) => ref.customerId === partyId).map((ref) => [ref.itemId, ref.customerSku]),
-  ), [customerItemRefs, partyId])
+  );
+  const customerSkuByItem = useMemo(
+    () =>
+      new Map(
+        customerItemRefs
+          .filter((ref) => ref.customerId === partyId)
+          .map((ref) => [ref.itemId, ref.customerSku]),
+      ),
+    [customerItemRefs, partyId],
+  );
   const warehouseColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
-    if (stockLocations.length < 2) return null
-    if (!rows.some((row) => row.itemId !== '' && stockedItemIds.has(row.itemId))) return null
+    if (stockLocations.length < 2) return null;
+    if (!rows.some((row) => row.itemId !== "" && stockedItemIds.has(row.itemId))) return null;
     return {
-      key: 'stockLocationId',
-      label: tCommon('labels.warehouse'),
-      width: '150px',
-      type: 'select',
+      key: "stockLocationId",
+      label: tCommon("labels.warehouse"),
+      width: "150px",
+      type: "select",
       // A warehouse owned by another entity names that entity: shipping from
       // it is a cross-subsidiary fulfillment by its owner.
-      options: [{ value: '', label: '—' }, ...stockLocations.map((l) => {
-        const owner = l.subsidiaryId && subsidiaryId && l.subsidiaryId !== subsidiaryId
-          ? subsidiaries.find((subsidiary) => subsidiary.id === l.subsidiaryId)?.name
-          : null
-        return { value: l.id, label: owner ? `${l.code ?? ''} · ${owner}` : (l.code ?? '') }
-      })],
-      isCellEditable: (row) => stockedItemIds.has(String(row.itemId ?? '')),
-    }
-  }, [stockLocations, rows, stockedItemIds, tCommon, subsidiaries, subsidiaryId])
+      options: [
+        { value: "", label: "—" },
+        ...stockLocations.map((l) => {
+          const owner =
+            l.subsidiaryId && subsidiaryId && l.subsidiaryId !== subsidiaryId
+              ? subsidiaries.find((subsidiary) => subsidiary.id === l.subsidiaryId)?.name
+              : null;
+          return { value: l.id, label: owner ? `${l.code ?? ""} · ${owner}` : (l.code ?? "") };
+        }),
+      ],
+      isCellEditable: (row) => stockedItemIds.has(String(row.itemId ?? "")),
+    };
+  }, [stockLocations, rows, stockedItemIds, tCommon, subsidiaries, subsidiaryId]);
 
   // Discount lines applied from a promotion carry its code; the column shows
   // only when a row actually carries one, so ordinary orders keep their grid.
   const promotionColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
-    if (!(promotionsEnabled && (kind === 'quote' || kind === 'sales_order'))) return null
-    if (!rows.some((row) => row.promotionCode !== '')) return null
+    if (!(promotionsEnabled && (kind === "quote" || kind === "sales_order"))) return null;
+    if (!rows.some((row) => row.promotionCode !== "")) return null;
     return {
-      key: 'promotionCode',
-      label: tSales('promotion.chip'),
-      width: '130px',
-      type: 'readonly',
+      key: "promotionCode",
+      label: tSales("promotion.chip"),
+      width: "130px",
+      type: "readonly",
       render: (row) => {
-        const code = String(row.promotionCode ?? '')
-        if (code === '') return null
-        return <Badge variant="secondary">{code}</Badge>
+        const code = String(row.promotionCode ?? "");
+        if (code === "") return null;
+        return <Badge variant="secondary">{code}</Badge>;
       },
-    }
-  }, [promotionsEnabled, kind, rows, tSales])
+    };
+  }, [promotionsEnabled, kind, rows, tSales]);
 
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => {
       const builtIn: Record<string, LineGridColumn<LineRow>> = {
-      item_id:
-      {
-        key: 'itemId',
-        label: t('columns.item'),
-        width: 'minmax(170px,1.6fr)',
-        type: 'search-select',
-        options: items.map((i) => {
-          const base = `${i.code ? i.code + ' · ' : ''}${i.name ?? ''}`.trim()
-          const customerSku = customerSkuByItem.get(i.id)
-          return { value: i.id, label: customerSku ? `${base} · ${customerSku}` : base }
-        }),
-        scanResolver: optionalScanResolver(barcodeScanningEnabled, (value) => ({
-          field: 'item', value, customerId: partyId || undefined,
-        })),
-        onScanResolved: (_row, _index, result) => result.unit
-          ? { unit: result.unit, scanUnitItemId: result.value }
-          : undefined,
-        placeholder: '—',
-      },
-      account_id: {
-        key: 'accountId',
-        label: t('columns.account', { kind }),
-        width: 'minmax(180px,1.8fr)',
-        type: 'search-select',
-        options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
-        placeholder: t('columns.accountPlaceholder'),
-      },
-      description: { key: 'description', label: tCommon('labels.description'), width: 'minmax(150px,1.6fr)', type: 'text' },
-      quantity: { key: 'quantity', label: t('columns.qty'), width: '90px', type: 'decimal', decimalScale: 8, align: 'right', required: true },
-      unit: { key: 'unit', label: tCommon('labels.unit'), width: '90px', type: 'text' },
-      unit_price: { key: 'unitPrice', label: t('columns.unitPrice'), width: '110px', type: 'decimal', decimalScale: 8, align: 'right', required: true },
-      department_id: {
-        key: 'departmentId', label: tCommon('labels.department'), width: '140px', type: 'select',
-        options: [{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))],
-      },
-      project_id: {
-        key: 'projectId', label: tCommon('labels.project'), width: 'minmax(150px,1.2fr)', type: 'search-select',
-        options: projects.map((project) => ({ value: project.id, label: project.name ?? '' })), placeholder: '—',
-      },
-      work_from: { key: 'workFrom', label: tCommon('labels.workFrom'), width: '130px', type: 'date' },
-      work_to: { key: 'workTo', label: tCommon('labels.workTo'), width: '130px', type: 'date' },
-      tax_code_id: {
-        key: 'taxProfileId',
-        label: tCommon('labels.tax'),
-        width: '110px',
-        type: 'select',
-        options: [{ value: '', label: t('columns.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
-      },
-      amount: {
-        key: '_amount',
-        label: tCommon('labels.amount'),
-        width: '120px',
-        type: 'readonly',
-        align: 'right',
-        render: (row) => {
-          const a = lineAmount(row)
-          return a ? money(a, { currency: doc.currency }) : ''
+        item_id: {
+          key: "itemId",
+          label: t("columns.item"),
+          width: "minmax(170px,1.6fr)",
+          type: "search-select",
+          options: items.map((i) => {
+            const base = `${i.code ? i.code + " · " : ""}${i.name ?? ""}`.trim();
+            const customerSku = customerSkuByItem.get(i.id);
+            return { value: i.id, label: customerSku ? `${base} · ${customerSku}` : base };
+          }),
+          scanResolver: optionalScanResolver(barcodeScanningEnabled, (value) => ({
+            field: "item",
+            value,
+            customerId: partyId || undefined,
+          })),
+          onScanResolved: (_row, _index, result) =>
+            result.unit ? { unit: result.unit, scanUnitItemId: result.value } : undefined,
+          placeholder: "—",
         },
-      },
-      tax_amount: {
-        key: '_tax',
-        label: t('columns.taxAmount'),
-        width: '100px',
-        type: 'readonly',
-        align: 'right',
-        render: (row) => {
-          const t = lineTax(row)
-          return t ? money(t, { currency: doc.currency }) : ''
+        account_id: {
+          key: "accountId",
+          label: t("columns.account", { kind }),
+          width: "minmax(180px,1.8fr)",
+          type: "search-select",
+          options: accounts.map((a) => ({
+            value: a.id,
+            label: `${a.number ?? ""} ${a.name ?? ""}`.trim(),
+          })),
+          placeholder: t("columns.accountPlaceholder"),
         },
-      },
-      }
+        description: {
+          key: "description",
+          label: tCommon("labels.description"),
+          width: "minmax(150px,1.6fr)",
+          type: "text",
+        },
+        quantity: {
+          key: "quantity",
+          label: t("columns.qty"),
+          width: "90px",
+          type: "decimal",
+          decimalScale: 8,
+          align: "right",
+          required: true,
+        },
+        unit: { key: "unit", label: tCommon("labels.unit"), width: "90px", type: "text" },
+        unit_price: {
+          key: "unitPrice",
+          label: t("columns.unitPrice"),
+          width: "110px",
+          type: "decimal",
+          decimalScale: 8,
+          align: "right",
+          required: true,
+        },
+        department_id: {
+          key: "departmentId",
+          label: tCommon("labels.department"),
+          width: "140px",
+          type: "select",
+          options: [
+            { value: "", label: "—" },
+            ...departments.map((department) => ({
+              value: department.id,
+              label: department.name ?? "",
+            })),
+          ],
+        },
+        project_id: {
+          key: "projectId",
+          label: tCommon("labels.project"),
+          width: "minmax(150px,1.2fr)",
+          type: "search-select",
+          options: projects.map((project) => ({ value: project.id, label: project.name ?? "" })),
+          placeholder: "—",
+        },
+        work_from: {
+          key: "workFrom",
+          label: tCommon("labels.workFrom"),
+          width: "130px",
+          type: "date",
+        },
+        work_to: { key: "workTo", label: tCommon("labels.workTo"), width: "130px", type: "date" },
+        tax_code_id: {
+          key: "taxProfileId",
+          label: tCommon("labels.tax"),
+          width: "110px",
+          type: "select",
+          options: [
+            { value: "", label: t("columns.noTax") },
+            ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? "" })),
+          ],
+        },
+        amount: {
+          key: "_amount",
+          label: tCommon("labels.amount"),
+          width: "120px",
+          type: "readonly",
+          align: "right",
+          render: (row) => {
+            const a = lineAmount(row);
+            return a ? money(a, { currency: doc.currency }) : "";
+          },
+        },
+        tax_amount: {
+          key: "_tax",
+          label: t("columns.taxAmount"),
+          width: "100px",
+          type: "readonly",
+          align: "right",
+          render: (row) => {
+            const t = lineTax(row);
+            return t ? money(t, { currency: doc.currency }) : "";
+          },
+        },
+      };
       // The work period is opt-in through the form designer: without a
       // layout it stays off the grid.
-      const placed = !layout ? Object.entries(builtIn).filter(([key]) => key !== 'work_from' && key !== 'work_to').map(([, column]) => column) : layout.lines.columns.flatMap((placement) => {
-        if (!placement.visible) return []
-        const base = builtIn[placement.key]
-        if (!base) return []
-        return [{ ...base, width: placement.width ?? base.width, label: placement.labelOverride?.trim() || base.label }]
-      })
+      const placed = !layout
+        ? Object.entries(builtIn)
+            .filter(([key]) => key !== "work_from" && key !== "work_to")
+            .map(([, column]) => column)
+        : layout.lines.columns.flatMap((placement) => {
+            if (!placement.visible) return [];
+            const base = builtIn[placement.key];
+            if (!base) return [];
+            return [
+              {
+                ...base,
+                width: placement.width ?? base.width,
+                label: placement.labelOverride?.trim() || base.label,
+              },
+            ];
+          });
       return [
         ...placed,
         // The warehouse picker is force-shown like a mandatory dimension:
         // tenant layouts predate the key, so placement alone would hide it.
         ...(warehouseColumn ? [warehouseColumn] : []),
         ...(promotionColumn ? [promotionColumn] : []),
-        ...(dropShipping && kind === 'sales_order' && isApproved ? [{
-          key: '_dropShip',
-          label: t('dropShip.routedLines'),
-          width: 'minmax(170px,1fr)',
-          type: 'readonly' as const,
-          render: (row: LineRow) => {
-            if (!row.persistedLineId || !stockedItemIds.has(row.itemId)) return null
-            const route = dropShipRoutes.find((candidate) => candidate.salesOrderLineId === row.persistedLineId)
-            return (
-              <span className="flex flex-wrap items-center gap-2 text-sm">
-                {route?.purchaseOrderId ? (
-                  <Link className="font-mono text-teal-700 hover:underline dark:text-teal-300" href={`/purchase-orders?order=${encodeURIComponent(route.purchaseOrderId)}`}>
-                    {t('dropShip.purchaseOrderLinked')}
-                  </Link>
-                ) : route ? <span className="text-slate-500 dark:text-slate-400">{t('dropShip.routed')}</span> : null}
-                {canRouteDropShip && !route ? (
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(row.persistedLineId, true)}>{t('dropShip.routeLine')}</Button>
-                ) : null}
-                {canRouteDropShip && route && !route.purchaseOrderLineId ? (
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(row.persistedLineId, false)}>{t('dropShip.unrouteLine')}</Button>
-                ) : null}
-              </span>
-            )
-          },
-        }] : []),
-        ...segments.filter((segment) => segment.showOnLines).map((segment): LineGridColumn<LineRow> => ({
-          key: `seg_${segment.key}`,
-          label: segment.name,
-          width: 'minmax(150px,1.2fr)',
-          type: 'search-select',
-          options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: value.name }))],
-          placeholder: '—',
-        })),
-      ]
+        ...(dropShipping && kind === "sales_order" && isApproved
+          ? [
+              {
+                key: "_dropShip",
+                label: t("dropShip.routedLines"),
+                width: "minmax(170px,1fr)",
+                type: "readonly" as const,
+                render: (row: LineRow) => {
+                  if (!row.persistedLineId || !stockedItemIds.has(row.itemId)) return null;
+                  const route = dropShipRoutes.find(
+                    (candidate) => candidate.salesOrderLineId === row.persistedLineId,
+                  );
+                  return (
+                    <span className="flex flex-wrap items-center gap-2 text-sm">
+                      {route?.purchaseOrderId ? (
+                        <Link
+                          className="font-mono text-teal-700 hover:underline dark:text-teal-300"
+                          href={`/purchase-orders?order=${encodeURIComponent(route.purchaseOrderId)}`}
+                        >
+                          {t("dropShip.purchaseOrderLinked")}
+                        </Link>
+                      ) : route ? (
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {t("dropShip.routed")}
+                        </span>
+                      ) : null}
+                      {canRouteDropShip && !route ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => setDropShipRoute(row.persistedLineId, true)}
+                        >
+                          {t("dropShip.routeLine")}
+                        </Button>
+                      ) : null}
+                      {canRouteDropShip && route && !route.purchaseOrderLineId ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => setDropShipRoute(row.persistedLineId, false)}
+                        >
+                          {t("dropShip.unrouteLine")}
+                        </Button>
+                      ) : null}
+                    </span>
+                  );
+                },
+              },
+            ]
+          : []),
+        ...segments
+          .filter((segment) => segment.showOnLines)
+          .map((segment): LineGridColumn<LineRow> => ({
+            key: `seg_${segment.key}`,
+            label: segment.name,
+            width: "minmax(150px,1.2fr)",
+            type: "search-select",
+            options: [
+              { value: INHERIT_SEGMENT, label: tCommon("labels.inheritHeader") },
+              { value: CLEAR_SEGMENT, label: tCommon("labels.noDimensionValue") },
+              ...segment.values.map((value) => ({ value: value.id, label: value.name })),
+            ],
+            placeholder: "—",
+          })),
+      ];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn, promotionColumn, customerSkuByItem, barcodeScanningEnabled, partyId, dropShipping, isApproved, stockedItemIds, dropShipRoutes, canRouteDropShip, busy],
-  )
+    [
+      accounts,
+      items,
+      taxProfiles,
+      departments,
+      projects,
+      segments,
+      kind,
+      layout,
+      t,
+      tCommon,
+      warehouseColumn,
+      promotionColumn,
+      customerSkuByItem,
+      barcodeScanningEnabled,
+      partyId,
+      dropShipping,
+      isApproved,
+      stockedItemIds,
+      dropShipRoutes,
+      canRouteDropShip,
+      busy,
+    ],
+  );
 
-  const field = 'space-y-1.5'
+  const field = "space-y-1.5";
   const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
-    const label = placement.labelOverride?.trim()
+    const label = placement.labelOverride?.trim();
     switch (placement.key) {
-      case 'party_id':
-        return <><FieldLabel fieldName={label || t('partyLabel', { kind })}>{label || t('partyLabel', { kind })}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { kind })} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
-      case 'document_date':
-        return <><FieldLabel fieldName={label || t('dateLabel', { kind })}>{label || t('dateLabel', { kind })}</FieldLabel>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
-      case 'due_date':
-        return <><FieldLabel fieldName={label || t('expiryLabel', { kind })}>{label || t('expiryLabel', { kind })}</FieldLabel>{isEditable ? <DateField value={dueDate} onChange={(value) => setDueDate(value)} /> : <p className="text-sm">{doc.due_date ?? '—'}</p>}</>
-      case 'work_completed_on':
-        if (kind !== 'sales_order') return null
-        return <><FieldLabel fieldName={label || tCommon('labels.workCompletedOn')}>{label || tCommon('labels.workCompletedOn')}</FieldLabel>{isEditable ? <DateField value={workCompletedOn} onChange={(value) => setWorkCompletedOn(value)} /> : <p className="text-sm">{doc.work_completed_on ?? '—'}</p>}</>
-      case 'department_id':
-        return <><FieldLabel fieldName={label || tCommon('labels.department')}>{label || tCommon('labels.department')}</FieldLabel>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))]} value={departmentId} onChange={(value) => setDepartmentId(value ?? '')} placeholder="—" /> : <p className="text-sm">{departments.find((department) => department.id === doc.department_id)?.name ?? '—'}</p>}</>
-      case 'project_id':
-        return <><FieldLabel fieldName={label || tCommon('labels.project')}>{label || tCommon('labels.project')}</FieldLabel>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...projects.map((project) => ({ value: project.id, label: project.name ?? '' }))]} value={projectId} onChange={(value) => setProjectId(value ?? '')} placeholder="—" /> : <p className="text-sm">{projects.find((project) => project.id === doc.project_id)?.name ?? '—'}</p>}</>
-      case 'subsidiary_id':
-        if (subsidiaries.length === 0) return null
-        return <><FieldLabel fieldName={label || tCommon('labels.subsidiary')}>{label || tCommon('labels.subsidiary')}</FieldLabel>{isEditable ? <SearchSelect options={subsidiaries.map((subsidiary) => ({ value: subsidiary.id, label: subsidiary.name ?? '' }))} value={subsidiaryId} onChange={(value) => setSubsidiaryId(value ?? '')} placeholder="—" clearable /> : <p className="text-sm">{subsidiaries.find((subsidiary) => subsidiary.id === doc.subsidiary_id)?.name ?? '—'}</p>}</>
-      case 'memo':
-        return <><FieldLabel fieldName={label || tCommon('labels.memo')}>{label || tCommon('labels.memo')}</FieldLabel>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+      case "party_id":
+        return (
+          <>
+            <FieldLabel fieldName={label || t("partyLabel", { kind })}>
+              {label || t("partyLabel", { kind })}
+              {isEditable ? <span className="text-red-500"> *</span> : null}
+            </FieldLabel>
+            {isEditable ? (
+              <SearchSelect
+                options={parties.map((party) => ({
+                  value: party.id,
+                  label: party.display_name ?? "",
+                }))}
+                value={partyId}
+                onChange={(value) => setPartyId(value ?? "")}
+                placeholder={t("selectPartyPlaceholder", { kind })}
+              />
+            ) : (
+              <p className="text-sm">{doc.party_name ?? "—"}</p>
+            )}
+          </>
+        );
+      case "document_date":
+        return (
+          <>
+            <FieldLabel fieldName={label || t("dateLabel", { kind })}>
+              {label || t("dateLabel", { kind })}
+            </FieldLabel>
+            {isEditable ? (
+              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
+            ) : (
+              <p className="text-sm">{doc.document_date}</p>
+            )}
+          </>
+        );
+      case "due_date":
+        return (
+          <>
+            <FieldLabel fieldName={label || t("expiryLabel", { kind })}>
+              {label || t("expiryLabel", { kind })}
+            </FieldLabel>
+            {isEditable ? (
+              <DateField value={dueDate} onChange={(value) => setDueDate(value)} />
+            ) : (
+              <p className="text-sm">{doc.due_date ?? "—"}</p>
+            )}
+          </>
+        );
+      case "work_completed_on":
+        if (kind !== "sales_order") return null;
+        return (
+          <>
+            <FieldLabel fieldName={label || tCommon("labels.workCompletedOn")}>
+              {label || tCommon("labels.workCompletedOn")}
+            </FieldLabel>
+            {isEditable ? (
+              <DateField value={workCompletedOn} onChange={(value) => setWorkCompletedOn(value)} />
+            ) : (
+              <p className="text-sm">{doc.work_completed_on ?? "—"}</p>
+            )}
+          </>
+        );
+      case "department_id":
+        return (
+          <>
+            <FieldLabel fieldName={label || tCommon("labels.department")}>
+              {label || tCommon("labels.department")}
+            </FieldLabel>
+            {isEditable ? (
+              <SearchSelect
+                options={[
+                  { value: "", label: "—" },
+                  ...departments.map((department) => ({
+                    value: department.id,
+                    label: department.name ?? "",
+                  })),
+                ]}
+                value={departmentId}
+                onChange={(value) => setDepartmentId(value ?? "")}
+                placeholder="—"
+              />
+            ) : (
+              <p className="text-sm">
+                {departments.find((department) => department.id === doc.department_id)?.name ?? "—"}
+              </p>
+            )}
+          </>
+        );
+      case "project_id":
+        return (
+          <>
+            <FieldLabel fieldName={label || tCommon("labels.project")}>
+              {label || tCommon("labels.project")}
+            </FieldLabel>
+            {isEditable ? (
+              <SearchSelect
+                options={[
+                  { value: "", label: "—" },
+                  ...projects.map((project) => ({ value: project.id, label: project.name ?? "" })),
+                ]}
+                value={projectId}
+                onChange={(value) => setProjectId(value ?? "")}
+                placeholder="—"
+              />
+            ) : (
+              <p className="text-sm">
+                {projects.find((project) => project.id === doc.project_id)?.name ?? "—"}
+              </p>
+            )}
+          </>
+        );
+      case "subsidiary_id":
+        if (subsidiaries.length === 0) return null;
+        return (
+          <>
+            <FieldLabel fieldName={label || tCommon("labels.subsidiary")}>
+              {label || tCommon("labels.subsidiary")}
+            </FieldLabel>
+            {isEditable ? (
+              <SearchSelect
+                options={subsidiaries.map((subsidiary) => ({
+                  value: subsidiary.id,
+                  label: subsidiary.name ?? "",
+                }))}
+                value={subsidiaryId}
+                onChange={(value) => setSubsidiaryId(value ?? "")}
+                placeholder="—"
+                clearable
+              />
+            ) : (
+              <p className="text-sm">
+                {subsidiaries.find((subsidiary) => subsidiary.id === doc.subsidiary_id)?.name ??
+                  "—"}
+              </p>
+            )}
+          </>
+        );
+      case "memo":
+        return (
+          <>
+            <FieldLabel fieldName={label || tCommon("labels.memo")}>
+              {label || tCommon("labels.memo")}
+            </FieldLabel>
+            {isEditable ? (
+              <Input value={memo} onChange={(event) => setMemo(event.target.value)} />
+            ) : (
+              <p className="text-sm">{doc.memo ?? "—"}</p>
+            )}
+          </>
+        );
       default:
-        return null
+        return null;
     }
-  }
-  const canIssue = !priceLookupBlocked && !!partyId && rows.some((r) => {
-    try { return Boolean(r.itemId || r.accountId) && cmp(lineAmount(r), '0') > 0 } catch { return false }
-  })
+  };
+  const canIssue =
+    !priceLookupBlocked &&
+    !!partyId &&
+    rows.some((r) => {
+      try {
+        return Boolean(r.itemId || r.accountId) && cmp(lineAmount(r), "0") > 0;
+      } catch {
+        return false;
+      }
+    });
   const convertTargets = allowedConvertKinds
     ? CONVERSION_TARGETS[kind].filter((target) => allowedConvertKinds.includes(target.kind))
-    : canManage ? CONVERSION_TARGETS[kind] : []
+    : canManage
+      ? CONVERSION_TARGETS[kind]
+      : [];
   // The Actions popover must never open onto nothing (the document-drawer
   // rule): every clause mirrors one entry rendered below, so a viewer with
   // no entry gets no button instead of an empty menu. ApprovalActions
@@ -2080,27 +2633,44 @@ export function OrderDrawer({
   const hasOrderMenuEntries =
     canManage ||
     (convertTargets.length > 0 && isApproved) ||
-    (kind === 'quote' && quoteAwardAvailable && !createMode) ||
-    (dropShipping && canAssessDropShip && kind === 'sales_order' && isApproved && dropShipRoutes.some((route) => route.purchaseOrderLineId)) ||
-    (dropShipping && canCreateDropShipPurchaseOrder && kind === 'sales_order' && isApproved && dropShipRoutes.some((row) => row.purchaseOrderLineId === null)) ||
+    (kind === "quote" && quoteAwardAvailable && !createMode) ||
+    (dropShipping &&
+      canAssessDropShip &&
+      kind === "sales_order" &&
+      isApproved &&
+      dropShipRoutes.some((route) => route.purchaseOrderLineId)) ||
+    (dropShipping &&
+      canCreateDropShipPurchaseOrder &&
+      kind === "sales_order" &&
+      isApproved &&
+      dropShipRoutes.some((row) => row.purchaseOrderLineId === null)) ||
     (dropShipping && canConfirmDropShip && isDropShipPurchaseOrder && isApproved) ||
-    (returnAuthorizations && kind === 'sales_order' && isApproved)
+    (returnAuthorizations && kind === "sales_order" && isApproved);
   // An issued purchase order with stock still to receive makes Receive goods
   // its primary action: receiving is the next step after issue. The receipt
   // form posts only on its own explicit save, and the receiving grant is the
   // one the convert targets already encode.
-  const hasOpenStockLines = order.lines.some((line) => line.item_id != null
-    && toQuantityUnits(String(line.quantity ?? '0'))
-      - toQuantityUnits(String(line.quantity_fulfilled ?? '0'))
-      - toQuantityUnits(String(line.quantity_cancelled ?? '0')) > 0n)
-  const receiveAvailable = kind === 'purchase_order' && !createMode && isApproved && canManage
-    && hasOpenStockLines && convertTargets.some((target) => target.kind === 'purchase_receipt')
+  const hasOpenStockLines = order.lines.some(
+    (line) =>
+      line.item_id != null &&
+      toQuantityUnits(String(line.quantity ?? "0")) -
+        toQuantityUnits(String(line.quantity_fulfilled ?? "0")) -
+        toQuantityUnits(String(line.quantity_cancelled ?? "0")) >
+        0n,
+  );
+  const receiveAvailable =
+    kind === "purchase_order" &&
+    !createMode &&
+    isApproved &&
+    canManage &&
+    hasOpenStockLines &&
+    convertTargets.some((target) => target.kind === "purchase_receipt");
 
   return (
     <TransactionDrawer
       closeHref={closeHref ?? meta.base}
       beforeClose={confirmDiscard}
-      recordId={createMode ? 'new' : String(doc.id)}
+      recordId={createMode ? "new" : String(doc.id)}
       canEditAttachments={createMode ? false : canManage}
       panelClassName={docTypeMeta(kind).surfaceCls}
       // Attachments, audit, and approvals all read the persisted row the
@@ -2110,136 +2680,212 @@ export function OrderDrawer({
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={kind} />
           {doc.document_number ? <span className="font-mono">{doc.document_number}</span> : null}
-          <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
+          <Badge variant={STATUS_VARIANT[doc.status] ?? "secondary"}>
             {statusLabel(doc.status)}
           </Badge>
           <ExternalRefChip externalRef={doc.external_ref} externalSource={doc.external_source} />
           {converted.partial ? (
             <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
-              {t('convertedProgress', {
+              {t("convertedProgress", {
                 billed: converted.billed,
                 ordered: converted.ordered,
               })}
             </span>
           ) : converted.full ? (
-            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">{t('fullyConverted')}</span>
+            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">
+              {t("fullyConverted")}
+            </span>
           ) : null}
         </span>
       }
-      description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
+      description={
+        mode === "edit" ? tCommon("feedback.editingHint") : (doc.party_name ?? undefined)
+      }
       primaryAction={
         canManage && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => {
-            if (mode === 'edit') {
-              void cancelWithConfirm()
-              return
-            }
-            setMode('edit')
-            // Entering edit mode reopens the retained draft when one waits.
-            void maybeOfferDraftRestore()
-          }}>
-            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2.5 text-xs"
+            disabled={busy}
+            onClick={() => {
+              if (mode === "edit") {
+                void cancelWithConfirm();
+                return;
+              }
+              setMode("edit");
+              // Entering edit mode reopens the retained draft when one waits.
+              void maybeOfferDraftRestore();
+            }}
+          >
+            {mode === "edit" ? tCommon("actions.cancel") : tCommon("actions.edit")}
           </Button>
-        ) : receiveAvailable && mode !== 'edit' ? (
-          <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setReceiveOpen(true)}>
-            {t('receive.title')}
+        ) : receiveAvailable && mode !== "edit" ? (
+          <Button
+            size="sm"
+            className="h-8 px-2.5 text-xs"
+            disabled={busy}
+            onClick={() => setReceiveOpen(true)}
+          >
+            {t("receive.title")}
           </Button>
         ) : null
       }
       actions={
-        mode === 'edit' ? (
+        mode === "edit" ? (
           <>
-            <Button disabled={busy || priceLookupBlocked} onClick={save} title={priceLookupPending.size > 0 ? t('pricingResolving') : undefined}>
-              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+            <Button
+              disabled={busy || priceLookupBlocked}
+              onClick={save}
+              title={priceLookupPending.size > 0 ? t("pricingResolving") : undefined}
+            >
+              {busy ? tCommon("actions.saving") : tCommon("actions.save")}
             </Button>
           </>
-        ) : hasOrderMenuEntries || doc.status === 'pending_approval' ? (
+        ) : hasOrderMenuEntries || doc.status === "pending_approval" ? (
           <>
             {hasOrderMenuEntries ? (
-          <>
-            {kind === 'quote' && quoteAwardAvailable && !createMode ? (
-              <QuoteAwardAction quoteId={String(doc.id)} docStatus={doc.status} canAward={quoteAwardEnabled} />
-            ) : null}
-            {isApproved
-              ? convertTargets.map((target) => (
-                  <Button
-                    key={target.kind}
-                    disabled={busy || converted.full}
-                    title={converted.full ? t('fullyConverted') : undefined}
-                    onClick={() =>
-                      kind === 'purchase_order' && target.kind === 'purchase_receipt'
-                        ? setReceiveOpen(true)
-                        : convert(target.kind, t(target.labelKey))
-                    }
-                  >
-                    {t('convertTo', { target: t(target.labelKey) })}
-                  </Button>
-                ))
-              : null}
-            {canManage ? (
               <>
-                <PdfButton recordType={kind} recordId={String(doc.id)} />
-                <SendButton recordType={kind} recordId={String(doc.id)} />
-                <FlowManualButtons subjectKind={kind} subjectId={String(doc.id)} />
-                {isDraft ? (
-                  <Button disabled={busy || !canIssue} onClick={issue} title={priceLookupBlocked ? t('pricingResolving') : !canIssue ? t('issueHint') : undefined}>
-                    {t('issue')}
+                {kind === "quote" && quoteAwardAvailable && !createMode ? (
+                  <QuoteAwardAction
+                    quoteId={String(doc.id)}
+                    docStatus={doc.status}
+                    canAward={quoteAwardEnabled}
+                  />
+                ) : null}
+                {isApproved
+                  ? convertTargets.map((target) => (
+                      <Button
+                        key={target.kind}
+                        disabled={busy || converted.full}
+                        title={converted.full ? t("fullyConverted") : undefined}
+                        onClick={() =>
+                          kind === "purchase_order" && target.kind === "purchase_receipt"
+                            ? setReceiveOpen(true)
+                            : convert(target.kind, t(target.labelKey))
+                        }
+                      >
+                        {t("convertTo", { target: t(target.labelKey) })}
+                      </Button>
+                    ))
+                  : null}
+                {canManage ? (
+                  <>
+                    <PdfButton recordType={kind} recordId={String(doc.id)} />
+                    <SendButton recordType={kind} recordId={String(doc.id)} />
+                    <FlowManualButtons subjectKind={kind} subjectId={String(doc.id)} />
+                    {isDraft ? (
+                      <Button
+                        disabled={busy || !canIssue}
+                        onClick={issue}
+                        title={
+                          priceLookupBlocked
+                            ? t("pricingResolving")
+                            : !canIssue
+                              ? t("issueHint")
+                              : undefined
+                        }
+                      >
+                        {t("issue")}
+                      </Button>
+                    ) : null}
+                    {pickLists && kind === "sales_order" && isApproved ? (
+                      <Button
+                        disabled={busy}
+                        onClick={() =>
+                          router.push(`/picks?pickFrom=${encodeURIComponent(String(doc.id))}`)
+                        }
+                      >
+                        {tFulfillment("pick.createFromOrder")}
+                      </Button>
+                    ) : null}
+                  </>
+                ) : null}
+                {dropShipping &&
+                canAssessDropShip &&
+                kind === "sales_order" &&
+                isApproved &&
+                dropShipRoutes.some((route) => route.purchaseOrderLineId) ? (
+                  <DropShipAssessmentButton
+                    lines={dropShipRoutes
+                      .filter((route) => route.purchaseOrderLineId)
+                      .map((route) => ({
+                        id: route.salesOrderLineId,
+                        label: String(
+                          order.lines.find((line) => line.id === route.salesOrderLineId)
+                            ?.description || route.salesOrderLineId,
+                        ),
+                      }))}
+                    accounts={dropShipLiabilityAccounts}
+                  />
+                ) : null}
+                {dropShipping &&
+                canCreateDropShipPurchaseOrder &&
+                kind === "sales_order" &&
+                isApproved &&
+                dropShipRoutes.some((row) => row.purchaseOrderLineId === null) ? (
+                  <div className="flex items-center gap-2">
+                    <SearchSelect
+                      options={dropShipVendors.map((vendor) => ({
+                        value: vendor.id,
+                        label: vendor.display_name ?? "",
+                      }))}
+                      value={dropShipVendorId}
+                      onChange={(value) => setDropShipVendorId(value ?? "")}
+                      placeholder={t("dropShip.selectVendor")}
+                    />
+                    <Button
+                      disabled={busy || !dropShipVendorId}
+                      onClick={createDropShipPurchaseOrder}
+                    >
+                      {t("dropShip.createPurchaseOrder")}
+                    </Button>
+                  </div>
+                ) : null}
+                {dropShipping && canConfirmDropShip && isDropShipPurchaseOrder && isApproved ? (
+                  <Button disabled={busy} onClick={confirmDropShipShipment}>
+                    {t("dropShip.confirmVendorShipment")}
                   </Button>
                 ) : null}
-                {pickLists && kind === 'sales_order' && isApproved ? (
-                  <Button disabled={busy} onClick={() => router.push(`/picks?pickFrom=${encodeURIComponent(String(doc.id))}`)}>
-                    {tFulfillment('pick.createFromOrder')}
+                {returnAuthorizations && kind === "sales_order" && isApproved ? (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      router.push(
+                        `/returns?doc=new&kind=rma&sourceDocumentId=${encodeURIComponent(String(doc.id))}`,
+                      )
+                    }
+                  >
+                    {tReturns("actions.new")}
+                  </Button>
+                ) : null}
+                {canManage && isApproved ? (
+                  <Button variant="outline" disabled={busy} onClick={voidOrder}>
+                    {tCommon("actions.void")}
+                  </Button>
+                ) : null}
+                {canManage && isApproved && kind === "purchase_order" ? (
+                  <Button variant="outline" disabled={busy} onClick={returnToDraft}>
+                    {tCommon("actions.returnToDraft")}
+                  </Button>
+                ) : null}
+                {canManage && isApproved && kind === "purchase_order" ? (
+                  <Button variant="outline" disabled={busy} onClick={() => void openAmend()}>
+                    {t("amend")}
+                  </Button>
+                ) : null}
+                {canManage && doc.status === "draft" ? (
+                  <Button
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={remove}
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                  >
+                    {tCommon("actions.delete")}
                   </Button>
                 ) : null}
               </>
-            ) : null}
-            {dropShipping && canAssessDropShip && kind==='sales_order' && isApproved && dropShipRoutes.some(route=>route.purchaseOrderLineId) ?
-              <DropShipAssessmentButton lines={dropShipRoutes.filter(route=>route.purchaseOrderLineId).map(route=>({id:route.salesOrderLineId,label:String(order.lines.find(line=>line.id===route.salesOrderLineId)?.description || route.salesOrderLineId)}))} accounts={dropShipLiabilityAccounts} /> : null}
-            {dropShipping && canCreateDropShipPurchaseOrder && kind === 'sales_order' && isApproved
-              && dropShipRoutes.some((row) => row.purchaseOrderLineId === null) ? (
-              <div className="flex items-center gap-2">
-                <SearchSelect
-                  options={dropShipVendors.map((vendor) => ({ value: vendor.id, label: vendor.display_name ?? '' }))}
-                  value={dropShipVendorId}
-                  onChange={(value) => setDropShipVendorId(value ?? '')}
-                  placeholder={t('dropShip.selectVendor')}
-                />
-                <Button disabled={busy || !dropShipVendorId} onClick={createDropShipPurchaseOrder}>
-                  {t('dropShip.createPurchaseOrder')}
-                </Button>
-              </div>
-            ) : null}
-            {dropShipping && canConfirmDropShip && isDropShipPurchaseOrder && isApproved ? (
-              <Button disabled={busy} onClick={confirmDropShipShipment}>
-                {t('dropShip.confirmVendorShipment')}
-              </Button>
-            ) : null}
-            {returnAuthorizations && kind === 'sales_order' && isApproved ? (
-              <Button variant="outline" disabled={busy} onClick={() => router.push(`/returns?doc=new&kind=rma&sourceDocumentId=${encodeURIComponent(String(doc.id))}`)}>
-                {tReturns('actions.new')}
-              </Button>
-            ) : null}
-            {canManage && isApproved ? (
-              <Button variant="outline" disabled={busy} onClick={voidOrder}>
-                {tCommon('actions.void')}
-              </Button>
-            ) : null}
-            {canManage && isApproved && kind === 'purchase_order' ? (
-              <Button variant="outline" disabled={busy} onClick={returnToDraft}>
-                {tCommon('actions.returnToDraft')}
-              </Button>
-            ) : null}
-            {canManage && isApproved && kind === 'purchase_order' ? (
-              <Button variant="outline" disabled={busy} onClick={() => void openAmend()}>
-                {t('amend')}
-              </Button>
-            ) : null}
-            {canManage && doc.status === 'draft' ? (
-              <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                {tCommon('actions.delete')}
-              </Button>
-            ) : null}
-            </>
             ) : null}
             {/* Flow-gate Approve/Reject rides the viewer's gate capability
                 (record-state/myActions), not the edit grant: a gate assignee
@@ -2254,213 +2900,342 @@ export function OrderDrawer({
               // document withdraw the bill drawer uses. The shared document
               // action rule decides who sees it: the submitter, or a holder
               // of the approve grant.
-              withdraw={{ documentId: String(doc.id), status: doc.status, canCreate: canManage, canApprove }}
+              withdraw={{
+                documentId: String(doc.id),
+                status: doc.status,
+                canCreate: canManage,
+                canApprove,
+              }}
             />
           </>
         ) : null
       }
-      keepRecordTabsMounted={['subscription']}
-      detailTabs={createMode ? [] : [
-        ...(order.links.length > 0 ? [{
-          key: 'related',
-          label: t('linksTitle'),
-          content: (
-            <div className="space-y-2">
-              <Label>{t('linksTitle')}</Label>
-              <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                {order.links.map((l) => (
-                  <div key={`${l.direction}-${l.id}`} className="flex items-center gap-3 px-3 py-2 text-sm">
-                    <span className="w-28 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      {l.direction === 'from' ? t('linkCreatedFrom') : t('linkConvertedInto')}
-                    </span>
-                    <Link
-                      href={docHref(l.kind, l.id)}
-                      className="font-mono text-teal-700 hover:underline dark:text-teal-300"
-                    >
-                      {l.document_number}
-                    </Link>
-                    <span className="text-slate-400 dark:text-slate-500">{t('docKind', { kind: l.kind })}</span>
-                    <span className="flex-1" />
-                    <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
-                      {statusLabel(l.status)}
-                    </Badge>
-                    {canManage && canVoidReceipt && l.kind === 'purchase_receipt' && l.status === 'approved' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={busy}
-                        onClick={() => setVoidTarget({ id: String(l.id), number: String(l.document_number) })}
-                      >
-                        {tCommon('actions.void')}
-                      </Button>
-                    ) : canManage && !canVoidReceipt && l.kind === 'purchase_receipt' && l.status === 'approved' ? (
-                      <PermissionHint permission="goods_receipts.create" action={tCommon('actions.void')} />
+      keepRecordTabsMounted={["subscription"]}
+      detailTabs={
+        createMode
+          ? []
+          : [
+              ...(order.links.length > 0
+                ? [
+                    {
+                      key: "related",
+                      label: t("linksTitle"),
+                      content: (
+                        <div className="space-y-2">
+                          <Label>{t("linksTitle")}</Label>
+                          <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                            {order.links.map((l) => (
+                              <div
+                                key={`${l.direction}-${l.id}`}
+                                className="flex items-center gap-3 px-3 py-2 text-sm"
+                              >
+                                <span className="w-28 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                  {l.direction === "from"
+                                    ? t("linkCreatedFrom")
+                                    : t("linkConvertedInto")}
+                                </span>
+                                <Link
+                                  href={docHref(l.kind, l.id)}
+                                  className="font-mono text-teal-700 hover:underline dark:text-teal-300"
+                                >
+                                  {l.document_number}
+                                </Link>
+                                <span className="text-slate-400 dark:text-slate-500">
+                                  {t("docKind", { kind: l.kind })}
+                                </span>
+                                <span className="flex-1" />
+                                <Badge variant={STATUS_VARIANT[l.status] ?? "secondary"}>
+                                  {statusLabel(l.status)}
+                                </Badge>
+                                {canManage &&
+                                canVoidReceipt &&
+                                l.kind === "purchase_receipt" &&
+                                l.status === "approved" ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      setVoidTarget({
+                                        id: String(l.id),
+                                        number: String(l.document_number),
+                                      })
+                                    }
+                                  >
+                                    {tCommon("actions.void")}
+                                  </Button>
+                                ) : canManage &&
+                                  !canVoidReceipt &&
+                                  l.kind === "purchase_receipt" &&
+                                  l.status === "approved" ? (
+                                  <PermissionHint
+                                    permission="goods_receipts.create"
+                                    action={tCommon("actions.void")}
+                                  />
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ),
+                    },
+                  ]
+                : []),
+              {
+                key: "approvals",
+                label: tCommon("approvalFlow.historyTitle"),
+                content: (
+                  <div className="space-y-4">
+                    {kind === "purchase_order" ? (
+                      <EnteredAfterOrderDateNotice days={order.enteredAfterOrderDays} />
                     ) : null}
+                    <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />
                   </div>
-                ))}
-              </div>
-            </div>
-          ),
-        }] : []),
-        {
-          key: 'approvals',
-          label: tCommon('approvalFlow.historyTitle'),
-          content: (
-            <div className="space-y-4">
-              {kind === 'purchase_order' ? <EnteredAfterOrderDateNotice days={order.enteredAfterOrderDays} /> : null}
-              <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />
-            </div>
-          ),
-        },
-        ...(kind === 'quote' && quoteToCashEnabled ? [{
-          key: 'subscription',
-          label: tEstimates('quoteCash.tab'),
-          content: (
-            <QuoteCashSection
-              quoteId={String(doc.id)}
-              currency={doc.currency}
-              // Subscription terms edit with the quote: read-only until the
-              // drawer is in edit mode.
-              canManage={canManage && mode === 'edit'}
-              docStatus={doc.status}
-              lines={order.lines
-                .filter((l) => typeof (l as { id?: unknown }).id === 'string')
-                .map((l) => ({
-                  id: (l as unknown as { id: string }).id,
-                  description: typeof l.description === 'string' ? l.description : null,
-                }))}
-            />
-          ),
-        }] : []),
-        ...(backorders && kind === 'sales_order' && isApproved ? [{
-          key: 'backorders',
-          label: t('backorders.tab'),
-          content: (
-            <OrderBackorders
-              orderId={String(doc.id)}
-              itemLabel={(itemId) => {
-                const item = itemById.get(itemId)
-                return item ? `${item.code ? `${item.code} · ` : ''}${item.name ?? ''}` : '—'
-              }}
-            />
-          ),
-        }] : []),
-      ]}
+                ),
+              },
+              ...(kind === "quote" && quoteToCashEnabled
+                ? [
+                    {
+                      key: "subscription",
+                      label: tEstimates("quoteCash.tab"),
+                      content: (
+                        <QuoteCashSection
+                          quoteId={String(doc.id)}
+                          currency={doc.currency}
+                          // Subscription terms edit with the quote: read-only until the
+                          // drawer is in edit mode.
+                          canManage={canManage && mode === "edit"}
+                          docStatus={doc.status}
+                          lines={order.lines
+                            .filter((l) => typeof (l as { id?: unknown }).id === "string")
+                            .map((l) => ({
+                              id: (l as unknown as { id: string }).id,
+                              description: typeof l.description === "string" ? l.description : null,
+                            }))}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
+              ...(backorders && kind === "sales_order" && isApproved
+                ? [
+                    {
+                      key: "backorders",
+                      label: t("backorders.tab"),
+                      content: (
+                        <OrderBackorders
+                          orderId={String(doc.id)}
+                          itemLabel={(itemId) => {
+                            const item = itemById.get(itemId);
+                            return item
+                              ? `${item.code ? `${item.code} · ` : ""}${item.name ?? ""}`
+                              : "—";
+                          }}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
+            ]
+      }
       footer={
         <div className="flex w-full items-center gap-3">
-          <span role="status" className="sr-only">{priceLookupPending.size > 0 ? t('pricingResolving') : null}</span>
+          <span role="status" className="sr-only">
+            {priceLookupPending.size > 0 ? t("pricingResolving") : null}
+          </span>
           <span
             className={
-              'text-xs ' +
-              (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+              "text-xs " +
+              (saveState === "error"
+                ? "text-red-600 dark:text-red-400"
+                : "text-slate-500 dark:text-slate-400")
             }
           >
-            {mode === 'edit'
-              ? saveState === 'saving'
-                ? tCommon('actions.saving')
-                : saveState === 'error'
-                  ? (
-                    <button
-                      type="button"
-                      className="underline underline-offset-2"
-                      disabled={busy}
-                      onClick={() => void save()}
-                    >
-                      {t('saveFailedRetry')}
-                    </button>
-                  )
-                  : dirty
-                    ? t('unsavedChanges')
-                    : null
-              : null}
+            {mode === "edit" ? (
+              saveState === "saving" ? (
+                tCommon("actions.saving")
+              ) : saveState === "error" ? (
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  disabled={busy}
+                  onClick={() => void save()}
+                >
+                  {t("saveFailedRetry")}
+                </button>
+              ) : dirty ? (
+                t("unsavedChanges")
+              ) : null
+            ) : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t('totals.subtotal', { amount: money((mode === 'edit' || createMode ? draftTotals : totals).subtotal, { currency: doc.currency }) })} ·{' '}
-            {t('totals.tax', { amount: money((mode === 'edit' || createMode ? draftTotals : totals).taxTotal, { currency: doc.currency }) })} ·{' '}
+            {t("totals.subtotal", {
+              amount: money((mode === "edit" || createMode ? draftTotals : totals).subtotal, {
+                currency: doc.currency,
+              }),
+            })}{" "}
+            ·{" "}
+            {t("totals.tax", {
+              amount: money((mode === "edit" || createMode ? draftTotals : totals).taxTotal, {
+                currency: doc.currency,
+              }),
+            })}{" "}
+            ·{" "}
             <strong className="text-slate-900 dark:text-slate-100">
-              {t('totals.total', { amount: money((mode === 'edit' || createMode ? draftTotals : totals).total, { currency: doc.currency }) })}
+              {t("totals.total", {
+                amount: money((mode === "edit" || createMode ? draftTotals : totals).total, {
+                  currency: doc.currency,
+                }),
+              })}
             </strong>
           </span>
         </div>
       }
     >
       <div className="space-y-6 p-1">
-        <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
-        {kind === 'purchase_order' && mode === 'view' ? (
+        <ActionAlert error={refusal} fallbackMessage={t("actionFailed")} />
+        {kind === "purchase_order" && mode === "view" ? (
           <EnteredAfterOrderDateNotice days={order.enteredAfterOrderDays} />
         ) : null}
-        {refusal?.code === 'ORDER_LINE_WAREHOUSE_REQUIRED' && canManage && isApproved && (kind === 'purchase_order' || kind === 'sales_order') ? (
+        {refusal?.code === "ORDER_LINE_WAREHOUSE_REQUIRED" &&
+        canManage &&
+        isApproved &&
+        (kind === "purchase_order" || kind === "sales_order") ? (
           <AssignWarehousePanel
             lines={rows
-              .filter((row) => row.itemId && stockedItemIds.has(row.itemId) && !row.stockLocationId && row.persistedLineId)
-              .map((row) => ({ persistedLineId: row.persistedLineId, description: row.description }))}
-            warehouses={stockLocations.filter((loc) => !loc.subsidiaryId || loc.subsidiaryId === doc.subsidiary_id)}
+              .filter(
+                (row) =>
+                  row.itemId &&
+                  stockedItemIds.has(row.itemId) &&
+                  !row.stockLocationId &&
+                  row.persistedLineId,
+              )
+              .map((row) => ({
+                persistedLineId: row.persistedLineId,
+                description: row.description,
+              }))}
+            warehouses={stockLocations.filter(
+              (loc) => !loc.subsidiaryId || loc.subsidiaryId === doc.subsidiary_id,
+            )}
             assignUrl={`${apiBase}/${doc.id}/assign-warehouse`}
             getRevision={() => revisionRef.current}
             onAssigned={() => router.refresh()}
             disabled={busy}
           />
         ) : null}
-        {refusal?.code === 'ITEM_MISSING_RNB_ACCOUNT' && rnbRemedy && kind === 'purchase_order' ? (
-          <section aria-label={t('rnbRemedyTitle')} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('rnbRemedyTitle')}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('rnbRemedyHint')}</p>
+        {refusal?.code === "ITEM_MISSING_RNB_ACCOUNT" && rnbRemedy && kind === "purchase_order" ? (
+          <section
+            aria-label={t("rnbRemedyTitle")}
+            className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+          >
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+              {t("rnbRemedyTitle")}
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t("rnbRemedyHint")}</p>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/items?item=${encodeURIComponent(rnbRemedy.itemId)}&itemTab=costing`}>
-                  {t('rnbRemedyOpenCosting', { item: rnbRemedy.itemName ?? t('rnbRemedyThisItem') })}
+                  {t("rnbRemedyOpenCosting", {
+                    item: rnbRemedy.itemName ?? t("rnbRemedyThisItem"),
+                  })}
                 </Link>
               </Button>
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/admin/setup/company">{t('rnbRemedyCompanyDefault')}</Link>
+                <Link href="/admin/setup/company">{t("rnbRemedyCompanyDefault")}</Link>
               </Button>
             </div>
           </section>
         ) : null}
-        {refusal?.code === 'ITEM_MISSING_UNIT_CONVERSION' && unitConversionRemedy ? (
-          <section aria-label={t('unitConversionRemedyTitle')} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('unitConversionRemedyTitle')}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('unitConversionRemedyHint')}</p>
+        {refusal?.code === "ITEM_MISSING_UNIT_CONVERSION" && unitConversionRemedy ? (
+          <section
+            aria-label={t("unitConversionRemedyTitle")}
+            className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+          >
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+              {t("unitConversionRemedyTitle")}
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t("unitConversionRemedyHint")}
+            </p>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/items?item=${encodeURIComponent(unitConversionRemedy.itemId)}&itemTab=costing`}>
-                  {t('unitConversionRemedyOpenCosting', { item: unitConversionRemedy.itemName ?? t('rnbRemedyThisItem'), unit: unitConversionRemedy.unit ?? '' })}
+                <Link
+                  href={`/items?item=${encodeURIComponent(unitConversionRemedy.itemId)}&itemTab=costing`}
+                >
+                  {t("unitConversionRemedyOpenCosting", {
+                    item: unitConversionRemedy.itemName ?? t("rnbRemedyThisItem"),
+                    unit: unitConversionRemedy.unit ?? "",
+                  })}
                 </Link>
               </Button>
             </div>
           </section>
         ) : null}
-        {priceLookupFailures.size > 0 ? <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">{[...priceLookupFailures].map(([key, message]) => <li key={key} role="alert">{rows.find((row) => row.clientKey === key)?.description || t('columns.item')}: {message}</li>)}</ul> : null}
+        {priceLookupFailures.size > 0 ? (
+          <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
+            {[...priceLookupFailures].map(([key, message]) => (
+              <li key={key} role="alert">
+                {rows.find((row) => row.clientKey === key)?.description || t("columns.item")}:{" "}
+                {message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {amendReason !== null && amendRows !== null ? (
-          <section aria-label={t('amendTitle')} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('amendTitle')}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('amendHint')}</p>
+          <section
+            aria-label={t("amendTitle")}
+            className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+          >
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+              {t("amendTitle")}
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t("amendHint")}</p>
             <div className="space-y-2">
               {amendRows.map((row) => (
                 <div key={row.id} className="flex flex-wrap items-end gap-2">
-                  <p className="min-w-40 flex-1 text-sm text-slate-700 dark:text-slate-300">{row.description || t('columns.item')}</p>
+                  <p className="min-w-40 flex-1 text-sm text-slate-700 dark:text-slate-300">
+                    {row.description || t("columns.item")}
+                  </p>
                   <div>
-                    <Label>{t('columns.qty')}</Label>
+                    <Label>{t("columns.qty")}</Label>
                     <Input
-                      aria-label={`${t('columns.qty')} — ${row.description || t('columns.item')}`}
+                      aria-label={`${t("columns.qty")} — ${row.description || t("columns.item")}`}
                       inputMode="decimal"
                       className="w-28 text-right tabular-nums"
                       value={row.quantity}
                       disabled={busy}
-                      onChange={(event) => setAmendRows((current) => current?.map((candidate) => candidate.id === row.id ? { ...candidate, quantity: event.target.value } : candidate) ?? null)}
+                      onChange={(event) =>
+                        setAmendRows(
+                          (current) =>
+                            current?.map((candidate) =>
+                              candidate.id === row.id
+                                ? { ...candidate, quantity: event.target.value }
+                                : candidate,
+                            ) ?? null,
+                        )
+                      }
                     />
                   </div>
                   <div>
-                    <Label>{t('columns.unitPrice')}</Label>
+                    <Label>{t("columns.unitPrice")}</Label>
                     <Input
-                      aria-label={`${t('columns.unitPrice')} — ${row.description || t('columns.item')}`}
+                      aria-label={`${t("columns.unitPrice")} — ${row.description || t("columns.item")}`}
                       inputMode="decimal"
                       className="w-28 text-right tabular-nums"
                       value={row.unitPrice}
                       disabled={busy}
-                      onChange={(event) => setAmendRows((current) => current?.map((candidate) => candidate.id === row.id ? { ...candidate, unitPrice: event.target.value } : candidate) ?? null)}
+                      onChange={(event) =>
+                        setAmendRows(
+                          (current) =>
+                            current?.map((candidate) =>
+                              candidate.id === row.id
+                                ? { ...candidate, unitPrice: event.target.value }
+                                : candidate,
+                            ) ?? null,
+                        )
+                      }
                     />
                   </div>
                 </div>
@@ -2468,128 +3243,174 @@ export function OrderDrawer({
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" disabled={busy} onClick={() => void saveAmend()}>
-                {busy ? tCommon('actions.saving') : t('amendSave')}
+                {busy ? tCommon("actions.saving") : t("amendSave")}
               </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setAmendReason(null); setAmendRows(null) }}>
-                {tCommon('actions.cancel')}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  setAmendReason(null);
+                  setAmendRows(null);
+                }}
+              >
+                {tCommon("actions.cancel")}
               </Button>
             </div>
           </section>
         ) : null}
-        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className={`${field} lg:col-span-2`}>
-            <Label>
-              {t('partyLabel', { kind })}
-              {editable ? <span className="text-red-500"> *</span> : null}
-            </Label>
-            {editable ? (
-              <SearchSelect
-                options={parties.map((c) => ({ value: c.id, label: c.display_name ?? '' }))}
-                value={partyId}
-                onChange={(v) => setPartyId(v ?? '')}
-                placeholder={t('selectPartyPlaceholder', { kind })}
-              />
-            ) : (
-              <p className="text-sm">{doc.party_name ?? '—'}</p>
-            )}
-          </div>
-          <div className={field}>
-            <Label>{t('dateLabel', { kind })}</Label>
-            {editable ? (
-              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
-            ) : (
-              <p className="text-sm">{doc.document_date}</p>
-            )}
-          </div>
-          <div className={field}>
-            <Label>{t('expiryLabel', { kind })}</Label>
-            {editable ? (
-              <DateField value={dueDate} onChange={(value) => setDueDate(value)} />
-            ) : (
-              <p className="text-sm">{doc.due_date ?? '—'}</p>
-            )}
-          </div>
-          <div className={field}>
-            <Label>{tCommon('labels.department')}</Label>
-            {editable ? (
-              <SearchSelect
-                options={[{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))]}
-                value={departmentId}
-                onChange={(v) => setDepartmentId(v ?? '')}
-                placeholder="—"
-              />
-            ) : (
-              <p className="text-sm">{departments.find((d) => d.id === doc.department_id)?.name ?? '—'}</p>
-            )}
-          </div>
-          <div className={field}>
-            <Label>{tCommon('labels.project')}</Label>
-            {editable ? (
-              <SearchSelect
-                options={[{ value: '', label: '—' }, ...projects.map((p) => ({ value: p.id, label: p.name ?? '' }))]}
-                value={projectId}
-                onChange={(v) => setProjectId(v ?? '')}
-                placeholder="—"
-              />
-            ) : (
-              <p className="text-sm">{projects.find((p) => p.id === doc.project_id)?.name ?? '—'}</p>
-            )}
-          </div>
-          {subsidiaries.length > 0 ? (
-            <div className={field}>
-              <Label>{tCommon('labels.subsidiary')}</Label>
+        {layout ? (
+          <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={`${field} lg:col-span-2`}>
+              <Label>
+                {t("partyLabel", { kind })}
+                {editable ? <span className="text-red-500"> *</span> : null}
+              </Label>
               {editable ? (
                 <SearchSelect
-                  options={subsidiaries.map((subsidiary) => ({ value: subsidiary.id, label: subsidiary.name ?? '' }))}
-                  value={subsidiaryId}
-                  onChange={(value) => setSubsidiaryId(value ?? '')}
-                  placeholder="—"
-                  clearable
+                  options={parties.map((c) => ({ value: c.id, label: c.display_name ?? "" }))}
+                  value={partyId}
+                  onChange={(v) => setPartyId(v ?? "")}
+                  placeholder={t("selectPartyPlaceholder", { kind })}
                 />
               ) : (
-                <p className="text-sm">{subsidiaries.find((subsidiary) => subsidiary.id === doc.subsidiary_id)?.name ?? '—'}</p>
+                <p className="text-sm">{doc.party_name ?? "—"}</p>
               )}
             </div>
-          ) : null}
-          <div className={`${field} lg:col-span-2`}>
-            <Label>{tCommon('labels.memo')}</Label>
-            {editable ? (
-              <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
-            ) : (
-              <p className="text-sm">{doc.memo ?? '—'}</p>
-            )}
+            <div className={field}>
+              <Label>{t("dateLabel", { kind })}</Label>
+              {editable ? (
+                <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
+              ) : (
+                <p className="text-sm">{doc.document_date}</p>
+              )}
+            </div>
+            <div className={field}>
+              <Label>{t("expiryLabel", { kind })}</Label>
+              {editable ? (
+                <DateField value={dueDate} onChange={(value) => setDueDate(value)} />
+              ) : (
+                <p className="text-sm">{doc.due_date ?? "—"}</p>
+              )}
+            </div>
+            <div className={field}>
+              <Label>{tCommon("labels.department")}</Label>
+              {editable ? (
+                <SearchSelect
+                  options={[
+                    { value: "", label: "—" },
+                    ...departments.map((d) => ({ value: d.id, label: d.name ?? "" })),
+                  ]}
+                  value={departmentId}
+                  onChange={(v) => setDepartmentId(v ?? "")}
+                  placeholder="—"
+                />
+              ) : (
+                <p className="text-sm">
+                  {departments.find((d) => d.id === doc.department_id)?.name ?? "—"}
+                </p>
+              )}
+            </div>
+            <div className={field}>
+              <Label>{tCommon("labels.project")}</Label>
+              {editable ? (
+                <SearchSelect
+                  options={[
+                    { value: "", label: "—" },
+                    ...projects.map((p) => ({ value: p.id, label: p.name ?? "" })),
+                  ]}
+                  value={projectId}
+                  onChange={(v) => setProjectId(v ?? "")}
+                  placeholder="—"
+                />
+              ) : (
+                <p className="text-sm">
+                  {projects.find((p) => p.id === doc.project_id)?.name ?? "—"}
+                </p>
+              )}
+            </div>
+            {subsidiaries.length > 0 ? (
+              <div className={field}>
+                <Label>{tCommon("labels.subsidiary")}</Label>
+                {editable ? (
+                  <SearchSelect
+                    options={subsidiaries.map((subsidiary) => ({
+                      value: subsidiary.id,
+                      label: subsidiary.name ?? "",
+                    }))}
+                    value={subsidiaryId}
+                    onChange={(value) => setSubsidiaryId(value ?? "")}
+                    placeholder="—"
+                    clearable
+                  />
+                ) : (
+                  <p className="text-sm">
+                    {subsidiaries.find((subsidiary) => subsidiary.id === doc.subsidiary_id)?.name ??
+                      "—"}
+                  </p>
+                )}
+              </div>
+            ) : null}
+            <div className={`${field} lg:col-span-2`}>
+              <Label>{tCommon("labels.memo")}</Label>
+              {editable ? (
+                <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+              ) : (
+                <p className="text-sm">{doc.memo ?? "—"}</p>
+              )}
+            </div>
           </div>
-        </div>}
+        )}
 
         {segments.some((segment) => segment.showOnHeader) ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {segments.filter((segment) => segment.showOnHeader).map((segment) => {
-              const selected = extraDims[segment.key] ?? ''
-              return (
-                <div key={segment.key} className={field}>
-                  <Label>{segment.name}</Label>
-                  {editable ? (
-                    <SearchSelect
-                      options={segment.values.map((value) => ({ value: value.id, label: value.name }))}
-                      value={selected}
-                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value || null }))}
-                      placeholder="—"
-                      clearable
-                    />
-                  ) : (
-                    <p className="text-sm">{segment.values.find((value) => value.id === selected)?.name ?? '—'}</p>
-                  )}
-                </div>
-              )
-            })}
+            {segments
+              .filter((segment) => segment.showOnHeader)
+              .map((segment) => {
+                const selected = extraDims[segment.key] ?? "";
+                return (
+                  <div key={segment.key} className={field}>
+                    <Label>{segment.name}</Label>
+                    {editable ? (
+                      <SearchSelect
+                        options={segment.values.map((value) => ({
+                          value: value.id,
+                          label: value.name,
+                        }))}
+                        value={selected}
+                        onChange={(value) =>
+                          setExtraDims((current) => ({ ...current, [segment.key]: value || null }))
+                        }
+                        placeholder="—"
+                        clearable
+                      />
+                    ) : (
+                      <p className="text-sm">
+                        {segment.values.find((value) => value.id === selected)?.name ?? "—"}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         ) : null}
 
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Label>{tCommon('labels.lines')}</Label>
-            {promotionsEnabled && (kind === 'quote' || kind === 'sales_order') && editable && !createMode && doc.id !== '' && doc.status === 'draft' ? (
-              <PromotionApplyControl documentId={doc.id} currency={doc.currency} onApplied={() => router.refresh()} />
+            <Label>{tCommon("labels.lines")}</Label>
+            {promotionsEnabled &&
+            (kind === "quote" || kind === "sales_order") &&
+            editable &&
+            !createMode &&
+            doc.id !== "" &&
+            doc.status === "draft" ? (
+              <PromotionApplyControl
+                documentId={doc.id}
+                currency={doc.currency}
+                onApplied={() => router.refresh()}
+              />
             ) : null}
           </div>
           <LineGrid<LineRow>
@@ -2597,15 +3418,17 @@ export function OrderDrawer({
             rows={rows}
             onRowsChange={onRowsChange}
             emptyRow={() => emptyLine(segments)}
-            getRowKey={(row, i) => row.clientKey !== '' ? row.clientKey : `row-${i}`}
-            cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID(), persistedLineId: '' })}
+            getRowKey={(row, i) => (row.clientKey !== "" ? row.clientKey : `row-${i}`)}
+            cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID(), persistedLineId: "" })}
             readOnly={!editable}
             formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
       </div>
-      {receiveOpen && kind === 'purchase_order' && isApproved
-      && convertTargets.some((target) => target.kind === 'purchase_receipt') ? (
+      {receiveOpen &&
+      kind === "purchase_order" &&
+      isApproved &&
+      convertTargets.some((target) => target.kind === "purchase_receipt") ? (
         <GoodsReceiptForm
           orderId={String(doc.id)}
           apiBase={apiBase}
@@ -2619,17 +3442,17 @@ export function OrderDrawer({
           receiptId={voidTarget.id}
           onClose={closeVoidDialog}
           onVoided={() => {
-            toast.success(t('voidReceiptDone', { number: voidTarget.number }))
-            closeVoidDialog()
-            router.refresh()
+            toast.success(t("voidReceiptDone", { number: voidTarget.number }));
+            closeVoidDialog();
+            router.refresh();
           }}
           onCorrected={() => {
-            toast.success(tCommon('amendment.remainderCorrected'))
-            closeVoidDialog()
-            router.refresh()
+            toast.success(tCommon("amendment.remainderCorrected"));
+            closeVoidDialog();
+            router.refresh();
           }}
         />
       ) : null}
     </TransactionDrawer>
-  )
+  );
 }

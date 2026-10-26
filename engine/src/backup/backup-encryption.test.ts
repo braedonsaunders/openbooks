@@ -57,7 +57,10 @@ async function withDataKeyRing<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Encrypt NDJSON lines with the exact pipeline the backup writers use. */
-async function writeEncryptedArchive(path: string, lines: string[]): Promise<{ sha256: string; envelopeLine: string }> {
+async function writeEncryptedArchive(
+  path: string,
+  lines: string[],
+): Promise<{ sha256: string; envelopeLine: string }> {
   const encrypted = beginEncryptedBackup();
   const hash = createHash("sha256");
   hash.update(encrypted.envelopeLine);
@@ -86,7 +89,10 @@ function backupLines(orgId: string): string[] {
       orgId,
       createdAt: "2026-08-04T12:00:00.000Z",
       schemaSha256: "a".repeat(64),
-      dataKeyCheck: sealSecret(BACKUP_DATA_KEY_CHECK_PLAINTEXT, { orgId: "system", purpose: "backup.data-key-check" }),
+      dataKeyCheck: sealSecret(BACKUP_DATA_KEY_CHECK_PLAINTEXT, {
+        orgId: "system",
+        purpose: "backup.data-key-check",
+      }),
     }),
     `{"t":"orgs","r":{"id":"${orgId}","name":"Round Trip"}}`,
     `{"t":"journal_lines","r":{"id":"${randomUUID()}","org_id":"${orgId}","amount":${amount}}}`,

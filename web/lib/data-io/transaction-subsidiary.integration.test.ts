@@ -19,31 +19,30 @@
  * stamped with the org root (exactly the subsidiary the kernel posts to, so
  * document and GL agree); an unknown subsidiary fails the row closed.
  */
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
 // Data-io resources are server-only. Shim that marker so this focused
 // PostgreSQL boundary test can import them under node's test runner.
-const { DOC_KINDS } = (await import('../document-kinds.ts')) as typeof import('../document-kinds.ts')
-const { transactionResource } = (await import('./transaction-resources.ts')) as typeof import(
-  './transaction-resources.ts'
-)
+const { DOC_KINDS } =
+  (await import("../document-kinds.ts")) as typeof import("../document-kinds.ts");
+const { transactionResource } =
+  (await import("./transaction-resources.ts")) as typeof import("./transaction-resources.ts");
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrgReporting } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
+const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 interface Fixture {
-  orgId: string
-  date: string
-  revenueNo: string
-  customerId: string
-  rootId: string
+  orgId: string;
+  date: string;
+  revenueNo: string;
+  customerId: string;
+  rootId: string;
 }
 
 /**
@@ -53,167 +52,196 @@ interface Fixture {
  * as soon as the first test ends.
  */
 async function fixture(): Promise<Fixture> {
-  const o = await withBypassContext(() => (createScratchOrg()))
+  const o = await withBypassContext(() => createScratchOrg());
   // The data-io import above leaves the ambient scope RLS-enforced with no
   // tenant: seed writes go through the bypass, reads through the org.
-  const revenueNo = await withOrgContext(o.orgId, async () => (await db.execute<{ number: string }>(
-      sql`select number from accounts where id = ${o.accounts.revenue} and org_id = ${o.orgId}`, 'objects',
-    ))[0]?.number)
-  assert.ok(revenueNo)
+  const revenueNo = await withOrgContext(
+    o.orgId,
+    async () =>
+      (
+        await db.execute<{ number: string }>(
+          sql`select number from accounts where id = ${o.accounts.revenue} and org_id = ${o.orgId}`,
+          "objects",
+        )
+      )[0]?.number,
+  );
+  assert.ok(revenueNo);
   await withBypassContext(async () => {
-    await db.execute(sql`update parties set short_code = 'ACME' where id = ${o.customerId}`)
-  })
-  return { orgId: o.orgId, date: o.date, revenueNo, customerId: o.customerId, rootId: o.subsidiaryId }
+    await db.execute(sql`update parties set short_code = 'ACME' where id = ${o.customerId}`);
+  });
+  return {
+    orgId: o.orgId,
+    date: o.date,
+    revenueNo,
+    customerId: o.customerId,
+    rootId: o.subsidiaryId,
+  };
 }
 
 async function addSubsidiary(fx: Fixture, name: string): Promise<string> {
-  const [row] = await withBypassContext(async () => await db.execute<{ id: string }>(sql`
+  const [row] = await withBypassContext(
+    async () =>
+      await db.execute<{ id: string }>(
+        sql`
       insert into subsidiaries (org_id, parent_id, name, base_currency, country)
       values (${fx.orgId}, ${fx.rootId}, ${name}, 'CAD', 'CA')
-      returning id`, 'objects'))
-  assert.ok(row?.id)
-  return row.id
+      returning id`,
+        "objects",
+      ),
+  );
+  assert.ok(row?.id);
+  return row.id;
 }
 
 async function writeInvoice(fx: Fixture, row: Record<string, unknown>) {
-  const cfg = DOC_KINDS.customer_invoice
-  assert.ok(cfg)
+  const cfg = DOC_KINDS.customer_invoice;
+  assert.ok(cfg);
   // The call under test resolves subsidiaries and posts through the ambient
   // scope: run it inside the caller's tenant.
-  return withOrgContext(fx.orgId, () => transactionResource(cfg, fx.orgId).write([row], 'insert', {
-    orgId: fx.orgId,
-    actorId: randomUUID(),
-    dryRun: false,
-  }))
+  return withOrgContext(fx.orgId, () =>
+    transactionResource(cfg, fx.orgId).write([row], "insert", {
+      orgId: fx.orgId,
+      actorId: randomUUID(),
+      dryRun: false,
+    }),
+  );
 }
 
 async function storedSubsidiaryId(fx: Fixture, documentNumber: string): Promise<string | null> {
-  const [row] = await withOrgContext(fx.orgId, async () => await db.execute<{ subsidiary_id: string | null }>(sql`
+  const [row] = await withOrgContext(
+    fx.orgId,
+    async () =>
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
       select subsidiary_id from documents
-       where org_id = ${fx.orgId} and document_number = ${documentNumber}`, 'objects'))
-  return row?.subsidiary_id ?? null
+       where org_id = ${fx.orgId} and document_number = ${documentNumber}`,
+        "objects",
+      ),
+  );
+  return row?.subsidiary_id ?? null;
 }
 
 test(
-  'an imported invoice attributes its subsidiary by name',
+  "an imported invoice attributes its subsidiary by name",
   { skip: !DB, timeout: 180_000 },
   async () => {
-    const fx = await fixture()
+    const fx = await fixture();
     try {
-      const westId = await addSubsidiary(fx, 'West Co')
+      const westId = await addSubsidiary(fx, "West Co");
       const outcome = await writeInvoice(fx, {
-        documentNumber: 'SUB-1',
+        documentNumber: "SUB-1",
         documentDate: fx.date,
-        party: 'ACME',
-        subsidiary: 'West Co',
-        lines: JSON.stringify([{ account: fx.revenueNo, amount: '100.00' }]),
-      })
+        party: "ACME",
+        subsidiary: "West Co",
+        lines: JSON.stringify([{ account: fx.revenueNo, amount: "100.00" }]),
+      });
       assert.deepEqual(
         { created: outcome.created, failed: outcome.failed, errors: outcome.errors },
         { created: 1, failed: 0, errors: [] },
-      )
+      );
       assert.equal(
-        await storedSubsidiaryId(fx, 'SUB-1'),
+        await storedSubsidiaryId(fx, "SUB-1"),
         westId,
-        'the document carries the named subsidiary, not NULL and not the root',
-      )
+        "the document carries the named subsidiary, not NULL and not the root",
+      );
     } finally {
-      await dropScratchOrgReporting(fx.orgId)
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
-)
+);
 
 test(
-  'an omitted subsidiary is stamped with the root the kernel posts to',
+  "an omitted subsidiary is stamped with the root the kernel posts to",
   { skip: !DB, timeout: 180_000 },
   async () => {
-    const fx = await fixture()
+    const fx = await fixture();
     try {
       const outcome = await writeInvoice(fx, {
-        documentNumber: 'SUB-2',
+        documentNumber: "SUB-2",
         documentDate: fx.date,
-        party: 'ACME',
-        lines: JSON.stringify([{ account: fx.revenueNo, amount: '50.00' }]),
-      })
+        party: "ACME",
+        lines: JSON.stringify([{ account: fx.revenueNo, amount: "50.00" }]),
+      });
       assert.deepEqual(
         { created: outcome.created, failed: outcome.failed },
         { created: 1, failed: 0 },
-      )
+      );
       assert.equal(
-        await storedSubsidiaryId(fx, 'SUB-2'),
+        await storedSubsidiaryId(fx, "SUB-2"),
         fx.rootId,
-        'no silent NULL: the document agrees with the root-subsidiary GL legs',
-      )
+        "no silent NULL: the document agrees with the root-subsidiary GL legs",
+      );
     } finally {
-      await dropScratchOrgReporting(fx.orgId)
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
-)
+);
+
+test("an unknown subsidiary fails the row closed", { skip: !DB, timeout: 180_000 }, async () => {
+  const fx = await fixture();
+  try {
+    const outcome = await writeInvoice(fx, {
+      documentNumber: "SUB-3",
+      documentDate: fx.date,
+      party: "ACME",
+      subsidiary: "No Such Entity",
+      lines: JSON.stringify([{ account: fx.revenueNo, amount: "50.00" }]),
+    });
+    assert.deepEqual(
+      { created: outcome.created, failed: outcome.failed },
+      { created: 0, failed: 1 },
+    );
+    assert.match(outcome.errors[0]?.message ?? "", /No Such Entity/);
+    assert.equal(await storedSubsidiaryId(fx, "SUB-3"), null);
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
-  'an unknown subsidiary fails the row closed',
+  "an exported subsidiary round-trips back onto the same subsidiary",
   { skip: !DB, timeout: 180_000 },
   async () => {
-    const fx = await fixture()
+    const fx = await fixture();
     try {
-      const outcome = await writeInvoice(fx, {
-        documentNumber: 'SUB-3',
-        documentDate: fx.date,
-        party: 'ACME',
-        subsidiary: 'No Such Entity',
-        lines: JSON.stringify([{ account: fx.revenueNo, amount: '50.00' }]),
-      })
-      assert.deepEqual(
-        { created: outcome.created, failed: outcome.failed },
-        { created: 0, failed: 1 },
-      )
-      assert.match(outcome.errors[0]?.message ?? '', /No Such Entity/)
-      assert.equal(await storedSubsidiaryId(fx, 'SUB-3'), null)
-    } finally {
-      await dropScratchOrgReporting(fx.orgId)
-    }
-  },
-)
-
-test(
-  'an exported subsidiary round-trips back onto the same subsidiary',
-  { skip: !DB, timeout: 180_000 },
-  async () => {
-    const fx = await fixture()
-    try {
-      const westId = await addSubsidiary(fx, 'West Co')
+      const westId = await addSubsidiary(fx, "West Co");
       const created = await writeInvoice(fx, {
-        documentNumber: 'SUB-4',
+        documentNumber: "SUB-4",
         documentDate: fx.date,
-        party: 'ACME',
-        subsidiary: 'West Co',
-        lines: JSON.stringify([{ account: fx.revenueNo, amount: '75.00' }]),
-      })
-      assert.equal(created.failed, 0)
-      const cfg = DOC_KINDS.customer_invoice
-      assert.ok(cfg)
-      const exported = await withOrgContext(fx.orgId, () => transactionResource(cfg, fx.orgId).read())
+        party: "ACME",
+        subsidiary: "West Co",
+        lines: JSON.stringify([{ account: fx.revenueNo, amount: "75.00" }]),
+      });
+      assert.equal(created.failed, 0);
+      const cfg = DOC_KINDS.customer_invoice;
+      assert.ok(cfg);
+      const exported = await withOrgContext(fx.orgId, () =>
+        transactionResource(cfg, fx.orgId).read(),
+      );
       const row = (exported.rows as Record<string, unknown>[]).find(
-        (r) => r.documentNumber === 'SUB-4',
-      )
-      assert.equal(
-        row?.subsidiary,
-        'West Co',
-        'the exporter emits the key the importer resolves',
-      )
-      delete row?.documentNumber
-      const replay = await writeInvoice(fx, { ...(row as Record<string, unknown>) })
+        (r) => r.documentNumber === "SUB-4",
+      );
+      assert.equal(row?.subsidiary, "West Co", "the exporter emits the key the importer resolves");
+      delete row?.documentNumber;
+      const replay = await writeInvoice(fx, { ...(row as Record<string, unknown>) });
       assert.deepEqual(
         { created: replay.created, failed: replay.failed, errors: replay.errors },
         { created: 1, failed: 0, errors: [] },
-      )
-      const [copy] = await withOrgContext(fx.orgId, async () => await db.execute<{ subsidiary_id: string | null }>(sql`
+      );
+      const [copy] = await withOrgContext(
+        fx.orgId,
+        async () =>
+          await db.execute<{ subsidiary_id: string | null }>(
+            sql`
           select subsidiary_id from documents
            where org_id = ${fx.orgId} and document_number <> 'SUB-4'
-             and kind = 'customer_invoice'`, 'objects'))
-      assert.equal(copy?.subsidiary_id, westId)
+             and kind = 'customer_invoice'`,
+            "objects",
+          ),
+      );
+      assert.equal(copy?.subsidiary_id, westId);
     } finally {
-      await dropScratchOrgReporting(fx.orgId)
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
-)
+);

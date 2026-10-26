@@ -4,290 +4,1088 @@
  * organization preferences; permission and feature metadata remain product-owned.
  */
 export type LocalNavigationTab = {
-  href: string
-  ns: string
-  key: string
-  label?: string
+  href: string;
+  ns: string;
+  key: string;
+  label?: string;
   /** Semantic icon inherited by the native main-menu destination. */
-  iconKey?: string
+  iconKey?: string;
   /** Explicit main-menu identity for a query-addressed working view. */
-  menuKey?: string
+  menuKey?: string;
   /** Registered entry-point key; detailed views stay local unless promoted. */
-  menuParent?: string
-  permission?: string
-  permissionsAny?: string[]
-  permissionsAll?: readonly string[]
-  feature?: string
+  menuParent?: string;
+  permission?: string;
+  permissionsAny?: string[];
+  permissionsAll?: readonly string[];
+  feature?: string;
   /** Additional feature dependencies required by this working view. */
-  requiredFeatures?: readonly string[]
-  prefix?: boolean
-  carry?: string[]
+  requiredFeatures?: readonly string[];
+  prefix?: boolean;
+  carry?: string[];
   /** Supporting work queues stay in the native More menu. */
-  secondary?: boolean
-}
+  secondary?: boolean;
+};
 
 export type LocalNavigationSet = {
-  id: string
-  label: string
-  feature?: string
+  id: string;
+  label: string;
+  feature?: string;
   /** Inline view switches retain page-owned counts and conditional choices. */
-  inline?: boolean
-  tabs: LocalNavigationTab[]
-}
+  inline?: boolean;
+  tabs: LocalNavigationTab[];
+};
 
 /** Presentation preferences cannot alter route ownership or authorization. */
 export type LocalNavigationPreference = {
-  items: { href: string; label?: string; hidden?: boolean }[]
-}
+  items: { href: string; label?: string; hidden?: boolean }[];
+};
 
-export type LocalNavigationPreferences = Record<string, LocalNavigationPreference>
+export type LocalNavigationPreferences = Record<string, LocalNavigationPreference>;
 
 export function applyLocalNavigationPreferences<T extends { href: string; label: string }>(
   tabs: readonly T[],
   preference?: LocalNavigationPreference,
 ): T[] {
-  if (!preference) return [...tabs]
-  const byHref = new Map(tabs.map((tab) => [tab.href, tab]))
-  const configured = new Set<string>()
-  const result: T[] = []
+  if (!preference) return [...tabs];
+  const byHref = new Map(tabs.map((tab) => [tab.href, tab]));
+  const configured = new Set<string>();
+  const result: T[] = [];
   for (const item of preference.items) {
-    if (configured.has(item.href)) continue
-    configured.add(item.href)
-    const tab = byHref.get(item.href)
-    if (tab && !item.hidden) result.push({ ...tab, label: item.label?.trim() || tab.label })
+    if (configured.has(item.href)) continue;
+    configured.add(item.href);
+    const tab = byHref.get(item.href);
+    if (tab && !item.hidden) result.push({ ...tab, label: item.label?.trim() || tab.label });
   }
   // New destinations inherit their product defaults rather than disappearing
   // from companies whose navigation was configured before they shipped.
-  return [...result, ...tabs.filter((tab) => !configured.has(tab.href))]
+  return [...result, ...tabs.filter((tab) => !configured.has(tab.href))];
 }
 
-export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 'compensation' | 'benefits', LocalNavigationTab[]> = {
+export const HRM_LOCAL_NAVIGATION: Record<
+  "people" | "hiring" | "timeOff" | "talent" | "compensation" | "benefits",
+  LocalNavigationTab[]
+> = {
   people: [
-    { href: '/hrm/positions', iconKey: 'briefcase-business', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read' },
-    { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
-    { href: '/hrm/org-chart', iconKey: 'network', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.org_chart.read', 'hrm.employment.read', 'hrm.self.read'] },
-    { href: '/hrm/change-requests', iconKey: 'user-cog', ns: 'nav', key: 'modules.hrm-change-requests', permission: 'hrm.employment.read', secondary: true },
-    { href: '/hrm/processes', secondary: true, iconKey: 'workflow', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
-    { href: '/hrm/processes/templates', iconKey: 'clipboard-check', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', menuParent: 'hrm-processes', prefix: true },
-    { href: '/hrm/documents', iconKey: 'files', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },
-    { href: '/hrm/qualifications', iconKey: 'badge-check', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
-    { href: '/hrm/training', label: 'Training', iconKey: 'graduation-cap', ns: 'admin', key: 'setup.training.title', permission: 'hrm.certifications.read', feature: 'hrmTraining' },
+    {
+      href: "/hrm/positions",
+      iconKey: "briefcase-business",
+      ns: "hrm",
+      key: "home.tabs.positions",
+      permission: "hrm.position.read",
+    },
+    {
+      href: "/entities/employees",
+      ns: "nav",
+      key: "modules.employees",
+      permission: "parties.read",
+    },
+    {
+      href: "/hrm/org-chart",
+      iconKey: "network",
+      ns: "hrm",
+      key: "home.tabs.orgChart",
+      permissionsAny: ["hrm.org_chart.read", "hrm.employment.read", "hrm.self.read"],
+    },
+    {
+      href: "/hrm/change-requests",
+      iconKey: "user-cog",
+      ns: "nav",
+      key: "modules.hrm-change-requests",
+      permission: "hrm.employment.read",
+      secondary: true,
+    },
+    {
+      href: "/hrm/processes",
+      secondary: true,
+      iconKey: "workflow",
+      ns: "hrm",
+      key: "processes.title",
+      permission: "hrm.process.read",
+      prefix: true,
+    },
+    {
+      href: "/hrm/processes/templates",
+      iconKey: "clipboard-check",
+      ns: "hrm",
+      key: "processes.templates.title",
+      permission: "hrm.process.manage",
+      menuParent: "hrm-processes",
+      prefix: true,
+    },
+    {
+      href: "/hrm/documents",
+      iconKey: "files",
+      ns: "hrm",
+      key: "home.tabs.documents",
+      permission: "hrm.documents.read",
+      feature: "hrmDocuments",
+    },
+    {
+      href: "/hrm/qualifications",
+      iconKey: "badge-check",
+      ns: "hrm",
+      key: "home.tabs.qualifications",
+      permission: "hrm.certifications.read",
+      feature: "hrmCertifications",
+    },
+    {
+      href: "/hrm/training",
+      label: "Training",
+      iconKey: "graduation-cap",
+      ns: "admin",
+      key: "setup.training.title",
+      permission: "hrm.certifications.read",
+      feature: "hrmTraining",
+    },
   ],
   hiring: [
-    { href: '/hrm/recruiting', iconKey: 'user-search', ns: 'hrm', key: 'talentWorkspace.applications', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['applicationStatus','opening','stage'] },
-    {href:'/hrm/recruiting?tab=openings',label:'Openings',iconKey:'briefcase-business',menuKey:'hrm-recruiting-openings',ns:'hrm',key:'recruiting.tabs.openings',permission:'hrm.recruiting.read',feature:'hrmRecruiting',menuParent:'hrm-recruiting',carry:['status']},
-    ...([['interviews', 'calendar-check'], ['offers', 'handshake'], ['postings', 'megaphone'], ['pools', 'users']] as const).map(([tab, iconKey]) => ({
-      href: `/hrm/recruiting?tab=${tab}`, iconKey, menuKey: `hrm-recruiting-${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
-      menuParent: 'hrm-recruiting',
-      permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'], secondary: tab !== 'pools',
+    {
+      href: "/hrm/recruiting",
+      iconKey: "user-search",
+      ns: "hrm",
+      key: "talentWorkspace.applications",
+      permission: "hrm.recruiting.read",
+      feature: "hrmRecruiting",
+      carry: ["applicationStatus", "opening", "stage"],
+    },
+    {
+      href: "/hrm/recruiting?tab=openings",
+      label: "Openings",
+      iconKey: "briefcase-business",
+      menuKey: "hrm-recruiting-openings",
+      ns: "hrm",
+      key: "recruiting.tabs.openings",
+      permission: "hrm.recruiting.read",
+      feature: "hrmRecruiting",
+      menuParent: "hrm-recruiting",
+      carry: ["status"],
+    },
+    ...(
+      [
+        ["interviews", "calendar-check"],
+        ["offers", "handshake"],
+        ["postings", "megaphone"],
+        ["pools", "users"],
+      ] as const
+    ).map(([tab, iconKey]) => ({
+      href: `/hrm/recruiting?tab=${tab}`,
+      iconKey,
+      menuKey: `hrm-recruiting-${tab}`,
+      ns: "hrm",
+      key: `recruiting.tabs.${tab}`,
+      menuParent: "hrm-recruiting",
+      permission: "hrm.recruiting.read",
+      feature: "hrmRecruiting",
+      carry: ["status"],
+      secondary: tab !== "pools",
     })),
   ],
   timeOff: [
-    { href: '/hrm/leave', iconKey: 'calendar-days', ns: 'hrm', key: 'leave.listTitle', permission: 'hrm.leave.read', carry: ['segment'] },
-    { href: '/hrm/leave?view=calendar', iconKey: 'calendar-clock', menuKey: 'hrm-leave-calendar', ns: 'hrm', key: 'leave.calendarTitle', permission: 'hrm.leave.read', menuParent: 'hrm-leave', carry: ['segment'] },
+    {
+      href: "/hrm/leave",
+      iconKey: "calendar-days",
+      ns: "hrm",
+      key: "leave.listTitle",
+      permission: "hrm.leave.read",
+      carry: ["segment"],
+    },
+    {
+      href: "/hrm/leave?view=calendar",
+      iconKey: "calendar-clock",
+      menuKey: "hrm-leave-calendar",
+      ns: "hrm",
+      key: "leave.calendarTitle",
+      permission: "hrm.leave.read",
+      menuParent: "hrm-leave",
+      carry: ["segment"],
+    },
   ],
   talent: [
-    { href: '/hrm/performance', iconKey: 'chart-no-axes-combined', ns: 'hrm', key: 'talentWorkspace.reviews', feature: 'hrmPerformance' },
-    {href:'/hrm/performance?tab=cycles',label:"Manage reviews",iconKey:'calendar-days',menuKey:'hrm-performance-cycles',ns:'hrm',key:'talentWorkspace.manageReviews',permission:'hrm.performance.manage',feature:'hrmPerformance',menuParent:'hrm-performance'},
-    { href: '/hrm/performance/templates', iconKey: 'journal', menuKey: 'hrm-performance-templates', ns: 'hrm', key: 'talentWorkspace.templates', permissionsAny: ['admin.setup.manage','hrm.performance.manage'], feature: 'hrmPerformance', menuParent: 'hrm-performance', prefix: true, secondary: true },
-    {href:'/hrm/performance/goals',label:"Goals",iconKey:'target',menuKey:'hrm-performance-goals',ns:'hrm',key:'talentWorkspace.goals',feature:'hrmPerformance',menuParent:'hrm-performance'},
-    {href:'/hrm/performance/conversations',label:"Conversations",iconKey:'messages-square',menuKey:'hrm-performance-conversations',ns:'hrm',key:'talentWorkspace.conversations',feature:'hrmPerformance',menuParent:'hrm-performance'},
-    { href: '/hrm/performance?tab=calibration', iconKey: 'sliders-horizontal', menuKey: 'hrm-performance-calibration', ns: 'hrm', key: 'performance.continuous.tabs.calibration', secondary: true, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/performance?tab=talent', iconKey: 'chart-scatter', menuKey: 'hrm-performance-talent', ns: 'hrm', key: 'performance.workspace.assessments', secondary: true, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/performance?tab=succession', iconKey: 'git-branch', menuKey: 'hrm-performance-succession', ns: 'hrm', key: 'performance.workspace.succession', secondary: true, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/performance?tab=retention', iconKey: 'heart-pulse', menuKey: 'hrm-performance-retention', ns: 'hrm', key: 'retention.title', secondary: true, permission: 'hrm.retention.read', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/surveys', iconKey: 'message', ns: 'hrm', key: 'home.tabs.surveys', secondary: true, permission: 'hrm.surveys.manage', feature: 'hrmSurveys', menuParent: 'hrm-performance' },
+    {
+      href: "/hrm/performance",
+      iconKey: "chart-no-axes-combined",
+      ns: "hrm",
+      key: "talentWorkspace.reviews",
+      feature: "hrmPerformance",
+    },
+    {
+      href: "/hrm/performance?tab=cycles",
+      label: "Manage reviews",
+      iconKey: "calendar-days",
+      menuKey: "hrm-performance-cycles",
+      ns: "hrm",
+      key: "talentWorkspace.manageReviews",
+      permission: "hrm.performance.manage",
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+    },
+    {
+      href: "/hrm/performance/templates",
+      iconKey: "journal",
+      menuKey: "hrm-performance-templates",
+      ns: "hrm",
+      key: "talentWorkspace.templates",
+      permissionsAny: ["admin.setup.manage", "hrm.performance.manage"],
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+      prefix: true,
+      secondary: true,
+    },
+    {
+      href: "/hrm/performance/goals",
+      label: "Goals",
+      iconKey: "target",
+      menuKey: "hrm-performance-goals",
+      ns: "hrm",
+      key: "talentWorkspace.goals",
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+    },
+    {
+      href: "/hrm/performance/conversations",
+      label: "Conversations",
+      iconKey: "messages-square",
+      menuKey: "hrm-performance-conversations",
+      ns: "hrm",
+      key: "talentWorkspace.conversations",
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+    },
+    {
+      href: "/hrm/performance?tab=calibration",
+      iconKey: "sliders-horizontal",
+      menuKey: "hrm-performance-calibration",
+      ns: "hrm",
+      key: "performance.continuous.tabs.calibration",
+      secondary: true,
+      permission: "hrm.performance.manage",
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+    },
+    {
+      href: "/hrm/performance?tab=talent",
+      iconKey: "chart-scatter",
+      menuKey: "hrm-performance-talent",
+      ns: "hrm",
+      key: "performance.workspace.assessments",
+      secondary: true,
+      permission: "hrm.performance.manage",
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+    },
+    {
+      href: "/hrm/performance?tab=succession",
+      iconKey: "git-branch",
+      menuKey: "hrm-performance-succession",
+      ns: "hrm",
+      key: "performance.workspace.succession",
+      secondary: true,
+      permission: "hrm.performance.manage",
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+    },
+    {
+      href: "/hrm/performance?tab=retention",
+      iconKey: "heart-pulse",
+      menuKey: "hrm-performance-retention",
+      ns: "hrm",
+      key: "retention.title",
+      secondary: true,
+      permission: "hrm.retention.read",
+      feature: "hrmPerformance",
+      menuParent: "hrm-performance",
+    },
+    {
+      href: "/hrm/surveys",
+      iconKey: "message",
+      ns: "hrm",
+      key: "home.tabs.surveys",
+      secondary: true,
+      permission: "hrm.surveys.manage",
+      feature: "hrmSurveys",
+      menuParent: "hrm-performance",
+    },
   ],
   compensation: [
-    { href: '/hrm/compensation', iconKey: 'gauge', ns: 'hrm', key: 'compensation.workspace.overview', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },
-    ...([
-      ['cycles', 'Pay cycles', 'calendar-range'],
-      ['plans', 'Headcount plans', 'users'],
-      ['families', 'Job families', 'network'],
-      ['levels', 'Job levels', 'layers'],
-      ['bands', 'Pay bands', 'banknote'],
-    ] as const).map(([view, label, iconKey]) => ({
-      href: `/hrm/compensation?view=${view}`, label, iconKey, ...(view === 'plans' ? { secondary: true } : {}), menuKey: `hrm-compensation-${view}`,
-      ns: 'hrm', key: `compensation.workspace.${view}`, permission: 'hrm.compensation.read', feature: 'hrmCompensation' as const,
+    {
+      href: "/hrm/compensation",
+      iconKey: "gauge",
+      ns: "hrm",
+      key: "compensation.workspace.overview",
+      permission: "hrm.compensation.read",
+      feature: "hrmCompensation",
+      prefix: true,
+    },
+    ...(
+      [
+        ["cycles", "Pay cycles", "calendar-range"],
+        ["plans", "Headcount plans", "users"],
+        ["families", "Job families", "network"],
+        ["levels", "Job levels", "layers"],
+        ["bands", "Pay bands", "banknote"],
+      ] as const
+    ).map(([view, label, iconKey]) => ({
+      href: `/hrm/compensation?view=${view}`,
+      label,
+      iconKey,
+      ...(view === "plans" ? { secondary: true } : {}),
+      menuKey: `hrm-compensation-${view}`,
+      ns: "hrm",
+      key: `compensation.workspace.${view}`,
+      permission: "hrm.compensation.read",
+      feature: "hrmCompensation" as const,
       // Job architecture is setup data; it stays on the Compensation strip, not the main menu.
-      ...(view === 'families' || view === 'levels' || view === 'bands' ? { menuParent: 'hrm-compensation' } : {}),
+      ...(view === "families" || view === "levels" || view === "bands"
+        ? { menuParent: "hrm-compensation" }
+        : {}),
     })),
-    { href: '/hrm/compensation/equity', iconKey: 'scale', ns: 'hrm', key: 'equity.title', permission: 'hrm.compensation.read', feature: 'hrmCompensation' },
+    {
+      href: "/hrm/compensation/equity",
+      iconKey: "scale",
+      ns: "hrm",
+      key: "equity.title",
+      permission: "hrm.compensation.read",
+      feature: "hrmCompensation",
+    },
   ],
   benefits: [
-    { href: '/hrm/benefits', iconKey: 'heart-handshake', ns: 'hrm', key: 'benefits.workspace.tabs.overview', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=programs', iconKey: 'gift', menuKey: 'hrm-benefits-programs', ns: 'hrm', key: 'benefits.workspace.tabs.programs', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=employees', iconKey: 'user-check', menuKey: 'hrm-benefits-employees', ns: 'hrm', key: 'benefits.workspace.tabs.employees', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=delivery', iconKey: 'banknote-arrow-up', menuKey: 'hrm-benefits-delivery', ns: 'hrm', key: 'benefits.workspace.tabs.delivery', permission: 'hrm.benefits.read' },
+    {
+      href: "/hrm/benefits",
+      iconKey: "heart-handshake",
+      ns: "hrm",
+      key: "benefits.workspace.tabs.overview",
+      permission: "hrm.benefits.read",
+    },
+    {
+      href: "/hrm/benefits?view=programs",
+      iconKey: "gift",
+      menuKey: "hrm-benefits-programs",
+      ns: "hrm",
+      key: "benefits.workspace.tabs.programs",
+      permission: "hrm.benefits.read",
+    },
+    {
+      href: "/hrm/benefits?view=employees",
+      iconKey: "user-check",
+      menuKey: "hrm-benefits-employees",
+      ns: "hrm",
+      key: "benefits.workspace.tabs.employees",
+      permission: "hrm.benefits.read",
+    },
+    {
+      href: "/hrm/benefits?view=delivery",
+      iconKey: "banknote-arrow-up",
+      menuKey: "hrm-benefits-delivery",
+      ns: "hrm",
+      key: "benefits.workspace.tabs.delivery",
+      permission: "hrm.benefits.read",
+    },
   ],
-}
+};
 
 export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
-  { id:'manufacturing',label:'Manufacturing',feature:'manufacturing',tabs:[
-    {href:'/manufacturing',label:'Manufacturing',ns:'manufacturing',key:'title',permission:'manufacturing.read',iconKey:'package'},
-    {href:'/manufacturing/work-orders',label:'Work orders',ns:'manufacturing',key:'titles.work-orders',permission:'manufacturing.read',iconKey:'clipboard',menuParent:'manufacturing'},
-    {href:'/manufacturing/work-centers',label:'Work centers',ns:'manufacturing',key:'titles.work-centers',permission:'manufacturing.read',iconKey:'settings',menuParent:'manufacturing'},
-    {href:'/manufacturing/routings',label:'Routings',ns:'manufacturing',key:'titles.routings',permission:'manufacturing.read',iconKey:'workflow',menuParent:'manufacturing'},
-    {href:'/manufacturing/time',label:'Production time',ns:'operatingProfiles',key:'time.title',permission:'time.read',permissionsAll:['manufacturing.read'],iconKey:'clock',menuParent:'manufacturing'},
-    {href:'/manufacturing/quality',label:'Quality',ns:'manufacturing',key:'quality.title',permission:'manufacturing.read',permissionsAll:['items.read'],iconKey:'badge-check',menuParent:'manufacturing'},
-    {href:'/manufacturing/mrp',label:'MRP',ns:'manufacturing',key:'titles.mrp',permission:'manufacturing.read',feature:'manufacturingMrp',iconKey:'calendar-days',menuParent:'manufacturing'},
-  ] },
-  { id: 'collections-views', label: 'Collections', tabs: [
-    { href: '/collections', ns: 'ar', key: 'collections.tabs.worklist', permission: 'documents.manage', permissionsAny: ['ar.read'] },
-    { href: '/collections?view=policies', ns: 'ar', key: 'collections.tabs.policies', permission: 'documents.manage' },
-    { href: '/collections?view=recurring', ns: 'ar', key: 'collections.tabs.recurring', permission: 'documents.manage' },
-    ...['subscriptions', 'plans'].map((view) => ({ href: `/collections?view=${view}`, ns: 'ar', key: `collections.tabs.${view}`, permission: 'documents.manage', permissionsAny: ['ar.read'], feature: 'subscriptionBilling' })),
-    ...['versions', 'contracts', 'amendments'].map((view) => ({ href: `/collections?view=${view}`, ns: 'ar', key: `collections.tabs.${view}`, permission: 'documents.manage', permissionsAny: ['ar.read'], feature: 'advancedSubscriptions' })),
-  ] },
-  { id: 'crm-sales', label: 'Sales', feature: 'salesManagement', tabs: [
-    ...([['overview', 'chart-no-axes-combined'], ['representatives', 'user-check'], ['teams', 'users'], ['quotas', 'target'], ['territories', 'map']] as const).map(([tab, iconKey]) => ({ href: tab==='overview'?'/crm/sales':`/crm/sales/${tab}`, iconKey, ns: 'crm', key: `sales.tabs.${tab}`, permissionsAny: ['crm.setup.manage', 'crm.forecasts.read'], carry: ['periodStart', 'periodEnd'] })),
-  ] },
-  ...Object.entries(HRM_LOCAL_NAVIGATION).map(([id, tabs]) => ({ id: `hrm-${id}`, label: ({ people: 'Employees', hiring: 'Hiring', timeOff: 'Time Off', talent: 'Talent', compensation: 'Compensation', benefits: 'Benefits' } as Record<string, string>)[id]!, feature: 'hrm', tabs })),
-  { id: 'time', label: 'Time', feature: 'timeTracking', tabs: [
-    { href: '/timesheets', ns: 'timesheets', key: 'field.timesheetsTab', label: 'Timesheets', permissionsAny: ['time.read', 'time.manage', 'time.self', 'time.clock'] },
-    { href: '/time/clock', ns: 'timesheets', key: 'field.clockTab', label: 'Time Clock', permission: 'time.clock', feature: 'fieldTime' },
-    { href: '/time/crew', iconKey: 'users', ns: 'timesheets', key: 'field.crewTab', label: 'Crew Time', permissionsAny: ['time.read', 'time.crew.enter'], feature: 'fieldTime' },
-  ] },
-  { id: 'tax-views', label: 'Tax', inline: true, tabs: [
-    { href: '/tax', ns: 'tax', key: 'tabs.prepare' },
-    { href: '/tax?tab=history', ns: 'tax', key: 'tabs.history' },
-  ] },
-  { id: 'close-views', label: 'Continuous Close', inline: true, tabs: [
-    { href: '/continuous-close', ns: 'continuousClose', key: 'tabs.findings' },
-    { href: '/continuous-close?tab=reports', ns: 'continuousClose', key: 'tabs.reports' },
-  ] },
-  { id: 'insights-views', label: 'Insights', inline: true, tabs: [
-    { href: '/insights', ns: 'insights', key: 'tabs.cards' },
-    { href: '/insights/dashboards', ns: 'insights', key: 'tabs.dashboards' },
-  ] },
-  { id: 'setup-allocations', label: 'Allocations', inline: true, tabs: [
-    { href: '/admin/setup/allocations?tab=rules', ns: 'allocations', key: 'rules.tabs.rules' },
-    { href: '/admin/setup/allocations?tab=drivers', ns: 'allocations', key: 'rules.tabs.drivers' },
-    { href: '/admin/setup/allocations?tab=runs', ns: 'allocations', key: 'rules.tabs.runs' },
-  ] },
-  { id: 'setup-depreciation', label: 'Depreciation', inline: true, tabs: [
-    { href: '/admin/setup/depreciation?tab=methods', ns: 'admin', key: 'setup.assetDepreciationSetup.tabs.methods' },
-    { href: '/admin/setup/depreciation?tab=books', ns: 'admin', key: 'setup.assetDepreciationSetup.tabs.books' },
-  ] },
-  { id: 'setup-tax-depreciation', label: 'Tax Depreciation', inline: true, tabs: [
-    { href: '/admin/setup/tax-depreciation?tab=overview', ns: 'admin', key: 'setup.taxDepreciationSetup.tabs.overview' },
-    { href: '/admin/setup/tax-depreciation?tab=regimes', ns: 'admin', key: 'setup.taxDepreciationSetup.tabs.regimes' },
-  ] },
-  { id: 'setup-overhead', label: 'Overhead', inline: true, tabs: [
-    { href: '/admin/setup/overhead?view=model', ns: 'admin', key: 'setup.entities.overhead-model.tabs.model' },
-    { href: '/admin/setup/overhead?view=rates', ns: 'admin', key: 'setup.entities.overhead-model.tabs.rates' },
-    { href: '/admin/setup/overhead?view=lifecycle', ns: 'admin', key: 'setup.entities.overhead-model.tabs.lifecycle' },
-    { href: '/admin/setup/overhead?view=application', ns: 'admin', key: 'setup.entities.overhead-model.tabs.application' },
-  ] },
-  { id: 'journal-views', label: 'Journals', inline: true, tabs: [
-    { href: '/journal', ns: 'journal', key: 'list.entriesTab' },
-    { href: '/journal?journalTab=drafts', ns: 'journal', key: 'list.draftsTab' },
-  ] },
-  { id: 'accounts-views', label: 'Chart of Accounts', inline: true, tabs: [
-    { href: '/accounts', ns: 'accounts', key: 'list.views.list' },
-    { href: '/accounts?layout=hierarchy', ns: 'accounts', key: 'list.views.hierarchy' },
-  ] },
-  { id: 'inventory-views', label: 'Inventory', inline: true, tabs: [
-    ...['onhand', 'movements', 'counts', 'locations', 'bom'].map((view) => ({ href: `/inventory?inventoryView=${view}`, ns: 'inventory', key: `view.${view}` })),
-  ] },
-  { id: 'inbox-views', label: 'Inbox', inline: true, tabs: [
-    { href: '/inbox', ns: 'approvals', key: 'tabs.mine' },
-    { href: '/inbox?tab=tasks', ns: 'inbox', key: 'filters.myTasks' },
-    ...['submitted', 'all'].map((tab) => ({ href: `/inbox?tab=${tab}`, ns: 'approvals', key: `tabs.${tab}` })),
-  ] },
-  { id: 'me-views', label: 'Me', inline: true, tabs: [
-    { href: '/me', ns: 'hrm', key: 'me.tabs.overview' },
-    { href: '/hrm/my-leave', ns: 'hrm', key: 'me.tabs.leave' },
-    { href: '/me/schedule', ns: 'scheduling', key: 'mine.tab', feature: 'hrmShiftPlanning' },
-    ...['profile', 'checklists', 'reviews', 'benefits', 'team', 'compensation', 'documents'].map((tab) => ({ href: `/me/${tab}`, ns: 'hrm', key: `me.tabs.${tab}` })),
-    { href: '/me/one-on-ones', ns: 'hrm', key: 'me.tabs.oneOnOnes' },
-    { href: '/me/surveys', ns: 'hrm', key: 'me.tabs.openSurveys' },
-    { href: '/me/training', ns: 'hrm', key: 'me.tabs.training', feature: 'hrmTraining', permission: 'hrm.self.read' },
-  ] },
-  { id: 'payroll', label: 'Payroll', feature: 'payroll', tabs: [
-    { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview', permission: 'payroll.read' },
-    { href: '/payroll/runs', iconKey: 'circle-dollar-sign', ns: 'payroll', key: 'home.tabs.runs', permission: 'payroll.read', prefix: true },
-    { href: '/payroll/remittances', iconKey: 'landmark', ns: 'payroll', key: 'home.tabs.remittances', permission: 'payroll.read' },
-    { href: '/payroll/anomalies', iconKey: 'shield', ns: 'payroll', key: 'home.tabs.checks', permission: 'payroll.read' },
-    { href: '/payroll/separations', iconKey: 'user-minus', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
-    // Periodic and adoption work stays one step away in the More menu.
-    { href: '/payroll/year-end', iconKey: 'calendar-check', ns: 'payroll', key: 'home.tabs.yearEnd', permission: 'payroll.read', secondary: true, menuParent: 'payroll' },
-    ...[
-      ['opening-balances', 'payroll.read'],
-      ['retro', 'payroll.read'],
-      ['parallel-run', 'payroll.read'],
-      ['work-locations', 'payroll.manage'],
-    ].map(([route, permission]) => ({
-      href: `/payroll/${route}`, ns: 'nav', key: `modules.payroll-${route}`, permission, secondary: true,
-    })),
-  ] },
-  { id: 'resourcing', label: 'Resourcing', feature: 'resourcing', tabs: [
-    ...[['', 'overview', 'gauge'], ['/board', 'board', 'calendar-range'], ['/assignments', 'assignments', 'user-check'], ['/requests', 'requests', 'inbox'], ['/demand', 'demand', 'chart-scatter'], ['/retainers', 'retainers', 'handshake']].map(([suffix, key, iconKey]) => ({
-      href: `/resourcing${suffix}`, iconKey, ns: 'resourcing', key: `cockpit.tabs.${key}`, permission: 'resourcing.read',
-      ...(key === 'requests' ? { feature: 'resourceRequests' } : {}),
-      ...(key === 'retainers' ? { feature: 'retainerBilling', permission: 'retainers.read' } : {}),
-    })),
-  ] },
+  {
+    id: "manufacturing",
+    label: "Manufacturing",
+    feature: "manufacturing",
+    tabs: [
+      {
+        href: "/manufacturing",
+        label: "Manufacturing",
+        ns: "manufacturing",
+        key: "title",
+        permission: "manufacturing.read",
+        iconKey: "package",
+      },
+      {
+        href: "/manufacturing/work-orders",
+        label: "Work orders",
+        ns: "manufacturing",
+        key: "titles.work-orders",
+        permission: "manufacturing.read",
+        iconKey: "clipboard",
+        menuParent: "manufacturing",
+      },
+      {
+        href: "/manufacturing/work-centers",
+        label: "Work centers",
+        ns: "manufacturing",
+        key: "titles.work-centers",
+        permission: "manufacturing.read",
+        iconKey: "settings",
+        menuParent: "manufacturing",
+      },
+      {
+        href: "/manufacturing/routings",
+        label: "Routings",
+        ns: "manufacturing",
+        key: "titles.routings",
+        permission: "manufacturing.read",
+        iconKey: "workflow",
+        menuParent: "manufacturing",
+      },
+      {
+        href: "/manufacturing/time",
+        label: "Production time",
+        ns: "operatingProfiles",
+        key: "time.title",
+        permission: "time.read",
+        permissionsAll: ["manufacturing.read"],
+        iconKey: "clock",
+        menuParent: "manufacturing",
+      },
+      {
+        href: "/manufacturing/quality",
+        label: "Quality",
+        ns: "manufacturing",
+        key: "quality.title",
+        permission: "manufacturing.read",
+        permissionsAll: ["items.read"],
+        iconKey: "badge-check",
+        menuParent: "manufacturing",
+      },
+      {
+        href: "/manufacturing/mrp",
+        label: "MRP",
+        ns: "manufacturing",
+        key: "titles.mrp",
+        permission: "manufacturing.read",
+        feature: "manufacturingMrp",
+        iconKey: "calendar-days",
+        menuParent: "manufacturing",
+      },
+    ],
+  },
+  {
+    id: "collections-views",
+    label: "Collections",
+    tabs: [
+      {
+        href: "/collections",
+        ns: "ar",
+        key: "collections.tabs.worklist",
+        permission: "documents.manage",
+        permissionsAny: ["ar.read"],
+      },
+      {
+        href: "/collections?view=policies",
+        ns: "ar",
+        key: "collections.tabs.policies",
+        permission: "documents.manage",
+      },
+      {
+        href: "/collections?view=recurring",
+        ns: "ar",
+        key: "collections.tabs.recurring",
+        permission: "documents.manage",
+      },
+      ...["subscriptions", "plans"].map((view) => ({
+        href: `/collections?view=${view}`,
+        ns: "ar",
+        key: `collections.tabs.${view}`,
+        permission: "documents.manage",
+        permissionsAny: ["ar.read"],
+        feature: "subscriptionBilling",
+      })),
+      ...["versions", "contracts", "amendments"].map((view) => ({
+        href: `/collections?view=${view}`,
+        ns: "ar",
+        key: `collections.tabs.${view}`,
+        permission: "documents.manage",
+        permissionsAny: ["ar.read"],
+        feature: "advancedSubscriptions",
+      })),
+    ],
+  },
+  {
+    id: "crm-sales",
+    label: "Sales",
+    feature: "salesManagement",
+    tabs: [
+      ...(
+        [
+          ["overview", "chart-no-axes-combined"],
+          ["representatives", "user-check"],
+          ["teams", "users"],
+          ["quotas", "target"],
+          ["territories", "map"],
+        ] as const
+      ).map(([tab, iconKey]) => ({
+        href: tab === "overview" ? "/crm/sales" : `/crm/sales/${tab}`,
+        iconKey,
+        ns: "crm",
+        key: `sales.tabs.${tab}`,
+        permissionsAny: ["crm.setup.manage", "crm.forecasts.read"],
+        carry: ["periodStart", "periodEnd"],
+      })),
+    ],
+  },
+  ...Object.entries(HRM_LOCAL_NAVIGATION).map(([id, tabs]) => ({
+    id: `hrm-${id}`,
+    label: (
+      {
+        people: "Employees",
+        hiring: "Hiring",
+        timeOff: "Time Off",
+        talent: "Talent",
+        compensation: "Compensation",
+        benefits: "Benefits",
+      } as Record<string, string>
+    )[id]!,
+    feature: "hrm",
+    tabs,
+  })),
+  {
+    id: "time",
+    label: "Time",
+    feature: "timeTracking",
+    tabs: [
+      {
+        href: "/timesheets",
+        ns: "timesheets",
+        key: "field.timesheetsTab",
+        label: "Timesheets",
+        permissionsAny: ["time.read", "time.manage", "time.self", "time.clock"],
+      },
+      {
+        href: "/time/clock",
+        ns: "timesheets",
+        key: "field.clockTab",
+        label: "Time Clock",
+        permission: "time.clock",
+        feature: "fieldTime",
+      },
+      {
+        href: "/time/crew",
+        iconKey: "users",
+        ns: "timesheets",
+        key: "field.crewTab",
+        label: "Crew Time",
+        permissionsAny: ["time.read", "time.crew.enter"],
+        feature: "fieldTime",
+      },
+    ],
+  },
+  {
+    id: "tax-views",
+    label: "Tax",
+    inline: true,
+    tabs: [
+      { href: "/tax", ns: "tax", key: "tabs.prepare" },
+      { href: "/tax?tab=history", ns: "tax", key: "tabs.history" },
+    ],
+  },
+  {
+    id: "close-views",
+    label: "Continuous Close",
+    inline: true,
+    tabs: [
+      { href: "/continuous-close", ns: "continuousClose", key: "tabs.findings" },
+      { href: "/continuous-close?tab=reports", ns: "continuousClose", key: "tabs.reports" },
+    ],
+  },
+  {
+    id: "insights-views",
+    label: "Insights",
+    inline: true,
+    tabs: [
+      { href: "/insights", ns: "insights", key: "tabs.cards" },
+      { href: "/insights/dashboards", ns: "insights", key: "tabs.dashboards" },
+    ],
+  },
+  {
+    id: "setup-allocations",
+    label: "Allocations",
+    inline: true,
+    tabs: [
+      { href: "/admin/setup/allocations?tab=rules", ns: "allocations", key: "rules.tabs.rules" },
+      {
+        href: "/admin/setup/allocations?tab=drivers",
+        ns: "allocations",
+        key: "rules.tabs.drivers",
+      },
+      { href: "/admin/setup/allocations?tab=runs", ns: "allocations", key: "rules.tabs.runs" },
+    ],
+  },
+  {
+    id: "setup-depreciation",
+    label: "Depreciation",
+    inline: true,
+    tabs: [
+      {
+        href: "/admin/setup/depreciation?tab=methods",
+        ns: "admin",
+        key: "setup.assetDepreciationSetup.tabs.methods",
+      },
+      {
+        href: "/admin/setup/depreciation?tab=books",
+        ns: "admin",
+        key: "setup.assetDepreciationSetup.tabs.books",
+      },
+    ],
+  },
+  {
+    id: "setup-tax-depreciation",
+    label: "Tax Depreciation",
+    inline: true,
+    tabs: [
+      {
+        href: "/admin/setup/tax-depreciation?tab=overview",
+        ns: "admin",
+        key: "setup.taxDepreciationSetup.tabs.overview",
+      },
+      {
+        href: "/admin/setup/tax-depreciation?tab=regimes",
+        ns: "admin",
+        key: "setup.taxDepreciationSetup.tabs.regimes",
+      },
+    ],
+  },
+  {
+    id: "setup-overhead",
+    label: "Overhead",
+    inline: true,
+    tabs: [
+      {
+        href: "/admin/setup/overhead?view=model",
+        ns: "admin",
+        key: "setup.entities.overhead-model.tabs.model",
+      },
+      {
+        href: "/admin/setup/overhead?view=rates",
+        ns: "admin",
+        key: "setup.entities.overhead-model.tabs.rates",
+      },
+      {
+        href: "/admin/setup/overhead?view=lifecycle",
+        ns: "admin",
+        key: "setup.entities.overhead-model.tabs.lifecycle",
+      },
+      {
+        href: "/admin/setup/overhead?view=application",
+        ns: "admin",
+        key: "setup.entities.overhead-model.tabs.application",
+      },
+    ],
+  },
+  {
+    id: "journal-views",
+    label: "Journals",
+    inline: true,
+    tabs: [
+      { href: "/journal", ns: "journal", key: "list.entriesTab" },
+      { href: "/journal?journalTab=drafts", ns: "journal", key: "list.draftsTab" },
+    ],
+  },
+  {
+    id: "accounts-views",
+    label: "Chart of Accounts",
+    inline: true,
+    tabs: [
+      { href: "/accounts", ns: "accounts", key: "list.views.list" },
+      { href: "/accounts?layout=hierarchy", ns: "accounts", key: "list.views.hierarchy" },
+    ],
+  },
+  {
+    id: "inventory-views",
+    label: "Inventory",
+    inline: true,
+    tabs: [
+      ...["onhand", "movements", "counts", "locations", "bom"].map((view) => ({
+        href: `/inventory?inventoryView=${view}`,
+        ns: "inventory",
+        key: `view.${view}`,
+      })),
+    ],
+  },
+  {
+    id: "inbox-views",
+    label: "Inbox",
+    inline: true,
+    tabs: [
+      { href: "/inbox", ns: "approvals", key: "tabs.mine" },
+      { href: "/inbox?tab=tasks", ns: "inbox", key: "filters.myTasks" },
+      ...["submitted", "all"].map((tab) => ({
+        href: `/inbox?tab=${tab}`,
+        ns: "approvals",
+        key: `tabs.${tab}`,
+      })),
+    ],
+  },
+  {
+    id: "me-views",
+    label: "Me",
+    inline: true,
+    tabs: [
+      { href: "/me", ns: "hrm", key: "me.tabs.overview" },
+      { href: "/hrm/my-leave", ns: "hrm", key: "me.tabs.leave" },
+      { href: "/me/schedule", ns: "scheduling", key: "mine.tab", feature: "hrmShiftPlanning" },
+      ...["profile", "checklists", "reviews", "benefits", "team", "compensation", "documents"].map(
+        (tab) => ({ href: `/me/${tab}`, ns: "hrm", key: `me.tabs.${tab}` }),
+      ),
+      { href: "/me/one-on-ones", ns: "hrm", key: "me.tabs.oneOnOnes" },
+      { href: "/me/surveys", ns: "hrm", key: "me.tabs.openSurveys" },
+      {
+        href: "/me/training",
+        ns: "hrm",
+        key: "me.tabs.training",
+        feature: "hrmTraining",
+        permission: "hrm.self.read",
+      },
+    ],
+  },
+  {
+    id: "payroll",
+    label: "Payroll",
+    feature: "payroll",
+    tabs: [
+      { href: "/payroll", ns: "payroll", key: "home.tabs.overview", permission: "payroll.read" },
+      {
+        href: "/payroll/runs",
+        iconKey: "circle-dollar-sign",
+        ns: "payroll",
+        key: "home.tabs.runs",
+        permission: "payroll.read",
+        prefix: true,
+      },
+      {
+        href: "/payroll/remittances",
+        iconKey: "landmark",
+        ns: "payroll",
+        key: "home.tabs.remittances",
+        permission: "payroll.read",
+      },
+      {
+        href: "/payroll/anomalies",
+        iconKey: "shield",
+        ns: "payroll",
+        key: "home.tabs.checks",
+        permission: "payroll.read",
+      },
+      {
+        href: "/payroll/separations",
+        iconKey: "user-minus",
+        ns: "payroll",
+        key: "home.tabs.separations",
+        permission: "payroll.read",
+      },
+      // Periodic and adoption work stays one step away in the More menu.
+      {
+        href: "/payroll/year-end",
+        iconKey: "calendar-check",
+        ns: "payroll",
+        key: "home.tabs.yearEnd",
+        permission: "payroll.read",
+        secondary: true,
+        menuParent: "payroll",
+      },
+      ...[
+        ["opening-balances", "payroll.read"],
+        ["retro", "payroll.read"],
+        ["parallel-run", "payroll.read"],
+        ["work-locations", "payroll.manage"],
+      ].map(([route, permission]) => ({
+        href: `/payroll/${route}`,
+        ns: "nav",
+        key: `modules.payroll-${route}`,
+        permission,
+        secondary: true,
+      })),
+    ],
+  },
+  {
+    id: "resourcing",
+    label: "Resourcing",
+    feature: "resourcing",
+    tabs: [
+      ...[
+        ["", "overview", "gauge"],
+        ["/board", "board", "calendar-range"],
+        ["/assignments", "assignments", "user-check"],
+        ["/requests", "requests", "inbox"],
+        ["/demand", "demand", "chart-scatter"],
+        ["/retainers", "retainers", "handshake"],
+      ].map(([suffix, key, iconKey]) => ({
+        href: `/resourcing${suffix}`,
+        iconKey,
+        ns: "resourcing",
+        key: `cockpit.tabs.${key}`,
+        permission: "resourcing.read",
+        ...(key === "requests" ? { feature: "resourceRequests" } : {}),
+        ...(key === "retainers"
+          ? { feature: "retainerBilling", permission: "retainers.read" }
+          : {}),
+      })),
+    ],
+  },
   // Service dispatch: the home and one tab per record family. Dispatch boards
   // are Scheduling boards of the dispatch type, reached from the home.
-  { id: 'service', label: 'Service', feature: 'serviceDispatch', tabs: [
-    ...[['', 'overview', 'gauge'], ['/requests', 'requests', 'inbox'], ['/jobs', 'jobs', 'wrench'], ['/visits', 'visits', 'calendar-check'], ['/agreements', 'agreements', 'rotate-ccw']].map(([suffix, key, iconKey]) => ({
-      href: `/service${suffix}`, iconKey, ns: 'service', key: `tabs.${key}`, permissionsAny: ['service.read', 'service.manage', 'service.dispatch'],
-    })),
-  ] },
-  { id: 'warehouse', label: 'Warehouse', feature: 'warehousing', tabs: [
-    { href: '/warehouse', ns: 'warehouse', key: 'home.title', permission: 'items.read' },
-    { href: '/picks', iconKey: 'list-checks', ns: 'nav', key: 'modules.picks', permission: 'orders.fulfill', feature: 'fulfillment' },
-    { href: '/shipments', ns: 'nav', key: 'modules.shipments', permission: 'orders.fulfill', feature: 'fulfillment' },
-    { href: '/returns', ns: 'nav', key: 'modules.returns', permission: 'orders.fulfill', feature: 'returnAuthorizations' },
-  ] },
-  { id: 'nonprofit', label: 'Nonprofit', feature: 'nonprofit', tabs: [
-    { href: '/nonprofit', ns: 'nonprofit', key: 'home.title', permission: 'funds.read' },
-    { href: '/nonprofit/funds', iconKey: 'wallet', ns: 'nonprofit', key: 'funds.title', permission: 'funds.read', feature: 'fundAccounting' },
-    { href: '/nonprofit/releases', iconKey: 'banknote-arrow-up', ns: 'nonprofit', key: 'releases.title', permission: 'funds.read', feature: 'fundAccounting' },
-    { href: '/nonprofit/grants', iconKey: 'award', ns: 'nonprofit', key: 'grants.title', permission: 'grants.read', feature: 'grantManagement' },
-    { href: '/nonprofit/encumbrances', iconKey: 'scale', ns: 'nonprofit', key: 'encumbrances.title', permission: 'encumbrances.read', feature: 'encumbrances' },
-    { href: '/nonprofit/setup', iconKey: 'settings', ns: 'nonprofit', key: 'setup.title', permission: 'funds.read' },
-  ] },
+  {
+    id: "service",
+    label: "Service",
+    feature: "serviceDispatch",
+    tabs: [
+      ...[
+        ["", "overview", "gauge"],
+        ["/requests", "requests", "inbox"],
+        ["/jobs", "jobs", "wrench"],
+        ["/visits", "visits", "calendar-check"],
+        ["/agreements", "agreements", "rotate-ccw"],
+      ].map(([suffix, key, iconKey]) => ({
+        href: `/service${suffix}`,
+        iconKey,
+        ns: "service",
+        key: `tabs.${key}`,
+        permissionsAny: ["service.read", "service.manage", "service.dispatch"],
+      })),
+    ],
+  },
+  {
+    id: "warehouse",
+    label: "Warehouse",
+    feature: "warehousing",
+    tabs: [
+      { href: "/warehouse", ns: "warehouse", key: "home.title", permission: "items.read" },
+      {
+        href: "/picks",
+        iconKey: "list-checks",
+        ns: "nav",
+        key: "modules.picks",
+        permission: "orders.fulfill",
+        feature: "fulfillment",
+      },
+      {
+        href: "/shipments",
+        ns: "nav",
+        key: "modules.shipments",
+        permission: "orders.fulfill",
+        feature: "fulfillment",
+      },
+      {
+        href: "/returns",
+        ns: "nav",
+        key: "modules.returns",
+        permission: "orders.fulfill",
+        feature: "returnAuthorizations",
+      },
+    ],
+  },
+  {
+    id: "nonprofit",
+    label: "Nonprofit",
+    feature: "nonprofit",
+    tabs: [
+      { href: "/nonprofit", ns: "nonprofit", key: "home.title", permission: "funds.read" },
+      {
+        href: "/nonprofit/funds",
+        iconKey: "wallet",
+        ns: "nonprofit",
+        key: "funds.title",
+        permission: "funds.read",
+        feature: "fundAccounting",
+      },
+      {
+        href: "/nonprofit/releases",
+        iconKey: "banknote-arrow-up",
+        ns: "nonprofit",
+        key: "releases.title",
+        permission: "funds.read",
+        feature: "fundAccounting",
+      },
+      {
+        href: "/nonprofit/grants",
+        iconKey: "award",
+        ns: "nonprofit",
+        key: "grants.title",
+        permission: "grants.read",
+        feature: "grantManagement",
+      },
+      {
+        href: "/nonprofit/encumbrances",
+        iconKey: "scale",
+        ns: "nonprofit",
+        key: "encumbrances.title",
+        permission: "encumbrances.read",
+        feature: "encumbrances",
+      },
+      {
+        href: "/nonprofit/setup",
+        iconKey: "settings",
+        ns: "nonprofit",
+        key: "setup.title",
+        permission: "funds.read",
+      },
+    ],
+  },
   // Equity & cap table, one legal entity at a time: the overview, the daily
   // working views, and the structure records one step away in More. The
   // as-of date travels between views with the legal entity.
-  { id: 'equity', label: 'Equity & Cap Table', feature: 'equity', tabs: [
-    { href: '/equity', iconKey: 'gauge', ns: 'equity', key: 'tabs.overview', permission: 'equity.read', carry: ['asOf', 'asOfPeriod'] },
-    ...(['captable', 'securities', 'rounds', 'waterfall', 'compensation'] as const).map((view) => ({
-      href: `/equity?view=${view}`, ns: 'equity', key: `tabs.${view}`, permission: 'equity.read', carry: ['asOf', 'asOfPeriod'],
-    })),
-    ...(['classes', 'plans', 'stakeholders'] as const).map((view) => ({
-      href: `/equity?view=${view}`, ns: 'equity', key: `tabs.${view}`, permission: 'equity.read', carry: ['asOf', 'asOfPeriod'], secondary: true,
-    })),
-  ] },
-  { id: 'assets', label: 'Fixed Assets', tabs: [
-    { href: '/assets', ns: 'nav', key: 'modules.assets', permission: 'assets.read', feature: 'fixedAssets' },
-    { href: '/assets?tab=tax-depreciation', ns: 'nav', key: 'modules.tax-depreciation', permission: 'assets.read', feature: 'fixedAssets' },
-    { href: '/assets/leases', ns: 'nav', key: 'modules.leases', permission: 'assets.read', feature: 'fixedAssets', prefix: true },
-    { href: '/assets/equipment', ns: 'nav', key: 'modules.equipment', permission: 'assets.read', feature: 'equipment' },
-    { href: '/assets/proposals', ns: 'nav', key: 'modules.asset-proposals', permission: 'assets.read', feature: 'assetProposals' },
-    { href: '/assets/construction', ns: 'nav', key: 'modules.asset-construction', permission: 'assets.read', feature: 'constructionInProgress' },
-    { href: '/assets/maintenance', ns: 'nav', key: 'modules.asset-maintenance', permission: 'assets.read', feature: 'assetMaintenance' },
-    { href: '/assets/insurance', ns: 'nav', key: 'modules.asset-insurance', permission: 'assets.read', feature: 'assetInsurance' },
-  ] },
+  {
+    id: "equity",
+    label: "Equity & Cap Table",
+    feature: "equity",
+    tabs: [
+      {
+        href: "/equity",
+        iconKey: "gauge",
+        ns: "equity",
+        key: "tabs.overview",
+        permission: "equity.read",
+        carry: ["asOf", "asOfPeriod"],
+      },
+      ...(["captable", "securities", "rounds", "waterfall", "compensation"] as const).map(
+        (view) => ({
+          href: `/equity?view=${view}`,
+          ns: "equity",
+          key: `tabs.${view}`,
+          permission: "equity.read",
+          carry: ["asOf", "asOfPeriod"],
+        }),
+      ),
+      ...(["classes", "plans", "stakeholders"] as const).map((view) => ({
+        href: `/equity?view=${view}`,
+        ns: "equity",
+        key: `tabs.${view}`,
+        permission: "equity.read",
+        carry: ["asOf", "asOfPeriod"],
+        secondary: true,
+      })),
+    ],
+  },
+  {
+    id: "assets",
+    label: "Fixed Assets",
+    tabs: [
+      {
+        href: "/assets",
+        ns: "nav",
+        key: "modules.assets",
+        permission: "assets.read",
+        feature: "fixedAssets",
+      },
+      {
+        href: "/assets?tab=tax-depreciation",
+        ns: "nav",
+        key: "modules.tax-depreciation",
+        permission: "assets.read",
+        feature: "fixedAssets",
+      },
+      {
+        href: "/assets/leases",
+        ns: "nav",
+        key: "modules.leases",
+        permission: "assets.read",
+        feature: "fixedAssets",
+        prefix: true,
+      },
+      {
+        href: "/assets/equipment",
+        ns: "nav",
+        key: "modules.equipment",
+        permission: "assets.read",
+        feature: "equipment",
+      },
+      {
+        href: "/assets/proposals",
+        ns: "nav",
+        key: "modules.asset-proposals",
+        permission: "assets.read",
+        feature: "assetProposals",
+      },
+      {
+        href: "/assets/construction",
+        ns: "nav",
+        key: "modules.asset-construction",
+        permission: "assets.read",
+        feature: "constructionInProgress",
+      },
+      {
+        href: "/assets/maintenance",
+        ns: "nav",
+        key: "modules.asset-maintenance",
+        permission: "assets.read",
+        feature: "assetMaintenance",
+      },
+      {
+        href: "/assets/insurance",
+        ns: "nav",
+        key: "modules.asset-insurance",
+        permission: "assets.read",
+        feature: "assetInsurance",
+      },
+    ],
+  },
   // Pairing rides Intercompany transactions; netting runs and transfers ride
   // Intercompany netting. No set-level feature: either switch alone keeps
   // its own tabs.
-  { id: 'intercompany', label: 'Intercompany', tabs: [
-    { href: '/intercompany', iconKey: 'git-branch', ns: 'intercompany', key: 'tabs.pairing', permission: 'intercompany.read', feature: 'intercompanyTransactions' },
-    { href: '/intercompany/netting', iconKey: 'workflow', ns: 'intercompany', key: 'tabs.netting', permission: 'intercompany.read', feature: 'intercompanyNetting' },
-    { href: '/intercompany/transfers', iconKey: 'banknote', ns: 'intercompany', key: 'tabs.transfers', permission: 'intercompany.read', feature: 'intercompanyNetting' },
-  ] },
+  {
+    id: "intercompany",
+    label: "Intercompany",
+    tabs: [
+      {
+        href: "/intercompany",
+        iconKey: "git-branch",
+        ns: "intercompany",
+        key: "tabs.pairing",
+        permission: "intercompany.read",
+        feature: "intercompanyTransactions",
+      },
+      {
+        href: "/intercompany/netting",
+        iconKey: "workflow",
+        ns: "intercompany",
+        key: "tabs.netting",
+        permission: "intercompany.read",
+        feature: "intercompanyNetting",
+      },
+      {
+        href: "/intercompany/transfers",
+        iconKey: "banknote",
+        ns: "intercompany",
+        key: "tabs.transfers",
+        permission: "intercompany.read",
+        feature: "intercompanyNetting",
+      },
+    ],
+  },
   // No set-level feature: the overview/vendors tabs need subcontractor
   // compliance while information returns ride their own tax switch, so the
   // workspace renders while EITHER switch is on and each tab enforces its own.
-  { id: 'compliance', label: 'Subcontractor Compliance', tabs: [
-    { href: '/compliance', ns: 'compliance', key: 'tabs.overview', permission: 'compliance.read', feature: 'subcontractorCompliance' },
-    { href: '/compliance/vendors', ns: 'compliance', key: 'tabs.vendors', permission: 'compliance.read', feature: 'subcontractorCompliance' },
-    { href: '/compliance/lien-waivers', ns: 'compliance', key: 'tabs.lienWaivers', permission: 'compliance.read', feature: 'projects', requiredFeatures: ['subcontractorCompliance'] },
-    { href: '/compliance/information-returns', ns: 'compliance', key: 'tabs.informationReturns', permission: 'compliance.read', feature: 'informationReturns' },
-  ] },
-]
+  {
+    id: "compliance",
+    label: "Subcontractor Compliance",
+    tabs: [
+      {
+        href: "/compliance",
+        ns: "compliance",
+        key: "tabs.overview",
+        permission: "compliance.read",
+        feature: "subcontractorCompliance",
+      },
+      {
+        href: "/compliance/vendors",
+        ns: "compliance",
+        key: "tabs.vendors",
+        permission: "compliance.read",
+        feature: "subcontractorCompliance",
+      },
+      {
+        href: "/compliance/lien-waivers",
+        ns: "compliance",
+        key: "tabs.lienWaivers",
+        permission: "compliance.read",
+        feature: "projects",
+        requiredFeatures: ["subcontractorCompliance"],
+      },
+      {
+        href: "/compliance/information-returns",
+        ns: "compliance",
+        key: "tabs.informationReturns",
+        permission: "compliance.read",
+        feature: "informationReturns",
+      },
+    ],
+  },
+];
 
-export const LOCAL_NAVIGATION_BY_ID = new Map(LOCAL_NAVIGATION.map((set) => [set.id, set]))
+export const LOCAL_NAVIGATION_BY_ID = new Map(LOCAL_NAVIGATION.map((set) => [set.id, set]));

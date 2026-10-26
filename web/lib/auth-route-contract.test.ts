@@ -21,7 +21,9 @@ function get(path: string): Promise<NextResponse> {
 }
 
 const priorSessionSecret = process.env.SESSION_SECRET;
-test.before(() => { process.env.SESSION_SECRET = randomBytes(32).toString("hex"); });
+test.before(() => {
+  process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+});
 test.after(() => {
   if (priorSessionSecret === undefined) delete process.env.SESSION_SECRET;
   else process.env.SESSION_SECRET = priorSessionSecret;
@@ -52,7 +54,12 @@ test("field-ticket signing tokens verify possession before any request lookup", 
   const priorSecret = process.env.SESSION_SECRET;
   process.env.SESSION_SECRET = randomBytes(32).toString("hex");
   try {
-    const token = mintSigningToken(randomUUID(), randomUUID(), randomUUID(), new Date(Date.now() + 600_000));
+    const token = mintSigningToken(
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+      new Date(Date.now() + 600_000),
+    );
     const claims = verifySigningToken(token);
     assert.ok(claims, "a freshly minted token verifies");
     assert.equal(typeof claims!.orgId, "string");
@@ -60,7 +67,12 @@ test("field-ticket signing tokens verify possession before any request lookup", 
     const tampered = token.slice(0, -1) + (token.endsWith("A") ? "B" : "A");
     assert.equal(verifySigningToken(tampered), null, "a tampered signature verifies to nothing");
 
-    const expired = mintSigningToken(randomUUID(), randomUUID(), randomUUID(), new Date(Date.now() - 1000));
+    const expired = mintSigningToken(
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+      new Date(Date.now() - 1000),
+    );
     assert.equal(verifySigningToken(expired), null, "an expired token verifies to nothing");
 
     assert.equal(verifySigningToken("not-a-token"), null);
@@ -74,13 +86,22 @@ test("the customer-sign API refuses a tampered token with 401 before any lookup"
   const priorSecret = process.env.SESSION_SECRET;
   process.env.SESSION_SECRET = randomBytes(32).toString("hex");
   try {
-    const token = mintSigningToken(randomUUID(), randomUUID(), randomUUID(), new Date(Date.now() + 600_000));
+    const token = mintSigningToken(
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+      new Date(Date.now() + 600_000),
+    );
     const tampered = token.slice(0, -1) + (token.endsWith("A") ? "B" : "A");
     const response = (await signPost(
       new Request("http://openbooks.test/api/sign/field-tickets", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: tampered, signature: "data:image/png;base64,AAAA", name: "Mallory" }),
+        body: JSON.stringify({
+          token: tampered,
+          signature: "data:image/png;base64,AAAA",
+          name: "Mallory",
+        }),
       }),
     )) as Response;
     assert.equal(response.status, 401);

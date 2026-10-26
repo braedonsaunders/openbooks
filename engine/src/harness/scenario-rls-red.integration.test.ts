@@ -4,10 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { runUserSql } from "../platform/sqlapi.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { probeTableIsolation, runScenario } from "../golden/scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -61,66 +58,100 @@ test("rls-org-isolation fails on an org-scoped table with no policy", { skip: !D
   }
 });
 
-test("one org's rows are invisible from another org's scope, via table and view", { skip: !DB }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
-  try {
-    const entryB = await withBypassContext(async () => {
-      const id = randomUUID();
-      await db.execute(sql`
+test(
+  "one org's rows are invisible from another org's scope, via table and view",
+  { skip: !DB },
+  async () => {
+    const orgA = await createScratchOrg();
+    const orgB = await createScratchOrg();
+    try {
+      const entryB = await withBypassContext(async () => {
+        const id = randomUUID();
+        await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, document_date, currency)
         values (${id}, ${orgB.orgId}, 'customer_invoice', ${`RLS-B-${id.slice(0, 8)}`}, ${orgB.date}, 'CAD')`);
-      return id;
-    });
-    // Foreign reads from A's scope: base table through an RLS-subject reader
-    // (the harness pool login itself is a superuser in CI and rehearsal, and
-    // PostgreSQL exempts such logins from RLS entirely — reading raw would
-    // prove nothing there, so the probe assumes the runtime role first).
-    const tableProbe = await probeTableIsolation(orgA.orgId, entryB);
-    assert.equal(tableProbe.established, true, `table probe must run as an RLS-subject role: ${tableProbe.detail}`);
-    assert.equal(tableProbe.tableHidden, true, "org A must not see org B's entry through the table");
-    // The governed view scopes by its own temp-table tenant context, which the
-    // app pool scope does not establish — reading it there returns empty for
-    // every session with or without isolation, a vacuous proof. Read it the
-    // way web readers do instead: runUserSql establishes the temp context and
-    // the tenant GUCs and executes as the SELECT-only role, so both the view
-    // predicate and the underlying base-table policies must agree to hide the
-    // row. The console search_path resolves the bare table name to the view,
-    // exactly as a user query would.
-    const seenView = await runUserSql(
-      `select id from documents where id = '${entryB}'`,
-      { orgId: orgA.orgId, payrollRead: true, expenseRead: true },
-    );
-    assert.equal(seenView.rowCount, 0, "org A must not see org B's entry through the web-reader view");
-    // Non-vacuity, both mechanisms: B's own scope sees it — through the
-    // RLS-subject probe and through the governed reader. The governed B-side
-    // read in particular proves the A-side governed emptiness means
-    // isolation: with no temp context (or a broken one) the view is empty
-    // for B as well.
-    const seenOwn = await probeTableIsolation(orgB.orgId, entryB);
-    assert.equal(seenOwn.established, true, `own-scope probe must run as an RLS-subject role: ${seenOwn.detail}`);
-    assert.equal(seenOwn.tableHidden, false, "org B must see its own entry — otherwise the emptiness above proves nothing");
-    const seenOwnGoverned = await runUserSql(
-      `select id from documents where id = '${entryB}'`,
-      { orgId: orgB.orgId, payrollRead: true, expenseRead: true },
-    );
-    assert.equal(seenOwnGoverned.rowCount, 1, "org B must see its own entry through the governed reader — otherwise the governed emptiness above proves nothing");
-  } finally {
-    await dropScratchOrg(orgA.orgId);
-    await dropScratchOrg(orgB.orgId);
-  }
-});
+        return id;
+      });
+      // Foreign reads from A's scope: base table through an RLS-subject reader
+      // (the harness pool login itself is a superuser in CI and rehearsal, and
+      // PostgreSQL exempts such logins from RLS entirely — reading raw would
+      // prove nothing there, so the probe assumes the runtime role first).
+      const tableProbe = await probeTableIsolation(orgA.orgId, entryB);
+      assert.equal(
+        tableProbe.established,
+        true,
+        `table probe must run as an RLS-subject role: ${tableProbe.detail}`,
+      );
+      assert.equal(
+        tableProbe.tableHidden,
+        true,
+        "org A must not see org B's entry through the table",
+      );
+      // The governed view scopes by its own temp-table tenant context, which the
+      // app pool scope does not establish — reading it there returns empty for
+      // every session with or without isolation, a vacuous proof. Read it the
+      // way web readers do instead: runUserSql establishes the temp context and
+      // the tenant GUCs and executes as the SELECT-only role, so both the view
+      // predicate and the underlying base-table policies must agree to hide the
+      // row. The console search_path resolves the bare table name to the view,
+      // exactly as a user query would.
+      const seenView = await runUserSql(`select id from documents where id = '${entryB}'`, {
+        orgId: orgA.orgId,
+        payrollRead: true,
+        expenseRead: true,
+      });
+      assert.equal(
+        seenView.rowCount,
+        0,
+        "org A must not see org B's entry through the web-reader view",
+      );
+      // Non-vacuity, both mechanisms: B's own scope sees it — through the
+      // RLS-subject probe and through the governed reader. The governed B-side
+      // read in particular proves the A-side governed emptiness means
+      // isolation: with no temp context (or a broken one) the view is empty
+      // for B as well.
+      const seenOwn = await probeTableIsolation(orgB.orgId, entryB);
+      assert.equal(
+        seenOwn.established,
+        true,
+        `own-scope probe must run as an RLS-subject role: ${seenOwn.detail}`,
+      );
+      assert.equal(
+        seenOwn.tableHidden,
+        false,
+        "org B must see its own entry — otherwise the emptiness above proves nothing",
+      );
+      const seenOwnGoverned = await runUserSql(`select id from documents where id = '${entryB}'`, {
+        orgId: orgB.orgId,
+        payrollRead: true,
+        expenseRead: true,
+      });
+      assert.equal(
+        seenOwnGoverned.rowCount,
+        1,
+        "org B must see its own entry through the governed reader — otherwise the governed emptiness above proves nothing",
+      );
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);
 
-test("rls-org-isolation passes on a clean catalog with live foreign rows", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const cp = await runScenario(org.orgId, { at: org.date });
-    const rls = check(cp, "rls-org-isolation");
-    assert.equal(rls.ok, true, `RLS gate must hold on a clean tree: ${rls.detail}`);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "rls-org-isolation passes on a clean catalog with live foreign rows",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const cp = await runScenario(org.orgId, { at: org.date });
+      const rls = check(cp, "rls-org-isolation");
+      assert.equal(rls.ok, true, `RLS gate must hold on a clean tree: ${rls.detail}`);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * With two document-holding orgs the probe is live (not vacuous): it must
@@ -142,7 +173,11 @@ test("rls-org-isolation hides live foreign rows across orgs", { skip: !DB }, asy
     const cp = await runScenario(orgA.orgId, { at: orgA.date });
     const rls = check(cp, "rls-org-isolation");
     assert.equal(rls.ok, true, `RLS gate must hold with live foreign rows: ${rls.detail}`);
-    assert.match(rls.detail, /foreign doc invisible via table=true view=true/, "both halves must genuinely probe");
+    assert.match(
+      rls.detail,
+      /foreign doc invisible via table=true view=true/,
+      "both halves must genuinely probe",
+    );
   } finally {
     await dropScratchOrg(orgA.orgId);
     await dropScratchOrg(orgB.orgId);

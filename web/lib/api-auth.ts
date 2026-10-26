@@ -9,10 +9,7 @@ import {
   type ApiRequestAudit,
 } from "./application/api-key-audit";
 import { setRequestOrg } from "./request-org";
-import {
-  permissionSetCovers,
-  resolveKeyScopeAuthority,
-} from "./permissions";
+import { permissionSetCovers, resolveKeyScopeAuthority } from "./permissions";
 import type { SessionUser } from "./auth";
 import { isFeatureEnabled } from "./features";
 import { notFound } from "@/lib/api/responses";
@@ -33,7 +30,6 @@ import { resolveUserAuthz } from "./authz-core";
  * creation. At rest we keep the SHA-256 hash (for lookup) and a 4-char tail
  * preview. Every authenticated request records an `api_key_events` row.
  */
-
 
 const KEY_PREFIX = "ob_live_";
 
@@ -130,7 +126,9 @@ export async function resolveApiKeyAuth(
   // bypass: identity-bootstrap — an API key's organization is unknown until its row is read.
   const keyRow = await withBypassContext(
     async () =>
-      (await db.execute<ApiKeySqlRow>(sql`
+      (
+        await db.execute<ApiKeySqlRow>(
+          sql`
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
              k.rate_limit_per_min,
              u.email, u.name, u.is_active as user_active,
@@ -140,7 +138,10 @@ export async function resolveApiKeyAuth(
         join users u on u.id = k.user_id and u.org_id = k.org_id
         join orgs o on o.id = k.org_id and o.id = u.org_id
        where k.key_hash = ${keyHash}
-       limit 1`, "objects"))[0],
+       limit 1`,
+          "objects",
+        )
+      )[0],
   );
   if (!keyRow) return null;
   if (!keyRow.is_active || !keyRow.user_active) return null;
@@ -168,18 +169,21 @@ export async function resolveApiKeyAuth(
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${keyRow.user_id} and a.org_id = ${keyRow.org_id}`);
   const assignments = assignmentResult as unknown as { rows: ApiKeyRoleSqlRow[] };
-  const ownerAuthz = await resolveUserAuthz({
-    id: keyRow.user_id,
-    email: keyRow.email,
-    name: keyRow.name,
-    roles: assignments.rows.map((row) => ({ key: row.key, name: row.name })),
-    orgId: keyRow.org_id,
-    envKind,
-    productionOrgId: keyRow.org_id,
-    isSuperAdmin: keyRow.user_is_super_admin,
-    homeUserId: keyRow.user_id,
-    homeOrgId: keyRow.org_id,
-  }, db);
+  const ownerAuthz = await resolveUserAuthz(
+    {
+      id: keyRow.user_id,
+      email: keyRow.email,
+      name: keyRow.name,
+      roles: assignments.rows.map((row) => ({ key: row.key, name: row.name })),
+      orgId: keyRow.org_id,
+      envKind,
+      productionOrgId: keyRow.org_id,
+      isSuperAdmin: keyRow.user_is_super_admin,
+      homeUserId: keyRow.user_id,
+      homeOrgId: keyRow.org_id,
+    },
+    db,
+  );
   const ownerPerms = ownerAuthz.permissions;
 
   // Fail closed on malformed or residual empty scope sets: storage rejects
@@ -210,7 +214,8 @@ export async function resolveApiKeyAuth(
   // leaves its last-used stamp behind. A write that matches zero rows is a
   // failure (RLS, concurrent revoke), not a silent success — refuse rather
   // than return a session whose use cannot be observed.
-  const stamped = await db.execute(sql`
+  const stamped = await db.execute(
+    sql`
     update api_keys
        set last_used_at = now()
      where id = ${keyRow.id}
@@ -224,7 +229,9 @@ export async function resolveApiKeyAuth(
             and u.org_id = api_keys.org_id
             and u.is_active
        )
-     returning id`, "objects");
+     returning id`,
+    "objects",
+  );
   if (!stamped[0]) return null;
 
   return {
@@ -254,14 +261,17 @@ export async function resolveApiKeyAuth(
  */
 export async function enforceRateLimit(auth: ApiKeyAuth): Promise<NextResponse | null> {
   if (auth.rateLimitPerMin == null) return null;
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     update api_keys
        set rate_window_count = case
              when rate_window_start = date_trunc('minute', now()) then rate_window_count + 1
              else 1 end,
            rate_window_start = date_trunc('minute', now())
      where id = ${auth.keyId} and org_id = ${auth.user.orgId}
-     returning rate_window_count as count`, "objects"));
+     returning rate_window_count as count`,
+    "objects",
+  );
   const updated = r[0] as { count?: unknown } | undefined;
   // A 0-row UPDATE is not "count 1 / under the ceiling". The key did not
   // authenticate: the window was not recorded, so the request is refused.
@@ -277,11 +287,13 @@ export async function enforceRateLimit(auth: ApiKeyAuth): Promise<NextResponse |
   const retryAfter = Math.max(1, 60 - new Date().getSeconds());
   // Required evidence: a rate-limited key's attempt is still an authenticated
   // execution. A failing write propagates and fails the request closed.
-  await insertApiKeyEvent(transportEvent(
-    auth.audit,
-    { orgId: auth.user.orgId, keyId: auth.keyId },
-    { statusCode: 429, error: "rate limit exceeded" },
-  ));
+  await insertApiKeyEvent(
+    transportEvent(
+      auth.audit,
+      { orgId: auth.user.orgId, keyId: auth.keyId },
+      { statusCode: 429, error: "rate limit exceeded" },
+    ),
+  );
   return NextResponse.json(
     { error: `rate limit exceeded (${auth.rateLimitPerMin}/min)` },
     { status: 429, headers: { "Retry-After": String(retryAfter) } },
@@ -300,10 +312,7 @@ export function canApi(auth: ApiKeyAuth, perm: string): boolean {
  *   const gate = await guardApiKey("gl.read", req);
  *   if (gate instanceof NextResponse) return gate;
  */
-export async function guardApiKey(
-  perm: string,
-  req: Request,
-): Promise<ApiKeyAuth | NextResponse> {
+export async function guardApiKey(perm: string, req: Request): Promise<ApiKeyAuth | NextResponse> {
   const auth = await resolveApiKeyAuth(req);
   if (!auth) {
     return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
@@ -323,7 +332,5 @@ export async function guardApiKeyFeature(
   auth: ApiKeyAuth,
   featureKey: string,
 ): Promise<NextResponse | null> {
-  return (await isFeatureEnabled(auth.user.orgId, featureKey))
-    ? null
-    : notFound("record");
+  return (await isFeatureEnabled(auth.user.orgId, featureKey)) ? null : notFound("record");
 }

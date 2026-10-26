@@ -5,11 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { disposeAsset } from "./asset-lifecycle.ts";
 import { buildSchedule, runDepreciation } from "./depreciation.ts";
-import {
-  proposeAssetChange,
-  applyAssetChange,
-  type AssetChangeInput,
-} from "./asset-changes.ts";
+import { proposeAssetChange, applyAssetChange, type AssetChangeInput } from "./asset-changes.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
@@ -43,9 +39,12 @@ async function seedTwoBookDepreciated(postsGl = true): Promise<TwoBook> {
   await db.execute(
     sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'assets.manage','grant')`,
   );
-  const calendar = (await db.execute<{ id: string }>(
-      sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
-    ))[0]!.id;
+  const calendar = (
+    await db.execute<{ id: string }>(
+      sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(
     sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,custom) values(${randomUUID()},${org.orgId},${calendar},2026,8,'2026-08','2026-08-01','2026-08-31',false,'{}'::jsonb)`,
   );
@@ -107,25 +106,36 @@ async function seedTwoBookDepreciated(postsGl = true): Promise<TwoBook> {
 
 async function approve(orgId: string, changeId: string, submitterId: string, approverId: string) {
   await submitFinancialChange(orgId, changeId, submitterId);
-  const gate = (await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${orgId} and subject_id=${changeId} and status='pending'`, "objects",
-    ))[0]!;
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${orgId} and subject_id=${changeId} and status='pending'`,
+      "objects",
+    )
+  )[0]!;
   await decideGate({ gateId: gate.id, userId: approverId, decision: "approved" });
 }
 
 async function bookBalance(orgId: string, bookId: string, accountId: string) {
-  return (await db.execute<{ total: string }>(sql`
+  return (
+    await db.execute<{ total: string }>(
+      sql`
       select coalesce(sum(l.amount), 0)::text as total
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId} and e.book_id = ${bookId}
-         and l.account_id = ${accountId}`, "objects"))[0]!.total;
+         and l.account_id = ${accountId}`,
+      "objects",
+    )
+  )[0]!.total;
 }
 
 async function assetStatus(orgId: string, assetId: string) {
-  return (await db.execute<{ status: string }>(
-      sql`select status from fixed_assets where org_id=${orgId} and id=${assetId}`, "objects",
-    ))[0]!.status;
+  return (
+    await db.execute<{ status: string }>(
+      sql`select status from fixed_assets where org_id=${orgId} and id=${assetId}`,
+      "objects",
+    )
+  )[0]!.status;
 }
 
 test(
@@ -136,12 +146,21 @@ test(
     try {
       const posted = await runDepreciation(f.org.orgId, "2026-07-31", f.actorId, f.assetId);
       assert.equal(posted.posted, 2);
-      assert.equal(await bookBalance(f.org.orgId, f.org.bookId, f.org.accounts.clearing), "-100.0000");
-      assert.equal(await bookBalance(f.org.orgId, f.secondaryBookId, f.org.accounts.clearing), "-200.0000");
+      assert.equal(
+        await bookBalance(f.org.orgId, f.org.bookId, f.org.accounts.clearing),
+        "-100.0000",
+      );
+      assert.equal(
+        await bookBalance(f.org.orgId, f.secondaryBookId, f.org.accounts.clearing),
+        "-200.0000",
+      );
 
-      const journalsBefore = (await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`, "objects",
-        ))[0]!.n;
+      const journalsBefore = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       await assert.rejects(
         () =>
           disposeAsset(f.org.orgId, f.assetId, {
@@ -162,16 +181,22 @@ test(
       );
       assert.equal(await assetStatus(f.org.orgId, f.assetId), "in_service");
       assert.equal(
-        (await db.execute<{ n: number }>(
-            sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`, "objects",
-          ))[0]!.n,
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`,
+            "objects",
+          )
+        )[0]!.n,
         journalsBefore,
         "refusal must post no journals",
       );
       assert.equal(
-        (await db.execute<{ n: number }>(
-            sql`select count(*)::int as n from asset_events where org_id=${f.org.orgId} and asset_id=${f.assetId}`, "objects",
-          ))[0]!.n,
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from asset_events where org_id=${f.org.orgId} and asset_id=${f.assetId}`,
+            "objects",
+          )
+        )[0]!.n,
         0,
         "refusal must record no asset events",
       );
@@ -209,9 +234,14 @@ test(
       assert.equal(applied.full, true);
       assert.equal(await assetStatus(f.org.orgId, f.assetId), "disposed");
       for (const bookId of [f.org.bookId, f.secondaryBookId]) {
-        const disposals = (await db.execute<{ n: number }>(sql`
+        const disposals = (
+          await db.execute<{ n: number }>(
+            sql`
             select count(*)::int as n from journal_entries
-             where org_id=${f.org.orgId} and book_id=${bookId} and origin='disposal' and status='posted'`, "objects"))[0]!.n;
+             where org_id=${f.org.orgId} and book_id=${bookId} and origin='disposal' and status='posted'`,
+            "objects",
+          )
+        )[0]!.n;
         assert.ok(disposals >= 1, `clearing journal posted in book ${bookId}`);
         assert.equal(
           await bookBalance(f.org.orgId, bookId, f.org.accounts.clearing),
@@ -306,9 +336,12 @@ test(
       await buildSchedule(assetId, org.orgId, actorId, secondaryBookId);
       const posted = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
       assert.equal(posted.posted, 1);
-      const journalsBefore = (await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects",
-        ))[0]!.n;
+      const journalsBefore = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       await assert.rejects(
         () =>
           disposeAsset(org.orgId, assetId, {
@@ -328,9 +361,12 @@ test(
       );
       assert.equal(await assetStatus(org.orgId, assetId), "in_service");
       assert.equal(
-        (await db.execute<{ n: number }>(
-            sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects",
-          ))[0]!.n,
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n,
         journalsBefore,
         "refusal must post no journals",
       );
@@ -408,16 +444,13 @@ test(
   },
 );
 
-test(
-  "direct disposal still clears a single-book asset",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actorId = (await seedFlowActors(org.orgId)).adminId;
-      const categoryId = randomUUID();
-      const assetId = randomUUID();
-      await db.execute(sql`
+test("direct disposal still clears a single-book asset", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const categoryId = randomUUID();
+    const assetId = randomUUID();
+    await db.execute(sql`
         insert into asset_categories
           (id, org_id, name, asset_account_id,
            accumulated_depreciation_account_id,
@@ -431,7 +464,7 @@ test(
            'straight_line', 10, 'full_month', '{}'::jsonb, true,
            ${actorId}, ${actorId})
       `);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into fixed_assets
           (id, org_id, subsidiary_id, category_id, asset_number, name, status,
            acquired_on, in_service_on, acquisition_cost, salvage_value,
@@ -443,22 +476,21 @@ test(
            ${org.date}, ${org.date}, 1000, 0, 'straight_line', 10,
            'full_month', '{}'::jsonb, ${actorId}, ${actorId})
       `);
-      await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-      const posted = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
-      assert.equal(posted.posted, 1);
-      const result = await disposeAsset(org.orgId, assetId, {
-        proceeds: "100",
-        proceedsAccountId: org.accounts.bank,
-        date: "2026-07-31",
-        actorId,
-      });
-      assert.equal(result.status, "disposed");
-      assert.equal(await bookBalance(org.orgId, org.bookId, org.accounts.clearing), "0.0000");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+    const posted = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
+    assert.equal(posted.posted, 1);
+    const result = await disposeAsset(org.orgId, assetId, {
+      proceeds: "100",
+      proceedsAccountId: org.accounts.bank,
+      date: "2026-07-31",
+      actorId,
+    });
+    assert.equal(result.status, "disposed");
+    assert.equal(await bookBalance(org.orgId, org.bookId, org.accounts.clearing), "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "direct disposal still clears an asset whose second book is reporting-only",

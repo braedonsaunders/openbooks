@@ -20,7 +20,13 @@ import { db, withOrg } from "../../platform/db.ts";
 
 const FEATURE_REMEDY = "Enable Sales Channels in Company Settings → Features.";
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
@@ -74,8 +80,14 @@ export async function importShopifyLocations(
     LOCATIONS_QUERY,
     {},
     (data) =>
-      (data as { locations: { edges: { node: Record<string, unknown> }[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } })
-        .locations,
+      (
+        data as {
+          locations: {
+            edges: { node: Record<string, unknown> }[];
+            pageInfo: { hasNextPage: boolean; endCursor: string | null };
+          };
+        }
+      ).locations,
   )) {
     const { numericId, name } = normalizeLocationNode(node);
     const matched = await withOrg(orgId, async () => {
@@ -93,7 +105,10 @@ export async function importShopifyLocations(
 function normalizeLocationNode(node: Record<string, unknown>): { numericId: string; name: string } {
   const raw = typeof node.id === "string" ? node.id : "";
   const numericId = raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw.trim();
-  const name = typeof node.name === "string" && node.name.trim() !== "" ? node.name.trim() : `Location ${numericId}`;
+  const name =
+    typeof node.name === "string" && node.name.trim() !== ""
+      ? node.name.trim()
+      : `Location ${numericId}`;
   if (!/^\d+$/.test(numericId)) {
     refuse(
       "shopify_location_unreadable",
@@ -123,24 +138,37 @@ async function storeShopifyLocation(
 ): Promise<StoreMatch> {
   // A re-import racing the first store is an expected unique-key collision;
   // re-read below to return the winner instead of dropping the write.
-  const inserted = await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into sales_channel_locations
       (org_id, channel_id, external_location_id, external_name, created_by, updated_by)
     values (${orgId}, ${channel.channelId}, ${externalLocationId}, ${externalName}, ${actorId}, ${actorId})
     on conflict (org_id, channel_id, external_location_id)
       do update set external_name = excluded.external_name,
                     updated_by = excluded.updated_by, updated_at = now()
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   const id =
     inserted[0]?.id ??
-    (await db.execute<{ id: string }>(sql`
+    (
+      await db.execute<{ id: string }>(
+        sql`
         select id from sales_channel_locations
          where org_id = ${orgId} and channel_id = ${channel.channelId}
-           and external_location_id = ${externalLocationId}`, "objects"))[0]?.id;
+           and external_location_id = ${externalLocationId}`,
+        "objects",
+      )
+    )[0]?.id;
   if (!id) throw new Error("Channel location store returned no row; the location was lost");
-  const current = (await db.execute<{ stock_location_id: string | null }>(sql`
+  const current = (
+    await db.execute<{ stock_location_id: string | null }>(
+      sql`
       select stock_location_id from sales_channel_locations
-       where org_id = ${orgId} and id = ${id}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${id}`,
+      "objects",
+    )
+  )[0];
   if (!current) throw new Error("Channel location store lost its row; the location was not stored");
   if (current.stock_location_id) return "matched";
   const candidates = await findStockCandidates(orgId, externalName);
@@ -153,7 +181,10 @@ async function storeShopifyLocation(
     return "matched";
   }
   if (candidates.length > 1) {
-    return { shopifyName: externalName, candidates: candidates.map((candidate) => candidate.label) };
+    return {
+      shopifyName: externalName,
+      candidates: candidates.map((candidate) => candidate.label),
+    };
   }
   return "unmapped";
 }
@@ -169,12 +200,15 @@ interface StockCandidate {
  * row for the operator instead of guessing.
  */
 async function findStockCandidates(orgId: string, shopifyName: string): Promise<StockCandidate[]> {
-  const rows = await db.execute<{ id: string; code: string; name: string }>(sql`
+  const rows = await db.execute<{ id: string; code: string; name: string }>(
+    sql`
       select sl.id, sl.code, l.name
         from stock_locations sl
         join locations l on l.org_id = sl.org_id and l.id = sl.location_id
        where sl.org_id = ${orgId} and sl.is_active
-         and (lower(sl.code) = lower(${shopifyName}) or lower(l.name) = lower(${shopifyName}))`, "objects");
+         and (lower(sl.code) = lower(${shopifyName}) or lower(l.name) = lower(${shopifyName}))`,
+    "objects",
+  );
   return rows.map((row) => ({ id: row.id, label: `${row.name} (${row.code})` }));
 }
 
@@ -191,7 +225,12 @@ export async function applyLocationWebhook(
   topic: string,
   payload: Record<string, unknown>,
 ): Promise<{ action: string; externalLocationId: string }> {
-  const raw = typeof payload.id === "string" ? payload.id : typeof payload.id === "number" ? String(payload.id) : "";
+  const raw =
+    typeof payload.id === "string"
+      ? payload.id
+      : typeof payload.id === "number"
+        ? String(payload.id)
+        : "";
   const numericId = raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw.trim();
   if (!/^\d+$/.test(numericId)) {
     refuse(
@@ -208,10 +247,15 @@ export async function applyLocationWebhook(
          and external_location_id = ${numericId} and stock_location_id is null
        returning id, stock_location_id`);
     if ((deleted.rowCount ?? 0) === 1) return { action: "removed", externalLocationId: numericId };
-    const mapped = (await db.execute<{ id: string }>(sql`
+    const mapped = (
+      await db.execute<{ id: string }>(
+        sql`
         select id from sales_channel_locations
          where org_id = ${orgId} and channel_id = ${channel.channelId}
-           and external_location_id = ${numericId}`, "objects"))[0];
+           and external_location_id = ${numericId}`,
+        "objects",
+      )
+    )[0];
     if (mapped) {
       return { action: "kept_mapped", externalLocationId: numericId };
     }
@@ -222,5 +266,8 @@ export async function applyLocationWebhook(
       ? payload.name.trim().slice(0, 500)
       : `Location ${numericId}`;
   await withOrg(orgId, () => storeShopifyLocation(orgId, actorId, channel, numericId, name));
-  return { action: topic === "locations/create" ? "created" : "updated", externalLocationId: numericId };
+  return {
+    action: topic === "locations/create" ? "created" : "updated",
+    externalLocationId: numericId,
+  };
 }

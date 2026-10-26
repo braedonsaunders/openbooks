@@ -1,10 +1,15 @@
-import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import test from 'node:test'
-import { PDFDocument } from 'pdf-lib'
-import { encryptPdf, PdfEncryptionError, pdfEncryptionAvailable, verifyPdfEncryption } from './encrypt'
+import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { PDFDocument } from "pdf-lib";
+import {
+  encryptPdf,
+  PdfEncryptionError,
+  pdfEncryptionAvailable,
+  verifyPdfEncryption,
+} from "./encrypt";
 
 /**
  * Encryption is an external-binary capability (qpdf), exactly like the
@@ -14,9 +19,9 @@ import { encryptPdf, PdfEncryptionError, pdfEncryptionAvailable, verifyPdfEncryp
  */
 
 async function samplePdf(): Promise<Buffer> {
-  const doc = await PDFDocument.create()
-  doc.addPage([200, 200]).drawText('net pay')
-  return Buffer.from(await doc.save())
+  const doc = await PDFDocument.create();
+  doc.addPage([200, 200]).drawText("net pay");
+  return Buffer.from(await doc.save());
 }
 
 /**
@@ -25,160 +30,168 @@ async function samplePdf(): Promise<Buffer> {
  * is exactly the forgery the payroll send path must not be fooled by.
  */
 async function forgedMarkerPdf(): Promise<Buffer> {
-  const doc = await PDFDocument.load(await samplePdf())
+  const doc = await PDFDocument.load(await samplePdf());
   doc.context.trailerInfo.Encrypt = doc.context.register(
     doc.context.obj({
-      Filter: 'Standard', V: 5, R: 6, Length: 256,
-      O: '00', U: '00', OE: '00', UE: '00', P: -1, Perms: '00',
+      Filter: "Standard",
+      V: 5,
+      R: 6,
+      Length: 256,
+      O: "00",
+      U: "00",
+      OE: "00",
+      UE: "00",
+      P: -1,
+      Perms: "00",
     }),
-  )
-  return Buffer.from(await doc.save())
+  );
+  return Buffer.from(await doc.save());
 }
 
-test('an empty password is refused', async () => {
-  const pdf = await samplePdf()
-  await assert.rejects(() => encryptPdf(pdf, { userPassword: '' }), PdfEncryptionError)
-})
+test("an empty password is refused", async () => {
+  const pdf = await samplePdf();
+  await assert.rejects(() => encryptPdf(pdf, { userPassword: "" }), PdfEncryptionError);
+});
 
-test('a password with a line break or control character is refused by name', async () => {
+test("a password with a line break or control character is refused by name", async () => {
   // qpdf's @- form reads one argument per line, so a newline would split the
   // password and encrypt with the truncated first line. The refusal fires
   // before qpdf is spawned, so it holds with or without the binary.
-  const pdf = await samplePdf()
-  for (const userPassword of ['secret\npassword', 'secret\r\npassword', 'sec\tret', 'sec\x7fret']) {
+  const pdf = await samplePdf();
+  for (const userPassword of ["secret\npassword", "secret\r\npassword", "sec\tret", "sec\x7fret"]) {
     await assert.rejects(
       () => encryptPdf(pdf, { userPassword }),
       (error: unknown) => {
-        assert.ok(error instanceof PdfEncryptionError)
-        assert.match((error as Error).message, /control character/)
-        assert.match((error as Error).message, /user password/)
-        return true
+        assert.ok(error instanceof PdfEncryptionError);
+        assert.match((error as Error).message, /control character/);
+        assert.match((error as Error).message, /user password/);
+        return true;
       },
       `expected ${JSON.stringify(userPassword)} to be refused`,
-    )
+    );
   }
   await assert.rejects(
-    () => encryptPdf(pdf, { userPassword: 'clean-password', ownerPassword: 'owner\npassword' }),
+    () => encryptPdf(pdf, { userPassword: "clean-password", ownerPassword: "owner\npassword" }),
     (error: unknown) => {
-      assert.ok(error instanceof PdfEncryptionError)
-      assert.match((error as Error).message, /owner password/)
-      return true
+      assert.ok(error instanceof PdfEncryptionError);
+      assert.match((error as Error).message, /owner password/);
+      return true;
     },
-  )
-})
+  );
+});
 
-test('a missing qpdf binary throws instead of returning the plaintext', async () => {
-  const pdf = await samplePdf()
-  const previous = process.env.OPENBOOKS_QPDF_PATH
-  process.env.OPENBOOKS_QPDF_PATH = '/nonexistent/qpdf-openbooks-test'
+test("a missing qpdf binary throws instead of returning the plaintext", async () => {
+  const pdf = await samplePdf();
+  const previous = process.env.OPENBOOKS_QPDF_PATH;
+  process.env.OPENBOOKS_QPDF_PATH = "/nonexistent/qpdf-openbooks-test";
   try {
     await assert.rejects(
-      () => encryptPdf(pdf, { userPassword: 'HOP12091906' }),
+      () => encryptPdf(pdf, { userPassword: "HOP12091906" }),
       (error: unknown) => {
-        assert.ok(error instanceof PdfEncryptionError)
-        assert.match((error as Error).message, /qpdf/)
-        return true
+        assert.ok(error instanceof PdfEncryptionError);
+        assert.match((error as Error).message, /qpdf/);
+        return true;
       },
-    )
+    );
   } finally {
-    if (previous === undefined) delete process.env.OPENBOOKS_QPDF_PATH
-    else process.env.OPENBOOKS_QPDF_PATH = previous
+    if (previous === undefined) delete process.env.OPENBOOKS_QPDF_PATH;
+    else process.env.OPENBOOKS_QPDF_PATH = previous;
   }
-})
+});
 
-test('encrypted output cannot be opened without the password', async () => {
+test("encrypted output cannot be opened without the password", async () => {
   if (!(await pdfEncryptionAvailable())) {
     // qpdf is provisioned in the runtime image; developer machines may not
     // have it, and a skipped check is honest where a fake one is not.
-    return
+    return;
   }
-  const encrypted = await encryptPdf(await samplePdf(), { userPassword: 'HOP12091906' })
-  assert.match(encrypted.subarray(0, 5).toString('latin1'), /^%PDF-/)
-  await assert.rejects(() => PDFDocument.load(encrypted))
+  const encrypted = await encryptPdf(await samplePdf(), { userPassword: "HOP12091906" });
+  assert.match(encrypted.subarray(0, 5).toString("latin1"), /^%PDF-/);
+  await assert.rejects(() => PDFDocument.load(encrypted));
   // Loading it while explicitly tolerating encryption still works, which is
   // how the ingestion paths in the app read third-party protected files.
-  const parsed = await PDFDocument.load(encrypted, { ignoreEncryption: true })
-  assert.equal(parsed.getPageCount(), 1)
-})
+  const parsed = await PDFDocument.load(encrypted, { ignoreEncryption: true });
+  assert.equal(parsed.getPageCount(), 1);
+});
 
-test('genuine ciphertext passes certification', async () => {
-  if (!(await pdfEncryptionAvailable())) return
-  const encrypted = await encryptPdf(await samplePdf(), { userPassword: 'HOP12091906' })
-  await assert.doesNotReject(() => verifyPdfEncryption(encrypted))
-})
+test("genuine ciphertext passes certification", async () => {
+  if (!(await pdfEncryptionAvailable())) return;
+  const encrypted = await encryptPdf(await samplePdf(), { userPassword: "HOP12091906" });
+  await assert.doesNotReject(() => verifyPdfEncryption(encrypted));
+});
 
-test('verification refuses a document that opens without a password', async () => {
-  if (!(await pdfEncryptionAvailable())) return
+test("verification refuses a document that opens without a password", async () => {
+  if (!(await pdfEncryptionAvailable())) return;
   await assert.rejects(
     async () => verifyPdfEncryption(await samplePdf()),
     (error: unknown) => {
-      assert.ok(error instanceof PdfEncryptionError)
-      assert.match((error as Error).message, /opens without a password/)
-      return true
+      assert.ok(error instanceof PdfEncryptionError);
+      assert.match((error as Error).message, /opens without a password/);
+      return true;
     },
-  )
-})
+  );
+});
 
-test('a forged encryption marker does not certify plaintext as ciphertext', async () => {
-  const forged = await forgedMarkerPdf()
+test("a forged encryption marker does not certify plaintext as ciphertext", async () => {
+  const forged = await forgedMarkerPdf();
   // The marker gullibility that makes the old parser-flag check unsafe: the
   // strict loader refuses to open it and reports it as encrypted.
-  await assert.rejects(() => PDFDocument.load(forged), /encrypted/)
-  const tolerant = await PDFDocument.load(forged, { ignoreEncryption: true })
-  assert.equal(tolerant.isEncrypted, true)
+  await assert.rejects(() => PDFDocument.load(forged), /encrypted/);
+  const tolerant = await PDFDocument.load(forged, { ignoreEncryption: true });
+  assert.equal(tolerant.isEncrypted, true);
 
-  if (!(await pdfEncryptionAvailable())) return
-  await assert.rejects(() => verifyPdfEncryption(forged), PdfEncryptionError)
-})
+  if (!(await pdfEncryptionAvailable())) return;
+  await assert.rejects(() => verifyPdfEncryption(forged), PdfEncryptionError);
+});
 
-test('verification fails closed when qpdf is unavailable', async () => {
-  const pdf = await samplePdf()
-  const previous = process.env.OPENBOOKS_QPDF_PATH
-  process.env.OPENBOOKS_QPDF_PATH = '/nonexistent/qpdf-openbooks-test'
+test("verification fails closed when qpdf is unavailable", async () => {
+  const pdf = await samplePdf();
+  const previous = process.env.OPENBOOKS_QPDF_PATH;
+  process.env.OPENBOOKS_QPDF_PATH = "/nonexistent/qpdf-openbooks-test";
   try {
     await assert.rejects(
       () => verifyPdfEncryption(pdf),
       (error: unknown) => {
-        assert.ok(error instanceof PdfEncryptionError)
-        return true
+        assert.ok(error instanceof PdfEncryptionError);
+        return true;
       },
-    )
+    );
   } finally {
-    if (previous === undefined) delete process.env.OPENBOOKS_QPDF_PATH
-    else process.env.OPENBOOKS_QPDF_PATH = previous
+    if (previous === undefined) delete process.env.OPENBOOKS_QPDF_PATH;
+    else process.env.OPENBOOKS_QPDF_PATH = previous;
   }
-})
+});
 
-test('a hung qpdf is killed after the timeout instead of pinning the worker', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'openbooks-qpdf-hang-'))
+test("a hung qpdf is killed after the timeout instead of pinning the worker", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "openbooks-qpdf-hang-"));
   try {
     // A binary-shaped stub that never exits: without a ceiling, encryptPdf
     // would await it forever and pin the delivery worker with it.
-    const stub = join(dir, 'qpdf-hang')
-    await writeFile(stub, '#!/bin/sh\nsleep 30\n', { mode: 0o755 })
-    const previousPath = process.env.OPENBOOKS_QPDF_PATH
-    const previousTimeout = process.env.OPENBOOKS_QPDF_TIMEOUT_MS
-    process.env.OPENBOOKS_QPDF_PATH = stub
-    process.env.OPENBOOKS_QPDF_TIMEOUT_MS = '300'
+    const stub = join(dir, "qpdf-hang");
+    await writeFile(stub, "#!/bin/sh\nsleep 30\n", { mode: 0o755 });
+    const previousPath = process.env.OPENBOOKS_QPDF_PATH;
+    const previousTimeout = process.env.OPENBOOKS_QPDF_TIMEOUT_MS;
+    process.env.OPENBOOKS_QPDF_PATH = stub;
+    process.env.OPENBOOKS_QPDF_TIMEOUT_MS = "300";
     try {
-      const started = Date.now()
-      const pdf = await samplePdf()
+      const started = Date.now();
+      const pdf = await samplePdf();
       await assert.rejects(
-        () => encryptPdf(pdf, { userPassword: 'HOP12091906' }),
+        () => encryptPdf(pdf, { userPassword: "HOP12091906" }),
         (error: unknown) => {
-          assert.ok(error instanceof PdfEncryptionError)
-          assert.match((error as Error).message, /did not finish within 300 ms/)
-          return true
+          assert.ok(error instanceof PdfEncryptionError);
+          assert.match((error as Error).message, /did not finish within 300 ms/);
+          return true;
         },
-      )
-      assert.ok(Date.now() - started < 15_000, 'the hang must be cut short near the timeout')
+      );
+      assert.ok(Date.now() - started < 15_000, "the hang must be cut short near the timeout");
     } finally {
-      if (previousPath === undefined) delete process.env.OPENBOOKS_QPDF_PATH
-      else process.env.OPENBOOKS_QPDF_PATH = previousPath
-      if (previousTimeout === undefined) delete process.env.OPENBOOKS_QPDF_TIMEOUT_MS
-      else process.env.OPENBOOKS_QPDF_TIMEOUT_MS = previousTimeout
+      if (previousPath === undefined) delete process.env.OPENBOOKS_QPDF_PATH;
+      else process.env.OPENBOOKS_QPDF_PATH = previousPath;
+      if (previousTimeout === undefined) delete process.env.OPENBOOKS_QPDF_TIMEOUT_MS;
+      else process.env.OPENBOOKS_QPDF_TIMEOUT_MS = previousTimeout;
     }
   } finally {
-    await rm(dir, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true });
   }
-})
+});

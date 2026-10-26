@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, EmptyState } from '@openbooks/ui'
-import { Banknote, HeartHandshake, KeyRound, Percent, ShieldAlert, Timer } from 'lucide-react'
-import { StatTile, CockpitPanel } from '../../../components/cockpit/ui'
-import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
-import { createMoneyFormatter } from '@/lib/money-format'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import type { CollectionPolicyNotice, RecoveryDashboardData } from './view'
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle, Badge, Button, EmptyState } from "@openbooks/ui";
+import { Banknote, HeartHandshake, KeyRound, Percent, ShieldAlert, Timer } from "lucide-react";
+import { StatTile, CockpitPanel } from "../../../components/cockpit/ui";
+import { DrawerTabStrip } from "../../../components/drawer-tab-strip";
+import { createMoneyFormatter } from "@/lib/money-format";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import type { CollectionPolicyNotice, RecoveryDashboardData } from "./view";
 
 /**
  * Revenue recovery at a glance: what automatic collection brought back in
@@ -24,19 +24,25 @@ import type { CollectionPolicyNotice, RecoveryDashboardData } from './view'
  * definition is available the panel links to the Reports hub instead of
  * rendering a second analytical list under the operational queue.
  */
-export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardData | null; notice?: CollectionPolicyNotice | null }) {
-  const t = useTranslations('ar.collections.recovery')
-  const locale = useLocale()
-  const router = useRouter()
-  const [busy, setBusy] = useState<string | null>(null)
+export function RecoveryDashboard({
+  data,
+  notice,
+}: {
+  data: RecoveryDashboardData | null;
+  notice?: CollectionPolicyNotice | null;
+}) {
+  const t = useTranslations("ar.collections.recovery");
+  const locale = useLocale();
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
   // The three recovery queues replace each other behind the shared strip —
   // never stacked — defaulting to the first queue with work.
-  const [queue, setQueue] = useState<'auth' | 'expiring' | 'hardStuck' | null>(null)
+  const [queue, setQueue] = useState<"auth" | "expiring" | "hardStuck" | null>(null);
   // Automatic collection is on but no collection policy is: the dashboard
   // has no schedule to report against, so its slot carries the setup remedy
   // and the rest of the page renders around it.
   if (!data) {
-    if (!notice) return null
+    if (!notice) return null;
     return (
       <Alert variant="warning">
         <AlertTitle>{notice.title}</AlertTitle>
@@ -47,194 +53,210 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
           </Button>
         </AlertDescription>
       </Alert>
-    )
+    );
   }
-  const { money } = createMoneyFormatter(locale, 'USD')
-  const rate = data.metrics.recoveryRate
+  const { money } = createMoneyFormatter(locale, "USD");
+  const rate = data.metrics.recoveryRate;
   // Recovered revenue is shown per currency — a multi-currency book never
   // presents a mixed-currency sum as one number.
   const recoveredValue = data.metrics.recoveredByCurrency
     .map((row) => money(row.amount, { currency: row.currency }))
-    .join(' · ')
-  const attentionCount =
-    data.awaitingAuth.length + data.expiring.length + data.hardStuck.length
+    .join(" · ");
+  const attentionCount = data.awaitingAuth.length + data.expiring.length + data.hardStuck.length;
   // The queues replace each other: the strip defaults to the first queue
   // with work, and an explicit selection survives reloads of the rows.
   const activeQueue =
     queue ??
-    (data.awaitingAuth.length > 0 ? 'auth' : data.expiring.length > 0 ? 'expiring' : 'hardStuck')
+    (data.awaitingAuth.length > 0 ? "auth" : data.expiring.length > 0 ? "expiring" : "hardStuck");
 
   const copyAuthLink = async (authUrl: string | null) => {
-    if (!authUrl) return
+    if (!authUrl) return;
     try {
-      await navigator.clipboard.writeText(authUrl)
-      toast.success(t('linkCopied'))
+      await navigator.clipboard.writeText(authUrl);
+      toast.success(t("linkCopied"));
     } catch {
-      toast.error(t('linkCopyFailed'))
+      toast.error(t("linkCopyFailed"));
     }
-  }
+  };
 
-  const sendUpdateLink = async (row: RecoveryDashboardData['expiring'][number]) => {
+  const sendUpdateLink = async (row: RecoveryDashboardData["expiring"][number]) => {
     // The provider session prices in the customer's own invoice currency.
     // Without one there is nothing honest to mint: refuse by name and point
     // at the panel where the operator picks the currency explicitly,
     // instead of guessing another party's.
     if (!row.currency) {
-      toast.error(t('updateLinkNoCurrency'))
-      return
+      toast.error(t("updateLinkNoCurrency"));
+      return;
     }
-    const key = `expiring:${row.methodId}`
-    setBusy(key)
+    const key = `expiring:${row.methodId}`;
+    setBusy(key);
     try {
-      const setupRes = await fetch('/api/autopay/methods', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ partyId: row.partyId, provider: row.provider, currency: row.currency }),
-      })
+      const setupRes = await fetch("/api/autopay/methods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          partyId: row.partyId,
+          provider: row.provider,
+          currency: row.currency,
+        }),
+      });
       // A computed refusal must reach the operator: the server names the
       // remedy in the error body, so read it instead of replacing it with
       // a generic toast.
       if (!setupRes.ok) {
-        toast.error(await readApiErrorMessage(setupRes, t('updateLinkFailed')))
-        return
+        toast.error(await readApiErrorMessage(setupRes, t("updateLinkFailed")));
+        return;
       }
-      const setup = (await setupRes.json()) as { setupUrl?: string }
+      const setup = (await setupRes.json()) as { setupUrl?: string };
       if (!setup.setupUrl) {
-        toast.error(t('updateLinkFailed'))
-        return
+        toast.error(t("updateLinkFailed"));
+        return;
       }
-      await navigator.clipboard.writeText(`${window.location.origin}${setup.setupUrl}`)
+      await navigator.clipboard.writeText(`${window.location.origin}${setup.setupUrl}`);
       const markRes = await fetch(`/api/autopay/methods/${row.methodId}/outreach`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
-      })
+      });
       if (!markRes.ok) {
-        toast.error(await readApiErrorMessage(markRes, t('outreachMarkFailed')))
-        return
+        toast.error(await readApiErrorMessage(markRes, t("outreachMarkFailed")));
+        return;
       }
-      toast.success(t('updateLinkSent'))
-      router.refresh()
+      toast.success(t("updateLinkSent"));
+      router.refresh();
     } catch {
-      toast.error(t('updateLinkFailed'))
+      toast.error(t("updateLinkFailed"));
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile
-          label={t('recovered')}
-          value={recoveredValue === '' ? '—' : recoveredValue}
-          sub={t('recoveredSub', { count: data.metrics.recoveredInvoices })}
+          label={t("recovered")}
+          value={recoveredValue === "" ? "—" : recoveredValue}
+          sub={t("recoveredSub", { count: data.metrics.recoveredInvoices })}
           icon={Banknote}
           accent="emerald"
-          tone={data.metrics.recoveredInvoices > 0 ? 'positive' : 'neutral'}
+          tone={data.metrics.recoveredInvoices > 0 ? "positive" : "neutral"}
         />
         <StatTile
-          label={t('recoveryRate')}
-          value={rate === null ? '—' : `${(rate * 100).toFixed(1)}%`}
-          sub={t('recoveryRateSub', { failed: data.metrics.invoicesWithFailures })}
+          label={t("recoveryRate")}
+          value={rate === null ? "—" : `${(rate * 100).toFixed(1)}%`}
+          sub={t("recoveryRateSub", { failed: data.metrics.invoicesWithFailures })}
           icon={Percent}
           accent="teal"
           tone="neutral"
         />
         <StatTile
-          label={t('waitingOnCustomers')}
+          label={t("waitingOnCustomers")}
           value={String(data.metrics.awaitingAuthentication)}
-          sub={t('waitingOnCustomersSub')}
+          sub={t("waitingOnCustomersSub")}
           icon={KeyRound}
           accent="amber"
-          tone={data.metrics.awaitingAuthentication > 0 ? 'warning' : 'neutral'}
+          tone={data.metrics.awaitingAuthentication > 0 ? "warning" : "neutral"}
         />
         <StatTile
-          label={t('churnPrevented')}
+          label={t("churnPrevented")}
           value={String(data.metrics.churnPrevented)}
-          sub={t('churnPreventedSub', { attempts: data.metrics.attempts })}
+          sub={t("churnPreventedSub", { attempts: data.metrics.attempts })}
           icon={HeartHandshake}
           accent="sky"
-          tone={data.metrics.churnPrevented > 0 ? 'positive' : 'neutral'}
+          tone={data.metrics.churnPrevented > 0 ? "positive" : "neutral"}
         />
       </div>
 
       <CockpitPanel
-        title={t('attentionTitle')}
+        title={t("attentionTitle")}
         icon={ShieldAlert}
-        hint={attentionCount === 0 ? t('attentionClear') : t('attentionCount', { count: attentionCount })}
+        hint={
+          attentionCount === 0
+            ? t("attentionClear")
+            : t("attentionCount", { count: attentionCount })
+        }
       >
         {attentionCount === 0 ? (
-          <EmptyState title={t('attentionEmptyTitle')} description={t('attentionEmptyDescription')} />
+          <EmptyState
+            title={t("attentionEmptyTitle")}
+            description={t("attentionEmptyDescription")}
+          />
         ) : (
           <>
             <DrawerTabStrip
               tabs={[
-                { key: 'auth', label: t('needsAuth'), count: data.awaitingAuth.length },
-                { key: 'expiring', label: t('cardExpiring'), count: data.expiring.length },
-                { key: 'hardStuck', label: t('hardStuck'), count: data.hardStuck.length },
+                { key: "auth", label: t("needsAuth"), count: data.awaitingAuth.length },
+                { key: "expiring", label: t("cardExpiring"), count: data.expiring.length },
+                { key: "hardStuck", label: t("hardStuck"), count: data.hardStuck.length },
               ]}
               activeKey={activeQueue}
               onSelect={(key) => setQueue(key)}
-              ariaLabel={t('attentionTitle')}
+              ariaLabel={t("attentionTitle")}
             />
-            <div hidden={activeQueue !== 'auth'} className="flex flex-col gap-4">
-            {data.awaitingAuth.map((row) => (
-              <div key={row.attemptId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <Badge variant="warning">{t('needsAuth')}</Badge>
-                <a className="text-sm font-medium underline" href={`/collections?attempt=${row.attemptId}`}>
-                  {row.invoiceNumber}
-                </a>
-                <span className="text-sm text-muted-foreground">
-                  {row.customerName} · {money(row.amount, { currency: row.currency })}
-                </span>
-                <span className="flex-1" />
-                <Button
-                  variant="outline"
-                  disabled={!row.authUrl}
-                  onClick={() => void copyAuthLink(row.authUrl)}
-                >
-                  {t('copyAuthLink')}
-                </Button>
-              </div>
-            ))}
+            <div hidden={activeQueue !== "auth"} className="flex flex-col gap-4">
+              {data.awaitingAuth.map((row) => (
+                <div key={row.attemptId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Badge variant="warning">{t("needsAuth")}</Badge>
+                  <a
+                    className="text-sm font-medium underline"
+                    href={`/collections?attempt=${row.attemptId}`}
+                  >
+                    {row.invoiceNumber}
+                  </a>
+                  <span className="text-sm text-muted-foreground">
+                    {row.customerName} · {money(row.amount, { currency: row.currency })}
+                  </span>
+                  <span className="flex-1" />
+                  <Button
+                    variant="outline"
+                    disabled={!row.authUrl}
+                    onClick={() => void copyAuthLink(row.authUrl)}
+                  >
+                    {t("copyAuthLink")}
+                  </Button>
+                </div>
+              ))}
             </div>
-            <div hidden={activeQueue !== 'expiring'} className="flex flex-col gap-4">
-            {data.expiring.map((row) => (
-              <div key={row.methodId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <Badge variant="warning">{t('cardExpiring')}</Badge>
-                <span className="text-sm font-medium">
-                  {row.partyName ?? row.partyId} · {row.brand ?? ''} •••• {row.last4 ?? ''}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {t('expiresOn', { date: row.expiresOn })}
-                </span>
-                <span className="flex-1" />
-                <Button
-                  variant="outline"
-                  disabled={busy === `expiring:${row.methodId}`}
-                  onClick={() => void sendUpdateLink(row)}
-                >
-                  {t('sendUpdateLink')}
-                </Button>
-              </div>
-            ))}
+            <div hidden={activeQueue !== "expiring"} className="flex flex-col gap-4">
+              {data.expiring.map((row) => (
+                <div key={row.methodId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Badge variant="warning">{t("cardExpiring")}</Badge>
+                  <span className="text-sm font-medium">
+                    {row.partyName ?? row.partyId} · {row.brand ?? ""} •••• {row.last4 ?? ""}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {t("expiresOn", { date: row.expiresOn })}
+                  </span>
+                  <span className="flex-1" />
+                  <Button
+                    variant="outline"
+                    disabled={busy === `expiring:${row.methodId}`}
+                    onClick={() => void sendUpdateLink(row)}
+                  >
+                    {t("sendUpdateLink")}
+                  </Button>
+                </div>
+              ))}
             </div>
-            <div hidden={activeQueue !== 'hardStuck'} className="flex flex-col gap-4">
-            {data.hardStuck.map((row) => (
-              <div key={row.attemptId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <Badge variant="destructive">{t('hardStuck')}</Badge>
-                <a className="text-sm font-medium underline" href={`/collections?attempt=${row.attemptId}`}>
-                  {row.invoiceNumber}
-                </a>
-                <span className="text-sm text-muted-foreground">
-                  {row.customerName} · {money(row.amount, { currency: row.currency })}
-                  {row.declineCode ? ` · ${row.declineCode}` : ''}
-                </span>
-                <span className="flex-1" />
-                <span className="text-sm text-muted-foreground">{t('hardStuckHint')}</span>
-              </div>
-            ))}
+            <div hidden={activeQueue !== "hardStuck"} className="flex flex-col gap-4">
+              {data.hardStuck.map((row) => (
+                <div key={row.attemptId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Badge variant="destructive">{t("hardStuck")}</Badge>
+                  <a
+                    className="text-sm font-medium underline"
+                    href={`/collections?attempt=${row.attemptId}`}
+                  >
+                    {row.invoiceNumber}
+                  </a>
+                  <span className="text-sm text-muted-foreground">
+                    {row.customerName} · {money(row.amount, { currency: row.currency })}
+                    {row.declineCode ? ` · ${row.declineCode}` : ""}
+                  </span>
+                  <span className="flex-1" />
+                  <span className="text-sm text-muted-foreground">{t("hardStuckHint")}</span>
+                </div>
+              ))}
             </div>
           </>
         )}
@@ -242,28 +264,30 @@ export function RecoveryDashboard({ data, notice }: { data: RecoveryDashboardDat
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3">
             <Timer size={14} aria-hidden className="text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">{t('breakdownTitle')}</p>
-              <p className="text-sm text-muted-foreground">{t('breakdownDrillDescription')}</p>
+              <p className="text-sm font-medium">{t("breakdownTitle")}</p>
+              <p className="text-sm text-muted-foreground">{t("breakdownDrillDescription")}</p>
             </div>
             <span className="flex-1" />
             <Button asChild size="sm" variant="outline">
-              <Link href={`/reports/custom/run/${data.recoveryReportId}`}>{t('breakdownDrillAction')}</Link>
+              <Link href={`/reports/custom/run/${data.recoveryReportId}`}>
+                {t("breakdownDrillAction")}
+              </Link>
             </Button>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3">
             <Timer size={14} aria-hidden className="text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">{t('breakdownTitle')}</p>
-              <p className="text-sm text-muted-foreground">{t('breakdownHubDescription')}</p>
+              <p className="text-sm font-medium">{t("breakdownTitle")}</p>
+              <p className="text-sm text-muted-foreground">{t("breakdownHubDescription")}</p>
             </div>
             <span className="flex-1" />
             <Button asChild size="sm" variant="outline">
-              <Link href="/reports">{t('breakdownHubAction')}</Link>
+              <Link href="/reports">{t("breakdownHubAction")}</Link>
             </Button>
           </div>
         )}
       </CockpitPanel>
     </div>
-  )
+  );
 }

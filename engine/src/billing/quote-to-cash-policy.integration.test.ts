@@ -3,15 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
-import {
-  clearQuoteToCashSettings,
-  saveQuoteToCashSettings,
-} from "./quote-to-cash.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { clearQuoteToCashSettings, saveQuoteToCashSettings } from "./quote-to-cash.ts";
 
 const DB = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -56,8 +49,11 @@ test(
           actor_id: string;
           at: string;
           changes: { before: unknown; after: unknown; reason?: string };
-        }>(sql`
-      select action, actor_id, at::text, changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`, "objects"),
+        }>(
+          sql`
+      select action, actor_id, at::text, changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`,
+          "objects",
+        ),
       );
       assert.equal(evidence.length, 3);
       const storedFirst = { ...first };
@@ -92,55 +88,49 @@ test(
       );
       const count = await withOrgContext(org.orgId, () =>
         db.execute<{ n: number }>(
-          sql`select count(*)::int n from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings'`, "objects",
+          sql`select count(*)::int n from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings'`,
+          "objects",
         ),
       );
-      assert.equal(
-        count[0]!.n,
-        3,
-        "refused reset cannot report a second successful deletion",
-      );
+      assert.equal(count[0]!.n, 3, "refused reset cannot report a second successful deletion");
     } finally {
       await dropScratchOrg(org.orgId);
     }
   },
 );
 
-test(
-  "concurrent quote policy writes retain a complete ordered audit chain",
-  DB,
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = await withBypassContext(() =>
-        createScratchUser(org.orgId, "Policy administrator", "admin"),
-      );
-      await withOrgContext(org.orgId, () =>
-        db.execute(
-          sql`update orgs set settings=settings || '{"features":{"quoteToCash":true,"subscriptionBilling":true,"orders":true}}'::jsonb where id=${org.orgId}`,
-        ),
-      );
-      await Promise.all(
-        [20, 30, 40].map((n) =>
-          saveQuoteToCashSettings(org.orgId, actor, {
-            autoActivateOnSign: false,
-            defaultBillingTiming: "advance",
-            defaultStartRule: "quote_date",
-            signatureExpiryDays: n,
-          }),
-        ),
-      );
-      const rows = await withOrgContext(org.orgId, () =>
-          db.execute<{ changes: { before: unknown; after: unknown } }>(
-            sql`select changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`, "objects",
-          ),
-        );
-      assert.equal(rows.length, 3);
-      assert.equal(rows[0]!.changes.before, null);
-      assert.deepEqual(rows[1]!.changes.before, rows[0]!.changes.after);
-      assert.deepEqual(rows[2]!.changes.before, rows[1]!.changes.after);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("concurrent quote policy writes retain a complete ordered audit chain", DB, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Policy administrator", "admin"),
+    );
+    await withOrgContext(org.orgId, () =>
+      db.execute(
+        sql`update orgs set settings=settings || '{"features":{"quoteToCash":true,"subscriptionBilling":true,"orders":true}}'::jsonb where id=${org.orgId}`,
+      ),
+    );
+    await Promise.all(
+      [20, 30, 40].map((n) =>
+        saveQuoteToCashSettings(org.orgId, actor, {
+          autoActivateOnSign: false,
+          defaultBillingTiming: "advance",
+          defaultStartRule: "quote_date",
+          signatureExpiryDays: n,
+        }),
+      ),
+    );
+    const rows = await withOrgContext(org.orgId, () =>
+      db.execute<{ changes: { before: unknown; after: unknown } }>(
+        sql`select changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`,
+        "objects",
+      ),
+    );
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0]!.changes.before, null);
+    assert.deepEqual(rows[1]!.changes.before, rows[0]!.changes.after);
+    assert.deepEqual(rows[2]!.changes.before, rows[1]!.changes.after);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

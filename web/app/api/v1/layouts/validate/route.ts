@@ -16,7 +16,10 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     if (body.spec === undefined) {
       throw new ApplicationError("invalid_input", "spec is required", 422);
     }
-    return { status: 200, body: { ok: true, ...(await validateLayout(context, { spec: body.spec })) } };
+    return {
+      status: 200,
+      body: { ok: true, ...(await validateLayout(context, { spec: body.spec })) },
+    };
   });
 }
 

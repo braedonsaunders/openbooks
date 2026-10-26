@@ -86,22 +86,37 @@ export function validateAvailabilityWindows(windows: unknown): AvailabilityWindo
     const endsAt = (window as { endsAt?: unknown }).endsAt;
     const timezone = (window as { timezone?: unknown }).timezone;
     if (typeof startsAt !== "string" || Number.isNaN(Date.parse(startsAt))) {
-      throw new RecruitingError("INVALID_INPUT", `window ${index} needs an ISO startsAt — declare when the window opens`);
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        `window ${index} needs an ISO startsAt — declare when the window opens`,
+      );
     }
     if (typeof endsAt !== "string" || Number.isNaN(Date.parse(endsAt))) {
-      throw new RecruitingError("INVALID_INPUT", `window ${index} needs an ISO endsAt — declare when the window closes`);
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        `window ${index} needs an ISO endsAt — declare when the window closes`,
+      );
     }
     if (Date.parse(endsAt) <= Date.parse(startsAt)) {
-      throw new RecruitingError("INVALID_INPUT", `window ${index} ends before it starts — declare an ordered window`);
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        `window ${index} ends before it starts — declare an ordered window`,
+      );
     }
     if (typeof timezone !== "string" || timezone.trim().length === 0) {
-      throw new RecruitingError("INVALID_INPUT", `window ${index} needs a timezone — declare where the clock lives`);
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        `window ${index} needs a timezone — declare where the clock lives`,
+      );
     }
     const normalizedTimezone = timezone.trim();
     try {
       new Intl.DateTimeFormat("en", { timeZone: normalizedTimezone }).format(new Date(0));
     } catch {
-      throw new RecruitingError("INVALID_INPUT", `window ${index} names an invalid IANA timezone — use a supported region such as Europe/Paris`);
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        `window ${index} names an invalid IANA timezone — use a supported region such as Europe/Paris`,
+      );
     }
     return { startsAt, endsAt, timezone: normalizedTimezone };
   });
@@ -154,29 +169,41 @@ async function interviewChain(
   orgId: string,
   interviewId: string,
 ): Promise<{ requisitionId: string; candidateEmail: string | null; candidateName: string }> {
-  const row = (await exec.execute<{
-    requisitionId: string;
-    candidateEmail: string | null;
-    candidateName: string;
-  }>(sql`
+  const row = (
+    await exec.execute<{
+      requisitionId: string;
+      candidateEmail: string | null;
+      candidateName: string;
+    }>(
+      sql`
     select a.requisition_id as "requisitionId", c.email as "candidateEmail",
            c.display_name as "candidateName"
       from hrm_interviews i
       join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
       join hrm_candidates c on c.org_id = i.org_id and c.id = a.candidate_id
      where i.org_id = ${orgId} and i.id = ${interviewId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
   }
   return row;
 }
 
-async function panelParties(exec: SqlExecutor, orgId: string, interviewId: string): Promise<string[]> {
-  const rows = await exec.execute<{ partyId: string }>(sql`
+async function panelParties(
+  exec: SqlExecutor,
+  orgId: string,
+  interviewId: string,
+): Promise<string[]> {
+  const rows = await exec.execute<{ partyId: string }>(
+    sql`
     select party_id as "partyId" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} order by party_id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.partyId);
 }
 
@@ -210,17 +237,21 @@ export async function listInterviewerPools(query: {
       kitId: string | null;
       availability: unknown;
       isActive: boolean;
-    }>(sql`
+    }>(
+      sql`
       select id, name, kit_id as "kitId", availability, is_active as "isActive"
         from hrm_interviewer_pools
        where org_id = ${orgId}
          and (${query.includeInactive === true} or is_active)
        order by name
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((row) => {
       let availability: readonly AvailabilityWindow[];
       try {
-        availability = row.availability === null ? [] : validateAvailabilityWindows(row.availability);
+        availability =
+          row.availability === null ? [] : validateAvailabilityWindows(row.availability);
       } catch (e) {
         if (e instanceof RecruitingError) {
           throw new RecruitingError(
@@ -255,7 +286,11 @@ export async function proposeSlots(query: {
   } else if (query.poolId !== undefined) {
     const pools = await listInterviewerPools({ orgId, actorId });
     const pool = pools.find((candidate) => candidate.id === String(query.poolId));
-    if (!pool) throw new RecruitingError("NOT_FOUND", "interviewer pool is not visible in this organization");
+    if (!pool)
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "interviewer pool is not visible in this organization",
+      );
     if (pool.availability.length === 0) {
       throw new RecruitingError(
         "REFUSED",
@@ -276,23 +311,37 @@ export async function proposeSlots(query: {
   return withOrgTransaction(orgId, async () => {
     const chain = await interviewChain(db, orgId, interviewId);
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
-    const interview = (await db.execute<{ status: string }>(sql`
+    const interview = (
+      await db.execute<{ status: string }>(
+        sql`
       select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId} for update
-    `, "objects"))[0];
-    if (!interview) throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!interview)
+      throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     if (interview.status !== "scheduled") {
       throw new RecruitingError(
         "REFUSED",
         `a ${interview.status} interview takes no new slots — schedule a fresh interview instead of reopening this one`,
       );
     }
-    const alreadyBooked = (await db.execute<{ one: number }>(sql`
+    const alreadyBooked = (
+      await db.execute<{ one: number }>(
+        sql`
       select 1 as one from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (alreadyBooked) {
-      throw new RecruitingError("REFUSED", "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time");
+      throw new RecruitingError(
+        "REFUSED",
+        "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time",
+      );
     }
     // A fresh link per batch: any live proposed batch for this interview is
     // declined first, so exactly one booking link is live at a time and an
@@ -310,7 +359,9 @@ export async function proposeSlots(query: {
     const tokenHash = hashRecruitingToken(token);
     const slots: SlotDTO[] = [];
     for (const window of windows) {
-      const row = (await db.execute<SlotRow>(sql`
+      const row = (
+        await db.execute<SlotRow>(
+          sql`
         insert into hrm_interview_slots
           (org_id, interview_id, starts_at, ends_at, timezone, kind,
            proposed_by, candidate_token_hash, expires_at, created_by, updated_by)
@@ -319,12 +370,22 @@ export async function proposeSlots(query: {
         returning id, interview_id as "interviewId",
                   starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
                   expires_at as "expiresAt"
-      `, "objects"))[0];
-      if (!row) throw new RecruitingError("REFUSED", "the slot was not stored — no row was written; retry the request");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!row)
+        throw new RecruitingError(
+          "REFUSED",
+          "the slot was not stored — no row was written; retry the request",
+        );
       slots.push(toSlotDTO(row));
     }
     if (slots.length === 0) {
-      throw new RecruitingError("REFUSED", "no slots were stored — no rows were written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "no slots were stored — no rows were written; retry the request",
+      );
     }
     return {
       slots,
@@ -351,7 +412,10 @@ export interface BookSlotQuery {
  */
 export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   if (typeof query.bookingToken !== "string" || query.bookingToken.length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "a booking link is required — open the link the recruiter sent");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "a booking link is required — open the link the recruiter sent",
+    );
   }
   const claims = verifyRecruitingToken(query.bookingToken, "book");
   if (!claims) {
@@ -368,12 +432,15 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   // interview's org), then run everything else under that org.
   // bypass: connector-token — a candidate's booking token binds the interview but not its organization.
   const scope = await withBypassContext(async () => {
-    const found = await db.execute<{ orgId: string; expiresAt: string | null }>(sql`
+    const found = await db.execute<{ orgId: string; expiresAt: string | null }>(
+      sql`
       select org_id as "orgId", max(expires_at) as "expiresAt"
         from hrm_interview_slots
        where candidate_token_hash = ${tokenHash}
        group by org_id limit 2
-    `, "objects");
+    `,
+      "objects",
+    );
     return found;
   });
   if (scope.length !== 1 || !scope[0]) {
@@ -389,9 +456,14 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
     // The interview's own fate gates every booking: a cancel that lands
     // between the link lookup above and this transaction must still read
     // cancelled, never book a dead sitting.
-    const interview = (await db.execute<{ status: string }>(sql`
+    const interview = (
+      await db.execute<{ status: string }>(
+        sql`
       select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!interview) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }
@@ -407,35 +479,53 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
         `a ${interview.status} interview takes no bookings — ask the recruiter for a fresh interview instead of reusing this link`,
       );
     }
-    const alreadyBooked = (await db.execute<{ one: number }>(sql`
+    const alreadyBooked = (
+      await db.execute<{ one: number }>(
+        sql`
       select 1 as one from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (alreadyBooked) {
-      throw new RecruitingError("REFUSED", "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time");
+      throw new RecruitingError(
+        "REFUSED",
+        "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time",
+      );
     }
     const slotId = requireId(query.slotId, "slotId");
     // The requested slot names its own fate before link liveness is
     // considered: a racer arriving after the winner must hear taken (their
     // slot is gone), not expired (the link itself may still be live with
     // other proposed slots, or exhausted by this very booking).
-    const wanted = (await db.execute<{ kind: string }>(sql`
+    const wanted = (
+      await db.execute<{ kind: string }>(
+        sql`
       select kind from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and id = ${slotId}
          and candidate_token_hash = ${tokenHash}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (wanted && wanted.kind !== "proposed") {
       throw new RecruitingError(
         "REFUSED",
         "this slot was just taken — pick another proposed slot instead of retrying this one",
       );
     }
-    const link = (await db.execute<{ expiresAt: string | null }>(sql`
+    const link = (
+      await db.execute<{ expiresAt: string | null }>(
+        sql`
       select max(expires_at) as "expiresAt" from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId}
          and candidate_token_hash = ${tokenHash} and kind = 'proposed'
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!link?.expiresAt || Date.parse(link.expiresAt) <= Date.now()) {
       throw new RecruitingError(
         "REFUSED",
@@ -444,7 +534,9 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
     }
     // FIRST WINS: exactly one concurrent booker flips proposed→booked; the
     // others match zero rows and are refused as taken below.
-    const booked = (await db.execute<SlotRow>(sql`
+    const booked = (
+      await db.execute<SlotRow>(
+        sql`
       update hrm_interview_slots
          set kind = 'booked', booked_by_candidate_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${slotId} and interview_id = ${interviewId}
@@ -452,7 +544,10 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
       returning id, interview_id as "interviewId",
                 starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
                 expires_at as "expiresAt"
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!booked) {
       throw new RecruitingError(
         "REFUSED",
@@ -521,14 +616,17 @@ export async function readBookingLink(bookingToken: string): Promise<{
   const tokenHash = hashRecruitingToken(bookingToken);
   // bypass: connector-token — a candidate's booking token binds the slots but not their organization.
   const rows = await withBypassContext(async () => {
-    const found = await db.execute<SlotRow & { orgId: string }>(sql`
+    const found = await db.execute<SlotRow & { orgId: string }>(
+      sql`
       select org_id as "orgId", id, interview_id as "interviewId",
              starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
              expires_at as "expiresAt"
         from hrm_interview_slots
        where candidate_token_hash = ${tokenHash} and kind = 'proposed'
        order by starts_at
-    `, "objects");
+    `,
+      "objects",
+    );
     return found;
   });
   if (rows.length === 0) {
@@ -559,10 +657,7 @@ export async function readBookingLink(bookingToken: string): Promise<{
  * state, and scorecard submitted/total per sitting. Names only — the
  * scorecard contents stay behind the blind read.
  */
-export async function listUpcomingInterviews(query: {
-  orgId: string;
-  actorId: string;
-}): Promise<
+export async function listUpcomingInterviews(query: { orgId: string; actorId: string }): Promise<
   readonly {
     id: string;
     kind: string;
@@ -593,7 +688,8 @@ export async function listUpcomingInterviews(query: {
       bookedSlots: string;
       scorecardsSubmitted: string;
       scorecardsTotal: string;
-    }>(sql`
+    }>(
+      sql`
       select i.id, i.kind, i.scheduled_at as "scheduledAt", i.status,
              c.display_name as "candidateName", r.title as "requisitionTitle",
              (select count(*)::text from hrm_interview_slots s
@@ -612,7 +708,9 @@ export async function listUpcomingInterviews(query: {
          and (${allowed === null} or r.employer_subsidiary_id = any(${allowed === null ? "{}" : pgUuidArray([...allowed])}::uuid[]))
        order by i.scheduled_at
        limit 200
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((row) => ({
       id: row.id,
       kind: row.kind,
@@ -640,14 +738,17 @@ export async function listInterviewSlots(query: {
   return withOrgTransaction(orgId, async () => {
     const chain = await interviewChain(db, orgId, interviewId);
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
-    const rows = await db.execute<SlotRow>(sql`
+    const rows = await db.execute<SlotRow>(
+      sql`
       select id, interview_id as "interviewId",
              starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
              expires_at as "expiresAt"
         from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId}
        order by starts_at
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toSlotDTO);
   });
 }

@@ -1,24 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const issueReporting: DocArticle = {
-  slug: 'issue-reporting',
-  title: 'Reporting a Product Issue',
-  category: 'administration',
+  slug: "issue-reporting",
+  title: "Reporting a Product Issue",
+  category: "administration",
   order: 6,
   summary:
-    'Report a defect from any page, what the reporter removes before filing, and how an operator chooses the destination.',
-  updated: '2026-09-17',
+    "Report a defect from any page, what the reporter removes before filing, and how an operator chooses the destination.",
+  updated: "2026-09-17",
   keywords: [
-    'report',
-    'issue',
-    'bug',
-    'defect',
-    'feedback',
-    'problem',
-    'broken',
-    'wrong',
-    'tracker',
-    'github',
+    "report",
+    "issue",
+    "bug",
+    "defect",
+    "feedback",
+    "problem",
+    "broken",
+    "wrong",
+    "tracker",
+    "github",
   ],
   body: `# Reporting a Product Issue
 
@@ -99,5 +99,5 @@ The reporter uses the organization's configured AI provider
 With no provider configured, reporting still works — the report is filed
 without triage, which is worse writing and no lost defects.
 `,
-  related: ['audit-log', 'assistant-chat', 'company-settings'],
-}
+  related: ["audit-log", "assistant-chat", "company-settings"],
+};

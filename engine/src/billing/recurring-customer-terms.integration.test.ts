@@ -42,56 +42,67 @@ async function seedSchedule(
 }
 
 async function draftDueDates(orgId: string): Promise<(string | null)[]> {
-  const rows = await db.execute<{ due: string | null }>(sql`
+  const rows = await db.execute<{ due: string | null }>(
+    sql`
     select due_date::text as due from documents
      where org_id = ${orgId} and kind = 'customer_invoice' and status = 'draft'
        and document_number not like 'TPL-%'
-     order by due_date nulls last, document_number`, "objects");
+     order by due_date nulls last, document_number`,
+    "objects",
+  );
   return rows.map((row) => row.due);
 }
 
-test("recurring drafts without a template spread fall back to customer terms", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
-    await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
+test(
+  "recurring drafts without a template spread fall back to customer terms",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+      await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
       where org_id=${org.orgId} and key='admin'`);
-    const net15 = randomUUID();
-    await db.execute(sql`
+      const net15 = randomUUID();
+      await db.execute(sql`
       insert into payment_terms (id, org_id, name, net_days)
       values (${net15}, ${org.orgId}, 'Net 15', 15)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into customer_roles (org_id, party_id, payment_terms_id)
       values (${org.orgId}, ${org.customerId}, ${net15})`);
-    // Template spread (+30) stays authoritative over the customer's Net 15.
-    await seedSchedule(org, actorId, org.customerId, "2026-08-14");
-    // No template spread: the draft follows the customer's Net 15 from the
-    // run date, exactly like a hand-entered invoice.
-    await seedSchedule(org, actorId, org.customerId, null);
-    const run = await runDueRecurringSchedules(org.date);
-    assert.equal(run.failed, 0);
-    assert.equal(run.generated, 2);
-    assert.deepEqual(await draftDueDates(org.orgId), ["2026-07-30", "2026-08-14"]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Template spread (+30) stays authoritative over the customer's Net 15.
+      await seedSchedule(org, actorId, org.customerId, "2026-08-14");
+      // No template spread: the draft follows the customer's Net 15 from the
+      // run date, exactly like a hand-entered invoice.
+      await seedSchedule(org, actorId, org.customerId, null);
+      const run = await runDueRecurringSchedules(org.date);
+      assert.equal(run.failed, 0);
+      assert.equal(run.generated, 2);
+      assert.deepEqual(await draftDueDates(org.orgId), ["2026-07-30", "2026-08-14"]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("recurring drafts stay undated without template terms or customer terms", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
-    await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
+test(
+  "recurring drafts stay undated without template terms or customer terms",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+      await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
       where org_id=${org.orgId} and key='admin'`);
-    const bareCustomer = randomUUID();
-    await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
+      const bareCustomer = randomUUID();
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${bareCustomer}, ${org.orgId}, 'customer', 'Terms-less Customer', true, '{}'::jsonb)`);
-    await seedSchedule(org, actorId, bareCustomer, null);
-    const run = await runDueRecurringSchedules(org.date);
-    assert.equal(run.failed, 0);
-    assert.equal(run.generated, 1);
-    assert.deepEqual(await draftDueDates(org.orgId), [null]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await seedSchedule(org, actorId, bareCustomer, null);
+      const run = await runDueRecurringSchedules(org.date);
+      assert.equal(run.failed, 0);
+      assert.equal(run.generated, 1);
+      assert.deepEqual(await draftDueDates(org.orgId), [null]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

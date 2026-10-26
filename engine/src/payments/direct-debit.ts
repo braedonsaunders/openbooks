@@ -2,7 +2,11 @@ import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { sum } from "../money/money.ts";
-import { cancelPaymentRun, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
+import {
+  cancelPaymentRun,
+  PAYMENT_RUN_INTERNAL_CANCEL_REASONS,
+  PAYMENT_RUN_SYSTEM_ACTOR_ID,
+} from "./run-cancellation.ts";
 import { createPaymentDocument, nextNumber, updateDraftPayment } from "./payment-documents.ts";
 import { isPaymentRunSourceClaimConflict } from "./run-creation.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
@@ -25,7 +29,10 @@ function directDebitSubsidiaryScopeFilter(
   if (allowedSubsidiaryIds == null) return sql``;
   const ids = [...allowedSubsidiaryIds];
   return ids.length > 0
-    ? sql` and ${column} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    ? sql` and ${column} in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
     : sql` and false`;
 }
 
@@ -40,24 +47,51 @@ export async function createDirectDebitRun(opts: {
   allowedSubsidiaryIds?: DirectDebitSubsidiaryScope;
 }): Promise<{ id: string; runNumber: string }> {
   const outcome = await withOrgTransaction(opts.orgId, async () => {
-    if (!opts.invoiceDocumentIds.length) throw new PaymentError("select at least one invoice to collect");
-    const asOf = opts.scheduledFor ?? await businessToday(opts.orgId);
+    if (!opts.invoiceDocumentIds.length)
+      throw new PaymentError("select at least one invoice to collect");
+    const asOf = opts.scheduledFor ?? (await businessToday(opts.orgId));
     // Lock the requested profile before checking its legal entity. This keeps
     // a concurrent profile move from changing the run's subsidiary after the
     // scope decision and before the run is persisted.
-    const profileResult = (await db.execute<{ id: string; bank_account_id: string; subsidiary_id: string | null; currency: string; rail: string; direction: string }>(sql`
+    const profileResult = await db.execute<{
+      id: string;
+      bank_account_id: string;
+      subsidiary_id: string | null;
+      currency: string;
+      rail: string;
+      direction: string;
+    }>(
+      sql`
     select p.id, p.bank_account_id, p.subsidiary_id, p.currency, f.rail, f.direction
       from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
       join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
        ${directDebitSubsidiaryScopeFilter(sql`p.subsidiary_id`, opts.allowedSubsidiaryIds)}
      for update of p
-  `, "objects"));
+  `,
+      "objects",
+    );
     const profile = profileResult[0];
-    if (!profile || profile.direction === "credit" || !["nacha_debit", "sepa_debit", "custom"].includes(profile.rail)) {
+    if (
+      !profile ||
+      profile.direction === "credit" ||
+      !["nacha_debit", "sepa_debit", "custom"].includes(profile.rail)
+    ) {
       throw new PaymentError("select an active direct-debit bank profile");
     }
-    const result = (await db.execute<{ document_id: string; party_id: string; currency: string; fx_rate: string; subsidiary_id: string | null; open_line_id: string; control_account_id: string; open_base: string; open: string; mandate_id: string; party_bank_account_id: string }>(sql`
+    const result = await db.execute<{
+      document_id: string;
+      party_id: string;
+      currency: string;
+      fx_rate: string;
+      subsidiary_id: string | null;
+      open_line_id: string;
+      control_account_id: string;
+      open_base: string;
+      open: string;
+      mandate_id: string;
+      party_bank_account_id: string;
+    }>(sql`
     select d.id as document_id, d.party_id, d.currency, d.fx_rate, d.subsidiary_id,
            jl.id as open_line_id, jl.account_id as control_account_id,
            abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
@@ -82,9 +116,12 @@ export async function createDirectDebitRun(opts: {
        ${directDebitSubsidiaryScopeFilter(sql`party.subsidiary_id`, opts.allowedSubsidiaryIds)}
        and abs(jl.amount) - coalesce(ap.applied, 0) > 0
       for update of d, party
-  `));
+  `);
     const found = new Set(result.rows.map((r) => r.document_id));
-    if (opts.invoiceDocumentIds.some((id) => !found.has(id))) throw new PaymentError("some invoices are closed, outside the profile scope, or have no active debit mandate");
+    if (opts.invoiceDocumentIds.some((id) => !found.has(id)))
+      throw new PaymentError(
+        "some invoices are closed, outside the profile scope, or have no active debit mandate",
+      );
     const groups = new Map<string, typeof result.rows>();
     for (const row of result.rows) {
       // The receipt converts at its own posting date's rate; each invoice keeps its carrying amount.
@@ -92,57 +129,140 @@ export async function createDirectDebitRun(opts: {
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
     const runNumber = await nextNumber(opts.orgId, "payment_run", "COLL-");
-    const run = (await db.insert(schema.paymentRuns).values({ orgId: opts.orgId, runNumber, bankAccountId: profile.bank_account_id, paymentBankProfileId: profile.id, subsidiaryId: profile.subsidiary_id, method: "direct_debit", direction: "inbound", purpose: "customer_collections", currency: profile.currency, status: "draft", scheduledFor: opts.scheduledFor ?? null, createdBy: opts.createdBy }).returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber }))[0]!;
+    const run = (
+      await db
+        .insert(schema.paymentRuns)
+        .values({
+          orgId: opts.orgId,
+          runNumber,
+          bankAccountId: profile.bank_account_id,
+          paymentBankProfileId: profile.id,
+          subsidiaryId: profile.subsidiary_id,
+          method: "direct_debit",
+          direction: "inbound",
+          purpose: "customer_collections",
+          currency: profile.currency,
+          status: "draft",
+          scheduledFor: opts.scheduledFor ?? null,
+          createdBy: opts.createdBy,
+        })
+        .returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber })
+    )[0]!;
     const createdReceiptIds: string[] = [];
     // The run row must survive a failed assembly as cancellation evidence, so
     // keep it outside this savepoint while making child writes reversible.
     await db.execute(sql`savepoint direct_debit_run_assembly`);
     try {
-    // Claim the complete source population before creating receipt documents.
-    // payment_instruction_id is intentionally nullable while a draft run is
-    // being assembled; the partial unique index is the final race authority.
-    await db.insert(schema.paymentRunItems).values(result.rows.map((invoice) => ({
-      orgId: opts.orgId,
-      paymentRunId: run.id,
-      sourceDocumentId: invoice.document_id,
-      sourceOpenLineId: invoice.open_line_id,
-      kind: "receivable" as const,
-      grossAmount: invoice.open,
-      discountAmount: "0",
-      creditAmount: "0",
-      paymentAmount: invoice.open,
-      currency: invoice.currency,
-      fxRate: invoice.fx_rate,
-      status: "selected" as const,
-      createdBy: opts.createdBy,
-    })));
-    for (const invoices of groups.values()) {
-      const first = invoices[0]!;
-      const allocations: AllocationInput[] = invoices.map((i) => sameCurrencyAllocation(i.open_line_id, i.open, i.open_base));
-      const total = sum(allocations.map((a) => a.sourceTransactionAmount));
-      // Scheduled collection run: system provenance, unrestricted by
-      // construction; the receipt carries the invoiced subsidiary explicitly.
-      const receipt = await createPaymentDocument({ orgId: opts.orgId, kind: "customer_payment", createdBy: opts.createdBy, allowedSubsidiaryIds: null, partyId: first.party_id, bankAccountId: profile.bank_account_id, subsidiaryId: first.subsidiary_id, currency: profile.currency, memo: `Collection run ${runNumber}` });
-      createdReceiptIds.push(receipt.id);
-      // Mandate collection on its own receipt: no actor entity set is resolved
-      // here, so explicit null names the unrestricted grant outright.
-      await updateDraftPayment(receipt.id, { partyId: first.party_id, bankAccountId: profile.bank_account_id, allocations, controlAccountId: first.control_account_id }, opts.createdBy, opts.orgId, { allowedSubsidiaryIds: null });
-      const instruction = (await db.insert(schema.paymentInstructions).values({ orgId: opts.orgId, paymentRunId: run.id, payeePartyId: first.party_id, payeeBankAccountId: first.party_bank_account_id, mandateId: first.mandate_id, amount: total, currency: profile.currency, paymentDocumentId: receipt.id, status: "pending", createdBy: opts.createdBy }).returning({ id: schema.paymentInstructions.id }))[0]!;
-      const associated = await db
-        .update(schema.paymentRunItems)
-        .set({ paymentInstructionId: instruction.id, updatedAt: new Date(), updatedBy: opts.createdBy })
-        .where(and(
-          eq(schema.paymentRunItems.orgId, opts.orgId),
-          eq(schema.paymentRunItems.paymentRunId, run.id),
-          inArray(schema.paymentRunItems.sourceOpenLineId, invoices.map((invoice) => invoice.open_line_id)),
-        ))
-        .returning({ id: schema.paymentRunItems.id });
-      if (associated.length !== invoices.length) {
-        throw new PaymentError("the collection run could not associate every claimed invoice");
+      // Claim the complete source population before creating receipt documents.
+      // payment_instruction_id is intentionally nullable while a draft run is
+      // being assembled; the partial unique index is the final race authority.
+      await db.insert(schema.paymentRunItems).values(
+        result.rows.map((invoice) => ({
+          orgId: opts.orgId,
+          paymentRunId: run.id,
+          sourceDocumentId: invoice.document_id,
+          sourceOpenLineId: invoice.open_line_id,
+          kind: "receivable" as const,
+          grossAmount: invoice.open,
+          discountAmount: "0",
+          creditAmount: "0",
+          paymentAmount: invoice.open,
+          currency: invoice.currency,
+          fxRate: invoice.fx_rate,
+          status: "selected" as const,
+          createdBy: opts.createdBy,
+        })),
+      );
+      for (const invoices of groups.values()) {
+        const first = invoices[0]!;
+        const allocations: AllocationInput[] = invoices.map((i) =>
+          sameCurrencyAllocation(i.open_line_id, i.open, i.open_base),
+        );
+        const total = sum(allocations.map((a) => a.sourceTransactionAmount));
+        // Scheduled collection run: system provenance, unrestricted by
+        // construction; the receipt carries the invoiced subsidiary explicitly.
+        const receipt = await createPaymentDocument({
+          orgId: opts.orgId,
+          kind: "customer_payment",
+          createdBy: opts.createdBy,
+          allowedSubsidiaryIds: null,
+          partyId: first.party_id,
+          bankAccountId: profile.bank_account_id,
+          subsidiaryId: first.subsidiary_id,
+          currency: profile.currency,
+          memo: `Collection run ${runNumber}`,
+        });
+        createdReceiptIds.push(receipt.id);
+        // Mandate collection on its own receipt: no actor entity set is resolved
+        // here, so explicit null names the unrestricted grant outright.
+        await updateDraftPayment(
+          receipt.id,
+          {
+            partyId: first.party_id,
+            bankAccountId: profile.bank_account_id,
+            allocations,
+            controlAccountId: first.control_account_id,
+          },
+          opts.createdBy,
+          opts.orgId,
+          { allowedSubsidiaryIds: null },
+        );
+        const instruction = (
+          await db
+            .insert(schema.paymentInstructions)
+            .values({
+              orgId: opts.orgId,
+              paymentRunId: run.id,
+              payeePartyId: first.party_id,
+              payeeBankAccountId: first.party_bank_account_id,
+              mandateId: first.mandate_id,
+              amount: total,
+              currency: profile.currency,
+              paymentDocumentId: receipt.id,
+              status: "pending",
+              createdBy: opts.createdBy,
+            })
+            .returning({ id: schema.paymentInstructions.id })
+        )[0]!;
+        const associated = await db
+          .update(schema.paymentRunItems)
+          .set({
+            paymentInstructionId: instruction.id,
+            updatedAt: new Date(),
+            updatedBy: opts.createdBy,
+          })
+          .where(
+            and(
+              eq(schema.paymentRunItems.orgId, opts.orgId),
+              eq(schema.paymentRunItems.paymentRunId, run.id),
+              inArray(
+                schema.paymentRunItems.sourceOpenLineId,
+                invoices.map((invoice) => invoice.open_line_id),
+              ),
+            ),
+          )
+          .returning({ id: schema.paymentRunItems.id });
+        if (associated.length !== invoices.length) {
+          throw new PaymentError("the collection run could not associate every claimed invoice");
+        }
       }
-    }
-    await db.execute(sql`update payment_runs r set payment_count = x.n, total_amount = x.total, updated_at = now(), updated_by = ${opts.createdBy} from (select payment_run_id, count(*)::int as n, coalesce(sum(amount), 0) as total from payment_instructions where org_id = ${opts.orgId} and payment_run_id = ${run.id} group by payment_run_id) x where r.id = x.payment_run_id and r.org_id = ${opts.orgId}`);
-      await db.insert(schema.paymentEvents).values({ orgId: opts.orgId, paymentRunId: run.id, eventType: "run_created", toStatus: "draft", details: { paymentBankProfileId: profile.id, sourceCount: result.rows.length, direction: "inbound" }, actorId: opts.createdBy });
+      await db.execute(
+        sql`update payment_runs r set payment_count = x.n, total_amount = x.total, updated_at = now(), updated_by = ${opts.createdBy} from (select payment_run_id, count(*)::int as n, coalesce(sum(amount), 0) as total from payment_instructions where org_id = ${opts.orgId} and payment_run_id = ${run.id} group by payment_run_id) x where r.id = x.payment_run_id and r.org_id = ${opts.orgId}`,
+      );
+      await db
+        .insert(schema.paymentEvents)
+        .values({
+          orgId: opts.orgId,
+          paymentRunId: run.id,
+          eventType: "run_created",
+          toStatus: "draft",
+          details: {
+            paymentBankProfileId: profile.id,
+            sourceCount: result.rows.length,
+            direction: "inbound",
+          },
+          actorId: opts.createdBy,
+        });
       await db.execute(sql`release savepoint direct_debit_run_assembly`);
       return { kind: "success" as const, run };
     } catch (error) {
@@ -152,12 +272,34 @@ export async function createDirectDebitRun(opts: {
       // Clear the failed child writes while retaining the run row, then record
       // the same durable cancellation evidence as the pre-transaction path.
       await db.execute(sql`rollback to savepoint direct_debit_run_assembly`);
-      await cancelPaymentRun(run.id, opts.orgId, PAYMENT_RUN_SYSTEM_ACTOR_ID, PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed);
+      await cancelPaymentRun(
+        run.id,
+        opts.orgId,
+        PAYMENT_RUN_SYSTEM_ACTOR_ID,
+        PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed,
+      );
       if (createdReceiptIds.length > 0) {
-        await db.execute(sql`delete from document_lines dl using documents d where dl.document_id = d.id and dl.org_id = d.org_id and d.id in ${createdReceiptIds} and d.org_id = ${opts.orgId} and d.status = 'draft'`);
-        await db.execute(sql`delete from documents where id in ${createdReceiptIds} and org_id = ${opts.orgId} and status = 'draft'`);
+        await db.execute(
+          sql`delete from document_lines dl using documents d where dl.document_id = d.id and dl.org_id = d.org_id and d.id in ${createdReceiptIds} and d.org_id = ${opts.orgId} and d.status = 'draft'`,
+        );
+        await db.execute(
+          sql`delete from documents where id in ${createdReceiptIds} and org_id = ${opts.orgId} and status = 'draft'`,
+        );
       }
-      await db.insert(schema.paymentEvents).values({ orgId: opts.orgId, paymentRunId: run.id, eventType: "run_creation_failed", fromStatus: "draft", toStatus: "cancelled", details: { error: error instanceof Error ? error.message : String(error), direction: "inbound" }, actorId: opts.createdBy });
+      await db
+        .insert(schema.paymentEvents)
+        .values({
+          orgId: opts.orgId,
+          paymentRunId: run.id,
+          eventType: "run_creation_failed",
+          fromStatus: "draft",
+          toStatus: "cancelled",
+          details: {
+            error: error instanceof Error ? error.message : String(error),
+            direction: "inbound",
+          },
+          actorId: opts.createdBy,
+        });
       return { kind: "failure" as const, error: failure };
     }
   });

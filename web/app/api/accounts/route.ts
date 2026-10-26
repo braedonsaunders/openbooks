@@ -3,19 +3,10 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  lockScopeRow,
-  ScopeNotFoundError,
-} from "@openbooks/engine/organization/scope";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { ACCOUNT_TYPES } from "@openbooks/schema";
-import {
-  guardSubsidiaryScope,
-  guardUnrestrictedScope,
-} from "../../../lib/authz";
-import {
-  isFeatureEnabled,
-  subsidiaryFeatureEnabled,
-} from "../../../lib/features";
+import { guardSubsidiaryScope, guardUnrestrictedScope } from "../../../lib/authz";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../lib/features";
 import {
   customFieldViewerFor,
   findUnownedCustomReferences,
@@ -88,8 +79,7 @@ export const POST = defineRoute({
   body: createBodySchema,
   handler: async ({ request, authz: gate, body: routeBody }) => {
     const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
-    if (!isUuid(requestId))
-      return bad("invalid_idempotency_key", undefined, 400);
+    if (!isUuid(requestId)) return bad("invalid_idempotency_key", undefined, 400);
 
     const body = routeBody;
     // Multi-currency off refuses settlement-currency writes — except the one the
@@ -101,28 +91,17 @@ export const POST = defineRoute({
     ) {
       const restriction = body.currencyRestriction?.toUpperCase() ?? null;
       const base = await orgBaseCurrency(gate.user.orgId);
-      if (!(
-        body.reconcilable === true &&
-        restriction &&
-        base &&
-        restriction === base
-      )) {
+      if (!(body.reconcilable === true && restriction && base && restriction === base)) {
         return notFound("record");
       }
     }
-    if (
-      body.eliminate !== undefined &&
-      !(await subsidiaryFeatureEnabled(gate.user.orgId))
-    ) {
+    if (body.eliminate !== undefined && !(await subsidiaryFeatureEnabled(gate.user.orgId))) {
       return notFound("record");
     }
 
     const name = body.name?.trim() ?? "";
     if (!name) return bad("name_required", "name");
-    if (
-      !body.type ||
-      !ACCOUNT_TYPES.includes(body.type as (typeof ACCOUNT_TYPES)[number])
-    ) {
+    if (!body.type || !ACCOUNT_TYPES.includes(body.type as (typeof ACCOUNT_TYPES)[number])) {
       return bad("invalid_type", "type");
     }
 
@@ -136,16 +115,17 @@ export const POST = defineRoute({
 
     if (parentId && !isUuid(parentId)) return bad("invalid_parent", "parentId");
 
-    const currencyRestriction =
-      textOrNull(body.currencyRestriction)?.toUpperCase() ?? null;
+    const currencyRestriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null;
     if (currencyRestriction) {
       if (!CURRENCY_RE.test(currencyRestriction))
         return bad("invalid_currency", "currencyRestriction");
-      const currency = await db.execute(sql`
+      const currency = await db.execute(
+        sql`
       select 1 from currencies where code = ${currencyRestriction}
-    `, "objects");
-      if (!currency[0])
-        return bad("invalid_currency", "currencyRestriction");
+    `,
+        "objects",
+      );
+      if (!currency[0]) return bad("invalid_currency", "currencyRestriction");
     }
     // Storage requires reconcilable accounts to carry a settlement currency
     // (accounts_reconcilable_currency_required). Refuse the combination here
@@ -156,12 +136,14 @@ export const POST = defineRoute({
 
     const subsidiaryId = textOrNull(body.subsidiaryId);
     if (subsidiaryId) {
-      if (!isUuid(subsidiaryId))
-        return bad("invalid_subsidiary", "subsidiaryId");
-      const subsidiary = await db.execute(sql`
+      if (!isUuid(subsidiaryId)) return bad("invalid_subsidiary", "subsidiaryId");
+      const subsidiary = await db.execute(
+        sql`
       select 1 from subsidiaries
        where id = ${subsidiaryId} and org_id = ${gate.user.orgId}
-    `, "objects");
+    `,
+        "objects",
+      );
       if (!subsidiary[0]) return bad("invalid_subsidiary", "subsidiaryId");
       // A restricted caller may never mint an account for a subsidiary they
       // cannot see; a missing or foreign id stays invalid_subsidiary above.
@@ -178,20 +160,19 @@ export const POST = defineRoute({
     // one answers 404, and the difference discloses the hidden row. The
     // effective subsidiary is resolved inside the write transaction below.
 
-    const definitions = await db.execute<{ key: string }>(sql`
+    const definitions = await db.execute<{ key: string }>(
+      sql`
     select key from segment_definitions
      where org_id = ${gate.user.orgId} and is_active and allow_account_requirement
-  `, "objects");
-    const allowedDimensions = new Set([
-      "party",
-      ...definitions.map((row) => row.key),
-    ]);
+  `,
+      "objects",
+    );
+    const allowedDimensions = new Set(["party", ...definitions.map((row) => row.key)]);
     const requestedDimensions = body.requiredDimensions ?? [];
     if (
       !Array.isArray(requestedDimensions) ||
       requestedDimensions.some(
-        (dimension) =>
-          typeof dimension !== "string" || !allowedDimensions.has(dimension),
+        (dimension) => typeof dimension !== "string" || !allowedDimensions.has(dimension),
       )
     ) {
       return bad("invalid_dimensions", "requiredDimensions");
@@ -200,9 +181,17 @@ export const POST = defineRoute({
 
     const viewer = customFieldViewerFor(gate);
     const activeCustomDefs = await loadFieldDefs("accounts");
-    const hiddenCustom = hiddenCustomFieldRefusal(activeCustomDefs, viewer, body.custom ?? {}, null);
+    const hiddenCustom = hiddenCustomFieldRefusal(
+      activeCustomDefs,
+      viewer,
+      body.custom ?? {},
+      null,
+    );
     if (hiddenCustom)
-      return NextResponse.json({ error: hiddenCustom.message, fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } }, { status: 403 });
+      return NextResponse.json(
+        { error: hiddenCustom.message, fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } },
+        { status: 403 },
+      );
     const customDefs = visibleCustomFieldDefs(activeCustomDefs, viewer);
     const validatedCustom = validateCustomValues(customDefs, body.custom ?? {});
     if (!validatedCustom.ok) return bad("invalid_custom_fields", "custom");
@@ -214,8 +203,7 @@ export const POST = defineRoute({
       customDefs,
       validatedCustom.cleaned,
     );
-    if (unownedCreateRefs.length > 0)
-      return bad("unknown_custom_reference", "custom");
+    if (unownedCreateRefs.length > 0) return bad("unknown_custom_reference", "custom");
     const custom = validatedCustom.cleaned;
 
     let created: boolean | NextResponse = false;
@@ -245,20 +233,23 @@ export const POST = defineRoute({
             if (!(error instanceof ScopeNotFoundError)) throw error;
             return notFound("record");
           }
-          const parent = (await tx.execute<{
+          const parent = (
+            await tx.execute<{
               is_summary: boolean;
               is_active: boolean;
               type: string;
               subsidiary_id: string | null;
-            }>(sql`
+            }>(
+              sql`
           select is_summary, is_active, type, subsidiary_id from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
-        `, "objects"))[0];
+        `,
+              "objects",
+            )
+          )[0];
           if (!parent) return notFound("record");
-          if (!parent.is_summary)
-            return bad("parent_must_be_summary", "parentId");
+          if (!parent.is_summary) return bad("parent_must_be_summary", "parentId");
           if (!parent.is_active) return bad("inactive_parent", "parentId");
-          if (parent.type !== body.type)
-            return bad("parent_type_mismatch", "parentId");
+          if (parent.type !== body.type) return bad("parent_type_mismatch", "parentId");
           if (effectiveSubsidiaryId === null) {
             effectiveSubsidiaryId = parent.subsidiary_id;
             if (effectiveSubsidiaryId === null) {
@@ -274,9 +265,14 @@ export const POST = defineRoute({
         // name must not refuse the replay. Any other same-name holder is
         // checked under the name lock, before the idempotency claim, so a
         // refusal leaves no claim behind for the operator to retry against.
-        const priorCreate = (await tx.execute(sql`
+        const priorCreate = (
+          await tx.execute(
+            sql`
           select 1 from accounts where id = ${requestId} and org_id = ${gate.user.orgId}
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (!priorCreate) {
           await tx.execute(accountNameLock(gate.user.orgId, name));
           const holders = await findNamedAccounts(tx, {
@@ -328,7 +324,8 @@ export const POST = defineRoute({
         // Another transaction may claim this key after the preflight read;
         // the missing RETURNING row is re-read from the immutable audit image
         // below and becomes either an exact replay or a typed conflict.
-        const inserted = await tx.execute<{ id: string }>(sql`
+        const inserted = await tx.execute<{ id: string }>(
+          sql`
         insert into accounts
           (id, org_id, number, name, type, description, parent_id, is_summary, is_active,
            currency_restriction, eliminate, subsidiary_id, subsidiary_include_children,
@@ -343,7 +340,9 @@ export const POST = defineRoute({
         -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
-      `, "objects");
+      `,
+          "objects",
+        );
         if (!inserted[0]) {
           const replay = await resolveIdempotentReplay(tx, {
             orgId: gate.user.orgId,
@@ -367,8 +366,7 @@ export const POST = defineRoute({
     } catch (error) {
       if (error instanceof SetupCreateConflict) {
         return conflict(error.code, {
-          remedy:
-            "Close and reopen the account drawer to retry with a fresh request key.",
+          remedy: "Close and reopen the account drawer to retry with a fresh request key.",
         });
       }
       const message =
@@ -380,34 +378,40 @@ export const POST = defineRoute({
         // instead of guessing: the refusal carries its id, name and number
         // for the drawer's existing-account link.
         const holder = number
-          ? (await db.execute<{ id: string; name: string; number: string | null }>(sql`
+          ? (
+              await db.execute<{ id: string; name: string; number: string | null }>(
+                sql`
               select id, name, number from accounts
                where org_id = ${gate.user.orgId} and number = ${number}
                limit 1
-            `, "objects"))[0]
+            `,
+                "objects",
+              )
+            )[0]
           : undefined;
-        return bad("number_in_use", "number", 422, holder ? {
-          existingAccountId: holder.id,
-          existingAccountName: holder.name,
-          existingAccountNumber: holder.number,
-        } : undefined);
+        return bad(
+          "number_in_use",
+          "number",
+          422,
+          holder
+            ? {
+                existingAccountId: holder.id,
+                existingAccountName: holder.name,
+                existingAccountNumber: holder.number,
+              }
+            : undefined,
+        );
       }
       if (message.includes("parent_not_found")) return notFound("record");
-      if (message.includes("inactive_parent"))
-        return bad("inactive_parent", "parentId");
+      if (message.includes("inactive_parent")) return bad("inactive_parent", "parentId");
       if (message.includes("parent_must_be_summary"))
         return bad("parent_must_be_summary", "parentId");
-      if (message.includes("parent_type_mismatch"))
-        return bad("parent_type_mismatch", "parentId");
+      if (message.includes("parent_type_mismatch")) return bad("parent_type_mismatch", "parentId");
       throw error;
     }
     if (created instanceof NextResponse) return created;
 
-    const loadedPayload = await loadAccount(
-      requestId,
-      gate.user.orgId,
-      gate.allowedSubsidiaryIds,
-    );
+    const loadedPayload = await loadAccount(requestId, gate.user.orgId, gate.allowedSubsidiaryIds);
     if (!loadedPayload) return bad("save_failed", undefined, 500);
     const payload = await redactAccountCustomFields(loadedPayload, viewer);
     // A fresh account backs no statements yet: corroboration is the request's
@@ -420,7 +424,10 @@ export const POST = defineRoute({
       isSummary,
     });
     return NextResponse.json(
-      { ...payload, warnings: [...(hygiene ? [hygiene] : []), ...(duplicateWarning ? [duplicateWarning] : [])] },
+      {
+        ...payload,
+        warnings: [...(hygiene ? [hygiene] : []), ...(duplicateWarning ? [duplicateWarning] : [])],
+      },
       { status: created ? 201 : 200 },
     );
   },

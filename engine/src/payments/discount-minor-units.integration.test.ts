@@ -40,7 +40,9 @@ async function discountFixture(
             ${opts.billTotal}, '0', ${opts.billTotal}, ${actor})`);
   await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
     values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', ${opts.billTotal}, ${opts.billTotal}, '0')`);
-  await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
+  await db.execute(
+    sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`,
+  );
   await postDocument(billId, {
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
   });
@@ -55,7 +57,8 @@ async function discountFixture(
             ${org.subsidiaryId}, ${formatId}, ${opts.currency}, 'CA',
             ${JSON.stringify({ discountAccountId: org.accounts.cogs })}::jsonb, ${actor}, ${actor})`);
 
-  const run = await createPaymentRun({ allowedSubsidiaryIds: null,
+  const run = await createPaymentRun({
+    allowedSubsidiaryIds: null,
     orgId: org.orgId,
     createdBy: actor,
     paymentBankProfileId: profileId,
@@ -65,10 +68,16 @@ async function discountFixture(
   return { runId: run.id, billId };
 }
 
-async function runDiscounts(orgId: string, runId: string): Promise<{ discount: string; payment: string }[]> {
-  const rows = await db.execute<{ discount: string; payment: string }>(sql`
+async function runDiscounts(
+  orgId: string,
+  runId: string,
+): Promise<{ discount: string; payment: string }[]> {
+  const rows = await db.execute<{ discount: string; payment: string }>(
+    sql`
     select i.discount_amount::text as discount, i.payment_amount::text as payment
-      from payment_run_items i where i.org_id = ${orgId} and i.payment_run_id = ${runId}`, "objects");
+      from payment_run_items i where i.org_id = ${orgId} and i.payment_run_id = ${runId}`,
+    "objects",
+  );
   return rows;
 }
 
@@ -76,31 +85,40 @@ for (const [currency, fxRate, billTotal, discountPercent, wantDiscount, wantPaym
   ["JPY", "0.0091", "10501", "2", "210.0000", "10291.0000"],
   ["KWD", "3.6000", "1000.005", "2", "20.0000", "980.0050"],
 ] as const) {
-  test(`payment-run early discount rounds to ${currency} minor units, not cents`, { skip: !DB }, async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = await createScratchUser(org.orgId, "W6 discounts", "admin");
-      if (currency === "KWD") {
-        // Tenant data, like an admin-added currency: the chain must honour
-        // its scale wherever the row exists.
-        await db.execute(sql`insert into currencies (code, name, minor_units)
+  test(
+    `payment-run early discount rounds to ${currency} minor units, not cents`,
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      try {
+        const actor = await createScratchUser(org.orgId, "W6 discounts", "admin");
+        if (currency === "KWD") {
+          // Tenant data, like an admin-added currency: the chain must honour
+          // its scale wherever the row exists.
+          await db.execute(sql`insert into currencies (code, name, minor_units)
           values ('KWD', 'Kuwaiti Dinar', 3) on conflict (code) do update set minor_units = 3`);
+        }
+        const { runId } = await discountFixture(org, actor, {
+          currency,
+          fxRate,
+          billTotal,
+          discountPercent,
+        });
+        const before = await runDiscounts(org.orgId, runId);
+        assert.deepEqual(
+          before.map((r) => [r.discount, r.payment]),
+          [[wantDiscount, wantPayment]],
+          `${currency} discount carries the currency's scale`,
+        );
+        // The run still balances: discount + payment == the open bill, so the
+        // legs built verbatim from this composition cannot carry dust either.
+        const { add, cmp } = await import("../money/money.ts");
+        for (const r of before) {
+          assert.equal(cmp(add(r.discount, r.payment), billTotal), 0, "run balances without dust");
+        }
+      } finally {
+        await dropScratchOrg(org.orgId);
       }
-      const { runId } = await discountFixture(org, actor, { currency, fxRate, billTotal, discountPercent });
-      const before = await runDiscounts(org.orgId, runId);
-      assert.deepEqual(
-        before.map((r) => [r.discount, r.payment]),
-        [[wantDiscount, wantPayment]],
-        `${currency} discount carries the currency's scale`,
-      );
-      // The run still balances: discount + payment == the open bill, so the
-      // legs built verbatim from this composition cannot carry dust either.
-      const { add, cmp } = await import("../money/money.ts");
-      for (const r of before) {
-        assert.equal(cmp(add(r.discount, r.payment), billTotal), 0, "run balances without dust");
-      }
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  });
+    },
+  );
 }

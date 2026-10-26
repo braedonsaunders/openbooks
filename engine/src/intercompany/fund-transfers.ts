@@ -17,7 +17,13 @@ import {
 import { loadIntercompanyPair } from "../organization/intercompany-accounts.ts";
 import { postEntry, type PostEntryResult } from "../journal/post-entry.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { auditIntercompany, IntercompanyError, INTERCOMPANY_NETTING_DISABLED, requireOneRow, requireIntercompanyPermission } from "./errors.ts";
+import {
+  auditIntercompany,
+  IntercompanyError,
+  INTERCOMPANY_NETTING_DISABLED,
+  requireOneRow,
+  requireIntercompanyPermission,
+} from "./errors.ts";
 import {
   assertIntercompanyPeriodsOpen,
   intercompanyPostingBook,
@@ -86,7 +92,8 @@ function scopeAllows(allowed: ReadonlySet<string> | null, ids: string[]): boolea
 }
 
 function validate(input: FundTransferInput): FundTransferInput & { amount: string } {
-  if (!isIsoCalendarDate(input.transferDate)) refuse("the transfer date must be a valid calendar date (YYYY-MM-DD)");
+  if (!isIsoCalendarDate(input.transferDate))
+    refuse("the transfer date must be a valid calendar date (YYYY-MM-DD)");
   for (const [value, label] of [
     [input.fromSubsidiaryId, "paying subsidiary"],
     [input.toSubsidiaryId, "receiving subsidiary"],
@@ -96,15 +103,20 @@ function validate(input: FundTransferInput): FundTransferInput & { amount: strin
     if (!isUuid(value)) refuse(`choose the ${label}`);
   }
   if (input.fromSubsidiaryId === input.toSubsidiaryId) {
-    refuse("both bank accounts belong to the same subsidiary; record a bank transfer in Banking instead");
+    refuse(
+      "both bank accounts belong to the same subsidiary; record a bank transfer in Banking instead",
+    );
   }
   const exact = canonicalDecimal(input.amount, 4);
-  if (exact === null || toUnits(exact) <= 0n || wholeDigits(exact) > 15) refuse("the amount must be a positive amount with at most four decimals");
+  if (exact === null || toUnits(exact) <= 0n || wholeDigits(exact) > 15)
+    refuse("the amount must be a positive amount with at most four decimals");
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
   if (!reason) refuse("a reason is required");
   if (reason.length > 2000) refuse("the reason must be at most 2000 characters");
-  const memo = typeof input.memo === "string" && input.memo.trim() ? input.memo.trim().slice(0, 500) : null;
-  if (input.currency != null && !/^[A-Z]{3}$/.test(input.currency)) refuse("the currency must be a three-letter code");
+  const memo =
+    typeof input.memo === "string" && input.memo.trim() ? input.memo.trim().slice(0, 500) : null;
+  if (input.currency != null && !/^[A-Z]{3}$/.test(input.currency))
+    refuse("the currency must be a three-letter code");
   return { ...input, amount: parseMoney(exact), reason, memo };
 }
 
@@ -123,38 +135,69 @@ export async function postIntercompanyFundTransfer(
     await requireIntercompanyPermission(db, orgId, actorId, "intercompany.settle");
     if (!(await lockAndCheckOrgFeature(db, orgId, FEATURE))) refuse(INTERCOMPANY_NETTING_DISABLED);
     if (input.idempotencyKey) {
-      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`intercompany-transfer:${orgId}:${input.idempotencyKey}`}, 0))`);
-      const prior = (await db.execute<{
-        id: string; status: "posted" | "reversed"; from_bank_account_id: string; to_bank_account_id: string; amount: string; transfer_date: string;
-        from_subsidiary_id: string; to_subsidiary_id: string;
-        currency: string; memo: string | null; reason: string;
-      }>(sql`
+      await db.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`intercompany-transfer:${orgId}:${input.idempotencyKey}`}, 0))`,
+      );
+      const prior = (
+        await db.execute<{
+          id: string;
+          status: "posted" | "reversed";
+          from_bank_account_id: string;
+          to_bank_account_id: string;
+          amount: string;
+          transfer_date: string;
+          from_subsidiary_id: string;
+          to_subsidiary_id: string;
+          currency: string;
+          memo: string | null;
+          reason: string;
+        }>(
+          sql`
         select id, status, from_bank_account_id, to_bank_account_id, amount::text as amount, transfer_date::text as transfer_date,
                from_subsidiary_id, to_subsidiary_id, currency, memo, reason
           from intercompany_fund_transfers
-         where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`, "objects"))[0];
+         where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`,
+          "objects",
+        )
+      )[0];
       if (prior) {
-        const same = prior.from_bank_account_id === input.fromBankAccountId
-          && prior.to_bank_account_id === input.toBankAccountId
-          && prior.from_subsidiary_id === input.fromSubsidiaryId
-          && prior.to_subsidiary_id === input.toSubsidiaryId
-          && toUnits(prior.amount) === toUnits(input.amount)
-          && prior.transfer_date === input.transferDate
-          && (input.currency == null || prior.currency === input.currency)
-          && prior.memo === (input.memo ?? null)
-          && prior.reason === input.reason;
-        if (!same) refuse("this request key already recorded a different transfer; use a new key for a new transfer", 409);
+        const same =
+          prior.from_bank_account_id === input.fromBankAccountId &&
+          prior.to_bank_account_id === input.toBankAccountId &&
+          prior.from_subsidiary_id === input.fromSubsidiaryId &&
+          prior.to_subsidiary_id === input.toSubsidiaryId &&
+          toUnits(prior.amount) === toUnits(input.amount) &&
+          prior.transfer_date === input.transferDate &&
+          (input.currency == null || prior.currency === input.currency) &&
+          prior.memo === (input.memo ?? null) &&
+          prior.reason === input.reason;
+        if (!same)
+          refuse(
+            "this request key already recorded a different transfer; use a new key for a new transfer",
+            409,
+          );
         if (prior.status === "reversed") {
-          refuse("this transfer has already been reversed; use a new request key to record a new transfer", 409);
+          refuse(
+            "this transfer has already been reversed; use a new request key to record a new transfer",
+            409,
+          );
         }
         return prior.id;
       }
     }
     const accounts = await db.execute<{
-      id: string; name: string; type: string; is_active: boolean; is_summary: boolean; currency_restriction: string | null;
-    }>(sql`
+      id: string;
+      name: string;
+      type: string;
+      is_active: boolean;
+      is_summary: boolean;
+      currency_restriction: string | null;
+    }>(
+      sql`
       select id, name, type, is_active, is_summary, currency_restriction from accounts
-       where org_id = ${orgId} and id in (${input.fromBankAccountId}, ${input.toBankAccountId})`, "objects");
+       where org_id = ${orgId} and id in (${input.fromBankAccountId}, ${input.toBankAccountId})`,
+      "objects",
+    );
     const from = accounts.find((account) => account.id === input.fromBankAccountId);
     const to = accounts.find((account) => account.id === input.toBankAccountId);
     if (!from || !to) refuse("a chosen bank account does not exist in this organization", 404);
@@ -163,26 +206,50 @@ export async function postIntercompanyFundTransfer(
         refuse(`${account.name} is not an active bank account`);
       }
     }
-    const restrictions = [...new Set([from.currency_restriction, to.currency_restriction].filter((c): c is string => Boolean(c)))];
+    const restrictions = [
+      ...new Set(
+        [from.currency_restriction, to.currency_restriction].filter((c): c is string => Boolean(c)),
+      ),
+    ];
     if (restrictions.length > 1) {
-      refuse(`${from.name} holds ${from.currency_restriction} and ${to.name} holds ${to.currency_restriction}; an intercompany transfer moves one currency — choose accounts in the same currency`);
+      refuse(
+        `${from.name} holds ${from.currency_restriction} and ${to.name} holds ${to.currency_restriction}; an intercompany transfer moves one currency — choose accounts in the same currency`,
+      );
     }
     const currency = restrictions[0] ?? input.currency ?? null;
-    if (!currency) refuse("choose the transfer currency; neither bank account is restricted to one");
-    if (input.currency && input.currency !== currency) refuse(`the chosen bank accounts hold ${currency}, not ${input.currency}`);
+    if (!currency)
+      refuse("choose the transfer currency; neither bank account is restricted to one");
+    if (input.currency && input.currency !== currency)
+      refuse(`the chosen bank accounts hold ${currency}, not ${input.currency}`);
 
-    const pair = await loadIntercompanyPair(db, orgId, input.fromSubsidiaryId, input.toSubsidiaryId);
+    const pair = await loadIntercompanyPair(
+      db,
+      orgId,
+      input.fromSubsidiaryId,
+      input.toSubsidiaryId,
+    );
     if (!pair || !pair.isActive) {
-      refuse("no active intercompany pair joins these subsidiaries; configure one under Setup → Accounting → Intercompany pairs");
+      refuse(
+        "no active intercompany pair joins these subsidiaries; configure one under Setup → Accounting → Intercompany pairs",
+      );
     }
     const ctx = await loadSubsidiaryContext(db, orgId);
     const fromSub = ctx.byId.get(input.fromSubsidiaryId);
     const toSub = ctx.byId.get(input.toSubsidiaryId);
     if (!fromSub || !toSub) refuse("a chosen subsidiary does not exist in this organization", 404);
     const bookId = await intercompanyPostingBook(db, orgId);
-    const periodId = await intercompanyPostingPeriod(db, orgId, input.transferDate, input.fromSubsidiaryId);
+    const periodId = await intercompanyPostingPeriod(
+      db,
+      orgId,
+      input.transferDate,
+      input.fromSubsidiaryId,
+    );
     await assertIntercompanyPeriodsOpen(db, {
-      orgId, date: input.transferDate, bookId, subsidiaryIds: [input.fromSubsidiaryId, input.toSubsidiaryId], modules: ["banking"],
+      orgId,
+      date: input.transferDate,
+      bookId,
+      subsidiaryIds: [input.fromSubsidiaryId, input.toSubsidiaryId],
+      modules: ["banking"],
     });
     const rates = await resolveSpotRates(db, orgId, input.transferDate, [
       { from: currency, to: fromSub.baseCurrency },
@@ -212,13 +279,24 @@ export async function postIntercompanyFundTransfer(
     let legs;
     try {
       legs = await intercompanyBalancingLegs(db, {
-        orgId, ctx, originSubId: input.fromSubsidiaryId, originFxRate: fromRate, lines: bankLines,
+        orgId,
+        ctx,
+        originSubId: input.fromSubsidiaryId,
+        originFxRate: fromRate,
+        lines: bankLines,
       });
       await validateSubsidiaryRestrictions(db, {
         orgId,
         ctx,
         docSubsidiaryId: input.fromSubsidiaryId,
-        lines: [...bankLines, ...legs.map((leg) => ({ accountId: leg.accountId, amount: leg.amount, subsidiaryId: leg.subsidiaryId }))],
+        lines: [
+          ...bankLines,
+          ...legs.map((leg) => ({
+            accountId: leg.accountId,
+            amount: leg.amount,
+            subsidiaryId: leg.subsidiaryId,
+          })),
+        ],
       });
     } catch (error) {
       if (error instanceof SubsidiaryError) refuse(error.message);
@@ -238,30 +316,45 @@ export async function postIntercompanyFundTransfer(
         origin: "intercompany",
         custom: { intercompanyTransfer: transferNumber },
         actorId,
-        idempotencyKey: input.idempotencyKey ? `intercompany-transfer:${input.idempotencyKey}` : undefined,
+        idempotencyKey: input.idempotencyKey
+          ? `intercompany-transfer:${input.idempotencyKey}`
+          : undefined,
         closeModules: ["banking"],
         lines: [
           ...bankLines.map((line) => ({
-            accountId: line.accountId, subsidiaryId: line.subsidiaryId, amount: line.amount,
-            currency: line.currency, txnAmount: line.txnAmount, fxRate: line.fxRate, memo,
+            accountId: line.accountId,
+            subsidiaryId: line.subsidiaryId,
+            amount: line.amount,
+            currency: line.currency,
+            txnAmount: line.txnAmount,
+            fxRate: line.fxRate,
+            memo,
           })),
           ...legs.map((leg) => ({
-            accountId: leg.accountId, subsidiaryId: leg.subsidiaryId, amount: leg.amount,
-            currency: leg.currency, txnAmount: leg.txnAmount, fxRate: leg.fxRate, memo: leg.memo,
+            accountId: leg.accountId,
+            subsidiaryId: leg.subsidiaryId,
+            amount: leg.amount,
+            currency: leg.currency,
+            txnAmount: leg.txnAmount,
+            fxRate: leg.fxRate,
+            memo: leg.memo,
           })),
         ],
       });
     } catch (error) {
       intercompanyPostingRefusal(error);
     }
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into intercompany_fund_transfers
         (org_id, transfer_number, transfer_date, from_subsidiary_id, to_subsidiary_id, from_bank_account_id,
          to_bank_account_id, currency, amount, memo, reason, entry_id, idempotency_key, created_by)
       values (${orgId}, ${transferNumber}, ${input.transferDate}, ${input.fromSubsidiaryId}, ${input.toSubsidiaryId},
               ${input.fromBankAccountId}, ${input.toBankAccountId}, ${currency}, ${input.amount}, ${input.memo ?? null},
               ${input.reason}, ${posted.entryId}, ${input.idempotencyKey ?? null}, ${actorId})
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     requireOneRow(inserted, "the transfer could not be recorded");
     const transferId = inserted[0]!.id;
     await auditIntercompany(db, {
@@ -273,7 +366,13 @@ export async function postIntercompanyFundTransfer(
       changes: {
         mode: "intercompany_transfer_posted",
         reason: input.reason,
-        after: { transferNumber, transferDate: input.transferDate, currency, amount: input.amount, entryId: posted.entryId },
+        after: {
+          transferNumber,
+          transferDate: input.transferDate,
+          currency,
+          amount: input.amount,
+          entryId: posted.entryId,
+        },
       },
     });
     return transferId;
@@ -289,30 +388,53 @@ export async function reverseIntercompanyFundTransfer(
   input: { reversalDate: string; reason: string },
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<FundTransferDetail> {
-  if (!isIsoCalendarDate(input.reversalDate)) refuse("the reversal date must be a valid calendar date (YYYY-MM-DD)");
+  if (!isIsoCalendarDate(input.reversalDate))
+    refuse("the reversal date must be a valid calendar date (YYYY-MM-DD)");
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
   if (!reason) refuse("a reversal reason is required");
   if (!isUuid(transferId)) refuse("transfer not found", 404);
   await withOrgTransaction(orgId, async () => {
     await requireIntercompanyPermission(db, orgId, actorId, "intercompany.settle");
     if (!(await lockAndCheckOrgFeature(db, orgId, FEATURE))) refuse(INTERCOMPANY_NETTING_DISABLED);
-    const transfer = (await db.execute<{
-      status: string; entry_id: string; transfer_number: string; transfer_date: string;
-      from_subsidiary_id: string; to_subsidiary_id: string;
-    }>(sql`
+    const transfer = (
+      await db.execute<{
+        status: string;
+        entry_id: string;
+        transfer_number: string;
+        transfer_date: string;
+        from_subsidiary_id: string;
+        to_subsidiary_id: string;
+      }>(
+        sql`
       select status, entry_id, transfer_number, transfer_date::text as transfer_date, from_subsidiary_id, to_subsidiary_id
         from intercompany_fund_transfers
        where org_id = ${orgId} and id = ${transferId}
-       for update`, "objects"))[0];
-    if (!transfer || !scopeAllows(allowedSubsidiaryIds, [transfer.from_subsidiary_id, transfer.to_subsidiary_id])) {
+       for update`,
+        "objects",
+      )
+    )[0];
+    if (
+      !transfer ||
+      !scopeAllows(allowedSubsidiaryIds, [transfer.from_subsidiary_id, transfer.to_subsidiary_id])
+    ) {
       refuse("transfer not found", 404);
     }
     if (transfer.status === "reversed") return;
-    if (input.reversalDate < transfer.transfer_date) refuse(`the reversal date cannot be before the transfer date ${transfer.transfer_date}`);
+    if (input.reversalDate < transfer.transfer_date)
+      refuse(`the reversal date cannot be before the transfer date ${transfer.transfer_date}`);
     const bookId = await intercompanyPostingBook(db, orgId);
-    const periodId = await intercompanyPostingPeriod(db, orgId, input.reversalDate, transfer.from_subsidiary_id);
+    const periodId = await intercompanyPostingPeriod(
+      db,
+      orgId,
+      input.reversalDate,
+      transfer.from_subsidiary_id,
+    );
     await assertIntercompanyPeriodsOpen(db, {
-      orgId, date: input.reversalDate, bookId, subsidiaryIds: [transfer.from_subsidiary_id, transfer.to_subsidiary_id], modules: ["banking"],
+      orgId,
+      date: input.reversalDate,
+      bookId,
+      subsidiaryIds: [transfer.from_subsidiary_id, transfer.to_subsidiary_id],
+      modules: ["banking"],
     });
     const reversalEntryId = await postMirrorReversal(db, {
       orgId,
@@ -326,12 +448,15 @@ export async function reverseIntercompanyFundTransfer(
       custom: { intercompanyTransfer: transfer.transfer_number, reversal: true },
       closeModules: ["banking"],
     });
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update intercompany_fund_transfers
          set status = 'reversed', reversal_entry_id = ${reversalEntryId}, reversal_date = ${input.reversalDate},
              reverse_reason = ${reason}, reversed_by = ${actorId}, reversed_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${transferId} and status = 'posted'
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     requireOneRow(updated, "the transfer changed while it was being reversed");
     await auditIntercompany(db, {
       orgId,
@@ -356,19 +481,39 @@ export async function loadIntercompanyFundTransfer(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<FundTransferDetail> {
   if (!isUuid(transferId)) refuse("transfer not found", 404);
-  const row = (await db.execute<{
-    id: string; transfer_number: string; transfer_date: string; from_subsidiary_id: string; to_subsidiary_id: string;
-    from_bank_account_id: string; to_bank_account_id: string; currency: string; amount: string; memo: string | null;
-    reason: string; status: "posted" | "reversed"; entry_id: string; reversal_entry_id: string | null;
-    reversal_date: string | null; reverse_reason: string | null; created_by: string; created_at: string;
-  }>(sql`
+  const row = (
+    await db.execute<{
+      id: string;
+      transfer_number: string;
+      transfer_date: string;
+      from_subsidiary_id: string;
+      to_subsidiary_id: string;
+      from_bank_account_id: string;
+      to_bank_account_id: string;
+      currency: string;
+      amount: string;
+      memo: string | null;
+      reason: string;
+      status: "posted" | "reversed";
+      entry_id: string;
+      reversal_entry_id: string | null;
+      reversal_date: string | null;
+      reverse_reason: string | null;
+      created_by: string;
+      created_at: string;
+    }>(
+      sql`
     select id, transfer_number, transfer_date::text as transfer_date, from_subsidiary_id, to_subsidiary_id,
            from_bank_account_id, to_bank_account_id, currency, amount::text as amount, memo, reason, status,
            entry_id, reversal_entry_id, reversal_date::text as reversal_date, reverse_reason, created_by,
            created_at::text as created_at
       from intercompany_fund_transfers
-     where org_id = ${orgId} and id = ${transferId}`, "objects"))[0];
-  if (!row || !scopeAllows(allowedSubsidiaryIds, [row.from_subsidiary_id, row.to_subsidiary_id])) refuse("transfer not found", 404);
+     where org_id = ${orgId} and id = ${transferId}`,
+      "objects",
+    )
+  )[0];
+  if (!row || !scopeAllows(allowedSubsidiaryIds, [row.from_subsidiary_id, row.to_subsidiary_id]))
+    refuse("transfer not found", 404);
   return {
     id: row.id,
     transferNumber: row.transfer_number,
@@ -399,15 +544,19 @@ export async function listIntercompanyFundTransfers(
 ): Promise<FundTransferDetail[]> {
   const limit = Math.min(Math.max(options.limit ?? 200, 1), 500);
   const allowed = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds];
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from intercompany_fund_transfers
      where org_id = ${orgId}
        and (${allowed === null}::boolean
             or (from_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])
                 and to_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])))
      order by transfer_date desc, transfer_number desc
-     limit ${limit}`, "objects");
+     limit ${limit}`,
+    "objects",
+  );
   const out: FundTransferDetail[] = [];
-  for (const row of rows) out.push(await loadIntercompanyFundTransfer(orgId, row.id, allowedSubsidiaryIds));
+  for (const row of rows)
+    out.push(await loadIntercompanyFundTransfer(orgId, row.id, allowedSubsidiaryIds));
   return out;
 }

@@ -66,8 +66,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmBenefitsEnrollmentLinksRouteNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmBenefitsEnrollmentLinksRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
@@ -77,22 +78,23 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-benefits-enrollment-links";
-  const linksRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-benefits-enrollment-links";
+const linksRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const ENROLLMENT_ID = "00000000-0000-4000-8000-000000000091";
 const DEPENDENT_ID = "00000000-0000-4000-8000-000000000092";
@@ -115,21 +117,35 @@ function jsonRequest(body: unknown): Request {
 
 test("POST links and unlinks through the discriminated action", async () => {
   reset();
-  const linked = await linksRoute!.POST(jsonRequest({ action: "link", dependentId: DEPENDENT_ID }), ctx);
+  const linked = await linksRoute!.POST(
+    jsonRequest({ action: "link", dependentId: DEPENDENT_ID }),
+    ctx,
+  );
   assert.equal(linked.status, 200);
   assert.deepEqual(routeState.calls[0], {
     fn: "link",
-    args: { orgId: "org-1", actorId: "user-1", enrollmentId: ENROLLMENT_ID, dependentId: DEPENDENT_ID },
+    args: {
+      orgId: "org-1",
+      actorId: "user-1",
+      enrollmentId: ENROLLMENT_ID,
+      dependentId: DEPENDENT_ID,
+    },
   });
   reset();
-  const unlinked = await linksRoute!.POST(jsonRequest({ action: "unlink", dependentId: DEPENDENT_ID }), ctx);
+  const unlinked = await linksRoute!.POST(
+    jsonRequest({ action: "unlink", dependentId: DEPENDENT_ID }),
+    ctx,
+  );
   assert.equal(unlinked.status, 200);
   assert.deepEqual(routeState.calls[0]!.fn, "unlink");
 });
 
 test("POST refuses a non-uuid dependent before the service", async () => {
   reset();
-  assert.equal((await linksRoute!.POST(jsonRequest({ action: "link", dependentId: "nope" }), ctx)).status, 400);
+  assert.equal(
+    (await linksRoute!.POST(jsonRequest({ action: "link", dependentId: "nope" }), ctx)).status,
+    400,
+  );
   assert.equal(routeState.calls.length, 0);
 });
 
@@ -139,7 +155,10 @@ test("POST maps the cross-employment refusal with remedy intact", async () => {
     "REFUSED",
     "the dependent belongs to a different employment than the election — cover a worker's own dependents on their own elections",
   );
-  const refused = await linksRoute!.POST(jsonRequest({ action: "link", dependentId: DEPENDENT_ID }), ctx);
+  const refused = await linksRoute!.POST(
+    jsonRequest({ action: "link", dependentId: DEPENDENT_ID }),
+    ctx,
+  );
   assert.equal(refused.status, 422);
   const body = (await refused.json()) as { error: string };
   assert.match(body.error, /their own elections/);

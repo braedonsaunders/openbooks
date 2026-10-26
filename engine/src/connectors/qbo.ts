@@ -59,12 +59,20 @@ function basicAuth(app: QboApp): string {
  *  Authorization header and POST body) to a host that was never allowlisted:
  *  the token endpoints carry the client secret and refresh token, and every
  *  API call carries the company bearer token. */
-function qboFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
+function qboFetch(
+  url: string | URL,
+  init: RequestInit = {},
+  transport: typeof fetch = guardedFetch,
+): Promise<Response> {
   // Deadline plus bounded retry (429 honoring Retry-After, 5xx, network)
   // through the shared connector helper, with a named refusal after
   // exhaustion. redirect: "error" stays on every attempt and redirect
   // refusals are never retried — still exactly one request per call.
-  return fetchWithConnectorRetry(url, { ...init, redirect: "error" }, { describe: "QBO", transport });
+  return fetchWithConnectorRetry(
+    url,
+    { ...init, redirect: "error" },
+    { describe: "QBO", transport },
+  );
 }
 
 interface TokenResponse {
@@ -82,24 +90,54 @@ function toTokens(r: TokenResponse): QboTokens {
 }
 
 /** Exchange an authorization code for the first token pair. */
-export async function exchangeCode(app: QboApp, code: string, transport: typeof fetch = guardedFetch): Promise<QboTokens> {
-  const res = await qboFetch(TOKEN_URL, {
-    method: "POST",
-    headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-    body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: app.redirectUri }),
-  }, transport);
-  if (!res.ok) throw new Error(`QBO token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+export async function exchangeCode(
+  app: QboApp,
+  code: string,
+  transport: typeof fetch = guardedFetch,
+): Promise<QboTokens> {
+  const res = await qboFetch(
+    TOKEN_URL,
+    {
+      method: "POST",
+      headers: {
+        Authorization: basicAuth(app),
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: app.redirectUri,
+      }),
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(`QBO token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
 
 /** Refresh an expired access token (the refresh token may rotate). */
-export async function refreshTokens(app: QboApp, refreshToken: string, transport: typeof fetch = guardedFetch): Promise<QboTokens> {
-  const res = await qboFetch(TOKEN_URL, {
-    method: "POST",
-    headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
-  }, transport);
-  if (!res.ok) throw new Error(`QBO token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+export async function refreshTokens(
+  app: QboApp,
+  refreshToken: string,
+  transport: typeof fetch = guardedFetch,
+): Promise<QboTokens> {
+  const res = await qboFetch(
+    TOKEN_URL,
+    {
+      method: "POST",
+      headers: {
+        Authorization: basicAuth(app),
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(`QBO token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
 
@@ -125,7 +163,8 @@ export class QboClient {
   private async accessToken(): Promise<string> {
     if (new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
       const consumed = this.tokens;
-      const refresh = (refreshToken: string) => refreshTokens(this.app, refreshToken, this.transport);
+      const refresh = (refreshToken: string) =>
+        refreshTokens(this.app, refreshToken, this.transport);
       this.tokens = this.onRefresh
         ? await this.onRefresh(consumed, refresh)
         : await refresh(consumed.refreshToken);
@@ -138,20 +177,31 @@ export class QboClient {
     const url = new URL(`${apiBase(this.app.environment)}/v3/company/${this.realmId}/${path}`);
     url.searchParams.set("minorversion", MINOR_VERSION);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    const res = await qboFetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }, this.transport);
-    if (!res.ok) throw new Error(`QBO ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const res = await qboFetch(
+      url,
+      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
+      this.transport,
+    );
+    if (!res.ok)
+      throw new Error(`QBO ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return (await res.json()) as T;
   }
 
   /** One page of a QBO query (entity array under QueryResponse.<Entity>). */
   private async queryPage<T>(statement: string): Promise<T[]> {
-    const data = await this.get<{ QueryResponse?: Record<string, unknown> }>("query", { query: statement });
+    const data = await this.get<{ QueryResponse?: Record<string, unknown> }>("query", {
+      query: statement,
+    });
     for (const v of Object.values(data.QueryResponse ?? {})) if (Array.isArray(v)) return v as T[];
     return [];
   }
 
   /** Query ALL rows of an entity (STARTPOSITION pagination, 1000/page). */
-  async queryAll<T = Record<string, unknown>>(entity: string, where = "", orderBy = "Id"): Promise<T[]> {
+  async queryAll<T = Record<string, unknown>>(
+    entity: string,
+    where = "",
+    orderBy = "Id",
+  ): Promise<T[]> {
     const out: T[] = [];
     const page = 1000;
     for (let start = 1; ; start += page) {
@@ -166,14 +216,21 @@ export class QboClient {
   /** Signed attachment URLs carry their own authority; never forward company bearer tokens. */
   async downloadAttachment(url: string): Promise<Buffer> {
     const target = new URL(url);
-    if (target.protocol !== "https:" || target.username || target.password) throw new Error("QuickBooks attachment download URL is invalid");
+    if (target.protocol !== "https:" || target.username || target.password)
+      throw new Error("QuickBooks attachment download URL is invalid");
     const response = await qboFetch(target, {}, this.transport);
-    if (!response.ok) throw new Error(`QuickBooks attachment download HTTP ${response.status}; check file access and retry`);
+    if (!response.ok)
+      throw new Error(
+        `QuickBooks attachment download HTTP ${response.status}; check file access and retry`,
+      );
     return Buffer.from(await response.arrayBuffer());
   }
 
   /** Fetch a report (TrialBalance, …) as its raw JSON. */
-  async report<T = Record<string, unknown>>(name: string, params: Record<string, string> = {}): Promise<T> {
+  async report<T = Record<string, unknown>>(
+    name: string,
+    params: Record<string, string> = {},
+  ): Promise<T> {
     return this.get<T>(`reports/${name}`, params);
   }
 

@@ -99,20 +99,35 @@ export type PromotionInput = {
   discountAccountId?: string | null;
 };
 
-function refusal(message: string, code: PromotionRefusalCode, status: 404 | 409 | 422, remedy?: string): PromotionRefusal {
+function refusal(
+  message: string,
+  code: PromotionRefusalCode,
+  status: 404 | 409 | 422,
+  remedy?: string,
+): PromotionRefusal {
   return new PromotionRefusal(message, code, status, remedy);
 }
 
 async function assertPromotionsFeature(runner: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(runner, orgId, FEATURE))) {
-    throw refusal("Promotions is turned off for this organization", "feature_disabled", 409, FEATURE_REMEDY);
+    throw refusal(
+      "Promotions is turned off for this organization",
+      "feature_disabled",
+      409,
+      FEATURE_REMEDY,
+    );
   }
 }
 
 function parseCode(value: unknown): string {
   const code = typeof value === "string" ? value.trim() : "";
   if (!code || code.length > 64) {
-    throw refusal("A promotion code is required", "invalid_input", 422, "Enter the code customers type at checkout");
+    throw refusal(
+      "A promotion code is required",
+      "invalid_input",
+      422,
+      "Enter the code customers type at checkout",
+    );
   }
   return code;
 }
@@ -120,13 +135,23 @@ function parseCode(value: unknown): string {
 function parsePercent(value: unknown): string {
   const percent = canonicalDecimal(value, 4);
   if (percent === null) {
-    throw refusal(`Promotion percent ${String(value)} is not a usable rate`, "invalid_input", 422, "Enter a percent above zero up to 100");
+    throw refusal(
+      `Promotion percent ${String(value)} is not a usable rate`,
+      "invalid_input",
+      422,
+      "Enter a percent above zero up to 100",
+    );
   }
   // Percent units are ten-thousandths: 10.0000 reads as 100000. Compared as
   // integers, never floats.
   const units = toUnits(percent);
   if (units <= 0n || units > 100_0000n) {
-    throw refusal(`Promotion percent ${String(value)} is not a usable rate`, "invalid_input", 422, "Enter a percent above zero up to 100");
+    throw refusal(
+      `Promotion percent ${String(value)} is not a usable rate`,
+      "invalid_input",
+      422,
+      "Enter a percent above zero up to 100",
+    );
   }
   return percent;
 }
@@ -136,20 +161,33 @@ function parseMinor(value: unknown, label: string): bigint {
   // decimal text judged by the shared scale-zero grammar. Fractions and
   // unsafe numbers are refused, never truncated: truncating 1.5 stored 1,
   // a discount nobody typed.
-  const text = typeof value === "bigint"
-    ? value.toString()
-    : typeof value === "number"
-      ? (Number.isSafeInteger(value) ? String(value) : "")
-      : typeof value === "string"
-        ? value.trim()
-        : "";
+  const text =
+    typeof value === "bigint"
+      ? value.toString()
+      : typeof value === "number"
+        ? Number.isSafeInteger(value)
+          ? String(value)
+          : ""
+        : typeof value === "string"
+          ? value.trim()
+          : "";
   const exact = text === "" ? null : canonicalDecimal(text, 0);
   if (exact === null || !/^-?\d+$/.test(exact)) {
-    throw refusal(`${label} must be a whole number of minor units`, "invalid_input", 422, `Enter ${label.toLowerCase()} as whole minor units`);
+    throw refusal(
+      `${label} must be a whole number of minor units`,
+      "invalid_input",
+      422,
+      `Enter ${label.toLowerCase()} as whole minor units`,
+    );
   }
   const minor = BigInt(exact);
   if (minor <= 0n) {
-    throw refusal(`${label} must be greater than zero`, "invalid_input", 422, `Enter a positive ${label.toLowerCase()}`);
+    throw refusal(
+      `${label} must be greater than zero`,
+      "invalid_input",
+      422,
+      `Enter a positive ${label.toLowerCase()}`,
+    );
   }
   return minor;
 }
@@ -157,15 +195,30 @@ function parseMinor(value: unknown, label: string): bigint {
 function parseCurrency(value: unknown): string {
   const currency = typeof value === "string" ? value.trim().toUpperCase() : "";
   if (!/^[A-Z]{3}$/.test(currency)) {
-    throw refusal(`Currency ${String(value)} is not an ISO code`, "invalid_input", 422, "Enter the three-letter currency code, for example USD");
+    throw refusal(
+      `Currency ${String(value)} is not an ISO code`,
+      "invalid_input",
+      422,
+      "Enter the three-letter currency code, for example USD",
+    );
   }
   return currency;
 }
 
 function parseCount(value: unknown, label: string): number {
-  const count = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value.trim()) : NaN;
+  const count =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? Number(value.trim())
+        : NaN;
   if (!Number.isInteger(count) || count <= 0) {
-    throw refusal(`${label} must be a positive whole number`, "invalid_input", 422, `Enter a positive whole ${label.toLowerCase()}`);
+    throw refusal(
+      `${label} must be a positive whole number`,
+      "invalid_input",
+      422,
+      `Enter a positive whole ${label.toLowerCase()}`,
+    );
   }
   return count;
 }
@@ -177,10 +230,20 @@ function parseCount(value: unknown, label: string): number {
 export function validatePromotionFields(input: PromotionInput): void {
   parseCode(input.code);
   if (typeof input.name !== "string" || input.name.trim() === "") {
-    throw refusal("A promotion name is required", "invalid_input", 422, "Name the campaign operators see in lists");
+    throw refusal(
+      "A promotion name is required",
+      "invalid_input",
+      422,
+      "Name the campaign operators see in lists",
+    );
   }
   if (!PROMOTION_KINDS.includes(input.kind)) {
-    throw refusal(`Promotion kind ${String(input.kind)} is unknown`, "invalid_input", 422, "Choose percent, amount, free shipping or buy X get Y");
+    throw refusal(
+      `Promotion kind ${String(input.kind)} is unknown`,
+      "invalid_input",
+      422,
+      "Choose percent, amount, free shipping or buy X get Y",
+    );
   }
   if (input.kind === "percent") parsePercent(input.percentValue);
   if (input.kind === "amount") {
@@ -192,9 +255,15 @@ export function validatePromotionFields(input: PromotionInput): void {
     parseCount(input.getQuantity, "Free quantity");
   }
   if (input.startsAt && input.endsAt && input.endsAt <= input.startsAt) {
-    throw refusal("The promotion ends before it starts", "invalid_input", 422, "Set the end after the start of the active window");
+    throw refusal(
+      "The promotion ends before it starts",
+      "invalid_input",
+      422,
+      "Set the end after the start of the active window",
+    );
   }
-  if (input.usageLimit !== undefined && input.usageLimit !== null) parseCount(input.usageLimit, "Usage limit");
+  if (input.usageLimit !== undefined && input.usageLimit !== null)
+    parseCount(input.usageLimit, "Usage limit");
 }
 
 type PromotionRow = Record<string, unknown> & {
@@ -252,8 +321,13 @@ const PROMOTION_COLUMNS = sql`
   channel_scope_id, usage_limit, usage_count, discount_account_id`;
 
 async function readPromotion(runner: SqlExecutor, orgId: string, id: string): Promise<Promotion> {
-  const row = (await runner.execute<PromotionRow>(sql`
-    select ${PROMOTION_COLUMNS} from promotions where org_id = ${orgId} and id = ${id}`, "objects"))[0];
+  const row = (
+    await runner.execute<PromotionRow>(
+      sql`
+    select ${PROMOTION_COLUMNS} from promotions where org_id = ${orgId} and id = ${id}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw refusal("Promotion not found", "not_found", 404);
   return toPromotion(row);
 }
@@ -271,10 +345,17 @@ export async function createPromotion(
   return readPromotion(runner, orgId, id);
 }
 
-async function insertPromotion(runner: SqlExecutor, orgId: string, actorId: string, input: PromotionInput): Promise<string> {
+async function insertPromotion(
+  runner: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  input: PromotionInput,
+): Promise<string> {
   let id: string;
   try {
-    const inserted = (await runner.execute<{ id: string }>(sql`
+    const inserted = (
+      await runner.execute<{ id: string }>(
+        sql`
       insert into promotions (org_id, code, name, description, kind, status, percent_value, amount_minor,
                               currency, buy_quantity, get_quantity, starts_at, ends_at, channel_scope_id,
                               usage_limit, discount_account_id, created_by, updated_by)
@@ -286,17 +367,34 @@ async function insertPromotion(runner: SqlExecutor, orgId: string, actorId: stri
               ${input.kind === "buy_x_get_y" ? parseCount(input.getQuantity, "Free quantity") : null},
               ${input.startsAt ?? null}, ${input.endsAt ?? null}, ${input.channelScopeId ?? null},
               ${input.usageLimit ?? null}, ${input.discountAccountId ?? null}, ${actorId}, ${actorId})
-      returning id`, "objects"))[0];
-    if (!inserted) throw refusal("The promotion was not saved", "changed_concurrently", 409, "Try saving the promotion again");
+      returning id`,
+        "objects",
+      )
+    )[0];
+    if (!inserted)
+      throw refusal(
+        "The promotion was not saved",
+        "changed_concurrently",
+        409,
+        "Try saving the promotion again",
+      );
     id = inserted.id;
   } catch (error) {
     if (error instanceof PromotionRefusal) throw error;
     if (isUniqueViolation(error)) {
-      throw refusal(`Promotion code ${parseCode(input.code)} is already in use`, "invalid_input", 422, "Choose a different code or open the existing promotion");
+      throw refusal(
+        `Promotion code ${parseCode(input.code)} is already in use`,
+        "invalid_input",
+        422,
+        "Choose a different code or open the existing promotion",
+      );
     }
     throw error;
   }
-  await writePromotionAudit(runner, orgId, actorId, id, "insert", { mode: "promotion_created", after: { code: parseCode(input.code), kind: input.kind } });
+  await writePromotionAudit(runner, orgId, actorId, id, "insert", {
+    mode: "promotion_created",
+    after: { code: parseCode(input.code), kind: input.kind },
+  });
   return id;
 }
 
@@ -304,8 +402,12 @@ async function insertPromotion(runner: SqlExecutor, orgId: string, actorId: stri
  * Pure lifecycle rule shared by the engine transition and the setup form, so
  * the drawer refuses the same moves with the same words. Null means allowed.
  */
-export function promotionStatusTransition(from: PromotionStatus, to: PromotionStatus): string | null {
-  if (to !== "active" && to !== "archived") return "Activate a draft or archive a promotion that is done";
+export function promotionStatusTransition(
+  from: PromotionStatus,
+  to: PromotionStatus,
+): string | null {
+  if (to !== "active" && to !== "archived")
+    return "Activate a draft or archive a promotion that is done";
   if (from === "draft" && (to === "active" || to === "archived")) return null;
   if (from === "active" && to === "archived") return null;
   // Archived promotions keep their history and can never return: reopening
@@ -328,10 +430,20 @@ export async function setPromotionStatus(
 ): Promise<Promotion> {
   await assertPromotionsFeature(runner, orgId);
   if (status !== "active" && status !== "archived") {
-    throw refusal(`Promotion status ${status} is not a transition`, "invalid_input", 422, "Activate a draft or archive a promotion that is done");
+    throw refusal(
+      `Promotion status ${status} is not a transition`,
+      "invalid_input",
+      422,
+      "Activate a draft or archive a promotion that is done",
+    );
   }
-  const current = (await runner.execute<{ status: string; code: string }>(sql`
-    select status, code from promotions where org_id = ${orgId} and id = ${id} for update`, "objects"))[0];
+  const current = (
+    await runner.execute<{ status: string; code: string }>(
+      sql`
+    select status, code from promotions where org_id = ${orgId} and id = ${id} for update`,
+      "objects",
+    )
+  )[0];
   if (!current) throw refusal("Promotion not found", "not_found", 404);
   const remedy = promotionStatusTransition(current.status as PromotionStatus, status);
   if (remedy !== null) {
@@ -345,16 +457,33 @@ export async function setPromotionStatus(
   const updated = await runner.execute<never>(sql`
     update promotions set status = ${status}, updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and id = ${id} and status = ${current.status}`);
-  if (updated.rowCount !== 1) throw refusal(`Promotion ${current.code} changed during the update`, "changed_concurrently", 409, "Reload the promotion and try again");
-  await writePromotionAudit(runner, orgId, actorId, id, "update", { mode: "promotion_status", before: { status: current.status }, after: { status } });
+  if (updated.rowCount !== 1)
+    throw refusal(
+      `Promotion ${current.code} changed during the update`,
+      "changed_concurrently",
+      409,
+      "Reload the promotion and try again",
+    );
+  await writePromotionAudit(runner, orgId, actorId, id, "update", {
+    mode: "promotion_status",
+    before: { status: current.status },
+    after: { status },
+  });
   return readPromotion(runner, orgId, id);
 }
 
-export async function listPromotions(runner: SqlExecutor, orgId: string, activeOnly: boolean): Promise<Promotion[]> {
-  const rows = await runner.execute<PromotionRow>(sql`
+export async function listPromotions(
+  runner: SqlExecutor,
+  orgId: string,
+  activeOnly: boolean,
+): Promise<Promotion[]> {
+  const rows = await runner.execute<PromotionRow>(
+    sql`
     select ${PROMOTION_COLUMNS}
       from promotions where org_id = ${orgId} ${activeOnly ? sql`and status = 'active'` : sql``}
-     order by code`, "objects");
+     order by code`,
+    "objects",
+  );
   return rows.map(toPromotion);
 }
 
@@ -406,7 +535,12 @@ async function currencyQuantum(runner: SqlExecutor, currency: string): Promise<n
     return await resolveCurrencyQuantum(runner, currency);
   } catch (error) {
     if (error instanceof UnknownCurrencyPrecisionError) {
-      throw refusal(error.message, "currency_precision_unknown", 422, currencyPrecisionRemedy(currency));
+      throw refusal(
+        error.message,
+        "currency_precision_unknown",
+        422,
+        currencyPrecisionRemedy(currency),
+      );
     }
     throw error;
   }
@@ -475,20 +609,40 @@ export async function applyPromotion(
   }
   const computed = computeDiscountShares(promotion, lines, document, quantum, scale);
   if (computed.every((share) => share === 0n)) {
-    throw refusal(`Promotion ${promotion.code} gives no discount on this document`, "below_threshold", 422, "Check the promotion value against the document lines");
+    throw refusal(
+      `Promotion ${promotion.code} gives no discount on this document`,
+      "below_threshold",
+      422,
+      "Check the promotion value against the document lines",
+    );
   }
   const computedMinor = computed.reduce((sum, share) => sum + share, 0n);
   // A stacked promotion is capped at the remaining undiscounted amount and
   // re-dealt across the same lines in proportion, summing exactly.
   const shares = computedMinor > remainingMinor ? apportion(remainingMinor, computed) : computed;
-  const inserted = await insertDiscountLines(runner, orgId, actorId, document, promotion, lines, shares, discountAccountId, scale);
+  const inserted = await insertDiscountLines(
+    runner,
+    orgId,
+    actorId,
+    document,
+    promotion,
+    lines,
+    shares,
+    discountAccountId,
+    scale,
+  );
   const total = shares.reduce((sum, share) => sum + share, 0n);
   const updatedDocument = await runner.execute<never>(sql`
     update documents
        set updated_by = ${actorId}
      where org_id = ${orgId} and id = ${document.id} and status = 'draft'`);
   if (updatedDocument.rowCount !== 1) {
-    throw refusal(`Document ${document.document_number} changed while applying promotion ${promotion.code}`, "changed_concurrently", 409, "Reload the document and apply the promotion again");
+    throw refusal(
+      `Document ${document.document_number} changed while applying promotion ${promotion.code}`,
+      "changed_concurrently",
+      409,
+      "Reload the document and apply the promotion again",
+    );
   }
   await countRedemption(runner, orgId, promotion);
   await writeDocumentAudit(runner, orgId, actorId, document.id, {
@@ -517,10 +671,15 @@ async function lockDocument(
   documentId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<LockedDocument> {
-  const row = (await runner.execute<LockedDocument>(sql`
+  const row = (
+    await runner.execute<LockedDocument>(
+      sql`
     select d.id, d.kind, d.status, d.document_number, d.currency, d.subsidiary_id,
            (select max(line_number) from document_lines where org_id = ${orgId} and document_id = d.id) as max_line
-      from documents d where d.org_id = ${orgId} and d.id = ${documentId} for update of d`, "objects"))[0];
+      from documents d where d.org_id = ${orgId} and d.id = ${documentId} for update of d`,
+      "objects",
+    )
+  )[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw refusal("Sales document not found", "not_found", 404);
   }
@@ -533,7 +692,12 @@ async function lockDocument(
     );
   }
   if (row.status !== "draft") {
-    throw refusal(`${row.document_number} is ${row.status}; promotions apply to drafts`, "wrong_status", 409, "Reopen the document to a draft before applying the promotion");
+    throw refusal(
+      `${row.document_number} is ${row.status}; promotions apply to drafts`,
+      "wrong_status",
+      409,
+      "Reopen the document to a draft before applying the promotion",
+    );
   }
   return row;
 }
@@ -544,18 +708,35 @@ async function lockPromotion(
   input: { code?: string; promotionId?: string },
 ): Promise<Promotion> {
   if (!input.promotionId && !input.code) {
-    throw refusal("A promotion code is required", "invalid_input", 422, "Enter the code or pick an active promotion from the list");
+    throw refusal(
+      "A promotion code is required",
+      "invalid_input",
+      422,
+      "Enter the code or pick an active promotion from the list",
+    );
   }
   const row = input.promotionId
-    ? (await runner.execute<PromotionRow>(sql`
+    ? (
+        await runner.execute<PromotionRow>(
+          sql`
         select ${PROMOTION_COLUMNS}
-          from promotions where org_id = ${orgId} and id = ${input.promotionId} for update`, "objects"))[0]
-    : (await runner.execute<PromotionRow>(sql`
+          from promotions where org_id = ${orgId} and id = ${input.promotionId} for update`,
+          "objects",
+        )
+      )[0]
+    : (
+        await runner.execute<PromotionRow>(
+          sql`
         select ${PROMOTION_COLUMNS}
-          from promotions where org_id = ${orgId} and lower(code) = lower(${parseCode(input.code)}) for update`, "objects"))[0];
+          from promotions where org_id = ${orgId} and lower(code) = lower(${parseCode(input.code)}) for update`,
+          "objects",
+        )
+      )[0];
   if (!row) {
     throw refusal(
-      input.promotionId ? "Promotion not found" : `Promotion code ${String(input.code)} does not exist`,
+      input.promotionId
+        ? "Promotion not found"
+        : `Promotion code ${String(input.code)} does not exist`,
       "not_found",
       404,
       "Check the code spelling or pick an active promotion from the list",
@@ -570,14 +751,26 @@ function checkPromotionUsable(promotion: Promotion, channelId: string | null): v
       `Promotion ${promotion.code} is ${promotion.status}`,
       "wrong_status",
       409,
-      promotion.status === "draft" ? "Activate the promotion in Setup → Sales → Promotions" : "Create a new promotion for the next campaign",
+      promotion.status === "draft"
+        ? "Activate the promotion in Setup → Sales → Promotions"
+        : "Create a new promotion for the next campaign",
     );
   }
   if (promotion.startsInFuture) {
-    throw refusal(`Promotion ${promotion.code} starts on ${promotion.startsAt}`, "not_started", 409, `Wait until ${promotion.startsAt} or change the promotion window`);
+    throw refusal(
+      `Promotion ${promotion.code} starts on ${promotion.startsAt}`,
+      "not_started",
+      409,
+      `Wait until ${promotion.startsAt} or change the promotion window`,
+    );
   }
   if (promotion.ended) {
-    throw refusal(`Promotion ${promotion.code} ended on ${promotion.endsAt}`, "expired", 409, "Extend the promotion window or create a new promotion");
+    throw refusal(
+      `Promotion ${promotion.code} ended on ${promotion.endsAt}`,
+      "expired",
+      409,
+      "Extend the promotion window or create a new promotion",
+    );
   }
   if (promotion.channelScopeId && promotion.channelScopeId !== channelId) {
     throw refusal(
@@ -603,10 +796,15 @@ async function refuseRepeatApplication(
   document: LockedDocument,
   promotion: Promotion,
 ): Promise<void> {
-  const applied = (await runner.execute<{ applied: boolean }>(sql`
+  const applied = (
+    await runner.execute<{ applied: boolean }>(
+      sql`
     select exists (select 1 from document_lines
                     where org_id = ${orgId} and document_id = ${document.id}
-                      and promotion_id = ${promotion.id}) as applied`, "objects"))[0];
+                      and promotion_id = ${promotion.id}) as applied`,
+      "objects",
+    )
+  )[0];
   if (applied?.applied) {
     throw refusal(
       `Promotion ${promotion.code} is already applied to ${document.document_number}`,
@@ -627,11 +825,21 @@ async function loadEligibleLines(
   // line, tagged with a promotion or not, already reduces what is left to
   // discount, so it is summed as an offset. All lines are locked so the
   // offsets cannot move while the new discount is sized.
-  const rows = await runner.execute<{ line_id: string; line_number: number; amount: string; quantity: string; unit_price: string; promotion_id: string | null }>(sql`
+  const rows = await runner.execute<{
+    line_id: string;
+    line_number: number;
+    amount: string;
+    quantity: string;
+    unit_price: string;
+    promotion_id: string | null;
+  }>(
+    sql`
     select id as line_id, line_number, amount::text, quantity::text, unit_price::text, promotion_id
       from document_lines
      where org_id = ${orgId} and document_id = ${documentId}
-     order by line_number for update`, "objects");
+     order by line_number for update`,
+    "objects",
+  );
   const lines: EligibleLine[] = [];
   let eligibleUnits = 0n;
   let offsetUnits = 0n;
@@ -654,7 +862,13 @@ async function loadEligibleLines(
 const MICRO_PER_UNIT = 1_000_000n;
 
 /** Per-line discount shares in ISO minors, summing exactly to the promotion value. */
-function computeDiscountShares(promotion: Promotion, lines: EligibleLine[], document: LockedDocument, quantum: number, scale: bigint): bigint[] {
+function computeDiscountShares(
+  promotion: Promotion,
+  lines: EligibleLine[],
+  document: LockedDocument,
+  quantum: number,
+  scale: bigint,
+): bigint[] {
   const toMinor = (units4dp: bigint): bigint => roundDiv(units4dp, scale);
   switch (promotion.kind) {
     case "percent": {
@@ -678,9 +892,10 @@ function computeDiscountShares(promotion: Promotion, lines: EligibleLine[], docu
       // majors with the currency exponent), so it compares directly against
       // the ISO-minor line base: no hundredths reinterpretation.
       const base = lines.map((line) => toMinor(line.amount_units));
-      const total = promotion.amountMinor! < base.reduce((sum, minor) => sum + minor, 0n)
-        ? promotion.amountMinor!
-        : base.reduce((sum, minor) => sum + minor, 0n);
+      const total =
+        promotion.amountMinor! < base.reduce((sum, minor) => sum + minor, 0n)
+          ? promotion.amountMinor!
+          : base.reduce((sum, minor) => sum + minor, 0n);
       if (total <= 0n) return lines.map(() => 0n);
       return apportion(total, base);
     }
@@ -757,7 +972,9 @@ async function insertDiscountLines(
     // Money columns carry four decimals; an ISO-minor share scales up
     // exactly, so the stored line agrees with the returned total.
     const amount = fromUnits(-share * scale);
-    const row = (await runner.execute<{ id: string }>(sql`
+    const row = (
+      await runner.execute<{ id: string }>(
+        sql`
       insert into document_lines (org_id, document_id, line_number, account_id, description, quantity,
                                   unit_price, amount, tax_amount, tax_overridden, is_billable,
                                   quantity_fulfilled, quantity_billed, promotion_id, custom,
@@ -765,25 +982,48 @@ async function insertDiscountLines(
       values (${orgId}, ${document.id}, ${lineNumber}, ${discountAccountId},
               ${`Promotion ${promotion.code} — ${promotion.name}`}, '1', ${amount}, ${amount},
               '0', false, false, '0', '0', ${promotion.id}, '{}'::jsonb, ${actorId}, ${actorId})
-      returning id`, "objects"))[0];
-    if (!row) throw refusal(`Promotion ${promotion.code} could not add its discount line`, "changed_concurrently", 409, "Reload the document and apply the promotion again");
+      returning id`,
+        "objects",
+      )
+    )[0];
+    if (!row)
+      throw refusal(
+        `Promotion ${promotion.code} could not add its discount line`,
+        "changed_concurrently",
+        409,
+        "Reload the document and apply the promotion again",
+      );
     inserted.push({ lineId: row.id, lineNumber, amountMinor: share.toString() });
     lineNumber += 1;
   }
   if (inserted.length === 0) {
-    throw refusal(`Promotion ${promotion.code} gives no discount on this document`, "below_threshold", 422, "Check the promotion value against the document lines");
+    throw refusal(
+      `Promotion ${promotion.code} gives no discount on this document`,
+      "below_threshold",
+      422,
+      "Check the promotion value against the document lines",
+    );
   }
   return inserted;
 }
 
-async function countRedemption(runner: SqlExecutor, orgId: string, promotion: Promotion): Promise<void> {
+async function countRedemption(
+  runner: SqlExecutor,
+  orgId: string,
+  promotion: Promotion,
+): Promise<void> {
   // The promotion row is already locked by lockPromotion, so the count and
   // the limit check serialize against concurrent checkouts.
   const updated = await runner.execute<never>(sql`
     update promotions set usage_count = usage_count + 1, updated_at = now()
      where org_id = ${orgId} and id = ${promotion.id} and usage_count = ${promotion.usageCount}`);
   if (updated.rowCount !== 1) {
-    throw refusal(`Promotion ${promotion.code} changed while applying`, "changed_concurrently", 409, "Reload the document and apply the promotion again");
+    throw refusal(
+      `Promotion ${promotion.code} changed while applying`,
+      "changed_concurrently",
+      409,
+      "Reload the document and apply the promotion again",
+    );
   }
 }
 
@@ -795,10 +1035,13 @@ async function writePromotionAudit(
   action: "insert" | "update",
   changes: Record<string, unknown>,
 ): Promise<void> {
-  const result = await runner.execute<{ id: string }>(sql`
+  const result = await runner.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'promotions', ${promotionId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (result.length !== 1) throw new Error("promotion change was not audited");
 }
 
@@ -809,13 +1052,21 @@ async function writeDocumentAudit(
   documentId: string,
   changes: Record<string, unknown>,
 ): Promise<void> {
-  const result = await runner.execute<{ id: string }>(sql`
+  const result = await runner.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'documents', ${documentId}, 'update', ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (result.length !== 1) throw new Error("promotion application was not audited");
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === "23505";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === "23505"
+  );
 }

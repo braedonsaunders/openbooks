@@ -272,10 +272,7 @@ test("refresh ready write refuses a clone this request did not just prove", () =
   const theirs = `${REFRESH_CLONE_PROOF_PREFIX}bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`;
 
   assert.equal(
-    refreshReadyMatchesProvenClone(
-      { status: "refreshing", lastError: ours },
-      { proofToken: ours },
-    ),
+    refreshReadyMatchesProvenClone({ status: "refreshing", lastError: ours }, { proofToken: ours }),
     true,
   );
   refuseUnprovenRefreshReady(

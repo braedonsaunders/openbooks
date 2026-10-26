@@ -13,7 +13,10 @@ const startApplicationCloseRunBody = z.looseObject({
   bookId: z.string().min(1),
   blueprintId: z.string().optional(),
   reportingPackageId: z.string().optional(),
-  targetCloseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  targetCloseDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   subsidiaryIds: z.array(z.string().min(1)).optional(),
 });
 

@@ -1,21 +1,27 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { voidInternalBilling } from '@openbooks/engine/internal-billing'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { voidInternalBilling } from "@openbooks/engine/internal-billing";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** Controlled void: a reversal journal, subject to before-void approvals. */
 export const POST = defineRoute({
-  permission: 'gl.post',
-  feature: 'internalBilling',
+  permission: "gl.post",
+  feature: "internalBilling",
   params: z.object({ id: uuidString() }),
-  body: z.object({
-    reason: z.string(),
-    reversalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-    expectedRevision: z.string().nullable().optional(),
-  }).strict(),
+  body: z
+    .object({
+      reason: z.string(),
+      reversalDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      expectedRevision: z.string().nullable().optional(),
+    })
+    .strict(),
   invalidBodyStatus: 422,
   handler: async ({ authz, params, body }) => {
     const result = await voidInternalBilling({
@@ -26,7 +32,7 @@ export const POST = defineRoute({
       reason: body.reason,
       reversalDate: body.reversalDate ?? null,
       expectedRevision: body.expectedRevision ?? null,
-    })
-    return NextResponse.json(result)
+    });
+    return NextResponse.json(result);
   },
-})
+});

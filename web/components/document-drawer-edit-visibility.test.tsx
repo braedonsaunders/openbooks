@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -17,7 +17,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -67,7 +75,10 @@ function editButtons(): HTMLButtonElement[] {
   ) as HTMLButtonElement[];
 }
 
-async function renderDraftBill(editVisible: boolean, t: import("node:test").TestContext): Promise<void> {
+async function renderDraftBill(
+  editVisible: boolean,
+  t: import("node:test").TestContext,
+): Promise<void> {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -115,7 +126,13 @@ async function renderDraftBill(editVisible: boolean, t: import("node:test").Test
             segments={[]}
             canCreate
             canPost={false}
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "edit", visible: editVisible }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "edit", visible: editVisible }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -128,10 +145,18 @@ async function renderDraftBill(editVisible: boolean, t: import("node:test").Test
 
 test("a visible Edit action keeps the primary Edit button", async (t) => {
   await renderDraftBill(true, t);
-  assert.equal(editButtons().length, 1, "an editable draft must offer exactly one Edit entry point");
+  assert.equal(
+    editButtons().length,
+    1,
+    "an editable draft must offer exactly one Edit entry point",
+  );
 });
 
 test("a hidden Edit action removes the primary Edit button", async (t) => {
   await renderDraftBill(false, t);
-  assert.equal(editButtons().length, 0, "hiding Edit in the form layout must remove the primary Edit button");
+  assert.equal(
+    editButtons().length,
+    0,
+    "hiding Edit in the form layout must remove the primary Edit button",
+  );
 });

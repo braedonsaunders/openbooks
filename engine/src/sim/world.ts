@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import {
+  db,
+  withBypass,
+  withBypassContext,
+  withOrgContext,
+  withOrgTransaction,
+} from "../platform/db.ts";
 import { civilDateFromParts, endOfMonth } from "../platform/business-date.ts";
 import { dropSimOrg } from "../testing/fixtures.ts";
 import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
@@ -99,7 +105,8 @@ export interface SimJob {
   code: string;
   name: string;
   customerId: string;
-  method: "time_and_materials" | "schedule_of_values" | "fixed_price" | "not_to_exceed" | "cost_plus";
+  method:
+    "time_and_materials" | "schedule_of_values" | "fixed_price" | "not_to_exceed" | "cost_plus";
   /** Contract/NTE ceiling or fixed price (decimal string; "0" for open-ended T&M). */
   contractValue: string;
   /** Crew weight — drives share of daily labor + equipment/material sizing. */
@@ -201,14 +208,32 @@ const COA: [string, string, string, string][] = [
  * Signed base amounts: debit positive, credit negative; they sum to zero.
  * Scaled by `s` so different companies open at different sizes.
  */
-function openingBalanceLines(accounts: Record<string, string>, scale: string): { accountId: string; amount: string }[] {
+function openingBalanceLines(
+  accounts: Record<string, string>,
+  scale: string,
+): { accountId: string; amount: string }[] {
   const raw: [string, string][] = [
-    ["bank", "420000"], ["bankSavings", "260000"], ["ar", "185000"], ["prepaid", "24000"],
-    ["prepaidInsurance", "31000"], ["inventory", "46000"], ["equipment", "640000"], ["vehicles", "185000"],
-    ["furniture", "92000"], ["leasehold", "128000"], ["accumDep", "-286000"], ["deposits", "18000"],
-    ["ap", "-98000"], ["creditCard", "-21500"], ["accruedPayroll", "-37000"], ["deferredRevenue", "-52000"],
-    ["currentDebt", "-60000"], ["lineOfCredit", "-150000"], ["notesPayable", "-430000"],
-    ["commonStock", "-10000"], ["apic", "-240000"],
+    ["bank", "420000"],
+    ["bankSavings", "260000"],
+    ["ar", "185000"],
+    ["prepaid", "24000"],
+    ["prepaidInsurance", "31000"],
+    ["inventory", "46000"],
+    ["equipment", "640000"],
+    ["vehicles", "185000"],
+    ["furniture", "92000"],
+    ["leasehold", "128000"],
+    ["accumDep", "-286000"],
+    ["deposits", "18000"],
+    ["ap", "-98000"],
+    ["creditCard", "-21500"],
+    ["accruedPayroll", "-37000"],
+    ["deferredRevenue", "-52000"],
+    ["currentDebt", "-60000"],
+    ["lineOfCredit", "-150000"],
+    ["notesPayable", "-430000"],
+    ["commonStock", "-10000"],
+    ["apic", "-240000"],
   ];
   const lines = raw.map(([key, value]) => ({
     accountId: accounts[key]!,
@@ -230,7 +255,10 @@ function monthsInWindow(startDate: string, endDate: string): { year: number; mon
   while (y < endY || (y === endY && m <= endM)) {
     out.push({ year: y, month: m });
     m += 1;
-    if (m > 12) { m = 1; y += 1; }
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
   }
   return out;
 }
@@ -300,8 +328,20 @@ export async function provisionOrg(
     // simHarness flag is what the destructive-op guard checks before any wipe.
     // Optional control accounts (labor WIP/clearing, unbilled, retainage, FX) are
     // wired only when this company's chart defines them.
-    const control: Record<string, string> = { ar: accounts.ar!, ap: accounts.ap!, bank: accounts.bank! };
-    for (const k of ["employeePayable", "retainageReceivable", "laborWip", "laborClearing", "unbilledReceivable", "projectRevenue", "payrollVariance"]) {
+    const control: Record<string, string> = {
+      ar: accounts.ar!,
+      ap: accounts.ap!,
+      bank: accounts.bank!,
+    };
+    for (const k of [
+      "employeePayable",
+      "retainageReceivable",
+      "laborWip",
+      "laborClearing",
+      "unbilledReceivable",
+      "projectRevenue",
+      "payrollVariance",
+    ]) {
       if (accounts[k]) control[k] = accounts[k]!;
     }
     if (accounts.fxGainLoss) control.fxRealizedGainLoss = accounts.fxGainLoss;
@@ -324,7 +364,9 @@ export async function provisionOrg(
     if (accounts.laborWip && accounts.laborClearing) {
       settings.laborCosting = { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] };
     }
-    await db.execute(sql`update orgs set settings = ${JSON.stringify(settings)}::jsonb where id = ${orgId}`);
+    await db.execute(
+      sql`update orgs set settings = ${JSON.stringify(settings)}::jsonb where id = ${orgId}`,
+    );
 
     // Vendor / customer population.
     const vendors: SimVendor[] = [];
@@ -335,7 +377,9 @@ export async function provisionOrg(
         values (${id}, ${orgId}, 'vendor', ${v.name}, true, '{}'::jsonb)`);
       // A party is a vendor because it carries a vendor role — this is what the
       // vendor list (and every role-scoped view) filters on.
-      await db.execute(sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+      await db.execute(
+        sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`,
+      );
       vendors.push({ id, ...v });
     }
     const customers: SimCustomer[] = [];
@@ -344,7 +388,9 @@ export async function provisionOrg(
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${id}, ${orgId}, 'customer', ${c.name}, true, '{}'::jsonb)`);
-      await db.execute(sql`insert into customer_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+      await db.execute(
+        sql`insert into customer_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`,
+      );
       customers.push({ id, ...c });
     }
 
@@ -354,10 +400,14 @@ export async function provisionOrg(
     const mkUser = async (name: string, role: string): Promise<string> => {
       const id = randomUUID();
       await db.transaction(async (tx) => {
-        const assignedRole = (await tx.execute<{ id: string }>(sql`
+        const assignedRole = await tx.execute<{ id: string }>(
+          sql`
           select id from app_roles where org_id=${orgId} and key=${role} and is_built_in for share
-        `, "objects"));
-        if (assignedRole.length !== 1) throw new Error(`Native simulation role ${role} is unavailable`);
+        `,
+          "objects",
+        );
+        if (assignedRole.length !== 1)
+          throw new Error(`Native simulation role ${role} is unavailable`);
         await tx.execute(sql`
           insert into users (id, org_id, email, name, password_hash, is_active)
           values (${id}, ${orgId}, ${`${role}-${id.slice(0, 8)}@sim.test`}, ${name}, 'x', true)
@@ -394,7 +444,9 @@ export async function provisionOrg(
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
           values (${id}, ${orgId}, 'employee', ${w.name}, true, '{}'::jsonb)`);
-        await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+        await db.execute(
+          sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`,
+        );
         employees.push({ id, name: w.name, costRate: w.costRate, billRate: w.billRate });
       }
       timeTypeId = randomUUID();
@@ -416,8 +468,11 @@ export async function provisionOrg(
     const engagements: SimOrg["engagements"] = [];
     const perCustomer = profile.engagementsPerCustomer ?? 0;
     if (accounts.laborWip && accounts.laborClearing && perCustomer > 0) {
-      const tmTypeRow = (await db.execute<{ id: string }>(sql`
-        select id from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`, "objects"));
+      const tmTypeRow = await db.execute<{ id: string }>(
+        sql`
+        select id from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`,
+        "objects",
+      );
       const tmType = tmTypeRow[0];
       let n = 0;
       if (tmType) {
@@ -443,8 +498,13 @@ export async function provisionOrg(
     if (accounts.laborWip && accounts.laborClearing && profile.jobPortfolio?.length) {
       const custByName = new Map(customers.map((c) => [c.name, c]));
       const typeByKey = new Map(
-        (await db.execute<{ id: string; key: string }>(sql`
-          select id, key from project_types where org_id = ${orgId} and is_active`, "objects")).map((t) => [t.key, t.id]),
+        (
+          await db.execute<{ id: string; key: string }>(
+            sql`
+          select id, key from project_types where org_id = ${orgId} and is_active`,
+            "objects",
+          )
+        ).map((t) => [t.key, t.id]),
       );
       for (const spec of profile.jobPortfolio) {
         const customer = custByName.get(spec.customer);
@@ -465,8 +525,14 @@ export async function provisionOrg(
                     ${accounts.revenueService}, ${sort++})`);
         }
         jobs.push({
-          id, code: spec.code, name: spec.name, customerId: customer.id, method: spec.method,
-          contractValue, crewSize: spec.crewSize ?? 3, equipment: spec.equipment ?? false,
+          id,
+          code: spec.code,
+          name: spec.name,
+          customerId: customer.id,
+          method: spec.method,
+          contractValue,
+          crewSize: spec.crewSize ?? 3,
+          equipment: spec.equipment ?? false,
           monthlyMaterials: spec.monthlyMaterials ?? 0,
         });
       }
@@ -476,7 +542,11 @@ export async function provisionOrg(
     // subscriber population, plus the org feature flag the recurring-billing engine
     // gates on. Billing/recognition run through the real engines in the driver.
     const subscriptions: SimSubscription[] = [];
-    if (profile.subscriptionPlans?.length && accounts.deferredRevenue && accounts.subscriptionRevenue) {
+    if (
+      profile.subscriptionPlans?.length &&
+      accounts.deferredRevenue &&
+      accounts.subscriptionRevenue
+    ) {
       // Merge, don't jsonb_set the nested path: jsonb_set won't create a missing
       // intermediate 'features' object, so it would no-op on a fresh '{}' settings.
       await db.execute(sql`
@@ -497,7 +567,10 @@ export async function provisionOrg(
         ruleByTerm.set(term, ruleId);
       }
       const custByName = new Map(customers.map((c) => [c.name, c]));
-      const planByKey = new Map<string, { id: string; interval: string; termMonths: number; amount: number }>();
+      const planByKey = new Map<
+        string,
+        { id: string; interval: string; termMonths: number; amount: number }
+      >();
       for (const plan of profile.subscriptionPlans) {
         const itemId = randomUUID();
         await db.execute(sql`
@@ -511,7 +584,12 @@ export async function provisionOrg(
             (id, org_id, name, description, amount, currency_code, interval, interval_count, income_account_id, item_id, is_active)
           values (${planId}, ${orgId}, ${plan.name}, ${plan.name}, ${String(plan.amount)}, ${cur},
                   ${plan.interval}, 1, ${accounts.subscriptionRevenue}, ${itemId}, true)`);
-        planByKey.set(plan.key, { id: planId, interval: plan.interval, termMonths: plan.termMonths, amount: plan.amount });
+        planByKey.set(plan.key, {
+          id: planId,
+          interval: plan.interval,
+          termMonths: plan.termMonths,
+          amount: plan.amount,
+        });
       }
       for (const sub of profile.subscribers ?? []) {
         const customer = custByName.get(sub.customer);
@@ -525,8 +603,13 @@ export async function provisionOrg(
                   ${window.startDate}, ${window.startDate}, ${window.startDate}, true,
                   extract(day from ${window.startDate}::date))`);
         subscriptions.push({
-          id, customerId: customer.id, planKey: sub.plan, interval: plan.interval as "monthly" | "annually",
-          termMonths: plan.termMonths, amount: plan.amount, quantity: sub.quantity,
+          id,
+          customerId: customer.id,
+          planKey: sub.plan,
+          interval: plan.interval as "monthly" | "annually",
+          termMonths: plan.termMonths,
+          amount: plan.amount,
+          quantity: sub.quantity,
         });
       }
 
@@ -537,7 +620,9 @@ export async function provisionOrg(
         insert into dunning_policies (id, org_id, name, applies_to_kind, grace_period_days, min_balance, is_active)
         values (${policyId}, ${orgId}, 'Standard Dunning', 'customer_invoice', 3, '25', true)`);
       const stages: [number, number, string][] = [
-        [1, 5, "Friendly reminder"], [2, 15, "Past-due notice"], [3, 30, "Final notice before suspension"],
+        [1, 5, "Friendly reminder"],
+        [2, 15, "Past-due notice"],
+        [3, 30, "Final notice before suspension"],
       ];
       for (const [seq, offset, name] of stages) {
         await db.execute(sql`
@@ -551,17 +636,31 @@ export async function provisionOrg(
     await ensureReportDefinitions(orgId);
 
     const simWorld = {
-      orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts,
-      vendors, customers, actors, periods, employees, timeTypeId, laborItemId,
-      engagements, jobs, subscriptions,
+      orgId,
+      bookId,
+      subsidiaryId,
+      fiscalCalendarId,
+      currency: cur,
+      accounts,
+      vendors,
+      customers,
+      actors,
+      periods,
+      employees,
+      timeTypeId,
+      laborItemId,
+      engagements,
+      jobs,
+      subscriptions,
     };
-    if (profile.resourcing) await provisionResourcingPlan({
-      profile,
-      plan: profile.resourcing,
-      world: simWorld,
-      window,
-      rng: Rng.fromSeed(`${profile.id}:${window.startDate}:${window.endDate}`),
-    });
+    if (profile.resourcing)
+      await provisionResourcingPlan({
+        profile,
+        plan: profile.resourcing,
+        world: simWorld,
+        window,
+        rng: Rng.fromSeed(`${profile.id}:${window.startDate}:${window.endDate}`),
+      });
 
     return simWorld;
   });
@@ -586,22 +685,35 @@ export async function provisionOrg(
         { post: true },
       ),
     );
-    const finalized = await withOrgContext(world.orgId, () => db.execute<{ id: string }>(sql`
+    const finalized = await withOrgContext(world.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
       update orgs
          set settings = settings - 'simProvisioningAttempt', updated_at = now()
        where id = ${world.orgId}
          and settings->'simProvisioningAttempt'->>'id' = ${attemptId}
          and settings->'simProvisioningAttempt'->>'status' = 'opening_balances'
       returning id
-    `, "objects"));
-    if (finalized.length !== 1) throw new Error(`SIM provisioning attempt ${attemptId} lost org ${world.orgId} before completion`);
+    `,
+        "objects",
+      ),
+    );
+    if (finalized.length !== 1)
+      throw new Error(
+        `SIM provisioning attempt ${attemptId} lost org ${world.orgId} before completion`,
+      );
   } catch (error) {
     try {
       await wipeSimOrg(world.orgId);
     } catch (cleanupError) {
       throw new Error(
         `SIM provisioning failed for org ${world.orgId} and cleanup could not complete; retry provisioning to reconcile the tagged attempt`,
-        { cause: new AggregateError([error, cleanupError], "SIM provisioning and cleanup both failed") },
+        {
+          cause: new AggregateError(
+            [error, cleanupError],
+            "SIM provisioning and cleanup both failed",
+          ),
+        },
       );
     }
     throw error;
@@ -615,12 +727,15 @@ export async function provisionOrg(
 async function reconcileIncompleteSimProvisioning(): Promise<void> {
   // bypass: cross-org-by-design — abandoned simulation attempts are swept across every organization of the installation.
   const stale = await withBypassContext(async () => {
-    const result = await db.execute<{ id: string }>(sql`
+    const result = await db.execute<{ id: string }>(
+      sql`
       select id
         from orgs
        where settings->'simProvisioningAttempt'->>'status' = 'opening_balances'
          and created_at < now() - interval '30 minutes'
-       order by created_at asc`, "objects");
+       order by created_at asc`,
+      "objects",
+    );
     return result;
   });
   for (const { id } of stale) await wipeSimOrg(id);

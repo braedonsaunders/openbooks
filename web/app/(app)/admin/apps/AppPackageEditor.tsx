@@ -4,25 +4,8 @@ import { nextActionName } from "@/lib/apps/endpoint-names";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  FileCode2,
-  Folder,
-  Plus,
-  Upload,
-  Trash2,
-  Pencil,
-  Download,
-} from "lucide-react";
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Input,
-  Label,
-  Select,
-  Textarea,
-  cn,
-} from "@openbooks/ui";
+import { FileCode2, Folder, Plus, Upload, Trash2, Pencil, Download } from "lucide-react";
+import { Alert, AlertDescription, Button, Input, Label, Select, Textarea, cn } from "@openbooks/ui";
 import { AppWorkspaceTabs } from "./sections";
 import { StarterTitleHint } from "./StarterTitleHint";
 import { AppScreens } from "./AppScreens";
@@ -89,13 +72,14 @@ export function AppPackageEditor({
   );
   const packageSessionKey = `${sourceDraft?.id ?? manifest?.key ?? ""}:${baseVersionId ?? "new"}:${sourceDraft?.contentHash ?? ""}`;
   const packageSessionRef = useRef(packageSessionKey);
-  useLayoutEffect(() => { filesRef.current = files; }, [files]);
-  useLayoutEffect(() => { packageSessionRef.current = packageSessionKey; }, [packageSessionKey]);
+  useLayoutEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+  useLayoutEffect(() => {
+    packageSessionRef.current = packageSessionKey;
+  }, [packageSessionKey]);
   const [grants, setGrants] = useState<string[]>(
-    () =>
-      bundle.grantedPermissions ??
-      parseManifest(bundle.manifest).manifest?.permissions ??
-      [],
+    () => bundle.grantedPermissions ?? parseManifest(bundle.manifest).manifest?.permissions ?? [],
   );
   useEffect(() => {
     if (!dirty) return;
@@ -120,9 +104,7 @@ export function AppPackageEditor({
     setManifest(next);
     change(
       files.map((file) =>
-        file.path === "manifest.json"
-          ? { ...file, content: JSON.stringify(next, null, 2) }
-          : file,
+        file.path === "manifest.json" ? { ...file, content: JSON.stringify(next, null, 2) } : file,
       ),
     );
   }
@@ -159,10 +141,7 @@ export function AppPackageEditor({
           ...manifest,
           frontend: {
             ...manifest.frontend,
-            entry:
-              manifest.frontend.entry === selected
-                ? path
-                : manifest.frontend.entry,
+            entry: manifest.frontend.entry === selected ? path : manifest.frontend.entry,
           },
           endpoints: manifest.endpoints.map((endpoint) =>
             endpoint.file === selected ? { ...endpoint, file: path } : endpoint,
@@ -199,9 +178,7 @@ export function AppPackageEditor({
     const uploadSession = packageSessionKey;
     try {
       const additions: AppPackageFile[] = [];
-      const folder = selected.includes("/")
-        ? selected.slice(0, selected.lastIndexOf("/") + 1)
-        : "";
+      const folder = selected.includes("/") ? selected.slice(0, selected.lastIndexOf("/") + 1) : "";
       for (const file of Array.from(list)) {
         if (file.size > 2 * 1024 * 1024) throw new Error(t("fileTooLarge"));
         const path = folder + (directory ? file.webkitRelativePath : file.name);
@@ -213,10 +190,8 @@ export function AppPackageEditor({
         if (binary) {
           for (const byte of bytes) content += String.fromCharCode(byte);
           content = btoa(content);
-        } else
-          content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-        if (content.length > 2 * 1024 * 1024)
-          throw new Error(t("fileTooLarge"));
+        } else content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        if (content.length > 2 * 1024 * 1024) throw new Error(t("fileTooLarge"));
         additions.push({ path, content, isBinary: binary });
       }
       const replaced = additions.filter((file) =>
@@ -233,12 +208,7 @@ export function AppPackageEditor({
         return;
       if (packageSessionRef.current !== uploadSession) return;
       const paths = new Set(additions.map((file) => file.path));
-      setFiles((current) => [
-        ...current.filter(
-          (file) => !paths.has(file.path),
-        ),
-        ...additions,
-      ]);
+      setFiles((current) => [...current.filter((file) => !paths.has(file.path)), ...additions]);
       setDirty(true);
       onDirtyChange?.(true);
       setError(null);
@@ -255,9 +225,7 @@ export function AppPackageEditor({
     try {
       const next = packageFromSourceFiles(
         files,
-        grants.filter((permission) =>
-          manifest?.permissions.includes(permission),
-        ),
+        grants.filter((permission) => manifest?.permissions.includes(permission)),
       );
       const response = await fetch("/api/apps/drafts", {
         method: "POST",
@@ -272,8 +240,7 @@ export function AppPackageEditor({
       });
       // Status first: a proxy/HTML/empty refusal must surface the HTTP
       // failure, never a SyntaxError from parsing the body.
-      if (!response.ok)
-        throw new Error(await readApiErrorMessage(response, t("failed")));
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t("failed")));
       const result = await response.json();
       onDirtyChange?.(false);
       setDirty(false);
@@ -288,9 +255,7 @@ export function AppPackageEditor({
   function downloadFile() {
     if (!selectedFile) return;
     const bytes = selectedFile.isBinary
-      ? Uint8Array.from(atob(selectedFile.content), (character) =>
-          character.charCodeAt(0),
-        )
+      ? Uint8Array.from(atob(selectedFile.content), (character) => character.charCodeAt(0))
       : new TextEncoder().encode(selectedFile.content);
     const url = URL.createObjectURL(
       new Blob([bytes], { type: contentTypeFor(selected).contentType }),
@@ -305,9 +270,7 @@ export function AppPackageEditor({
     try {
       const next = packageFromSourceFiles(
         files,
-        grants.filter((permission) =>
-          manifest?.permissions.includes(permission),
-        ),
+        grants.filter((permission) => manifest?.permissions.includes(permission)),
       );
       const { zipSync, strToU8 } = await import("fflate");
       const entries: Record<string, Uint8Array> = {
@@ -315,9 +278,7 @@ export function AppPackageEditor({
       };
       for (const file of next.files)
         entries[file.path] = file.isBinary
-          ? Uint8Array.from(atob(file.content), (character) =>
-              character.charCodeAt(0),
-            )
+          ? Uint8Array.from(atob(file.content), (character) => character.charCodeAt(0))
           : strToU8(file.content);
       const url = URL.createObjectURL(
         new Blob([new Uint8Array(zipSync(entries))], {
@@ -337,9 +298,7 @@ export function AppPackageEditor({
   for (const file of [...files]
     .sort((a, b) => a.path.localeCompare(b.path))
     .filter((file) => file.path.toLowerCase().includes(search.toLowerCase()))) {
-    const folder = file.path.includes("/")
-      ? file.path.slice(0, file.path.lastIndexOf("/"))
-      : "";
+    const folder = file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "";
     folders.set(folder, [...(folders.get(folder) ?? []), file]);
   }
   return (
@@ -348,10 +307,11 @@ export function AppPackageEditor({
         <AppWorkspaceTabs
           label={t("tabsLabel")}
           selected={tab}
-          tabs={["general", "screens", "data", "actions", "access", "files"].map(
-            key => ({ key, label: key === "files" ? t("files") : t(`sections.${key}`) }),
-          )}
-          onSelect={value => {
+          tabs={["general", "screens", "data", "actions", "access", "files"].map((key) => ({
+            key,
+            label: key === "files" ? t("files") : t(`sections.${key}`),
+          }))}
+          onSelect={(value) => {
             if (hasPending) setError(t("pendingDefinition"));
             else setTab(value);
           }}
@@ -410,9 +370,7 @@ export function AppPackageEditor({
                     className="w-full"
                     rows={3}
                     value={manifest.description ?? ""}
-                    onChange={(e) =>
-                      patchManifest({ description: e.target.value })
-                    }
+                    onChange={(e) => patchManifest({ description: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -448,10 +406,7 @@ export function AppPackageEditor({
                     }
                   >
                     {files
-                      .filter(
-                        (file) =>
-                          file.path !== "manifest.json" && !file.isBinary,
-                      )
+                      .filter((file) => file.path !== "manifest.json" && !file.isBinary)
                       .map((file) => (
                         <option key={file.path}>{file.path}</option>
                       ))}
@@ -483,10 +438,7 @@ export function AppPackageEditor({
                 </div>
               </div>
             </div>
-            <section
-              hidden={tab !== "actions"}
-              className="space-y-3"
-            >
+            <section hidden={tab !== "actions"} className="space-y-3">
               <h3 className="text-sm font-semibold">{t("endpoints")}</h3>
               <p className="text-sm text-slate-500">{t("endpointsHelp")}</p>
               {manifest.endpoints.map((endpoint, index) => (
@@ -500,9 +452,7 @@ export function AppPackageEditor({
                     onChange={(e) =>
                       patchManifest({
                         endpoints: manifest.endpoints.map((value, i) =>
-                          i === index
-                            ? { ...value, name: e.target.value }
-                            : value,
+                          i === index ? { ...value, name: e.target.value } : value,
                         ),
                       })
                     }
@@ -513,9 +463,7 @@ export function AppPackageEditor({
                     onChange={(e) =>
                       patchManifest({
                         endpoints: manifest.endpoints.map((value, i) =>
-                          i === index
-                            ? { ...value, file: e.target.value }
-                            : value,
+                          i === index ? { ...value, file: e.target.value } : value,
                         ),
                       })
                     }
@@ -535,8 +483,7 @@ export function AppPackageEditor({
                           i === index
                             ? {
                                 ...value,
-                                method: e.target.value as
-                                  "GET" | "POST" | "ANY",
+                                method: e.target.value as "GET" | "POST" | "ANY",
                               }
                             : value,
                         ),
@@ -554,9 +501,7 @@ export function AppPackageEditor({
                     aria-label={t("removeEndpoint")}
                     onClick={() =>
                       patchManifest({
-                        endpoints: manifest.endpoints.filter(
-                          (_, i) => i !== index,
-                        ),
+                        endpoints: manifest.endpoints.filter((_, i) => i !== index),
                       })
                     }
                   >
@@ -576,10 +521,7 @@ export function AppPackageEditor({
                   }
                   const updated: AppManifest = {
                     ...manifest,
-                    endpoints: [
-                      ...manifest.endpoints,
-                      { name, file: path, method: "POST" },
-                    ],
+                    endpoints: [...manifest.endpoints, { name, file: path, method: "POST" }],
                   };
                   setManifest(updated);
                   change([
@@ -590,8 +532,7 @@ export function AppPackageEditor({
                     ),
                     {
                       path,
-                      content:
-                        "function handler(request) {\n  return { ok: true };\n}\n",
+                      content: "function handler(request) {\n  return { ok: true };\n}\n",
                     },
                   ]);
                 }}
@@ -606,10 +547,7 @@ export function AppPackageEditor({
                 <p className="text-sm text-slate-500">{t("permissionsHelp")}</p>
                 <div className="grid max-h-64 gap-2 overflow-auto rounded-lg border border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
                   {APP_PLATFORM_PERMISSIONS.map((permission) => (
-                    <label
-                      key={permission}
-                      className="flex items-start gap-2 text-sm"
-                    >
+                    <label key={permission} className="flex items-start gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={manifest.permissions.includes(permission)}
@@ -617,16 +555,12 @@ export function AppPackageEditor({
                           patchManifest({
                             permissions: e.target.checked
                               ? [...manifest.permissions, permission]
-                              : manifest.permissions.filter(
-                                  (value) => value !== permission,
-                                ),
+                              : manifest.permissions.filter((value) => value !== permission),
                           });
                           setGrants((previous) =>
                             e.target.checked
                               ? [...previous, permission]
-                              : previous.filter(
-                                  (value) => value !== permission,
-                                ),
+                              : previous.filter((value) => value !== permission),
                           );
                         }}
                       />
@@ -700,9 +634,7 @@ export function AppPackageEditor({
             </div>
             <div hidden={tab !== "data"}>
               <AppDefinitions
-                onPendingChange={(value) =>
-                  pendingChanged("definitions", value)
-                }
+                onPendingChange={(value) => pendingChanged("definitions", value)}
                 files={files}
                 manifest={manifest}
                 onFiles={change}
@@ -789,10 +721,7 @@ export function AppPackageEditor({
                 }}
               />
             </div>
-            <nav
-              aria-label={t("files")}
-              className="max-h-96 overflow-auto text-sm"
-            >
+            <nav aria-label={t("files")} className="max-h-96 overflow-auto text-sm">
               {[...folders].map(([folder, entries]) => (
                 <div key={folder} className="mb-2">
                   {folder ? (
@@ -816,9 +745,7 @@ export function AppPackageEditor({
                       )}
                     >
                       <FileCode2 size={14} className="shrink-0" />
-                      <span className="truncate">
-                        {file.path.split("/").at(-1)}
-                      </span>
+                      <span className="truncate">{file.path.split("/").at(-1)}</span>
                     </button>
                   ))}
                 </div>
@@ -870,9 +797,7 @@ export function AppPackageEditor({
                 value={selectedFile?.content ?? ""}
                 onChange={(content) => {
                   change(
-                    files.map((file) =>
-                      file.path === selected ? { ...file, content } : file,
-                    ),
+                    files.map((file) => (file.path === selected ? { ...file, content } : file)),
                   );
                   if (selected === "manifest.json") {
                     try {
@@ -910,16 +835,10 @@ export function AppPackageEditor({
         </Alert>
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          disabled={busy || hasPending || !reason.trim()}
-          onClick={save}
-        >
+        <Button type="button" disabled={busy || hasPending || !reason.trim()} onClick={save}>
           {busy ? t("saving") : t("saveDraft")}
         </Button>
-        <span className="text-sm text-slate-500">
-          {dirty ? t("unsaved") : t("notLive")}
-        </span>
+        <span className="text-sm text-slate-500">{dirty ? t("unsaved") : t("notLive")}</span>
       </div>
     </div>
   );

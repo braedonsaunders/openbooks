@@ -70,13 +70,31 @@ export interface ExplainPayTrace {
   earnings: ExplainPayLine[];
   deductions: ExplainPayLine[];
   employerContributions: ExplainPayLine[];
-  benefitInputs: { id: string; kind: string; amount: string; coverageFrom: string; coverageTo: string; status: string }[];
+  benefitInputs: {
+    id: string;
+    kind: string;
+    amount: string;
+    coverageFrom: string;
+    coverageTo: string;
+    status: string;
+  }[];
   leaveInputs: { id: string; kind: string; hours: string; absenceDate: string; status: string }[];
-  wageRates: { id: string; rate: string; basis: string; effectiveFrom: string; effectiveTo: string | null }[];
+  wageRates: {
+    id: string;
+    rate: string;
+    basis: string;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+  }[];
   diffVsPrevious: {
     previousStubId: string | null;
     previousPayDate: string | null;
-    changes: { description: string; previousAmount: string | null; amount: string | null; input: string }[];
+    changes: {
+      description: string;
+      previousAmount: string | null;
+      amount: string | null;
+      input: string;
+    }[];
   };
   sources: { kind: string; id: string }[];
 }
@@ -93,7 +111,7 @@ type StubRow = {
   country: string | null;
   province: string | null;
   employeePartyId: string | null;
-}
+};
 
 async function assertExplainFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, "payroll"))) {
@@ -134,9 +152,14 @@ async function assertPayrollEmploymentScope(
 ): Promise<void> {
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed === null) return;
-  const row = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+  const row = (
+    await exec.execute<{ employerSubsidiaryId: string | null }>(
+      sql`
     select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
-     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid`, "objects"))[0];
+     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid`,
+      "objects",
+    )
+  )[0];
   if (!row?.employerSubsidiaryId || !allowed.has(row.employerSubsidiaryId)) {
     throw employmentNotVisible();
   }
@@ -191,17 +214,23 @@ async function loadStub(
                tax_year as "taxYear", country, province,
                employee_party_id::text as "employeePartyId"`;
   const rows = stubId
-    ? (await exec.execute<StubRow>(sql`
+    ? await exec.execute<StubRow>(
+        sql`
         ${columns}
           from pay_stubs
          where org_id = ${orgId}::uuid and id = ${stubId}::uuid
-           and employment_id = ${employmentId}::uuid`, "objects"))
-    : (await exec.execute<StubRow>(sql`
+           and employment_id = ${employmentId}::uuid`,
+        "objects",
+      )
+    : await exec.execute<StubRow>(
+        sql`
         ${columns}
           from pay_stubs
          where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
          order by pay_date desc, id desc
-         limit 1`, "objects"));
+         limit 1`,
+        "objects",
+      );
   const stub = rows[0];
   if (!stub) {
     throw new AiRailsError(
@@ -220,10 +249,17 @@ async function loadLines(
   stubId: string,
 ): Promise<{ lines: ExplainPayLine[]; systemKeys: Map<string, string | null> }> {
   const rows = await exec.execute<{
-    id: string; componentId: string | null; kind: string; description: string;
-    hours: string | null; rate: string | null; amount: string; treatment: string | null;
+    id: string;
+    componentId: string | null;
+    kind: string;
+    description: string;
+    hours: string | null;
+    rate: string | null;
+    amount: string;
+    treatment: string | null;
     systemKey: string | null;
-  }>(sql`
+  }>(
+    sql`
     select l.id::text as id, l.component_id::text as "componentId", l.kind,
            l.description, l.hours::text as hours, l.rate::text as rate,
            l.amount::text as amount,
@@ -236,7 +272,9 @@ async function loadLines(
       left join pay_components c
         on c.org_id = l.org_id and c.id = l.component_id
      where l.org_id = ${orgId}::uuid and l.stub_id = ${stubId}::uuid
-     order by l.sequence, l.id`, "objects");
+     order by l.sequence, l.id`,
+    "objects",
+  );
   // Capped-share evidence loads separately below; lines start empty so a
   // pack with no declaration leaves nulls, never zeros or guesses.
   const lines = rows.map(({ systemKey: _systemKey, ...line }) => ({
@@ -257,7 +295,12 @@ export function diffStubLines(
 ): { description: string; previousAmount: string | null; amount: string | null; input: string }[] {
   const prevByDesc = new Map(previous.map((l) => [l.description, l]));
   const seen = new Set<string>();
-  const changes: { description: string; previousAmount: string | null; amount: string | null; input: string }[] = [];
+  const changes: {
+    description: string;
+    previousAmount: string | null;
+    amount: string | null;
+    input: string;
+  }[] = [];
   for (const line of current) {
     seen.add(line.description);
     const prev = prevByDesc.get(line.description);
@@ -266,9 +309,10 @@ export function diffStubLines(
         description: line.description,
         previousAmount: null,
         amount: line.amount,
-        input: line.hours !== null && line.rate !== null
-          ? `new line: ${line.hours} hours × ${line.rate}`
-          : "new line this period",
+        input:
+          line.hours !== null && line.rate !== null
+            ? `new line: ${line.hours} hours × ${line.rate}`
+            : "new line this period",
       });
     } else if (prev.amount !== line.amount) {
       const bits: string[] = [];
@@ -353,10 +397,14 @@ async function loadCappedShareEvidence(
         );
       }
     }
-    const history = (await exec.execute<{ prior: string }>(sql`
+    const history = (
+      await exec.execute<{ prior: string }>(
+        sql`
       select (${entry.ytdSources
         .map(
-          (source) => sql`coalesce((select ${sql.raw(source.openingColumn)} from payroll_opening_balances
+          (
+            source,
+          ) => sql`coalesce((select ${sql.raw(source.openingColumn)} from payroll_opening_balances
             where org_id = ${orgId} and employee_party_id = ${partyId} and tax_year = ${stub.taxYear}), 0)
             + coalesce(sum((s.factors->>${source.factorKey})::numeric), 0)`,
         )
@@ -367,13 +415,14 @@ async function loadCappedShareEvidence(
        where s.org_id = ${orgId} and s.employee_party_id = ${partyId}
          and s.tax_year = ${stub.taxYear} and s.pay_run_document_id <> ${stub.payRunDocumentId}::uuid
          and s.pay_date <= ${stub.payDate}::date
-         and r.run_status = 'committed' and d.status <> 'voided'`, "objects"))[0];
+         and r.run_status = 'committed' and d.status <> 'voided'`,
+        "objects",
+      )
+    )[0];
     // No prior rows sum to null, not zero: coalesce the absence, never the
     // carry-in, which the selects above already default.
     const ytdBefore = history?.prior ?? "0";
-    const entryAmount = matching
-      .map((line) => line.amount)
-      .reduce((a, b) => add(a, b), "0");
+    const entryAmount = matching.map((line) => line.amount).reduce((a, b) => add(a, b), "0");
     const ytd = add(ytdBefore, entryAmount);
     const remainingBefore =
       entry.maximum === null
@@ -414,34 +463,57 @@ export async function explainPay(
   await loadCappedShareEvidence(exec, orgId, stub, lines, systemKeys);
 
   const benefitInputs = await exec.execute<{
-    id: string; kind: string; amount: string; coverageFrom: string; coverageTo: string; status: string;
-  }>(sql`
+    id: string;
+    kind: string;
+    amount: string;
+    coverageFrom: string;
+    coverageTo: string;
+    status: string;
+  }>(
+    sql`
     select a.id::text as id, r.kind, a.amount::text as amount,
            a.period_from::text as "coverageFrom", a.period_to::text as "coverageTo", a.status
       from pay_run_benefit_allocations a
       join hrm_benefit_contribution_rules r on r.org_id = a.org_id and r.id = a.rule_id
      where a.org_id = ${orgId}::uuid and a.employment_id = ${employmentId}::uuid
        and a.pay_run_document_id = ${stub.payRunDocumentId}::uuid
-     order by a.id`, "objects");
+     order by a.id`,
+    "objects",
+  );
 
   const leaveInputs = await exec.execute<{
-    id: string; kind: string; hours: string; absenceDate: string; status: string;
-  }>(sql`
+    id: string;
+    kind: string;
+    hours: string;
+    absenceDate: string;
+    status: string;
+  }>(
+    sql`
     select id::text as id, kind, hours::text as hours,
            absence_date::text as "absenceDate", status
       from hrm_payroll_inputs
      where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
        and consumed_by_run_document_id = ${stub.payRunDocumentId}::uuid
-     order by absence_date, id`, "objects");
+     order by absence_date, id`,
+    "objects",
+  );
 
-  const partyRows = await exec.execute<{ partyId: string }>(sql`
+  const partyRows = await exec.execute<{ partyId: string }>(
+    sql`
     select worker_party_id::text as "partyId" from worker_employments
-     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid`, "objects");
+     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid`,
+    "objects",
+  );
   const partyId = partyRows[0]?.partyId ?? null;
   const wageRates = partyId
-    ? (await exec.execute<{
-        id: string; rate: string; basis: string; effectiveFrom: string; effectiveTo: string | null;
-      }>(sql`
+    ? await exec.execute<{
+        id: string;
+        rate: string;
+        basis: string;
+        effectiveFrom: string;
+        effectiveTo: string | null;
+      }>(
+        sql`
         select id::text as id, rate::text as rate, basis,
                effective_from::text as "effectiveFrom",
                effective_to::text as "effectiveTo"
@@ -451,10 +523,13 @@ export async function explainPay(
            and effective_from <= ${stub.payDate}::date
            and (effective_to is null or effective_to >= ${stub.payDate}::date)
          order by effective_from desc
-         limit 5`, "objects"))
+         limit 5`,
+        "objects",
+      )
     : [];
 
-  const prevRows = await exec.execute<StubRow>(sql`
+  const prevRows = await exec.execute<StubRow>(
+    sql`
     select id::text as id, employment_id::text as "employmentId",
            pay_run_document_id::text as "payRunDocumentId",
            pay_date::text as "payDate", gross::text as gross,
@@ -465,7 +540,9 @@ export async function explainPay(
      where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
        and pay_date < ${stub.payDate}::date
      order by pay_date desc, id desc
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   const prev = prevRows[0] ?? null;
   // The previous stub feeds only the diff, never capped-share evidence:
   // its own explanation reads its own history when asked.

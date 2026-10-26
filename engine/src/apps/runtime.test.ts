@@ -50,25 +50,25 @@ function fakeAdapters(withRecords = false): AppHostAdapters {
 function withPlatform(adapters: AppHostAdapters): AppHostAdapters {
   adapters.platform = {
     async schema() {
-      return [{ key: 'items', operations: ['list', 'get', 'create', 'update', 'delete'] }]
+      return [{ key: "items", operations: ["list", "get", "create", "update", "delete"] }];
     },
     async list(typeKey, options) {
-      return { records: [{ id: 'i1', typeKey }], options, total: 1, page: 1, perPage: 25 }
+      return { records: [{ id: "i1", typeKey }], options, total: 1, page: 1, perPage: 25 };
     },
     async get(typeKey, id) {
-      return { typeKey, id }
+      return { typeKey, id };
     },
     async create(typeKey, body) {
-      return { id: 'created', typeKey, ...body }
+      return { id: "created", typeKey, ...body };
     },
     async update(typeKey, id, body) {
-      return { id, typeKey, ...body }
+      return { id, typeKey, ...body };
     },
     async delete(typeKey, id) {
-      return { ok: true, typeKey, id }
+      return { ok: true, typeKey, id };
     },
-  }
-  return adapters
+  };
+  return adapters;
 }
 
 const req = (over: Partial<AppRequest> = {}): AppRequest => ({
@@ -282,7 +282,10 @@ test("journal.create round-trips input and post flag through the adapter", async
   assert.equal(calls[0]!.post, false);
   assert.equal((calls[0]!.input as { memo?: unknown }).memo, "m");
   assert.equal(calls[1]!.post, true);
-  const body = r.response!.body as { draft: { documentNumber: unknown }; posted: { entryId: unknown } };
+  const body = r.response!.body as {
+    draft: { documentNumber: unknown };
+    posted: { entryId: unknown };
+  };
   assert.equal(body.draft.documentNumber, "JE-0001");
   assert.equal(body.posted.entryId, "e1");
 });
@@ -363,10 +366,7 @@ test("a guest stack overflow is an endpoint error, not a host process abort", as
     adapters: fakeAdapters(),
   });
   assert.equal(r.status, "error");
-  assert.equal(
-    r.error,
-    "guest stack overflow: the handler exceeded the sandbox stack limit",
-  );
+  assert.equal(r.error, "guest stack overflow: the handler exceeded the sandbox stack limit");
   // Dispose of that poisoned WASM runtime must not take the process down:
   // a later endpoint on the same host still returns a result.
   const after = await runAppEndpoint({
@@ -391,31 +391,29 @@ test("guest-controlled error text does not rewrite or skip runtime dispose", asy
 });
 
 test("a renamed Error is not a WebAssembly abort", () => {
-  assert.equal(
-    isHostVmUnfreeableSignal(new WebAssembly.RuntimeError("Aborted()")),
-    true,
-  );
+  assert.equal(isHostVmUnfreeableSignal(new WebAssembly.RuntimeError("Aborted()")), true);
   const renamed = new Error("Aborted()");
   renamed.name = "RuntimeError";
   assert.equal(isHostVmUnfreeableSignal(renamed), false);
   assert.equal(renamed instanceof WebAssembly.RuntimeError, false);
 });
 
-test('platform query plans round-trip through QuickJS without exposing SQL', async () => {
-  const adapters = withPlatform(fakeAdapters())
-  const plan = { from: { type: 'items', as: 'item' }, select: [{ source: 'item', field: 'id' }] }
+test("platform query plans round-trip through QuickJS without exposing SQL", async () => {
+  const adapters = withPlatform(fakeAdapters());
+  const plan = { from: { type: "items", as: "item" }, select: [{ source: "item", field: "id" }] };
   adapters.platform!.query = async (received) => {
-    assert.deepEqual(received, plan)
-    return { records: [{ 'item.id': 'i1' }], hasMore: false }
-  }
+    assert.deepEqual(received, plan);
+    return { records: [{ "item.id": "i1" }], hasMore: false };
+  };
   const result = await runAppEndpoint({
-    source: 'function handler(request) { return ob.platform.query(request.body); }',
-    request: req({ body: plan }), adapters,
-  })
-  assert.equal(result.status, 'ok')
-  assert.deepEqual(result.response!.body, { records: [{ 'item.id': 'i1' }], hasMore: false })
-  assert.equal(result.units, 80)
-})
+    source: "function handler(request) { return ob.platform.query(request.body); }",
+    request: req({ body: plan }),
+    adapters,
+  });
+  assert.equal(result.status, "ok");
+  assert.deepEqual(result.response!.body, { records: [{ "item.id": "i1" }], hasMore: false });
+  assert.equal(result.units, 80);
+});
 
 test("the sandbox has no host db, fs, or net primitives except injected adapters", async () => {
   const r = await runAppEndpoint({

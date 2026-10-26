@@ -1,4 +1,4 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { submitResponse } from "@openbooks/engine/hrm/surveys/responses";
@@ -34,30 +34,48 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     const { token } = await ctx.params;
     const claims = verifySurveyInvitationToken(token);
     if (!claims) {
-      return NextResponse.json({ error: "this survey link is invalid or expired — ask HR for a fresh invitation" }, { status: 403 });
+      return NextResponse.json(
+        { error: "this survey link is invalid or expired — ask HR for a fresh invitation" },
+        { status: 403 },
+      );
     }
     const survey = await withOrgTransaction(claims.orgId, async () => {
-      const row = (await db.execute<{
-        id: string;
-        name: string;
-        kind: string;
-        anonymity: string;
-        status: string;
-        closes_at: string | null;
-      }>(sql`
+      const row = (
+        await db.execute<{
+          id: string;
+          name: string;
+          kind: string;
+          anonymity: string;
+          status: string;
+          closes_at: string | null;
+        }>(
+          sql`
         select s.id, s.name, s.kind, s.anonymity, s.status, s.closes_at::text as closes_at
           from hrm_survey_invitations i
           join hrm_surveys s on s.org_id = i.org_id and s.id = i.survey_id
          where i.token_hash = ${hashHrmToken(token)}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!row) {
-        throw new SurveyLinkRefusal("this survey link is no longer available — ask HR for a fresh invitation");
+        throw new SurveyLinkRefusal(
+          "this survey link is no longer available — ask HR for a fresh invitation",
+        );
       }
-      const questions = await db.execute<{ id: string; kind: string; prompt: string; options: unknown }>(sql`
+      const questions = await db.execute<{
+        id: string;
+        kind: string;
+        prompt: string;
+        options: unknown;
+      }>(
+        sql`
         select id, kind, prompt, options from hrm_survey_questions
          where org_id = ${claims.orgId} and survey_id = ${row.id}
          order by position
-      `, "objects");
+      `,
+        "objects",
+      );
       return { ...row, questions };
     });
     return NextResponse.json({ survey });
@@ -76,7 +94,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const { token } = await ctx.params;
     const claims = verifySurveyInvitationToken(token);
     if (!claims) {
-      return NextResponse.json({ error: "this survey link is invalid or expired — ask HR for a fresh invitation" }, { status: 403 });
+      return NextResponse.json(
+        { error: "this survey link is invalid or expired — ask HR for a fresh invitation" },
+        { status: 403 },
+      );
     }
     const today = await businessToday(claims.orgId);
     const result = await submitResponse({ token, answers: parsedBody.data.answers, today });

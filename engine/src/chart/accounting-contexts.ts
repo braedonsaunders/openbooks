@@ -47,12 +47,18 @@ export interface ResolvedAccountingContext {
 }
 
 /** Active contexts, or none while the feature is off. */
-export async function listAccountingContexts(executor: SqlExecutor, orgId: string): Promise<AccountingContextOption[]> {
+export async function listAccountingContexts(
+  executor: SqlExecutor,
+  orgId: string,
+): Promise<AccountingContextOption[]> {
   if (!(await orgFeatureEnabled(orgId, ACCOUNTING_CONTEXTS_FEATURE, executor))) return [];
-  return await executor.execute<AccountingContextOption>(sql`
+  return await executor.execute<AccountingContextOption>(
+    sql`
     select id, code, name from accounting_contexts
      where org_id = ${orgId} and is_active
-     order by name, code, id`, "objects");
+     order by name, code, id`,
+    "objects",
+  );
 }
 
 /**
@@ -70,30 +76,51 @@ export async function resolveAccountingContext(
   const enabled = await orgFeatureEnabled(orgId, ACCOUNTING_CONTEXTS_FEATURE, executor);
   if (!enabled) {
     if (requested) {
-      throw new AccountingContextError("Accounting contexts are turned off for this company.", "accounting_contexts_disabled", "Turn on Accounting contexts in Company Settings → Features, or run the report on the base chart.");
+      throw new AccountingContextError(
+        "Accounting contexts are turned off for this company.",
+        "accounting_contexts_disabled",
+        "Turn on Accounting contexts in Company Settings → Features, or run the report on the base chart.",
+      );
     }
     return { context: null, source: "base" };
   }
   if (requested) {
-    const row = (await executor.execute<AccountingContextOption>(sql`
+    const row = (
+      await executor.execute<AccountingContextOption>(
+        sql`
       select id, code, name from accounting_contexts
-       where org_id = ${orgId} and id::text = ${requested} and is_active`, "objects"))[0];
+       where org_id = ${orgId} and id::text = ${requested} and is_active`,
+        "objects",
+      )
+    )[0];
     if (!row) {
-      throw new AccountingContextError("The accounting context is not an active context of this company.", "accounting_context_unknown", "Choose an active accounting context, or the base chart.");
+      throw new AccountingContextError(
+        "The accounting context is not an active context of this company.",
+        "accounting_context_unknown",
+        "Choose an active accounting context, or the base chart.",
+      );
     }
     return { context: row, source: "requested" };
   }
   if (!input.subsidiaryId) return { context: null, source: "base" };
-  const fallback = (await executor.execute<AccountingContextOption & { scope: "subsidiary" | "country" }>(sql`
+  const fallback = (
+    await executor.execute<AccountingContextOption & { scope: "subsidiary" | "country" }>(
+      sql`
     select c.id, c.code, c.name, case when d.subsidiary_id is not null then 'subsidiary' else 'country' end as scope
       from accounting_context_defaults d
       join accounting_contexts c on c.org_id = d.org_id and c.id = d.context_id and c.is_active
       join subsidiaries s on s.org_id = d.org_id and s.id = ${input.subsidiaryId}
      where d.org_id = ${orgId} and (d.subsidiary_id = s.id or (d.subsidiary_id is null and d.country = s.country))
      order by (d.subsidiary_id is not null) desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (!fallback) return { context: null, source: "base" };
-  return { context: { id: fallback.id, code: fallback.code, name: fallback.name }, source: fallback.scope };
+  return {
+    context: { id: fallback.id, code: fallback.code, name: fallback.name },
+    source: fallback.scope,
+  };
 }
 
 export interface AccountLabel {
@@ -143,10 +170,15 @@ export async function loadAccountLabels(
   options: { asOf: string; subsidiaryId?: string | null },
 ): Promise<Map<string, AccountLabel>> {
   if (!isIsoCalendarDate(options.asOf)) {
-    throw new AccountingContextError("The report date is not a calendar date.", "accounting_context_date", "Choose a valid report period.");
+    throw new AccountingContextError(
+      "The report date is not a calendar date.",
+      "accounting_context_date",
+      "Choose a valid report period.",
+    );
   }
   const subsidiaryId = options.subsidiaryId ?? null;
-  const rows = await executor.execute<LabelRow>(sql`
+  const rows = await executor.execute<LabelRow>(
+    sql`
     select a.id as account_id, a.number as base_number, a.name as base_name,
            loc.localized_number, loc.localized_name
       from accounts a
@@ -160,7 +192,9 @@ export async function loadAccountLabels(
          order by (l.subsidiary_id is not null) desc
          limit 1
       ) loc on true
-     where a.org_id = ${orgId}`, "objects");
+     where a.org_id = ${orgId}`,
+    "objects",
+  );
   const labels = new Map<string, AccountLabel>();
   for (const row of rows) {
     const localized = row.localized_number !== null || row.localized_name !== null;
@@ -175,7 +209,10 @@ export async function loadAccountLabels(
 }
 
 /** Sort key comparison for account rows under a context: number (natural order), then name. */
-export function compareAccountLabels(a: Pick<AccountLabel, "number" | "name">, b: Pick<AccountLabel, "number" | "name">): number {
+export function compareAccountLabels(
+  a: Pick<AccountLabel, "number" | "name">,
+  b: Pick<AccountLabel, "number" | "name">,
+): number {
   if (a.number && b.number) {
     const byNumber = a.number.localeCompare(b.number, "en", { numeric: true, sensitivity: "base" });
     if (byNumber !== 0) return byNumber;
@@ -206,26 +243,50 @@ export async function accountLocalizationWriteError(
     effectiveTo: string | null;
   },
 ): Promise<string | null> {
-  if (!input.localizedNumber?.trim() && !input.localizedName?.trim()) return "Enter a localized number, a localized name, or both.";
-  if (!isIsoCalendarDate(input.effectiveFrom)) return "Enter the date the localization takes effect.";
-  if (input.effectiveTo && (!isIsoCalendarDate(input.effectiveTo) || input.effectiveTo < input.effectiveFrom)) {
+  if (!input.localizedNumber?.trim() && !input.localizedName?.trim())
+    return "Enter a localized number, a localized name, or both.";
+  if (!isIsoCalendarDate(input.effectiveFrom))
+    return "Enter the date the localization takes effect.";
+  if (
+    input.effectiveTo &&
+    (!isIsoCalendarDate(input.effectiveTo) || input.effectiveTo < input.effectiveFrom)
+  ) {
     return "The end date must be on or after the effective date.";
   }
-  const account = (await executor.execute<{ merged_into_id: string | null }>(sql`
-    select merged_into_id from accounts where org_id = ${orgId} and id = ${input.accountId}`, "objects"))[0];
+  const account = (
+    await executor.execute<{ merged_into_id: string | null }>(
+      sql`
+    select merged_into_id from accounts where org_id = ${orgId} and id = ${input.accountId}`,
+      "objects",
+    )
+  )[0];
   if (!account) return "Choose an account of this company.";
-  const context = (await executor.execute<{ id: string }>(sql`
-    select id from accounting_contexts where org_id = ${orgId} and id = ${input.contextId}`, "objects"))[0];
+  const context = (
+    await executor.execute<{ id: string }>(
+      sql`
+    select id from accounting_contexts where org_id = ${orgId} and id = ${input.contextId}`,
+      "objects",
+    )
+  )[0];
   if (!context) return "Choose an accounting context of this company.";
   if (input.subsidiaryId) {
-    const subsidiary = (await executor.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`, "objects"))[0];
+    const subsidiary = (
+      await executor.execute<{ id: string }>(
+        sql`
+      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`,
+        "objects",
+      )
+    )[0];
     if (!subsidiary) return "Choose a subsidiary of this company.";
   }
   const number = input.localizedNumber?.trim();
   if (!number) return null;
-  await executor.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`account-localizations:${orgId}:${input.contextId}`}, 0))`);
-  const clash = (await executor.execute<{ label: string }>(sql`
+  await executor.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`account-localizations:${orgId}:${input.contextId}`}, 0))`,
+  );
+  const clash = (
+    await executor.execute<{ label: string }>(
+      sql`
     select concat_ws(' · ', a.number, a.name) as label
       from account_localizations l
       join accounts a on a.org_id = l.org_id and a.id = l.account_id
@@ -236,7 +297,11 @@ export async function accountLocalizationWriteError(
        and (l.subsidiary_id is null or ${input.subsidiaryId}::uuid is null or l.subsidiary_id = ${input.subsidiaryId}::uuid)
        and daterange(l.effective_from, coalesce(l.effective_to + 1, 'infinity'::date), '[)')
            && daterange(${input.effectiveFrom}::date, coalesce(${input.effectiveTo}::date + 1, 'infinity'::date), '[)')
-     limit 1`, "objects"))[0];
-  if (clash) return `Localized number ${number} is already used by ${clash.label} in this context for an overlapping period. Give each account its own localized number.`;
+     limit 1`,
+      "objects",
+    )
+  )[0];
+  if (clash)
+    return `Localized number ${number} is already used by ${clash.label} in this context for an overlapping period. Give each account its own localized number.`;
   return null;
 }

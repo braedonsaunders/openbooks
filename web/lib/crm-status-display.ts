@@ -1,6 +1,9 @@
-import { SEEDED_ACCOUNT_STATUS_NAMES, SEEDED_OPPORTUNITY_STATUS_NAMES } from '@openbooks/engine/crm/crm-default-statuses'
+import {
+  SEEDED_ACCOUNT_STATUS_NAMES,
+  SEEDED_OPPORTUNITY_STATUS_NAMES,
+} from "@openbooks/engine/crm/crm-default-statuses";
 
-export { SEEDED_ACCOUNT_STATUS_NAMES, SEEDED_OPPORTUNITY_STATUS_NAMES }
+export { SEEDED_ACCOUNT_STATUS_NAMES, SEEDED_OPPORTUNITY_STATUS_NAMES };
 
 /**
  * Display names for CRM opportunity statuses.
@@ -17,14 +20,14 @@ export function displayOpportunityStatusName(
   storedName: string,
   translatedByKey: (key: string) => string,
 ): string {
-  const key = SEEDED_OPPORTUNITY_STATUS_NAMES[storedName]
-  return key ? translatedByKey(key) : storedName
+  const key = SEEDED_OPPORTUNITY_STATUS_NAMES[storedName];
+  return key ? translatedByKey(key) : storedName;
 }
 
 export function displayAccountStatusName(
   storedName: string,
   translatedByKey: (key: string) => string,
 ): string {
-  const key = SEEDED_ACCOUNT_STATUS_NAMES[storedName]
-  return key ? translatedByKey(key) : storedName
+  const key = SEEDED_ACCOUNT_STATUS_NAMES[storedName];
+  return key ? translatedByKey(key) : storedName;
 }

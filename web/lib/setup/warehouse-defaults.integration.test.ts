@@ -4,11 +4,8 @@ import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -19,8 +16,13 @@ async function seedOrg() {
   await db.execute(sql`
     update orgs set settings = settings || '{"features": {"warehousing": true}}'::jsonb
      where id = ${org.orgId}`);
-  const main = (await db.execute<{ id: string }>(sql`
-      select id from stock_locations where org_id = ${org.orgId} and code = 'MAIN'`, "objects"))[0]!.id;
+  const main = (
+    await db.execute<{ id: string }>(
+      sql`
+      select id from stock_locations where org_id = ${org.orgId} and code = 'MAIN'`,
+      "objects",
+    )
+  )[0]!.id;
   const secondId = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
@@ -57,13 +59,23 @@ test(
         isActive: true,
       });
       assert.ok(duplicate.status >= 400, "a second default for one entity is refused");
-      const rows = (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from warehouse_defaults where org_id = ${f.orgId}`, "objects"))[0]!.n;
+      const rows = (
+        await db.execute<{ n: number }>(
+          sql`
+          select count(*)::int as n from warehouse_defaults where org_id = ${f.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(rows, 2, "the refused duplicate writes nothing");
 
-      const audits = (await db.execute<{ n: number }>(sql`
+      const audits = (
+        await db.execute<{ n: number }>(
+          sql`
           select count(*)::int as n from audit_log
-           where org_id = ${f.orgId} and table_name = 'warehouse_defaults'`, "objects"))[0]!.n;
+           where org_id = ${f.orgId} and table_name = 'warehouse_defaults'`,
+          "objects",
+        )
+      )[0]!.n;
       assert.ok(audits >= 2, "designations carry audit evidence");
     } finally {
       await dropScratchOrgReporting(f.orgId);

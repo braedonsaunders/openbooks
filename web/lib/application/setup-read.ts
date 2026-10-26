@@ -1,12 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  FEATURES,
-  featureEnabled,
-  resolvedFeatureState,
-  type FeatureState,
-} from "../features";
+import { FEATURES, featureEnabled, resolvedFeatureState, type FeatureState } from "../features";
 import { loadExtensionSettingRows } from "../setup/extension-settings";
 import {
   SETUP_ENTITIES,
@@ -22,7 +17,10 @@ import { assertApplicationPermission } from "./context";
 import { ApplicationError } from "./errors";
 import { setupReadProjection, setupReadSource } from "../setup/read-shape";
 import { UNRESTRICTED_SCOPE_REQUIRED } from "../subsidiaries";
-import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from "../setup/subsidiary-scope";
+import {
+  setupEntityHasSubsidiaryAnchor,
+  setupEntitySubsidiaryFilter,
+} from "../setup/subsidiary-scope";
 
 function resolveEntity(base: SetupEntity, features: FeatureState): SetupEntity {
   return setupEntityForFeatureState(base, {
@@ -67,7 +65,10 @@ function setupRecordMissing(entityKey: string): ApplicationError {
   );
 }
 
-async function requireSetupEntity(context: ApplicationContext, entityKey: string): Promise<SetupEntity> {
+async function requireSetupEntity(
+  context: ApplicationContext,
+  entityKey: string,
+): Promise<SetupEntity> {
   assertApplicationPermission(context, "admin.setup.manage");
   const base = SETUP_ENTITY_BY_KEY.get(entityKey);
   if (!base) throw setupEntityMissing();
@@ -79,12 +80,15 @@ async function requireSetupEntity(context: ApplicationContext, entityKey: string
   return resolveEntity(base, features);
 }
 
-function mapSetupRecord(entity: SetupEntity, row: Record<string, unknown>): Record<string, unknown> {
+function mapSetupRecord(
+  entity: SetupEntity,
+  row: Record<string, unknown>,
+): Record<string, unknown> {
   const idColumn = entity.idColumn ?? "id";
   return {
     id: row[idColumn],
     ...Object.fromEntries(entity.columns.map((column) => [column.key, row[toSnake(column.key)]])),
-    ...(entity.key === 'pay-components'
+    ...(entity.key === "pay-components"
       ? { supplementalWageCategory: row.supplemental_wage_category }
       : {}),
   };
@@ -97,14 +101,16 @@ export async function listSetupRecords(
 ) {
   const entity = await requireSetupEntity(context, input.entityKey);
   if (context.authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) {
-    throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
+    throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403);
   }
   const limit = clamp(input.limit ?? 50, 1, 200);
   if (entity.dataSource === "extension-settings") {
-    if (context.authz.allowedSubsidiaryIds !== null) throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
+    if (context.authz.allowedSubsidiaryIds !== null)
+      throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403);
     const needle = input.query?.trim().toLowerCase();
-    const rows = (await loadExtensionSettingRows(context.authz.user.orgId)).filter((row) =>
-      !needle || Object.values(row).some((value) => String(value).toLowerCase().includes(needle)),
+    const rows = (await loadExtensionSettingRows(context.authz.user.orgId)).filter(
+      (row) =>
+        !needle || Object.values(row).some((value) => String(value).toLowerCase().includes(needle)),
     );
     return {
       entityKey: entity.key,
@@ -117,7 +123,8 @@ export async function listSetupRecords(
   const columnKeys = entity.columns.map((column) => toSnake(column.key));
   const selectCols = [...new Set([idColumn, ...columnKeys])];
   const searchColumns = entity.columns.map(
-    (column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${input.query ?? ""}%`}`,
+    (column) =>
+      sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${input.query ?? ""}%`}`,
   );
   const rowFilter = sql`where 1 = 1
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
@@ -126,12 +133,18 @@ export async function listSetupRecords(
     ${input.query && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`;
   const orderBy = entity.orderBy ?? (entity.naturalKey ? toSnake(entity.naturalKey) : idColumn);
   const [rows, count] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderBy)}
-       limit ${limit}`, "objects"),
-    db.execute<{ n: number }>(sql`
-      select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`, "objects"),
+       limit ${limit}`,
+      "objects",
+    ),
+    db.execute<{ n: number }>(
+      sql`
+      select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`,
+      "objects",
+    ),
   ]);
   return {
     entityKey: entity.key,
@@ -147,14 +160,16 @@ export async function getSetupRecord(
 ) {
   const entity = await requireSetupEntity(context, input.entityKey);
   if (context.authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) {
-    throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
+    throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403);
   }
   if (entity.dataSource === "extension-settings") {
-    if (context.authz.allowedSubsidiaryIds !== null) throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
+    if (context.authz.allowedSubsidiaryIds !== null)
+      throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403);
     // The adapter returns the full active catalog, not a page; find by id
     // here is a key lookup over that complete set.
-    const record = (await loadExtensionSettingRows(context.authz.user.orgId))
-      .find((row) => String(row.id) === input.id);
+    const record = (await loadExtensionSettingRows(context.authz.user.orgId)).find(
+      (row) => String(row.id) === input.id,
+    );
     if (!record) throw setupRecordMissing(entity.key);
     return record;
   }
@@ -162,11 +177,14 @@ export async function getSetupRecord(
   const idColumn = entity.idColumn ?? "id";
   const columnKeys = entity.columns.map((column) => toSnake(column.key));
   const selectCols = [...new Set([idColumn, ...columnKeys])];
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)}
      where ${sql.raw(idColumn)} = ${input.id}
      ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
-     ${setupEntitySubsidiaryFilter(entity, context.authz.allowedSubsidiaryIds)}`, "objects");
+     ${setupEntitySubsidiaryFilter(entity, context.authz.allowedSubsidiaryIds)}`,
+    "objects",
+  );
   if (rows.length === 0) throw setupRecordMissing(entity.key);
   if (rows.length !== 1) {
     throw new ApplicationError(

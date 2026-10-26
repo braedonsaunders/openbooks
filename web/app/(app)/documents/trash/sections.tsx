@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { ChevronLeft } from 'lucide-react'
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 
 /**
  * Back link above the trash header, moved here from page.tsx so the native
@@ -19,5 +19,5 @@ export function TrashBackLink({ href, label }: { href: string; label: string }) 
       <ChevronLeft className="h-3.5 w-3.5" />
       {label}
     </Link>
-  )
+  );
 }

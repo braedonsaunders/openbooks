@@ -1,16 +1,25 @@
-import 'server-only'
+import "server-only";
 
-import { sql, type SQL } from 'drizzle-orm'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { displayRoleDescription } from '../../../../lib/role-display'
-import { db } from '@openbooks/engine/platform/db'
-import { UNUSABLE_PASSWORD_HASH } from '@openbooks/engine/organization/pending-credential'
-import { grid, page, pageHeader, pagination, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { dateTime } from '../../../../lib/format'
-import { parseListParams, pickString } from '../../../../lib/list-params'
-import type { AdminUserRow } from './sections'
-import { countOtherActiveUserAdministrators } from '../../../../lib/sole-administrator'
+import { sql, type SQL } from "drizzle-orm";
+import { getLocale, getTranslations } from "next-intl/server";
+import { displayRoleDescription } from "../../../../lib/role-display";
+import { db } from "@openbooks/engine/platform/db";
+import { UNUSABLE_PASSWORD_HASH } from "@openbooks/engine/organization/pending-credential";
+import {
+  grid,
+  page,
+  pageHeader,
+  pagination,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { dateTime } from "../../../../lib/format";
+import { parseListParams, pickString } from "../../../../lib/list-params";
+import type { AdminUserRow } from "./sections";
+import { countOtherActiveUserAdministrators } from "../../../../lib/sole-administrator";
 
 /**
  * Org users and their role assignments, split into a loader and a spec.
@@ -24,105 +33,107 @@ import { countOtherActiveUserAdministrators } from '../../../../lib/sole-adminis
  * SESSION user, which the loader resolves; a spec never learns who is looking.
  */
 
-const BASE = '/admin/users'
-const SORTS = ['name', 'email', 'last_login', 'last_sign_in'] as const
+const BASE = "/admin/users";
+const SORTS = ["name", "email", "last_login", "last_sign_in"] as const;
 const ORDER: Record<(typeof SORTS)[number], string> = {
-  name: 'lower(u.name)',
-  email: 'lower(u.email)',
-  last_login: 'u.last_login_at',
+  name: "lower(u.name)",
+  email: "lower(u.email)",
+  last_login: "u.last_login_at",
   // Alias: the column is labeled "Last sign-in", so sort=last_sign_in must
   // order exactly like last_login. Unknown keys silently fall back to name
   // ordering, which reads as nulls interleaved around sorted dates
   // — never let a label-plausible key fall through.
-  last_sign_in: 'u.last_login_at',
-}
+  last_sign_in: "u.last_login_at",
+};
 
 export interface AdminUsersData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  manageRolesHref: string
-  manageRolesLabel: string
-  searchPlaceholder: string
-  statusFilterLabel: string
-  statusOptions: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
-  isEmpty: boolean
-  hasRows: boolean
-  emptyTitle: string
-  emptyDescription: string
-  users: AdminUserRow[]
-  allRoles: { id: string; name: string; isBuiltIn: boolean; description: string | null }[]
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  manageRolesHref: string;
+  manageRolesLabel: string;
+  searchPlaceholder: string;
+  statusFilterLabel: string;
+  statusOptions: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  isEmpty: boolean;
+  hasRows: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  users: AdminUserRow[];
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description: string | null }[];
   labels: {
-    name: string
-    email: string
-    roles: string
-    status: string
-    lastSignIn: string
-    actions: string
-    you: string
-    unassignedRole: string
-    linkedPerson: string
-    unlinkedPerson: string
-  }
-  total: number
-  currentPage: number
-  perPage: number
-  sort: string
-  dir: 'asc' | 'desc'
+    name: string;
+    email: string;
+    roles: string;
+    status: string;
+    lastSignIn: string;
+    actions: string;
+    you: string;
+    unassignedRole: string;
+    linkedPerson: string;
+    unlinkedPerson: string;
+  };
+  total: number;
+  currentPage: number;
+  perPage: number;
+  sort: string;
+  dir: "asc" | "desc";
 }
 
 export async function loadAdminUsers(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AdminUsersData> {
-  const authz = await requirePermission('admin.users.manage')
+  const authz = await requirePermission("admin.users.manage");
   // The sole active user administrator may link their own login (attested
   // and audited); the server re-checks this inside the write.
-  const soleAdministrator = (await countOtherActiveUserAdministrators(db, authz.user.orgId, authz.user.id)) === 0
-  const t = await getTranslations('admin.users')
-  const tRoles = await getTranslations('admin.roles')
-  const tCommon = await getTranslations('common')
-  const tHub = await getTranslations('admin.hub')
+  const soleAdministrator =
+    (await countOtherActiveUserAdministrators(db, authz.user.orgId, authz.user.id)) === 0;
+  const t = await getTranslations("admin.users");
+  const tRoles = await getTranslations("admin.roles");
+  const tCommon = await getTranslations("common");
+  const tHub = await getTranslations("admin.hub");
   // Sign-in timestamps render in the viewer's locale, not the
   // en-CA formatter default.
-  const locale = await getLocale()
-  const orgId = authz.user.orgId
+  const locale = await getLocale();
+  const orgId = authz.user.orgId;
   const listParams = parseListParams(sp, {
-    sort: 'name',
-    dir: 'asc',
+    sort: "name",
+    dir: "asc",
     perPage: 25,
     allowedSorts: SORTS,
-  })
-  const statusParam = pickString(sp.status)
-  const status = statusParam === 'inactive' || statusParam === 'all' ? statusParam : 'active'
+  });
+  const statusParam = pickString(sp.status);
+  const status = statusParam === "inactive" || statusParam === "all" ? statusParam : "active";
 
-  const filters: SQL[] = [sql`u.org_id = ${orgId}`]
+  const filters: SQL[] = [sql`u.org_id = ${orgId}`];
   if (listParams.q) {
-    const like = `%${listParams.q}%`
-    filters.push(sql`(u.name ilike ${like} or u.email ilike ${like})`)
+    const like = `%${listParams.q}%`;
+    filters.push(sql`(u.name ilike ${like} or u.email ilike ${like})`);
   }
-  const searchWhere = sql.join(filters, sql` and `)
-  if (status !== 'all') filters.push(sql`u.is_active = ${status === 'active'}`)
-  const where = sql.join(filters, sql` and `)
+  const searchWhere = sql.join(filters, sql` and `);
+  if (status !== "all") filters.push(sql`u.is_active = ${status === "active"}`);
+  const where = sql.join(filters, sql` and `);
   // Sort key is whitelisted through ORDER — never raw user input.
   const orderBy = sql.raw(
-    `${ORDER[listParams.sort]} ${listParams.dir === 'asc' ? 'asc nulls last' : 'desc nulls last'}, lower(u.email) asc`,
-  )
+    `${ORDER[listParams.sort]} ${listParams.dir === "asc" ? "asc nulls last" : "desc nulls last"}, lower(u.email) asc`,
+  );
 
   const [rowsR, countR, statusCountsR, rolesR] = await Promise.all([
     db.execute<{
-      id: string
-      name: string
-      email: string
-      is_active: boolean
-      last_login_at: string | null
-      is_pending: boolean
-      invite_live: boolean
-      party_id: string | null
-      party_name: string | null
-      party_kind: string | null
-    }>(sql`
+      id: string;
+      name: string;
+      email: string;
+      is_active: boolean;
+      last_login_at: string | null;
+      is_pending: boolean;
+      invite_live: boolean;
+      party_id: string | null;
+      party_name: string | null;
+      party_kind: string | null;
+    }>(
+      sql`
       select u.id, u.name, u.email, u.is_active, u.last_login_at,
              -- Pending means the person has never set a password, the same rule
              -- the resend action enforces, so an expired link never hides the
@@ -135,59 +146,79 @@ export async function loadAdminUsers(
         left join parties p on p.id = u.party_id and p.org_id = u.org_id
        where ${where}
        order by ${orderBy}
-       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}`, 'objects'),
-    db.execute<{ c: number }>(sql`select count(*)::int as c from users u where ${where}`, 'objects'),
-    db.execute<{ is_active: boolean; c: number }>(sql`
+       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}`,
+      "objects",
+    ),
+    db.execute<{ c: number }>(
+      sql`select count(*)::int as c from users u where ${where}`,
+      "objects",
+    ),
+    db.execute<{ is_active: boolean; c: number }>(
+      sql`
       select u.is_active, count(*)::int as c from users u
-       where ${searchWhere} group by u.is_active`, 'objects'),
-    db.execute<{ id: string; key: string; name: string; is_built_in: boolean; description: string | null }>(sql`
+       where ${searchWhere} group by u.is_active`,
+      "objects",
+    ),
+    db.execute<{
+      id: string;
+      key: string;
+      name: string;
+      is_built_in: boolean;
+      description: string | null;
+    }>(
+      sql`
       select id, key, name, is_built_in, description from app_roles
        where org_id = ${orgId}
-       order by is_built_in desc, name asc`, 'objects'),
-  ])
+       order by is_built_in desc, name asc`,
+      "objects",
+    ),
+  ]);
 
-  const users = rowsR
-  const total = Number(countR[0]?.c ?? 0)
+  const users = rowsR;
+  const total = Number(countR[0]?.c ?? 0);
   const statusCounts = Object.fromEntries(
-    statusCountsR.map((r) => [r.is_active ? 'active' : 'inactive', Number(r.c)]),
-  ) as Record<string, number>
-  const allRoles = rolesR
+    statusCountsR.map((r) => [r.is_active ? "active" : "inactive", Number(r.c)]),
+  ) as Record<string, number>;
+  const allRoles = rolesR;
 
-  const userIds = users.map((u) => u.id)
+  const userIds = users.map((u) => u.id);
   const assignmentsR =
     userIds.length === 0
-      ? [] as { user_id: string; role_id: string; role_name: string }[]
-      : await db.execute<{ user_id: string; role_id: string; role_name: string }>(sql`
+      ? ([] as { user_id: string; role_id: string; role_name: string }[])
+      : await db.execute<{ user_id: string; role_id: string; role_name: string }>(
+          sql`
           select a.user_id, r.id as role_id, r.name as role_name
             from role_assignments a
             join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-           where a.org_id = ${orgId} and a.user_id = any(${`{${userIds.join(',')}}`}::uuid[])
-           order by r.name asc`, 'objects')
-  const rolesByUser = new Map<string, { id: string; name: string }[]>()
+           where a.org_id = ${orgId} and a.user_id = any(${`{${userIds.join(",")}}`}::uuid[])
+           order by r.name asc`,
+          "objects",
+        );
+  const rolesByUser = new Map<string, { id: string; name: string }[]>();
   for (const a of assignmentsR) {
-    const list = rolesByUser.get(a.user_id) ?? []
-    list.push({ id: a.role_id, name: a.role_name })
-    rolesByUser.set(a.user_id, list)
+    const list = rolesByUser.get(a.user_id) ?? [];
+    list.push({ id: a.role_id, name: a.role_name });
+    rolesByUser.set(a.user_id, list);
   }
 
   return {
-    title: t('title'),
-    description: t('description'),
-    backHref: '/admin',
-    backLabel: tHub('title'),
-    manageRolesHref: '/admin/roles',
-    manageRolesLabel: t('manageRoles'),
-    searchPlaceholder: t('searchPlaceholder'),
-    statusFilterLabel: t('statusFilter'),
+    title: t("title"),
+    description: t("description"),
+    backHref: "/admin",
+    backLabel: tHub("title"),
+    manageRolesHref: "/admin/roles",
+    manageRolesLabel: t("manageRoles"),
+    searchPlaceholder: t("searchPlaceholder"),
+    statusFilterLabel: t("statusFilter"),
     statusOptions: [
-      { value: 'active', label: tCommon('labels.active'), count: statusCounts.active ?? 0 },
-      { value: 'inactive', label: tCommon('labels.inactive'), count: statusCounts.inactive ?? 0 },
+      { value: "active", label: tCommon("labels.active"), count: statusCounts.active ?? 0 },
+      { value: "inactive", label: tCommon("labels.inactive"), count: statusCounts.inactive ?? 0 },
     ],
     currentParams: sp,
     isEmpty: users.length === 0,
     hasRows: users.length > 0,
-    emptyTitle: t('emptyTitle'),
-    emptyDescription: listParams.q ? t('emptySearchDescription') : t('emptyFilterDescription'),
+    emptyTitle: t("emptyTitle"),
+    emptyDescription: listParams.q ? t("emptySearchDescription") : t("emptyFilterDescription"),
     users: users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -197,12 +228,12 @@ export async function loadAdminUsers(
       selfLinkAllowed: u.id === authz.user.id && soleAdministrator,
       isPending: u.is_pending,
       statusLabel: u.is_pending
-        ? t(u.invite_live ? 'statusPending' : 'statusInviteNotActive')
+        ? t(u.invite_live ? "statusPending" : "statusInviteNotActive")
         : u.is_active
-          ? t('statusActive')
-          : t('statusInactive'),
-      statusVariant: u.is_pending ? 'warning' : u.is_active ? 'success' : 'destructive',
-      lastSignIn: u.last_login_at ? dateTime(u.last_login_at, locale) : '—',
+          ? t("statusActive")
+          : t("statusInactive"),
+      statusVariant: u.is_pending ? "warning" : u.is_active ? "success" : "destructive",
+      lastSignIn: u.last_login_at ? dateTime(u.last_login_at, locale) : "—",
       assigned: rolesByUser.get(u.id) ?? [],
       partyId: u.party_id,
       partyName: u.party_name,
@@ -216,74 +247,77 @@ export async function loadAdminUsers(
       isBuiltIn: r.is_built_in,
       description: displayRoleDescription(
         { key: r.key, isBuiltIn: r.is_built_in, description: r.description },
-        (key) => (tRoles.has(`builtInDescriptions.${key}` as never) ? tRoles(`builtInDescriptions.${key}` as never) : null),
+        (key) =>
+          tRoles.has(`builtInDescriptions.${key}` as never)
+            ? tRoles(`builtInDescriptions.${key}` as never)
+            : null,
       ),
     })),
     labels: {
-      name: tCommon('labels.name'),
-      email: tCommon('labels.email'),
-      roles: t('table.roles'),
-      status: tCommon('labels.status'),
-      lastSignIn: t('table.lastSignIn'),
-      actions: tCommon('labels.actions'),
-      you: t('you'),
-      unassignedRole: t('unassignedRole'),
-      linkedPerson: t('table.linkedPerson'),
-      unlinkedPerson: t('unlinkedPerson'),
+      name: tCommon("labels.name"),
+      email: tCommon("labels.email"),
+      roles: t("table.roles"),
+      status: tCommon("labels.status"),
+      lastSignIn: t("table.lastSignIn"),
+      actions: tCommon("labels.actions"),
+      you: t("you"),
+      unassignedRole: t("unassignedRole"),
+      linkedPerson: t("table.linkedPerson"),
+      unlinkedPerson: t("unlinkedPerson"),
     },
     total,
     currentPage: listParams.page,
     perPage: listParams.perPage,
     sort: listParams.sort,
     dir: listParams.dir,
-  }
+  };
 }
 
-const f = ref<AdminUsersData>()
+const f = ref<AdminUsersData>();
 
 export function adminUsersSpec(data: AdminUsersData): PageSpec {
   return page({
-    route: '/admin/users',
-    layout: 'list',
+    route: "/admin/users",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: f('backHref'), label: f('backLabel') },
-        title: f('title'),
-        description: f('description'),
+        back: { href: f("backHref"), label: f("backLabel") },
+        title: f("title"),
+        description: f("description"),
         actions: [
-          widget('invite-user', {
+          widget("invite-user", {
             allRoles: data.allRoles,
           }),
-          widget('plain-link-button', {
+          widget("plain-link-button", {
             href: data.manageRolesHref,
             label: data.manageRolesLabel,
-            variant: 'outline',
+            variant: "outline",
           }),
         ],
       }),
-      grid('flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
+      grid("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+        widgetBlock("filter-chips", {
           basePath: BASE,
           currentParams: data.currentParams,
-          paramKey: 'status',
+          paramKey: "status",
           label: data.statusFilterLabel,
-          defaultValue: 'active',
+          defaultValue: "active",
           options: data.statusOptions,
         }),
       ]),
     ],
     body: [
       {
-        ...widgetBlock('empty-state', {
-          icon: 'users',
+        ...widgetBlock("empty-state", {
+          icon: "users",
           title: data.emptyTitle,
           description: data.emptyDescription,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
-        ...widgetBlock('admin-users-table', {
+        ...widgetBlock("admin-users-table", {
           users: data.users,
           allRoles: data.allRoles,
           basePath: BASE,
@@ -292,16 +326,16 @@ export function adminUsersSpec(data: AdminUsersData): PageSpec {
           dir: data.dir,
           labels: data.labels,
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
       pagination({
         basePath: BASE,
-        total: f('total'),
-        page: f('currentPage'),
-        perPage: f('perPage'),
+        total: f("total"),
+        page: f("currentPage"),
+        perPage: f("perPage"),
         // The native pager is unwrapped here — no `mt-3` spacer.
         bare: true,
       }),
     ],
-  })
+  });
 }

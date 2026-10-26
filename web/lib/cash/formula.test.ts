@@ -7,8 +7,14 @@ import { evaluateFormula } from "./formula.ts";
 // result renders as canonical numeric(19,4).
 
 test("malformed literals refuse naming the position instead of evaluating a prefix", () => {
-  assert.throws(() => evaluateFormula("1.2.3 + 4"), /Malformed numeric literal "1\.2\.3" at position 0/);
-  assert.throws(() => evaluateFormula("1 + 2.3.4"), /Malformed numeric literal "2\.3\.4" at position 4/);
+  assert.throws(
+    () => evaluateFormula("1.2.3 + 4"),
+    /Malformed numeric literal "1\.2\.3" at position 0/,
+  );
+  assert.throws(
+    () => evaluateFormula("1 + 2.3.4"),
+    /Malformed numeric literal "2\.3\.4" at position 4/,
+  );
   assert.throws(() => evaluateFormula("1..2"), /Malformed numeric literal "1\.\.2" at position 0/);
   assert.throws(() => evaluateFormula("."), /Malformed numeric literal "\." at position 0/);
 });
@@ -17,8 +23,10 @@ test("decimal arithmetic and equality are exact, not float", () => {
   assert.equal(evaluateFormula("0.1 + 0.2"), "0.3000");
   // The exact expression from the defect report, through the same IF→ternary
   // rewrite categoryWeekly applies before evaluating.
-  const rewritten = "IF(0.1+0.2==0.3,100,0)"
-    .replace(/IF\s*\(([^,]+),([^,]+),([^)]+)\)/g, "($1 ? $2 : $3)");
+  const rewritten = "IF(0.1+0.2==0.3,100,0)".replace(
+    /IF\s*\(([^,]+),([^,]+),([^)]+)\)/g,
+    "($1 ? $2 : $3)",
+  );
   assert.equal(evaluateFormula(rewritten), "100.0000");
   assert.equal(evaluateFormula("0.1 + 0.2 == 0.3"), "1.0000");
   assert.equal(evaluateFormula("1.5 - 1.05"), "0.4500");
@@ -75,7 +83,10 @@ test("structural refusals still name the problem", () => {
   assert.throws(() => evaluateFormula("1 +"), /Unexpected end of formula/);
   assert.throws(() => evaluateFormula("(1 + 2"), /Unexpected end of formula/);
   assert.throws(() => evaluateFormula("1 2"), /trailing formula content "2" at position 2/);
-  assert.throws(() => evaluateFormula("1 & 2"), /Unsupported character "&" in formula at position 2/);
+  assert.throws(
+    () => evaluateFormula("1 & 2"),
+    /Unsupported character "&" in formula at position 2/,
+  );
   assert.throws(() => evaluateFormula("nosuchfn(1)"), /Unsupported formula function: nosuchfn/);
   assert.throws(() => evaluateFormula("bogus"), /Unsupported formula token: bogus at position 0/);
   assert.throws(() => evaluateFormula("12,34"), /trailing formula content/);

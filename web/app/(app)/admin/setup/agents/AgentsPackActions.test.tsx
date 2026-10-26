@@ -8,14 +8,17 @@ declare global {
 
 // jsdom first: the island reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/agents", scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/agents",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
 stubModules({ navigation: "export function useRouter(){return globalThis.__agentsTestRouter}" });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -100,7 +103,9 @@ for (const [name, respond, kind, countMessage, match, matchMessage, checkRefresh
       );
       await tick();
     });
-    const runNow = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Run now"));
+    const runNow = [...host.querySelectorAll("button")].find((el) =>
+      el.textContent?.includes("Run now"),
+    );
     assert.ok(runNow, "run-now button must render");
     await act(async () => {
       runNow.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

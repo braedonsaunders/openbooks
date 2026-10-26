@@ -8,16 +8,36 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, apportion, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { extendCost, receiveStandard, unitCostPerQuantity } from "./costing.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { InventoryCostBasisError, InventoryError, type Runner } from "./contracts.ts";
 import { emitAvailabilityChanged } from "../webhooks/emit.ts";
 import { normalizeMovementIdempotencyKey } from "./action-idempotency.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
-import { assertStockLocationAdmitsSubsidiary, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
+import {
+  assertStockLocationAdmitsSubsidiary,
+  resolveProfile,
+  assertMovementOwner,
+  assertInventoryFeature,
+} from "./profile-policy.ts";
 import { assertItemsActive } from "./item-active.ts";
 import { assertNotKitItem } from "./kits.ts";
-import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
+import {
+  stockLocationDim,
+  postInventoryEntry,
+  inventoryOffsetAccountProblem,
+  type JournalLineInput,
+} from "./journal.ts";
+import {
+  primaryBookId,
+  periodForDate,
+  subsidiaryCurrency,
+  getOnHandWith,
+  lockInventoryPosition,
+  persistReceiptMoney,
+} from "./position.ts";
 import { addLayerAtCost, requireStandardCost } from "./cost-layers.ts";
 // ---------------------------------------------------------------------------
 // Receive
@@ -88,8 +108,7 @@ export async function receiveInventory(
   // every downstream consumer lands in numeric(19,4) columns, so junk used
   // to escape as a bare Error and oversized figures as a storage failure.
   const quantity = persistReceiptMoney(input.quantity, "receipt quantity");
-  if (cmp(quantity, "0") <= 0)
-    throw new InventoryError("receipt quantity must be positive");
+  if (cmp(quantity, "0") <= 0) throw new InventoryError("receipt quantity must be positive");
   // unitCost may be omitted (average fallback); when supplied it prices the
   // same journal math, so it takes the same early gate.
   if (input.unitCost !== undefined) persistReceiptMoney(input.unitCost, "receipt unit cost");
@@ -105,8 +124,7 @@ export async function receiveInventory(
   if (authoritativeTotal !== null && cmp(authoritativeTotal, "0") < 0)
     throw new InventoryError("receipt total value must not be negative");
   const period = await periodForDate(orgId, input.date);
-  if (!period)
-    throw new InventoryError(`no accounting period for ${input.date}`);
+  if (!period) throw new InventoryError(`no accounting period for ${input.date}`);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
   const ctx = await loadSubsidiaryContext(db, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
@@ -130,7 +148,13 @@ export async function receiveInventory(
     // Costing policy is locked and re-read after the position lock. The
     // costing-policy writer takes the same profile lock before revaluing
     // layers, so a receipt cannot carry a stale pre-transaction policy.
-    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,input.stockLocationId);
+    await lockSubcontractCustodyAuthority(
+      tx,
+      orgId,
+      actorId,
+      input.subsidiaryId,
+      input.stockLocationId,
+    );
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // INV-ACTIVE fence: a receipt mints stock, so an inactive item refuses
@@ -139,8 +163,7 @@ export async function receiveInventory(
     // a racing deactivation serializes (see item-active.ts).
     await assertItemsActive(tx, orgId, [input.itemId], {
       inactiveRemedy: "reactivate it before posting stock movements",
-      outsideOrganization:
-        "receipt references an item outside this organization",
+      outsideOrganization: "receipt references an item outside this organization",
     });
     // Kits hold no stock of their own: a receipt would mint a position that
     // can never be valued or shipped. Refuse before any layer, movement or
@@ -168,23 +191,31 @@ export async function receiveInventory(
     // cost, else the average prevailing under the position lock.
     let layerUnitCost: string;
     if (authoritativeTotal !== null) {
-      layerUnitCost = unitCostPerQuantity(
-        authoritativeTotal,
-        input.quantity,
-      )!;
+      layerUnitCost = unitCostPerQuantity(authoritativeTotal, input.quantity)!;
     } else if (input.unitCost !== undefined) {
       layerUnitCost = input.unitCost;
     } else if (profile.costingMethod === "standard") {
       // A standard-cost item carries every unit at its configured standard.
       layerUnitCost = await requireStandardCost(tx, orgId, input.itemId, profile);
     } else {
-      const onHand = await getOnHandWith(tx, orgId, input.itemId, input.stockLocationId, { subsidiaryId: input.subsidiaryId });
+      const onHand = await getOnHandWith(tx, orgId, input.itemId, input.stockLocationId, {
+        subsidiaryId: input.subsidiaryId,
+      });
       // With nothing valued on hand there is no average: a zero-cost receipt
       // would book found stock for nothing and its later sale at zero COGS.
       if (isZero(onHand.unitCost)) {
-        const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
-          from items where org_id = ${orgId} and id = ${input.itemId}`, "objects"))[0]?.label ?? input.itemId;
-        throw new InventoryCostBasisError(`item ${label} has no cost basis at this stock location — nothing valued is on hand to average — so the ${input.quantity} received needs a unit cost; enter the unit cost of the received quantity`, label);
+        const label =
+          (
+            await tx.execute<{ label: string }>(
+              sql`select coalesce(nullif(btrim(code), ''), name) as label
+          from items where org_id = ${orgId} and id = ${input.itemId}`,
+              "objects",
+            )
+          )[0]?.label ?? input.itemId;
+        throw new InventoryCostBasisError(
+          `item ${label} has no cost basis at this stock location — nothing valued is on hand to average — so the ${input.quantity} received needs a unit cost; enter the unit cost of the received quantity`,
+          label,
+        );
       }
       layerUnitCost = onHand.unitCost;
     }
@@ -197,9 +228,7 @@ export async function receiveInventory(
         // less the standard value is the purchase price variance.
         const std = await requireStandardCost(tx, orgId, input.itemId, profile);
         inventoryValue = extendCost(input.quantity, std);
-        variance = fromUnits(
-          toUnits(authoritativeTotal) - toUnits(inventoryValue),
-        );
+        variance = fromUnits(toUnits(authoritativeTotal) - toUnits(inventoryValue));
         layerUnitCost = std;
       } else {
         inventoryValue = authoritativeTotal;
@@ -221,9 +250,19 @@ export async function receiveInventory(
     // acct).
     const postJournal = input.postJournal !== false;
     if (postJournal) {
-      const accountProblem = inventoryOffsetAccountProblem(profile.assetAccountId, input.offsetAccountId, "receipt offset")
-        ?? (profile.costingMethod === "standard"
-          ? inventoryOffsetAccountProblem(profile.assetAccountId, profile.varianceAccountId, "variance") : null);
+      const accountProblem =
+        inventoryOffsetAccountProblem(
+          profile.assetAccountId,
+          input.offsetAccountId,
+          "receipt offset",
+        ) ??
+        (profile.costingMethod === "standard"
+          ? inventoryOffsetAccountProblem(
+              profile.assetAccountId,
+              profile.varianceAccountId,
+              "variance",
+            )
+          : null);
       if (accountProblem) throw new InventoryError(accountProblem);
     }
     if (!postJournal && !isZero(variance)) {
@@ -237,14 +276,12 @@ export async function receiveInventory(
       );
     }
     if (!postJournal && !input.linkEntryId) {
-      throw new InventoryError(
-        "a non-posting receipt requires its source journal entry",
-      );
+      throw new InventoryError("a non-posting receipt requires its source journal entry");
     }
     if (postJournal && !input.offsetAccountId) {
       throw new InventoryError("receipt requires an offset account");
     }
-    await assertCustodyReceiptEvidence(tx,orgId,actorId,input);
+    await assertCustodyReceiptEvidence(tx, orgId, actorId, input);
     await validateTrackingSelection(
       tx,
       orgId,
@@ -256,19 +293,24 @@ export async function receiveInventory(
         lotId: input.lotId,
         serialId: input.serialId,
       },
-      input.ownershipSourceStockId ? "ownership_receipt" : input.admission === "count" ? "count_receipt" : "receipt",
+      input.ownershipSourceStockId
+        ? "ownership_receipt"
+        : input.admission === "count"
+          ? "count_receipt"
+          : "receipt",
       actorId,
     );
     // Deficits settle only within the receiving legal entity: one
     // subsidiary's receipt must never consume another's shortfall (its
     // layers, GL, and on-hand reader are all per-entity).
-    const deficits = (await tx.execute<{
-        id: string;
-        remaining_quantity: string;
-        provisional_unit_cost: string;
-        offset_account_id: string | null;
-        issued_on: string;
-      }>(sql`
+    const deficits = await tx.execute<{
+      id: string;
+      remaining_quantity: string;
+      provisional_unit_cost: string;
+      offset_account_id: string | null;
+      issued_on: string;
+    }>(
+      sql`
       select deficit.id,deficit.remaining_quantity,deficit.provisional_unit_cost,deficit.offset_account_id,
              issue.moved_at::text as issued_on
         from inventory_provisional_costs deficit
@@ -276,7 +318,9 @@ export async function receiveInventory(
        where deficit.org_id=${orgId} and deficit.item_id=${input.itemId} and deficit.stock_location_id=${input.stockLocationId}
          and deficit.subsidiary_id=${input.subsidiaryId}
          and deficit.remaining_quantity>0 order by deficit.created_at,deficit.id for update of deficit
-    `, "objects"));
+    `,
+      "objects",
+    );
     let receiptUnits = toUnits(input.quantity);
     let provisionalValueUnits = 0n;
     let settledReceiptValueUnits = 0n;
@@ -292,16 +336,19 @@ export async function receiveInventory(
       const available = toUnits(deficit.remaining_quantity);
       const take = available < receiptUnits ? available : receiptUnits;
       const quantity = fromUnits(take);
-      const provisionalValue = extendCost(
-        quantity,
-        deficit.provisional_unit_cost,
-      );
+      const provisionalValue = extendCost(quantity, deficit.provisional_unit_cost);
       const receiptValue = extendCost(quantity, layerUnitCost);
       // The true-up corrects the account the shortfall was charged to; a
       // deficit without that record has no truthful destination.
       if (!deficit.offset_account_id) {
-        const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
-          from items where org_id = ${orgId} and id = ${input.itemId}`, "objects"))[0]?.label ?? input.itemId;
+        const label =
+          (
+            await tx.execute<{ label: string }>(
+              sql`select coalesce(nullif(btrim(code), ''), name) as label
+          from items where org_id = ${orgId} and id = ${input.itemId}`,
+              "objects",
+            )
+          )[0]?.label ?? input.itemId;
         throw new InventoryError(
           `item ${label} has negative stock issued on ${deficit.issued_on} without a recorded charge account, so this receipt cannot correct that issue's provisional cost; record the account under the item's Inventory tab (Shortfalls awaiting a charge account), then receive again`,
         );
@@ -311,9 +358,7 @@ export async function receiveInventory(
         quantity,
         provisionalUnitCost: deficit.provisional_unit_cost,
         offsetAccountId: deficit.offset_account_id,
-        correction: fromUnits(
-          toUnits(receiptValue) - toUnits(provisionalValue),
-        ),
+        correction: fromUnits(toUnits(receiptValue) - toUnits(provisionalValue)),
       });
       provisionalValueUnits += toUnits(provisionalValue);
       settledReceiptValueUnits += toUnits(receiptValue);
@@ -325,12 +370,15 @@ export async function receiveInventory(
     // consume more value than the receipt contains.
     if (authoritativeTotal !== null && profile.costingMethod !== "standard") {
       const allocated = apportion(toUnits(authoritativeTotal), [
-        ...settlements.map((settlement) => toUnits(settlement.quantity)), receiptUnits,
+        ...settlements.map((settlement) => toUnits(settlement.quantity)),
+        receiptUnits,
       ]);
       settledReceiptValueUnits = 0n;
       settlements.forEach((settlement, index) => {
         const value = allocated[index]!;
-        settlement.correction = fromUnits(value - toUnits(extendCost(settlement.quantity, settlement.provisionalUnitCost)));
+        settlement.correction = fromUnits(
+          value - toUnits(extendCost(settlement.quantity, settlement.provisionalUnitCost)),
+        );
         settledReceiptValueUnits += value;
       });
     }
@@ -338,9 +386,7 @@ export async function receiveInventory(
       authoritativeTotal !== null && profile.costingMethod !== "standard"
         ? fromUnits(toUnits(authoritativeTotal) - settledReceiptValueUnits)
         : extendCost(excessQuantity, layerUnitCost);
-    const assetDelta = fromUnits(
-      provisionalValueUnits + toUnits(excessLayerValue),
-    );
+    const assetDelta = fromUnits(provisionalValueUnits + toUnits(excessLayerValue));
     const correction = fromUnits(toUnits(inventoryValue) - toUnits(assetDelta));
     // Each settlement's true-up returns to the account its issue charged.
     // Extending the whole receipt can differ from the per-settlement
@@ -348,14 +394,26 @@ export async function receiveInventory(
     // account so the corrections sum exactly to the receipt's.
     const correctionByAccount = new Map<string, bigint>();
     for (const settlement of settlements) {
-      correctionByAccount.set(settlement.offsetAccountId,
-        (correctionByAccount.get(settlement.offsetAccountId) ?? 0n) + toUnits(settlement.correction));
+      correctionByAccount.set(
+        settlement.offsetAccountId,
+        (correctionByAccount.get(settlement.offsetAccountId) ?? 0n) +
+          toUnits(settlement.correction),
+      );
     }
     if (!isZero(correction)) {
       const first = settlements[0];
-      if (!first) throw new InventoryError("a receipt cost true-up has no negative-stock settlement to correct");
-      const allocated = [...correctionByAccount.values()].reduce((total, amount) => total + amount, 0n);
-      correctionByAccount.set(first.offsetAccountId, correctionByAccount.get(first.offsetAccountId)! + toUnits(correction) - allocated);
+      if (!first)
+        throw new InventoryError(
+          "a receipt cost true-up has no negative-stock settlement to correct",
+        );
+      const allocated = [...correctionByAccount.values()].reduce(
+        (total, amount) => total + amount,
+        0n,
+      );
+      correctionByAccount.set(
+        first.offsetAccountId,
+        correctionByAccount.get(first.offsetAccountId)! + toUnits(correction) - allocated,
+      );
     }
     const correctionLines = [...correctionByAccount]
       .filter(([, amount]) => amount !== 0n)
@@ -432,7 +490,8 @@ export async function receiveInventory(
 
     const receiptQuantity = persistReceiptMoney(input.quantity, "receipt quantity");
     const receiptUnitCost = persistReceiptMoney(layerUnitCost, "receipt unit cost");
-    const mv = (await tx.execute<{ id: string }>(sql`
+    const mv = await tx.execute<{ id: string }>(
+      sql`
       insert into inventory_movements
         (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
          document_line_id, journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
@@ -440,7 +499,9 @@ export async function receiveInventory(
               ${input.serialId ?? null}, ${receiptQuantity}, ${receiptUnitCost}, ${assetDelta},
               ${input.documentLineId ?? null}, ${entryId}, ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`, "objects"));
+      returning id`,
+      "objects",
+    );
     const movementId = mv[0]!.id;
 
     for (const settlement of settlements) {
@@ -459,16 +520,27 @@ export async function receiveInventory(
     }
 
     if (receiptUnits > 0n) {
-      await addLayerAtCost(tx, orgId, input.subsidiaryId, input.itemId,
-        input.stockLocationId, excessQuantity, excessLayerValue,
-        profile.costingMethod, movementId, input.date, actorId, layerUnitCost);
+      await addLayerAtCost(
+        tx,
+        orgId,
+        input.subsidiaryId,
+        input.itemId,
+        input.stockLocationId,
+        excessQuantity,
+        excessLayerValue,
+        profile.costingMethod,
+        movementId,
+        input.date,
+        actorId,
+        layerUnitCost,
+      );
     }
 
-    if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
+    if (profile.tracking === "serial" || profile.tracking === "lot_serial") {
       await applySerialReceipt(tx, orgId, actorId, input, movementId);
     }
 
-    if (input.admission!=="count") await createReceiptInspection(tx,orgId,actorId,movementId);
+    if (input.admission !== "count") await createReceiptInspection(tx, orgId, actorId, movementId);
 
     return { movementId, entryId, value: assetDelta };
   };

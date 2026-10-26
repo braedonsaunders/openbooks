@@ -19,7 +19,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.nav-route-test')]
@@ -49,9 +49,7 @@ registerHooks({
 const routeUrl = "./route.ts?nav-array-binding-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 interface NavConfigLike {
   version: number;
@@ -106,16 +104,25 @@ test("saving a nav config with multiple app items round-trips and audits against
     assert.equal(saved.ok, true);
     assert.match(saved.revision, /^\d{4}-\d{2}-\d{2}T/);
 
-    const stored = (await db.execute<{ config: NavConfigLike }>(sql`
-      select config from org_nav_configs where org_id = ${org.orgId}`, "objects"));
+    const stored = await db.execute<{ config: NavConfigLike }>(
+      sql`
+      select config from org_nav_configs where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(stored.length, 1);
     assert.deepEqual(stored[0]!.config, config);
 
-    const audits = (await db.execute<{ action: string }>(sql`
+    const audits = await db.execute<{ action: string }>(
+      sql`
       select action from audit_log
        where org_id = ${org.orgId} and table_name = 'org_nav_configs'
-       order by at`, "objects"));
-    assert.deepEqual(audits.map((r) => r.action), ["insert"]);
+       order by at`,
+      "objects",
+    );
+    assert.deepEqual(
+      audits.map((r) => r.action),
+      ["insert"],
+    );
 
     // A second save updates in place and audits the update lifecycle.
     const revised: NavConfigLike = {
@@ -125,14 +132,23 @@ test("saving a nav config with multiple app items round-trips and audits against
     revised.groups[0]!.label = "Operations Workspace";
     const res2 = await PUT(putRequest(revised));
     assert.equal(res2.status, 200);
-    const stored2 = (await db.execute<{ config: NavConfigLike }>(sql`
-      select config from org_nav_configs where org_id = ${org.orgId}`, "objects"));
+    const stored2 = await db.execute<{ config: NavConfigLike }>(
+      sql`
+      select config from org_nav_configs where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.deepEqual(stored2[0]!.config, revised);
-    const audits2 = (await db.execute<{ action: string }>(sql`
+    const audits2 = await db.execute<{ action: string }>(
+      sql`
       select action from audit_log
        where org_id = ${org.orgId} and table_name = 'org_nav_configs'
-       order by at`, "objects"));
-    assert.deepEqual(audits2.map((r) => r.action), ["insert", "update"]);
+       order by at`,
+      "objects",
+    );
+    assert.deepEqual(
+      audits2.map((r) => r.action),
+      ["insert", "update"],
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrgReportingSafe(org.orgId);
@@ -168,12 +184,18 @@ test("a nav config referencing an uninstalled app is refused without persisting 
     assert.equal(res.status, 400);
     assert.deepEqual(await res.json(), { error: "navigation references an unknown app" });
 
-    const stored = (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from org_nav_configs where org_id = ${org.orgId}`, "objects"));
+    const stored = await db.execute<{ count: number }>(
+      sql`
+      select count(*)::int as count from org_nav_configs where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(stored[0]!.count, 0);
-    const audits = (await db.execute<{ count: number }>(sql`
+    const audits = await db.execute<{ count: number }>(
+      sql`
       select count(*)::int as count from audit_log
-       where org_id = ${org.orgId} and table_name = 'org_nav_configs'`, "objects"));
+       where org_id = ${org.orgId} and table_name = 'org_nav_configs'`,
+      "objects",
+    );
     assert.equal(audits[0]!.count, 0);
   } finally {
     routeState.authz = null;
@@ -206,8 +228,11 @@ test("a module-only nav config skips the app catalog check and still round-trips
     };
     const res = await PUT(putRequest(config));
     assert.equal(res.status, 200);
-    const stored = (await db.execute<{ config: NavConfigLike }>(sql`
-      select config from org_nav_configs where org_id = ${org.orgId}`, "objects"));
+    const stored = await db.execute<{ config: NavConfigLike }>(
+      sql`
+      select config from org_nav_configs where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.deepEqual(stored[0]!.config, config);
   } finally {
     routeState.authz = null;

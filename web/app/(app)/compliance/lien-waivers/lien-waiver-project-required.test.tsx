@@ -14,14 +14,20 @@ declare global {
 // as a record-level alert (announced, persistent until the next attempt),
 // not a plain paragraph.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/compliance/lien-waivers", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/compliance/lien-waivers",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__waiverRouter}export function usePathname(){return '/compliance/lien-waivers'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__waiverRouter}export function usePathname(){return '/compliance/lien-waivers'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -69,7 +75,9 @@ test("creating a waiver requires an explicit type choice and posts nothing witho
   globalThis.__waiverPosts = [];
   const priorFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === "/api/compliance/lien-waivers" && (init?.method ?? "GET") === "POST") {
       globalThis.__waiverPosts!.push(init?.body);
     }
@@ -92,11 +100,13 @@ test("creating a waiver requires an explicit type choice and posts nothing witho
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-09-17">
           <LienWaiverToolbar
-          direction=""
-          status=""
-          projects={[{ id: "project-1", label: "JOB-T03-01" }]}
-          vendors={[{ id: "vendor-1", label: "Regional Telecom", defaultType: "conditional_progress" }]}
-          canManage
+            direction=""
+            status=""
+            projects={[{ id: "project-1", label: "JOB-T03-01" }]}
+            vendors={[
+              { id: "vendor-1", label: "Regional Telecom", defaultType: "conditional_progress" },
+            ]}
+            canManage
           />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
@@ -114,11 +124,7 @@ test("creating a waiver requires an explicit type choice and posts nothing witho
   assert.equal(waiverType.value, "", "the form must not preselect an unconditional release");
   await click(create);
   await tick();
-  assert.equal(
-    (globalThis.__waiverPosts ?? []).length,
-    0,
-    "no POST may fire without a project",
-  );
+  assert.equal((globalThis.__waiverPosts ?? []).length, 0, "no POST may fire without a project");
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the missing-project reason must pin as a record alert");
   assert.match(

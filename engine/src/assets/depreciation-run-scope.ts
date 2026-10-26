@@ -60,13 +60,40 @@ export interface RunDepreciationResult {
    * (`period`, `P05 FY2026`) and carries the period's fiscal position and
    * dates (`periodRef`) for display labels.
    */
-  entries: { assetId: string; assetNumber: string; period: string; periodRef: PeriodDisplayInput; amount: string; entryId: string; lineId: string }[];
+  entries: {
+    assetId: string;
+    assetNumber: string;
+    period: string;
+    periodRef: PeriodDisplayInput;
+    amount: string;
+    entryId: string;
+    lineId: string;
+  }[];
   /** Reporting-only recognitions with their immutable line evidence. */
-  recordedEntries: { assetId: string; assetNumber: string; period: string; periodRef: PeriodDisplayInput; amount: string; lineId: string }[];
+  recordedEntries: {
+    assetId: string;
+    assetNumber: string;
+    period: string;
+    periodRef: PeriodDisplayInput;
+    amount: string;
+    lineId: string;
+  }[];
   /** Lines examined but not recognized, with the reason named per asset. */
-  skippedAssets: { assetNumber: string; period: string; periodRef: PeriodDisplayInput; reason: string }[];
+  skippedAssets: {
+    assetNumber: string;
+    period: string;
+    periodRef: PeriodDisplayInput;
+    reason: string;
+  }[];
   /** Structured per-asset problems; `problems` keeps the legacy strings. */
-  problemItems: { assetNumber: string; period: string; periodRef: PeriodDisplayInput; message: string; assetId?: string; lineId?: string }[];
+  problemItems: {
+    assetNumber: string;
+    period: string;
+    periodRef: PeriodDisplayInput;
+    message: string;
+    assetId?: string;
+    lineId?: string;
+  }[];
   problems: string[];
   /** The as-of date the run evaluated (defaults to the org business day). */
   asOfDate: string;
@@ -186,7 +213,13 @@ export interface AlreadyPostedDepreciationLine {
 export async function assertConfirmSetCurrent(
   tx: SqlExecutor,
   orgId: string,
-  input: { asOfDate: string; bookId?: string; periodId?: string; assetIds?: string[]; postingDate?: string },
+  input: {
+    asOfDate: string;
+    bookId?: string;
+    periodId?: string;
+    assetIds?: string[];
+    postingDate?: string;
+  },
   expectedLines: ExpectedDepreciationLine[],
   allowedSubsidiaryIds?: string[],
   expectedFingerprint?: string,
@@ -197,16 +230,26 @@ export async function assertConfirmSetCurrent(
   const alreadyPosted: AlreadyPostedDepreciationLine[] = [];
   if (lineIds.length === 0) return alreadyPosted;
 
-  const assets = (await tx.execute<{ id: string; category_id: string; custom: unknown; asset_number: string }>(sql`
+  const assets = await tx.execute<{
+    id: string;
+    category_id: string;
+    custom: unknown;
+    asset_number: string;
+  }>(
+    sql`
     select id, category_id, custom, asset_number from fixed_assets
      where org_id = ${orgId} and id = any(${uuidArray(assetIds)}::uuid[])
-     order by id for update`, "objects"));
+     order by id for update`,
+    "objects",
+  );
   const foundAssets = new Set(assets.map((row) => String(row.id)));
   const missingAsset = assetIds.find((id) => !foundAssets.has(id));
   if (missingAsset) {
-    throw new StalePreviewError(`asset ${missingAsset} left the confirmed scope; re-preview before confirming`);
+    throw new StalePreviewError(
+      `asset ${missingAsset} left the confirmed scope; re-preview before confirming`,
+    );
   }
-  for (const asset of assets) assertLocalDepreciation(asset.custom,asset.asset_number);
+  for (const asset of assets) assertLocalDepreciation(asset.custom, asset.asset_number);
   const categoryIds = [...new Set(assets.map((row) => String(row.category_id)))].sort();
   await tx.execute(sql`
     select id from asset_categories
@@ -218,25 +261,28 @@ export async function assertConfirmSetCurrent(
      order by id
      for update`);
 
-  const reloaded = (await tx.execute<DepreciationPeriodColumns & {
-    line_id: string;
-    planned_amount: string;
-    posted_amount: string | null;
-    period_id: string;
-    book_id: string;
-    posts_gl: boolean;
-    asset_number: string;
-    subsidiary_id: string;
-    asset_account: string | null;
-    asset_accum: string | null;
-    asset_expense: string | null;
-    department_id: string | null;
-    project_id: string | null;
-    location_id: string | null;
-    cat_asset: string;
-    cat_accum: string;
-    cat_expense: string;
-  }>(sql`
+  const reloaded = await tx.execute<
+    DepreciationPeriodColumns & {
+      line_id: string;
+      planned_amount: string;
+      posted_amount: string | null;
+      period_id: string;
+      book_id: string;
+      posts_gl: boolean;
+      asset_number: string;
+      subsidiary_id: string;
+      asset_account: string | null;
+      asset_accum: string | null;
+      asset_expense: string | null;
+      department_id: string | null;
+      project_id: string | null;
+      location_id: string | null;
+      cat_asset: string;
+      cat_accum: string;
+      cat_expense: string;
+    }
+  >(
+    sql`
     select l.id as line_id,
            l.planned_amount::text as planned_amount,
            l.posted_amount::text as posted_amount,
@@ -271,7 +317,9 @@ export async function assertConfirmSetCurrent(
        ${input.periodId ? sql`and l.period_id = ${input.periodId}` : sql``}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
      order by l.id
-     for update`, "objects"));
+     for update`,
+    "objects",
+  );
 
   // Full-fingerprint comparison under the locks: every reloaded unposted
   // row is field-compared against its confirmed preview row (exactly the
@@ -387,9 +435,7 @@ export async function assertConfirmSetCurrent(
   if (expectedFingerprint !== undefined && alreadyPosted.length === 0) {
     const recomputed = previewDepreciationFingerprint(orgId, input, fingerprinted);
     if (recomputed !== expectedFingerprint) {
-      throw new StalePreviewError(
-        `confirmed set changed; re-preview before confirming`,
-      );
+      throw new StalePreviewError(`confirmed set changed; re-preview before confirming`);
     }
   }
   return alreadyPosted;
@@ -406,9 +452,7 @@ export class ClosedBatchError extends Error {
   periodRef: PeriodDisplayInput;
   constructor(assetNumber: string, periodRef: PeriodDisplayInput) {
     const periodName = canonicalPeriodLabel(periodRef);
-    super(
-      `${assetNumber} ${periodName}: GL period closed; open the period and confirm again`,
-    );
+    super(`${assetNumber} ${periodName}: GL period closed; open the period and confirm again`);
     this.assetNumber = assetNumber;
     this.periodName = periodName;
     this.periodRef = periodRef;
@@ -506,7 +550,13 @@ export function previewLineDrift(
  */
 export function previewDepreciationFingerprint(
   orgId: string,
-  input: { asOfDate: string; bookId?: string; periodId?: string; assetIds?: string[]; postingDate?: string },
+  input: {
+    asOfDate: string;
+    bookId?: string;
+    periodId?: string;
+    assetIds?: string[];
+    postingDate?: string;
+  },
   rows: FingerprintedDepreciationRow[],
 ): string {
   const normalized = {

@@ -1,14 +1,14 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
-import type { ApplicationContext } from '../application/context';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import type { SessionUser } from "../auth";
+import type { ApplicationContext } from "../application/context";
 
-const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { executeAssistantTool } = await import('./registry');
-const applicationCrm = await import('../application/crm-read');
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { executeAssistantTool } = await import("./registry");
+const applicationCrm = await import("../application/crm-read");
 
 function userFor(orgId: string, name: string): SessionUser {
   const userId = randomUUID();
@@ -16,10 +16,10 @@ function userFor(orgId: string, name: string): SessionUser {
     id: userId,
     orgId,
     name,
-    email: `${name.replaceAll(' ', '.').toLowerCase()}@scratch.test`,
-    roles: [{ key: 'ordinary-role', name: 'Ordinary role' }],
+    email: `${name.replaceAll(" ", ".").toLowerCase()}@scratch.test`,
+    roles: [{ key: "ordinary-role", name: "Ordinary role" }],
     isSuperAdmin: false,
-    envKind: 'production',
+    envKind: "production",
     productionOrgId: orgId,
     homeOrgId: orgId,
     homeUserId: userId,
@@ -27,11 +27,11 @@ function userFor(orgId: string, name: string): SessionUser {
 }
 
 const CRM_PERMS = [
-  'assistant.use',
-  'crm.opportunities.read',
-  'crm.accounts.read',
-  'crm.activities.read',
-  'crm.forecasts.read',
+  "assistant.use",
+  "crm.opportunities.read",
+  "crm.accounts.read",
+  "crm.activities.read",
+  "crm.forecasts.read",
 ];
 
 /** One open + one hidden-subsidiary opportunity, a prospect profile, and an activity. */
@@ -82,163 +82,246 @@ async function seedCrm(orgId: string, rootSubsidiary: string, customerId: string
   return { openStatus, wonStatus, hiddenSubsidiary, hiddenParty, openOpp, hiddenOpp, activity };
 }
 
-test('CRM assistant reads: happy path, aggregates, and subsidiary scoping', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const seed = await seedCrm(org.orgId, org.subsidiaryId, org.customerId);
-    const restricted = {
-      user: userFor(org.orgId, 'CRM scope reader'),
-      permissions: new Set(CRM_PERMS),
-      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    };
-    const full = {
-      user: userFor(org.orgId, 'CRM full reader'),
-      permissions: new Set(CRM_PERMS),
-      allowedSubsidiaryIds: null as Set<string> | null,
-    };
-    await withOrgContext(org.orgId, async () => {
-      const search = await executeAssistantTool(restricted, 'search_opportunities', {});
-      assert.equal(search.ok, true, JSON.stringify(search));
-      assert.ok(search.ok);
-      const data = search.data as {
-        total: number; opportunities: { opportunityNumber: string }[];
-        totalsByCurrency: { currency: string; projectedAmount: number }[];
-        byStage: { statusName: string; count: number }[];
+test(
+  "CRM assistant reads: happy path, aggregates, and subsidiary scoping",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const seed = await seedCrm(org.orgId, org.subsidiaryId, org.customerId);
+      const restricted = {
+        user: userFor(org.orgId, "CRM scope reader"),
+        permissions: new Set(CRM_PERMS),
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       };
-      assert.equal(data.total, 1);
-      assert.equal(data.opportunities[0]!.opportunityNumber, 'OPP-1001');
-      assert.deepEqual(data.totalsByCurrency, [{ currency: 'CAD', count: 1, projectedAmount: '10000', weightedAmount: '6000' }]);
-      assert.deepEqual(data.byStage, [{ statusName: 'Negotiation', isClosed: false, isWon: false, currency: 'CAD', count: 1, projectedAmount: '10000', weightedAmount: '6000' }]);
+      const full = {
+        user: userFor(org.orgId, "CRM full reader"),
+        permissions: new Set(CRM_PERMS),
+        allowedSubsidiaryIds: null as Set<string> | null,
+      };
+      await withOrgContext(org.orgId, async () => {
+        const search = await executeAssistantTool(restricted, "search_opportunities", {});
+        assert.equal(search.ok, true, JSON.stringify(search));
+        assert.ok(search.ok);
+        const data = search.data as {
+          total: number;
+          opportunities: { opportunityNumber: string }[];
+          totalsByCurrency: { currency: string; projectedAmount: number }[];
+          byStage: { statusName: string; count: number }[];
+        };
+        assert.equal(data.total, 1);
+        assert.equal(data.opportunities[0]!.opportunityNumber, "OPP-1001");
+        assert.deepEqual(data.totalsByCurrency, [
+          { currency: "CAD", count: 1, projectedAmount: "10000", weightedAmount: "6000" },
+        ]);
+        assert.deepEqual(data.byStage, [
+          {
+            statusName: "Negotiation",
+            isClosed: false,
+            isWon: false,
+            currency: "CAD",
+            count: 1,
+            projectedAmount: "10000",
+            weightedAmount: "6000",
+          },
+        ]);
 
-      const fullSearch = await executeAssistantTool(full, 'search_opportunities', {});
-      assert.equal(fullSearch.ok, true, JSON.stringify(fullSearch));
-      assert.ok(fullSearch.ok);
-      assert.equal((fullSearch.data as { total: number }).total, 2);
+        const fullSearch = await executeAssistantTool(full, "search_opportunities", {});
+        assert.equal(fullSearch.ok, true, JSON.stringify(fullSearch));
+        assert.ok(fullSearch.ok);
+        assert.equal((fullSearch.data as { total: number }).total, 2);
 
-      const open = await executeAssistantTool(restricted, 'get_opportunity', { opportunityId: seed.openOpp });
-      assert.equal(open.ok, true, JSON.stringify(open));
-      assert.ok(open.ok);
-      assert.equal((open.data as { opportunity: { opportunityNumber: string } }).opportunity.opportunityNumber, 'OPP-1001');
+        const open = await executeAssistantTool(restricted, "get_opportunity", {
+          opportunityId: seed.openOpp,
+        });
+        assert.equal(open.ok, true, JSON.stringify(open));
+        assert.ok(open.ok);
+        assert.equal(
+          (open.data as { opportunity: { opportunityNumber: string } }).opportunity
+            .opportunityNumber,
+          "OPP-1001",
+        );
 
-      const hidden = await executeAssistantTool(restricted, 'get_opportunity', { opportunityId: seed.hiddenOpp });
-      assert.deepEqual(hidden, { ok: false, error: 'opportunity_not_found' });
+        const hidden = await executeAssistantTool(restricted, "get_opportunity", {
+          opportunityId: seed.hiddenOpp,
+        });
+        assert.deepEqual(hidden, { ok: false, error: "opportunity_not_found" });
 
-      const accounts = await executeAssistantTool(restricted, 'search_crm_accounts', { stage: 'prospect' });
-      assert.equal(accounts.ok, true, JSON.stringify(accounts));
-      assert.ok(accounts.ok);
-      assert.equal((accounts.data as { total: number }).total, 1);
+        const accounts = await executeAssistantTool(restricted, "search_crm_accounts", {
+          stage: "prospect",
+        });
+        assert.equal(accounts.ok, true, JSON.stringify(accounts));
+        assert.ok(accounts.ok);
+        assert.equal((accounts.data as { total: number }).total, 1);
 
-      const profile = await executeAssistantTool(restricted, 'get_crm_account', { partyId: org.customerId });
-      assert.equal(profile.ok, true, JSON.stringify(profile));
-      assert.ok(profile.ok);
-      assert.equal((profile.data as { profile: { lifecycleStage: string } }).profile.lifecycleStage, 'prospect');
+        const profile = await executeAssistantTool(restricted, "get_crm_account", {
+          partyId: org.customerId,
+        });
+        assert.equal(profile.ok, true, JSON.stringify(profile));
+        assert.ok(profile.ok);
+        assert.equal(
+          (profile.data as { profile: { lifecycleStage: string } }).profile.lifecycleStage,
+          "prospect",
+        );
 
-      const hiddenProfile = await executeAssistantTool(restricted, 'get_crm_account', { partyId: seed.hiddenParty });
-      assert.deepEqual(hiddenProfile, { ok: false, error: 'crm_account_not_found' });
+        const hiddenProfile = await executeAssistantTool(restricted, "get_crm_account", {
+          partyId: seed.hiddenParty,
+        });
+        assert.deepEqual(hiddenProfile, { ok: false, error: "crm_account_not_found" });
 
-      const activities = await executeAssistantTool(restricted, 'search_crm_activities', {});
-      assert.equal(activities.ok, true, JSON.stringify(activities));
-      assert.ok(activities.ok);
-      assert.equal((activities.data as { total: number }).total, 1);
+        const activities = await executeAssistantTool(restricted, "search_crm_activities", {});
+        assert.equal(activities.ok, true, JSON.stringify(activities));
+        assert.ok(activities.ok);
+        assert.equal((activities.data as { total: number }).total, 1);
 
-      const activity = await executeAssistantTool(restricted, 'get_crm_activity', { activityId: seed.activity });
-      assert.equal(activity.ok, true, JSON.stringify(activity));
+        const activity = await executeAssistantTool(restricted, "get_crm_activity", {
+          activityId: seed.activity,
+        });
+        assert.equal(activity.ok, true, JSON.stringify(activity));
 
-      const forecast = await executeAssistantTool(restricted, 'crm_forecast', {
-        periodStart: '2026-10-01',
-        periodEnd: '2026-12-31',
-      });
-      assert.equal(forecast.ok, true, JSON.stringify(forecast));
-      assert.ok(forecast.ok);
-      const rows = (forecast.data as { forecast: { currency: string; pipelineAmount: number; weightedAmount: number }[] }).forecast;
-      assert.deepEqual(rows, [{
-        currency: 'CAD', pipelineAmount: '10000', weightedAmount: '6000',
-        worstCaseAmount: '0', mostLikelyAmount: '10000', upsideAmount: '0', closedAmount: '0',
-      }]);
+        const forecast = await executeAssistantTool(restricted, "crm_forecast", {
+          periodStart: "2026-10-01",
+          periodEnd: "2026-12-31",
+        });
+        assert.equal(forecast.ok, true, JSON.stringify(forecast));
+        assert.ok(forecast.ok);
+        const rows = (
+          forecast.data as {
+            forecast: { currency: string; pipelineAmount: number; weightedAmount: number }[];
+          }
+        ).forecast;
+        assert.deepEqual(rows, [
+          {
+            currency: "CAD",
+            pipelineAmount: "10000",
+            weightedAmount: "6000",
+            worstCaseAmount: "0",
+            mostLikelyAmount: "10000",
+            upsideAmount: "0",
+            closedAmount: "0",
+          },
+        ]);
 
-      const badPeriod = await executeAssistantTool(restricted, 'crm_forecast', {
-        periodStart: '2026-12-31',
-        periodEnd: '2026-10-01',
-      });
-      assert.deepEqual(badPeriod, { ok: false, error: 'invalid_forecast_period' });
+        const badPeriod = await executeAssistantTool(restricted, "crm_forecast", {
+          periodStart: "2026-12-31",
+          periodEnd: "2026-10-01",
+        });
+        assert.deepEqual(badPeriod, { ok: false, error: "invalid_forecast_period" });
 
-      await withBypassContext(() => db.execute(sql`
+        await withBypassContext(() =>
+          db.execute(sql`
         update crm_opportunities
            set projected_amount='999999999999999.9999', weighted_amount='999999999999998.9999'
          where id=${seed.openOpp} and org_id=${org.orgId}
-      `));
-      const appContext = {
-        authz: restricted,
-        source: 'api',
-        requestId: randomUUID(),
-        apiKeyId: null,
-      } as ApplicationContext;
-      const applicationList = await applicationCrm.listApplicationOpportunities(appContext, {});
-      assert.equal(applicationList.total, 1);
-      assert.deepEqual(
-        [applicationList.opportunities[0]!.projectedAmount, applicationList.opportunities[0]!.weightedAmount],
-        ['999999999999999.9999', '999999999999998.9999'],
-      );
-      assert.deepEqual(applicationList.totalsByCurrency, [{
-        currency: 'CAD', count: 1,
-        projectedAmount: '999999999999999.9999', weightedAmount: '999999999999998.9999',
-      }]);
+      `),
+        );
+        const appContext = {
+          authz: restricted,
+          source: "api",
+          requestId: randomUUID(),
+          apiKeyId: null,
+        } as ApplicationContext;
+        const applicationList = await applicationCrm.listApplicationOpportunities(appContext, {});
+        assert.equal(applicationList.total, 1);
+        assert.deepEqual(
+          [
+            applicationList.opportunities[0]!.projectedAmount,
+            applicationList.opportunities[0]!.weightedAmount,
+          ],
+          ["999999999999999.9999", "999999999999998.9999"],
+        );
+        assert.deepEqual(applicationList.totalsByCurrency, [
+          {
+            currency: "CAD",
+            count: 1,
+            projectedAmount: "999999999999999.9999",
+            weightedAmount: "999999999999998.9999",
+          },
+        ]);
 
-      const applicationOpportunity = await applicationCrm.getApplicationOpportunity(appContext, seed.openOpp);
-      assert.deepEqual(
-        [applicationOpportunity.opportunity.projectedAmount, applicationOpportunity.opportunity.weightedAmount],
-        ['999999999999999.9999', '999999999999998.9999'],
-      );
-      const applicationAccounts = await applicationCrm.listApplicationCrmAccounts(appContext, { stage: 'prospect' });
-      assert.equal(applicationAccounts.total, 1);
-      assert.equal(applicationAccounts.accounts[0]!.partyId, org.customerId);
-      const applicationAccount = await applicationCrm.getApplicationCrmAccount(appContext, org.customerId);
-      assert.equal(applicationAccount.profile.lifecycleStage, 'prospect');
-      assert.deepEqual(
-        [applicationAccount.opportunities[0]!.projectedAmount, applicationAccount.opportunities[0]!.weightedAmount],
-        ['999999999999999.9999', '999999999999998.9999'],
-      );
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        const applicationOpportunity = await applicationCrm.getApplicationOpportunity(
+          appContext,
+          seed.openOpp,
+        );
+        assert.deepEqual(
+          [
+            applicationOpportunity.opportunity.projectedAmount,
+            applicationOpportunity.opportunity.weightedAmount,
+          ],
+          ["999999999999999.9999", "999999999999998.9999"],
+        );
+        const applicationAccounts = await applicationCrm.listApplicationCrmAccounts(appContext, {
+          stage: "prospect",
+        });
+        assert.equal(applicationAccounts.total, 1);
+        assert.equal(applicationAccounts.accounts[0]!.partyId, org.customerId);
+        const applicationAccount = await applicationCrm.getApplicationCrmAccount(
+          appContext,
+          org.customerId,
+        );
+        assert.equal(applicationAccount.profile.lifecycleStage, "prospect");
+        assert.deepEqual(
+          [
+            applicationAccount.opportunities[0]!.projectedAmount,
+            applicationAccount.opportunities[0]!.weightedAmount,
+          ],
+          ["999999999999999.9999", "999999999999998.9999"],
+        );
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('CRM assistant reads isolate orgs and honor the feature flag', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => createScratchOrg());
-  const orgB = await withBypassContext(() => createScratchOrg());
-  try {
-    const seedA = await seedCrm(orgA.orgId, orgA.subsidiaryId, orgA.customerId);
-    const authzA = {
-      user: userFor(orgA.orgId, 'CRM org reader'),
-      permissions: new Set(CRM_PERMS),
-      allowedSubsidiaryIds: null as Set<string> | null,
-    };
-    await withOrgContext(orgA.orgId, async () => {
-      const cross = await executeAssistantTool(
-        { ...authzA, user: { ...authzA.user, orgId: orgB.orgId } },
-        'get_opportunity',
-        { opportunityId: seedA.openOpp },
-      );
-      assert.deepEqual(cross, { ok: false, error: 'opportunity_not_found' });
-    });
-    await withBypassContext(() => db.execute(sql`
+test(
+  "CRM assistant reads isolate orgs and honor the feature flag",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
+    try {
+      const seedA = await seedCrm(orgA.orgId, orgA.subsidiaryId, orgA.customerId);
+      const authzA = {
+        user: userFor(orgA.orgId, "CRM org reader"),
+        permissions: new Set(CRM_PERMS),
+        allowedSubsidiaryIds: null as Set<string> | null,
+      };
+      await withOrgContext(orgA.orgId, async () => {
+        const cross = await executeAssistantTool(
+          { ...authzA, user: { ...authzA.user, orgId: orgB.orgId } },
+          "get_opportunity",
+          { opportunityId: seedA.openOpp },
+        );
+        assert.deepEqual(cross, { ok: false, error: "opportunity_not_found" });
+      });
+      await withBypassContext(() =>
+        db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":false}'::jsonb)
       where id=${orgA.orgId}
-    `));
-    await withOrgContext(orgA.orgId, async () => {
-      const off = await executeAssistantTool(authzA, 'search_opportunities', {});
-      assert.deepEqual(off, { ok: false, error: 'crm_feature_disabled' });
-      await assert.rejects(
-        applicationCrm.listApplicationOpportunities({
-          authz: authzA, source: 'api', requestId: randomUUID(), apiKeyId: null,
-        } as ApplicationContext, {}),
-        (error: unknown) => (error as { status?: number }).status === 404
-          && (error as Error).message === 'crm is off; enable it from GET /api/v1/settings/features',
+    `),
       );
-    });
-  } finally {
-    await dropScratchOrg(orgA.orgId);
-    await dropScratchOrg(orgB.orgId);
-  }
-});
+      await withOrgContext(orgA.orgId, async () => {
+        const off = await executeAssistantTool(authzA, "search_opportunities", {});
+        assert.deepEqual(off, { ok: false, error: "crm_feature_disabled" });
+        await assert.rejects(
+          applicationCrm.listApplicationOpportunities(
+            {
+              authz: authzA,
+              source: "api",
+              requestId: randomUUID(),
+              apiKeyId: null,
+            } as ApplicationContext,
+            {},
+          ),
+          (error: unknown) =>
+            (error as { status?: number }).status === 404 &&
+            (error as Error).message === "crm is off; enable it from GET /api/v1/settings/features",
+        );
+      });
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);

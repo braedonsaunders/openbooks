@@ -31,10 +31,15 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const nowIso = (): string => new Date().toISOString();
 
 async function gateStatus(orgId: string, subjectId: string): Promise<string> {
-  const row = (await db.execute<{ status: string }>(sql`
+  const row = (
+    await db.execute<{ status: string }>(
+      sql`
     select status from flow_gates
      where org_id = ${orgId} and subject_id = ${subjectId} and status = 'pending'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.status ?? "resolved";
 }
 
@@ -64,10 +69,15 @@ test("a restricted actor cannot approve an out-of-scope gate by id", { skip: !DB
     `);
     const submitted = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(submitted.gated, true, "the fixture must raise a real pending gate");
-    const gate = (await db.execute<{ id: string }>(sql`
+    const gate = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from flow_gates
        where org_id = ${org.orgId} and subject_id = ${docId} and status = 'pending'
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     assert.ok(gate, "the gate the actor will name by id must exist");
 
     const restricted = {

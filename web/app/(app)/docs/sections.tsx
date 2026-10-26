@@ -1,30 +1,30 @@
-import Link from 'next/link'
-import { ArrowRight, BookOpenCheck, Compass, Replace } from 'lucide-react'
+import Link from "next/link";
+import { ArrowRight, BookOpenCheck, Compass, Replace } from "lucide-react";
 
-import type { DocArticle, DocCategory } from '../../../lib/docs'
+import type { DocArticle, DocCategory } from "../../../lib/docs";
 
-export type DocArticleSummary = Pick<DocArticle, 'slug' | 'title' | 'summary'>
+export type DocArticleSummary = Pick<DocArticle, "slug" | "title" | "summary">;
 
 export interface DocsHomeGroup {
-  category: DocCategory
-  articles: DocArticleSummary[]
+  category: DocCategory;
+  articles: DocArticleSummary[];
 }
 
 export interface DocsHomeContent {
-  eyebrow: string
-  title: string
-  subtitle: string
-  startHere: string
-  stepLabels: string[]
-  switchingTitle: string
-  switchingSubtitle: string
-  browseTitle: string
-  browseSubtitle: string
-  articleCount: string
-  startHereArticles: DocArticleSummary[]
-  switchingShortTitles: string[]
-  switchingArticles: DocArticleSummary[]
-  groups: DocsHomeGroup[]
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  startHere: string;
+  stepLabels: string[];
+  switchingTitle: string;
+  switchingSubtitle: string;
+  browseTitle: string;
+  browseSubtitle: string;
+  articleCount: string;
+  startHereArticles: DocArticleSummary[];
+  switchingShortTitles: string[];
+  switchingArticles: DocArticleSummary[];
+  groups: DocsHomeGroup[];
 }
 
 /**
@@ -36,7 +36,7 @@ export interface DocsHomeContent {
  * as the native page always has.
  */
 export function DocsHome({ content }: { content: DocsHomeContent }) {
-  const { startHereArticles, switchingArticles, switchingShortTitles, groups } = content
+  const { startHereArticles, switchingArticles, switchingShortTitles, groups } = content;
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-8 rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white p-6 dark:border-teal-900 dark:from-teal-950/40 dark:to-slate-950">
@@ -49,13 +49,18 @@ export function DocsHome({ content }: { content: DocsHomeContent }) {
         <h1 className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100 sm:text-3xl">
           {content.title}
         </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">{content.subtitle}</p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+          {content.subtitle}
+        </p>
       </header>
 
       <section className="mb-8" aria-labelledby="start-here-heading">
         <div className="mb-3 flex items-center gap-2">
           <Compass className="h-4 w-4 text-teal-600 dark:text-teal-400" aria-hidden />
-          <h2 id="start-here-heading" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <h2
+            id="start-here-heading"
+            className="text-base font-semibold text-slate-900 dark:text-slate-100"
+          >
             {content.startHere}
           </h2>
         </div>
@@ -67,7 +72,7 @@ export function DocsHome({ content }: { content: DocsHomeContent }) {
               className="group rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300 hover:bg-teal-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800 dark:hover:bg-teal-950/20"
             >
               <span className="text-xs font-semibold text-teal-700 dark:text-teal-300">
-                {content.stepLabels[index] ?? ''}
+                {content.stepLabels[index] ?? ""}
               </span>
               <span className="mt-1 flex items-center justify-between gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {article.title}
@@ -76,7 +81,9 @@ export function DocsHome({ content }: { content: DocsHomeContent }) {
                   aria-hidden
                 />
               </span>
-              <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">{article.summary}</span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">
+                {article.summary}
+              </span>
             </Link>
           ))}
         </div>
@@ -89,10 +96,15 @@ export function DocsHome({ content }: { content: DocsHomeContent }) {
         <div className="mb-3 flex items-start gap-2">
           <Replace className="mt-0.5 h-4 w-4 text-violet-600 dark:text-violet-400" aria-hidden />
           <div>
-            <h2 id="switching-heading" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h2
+              id="switching-heading"
+              className="text-base font-semibold text-slate-900 dark:text-slate-100"
+            >
               {content.switchingTitle}
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{content.switchingSubtitle}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {content.switchingSubtitle}
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -110,7 +122,9 @@ export function DocsHome({ content }: { content: DocsHomeContent }) {
 
       <div className="mb-3 flex items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{content.browseTitle}</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            {content.browseTitle}
+          </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">{content.browseSubtitle}</p>
         </div>
         <span className="text-xs text-slate-500 dark:text-slate-400">{content.articleCount}</span>
@@ -124,10 +138,16 @@ export function DocsHome({ content }: { content: DocsHomeContent }) {
             className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
           >
             <div className="mb-1 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{category.title}</h3>
-              <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-500">{articles.length}</span>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {category.title}
+              </h3>
+              <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-500">
+                {articles.length}
+              </span>
             </div>
-            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{category.description}</p>
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+              {category.description}
+            </p>
             <ul className="space-y-1">
               {articles.map((a) => (
                 <li key={a.slug}>
@@ -149,5 +169,5 @@ export function DocsHome({ content }: { content: DocsHomeContent }) {
         ))}
       </div>
     </div>
-  )
+  );
 }

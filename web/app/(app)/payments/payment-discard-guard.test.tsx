@@ -10,7 +10,10 @@ import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
 // jsdom first: the drawer reads browser globals at render.
-await bootJsdomEnvironment({ url: "http://localhost:4800/receipts?payment=019f0000-0000-4000-8000-000000000003", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/receipts?payment=019f0000-0000-4000-8000-000000000003",
+  matchMediaMatches: false,
+});
 
 const script = { confirmResult: true, confirmCalls: 0 };
 Object.assign(globalThis, {
@@ -124,7 +127,8 @@ async function typeIntoForm() {
     const inputs = [...document.querySelectorAll("input")] as HTMLInputElement[];
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     for (const input of inputs) {
-      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox") continue;
+      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox")
+        continue;
       setter?.call(input, `${input.value}x`);
       input.dispatchEvent(new window.Event("input", { bubbles: true }));
     }

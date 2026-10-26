@@ -81,14 +81,24 @@ async function draftCloseoutSale(
     );
   }
   await withBypassContext(() =>
-    db.execute(sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId}`),
+    db.execute(
+      sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId}`,
+    ),
   );
   return id;
 }
 
-async function closeoutAccounts(org: ScratchOrg): Promise<{ tips: string; fees: string; overShort: string }> {
+async function closeoutAccounts(
+  org: ScratchOrg,
+): Promise<{ tips: string; fees: string; overShort: string }> {
   const tips = await withBypassContext(() =>
-    seedPostingAccount(org.orgId, "2160", "Tips Payable", "liability_current_other", org.subsidiaryId),
+    seedPostingAccount(
+      org.orgId,
+      "2160",
+      "Tips Payable",
+      "liability_current_other",
+      org.subsidiaryId,
+    ),
   );
   const fees = await withBypassContext(() =>
     seedPostingAccount(org.orgId, "6160", "Processor Fees", "expense", org.subsidiaryId),
@@ -96,23 +106,28 @@ async function closeoutAccounts(org: ScratchOrg): Promise<{ tips: string; fees: 
   const overShort = await withBypassContext(() =>
     seedPostingAccount(org.orgId, "6190", "Cash Over/Short", "expense_other", org.subsidiaryId),
   );
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = settings ||
       jsonb_build_object('controlAccounts',
         coalesce(settings->'controlAccounts', '{}'::jsonb) ||
         jsonb_build_object('tipsPayable', ${tips}::text, 'processorFees', ${fees}::text, 'cashOverShort', ${overShort}::text))
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   return { tips, fees, overShort };
 }
 
 async function entryLegs(documentId: string, orgId: string): Promise<[string | null, string][]> {
-  const rows = await db.execute<{ number: string | null; amount: string }>(sql`
+  const rows = await db.execute<{ number: string | null; amount: string }>(
+    sql`
     select a.number, l.amount::text as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.org_id = ${orgId} and e.source_document_id = ${documentId}
-     order by l.line_number`, "objects");
+     order by l.line_number`,
+    "objects",
+  );
   return rows.map((row) => [row.number, row.amount]);
 }
 
@@ -121,7 +136,13 @@ test("tips and fees post to liability and expense, never revenue", { skip: !DB }
   try {
     await closeoutAccounts(org);
     const card = await withBypassContext(() =>
-      seedPostingAccount(org.orgId, "1011", "Card Clearing", "asset_current_other", org.subsidiaryId),
+      seedPostingAccount(
+        org.orgId,
+        "1011",
+        "Card Clearing",
+        "asset_current_other",
+        org.subsidiaryId,
+      ),
     );
     // Total 100 + 5.00 tip − 0.35 fee: the card tender collects 104.65.
     const id = await draftCloseoutSale(
@@ -189,7 +210,13 @@ test("server-tagged tips carry the party for payroll pay-out", { skip: !DB }, as
   try {
     await closeoutAccounts(org);
     const card = await withBypassContext(() =>
-      seedPostingAccount(org.orgId, "1012", "Card Clearing", "asset_current_other", org.subsidiaryId),
+      seedPostingAccount(
+        org.orgId,
+        "1012",
+        "Card Clearing",
+        "asset_current_other",
+        org.subsidiaryId,
+      ),
     );
     const id = await draftCloseoutSale(
       org,
@@ -205,12 +232,17 @@ test("server-tagged tips carry the party for payroll pay-out", { skip: !DB }, as
       },
     );
     await withOrg(org.orgId, () => postDocument(id, control(org)));
-    const tipParty = (await db.execute<{ party: string | null }>(sql`
+    const tipParty = (
+      await db.execute<{ party: string | null }>(
+        sql`
       select l.party_id as party
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where e.org_id = ${org.orgId} and e.source_document_id = ${id} and a.number = '2160'`, "objects"))[0]?.party;
+       where e.org_id = ${org.orgId} and e.source_document_id = ${id} and a.number = '2160'`,
+        "objects",
+      )
+    )[0]?.party;
     assert.equal(tipParty, org.customerId);
     const exposure = await withBypassContext(() =>
       readTipsPayableExposure(db, org.orgId, { allowedSubsidiaryIds: null }),
@@ -220,68 +252,92 @@ test("server-tagged tips carry the party for payroll pay-out", { skip: !DB }, as
     assert.equal(exposure[0]!.amountMinor, "-30000");
     assert.equal(exposure[0]!.day, org.date);
 
-    const outOfScope = await withBypassContext(() => readTipsPayableExposure(db, org.orgId, {
-      allowedSubsidiaryIds: new Set([randomUUID()]),
-    }));
+    const outOfScope = await withBypassContext(() =>
+      readTipsPayableExposure(db, org.orgId, {
+        allowedSubsidiaryIds: new Set([randomUUID()]),
+      }),
+    );
     assert.deepEqual(outOfScope, []);
 
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Cash Sale Reviewer", "admin"));
-    const voidResult = await withOrg(org.orgId, () => requestDocumentVoid({
-      documentId: id,
-      orgId: org.orgId,
-      actorId,
-      reason: "Duplicate cash sale",
-      reversalDate: org.date,
-      source: "api",
-      allowedSubsidiaryIds: null,
-    }));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Cash Sale Reviewer", "admin"),
+    );
+    const voidResult = await withOrg(org.orgId, () =>
+      requestDocumentVoid({
+        documentId: id,
+        orgId: org.orgId,
+        actorId,
+        reason: "Duplicate cash sale",
+        reversalDate: org.date,
+        source: "api",
+        allowedSubsidiaryIds: null,
+      }),
+    );
     assert.equal(voidResult.status, "voided");
-    const afterVoid = await withBypassContext(() => readTipsPayableExposure(db, org.orgId, {
-      allowedSubsidiaryIds: null,
-    }));
+    const afterVoid = await withBypassContext(() =>
+      readTipsPayableExposure(db, org.orgId, {
+        allowedSubsidiaryIds: null,
+      }),
+    );
     assert.deepEqual(afterVoid, []);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("tips without a configured liability refuse with the Setup remedy", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const card = await withBypassContext(() =>
-      seedPostingAccount(org.orgId, "1013", "Card Clearing", "asset_current_other", org.subsidiaryId),
-    );
-    const id = await draftCloseoutSale(
-      org,
-      "CS-NOACCT",
-      [{ amount: "100.0000" }],
-      [{ kind: "card", accountId: card, amount: "105.0000" }],
-      {
-        tipsTotal: "5.0000",
-        feeTotal: "0",
-        overShort: "0",
-        serverPartyId: null,
-        parts: [{ position: 1, tip: "5.0000", fee: "0" }],
-      },
-    );
-    await assert.rejects(
-      withOrg(org.orgId, () => postDocument(id, control(org))),
-      (error: unknown) =>
-        error instanceof PostingError &&
-        /no tips-payable liability account is configured/.test(error.message) &&
-        /Setup → Company & Accounting → Control accounts/.test(error.message),
-    );
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "tips without a configured liability refuse with the Setup remedy",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const card = await withBypassContext(() =>
+        seedPostingAccount(
+          org.orgId,
+          "1013",
+          "Card Clearing",
+          "asset_current_other",
+          org.subsidiaryId,
+        ),
+      );
+      const id = await draftCloseoutSale(
+        org,
+        "CS-NOACCT",
+        [{ amount: "100.0000" }],
+        [{ kind: "card", accountId: card, amount: "105.0000" }],
+        {
+          tipsTotal: "5.0000",
+          feeTotal: "0",
+          overShort: "0",
+          serverPartyId: null,
+          parts: [{ position: 1, tip: "5.0000", fee: "0" }],
+        },
+      );
+      await assert.rejects(
+        withOrg(org.orgId, () => postDocument(id, control(org))),
+        (error: unknown) =>
+          error instanceof PostingError &&
+          /no tips-payable liability account is configured/.test(error.message) &&
+          /Setup → Company & Accounting → Control accounts/.test(error.message),
+      );
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("a mis-tendered close-out names the explicit formula", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await closeoutAccounts(org);
     const card = await withBypassContext(() =>
-      seedPostingAccount(org.orgId, "1014", "Card Clearing", "asset_current_other", org.subsidiaryId),
+      seedPostingAccount(
+        org.orgId,
+        "1014",
+        "Card Clearing",
+        "asset_current_other",
+        org.subsidiaryId,
+      ),
     );
     const id = await draftCloseoutSale(
       org,
@@ -340,12 +396,17 @@ test("a close-out on a refund refuses at posting", { skip: !DB }, async () => {
                 '10.0000', '10.0000', '0', '1', '10.0000', '{}'::jsonb)`),
     );
     await withBypassContext(() =>
-      db.execute(sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId}`),
+      db.execute(
+        sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId}`,
+      ),
     );
     await assert.rejects(
       withOrg(org.orgId, () => postDocument(id, control(org))),
       (error: unknown) =>
-        error instanceof PostingError && /carries a close-out — record tips, fees and over\/short on the cash sale/.test(error.message),
+        error instanceof PostingError &&
+        /carries a close-out — record tips, fees and over\/short on the cash sale/.test(
+          error.message,
+        ),
     );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

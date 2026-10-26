@@ -102,7 +102,8 @@ function powExact(base: bigint, exponent: bigint): bigint {
     throw new DepreciationFormulaError("formula exponent must be an integer");
   }
   let power = exponent / EXACT_SCALE;
-  if (power > 1_000n || power < -1_000n) throw new DepreciationFormulaError("formula exponent is out of range");
+  if (power > 1_000n || power < -1_000n)
+    throw new DepreciationFormulaError("formula exponent is out of range");
   const inverse = power < 0n;
   if (inverse) power = -power;
   let result = EXACT_SCALE;
@@ -115,13 +116,25 @@ function powExact(base: bigint, exponent: bigint): bigint {
   return inverse ? divExact(EXACT_SCALE, result) : result;
 }
 
-type Tok =
-  | { k: "num"; v: string }
-  | { k: "id"; v: string }
-  | { k: "op"; v: string };
+type Tok = { k: "num"; v: string } | { k: "id"; v: string } | { k: "op"; v: string };
 
 const OP_RE = /^(<=|>=|==|!=|[-+*/^~()<>,])/;
-const SCALAR_VARS = new Set(["OC", "CC", "NB", "RV", "AL", "CP", "TD", "LD", "CU", "LU", "DH", "DP", "FY", "PB"]);
+const SCALAR_VARS = new Set([
+  "OC",
+  "CC",
+  "NB",
+  "RV",
+  "AL",
+  "CP",
+  "TD",
+  "LD",
+  "CU",
+  "LU",
+  "DH",
+  "DP",
+  "FY",
+  "PB",
+]);
 // RL is resolved separately because its default derives from AL and CP.
 const KEYWORDS = new Set(["IF", "THEN", "ELSE", "ENDIF", "ROUND"]);
 
@@ -130,7 +143,10 @@ function tokenize(src: string): Tok[] {
   let i = 0;
   while (i < src.length) {
     const char = src[i]!;
-    if (/\s/.test(char)) { i++; continue; }
+    if (/\s/.test(char)) {
+      i++;
+      continue;
+    }
     if (/[0-9.]/.test(char)) {
       const match = /^\d*\.?\d+(?:[eE][-+]?\d+)?/.exec(src.slice(i));
       if (!match) throw new DepreciationFormulaError(`bad number at ${i}`);
@@ -156,12 +172,14 @@ type Node = (context: DepContext) => bigint;
 
 function resolveVar(name: string): Node {
   if (SCALAR_VARS.has(name)) {
-    return (context) => exactUnits((context as unknown as Record<string, DecimalInput>)[name] ?? "0");
+    return (context) =>
+      exactUnits((context as unknown as Record<string, DecimalInput>)[name] ?? "0");
   }
   if (name === "RL") {
-    return (context) => context.RL !== undefined
-      ? exactUnits(context.RL)
-      : exactUnits(context.AL) - exactUnits(context.CP) + EXACT_SCALE;
+    return (context) =>
+      context.RL !== undefined
+        ? exactUnits(context.RL)
+        : exactUnits(context.AL) - exactUnits(context.CP) + EXACT_SCALE;
   }
   const rate = /^R(\d+)$/.exec(name);
   if (rate) {
@@ -173,21 +191,31 @@ function resolveVar(name: string): Node {
 
 class Parser {
   private position = 0;
-  constructor(private readonly tokens: Tok[], private readonly source: string) {}
+  constructor(
+    private readonly tokens: Tok[],
+    private readonly source: string,
+  ) {}
 
-  private peek(): Tok | undefined { return this.tokens[this.position]; }
-  private next(): Tok | undefined { return this.tokens[this.position++]; }
+  private peek(): Tok | undefined {
+    return this.tokens[this.position];
+  }
+  private next(): Tok | undefined {
+    return this.tokens[this.position++];
+  }
   private eatOp(value: string): void {
     const token = this.next();
-    if (!token || token.k !== "op" || token.v !== value) throw new DepreciationFormulaError(`expected "${value}" in "${this.source}"`);
+    if (!token || token.k !== "op" || token.v !== value)
+      throw new DepreciationFormulaError(`expected "${value}" in "${this.source}"`);
   }
   private eatKeyword(value: string): void {
     const token = this.next();
-    if (!token || token.k !== "id" || token.v.toUpperCase() !== value) throw new DepreciationFormulaError(`expected ${value} in "${this.source}"`);
+    if (!token || token.k !== "id" || token.v.toUpperCase() !== value)
+      throw new DepreciationFormulaError(`expected ${value} in "${this.source}"`);
   }
   parse(): Node {
     const node = this.expression();
-    if (this.position !== this.tokens.length) throw new DepreciationFormulaError(`trailing tokens in "${this.source}"`);
+    if (this.position !== this.tokens.length)
+      throw new DepreciationFormulaError(`trailing tokens in "${this.source}"`);
     return node;
   }
   private expression(): Node {
@@ -197,7 +225,8 @@ class Parser {
       const right = this.add();
       const prior = left;
       left = (context) => {
-        const a = prior(context), b = right(context);
+        const a = prior(context),
+          b = right(context);
         return a > b ? a : b;
       };
     }
@@ -209,7 +238,10 @@ class Parser {
       const operation = this.next()!.v;
       const right = this.multiply();
       const prior = left;
-      left = operation === "+" ? (context) => prior(context) + right(context) : (context) => prior(context) - right(context);
+      left =
+        operation === "+"
+          ? (context) => prior(context) + right(context)
+          : (context) => prior(context) - right(context);
     }
     return left;
   }
@@ -219,7 +251,10 @@ class Parser {
       const operation = this.next()!.v;
       const right = this.power();
       const prior = left;
-      left = operation === "*" ? (context) => mulExact(prior(context), right(context)) : (context) => divExact(prior(context), right(context));
+      left =
+        operation === "*"
+          ? (context) => mulExact(prior(context), right(context))
+          : (context) => divExact(prior(context), right(context));
     }
     return left;
   }
@@ -256,7 +291,8 @@ class Parser {
       const keyword = token.v.toUpperCase();
       if (keyword === "IF") return this.ifExpression();
       if (keyword === "ROUND") return this.roundExpression();
-      if (KEYWORDS.has(keyword)) throw new DepreciationFormulaError(`unexpected ${token.v} in "${this.source}"`);
+      if (KEYWORDS.has(keyword))
+        throw new DepreciationFormulaError(`unexpected ${token.v} in "${this.source}"`);
       return resolveVar(token.v);
     }
     throw new DepreciationFormulaError(`unexpected "${token.v}" in "${this.source}"`);
@@ -268,7 +304,7 @@ class Parser {
     this.eatKeyword("ELSE");
     const whenFalse = this.expression();
     this.eatKeyword("ENDIF");
-    return (context) => condition(context) ? whenTrue(context) : whenFalse(context);
+    return (context) => (condition(context) ? whenTrue(context) : whenFalse(context));
   }
   private roundExpression(): Node {
     this.eatOp("(");
@@ -277,30 +313,43 @@ class Parser {
     if (this.peek()?.k === "op" && this.peek()!.v === ",") {
       this.next();
       const token = this.next();
-      if (!token || token.k !== "num" || !/^\d+$/.test(token.v)) throw new DepreciationFormulaError(`ROUND digits must be an integer in "${this.source}"`);
+      if (!token || token.k !== "num" || !/^\d+$/.test(token.v))
+        throw new DepreciationFormulaError(`ROUND digits must be an integer in "${this.source}"`);
       digits = Number.parseInt(token.v, 10);
     }
     this.eatOp(")");
-    if (digits < 0 || digits > PRECISION) throw new DepreciationFormulaError(`ROUND digits must be 0 through ${PRECISION}`);
+    if (digits < 0 || digits > PRECISION)
+      throw new DepreciationFormulaError(`ROUND digits must be 0 through ${PRECISION}`);
     const quantum = 10n ** BigInt(PRECISION - digits);
     return (context) => roundDiv(node(context), quantum) * quantum;
   }
   private condition(): (context: DepContext) => boolean {
     const left = this.expression();
     const operator = this.next();
-    if (!operator || operator.k !== "op" || !["<=", "<", "==", "!=", ">=", ">"].includes(operator.v)) {
+    if (
+      !operator ||
+      operator.k !== "op" ||
+      !["<=", "<", "==", "!=", ">=", ">"].includes(operator.v)
+    ) {
       throw new DepreciationFormulaError(`expected a comparison in "${this.source}"`);
     }
     const right = this.expression();
     return (context) => {
-      const a = left(context), b = right(context);
+      const a = left(context),
+        b = right(context);
       switch (operator.v) {
-        case "<=": return a <= b;
-        case "<": return a < b;
-        case "==": return a === b;
-        case "!=": return a !== b;
-        case ">=": return a >= b;
-        default: return a > b;
+        case "<=":
+          return a <= b;
+        case "<":
+          return a < b;
+        case "==":
+          return a === b;
+        case "!=":
+          return a !== b;
+        case ">=":
+          return a >= b;
+        default:
+          return a > b;
       }
     };
   }
@@ -365,9 +414,10 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
   if (depreciableBase <= 0n) return [];
   const evaluate = compileExactFormula(input.formula);
   const endOfLife = input.endOfLife ?? "fully_depreciate";
-  const lifetimeUsage = input.lifetimeUsage !== undefined
-    ? exactUnits(input.lifetimeUsage)
-    : (input.usage ?? []).reduce((total, usage) => total + exactUnits(usage), 0n);
+  const lifetimeUsage =
+    input.lifetimeUsage !== undefined
+      ? exactUnits(input.lifetimeUsage)
+      : (input.usage ?? []).reduce((total, usage) => total + exactUnits(usage), 0n);
   const firstPeriodFraction = exactUnits(input.firstPeriodFraction ?? "1");
   if (firstPeriodFraction < 0n || firstPeriodFraction > EXACT_SCALE) {
     throw new DepreciationFormulaError("first-period fraction must be between zero and one");
@@ -381,9 +431,10 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
   // Integer ratio only: a JS float of (scale − fraction) / scale can flip the
   // rounded period count (one whole extra or missing charge).
   const withheldUnits = EXACT_SCALE - firstPeriodFraction;
-  const extension = firstPeriodFraction < EXACT_SCALE && endOfLife === "fully_depreciate"
-    ? Math.max(1, Number(roundDiv(BigInt(fractionPeriods) * withheldUnits, EXACT_SCALE)))
-    : 0;
+  const extension =
+    firstPeriodFraction < EXACT_SCALE && endOfLife === "fully_depreciate"
+      ? Math.max(1, Number(roundDiv(BigInt(fractionPeriods) * withheldUnits, EXACT_SCALE)))
+      : 0;
   const totalPeriods = life + extension;
   const reduced = firstPeriodFraction < EXACT_SCALE ? fractionPeriods : 0;
   // Full-charge periods left from `period` to the end of the schedule: each
@@ -412,10 +463,22 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
       charge = roundDiv(remaining, BigInt(totalPeriods - currentPeriod + 1));
     } else {
       const context: DepContext = {
-        OC: fromUnits(cost), CC: fromUnits(cost), NB: fromUnits(netBookValue), RV: fromUnits(salvage),
-        AL: String(life), CP: String(currentPeriod), TD: fromUnits(accumulated), LD: fromUnits(last),
-        CU: input.usage?.[currentPeriod - 1] ?? "0", LU: exactString(lifetimeUsage),
-        DH: "1", DP: "1", FY: "12", PB: "0", RL: exactString(remainingLife(currentPeriod)), R: input.rateTable,
+        OC: fromUnits(cost),
+        CC: fromUnits(cost),
+        NB: fromUnits(netBookValue),
+        RV: fromUnits(salvage),
+        AL: String(life),
+        CP: String(currentPeriod),
+        TD: fromUnits(accumulated),
+        LD: fromUnits(last),
+        CU: input.usage?.[currentPeriod - 1] ?? "0",
+        LU: exactString(lifetimeUsage),
+        DH: "1",
+        DP: "1",
+        FY: "12",
+        PB: "0",
+        RL: exactString(remainingLife(currentPeriod)),
+        R: input.rateTable,
       };
       let evaluated = evaluate(context);
       if (currentPeriod <= fractionPeriods && firstPeriodFraction < EXACT_SCALE) {

@@ -5,10 +5,7 @@ import { ManufacturingNotFoundError } from "./errors.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { lockManufacturingOrderExecutionAuthority } from "./authority.ts";
 import { getWorkOrder } from "./work-orders.ts";
-import {
-  completeWorkOrder,
-  type CompleteWorkOrderInput,
-} from "./completion.ts";
+import { completeWorkOrder, type CompleteWorkOrderInput } from "./completion.ts";
 import { issueMaterials, type MaterialIssueLine } from "./materials.ts";
 import {
   correctWorkOrderCompletionDate,
@@ -16,7 +13,10 @@ import {
 } from "./completion-redate.ts";
 
 // The web app reaches the completion-date correction through this public contract.
-export { correctWorkOrderCompletionDate, type CompletionDateCorrectionInput } from "./completion-redate.ts";
+export {
+  correctWorkOrderCompletionDate,
+  type CompletionDateCorrectionInput,
+} from "./completion-redate.ts";
 /** Native inventory claims store the result atomically with its production postings.
  * Feature and entity authority are checked again before returning a retained result. */
 export async function executeManufacturingReceipt(
@@ -27,15 +27,8 @@ export async function executeManufacturingReceipt(
   key: string,
   input: CompleteWorkOrderInput,
 ) {
-  return execute(
-    orgId,
-    actorId,
-    scope,
-    id,
-    key,
-    "manufacturing.receipt",
-    input,
-    () => completeWorkOrder(db, orgId, actorId, id, input),
+  return execute(orgId, actorId, scope, id, key, "manufacturing.receipt", input, () =>
+    completeWorkOrder(db, orgId, actorId, id, input),
   );
 }
 export async function executeManufacturingIssue(
@@ -67,15 +60,8 @@ export async function executeManufacturingCompletionDateCorrection(
   key: string,
   input: CompletionDateCorrectionInput,
 ) {
-  return execute(
-    orgId,
-    actorId,
-    scope,
-    id,
-    key,
-    "manufacturing.completion-date",
-    input,
-    () => correctWorkOrderCompletionDate(db, orgId, actorId, id, input),
+  return execute(orgId, actorId, scope, id, key, "manufacturing.completion-date", input, () =>
+    correctWorkOrderCompletionDate(db, orgId, actorId, id, input),
   );
 }
 
@@ -94,7 +80,7 @@ async function execute<T>(
     const order = await getWorkOrder(db, orgId, id);
     if (!order || !subsidiaryScopeAllows(scope, order.subsidiaryId))
       throw new ManufacturingNotFoundError();
-    await lockManufacturingOrderExecutionAuthority(db,orgId,actorId,id,scope);
+    await lockManufacturingOrderExecutionAuthority(db, orgId, actorId, id, scope);
     return executeIdempotentInventoryAction(orgId, actorId, {
       operation,
       idempotencyKey: key,

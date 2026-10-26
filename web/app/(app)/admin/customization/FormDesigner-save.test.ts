@@ -1,54 +1,60 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/customization?recordType=vendor_bill&tab=forms', matchMediaMatches: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/customization?recordType=vendor_bill&tab=forms",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
-const { registerHooks } = await import('node:module')
-const { pathToFileURL } = await import('node:url')
-const { join } = await import('node:path')
+const { registerHooks } = await import("node:module");
+const { pathToFileURL } = await import("node:url");
+const { join } = await import("node:path");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
 // worktree copies so the test runs the code under test.
-const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-const worktreeCustomization = pathToFileURL(join(process.cwd(), 'packages', 'customization', 'src', 'index.ts')).href
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/admin/customization' } })
+const worktreeUi = pathToFileURL(join(process.cwd(), "packages", "ui", "src", "index.ts")).href;
+const worktreeCustomization = pathToFileURL(
+  join(process.cwd(), "packages", "customization", "src", "index.ts"),
+).href;
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/admin/customization" } });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') {
-      return { shortCircuit: true, url: worktreeUi }
+    if (specifier === "@openbooks/ui") {
+      return { shortCircuit: true, url: worktreeUi };
     }
-    if (specifier === '@openbooks/customization') {
-      return { shortCircuit: true, url: worktreeCustomization }
+    if (specifier === "@openbooks/customization") {
+      return { shortCircuit: true, url: worktreeCustomization };
     }
 
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { act } = await import('react')
-const { createRoot } = await import('react-dom/client')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { FormDesigner } = await import('./FormDesigner')
-const { defaultFormLayout } = await import('@openbooks/customization')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { FormDesigner } = await import("./FormDesigner");
+const { defaultFormLayout } = await import("@openbooks/customization");
 
-const FORM_ID = '019f68a5-6a24-78ec-bed6-cc04e06f2078'
+const FORM_ID = "019f68a5-6a24-78ec-bed6-cc04e06f2078";
 
-type FetchCall = { url: string; method: string; body: string }
-const calls: FetchCall[] = []
+type FetchCall = { url: string; method: string; body: string };
+const calls: FetchCall[] = [];
 globalThis.fetch = (async (url: unknown, init?: { method?: string; body?: unknown }) => {
-  calls.push({ url: String(url), method: init?.method ?? 'GET', body: String(init?.body ?? '') })
-  return new Response(JSON.stringify({}), { headers: { 'content-type': 'application/json' } })
-}) as typeof fetch
+  calls.push({ url: String(url), method: init?.method ?? "GET", body: String(init?.body ?? "") });
+  return new Response(JSON.stringify({}), { headers: { "content-type": "application/json" } });
+}) as typeof fetch;
 
 /**
  * saving an existing form PATCHed the COLLECTION url
@@ -56,53 +62,55 @@ globalThis.fetch = (async (url: unknown, init?: { method?: string; body?: unknow
  * edit died with a silent 405. Updates belong on the member route, which
  * implements PATCH.
  */
-test('form edits PATCH the member route, never the collection url', async () => {
-  document.body.innerHTML = ''
-  calls.length = 0
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+test("form edits PATCH the member route, never the collection url", async () => {
+  document.body.innerHTML = "";
+  calls.length = 0;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   /* eslint-disable react/no-children-prop */
   await act(async () => {
     root.render(
       React.createElement(NextIntlClientProvider, {
-        locale: 'en',
+        locale: "en",
         messages,
-        timeZone: 'UTC',
+        timeZone: "UTC",
         children: React.createElement(FormDesigner, {
-          recordType: 'vendor_bill',
+          recordType: "vendor_bill",
           def: {
             id: FORM_ID,
-            name: 'Ops Bill Form',
+            name: "Ops Bill Form",
             isDefault: false,
             isActive: true,
-            layout: defaultFormLayout('vendor_bill'),
-            recordType: 'vendor_bill',
+            layout: defaultFormLayout("vendor_bill"),
+            recordType: "vendor_bill",
           },
           headerDefs: [],
           lineDefs: [],
           subsidiaryEnabled: false,
         }),
       }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   /* eslint-enable react/no-children-prop */
   try {
-    const save = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Save form')
-    assert.ok(save, 'the Save form button must render')
+    const save = [...document.querySelectorAll("button")].find(
+      (b) => (b.textContent ?? "").trim() === "Save form",
+    );
+    assert.ok(save, "the Save form button must render");
     await act(async () => {
-      ;(save as HTMLButtonElement).dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    assert.equal(calls.length, 1, 'saving must send exactly one request')
-    assert.equal(calls[0]!.method, 'PATCH')
-    assert.equal(calls[0]!.url, `/api/customization/form-layouts/${FORM_ID}`)
-    assert.equal((JSON.parse(calls[0]!.body) as { name: string }).name, 'Ops Bill Form')
+      (save as HTMLButtonElement).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.equal(calls.length, 1, "saving must send exactly one request");
+    assert.equal(calls[0]!.method, "PATCH");
+    assert.equal(calls[0]!.url, `/api/customization/form-layouts/${FORM_ID}`);
+    assert.equal((JSON.parse(calls[0]!.body) as { name: string }).name, "Ops Bill Form");
   } finally {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+      root.unmount();
+    });
+    host.remove();
   }
-})
+});

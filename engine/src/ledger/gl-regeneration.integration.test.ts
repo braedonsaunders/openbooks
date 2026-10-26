@@ -52,26 +52,23 @@ test(
          where id = ${documentId} and org_id = ${org.orgId}
       `);
       const entryId = await postDocument(documentId, deps);
-      const before = (await db.execute<Record<string, unknown>>(sql`
+      const before = await db.execute<Record<string, unknown>>(
+        sql`
         select jl.id, jl.line_number, jl.account_id, jl.amount::text,
                jl.currency, jl.txn_amount::text, jl.fx_rate::text,
                jl.party_id, jl.is_open_item
           from journal_lines jl
          where jl.entry_id = ${entryId}
          order by jl.line_number
-      `, "objects"));
+      `,
+        "objects",
+      );
 
       await assert.rejects(
         db.transaction((tx) =>
-          regenerateGlImpactTx(
-            tx,
-            documentId,
-            { ...deps, migration: false },
-            "mirror",
-          ),
+          regenerateGlImpactTx(tx, documentId, { ...deps, migration: false }, "mirror"),
         ),
-        (error: unknown) =>
-          error instanceof PostingError && /restricted/.test(error.message),
+        (error: unknown) => error instanceof PostingError && /restricted/.test(error.message),
       );
 
       const unchanged = await db.transaction((tx) =>
@@ -106,8 +103,7 @@ test(
           return regenerateGlImpactTx(tx, documentId, deps, "mirror");
         }),
         (error: unknown) =>
-          error instanceof PostingError &&
-          /in-place regeneration is forbidden/.test(error.message),
+          error instanceof PostingError && /in-place regeneration is forbidden/.test(error.message),
       );
 
       await db.execute(sql`
@@ -134,40 +130,48 @@ test(
           return regenerateGlImpactTx(tx, documentId, deps, "mirror");
         }),
         (error: unknown) =>
-          error instanceof PostingError &&
-          /in-place regeneration is forbidden/.test(error.message),
+          error instanceof PostingError && /in-place regeneration is forbidden/.test(error.message),
       );
 
-      const after = (await db.execute<Record<string, unknown>>(sql`
+      const after = await db.execute<Record<string, unknown>>(
+        sql`
         select jl.id, jl.line_number, jl.account_id, jl.amount::text,
                jl.currency, jl.txn_amount::text, jl.fx_rate::text,
                jl.party_id, jl.is_open_item
           from journal_lines jl
          where jl.entry_id = ${entryId}
          order by jl.line_number
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(after, before, "posted journal evidence never changed");
-      const persisted = (await db.execute<{
-          currency: string;
-          subtotal: string;
-          total: string;
-          memo: string | null;
-        }>(sql`
+      const persisted = await db.execute<{
+        currency: string;
+        subtotal: string;
+        total: string;
+        memo: string | null;
+      }>(
+        sql`
         select currency, subtotal::text, total::text, memo
           from documents
          where id = ${documentId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(persisted[0], {
         currency: "CAD",
         subtotal: "100.0000",
         total: "100.0000",
         memo: "Non-financial source metadata",
       });
-      const entryCount = (await db.execute<{ count: number }>(sql`
+      const entryCount = await db.execute<{ count: number }>(
+        sql`
         select count(*)::int as count
           from journal_entries
          where source_document_id = ${documentId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(entryCount[0]!.count, 1);
     } finally {
       await dropScratchOrg(org.orgId);

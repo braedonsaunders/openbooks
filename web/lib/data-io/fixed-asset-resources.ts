@@ -1,16 +1,28 @@
-import { importRowError } from './row-error'
-import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
-import 'server-only'
-import { randomUUID } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from '@openbooks/engine/platform/db'
-import { buildAllSchedulesWithRunner } from '@openbooks/engine/assets/depreciation'
-import { refuseFixedAssetRehomeWithEquipment } from '@openbooks/engine/organization/scope'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/money/money'
-import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
-import { canonicalDecimal } from '../exact-decimal'
-import { pgErrorCode, pgErrorConstraint } from '../setup/coerce'
+import { importRowError } from "./row-error";
+import {
+  readExportWindow,
+  transferId,
+  transferWhere,
+  transferOrder,
+  transferLimit,
+  finishExportPage,
+} from "./export-page";
+import "server-only";
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import {
+  db,
+  withOrgTransaction,
+  withTransactionSavepoint,
+  type SqlExecutor,
+} from "@openbooks/engine/platform/db";
+import { buildAllSchedulesWithRunner } from "@openbooks/engine/assets/depreciation";
+import { refuseFixedAssetRehomeWithEquipment } from "@openbooks/engine/organization/scope";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { cmp, normalizeMoney, toUnits } from "@openbooks/engine/money/money";
+import { moneyRefusal } from "@openbooks/engine/money/decimal-refusal";
+import { canonicalDecimal } from "../exact-decimal";
+import { pgErrorCode, pgErrorConstraint } from "../setup/coerce";
 import {
   orgFeatureEnabled,
   RefResolver,
@@ -18,8 +30,8 @@ import {
   type DataResource,
   type ReadCtx,
   type WriteCtx,
-} from './resource-core'
-import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
+} from "./resource-core";
+import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from "./types";
 
 /**
  * Fixed assets as an import/export resource, including the mid-life
@@ -43,168 +55,220 @@ import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from 
 
 // Row cap is the canonical MAX_EXPORT_ROWS from ./resource-core (a second
 // local copy would let the two caps drift, silently reintroducing this bug).
-export const FIXED_ASSETS_KEY = 'fixed-assets'
+export const FIXED_ASSETS_KEY = "fixed-assets";
 
 export const FIXED_ASSETS_DESCRIPTOR: ResourceDescriptor = {
   key: FIXED_ASSETS_KEY,
-  label: 'Fixed assets',
-  group: 'Master data',
-  iconKey: 'landmark',
-  readPermission: 'assets.read',
-  writePermission: 'assets.manage',
+  label: "Fixed assets",
+  group: "Master data",
+  iconKey: "landmark",
+  readPermission: "assets.read",
+  writePermission: "assets.manage",
   supportsImport: true,
-  naturalKey: 'assetNumber',
+  naturalKey: "assetNumber",
   scopedWrite: true,
-}
+};
 
-const METHODS = ['straight_line', 'declining_balance', 'manual', 'units_of_production'] as const
-const CONVENTIONS = ['full_month', 'half_month', 'stub_day', 'prorated'] as const
-const STATUSES = ['draft', 'in_service'] as const
+const METHODS = ["straight_line", "declining_balance", "manual", "units_of_production"] as const;
+const CONVENTIONS = ["full_month", "half_month", "stub_day", "prorated"] as const;
+const STATUSES = ["draft", "in_service"] as const;
 
 const FIELDS: ResourceField[] = [
-  { key: 'assetNumber', label: 'Asset number', kind: 'text', required: true },
-  { key: 'name', label: 'Asset name', kind: 'text', required: true },
-  { key: 'description', label: 'Description', kind: 'long_text' },
-  { key: 'category', label: 'Category (name)', kind: 'text', required: true },
-  { key: 'subsidiary', label: 'Subsidiary (name)', kind: 'text', ref: { resource: 'subsidiaries', by: 'name' } },
-  { key: 'acquisitionCost', label: 'Acquisition cost', kind: 'currency', required: true },
-  { key: 'salvageValue', label: 'Salvage value', kind: 'currency' },
-  { key: 'acquiredOn', label: 'Acquired on (YYYY-MM-DD)', kind: 'date' },
-  { key: 'inServiceOn', label: 'In service on (YYYY-MM-DD)', kind: 'date' },
+  { key: "assetNumber", label: "Asset number", kind: "text", required: true },
+  { key: "name", label: "Asset name", kind: "text", required: true },
+  { key: "description", label: "Description", kind: "long_text" },
+  { key: "category", label: "Category (name)", kind: "text", required: true },
   {
-    key: 'status', label: 'Status', kind: 'select', required: true,
+    key: "subsidiary",
+    label: "Subsidiary (name)",
+    kind: "text",
+    ref: { resource: "subsidiaries", by: "name" },
+  },
+  { key: "acquisitionCost", label: "Acquisition cost", kind: "currency", required: true },
+  { key: "salvageValue", label: "Salvage value", kind: "currency" },
+  { key: "acquiredOn", label: "Acquired on (YYYY-MM-DD)", kind: "date" },
+  { key: "inServiceOn", label: "In service on (YYYY-MM-DD)", kind: "date" },
+  {
+    key: "status",
+    label: "Status",
+    kind: "select",
+    required: true,
     options: [
-      { value: 'draft', label: 'Draft' },
-      { value: 'in_service', label: 'In service' },
+      { value: "draft", label: "Draft" },
+      { value: "in_service", label: "In service" },
     ],
   },
   {
-    key: 'method', label: 'Depreciation method', kind: 'select', required: true,
+    key: "method",
+    label: "Depreciation method",
+    kind: "select",
+    required: true,
     options: [
-      { value: 'straight_line', label: 'Straight line' },
-      { value: 'declining_balance', label: 'Declining balance' },
-      { value: 'manual', label: 'Manual (evidence based)' },
-      { value: 'units_of_production', label: 'Units of production' },
+      { value: "straight_line", label: "Straight line" },
+      { value: "declining_balance", label: "Declining balance" },
+      { value: "manual", label: "Manual (evidence based)" },
+      { value: "units_of_production", label: "Units of production" },
     ],
   },
-  { key: 'lifeMonths', label: 'Useful life (months)', kind: 'number' },
-  { key: 'ratePercent', label: 'Declining rate (%/year)', kind: 'percent' },
+  { key: "lifeMonths", label: "Useful life (months)", kind: "number" },
+  { key: "ratePercent", label: "Declining rate (%/year)", kind: "percent" },
   {
-    key: 'convention', label: 'Convention', kind: 'select',
+    key: "convention",
+    label: "Convention",
+    kind: "select",
     options: [
-      { value: 'full_month', label: 'Full month' },
-      { value: 'half_month', label: 'Half month' },
-      { value: 'stub_day', label: 'Stub day' },
-      { value: 'prorated', label: 'Prorated' },
+      { value: "full_month", label: "Full month" },
+      { value: "half_month", label: "Half month" },
+      { value: "stub_day", label: "Stub day" },
+      { value: "prorated", label: "Prorated" },
     ],
   },
-  { key: 'unitsTotal', label: 'Lifetime units', kind: 'number' },
-  { key: 'assetAccount', label: 'Asset account (number)', kind: 'reference', required: true, ref: { resource: 'accounts', by: 'number' } },
-  { key: 'accumAccount', label: 'Accumulated depreciation account (number)', kind: 'reference', required: true, ref: { resource: 'accounts', by: 'number' } },
-  { key: 'expenseAccount', label: 'Depreciation expense account (number)', kind: 'reference', required: true, ref: { resource: 'accounts', by: 'number' } },
-  { key: 'openingAccumulated', label: 'Opening accumulated depreciation', kind: 'currency' },
-  { key: 'openingAsOf', label: 'Opening as-of date (YYYY-MM-DD)', kind: 'date' },
-  { key: 'serialNumber', label: 'Serial number', kind: 'text' },
-]
+  { key: "unitsTotal", label: "Lifetime units", kind: "number" },
+  {
+    key: "assetAccount",
+    label: "Asset account (number)",
+    kind: "reference",
+    required: true,
+    ref: { resource: "accounts", by: "number" },
+  },
+  {
+    key: "accumAccount",
+    label: "Accumulated depreciation account (number)",
+    kind: "reference",
+    required: true,
+    ref: { resource: "accounts", by: "number" },
+  },
+  {
+    key: "expenseAccount",
+    label: "Depreciation expense account (number)",
+    kind: "reference",
+    required: true,
+    ref: { resource: "accounts", by: "number" },
+  },
+  { key: "openingAccumulated", label: "Opening accumulated depreciation", kind: "currency" },
+  { key: "openingAsOf", label: "Opening as-of date (YYYY-MM-DD)", kind: "date" },
+  { key: "serialNumber", label: "Serial number", kind: "text" },
+];
 
 function cell(src: Record<string, unknown>, key: string): string {
-  const raw = src[key]
-  if (raw === null || raw === undefined) return ''
-  return String(raw).trim()
+  const raw = src[key];
+  if (raw === null || raw === undefined) return "";
+  return String(raw).trim();
 }
 
 function rawCell(src: Record<string, unknown>, key: string): unknown {
-  const raw = src[key]
-  return typeof raw === 'string' ? raw.trim() : raw
+  const raw = src[key];
+  return typeof raw === "string" ? raw.trim() : raw;
 }
 
 function isPresent(raw: unknown): boolean {
-  return raw !== null && raw !== undefined && !(typeof raw === 'string' && raw.trim() === '')
+  return raw !== null && raw !== undefined && !(typeof raw === "string" && raw.trim() === "");
 }
 
-function moneyCell(label: string, raw: unknown, opts?: { required?: boolean; allowNegative?: boolean }): string | null {
+function moneyCell(
+  label: string,
+  raw: unknown,
+  opts?: { required?: boolean; allowNegative?: boolean },
+): string | null {
   if (!isPresent(raw)) {
-    if (opts?.required) throw new Error(`${label} is required`)
-    return null
+    if (opts?.required) throw new Error(`${label} is required`);
+    return null;
   }
-  const exact = canonicalDecimal(raw, 4)
-  if (exact === null) throw new Error(moneyRefusal(label, raw))
-  let amount: string
+  const exact = canonicalDecimal(raw, 4);
+  if (exact === null) throw new Error(moneyRefusal(label, raw));
+  let amount: string;
   try {
-    amount = normalizeMoney(exact)
+    amount = normalizeMoney(exact);
   } catch {
-    throw new Error(moneyRefusal(label, raw))
+    throw new Error(moneyRefusal(label, raw));
   }
-  if (!opts?.allowNegative && cmp(amount, '0') < 0) throw new Error(`${label} must be non-negative`)
-  return amount
+  if (!opts?.allowNegative && cmp(amount, "0") < 0)
+    throw new Error(`${label} must be non-negative`);
+  return amount;
 }
 
 function dateCell(label: string, raw: string, opts?: { required?: boolean }): string | null {
   if (!raw) {
-    if (opts?.required) throw new Error(`${label} is required`)
-    return null
+    if (opts?.required) throw new Error(`${label} is required`);
+    return null;
   }
-  if (!isIsoCalendarDate(raw)) throw new Error(`${label} must be a real calendar date (YYYY-MM-DD)`)
-  return raw
+  if (!isIsoCalendarDate(raw))
+    throw new Error(`${label} must be a real calendar date (YYYY-MM-DD)`);
+  return raw;
 }
 
-function intCell(label: string, raw: string, opts?: { required?: boolean; min?: number; max?: number }): number | null {
+function intCell(
+  label: string,
+  raw: string,
+  opts?: { required?: boolean; min?: number; max?: number },
+): number | null {
   if (!raw) {
-    if (opts?.required) throw new Error(`${label} is required`)
-    return null
+    if (opts?.required) throw new Error(`${label} is required`);
+    return null;
   }
-  if (!/^\d+$/.test(raw)) throw new Error(`${label} must be a whole number (got "${raw}")`)
-  const value = Number(raw)
-  if (opts?.min !== undefined && value < opts.min) throw new Error(`${label} must be at least ${opts.min}`)
-  if (opts?.max !== undefined && value > opts.max) throw new Error(`${label} must be at most ${opts.max}`)
-  return value
+  if (!/^\d+$/.test(raw)) throw new Error(`${label} must be a whole number (got "${raw}")`);
+  const value = Number(raw);
+  if (opts?.min !== undefined && value < opts.min)
+    throw new Error(`${label} must be at least ${opts.min}`);
+  if (opts?.max !== undefined && value > opts.max)
+    throw new Error(`${label} must be at most ${opts.max}`);
+  return value;
 }
 
 /** Asset categories have no import surface of their own: resolve by name, refuse ambiguity. */
 async function resolveCategory(orgId: string, raw: string): Promise<string> {
-  const name = raw.trim()
-  if (!name) throw new Error('Category (name) is required')
-  const matches = await db.execute<{ id: string }>(sql`
-    select id from asset_categories where org_id = ${orgId} and lower(name) = lower(${name}) limit 2`, 'objects')
+  const name = raw.trim();
+  if (!name) throw new Error("Category (name) is required");
+  const matches = await db.execute<{ id: string }>(
+    sql`
+    select id from asset_categories where org_id = ${orgId} and lower(name) = lower(${name}) limit 2`,
+    "objects",
+  );
   if (matches.length === 0) {
-    throw new Error(`unknown asset category "${name}" — create it under Fixed assets first`)
+    throw new Error(`unknown asset category "${name}" — create it under Fixed assets first`);
   }
-  if (matches.length > 1) throw new Error(`asset category "${name}" matches more than one category`)
-  return matches[0]!.id
+  if (matches.length > 1)
+    throw new Error(`asset category "${name}" matches more than one category`);
+  return matches[0]!.id;
 }
 
 async function rootSubsidiaryId(orgId: string): Promise<string> {
-  const found = (await db.execute<{ id: string }>(sql`
+  const found = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from subsidiaries
      where org_id = ${orgId} and parent_id is null and not is_elimination and is_active
-     order by name limit 1`, 'objects'))[0]
-  if (!found) throw new Error('no active root subsidiary exists to own the asset')
-  return found.id
+     order by name limit 1`,
+      "objects",
+    )
+  )[0];
+  if (!found) throw new Error("no active root subsidiary exists to own the asset");
+  return found.id;
 }
 
 interface ParsedAsset {
-  assetNumber: string
-  name: string
-  description: string | null
-  categoryId: string
-  subsidiaryId: string
-  acquisitionCost: string
-  salvageValue: string
-  acquiredOn: string | null
-  inServiceOn: string | null
-  status: (typeof STATUSES)[number]
+  assetNumber: string;
+  name: string;
+  description: string | null;
+  categoryId: string;
+  subsidiaryId: string;
+  acquisitionCost: string;
+  salvageValue: string;
+  acquiredOn: string | null;
+  inServiceOn: string | null;
+  status: (typeof STATUSES)[number];
   /** Null only when keeping a stored custom formula method (drawer-only, never chosen by import). */
-  method: string | null
-  lifeMonths: number | null
-  ratePercent: string | null
-  convention: (typeof CONVENTIONS)[number]
-  unitsTotal: string | null
-  assetAccountId: string
-  accumAccountId: string
-  expenseAccountId: string
-  openingAccumulated: string | null
-  openingAsOf: string | null
-  serialNumber: string | null
+  method: string | null;
+  lifeMonths: number | null;
+  ratePercent: string | null;
+  convention: (typeof CONVENTIONS)[number];
+  unitsTotal: string | null;
+  assetAccountId: string;
+  accumAccountId: string;
+  expenseAccountId: string;
+  openingAccumulated: string | null;
+  openingAsOf: string | null;
+  serialNumber: string | null;
 }
 
 async function parseRow(
@@ -213,163 +277,198 @@ async function parseRow(
   resolver: RefResolver,
   stored: StoredAsset | null,
 ): Promise<ParsedAsset> {
-  const assetNumber = cell(src, 'assetNumber')
-  if (!assetNumber) throw new Error('Asset number is required')
+  const assetNumber = cell(src, "assetNumber");
+  if (!assetNumber) throw new Error("Asset number is required");
   // Blank-keeps-stored: an export re-imported verbatim must be a no-op, so
   // blank cells fall back to the stored row (inserts fall back to the product
   // defaults, then the required checks below fire). This also protects rows
   // whose custom formula method has no import spelling: the method cell
   // exports blank and stays untouched.
-  const name = cell(src, 'name') || stored?.name || null
-  if (!name) throw new Error('Asset name is required')
-  const categoryRaw = cell(src, 'category')
+  const name = cell(src, "name") || stored?.name || null;
+  if (!name) throw new Error("Asset name is required");
+  const categoryRaw = cell(src, "category");
   const categoryId = categoryRaw
     ? await resolveCategory(orgId, categoryRaw)
-    : (stored?.category_id ?? null)
-  if (!categoryId) throw new Error('Category (name) is required')
+    : (stored?.category_id ?? null);
+  if (!categoryId) throw new Error("Category (name) is required");
 
-  const subsidiaryRaw = cell(src, 'subsidiary')
+  const subsidiaryRaw = cell(src, "subsidiary");
   const subsidiaryId = subsidiaryRaw
-    ? ((await resolver.resolveId({ resource: 'subsidiaries', by: 'name' }, subsidiaryRaw)) ??
-      (() => { throw new Error(`unknown subsidiary "${subsidiaryRaw}"`) })())
-    : (stored?.subsidiary_id ?? await rootSubsidiaryId(orgId))
+    ? ((await resolver.resolveId({ resource: "subsidiaries", by: "name" }, subsidiaryRaw)) ??
+      (() => {
+        throw new Error(`unknown subsidiary "${subsidiaryRaw}"`);
+      })())
+    : (stored?.subsidiary_id ?? (await rootSubsidiaryId(orgId)));
 
-  const costRaw = rawCell(src, 'acquisitionCost')
+  const costRaw = rawCell(src, "acquisitionCost");
   const acquisitionCost = isPresent(costRaw)
-    ? moneyCell('Acquisition cost', costRaw, { required: true })!
-    : (stored ? String(stored.acquisition_cost) : null)
-  if (!acquisitionCost) throw new Error('Acquisition cost is required')
-  const salvageRaw = rawCell(src, 'salvageValue')
+    ? moneyCell("Acquisition cost", costRaw, { required: true })!
+    : stored
+      ? String(stored.acquisition_cost)
+      : null;
+  if (!acquisitionCost) throw new Error("Acquisition cost is required");
+  const salvageRaw = rawCell(src, "salvageValue");
   const salvageValue = isPresent(salvageRaw)
-    ? moneyCell('Salvage value', salvageRaw)!
-    : (stored ? String(stored.salvage_value) : '0.0000')
-  if (cmp(salvageValue, acquisitionCost) > 0) throw new Error('Salvage value cannot exceed acquisition cost')
+    ? moneyCell("Salvage value", salvageRaw)!
+    : stored
+      ? String(stored.salvage_value)
+      : "0.0000";
+  if (cmp(salvageValue, acquisitionCost) > 0)
+    throw new Error("Salvage value cannot exceed acquisition cost");
 
-  const acquiredRaw = cell(src, 'acquiredOn')
-  const acquiredOn = acquiredRaw ? dateCell('Acquired on', acquiredRaw) : (stored?.acquired_on ?? null)
-  const statusCell = cell(src, 'status').toLowerCase()
+  const acquiredRaw = cell(src, "acquiredOn");
+  const acquiredOn = acquiredRaw
+    ? dateCell("Acquired on", acquiredRaw)
+    : (stored?.acquired_on ?? null);
+  const statusCell = cell(src, "status").toLowerCase();
   if (statusCell && !(STATUSES as readonly string[]).includes(statusCell)) {
-    throw new Error(`Status must be draft or in_service (got "${cell(src, 'status')}")`)
+    throw new Error(`Status must be draft or in_service (got "${cell(src, "status")}")`);
   }
-  const status = (statusCell || stored?.status || 'draft') as ParsedAsset['status']
-  if (stored && stored.status === 'in_service' && status === 'draft') {
-    throw new Error('an in-service asset cannot return to draft through import')
+  const status = (statusCell || stored?.status || "draft") as ParsedAsset["status"];
+  if (stored && stored.status === "in_service" && status === "draft") {
+    throw new Error("an in-service asset cannot return to draft through import");
   }
-  const inServiceRaw = cell(src, 'inServiceOn')
+  const inServiceRaw = cell(src, "inServiceOn");
   const inServiceOn = inServiceRaw
-    ? dateCell('In service on', inServiceRaw)
-    : (stored?.in_service_on ?? null)
-  if (status === 'in_service' && !inServiceOn) throw new Error('In service on is required for in-service assets')
+    ? dateCell("In service on", inServiceRaw)
+    : (stored?.in_service_on ?? null);
+  if (status === "in_service" && !inServiceOn)
+    throw new Error("In service on is required for in-service assets");
 
-  const methodCell = cell(src, 'method').toLowerCase()
+  const methodCell = cell(src, "method").toLowerCase();
   if (methodCell && !(METHODS as readonly string[]).includes(methodCell)) {
-    throw new Error(`Depreciation method must be one of ${METHODS.join(', ')} (got "${cell(src, 'method')}")`)
+    throw new Error(
+      `Depreciation method must be one of ${METHODS.join(", ")} (got "${cell(src, "method")}")`,
+    );
   }
   // A null method is a custom formula method (drawer-only): it validates
   // nothing here and can only be kept, never chosen. Inserts default a blank
   // method to straight line; updates keep the stored one.
-  const method: string | null = methodCell || stored?.depreciation_method || (!stored ? 'straight_line' : null)
-  const methodChanged = !!stored && !!methodCell && methodCell !== stored.depreciation_method
-  const lifeRaw = cell(src, 'lifeMonths')
-  let lifeMonths: number | null
+  const method: string | null =
+    methodCell || stored?.depreciation_method || (!stored ? "straight_line" : null);
+  const methodChanged = !!stored && !!methodCell && methodCell !== stored.depreciation_method;
+  const lifeRaw = cell(src, "lifeMonths");
+  let lifeMonths: number | null;
   if (lifeRaw) {
-    lifeMonths = intCell('Useful life (months)', lifeRaw, { min: 1 })
+    lifeMonths = intCell("Useful life (months)", lifeRaw, { min: 1 });
   } else if (methodChanged || !stored) {
-    lifeMonths = null
+    lifeMonths = null;
   } else {
-    lifeMonths = stored.useful_life_months
+    lifeMonths = stored.useful_life_months;
   }
-  if (!stored && method !== 'manual' && method !== null && lifeMonths === null) {
-    throw new Error('Useful life (months) is required')
+  if (!stored && method !== "manual" && method !== null && lifeMonths === null) {
+    throw new Error("Useful life (months) is required");
   }
-  if (methodChanged && method !== 'manual' && method !== null && lifeMonths === null) {
-    throw new Error('Useful life (months) is required when changing the depreciation method')
+  if (methodChanged && method !== "manual" && method !== null && lifeMonths === null) {
+    throw new Error("Useful life (months) is required when changing the depreciation method");
   }
-  const rateRaw = rawCell(src, 'ratePercent')
-  let ratePercent: string | null = null
+  const rateRaw = rawCell(src, "ratePercent");
+  let ratePercent: string | null = null;
   if (isPresent(rateRaw)) {
     // A trailing percent marker is notation; internal separators remain in
     // the shared decimal validator so locale ambiguity is refused by name.
-    const rateText = typeof rateRaw === 'string' ? rateRaw.trim().replace(/%$/, '').trim() : rateRaw
-    const exact = canonicalDecimal(rateText, 4)
-    if (exact === null) throw new Error(moneyRefusal('Declining rate', rateText, 'a percentage'))
-    ratePercent = normalizeMoney(exact)
-    if (cmp(ratePercent, '0') <= 0 || cmp(ratePercent, '100') > 0) {
-      throw new Error('Declining rate must be above 0 and at most 100')
+    const rateText =
+      typeof rateRaw === "string" ? rateRaw.trim().replace(/%$/, "").trim() : rateRaw;
+    const exact = canonicalDecimal(rateText, 4);
+    if (exact === null) throw new Error(moneyRefusal("Declining rate", rateText, "a percentage"));
+    ratePercent = normalizeMoney(exact);
+    if (cmp(ratePercent, "0") <= 0 || cmp(ratePercent, "100") > 0) {
+      throw new Error("Declining rate must be above 0 and at most 100");
     }
   } else if (!methodChanged) {
-    ratePercent = stored?.depreciation_rate_percent ?? null
+    ratePercent = stored?.depreciation_rate_percent ?? null;
   }
-  if (method === 'declining_balance' && ratePercent === null) {
-    throw new Error('Declining rate (%/year) is required for declining balance')
+  if (method === "declining_balance" && ratePercent === null) {
+    throw new Error("Declining rate (%/year) is required for declining balance");
   }
-  const conventionCell = cell(src, 'convention').toLowerCase()
+  const conventionCell = cell(src, "convention").toLowerCase();
   if (conventionCell && !(CONVENTIONS as readonly string[]).includes(conventionCell)) {
-    throw new Error(`Convention must be one of ${CONVENTIONS.join(', ')} (got "${cell(src, 'convention')}")`)
+    throw new Error(
+      `Convention must be one of ${CONVENTIONS.join(", ")} (got "${cell(src, "convention")}")`,
+    );
   }
-  const convention = (conventionCell || stored?.depreciation_convention || 'full_month') as ParsedAsset['convention']
-  const unitsRaw = rawCell(src, 'unitsTotal')
-  let unitsTotal: string | null
+  const convention = (conventionCell ||
+    stored?.depreciation_convention ||
+    "full_month") as ParsedAsset["convention"];
+  const unitsRaw = rawCell(src, "unitsTotal");
+  let unitsTotal: string | null;
   if (isPresent(unitsRaw)) {
-    unitsTotal = moneyCell('Lifetime units', unitsRaw)!
+    unitsTotal = moneyCell("Lifetime units", unitsRaw)!;
   } else if (methodChanged || !stored) {
-    unitsTotal = null
+    unitsTotal = null;
   } else {
-    unitsTotal = stored.depreciation_units_total
+    unitsTotal = stored.depreciation_units_total;
   }
-  if (unitsTotal !== null && cmp(unitsTotal, '0') <= 0) throw new Error('Lifetime units must be positive')
-  if (method === 'units_of_production' && unitsTotal === null) {
-    throw new Error('Lifetime units are required for units of production')
+  if (unitsTotal !== null && cmp(unitsTotal, "0") <= 0)
+    throw new Error("Lifetime units must be positive");
+  if (method === "units_of_production" && unitsTotal === null) {
+    throw new Error("Lifetime units are required for units of production");
   }
 
-  const requireAccount = async (key: string, label: string, fallback: string | null): Promise<string> => {
-    const raw = cell(src, key)
+  const requireAccount = async (
+    key: string,
+    label: string,
+    fallback: string | null,
+  ): Promise<string> => {
+    const raw = cell(src, key);
     if (!raw) {
-      if (fallback) return fallback
-      throw new Error(`${label} is required`)
+      if (fallback) return fallback;
+      throw new Error(`${label} is required`);
     }
-    const id = await resolver.resolveId({ resource: 'accounts', by: 'number' }, raw)
-    if (!id) throw new Error(`unknown account number "${raw}" for ${label}`)
-    return id
-  }
-  const assetAccountId = await requireAccount('assetAccount', 'Asset account (number)', stored?.asset_account_id ?? null)
-  const accumAccountId = await requireAccount('accumAccount', 'Accumulated depreciation account (number)', stored?.accumulated_depreciation_account_id ?? null)
-  const expenseAccountId = await requireAccount('expenseAccount', 'Depreciation expense account (number)', stored?.depreciation_expense_account_id ?? null)
+    const id = await resolver.resolveId({ resource: "accounts", by: "number" }, raw);
+    if (!id) throw new Error(`unknown account number "${raw}" for ${label}`);
+    return id;
+  };
+  const assetAccountId = await requireAccount(
+    "assetAccount",
+    "Asset account (number)",
+    stored?.asset_account_id ?? null,
+  );
+  const accumAccountId = await requireAccount(
+    "accumAccount",
+    "Accumulated depreciation account (number)",
+    stored?.accumulated_depreciation_account_id ?? null,
+  );
+  const expenseAccountId = await requireAccount(
+    "expenseAccount",
+    "Depreciation expense account (number)",
+    stored?.depreciation_expense_account_id ?? null,
+  );
 
   // The mid-life carry-in: pre-cutover accumulated plus its as-of date, both
   // or neither, inside the depreciable basis, not before the in-service
   // month — the same contract the flyout API enforces.
-  const openingRaw = rawCell(src, 'openingAccumulated')
-  const asOfRaw = cell(src, 'openingAsOf')
+  const openingRaw = rawCell(src, "openingAccumulated");
+  const asOfRaw = cell(src, "openingAsOf");
   const openingAccumulated = isPresent(openingRaw)
-    ? moneyCell('Opening accumulated depreciation', openingRaw)!
-    : (stored?.opening_accumulated_depreciation ?? null)
+    ? moneyCell("Opening accumulated depreciation", openingRaw)!
+    : (stored?.opening_accumulated_depreciation ?? null);
   const openingAsOf = asOfRaw
-    ? dateCell('Opening as-of date', asOfRaw)!
-    : (stored?.opening_accumulated_as_of ?? null)
+    ? dateCell("Opening as-of date", asOfRaw)!
+    : (stored?.opening_accumulated_as_of ?? null);
   if ((openingAccumulated === null) !== (openingAsOf === null)) {
-    throw new Error('Opening accumulated depreciation and its as-of date must be set together')
+    throw new Error("Opening accumulated depreciation and its as-of date must be set together");
   }
   if (
     openingAccumulated !== null &&
     toUnits(openingAccumulated) > toUnits(acquisitionCost) - toUnits(salvageValue)
   ) {
-    throw new Error('Opening accumulated depreciation cannot exceed cost minus salvage')
+    throw new Error("Opening accumulated depreciation cannot exceed cost minus salvage");
   }
   if (
     openingAccumulated !== null &&
-    cmp(openingAccumulated, '0') > 0 &&
+    cmp(openingAccumulated, "0") > 0 &&
     inServiceOn !== null &&
     openingAsOf !== null &&
     openingAsOf.slice(0, 7) < inServiceOn.slice(0, 7)
   ) {
-    throw new Error('Opening as-of date cannot precede the in-service month')
+    throw new Error("Opening as-of date cannot precede the in-service month");
   }
 
   return {
     assetNumber,
     name,
-    description: cell(src, 'description') || null,
+    description: cell(src, "description") || null,
     categoryId,
     subsidiaryId,
     acquisitionCost,
@@ -387,34 +486,34 @@ async function parseRow(
     expenseAccountId,
     openingAccumulated,
     openingAsOf,
-    serialNumber: cell(src, 'serialNumber') || null,
-  }
+    serialNumber: cell(src, "serialNumber") || null,
+  };
 }
 
 type StoredAsset = {
-  id: string
-  asset_number: string
-  status: string
-  name: string
-  description: string | null
-  category_id: string
-  subsidiary_id: string
-  acquisition_cost: string
-  salvage_value: string
-  acquired_on: string | null
-  in_service_on: string | null
-  depreciation_method: string | null
-  useful_life_months: number | null
-  depreciation_rate_percent: string | null
-  depreciation_convention: string | null
-  depreciation_units_total: string | null
-  asset_account_id: string
-  accumulated_depreciation_account_id: string
-  depreciation_expense_account_id: string
-  opening_accumulated_depreciation: string | null
-  opening_accumulated_as_of: string | null
-  serial_number: string | null
-}
+  id: string;
+  asset_number: string;
+  status: string;
+  name: string;
+  description: string | null;
+  category_id: string;
+  subsidiary_id: string;
+  acquisition_cost: string;
+  salvage_value: string;
+  acquired_on: string | null;
+  in_service_on: string | null;
+  depreciation_method: string | null;
+  useful_life_months: number | null;
+  depreciation_rate_percent: string | null;
+  depreciation_convention: string | null;
+  depreciation_units_total: string | null;
+  asset_account_id: string;
+  accumulated_depreciation_account_id: string;
+  depreciation_expense_account_id: string;
+  opening_accumulated_depreciation: string | null;
+  opening_accumulated_as_of: string | null;
+  serial_number: string | null;
+};
 
 const STORED_ASSET_COLUMNS = sql`
     id, asset_number, status, name, description, category_id, subsidiary_id,
@@ -425,7 +524,7 @@ const STORED_ASSET_COLUMNS = sql`
            depreciation_expense_account_id,
            opening_accumulated_depreciation::text as opening_accumulated_depreciation,
            opening_accumulated_as_of::text as opening_accumulated_as_of,
-           serial_number`
+           serial_number`;
 
 async function findMatches(
   runner: SqlExecutor,
@@ -433,20 +532,32 @@ async function findMatches(
   assetNumber: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
 ): Promise<StoredAsset[]> {
-  return await runner.execute<StoredAsset>(sql`
+  return await runner.execute<StoredAsset>(
+    sql`
     select ${STORED_ASSET_COLUMNS}
       from fixed_assets
      where org_id = ${orgId} and lower(asset_number) = lower(${assetNumber})
        ${subsidiaryReadFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-     order by id limit 3 for update`, 'objects')
+     order by id limit 3 for update`,
+    "objects",
+  );
 }
 
 /** Posted lines or lifecycle events fix the figures a re-import may touch. */
-async function readStoredAsset(runner: SqlExecutor, orgId: string, assetId: string): Promise<StoredAsset> {
-  const row = (await runner.execute<StoredAsset>(sql`
-    select ${STORED_ASSET_COLUMNS} from fixed_assets where org_id = ${orgId} and id = ${assetId}`, 'objects'))[0]
-  if (!row) throw new Error('fixed asset mutation did not return a row')
-  return row
+async function readStoredAsset(
+  runner: SqlExecutor,
+  orgId: string,
+  assetId: string,
+): Promise<StoredAsset> {
+  const row = (
+    await runner.execute<StoredAsset>(
+      sql`
+    select ${STORED_ASSET_COLUMNS} from fixed_assets where org_id = ${orgId} and id = ${assetId}`,
+      "objects",
+    )
+  )[0];
+  if (!row) throw new Error("fixed asset mutation did not return a row");
+  return row;
 }
 
 function assetAuditSnapshot(asset: StoredAsset): Record<string, unknown> {
@@ -472,13 +583,13 @@ function assetAuditSnapshot(asset: StoredAsset): Record<string, unknown> {
     openingAccumulatedDepreciation: asset.opening_accumulated_depreciation,
     openingAccumulatedAsOf: asset.opening_accumulated_as_of,
     serialNumber: asset.serial_number,
-  }
+  };
 }
 
 async function auditAssetImport(
   runner: SqlExecutor,
   ctx: WriteCtx,
-  action: 'insert' | 'update',
+  action: "insert" | "update",
   before: StoredAsset | null,
   after: StoredAsset,
 ): Promise<void> {
@@ -486,33 +597,43 @@ async function auditAssetImport(
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${ctx.orgId}, 'fixed_assets', ${after.id}, ${action},
       ${JSON.stringify({
-        source: 'import',
+        source: "import",
         before: before ? assetAuditSnapshot(before) : null,
         after: assetAuditSnapshot(after),
-      })}::jsonb, ${ctx.actorId})`)
+      })}::jsonb, ${ctx.actorId})`);
 }
 
-async function assetHasHistory(runner: SqlExecutor, orgId: string, assetId: string): Promise<boolean> {
-  const rows = await runner.execute<{ n: string }>(sql`
+async function assetHasHistory(
+  runner: SqlExecutor,
+  orgId: string,
+  assetId: string,
+): Promise<boolean> {
+  const rows = await runner.execute<{ n: string }>(
+    sql`
     select count(*)::text as n from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
      where s.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is not null
     union all
-    select count(*)::text as n from asset_events where org_id = ${orgId} and asset_id = ${assetId}`, 'objects')
-  return rows.some((r) => r.n !== '0')
+    select count(*)::text as n from asset_events where org_id = ${orgId} and asset_id = ${assetId}`,
+    "objects",
+  );
+  return rows.some((r) => r.n !== "0");
 }
 
 export function fixedAssetsResource(orgId: string): DataResource {
   return {
     descriptor: FIXED_ASSETS_DESCRIPTOR,
     async fields() {
-      return FIELDS
+      return FIELDS;
     },
     async columns() {
-      return FIELDS.map((f) => ({ key: f.key, label: f.label }))
+      return FIELDS.map((f) => ({ key: f.key, label: f.label }));
     },
     async read(readCtx?: ReadCtx) {
-      const rows = (await readExportWindow<Record<string, CellValue>>(db, sql`
+      const rows = (
+        await readExportWindow<Record<string, CellValue>>(
+          db,
+          sql`
         select a.asset_number as "assetNumber",
                a.name as "name",
                a.description as "description",
@@ -543,14 +664,17 @@ export function fixedAssetsResource(orgId: string): DataResource {
          where a.org_id = ${orgId}
            ${subsidiaryReadFilter(sql`a.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          ${transferWhere(readCtx, sql`a.id`)} order by ${transferOrder(readCtx, sql`a.id`, sql`a.asset_number, a.id`)}
-         limit ${transferLimit(readCtx)}`, readCtx)).rows
+         limit ${transferLimit(readCtx)}`,
+          readCtx,
+        )
+      ).rows;
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      finishExportPage(rows, FIXED_ASSETS_DESCRIPTOR.label, readCtx)
-      return { fields: FIELDS, columns: FIELDS.map((f) => ({ key: f.key, label: f.label })), rows }
+      finishExportPage(rows, FIXED_ASSETS_DESCRIPTOR.label, readCtx);
+      return { fields: FIELDS, columns: FIELDS.map((f) => ({ key: f.key, label: f.label })), rows };
     },
     async write(rows, mode, ctx: WriteCtx) {
-      const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+      const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] };
       // The import route resolves the resource (and its feature gate) before
       // preview/commit work, but resolution and the write are not atomic: a
       // disable in between — or any caller that reaches the writer without
@@ -558,47 +682,55 @@ export function fixedAssetsResource(orgId: string): DataResource {
       // feature is off. Recheck at the write boundary and refuse every row by
       // name, in both modes, so a preview can never promise what a commit
       // would refuse.
-      if (!(await orgFeatureEnabled(ctx.orgId, 'fixedAssets'))) {
+      if (!(await orgFeatureEnabled(ctx.orgId, "fixedAssets"))) {
         for (let index = 0; index < rows.length; index++) {
-          outcome.failed++
+          outcome.failed++;
           outcome.errors.push({
             row: index + 1,
             message:
-              'fixed assets feature is disabled — re-enable Fixed assets under Company Settings → Features, then import again',
-          })
+              "fixed assets feature is disabled — re-enable Fixed assets under Company Settings → Features, then import again",
+          });
         }
-        return outcome
+        return outcome;
       }
-      const resolver = new RefResolver(orgId)
-      const allowedSubsidiaries = ctx.allowedSubsidiaryIds == null
-        ? ctx.allowedSubsidiaryIds
-        : [...ctx.allowedSubsidiaryIds]
+      const resolver = new RefResolver(orgId);
+      const allowedSubsidiaries =
+        ctx.allowedSubsidiaryIds == null ? ctx.allowedSubsidiaryIds : [...ctx.allowedSubsidiaryIds];
 
       for (let index = 0; index < rows.length; index++) {
-        const rowNo = index + 1
-        const src = rows[index]!
+        const rowNo = index + 1;
+        const src = rows[index]!;
         try {
-          await withOrgTransaction(ctx.orgId, () => withTransactionSavepoint(db, async () => {
-          const tx = db
-          const numberCell = cell(src, 'assetNumber')
-          if (!numberCell) throw new Error('Asset number is required')
-          const matches = await findMatches(tx, ctx.orgId, numberCell, ctx.allowedSubsidiaryIds)
-          if (matches.length > 1) {
-            throw new Error(`asset number "${numberCell}" matches more than one asset — disambiguate before importing`)
-          }
-          const stored = matches[0] ?? null
-          // Validate in both modes so the wizard's preview is a real preview.
-          const parsed = await parseRow(ctx.orgId, src, resolver, stored)
-          if (ctx.allowedSubsidiaryIds && !ctx.allowedSubsidiaryIds.has(parsed.subsidiaryId)) {
-            throw new Error('the asset’s subsidiary is outside your subsidiary access')
-          }
-          if (!stored) {
-            if (ctx.dryRun) {
-              outcome.created++
-              return
-            }
-            const assetId = randomUUID()
-            const inserted = await tx.execute<{ id: string }>(sql`
+          await withOrgTransaction(ctx.orgId, () =>
+            withTransactionSavepoint(db, async () => {
+              const tx = db;
+              const numberCell = cell(src, "assetNumber");
+              if (!numberCell) throw new Error("Asset number is required");
+              const matches = await findMatches(
+                tx,
+                ctx.orgId,
+                numberCell,
+                ctx.allowedSubsidiaryIds,
+              );
+              if (matches.length > 1) {
+                throw new Error(
+                  `asset number "${numberCell}" matches more than one asset — disambiguate before importing`,
+                );
+              }
+              const stored = matches[0] ?? null;
+              // Validate in both modes so the wizard's preview is a real preview.
+              const parsed = await parseRow(ctx.orgId, src, resolver, stored);
+              if (ctx.allowedSubsidiaryIds && !ctx.allowedSubsidiaryIds.has(parsed.subsidiaryId)) {
+                throw new Error("the asset’s subsidiary is outside your subsidiary access");
+              }
+              if (!stored) {
+                if (ctx.dryRun) {
+                  outcome.created++;
+                  return;
+                }
+                const assetId = randomUUID();
+                const inserted = await tx.execute<{ id: string }>(
+                  sql`
               insert into fixed_assets
                 (id, org_id, subsidiary_id, category_id, asset_number, name, description, status,
                  acquired_on, in_service_on, acquisition_cost, salvage_value,
@@ -617,65 +749,77 @@ export function fixedAssetsResource(orgId: string): DataResource {
                       ${parsed.expenseAccountId},
                       ${parsed.openingAccumulated}, ${parsed.openingAsOf},
                       ${parsed.serialNumber}, '{}'::jsonb, ${ctx.actorId}, ${ctx.actorId})
-              returning id`, 'objects')
-            if (!inserted[0]) throw new Error('fixed asset insert did not create a row')
-            if (parsed.status === 'in_service') {
-              try {
-                await buildAllSchedulesWithRunner(tx, assetId, ctx.orgId, ctx.actorId, allowedSubsidiaries)
-              } catch (error) {
-                throw new Error(
-                  `schedule build failed: ${importRowError(error)}`,
-                )
+              returning id`,
+                  "objects",
+                );
+                if (!inserted[0]) throw new Error("fixed asset insert did not create a row");
+                if (parsed.status === "in_service") {
+                  try {
+                    await buildAllSchedulesWithRunner(
+                      tx,
+                      assetId,
+                      ctx.orgId,
+                      ctx.actorId,
+                      allowedSubsidiaries,
+                    );
+                  } catch (error) {
+                    throw new Error(`schedule build failed: ${importRowError(error)}`);
+                  }
+                }
+                const after = await readStoredAsset(tx, ctx.orgId, assetId);
+                await auditAssetImport(tx, ctx, "insert", null, after);
+                outcome.created++;
+                return;
               }
-            }
-            const after = await readStoredAsset(tx, ctx.orgId, assetId)
-            await auditAssetImport(tx, ctx, 'insert', null, after)
-            outcome.created++
-            return
-          }
 
-          // Update path. parseRow already resolved blank cells to the stored
-          // row, so an export re-imported verbatim compares equal here.
-          if (mode === 'insert') {
-            throw new Error(`asset number "${parsed.assetNumber}" already exists`)
-          }
-          if (stored.status !== 'draft' && stored.status !== 'in_service') {
-            throw new Error(`only draft or in-service assets can be updated by import (status is ${stored.status})`)
-          }
-          const history = await assetHasHistory(tx, ctx.orgId, stored.id)
-          const basisChanged =
-            parsed.acquisitionCost !== String(stored.acquisition_cost) ||
-            parsed.salvageValue !== String(stored.salvage_value) ||
-            (parsed.method ?? null) !== stored.depreciation_method ||
-            (parsed.lifeMonths ?? null) !== stored.useful_life_months ||
-            (parsed.ratePercent ?? null) !== (stored.depreciation_rate_percent ?? null) ||
-            parsed.convention !== (stored.depreciation_convention ?? 'full_month') ||
-            (parsed.unitsTotal ?? null) !== (stored.depreciation_units_total ?? null) ||
-            (parsed.openingAccumulated ?? null) !== (stored.opening_accumulated_depreciation ?? null) ||
-            (parsed.openingAsOf ?? null) !== (stored.opening_accumulated_as_of ?? null) ||
-            parsed.categoryId !== stored.category_id ||
-            parsed.assetAccountId !== stored.asset_account_id ||
-            parsed.accumAccountId !== stored.accumulated_depreciation_account_id ||
-            parsed.expenseAccountId !== stored.depreciation_expense_account_id ||
-            parsed.subsidiaryId !== stored.subsidiary_id ||
-            (parsed.inServiceOn ?? null) !== (stored.in_service_on ?? null) ||
-            parsed.status !== stored.status
-          if (history && basisChanged) {
-            throw new Error('posted depreciation or lifecycle events already reference this asset — change only name, description, or serial number')
-          }
-          await refuseFixedAssetRehomeWithEquipment(
-            tx,
-            ctx.orgId,
-            stored.id,
-            String(stored.subsidiary_id),
-            parsed.subsidiaryId,
-          )
-          if (ctx.dryRun) {
-            outcome.updated++
-            return
-          }
-          // Blank-keeps-stored: only overwrite a column when the file spoke.
-          const updated = await tx.execute<{ id: string }>(sql`
+              // Update path. parseRow already resolved blank cells to the stored
+              // row, so an export re-imported verbatim compares equal here.
+              if (mode === "insert") {
+                throw new Error(`asset number "${parsed.assetNumber}" already exists`);
+              }
+              if (stored.status !== "draft" && stored.status !== "in_service") {
+                throw new Error(
+                  `only draft or in-service assets can be updated by import (status is ${stored.status})`,
+                );
+              }
+              const history = await assetHasHistory(tx, ctx.orgId, stored.id);
+              const basisChanged =
+                parsed.acquisitionCost !== String(stored.acquisition_cost) ||
+                parsed.salvageValue !== String(stored.salvage_value) ||
+                (parsed.method ?? null) !== stored.depreciation_method ||
+                (parsed.lifeMonths ?? null) !== stored.useful_life_months ||
+                (parsed.ratePercent ?? null) !== (stored.depreciation_rate_percent ?? null) ||
+                parsed.convention !== (stored.depreciation_convention ?? "full_month") ||
+                (parsed.unitsTotal ?? null) !== (stored.depreciation_units_total ?? null) ||
+                (parsed.openingAccumulated ?? null) !==
+                  (stored.opening_accumulated_depreciation ?? null) ||
+                (parsed.openingAsOf ?? null) !== (stored.opening_accumulated_as_of ?? null) ||
+                parsed.categoryId !== stored.category_id ||
+                parsed.assetAccountId !== stored.asset_account_id ||
+                parsed.accumAccountId !== stored.accumulated_depreciation_account_id ||
+                parsed.expenseAccountId !== stored.depreciation_expense_account_id ||
+                parsed.subsidiaryId !== stored.subsidiary_id ||
+                (parsed.inServiceOn ?? null) !== (stored.in_service_on ?? null) ||
+                parsed.status !== stored.status;
+              if (history && basisChanged) {
+                throw new Error(
+                  "posted depreciation or lifecycle events already reference this asset — change only name, description, or serial number",
+                );
+              }
+              await refuseFixedAssetRehomeWithEquipment(
+                tx,
+                ctx.orgId,
+                stored.id,
+                String(stored.subsidiary_id),
+                parsed.subsidiaryId,
+              );
+              if (ctx.dryRun) {
+                outcome.updated++;
+                return;
+              }
+              // Blank-keeps-stored: only overwrite a column when the file spoke.
+              const updated = await tx.execute<{ id: string }>(
+                sql`
             update fixed_assets
                set name = ${parsed.name},
                    description = ${parsed.description},
@@ -699,34 +843,42 @@ export function fixedAssetsResource(orgId: string): DataResource {
                    serial_number = ${parsed.serialNumber},
                    updated_by = ${ctx.actorId}
              where id = ${stored.id} and org_id = ${ctx.orgId}
-             returning id`, 'objects')
-          if (!updated[0]) throw new Error('fixed asset update did not affect a row')
-          if (parsed.status === 'in_service' && !history) {
-            try {
-              await buildAllSchedulesWithRunner(tx, stored.id, ctx.orgId, ctx.actorId, allowedSubsidiaries)
-            } catch (error) {
-              throw new Error(
-                `schedule build failed: ${importRowError(error)}`,
-              )
-            }
-          }
-          const after = await readStoredAsset(tx, ctx.orgId, stored.id)
-          await auditAssetImport(tx, ctx, 'update', stored, after)
-          outcome.updated++
-          }))
+             returning id`,
+                "objects",
+              );
+              if (!updated[0]) throw new Error("fixed asset update did not affect a row");
+              if (parsed.status === "in_service" && !history) {
+                try {
+                  await buildAllSchedulesWithRunner(
+                    tx,
+                    stored.id,
+                    ctx.orgId,
+                    ctx.actorId,
+                    allowedSubsidiaries,
+                  );
+                } catch (error) {
+                  throw new Error(`schedule build failed: ${importRowError(error)}`);
+                }
+              }
+              const after = await readStoredAsset(tx, ctx.orgId, stored.id);
+              await auditAssetImport(tx, ctx, "update", stored, after);
+              outcome.updated++;
+            }),
+          );
         } catch (error) {
-          outcome.failed++
+          outcome.failed++;
           const message =
-            pgErrorCode(error) === '23505' && pgErrorConstraint(error) === 'fixed_assets_org_asset_number_unique'
-              ? 'the asset row could not be imported; check your access and input, then retry'
-              : importRowError(error)
+            pgErrorCode(error) === "23505" &&
+            pgErrorConstraint(error) === "fixed_assets_org_asset_number_unique"
+              ? "the asset row could not be imported; check your access and input, then retry"
+              : importRowError(error);
           outcome.errors.push({
             row: rowNo,
             message,
-          })
+          });
         }
       }
-      return outcome
+      return outcome;
     },
-  }
+  };
 }

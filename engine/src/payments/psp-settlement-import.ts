@@ -5,7 +5,13 @@ import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { mulRate, toUnits } from "../money/money.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { PspSettlementConflictError, PspSettlementError, requireFxRate, requireSettlementCurrency, summarizeSettlement } from "./psp-settlement-core.ts";
+import {
+  PspSettlementConflictError,
+  PspSettlementError,
+  requireFxRate,
+  requireSettlementCurrency,
+  summarizeSettlement,
+} from "./psp-settlement-core.ts";
 import type { ParsedSettlement, ParsedSettlementLine } from "./psp-settlement-core.ts";
 import { validateSettlementPostingAccounts } from "./psp-settlement-posting-context.ts";
 import type { ImportAccounts } from "./psp-settlement-posting-context.ts";
@@ -14,7 +20,10 @@ function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
 }
@@ -107,7 +116,11 @@ function settlementEvidenceDifference(
   const fxPairs: Array<[label: string, stored: string | null, expected: string | null]> = [
     ["source currency", row.source_currency ?? null, fx?.sourceCurrency ?? null],
     ["conversion rate", row.conversion_rate ?? null, fx?.conversionRate ?? null],
-    ["conversion rate source", row.conversion_rate_source ?? null, fx?.conversionRateSource ?? null],
+    [
+      "conversion rate source",
+      row.conversion_rate_source ?? null,
+      fx?.conversionRateSource ?? null,
+    ],
     ["payout rate", row.payout_rate ?? null, fx?.payoutRate ?? null],
     ["payout rate source", row.payout_rate_source ?? null, fx?.payoutRateSource ?? null],
   ];
@@ -128,11 +141,7 @@ function settlementEvidenceDifference(
   for (const [index, line] of parsed.lines.entries()) {
     const stored = lines[index];
     const label = `line ${index + 1}`;
-    if (
-      stored === undefined
-      || stored.line_number !== index + 1
-      || stored.kind !== line.kind
-    ) {
+    if (stored === undefined || stored.line_number !== index + 1 || stored.kind !== line.kind) {
       return `${label} kind differs (stored ${stored?.kind ?? "(missing)"} vs imported ${line.kind})`;
     }
     if (stored.external_ref !== (line.externalRef ?? null)) {
@@ -169,13 +178,14 @@ function settlementConfigChanges(
   subsidiaryId: string | null,
 ): string[] {
   const changes: string[] = [];
-  const pairs: Array<[label: string, stored: string | null, incoming: string | null | undefined]> = [
-    ["bank account", row.bank_account_id, accounts.bankAccountId],
-    ["fee account", row.fee_account_id, accounts.feeAccountId],
-    ["dispute account", row.dispute_account_id, accounts.disputeAccountId],
-    ["fx account", row.fx_account_id, accounts.fxAccountId],
-    ["clearing account", row.clearing_account_id, accounts.clearingAccountId],
-  ];
+  const pairs: Array<[label: string, stored: string | null, incoming: string | null | undefined]> =
+    [
+      ["bank account", row.bank_account_id, accounts.bankAccountId],
+      ["fee account", row.fee_account_id, accounts.feeAccountId],
+      ["dispute account", row.dispute_account_id, accounts.disputeAccountId],
+      ["fx account", row.fx_account_id, accounts.fxAccountId],
+      ["clearing account", row.clearing_account_id, accounts.clearingAccountId],
+    ];
   for (const [label, stored, incoming] of pairs) {
     if (stored !== (incoming ?? null)) changes.push(label);
   }
@@ -206,15 +216,11 @@ export async function importSettlementBatch(
   // the single pre-write choke point every provider and direct caller
   // passes through — with the same shape the reverse action requires.
   if (!isIsoCalendarDate(parsed.settlementDate)) {
-    throw new PspSettlementError(
-      "settlement date must be a real calendar date (YYYY-MM-DD)",
-    );
+    throw new PspSettlementError("settlement date must be a real calendar date (YYYY-MM-DD)");
   }
   const currency = parsed.currency.trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) {
-    throw new PspSettlementError(
-      "settlement currency must be a three-letter code",
-    );
+    throw new PspSettlementError("settlement currency must be a three-letter code");
   }
   // Cross-currency batches convert at evidenced rates only. Every line is in
   // the batch currency or the evidenced source currency, and every
@@ -294,8 +300,7 @@ export async function importSettlementBatch(
   // Absence stays lenient — the import form asks up front, and posting
   // resolves an absent subsidiary exactly like every other document.
   const subsidiaryId =
-    typeof accounts.subsidiaryId === "string" &&
-    accounts.subsidiaryId !== ""
+    typeof accounts.subsidiaryId === "string" && accounts.subsidiaryId !== ""
       ? accounts.subsidiaryId
       : null;
   if (subsidiaryId !== null) {
@@ -304,11 +309,16 @@ export async function importSettlementBatch(
         `settlement subsidiary ${subsidiaryId} is not a valid subsidiary reference`,
       );
     }
-    const sub = (await db.execute<{ name: string; isActive: boolean }>(sql`
+    const sub = (
+      await db.execute<{ name: string; isActive: boolean }>(
+        sql`
       select name, is_active as "isActive"
         from subsidiaries
        where org_id = ${orgId} and id = ${subsidiaryId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!sub) {
       throw new PspSettlementError(
         "settlement subsidiary is not a subsidiary of this organization",
@@ -341,20 +351,21 @@ export async function importSettlementBatch(
   // source amounts with the rate evidence; posting reconciles the two.
   const totals = fx
     ? summarizeSettlement(
-      parsed.lines.map((line) => {
-        const lineCurrency = (line.currency ?? "").toUpperCase() || currency;
-        if (lineCurrency === currency) return line;
-        const rate = requireFxRate(
-          (line.meta ?? {}).exchangeRate ?? conversionRate,
-          "settlement conversion_rate",
-        );
-        return { ...line, amount: mulRate(line.amount, rate), currency };
-      }),
-    )
+        parsed.lines.map((line) => {
+          const lineCurrency = (line.currency ?? "").toUpperCase() || currency;
+          if (lineCurrency === currency) return line;
+          const rate = requireFxRate(
+            (line.meta ?? {}).exchangeRate ?? conversionRate,
+            "settlement conversion_rate",
+          );
+          return { ...line, amount: mulRate(line.amount, rate), currency };
+        }),
+      )
     : summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into psp_settlement_batches (
         id, org_id, provider, external_ref, status, currency,
         gross_amount, fee_amount, refund_amount, dispute_amount, adjustment_amount, net_amount, fx_amount,
@@ -377,57 +388,61 @@ export async function importSettlementBatch(
       -- batch selected below is reused and reconciled, so the first insert wins.
       on conflict (org_id, provider, external_ref) do nothing
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const created = inserted.length === 1;
-    const current = (await db.execute<{ id: string; status: string; subsidiary_id: string | null }>(sql`
+    const current = await db.execute<{ id: string; status: string; subsidiary_id: string | null }>(
+      sql`
       select id, status, subsidiary_id
         from psp_settlement_batches
        where org_id = ${orgId}
          and provider = ${parsed.provider}
          and external_ref = ${parsed.externalRef}
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = current[0];
-    if (!row)
-      throw new PspSettlementError("settlement batch could not be locked");
+    if (!row) throw new PspSettlementError("settlement batch could not be locked");
     if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) {
       throw new ScopeNotFoundError();
     }
     if (row.status === "void") {
-      throw new PspSettlementError(
-        "a voided provider settlement reference cannot be reused",
-      );
+      throw new PspSettlementError("a voided provider settlement reference cannot be reused");
     }
     const batchId = row.id;
     if (!created) {
-      const stored = (await db.execute<{
-        status: string;
-        provider: string;
-        external_ref: string;
-        currency: string;
-        gross_amount: string;
-        fee_amount: string;
-        refund_amount: string;
-        dispute_amount: string;
-        adjustment_amount: string;
-        net_amount: string;
-        fx_amount: string;
-        settlement_date: string;
-        bank_account_id: string | null;
-        fee_account_id: string | null;
-        dispute_account_id: string | null;
-        fx_account_id: string | null;
-        clearing_account_id: string | null;
-        subsidiary_id: string | null;
-        source_currency: string | null;
-        conversion_rate: string | null;
-        conversion_rate_source: string | null;
-        payout_rate: string | null;
-        payout_rate_source: string | null;
-        source_payload: unknown;
-        line_count: number;
-        memo: string | null;
-      }>(sql`
+      const stored = (
+        await db.execute<{
+          status: string;
+          provider: string;
+          external_ref: string;
+          currency: string;
+          gross_amount: string;
+          fee_amount: string;
+          refund_amount: string;
+          dispute_amount: string;
+          adjustment_amount: string;
+          net_amount: string;
+          fx_amount: string;
+          settlement_date: string;
+          bank_account_id: string | null;
+          fee_account_id: string | null;
+          dispute_account_id: string | null;
+          fx_account_id: string | null;
+          clearing_account_id: string | null;
+          subsidiary_id: string | null;
+          source_currency: string | null;
+          conversion_rate: string | null;
+          conversion_rate_source: string | null;
+          payout_rate: string | null;
+          payout_rate_source: string | null;
+          source_payload: unknown;
+          line_count: number;
+          memo: string | null;
+        }>(
+          sql`
         select status, provider, external_ref, currency, gross_amount::text, fee_amount::text,
                refund_amount::text, dispute_amount::text, adjustment_amount::text,
                net_amount::text, fx_amount::text, settlement_date::text,
@@ -437,7 +452,10 @@ export async function importSettlementBatch(
                source_payload, line_count, memo
           from psp_settlement_batches
          where id = ${batchId} and org_id = ${orgId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       const storedLines = await db.execute<{
         line_number: number;
         kind: string;
@@ -447,12 +465,15 @@ export async function importSettlementBatch(
         currency: string | null;
         document_id: string | null;
         meta: unknown;
-      }>(sql`
+      }>(
+        sql`
         select line_number, kind, external_ref, description, amount::text, currency, document_id, meta
           from psp_settlement_lines
          where batch_id = ${batchId} and org_id = ${orgId}
          order by line_number
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!stored) throw new PspSettlementError("settlement batch could not be read");
       const persistedTotals = {
         grossAmount: stored.gross_amount,
@@ -463,24 +484,34 @@ export async function importSettlementBatch(
         netAmount: stored.net_amount,
         fxAmount: stored.fx_amount,
       };
-      const conflict = (difference: string) => new PspSettlementConflictError(
-        `provider settlement reference already has different evidence (${difference}); use the persisted batch, then reverse it or record a separate adjustment`,
-        {
-          batchId,
-          status: stored.status,
-          provider: stored.provider,
-          externalRef: stored.external_ref,
-          currency: stored.currency,
-          totals: persistedTotals,
-        },
+      const conflict = (difference: string) =>
+        new PspSettlementConflictError(
+          `provider settlement reference already has different evidence (${difference}); use the persisted batch, then reverse it or record a separate adjustment`,
+          {
+            batchId,
+            status: stored.status,
+            provider: stored.provider,
+            externalRef: stored.external_ref,
+            currency: stored.currency,
+            totals: persistedTotals,
+          },
+        );
+      const evidenceDifference = settlementEvidenceDifference(
+        stored,
+        storedLines,
+        parsed,
+        currency,
+        totals,
+        sourceCurrency
+          ? {
+              sourceCurrency,
+              conversionRate,
+              conversionRateSource,
+              payoutRate,
+              payoutRateSource,
+            }
+          : null,
       );
-      const evidenceDifference = settlementEvidenceDifference(stored, storedLines, parsed, currency, totals, sourceCurrency ? {
-        sourceCurrency,
-        conversionRate,
-        conversionRateSource,
-        payoutRate,
-        payoutRateSource,
-      } : null);
       if (evidenceDifference) throw conflict(evidenceDifference);
       const configChanges = settlementConfigChanges(stored, accounts, subsidiaryId);
       if (configChanges.length === 0) return { batchId, created: false };
@@ -490,7 +521,9 @@ export async function importSettlementBatch(
       // dispute and FX accounts and subsidiary, audited, without touching
       // a single evidence line. This is the repair the post refusal advises.
       if (stored.status !== "draft") {
-        throw conflict(`only the posting configuration differs (${configChanges.join(", ")}), and a ${stored.status} batch is immutable`);
+        throw conflict(
+          `only the posting configuration differs (${configChanges.join(", ")}), and a ${stored.status} batch is immutable`,
+        );
       }
       const before = {
         bankAccountId: stored.bank_account_id,
@@ -520,7 +553,9 @@ export async function importSettlementBatch(
          where id = ${batchId} and org_id = ${orgId} and status = 'draft'
       `);
       if ((repaired.rowCount ?? 0) !== 1) {
-        throw new PspSettlementError("settlement draft changed while repairing it; reload and import again");
+        throw new PspSettlementError(
+          "settlement draft changed while repairing it; reload and import again",
+        );
       }
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

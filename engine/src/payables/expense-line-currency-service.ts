@@ -20,7 +20,12 @@ export const EXPENSE_FX_POLICY_SETUP = "Setup → Expense FX Policies";
 
 export class ExpenseFxRefusal extends Error {
   readonly name = "ExpenseFxRefusal";
-  constructor(readonly status: 409 | 422, readonly code: string, message: string, readonly remedy: string) {
+  constructor(
+    readonly status: 409 | 422,
+    readonly code: string,
+    message: string,
+    readonly remedy: string,
+  ) {
     super(message);
   }
 }
@@ -32,23 +37,52 @@ export type ExpenseFxPolicy = { allowRateOverride: boolean; effectiveFrom: strin
  * operator rate is refused: the dated exchange rate or the billed amount
  * converts every line.
  */
-export async function expenseFxPolicy(runner: SqlExecutor, orgId: string, onDate: string): Promise<ExpenseFxPolicy> {
-  const row = (await runner.execute<{ allowRateOverride: boolean; effectiveFrom: string }>(sql`
+export async function expenseFxPolicy(
+  runner: SqlExecutor,
+  orgId: string,
+  onDate: string,
+): Promise<ExpenseFxPolicy> {
+  const row = (
+    await runner.execute<{ allowRateOverride: boolean; effectiveFrom: string }>(
+      sql`
     select allow_rate_override as "allowRateOverride", effective_from::text as "effectiveFrom"
       from expense_fx_policies
      where org_id = ${orgId} and effective_from <= ${onDate}::date
      order by effective_from desc
      limit 1
-  `, "objects"))[0];
-  return row ? { allowRateOverride: row.allowRateOverride === true, effectiveFrom: row.effectiveFrom } : { allowRateOverride: false, effectiveFrom: null };
+  `,
+      "objects",
+    )
+  )[0];
+  return row
+    ? { allowRateOverride: row.allowRateOverride === true, effectiveFrom: row.effectiveFrom }
+    : { allowRateOverride: false, effectiveFrom: null };
 }
 
-async function entityRateType(runner: SqlExecutor, orgId: string, subsidiaryId: string | null, onDate: string): Promise<string> {
-  const entity = subsidiaryId ?? (await runner.execute<{ id: string }>(sql`
+async function entityRateType(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string | null,
+  onDate: string,
+): Promise<string> {
+  const entity =
+    subsidiaryId ??
+    (
+      await runner.execute<{ id: string }>(
+        sql`
     select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1
-  `, "objects"))[0]?.id ?? null;
+  `,
+        "objects",
+      )
+    )[0]?.id ??
+    null;
   if (!entity) {
-    throw new ExpenseFxRefusal(422, "expense_fx_entity_missing", "The organization has no legal entity whose rate type converts expense lines.", "Create the organization's root subsidiary before converting foreign-currency expenses.");
+    throw new ExpenseFxRefusal(
+      422,
+      "expense_fx_entity_missing",
+      "The organization has no legal entity whose rate type converts expense lines.",
+      "Create the organization's root subsidiary before converting foreign-currency expenses.",
+    );
   }
   return (await accountingPreferences(runner, orgId, entity, onDate)).postingRateType;
 }
@@ -76,7 +110,14 @@ export async function quoteExpenseFxRate(
   input: { orgId: string; subsidiaryId: string | null; from: string; to: string; rateDate: string },
 ): Promise<ExpenseFxQuote> {
   const rateType = await entityRateType(runner, input.orgId, input.subsidiaryId, input.rateDate);
-  const evidence = await lookupSpotRateWithEvidence(runner, input.orgId, input.from, input.to, input.rateDate, rateType);
+  const evidence = await lookupSpotRateWithEvidence(
+    runner,
+    input.orgId,
+    input.from,
+    input.to,
+    input.rateDate,
+    rateType,
+  );
   const observation = evidence.observations[0];
   const rate = evidence.rate === null ? null : expenseFxRate(evidence.rate);
   if (rate === null || !observation) {
@@ -144,7 +185,12 @@ export async function resolveExpenseLineCurrency(
   const line = `Line ${input.lineNumber}`;
   const minorUnits = currencyMinorUnits(input.reportCurrency);
   if (minorUnits === null) {
-    throw new ExpenseFxRefusal(422, "expense_fx_report_currency", `${line}: the report currency ${input.reportCurrency} has no registered minor unit.`, "Record the report in an ISO 4217 currency.");
+    throw new ExpenseFxRefusal(
+      422,
+      "expense_fx_report_currency",
+      `${line}: the report currency ${input.reportCurrency} has no registered minor unit.`,
+      "Record the report in an ISO 4217 currency.",
+    );
   }
   const base = {
     version: 1 as const,
@@ -158,7 +204,11 @@ export async function resolveExpenseLineCurrency(
     digest: null,
     billedAmount: null,
   };
-  const original = { currency: foreign.currency, originalAmount: foreign.amount, originalTaxAmount: foreign.taxAmount };
+  const original = {
+    currency: foreign.currency,
+    originalAmount: foreign.amount,
+    originalTaxAmount: foreign.taxAmount,
+  };
 
   if (foreign.method === "rate_table") {
     const quote = await quoteExpenseFxRate(runner, {
@@ -179,7 +229,12 @@ export async function resolveExpenseLineCurrency(
     return {
       ...original,
       rate: quote.rate,
-      ...convertExpenseAtRate({ amount: foreign.amount, taxAmount: foreign.taxAmount, rate: quote.rate, minorUnits }),
+      ...convertExpenseAtRate({
+        amount: foreign.amount,
+        taxAmount: foreign.taxAmount,
+        rate: quote.rate,
+        minorUnits,
+      }),
       evidence: {
         ...base,
         method: "rate_table",
@@ -207,7 +262,12 @@ export async function resolveExpenseLineCurrency(
     return {
       ...original,
       rate,
-      ...convertExpenseAtRate({ amount: foreign.amount, taxAmount: foreign.taxAmount, rate, minorUnits }),
+      ...convertExpenseAtRate({
+        amount: foreign.amount,
+        taxAmount: foreign.taxAmount,
+        rate,
+        minorUnits,
+      }),
       evidence: { ...base, method: "override", rate, source: "operator", reason: foreign.reason },
     };
   }
@@ -220,7 +280,12 @@ export async function resolveExpenseLineCurrency(
       `Enter the receipt's ${foreign.currency} tax, or remove the line's tax code.`,
     );
   }
-  const billed = convertExpenseFromBilled({ amount: foreign.amount, taxAmount: foreign.taxAmount, billedAmount: foreign.billedAmount!, minorUnits });
+  const billed = convertExpenseFromBilled({
+    amount: foreign.amount,
+    taxAmount: foreign.taxAmount,
+    billedAmount: foreign.billedAmount!,
+    minorUnits,
+  });
   if (!billed) {
     throw new ExpenseFxRefusal(
       422,
@@ -234,6 +299,12 @@ export async function resolveExpenseLineCurrency(
     rate: billed.rate,
     amount: billed.amount,
     taxAmount: billed.taxAmount,
-    evidence: { ...base, method: "billed_amount", rate: billed.rate, source: "billed_amount", billedAmount: foreign.billedAmount },
+    evidence: {
+      ...base,
+      method: "billed_amount",
+      rate: billed.rate,
+      source: "billed_amount",
+      billedAmount: foreign.billedAmount,
+    },
   };
 }

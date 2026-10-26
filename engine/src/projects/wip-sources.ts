@@ -33,13 +33,13 @@ import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
  * own `select ... from eligible_sources`. `capped_available_value` is the
  * unbilled value after the ceiling.
  */
-export type WipSourcePopulation =
-  | { kind: "open" }
-  | { kind: "as_of"; periodEnd: string };
+export type WipSourcePopulation = { kind: "open" } | { kind: "as_of"; periodEnd: string };
 
 /** Effective invoicing-profile attribute: project overrides customer overrides
  *  project type, an absent or null override defers (resolveInvoicingProfile). */
-function effectiveInvoicing(key: "billingProcedure" | "lineBuilder" | "recognition" | "revenueAccount" | "notToExceed"): SQL {
+function effectiveInvoicing(
+  key: "billingProcedure" | "lineBuilder" | "recognition" | "revenueAccount" | "notToExceed",
+): SQL {
   const field = sql`${key}::text`;
   return sql`(coalesce(
     nullif(project.invoicing_profile->${field}, 'null'::jsonb),
@@ -62,33 +62,38 @@ export function eligibleWipSourcesSql(
      where billing_line.org_id = ${orgId} and billing_line.id = ${billingLine}
        and billing_invoice.status <> 'voided'
        and billing_invoice.document_date > ${asOf}::date)`;
-  const timeUnbilled = asOf === null
-    ? sql`te.billing_status = 'unbilled'`
-    : sql`te.worked_on <= ${asOf}::date
+  const timeUnbilled =
+    asOf === null
+      ? sql`te.billing_status = 'unbilled'`
+      : sql`te.worked_on <= ${asOf}::date
          and (te.billing_status = 'unbilled' or ${billedAfterPeriodEnd(sql`te.invoiced_by_line_id`)})`;
-  const lineUnbilled = asOf === null
-    ? sql`line.billed_by_line_id is null`
-    : sql`document.document_date <= ${asOf}::date
+  const lineUnbilled =
+    asOf === null
+      ? sql`line.billed_by_line_id is null`
+      : sql`document.document_date <= ${asOf}::date
          and (line.billed_by_line_id is null or ${billedAfterPeriodEnd(sql`line.billed_by_line_id`)})`;
-  const projectScope = asOf === null
-    ? sql`coalesce(type.invoicing_profile->>'billingProcedure', 'standard') = 'standard'
+  const projectScope =
+    asOf === null
+      ? sql`coalesce(type.invoicing_profile->>'billingProcedure', 'standard') = 'standard'
          and type.invoicing_profile->>'lineBuilder' in ('tm_actual', 'cost_plus')
          and (type.invoicing_profile->'allowedBases' ? 'time_selection'
            or type.invoicing_profile->'allowedBases' ? 'date_range')`
-    : sql`coalesce(${effectiveInvoicing("billingProcedure")}, 'standard') = 'standard'
+      : sql`coalesce(${effectiveInvoicing("billingProcedure")}, 'standard') = 'standard'
          and ${effectiveInvoicing("lineBuilder")} in ('tm_actual', 'cost_plus')
          and ${effectiveInvoicing("recognition")} = 'as_invoiced'
          and coalesce(${effectiveInvoicing("revenueAccount")}, 'item_income') <> 'unbilled_receivable'`;
-  const reserved = asOf === null
-    ? sql`exists(select 1 from prebill_lines reserved
+  const reserved =
+    asOf === null
+      ? sql`exists(select 1 from prebill_lines reserved
                       join prebills worksheet on worksheet.org_id=reserved.org_id and worksheet.id=reserved.prebill_id
                      where reserved.org_id=${orgId} and reserved.source_type=source.source_type
                        and coalesce(reserved.time_entry_id,reserved.document_line_id)=source.source_id
                        and worksheet.status in ('draft','review','approved','customer_review'))`
-    : sql`false`;
-  const availableValue = asOf === null
-    ? sql`case when source.held or source.reserved then 0 else source.source_value end`
-    : sql`case when source.held or source.source_value <= 0 then 0 else source.source_value end`;
+      : sql`false`;
+  const availableValue =
+    asOf === null
+      ? sql`case when source.held or source.reserved then 0 else source.source_value end`
+      : sql`case when source.held or source.source_value <= 0 then 0 else source.source_value end`;
   const invoicePopulation = sql`line.org_id=${orgId}
     and invoice.status<>'voided'
     ${asOf === null ? sql`` : sql`and invoice.document_date <= ${asOf}::date`}
@@ -113,8 +118,9 @@ export function eligibleWipSourcesSql(
        where ${invoicePopulation} and line.project_id is null and invoice.project_id=source.project_id
     ) billed
   ),0)`;
-  const remainingCap = asOf === null
-    ? sql`case when source.profile#>>'{totalPrice,method}' = 'not_to_exceed' then greatest(
+  const remainingCap =
+    asOf === null
+      ? sql`case when source.profile#>>'{totalPrice,method}' = 'not_to_exceed' then greatest(
                coalesce(source.contract_value,0)
                - ${invoicedToDate}
                - coalesce((select sum(worksheet.proposed_bill_amount) from prebills worksheet
@@ -122,7 +128,7 @@ export function eligibleWipSourcesSql(
                               and worksheet.status in ('draft','review','approved','customer_review')),0),
                0
              ) else null end`
-    : sql`case when (source.profile#>>'{totalPrice,method}' = 'not_to_exceed' or source.invoicing_not_to_exceed)
+      : sql`case when (source.profile#>>'{totalPrice,method}' = 'not_to_exceed' or source.invoicing_not_to_exceed)
                     and coalesce(source.contract_value, 0) > 0
                then greatest(source.contract_value - ${invoicedToDate}, 0)
                else null end`;

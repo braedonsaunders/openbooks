@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { Mail, Sparkles } from 'lucide-react'
-import { toast } from 'sonner'
-import { refusalMessageFromBody } from '@/lib/api-error'
-import { Button } from '@openbooks/ui'
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Mail, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { refusalMessageFromBody } from "@/lib/api-error";
+import { Button } from "@openbooks/ui";
 
 /**
  * The briefing tab's ONLY interactive layer: generate + send-as-email over
@@ -24,67 +24,78 @@ export function AgentsBriefingActions({
   failedLabel,
   errorLabels,
 }: {
-  aiEnabled: boolean
-  hasBriefing: boolean
-  generateLabel: string
-  generatingLabel: string
-  sendLabel: string
-  sentLabel: string
-  sendFailedLabel: string
-  failedLabel: string
-  errorLabels: Record<string, string>
+  aiEnabled: boolean;
+  hasBriefing: boolean;
+  generateLabel: string;
+  generatingLabel: string;
+  sendLabel: string;
+  sentLabel: string;
+  sendFailedLabel: string;
+  failedLabel: string;
+  errorLabels: Record<string, string>;
 }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState<'generate' | 'send' | null>(null)
+  const router = useRouter();
+  const [busy, setBusy] = useState<"generate" | "send" | null>(null);
 
-  async function run(action: 'generate' | 'send') {
-    setBusy(action)
+  async function run(action: "generate" | "send") {
+    setBusy(action);
     try {
-      const response = await fetch('/api/agents/briefing', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const response = await fetch("/api/agents/briefing", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ action }),
-      })
+      });
       const body = (await response.json().catch(() => null)) as {
-        ok?: boolean
-        emailed?: boolean
-        error?: string
-      } | null
+        ok?: boolean;
+        emailed?: boolean;
+        error?: string;
+      } | null;
       // Mapped codes keep their labels; anything else reads through the
       // shared helper so message, remedy and code render instead of the
       // generic fallback.
       if (!response.ok || !body?.ok) {
-        toast.error(errorLabels[body?.error ?? 'failed'] ?? refusalMessageFromBody(body, { fallback: failedLabel }) ?? failedLabel)
-        return
+        toast.error(
+          errorLabels[body?.error ?? "failed"] ??
+            refusalMessageFromBody(body, { fallback: failedLabel }) ??
+            failedLabel,
+        );
+        return;
       }
-      if (action === 'send') {
-        if (body.emailed) toast.success(sentLabel)
-        else toast.error(sendFailedLabel)
+      if (action === "send") {
+        if (body.emailed) toast.success(sentLabel);
+        else toast.error(sendFailedLabel);
       }
-      router.refresh()
+      router.refresh();
     } catch {
-      toast.error(failedLabel)
+      toast.error(failedLabel);
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
   }
 
-  if (!aiEnabled) return null
+  if (!aiEnabled) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
-        variant={hasBriefing ? 'outline' : 'default'}
-        size={hasBriefing ? 'sm' : 'md'}
+        variant={hasBriefing ? "outline" : "default"}
+        size={hasBriefing ? "sm" : "md"}
         disabled={busy !== null}
-        onClick={() => void run('generate')}
+        onClick={() => void run("generate")}
       >
-        <Sparkles size={14} />{busy === 'generate' ? generatingLabel : generateLabel}
+        <Sparkles size={14} />
+        {busy === "generate" ? generatingLabel : generateLabel}
       </Button>
       {hasBriefing ? (
-        <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void run('send')}>
-          <Mail size={13} />{sendLabel}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy !== null}
+          onClick={() => void run("send")}
+        >
+          <Mail size={13} />
+          {sendLabel}
         </Button>
       ) : null}
     </div>
-  )
+  );
 }

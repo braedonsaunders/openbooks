@@ -1,8 +1,4 @@
-import {
-  compareDecimal,
-  divideDecimal,
-  multiplyDecimal,
-} from "../money/exact-decimal.ts";
+import { compareDecimal, divideDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
 
 /**
  * Earned-value arithmetic for project tasks — pure, exact, and deterministic.
@@ -32,7 +28,8 @@ export const WEEKS_SCALE = 2;
 export const BURN_WINDOW_WEEKS = 4;
 
 export type PercentCompleteBasis = "quantity" | "schedule" | "cost" | "none";
-export type ForecastMethod = "manual" | "remaining_budget" | "units_productivity" | "cost_performance";
+export type ForecastMethod =
+  "manual" | "remaining_budget" | "units_productivity" | "cost_performance";
 export type EstimateSource = "forecast" | "remaining_budget";
 
 export interface TaskForecastInput {
@@ -94,9 +91,12 @@ export interface TaskEarnedValue {
 }
 
 /** Round an exact decimal of any scale to `scale` places, halves away from zero. */
-export const roundDecimal = (value: string, scale: number): string => divideDecimal(value, "1", scale);
-export const money = (value: string | null | undefined): string => roundDecimal(value ?? "0", MONEY_SCALE);
-const quantity = (value: string | null | undefined): string => roundDecimal(value ?? "0", QUANTITY_SCALE);
+export const roundDecimal = (value: string, scale: number): string =>
+  divideDecimal(value, "1", scale);
+export const money = (value: string | null | undefined): string =>
+  roundDecimal(value ?? "0", MONEY_SCALE);
+const quantity = (value: string | null | undefined): string =>
+  roundDecimal(value ?? "0", QUANTITY_SCALE);
 const hours = (value: string | null | undefined): string => roundDecimal(value ?? "0", HOURS_SCALE);
 
 export function addDecimal(left: string, right: string, scale: number): string {
@@ -126,7 +126,9 @@ function fraction(value: string): number {
 function toUnits(value: string, scale: number): bigint {
   const negative = value.startsWith("-");
   const [whole, frac = ""] = value.replace(/^[+-]/, "").split(".");
-  const units = BigInt(whole || "0") * 10n ** BigInt(scale) + BigInt((frac + "0".repeat(scale)).slice(0, scale) || "0");
+  const units =
+    BigInt(whole || "0") * 10n ** BigInt(scale) +
+    BigInt((frac + "0".repeat(scale)).slice(0, scale) || "0");
   return negative ? -units : units;
 }
 
@@ -137,12 +139,18 @@ function fromUnits(units: bigint, scale: number): string {
   return `${negative ? "-" : ""}${body}`;
 }
 
-const positive = (value: string | null): value is string => value !== null && compareDecimal(value, "0") > 0;
+const positive = (value: string | null): value is string =>
+  value !== null && compareDecimal(value, "0") > 0;
 const maxZero = (value: string, scale: number): string =>
   compareDecimal(value, "0") < 0 ? roundDecimal("0", scale) : roundDecimal(value, scale);
 
 /** value × numerator ÷ denominator, rounded once at `scale`. Denominator must be positive. */
-export function scaleBy(value: string, numerator: string, denominator: string, scale: number): string {
+export function scaleBy(
+  value: string,
+  numerator: string,
+  denominator: string,
+  scale: number,
+): string {
   const exactProduct = multiplyDecimal(value, numerator, fraction(value) + fraction(numerator));
   return divideDecimal(exactProduct, denominator, scale);
 }
@@ -167,10 +175,12 @@ interface Completion {
  * scheduled task, then cost-to-cost against the current cost budget (capped
  * at 100%). A task with none of the three is unmeasured.
  */
-export function completionOf(input: Pick<
-  TaskEarnedValueInput,
-  "budgetQuantity" | "installedQuantity" | "scheduleProgress" | "actualCost" | "budgetCost"
->): Completion | null {
+export function completionOf(
+  input: Pick<
+    TaskEarnedValueInput,
+    "budgetQuantity" | "installedQuantity" | "scheduleProgress" | "actualCost" | "budgetCost"
+  >,
+): Completion | null {
   if (positive(input.budgetQuantity)) {
     return {
       basis: "quantity",
@@ -179,7 +189,11 @@ export function completionOf(input: Pick<
     };
   }
   if (input.scheduleProgress !== null) {
-    return { basis: "schedule", numerator: clampToWhole(input.scheduleProgress, "1"), denominator: "1" };
+    return {
+      basis: "schedule",
+      numerator: clampToWhole(input.scheduleProgress, "1"),
+      denominator: "1",
+    };
   }
   if (positive(input.budgetCost)) {
     return {
@@ -213,23 +227,34 @@ export function computeTaskEarnedValue(input: TaskEarnedValueInput): TaskEarnedV
   const vac = subtractDecimal(bac, eac, MONEY_SCALE);
 
   const budgetHours = input.budgetHours === null ? null : hours(input.budgetHours);
-  const hoursToComplete = input.forecast?.hoursToComplete != null
-    ? hours(input.forecast.hoursToComplete)
-    : budgetHours === null
-      ? null
-      : maxZero(subtractDecimal(budgetHours, actualHours, HOURS_SCALE), HOURS_SCALE);
+  const hoursToComplete =
+    input.forecast?.hoursToComplete != null
+      ? hours(input.forecast.hoursToComplete)
+      : budgetHours === null
+        ? null
+        : maxZero(subtractDecimal(budgetHours, actualHours, HOURS_SCALE), HOURS_SCALE);
 
-  const productivity = positive(input.budgetQuantity) && positive(actualHours)
-    ? divideDecimal(installed, actualHours, RATIO_SCALE)
-    : null;
-
-  const weeklyCostBurn = divideDecimal(money(input.trailingCost), String(BURN_WINDOW_WEEKS), MONEY_SCALE);
-  const weeklyHoursBurn = divideDecimal(hours(input.trailingHours), String(BURN_WINDOW_WEEKS), HOURS_SCALE);
-  const weeksToComplete = compareDecimal(etc, "0") === 0
-    ? roundDecimal("0", WEEKS_SCALE)
-    : positive(weeklyCostBurn)
-      ? divideDecimal(etc, weeklyCostBurn, WEEKS_SCALE)
+  const productivity =
+    positive(input.budgetQuantity) && positive(actualHours)
+      ? divideDecimal(installed, actualHours, RATIO_SCALE)
       : null;
+
+  const weeklyCostBurn = divideDecimal(
+    money(input.trailingCost),
+    String(BURN_WINDOW_WEEKS),
+    MONEY_SCALE,
+  );
+  const weeklyHoursBurn = divideDecimal(
+    hours(input.trailingHours),
+    String(BURN_WINDOW_WEEKS),
+    HOURS_SCALE,
+  );
+  const weeksToComplete =
+    compareDecimal(etc, "0") === 0
+      ? roundDecimal("0", WEEKS_SCALE)
+      : positive(weeklyCostBurn)
+        ? divideDecimal(etc, weeklyCostBurn, WEEKS_SCALE)
+        : null;
 
   return {
     taskId: input.taskId,
@@ -297,11 +322,18 @@ export function rollUpProjectEarnedValue(
   unassigned: UnassignedActuals,
 ): ProjectEarnedValueTotals {
   const total = (pick: (task: TaskEarnedValue) => string | null, scale: number) =>
-    tasks.reduce((acc, task) => addDecimal(acc, pick(task) ?? "0", scale), roundDecimal("0", scale));
+    tasks.reduce(
+      (acc, task) => addDecimal(acc, pick(task) ?? "0", scale),
+      roundDecimal("0", scale),
+    );
   const bac = total((task) => task.budgetAtCompletion, MONEY_SCALE);
   const ev = total((task) => task.earnedValue, MONEY_SCALE);
   const unassignedCost = money(unassigned.actualCost);
-  const ac = addDecimal(total((task) => task.actualCost, MONEY_SCALE), unassignedCost, MONEY_SCALE);
+  const ac = addDecimal(
+    total((task) => task.actualCost, MONEY_SCALE),
+    unassignedCost,
+    MONEY_SCALE,
+  );
   const etc = total((task) => task.estimateToComplete, MONEY_SCALE);
   const eac = addDecimal(ac, etc, MONEY_SCALE);
   const weeklyCostBurn = addDecimal(
@@ -325,15 +357,20 @@ export function rollUpProjectEarnedValue(
     estimateAtCompletion: eac,
     varianceAtCompletion: subtractDecimal(bac, eac, MONEY_SCALE),
     budgetHours: total((task) => task.budgetHours, HOURS_SCALE),
-    actualHours: addDecimal(total((task) => task.actualHours, HOURS_SCALE), hours(unassigned.actualHours), HOURS_SCALE),
+    actualHours: addDecimal(
+      total((task) => task.actualHours, HOURS_SCALE),
+      hours(unassigned.actualHours),
+      HOURS_SCALE,
+    ),
     hoursToComplete: total((task) => task.hoursToComplete, HOURS_SCALE),
     weeklyCostBurn,
     weeklyHoursBurn,
-    weeksToComplete: compareDecimal(etc, "0") === 0
-      ? roundDecimal("0", WEEKS_SCALE)
-      : positive(weeklyCostBurn)
-        ? divideDecimal(etc, weeklyCostBurn, WEEKS_SCALE)
-        : null,
+    weeksToComplete:
+      compareDecimal(etc, "0") === 0
+        ? roundDecimal("0", WEEKS_SCALE)
+        : positive(weeklyCostBurn)
+          ? divideDecimal(etc, weeklyCostBurn, WEEKS_SCALE)
+          : null,
   };
 }
 
@@ -356,18 +393,26 @@ export interface ForecastSuggestion {
  */
 export function suggestTaskForecasts(input: TaskEarnedValueInput): ForecastSuggestion[] {
   const ev = computeTaskEarnedValue({ ...input, forecast: null });
-  const suggestions: ForecastSuggestion[] = [{
-    method: "remaining_budget",
-    costToComplete: ev.estimateToComplete,
-    hoursToComplete: ev.hoursToComplete,
-  }];
+  const suggestions: ForecastSuggestion[] = [
+    {
+      method: "remaining_budget",
+      costToComplete: ev.estimateToComplete,
+      hoursToComplete: ev.hoursToComplete,
+    },
+  ];
 
   const installed = ev.installedQuantity;
   if (positive(input.budgetQuantity) && positive(installed)) {
-    const remainingQuantity = maxZero(subtractDecimal(quantity(input.budgetQuantity), installed, QUANTITY_SCALE), QUANTITY_SCALE);
+    const remainingQuantity = maxZero(
+      subtractDecimal(quantity(input.budgetQuantity), installed, QUANTITY_SCALE),
+      QUANTITY_SCALE,
+    );
     suggestions.push({
       method: "units_productivity",
-      costToComplete: maxZero(scaleBy(remainingQuantity, ev.actualCost, installed, MONEY_SCALE), MONEY_SCALE),
+      costToComplete: maxZero(
+        scaleBy(remainingQuantity, ev.actualCost, installed, MONEY_SCALE),
+        MONEY_SCALE,
+      ),
       hoursToComplete: positive(ev.actualHours)
         ? scaleBy(remainingQuantity, ev.actualHours, installed, HOURS_SCALE)
         : null,
@@ -376,7 +421,10 @@ export function suggestTaskForecasts(input: TaskEarnedValueInput): ForecastSugge
 
   if (positive(ev.costPerformanceIndex) && positive(ev.earnedValue)) {
     // (BAC − EV) ÷ (EV ÷ AC) computed as (BAC − EV) × AC ÷ EV: one rounding.
-    const remainingValue = maxZero(subtractDecimal(ev.budgetAtCompletion, ev.earnedValue, MONEY_SCALE), MONEY_SCALE);
+    const remainingValue = maxZero(
+      subtractDecimal(ev.budgetAtCompletion, ev.earnedValue, MONEY_SCALE),
+      MONEY_SCALE,
+    );
     const budgetHours = ev.budgetHours;
     let hoursToComplete: string | null = null;
     if (budgetHours !== null && positive(ev.budgetAtCompletion) && positive(ev.actualHours)) {
@@ -384,7 +432,10 @@ export function suggestTaskForecasts(input: TaskEarnedValueInput): ForecastSugge
       // re-rated at the task's observed hours per earned hour.
       const earnedHours = scaleBy(budgetHours, ev.earnedValue, ev.budgetAtCompletion, HOURS_SCALE);
       if (positive(earnedHours)) {
-        const remainingHours = maxZero(subtractDecimal(budgetHours, earnedHours, HOURS_SCALE), HOURS_SCALE);
+        const remainingHours = maxZero(
+          subtractDecimal(budgetHours, earnedHours, HOURS_SCALE),
+          HOURS_SCALE,
+        );
         hoursToComplete = scaleBy(remainingHours, ev.actualHours, earnedHours, HOURS_SCALE);
       }
     }

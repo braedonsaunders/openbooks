@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { eq, sql } from 'drizzle-orm'
-import { db, withBypass, withBypassContext } from '@openbooks/engine/platform/db'
-import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/platform/secrets'
-import { PLATFORM_SETTINGS_ID, platformSettings } from '@openbooks/schema'
+import { eq, sql } from "drizzle-orm";
+import { db, withBypass, withBypassContext } from "@openbooks/engine/platform/db";
+import { sealSecret, SecretIntegrityError, unsealSecret } from "@openbooks/engine/platform/secrets";
+import { PLATFORM_SETTINGS_ID, platformSettings } from "@openbooks/schema";
 
 /**
  * Where in-app issue reports go.
@@ -23,86 +23,86 @@ import { PLATFORM_SETTINGS_ID, platformSettings } from '@openbooks/schema'
 
 // GitHub's own limits, enforced here so a typo cannot become a request to an
 // arbitrary path under api.github.com.
-const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/
-const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/
+const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 
-const MAX_LABELS = 8
-const MAX_LABEL_CHARS = 40
+const MAX_LABELS = 8;
+const MAX_LABEL_CHARS = 40;
 
 type StoredFeedback = {
-  enabled?: boolean
-  owner?: string
-  repo?: string
-  labels?: string[]
-  searchDuplicates?: boolean
+  enabled?: boolean;
+  owner?: string;
+  repo?: string;
+  labels?: string[];
+  searchDuplicates?: boolean;
   /** enc:v1 sealed access token (engine/src/platform/secrets.ts). Never plaintext. */
-  token?: string
-}
+  token?: string;
+};
 
 /** What the operator console may see — existence of a token, never its value. */
 export type FeedbackSettingsView = {
-  enabled: boolean
-  owner: string
-  repo: string
-  labels: string
-  searchDuplicates: boolean
-  hasToken: boolean
+  enabled: boolean;
+  owner: string;
+  repo: string;
+  labels: string;
+  searchDuplicates: boolean;
+  hasToken: boolean;
   /** Enabled AND completely configured — the state the launcher renders in. */
-  ready: boolean
-}
+  ready: boolean;
+};
 
 export type FeedbackSettingsInput = {
-  enabled: boolean
-  owner: string
-  repo: string
-  labels: string
-  searchDuplicates: boolean
+  enabled: boolean;
+  owner: string;
+  repo: string;
+  labels: string;
+  searchDuplicates: boolean;
   /** New plaintext token to seal, or undefined to keep the stored one. */
-  token?: string
-}
+  token?: string;
+};
 
 /** The decrypted destination a turn actually files against. */
 export type FeedbackRuntime = {
-  owner: string
-  repo: string
-  token: string
-  labels: string[]
-  searchDuplicates: boolean
-}
+  owner: string;
+  repo: string;
+  token: string;
+  labels: string[];
+  searchDuplicates: boolean;
+};
 
 /** Comma-separated operator input → a bounded, de-duplicated label list. */
 export function parseFeedbackLabels(value: string): string[] {
-  const seen = new Set<string>()
-  const labels: string[] = []
-  for (const part of value.split(',')) {
-    const label = part.trim()
-    if (!label || label.length > MAX_LABEL_CHARS || seen.has(label.toLowerCase())) continue
-    seen.add(label.toLowerCase())
-    labels.push(label)
-    if (labels.length >= MAX_LABELS) break
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const part of value.split(",")) {
+    const label = part.trim();
+    if (!label || label.length > MAX_LABEL_CHARS || seen.has(label.toLowerCase())) continue;
+    seen.add(label.toLowerCase());
+    labels.push(label);
+    if (labels.length >= MAX_LABELS) break;
   }
-  return labels
+  return labels;
 }
 
 /** Validate and normalize an operator save. Throws with an operator-readable reason. */
 export function sanitizeFeedbackSettingsInput(input: FeedbackSettingsInput): FeedbackSettingsInput {
-  const owner = input.owner.trim()
-  const repo = input.repo.trim()
-  if (owner && !OWNER_RE.test(owner)) throw new Error('A valid repository owner is required.')
-  if (repo && (!REPO_RE.test(repo) || repo === '.' || repo === '..')) {
-    throw new Error('A valid repository name is required.')
+  const owner = input.owner.trim();
+  const repo = input.repo.trim();
+  if (owner && !OWNER_RE.test(owner)) throw new Error("A valid repository owner is required.");
+  if (repo && (!REPO_RE.test(repo) || repo === "." || repo === "..")) {
+    throw new Error("A valid repository name is required.");
   }
   if (input.enabled && (!owner || !repo)) {
-    throw new Error('Reporting needs a repository owner and name before it can be enabled.')
+    throw new Error("Reporting needs a repository owner and name before it can be enabled.");
   }
   return {
     enabled: input.enabled,
     owner,
     repo,
-    labels: parseFeedbackLabels(input.labels).join(', '),
+    labels: parseFeedbackLabels(input.labels).join(", "),
     searchDuplicates: input.searchDuplicates,
     token: input.token?.trim() || undefined,
-  }
+  };
 }
 
 async function readStored(): Promise<StoredFeedback> {
@@ -113,31 +113,31 @@ async function readStored(): Promise<StoredFeedback> {
       .from(platformSettings)
       .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
       .limit(1),
-  )
-  const settings = rows[0]?.settings
-  if (!settings || typeof settings !== 'object') return {}
-  const feedback = (settings as Record<string, unknown>).feedback
-  return feedback && typeof feedback === 'object' ? (feedback as StoredFeedback) : {}
+  );
+  const settings = rows[0]?.settings;
+  if (!settings || typeof settings !== "object") return {};
+  const feedback = (settings as Record<string, unknown>).feedback;
+  return feedback && typeof feedback === "object" ? (feedback as StoredFeedback) : {};
 }
 
 function toView(raw: StoredFeedback): FeedbackSettingsView {
-  const owner = typeof raw.owner === 'string' ? raw.owner : ''
-  const repo = typeof raw.repo === 'string' ? raw.repo : ''
-  const hasToken = typeof raw.token === 'string' && raw.token.length > 0
-  const enabled = raw.enabled === true
+  const owner = typeof raw.owner === "string" ? raw.owner : "";
+  const repo = typeof raw.repo === "string" ? raw.repo : "";
+  const hasToken = typeof raw.token === "string" && raw.token.length > 0;
+  const enabled = raw.enabled === true;
   return {
     enabled,
     owner,
     repo,
-    labels: Array.isArray(raw.labels) ? raw.labels.join(', ') : '',
+    labels: Array.isArray(raw.labels) ? raw.labels.join(", ") : "",
     searchDuplicates: raw.searchDuplicates !== false,
     hasToken,
     ready: enabled && hasToken && Boolean(owner && repo),
-  }
+  };
 }
 
 export async function getFeedbackSettings(): Promise<FeedbackSettingsView> {
-  return toView(await readStored())
+  return toView(await readStored());
 }
 
 /**
@@ -145,47 +145,49 @@ export async function getFeedbackSettings(): Promise<FeedbackSettingsView> {
  * secret-free read: the app shell runs it on every page.
  */
 export async function isFeedbackReady(): Promise<boolean> {
-  return (await getFeedbackSettings()).ready
+  return (await getFeedbackSettings()).ready;
 }
 
 /** The decrypted token, for verifying a destination the operator just saved. */
 export async function getFeedbackToken(): Promise<string | null> {
-  const raw = await readStored()
+  const raw = await readStored();
   // Installation-wide secret on the org-less platform_settings singleton:
   // the seal scope carries the fixed system id. A tampered token reads as
   // unconfigured, never a 500.
   try {
-    return raw.token ? unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" }) : null
+    return raw.token
+      ? unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" })
+      : null;
   } catch (error) {
-    if (!(error instanceof SecretIntegrityError)) throw error
-    return null
+    if (!(error instanceof SecretIntegrityError)) throw error;
+    return null;
   }
 }
 
 /** The decrypted destination, or null when reporting is off or incomplete. */
 export async function getFeedbackRuntime(): Promise<FeedbackRuntime | null> {
-  const raw = await readStored()
-  if (raw.enabled !== true || !raw.token) return null
-  const owner = typeof raw.owner === 'string' ? raw.owner.trim() : ''
-  const repo = typeof raw.repo === 'string' ? raw.repo.trim() : ''
-  if (!OWNER_RE.test(owner)) return null
-  if (!REPO_RE.test(repo) || repo === '.' || repo === '..') return null
+  const raw = await readStored();
+  if (raw.enabled !== true || !raw.token) return null;
+  const owner = typeof raw.owner === "string" ? raw.owner.trim() : "";
+  const repo = typeof raw.repo === "string" ? raw.repo.trim() : "";
+  if (!OWNER_RE.test(owner)) return null;
+  if (!REPO_RE.test(repo) || repo === "." || repo === "..") return null;
   // A tampered token reads as unconfigured — reporting answers 503
   // unavailable by its existing rule — never a 500.
-  let token: string | null = null
+  let token: string | null = null;
   try {
-    token = unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" })
+    token = unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" });
   } catch (error) {
-    if (!(error instanceof SecretIntegrityError)) throw error
+    if (!(error instanceof SecretIntegrityError)) throw error;
   }
-  if (!token) return null
+  if (!token) return null;
   return {
     owner,
     repo,
     token,
-    labels: Array.isArray(raw.labels) ? raw.labels.filter((l) => typeof l === 'string') : [],
+    labels: Array.isArray(raw.labels) ? raw.labels.filter((l) => typeof l === "string") : [],
     searchDuplicates: raw.searchDuplicates !== false,
-  }
+  };
 }
 
 /**
@@ -199,44 +201,52 @@ export async function saveFeedbackSettings(
   actorId: string,
   authorize?: () => Promise<unknown>,
 ): Promise<FeedbackSettingsView> {
-  const validated = sanitizeFeedbackSettingsInput(input)
+  const validated = sanitizeFeedbackSettingsInput(input);
   // bypass: cross-org-by-design — the feedback destination is an installation-wide platform setting, not an organization's.
   return withBypass(async () => {
-    await authorize?.()
-    const settings = await lockSettings()
-    const previous = (settings.feedback ?? {}) as StoredFeedback
+    await authorize?.();
+    const settings = await lockSettings();
+    const previous = (settings.feedback ?? {}) as StoredFeedback;
     const next: StoredFeedback = {
       enabled: validated.enabled,
       owner: validated.owner || undefined,
       repo: validated.repo || undefined,
       labels: parseFeedbackLabels(validated.labels),
       searchDuplicates: validated.searchDuplicates,
-      token: validated.token ? sealSecret(validated.token, { orgId: "system", purpose: "feedback.token" }) : previous.token,
-    }
-    await writeSettings({ ...settings, feedback: next }, actorId)
-    return toView(next)
-  })
+      token: validated.token
+        ? sealSecret(validated.token, { orgId: "system", purpose: "feedback.token" })
+        : previous.token,
+    };
+    await writeSettings({ ...settings, feedback: next }, actorId);
+    return toView(next);
+  });
 }
 
 /** Forget the stored credential without losing the rest of the destination. */
-export async function clearFeedbackToken(actorId: string, authorize?: () => Promise<unknown>): Promise<void> {
+export async function clearFeedbackToken(
+  actorId: string,
+  authorize?: () => Promise<unknown>,
+): Promise<void> {
   // bypass: cross-org-by-design — the feedback destination is an installation-wide platform setting, not an organization's.
   await withBypass(async () => {
-    await authorize?.()
-    const settings = await lockSettings()
-    const previous = (settings.feedback ?? {}) as StoredFeedback
+    await authorize?.();
+    const settings = await lockSettings();
+    const previous = (settings.feedback ?? {}) as StoredFeedback;
     // A destination with no credential cannot file, so the switch goes off
     // with the token rather than leaving a header control that always fails.
-    const next: StoredFeedback = { ...previous, token: undefined, enabled: false }
-    await writeSettings({ ...settings, feedback: next }, actorId)
-  })
+    const next: StoredFeedback = { ...previous, token: undefined, enabled: false };
+    await writeSettings({ ...settings, feedback: next }, actorId);
+  });
 }
 
 /** Read the singleton under its row lock. Callers are already inside withBypass. */
 async function lockSettings(): Promise<Record<string, unknown>> {
-  const rows = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-    select settings from platform_settings where id = ${PLATFORM_SETTINGS_ID} for update`, 'objects')
-  return rows[0]?.settings ?? {}
+  const rows = await db.execute<{ settings: Record<string, unknown> | null }>(
+    sql`
+    select settings from platform_settings where id = ${PLATFORM_SETTINGS_ID} for update`,
+    "objects",
+  );
+  return rows[0]?.settings ?? {};
 }
 
 async function writeSettings(settings: Record<string, unknown>, actorId: string): Promise<void> {
@@ -247,7 +257,7 @@ async function writeSettings(settings: Record<string, unknown>, actorId: string)
     insert into platform_settings (id, settings, created_by, updated_by)
     values (${PLATFORM_SETTINGS_ID}, ${JSON.stringify(settings)}::jsonb, ${actorId}, ${actorId})
     on conflict (id) do update
-       set settings = excluded.settings, updated_at = now(), updated_by = excluded.updated_by`)
+       set settings = excluded.settings, updated_at = now(), updated_by = excluded.updated_by`);
 }
 
 /**
@@ -258,11 +268,9 @@ async function writeSettings(settings: Record<string, unknown>, actorId: string)
  * reporting and which company they work for. Short values are skipped: a
  * two-character company name would blank half the report.
  */
-export function feedbackDenyList(
-  values: ReadonlyArray<string | null | undefined>,
-): string[] {
+export function feedbackDenyList(values: ReadonlyArray<string | null | undefined>): string[] {
   return values.flatMap((value) => {
-    const text = value?.trim()
-    return text && text.length >= 3 ? [text] : []
-  })
+    const text = value?.trim();
+    return text && text.length >= 3 ? [text] : [];
+  });
 }

@@ -18,9 +18,21 @@ export const RESOURCING_REQUEST_SUBJECT_KIND = "resourcing_request";
 export const RES_ASSIGNMENT_BOOKING_VALUES = ["soft", "hard"] as const;
 export const RES_ASSIGNMENT_STATE_VALUES = ["active", "released"] as const;
 export const RES_ASSIGNMENT_SOURCE_VALUES = ["manual", "request", "pipeline"] as const;
-export const RES_REQUEST_STATUS_VALUES = ["draft", "submitted", "approved", "rejected", "cancelled"] as const;
+export const RES_REQUEST_STATUS_VALUES = [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+  "cancelled",
+] as const;
 export const RES_RETAINER_KIND_VALUES = ["hours", "fees"] as const;
-export const RES_RETAINER_STATE_VALUES = ["draft", "active", "exhausted", "expired", "closed"] as const;
+export const RES_RETAINER_STATE_VALUES = [
+  "draft",
+  "active",
+  "exhausted",
+  "expired",
+  "closed",
+] as const;
 export const RES_RETAINER_DRAWDOWN_STATE_VALUES = ["draft", "posted"] as const;
 
 /** One planned project booking for a named employee or a generic role. */
@@ -54,10 +66,7 @@ export const resAssignments = pgTable(
     ),
     index("res_assignments_employee_week").on(t.orgId, t.employeePartyId, t.weekStart),
     index("res_assignments_week").on(t.orgId, t.weekStart),
-    check(
-      "res_assignments_subject",
-      sql`num_nonnulls(${t.employeePartyId}, ${t.jobTitle}) = 1`,
-    ),
+    check("res_assignments_subject", sql`num_nonnulls(${t.employeePartyId}, ${t.jobTitle}) = 1`),
     check(
       "res_assignments_job_title_nonblank",
       sql`${t.jobTitle} is null or length(btrim(${t.jobTitle})) > 0`,

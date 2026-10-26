@@ -1,124 +1,243 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../locale' && context.parentURL?.includes('/pdf-templates/values')) return {shortCircuit:true,url:'data:text/javascript,export async function resolveLocale(){return "en-CA"}'}
-    return next(specifier, context)
+    if (specifier === "../locale" && context.parentURL?.includes("/pdf-templates/values"))
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export async function resolveLocale(){return "en-CA"}',
+      };
+    return next(specifier, context);
   },
-})
-const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
+});
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
-const { recurringBenefitsRunSource } = await import("@openbooks/engine/testing/payroll/benefit-plan-inputs");
-const { findSamplePdfRecordId, loadPdfRecordValues } = await import('./values')
-const { loadRecordSubsidiaryScope } = await import('../../app/api/record-pdf/lib')
-const { guardSubsidiaryScope } = await import('../authz')
-type Authz = import('../authz').Authz
+const { recurringBenefitsRunSource } =
+  await import("@openbooks/engine/testing/payroll/benefit-plan-inputs");
+const { findSamplePdfRecordId, loadPdfRecordValues } = await import("./values");
+const { loadRecordSubsidiaryScope } = await import("../../app/api/record-pdf/lib");
+const { guardSubsidiaryScope } = await import("../authz");
+type Authz = import("../authz").Authz;
 
-for (const recordType of ['pay_stub', 'payroll_cheque'] as const) {
-  test(`${recordType} PDF scope follows the original pay-run entity for printing and preview`, {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
-    const org = await withBypassContext(() => createScratchOrg())
-    const other = await withBypassContext(() => createScratchOrg())
-    try {
-      const {adminId} = await withBypassContext(() => seedFlowActors(org.orgId))
-      await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${org.orgId}`))
-      const hidden = randomUUID()
-      await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values(${hidden},${org.orgId},${org.subsidiaryId},'Hidden payroll entity','CAD','CA')`))
-      const stubs: string[]=[]
-      const employees: string[]=[]
-      await withBypassContext(async () => {
-        for(const [sub,name,date] of [[org.subsidiaryId,'Visible','2026-07-01T00:00:00Z'],[hidden,'Hidden','2026-07-02T00:00:00Z']] as const) {
-          const schedule = randomUUID(), employee=randomUUID(), stub=randomUUID()
-          await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id)
-            values(${schedule},${org.orgId},${name},'biweekly',26,'2026-07-18',3,${sub})`)
-          await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
-            values(${employee},${org.orgId},'person',${name},${sub})`)
-          const employment=randomUUID()
-          await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id)
-            values(${employment},${org.orgId},${employee},${sub})`)
-          await db.execute(sql`insert into worker_employment_versions(org_id,employment_id,version_no,status,effective_from,effective_to,recorded_at)
-            values(${org.orgId},${employment},1,'active','2020-01-01'::date,null::date,now())`)
-          const run=await createPayRun({orgId:org.orgId,actorId:adminId,payScheduleId:schedule,periodStart:'2026-07-05',periodEnd:'2026-07-18'})
-          await db.execute(sql`insert into pay_stubs(country, country_source, id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,payment_method,cheque_number,created_at)
-            values('CA', 'calculation', ${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,'CAD',240,200,'cheque',${name},${date}::timestamptz)`)
-          stubs.push(stub);employees.push(employee)
-        }
-      })
-      const gate={user:{orgId:org.orgId,id:adminId},permissions:new Set(['payroll.read']),allowedSubsidiaryIds:new Set([org.subsidiaryId])} as Authz
-      const visible = await withOrgContext(org.orgId, () => loadRecordSubsidiaryScope(recordType,org.orgId,stubs[0]!))
-      assert.deepEqual(visible,{subsidiaryId:org.subsidiaryId})
-      assert.equal(guardSubsidiaryScope(gate,visible!.subsidiaryId),null)
-      const denied = await withOrgContext(org.orgId, () => loadRecordSubsidiaryScope(recordType,org.orgId,stubs[1]!))
-      assert.equal(guardSubsidiaryScope(gate,denied!.subsidiaryId)?.status,404)
-      assert.equal(await withOrgContext(org.orgId, () => findSamplePdfRecordId(recordType,org.orgId,new Set([org.subsidiaryId]))),stubs[0])
-      assert.equal(await withOrgContext(org.orgId, () => findSamplePdfRecordId(recordType,org.orgId,null)),stubs[1])
-      assert.equal(await withOrgContext(org.orgId, () => findSamplePdfRecordId(recordType,org.orgId,new Set())),null)
-      assert.equal(await withOrgContext(org.orgId, () => loadRecordSubsidiaryScope(recordType,other.orgId,stubs[0]!)),null)
-      assert.equal(await withOrgContext(org.orgId, () => loadRecordSubsidiaryScope(recordType,org.orgId,randomUUID())),null)
-      // A later employee transfer cannot move the original pay-run document.
-      await withBypassContext(() => db.execute(sql`update parties set subsidiary_id=${hidden} where org_id=${org.orgId} and id=${employees[0]}`))
-      await withBypassContext(() => db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employees[1]}`))
-      assert.deepEqual(await withOrgContext(org.orgId, () => loadRecordSubsidiaryScope(recordType,org.orgId,stubs[0]!)),visible)
-      assert.equal(await withOrgContext(org.orgId, () => findSamplePdfRecordId(recordType,org.orgId,new Set([org.subsidiaryId]))),stubs[0])
-    } finally {await dropScratchOrgReporting(org.orgId);await dropScratchOrgReporting(other.orgId)}
-  })
+for (const recordType of ["pay_stub", "payroll_cheque"] as const) {
+  test(
+    `${recordType} PDF scope follows the original pay-run entity for printing and preview`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await withBypassContext(() => createScratchOrg());
+      const other = await withBypassContext(() => createScratchOrg());
+      try {
+        const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+        await withBypassContext(() =>
+          db.execute(
+            sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${org.orgId}`,
+          ),
+        );
+        const hidden = randomUUID();
+        await withBypassContext(() =>
+          db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${hidden},${org.orgId},${org.subsidiaryId},'Hidden payroll entity','CAD','CA')`),
+        );
+        const stubs: string[] = [];
+        const employees: string[] = [];
+        await withBypassContext(async () => {
+          for (const [sub, name, date] of [
+            [org.subsidiaryId, "Visible", "2026-07-01T00:00:00Z"],
+            [hidden, "Hidden", "2026-07-02T00:00:00Z"],
+          ] as const) {
+            const schedule = randomUUID(),
+              employee = randomUUID(),
+              stub = randomUUID();
+            await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id)
+            values(${schedule},${org.orgId},${name},'biweekly',26,'2026-07-18',3,${sub})`);
+            await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
+            values(${employee},${org.orgId},'person',${name},${sub})`);
+            const employment = randomUUID();
+            await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id)
+            values(${employment},${org.orgId},${employee},${sub})`);
+            await db.execute(sql`insert into worker_employment_versions(org_id,employment_id,version_no,status,effective_from,effective_to,recorded_at)
+            values(${org.orgId},${employment},1,'active','2020-01-01'::date,null::date,now())`);
+            const run = await createPayRun({
+              orgId: org.orgId,
+              actorId: adminId,
+              payScheduleId: schedule,
+              periodStart: "2026-07-05",
+              periodEnd: "2026-07-18",
+            });
+            await db.execute(sql`insert into pay_stubs(country, country_source, id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,payment_method,cheque_number,created_at)
+            values('CA', 'calculation', ${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,'CAD',240,200,'cheque',${name},${date}::timestamptz)`);
+            stubs.push(stub);
+            employees.push(employee);
+          }
+        });
+        const gate = {
+          user: { orgId: org.orgId, id: adminId },
+          permissions: new Set(["payroll.read"]),
+          allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+        } as Authz;
+        const visible = await withOrgContext(org.orgId, () =>
+          loadRecordSubsidiaryScope(recordType, org.orgId, stubs[0]!),
+        );
+        assert.deepEqual(visible, { subsidiaryId: org.subsidiaryId });
+        assert.equal(guardSubsidiaryScope(gate, visible!.subsidiaryId), null);
+        const denied = await withOrgContext(org.orgId, () =>
+          loadRecordSubsidiaryScope(recordType, org.orgId, stubs[1]!),
+        );
+        assert.equal(guardSubsidiaryScope(gate, denied!.subsidiaryId)?.status, 404);
+        assert.equal(
+          await withOrgContext(org.orgId, () =>
+            findSamplePdfRecordId(recordType, org.orgId, new Set([org.subsidiaryId])),
+          ),
+          stubs[0],
+        );
+        assert.equal(
+          await withOrgContext(org.orgId, () => findSamplePdfRecordId(recordType, org.orgId, null)),
+          stubs[1],
+        );
+        assert.equal(
+          await withOrgContext(org.orgId, () =>
+            findSamplePdfRecordId(recordType, org.orgId, new Set()),
+          ),
+          null,
+        );
+        assert.equal(
+          await withOrgContext(org.orgId, () =>
+            loadRecordSubsidiaryScope(recordType, other.orgId, stubs[0]!),
+          ),
+          null,
+        );
+        assert.equal(
+          await withOrgContext(org.orgId, () =>
+            loadRecordSubsidiaryScope(recordType, org.orgId, randomUUID()),
+          ),
+          null,
+        );
+        // A later employee transfer cannot move the original pay-run document.
+        await withBypassContext(() =>
+          db.execute(
+            sql`update parties set subsidiary_id=${hidden} where org_id=${org.orgId} and id=${employees[0]}`,
+          ),
+        );
+        await withBypassContext(() =>
+          db.execute(
+            sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employees[1]}`,
+          ),
+        );
+        assert.deepEqual(
+          await withOrgContext(org.orgId, () =>
+            loadRecordSubsidiaryScope(recordType, org.orgId, stubs[0]!),
+          ),
+          visible,
+        );
+        assert.equal(
+          await withOrgContext(org.orgId, () =>
+            findSamplePdfRecordId(recordType, org.orgId, new Set([org.subsidiaryId])),
+          ),
+          stubs[0],
+        );
+      } finally {
+        await dropScratchOrgReporting(org.orgId);
+        await dropScratchOrgReporting(other.orgId);
+      }
+    },
+  );
 }
 
-
-test('pay-stub YTD keeps employer and currency isolation at each same-day payment', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId))
-    const hidden = randomUUID(), employee = randomUUID()
-    const ids = [randomUUID(), randomUUID(), randomUUID()].sort()
-    const ownStubs: string[] = []
-    await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${org.orgId}`)
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${org.orgId},${org.subsidiaryId},'Other employer','CAD','CA')`)
-      await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values(${employee},${org.orgId},'person','Transferred employee',${org.subsidiaryId})`)
-      const employment = randomUUID()
-      await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id) values(${employment},${org.orgId},${employee},${org.subsidiaryId})`)
-      await db.execute(sql`insert into worker_employment_versions(org_id,employment_id,version_no,status,effective_from,effective_to,recorded_at) values(${org.orgId},${employment},1,'active','2020-01-01'::date,null::date,now())`)
-      const taxComponent = randomUUID(), earningComponent = randomUUID()
-      await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,system_key)
+test(
+  "pay-stub YTD keeps employer and currency isolation at each same-day payment",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+      const hidden = randomUUID(),
+        employee = randomUUID();
+      const ids = [randomUUID(), randomUUID(), randomUUID()].sort();
+      const ownStubs: string[] = [];
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${org.orgId}`,
+        );
+        await db.execute(
+          sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${org.orgId},${org.subsidiaryId},'Other employer','CAD','CA')`,
+        );
+        await db.execute(
+          sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values(${employee},${org.orgId},'person','Transferred employee',${org.subsidiaryId})`,
+        );
+        const employment = randomUUID();
+        await db.execute(
+          sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id) values(${employment},${org.orgId},${employee},${org.subsidiaryId})`,
+        );
+        await db.execute(
+          sql`insert into worker_employment_versions(org_id,employment_id,version_no,status,effective_from,effective_to,recorded_at) values(${org.orgId},${employment},1,'active','2020-01-01'::date,null::date,now())`,
+        );
+        const taxComponent = randomUUID(),
+          earningComponent = randomUUID();
+        await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,system_key)
         values(${taxComponent},${org.orgId},'TAX','Income tax','deduction','income_tax'),
-              (${earningComponent},${org.orgId},'REG','Regular pay','earning',null)`)
-      // Equal timestamps use the persisted ID to break ties. The third payment
-      // is one microsecond later but has a lower ID than the second: the cutoff
-      // must retain PostgreSQL timestamp precision rather than round to JS Date.
-      for (const [sub, currency, gross, net, tax, timestamp, stub] of [
-        [org.subsidiaryId, 'CAD', '240', '230', '10', '2026-07-21T10:00:00.123456Z', ids[0]!],
-        [org.subsidiaryId, 'CAD', '60', '55', '5', '2026-07-21T10:00:00.123456Z', ids[2]!],
-        [org.subsidiaryId, 'CAD', '20', '18', '2', '2026-07-21T10:00:00.123457Z', ids[1]!],
-        [hidden, 'CAD', '1000', '900', '100', '2026-07-21T09:00:00Z', randomUUID()],
-        [org.subsidiaryId, 'USD', '2000', '1800', '200', '2026-07-21T09:00:00Z', randomUUID()],
-      ] as const) {
-        const schedule = randomUUID()
-        await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id)
-          values(${schedule},${org.orgId},${schedule},'biweekly',26,'2026-07-18',3,${sub})`)
-        const run = await createPayRun({ orgId: org.orgId, actorId: adminId, payScheduleId: schedule, periodStart: '2026-07-05', periodEnd: '2026-07-18' })
-        await db.execute(sql`insert into pay_stubs(country, country_source, id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,created_at)
-          values('CA', 'calculation', ${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,${currency},${gross},${net},${timestamp}::timestamptz)`)
-        await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount,sequence)
+              (${earningComponent},${org.orgId},'REG','Regular pay','earning',null)`);
+        // Equal timestamps use the persisted ID to break ties. The third payment
+        // is one microsecond later but has a lower ID than the second: the cutoff
+        // must retain PostgreSQL timestamp precision rather than round to JS Date.
+        for (const [sub, currency, gross, net, tax, timestamp, stub] of [
+          [org.subsidiaryId, "CAD", "240", "230", "10", "2026-07-21T10:00:00.123456Z", ids[0]!],
+          [org.subsidiaryId, "CAD", "60", "55", "5", "2026-07-21T10:00:00.123456Z", ids[2]!],
+          [org.subsidiaryId, "CAD", "20", "18", "2", "2026-07-21T10:00:00.123457Z", ids[1]!],
+          [hidden, "CAD", "1000", "900", "100", "2026-07-21T09:00:00Z", randomUUID()],
+          [org.subsidiaryId, "USD", "2000", "1800", "200", "2026-07-21T09:00:00Z", randomUUID()],
+        ] as const) {
+          const schedule = randomUUID();
+          await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id)
+          values(${schedule},${org.orgId},${schedule},'biweekly',26,'2026-07-18',3,${sub})`);
+          const run = await createPayRun({
+            orgId: org.orgId,
+            actorId: adminId,
+            payScheduleId: schedule,
+            periodStart: "2026-07-05",
+            periodEnd: "2026-07-18",
+          });
+          await db.execute(sql`insert into pay_stubs(country, country_source, id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code,gross,net_pay,created_at)
+          values('CA', 'calculation', ${stub},${org.orgId},${run.documentId},${employee},${employment},'ON',26,'2026-07-21',2026,${currency},${gross},${net},${timestamp}::timestamptz)`);
+          await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount,sequence)
           values(${org.orgId},${stub},${taxComponent},'deduction','Income tax',${tax},110),
-                (${org.orgId},${stub},${earningComponent},'earning','Regular pay',${gross},10)`)
-        await db.execute(sql`update pay_runs set run_status='committed', benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db, org.orgId, run.documentId))}::jsonb where org_id=${org.orgId} and document_id=${run.documentId}`)
-        if (sub === org.subsidiaryId && currency === 'CAD') ownStubs.push(stub)
+                (${org.orgId},${stub},${earningComponent},'earning','Regular pay',${gross},10)`);
+          await db.execute(
+            sql`update pay_runs set run_status='committed', benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db, org.orgId, run.documentId))}::jsonb where org_id=${org.orgId} and document_id=${run.documentId}`,
+          );
+          if (sub === org.subsidiaryId && currency === "CAD") ownStubs.push(stub);
+        }
+      });
+      for (const [index, gross, net, tax] of [
+        [0, "$240.00", "$230.00", "$10.00"],
+        [1, "$300.00", "$285.00", "$15.00"],
+        [2, "$320.00", "$303.00", "$17.00"],
+      ] as const) {
+        const record = await withOrgContext(org.orgId, () =>
+          loadPdfRecordValues("pay_stub", org.orgId, ownStubs[index]!, null),
+        );
+        assert.ok(record);
+        assert.equal(record.values.ytd_gross, gross, `payment ${index + 1} gross`);
+        assert.equal(record.values.ytd_net, net, `payment ${index + 1} net`);
+        assert.equal(record.values.ytd_tax, tax, `payment ${index + 1} tax`);
+        assert.equal(
+          record.values.earnings_ytd_total,
+          gross,
+          `payment ${index + 1} earnings reconcile with header`,
+        );
+        assert.equal(
+          record.values.withholdings_ytd_total,
+          tax,
+          `payment ${index + 1} withholding reconciles with header`,
+        );
       }
-    })
-    for (const [index, gross, net, tax] of [[0, '$240.00', '$230.00', '$10.00'], [1, '$300.00', '$285.00', '$15.00'], [2, '$320.00', '$303.00', '$17.00']] as const) {
-      const record = await withOrgContext(org.orgId, () => loadPdfRecordValues('pay_stub', org.orgId, ownStubs[index]!, null))
-      assert.ok(record)
-      assert.equal(record.values.ytd_gross, gross, `payment ${index + 1} gross`)
-      assert.equal(record.values.ytd_net, net, `payment ${index + 1} net`)
-      assert.equal(record.values.ytd_tax, tax, `payment ${index + 1} tax`)
-      assert.equal(record.values.earnings_ytd_total, gross, `payment ${index + 1} earnings reconcile with header`)
-      assert.equal(record.values.withholdings_ytd_total, tax, `payment ${index + 1} withholding reconciles with header`)
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
-  } finally { await dropScratchOrgReporting(org.orgId) }
-})
+  },
+);

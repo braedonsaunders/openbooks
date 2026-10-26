@@ -9,11 +9,7 @@ import type {
   SalesChannelAdapter,
 } from "../contracts.ts";
 import { disconnectChannelByProvider } from "../channels.ts";
-import {
-  normalizeWebhookProduct,
-  retireCatalogProduct,
-  upsertCatalogProduct,
-} from "./catalog.ts";
+import { normalizeWebhookProduct, retireCatalogProduct, upsertCatalogProduct } from "./catalog.ts";
 import { loadShopifyChannel, shopifySettingsSchema } from "./channel-access.ts";
 import { CommerceError } from "../errors.ts";
 import { applyLocationWebhook } from "./locations.ts";
@@ -64,7 +60,7 @@ function orderText(value: unknown): string | null {
 
 /** The storefront order id for an event payload, refusing by name without it. */
 function eventOrderId(body: Record<string, unknown>, field: "id" | "order_id"): string {
-  const id = orderText(field === "id" ? body.id : body.order_id ?? body.orderId);
+  const id = orderText(field === "id" ? body.id : (body.order_id ?? body.orderId));
   if (!id) {
     refuse(
       "shopify_order_unreadable",
@@ -127,13 +123,19 @@ function customerNeedles(payload: Record<string, unknown>): string[] {
  * no personal data. A tombstoned delivery processes to `ignored`, so a
  * pending event that has not run yet can never resurrect the data.
  */
-async function redactCustomerBodies(orgId: string, channelId: string, needles: string[]): Promise<number> {
+async function redactCustomerBodies(
+  orgId: string,
+  channelId: string,
+  needles: string[],
+): Promise<number> {
   if (needles.length === 0) return 0;
   const tombstone = JSON.stringify({
     redacted: "customers_redact",
     redactedAt: new Date().toISOString(),
   });
-  const conditions = needles.map((needle) => sql`convert_from(raw_body, 'UTF8') like ${`%${needle}%`}`);
+  const conditions = needles.map(
+    (needle) => sql`convert_from(raw_body, 'UTF8') like ${`%${needle}%`}`,
+  );
   const combined = conditions.reduce((left, right) => sql`${left} or ${right}`);
   const updated = await db.execute<never>(sql`
     update integration_inbound_events
@@ -146,7 +148,11 @@ async function redactCustomerBodies(orgId: string, channelId: string, needles: s
   return updated.rowCount ?? 0;
 }
 
-async function redactChannelBodies(orgId: string, channelId: string, marker: string): Promise<number> {
+async function redactChannelBodies(
+  orgId: string,
+  channelId: string,
+  marker: string,
+): Promise<number> {
   const tombstone = JSON.stringify({ redacted: marker, redactedAt: new Date().toISOString() });
   const updated = await db.execute<never>(sql`
     update integration_inbound_events
@@ -230,7 +236,11 @@ const shopifyAdapter: SalesChannelAdapter = {
   async testConnection(ctx: ChannelContext, channelId: string) {
     try {
       const channel = await loadShopifyChannel(ctx.orgId, channelId);
-      const client = new ShopifyClient({ shopDomain: channel.shop, accessToken: channel.accessToken, apiVersion: channel.settings.apiVersion });
+      const client = new ShopifyClient({
+        shopDomain: channel.shop,
+        accessToken: channel.accessToken,
+        apiVersion: channel.settings.apiVersion,
+      });
       const shop = await client.shopIdentity();
       if (shop.myshopifyDomain.toLowerCase() !== channel.shop.toLowerCase()) {
         return {
@@ -276,7 +286,10 @@ const shopifyAdapter: SalesChannelAdapter = {
       if (typeof body.redacted === "string") {
         return {
           action: "ignored",
-          resultRef: { redacted: body.redacted, reason: "Tombstoned for a Shopify erasure request; the personal data is gone." },
+          resultRef: {
+            redacted: body.redacted,
+            reason: "Tombstoned for a Shopify erasure request; the personal data is gone.",
+          },
         };
       }
       const topic = delivery.topic;
@@ -306,13 +319,18 @@ const shopifyAdapter: SalesChannelAdapter = {
           action: "processed",
           resultRef: {
             recorded: true,
-            inventoryItemId: typeof item === "number" || typeof item === "string" ? String(item) : null,
+            inventoryItemId:
+              typeof item === "number" || typeof item === "string" ? String(item) : null,
             available: (body.available ?? null) as unknown,
             note: "The level is recorded on this event; stock reconciliation compares it against the storefront during each inventory push run.",
           },
         };
       }
-      if (topic === "locations/create" || topic === "locations/update" || topic === "locations/delete") {
+      if (
+        topic === "locations/create" ||
+        topic === "locations/update" ||
+        topic === "locations/delete"
+      ) {
         const applied = await applyLocationWebhook(orgId, null, channel, topic, body);
         return { action: "processed", resultRef: applied };
       }
@@ -326,7 +344,11 @@ const shopifyAdapter: SalesChannelAdapter = {
           },
         };
       }
-      if (topic === "customers/data_request" || topic === "customers/redact" || topic === "shop/redact") {
+      if (
+        topic === "customers/data_request" ||
+        topic === "customers/redact" ||
+        topic === "shop/redact"
+      ) {
         return handleCompliance(orgId, channelId, topic, body);
       }
       if ((ORDER_UPSERT_TOPICS as readonly string[]).includes(topic)) {
@@ -355,14 +377,24 @@ const shopifyAdapter: SalesChannelAdapter = {
         const cancelled = await postChannelCancellation(orgId, null, stored.eventId);
         return {
           action: "processed",
-          resultRef: { orderExternalId, eventId: stored.eventId, cancelled: true, status: cancelled.status },
+          resultRef: {
+            orderExternalId,
+            eventId: stored.eventId,
+            cancelled: true,
+            status: cancelled.status,
+          },
         };
       }
       if (topic === "refunds/create") {
         const orderExternalId = eventOrderId(body, "order_id");
-        const order = (await db.execute<{ shop_currency: string }>(sql`
+        const order = (
+          await db.execute<{ shop_currency: string }>(
+            sql`
             select shop_currency from channel_orders
-             where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`, "objects"))[0];
+             where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`,
+            "objects",
+          )
+        )[0];
         if (!order) {
           refuse(
             "channel_order_unknown",
@@ -383,7 +415,12 @@ const shopifyAdapter: SalesChannelAdapter = {
         const posted = await postChannelRefund(orgId, null, stored.eventId);
         return {
           action: "processed",
-          resultRef: { orderExternalId, eventId: stored.eventId, refundId: refund.externalId, status: posted.status },
+          resultRef: {
+            orderExternalId,
+            eventId: stored.eventId,
+            refundId: refund.externalId,
+            status: posted.status,
+          },
         };
       }
       if (topic.startsWith("fulfillments/")) {
@@ -391,9 +428,10 @@ const shopifyAdapter: SalesChannelAdapter = {
         const normalized = normalizeShopifyFulfilment(body, orderExternalId);
         // A delete or an explicit cancellation ends the fulfilment's life the
         // same way: the reversal names the posted fulfilment it reverses.
-        const fulfilment = topic === "fulfillments/cancelled" || topic === "fulfillments/delete"
-          ? { ...normalized, cancelled: true }
-          : normalized;
+        const fulfilment =
+          topic === "fulfillments/cancelled" || topic === "fulfillments/delete"
+            ? { ...normalized, cancelled: true }
+            : normalized;
         // A cancellation arrives as its own event (same fulfilment, new
         // row), so the reversal can name the posted fulfilment it reverses.
         const stored = await ingestChannelEvent(orgId, null, channelId, orderExternalId, {
@@ -407,7 +445,12 @@ const shopifyAdapter: SalesChannelAdapter = {
         const posted = await postChannelFulfilment(orgId, null, stored.eventId);
         return {
           action: "processed",
-          resultRef: { orderExternalId, eventId: stored.eventId, fulfilled: true, status: posted.status },
+          resultRef: {
+            orderExternalId,
+            eventId: stored.eventId,
+            fulfilled: true,
+            status: posted.status,
+          },
         };
       }
       if (
@@ -421,7 +464,10 @@ const shopifyAdapter: SalesChannelAdapter = {
       }
       return {
         action: "ignored",
-        resultRef: { topic, reason: "This connector handles no such topic; the delivery stays stored for review." },
+        resultRef: {
+          topic,
+          reason: "This connector handles no such topic; the delivery stays stored for review.",
+        },
       };
     });
   },
@@ -455,5 +501,3 @@ export function installedChannelKinds(): string[] {
   ensureShopifyAdapterRegistered();
   return registeredChannelKinds();
 }
-
-

@@ -43,10 +43,13 @@ async function main(): Promise<void> {
       // surfaced as "no user e2e@openbooks.test" against a database that has
       // one. withBypassContext is the documented remedy for exactly this.
       const rows = await withBypassContext(() =>
-          db.execute<{ orgId: string }>(sql`
+        db.execute<{ orgId: string }>(
+          sql`
             select u.org_id as "orgId" from users u where u.email = ${email} order by u.created_at limit 1
-          `, "objects"),
-        );
+          `,
+          "objects",
+        ),
+      );
       if (!rows[0]) throw new Error(`no user ${email}`);
       emit({ orgId: rows[0].orgId });
       return;
@@ -55,12 +58,15 @@ async function main(): Promise<void> {
       const [orgId, csv] = args;
       const contracts = String(csv).split(",").filter(Boolean);
       const res = await withOrg(String(orgId), () =>
-        db.execute<Record<string, unknown>>(sql`
+        db.execute<Record<string, unknown>>(
+          sql`
           select c.contract_number as "contract", o.id
             from performance_obligations o
             join revenue_contracts c on c.id = o.contract_id
            where c.contract_number = any(${`{${contracts.join(",")}}`}::text[])
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       emit({ obligations: Object.fromEntries(res.map((r) => [String(r.contract), String(r.id)])) });
       return;
@@ -68,9 +74,12 @@ async function main(): Promise<void> {
     case "contract": {
       const [orgId, number] = args;
       const res = await withOrg(String(orgId), () =>
-        db.execute<Record<string, unknown>>(sql`
+        db.execute<Record<string, unknown>>(
+          sql`
           select id from revenue_contracts where contract_number = ${number} limit 1
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       if (!res[0]) throw new Error(`no contract ${number}`);
       emit({ id: String(res[0].id) });
@@ -78,21 +87,26 @@ async function main(): Promise<void> {
     }
     case "dunning-run": {
       const [orgId, asOf] = args;
-      const result = await withOrg(String(orgId), () => runDunningForOrg(String(orgId), String(asOf)));
+      const result = await withOrg(String(orgId), () =>
+        runDunningForOrg(String(orgId), String(asOf)),
+      );
       emit({ result });
       return;
     }
     case "dunning-log": {
       const [orgId] = args;
       const res = await withOrg(String(orgId), () =>
-        db.execute<Record<string, unknown>>(sql`
+        db.execute<Record<string, unknown>>(
+          sql`
           select d.document_number as "documentNumber", st.sequence, st.name as "stageName",
                  dl.amount_due as "amountDue", dl.status, dl.to_email as "toEmail"
             from dunning_log dl
             join documents d on d.id = dl.document_id
             join dunning_stages st on st.id = dl.stage_id
            order by dl.sent_at nulls last, st.sequence
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       emit({
         log: res.map((r) => ({
@@ -111,13 +125,16 @@ async function main(): Promise<void> {
       // a dead chunk seeded but never saved to the state file).
       const [orgId, partyId] = args;
       const res = await withOrg(String(orgId), () =>
-        db.execute<Record<string, unknown>>(sql`
+        db.execute<Record<string, unknown>>(
+          sql`
           select id, document_number as "number", kind, status
             from documents
            where org_id = ${String(orgId)} and party_id = ${String(partyId)}
              and kind in ('customer_invoice', 'customer_credit', 'customer_payment')
            order by created_at
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       emit({
         docs: res.map((r) => ({
@@ -132,10 +149,13 @@ async function main(): Promise<void> {
     case "dunning-outbox": {
       const [orgId] = args;
       const res = await withOrg(String(orgId), () =>
-        db.execute<Record<string, unknown>>(sql`
+        db.execute<Record<string, unknown>>(
+          sql`
           select payload from scheduler_outbox
            where occurrence_key like 'dunning:%' order by created_at
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       emit({
         outbox: res.map((r) => {

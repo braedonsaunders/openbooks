@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/pdf-templates", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/pdf-templates",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 declare global {
   var __templateToasts: { kind: string; message: string }[] | undefined;
@@ -21,7 +25,10 @@ const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return{push(u){(globalThis.__templatePushes??=[]).push(String(u))},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/admin/pdf-templates'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return{push(u){(globalThis.__templatePushes??=[]).push(String(u))},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/admin/pdf-templates'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
@@ -288,9 +295,8 @@ test("F4T2-5: row Duplicate pre-fills a language-neutral unique name", async () 
 // F4T2-4: the duplicate round-trip checks the status before parsing, toasts
 // the named refusal on failure, and never navigates to /undefined.
 function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set as
-    | ((this: HTMLInputElement, value: string) => void)
-    | undefined;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
+    ?.set as ((this: HTMLInputElement, value: string) => void) | undefined;
   setter?.call(input, value);
   input.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
@@ -322,9 +328,9 @@ test("F4T2-4: duplicate posts the copy and navigates to its id", async () => {
   const { host, root } = await mountDuplicateButton();
   try {
     await openDuplicateDialog(host);
-    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-      (b) => b.textContent?.trim() === "Save",
-    );
+    const confirm = [
+      ...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ].find((b) => b.textContent?.trim() === "Save");
     assert.ok(confirm, "the name prompt must offer confirm");
     // Type an explicit name: the offered default is F4T2-5's concern, and
     // this test pins the round-trip, not the default.
@@ -334,7 +340,11 @@ test("F4T2-4: duplicate posts the copy and navigates to its id", async () => {
       setInputValue(input, "My template 2");
     });
     assert.equal(input.value, "My template 2");
-    assert.equal(confirm.disabled, false, "a valid name enables the save action before confirmation");
+    assert.equal(
+      confirm.disabled,
+      false,
+      "a valid name enables the save action before confirmation",
+    );
     await act(async () => {
       confirm.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     });
@@ -461,9 +471,7 @@ test("F4T-15: paper names render in the operator locale", async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   try {
-    const paperCell = [...host.querySelectorAll("span")].find((s) =>
-      s.textContent?.includes("·"),
-    );
+    const paperCell = [...host.querySelectorAll("span")].find((s) => s.textContent?.includes("·"));
     assert.ok(paperCell, "the paper cell must render");
     assert.ok(
       !paperCell.textContent?.includes("Letter"),

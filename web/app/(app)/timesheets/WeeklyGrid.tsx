@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { ApprovalActions } from '@/components/approval-actions'
+import { ApprovalActions } from "@/components/approval-actions";
 
 /**
  * WeeklyGrid — the weekly time-entry matrix. One row per "time line"
@@ -14,69 +14,84 @@ import { ApprovalActions } from '@/components/approval-actions'
  * approved or the user lacks time.manage.
  */
 
-import Link from 'next/link'
-import { RemoteRecordChoice } from '@/components/remote-record-choice'
-import type { TimeWorkFamily } from '@openbooks/engine/projects/time-work-target'
-import type { AdditionalTimeSelection } from '@openbooks/engine/projects/additional-time-submission'
-import { AdditionalTimeReview } from './AdditionalTimeReview'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { decimalLabel, viewerDate } from '../../../lib/format'
-import { toast } from 'sonner'
-import { useBusinessToday } from '../../../components/business-date-provider'
-import { confirmDialog } from '../../../lib/confirm'
-import { refusalMessageFromBody } from '../../../lib/api-error'
-import { promptDialog } from '../../../lib/prompt'
-import { CalendarCheck, Check, ChevronLeft, ChevronRight, FilePenLine, Loader2, Lock, Plus, RotateCcw, Trash2, Undo2 } from 'lucide-react'
-import { fillFromSchedule } from '../../../lib/scheduling/timesheet-fill'
-import { Badge, Button, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
-import { type CustomFieldDefClient } from '../../../components/custom-field-inputs'
-import { CustomFieldInput } from '../../../components/custom-field-input'
+import Link from "next/link";
+import { RemoteRecordChoice } from "@/components/remote-record-choice";
+import type { TimeWorkFamily } from "@openbooks/engine/projects/time-work-target";
+import type { AdditionalTimeSelection } from "@openbooks/engine/projects/additional-time-submission";
+import { AdditionalTimeReview } from "./AdditionalTimeReview";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { decimalLabel, viewerDate } from "../../../lib/format";
+import { toast } from "sonner";
+import { useBusinessToday } from "../../../components/business-date-provider";
+import { confirmDialog } from "../../../lib/confirm";
+import { refusalMessageFromBody } from "../../../lib/api-error";
+import { promptDialog } from "../../../lib/prompt";
+import {
+  CalendarCheck,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  FilePenLine,
+  Loader2,
+  Lock,
+  Plus,
+  RotateCcw,
+  Trash2,
+  Undo2,
+} from "lucide-react";
+import { fillFromSchedule } from "../../../lib/scheduling/timesheet-fill";
+import { Badge, Button, SearchSelect, Select, UrlDrawer, cn } from "@openbooks/ui";
+import { type CustomFieldDefClient } from "../../../components/custom-field-inputs";
+import { CustomFieldInput } from "../../../components/custom-field-input";
 import type {
   PickerOption,
   TimeTypeOption,
   TimesheetPickers,
   WeekPayload,
   WeekRow,
-} from '../../api/timesheets/_lib'
-import { DateField } from '@/components/date-field'
+} from "../../api/timesheets/_lib";
+import { DateField } from "@/components/date-field";
 
 // Day-of-week catalog keys, Sunday-first to match the grid columns.
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 /** Statuses whose label lives in common.status; the rest live in timesheets.status. */
-const COMMON_STATUS_KEYS = new Set(['draft', 'approved', 'rejected'])
-const LOCAL_STATUS_KEYS = new Set(['submitted', 'empty'])
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'outline' | 'destructive'> = {
-  draft: 'secondary',
-  submitted: 'warning',
-  approved: 'success',
-  rejected: 'destructive',
-  empty: 'outline',
-}
+const COMMON_STATUS_KEYS = new Set(["draft", "approved", "rejected"]);
+const LOCAL_STATUS_KEYS = new Set(["submitted", "empty"]);
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "secondary" | "success" | "warning" | "outline" | "destructive"
+> = {
+  draft: "secondary",
+  submitted: "warning",
+  approved: "success",
+  rejected: "destructive",
+  empty: "outline",
+};
 
 interface GridRow {
-  costTarget: TimeWorkFamily
-  workOrderId: string
-  woOperationId: string
-  projectId: string
-  itemId: string
-  timeTypeId: string
-  departmentId: string
-  isBillable: boolean
-  memo: string
-  hours: string[]
-  productionEntryIds: string[][]
+  costTarget: TimeWorkFamily;
+  workOrderId: string;
+  woOperationId: string;
+  projectId: string;
+  itemId: string;
+  timeTypeId: string;
+  departmentId: string;
+  isBillable: boolean;
+  memo: string;
+  hours: string[];
+  productionEntryIds: string[][];
   /** Per-entry statuses behind this line (empty for unsaved lines). An
    * approver may retarget the billable flag only when every entry is still
    * submitted — the server re-checks, this gates the checkbox. */
-  entryStatuses: string[]
-  custom: Record<string, unknown>
-  immutable: boolean
-  amendsEntryId: string | null
-  plannedHours: string | null
-  plannedOnly: boolean
+  entryStatuses: string[];
+  custom: Record<string, unknown>;
+  immutable: boolean;
+  amendsEntryId: string | null;
+  plannedHours: string | null;
+  plannedOnly: boolean;
 }
 
 /**
@@ -92,148 +107,171 @@ function policyBillable(
   costTarget: TimeWorkFamily,
   internalProjectIds: readonly string[] = [],
 ): boolean {
-  if (costTarget === 'production' || projectId === '') return false
-  if (internalProjectIds.includes(projectId)) return false
-  return timeType?.isBillableDefault ?? false
+  if (costTarget === "production" || projectId === "") return false;
+  if (internalProjectIds.includes(projectId)) return false;
+  return timeType?.isBillableDefault ?? false;
 }
 
 function emptyRow(
   timeTypes: TimeTypeOption[],
-  workFamily: TimeWorkFamily = 'project',
-  projectId = '',
+  workFamily: TimeWorkFamily = "project",
+  projectId = "",
   internalProjectIds: readonly string[] = [],
 ): GridRow {
   // New lines start on the org's standard time type. List position is never
   // the default: multiplier or alphabetical order would silently book premium
   // or travel time as the operator's first, unexamined choice.
-  const def = timeTypes.find((t) => t.isDefault) ?? timeTypes[0]
+  const def = timeTypes.find((t) => t.isDefault) ?? timeTypes[0];
   return {
     costTarget: workFamily,
-    workOrderId: '',
-    woOperationId: '',
+    workOrderId: "",
+    woOperationId: "",
     projectId,
-    itemId: '',
-    timeTypeId: def?.value ?? '',
-    departmentId: '',
+    itemId: "",
+    timeTypeId: def?.value ?? "",
+    departmentId: "",
     isBillable: policyBillable(projectId, def, workFamily, internalProjectIds),
-    memo: '',
-    hours: ['', '', '', '', '', '', ''],
-    productionEntryIds: Array.from({length:7},()=>[]),
+    memo: "",
+    hours: ["", "", "", "", "", "", ""],
+    productionEntryIds: Array.from({ length: 7 }, () => []),
     entryStatuses: [],
     custom: {},
     immutable: false,
     amendsEntryId: null,
     plannedHours: null,
     plannedOnly: false,
-  }
+  };
 }
 
-function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily): GridRow[] {
-  if (rows.length === 0) return [emptyRow(timeTypes,workFamily)]
+function fromPayload(
+  rows: WeekRow[],
+  timeTypes: TimeTypeOption[],
+  workFamily: TimeWorkFamily,
+): GridRow[] {
+  if (rows.length === 0) return [emptyRow(timeTypes, workFamily)];
   return rows.map((r) => ({
-    costTarget: r.workOrderId ? 'production' : r.projectId ? 'project' : workFamily,
-    workOrderId: r.workOrderId ?? '',
-    woOperationId: r.woOperationId ?? '',
-    projectId: r.projectId ?? '',
-    itemId: r.itemId ?? '',
-    timeTypeId: r.timeTypeId ?? '',
-    departmentId: r.departmentId ?? '',
+    costTarget: r.workOrderId ? "production" : r.projectId ? "project" : workFamily,
+    workOrderId: r.workOrderId ?? "",
+    woOperationId: r.woOperationId ?? "",
+    projectId: r.projectId ?? "",
+    itemId: r.itemId ?? "",
+    timeTypeId: r.timeTypeId ?? "",
+    departmentId: r.departmentId ?? "",
     isBillable: r.isBillable,
-    memo: r.memo ?? '',
-    productionEntryIds: r.productionEntryIds ?? Array.from({length:7},()=>[]),
-    hours: r.hours.map((h) => (h === '' ? '' : String(Number(h)))),
+    memo: r.memo ?? "",
+    productionEntryIds: r.productionEntryIds ?? Array.from({ length: 7 }, () => []),
+    hours: r.hours.map((h) => (h === "" ? "" : String(Number(h)))),
     entryStatuses: r.entryStatuses ?? [],
     custom: r.custom ?? {},
     immutable: r.immutable,
     amendsEntryId: r.amendsEntryId,
     plannedHours: null,
     plannedOnly: false,
-  }))
+  }));
 }
 
-function seedRows(payload: WeekPayload, pickers: TimesheetPickers, workFamily: TimeWorkFamily = 'project', quickProjectId?: string,
+function seedRows(
+  payload: WeekPayload,
+  pickers: TimesheetPickers,
+  workFamily: TimeWorkFamily = "project",
+  quickProjectId?: string,
 ): GridRow[] {
-  const rows = fromPayload(payload.rows, pickers.timeTypes,workFamily)
-  if (quickProjectId && ['draft','empty','rejected'].includes(payload.status) && pickers.projects.some(project=>project.value===quickProjectId) && !rows.some(row=>row.projectId===quickProjectId)) {
-    const quick = emptyRow(pickers.timeTypes, workFamily, quickProjectId, pickers.internalProjectIds ?? [])
-    if (!payload.rows.length) rows[0]=quick
-    else rows.push(quick)
+  const rows = fromPayload(payload.rows, pickers.timeTypes, workFamily);
+  if (
+    quickProjectId &&
+    ["draft", "empty", "rejected"].includes(payload.status) &&
+    pickers.projects.some((project) => project.value === quickProjectId) &&
+    !rows.some((row) => row.projectId === quickProjectId)
+  ) {
+    const quick = emptyRow(
+      pickers.timeTypes,
+      workFamily,
+      quickProjectId,
+      pickers.internalProjectIds ?? [],
+    );
+    if (!payload.rows.length) rows[0] = quick;
+    else rows.push(quick);
   }
-  if ((payload.status !== 'draft' && payload.status !== 'empty') || !payload.planned?.length
-  ) return rows
-  const projectIds = new Set(pickers.projects.map((project) => project.value))
-  const additions: GridRow[] = []
+  if ((payload.status !== "draft" && payload.status !== "empty") || !payload.planned?.length)
+    return rows;
+  const projectIds = new Set(pickers.projects.map((project) => project.value));
+  const additions: GridRow[] = [];
   for (const booking of payload.planned) {
-    if (!projectIds.has(booking.projectId)) continue
-    const index = payload.rows.findIndex((row) =>
-      row.projectId === booking.projectId && row.itemId === booking.itemId && row.isBillable === booking.isBillable,
-    )
+    if (!projectIds.has(booking.projectId)) continue;
+    const index = payload.rows.findIndex(
+      (row) =>
+        row.projectId === booking.projectId &&
+        row.itemId === booking.itemId &&
+        row.isBillable === booking.isBillable,
+    );
     if (index >= 0) {
-      rows[index] = { ...rows[index]!, plannedHours: booking.plannedHours }
+      rows[index] = { ...rows[index]!, plannedHours: booking.plannedHours };
     } else {
       additions.push({
         ...emptyRow(pickers.timeTypes),
         projectId: booking.projectId,
-        itemId: booking.itemId ?? '',
+        itemId: booking.itemId ?? "",
         isBillable: booking.isBillable,
         entryStatuses: [],
         plannedHours: booking.plannedHours,
         plannedOnly: true,
-      })
+      });
     }
   }
-  return payload.rows.length === 0 && additions.length > 0 && !quickProjectId ? additions : [...rows, ...additions]
+  return payload.rows.length === 0 && additions.length > 0 && !quickProjectId
+    ? additions
+    : [...rows, ...additions];
 }
 
 function num(v: string): number {
-  if (v.trim() === '') return 0
-  const n = Number(v)
-  return Number.isNaN(n) ? 0 : n
+  if (v.trim() === "") return 0;
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
 }
 
 function fmt(n: number, locale: string): string {
-  return decimalLabel(n, locale, 2, 2)
+  return decimalLabel(n, locale, 2, 2);
 }
 
 /** Day-of-month from a day's ISO date ("2026-07-13" → 13). */
 function dayOfMonth(iso: string): number {
-  return Number(iso.split('-')[2])
+  return Number(iso.split("-")[2]);
 }
 
 /** Formatted week endpoints from the week's Sunday, for the "Week of …" title. */
 function weekRange(sundayIso: string, locale: string): { from: string; to: string } {
-  const [y, m, d] = sundayIso.split('-').map(Number)
-  const sun = new Date(Date.UTC(y!, m! - 1, d!, 12))
-  const sat = new Date(sun)
-  sat.setUTCDate(sat.getUTCDate() + 6)
+  const [y, m, d] = sundayIso.split("-").map(Number);
+  const sun = new Date(Date.UTC(y!, m! - 1, d!, 12));
+  const sat = new Date(sun);
+  sat.setUTCDate(sat.getUTCDate() + 6);
   const fmtDate = (dt: Date, withYear: boolean) =>
-    viewerDate(dt, locale, 'UTC', {
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-      ...(withYear ? { year: 'numeric' } : {}),
-    })
-  return { from: fmtDate(sun, false), to: fmtDate(sat, true) }
+    viewerDate(dt, locale, "UTC", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+      ...(withYear ? { year: "numeric" } : {}),
+    });
+  return { from: fmtDate(sun, false), to: fmtDate(sat, true) };
 }
 
 /** Shift an ISO Sunday by ±7 days, returning the new Sunday ISO. */
 function shiftWeek(sundayIso: string, deltaWeeks: number): string {
-  const [y, m, d] = sundayIso.split('-').map(Number)
-  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12))
-  dt.setUTCDate(dt.getUTCDate() + deltaWeeks * 7)
-  return dt.toISOString().slice(0, 10)
+  const [y, m, d] = sundayIso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12));
+  dt.setUTCDate(dt.getUTCDate() + deltaWeeks * 7);
+  return dt.toISOString().slice(0, 10);
 }
 
 function sundayOf(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12))
-  dt.setUTCDate(dt.getUTCDate() - dt.getUTCDay())
-  return dt.toISOString().slice(0, 10)
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12));
+  dt.setUTCDate(dt.getUTCDate() - dt.getUTCDay());
+  return dt.toISOString().slice(0, 10);
 }
 
 export function WeeklyGrid({
   employeeId,
-  workFamily = 'project',
+  workFamily = "project",
   quickProjectId,
   productionAvailable = false,
   projectAvailable = true,
@@ -244,77 +282,93 @@ export function WeeklyGrid({
   canApprove,
   canReopen,
   fieldDefs = [],
-  closeHref = '/timesheets',
+  closeHref = "/timesheets",
   // HR-20: destructured beside the prop it feeds.
   fieldFlags = [],
   anomalyFlags = [],
 }: {
-  employeeId: string | null
-  workFamily?: TimeWorkFamily
-  quickProjectId?: string
-  productionAvailable?: boolean
-  projectAvailable?: boolean
-  week: string
-  payload: WeekPayload
-  pickers: TimesheetPickers
-  canManage: boolean
-  canApprove: boolean
+  employeeId: string | null;
+  workFamily?: TimeWorkFamily;
+  quickProjectId?: string;
+  productionAvailable?: boolean;
+  projectAvailable?: boolean;
+  week: string;
+  payload: WeekPayload;
+  pickers: TimesheetPickers;
+  canManage: boolean;
+  canApprove: boolean;
   /** Holds time.reopen — deliberately separate from approve, so the person who
    * signs off on hours is not automatically the one who can unwind that. */
-  canReopen: boolean
+  canReopen: boolean;
   /** Org-defined custom fields for a timesheet LINE (target table time_entries).
    * A week has no record of its own — it is an aggregate over its lines — so
    * tenant extension lives on the line, rendered as extra grid columns. */
-  fieldDefs?: CustomFieldDefClient[]
+  fieldDefs?: CustomFieldDefClient[];
   /** Where the flyout's close/escape returns to (the list, filters intact). */
-  closeHref?: string
+  closeHref?: string;
   // HR-20: field flag chips over the week's clock pairs — geo/photo/
   // auto-close. Coordinates stay out; the drawer shows flags only.
-  fieldFlags?: { entryId: string; workedOn: string; hours: string; geoCheck: string | null; autoClosed: boolean; hasPhoto: boolean }[]
+  fieldFlags?: {
+    entryId: string;
+    workedOn: string;
+    hours: string;
+    geoCheck: string | null;
+    autoClosed: boolean;
+    hasPhoto: boolean;
+  }[];
   /** Open anomaly flags overlapping this week. Empty when none are visible
    *  to the actor — the grid renders unchanged. */
-  anomalyFlags?: { kind: string; kindLabel: string; severity: string; explanation: string }[]
+  anomalyFlags?: { kind: string; kindLabel: string; severity: string; explanation: string }[];
 }) {
-  const t = useTranslations('timesheets')
-  const tOperating = useTranslations('operatingProfiles')
-  const tScheduling = useTranslations('scheduling')
-  const locale = useLocale()
-  const tCommon = useTranslations('common')
+  const t = useTranslations("timesheets");
+  const tOperating = useTranslations("operatingProfiles");
+  const tScheduling = useTranslations("scheduling");
+  const locale = useLocale();
+  const tCommon = useTranslations("common");
   const statusLabel = (s: string) =>
-    COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : LOCAL_STATUS_KEYS.has(s) ? t(`status.${s}`) : s
-  const router = useRouter()
-  const today = useBusinessToday()
-  const [rows, setRows] = useState<GridRow[]>(() => seedRows(payload, pickers,workFamily,quickProjectId))
-  const [status, setStatus] = useState(payload.status)
-  const canSubmitAdditional =
-    canManage && ['approved', 'draft', 'rejected'].includes(status)
-  const [pendingEntries, setPendingEntries] = useState(payload.pendingEntries ?? [])
-  const [additionalReview, setAdditionalReview] = useState(false)
-  const [dirty, setDirty] = useState(false)
-  const [busy, setBusy] = useState(false)
+    COMMON_STATUS_KEYS.has(s)
+      ? tCommon(`status.${s}`)
+      : LOCAL_STATUS_KEYS.has(s)
+        ? t(`status.${s}`)
+        : s;
+  const router = useRouter();
+  const today = useBusinessToday();
+  const [rows, setRows] = useState<GridRow[]>(() =>
+    seedRows(payload, pickers, workFamily, quickProjectId),
+  );
+  const [status, setStatus] = useState(payload.status);
+  const canSubmitAdditional = canManage && ["approved", "draft", "rejected"].includes(status);
+  const [pendingEntries, setPendingEntries] = useState(payload.pendingEntries ?? []);
+  const [additionalReview, setAdditionalReview] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
   // Which decision is in flight (save/submit/approve/…). The button for that
   // action shows its spinner + progress label while every action stays
   // disabled — a slow approval reads as working, never as a silent failure.
-  const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   // A completed decision pins its confirmation beside the actions until the
   // next action — a toast alone vanishes, and the operator reads silence as
   // success or success as silence. Mirrors the pinned refusal below.
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null);
   // Synchronous re-entry fence: React state lands on the next render, so two
   // rapid clicks would both read busy=false and post twice. The ref flips in
   // the same tick as the first click, so the second click is refused.
-  const inflight = useRef(false)
+  const inflight = useRef(false);
   // The revision this editor loaded. Every save sends it back; the server
   // refuses a save over a moved week with a named 409 instead of silently
   // overwriting the other editor's hours.
-  const [revision, setRevision] = useState(payload.revision)
+  const [revision, setRevision] = useState(payload.revision);
   // A refused decision pins beside the actions until the next action — a
   // toast alone vanishes, and the operator reads silence as success.
-  const [refusal, setRefusal] = useState<{ message: string; remedy: string | null; setupHref: string | null } | null>(null)
+  const [refusal, setRefusal] = useState<{
+    message: string;
+    remedy: string | null;
+    setupHref: string | null;
+  } | null>(null);
   // A refused (stale) save parks its server message here with a reload
   // path. Local edits stay in the grid — nothing the server holds is
   // touched, and nothing typed is dropped until the editor reloads.
-  const [staleError, setStaleError] = useState<string | null>(null)
+  const [staleError, setStaleError] = useState<string | null>(null);
 
   // The employee/week live in the URL, so switching either re-renders THIS
   // component instance with a new payload — a `useState` initializer would not
@@ -323,106 +377,115 @@ export function WeeklyGrid({
   // Re-seed whenever the identity of the loaded week changes — or its
   // revision does, which is how a reload-after-conflict (router.refresh)
   // delivers the week the other editor saved.
-  const loadedKey = `${employeeId ?? ''}:${week}`
-  const seededKey = useRef(loadedKey)
-  const seededRevision = useRef(payload.revision)
+  const loadedKey = `${employeeId ?? ""}:${week}`;
+  const seededKey = useRef(loadedKey);
+  const seededRevision = useRef(payload.revision);
   useEffect(() => {
-    setPendingEntries(payload.pendingEntries ?? [])
-  }, [loadedKey, payload.pendingEntries])
+    setPendingEntries(payload.pendingEntries ?? []);
+  }, [loadedKey, payload.pendingEntries]);
   useEffect(() => {
-    if (seededKey.current === loadedKey && seededRevision.current === payload.revision) return
-    seededKey.current = loadedKey
-    seededRevision.current = payload.revision
-    setRows(seedRows(payload, pickers,workFamily,quickProjectId))
-    setStatus(payload.status)
-    setPendingEntries(payload.pendingEntries ?? [])
-    setAdditionalReview(false)
-    setRevision(payload.revision)
-    setDirty(false)
-    setStaleError(null)
-  }, [loadedKey, payload, pickers, workFamily, quickProjectId])
+    if (seededKey.current === loadedKey && seededRevision.current === payload.revision) return;
+    seededKey.current = loadedKey;
+    seededRevision.current = payload.revision;
+    setRows(seedRows(payload, pickers, workFamily, quickProjectId));
+    setStatus(payload.status);
+    setPendingEntries(payload.pendingEntries ?? []);
+    setAdditionalReview(false);
+    setRevision(payload.revision);
+    setDirty(false);
+    setStaleError(null);
+  }, [loadedKey, payload, pickers, workFamily, quickProjectId]);
 
   // Manual approval seals the week. Automatic availability seals each saved
   // row, while later days can still be added without reopening posted history.
-  const locked = status === 'approved' || !canManage || !employeeId
-  const readOnly = locked
+  const locked = status === "approved" || !canManage || !employeeId;
+  const readOnly = locked;
 
   const timeTypeById = useMemo(
     () => new Map(pickers.timeTypes.map((t) => [t.value, t])),
     [pickers.timeTypes],
-  )
+  );
 
   const setRow = (i: number, patch: Partial<GridRow>) => {
-    if (rows[i]?.immutable) return
-    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
-    setDirty(true)
-  }
+    if (rows[i]?.immutable) return;
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+    setDirty(true);
+  };
   const setCell = (i: number, day: number, value: string) => {
-    if (rows[i]?.immutable) return
+    if (rows[i]?.immutable) return;
     setRows((rs) =>
       rs.map((r, j) =>
         j === i ? { ...r, hours: r.hours.map((h, k) => (k === day ? value : h)) } : r,
       ),
-    )
-    setDirty(true)
-  }
+    );
+    setDirty(true);
+  };
   const addRow = () => {
-    setRows((rs) => [...rs, emptyRow(pickers.timeTypes,workFamily)])
-    setDirty(true)
-  }
+    setRows((rs) => [...rs, emptyRow(pickers.timeTypes, workFamily)]);
+    setDirty(true);
+  };
   const removeRow = (i: number) => {
-    if (rows[i]?.immutable) return
+    if (rows[i]?.immutable) return;
     setRows((rs) =>
-      rs.length <= 1 ? [emptyRow(pickers.timeTypes,workFamily)] : rs.filter((_, j) => j !== i),
-    )
-    setDirty(true)
-  }
+      rs.length <= 1 ? [emptyRow(pickers.timeTypes, workFamily)] : rs.filter((_, j) => j !== i),
+    );
+    setDirty(true);
+  };
 
   // When the time type changes, follow the billable policy (only if the user
   // hasn't diverged — we keep it simple and always follow the policy here).
   // The explicit checkbox wins until a policy input changes.
-  const internalIds = pickers.internalProjectIds ?? []
+  const internalIds = pickers.internalProjectIds ?? [];
   const onTimeType = (i: number, value: string) => {
-    setRow(i, { timeTypeId: value, isBillable: policyBillable(rows[i]!.projectId, timeTypeById.get(value), rows[i]!.costTarget, internalIds) })
-  }
+    setRow(i, {
+      timeTypeId: value,
+      isBillable: policyBillable(
+        rows[i]!.projectId,
+        timeTypeById.get(value),
+        rows[i]!.costTarget,
+        internalIds,
+      ),
+    });
+  };
 
   const dayTotals = useMemo(() => {
-    const totals = [0, 0, 0, 0, 0, 0, 0]
-    for (const r of rows) for (let d = 0; d < 7; d++) totals[d]! += num(r.hours[d]!)
-    return totals
-  }, [rows])
-  const rowTotal = (r: GridRow) => r.hours.reduce((s, h) => s + num(h), 0)
-  const grandTotal = dayTotals.reduce((s, t) => s + t, 0)
+    const totals = [0, 0, 0, 0, 0, 0, 0];
+    for (const r of rows) for (let d = 0; d < 7; d++) totals[d]! += num(r.hours[d]!);
+    return totals;
+  }, [rows]);
+  const rowTotal = (r: GridRow) => r.hours.reduce((s, h) => s + num(h), 0);
+  const grandTotal = dayTotals.reduce((s, t) => s + t, 0);
   const billableTotal = useMemo(
     () => rows.filter((r) => r.isBillable).reduce((s, r) => s + rowTotal(r), 0),
     [rows],
-  )
+  );
 
   // ---- navigation (URL is the source of truth; no full reload) -------------
   const confirmDiscard = async () => {
-    if (!dirty) return true
+    if (!dirty) return true;
     return confirmDialog({
-      message: t('grid.discardConfirm'),
-      confirmLabel: tCommon('confirm.discardChanges'),
-      tone: 'danger',
-    })
-  }
+      message: t("grid.discardConfirm"),
+      confirmLabel: tCommon("confirm.discardChanges"),
+      tone: "danger",
+    });
+  };
   const go = async (nextEmployee: string | null, nextWeek: string) => {
-    if (!(await confirmDiscard())) return
-    const emp = nextEmployee ?? employeeId
-    if (!emp) return
+    if (!(await confirmDiscard())) return;
+    const emp = nextEmployee ?? employeeId;
+    if (!emp) return;
     // Stay in the flyout and keep the list's filters: closeHref is the list URL
     // this drawer was opened over. (Built here, not passed as a prop — a server
     // component cannot hand a function to a client component.)
-    const params = new URLSearchParams({ timesheet: `${emp}:${nextWeek}` })
-    if (closeHref !== '/timesheets') params.set('drawerReturn', closeHref)
-    const [base, existing] = closeHref.split('?')
-    if (existing) for (const [k, v] of new URLSearchParams(existing)) if (!params.has(k)) params.set(k, v)
-    router.push(`${base}?${params.toString()}` as never)
-  }
+    const params = new URLSearchParams({ timesheet: `${emp}:${nextWeek}` });
+    if (closeHref !== "/timesheets") params.set("drawerReturn", closeHref);
+    const [base, existing] = closeHref.split("?");
+    if (existing)
+      for (const [k, v] of new URLSearchParams(existing)) if (!params.has(k)) params.set(k, v);
+    router.push(`${base}?${params.toString()}` as never);
+  };
   const onEmployee = (v: string) => {
-    if (v && v !== employeeId) go(v, week)
-  }
+    if (v && v !== employeeId) go(v, week);
+  };
 
   // ---- actions -------------------------------------------------------------
   // onConflict handles the weekly-PUT staleness refusal: the status is
@@ -431,38 +494,38 @@ export function WeeklyGrid({
   async function post(
     url: string,
     body: unknown,
-    method: 'PUT' | 'POST' = 'POST',
+    method: "PUT" | "POST" = "POST",
     onConflict?: (message: string) => void,
     action: string | null = null,
   ) {
-    if (inflight.current) return null
-    inflight.current = true
-    setBusy(true)
-    setPendingAction(action)
-    setRefusal(null)
-    setNotice(null)
+    if (inflight.current) return null;
+    inflight.current = true;
+    setBusy(true);
+    setPendingAction(action);
+    setRefusal(null);
+    setNotice(null);
     try {
-      const target = workFamily === 'production' ? `${url}?workFamily=production` : url
+      const target = workFamily === "production" ? `${url}?workFamily=production` : url;
       const res = await fetch(target, {
         method,
-        headers: { 'content-type': 'application/json' },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-      })
+      });
       // The refusal reads through the shared helper so message and code
       // render instead of only the bare `error` field.
       if (res.status === 409 && onConflict) {
-        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown };
         onConflict(
-          refusalMessageFromBody(data, { fallback: tCommon('feedback.somethingWentWrong') })
-            ?? tCommon('feedback.somethingWentWrong'),
-        )
-        return null
+          refusalMessageFromBody(data, { fallback: tCommon("feedback.somethingWentWrong") }) ??
+            tCommon("feedback.somethingWentWrong"),
+        );
+        return null;
       }
       const data = (await res.json().catch(() => ({}))) as {
-        error?: unknown
-        remedy?: unknown
-        details?: { setupHref?: unknown } | null
-      }
+        error?: unknown;
+        remedy?: unknown;
+        details?: { setupHref?: unknown } | null;
+      };
       if (!res.ok) {
         // Designed refusals arrive typed: the message names what failed and
         // the remedy names the fix, with a shortcut when the fix lives on a
@@ -473,124 +536,185 @@ export function WeeklyGrid({
         // render; the remedy stays separate because it pins and toasts on
         // its own line below.
         const message =
-          refusalMessageFromBody({ ...data, remedy: undefined }, { fallback: tCommon('feedback.somethingWentWrong') })
-            ?? tCommon('feedback.somethingWentWrong')
-        const remedy = typeof data?.remedy === 'string' && data.remedy ? data.remedy : null
-        const setupHref = data?.details && typeof data.details.setupHref === 'string' && data.details.setupHref.startsWith('/')
-          ? data.details.setupHref
-          : null
-        setRefusal({ message, remedy, setupHref })
+          refusalMessageFromBody(
+            { ...data, remedy: undefined },
+            { fallback: tCommon("feedback.somethingWentWrong") },
+          ) ?? tCommon("feedback.somethingWentWrong");
+        const remedy = typeof data?.remedy === "string" && data.remedy ? data.remedy : null;
+        const setupHref =
+          data?.details &&
+          typeof data.details.setupHref === "string" &&
+          data.details.setupHref.startsWith("/")
+            ? data.details.setupHref
+            : null;
+        setRefusal({ message, remedy, setupHref });
         toast.error(remedy ? `${message}\n${remedy}` : message, {
-          ...(setupHref ? { action: { label: tCommon('actions.open'), onClick: () => router.push(setupHref) } } : {}),
-        })
-        return null
+          ...(setupHref
+            ? { action: { label: tCommon("actions.open"), onClick: () => router.push(setupHref) } }
+            : {}),
+        });
+        return null;
       }
-      return data as WeekPayload
+      return data as WeekPayload;
     } catch {
-      toast.error(t('grid.networkError'))
-      return null
+      toast.error(t("grid.networkError"));
+      return null;
     } finally {
-      inflight.current = false
-      setBusy(false)
-      setPendingAction(null)
+      inflight.current = false;
+      setBusy(false);
+      setPendingAction(null);
     }
   }
 
   const applyPayload = (data: WeekPayload) => {
-    setRows(seedRows(data, pickers,workFamily,quickProjectId))
-    setStatus(data.status)
-    setPendingEntries(data.pendingEntries ?? [])
-    setRevision(data.revision)
-    setDirty(false)
-    router.refresh()
-  }
+    setRows(seedRows(data, pickers, workFamily, quickProjectId));
+    setStatus(data.status);
+    setPendingEntries(data.pendingEntries ?? []);
+    setRevision(data.revision);
+    setDirty(false);
+    router.refresh();
+  };
 
   const onSave = async () => {
-    if (!employeeId) return
-    const data = await post('/api/timesheets', {
-      employee: employeeId,
-      week,
-      expectedRevision: revision,
-      rows: rows.filter((r) => !r.immutable && !(r.plannedOnly && !r.hours.some((hours) => hours.trim() !== '' && Number(hours) !== 0))).map((r) => ({
-        projectId: r.projectId || null,
-        workOrderId: r.workOrderId || null,
-        woOperationId: r.woOperationId || null,
-        itemId: r.itemId || null,
-        timeTypeId: r.timeTypeId || null,
-        departmentId: r.departmentId || null,
-        isBillable: r.isBillable,
-        memo: r.memo || null,
-        hours: r.hours,
-        custom: r.custom,
-      })),
-    }, 'PUT', (message) => setStaleError(message))
+    if (!employeeId) return;
+    const data = await post(
+      "/api/timesheets",
+      {
+        employee: employeeId,
+        week,
+        expectedRevision: revision,
+        rows: rows
+          .filter(
+            (r) =>
+              !r.immutable &&
+              !(
+                r.plannedOnly &&
+                !r.hours.some((hours) => hours.trim() !== "" && Number(hours) !== 0)
+              ),
+          )
+          .map((r) => ({
+            projectId: r.projectId || null,
+            workOrderId: r.workOrderId || null,
+            woOperationId: r.woOperationId || null,
+            itemId: r.itemId || null,
+            timeTypeId: r.timeTypeId || null,
+            departmentId: r.departmentId || null,
+            isBillable: r.isBillable,
+            memo: r.memo || null,
+            hours: r.hours,
+            custom: r.custom,
+          })),
+      },
+      "PUT",
+      (message) => setStaleError(message),
+    );
     if (data) {
-      setRevision(data.revision)
-      setStaleError(null)
-      applyPayload(data)
-      toast.success(t('grid.saved'))
+      setRevision(data.revision);
+      setStaleError(null);
+      applyPayload(data);
+      toast.success(t("grid.saved"));
     }
-  }
+  };
 
   const onSubmit = async () => {
-    if (!employeeId) return
+    if (!employeeId) return;
     if (dirty) {
-      toast.error(t('grid.saveBeforeSubmit'))
-      return
+      toast.error(t("grid.saveBeforeSubmit"));
+      return;
     }
-    const data = await post('/api/timesheets/submit', { employee: employeeId, week }, 'POST', undefined, 'submit')
+    const data = await post(
+      "/api/timesheets/submit",
+      { employee: employeeId, week },
+      "POST",
+      undefined,
+      "submit",
+    );
     if (data) {
-      applyPayload(data)
-      setNotice(t('grid.submittedToast'))
-      toast.success(t('grid.submittedToast'))
+      applyPayload(data);
+      setNotice(t("grid.submittedToast"));
+      toast.success(t("grid.submittedToast"));
     }
-  }
+  };
   const onSubmitAdditional = async (selections: AdditionalTimeSelection[], reason: string) => {
-    if (!employeeId || !canSubmitAdditional) return
-    const data = await post('/api/timesheets/submit', { employee: employeeId, week, selections, reason },
-      'POST', undefined, 'submit-additional')
+    if (!employeeId || !canSubmitAdditional) return;
+    const data = await post(
+      "/api/timesheets/submit",
+      { employee: employeeId, week, selections, reason },
+      "POST",
+      undefined,
+      "submit-additional",
+    );
     if (data) {
-      applyPayload(data)
-      setAdditionalReview(false)
-      setNotice(t('grid.submittedToast'))
+      applyPayload(data);
+      setAdditionalReview(false);
+      setNotice(t("grid.submittedToast"));
     }
-  }
-  const onCorrectTimeType = async (entry: NonNullable<WeekPayload['pendingEntries']>[number], timeTypeId: string,
-    timeTypeUpdatedAt: string, commandId: string, reason: string) => {
-    if (!employeeId || !canManage || dirty || status === 'submitted') return false
-    const data = await post('/api/timesheets/time-type', { employeePartyId: employeeId, weekStart: week,
-      entryId: entry.id, expectedUpdatedAt: entry.updatedAt, timeTypeId, timeTypeUpdatedAt, commandId, reason },
-      'POST', undefined, 'correct-time-type')
-    if (!data) return false
-    applyPayload(data)
-    toast.success(t('timeTypeCorrection.saved'))
-    return true
-  }
+  };
+  const onCorrectTimeType = async (
+    entry: NonNullable<WeekPayload["pendingEntries"]>[number],
+    timeTypeId: string,
+    timeTypeUpdatedAt: string,
+    commandId: string,
+    reason: string,
+  ) => {
+    if (!employeeId || !canManage || dirty || status === "submitted") return false;
+    const data = await post(
+      "/api/timesheets/time-type",
+      {
+        employeePartyId: employeeId,
+        weekStart: week,
+        entryId: entry.id,
+        expectedUpdatedAt: entry.updatedAt,
+        timeTypeId,
+        timeTypeUpdatedAt,
+        commandId,
+        reason,
+      },
+      "POST",
+      undefined,
+      "correct-time-type",
+    );
+    if (!data) return false;
+    applyPayload(data);
+    toast.success(t("timeTypeCorrection.saved"));
+    return true;
+  };
 
   // A week with nothing recorded (leave, no work) is closed by an explicit
   // declaration with a reason, which goes through the same approval as hours.
   // Approved leave covering the week is named in the prompt and recorded on
   // the declaration's audit, so the absence it records is explicit.
   const onDeclareNoHours = async () => {
-    if (!employeeId) return
-    const cover = payload.leaveCover ?? []
+    if (!employeeId) return;
+    const cover = payload.leaveCover ?? [];
     const reason = await promptDialog({
-      title: t('grid.noHoursTitle'),
-      message: cover.length > 0
-        ? t('grid.noHoursLeaveMessage', { leave: cover.map((entry) => `${entry.leaveType} ${entry.from}–${entry.to}`).join('; ') })
-        : t('grid.noHoursMessage'),
-      label: t('grid.noHoursReasonLabel'),
-      placeholder: t('grid.noHoursPlaceholder'),
-      confirmLabel: t('grid.noHoursConfirm'),
-    })
-    if (!reason) return
-    const data = await post('/api/timesheets/submit', { employee: employeeId, week, noHours: true, reason }, 'POST', undefined, 'submit')
+      title: t("grid.noHoursTitle"),
+      message:
+        cover.length > 0
+          ? t("grid.noHoursLeaveMessage", {
+              leave: cover
+                .map((entry) => `${entry.leaveType} ${entry.from}–${entry.to}`)
+                .join("; "),
+            })
+          : t("grid.noHoursMessage"),
+      label: t("grid.noHoursReasonLabel"),
+      placeholder: t("grid.noHoursPlaceholder"),
+      confirmLabel: t("grid.noHoursConfirm"),
+    });
+    if (!reason) return;
+    const data = await post(
+      "/api/timesheets/submit",
+      { employee: employeeId, week, noHours: true, reason },
+      "POST",
+      undefined,
+      "submit",
+    );
     if (data) {
-      applyPayload(data)
-      setNotice(t('grid.noHoursToast'))
-      toast.success(t('grid.noHoursToast'))
+      applyPayload(data);
+      setNotice(t("grid.noHoursToast"));
+      toast.success(t("grid.noHoursToast"));
     }
-  }
+  };
 
   // An approver holding time.approve may mark a submitted line billable or
   // not (a write-off) before deciding the week. The flag posts immediately
@@ -598,139 +722,174 @@ export function WeeklyGrid({
   // save could silently drop (the save skips submitted lines). The approval
   // that follows snapshots bill rates off the final flag.
   const onBillableApprover = async (index: number, value: boolean) => {
-    if (!employeeId) return
-    const line = rows[index]
-    if (!line) return
-    const data = await post('/api/timesheets/billable', {
-      employee: employeeId,
-      week,
-      line: {
-        projectId: line.projectId || null,
-        itemId: line.itemId || null,
-        timeTypeId: line.timeTypeId || null,
-        departmentId: line.departmentId || null,
-        memo: line.memo || null,
-        custom: line.custom,
+    if (!employeeId) return;
+    const line = rows[index];
+    if (!line) return;
+    const data = await post(
+      "/api/timesheets/billable",
+      {
+        employee: employeeId,
+        week,
+        line: {
+          projectId: line.projectId || null,
+          itemId: line.itemId || null,
+          timeTypeId: line.timeTypeId || null,
+          departmentId: line.departmentId || null,
+          memo: line.memo || null,
+          custom: line.custom,
+        },
+        isBillable: value,
       },
-      isBillable: value,
-    }, 'POST', undefined, 'billable')
+      "POST",
+      undefined,
+      "billable",
+    );
     if (data) {
-      applyPayload(data)
-      setNotice(t('grid.billableUpdatedToast'))
-      toast.success(t('grid.billableUpdatedToast'))
+      applyPayload(data);
+      setNotice(t("grid.billableUpdatedToast"));
+      toast.success(t("grid.billableUpdatedToast"));
     }
-  }
+  };
 
   const onWithdraw = async () => {
-    if (!employeeId) return
+    if (!employeeId) return;
     const ok = await confirmDialog({
-      title: t('grid.withdrawTitle'),
-      message: t('grid.withdrawMessage'),
-      confirmLabel: t('grid.withdraw'),
-    })
-    if (!ok) return
-    const data = await post('/api/timesheets/withdraw', { employee: employeeId, week }, 'POST', undefined, 'withdraw')
+      title: t("grid.withdrawTitle"),
+      message: t("grid.withdrawMessage"),
+      confirmLabel: t("grid.withdraw"),
+    });
+    if (!ok) return;
+    const data = await post(
+      "/api/timesheets/withdraw",
+      { employee: employeeId, week },
+      "POST",
+      undefined,
+      "withdraw",
+    );
     if (data) {
-      applyPayload(data)
-      setNotice(t('grid.withdrawnToast'))
-      toast.success(t('grid.withdrawnToast'))
+      applyPayload(data);
+      setNotice(t("grid.withdrawnToast"));
+      toast.success(t("grid.withdrawnToast"));
     }
-  }
+  };
 
   const onReopen = async () => {
-    if (!employeeId) return
+    if (!employeeId) return;
     const ok = await confirmDialog({
-      title: t('grid.reopenTitle'),
-      message: t('grid.reopenMessage'),
-      confirmLabel: t('grid.reopen'),
-    })
-    if (!ok) return
-    const data = await post('/api/timesheets/reopen', { employee: employeeId, week })
+      title: t("grid.reopenTitle"),
+      message: t("grid.reopenMessage"),
+      confirmLabel: t("grid.reopen"),
+    });
+    if (!ok) return;
+    const data = await post("/api/timesheets/reopen", { employee: employeeId, week });
     if (data) {
-      applyPayload(data)
-      toast.success(t('grid.reopenedToast'))
+      applyPayload(data);
+      toast.success(t("grid.reopenedToast"));
     }
-  }
+  };
 
   const onAmend = async () => {
-    if (!employeeId) return
+    if (!employeeId) return;
     const ok = await confirmDialog({
-      title: t('grid.amendTitle'),
-      message: t('grid.amendMessage'),
-      confirmLabel: t('grid.amend'),
-    })
-    if (!ok) return
-    const data = await post('/api/timesheets/amend', { employee: employeeId, week })
+      title: t("grid.amendTitle"),
+      message: t("grid.amendMessage"),
+      confirmLabel: t("grid.amend"),
+    });
+    if (!ok) return;
+    const data = await post("/api/timesheets/amend", { employee: employeeId, week });
     if (data) {
-      applyPayload(data)
-      toast.success(t('grid.amendedToast'))
+      applyPayload(data);
+      toast.success(t("grid.amendedToast"));
     }
-  }
+  };
 
-  const canSave = canManage && !readOnly && employeeId != null
+  const canSave = canManage && !readOnly && employeeId != null;
   // Published bookings fill empty days; the person reviews and saves as usual.
   const onFillFromSchedule = () => {
-    const beforeProjects = rows.map((row) => row.projectId)
+    const beforeProjects = rows.map((row) => row.projectId);
     const result = fillFromSchedule(rows, payload.scheduled ?? [], payload.days, {
       projectIds: new Set(pickers.projects.map((project) => project.value)),
       blank: () => emptyRow(pickers.timeTypes),
-    })
+    });
     if (result.filled === 0) {
-      toast.info(tScheduling('prefill.nothing'))
-      return
+      toast.info(tScheduling("prefill.nothing"));
+      return;
     }
     // Rows the fill newly assigns to a project (including appended lines,
     // which have no before-image) follow the billable policy; untouched rows
     // keep the operator's choice.
-    setRows(result.rows.map((row, index) =>
-      row.projectId !== '' && (beforeProjects[index] ?? '') === ''
-        ? { ...row, isBillable: policyBillable(row.projectId, timeTypeById.get(row.timeTypeId), row.costTarget, internalIds) }
-        : row,
-    ))
-    setDirty(true)
-    toast.success(tScheduling('prefill.filled', { count: result.filled, skipped: result.skipped }))
-  }
+    setRows(
+      result.rows.map((row, index) =>
+        row.projectId !== "" && (beforeProjects[index] ?? "") === ""
+          ? {
+              ...row,
+              isBillable: policyBillable(
+                row.projectId,
+                timeTypeById.get(row.timeTypeId),
+                row.costTarget,
+                internalIds,
+              ),
+            }
+          : row,
+      ),
+    );
+    setDirty(true);
+    toast.success(tScheduling("prefill.filled", { count: result.filled, skipped: result.skipped }));
+  };
   const canSubmit =
-    canManage &&
-    employeeId != null &&
-    (status === 'draft' || status === 'rejected')
+    canManage && employeeId != null && (status === "draft" || status === "rejected");
   // Reopen is offered only when it will actually succeed: approved, held by
   // nothing downstream, and the user carries the separate reopen right.
-  const weekLocked = (payload.lockReasons?.length ?? 0) > 0
+  const weekLocked = (payload.lockReasons?.length ?? 0) > 0;
   async function correctProductionEntry(entryId: string, hours: string) {
-    const replacementHours = await promptDialog({ title: tOperating('time.correctTitle'), message: tOperating('time.correctMessage'), label: tOperating('time.correctHours'), initialValue: hours })
-    if (replacementHours === null) return
-    const reason = await promptDialog({ title: tOperating('time.correctTitle'), label: tOperating('time.correctReason'), multiline: true })
-    if (!reason) return
-    const result = await post('/api/timesheets/amend', { entryId, replacement: {hours: replacementHours, reason} })
-    if (result) { toast.success(t('grid.amendedToast')); applyPayload(result); router.refresh() }
+    const replacementHours = await promptDialog({
+      title: tOperating("time.correctTitle"),
+      message: tOperating("time.correctMessage"),
+      label: tOperating("time.correctHours"),
+      initialValue: hours,
+    });
+    if (replacementHours === null) return;
+    const reason = await promptDialog({
+      title: tOperating("time.correctTitle"),
+      label: tOperating("time.correctReason"),
+      multiline: true,
+    });
+    if (!reason) return;
+    const result = await post("/api/timesheets/amend", {
+      entryId,
+      replacement: { hours: replacementHours, reason },
+    });
+    if (result) {
+      toast.success(t("grid.amendedToast"));
+      applyPayload(result);
+      router.refresh();
+    }
   }
 
-  const canDoReopen = canReopen && employeeId != null && status === 'approved' && !weekLocked
-  const canDoAmend = canReopen && employeeId != null && status === 'approved' && weekLocked
+  const canDoReopen = canReopen && employeeId != null && status === "approved" && !weekLocked;
+  const canDoAmend = canReopen && employeeId != null && status === "approved" && weekLocked;
   // Withdraw is the submitter's own recall of a week still awaiting decision:
   // decided weeks stay decided (approved reopens, rejected is already back).
-  const canWithdraw = canManage && employeeId != null && status === 'submitted'
+  const canWithdraw = canManage && employeeId != null && status === "submitted";
   // Approver billable retargeting is a submitted-week right: the per-row
   // gate below additionally requires every entry still submitted, no
   // amendment offset, and never a production line.
-  const canEditBillable =
-    canApprove && employeeId != null && status === 'submitted'
+  const canEditBillable = canApprove && employeeId != null && status === "submitted";
 
   // Column widths mirror LineGrid's data-driven track model.
   // Org-defined line fields become real grid columns, between the built-in
   // line metadata and the seven day cells.
   const customCols = useMemo(
-    () => fieldDefs.filter((d) => d.config.displayMode !== 'hidden'),
+    () => fieldDefs.filter((d) => d.config.displayMode !== "hidden"),
     [fieldDefs],
-  )
-  const fixedCols = 6 + customCols.length
-  const template = `minmax(160px,1.6fr) minmax(130px,1.2fr) 110px 120px 56px minmax(140px,1.4fr) ${'minmax(120px,1fr) '.repeat(customCols.length)}${'62px '.repeat(7)}72px 40px`
+  );
+  const fixedCols = 6 + customCols.length;
+  const template = `minmax(160px,1.6fr) minmax(130px,1.2fr) 110px 120px 56px minmax(140px,1.4fr) ${"minmax(120px,1fr) ".repeat(customCols.length)}${"62px ".repeat(7)}72px 40px`;
 
   const cellInput =
-    'w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100'
+    "w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100";
 
-  if (additionalReview && canManage && status !== 'submitted') {
+  if (additionalReview && canManage && status !== "submitted") {
     return (
       <UrlDrawer
         open
@@ -740,18 +899,26 @@ export function WeeklyGrid({
         beforeClose={async () => !busy && (await confirmDiscard())}
         title={
           <span>
-            {t('additional.title')} ·{' '}
-            {pickers.employees.find(employee => employee.value === employeeId)?.label}
-            {' · '}
-            {t('grid.weekOf', weekRange(week, locale))}
+            {t("additional.title")} ·{" "}
+            {pickers.employees.find((employee) => employee.value === employeeId)?.label}
+            {" · "}
+            {t("grid.weekOf", weekRange(week, locale))}
           </span>
         }
       >
-        <AdditionalTimeReview key={`${loadedKey}:${revision}`} entries={pendingEntries} pickers={pickers}
-        busy={busy} refusal={refusal} onBack={() => setAdditionalReview(false)} onSubmit={onSubmitAdditional}
-        canSubmit={canSubmitAdditional} onCorrect={onCorrectTimeType} />
+        <AdditionalTimeReview
+          key={`${loadedKey}:${revision}`}
+          entries={pendingEntries}
+          pickers={pickers}
+          busy={busy}
+          refusal={refusal}
+          onBack={() => setAdditionalReview(false)}
+          onSubmit={onSubmitAdditional}
+          canSubmit={canSubmitAdditional}
+          onCorrect={onCorrectTimeType}
+        />
       </UrlDrawer>
-    )
+    );
   }
   return (
     <UrlDrawer
@@ -764,58 +931,64 @@ export function WeeklyGrid({
       initialFullscreen
       title={
         <span className="flex flex-wrap items-center gap-2.5">
-          {t('grid.title')}
-          <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>
-            {statusLabel(status)}
-          </Badge>
+          {t("grid.title")}
+          <Badge variant={STATUS_VARIANT[status] ?? "secondary"}>{statusLabel(status)}</Badge>
         </span>
       }
       headerActions={
         <>
-          {canManage && status !== 'submitted' && pendingEntries.length > 0 ? (
-            <Button size="sm" variant="outline" disabled={busy || dirty} onClick={() => setAdditionalReview(true)}>
-              {t('additional.action', { count: pendingEntries.length })}
+          {canManage && status !== "submitted" && pendingEntries.length > 0 ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || dirty}
+              onClick={() => setAdditionalReview(true)}
+            >
+              {t("additional.action", { count: pendingEntries.length })}
             </Button>
           ) : null}
           {canSave && (payload.scheduled?.length ?? 0) > 0 ? (
-            <Button size="sm" variant="outline" onClick={onFillFromSchedule} disabled={busy} title={tScheduling('prefill.timesheetHint')}>
-              <CalendarCheck size={14} /> {tScheduling('prefill.fill')}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onFillFromSchedule}
+              disabled={busy}
+              title={tScheduling("prefill.timesheetHint")}
+            >
+              <CalendarCheck size={14} /> {tScheduling("prefill.fill")}
             </Button>
           ) : null}
           {canSave ? (
             <Button size="sm" onClick={onSave} disabled={busy || !dirty}>
-              {tCommon('actions.save')}
+              {tCommon("actions.save")}
             </Button>
           ) : null}
           {canSubmit && grandTotal > 0 ? (
             <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy || dirty}>
-              {pendingAction === 'submit' ? (
+              {pendingAction === "submit" ? (
                 <span className="inline-flex items-center gap-1.5">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {t('grid.submitting')}
+                  {t("grid.submitting")}
                 </span>
               ) : (
-                t('grid.submitForApproval')
+                t("grid.submitForApproval")
               )}
             </Button>
           ) : null}
           {canSubmit && grandTotal === 0 && !dirty ? (
             <Button size="sm" variant="outline" onClick={onDeclareNoHours} disabled={busy}>
-              {pendingAction === 'submit' ? (
+              {pendingAction === "submit" ? (
                 <span className="inline-flex items-center gap-1.5">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {t('grid.submitting')}
+                  {t("grid.submitting")}
                 </span>
               ) : (
-                t('grid.noHoursAction')
+                t("grid.noHoursAction")
               )}
             </Button>
           ) : null}
-          {status === 'submitted' && payload.weekId ? (
-            <ApprovalActions
-              subjectKind="timesheet_week"
-              subjectId={payload.weekId}
-            />
+          {status === "submitted" && payload.weekId ? (
+            <ApprovalActions subjectKind="timesheet_week" subjectId={payload.weekId} />
           ) : null}
           {refusal ? (
             <div
@@ -825,14 +998,12 @@ export function WeeklyGrid({
               <span className="min-w-52 flex-1">
                 {refusal.message}
                 {refusal.remedy ? (
-                  <span className="mt-0.5 block text-xs opacity-90">
-                    {refusal.remedy}
-                  </span>
+                  <span className="mt-0.5 block text-xs opacity-90">{refusal.remedy}</span>
                 ) : null}
               </span>
               {refusal.setupHref ? (
                 <Link href={refusal.setupHref} className="text-sm font-medium underline">
-                  {tCommon('actions.open')}
+                  {tCommon("actions.open")}
                 </Link>
               ) : null}
             </div>
@@ -848,26 +1019,26 @@ export function WeeklyGrid({
           ) : null}
           {canWithdraw ? (
             <Button size="sm" variant="outline" onClick={onWithdraw} disabled={busy}>
-              {pendingAction === 'withdraw' ? (
+              {pendingAction === "withdraw" ? (
                 <span className="inline-flex items-center gap-1.5">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {t('grid.withdrawing')}
+                  {t("grid.withdrawing")}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5">
-                  <Undo2 size={14} /> {t('grid.withdraw')}
+                  <Undo2 size={14} /> {t("grid.withdraw")}
                 </span>
               )}
             </Button>
           ) : null}
           {canDoReopen ? (
             <Button size="sm" variant="outline" onClick={onReopen} disabled={busy}>
-              <RotateCcw size={14} /> {t('grid.reopen')}
+              <RotateCcw size={14} /> {t("grid.reopen")}
             </Button>
           ) : null}
           {canDoAmend ? (
             <Button size="sm" variant="outline" onClick={onAmend} disabled={busy}>
-              <FilePenLine size={14} /> {t('grid.amend')}
+              <FilePenLine size={14} /> {t("grid.amend")}
             </Button>
           ) : null}
         </>
@@ -882,7 +1053,7 @@ export function WeeklyGrid({
         >
           <span className="min-w-52 flex-1">{staleError}</span>
           <Button size="sm" variant="outline" onClick={() => router.refresh()}>
-            {tCommon('actions.refresh')}
+            {tCommon("actions.refresh")}
           </Button>
         </div>
       ) : null}
@@ -891,63 +1062,82 @@ export function WeeklyGrid({
       <div className="mb-5 space-y-3 border-b border-slate-200 pb-4 dark:border-slate-800">
         <div className="w-72">
           <SearchSelect
-            value={employeeId ?? ''}
+            value={employeeId ?? ""}
             onChange={onEmployee}
             options={pickers.employees}
-            placeholder={t('grid.selectEmployee')}
-            ariaLabel={tCommon('labels.employee')}
+            placeholder={t("grid.selectEmployee")}
+            ariaLabel={tCommon("labels.employee")}
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, -1))} disabled={!employeeId}>
-            <ChevronLeft size={15} /> {t('grid.prev')}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => go(employeeId, shiftWeek(week, -1))}
+            disabled={!employeeId}
+          >
+            <ChevronLeft size={15} /> {t("grid.prev")}
           </Button>
           <span className="min-w-[220px] text-center text-sm font-medium text-slate-700 dark:text-slate-200">
-            {t('grid.weekOf', weekRange(week, locale))}
+            {t("grid.weekOf", weekRange(week, locale))}
           </span>
-          <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, 1))} disabled={!employeeId}>
-            {tCommon('actions.next')} <ChevronRight size={15} />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => go(employeeId, shiftWeek(week, 1))}
+            disabled={!employeeId}
+          >
+            {tCommon("actions.next")} <ChevronRight size={15} />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => go(employeeId, sundayOf(today))} disabled={!employeeId}>
-            {t('grid.thisWeek')}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => go(employeeId, sundayOf(today))}
+            disabled={!employeeId}
+          >
+            {t("grid.thisWeek")}
           </Button>
           <DateField
             value={week}
             disabled={!employeeId}
             onChange={(value) => {
-              if (value) go(employeeId, sundayOf(value))
+              if (value) go(employeeId, sundayOf(value));
             }}
             className="h-8 w-36 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-            aria-label={t('grid.weekJump')}
-            title={t('grid.weekJump')}
+            aria-label={t("grid.weekJump")}
+            title={t("grid.weekJump")}
           />
-          {readOnly && status === 'approved' ? (
+          {readOnly && status === "approved" ? (
             <span className="text-xs text-slate-400 dark:text-slate-500">
-              {t('grid.approvedReadOnly')}
+              {t("grid.approvedReadOnly")}
             </span>
           ) : !canManage ? (
-            <span className="text-xs text-slate-400 dark:text-slate-500">
-              {t('grid.viewOnly')}
-            </span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">{t("grid.viewOnly")}</span>
           ) : null}
         </div>
 
         {/* A refused save names what happened and offers the way back. The
           grid keeps the typed hours until the editor chooses Reload. */}
-        {fieldFlags.filter((flag) => flag.geoCheck === 'outside' || flag.geoCheck === 'unavailable' || flag.autoClosed).length > 0 ? (
+        {fieldFlags.filter(
+          (flag) =>
+            flag.geoCheck === "outside" || flag.geoCheck === "unavailable" || flag.autoClosed,
+        ).length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {fieldFlags
-              .filter((flag) => flag.geoCheck === 'outside' || flag.geoCheck === 'unavailable' || flag.autoClosed)
+              .filter(
+                (flag) =>
+                  flag.geoCheck === "outside" || flag.geoCheck === "unavailable" || flag.autoClosed,
+              )
               .map((flag) => (
                 <span
                   key={flag.entryId}
                   className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200"
                 >
                   {flag.workedOn} · {flag.hours}h
-                  {flag.geoCheck === 'outside' ? ` ${t('field.flagOutside')}` : null}
-                  {flag.geoCheck === 'unavailable' ? ` ${t('field.flagUnavailable')}` : null}
-                  {flag.autoClosed ? ` ${t('field.flagAutoClosed')}` : null}
-                  {flag.hasPhoto ? ` ${t('field.flagPhoto')}` : null}
+                  {flag.geoCheck === "outside" ? ` ${t("field.flagOutside")}` : null}
+                  {flag.geoCheck === "unavailable" ? ` ${t("field.flagUnavailable")}` : null}
+                  {flag.autoClosed ? ` ${t("field.flagAutoClosed")}` : null}
+                  {flag.hasPhoto ? ` ${t("field.flagPhoto")}` : null}
                 </span>
               ))}
           </div>
@@ -965,8 +1155,11 @@ export function WeeklyGrid({
                 {flag.kindLabel}
               </span>
             ))}
-            <a href="/payroll/anomalies" className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
-              {t('grid.checksLink')}
+            <a
+              href="/payroll/anomalies"
+              className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+            >
+              {t("grid.checksLink")}
             </a>
           </div>
         ) : null}
@@ -977,46 +1170,52 @@ export function WeeklyGrid({
           <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
             <Lock size={13} className="mt-0.5 shrink-0" />
             <span>
-              {t('grid.lockedBecause', {
-                reasons: (payload.lockReasons ?? []).map((r) => t(`grid.lockReason.${r}`)).join(', '),
+              {t("grid.lockedBecause", {
+                reasons: (payload.lockReasons ?? [])
+                  .map((r) => t(`grid.lockReason.${r}`))
+                  .join(", "),
                 count: payload.lockedCount ?? 0,
               })}
             </span>
           </div>
         ) : null}
 
-        {status === 'rejected' && payload.rejectionReason ? (
+        {status === "rejected" && payload.rejectionReason ? (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-            {t('grid.rejectedBecause', { reason: payload.rejectionReason })}
+            {t("grid.rejectedBecause", { reason: payload.rejectionReason })}
           </div>
         ) : null}
       </div>
 
       {!employeeId ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t('grid.noEmployee')}
-        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t("grid.noEmployee")}</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
             {/* header */}
             {[
-              { id: 'project', label: productionAvailable ? tOperating('time.work') : tCommon('labels.project'), required: false },
-              { id: 'item', label: t('labels.serviceItem') },
-              { id: 'timeType', label: t('labels.timeType') },
-              { id: 'department', label: tCommon('labels.department') },
-              { id: 'bill', label: t('labels.bill') },
-              { id: 'memo', label: tCommon('labels.memo') },
-              ...customCols.map((d) => ({ id: `cf_${d.key}`, label: d.label, required: d.isRequired })),
+              {
+                id: "project",
+                label: productionAvailable ? tOperating("time.work") : tCommon("labels.project"),
+                required: false,
+              },
+              { id: "item", label: t("labels.serviceItem") },
+              { id: "timeType", label: t("labels.timeType") },
+              { id: "department", label: tCommon("labels.department") },
+              { id: "bill", label: t("labels.bill") },
+              { id: "memo", label: tCommon("labels.memo") },
+              ...customCols.map((d) => ({
+                id: `cf_${d.key}`,
+                label: d.label,
+                required: d.isRequired,
+              })),
             ].map((h) => (
               <div
                 key={h.id}
                 className="border-b border-slate-200 px-2.5 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400"
               >
                 {h.label}
-                {h.required && !readOnly ? (
-                  <span className="text-red-500"> *</span>
-                ) : null}
+                {h.required && !readOnly ? <span className="text-red-500"> *</span> : null}
               </div>
             ))}
             {payload.days.map((iso, i) => (
@@ -1028,20 +1227,24 @@ export function WeeklyGrid({
               </div>
             ))}
             <div className="border-b border-slate-200 px-2 py-2 text-right text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-              {tCommon('labels.total')}
+              {tCommon("labels.total")}
             </div>
             <div className="border-b border-slate-200 dark:border-slate-800" />
 
             {/* rows */}
             {rows.map((r, i) => {
-              const total = rowTotal(r)
+              const total = rowTotal(r);
               // An approver's billable retarget stays available on a
               // submitted line although the row is otherwise immutable: the
               // flag posts immediately through the billable route (never a
               // local draft), and the server refuses approved/invoiced lines.
-              const approverBillable = canEditBillable && !busy
-                && r.costTarget !== 'production' && r.amendsEntryId == null
-                && r.entryStatuses.length > 0 && r.entryStatuses.every((s) => s === 'submitted')
+              const approverBillable =
+                canEditBillable &&
+                !busy &&
+                r.costTarget !== "production" &&
+                r.amendsEntryId == null &&
+                r.entryStatuses.length > 0 &&
+                r.entryStatuses.every((s) => s === "submitted");
               return (
                 <RowFragment
                   key={i}
@@ -1057,40 +1260,76 @@ export function WeeklyGrid({
                   cellInput={cellInput}
                   productionAvailable={productionAvailable}
                   projectAvailable={projectAvailable}
-                  onTarget={(value) => setRow(i, { costTarget: value, projectId: '', workOrderId: '', woOperationId: '', isBillable: value === 'production' ? false : r.isBillable })}
-                  onWorkOrder={(v) => setRow(i, { projectId: '', workOrderId: v, woOperationId: '', isBillable: false })}
+                  onTarget={(value) =>
+                    setRow(i, {
+                      costTarget: value,
+                      projectId: "",
+                      workOrderId: "",
+                      woOperationId: "",
+                      isBillable: value === "production" ? false : r.isBillable,
+                    })
+                  }
+                  onWorkOrder={(v) =>
+                    setRow(i, {
+                      projectId: "",
+                      workOrderId: v,
+                      woOperationId: "",
+                      isBillable: false,
+                    })
+                  }
                   onOperation={(v) => setRow(i, { woOperationId: v })}
-                  onProject={(v) => setRow(i, { projectId: v, workOrderId: '', woOperationId: '', isBillable: policyBillable(v, timeTypeById.get(r.timeTypeId), r.costTarget, internalIds) })}
+                  onProject={(v) =>
+                    setRow(i, {
+                      projectId: v,
+                      workOrderId: "",
+                      woOperationId: "",
+                      isBillable: policyBillable(
+                        v,
+                        timeTypeById.get(r.timeTypeId),
+                        r.costTarget,
+                        internalIds,
+                      ),
+                    })
+                  }
                   onItem={(v) => setRow(i, { itemId: v })}
                   onTimeType={(v) => onTimeType(i, v)}
                   onDept={(v) => setRow(i, { departmentId: v })}
                   onBillable={(v) => {
-                    if (approverBillable) void onBillableApprover(i, v)
-                    else setRow(i, { isBillable: v })
+                    if (approverBillable) void onBillableApprover(i, v);
+                    else setRow(i, { isBillable: v });
                   }}
                   onMemo={(v) => setRow(i, { memo: v })}
                   customCols={customCols}
                   onCustom={(v) => setRow(i, { custom: v })}
                   onCell={(d, v) => setCell(i, d, v)}
-                  onCorrect={canReopen && !busy ? (entryId, hours) => void correctProductionEntry(entryId,hours) : undefined}
+                  onCorrect={
+                    canReopen && !busy
+                      ? (entryId, hours) => void correctProductionEntry(entryId, hours)
+                      : undefined
+                  }
                   onRemove={() => removeRow(i)}
                 />
-              )
+              );
             })}
 
             {/* footer totals */}
-            <div style={{ gridColumn: `span ${fixedCols}` }} className="border-t border-slate-200 px-2.5 py-2 text-right text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              {t('labels.dailyTotals')}
+            <div
+              style={{ gridColumn: `span ${fixedCols}` }}
+              className="border-t border-slate-200 px-2.5 py-2 text-right text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
+            >
+              {t("labels.dailyTotals")}
             </div>
             {dayTotals.map((tot, d) => (
               <div
                 key={d}
                 className={cn(
-                  'border-t border-slate-200 px-1 py-2 text-center text-sm tabular-nums dark:border-slate-700',
-                  tot > 0 ? 'font-semibold text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500',
+                  "border-t border-slate-200 px-1 py-2 text-center text-sm tabular-nums dark:border-slate-700",
+                  tot > 0
+                    ? "font-semibold text-slate-800 dark:text-slate-100"
+                    : "text-slate-400 dark:text-slate-500",
                 )}
               >
-                {tot > 0 ? fmt(tot, locale) : '—'}
+                {tot > 0 ? fmt(tot, locale) : "—"}
               </div>
             ))}
             <div className="border-t border-slate-200 px-2 py-2 text-right text-sm font-bold tabular-nums text-teal-700 dark:border-slate-700 dark:text-teal-300">
@@ -1105,20 +1344,20 @@ export function WeeklyGrid({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           {!readOnly ? (
             <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={busy}>
-              <Plus size={14} /> {t('grid.addLine')}
+              <Plus size={14} /> {t("grid.addLine")}
             </Button>
           ) : (
             <span />
           )}
           <div className="flex items-center gap-5 text-sm">
             <span className="text-slate-500 dark:text-slate-400">
-              {t('labels.billable')}{' '}
+              {t("labels.billable")}{" "}
               <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
                 {fmt(billableTotal, locale)}
               </span>
             </span>
             <span className="text-slate-500 dark:text-slate-400">
-              {t('labels.totalHours')}{' '}
+              {t("labels.totalHours")}{" "}
               <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-300">
                 {fmt(grandTotal, locale)}
               </span>
@@ -1127,7 +1366,7 @@ export function WeeklyGrid({
         </div>
       ) : null}
     </UrlDrawer>
-  )
+  );
 }
 
 function RowFragment({
@@ -1155,78 +1394,106 @@ function RowFragment({
   onRemove,
   onCorrect,
 }: {
-  onCorrect?: (entryId: string, hours: string) => void
-  r: GridRow
-  i: number
-  total: number
-  readOnly: boolean
+  onCorrect?: (entryId: string, hours: string) => void;
+  r: GridRow;
+  i: number;
+  total: number;
+  readOnly: boolean;
   /** Approver retarget of the billable flag on a submitted line (posts
    * through the billable route; every other cell stays read-only). */
-  billableEditable: boolean
-  pickers: TimesheetPickers
-  cellInput: string
-  onProject: (v: string) => void
-  productionAvailable: boolean
-  projectAvailable: boolean
-  onTarget: (v: TimeWorkFamily) => void
-  onWorkOrder: (v: string) => void
-  onOperation: (v: string) => void
-  onItem: (v: string) => void
-  onTimeType: (v: string) => void
-  onDept: (v: string) => void
-  onBillable: (v: boolean) => void
-  onMemo: (v: string) => void
-  customCols: CustomFieldDefClient[]
-  onCustom: (values: Record<string, unknown>) => void
-  onCell: (day: number, value: string) => void
-  onRemove: () => void
+  billableEditable: boolean;
+  pickers: TimesheetPickers;
+  cellInput: string;
+  onProject: (v: string) => void;
+  productionAvailable: boolean;
+  projectAvailable: boolean;
+  onTarget: (v: TimeWorkFamily) => void;
+  onWorkOrder: (v: string) => void;
+  onOperation: (v: string) => void;
+  onItem: (v: string) => void;
+  onTimeType: (v: string) => void;
+  onDept: (v: string) => void;
+  onBillable: (v: boolean) => void;
+  onMemo: (v: string) => void;
+  customCols: CustomFieldDefClient[];
+  onCustom: (values: Record<string, unknown>) => void;
+  onCell: (day: number, value: string) => void;
+  onRemove: () => void;
 }) {
-  const t = useTranslations('timesheets')
-  const tOperating = useTranslations('operatingProfiles')
-  const tCommon = useTranslations('common')
-  const tResourcing = useTranslations('resourcing')
-  const locale = useLocale()
-  const cell = 'flex min-h-[42px] items-center border-b border-slate-100 px-1 dark:border-slate-800'
-  const label = (opts: PickerOption[], v: string) => opts.find((o) => o.value === v)?.label ?? '—'
+  const t = useTranslations("timesheets");
+  const tOperating = useTranslations("operatingProfiles");
+  const tCommon = useTranslations("common");
+  const tResourcing = useTranslations("resourcing");
+  const locale = useLocale();
+  const cell =
+    "flex min-h-[42px] items-center border-b border-slate-100 px-1 dark:border-slate-800";
+  const label = (opts: PickerOption[], v: string) => opts.find((o) => o.value === v)?.label ?? "—";
 
   return (
     <>
-      <div className={cn(cell,'flex-col items-stretch justify-center gap-1 py-1')}>
+      <div className={cn(cell, "flex-col items-stretch justify-center gap-1 py-1")}>
         {productionAvailable && projectAvailable && !readOnly ? (
-          <Select value={r.costTarget} aria-label={tOperating('time.work')} onChange={e=>onTarget(e.target.value as TimeWorkFamily)} className="h-7 text-xs">
-            <option value="project">{tOperating('time.project')}</option>
-            <option value="production">{tOperating('time.production')}</option>
+          <Select
+            value={r.costTarget}
+            aria-label={tOperating("time.work")}
+            onChange={(e) => onTarget(e.target.value as TimeWorkFamily)}
+            className="h-7 text-xs"
+          >
+            <option value="project">{tOperating("time.project")}</option>
+            <option value="production">{tOperating("time.production")}</option>
           </Select>
         ) : null}
-        {r.costTarget === 'production' ? (
+        {r.costTarget === "production" ? (
           <>
-            <RemoteRecordChoice id={`time-order-${i}`} value={r.workOrderId} options={[]} endpoint="/api/timesheets/production-choices?workFamily=production" disabled={readOnly} clearable onChange={onWorkOrder}
-              labels={{choose:tOperating('time.order'),searchPlaceholder:tOperating('time.search'),loadFailed:tOperating('loadFailed'),retry:tOperating('retry')}} />
+            <RemoteRecordChoice
+              id={`time-order-${i}`}
+              value={r.workOrderId}
+              options={[]}
+              endpoint="/api/timesheets/production-choices?workFamily=production"
+              disabled={readOnly}
+              clearable
+              onChange={onWorkOrder}
+              labels={{
+                choose: tOperating("time.order"),
+                searchPlaceholder: tOperating("time.search"),
+                loadFailed: tOperating("loadFailed"),
+                retry: tOperating("retry"),
+              }}
+            />
             {r.workOrderId ? (
-              <RemoteRecordChoice id={`time-operation-${i}`} value={r.woOperationId} options={[]} endpoint={`/api/timesheets/production-choices?workFamily=production&workOrderId=${r.workOrderId}`} disabled={readOnly} clearable onChange={onOperation}
-              labels={{choose:tOperating('time.operation'),searchPlaceholder:tOperating('time.search'),loadFailed:tOperating('loadFailed'),retry:tOperating('retry')}} />
+              <RemoteRecordChoice
+                id={`time-operation-${i}`}
+                value={r.woOperationId}
+                options={[]}
+                endpoint={`/api/timesheets/production-choices?workFamily=production&workOrderId=${r.workOrderId}`}
+                disabled={readOnly}
+                clearable
+                onChange={onOperation}
+                labels={{
+                  choose: tOperating("time.operation"),
+                  searchPlaceholder: tOperating("time.search"),
+                  loadFailed: tOperating("loadFailed"),
+                  retry: tOperating("retry"),
+                }}
+              />
             ) : null}
           </>
         ) : readOnly ? (
-          <span className="px-1.5 text-sm">
-            {label(pickers.projects, r.projectId)}
-          </span>
+          <span className="px-1.5 text-sm">{label(pickers.projects, r.projectId)}</span>
         ) : (
           <SearchSelect
             value={r.projectId}
             onChange={onProject}
             options={pickers.projects}
-            placeholder={t('grid.projectPlaceholder')}
-            ariaLabel={t('grid.lineProjectAria', { line: i + 1 })}
+            placeholder={t("grid.projectPlaceholder")}
+            ariaLabel={t("grid.lineProjectAria", { line: i + 1 })}
             className="w-full border-0 bg-transparent shadow-none"
           />
         )}
       </div>
       <div className={cell}>
         {readOnly ? (
-          <span className="px-1.5 text-sm">
-            {r.itemId ? label(pickers.items, r.itemId) : '—'}
-          </span>
+          <span className="px-1.5 text-sm">{r.itemId ? label(pickers.items, r.itemId) : "—"}</span>
         ) : (
           <SearchSelect
             value={r.itemId}
@@ -1234,20 +1501,18 @@ function RowFragment({
             options={pickers.items}
             placeholder="—"
             clearable
-            ariaLabel={t('grid.lineItemAria', { line: i + 1 })}
+            ariaLabel={t("grid.lineItemAria", { line: i + 1 })}
             className="w-full border-0 bg-transparent shadow-none"
           />
         )}
       </div>
       <div className={cell}>
         {readOnly ? (
-          <span className="px-1.5 text-sm">
-            {label(pickers.timeTypes, r.timeTypeId)}
-          </span>
+          <span className="px-1.5 text-sm">{label(pickers.timeTypes, r.timeTypeId)}</span>
         ) : (
           <Select
             value={r.timeTypeId}
-            aria-label={t('grid.lineTimeTypeAria', { line: i + 1 })}
+            aria-label={t("grid.lineTimeTypeAria", { line: i + 1 })}
             onChange={(e) => onTimeType(e.target.value)}
             className="w-full border-0 bg-transparent shadow-none"
           >
@@ -1262,12 +1527,12 @@ function RowFragment({
       <div className={cell}>
         {readOnly ? (
           <span className="px-1.5 text-sm">
-            {r.departmentId ? label(pickers.departments, r.departmentId) : '—'}
+            {r.departmentId ? label(pickers.departments, r.departmentId) : "—"}
           </span>
         ) : (
           <Select
             value={r.departmentId}
-            aria-label={t('grid.lineDepartmentAria', { line: i + 1 })}
+            aria-label={t("grid.lineDepartmentAria", { line: i + 1 })}
             onChange={(e) => onDept(e.target.value)}
             className="w-full border-0 bg-transparent shadow-none"
           >
@@ -1280,43 +1545,45 @@ function RowFragment({
           </Select>
         )}
       </div>
-      <div className={cn(cell, 'justify-center')}>
+      <div className={cn(cell, "justify-center")}>
         <input
           type="checkbox"
           checked={r.isBillable}
-          disabled={r.costTarget === 'production' || (readOnly && !billableEditable)}
+          disabled={r.costTarget === "production" || (readOnly && !billableEditable)}
           onChange={(e) => onBillable(e.target.checked)}
-          aria-label={t('grid.lineBillableAria', { line: i + 1 })}
+          aria-label={t("grid.lineBillableAria", { line: i + 1 })}
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
         />
       </div>
       <div className={cell}>
         {r.amendsEntryId ? (
           <Badge variant="outline" className="mr-1 shrink-0">
-            {t('grid.amendmentLine')}
+            {t("grid.amendmentLine")}
           </Badge>
         ) : null}
         {r.plannedHours !== null ? (
           <Badge variant="outline" className="mr-1 shrink-0">
-            {tResourcing('prefill.badge', { hours: decimalLabel(Number(r.plannedHours), locale, 0, 4) })}
+            {tResourcing("prefill.badge", {
+              hours: decimalLabel(Number(r.plannedHours), locale, 0, 4),
+            })}
           </Badge>
         ) : null}
         {readOnly ? (
           <span className="truncate px-1.5 text-sm text-slate-500 dark:text-slate-400">
-            {r.memo || '—'}
+            {r.memo || "—"}
           </span>
         ) : (
           <input
             value={r.memo}
-            aria-label={t('grid.lineMemoAria', { line: i + 1 })}
+            aria-label={t("grid.lineMemoAria", { line: i + 1 })}
             onChange={(e) => onMemo(e.target.value)}
-            placeholder={tCommon('labels.memo')}
+            placeholder={tCommon("labels.memo")}
             className={cellInput}
           />
         )}
       </div>
       {customCols.map((def) => (
-        <div key={def.key} className={cn(cell, 'px-0.5')}>
+        <div key={def.key} className={cn(cell, "px-0.5")}>
           <CustomFieldInput
             def={def}
             value={r.custom[def.key]}
@@ -1327,15 +1594,17 @@ function RowFragment({
         </div>
       ))}
       {r.hours.map((h, d) => (
-        <div key={d} className={cn(cell, 'px-0')}>
+        <div key={d} className={cn(cell, "px-0")}>
           {readOnly ? (
             <div className="flex w-full flex-col items-center gap-1 px-1 text-center text-sm tabular-nums">
-              <span>
-                {h === '' || Number(h) === 0 ? '' : Number(h).toFixed(2)}
-              </span>
+              <span>{h === "" || Number(h) === 0 ? "" : Number(h).toFixed(2)}</span>
               {onCorrect && r.productionEntryIds[d]?.length === 1 ? (
-                <button type="button" onClick={() => onCorrect(r.productionEntryIds[d]![0]!, h)} className="text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300">
-                  {tOperating('time.correct')}
+                <button
+                  type="button"
+                  onClick={() => onCorrect(r.productionEntryIds[d]![0]!, h)}
+                  className="text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  {tOperating("time.correct")}
                 </button>
               ) : null}
             </div>
@@ -1347,22 +1616,30 @@ function RowFragment({
               step={0.25}
               value={h}
               onChange={(e) => onCell(d, e.target.value)}
-              aria-label={t('grid.lineHoursAria', { line: i + 1, day: t(`days.${DAY_KEYS[d]}`) })}
-              className={cn(cellInput, 'text-center tabular-nums')}
+              aria-label={t("grid.lineHoursAria", { line: i + 1, day: t(`days.${DAY_KEYS[d]}`) })}
+              className={cn(cellInput, "text-center tabular-nums")}
               placeholder="0"
             />
           )}
         </div>
       ))}
-      <div className={cn(cell, 'justify-end px-2 text-sm tabular-nums', total > 0 ? 'font-semibold text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500')}>
-        {total > 0 ? total.toFixed(2) : '—'}
+      <div
+        className={cn(
+          cell,
+          "justify-end px-2 text-sm tabular-nums",
+          total > 0
+            ? "font-semibold text-slate-800 dark:text-slate-100"
+            : "text-slate-400 dark:text-slate-500",
+        )}
+      >
+        {total > 0 ? total.toFixed(2) : "—"}
       </div>
-      <div className={cn(cell, 'justify-center px-0')}>
+      <div className={cn(cell, "justify-center px-0")}>
         {!readOnly ? (
           <button
             type="button"
             onClick={onRemove}
-            aria-label={t('grid.removeLineAria', { line: i + 1 })}
+            aria-label={t("grid.removeLineAria", { line: i + 1 })}
             className="flex h-7 w-7 items-center justify-center rounded text-slate-300 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40"
           >
             <Trash2 size={14} />
@@ -1370,5 +1647,5 @@ function RowFragment({
         ) : null}
       </div>
     </>
-  )
+  );
 }

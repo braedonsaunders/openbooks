@@ -62,9 +62,15 @@ test("concurrent token refreshes use the newest generation and preserve current 
 
     assert.equal(refreshCalls, 1, "only one worker may consume the rotating refresh token");
     assert.deepEqual(second, first, "the waiting worker adopts the committed token generation");
-    const loaded = await db.execute<{ secrets: string | null }>(sql`
-      select secrets from connections where id = ${id} and org_id = ${org.orgId}`, "objects");
-    const stored = unsealJson<Record<string, unknown>>(String(loaded[0]?.secrets), { orgId: org.orgId, purpose: "connection.secrets" });
+    const loaded = await db.execute<{ secrets: string | null }>(
+      sql`
+      select secrets from connections where id = ${id} and org_id = ${org.orgId}`,
+      "objects",
+    );
+    const stored = unsealJson<Record<string, unknown>>(String(loaded[0]?.secrets), {
+      orgId: org.orgId,
+      purpose: "connection.secrets",
+    });
     assert.ok(stored, "the latest sealed credentials remain readable");
     assert.equal(stored.clientId, "current-client-id");
     assert.equal(stored.clientSecret, "current-client-secret");

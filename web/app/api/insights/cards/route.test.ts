@@ -1,28 +1,28 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Route-boundary suite for the canonical unsaved create contract: opening
 // `?card=new` (or cancelling it) must write nothing — this endpoint runs only
 // on explicit Save, keyed by Idempotency-Key exactly like POST /api/accounts.
 // An exact retry replays (200); a changed payload on the same key, or a key
 // colliding with another org's row, is a 409 that returns no row.
-const stateKey = Symbol.for('openbooks.insight-cards-route-test')
-const ORG_ID = '00000000-0000-4000-8000-00000000d001'
-const USER_ID = '00000000-0000-4000-8000-00000000d002'
-const OTHER_ORG = '00000000-0000-4000-8000-00000000d003'
+const stateKey = Symbol.for("openbooks.insight-cards-route-test");
+const ORG_ID = "00000000-0000-4000-8000-00000000d001";
+const USER_ID = "00000000-0000-4000-8000-00000000d002";
+const OTHER_ORG = "00000000-0000-4000-8000-00000000d003";
 
 interface CardRow {
-  id: string
-  org_id: string
+  id: string;
+  org_id: string;
 }
 
 interface RouteState {
-  requestKey: string | null
-  rows: Map<string, CardRow>
-  auditAfter: Map<string, Record<string, unknown>>
-  auditInserts: number
-  transactionQueries: string[]
+  requestKey: string | null;
+  rows: Map<string, CardRow>;
+  auditAfter: Map<string, Record<string, unknown>>;
+  auditInserts: number;
+  transactionQueries: string[];
 }
 
 const state: RouteState = {
@@ -31,98 +31,97 @@ const state: RouteState = {
   auditAfter: new Map(),
   auditInserts: 0,
   transactionQueries: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return ''
-      if (!chunk || typeof chunk !== 'object') return ''
+      if (typeof chunk === "string") return "";
+      if (!chunk || typeof chunk !== "object") return "";
       if (Array.isArray((chunk as { queryChunks?: unknown }).queryChunks)) {
-        return sqlText(chunk)
+        return sqlText(chunk);
       }
-      const value = (chunk as { value?: unknown }).value
-      if (typeof value === 'string') return value
-      if (Array.isArray(value)) return value.filter((v) => typeof v === 'string').join('')
-      return ''
+      const value = (chunk as { value?: unknown }).value;
+      if (typeof value === "string") return value;
+      if (Array.isArray(value)) return value.filter((v) => typeof v === "string").join("");
+      return "";
     })
-    .join('')
+    .join("");
 }
 
 function paramsOf(query: unknown): unknown[] {
-  const out: unknown[] = []
+  const out: unknown[] = [];
   const walk = (chunks: unknown): void => {
-    if (!Array.isArray(chunks)) return
+    if (!Array.isArray(chunks)) return;
     for (const chunk of chunks) {
-      if (!chunk || typeof chunk !== 'object') {
+      if (!chunk || typeof chunk !== "object") {
         if (
-          typeof chunk === 'string' ||
-          typeof chunk === 'number' ||
-          typeof chunk === 'boolean' ||
+          typeof chunk === "string" ||
+          typeof chunk === "number" ||
+          typeof chunk === "boolean" ||
           chunk === null
         ) {
-          out.push(chunk)
+          out.push(chunk);
         }
-        continue
+        continue;
       }
       if (Array.isArray(chunk)) {
-        out.push(...chunk)
-        continue
+        out.push(...chunk);
+        continue;
       }
-      const nested = (chunk as { queryChunks?: unknown }).queryChunks
+      const nested = (chunk as { queryChunks?: unknown }).queryChunks;
       if (Array.isArray(nested)) {
-        walk(nested)
-        continue
+        walk(nested);
+        continue;
       }
-      if ('value' in chunk) {
-        const v = (chunk as { value?: unknown }).value
-        if (typeof v === 'string') out.push(v)
+      if ("value" in chunk) {
+        const v = (chunk as { value?: unknown }).value;
+        if (typeof v === "string") out.push(v);
       }
     }
-  }
-  walk((query as { queryChunks?: unknown })?.queryChunks)
-  return out
+  };
+  walk((query as { queryChunks?: unknown })?.queryChunks);
+  return out;
 }
 
 function sniffAudit(params: unknown[]): void {
   for (const param of params) {
-    if (typeof param !== 'string') continue
-    let parsed: unknown = null
+    if (typeof param !== "string") continue;
+    let parsed: unknown = null;
     try {
-      parsed = JSON.parse(param)
+      parsed = JSON.parse(param);
     } catch {
-      continue
+      continue;
     }
     if (
       parsed !== null &&
-      typeof parsed === 'object' &&
+      typeof parsed === "object" &&
       (parsed as { before?: unknown }).before === null &&
-      typeof (parsed as { after?: unknown }).after === 'object'
+      typeof (parsed as { after?: unknown }).after === "object"
     ) {
-      state.auditInserts += 1
+      state.auditInserts += 1;
       if (state.requestKey) {
-        state.auditAfter.set(state.requestKey, (parsed as { after: Record<string, unknown> }).after)
+        state.auditAfter.set(
+          state.requestKey,
+          (parsed as { after: Record<string, unknown> }).after,
+        );
       }
     }
   }
 }
 
-;(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksInsightCardsSqlText = sqlText
-;(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksInsightCardsParamsOf = paramsOf
-;(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksInsightCardsSniffAudit = sniffAudit
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksInsightCardsSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksInsightCardsParamsOf =
+  paramsOf;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksInsightCardsSniffAudit =
+  sniffAudit;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.insight-cards-route-test')]
       const sqlText = globalThis.openbooksInsightCardsSqlText
@@ -172,7 +171,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `export async function getAuthz() { return null }
      export function can(authz, permission) { return authz.permissions?.has('*') || authz.permissions?.has(permission) || false }
      export async function guardPermission(permission) {
@@ -180,146 +179,160 @@ const mockSources = new Map<string, string>([
        return new Response(null, { status: 403 })
      }`,
   ],
-  ['mock:get-authz', `export async function getAuthz() { return null }`],
-])
+  ["mock:get-authz", `export async function getAuthz() { return null }`],
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@/lib/api/json') {
+    if (specifier === "@/lib/api/json") {
       return {
-        url: new URL('../../../../lib/api/json.ts', import.meta.url).href,
+        url: new URL("../../../../lib/api/json.ts", import.meta.url).href,
         shortCircuit: true,
-      }
+      };
     }
-    if (specifier === '@openbooks/engine/platform/canonical-json') {
+    if (specifier === "@openbooks/engine/platform/canonical-json") {
       return {
-        url: new URL(
-          '../../../../../engine/src/platform/canonical-json.ts',
-          import.meta.url,
-        ).href,
+        url: new URL("../../../../../engine/src/platform/canonical-json.ts", import.meta.url).href,
         shortCircuit: true,
-      }
+      };
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?insight-cards-idempotency-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?insight-cards-idempotency-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  state.requestKey = null
-  state.rows.clear()
-  state.auditAfter.clear()
-  state.auditInserts = 0
-  state.transactionQueries.length = 0
+  state.requestKey = null;
+  state.rows.clear();
+  state.auditAfter.clear();
+  state.auditInserts = 0;
+  state.transactionQueries.length = 0;
 }
 
 const QUERY = {
-  source: 'ledger_lines',
-  measures: [{ agg: 'sum', field: 'amount' }],
-  dimensions: [{ field: 'posting_date', bin: 'month' }],
-}
+  source: "ledger_lines",
+  measures: [{ agg: "sum", field: "amount" }],
+  dimensions: [{ field: "posting_date", bin: "month" }],
+};
 
 const BODY = {
-  name: 'Monthly spend',
+  name: "Monthly spend",
   description: null,
   query: QUERY,
-  vizType: 'bar',
+  vizType: "bar",
   vizSettings: {},
   allowedRoles: null,
-}
+};
 
 function post(key: string | null, body: Record<string, unknown>): Promise<Response> {
-  state.requestKey = key
-  const headers: Record<string, string> = { 'content-type': 'application/json' }
-  if (key !== null) headers['Idempotency-Key'] = key
+  state.requestKey = key;
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (key !== null) headers["Idempotency-Key"] = key;
   return POST(
-    new Request('http://openbooks.test/api/insights/cards', {
-      method: 'POST',
+    new Request("http://openbooks.test/api/insights/cards", {
+      method: "POST",
       headers,
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
-test('card create refuses a missing or malformed idempotency key before any write', async () => {
-  reset()
+test("card create refuses a missing or malformed idempotency key before any write", async () => {
+  reset();
 
-  const missing = await post(null, BODY)
-  assert.equal(missing.status, 400)
-  assert.deepEqual(await missing.json(), { error: 'invalid_idempotency_key' })
+  const missing = await post(null, BODY);
+  assert.equal(missing.status, 400);
+  assert.deepEqual(await missing.json(), { error: "invalid_idempotency_key" });
 
-  const malformed = await post('not-a-uuid', BODY)
-  assert.equal(malformed.status, 400)
-  assert.deepEqual(await malformed.json(), { error: 'invalid_idempotency_key' })
+  const malformed = await post("not-a-uuid", BODY);
+  assert.equal(malformed.status, 400);
+  assert.deepEqual(await malformed.json(), { error: "invalid_idempotency_key" });
 
-  assert.equal(state.transactionQueries.length, 0, 'refused keys must not reach the database at all')
-})
+  assert.equal(
+    state.transactionQueries.length,
+    0,
+    "refused keys must not reach the database at all",
+  );
+});
 
-test('card create validates viz type and query before inserting', async () => {
-  reset()
-  const key = '00000000-0000-4000-8000-00000000d010'
+test("card create validates viz type and query before inserting", async () => {
+  reset();
+  const key = "00000000-0000-4000-8000-00000000d010";
 
-  const badViz = await post(key, { ...BODY, vizType: 'hologram' })
-  assert.deepEqual([badViz.status, ((await badViz.json()) as { issues?: { path: string }[] }).issues?.[0]?.path], [400, 'vizType'])
+  const badViz = await post(key, { ...BODY, vizType: "hologram" });
+  assert.deepEqual(
+    [badViz.status, ((await badViz.json()) as { issues?: { path: string }[] }).issues?.[0]?.path],
+    [400, "vizType"],
+  );
 
-  const badQuery = await post(key, { ...BODY, query: { source: 'nope' } })
-  assert.deepEqual([badQuery.status, ((await badQuery.json()) as { issues?: { path: string }[] }).issues?.[0]?.path], [400, 'query'])
+  const badQuery = await post(key, { ...BODY, query: { source: "nope" } });
+  assert.deepEqual(
+    [
+      badQuery.status,
+      ((await badQuery.json()) as { issues?: { path: string }[] }).issues?.[0]?.path,
+    ],
+    [400, "query"],
+  );
 
-  assert.equal(state.rows.size, 0, 'validation failures must not insert')
-})
+  assert.equal(state.rows.size, 0, "validation failures must not insert");
+});
 
-test('card create refuses a payroll source without payroll access before inserting', async () => {
-  reset()
-  const response = await post('00000000-0000-4000-8000-00000000d013', {
+test("card create refuses a payroll source without payroll access before inserting", async () => {
+  reset();
+  const response = await post("00000000-0000-4000-8000-00000000d013", {
     ...BODY,
-    query: { source: 'pay_stubs', measures: [], dimensions: [] },
-  })
-  assert.equal(response.status, 403)
-  assert.equal(state.transactionQueries.length, 0, 'source authorization precedes card persistence')
-})
+    query: { source: "pay_stubs", measures: [], dimensions: [] },
+  });
+  assert.equal(response.status, 403);
+  assert.equal(
+    state.transactionQueries.length,
+    0,
+    "source authorization precedes card persistence",
+  );
+});
 
-test('card creation replays only the exact request for an idempotency key', async () => {
-  reset()
-  const key = '00000000-0000-4000-8000-00000000d011'
+test("card creation replays only the exact request for an idempotency key", async () => {
+  reset();
+  const key = "00000000-0000-4000-8000-00000000d011";
 
-  const created = await post(key, BODY)
-  assert.equal(created.status, 201)
-  assert.deepEqual(await created.json(), { id: key })
-  assert.equal(state.auditInserts, 1, 'the create must leave exactly one insert audit event')
-  assert.equal(state.auditAfter.get(key)?.viz_type, 'bar')
+  const created = await post(key, BODY);
+  assert.equal(created.status, 201);
+  assert.deepEqual(await created.json(), { id: key });
+  assert.equal(state.auditInserts, 1, "the create must leave exactly one insert audit event");
+  assert.equal(state.auditAfter.get(key)?.viz_type, "bar");
 
-  const replay = await post(key, BODY)
-  assert.equal(replay.status, 200)
-  assert.deepEqual(await replay.json(), { id: key })
-  assert.equal(state.auditInserts, 1, 'a replay must not write a second audit event')
+  const replay = await post(key, BODY);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), { id: key });
+  assert.equal(state.auditInserts, 1, "a replay must not write a second audit event");
 
-  const changed = await post(key, { ...BODY, vizType: 'line' })
-  assert.equal(changed.status, 409)
-  assert.deepEqual(await changed.json(), { error: 'invalid_idempotency_key' })
-})
+  const changed = await post(key, { ...BODY, vizType: "line" });
+  assert.equal(changed.status, 409);
+  assert.deepEqual(await changed.json(), { error: "invalid_idempotency_key" });
+});
 
-test('card create refuses a key colliding with another org without disclosing it', async () => {
-  reset()
-  const key = '00000000-0000-4000-8000-00000000d012'
-  state.rows.set(key, { id: key, org_id: OTHER_ORG })
+test("card create refuses a key colliding with another org without disclosing it", async () => {
+  reset();
+  const key = "00000000-0000-4000-8000-00000000d012";
+  state.rows.set(key, { id: key, org_id: OTHER_ORG });
 
-  const response = await post(key, BODY)
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), { error: 'invalid_idempotency_key' })
-  assert.equal(state.auditInserts, 0, 'a foreign collision must not audit in this org')
-})
+  const response = await post(key, BODY);
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "invalid_idempotency_key" });
+  assert.equal(state.auditInserts, 0, "a foreign collision must not audit in this org");
+});

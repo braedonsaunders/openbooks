@@ -11,27 +11,120 @@
  * `jl_guard` trigger explicitly allows on posted lines).
  */
 
-export { BankingError, normalizeExternalAccountId, BANK_STATEMENT_PARSER_VERSION, SYSTEM_ACTOR_ID, statementComparisonSign, statementTotalsAgree, LIABILITY_STATEMENT_ACCOUNT_TYPES } from "./banking-core"
-export type { ParsedStatementLine, ParsedStatement, StatementSource, StatementSourceContent, StatementSourceEvidence, BankingContext, CsvMapping, SkippedStatementRowCode, SkippedStatementRow, StatementBalanceRole, BalanceCandidateLine } from "./banking-core"
-export { decodeStatementSourceText } from "./statement-encoding"
-export { parseOfx } from "./statement-parsers/ofx"
-export { parseCsvRows, parseCsvDate, parseCsv } from "./statement-parsers/csv"
-export { parseCamt053 } from "./statement-parsers/camt053"
-export { parseBai2 } from "./statement-parsers/bai2"
-export { parseMt940 } from "./statement-parsers/mt940"
-export { requireBankAccountInScope } from "./reconcilable-account"
-export { normalizeFingerprintText, filterDuplicateStatementLines, statementSourceSha256, importStatement, deleteStatementImport, correctStatementBalances } from "./statement-import"
-export type { FlaggedStatementLine, ImportResult, OpeningBalanceMismatch, StatementBalanceCorrection, SuggestedStatementOpening } from "./statement-import"
-export { listAccountStatements } from "./statement-list"
-export type { AccountStatementListInput, AccountStatementRow, AccountStatementSort } from "./statement-list"
-export { startReconciliation, reconciliationBookId, reconciliationTotals, listSignOffBlockers, adjustReconciliation, discardReconciliation, markReconciled, withdrawReconciliationSignOff, reconciliationStaleness, reconciliationStalenessSummaries, priorPeriodLateEffect, confirmOpeningBalance, openingPosition } from "./reconciliation"
-export type { ReconciliationTotals, SignOffBlocker, ReconciliationStaleness, ReconciliationStalenessSummary, StaleJournalEntry, ReversedMatchEntry, PriorPeriodLateEffect, OpeningPosition, OpeningConfirmation } from "./reconciliation"
-export { previewSignOffRevalidation, revalidateReconciliationSignOff } from './reconciliation-revalidation'
-export type { SignOffRevalidationPreview } from './reconciliation-revalidation'
-export type { SignOffRevalidationCertificate } from './reconciliation-review-proof'
-export { reconciliationEvidence } from "./reconciliation-evidence"
-export type { ReconciliationEvidence, ReconciliationHistoryEvent, EvidenceStatement, EvidenceExcludedLine } from "./reconciliation-evidence"
-export { autoMatch, createMatchWithJournal, createMatch, unmatchStatementLine, unmatchStatementImport, createGlClearingGroup, unmatchGlClearingGroup, excludeStatementLine, clearPossibleDuplicateFlag, excludePossibleDuplicates, restoreStatementLine, correctStatementLine } from "./matching"
-export type { AutoMatchResult, StatementLineCorrection } from "./matching"
-export { SOURCE_EVIDENCE_POLICY_CODE, sourceEvidencePolicyActive, applySourceLineEvidence, refreshSourceReconciliationState, signOffFromSourceEvidence } from "./source-evidence"
-export type { SourceClearedLineEvidence, SourceClearedEntryEvidence, SourceAccountEvidenceState, SourceSignOffOutcome } from "./source-evidence"
+export {
+  BankingError,
+  normalizeExternalAccountId,
+  BANK_STATEMENT_PARSER_VERSION,
+  SYSTEM_ACTOR_ID,
+  statementComparisonSign,
+  statementTotalsAgree,
+  LIABILITY_STATEMENT_ACCOUNT_TYPES,
+} from "./banking-core";
+export type {
+  ParsedStatementLine,
+  ParsedStatement,
+  StatementSource,
+  StatementSourceContent,
+  StatementSourceEvidence,
+  BankingContext,
+  CsvMapping,
+  SkippedStatementRowCode,
+  SkippedStatementRow,
+  StatementBalanceRole,
+  BalanceCandidateLine,
+} from "./banking-core";
+export { decodeStatementSourceText } from "./statement-encoding";
+export { parseOfx } from "./statement-parsers/ofx";
+export { parseCsvRows, parseCsvDate, parseCsv } from "./statement-parsers/csv";
+export { parseCamt053 } from "./statement-parsers/camt053";
+export { parseBai2 } from "./statement-parsers/bai2";
+export { parseMt940 } from "./statement-parsers/mt940";
+export { requireBankAccountInScope } from "./reconcilable-account";
+export {
+  normalizeFingerprintText,
+  filterDuplicateStatementLines,
+  statementSourceSha256,
+  importStatement,
+  deleteStatementImport,
+  correctStatementBalances,
+} from "./statement-import";
+export type {
+  FlaggedStatementLine,
+  ImportResult,
+  OpeningBalanceMismatch,
+  StatementBalanceCorrection,
+  SuggestedStatementOpening,
+} from "./statement-import";
+export { listAccountStatements } from "./statement-list";
+export type {
+  AccountStatementListInput,
+  AccountStatementRow,
+  AccountStatementSort,
+} from "./statement-list";
+export {
+  startReconciliation,
+  reconciliationBookId,
+  reconciliationTotals,
+  listSignOffBlockers,
+  adjustReconciliation,
+  discardReconciliation,
+  markReconciled,
+  withdrawReconciliationSignOff,
+  reconciliationStaleness,
+  reconciliationStalenessSummaries,
+  priorPeriodLateEffect,
+  confirmOpeningBalance,
+  openingPosition,
+} from "./reconciliation";
+export type {
+  ReconciliationTotals,
+  SignOffBlocker,
+  ReconciliationStaleness,
+  ReconciliationStalenessSummary,
+  StaleJournalEntry,
+  ReversedMatchEntry,
+  PriorPeriodLateEffect,
+  OpeningPosition,
+  OpeningConfirmation,
+} from "./reconciliation";
+export {
+  previewSignOffRevalidation,
+  revalidateReconciliationSignOff,
+} from "./reconciliation-revalidation";
+export type { SignOffRevalidationPreview } from "./reconciliation-revalidation";
+export type { SignOffRevalidationCertificate } from "./reconciliation-review-proof";
+export { reconciliationEvidence } from "./reconciliation-evidence";
+export type {
+  ReconciliationEvidence,
+  ReconciliationHistoryEvent,
+  EvidenceStatement,
+  EvidenceExcludedLine,
+} from "./reconciliation-evidence";
+export {
+  autoMatch,
+  createMatchWithJournal,
+  createMatch,
+  unmatchStatementLine,
+  unmatchStatementImport,
+  createGlClearingGroup,
+  unmatchGlClearingGroup,
+  excludeStatementLine,
+  clearPossibleDuplicateFlag,
+  excludePossibleDuplicates,
+  restoreStatementLine,
+  correctStatementLine,
+} from "./matching";
+export type { AutoMatchResult, StatementLineCorrection } from "./matching";
+export {
+  SOURCE_EVIDENCE_POLICY_CODE,
+  sourceEvidencePolicyActive,
+  applySourceLineEvidence,
+  refreshSourceReconciliationState,
+  signOffFromSourceEvidence,
+} from "./source-evidence";
+export type {
+  SourceClearedLineEvidence,
+  SourceClearedEntryEvidence,
+  SourceAccountEvidenceState,
+  SourceSignOffOutcome,
+} from "./source-evidence";

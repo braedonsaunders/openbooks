@@ -1,68 +1,88 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
+import Link from "next/link";
 
-import { RecordTabs } from '@/components/module-home/record-tabs'
-import { OperatingProfilePicker } from '@/components/operating-profile-picker'
-import { ProjectWorkJourney } from './ProjectWorkJourney'
-import type { OperatingProfileChoice } from '@openbooks/engine/organization/operating-profiles'
-import type { OperatingProfileDefinition } from '@openbooks/engine/organization/operating-profile-model'
+import { RecordTabs } from "@/components/module-home/record-tabs";
+import { OperatingProfilePicker } from "@/components/operating-profile-picker";
+import { ProjectWorkJourney } from "./ProjectWorkJourney";
+import type { OperatingProfileChoice } from "@openbooks/engine/organization/operating-profiles";
+import type { OperatingProfileDefinition } from "@openbooks/engine/organization/operating-profile-model";
 
-import { useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { BookOpen, ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
-import { toast } from 'sonner'
-import { Badge, Button, Drawer, Input, Label, Popover, SearchSelect, Select, Textarea, UrlDrawer, cn } from '@openbooks/ui'
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { BookOpen, ChevronDown, Plus, Receipt, Trash2, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Badge,
+  Button,
+  Drawer,
+  Input,
+  Label,
+  Popover,
+  SearchSelect,
+  Select,
+  Textarea,
+  UrlDrawer,
+  cn,
+} from "@openbooks/ui";
 import {
   defaultFormLayout,
   isCustomTabKey,
   resolveFormTabs,
   type FormLayoutConfig,
   type HeaderFieldPlacement,
-} from '@openbooks/customization'
-import { CustomFieldInput } from '../../../components/custom-field-input'
-import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
-import { HeaderFields } from '../../../components/transaction-form/header-fields'
-import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
-import { RateBookAssignmentSection } from '../parties/RateBookAssignmentSection'
+} from "@openbooks/customization";
+import { CustomFieldInput } from "../../../components/custom-field-input";
+import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
+import { HeaderFields } from "../../../components/transaction-form/header-fields";
+import {
+  InvoicingPreferenceFields,
+  type InvoicingPref,
+} from "../../../components/invoicing-preference-fields";
+import { RateBookAssignmentSection } from "../parties/RateBookAssignmentSection";
 // HR-20 begin: project geofences, rehomed onto the project page.
-import { GeofenceSection } from '../../../components/field-time/GeofenceSection'
+import { GeofenceSection } from "../../../components/field-time/GeofenceSection";
 // HR-20 end
-import { shouldAutoActivateProject } from './project-activation'
-import { profileHidesProjectHeaderField } from '../../../lib/project-header-visibility'
-import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
-import { RecognitionCard, type RecognitionStatus } from './tabs/RecognitionCard'
-import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
-import { TransactionsTab } from './tabs/TransactionsTab'
-import { WorkBreakdownTab } from './tabs/WorkBreakdownTab'
-import { ScheduleTab } from './tabs/ScheduleTab'
-import { StaffingTab } from './tabs/StaffingTab'
-import { ProgressTab } from './tabs/ProgressTab'
-import type { ChargeRow, ChargeItemOption, ChargeEquipmentOption, ChargeOperatorOption } from './tabs/ChargesSection'
+import { shouldAutoActivateProject } from "./project-activation";
+import { profileHidesProjectHeaderField } from "../../../lib/project-header-visibility";
+import { FinancialsTab, type FinancialsData } from "./tabs/FinancialsTab";
+import { RecognitionCard, type RecognitionStatus } from "./tabs/RecognitionCard";
+import { CostTimeTab, type CostTimeData } from "./tabs/CostTimeTab";
+import { TransactionsTab } from "./tabs/TransactionsTab";
+import { WorkBreakdownTab } from "./tabs/WorkBreakdownTab";
+import { ScheduleTab } from "./tabs/ScheduleTab";
+import { StaffingTab } from "./tabs/StaffingTab";
+import { ProgressTab } from "./tabs/ProgressTab";
+import type {
+  ChargeRow,
+  ChargeItemOption,
+  ChargeEquipmentOption,
+  ChargeOperatorOption,
+} from "./tabs/ChargesSection";
 import {
   BillingSection,
   type BillableFieldTicketClient,
   type BillingRequestClient,
   type UnbilledClient,
   type EffectiveInvoicingClient,
-} from './tabs/BillingSection'
-import { SUBDIVISIONS } from '@openbooks/engine/compliance/lien-jurisdictions'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { useMoney } from '@/components/money-provider'
-import { useAppAction } from '@/lib/use-app-action'
-import { ReadOnlyValue } from '../../../components/read-only-value'
-import { DateField } from '@/components/date-field'
+} from "./tabs/BillingSection";
+import { SUBDIVISIONS } from "@openbooks/engine/compliance/lien-jurisdictions";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { useMoney } from "@/components/money-provider";
+import { useAppAction } from "@/lib/use-app-action";
+import { ReadOnlyValue } from "../../../components/read-only-value";
+import { DateField } from "@/components/date-field";
 
 interface PartyOpt {
-  id: string
-  display_name?: string | null
+  id: string;
+  display_name?: string | null;
 }
 interface SubsidiaryOpt {
-  id: string
-  name: string
-  depth: number
+  id: string;
+  name: string;
+  depth: number;
 }
 /**
  * The project row as this drawer reads it. The loader selects the whole row;
@@ -70,77 +90,83 @@ interface SubsidiaryOpt {
  * as strings, `date` columns as ISO-date strings, jsonb parsed).
  */
 interface ProjectRecord {
-  id: string
-  code: string | null
-  name: string
-  is_active: boolean
-  is_internal: boolean
-  custom: Record<string, unknown> | null
-  customer_id: string | null
-  foreman_id: string | null
-  manager_id: string | null
-  status: string
-  customer_po_number: string | null
-  starts_on: string | null
-  ends_on: string | null
-  site_jurisdiction: string | null
-  notes: string | null
-  subsidiary_id: string | null
-  subsidiary_include_children: boolean
-  project_type_id: string | null
-  invoicing_preference: unknown
+  id: string;
+  code: string | null;
+  name: string;
+  is_active: boolean;
+  is_internal: boolean;
+  custom: Record<string, unknown> | null;
+  customer_id: string | null;
+  foreman_id: string | null;
+  manager_id: string | null;
+  status: string;
+  customer_po_number: string | null;
+  starts_on: string | null;
+  ends_on: string | null;
+  site_jurisdiction: string | null;
+  notes: string | null;
+  subsidiary_id: string | null;
+  subsidiary_include_children: boolean;
+  project_type_id: string | null;
+  invoicing_preference: unknown;
 }
 interface ProjectPayload {
-  project: ProjectRecord
-  contractValue: string | null
-  customerName: string | null
-  foremanName: string | null
-  managerName: string | null
+  project: ProjectRecord;
+  contractValue: string | null;
+  customerName: string | null;
+  foremanName: string | null;
+  managerName: string | null;
   tasks: {
-    id: string
-    code: string | null
-    name: string
-    status: string
-    estimated_hours: string | null
-    estimated_cost: string | null
-    updated_at: string
-  }[]
-  customFieldDefs?: CustomFieldDefClient[]
+    id: string;
+    code: string | null;
+    name: string;
+    status: string;
+    estimated_hours: string | null;
+    estimated_cost: string | null;
+    updated_at: string;
+  }[];
+  customFieldDefs?: CustomFieldDefClient[];
 }
 
 /** Everything the cockpit tabs need — loaded server-side alongside the project. */
 export interface ProjectCockpitData {
-  financials: FinancialsData
-  projectType: { key: string; name: string }
-  time: CostTimeData
+  financials: FinancialsData;
+  projectType: { key: string; name: string };
+  time: CostTimeData;
   // HR-20: crew-today rows for the cockpit (empty when fieldTime is off).
-  crewToday: { employeePartyId: string; employeeName: string | null; since: string; costCodeRef: string | null; geoCheck: string }[]
+  crewToday: {
+    employeePartyId: string;
+    employeeName: string | null;
+    since: string;
+    costCodeRef: string | null;
+    geoCheck: string;
+  }[];
   // HR-20: the geofence section renders only when fieldTime is on — off
   // must not even mount it, or it fires a 404 probe fetch on every open.
-  showFieldTime: boolean
-  unbilled: UnbilledClient
-  billingRequests: BillingRequestClient[]
-  billableFieldTickets: BillableFieldTicketClient[]
+  showFieldTime: boolean;
+  unbilled: UnbilledClient;
+  billingRequests: BillingRequestClient[];
+  billableFieldTickets: BillableFieldTicketClient[];
   /** Effective invoicing/backup defaults after the type←customer←project cascade. */
-  invoicing: EffectiveInvoicingClient
-  applicationIncomeAccounts: { id: string; label: string }[]
-  charges: ChargeRow[]
-  items: ChargeItemOption[]
-  equipment: ChargeEquipmentOption[]
-  operators: ChargeOperatorOption[]
-  equipmentEnabled: boolean
-  absorption: { recovered: string; billValue: string }
-  recognition: RecognitionStatus | null
-  glRange: { from: string; to: string }
+  invoicing: EffectiveInvoicingClient;
+  applicationIncomeAccounts: { id: string; label: string }[];
+  charges: ChargeRow[];
+  items: ChargeItemOption[];
+  equipment: ChargeEquipmentOption[];
+  operators: ChargeOperatorOption[];
+  equipmentEnabled: boolean;
+  absorption: { recovered: string; billValue: string };
+  recognition: RecognitionStatus | null;
+  glRange: { from: string; to: string };
   transactions: {
-    id: string
-    kind: string
-    documentNumber: string
-    documentDate: string
-    partyName: string | null
-    status: string
-    amount: string | number
-  }[]
+    id: string;
+    kind: string;
+    documentNumber: string;
+    documentDate: string;
+    partyName: string | null;
+    status: string;
+    amount: string | number;
+  }[];
 }
 
 /**
@@ -150,13 +176,13 @@ export interface ProjectCockpitData {
  * built-in key draws.
  */
 type TabKey =
-  | 'overview'
-  | 'financials'
-  | 'project_management'
-  | 'cost_time'
-  | 'billing'
-  | 'transactions'
-  | string
+  | "overview"
+  | "financials"
+  | "project_management"
+  | "cost_time"
+  | "billing"
+  | "transactions"
+  | string;
 
 export function ProjectDrawer({
   payload,
@@ -166,7 +192,7 @@ export function ProjectDrawer({
   subsidiaries,
   canManage,
   canViewGl,
-  basePath = '/projects',
+  basePath = "/projects",
   layout,
   cockpit,
   projectTypes = [],
@@ -174,153 +200,166 @@ export function ProjectDrawer({
   resourcingEnabled = false,
   progressEnabled = false,
   locale,
-  initialTab = 'overview',
+  initialTab = "overview",
   applicationPermissions,
   createMode = false,
   operatingChoices = [],
   operatingDefinition = null,
   initialOperatingChoice = null,
-  initialOperatingDepartmentId = '',
+  initialOperatingDepartmentId = "",
   quickTimeHref = null,
   closeHref,
 }: {
-  payload: ProjectPayload
-  parties: PartyOpt[]
+  payload: ProjectPayload;
+  parties: PartyOpt[];
   /** Manager picker: internal people only (the write path refuses anyone else). */
-  managerParties: PartyOpt[]
+  managerParties: PartyOpt[];
   /** Foreman picker: the same internal people (the write path refuses anyone else). */
-  foremanParties: PartyOpt[]
-  subsidiaries: SubsidiaryOpt[]
-  canManage: boolean
-  canViewGl: boolean
-  basePath?: string
+  foremanParties: PartyOpt[];
+  subsidiaries: SubsidiaryOpt[];
+  canManage: boolean;
+  canViewGl: boolean;
+  basePath?: string;
   /** Resolved form layout (custom fields already merged in). */
-  layout?: FormLayoutConfig
+  layout?: FormLayoutConfig;
   /** Cockpit data for the financial/time/charges/billing/transactions tabs.
    *  Null while creating: those tabs need a persisted project, so create mode
    *  draws only the overview and author-created field tabs. */
-  cockpit: ProjectCockpitData | null
+  cockpit: ProjectCockpitData | null;
   /** Configurable project types (Setup → Project Types) for the selector. */
-  projectTypes?: { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]
+  projectTypes?: {
+    id: string;
+    name: string;
+    billingMethod: string | null;
+    billingProcedure: string;
+  }[];
   /** Server-resolved Projects → Project Scheduling gate. */
-  schedulingEnabled?: boolean
+  schedulingEnabled?: boolean;
   /** Server-resolved resourcing feature plus the reader grant. */
-  resourcingEnabled?: boolean
+  resourcingEnabled?: boolean;
   /** Server-resolved Projects → Progress tracking gate. */
-  progressEnabled?: boolean
+  progressEnabled?: boolean;
   /** Tenant locale, so the schedule surface formats dates like the rest of the app. */
-  locale?: string
+  locale?: string;
   /** Stable URL state used when a related transaction is stacked over the project. */
-  initialTab?: TabKey
+  initialTab?: TabKey;
   /** Accounting permissions for the project-contained application-for-payment workflow. */
   applicationPermissions: {
-    canRead: boolean
-    canCreate: boolean
-    canApprove: boolean
-    canInvoice: boolean
-  }
+    canRead: boolean;
+    canCreate: boolean;
+    canApprove: boolean;
+    canInvoice: boolean;
+  };
   /**
    * Unsaved-create: the drawer opens editable on a payload with no persisted
    * row. Cancel navigates away with zero writes; Save persists through one
    * idempotent POST. Only the overview and author-created field tabs draw —
    * every cockpit tab needs a persisted project.
    */
-  createMode?: boolean
-  operatingChoices?: OperatingProfileChoice[]
-  operatingDefinition?: OperatingProfileDefinition | null
-  initialOperatingChoice?: OperatingProfileChoice | null
-  initialOperatingDepartmentId?: string
-  quickTimeHref?: string | null
+  createMode?: boolean;
+  operatingChoices?: OperatingProfileChoice[];
+  operatingDefinition?: OperatingProfileDefinition | null;
+  initialOperatingChoice?: OperatingProfileChoice | null;
+  initialOperatingDepartmentId?: string;
+  quickTimeHref?: string | null;
   /** List URL (filters preserved) that Cancel and the close affordance return to. */
-  closeHref?: string
+  closeHref?: string;
 }) {
-  const { currency, money } = useMoney()
-  const t = useTranslations('projects')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const pr = payload.project
-  const isPlaceholderName = pr.name === 'New project'
+  const { currency, money } = useMoney();
+  const t = useTranslations("projects");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const pr = payload.project;
+  const isPlaceholderName = pr.name === "New project";
 
   const statusOptions = useMemo(
     () => [
-      { value: 'quoted', label: t('status.quoted') },
-      { value: 'awarded', label: t('status.awarded') },
-      { value: 'active', label: tCommon('status.active') },
-      { value: 'substantially_complete', label: t('status.substantially_complete') },
-      { value: 'closed', label: tCommon('status.closed') },
-      { value: 'cancelled', label: tCommon('status.cancelled') },
+      { value: "quoted", label: t("status.quoted") },
+      { value: "awarded", label: t("status.awarded") },
+      { value: "active", label: tCommon("status.active") },
+      { value: "substantially_complete", label: t("status.substantially_complete") },
+      { value: "closed", label: tCommon("status.closed") },
+      { value: "cancelled", label: tCommon("status.cancelled") },
     ],
     [t, tCommon],
-  )
-  const [name, setName] = useState<string>(isPlaceholderName ? '' : (pr.name ?? ''))
-  const [code, setCode] = useState<string>(pr.code ?? '')
-  const [customerId, setCustomerId] = useState<string>(pr.customer_id ?? '')
-  const [foremanId, setForemanId] = useState<string>(pr.foreman_id ?? '')
-  const [managerId, setManagerId] = useState<string>(pr.manager_id ?? '')
-  const [status, setStatus] = useState<string>(pr.status ?? 'active')
-  const [projectTypeId, setProjectTypeId] = useState<string>(pr.project_type_id ?? '')
-  const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((pr.invoicing_preference as InvoicingPref) ?? {})
-  const [customerPoNumber, setCustomerPoNumber] = useState<string>(pr.customer_po_number ?? '')
-  const [startsOn, setStartsOn] = useState<string>(pr.starts_on ?? '')
-  const [endsOn, setEndsOn] = useState<string>(pr.ends_on ?? '')
+  );
+  const [name, setName] = useState<string>(isPlaceholderName ? "" : (pr.name ?? ""));
+  const [code, setCode] = useState<string>(pr.code ?? "");
+  const [customerId, setCustomerId] = useState<string>(pr.customer_id ?? "");
+  const [foremanId, setForemanId] = useState<string>(pr.foreman_id ?? "");
+  const [managerId, setManagerId] = useState<string>(pr.manager_id ?? "");
+  const [status, setStatus] = useState<string>(pr.status ?? "active");
+  const [projectTypeId, setProjectTypeId] = useState<string>(pr.project_type_id ?? "");
+  const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>(
+    (pr.invoicing_preference as InvoicingPref) ?? {},
+  );
+  const [customerPoNumber, setCustomerPoNumber] = useState<string>(pr.customer_po_number ?? "");
+  const [startsOn, setStartsOn] = useState<string>(pr.starts_on ?? "");
+  const [endsOn, setEndsOn] = useState<string>(pr.ends_on ?? "");
   // Where the improved property sits (ISO 3166-2): lien waivers release
   // payment only when their jurisdiction matches it. Empty means unrecorded,
   // which fails lien-waiver coverage closed as unevaluable.
-  const [siteJurisdiction, setSiteJurisdiction] = useState<string>(pr.site_jurisdiction ?? '')
-  const subdivisionOptions = useMemo(() => SUBDIVISIONS.map((entry) => {
-    let label = `${entry.code} · ${entry.name}`
-    if (locale) {
-      try {
-        const localized = new Intl.DisplayNames([locale], { type: 'region' }).of(entry.code)
-        if (localized && localized !== entry.code) label = `${entry.code} · ${localized}`
-      } catch { /* fall through to the registry English name */ }
-    }
-    return { value: entry.code, label }
-  }), [locale])
-  const [contractValue, setContractValue] = useState<string>(
-    payload.contractValue ?? '',
-  )
-  const [notes, setNotes] = useState<string>(pr.notes ?? '')
-  const [custom, setCustom] = useState<Record<string, unknown>>(
-    pr.custom ?? {},
-  )
+  const [siteJurisdiction, setSiteJurisdiction] = useState<string>(pr.site_jurisdiction ?? "");
+  const subdivisionOptions = useMemo(
+    () =>
+      SUBDIVISIONS.map((entry) => {
+        let label = `${entry.code} · ${entry.name}`;
+        if (locale) {
+          try {
+            const localized = new Intl.DisplayNames([locale], { type: "region" }).of(entry.code);
+            if (localized && localized !== entry.code) label = `${entry.code} · ${localized}`;
+          } catch {
+            /* fall through to the registry English name */
+          }
+        }
+        return { value: entry.code, label };
+      }),
+    [locale],
+  );
+  const [contractValue, setContractValue] = useState<string>(payload.contractValue ?? "");
+  const [notes, setNotes] = useState<string>(pr.notes ?? "");
+  const [custom, setCustom] = useState<Record<string, unknown>>(pr.custom ?? {});
   // Unsaved-create defaults the record to active: the drawer opens on nothing
   // persisted, so deactivation lifecycle guards have nothing to evaluate yet.
-  const [isActive, setIsActive] = useState<boolean>(createMode ? true : pr.is_active === true)
-  const [subsidiaryId, setSubsidiaryId] = useState<string>(pr.subsidiary_id ?? '')
+  const [isActive, setIsActive] = useState<boolean>(createMode ? true : pr.is_active === true);
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(pr.subsidiary_id ?? "");
   const [subsidiaryIncludeChildren, setSubsidiaryIncludeChildren] = useState<boolean>(
     pr.subsidiary_include_children !== false,
-  )
+  );
   // Internal (shop/overhead) time target: no customer, non-billable, no labor
   // cost posting. Checking it clears the customer and invoicing override (the
   // server refuses any race the same way); unchecking a project with booked
   // time is refused by name.
-  const [isInternal, setIsInternal] = useState<boolean>(pr.is_internal === true)
+  const [isInternal, setIsInternal] = useState<boolean>(pr.is_internal === true);
   function setInternal(next: boolean) {
-    setIsInternal(next)
+    setIsInternal(next);
     if (next) {
-      setCustomerId('')
-      setInvoicingPref({})
+      setCustomerId("");
+      setInvoicingPref({});
     }
   }
 
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
   // Saves run on the shared action path: refusals pin beside the record and
   // toast, and busy always releases — a failed or unreachable save can never
   // wedge the Save button disabled or swallow the server's reason.
-  const { busy, refusal, execute } = useAppAction()
-  const requestIdRef = useRef<string | null>(null)
+  const { busy, refusal, execute } = useAppAction();
+  const requestIdRef = useRef<string | null>(null);
 
   // Opens READ-ONLY; Edit switches to an explicit-save form.
   // Unsaved-create opens editable: there is no persisted record to read yet.
-  const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
-  const editable = mode === 'edit' && canManage
-  const returnHref = closeHref ?? basePath
-  const tOperating = useTranslations('operatingProfiles')
-  const [operatingDepartmentId,setOperatingDepartmentId]=useState(initialOperatingDepartmentId)
-  const [operatingSelection, setOperatingSelection] = useState<OperatingProfileChoice | null>(initialOperatingChoice)
-  const [choosingWorkflow, setChoosingWorkflow] = useState(createMode && !initialOperatingChoice && operatingChoices.length > 0)
-  const activeOperatingDefinition = operatingSelection?.definition ?? operatingDefinition
+  const [mode, setMode] = useState<"view" | "edit">(createMode ? "edit" : "view");
+  const editable = mode === "edit" && canManage;
+  const returnHref = closeHref ?? basePath;
+  const tOperating = useTranslations("operatingProfiles");
+  const [operatingDepartmentId, setOperatingDepartmentId] = useState(initialOperatingDepartmentId);
+  const [operatingSelection, setOperatingSelection] = useState<OperatingProfileChoice | null>(
+    initialOperatingChoice,
+  );
+  const [choosingWorkflow, setChoosingWorkflow] = useState(
+    createMode && !initialOperatingChoice && operatingChoices.length > 0,
+  );
+  const activeOperatingDefinition = operatingSelection?.definition ?? operatingDefinition;
 
   // Flyout chrome: subtabs + Actions-menu-driven create forms (repository conventions).
   // Unsaved-create lands on the overview: every other built-in tab needs a
@@ -328,38 +367,45 @@ export function ProjectDrawer({
   // strand the drawer on a missing panel.
   const [tab, setTab] = useState<TabKey>(
     createMode
-      ? 'overview'
-      : initialTab === 'work_breakdown' || initialTab === 'schedule' || initialTab === 'staffing' || initialTab === 'progress'
-        ? 'project_management'
+      ? "overview"
+      : initialTab === "work_breakdown" ||
+          initialTab === "schedule" ||
+          initialTab === "staffing" ||
+          initialTab === "progress"
+        ? "project_management"
         : initialTab,
-  )
+  );
   const [managementTab, setManagementTab] = useState<string>(
-    initialTab === 'schedule' || initialTab === 'staffing' || initialTab === 'progress' ? initialTab : 'work_breakdown',
-  )
-  const [actionsOpen, setActionsOpen] = useState(false)
-  const [chargeFormOpen, setChargeFormOpen] = useState(false)
-  const [showOptionalBreakdown,setShowOptionalBreakdown]=useState(payload.tasks.length>0||initialTab==='work_breakdown')
-  const [billingFormOpen, setBillingFormOpen] = useState(false)
-  const [recognitionOpen, setRecognitionOpen] = useState(false)
+    initialTab === "schedule" || initialTab === "staffing" || initialTab === "progress"
+      ? initialTab
+      : "work_breakdown",
+  );
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [chargeFormOpen, setChargeFormOpen] = useState(false);
+  const [showOptionalBreakdown, setShowOptionalBreakdown] = useState(
+    payload.tasks.length > 0 || initialTab === "work_breakdown",
+  );
+  const [billingFormOpen, setBillingFormOpen] = useState(false);
+  const [recognitionOpen, setRecognitionOpen] = useState(false);
 
-  const nameValid = name.trim().length > 0 && name.trim() !== 'New project'
+  const nameValid = name.trim().length > 0 && name.trim() !== "New project";
 
   const partyOptions = useMemo(
-    () => parties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
+    () => parties.map((p) => ({ value: p.id, label: p.display_name ?? "" })),
     [parties],
-  )
+  );
   const managerOptions = useMemo(
-    () => managerParties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
+    () => managerParties.map((p) => ({ value: p.id, label: p.display_name ?? "" })),
     [managerParties],
-  )
+  );
   const foremanOptions = useMemo(
-    () => foremanParties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
+    () => foremanParties.map((p) => ({ value: p.id, label: p.display_name ?? "" })),
     [foremanParties],
-  )
+  );
 
   const savePayload = useMemo(
     () => ({
-      name: name.trim() || (isActive ? name : 'New project'),
+      name: name.trim() || (isActive ? name : "New project"),
       code,
       isInternal,
       customerId: customerId || null,
@@ -377,42 +423,71 @@ export function ProjectDrawer({
       custom,
       subsidiaryId: subsidiaries.length > 0 ? subsidiaryId || null : undefined,
       subsidiaryIncludeChildren: subsidiaries.length > 0 ? subsidiaryIncludeChildren : undefined,
-      ...(createMode && operatingSelection ? { operatingProfile: operatingSelection.value, operatingDepartmentId: operatingDepartmentId || null } : {}),
+      ...(createMode && operatingSelection
+        ? {
+            operatingProfile: operatingSelection.value,
+            operatingDepartmentId: operatingDepartmentId || null,
+          }
+        : {}),
     }),
-    [name, code, isInternal, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, siteJurisdiction, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive, createMode, operatingSelection, operatingDepartmentId],
-  )
+    [
+      name,
+      code,
+      isInternal,
+      customerId,
+      foremanId,
+      managerId,
+      status,
+      projectTypeId,
+      invoicingPref,
+      customerPoNumber,
+      startsOn,
+      endsOn,
+      contractValue,
+      notes,
+      siteJurisdiction,
+      custom,
+      subsidiaryId,
+      subsidiaryIncludeChildren,
+      subsidiaries.length,
+      isActive,
+      createMode,
+      operatingSelection,
+      operatingDepartmentId,
+    ],
+  );
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
   // but deliberately NOT subscribed: the gate fires only when `savePayload`
   // changes identity, so merely entering edit mode with untouched fields never
   // marks the form dirty (same guarantee as the ref-mirrored gate this
   // replaces, without the effect-body setState).
-  const [dirty, setDirty] = useState(false)
-  const [prevSavePayload, setPrevSavePayload] = useState(savePayload)
+  const [dirty, setDirty] = useState(false);
+  const [prevSavePayload, setPrevSavePayload] = useState(savePayload);
   if (prevSavePayload !== savePayload) {
-    setPrevSavePayload(savePayload)
-    if (editable) setDirty(true)
+    setPrevSavePayload(savePayload);
+    if (editable) setDirty(true);
   }
 
   function resetForm() {
-    setName(isPlaceholderName ? '' : (pr.name ?? ''))
-    setCode(pr.code ?? '')
-    setIsInternal(pr.is_internal === true)
-    setCustomerId(pr.customer_id ?? '')
-    setForemanId(pr.foreman_id ?? '')
-    setManagerId(pr.manager_id ?? '')
-    setStatus(pr.status ?? 'active')
-    setProjectTypeId(pr.project_type_id ?? '')
-    setInvoicingPref((pr.invoicing_preference as InvoicingPref) ?? {})
-    setCustomerPoNumber(pr.customer_po_number ?? '')
-    setStartsOn(pr.starts_on ?? '')
-    setEndsOn(pr.ends_on ?? '')
-    setSiteJurisdiction(pr.site_jurisdiction ?? '')
-    setContractValue(payload.contractValue ?? '')
-    setNotes(pr.notes ?? '')
-    setCustom(pr.custom ?? {})
-    setSubsidiaryId(pr.subsidiary_id ?? '')
-    setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false)
+    setName(isPlaceholderName ? "" : (pr.name ?? ""));
+    setCode(pr.code ?? "");
+    setIsInternal(pr.is_internal === true);
+    setCustomerId(pr.customer_id ?? "");
+    setForemanId(pr.foreman_id ?? "");
+    setManagerId(pr.manager_id ?? "");
+    setStatus(pr.status ?? "active");
+    setProjectTypeId(pr.project_type_id ?? "");
+    setInvoicingPref((pr.invoicing_preference as InvoicingPref) ?? {});
+    setCustomerPoNumber(pr.customer_po_number ?? "");
+    setStartsOn(pr.starts_on ?? "");
+    setEndsOn(pr.ends_on ?? "");
+    setSiteJurisdiction(pr.site_jurisdiction ?? "");
+    setContractValue(payload.contractValue ?? "");
+    setNotes(pr.notes ?? "");
+    setCustom(pr.custom ?? {});
+    setSubsidiaryId(pr.subsidiary_id ?? "");
+    setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false);
   }
 
   /**
@@ -426,101 +501,103 @@ export function ProjectDrawer({
     // valid — but the server refuses nameless creates too, so fail closed
     // here rather than POSTing a request known to 422.
     if (!nameValid) {
-      setSaveState('error')
-      toast.error(t('drawer.saveFailedRetry'))
-      return
+      setSaveState("error");
+      toast.error(t("drawer.saveFailedRetry"));
+      return;
     }
-    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-    setSaveState('saving')
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
+    setSaveState("saving");
     await execute(
       () =>
-        fetchAction<{ project?: { id?: unknown } }>('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
+        fetchAction<{ project?: { id?: unknown } }>("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": requestIdRef.current! },
           body: JSON.stringify({ ...savePayload, isActive }),
         }),
       {
-        fallbackMessage: t('drawer.saveFailedRetry'),
+        fallbackMessage: t("drawer.saveFailedRetry"),
         onOk: (data) => {
-          setSaveState('saved')
-          setDirty(false)
-          const createdId = typeof data?.project?.id === 'string' ? data.project.id : null
-          const separator = returnHref.includes('?') ? '&' : '?'
-          router.replace((createdId ? `${returnHref}${separator}project=${createdId}` : returnHref) as never)
-          router.refresh()
+          setSaveState("saved");
+          setDirty(false);
+          const createdId = typeof data?.project?.id === "string" ? data.project.id : null;
+          const separator = returnHref.includes("?") ? "&" : "?";
+          router.replace(
+            (createdId ? `${returnHref}${separator}project=${createdId}` : returnHref) as never,
+          );
+          router.refresh();
         },
-        onRefused: () => setSaveState('error'),
+        onRefused: () => setSaveState("error"),
       },
-    )
+    );
   }
 
   async function save() {
     if (createMode) {
-      await saveNew()
-      return
+      await saveNew();
+      return;
     }
-    setSaveState('saving')
+    setSaveState("saving");
     await execute(
       () =>
         fetchAction(`/api/projects/${pr.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(savePayload),
         }),
       {
-        fallbackMessage: t('drawer.autosaveFailed'),
+        fallbackMessage: t("drawer.autosaveFailed"),
         onOk: async () => {
-          setSaveState('saved')
-          setDirty(false)
-          setMode('view')
+          setSaveState("saved");
+          setDirty(false);
+          setMode("view");
           // The draft placeholder is inactive by design, but the save
           // that gives it a real name completes creation — leave it inactive and
           // the user thinks the save failed (Inactive badge, hidden from the
           // list). Later saves never touch the flag, so deactivation sticks.
           if (shouldAutoActivateProject(pr.name, isActive, name)) {
-            await setActiveState(true)
+            await setActiveState(true);
           }
-          router.refresh()
+          router.refresh();
         },
-        onRefused: () => setSaveState('error'),
+        onRefused: () => setSaveState("error"),
       },
-    )
+    );
   }
 
   function cancel() {
     // Unsaved-create Cancel writes nothing: there is no persisted row to
     // restore, so leave the URL (and the database) exactly as found.
     if (createMode) {
-      router.push(returnHref as never)
-      return
+      router.push(returnHref as never);
+      return;
     }
-    resetForm()
-    setDirty(false)
-    setSaveState('saved')
-    setMode('view')
+    resetForm();
+    setDirty(false);
+    setSaveState("saved");
+    setMode("view");
   }
 
   async function setActiveState(next: boolean) {
     await execute(
       () =>
         fetchAction(`/api/projects/${pr.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ isActive: next }),
         }),
       {
-        fallbackMessage: t('drawer.updateFailed'),
+        fallbackMessage: t("drawer.updateFailed"),
         onOk: () => {
-          setIsActive(next)
-          toast.success(next ? t('drawer.activated') : t('drawer.deactivated'))
-          router.refresh()
+          setIsActive(next);
+          toast.success(next ? t("drawer.activated") : t("drawer.deactivated"));
+          router.refresh();
         },
       },
-    )
+    );
   }
 
-  const ro = !editable
-  const effectiveLayout = layout ?? defaultFormLayout('project')
+  const ro = !editable;
+  const effectiveLayout = layout ?? defaultFormLayout("project");
 
   /** Overview shows every field group that no custom tab has claimed. */
   const overviewLayout = useMemo(() => {
@@ -528,153 +605,315 @@ export function ProjectDrawer({
       (effectiveLayout.tabs ?? [])
         .filter((placement) => isCustomTabKey(placement.key))
         .flatMap((placement) => placement.groupIds ?? []),
-    )
-    if (claimed.size === 0) return effectiveLayout
+    );
+    if (claimed.size === 0) return effectiveLayout;
     return {
       ...effectiveLayout,
       header: { groups: effectiveLayout.header.groups.filter((group) => !claimed.has(group.id)) },
-    }
-  }, [effectiveLayout])
+    };
+  }, [effectiveLayout]);
   const cfByKey = useMemo(
     // Inside the memo: a `?? []` fallback outside would hand the dep array a
     // fresh empty-array identity on every render, defeating the memo.
     () => new Map((payload.customFieldDefs ?? []).map((d) => [`cf_${d.key}`, d])),
     [payload.customFieldDefs],
-  )
+  );
 
   function renderProjectField(placement: HeaderFieldPlacement): React.ReactNode {
     // Foreman renders from the shared project field set on every flavour;
     // only an explicit form-layout omission hides it. Site and customer-PO
     // keep their operating-profile presentation switches.
-    if (profileHidesProjectHeaderField(placement.key, activeOperatingDefinition?.presentation)) return null
-    const lbl = placement.labelOverride?.trim() || undefined
+    if (profileHidesProjectHeaderField(placement.key, activeOperatingDefinition?.presentation))
+      return null;
+    const lbl = placement.labelOverride?.trim() || undefined;
     switch (placement.key) {
-      case 'name':
+      case "name":
         return (
           <>
-            <Label>{lbl || tCommon('labels.name')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-            {editable ? <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} /> : <ReadOnlyValue value={name} />}
+            <Label>
+              {lbl || tCommon("labels.name")}
+              {editable ? <span className="text-red-500"> *</span> : null}
+            </Label>
+            {editable ? (
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t("drawer.namePlaceholder")}
+              />
+            ) : (
+              <ReadOnlyValue value={name} />
+            )}
           </>
-        )
-      case 'code':
+        );
+      case "code":
         return (
           <>
-            <Label>{lbl || t('labels.code')}</Label>
-            {editable ? <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder={t('drawer.codePlaceholder')} /> : <ReadOnlyValue value={code} className="font-mono" />}
+            <Label>{lbl || t("labels.code")}</Label>
+            {editable ? (
+              <Input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="font-mono"
+                placeholder={t("drawer.codePlaceholder")}
+              />
+            ) : (
+              <ReadOnlyValue value={code} className="font-mono" />
+            )}
           </>
-        )
-      case 'project_type_id':
-        if (projectTypes.length === 0) return null
+        );
+      case "project_type_id":
+        if (projectTypes.length === 0) return null;
         return (
           <>
-            <Label>{lbl || t('drawer.projectType')}</Label>
-            {editable ? <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)}>
-              <option value="">—</option>
-              {projectTypes.map((projectType) => <option key={projectType.id} value={projectType.id}>{projectType.name}</option>)}
-            </Select> : <ReadOnlyValue value={projectTypes.find((projectType) => projectType.id === projectTypeId)?.name ?? ''} />}
+            <Label>{lbl || t("drawer.projectType")}</Label>
+            {editable ? (
+              <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)}>
+                <option value="">—</option>
+                {projectTypes.map((projectType) => (
+                  <option key={projectType.id} value={projectType.id}>
+                    {projectType.name}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <ReadOnlyValue
+                value={
+                  projectTypes.find((projectType) => projectType.id === projectTypeId)?.name ?? ""
+                }
+              />
+            )}
           </>
-        )
-      case 'customer_id':
+        );
+      case "customer_id":
         return (
           <>
-            <Label>{lbl || tCommon('labels.customer')}</Label>
-            {editable ? <SearchSelect value={customerId} onChange={setCustomerId} options={partyOptions} clearable emptyLabel={t('drawer.noCustomer')} placeholder={t('drawer.selectCustomer')} sheetTitle={tCommon('labels.customer')} ariaLabel={tCommon('labels.customer')} /> : <ReadOnlyValue value={partyOptions.find((option) => option.value === customerId)?.label ?? ''} />}
+            <Label>{lbl || tCommon("labels.customer")}</Label>
+            {editable ? (
+              <SearchSelect
+                value={customerId}
+                onChange={setCustomerId}
+                options={partyOptions}
+                clearable
+                emptyLabel={t("drawer.noCustomer")}
+                placeholder={t("drawer.selectCustomer")}
+                sheetTitle={tCommon("labels.customer")}
+                ariaLabel={tCommon("labels.customer")}
+              />
+            ) : (
+              <ReadOnlyValue
+                value={partyOptions.find((option) => option.value === customerId)?.label ?? ""}
+              />
+            )}
           </>
-        )
-      case 'status':
+        );
+      case "status":
         return (
           <>
-            <Label>{lbl || tCommon('labels.status')}</Label>
-            {editable ? <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              {statusOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-            </Select> : <ReadOnlyValue value={statusOptions.find((option) => option.value === status)?.label ?? status} />}
+            <Label>{lbl || tCommon("labels.status")}</Label>
+            {editable ? (
+              <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                {statusOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <ReadOnlyValue
+                value={statusOptions.find((option) => option.value === status)?.label ?? status}
+              />
+            )}
           </>
-        )
-      case 'contract_value':
+        );
+      case "contract_value":
         return (
           <>
-            <Label>{lbl || t('labels.contractValue')}</Label>
-            {editable ? <div className="flex items-center">
-              <span className="mr-1 text-slate-500">{currency}</span>
-              <Input inputMode="decimal" className="text-right tabular-nums" value={contractValue} onChange={(e) => setContractValue(e.target.value)} />
-            </div> : <ReadOnlyValue value={contractValue ? money(contractValue) : ''} className="text-right tabular-nums" />}
+            <Label>{lbl || t("labels.contractValue")}</Label>
+            {editable ? (
+              <div className="flex items-center">
+                <span className="mr-1 text-slate-500">{currency}</span>
+                <Input
+                  inputMode="decimal"
+                  className="text-right tabular-nums"
+                  value={contractValue}
+                  onChange={(e) => setContractValue(e.target.value)}
+                />
+              </div>
+            ) : (
+              <ReadOnlyValue
+                value={contractValue ? money(contractValue) : ""}
+                className="text-right tabular-nums"
+              />
+            )}
           </>
-        )
-      case 'foreman_id':
+        );
+      case "foreman_id":
         return (
           <>
-            <Label>{lbl || t('labels.foreman')}</Label>
-            {editable ? <SearchSelect value={foremanId} onChange={setForemanId} options={foremanOptions} clearable emptyLabel={t('drawer.noForeman')} placeholder={t('drawer.selectForeman')} sheetTitle={t('labels.foreman')} ariaLabel={t('labels.foreman')} /> : <ReadOnlyValue value={foremanOptions.find((option) => option.value === foremanId)?.label ?? partyOptions.find((option) => option.value === foremanId)?.label ?? ''} />}
+            <Label>{lbl || t("labels.foreman")}</Label>
+            {editable ? (
+              <SearchSelect
+                value={foremanId}
+                onChange={setForemanId}
+                options={foremanOptions}
+                clearable
+                emptyLabel={t("drawer.noForeman")}
+                placeholder={t("drawer.selectForeman")}
+                sheetTitle={t("labels.foreman")}
+                ariaLabel={t("labels.foreman")}
+              />
+            ) : (
+              <ReadOnlyValue
+                value={
+                  foremanOptions.find((option) => option.value === foremanId)?.label ??
+                  partyOptions.find((option) => option.value === foremanId)?.label ??
+                  ""
+                }
+              />
+            )}
           </>
-        )
-      case 'manager_id':
+        );
+      case "manager_id":
         return (
           <>
-            <Label>{lbl || t('labels.manager')}</Label>
-            {editable ? <SearchSelect value={managerId} onChange={setManagerId} options={managerOptions} clearable emptyLabel={t('drawer.noManager')} placeholder={t('drawer.selectManager')} sheetTitle={t('labels.manager')} ariaLabel={t('labels.manager')} /> : <ReadOnlyValue value={managerOptions.find((option) => option.value === managerId)?.label ?? partyOptions.find((option) => option.value === managerId)?.label ?? ''} />}
+            <Label>{lbl || t("labels.manager")}</Label>
+            {editable ? (
+              <SearchSelect
+                value={managerId}
+                onChange={setManagerId}
+                options={managerOptions}
+                clearable
+                emptyLabel={t("drawer.noManager")}
+                placeholder={t("drawer.selectManager")}
+                sheetTitle={t("labels.manager")}
+                ariaLabel={t("labels.manager")}
+              />
+            ) : (
+              <ReadOnlyValue
+                value={
+                  managerOptions.find((option) => option.value === managerId)?.label ??
+                  partyOptions.find((option) => option.value === managerId)?.label ??
+                  ""
+                }
+              />
+            )}
           </>
-        )
-      case 'customer_po_number':
+        );
+      case "customer_po_number":
         return (
           <>
-            <Label>{lbl || t('labels.customerPo')}</Label>
-            {editable ? <Input value={customerPoNumber} onChange={(e) => setCustomerPoNumber(e.target.value)} className="font-mono" /> : <ReadOnlyValue value={customerPoNumber} className="font-mono" />}
+            <Label>{lbl || t("labels.customerPo")}</Label>
+            {editable ? (
+              <Input
+                value={customerPoNumber}
+                onChange={(e) => setCustomerPoNumber(e.target.value)}
+                className="font-mono"
+              />
+            ) : (
+              <ReadOnlyValue value={customerPoNumber} className="font-mono" />
+            )}
           </>
-        )
-      case 'starts_on':
+        );
+      case "starts_on":
         return (
           <>
-            <Label>{lbl || t('labels.startDate')}</Label>
-            {editable ? <DateField value={startsOn} onChange={(value) => setStartsOn(value)} /> : <ReadOnlyValue value={startsOn} />}
+            <Label>{lbl || t("labels.startDate")}</Label>
+            {editable ? (
+              <DateField value={startsOn} onChange={(value) => setStartsOn(value)} />
+            ) : (
+              <ReadOnlyValue value={startsOn} />
+            )}
           </>
-        )
-      case 'ends_on':
+        );
+      case "ends_on":
         return (
           <>
-            <Label>{lbl || t('labels.endDate')}</Label>
-            {editable ? <DateField value={endsOn} onChange={(value) => setEndsOn(value)} /> : <ReadOnlyValue value={endsOn} />}
+            <Label>{lbl || t("labels.endDate")}</Label>
+            {editable ? (
+              <DateField value={endsOn} onChange={(value) => setEndsOn(value)} />
+            ) : (
+              <ReadOnlyValue value={endsOn} />
+            )}
           </>
-        )
-      case 'site_jurisdiction': {
-        const siteLabel = subdivisionOptions.find((option) => option.value === siteJurisdiction)?.label ?? siteJurisdiction
+        );
+      case "site_jurisdiction": {
+        const siteLabel =
+          subdivisionOptions.find((option) => option.value === siteJurisdiction)?.label ??
+          siteJurisdiction;
         return (
           <>
-            <Label>{lbl || t('labels.siteJurisdiction')}</Label>
-            {editable ? <Select value={siteJurisdiction} onChange={(e) => setSiteJurisdiction(e.target.value)}>
-              <option value="">—</option>
-              {subdivisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </Select> : <ReadOnlyValue value={siteLabel} />}
+            <Label>{lbl || t("labels.siteJurisdiction")}</Label>
+            {editable ? (
+              <Select
+                value={siteJurisdiction}
+                onChange={(e) => setSiteJurisdiction(e.target.value)}
+              >
+                <option value="">—</option>
+                {subdivisionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <ReadOnlyValue value={siteLabel} />
+            )}
           </>
-        )
+        );
       }
-      case 'subsidiary_id':
-        if (subsidiaries.length === 0) return null
+      case "subsidiary_id":
+        if (subsidiaries.length === 0) return null;
         return (
           <>
-            <Label>{lbl || t('drawer.subsidiaryRestriction')}</Label>
-            {editable ? <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
-              <option value="">{t('drawer.allSubsidiaries')}</option>
-              {subsidiaries.map((s) => (<option key={s.id} value={s.id}>{`${'— '.repeat(s.depth)}${s.name}`}</option>))}
-            </Select> : <ReadOnlyValue value={subsidiaries.find((subsidiary) => subsidiary.id === subsidiaryId)?.name ?? t('drawer.allSubsidiaries')} />}
+            <Label>{lbl || t("drawer.subsidiaryRestriction")}</Label>
+            {editable ? (
+              <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
+                <option value="">{t("drawer.allSubsidiaries")}</option>
+                {subsidiaries.map((s) => (
+                  <option key={s.id} value={s.id}>{`${"— ".repeat(s.depth)}${s.name}`}</option>
+                ))}
+              </Select>
+            ) : (
+              <ReadOnlyValue
+                value={
+                  subsidiaries.find((subsidiary) => subsidiary.id === subsidiaryId)?.name ??
+                  t("drawer.allSubsidiaries")
+                }
+              />
+            )}
             {subsidiaryId && editable ? (
               <label className="mt-1 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <input type="checkbox" checked={subsidiaryIncludeChildren} onChange={(e) => setSubsidiaryIncludeChildren(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
-                {t('drawer.includeChildSubsidiaries')}
+                <input
+                  type="checkbox"
+                  checked={subsidiaryIncludeChildren}
+                  onChange={(e) => setSubsidiaryIncludeChildren(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+                {t("drawer.includeChildSubsidiaries")}
               </label>
-            ) : subsidiaryId ? <ReadOnlyValue value={subsidiaryIncludeChildren ? tCommon('labels.yes') : tCommon('labels.no')} className="text-xs" /> : null}
+            ) : subsidiaryId ? (
+              <ReadOnlyValue
+                value={subsidiaryIncludeChildren ? tCommon("labels.yes") : tCommon("labels.no")}
+                className="text-xs"
+              />
+            ) : null}
           </>
-        )
-      case 'notes':
+        );
+      case "notes":
         return (
           <>
-            <Label>{lbl || tCommon('labels.notes')}</Label>
-            {editable ? <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /> : <ReadOnlyValue value={notes} className="whitespace-pre-wrap" />}
+            <Label>{lbl || tCommon("labels.notes")}</Label>
+            {editable ? (
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+            ) : (
+              <ReadOnlyValue value={notes} className="whitespace-pre-wrap" />
+            )}
           </>
-        )
+        );
       default: {
-        const def = cfByKey.get(placement.key)
-        if (!def) return null
-        const overridden = lbl ? { ...def, label: lbl } : def
+        const def = cfByKey.get(placement.key);
+        if (!def) return null;
+        const overridden = lbl ? { ...def, label: lbl } : def;
         return (
           <CustomFieldInput
             def={overridden}
@@ -682,7 +921,7 @@ export function ProjectDrawer({
             onChange={(v) => setCustom({ ...custom, [def.key]: v })}
             readOnly={ro}
           />
-        )
+        );
       }
     }
   }
@@ -691,13 +930,16 @@ export function ProjectDrawer({
     return (
       <button
         type="button"
-        onClick={() => { setActionsOpen(false); onClick() }}
+        onClick={() => {
+          setActionsOpen(false);
+          onClick();
+        }}
         className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
       >
         {icon}
         {label}
       </button>
-    )
+    );
   }
 
   /**
@@ -711,340 +953,507 @@ export function ProjectDrawer({
   const tabs = useMemo(() => {
     return resolveFormTabs(effectiveLayout)
       .filter((placement) => placement.visible)
-      .filter((placement) => !createMode || placement.key === 'overview' || isCustomTabKey(placement.key))
+      .filter(
+        (placement) => !createMode || placement.key === "overview" || isCustomTabKey(placement.key),
+      )
       .map((placement) => ({
         key: placement.key,
         groupIds: placement.groupIds ?? [],
         subtabs: (placement.subtabs ?? [])
-          .filter((subtab) =>
-            subtab.visible &&
-            (subtab.key !== 'schedule' || schedulingEnabled) &&
-            (subtab.key !== 'staffing' || resourcingEnabled) &&
-            (subtab.key !== 'progress' || progressEnabled) &&
-            (subtab.key !== 'work_breakdown' || !activeOperatingDefinition || showOptionalBreakdown || ['activities', 'tasks', 'field_tickets'].includes(activeOperatingDefinition.capture)),
+          .filter(
+            (subtab) =>
+              subtab.visible &&
+              (subtab.key !== "schedule" || schedulingEnabled) &&
+              (subtab.key !== "staffing" || resourcingEnabled) &&
+              (subtab.key !== "progress" || progressEnabled) &&
+              (subtab.key !== "work_breakdown" ||
+                !activeOperatingDefinition ||
+                showOptionalBreakdown ||
+                ["activities", "tasks", "field_tickets"].includes(
+                  activeOperatingDefinition.capture,
+                )),
           )
           .map((subtab) => ({
             key: subtab.key,
-            label:
-              subtab.labelOverride?.trim() ||
-              t(`cockpit.tabs.${subtab.key}`),
+            label: subtab.labelOverride?.trim() || t(`cockpit.tabs.${subtab.key}`),
           })),
         label:
           placement.labelOverride?.trim() ||
           (isCustomTabKey(placement.key)
-            ? placement.key.replace(/^tab_/, '').replace(/_/g, ' ')
+            ? placement.key.replace(/^tab_/, "").replace(/_/g, " ")
             : t(`cockpit.tabs.${placement.key}`)),
       }))
-      .filter((placement) =>
-        placement.key !== 'project_management' || placement.subtabs.length > 0,
-      )
-  }, [effectiveLayout, schedulingEnabled, resourcingEnabled, progressEnabled, t, createMode, activeOperatingDefinition,showOptionalBreakdown])
+      .filter(
+        (placement) => placement.key !== "project_management" || placement.subtabs.length > 0,
+      );
+  }, [
+    effectiveLayout,
+    schedulingEnabled,
+    resourcingEnabled,
+    progressEnabled,
+    t,
+    createMode,
+    activeOperatingDefinition,
+    showOptionalBreakdown,
+  ]);
 
-  const optionalBreakdownConfigured=resolveFormTabs(effectiveLayout).some(placement=>placement.visible&&placement.key==='project_management'&&(placement.subtabs??[]).some(subtab=>subtab.visible&&subtab.key==='work_breakdown'))
-  function openWorkBreakdown(){setShowOptionalBreakdown(true);setTab('project_management');setManagementTab('work_breakdown')}
+  const optionalBreakdownConfigured = resolveFormTabs(effectiveLayout).some(
+    (placement) =>
+      placement.visible &&
+      placement.key === "project_management" &&
+      (placement.subtabs ?? []).some((subtab) => subtab.visible && subtab.key === "work_breakdown"),
+  );
+  function openWorkBreakdown() {
+    setShowOptionalBreakdown(true);
+    setTab("project_management");
+    setManagementTab("work_breakdown");
+  }
 
   // A hidden or gated-off tab must never stay selected, during render (same
   // committed value, no extra render).
   if (tabs.length > 0 && !tabs.some((item) => item.key === tab)) {
-    setTab(tabs[0]!.key)
+    setTab(tabs[0]!.key);
   }
 
-  const activeTab = tabs.find((item) => item.key === tab) ?? null
+  const activeTab = tabs.find((item) => item.key === tab) ?? null;
   const managementTabs = useMemo(
-    () => tabs.find((item) => item.key === 'project_management')?.subtabs ?? [],
+    () => tabs.find((item) => item.key === "project_management")?.subtabs ?? [],
     [tabs],
-  )
+  );
 
   // Same fallback for the management sub-tab, during render.
   if (
-    tab === 'project_management' &&
+    tab === "project_management" &&
     managementTabs.length > 0 &&
     !managementTabs.some((item) => item.key === managementTab)
   ) {
-    setManagementTab(managementTabs[0]!.key)
+    setManagementTab(managementTabs[0]!.key);
   }
 
   return (
     <>
-    <UrlDrawer
-      open
-      closeHref={returnHref}
-      syncUrlOnClose
-      size="2xl"
-      title={
-        <span className="flex items-center gap-2.5">
-          <span>{name.trim() || t('drawer.newProject')}</span>
-          <Badge variant={isActive ? 'success' : 'outline'}>
-            {isActive ? tCommon('status.active') : tCommon('status.inactive')}
-          </Badge>
-        </span>
-      }
-      description={mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
-      subtabs={
-        <RecordTabs label={t('cockpit.tabsAria')} tabs={tabs.map((item) => ({ key: item.key, label: item.label }))} active={tab} onChange={setTab} />
-      }
-      headerActions={
-        mode === 'edit' ? (
-          <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>
-              {tCommon('actions.cancel')}
-            </Button>
-            <Button size="sm" disabled={busy || choosingWorkflow || (createMode === true && !nameValid)} onClick={save}>
-              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-            </Button>
-          </div>
-        ) : canManage || canViewGl || !!cockpit?.recognition || quickTimeHref ? (
-          <div className="flex items-center gap-1.5">
-            {quickTimeHref ? <Button asChild size="sm"><Link href={quickTimeHref as never}>{tOperating('time.record')}</Link></Button> : null}
-            {canManage ? (
-              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { setTab('overview'); setMode('edit') }}>
-                {tCommon('actions.edit')}
+      <UrlDrawer
+        open
+        closeHref={returnHref}
+        syncUrlOnClose
+        size="2xl"
+        title={
+          <span className="flex items-center gap-2.5">
+            <span>{name.trim() || t("drawer.newProject")}</span>
+            <Badge variant={isActive ? "success" : "outline"}>
+              {isActive ? tCommon("status.active") : tCommon("status.inactive")}
+            </Badge>
+          </span>
+        }
+        description={mode === "edit" ? tCommon("feedback.editingHint") : undefined}
+        subtabs={
+          <RecordTabs
+            label={t("cockpit.tabsAria")}
+            tabs={tabs.map((item) => ({ key: item.key, label: item.label }))}
+            active={tab}
+            onChange={setTab}
+          />
+        }
+        headerActions={
+          mode === "edit" ? (
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>
+                {tCommon("actions.cancel")}
               </Button>
-            ) : null}
-            <Popover
-            open={actionsOpen}
-            onOpenChange={setActionsOpen}
-            align="end"
-            trigger={
               <Button
-                variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 px-2.5 text-xs"
-                onClick={() => setActionsOpen((o) => !o)}
-                aria-expanded={actionsOpen}
+                disabled={busy || choosingWorkflow || (createMode === true && !nameValid)}
+                onClick={save}
               >
-                {tCommon('labels.actions')}
-                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', actionsOpen && 'rotate-180')} aria-hidden />
+                {busy ? tCommon("actions.saving") : tCommon("actions.save")}
               </Button>
-            }
-            className="w-56 p-1.5"
-          >
-            <div className="space-y-0.5">
-              {canViewGl && cockpit
-                ? menuItem(<BookOpen className="h-3.5 w-3.5" aria-hidden />, t('cockpit.viewGeneralLedger'), () => {
-                    const params = new URLSearchParams({
-                      period: 'custom',
-                      from: cockpit.glRange.from,
-                      to: cockpit.glRange.to,
-                      project: String(pr.id),
-                    })
-                    router.push(`/reports/general-ledger?${params.toString()}`)
-                  })
-                : null}
-              {cockpit?.recognition
-                ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('recognition.title'), () => setRecognitionOpen(true))
-                : null}
-              {canManage ? (
-                <>
-                  <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-                  {optionalBreakdownConfigured?menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />,tOperating('workJourney.breakdown'),openWorkBreakdown):null}
-                  {tabs.some(item=>item.key==='transactions')?menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) }):null}
-                  {cockpit && tabs.some(item=>item.key==='billing')&&cockpit.invoicing.billingProcedure !== 'application_for_payment'
-                    ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })
-                    : null}
-                  <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-                  {isActive
-                    ? menuItem(<Trash2 className="h-3.5 w-3.5" aria-hidden />, t('drawer.deactivate'), () => setActiveState(false))
-                    : nameValid
-                      ? menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('drawer.activate'), () => setActiveState(true))
-                      : null}
-                </>
-              ) : null}
             </div>
-          </Popover>
-          </div>
-        ) : undefined
-      }
-      footer={
-        tab === 'overview' && mode === 'edit' ? (
-          <div className="flex w-full items-center gap-3">
-            <span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>
-              {saveState === 'saving'
-                ? tCommon('actions.saving')
-                : saveState === 'error'
-                  ? t('drawer.saveFailedRetry')
-                  : dirty
-                    ? t('drawer.unsavedChanges')
+          ) : canManage || canViewGl || !!cockpit?.recognition || quickTimeHref ? (
+            <div className="flex items-center gap-1.5">
+              {quickTimeHref ? (
+                <Button asChild size="sm">
+                  <Link href={quickTimeHref as never}>{tOperating("time.record")}</Link>
+                </Button>
+              ) : null}
+              {canManage ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  onClick={() => {
+                    setTab("overview");
+                    setMode("edit");
+                  }}
+                >
+                  {tCommon("actions.edit")}
+                </Button>
+              ) : null}
+              <Popover
+                open={actionsOpen}
+                onOpenChange={setActionsOpen}
+                align="end"
+                trigger={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2.5 text-xs"
+                    onClick={() => setActionsOpen((o) => !o)}
+                    aria-expanded={actionsOpen}
+                  >
+                    {tCommon("labels.actions")}
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform",
+                        actionsOpen && "rotate-180",
+                      )}
+                      aria-hidden
+                    />
+                  </Button>
+                }
+                className="w-56 p-1.5"
+              >
+                <div className="space-y-0.5">
+                  {canViewGl && cockpit
+                    ? menuItem(
+                        <BookOpen className="h-3.5 w-3.5" aria-hidden />,
+                        t("cockpit.viewGeneralLedger"),
+                        () => {
+                          const params = new URLSearchParams({
+                            period: "custom",
+                            from: cockpit.glRange.from,
+                            to: cockpit.glRange.to,
+                            project: String(pr.id),
+                          });
+                          router.push(`/reports/general-ledger?${params.toString()}`);
+                        },
+                      )
                     : null}
-            </span>
-          </div>
-        ) : undefined
-      }
-    >
-      <div className="px-1 pt-1">
-        <ActionAlert error={refusal} fallbackMessage={t('drawer.saveFailedRetry')} />
-      </div>
-      {tab === 'overview' ? (
-        <div className="space-y-7 p-1">
-          {/* Groups moved onto an author-created tab are drawn there, not here. */}
-          {choosingWorkflow ? <OperatingProfilePicker family="project" initialChoices={operatingChoices} departmentId={operatingDepartmentId} value={operatingSelection?.value ?? null} onChoose={(choice,department) => { setOperatingSelection(choice); setOperatingDepartmentId(department); setChoosingWorkflow(false) }} /> : <>
-          {createMode && operatingSelection ? <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">{operatingSelection.name}</span><Button variant="ghost" size="sm" onClick={() => setChoosingWorkflow(true)}>{tOperating('change')}</Button></div> : null}
-          {!createMode&&cockpit&&activeOperatingDefinition?.presentation.showReadiness?<ProjectWorkJourney definition={activeOperatingDefinition} quickTimeHref={quickTimeHref} hours={cockpit.time.totals.hours}
-            onTime={tabs.some(item=>item.key==='cost_time')?()=>setTab('cost_time'):undefined}
-            onCharge={canManage&&tabs.some(item=>item.key==='transactions')?()=>{setTab('transactions');setChargeFormOpen(true)}:undefined}
-            onBreakdown={optionalBreakdownConfigured?openWorkBreakdown:undefined}/>:null}
-          <HeaderFields layout={overviewLayout} editable={editable} renderField={renderProjectField} />
+                  {cockpit?.recognition
+                    ? menuItem(
+                        <TrendingUp className="h-3.5 w-3.5" aria-hidden />,
+                        t("recognition.title"),
+                        () => setRecognitionOpen(true),
+                      )
+                    : null}
+                  {canManage ? (
+                    <>
+                      <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+                      {optionalBreakdownConfigured
+                        ? menuItem(
+                            <Plus className="h-3.5 w-3.5" aria-hidden />,
+                            tOperating("workJourney.breakdown"),
+                            openWorkBreakdown,
+                          )
+                        : null}
+                      {tabs.some((item) => item.key === "transactions")
+                        ? menuItem(
+                            <Plus className="h-3.5 w-3.5" aria-hidden />,
+                            t("charges.addTitle"),
+                            () => {
+                              setTab("transactions");
+                              setChargeFormOpen(true);
+                            },
+                          )
+                        : null}
+                      {cockpit &&
+                      tabs.some((item) => item.key === "billing") &&
+                      cockpit.invoicing.billingProcedure !== "application_for_payment"
+                        ? menuItem(
+                            <Receipt className="h-3.5 w-3.5" aria-hidden />,
+                            t("billing.requestBilling"),
+                            () => {
+                              setTab("billing");
+                              setBillingFormOpen(true);
+                            },
+                          )
+                        : null}
+                      <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+                      {isActive
+                        ? menuItem(
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />,
+                            t("drawer.deactivate"),
+                            () => setActiveState(false),
+                          )
+                        : nameValid
+                          ? menuItem(
+                              <Plus className="h-3.5 w-3.5" aria-hidden />,
+                              t("drawer.activate"),
+                              () => setActiveState(true),
+                            )
+                          : null}
+                    </>
+                  ) : null}
+                </div>
+              </Popover>
+            </div>
+          ) : undefined
+        }
+        footer={
+          tab === "overview" && mode === "edit" ? (
+            <div className="flex w-full items-center gap-3">
+              <span
+                className={cn(
+                  "text-xs",
+                  saveState === "error"
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-slate-500 dark:text-slate-400",
+                )}
+              >
+                {saveState === "saving"
+                  ? tCommon("actions.saving")
+                  : saveState === "error"
+                    ? t("drawer.saveFailedRetry")
+                    : dirty
+                      ? t("drawer.unsavedChanges")
+                      : null}
+              </span>
+            </div>
+          ) : undefined
+        }
+      >
+        <div className="px-1 pt-1">
+          <ActionAlert error={refusal} fallbackMessage={t("drawer.saveFailedRetry")} />
+        </div>
+        {tab === "overview" ? (
+          <div className="space-y-7 p-1">
+            {/* Groups moved onto an author-created tab are drawn there, not here. */}
+            {choosingWorkflow ? (
+              <OperatingProfilePicker
+                family="project"
+                initialChoices={operatingChoices}
+                departmentId={operatingDepartmentId}
+                value={operatingSelection?.value ?? null}
+                onChoose={(choice, department) => {
+                  setOperatingSelection(choice);
+                  setOperatingDepartmentId(department);
+                  setChoosingWorkflow(false);
+                }}
+              />
+            ) : (
+              <>
+                {createMode && operatingSelection ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">{operatingSelection.name}</span>
+                    <Button variant="ghost" size="sm" onClick={() => setChoosingWorkflow(true)}>
+                      {tOperating("change")}
+                    </Button>
+                  </div>
+                ) : null}
+                {!createMode && cockpit && activeOperatingDefinition?.presentation.showReadiness ? (
+                  <ProjectWorkJourney
+                    definition={activeOperatingDefinition}
+                    quickTimeHref={quickTimeHref}
+                    hours={cockpit.time.totals.hours}
+                    onTime={
+                      tabs.some((item) => item.key === "cost_time")
+                        ? () => setTab("cost_time")
+                        : undefined
+                    }
+                    onCharge={
+                      canManage && tabs.some((item) => item.key === "transactions")
+                        ? () => {
+                            setTab("transactions");
+                            setChargeFormOpen(true);
+                          }
+                        : undefined
+                    }
+                    onBreakdown={optionalBreakdownConfigured ? openWorkBreakdown : undefined}
+                  />
+                ) : null}
+                <HeaderFields
+                  layout={overviewLayout}
+                  editable={editable}
+                  renderField={renderProjectField}
+                />
 
-          {/* Internal (shop/overhead) time target: non-billable, customer-less,
+                {/* Internal (shop/overhead) time target: non-billable, customer-less,
               excluded from labor cost posting. Offered on create and before
               time is booked; the flag locks once hours exist. */}
-          <section className="space-y-2">
-            <label className="flex cursor-pointer items-start gap-2.5">
-              <input
-                type="checkbox"
-                checked={isInternal}
-                disabled={!editable}
-                onChange={(e) => setInternal(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-teal-600"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {t('drawer.internalLabel')}
-                </span>
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  {t('drawer.internalHint')}
-                </span>
-              </span>
-            </label>
-          </section>
+                <section className="space-y-2">
+                  <label className="flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={isInternal}
+                      disabled={!editable}
+                      onChange={(e) => setInternal(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-teal-600"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {t("drawer.internalLabel")}
+                      </span>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">
+                        {t("drawer.internalHint")}
+                      </span>
+                    </span>
+                  </label>
+                </section>
 
-          {/* Project-level invoicing/backup override (cascades over type ← customer).
+                {/* Project-level invoicing/backup override (cascades over type ← customer).
               Internal projects invoice no one, so the override stays hidden
               while internal is checked. */}
-          {!isInternal ? (
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('invoicingPref.heading')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('invoicingPref.projectHint')}</p>
-            </div>
-            <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
-          </section>
-          ) : null}
+                {!isInternal ? (
+                  <section className="space-y-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {t("invoicingPref.heading")}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {t("invoicingPref.projectHint")}
+                      </p>
+                    </div>
+                    <InvoicingPreferenceFields
+                      value={invoicingPref}
+                      onChange={setInvoicingPref}
+                      disabled={ro}
+                    />
+                  </section>
+                ) : null}
 
-          {/* Unsaved-create mounts no persisted-record sections: both probe
+                {/* Unsaved-create mounts no persisted-record sections: both probe
               their APIs on mount, and there is no project id to probe with. */}
-          {!isPlaceholderName && !createMode ? (
-            <RateBookAssignmentSection scope="project" scopeId={String(pr.id)} editable={editable} />
-          ) : null}
+                {!isPlaceholderName && !createMode ? (
+                  <RateBookAssignmentSection
+                    scope="project"
+                    scopeId={String(pr.id)}
+                    editable={editable}
+                  />
+                ) : null}
 
-          {/* HR-20: the clock enforcement place, rehomed onto the project page.
+                {/* HR-20: the clock enforcement place, rehomed onto the project page.
               Off never mounts — the section probes its API on mount. */}
-          {!isPlaceholderName && !createMode && cockpit?.showFieldTime === true && (!activeOperatingDefinition || activeOperatingDefinition.presentation.showSite) ? (
-            <GeofenceSection projectId={String(pr.id)} initial={[]} canManage={editable} />
-          ) : null}
+                {!isPlaceholderName &&
+                !createMode &&
+                cockpit?.showFieldTime === true &&
+                (!activeOperatingDefinition || activeOperatingDefinition.presentation.showSite) ? (
+                  <GeofenceSection projectId={String(pr.id)} initial={[]} canManage={editable} />
+                ) : null}
 
-          {createMode && editable ? (
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-950"
-              />
-              <span className="text-sm">{tCommon('labels.active')}</span>
-            </label>
-          ) : null}
-          </>}
+                {createMode && editable ? (
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={(e) => setIsActive(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-950"
+                    />
+                    <span className="text-sm">{tCommon("labels.active")}</span>
+                  </label>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
 
-        </div>
-      ) : null}
+        {tab === "financials" && cockpit ? <FinancialsTab data={cockpit.financials} /> : null}
 
-      {tab === 'financials' && cockpit ? (
-        <FinancialsTab data={cockpit.financials} />
-      ) : null}
-
-      {/* HR-20: crew-today rides the cost/time tab. */}
-      {tab === 'cost_time' && cockpit ? <CostTimeTab data={cockpit.time} projectId={String(pr.id)} crewToday={cockpit.crewToday} /> : null}
-
-      {tab === 'billing' && cockpit ? (
-        <BillingSection
-          projectId={pr.id}
-          unbilled={cockpit.unbilled}
-          requests={cockpit.billingRequests}
-          fieldTickets={cockpit.billableFieldTickets}
-          invoicing={cockpit.invoicing}
-          canManage={canManage}
-          applicationPermissions={applicationPermissions}
-          applicationIncomeAccounts={cockpit.applicationIncomeAccounts}
-          formOpen={billingFormOpen}
-          onFormOpenChange={setBillingFormOpen}
-        />
-      ) : null}
-
-      {tab === 'project_management' ? (
-        <div>
-          <RecordTabs label={t('cockpit.tabs.project_management')} tabs={managementTabs} active={managementTab} onChange={setManagementTab} />
-          {managementTab === 'work_breakdown' ? (
-            <WorkBreakdownTab
-              projectId={String(pr.id)}
-              tasks={payload.tasks}
-              canManage={canManage}
-            />
-          ) : null}
-          {managementTab === 'schedule' && schedulingEnabled ? (
-            <ScheduleTab
-              projectId={String(pr.id)}
-              projectStart={startsOn || null}
-              projectEnd={endsOn || null}
-              canManage={canManage}
-              locale={locale}
-            />
-          ) : null}
-          {managementTab === 'staffing' && resourcingEnabled ? (
-            <StaffingTab projectId={String(pr.id)} />
-          ) : null}
-          {managementTab === 'progress' && progressEnabled ? (
-            <ProgressTab projectId={String(pr.id)} canManage={canManage} />
-          ) : null}
-        </div>
-      ) : null}
-
-      {tab === 'transactions' && cockpit ? (
-        <TransactionsTab
-          projectId={pr.id}
-          transactions={cockpit.transactions}
-          charges={cockpit.charges}
-          items={cockpit.items}
-          equipment={cockpit.equipment}
-          operators={cockpit.operators}
-          absorption={cockpit.absorption}
-          chargeFormOpen={chargeFormOpen}
-          onChargeFormOpenChange={setChargeFormOpen}
-          equipmentEnabled={cockpit.equipmentEnabled}
-        />
-      ) : null}
-
-      {/* An author-created tab renders the field groups assigned to it, using
-          the same renderer as Overview so its fields behave identically. */}
-      {activeTab && isCustomTabKey(activeTab.key) ? (
-        <div className="space-y-7 p-1">
-          <HeaderFields
-            layout={{
-              ...effectiveLayout,
-              header: {
-                groups: effectiveLayout.header.groups.filter((group) =>
-                  activeTab.groupIds.includes(group.id),
-                ),
-              },
-            }}
-            editable={editable}
-            renderField={renderProjectField}
+        {/* HR-20: crew-today rides the cost/time tab. */}
+        {tab === "cost_time" && cockpit ? (
+          <CostTimeTab
+            data={cockpit.time}
+            projectId={String(pr.id)}
+            crewToday={cockpit.crewToday}
           />
-        </div>
-      ) : null}
-    </UrlDrawer>
-    <Drawer
-      open={recognitionOpen}
-      onClose={() => setRecognitionOpen(false)}
-      stacked
-      size="lg"
-      title={t('recognition.title')}
-      description={name.trim() || pr.code || undefined}
-    >
-      {cockpit?.recognition ? (
-        <RecognitionCard projectId={String(pr.id)} status={cockpit.recognition} canManage={canManage} />
-      ) : null}
-    </Drawer>
+        ) : null}
+
+        {tab === "billing" && cockpit ? (
+          <BillingSection
+            projectId={pr.id}
+            unbilled={cockpit.unbilled}
+            requests={cockpit.billingRequests}
+            fieldTickets={cockpit.billableFieldTickets}
+            invoicing={cockpit.invoicing}
+            canManage={canManage}
+            applicationPermissions={applicationPermissions}
+            applicationIncomeAccounts={cockpit.applicationIncomeAccounts}
+            formOpen={billingFormOpen}
+            onFormOpenChange={setBillingFormOpen}
+          />
+        ) : null}
+
+        {tab === "project_management" ? (
+          <div>
+            <RecordTabs
+              label={t("cockpit.tabs.project_management")}
+              tabs={managementTabs}
+              active={managementTab}
+              onChange={setManagementTab}
+            />
+            {managementTab === "work_breakdown" ? (
+              <WorkBreakdownTab
+                projectId={String(pr.id)}
+                tasks={payload.tasks}
+                canManage={canManage}
+              />
+            ) : null}
+            {managementTab === "schedule" && schedulingEnabled ? (
+              <ScheduleTab
+                projectId={String(pr.id)}
+                projectStart={startsOn || null}
+                projectEnd={endsOn || null}
+                canManage={canManage}
+                locale={locale}
+              />
+            ) : null}
+            {managementTab === "staffing" && resourcingEnabled ? (
+              <StaffingTab projectId={String(pr.id)} />
+            ) : null}
+            {managementTab === "progress" && progressEnabled ? (
+              <ProgressTab projectId={String(pr.id)} canManage={canManage} />
+            ) : null}
+          </div>
+        ) : null}
+
+        {tab === "transactions" && cockpit ? (
+          <TransactionsTab
+            projectId={pr.id}
+            transactions={cockpit.transactions}
+            charges={cockpit.charges}
+            items={cockpit.items}
+            equipment={cockpit.equipment}
+            operators={cockpit.operators}
+            absorption={cockpit.absorption}
+            chargeFormOpen={chargeFormOpen}
+            onChargeFormOpenChange={setChargeFormOpen}
+            equipmentEnabled={cockpit.equipmentEnabled}
+          />
+        ) : null}
+
+        {/* An author-created tab renders the field groups assigned to it, using
+          the same renderer as Overview so its fields behave identically. */}
+        {activeTab && isCustomTabKey(activeTab.key) ? (
+          <div className="space-y-7 p-1">
+            <HeaderFields
+              layout={{
+                ...effectiveLayout,
+                header: {
+                  groups: effectiveLayout.header.groups.filter((group) =>
+                    activeTab.groupIds.includes(group.id),
+                  ),
+                },
+              }}
+              editable={editable}
+              renderField={renderProjectField}
+            />
+          </div>
+        ) : null}
+      </UrlDrawer>
+      <Drawer
+        open={recognitionOpen}
+        onClose={() => setRecognitionOpen(false)}
+        stacked
+        size="lg"
+        title={t("recognition.title")}
+        description={name.trim() || pr.code || undefined}
+      >
+        {cockpit?.recognition ? (
+          <RecognitionCard
+            projectId={String(pr.id)}
+            status={cockpit.recognition}
+            canManage={canManage}
+          />
+        ) : null}
+      </Drawer>
     </>
-  )
+  );
 }

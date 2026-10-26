@@ -1,64 +1,58 @@
-import type { BoardWindow, BoardEntry } from '../components/scheduling/model'
+import type { BoardWindow, BoardEntry } from "../components/scheduling/model";
 /** Native-shaped scheduling snapshots for component lifecycle and presentation controls. */
-export function scheduleWindow(
-  from = '2026-10-12',
-  through = from,
-): BoardWindow {
+export function scheduleWindow(from = "2026-10-12", through = from): BoardWindow {
   const board = {
-    id: 'aa010000-0000-4000-8000-000000000001',
-    code: 'CREW',
-    name: 'Crew',
-    rowKind: 'people',
+    id: "aa010000-0000-4000-8000-000000000001",
+    code: "CREW",
+    name: "Crew",
+    rowKind: "people",
     resourceKind: null,
-    views: ['grid', 'targets', 'calendar', 'timeline'],
-    defaultView: 'grid',
+    views: ["grid", "targets", "calendar", "timeline"],
+    defaultView: "grid",
     showWeekends: true,
     showTotals: false,
     showHoursColumn: true,
-    distributionVisibility: 'personal',
-    weekendDays: ['6', '7'],
+    distributionVisibility: "personal",
+    weekendDays: ["6", "7"],
     cellColorRules: [],
-    timeZone: 'America/Toronto',
+    timeZone: "America/Toronto",
     rangeDays: 7,
     weekStartsOn: 0,
-    grain: 'day',
+    grain: "day",
     dayPolicyKnown: true,
-    dayStarts: '07:00',
-    dayEnds: '15:30',
+    dayStarts: "07:00",
+    dayEnds: "15:30",
     dayBreakMinutes: 30,
-    publishPolicy: 'live',
-    boardType: 'people',
+    publishPolicy: "live",
+    boardType: "people",
     isActive: true,
     projectId: null,
-  }
-  const subjects = [
-    'aa010000-0000-4000-8000-000000000002',
-    'aa010000-0000-4000-8000-000000000003',
-  ]
+  };
+  const subjects = ["aa010000-0000-4000-8000-000000000002", "aa010000-0000-4000-8000-000000000003"];
   const entry = (index: number): BoardEntry => ({
     id: `aa010000-0000-4000-8000-00000000000${index + 4}`,
     boardId: board.id,
     boardName: board.name,
     revision: 1,
     subjectId: subjects[index]!,
-    subjectKind: 'person',
+    subjectKind: "person",
     workerPartyId: subjects[index]!,
-    status: 'published',
+    status: "published",
     startsOn: from,
     endsOn: from,
     startsAt: `${from}T11:00:00Z`,
     endsAt: `${from}T19:30:00Z`,
-    startClock: '07:00',
-    endClock: '15:30',
+    startClock: "07:00",
+    endClock: "15:30",
     workedMinutes: 480,
     breakMinutes: 30,
-    spanMode: 'day',
+    spanMode: "day",
     target: {
-      kind: 'code',
-      id: 'aa010000-0000-4000-8000-000000000006',
-      code: 'SHOP',
-      label: 'Shop',
-      color: index ? '#00ff00' : '#ff0000',
+      kind: "code",
+      id: "aa010000-0000-4000-8000-000000000006",
+      code: "SHOP",
+      label: "Shop",
+      color: index ? "#00ff00" : "#ff0000",
       context: null,
       counts: true,
     },
@@ -71,7 +65,7 @@ export function scheduleWindow(
     seriesId: null,
     supersedesId: null,
     updatedAt: `${from}T10:00:00Z`,
-    updatedByName: 'Scheduler',
+    updatedByName: "Scheduler",
     governed: false,
     removesPredecessor: false,
     patternAssignmentId: null,
@@ -79,18 +73,16 @@ export function scheduleWindow(
     closedAt: null,
     attendance: null,
     openRequest: null,
-  })
+  });
   return {
     board,
     from,
     through,
-    days: [
-      { date: from, isWeekend: false, isHoliday: false, holidayName: null },
-    ],
+    days: [{ date: from, isWeekend: false, isHoliday: false, holidayName: null }],
     rows: subjects.map((subjectId, i) => ({
       subjectId,
-      subjectKind: 'person',
-      name: i ? 'Blair' : 'Alex',
+      subjectKind: "person",
+      name: i ? "Blair" : "Alex",
       shortCode: null,
       jobTitle: null,
       departmentId: null,
@@ -106,5 +98,5 @@ export function scheduleWindow(
     pendingPublication: null,
     canManage: false,
     canPublish: false,
-  } as unknown as BoardWindow
+  } as unknown as BoardWindow;
 }

@@ -1,12 +1,12 @@
-import 'server-only'
+import "server-only";
 
-import { isUuid } from '../../lib/list-params'
-import { db } from '@openbooks/engine/platform/db'
-import { listSchedules } from '@openbooks/engine/hrm/construction/rates'
-import { can, getAuthz } from '../../lib/authz'
-import { SETUP_ENTITY_BY_KEY } from '../../lib/setup/registry'
-import { setupSectionManagePermission } from '../../lib/setup/access'
-import { SetupEntitySection } from '../../app/(app)/admin/setup/[entity]/SetupEntitySection'
+import { isUuid } from "../../lib/list-params";
+import { db } from "@openbooks/engine/platform/db";
+import { listSchedules } from "@openbooks/engine/hrm/construction/rates";
+import { can, getAuthz } from "../../lib/authz";
+import { SETUP_ENTITY_BY_KEY } from "../../lib/setup/registry";
+import { setupSectionManagePermission } from "../../lib/setup/access";
+import { SetupEntitySection } from "../../app/(app)/admin/setup/[entity]/SetupEntitySection";
 
 /**
  * Slot for the registry-backed configuration sections that other modules
@@ -23,30 +23,33 @@ export async function SetupSectionSlot({
   entityKey,
   sp,
   basePath,
-  rowParam = 'row',
+  rowParam = "row",
   paramPrefix,
 }: {
-  entityKey: string
-  sp: Record<string, string | string[] | undefined>
-  basePath: string
+  entityKey: string;
+  sp: Record<string, string | string[] | undefined>;
+  basePath: string;
   /** Namespaced drawer key for hosts mounting several sections:
    *  each section reads and writes only its own key. */
-  rowParam?: string
+  rowParam?: string;
   /** Independent list filters and pagination for a section sharing its host. */
-  paramPrefix?: string
+  paramPrefix?: string;
 }) {
-  const authz = await getAuthz()
-  if (!authz) return null
-  const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!entity || entity.parentRecords?.length) return null
+  const authz = await getAuthz();
+  if (!authz) return null;
+  const entity = SETUP_ENTITY_BY_KEY.get(entityKey);
+  if (!entity || entity.parentRecords?.length) return null;
   // Rate schedules carry caller-dependent visibility (a B-anchored schedule
   // never reaches an A-scoped reader): resolve the visible ids through the
   // owning engine service so the generic section reads exactly those rows
   // instead of the whole org table. Every other entity keeps the plain
   // org-wide read.
-  const visibleRowIds = entityKey === 'construction-rate-schedules'
-    ? new Set((await listSchedules(db, authz.user.orgId, authz.user.id)).map((schedule) => schedule.id))
-    : undefined
+  const visibleRowIds =
+    entityKey === "construction-rate-schedules"
+      ? new Set(
+          (await listSchedules(db, authz.user.orgId, authz.user.id)).map((schedule) => schedule.id),
+        )
+      : undefined;
   return (
     <SetupEntitySection
       entity={entity}
@@ -59,7 +62,13 @@ export async function SetupSectionSlot({
       rowParam={rowParam}
       paramPrefix={paramPrefix}
       visibleRowIds={visibleRowIds}
-      fixedFilter={['payroll-service-credits', 'payroll-vacation-terms'].includes(entityKey) && typeof sp.employment === 'string' && isUuid(sp.employment) ? { fieldKey: 'employmentId', value: sp.employment } : undefined}
+      fixedFilter={
+        ["payroll-service-credits", "payroll-vacation-terms"].includes(entityKey) &&
+        typeof sp.employment === "string" &&
+        isUuid(sp.employment)
+          ? { fieldKey: "employmentId", value: sp.employment }
+          : undefined
+      }
     />
-  )
+  );
 }

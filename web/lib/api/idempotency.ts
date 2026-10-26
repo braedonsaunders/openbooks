@@ -1,11 +1,11 @@
-import { sql } from 'drizzle-orm'
-import { resolveIdempotentReplay } from '@openbooks/engine/records/idempotent-replay'
-import type { SqlExecutor } from '@openbooks/engine/platform/db'
+import { sql } from "drizzle-orm";
+import { resolveIdempotentReplay } from "@openbooks/engine/records/idempotent-replay";
+import type { SqlExecutor } from "@openbooks/engine/platform/db";
 
 // The narrowest runner every caller already satisfies: full transaction
 // executors (routes, setupWriteTransaction) and SqlExecutor-typed helpers
 // (saveSetupBook) alike.
-type Executor = SqlExecutor
+type Executor = SqlExecutor;
 
 /**
  * Idempotent create guard, following POST /api/accounts: the caller's
@@ -29,19 +29,22 @@ type Executor = SqlExecutor
 export async function claimIdempotentCreate(
   tx: Executor,
   args: { orgId: string; table: string; key: string },
-): Promise<'fresh' | 'exists'> {
-  const prior = await tx.execute<{ id: string }>(sql`
+): Promise<"fresh" | "exists"> {
+  const prior = await tx.execute<{ id: string }>(
+    sql`
     select id from ${sql.identifier(args.table)}
      where id = ${args.key} and org_id = ${args.orgId}
-  `, 'objects')
-  return prior[0] ? 'exists' : 'fresh'
+  `,
+    "objects",
+  );
+  return prior[0] ? "exists" : "fresh";
 }
 
 /**
  * Re-read after a pre-existing row or a lost insert race: replay or refuse.
  * One implementation serves routes and engine commands alike.
  */
-export { resolveIdempotentReplay }
+export { resolveIdempotentReplay };
 
 /**
  * The refusal when a reused idempotency key cannot replay: a changed payload,
@@ -52,12 +55,14 @@ export { resolveIdempotentReplay }
  * drawer mints a new key per mount.
  */
 export class SetupCreateConflict extends Error {
-  readonly status = 409 as const
-  readonly code = 'idempotency-conflict' as const
-  constructor(reason: 'changed-payload' | 'foreign-key') {
-    super(reason === 'foreign-key'
-      ? 'This request key is already in use by another organization. Close and reopen the drawer to try again with a fresh request.'
-      : 'This request was already saved with different details. Close and reopen the drawer to try again with a fresh request.')
+  readonly status = 409 as const;
+  readonly code = "idempotency-conflict" as const;
+  constructor(reason: "changed-payload" | "foreign-key") {
+    super(
+      reason === "foreign-key"
+        ? "This request key is already in use by another organization. Close and reopen the drawer to try again with a fresh request."
+        : "This request was already saved with different details. Close and reopen the drawer to try again with a fresh request.",
+    );
   }
 }
 
@@ -73,34 +78,40 @@ export class SetupCreateConflict extends Error {
 export async function claimSetupCreate(
   tx: Executor,
   args: {
-    orgId: string
-    table: string
-    key: string
-    match: Record<string, unknown>
+    orgId: string;
+    table: string;
+    key: string;
+    match: Record<string, unknown>;
     /** Selects without an org filter to detect a cross-org collision instead
      *  of silently matching zero rows (which would read as a fresh claim). */
-    orgScoped?: boolean
+    orgScoped?: boolean;
   },
-): Promise<{ kind: 'fresh' } | { kind: 'replay'; id: string }> {
-  const table = sql.identifier(args.table)
+): Promise<{ kind: "fresh" } | { kind: "replay"; id: string }> {
+  const table = sql.identifier(args.table);
   if (args.orgScoped === false) {
-    const prior = await tx.execute<{ id: string }>(sql`
-      select id from ${table} where id = ${args.key}`, 'objects')
-    if (!prior[0]) return { kind: 'fresh' }
+    const prior = await tx.execute<{ id: string }>(
+      sql`
+      select id from ${table} where id = ${args.key}`,
+      "objects",
+    );
+    if (!prior[0]) return { kind: "fresh" };
   } else {
-    const prior = await tx.execute<{ org_id: string }>(sql`
-      select org_id from ${table} where id = ${args.key}`, 'objects')
-    const owner = prior[0]?.org_id
-    if (owner === undefined) return { kind: 'fresh' }
-    if (owner !== args.orgId) throw new SetupCreateConflict('foreign-key')
+    const prior = await tx.execute<{ org_id: string }>(
+      sql`
+      select org_id from ${table} where id = ${args.key}`,
+      "objects",
+    );
+    const owner = prior[0]?.org_id;
+    if (owner === undefined) return { kind: "fresh" };
+    if (owner !== args.orgId) throw new SetupCreateConflict("foreign-key");
   }
   const verdict = await resolveIdempotentReplay(tx, {
     orgId: args.orgId,
     table: args.table,
     key: args.key,
     match: args.match,
-    matchField: 'match',
-  })
-  if (verdict !== 'replay') throw new SetupCreateConflict('changed-payload')
-  return { kind: 'replay', id: args.key }
+    matchField: "match",
+  });
+  if (verdict !== "replay") throw new SetupCreateConflict("changed-payload");
+  return { kind: "replay", id: args.key };
 }

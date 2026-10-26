@@ -7,10 +7,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
-import {
-  canReopenWeek,
-  type EntryProvenance,
-} from "../../../../lib/time-lifecycle";
+import { canReopenWeek, type EntryProvenance } from "../../../../lib/time-lifecycle";
 import {
   isIsoDate,
   loadWeek,
@@ -49,21 +46,18 @@ interface Body {
  */
 export const POST = defineRoute({
   authorize: authorizeTimeWorkspace("time.reopen"),
-  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
+  feature: {
+    none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target.",
+  },
   body: postBodySchema0,
   handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
     const body = routeBody as Body;
-    if (!body.employee || !isUuid(body.employee))
-      return bad("Invalid employee");
+    if (!body.employee || !isUuid(body.employee)) return bad("Invalid employee");
     if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
-    const employee = await pinTimekeeper(
-      orgId,
-      body.employee,
-      gate.allowedSubsidiaryIds,
-    );
+    const employee = await pinTimekeeper(orgId, body.employee, gate.allowedSubsidiaryIds);
     if (!employee) return bad("Employee not found");
     const week = weekStart(body.week);
     const days = weekWindow(week);
@@ -73,17 +67,18 @@ export const POST = defineRoute({
     // Fast path only: the authoritative state check happens under the header
     // lock inside the transaction, where a concurrent reopen's commit is
     // visible and the loser is refused instead of auditing a phantom unwind.
-    const before = await loadWeek(
-      orgId,
-      employee,
-      week,
-      gate.allowedSubsidiaryIds,
-    );
-    if (before.status !== "approved")
-      return bad("Only an approved week can be reopened");
+    const before = await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds);
+    if (before.status !== "approved") return bad("Only an approved week can be reopened");
 
     return withOrgTransaction(orgId, async () => {
-      await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: employee, from: weekFrom, through: weekTo, requestedScope: gate.allowedSubsidiaryIds, permission: "time.reopen", workFamily: timeWorkFamily(workspaceRequest) });
+      await lockSharedTimeAuthority(db, orgId, user.id, {
+        employeeId: employee,
+        from: weekFrom,
+        through: weekTo,
+        requestedScope: gate.allowedSubsidiaryIds,
+        permission: "time.reopen",
+        workFamily: timeWorkFamily(workspaceRequest),
+      });
       // Lock the header FIRST — the same order approval uses (header, then
       // entries) — so a concurrent approval cannot deadlock against this
       // reopen. The locked status is the authoritative state check: the
@@ -91,26 +86,32 @@ export const POST = defineRoute({
       // passed it before the winner committed observes draft here and is
       // refused instead of writing a second 'reopened' audit over a week that
       // is already draft.
-      const header = (await db.execute<{ id: string; status: string }>(sql`
+      const header = (
+        await db.execute<{ id: string; status: string }>(
+          sql`
       select id, status from timesheet_weeks
        where org_id = ${orgId}
          and employee_party_id = ${employee}
          and week_start = ${week}::date
        for update
-    `, "objects"))[0];
+    `,
+          "objects",
+        )
+      )[0];
       if (!header || header.status !== "approved") {
         return bad("Only an approved week can be reopened");
       }
 
       const rows = await db.execute<{
-          invoiced_by_line_id: string | null;
-          payroll_batch_ref: string | null;
-          cost_journal_entry_id: string | null;
-          production_consumed_operation_id: string | null;
-          overhead_journal_entry_id: string | null;
-          field_ticket_id: string | null;
-          billing_status: "unbilled" | "billed";
-        }>(sql`
+        invoiced_by_line_id: string | null;
+        payroll_batch_ref: string | null;
+        cost_journal_entry_id: string | null;
+        production_consumed_operation_id: string | null;
+        overhead_journal_entry_id: string | null;
+        field_ticket_id: string | null;
+        billing_status: "unbilled" | "billed";
+      }>(
+        sql`
       select invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
              overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, billing_status
         from time_entries
@@ -118,13 +119,15 @@ export const POST = defineRoute({
          and employee_party_id = ${employee}
          and worked_on >= ${weekFrom} and worked_on <= ${weekTo}
          and status = 'approved'
-       for update`, "objects");
+       for update`,
+        "objects",
+      );
 
       const entries: EntryProvenance[] = rows.map((r) => ({
         invoicedByLineId: r.invoiced_by_line_id,
         payrollBatchRef: r.payroll_batch_ref,
         costJournalEntryId: r.cost_journal_entry_id,
-      productionConsumedOperationId: r.production_consumed_operation_id,
+        productionConsumedOperationId: r.production_consumed_operation_id,
         overheadJournalEntryId: r.overhead_journal_entry_id,
         fieldTicketId: r.field_ticket_id,
         billingStatus: r.billing_status,
@@ -144,7 +147,9 @@ export const POST = defineRoute({
       // hours with no original to negate. Inspect the link in both directions:
       // offsets pointing back at an original, and originals pointed at by an
       // offset. Either side makes the week append-only.
-      const offsets = (await db.execute<{ n: number }>(sql`
+      const offsets = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n
         from time_entries entry
        where entry.org_id = ${orgId}
@@ -157,7 +162,10 @@ export const POST = defineRoute({
               where contra.org_id = entry.org_id
                 and contra.amends_entry_id = entry.id
            )
-         )`, "objects"))[0]!.n;
+         )`,
+          "objects",
+        )
+      )[0]!.n;
       if (Number(offsets) > 0) {
         return bad(
           "This week carries amendment offsets — correct it with a new amendment, not a reopen",
@@ -195,20 +203,16 @@ export const POST = defineRoute({
       // who cleared the sign-off. An audit failure rolls the reopen back with it.
       await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify(
-        {
-          event: "reopened",
-          actor: { kind: "user", userId: user.id },
-          before: { status: header.status },
-          after: { status: "draft" },
-          weekStart: week,
-        },
-      )}::jsonb, ${user.id})
+      values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
+        event: "reopened",
+        actor: { kind: "user", userId: user.id },
+        before: { status: header.status },
+        after: { status: "draft" },
+        weekStart: week,
+      })}::jsonb, ${user.id})
     `);
 
-      return NextResponse.json(
-        await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds),
-      );
+      return NextResponse.json(await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds));
     });
   },
 });

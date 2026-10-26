@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -9,11 +9,11 @@ import test from "node:test";
 // Totals are deliberately untouched (the reader sums raw multi-currency
 // totals org-wide; a tile must never present those as a fact).
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
+stubModules({
+  intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}",
+});
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
-
     const engineUrl = resolveEngineSpecifier(specifier);
     if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
@@ -22,7 +22,8 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
@@ -32,10 +33,16 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Expense Watcher", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Expense Watcher",
+      orgId,
       roles: [{ key: "staff", name: "staff" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(["dashboard.read", ...permissions]),
     allowedSubsidiaryIds: null,
@@ -48,33 +55,43 @@ async function seedReport(org: ScratchOrg, status: string): Promise<void> {
     values(${id},${org.orgId},'expense_report',${status},${id},${org.subsidiaryId},${org.date},'CAD','1','100',0,'100','100')`);
 }
 
-test("dashboard expenses tile counts pending_approval reports through the cockpit reader", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await withBypass(() => seedReport(org, "pending_approval"));
-    await withBypass(() => seedReport(org, "pending_approval"));
-    await withBypass(() => seedReport(org, "approved"));
-    await withBypass(() => seedReport(org, "draft"));
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Expense Reader", "admin"));
-    const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"]), ["kpi-expenses-awaiting-approval"]),
-    );
-    assert.equal(metrics.pendingExpenses, 2, "approved and draft reports do not count");
-    const blind = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"]), ["kpi-expenses-awaiting-approval"]),
-    );
-    assert.equal(blind.pendingExpenses, 0);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "dashboard expenses tile counts pending_approval reports through the cockpit reader",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await withBypass(() => seedReport(org, "pending_approval"));
+      await withBypass(() => seedReport(org, "pending_approval"));
+      await withBypass(() => seedReport(org, "approved"));
+      await withBypass(() => seedReport(org, "draft"));
+      const actor = await withBypass(() => createScratchUser(org.orgId, "Expense Reader", "admin"));
+      const metrics = await withOrgContext(org.orgId, () =>
+        loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"]), [
+          "kpi-expenses-awaiting-approval",
+        ]),
+      );
+      assert.equal(metrics.pendingExpenses, 2, "approved and draft reports do not count");
+      const blind = await withOrgContext(org.orgId, () =>
+        loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"]), [
+          "kpi-expenses-awaiting-approval",
+        ]),
+      );
+      assert.equal(blind.pendingExpenses, 0);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("dashboard expenses tile is honest on empty", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Expense Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"]), ["kpi-expenses-awaiting-approval"]),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"]), [
+        "kpi-expenses-awaiting-approval",
+      ]),
     );
     assert.equal(metrics.pendingExpenses, 0);
   } finally {

@@ -1,7 +1,15 @@
-import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
+import { seedEnabledPayrollConfiguration } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -50,12 +58,12 @@ test(
       const superPayable = await account("2320", "Superannuation payable", "liability_current");
       const wcbPayable = await account("2330", "Workers compensation payable", "liability_current");
       await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            wagesTo: "expense",
-            countries: ["AU"],
-          });
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        countries: ["AU"],
+      });
 
       await seedPayrollComponents(org.orgId, actorId, "AU");
       await setPackSlotAccount(org.orgId, actorId, "AU", "payg", paygPayable);
@@ -70,12 +78,23 @@ test(
                 '{}'::jsonb, false, true, '{}'::jsonb)`);
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Fortnightly AU', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-        payDateOffsetDays: 3, subsidiaryId: auSubId,
+        name: "Fortnightly AU",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
+        payDateOffsetDays: 3,
+        subsidiaryId: auSubId,
       });
-      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, subsidiaryId: auSubId,
-        country: "AU", factKey: "payroll_tax_position", effectiveFrom: "2026-07-01",
-        value: "below_threshold_ungrouped", changeReason: "test employer below every state threshold" });
+      await upsertPayrollEmployerFact({
+        orgId: org.orgId,
+        actorId,
+        subsidiaryId: auSubId,
+        country: "AU",
+        factKey: "payroll_tax_position",
+        effectiveFrom: "2026-07-01",
+        value: "below_threshold_ungrouped",
+        changeReason: "test employer below every state threshold",
+      });
 
       const seedEmployee = async (name: string, province: string) => {
         const employeeId = randomUUID();
@@ -84,10 +103,15 @@ test(
         });
         const employmentId = await seedWorkerEmployment(org.orgId, employeeId, auSubId);
         await seedPayrollWage(org.orgId, employeeId, actorId, {
-          currency: 'AUD', rate: '30', basis: 'hour', effectiveFrom: '2026-07-01',
+          currency: "AUD",
+          rate: "30",
+          basis: "hour",
+          effectiveFrom: "2026-07-01",
         });
         await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-          country: 'AU', province: province, payBasis: 'hourly',
+          country: "AU",
+          province: province,
+          payBasis: "hourly",
         });
 
         await db.execute(sql`
@@ -111,8 +135,12 @@ test(
                   '{"opening_qualifying_ytd": "0"}'::jsonb, ${actorId}, ${actorId})`);
         for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
           await seedPayrollTime(org.orgId, employeeId, actorId, {
-            workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-            costingBasis: 'actual',
+            workedOn: workedOn,
+            hours: 20,
+            status: "approved",
+            isBillable: false,
+            billingStatus: "unbilled",
+            costingBasis: "actual",
           });
         }
         return employeeId;
@@ -131,19 +159,40 @@ test(
 
       // The operator's saves, through the same write boundary the UI uses.
       await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp",
-        region: "NSW", filingAccountId: null, taxYear: 2027, values: { rate: "0.012" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: AU_PACK_RATES,
+        rateKey: "au_workers_comp",
+        region: "NSW",
+        filingAccountId: null,
+        taxYear: 2027,
+        values: { rate: "0.012" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp",
-        region: "VIC", filingAccountId: null, taxYear: 2027, values: { rate: "0.014" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: AU_PACK_RATES,
+        rateKey: "au_workers_comp",
+        region: "VIC",
+        filingAccountId: null,
+        taxYear: 2027,
+        values: { rate: "0.014" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
       await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp",
-        region: "QLD", filingAccountId: null, taxYear: 2027, values: { rate: "0.011" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        orgId: org.orgId,
+        actorId,
+        rates: AU_PACK_RATES,
+        rateKey: "au_workers_comp",
+        region: "QLD",
+        filingAccountId: null,
+        taxYear: 2027,
+        values: { rate: "0.011" },
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
 
       // The warning clears once every touched region resolves — honest only
@@ -155,24 +204,42 @@ test(
       );
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       // An SG record filed under the retired running year-to-date blocks the
       // run by name before Calculate, and clears once re-declared.
-      const legacySg = (answers: string) => db.execute(sql`
+      const legacySg = (answers: string) =>
+        db.execute(sql`
         update employee_tax_certificates set answers = ${answers}::jsonb
          where org_id = ${org.orgId} and employee_party_id = ${nswEmployeeId}
            and certificate_key = 'au_sg_administration'`);
       await legacySg('{"qualifying_ytd": "150000.00"}');
-      const retired = (await payRunReadiness(org.orgId, run.documentId)).items
-        .filter((item) => item.severity === "blocker" && /retired "qualifying_ytd"/.test(item.detail ?? ""));
-      assert.deepEqual(retired.map((item) => item.employees.map((employee) => employee.name)), [["Sydney Worker"]]);
-      assert.match(retired[0]!.detail!, /^Sydney Worker's SG facts .*Re-declare "Opening qualifying earnings year-to-date"/);
+      const retired = (await payRunReadiness(org.orgId, run.documentId)).items.filter(
+        (item) => item.severity === "blocker" && /retired "qualifying_ytd"/.test(item.detail ?? ""),
+      );
+      assert.deepEqual(
+        retired.map((item) => item.employees.map((employee) => employee.name)),
+        [["Sydney Worker"]],
+      );
+      assert.match(
+        retired[0]!.detail!,
+        /^Sydney Worker's SG facts .*Re-declare "Opening qualifying earnings year-to-date"/,
+      );
       await legacySg('{"qualifying_ytd": "150000.00", "opening_qualifying_ytd": "0"}');
-      assert.ok(!(await payRunReadiness(org.orgId, run.documentId)).items
-        .some((item) => /qualifying_ytd/.test(item.detail ?? "")));
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.ok(
+        !(await payRunReadiness(org.orgId, run.documentId)).items.some((item) =>
+          /qualifying_ytd/.test(item.detail ?? ""),
+        ),
+      );
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.equal(result.employees, 3);
       assert.deepEqual(result.errors, []);
 
@@ -182,15 +249,22 @@ test(
         [qldEmployeeId]: "29.5700",
       };
       for (const [employeeId, amount] of Object.entries(expected)) {
-        const lines = (await db.execute<{
-          system_key: string | null; kind: string; description: string; amount: string; sequence: number;
-        }>(sql`
+        const lines = await db.execute<{
+          system_key: string | null;
+          kind: string;
+          description: string;
+          amount: string;
+          sequence: number;
+        }>(
+          sql`
           select c.system_key, l.kind, l.description, l.amount, l.sequence
             from pay_stub_lines l
             join pay_components c on c.id = l.component_id
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-             and s.employee_party_id = ${employeeId} and c.system_key = 'wcb'`, "objects"));
+             and s.employee_party_id = ${employeeId} and c.system_key = 'wcb'`,
+          "objects",
+        );
         assert.equal(lines.length, 1, "one WCB line on the stub");
         assert.deepEqual(
           [lines[0]!.sequence, lines[0]!.kind, lines[0]!.description],
@@ -201,20 +275,29 @@ test(
 
       // Employer-side only: net pay is gross less withholdings, so the new
       // accrual must not move any stub's net.
-      const stubs = (await db.execute<{
-        employee_party_id: string; gross: string; net_pay: string; employer_cost: string;
-      }>(sql`
+      const stubs = await db.execute<{
+        employee_party_id: string;
+        gross: string;
+        net_pay: string;
+        employer_cost: string;
+      }>(
+        sql`
         select employee_party_id, gross, net_pay, employer_cost from pay_stubs
-         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`,
+        "objects",
+      );
       assert.equal(stubs.length, 3);
       for (const stub of stubs) {
         assert.equal(stub.gross, "2400.0000");
-        const deductions = (await db.execute<{ total: string }>(sql`
+        const deductions = await db.execute<{ total: string }>(
+          sql`
           select coalesce(sum(l.amount), 0)::text as total
             from pay_stub_lines l
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-             and s.employee_party_id = ${stub.employee_party_id} and l.kind = 'deduction'`, "objects"));
+             and s.employee_party_id = ${stub.employee_party_id} and l.kind = 'deduction'`,
+          "objects",
+        );
         assert.equal(
           stub.net_pay,
           sum([stub.gross, neg(deductions[0]!.total)]),
@@ -230,9 +313,12 @@ test(
       // Through commit into the journal: the premium lands on the mapped
       // liability and the projection still balances.
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${run.documentId}`, "objects"));
+         where org_id = ${org.orgId} and document_id = ${run.documentId}`,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
       const wcbLegs = glLines.filter((row) => row.account_id === wcbPayable);
       assert.equal(sum(wcbLegs.map((row) => row.amount)), neg("99.4600"));

@@ -4,13 +4,30 @@
  *
  * Pure: shared by the engine, the API and the client.
  */
-export const VISIT_STATUSES = ["unscheduled", "scheduled", "dispatched", "en_route", "on_site", "completed", "unable_to_complete", "cancelled"] as const;
+export const VISIT_STATUSES = [
+  "unscheduled",
+  "scheduled",
+  "dispatched",
+  "en_route",
+  "on_site",
+  "completed",
+  "unable_to_complete",
+  "cancelled",
+] as const;
 export type VisitStatus = (typeof VISIT_STATUSES)[number];
 
 export const JOB_STATUSES = ["open", "completed", "cancelled"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-export const REQUEST_STATUSES = ["new", "assessment_scheduled", "assessed", "quoted", "converted", "declined", "cancelled"] as const;
+export const REQUEST_STATUSES = [
+  "new",
+  "assessment_scheduled",
+  "assessed",
+  "quoted",
+  "converted",
+  "declined",
+  "cancelled",
+] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
 export const SERVICE_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
@@ -32,14 +49,23 @@ const VISIT_TRANSITIONS: Readonly<Record<VisitStatus, readonly VisitStatus[]>> =
 };
 
 /** Field statuses a technician sets from My visits. */
-const TECHNICIAN_TARGETS: ReadonlySet<VisitStatus> = new Set(["en_route", "on_site", "completed", "unable_to_complete"]);
+const TECHNICIAN_TARGETS: ReadonlySet<VisitStatus> = new Set([
+  "en_route",
+  "on_site",
+  "completed",
+  "unable_to_complete",
+]);
 
 export function visitTransitionAllowed(from: VisitStatus, to: VisitStatus): boolean {
   return VISIT_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
 /** Whether `mode` may move a visit from `from` to `to` (reopening is the review's, never a direct move). */
-export function visitTransitionPermitted(from: VisitStatus, to: VisitStatus, mode: VisitActorMode): boolean {
+export function visitTransitionPermitted(
+  from: VisitStatus,
+  to: VisitStatus,
+  mode: VisitActorMode,
+): boolean {
   if (!visitTransitionAllowed(from, to)) return false;
   if (from === "completed") return false;
   if (mode === "technician") return TECHNICIAN_TARGETS.has(to);
@@ -48,12 +74,19 @@ export function visitTransitionPermitted(from: VisitStatus, to: VisitStatus, mod
 
 /** The field statuses the actor may move a visit to next, in lifecycle order. */
 export function nextVisitStatuses(from: VisitStatus, mode: VisitActorMode): VisitStatus[] {
-  return VISIT_STATUSES.filter((to) => to !== "scheduled" && to !== "unscheduled" && visitTransitionPermitted(from, to, mode));
+  return VISIT_STATUSES.filter(
+    (to) => to !== "scheduled" && to !== "unscheduled" && visitTransitionPermitted(from, to, mode),
+  );
 }
 
 /** A visit holding technicians on the board: booked and not yet finished. */
 export function visitIsBooked(status: VisitStatus): boolean {
-  return status === "scheduled" || status === "dispatched" || status === "en_route" || status === "on_site";
+  return (
+    status === "scheduled" ||
+    status === "dispatched" ||
+    status === "en_route" ||
+    status === "on_site"
+  );
 }
 
 /** A visit whose bookings may still move: nobody has left for it yet. */
@@ -94,10 +127,21 @@ export function requestIsOpen(status: RequestStatus): boolean {
 }
 
 /** Response target in hours by priority, from the policy in force; null when the policy sets none. */
-export function responseHours(policy: { readonly urgentResponseHours: number | null; readonly highResponseHours: number | null; readonly normalResponseHours: number | null; readonly lowResponseHours: number | null }, priority: ServicePriority): number | null {
-  return priority === "urgent" ? policy.urgentResponseHours
-    : priority === "high" ? policy.highResponseHours
-      : priority === "normal" ? policy.normalResponseHours
+export function responseHours(
+  policy: {
+    readonly urgentResponseHours: number | null;
+    readonly highResponseHours: number | null;
+    readonly normalResponseHours: number | null;
+    readonly lowResponseHours: number | null;
+  },
+  priority: ServicePriority,
+): number | null {
+  return priority === "urgent"
+    ? policy.urgentResponseHours
+    : priority === "high"
+      ? policy.highResponseHours
+      : priority === "normal"
+        ? policy.normalResponseHours
         : policy.lowResponseHours;
 }
 

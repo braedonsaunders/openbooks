@@ -19,12 +19,16 @@ test(
       assert.ok(result.registrationsCreated >= 1);
 
       const installed = await withOrgContext(target.orgId, async () => {
-        const jurisdictions = (await db.execute(sql`
+        const jurisdictions = (await db.execute(
+          sql`
           select code from tax_jurisdictions
            where org_id = ${target.orgId} and code in ('US', 'US-WA')
            order by code
-        `, "objects")) as Array<{ code: string }>;
-        const codes = (await db.execute(sql`
+        `,
+          "objects",
+        )) as Array<{ code: string }>;
+        const codes = (await db.execute(
+          sql`
           select code.code,
                  coalesce(
                    jsonb_agg(
@@ -44,30 +48,42 @@ test(
                                'US-WA-BO-SVC', 'US-WA-BO-SVC1M', 'US-WA-BO-SVC5M')
            group by code.id, code.code
            order by code.code
-        `, "objects")) as Array<{
+        `,
+          "objects",
+        )) as Array<{
           code: string;
           rates: Array<{ rate: string; from: string; to: string | null }>;
         }>;
-        const groupMembers = (await db.execute(sql`
+        const groupMembers = (await db.execute(
+          sql`
           select count(*)::text as "count"
             from tax_group_members member
             join tax_groups grp on grp.id = member.tax_group_id and grp.org_id = ${target.orgId}
            where grp.code = 'US-WA-TAX'
-        `, "objects")) as Array<{ count: string }>;
-        const forms = (await db.execute(sql`
+        `,
+          "objects",
+        )) as Array<{ count: string }>;
+        const forms = (await db.execute(
+          sql`
           select code from tax_return_forms
            where org_id = ${target.orgId} and code in ('US_WA_CET', 'US_SALES_TAX_WORKPAPER')
            order by code
-        `, "objects")) as Array<{ code: string }>;
-        const boxes = (await db.execute(sql`
+        `,
+          "objects",
+        )) as Array<{ code: string }>;
+        const boxes = (await db.execute(
+          sql`
           select line_code as "lineCode", formula,
                  count(tax_code_id)::text as "mappedCodes"
             from tax_report_lines
            where org_id = ${target.orgId} and report_code = 'US_WA_CET'
            group by line_code, formula
            order by min(sequence)
-        `, "objects")) as Array<{ lineCode: string; formula: string | null; mappedCodes: string }>;
-        const registrations = (await db.execute(sql`
+        `,
+          "objects",
+        )) as Array<{ lineCode: string; formula: string | null; mappedCodes: string }>;
+        const registrations = (await db.execute(
+          sql`
           select registration.is_active as "isActive",
                  registration.filing_frequency as "filingFrequency",
                  registration.return_form_code as "returnFormCode"
@@ -76,12 +92,20 @@ test(
               on jurisdiction.id = registration.jurisdiction_id
              and jurisdiction.org_id = registration.org_id
            where registration.org_id = ${target.orgId} and jurisdiction.code = 'US-WA'
-        `, "objects")) as Array<{ isActive: boolean; filingFrequency: string; returnFormCode: string | null }>;
+        `,
+          "objects",
+        )) as Array<{ isActive: boolean; filingFrequency: string; returnFormCode: string | null }>;
         return { jurisdictions, codes, groupMembers, forms, boxes, registrations };
       });
 
-      assert.deepEqual(installed.jurisdictions.map((row) => row.code), ["US", "US-WA"]);
-      assert.deepEqual(installed.forms.map((row) => row.code), ["US_SALES_TAX_WORKPAPER", "US_WA_CET"]);
+      assert.deepEqual(
+        installed.jurisdictions.map((row) => row.code),
+        ["US", "US-WA"],
+      );
+      assert.deepEqual(
+        installed.forms.map((row) => row.code),
+        ["US_SALES_TAX_WORKPAPER", "US_WA_CET"],
+      );
       assert.deepEqual(installed.codes.find((row) => row.code === "US-WA-ST")?.rates, [
         { rate: "2.0000", from: "1935-05-01", to: "1941-04-30" },
         { rate: "3.0000", from: "1941-05-01", to: "1955-04-30" },
@@ -101,11 +125,26 @@ test(
       ]);
       assert.equal(installed.codes.length, 7);
       assert.equal(installed.groupMembers[0]?.count, "7");
-      assert.deepEqual(installed.boxes.map((row) => row.lineCode), [
-        "BO_RET", "BO_WHO", "BO_MFG", "BO_SVC", "BO_SVC1M", "BO_SVC5M",
-        "ST_TAXABLE", "ST_TAX", "USE_TAX", "LOCAL_TAXABLE", "LOCAL_TAX",
-        "SBC_CREDIT", "WA_GROSS", "WA_TAX", "TOTAL_DUE",
-      ]);
+      assert.deepEqual(
+        installed.boxes.map((row) => row.lineCode),
+        [
+          "BO_RET",
+          "BO_WHO",
+          "BO_MFG",
+          "BO_SVC",
+          "BO_SVC1M",
+          "BO_SVC5M",
+          "ST_TAXABLE",
+          "ST_TAX",
+          "USE_TAX",
+          "LOCAL_TAXABLE",
+          "LOCAL_TAX",
+          "SBC_CREDIT",
+          "WA_GROSS",
+          "WA_TAX",
+          "TOTAL_DUE",
+        ],
+      );
       assert.equal(installed.boxes.find((row) => row.lineCode === "WA_TAX")?.mappedCodes, "7");
       assert.equal(installed.boxes.find((row) => row.lineCode === "WA_GROSS")?.mappedCodes, "7");
       assert.equal(

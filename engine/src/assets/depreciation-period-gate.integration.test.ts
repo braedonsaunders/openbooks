@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
-import {
-  buildSchedule,
-  recordDepreciationInput,
-  runDepreciation,
-} from "./depreciation.ts";
+import { buildSchedule, recordDepreciationInput, runDepreciation } from "./depreciation.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -77,9 +73,14 @@ async function seedManualAsset(
     await tx.execute(sql`
       insert into folders (id, org_id, name, record_table, record_id, created_by, updated_by)
       values (${folderId}, ${org.orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
-    const fileId = (await tx.execute<{ id: string }>(sql`
+    const fileId = (
+      await tx.execute<{ id: string }>(
+        sql`
       insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-      values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
+      values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`,
+        "objects",
+      )
+    )[0]!.id;
     await tx.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
       values (${org.orgId}, ${fileId}, 'fixed_assets', ${assetId}, ${actorId})`);
@@ -124,22 +125,29 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  const r = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
-test("open period: the runner still posts (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const assetId = await seedStraightLineAsset(org, actorId, "open");
-    const run = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
-    assert.equal(run.posted, 1, `expected one posting, got ${JSON.stringify(run.problems)}`);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "open period: the runner still posts (setup can post, refusal is load-bearing)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const assetId = await seedStraightLineAsset(org, actorId, "open");
+      const run = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
+      assert.equal(run.posted, 1, `expected one posting, got ${JSON.stringify(run.problems)}`);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("runDepreciation skips a user-closed GL period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -169,7 +177,11 @@ test("runDepreciation skips a source-owned imported lock", { skip: !DB }, async 
     await closeAllImported(org);
     const before = await journalCount(org.orgId);
     const run = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
-    assert.equal(run.posted, 0, "an imported lock must post nothing: posting is new activity, not replay");
+    assert.equal(
+      run.posted,
+      0,
+      "an imported lock must post nothing: posting is new activity, not replay",
+    );
     assert.ok(run.skipped >= 1, "the locked line must be skipped, not posted");
     assert.ok(
       run.problems.some((p) => /closed/i.test(p)),
@@ -189,8 +201,14 @@ test("recordDepreciationInput refuses a user-closed period", { skip: !DB }, asyn
     await closeGlForUser(org, actorId);
     await assert.rejects(
       recordDepreciationInput({
-        orgId: org.orgId, assetId, effectiveDate: org.date, kind: "manual",
-        value: "100.0000", memo: "Gate probe user-closed", evidenceFileId, actorId,
+        orgId: org.orgId,
+        assetId,
+        effectiveDate: org.date,
+        kind: "manual",
+        value: "100.0000",
+        memo: "Gate probe user-closed",
+        evidenceFileId,
+        actorId,
       }),
       /the asset or GL period is closed/,
       "manual input into a user-closed period must be refused",
@@ -208,8 +226,14 @@ test("recordDepreciationInput refuses a source-owned imported lock", { skip: !DB
     await closeAllImported(org);
     await assert.rejects(
       recordDepreciationInput({
-        orgId: org.orgId, assetId, effectiveDate: org.date, kind: "manual",
-        value: "100.0000", memo: "Gate probe imported", evidenceFileId, actorId,
+        orgId: org.orgId,
+        assetId,
+        effectiveDate: org.date,
+        kind: "manual",
+        value: "100.0000",
+        memo: "Gate probe imported",
+        evidenceFileId,
+        actorId,
       }),
       /the asset or GL period is closed/,
       "manual input into an imported lock must be refused: recording evidence is not replay",

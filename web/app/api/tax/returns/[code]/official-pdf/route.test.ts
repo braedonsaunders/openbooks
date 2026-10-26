@@ -31,8 +31,7 @@ const routeState: RouteState = {
   deletedFiles: [],
   restricted: false,
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 stubModules({
   navigation: false,
@@ -150,7 +149,9 @@ function postPdf(): Promise<Response> {
 
 function del(): Promise<Response> {
   return DELETE(
-    new Request("http://openbooks.test/api/tax/returns/US_NY_ST100/official-pdf", { method: "DELETE" }),
+    new Request("http://openbooks.test/api/tax/returns/US_NY_ST100/official-pdf", {
+      method: "DELETE",
+    }),
     { params: Promise.resolve({ code: "US_NY_ST100" }) },
   ) as Promise<Response>;
 }

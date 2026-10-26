@@ -30,7 +30,10 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
       phone: (body.phone ?? undefined) as string | null | undefined,
       address: (address ?? undefined) as CustomerUpsertAddress | undefined,
     });
-    return { status: outcome.created ? 201 : 200, body: { id: outcome.id, created: outcome.created } };
+    return {
+      status: outcome.created ? 201 : 200,
+      body: { id: outcome.id, created: outcome.created },
+    };
   });
 }
 

@@ -1,17 +1,17 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { activePostingPrimaryBookId } from '@openbooks/engine/platform/database'
-import { ambientTenantOrgId, pinnedTransactionExecutor } from '@openbooks/engine/platform/db'
-import { analyticsQuery } from '../analytics/query'
-import { mulDecimal } from '@openbooks/engine/money'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { activePostingPrimaryBookId } from "@openbooks/engine/platform/database";
+import { ambientTenantOrgId, pinnedTransactionExecutor } from "@openbooks/engine/platform/db";
+import { analyticsQuery } from "../analytics/query";
+import { mulDecimal } from "@openbooks/engine/money";
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
-import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '@openbooks/engine/records/open-item-kinds'
-import { openItemsAsOfSql } from '@openbooks/engine/records/open-item-scopes'
-import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
-import { apOpenAccountScope, arOpenAccountScope } from '../ledger-scope'
-import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
+import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
+import { openItemsAsOfSql } from "@openbooks/engine/records/open-item-scopes";
+import { lineFunctional, presentationCurrency, presentationRates } from "../fx-presentation";
+import { apOpenAccountScope, arOpenAccountScope } from "../ledger-scope";
+import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from "./core";
 
 /**
  * Operational AR/AP items follow the document's posting AS OF the forecast
@@ -22,17 +22,17 @@ import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
  * correction.
  */
 interface OpenItemQueryRow extends Record<string, unknown> {
-  id: string
-  entry_id: string
-  doc_id: string | null
-  doc_kind: string | null
-  doc_number: string | null
-  party_id: string | null
-  party_name: string
-  tran_date: string
-  due_date: string | null
-  remaining: string
-  func: string | null
+  id: string;
+  entry_id: string;
+  doc_id: string | null;
+  doc_kind: string | null;
+  doc_number: string | null;
+  party_id: string | null;
+  party_name: string;
+  tran_date: string;
+  due_date: string | null;
+  remaining: string;
+  func: string | null;
 }
 
 /** Shared historical control-line population. Consumers aggregate in SQL
@@ -61,13 +61,13 @@ export async function openItemSourceQuery(
     orgId,
     asOf,
     bookId: await activePostingPrimaryBookId(orgId),
-    accounts: side === 'ap' ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`),
-    kinds: side === 'ap' ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS,
-    creditKind: side === 'ap' ? 'vendor_credit' : 'customer_credit',
-    normalSign: side === 'ap' ? 'credit' : 'debit',
+    accounts: side === "ap" ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`),
+    kinds: side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS,
+    creditKind: side === "ap" ? "vendor_credit" : "customer_credit",
+    normalSign: side === "ap" ? "credit" : "debit",
     subsidiaryIds: subIds,
     partyId,
-  })
+  });
   return sql`
     with oi as materialized (${items})
     select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
@@ -76,7 +76,7 @@ export async function openItemSourceQuery(
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
       left join subsidiaries sub on sub.id = oi.subsidiary_id and sub.org_id = ${orgId}
-  `
+  `;
 }
 
 /**
@@ -91,7 +91,7 @@ export async function openItemSourceQuery(
  * scope. Reads inside a transaction never share: they must see that
  * transaction's own writes.
  */
-const inFlight = new Map<string, Promise<OpenItem[]>>()
+const inFlight = new Map<string, Promise<OpenItem[]>>();
 
 export function openItems(
   orgId: string,
@@ -100,15 +100,22 @@ export function openItems(
   subIds?: string[],
   partyId?: string,
 ): Promise<OpenItem[]> {
-  if (pinnedTransactionExecutor()) return readOpenItems(orgId, side, asOf, subIds, partyId)
-  const key = JSON.stringify([ambientTenantOrgId(), orgId, side, asOf, subIds ? [...subIds].sort() : null, partyId ?? null])
-  let read = inFlight.get(key)
+  if (pinnedTransactionExecutor()) return readOpenItems(orgId, side, asOf, subIds, partyId);
+  const key = JSON.stringify([
+    ambientTenantOrgId(),
+    orgId,
+    side,
+    asOf,
+    subIds ? [...subIds].sort() : null,
+    partyId ?? null,
+  ]);
+  let read = inFlight.get(key);
   if (!read) {
-    read = readOpenItems(orgId, side, asOf, subIds, partyId).finally(() => inFlight.delete(key))
-    inFlight.set(key, read)
+    read = readOpenItems(orgId, side, asOf, subIds, partyId).finally(() => inFlight.delete(key));
+    inFlight.set(key, read);
   }
   // Each caller owns its rows: forecasts annotate and reorder them.
-  return read.then((items) => items.map((item) => ({ ...item })))
+  return read.then((items) => items.map((item) => ({ ...item })));
 }
 
 async function readOpenItems(
@@ -118,7 +125,9 @@ async function readOpenItems(
   subIds?: string[],
   partyId?: string,
 ): Promise<OpenItem[]> {
-  const result = await analyticsQuery<OpenItemQueryRow>(await openItemSourceQuery(orgId, side, asOf, subIds, partyId))
+  const result = await analyticsQuery<OpenItemQueryRow>(
+    await openItemSourceQuery(orgId, side, asOf, subIds, partyId),
+  );
   // `remaining` nets in the line entity's functional currency (legs are
   // stamped functional; the shared leg-split helper reads the target leg in
   // amount and the consumed leg in source_amount, and the sign filter keeps
@@ -126,9 +135,14 @@ async function readOpenItems(
   // functionals, so each item translates to the presentation currency at the
   // closing spot — raw functionals would mix subsidiary currencies. One rate
   // lookup per functional in view; missing coverage fails closed.
-  const rows = result.rows
-  const base = await presentationCurrency(orgId)
-  const rates = await presentationRates(orgId, base, rows.map((row) => row.func ?? null), asOf)
+  const rows = result.rows;
+  const base = await presentationCurrency(orgId);
+  const rates = await presentationRates(
+    orgId,
+    base,
+    rows.map((row) => row.func ?? null),
+    asOf,
+  );
   return rows.map((row) => ({
     id: row.id,
     entryId: row.entry_id,
@@ -143,6 +157,8 @@ async function readOpenItems(
     // exact at the boundary; converting to Number would round valid
     // numeric(19,4) balances before the forecast has a chance to aggregate
     // them.
-    remaining: normalizeMoneyValue(mulDecimal(String(row.remaining), rates.get(lineFunctional(row.func ?? null, base))!)),
-  }))
+    remaining: normalizeMoneyValue(
+      mulDecimal(String(row.remaining), rates.get(lineFunctional(row.func ?? null, base))!),
+    ),
+  }));
 }

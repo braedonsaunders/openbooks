@@ -1,19 +1,10 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  orgContext,
-  withOrgContext,
-  withOrgTransaction,
-} from "@openbooks/engine/platform/db";
+import { db, orgContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import type { ApplicationContext } from "./context";
 import { insertApiKeyEvent, markClaimedCommandEvidence } from "./api-key-audit";
 import { conflict, invalidInput } from "./errors";
-import {
-  NonJsonValueError,
-  requestHash,
-  toJsonValue,
-} from "./idempotency-core";
+import { NonJsonValueError, requestHash, toJsonValue } from "./idempotency-core";
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,200}$/;
 const OPERATION_NAME = /^[a-z][a-z0-9_.-]{2,99}$/;
@@ -36,7 +27,6 @@ type StoredKeyRow = {
   completedAt: Date | null;
 };
 
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -53,7 +43,8 @@ async function readCommittedKeyRow(
   idempotencyKey: string,
 ): Promise<StoredKeyRow | null> {
   const read = async () => {
-    const result = await db.execute<StoredKeyRow>(sql`
+    const result = await db.execute<StoredKeyRow>(
+      sql`
       select request_hash as "requestHash", response, completed_at as "completedAt"
         from application_idempotency_keys
        where org_id = ${context.authz.user.orgId}
@@ -62,7 +53,9 @@ async function readCommittedKeyRow(
          and operation = ${operation}
          and idempotency_key = ${idempotencyKey}
        limit 1
-    `, "objects");
+    `,
+      "objects",
+    );
     return result[0] ?? null;
   };
   if (orgContext.getStore()?.txDb) return read();
@@ -85,14 +78,17 @@ async function claimLockHeld(
   idempotencyKey: string,
 ): Promise<boolean> {
   const probe = async () => {
-    const result = await db.execute<{ held: boolean }>(sql`
+    const result = await db.execute<{ held: boolean }>(
+      sql`
       select exists (
         select 1 from pg_locks
          where locktype = 'advisory'
            and classid = hashtext(${context.authz.user.orgId})::integer
            and objid = hashtext(${`${context.source}|${operation}|${idempotencyKey}`})::integer
       ) as held
-    `, "objects");
+    `,
+      "objects",
+    );
     return !!result[0]?.held;
   };
   if (orgContext.getStore()?.txDb) return probe();
@@ -159,8 +155,7 @@ export async function executeIdempotent<T>(args: {
       throw conflict("idempotencyKey was already used with different input");
     }
   };
-  const isCompleted = (row: StoredKeyRow): boolean =>
-    !!row.completedAt && row.response !== null;
+  const isCompleted = (row: StoredKeyRow): boolean => !!row.completedAt && row.response !== null;
 
   // Committed-state fast path: a completed attempt replays without opening
   // any transaction, and key reuse with different input fails closed before
@@ -186,15 +181,19 @@ export async function executeIdempotent<T>(args: {
   // so correctness rests on the unique index, not on the hash.
   const claimAndExecute = (): Promise<{ replayed: boolean; value: T } | undefined> =>
     withOrgTransaction(context.authz.user.orgId, async () => {
-      const gate = (await db.execute<{ acquired: boolean }>(sql`
+      const gate = await db.execute<{ acquired: boolean }>(
+        sql`
         select pg_try_advisory_xact_lock(
                  hashtext(${context.authz.user.orgId}),
                  hashtext(${`${context.source}|${args.operation}|${args.idempotencyKey}`})
                ) as acquired
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (!gate[0]?.acquired) return undefined;
 
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into application_idempotency_keys
           (org_id, actor_id, source, operation, idempotency_key, request_hash,
            expires_at)
@@ -206,7 +205,9 @@ export async function executeIdempotent<T>(args: {
         on conflict (org_id, actor_id, source, operation, idempotency_key)
         do nothing
         returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (inserted.length === 0) return undefined;
 
       const value = await args.execute();

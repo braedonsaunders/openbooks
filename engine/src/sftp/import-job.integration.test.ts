@@ -20,7 +20,8 @@ const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-import-job-"))
 const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
-const { recordScheduleRunOutcome, runDueSftpImports, sftpImportAuditSource } = await import("./import-job.ts");
+const { recordScheduleRunOutcome, runDueSftpImports, sftpImportAuditSource } =
+  await import("./import-job.ts");
 const { db, pool, withOrgContext } = await import("../platform/db.ts");
 const { sftpImportScheduleRunLockKey } = await import("./import-job.ts");
 
@@ -31,15 +32,28 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 /** Minimal OFX v1 SGML statement carrying one STMTTRN per fitid (CAD outflows). */
 function ofxStatement(fitids: string[]): Buffer {
-  const header =
-    ["OFXHEADER:100", "DATA:OFXSGML", "VERSION:102", "SECURITY:NONE",
-     "ENCODING:USASCII", "CHARSET:1252", "COMPRESSION:NONE", "OLDFILEUID:NONE",
-     "NEWFILEUID:NONE", "", ""].join("\r\n");
+  const header = [
+    "OFXHEADER:100",
+    "DATA:OFXSGML",
+    "VERSION:102",
+    "SECURITY:NONE",
+    "ENCODING:USASCII",
+    "CHARSET:1252",
+    "COMPRESSION:NONE",
+    "OLDFILEUID:NONE",
+    "NEWFILEUID:NONE",
+    "",
+    "",
+  ].join("\r\n");
   const body =
     `<OFX><CURDEF>CAD` +
-    fitids.map((id, i) =>
-      `<STMTTRN><DTPOSTED>20260715</DTPOSTED><TRNAMT>-${(i + 1) * 10}.50</TRNAMT>` +
-      `<NAME>SFTP Vendor ${i}</NAME><FITID>${id}</FITID></STMTTRN>`).join("") +
+    fitids
+      .map(
+        (id, i) =>
+          `<STMTTRN><DTPOSTED>20260715</DTPOSTED><TRNAMT>-${(i + 1) * 10}.50</TRNAMT>` +
+          `<NAME>SFTP Vendor ${i}</NAME><FITID>${id}</FITID></STMTTRN>`,
+      )
+      .join("") +
     `</OFX>`;
   return Buffer.from(header + body, "utf8");
 }
@@ -120,7 +134,8 @@ type ActorRow = {
 };
 
 async function loadScheduledActors(orgId: string, prefix: string): Promise<ActorRow[]> {
-  const r = (await db.execute<ActorRow>(sql`
+  const r = await db.execute<ActorRow>(
+    sql`
     select bsl.bank_transaction_id as "bankTransactionId",
            bs.created_by as "statementActor",
            bsl.created_by as "lineActor",
@@ -132,7 +147,9 @@ async function loadScheduledActors(orgId: string, prefix: string): Promise<Actor
         and al.table_name = 'bank_statements' and al.row_id = bs.id
      where bsl.org_id = ${orgId} and bsl.bank_transaction_id like ${prefix}
      order by bsl.bank_transaction_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 }
 
@@ -141,13 +158,16 @@ async function countForeignActorRows(orgId: string, forbidden: string[]): Promis
   // A bare JS array binds as a row constructor under Drizzle; bind an explicit
   // Postgres array literal ({a,b}) and cast instead.
   const forbiddenIds = `{${forbidden.join(",")}}`;
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select (
       (select count(*) from bank_statements where org_id = ${orgId} and created_by = any(${forbiddenIds}::uuid[])) +
       (select count(*) from bank_statement_lines where org_id = ${orgId} and created_by = any(${forbiddenIds}::uuid[])) +
       (select count(*) from audit_log where org_id = ${orgId} and actor_id = any(${forbiddenIds}::uuid[]))
     )::int as n
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
@@ -159,54 +179,66 @@ type LastResultRow = {
     imported: number;
     duplicates: number;
     errors: string[];
-    files: { file: string; imported: number; duplicates: number; statementIds: string[]; error?: string }[];
+    files: {
+      file: string;
+      imported: number;
+      duplicates: number;
+      statementIds: string[];
+      error?: string;
+    }[];
   } | null;
 };
 
 async function loadSchedule(id: string): Promise<LastResultRow> {
-  const r = (await db.execute<LastResultRow>(sql`
+  const r = await db.execute<LastResultRow>(
+    sql`
     select last_run_at as "lastRunAt", last_result as "lastResult"
       from sftp_import_schedules where id = ${id}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]!;
 }
 
-test(
-  "scheduled SFTP imports surface processed-file archival failures",
-  { skip: !DB },
-  async () => {
-    const f = await seedSftpFixture();
-    try {
-      // A file planted where the archive's day-directory goes makes the local
-      // backend's rename fail after the statement transaction has committed
-      // (no generation can be created under it). The source must remain
-      // visible for a later retry, while the run and its per-file outcome
-      // must make the archival failure operator-visible. The blocker sits
-      // inside processed/, which the scan skips as a directory — only the
-      // archival rename trips over it.
-      const day = new Date().toISOString().slice(0, 10);
-      mkdirSync(join(localServerDir(f.rootPrefix), "inbound", "processed"), { recursive: true });
-      writeFileSync(join(localServerDir(f.rootPrefix), "inbound", "processed", day), Buffer.from("not a directory"));
+test("scheduled SFTP imports surface processed-file archival failures", { skip: !DB }, async () => {
+  const f = await seedSftpFixture();
+  try {
+    // A file planted where the archive's day-directory goes makes the local
+    // backend's rename fail after the statement transaction has committed
+    // (no generation can be created under it). The source must remain
+    // visible for a later retry, while the run and its per-file outcome
+    // must make the archival failure operator-visible. The blocker sits
+    // inside processed/, which the scan skips as a directory — only the
+    // archival rename trips over it.
+    const day = new Date().toISOString().slice(0, 10);
+    mkdirSync(join(localServerDir(f.rootPrefix), "inbound", "processed"), { recursive: true });
+    writeFileSync(
+      join(localServerDir(f.rootPrefix), "inbound", "processed", day),
+      Buffer.from("not a directory"),
+    );
 
-      const runs = await runDueSftpImports(f.org.orgId);
-      const authored = runs.find((run) => run.scheduleId === f.authoredScheduleId)!;
-      assert.equal(authored.imported, 2, "the statement import commits before archival is attempted");
-      assert.equal(authored.errors.length, 1);
-      assert.match(authored.errors[0]!, /^acct\.ofx: /);
-      const fileOutcome = authored.files.find((entry) => entry.file === "acct.ofx")!;
-      assert.ok(fileOutcome.error, "the file outcome records the archival failure");
-      assert.equal(fileOutcome.imported, 2);
-      assert.deepEqual(listFolder(f.rootPrefix, "inbound"), ["acct.ofx", "processed"]);
-      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed")), [day]);
+    const runs = await runDueSftpImports(f.org.orgId);
+    const authored = runs.find((run) => run.scheduleId === f.authoredScheduleId)!;
+    assert.equal(authored.imported, 2, "the statement import commits before archival is attempted");
+    assert.equal(authored.errors.length, 1);
+    assert.match(authored.errors[0]!, /^acct\.ofx: /);
+    const fileOutcome = authored.files.find((entry) => entry.file === "acct.ofx")!;
+    assert.ok(fileOutcome.error, "the file outcome records the archival failure");
+    assert.equal(fileOutcome.imported, 2);
+    assert.deepEqual(listFolder(f.rootPrefix, "inbound"), ["acct.ofx", "processed"]);
+    assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed")), [day]);
 
-      const schedule = await loadSchedule(f.authoredScheduleId);
-      assert.deepEqual(schedule.lastResult?.errors, authored.errors, "the persisted run retains the archival error");
-    } finally {
-      await dropScratchOrgReporting(f.org.orgId);
-      rmSync(scratchDataDir, { recursive: true, force: true });
-    }
-  },
-);
+    const schedule = await loadSchedule(f.authoredScheduleId);
+    assert.deepEqual(
+      schedule.lastResult?.errors,
+      authored.errors,
+      "the persisted run retains the archival error",
+    );
+  } finally {
+    await dropScratchOrgReporting(f.org.orgId);
+    rmSync(scratchDataDir, { recursive: true, force: true });
+  }
+});
 
 test(
   "scheduled SFTP imports carry system provenance, never the schedule author or an org uuid",
@@ -239,24 +271,34 @@ test(
         // THE regression: persisted provenance is the documented system actor
         // on every evidence surface — not the historical schedule author and
         // not the organization id standing in for a missing one.
-        assert.equal(row.statementActor, SYSTEM_ACTOR_ID, `statement actor for ${row.bankTransactionId}`);
+        assert.equal(
+          row.statementActor,
+          SYSTEM_ACTOR_ID,
+          `statement actor for ${row.bankTransactionId}`,
+        );
         assert.equal(row.lineActor, SYSTEM_ACTOR_ID, `line actor for ${row.bankTransactionId}`);
         assert.equal(row.auditActor, SYSTEM_ACTOR_ID, `audit actor for ${row.bankTransactionId}`);
       }
 
       // Durable job marker: each audit row names the exact schedule whose scan
       // imported the file, without ever naming a human.
-      const authoredAudit = await db.execute<{ n: number }>(sql`
+      const authoredAudit = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from audit_log
          where org_id = ${f.org.orgId} and table_name = 'bank_statements'
            and request_id = ${sftpImportAuditSource(f.authoredScheduleId)}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(Number(authoredAudit[0]!.n), 1);
-      const unauthoredAudit = await db.execute<{ n: number }>(sql`
+      const unauthoredAudit = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from audit_log
          where org_id = ${f.org.orgId} and table_name = 'bank_statements'
            and request_id = ${sftpImportAuditSource(f.unauthoredScheduleId)}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(Number(unauthoredAudit[0]!.n), 1);
 
       // No impersonation anywhere in the tenant's financial evidence.
@@ -273,11 +315,14 @@ test(
       assert.ok(fileOutcome, "the run records the exact source file it saw");
       assert.deepEqual(fileOutcome.error, undefined);
       assert.equal(fileOutcome.imported, 2);
-      const statementIds = await db.execute<{ id: string }>(sql`
+      const statementIds = await db.execute<{ id: string }>(
+        sql`
         select id from bank_statements
          where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.bank}
            and source_file_sha256 is not null
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.ok(fileOutcome.statementIds.length >= 1);
       const persistedIds = new Set(statementIds.map((row) => row.id));
       for (const statementId of fileOutcome.statementIds) {
@@ -298,30 +343,49 @@ test(
       // a NEW filename is recognized as already imported — counted as
       // duplicates, no new statement/evidence rows, and the repeat still
       // carries system provenance rather than some other identity.
-      const beforeStatements = (await db.execute<{ n: number }>(sql`
+      const beforeStatements = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from bank_statements where org_id = ${f.org.orgId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       const replayBytes = ofxStatement(["sftp-deposit-a", "sftp-deposit-b"]);
-      assert.deepEqual(replayBytes, readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed", day, generations[0]!)));
+      assert.deepEqual(
+        replayBytes,
+        readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed", day, generations[0]!)),
+      );
       stageFile(f.rootPrefix, "inbound", "acct.ofx", replayBytes);
       const reruns = await runDueSftpImports(f.org.orgId);
       const rerun = reruns.find((run) => run.scheduleId === f.authoredScheduleId)!;
       assert.deepEqual(rerun.errors, []);
       assert.equal(rerun.imported, 0, "replayed exact source bytes import nothing");
       assert.equal(rerun.duplicates, 2, "every replayed line is recognized as a duplicate");
-      const afterStatements = (await db.execute<{ n: number }>(sql`
+      const afterStatements = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from bank_statements where org_id = ${f.org.orgId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(afterStatements, beforeStatements);
       assert.equal(await countForeignActorRows(f.org.orgId, [f.authorId, f.org.orgId]), 0);
       // The replay archives as a numbered second generation: the first
       // archive is never replaced, even by identical bytes.
       const generationsAfter = listFolder(f.rootPrefix, join("inbound", "processed", day));
       assert.equal(generationsAfter.length, 2);
-      assert.ok(generationsAfter.includes(generations[0]!), "the first generation survives the replay");
+      assert.ok(
+        generationsAfter.includes(generations[0]!),
+        "the first generation survives the replay",
+      );
       const second = generationsAfter.find((name) => name !== generations[0]!)!;
       assert.match(second, /^acct\.[0-9a-f]{12}\.2\.ofx$/);
-      assert.deepEqual(replayBytes, readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed", day, second)));
+      assert.deepEqual(
+        replayBytes,
+        readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed", day, second)),
+      );
     } finally {
       await dropScratchOrgReporting(f.org.orgId);
       rmSync(scratchDataDir, { recursive: true, force: true });
@@ -340,21 +404,41 @@ test(
       const lockKey = sftpImportScheduleRunLockKey(f.org.orgId, f.authoredScheduleId);
       await blocker.query("select pg_advisory_lock(hashtextextended($1, 0))", [lockKey]);
       lockHeld = true;
-      const before = (await db.execute<{ last_result: unknown; run_claim_token: string | null }>(sql`
+      const before = (
+        await db.execute<{ last_result: unknown; run_claim_token: string | null }>(
+          sql`
         select last_result, run_claim_token from sftp_import_schedules
          where id = ${f.authoredScheduleId} and org_id = ${f.org.orgId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
 
       const skipped = (await runDueSftpImports(f.org.orgId, f.authoredScheduleId))[0]!;
       assert.equal(skipped.alreadyRunning, true);
-      assert.match(skipped.errors.join("\n"), /already running; wait for the active scan to finish/);
+      assert.match(
+        skipped.errors.join("\n"),
+        /already running; wait for the active scan to finish/,
+      );
       assert.equal(skipped.filesSeen, 0);
-      assert.ok(listFolder(f.rootPrefix, "inbound").includes("acct.ofx"), "a losing invocation leaves the source file untouched");
-      const after = (await db.execute<{ last_result: unknown; run_claim_token: string | null }>(sql`
+      assert.ok(
+        listFolder(f.rootPrefix, "inbound").includes("acct.ofx"),
+        "a losing invocation leaves the source file untouched",
+      );
+      const after = (
+        await db.execute<{ last_result: unknown; run_claim_token: string | null }>(
+          sql`
         select last_result, run_claim_token from sftp_import_schedules
          where id = ${f.authoredScheduleId} and org_id = ${f.org.orgId}
-      `, "objects"))[0]!;
-      assert.deepEqual(after, before, "a losing invocation does not persist schedule evidence or a claim");
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(
+        after,
+        before,
+        "a losing invocation does not persist schedule evidence or a claim",
+      );
 
       await blocker.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
       lockHeld = false;
@@ -362,14 +446,21 @@ test(
       assert.equal(claimed.alreadyRunning, undefined);
       assert.equal(claimed.imported, 2);
       assert.deepEqual(claimed.errors, []);
-      assert.ok(!listFolder(f.rootPrefix, "inbound").includes("acct.ofx"), "the lock owner archives the imported source");
+      assert.ok(
+        !listFolder(f.rootPrefix, "inbound").includes("acct.ofx"),
+        "the lock owner archives the imported source",
+      );
     } finally {
-      if (lockHeld) await blocker.query("select pg_advisory_unlock(hashtextextended($1, 0))", [sftpImportScheduleRunLockKey(f.org.orgId, f.authoredScheduleId)]).catch(() => undefined);
+      if (lockHeld)
+        await blocker
+          .query("select pg_advisory_unlock(hashtextextended($1, 0))", [
+            sftpImportScheduleRunLockKey(f.org.orgId, f.authoredScheduleId),
+          ])
+          .catch(() => undefined);
       blocker.release();
       await dropScratchOrgReporting(f.org.orgId);
       rmSync(scratchDataDir, { recursive: true, force: true });
     }
-
   },
 );
 
@@ -400,12 +491,13 @@ test(
       );
       assert.equal(result.imported, 1);
 
-      const r = (await db.execute<{
+      const r = await db.execute<{
         statementActor: string | null;
         lineActor: string | null;
         auditActor: string | null;
         requestId: string | null;
-      }>(sql`
+      }>(
+        sql`
         select bs.created_by as "statementActor",
                bsl.created_by as "lineActor",
                al.actor_id as "auditActor",
@@ -415,7 +507,9 @@ test(
           join audit_log al on al.org_id = bs.org_id
             and al.table_name = 'bank_statements' and al.row_id = bs.id
          where bsl.org_id = ${f.org.orgId} and bsl.bank_transaction_id = 'manual-upload-1'
-      `, "objects"));
+      `,
+        "objects",
+      );
       const row = r[0]!;
       assert.equal(row.statementActor, f.authorId);
       assert.equal(row.lineActor, f.authorId);
@@ -448,9 +542,9 @@ test(
         Buffer.from([0xff, 0xfe]),
         Buffer.from(
           "<OFX><CURDEF>CAD" +
-          "<STMTTRN><DTPOSTED>20260715</DTPOSTED><TRNAMT>-42.50</TRNAMT>" +
-          "<NAME>UTF16 Vendor</NAME><FITID>sftp-utf16-a</FITID></STMTTRN>" +
-          "</OFX>",
+            "<STMTTRN><DTPOSTED>20260715</DTPOSTED><TRNAMT>-42.50</TRNAMT>" +
+            "<NAME>UTF16 Vendor</NAME><FITID>sftp-utf16-a</FITID></STMTTRN>" +
+            "</OFX>",
           "utf16le",
         ),
       ]);
@@ -466,10 +560,13 @@ test(
       assert.ok(mine, "the utf16 schedule must be scanned");
       assert.deepEqual(mine.errors, [], `scan errors surfaced: ${JSON.stringify(mine.errors)}`);
       assert.equal(mine.imported, 1);
-      const lines = await db.execute<{ amount: string }>(sql`
+      const lines = await db.execute<{ amount: string }>(
+        sql`
         select amount from bank_statement_lines
          where org_id = ${f.org.orgId} and bank_transaction_id = 'sftp-utf16-a'
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(lines.length, 1);
       assert.equal(lines[0]!.amount, "-42.5000");
     } finally {
@@ -478,49 +575,48 @@ test(
   },
 );
 
-test(
-  "a failing watch-folder file never starves the files behind it",
-  { skip: !DB },
-  async () => {
-    const f = await seedSftpFixture();
-    try {
-      // Byte-order first: a persistently unparseable file that sorts ahead
-      // of a good one. The scan must record its failure on its own outcome
-      // and still attempt every later key.
-      stageFile(f.rootPrefix, "inbound", "a-broken.ofx", Buffer.from("not a statement at all"));
-      const lateFitid = `sftp-late-${randomUUID()}`;
-      stageFile(f.rootPrefix, "inbound", "z-good.ofx", ofxStatement([lateFitid]));
+test("a failing watch-folder file never starves the files behind it", { skip: !DB }, async () => {
+  const f = await seedSftpFixture();
+  try {
+    // Byte-order first: a persistently unparseable file that sorts ahead
+    // of a good one. The scan must record its failure on its own outcome
+    // and still attempt every later key.
+    stageFile(f.rootPrefix, "inbound", "a-broken.ofx", Buffer.from("not a statement at all"));
+    const lateFitid = `sftp-late-${randomUUID()}`;
+    stageFile(f.rootPrefix, "inbound", "z-good.ofx", ofxStatement([lateFitid]));
 
-      const runs = await runDueSftpImports(f.org.orgId);
-      const authored = runs.find((run) => run.scheduleId === f.authoredScheduleId)!;
-      assert.ok(authored, "the authored schedule must be scanned");
-      assert.deepEqual(
-        authored.files.map((entry) => entry.file).sort(),
-        ["a-broken.ofx", "acct.ofx", "z-good.ofx"],
-        "every listed key is attempted, including the keys behind the failure",
-      );
-      const broken = authored.files.find((entry) => entry.file === "a-broken.ofx")!;
-      assert.ok(broken.error, "the failing file records its own error");
-      assert.equal(broken.imported, 0);
-      assert.match(authored.errors.join("\n"), /^a-broken\.ofx: /m);
-      const good = authored.files.find((entry) => entry.file === "z-good.ofx")!;
-      assert.equal(good.error, undefined);
-      assert.equal(good.imported, 1, "the file behind the failure is still attempted and imported");
-      assert.equal(authored.files.find((entry) => entry.file === "acct.ofx")!.imported, 2);
-      const lines = await db.execute<{ n: number }>(sql`
+    const runs = await runDueSftpImports(f.org.orgId);
+    const authored = runs.find((run) => run.scheduleId === f.authoredScheduleId)!;
+    assert.ok(authored, "the authored schedule must be scanned");
+    assert.deepEqual(
+      authored.files.map((entry) => entry.file).sort(),
+      ["a-broken.ofx", "acct.ofx", "z-good.ofx"],
+      "every listed key is attempted, including the keys behind the failure",
+    );
+    const broken = authored.files.find((entry) => entry.file === "a-broken.ofx")!;
+    assert.ok(broken.error, "the failing file records its own error");
+    assert.equal(broken.imported, 0);
+    assert.match(authored.errors.join("\n"), /^a-broken\.ofx: /m);
+    const good = authored.files.find((entry) => entry.file === "z-good.ofx")!;
+    assert.equal(good.error, undefined);
+    assert.equal(good.imported, 1, "the file behind the failure is still attempted and imported");
+    assert.equal(authored.files.find((entry) => entry.file === "acct.ofx")!.imported, 2);
+    const lines = await db.execute<{ n: number }>(
+      sql`
         select count(*)::int as n from bank_statement_lines
          where org_id = ${f.org.orgId} and bank_transaction_id = ${lateFitid}
-      `, "objects");
-      assert.equal(lines[0]!.n, 1);
-      // The failure stays in the folder for a later retry; the import moves on.
-      assert.ok(listFolder(f.rootPrefix, "inbound").includes("a-broken.ofx"));
-      assert.ok(!listFolder(f.rootPrefix, "inbound").includes("z-good.ofx"));
-    } finally {
-      await dropScratchOrgReporting(f.org.orgId);
-      rmSync(scratchDataDir, { recursive: true, force: true });
-    }
-  },
-);
+      `,
+      "objects",
+    );
+    assert.equal(lines[0]!.n, 1);
+    // The failure stays in the folder for a later retry; the import moves on.
+    assert.ok(listFolder(f.rootPrefix, "inbound").includes("a-broken.ofx"));
+    assert.ok(!listFolder(f.rootPrefix, "inbound").includes("z-good.ofx"));
+  } finally {
+    await dropScratchOrgReporting(f.org.orgId);
+    rmSync(scratchDataDir, { recursive: true, force: true });
+  }
+});
 
 test(
   "a schedule deleted mid-scan keeps its run evidence in audit and names it in the result",
@@ -534,18 +630,21 @@ test(
         imported: 2,
         duplicates: 0,
         errors: [] as string[],
-        files: [{
-          file: "acct.ofx",
-          imported: 2,
-          duplicates: 0,
-          skipped: [],
-          statementIds: ["00000000-0000-4000-8000-000000000010"],
-        }],
+        files: [
+          {
+            file: "acct.ofx",
+            imported: 2,
+            duplicates: 0,
+            skipped: [],
+            statementIds: ["00000000-0000-4000-8000-000000000010"],
+          },
+        ],
       };
       // The schedule row still exists: the outcome lands on last_result,
       // the returned run is untouched, and no audit row is written.
       const recorded = await withOrgContext(f.org.orgId, () =>
-        recordScheduleRunOutcome({ id: f.authoredScheduleId, org_id: f.org.orgId }, run));
+        recordScheduleRunOutcome({ id: f.authoredScheduleId, org_id: f.org.orgId }, run),
+      );
       assert.deepEqual(recorded.errors, []);
       assert.equal((await loadSchedule(f.authoredScheduleId)).lastResult?.imported, 2);
 
@@ -554,14 +653,22 @@ test(
       // clean scan while the evidence is silently dropped.
       await db.execute(sql`delete from sftp_import_schedules where id = ${f.authoredScheduleId}`);
       const orphaned = await withOrgContext(f.org.orgId, () =>
-        recordScheduleRunOutcome({ id: f.authoredScheduleId, org_id: f.org.orgId }, run));
+        recordScheduleRunOutcome({ id: f.authoredScheduleId, org_id: f.org.orgId }, run),
+      );
       assert.equal(orphaned.errors.length, 1);
       assert.match(orphaned.errors[0]!, /was deleted during the scan/);
       assert.match(orphaned.errors[0]!, /last_result was not recorded/);
-      const audit = await db.execute<{ action: string; changes: typeof run; request: string | null }>(sql`
+      const audit = await db.execute<{
+        action: string;
+        changes: typeof run;
+        request: string | null;
+      }>(
+        sql`
         select action, changes, request_id as request from audit_log
          where org_id = ${f.org.orgId} and table_name = 'sftp_import_schedules' and row_id = ${f.authoredScheduleId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.action, "scan_outcome_unrecorded");
       assert.deepEqual(audit[0]!.changes, run);

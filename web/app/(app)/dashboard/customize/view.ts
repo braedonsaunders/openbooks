@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { getAuthz } from '../../../../lib/authz'
-import { getUserRoleTier, ROLE_TIER_LABEL_KEYS } from '../_role-tier'
+import { getTranslations } from "next-intl/server";
+import { frame, grid, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { getAuthz } from "../../../../lib/authz";
+import { getUserRoleTier, ROLE_TIER_LABEL_KEYS } from "../_role-tier";
 
 /**
  * The dashboard customise page, split into a loader and a spec.
@@ -21,39 +21,39 @@ import { getUserRoleTier, ROLE_TIER_LABEL_KEYS } from '../_role-tier'
  */
 
 export interface CustomizeDashboardData {
-  backHref: string
-  backLabel: string
-  title: string
-  roleLabel: string
+  backHref: string;
+  backLabel: string;
+  title: string;
+  roleLabel: string;
 }
 
 export async function loadCustomizeDashboard(): Promise<CustomizeDashboardData | null> {
-  const t = await getTranslations('dashboard')
-  const authz = await getAuthz()
-  if (!authz) return null
+  const t = await getTranslations("dashboard");
+  const authz = await getAuthz();
+  if (!authz) return null;
 
-  const role = getUserRoleTier(authz)
+  const role = getUserRoleTier(authz);
 
   return {
-    backHref: '/dashboard',
-    backLabel: t('customize.back'),
-    title: t('customize.title'),
-    roleLabel: t('customize.roleLabel', { role: t(ROLE_TIER_LABEL_KEYS[role]) }),
-  }
+    backHref: "/dashboard",
+    backLabel: t("customize.back"),
+    title: t("customize.title"),
+    roleLabel: t("customize.roleLabel", { role: t(ROLE_TIER_LABEL_KEYS[role]) }),
+  };
 }
 
 export function customizeDashboardSpec(data: CustomizeDashboardData): PageSpec {
   return page({
-    route: '/dashboard/customize',
+    route: "/dashboard/customize",
     // The native page renders inside PageContainer, not the sticky
     // ListPageLayout chrome — the platform-hub arrangement.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      frame('page-container', [
+      frame("page-container", [
         // Exact wrapper from page.tsx: <div className="space-y-4">.
-        grid('space-y-4', [
-          widgetBlock('dashboard-customize-header', {
+        grid("space-y-4", [
+          widgetBlock("dashboard-customize-header", {
             backHref: data.backHref,
             backLabel: data.backLabel,
             title: data.title,
@@ -61,9 +61,9 @@ export function customizeDashboardSpec(data: CustomizeDashboardData): PageSpec {
           }),
           // No props: the slot re-derives layout, nodes, the allowed-widget
           // set, the bound action and its own remount key from the session.
-          widgetBlock('dashboard-edit'),
+          widgetBlock("dashboard-edit"),
         ]),
       ]),
     ],
-  })
+  });
 }

@@ -11,26 +11,31 @@
  * `requirement` line is our own restatement of the cited paragraph.
  */
 
-import {
-  computeApplication,
-  revisedScheduleValue,
-} from "../../projects/construction-billing.ts";
+import { computeApplication, revisedScheduleValue } from "../../projects/construction-billing.ts";
 import { costToCostPercent } from "../../projects/revenue.ts";
-import { randomUUID } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db,withOrgContext } from '../../platform/db.ts'
-import { postEntry } from '../../journal/post-entry.ts'
-import { seedFlowActors,seedApprovalFlow, grantScratchPermissions as grantDecisionDuties } from '../../testing/fixtures.ts'
-import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts'
-import { decideGate } from '../../flows/gates.ts'
-import { proposeProvisionAssessment,applyProvisionAssessment } from '../../provisions/assessments.ts'
-import { capture } from '../ledger-helpers.ts'
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db, withOrgContext } from "../../platform/db.ts";
+import { postEntry } from "../../journal/post-entry.ts";
+import {
+  seedFlowActors,
+  seedApprovalFlow,
+  grantScratchPermissions as grantDecisionDuties,
+} from "../../testing/fixtures.ts";
+import { submitFinancialChange } from "../../flows/financial-changes-adapter.ts";
+import { decideGate } from "../../flows/gates.ts";
+import {
+  proposeProvisionAssessment,
+  applyProvisionAssessment,
+} from "../../provisions/assessments.ts";
+import { capture } from "../ledger-helpers.ts";
 import type { ConformanceCase } from "../types.ts";
 
 export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
   {
     id: "con-application-measures-progress",
-    title: "A progress application measures work done, withholds retainage, and states the amount due",
+    title:
+      "A progress application measures work done, withholds retainage, and states the amount due",
     citations: [
       {
         standard: "ASC 606",
@@ -115,7 +120,8 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
 
   {
     id: "con-change-order-revises-capacity",
-    title: "An approved change order revises the contract value but never below work already billed",
+    title:
+      "An approved change order revises the contract value but never below work already billed",
     citations: [
       {
         standard: "ASC 606",
@@ -244,42 +250,114 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
       "A provision of 150,000.00 is recognised immediately, in addition to the costs already incurred.",
     ],
     expected: {
-      entries:[{step:"loss-provision",lines:[{role:"provisionExpense",amount:"150000.0000"},{role:"provisionLiability",amount:"-150000.0000"}]}],
+      entries: [
+        {
+          step: "loss-provision",
+          lines: [
+            { role: "provisionExpense", amount: "150000.0000" },
+            { role: "provisionLiability", amount: "-150000.0000" },
+          ],
+        },
+      ],
       values: {
         totalForecastCost: "1150000.0000",
         expectedLoss: "150000.0000",
         lossProvision: "150000.0000",
       },
     },
-    run:async ctx=> {
-      const ledger=ctx.ledger!, projectId=randomUUID()
-      const actors=await withOrgContext(ledger.orgId, async()=> {
-        const actors=await seedFlowActors(ledger.orgId)
-        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${ledger.orgId}`)
-        await db.execute(sql`insert into projects(id,org_id,code,name,subsidiary_id,contract_value) values (${projectId},${ledger.orgId},'CONF-LOSS','Fixed-price construction',${ledger.subsidiaryId},1000000)`)
+    run: async (ctx) => {
+      const ledger = ctx.ledger!,
+        projectId = randomUUID();
+      const actors = await withOrgContext(ledger.orgId, async () => {
+        const actors = await seedFlowActors(ledger.orgId);
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${ledger.orgId}`,
+        );
+        await db.execute(
+          sql`insert into projects(id,org_id,code,name,subsidiary_id,contract_value) values (${projectId},${ledger.orgId},'CONF-LOSS','Fixed-price construction',${ledger.subsidiaryId},1000000)`,
+        );
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values
-          (${ledger.orgId},${actors.submitterId},'gl.manage','grant'),(${ledger.orgId},${actors.submitterId},'gl.post','grant'),(${ledger.orgId},${actors.submitterId},'projects.read','grant')`)
+          (${ledger.orgId},${actors.submitterId},'gl.manage','grant'),(${ledger.orgId},${actors.submitterId},'gl.post','grant'),(${ledger.orgId},${actors.submitterId},'projects.read','grant')`);
         await grantDecisionDuties(ledger.orgId, actors.approver1Id, ["gl.manage"]);
-    await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
-        return actors
-      })
-      return withOrgContext(ledger.orgId,async()=> {
-        await postEntry(db,{orgId:ledger.orgId,bookId:ledger.bookId,subsidiaryId:ledger.subsidiaryId,entryNumber:'CONF-RESULTS',postingDate:ledger.date,periodId:ledger.periodId,origin:'manual',currency:'CAD',actorId:actors.submitterId,
-          lines:[{accountId:ctx.roles.provisionExpense,amount:'200000',projectId},{accountId:ctx.roles.revenue,amount:'-200000',projectId}]})
-        const id=await proposeProvisionAssessment(ledger.orgId,actors.submitterId,{
-          obligation:{id:randomUUID(),subsidiaryId:ledger.subsidiaryId,bookId:ledger.bookId,currency:'CAD',name:'Construction expected loss',expenseAccountId:ctx.roles.provisionExpense,liabilityAccountId:ctx.roles.provisionLiability,projectId},
-          effectiveOn:ledger.date,idempotencyKey:randomUUID(),reason:'Recognize the current supported contract loss in full',
-          assessment:{presentObligation:true,outflow:'probable',reliablyEstimable:true,evidence:'Approved contract and supported remaining direct and allocated cost forecast.',discounting:'immaterial',discountEvidence:'Work completes shortly and time value is immaterial.',estimate:null},
-          construction:{remainingCost:'950000',terminationAvailable:false,terminationCost:null,relatedAssetsReviewed:true,impairmentEvidence:'Related contract assets have been reviewed and no further impairment is required.'},
-        })
-        await submitFinancialChange(ledger.orgId,id,actors.submitterId)
-        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
-        await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
-        let result:Record<string,unknown>={}
-        const entry=await capture(ctx,'loss-provision',async()=>{result=await applyProvisionAssessment(ledger.orgId,id,actors.submitterId)})
-        const forecast=result.construction as {totalForecastCost:string;expectedLoss:string}
-        return {entries:[entry],values:{totalForecastCost:forecast.totalForecastCost,expectedLoss:forecast.expectedLoss,lossProvision:String(result.liability)}}
-      })
+        await seedApprovalFlow(ledger.orgId, {
+          subjectKind: "financial_change",
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "any",
+          preventSelfApproval: true,
+        });
+        return actors;
+      });
+      return withOrgContext(ledger.orgId, async () => {
+        await postEntry(db, {
+          orgId: ledger.orgId,
+          bookId: ledger.bookId,
+          subsidiaryId: ledger.subsidiaryId,
+          entryNumber: "CONF-RESULTS",
+          postingDate: ledger.date,
+          periodId: ledger.periodId,
+          origin: "manual",
+          currency: "CAD",
+          actorId: actors.submitterId,
+          lines: [
+            { accountId: ctx.roles.provisionExpense, amount: "200000", projectId },
+            { accountId: ctx.roles.revenue, amount: "-200000", projectId },
+          ],
+        });
+        const id = await proposeProvisionAssessment(ledger.orgId, actors.submitterId, {
+          obligation: {
+            id: randomUUID(),
+            subsidiaryId: ledger.subsidiaryId,
+            bookId: ledger.bookId,
+            currency: "CAD",
+            name: "Construction expected loss",
+            expenseAccountId: ctx.roles.provisionExpense,
+            liabilityAccountId: ctx.roles.provisionLiability,
+            projectId,
+          },
+          effectiveOn: ledger.date,
+          idempotencyKey: randomUUID(),
+          reason: "Recognize the current supported contract loss in full",
+          assessment: {
+            presentObligation: true,
+            outflow: "probable",
+            reliablyEstimable: true,
+            evidence:
+              "Approved contract and supported remaining direct and allocated cost forecast.",
+            discounting: "immaterial",
+            discountEvidence: "Work completes shortly and time value is immaterial.",
+            estimate: null,
+          },
+          construction: {
+            remainingCost: "950000",
+            terminationAvailable: false,
+            terminationCost: null,
+            relatedAssetsReviewed: true,
+            impairmentEvidence:
+              "Related contract assets have been reviewed and no further impairment is required.",
+          },
+        });
+        await submitFinancialChange(ledger.orgId, id, actors.submitterId);
+        const gate = (
+          await db.execute<{ id: string }>(
+            sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`,
+            "objects",
+          )
+        )[0]!;
+        await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: "approved" });
+        let result: Record<string, unknown> = {};
+        const entry = await capture(ctx, "loss-provision", async () => {
+          result = await applyProvisionAssessment(ledger.orgId, id, actors.submitterId);
+        });
+        const forecast = result.construction as { totalForecastCost: string; expectedLoss: string };
+        return {
+          entries: [entry],
+          values: {
+            totalForecastCost: forecast.totalForecastCost,
+            expectedLoss: forecast.expectedLoss,
+            lossProvision: String(result.liability),
+          },
+        };
+      });
     },
   },
 ];

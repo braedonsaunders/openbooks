@@ -5,11 +5,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import {
-  factorLabelForPack,
-  PAYROLL_COUNTRY_PACKS,
-  type PayrollCountryPack,
-} from "./packs.ts";
+import { factorLabelForPack, PAYROLL_COUNTRY_PACKS, type PayrollCountryPack } from "./packs.ts";
 import { calculatePub15T } from "./us/pub15t.ts";
 import type { FilingStatus } from "./us/rates.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
@@ -82,7 +78,9 @@ function codeOnly(source: string): string {
   const regexOpens = (): boolean => {
     if (lastSig === "") return true;
     if ("=(:,[!&|?;{".includes(lastSig)) return true;
-    return /(?:^|[^A-Za-z0-9_$])(?:return|typeof|case|do|else|in|of|new|delete|void|yield|await)\s*$/.test(out);
+    return /(?:^|[^A-Za-z0-9_$])(?:return|typeof|case|do|else|in|of|new|delete|void|yield|await)\s*$/.test(
+      out,
+    );
   };
   while (i < source.length) {
     const ch = source[i]!;
@@ -106,7 +104,7 @@ function codeOnly(source: string): string {
       continue;
     }
     if (state === "sq" || state === "dq") {
-      const quote = state === "sq" ? "'" : "\"";
+      const quote = state === "sq" ? "'" : '"';
       if (ch === "\\") {
         i += 2;
         continue;
@@ -172,7 +170,7 @@ function codeOnly(source: string): string {
       i++;
       continue;
     }
-    if (ch === "\"") {
+    if (ch === '"') {
       state = "dq";
       i++;
       continue;
@@ -236,7 +234,8 @@ function blockKeys(block: string): string[] {
  */
 function literalBlocks(clean: string): string[] {
   const blocks: string[] = [];
-  const opener = /(?:return|factors)\s*(?::[^=;]+)?=\s*\{|return\s*\{|(?:const|let|var)\s+factors\s*(?::[^=;]+)?=\s*\{/g;
+  const opener =
+    /(?:return|factors)\s*(?::[^=;]+)?=\s*\{|return\s*\{|(?:const|let|var)\s+factors\s*(?::[^=;]+)?=\s*\{/g;
   let match: RegExpExecArray | null;
   while ((match = opener.exec(clean)) !== null) {
     let depth = 0;
@@ -269,22 +268,16 @@ function collectStatic(dir: string): TracedSet {
       const key = quebecPrefixed ? `QC_${match[1]!}` : match[1]!;
       if (!keys.has(key)) keys.set(key, relative);
     }
-    for (
-      const match of source.matchAll(/factors\.([A-Z][A-Za-z0-9_:]*)\s*=/g)
-    ) {
+    for (const match of source.matchAll(/factors\.([A-Z][A-Za-z0-9_:]*)\s*=/g)) {
       if (!keys.has(match[1]!)) keys.set(match[1]!, relative);
     }
-    for (
-      const match of source.matchAll(/factors\["([A-Z][A-Za-z0-9_:]*)"\]\s*=/g)
-    ) {
+    for (const match of source.matchAll(/factors\["([A-Z][A-Za-z0-9_:]*)"\]\s*=/g)) {
       if (!keys.has(match[1]!)) keys.set(match[1]!, relative);
     }
     const clean = codeOnly(source);
     for (const block of literalBlocks(clean)) {
       for (const key of blockKeys(block)) {
-        const labelled = quebecPrefixed && !key.startsWith("QC_")
-          ? `QC_${key}`
-          : key;
+        const labelled = quebecPrefixed && !key.startsWith("QC_") ? `QC_${key}` : key;
         if (!keys.has(labelled)) keys.set(labelled, relative);
       }
     }
@@ -321,7 +314,8 @@ function collectDynamic(country: string): Map<string, string> {
   if (country === "US") {
     add(
       calculatePub15T({
-        payDate: "2025-06-15", futaRegion: "CA",
+        payDate: "2025-06-15",
+        futaRegion: "CA",
         periodsPerYear: 26,
         wages: "2000",
         supplemental: "500",
@@ -333,13 +327,15 @@ function collectDynamic(country: string): Map<string, string> {
   if (country === "CA") {
     for (const province of ["ON", "QC", "ZZ"] as Province[]) {
       add(
-        calculateT4127(assessedCanadianWages({
-          payDate: "2026-03-15",
-          province,
-          periodsPerYear: 26,
-          income: "2000",
-          nonPeriodic: "500",
-        })).factors,
+        calculateT4127(
+          assessedCanadianWages({
+            payDate: "2026-03-15",
+            province,
+            periodsPerYear: 26,
+            income: "2000",
+            nonPeriodic: "500",
+          }),
+        ).factors,
         `calculateT4127/${province}`,
       );
     }

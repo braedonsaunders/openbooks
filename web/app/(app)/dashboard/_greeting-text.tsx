@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useSyncExternalStore } from 'react'
-import { useTranslations } from 'next-intl'
-import { useViewerFormat } from '@/lib/viewer-format'
-import { buildGreeting } from './_greeting'
+import { useSyncExternalStore } from "react";
+import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
+import { buildGreeting } from "./_greeting";
 
 function subscribe(): () => void {
-  return () => {}
+  return () => {};
 }
 
 /**
@@ -20,20 +20,26 @@ export function GreetingText({
   name,
   serverGreeting,
 }: {
-  name: string | null
-  serverGreeting: string
+  name: string | null;
+  serverGreeting: string;
 }) {
-  const t = useTranslations('dashboard')
-  const { locale, timeZone } = useViewerFormat()
+  const t = useTranslations("dashboard");
+  const { locale, timeZone } = useViewerFormat();
   const text = useSyncExternalStore(
     subscribe,
     () =>
-      buildGreeting(new Date(), name, {
-        morning: t('greeting.morning'),
-        afternoon: t('greeting.afternoon'),
-        evening: t('greeting.evening'),
-      }, timeZone, locale),
+      buildGreeting(
+        new Date(),
+        name,
+        {
+          morning: t("greeting.morning"),
+          afternoon: t("greeting.afternoon"),
+          evening: t("greeting.evening"),
+        },
+        timeZone,
+        locale,
+      ),
     () => serverGreeting,
-  )
-  return <>{text}</>
+  );
+  return <>{text}</>;
 }

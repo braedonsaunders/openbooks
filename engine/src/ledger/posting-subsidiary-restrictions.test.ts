@@ -4,7 +4,11 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "./posting-document.ts";
-import { PostingError, type PostingDocument, type PostingDocumentLine } from "../journal/posting-contracts.ts";
+import {
+  PostingError,
+  type PostingDocument,
+  type PostingDocumentLine,
+} from "../journal/posting-contracts.ts";
 import { RULES } from "./posting-rules.ts";
 import {
   intercompanyBalancingLegs,
@@ -21,8 +25,7 @@ test("uuid-array binding rejects a nullish element instead of emitting a hole", 
   assert.equal(uuidArray([accountId]), `{${accountId}}`);
   assert.throws(
     () => uuidArray([accountId, null]),
-    (error: unknown) =>
-      error instanceof SubsidiaryError && /element 2/.test(error.message),
+    (error: unknown) => error instanceof SubsidiaryError && /element 2/.test(error.message),
   );
 });
 
@@ -34,35 +37,46 @@ test("intercompany FX residual keeps the origin leg transaction amount in docume
   const fxRate = "0.3333333333";
   const ctx: SubsidiaryContext = {
     byId: new Map([
-      [originSubId, {
-        id: originSubId,
-        parentId: null,
-        name: "Origin",
-        baseCurrency: "CAD",
-        isElimination: false,
-        isActive: true,
-      }],
-      [counterSubId, {
-        id: counterSubId,
-        parentId: originSubId,
-        name: "Counter",
-        baseCurrency: "USD",
-        isElimination: false,
-        isActive: true,
-      }],
+      [
+        originSubId,
+        {
+          id: originSubId,
+          parentId: null,
+          name: "Origin",
+          baseCurrency: "CAD",
+          isElimination: false,
+          isActive: true,
+        },
+      ],
+      [
+        counterSubId,
+        {
+          id: counterSubId,
+          parentId: originSubId,
+          name: "Counter",
+          baseCurrency: "USD",
+          isElimination: false,
+          isActive: true,
+        },
+      ],
     ]),
     rootId: originSubId,
     multi: true,
   };
   const runner = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({
-      rows: [{
-        fromId: originSubId,
-        toId: counterSubId,
-        dueFrom: originDueFrom,
-        dueTo: counterDueTo,
-      }],
-    }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({
+        rows: [
+          {
+            fromId: originSubId,
+            toId: counterSubId,
+            dueFrom: originDueFrom,
+            dueTo: counterDueTo,
+          },
+        ],
+      }).then(<T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result,
+      ),
   } as unknown as Pick<typeof db, "execute">;
   const legs = await intercompanyBalancingLegs(runner, {
     orgId: randomUUID(),
@@ -202,11 +216,13 @@ test(
           /no resolvable account/.test(error.message),
       );
 
-      const residue = (await db.execute<{
-        status: string;
-        entries: number;
-        journalLines: number;
-      }>(sql`
+      const residue = (
+        await db.execute<{
+          status: string;
+          entries: number;
+          journalLines: number;
+        }>(
+          sql`
         select d.status,
                count(distinct e.id)::int as entries,
                count(jl.id)::int as "journalLines"
@@ -216,7 +232,10 @@ test(
           left join journal_lines jl
             on jl.org_id = e.org_id and jl.entry_id = e.id
          where d.org_id = ${org.orgId} and d.id = ${documentId}
-         group by d.id`, "objects"))[0]!;
+         group by d.id`,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(residue, {
         status: "approved",
         entries: 0,
@@ -250,11 +269,13 @@ test(
       `);
 
       assert.ok(await postDocument(documentId, deps));
-      const posted = (await db.execute<{
-        status: string;
-        entries: number;
-        journalLines: number;
-      }>(sql`
+      const posted = (
+        await db.execute<{
+          status: string;
+          entries: number;
+          journalLines: number;
+        }>(
+          sql`
         select d.status,
                count(distinct e.id)::int as entries,
                count(jl.id)::int as "journalLines"
@@ -264,7 +285,10 @@ test(
           left join journal_lines jl
             on jl.org_id = e.org_id and jl.entry_id = e.id
          where d.org_id = ${org.orgId} and d.id = ${documentId}
-         group by d.id`, "objects"))[0]!;
+         group by d.id`,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(posted, {
         status: "posted",
         entries: 1,

@@ -64,8 +64,12 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
-        pensionable: "1500.00", insurable: "1500.00", qpipInsurable: "1500.00",
-        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
+        pensionable: "1500.00",
+        insurable: "1500.00",
+        qpipInsurable: "1500.00",
+        pensionableNonPeriodic: "0",
+        insurableNonPeriodic: "0",
+        qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "SK",
         periodsPerYear: 52,
@@ -122,8 +126,12 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
-        pensionable: "2000.00", insurable: "2000.00", qpipInsurable: "2000.00",
-        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
+        pensionable: "2000.00",
+        insurable: "2000.00",
+        qpipInsurable: "2000.00",
+        pensionableNonPeriodic: "0",
+        insurableNonPeriodic: "0",
+        qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "SK",
         periodsPerYear: 26,
@@ -173,8 +181,12 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
-        pensionable: "2000.00", insurable: "2000.00", qpipInsurable: "2000.00",
-        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
+        pensionable: "2000.00",
+        insurable: "2000.00",
+        qpipInsurable: "2000.00",
+        pensionableNonPeriodic: "0",
+        insurableNonPeriodic: "0",
+        qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "SK",
         periodsPerYear: 26,
@@ -227,8 +239,12 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
-        pensionable: "1500.00", insurable: "1500.00", qpipInsurable: "1500.00",
-        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",
+        pensionable: "1500.00",
+        insurable: "1500.00",
+        qpipInsurable: "1500.00",
+        pensionableNonPeriodic: "0",
+        insurableNonPeriodic: "0",
+        qpipNonPeriodic: "0",
         payDate: "2026-01-15",
         province: "QC",
         periodsPerYear: 52,
@@ -284,8 +300,12 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateT4127({
-        pensionable: "2000.00", insurable: "2000.00", qpipInsurable: "2000.00",
-        pensionableNonPeriodic: "2000.00", insurableNonPeriodic: "2000.00", qpipNonPeriodic: "2000.00",
+        pensionable: "2000.00",
+        insurable: "2000.00",
+        qpipInsurable: "2000.00",
+        pensionableNonPeriodic: "2000.00",
+        insurableNonPeriodic: "2000.00",
+        qpipNonPeriodic: "2000.00",
         payDate: "2026-01-15",
         province: "ON",
         periodsPerYear: 52,
@@ -367,7 +387,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
 
   {
     id: "payroll-us-supplemental-medicare-cap",
-    title: "Supplemental wages past $1M and wages past the Social Security base are handled exactly",
+    title:
+      "Supplemental wages past $1M and wages past the Social Security base are handled exactly",
     citations: [
       {
         standard: "IRS Pub 15",
@@ -432,7 +453,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     citations: [
       {
         standard: "AL DOR",
-        reference: "Withholding Tax Tables and Instructions, rev. Aug 2024 — official M-2 / $850 example",
+        reference:
+          "Withholding Tax Tables and Instructions, rev. Aug 2024 — official M-2 / $850 example",
         kind: "illustrative-example",
         requirement:
           "The booklet's formula on a married employee with 2 dependents earning $850.00 weekly and $35.19 of federal withholding produces $29.59 of Alabama withholding.",
@@ -491,12 +513,40 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     expected: {
       values: { periodicTax: "0.0000" },
     },
-    run:()=>{
-      const result=calculateT4127({
-        pensionable: "10000", insurable: "10000", qpipInsurable: "10000",
-        pensionableNonPeriodic: "0", insurableNonPeriodic: "0", qpipNonPeriodic: "0",payDate:"2026-06-30",province:"AB",periodsPerYear:4,income:"10000",cppExempt:true,eiExempt:true,federalClaimCode:1,provincialClaimCode:1,
-        averaging:{elapsedPeriods:2,income:"60000",pensionDeductions:"0",alimonyDeductions:"0",unionDues:"0",f5A:"0",pensionablePeriodic:"0",insurablePeriodic:"0",qpipPeriodic:"0",pensionableNonPeriodic:"0",insurableNonPeriodic:"0",qpipNonPeriodic:"0",periodicTax:"18655.02",bonusTax:"0"}})
-      return {values:{periodicTax:result.periodicTax}}
+    run: () => {
+      const result = calculateT4127({
+        pensionable: "10000",
+        insurable: "10000",
+        qpipInsurable: "10000",
+        pensionableNonPeriodic: "0",
+        insurableNonPeriodic: "0",
+        qpipNonPeriodic: "0",
+        payDate: "2026-06-30",
+        province: "AB",
+        periodsPerYear: 4,
+        income: "10000",
+        cppExempt: true,
+        eiExempt: true,
+        federalClaimCode: 1,
+        provincialClaimCode: 1,
+        averaging: {
+          elapsedPeriods: 2,
+          income: "60000",
+          pensionDeductions: "0",
+          alimonyDeductions: "0",
+          unionDues: "0",
+          f5A: "0",
+          pensionablePeriodic: "0",
+          insurablePeriodic: "0",
+          qpipPeriodic: "0",
+          pensionableNonPeriodic: "0",
+          insurableNonPeriodic: "0",
+          qpipNonPeriodic: "0",
+          periodicTax: "18655.02",
+          bonusTax: "0",
+        },
+      });
+      return { values: { periodicTax: result.periodicTax } };
     },
   },
 
@@ -526,10 +576,15 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     },
     run: () => {
       const result = calculateTp1015({
-        payDate: "2026-01-15", periodsPerYear: 26,
-        income: "4000.00", pensionDeductions: "200.00",
-        qpp: "243.52", pensionable: "4000.00", personalCredits: "21830.00",
-        ftqSharesPerPeriod: "100.00", fondactionSharesPerPeriod: "150.00",
+        payDate: "2026-01-15",
+        periodsPerYear: 26,
+        income: "4000.00",
+        pensionDeductions: "200.00",
+        qpp: "243.52",
+        pensionable: "4000.00",
+        personalCredits: "21830.00",
+        ftqSharesPerPeriod: "100.00",
+        fondactionSharesPerPeriod: "150.00",
       });
       return { values: { provincialTax: result.periodicTax, taxableIncome: result.factors.QC_I! } };
     },

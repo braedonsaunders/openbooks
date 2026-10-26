@@ -9,4 +9,4 @@
  * It is the chart a company starts on when no industry template fits and
  * the operator chooses features individually.
  */
-export const NEUTRAL_INDUSTRY_KEY = 'general_business'
+export const NEUTRAL_INDUSTRY_KEY = "general_business";

@@ -10,8 +10,10 @@ export function mergeStatutoryFactors(
   for (const [key, value] of additions) {
     if (key in factors && factors[key] !== value) {
       throw new PayrollError(
-        `${source} factor "${key}" collides with the ${country} pack's statutory factors — `
-        + (source === "program" ? "rename the program's stubFactorKey" : "rename the levy's factorKey"),
+        `${source} factor "${key}" collides with the ${country} pack's statutory factors — ` +
+          (source === "program"
+            ? "rename the program's stubFactorKey"
+            : "rename the levy's factorKey"),
       );
     }
     factors[key] = value;

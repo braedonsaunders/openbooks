@@ -47,9 +47,7 @@ test("rejects a change_status to 'approved' on a document flow", () => {
   );
   const res = lintFlowGraphForSubject("vendor_bill", g);
   assert.equal(res.ok, false);
-  assert.ok(
-    res.errors.some((e) => /change_status.*approved.*engine-enforced/i.test(e)),
-  );
+  assert.ok(res.errors.some((e) => /change_status.*approved.*engine-enforced/i.test(e)));
 });
 
 function scheduledGraph(cron: string) {
@@ -78,10 +76,7 @@ function scheduledGraph(cron: string) {
 }
 
 test("rejects a scheduled trigger whose cron can never fire, naming the node", () => {
-  const res = lintFlowGraphForSubject(
-    "vendor_bill",
-    scheduledGraph("not-a-cron"),
-  );
+  const res = lintFlowGraphForSubject("vendor_bill", scheduledGraph("not-a-cron"));
   assert.equal(res.ok, false);
   assert.ok(
     res.errors.some((e) =>
@@ -92,13 +87,8 @@ test("rejects a scheduled trigger whose cron can never fire, naming the node", (
 });
 
 test("a scheduled trigger with a valid cron draws no cron refusal", () => {
-  const res = lintFlowGraphForSubject(
-    "vendor_bill",
-    scheduledGraph("0 9 * * *"),
-  );
-  const cronErrors = res.ok
-    ? []
-    : res.errors.filter((e) => /cron|timezone/i.test(e));
+  const res = lintFlowGraphForSubject("vendor_bill", scheduledGraph("0 9 * * *"));
+  const cronErrors = res.ok ? [] : res.errors.filter((e) => /cron|timezone/i.test(e));
   assert.deepEqual(cronErrors, []);
 });
 
@@ -166,9 +156,7 @@ test("rejects an authored bank-detail approval without a gate", () => {
   const res = lintFlowGraphForSubject("party_bank_account", g);
   assert.equal(res.ok, false);
   assert.ok(
-    res.errors.some((e) =>
-      /change_status.*approved.*bank-detail.*engine-enforced/i.test(e),
-    ),
+    res.errors.some((e) => /change_status.*approved.*bank-detail.*engine-enforced/i.test(e)),
   );
 });
 
@@ -190,14 +178,10 @@ test("accepts a gate-only bank-detail approval flow (engine releases it)", () =>
 
 test("bank-detail adapter rejects authored approval at the runtime boundary", async () => {
   await assert.rejects(
-    bankAccountsFlowAdapter.changeStatus(
-      "not-a-real-bank-account",
-      "approved",
-      {
-        orgId: "org",
-        userId: "author",
-      },
-    ),
+    bankAccountsFlowAdapter.changeStatus("not-a-real-bank-account", "approved", {
+      orgId: "org",
+      userId: "author",
+    }),
     /bank-detail approval release is engine-enforced.*approval gate/i,
   );
   assert.equal(bankAccountsFlowAdapter.profile.pinsSubmissionPolicy, true);
@@ -246,9 +230,7 @@ test("refuses a graph with more than one trigger, naming every trigger by kind",
   const res = lintFlowGraphForSubject("vendor_bill", g);
   assert.equal(res.ok, false);
   assert.ok(
-    res.errors.some((e) =>
-      /2 triggers.*"on_submit".*"manual".*exactly one trigger/i.test(e),
-    ),
+    res.errors.some((e) => /2 triggers.*"on_submit".*"manual".*exactly one trigger/i.test(e)),
     `expected a named single-trigger refusal, got: ${res.errors.join("; ")}`,
   );
 });
@@ -353,22 +335,17 @@ test("names posting and create triggers that can never fire for quotes", () => {
   const res = lintFlowGraphForSubject("quote", g);
   assert.equal(res.ok, false);
   assert.ok(
-    res.errors.some((error) =>
-      /Trigger t-post: "before_post" never fires for Quote/i.test(error),
-    ),
+    res.errors.some((error) => /Trigger t-post: "before_post" never fires for Quote/i.test(error)),
     `expected a named posting refusal, got: ${res.errors.join("; ")}`,
   );
   assert.ok(
-    res.errors.some((error) =>
-      /Trigger t-create: "on_create" never fires for Quote/i.test(error),
-    ),
+    res.errors.some((error) => /Trigger t-create: "on_create" never fires for Quote/i.test(error)),
     `expected a named create refusal, got: ${res.errors.join("; ")}`,
   );
 });
 
 test("board delivery drafts keep generic timing neutral; explicit multi-time clocks preserve paired times and require timezone/selection", async () => {
-  const { scheduleBoardTimerGraph } =
-    await import("./schedule-board-adapter.ts");
+  const { scheduleBoardTimerGraph } = await import("./schedule-board-adapter.ts");
   const { scheduledTriggerCrons } = await import("./scheduled.ts");
   const id = "00000000-0000-4000-8000-000000000001";
   const ordinary = scheduleBoardTimerGraph(id, "America/Toronto");
@@ -400,9 +377,7 @@ test("board delivery drafts keep generic timing neutral; explicit multi-time clo
     assert.equal(refused.ok, false);
     assert.ok(
       refused.errors.some((error) =>
-        field === "tz"
-          ? /timezone/.test(error)
-          : /record selection/.test(error),
+        field === "tz" ? /timezone/.test(error) : /record selection/.test(error),
       ),
     );
   }

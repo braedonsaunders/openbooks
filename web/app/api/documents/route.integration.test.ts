@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import type { SessionUser } from '../../../lib/auth'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../../../lib/auth";
 
 /**
  * POST /api/documents: uniform unsaved-create Save for the nine shared
@@ -20,44 +20,59 @@ import type { SessionUser } from '../../../lib/auth'
  * Only the session gate is doubled. Validation, UUID, decimal,
  * canonical-JSON, numbering, and the JSON boundary all run REAL.
  */
-const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __documentCreateUser: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __documentCreateUser: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
-      return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
+    if (specifier === "next-intl/server") {
+      return virtual(
+        'export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}',
+      );
     }
-    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-      return virtual('export async function currentUser(){return globalThis.__documentCreateUser.user}')
+    if (
+      (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
+      context.parentURL?.endsWith("/web/lib/authz.ts")
+    ) {
+      return virtual(
+        "export async function currentUser(){return globalThis.__documentCreateUser.user}",
+      );
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { POST } = await import('./route')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { POST } = await import("./route");
 
 const post = (body: unknown, key: string) =>
   POST(
-    new Request('http://audit.local/api/documents', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'Idempotency-Key': key },
+    new Request("http://audit.local/api/documents", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": key },
       body: JSON.stringify(body),
     }),
-  )
+  );
 
 async function setup() {
-  const org = await withBypassContext(() => createScratchOrg())
-  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Doc creator', 'doc_creator'))
+  const org = await withBypassContext(() => createScratchOrg());
+  const actor = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Doc creator", "doc_creator"),
+  );
   await withBypassContext(() =>
-    db.execute(sql`update app_roles set permissions='["ar.read","ar.create","ap.read","ap.create","gl.post","gl.read","banking.read"]'::jsonb where org_id=${org.orgId} and key='doc_creator'`),
-  )
+    db.execute(
+      sql`update app_roles set permissions='["ar.read","ar.create","ap.read","ap.create","gl.post","gl.read","banking.read"]'::jsonb where org_id=${org.orgId} and key='doc_creator'`,
+    ),
+  );
   // Second bank account (transfer legs) + card-liability account (card control).
-  const bank2 = randomUUID()
-  const bank3 = randomUUID()
-  const cardLiability = randomUUID()
+  const bank2 = randomUUID();
+  const bank3 = randomUUID();
+  const cardLiability = randomUUID();
   await withBypassContext(async () => {
     // A reconcilable account must name the single currency it reconciles in:
     // accounts_reconcilable_currency_required refuses `reconcilable` with a
@@ -66,354 +81,431 @@ async function setup() {
     // root subsidiary rather than hardcoded, so the fixture follows
     // ORG_CURRENCY instead of pinning these legs to one jurisdiction.
     const baseCurrency = sql`(select base_currency from subsidiaries
-      where org_id = ${org.orgId} and parent_id is null limit 1)`
+      where org_id = ${org.orgId} and parent_id is null limit 1)`;
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
-      values (${bank2}, ${org.orgId}, '1001', 'Savings', 'asset_bank', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`)
+      values (${bank2}, ${org.orgId}, '1001', 'Savings', 'asset_bank', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`);
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
-      values (${bank3}, ${org.orgId}, '1002', 'Operating', 'asset_bank', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`)
+      values (${bank3}, ${org.orgId}, '1002', 'Operating', 'asset_bank', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`);
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
-      values (${cardLiability}, ${org.orgId}, '2100', 'Corp Card', 'liability_card', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`)
-  })
+      values (${cardLiability}, ${org.orgId}, '2100', 'Corp Card', 'liability_card', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`);
+  });
   state.user = {
-    id: actor, orgId: org.orgId, name: 'Doc creator', email: 'creator@scratch.test',
-    roles: [], isSuperAdmin: false, envKind: 'production',
-    productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor,
-  }
-  return { org, actor, bank2, bank3, cardLiability }
+    id: actor,
+    orgId: org.orgId,
+    name: "Doc creator",
+    email: "creator@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: org.orgId,
+    homeOrgId: org.orgId,
+    homeUserId: actor,
+  };
+  return { org, actor, bank2, bank3, cardLiability };
 }
 
 const docCount = (orgId: string, id: string) =>
   withBypassContext(async () =>
     Number(
-      (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!.n,
+      (
+        await db.execute<{ n: string }>(
+          sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.n,
     ),
-  )
+  );
 
 const auditRows = (orgId: string, id: string) =>
-  withBypassContext(async () =>
-    await db.execute<{ action: string; requestId: string | null; changes: unknown }>(sql`
+  withBypassContext(
+    async () =>
+      await db.execute<{ action: string; requestId: string | null; changes: unknown }>(
+        sql`
         select action, request_id as "requestId", changes from audit_log
          where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
-         order by at asc`, 'objects'),
-  )
+         order by at asc`,
+        "objects",
+      ),
+  );
 
 const seqNext = (orgId: string, kind: string) =>
-  withBypassContext(async () =>
-    (await db.execute<{ n: number }>(sql`select next_number as n from number_sequences where org_id = ${orgId} and document_kind = ${kind}`, 'objects'))[0]?.n ?? null,
-  )
+  withBypassContext(
+    async () =>
+      (
+        await db.execute<{ n: number }>(
+          sql`select next_number as n from number_sequences where org_id = ${orgId} and document_kind = ${kind}`,
+          "objects",
+        )
+      )[0]?.n ?? null,
+  );
 
-const bodies = (org: Awaited<ReturnType<typeof setup>>['org'], bank2: string, bank3: string, cardLiability: string) => ({
+const bodies = (
+  org: Awaited<ReturnType<typeof setup>>["org"],
+  bank2: string,
+  bank3: string,
+  cardLiability: string,
+) => ({
   customer_invoice: {
-    kind: 'customer_invoice', partyId: org.customerId, documentDate: org.date,
-    lines: [{ accountId: org.accounts.revenue, amount: '100', description: 'Widget' }],
+    kind: "customer_invoice",
+    partyId: org.customerId,
+    documentDate: org.date,
+    lines: [{ accountId: org.accounts.revenue, amount: "100", description: "Widget" }],
   },
   customer_credit: {
-    kind: 'customer_credit', partyId: org.customerId, documentDate: org.date,
-    lines: [{ accountId: org.accounts.revenue, amount: '40', description: 'Return' }],
+    kind: "customer_credit",
+    partyId: org.customerId,
+    documentDate: org.date,
+    lines: [{ accountId: org.accounts.revenue, amount: "40", description: "Return" }],
   },
   vendor_bill: {
-    kind: 'vendor_bill', partyId: org.vendorId, documentDate: org.date,
-    lines: [{ accountId: org.accounts.cogs, amount: '50', description: 'Parts' }],
+    kind: "vendor_bill",
+    partyId: org.vendorId,
+    documentDate: org.date,
+    lines: [{ accountId: org.accounts.cogs, amount: "50", description: "Parts" }],
   },
   vendor_credit: {
-    kind: 'vendor_credit', partyId: org.vendorId, documentDate: org.date,
-    lines: [{ accountId: org.accounts.cogs, amount: '20', description: 'Rebate' }],
+    kind: "vendor_credit",
+    partyId: org.vendorId,
+    documentDate: org.date,
+    lines: [{ accountId: org.accounts.cogs, amount: "20", description: "Rebate" }],
   },
   card_charge: {
-    kind: 'card_charge', documentDate: org.date,
+    kind: "card_charge",
+    documentDate: org.date,
     custom: { controlAccountId: cardLiability },
-    lines: [{ accountId: org.accounts.cogs, amount: '25', description: 'Supplies' }],
+    lines: [{ accountId: org.accounts.cogs, amount: "25", description: "Supplies" }],
   },
   card_refund: {
-    kind: 'card_refund', documentDate: org.date,
-    lines: [{ accountId: org.accounts.cogs, amount: '10', description: 'Refund' }],
+    kind: "card_refund",
+    documentDate: org.date,
+    lines: [{ accountId: org.accounts.cogs, amount: "10", description: "Refund" }],
   },
   check: {
-    kind: 'check', documentDate: org.date, referenceNumber: '1234',
+    kind: "check",
+    documentDate: org.date,
+    referenceNumber: "1234",
     custom: { controlAccountId: bank2 },
-    lines: [{ accountId: org.accounts.cogs, amount: '75', description: 'Rent' }],
+    lines: [{ accountId: org.accounts.cogs, amount: "75", description: "Rent" }],
   },
   deposit: {
-    kind: 'deposit', documentDate: org.date,
+    kind: "deposit",
+    documentDate: org.date,
     custom: { controlAccountId: bank2 },
-    lines: [{ accountId: org.accounts.revenue, amount: '200', description: 'Cash' }],
+    lines: [{ accountId: org.accounts.revenue, amount: "200", description: "Cash" }],
   },
   transfer: {
-    kind: 'transfer', documentDate: org.date,
+    kind: "transfer",
+    documentDate: org.date,
     lines: [
-      { accountId: bank3, amount: '50' },
-      { accountId: bank2, amount: '0' },
+      { accountId: bank3, amount: "50" },
+      { accountId: bank2, amount: "0" },
     ],
   },
-})
+});
 
 const PREFIX: Record<string, string> = {
-  customer_invoice: 'INV-', customer_credit: 'CM-', vendor_bill: 'BILL-', vendor_credit: 'VCRED-',
-  card_charge: 'CC-', card_refund: 'CRF-', check: 'CHK-', deposit: 'DEP-', transfer: 'TRF-',
-}
+  customer_invoice: "INV-",
+  customer_credit: "CM-",
+  vendor_bill: "BILL-",
+  vendor_credit: "VCRED-",
+  card_charge: "CC-",
+  card_refund: "CRF-",
+  check: "CHK-",
+  deposit: "DEP-",
+  transfer: "TRF-",
+};
 
-test('every supported kind creates a draft with a Save-allocated number', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
+test("every supported kind creates a draft with a Save-allocated number", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
   try {
-    const all = bodies(org, bank2, bank3, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability);
     await withOrgContext(org.orgId, async () => {
       for (const kind of Object.keys(all)) {
-        const key = randomUUID()
-        const before = await seqNext(org.orgId, kind)
-        const response = await post(all[kind as keyof typeof all], key)
-        assert.equal(response.status, 201, `${kind} → ${JSON.stringify(await response.clone().json())}`)
-        const doc = (await response.json()) as { doc: Record<string, unknown> }
-        assert.equal(doc.doc.kind, kind)
-        assert.equal(doc.doc.status, 'draft')
-        assert.equal(doc.doc.id, key)
+        const key = randomUUID();
+        const before = await seqNext(org.orgId, kind);
+        const response = await post(all[kind as keyof typeof all], key);
+        assert.equal(
+          response.status,
+          201,
+          `${kind} → ${JSON.stringify(await response.clone().json())}`,
+        );
+        const doc = (await response.json()) as { doc: Record<string, unknown> };
+        assert.equal(doc.doc.kind, kind);
+        assert.equal(doc.doc.status, "draft");
+        assert.equal(doc.doc.id, key);
         assert.ok(
-          typeof doc.doc.document_number === 'string' && doc.doc.document_number.startsWith(PREFIX[kind]!),
+          typeof doc.doc.document_number === "string" &&
+            doc.doc.document_number.startsWith(PREFIX[kind]!),
           `${kind} number ${String(doc.doc.document_number)}`,
-        )
-        assert.ok(doc.doc.subsidiary_id, `${kind} carries a subsidiary`)
-        assert.equal(doc.doc.currency, 'CAD')
+        );
+        assert.ok(doc.doc.subsidiary_id, `${kind} carries a subsidiary`);
+        assert.equal(doc.doc.currency, "CAD");
         // The number allocates here on Save: the sequence advances exactly one.
-        const after = await seqNext(org.orgId, kind)
-        assert.equal(after, (before ?? 0) + 1, `${kind} sequence`)
+        const after = await seqNext(org.orgId, kind);
+        assert.equal(after, (before ?? 0) + 1, `${kind} sequence`);
       }
-    })
+    });
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('first create emits exactly two audit events: insert image plus initialization-to-final update', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
+test("first create emits exactly two audit events: insert image plus initialization-to-final update", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
   try {
-    const key = randomUUID()
-    const all = bodies(org, bank2, bank3, cardLiability)
-    let number = ''
+    const key = randomUUID();
+    const all = bodies(org, bank2, bank3, cardLiability);
+    let number = "";
     await withOrgContext(org.orgId, async () => {
-      const response = await post(all.customer_invoice, key)
-      assert.equal(response.status, 201)
-      number = String(((await response.json()) as { doc: Record<string, unknown> }).doc.document_number)
-    })
-    const audits = await auditRows(org.orgId, key)
-    assert.deepEqual(audits.map((a) => [a.action, a.requestId]), [
-      ['insert', key],
-      ['update', 'ui'],
-    ])
-    const insertAfter = (audits[0]!.changes as { after: Record<string, unknown> }).after
-    assert.equal(insertAfter.kind, 'customer_invoice')
-    assert.equal(insertAfter.document_number, number)
-    assert.equal(insertAfter.status, 'draft')
+      const response = await post(all.customer_invoice, key);
+      assert.equal(response.status, 201);
+      number = String(
+        ((await response.json()) as { doc: Record<string, unknown> }).doc.document_number,
+      );
+    });
+    const audits = await auditRows(org.orgId, key);
+    assert.deepEqual(
+      audits.map((a) => [a.action, a.requestId]),
+      [
+        ["insert", key],
+        ["update", "ui"],
+      ],
+    );
+    const insertAfter = (audits[0]!.changes as { after: Record<string, unknown> }).after;
+    assert.equal(insertAfter.kind, "customer_invoice");
+    assert.equal(insertAfter.document_number, number);
+    assert.equal(insertAfter.status, "draft");
     // The paired update shows initialization → final saved state.
     // The saved image is the record's full shape, so the header total lives
     // under `document` — asserting a flat `after.total` read undefined and
     // compared NaN, which is a pass-shaped failure waiting for a real total to
     // be wrong. Name the envelope so a reshape fails loudly instead.
     const updateChanges = audits[1]!.changes as {
-      mode: string
-      after: { document: { total: string } }
-    }
-    assert.equal(updateChanges.mode, 'record_update')
-    assert.deepEqual(
-      Object.keys(updateChanges.after).sort(),
-      ['applications', 'document', 'glImpact', 'lines', 'taxComponents'],
-    )
-    assert.equal(Number(updateChanges.after.document.total), 100)
+      mode: string;
+      after: { document: { total: string } };
+    };
+    assert.equal(updateChanges.mode, "record_update");
+    assert.deepEqual(Object.keys(updateChanges.after).sort(), [
+      "applications",
+      "document",
+      "glImpact",
+      "lines",
+      "taxComponents",
+    ]);
+    assert.equal(Number(updateChanges.after.document.total), 100);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('exact replay returns 200 with no new rows and no sequence burn', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
+test("exact replay returns 200 with no new rows and no sequence burn", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
   try {
-    const key = randomUUID()
-    const all = bodies(org, bank2, bank3, cardLiability)
-    let first: { doc: Record<string, unknown> }
+    const key = randomUUID();
+    const all = bodies(org, bank2, bank3, cardLiability);
+    let first: { doc: Record<string, unknown> };
     await withOrgContext(org.orgId, async () => {
-      const created = await post(all.vendor_bill, key)
-      assert.equal(created.status, 201)
-      first = (await created.json()) as { doc: Record<string, unknown> }
-    })
-    const seqBefore = await seqNext(org.orgId, 'vendor_bill')
-    const auditsBefore = await auditRows(org.orgId, key)
+      const created = await post(all.vendor_bill, key);
+      assert.equal(created.status, 201);
+      first = (await created.json()) as { doc: Record<string, unknown> };
+    });
+    const seqBefore = await seqNext(org.orgId, "vendor_bill");
+    const auditsBefore = await auditRows(org.orgId, key);
     await withOrgContext(org.orgId, async () => {
-      const replayed = await post(all.vendor_bill, key)
-      assert.equal(replayed.status, 200)
-      const again = (await replayed.json()) as { doc: Record<string, unknown> }
-      assert.equal(again.doc.id, key)
-      assert.equal(again.doc.document_number, first!.doc.document_number)
-    })
-    assert.equal(await seqNext(org.orgId, 'vendor_bill'), seqBefore, 'replay burns no number')
-    assert.equal((await auditRows(org.orgId, key)).length, auditsBefore.length, 'replay writes no audit')
-    assert.equal(await docCount(org.orgId, key), 1)
+      const replayed = await post(all.vendor_bill, key);
+      assert.equal(replayed.status, 200);
+      const again = (await replayed.json()) as { doc: Record<string, unknown> };
+      assert.equal(again.doc.id, key);
+      assert.equal(again.doc.document_number, first!.doc.document_number);
+    });
+    assert.equal(await seqNext(org.orgId, "vendor_bill"), seqBefore, "replay burns no number");
+    assert.equal(
+      (await auditRows(org.orgId, key)).length,
+      auditsBefore.length,
+      "replay writes no audit",
+    );
+    assert.equal(await docCount(org.orgId, key), 1);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('changed payload on the same key is a 409 and changes nothing', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
+test("changed payload on the same key is a 409 and changes nothing", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
   try {
-    const key = randomUUID()
-    const all = bodies(org, bank2, bank3, cardLiability)
+    const key = randomUUID();
+    const all = bodies(org, bank2, bank3, cardLiability);
     await withOrgContext(org.orgId, async () => {
-      assert.equal((await post(all.check, key)).status, 201)
-      const changed = { ...all.check, referenceNumber: '9999' }
-      const conflict = await post(changed, key)
-      assert.equal(conflict.status, 409)
-      assert.deepEqual(await conflict.json(), { code: 'document_create_conflict' })
-    })
-    const audits = await auditRows(org.orgId, key)
-    assert.equal(audits.length, 2, 'conflict writes no audit')
-    const doc = await withBypassContext(async () =>
-      (await db.execute<{ n: string }>(sql`select reference_number as n from documents where id = ${key} and org_id = ${org.orgId}`, 'objects'))[0],
-    )
-    assert.equal(doc?.n, '1234', 'original row untouched')
+      assert.equal((await post(all.check, key)).status, 201);
+      const changed = { ...all.check, referenceNumber: "9999" };
+      const conflict = await post(changed, key);
+      assert.equal(conflict.status, 409);
+      assert.deepEqual(await conflict.json(), { code: "document_create_conflict" });
+    });
+    const audits = await auditRows(org.orgId, key);
+    assert.equal(audits.length, 2, "conflict writes no audit");
+    const doc = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ n: string }>(
+            sql`select reference_number as n from documents where id = ${key} and org_id = ${org.orgId}`,
+            "objects",
+          )
+        )[0],
+    );
+    assert.equal(doc?.n, "1234", "original row untouched");
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('cross-org key collision is a 409 that discloses nothing', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
-  const other = await withBypassContext(() => createScratchOrg())
+test("cross-org key collision is a 409 that discloses nothing", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
+  const other = await withBypassContext(() => createScratchOrg());
   try {
-    const key = randomUUID()
+    const key = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`
         insert into documents (id, org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total, created_by)
-        values (${key}, ${other.orgId}, 'vendor_bill', 'draft', 'BILL-X', ${other.subsidiaryId}, ${other.date}, 'CAD', '0', '0', '0', ${other.orgId})`)
-    })
-    const all = bodies(org, bank2, bank3, cardLiability)
+        values (${key}, ${other.orgId}, 'vendor_bill', 'draft', 'BILL-X', ${other.subsidiaryId}, ${other.date}, 'CAD', '0', '0', '0', ${other.orgId})`);
+    });
+    const all = bodies(org, bank2, bank3, cardLiability);
     await withOrgContext(org.orgId, async () => {
-      const response = await post(all.vendor_bill, key)
-      assert.equal(response.status, 409)
-      assert.deepEqual(await response.json(), { code: 'document_create_conflict' })
-    })
-    assert.equal(await docCount(org.orgId, key), 0, 'no row claimed in this org')
-    assert.equal((await auditRows(org.orgId, key)).length, 0, 'no audit in this org')
+      const response = await post(all.vendor_bill, key);
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "document_create_conflict" });
+    });
+    assert.equal(await docCount(org.orgId, key), 0, "no row claimed in this org");
+    assert.equal((await auditRows(org.orgId, key)).length, 0, "no audit in this org");
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-    await withBypassContext(() => dropScratchOrg(other.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(other.orgId));
   }
-})
+});
 
-test('late writer failure rolls back everything: zero row, zero audit, zero sequence, reusable key', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
+test("late writer failure rolls back everything: zero row, zero audit, zero sequence, reusable key", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
   try {
-    const key = randomUUID()
-    const all = bodies(org, bank2, bank3, cardLiability)
+    const key = randomUUID();
+    const all = bodies(org, bank2, bank3, cardLiability);
     // A foreign line account passes every route precheck and fails deep in
     // the shared writer — after the claim, number, and audit would have
     // committed in a non-atomic design.
     const bad = {
       ...all.customer_invoice,
-      lines: [{ accountId: randomUUID(), amount: '100', description: 'Ghost' }],
-    }
-    const seqBefore = await seqNext(org.orgId, 'customer_invoice')
+      lines: [{ accountId: randomUUID(), amount: "100", description: "Ghost" }],
+    };
+    const seqBefore = await seqNext(org.orgId, "customer_invoice");
     await withOrgContext(org.orgId, async () => {
-      const refused = await post(bad, key)
-      assert.equal(refused.status, 404)
-      assert.deepEqual(await refused.json(), { error: 'account not found for this subsidiary' })
-    })
-    assert.equal(await docCount(org.orgId, key), 0, 'no document row')
-    assert.equal((await auditRows(org.orgId, key)).length, 0, 'no audit insert')
-    assert.equal(await seqNext(org.orgId, 'customer_invoice'), seqBefore, 'no sequence burn')
+      const refused = await post(bad, key);
+      assert.equal(refused.status, 404);
+      assert.deepEqual(await refused.json(), { error: "account not found for this subsidiary" });
+    });
+    assert.equal(await docCount(org.orgId, key), 0, "no document row");
+    assert.equal((await auditRows(org.orgId, key)).length, 0, "no audit insert");
+    assert.equal(await seqNext(org.orgId, "customer_invoice"), seqBefore, "no sequence burn");
     // The key was never claimed: the corrected request proceeds as fresh.
     await withOrgContext(org.orgId, async () => {
-      const retried = await post(all.customer_invoice, key)
-      assert.equal(retried.status, 201, JSON.stringify(await retried.clone().json()))
-    })
-    assert.equal(await docCount(org.orgId, key), 1)
+      const retried = await post(all.customer_invoice, key);
+      assert.equal(retried.status, 201, JSON.stringify(await retried.clone().json()));
+    });
+    assert.equal(await docCount(org.orgId, key), 1);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('pre-transaction provider/shape refusal writes nothing', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
+test("pre-transaction provider/shape refusal writes nothing", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
   try {
-    const key = randomUUID()
-    const all = bodies(org, bank2, bank3, cardLiability)
+    const key = randomUUID();
+    const all = bodies(org, bank2, bank3, cardLiability);
     const bad = {
       ...all.vendor_bill,
-      lines: [{ accountId: org.accounts.cogs, amount: 'not-an-amount', description: 'Bad' }],
-    }
+      lines: [{ accountId: org.accounts.cogs, amount: "not-an-amount", description: "Bad" }],
+    };
     await withOrgContext(org.orgId, async () => {
-      const refused = await post(bad, key)
-      assert.equal(refused.status, 422)
-    })
-    assert.equal(await docCount(org.orgId, key), 0, 'no document row')
-    assert.equal((await auditRows(org.orgId, key)).length, 0, 'no audit insert')
+      const refused = await post(bad, key);
+      assert.equal(refused.status, 422);
+    });
+    assert.equal(await docCount(org.orgId, key), 0, "no document row");
+    assert.equal((await auditRows(org.orgId, key)).length, 0, "no audit insert");
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('tenant and field refusals name the remedy with exact drawer messages', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
-  const other = await withBypassContext(() => createScratchOrg())
+test("tenant and field refusals name the remedy with exact drawer messages", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
+  const other = await withBypassContext(() => createScratchOrg());
   try {
-    const all = bodies(org, bank2, bank3, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability);
     await withOrgContext(org.orgId, async () => {
       // Missing party on a party-role kind.
-      let response = await post({ ...all.customer_invoice, partyId: null }, randomUUID())
-      assert.equal(response.status, 422)
-      assert.match((await response.json() as { error: string }).error, /requires a customer/)
+      let response = await post({ ...all.customer_invoice, partyId: null }, randomUUID());
+      assert.equal(response.status, 422);
+      assert.match(((await response.json()) as { error: string }).error, /requires a customer/);
       // Malformed header date.
-      response = await post({ ...all.vendor_bill, documentDate: '2026-13-99' }, randomUUID())
-      assert.equal(response.status, 422)
-      assert.match((await response.json() as { error: string }).error, /invalid documentDate/)
+      response = await post({ ...all.vendor_bill, documentDate: "2026-13-99" }, randomUUID());
+      assert.equal(response.status, 422);
+      assert.match(((await response.json()) as { error: string }).error, /invalid documentDate/);
       // Another tenant's party.
-      response = await post({ ...all.customer_invoice, partyId: other.customerId }, randomUUID())
-      assert.equal(response.status, 404)
-      assert.deepEqual(await response.json(), { error: 'party not found in this organization' })
+      response = await post({ ...all.customer_invoice, partyId: other.customerId }, randomUUID());
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "party not found in this organization" });
       // Another tenant's line account.
       response = await post(
-        { ...all.vendor_bill, lines: [{ accountId: other.accounts.cogs, amount: '5' }] },
+        { ...all.vendor_bill, lines: [{ accountId: other.accounts.cogs, amount: "5" }] },
         randomUUID(),
-      )
-      assert.equal(response.status, 404)
-      assert.deepEqual(await response.json(), { error: 'account not found for this subsidiary' })
+      );
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "account not found for this subsidiary" });
       // Unknown subsidiary.
-      response = await post({ ...all.vendor_bill, subsidiaryId: randomUUID() }, randomUUID())
-      assert.equal(response.status, 422)
-      assert.deepEqual(await response.json(), { error: 'invalid subsidiary' })
+      response = await post({ ...all.vendor_bill, subsidiaryId: randomUUID() }, randomUUID());
+      assert.equal(response.status, 422);
+      assert.deepEqual(await response.json(), { error: "invalid subsidiary" });
       // Explicit null subsidiary.
-      response = await post({ ...all.vendor_bill, subsidiaryId: null }, randomUUID())
-      assert.equal(response.status, 422)
-      assert.match((await response.json() as { error: string }).error, /select a legal entity or enter a document currency/)
+      response = await post({ ...all.vendor_bill, subsidiaryId: null }, randomUUID());
+      assert.equal(response.status, 422);
+      assert.match(
+        ((await response.json()) as { error: string }).error,
+        /select a legal entity or enter a document currency/,
+      );
       // Missing line account names its line.
       response = await post(
-        { ...all.vendor_bill, lines: [{ amount: '5', description: 'No account' }] },
+        { ...all.vendor_bill, lines: [{ amount: "5", description: "No account" }] },
         randomUUID(),
-      )
-      assert.equal(response.status, 422)
-      assert.match((await response.json() as { error: string }).error, /Line 1: an account is required/)
-    })
+      );
+      assert.equal(response.status, 422);
+      assert.match(
+        ((await response.json()) as { error: string }).error,
+        /Line 1: an account is required/,
+      );
+    });
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-    await withBypassContext(() => dropScratchOrg(other.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(other.orgId));
   }
-})
+});
 
-test('omitted currency uses the org base with multi-currency off; explicit currency stays gated', async () => {
-  const { org, bank2, bank3, cardLiability } = await setup()
+test("omitted currency uses the org base with multi-currency off; explicit currency stays gated", async () => {
+  const { org, bank2, bank3, cardLiability } = await setup();
   try {
-    const all = bodies(org, bank2, bank3, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability);
     await withOrgContext(org.orgId, async () => {
-      const plain = await post(all.customer_invoice, randomUUID())
-      assert.equal(plain.status, 201, JSON.stringify(await plain.clone().json()))
-      assert.equal(((await plain.json()) as { doc: Record<string, unknown> }).doc.currency, 'CAD')
+      const plain = await post(all.customer_invoice, randomUUID());
+      assert.equal(plain.status, 201, JSON.stringify(await plain.clone().json()));
+      assert.equal(((await plain.json()) as { doc: Record<string, unknown> }).doc.currency, "CAD");
       // An explicit currency is a user currency change: governed by the
       // existing multi-currency feature policy, exactly like PATCH.
-      const gated = await post({ ...all.customer_invoice, currency: 'USD' }, randomUUID())
-      assert.equal(gated.status, 404)
-      assert.deepEqual(await gated.json(), { error: 'not_found' })
-    })
+      const gated = await post({ ...all.customer_invoice, currency: "USD" }, randomUUID());
+      assert.equal(gated.status, 404);
+      assert.deepEqual(await gated.json(), { error: "not_found" });
+    });
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});

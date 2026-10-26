@@ -1,10 +1,22 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { fitsLedgerRange, fromUnits, mulPercent, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import {
+  fitsLedgerRange,
+  fromUnits,
+  mulPercent,
+  mulRatio,
+  normalizeDecimal,
+  normalizeMoney,
+  toUnits,
+} from "../money/money.ts";
 import type { ComputedTaxComponent } from "./tax.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
-import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
+import {
+  guardedFetch,
+  resolveVerifiedAddresses,
+  type AddressLookup,
+} from "../connectors/ssrf-guard.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -37,7 +49,13 @@ export interface TaxComponentQuote {
   rateIsBlendedFallback?: boolean;
 }
 
-export type ProviderDocumentKind = "customer_invoice" | "vendor_bill" | "customer_credit" | "vendor_credit" | "cash_sale" | "cash_refund";
+export type ProviderDocumentKind =
+  | "customer_invoice"
+  | "vendor_bill"
+  | "customer_credit"
+  | "vendor_credit"
+  | "cash_sale"
+  | "cash_refund";
 
 export interface TaxQuoteRequest {
   taxableAmount: string;
@@ -101,10 +119,13 @@ export async function readTaxRateProviderConfig(
   runner: Pick<typeof db, "execute"> = db,
   forShare = false,
 ): Promise<TaxRateProviderConfigRow | null> {
-  const r = (await runner.execute<TaxRateProviderConfigRow>(sql`
+  const r = await runner.execute<TaxRateProviderConfigRow>(
+    sql`
     select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} limit 1
     ${forShare ? sql`for share` : sql``}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0] ?? null;
 }
 
@@ -227,10 +248,15 @@ export async function resolveEntityTaxAddress(
 ): Promise<EntityTaxAddress> {
   if (subsidiaryId) {
     uuidOrThrow(subsidiaryId, "subsidiary");
-    const row = (await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
+    const row = (
+      await runner.execute<{ name: string; legalName: string | null; country: string | null }>(
+        sql`
         select name, legal_name as "legalName", country from subsidiaries
          where org_id = ${orgId} and id = ${subsidiaryId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new TaxRateProviderError(
         "the receiving entity has no tax address — set it in Setup → Subsidiaries " +
@@ -244,11 +270,18 @@ export async function resolveEntityTaxAddress(
     }
     return { address: { country: row.country }, entityName: row.legalName ?? row.name };
   }
-  const org = (await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
+  const org = (
+    await runner.execute<{ name: string; legalName: string | null; country: string | null }>(
+      sql`
       select name, legal_name as "legalName", country from orgs where id = ${orgId}
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!org || !org.country?.trim()) {
-    throw new TaxRateProviderError("the organization has no tax address — set its country before quoting provider tax");
+    throw new TaxRateProviderError(
+      "the organization has no tax address — set its country before quoting provider tax",
+    );
   }
   return { address: { country: org.country }, entityName: org.legalName ?? org.name };
 }
@@ -270,25 +303,35 @@ export async function resolveCounterpartyTaxAddress(
     );
   }
   uuidOrThrow(partyId, "party");
-  const row = (await runner.execute<{
+  const row = (
+    await runner.execute<{
       line1: string | null;
       city: string | null;
       region: string | null;
       postalCode: string | null;
       country: string | null;
       partyName: string;
-    }>(sql`
+    }>(
+      sql`
       select a.line1, a.city, a.region, a.postal_code as "postalCode", a.country,
              p.display_name as "partyName"
         from addresses a join parties p on p.id = a.party_id and p.org_id = ${orgId}
        where a.org_id = ${orgId} and a.party_id = ${partyId}
        order by a.is_default_shipping desc, a.is_default_billing desc, a.id asc
        limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
-    const party = (await runner.execute<{ displayName: string }>(sql`
+    const party = (
+      await runner.execute<{ displayName: string }>(
+        sql`
         select display_name as "displayName" from parties where org_id = ${orgId} and id = ${partyId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     throw new TaxRateProviderError(
       `the ${counterpartyLabel} "${party?.displayName ?? partyId}" has no tax address — add an address on the party record before quoting provider tax`,
     );
@@ -298,7 +341,13 @@ export async function resolveCounterpartyTaxAddress(
       `the ${counterpartyLabel} "${row.partyName}" has a tax address without a country — set the country on the party address before quoting provider tax`,
     );
   }
-  return { line1: row.line1, city: row.city, region: row.region, postalCode: row.postalCode, country: row.country };
+  return {
+    line1: row.line1,
+    city: row.city,
+    region: row.region,
+    postalCode: row.postalCode,
+    country: row.country,
+  };
 }
 
 /**
@@ -333,7 +382,9 @@ export async function validateJurisdictionTaxCodes(
   for (const [jurisdiction, codeId] of Object.entries(mapping)) {
     const name = jurisdiction.trim();
     if (name === "") {
-      throw new TaxRateProviderError("settings.jurisdictionTaxCodes has an empty jurisdiction name");
+      throw new TaxRateProviderError(
+        "settings.jurisdictionTaxCodes has an empty jurisdiction name",
+      );
     }
     if (name in normalized) {
       throw new TaxRateProviderError(
@@ -348,9 +399,14 @@ export async function validateJurisdictionTaxCodes(
         `provider jurisdiction "${jurisdiction}" is mapped to "${codeId}", which is not a tax code id`,
       );
     }
-    const row = (await runner.execute<{ id: string; code: string; isActive: boolean }>(sql`
+    const row = (
+      await runner.execute<{ id: string; code: string; isActive: boolean }>(
+        sql`
         select id, code, is_active as "isActive" from tax_codes where org_id = ${orgId} and id = ${codeId}
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new TaxRateProviderError(
         `provider jurisdiction "${jurisdiction}" is mapped to a tax code that does not exist in this organization`,
@@ -368,7 +424,11 @@ export async function validateJurisdictionTaxCodes(
 function persistableTaxProviderSettings(
   settings: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (!("defaultRatePercent" in settings) || settings.defaultRatePercent == null || settings.defaultRatePercent === "") {
+  if (
+    !("defaultRatePercent" in settings) ||
+    settings.defaultRatePercent == null ||
+    settings.defaultRatePercent === ""
+  ) {
     return settings;
   }
   try {
@@ -379,7 +439,9 @@ function persistableTaxProviderSettings(
     return { ...settings, defaultRatePercent: rate };
   } catch (error) {
     if (error instanceof TaxRateProviderError) throw error;
-    throw new TaxRateProviderError("settings.defaultRatePercent must be a finite non-negative decimal");
+    throw new TaxRateProviderError(
+      "settings.defaultRatePercent must be a finite non-negative decimal",
+    );
   }
 }
 
@@ -483,9 +545,12 @@ export async function saveTaxRateProviderConfig(
     // for it — concurrent edits can never silently overwrite each other, and
     // the config row, its sealed secret, and the audit evidence commit or roll
     // back together.
-    const locked = (await db.execute<TaxRateProviderConfigRow>(sql`
+    const locked = await db.execute<TaxRateProviderConfigRow>(
+      sql`
       select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const existing = locked[0] ?? null;
 
     if (options.expectedUpdatedAt !== undefined) {
@@ -504,35 +569,53 @@ export async function saveTaxRateProviderConfig(
     let nextSecretKeys: string[] | null = null;
     let secretChange: TaxProviderConfigAuditState["secretChange"];
     let sealedSecrets: string | null = existing?.secrets ?? null;
-    if (input.apiKey !== undefined || input.accountId !== undefined || input.licenseKey !== undefined) {
+    if (
+      input.apiKey !== undefined ||
+      input.accountId !== undefined ||
+      input.licenseKey !== undefined
+    ) {
       const prev = existing?.secrets
-        ? ((await unsealJson(existing.secrets, { orgId, purpose: "tax.provider.secrets" })) as Record<string, string>)
+        ? ((await unsealJson(existing.secrets, {
+            orgId,
+            purpose: "tax.provider.secrets",
+          })) as Record<string, string>)
         : {};
       previousSecretKeys = Object.keys(prev).sort();
       const next: Record<string, string> = { ...prev };
       if (input.apiKey === null) delete next.apiKey;
       else if (typeof input.apiKey === "string" && input.apiKey) next.apiKey = input.apiKey;
       if (input.accountId === null) delete next.accountId;
-      else if (typeof input.accountId === "string" && input.accountId) next.accountId = input.accountId;
+      else if (typeof input.accountId === "string" && input.accountId)
+        next.accountId = input.accountId;
       if (input.licenseKey === null) delete next.licenseKey;
-      else if (typeof input.licenseKey === "string" && input.licenseKey) next.licenseKey = input.licenseKey;
+      else if (typeof input.licenseKey === "string" && input.licenseKey)
+        next.licenseKey = input.licenseKey;
       nextSecretKeys = Object.keys(next).sort();
       secretChange = {
         added: nextSecretKeys.filter((k) => !(k in prev)).sort(),
         removed: previousSecretKeys.filter((k) => !(k in next)).sort(),
       };
-      sealedSecrets = nextSecretKeys.length ? await sealJson(next, { orgId, purpose: "tax.provider.secrets" }) : null;
+      sealedSecrets = nextSecretKeys.length
+        ? await sealJson(next, { orgId, purpose: "tax.provider.secrets" })
+        : null;
     }
 
     const displayName =
       input.displayName?.trim() ||
-      ({ avalara: "Avalara AvaTax", taxjar: "TaxJar", custom_http: "Custom tax HTTP", manual: "Manual rates" } as const)[
-        input.provider
-      ];
+      (
+        {
+          avalara: "Avalara AvaTax",
+          taxjar: "TaxJar",
+          custom_http: "Custom tax HTTP",
+          manual: "Manual rates",
+        } as const
+      )[input.provider];
     let settings = persistableTaxProviderSettings(input.settings ?? existing?.settings ?? {});
     if (input.commitTransactions !== undefined) {
       if (typeof input.commitTransactions !== "boolean") {
-        throw new TaxRateProviderError("commitTransactions must be a boolean — switch transaction commits on or off in the provider settings");
+        throw new TaxRateProviderError(
+          "commitTransactions must be a boolean — switch transaction commits on or off in the provider settings",
+        );
       }
       settings = { ...settings, commitTransactions: input.commitTransactions };
     } else if (settings.commitTransactions === undefined) {
@@ -571,7 +654,8 @@ export async function saveTaxRateProviderConfig(
     if (existing) {
       // Single statement: general config and the sealed secret move together,
       // so a clear can never be half-applied by a failure between two writes.
-      const updated = (await db.execute<{ updatedAt: string }>(sql`
+      const updated = await db.execute<{ updatedAt: string }>(
+        sql`
         update tax_rate_provider_configs set
           provider = ${input.provider},
           display_name = ${displayName},
@@ -583,19 +667,25 @@ export async function saveTaxRateProviderConfig(
          where org_id = ${orgId}
         returning id,
                   to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
-      `, "objects"));
-      if (!updated[0]) throw new TaxRateProviderError("tax provider config row vanished while saving");
+      `,
+        "objects",
+      );
+      if (!updated[0])
+        throw new TaxRateProviderError("tax provider config row vanished while saving");
       configId = existing.id;
       afterRevision = updated[0].updatedAt;
     } else {
-      const inserted = (await db.execute<{ id: string; updatedAt: string }>(sql`
+      const inserted = await db.execute<{ id: string; updatedAt: string }>(
+        sql`
         insert into tax_rate_provider_configs
           (org_id, provider, display_name, is_enabled, settings, secrets, prefer_provider, created_by, updated_by)
         values (${orgId}, ${input.provider}, ${displayName}, ${input.isEnabled},
                 ${JSON.stringify(settings)}::jsonb, ${sealedSecrets}, ${input.preferProvider ?? true},
                 ${actorId}, ${actorId})
         returning id, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
-      `, "objects"));
+      `,
+        "objects",
+      );
       configId = inserted[0]!.id;
       afterRevision = inserted[0]!.updatedAt;
     }
@@ -722,7 +812,9 @@ export function quoteFromRate(
   try {
     percentText = normalizeDecimal(ratePercent, 4);
   } catch {
-    throw new TaxRateProviderError("rate percent must be an exact decimal with at most 4 decimal places");
+    throw new TaxRateProviderError(
+      "rate percent must be an exact decimal with at most 4 decimal places",
+    );
   }
   const [whole = "0", fraction = ""] = percentText.split(".");
   const numerator = BigInt(`${whole}${fraction}`);
@@ -741,10 +833,10 @@ export function quoteFromRate(
 
 async function secretsOf(row: TaxRateProviderConfigRow): Promise<Record<string, string>> {
   if (!row.secrets) return {};
-  return (await unsealJson(row.secrets, { orgId: row.orgId, purpose: "tax.provider.secrets" })) as Record<
-    string,
-    string
-  >;
+  return (await unsealJson(row.secrets, {
+    orgId: row.orgId,
+    purpose: "tax.provider.secrets",
+  })) as Record<string, string>;
 }
 
 /**
@@ -816,7 +908,10 @@ export async function readTaxProviderJson(
       // AbortSignal.timeout() aborts with TimeoutError, manual aborts with
       // AbortError — both names map, since no other abort source exists here.
       if (error instanceof TaxRateProviderError) throw error;
-      if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+      if (
+        error instanceof Error &&
+        (error.name === "AbortError" || error.name === "TimeoutError")
+      ) {
         throw new TaxRateProviderError(
           `${providerLabel} tax quote timed out after ${timeoutMs}ms — check the provider endpoint and retry the quote`,
           { cause: error },
@@ -929,7 +1024,12 @@ export function avalaraDocumentType(documentKind: ProviderDocumentKind | undefin
   // A cash sale quotes exactly like an invoice and a cash refund exactly
   // like a credit memo: the non-committing estimate types above are what
   // quotes use, so both cash kinds ride the existing mappings unchanged.
-  if (documentKind === "customer_credit" || documentKind === "vendor_credit" || documentKind === "cash_refund") return "ReturnOrder";
+  if (
+    documentKind === "customer_credit" ||
+    documentKind === "vendor_credit" ||
+    documentKind === "cash_refund"
+  )
+    return "ReturnOrder";
   return "SalesOrder";
 }
 
@@ -941,7 +1041,11 @@ export async function quoteViaAvalara(
 ): Promise<TaxQuoteResult> {
   // The destination country is required: an empty ship-to used to fall back
   // to 'US', quoting every foreign document under US rules (or a false zero).
-  const destinationCountry = requiredCountry(req.shipTo.country, "Avalara", "a destination country");
+  const destinationCountry = requiredCountry(
+    req.shipTo.country,
+    "Avalara",
+    "a destination country",
+  );
   // Origin-based sourcing states tax by where the sale ships FROM: sending
   // only singleLocation (the destination) prices them under the wrong
   // jurisdiction. Whenever the origin is known, send shipFrom plus shipTo
@@ -1003,11 +1107,24 @@ export async function quoteViaAvalara(
     },
     { ...options, providerLabel: "Avalara" },
   );
-  const raw = await readTaxProviderJson(res, "Avalara", options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS);
-  if (!res.ok) throw new TaxRateProviderError(`Avalara ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
+  const raw = await readTaxProviderJson(
+    res,
+    "Avalara",
+    options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS,
+  );
+  if (!res.ok)
+    throw new TaxRateProviderError(`Avalara ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
   const totalTax = providerMoney((raw as { totalTax?: number }).totalTax, "totalTax");
-  const details = ((raw as { summary?: { jurisdictionType?: string; rate?: number; tax?: number; taxName?: string }[] }).summary ??
-    []) as { jurisdictionType?: string; rate?: number; tax?: number; taxName?: string }[];
+  const details = ((
+    raw as {
+      summary?: { jurisdictionType?: string; rate?: number; tax?: number; taxName?: string }[];
+    }
+  ).summary ?? []) as {
+    jurisdictionType?: string;
+    rate?: number;
+    tax?: number;
+    taxName?: string;
+  }[];
   const components: TaxComponentQuote[] = details.length
     ? details.map((d) => ({
         jurisdiction: d.jurisdictionType ?? "unknown",
@@ -1040,7 +1157,8 @@ async function quoteAvalara(
 ): Promise<TaxQuoteResult> {
   await assertNotSandbox(row.orgId, "avalara tax quote");
   const secrets = await secretsOf(row);
-  if (!secrets.accountId || !secrets.licenseKey) throw new TaxRateProviderError("Avalara accountId and licenseKey required");
+  if (!secrets.accountId || !secrets.licenseKey)
+    throw new TaxRateProviderError("Avalara accountId and licenseKey required");
   return quoteViaAvalara(
     req,
     {
@@ -1067,8 +1185,8 @@ export async function quoteViaTaxJar(
 ): Promise<TaxQuoteResult> {
   if (req.currency !== "USD") {
     throw new TaxRateProviderError(
-      `TaxJar quotes only support USD documents; ${req.currency ? `currency "${req.currency}"` : "an unspecified currency"} `
-      + "must be priced with a USD document or another provider that supports the document currency",
+      `TaxJar quotes only support USD documents; ${req.currency ? `currency "${req.currency}"` : "an unspecified currency"} ` +
+        "must be priced with a USD document or another provider that supports the document currency",
     );
   }
   // Origin and destination countries are required: an empty address used to
@@ -1107,7 +1225,11 @@ export async function quoteViaTaxJar(
     // so there is no local-exemption-without-mapping case to refuse.
     customer_id: req.counterpartyCode ?? undefined,
     ...(req.itemCode
-      ? { line_items: [{ id: "1", quantity: 1, unit_price: lineAmount, product_tax_code: req.itemCode }] }
+      ? {
+          line_items: [
+            { id: "1", quantity: 1, unit_price: lineAmount, product_tax_code: req.itemCode },
+          ],
+        }
       : {}),
   };
   const res = await taxProviderFetch(
@@ -1119,8 +1241,13 @@ export async function quoteViaTaxJar(
     },
     { ...options, providerLabel: "TaxJar" },
   );
-  const raw = await readTaxProviderJson(res, "TaxJar", options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS);
-  if (!res.ok) throw new TaxRateProviderError(`TaxJar ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
+  const raw = await readTaxProviderJson(
+    res,
+    "TaxJar",
+    options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS,
+  );
+  if (!res.ok)
+    throw new TaxRateProviderError(`TaxJar ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
   const tax = (raw as { tax?: Record<string, unknown> }).tax ?? {};
   const amountToCollect = providerMoney(tax.amount_to_collect, "amount_to_collect");
   // Blended combined rate; each jurisdiction's own rate takes precedence below.
@@ -1133,10 +1260,14 @@ export async function quoteViaTaxJar(
     // TaxJar keys each jurisdiction's own rate `<j>_tax_rate` (special
     // districts use its `remitance` spelling). Fall back to the blended rate
     // only when the payload omits it, and flag that fact on the component.
-    const ownRate = breakdown[`${jurisdiction}_tax_rate`] ?? breakdown[`${jurisdiction}_tax_remitance_rate`];
+    const ownRate =
+      breakdown[`${jurisdiction}_tax_rate`] ?? breakdown[`${jurisdiction}_tax_remitance_rate`];
     components.push({
       jurisdiction,
-      ratePercent: ownRate == null ? blendedRate : percentFromRateFraction(ownRate, `breakdown.${jurisdiction} tax rate`),
+      ratePercent:
+        ownRate == null
+          ? blendedRate
+          : percentFromRateFraction(ownRate, `breakdown.${jurisdiction} tax rate`),
       taxAmount: providerMoney(value, `breakdown.${key}`),
       ...(ownRate == null ? { rateIsBlendedFallback: true } : {}),
     });
@@ -1210,14 +1341,20 @@ export async function quoteViaCustomHttp(
     },
     { ...options, providerLabel: "custom tax hook" },
   );
-  const raw = await readTaxProviderJson(res, "custom tax hook", options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS);
+  const raw = await readTaxProviderJson(
+    res,
+    "custom tax hook",
+    options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS,
+  );
   if (!res.ok) throw new TaxRateProviderError(`custom tax hook ${res.status}`);
   const components = (Array.isArray(raw.components) ? raw.components : []) as TaxComponentQuote[];
   const hasHeadline = raw.taxAmount !== undefined && raw.taxAmount !== null && raw.taxAmount !== "";
   if (!hasHeadline && components.length === 0) {
     throw new TaxRateProviderError("custom tax hook response must include taxAmount or components");
   }
-  const taxAmount = hasHeadline ? fromUnits(toUnits(String(raw.taxAmount))) : sumComponentTax(components);
+  const taxAmount = hasHeadline
+    ? fromUnits(toUnits(String(raw.taxAmount)))
+    : sumComponentTax(components);
   if (components.length > 0 && toUnits(taxAmount) !== toUnits(sumComponentTax(components))) {
     throw new TaxRateProviderError("custom tax hook taxAmount does not match its components");
   }
@@ -1280,7 +1417,9 @@ async function synthesizeCustomHeadlineComponent(
   try {
     headline = toUnits(result.taxAmount);
   } catch {
-    throw new TaxRateProviderError("custom tax hook returned a tax amount that is not a ledger-scale decimal");
+    throw new TaxRateProviderError(
+      "custom tax hook returned a tax amount that is not a ledger-scale decimal",
+    );
   }
   if (headline === 0n) return result;
   const key = cfg.settings.customHeadlineJurisdiction;
@@ -1366,7 +1505,11 @@ async function resolveConfiguredTax(
         "manual provider requires settings.defaultRatePercent; refusing to quote at an implied 0%",
       );
     }
-    result = quoteFromRate(req.taxableAmount, configured, req.shipTo.region ?? req.shipTo.country ?? "LOCAL");
+    result = quoteFromRate(
+      req.taxableAmount,
+      configured,
+      req.shipTo.region ?? req.shipTo.country ?? "LOCAL",
+    );
   }
   if (cfg.provider === "custom_http" && result.components.length === 0) {
     result = await synthesizeCustomHeadlineComponent(orgId, req, cfg, result);
@@ -1375,7 +1518,10 @@ async function resolveConfiguredTax(
   return result;
 }
 
-function validateTaxQuoteResult(result: TaxQuoteResult, expectedProvider: TaxRateProviderKey): void {
+function validateTaxQuoteResult(
+  result: TaxQuoteResult,
+  expectedProvider: TaxRateProviderKey,
+): void {
   if (result.provider !== expectedProvider || !Array.isArray(result.components)) {
     throw new TaxRateProviderError("provider returned an ambiguous tax quote");
   }
@@ -1384,7 +1530,11 @@ function validateTaxQuoteResult(result: TaxQuoteResult, expectedProvider: TaxRat
   try {
     headline = toUnits(result.taxAmount);
     for (const component of result.components) {
-      if (!component || typeof component.jurisdiction !== "string" || component.jurisdiction.trim() === "") {
+      if (
+        !component ||
+        typeof component.jurisdiction !== "string" ||
+        component.jurisdiction.trim() === ""
+      ) {
         throw new Error("component jurisdiction is missing");
       }
       if (toUnits(component.ratePercent) < 0n) throw new Error("component rate cannot be negative");
@@ -1423,7 +1573,8 @@ async function providerTaxCodeFields(
   runner: Pick<typeof db, "execute">,
   forShare = false,
 ): Promise<ProviderTaxCodeFields> {
-  const row = (await runner.execute<{
+  const row = (
+    await runner.execute<{
       id: string;
       code: string;
       calculationType: string;
@@ -1433,14 +1584,18 @@ async function providerTaxCodeFields(
       paidAccountId: string | null;
       withholdingAccountId: string | null;
       isActive: boolean;
-    }>(sql`
+    }>(
+      sql`
       select id, code, calculation_type as "calculationType",
              recoverable_percent::text as "recoverablePercent", rounding_scale as "roundingScale",
              collected_account_id as "collectedAccountId", paid_account_id as "paidAccountId",
              withholding_account_id as "withholdingAccountId", is_active as "isActive"
         from tax_codes where org_id = ${orgId} and id = ${codeId}
         ${forShare ? sql`for share` : sql``}
-      `, "objects"))[0];
+      `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new TaxRateProviderError(
       `provider jurisdiction "${jurisdiction}" is mapped to a tax code that does not exist in this organization`,
@@ -1451,7 +1606,11 @@ async function providerTaxCodeFields(
       `provider jurisdiction "${jurisdiction}" is mapped to inactive tax code "${row.code}" — reactivate it or remap the jurisdiction`,
     );
   }
-  if (row.calculationType !== "standard" && row.calculationType !== "withholding" && row.calculationType !== "reverse_charge") {
+  if (
+    row.calculationType !== "standard" &&
+    row.calculationType !== "withholding" &&
+    row.calculationType !== "reverse_charge"
+  ) {
     throw new TaxRateProviderError(
       `provider jurisdiction "${jurisdiction}" is mapped to tax code "${row.code}" with an unknown calculation type`,
     );
@@ -1511,7 +1670,9 @@ export async function resolveProviderTaxComponents(
   try {
     base = normalizeMoney(taxableAmount);
   } catch {
-    throw new TaxRateProviderError("provider taxable amount is not a ledger-scale decimal — refusing to book");
+    throw new TaxRateProviderError(
+      "provider taxable amount is not a ledger-scale decimal — refusing to book",
+    );
   }
   let headline: bigint;
   let componentTotal = 0n;
@@ -1538,7 +1699,10 @@ export async function resolveProviderTaxComponents(
       );
     }
     if (!fields.has(codeId)) {
-      fields.set(codeId, await providerTaxCodeFields(orgId, codeId, component.jurisdiction, runner));
+      fields.set(
+        codeId,
+        await providerTaxCodeFields(orgId, codeId, component.jurisdiction, runner),
+      );
     }
   }
   return result.components.map((component, index) => {
@@ -1630,12 +1794,16 @@ export async function providerBindingMismatch(
         `re-quote the draft against the current provider mapping before approval`
       );
     }
-    const code = await providerTaxCodeFields(orgId, expected, quoted.jurisdiction, runner, forShare).catch(
-      (error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        return { failed: message } as const;
-      },
-    );
+    const code = await providerTaxCodeFields(
+      orgId,
+      expected,
+      quoted.jurisdiction,
+      runner,
+      forShare,
+    ).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      return { failed: message } as const;
+    });
     if ("failed" in code) return `${code.failed} — re-quote the draft before approval`;
     if (booked.taxCodeId !== code.id) {
       return (
@@ -1733,7 +1901,8 @@ export async function readTaxQuoteForDocumentLine(
     components: TaxComponentQuote[];
     external_ref: string | null;
     raw_payload: Record<string, unknown> | null;
-  }>(sql`
+  }>(
+    sql`
     select id, provider_config_id, provider, quoted_on::text, currency,
            ship_from, ship_to, taxable_amount::text, tax_amount::text,
            components, external_ref, raw_payload
@@ -1741,7 +1910,9 @@ export async function readTaxQuoteForDocumentLine(
      where org_id = ${orgId} and document_line_id = ${documentLineId}
      order by created_at desc, id desc
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) return null;
   return {
@@ -1769,7 +1940,7 @@ export async function persistTaxQuote(
   actorId: string | null,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<string> {
-  const quotedOn = req.quotedOn ?? await businessToday(orgId);
+  const quotedOn = req.quotedOn ?? (await businessToday(orgId));
   // A shape-valid non-day such as February 30, or an amount wider than the
   // evidence columns, would otherwise die in Postgres as a raw storage throw
   // (HTTP 500 at the quote route, which only maps TaxRateProviderError).
@@ -1786,7 +1957,8 @@ export async function persistTaxQuote(
   if (!fitsLedgerRange(taxableExact) || !fitsLedgerRange(taxExact)) {
     throw new TaxRateProviderError("quote amounts must fit the ledger (at most 15 whole digits)");
   }
-  const inserted = await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(
+    sql`
     insert into tax_rate_quotes
       (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
        taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id,
@@ -1797,7 +1969,9 @@ export async function persistTaxQuote(
             ${result.externalRef}, ${result.raw ? JSON.stringify(result.raw) : null}::jsonb,
             ${req.documentLineId ?? null}, ${actorId}, ${actorId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   const id = inserted[0]?.id;
   if (!id) throw new TaxRateProviderError("provider tax evidence insert returned no id");
   return id;
@@ -1821,7 +1995,7 @@ export async function quoteExternalTax(
   } & TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult & { quoteId: string | null }> {
   const runner = options.runner ?? db;
-  const cfg = options.config ?? await readTaxRateProviderConfig(orgId, runner);
+  const cfg = options.config ?? (await readTaxRateProviderConfig(orgId, runner));
   if (!cfg || !cfg.isEnabled) {
     throw new TaxRateProviderError("no enabled tax rate provider");
   }

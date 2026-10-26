@@ -49,7 +49,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:service",
     `
-      export { REQUISITION_DESCRIPTION_MAX_LENGTH } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/hrm/recruiting/requisitions'))};
+      export { REQUISITION_DESCRIPTION_MAX_LENGTH } from ${JSON.stringify(import.meta.resolve("@openbooks/engine/hrm/recruiting/requisitions"))};
 
       const state = globalThis[Symbol.for('openbooks.hrm-recruiting-requisitions-route-test')]
       export async function reviseRequisition(args) { state.calls.push({ fn: 'revise', args }); if (state.serviceThrow) throw state.serviceThrow; return { id: 'requisition-1', requisitionNumber: 'REQ-00001' } }
@@ -103,8 +103,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRecruitingRequisitionsNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmRecruitingRequisitionsNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -119,24 +120,27 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const collectionUrl = "./route.ts?hrm-recruiting-requisitions-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(collectionUrl)) as typeof import("./route.ts");
-  const itemUrl = "./[id]/route.ts?hrm-recruiting-requisitions-item";
-  const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(itemUrl)) as typeof import("./[id]/route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const collectionUrl = "./route.ts?hrm-recruiting-requisitions-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  collectionUrl
+)) as typeof import("./route.ts");
+const itemUrl = "./[id]/route.ts?hrm-recruiting-requisitions-item";
+const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(
+  itemUrl
+)) as typeof import("./[id]/route.ts");
+test.after(() => hooks.deregister());
 
 const SUBSIDIARY_ID = "00000000-0000-4000-8000-000000000021";
 const REQUISITION_ID = "00000000-0000-4000-8000-000000000022";
@@ -157,21 +161,47 @@ function jsonRequest(url: string, method: string, body: unknown): Request {
   });
 }
 
-const paramsOf = (id: string): { params: Promise<{ id: string }> } => ({ params: Promise.resolve({ id }) });
+const paramsOf = (id: string): { params: Promise<{ id: string }> } => ({
+  params: Promise.resolve({ id }),
+});
 
 test("a missing feature flag 404s before the service runs", async () => {
   reset();
   routeState.featureOn = false;
-  assert.equal((await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/recruiting/requisitions"))).status, 404);
-  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/api/hrm/recruiting/requisitions", "POST", {}))).status, 404);
-  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), paramsOf(REQUISITION_ID))).status, 404);
+  assert.equal(
+    (
+      await collectionRoute!.GET(
+        new Request("http://openbooks.test/api/hrm/recruiting/requisitions"),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest("http://openbooks.test/api/hrm/recruiting/requisitions", "POST", {}),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (await itemRoute!.GET(new Request("http://openbooks.test/x"), paramsOf(REQUISITION_ID))).status,
+    404,
+  );
   assert.deepEqual(routeState.calls, []);
 });
 
 test("an unauthenticated caller never reaches the service", async () => {
   reset();
   routeState.gate = { status: 401 };
-  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/api/hrm/recruiting/requisitions", "POST", {}))).status, 401);
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest("http://openbooks.test/api/hrm/recruiting/requisitions", "POST", {}),
+      )
+    ).status,
+    401,
+  );
   assert.deepEqual(routeState.calls, []);
 });
 
@@ -179,8 +209,22 @@ test("create validates the body through the real parser before the service runs"
   reset();
   const url = "http://openbooks.test/api/hrm/recruiting/requisitions";
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { title: "T" }))).status, 400);
-  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { title: "T", employerSubsidiaryId: "nope", headcount: 1 }))).status, 400);
-  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { title: "T", employerSubsidiaryId: SUBSIDIARY_ID, headcount: 0 }))).status, 400);
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { title: "T", employerSubsidiaryId: "nope", headcount: 1 }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { title: "T", employerSubsidiaryId: SUBSIDIARY_ID, headcount: 0 }),
+      )
+    ).status,
+    400,
+  );
   assert.equal(
     (
       await collectionRoute!.POST(
@@ -207,7 +251,9 @@ test("create forwards org, actor, and body, then 201s", async () => {
     }),
   );
   assert.equal(response.status, 201);
-  assert.deepEqual(await response.json(), { requisition: { id: "requisition-1", requisitionNumber: "REQ-00001" } });
+  assert.deepEqual(await response.json(), {
+    requisition: { id: "requisition-1", requisitionNumber: "REQ-00001" },
+  });
   assert.equal(routeState.calls[0]!.fn, "create");
   assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).orgId, "org-1");
   assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).headcount, 2);
@@ -216,7 +262,11 @@ test("create forwards org, actor, and body, then 201s", async () => {
 test("list rejects unknown statuses before the service runs, then lists", async () => {
   reset();
   assert.equal(
-    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/recruiting/requisitions?status=archived"))).status,
+    (
+      await collectionRoute!.GET(
+        new Request("http://openbooks.test/api/hrm/recruiting/requisitions?status=archived"),
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, []);
@@ -225,12 +275,17 @@ test("list rejects unknown statuses before the service runs, then lists", async 
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { requisitions: [] });
-  assert.deepEqual(routeState.calls, [{ fn: "list", args: { orgId: "org-1", actorId: "user-1", status: "open" } }]);
+  assert.deepEqual(routeState.calls, [
+    { fn: "list", args: { orgId: "org-1", actorId: "user-1", status: "open" } },
+  ]);
 });
 
 test("item PATCH validates the action union through the real parser", async () => {
   reset();
-  const badId = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "open" }), paramsOf("nope"));
+  const badId = await itemRoute!.PATCH(
+    jsonRequest("http://openbooks.test/x", "PATCH", { action: "open" }),
+    paramsOf("nope"),
+  );
   assert.equal(badId.status, 400);
   const badAction = await itemRoute!.PATCH(
     jsonRequest("http://openbooks.test/x", "PATCH", { action: " vaporize " }),
@@ -260,13 +315,18 @@ test("item PATCH dispatches every action with org, actor, and id", async () => {
     );
     assert.equal(response.status, 200);
     assert.equal(routeState.calls[0]!.fn, fn);
-    assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).requisitionId, REQUISITION_ID);
+    assert.deepEqual(
+      (routeState.calls[0]!.args as Record<string, unknown>).requisitionId,
+      REQUISITION_ID,
+    );
   }
 });
 
 test("a service refusal delegates to the shared mapping with the error intact", async () => {
   reset();
-  const refusal = new Error("the position shows no vacant FTE as of 2026-10-01 — open over establishment explicitly");
+  const refusal = new Error(
+    "the position shows no vacant FTE as of 2026-10-01 — open over establishment explicitly",
+  );
   routeState.serviceThrow = refusal;
   const response: Response = await itemRoute!.PATCH(
     jsonRequest("http://openbooks.test/x", "PATCH", { action: "open" }),

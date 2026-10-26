@@ -9,7 +9,6 @@
 import type { CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
-
 export interface CustomerInsightText {
   title: string;
   message: string;
@@ -73,7 +72,9 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
   // Percents render in the request locale (12,3 not 12.3): numeric args
   // arrive unformatted and cross here, never via toFixed upstream.
   const pct1 = (value: number): string =>
-    new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+    new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(
+      value,
+    );
   const int0 = (value: number): string =>
     new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
   const fieldLabel = (key: string): string => {
@@ -86,8 +87,10 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
   return {
     locale,
     monthLabel,
-    displayCustomerName: (name) => (name === "Unknown" ? t("customer.labels.unknownCustomer") : name),
-    displayJobName: (name) => (name === "Untitled project" ? t("customer.labels.untitledProject") : name),
+    displayCustomerName: (name) =>
+      name === "Unknown" ? t("customer.labels.unknownCustomer") : name,
+    displayJobName: (name) =>
+      name === "Untitled project" ? t("customer.labels.untitledProject") : name,
     churnInactive: (days) => t("customer.insights.churnInactive", { days }),
     churnDeclining: t("customer.insights.churnDeclining"),
     churnBelowPattern: t("customer.insights.churnBelowPattern"),
@@ -95,18 +98,21 @@ export function customerStrings(t: CatalogMessageFn, locale: string): CustomerSt
     churnLowFrequency: t("customer.insights.churnLowFrequency"),
     recMaintain: t("customer.insights.recMaintain"),
     recFriction: (credits) => t("customer.insights.recFriction", { count: credits }),
-    recOverdue: (overdueDays, cycleDays) => t("customer.insights.recOverdue", { overdue: overdueDays, cycle: cycleDays }),
+    recOverdue: (overdueDays, cycleDays) =>
+      t("customer.insights.recOverdue", { overdue: overdueDays, cycle: cycleDays }),
     recWinBack: t("customer.insights.recWinBack"),
     recNurture: t("customer.insights.recNurture"),
     recOnboard: t("customer.insights.recOnboard"),
     recReprice: (marginPct) => t("customer.insights.recReprice", { pct: pct1(marginPct) }),
     recReview: t("customer.insights.recReview"),
     intelligenceScore: (score, grades) => {
-      if (score >= grades.aPlus) return { label: t("customer.insights.scoreExcellent"), grade: "A+" };
+      if (score >= grades.aPlus)
+        return { label: t("customer.insights.scoreExcellent"), grade: "A+" };
       if (score >= grades.a) return { label: t("customer.insights.scoreVeryGood"), grade: "A" };
       if (score >= grades.b) return { label: t("customer.insights.scoreGood"), grade: "B" };
       if (score >= grades.c) return { label: t("customer.insights.scoreFair"), grade: "C" };
-      if (score >= grades.d) return { label: t("customer.insights.scoreNeedsAttention"), grade: "D" };
+      if (score >= grades.d)
+        return { label: t("customer.insights.scoreNeedsAttention"), grade: "D" };
       return { label: t("customer.insights.scoreNeedsAttention"), grade: "F" };
     },
     projectedClv: (amount, years, customers) => ({

@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  deriveConsolidatedRates,
-  runOwnershipConsolidation,
-} from "./consolidation.ts";
+import { deriveConsolidatedRates, runOwnershipConsolidation } from "./consolidation.ts";
 import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
@@ -17,14 +14,17 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Historical bases are explicit controller evidence, not inferred spot prices. */
-async function seedHistoricalBases(org: ScratchOrg, pairs: readonly (readonly [string, string, string])[]): Promise<void> {
-  const predecessorId=randomUUID();
+async function seedHistoricalBases(
+  org: ScratchOrg,
+  pairs: readonly (readonly [string, string, string])[],
+): Promise<void> {
+  const predecessorId = randomUUID();
   await db.execute(sql`
     insert into accounting_periods
       (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
     select ${predecessorId},${org.orgId},fiscal_calendar_id,2026,6,'2026-06','2026-06-01','2026-06-30',false
       from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
-  for (const [from,to,historical] of pairs)
+  for (const [from, to, historical] of pairs)
     await db.execute(sql`
       insert into consolidated_fx_rates
         (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
@@ -98,7 +98,10 @@ async function seedEliminationCurrencyFixture(org: ScratchOrg): Promise<{
     `);
   }
   await seedHistoricalBases(org, [
-    ['USD','CAD','1.35'],['EUR','CAD','1.45'],['USD','EUR','0.93'],['CAD','EUR','0.6896551724'],
+    ["USD", "CAD", "1.35"],
+    ["EUR", "CAD", "1.45"],
+    ["USD", "EUR", "0.93"],
+    ["CAD", "EUR", "0.6896551724"],
   ]);
   const interestId = randomUUID();
   await db.execute(sql`
@@ -115,88 +118,116 @@ async function seedEliminationCurrencyFixture(org: ScratchOrg): Promise<{
   return { childId };
 }
 
-test("rate derivation resolves a pair stored only as the inverse quote", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const childId = randomUUID();
-    await db.execute(sql`
+test(
+  "rate derivation resolves a pair stored only as the inverse quote",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const childId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
       values (${childId},${org.orgId},${org.subsidiaryId},'US Op Co','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
     `);
-    // The needed pair is USD→CAD, but the org stores only the inverse
-    // CAD→USD quote — posting and revaluation already convert through it,
-    // and derivation must do the same instead of refusing rates-missing.
-    await db.execute(sql`
+      // The needed pair is USD→CAD, but the org stores only the inverse
+      // CAD→USD quote — posting and revaluation already convert through it,
+      // and derivation must do the same instead of refusing rates-missing.
+      await db.execute(sql`
       insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate,source)
       values (${org.orgId},'CAD','USD','2026-07-15','spot','0.8000000000','manual')
     `);
-    await seedHistoricalBases(org,[['USD','CAD','1.2500000000']]);
-    await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
-    const row = (await db.execute<{ current_rate: string; average_rate: string }>(sql`
+      await seedHistoricalBases(org, [["USD", "CAD", "1.2500000000"]]);
+      await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
+      const row = (
+        await db.execute<{ current_rate: string; average_rate: string }>(
+          sql`
       select current_rate::text as current_rate, average_rate::text as average_rate
         from consolidated_fx_rates
        where org_id = ${org.orgId} and period_id = ${org.periodId}
          and from_currency = 'USD' and to_currency = 'CAD'
-    `, "objects"))[0];
-    assert.equal(row?.current_rate, "1.2500000000");
-    assert.equal(row?.average_rate, "1.2500000000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(row?.current_rate, "1.2500000000");
+      assert.equal(row?.average_rate, "1.2500000000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("rate derivation still refuses an uncovered pair instead of defaulting", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const childId = randomUUID();
-    await db.execute(sql`
+test(
+  "rate derivation still refuses an uncovered pair instead of defaulting",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const childId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
       values (${childId},${org.orgId},${org.subsidiaryId},'US Op Co','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
     `);
-    await assert.rejects(
-      () => deriveConsolidatedRates(org.orgId, org.periodId, actorId),
-      /no spot rate for USD→CAD on or before 2026-07-31/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        () => deriveConsolidatedRates(org.orgId, org.periodId, actorId),
+        /no spot rate for USD→CAD on or before 2026-07-31/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("rate derivation covers source currencies into the elimination entity", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedEliminationCurrencyFixture(org);
+test(
+  "rate derivation covers source currencies into the elimination entity",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedEliminationCurrencyFixture(org);
 
-    await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
-    const rates = (await db.execute<{ from_currency: string; to_currency: string }>(sql`
+      await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
+      const rates = (
+        await db.execute<{ from_currency: string; to_currency: string }>(
+          sql`
       select from_currency, to_currency from consolidated_fx_rates
        where org_id=${org.orgId} and period_id=${org.periodId}
-    `, "objects")).map((r) => `${r.from_currency}→${r.to_currency}`);
-    assert.ok(rates.includes("USD→EUR"), `derived pairs cover the elimination entity (got ${rates.join(", ")})`);
+    `,
+          "objects",
+        )
+      ).map((r) => `${r.from_currency}→${r.to_currency}`);
+      assert.ok(
+        rates.includes("USD→EUR"),
+        `derived pairs cover the elimination entity (got ${rates.join(", ")})`,
+      );
 
-    // And the ownership run that consumes the pair completes: USD 1000 of
-    // acquisition-date equity at the policy rate 2 lands in EUR as 2000,
-    // cost 2100 leaves goodwill 100.
-    const run = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
-    assert.equal(run.entryIds.length, 1);
-    const balances = (await db.execute<{ number: string; amount: string }>(sql`
+      // And the ownership run that consumes the pair completes: USD 1000 of
+      // acquisition-date equity at the policy rate 2 lands in EUR as 2000,
+      // cost 2100 leaves goodwill 100.
+      const run = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+      assert.equal(run.entryIds.length, 1);
+      const balances = await db.execute<{ number: string; amount: string }>(
+        sql`
       select a.number,coalesce(sum(l.amount),0)::text amount
         from journal_lines l join journal_entries e on e.id=l.entry_id
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${run.entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `, "objects"));
-    assert.deepEqual(balances, [
-      { number: "1400", amount: "-2100.0000" },
-      { number: "1500", amount: "100.0000" },
-      { number: "3000", amount: "2000.0000" },
-    ]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.deepEqual(balances, [
+        { number: "1400", amount: "-2100.0000" },
+        { number: "1500", amount: "100.0000" },
+        { number: "3000", amount: "2000.0000" },
+      ]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

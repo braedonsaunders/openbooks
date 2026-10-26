@@ -1,8 +1,8 @@
-import { redirect } from 'next/navigation'
-import { getAuthz } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { redirect } from "next/navigation";
+import { getAuthz } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Feature-gate boundary for the Property Management module.
@@ -12,9 +12,13 @@ export const dynamic = 'force-dynamic'
  * by browser history, which is UI-only enforcement, and the contract requires
  * refusal. Gating in the layout covers every route in this segment at once.
  */
-export default async function PropertyManagementLayout({ children }: { children: React.ReactNode }) {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  await requireFeatureEnabled(authz.user.orgId, 'propertyManagement')
-  return children
+export default async function PropertyManagementLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  await requireFeatureEnabled(authz.user.orgId, "propertyManagement");
+  return children;
 }

@@ -3,7 +3,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { eventMonth, recognitionEventDecimal } from "./recognition-dates.ts";
 import { RevenueRecognitionError, assertEnabled } from "./recognition-transaction-price.ts";
-import { buildAllRecognitionSchedulesOn, lockObligationContract, type RevenueChangeBasis } from "./recognition-schedule-build.ts";
+import {
+  buildAllRecognitionSchedulesOn,
+  lockObligationContract,
+  type RevenueChangeBasis,
+} from "./recognition-schedule-build.ts";
 
 // ---------------------------------------------------------------------------
 // recordRecognitionEvent — persist a milestone or usage event
@@ -43,11 +47,12 @@ export async function recordRecognitionEvent(
 ): Promise<RecordRecognitionEventResult> {
   eventMonth(input.periodMonth);
   const amount = recognitionEventDecimal(input.amount, "event amount");
-  const unitRate = input.unitRate == null ? null : recognitionEventDecimal(input.unitRate, "event unit rate");
-  const quantity = input.quantity == null ? null : recognitionEventDecimal(input.quantity, "event quantity");
-  const sourceReference = typeof input.sourceReference === "string"
-    ? input.sourceReference.trim()
-    : "";
+  const unitRate =
+    input.unitRate == null ? null : recognitionEventDecimal(input.unitRate, "event unit rate");
+  const quantity =
+    input.quantity == null ? null : recognitionEventDecimal(input.quantity, "event quantity");
+  const sourceReference =
+    typeof input.sourceReference === "string" ? input.sourceReference.trim() : "";
   if (!sourceReference || sourceReference.length > 500) {
     throw new RevenueRecognitionError(
       "recognition events require a non-blank sourceReference of at most 500 characters",
@@ -61,18 +66,27 @@ export async function recordRecognitionEvent(
   return await db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
 
-    await lockObligationContract(tx,input.orgId,input.obligationId);
+    await lockObligationContract(tx, input.orgId, input.obligationId);
     // Validate the obligation exists and uses a milestone or usage method.
-    const oblRes = (await tx.execute<{ id: string; description: string; method: string; status: string }>(sql`
+    const oblRes = await tx.execute<{
+      id: string;
+      description: string;
+      method: string;
+      status: string;
+    }>(
+      sql`
       select o.id, o.description, r.method, o.status
         from performance_obligations o
         join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
        where o.id = ${input.obligationId} and o.org_id = ${input.orgId}
-       for update of o`, "objects"));
+       for update of o`,
+      "objects",
+    );
     if (!oblRes[0]) {
       throw new RevenueRecognitionError("obligation not found");
     }
-    if (oblRes[0].status === "cancelled") throw new RevenueRecognitionError("cancelled obligations cannot accept recognition events");
+    if (oblRes[0].status === "cancelled")
+      throw new RevenueRecognitionError("cancelled obligations cannot accept recognition events");
     if (oblRes[0].method !== "milestone" && oblRes[0].method !== "usage") {
       throw new RevenueRecognitionError(
         `recognition method '${oblRes[0].method}' does not accept events; only milestone and usage methods are supported`,
@@ -84,12 +98,13 @@ export async function recordRecognitionEvent(
     // reach the plan or the GL. Refuse by name before inserting anything.
     // Fully satisfied but NOT retired promises still accept negative
     // corrections, which reverse earned revenue through the normal rebuild.
-    const schedRes = (await tx.execute<{ change_basis: RevenueChangeBasis | null }>(sql`
+    const schedRes = await tx.execute<{ change_basis: RevenueChangeBasis | null }>(
+      sql`
       select change_basis from recognition_schedules
-       where obligation_id = ${input.obligationId} and org_id = ${input.orgId}`, "objects"));
-    const retirement = schedRes
-      .map((row) => row.change_basis)
-      .find((basis) => basis?.retired);
+       where obligation_id = ${input.obligationId} and org_id = ${input.orgId}`,
+      "objects",
+    );
+    const retirement = schedRes.map((row) => row.change_basis).find((basis) => basis?.retired);
     if (retirement) {
       throw new RevenueRecognitionError(
         `"${oblRes[0].description}" was retired by modification ${retirement.changeId} on ${retirement.effectiveOn} — record the event against its replacement promise or amend the contract`,
@@ -99,7 +114,8 @@ export async function recordRecognitionEvent(
     // The partial unique index is the concurrency authority.  A conflicting
     // transaction waits for the winner to commit, then this statement returns
     // no row and the committed event is compared below.
-    const res = (await tx.execute<{ id: string }>(sql`
+    const res = await tx.execute<{ id: string }>(
+      sql`
       insert into recognition_events
         (org_id, obligation_id, period_month, amount, description, source_reference,
          unit_rate, quantity, created_by, updated_by)
@@ -111,7 +127,9 @@ export async function recordRecognitionEvent(
       on conflict (org_id, obligation_id, source_reference)
         where source_reference is not null
       do nothing
-      returning id`, "objects"));
+      returning id`,
+      "objects",
+    );
 
     if (res[0]) {
       // Rebuild the obligation's schedule on every GL-posting book so the new
@@ -125,7 +143,8 @@ export async function recordRecognitionEvent(
     // which is a successful replay.  Reusing it with a different payload is a
     // fail-closed conflict: silently accepting it would make the source key's
     // financial meaning depend on whichever request won the race.
-    const existing = (await tx.execute<{ id: string; payload_matches: boolean }>(sql`
+    const existing = await tx.execute<{ id: string; payload_matches: boolean }>(
+      sql`
       select id,
              (
                period_month = ${input.periodMonth}
@@ -139,7 +158,9 @@ export async function recordRecognitionEvent(
        where org_id = ${input.orgId}
          and obligation_id = ${input.obligationId}
          and source_reference = ${sourceReference}
-       limit 1`, "objects"));
+       limit 1`,
+      "objects",
+    );
     const prior = existing[0];
     if (!prior) {
       // The unique index and the read must agree.  Reaching this state means a

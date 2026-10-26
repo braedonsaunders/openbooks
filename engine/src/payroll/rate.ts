@@ -1,5 +1,9 @@
 import { sql, type SQL } from "drizzle-orm";
-import { annualPayRate, isTimePayRateBasis, type PayRateBasis } from "../projects/pay-rate-basis.ts";
+import {
+  annualPayRate,
+  isTimePayRateBasis,
+  type PayRateBasis,
+} from "../projects/pay-rate-basis.ts";
 import { divideMoney } from "./run-allocation.ts";
 import type { Money } from "../money/brands.ts";
 
@@ -93,9 +97,15 @@ export interface PayableRate {
  */
 export function salaryPeriodPay(rate: PayableRate, periodsPerYear: number): Money {
   if (!isTimePayRateBasis(rate.basis)) {
-    throw new Error("a salary is paid from a time-based rate; an hourly rate has no per-period amount");
+    throw new Error(
+      "a salary is paid from a time-based rate; an hourly rate has no per-period amount",
+    );
   }
-  return divideMoney(annualPayRate(rate.rate, rate.basis, rate.annualHours), String(periodsPerYear), 2);
+  return divideMoney(
+    annualPayRate(rate.rate, rate.basis, rate.annualHours),
+    String(periodsPerYear),
+    2,
+  );
 }
 
 /**

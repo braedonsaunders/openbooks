@@ -47,10 +47,7 @@ const mockSources = new Map<string, string>([
       export async function guardFeaturePermission(permission, feature) { return guardPermission(permission) }
     `,
   ],
-  [
-    "mock:features",
-    `export async function isFeatureEnabled() { return true }`,
-  ],
+  ["mock:features", `export async function isFeatureEnabled() { return true }`],
   [
     "mock:service",
     `
@@ -67,7 +64,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveActionNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveActionNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
@@ -77,31 +75,38 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/hrm/leave", "mock:service"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const withdrawUrl = "./withdraw/route.ts?hrm-leave-withdraw";
-  const cancelUrl = "./cancel/route.ts?hrm-leave-cancel";
-  const withdrawRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
-  const cancelRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined = (await import(cancelUrl)) as typeof import("./cancel/route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const withdrawUrl = "./withdraw/route.ts?hrm-leave-withdraw";
+const cancelUrl = "./cancel/route.ts?hrm-leave-cancel";
+const withdrawRoute:
+  | { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> }
+  | undefined = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
+const cancelRoute:
+  | { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> }
+  | undefined = (await import(cancelUrl)) as typeof import("./cancel/route.ts");
+test.after(() => hooks.deregister());
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };
 
 function post(route: NonNullable<typeof withdrawRoute>, body: unknown): Promise<Response> {
   return route.POST(
-    new Request("http://x", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    new Request("http://x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
     ctx,
   );
 }
@@ -133,7 +138,10 @@ test("withdraw with a grant and a reason reaches the service", async () => {
   reset(["hrm.leave.request"]);
   const res = await post(withdrawRoute!, { reason: "Plans changed" });
   assert.equal(res.status, 200);
-  assert.deepEqual(routeState.calls.map((call) => call.fn), ["withdraw"]);
+  assert.deepEqual(
+    routeState.calls.map((call) => call.fn),
+    ["withdraw"],
+  );
 });
 
 test("cancel refuses a read-only viewer and an empty reason", async () => {
@@ -147,5 +155,8 @@ test("cancel refuses a read-only viewer and an empty reason", async () => {
 test("cancel with a grant and a reason reaches the service", async () => {
   reset(["hrm.leave.request"]);
   assert.equal((await post(cancelRoute!, { reason: "No longer needed" })).status, 200);
-  assert.deepEqual(routeState.calls.map((call) => call.fn), ["cancel"]);
+  assert.deepEqual(
+    routeState.calls.map((call) => call.fn),
+    ["cancel"],
+  );
 });

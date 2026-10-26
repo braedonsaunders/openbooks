@@ -39,13 +39,19 @@ export function processBalanceRows(
   sources: readonly ProcessBalanceSource[],
   measuredByUnit: ReadonlyMap<string, string>,
 ): ProcessBalanceRow[] {
-  const units = [...new Set([...sources.map((source) => source.unit), ...measuredByUnit.keys()])].sort();
+  const units = [
+    ...new Set([...sources.map((source) => source.unit), ...measuredByUnit.keys()]),
+  ].sort();
   return units.map((unit) => {
     const source = sources.find((candidate) => candidate.unit === unit) ?? {
-      unit, inputQuantity: "0", outputQuantity: "0", producedOutputQuantity: "0",
+      unit,
+      inputQuantity: "0",
+      outputQuantity: "0",
+      producedOutputQuantity: "0",
     };
     const measured = measuredByUnit.get(unit) ?? null;
-    const unreceived = measured === null ? "0" : nonNegative(add(measured, neg(source.producedOutputQuantity)));
+    const unreceived =
+      measured === null ? "0" : nonNegative(add(measured, neg(source.producedOutputQuantity)));
     const accounted = add(source.outputQuantity, unreceived);
     const difference = add(source.inputQuantity, neg(accounted));
     const sign = cmp(difference, "0");

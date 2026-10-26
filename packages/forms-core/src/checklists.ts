@@ -2,19 +2,10 @@ import { z } from "zod";
 import { uuidString } from "./identifiers";
 import { RECORD_FIELD_TYPES } from "./record-data";
 import { evaluateLogicRule } from "./evaluator";
-import {
-  formSchemaV1Schema,
-  logicRuleSchema,
-  lintFormSchema,
-  type LogicRule,
-} from "./schema";
+import { formSchemaV1Schema, logicRuleSchema, lintFormSchema, type LogicRule } from "./schema";
 
 export const CHECKLIST_STEP_SUBJECT_KIND = "hrm_process_step";
-export const checklistContextFields = [
-  "employerSubsidiaryId",
-  "departmentId",
-  "kind",
-] as const;
+export const checklistContextFields = ["employerSubsidiaryId", "departmentId", "kind"] as const;
 const id = uuidString();
 export const checklistStepDesignSchema = z.object({
   section: z.string().max(120).default(""),
@@ -60,8 +51,7 @@ export const emptyStepDesign = (): ChecklistStepDesign => ({
 });
 export type ChecklistIssue = { stepId?: string; message: string };
 function ruleFields(rule: LogicRule, depth = 0): string[] {
-  if (depth > 8)
-    throw new Error("Conditions exceed eight levels — simplify the rule");
+  if (depth > 8) throw new Error("Conditions exceed eight levels — simplify the rule");
   if ("field" in rule) return [rule.field];
   if ("rule" in rule) return ruleFields(rule.rule, depth + 1);
   return rule.rules.flatMap((r) => ruleFields(r, depth + 1));
@@ -76,10 +66,8 @@ export function checklistConditionPredicates(
 /** Publication checks describe the complete process, including dependency cycles. */
 export function checklistIssues(doc: ChecklistDocument): ChecklistIssue[] {
   const issues: ChecklistIssue[] = [];
-  if (!doc.name.trim())
-    issues.push({ message: "Name the checklist before publishing." });
-  if (!doc.steps.length)
-    issues.push({ message: "Add at least one step before publishing." });
+  if (!doc.name.trim()) issues.push({ message: "Name the checklist before publishing." });
+  if (!doc.steps.length) issues.push({ message: "Add at least one step before publishing." });
   const ids = new Set(doc.steps.map((s) => s.id));
   if (ids.size !== doc.steps.length)
     issues.push({ message: "Each step must have a distinct identity." });
@@ -91,32 +79,23 @@ export function checklistIssues(doc: ChecklistDocument): ChecklistIssue[] {
       step.dueOffsetDays < -3650 ||
       step.dueOffsetDays > 3650
     )
-      add(
-        "Enter a whole number of days between -3650 and 3650 for the due date.",
-      );
+      add("Enter a whole number of days between -3650 and 3650 for the due date.");
     for (const resource of step.design.resources) {
       try {
         const url = new URL(resource.url);
         if (!["http:", "https:"].includes(url.protocol)) throw new Error();
       } catch {
-        add(
-          "Give every resource an HTTP or HTTPS link, or remove the unfinished link.",
-        );
+        add("Give every resource an HTTP or HTTPS link, or remove the unfinished link.");
       }
     }
     if ((step.ownerKind === "named_party") !== (step.ownerPartyId !== null))
-      add(
-        "Choose a named owner, or clear the named person for a role assignment.",
-      );
+      add("Choose a named owner, or clear the named person for a role assignment.");
     if (step.design.dependencies.some((x) => !ids.has(x) || x === step.id))
       add("Dependencies must name another step in this checklist.");
-    if (
-      new Set(step.design.dependencies).size !== step.design.dependencies.length
-    )
+    if (new Set(step.design.dependencies).size !== step.design.dependencies.length)
       add("Remove duplicate dependencies.");
     if (step.design.form) {
-      for (const issue of lintFormSchema(step.design.form))
-        add(`Response form: ${issue.message}.`);
+      for (const issue of lintFormSchema(step.design.form)) add(`Response form: ${issue.message}.`);
       for (const field of step.design.form.sections.flatMap((s) => s.fields)) {
         if (!RECORD_FIELD_TYPES.includes(field.type))
           add(
@@ -128,24 +107,15 @@ export function checklistIssues(doc: ChecklistDocument): ChecklistIssue[] {
       try {
         if (
           ruleFields(step.design.condition).some(
-            (f) =>
-              !checklistContextFields.includes(
-                f as (typeof checklistContextFields)[number],
-              ),
+            (f) => !checklistContextFields.includes(f as (typeof checklistContextFields)[number]),
           )
         )
-          add(
-            "Conditions may use the employer, department and process kind only.",
-          );
+          add("Conditions may use the employer, department and process kind only.");
       } catch (error) {
-        add(
-          error instanceof Error ? error.message : "Simplify this condition.",
-        );
+        add(error instanceof Error ? error.message : "Simplify this condition.");
         continue;
       }
-      for (const predicate of checklistConditionPredicates(
-        step.design.condition,
-      )) {
+      for (const predicate of checklistConditionPredicates(step.design.condition)) {
         if (
           ["gt", "lt", "gte", "lte"].includes(predicate.op) ||
           ("valueType" in predicate && predicate.valueType)
@@ -154,21 +124,15 @@ export function checklistIssues(doc: ChecklistDocument): ChecklistIssue[] {
             "Employer, department and process kind conditions use equality, membership or presence — choose a matching operator.",
           );
         if (!("value" in predicate)) continue;
-        const values = Array.isArray(predicate.value)
-          ? predicate.value
-          : [predicate.value];
+        const values = Array.isArray(predicate.value) ? predicate.value : [predicate.value];
         for (const value of values) {
           if (value === null) continue;
           if (
             predicate.field === "kind"
-              ? !["onboarding", "offboarding", "transfer"].includes(
-                  String(value),
-                )
+              ? !["onboarding", "offboarding", "transfer"].includes(String(value))
               : !id.safeParse(value).success
           )
-            add(
-              "Choose a valid employer, department or process kind from the condition picker.",
-            );
+            add("Choose a valid employer, department or process kind from the condition picker.");
         }
       }
     }
@@ -179,17 +143,14 @@ export function checklistIssues(doc: ChecklistDocument): ChecklistIssue[] {
     if (visiting.has(id)) return true;
     if (visited.has(id)) return false;
     visiting.add(id);
-    const cycle =
-      doc.steps.find((s) => s.id === id)?.design.dependencies.some(walk) ??
-      false;
+    const cycle = doc.steps.find((s) => s.id === id)?.design.dependencies.some(walk) ?? false;
     visiting.delete(id);
     visited.add(id);
     return cycle;
   }
   if (doc.steps.some((s) => walk(s.id)))
     issues.push({
-      message:
-        "Steps form a dependency cycle — remove a dependency so work can progress.",
+      message: "Steps form a dependency cycle — remove a dependency so work can progress.",
     });
   return issues;
 }
@@ -199,9 +160,7 @@ export function includedChecklistSteps(
   values: Record<string, unknown>,
 ): ChecklistStep[] {
   const included = doc.steps.filter(
-    (s) =>
-      !s.design.condition ||
-      evaluateLogicRule(s.design.condition, { values, rows: {} }),
+    (s) => !s.design.condition || evaluateLogicRule(s.design.condition, { values, rows: {} }),
   );
   const ids = new Set(included.map((s) => s.id));
   for (const s of included)
@@ -236,15 +195,11 @@ export function actionableChecklistSteps<T extends ChecklistExecutionStep>(
         step.approvalStatus !== "pending" &&
         (step.design?.dependencies ?? []).every((id) => {
           const dependency = steps.find((s) => s.sourceStepId === id);
-          return (
-            dependency?.status === "done" || dependency?.status === "skipped"
-          );
+          return dependency?.status === "done" || dependency?.status === "skipped";
         }),
     )
     .sort(
       (a, b) =>
-        a.dueOn.localeCompare(b.dueOn) ||
-        a.position - b.position ||
-        a.id.localeCompare(b.id),
+        a.dueOn.localeCompare(b.dueOn) || a.position - b.position || a.id.localeCompare(b.id),
     );
 }

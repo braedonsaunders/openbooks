@@ -24,24 +24,49 @@ test("employer fact storage resolves legal-employer history and retains audited 
       changeReason: `Annual legal-employer headcount correction ${tag}`,
     };
     await upsertPayrollEmployerFact({ ...input, value: "12.34" });
-    assert.equal(await resolveStoredEmployerFact({
-      tx: db, orgId: org.orgId, subsidiaryId: org.subsidiaryId,
-      country: "FR", factKey: input.factKey, asOf: "2024-06-30",
-    }), "12.34");
+    assert.equal(
+      await resolveStoredEmployerFact({
+        tx: db,
+        orgId: org.orgId,
+        subsidiaryId: org.subsidiaryId,
+        country: "FR",
+        factKey: input.factKey,
+        asOf: "2024-06-30",
+      }),
+      "12.34",
+    );
 
     await upsertPayrollEmployerFact({
-      ...input, value: "14.56", changeReason: `Corrected from filed prior-year roster ${tag}`,
+      ...input,
+      value: "14.56",
+      changeReason: `Corrected from filed prior-year roster ${tag}`,
     });
-    assert.equal(await resolveStoredEmployerFact({
-      tx: db, orgId: org.orgId, subsidiaryId: org.subsidiaryId,
-      country: "FR", factKey: input.factKey, asOf: "2024-06-30",
-    }), "12.34", "a correction today must not reinterpret a historical payroll date");
-    assert.equal(await resolveStoredEmployerFact({
-      tx: db, orgId: org.orgId, subsidiaryId: org.subsidiaryId,
-      country: "FR", factKey: input.factKey, asOf: new Date().toISOString().slice(0, 10),
-    }), "14.56");
+    assert.equal(
+      await resolveStoredEmployerFact({
+        tx: db,
+        orgId: org.orgId,
+        subsidiaryId: org.subsidiaryId,
+        country: "FR",
+        factKey: input.factKey,
+        asOf: "2024-06-30",
+      }),
+      "12.34",
+      "a correction today must not reinterpret a historical payroll date",
+    );
+    assert.equal(
+      await resolveStoredEmployerFact({
+        tx: db,
+        orgId: org.orgId,
+        subsidiaryId: org.subsidiaryId,
+        country: "FR",
+        factKey: input.factKey,
+        asOf: new Date().toISOString().slice(0, 10),
+      }),
+      "14.56",
+    );
 
-    const audit = await db.execute<{ action: string; changes: { reason?: string } }>(sql`
+    const audit = await db.execute<{ action: string; changes: { reason?: string } }>(
+      sql`
       select action, changes
         from audit_log
        where org_id = ${org.orgId}
@@ -49,11 +74,19 @@ test("employer fact storage resolves legal-employer history and retains audited 
          and changes->>'factKey' = ${input.factKey}
          and changes->>'reason' like ${`%${tag}%`}
        order by at, id
-    `, "objects");
+    `,
+      "objects",
+    );
     // The correction's supersede and insert share one transaction timestamp,
     // so only the original insert has a deterministic position.
     assert.equal(audit[0]?.action, "insert");
-    assert.deepEqual(audit.slice(1).map((row) => row.action).sort(), ["insert", "supersede"]);
+    assert.deepEqual(
+      audit
+        .slice(1)
+        .map((row) => row.action)
+        .sort(),
+      ["insert", "supersede"],
+    );
     const correction = audit.slice(1).find((row) => row.action === "insert");
     assert.equal(correction?.changes.reason, `Corrected from filed prior-year roster ${tag}`);
   } finally {

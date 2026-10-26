@@ -39,7 +39,8 @@ export async function listApplicationUsers(
   }
   if (status !== "all") where = sql`${where} and u.is_active = ${status !== "inactive"}`;
   const [rows, count] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select u.id, u.name, u.email, u.is_active, u.last_login_at,
              coalesce(array_agg(r.name) filter (where r.id is not null), '{}') as roles
         from users u
@@ -49,7 +50,9 @@ export async function listApplicationUsers(
        group by u.id
        order by lower(u.name) asc, lower(u.email) asc
        limit ${limit}
-    `, "objects"),
+    `,
+      "objects",
+    ),
     db.execute<{ n: string }>(sql`select count(*) as n from users u where ${where}`, "objects"),
   ]);
   return {
@@ -83,7 +86,8 @@ export async function listApplicationRoles(
   }
   if (type !== "all") where = sql`${where} and r.is_built_in = ${type === "built_in"}`;
   const [rows, count] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select r.id, r.key, r.name, r.description, r.is_built_in, r.permissions,
              r.subsidiary_restriction,
              coalesce(jsonb_array_length(r.permissions), 0)::int as permission_count,
@@ -93,7 +97,9 @@ export async function listApplicationRoles(
        where ${where}
        order by r.is_built_in desc, lower(r.name) asc
        limit ${limit}
-    `, "objects"),
+    `,
+      "objects",
+    ),
     db.execute<{ n: string }>(sql`select count(*) as n from app_roles r where ${where}`, "objects"),
   ]);
   return {
@@ -145,9 +151,10 @@ export async function listApplicationAuditEvents(
   if (input.action) where = sql`${where} and a.action = ${input.action}`;
   if (input.recordType) where = sql`${where} and (${rtypeExpr}) = ${input.recordType}`;
   if (input.actorId) {
-    where = input.actorId === "system"
-      ? sql`${where} and a.actor_id is null`
-      : sql`${where} and a.actor_id = ${input.actorId}`;
+    where =
+      input.actorId === "system"
+        ? sql`${where} and a.actor_id is null`
+        : sql`${where} and a.actor_id = ${input.actorId}`;
   }
   if (input.from) where = sql`${where} and a.at >= ${input.from}::date`;
   if (input.to) where = sql`${where} and a.at < (${input.to}::date + interval '1 day')`;
@@ -157,7 +164,8 @@ export async function listApplicationAuditEvents(
     where = sql`${where} and ((${rtypeExpr}) ilike ${like} or u.name ilike ${like} or a.row_id::text = ${q})`;
   }
   const [rows, count] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select a.id, a.row_id, a.action, a.at, u.name as actor_name, (${rtypeExpr}) as rtype, a.changes,
              case
                when a.changes ? 'before' or a.changes ? 'after' then 'snapshot'
@@ -168,7 +176,9 @@ export async function listApplicationAuditEvents(
        where ${where}
        order by a.at desc
        limit ${limit}
-    `, "objects"),
+    `,
+      "objects",
+    ),
     db.execute<{ n: string }>(sql`select count(*) as n ${auditFrom} where ${where}`, "objects"),
   ]);
   return {

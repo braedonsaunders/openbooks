@@ -22,7 +22,9 @@ export function collectTestFiles(root = ROOT) {
   for (const sub of ["engine/src", "web", "packages", "schema", "e2e", "scripts"]) {
     try {
       if (statSync(join(root, sub)).isDirectory()) walk(join(root, sub));
-    } catch { /* optional tree absent */ }
+    } catch {
+      /* optional tree absent */
+    }
   }
   return out;
 }
@@ -49,10 +51,26 @@ export function regexLiterals(src) {
     while (k >= 0 && /[A-Za-z0-9_$]/.test(src[k])) k--;
     return src.slice(k + 1, j + 1);
   };
-  const KEYWORDS = new Set(["return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "yield", "await", "case"]);
+  const KEYWORDS = new Set([
+    "return",
+    "typeof",
+    "instanceof",
+    "in",
+    "of",
+    "new",
+    "delete",
+    "void",
+    "yield",
+    "await",
+    "case",
+  ]);
   while (i < n) {
     const char = src[i];
-    if (char === "\n") { line++; i++; continue; }
+    if (char === "\n") {
+      line++;
+      i++;
+      continue;
+    }
     if (char === "'" || char === '"') {
       const quote = char;
       i++;
@@ -69,8 +87,14 @@ export function regexLiterals(src) {
       while (i < n) {
         const inner = src[i];
         if (inner === "\n") line++;
-        if (inner === "\\") { i += 2; continue; }
-        if (inner === "`") { i++; break; }
+        if (inner === "\\") {
+          i += 2;
+          continue;
+        }
+        if (inner === "`") {
+          i++;
+          break;
+        }
         i++;
       }
       continue;
@@ -102,7 +126,11 @@ export function regexLiterals(src) {
         while (i < n) {
           const inner = src[i];
           if (inner === "\n") break;
-          if (inner === "\\") { pattern += src.slice(i, i + 2); i += 2; continue; }
+          if (inner === "\\") {
+            pattern += src.slice(i, i + 2);
+            i += 2;
+            continue;
+          }
           if (inner === "[") inClass = true;
           if (inner === "]") inClass = false;
           if (inner === "/" && !inClass) break;
@@ -151,8 +179,9 @@ export function isEscapeClass(pattern) {
   const members = klass[1].replace(/\\(.)/g, "$1");
   // At least 8 distinct metacharacters: the real idiom lists 13-14, while a
   // short class like /[\\.]/ may be a mis-escape and stays checked.
-  return members.includes("\\") && /^[.*+?^${}()|[\]\\\/-]+$/.test(members) &&
-    new Set(members).size >= 8;
+  return (
+    members.includes("\\") && /^[.*+?^${}()|[\]\\\/-]+$/.test(members) && new Set(members).size >= 8
+  );
 }
 
 // Entries the sweep verified by hand: the effective pattern really does
@@ -161,27 +190,98 @@ export function isEscapeClass(pattern) {
 // escapeRegExp idioms, source-text pins). A NEW occurrence fails the build;
 // extend this list only with a reason naming the backslash in the text.
 export const ALLOWLIST = [
-  { file: "scripts/ci-pipeline-integrity.test.mjs", snippet: "\\\\\\s*$", reason: "shell line-continuation backslash at end of line" },
-  { file: "scripts/deploy-edge-workflow.test.mjs", snippet: "gh api", reason: "expected YAML embeds shell continuations (literal backslash-newline)" },
-  { file: "scripts/deploy-edge-workflow.test.mjs", snippet: "dispatches", reason: "expected YAML embeds shell continuations" },
-  { file: "scripts/deploy-edge-workflow.test.mjs", snippet: "workflow_run_id", reason: "expected YAML embeds shell continuations" },
-  { file: "scripts/deploy-edge-workflow.test.mjs", snippet: "PUBLISH_RUN_ID", reason: "expected YAML embeds shell continuations" },
-  { file: "scripts/deploy-production-workflow.test.mjs", snippet: "^v", reason: "pins a BRE version pattern inside the workflow YAML (backslashes are the text)" },
-  { file: "web/lib/assistant/coverage-matrix.test.ts", snippet: 'replace(/\\\\/g, "/")', reason: "Windows separator normalization: the backslash is the text" },
-  { file: "schema/canonical-baseline-generator.test.ts", snippet: "restrict", reason: "psql \\\\restrict/\\\\unrestrict metacommand lines in dump text" },
-  { file: "web/lib/feature-gates.test.ts", snippet: "replace", reason: "pins the absence of slash-stripping source (backslashes are the source text)" },
-  { file: "scripts/ci-pipeline-integrity.test.mjs", snippet: "not ok \\\\d", reason: "pins the canary's TAP grep in test.yml, whose text really contains backslash escapes" },
-  { file: "scripts/test-fixture-architecture.test.mjs", snippet: "\\$\\{receipt", reason: "pins owner source text that really contains backslash-n escape sequences" },
-  { file: "engine/src/provisioning/bootstrap-safety.test.ts", snippet: "seed-project-types", reason: "pins the \\. stem escape inside isSeedProjectTypesCli's entrypoint regex (seed-project-types.ts:80), whose text really contains a backslash" },
-  { file: "scripts/test-workflow.test.mjs", snippet: "package-lock", reason: "pins the scope job's grep over the build's own inputs in test.yml:66, whose text really contains backslash escapes (\\.github, package-lock\\.json) so the minimal correct pattern carries \\\\ runs" },
-  { file: "packages/pdf/src/statement.test.ts", snippet: "nrtbf", reason: "PDF literal-string unescaper: raw content streams really contain backslash escapes (\\n, \\(, \\NNN octal)" },
-  { file: "packages/pdf/src/statement.test.ts", snippet: "0-9A-Fa-f", reason: "PDF show-string decoder: literal runs are delimited by backslash-paren in the raw stream text" },
-  { file: "packages/pdf/src/statement.test.ts", snippet: "1 0 0 1", reason: "PDF text-position tokenizer: TJ/Tj strings carry backslash-escaped parens in the raw stream text" },
+  {
+    file: "scripts/ci-pipeline-integrity.test.mjs",
+    snippet: "\\\\\\s*$",
+    reason: "shell line-continuation backslash at end of line",
+  },
+  {
+    file: "scripts/deploy-edge-workflow.test.mjs",
+    snippet: "gh api",
+    reason: "expected YAML embeds shell continuations (literal backslash-newline)",
+  },
+  {
+    file: "scripts/deploy-edge-workflow.test.mjs",
+    snippet: "dispatches",
+    reason: "expected YAML embeds shell continuations",
+  },
+  {
+    file: "scripts/deploy-edge-workflow.test.mjs",
+    snippet: "workflow_run_id",
+    reason: "expected YAML embeds shell continuations",
+  },
+  {
+    file: "scripts/deploy-edge-workflow.test.mjs",
+    snippet: "PUBLISH_RUN_ID",
+    reason: "expected YAML embeds shell continuations",
+  },
+  {
+    file: "scripts/deploy-production-workflow.test.mjs",
+    snippet: "^v",
+    reason: "pins a BRE version pattern inside the workflow YAML (backslashes are the text)",
+  },
+  {
+    file: "web/lib/assistant/coverage-matrix.test.ts",
+    snippet: 'replace(/\\\\/g, "/")',
+    reason: "Windows separator normalization: the backslash is the text",
+  },
+  {
+    file: "schema/canonical-baseline-generator.test.ts",
+    snippet: "restrict",
+    reason: "psql \\\\restrict/\\\\unrestrict metacommand lines in dump text",
+  },
+  {
+    file: "web/lib/feature-gates.test.ts",
+    snippet: "replace",
+    reason: "pins the absence of slash-stripping source (backslashes are the source text)",
+  },
+  {
+    file: "scripts/ci-pipeline-integrity.test.mjs",
+    snippet: "not ok \\\\d",
+    reason: "pins the canary's TAP grep in test.yml, whose text really contains backslash escapes",
+  },
+  {
+    file: "scripts/test-fixture-architecture.test.mjs",
+    snippet: "\\$\\{receipt",
+    reason: "pins owner source text that really contains backslash-n escape sequences",
+  },
+  {
+    file: "engine/src/provisioning/bootstrap-safety.test.ts",
+    snippet: "seed-project-types",
+    reason:
+      "pins the \\. stem escape inside isSeedProjectTypesCli's entrypoint regex (seed-project-types.ts:80), whose text really contains a backslash",
+  },
+  {
+    file: "scripts/test-workflow.test.mjs",
+    snippet: "package-lock",
+    reason:
+      "pins the scope job's grep over the build's own inputs in test.yml:66, whose text really contains backslash escapes (\\.github, package-lock\\.json) so the minimal correct pattern carries \\\\ runs",
+  },
+  {
+    file: "packages/pdf/src/statement.test.ts",
+    snippet: "nrtbf",
+    reason:
+      "PDF literal-string unescaper: raw content streams really contain backslash escapes (\\n, \\(, \\NNN octal)",
+  },
+  {
+    file: "packages/pdf/src/statement.test.ts",
+    snippet: "0-9A-Fa-f",
+    reason:
+      "PDF show-string decoder: literal runs are delimited by backslash-paren in the raw stream text",
+  },
+  {
+    file: "packages/pdf/src/statement.test.ts",
+    snippet: "1 0 0 1",
+    reason:
+      "PDF text-position tokenizer: TJ/Tj strings carry backslash-escaped parens in the raw stream text",
+  },
 ];
 
 export function isAllowlisted(file, snippet) {
-  return ALLOWLIST.some((entry) => file === entry.file &&
-    (snippet.includes(entry.snippet) || entry.snippet.includes(snippet)));
+  return ALLOWLIST.some(
+    (entry) =>
+      file === entry.file && (snippet.includes(entry.snippet) || entry.snippet.includes(snippet)),
+  );
 }
 
 export function scanFile(path, root = ROOT) {
@@ -205,10 +305,17 @@ export function scanFile(path, root = ROOT) {
     for (const [key, body] of blocks) {
       const effective = unescapeTemplate(body);
       for (const literal of regexLiterals(effective)) {
-        checkLiteral(literal.pattern, literal.line, `mock:${key} ${literal.snippet}`, "mock-body literal");
+        checkLiteral(
+          literal.pattern,
+          literal.line,
+          `mock:${key} ${literal.snippet}`,
+          "mock-body literal",
+        );
       }
     }
-  } catch { /* unparseable mock wiring is the sibling checker's job */ }
+  } catch {
+    /* unparseable mock wiring is the sibling checker's job */
+  }
   return findings;
 }
 
@@ -225,7 +332,9 @@ if (invoked) {
   const root = process.argv[2] ?? ROOT;
   const findings = scanTree(root);
   for (const finding of findings) {
-    console.log(`${finding.file}:${finding.line} [${finding.origin}] run=${finding.run} :: ${finding.snippet}`);
+    console.log(
+      `${finding.file}:${finding.line} [${finding.origin}] run=${finding.run} :: ${finding.snippet}`,
+    );
   }
   console.log(`checked test regexes; suspects=${findings.length}`);
   process.exit(findings.length > 0 ? 1 : 0);

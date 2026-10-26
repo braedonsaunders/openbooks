@@ -6,7 +6,6 @@ import { isUuid } from "../../../../../lib/list-params";
 import { runAutomationBody } from "../../bodies";
 import { automationErrorResponse, resolveRunInvocationKey } from "../../_lib";
 
-
 export const runtime = "nodejs";
 
 /**
@@ -25,12 +24,12 @@ export const POST = defineRoute({
 
     const { id } = await ctx.params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "automation id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "automation id must be a uuid" }, { status: 400 });
 
-    const invocation = resolveRunInvocationKey(request.headers.get("Idempotency-Key"), gate.user.id);
+    const invocation = resolveRunInvocationKey(
+      request.headers.get("Idempotency-Key"),
+      gate.user.id,
+    );
     if (!invocation.ok) {
       return NextResponse.json({ error: invocation.error }, { status: 400 });
     }
@@ -39,8 +38,7 @@ export const POST = defineRoute({
     if ((body.subjectEntity == null) !== (body.subjectId == null)) {
       return NextResponse.json(
         {
-          error:
-            "subjectEntity and subjectId travel together — pass both or neither",
+          error: "subjectEntity and subjectId travel together — pass both or neither",
         },
         { status: 400 },
       );

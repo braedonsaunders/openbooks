@@ -23,7 +23,10 @@ test("band amounts refuse JSON numbers and name the decimal-string remedy", () =
   const parsed = createBandBody.safeParse({ ...BAND, min: 50000 });
   assert.equal(parsed.success, false);
   if (!parsed.success) {
-    assert.match(parsed.error.issues.find((issue) => issue.path.join(".") === "min")!.message, /decimal string/);
+    assert.match(
+      parsed.error.issues.find((issue) => issue.path.join(".") === "min")!.message,
+      /decimal string/,
+    );
   }
 });
 
@@ -42,7 +45,11 @@ test("band amounts refuse the unconfigured by name with a remedy", () => {
     if (parsed.success) assert.fail(`min ${String(min)} must be refused`);
     const issue = parsed.error.issues.find((i) => i.path.join(".") === "min");
     assert.ok(issue, `refusal names the min path for ${String(min)}`);
-    assert.match(issue!.message, new RegExp(needle), `remedy for ${String(min)}: ${issue!.message}`);
+    assert.match(
+      issue!.message,
+      new RegExp(needle),
+      `remedy for ${String(min)}: ${issue!.message}`,
+    );
   }
 });
 

@@ -1,58 +1,108 @@
-import 'server-only'
-import { getTranslations } from 'next-intl/server'
-import { myBenefitStatement } from '@openbooks/engine/hrm/benefits'
-import type { Authz } from '../authz'
-import { getMoneyFormatter } from '../money-server'
+import "server-only";
+import { getTranslations } from "next-intl/server";
+import { myBenefitStatement } from "@openbooks/engine/hrm/benefits";
+import type { Authz } from "../authz";
+import { getMoneyFormatter } from "../money-server";
 
 export interface MyBenefitAwardRow {
-  id: string
-  programName: string
-  periodLabel: string
-  valueLabel: string
-  statusLabel: string
-  statusVariant: 'success' | 'warning' | 'outline' | 'destructive'
+  id: string;
+  programName: string;
+  periodLabel: string;
+  valueLabel: string;
+  statusLabel: string;
+  statusVariant: "success" | "warning" | "outline" | "destructive";
 }
 
 export interface MyBenefitAwardsData {
-  paidAwards: MyBenefitAwardRow[]
-  pendingAwards: MyBenefitAwardRow[]
-  reversedAwards: MyBenefitAwardRow[]
-  awardsRefusal: { title: string; message: string } | null
-  awardsText: Record<'paidTitle' | 'pendingTitle' | 'reversedTitle' | 'reversedEmpty' | 'reversedStatus' | 'hint' | 'paidEmpty' | 'pendingEmpty' | 'program' | 'period' | 'value' | 'status', string>
+  paidAwards: MyBenefitAwardRow[];
+  pendingAwards: MyBenefitAwardRow[];
+  reversedAwards: MyBenefitAwardRow[];
+  awardsRefusal: { title: string; message: string } | null;
+  awardsText: Record<
+    | "paidTitle"
+    | "pendingTitle"
+    | "reversedTitle"
+    | "reversedEmpty"
+    | "reversedStatus"
+    | "hint"
+    | "paidEmpty"
+    | "pendingEmpty"
+    | "program"
+    | "period"
+    | "value"
+    | "status",
+    string
+  >;
 }
 
 /** Self-service reads its own employments; no HR aggregate reaches this projection. */
 export async function loadMyBenefitAwards(authz: Authz): Promise<MyBenefitAwardsData> {
-  const t = await getTranslations('hrm')
-  const textKeys = ['paidTitle', 'pendingTitle', 'reversedTitle', 'reversedEmpty', 'reversedStatus', 'hint', 'paidEmpty', 'pendingEmpty', 'program', 'period', 'value', 'status'] as const
-  const awardsText = Object.fromEntries(textKeys.map((key) => [key, t(`me.benefits.awards.${key}`)])) as MyBenefitAwardsData['awardsText']
+  const t = await getTranslations("hrm");
+  const textKeys = [
+    "paidTitle",
+    "pendingTitle",
+    "reversedTitle",
+    "reversedEmpty",
+    "reversedStatus",
+    "hint",
+    "paidEmpty",
+    "pendingEmpty",
+    "program",
+    "period",
+    "value",
+    "status",
+  ] as const;
+  const awardsText = Object.fromEntries(
+    textKeys.map((key) => [key, t(`me.benefits.awards.${key}`)]),
+  ) as MyBenefitAwardsData["awardsText"];
   try {
     const [statements, { money }] = await Promise.all([
       myBenefitStatement({ orgId: authz.user.orgId, actorId: authz.user.id }),
       getMoneyFormatter(authz.user.orgId),
-    ])
-    const project = (award: (typeof statements)[number]['paidAwards'][number]): MyBenefitAwardRow => ({
+    ]);
+    const project = (
+      award: (typeof statements)[number]["paidAwards"][number],
+    ): MyBenefitAwardRow => ({
       id: award.id,
       programName: award.programName,
       periodLabel: award.periodTo ? `${award.periodFrom} – ${award.periodTo}` : award.periodFrom,
       valueLabel: money(award.value, { currency: award.currency }),
-      statusLabel: award.deliveryState === 'reversed' ? t('me.benefits.awards.reversedStatus')
-        : award.status === 'delivered' ? award.externalRef
-          ? `${t('portfolio.awardStatus.delivered')} · ${t('portfolio.delivery.external')}`
-          : t('portfolio.payrollDelivery')
-        : t(`portfolio.awardStatus.${award.status}`),
-      statusVariant: award.status === 'rejected' ? 'destructive' : award.deliveryState === 'reversed' ? 'outline' : award.status === 'delivered' ? 'success' : 'warning',
-    })
+      statusLabel:
+        award.deliveryState === "reversed"
+          ? t("me.benefits.awards.reversedStatus")
+          : award.status === "delivered"
+            ? award.externalRef
+              ? `${t("portfolio.awardStatus.delivered")} · ${t("portfolio.delivery.external")}`
+              : t("portfolio.payrollDelivery")
+            : t(`portfolio.awardStatus.${award.status}`),
+      statusVariant:
+        award.status === "rejected"
+          ? "destructive"
+          : award.deliveryState === "reversed"
+            ? "outline"
+            : award.status === "delivered"
+              ? "success"
+              : "warning",
+    });
     return {
-      awardsText, awardsRefusal: null,
+      awardsText,
+      awardsRefusal: null,
       paidAwards: statements.flatMap((statement) => statement.paidAwards.map(project)),
       pendingAwards: statements.flatMap((statement) => statement.pendingAwards.map(project)),
-      reversedAwards: statements.flatMap((statement) => [...statement.reversedAwards, ...statement.rejectedAwards].map(project)),
-    }
+      reversedAwards: statements.flatMap((statement) =>
+        [...statement.reversedAwards, ...statement.rejectedAwards].map(project),
+      ),
+    };
   } catch (error) {
-    return { awardsText, paidAwards: [], pendingAwards: [], reversedAwards: [], awardsRefusal: {
-      title: t('me.benefits.awards.refusalTitle'),
-      message: error instanceof Error ? error.message : t('portfolio.loadFailed'),
-    } }
+    return {
+      awardsText,
+      paidAwards: [],
+      pendingAwards: [],
+      reversedAwards: [],
+      awardsRefusal: {
+        title: t("me.benefits.awards.refusalTitle"),
+        message: error instanceof Error ? error.message : t("portfolio.loadFailed"),
+      },
+    };
   }
 }

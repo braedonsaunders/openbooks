@@ -23,11 +23,19 @@ export async function voidDocument(
   actorId: string,
   reason: string,
 ): Promise<{ documentId: string }> {
-  return deleteDocument(documentId, actorId, _world.orgId, { source: "sim", reason, allowedSubsidiaryIds: null });
+  return deleteDocument(documentId, actorId, _world.orgId, {
+    source: "sim",
+    reason,
+    allowedSubsidiaryIds: null,
+  });
 }
 
 /** Post a negated reversing entry for a posted journal entry (flips the original to reversed). */
-export async function reverseEntry(world: SimOrg, entryId: string, actorId: string): Promise<{ reversalId: string | null }> {
+export async function reverseEntry(
+  world: SimOrg,
+  entryId: string,
+  actorId: string,
+): Promise<{ reversalId: string | null }> {
   const reversalId = await reverseProjectGlEntry(
     world.orgId,
     actorId,
@@ -44,7 +52,13 @@ export async function reverseEntry(world: SimOrg, entryId: string, actorId: stri
  */
 export async function writeOffReceivable(
   world: SimOrg,
-  args: { customerId: string; amount: string; reason: string; actorId: string; documentDate: string },
+  args: {
+    customerId: string;
+    amount: string;
+    reason: string;
+    actorId: string;
+    documentDate: string;
+  },
 ): Promise<{ documentId: string; entryId: string }> {
   const res = await createAndPostDocument(world, {
     kind: "customer_credit",
@@ -55,7 +69,13 @@ export async function writeOffReceivable(
     currency: world.currency,
     memo: `Bad debt write-off — ${args.reason}`,
     custom: { sim: { writeOff: true } },
-    lines: [{ accountId: world.accounts.badDebt!, description: `Write-off: ${args.reason}`, amount: args.amount }],
+    lines: [
+      {
+        accountId: world.accounts.badDebt!,
+        description: `Write-off: ${args.reason}`,
+        amount: args.amount,
+      },
+    ],
   });
   return { documentId: res.documentId, entryId: res.entryId };
 }

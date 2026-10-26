@@ -25,7 +25,9 @@ import { gbTablesForTaxYear } from "./year-tables.ts";
  * year-to-date levy the EPS reports is their sum over committed stubs.
  * EPS submission itself rides RTI software per the pack's standing refusal.
  */
-export function gbEmployerAggregateLevies(taxYear: number): readonly PayrollEmployerAggregateLevy[] {
+export function gbEmployerAggregateLevies(
+  taxYear: number,
+): readonly PayrollEmployerAggregateLevy[] {
   // Throws for a year without transcribed tables — the declaration refuses
   // untranscribed years, never prices from a neighbour's.
   const tables = gbTablesForTaxYear(taxYear);

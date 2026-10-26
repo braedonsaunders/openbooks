@@ -76,7 +76,8 @@ function storedBoundaries(raw: unknown): readonly number[] | null {
   const boundaries = raw.map(Number);
   if (boundaries.some((day) => !Number.isInteger(day))) return null;
   for (const [index, boundary] of boundaries.entries()) {
-    if (boundary < 1 || boundary > 36500 || (index > 0 && boundary <= boundaries[index - 1]!)) return null;
+    if (boundary < 1 || boundary > 36500 || (index > 0 && boundary <= boundaries[index - 1]!))
+      return null;
   }
   return boundaries;
 }
@@ -93,7 +94,8 @@ export async function agingBucketPolicyFor(
   const rows = await tx.execute<{
     boundaries: unknown;
     effective_from: string | Date;
-  }>(sql`
+  }>(
+    sql`
     select boundaries, effective_from
       from aging_bucket_policies
      where org_id = ${orgId}
@@ -102,16 +104,20 @@ export async function agingBucketPolicyFor(
        and (effective_to is null or effective_to >= ${onDate}::date)
      order by effective_from desc
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = rows[0];
   // A configured row that cannot be read refuses by name: falling back to the
   // default here would silently re-bucket history the organization laddered
   // differently. Only the absence of any row resolves the default.
-  if (!row) return { boundaries: [...DEFAULT_AGING_BOUNDARIES], source: "default", effectiveFrom: null };
+  if (!row)
+    return { boundaries: [...DEFAULT_AGING_BOUNDARIES], source: "default", effectiveFrom: null };
   const boundaries = storedBoundaries(row.boundaries);
   if (!boundaries) throw new AgingBucketPolicyUnreadableError(orgId, onDate);
-  const effectiveFrom = row.effective_from instanceof Date
-    ? row.effective_from.toISOString().slice(0, 10)
-    : String(row.effective_from).slice(0, 10);
+  const effectiveFrom =
+    row.effective_from instanceof Date
+      ? row.effective_from.toISOString().slice(0, 10)
+      : String(row.effective_from).slice(0, 10);
   return { boundaries, source: "policy", effectiveFrom };
 }

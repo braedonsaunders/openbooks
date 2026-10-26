@@ -14,14 +14,18 @@ declare global {
 
 // jsdom first: the guide reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/tax-setup", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/tax-setup",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
 stubModules({ navigation: "export function useRouter(){return globalThis.__taxSetupRouter}" });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -63,7 +67,9 @@ const PROVISION_REFUSAL = "unknown tax setup selection";
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -129,7 +135,10 @@ test("a refused provision toasts the server refusal, not a generic failure", asy
     assert.ok(provision, "expected an enabled provision button after selecting");
     await click(provision);
     const errors = (globalThis.__taxSetupToasts ?? []).filter((t) => t.kind === "error");
-    assert.deepEqual(errors.map((t) => t.message), [PROVISION_REFUSAL]);
+    assert.deepEqual(
+      errors.map((t) => t.message),
+      [PROVISION_REFUSAL],
+    );
   } finally {
     await unmount();
     restoreFetch();

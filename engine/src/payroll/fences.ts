@@ -41,10 +41,7 @@ export const employerLevyFenceKey = (
   levyKey: string,
 ): string => `payroll-levy-ytd:${orgId}:${taxYear}:${country}:${levyKey}`;
 
-async function takeFences(
-  tx: Pick<typeof db, "execute">,
-  keys: readonly string[],
-): Promise<void> {
+async function takeFences(tx: Pick<typeof db, "execute">, keys: readonly string[]): Promise<void> {
   for (const key of [...new Set(keys)].sort()) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
   }
@@ -66,7 +63,10 @@ export async function takeEmployeeTaxYearFences(
   // Dated withholding records can affect several tax years. Every statutory
   // writer owns the employee-wide configuration fence before yearly room,
   // so a new election cannot race a calculation or commit in another year.
-  await takeFences(tx,keys.map(key=>key.slice(0,key.lastIndexOf(":"))));
+  await takeFences(
+    tx,
+    keys.map((key) => key.slice(0, key.lastIndexOf(":"))),
+  );
   await takeFences(tx, keys);
 }
 

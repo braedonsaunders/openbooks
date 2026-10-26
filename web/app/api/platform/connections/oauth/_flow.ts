@@ -25,9 +25,13 @@ export type ConnectionOauthState = {
 };
 
 /** Recheck the initiating actor after the provider round-trip, before storing its credentials. */
-export async function connectionOauthActorStillAuthorized(orgId: string, userId: string): Promise<boolean> {
+export async function connectionOauthActorStillAuthorized(
+  orgId: string,
+  userId: string,
+): Promise<boolean> {
   const gate = await guardPermission("admin.setup.manage");
-  if (!gate || gate instanceof NextResponse || gate.user.id !== userId || gate.user.orgId !== orgId) return false;
+  if (!gate || gate instanceof NextResponse || gate.user.id !== userId || gate.user.orgId !== orgId)
+    return false;
   return guardUnrestrictedScope(gate) === null;
 }
 
@@ -39,7 +43,10 @@ export function connectionOauthRedirectUri(provider: ConnectionOauthProvider): s
   return `${connectionAppOrigin()}/api/platform/connections/oauth/${provider}/callback`;
 }
 
-export function mintConnectionOauthState(orgId: string, connectionId: string): {
+export function mintConnectionOauthState(
+  orgId: string,
+  connectionId: string,
+): {
   state: string;
   nonce: string;
 } {
@@ -49,7 +56,10 @@ export function mintConnectionOauthState(orgId: string, connectionId: string): {
   // param, so the org cannot be known before unsealing. The payload's own
   // orgId is validated after decryption, with the cookie nonce and expiry.
   return {
-    state: sealJson({ orgId, connectionId, nonce, exp }, { orgId: "system", purpose: "connection.oauth.state" }),
+    state: sealJson(
+      { orgId, connectionId, nonce, exp },
+      { orgId: "system", purpose: "connection.oauth.state" },
+    ),
     nonce,
   };
 }
@@ -75,7 +85,9 @@ export function clearConnectionOauthCookie(response: NextResponse): void {
 }
 
 export function connectionOauthBounce(status: string): NextResponse {
-  const response = NextResponse.redirect(new URL(`/sync?oauth=${status}`, `${connectionAppOrigin()}/`));
+  const response = NextResponse.redirect(
+    new URL(`/sync?oauth=${status}`, `${connectionAppOrigin()}/`),
+  );
   clearConnectionOauthCookie(response);
   return response;
 }
@@ -114,20 +126,23 @@ export function acceptConnectionOauthState(
   // undecryptable token bounces to badstate — the refusal for this flow.
   let st: Partial<ConnectionOauthState>;
   try {
-    st = unsealJson<Partial<ConnectionOauthState>>(sealed, { orgId: "system", purpose: "connection.oauth.state" });
+    st = unsealJson<Partial<ConnectionOauthState>>(sealed, {
+      orgId: "system",
+      purpose: "connection.oauth.state",
+    });
   } catch {
     return null;
   }
   if (
-    !st
-    || typeof st.orgId !== "string"
-    || !st.orgId
-    || typeof st.connectionId !== "string"
-    || !st.connectionId
-    || typeof st.nonce !== "string"
-    || st.nonce.length < 16
-    || typeof st.exp !== "number"
-    || !Number.isSafeInteger(st.exp)
+    !st ||
+    typeof st.orgId !== "string" ||
+    !st.orgId ||
+    typeof st.connectionId !== "string" ||
+    !st.connectionId ||
+    typeof st.nonce !== "string" ||
+    st.nonce.length < 16 ||
+    typeof st.exp !== "number" ||
+    !Number.isSafeInteger(st.exp)
   ) {
     return null;
   }

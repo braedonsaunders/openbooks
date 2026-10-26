@@ -1,14 +1,14 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { db } from '@openbooks/engine/platform/db'
-import { salesOrderScope } from '@openbooks/engine/sales/backorders'
-import { pickCandidates } from '@openbooks/engine/sales/fulfillment/module'
-import { guardSubsidiaryScope } from '@/lib/authz'
-import { defineRoute } from '@/lib/api/route'
-import { notFound, unprocessable } from '@/lib/api/responses'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { db } from "@openbooks/engine/platform/db";
+import { salesOrderScope } from "@openbooks/engine/sales/backorders";
+import { pickCandidates } from "@openbooks/engine/sales/fulfillment/module";
+import { guardSubsidiaryScope } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { notFound, unprocessable } from "@/lib/api/responses";
 
-const query = z.object({ salesOrderId: uuidString() })
+const query = z.object({ salesOrderId: uuidString() });
 
 /**
  * What an issued sales order still has to pick: each open stock line with
@@ -17,24 +17,25 @@ const query = z.object({ salesOrderId: uuidString() })
  * starts from this; release re-checks every bin under the position locks.
  */
 export const GET = defineRoute({
-  permission: 'orders.fulfill',
-  feature: 'fulfillment',
+  permission: "orders.fulfill",
+  feature: "fulfillment",
   handler: async ({ request, authz }) => {
-    const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams))
+    const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!parsed.success) {
-      return unprocessable('Name the sales order to pick with ?salesOrderId=<id>', {
-        field: 'salesOrderId',
+      return unprocessable("Name the sales order to pick with ?salesOrderId=<id>", {
+        field: "salesOrderId",
         status: 400,
-      })
+      });
     }
-    const { salesOrderId } = parsed.data
-    const orgId = authz.user.orgId
-    const order = await salesOrderScope(db, orgId, salesOrderId)
-    if (!order) return notFound('sales_order', salesOrderId)
+    const { salesOrderId } = parsed.data;
+    const orgId = authz.user.orgId;
+    const order = await salesOrderScope(db, orgId, salesOrderId);
+    if (!order) return notFound("sales_order", salesOrderId);
     // Out of scope answers exactly like an absent order.
-    if (guardSubsidiaryScope(authz, order.subsidiaryId)) return notFound('sales_order', salesOrderId)
-    const candidates = await pickCandidates(db, orgId, order.id, authz.allowedSubsidiaryIds)
-    if (!candidates) return notFound('sales_order', salesOrderId)
-    return NextResponse.json(candidates)
+    if (guardSubsidiaryScope(authz, order.subsidiaryId))
+      return notFound("sales_order", salesOrderId);
+    const candidates = await pickCandidates(db, orgId, order.id, authz.allowedSubsidiaryIds);
+    if (!candidates) return notFound("sales_order", salesOrderId);
+    return NextResponse.json(candidates);
   },
-})
+});

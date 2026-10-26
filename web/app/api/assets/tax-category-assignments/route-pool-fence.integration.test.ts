@@ -6,22 +6,29 @@ import { sql } from "drizzle-orm";
 
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __assetTaxPoolFenceState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/feature-gates")) return virtual(`
+    if (specifier.endsWith("/lib/feature-gates"))
+      return virtual(`
       const state = globalThis.__assetTaxPoolFenceState;
       export async function guardFeaturePermission() {
         return { user: { orgId: state.orgId, id: state.actorId }, allowedSubsidiaryIds: null };
       }
     `);
-    if (specifier.endsWith("/lib/authz")) return virtual("export function guardUnrestrictedScope() { return null }");
+    if (specifier.endsWith("/lib/authz"))
+      return virtual("export function guardUnrestrictedScope() { return null }");
     return next(specifier, context);
   },
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
-const { installTaxDepreciationPack } = await import("@openbooks/engine/tax-returns/depreciation-packs");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
+const { installTaxDepreciationPack } =
+  await import("@openbooks/engine/tax-returns/depreciation-packs");
 const { lockAssetTaxLifecycle } = await import("@openbooks/engine/organization/asset-tax-fence");
 const routeUrl = "./route.ts?asset-tax-pool-fence-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
@@ -29,10 +36,15 @@ const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 async function blockedBy(holderPid: number): Promise<boolean> {
   const deadline = Date.now() + 3_000;
   while (Date.now() < deadline) {
-    const result = await withBypassContext(() => db.execute<{ blocked: boolean }>(sql`
+    const result = await withBypassContext(() =>
+      db.execute<{ blocked: boolean }>(
+        sql`
       select exists (
         select 1 from pg_stat_activity where ${holderPid} = any(pg_blocking_pids(pid))
-      ) as blocked`, "objects"));
+      ) as blocked`,
+        "objects",
+      ),
+    );
     if (result[0]!.blocked) return true;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -82,26 +94,43 @@ test("category class PATCH waits on every affected subsidiary's tax-pool lifecyc
     for (const [index, subsidiaryId] of subsidiaryIds.entries()) {
       let release!: () => void;
       let ready!: (pid: number) => void;
-      const hold = new Promise<void>((resolve) => { release = resolve; });
-      const lockReady = new Promise<number>((resolve) => { ready = resolve; });
-      const holder = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await lockAssetTaxLifecycle(tx, org.orgId, [subsidiaryId]);
-        const row = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0];
-        assert.ok(row);
-        ready(Number(row.pid));
-        await hold;
-      }));
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const lockReady = new Promise<number>((resolve) => {
+        ready = resolve;
+      });
+      const holder = withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          await lockAssetTaxLifecycle(tx, org.orgId, [subsidiaryId]);
+          const row = (
+            await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects")
+          )[0];
+          assert.ok(row);
+          ready(Number(row.pid));
+          await hold;
+        }),
+      );
       const holderPid = await lockReady;
       try {
-        const patch = withOrgContext(org.orgId, () => PATCH(new Request(
-          "http://assets.test/api/assets/tax-category-assignments",
-          {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ categoryId, regime: "ca_cca", ...(index === 0 ? {} : { classCode: "8" }) }),
-          },
-        )));
-        assert.equal(await blockedBy(holderPid), true, `PATCH did not wait for subsidiary ${subsidiaryId}`);
+        const patch = withOrgContext(org.orgId, () =>
+          PATCH(
+            new Request("http://assets.test/api/assets/tax-category-assignments", {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                categoryId,
+                regime: "ca_cca",
+                ...(index === 0 ? {} : { classCode: "8" }),
+              }),
+            }),
+          ),
+        );
+        assert.equal(
+          await blockedBy(holderPid),
+          true,
+          `PATCH did not wait for subsidiary ${subsidiaryId}`,
+        );
         release();
         const response = await patch;
         assert.equal(response.status, 200, await response.text());

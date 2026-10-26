@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   badge,
   column,
@@ -17,20 +17,20 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../lib/features'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../lib/features";
 import {
   complianceSubsidiaryFilter,
   isLienWaiverLegacyUnverified,
   loadLienWaivers,
   requireLienWaiverFeature,
   type LienWaiverRow,
-} from '../../../../lib/compliance'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { complianceTabs } from '../tabs'
+} from "../../../../lib/compliance";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { complianceTabs } from "../tabs";
 
 /**
  * Lien waivers, split into a loader and a spec.
@@ -43,83 +43,83 @@ import { complianceTabs } from '../tabs'
  * block with a class, and the toolbar and drawer are widgets.
  */
 
-const STATUS_TONE: Record<string, 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'> = {
-  signed: 'success',
-  received: 'warning',
-  requested: 'warning',
-  draft: 'outline',
-  rejected: 'destructive',
-  void: 'secondary',
-}
+const STATUS_TONE: Record<string, "success" | "warning" | "destructive" | "secondary" | "outline"> =
+  {
+    signed: "success",
+    received: "warning",
+    requested: "warning",
+    draft: "outline",
+    rejected: "destructive",
+    void: "secondary",
+  };
 
 export interface WaiverListRow {
-  id: string
-  waiverNumber: string
-  href: string
-  directionLabel: string
-  partyName: string
-  projectName: string
-  typeLabel: string
-  throughDate: string
-  amount: string
-  statusLabel: string
-  statusVariant: 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'
+  id: string;
+  waiverNumber: string;
+  href: string;
+  directionLabel: string;
+  partyName: string;
+  projectName: string;
+  typeLabel: string;
+  throughDate: string;
+  amount: string;
+  statusLabel: string;
+  statusVariant: "success" | "warning" | "destructive" | "secondary" | "outline";
   /** Signed before the snapshot freeze: the print is bannered current records, not the release. */
-  legacyUnverified: boolean
+  legacyUnverified: boolean;
 }
 
 export interface LienWaiversData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof complianceTabs>>
-  toolbar: Record<string, unknown>
-  emptyTitle: string
-  emptyDescription: string
-  isEmpty: boolean
-  hasRows: boolean
-  columnNumber: string
-  columnParty: string
-  columnProject: string
-  columnType: string
-  columnThrough: string
-  columnAmount: string
-  columnStatus: string
-  rows: WaiverListRow[]
-  drawerOpen: boolean
-  drawerProps: Record<string, unknown> | null
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof complianceTabs>>;
+  toolbar: Record<string, unknown>;
+  emptyTitle: string;
+  emptyDescription: string;
+  isEmpty: boolean;
+  hasRows: boolean;
+  columnNumber: string;
+  columnParty: string;
+  columnProject: string;
+  columnType: string;
+  columnThrough: string;
+  columnAmount: string;
+  columnStatus: string;
+  rows: WaiverListRow[];
+  drawerOpen: boolean;
+  drawerProps: Record<string, unknown> | null;
 }
 
 export async function loadLienWaiversPage(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<LienWaiversData> {
-  const authz = await requirePermission('compliance.read')
-  await requireFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
-  const orgId = authz.user.orgId
-  await requireLienWaiverFeature(orgId)
-  const t = await getTranslations('compliance')
-  const { money } = await getMoneyFormatter()
-  const direction = pickString(sp.direction)
-  const status = pickString(sp.status) ?? null
-  const openId = pickString(sp.waiver) ?? null
+  const authz = await requirePermission("compliance.read");
+  await requireFeatureEnabled(authz.user.orgId, "subcontractorCompliance");
+  const orgId = authz.user.orgId;
+  await requireLienWaiverFeature(orgId);
+  const t = await getTranslations("compliance");
+  const { money } = await getMoneyFormatter();
+  const direction = pickString(sp.direction);
+  const status = pickString(sp.status) ?? null;
+  const openId = pickString(sp.waiver) ?? null;
 
   const [waivers, projects, vendors, informationReturnsEnabled] = await Promise.all([
     loadLienWaivers({
       orgId,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-      direction:
-        direction === 'issued'
-          ? 'issued'
-          : direction === 'received'
-            ? 'received'
-            : null,
+      direction: direction === "issued" ? "issued" : direction === "received" ? "received" : null,
       status,
     }),
-    db.execute<{ id: string; label: string }>(sql`
+    db.execute<{ id: string; label: string }>(
+      sql`
       select id, coalesce(code || ' · ' || name, name) as label from projects
        where org_id = ${orgId} and is_active
          ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-       order by code nulls last, name limit 500`, 'objects'),
-    db.execute<{ id: string; label: string; defaultType: string }>(sql`
+       order by code nulls last, name limit 500`,
+      "objects",
+    ),
+    db.execute<{ id: string; label: string; defaultType: string }>(
+      sql`
       select p.id, p.display_name as label,
              coalesce(cls.default_lien_waiver_type, '') as "defaultType"
        from parties p
@@ -127,17 +127,22 @@ export async function loadLienWaiversPage(
        left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
        where p.org_id = ${orgId} and p.is_active
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-       order by p.display_name limit 2000`, 'objects'),
-    isFeatureEnabled(orgId, 'informationReturns'),
-  ])
-  const tabs = await complianceTabs('/compliance/lien-waivers', { projectsEnabled: true, informationReturnsEnabled })
+       order by p.display_name limit 2000`,
+      "objects",
+    ),
+    isFeatureEnabled(orgId, "informationReturns"),
+  ]);
+  const tabs = await complianceTabs("/compliance/lien-waivers", {
+    projectsEnabled: true,
+    informationReturnsEnabled,
+  });
 
   // The open record loads independently of the list filters: a waiver the
   // direction/status filter excludes must still open from a deep link. The
   // targeted load keeps the org and subsidiary scope (and the permission
   // gates above), so a filter-excluded id opens while an out-of-scope one
   // still opens nothing. isUuid guards the uuid cast in the query.
-  const openUuid = openId && isUuid(openId) ? openId : null
+  const openUuid = openId && isUuid(openId) ? openId : null;
   const open: LienWaiverRow | null = openUuid
     ? (waivers.find((w) => w.id === openUuid) ??
       (
@@ -148,56 +153,59 @@ export async function loadLienWaiversPage(
         })
       )[0] ??
       null)
-    : null
+    : null;
   // Open bills the vendor could release, so a waiver's amount comes from the
   // money it is exchanged for rather than from retyping.
   const openBills = open
-    ? (await db.execute<{
-          id: string
-          label: string
-          amount: string
-          currency: string
-        }>(sql`
+    ? await db.execute<{
+        id: string;
+        label: string;
+        amount: string;
+        currency: string;
+      }>(
+        sql`
         select id, document_number as label, coalesce(open_balance, total) as amount, currency
           from documents
          where org_id = ${orgId} and party_id = ${open.partyId} and project_id = ${open.projectId}
            and kind in ('vendor_bill', 'expense_report') and status = 'posted'
            ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-         order by document_date desc limit 50`, 'objects'))
-    : []
+         order by document_date desc limit 50`,
+        "objects",
+      )
+    : [];
 
   const query = new URLSearchParams({
     ...(direction ? { direction } : {}),
     ...(status ? { status } : {}),
-  })
-  const canManage = can(authz, 'compliance.manage')
+  });
+  const canManage = can(authz, "compliance.manage");
 
   return {
-    title: t('lienWaivers.title'),
-    description: t('lienWaivers.description'),
+    title: t("lienWaivers.title"),
+    description: t("lienWaivers.description"),
     tabs,
     toolbar: {
-      direction: direction ?? '',
-      status: status ?? '',
+      direction: direction ?? "",
+      status: status ?? "",
       projects,
       vendors,
       canManage,
     },
-    emptyTitle: t('lienWaivers.empty.title'),
-    emptyDescription: t('lienWaivers.empty.description'),
+    emptyTitle: t("lienWaivers.empty.title"),
+    emptyDescription: t("lienWaivers.empty.description"),
     isEmpty: waivers.length === 0,
     hasRows: waivers.length > 0,
-    columnNumber: t('lienWaivers.columns.number'),
-    columnParty: t('lienWaivers.columns.party'),
-    columnProject: t('lienWaivers.columns.project'),
-    columnType: t('lienWaivers.columns.type'),
-    columnThrough: t('lienWaivers.columns.through'),
-    columnAmount: t('lienWaivers.columns.amount'),
-    columnStatus: t('lienWaivers.columns.status'),
+    columnNumber: t("lienWaivers.columns.number"),
+    columnParty: t("lienWaivers.columns.party"),
+    columnProject: t("lienWaivers.columns.project"),
+    columnType: t("lienWaivers.columns.type"),
+    columnThrough: t("lienWaivers.columns.through"),
+    columnAmount: t("lienWaivers.columns.amount"),
+    columnStatus: t("lienWaivers.columns.status"),
     rows: await Promise.all(
       waivers.map(async (waiver) => {
-        const rowQuery = new URLSearchParams(query)
-        rowQuery.set('waiver', waiver.id)
+        const rowQuery = new URLSearchParams(query);
+        rowQuery.set("waiver", waiver.id);
         // A legacy executed waiver still reads "Signed" — that is what released
         // the payment — but the badge drops to warning so the list shows the
         // same legacy state as the drawer and the bannered print.
@@ -206,7 +214,7 @@ export async function loadLienWaiversPage(
           status: waiver.status,
           signedAt: waiver.signedAt,
           hasExecutedSnapshot: waiver.hasExecutedSnapshot,
-        })
+        });
         return {
           id: waiver.id,
           waiverNumber: waiver.waiverNumber,
@@ -218,11 +226,9 @@ export async function loadLienWaiversPage(
           throughDate: waiver.throughDate,
           amount: money(waiver.amount, { currency: waiver.currency }),
           statusLabel: t(`waiverStatus.${waiver.status}`),
-          statusVariant: legacyUnverified
-            ? 'warning'
-            : (STATUS_TONE[waiver.status] ?? 'secondary'),
+          statusVariant: legacyUnverified ? "warning" : (STATUS_TONE[waiver.status] ?? "secondary"),
           legacyUnverified,
-        }
+        };
       }),
     ),
     drawerOpen: Boolean(open),
@@ -233,85 +239,81 @@ export async function loadLienWaiversPage(
           remountKey: openId,
           waiver: open,
           openBills,
-          closeHref: `/compliance/lien-waivers${query.toString() ? `?${query}` : ''}`,
+          closeHref: `/compliance/lien-waivers${query.toString() ? `?${query}` : ""}`,
           canManage,
         }
       : null,
-  }
+  };
 }
 
-const f = ref<LienWaiversData>()
-const item = field
-const rootF = rootRef<LienWaiversData>()
+const f = ref<LienWaiversData>();
+const item = field;
+const rootF = rootRef<LienWaiversData>();
 
-const MUTED = 'text-slate-500 dark:text-slate-400'
+const MUTED = "text-slate-500 dark:text-slate-400";
 
 export function lienWaiversSpec(data: LienWaiversData): PageSpec {
   return page({
-    route: '/compliance/lien-waivers',
-    layout: 'list',
+    route: "/compliance/lien-waivers",
+    layout: "list",
     header: [
-      pageHeader({ title: f('title'), description: f('description') }),
-      widgetBlock('module-home-tabs', { tabs: data.tabs }),
+      pageHeader({ title: f("title"), description: f("description") }),
+      widgetBlock("module-home-tabs", { tabs: data.tabs }),
     ],
     body: [
-      widgetBlock('lien-waiver-toolbar', data.toolbar),
+      widgetBlock("lien-waiver-toolbar", data.toolbar),
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.emptyTitle,
           description: data.emptyDescription,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
         ...grid(
-          'mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
+          "mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
           [
-            registeredListTable('compliance_lien_waivers', {
-              variant: 'app',
-              rows: f('rows'),
-              rowKey: item('id'),
+            registeredListTable("compliance_lien_waivers", {
+              variant: "app",
+              rows: f("rows"),
+              rowKey: item("id"),
               columns: [
                 column(
-                  rootF('columnNumber'),
-                  widgetCell('waiver-number-cell', {
-                    waiverNumber: item('waiverNumber'),
-                    href: item('href'),
-                    directionLabel: item('directionLabel'),
+                  rootF("columnNumber"),
+                  widgetCell("waiver-number-cell", {
+                    waiverNumber: item("waiverNumber"),
+                    href: item("href"),
+                    directionLabel: item("directionLabel"),
                   }),
-                  { className: 'font-medium' },
+                  { className: "font-medium" },
                 ),
-                column(rootF('columnParty'), text(item('partyName'))),
-                column(rootF('columnProject'), text(item('projectName')), {
+                column(rootF("columnParty"), text(item("partyName"))),
+                column(rootF("columnProject"), text(item("projectName")), {
                   className: MUTED,
                 }),
-                column(rootF('columnType'), text(item('typeLabel')), {
-                  className: 'text-xs',
+                column(rootF("columnType"), text(item("typeLabel")), {
+                  className: "text-xs",
                 }),
-                column(rootF('columnThrough'), text(item('throughDate')), {
-                  className: 'tabular-nums',
+                column(rootF("columnThrough"), text(item("throughDate")), {
+                  className: "tabular-nums",
                 }),
-                column(rootF('columnAmount'), text(item('amount')), {
-                  align: 'right',
-                  className: 'tabular-nums',
+                column(rootF("columnAmount"), text(item("amount")), {
+                  align: "right",
+                  className: "tabular-nums",
                 }),
                 column(
-                  rootF('columnStatus'),
-                  badge(item('statusLabel'), {
-                    variant: item('statusVariant'),
+                  rootF("columnStatus"),
+                  badge(item("statusLabel"), {
+                    variant: item("statusVariant"),
                   }),
                 ),
               ],
             }),
           ],
         ),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
-      widgetBlock(
-        'lien-waiver-drawer',
-        { drawer: data.drawerProps },
-        f('drawerOpen'),
-      ),
+      widgetBlock("lien-waiver-drawer", { drawer: data.drawerProps }, f("drawerOpen")),
     ],
-  })
+  });
 }

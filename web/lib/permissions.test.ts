@@ -1,18 +1,18 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 import {
   INVENTORY_ACTION_PERMISSIONS,
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
-} from '@openbooks/engine/organization/permissions'
-import { stubModules } from '../testing/stub-modules.ts'
+} from "@openbooks/engine/organization/permissions";
+import { stubModules } from "../testing/stub-modules.ts";
 import {
   BUILT_IN_ROLES,
   PERMISSION_CATALOGUE,
   permissionSetCovers,
   resolveEffectivePermissions,
-} from './permissions.ts'
-import { NextResponse } from 'next/server'
+} from "./permissions.ts";
+import { NextResponse } from "next/server";
 
 /**
  * Representative SoD controls for inventory money movement
@@ -36,40 +36,43 @@ import { NextResponse } from 'next/server'
  */
 
 interface EmailRouteState {
-  permissions: Set<string>
-  engineCalls: Array<Record<string, unknown>>
-  sendCalls: Array<Record<string, unknown>>
-  transportResolution: Record<string, unknown>
+  permissions: Set<string>;
+  engineCalls: Array<Record<string, unknown>>;
+  sendCalls: Array<Record<string, unknown>>;
+  transportResolution: Record<string, unknown>;
   /** Handed to the authz mock through the state bag: mock modules must stay import-free. */
-  NextResponse: typeof NextResponse
+  NextResponse: typeof NextResponse;
 }
 
-const stateKey = Symbol.for('openbooks.email-route-permission-test')
-const realAuthzUrl = new URL('./authz.ts?email-permission-test-helper', import.meta.url).href
+const stateKey = Symbol.for("openbooks.email-route-permission-test");
+const realAuthzUrl = new URL("./authz.ts?email-permission-test-helper", import.meta.url).href;
 const emailState: EmailRouteState = {
   permissions: new Set(),
   engineCalls: [],
   sendCalls: [],
-  transportResolution: { state: 'ready', transport: { provider: 'smtp', from: 'noreply@example.com', replyTo: null } },
+  transportResolution: {
+    state: "ready",
+    transport: { provider: "smtp", from: "noreply@example.com", replyTo: null },
+  },
   NextResponse,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = emailState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = emailState;
 
-let realEmailsUrl = ''
+let realEmailsUrl = "";
 const mockedSpecifiers = new Map<string, string>([
-  ['../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/authz', 'mock:authz'],
+  ["../../../../lib/authz", "mock:authz"],
+  ["../../../../../lib/authz", "mock:authz"],
   // defineRoute resolves the gate through the production alias in a lazy
   // per-request import, not through the route's own relative specifier, so
   // the scripted gate must be reachable under that exact specifier or the
   // real chain runs and every request answers 401.
-  ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/delivery/email-config/module', 'mock:email-config'],
-])
+  ["@/lib/authz", "mock:authz"],
+  ["@openbooks/engine/delivery/email-config/module", "mock:email-config"],
+]);
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.email-route-permission-test')]
       export async function guardPermission(permission) {
@@ -93,7 +96,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:email-config',
+    "mock:email-config",
     `
       const state = globalThis[Symbol.for('openbooks.email-route-permission-test')]
       export class OrgEmailConfigConflictError extends Error {}
@@ -125,96 +128,99 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 stubModules({ navigation: {}, intl: false, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      context.parentURL?.includes('?email-permission-test-helper') &&
-      !specifier.startsWith('node:')
+      context.parentURL?.includes("?email-permission-test-helper") &&
+      !specifier.startsWith("node:")
     ) {
-      const resolved = nextResolve(specifier, context)
-      if (resolved.url.startsWith('file:') && !resolved.url.includes('?')) {
-        return { ...resolved, url: `${resolved.url}?email-permission-test-helper` }
+      const resolved = nextResolve(specifier, context);
+      if (resolved.url.startsWith("file:") && !resolved.url.includes("?")) {
+        return { ...resolved, url: `${resolved.url}?email-permission-test-helper` };
       }
-      return resolved
+      return resolved;
     }
     // Keep every real emails export (validators included); only sendVia is
     // instrumented below so no test ever touches a real provider.
-    if (specifier === '@openbooks/emails') {
-      realEmailsUrl = nextResolve(specifier, context).url
-      return { url: 'mock:emails', shortCircuit: true }
+    if (specifier === "@openbooks/emails") {
+      realEmailsUrl = nextResolve(specifier, context).url;
+      return { url: "mock:emails", shortCircuit: true };
     }
-    const mocked = mockedSpecifiers.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockedSpecifiers.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:emails') {
+    if (url === "mock:emails") {
       const source = `export * from '${realEmailsUrl}'
 const state = globalThis[Symbol.for('openbooks.email-route-permission-test')]
 export async function sendVia(transport, input, identity) {
   state.sendCalls.push({ transport, input, identity })
   return { kind: 'sent', providerMessageId: 'msg-1' }
 }
-`
-      return { format: 'module', source, shortCircuit: true }
+`;
+      return { format: "module", source, shortCircuit: true };
     }
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const configRouteUrl = '../app/api/admin/email/route.ts?email-route-permission-test'
-const testRouteUrl = '../app/api/admin/email/test/route.ts?email-route-permission-test'
-let emailHooksDeregistered = false
+const configRouteUrl = "../app/api/admin/email/route.ts?email-route-permission-test";
+const testRouteUrl = "../app/api/admin/email/test/route.ts?email-route-permission-test";
+let emailHooksDeregistered = false;
 function deregisterEmailHooks(): void {
   if (!emailHooksDeregistered) {
-    emailHooksDeregistered = true
-    hooks.deregister()
+    emailHooksDeregistered = true;
+    hooks.deregister();
   }
 }
 const emailRoutesReady = Promise.all([
-  import(configRouteUrl) as Promise<typeof import('../app/api/admin/email/route.ts')>,
-  import(testRouteUrl) as Promise<typeof import('../app/api/admin/email/test/route.ts')>,
+  import(configRouteUrl) as Promise<typeof import("../app/api/admin/email/route.ts")>,
+  import(testRouteUrl) as Promise<typeof import("../app/api/admin/email/test/route.ts")>,
 ]).then(([configRoutes, testRoutes]) => {
-  return { configRoutes, testRoutes }
-})
+  return { configRoutes, testRoutes };
+});
 
 function resetEmailAuthority(permissions: string[]): void {
-  emailState.permissions = new Set(permissions)
-  emailState.engineCalls.length = 0
-  emailState.sendCalls.length = 0
-  emailState.transportResolution = { state: 'ready', transport: { provider: 'smtp', from: 'noreply@example.com', replyTo: null } }
+  emailState.permissions = new Set(permissions);
+  emailState.engineCalls.length = 0;
+  emailState.sendCalls.length = 0;
+  emailState.transportResolution = {
+    state: "ready",
+    transport: { provider: "smtp", from: "noreply@example.com", replyTo: null },
+  };
 }
 
 async function putConfig(body: Record<string, unknown>): Promise<Response> {
-  const { configRoutes } = await emailRoutesReady
+  const { configRoutes } = await emailRoutesReady;
   return configRoutes.PUT(
-    new Request('http://localhost/api/admin/email', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...body, expectedUpdatedAt: '2026-09-05T00:00:00.123450Z' }),
+    new Request("http://localhost/api/admin/email", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...body, expectedUpdatedAt: "2026-09-05T00:00:00.123450Z" }),
     }),
-  )
+  );
 }
 
 async function postTestSend(to: string): Promise<Response> {
-  const { testRoutes } = await emailRoutesReady
+  const { testRoutes } = await emailRoutesReady;
   return testRoutes.POST(
-    new Request('http://localhost/api/admin/email/test', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://localhost/api/admin/email/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ to }),
     }),
-  )
+  );
 }
 
 // Finish loading the email routes before installing the provision-route hooks.
-await emailRoutesReady
+await emailRoutesReady;
 
 // --- Income-tax provision posting authorization ------------------------------
 //
@@ -228,54 +234,56 @@ await emailRoutesReady
 // permission resolution they rest on, and the handler itself all run exactly
 // as production runs them.
 
-const PROVISION_POST_RUN_ID = '00000000-0000-4000-8000-00000000c001'
-const PROVISION_POST_ROOT_ID = '00000000-0000-4000-8000-00000000c002'
-const PROVISION_POST_CHILD_ID = '00000000-0000-4000-8000-00000000c003'
-const PROVISION_POST_ORG_ID = 'org-provision-post'
-const PROVISION_POST_USER_ID = 'user-provision-post'
-const PROVISION_POST_ENTRY_ID = 'entry-provision-post'
+const PROVISION_POST_RUN_ID = "00000000-0000-4000-8000-00000000c001";
+const PROVISION_POST_ROOT_ID = "00000000-0000-4000-8000-00000000c002";
+const PROVISION_POST_CHILD_ID = "00000000-0000-4000-8000-00000000c003";
+const PROVISION_POST_ORG_ID = "org-provision-post";
+const PROVISION_POST_USER_ID = "user-provision-post";
+const PROVISION_POST_ENTRY_ID = "entry-provision-post";
 
 interface ProvisionPostState {
-  currentUser: Record<string, unknown> | null
-  rolePermissions: string[]
-  allowedSubsidiaryIds: Set<string> | null
-  runExists: boolean
-  rootSubsidiaryId: string | null
-  dbCalls: string[]
-  engineCalls: { orgId: string; runId: string; actorId: string }[]
+  currentUser: Record<string, unknown> | null;
+  rolePermissions: string[];
+  allowedSubsidiaryIds: Set<string> | null;
+  runExists: boolean;
+  rootSubsidiaryId: string | null;
+  dbCalls: string[];
+  engineCalls: { orgId: string; runId: string; actorId: string }[];
 }
 
 const provisionPostState: ProvisionPostState = {
   currentUser: null,
-  rolePermissions: ['gl.post'],
+  rolePermissions: ["gl.post"],
   allowedSubsidiaryIds: null,
   runExists: true,
   rootSubsidiaryId: PROVISION_POST_ROOT_ID,
   dbCalls: [],
   engineCalls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('openbooks.provision-post-test')] =
-  provisionPostState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.provision-post-test")
+] = provisionPostState;
 
 /** Flatten a drizzle SQL chunk into its raw text for routing scripted replies. */
 function provisionSqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((c) => {
-      if (typeof c === 'string') return c
-      const value = (c as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return provisionSqlText(c)
-      return ''
+      if (typeof c === "string") return c;
+      const value = (c as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((c as { queryChunks?: unknown[] })?.queryChunks) return provisionSqlText(c);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksProvisionPostSqlText = provisionSqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksProvisionPostSqlText =
+  provisionSqlText;
 
 const provisionPostSources = new Map<string, string>([
   [
-    'mock:provision-post-db',
+    "mock:provision-post-db",
     `
       const state = globalThis[Symbol.for('openbooks.provision-post-test')]
       const sqlText = globalThis.openbooksProvisionPostSqlText
@@ -312,7 +320,7 @@ const provisionPostSources = new Map<string, string>([
     // The instrumented kernel boundary: every GL mutation this route can cause
     // funnels through postProvisionRun, so recording its invocations records
     // the engine writes.
-    'mock:provision-post-engine',
+    "mock:provision-post-engine",
     `
       const state = globalThis[Symbol.for('openbooks.provision-post-test')]
       export class IncomeTaxProvisionError extends Error {}
@@ -323,7 +331,7 @@ const provisionPostSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:provision-post-auth',
+    "mock:provision-post-auth",
     `
       const state = globalThis[Symbol.for('openbooks.provision-post-test')]
       export async function currentUser() {
@@ -332,7 +340,7 @@ const provisionPostSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:provision-post-subsidiaries',
+    "mock:provision-post-subsidiaries",
     `
       const state = globalThis[Symbol.for('openbooks.provision-post-test')]
       export async function allowedSubsidiaryIds(_userId) {
@@ -340,61 +348,72 @@ const provisionPostSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const provisionPostHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/platform/db' || specifier === '@openbooks/engine/platform/database' || (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/organization/extension-permission-availability.ts'))) {
-      return { url: 'mock:provision-post-db', shortCircuit: true }
+    if (
+      specifier === "@openbooks/engine/platform/db" ||
+      specifier === "@openbooks/engine/platform/database" ||
+      (specifier === "../platform/db.ts" &&
+        context.parentURL?.endsWith("/organization/extension-permission-availability.ts"))
+    ) {
+      return { url: "mock:provision-post-db", shortCircuit: true };
     }
-    if (specifier === '@openbooks/engine/tax-returns/income-tax-provision') {
-      return { url: 'mock:provision-post-engine', shortCircuit: true }
+    if (specifier === "@openbooks/engine/tax-returns/income-tax-provision") {
+      return { url: "mock:provision-post-engine", shortCircuit: true };
     }
     // authz.ts reaches these siblings as './auth'/'./subsidiaries'; the
     // suffixed forms cover direct deep imports from the route side.
-    if (specifier === './auth' || specifier.endsWith('/lib/auth')) {
-      return { url: 'mock:provision-post-auth', shortCircuit: true }
+    if (specifier === "./auth" || specifier.endsWith("/lib/auth")) {
+      return { url: "mock:provision-post-auth", shortCircuit: true };
     }
-    if ((specifier === './subsidiaries' || specifier.endsWith('/lib/subsidiaries')) && (/\/web\/lib\/authz(?:-core)?\.ts$/.test(context.parentURL ?? ''))) {
-      return { url: 'mock:provision-post-subsidiaries', shortCircuit: true }
+    if (
+      (specifier === "./subsidiaries" || specifier.endsWith("/lib/subsidiaries")) &&
+      /\/web\/lib\/authz(?:-core)?\.ts$/.test(context.parentURL ?? "")
+    ) {
+      return { url: "mock:provision-post-subsidiaries", shortCircuit: true };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = provisionPostSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = provisionPostSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const provisionPostRouteUrl = '../app/api/tax/provisions/[id]/post/route.ts?provision-post-test'
+const provisionPostRouteUrl = "../app/api/tax/provisions/[id]/post/route.ts?provision-post-test";
 const { POST: postProvisionRoute } = (await import(
   provisionPostRouteUrl
-)) as typeof import('../app/api/tax/provisions/[id]/post/route.ts')
-provisionPostHooks.deregister()
+)) as typeof import("../app/api/tax/provisions/[id]/post/route.ts");
+provisionPostHooks.deregister();
 
 function resetProvisionPost(): void {
   // Email route tests run first and need the email doubles; provision
   // requests need the real gate, so the email hooks retire here, before the
   // first provision request resolves its lazy gate import.
-  deregisterEmailHooks()
+  deregisterEmailHooks();
   provisionPostState.currentUser = {
     id: PROVISION_POST_USER_ID,
     orgId: PROVISION_POST_ORG_ID,
     isSuperAdmin: false,
-  }
-  provisionPostState.rolePermissions = ['gl.post']
-  provisionPostState.allowedSubsidiaryIds = null
-  provisionPostState.runExists = true
-  provisionPostState.rootSubsidiaryId = PROVISION_POST_ROOT_ID
-  provisionPostState.dbCalls.length = 0
-  provisionPostState.engineCalls.length = 0
+  };
+  provisionPostState.rolePermissions = ["gl.post"];
+  provisionPostState.allowedSubsidiaryIds = null;
+  provisionPostState.runExists = true;
+  provisionPostState.rootSubsidiaryId = PROVISION_POST_ROOT_ID;
+  provisionPostState.dbCalls.length = 0;
+  provisionPostState.engineCalls.length = 0;
 }
 
 function postProvision(id: string): Promise<Response> {
-  return postProvisionRoute(new Request(`http://openbooks.test/api/tax/provisions/${id}/post`, { method: 'POST' }), {
-    params: Promise.resolve({ id }),
-  })
+  return postProvisionRoute(
+    new Request(`http://openbooks.test/api/tax/provisions/${id}/post`, { method: "POST" }),
+    {
+      params: Promise.resolve({ id }),
+    },
+  );
 }
 
 // Complete asynchronous setup before registering tests so --test-force-exit
@@ -402,236 +421,249 @@ function postProvision(id: string): Promise<Response> {
 // The email gate resolves lazily per request, so its doubles remain registered
 // through those tests. Provision requests retire them in resetProvisionPost;
 // this hook also covers filtered runs without a provision request.
-test.after(() => deregisterEmailHooks())
-test('a user without an explicit role assignment receives no role permissions', () => {
+test.after(() => deregisterEmailHooks());
+test("a user without an explicit role assignment receives no role permissions", () => {
   const permissions = resolveEffectivePermissions({
     rolePermissionSets: [],
     overrides: [],
-  })
-  assert.deepEqual([...permissions], [])
-})
+  });
+  assert.deepEqual([...permissions], []);
+});
 
-test('explicit role assignments are unioned and deny overrides win', () => {
+test("explicit role assignments are unioned and deny overrides win", () => {
   const permissions = resolveEffectivePermissions({
-    rolePermissionSets: [['ap.read', 'ap.create'], ['reports.read']],
+    rolePermissionSets: [["ap.read", "ap.create"], ["reports.read"]],
     overrides: [
-      { permission: 'ap.create', effect: 'deny' },
-      { permission: 'banking.read', effect: 'grant' },
+      { permission: "ap.create", effect: "deny" },
+      { permission: "banking.read", effect: "grant" },
     ],
-  })
-  assert.deepEqual([...permissions].sort(), ['ap.read', 'banking.read', 'reports.read'])
-})
+  });
+  assert.deepEqual([...permissions].sort(), ["ap.read", "banking.read", "reports.read"]);
+});
 
-test('specific denies override a full wildcard grant while preserving other permissions', () => {
+test("specific denies override a full wildcard grant while preserving other permissions", () => {
   const permissions = resolveEffectivePermissions({
-    rolePermissionSets: [['*']],
-    overrides: [{ permission: 'gl.post', effect: 'deny' }],
-  })
-  assert.equal(permissionSetCovers(permissions, 'gl.post'), false)
-  assert.equal(permissionSetCovers(permissions, 'gl.read'), true)
-})
+    rolePermissionSets: [["*"]],
+    overrides: [{ permission: "gl.post", effect: "deny" }],
+  });
+  assert.equal(permissionSetCovers(permissions, "gl.post"), false);
+  assert.equal(permissionSetCovers(permissions, "gl.read"), true);
+});
 
-test('a catalog maintainer holding items.manage alone is refused every financial inventory action', () => {
+test("a catalog maintainer holding items.manage alone is refused every financial inventory action", () => {
   // The route consults these exact mappings, so asserting them asserts the
   // production write path, and every demanded key must be role-assignable.
   const demanded = [
     ...Object.values(INVENTORY_ACTION_PERMISSIONS),
     ...Object.values(INVENTORY_ADVANCED_ACTION_PERMISSIONS),
-  ]
+  ];
   for (const perm of demanded) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
       `${perm} must be seeded so someone can hold it`,
-    )
+    );
     assert.equal(
-      permissionSetCovers(new Set(['items.manage']), perm),
+      permissionSetCovers(new Set(["items.manage"]), perm),
       false,
       `items.manage must not carry ${perm}: catalog maintenance is not ledger authority`,
-    )
+    );
   }
   // Reversal is deliberately distinct from posting (maker/checker).
-  assert.equal(INVENTORY_ACTION_PERMISSIONS.reverse, 'items.reverse')
+  assert.equal(INVENTORY_ACTION_PERMISSIONS.reverse, "items.reverse");
   for (const [action, perm] of Object.entries(INVENTORY_ACTION_PERMISSIONS)) {
-    if (action !== 'reverse') {
-      assert.equal(perm, 'items.post', `${action} moves value and demands posting authority`)
+    if (action !== "reverse") {
+      assert.equal(perm, "items.post", `${action} moves value and demands posting authority`);
     }
   }
-})
+});
 
-test('principals with the right financial authority are still allowed through', () => {
+test("principals with the right financial authority are still allowed through", () => {
   // A poster clears every forward verb; wildcard grants keep working.
-  const poster = new Set(['gl.post', 'items.post'])
+  const poster = new Set(["gl.post", "items.post"]);
   for (const [action, perm] of Object.entries(INVENTORY_ACTION_PERMISSIONS)) {
-    if (action === 'reverse') continue
-    assert.equal(permissionSetCovers(poster, perm), true, `${action} allowed for items.post`)
+    if (action === "reverse") continue;
+    assert.equal(permissionSetCovers(poster, perm), true, `${action} allowed for items.post`);
   }
-  assert.equal(permissionSetCovers(new Set(['items.*']), 'items.reverse'), true)
+  assert.equal(permissionSetCovers(new Set(["items.*"]), "items.reverse"), true);
   // Built-ins split the duties: controller unwinds, accountant only posts,
   // and no read-only/approval/sales role touches value at all.
   const holds = (role: string, perm: string) =>
-    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm)
-  assert.equal(holds('controller', 'items.post'), true)
-  assert.equal(holds('controller', 'items.reverse'), true)
-  assert.equal(holds('accountant', 'items.post'), true)
-  assert.equal(holds('accountant', 'items.reverse'), false)
-  for (const role of ['approver', 'viewer', 'sales_manager', 'sales_rep']) {
-    assert.equal(holds(role, 'items.post'), false, `${role} must not post`)
-    assert.equal(holds(role, 'items.reverse'), false, `${role} must not reverse`)
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  assert.equal(holds("controller", "items.post"), true);
+  assert.equal(holds("controller", "items.reverse"), true);
+  assert.equal(holds("accountant", "items.post"), true);
+  assert.equal(holds("accountant", "items.reverse"), false);
+  for (const role of ["approver", "viewer", "sales_manager", "sales_rep"]) {
+    assert.equal(holds(role, "items.post"), false, `${role} must not post`);
+    assert.equal(holds(role, "items.reverse"), false, `${role} must not reverse`);
   }
-})
+});
 
-test('a users-admin without setup authority cannot mutate the org email transport or send through it', async () => {
-  resetEmailAuthority(['admin.users.manage'])
+test("a users-admin without setup authority cannot mutate the org email transport or send through it", async () => {
+  resetEmailAuthority(["admin.users.manage"]);
 
   const saved = await putConfig({
     enabled: true,
-    provider: 'smtp',
-    smtpHost: 'smtp.attacker.example',
-    secret: 'replaced-secret',
-  })
-  assert.equal(saved.status, 403)
+    provider: "smtp",
+    smtpHost: "smtp.attacker.example",
+    secret: "replaced-secret",
+  });
+  assert.equal(saved.status, 403);
 
-  const sent = await postTestSend('victim@example.com')
-  assert.equal(sent.status, 403)
+  const sent = await postTestSend("victim@example.com");
+  assert.equal(sent.status, 403);
 
   // Denial is total: no config write/read, no email_log row, no provider send.
-  assert.deepEqual(emailState.engineCalls, [])
-  assert.deepEqual(emailState.sendCalls, [])
-})
+  assert.deepEqual(emailState.engineCalls, []);
+  assert.deepEqual(emailState.sendCalls, []);
+});
 
-test('setup authority reaches every email handler without holding users-manage', async () => {
-  resetEmailAuthority(['admin.setup.manage'])
+test("setup authority reaches every email handler without holding users-manage", async () => {
+  resetEmailAuthority(["admin.setup.manage"]);
 
-  const { configRoutes } = await emailRoutesReady
-  const read = await configRoutes.GET()
-  assert.equal(read.status, 200)
+  const { configRoutes } = await emailRoutesReady;
+  const read = await configRoutes.GET();
+  assert.equal(read.status, 200);
   assert.deepEqual(await read.json(), {
     enabled: false,
-    provider: 'smtp',
-    fromEmail: 'noreply@example.com',
+    provider: "smtp",
+    fromEmail: "noreply@example.com",
     hasSecret: false,
-    updatedAt: '2026-09-05T00:00:00.123450Z',
-  })
+    updatedAt: "2026-09-05T00:00:00.123450Z",
+  });
 
   const saved = await putConfig({
     enabled: true,
-    provider: 'smtp',
-    smtpHost: 'smtp.example.com',
-    secret: 's3cret',
-  })
-  assert.equal(saved.status, 200)
+    provider: "smtp",
+    smtpHost: "smtp.example.com",
+    secret: "s3cret",
+  });
+  assert.equal(saved.status, 200);
   // The exact normalized save input — secret still plaintext here; the shared
   // engine service seals it (unchanged by this slice).
   assert.deepEqual(emailState.engineCalls[1], {
-    fn: 'saveOrgEmailConfig',
-    orgId: 'org-1',
+    fn: "saveOrgEmailConfig",
+    orgId: "org-1",
     input: {
       enabled: true,
-      provider: 'smtp',
+      provider: "smtp",
       fromName: undefined,
       fromEmail: undefined,
       replyTo: undefined,
       mailgunDomain: undefined,
       mailgunRegion: undefined,
-      smtpHost: 'smtp.example.com',
+      smtpHost: "smtp.example.com",
       smtpPort: undefined,
       smtpSecure: undefined,
       smtpUsername: undefined,
-      secret: 's3cret',
+      secret: "s3cret",
     },
-  })
+  });
 
-  const sent = await postTestSend('colleague@example.com')
-  assert.equal(sent.status, 200)
-  assert.deepEqual(await sent.json(), { ok: true, provider: 'smtp', messageId: 'msg-1' })
+  const sent = await postTestSend("colleague@example.com");
+  assert.equal(sent.status, 200);
+  assert.deepEqual(await sent.json(), { ok: true, provider: "smtp", messageId: "msg-1" });
   assert.deepEqual(
     emailState.engineCalls.map((call) => call.fn),
     [
-      'readOrgEmailConfigView', // GET
-      'saveOrgEmailConfig', // PUT persist
-      'resolveOrgEmailTransportDetailed', // POST transport resolve
-      'insertEmailLog', // POST email_log row
-      'markEmailSent', // POST success marker
+      "readOrgEmailConfigView", // GET
+      "saveOrgEmailConfig", // PUT persist
+      "resolveOrgEmailTransportDetailed", // POST transport resolve
+      "insertEmailLog", // POST email_log row
+      "markEmailSent", // POST success marker
     ],
-  )
-  assert.equal(emailState.sendCalls.length, 1)
-})
+  );
+  assert.equal(emailState.sendCalls.length, 1);
+});
 
-test('test-send names unusable email configuration instead of treating it as unconfigured', async () => {
-  resetEmailAuthority(['admin.setup.manage'])
-  const reason = 'the stored email configuration is incomplete: SMTP sender is missing'
-  emailState.transportResolution = { state: 'unusable', reason }
+test("test-send names unusable email configuration instead of treating it as unconfigured", async () => {
+  resetEmailAuthority(["admin.setup.manage"]);
+  const reason = "the stored email configuration is incomplete: SMTP sender is missing";
+  emailState.transportResolution = { state: "unusable", reason };
 
-  const response = await postTestSend('colleague@example.com')
+  const response = await postTestSend("colleague@example.com");
 
-  assert.equal(response.status, 422)
+  assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), {
     error: `Email delivery cannot send: ${reason}. An administrator with setup access can re-enter the provider settings in Admin → Email.`,
-  })
-  assert.deepEqual(emailState.engineCalls.map((call) => call.fn), ['resolveOrgEmailTransportDetailed'])
-  assert.deepEqual(emailState.sendCalls, [], 'an unusable transport is never sent through')
-})
+  });
+  assert.deepEqual(
+    emailState.engineCalls.map((call) => call.fn),
+    ["resolveOrgEmailTransportDetailed"],
+  );
+  assert.deepEqual(emailState.sendCalls, [], "an unusable transport is never sent through");
+});
 
-test('built-in roles split email transport authority from user administration', () => {
+test("built-in roles split email transport authority from user administration", () => {
   // admin.setup.manage must stay seedable so someone can actually hold it.
-  assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes('admin.setup.manage'))
+  assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes("admin.setup.manage"));
   const holds = (role: string, perm: string) =>
-    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm)
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   // The controller owns org configuration (including the outbound transport)
   // but never people administration — the SoD this slice pins in.
-  assert.equal(holds('controller', 'admin.setup.manage'), true)
-  assert.equal(holds('controller', 'admin.users.manage'), false)
+  assert.equal(holds("controller", "admin.setup.manage"), true);
+  assert.equal(holds("controller", "admin.users.manage"), false);
   // Full administrators keep both sides.
-  assert.equal(holds('admin', 'admin.setup.manage'), true)
-  assert.equal(holds('admin', 'admin.users.manage'), true)
-})
+  assert.equal(holds("admin", "admin.setup.manage"), true);
+  assert.equal(holds("admin", "admin.users.manage"), true);
+});
 
-test('the provision post route denies reports-only and out-of-scope principals before any write', async () => {
-  resetProvisionPost()
+test("the provision post route denies reports-only and out-of-scope principals before any write", async () => {
+  resetProvisionPost();
 
   // Report authorship is not ledger authority: the gate names gl.post and
   // neither the scoped run read nor the kernel ever runs.
-  provisionPostState.rolePermissions = ['reports.create']
-  const forbidden = await postProvision(PROVISION_POST_RUN_ID)
-  assert.equal(forbidden.status, 403)
-  assert.deepEqual(await forbidden.json(), { error: 'missing permission: gl.post' })
-  assert.deepEqual(provisionPostState.engineCalls, [], 'a reports-only principal causes zero engine writes')
+  provisionPostState.rolePermissions = ["reports.create"];
+  const forbidden = await postProvision(PROVISION_POST_RUN_ID);
+  assert.equal(forbidden.status, 403);
+  assert.deepEqual(await forbidden.json(), { error: "missing permission: gl.post" });
+  assert.deepEqual(
+    provisionPostState.engineCalls,
+    [],
+    "a reports-only principal causes zero engine writes",
+  );
   assert.ok(
-    !provisionPostState.dbCalls.some((text) => text.includes('tax_provision_runs')),
-    'the 403 precedes even the scoped run load',
-  )
+    !provisionPostState.dbCalls.some((text) => text.includes("tax_provision_runs")),
+    "the 403 precedes even the scoped run load",
+  );
 
   // The root-only posting is an org-wide operation, so a child-restricted
   // caller receives the named scope remedy before the run is disclosed.
-  provisionPostState.rolePermissions = ['gl.post']
-  provisionPostState.runExists = false
-  const unknownRun = await postProvision(PROVISION_POST_RUN_ID)
-  assert.equal(unknownRun.status, 404)
+  provisionPostState.rolePermissions = ["gl.post"];
+  provisionPostState.runExists = false;
+  const unknownRun = await postProvision(PROVISION_POST_RUN_ID);
+  assert.equal(unknownRun.status, 404);
 
-  provisionPostState.runExists = true
-  provisionPostState.allowedSubsidiaryIds = new Set([PROVISION_POST_CHILD_ID])
-  const outOfScopeRoot = await postProvision(PROVISION_POST_RUN_ID)
-  assert.equal(outOfScopeRoot.status, 403)
+  provisionPostState.runExists = true;
+  provisionPostState.allowedSubsidiaryIds = new Set([PROVISION_POST_CHILD_ID]);
+  const outOfScopeRoot = await postProvision(PROVISION_POST_RUN_ID);
+  assert.equal(outOfScopeRoot.status, 403);
   assert.deepEqual(
     await outOfScopeRoot.json(),
-    { error: 'requires unrestricted subsidiary access' },
-    'an org-wide provision post names the scope requirement',
-  )
-  assert.deepEqual(provisionPostState.engineCalls, [], 'neither denial reached the kernel')
-})
+    { error: "requires unrestricted subsidiary access" },
+    "an org-wide provision post names the scope requirement",
+  );
+  assert.deepEqual(provisionPostState.engineCalls, [], "neither denial reached the kernel");
+});
 
-test('an unrestricted gl.post holder posts the organization-wide provision through the real handler', async () => {
-  resetProvisionPost()
+test("an unrestricted gl.post holder posts the organization-wide provision through the real handler", async () => {
+  resetProvisionPost();
   // Posting changes every entity represented in the consolidated run.
-  provisionPostState.allowedSubsidiaryIds = null
+  provisionPostState.allowedSubsidiaryIds = null;
 
-  const response = await postProvision(PROVISION_POST_RUN_ID)
+  const response = await postProvision(PROVISION_POST_RUN_ID);
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { entryId: PROVISION_POST_ENTRY_ID })
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { entryId: PROVISION_POST_ENTRY_ID });
   assert.deepEqual(
     provisionPostState.engineCalls,
-    [{ orgId: PROVISION_POST_ORG_ID, runId: PROVISION_POST_RUN_ID, actorId: PROVISION_POST_USER_ID }],
-    'exactly one kernel posting of the requested run, attributed to the caller',
-  )
-})
+    [
+      {
+        orgId: PROVISION_POST_ORG_ID,
+        runId: PROVISION_POST_RUN_ID,
+        actorId: PROVISION_POST_USER_ID,
+      },
+    ],
+    "exactly one kernel posting of the requested run, attributed to the caller",
+  );
+});

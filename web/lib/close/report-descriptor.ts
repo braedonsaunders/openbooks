@@ -89,8 +89,6 @@ export function describeQuery(query: ReportCustomQuery, locale: string): ReportD
 }
 
 export function describeStatement(params?: Record<string, string> | null): ReportDescriptor {
-  const filters = params
-    ? Object.entries(params).map(([key, value]) => `${key} = ${value}`)
-    : [];
+  const filters = params ? Object.entries(params).map(([key, value]) => `${key} = ${value}`) : [];
   return { dateRange: null, breakouts: [], filters, measures: [] };
 }

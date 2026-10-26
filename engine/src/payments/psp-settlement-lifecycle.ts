@@ -36,9 +36,7 @@ export async function reverseSettlementBatch(
   await assertNotSandbox(orgId, "reverse a PSP settlement");
   const reason = input.reason.trim();
   if (reason.length < 5 || reason.length > 500) {
-    throw new PspSettlementError(
-      "reversal reason must be between 5 and 500 characters",
-    );
+    throw new PspSettlementError("reversal reason must be between 5 and 500 characters");
   }
   return withOrg(orgId, () =>
     db.transaction(async (tx) => {
@@ -49,36 +47,39 @@ export async function reverseSettlementBatch(
         provider: string;
         external_ref: string;
         subsidiary_id: string | null;
-      }>(sql`
+      }>(
+        sql`
       select status, journal_entry_id, reversal_entry_id, provider,
              external_ref, subsidiary_id
         from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId}
        for update
-    `, "objects");
+    `,
+        "objects",
+      );
       const b = batch[0];
       if (!b) throw new ScopeNotFoundError();
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, b.subsidiary_id))
         throw new ScopeNotFoundError();
       if (b.status === "void") {
         if (!b.reversal_entry_id) {
-          throw new PspSettlementError(
-            "void batch is missing reversal evidence",
-          );
+          throw new PspSettlementError("void batch is missing reversal evidence");
         }
         if (!b.subsidiary_id) {
           throw new PspSettlementError(
             "void batch is missing its subsidiary for payout-accrual reversal",
           );
         }
-        const reversal = (await tx.execute<{ posting_date: string }>(sql`
+        const reversal = (
+          await tx.execute<{ posting_date: string }>(
+            sql`
         select posting_date::text from journal_entries
          where id = ${b.reversal_entry_id} and org_id = ${orgId}
-      `, "objects"))[0];
-        if (!reversal)
-          throw new PspSettlementError(
-            "void batch reversal journal is missing",
-          );
+      `,
+            "objects",
+          )
+        )[0];
+        if (!reversal) throw new PspSettlementError("void batch reversal journal is missing");
         await reverseOpenPayoutAccrualsForBatch(tx, {
           orgId,
           batchId,
@@ -90,9 +91,7 @@ export async function reverseSettlementBatch(
         return { entryId: b.reversal_entry_id };
       }
       if (b.status !== "posted" || !b.journal_entry_id || !b.subsidiary_id) {
-        throw new PspSettlementError(
-          "only a posted settlement batch can be reversed",
-        );
+        throw new PspSettlementError("only a posted settlement batch can be reversed");
       }
 
       const source = await tx.execute<{
@@ -101,28 +100,22 @@ export async function reverseSettlementBatch(
         entry_number: string;
         status: string;
         origin: string;
-      }>(sql`
+      }>(
+        sql`
       select book_id, subsidiary_id, entry_number, status, origin
         from journal_entries
        where id = ${b.journal_entry_id} and org_id = ${orgId}
        for update
-    `, "objects");
+    `,
+        "objects",
+      );
       const original = source[0];
       if (!original || original.status !== "posted") {
-        throw new PspSettlementError(
-          "settlement source journal is missing or already reversed",
-        );
+        throw new PspSettlementError("settlement source journal is missing or already reversed");
       }
-      const periodId = await periodForDate(
-        orgId,
-        input.reversalDate,
-        original.subsidiary_id,
-        tx,
-      );
+      const periodId = await periodForDate(orgId, input.reversalDate, original.subsidiary_id, tx);
       if (!periodId) {
-        throw new PspSettlementError(
-          `no open accounting period for ${input.reversalDate}`,
-        );
+        throw new PspSettlementError(`no open accounting period for ${input.reversalDate}`);
       }
       await assertPeriodModulesOpen(tx, {
         orgId,
@@ -131,7 +124,8 @@ export async function reverseSettlementBatch(
         subsidiaryIds: [original.subsidiary_id],
         modules: ["banking"],
       });
-      const lines = await tx.execute<Record<string, unknown>>(sql`
+      const lines = await tx.execute<Record<string, unknown>>(
+        sql`
       select line_number, account_id, subsidiary_id, amount::text, currency,
              txn_amount::text, fx_rate::text, memo, party_id, department_id,
              project_id, location_id, class_id, equipment_unit_id,
@@ -139,7 +133,9 @@ export async function reverseSettlementBatch(
         from journal_lines
        where entry_id = ${b.journal_entry_id} and org_id = ${orgId}
        order by line_number
-    `, "objects");
+    `,
+        "objects",
+      );
       if (lines.length === 0) {
         throw new PspSettlementError("settlement source journal has no lines");
       }
@@ -168,18 +164,12 @@ export async function reverseSettlementBatch(
           fxRate: String(line.fx_rate),
           memo: line.memo == null ? null : String(line.memo),
           partyId: line.party_id == null ? null : String(line.party_id),
-          departmentId:
-            line.department_id == null ? null : String(line.department_id),
+          departmentId: line.department_id == null ? null : String(line.department_id),
           projectId: line.project_id == null ? null : String(line.project_id),
-          locationId:
-            line.location_id == null ? null : String(line.location_id),
+          locationId: line.location_id == null ? null : String(line.location_id),
           classId: line.class_id == null ? null : String(line.class_id),
-          equipmentUnitId:
-            line.equipment_unit_id == null
-              ? null
-              : String(line.equipment_unit_id),
-          paymentCardId:
-            line.payment_card_id == null ? null : String(line.payment_card_id),
+          equipmentUnitId: line.equipment_unit_id == null ? null : String(line.equipment_unit_id),
+          paymentCardId: line.payment_card_id == null ? null : String(line.payment_card_id),
           taxCodeId: line.tax_code_id == null ? null : String(line.tax_code_id),
           extraDims: (line.extra_dims ?? {}) as Record<string, string>,
           lineNumber: Number(line.line_number),

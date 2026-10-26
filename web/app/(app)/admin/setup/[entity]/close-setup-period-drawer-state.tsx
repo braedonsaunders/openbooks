@@ -20,12 +20,9 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
   const closeHref = drawerHref(props.currentParams, "periods", "period", null);
   const creating = pickString(props.currentParams.period) === "new";
   const selectedBook =
-    props.books.find((book) => book.id === props.selectedBookId) ??
-    props.books[0];
+    props.books.find((book) => book.id === props.selectedBookId) ?? props.books[0];
   const [calendarId, setCalendarId] = useState(
-    props.calendarOptions.find((item) => item.is_default)?.id ??
-      props.calendarOptions[0]?.id ??
-      "",
+    props.calendarOptions.find((item) => item.is_default)?.id ?? props.calendarOptions[0]?.id ?? "",
   );
   const [year, setYear] = useState(props.fiscalYear);
   const [action, setAction] = useState<{
@@ -87,7 +84,10 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
   // tap on the wrong module row can still be cancelled. Resets whenever the
   // pending action changes.
   const [closeArmed, setCloseArmed] = useIdentityState([action?.module, action?.state], false);
-  const [bankingUnavailable, setBankingUnavailable] = useIdentityState([bankingClosePending, row?.id, selectedBook?.id], false);
+  const [bankingUnavailable, setBankingUnavailable] = useIdentityState(
+    [bankingClosePending, row?.id, selectedBook?.id],
+    false,
+  );
   useEffect(() => {
     if (!bankingClosePending || !row || !selectedBook) return;
     let live = true;
@@ -101,13 +101,18 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
     )
       .then((data) => {
         if (!live) return;
-        const status = data as { accounts?: BankingReconAccount[]; unmatchedStatementLines?: unknown };
+        const status = data as {
+          accounts?: BankingReconAccount[];
+          unmatchedStatementLines?: unknown;
+        };
         const accounts = status.accounts;
         setBankingStatus({
           accounts: Array.isArray(accounts) ? (accounts as BankingReconAccount[]) : [],
           issues: [],
           unmatchedStatementLines:
-            typeof status.unmatchedStatementLines === "number" ? status.unmatchedStatementLines : null,
+            typeof status.unmatchedStatementLines === "number"
+              ? status.unmatchedStatementLines
+              : null,
         });
         setBankingUnavailable(false);
       })
@@ -134,9 +139,9 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
   const prefillEntity = pickString(props.currentParams.reopenEntity);
   const reopenPrefillEntity = prefillEntity && isUuid(prefillEntity) ? prefillEntity : null;
   const reopenPrefillEntityName = reopenPrefillEntity
-    ? (props.subsidiaries.find((item) => item.id === reopenPrefillEntity)?.display_name
-      ?? props.subsidiaries.find((item) => item.id === reopenPrefillEntity)?.name
-      ?? reopenPrefillEntity)
+    ? (props.subsidiaries.find((item) => item.id === reopenPrefillEntity)?.display_name ??
+      props.subsidiaries.find((item) => item.id === reopenPrefillEntity)?.name ??
+      reopenPrefillEntity)
     : null;
   const prefillConsumed = useRef(false);
   useEffect(() => {
@@ -145,7 +150,9 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
     setAction({ module: reopenPrefillModule, state: "reopen" });
   }, [action, reopenPrefillModule]);
   const [closeAllOverrides, setCloseAllOverrides] = useState<Record<string, string>>({});
-  const [closeAllResults, setCloseAllResults] = useState<{ module: string; ok: boolean; error?: string }[] | null>(null);
+  const [closeAllResults, setCloseAllResults] = useState<
+    { module: string; ok: boolean; error?: string }[] | null
+  >(null);
   // One end-window reason draft per active reopen request on this row.
   const [endReasons, setEndReasons] = useState<Record<string, string>>({});
   async function generate() {
@@ -192,28 +199,29 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
     bankingStatus !== null &&
     ((bankingInProgress ?? 0) > 0 || (bankingUnmatched ?? 0) > 0)
       ? t("periods.bankingCloseConfirmDetail", {
-        inProgress: bankingInProgress ?? 0,
-        unmatched: bankingUnmatched ?? 0,
-      })
+          inProgress: bankingInProgress ?? 0,
+          unmatched: bankingUnmatched ?? 0,
+        })
       : null;
   // Closing out of order is allowed but never silent: the armed summary
   // names earlier periods with activity whose same module is still open.
   const earlierOpenPeriods =
     row && action && (action.state === "closed" || action.state === "soft_closed")
       ? props.periods
-        .filter((period) =>
-          period.calendar_name === row.calendar_name &&
-          period.starts_on < row.starts_on &&
-          Number(period.entries ?? 0) > 0 &&
-          (period.locks?.[action.module]?.state ?? "open") === "open")
-        .sort((left, right) => left.starts_on.localeCompare(right.starts_on))
-        .map((period) => period.name)
+          .filter(
+            (period) =>
+              period.calendar_name === row.calendar_name &&
+              period.starts_on < row.starts_on &&
+              Number(period.entries ?? 0) > 0 &&
+              (period.locks?.[action.module]?.state ?? "open") === "open",
+          )
+          .sort((left, right) => left.starts_on.localeCompare(right.starts_on))
+          .map((period) => period.name)
       : [];
   // The first Confirm click arms the summary (module, consequences, live
   // Banking counts); only the second posts. A tap on the wrong module row
   // still cancels here instead of closing the wrong books.
-  const actionCloses =
-    action?.state === "closed" || action?.state === "soft_closed";
+  const actionCloses = action?.state === "closed" || action?.state === "soft_closed";
   function confirmAction() {
     if (actionCloses && !closeArmed) {
       setCloseArmed(true);
@@ -268,9 +276,7 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
             module: action.module,
             state: action.state,
             reason,
-            ...(bankingAck.trim()
-              ? { bankingAcknowledgement: bankingAck.trim() }
-              : {}),
+            ...(bankingAck.trim() ? { bankingAcknowledgement: bankingAck.trim() } : {}),
           },
           t("errors.actionFailed"),
           t("periods.requestTimedOut"),
@@ -297,10 +303,7 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
         );
       router.refresh();
     } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
+      const message = error instanceof ApiResponseError ? error.message : t("errors.actionFailed");
       setActionError(message);
       toast.error(message);
     } finally {
@@ -336,9 +339,7 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
           bookId: selectedBook.id,
           reason: closeAllReason.trim(),
           ...(Object.keys(overrides).length > 0 ? { moduleReasons: overrides } : {}),
-          ...(bankingAck.trim()
-            ? { bankingAcknowledgement: bankingAck.trim() }
-            : {}),
+          ...(bankingAck.trim() ? { bankingAcknowledgement: bankingAck.trim() } : {}),
         },
         t("errors.actionFailed"),
         t("periods.requestTimedOut"),
@@ -357,10 +358,7 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
       }
       router.refresh();
     } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
+      const message = error instanceof ApiResponseError ? error.message : t("errors.actionFailed");
       setActionError(message);
       toast.error(message);
     } finally {
@@ -401,10 +399,7 @@ export function usePeriodDrawerState(row: PeriodRow | undefined, props: Props) {
       });
       router.refresh();
     } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
+      const message = error instanceof ApiResponseError ? error.message : t("errors.actionFailed");
       setActionError(message);
       toast.error(message);
     } finally {

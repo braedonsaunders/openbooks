@@ -1,149 +1,290 @@
-'use client'
+"use client";
 
-import { useMemo, useState, type DragEvent } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
-import { Plus, Users } from 'lucide-react'
-import { cn, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
-import { CHIP_COLORS, chipStyle } from './BookingChip'
-import { SourceRecordChip } from './SourceRecord'
-import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
-import { TargetPicker } from './TargetPicker'
-import { cellKey, indexAbsences, initials, presentedBoardEntries, targetHue, type BoardEntry, type BoardTarget, type SpanInput } from './model'
-import type { BoardController } from './use-board'
-import type { BoardWindow } from '@openbooks/engine/schedule-boards/window'
+import { useMemo, useState, type DragEvent } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { Plus, Users } from "lucide-react";
+import { cn, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@openbooks/ui";
+import { CHIP_COLORS, chipStyle } from "./BookingChip";
+import { SourceRecordChip } from "./SourceRecord";
+import type { BoardSourceRecord } from "@openbooks/engine/schedule-boards/source-history";
+import { TargetPicker } from "./TargetPicker";
+import {
+  cellKey,
+  indexAbsences,
+  initials,
+  presentedBoardEntries,
+  targetHue,
+  type BoardEntry,
+  type BoardTarget,
+  type SpanInput,
+} from "./model";
+import type { BoardController } from "./use-board";
+import type { BoardWindow } from "@openbooks/engine/schedule-boards/window";
 
-import { filterBoardRows } from './legend'
+import { filterBoardRows } from "./legend";
 
-const newId = () => crypto.randomUUID()
-const keyOf = (target: Pick<BoardTarget, 'kind' | 'id'>) => `${target.kind}:${target.id}`
+const newId = () => crypto.randomUUID();
+const keyOf = (target: Pick<BoardTarget, "kind" | "id">) => `${target.kind}:${target.id}`;
 
 /**
  * The dispatch view: one row per target on the board, subjects
  * stacked in each day. Drag subjects from the rail onto a target and day to book
  * them, or between days and targets to move them.
  */
-export function TargetsView({ controller, window: board, search, today, onOpenEntry, onOpenSourceRecord }: {
-  controller: BoardController
-  window: BoardWindow
-  search: string
-  today: string
-  onOpenEntry: (entry: BoardEntry) => void
-  onOpenSourceRecord: (record: BoardSourceRecord) => void
+export function TargetsView({
+  controller,
+  window: board,
+  search,
+  today,
+  onOpenEntry,
+  onOpenSourceRecord,
+}: {
+  controller: BoardController;
+  window: BoardWindow;
+  search: string;
+  today: string;
+  onOpenEntry: (entry: BoardEntry) => void;
+  onOpenSourceRecord: (record: BoardSourceRecord) => void;
 }) {
-  const t = useTranslations('scheduling')
-  const locale = useLocale()
-  const [extraTargets, setExtraTargets] = useState<BoardTarget[]>([])
-  const [adding, setAdding] = useState<{ left: number; top: number } | null>(null)
-  const [railDate, setRailDate] = useState<string>(() => board.days.find((day) => day.date >= today)?.date ?? board.days[0]?.date ?? today)
-  const days = useMemo(() => board.days.filter((day) => board.board.showWeekends || !day.isWeekend), [board.days, board.board.showWeekends])
-  const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
-  const personName = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
-  const absences = useMemo(() => indexAbsences(board.absences), [board.absences])
+  const t = useTranslations("scheduling");
+  const locale = useLocale();
+  const [extraTargets, setExtraTargets] = useState<BoardTarget[]>([]);
+  const [adding, setAdding] = useState<{ left: number; top: number } | null>(null);
+  const [railDate, setRailDate] = useState<string>(
+    () => board.days.find((day) => day.date >= today)?.date ?? board.days[0]?.date ?? today,
+  );
+  const days = useMemo(
+    () => board.days.filter((day) => board.board.showWeekends || !day.isWeekend),
+    [board.days, board.board.showWeekends],
+  );
+  const replaced = useMemo(() => new Set(board.replaced), [board.replaced]);
+  const personName = useMemo(
+    () => new Map(board.rows.map((person) => [person.subjectId, person.name])),
+    [board.rows],
+  );
+  const absences = useMemo(() => indexAbsences(board.absences), [board.absences]);
 
-  const visibleSubjects = useMemo(() => new Set(filterBoardRows(board,search,null).map(r=>r.subjectId)),[board,search])
-  const live = useMemo(() => presentedBoardEntries(board).filter((entry) => !replaced.has(entry.id) && visibleSubjects.has(entry.subjectId)), [board, replaced, visibleSubjects])
+  const visibleSubjects = useMemo(
+    () => new Set(filterBoardRows(board, search, null).map((r) => r.subjectId)),
+    [board, search],
+  );
+  const live = useMemo(
+    () =>
+      presentedBoardEntries(board).filter(
+        (entry) => !replaced.has(entry.id) && visibleSubjects.has(entry.subjectId),
+      ),
+    [board, replaced, visibleSubjects],
+  );
   const rows = useMemo(() => {
-    const byTarget = new Map<string, { target: BoardTarget; cells: Map<string, BoardEntry[]>; people: Set<string> }>()
+    const byTarget = new Map<
+      string,
+      { target: BoardTarget; cells: Map<string, BoardEntry[]>; people: Set<string> }
+    >();
     for (const entry of live) {
-      if (!entry.target) continue
-      const key = keyOf(entry.target)
-      const row = byTarget.get(key) ?? { target: entry.target, cells: new Map(), people: new Set() }
-      const list = row.cells.get(entry.startsOn) ?? []
-      list.push(entry)
-      row.cells.set(entry.startsOn, list)
-      row.people.add(entry.subjectId)
-      byTarget.set(key, row)
+      if (!entry.target) continue;
+      const key = keyOf(entry.target);
+      const row = byTarget.get(key) ?? {
+        target: entry.target,
+        cells: new Map(),
+        people: new Set(),
+      };
+      const list = row.cells.get(entry.startsOn) ?? [];
+      list.push(entry);
+      row.cells.set(entry.startsOn, list);
+      row.people.add(entry.subjectId);
+      byTarget.set(key, row);
     }
-    for (const target of extraTargets) if (!byTarget.has(keyOf(target))) byTarget.set(keyOf(target), { target, cells: new Map(), people: new Set() })
-    return [...byTarget.values()].sort((a, b) => Number(a.target.kind === 'code') - Number(b.target.kind === 'code') || b.people.size - a.people.size || (a.target.code ?? a.target.label).localeCompare(b.target.code ?? b.target.label))
-  }, [extraTargets, live])
+    for (const target of extraTargets)
+      if (!byTarget.has(keyOf(target)))
+        byTarget.set(keyOf(target), { target, cells: new Map(), people: new Set() });
+    return [...byTarget.values()].sort(
+      (a, b) =>
+        Number(a.target.kind === "code") - Number(b.target.kind === "code") ||
+        b.people.size - a.people.size ||
+        (a.target.code ?? a.target.label).localeCompare(b.target.code ?? b.target.label),
+    );
+  }, [extraTargets, live]);
   const sourceRows = useMemo(() => {
-    const groups = new Map<string, BoardSourceRecord[]>()
+    const groups = new Map<string, BoardSourceRecord[]>();
     for (const record of board.sourceRecords ?? []) {
-      if (!visibleSubjects.has(record.workerPartyId)) continue
-      const label = record.label ?? ''; const records = groups.get(label) ?? []
-      records.push(record); groups.set(label,records)
+      if (!visibleSubjects.has(record.workerPartyId)) continue;
+      const label = record.label ?? "";
+      const records = groups.get(label) ?? [];
+      records.push(record);
+      groups.set(label, records);
     }
-    return [...groups.entries()].sort(([a],[b])=>a.localeCompare(b))
-  }, [board.sourceRecords, visibleSubjects])
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [board.sourceRecords, visibleSubjects]);
 
   const bookedOn = useMemo(() => {
-    const set = new Set<string>()
+    const set = new Set<string>();
     // Linked source presentation does not release a native booking's availability.
-    for (const entry of board.entries) if (!replaced.has(entry.id)) set.add(cellKey(entry.subjectId, entry.startsOn))
-    return set
-  }, [board.entries, replaced])
-  const available = useMemo(() => board.rows.filter((person) => visibleSubjects.has(person.subjectId) && !bookedOn.has(cellKey(person.subjectId, railDate)) && !(absences.get(cellKey(person.subjectId, railDate)) ?? []).length), [absences, board.rows, bookedOn, railDate, visibleSubjects])
+    for (const entry of board.entries)
+      if (!replaced.has(entry.id)) set.add(cellKey(entry.subjectId, entry.startsOn));
+    return set;
+  }, [board.entries, replaced]);
+  const available = useMemo(
+    () =>
+      board.rows.filter(
+        (person) =>
+          visibleSubjects.has(person.subjectId) &&
+          !bookedOn.has(cellKey(person.subjectId, railDate)) &&
+          !(absences.get(cellKey(person.subjectId, railDate)) ?? []).length,
+      ),
+    [absences, board.rows, bookedOn, railDate, visibleSubjects],
+  );
 
-  const span: SpanInput = board.board.grain === 'day' || !board.board.dayPolicyKnown ? { mode: 'day' } : { mode: 'timed', starts: board.board.dayStarts, ends: board.board.dayEnds, breakMinutes: board.board.dayBreakMinutes }
-  const weekday = useMemo(() => new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }), [locale])
+  const span: SpanInput =
+    board.board.grain === "day" || !board.board.dayPolicyKnown
+      ? { mode: "day" }
+      : {
+          mode: "timed",
+          starts: board.board.dayStarts,
+          ends: board.board.dayEnds,
+          breakMinutes: board.board.dayBreakMinutes,
+        };
+  const weekday = useMemo(
+    () => new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", timeZone: "UTC" }),
+    [locale],
+  );
 
   async function drop(event: DragEvent<HTMLElement>, target: BoardTarget, date: string) {
-    event.preventDefault()
-    if (!board.canManage) return
-    const personId = event.dataTransfer.getData('application/x-openbooks-person')
-    const entryId = event.dataTransfer.getData('application/x-openbooks-booking')
+    event.preventDefault();
+    if (!board.canManage) return;
+    const personId = event.dataTransfer.getData("application/x-openbooks-person");
+    const entryId = event.dataTransfer.getData("application/x-openbooks-booking");
     if (personId) {
-      const subject = board.rows.find((row) => row.subjectId === personId)
-      if (!subject) return
-      await controller.run([{ op: 'create', id: newId(), subject: { kind: subject.subjectKind, id: personId }, onDate: date, target: { kind: target.kind, id: target.id }, span }], t('history.book', { target: target.code ?? target.label }))
+      const subject = board.rows.find((row) => row.subjectId === personId);
+      if (!subject) return;
+      await controller.run(
+        [
+          {
+            op: "create",
+            id: newId(),
+            subject: { kind: subject.subjectKind, id: personId },
+            onDate: date,
+            target: { kind: target.kind, id: target.id },
+            span,
+          },
+        ],
+        t("history.book", { target: target.code ?? target.label }),
+      );
     } else if (entryId) {
-      const entry = controller.entriesById.get(entryId)
-      if (!entry || entry.boardId !== board.board.id) return
-      if (entry.startsOn === date && entry.target && keyOf(entry.target) === keyOf(target)) return
-      await controller.run([{ op: 'update', id: entry.id, expectedRevision: entry.revision, fields: { onDate: date, target: { kind: target.kind, id: target.id }, projectTaskId: null } }], t('history.move', { name: personName.get(entry.subjectId) ?? '' }))
+      const entry = controller.entriesById.get(entryId);
+      if (!entry || entry.boardId !== board.board.id) return;
+      if (entry.startsOn === date && entry.target && keyOf(entry.target) === keyOf(target)) return;
+      await controller.run(
+        [
+          {
+            op: "update",
+            id: entry.id,
+            expectedRevision: entry.revision,
+            fields: {
+              onDate: date,
+              target: { kind: target.kind, id: target.id },
+              projectTaskId: null,
+            },
+          },
+        ],
+        t("history.move", { name: personName.get(entry.subjectId) ?? "" }),
+      );
     }
   }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 gap-4">
       <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-        <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full border-separate border-spacing-0 text-sm">
+        <Table
+          containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none"
+          className="w-full border-separate border-spacing-0 text-sm"
+        >
           <TableHeader className="sticky top-0 z-10 bg-white/95 backdrop-blur dark:bg-slate-950/95">
             <TableRow noAnimate>
-              <TableHead className="sticky left-0 z-10 w-56 border-b border-slate-200 bg-white/95 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/95">{t('targets.where')}</TableHead>
+              <TableHead className="sticky left-0 z-10 w-56 border-b border-slate-200 bg-white/95 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/95">
+                {t("targets.where")}
+              </TableHead>
               {days.map((day) => (
-                <TableHead key={day.date} className={cn('min-w-[110px] border-b border-l border-slate-100 px-2 py-2 text-center text-[11px] font-semibold dark:border-slate-800', day.date === today ? 'text-teal-700 dark:text-teal-300' : 'text-slate-500', day.isWeekend && 'bg-slate-50/80 dark:bg-slate-900/60')}>
+                <TableHead
+                  key={day.date}
+                  className={cn(
+                    "min-w-[110px] border-b border-l border-slate-100 px-2 py-2 text-center text-[11px] font-semibold dark:border-slate-800",
+                    day.date === today ? "text-teal-700 dark:text-teal-300" : "text-slate-500",
+                    day.isWeekend && "bg-slate-50/80 dark:bg-slate-900/60",
+                  )}
+                >
                   {weekday.format(new Date(`${day.date}T00:00:00Z`))}
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sourceRows.map(([label,records]) => <TableRow noAnimate key={`source-${label}`}>
-              <TableCell className="sticky left-0 z-[5] max-w-[250px] border-b bg-white px-3 py-2 align-top dark:bg-slate-950">
-                <div className="truncate font-semibold" title={label}>{label || '—'}</div>
-                <div className="text-[11px] text-slate-500">{t('source.unknownHours')}</div>
-              </TableCell>
-              {days.map(day => <TableCell key={day.date} className="border-b border-l p-1 align-top">
-                <div className="flex flex-col gap-0.5">{records.filter(r=>r.onDate===day.date).map(record=>
-                  <div key={record.id} title={personName.get(record.workerPartyId)}>
-                    <SourceRecordChip records={[record]} workerName={personName.get(record.workerPartyId)} subjectOnly compact onOpen={onOpenSourceRecord} />
-                  </div>)}</div>
-              </TableCell>)}
-            </TableRow>)}
+            {sourceRows.map(([label, records]) => (
+              <TableRow noAnimate key={`source-${label}`}>
+                <TableCell className="sticky left-0 z-[5] max-w-[250px] border-b bg-white px-3 py-2 align-top dark:bg-slate-950">
+                  <div className="truncate font-semibold" title={label}>
+                    {label || "—"}
+                  </div>
+                  <div className="text-[11px] text-slate-500">{t("source.unknownHours")}</div>
+                </TableCell>
+                {days.map((day) => (
+                  <TableCell key={day.date} className="border-b border-l p-1 align-top">
+                    <div className="flex flex-col gap-0.5">
+                      {records
+                        .filter((r) => r.onDate === day.date)
+                        .map((record) => (
+                          <div key={record.id} title={personName.get(record.workerPartyId)}>
+                            <SourceRecordChip
+                              records={[record]}
+                              workerName={personName.get(record.workerPartyId)}
+                              subjectOnly
+                              compact
+                              onOpen={onOpenSourceRecord}
+                            />
+                          </div>
+                        ))}
+                    </div>
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
             {rows.map((row) => {
-              const hue = targetHue(row.target)
+              const hue = targetHue(row.target);
               return (
                 <TableRow noAnimate key={keyOf(row.target)} className="group">
                   <TableCell className="sticky left-0 z-[5] border-b border-slate-100 bg-white px-3 py-2 align-top dark:border-slate-800 dark:bg-slate-950">
                     <div className="flex items-center gap-2">
-                      <span className="h-8 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: `hsl(${hue} 65% 55%)` }} />
+                      <span
+                        className="h-8 w-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: `hsl(${hue} 65% 55%)` }}
+                      />
                       <div className="min-w-0">
-                        <div className="truncate font-semibold text-slate-900 dark:text-slate-100">{row.target.code ?? row.target.label}</div>
-                        <div className="truncate text-[11px] text-slate-400">{[row.target.code ? row.target.label : null, row.target.context].filter(Boolean).join(' · ') || t(`kinds.${row.target.kind}`)}</div>
+                        <div className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                          {row.target.code ?? row.target.label}
+                        </div>
+                        <div className="truncate text-[11px] text-slate-400">
+                          {[row.target.code ? row.target.label : null, row.target.context]
+                            .filter(Boolean)
+                            .join(" · ") || t(`kinds.${row.target.kind}`)}
+                        </div>
                       </div>
-                      <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"><Users className="h-3 w-3" />{row.people.size}</span>
+                      <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        <Users className="h-3 w-3" />
+                        {row.people.size}
+                      </span>
                     </div>
                   </TableCell>
                   {days.map((day) => {
-                    const entries = row.cells.get(day.date) ?? []
+                    const entries = row.cells.get(day.date) ?? [];
                     return (
                       <TableCell
                         key={day.date}
                         onDragOver={(event) => board.canManage && event.preventDefault()}
                         onDrop={(event) => void drop(event, row.target, day.date)}
-                        className={cn('border-b border-l border-slate-100 p-1 align-top dark:border-slate-800', day.isWeekend && 'bg-slate-50/60 dark:bg-slate-900/40', day.date === today && 'bg-teal-50/40 dark:bg-teal-950/20')}
+                        className={cn(
+                          "border-b border-l border-slate-100 p-1 align-top dark:border-slate-800",
+                          day.isWeekend && "bg-slate-50/60 dark:bg-slate-900/40",
+                          day.date === today && "bg-teal-50/40 dark:bg-teal-950/20",
+                        )}
                       >
                         <div className="flex min-h-[36px] flex-col gap-0.5">
                           {entries.map((entry) => (
@@ -151,23 +292,51 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
                               type="button"
                               key={entry.id}
                               draggable={board.canManage && entry.boardId === board.board.id}
-                              onDragStart={(event) => event.dataTransfer.setData('application/x-openbooks-booking', entry.id)}
+                              onDragStart={(event) =>
+                                event.dataTransfer.setData(
+                                  "application/x-openbooks-booking",
+                                  entry.id,
+                                )
+                              }
                               onClick={() => onOpenEntry(entry)}
                               style={chipStyle(targetHue(entry.target), entry.target?.color)}
-                              className={cn('flex w-full items-center gap-1.5 text-left rounded-md border px-1.5 py-0.5 text-[11px] font-medium', CHIP_COLORS, entry.status === 'draft' && 'border-dashed', entry.boardId !== board.board.id && 'opacity-60')}
-                              title={[entry.detail, entry.spanMode === 'timed' ? `${entry.startClock}–${entry.endClock}` : null, entry.notes].filter(Boolean).join('\n') || undefined}
+                              className={cn(
+                                "flex w-full items-center gap-1.5 text-left rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
+                                CHIP_COLORS,
+                                entry.status === "draft" && "border-dashed",
+                                entry.boardId !== board.board.id && "opacity-60",
+                              )}
+                              title={
+                                [
+                                  entry.detail,
+                                  entry.spanMode === "timed"
+                                    ? `${entry.startClock}–${entry.endClock}`
+                                    : null,
+                                  entry.notes,
+                                ]
+                                  .filter(Boolean)
+                                  .join("\n") || undefined
+                              }
                             >
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-[8px] font-bold dark:bg-black/20">{initials(personName.get(entry.subjectId) ?? '?')}</span>
-                              <span className="truncate">{personName.get(entry.subjectId) ?? '—'}</span>
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-[8px] font-bold dark:bg-black/20">
+                                {initials(personName.get(entry.subjectId) ?? "?")}
+                              </span>
+                              <span className="truncate">
+                                {personName.get(entry.subjectId) ?? "—"}
+                              </span>
                             </button>
                           ))}
-                          {entries.length > 1 ? <span className="px-1 text-[10px] font-semibold text-slate-400">{t('targets.count', { count: entries.length })}</span> : null}
+                          {entries.length > 1 ? (
+                            <span className="px-1 text-[10px] font-semibold text-slate-400">
+                              {t("targets.count", { count: entries.length })}
+                            </span>
+                          ) : null}
                         </div>
                       </TableCell>
-                    )
+                    );
                   })}
                 </TableRow>
-              )
+              );
             })}
             <TableRow noAnimate>
               <TableCell colSpan={days.length + 1} className="px-3 py-2">
@@ -175,15 +344,18 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
                   <button
                     type="button"
                     onClick={(event) => {
-                      const box = event.currentTarget.getBoundingClientRect()
-                      setAdding({ left: box.left, top: box.bottom + 4 })
+                      const box = event.currentTarget.getBoundingClientRect();
+                      setAdding({ left: box.left, top: box.bottom + 4 });
                     }}
                     className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40"
                   >
-                    <Plus className="h-3.5 w-3.5" />{t('targets.add')}
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("targets.add")}
                   </button>
                 ) : null}
-                {rows.length === 0 && sourceRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('targets.empty')}</p> : null}
+                {rows.length === 0 && sourceRows.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-500">{t("targets.empty")}</p>
+                ) : null}
               </TableCell>
             </TableRow>
           </TableBody>
@@ -192,14 +364,21 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
 
       <aside className="hidden w-60 shrink-0 flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex">
         <div className="border-b border-slate-100 p-3 dark:border-slate-800">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('targets.available')}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {t("targets.available")}
+          </div>
           <div className="mt-2 flex min-w-0 flex-nowrap gap-1 overflow-x-auto">
             {days.map((day) => (
               <button
                 key={day.date}
                 type="button"
                 onClick={() => setRailDate(day.date)}
-                className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-medium tabular-nums', railDate === day.date ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800')}
+                className={cn(
+                  "rounded-md px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                  railDate === day.date
+                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                    : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
+                )}
               >
                 {weekday.format(new Date(`${day.date}T00:00:00Z`))}
               </button>
@@ -211,17 +390,30 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
             <li
               key={person.subjectId}
               draggable={board.canManage}
-              onDragStart={(event) => event.dataTransfer.setData('application/x-openbooks-person', person.subjectId)}
-              className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900', board.canManage && 'cursor-grab')}
+              onDragStart={(event) =>
+                event.dataTransfer.setData("application/x-openbooks-person", person.subjectId)
+              }
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900",
+                board.canManage && "cursor-grab",
+              )}
             >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{initials(person.name)}</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {initials(person.name)}
+              </span>
               <span className="min-w-0">
                 <span className="block truncate font-medium">{person.name}</span>
-                <span className="block truncate text-[10px] text-slate-400">{person.tradeName ?? person.jobTitle ?? person.departmentName ?? ''}</span>
+                <span className="block truncate text-[10px] text-slate-400">
+                  {person.tradeName ?? person.jobTitle ?? person.departmentName ?? ""}
+                </span>
               </span>
             </li>
           ))}
-          {available.length === 0 ? <li className="px-2 py-6 text-center text-xs text-slate-500">{t('targets.allBooked')}</li> : null}
+          {available.length === 0 ? (
+            <li className="px-2 py-6 text-center text-xs text-slate-500">
+              {t("targets.allBooked")}
+            </li>
+          ) : null}
         </ul>
       </aside>
 
@@ -233,12 +425,12 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
           anchor={{ ...adding, width: 360 }}
           cellCount={1}
           onCommit={(picked) => {
-            setExtraTargets((current) => [...current, picked.target])
-            setAdding(null)
+            setExtraTargets((current) => [...current, picked.target]);
+            setAdding(null);
           }}
           onCancel={() => setAdding(null)}
         />
       ) : null}
     </div>
-  )
+  );
 }

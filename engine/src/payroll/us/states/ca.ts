@@ -52,7 +52,10 @@
 import { bmin, D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { PayrollError } from "../../error.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, certificateFlag,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
 } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
@@ -63,7 +66,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ca.ts";
 
 /**
@@ -134,12 +141,42 @@ export interface CaYearRates {
 // ---------------------------------------------------------------------------
 const LOW_INCOME_2026: ByPeriod<Readonly<Record<CaColumn, string>>> = {
   weekly: { single_dual: "363", married_0_1: "363", married_2_plus: "727", head_household: "727" },
-  biweekly: { single_dual: "727", married_0_1: "727", married_2_plus: "1454", head_household: "1454" },
-  semimonthly: { single_dual: "787", married_0_1: "787", married_2_plus: "1575", head_household: "1575" },
-  monthly: { single_dual: "1575", married_0_1: "1575", married_2_plus: "3149", head_household: "3149" },
-  quarterly: { single_dual: "4724", married_0_1: "4724", married_2_plus: "9448", head_household: "9448" },
-  semiannual: { single_dual: "9448", married_0_1: "9448", married_2_plus: "18896", head_household: "18896" },
-  annual: { single_dual: "18896", married_0_1: "18896", married_2_plus: "37791", head_household: "37791" },
+  biweekly: {
+    single_dual: "727",
+    married_0_1: "727",
+    married_2_plus: "1454",
+    head_household: "1454",
+  },
+  semimonthly: {
+    single_dual: "787",
+    married_0_1: "787",
+    married_2_plus: "1575",
+    head_household: "1575",
+  },
+  monthly: {
+    single_dual: "1575",
+    married_0_1: "1575",
+    married_2_plus: "3149",
+    head_household: "3149",
+  },
+  quarterly: {
+    single_dual: "4724",
+    married_0_1: "4724",
+    married_2_plus: "9448",
+    head_household: "9448",
+  },
+  semiannual: {
+    single_dual: "9448",
+    married_0_1: "9448",
+    married_2_plus: "18896",
+    head_household: "18896",
+  },
+  annual: {
+    single_dual: "18896",
+    married_0_1: "18896",
+    married_2_plus: "37791",
+    head_household: "37791",
+  },
   daily: { single_dual: "73", married_0_1: "73", married_2_plus: "145", head_household: "145" },
 };
 
@@ -163,12 +200,37 @@ const ESTIMATED_DEDUCTION_2026: ByPeriod<readonly string[]> = {
 // ---------------------------------------------------------------------------
 const STANDARD_DEDUCTION_2026: ByPeriod<Readonly<Record<CaColumn, string>>> = {
   weekly: { single_dual: "110", married_0_1: "110", married_2_plus: "219", head_household: "219" },
-  biweekly: { single_dual: "219", married_0_1: "219", married_2_plus: "439", head_household: "439" },
-  semimonthly: { single_dual: "238", married_0_1: "238", married_2_plus: "476", head_household: "476" },
+  biweekly: {
+    single_dual: "219",
+    married_0_1: "219",
+    married_2_plus: "439",
+    head_household: "439",
+  },
+  semimonthly: {
+    single_dual: "238",
+    married_0_1: "238",
+    married_2_plus: "476",
+    head_household: "476",
+  },
   monthly: { single_dual: "476", married_0_1: "476", married_2_plus: "951", head_household: "951" },
-  quarterly: { single_dual: "1427", married_0_1: "1427", married_2_plus: "2853", head_household: "2853" },
-  semiannual: { single_dual: "2853", married_0_1: "2853", married_2_plus: "5706", head_household: "5706" },
-  annual: { single_dual: "5706", married_0_1: "5706", married_2_plus: "11412", head_household: "11412" },
+  quarterly: {
+    single_dual: "1427",
+    married_0_1: "1427",
+    married_2_plus: "2853",
+    head_household: "2853",
+  },
+  semiannual: {
+    single_dual: "2853",
+    married_0_1: "2853",
+    married_2_plus: "5706",
+    head_household: "5706",
+  },
+  annual: {
+    single_dual: "5706",
+    married_0_1: "5706",
+    married_2_plus: "11412",
+    head_household: "11412",
+  },
   daily: { single_dual: "22", married_0_1: "22", married_2_plus: "44", head_household: "44" },
 };
 
@@ -177,13 +239,97 @@ const STANDARD_DEDUCTION_2026: ByPeriod<Readonly<Record<CaColumn, string>>> = {
 // Index n is n allowances, 0…10.
 // ---------------------------------------------------------------------------
 const EXEMPTION_ALLOWANCE_2026: ByPeriod<readonly string[]> = {
-  weekly: ["0.00", "3.24", "6.47", "9.71", "12.95", "16.18", "19.42", "22.66", "25.89", "29.13", "32.37"],
-  biweekly: ["0.00", "6.47", "12.95", "19.42", "25.89", "32.37", "38.84", "45.31", "51.78", "58.26", "64.73"],
-  semimonthly: ["0.00", "7.01", "14.03", "21.04", "28.05", "35.06", "42.08", "49.09", "56.10", "63.11", "70.13"],
-  monthly: ["0.00", "14.03", "28.05", "42.08", "56.10", "70.13", "84.15", "98.18", "112.20", "126.23", "140.25"],
-  quarterly: ["0.00", "42.08", "84.15", "126.23", "168.30", "210.38", "252.45", "294.53", "336.60", "378.68", "420.75"],
-  semiannual: ["0.00", "84.15", "168.30", "252.45", "336.60", "420.75", "504.90", "589.05", "673.20", "757.35", "841.50"],
-  annual: ["0.00", "168.30", "336.60", "504.90", "673.20", "841.50", "1009.80", "1178.10", "1346.40", "1514.70", "1683.00"],
+  weekly: [
+    "0.00",
+    "3.24",
+    "6.47",
+    "9.71",
+    "12.95",
+    "16.18",
+    "19.42",
+    "22.66",
+    "25.89",
+    "29.13",
+    "32.37",
+  ],
+  biweekly: [
+    "0.00",
+    "6.47",
+    "12.95",
+    "19.42",
+    "25.89",
+    "32.37",
+    "38.84",
+    "45.31",
+    "51.78",
+    "58.26",
+    "64.73",
+  ],
+  semimonthly: [
+    "0.00",
+    "7.01",
+    "14.03",
+    "21.04",
+    "28.05",
+    "35.06",
+    "42.08",
+    "49.09",
+    "56.10",
+    "63.11",
+    "70.13",
+  ],
+  monthly: [
+    "0.00",
+    "14.03",
+    "28.05",
+    "42.08",
+    "56.10",
+    "70.13",
+    "84.15",
+    "98.18",
+    "112.20",
+    "126.23",
+    "140.25",
+  ],
+  quarterly: [
+    "0.00",
+    "42.08",
+    "84.15",
+    "126.23",
+    "168.30",
+    "210.38",
+    "252.45",
+    "294.53",
+    "336.60",
+    "378.68",
+    "420.75",
+  ],
+  semiannual: [
+    "0.00",
+    "84.15",
+    "168.30",
+    "252.45",
+    "336.60",
+    "420.75",
+    "504.90",
+    "589.05",
+    "673.20",
+    "757.35",
+    "841.50",
+  ],
+  annual: [
+    "0.00",
+    "168.30",
+    "336.60",
+    "504.90",
+    "673.20",
+    "841.50",
+    "1009.80",
+    "1178.10",
+    "1346.40",
+    "1514.70",
+    "1683.00",
+  ],
   daily: ["0.00", "0.65", "1.29", "1.94", "2.59", "3.24", "3.88", "4.53", "5.18", "5.83", "6.47"],
 };
 
@@ -194,8 +340,16 @@ const EXEMPTION_ALLOWANCE_2026: ByPeriod<readonly string[]> = {
 // breakpoints and the accumulated "plus" amounts change.
 // ---------------------------------------------------------------------------
 const R = {
-  a: "0.011", b: "0.022", c: "0.044", d: "0.066", e: "0.088",
-  f: "0.1023", g: "0.1133", h: "0.1243", i: "0.1353", j: "0.1463",
+  a: "0.011",
+  b: "0.022",
+  c: "0.044",
+  d: "0.066",
+  e: "0.088",
+  f: "0.1023",
+  g: "0.1133",
+  h: "0.1243",
+  i: "0.1353",
+  j: "0.1463",
 } as const;
 
 /** Build the ten rows from the printed breakpoints and accumulated amounts. */
@@ -218,17 +372,47 @@ function rows(
 // Table 5 — Annual, Single / Dual Income Married / Married with Multiple Employers
 const T5 = rows(
   ["11079", "26264", "41452", "57542", "72724", "371479", "445771", "742953", "1000000"],
-  ["121.87", "455.94", "1124.21", "2186.15", "3522.17", "34084.81", "42502.09", "79441.81", "114220.27"],
+  [
+    "121.87",
+    "455.94",
+    "1124.21",
+    "2186.15",
+    "3522.17",
+    "34084.81",
+    "42502.09",
+    "79441.81",
+    "114220.27",
+  ],
 );
 // Table 6 — Annual, Married
 const T6 = rows(
   ["22158", "52528", "82904", "115084", "145448", "742958", "891542", "1000000", "1485906"],
-  ["243.74", "911.88", "2248.42", "4372.30", "7044.33", "68169.60", "85004.17", "98485.50", "164228.58"],
+  [
+    "243.74",
+    "911.88",
+    "2248.42",
+    "4372.30",
+    "7044.33",
+    "68169.60",
+    "85004.17",
+    "98485.50",
+    "164228.58",
+  ],
 );
 // Table 7 — Annual, Unmarried Head of Household
 const T7 = rows(
   ["22173", "52530", "67716", "83805", "98990", "505208", "606251", "1000000", "1010417"],
-  ["243.90", "911.75", "1579.93", "2641.80", "3978.08", "45534.18", "56982.35", "105925.35", "107334.77"],
+  [
+    "243.90",
+    "911.75",
+    "1579.93",
+    "2641.80",
+    "3978.08",
+    "45534.18",
+    "56982.35",
+    "105925.35",
+    "107334.77",
+  ],
 );
 // Table 8 — Daily / Miscellaneous, Single / Dual / Multiple
 const T8 = rows(
@@ -253,7 +437,17 @@ const T11 = rows(
 // Table 12 — Quarterly, Married
 const T12 = rows(
   ["5540", "13132", "20726", "28772", "36362", "185740", "222886", "250000", "371477"],
-  ["60.94", "227.96", "562.10", "1093.14", "1761.06", "17042.43", "21251.07", "24621.34", "41057.18"],
+  [
+    "60.94",
+    "227.96",
+    "562.10",
+    "1093.14",
+    "1761.06",
+    "17042.43",
+    "21251.07",
+    "24621.34",
+    "41057.18",
+  ],
 );
 // Table 13 — Quarterly, Unmarried Head of Household
 const T13 = rows(
@@ -263,17 +457,47 @@ const T13 = rows(
 // Table 14 — Semi-annual, Single / Dual / Multiple
 const T14 = rows(
   ["5540", "13132", "20726", "28772", "36362", "185740", "222886", "371476", "500000"],
-  ["60.94", "227.96", "562.10", "1093.14", "1761.06", "17042.43", "21251.07", "39720.81", "57110.11"],
+  [
+    "60.94",
+    "227.96",
+    "562.10",
+    "1093.14",
+    "1761.06",
+    "17042.43",
+    "21251.07",
+    "39720.81",
+    "57110.11",
+  ],
 );
 // Table 15 — Semi-annual, Married
 const T15 = rows(
   ["11080", "26264", "41452", "57544", "72724", "371480", "445772", "500000", "742954"],
-  ["121.88", "455.93", "1124.20", "2186.27", "3522.11", "34084.85", "42502.13", "49242.67", "82114.35"],
+  [
+    "121.88",
+    "455.93",
+    "1124.20",
+    "2186.27",
+    "3522.11",
+    "34084.85",
+    "42502.13",
+    "49242.67",
+    "82114.35",
+  ],
 );
 // Table 16 — Semi-annual, Unmarried Head of Household
 const T16 = rows(
   ["11086", "26266", "33858", "41902", "49496", "252604", "303126", "500000", "505208"],
-  ["121.95", "455.91", "789.96", "1320.86", "1989.13", "22767.08", "28491.22", "52962.66", "53667.30"],
+  [
+    "121.95",
+    "455.91",
+    "789.96",
+    "1320.86",
+    "1989.13",
+    "22767.08",
+    "28491.22",
+    "52962.66",
+    "53667.30",
+  ],
 );
 // Table 17 — Semi-monthly, Single / Dual / Multiple
 const T17 = rows(
@@ -371,16 +595,18 @@ const CA_EDITIONS_BY_YEAR: Record<number, CaYearRates> = {
   [CA_RATES_2026.year]: CA_RATES_2026,
 };
 
-export const CA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "California Withholding Schedules for 2026 — Method B",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "California EDD, California Withholding Schedules for 2026, Method B (Exact Calculation "
-    + "Method), Tables 1–4 and 5–28; California Employer's Guide DE 44 Rev. 52 (4-26)",
-  status: "published",
-  region: "CA",
-}];
+export const CA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "California Withholding Schedules for 2026 — Method B",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "California EDD, California Withholding Schedules for 2026, Method B (Exact Calculation " +
+      "Method), Tables 1–4 and 5–28; California Employer's Guide DE 44 Rev. 52 (4-26)",
+    status: "published",
+    region: "CA",
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Column and schedule selection
@@ -408,8 +634,10 @@ export const CA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
  */
 function columnFor(status: CaFilingStatus, totalAllowances: number): CaColumn {
   switch (status) {
-    case "single_or_dual": return "single_dual";
-    case "head_household": return "head_household";
+    case "single_or_dual":
+      return "single_dual";
+    case "head_household":
+      return "head_household";
     case "married_one_income":
       return totalAllowances >= 2 ? "married_2_plus" : "married_0_1";
   }
@@ -418,9 +646,12 @@ function columnFor(status: CaFilingStatus, totalAllowances: number): CaColumn {
 /** Which Table 5–28 schedule applies. Keyed on filing status alone. */
 function scheduleFor(status: CaFilingStatus): CaSchedule {
   switch (status) {
-    case "single_or_dual": return "single";
-    case "married_one_income": return "married";
-    case "head_household": return "head_household";
+    case "single_or_dual":
+      return "single";
+    case "married_one_income":
+      return "married";
+    case "head_household":
+      return "head_household";
   }
 }
 
@@ -469,21 +700,36 @@ function compute(
   // EDD permits a pre-2020 federal W-4 to remain effective when no DE 4 has
   // replaced it. Only that case inherits its marital status and allowances.
   const legacyW4 = input.certificate.onFile ? undefined : input.federalLegacyW4;
-  const status = (legacyW4
-    ? legacyW4.status === "married" ? "married_one_income" : "single_or_dual"
-    : certificateChoice(input.certificate, "filing_status") ?? "single_or_dual") as CaFilingStatus;
-  const regular = legacyW4?.allowances
-    ?? certificateCount(input.certificate, "regular_allowances") ?? 0;
-  const estimated = legacyW4 ? 0
-    : certificateCount(input.certificate, "estimated_deduction_allowances") ?? 0;
+  const status = (
+    legacyW4
+      ? legacyW4.status === "married"
+        ? "married_one_income"
+        : "single_or_dual"
+      : (certificateChoice(input.certificate, "filing_status") ?? "single_or_dual")
+  ) as CaFilingStatus;
+  const regular =
+    legacyW4?.allowances ?? certificateCount(input.certificate, "regular_allowances") ?? 0;
+  const estimated = legacyW4
+    ? 0
+    : (certificateCount(input.certificate, "estimated_deduction_allowances") ?? 0);
   const total = regular + estimated;
   if (legacyW4) trace("CA_LEGACY_W4", 1n);
 
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
     requireMilitarySpouseEligibility(input.certificate, "California", [
-      { key: "servicemember_is_armed_forces_member", description: "the spouse is a member of the Armed Forces present in California in compliance with military orders" },
-      { key: "spouse_present_solely_to_accompany", description: "the employee is present in California solely to be with the spouse" },
-      { key: "spouse_domiciled_outside_ca", description: "the employee maintains domicile in another state" },
+      {
+        key: "servicemember_is_armed_forces_member",
+        description:
+          "the spouse is a member of the Armed Forces present in California in compliance with military orders",
+      },
+      {
+        key: "spouse_present_solely_to_accompany",
+        description: "the employee is present in California solely to be with the spouse",
+      },
+      {
+        key: "spouse_domiciled_outside_ca",
+        description: "the employee maintains domicile in another state",
+      },
     ]);
     trace("CA_EXEMPT", 1n);
     return { state: "CA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
@@ -508,10 +754,10 @@ function compute(
   // engine refuses it: run the timed dispatch with classified components.
   if (input.supplementalPaymentTiming === "separate" && supplemental > 0n) {
     throw new PayrollError(
-      "California supplemental wages paid separately from regular wages take the DE 44 "
-      + "flat election (10.23% bonuses/stock options, 6.60% other), not the regular schedules. "
-      + "Price them through the timed withholding dispatch with each earning component classified "
-      + "by supplemental wage category — refused by name",
+      "California supplemental wages paid separately from regular wages take the DE 44 " +
+        "flat election (10.23% bonuses/stock options, 6.60% other), not the regular schedules. " +
+        "Price them through the timed withholding dispatch with each earning component classified " +
+        "by supplemental wage category — refused by name",
     );
   }
   const gross = wages + supplemental;
@@ -526,7 +772,11 @@ function compute(
     // rule suspending it below the exemption; it is withheld either way.
     const onlyExtra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "CA", year: rates.year, tax: D(onlyExtra), taxSupplemental: D(0n), factors,
+      state: "CA",
+      year: rates.year,
+      tax: D(onlyExtra),
+      taxSupplemental: D(0n),
+      factors,
     };
   }
 
@@ -639,13 +889,17 @@ export const CA_FACTOR_LABELS: Readonly<Record<string, string>> = {
  * prices the capped base.
  */
 export function caEttWithholding(
-  payDate: string, subjectWages: string, ytdSubjectWages: string,
+  payDate: string,
+  subjectWages: string,
+  ytdSubjectWages: string,
 ): string {
   const rates = CA_STATE_ENGINE.ratesForPayDate(payDate);
-  return D(mulRateCents(
-    max0(bmin(U(subjectWages), U(rates.ettWageBase) - U(ytdSubjectWages))),
-    rates.ettRate,
-  ));
+  return D(
+    mulRateCents(
+      max0(bmin(U(subjectWages), U(rates.ettWageBase) - U(ytdSubjectWages))),
+      rates.ettRate,
+    ),
+  );
 }
 
 const CA_STATE_ENGINE = defineStateEngine({
@@ -661,8 +915,14 @@ export const CA_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: CA_TAX_YEAR_EDITIONS,
   printedPeriods: [
-    "weekly", "biweekly", "semimonthly", "monthly",
-    "quarterly", "semiannual", "annual", "daily",
+    "weekly",
+    "biweekly",
+    "semimonthly",
+    "monthly",
+    "quarterly",
+    "semiannual",
+    "annual",
+    "daily",
   ],
   compute: CA_STATE_ENGINE.compute,
 };

@@ -8,7 +8,16 @@ const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
 });
 const globals = globalThis as Record<string, unknown>;
 const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+for (const key of [
+  "window",
+  "document",
+  "navigator",
+  "Node",
+  "Element",
+  "HTMLElement",
+  "Event",
+  "self",
+]) {
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
 if (typeof window.matchMedia !== "function") {

@@ -20,7 +20,14 @@
  * This module has no imports, so readers, tests, and (later) client code can
  * share the definition without dragging in a query engine.
  */
-export const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"];
+export const PNL_TYPES = [
+  "income",
+  "income_other",
+  "cogs",
+  "expense",
+  "expense_other",
+  "expense_deferred",
+];
 
 /**
  * Cost side of the P&L universe: every PNL_TYPES member that is not revenue.
@@ -29,7 +36,13 @@ export const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_
 export const PNL_COST_TYPES = ["cogs", "expense", "expense_other", "expense_deferred"];
 
 /** Balance-sheet asset types the CoA class and the statement engine share. */
-export const ASSET_TYPES = ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"];
+export const ASSET_TYPES = [
+  "asset_bank",
+  "asset_receivable",
+  "asset_current_other",
+  "asset_fixed",
+  "asset_other",
+];
 export const LIABILITY_TYPES = [
   "liability_payable",
   "liability_card",

@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import type { ReactNode } from 'react'
+import type { ReactNode } from "react";
 
 /** A keyboard-operable, text-named action for drilling into a table record. */
 export function TableDrilldownButton({
   children,
   onActivate,
 }: {
-  children: ReactNode
-  onActivate: () => void
+  children: ReactNode;
+  onActivate: () => void;
 }) {
   return (
     <button
@@ -18,5 +18,5 @@ export function TableDrilldownButton({
     >
       {children}
     </button>
-  )
+  );
 }

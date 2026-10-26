@@ -57,15 +57,18 @@ const routeUrl = "./route.ts?ap-capture-config";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 // The configuration is read once a validated upload needs document capture,
 // so each request carries one well-formed PDF bill.
 function postRequest(): Request {
   const form = new FormData();
-  form.append("files", new File([Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n")], "bill.pdf", { type: "application/pdf" }));
+  form.append(
+    "files",
+    new File([Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n")], "bill.pdf", {
+      type: "application/pdf",
+    }),
+  );
   return new Request("http://openbooks.test/api/ap-capture", { method: "POST", body: form });
 }
 
@@ -84,26 +87,30 @@ test("an unconfigured org is refused as not-configured", { skip: !DB }, async ()
   }
 });
 
-test("a misconfigured endpoint surfaces its own message, never not-configured", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`
+test(
+  "a misconfigured endpoint surfaces its own message, never not-configured",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await db.execute(sql`
       update orgs set settings = jsonb_set(
         coalesce(settings, '{}'::jsonb), '{ai}',
         '{"enabled": true, "documentCapture": {"enabled": true, "endpoint": "http://internal.local/ocr"}}'
       ) where id = ${org.orgId}`);
-    state.gate = { user: { id: randomUUID(), orgId: org.orgId } };
+      state.gate = { user: { id: randomUUID(), orgId: org.orgId } };
 
-    const response = await POST(postRequest());
+      const response = await POST(postRequest());
 
-    assert.equal(response.status, 422);
-    const body = (await response.json()) as { error?: string };
-    assert.equal(body.error, "Document provider endpoint must use HTTPS");
-  } finally {
-    state.gate = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.equal(response.status, 422);
+      const body = (await response.json()) as { error?: string };
+      assert.equal(body.error, "Document provider endpoint must use HTTPS");
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

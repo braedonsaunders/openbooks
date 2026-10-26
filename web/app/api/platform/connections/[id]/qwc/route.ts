@@ -1,46 +1,60 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { getTranslations } from 'next-intl/server'
-import { appBaseUrl } from '@openbooks/engine/flows/email-tokens'
-import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from '@openbooks/engine/sync/connection'
-import { xmlEscape } from '@openbooks/engine/qbd/qbxml'
-import { storageIdentityError } from '../../_storage-identity'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { getTranslations } from "next-intl/server";
+import { appBaseUrl } from "@openbooks/engine/flows/email-tokens";
+import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from "@openbooks/engine/sync/connection";
+import { xmlEscape } from "@openbooks/engine/qbd/qbxml";
+import { storageIdentityError } from "../../_storage-identity";
 import { notFound } from "@/lib/api/responses";
 
-
-const OWNER_ID = '{E71D62A6-BC4D-4F72-90E8-F797CA478DA0}'
+const OWNER_ID = "{E71D62A6-BC4D-4F72-90E8-F797CA478DA0}";
 
 export const GET = defineRoute({
-  permission: 'admin.setup.manage', feature: { none: 'QuickBooks Desktop connector files are controlled by setup permission and have no separate organization feature gate.' },
-  scope: 'unrestricted', params: z.object({ id: z.string() }),
+  permission: "admin.setup.manage",
+  feature: {
+    none: "QuickBooks Desktop connector files are controlled by setup permission and have no separate organization feature gate.",
+  },
+  scope: "unrestricted",
+  params: z.object({ id: z.string() }),
   handler: async ({ params: { id }, authz: gate }) => {
-  const connection = await getConnection(gate.user.orgId, id).catch((e) => {
-    if (storageIdentityError(e)) return null
-    throw e
-  })
-  if (!connection) return notFound("record")
-  if (connection.source !== 'qbd') return NextResponse.json({ error: 'not a QuickBooks Desktop connection' }, { status: 400 })
-  const region = String((connection.config as { region?: unknown } | null)?.region ?? '').trim().toUpperCase()
-  if (!(QBD_WEB_CONNECTOR_REGIONS as readonly string[]).includes(region)) {
-    return NextResponse.json({ error: `QuickBooks Desktop ${region || 'unknown'} editions are not supported by the Intuit Web Connector (supported regions: ${QBD_WEB_CONNECTOR_REGIONS.join(', ')}) — no Web Connector file was generated` }, { status: 400 })
-  }
+    const connection = await getConnection(gate.user.orgId, id).catch((e) => {
+      if (storageIdentityError(e)) return null;
+      throw e;
+    });
+    if (!connection) return notFound("record");
+    if (connection.source !== "qbd")
+      return NextResponse.json({ error: "not a QuickBooks Desktop connection" }, { status: 400 });
+    const region = String((connection.config as { region?: unknown } | null)?.region ?? "")
+      .trim()
+      .toUpperCase();
+    if (!(QBD_WEB_CONNECTOR_REGIONS as readonly string[]).includes(region)) {
+      return NextResponse.json(
+        {
+          error: `QuickBooks Desktop ${region || "unknown"} editions are not supported by the Intuit Web Connector (supported regions: ${QBD_WEB_CONNECTOR_REGIONS.join(", ")}) — no Web Connector file was generated`,
+        },
+        { status: 400 },
+      );
+    }
 
-  const origin = appBaseUrl()
-  if (!origin.startsWith('https://') && !/^http:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origin)) {
-    return NextResponse.json({ error: 'QuickBooks Web Connector requires an HTTPS deployment URL' }, { status: 400 })
-  }
-  const endpoint = `${origin}/api/qbd/web-connector/${connection.id}`
-  const support = `${origin}/docs/quickbooks-desktop-connector`
-  const fileId = `{${connection.id.toUpperCase()}}`
-  const username = `qbd:${connection.id}`
-  const t = await getTranslations('sync')
-  const xml = `<?xml version="1.0"?>
+    const origin = appBaseUrl();
+    if (!origin.startsWith("https://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origin)) {
+      return NextResponse.json(
+        { error: "QuickBooks Web Connector requires an HTTPS deployment URL" },
+        { status: 400 },
+      );
+    }
+    const endpoint = `${origin}/api/qbd/web-connector/${connection.id}`;
+    const support = `${origin}/docs/quickbooks-desktop-connector`;
+    const fileId = `{${connection.id.toUpperCase()}}`;
+    const username = `qbd:${connection.id}`;
+    const t = await getTranslations("sync");
+    const xml = `<?xml version="1.0"?>
 <QBWCXML>
   <AppName>${xmlEscape(connection.displayName)}</AppName>
   <AppID></AppID>
   <AppURL>${xmlEscape(endpoint)}</AppURL>
-  <AppDescription>${xmlEscape(t('qbd.qwcDescription'))}</AppDescription>
+  <AppDescription>${xmlEscape(t("qbd.qwcDescription"))}</AppDescription>
   <AppSupport>${xmlEscape(support)}</AppSupport>
   <UserName>${xmlEscape(username)}</UserName>
   <OwnerID>${OWNER_ID}</OwnerID>
@@ -52,15 +66,17 @@ export const GET = defineRoute({
   <PersonalDataPref>pdpOptional</PersonalDataPref>
   <Style>Document</Style>
   <AuthFlags>0xF</AuthFlags>
-</QBWCXML>`
-  const safeName = connection.displayName.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-|-$/g, '') || 'quickbooks-desktop'
-  return new Response(xml, {
-    headers: {
-      'Content-Type': 'application/xml; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${safeName}.qwc"`,
-      'Cache-Control': 'private, no-store',
-      'X-Content-Type-Options': 'nosniff',
-    },
-  })
+</QBWCXML>`;
+    const safeName =
+      connection.displayName.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-|-$/g, "") ||
+      "quickbooks-desktop";
+    return new Response(xml, {
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${safeName}.qwc"`,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   },
-})
+});

@@ -17,7 +17,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.form-layout-post-bool-test')]
@@ -38,7 +38,8 @@ const hooks = registerHooks({
     // @/lib/authz alias at request time, so the hook must cover that alias
     // in addition to the route's relative import.
     if (
-      (specifier === "../../../../lib/authz" && context.parentURL?.includes("customization/form-layouts/route")) ||
+      (specifier === "../../../../lib/authz" &&
+        context.parentURL?.includes("customization/form-layouts/route")) ||
       (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
@@ -58,9 +59,7 @@ const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
 const { defaultFormLayout } = await import("@openbooks/customization");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
   const org = await createScratchOrg();
@@ -81,202 +80,187 @@ function postRequest(body: unknown): Request {
 }
 
 async function layoutCount(orgId: string): Promise<number> {
-  const r = await db.execute<{ c: number }>(sql`
-    select count(*)::int as c from form_layouts where org_id = ${orgId}`, "objects");
+  const r = await db.execute<{ c: number }>(
+    sql`
+    select count(*)::int as c from form_layouts where org_id = ${orgId}`,
+    "objects",
+  );
   return Number(r[0]?.c ?? 0);
 }
 
 async function defaultNames(orgId: string): Promise<string[]> {
-  const r = await db.execute<{ name: string }>(sql`
-    select name from form_layouts where org_id = ${orgId} and is_default order by name`, "objects");
+  const r = await db.execute<{ name: string }>(
+    sql`
+    select name from form_layouts where org_id = ${orgId} and is_default order by name`,
+    "objects",
+  );
   return r.map((row) => row.name);
 }
 
-test(
-  "POST refuses a non-boolean isDefault with a 400 and does not steal the org default",
-  async () => {
-    const f = await seed();
-    const prior = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Prior default",
-        layout: defaultFormLayout("vendor_bill"),
-        isDefault: true,
-      }),
-    );
-    assert.equal(prior.status, 200);
-    const res = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Thief",
-        layout: defaultFormLayout("vendor_bill"),
-        isDefault: "false",
-      }),
-    );
-    assert.equal(res.status, 400);
-    assert.equal((await res.json()).error, "isDefault must be a boolean");
-    assert.equal(await layoutCount(f.orgId), 1, "rejected create must store no row");
-    assert.deepEqual(await defaultNames(f.orgId), ["Prior default"]);
-  },
-);
+test("POST refuses a non-boolean isDefault with a 400 and does not steal the org default", async () => {
+  const f = await seed();
+  const prior = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Prior default",
+      layout: defaultFormLayout("vendor_bill"),
+      isDefault: true,
+    }),
+  );
+  assert.equal(prior.status, 200);
+  const res = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Thief",
+      layout: defaultFormLayout("vendor_bill"),
+      isDefault: "false",
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).error, "isDefault must be a boolean");
+  assert.equal(await layoutCount(f.orgId), 1, "rejected create must store no row");
+  assert.deepEqual(await defaultNames(f.orgId), ["Prior default"]);
+});
 
-test(
-  "POST still accepts an omitted or real-boolean isDefault",
-  async () => {
-    const f = await seed();
-    const implicit = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Implicit default flag",
-        layout: defaultFormLayout("vendor_bill"),
-      }),
-    );
-    assert.equal(implicit.status, 200);
-    const explicitFalse = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Explicit nondefault",
-        layout: defaultFormLayout("vendor_bill"),
-        isDefault: false,
-      }),
-    );
-    assert.equal(explicitFalse.status, 200);
-    const explicitTrue = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Explicit default",
-        layout: defaultFormLayout("vendor_bill"),
-        isDefault: true,
-      }),
-    );
-    assert.equal(explicitTrue.status, 200);
-    assert.equal(await layoutCount(f.orgId), 3);
-    assert.deepEqual(await defaultNames(f.orgId), ["Explicit default"]);
-  },
-);
+test("POST still accepts an omitted or real-boolean isDefault", async () => {
+  const f = await seed();
+  const implicit = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Implicit default flag",
+      layout: defaultFormLayout("vendor_bill"),
+    }),
+  );
+  assert.equal(implicit.status, 200);
+  const explicitFalse = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Explicit nondefault",
+      layout: defaultFormLayout("vendor_bill"),
+      isDefault: false,
+    }),
+  );
+  assert.equal(explicitFalse.status, 200);
+  const explicitTrue = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Explicit default",
+      layout: defaultFormLayout("vendor_bill"),
+      isDefault: true,
+    }),
+  );
+  assert.equal(explicitTrue.status, 200);
+  assert.equal(await layoutCount(f.orgId), 3);
+  assert.deepEqual(await defaultNames(f.orgId), ["Explicit default"]);
+});
 
-test(
-  "POST refuses a non-boolean isActive with a 400, never a storage 500",
-  async () => {
-    const f = await seed();
-    const res = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Custom",
-        layout: defaultFormLayout("vendor_bill"),
-        isActive: "eventually",
-      }),
-    );
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /isActive/);
-    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
-  },
-);
+test("POST refuses a non-boolean isActive with a 400, never a storage 500", async () => {
+  const f = await seed();
+  const res = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Custom",
+      layout: defaultFormLayout("vendor_bill"),
+      isActive: "eventually",
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /isActive/);
+  assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+});
 
-test(
-  "POST refuses a truthy non-array allowedRoles and stores no row",
-  async () => {
-    const f = await seed();
-    const res = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Gated",
-        layout: defaultFormLayout("vendor_bill"),
-        allowedRoles: { admin: true },
-      }),
-    );
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /allowedRoles/);
-    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
-  },
-);
+test("POST refuses a truthy non-array allowedRoles and stores no row", async () => {
+  const f = await seed();
+  const res = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Gated",
+      layout: defaultFormLayout("vendor_bill"),
+      allowedRoles: { admin: true },
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /allowedRoles/);
+  assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+});
 
-test(
-  "POST refuses a non-UUID allowedRoles string and stores no row",
-  async () => {
-    const f = await seed();
-    const res = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Keyed",
-        layout: defaultFormLayout("vendor_bill"),
-        allowedRoles: ["admin"],
-      }),
-    );
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /allowedRoles/);
-    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
-  },
-);
+test("POST refuses a non-UUID allowedRoles string and stores no row", async () => {
+  const f = await seed();
+  const res = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Keyed",
+      layout: defaultFormLayout("vendor_bill"),
+      allowedRoles: ["admin"],
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /allowedRoles/);
+  assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+});
 
 const ROLE_ID = "00000000-0000-4000-8000-000000000099";
 
-test(
-  "POST persists a UUID allowedRoles list",
-  async () => {
-    const f = await seed();
-    const res = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Role Gated",
-        layout: defaultFormLayout("vendor_bill"),
-        allowedRoles: [ROLE_ID],
-      }),
-    );
-    assert.equal(res.status, 200);
-    const body = (await res.json()) as { id?: string };
-    const stored = await db.execute<{ allowedRoles: unknown }>(sql`
+test("POST persists a UUID allowedRoles list", async () => {
+  const f = await seed();
+  const res = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Role Gated",
+      layout: defaultFormLayout("vendor_bill"),
+      allowedRoles: [ROLE_ID],
+    }),
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { id?: string };
+  const stored = await db.execute<{ allowedRoles: unknown }>(
+    sql`
       select allowed_roles as "allowedRoles"
-        from form_layouts where org_id = ${f.orgId} and id = ${body.id}`, "objects");
-    assert.deepEqual(stored[0]?.allowedRoles, [ROLE_ID]);
-  },
-);
+        from form_layouts where org_id = ${f.orgId} and id = ${body.id}`,
+    "objects",
+  );
+  assert.deepEqual(stored[0]?.allowedRoles, [ROLE_ID]);
+});
 
-test(
-  "POST still accepts an omitted or real-boolean isActive",
-  async () => {
-    const f = await seed();
-    const implicit = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Implicit",
-        layout: defaultFormLayout("vendor_bill"),
-      }),
-    );
-    assert.equal(implicit.status, 200);
-    const explicit = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Explicit",
-        layout: defaultFormLayout("vendor_bill"),
-        isActive: false,
-      }),
-    );
-    assert.equal(explicit.status, 200);
-    assert.equal(await layoutCount(f.orgId), 2);
-  },
-);
+test("POST still accepts an omitted or real-boolean isActive", async () => {
+  const f = await seed();
+  const implicit = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Implicit",
+      layout: defaultFormLayout("vendor_bill"),
+    }),
+  );
+  assert.equal(implicit.status, 200);
+  const explicit = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Explicit",
+      layout: defaultFormLayout("vendor_bill"),
+      isActive: false,
+    }),
+  );
+  assert.equal(explicit.status, 200);
+  assert.equal(await layoutCount(f.orgId), 2);
+});
 
-test(
-  "POST refuses an inactive default instead of storing a row resolve cannot see",
-  async () => {
-    const f = await seed();
-    const res = await POST(
-      postRequest({
-        recordType: "vendor_bill",
-        name: "Hidden default",
-        layout: defaultFormLayout("vendor_bill"),
-        isDefault: true,
-        isActive: false,
-      }),
-    );
-    assert.equal(res.status, 400);
-    const body = await res.json();
-    assert.match(String(body.error), /inactive form cannot be the default/i);
-    assert.match(String(body.error), /activate it/i);
-    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
-  },
-);
+test("POST refuses an inactive default instead of storing a row resolve cannot see", async () => {
+  const f = await seed();
+  const res = await POST(
+    postRequest({
+      recordType: "vendor_bill",
+      name: "Hidden default",
+      layout: defaultFormLayout("vendor_bill"),
+      isDefault: true,
+      isActive: false,
+    }),
+  );
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(String(body.error), /inactive form cannot be the default/i);
+  assert.match(String(body.error), /activate it/i);
+  assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+});
 
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook

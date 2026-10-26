@@ -1,7 +1,7 @@
-import { getFeedbackSettings } from '../../../../lib/feedback/config'
-import { PlatformFeedbackClient } from './PlatformFeedbackClient'
+import { getFeedbackSettings } from "../../../../lib/feedback/config";
+import { PlatformFeedbackClient } from "./PlatformFeedbackClient";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Where in-app issue reports go — an INSTALLATION setting, which is why it
@@ -12,6 +12,6 @@ export const dynamic = 'force-dynamic'
  * loader returns only the redacted view (never the stored token).
  */
 export default async function PlatformFeedbackPage() {
-  const settings = await getFeedbackSettings()
-  return <PlatformFeedbackClient settings={settings} />
+  const settings = await getFeedbackSettings();
+  return <PlatformFeedbackClient settings={settings} />;
 }

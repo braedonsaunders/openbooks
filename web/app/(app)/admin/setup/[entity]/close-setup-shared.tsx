@@ -23,7 +23,11 @@ export const TABS = [
 export type Tab = (typeof TABS)[number];
 export const MODULES = ["ar", "ap", "banking", "assets", "tax", "gl"] as const;
 
-export async function post(body: Record<string, unknown>, fallback: string, timeoutMessage?: string) {
+export async function post(
+  body: Record<string, unknown>,
+  fallback: string,
+  timeoutMessage?: string,
+) {
   // Close writes run sequential module transitions behind one advisory
   // fence: on a loaded host the answer can take a while, but a request that
   // never answers must not wedge the drawer with a busy button and no
@@ -48,10 +52,7 @@ export async function post(body: Record<string, unknown>, fallback: string, time
   }
 }
 
-export function dataText(
-  t: ReturnType<typeof useTranslations>,
-  value: string | null | undefined,
-) {
+export function dataText(t: ReturnType<typeof useTranslations>, value: string | null | undefined) {
   if (!value) return "";
   return value.startsWith("close.") ? t(value.slice(6)) : value;
 }
@@ -114,12 +115,8 @@ export function SectionHeading({
           {icon}
         </div>
         <div>
-          <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-            {title}
-          </h3>
-          <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
-            {description}
-          </p>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+          <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">{description}</p>
         </div>
       </div>
       {action}
@@ -217,9 +214,7 @@ export function TokenSelect({
                 <button
                   type="button"
                   aria-label={t("actions.removeValue", { value: label })}
-                  onClick={() =>
-                    onChange(value.filter((value) => value !== item))
-                  }
+                  onClick={() => onChange(value.filter((value) => value !== item))}
                   className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
                 >
                   <X size={12} />
@@ -254,9 +249,7 @@ export function KeyValueRows({
             value={row.key}
             onChange={(event) =>
               onChange(
-                rows.map((item, i) =>
-                  i === index ? { ...item, key: event.target.value } : item,
-                ),
+                rows.map((item, i) => (i === index ? { ...item, key: event.target.value } : item)),
               )
             }
           />
@@ -305,9 +298,7 @@ export function objectToRows(value: unknown): Array<{ key: string; value: string
     value: typeof raw === "string" ? raw : JSON.stringify(raw),
   }));
 }
-export function rowsToObject(
-  rows: Array<{ key: string; value: string }>,
-): Record<string, unknown> {
+export function rowsToObject(rows: Array<{ key: string; value: string }>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const { key, value } of rows) {
     const trimmed = key.trim();
@@ -315,8 +306,7 @@ export function rowsToObject(
     let parsed: unknown = value;
     if (value === "true") parsed = true;
     else if (value === "false") parsed = false;
-    else if (value !== "" && !Number.isNaN(Number(value)))
-      parsed = Number(value);
+    else if (value !== "" && !Number.isNaN(Number(value))) parsed = Number(value);
     out[trimmed] = parsed;
   }
   return out;
@@ -348,11 +338,7 @@ export function pruneEmpty(obj: Record<string, unknown>): Record<string, unknown
 export function normalizeAttachments(raw: unknown): ReportAttachment[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((item) =>
-      item && typeof item === "object"
-        ? { ...(item as ReportAttachment) }
-        : null,
-    )
+    .map((item) => (item && typeof item === "object" ? { ...(item as ReportAttachment) } : null))
     .filter((item): item is ReportAttachment => Boolean(item && item.slug));
 }
 
@@ -462,13 +448,7 @@ export function drawerHref(
   return mergeHref(BASE, params, { tab, [key]: value });
 }
 
-export function RowLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
+export function RowLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
       href={href}

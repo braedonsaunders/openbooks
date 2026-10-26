@@ -60,7 +60,7 @@ async function seedSepaDebitRun(
   // invoice must be committed — never siblings in one uncommitted seed tx.
   const seeded = await withOrgTransaction(org.orgId, async () => {
     const actorId = await createScratchUser(org.orgId, "Collection Operator", "accountant");
-    await grantScratchPermissions(org.orgId,actorId,["parties.manage"]);
+    await grantScratchPermissions(org.orgId, actorId, ["parties.manage"]);
     const formatId = randomUUID();
     const profileId = randomUUID();
     const accountId = randomUUID();
@@ -82,10 +82,19 @@ async function seedSepaDebitRun(
         (${profileId}, ${org.orgId}, 'SEPA collection profile', ${org.accounts.bank},
          ${org.subsidiaryId}, ${formatId}, 'CAD', 'DE', ${sealJson(ORIGINATOR_SECRETS, { orgId: org.orgId, purpose: "payment.originator.secrets" })},
          true, ${actorId}, ${actorId})`);
-    await seedApprovedBankAccountFixture({id:accountId,orgId:org.orgId,actorId,partyId:org.customerId,
-      bankName:'Customer bank',country:'DE',currency:'CAD',routing:bank.routing,
-      sealedAccount:bank.account===null?null:encryptAccountNumber(bank.account,{orgId:org.orgId}),
-      lastFour:bank.account===null?null:bank.account.slice(-4)});
+    await seedApprovedBankAccountFixture({
+      id: accountId,
+      orgId: org.orgId,
+      actorId,
+      partyId: org.customerId,
+      bankName: "Customer bank",
+      country: "DE",
+      currency: "CAD",
+      routing: bank.routing,
+      sealedAccount:
+        bank.account === null ? null : encryptAccountNumber(bank.account, { orgId: org.orgId }),
+      lastFour: bank.account === null ? null : bank.account.slice(-4),
+    });
     await db.execute(sql`
       insert into payment_mandates
         (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,
@@ -133,25 +142,35 @@ async function seedSepaDebitRun(
   // the only state the exporter accepts.
   await submitPaymentRun(run.id, org.orgId, seeded.actorId);
 
-  const instructionId = (await withBypass(() =>
-      db.execute<{ id: string }>(sql`
+  const instructionId = (
+    await withBypass(() =>
+      db.execute<{ id: string }>(
+        sql`
         select id from payment_instructions
-         where payment_run_id = ${run.id} and org_id = ${org.orgId}`, "objects"),
-    ))[0]!.id;
+         where payment_run_id = ${run.id} and org_id = ${org.orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   return { actorId: seeded.actorId, runId: run.id, instructionId, accountId: seeded.accountId };
 }
 
 async function runState(orgId: string, runId: string) {
-  return (await withBypass(() =>
-      db.execute<{ status: string; files: number; events: number; exportedFileRef: string | null }>(sql`
+  return (
+    await withBypass(() =>
+      db.execute<{ status: string; files: number; events: number; exportedFileRef: string | null }>(
+        sql`
         select r.status,
                (select count(*)::int from payment_files f
                  where f.payment_run_id = r.id and f.org_id = r.org_id) as files,
                (select count(*)::int from payment_events e
                  where e.payment_run_id = r.id and e.org_id = r.org_id) as events,
                r.exported_file_ref as "exportedFileRef"
-          from payment_runs r where r.id = ${runId} and r.org_id = ${orgId}`, "objects"),
-    ))[0]!;
+          from payment_runs r where r.id = ${runId} and r.org_id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!;
 }
 
 /**
@@ -164,7 +183,9 @@ async function dropScratchOrgWithPaymentArtifacts(orgId: string): Promise<void> 
       select set_config('openbooks.amend', 'on', true),
              set_config('openbooks.sandbox_wipe', 'on', true),
              set_config('app.bypass_rls', 'on', true)`);
-    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and name like 'Scratch %'`);
+    await tx.execute(
+      sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and name like 'Scratch %'`,
+    );
     await tx.execute(sql`delete from payment_file_deliveries where org_id = ${orgId}`);
     await tx.execute(sql`delete from payment_events where org_id = ${orgId}`);
     await tx.execute(sql`delete from payment_files where org_id = ${orgId}`);
@@ -172,39 +193,43 @@ async function dropScratchOrgWithPaymentArtifacts(orgId: string): Promise<void> 
   await dropScratchOrgReporting(orgId);
 }
 
-test("an approved typo-checksum IBAN refuses generation, stores nothing, and blocks readiness", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const fixture = await seedSepaDebitRun(org, {
-      routing: { iban: TYPO_IBAN, bic: VALID_BIC },
-      account: TYPO_IBAN,
-    });
-    const before = await runState(org.orgId, fixture.runId);
+test(
+  "an approved typo-checksum IBAN refuses generation, stores nothing, and blocks readiness",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const fixture = await seedSepaDebitRun(org, {
+        routing: { iban: TYPO_IBAN, bic: VALID_BIC },
+        account: TYPO_IBAN,
+      });
+      const before = await runState(org.orgId, fixture.runId);
 
-    await assert.rejects(
-      () => generatePaymentFileArtifact(fixture.runId, org.orgId, fixture.actorId),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /IBAN/i);
-        return true;
-      },
-    );
+      await assert.rejects(
+        () => generatePaymentFileArtifact(fixture.runId, org.orgId, fixture.actorId),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /IBAN/i);
+          return true;
+        },
+      );
 
-    const after = await runState(org.orgId, fixture.runId);
-    assert.equal(after.files, 0, "refusal must persist zero payment files");
-    assert.equal(after.events, before.events, "refusal must write zero payment events");
-    assert.equal(after.status, "approved", "refusal must not flip the run to generated");
-    assert.equal(after.exportedFileRef, null);
+      const after = await runState(org.orgId, fixture.runId);
+      assert.equal(after.files, 0, "refusal must persist zero payment files");
+      assert.equal(after.events, before.events, "refusal must write zero payment events");
+      assert.equal(after.status, "approved", "refusal must not flip the run to generated");
+      assert.equal(after.exportedFileRef, null);
 
-    const readiness = await paymentRunReadiness(fixture.runId, org.orgId);
-    const blocker = readiness.blockers.find((b) => b.instructionId === fixture.instructionId);
-    assert.ok(blocker, "readiness must flag the checksum-invalid debtor IBAN");
-    assert.match(blocker.reason, /IBAN/i);
-    assert.equal(blocker.source, "bank");
-  } finally {
-    await dropScratchOrgWithPaymentArtifacts(org.orgId);
-  }
-});
+      const readiness = await paymentRunReadiness(fixture.runId, org.orgId);
+      const blocker = readiness.blockers.find((b) => b.instructionId === fixture.instructionId);
+      assert.ok(blocker, "readiness must flag the checksum-invalid debtor IBAN");
+      assert.match(blocker.reason, /IBAN/i);
+      assert.equal(blocker.source, "bank");
+    } finally {
+      await dropScratchOrgWithPaymentArtifacts(org.orgId);
+    }
+  },
+);
 
 test("an absent debtor IBAN refuses generation and stores nothing", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
@@ -232,40 +257,44 @@ test("an absent debtor IBAN refuses generation and stores nothing", { skip: !DB 
   }
 });
 
-test("an inactive/unapproved bank at generation refuses and stores nothing", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const fixture = await seedSepaDebitRun(org, {
-      routing: { iban: VALID_IBAN, bic: VALID_BIC },
-      account: VALID_IBAN,
-    });
-    // The exact material-edit write the bank-account flow performs: new
-    // revision re-enters approval as pending + inactive.
-    await withBypass(() =>
-      db.execute(sql`
+test(
+  "an inactive/unapproved bank at generation refuses and stores nothing",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const fixture = await seedSepaDebitRun(org, {
+        routing: { iban: VALID_IBAN, bic: VALID_BIC },
+        account: VALID_IBAN,
+      });
+      // The exact material-edit write the bank-account flow performs: new
+      // revision re-enters approval as pending + inactive.
+      await withBypass(() =>
+        db.execute(sql`
         update party_bank_accounts set
           approval_status = 'pending', is_active = false, approved_at = null, approved_by = null,
           updated_at = now(), updated_by = ${fixture.actorId}
          where id = ${fixture.accountId} and org_id = ${org.orgId}`),
-    );
+      );
 
-    await assert.rejects(
-      () => generatePaymentFileArtifact(fixture.runId, org.orgId, fixture.actorId),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /not approved|inactive/i);
-        return true;
-      },
-    );
+      await assert.rejects(
+        () => generatePaymentFileArtifact(fixture.runId, org.orgId, fixture.actorId),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /not approved|inactive/i);
+          return true;
+        },
+      );
 
-    const after = await runState(org.orgId, fixture.runId);
-    assert.equal(after.files, 0);
-    assert.equal(after.status, "approved");
-    assert.equal(after.exportedFileRef, null);
-  } finally {
-    await dropScratchOrgWithPaymentArtifacts(org.orgId);
-  }
-});
+      const after = await runState(org.orgId, fixture.runId);
+      assert.equal(after.files, 0);
+      assert.equal(after.status, "approved");
+      assert.equal(after.exportedFileRef, null);
+    } finally {
+      await dropScratchOrgWithPaymentArtifacts(org.orgId);
+    }
+  },
+);
 
 test("a valid SEPA debit run still generates its pain.008 artifact", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());

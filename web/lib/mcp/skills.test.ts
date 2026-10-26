@@ -113,7 +113,8 @@ test("skills are unique, resource-addressable, and non-empty", () => {
 
 test("document playbooks forward persisted revisions without synthesizing tokens", () => {
   const groundRules = MCP_SKILLS.find((skill) => skill.slug === "ground-rules")?.body ?? "";
-  const documentFlow = MCP_SKILLS.find((skill) => skill.slug === "draft-and-post-a-document")?.body ?? "";
+  const documentFlow =
+    MCP_SKILLS.find((skill) => skill.slug === "draft-and-post-a-document")?.body ?? "";
   for (const body of [groundRules, documentFlow]) {
     assert.match(body, /updatedAt/);
     assert.match(body, /expectedUpdatedAt/);
@@ -143,10 +144,7 @@ test("error mapping surfaces safe shapes and hides the rest", () => {
     message: "period is locked",
     details: { periodId: "p1" },
   });
-  assert.equal(
-    mcpErrorStatus(new ApplicationError("conflict", "period is locked", 409)),
-    409,
-  );
+  assert.equal(mcpErrorStatus(new ApplicationError("conflict", "period is locked", 409)), 409);
 
   const assistant = mapMcpError(new AssistantToolFailure("forbidden"));
   assert.deepEqual(assistant, { code: "forbidden", message: "forbidden" });

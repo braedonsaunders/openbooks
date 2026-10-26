@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import { useMoney } from '@/components/money-provider'
-import { useId, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Play, Scale } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button, Drawer, Input, Label } from '@openbooks/ui'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
-import { DateField } from '@/components/date-field'
+import { useMoney } from "@/components/money-provider";
+import { useId, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Play, Scale } from "lucide-react";
+import { toast } from "sonner";
+import { Button, Drawer, Input, Label } from "@openbooks/ui";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { DateField } from "@/components/date-field";
 /**
  * Start a reconciliation session (through date + bank statement balance),
  * or resume the account's open one — one open session per account.
@@ -22,72 +22,75 @@ export function StartReconciliationButton({
   glBalance,
   currency,
 }: {
-  accountId: string
-  openReconciliationId: string | null
-  glBalance: string
-  currency?: string | null
+  accountId: string;
+  openReconciliationId: string | null;
+  glBalance: string;
+  currency?: string | null;
 }) {
-  const { money } = useMoney(currency ?? undefined)
-  const t = useTranslations('banking.start')
-  const tBanking = useTranslations('banking')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [throughDate, setThroughDate] = useState(useBusinessToday())
-  const [statementBalance, setStatementBalance] = useState('')
-  const throughDateId = useId()
-  const statementBalanceId = useId()
+  const { money } = useMoney(currency ?? undefined);
+  const t = useTranslations("banking.start");
+  const tBanking = useTranslations("banking");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [throughDate, setThroughDate] = useState(useBusinessToday());
+  const [statementBalance, setStatementBalance] = useState("");
+  const throughDateId = useId();
+  const statementBalanceId = useId();
 
   if (openReconciliationId) {
     return (
       <Button asChild>
-        <Link href={(`/banking/${accountId}/reconcile/${openReconciliationId}`)}>
-          <Play size={15} /> {t('resume')}
+        <Link href={`/banking/${accountId}/reconcile/${openReconciliationId}`}>
+          <Play size={15} /> {t("resume")}
         </Link>
       </Button>
-    )
+    );
   }
 
   async function start() {
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch('/api/banking/reconciliations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/banking/reconciliations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountId, throughDate, statementBalance }),
-      })
+      });
       // The status is checked before the body parses: a non-JSON 502 page
       // must toast the translated fallback, never a SyntaxError.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, tBanking('errors.startFailed')))
-      const data = (await res.json()) as { id: string }
-      router.push((`/banking/${accountId}/reconcile/${data.id}`))
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tBanking("errors.startFailed")));
+      const data = (await res.json()) as { id: string };
+      router.push(`/banking/${accountId}/reconcile/${data.id}`);
+      router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : tBanking('errors.startFailed'))
+      toast.error(e instanceof Error ? e.message : tBanking("errors.startFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <>
       <Button onClick={() => setOpen(true)}>
-        <Scale size={15} /> {t('button')}
+        <Scale size={15} /> {t("button")}
       </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
         size="sm"
-        title={t('title')}
-        description={t('description')}
+        title={t("title")}
+        description={t("description")}
         headerActions={
           <>
             <Button variant="outline" onClick={() => setOpen(false)}>
-              {tCommon('actions.cancel')}
+              {tCommon("actions.cancel")}
             </Button>
-            <Button disabled={busy || !throughDate || canonicalDecimal(statementBalance, 4) === null} onClick={start}>
-              {busy ? t('starting') : t('start')}
+            <Button
+              disabled={busy || !throughDate || canonicalDecimal(statementBalance, 4) === null}
+              onClick={start}
+            >
+              {busy ? t("starting") : t("start")}
             </Button>
           </>
         }
@@ -95,13 +98,19 @@ export function StartReconciliationButton({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor={throughDateId}>
-              {tBanking('labels.reconcileThrough')}<span className="text-red-500"> *</span>
+              {tBanking("labels.reconcileThrough")}
+              <span className="text-red-500"> *</span>
             </Label>
-            <DateField id={throughDateId} value={throughDate} onChange={(value) => setThroughDate(value)} />
+            <DateField
+              id={throughDateId}
+              value={throughDate}
+              onChange={(value) => setThroughDate(value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={statementBalanceId}>
-              {tBanking('labels.statementBalance')}<span className="text-red-500"> *</span>
+              {tBanking("labels.statementBalance")}
+              <span className="text-red-500"> *</span>
             </Label>
             <Input
               id={statementBalanceId}
@@ -112,7 +121,7 @@ export function StartReconciliationButton({
               className="text-right tabular-nums"
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t.rich('currentGlBalance', {
+              {t.rich("currentGlBalance", {
                 amount: money(glBalance),
                 amt: (chunks) => <span className="tabular-nums">{chunks}</span>,
               })}
@@ -121,5 +130,5 @@ export function StartReconciliationButton({
         </div>
       </Drawer>
     </>
-  )
+  );
 }

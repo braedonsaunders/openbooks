@@ -1,28 +1,31 @@
-import 'server-only'
-import { benefitContributionLabels } from './benefit-contribution-labels'
-import type { BenefitElectDialogStrings } from '../../app/(app)/me/islands'
+import "server-only";
+import { benefitContributionLabels } from "./benefit-contribution-labels";
+import type { BenefitElectDialogStrings } from "../../app/(app)/me/islands";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   listEnrollmentWindows,
   listEnrollmentPlanOptions,
   listEnrollments,
   type EnrollmentSummary,
   type EnrollmentWindowSummary,
-} from '@openbooks/engine/hrm/benefits/benefits-read'
-import { listBenefitsProgramCatalog, listBenefitsProgramActivity } from '@openbooks/engine/hrm/benefits'
-import { getMoneyFormatter } from '../money-server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { benefitsCockpit } from '@openbooks/engine/hrm/benefits/benefits-read'
-import { can, type Authz } from '../authz'
-import type { DirectoryItem } from '../../components/module-home/ui'
-import type { ModuleHomeTab } from '../../components/module-home/ui'
-import { loadQueueLabels } from './change-requests'
-import { listScopedDepartmentOptions } from '../scoped-options'
-import { subsidiaryVisibleFilter } from '../subsidiaries'
-import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+} from "@openbooks/engine/hrm/benefits/benefits-read";
+import {
+  listBenefitsProgramCatalog,
+  listBenefitsProgramActivity,
+} from "@openbooks/engine/hrm/benefits";
+import { getMoneyFormatter } from "../money-server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { benefitsCockpit } from "@openbooks/engine/hrm/benefits/benefits-read";
+import { can, type Authz } from "../authz";
+import type { DirectoryItem } from "../../components/module-home/ui";
+import type { ModuleHomeTab } from "../../components/module-home/ui";
+import { loadQueueLabels } from "./change-requests";
+import { listScopedDepartmentOptions } from "../scoped-options";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { hrmGroupTabs } from "../../components/module-home/group-tabs";
 import {
   isProgramEditable,
   parsePortfolioView,
@@ -37,7 +40,7 @@ import {
   type PortfolioView,
   type ProgramFamily,
   type VitalsLabels,
-} from './benefits-portfolio'
+} from "./benefits-portfolio";
 import {
   loadBenefitsPortfolio,
   type AttentionItem,
@@ -47,309 +50,382 @@ import {
   type PortfolioProgramRow,
   type PortfolioVitals,
   type ProgramDetailDrawer,
-} from './benefits-workspace'
+} from "./benefits-workspace";
 
 /** The Benefits loader composes the canonical program catalog and scoped native records.
  * Enrollment windows belong to employee assignments. Refused reads retain their remedy;
  * currency-separated totals never imply conversion or confirmation of payment. */
 
 export interface BenefitsWindowRow extends EnrollmentWindowSummary {
-  kindLabel: string
-  statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  rangeLabel: string
-  windowHref: string
-  openLabel: string
+  kindLabel: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  rangeLabel: string;
+  windowHref: string;
+  openLabel: string;
 }
 
 export interface BenefitsEnrollmentRow extends EnrollmentSummary {
-  employeeContributionLabel: string
-  employerContributionLabel: string
-  employeeLabel: string
-  employeeHref: string | null
-  configurationHref: string
-  statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  openLabel: string
-  windowHref: string | null
+  employeeContributionLabel: string;
+  employerContributionLabel: string;
+  employeeLabel: string;
+  employeeHref: string | null;
+  configurationHref: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  openLabel: string;
+  windowHref: string | null;
 }
 
 export interface BenefitsSegment {
-  value: string
-  label: string
-  count: number
+  value: string;
+  label: string;
+  count: number;
 }
 
 export interface BenefitsRefusal {
-  title: string
-  message: string
+  title: string;
+  message: string;
 }
 
 export interface WindowDrawerData {
-  window: BenefitsWindowRow
-  progressLabel: string
-  progress: { value: string; label: string; count: number }[]
-  enrolments: BenefitsEnrollmentRow[]
+  window: BenefitsWindowRow;
+  progressLabel: string;
+  progress: { value: string; label: string; count: number }[];
+  enrolments: BenefitsEnrollmentRow[];
 }
 
 export interface BenefitsData {
-  title: string
-  description: string
-  listTitle: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  refusal: BenefitsRefusal | null
-  hasContent: boolean
-  segmentsLabel: string
-  allLabel: string
-  segments: BenefitsSegment[]
-  currentParams: Record<string, string | string[] | undefined>
-  columns: { window: string; kind: string; range: string; elections: string; pending: string; status: string }
+  title: string;
+  description: string;
+  listTitle: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  refusal: BenefitsRefusal | null;
+  hasContent: boolean;
+  segmentsLabel: string;
+  allLabel: string;
+  segments: BenefitsSegment[];
+  currentParams: Record<string, string | string[] | undefined>;
+  columns: {
+    window: string;
+    kind: string;
+    range: string;
+    elections: string;
+    pending: string;
+    status: string;
+  };
   enrollmentColumns: {
-    employee: string
-    plan: string
-    coverage: string
-    employeeAmount: string
-    employerAmount: string
-    status: string
-  }
-  windowRows: BenefitsWindowRow[]
-  enrollmentRows: BenefitsEnrollmentRow[]
-  showingEnrolments: boolean
-  emptyTitle: string
-  emptyDescription: string
-  canManage: boolean
-  newWindowButton: string
-  enrollmentWindowsButton: string
-  enrollmentWindowsHref: string
-  windowsManagerOpen: boolean
-  windowsCloseHref: string
-  newEnrollmentButton: string
-  newEnrollmentHref: string
-  enrollmentDialog: BenefitElectDialogStrings | null
-  newWindowHref: string
-  dialogOpen: boolean
-  dialogCloseHref: string
-  subsidiaryOptions: { value: string; label: string }[]
-  departmentOptions: { value: string; label: string }[]
-  drawer: WindowDrawerData | null
-  drawerCloseHref: string
-  approveLabel: string
-  actionFailed: string
-  portfolioView: PortfolioView
+    employee: string;
+    plan: string;
+    coverage: string;
+    employeeAmount: string;
+    employerAmount: string;
+    status: string;
+  };
+  windowRows: BenefitsWindowRow[];
+  enrollmentRows: BenefitsEnrollmentRow[];
+  showingEnrolments: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  canManage: boolean;
+  newWindowButton: string;
+  enrollmentWindowsButton: string;
+  enrollmentWindowsHref: string;
+  windowsManagerOpen: boolean;
+  windowsCloseHref: string;
+  newEnrollmentButton: string;
+  newEnrollmentHref: string;
+  enrollmentDialog: BenefitElectDialogStrings | null;
+  newWindowHref: string;
+  dialogOpen: boolean;
+  dialogCloseHref: string;
+  subsidiaryOptions: { value: string; label: string }[];
+  departmentOptions: { value: string; label: string }[];
+  drawer: WindowDrawerData | null;
+  drawerCloseHref: string;
+  approveLabel: string;
+  actionFailed: string;
+  portfolioView: PortfolioView;
   overview: {
-    vitals: PortfolioVitals
-    heroHint: string
-    directoryTitle: string
-    directory: DirectoryItem[]
-    payrollHint: string
-    vitalsLabels: VitalsLabels
-    cards: OverviewCard[]
-    attention: AttentionItem[]
-    attentionTitle: string
-    attentionEmpty: string
-    reportLinks: { key: string; href: string; label: string }[]
-    reportsTitle: string
-    reportsEmpty: string
-  }
-  programColumns: { program: string; family: string; value: string; effective: string; status: string }
-  programTableText: ProgramTableText
-  awardTableText: AwardTableText
-  programRows: PortfolioProgramRow[]
-  unifiedProgramRows: UnifiedProgramRow[]
-  programTypeFilter: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
-  programStatusFilter: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
-  programTypePickerOpen: boolean
-  programTypePickerTitle: string
-  canConfigureApprovalPolicies: boolean
-  incentiveProgramRows: PortfolioProgramRow[]
-  programsTitle: string
-  programsEmptyTitle: string
-  programsEmptyDescription: string
-  programsRefusal: { title: string; message: string } | null
-  awardColumns: { program: string; recipient: string; period: string; value: string; status: string }
-  awardRows: PortfolioAwardRow[]
-  rewardAwardRows: PortfolioAwardRow[]
-  payoutAwardRows: PortfolioAwardRow[]
-  deliveryRows: BenefitDeliveryRow[]
-  incentiveAwardRows: PortfolioAwardRow[]
-  rewardsTitle: string
-  incentivesTitle: string
-  payoutsTitle: string
-  awardsEmptyTitle: string
-  awardsEmptyDescription: string
-  awardsRefusal: { title: string; message: string } | null
-  newProgramButton: string
-  newProgramHref: string
-  newAwardButton: string
-  newAwardHref: string
-  programBuilderOpen: boolean
-  programBuilderFamily: ProgramFamily
-  programBuilderLocked: boolean
-  awardBuilderOpen: boolean
-  currencyOptions: PortfolioData['currencyOptions']
-  accountOptions: BuilderOption[]
-  payComponentOptions: BenefitPayComponentOption[]
-  employmentOptions: BuilderOption[]
-  employmentsTruncated: boolean
-  programDrawer: ProgramDetailDrawer | null
-  programCloseHref: string
-  awardDrawer: AwardDetailDrawer | null
-  awardCloseHref: string
-  canQueue: boolean
-  awardProgramOptions: { value: string; label: string; currency: string; fixedAmount: string | null; family: ProgramFamily }[]
-  vitalsRefusal: { title: string; message: string } | null
-  awardsTotal: number
-  awardsTruncated: boolean
-  truncationNotice: string
-  tiles: { activePrograms: string; openWindows: string; pendingApprovals: string; queuedPayouts: string }
-  deliveredRows: { currency: string; amount: string; display: string }[]
-  awaitingRows: { currency: string; amount: string; display: string }[]
-  moneyColumns: { currency: string; amount: string }
-  deliveredTitle: string
-  deliveredEmpty: string
-  awaitingTitle: string
-  awaitingEmpty: string
-  reportsRefusal: { title: string; message: string } | null
-  optionsRefusal: { title: string; message: string } | null
-  scopeDepartments: BuilderOption[]
-  scopeProjects: BuilderOption[]
-  scopeCustomers: BuilderOption[]
-  programEditOpen: boolean
-  programEditSeed: ProgramEditSeed | null
-
+    vitals: PortfolioVitals;
+    heroHint: string;
+    directoryTitle: string;
+    directory: DirectoryItem[];
+    payrollHint: string;
+    vitalsLabels: VitalsLabels;
+    cards: OverviewCard[];
+    attention: AttentionItem[];
+    attentionTitle: string;
+    attentionEmpty: string;
+    reportLinks: { key: string; href: string; label: string }[];
+    reportsTitle: string;
+    reportsEmpty: string;
+  };
+  programColumns: {
+    program: string;
+    family: string;
+    value: string;
+    effective: string;
+    status: string;
+  };
+  programTableText: ProgramTableText;
+  awardTableText: AwardTableText;
+  programRows: PortfolioProgramRow[];
+  unifiedProgramRows: UnifiedProgramRow[];
+  programTypeFilter: {
+    label: string;
+    allLabel: string;
+    options: { value: string; label: string }[];
+    currentParams: Record<string, string | undefined>;
+  };
+  programStatusFilter: {
+    label: string;
+    allLabel: string;
+    options: { value: string; label: string }[];
+    currentParams: Record<string, string | undefined>;
+  };
+  programTypePickerOpen: boolean;
+  programTypePickerTitle: string;
+  canConfigureApprovalPolicies: boolean;
+  incentiveProgramRows: PortfolioProgramRow[];
+  programsTitle: string;
+  programsEmptyTitle: string;
+  programsEmptyDescription: string;
+  programsRefusal: { title: string; message: string } | null;
+  awardColumns: {
+    program: string;
+    recipient: string;
+    period: string;
+    value: string;
+    status: string;
+  };
+  awardRows: PortfolioAwardRow[];
+  rewardAwardRows: PortfolioAwardRow[];
+  payoutAwardRows: PortfolioAwardRow[];
+  deliveryRows: BenefitDeliveryRow[];
+  incentiveAwardRows: PortfolioAwardRow[];
+  rewardsTitle: string;
+  incentivesTitle: string;
+  payoutsTitle: string;
+  awardsEmptyTitle: string;
+  awardsEmptyDescription: string;
+  awardsRefusal: { title: string; message: string } | null;
+  newProgramButton: string;
+  newProgramHref: string;
+  newAwardButton: string;
+  newAwardHref: string;
+  programBuilderOpen: boolean;
+  programBuilderFamily: ProgramFamily;
+  programBuilderLocked: boolean;
+  awardBuilderOpen: boolean;
+  currencyOptions: PortfolioData["currencyOptions"];
+  accountOptions: BuilderOption[];
+  payComponentOptions: BenefitPayComponentOption[];
+  employmentOptions: BuilderOption[];
+  employmentsTruncated: boolean;
+  programDrawer: ProgramDetailDrawer | null;
+  programCloseHref: string;
+  awardDrawer: AwardDetailDrawer | null;
+  awardCloseHref: string;
+  canQueue: boolean;
+  awardProgramOptions: {
+    value: string;
+    label: string;
+    currency: string;
+    fixedAmount: string | null;
+    family: ProgramFamily;
+  }[];
+  vitalsRefusal: { title: string; message: string } | null;
+  awardsTotal: number;
+  awardsTruncated: boolean;
+  truncationNotice: string;
+  tiles: {
+    activePrograms: string;
+    openWindows: string;
+    pendingApprovals: string;
+    queuedPayouts: string;
+  };
+  deliveredRows: { currency: string; amount: string; display: string }[];
+  awaitingRows: { currency: string; amount: string; display: string }[];
+  moneyColumns: { currency: string; amount: string };
+  deliveredTitle: string;
+  deliveredEmpty: string;
+  awaitingTitle: string;
+  awaitingEmpty: string;
+  reportsRefusal: { title: string; message: string } | null;
+  optionsRefusal: { title: string; message: string } | null;
+  scopeDepartments: BuilderOption[];
+  scopeProjects: BuilderOption[];
+  scopeCustomers: BuilderOption[];
+  programEditOpen: boolean;
+  programEditSeed: ProgramEditSeed | null;
 }
 
 type BenefitsCatalog = {
-  (key: string, params?: Record<string, string | number>): string
-  has: (key: string) => boolean
-}
+  (key: string, params?: Record<string, string | number>): string;
+  has: (key: string) => boolean;
+};
 
-function benefitsHref(basePath: string, segment: string | undefined, extra: Record<string, string>): string {
-  const params = new URLSearchParams()
-  if (segment) params.set('segment', segment)
-  for (const [key, value] of Object.entries(extra)) params.set(key, value)
-  const query = params.toString()
-  return query ? `${basePath}?${query}` : basePath
+function benefitsHref(
+  basePath: string,
+  segment: string | undefined,
+  extra: Record<string, string>,
+): string {
+  const params = new URLSearchParams();
+  if (segment) params.set("segment", segment);
+  for (const [key, value] of Object.entries(extra)) params.set(key, value);
+  const query = params.toString();
+  return query ? `${basePath}?${query}` : basePath;
 }
 
 function statusLabel(t: BenefitsCatalog, status: string): string {
-  return t.has(`benefits.statusNames.${status}`) ? t(`benefits.statusNames.${status}`) : status
+  return t.has(`benefits.statusNames.${status}`) ? t(`benefits.statusNames.${status}`) : status;
 }
 
-function statusVariant(status: string): BenefitsWindowRow['statusVariant'] {
-  if (status === 'open' || status === 'active') return 'success'
-  if (status === 'draft' || status === 'pending_approval' || status === 'elected') return 'warning'
-  if (status === 'cancelled') return 'destructive'
-  if (status === 'ended' || status === 'closed' || status === 'waived') return 'outline'
-  return 'default'
+function statusVariant(status: string): BenefitsWindowRow["statusVariant"] {
+  if (status === "open" || status === "active") return "success";
+  if (status === "draft" || status === "pending_approval" || status === "elected") return "warning";
+  if (status === "cancelled") return "destructive";
+  if (status === "ended" || status === "closed" || status === "waived") return "outline";
+  return "default";
 }
 
 function windowKindLabel(t: BenefitsCatalog, kind: string): string {
-  return t.has(`benefits.windowKinds.${kind}`) ? t(`benefits.windowKinds.${kind}`) : kind
+  return t.has(`benefits.windowKinds.${kind}`) ? t(`benefits.windowKinds.${kind}`) : kind;
 }
 
 /** Window lifecycle filters remain independent of the module destinations. */
-const SEGMENTS = ['all', 'open', 'draft', 'closed'] as const
+const SEGMENTS = ["all", "open", "draft", "closed"] as const;
 
 export function benefitsWorkspaceTabs(
   t: (key: string) => string,
-  activeView: 'overview' | 'programs' | 'employees' | 'delivery',
+  activeView: "overview" | "programs" | "employees" | "delivery",
 ): ModuleHomeTab[] {
   return [
-    { href: '/hrm/benefits', label: t('portfolio.overviewTitle'), active: activeView === 'overview' },
-    { href: '/hrm/benefits?view=programs', label: t('portfolio.programsTitle'), active: activeView === 'programs' },
-    { href: '/hrm/benefits?view=employees', label: t('benefits.workspace.tabs.employees'), active: activeView === 'employees' },
-    { href: '/hrm/benefits?view=delivery', label: t('benefits.workspace.tabs.delivery'), active: activeView === 'delivery' },
-  ]
+    {
+      href: "/hrm/benefits",
+      label: t("portfolio.overviewTitle"),
+      active: activeView === "overview",
+    },
+    {
+      href: "/hrm/benefits?view=programs",
+      label: t("portfolio.programsTitle"),
+      active: activeView === "programs",
+    },
+    {
+      href: "/hrm/benefits?view=employees",
+      label: t("benefits.workspace.tabs.employees"),
+      active: activeView === "employees",
+    },
+    {
+      href: "/hrm/benefits?view=delivery",
+      label: t("benefits.workspace.tabs.delivery"),
+      active: activeView === "delivery",
+    },
+  ];
 }
 
-export async function loadBenefits(authz: Authz, sp: Record<string, string | undefined>): Promise<BenefitsData> {
-  const t = (await getTranslations('hrm')) as unknown as BenefitsCatalog
-  const basePath = '/hrm/benefits'
-  const orgId = authz.user.orgId
-  const actorId = authz.user.id
-  const canManage = can(authz, 'hrm.benefits.manage')
-  const rawSegment = sp.segment ?? 'all'
-  const segment = (SEGMENTS as readonly string[]).includes(rawSegment) ? rawSegment : null
-  const showingEnrolments = sp.view === 'employees'
-  const portfolioView = parsePortfolioView(sp.view)
-  const tabs = benefitsWorkspaceTabs(t, portfolioView)
+export async function loadBenefits(
+  authz: Authz,
+  sp: Record<string, string | undefined>,
+): Promise<BenefitsData> {
+  const t = (await getTranslations("hrm")) as unknown as BenefitsCatalog;
+  const basePath = "/hrm/benefits";
+  const orgId = authz.user.orgId;
+  const actorId = authz.user.id;
+  const canManage = can(authz, "hrm.benefits.manage");
+  const rawSegment = sp.segment ?? "all";
+  const segment = (SEGMENTS as readonly string[]).includes(rawSegment) ? rawSegment : null;
+  const showingEnrolments = sp.view === "employees";
+  const portfolioView = parsePortfolioView(sp.view);
+  const tabs = benefitsWorkspaceTabs(t, portfolioView);
   const keepView: Record<string, string> = showingEnrolments
-    ? { view: 'employees' }
-    : portfolioView !== 'overview'
+    ? { view: "employees" }
+    : portfolioView !== "overview"
       ? { view: portfolioView }
-      : {}
-  const currentParams: BenefitsData['currentParams'] = { ...keepView }
-  if (sp.segment) currentParams.segment = sp.segment
+      : {};
+  const currentParams: BenefitsData["currentParams"] = { ...keepView };
+  if (sp.segment) currentParams.segment = sp.segment;
 
   if (segment === null) {
     return {
-      title: t('benefits.title'),
+      title: t("benefits.title"),
       description: t(`portfolio.views.${parsePortfolioView(sp.view)}`),
-      listTitle: '',
+      listTitle: "",
       tabs,
-      refusal: { title: t('benefits.unknownSegmentTitle'), message: t('benefits.unknownSegment', { segment: rawSegment }) },
+      refusal: {
+        title: t("benefits.unknownSegmentTitle"),
+        message: t("benefits.unknownSegment", { segment: rawSegment }),
+      },
       hasContent: false,
-      segmentsLabel: t('benefits.segmentsLabel'),
-      allLabel: t('benefits.allLabel'),
+      segmentsLabel: t("benefits.segmentsLabel"),
+      allLabel: t("benefits.allLabel"),
       segments: [],
       currentParams,
-      columns: { window: '', kind: '', range: '', elections: '', pending: '', status: '' },
-      enrollmentColumns: { employee: '', plan: '', coverage: '', employeeAmount: '', employerAmount: '', status: '' },
+      columns: { window: "", kind: "", range: "", elections: "", pending: "", status: "" },
+      enrollmentColumns: {
+        employee: "",
+        plan: "",
+        coverage: "",
+        employeeAmount: "",
+        employerAmount: "",
+        status: "",
+      },
       windowRows: [],
       enrollmentRows: [],
       showingEnrolments: false,
-      emptyTitle: '',
-      emptyDescription: '',
+      emptyTitle: "",
+      emptyDescription: "",
       canManage,
-      newWindowButton: t('benefits.newWindow'),
-      enrollmentWindowsButton: t('benefits.windowsTitle'),
+      newWindowButton: t("benefits.newWindow"),
+      enrollmentWindowsButton: t("benefits.windowsTitle"),
       enrollmentWindowsHref: `${basePath}?view=employees&windows=1`,
       windowsManagerOpen: false,
       windowsCloseHref: `${basePath}?view=employees`,
-      newEnrollmentButton: t('benefits.newEnrollment'),
+      newEnrollmentButton: t("benefits.newEnrollment"),
       newEnrollmentHref: `${basePath}?view=employees&enrollment=new`,
       enrollmentDialog: null,
-      newWindowHref: benefitsHref(basePath, rawSegment, { ...keepView, window: 'new' }),
+      newWindowHref: benefitsHref(basePath, rawSegment, { ...keepView, window: "new" }),
       dialogOpen: false,
       dialogCloseHref: basePath,
       subsidiaryOptions: [],
       departmentOptions: [],
       drawer: null,
       drawerCloseHref: basePath,
-      approveLabel: t('benefits.approve'),
-      actionFailed: t('benefits.actionFailed'),
+      approveLabel: t("benefits.approve"),
+      actionFailed: t("benefits.actionFailed"),
       ...emptyPortfolioFields(t, canManage, basePath),
-    }
+    };
   }
 
   // Segment badges count every window: the selected segment filters only the
   // visible rows below, so Draft and Closed never read 0 beside a filtered list.
-  const needsEnrollmentData = portfolioView === 'overview' || showingEnrolments || Boolean(sp.window)
+  const needsEnrollmentData =
+    portfolioView === "overview" || showingEnrolments || Boolean(sp.window);
   const [windows, contributionText, enrolments] = await Promise.all([
     needsEnrollmentData ? listEnrollmentWindows(db, orgId, actorId) : Promise.resolve([]),
-    getTranslations('admin'),
+    getTranslations("admin"),
     needsEnrollmentData ? listEnrollments(db, orgId, actorId) : Promise.resolve([]),
-  ])
+  ]);
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
     [...new Set(enrolments.map((e) => e.employmentId))],
     [],
-  )
+  );
 
-  const counts: Record<string, number> = { all: windows.length, open: 0, draft: 0, closed: 0 }
+  const counts: Record<string, number> = { all: windows.length, open: 0, draft: 0, closed: 0 };
   for (const w of windows) {
-    if (w.status === 'open' || w.status === 'draft' || w.status === 'closed') {
-      counts[w.status] = (counts[w.status] ?? 0) + 1
+    if (w.status === "open" || w.status === "draft" || w.status === "closed") {
+      counts[w.status] = (counts[w.status] ?? 0) + 1;
     }
   }
   const segments: BenefitsSegment[] = (SEGMENTS as readonly string[]).map((value) => ({
     value,
-    label: value === 'all' ? t('benefits.allLabel') : t(`benefits.segments.${value}`),
+    label: value === "all" ? t("benefits.allLabel") : t(`benefits.segments.${value}`),
     count: counts[value] ?? 0,
-  }))
+  }));
 
-  const visibleWindows = segment === 'all' ? windows : windows.filter((w) => w.status === segment)
+  const visibleWindows = segment === "all" ? windows : windows.filter((w) => w.status === segment);
   // No silent prefix cap: the window drawer resolves any window by id and
   // joins its enrolments from the complete arrays, so the table presents the
   // same complete population — a sliced table beside complete counts showed
@@ -360,195 +436,341 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     statusLabel: statusLabel(t, w.status),
     statusVariant: statusVariant(w.status),
     rangeLabel: `${w.opensOn} – ${w.closesOn}`,
-    windowHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, { view: 'employees', window: w.id }),
-    openLabel: t('benefits.openWindow'),
-  }))
+    windowHref: benefitsHref(basePath, segment === "all" ? undefined : segment, {
+      view: "employees",
+      window: w.id,
+    }),
+    openLabel: t("benefits.openWindow"),
+  }));
 
   const enrollmentRows: BenefitsEnrollmentRow[] = enrolments.map((e) => {
-    const worker = workerByEmployment.get(e.employmentId)
-    const label = worker?.name ?? e.employeeName ?? e.employmentId
+    const worker = workerByEmployment.get(e.employmentId);
+    const label = worker?.name ?? e.employeeName ?? e.employmentId;
     return {
       ...e,
       employeeLabel: label,
-      employeeContributionLabel: benefitContributionLabels(e.contributions, e.currency, contributionText, 'employee'),
-      employerContributionLabel: benefitContributionLabels(e.contributions, e.currency, contributionText, 'employer'),
-      employeeHref: worker?.partyId ? `/entities/employees?party=${encodeURIComponent(worker.partyId)}` : null,
+      employeeContributionLabel: benefitContributionLabels(
+        e.contributions,
+        e.currency,
+        contributionText,
+        "employee",
+      ),
+      employerContributionLabel: benefitContributionLabels(
+        e.contributions,
+        e.currency,
+        contributionText,
+        "employer",
+      ),
+      employeeHref: worker?.partyId
+        ? `/entities/employees?party=${encodeURIComponent(worker.partyId)}`
+        : null,
       statusLabel: statusLabel(t, e.status),
       statusVariant: statusVariant(e.status),
       configurationHref: `${basePath}?view=employees&enrollmentConfig=${encodeURIComponent(e.id)}`,
-      openLabel: t('benefits.openEnrollment'),
+      openLabel: t("benefits.openEnrollment"),
       windowHref: null,
-    }
-  })
+    };
+  });
 
-  const dialogOpen = sp.window === 'new' && canManage
+  const dialogOpen = sp.window === "new" && canManage;
   const [subsidiaryResult, departments] = await Promise.all([
-    dialogOpen ? db.execute<{ id: string; name: string }>(sql`
+    dialogOpen
+      ? db.execute<{ id: string; name: string }>(
+          sql`
       select id::text as id, name from subsidiaries
        where org_id = ${orgId}::uuid and is_active
          ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)}
        order by name
-    `, 'objects') : Promise.resolve([]),
-    dialogOpen ? listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds) : Promise.resolve([]),
-  ])
-  let drawer: WindowDrawerData | null = null
-  if (sp.window && sp.window !== 'new') {
-    const found = windowRows.find((w) => w.id === sp.window) ?? null
+    `,
+          "objects",
+        )
+      : Promise.resolve([]),
+    dialogOpen
+      ? listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)
+      : Promise.resolve([]),
+  ]);
+  let drawer: WindowDrawerData | null = null;
+  if (sp.window && sp.window !== "new") {
+    const found = windowRows.find((w) => w.id === sp.window) ?? null;
     if (found) {
-      const mine = enrolments.filter((e) => e.windowId === found.id)
-      const byStatus = new Map<string, number>()
-      for (const e of mine) byStatus.set(e.status, (byStatus.get(e.status) ?? 0) + 1)
+      const mine = enrolments.filter((e) => e.windowId === found.id);
+      const byStatus = new Map<string, number>();
+      for (const e of mine) byStatus.set(e.status, (byStatus.get(e.status) ?? 0) + 1);
       drawer = {
         window: found,
-        progressLabel: t('benefits.drawerProgress'),
+        progressLabel: t("benefits.drawerProgress"),
         progress: [...byStatus.entries()].map(([value, count]) => ({
           value,
           label: statusLabel(t, value),
           count,
         })),
         enrolments: enrollmentRows.filter((r) => mine.some((m) => m.id === r.id)),
-      }
+      };
     }
   }
 
-  const openCount = windows.filter((w) => w.status === 'open').length
-  const pendingEnrollmentCount = enrolments.filter((e) => e.status === 'pending_approval').length
-  const portfolio = await loadBenefitsPortfolio(authz, sp, { openCount, pendingEnrollments: pendingEnrollmentCount }, t)
+  const openCount = windows.filter((w) => w.status === "open").length;
+  const pendingEnrollmentCount = enrolments.filter((e) => e.status === "pending_approval").length;
+  const portfolio = await loadBenefitsPortfolio(
+    authz,
+    sp,
+    { openCount, pendingEnrollments: pendingEnrollmentCount },
+    t,
+  );
   const subsidiaryOptions = dialogOpen
     ? subsidiaryResult.map((row) => ({ value: row.id, label: row.name }))
-    : portfolio.subsidiaryOptions
+    : portfolio.subsidiaryOptions;
   const departmentOptions = dialogOpen
     ? departments.map((row) => ({ value: row.id, label: row.name }))
-    : portfolio.departmentOptions
+    : portfolio.departmentOptions;
   // An active program's edit defaults its apply-from date to the business day.
-  const editBusinessToday = sp.edit === '1' && sp.program !== undefined && sp.program !== 'new' ? await businessToday(orgId) : null
-  const portfolioFields = toPortfolioFields(t, authz, canManage, basePath, sp, portfolio, segment === 'all' ? undefined : segment, editBusinessToday)
+  const editBusinessToday =
+    sp.edit === "1" && sp.program !== undefined && sp.program !== "new"
+      ? await businessToday(orgId)
+      : null;
+  const portfolioFields = toPortfolioFields(
+    t,
+    authz,
+    canManage,
+    basePath,
+    sp,
+    portfolio,
+    segment === "all" ? undefined : segment,
+    editBusinessToday,
+  );
 
   try {
-    const catalog = []
+    const catalog = [];
     for (let offset = 0; ; offset += 500) {
-      const batch = await listBenefitsProgramCatalog(db, orgId, actorId, { limit: 500, offset, includeInternal:true })
-      catalog.push(...batch)
-      if (batch.length < 500) break
+      const batch = await listBenefitsProgramCatalog(db, orgId, actorId, {
+        limit: 500,
+        offset,
+        includeInternal: true,
+      });
+      catalog.push(...batch);
+      if (batch.length < 500) break;
     }
-    const type = sp.type
-    if (type && !['health', 'retirement', 'time_off', 'allowance', 'reward', 'incentive', 'custom', 'recovery'].includes(type)) {
-      portfolioFields.programsRefusal = { title: t('portfolio.readFailedTitle'), message: t('portfolio.unknownType', { type }) }
+    const type = sp.type;
+    if (
+      type &&
+      ![
+        "health",
+        "retirement",
+        "time_off",
+        "allowance",
+        "reward",
+        "incentive",
+        "custom",
+        "recovery",
+      ].includes(type)
+    ) {
+      portfolioFields.programsRefusal = {
+        title: t("portfolio.readFailedTitle"),
+        message: t("portfolio.unknownType", { type }),
+      };
     }
-    portfolioFields.unifiedProgramRows = catalog.filter(program=>program.parentProgramIds.length===0).map((program): UnifiedProgramRow => ({
-      id: program.id, code: program.code, name: program.name, family: program.type,
-      familyLabel: t(`programIdentity.types.${program.type}`),
-      valueLabel: portfolio.programs.find(row => row.id === program.id)?.valueLabel ?? t(program.nativeKind === 'entitlement' ? 'programWorkspace.rules' : 'portfolio.planCostsInRecord'),
-      effectiveFrom: program.effectiveFrom, effectiveTo: program.effectiveTo,
-      statusLabel: t.has(`portfolio.programStatus.${program.status}`) ? t(`portfolio.programStatus.${program.status}`) : t(`benefits.statusNames.${program.status}`),
-      statusVariant: program.status === 'active' ? 'success' : program.status === 'draft' ? 'warning' : 'outline',
-      programHref: benefitsHref(basePath, sp.segment, { ...keepView, ...(sp.type ? { type: sp.type } : {}), ...(sp.status ? { status: sp.status } : {}), program: program.id }),
-      lifecycle: program.status === 'active' || program.status === 'draft' ? 'current' : 'closed',
-    })).filter(row => !type || row.family === type)
+    portfolioFields.unifiedProgramRows = catalog
+      .filter((program) => program.parentProgramIds.length === 0)
+      .map((program): UnifiedProgramRow => ({
+        id: program.id,
+        code: program.code,
+        name: program.name,
+        family: program.type,
+        familyLabel: t(`programIdentity.types.${program.type}`),
+        valueLabel:
+          portfolio.programs.find((row) => row.id === program.id)?.valueLabel ??
+          t(
+            program.nativeKind === "entitlement"
+              ? "programWorkspace.rules"
+              : "portfolio.planCostsInRecord",
+          ),
+        effectiveFrom: program.effectiveFrom,
+        effectiveTo: program.effectiveTo,
+        statusLabel: t.has(`portfolio.programStatus.${program.status}`)
+          ? t(`portfolio.programStatus.${program.status}`)
+          : t(`benefits.statusNames.${program.status}`),
+        statusVariant:
+          program.status === "active"
+            ? "success"
+            : program.status === "draft"
+              ? "warning"
+              : "outline",
+        programHref: benefitsHref(basePath, sp.segment, {
+          ...keepView,
+          ...(sp.type ? { type: sp.type } : {}),
+          ...(sp.status ? { status: sp.status } : {}),
+          program: program.id,
+        }),
+        lifecycle: program.status === "active" || program.status === "draft" ? "current" : "closed",
+      }))
+      .filter((row) => !type || row.family === type)
       // Current programs (active and draft) by default; closed history on request.
-      .filter(row => sp.status === 'all' || (sp.status === 'closed' ? row.lifecycle === 'closed' : row.lifecycle === 'current'))
-    const { money } = await getMoneyFormatter(orgId)
-    const activity = []
-    if (portfolioView === 'delivery') {
+      .filter(
+        (row) =>
+          sp.status === "all" ||
+          (sp.status === "closed" ? row.lifecycle === "closed" : row.lifecycle === "current"),
+      );
+    const { money } = await getMoneyFormatter(orgId);
+    const activity = [];
+    if (portfolioView === "delivery") {
       for (let offset = 0; ; offset += 500) {
-        const batch = await listBenefitsProgramActivity(db, orgId, actorId, { limit: 500, offset })
-        activity.push(...batch)
-        if (batch.length < 500) break
+        const batch = await listBenefitsProgramActivity(db, orgId, actorId, { limit: 500, offset });
+        activity.push(...batch);
+        if (batch.length < 500) break;
       }
     }
-    const programById = new Map(catalog.map(program => [program.id, program]))
-    const awardById = new Map(portfolio.awards.map(award => [award.id, award]))
-    portfolioFields.deliveryRows = activity.filter(item => item.nativeKind === 'award' ? ['draft', 'pending', 'approved', 'queued', 'delivered'].includes(item.status) : item.payRunDocumentId !== null).map(item => {
-      const program = programById.get(item.programId)
-      const award = awardById.get(item.id)
-      return {
-        id:item.id,programName:program?.name ?? item.programId,programHref:`${basePath}?view=programs&program=${item.programId}`,
-        employeeName:item.employeeName,employeeHref:`/entities/employees?party=${item.employeePartyId}`,onDate:item.onDate,
-        valueLabel:item.currency ? money(item.amount,{currency:item.currency}) : `${item.amount} ${t(`programWorkspace.units.${item.unit}`)}`,
-        statusLabel:award?.statusLabel ?? (item.nativeKind === 'award' ? t(`portfolio.awardStatus.${item.status}`) : t(item.payrollProcessed ? 'programWorkspace.processedPayroll' : item.payRunDocumentId ? 'programWorkspace.queuedPayroll' : 'programWorkspace.ready')),
-        statusVariant:award?.statusVariant ?? 'secondary',
-        recordHref:item.nativeKind === 'award' ? `${basePath}?view=delivery&award=${item.id}` : item.payRunDocumentId ? `/payroll/runs/${item.payRunDocumentId}` : null,
-        recordLabel:t(item.nativeKind === 'award' ? 'portfolio.openAward' : 'programWorkspace.openPayRun'),
-      }
-    })
-    portfolioFields.overview.vitals.activePrograms = catalog.filter(program => program.parentProgramIds.length===0 && program.status === 'active').length
-    portfolioFields.tiles.activePrograms = portfolioFields.programsRefusal ? '—' : String(portfolioFields.overview.vitals.activePrograms)
+    const programById = new Map(catalog.map((program) => [program.id, program]));
+    const awardById = new Map(portfolio.awards.map((award) => [award.id, award]));
+    portfolioFields.deliveryRows = activity
+      .filter((item) =>
+        item.nativeKind === "award"
+          ? ["draft", "pending", "approved", "queued", "delivered"].includes(item.status)
+          : item.payRunDocumentId !== null,
+      )
+      .map((item) => {
+        const program = programById.get(item.programId);
+        const award = awardById.get(item.id);
+        return {
+          id: item.id,
+          programName: program?.name ?? item.programId,
+          programHref: `${basePath}?view=programs&program=${item.programId}`,
+          employeeName: item.employeeName,
+          employeeHref: `/entities/employees?party=${item.employeePartyId}`,
+          onDate: item.onDate,
+          valueLabel: item.currency
+            ? money(item.amount, { currency: item.currency })
+            : `${item.amount} ${t(`programWorkspace.units.${item.unit}`)}`,
+          statusLabel:
+            award?.statusLabel ??
+            (item.nativeKind === "award"
+              ? t(`portfolio.awardStatus.${item.status}`)
+              : t(
+                  item.payrollProcessed
+                    ? "programWorkspace.processedPayroll"
+                    : item.payRunDocumentId
+                      ? "programWorkspace.queuedPayroll"
+                      : "programWorkspace.ready",
+                )),
+          statusVariant: award?.statusVariant ?? "secondary",
+          recordHref:
+            item.nativeKind === "award"
+              ? `${basePath}?view=delivery&award=${item.id}`
+              : item.payRunDocumentId
+                ? `/payroll/runs/${item.payRunDocumentId}`
+                : null,
+          recordLabel: t(
+            item.nativeKind === "award" ? "portfolio.openAward" : "programWorkspace.openPayRun",
+          ),
+        };
+      });
+    portfolioFields.overview.vitals.activePrograms = catalog.filter(
+      (program) => program.parentProgramIds.length === 0 && program.status === "active",
+    ).length;
+    portfolioFields.tiles.activePrograms = portfolioFields.programsRefusal
+      ? "—"
+      : String(portfolioFields.overview.vitals.activePrograms);
   } catch (error) {
-    portfolioFields.programsRefusal = { title: t('portfolio.readFailedTitle'), message: error instanceof Error ? error.message : t('benefits.actionFailed') }
-    portfolioFields.tiles.activePrograms = '—'
+    portfolioFields.programsRefusal = {
+      title: t("portfolio.readFailedTitle"),
+      message: error instanceof Error ? error.message : t("benefits.actionFailed"),
+    };
+    portfolioFields.tiles.activePrograms = "—";
   }
 
-  let enrollmentDialog: BenefitElectDialogStrings | null = null
-  if (sp.enrollment === 'new' && showingEnrolments && canManage && !portfolio.optionsRefusal) {
-    const plans = await listEnrollmentPlanOptions(db, orgId, actorId)
+  let enrollmentDialog: BenefitElectDialogStrings | null = null;
+  if (sp.enrollment === "new" && showingEnrolments && canManage && !portfolio.optionsRefusal) {
+    const plans = await listEnrollmentPlanOptions(db, orgId, actorId);
     enrollmentDialog = {
-      title: t('benefits.newEnrollment'), description: t('me.benefits.electDescription'),
-      employmentLabel: t('benefits.columns.employee'), employments: portfolio.employmentOptions,
-      planLabel: t('me.benefits.columns.plan'), plans,
-      windowLabel: t('me.benefits.columns.window'),
-      windows: windows.filter((window) => window.status === 'open').map((window) => ({ value: window.id, label: `${window.name} (${window.opensOn} – ${window.closesOn})` })),
-      fromLabel: t('me.benefits.fromLabel'), lifeEventLabel: t('me.benefits.lifeEventLabel'),
-      lifeEventPlaceholder: t('me.benefits.lifeEventPlaceholder'),
-      submitLabel: t('benefits.newEnrollment'), cancelLabel: t('benefits.cancel'), submitFailed: t('me.benefits.electFailed'),
-    }
+      title: t("benefits.newEnrollment"),
+      description: t("me.benefits.electDescription"),
+      employmentLabel: t("benefits.columns.employee"),
+      employments: portfolio.employmentOptions,
+      planLabel: t("me.benefits.columns.plan"),
+      plans,
+      windowLabel: t("me.benefits.columns.window"),
+      windows: windows
+        .filter((window) => window.status === "open")
+        .map((window) => ({
+          value: window.id,
+          label: `${window.name} (${window.opensOn} – ${window.closesOn})`,
+        })),
+      fromLabel: t("me.benefits.fromLabel"),
+      lifeEventLabel: t("me.benefits.lifeEventLabel"),
+      lifeEventPlaceholder: t("me.benefits.lifeEventPlaceholder"),
+      submitLabel: t("benefits.newEnrollment"),
+      cancelLabel: t("benefits.cancel"),
+      submitFailed: t("me.benefits.electFailed"),
+    };
   }
 
-  const listTitle = portfolioView === 'employees' ? t('benefits.workspace.tabs.employees')
-    : portfolioView === 'delivery' ? t('benefits.workspace.tabs.delivery')
-      : portfolioView === 'programs' ? t('portfolio.programsTitle') : t('portfolio.overviewTitle')
+  const listTitle =
+    portfolioView === "employees"
+      ? t("benefits.workspace.tabs.employees")
+      : portfolioView === "delivery"
+        ? t("benefits.workspace.tabs.delivery")
+        : portfolioView === "programs"
+          ? t("portfolio.programsTitle")
+          : t("portfolio.overviewTitle");
 
   return {
-    title: t('benefits.title'),
+    title: t("benefits.title"),
     description: t(`portfolio.views.${parsePortfolioView(sp.view)}`),
     listTitle,
     tabs,
     refusal: null,
     hasContent: true,
-    segmentsLabel: t('benefits.segmentsLabel'),
-    allLabel: t('benefits.allLabel'),
+    segmentsLabel: t("benefits.segmentsLabel"),
+    allLabel: t("benefits.allLabel"),
     segments,
     currentParams,
     columns: {
-      window: t('benefits.columns.window'),
-      kind: t('benefits.columns.kind'),
-      range: t('benefits.columns.range'),
-      elections: t('benefits.columns.elections'),
-      pending: t('benefits.columns.pending'),
-      status: t('benefits.columns.status'),
+      window: t("benefits.columns.window"),
+      kind: t("benefits.columns.kind"),
+      range: t("benefits.columns.range"),
+      elections: t("benefits.columns.elections"),
+      pending: t("benefits.columns.pending"),
+      status: t("benefits.columns.status"),
     },
     enrollmentColumns: {
-      employee: t('benefits.columns.employee'),
-      plan: t('benefits.columns.plan'),
-      coverage: t('benefits.columns.coverage'),
-      employeeAmount: t('benefits.columns.employeeAmount'),
-      employerAmount: t('benefits.columns.employerAmount'),
-      status: t('benefits.columns.status'),
+      employee: t("benefits.columns.employee"),
+      plan: t("benefits.columns.plan"),
+      coverage: t("benefits.columns.coverage"),
+      employeeAmount: t("benefits.columns.employeeAmount"),
+      employerAmount: t("benefits.columns.employerAmount"),
+      status: t("benefits.columns.status"),
     },
     windowRows,
     enrollmentRows,
     showingEnrolments,
-    emptyTitle: showingEnrolments ? t('benefits.enrolmentsEmptyTitle') : t('benefits.windowsEmptyTitle'),
-    emptyDescription: showingEnrolments ? t('benefits.enrolmentsEmpty') : t('benefits.windowsEmpty'),
+    emptyTitle: showingEnrolments
+      ? t("benefits.enrolmentsEmptyTitle")
+      : t("benefits.windowsEmptyTitle"),
+    emptyDescription: showingEnrolments
+      ? t("benefits.enrolmentsEmpty")
+      : t("benefits.windowsEmpty"),
     canManage,
-    newWindowButton: t('benefits.newWindow'),
-    enrollmentWindowsButton: t('benefits.windowsTitle'),
+    newWindowButton: t("benefits.newWindow"),
+    enrollmentWindowsButton: t("benefits.windowsTitle"),
     enrollmentWindowsHref: `${basePath}?view=employees&windows=1`,
-    windowsManagerOpen: sp.windows === '1' && !sp.window,
+    windowsManagerOpen: sp.windows === "1" && !sp.window,
     windowsCloseHref: `${basePath}?view=employees`,
-    newEnrollmentButton: t('benefits.newEnrollment'),
+    newEnrollmentButton: t("benefits.newEnrollment"),
     newEnrollmentHref: `${basePath}?view=employees&enrollment=new`,
     enrollmentDialog,
     newWindowHref: `${basePath}?view=employees&window=new`,
     dialogOpen,
-    dialogCloseHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, {...keepView,...(sp.award && sp.program && sp.program !== 'new' ? {program:sp.program}: {})}),
+    dialogCloseHref: benefitsHref(basePath, segment === "all" ? undefined : segment, {
+      ...keepView,
+      ...(sp.award && sp.program && sp.program !== "new" ? { program: sp.program } : {}),
+    }),
     subsidiaryOptions,
     departmentOptions,
     drawer,
     drawerCloseHref: `${basePath}?view=employees&windows=1`,
-    approveLabel: t('benefits.approve'),
-    actionFailed: t('benefits.actionFailed'),
+    approveLabel: t("benefits.approve"),
+    actionFailed: t("benefits.actionFailed"),
     ...portfolioFields,
-  }
+  };
 }
 
 /**
@@ -562,81 +784,81 @@ function emptyPortfolioFields(
   basePath: string,
 ): Pick<
   BenefitsData,
-  | 'portfolioView'
-  | 'overview'
-  | 'programColumns'
-  | 'programTableText'
-  | 'awardTableText'
-  | 'unifiedProgramRows'
-  | 'programTypeFilter'
-  | 'programStatusFilter'
-  | 'programTypePickerOpen'
-  | 'canConfigureApprovalPolicies'
-  | 'programTypePickerTitle'
-  | 'programRows'
-  | 'incentiveProgramRows'
-  | 'programsTitle'
-  | 'programsEmptyTitle'
-  | 'programsEmptyDescription'
-  | 'programsRefusal'
-  | 'awardColumns'
-  | 'awardRows'
-  | 'rewardAwardRows'
-  | 'payoutAwardRows'
-  | 'deliveryRows'
-  | 'incentiveAwardRows'
-  | 'rewardsTitle'
-  | 'incentivesTitle'
-  | 'payoutsTitle'
-  | 'awardsEmptyTitle'
-  | 'awardsEmptyDescription'
-  | 'awardsRefusal'
-  | 'newProgramButton'
-  | 'newProgramHref'
-  | 'newAwardButton'
-  | 'newAwardHref'
-  | 'programBuilderOpen'
-  | 'programBuilderFamily'
-  | 'programBuilderLocked'
-  | 'awardBuilderOpen'
-  | 'currencyOptions'
-  | 'accountOptions'
-  | 'payComponentOptions'
-  | 'employmentOptions'
-  | 'employmentsTruncated'
-  | 'programDrawer'
-  | 'programCloseHref'
-  | 'awardDrawer'
-  | 'awardCloseHref'
-  | 'canQueue'
-  | 'awardProgramOptions'
-  | 'vitalsRefusal'
-  | 'awardsTotal'
-  | 'awardsTruncated'
-  | 'truncationNotice'
-  | 'tiles'
-  | 'deliveredRows'
-  | 'awaitingRows'
-  | 'moneyColumns'
-  | 'deliveredTitle'
-  | 'deliveredEmpty'
-  | 'awaitingTitle'
-  | 'awaitingEmpty'
-  | 'reportsRefusal'
-  | 'optionsRefusal'
-  | 'scopeDepartments'
-  | 'scopeProjects'
-  | 'scopeCustomers'
-  | 'programEditOpen'
-  | 'programEditSeed'
+  | "portfolioView"
+  | "overview"
+  | "programColumns"
+  | "programTableText"
+  | "awardTableText"
+  | "unifiedProgramRows"
+  | "programTypeFilter"
+  | "programStatusFilter"
+  | "programTypePickerOpen"
+  | "canConfigureApprovalPolicies"
+  | "programTypePickerTitle"
+  | "programRows"
+  | "incentiveProgramRows"
+  | "programsTitle"
+  | "programsEmptyTitle"
+  | "programsEmptyDescription"
+  | "programsRefusal"
+  | "awardColumns"
+  | "awardRows"
+  | "rewardAwardRows"
+  | "payoutAwardRows"
+  | "deliveryRows"
+  | "incentiveAwardRows"
+  | "rewardsTitle"
+  | "incentivesTitle"
+  | "payoutsTitle"
+  | "awardsEmptyTitle"
+  | "awardsEmptyDescription"
+  | "awardsRefusal"
+  | "newProgramButton"
+  | "newProgramHref"
+  | "newAwardButton"
+  | "newAwardHref"
+  | "programBuilderOpen"
+  | "programBuilderFamily"
+  | "programBuilderLocked"
+  | "awardBuilderOpen"
+  | "currencyOptions"
+  | "accountOptions"
+  | "payComponentOptions"
+  | "employmentOptions"
+  | "employmentsTruncated"
+  | "programDrawer"
+  | "programCloseHref"
+  | "awardDrawer"
+  | "awardCloseHref"
+  | "canQueue"
+  | "awardProgramOptions"
+  | "vitalsRefusal"
+  | "awardsTotal"
+  | "awardsTruncated"
+  | "truncationNotice"
+  | "tiles"
+  | "deliveredRows"
+  | "awaitingRows"
+  | "moneyColumns"
+  | "deliveredTitle"
+  | "deliveredEmpty"
+  | "awaitingTitle"
+  | "awaitingEmpty"
+  | "reportsRefusal"
+  | "optionsRefusal"
+  | "scopeDepartments"
+  | "scopeProjects"
+  | "scopeCustomers"
+  | "programEditOpen"
+  | "programEditSeed"
 > {
   return {
-    portfolioView: 'overview',
+    portfolioView: "overview",
     overview: {
-      heroHint: t('portfolio.home.heroHint'),
-      directoryTitle: t('portfolio.home.directoryTitle'),
+      heroHint: t("portfolio.home.heroHint"),
+      directoryTitle: t("portfolio.home.directoryTitle"),
       directory: [],
-      payrollHint: t('portfolio.home.payrollHint'),
+      payrollHint: t("portfolio.home.payrollHint"),
       vitals: {
         activePrograms: 0,
         draftPrograms: 0,
@@ -650,26 +872,36 @@ function emptyPortfolioFields(
       vitalsLabels: vitalsLabels(t),
       cards: [],
       attention: [],
-      attentionTitle: t('portfolio.attentionTitle'),
-      attentionEmpty: t('portfolio.attentionEmpty'),
+      attentionTitle: t("portfolio.attentionTitle"),
+      attentionEmpty: t("portfolio.attentionEmpty"),
       reportLinks: [],
-      reportsTitle: t('portfolio.reportsTitle'),
-      reportsEmpty: t('portfolio.reportsEmpty'),
+      reportsTitle: t("portfolio.reportsTitle"),
+      reportsEmpty: t("portfolio.reportsEmpty"),
     },
     programColumns: programColumns(t),
     programTableText: programTableText(t),
     awardTableText: awardTableText(t),
     programRows: [],
     unifiedProgramRows: [],
-    programTypeFilter: { label: t('portfolio.columns.family'), allLabel: t('benefits.allLabel'), options: [], currentParams: {} },
-    programStatusFilter: { label: t('portfolio.columns.status'), allLabel: t('portfolio.lifecycleFilter.current'), options: [], currentParams: {} },
+    programTypeFilter: {
+      label: t("portfolio.columns.family"),
+      allLabel: t("benefits.allLabel"),
+      options: [],
+      currentParams: {},
+    },
+    programStatusFilter: {
+      label: t("portfolio.columns.status"),
+      allLabel: t("portfolio.lifecycleFilter.current"),
+      options: [],
+      currentParams: {},
+    },
     programTypePickerOpen: false,
-    programTypePickerTitle: t('portfolio.newProgram'),
+    programTypePickerTitle: t("portfolio.newProgram"),
     canConfigureApprovalPolicies: false,
     incentiveProgramRows: [],
-    programsTitle: t('portfolio.programsTitle'),
-    programsEmptyTitle: '',
-    programsEmptyDescription: '',
+    programsTitle: t("portfolio.programsTitle"),
+    programsEmptyTitle: "",
+    programsEmptyDescription: "",
     programsRefusal: null,
     awardColumns: awardColumns(t),
     awardRows: [],
@@ -677,18 +909,18 @@ function emptyPortfolioFields(
     payoutAwardRows: [],
     deliveryRows: [],
     incentiveAwardRows: [],
-    rewardsTitle: t('portfolio.rewardsTitle'),
-    incentivesTitle: t('portfolio.incentivesTitle'),
-    payoutsTitle: t('portfolio.payoutsTitle'),
-    awardsEmptyTitle: '',
-    awardsEmptyDescription: '',
+    rewardsTitle: t("portfolio.rewardsTitle"),
+    incentivesTitle: t("portfolio.incentivesTitle"),
+    payoutsTitle: t("portfolio.payoutsTitle"),
+    awardsEmptyTitle: "",
+    awardsEmptyDescription: "",
     awardsRefusal: null,
-    newProgramButton: t('portfolio.newProgram'),
+    newProgramButton: t("portfolio.newProgram"),
     newProgramHref: `${basePath}?program=new`,
-    newAwardButton: t('portfolio.newReward'),
+    newAwardButton: t("portfolio.newReward"),
     newAwardHref: `${basePath}?award=new`,
     programBuilderOpen: false,
-    programBuilderFamily: 'reward',
+    programBuilderFamily: "reward",
     programBuilderLocked: false,
     awardBuilderOpen: false,
     currencyOptions: [],
@@ -705,15 +937,18 @@ function emptyPortfolioFields(
     vitalsRefusal: null,
     awardsTotal: 0,
     awardsTruncated: false,
-    truncationNotice: t('portfolio.awardsTruncated'),
-    tiles: { activePrograms: '0', openWindows: '0', pendingApprovals: '0', queuedPayouts: '0' },
+    truncationNotice: t("portfolio.awardsTruncated"),
+    tiles: { activePrograms: "0", openWindows: "0", pendingApprovals: "0", queuedPayouts: "0" },
     deliveredRows: [],
     awaitingRows: [],
-    moneyColumns: { currency: t('portfolio.columns.currency'), amount: t('portfolio.columns.value') },
-    deliveredTitle: t('portfolio.vitals.deliveredTitle'),
-    deliveredEmpty: t('portfolio.vitals.deliveredEmpty'),
-    awaitingTitle: t('portfolio.vitals.awaitingTitle'),
-    awaitingEmpty: t('portfolio.vitals.awaitingEmpty'),
+    moneyColumns: {
+      currency: t("portfolio.columns.currency"),
+      amount: t("portfolio.columns.value"),
+    },
+    deliveredTitle: t("portfolio.vitals.deliveredTitle"),
+    deliveredEmpty: t("portfolio.vitals.deliveredEmpty"),
+    awaitingTitle: t("portfolio.vitals.awaitingTitle"),
+    awaitingEmpty: t("portfolio.vitals.awaitingEmpty"),
     reportsRefusal: null,
     optionsRefusal: null,
     scopeDepartments: [],
@@ -721,73 +956,73 @@ function emptyPortfolioFields(
     scopeCustomers: [],
     programEditOpen: false,
     programEditSeed: null,
-  }
+  };
 }
 
 function vitalsLabels(t: BenefitsCatalog): VitalsLabels {
   return {
-    activePrograms: t('portfolio.vitals.activePrograms'),
-    openWindows: t('portfolio.vitals.openWindows'),
-    pendingApprovals: t('portfolio.vitals.pendingApprovals'),
-    queuedPayouts: t('portfolio.vitals.queuedPayouts'),
-    deliveredTitle: t('portfolio.vitals.deliveredTitle'),
-    awaitingTitle: t('portfolio.vitals.awaitingTitle'),
-    deliveredEmpty: t('portfolio.vitals.deliveredEmpty'),
-    awaitingEmpty: t('portfolio.vitals.awaitingEmpty'),
-    reportsTitle: t('portfolio.reportsTitle'),
-    reportsEmpty: t('portfolio.reportsEmpty'),
-    attentionTitle: t('portfolio.attentionTitle'),
-    attentionEmpty: t('portfolio.attentionEmpty'),
-    cardsTitle: t('portfolio.cardsTitle'),
-  }
+    activePrograms: t("portfolio.vitals.activePrograms"),
+    openWindows: t("portfolio.vitals.openWindows"),
+    pendingApprovals: t("portfolio.vitals.pendingApprovals"),
+    queuedPayouts: t("portfolio.vitals.queuedPayouts"),
+    deliveredTitle: t("portfolio.vitals.deliveredTitle"),
+    awaitingTitle: t("portfolio.vitals.awaitingTitle"),
+    deliveredEmpty: t("portfolio.vitals.deliveredEmpty"),
+    awaitingEmpty: t("portfolio.vitals.awaitingEmpty"),
+    reportsTitle: t("portfolio.reportsTitle"),
+    reportsEmpty: t("portfolio.reportsEmpty"),
+    attentionTitle: t("portfolio.attentionTitle"),
+    attentionEmpty: t("portfolio.attentionEmpty"),
+    cardsTitle: t("portfolio.cardsTitle"),
+  };
 }
 
-function programColumns(t: BenefitsCatalog): BenefitsData['programColumns'] {
+function programColumns(t: BenefitsCatalog): BenefitsData["programColumns"] {
   return {
-    program: t('portfolio.columns.program'),
-    family: t('portfolio.columns.family'),
-    value: t('portfolio.columns.value'),
-    effective: t('portfolio.columns.effective'),
-    status: t('portfolio.columns.status'),
-  }
+    program: t("portfolio.columns.program"),
+    family: t("portfolio.columns.family"),
+    value: t("portfolio.columns.value"),
+    effective: t("portfolio.columns.effective"),
+    status: t("portfolio.columns.status"),
+  };
 }
 
 function programTableText(t: BenefitsCatalog): ProgramTableText {
   return {
-    program: t('portfolio.columns.program'),
-    family: t('portfolio.columns.family'),
-    value: t('portfolio.columns.value'),
-    effective: t('portfolio.columns.effective'),
-    status: t('portfolio.columns.status'),
-    emptyTitle: t('portfolio.programsEmptyTitle'),
-    emptyDescription: t('portfolio.programsEmptyDescription'),
-    totalLabel: t('portfolio.totalLabel'),
-    truncatedLabel: t('portfolio.awardsTruncated'),
-  }
+    program: t("portfolio.columns.program"),
+    family: t("portfolio.columns.family"),
+    value: t("portfolio.columns.value"),
+    effective: t("portfolio.columns.effective"),
+    status: t("portfolio.columns.status"),
+    emptyTitle: t("portfolio.programsEmptyTitle"),
+    emptyDescription: t("portfolio.programsEmptyDescription"),
+    totalLabel: t("portfolio.totalLabel"),
+    truncatedLabel: t("portfolio.awardsTruncated"),
+  };
 }
 
 function awardTableText(t: BenefitsCatalog): AwardTableText {
   return {
-    program: t('portfolio.columns.program'),
-    recipient: t('portfolio.columns.recipient'),
-    period: t('portfolio.columns.period'),
-    value: t('portfolio.columns.value'),
-    status: t('portfolio.columns.status'),
-    emptyTitle: t('portfolio.awardsEmptyTitle'),
-    emptyDescription: t('portfolio.awardsEmptyDescription'),
-    totalLabel: t('portfolio.totalLabel'),
-    truncatedLabel: t('portfolio.awardsTruncated'),
-  }
+    program: t("portfolio.columns.program"),
+    recipient: t("portfolio.columns.recipient"),
+    period: t("portfolio.columns.period"),
+    value: t("portfolio.columns.value"),
+    status: t("portfolio.columns.status"),
+    emptyTitle: t("portfolio.awardsEmptyTitle"),
+    emptyDescription: t("portfolio.awardsEmptyDescription"),
+    totalLabel: t("portfolio.totalLabel"),
+    truncatedLabel: t("portfolio.awardsTruncated"),
+  };
 }
 
-function awardColumns(t: BenefitsCatalog): BenefitsData['awardColumns'] {
+function awardColumns(t: BenefitsCatalog): BenefitsData["awardColumns"] {
   return {
-    program: t('portfolio.columns.program'),
-    recipient: t('portfolio.columns.recipient'),
-    period: t('portfolio.columns.period'),
-    value: t('portfolio.columns.value'),
-    status: t('portfolio.columns.status'),
-  }
+    program: t("portfolio.columns.program"),
+    recipient: t("portfolio.columns.recipient"),
+    period: t("portfolio.columns.period"),
+    value: t("portfolio.columns.value"),
+    status: t("portfolio.columns.status"),
+  };
 }
 
 /** Cards, titles, builder state, and view-filtered rows from one portfolio. */
@@ -800,90 +1035,115 @@ function toPortfolioFields(
   portfolio: PortfolioData,
   segment: string | undefined,
   editBusinessToday: string | null = null,
-): Omit<ReturnType<typeof emptyPortfolioFields>, 'portfolioView'> & { portfolioView: PortfolioView } {
-  const portfolioView = parsePortfolioView(sp.view)
+): Omit<ReturnType<typeof emptyPortfolioFields>, "portfolioView"> & {
+  portfolioView: PortfolioView;
+} {
+  const portfolioView = parsePortfolioView(sp.view);
   const viewParam = (view: string): string =>
-    view === 'overview' ? basePath : `${basePath}?view=${view}`
-  const familyCount = (family: string): number => portfolio.programs.filter((p) => p.family === family).length
+    view === "overview" ? basePath : `${basePath}?view=${view}`;
+  const familyCount = (family: string): number =>
+    portfolio.programs.filter((p) => p.family === family).length;
   const countLabel = (count: number): string | null =>
-    count > 0 ? t('portfolio.cards.count', { count }) : null
+    count > 0 ? t("portfolio.cards.count", { count }) : null;
   const cards: OverviewCard[] = [
     {
-      key: 'health',
-      title: t('portfolio.cards.health.title'),
-      description: t('portfolio.cards.health.description'),
+      key: "health",
+      title: t("portfolio.cards.health.title"),
+      description: t("portfolio.cards.health.description"),
       href: `${basePath}?view=programs&plan=new&kind=health`,
-      iconKey: 'heart-pulse',
+      iconKey: "heart-pulse",
       countLabel: null,
     },
     {
-      key: 'retirement',
-      title: t('portfolio.cards.retirement.title'),
-      description: t('portfolio.cards.retirement.description'),
+      key: "retirement",
+      title: t("portfolio.cards.retirement.title"),
+      description: t("portfolio.cards.retirement.description"),
       href: `${basePath}?view=programs&plan=new&kind=retirement`,
-      iconKey: 'piggy-bank',
+      iconKey: "piggy-bank",
       countLabel: null,
     },
     {
-      key: 'time_off', title: t('portfolio.cards.time_off.title'), description: t('portfolio.cards.time_off.description'),
-      href: `${basePath}?view=programs&program=new&kind=time_off`, iconKey: 'calendar', countLabel: null,
+      key: "time_off",
+      title: t("portfolio.cards.time_off.title"),
+      description: t("portfolio.cards.time_off.description"),
+      href: `${basePath}?view=programs&program=new&kind=time_off`,
+      iconKey: "calendar",
+      countLabel: null,
     },
     {
-      key: 'allowance',
-      title: t('portfolio.cards.allowance.title'),
-      description: t('portfolio.cards.allowance.description'),
-      href: `${viewParam('programs')}${viewParam('programs') === basePath ? '?' : '&'}program=new&family=allowance`,
-      iconKey: 'wallet',
-      countLabel: countLabel(familyCount('allowance')),
+      key: "allowance",
+      title: t("portfolio.cards.allowance.title"),
+      description: t("portfolio.cards.allowance.description"),
+      href: `${viewParam("programs")}${viewParam("programs") === basePath ? "?" : "&"}program=new&family=allowance`,
+      iconKey: "wallet",
+      countLabel: countLabel(familyCount("allowance")),
     },
     {
-      key: 'reward',
-      title: t('portfolio.cards.reward.title'),
-      description: t('portfolio.cards.reward.description'),
-      href: `${viewParam('programs')}&program=new&family=reward`,
-      iconKey: 'gift',
-      countLabel: countLabel(familyCount('reward')),
+      key: "reward",
+      title: t("portfolio.cards.reward.title"),
+      description: t("portfolio.cards.reward.description"),
+      href: `${viewParam("programs")}&program=new&family=reward`,
+      iconKey: "gift",
+      countLabel: countLabel(familyCount("reward")),
     },
     {
-      key: 'incentive',
-      title: t('portfolio.cards.incentive.title'),
-      description: t('portfolio.cards.incentive.description'),
-      href: `${viewParam('programs')}&program=new&family=incentive`,
-      iconKey: 'chart-line',
-      countLabel: countLabel(familyCount('incentive')),
+      key: "incentive",
+      title: t("portfolio.cards.incentive.title"),
+      description: t("portfolio.cards.incentive.description"),
+      href: `${viewParam("programs")}&program=new&family=incentive`,
+      iconKey: "chart-line",
+      countLabel: countLabel(familyCount("incentive")),
     },
     {
-      key: 'custom',
-      title: t('portfolio.cards.custom.title'),
-      description: t('portfolio.cards.custom.description'),
-      href: `${viewParam('programs')}${viewParam('programs') === basePath ? '?' : '&'}program=new&family=custom`,
-      iconKey: 'shapes',
-      countLabel: countLabel(familyCount('custom')),
+      key: "custom",
+      title: t("portfolio.cards.custom.title"),
+      description: t("portfolio.cards.custom.description"),
+      href: `${viewParam("programs")}${viewParam("programs") === basePath ? "?" : "&"}program=new&family=custom`,
+      iconKey: "shapes",
+      countLabel: countLabel(familyCount("custom")),
     },
-  ]
-  const requestedFamily = sp.family === 'reward' || sp.family === 'allowance' || sp.family === 'incentive' || sp.family === 'custom'
-    ? sp.family
-    : null
+  ];
+  const requestedFamily =
+    sp.family === "reward" ||
+    sp.family === "allowance" ||
+    sp.family === "incentive" ||
+    sp.family === "custom"
+      ? sp.family
+      : null;
   return {
     portfolioView,
     overview: {
-      heroHint: t('portfolio.home.heroHint'),
-      directoryTitle: t('portfolio.home.directoryTitle'),
-      payrollHint: t('portfolio.home.payrollHint'),
+      heroHint: t("portfolio.home.heroHint"),
+      directoryTitle: t("portfolio.home.directoryTitle"),
+      payrollHint: t("portfolio.home.payrollHint"),
       directory: [
-        { href: viewParam('programs'), label: t('portfolio.programsTitle'), iconKey: 'heart-pulse' },
-        { href: viewParam('employees'), label: t('benefits.workspace.tabs.employees'), iconKey: 'users' },
-        { href: viewParam('delivery'), label: t('benefits.workspace.tabs.delivery'), iconKey: 'wallet' },
+        {
+          href: viewParam("programs"),
+          label: t("portfolio.programsTitle"),
+          iconKey: "heart-pulse",
+        },
+        {
+          href: viewParam("employees"),
+          label: t("benefits.workspace.tabs.employees"),
+          iconKey: "users",
+        },
+        {
+          href: viewParam("delivery"),
+          label: t("benefits.workspace.tabs.delivery"),
+          iconKey: "wallet",
+        },
       ],
       vitals: portfolio.vitals,
       vitalsLabels: vitalsLabels(t),
-      cards: can(authz, 'hrm.benefits.manage') ? cards : cards.filter((card) => card.key !== 'health' && card.key !== 'retirement'),
+      cards: can(authz, "hrm.benefits.manage")
+        ? cards
+        : cards.filter((card) => card.key !== "health" && card.key !== "retirement"),
       attention: portfolio.attention,
       attentionTitle: portfolio.attentionTitle,
-      attentionEmpty: t('portfolio.attentionEmpty'),
+      attentionEmpty: t("portfolio.attentionEmpty"),
       reportLinks: portfolio.reportLinks,
       reportsTitle: portfolio.reportsTitle,
-      reportsEmpty: t('portfolio.reportsEmpty'),
+      reportsEmpty: t("portfolio.reportsEmpty"),
     },
     programColumns: programColumns(t),
     programTableText: programTableText(t),
@@ -891,43 +1151,80 @@ function toPortfolioFields(
     programRows: portfolio.programs,
     unifiedProgramRows: portfolio.programs,
     programTypeFilter: {
-      label: t('portfolio.columns.family'), allLabel: t('benefits.allLabel'),
-      options: ['health', 'retirement', 'time_off', 'allowance', 'reward', 'incentive', 'custom', 'recovery'].map((value) => ({ value, label: t(`programIdentity.types.${value}`) })),
-      currentParams: { view: 'programs', ...(sp.type ? { type: sp.type } : {}), ...(sp.status ? { status: sp.status } : {}) },
+      label: t("portfolio.columns.family"),
+      allLabel: t("benefits.allLabel"),
+      options: [
+        "health",
+        "retirement",
+        "time_off",
+        "allowance",
+        "reward",
+        "incentive",
+        "custom",
+        "recovery",
+      ].map((value) => ({ value, label: t(`programIdentity.types.${value}`) })),
+      currentParams: {
+        view: "programs",
+        ...(sp.type ? { type: sp.type } : {}),
+        ...(sp.status ? { status: sp.status } : {}),
+      },
     },
     programStatusFilter: {
-      label: t('portfolio.columns.status'), allLabel: t('portfolio.lifecycleFilter.current'),
-      options: [{ value: 'closed', label: t('portfolio.lifecycleFilter.closed') }, { value: 'all', label: t('portfolio.lifecycleFilter.all') }],
-      currentParams: { view: 'programs', ...(sp.type ? { type: sp.type } : {}), ...(sp.status ? { status: sp.status } : {}) },
+      label: t("portfolio.columns.status"),
+      allLabel: t("portfolio.lifecycleFilter.current"),
+      options: [
+        { value: "closed", label: t("portfolio.lifecycleFilter.closed") },
+        { value: "all", label: t("portfolio.lifecycleFilter.all") },
+      ],
+      currentParams: {
+        view: "programs",
+        ...(sp.type ? { type: sp.type } : {}),
+        ...(sp.status ? { status: sp.status } : {}),
+      },
     },
-    programTypePickerOpen: sp.program === 'new' && sp.kind !== 'time_off' && !requestedFamily && canManage && portfolio.optionsRefusal === null,
-    programTypePickerTitle: t('portfolio.newProgram'),
-    canConfigureApprovalPolicies: can(authz, 'flows.manage'),
-    incentiveProgramRows: portfolio.programs.filter((p) => p.family === 'incentive'),
-    programsTitle: t('portfolio.programsTitle'),
-    programsEmptyTitle: t('portfolio.programsEmptyTitle'),
-    programsEmptyDescription: t('portfolio.programsEmptyDescription'),
+    programTypePickerOpen:
+      sp.program === "new" &&
+      sp.kind !== "time_off" &&
+      !requestedFamily &&
+      canManage &&
+      portfolio.optionsRefusal === null,
+    programTypePickerTitle: t("portfolio.newProgram"),
+    canConfigureApprovalPolicies: can(authz, "flows.manage"),
+    incentiveProgramRows: portfolio.programs.filter((p) => p.family === "incentive"),
+    programsTitle: t("portfolio.programsTitle"),
+    programsEmptyTitle: t("portfolio.programsEmptyTitle"),
+    programsEmptyDescription: t("portfolio.programsEmptyDescription"),
     programsRefusal: portfolio.programsRefusal,
     awardColumns: awardColumns(t),
     awardRows: portfolio.awards,
-    rewardAwardRows: portfolio.awards.filter((a) => a.programFamily !== 'incentive'),
+    rewardAwardRows: portfolio.awards.filter((a) => a.programFamily !== "incentive"),
     deliveryRows: [],
-    payoutAwardRows: portfolio.awards.filter((award) => ['approved', 'queued', 'delivered'].includes(award.status) || (award.status === 'voided' && Boolean(award.payRunDocumentId) && Boolean(award.payRunAdjustmentId))),
-    incentiveAwardRows: portfolio.awards.filter((a) => a.programFamily === 'incentive'),
-    rewardsTitle: t('portfolio.rewardsTitle'),
-    incentivesTitle: t('portfolio.incentivesTitle'),
-    payoutsTitle: t('portfolio.payoutsTitle'),
-    awardsEmptyTitle: t('portfolio.awardsEmptyTitle'),
-    awardsEmptyDescription: t('portfolio.awardsEmptyDescription'),
+    payoutAwardRows: portfolio.awards.filter(
+      (award) =>
+        ["approved", "queued", "delivered"].includes(award.status) ||
+        (award.status === "voided" &&
+          Boolean(award.payRunDocumentId) &&
+          Boolean(award.payRunAdjustmentId)),
+    ),
+    incentiveAwardRows: portfolio.awards.filter((a) => a.programFamily === "incentive"),
+    rewardsTitle: t("portfolio.rewardsTitle"),
+    incentivesTitle: t("portfolio.incentivesTitle"),
+    payoutsTitle: t("portfolio.payoutsTitle"),
+    awardsEmptyTitle: t("portfolio.awardsEmptyTitle"),
+    awardsEmptyDescription: t("portfolio.awardsEmptyDescription"),
     awardsRefusal: portfolio.awardsRefusal,
     newProgramButton: portfolio.newProgramButton,
-    newProgramHref: portfolioHrefFor(basePath, segment, sp.view, { program: 'new' }),
-    newAwardButton: t('programWorkspace.giveReward'),
-    newAwardHref: portfolioHrefFor(basePath, segment, sp.view, { award: 'new' }),
-    programBuilderOpen: sp.program === 'new' && requestedFamily !== null && canManage && portfolio.optionsRefusal === null,
-    programBuilderFamily: requestedFamily ?? 'reward',
+    newProgramHref: portfolioHrefFor(basePath, segment, sp.view, { program: "new" }),
+    newAwardButton: t("programWorkspace.giveReward"),
+    newAwardHref: portfolioHrefFor(basePath, segment, sp.view, { award: "new" }),
+    programBuilderOpen:
+      sp.program === "new" &&
+      requestedFamily !== null &&
+      canManage &&
+      portfolio.optionsRefusal === null,
+    programBuilderFamily: requestedFamily ?? "reward",
     programBuilderLocked: requestedFamily !== null,
-    awardBuilderOpen: sp.award === 'new' && canManage && portfolio.optionsRefusal === null,
+    awardBuilderOpen: sp.award === "new" && canManage && portfolio.optionsRefusal === null,
     currencyOptions: portfolio.currencyOptions,
     accountOptions: portfolio.accountOptions,
     payComponentOptions: portfolio.payComponentOptions,
@@ -941,34 +1238,45 @@ function toPortfolioFields(
     vitalsRefusal: portfolio.vitalsRefusal,
     awardsTotal: portfolio.awardsTotal,
     awardsTruncated: portfolio.awardsTruncated,
-    truncationNotice: t('portfolio.awardsTruncated'),
+    truncationNotice: t("portfolio.awardsTruncated"),
     tiles: {
-      activePrograms: portfolio.programsRefusal ? '—' : String(portfolio.vitals.activePrograms),
+      activePrograms: portfolio.programsRefusal ? "—" : String(portfolio.vitals.activePrograms),
       openWindows: String(portfolio.vitals.openWindows),
-      pendingApprovals: portfolio.awardsRefusal ? '—' : String(portfolio.vitals.pendingEnrollments + portfolio.vitals.pendingAwards),
-      queuedPayouts: portfolio.awardsRefusal ? '—' : String(portfolio.vitals.queuedAwards),
+      pendingApprovals: portfolio.awardsRefusal
+        ? "—"
+        : String(portfolio.vitals.pendingEnrollments + portfolio.vitals.pendingAwards),
+      queuedPayouts: portfolio.awardsRefusal ? "—" : String(portfolio.vitals.queuedAwards),
     },
     deliveredRows: portfolio.vitals.deliveredByCurrency,
     awaitingRows: portfolio.vitals.awaitingByCurrency,
-    moneyColumns: { currency: t('portfolio.columns.currency'), amount: t('portfolio.columns.value') },
-    deliveredTitle: t('portfolio.vitals.deliveredTitle'),
-    deliveredEmpty: t('portfolio.vitals.deliveredEmpty'),
-    awaitingTitle: t('portfolio.vitals.awaitingTitle'),
-    awaitingEmpty: t('portfolio.vitals.awaitingEmpty'),
+    moneyColumns: {
+      currency: t("portfolio.columns.currency"),
+      amount: t("portfolio.columns.value"),
+    },
+    deliveredTitle: t("portfolio.vitals.deliveredTitle"),
+    deliveredEmpty: t("portfolio.vitals.deliveredEmpty"),
+    awaitingTitle: t("portfolio.vitals.awaitingTitle"),
+    awaitingEmpty: t("portfolio.vitals.awaitingEmpty"),
     reportsRefusal: portfolio.reportsRefusal,
     optionsRefusal: portfolio.optionsRefusal,
     scopeDepartments: portfolio.departmentOptions,
     scopeProjects: portfolio.projectOptions,
     scopeCustomers: portfolio.customerOptions,
-    programEditOpen: sp.edit === '1' && portfolio.programs.some((program) => program.id === sp.program && isProgramEditable(program.status)) && canManage && portfolio.optionsRefusal === null,
+    programEditOpen:
+      sp.edit === "1" &&
+      portfolio.programs.some(
+        (program) => program.id === sp.program && isProgramEditable(program.status),
+      ) &&
+      canManage &&
+      portfolio.optionsRefusal === null,
     // The edit seed resolves from the authoritative program row the service
     // just listed — the builder edits server state, never a client echo.
     // Source accounts resolve through the detail drawer when it is open.
     programEditSeed: (() => {
-      if (sp.edit !== '1' || sp.program === undefined || sp.program === 'new') return null
-      const seed = portfolio.programs.find((row) => row.id === sp.program) ?? null
-      if (!seed || !isProgramEditable(seed.status) || portfolio.optionsRefusal) return null
-      const drawerSources = [...portfolio.editSourceAccountIds]
+      if (sp.edit !== "1" || sp.program === undefined || sp.program === "new") return null;
+      const seed = portfolio.programs.find((row) => row.id === sp.program) ?? null;
+      if (!seed || !isProgramEditable(seed.status) || portfolio.optionsRefusal) return null;
+      const drawerSources = [...portfolio.editSourceAccountIds];
       return {
         id: seed.id,
         status: seed.status,
@@ -984,8 +1292,8 @@ function toPortfolioFields(
         payComponentId: seed.payComponentId,
         deliveryMethod: seed.deliveryMethod,
         valuation: seed.valuation,
-        metric: seed.metric ?? '',
-        metricScope: seed.metricScope ?? 'company',
+        metric: seed.metric ?? "",
+        metricScope: seed.metricScope ?? "company",
         scopeIds: [...seed.scopeIds],
         scopeCustomerIds: [...seed.scopeCustomerIds],
         scopeDepartmentIds: [...seed.scopeDepartmentIds],
@@ -1008,16 +1316,22 @@ function toPortfolioFields(
         periodBasis: seed.periodBasis,
         paymentDelayDays: seed.paymentDelayDays,
         sourceAccountIds: drawerSources,
-      }
+      };
     })(),
     // Manual awards record rewards, allowances, and custom grants. Incentive
     // values settle through the settlement service only — the award route
     // refuses manual incentive values, so incentive programs are not offered
     // here; they settle from their program drawer.
     awardProgramOptions: portfolio.programs
-      .filter((program) => program.status === 'active' && program.family !== 'incentive')
-      .map((program) => ({ value: program.id, label: `${program.code} — ${program.name}`, family: program.family, currency: program.currency, fixedAmount: program.valuation === 'fixed' ? program.fixedAmount : null })),
-  }
+      .filter((program) => program.status === "active" && program.family !== "incentive")
+      .map((program) => ({
+        value: program.id,
+        label: `${program.code} — ${program.name}`,
+        family: program.family,
+        currency: program.currency,
+        fixedAmount: program.valuation === "fixed" ? program.fixedAmount : null,
+      })),
+  };
 }
 
 function portfolioHrefFor(
@@ -1026,42 +1340,42 @@ function portfolioHrefFor(
   view: string | undefined,
   extra: Record<string, string>,
 ): string {
-  const params = new URLSearchParams()
-  if (segment) params.set('segment', segment)
-  if (view && view !== 'overview') params.set('view', view)
-  for (const [key, value] of Object.entries(extra)) params.set(key, value)
-  const query = params.toString()
-  return query ? `${basePath}?${query}` : basePath
+  const params = new URLSearchParams();
+  if (segment) params.set("segment", segment);
+  if (view && view !== "overview") params.set("view", view);
+  for (const [key, value] of Object.entries(extra)) params.set(key, value);
+  const query = params.toString();
+  return query ? `${basePath}?${query}` : basePath;
 }
 
 export interface BenefitsPanelData {
-  title: string
-  openLabel: string
-  openWindows: { id: string; name: string }[]
-  openEmpty: string
-  pendingCount: number
-  pendingLabel: string
-  missingCount: number
-  missingLabel: string
-  queueHref: string
+  title: string;
+  openLabel: string;
+  openWindows: { id: string; name: string }[];
+  openEmpty: string;
+  pendingCount: number;
+  pendingLabel: string;
+  missingCount: number;
+  missingLabel: string;
+  queueHref: string;
 }
 
 /** Cockpit Benefits panel: open windows, pending approvals, enrollments missing contribution elections. Null without the grant. */
 export async function loadBenefitsPanel(authz: Authz): Promise<BenefitsPanelData | null> {
-  if (!can(authz, 'hrm.benefits.read')) return null
-  const orgId = authz.user.orgId
-  const t = (await getTranslations('hrm')) as unknown as BenefitsCatalog
-  const month = (await businessToday(orgId)).slice(0, 7)
-  const cockpit = await benefitsCockpit(db, orgId, authz.user.id, month)
+  if (!can(authz, "hrm.benefits.read")) return null;
+  const orgId = authz.user.orgId;
+  const t = (await getTranslations("hrm")) as unknown as BenefitsCatalog;
+  const month = (await businessToday(orgId)).slice(0, 7);
+  const cockpit = await benefitsCockpit(db, orgId, authz.user.id, month);
   return {
-    title: t('overview.benefits.title'),
-    openLabel: t('overview.benefits.openWindows'),
+    title: t("overview.benefits.title"),
+    openLabel: t("overview.benefits.openWindows"),
     openWindows: cockpit.openWindows.map((w) => ({ id: w.id, name: w.name })),
-    openEmpty: t('overview.benefits.noOpenWindow'),
+    openEmpty: t("overview.benefits.noOpenWindow"),
     pendingCount: cockpit.pendingApprovals.length,
-    pendingLabel: t('overview.benefits.pendingSub'),
+    pendingLabel: t("overview.benefits.pendingSub"),
     missingCount: cockpit.missingElections.length,
-    missingLabel: t('overview.benefits.missingSub'),
-    queueHref: '/hrm/benefits?view=employees',
-  }
+    missingLabel: t("overview.benefits.missingSub"),
+    queueHref: "/hrm/benefits?view=employees",
+  };
 }

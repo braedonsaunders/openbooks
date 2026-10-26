@@ -28,7 +28,10 @@ export const GET = defineRoute({
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       });
       if (result.kind === "employment_out_of_scope") {
-        return NextResponse.json({ error: "employment is outside your subsidiary scope" }, { status: 403 });
+        return NextResponse.json(
+          { error: "employment is outside your subsidiary scope" },
+          { status: 403 },
+        );
       }
       return NextResponse.json({ employees: result.employees });
     }

@@ -1,10 +1,17 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { useViewerFormat } from '../../../../lib/viewer-format'
-import { FileDown, History } from 'lucide-react'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useViewerFormat } from "../../../../lib/viewer-format";
+import { FileDown, History } from "lucide-react";
 import {
   Alert,
   AlertDescription,
@@ -16,14 +23,14 @@ import {
   Input,
   Skeleton,
   Textarea,
-} from '@openbooks/ui'
-import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
-import type { PayrollFilingSlipData } from '@openbooks/engine/payroll/filing-registry'
-import { useMoney } from '../../../../components/money-provider'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { confirmDialog } from '../../../../lib/confirm'
-import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'
-import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-html'
+} from "@openbooks/ui";
+import type { YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
+import type { PayrollFilingSlipData } from "@openbooks/engine/payroll/filing-registry";
+import { useMoney } from "../../../../components/money-provider";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { confirmDialog } from "../../../../lib/confirm";
+import { payrollSlipFacsimile } from "../../../../lib/payroll-slip-facsimile";
+import { renderTaxFormFacsimileBody } from "../../../../lib/tax-form-facsimile-html";
 
 /**
  * The AMENDED / CANCELLED filing lifecycle, on screen.
@@ -42,60 +49,60 @@ import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-h
  * country pack continues to refuse unsupported agency amendment formats.
  */
 
-export type FilingRevision = 'original' | 'amended' | 'cancelled'
+export type FilingRevision = "original" | "amended" | "cancelled";
 
 export type FilingRowStatus =
-  | 'unfiled' | 'unchanged' | 'changed' | 'absent' | 'unavailable' | 'withdrawn' | 'resurrected'
+  "unfiled" | "unchanged" | "changed" | "absent" | "unavailable" | "withdrawn" | "resurrected";
 
 export interface FilingFieldChange {
-  code: string | null
-  label: string
-  previous: string | null
-  current: string | null
-  redacted: boolean
-  money?: boolean
+  code: string | null;
+  label: string;
+  previous: string | null;
+  current: string | null;
+  redacted: boolean;
+  money?: boolean;
 }
 
 export interface FilingRowReview {
-  rowId: string
-  label: string
-  status: FilingRowStatus
-  lastRevision: FilingRevision | null
-  lastIssuedAt: string | null
-  changes: FilingFieldChange[]
+  rowId: string;
+  label: string;
+  status: FilingRowStatus;
+  lastRevision: FilingRevision | null;
+  lastIssuedAt: string | null;
+  changes: FilingFieldChange[];
 }
 
 export interface FilingSubmissionSummary {
-  id: string
-  revision: FilingRevision
-  revisionNumber: number
-  supersedesId: string | null
-  issuedAt: string
-  note: string | null
-  slipCount: number
-  artifact: { filename: string; contentType: string; bytes: number } | null
-  slips: { rowId: string; label: string; revision: FilingRevision }[]
+  id: string;
+  revision: FilingRevision;
+  revisionNumber: number;
+  supersedesId: string | null;
+  issuedAt: string;
+  note: string | null;
+  slipCount: number;
+  artifact: { filename: string; contentType: string; bytes: number } | null;
+  slips: { rowId: string; label: string; revision: FilingRevision }[];
 }
 
 export interface FilingLifecycle {
-  country: string
-  filingKey: string
-  label: string
-  taxYear: number
+  country: string;
+  filingKey: string;
+  label: string;
+  taxYear: number;
   amendment:
-  | { supported: false; refusal: string }
-  | {
-    supported: true
-    revisions: FilingRevision[]
-    vehicle: 'same_form' | 'correction_form'
-    formLabel: string | null
-    download: { label: string; note: string | null } | null
-    downloadRefusal: string | null
-    hasSlip: boolean
-  }
-  submissions: FilingSubmissionSummary[]
-  rows: FilingRowReview[]
-  populationRefusal: string | null
+    | { supported: false; refusal: string }
+    | {
+        supported: true;
+        revisions: FilingRevision[];
+        vehicle: "same_form" | "correction_form";
+        formLabel: string | null;
+        download: { label: string; note: string | null } | null;
+        downloadRefusal: string | null;
+        hasSlip: boolean;
+      };
+  submissions: FilingSubmissionSummary[];
+  rows: FilingRowReview[];
+  populationRefusal: string | null;
 }
 
 /**
@@ -104,27 +111,33 @@ export interface FilingLifecycle {
  * the pattern the projects cockpit already uses.
  */
 export function useFilingText() {
-  const t = useTranslations('payroll.filings')
+  const t = useTranslations("payroll.filings");
   return useCallback(
     (key: string, english: string) => (t.has(key as never) ? t(key as never) : english),
     [t],
-  )
+  );
 }
 
-const STATUS_TEXT: Record<FilingRowStatus, { english: string; variant: 'default' | 'secondary' | 'outline' | 'warning' | 'destructive' | 'success' }> = {
-  unfiled: { english: 'Not filed', variant: 'outline' },
-  unchanged: { english: 'Filed', variant: 'success' },
-  changed: { english: 'Changed since filing', variant: 'warning' },
-  absent: { english: 'No longer in the ledger', variant: 'destructive' },
-  unavailable: { english: 'Current status unavailable', variant: 'warning' },
-  withdrawn: { english: 'Cancelled', variant: 'secondary' },
-  resurrected: { english: 'Cancelled but still in the ledger', variant: 'destructive' },
-}
+const STATUS_TEXT: Record<
+  FilingRowStatus,
+  {
+    english: string;
+    variant: "default" | "secondary" | "outline" | "warning" | "destructive" | "success";
+  }
+> = {
+  unfiled: { english: "Not filed", variant: "outline" },
+  unchanged: { english: "Filed", variant: "success" },
+  changed: { english: "Changed since filing", variant: "warning" },
+  absent: { english: "No longer in the ledger", variant: "destructive" },
+  unavailable: { english: "Current status unavailable", variant: "warning" },
+  withdrawn: { english: "Cancelled", variant: "secondary" },
+  resurrected: { english: "Cancelled but still in the ledger", variant: "destructive" },
+};
 
 export function FilingStatusBadge({ status }: { status: FilingRowStatus }) {
-  const text = useFilingText()
-  const meta = STATUS_TEXT[status]
-  return <Badge variant={meta.variant}>{text(`lifecycle.status.${status}`, meta.english)}</Badge>
+  const text = useFilingText();
+  const meta = STATUS_TEXT[status];
+  return <Badge variant={meta.variant}>{text(`lifecycle.status.${status}`, meta.english)}</Badge>;
 }
 
 /**
@@ -138,18 +151,19 @@ export async function fetchFilingLifecycle(
   year: number,
 ): Promise<FilingLifecycle> {
   const res = await fetch(
-    `/api/payroll/year-end/amendments?country=${encodeURIComponent(country)}`
-    + `&filing=${encodeURIComponent(filing)}&year=${year}`,
-  )
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the filing history could not be loaded'))
-  return (await res.json()) as FilingLifecycle
+    `/api/payroll/year-end/amendments?country=${encodeURIComponent(country)}` +
+      `&filing=${encodeURIComponent(filing)}&year=${year}`,
+  );
+  if (!res.ok)
+    throw new Error(await readApiErrorMessage(res, "the filing history could not be loaded"));
+  return (await res.json()) as FilingLifecycle;
 }
 
 /** One population row's statutory slip, fetched for a drawer or a preview. */
 export interface FilingSlipResult {
-  slip: PayrollFilingSlipData
-  orgName: string
-  currency: string
+  slip: PayrollFilingSlipData;
+  orgName: string;
+  currency: string;
 }
 
 /**
@@ -158,17 +172,17 @@ export interface FilingSlipResult {
  * refused by name rather than rendered into a facsimile with unknown money.
  */
 export async function fetchFilingSlip(href: string): Promise<FilingSlipResult> {
-  const res = await fetch(href)
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the slip could not be loaded'))
+  const res = await fetch(href);
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, "the slip could not be loaded"));
   const body = (await res.json()) as {
-    slip?: PayrollFilingSlipData
-    orgName?: string
-    currency?: string
-    error?: string
-  }
-  if (!body.slip) throw new Error(body.error ?? res.statusText)
-  if (!body.currency) throw new Error('slip response is missing its currency')
-  return { slip: body.slip, orgName: body.orgName ?? '', currency: body.currency }
+    slip?: PayrollFilingSlipData;
+    orgName?: string;
+    currency?: string;
+    error?: string;
+  };
+  if (!body.slip) throw new Error(body.error ?? res.statusText);
+  if (!body.currency) throw new Error("slip response is missing its currency");
+  return { slip: body.slip, orgName: body.orgName ?? "", currency: body.currency };
 }
 
 /**
@@ -177,68 +191,78 @@ export async function fetchFilingSlip(href: string): Promise<FilingSlipResult> {
  * issued, with its reason surfaced, never swallowed.
  */
 export async function postFilingCorrection(input: {
-  country: string
-  filing: string
-  year: number
-  revision: 'amended' | 'cancelled'
-  rowIds: string[]
-  reason?: string
-  confirmedAmendment?: boolean
-  confirmedCancellation?: boolean
+  country: string;
+  filing: string;
+  year: number;
+  revision: "amended" | "cancelled";
+  rowIds: string[];
+  reason?: string;
+  confirmedAmendment?: boolean;
+  confirmedCancellation?: boolean;
 }): Promise<string | null> {
-  const res = await fetch('/api/payroll/year-end/amendments', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch("/api/payroll/year-end/amendments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-  })
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the correction could not be issued'))
-  const responseBody = (await res.json()) as { fileRefusal?: string | null }
-  return responseBody.fileRefusal ?? null
+  });
+  if (!res.ok)
+    throw new Error(await readApiErrorMessage(res, "the correction could not be issued"));
+  const responseBody = (await res.json()) as { fileRefusal?: string | null };
+  return responseBody.fileRefusal ?? null;
 }
 
 /** Fetches and caches one filing-year's lifecycle. */
-export function useFilingLifecycle(section: YearEndFilingSection | null, year: number, enabled: boolean) {
+export function useFilingLifecycle(
+  section: YearEndFilingSection | null,
+  year: number,
+  enabled: boolean,
+) {
   const [state, setState] = useState<
-    { status: 'idle' } | { status: 'loading' } | { status: 'error'; message: string }
-    | { status: 'ready'; lifecycle: FilingLifecycle }
-  >({ status: 'idle' })
-  const [nonce, setNonce] = useState(0)
-  const country = section?.country ?? ''
-  const key = section?.key ?? ''
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "error"; message: string }
+    | { status: "ready"; lifecycle: FilingLifecycle }
+  >({ status: "idle" });
+  const [nonce, setNonce] = useState(0);
+  const country = section?.country ?? "";
+  const key = section?.key ?? "";
 
   // Reset the lifecycle when its inputs change, during render (same committed
   // values, no extra render).
-  const [prevInputs, setPrevInputs] = useState(() => ({ country, key, year, enabled, nonce }))
+  const [prevInputs, setPrevInputs] = useState(() => ({ country, key, year, enabled, nonce }));
   if (
-    prevInputs.country !== country || prevInputs.key !== key || prevInputs.year !== year ||
-    prevInputs.enabled !== enabled || prevInputs.nonce !== nonce
+    prevInputs.country !== country ||
+    prevInputs.key !== key ||
+    prevInputs.year !== year ||
+    prevInputs.enabled !== enabled ||
+    prevInputs.nonce !== nonce
   ) {
-    setPrevInputs({ country, key, year, enabled, nonce })
-    setState(!enabled || !country || !key ? { status: 'idle' } : { status: 'loading' })
+    setPrevInputs({ country, key, year, enabled, nonce });
+    setState(!enabled || !country || !key ? { status: "idle" } : { status: "loading" });
   }
 
   useEffect(() => {
-    if (!enabled || !country || !key) return
-    let alive = true
+    if (!enabled || !country || !key) return;
+    let alive = true;
     void fetchFilingLifecycle(country, key, year)
       .then((lifecycle) => {
-        if (!alive) return
-        setState({ status: 'ready', lifecycle })
+        if (!alive) return;
+        setState({ status: "ready", lifecycle });
       })
       .catch((e: Error) => {
-        if (alive) setState({ status: 'error', message: e.message })
-      })
+        if (alive) setState({ status: "error", message: e.message });
+      });
     return () => {
-      alive = false
-    }
-  }, [country, key, year, enabled, nonce])
+      alive = false;
+    };
+  }, [country, key, year, enabled, nonce]);
 
   const reviewByRow = useMemo(() => {
-    if (state.status !== 'ready') return new Map<string, FilingRowReview>()
-    return new Map(state.lifecycle.rows.map((row) => [row.rowId, row]))
-  }, [state])
+    if (state.status !== "ready") return new Map<string, FilingRowReview>();
+    return new Map(state.lifecycle.rows.map((row) => [row.rowId, row]));
+  }, [state]);
 
-  return { state, reviewByRow, refresh: () => setNonce((n) => n + 1) }
+  return { state, reviewByRow, refresh: () => setNonce((n) => n + 1) };
 }
 
 /**
@@ -260,77 +284,85 @@ export function FilingLifecycleBar({
   onRecordOriginal,
   canFile,
 }: {
-  section: YearEndFilingSection
-  year: number
-  lifecycle: FilingLifecycle | null
-  busy: boolean
-  originalSelectionReady?: boolean
-  error: string | null
-  onRecordOriginal: (note: string) => void
+  section: YearEndFilingSection;
+  year: number;
+  lifecycle: FilingLifecycle | null;
+  busy: boolean;
+  originalSelectionReady?: boolean;
+  error: string | null;
+  onRecordOriginal: (note: string) => void;
   /**
    * Whether the operator may file (payroll.run). A read-only caller sees the
    * filing status but is never offered the act that starts the trail —
    * recording an issue is a statutory act, and the route refuses it.
    */
-  canFile: boolean
+  canFile: boolean;
 }) {
-  const { date } = useViewerFormat()
-  const text = useFilingText()
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [note, setNote] = useState('')
-  const issued = lifecycle?.submissions.length ?? 0
-  const latest = lifecycle?.submissions[issued - 1] ?? null
-  const changed = lifecycle?.rows.filter((row) => row.status === 'changed').length ?? 0
-  const absent = lifecycle?.rows.filter((row) => row.status === 'absent').length ?? 0
-  const resurrected = lifecycle?.rows.filter((row) => row.status === 'resurrected').length ?? 0
+  const { date } = useViewerFormat();
+  const text = useFilingText();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const issued = lifecycle?.submissions.length ?? 0;
+  const latest = lifecycle?.submissions[issued - 1] ?? null;
+  const changed = lifecycle?.rows.filter((row) => row.status === "changed").length ?? 0;
+  const absent = lifecycle?.rows.filter((row) => row.status === "absent").length ?? 0;
+  const resurrected = lifecycle?.rows.filter((row) => row.status === "resurrected").length ?? 0;
 
   const help = (
     <>
       <p>
         {text(
-          'lifecycle.help',
-          'An issued filing is evidence of what was declared to the agency, so it is never '
-          + 'overwritten: a correction is a new artifact that supersedes it, and the original '
-          + 'file stays downloadable. Amounts are always recomputed from committed pay stubs — '
-          + 'correct the payroll data, then amend.',
+          "lifecycle.help",
+          "An issued filing is evidence of what was declared to the agency, so it is never " +
+            "overwritten: a correction is a new artifact that supersedes it, and the original " +
+            "file stays downloadable. Amounts are always recomputed from committed pay stubs — " +
+            "correct the payroll data, then amend.",
         )}
       </p>
       {lifecycle && !lifecycle.amendment.supported && (
         <p className="mt-2">{lifecycle.amendment.refusal}</p>
       )}
     </>
-  )
+  );
 
   return (
     <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <FieldLabel
           help={help}
-          fieldName={text('lifecycle.title', 'Filing status')}
+          fieldName={text("lifecycle.title", "Filing status")}
           className="text-sm font-semibold text-slate-900 dark:text-slate-100"
         >
-          {text('lifecycle.title', 'Filing status')}
+          {text("lifecycle.title", "Filing status")}
         </FieldLabel>
         <div className="flex flex-wrap items-center gap-2">
-          {canFile && (issued===0||section.additionalSelectedOriginals&&lifecycle?.rows.some(row=>row.status==='unfiled')) && section.data.rows.length > 0 && (
-            <>
-              <Input
-                aria-label={text('lifecycle.note', 'Filing note')}
-                placeholder={text('lifecycle.notePlaceholder', 'How it was filed (optional)')}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="w-64"
-                maxLength={500}
-              />
-              <Button variant="outline" disabled={busy||!originalSelectionReady} onClick={() => onRecordOriginal(note)}>
-                {text('lifecycle.recordOriginal', 'Record as filed')}
-              </Button>
-            </>
-          )}
+          {canFile &&
+            (issued === 0 ||
+              (section.additionalSelectedOriginals &&
+                lifecycle?.rows.some((row) => row.status === "unfiled"))) &&
+            section.data.rows.length > 0 && (
+              <>
+                <Input
+                  aria-label={text("lifecycle.note", "Filing note")}
+                  placeholder={text("lifecycle.notePlaceholder", "How it was filed (optional)")}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="w-64"
+                  maxLength={500}
+                />
+                <Button
+                  variant="outline"
+                  disabled={busy || !originalSelectionReady}
+                  onClick={() => onRecordOriginal(note)}
+                >
+                  {text("lifecycle.recordOriginal", "Record as filed")}
+                </Button>
+              </>
+            )}
           {issued > 0 && (
             <Button variant="ghost" onClick={() => setHistoryOpen(true)}>
               <History size={14} aria-hidden />
-              {text('lifecycle.history', 'Filing history')}
+              {text("lifecycle.history", "Filing history")}
             </Button>
           )}
         </div>
@@ -338,16 +370,16 @@ export function FilingLifecycleBar({
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
         {issued === 0 ? (
-          <span>{text('lifecycle.notIssued', 'Not recorded as filed yet.')}</span>
+          <span>{text("lifecycle.notIssued", "Not recorded as filed yet.")}</span>
         ) : (
           <>
             <span>
-              {text('lifecycle.issuedCount', 'Artifacts issued')}:{' '}
+              {text("lifecycle.issuedCount", "Artifacts issued")}:{" "}
               <span className="font-medium text-slate-800 dark:text-slate-200">{issued}</span>
             </span>
             {latest && (
               <span className="flex items-center gap-1">
-                {text('lifecycle.latest', 'Latest')}:
+                {text("lifecycle.latest", "Latest")}:
                 <Badge variant="outline">
                   #{latest.revisionNumber} · {latest.revision}
                 </Badge>
@@ -356,17 +388,18 @@ export function FilingLifecycleBar({
             )}
             {changed > 0 && (
               <Badge variant="warning">
-                {text('lifecycle.changedCount', 'Changed since filing')}: {changed}
+                {text("lifecycle.changedCount", "Changed since filing")}: {changed}
               </Badge>
             )}
             {absent > 0 && (
               <Badge variant="destructive">
-                {text('lifecycle.absentCount', 'No longer in the ledger')}: {absent}
+                {text("lifecycle.absentCount", "No longer in the ledger")}: {absent}
               </Badge>
             )}
             {resurrected > 0 && (
               <Badge variant="destructive">
-                {text('lifecycle.resurrectedCount', 'Cancelled but still in the ledger')}: {resurrected}
+                {text("lifecycle.resurrectedCount", "Cancelled but still in the ledger")}:{" "}
+                {resurrected}
               </Badge>
             )}
           </>
@@ -397,7 +430,7 @@ export function FilingLifecycleBar({
         />
       )}
     </div>
-  )
+  );
 }
 
 /** Everything issued for this filing-year, newest first, with its evidence. */
@@ -407,30 +440,32 @@ function FilingHistoryDrawer({
   year,
   onClose,
 }: {
-  lifecycle: FilingLifecycle
-  label: string
-  year: number
-  onClose: () => void
+  lifecycle: FilingLifecycle;
+  label: string;
+  year: number;
+  onClose: () => void;
 }) {
-  const { dateTime } = useViewerFormat()
-  const text = useFilingText()
-  const tCommon = useTranslations('common')
-  const ordered = [...lifecycle.submissions].reverse()
+  const { dateTime } = useViewerFormat();
+  const text = useFilingText();
+  const tCommon = useTranslations("common");
+  const ordered = [...lifecycle.submissions].reverse();
   return (
     <Drawer
       open
       onClose={onClose}
       size="lg"
-      title={text('lifecycle.history', 'Filing history')}
+      title={text("lifecycle.history", "Filing history")}
       description={`${label} · ${year}`}
       footer={
         <div className="flex w-full justify-end">
-          <Button variant="ghost" onClick={onClose}>{tCommon('actions.close')}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {tCommon("actions.close")}
+          </Button>
         </div>
       }
     >
       {ordered.length === 0 ? (
-        <EmptyState title={text('lifecycle.notIssued', 'Not recorded as filed yet.')} />
+        <EmptyState title={text("lifecycle.notIssued", "Not recorded as filed yet.")} />
       ) : (
         <ol className="space-y-3">
           {ordered.map((submission) => (
@@ -440,7 +475,7 @@ function FilingHistoryDrawer({
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Badge variant={submission.revision === 'original' ? 'secondary' : 'warning'}>
+                  <Badge variant={submission.revision === "original" ? "secondary" : "warning"}>
                     #{submission.revisionNumber} · {submission.revision}
                   </Badge>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -456,7 +491,10 @@ function FilingHistoryDrawer({
                   </Button>
                 ) : (
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {text('lifecycle.noArtifact', 'No electronic file — the slip snapshot below is the record.')}
+                    {text(
+                      "lifecycle.noArtifact",
+                      "No electronic file — the slip snapshot below is the record.",
+                    )}
                   </span>
                 )}
               </div>
@@ -464,16 +502,19 @@ function FilingHistoryDrawer({
                 <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{submission.note}</p>
               )}
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                {text('lifecycle.slipsCovered', 'Slips covered')}: {submission.slipCount}
+                {text("lifecycle.slipsCovered", "Slips covered")}: {submission.slipCount}
                 {submission.supersedesId
-                  ? ` · ${text('lifecycle.supersedes', 'supersedes')} #${
-                    lifecycle.submissions.find((s) => s.id === submission.supersedesId)?.revisionNumber ?? '—'
-                  }`
-                  : ''}
+                  ? ` · ${text("lifecycle.supersedes", "supersedes")} #${
+                      lifecycle.submissions.find((s) => s.id === submission.supersedesId)
+                        ?.revisionNumber ?? "—"
+                    }`
+                  : ""}
               </p>
               <div className="mt-2 flex flex-wrap gap-1">
                 {submission.slips.slice(0, 24).map((slip) => (
-                  <Badge key={slip.rowId} variant="outline">{slip.label}</Badge>
+                  <Badge key={slip.rowId} variant="outline">
+                    {slip.label}
+                  </Badge>
                 ))}
                 {submission.slips.length > 24 && (
                   <Badge variant="outline">+{submission.slips.length - 24}</Badge>
@@ -484,10 +525,10 @@ function FilingHistoryDrawer({
         </ol>
       )}
     </Drawer>
-  )
+  );
 }
 
-const NUMERIC = /^-?\d+(\.\d+)?$/
+const NUMERIC = /^-?\d+(\.\d+)?$/;
 
 /**
  * The delta, and the two acts it enables — for ONE row, inside its slip
@@ -499,23 +540,28 @@ const NUMERIC = /^-?\d+(\.\d+)?$/
  * correction forms print in two columns.
  */
 export function FilingCorrectionSection(props: {
-  section: YearEndFilingSection
-  year: number
-  review: FilingRowReview
-  lifecycle: FilingLifecycle
-  onIssued: () => void
+  section: YearEndFilingSection;
+  year: number;
+  review: FilingRowReview;
+  lifecycle: FilingLifecycle;
+  onIssued: () => void;
   /**
    * Whether the operator may file (payroll.run). A read-only caller sees
    * what moved since filing but is never offered the amendment or the
    * cancellation — both are statutory acts the route refuses.
    */
-  canFile: boolean
+  canFile: boolean;
 }) {
-  const { review } = props
+  const { review } = props;
   // A changed row or revision is a new evidence context. Remounting the
   // stateful body clears its preview, reason, and error together before the
   // next paint, without synchronously setting state from an effect.
-  return <FilingCorrectionSectionBody key={`${review.rowId}:${review.lastRevision ?? 'none'}`} {...props} />
+  return (
+    <FilingCorrectionSectionBody
+      key={`${review.rowId}:${review.lastRevision ?? "none"}`}
+      {...props}
+    />
+  );
 }
 
 function FilingCorrectionSectionBody({
@@ -526,116 +572,119 @@ function FilingCorrectionSectionBody({
   onIssued,
   canFile,
 }: {
-  section: YearEndFilingSection
-  year: number
-  review: FilingRowReview
-  lifecycle: FilingLifecycle
-  onIssued: () => void
-  canFile: boolean
+  section: YearEndFilingSection;
+  year: number;
+  review: FilingRowReview;
+  lifecycle: FilingLifecycle;
+  onIssued: () => void;
+  canFile: boolean;
 }) {
-  const text = useFilingText()
-  const { money } = useMoney()
-  const [busy, setBusy] = useState<FilingRevision | null>(null)
-  const [error, setError] = useState('')
+  const text = useFilingText();
+  const { money } = useMoney();
+  const [busy, setBusy] = useState<FilingRevision | null>(null);
+  const [error, setError] = useState("");
   const [preview, setPreview] = useState<
-    { status: 'idle' } | { status: 'loading' } | { status: 'error'; message: string }
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "error"; message: string }
     | {
-      status: 'ready'
-      slip: PayrollFilingSlipData
-      orgName: string
-      currency: string
-      revision: 'amended' | 'cancelled'
-      rowId: string
-    }
-  >({ status: 'idle' })
-  const [cancellationReason, setCancellationReason] = useState('')
-  const previewRequest = useRef(0)
+        status: "ready";
+        slip: PayrollFilingSlipData;
+        orgName: string;
+        currency: string;
+        revision: "amended" | "cancelled";
+        rowId: string;
+      }
+  >({ status: "idle" });
+  const [cancellationReason, setCancellationReason] = useState("");
+  const previewRequest = useRef(0);
 
-  const amendment = lifecycle.amendment
+  const amendment = lifecycle.amendment;
   const show = (value: string | null, isMoney: boolean) =>
-    value == null ? '—' : isMoney && NUMERIC.test(value) ? money(value) : value
+    value == null ? "—" : isMoney && NUMERIC.test(value) ? money(value) : value;
 
-  const correctionHref = (revision: 'amended' | 'cancelled', format: 'json' | 'pdf') =>
-    `/api/payroll/year-end/amendments/slip?country=${encodeURIComponent(section.country)}`
-    + `&filing=${encodeURIComponent(section.key)}&year=${year}`
-    + `&row=${encodeURIComponent(review.rowId)}&revision=${revision}`
-    + (format === 'pdf' ? '&format=pdf' : '')
+  const correctionHref = (revision: "amended" | "cancelled", format: "json" | "pdf") =>
+    `/api/payroll/year-end/amendments/slip?country=${encodeURIComponent(section.country)}` +
+    `&filing=${encodeURIComponent(section.key)}&year=${year}` +
+    `&row=${encodeURIComponent(review.rowId)}&revision=${revision}` +
+    (format === "pdf" ? "&format=pdf" : "");
 
-  async function loadPreview(revision: 'amended' | 'cancelled') {
-    const request = ++previewRequest.current
-    const rowId = review.rowId
-    setPreview({ status: 'loading' })
+  async function loadPreview(revision: "amended" | "cancelled") {
+    const request = ++previewRequest.current;
+    const rowId = review.rowId;
+    setPreview({ status: "loading" });
     // Starting a new revision review invalidates any explanation typed for a
     // previous cancellation preview.
-    setCancellationReason('')
+    setCancellationReason("");
     try {
-      const result = await fetchFilingSlip(correctionHref(revision, 'json'))
-      if (request !== previewRequest.current) return
-      setPreview({ status: 'ready', ...result, revision, rowId })
+      const result = await fetchFilingSlip(correctionHref(revision, "json"));
+      if (request !== previewRequest.current) return;
+      setPreview({ status: "ready", ...result, revision, rowId });
     } catch (e) {
-      if (request !== previewRequest.current) return
-      setPreview({ status: 'error', message: (e as Error).message })
+      if (request !== previewRequest.current) return;
+      setPreview({ status: "error", message: (e as Error).message });
     }
   }
 
-  const amendmentPreviewLoaded = preview.status === 'ready'
-    && preview.revision === 'amended'
-    && preview.rowId === review.rowId
-  const cancellationPreviewLoaded = preview.status === 'ready'
-    && preview.revision === 'cancelled'
-    && preview.rowId === review.rowId
+  const amendmentPreviewLoaded =
+    preview.status === "ready" && preview.revision === "amended" && preview.rowId === review.rowId;
+  const cancellationPreviewLoaded =
+    preview.status === "ready" &&
+    preview.revision === "cancelled" &&
+    preview.rowId === review.rowId;
 
-  async function issue(revision: 'amended' | 'cancelled') {
-    setError('')
+  async function issue(revision: "amended" | "cancelled") {
+    setError("");
 
-    const reason = cancellationReason.trim()
-    if (revision === 'amended') {
+    const reason = cancellationReason.trim();
+    if (revision === "amended") {
       if (!amendmentPreviewLoaded) {
-        setError(text(
-          'lifecycle.amendPreviewRequired',
-          'Load and review the amendment preview for this slip before issuing it.',
-        ))
-        return
+        setError(
+          text(
+            "lifecycle.amendPreviewRequired",
+            "Load and review the amendment preview for this slip before issuing it.",
+          ),
+        );
+        return;
       }
       const confirmed = await confirmDialog({
-        title: text('lifecycle.amendConfirmTitle', 'Confirm amendment'),
+        title: text("lifecycle.amendConfirmTitle", "Confirm amendment"),
         message: text(
-          'lifecycle.amendConfirmMessage',
-          'This records an amended filing for the reviewed slip. The issued correction becomes part of the filing history. Continue?',
+          "lifecycle.amendConfirmMessage",
+          "This records an amended filing for the reviewed slip. The issued correction becomes part of the filing history. Continue?",
         ),
-        confirmLabel: text('lifecycle.confirmAmendment', 'Issue amendment'),
-        tone: 'danger',
-      })
-      if (!confirmed) return
+        confirmLabel: text("lifecycle.confirmAmendment", "Issue amendment"),
+        tone: "danger",
+      });
+      if (!confirmed) return;
     }
-    if (revision === 'cancelled') {
+    if (revision === "cancelled") {
       if (!cancellationPreviewLoaded) {
-        setError(text(
-          'lifecycle.cancelPreviewRequired',
-          'Load the cancellation preview for this slip before cancelling it.',
-        ))
-        return
+        setError(
+          text(
+            "lifecycle.cancelPreviewRequired",
+            "Load the cancellation preview for this slip before cancelling it.",
+          ),
+        );
+        return;
       }
       if (!reason) {
-        setError(text(
-          'lifecycle.cancelReasonRequired',
-          'A cancellation reason is required.',
-        ))
-        return
+        setError(text("lifecycle.cancelReasonRequired", "A cancellation reason is required."));
+        return;
       }
       const confirmed = await confirmDialog({
-        title: text('lifecycle.cancelConfirmTitle', 'Confirm cancellation'),
+        title: text("lifecycle.cancelConfirmTitle", "Confirm cancellation"),
         message: text(
-          'lifecycle.cancelConfirmMessage',
-          'This is an irreversible filing-history act. The reviewed slip will be reported as cancelled. Continue?',
+          "lifecycle.cancelConfirmMessage",
+          "This is an irreversible filing-history act. The reviewed slip will be reported as cancelled. Continue?",
         ),
-        confirmLabel: text('lifecycle.confirmCancellation', 'Confirm cancellation'),
-        tone: 'danger',
-      })
-      if (!confirmed) return
+        confirmLabel: text("lifecycle.confirmCancellation", "Confirm cancellation"),
+        tone: "danger",
+      });
+      if (!confirmed) return;
     }
 
-    setBusy(revision)
+    setBusy(revision);
     try {
       const fileRefusal = await postFilingCorrection({
         country: section.country,
@@ -643,66 +692,70 @@ function FilingCorrectionSectionBody({
         year,
         revision,
         rowIds: [review.rowId],
-        ...(revision === 'amended' ? { confirmedAmendment: true as const } : {}),
-        ...(revision === 'cancelled' ? { confirmedCancellation: true as const, reason } : {}),
-      })
-      if (fileRefusal) setError(fileRefusal)
-      setPreview({ status: 'idle' })
-      if (revision === 'cancelled') setCancellationReason('')
-      onIssued()
+        ...(revision === "amended" ? { confirmedAmendment: true as const } : {}),
+        ...(revision === "cancelled" ? { confirmedCancellation: true as const, reason } : {}),
+      });
+      if (fileRefusal) setError(fileRefusal);
+      setPreview({ status: "idle" });
+      if (revision === "cancelled") setCancellationReason("");
+      onIssued();
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
   }
 
   const facsimileHtml = useMemo(() => {
-    if (preview.status !== 'ready') return ''
-    const { result, layout } = payrollSlipFacsimile(preview.slip, year, preview.currency)
-    return renderTaxFormFacsimileBody(result, { orgName: preview.orgName }, layout)
-  }, [preview, year])
+    if (preview.status !== "ready") return "";
+    const { result, layout } = payrollSlipFacsimile(preview.slip, year, preview.currency);
+    return renderTaxFormFacsimileBody(result, { orgName: preview.orgName }, layout);
+  }, [preview, year]);
 
-  const canAmend = canFile
-    && !lifecycle?.populationRefusal
-    && amendment.supported
-    && amendment.revisions.includes('amended')
-    && review.status === 'changed'
-  const canCancel = canFile
-    && !lifecycle?.populationRefusal
-    && amendment.supported
-    && amendment.revisions.includes('cancelled')
-    && (review.status === 'absent' || review.status === 'changed' || review.status === 'unchanged')
+  const canAmend =
+    canFile &&
+    !lifecycle?.populationRefusal &&
+    amendment.supported &&
+    amendment.revisions.includes("amended") &&
+    review.status === "changed";
+  const canCancel =
+    canFile &&
+    !lifecycle?.populationRefusal &&
+    amendment.supported &&
+    amendment.revisions.includes("cancelled") &&
+    (review.status === "absent" || review.status === "changed" || review.status === "unchanged");
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <FieldLabel
-          fieldName={text('lifecycle.correction', 'Correction')}
+          fieldName={text("lifecycle.correction", "Correction")}
           className="text-sm font-semibold text-slate-900 dark:text-slate-100"
           help={
             <>
               <p>
                 {text(
-                  'lifecycle.correctionHelp',
-                  'Amending restates a slip that should exist; cancelling declares that the '
-                  + 'slip should never have existed. The figures are recomputed from committed '
-                  + 'pay stubs — they are never typed over — so correct the payroll data first '
-                  + 'and the amendment follows.',
+                  "lifecycle.correctionHelp",
+                  "Amending restates a slip that should exist; cancelling declares that the " +
+                    "slip should never have existed. The figures are recomputed from committed " +
+                    "pay stubs — they are never typed over — so correct the payroll data first " +
+                    "and the amendment follows.",
                 )}
               </p>
-              {amendment.supported && amendment.vehicle === 'correction_form' && amendment.formLabel && (
-                <p className="mt-2">
-                  {text('lifecycle.correctionForm', 'Correction form')}: {amendment.formLabel}
-                </p>
-              )}
+              {amendment.supported &&
+                amendment.vehicle === "correction_form" &&
+                amendment.formLabel && (
+                  <p className="mt-2">
+                    {text("lifecycle.correctionForm", "Correction form")}: {amendment.formLabel}
+                  </p>
+                )}
               {amendment.supported && amendment.download?.note && (
                 <p className="mt-2">{amendment.download.note}</p>
               )}
             </>
           }
         >
-          {text('lifecycle.correction', 'Correction')}
+          {text("lifecycle.correction", "Correction")}
         </FieldLabel>
         <FilingStatusBadge status={review.status} />
       </div>
@@ -716,54 +769,60 @@ function FilingCorrectionSectionBody({
           {lifecycle.populationRefusal && (
             <Alert variant="warning">
               <AlertDescription>
-                {text('lifecycle.populationUnavailable', 'The current filing population could not be built, so row status is unavailable and corrections are disabled.')}
-                {' '}{lifecycle.populationRefusal}
+                {text(
+                  "lifecycle.populationUnavailable",
+                  "The current filing population could not be built, so row status is unavailable and corrections are disabled.",
+                )}{" "}
+                {lifecycle.populationRefusal}
               </AlertDescription>
             </Alert>
           )}
-          {review.status === 'unfiled' && (lifecycle.submissions.length===0||section.additionalSelectedOriginals) && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {text(
-                'lifecycle.unfiledHelp',
-                'This slip has not been recorded as filed, so there is nothing to correct.',
-              )}
-            </p>
-          )}
-          {review.status === 'unfiled' && lifecycle.submissions.length>0 && !section.additionalSelectedOriginals && (
-            // A slip that appeared AFTER the return went out is an additional
-            // original, not a correction — a real gap, named rather than
-            // offered as an amendment that would misdescribe it.
-            <Alert variant="info">
+          {review.status === "unfiled" &&
+            (lifecycle.submissions.length === 0 || section.additionalSelectedOriginals) && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {text(
+                  "lifecycle.unfiledHelp",
+                  "This slip has not been recorded as filed, so there is nothing to correct.",
+                )}
+              </p>
+            )}
+          {review.status === "unfiled" &&
+            lifecycle.submissions.length > 0 &&
+            !section.additionalSelectedOriginals && (
+              // A slip that appeared AFTER the return went out is an additional
+              // original, not a correction — a real gap, named rather than
+              // offered as an amendment that would misdescribe it.
+              <Alert variant="info">
+                <AlertDescription>
+                  {text(
+                    "lifecycle.addedHelp",
+                    "This slip appeared after the return was filed. A slip discovered later is " +
+                      "filed as an additional original, not as a correction, and that is not " +
+                      "produced here — file it through the agency’s own service.",
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
+          {review.status === "resurrected" && (
+            <Alert variant="warning">
               <AlertDescription>
                 {text(
-                  'lifecycle.addedHelp',
-                  'This slip appeared after the return was filed. A slip discovered later is '
-                  + 'filed as an additional original, not as a correction, and that is not '
-                  + 'produced here — file it through the agency’s own service.',
+                  "lifecycle.resurrectedHelp",
+                  "This slip was cancelled, but the payroll ledger still produces it. Void or " +
+                    "adjust the underlying run, or the next return will file it again.",
                 )}
               </AlertDescription>
             </Alert>
           )}
 
-          {review.status === 'resurrected' && (
+          {review.status === "absent" && (
             <Alert variant="warning">
               <AlertDescription>
                 {text(
-                  'lifecycle.resurrectedHelp',
-                  'This slip was cancelled, but the payroll ledger still produces it. Void or '
-                  + 'adjust the underlying run, or the next return will file it again.',
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {review.status === 'absent' && (
-            <Alert variant="warning">
-              <AlertDescription>
-                {text(
-                  'lifecycle.absentHelp',
-                  'The payroll ledger no longer produces this slip, so there is nothing to '
-                  + 'restate. Cancel it so the agency stops holding it.',
+                  "lifecycle.absentHelp",
+                  "The payroll ledger no longer produces this slip, so there is nothing to " +
+                    "restate. Cancel it so the agency stops holding it.",
                 )}
               </AlertDescription>
             </Alert>
@@ -774,23 +833,36 @@ function FilingCorrectionSectionBody({
               <SharedTable className="w-full text-sm">
                 <SharedTableHeader>
                   <SharedTableRow className="text-left text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                    <SharedTableHead className="py-1 pr-3 font-medium">{text('lifecycle.box', 'Box')}</SharedTableHead>
-                    <SharedTableHead className="py-1 pr-3 font-medium">{text('lifecycle.field', 'Field')}</SharedTableHead>
-                    <SharedTableHead className="py-1 pr-3 text-right font-medium">{text('lifecycle.asFiled', 'As filed')}</SharedTableHead>
-                    <SharedTableHead className="py-1 text-right font-medium">{text('lifecycle.now', 'Now')}</SharedTableHead>
+                    <SharedTableHead className="py-1 pr-3 font-medium">
+                      {text("lifecycle.box", "Box")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-3 font-medium">
+                      {text("lifecycle.field", "Field")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-3 text-right font-medium">
+                      {text("lifecycle.asFiled", "As filed")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 text-right font-medium">
+                      {text("lifecycle.now", "Now")}
+                    </SharedTableHead>
                   </SharedTableRow>
                 </SharedTableHeader>
                 <SharedTableBody>
                   {review.changes.map((change) => (
                     <SharedTableRow
-                      key={`${change.code ?? ''}:${change.label}`}
+                      key={`${change.code ?? ""}:${change.label}`}
                       className="border-t border-slate-100 dark:border-slate-800"
                     >
-                      <SharedTableCell className="py-1 pr-3 font-medium tabular-nums">{change.code ?? '—'}</SharedTableCell>
+                      <SharedTableCell className="py-1 pr-3 font-medium tabular-nums">
+                        {change.code ?? "—"}
+                      </SharedTableCell>
                       <SharedTableCell className="py-1 pr-3">{change.label}</SharedTableCell>
                       {change.redacted ? (
-                        <SharedTableCell className="py-1 text-right text-amber-700 dark:text-amber-400" colSpan={2}>
-                          {text('lifecycle.redacted', 'Changed — value not displayed')}
+                        <SharedTableCell
+                          className="py-1 text-right text-amber-700 dark:text-amber-400"
+                          colSpan={2}
+                        >
+                          {text("lifecycle.redacted", "Changed — value not displayed")}
                         </SharedTableCell>
                       ) : (
                         <>
@@ -818,26 +890,32 @@ function FilingCorrectionSectionBody({
           <div className="flex flex-wrap items-center gap-2">
             {canAmend && (
               <>
-                <Button size="sm" variant="outline" onClick={() => void loadPreview('amended')}>
-                  {text('lifecycle.previewAmended', 'Preview correction')}
+                <Button size="sm" variant="outline" onClick={() => void loadPreview("amended")}>
+                  {text("lifecycle.previewAmended", "Preview correction")}
                 </Button>
-                <Button size="sm" disabled={busy != null || !amendmentPreviewLoaded} onClick={() => void issue('amended')}>
-                  {text('lifecycle.issueAmended', 'Issue amendment')}
+                <Button
+                  size="sm"
+                  disabled={busy != null || !amendmentPreviewLoaded}
+                  onClick={() => void issue("amended")}
+                >
+                  {text("lifecycle.issueAmended", "Issue amendment")}
                 </Button>
               </>
             )}
             {canCancel && (
               <>
-                <Button size="sm" variant="outline" onClick={() => void loadPreview('cancelled')}>
-                  {text('lifecycle.previewCancelled', 'Preview cancellation')}
+                <Button size="sm" variant="outline" onClick={() => void loadPreview("cancelled")}>
+                  {text("lifecycle.previewCancelled", "Preview cancellation")}
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
-                  disabled={busy != null || !cancellationPreviewLoaded || !cancellationReason.trim()}
-                  onClick={() => void issue('cancelled')}
+                  disabled={
+                    busy != null || !cancellationPreviewLoaded || !cancellationReason.trim()
+                  }
+                  onClick={() => void issue("cancelled")}
                 >
-                  {text('lifecycle.issueCancelled', 'Cancel this slip')}
+                  {text("lifecycle.issueCancelled", "Cancel this slip")}
                 </Button>
               </>
             )}
@@ -853,11 +931,11 @@ function FilingCorrectionSectionBody({
               <FieldLabel
                 htmlFor={`cancellation-reason-${review.rowId}`}
                 help={text(
-                  'lifecycle.cancelReasonHelp',
-                  'Explain why this issued slip should never have existed. The reason is retained in the filing history.',
+                  "lifecycle.cancelReasonHelp",
+                  "Explain why this issued slip should never have existed. The reason is retained in the filing history.",
                 )}
               >
-                {text('lifecycle.cancelReason', 'Cancellation reason')}
+                {text("lifecycle.cancelReason", "Cancellation reason")}
               </FieldLabel>
               <Textarea
                 id={`cancellation-reason-${review.rowId}`}
@@ -865,27 +943,31 @@ function FilingCorrectionSectionBody({
                 value={cancellationReason}
                 onChange={(event) => setCancellationReason(event.target.value)}
                 placeholder={text(
-                  'lifecycle.cancelReasonPlaceholder',
-                  'Why should this slip be cancelled?',
+                  "lifecycle.cancelReasonPlaceholder",
+                  "Why should this slip be cancelled?",
                 )}
                 maxLength={500}
               />
             </div>
           )}
 
-          {preview.status === 'loading' && <Skeleton className="h-40 w-full" />}
-          {preview.status === 'error' && (
+          {preview.status === "loading" && <Skeleton className="h-40 w-full" />}
+          {preview.status === "error" && (
             <Alert variant="warning">
               <AlertDescription>{preview.message}</AlertDescription>
             </Alert>
           )}
-          {preview.status === 'ready' && (
+          {preview.status === "ready" && (
             <div className="space-y-2">
               <div className="flex justify-end">
                 <Button asChild size="sm" variant="ghost">
-                  <a href={correctionHref(preview.revision, 'pdf')} target="_blank" rel="noreferrer">
+                  <a
+                    href={correctionHref(preview.revision, "pdf")}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     <FileDown size={13} aria-hidden />
-                    {text('slip.downloadPdf', 'Download PDF')}
+                    {text("slip.downloadPdf", "Download PDF")}
                   </a>
                 </Button>
               </div>
@@ -900,5 +982,5 @@ function FilingCorrectionSectionBody({
         </>
       )}
     </div>
-  )
+  );
 }

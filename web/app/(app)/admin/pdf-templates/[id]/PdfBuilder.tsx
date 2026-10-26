@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // GrapesJS visual builder for PDF documents — the canvas is styled as a real
 // PAPER SHEET: the body is sized to the exact page (width × height at 96 dpi),
@@ -8,89 +8,89 @@
 // Multi-page pagination is the Preview tab (exact Chromium render); here it's
 // one tall sheet.
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import GjsEditor, { BlocksProvider, Canvas } from '@grapesjs/react'
-import grapesjs, { type Editor } from 'grapesjs'
-import 'grapesjs/dist/css/grapes.min.css'
-import { BlockPalette } from './BlockPalette'
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import GjsEditor, { BlocksProvider, Canvas } from "@grapesjs/react";
+import grapesjs, { type Editor } from "grapesjs";
+import "grapesjs/dist/css/grapes.min.css";
+import { BlockPalette } from "./BlockPalette";
 import {
   collectionTableBlockHtml,
   mergeFieldBlockHtml,
   serializeTemplateEditor,
   type PaletteCollection,
   type PaletteField,
-} from './builder-blocks'
+} from "./builder-blocks";
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;">' +
   '<h1 style="font-size:22px;margin:0 0 8px;">Document title</h1>' +
   '<p style="font-size:13px;line-height:1.6;color:#334155;margin:0;">Drag content + record fields from the left.</p>' +
-  '</div>'
+  "</div>";
 
 const LIGHT_THEME: CSSProperties & Record<string, string> = {
-  '--gjs-primary-color': '#f1f5f9',
-  '--gjs-secondary-color': '#334155',
-  '--gjs-tertiary-color': '#0d9488',
-  '--gjs-quaternary-color': '#0f766e',
-  '--gjs-font-color': '#334155',
-  '--gjs-font-color-active': '#0f172a',
-  '--gjs-main-dark-color': '#e2e8f0',
-}
+  "--gjs-primary-color": "#f1f5f9",
+  "--gjs-secondary-color": "#334155",
+  "--gjs-tertiary-color": "#0d9488",
+  "--gjs-quaternary-color": "#0f766e",
+  "--gjs-font-color": "#334155",
+  "--gjs-font-color-active": "#0f172a",
+  "--gjs-main-dark-color": "#e2e8f0",
+};
 
 const BASE_BLOCKS: { id: string; label: string; content: string }[] = [
   {
-    id: 'heading',
-    label: 'Heading',
+    id: "heading",
+    label: "Heading",
     content:
       '<h2 style="font-size:16px;font-weight:700;color:#0f172a;margin:16px 0 6px;border-bottom:2px solid #e2e8f0;padding-bottom:4px;">Section heading</h2>',
   },
   {
-    id: 'text',
-    label: 'Text',
+    id: "text",
+    label: "Text",
     content:
       '<p style="font-size:13px;line-height:1.6;color:#334155;margin:0 0 8px;">Your text here.</p>',
   },
   {
-    id: 'image',
-    label: 'Image',
+    id: "image",
+    label: "Image",
     content:
       '<img src="https://placehold.co/600x180" alt="" style="max-width:100%;display:block;margin:6px 0;" />',
   },
   {
-    id: 'divider',
-    label: 'Divider',
+    id: "divider",
+    label: "Divider",
     content: '<hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;" />',
   },
   {
-    id: 'pagebreak',
-    label: 'Page break',
+    id: "pagebreak",
+    label: "Page break",
     content:
       '<div style="break-after:page;page-break-after:always;height:0;font-size:0;">&nbsp;</div>',
   },
   {
-    id: 'spacer',
-    label: 'Spacer',
+    id: "spacer",
+    label: "Spacer",
     content: '<div style="height:16px;line-height:16px;">&nbsp;</div>',
   },
   {
-    id: 'two-col',
-    label: '2 columns',
+    id: "two-col",
+    label: "2 columns",
     content:
       '<table style="width:100%;border-collapse:collapse;margin:6px 0;"><tr>' +
       '<td style="width:50%;vertical-align:top;padding-right:8px;font-size:13px;color:#334155;">Column one</td>' +
       '<td style="width:50%;vertical-align:top;padding-left:8px;font-size:13px;color:#334155;">Column two</td>' +
-      '</tr></table>',
+      "</tr></table>",
   },
   {
-    id: 'detail-row',
-    label: 'Label + value',
+    id: "detail-row",
+    label: "Label + value",
     content:
       '<table style="border-collapse:collapse;margin:0 0 2px;"><tr>' +
       '<td style="padding:4px 12px 4px 0;font-size:12px;color:#64748b;white-space:nowrap;">Label</td>' +
       '<td style="padding:4px 0;font-size:13px;color:#0f172a;">{{token}}</td>' +
-      '</tr></table>',
+      "</tr></table>",
   },
-]
+];
 
 // Build the canvas stylesheet that turns the GrapesJS iframe body into a paper
 // sheet at the exact page size, with the margin shown as inner whitespace + a
@@ -112,7 +112,7 @@ function pageCss(pageWidthPx: number, pageHeightPx: number, marginPx: number): s
     `border:1px dashed #cbd5e1;pointer-events:none;z-index:0;}` +
     // keep authored content above the guide
     `body>*{position:relative;z-index:1;}`
-  )
+  );
 }
 
 export default function PdfBuilder({
@@ -127,30 +127,30 @@ export default function PdfBuilder({
   collections = [],
   labels,
 }: {
-  initialHtml?: string | null
-  pageWidthPx: number
-  pageHeightPx: number
-  marginPx: number
-  paperLabel?: string
-  onReady: (editor: Editor) => void
-  onChange?: (html: string) => void
-  mergeFields?: PaletteField[]
-  collections?: PaletteCollection[]
-  labels: { content: string; fields: string; tables: string }
+  initialHtml?: string | null;
+  pageWidthPx: number;
+  pageHeightPx: number;
+  marginPx: number;
+  paperLabel?: string;
+  onReady: (editor: Editor) => void;
+  onChange?: (html: string) => void;
+  mergeFields?: PaletteField[];
+  collections?: PaletteCollection[];
+  labels: { content: string; fields: string; tables: string };
 }) {
-  const editorRef = useRef<Editor | null>(null)
-  const [, setEditor] = useState<Editor | null>(null)
+  const editorRef = useRef<Editor | null>(null);
+  const [, setEditor] = useState<Editor | null>(null);
 
   // Re-apply the paper-sheet CSS whenever the page dimensions change (the user
   // picks A4 / landscape / a new margin in the top bar). The load handler
   // injects a <style id="ob-page-css"> we update in place here.
   useEffect(() => {
-    const ed = editorRef.current
-    if (!ed) return
-    const doc = ed.Canvas.getBody()?.ownerDocument
-    const el = doc?.getElementById('ob-page-css')
-    if (el) el.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx)
-  }, [pageWidthPx, pageHeightPx, marginPx])
+    const ed = editorRef.current;
+    if (!ed) return;
+    const doc = ed.Canvas.getBody()?.ownerDocument;
+    const el = doc?.getElementById("ob-page-css");
+    if (el) el.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx);
+  }, [pageWidthPx, pageHeightPx, marginPx]);
 
   return (
     <div
@@ -163,55 +163,74 @@ export default function PdfBuilder({
         // from a public CDN, which the app CSP blocks on every editor load
         // Nothing renders those icon classes, so the dead
         // reference goes, not a vendored copy.
-        options={{ height: '100%', storageManager: false, fromElement: false, cssIcons: '' }}
+        options={{ height: "100%", storageManager: false, fromElement: false, cssIcons: "" }}
         onEditor={(editor: Editor) => {
-          const bm = editor.BlockManager
+          const bm = editor.BlockManager;
           for (const b of BASE_BLOCKS) {
-            bm.add(b.id, { label: b.label, category: labels.content, content: b.content })
+            bm.add(b.id, { label: b.label, category: labels.content, content: b.content });
           }
           for (const f of mergeFields) {
-            const content = mergeFieldBlockHtml(f)
-            if (!content) continue
+            const content = mergeFieldBlockHtml(f);
+            if (!content) continue;
             bm.add(`token:${f.key}`, {
               label: f.label || f.key,
               category: labels.fields,
               content,
-            })
+            });
           }
           for (const c of collections) {
-            const content = collectionTableBlockHtml(c)
-            if (!content) continue
+            const content = collectionTableBlockHtml(c);
+            if (!content) continue;
             bm.add(`table:${c.key}`, {
               label: `${c.label}`,
               category: labels.tables,
               content,
-            })
+            });
           }
           // Style the canvas as a real paper sheet once the iframe is ready.
-          editor.on('load', () => {
-            const doc = editor.Canvas.getBody()?.ownerDocument
-            if (!doc) return
-            const style = doc.createElement('style')
-            style.id = 'ob-page-css'
-            style.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx)
-            doc.head.appendChild(style)
-            const embedded = initialHtml?.match(/<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>([\s\S]*?)<\/style>/i)?.[1]
-            if (embedded) { const fontStyle=doc.createElement('style');fontStyle.id='ob-cheque-micr-font';fontStyle.textContent=embedded;doc.head.appendChild(fontStyle) }
-          })
+          editor.on("load", () => {
+            const doc = editor.Canvas.getBody()?.ownerDocument;
+            if (!doc) return;
+            const style = doc.createElement("style");
+            style.id = "ob-page-css";
+            style.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx);
+            doc.head.appendChild(style);
+            const embedded = initialHtml?.match(
+              /<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>([\s\S]*?)<\/style>/i,
+            )?.[1];
+            if (embedded) {
+              const fontStyle = doc.createElement("style");
+              fontStyle.id = "ob-cheque-micr-font";
+              fontStyle.textContent = embedded;
+              doc.head.appendChild(fontStyle);
+            }
+          });
           try {
-            const body = initialHtml?.replace(/<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>[\s\S]*?<\/style>/gi,'')
-            editor.setComponents(body?.trim() ? body : STARTER_HTML)
+            const body = initialHtml?.replace(
+              /<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>[\s\S]*?<\/style>/gi,
+              "",
+            );
+            editor.setComponents(body?.trim() ? body : STARTER_HTML);
           } catch {
             try {
-              editor.setComponents(STARTER_HTML)
+              editor.setComponents(STARTER_HTML);
             } catch {
               /* noop */
             }
           }
-          editorRef.current = editor
-          setEditor(editor)
-          editor.on('update', () => onChange?.(serializeTemplateEditor(editor, initialHtml?.match(/<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>[\s\S]*?<\/style>/i)?.[0] ?? '')))
-          onReady(editor)
+          editorRef.current = editor;
+          setEditor(editor);
+          editor.on("update", () =>
+            onChange?.(
+              serializeTemplateEditor(
+                editor,
+                initialHtml?.match(
+                  /<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>[\s\S]*?<\/style>/i,
+                )?.[0] ?? "",
+              ),
+            ),
+          );
+          onReady(editor);
         }}
       >
         <div className="grid h-full min-h-0 grid-cols-4 grid-rows-1">
@@ -229,5 +248,5 @@ export default function PdfBuilder({
         </div>
       </GjsEditor>
     </div>
-  )
+  );
 }

@@ -1,5 +1,5 @@
-import { sql } from 'drizzle-orm'
-import { db, withBypassContext } from '@openbooks/engine/platform/db'
+import { sql } from "drizzle-orm";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
 
 /**
  * Public recruiting helpers (HR-18): org resolution for the sessionless
@@ -13,28 +13,38 @@ import { db, withBypassContext } from '@openbooks/engine/platform/db'
 /** Resolve the org behind one interview or offer row. Null = no such row. */
 export async function resolvePublicOrgFeatures(
   rowId: string,
-  table: 'interview' | 'offer',
+  table: "interview" | "offer",
 ): Promise<{ orgId: string } | null> {
   // bypass: connector-token — a public offer or booking link, already matched by its token, resolves its organization.
   return withBypassContext(async () => {
     const found =
-      table === 'interview'
-        ? (await db.execute<{ orgId: string }>(sql`
+      table === "interview"
+        ? (
+            await db.execute<{ orgId: string }>(
+              sql`
               select org_id as "orgId" from hrm_interviews where id = ${rowId}
-            `, 'objects'))[0]
-        : (await db.execute<{ orgId: string }>(sql`
+            `,
+              "objects",
+            )
+          )[0]
+        : (
+            await db.execute<{ orgId: string }>(
+              sql`
               select org_id as "orgId" from hrm_offers where id = ${rowId}
-            `, 'objects'))[0]
-    return found ?? null
-  })
+            `,
+              "objects",
+            )
+          )[0];
+    return found ?? null;
+  });
 }
 
 /** URL-safe org slug: the org name lowercased, runs of other chars to one hyphen. */
 export function orgSlugFor(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 /**
@@ -48,15 +58,20 @@ export function orgSlugFor(name: string): string {
  * in a real org; this is the one that finds an org by guessing a string,
  * so this is where the environment has to be checked.
  */
-export async function resolveOrgBySlug(slug: string): Promise<{ orgId: string; name: string } | null> {
+export async function resolveOrgBySlug(
+  slug: string,
+): Promise<{ orgId: string; name: string } | null> {
   // bypass: cross-org-by-design — matching a public slug requires checking all production organization names for ambiguity.
   const orgs = await withBypassContext(async () => {
-    const rows = await db.execute<{ orgId: string; name: string }>(sql`
+    const rows = await db.execute<{ orgId: string; name: string }>(
+      sql`
         select id as "orgId", name from orgs where env_kind = 'production'
-      `, 'objects')
-    return rows
-  })
-  const matches = orgs.filter((org) => orgSlugFor(org.name) === slug)
-  if (matches.length !== 1) return null
-  return { orgId: matches[0]!.orgId, name: matches[0]!.name }
+      `,
+      "objects",
+    );
+    return rows;
+  });
+  const matches = orgs.filter((org) => orgSlugFor(org.name) === slug);
+  if (matches.length !== 1) return null;
+  return { orgId: matches[0]!.orgId, name: matches[0]!.name };
 }

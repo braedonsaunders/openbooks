@@ -1,7 +1,7 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
-import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 
 async function loadEquipmentRows(
   executor: SqlExecutor,
@@ -9,7 +9,8 @@ async function loadEquipmentRows(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  const unit = ((await executor.execute(sql`
+  const unit = await executor.execute(
+    sql`
     select e.*, i.name as charge_item_name, b.name as rate_book_name,
            f.asset_number as fixed_asset_number, f.acquisition_cost as fixed_asset_cost
       from equipment_units e
@@ -19,9 +20,12 @@ async function loadEquipmentRows(
      where e.id = ${id} and e.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowedSubsidiaryIds)}
      for share of e
-  `, 'objects')))
-  if (!unit[0]) return null
-  const metrics = ((await executor.execute(sql`
+  `,
+    "objects",
+  );
+  if (!unit[0]) return null;
+  const metrics = await executor.execute(
+    sql`
     select
       coalesce((select sum(dl.base_quantity) from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
         where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted') -- Live entries only: equipment usage includes currently approved and posted charges
@@ -45,8 +49,10 @@ async function loadEquipmentRows(
         join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id and ds.org_id = eu.org_id
         join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id and dsl.org_id = ds.org_id
         where eu.id = ${id} and eu.org_id = ${orgId} and dsl.posted_amount is not null), 0) as depreciation
-  `, 'objects')))
-  return { unit: unit[0], metrics: metrics[0] }
+  `,
+    "objects",
+  );
+  return { unit: unit[0], metrics: metrics[0] };
 }
 
 export async function loadEquipment(
@@ -61,7 +67,7 @@ export async function loadEquipment(
   // response. (A REPEATABLE READ snapshot cannot take the lock: a locking
   // read that meets a concurrent update errors with 40001 instead of
   // waiting.)
-  return withOrgTransaction(orgId, () => loadEquipmentRows(db, id, orgId, allowedSubsidiaryIds))
+  return withOrgTransaction(orgId, () => loadEquipmentRows(db, id, orgId, allowedSubsidiaryIds));
 }
 
 /**
@@ -77,5 +83,5 @@ export async function loadEquipmentInWrite(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  return loadEquipmentRows(tx, id, orgId, allowedSubsidiaryIds)
+  return loadEquipmentRows(tx, id, orgId, allowedSubsidiaryIds);
 }

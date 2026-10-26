@@ -106,7 +106,9 @@ export function buildNativeFromOdoo(
   // Cleared evidence (0158): a set matching_number means the line is matched
   // (reconciled). Odoo states no clear date, so the move date stands in —
   // understated evidence is safe, invented evidence is not.
-  const clearedEvidence = (l: OdooMoveLine): { sourceCleared: boolean; sourceClearedDate: string | null } => {
+  const clearedEvidence = (
+    l: OdooMoveLine,
+  ): { sourceCleared: boolean; sourceClearedDate: string | null } => {
     const cleared = typeof l.matching_number === "string" && l.matching_number !== "";
     return { sourceCleared: cleared, sourceClearedDate: cleared ? move.date : null };
   };
@@ -129,15 +131,22 @@ export function buildNativeFromOdoo(
         ...base,
         kind: docKind,
         controlAccountId: ctrlAccount,
-        lines: [{
-          accountId: counterAccount, itemId: null,
-          amount: fromUnits(total < 0n ? -total : total),
-          taxAmount: "0", taxOverridden: false, taxCodeId: null,
-          departmentId: null, projectId: null,
-          description: ctrl.name || null, lineNumber: 1,
-          sourceLineRef: String(counter.id),
-          ...clearedEvidence(counter),
-        }],
+        lines: [
+          {
+            accountId: counterAccount,
+            itemId: null,
+            amount: fromUnits(total < 0n ? -total : total),
+            taxAmount: "0",
+            taxOverridden: false,
+            taxCodeId: null,
+            departmentId: null,
+            projectId: null,
+            description: ctrl.name || null,
+            lineNumber: 1,
+            sourceLineRef: String(counter.id),
+            ...clearedEvidence(counter),
+          },
+        ],
       };
     }
     // Plain journal / bank-statement move: pass-through.
@@ -148,10 +157,17 @@ export function buildNativeFromOdoo(
       const a = acct(l);
       if (!a) return { skip: `unmapped account ${m2oId(l.account_id)}` };
       out.push({
-        accountId: a, itemId: null, amount: fromUnits(num(l.balance)),
-        taxAmount: "0", taxOverridden: false, taxCodeId: null,
-        partyId: lineParty(l), departmentId: null, projectId: null,
-        description: l.name || null, lineNumber: ++n,
+        accountId: a,
+        itemId: null,
+        amount: fromUnits(num(l.balance)),
+        taxAmount: "0",
+        taxOverridden: false,
+        taxCodeId: null,
+        partyId: lineParty(l),
+        departmentId: null,
+        projectId: null,
+        description: l.name || null,
+        lineNumber: ++n,
         sourceLineRef: String(l.id),
         ...clearedEvidence(l),
       });
@@ -172,14 +188,21 @@ export function buildNativeFromOdoo(
     const primaryTax = (l.tax_ids ?? [])[0];
     const rate = primaryTax !== undefined ? opts.taxRateById.get(primaryTax) : undefined;
     const rateKey = rate !== undefined ? normalizeMoney(String(rate)) : null;
-    const code = rateKey ? ctx.taxByRate.get(rateKey) ?? ctx.taxByRate.get(rateKey.replace(/\.0+$/, "")) : undefined;
+    const code = rateKey
+      ? (ctx.taxByRate.get(rateKey) ?? ctx.taxByRate.get(rateKey.replace(/\.0+$/, "")))
+      : undefined;
     const row: NativeDocLine = {
-      accountId: a, itemId: null,
+      accountId: a,
+      itemId: null,
       amount: fromUnits(num(l.balance) * BigInt(sign)),
-      taxAmount: "0", taxOverridden: false,
+      taxAmount: "0",
+      taxOverridden: false,
       taxCodeId: code?.id ?? null,
-      partyId: lineParty(l), departmentId: null, projectId: null,
-      description: l.name || null, lineNumber: ++n,
+      partyId: lineParty(l),
+      departmentId: null,
+      projectId: null,
+      description: l.name || null,
+      lineNumber: ++n,
     };
     out.push(row);
     detail.push({ row, taxIds: l.tax_ids ?? [] });
@@ -201,8 +224,7 @@ export function buildNativeFromOdoo(
   }
   for (const [taxId, amt] of taxByTaxId) {
     if (amt === 0n) continue;
-    const carrier =
-      detail.find((d) => d.taxIds.includes(taxId)) ?? detail[0]!;
+    const carrier = detail.find((d) => d.taxIds.includes(taxId)) ?? detail[0]!;
     const prev = toUnits(carrier.row.taxAmount);
     carrier.row.taxAmount = fromUnits(prev + amt);
     carrier.row.taxOverridden = true;
@@ -210,7 +232,10 @@ export function buildNativeFromOdoo(
       const rate = opts.taxRateById.get(taxId);
       carrier.row.taxCodeId =
         (rate !== undefined
-          ? (ctx.taxByRate.get(normalizeMoney(String(rate))) ?? ctx.taxByRate.get(normalizeMoney(String(rate)).replace(/\.0+$/, "")))?.id
+          ? (
+              ctx.taxByRate.get(normalizeMoney(String(rate))) ??
+              ctx.taxByRate.get(normalizeMoney(String(rate)).replace(/\.0+$/, ""))
+            )?.id
           : undefined) ?? null;
     }
   }

@@ -13,11 +13,7 @@
 
 import { fetchWithConnectorRetry } from "./http-retry.ts";
 import { guardedFetch } from "./ssrf-guard.ts";
-import {
-  normalizeVatId,
-  VatValidationError,
-  type VatAuthorityVerdict,
-} from "./vat-validation.ts";
+import { normalizeVatId, VatValidationError, type VatAuthorityVerdict } from "./vat-validation.ts";
 
 const DETAILS_URL = "https://abr.business.gov.au/json/AbnDetails.aspx";
 
@@ -26,21 +22,37 @@ export interface AbnCheckRequest {
   guid?: string | null;
 }
 
-function abnFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
-  return fetchWithConnectorRetry(url, { ...init, redirect: "error" }, { describe: "ABN Lookup", transport });
+function abnFetch(
+  url: string | URL,
+  init: RequestInit = {},
+  transport: typeof fetch = guardedFetch,
+): Promise<Response> {
+  return fetchWithConnectorRetry(
+    url,
+    { ...init, redirect: "error" },
+    { describe: "ABN Lookup", transport },
+  );
 }
 
 function parseJsonp(body: string, abn: string): Record<string, unknown> {
-  const trimmed = body.trim().replace(/^[^({]*\(/, "").replace(/\);?\s*$/, "");
+  const trimmed = body
+    .trim()
+    .replace(/^[^({]*\(/, "")
+    .replace(/\);?\s*$/, "");
   try {
     const parsed = JSON.parse(trimmed) as Record<string, unknown>;
     if (parsed && typeof parsed === "object") return parsed;
   } catch (error) {
-    throw new VatValidationError(`ABR answered an unreadable body for ${abn}: retry validation later`, {
-      cause: error,
-    });
+    throw new VatValidationError(
+      `ABR answered an unreadable body for ${abn}: retry validation later`,
+      {
+        cause: error,
+      },
+    );
   }
-  throw new VatValidationError(`ABR answered an unreadable body for ${abn}: retry validation later`);
+  throw new VatValidationError(
+    `ABR answered an unreadable body for ${abn}: retry validation later`,
+  );
 }
 
 /** Ask the ABR whether the ABN is currently Active. Throws on any service failure. */
@@ -62,20 +74,27 @@ export async function checkAbn(
   try {
     res = await abnFetch(url, { headers: { Accept: "application/javascript" } }, transport);
   } catch (error) {
-    throw new VatValidationError(`ABR is unreachable for ${abn}: retry validation later`, { cause: error });
+    throw new VatValidationError(`ABR is unreachable for ${abn}: retry validation later`, {
+      cause: error,
+    });
   }
   if (!res.ok) {
-    throw new VatValidationError(`ABR answered HTTP ${res.status} for ${abn}: retry validation later`);
+    throw new VatValidationError(
+      `ABR answered HTTP ${res.status} for ${abn}: retry validation later`,
+    );
   }
   const body = parseJsonp(await res.text(), abn);
   const answered = typeof body.Abn === "string" ? body.Abn.replace(/\s/g, "") : "";
   if (answered !== abn) {
-    throw new VatValidationError(`ABR answered for a different ABN than ${abn}: retry validation later`);
+    throw new VatValidationError(
+      `ABR answered for a different ABN than ${abn}: retry validation later`,
+    );
   }
   return {
     valid: body.AbnStatus === "Active",
     consultationNumber: null,
-    traderName: typeof body.EntityTypeName === "string" && body.EntityTypeName ? body.EntityTypeName : null,
+    traderName:
+      typeof body.EntityTypeName === "string" && body.EntityTypeName ? body.EntityTypeName : null,
     traderAddress: null,
   };
 }

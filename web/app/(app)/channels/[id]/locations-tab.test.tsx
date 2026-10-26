@@ -113,11 +113,19 @@ const INVENTORY = {
 function scriptFetch() {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url === `/api/channels/${CHANNEL_ID}/locations` && (!init?.method || init.method === "GET")) {
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (
+      url === `/api/channels/${CHANNEL_ID}/locations` &&
+      (!init?.method || init.method === "GET")
+    ) {
       return Response.json({ locations: LOCATIONS });
     }
-    if (url === `/api/channels/${CHANNEL_ID}/inventory` && (!init?.method || init.method === "GET")) {
+    if (
+      url === `/api/channels/${CHANNEL_ID}/inventory` &&
+      (!init?.method || init.method === "GET")
+    ) {
       return Response.json(INVENTORY);
     }
     if (url === `/api/channels/${CHANNEL_ID}/stock-locations`) {

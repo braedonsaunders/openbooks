@@ -86,7 +86,9 @@ export const benefitPrograms = pgTable(
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     payComponentId: uuid("pay_component_id"),
-    approvalMode: text("approval_mode", { enum: [...BENEFIT_PROGRAM_APPROVAL_MODES] }).notNull().default("none"),
+    approvalMode: text("approval_mode", { enum: [...BENEFIT_PROGRAM_APPROVAL_MODES] })
+      .notNull()
+      .default("none"),
     deliveryMethod: text("delivery_method", { enum: [...BENEFIT_PROGRAM_DELIVERY] })
       .notNull()
       .default("payroll"),
@@ -109,12 +111,16 @@ export const benefitPrograms = pgTable(
     periodBasis: text("period_basis", { enum: [...BENEFIT_PROGRAM_PERIOD_BASES] }),
     paymentDelayDays: integer("payment_delay_days").notNull().default(0),
     /** Approved time without the scoped project or department: refuse the measure or exclude it. */
-    unassignedTime: text("unassigned_time", { enum: [...BENEFIT_PROGRAM_UNASSIGNED_TIME] }).notNull().default("refuse"),
+    unassignedTime: text("unassigned_time", { enum: [...BENEFIT_PROGRAM_UNASSIGNED_TIME] })
+      .notNull()
+      .default("refuse"),
     /** Project-margin programs: loss share rate, per-project pool caps, pool rounding, open commitments as cost. */
     lossPercentRate: numeric("loss_percent_rate", { precision: 9, scale: 4 }),
     projectProfitCap: numeric("project_profit_cap", { precision: 19, scale: 4 }),
     projectLossCap: numeric("project_loss_cap", { precision: 19, scale: 4 }),
-    poolRounding: text("pool_rounding", { enum: ["share", "pool"] }).notNull().default("share"),
+    poolRounding: text("pool_rounding", { enum: ["share", "pool"] })
+      .notNull()
+      .default("share"),
     includeOpenCommitments: boolean("include_open_commitments").notNull().default(false),
     /** Approved-hour measures count only these time classifications; null counts all. */
     hourClassifications: text("hour_classifications").array(),
@@ -136,7 +142,10 @@ export const benefitPrograms = pgTable(
     check("hrm_benefit_programs_code", sql`char_length(btrim(${t.code})) > 0`),
     check("hrm_benefit_programs_name", sql`char_length(btrim(${t.name})) > 0`),
     check("hrm_benefit_programs_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("hrm_benefit_programs_window", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "hrm_benefit_programs_window",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
     check("hrm_benefit_programs_delay", sql`${t.paymentDelayDays} >= 0`),
     check("hrm_benefit_programs_approval_mode", sql`${t.approvalMode} in ('none','flows')`),
     check("hrm_benefit_programs_revision", sql`${t.revision} >= 1`),
@@ -172,7 +181,9 @@ export const benefitProgramScopes = pgTable(
     }).onDelete("restrict"),
     uniqueIndex("hrm_benefit_program_scopes_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_benefit_program_scopes_program").on(t.orgId, t.programId),
-    index("hrm_benefit_program_scopes_customer").on(t.orgId, t.customerId).where(sql`${t.customerId} is not null`),
+    index("hrm_benefit_program_scopes_customer")
+      .on(t.orgId, t.customerId)
+      .where(sql`${t.customerId} is not null`),
     check(
       "hrm_benefit_program_scopes_one_entity",
       sql`(${t.departmentId} is not null)::int + (${t.projectId} is not null)::int + (${t.customerId} is not null)::int = 1`,
@@ -192,15 +203,26 @@ export const benefitProgramRevisions = pgTable(
     reason: text("reason").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").notNull(),
-    createdTxid: bigint("created_txid", { mode: "number" }).notNull().default(sql`txid_current()`),
+    createdTxid: bigint("created_txid", { mode: "number" })
+      .notNull()
+      .default(sql`txid_current()`),
   },
   (t) => [
     foreignKey({ columns: [t.orgId], foreignColumns: [orgs.id] }),
-    foreignKey({ columns: [t.orgId, t.programId], foreignColumns: [benefitPrograms.orgId, benefitPrograms.id] }),
+    foreignKey({
+      columns: [t.orgId, t.programId],
+      foreignColumns: [benefitPrograms.orgId, benefitPrograms.id],
+    }),
     uniqueIndex("hrm_benefit_program_revisions_org_id_id_key").on(t.orgId, t.id),
     index("hrm_benefit_program_revisions_program").on(t.orgId, t.programId, t.effectiveFrom),
-    check("hrm_benefit_program_revisions_prior_policy_check", sql`jsonb_typeof(${t.priorPolicy}) = 'object'`),
-    check("hrm_benefit_program_revisions_reason_check", sql`length(btrim(${t.reason})) BETWEEN 1 AND 2000`),
+    check(
+      "hrm_benefit_program_revisions_prior_policy_check",
+      sql`jsonb_typeof(${t.priorPolicy}) = 'object'`,
+    ),
+    check(
+      "hrm_benefit_program_revisions_reason_check",
+      sql`length(btrim(${t.reason})) BETWEEN 1 AND 2000`,
+    ),
   ],
 );
 

@@ -55,8 +55,11 @@ async function counts(orgId: string): Promise<Record<string, number>> {
   return withOrg(orgId, async () => {
     const out: Record<string, number> = {};
     for (const table of COUNT_TABLES) {
-      const rows = await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from ${sql.raw(table)} where org_id = ${orgId}`, "objects");
+      const rows = await db.execute<{ n: number }>(
+        sql`
+        select count(*)::int as n from ${sql.raw(table)} where org_id = ${orgId}`,
+        "objects",
+      );
       out[table] = rows[0]!.n;
     }
     return out;
@@ -75,8 +78,17 @@ test(
         loadEntities(stubSource(), org.orgId, null, undefined, undefined, [
           ...stream("time_types", [record("TT-1", { name: "Regular", costMultiplier: "1.5" })]),
           ...stream("tax_codes", [record("TX-1", { code: "GST", ratePercent: "5" })]),
-          ...stream("payment_terms", [record("PT-1", { name: "Net 30", netDays: 30, discountPercent: "2" })]),
-          ...stream("items", [record("IT-1", { name: "Labour", kind: "service", defaultCost: "50", defaultRate: "100" })]),
+          ...stream("payment_terms", [
+            record("PT-1", { name: "Net 30", netDays: 30, discountPercent: "2" }),
+          ]),
+          ...stream("items", [
+            record("IT-1", {
+              name: "Labour",
+              kind: "service",
+              defaultCost: "50",
+              defaultRate: "100",
+            }),
+          ]),
           ...stream("projects", [record("PR-1", { name: "Job", contractValue: "10000" })]),
         ]),
       );
@@ -90,7 +102,9 @@ test(
           ...stream("time_types", [record("TT-2", { name: "Bad", costMultiplier: "12,34" })]),
           ...stream("tax_codes", [record("TX-2", { code: "BAD", ratePercent: "1.23456" })]),
           ...stream("payment_terms", [record("PT-2", { name: "Bad", discountPercent: "12,34" })]),
-          ...stream("items", [record("IT-2", { name: "Bad", defaultCost: "12,34", defaultRate: "1.23456" })]),
+          ...stream("items", [
+            record("IT-2", { name: "Bad", defaultCost: "12,34", defaultRate: "1.23456" }),
+          ]),
           ...stream("projects", [record("PR-2", { name: "Bad", contractValue: "12,34" })]),
         ]),
       );
@@ -103,7 +117,11 @@ test(
       ];
       for (const [resource, message] of complaints) {
         assert.equal(bad[resource]?.failed, 1, `${resource} refuses`);
-        assert.match(bad[resource]?.errors[0]?.message ?? "", message, `${resource} names the field`);
+        assert.match(
+          bad[resource]?.errors[0]?.message ?? "",
+          message,
+          `${resource} names the field`,
+        );
       }
       // Nothing new landed anywhere.
       assert.deepEqual(await counts(org.orgId), landed);
@@ -120,21 +138,46 @@ test(
     const org = await createScratchOrg();
     try {
       const first = await withOrg(org.orgId, () =>
-        loadEntities(stubSource(), org.orgId, null, undefined, undefined,
-          stream("payment_terms", [record("PT-9", { name: "Net 30", netDays: 30, discountPercent: "2" })])),
+        loadEntities(
+          stubSource(),
+          org.orgId,
+          null,
+          undefined,
+          undefined,
+          stream("payment_terms", [
+            record("PT-9", { name: "Net 30", netDays: 30, discountPercent: "2" }),
+          ]),
+        ),
       );
       assert.equal(first.payment_terms?.failed ?? -1, 0);
       const second = await withOrg(org.orgId, () =>
-        loadEntities(stubSource(), org.orgId, null, undefined, undefined,
-          stream("payment_terms", [record("PT-9", { name: "Net 30", netDays: 30, discountPercent: "1.23456" })])),
+        loadEntities(
+          stubSource(),
+          org.orgId,
+          null,
+          undefined,
+          undefined,
+          stream("payment_terms", [
+            record("PT-9", { name: "Net 30", netDays: 30, discountPercent: "1.23456" }),
+          ]),
+        ),
       );
       assert.equal(second.payment_terms?.failed, 1);
-      assert.match(second.payment_terms?.errors[0]?.message ?? "", /payment-term discount must be an exact decimal/);
-      const kept = await withOrg(org.orgId, () =>
-        db.execute<{ discount: string }>(sql`
-          select discount_percent::text as discount from payment_terms where org_id = ${org.orgId}`, "objects"),
+      assert.match(
+        second.payment_terms?.errors[0]?.message ?? "",
+        /payment-term discount must be an exact decimal/,
       );
-      assert.deepEqual(kept.map((row) => row.discount), ["2.0000"]);
+      const kept = await withOrg(org.orgId, () =>
+        db.execute<{ discount: string }>(
+          sql`
+          select discount_percent::text as discount from payment_terms where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(
+        kept.map((row) => row.discount),
+        ["2.0000"],
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -148,8 +191,16 @@ test(
     const org = await createScratchOrg();
     try {
       const seeded = await withOrg(org.orgId, () =>
-        loadEntities(stubSource(), org.orgId, null, undefined, undefined,
-          stream("parties", [record("EMP-1", { displayName: "Crew", kind: "company", isActive: true })])),
+        loadEntities(
+          stubSource(),
+          org.orgId,
+          null,
+          undefined,
+          undefined,
+          stream("parties", [
+            record("EMP-1", { displayName: "Crew", kind: "company", isActive: true }),
+          ]),
+        ),
       );
       assert.equal(seeded.parties?.failed ?? -1, 0);
       const cases: Array<{ field: string; message: RegExp }> = [
@@ -160,13 +211,23 @@ test(
       for (const [index, { field, message }] of cases.entries()) {
         await assert.rejects(
           withOrg(org.orgId, () =>
-            loadEntities(stubSource(), org.orgId, null, undefined, undefined,
-              stream("time_entries", [record(`TE-${index}`, {
-                employeeRef: "EMP-1", workedOn: "2026-07-15",
-                hours: field === "hours" ? "12,34" : "8",
-                costRate: field === "costRate" ? "1.23456" : "50",
-                billRate: field === "billRate" ? "12,34" : "100",
-              })]))),
+            loadEntities(
+              stubSource(),
+              org.orgId,
+              null,
+              undefined,
+              undefined,
+              stream("time_entries", [
+                record(`TE-${index}`, {
+                  employeeRef: "EMP-1",
+                  workedOn: "2026-07-15",
+                  hours: field === "hours" ? "12,34" : "8",
+                  costRate: field === "costRate" ? "1.23456" : "50",
+                  billRate: field === "billRate" ? "12,34" : "100",
+                }),
+              ]),
+            ),
+          ),
           (error: unknown) => error instanceof Error && message.test(error.message),
           `time entry ${field}`,
         );

@@ -72,7 +72,9 @@ async function startFakeAvalara(): Promise<FakeAvalara> {
         return;
       }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ code: body.code, committed: true, totalTax: Number(fake.totalTax) }));
+      res.end(
+        JSON.stringify({ code: body.code, committed: true, totalTax: Number(fake.totalTax) }),
+      );
       return;
     }
     const voidMatch = url.match(/^\/api\/v2\/companies\/[^/]+\/transactions\/([^/]+)\/void$/);
@@ -96,7 +98,10 @@ async function startFakeAvalara(): Promise<FakeAvalara> {
 }
 
 async function seedProviderConfig(org: Org, actorId: string, baseUrl: string): Promise<void> {
-  const secrets = sealJson({ accountId: "fake-account", licenseKey: "fake-key" }, { orgId: org.orgId, purpose: "tax.provider.secrets" });
+  const secrets = sealJson(
+    { accountId: "fake-account", licenseKey: "fake-key" },
+    { orgId: org.orgId, purpose: "tax.provider.secrets" },
+  );
   await db.execute(sql`
     insert into tax_rate_provider_configs
       (org_id, provider, display_name, is_enabled, prefer_provider, settings, secrets, created_by, updated_by)
@@ -119,7 +124,12 @@ async function seedTaxCode(org: Org, actorId: string): Promise<string> {
 }
 
 /** Approved invoice: one merchant line, tax evidence written inline. */
-async function seedInvoice(org: Org, actorId: string, number: string, codeId: string): Promise<string> {
+async function seedInvoice(
+  org: Org,
+  actorId: string,
+  number: string,
+  codeId: string,
+): Promise<string> {
   const documentId = randomUUID();
   const lineId = randomUUID();
   await db.transaction(async (tx) => {
@@ -146,12 +156,18 @@ async function seedInvoice(org: Org, actorId: string, number: string, codeId: st
       values (${org.orgId}, ${lineId}, ${codeId}, 1, '10.0000', '100.0000',
               '10.0000', '0.0000', '10.0000', 'standard', false, false, 2,
               ${org.accounts.taxOutput}, null, null, false, ${actorId}, ${actorId})`);
-    await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+    await tx.execute(
+      sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+    );
   });
   return documentId;
 }
 
-const CONTROL = (org: Org) => ({ ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank });
+const CONTROL = (org: Org) => ({
+  ar: org.accounts.ar,
+  ap: org.accounts.ap,
+  bank: org.accounts.bank,
+});
 const SCAN_OPTIONS = { allowPrivateEndpoints: true } as const;
 
 async function commitRow(org: Org, documentId: string) {
@@ -196,46 +212,50 @@ test("post enqueues the commit and the scan commits it exactly once", { skip: !D
   }
 });
 
-test("a 500 retries with backoff and a terminal failure retries on demand", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const fake = await startFakeAvalara();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Commit Retrier", "admin");
-    await seedProviderConfig(org, actorId, fake.baseUrl);
-    const codeId = await seedTaxCode(org, actorId);
-    const documentId = await seedInvoice(org, actorId, "INV-COMMIT-2", codeId);
-    await postDocument(documentId, { control: CONTROL(org) });
+test(
+  "a 500 retries with backoff and a terminal failure retries on demand",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const fake = await startFakeAvalara();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Commit Retrier", "admin");
+      await seedProviderConfig(org, actorId, fake.baseUrl);
+      const codeId = await seedTaxCode(org, actorId);
+      const documentId = await seedInvoice(org, actorId, "INV-COMMIT-2", codeId);
+      await postDocument(documentId, { control: CONTROL(org) });
 
-    fake.totalTax = null;
-    await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
-    let row = await commitRow(org, documentId);
-    assert.equal(row.status, "pending");
-    assert.equal(row.attempts, 1);
-    assert.match(row.lastError ?? "", /Avalara 500/);
+      fake.totalTax = null;
+      await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
+      let row = await commitRow(org, documentId);
+      assert.equal(row.status, "pending");
+      assert.equal(row.attempts, 1);
+      assert.match(row.lastError ?? "", /Avalara 500/);
 
-    // Force the attempt ceiling to prove the terminal state is visible.
-    await db.execute(sql`
+      // Force the attempt ceiling to prove the terminal state is visible.
+      await db.execute(sql`
       update tax_provider_transactions set attempts = 99, next_attempt_at = now()
        where id = ${row.id} and org_id = ${org.orgId}`);
-    await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
-    row = await commitRow(org, documentId);
-    assert.equal(row.status, "failed");
-    assert.match(row.lastError ?? "", /Avalara 500/);
+      await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
+      row = await commitRow(org, documentId);
+      assert.equal(row.status, "failed");
+      assert.match(row.lastError ?? "", /Avalara 500/);
 
-    // The operator fixes the provider and retries: the row re-arms and commits.
-    fake.totalTax = "10.0000";
-    await retryProviderTransaction(org.orgId, row.id, actorId);
-    row = await commitRow(org, documentId);
-    assert.equal(row.status, "pending");
-    assert.equal(row.attempts, 0);
-    await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
-    row = await commitRow(org, documentId);
-    assert.equal(row.status, "committed");
-  } finally {
-    await fake.close();
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // The operator fixes the provider and retries: the row re-arms and commits.
+      fake.totalTax = "10.0000";
+      await retryProviderTransaction(org.orgId, row.id, actorId);
+      row = await commitRow(org, documentId);
+      assert.equal(row.status, "pending");
+      assert.equal(row.attempts, 0);
+      await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
+      row = await commitRow(org, documentId);
+      assert.equal(row.status, "committed");
+    } finally {
+      await fake.close();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("void after commit voids the provider transaction", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -271,39 +291,48 @@ test("void after commit voids the provider transaction", { skip: !DB }, async ()
   }
 });
 
-test("a provider total that disagrees with posted tax is recorded, never adjusted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const fake = await startFakeAvalara();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Commit Auditor", "admin");
-    await seedProviderConfig(org, actorId, fake.baseUrl);
-    const codeId = await seedTaxCode(org, actorId);
-    const documentId = await seedInvoice(org, actorId, "INV-COMMIT-4", codeId);
-    await postDocument(documentId, { control: CONTROL(org) });
+test(
+  "a provider total that disagrees with posted tax is recorded, never adjusted",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const fake = await startFakeAvalara();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Commit Auditor", "admin");
+      await seedProviderConfig(org, actorId, fake.baseUrl);
+      const codeId = await seedTaxCode(org, actorId);
+      const documentId = await seedInvoice(org, actorId, "INV-COMMIT-4", codeId);
+      await postDocument(documentId, { control: CONTROL(org) });
 
-    // The provider prices the same lines a cent higher than the ledger.
-    fake.totalTax = "10.0100";
-    await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
-    const row = await commitRow(org, documentId);
-    assert.equal(row.status, "committed");
-    const excerpt = row.providerResponseExcerpt as {
-      postedTax?: string;
-      merchantTax?: string;
-      providerTax?: string;
-      mismatch?: string;
-    };
-    assert.equal(excerpt.postedTax, "10.0000");
-    assert.equal(excerpt.merchantTax, "10.0000");
-    assert.equal(excerpt.providerTax, "10.0100");
-    assert.equal(excerpt.mismatch, "10.0100");
+      // The provider prices the same lines a cent higher than the ledger.
+      fake.totalTax = "10.0100";
+      await runTaxProviderCommitScanForOrg(org.orgId, SCAN_OPTIONS);
+      const row = await commitRow(org, documentId);
+      assert.equal(row.status, "committed");
+      const excerpt = row.providerResponseExcerpt as {
+        postedTax?: string;
+        merchantTax?: string;
+        providerTax?: string;
+        mismatch?: string;
+      };
+      assert.equal(excerpt.postedTax, "10.0000");
+      assert.equal(excerpt.merchantTax, "10.0000");
+      assert.equal(excerpt.providerTax, "10.0100");
+      assert.equal(excerpt.mismatch, "10.0100");
 
-    // The books stand: the liability is the posted ten, not the provider's.
-    const liability = (await db.execute<{ total: string }>(sql`
+      // The books stand: the liability is the posted ten, not the provider's.
+      const liability = (
+        await db.execute<{ total: string }>(
+          sql`
       select sum(amount)::text as total from journal_lines
-       where org_id = ${org.orgId} and tax_code_id = ${codeId}`, "objects"))[0]?.total;
-    assert.equal(liability, "-10.0000");
-  } finally {
-    await fake.close();
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and tax_code_id = ${codeId}`,
+          "objects",
+        )
+      )[0]?.total;
+      assert.equal(liability, "-10.0000");
+    } finally {
+      await fake.close();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

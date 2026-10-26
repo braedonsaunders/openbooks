@@ -72,12 +72,19 @@ export async function storeEmailAttachments(
         const id = emailStagingKey(opts.storageKeySeed, index, attachment.filename);
         await putEmailAttachmentBlob(id, bytes, contentType);
         writtenStorageKeys.push(id);
-        stored.push({ filename: attachment.filename, contentType: attachment.contentType, storageKey: id });
+        stored.push({
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          storageKey: id,
+        });
       } else {
         stored.push({
           filename: attachment.filename,
           contentType: attachment.contentType,
-          sealed: sealSecret(attachment.content, { orgId: opts.orgId, purpose: "email.attachment" }),
+          sealed: sealSecret(attachment.content, {
+            orgId: opts.orgId,
+            purpose: "email.attachment",
+          }),
         });
       }
     }
@@ -123,7 +130,11 @@ export async function loadEmailAttachments(
           `email attachment ${attachment.filename} is missing from object storage; refusing to send a truncated message`,
         );
       }
-      loaded.push({ filename: attachment.filename, contentType: attachment.contentType, content: bytes.toString("base64") });
+      loaded.push({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        content: bytes.toString("base64"),
+      });
       continue;
     }
     let content: string;

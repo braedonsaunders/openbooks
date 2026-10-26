@@ -22,7 +22,11 @@ export async function lockApplicationEvidence(
   additionalDocumentIds: readonly string[] = [],
   additionalEntryIds: readonly string[] = [],
   options: { nowait?: boolean } = {},
-): Promise<{ documentIds: readonly string[]; entryIds: readonly string[]; lineIds: readonly string[] }> {
+): Promise<{
+  documentIds: readonly string[];
+  entryIds: readonly string[];
+  lineIds: readonly string[];
+}> {
   return lockApplicationEvidenceWithQuery(
     async (statement: SQL) => {
       const result = await tx.execute<Record<string, unknown>>(statement, "objects");
@@ -43,7 +47,11 @@ export async function lockApplicationEvidenceWithQuery(
   additionalDocumentIds: readonly string[] = [],
   additionalEntryIds: readonly string[] = [],
   options: { nowait?: boolean } = {},
-): Promise<{ documentIds: readonly string[]; entryIds: readonly string[]; lineIds: readonly string[] }> {
+): Promise<{
+  documentIds: readonly string[];
+  entryIds: readonly string[];
+  lineIds: readonly string[];
+}> {
   const lockClause = options.nowait ? sql`for update nowait` : sql`for update`;
   // One typed array keeps complete mirror graphs within PostgreSQL parameter
   // limits while retaining the same document → entry → line lock order.
@@ -52,12 +60,14 @@ export async function lockApplicationEvidenceWithQuery(
   const requestedEntries = new Set(additionalEntryIds);
   const endpointEntryIds = new Map<string, string>();
   if (requestedLines.length > 0) {
-    const owners = (await execute(sql`
+    const owners = (
+      await execute(sql`
       select line.id as "lineId", line.entry_id as "entryId", entry.source_document_id as "documentId"
         from journal_lines line
         join journal_entries entry on entry.id = line.entry_id and entry.org_id = line.org_id
        where line.org_id = ${orgId} and line.id = any(${sql.param(requestedLines)}::uuid[])
-    `)).rows as { lineId: string; entryId: string; documentId: string | null }[];
+    `)
+    ).rows as { lineId: string; entryId: string; documentId: string | null }[];
     if (owners.length !== requestedLines.length) {
       throw new Error("application endpoints changed or disappeared; retry the operation");
     }
@@ -70,13 +80,15 @@ export async function lockApplicationEvidenceWithQuery(
 
   const documentIds = [...requestedDocuments].sort();
   if (documentIds.length > 0) {
-    const lockedDocuments = (await execute(sql`
+    const lockedDocuments = (
+      await execute(sql`
       select id
         from documents
        where org_id = ${orgId} and id = any(${sql.param(documentIds)}::uuid[])
        order by id
        ${lockClause}
-    `)).rows;
+    `)
+    ).rows;
     if (lockedDocuments.length !== documentIds.length) {
       throw new Error("an application source document changed or disappeared; retry the operation");
     }
@@ -84,27 +96,34 @@ export async function lockApplicationEvidenceWithQuery(
 
   const entryIds = [...requestedEntries].sort();
   if (entryIds.length > 0) {
-    const lockedEntries = (await execute(sql`
+    const lockedEntries = (
+      await execute(sql`
       select id
         from journal_entries
        where org_id = ${orgId} and id = any(${sql.param(entryIds)}::uuid[])
        order by id
        ${lockClause}
-    `)).rows;
+    `)
+    ).rows;
     if (lockedEntries.length !== entryIds.length) {
       throw new Error("an application journal entry changed or disappeared; retry the operation");
     }
   }
 
   if (requestedLines.length > 0) {
-    const lockedLines = (await execute(sql`
+    const lockedLines = (
+      await execute(sql`
       select id, entry_id as "entryId"
         from journal_lines
        where org_id = ${orgId} and id = any(${sql.param(requestedLines)}::uuid[])
        order by id
        ${lockClause}
-    `)).rows as { id: string; entryId: string }[];
-    if (lockedLines.length !== requestedLines.length || lockedLines.some((line) => endpointEntryIds.get(line.id) !== line.entryId)) {
+    `)
+    ).rows as { id: string; entryId: string }[];
+    if (
+      lockedLines.length !== requestedLines.length ||
+      lockedLines.some((line) => endpointEntryIds.get(line.id) !== line.entryId)
+    ) {
       throw new Error("application endpoints changed or disappeared; retry the operation");
     }
   }

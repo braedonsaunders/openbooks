@@ -6,10 +6,7 @@ import type { SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, mul, neg } from "../money/money.ts";
-import {
-  applyAmendment,
-  subscriptionComponentTotal,
-} from "../billing/advanced-subscriptions.ts";
+import { applyAmendment, subscriptionComponentTotal } from "../billing/advanced-subscriptions.ts";
 import {
   changeSubscription,
   monthlyRecurringRevenue,
@@ -36,14 +33,24 @@ export const PORTAL_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 
 async function requirePortalFeature(runner: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(runner, orgId, PORTAL_FEATURE))) {
-    throw portalRefusal("The customer portal is turned off for this organization", "feature_disabled", 404, PORTAL_FEATURE_REMEDY);
+    throw portalRefusal(
+      "The customer portal is turned off for this organization",
+      "feature_disabled",
+      404,
+      PORTAL_FEATURE_REMEDY,
+    );
   }
 }
 
 function parsePortalDecimal(value: unknown, label: string, remedy: string): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) {
-    throw portalRefusal(`${label} must be a plain number with up to four decimals`, "invalid_input", 422, remedy);
+    throw portalRefusal(
+      `${label} must be a plain number with up to four decimals`,
+      "invalid_input",
+      422,
+      remedy,
+    );
   }
   return exact;
 }
@@ -63,8 +70,14 @@ type ClassicSubRow = {
   advanced_lifecycle: boolean;
 };
 
-async function loadClassicSub(runner: SqlExecutor, orgId: string, subscriptionId: string): Promise<ClassicSubRow> {
-  const row = (await runner.execute<ClassicSubRow>(sql`
+async function loadClassicSub(
+  runner: SqlExecutor,
+  orgId: string,
+  subscriptionId: string,
+): Promise<ClassicSubRow> {
+  const row = (
+    await runner.execute<ClassicSubRow>(
+      sql`
     select s.id, s.status, s.quantity::text as quantity, s.price_override::text as price_override,
            s.start_on::text as start_on, s.current_period_start::text as current_period_start,
            s.next_bill_on::text as next_bill_on, p.amount::text as plan_amount,
@@ -76,8 +89,17 @@ async function loadClassicSub(runner: SqlExecutor, orgId: string, subscriptionId
       left join subscription_lifecycles sl on sl.org_id = s.org_id and sl.subscription_id = s.id
      where s.org_id = ${orgId} and s.id = ${subscriptionId}
      limit 1
-  `, "objects"))[0];
-  if (!row) throw portalRefusal("That subscription was not found in your account", "not_found", 404, "Return to your portal home and choose from your own subscriptions");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!row)
+    throw portalRefusal(
+      "That subscription was not found in your account",
+      "not_found",
+      404,
+      "Return to your portal home and choose from your own subscriptions",
+    );
   return row;
 }
 
@@ -103,28 +125,51 @@ export type SubscriptionPreview = {
 export async function previewSubscriptionChange(
   orgId: string,
   partyId: string,
-  input: { subscriptionId: string; quantity?: unknown; componentKey?: string; effectiveOn?: string },
+  input: {
+    subscriptionId: string;
+    quantity?: unknown;
+    componentKey?: string;
+    effectiveOn?: string;
+  },
 ): Promise<SubscriptionPreview> {
   return withOrgTransaction(orgId, async () => {
     await requirePortalFeature(db, orgId);
     await assertPortalSubscription(db, orgId, partyId, input.subscriptionId);
     const sub = await loadClassicSub(db, orgId, input.subscriptionId);
     if (sub.status === "canceled") {
-      throw portalRefusal("This subscription is canceled", "wrong_state", 409, "Contact your supplier to start a new subscription");
+      throw portalRefusal(
+        "This subscription is canceled",
+        "wrong_state",
+        409,
+        "Contact your supplier to start a new subscription",
+      );
     }
-    const effectiveOn = input.effectiveOn ?? await businessToday(orgId);
+    const effectiveOn = input.effectiveOn ?? (await businessToday(orgId));
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveOn)) {
-      throw portalRefusal("The change date must be a calendar date", "invalid_input", 422, "Pick the date the change takes effect");
+      throw portalRefusal(
+        "The change date must be a calendar date",
+        "invalid_input",
+        422,
+        "Pick the date the change takes effect",
+      );
     }
     const periodStart = sub.current_period_start ?? sub.start_on;
     const periodEnd = sub.next_bill_on;
     if (sub.advanced_lifecycle) {
-      return previewAdvancedChange(orgId, input.subscriptionId, input, periodStart, periodEnd, effectiveOn);
+      return previewAdvancedChange(
+        orgId,
+        input.subscriptionId,
+        input,
+        periodStart,
+        periodEnd,
+        effectiveOn,
+      );
     }
     const oldPrice = sub.price_override ?? sub.plan_amount;
-    const newQuantity = input.quantity !== undefined
-      ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need")
-      : sub.quantity;
+    const newQuantity =
+      input.quantity !== undefined
+        ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need")
+        : sub.quantity;
     const beforeTotal = mul(
       normalizeSubscriptionMoney(sub.quantity, "quantity", "positive"),
       normalizeSubscriptionMoney(oldPrice, "price", "nonnegative"),
@@ -134,8 +179,24 @@ export async function previewSubscriptionChange(
       normalizeSubscriptionMoney(oldPrice, "price", "nonnegative"),
     );
     const cadence = normalizeSubscriptionCadence(sub.plan_interval, sub.plan_interval_count);
-    const beforeRemaining = remainingPeriodProration(beforeTotal, periodStart, periodEnd, effectiveOn, cadence.interval, cadence.intervalCount, sub.anchor_day);
-    const afterRemaining = remainingPeriodProration(afterTotal, periodStart, periodEnd, effectiveOn, cadence.interval, cadence.intervalCount, sub.anchor_day);
+    const beforeRemaining = remainingPeriodProration(
+      beforeTotal,
+      periodStart,
+      periodEnd,
+      effectiveOn,
+      cadence.interval,
+      cadence.intervalCount,
+      sub.anchor_day,
+    );
+    const afterRemaining = remainingPeriodProration(
+      afterTotal,
+      periodStart,
+      periodEnd,
+      effectiveOn,
+      cadence.interval,
+      cadence.intervalCount,
+      sub.anchor_day,
+    );
     const adjustment = add(afterRemaining, neg(beforeRemaining));
     return {
       beforeTotal,
@@ -158,28 +219,60 @@ async function previewAdvancedChange(
   effectiveOn: string,
 ): Promise<SubscriptionPreview> {
   if (!input.componentKey?.trim()) {
-    throw portalRefusal("Choose the subscription line to change", "invalid_input", 422, "Pick one subscription line to upgrade or downgrade");
+    throw portalRefusal(
+      "Choose the subscription line to change",
+      "invalid_input",
+      422,
+      "Pick one subscription line to upgrade or downgrade",
+    );
   }
-  const components = await db.execute<{ componentKey: string; quantity: string; unitPrice: string }>(sql`
+  const components = await db.execute<{
+    componentKey: string;
+    quantity: string;
+    unitPrice: string;
+  }>(
+    sql`
     select component_key as "componentKey", quantity::text as quantity, unit_price::text as "unitPrice"
       from subscription_components
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
        and effective_from <= ${effectiveOn} and (effective_to is null or effective_to >= ${effectiveOn})
-  `, "objects");
+  `,
+    "objects",
+  );
   const current = components.find((component) => component.componentKey === input.componentKey);
   if (!current) {
-    throw portalRefusal("That subscription line is not active", "invalid_input", 422, "Pick an active subscription line");
+    throw portalRefusal(
+      "That subscription line is not active",
+      "invalid_input",
+      422,
+      "Pick an active subscription line",
+    );
   }
-  const before = components.map((component) => ({ quantity: component.quantity, unitPrice: component.unitPrice }));
-  const after = components.map((component) => component.componentKey === input.componentKey
-    ? {
-      quantity: input.quantity !== undefined ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need") : component.quantity,
-      unitPrice: component.unitPrice,
-    }
-    : { quantity: component.quantity, unitPrice: component.unitPrice });
+  const before = components.map((component) => ({
+    quantity: component.quantity,
+    unitPrice: component.unitPrice,
+  }));
+  const after = components.map((component) =>
+    component.componentKey === input.componentKey
+      ? {
+          quantity:
+            input.quantity !== undefined
+              ? parsePortalDecimal(
+                  input.quantity,
+                  "Quantity",
+                  "Enter how many seats or units you need",
+                )
+              : component.quantity,
+          unitPrice: component.unitPrice,
+        }
+      : { quantity: component.quantity, unitPrice: component.unitPrice },
+  );
   const beforeTotal = subscriptionComponentTotal(before).toString();
   const afterTotal = subscriptionComponentTotal(after).toString();
-  const adjustment = add(prorate(afterTotal, periodStart, periodEnd, effectiveOn), neg(prorate(beforeTotal, periodStart, periodEnd, effectiveOn)));
+  const adjustment = add(
+    prorate(afterTotal, periodStart, periodEnd, effectiveOn),
+    neg(prorate(beforeTotal, periodStart, periodEnd, effectiveOn)),
+  );
   return {
     beforeTotal,
     afterTotal,
@@ -207,7 +300,12 @@ export async function applySubscriptionChange(
   orgId: string,
   partyId: string,
   linkId: string,
-  input: { subscriptionId: string; quantity?: unknown; componentKey?: string; effectiveOn?: string },
+  input: {
+    subscriptionId: string;
+    quantity?: unknown;
+    componentKey?: string;
+    effectiveOn?: string;
+  },
 ): Promise<AppliedSubscriptionChange> {
   const preview = await previewSubscriptionChange(orgId, partyId, input);
   const sub = await withOrgTransaction(orgId, async () => {
@@ -215,28 +313,55 @@ export async function applySubscriptionChange(
     return loadClassicSub(db, orgId, input.subscriptionId);
   });
   if (sub.advanced_lifecycle) {
-    const amendment = await applyAmendment(orgId, null, {
-      subscriptionId: input.subscriptionId,
-      type: "change_component",
-      componentKey: input.componentKey!.trim(),
-      quantity: input.quantity !== undefined ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need") : undefined,
-      effectiveOn: preview.effectiveOn,
-      idempotencyKey: randomUUID(),
-      reason: "Customer portal change",
-    }, { system: { origin: "customer_portal", detail: { partyId, linkId } } });
+    const amendment = await applyAmendment(
+      orgId,
+      null,
+      {
+        subscriptionId: input.subscriptionId,
+        type: "change_component",
+        componentKey: input.componentKey!.trim(),
+        quantity:
+          input.quantity !== undefined
+            ? parsePortalDecimal(
+                input.quantity,
+                "Quantity",
+                "Enter how many seats or units you need",
+              )
+            : undefined,
+        effectiveOn: preview.effectiveOn,
+        idempotencyKey: randomUUID(),
+        reason: "Customer portal change",
+      },
+      { system: { origin: "customer_portal", detail: { partyId, linkId } } },
+    );
     await withOrgTransaction(orgId, async () => {
       await recordPortalEvent(db, orgId, {
-        partyId, linkId, action: "subscription_changed", reasonCode: null,
-        detail: { subscriptionId: input.subscriptionId, amendmentId: amendment.id, adjustment: preview.adjustment },
+        partyId,
+        linkId,
+        action: "subscription_changed",
+        reasonCode: null,
+        detail: {
+          subscriptionId: input.subscriptionId,
+          amendmentId: amendment.id,
+          adjustment: preview.adjustment,
+        },
       });
     });
-    return { adjustment: preview.adjustment, invoiceId: null, documentNumber: null, amendmentId: amendment.id };
+    return {
+      adjustment: preview.adjustment,
+      invoiceId: null,
+      documentNumber: null,
+      amendmentId: amendment.id,
+    };
   }
   const change = await changeSubscription(
     orgId,
     input.subscriptionId,
     {
-      quantity: input.quantity !== undefined ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need") : undefined,
+      quantity:
+        input.quantity !== undefined
+          ? parsePortalDecimal(input.quantity, "Quantity", "Enter how many seats or units you need")
+          : undefined,
     },
     preview.effectiveOn,
     { actorId: null },
@@ -245,14 +370,24 @@ export async function applySubscriptionChange(
   await withOrgTransaction(orgId, async () => {
     await assertPortalSubscription(db, orgId, partyId, input.subscriptionId);
     await recordPortalEvent(db, orgId, {
-      partyId, linkId, action: "subscription_changed", reasonCode: null,
+      partyId,
+      linkId,
+      action: "subscription_changed",
+      reasonCode: null,
       detail: {
-        subscriptionId: input.subscriptionId, adjustment: change.adjustment,
-        invoiceId: change.invoiceId, documentNumber: change.documentNumber,
+        subscriptionId: input.subscriptionId,
+        adjustment: change.adjustment,
+        invoiceId: change.invoiceId,
+        documentNumber: change.documentNumber,
       },
     });
   });
-  return { adjustment: change.adjustment, invoiceId: change.invoiceId, documentNumber: change.documentNumber, amendmentId: null };
+  return {
+    adjustment: change.adjustment,
+    invoiceId: change.invoiceId,
+    documentNumber: change.documentNumber,
+    amendmentId: null,
+  };
 }
 
 export type SubscriptionTransition = { status: string };
@@ -279,7 +414,12 @@ async function transitionSubscription(
       );
     }
     if (sub.status === "canceled") {
-      throw portalRefusal("This subscription is already canceled", "wrong_state", 409, "Contact your supplier to start a new subscription");
+      throw portalRefusal(
+        "This subscription is already canceled",
+        "wrong_state",
+        409,
+        "Contact your supplier to start a new subscription",
+      );
     }
     if (sub.status === "suspended") {
       throw portalRefusal(
@@ -290,39 +430,93 @@ async function transitionSubscription(
       );
     }
     if (sub.status === to) {
-      throw portalRefusal(`This subscription is already ${to}`, "wrong_state", 409, "Choose a different change");
+      throw portalRefusal(
+        `This subscription is already ${to}`,
+        "wrong_state",
+        409,
+        "Choose a different change",
+      );
     }
     if (to === "canceled" && !reason?.trim()) {
-      throw portalRefusal("Tell us why you are canceling", "invalid_input", 422, "Write a sentence about why you are canceling");
+      throw portalRefusal(
+        "Tell us why you are canceling",
+        "invalid_input",
+        422,
+        "Write a sentence about why you are canceling",
+      );
     }
     const today = await businessToday(orgId);
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = (
+      await db.execute<{ id: string }>(
+        sql`
       update subscriptions
          set status = ${to},
              canceled_on = case when ${to} = 'canceled' then ${today} else canceled_on end,
              updated_at = now(), updated_by = ${PORTAL_ACTOR_ID}
        where org_id = ${orgId} and id = ${subscriptionId} and status = ${sub.status}
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
-      throw portalRefusal("The subscription changed while saving", "changed_concurrently", 409, "Reload the subscription and try again");
+      throw portalRefusal(
+        "The subscription changed while saving",
+        "changed_concurrently",
+        409,
+        "Reload the subscription and try again",
+      );
     }
     await recordPortalEvent(db, orgId, {
-      partyId, linkId, action, reasonCode: null,
-      detail: { subscriptionId, from: sub.status, to, ...(reason?.trim() ? { reason: reason.trim().slice(0, 200) } : {}) },
+      partyId,
+      linkId,
+      action,
+      reasonCode: null,
+      detail: {
+        subscriptionId,
+        from: sub.status,
+        to,
+        ...(reason?.trim() ? { reason: reason.trim().slice(0, 200) } : {}),
+      },
     });
     return { status: to };
   });
 }
 
 /** Pause billing on a classic subscription; the contract stays for reactivation. */
-export async function pauseSubscription(orgId: string, partyId: string, linkId: string, subscriptionId: string): Promise<SubscriptionTransition> {
-  return transitionSubscription(orgId, partyId, linkId, subscriptionId, "paused", null, "subscription_paused");
+export async function pauseSubscription(
+  orgId: string,
+  partyId: string,
+  linkId: string,
+  subscriptionId: string,
+): Promise<SubscriptionTransition> {
+  return transitionSubscription(
+    orgId,
+    partyId,
+    linkId,
+    subscriptionId,
+    "paused",
+    null,
+    "subscription_paused",
+  );
 }
 
 /** Resume a paused classic subscription. */
-export async function resumeSubscription(orgId: string, partyId: string, linkId: string, subscriptionId: string): Promise<SubscriptionTransition> {
-  return transitionSubscription(orgId, partyId, linkId, subscriptionId, "active", null, "subscription_resumed");
+export async function resumeSubscription(
+  orgId: string,
+  partyId: string,
+  linkId: string,
+  subscriptionId: string,
+): Promise<SubscriptionTransition> {
+  return transitionSubscription(
+    orgId,
+    partyId,
+    linkId,
+    subscriptionId,
+    "active",
+    null,
+    "subscription_resumed",
+  );
 }
 
 /** Cancel with reason capture; the reason is required and travels in the audit. */
@@ -333,7 +527,15 @@ export async function cancelSubscription(
   subscriptionId: string,
   reason: unknown,
 ): Promise<SubscriptionTransition> {
-  return transitionSubscription(orgId, partyId, linkId, subscriptionId, "canceled", String(reason ?? ""), "subscription_canceled");
+  return transitionSubscription(
+    orgId,
+    partyId,
+    linkId,
+    subscriptionId,
+    "canceled",
+    String(reason ?? ""),
+    "subscription_canceled",
+  );
 }
 
 export type AcceptedSaveOffer = {
@@ -362,13 +564,24 @@ export async function acceptSaveOffer(
     const settings = await readPortalSettings(orgId, db);
     const offer = settings.saveOffers.find((candidate) => candidate.id === input.offerId);
     if (!offer) {
-      throw portalRefusal("That save offer is no longer available", "invalid_input", 422, "Choose one of the current offers or continue canceling");
+      throw portalRefusal(
+        "That save offer is no longer available",
+        "invalid_input",
+        422,
+        "Choose one of the current offers or continue canceling",
+      );
     }
     return offer.kind;
   });
   if (preflight === "pause") {
     await pauseSubscription(orgId, partyId, linkId, input.subscriptionId);
-    return { offerId: input.offerId, kind: "pause", promotionCode: null, discountMinor: null, documentNumber: null };
+    return {
+      offerId: input.offerId,
+      kind: "pause",
+      promotionCode: null,
+      discountMinor: null,
+      documentNumber: null,
+    };
   }
   return withOrgTransaction(orgId, async () => {
     await requirePortalFeature(db, orgId);
@@ -376,9 +589,16 @@ export async function acceptSaveOffer(
     const settings = await readPortalSettings(orgId, db);
     const offer = settings.saveOffers.find((candidate) => candidate.id === input.offerId);
     if (!offer || offer.kind !== "discount") {
-      throw portalRefusal("That save offer is no longer available", "invalid_input", 422, "Choose one of the current offers or continue canceling");
+      throw portalRefusal(
+        "That save offer is no longer available",
+        "invalid_input",
+        422,
+        "Choose one of the current offers or continue canceling",
+      );
     }
-    const draft = (await db.execute<{ id: string; document_number: string }>(sql`
+    const draft = (
+      await db.execute<{ id: string; document_number: string }>(
+        sql`
       select id, document_number
         from documents
        where org_id = ${orgId} and party_id = ${partyId} and status = 'draft'
@@ -386,7 +606,10 @@ export async function acceptSaveOffer(
        order by created_at desc
        limit 1
       for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!draft) {
       throw portalRefusal(
         "There is no open draft to discount",
@@ -402,10 +625,16 @@ export async function acceptSaveOffer(
       allowedSubsidiaryIds: null,
     });
     await recordPortalEvent(db, orgId, {
-      partyId, linkId, action: "save_offer_accepted", reasonCode: null,
+      partyId,
+      linkId,
+      action: "save_offer_accepted",
+      reasonCode: null,
       detail: {
-        subscriptionId: input.subscriptionId, offerId: offer.id, promotionCode: applied.code,
-        discountMinor: applied.discountMinor, documentNumber: draft.document_number,
+        subscriptionId: input.subscriptionId,
+        offerId: offer.id,
+        promotionCode: applied.code,
+        discountMinor: applied.discountMinor,
+        documentNumber: draft.document_number,
       },
     });
     return {
@@ -457,11 +686,22 @@ export async function validatePortalReturn(
         "Choose one of your invoices or delivered shipments to return from",
       );
     }
-    const sourceRow = (await db.execute<{ documentDate: string; subsidiaryId: string }>(sql`
+    const sourceRow = (
+      await db.execute<{ documentDate: string; subsidiaryId: string }>(
+        sql`
       select document_date::text as "documentDate", subsidiary_id as "subsidiaryId"
         from documents where org_id = ${orgId} and id = ${input.sourceDocumentId} limit 1
-    `, "objects"))[0];
-    if (!sourceRow) throw portalRefusal("That record was not found in your account", "not_found", 404, "Return to your portal home and choose from your own records");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!sourceRow)
+      throw portalRefusal(
+        "That record was not found in your account",
+        "not_found",
+        404,
+        "Return to your portal home and choose from your own records",
+      );
     const today = await businessToday(orgId);
     const deadline = returnWindowDeadline(sourceRow.documentDate, settings.returnWindowDays);
     if (today > deadline) {
@@ -472,7 +712,10 @@ export async function validatePortalReturn(
         "Contact your supplier — they can still accept a late return on your behalf",
       );
     }
-    if (typeof input.reasonCode !== "string" || !settings.returnReasons.includes(input.reasonCode)) {
+    if (
+      typeof input.reasonCode !== "string" ||
+      !settings.returnReasons.includes(input.reasonCode)
+    ) {
       throw portalRefusal(
         `Choose one of the accepted return reasons: ${settings.returnReasons.join(", ")}`,
         "return_reason_not_allowed",
@@ -480,14 +723,24 @@ export async function validatePortalReturn(
         "Pick the reason that best matches from the list",
       );
     }
-    if (input.resolution !== "refund" && input.resolution !== "exchange" && input.resolution !== "store_credit") {
-      throw portalRefusal("Choose refund, exchange or store credit", "return_resolution_not_allowed", 422, "Pick how you want the return settled");
+    if (
+      input.resolution !== "refund" &&
+      input.resolution !== "exchange" &&
+      input.resolution !== "store_credit"
+    ) {
+      throw portalRefusal(
+        "Choose refund, exchange or store credit",
+        "return_resolution_not_allowed",
+        422,
+        "Pick how you want the return settled",
+      );
     }
-    const enabled = input.resolution === "refund"
-      ? settings.returnResolutions.refund
-      : input.resolution === "exchange"
-        ? settings.returnResolutions.exchange
-        : settings.returnResolutions.storeCredit;
+    const enabled =
+      input.resolution === "refund"
+        ? settings.returnResolutions.refund
+        : input.resolution === "exchange"
+          ? settings.returnResolutions.exchange
+          : settings.returnResolutions.storeCredit;
     if (!enabled) {
       throw portalRefusal(
         `This supplier does not offer ${input.resolution === "store_credit" ? "store credit" : input.resolution} for portal returns`,
@@ -497,26 +750,47 @@ export async function validatePortalReturn(
       );
     }
     if (!Array.isArray(input.lines) || input.lines.length === 0 || input.lines.length > 50) {
-      throw portalRefusal("Choose 1–50 return lines", "invalid_input", 422, "Select the items you are returning");
+      throw portalRefusal(
+        "Choose 1–50 return lines",
+        "invalid_input",
+        422,
+        "Select the items you are returning",
+      );
     }
     const lines = input.lines.map((line, index) => {
       if (typeof line.sourceIssueMovementId !== "string" || !isUuid(line.sourceIssueMovementId)) {
-        throw portalRefusal(`Return line ${index + 1} names no shipment`, "invalid_input", 422, "Choose a shipped item for every return line");
+        throw portalRefusal(
+          `Return line ${index + 1} names no shipment`,
+          "invalid_input",
+          422,
+          "Choose a shipped item for every return line",
+        );
       }
       return {
         sourceIssueMovementId: line.sourceIssueMovementId.toLowerCase(),
-        quantity: parsePortalDecimal(line.quantity, `Return line ${index + 1} quantity`, "Enter how many you are returning"),
+        quantity: parsePortalDecimal(
+          line.quantity,
+          `Return line ${index + 1} quantity`,
+          "Enter how many you are returning",
+        ),
       };
     });
     // The return window was measured on the chosen document, so every
     // returned shipment must come from that document.
-    const shipped = new Map((await db.execute<{ movementId: string; documentId: string }>(sql`
+    const shipped = new Map(
+      (
+        await db.execute<{ movementId: string; documentId: string }>(
+          sql`
       select movement.id as "movementId", source_line.document_id as "documentId"
         from inventory_movements movement
         join document_lines source_line on source_line.org_id = movement.org_id and source_line.id = movement.document_line_id
        where movement.org_id = ${orgId}
          and movement.id = any(${`{${lines.map((line) => line.sourceIssueMovementId).join(",")}}`}::uuid[])
-    `, "objects")).map((row) => [row.movementId, row.documentId]));
+    `,
+          "objects",
+        )
+      ).map((row) => [row.movementId, row.documentId]),
+    );
     lines.forEach((line, index) => {
       if (shipped.get(line.sourceIssueMovementId) !== input.sourceDocumentId.toLowerCase()) {
         throw portalRefusal(
@@ -535,7 +809,10 @@ export async function validatePortalReturn(
       deadline,
       reasonCode: input.reasonCode,
       resolution: input.resolution,
-      storeCreditBonusPercent: input.resolution === "store_credit" ? settings.returnResolutions.storeCreditBonusPercent : "0",
+      storeCreditBonusPercent:
+        input.resolution === "store_credit"
+          ? settings.returnResolutions.storeCreditBonusPercent
+          : "0",
       lines,
     };
   });

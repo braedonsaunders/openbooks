@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // TagInput — the one chip/tag multi-value text input. A row of removable
 // chips plus a type-ahead over a provided option list, with free entry for
@@ -19,22 +19,22 @@
 // Values are plain strings (what gets stored); options may carry a separate
 // display label but usually value === label.
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import { cn } from './utils'
-import { useHydrated } from './use-hydrated'
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { cn } from "./utils";
+import { useHydrated } from "./use-hydrated";
 
 export type TagOption = {
-  value: string
-  label?: string
-}
+  value: string;
+  label?: string;
+};
 
 /** Case- and whitespace-insensitive identity, matching how free-text values
  *  (e.g. job titles) are compared by the domain engines. */
 function normalizeTag(value: string): string {
-  return value.replace(/\s+/g, ' ').trim().toLowerCase()
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 export function TagInput({
@@ -49,105 +49,109 @@ export function TagInput({
   className,
 }: {
   /** Selected values, in display order. */
-  value: string[]
-  onChange: (next: string[]) => void
+  value: string[];
+  onChange: (next: string[]) => void;
   /** Type-ahead suggestions. Free entry stays available unless `allowNew` is off. */
-  options?: TagOption[]
-  placeholder?: string
-  ariaLabel?: string
-  id?: string
-  disabled?: boolean
+  options?: TagOption[];
+  placeholder?: string;
+  ariaLabel?: string;
+  id?: string;
+  disabled?: boolean;
   /** Allow committing typed text that is not in `options`. */
-  allowNew?: boolean
-  className?: string
+  allowNew?: boolean;
+  className?: string;
 }) {
-  const t = useTranslations('ui.tagInput')
-  const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const [highlight, setHighlight] = useState(0)
-  const mounted = useHydrated()
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const listRef = useRef<HTMLUListElement>(null)
-  const listId = `${useId()}-taglist`
+  const t = useTranslations("ui.tagInput");
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const mounted = useHydrated();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const listId = `${useId()}-taglist`;
 
   // Portaled dropdown anchored to the control (floats above drawer overflow).
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   function place() {
-    const r = wrapRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: r.bottom + 4, left: r.left, width: r.width })
+    const r = wrapRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, left: r.left, width: r.width });
   }
 
-  const selectedKeys = useMemo(() => new Set(value.map(normalizeTag)), [value])
-  const optionLabels = new Map(options.map(option => [normalizeTag(option.value), option.label ?? option.value]))
+  const selectedKeys = useMemo(() => new Set(value.map(normalizeTag)), [value]);
+  const optionLabels = new Map(
+    options.map((option) => [normalizeTag(option.value), option.label ?? option.value]),
+  );
 
   const filtered = useMemo(() => {
-    const q = normalizeTag(query)
+    const q = normalizeTag(query);
     return options.filter((o) => {
-      if (selectedKeys.has(normalizeTag(o.value))) return false
-      if (!q) return true
-      return normalizeTag(o.label ?? o.value).includes(q) || normalizeTag(o.value).includes(q)
-    })
-  }, [options, query, selectedKeys])
+      if (selectedKeys.has(normalizeTag(o.value))) return false;
+      if (!q) return true;
+      return normalizeTag(o.label ?? o.value).includes(q) || normalizeTag(o.value).includes(q);
+    });
+  }, [options, query, selectedKeys]);
 
-  const trimmedQuery = query.replace(/\s+/g, ' ').trim()
+  const trimmedQuery = query.replace(/\s+/g, " ").trim();
   const queryIsNew =
     allowNew &&
-    trimmedQuery !== '' &&
+    trimmedQuery !== "" &&
     !selectedKeys.has(normalizeTag(trimmedQuery)) &&
-    !filtered.some((o) => normalizeTag(o.value) === normalizeTag(trimmedQuery))
+    !filtered.some((o) => normalizeTag(o.value) === normalizeTag(trimmedQuery));
   // Row indices: 0..filtered.length-1 are suggestions; the optional trailing
   // row adds the typed text itself.
-  const rowCount = filtered.length + (queryIsNew ? 1 : 0)
+  const rowCount = filtered.length + (queryIsNew ? 1 : 0);
 
   function add(tag: string) {
-    const clean = tag.replace(/\s+/g, ' ').trim()
-    if (!clean || selectedKeys.has(normalizeTag(clean))) return
-    onChange([...value, clean])
-    setQuery('')
-    setHighlight(0)
+    const clean = tag.replace(/\s+/g, " ").trim();
+    if (!clean || selectedKeys.has(normalizeTag(clean))) return;
+    onChange([...value, clean]);
+    setQuery("");
+    setHighlight(0);
   }
 
   function remove(tag: string) {
-    onChange(value.filter((v) => v !== tag))
-    inputRef.current?.focus()
+    onChange(value.filter((v) => v !== tag));
+    inputRef.current?.focus();
   }
 
   function commitHighlighted() {
-    if (highlightCapped < filtered.length && filtered[highlightCapped]) add(filtered[highlightCapped].value)
-    else if (queryIsNew) add(trimmedQuery)
+    if (highlightCapped < filtered.length && filtered[highlightCapped])
+      add(filtered[highlightCapped].value);
+    else if (queryIsNew) add(trimmedQuery);
   }
 
   function openMenu() {
-    if (disabled) return
-    place()
-    setOpen(true)
+    if (disabled) return;
+    place();
+    setOpen(true);
   }
 
   // Click-outside closes (the dropdown is portaled, so check both trees).
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     function onDoc(e: MouseEvent) {
-      const target = e.target as Node
-      if (wrapRef.current?.contains(target) || listRef.current?.parentElement?.contains(target)) return
-      setOpen(false)
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target) || listRef.current?.parentElement?.contains(target))
+        return;
+      setOpen(false);
     }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [open])
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
 
   // Keep the dropdown anchored while open.
   useEffect(() => {
-    if (!open) return
-    place()
-    const onMove = () => place()
-    window.addEventListener('scroll', onMove, true)
-    window.addEventListener('resize', onMove)
+    if (!open) return;
+    place();
+    const onMove = () => place();
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
     return () => {
-      window.removeEventListener('scroll', onMove, true)
-      window.removeEventListener('resize', onMove)
-    }
-  }, [open])
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  }, [open]);
 
   // Clamp the highlight when the option list shrinks beneath it. This is
   // DERIVED, never stored: a render-phase setHighlight re-renders forever
@@ -157,44 +161,44 @@ export function TagInput({
   // field mounts exactly that state (no options, empty query) and crashed
   // its drawer. A setState-in-effect clamp would also loop the linter, so
   // readers use the capped value and writers keep setting raw indices.
-  const highlightCapped = Math.min(highlight, Math.max(0, rowCount - 1))
+  const highlightCapped = Math.min(highlight, Math.max(0, rowCount - 1));
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (!open) openMenu()
-      setHighlight((h) => Math.min(h + 1, Math.max(0, rowCount - 1)))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlight((h) => Math.max(h - 1, 0))
-    } else if (e.key === 'Enter' || e.key === ',') {
-      if (open || trimmedQuery !== '') {
-        e.preventDefault()
-        commitHighlighted()
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!open) openMenu();
+      setHighlight((h) => Math.min(h + 1, Math.max(0, rowCount - 1)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter" || e.key === ",") {
+      if (open || trimmedQuery !== "") {
+        e.preventDefault();
+        commitHighlighted();
       }
-    } else if (e.key === 'Backspace' && query === '' && value.length > 0) {
-      onChange(value.slice(0, -1))
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Backspace" && query === "" && value.length > 0) {
+      onChange(value.slice(0, -1));
+    } else if (e.key === "Escape") {
       if (open) {
-        e.stopPropagation()
-        setOpen(false)
+        e.stopPropagation();
+        setOpen(false);
       }
     }
   }
 
-  const showMenu = open && rowCount > 0
+  const showMenu = open && rowCount > 0;
 
   return (
-    <div ref={wrapRef} className={cn('relative', className)}>
+    <div ref={wrapRef} className={cn("relative", className)}>
       <div
         onClick={() => {
-          inputRef.current?.focus()
-          openMenu()
+          inputRef.current?.focus();
+          openMenu();
         }}
         className={cn(
-          'flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-1.5 transition-shadow duration-150 dark:border-slate-700 dark:bg-slate-900',
-          'focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/40',
-          disabled && 'cursor-not-allowed bg-slate-50 opacity-70 dark:bg-slate-800',
+          "flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-1.5 transition-shadow duration-150 dark:border-slate-700 dark:bg-slate-900",
+          "focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/40",
+          disabled && "cursor-not-allowed bg-slate-50 opacity-70 dark:bg-slate-800",
         )}
       >
         {value.map((tag) => (
@@ -206,10 +210,10 @@ export function TagInput({
             <button
               type="button"
               disabled={disabled}
-              aria-label={t('remove', { tag: optionLabels.get(normalizeTag(tag)) ?? tag })}
+              aria-label={t("remove", { tag: optionLabels.get(normalizeTag(tag)) ?? tag })}
               onClick={(e) => {
-                e.stopPropagation()
-                remove(tag)
+                e.stopPropagation();
+                remove(tag);
               }}
               className="grid h-4.5 w-4.5 shrink-0 place-items-center rounded text-teal-700/70 hover:bg-teal-100 hover:text-teal-900 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:outline-none dark:text-teal-300/70 dark:hover:bg-teal-900 dark:hover:text-teal-100"
             >
@@ -229,11 +233,11 @@ export function TagInput({
           aria-label={ariaLabel}
           disabled={disabled}
           value={query}
-          placeholder={value.length === 0 ? (placeholder ?? t('placeholder')) : undefined}
+          placeholder={value.length === 0 ? (placeholder ?? t("placeholder")) : undefined}
           onChange={(e) => {
-            setQuery(e.target.value)
-            setHighlight(0)
-            openMenu()
+            setQuery(e.target.value);
+            setHighlight(0);
+            openMenu();
           }}
           onFocus={openMenu}
           onKeyDown={onKeyDown}
@@ -246,10 +250,20 @@ export function TagInput({
         ? createPortal(
             <div
               data-ui-overlay
-              style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 208) }}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                width: Math.max(pos.width, 208),
+              }}
               className="z-[60] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
             >
-              <ul ref={listRef} id={listId} role="listbox" className="max-h-56 overflow-y-auto py-1">
+              <ul
+                ref={listRef}
+                id={listId}
+                role="listbox"
+                className="max-h-56 overflow-y-auto py-1"
+              >
                 {filtered.map((o, i) => (
                   <li key={o.value} role="presentation">
                     <button
@@ -260,12 +274,12 @@ export function TagInput({
                       onMouseEnter={() => setHighlight(i)}
                       // mousedown, not click: keeps focus in the input.
                       onMouseDown={(e) => {
-                        e.preventDefault()
-                        add(o.value)
+                        e.preventDefault();
+                        add(o.value);
                       }}
                       className={cn(
-                        'flex h-9 w-full items-center px-3 text-left text-sm text-slate-700 dark:text-slate-200',
-                        i === highlightCapped && 'bg-teal-50 dark:bg-teal-950/50',
+                        "flex h-9 w-full items-center px-3 text-left text-sm text-slate-700 dark:text-slate-200",
+                        i === highlightCapped && "bg-teal-50 dark:bg-teal-950/50",
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">{o.label ?? o.value}</span>
@@ -281,15 +295,17 @@ export function TagInput({
                       aria-selected={highlightCapped === filtered.length}
                       onMouseEnter={() => setHighlight(filtered.length)}
                       onMouseDown={(e) => {
-                        e.preventDefault()
-                        add(trimmedQuery)
+                        e.preventDefault();
+                        add(trimmedQuery);
                       }}
                       className={cn(
-                        'flex h-9 w-full items-center px-3 text-left text-sm text-teal-700 dark:text-teal-300',
-                        highlightCapped === filtered.length && 'bg-teal-50 dark:bg-teal-950/50',
+                        "flex h-9 w-full items-center px-3 text-left text-sm text-teal-700 dark:text-teal-300",
+                        highlightCapped === filtered.length && "bg-teal-50 dark:bg-teal-950/50",
                       )}
                     >
-                      <span className="min-w-0 flex-1 truncate">{t('add', { value: trimmedQuery })}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {t("add", { value: trimmedQuery })}
+                      </span>
                     </button>
                   </li>
                 ) : null}
@@ -299,5 +315,5 @@ export function TagInput({
           )
         : null}
     </div>
-  )
+  );
 }

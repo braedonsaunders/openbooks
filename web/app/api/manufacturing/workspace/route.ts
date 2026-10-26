@@ -18,14 +18,9 @@ export const GET = defineRoute({
   permission: "manufacturing.read",
   feature: "manufacturing",
   handler: async ({ authz, request }) => {
-    const parsed = Query.safeParse(
-      Object.fromEntries(new URL(request.url).searchParams),
-    );
+    const parsed = Query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!parsed.success)
-      return Response.json(
-        { error: "Invalid manufacturing list filters." },
-        { status: 400 },
-      );
+      return Response.json({ error: "Invalid manufacturing list filters." }, { status: 400 });
     const { view, ...input } = parsed.data;
     return withScopeSnapshot(authz.user.orgId, async () =>
       Response.json(

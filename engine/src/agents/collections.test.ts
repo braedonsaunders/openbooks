@@ -57,7 +57,12 @@ test("collection severity trips at exact age and materiality boundaries", () => 
     "critical",
   );
   assert.equal(
-    classifyCollectionSeverity({ materiality: "1.0000", threshold: "1000.0000", oldestDate: "2026-06-16", now }),
+    classifyCollectionSeverity({
+      materiality: "1.0000",
+      threshold: "1000.0000",
+      oldestDate: "2026-06-16",
+      now,
+    }),
     "critical",
   );
 });
@@ -108,8 +113,20 @@ test("overdue findings rank the call list and keep exact money", async () => {
     },
   ];
   const invoices: OverdueInvoiceRow[] = [
-    { partyId: "p-big", docId: "d1", docNumber: "INV-1", dueDate: "2026-05-01", openBalance: "5000.0000" },
-    { partyId: "p-big", docId: "d2", docNumber: "INV-2", dueDate: "2026-06-01", openBalance: "234.5678" },
+    {
+      partyId: "p-big",
+      docId: "d1",
+      docNumber: "INV-1",
+      dueDate: "2026-05-01",
+      openBalance: "5000.0000",
+    },
+    {
+      partyId: "p-big",
+      docId: "d2",
+      docNumber: "INV-2",
+      dueDate: "2026-06-01",
+      openBalance: "234.5678",
+    },
   ];
   const loaders = stubLoaders({
     overdueCustomers: async () => customers,
@@ -132,7 +149,11 @@ test("overdue findings rank the call list and keep exact money", async () => {
   assert.equal(only.summary.href, MODULE_BY_KEY.get("ar")?.href);
   assert.equal(only.summary.href, "/ar");
   assert.equal(only.evidence.length, 3, "two invoices plus the payment-behaviour datum");
-  assert.equal(only.proposal ?? null, null, "no record-send tool exists: drafts are listed, not dispatched");
+  assert.equal(
+    only.proposal ?? null,
+    null,
+    "no record-send tool exists: drafts are listed, not dispatched",
+  );
 });
 
 test("a disabled overdue control stays silent while promises still fire", async () => {
@@ -164,13 +185,14 @@ test("a disabled overdue control stays silent while promises still fire", async 
     ],
   });
   const detectors = policies().map((detector) =>
-    detector.detectorKey === "overdue_customer_balance" ? { ...detector, enabled: false } : detector,
+    detector.detectorKey === "overdue_customer_balance"
+      ? { ...detector, enabled: false }
+      : detector,
   );
   const findings = await collectionsFindings(ORG, "1000.0000", detectors, loaders);
-  assert.deepEqual(
-    findings.map((finding) => finding.findingType).sort(),
-    ["broken_payment_promise"],
-  );
+  assert.deepEqual(findings.map((finding) => finding.findingType).sort(), [
+    "broken_payment_promise",
+  ]);
 });
 
 test("invoices without a customer surface as one data-quality finding, never a pseudo-customer", async () => {
@@ -202,9 +224,27 @@ test("invoices without a customer surface as one data-quality finding, never a p
       },
     ],
     overdueInvoices: async () => [
-      { partyId: null, docId: "d-n1", docNumber: "INV-N1", dueDate: "2026-06-01", openBalance: "1000.0000" },
-      { partyId: null, docId: "d-n2", docNumber: "INV-N2", dueDate: "2026-06-02", openBalance: "2000.0000" },
-      { partyId: "p1", docId: "d-r1", docNumber: "INV-R1", dueDate: "2026-06-15", openBalance: "2000.0000" },
+      {
+        partyId: null,
+        docId: "d-n1",
+        docNumber: "INV-N1",
+        dueDate: "2026-06-01",
+        openBalance: "1000.0000",
+      },
+      {
+        partyId: null,
+        docId: "d-n2",
+        docNumber: "INV-N2",
+        dueDate: "2026-06-02",
+        openBalance: "2000.0000",
+      },
+      {
+        partyId: "p1",
+        docId: "d-r1",
+        docNumber: "INV-R1",
+        dueDate: "2026-06-15",
+        openBalance: "2000.0000",
+      },
     ],
     brokenPromises: async () => [
       // Above the floor on purpose: the skip must come from the missing
@@ -226,7 +266,9 @@ test("invoices without a customer surface as one data-quality finding, never a p
     `no pseudo-customer fingerprint may survive, got ${findings.map((finding) => finding.fingerprint)}`,
   );
   assert.ok(
-    !findings.some((finding) => String(finding.summary.reminderDraft ?? "").includes("Unspecified")),
+    !findings.some((finding) =>
+      String(finding.summary.reminderDraft ?? "").includes("Unspecified"),
+    ),
     "no reminder draft may be addressed to Unspecified",
   );
   assert.ok(
@@ -251,7 +293,9 @@ test("invoices without a customer surface as one data-quality finding, never a p
   );
   assert.equal(only.evidence.length, 3, "every party-less invoice rides along individually");
   assert.ok(
-    only.evidence.every((item) => item.kind === "customerless_invoice" && item.sourceType === "document"),
+    only.evidence.every(
+      (item) => item.kind === "customerless_invoice" && item.sourceType === "document",
+    ),
     "evidence points at the documents, never a party",
   );
 });
@@ -259,9 +303,33 @@ test("invoices without a customer surface as one data-quality finding, never a p
 test("broken promises group by customer and respect the breach tolerance", async () => {
   const loaders = stubLoaders();
   const seed: BrokenPromiseRow[] = [
-    { partyId: "p1", partyName: "P One", docId: "a", docNumber: "A", expectedPayDate: "2026-06-01", dueDate: null, openBalance: "800.0000" },
-    { partyId: "p1", partyName: "P One", docId: "b", docNumber: "B", expectedPayDate: "2026-06-05", dueDate: null, openBalance: "700.0000" },
-    { partyId: "p2", partyName: "P Two", docId: "c", docNumber: "C", expectedPayDate: "2026-06-02", dueDate: null, openBalance: "100.0000" },
+    {
+      partyId: "p1",
+      partyName: "P One",
+      docId: "a",
+      docNumber: "A",
+      expectedPayDate: "2026-06-01",
+      dueDate: null,
+      openBalance: "800.0000",
+    },
+    {
+      partyId: "p1",
+      partyName: "P One",
+      docId: "b",
+      docNumber: "B",
+      expectedPayDate: "2026-06-05",
+      dueDate: null,
+      openBalance: "700.0000",
+    },
+    {
+      partyId: "p2",
+      partyName: "P Two",
+      docId: "c",
+      docNumber: "C",
+      expectedPayDate: "2026-06-02",
+      dueDate: null,
+      openBalance: "100.0000",
+    },
   ];
   loaders.brokenPromises = async (_orgId, cutoff) => {
     loaders.seen.cutoff = cutoff;

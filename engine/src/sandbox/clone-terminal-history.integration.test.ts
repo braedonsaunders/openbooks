@@ -11,10 +11,7 @@ import {
   seedPostingAccount,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import {
-  createChangeRequestDraft,
-  submitChangeRequest,
-} from "../hrm/change-requests.ts";
+import { createChangeRequestDraft, submitChangeRequest } from "../hrm/change-requests.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { recordHistoricalContributionFixture } from "../testing/historical-translations.ts";
@@ -43,9 +40,12 @@ installEngineSeams();
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function gateOf(requestId: string): Promise<{ id: string }> {
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from flow_gates where subject_id = ${requestId} order by created_at
-  `, "objects");
+  `,
+    "objects",
+  );
   assert.equal(rows.length, 1, "exactly one gate decides the request");
   return rows[0]!;
 }
@@ -86,9 +86,14 @@ async function seedAppliedChangeRequest(orgId: string, subsidiaryId: string): Pr
   const gate = await gateOf(draft.id);
   const decided = await decideGate({ gateId: gate.id, decision: "approved", userId: approverId });
   assert.equal(decided.ok, true);
-  const status = (await db.execute<{ status: string }>(sql`
+  const status = (
+    await db.execute<{ status: string }>(
+      sql`
     select status from hrm_employment_change_requests where id = ${draft.id}
-  `, "objects"))[0]!.status;
+  `,
+      "objects",
+    )
+  )[0]!.status;
   assert.equal(status, "applied");
   return draft.id;
 }
@@ -98,20 +103,64 @@ async function seedAppliedFinancialChange(org: ScratchOrg, actorId: string): Pro
   return withOrgTransaction(org.orgId, async () => {
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
       coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
-    const equity = await seedPostingAccount(org.orgId, "CLONE-CAP", "Contribution capital", "equity");
-    const posted = await postEntry(db, { orgId: org.orgId, actorId, bookId: org.bookId,
-      subsidiaryId: org.subsidiaryId, periodId: org.periodId, entryNumber: `CAP-${randomUUID()}`,
-      postingDate: org.date, currency: "CAD", origin: "manual", lines: [
-        { accountId: equity, subsidiaryId: org.subsidiaryId, amount: "-100", currency: "CAD", txnAmount: "-100", fxRate: "1" },
-        { accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, amount: "100", currency: "CAD", txnAmount: "100", fxRate: "1" },
-      ] });
-    const source = (await db.execute<{ id: string }>(sql`select id from journal_lines
-      where org_id=${org.orgId} and entry_id=${posted.entryId} and account_id=${equity}`, "objects"))[0];
+    const equity = await seedPostingAccount(
+      org.orgId,
+      "CLONE-CAP",
+      "Contribution capital",
+      "equity",
+    );
+    const posted = await postEntry(db, {
+      orgId: org.orgId,
+      actorId,
+      bookId: org.bookId,
+      subsidiaryId: org.subsidiaryId,
+      periodId: org.periodId,
+      entryNumber: `CAP-${randomUUID()}`,
+      postingDate: org.date,
+      currency: "CAD",
+      origin: "manual",
+      lines: [
+        {
+          accountId: equity,
+          subsidiaryId: org.subsidiaryId,
+          amount: "-100",
+          currency: "CAD",
+          txnAmount: "-100",
+          fxRate: "1",
+        },
+        {
+          accountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          amount: "100",
+          currency: "CAD",
+          txnAmount: "100",
+          fxRate: "1",
+        },
+      ],
+    });
+    const source = (
+      await db.execute<{ id: string }>(
+        sql`select id from journal_lines
+      where org_id=${org.orgId} and entry_id=${posted.entryId} and account_id=${equity}`,
+        "objects",
+      )
+    )[0];
     assert.ok(source);
-    await recordHistoricalContributionFixture({ orgId: org.orgId, actorId, sourceLineId: source.id,
-      measurementCurrency: "CAD", presentationCurrency: "USD", historicalDate: org.date, amount: "-100", rate: "1.2" });
-    const applied = await db.execute<{ id: string }>(sql`select id from financial_changes
-      where org_id=${org.orgId} and subject_id=${source.id} and status='applied'`, "objects");
+    await recordHistoricalContributionFixture({
+      orgId: org.orgId,
+      actorId,
+      sourceLineId: source.id,
+      measurementCurrency: "CAD",
+      presentationCurrency: "USD",
+      historicalDate: org.date,
+      amount: "-100",
+      rate: "1.2",
+    });
+    const applied = await db.execute<{ id: string }>(
+      sql`select id from financial_changes
+      where org_id=${org.orgId} and subject_id=${source.id} and status='applied'`,
+      "objects",
+    );
     assert.equal(applied.length, 1);
     return applied[0]!.id;
   });
@@ -121,52 +170,64 @@ async function seedAppliedFinancialChange(org: ScratchOrg, actorId: string): Pro
  * shell cannot block the source org's drop (orgs_sandbox_of_fkey) or mask the
  * body's own failure behind a teardown error. */
 async function deleteSandboxesFor(productionOrgId: string): Promise<void> {
-  const rows = await db.execute<{ id: string }>(sql`
-    select id from sandboxes where production_org_id = ${productionOrgId}`, "objects");
+  const rows = await db.execute<{ id: string }>(
+    sql`
+    select id from sandboxes where production_org_id = ${productionOrgId}`,
+    "objects",
+  );
   for (const row of rows) await deleteSandbox(row.id);
 }
 
-test("a full sandbox clones applied HRM and financial-change history verbatim", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const requestId = await seedAppliedChangeRequest(org.orgId, org.subsidiaryId);
-    const actor = await createScratchUser(org.orgId, "Clone Flow Actor", "admin");
-    const changeId = await seedAppliedFinancialChange(org, actor);
+test(
+  "a full sandbox clones applied HRM and financial-change history verbatim",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const requestId = await seedAppliedChangeRequest(org.orgId, org.subsidiaryId);
+      const actor = await createScratchUser(org.orgId, "Clone Flow Actor", "admin");
+      const changeId = await seedAppliedFinancialChange(org, actor);
 
-    // ids are rebased by the copy, so correlate on rebase-invariant evidence:
-    // the storage-computed digest, the payload bytes, and the natural
-    // idempotency key.
-    const sourceRequest = (await db.execute<{
-      status: string;
-      digest: string;
-      payload: string;
-      appliedRevision: number | null;
-    }>(sql`
+      // ids are rebased by the copy, so correlate on rebase-invariant evidence:
+      // the storage-computed digest, the payload bytes, and the natural
+      // idempotency key.
+      const sourceRequest = (
+        await db.execute<{
+          status: string;
+          digest: string;
+          payload: string;
+          appliedRevision: number | null;
+        }>(
+          sql`
       select status, payload_digest as digest, payload::text as payload,
              applied_employment_revision as "appliedRevision"
         from hrm_employment_change_requests where id = ${requestId}
-    `, "objects"))[0]!;
-    assert.equal(sourceRequest.status, "applied");
-    assert.match(sourceRequest.digest, /^[0-9a-f]{64}$/);
-    assert.ok(sourceRequest.appliedRevision);
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(sourceRequest.status, "applied");
+      assert.match(sourceRequest.digest, /^[0-9a-f]{64}$/);
+      assert.ok(sourceRequest.appliedRevision);
 
-    const created = await createSandbox({
-      productionOrgId: org.orgId,
-      name: `TerminalHistory ${randomUUID()}`,
-      tier: "full",
-      masked: false,
-    });
+      const created = await createSandbox({
+        productionOrgId: org.orgId,
+        name: `TerminalHistory ${randomUUID()}`,
+        tier: "full",
+        masked: false,
+      });
 
-    // The applied HRM request arrives intact: terminal status,
-    // storage-computed digest, payload bytes, and application evidence that
-    // still points at the cloned canonical change (rebased both sides).
-    const clonedRequests = await db.execute<{
-      status: string;
-      digest: string;
-      payload: string;
-      appliedRevision: number | null;
-      changeRevision: number | null;
-    }>(sql`
+      // The applied HRM request arrives intact: terminal status,
+      // storage-computed digest, payload bytes, and application evidence that
+      // still points at the cloned canonical change (rebased both sides).
+      const clonedRequests = await db.execute<{
+        status: string;
+        digest: string;
+        payload: string;
+        appliedRevision: number | null;
+        changeRevision: number | null;
+      }>(
+        sql`
       select r.status, r.payload_digest as digest, r.payload::text as payload,
              r.applied_employment_revision as "appliedRevision",
              c.revision as "changeRevision"
@@ -174,69 +235,86 @@ test("a full sandbox clones applied HRM and financial-change history verbatim", 
         left join employment_changes c
           on c.id = r.applied_employment_change_id and c.org_id = r.org_id
        where r.org_id = ${created.sandboxOrgId}
-    `, "objects");
-    assert.equal(clonedRequests.length, 1, "the clone carries the applied change request");
-    const clonedRequest = clonedRequests[0]!;
-    assert.equal(clonedRequest.status, "applied");
-    assert.equal(clonedRequest.digest, sourceRequest.digest);
-    assert.equal(clonedRequest.payload, sourceRequest.payload);
-    assert.equal(clonedRequest.appliedRevision, sourceRequest.appliedRevision);
-    assert.equal(
-      clonedRequest.changeRevision,
-      sourceRequest.appliedRevision,
-      "the cloned application evidence still references the cloned canonical change",
-    );
+    `,
+        "objects",
+      );
+      assert.equal(clonedRequests.length, 1, "the clone carries the applied change request");
+      const clonedRequest = clonedRequests[0]!;
+      assert.equal(clonedRequest.status, "applied");
+      assert.equal(clonedRequest.digest, sourceRequest.digest);
+      assert.equal(clonedRequest.payload, sourceRequest.payload);
+      assert.equal(clonedRequest.appliedRevision, sourceRequest.appliedRevision);
+      assert.equal(
+        clonedRequest.changeRevision,
+        sourceRequest.appliedRevision,
+        "the cloned application evidence still references the cloned canonical change",
+      );
 
-    // The applied financial change arrives intact too, keyed by its natural
-    // idempotency key (the row id is rebased).
-    const clonedChange = (await db.execute<{ status: string }>(sql`
+      // The applied financial change arrives intact too, keyed by its natural
+      // idempotency key (the row id is rebased).
+      const clonedChange = (
+        await db.execute<{ status: string }>(
+          sql`
       select status from financial_changes
        where org_id = ${created.sandboxOrgId} and idempotency_key =
          (select idempotency_key from financial_changes where org_id=${org.orgId} and id=${changeId})
-    `, "objects"))[0];
-    assert.ok(clonedChange, "the clone carries the applied financial change");
-    assert.equal(clonedChange!.status, "applied");
+    `,
+          "objects",
+        )
+      )[0];
+      assert.ok(clonedChange, "the clone carries the applied financial change");
+      assert.equal(clonedChange!.status, "applied");
 
-    // ...while ordinary sessions are still refused by name on both tables.
-    const employmentId = (await db.execute<{ id: string }>(sql`
+      // ...while ordinary sessions are still refused by name on both tables.
+      const employmentId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from worker_employments where org_id = ${org.orgId} limit 1
-    `, "objects"))[0]!.id;
-    // The driver wraps the guard refusal (DrizzleQueryError cause chain), so
-    // match down the chain — the guard's own message must name the remedy.
-    await assert.rejects(
-      withOrg(org.orgId, () => db.execute(sql`
+    `,
+          "objects",
+        )
+      )[0]!.id;
+      // The driver wraps the guard refusal (DrizzleQueryError cause chain), so
+      // match down the chain — the guard's own message must name the remedy.
+      await assert.rejects(
+        withOrg(org.orgId, () =>
+          db.execute(sql`
         insert into hrm_employment_change_requests
           (org_id, employment_id, expected_employment_revision, payload,
            payload_digest, payload_schema_version, status)
         values (${org.orgId}, ${employmentId}, 1, '{}'::jsonb, 'forged', '1', 'applied')
-      `)),
-      (error: unknown) => {
-        assert.ok(
-          errorChainMatches(error, /must be inserted as draft, then submitted/),
-          "an ordinary applied INSERT is still refused by name",
-        );
-        return true;
-      },
-    );
-    await assert.rejects(
-      withOrg(org.orgId, () => db.execute(sql`
+      `),
+        ),
+        (error: unknown) => {
+          assert.ok(
+            errorChainMatches(error, /must be inserted as draft, then submitted/),
+            "an ordinary applied INSERT is still refused by name",
+          );
+          return true;
+        },
+      );
+      await assert.rejects(
+        withOrg(org.orgId, () =>
+          db.execute(sql`
         insert into financial_changes
           (org_id, subsidiary_id, domain, subject_id, operation, effective_on,
            reason, idempotency_key, payload, before_state, status, submitted_by)
         values (${org.orgId}, ${org.subsidiaryId}, 'lease', ${randomUUID()}, 'remeasure',
                 ${"2026-09-02"}, 'forged terminal insert probe', ${`probe-terminal-${randomUUID()}`},
                 '{}'::jsonb, '{}'::jsonb, 'approved', ${actor})
-      `)),
-      (error: unknown) => {
-        assert.ok(
-          errorChainMatches(error, /must start as draft/),
-          "an ordinary approved financial-change INSERT is still refused by name",
-        );
-        return true;
-      },
-    );
-  } finally {
-    await deleteSandboxesFor(org.orgId);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `),
+        ),
+        (error: unknown) => {
+          assert.ok(
+            errorChainMatches(error, /must start as draft/),
+            "an ordinary approved financial-change INSERT is still refused by name",
+          );
+          return true;
+        },
+      );
+    } finally {
+      await deleteSandboxesFor(org.orgId);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

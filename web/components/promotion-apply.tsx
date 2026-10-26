@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
-import { useMoney } from '@/components/money-provider'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { displayMinorAmount } from '@/lib/money-format'
-import { promptDialog } from '@/lib/prompt'
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button } from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { displayMinorAmount } from "@/lib/money-format";
+import { promptDialog } from "@/lib/prompt";
 
-type ActivePromotion = { id: string; code: string; name: string; kind: string }
+type ActivePromotion = { id: string; code: string; name: string; kind: string };
 
 async function readJson(res: Response) {
-  return (await res.json()) as Record<string, unknown>
+  return (await res.json()) as Record<string, unknown>;
 }
 
 /**
@@ -21,97 +21,109 @@ async function readJson(res: Response) {
  * the discount lines; the drawer reload shows them with their promotion
  * chip, and nothing posts until the document itself is saved.
  */
-export function PromotionApplyControl({ documentId, currency, disabled, onApplied }: {
-  documentId: string
-  currency: string
-  disabled?: boolean
-  onApplied: () => void
+export function PromotionApplyControl({
+  documentId,
+  currency,
+  disabled,
+  onApplied,
+}: {
+  documentId: string;
+  currency: string;
+  disabled?: boolean;
+  onApplied: () => void;
 }) {
-  const t = useTranslations('salesOrders')
-  const { money } = useMoney(currency)
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("salesOrders");
+  const { money } = useMoney(currency);
+  const [busy, setBusy] = useState(false);
 
   async function apply() {
-    if (busy) return
-    setBusy(true)
+    if (busy) return;
+    setBusy(true);
     try {
-      const listRes = await fetch('/api/promotions?active=1', { cache: 'no-store' })
+      const listRes = await fetch("/api/promotions?active=1", { cache: "no-store" });
       if (!listRes.ok) {
-        toast.error(await readApiErrorMessage(listRes, t('promotion.loadFailed')))
-        return
+        toast.error(await readApiErrorMessage(listRes, t("promotion.loadFailed")));
+        return;
       }
-      const listed = ((await readJson(listRes)).promotions ?? []) as ActivePromotion[]
-      let code: string | null
+      const listed = ((await readJson(listRes)).promotions ?? []) as ActivePromotion[];
+      let code: string | null;
       if (listed.length > 0) {
         code = await promptDialog({
-          title: t('promotion.selectTitle'),
-          label: t('promotion.selectLabel'),
-          confirmLabel: t('promotion.apply'),
+          title: t("promotion.selectTitle"),
+          label: t("promotion.selectLabel"),
+          confirmLabel: t("promotion.apply"),
           options: [
-            ...listed.map((promotion) => ({ value: promotion.code, label: `${promotion.code} — ${promotion.name}` })),
-            { value: '', label: t('promotion.enterCode') },
+            ...listed.map((promotion) => ({
+              value: promotion.code,
+              label: `${promotion.code} — ${promotion.name}`,
+            })),
+            { value: "", label: t("promotion.enterCode") },
           ],
-        })
-        if (code === '') {
+        });
+        if (code === "") {
           code = await promptDialog({
-            title: t('promotion.codeTitle'),
-            label: t('promotion.codeLabel'),
-            confirmLabel: t('promotion.apply'),
-          })
+            title: t("promotion.codeTitle"),
+            label: t("promotion.codeLabel"),
+            confirmLabel: t("promotion.apply"),
+          });
         }
       } else {
         code = await promptDialog({
-          title: t('promotion.codeTitle'),
-          label: t('promotion.codeLabel'),
-          confirmLabel: t('promotion.apply'),
-        })
+          title: t("promotion.codeTitle"),
+          label: t("promotion.codeLabel"),
+          confirmLabel: t("promotion.apply"),
+        });
       }
-      if (!code) return
+      if (!code) return;
       const applyRes = await fetch(`/api/documents/${documentId}/apply-promotion`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
-      })
+      });
       if (!applyRes.ok) {
-        toast.error(await readApiErrorMessage(applyRes, t('promotion.applyFailed')))
-        return
+        toast.error(await readApiErrorMessage(applyRes, t("promotion.applyFailed")));
+        return;
       }
-      const applied = await readJson(applyRes)
+      const applied = await readJson(applyRes);
       // A missing or malformed discount total never renders as a zero-value
       // success: it takes the same named-refusal path as unknown precision.
       // The registry exponent rides as both fraction digits so Intl
       // defaults cannot override it for private/custom codes.
-      const display = displayMinorAmount(applied.discountMinor, applied.minorUnits)
-      const count = Array.isArray(applied.lines) ? applied.lines.length : 0
+      const display = displayMinorAmount(applied.discountMinor, applied.minorUnits);
+      const count = Array.isArray(applied.lines) ? applied.lines.length : 0;
       const amount =
         display === null
           ? null
           : money(display.major, {
               minimumFractionDigits: display.digits,
               maximumFractionDigits: display.digits,
-            })
+            });
       if (amount === null) {
         // The discount applied; only its display amount refuses by name.
-        toast.error(t('promotion.precisionUnknown', {
-          currency: typeof applied.currency === 'string' ? applied.currency : currency,
-        }))
-        onApplied()
-        return
+        toast.error(
+          t("promotion.precisionUnknown", {
+            currency: typeof applied.currency === "string" ? applied.currency : currency,
+          }),
+        );
+        onApplied();
+        return;
       }
-      toast.success(t('promotion.applied', {
-        code: typeof applied.code === 'string' ? applied.code : code,
-        amount,
-        count,
-      }))
-      onApplied()
+      toast.success(
+        t("promotion.applied", {
+          code: typeof applied.code === "string" ? applied.code : code,
+          amount,
+          count,
+        }),
+      );
+      onApplied();
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <Button variant="outline" size="sm" disabled={disabled || busy} onClick={apply}>
-      {t('promotion.apply')}
+      {t("promotion.apply")}
     </Button>
-  )
+  );
 }

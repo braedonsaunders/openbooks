@@ -1,6 +1,14 @@
-import Link from 'next/link'
-import { CheckCircle2, CircleAlert, CircleDashed, Sparkles } from 'lucide-react'
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@openbooks/ui'
+import Link from "next/link";
+import { CheckCircle2, CircleAlert, CircleDashed, Sparkles } from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@openbooks/ui";
 
 /**
  * Composite cells in the setup readiness guide.
@@ -20,29 +28,29 @@ import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
  * implementation and cannot drift.
  */
 
-export type SetupReadinessCheckState = 'complete' | 'review' | 'waiting'
+export type SetupReadinessCheckState = "complete" | "review" | "waiting";
 
 export interface SetupReadinessCheck {
-  indexLabel: string
-  title: string
-  description: string
-  href: string
-  action: string
-  state: SetupReadinessCheckState
-  stateLabel: string
+  indexLabel: string;
+  title: string;
+  description: string;
+  href: string;
+  action: string;
+  state: SetupReadinessCheckState;
+  stateLabel: string;
 }
 
 const STATE_ICON = {
   complete: CheckCircle2,
   review: CircleAlert,
   waiting: CircleDashed,
-} as const
+} as const;
 
 const STATE_TILE_CLASS = {
-  complete: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950',
-  review: 'bg-amber-100 text-amber-700 dark:bg-amber-950',
-  waiting: 'bg-slate-100 text-slate-500 dark:bg-slate-800',
-} as const
+  complete: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950",
+  review: "bg-amber-100 text-amber-700 dark:bg-amber-950",
+  waiting: "bg-slate-100 text-slate-500 dark:bg-slate-800",
+} as const;
 
 /** The hero card: go-live guide header, foundation badge, and progress bar. */
 export function SetupReadinessHero({
@@ -58,17 +66,17 @@ export function SetupReadinessHero({
   progressMax,
   progressNow,
 }: {
-  kicker: string
-  title: string
-  description: string
-  badgeLabel: string
-  badgeReady: boolean
-  progressLabel: string
-  progressOf: string
-  progressPercent: number
-  progressMin: number
-  progressMax: number
-  progressNow: number
+  kicker: string;
+  title: string;
+  description: string;
+  badgeLabel: string;
+  badgeReady: boolean;
+  progressLabel: string;
+  progressOf: string;
+  progressPercent: number;
+  progressMin: number;
+  progressMax: number;
+  progressNow: number;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -81,19 +89,19 @@ export function SetupReadinessHero({
             <div className="min-w-0">
               <p className="text-sm font-semibold text-teal-700 dark:text-teal-300">{kicker}</p>
               <CardTitle className="mt-1 text-xl">{title}</CardTitle>
-              <CardDescription className="mt-2 max-w-2xl leading-relaxed">{description}</CardDescription>
+              <CardDescription className="mt-2 max-w-2xl leading-relaxed">
+                {description}
+              </CardDescription>
             </div>
           </div>
-          <Badge variant={badgeReady ? 'success' : 'warning'} className="shrink-0 self-start">
+          <Badge variant={badgeReady ? "success" : "warning"} className="shrink-0 self-start">
             {badgeLabel}
           </Badge>
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="font-medium text-slate-700 dark:text-slate-200">{progressLabel}</span>
-            <span className="tabular-nums text-slate-500 dark:text-slate-400">
-              {progressOf}
-            </span>
+            <span className="tabular-nums text-slate-500 dark:text-slate-400">{progressOf}</span>
           </div>
           <div
             className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
@@ -103,12 +111,15 @@ export function SetupReadinessHero({
             aria-valuemax={progressMax}
             aria-valuenow={progressNow}
           >
-            <div className="h-full rounded-full bg-teal-600 transition-[width]" style={{ width: `${progressPercent}%` }} />
+            <div
+              className="h-full rounded-full bg-teal-600 transition-[width]"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
         </div>
       </CardHeader>
     </Card>
-  )
+  );
 }
 
 /**
@@ -117,12 +128,14 @@ export function SetupReadinessHero({
  * same threading the admin hub cards use.
  */
 export function SetupReadinessCheckCard(check: SetupReadinessCheck) {
-  const Icon = STATE_ICON[check.state]
+  const Icon = STATE_ICON[check.state];
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-start gap-4">
-          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${STATE_TILE_CLASS[check.state]}`}>
+          <div
+            className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${STATE_TILE_CLASS[check.state]}`}
+          >
             <Icon size={18} />
           </div>
           <div className="min-w-0 flex-1">
@@ -139,5 +152,5 @@ export function SetupReadinessCheckCard(check: SetupReadinessCheck) {
       </CardHeader>
       <CardContent className="sr-only">{check.stateLabel}</CardContent>
     </Card>
-  )
+  );
 }

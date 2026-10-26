@@ -27,19 +27,13 @@ import {
   type ScheduleBoard,
 } from "./boards.ts";
 import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
-import {
-  hash,
-  lockPublishableDrafts,
-  publishDrafts,
-  type ScheduleNotice,
-} from "./entries.ts";
+import { hash, lockPublishableDrafts, publishDrafts, type ScheduleNotice } from "./entries.ts";
 import { requireDate } from "./spans.ts";
 import { deliverScheduleNotice } from "./distribution-hooks.ts";
 
 export const SCHEDULE_PUBLICATION_SUBJECT_KIND = "schedule_publication";
 
-export const NO_APPROVAL_APPLIED =
-  "No approval Flow applied; released when submitted.";
+export const NO_APPROVAL_APPLIED = "No approval Flow applied; released when submitted.";
 
 type RoutingResult = {
   gated: boolean;
@@ -47,10 +41,7 @@ type RoutingResult = {
   failed: boolean;
   error: string | null;
 };
-type Router = (
-  actor: ScheduleActor,
-  publicationId: string,
-) => Promise<RoutingResult>;
+type Router = (actor: ScheduleActor, publicationId: string) => Promise<RoutingResult>;
 const runtime = globalThis as typeof globalThis & {
   __schedulePublicationRouter?: Router;
 };
@@ -60,10 +51,7 @@ export function registerSchedulePublicationRouting(router: Router): void {
   runtime.__schedulePublicationRouter = router;
 }
 
-function route(
-  actor: ScheduleActor,
-  publicationId: string,
-): Promise<RoutingResult> {
+function route(actor: ScheduleActor, publicationId: string): Promise<RoutingResult> {
   if (!runtime.__schedulePublicationRouter) {
     throw new Error(
       "Schedule publication routing is not installed in this process. Install the native engine composition before publishing.",
@@ -116,9 +104,7 @@ export async function publishScheduleBoard(
     entryIds?: readonly string[];
   },
 ): Promise<PublicationOutcome> {
-  const board = await withOrgTransaction(actor.orgId, () =>
-    getBoard(actor, actor.boardId),
-  );
+  const board = await withOrgTransaction(actor.orgId, () => getBoard(actor, actor.boardId));
   const from = requireDate(actor.from, "Publish from"),
     through = requireDate(actor.through, "Publish through");
   if (through < from)
@@ -133,39 +119,72 @@ export async function publishScheduleBoard(
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-publish:${actor.orgId}:${current.id}`}, 0))`,
     );
-    const waiting = (await db.execute<{id:string;entry_ids:string[];created_by:string;from_date:string;through_date:string;has_receipt:boolean}>(
+    const waiting = (
+      await db.execute<{
+        id: string;
+        entry_ids: string[];
+        created_by: string;
+        from_date: string;
+        through_date: string;
+        has_receipt: boolean;
+      }>(
         sql`select p.id,p.entry_ids,p.created_by,p.from_date::text,p.through_date::text,
           exists(select 1 from flow_submissions s where s.org_id=p.org_id and s.subject_kind='schedule_publication' and s.subject_id=p.id) as has_receipt
-          from schedule_publications p where p.org_id=${actor.orgId} and p.board_id=${current.id} and p.status='pending'`, "objects",
-      ))[0];
+          from schedule_publications p where p.org_id=${actor.orgId} and p.board_id=${current.id} and p.status='pending'`,
+        "objects",
+      )
+    )[0];
     if (waiting) {
-      const sameSubmission=waiting.created_by===actor.actorId && waiting.has_receipt &&
-        (actor.entryIds ? actor.entryIds.length>0 && actor.entryIds.every(id=>waiting.entry_ids.includes(id)) : waiting.from_date===from && waiting.through_date===through);
-      if(sameSubmission)return {published:0,pending:true,publicationId:waiting.id,notices:[],boardName:current.name,distributionRefusals:[]};
-      throw new ScheduleError(
-        "A publication of this board is awaiting its approval.",
-        {
-          status: 409,
-          code: "schedule_publication_pending",
-          remedy:
-            "Wait for the decision in Approvals; the board can be published again once it is decided.",
-        },
-      );
+      const sameSubmission =
+        waiting.created_by === actor.actorId &&
+        waiting.has_receipt &&
+        (actor.entryIds
+          ? actor.entryIds.length > 0 &&
+            actor.entryIds.every((id) => waiting.entry_ids.includes(id))
+          : waiting.from_date === from && waiting.through_date === through);
+      if (sameSubmission)
+        return {
+          published: 0,
+          pending: true,
+          publicationId: waiting.id,
+          notices: [],
+          boardName: current.name,
+          distributionRefusals: [],
+        };
+      throw new ScheduleError("A publication of this board is awaiting its approval.", {
+        status: 409,
+        code: "schedule_publication_pending",
+        remedy:
+          "Wait for the decision in Approvals; the board can be published again once it is decided.",
+      });
     }
-    const drafts = await lockPublishableDrafts(actor, current, actor.entryIds ? {ids:actor.entryIds} : {from,through});
-    if(actor.entryIds && (new Set(actor.entryIds).size !== actor.entryIds.length || drafts.length !== actor.entryIds.length))
-      throw new ScheduleError("The selected publication changes are unavailable. Reload the board before resubmitting.",{status:409,code:"schedule_publication_stale"});
-    if (drafts.length === 0)
+    const drafts = await lockPublishableDrafts(
+      actor,
+      current,
+      actor.entryIds ? { ids: actor.entryIds } : { from, through },
+    );
+    if (
+      actor.entryIds &&
+      (new Set(actor.entryIds).size !== actor.entryIds.length ||
+        drafts.length !== actor.entryIds.length)
+    )
       throw new ScheduleError(
-        "There are no unpublished changes in these dates.",
-        { code: "schedule_nothing_to_publish" },
+        "The selected publication changes are unavailable. Reload the board before resubmitting.",
+        { status: 409, code: "schedule_publication_stale" },
       );
+    if (drafts.length === 0)
+      throw new ScheduleError("There are no unpublished changes in these dates.", {
+        code: "schedule_nothing_to_publish",
+      });
     const id = crypto.randomUUID();
-    const inserted = await db.execute(sql`insert into schedule_publications (id, org_id, board_id, subsidiary_id, from_date, through_date, entry_ids, entry_revisions,
+    const inserted = await db.execute(
+      sql`insert into schedule_publications (id, org_id, board_id, subsidiary_id, from_date, through_date, entry_ids, entry_revisions,
       reason, request_hash, created_by, updated_by)
       values (${id}, ${actor.orgId}, ${current.id}, ${current.subsidiaryId}, ${from}, ${through}, ${`{${drafts.map((draft) => draft.id).join(",")}}`}::uuid[],
       ${`{${drafts.map((draft) => draft.revision).join(",")}}`}::integer[], ${reason},
-      ${hash({ boardId: current.id, from, through, drafts: drafts.map((draft) => [draft.id, draft.revision]) })}, ${actor.actorId}, ${actor.actorId}) returning id`, "objects");
+      ${hash({ boardId: current.id, from, through, drafts: drafts.map((draft) => [draft.id, draft.revision]) })}, ${actor.actorId}, ${actor.actorId}) returning id`,
+      "objects",
+    );
     if (inserted.length !== 1)
       throw new ScheduleError("The publication was not recorded.", {
         code: "schedule_not_saved",
@@ -173,24 +192,25 @@ export async function publishScheduleBoard(
       });
     const routed = await route(actor, id);
     if (routed.failed) {
-      throw new ScheduleError(
-        "The schedule publication approval Flow could not start.",
-        {
-          code: "schedule_publication_flow_failed",
-          remedy: routed.error
-            ? `Ask an administrator to review the Schedule publication Flow: ${routed.error}`
-            : "Ask an administrator to review the Schedule publication Flow.",
-        },
-      );
+      throw new ScheduleError("The schedule publication approval Flow could not start.", {
+        code: "schedule_publication_flow_failed",
+        remedy: routed.error
+          ? `Ask an administrator to review the Schedule publication Flow: ${routed.error}`
+          : "Ask an administrator to review the Schedule publication Flow.",
+      });
     }
     if (routed.gated) {
-      const updated = await db.execute(sql`update schedule_publications set flow_run_id = ${routed.runId}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-        where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`, "objects");
+      const updated = await db.execute(
+        sql`update schedule_publications set flow_run_id = ${routed.runId}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+        where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`,
+        "objects",
+      );
       if (updated.length !== 1)
-        throw new ScheduleError(
-          "The publication changed while it was routed for approval.",
-          { status: 409, code: "schedule_stale", remedy: "Reload the board." },
-        );
+        throw new ScheduleError("The publication changed while it was routed for approval.", {
+          status: 409,
+          code: "schedule_stale",
+          remedy: "Reload the board.",
+        });
       return {
         published: 0,
         pending: true,
@@ -200,13 +220,7 @@ export async function publishScheduleBoard(
         distributionRefusals: [],
       };
     }
-    const result = await applyPublication(
-      actor,
-      current,
-      id,
-      "released",
-      NO_APPROVAL_APPLIED,
-    );
+    const result = await applyPublication(actor, current, id, "released", NO_APPROVAL_APPLIED);
     return {
       ...result,
       pending: false,
@@ -218,14 +232,14 @@ export async function publishScheduleBoard(
   });
 }
 
-async function lockPublication(
-  orgId: string,
-  id: string,
-): Promise<SchedulePublication> {
+async function lockPublication(orgId: string, id: string): Promise<SchedulePublication> {
   if (!isUuid(id)) throw new ScopeNotFoundError();
-  const row = (await db.execute<SchedulePublication>(
-      sql`select ${PUBLICATION_COLUMNS} from schedule_publications where org_id = ${orgId} and id = ${id} for update`, "objects",
-    ))[0];
+  const row = (
+    await db.execute<SchedulePublication>(
+      sql`select ${PUBLICATION_COLUMNS} from schedule_publications where org_id = ${orgId} and id = ${id} for update`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
@@ -246,12 +260,13 @@ async function applyPublication(
       remedy: "Reload the board.",
     });
   const updated = await db.execute(
-      mode === "released"
-        ? sql`update schedule_publications set status = 'approved', released_without_approval = true, decided_at = now(), decision_reason = ${decisionReason},
+    mode === "released"
+      ? sql`update schedule_publications set status = 'approved', released_without_approval = true, decided_at = now(), decision_reason = ${decisionReason},
         revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${id} and revision = ${publication.revision} returning id`
-        : sql`update schedule_publications set status = 'approved', decided_by = ${actor.actorId}, decided_at = now(), decision_reason = ${decisionReason},
-        revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${id} and revision = ${publication.revision} returning id`, "objects",
-    );
+      : sql`update schedule_publications set status = 'approved', decided_by = ${actor.actorId}, decided_at = now(), decision_reason = ${decisionReason},
+        revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${id} and revision = ${publication.revision} returning id`,
+    "objects",
+  );
   if (updated.length !== 1)
     throw new ScheduleError("The publication changed while it was decided.", {
       status: 409,
@@ -262,10 +277,7 @@ async function applyPublication(
     ids: publication.entryIds,
   });
   const submitted = new Map(
-    publication.entryIds.map((entryId, index) => [
-      entryId,
-      publication.entryRevisions[index],
-    ]),
+    publication.entryIds.map((entryId, index) => [entryId, publication.entryRevisions[index]]),
   );
   if (
     drafts.length !== publication.entryIds.length ||
@@ -297,11 +309,7 @@ export async function releasePublicationApproval(input: {
 }): Promise<void> {
   const actor = { orgId: input.orgId, actorId: input.actorId };
   await withOrgTransaction(input.orgId, async () => {
-    await lockApprovalSubject(
-      input.orgId,
-      SCHEDULE_PUBLICATION_SUBJECT_KIND,
-      input.publicationId,
-    );
+    await lockApprovalSubject(input.orgId, SCHEDULE_PUBLICATION_SUBJECT_KIND, input.publicationId);
     const proof = await readNativeApprovalDecision({
       orgId: input.orgId,
       actorId: input.actorId,
@@ -330,8 +338,7 @@ export async function releasePublicationApproval(input: {
         board,
         publication.id,
         "flow",
-        input.comment?.trim() ||
-          "Approved through the schedule publication Flow",
+        input.comment?.trim() || "Approved through the schedule publication Flow",
       );
       await deliverScheduleNotice({
         orgId: actor.orgId,
@@ -341,9 +348,12 @@ export async function releasePublicationApproval(input: {
       });
       return;
     }
-    const declined = await db.execute(sql`update schedule_publications set status = 'declined', decided_by = ${actor.actorId}, decided_at = now(),
+    const declined = await db.execute(
+      sql`update schedule_publications set status = 'declined', decided_by = ${actor.actorId}, decided_at = now(),
     decision_reason = ${input.comment?.trim() || "Declined through the schedule publication Flow"}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-    where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`, "objects");
+    where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`,
+      "objects",
+    );
     if (declined.length !== 1)
       throw new ScheduleError("The publication changed while it was decided.", {
         status: 409,
@@ -358,19 +368,12 @@ export async function withdrawPublication(
   actor: ScheduleActor & { publicationId: string; expectedRevision: number },
 ): Promise<void> {
   await withOrgTransaction(actor.orgId, async () => {
-    await lockApprovalSubject(
-      actor.orgId,
-      SCHEDULE_PUBLICATION_SUBJECT_KIND,
-      actor.publicationId,
-    );
+    await lockApprovalSubject(actor.orgId, SCHEDULE_PUBLICATION_SUBJECT_KIND, actor.publicationId);
     const publication = await lockPublication(actor.orgId, actor.publicationId);
     const board = await getBoard(actor, publication.boardId);
     await boardAuthority(actor, board, "publish");
     if (publication.createdBy !== actor.actorId) throw new ScopeNotFoundError();
-    if (
-      publication.status !== "pending" ||
-      publication.revision !== actor.expectedRevision
-    ) {
+    if (publication.status !== "pending" || publication.revision !== actor.expectedRevision) {
       throw new ScheduleError("This publication was already decided.", {
         status: 409,
         code: "schedule_stale",
@@ -383,13 +386,17 @@ export async function withdrawPublication(
       subjectKind: SCHEDULE_PUBLICATION_SUBJECT_KIND,
       subjectId: publication.id,
     });
-    const updated = await db.execute(sql`update schedule_publications set status = 'withdrawn', revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`, "objects");
+    const updated = await db.execute(
+      sql`update schedule_publications set status = 'withdrawn', revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+      where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`,
+      "objects",
+    );
     if (updated.length !== 1)
-      throw new ScheduleError(
-        "This publication changed while it was withdrawn.",
-        { status: 409, code: "schedule_stale", remedy: "Reload the board." },
-      );
+      throw new ScheduleError("This publication changed while it was withdrawn.", {
+        status: 409,
+        code: "schedule_stale",
+        remedy: "Reload the board.",
+      });
   }).catch((error: unknown) => {
     throw scheduleDatabaseRefusal(error);
   });
@@ -401,7 +408,12 @@ export async function pendingPublication(
   boardId: string,
 ): Promise<SchedulePublication | null> {
   return (
-    (await db.execute<SchedulePublication>(sql`select ${PUBLICATION_COLUMNS} from schedule_publications
-    where org_id = ${orgId} and board_id = ${boardId} and status = 'pending'`, "objects"))[0] ?? null
+    (
+      await db.execute<SchedulePublication>(
+        sql`select ${PUBLICATION_COLUMNS} from schedule_publications
+    where org_id = ${orgId} and board_id = ${boardId} and status = 'pending'`,
+        "objects",
+      )
+    )[0] ?? null
   );
 }

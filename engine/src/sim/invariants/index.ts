@@ -28,7 +28,7 @@ export interface InvariantResult {
 }
 
 async function scalar(q: ReturnType<typeof sql>): Promise<string> {
-  const r = (await db.execute<Record<string, unknown>>(q, "objects"));
+  const r = await db.execute<Record<string, unknown>>(q, "objects");
   const row = r[0] ?? {};
   return String(Object.values(row)[0] ?? "");
 }
@@ -42,7 +42,10 @@ export async function cheapInvariants(orgId: string): Promise<InvariantResult> {
       join journal_entries e on e.id = l.entry_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')`);
   if (Number(globalBal) !== 0) {
-    failures.push({ invariant: "global-balance", detail: `sum(all posted lines) = ${globalBal} (want 0)` });
+    failures.push({
+      invariant: "global-balance",
+      detail: `sum(all posted lines) = ${globalBal} (want 0)`,
+    });
   }
 
   const unbalanced = await scalar(sql`
@@ -52,7 +55,10 @@ export async function cheapInvariants(orgId: string): Promise<InvariantResult> {
        where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
        group by e.id having abs(sum(l.amount)) >= 0.005) x`);
   if (Number(unbalanced) !== 0) {
-    failures.push({ invariant: "per-entry-balance", detail: `${unbalanced} posted entries do not balance` });
+    failures.push({
+      invariant: "per-entry-balance",
+      detail: `${unbalanced} posted entries do not balance`,
+    });
   }
 
   // documents.total must equal the net posting to the document's own AR/AP
@@ -76,19 +82,26 @@ export async function cheapInvariants(orgId: string): Promise<InvariantResult> {
     select count(*) from per_doc
      where abs(abs(control_amt) - total) >= 0.005`);
   if (Number(totalDrift || "0") > 0) {
-    failures.push({ invariant: "doc-total-tieout", detail: `${totalDrift} documents whose total != control-account posting` });
+    failures.push({
+      invariant: "doc-total-tieout",
+      detail: `${totalDrift} documents whose total != control-account posting`,
+    });
   }
 
   return { pass: failures.length === 0, failures };
 }
 
 /** The full golden-fixture suite as of the last closed period. */
-export async function fullInvariants(orgId: string, at: string, gitSha: string | null): Promise<InvariantResult> {
+export async function fullInvariants(
+  orgId: string,
+  at: string,
+  gitSha: string | null,
+): Promise<InvariantResult> {
   const checkpoint = await runScenario(orgId, { at, gitSha });
   const failures: InvariantFailure[] = checkpoint.checks
     .filter((c) => !c.ok)
     .map((c) => ({ invariant: c.name, detail: c.detail }));
-  failures.push(...await saasUsageMonthInvariant(orgId));
+  failures.push(...(await saasUsageMonthInvariant(orgId)));
   return { pass: failures.length === 0, failures, checkpoint };
 }
 
@@ -108,7 +121,10 @@ export async function fullInvariants(orgId: string, at: string, gitSha: string |
  */
 const CLOSED_PERIOD_REFUSAL = /closed for this period/i;
 
-export async function immutabilityProbe(world: SimOrg, closedPeriod: SimPeriod): Promise<InvariantResult> {
+export async function immutabilityProbe(
+  world: SimOrg,
+  closedPeriod: SimPeriod,
+): Promise<InvariantResult> {
   const probeDate = closedPeriod.startsOn;
   // A world that staged no vendor must still exercise the kernel: returning
   // pass here would certify closed-period enforcement without posting
@@ -119,14 +135,28 @@ export async function immutabilityProbe(world: SimOrg, closedPeriod: SimPeriod):
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${id}, ${world.orgId}, 'vendor', 'Immutability Probe Vendor', true, '{}'::jsonb)`);
-    await db.execute(sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${world.orgId}, ${id})`);
-    vendor = { id, name: "Immutability Probe Vendor", termDays: 30, expenseCategories: [], billMin: 0, billMax: 0 };
+    await db.execute(
+      sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${world.orgId}, ${id})`,
+    );
+    vendor = {
+      id,
+      name: "Immutability Probe Vendor",
+      termDays: 30,
+      expenseCategories: [],
+      billMin: 0,
+      billMax: 0,
+    };
   }
   const expenseAccount = world.accounts.materials ?? Object.values(world.accounts)[0];
   if (!expenseAccount) {
     return {
       pass: false,
-      failures: [{ invariant: "period-immutability", detail: `probe not exercised: world has no posting account for closed period ${closedPeriod.name}` }],
+      failures: [
+        {
+          invariant: "period-immutability",
+          detail: `probe not exercised: world has no posting account for closed period ${closedPeriod.name}`,
+        },
+      ],
     };
   }
 
@@ -140,7 +170,9 @@ export async function immutabilityProbe(world: SimOrg, closedPeriod: SimPeriod):
   // Lines are immutable outside draft status (storage guard), so the bill is
   // staged as a draft and approved only once its lines exist — the kernel
   // then reaches the period gate instead of the approval lifecycle.
-  await db.execute(sql`update documents set status = 'approved' where id = ${docId} and org_id = ${world.orgId}`);
+  await db.execute(
+    sql`update documents set status = 'approved' where id = ${docId} and org_id = ${world.orgId}`,
+  );
 
   let rejected = false;
   let unexpected: string | null = null;
@@ -157,8 +189,12 @@ export async function immutabilityProbe(world: SimOrg, closedPeriod: SimPeriod):
     if (rejected || unexpected !== null) {
       // Line writes are immutable outside draft status (storage guard), so
       // the refused probe bill returns to draft before its lines are removed.
-      await db.execute(sql`update documents set status = 'draft' where id = ${docId} and org_id = ${world.orgId}`);
-      await db.execute(sql`delete from document_lines where document_id = ${docId} and org_id = ${world.orgId}`);
+      await db.execute(
+        sql`update documents set status = 'draft' where id = ${docId} and org_id = ${world.orgId}`,
+      );
+      await db.execute(
+        sql`delete from document_lines where document_id = ${docId} and org_id = ${world.orgId}`,
+      );
       await db.execute(sql`delete from documents where id = ${docId} and org_id = ${world.orgId}`);
     }
   }
@@ -167,12 +203,22 @@ export async function immutabilityProbe(world: SimOrg, closedPeriod: SimPeriod):
   if (unexpected !== null) {
     return {
       pass: false,
-      failures: [{ invariant: "period-immutability", detail: `probe into closed period ${closedPeriod.name} failed without reaching the closed-period gate: ${unexpected} (probe doc ${docId})` }],
+      failures: [
+        {
+          invariant: "period-immutability",
+          detail: `probe into closed period ${closedPeriod.name} failed without reaching the closed-period gate: ${unexpected} (probe doc ${docId})`,
+        },
+      ],
     };
   }
   return {
     pass: false,
-    failures: [{ invariant: "period-immutability", detail: `posting into closed period ${closedPeriod.name} was NOT rejected (probe doc ${docId})` }],
+    failures: [
+      {
+        invariant: "period-immutability",
+        detail: `posting into closed period ${closedPeriod.name} was NOT rejected (probe doc ${docId})`,
+      },
+    ],
   };
 }
 
@@ -199,7 +245,12 @@ export function writeDefectBundle(
   writeFileSync(
     join(dir, "defect.json"),
     JSON.stringify(
-      { simDate: args.simDate, phase: args.phase, failures: args.failures, checkpoint: args.checkpoint ?? null },
+      {
+        simDate: args.simDate,
+        phase: args.phase,
+        failures: args.failures,
+        checkpoint: args.checkpoint ?? null,
+      },
       null,
       2,
     ),

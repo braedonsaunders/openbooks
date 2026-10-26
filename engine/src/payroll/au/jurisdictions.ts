@@ -8,10 +8,7 @@
  * own thresholds and rates); they are not transcribed here and travel through
  * no per-employee withholding channel.
  */
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 import type {
   PayrollPackWithholding,
   PayrollRegionWithholding,
@@ -19,7 +16,14 @@ import type {
 
 /** Every state and territory code an AU employee profile may carry. */
 export const AU_KNOWN_REGIONS: readonly string[] = [
-  "NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT",
+  "NSW",
+  "VIC",
+  "QLD",
+  "SA",
+  "WA",
+  "TAS",
+  "NT",
+  "ACT",
 ];
 
 export const AU_STATE_NAMES: Readonly<Record<string, string>> = {
@@ -54,21 +58,22 @@ const TFN_DECLARATION: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "ATO Tax file number declaration (NAT 3092) — "
-    + "https://www.ato.gov.au/forms-and-instructions/tfn-declaration",
+    "ATO Tax file number declaration (NAT 3092) — " +
+    "https://www.ato.gov.au/forms-and-instructions/tfn-declaration",
   summary:
-    "Filed when the employee starts and whenever the answers change. It tells "
-    + "the payer which PAYG withholding scale applies: tax-free threshold "
-    + "claim, residency, STSL debt, and whether a TFN was quoted.",
+    "Filed when the employee starts and whenever the answers change. It tells " +
+    "the payer which PAYG withholding scale applies: tax-free threshold " +
+    "claim, residency, STSL debt, and whether a TFN was quoted.",
   storage: "certificate_rows",
   fields: [
     {
       key: "tax_file_number",
       label: "Tax file number",
       kind: "code",
-      help: "The employee's TFN as quoted on the declaration. When no TFN is "
-        + "quoted and no exemption is claimed, the payer must withhold at the "
-        + "top marginal rate plus Medicare levy.",
+      help:
+        "The employee's TFN as quoted on the declaration. When no TFN is " +
+        "quoted and no exemption is claimed, the payer must withhold at the " +
+        "top marginal rate plus Medicare levy.",
     },
     {
       key: "residency",
@@ -83,38 +88,43 @@ const TFN_DECLARATION: PayrollCertificate = {
         {
           value: "foreign_resident",
           label: "No — foreign resident",
-          help: "Withheld on the foreign-resident PAYG scale: no tax-free "
-            + "threshold, different rates from the first dollar.",
+          help:
+            "Withheld on the foreign-resident PAYG scale: no tax-free " +
+            "threshold, different rates from the first dollar.",
         },
       ],
       default: "australian_resident",
       required: true,
-      help: "The declaration's residency question. It selects the PAYG "
-        + "withholding scale, not a rate entered by hand.",
+      help:
+        "The declaration's residency question. It selects the PAYG " +
+        "withholding scale, not a rate entered by hand.",
     },
     {
       key: "working_holiday_maker",
       label: "Working holiday maker",
       kind: "flag",
       default: "false",
-      help: "The declaration's working-holiday-maker question. Working holiday "
-        + "makers are withheld under their own PAYG rates.",
+      help:
+        "The declaration's working-holiday-maker question. Working holiday " +
+        "makers are withheld under their own PAYG rates.",
     },
     {
       key: "tax_free_threshold",
       label: "Claim the tax-free threshold from this payer",
       kind: "flag",
       default: "false",
-      help: "May be claimed from one payer at a time. Unclaimed unless the "
-        + "declaration says so — that default is the statute, not an assumption.",
+      help:
+        "May be claimed from one payer at a time. Unclaimed unless the " +
+        "declaration says so — that default is the statute, not an assumption.",
     },
     {
       key: "stsl_debt",
       label: "STSL debt (HELP, VSL, SSL, TSL or FS)",
       kind: "flag",
       default: "false",
-      help: "Whether the payee has a study and training support loan to repay "
-        + "through PAYG withholding on top of income tax.",
+      help:
+        "Whether the payee has a study and training support loan to repay " +
+        "through PAYG withholding on top of income tax.",
     },
   ],
 };
@@ -140,13 +150,13 @@ const MEDICARE_VARIATION_DECLARATION: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "Medicare levy variation declaration — the instrument's Guide to other "
-    + "relevant documents and links lists it under quick code QC17088 "
-    + "(F2026L00716)",
+    "Medicare levy variation declaration — the instrument's Guide to other " +
+    "relevant documents and links lists it under quick code QC17088 " +
+    "(F2026L00716)",
   summary:
-    "Lodged with the TFN declaration when the employee claims a Medicare "
-    + "levy exemption. A full exemption takes PAYG scale 5, a half exemption "
-    + "scale 6; no claim leaves scales 1–3 selected by the TFN answers.",
+    "Lodged with the TFN declaration when the employee claims a Medicare " +
+    "levy exemption. A full exemption takes PAYG scale 5, a half exemption " +
+    "scale 6; no claim leaves scales 1–3 selected by the TFN answers.",
   storage: "certificate_rows",
   fields: [
     {
@@ -172,9 +182,10 @@ const MEDICARE_VARIATION_DECLARATION: PayrollCertificate = {
       ],
       default: "none",
       required: true,
-      help: "The variation declaration's exemption claim. It selects the "
-        + "PAYG withholding scale, not a rate entered by hand. Family and "
-        + "spouse low-income adjustments on the same form are not applied.",
+      help:
+        "The variation declaration's exemption claim. It selects the " +
+        "PAYG withholding scale, not a rate entered by hand. Family and " +
+        "spouse low-income adjustments on the same form are not applied.",
     },
   ],
 };
@@ -201,13 +212,13 @@ const SG_ADMINISTRATION: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "SGAA 1992 s10A(5) (maximum contributions base); 2026–27 base $270,830 "
-    + "(see AU_SUPER_2027)",
+    "SGAA 1992 s10A(5) (maximum contributions base); 2026–27 base $270,830 " +
+    "(see AU_SUPER_2027)",
   summary:
-    "The employer's per-employee SG record for the annual maximum "
-    + "contributions base: qualifying earnings paid this financial year "
-    + "before the employer's payroll ran here, for the $270,830 cap. Runs "
-    + "committed here are added automatically.",
+    "The employer's per-employee SG record for the annual maximum " +
+    "contributions base: qualifying earnings paid this financial year " +
+    "before the employer's payroll ran here, for the $270,830 cap. Runs " +
+    "committed here are added automatically.",
   storage: "certificate_rows",
   fields: [
     {
@@ -216,11 +227,12 @@ const SG_ADMINISTRATION: PayrollCertificate = {
       kind: "amount",
       decimals: 2,
       min: "0",
-      help: "Qualifying earnings this employer paid the employee this financial "
-        + "year before its payroll ran here, copied from the prior provider's "
-        + "report; zero for a new hire or when payroll has run here since 1 July. "
-        + "Do not include runs committed here: the engine adds those itself. No "
-        + "default exists, so the engine refuses to accrue SG without it.",
+      help:
+        "Qualifying earnings this employer paid the employee this financial " +
+        "year before its payroll ran here, copied from the prior provider's " +
+        "report; zero for a new hire or when payroll has run here since 1 July. " +
+        "Do not include runs committed here: the engine adds those itself. No " +
+        "default exists, so the engine refuses to accrue SG without it.",
     },
   ],
   // The field was once the running year-to-date, which included this
@@ -230,9 +242,10 @@ const SG_ADMINISTRATION: PayrollCertificate = {
     {
       key: "qualifying_ytd",
       replacedBy: "opening_qualifying_ytd",
-      notCarriedBecause: "the old figure included runs committed here, which the calculation now adds itself "
-        + "(counting them twice would understate super). Enter only the qualifying earnings paid this financial "
-        + "year before payroll ran here — zero when none",
+      notCarriedBecause:
+        "the old figure included runs committed here, which the calculation now adds itself " +
+        "(counting them twice would understate super). Enter only the qualifying earnings paid this financial " +
+        "year before payroll ran here — zero when none",
     },
   ],
 };
@@ -263,10 +276,10 @@ function auRegion(code: string): PayrollRegionWithholding {
     subRegions: [],
     subRegionConflictRule: "work_only",
     citation:
-      "Taxation Administration (Withholding Schedules) Instrument 2026 "
-      + "(F2026L00716), Schedule 1 — "
-      + "https://www.legislation.gov.au/F2026L00716/asmade/2026-06-12/"
-      + "text/original/epub/OEBPS/document_1/document_1.html",
+      "Taxation Administration (Withholding Schedules) Instrument 2026 " +
+      "(F2026L00716), Schedule 1 — " +
+      "https://www.legislation.gov.au/F2026L00716/asmade/2026-06-12/" +
+      "text/original/epub/OEBPS/document_1/document_1.html",
   };
 }
 

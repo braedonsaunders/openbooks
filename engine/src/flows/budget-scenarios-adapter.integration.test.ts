@@ -3,18 +3,23 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { budgetScenariosFlowAdapter } from "./budget-scenarios-adapter.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function seedScenario(orgId: string, bookId: string, periodId: string, name: string): Promise<string> {
-  const fy = (await db.execute<{ fiscal_year: number }>(
-    sql`select fiscal_year from accounting_periods where id = ${periodId}`, "objects",
-  ))[0]!.fiscal_year;
+async function seedScenario(
+  orgId: string,
+  bookId: string,
+  periodId: string,
+  name: string,
+): Promise<string> {
+  const fy = (
+    await db.execute<{ fiscal_year: number }>(
+      sql`select fiscal_year from accounting_periods where id = ${periodId}`,
+      "objects",
+    )
+  )[0]!.fiscal_year;
   const id = randomUUID();
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -46,8 +51,5 @@ test("budget findCandidateIds stays inside the ambient tenant", { skip: !DB }, a
 });
 
 test("budget findCandidateIds fails closed without a tenant context", { skip: !DB }, async () => {
-  await assert.rejects(
-    budgetScenariosFlowAdapter.findCandidateIds!(10),
-    /ambient tenant context/,
-  );
+  await assert.rejects(budgetScenariosFlowAdapter.findCandidateIds!(10), /ambient tenant context/);
 });

@@ -22,16 +22,13 @@ stubModules({
 const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const { default: messages } = await import("../../../../messages/en");
-const { ViewTabsProvider } =
-  await import("../../../../components/module-home/navigation-context");
+const { ViewTabsProvider } = await import("../../../../components/module-home/navigation-context");
 const { MoneyProvider } = await import("../../../../components/money-provider");
 const { LOCAL_NAVIGATION_BY_ID } = await import("@openbooks/engine/navigation");
 const { SalesWorkspace } = await import("./SalesWorkspace");
 const group = LOCAL_NAVIGATION_BY_ID.get("crm-sales")!.tabs.map((tab) => ({
   href: tab.href,
-  label: (messages.crm.sales.tabs as Record<string, string>)[
-    tab.key.split(".").at(-1)!
-  ]!,
+  label: (messages.crm.sales.tabs as Record<string, string>)[tab.key.split(".").at(-1)!]!,
 }));
 const baseline: SalesWorkspaceData = {
   departments: [],
@@ -90,15 +87,18 @@ async function mount(data: SalesWorkspaceData) {
   );
   return {
     host,
-    update: async (data: SalesWorkspaceData) => act(async () => root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <MoneyProvider currency="CAD">
-          <ViewTabsProvider managed groups={[group]}>
-            <SalesWorkspace data={data} params={{}} />
-          </ViewTabsProvider>
-        </MoneyProvider>
-      </NextIntlClientProvider>,
-    )),
+    update: async (data: SalesWorkspaceData) =>
+      act(async () =>
+        root.render(
+          <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+            <MoneyProvider currency="CAD">
+              <ViewTabsProvider managed groups={[group]}>
+                <SalesWorkspace data={data} params={{}} />
+              </ViewTabsProvider>
+            </MoneyProvider>
+          </NextIntlClientProvider>,
+        ),
+      ),
     close: async () => {
       await act(async () => root.unmount());
       host.remove();
@@ -109,9 +109,7 @@ test("all Sales routes use exactly one global subtab switch in the top-right hea
   for (const tab of group) {
     window.history.replaceState({}, "", tab.href);
     const section = tab.href.split("/").at(-1)!;
-    const page = (
-      section === "sales" ? "overview" : section
-    ) as SalesWorkspaceData["page"];
+    const page = (section === "sales" ? "overview" : section) as SalesWorkspaceData["page"];
     const screen = await mount({ ...baseline, page });
     try {
       if (page !== "overview")
@@ -139,15 +137,10 @@ test("all Sales routes use exactly one global subtab switch in the top-right hea
         "Sales navigation belongs in the header action rail",
       );
       assert.deepEqual(
-        [...strips[0]!.querySelectorAll("a")].map((a) =>
-          a.getAttribute("href"),
-        ),
+        [...strips[0]!.querySelectorAll("a")].map((a) => a.getAttribute("href")),
         group.map((t) => t.href),
       );
-      assert.equal(
-        strips[0]!.querySelector("[aria-current=page]")?.getAttribute("href"),
-        tab.href,
-      );
+      assert.equal(strips[0]!.querySelector("[aria-current=page]")?.getAttribute("href"), tab.href);
       if (page !== "overview") {
         assert.ok(screen.host.querySelector('input[type="search"]'));
         assert.equal(screen.host.querySelector("header form"), null);
@@ -224,7 +217,8 @@ test("choosing an employee keeps representative creation open and eligible", asy
       employeePicker.dispatchEvent(new window.Event("change", { bubbles: true }));
     });
     assert.match(
-      (globalThis as typeof globalThis & { salesRouterCalls: string[] }).salesRouterCalls.at(-1) ?? "",
+      (globalThis as typeof globalThis & { salesRouterCalls: string[] }).salesRouterCalls.at(-1) ??
+        "",
       /row=new&employee=00000000-0000-4000-8000-000000000001/,
     );
     await screen.update({
@@ -234,9 +228,10 @@ test("choosing an employee keeps representative creation open and eligible", asy
       creatingEmployee: employee,
       employees: [employee],
     });
-    const eligibility = [...dialog.querySelectorAll("select")].find((select) =>
-      [...select.options].some((option) => option.value === "yes") &&
-      [...select.options].some((option) => option.value === "no"),
+    const eligibility = [...dialog.querySelectorAll("select")].find(
+      (select) =>
+        [...select.options].some((option) => option.value === "yes") &&
+        [...select.options].some((option) => option.value === "no"),
     )!;
     assert.equal(eligibility.value, "yes");
   } finally {
@@ -283,9 +278,7 @@ test("representative details use the wide native drawer and Financial Health pan
     assert.match(dialog.textContent!, /Sales over time/);
     assert.match(dialog.textContent!, /No attributed sales/);
     assert.equal(
-      [...dialog.querySelectorAll("input")].some(
-        (input) => input.value === rep.name,
-      ),
+      [...dialog.querySelectorAll("input")].some((input) => input.value === rep.name),
       false,
       "employee identity belongs in the drawer title, not a repeated input",
     );
@@ -296,9 +289,7 @@ test("representative details use the wide native drawer and Financial Health pan
       ),
     );
     assert.ok(
-      [...dialog.querySelectorAll("button")].some(
-        (button) => button.textContent === "Save",
-      ),
+      [...dialog.querySelectorAll("button")].some((button) => button.textContent === "Save"),
     );
   } finally {
     await screen.close();
@@ -330,15 +321,11 @@ test("quota creation offers both a native individual sales rep and a sales team 
     const dialog = document.querySelector('[role="dialog"]')!;
     assert.ok(dialog);
     const target = [...dialog.querySelectorAll("select")].find((select) =>
-      [...select.options].some(
-        (option) => option.textContent === "Individual sales rep",
-      ),
+      [...select.options].some((option) => option.textContent === "Individual sales rep"),
     )!;
     assert.ok(target);
     assert.ok(
-      [...dialog.querySelectorAll("option")].some(
-        (option) => option.textContent === rep.name,
-      ),
+      [...dialog.querySelectorAll("option")].some((option) => option.textContent === rep.name),
     );
     await act(async () => {
       target.value = "team";

@@ -10,29 +10,29 @@
  * statement PDF style.
  */
 
-import { hasForeignLines, type PdfRecordTypeMeta } from './catalog'
+import { hasForeignLines, type PdfRecordTypeMeta } from "./catalog";
 
-const INK = '#0f172a'
-const MUTED = '#64748b'
-const FAINT = '#94a3b8'
-const RULE = '#e2e8f0'
-const WASH = '#f8fafc'
-const FONT = "font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;"
+const INK = "#0f172a";
+const MUTED = "#64748b";
+const FAINT = "#94a3b8";
+const RULE = "#e2e8f0";
+const WASH = "#f8fafc";
+const FONT = "font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;";
 
 export type StarterTemplate = {
-  sourceHtml: string
-  headerHtml: string
-  footerHtml: string
-  paperSize?: 'letter' | 'a4' | 'legal' | '4x6'
-  orientation?: 'portrait' | 'landscape'
-  marginMm?: number
-}
+  sourceHtml: string;
+  headerHtml: string;
+  footerHtml: string;
+  paperSize?: "letter" | "a4" | "legal" | "4x6";
+  orientation?: "portrait" | "landscape";
+  marginMm?: number;
+};
 
-const th = (label: string, align = 'left', width?: string) =>
-  `<th style="text-align:${align};${width ? `width:${width};` : ''}padding:7px 10px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:${MUTED};font-weight:700;border-bottom:2px solid ${INK};">${label}</th>`
+const th = (label: string, align = "left", width?: string) =>
+  `<th style="text-align:${align};${width ? `width:${width};` : ""}padding:7px 10px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:${MUTED};font-weight:700;border-bottom:2px solid ${INK};">${label}</th>`;
 
-const td = (token: string, align = 'left') =>
-  `<td style="text-align:${align};padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{${token}}}</td>`
+const td = (token: string, align = "left") =>
+  `<td style="text-align:${align};padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{${token}}}</td>`;
 
 function metaCell(label: string, token: string): string {
   return (
@@ -40,43 +40,47 @@ function metaCell(label: string, token: string): string {
     `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:3px;">${label}</div>` +
     `<div style="font-size:12px;color:${INK};font-weight:600;">{{${token}}}</div>` +
     `</td>`
-  )
+  );
 }
 
-function totalsRow(label: string, token: string, opts?: { strong?: boolean; accent?: string }): string {
-  const strong = opts?.strong
+function totalsRow(
+  label: string,
+  token: string,
+  opts?: { strong?: boolean; accent?: string },
+): string {
+  const strong = opts?.strong;
   const labelStyle = strong
     ? `font-size:12px;color:${INK};font-weight:700;`
-    : `font-size:11px;color:${MUTED};`
+    : `font-size:11px;color:${MUTED};`;
   const valueStyle = strong
     ? `font-size:15px;color:${opts?.accent ?? INK};font-weight:700;`
-    : `font-size:11.5px;color:${INK};`
-  const border = strong ? `border-top:2px solid ${INK};` : ''
+    : `font-size:11.5px;color:${INK};`;
+  const border = strong ? `border-top:2px solid ${INK};` : "";
   return (
     `<tr><td style="padding:5px 18px 5px 0;text-align:right;${labelStyle}${border}">${label}</td>` +
     `<td style="padding:5px 0;text-align:right;white-space:nowrap;${valueStyle}${border}">{{${token}}}</td></tr>`
-  )
+  );
 }
 
 /** The polished transaction-document starter (invoice, bill, quote, PO…). */
 function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
-  const hasParty = meta.partyHeading !== null
-  const hasDue = meta.fields.some((f) => f.key === 'due_date')
-  const hasReference = meta.fields.some((f) => f.key === 'reference_number')
-  const hasFiscalIdentity = meta.fields.some((f) => f.key === 'seller_address')
+  const hasParty = meta.partyHeading !== null;
+  const hasDue = meta.fields.some((f) => f.key === "due_date");
+  const hasReference = meta.fields.some((f) => f.key === "reference_number");
+  const hasFiscalIdentity = meta.fields.some((f) => f.key === "seller_address");
   // A line spent in another currency prints its original amount and rate
   // under the description; lines in the document currency print nothing more.
-  const foreignLines = hasForeignLines(meta)
+  const foreignLines = hasForeignLines(meta);
   const foreignDescriptionCell =
     `<td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{description}}` +
-    `<div data-if="original_currency" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Spent {{original_amount}} · {{fx_rate}} · {{fx_basis}}</div></td>`
+    `<div data-if="original_currency" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Spent {{original_amount}} · {{fx_rate}} · {{fx_basis}}</div></td>`;
 
   const metaCells = [
-    metaCell('Date', 'document_date'),
-    hasDue ? metaCell('Due date', 'due_date') : '',
-    hasReference ? metaCell('Reference', 'reference_number') : '',
-    metaCell('Status', 'status'),
-  ].join('')
+    metaCell("Date", "document_date"),
+    hasDue ? metaCell("Due date", "due_date") : "",
+    hasReference ? metaCell("Reference", "reference_number") : "",
+    metaCell("Status", "status"),
+  ].join("");
 
   const partyBlock = hasParty
     ? `<td style="vertical-align:top;">` +
@@ -84,11 +88,13 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
       `<div style="font-size:13.5px;color:${INK};font-weight:700;padding-bottom:2px;">{{party_name}}</div>` +
       `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{party_address}}</div>` +
       `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{party_email}}</div>` +
-      (hasFiscalIdentity ? `<div data-if="buyer_vat_id" style="font-size:11px;color:${MUTED};">VAT: {{buyer_vat_id}}</div>` +
-        `<div data-if="buyer_legal_registration" style="font-size:11px;color:${MUTED};">Registration: {{buyer_legal_registration}}</div>` +
-        `<div data-if="buyer_electronic_address" style="font-size:11px;color:${MUTED};">{{buyer_electronic_address}}</div>` : '') +
+      (hasFiscalIdentity
+        ? `<div data-if="buyer_vat_id" style="font-size:11px;color:${MUTED};">VAT: {{buyer_vat_id}}</div>` +
+          `<div data-if="buyer_legal_registration" style="font-size:11px;color:${MUTED};">Registration: {{buyer_legal_registration}}</div>` +
+          `<div data-if="buyer_electronic_address" style="font-size:11px;color:${MUTED};">{{buyer_electronic_address}}</div>`
+        : "") +
       `</td>`
-    : `<td style="vertical-align:top;"></td>`
+    : `<td style="vertical-align:top;"></td>`;
 
   const sourceHtml =
     `<div style="${FONT}color:${INK};">` +
@@ -100,12 +106,13 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
     // their embedded invoice requires; every other document prints the
     // registered address and tax numbers from Company & Accounting → Legal
     // identity. Lines collapse when not recorded.
-    (hasFiscalIdentity ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};line-height:1.6;max-width:320px;">{{seller_address}}</div>` +
-      `<div data-if="seller_vat_id" style="font-size:10px;color:${MUTED};">VAT: {{seller_vat_id}}</div>` +
-      `<div data-if="seller_tax_number" style="font-size:10px;color:${MUTED};">Tax registration: {{seller_tax_number}}</div>` +
-      `<div data-if="seller_legal_registration" style="font-size:10px;color:${MUTED};">Registration: {{seller_legal_registration}}</div>` +
-      `<div data-if="seller_contact" style="font-size:10px;color:${MUTED};">{{seller_contact}}</div>` +
-      `<div data-if="seller_electronic_address" style="font-size:10px;color:${MUTED};">{{seller_electronic_address}}</div>`
+    (hasFiscalIdentity
+      ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};line-height:1.6;max-width:320px;">{{seller_address}}</div>` +
+        `<div data-if="seller_vat_id" style="font-size:10px;color:${MUTED};">VAT: {{seller_vat_id}}</div>` +
+        `<div data-if="seller_tax_number" style="font-size:10px;color:${MUTED};">Tax registration: {{seller_tax_number}}</div>` +
+        `<div data-if="seller_legal_registration" style="font-size:10px;color:${MUTED};">Registration: {{seller_legal_registration}}</div>` +
+        `<div data-if="seller_contact" style="font-size:10px;color:${MUTED};">{{seller_contact}}</div>` +
+        `<div data-if="seller_electronic_address" style="font-size:10px;color:${MUTED};">{{seller_electronic_address}}</div>`
       : `<div data-if="org_address" style="font-size:10px;color:${MUTED};line-height:1.6;max-width:320px;">{{org_address}}</div>` +
         `<div data-if="org_tax_ids" style="font-size:10px;color:${MUTED};">{{org_tax_ids}}</div>`) +
     `</td>` +
@@ -123,20 +130,22 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
     `</td>` +
     `</tr></tbody></table>` +
     // ---- Lines ----
-    (meta.key === 'journal'
+    (meta.key === "journal"
       ? `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-        `<tr>${th('Account')}${th('Description')}${th('Amount', 'right', '92px')}</tr>` +
-        `<tr data-each="lines">${td('account_name')}${td('description')}${td('amount', 'right')}</tr>` +
+        `<tr>${th("Account")}${th("Description")}${th("Amount", "right", "92px")}</tr>` +
+        `<tr data-each="lines">${td("account_name")}${td("description")}${td("amount", "right")}</tr>` +
         `</tbody></table>`
       : `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-        `<tr>${th('Item / customer part #')}${th('Description')}${th('Qty', 'right', '52px')}${th('Rate', 'right', '76px')}${th('Amount', 'right', '92px')}</tr>` +
-        `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${foreignLines ? foreignDescriptionCell : td('description')}${hasFiscalIdentity ? td('quantity', 'right').replace('{{quantity}}', '{{quantity}} {{unit}}') : td('quantity', 'right')}${td('unit_price', 'right')}${td('amount', 'right')}</tr>` +
+        `<tr>${th("Item / customer part #")}${th("Description")}${th("Qty", "right", "52px")}${th("Rate", "right", "76px")}${th("Amount", "right", "92px")}</tr>` +
+        `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${foreignLines ? foreignDescriptionCell : td("description")}${hasFiscalIdentity ? td("quantity", "right").replace("{{quantity}}", "{{quantity}} {{unit}}") : td("quantity", "right")}${td("unit_price", "right")}${td("amount", "right")}</tr>` +
         `</tbody></table>`) +
-    (hasFiscalIdentity ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};margin:0 0 8px;">Currency: {{currency}}</div>` +
-      `<table data-if="vat_breakdown" style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-      `<tr>${th('VAT category')}${th('Rate', 'right')}${th('Taxable amount', 'right')}${th('VAT amount', 'right')}${th('Exemption')}</tr>` +
-      `<tr data-each="vat_breakdown">${td('category')}${td('rate', 'right')}${td('taxable_amount', 'right')}${td('tax_amount', 'right')}<td style="padding:8px 10px;font-size:10px;border-bottom:1px solid ${RULE};">{{exemption_reason}} {{exemption_reason_code}}</td></tr>` +
-      `</tbody></table>` : '') +
+    (hasFiscalIdentity
+      ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};margin:0 0 8px;">Currency: {{currency}}</div>` +
+        `<table data-if="vat_breakdown" style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
+        `<tr>${th("VAT category")}${th("Rate", "right")}${th("Taxable amount", "right")}${th("VAT amount", "right")}${th("Exemption")}</tr>` +
+        `<tr data-each="vat_breakdown">${td("category")}${td("rate", "right")}${td("taxable_amount", "right")}${td("tax_amount", "right")}<td style="padding:8px 10px;font-size:10px;border-bottom:1px solid ${RULE};">{{exemption_reason}} {{exemption_reason_code}}</td></tr>` +
+        `</tbody></table>`
+      : "") +
     // ---- Totals ----
     `<table style="width:100%;border-collapse:collapse;margin:0 0 26px;"><tbody><tr>` +
     `<td style="vertical-align:top;">` +
@@ -145,28 +154,30 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
     `</td>` +
     `<td style="vertical-align:top;text-align:right;width:280px;">` +
     `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
-    totalsRow('Subtotal', 'subtotal') +
-    totalsRow('Tax', 'tax_total') +
-    totalsRow('Total', 'total', { strong: true, accent }) +
-    (hasDue ? totalsRow('Balance due', 'balance_due') : '') +
+    totalsRow("Subtotal", "subtotal") +
+    totalsRow("Tax", "tax_total") +
+    totalsRow("Total", "total", { strong: true, accent }) +
+    (hasDue ? totalsRow("Balance due", "balance_due") : "") +
     `</tbody></table>` +
     `</td>` +
     `</tr></tbody></table>` +
-    (hasFiscalIdentity ? `<div data-if="payment_means" style="font-size:10px;color:${MUTED};line-height:1.6;margin-bottom:14px;">` +
-      `<div>Payment: {{payment_means}}</div><div data-if="payee_account">Account / IBAN: {{payee_account}}</div>` +
-      `<div data-if="payee_name">{{payee_name}}</div><div data-if="payee_bic">{{payee_bic}}</div>` +
-      `<div data-if="payment_reference">Payment reference: {{payment_reference}}</div></div>` : '') +
+    (hasFiscalIdentity
+      ? `<div data-if="payment_means" style="font-size:10px;color:${MUTED};line-height:1.6;margin-bottom:14px;">` +
+        `<div>Payment: {{payment_means}}</div><div data-if="payee_account">Account / IBAN: {{payee_account}}</div>` +
+        `<div data-if="payee_name">{{payee_name}}</div><div data-if="payee_bic">{{payee_bic}}</div>` +
+        `<div data-if="payment_reference">Payment reference: {{payment_reference}}</div></div>`
+      : "") +
     // ---- Footer note ----
     `<div style="border-top:1px solid ${RULE};padding-top:10px;font-size:9.5px;color:${FAINT};">` +
     `Thank you for your business. Questions about this document? Contact {{org_name}}.` +
     `</div>` +
-    `</div>`
+    `</div>`;
 
   return {
     sourceHtml,
-    headerHtml: '',
+    headerHtml: "",
     footerHtml: `{{org_name}} · ${meta.docTitle} {{document_number}} · Page {{page}} of {{pages}}`,
-  }
+  };
 }
 
 /** Debit/credit starter for journal entries. */
@@ -180,21 +191,21 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
  * not a branded sales document. Employers restyle it in the designer.
  */
 function payStubStarter(): StarterTemplate {
-  const STUB_INK = '#111111'
-  const cell = 'padding:1px 0;font-size:9.5px;line-height:1.35;vertical-align:top;'
-  const num = `${cell}text-align:right;white-space:nowrap;`
-  const head = (label: string, align = 'left', width?: string) =>
-    `<th style="text-align:${align};${width ? `width:${width};` : ''}padding:0 0 2px;font-size:9px;font-weight:700;color:${STUB_INK};border-bottom:1px solid ${STUB_INK};">${label}</th>`
+  const STUB_INK = "#111111";
+  const cell = "padding:1px 0;font-size:9.5px;line-height:1.35;vertical-align:top;";
+  const num = `${cell}text-align:right;white-space:nowrap;`;
+  const head = (label: string, align = "left", width?: string) =>
+    `<th style="text-align:${align};${width ? `width:${width};` : ""}padding:0 0 2px;font-size:9px;font-weight:700;color:${STUB_INK};border-bottom:1px solid ${STUB_INK};">${label}</th>`;
   const subtotal = (current: string, ytd: string, leadCols: number) =>
     `<tr><td colspan="${leadCols}"></td>` +
     `<td style="${num}border-top:1px solid ${STUB_INK};padding-top:3px;font-size:9px;">{{${current}}}</td>` +
-    `<td style="${num}border-top:1px solid ${STUB_INK};padding-top:3px;font-size:9px;">{{${ytd}}}</td></tr>`
+    `<td style="${num}border-top:1px solid ${STUB_INK};padding-top:3px;font-size:9px;">{{${ytd}}}</td></tr>`;
   const section = (title: string, collection: string, totals: [string, string] | null) =>
     `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;"><tbody>` +
-    `<tr>${head(title)}${head('Current', 'right', '70px')}${head('YTD Amount', 'right', '78px')}</tr>` +
+    `<tr>${head(title)}${head("Current", "right", "70px")}${head("YTD Amount", "right", "78px")}</tr>` +
     `<tr data-each="${collection}"><td style="${cell}">{{description}}</td><td style="${num}">{{current}}</td><td style="${num}">{{ytd_amount}}</td></tr>` +
-    (totals ? subtotal(totals[0], totals[1], 1) : '') +
-    `</tbody></table>`
+    (totals ? subtotal(totals[0], totals[1], 1) : "") +
+    `</tbody></table>`;
 
   const sourceHtml =
     `<div style="${FONT}color:${STUB_INK};">` +
@@ -221,12 +232,18 @@ function payStubStarter(): StarterTemplate {
     `<table style="width:100%;border-collapse:collapse;"><tbody><tr>` +
     `<td style="width:51%;vertical-align:top;padding-right:12px;">` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;"><tbody>` +
-    `<tr>${head('Earnings and Hours')}${head('Qty', 'right', '44px')}${head('Rate', 'right', '52px')}${head('Current', 'right', '62px')}${head('YTD Amount', 'right', '70px')}</tr>` +
+    `<tr>${head("Earnings and Hours")}${head("Qty", "right", "44px")}${head("Rate", "right", "52px")}${head("Current", "right", "62px")}${head("YTD Amount", "right", "70px")}</tr>` +
     `<tr data-each="earnings_detail"><td style="${cell}">{{description}}</td><td style="${num}">{{hours}}</td><td style="${num}">{{rate}}</td><td style="${num}">{{current}}</td><td style="${num}">{{ytd_amount}}</td></tr>` +
-    subtotal('earnings_current_total', 'earnings_ytd_total', 3) +
+    subtotal("earnings_current_total", "earnings_ytd_total", 3) +
     `</tbody></table>` +
-    section('Withholdings', 'withholdings', ['withholdings_current_total', 'withholdings_ytd_total']) +
-    section('Adjustments to Net Pay', 'net_adjustments', ['net_adjustments_current_total', 'net_adjustments_ytd_total']) +
+    section("Withholdings", "withholdings", [
+      "withholdings_current_total",
+      "withholdings_ytd_total",
+    ]) +
+    section("Adjustments to Net Pay", "net_adjustments", [
+      "net_adjustments_current_total",
+      "net_adjustments_ytd_total",
+    ]) +
     `<table style="width:100%;border-collapse:collapse;"><tbody><tr>` +
     `<td style="${cell}font-weight:700;">Net pay</td>` +
     `<td style="${num}font-weight:700;width:70px;">{{net_pay}}</td>` +
@@ -234,16 +251,16 @@ function payStubStarter(): StarterTemplate {
     `</tr></tbody></table>` +
     `</td>` +
     `<td style="width:49%;vertical-align:top;padding-left:12px;">` +
-    section('Taxable Company Items', 'taxable_company_items', null) +
+    section("Taxable Company Items", "taxable_company_items", null) +
     `</td>` +
     `</tr></tbody></table>` +
-    `</div>`
+    `</div>`;
 
   return {
     sourceHtml,
-    headerHtml: '',
-    footerHtml: '',
-  }
+    headerHtml: "",
+    footerHtml: "",
+  };
 }
 
 /**
@@ -267,7 +284,7 @@ function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate
     `</tr></tbody></table>` +
     `<table style="width:100%;border-collapse:collapse;margin:14px 0 6px;"><tbody><tr>` +
     `<td style="vertical-align:bottom;">` +
-    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:3px;">${meta.partyHeading ?? 'Pay to the order of'}</div>` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:3px;">${meta.partyHeading ?? "Pay to the order of"}</div>` +
     `<div style="font-size:14px;font-weight:700;color:${INK};border-bottom:1px solid ${INK};padding-bottom:4px;">{{employee_name}}</div>` +
     `</td>` +
     `<td style="vertical-align:bottom;text-align:right;width:180px;padding-left:24px;">` +
@@ -292,32 +309,35 @@ function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate
     `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding:0 0 12px;">` +
     `Statement of earnings · {{document_number}} · {{period_start}} – {{period_end}}</div>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-    `<tr>${th('Earnings')}${th('Hours', 'right', '70px')}${th('Rate', 'right', '80px')}${th('Amount', 'right', '92px')}</tr>` +
-    `<tr data-each="earnings">${td('description').replace('</td>', '<span data-if="non_cash" style="font-size:9px;color:#64748b;"> · Non-cash</span></td>')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
+    `<tr>${th("Earnings")}${th("Hours", "right", "70px")}${th("Rate", "right", "80px")}${th("Amount", "right", "92px")}</tr>` +
+    `<tr data-each="earnings">${td("description").replace("</td>", '<span data-if="non_cash" style="font-size:9px;color:#64748b;"> · Non-cash</span></td>')}${td("hours", "right")}${td("rate", "right")}${td("amount", "right")}</tr>` +
     `</tbody></table>` +
     `</div><div id="ob-cheque-voucher-deductions">` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-    `<tr>${th('Deductions')}${th('Amount', 'right', '92px')}</tr>` +
-    `<tr data-each="deductions">${td('description')}${td('amount', 'right')}</tr>` +
+    `<tr>${th("Deductions")}${th("Amount", "right", "92px")}</tr>` +
+    `<tr data-each="deductions">${td("description")}${td("amount", "right")}</tr>` +
     `</tbody></table>` +
     `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
-    totalsRow('Gross pay', 'gross') +
-    totalsRow('Non-cash benefits', 'non_cash_earnings').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
-    totalsRow('Cash earnings', 'cash_gross').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
-    totalsRow('Total deductions', 'total_deductions') +
-    totalsRow('Net pay', 'net_pay', { strong: true, accent }) +
+    totalsRow("Gross pay", "gross") +
+    totalsRow("Non-cash benefits", "non_cash_earnings").replace(
+      "<tr",
+      '<tr data-if="has_non_cash_earnings"',
+    ) +
+    totalsRow("Cash earnings", "cash_gross").replace("<tr", '<tr data-if="has_non_cash_earnings"') +
+    totalsRow("Total deductions", "total_deductions") +
+    totalsRow("Net pay", "net_pay", { strong: true, accent }) +
     `</tbody></table>` +
     `<div style="border-top:1px solid ${RULE};margin-top:18px;padding-top:10px;font-size:9.5px;color:${FAINT};">Printed {{printed_date}} · {{org_name}} · Confidential</div>` +
-    `</div></section></div>`
+    `</div></section></div>`;
 
   return {
     sourceHtml,
-    headerHtml: '',
-    footerHtml: '',
-    paperSize: 'letter',
-    orientation: 'portrait',
+    headerHtml: "",
+    footerHtml: "",
+    paperSize: "letter",
+    orientation: "portrait",
     marginMm: 0,
-  }
+  };
 }
 
 function journalStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
@@ -332,13 +352,13 @@ function journalStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplat
     `</tr></tbody></table>` +
     `<div style="height:3px;background:${accent};margin:0 0 22px;"></div>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 24px;"><tbody><tr>` +
-    metaCell('Posting date', 'posting_date') +
-    metaCell('Status', 'status') +
-    metaCell('Origin', 'origin') +
+    metaCell("Posting date", "posting_date") +
+    metaCell("Status", "status") +
+    metaCell("Origin", "origin") +
     `</tr></tbody></table>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-    `<tr>${th('#', 'left', '36px')}${th('Account')}${th('Memo')}${th('Debit', 'right', '92px')}${th('Credit', 'right', '92px')}</tr>` +
-    `<tr data-each="lines">${td('line_number')}${td('account_name')}${td('memo')}${td('debit', 'right')}${td('credit', 'right')}</tr>` +
+    `<tr>${th("#", "left", "36px")}${th("Account")}${th("Memo")}${th("Debit", "right", "92px")}${th("Credit", "right", "92px")}</tr>` +
+    `<tr data-each="lines">${td("line_number")}${td("account_name")}${td("memo")}${td("debit", "right")}${td("credit", "right")}</tr>` +
     `</tbody></table>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 26px;"><tbody><tr>` +
     `<td style="vertical-align:top;">` +
@@ -347,19 +367,19 @@ function journalStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplat
     `</td>` +
     `<td style="vertical-align:top;text-align:right;width:280px;">` +
     `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
-    totalsRow('Total debits', 'total_debits') +
-    totalsRow('Total credits', 'total_credits', { strong: true, accent }) +
+    totalsRow("Total debits", "total_debits") +
+    totalsRow("Total credits", "total_credits", { strong: true, accent }) +
     `</tbody></table>` +
     `</td>` +
     `</tr></tbody></table>` +
     `<div style="border-top:1px solid ${RULE};padding-top:10px;font-size:9.5px;color:${FAINT};">Printed {{printed_date}} · {{org_name}}</div>` +
-    `</div>`
+    `</div>`;
 
   return {
     sourceHtml,
-    headerHtml: '',
+    headerHtml: "",
     footerHtml: `{{org_name}} · ${meta.docTitle} {{entry_number}} · Page {{page}} of {{pages}}`,
-  }
+  };
 }
 
 /** The starter design for a record type, tinted with the org's brand accent. */
@@ -387,11 +407,11 @@ function fieldTicketStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
     `<table style="width:100%;border-collapse:collapse;margin-bottom:18px;background:${WASH};border-radius:8px;"><tr>` +
     `<td style="padding:12px 16px;">` +
     `<table style="border-collapse:collapse;"><tr>` +
-    metaCell('Customer', 'party_name') +
-    metaCell('Project', 'project_name') +
-    metaCell('Customer PO', 'po_number') +
-    metaCell('Foreman', 'foreman_name') +
-    metaCell('Status', 'status') +
+    metaCell("Customer", "party_name") +
+    metaCell("Project", "project_name") +
+    metaCell("Customer PO", "po_number") +
+    metaCell("Foreman", "foreman_name") +
+    metaCell("Status", "status") +
     `</tr></table>` +
     `</td></tr></table>` +
     `<div data-if="work_description" style="font-size:11.5px;color:${INK};line-height:1.6;margin-bottom:18px;"><span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};display:block;padding-bottom:3px;">Work description</span>{{work_description}}</div>` +
@@ -399,26 +419,46 @@ function fieldTicketStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
     `<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${MUTED};font-weight:700;padding-bottom:6px;">Crew hours</div>` +
     `<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">` +
     `<thead><tr>` +
-    th('Employee') + th('Class') + th('Reg', 'right') + th('OT', 'right') + th('DT', 'right') + th('Hours', 'right') + th('Amount', 'right') +
+    th("Employee") +
+    th("Class") +
+    th("Reg", "right") +
+    th("OT", "right") +
+    th("DT", "right") +
+    th("Hours", "right") +
+    th("Amount", "right") +
     `</tr></thead>` +
     `<tbody><tr data-each="crew">` +
-    td('employee_name') + td('labor_class') + td('reg_hours', 'right') + td('ot_hours', 'right') + td('dt_hours', 'right') + td('total_hours', 'right') + td('amount', 'right') +
+    td("employee_name") +
+    td("labor_class") +
+    td("reg_hours", "right") +
+    td("ot_hours", "right") +
+    td("dt_hours", "right") +
+    td("total_hours", "right") +
+    td("amount", "right") +
     `</tr></tbody></table>` +
     // equipment & materials
     `<div data-if="lines" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${MUTED};font-weight:700;padding-bottom:6px;">Equipment, consumables &amp; materials</div>` +
     `<table data-if="lines" style="width:100%;border-collapse:collapse;margin-bottom:20px;">` +
     `<thead><tr>` +
-    th('Item') + th('Description') + th('Qty', 'right') + th('Rate', 'right') + th('Amount', 'right') +
+    th("Item") +
+    th("Description") +
+    th("Qty", "right") +
+    th("Rate", "right") +
+    th("Amount", "right") +
     `</tr></thead>` +
     `<tbody><tr data-each="lines">` +
-    td('item_name') + td('description') + td('quantity', 'right') + td('unit_price', 'right') + td('amount', 'right') +
+    td("item_name") +
+    td("description") +
+    td("quantity", "right") +
+    td("unit_price", "right") +
+    td("amount", "right") +
     `</tr></tbody></table>` +
     // totals
     `<table style="width:100%;border-collapse:collapse;margin-bottom:26px;"><tr><td></td>` +
     `<td style="width:260px;"><table style="width:100%;border-collapse:collapse;">` +
-    totalsRow('Labor', 'labor_total') +
-    totalsRow('Equipment &amp; materials', 'lines_total') +
-    totalsRow('Total', 'grand_total', { strong: true, accent }) +
+    totalsRow("Labor", "labor_total") +
+    totalsRow("Equipment &amp; materials", "lines_total") +
+    totalsRow("Total", "grand_total", { strong: true, accent }) +
     `</table></td></tr></table>` +
     // signatures
     `<table style="width:100%;border-collapse:collapse;"><tr>` +
@@ -431,15 +471,15 @@ function fieldTicketStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
     `<div style="border-top:1px solid ${INK};margin-top:6px;padding-top:4px;font-size:9.5px;color:${MUTED};">Customer — {{customer_signature_name}} <span style="color:${FAINT};">{{customer_signed_at}}</span></div>` +
     `<div data-if="customer_comment" style="padding-top:4px;font-size:10px;color:${MUTED};font-style:italic;">&ldquo;{{customer_comment}}&rdquo;</div>` +
     `</td></tr></table>` +
-    `</div>`
+    `</div>`;
 
   return {
     sourceHtml,
-    headerHtml: '',
+    headerHtml: "",
     footerHtml:
       `<div style="${FONT}font-size:9px;color:${FAINT};width:100%;text-align:center;">` +
       `{{org_name}} · ${meta.docTitle} {{document_number}} · Printed {{printed_date}}</div>`,
-  }
+  };
 }
 
 /**
@@ -465,16 +505,16 @@ function packingSlipStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
     // ---- Ship-to + meta ----
     `<table style="width:100%;border-collapse:collapse;margin:0 0 18px;"><tbody><tr>` +
     `<td style="vertical-align:top;">` +
-    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:5px;">${meta.partyHeading ?? ''}</div>` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:5px;">${meta.partyHeading ?? ""}</div>` +
     `<div style="font-size:13.5px;color:${INK};font-weight:700;padding-bottom:2px;">{{ship_to_name}}</div>` +
     `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{ship_to_address}}</div>` +
     `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{party_phone}}</div>` +
     `</td>` +
     `<td style="vertical-align:top;text-align:right;">` +
     `<table style="border-collapse:collapse;margin-left:auto;"><tbody><tr>` +
-    metaCell('Ship date', 'document_date') +
-    metaCell('Sales order', 'sales_order_number') +
-    metaCell('Customer', 'party_name') +
+    metaCell("Ship date", "document_date") +
+    metaCell("Sales order", "sales_order_number") +
+    metaCell("Customer", "party_name") +
     `</tr></tbody></table>` +
     `</td>` +
     `</tr></tbody></table>` +
@@ -482,16 +522,16 @@ function packingSlipStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
     `<table style="width:100%;border-collapse:collapse;margin:0 0 22px;background:${WASH};border-radius:8px;"><tbody><tr>` +
     `<td style="padding:12px 16px;">` +
     `<table style="border-collapse:collapse;"><tbody><tr>` +
-    metaCell('Carrier', 'carrier_name') +
-    metaCell('Service', 'carrier_service') +
-    metaCell('Tracking number', 'tracking_number') +
-    metaCell('Cartons', 'carton_count') +
+    metaCell("Carrier", "carrier_name") +
+    metaCell("Service", "carrier_service") +
+    metaCell("Tracking number", "tracking_number") +
+    metaCell("Cartons", "carton_count") +
     `</tr></tbody></table>` +
     `</td></tr></tbody></table>` +
     // ---- Packed lines ----
     `<table style="width:100%;border-collapse:collapse;margin:0 0 20px;"><tbody>` +
-    `<tr>${th('Item / customer part #')}${th('Description')}${th('Carton', 'left', '80px')}${th('Qty', 'right', '64px')}${th('Unit', 'left', '52px')}</tr>` +
-    `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${td('description')}${td('carton')}${td('quantity', 'right')}${td('unit')}</tr>` +
+    `<tr>${th("Item / customer part #")}${th("Description")}${th("Carton", "left", "80px")}${th("Qty", "right", "64px")}${th("Unit", "left", "52px")}</tr>` +
+    `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${td("description")}${td("carton")}${td("quantity", "right")}${td("unit")}</tr>` +
     `</tbody></table>` +
     `<div data-if="memo" style="font-size:11px;color:${MUTED};line-height:1.6;margin:0 0 20px;">` +
     `<span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};display:block;padding-bottom:3px;">Notes</span>{{memo}}</div>` +
@@ -503,13 +543,13 @@ function packingSlipStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
     `<td style="width:50%;padding-left:20px;vertical-align:bottom;">` +
     `<div style="border-top:1px solid ${INK};margin-top:36px;padding-top:4px;font-size:9.5px;color:${MUTED};">Date</div>` +
     `</td></tr></tbody></table>` +
-    `</div>`
+    `</div>`;
 
   return {
     sourceHtml,
-    headerHtml: '',
+    headerHtml: "",
     footerHtml: `{{org_name}} · ${meta.docTitle} {{document_number}} · Page {{page}} of {{pages}}`,
-  }
+  };
 }
 
 function cartonLabelStarter(accent: string): StarterTemplate {
@@ -525,15 +565,15 @@ function cartonLabelStarter(accent: string): StarterTemplate {
     `<div style="font-size:17px;font-weight:700;margin-top:3px;">{{ship_to_name}}</div>` +
     `<div style="font-size:13px;line-height:1.35;margin-top:3px;">{{ship_to_address}}</div>` +
     `<div style="display:flex;justify-content:center;margin-top:9mm;">{{barcode barcode}}</div>` +
-    `</div>`
+    `</div>`;
   return {
     sourceHtml,
-    headerHtml: '',
-    footerHtml: '',
-    paperSize: '4x6',
-    orientation: 'portrait',
+    headerHtml: "",
+    footerHtml: "",
+    paperSize: "4x6",
+    orientation: "portrait",
     marginMm: 5,
-  }
+  };
 }
 
 function shippingLabelStarter(accent: string): StarterTemplate {
@@ -553,25 +593,25 @@ function shippingLabelStarter(accent: string): StarterTemplate {
     `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};margin-top:7px;">Tracking number</div>` +
     `<div style="font-size:12px;font-weight:700;margin-top:2px;">{{tracking_number}}</div>` +
     `<div style="display:flex;justify-content:center;margin-top:5mm;">{{barcode tracking_number}}</div>` +
-    `</div>`
+    `</div>`;
   return {
     sourceHtml,
-    headerHtml: '',
-    footerHtml: '',
-    paperSize: '4x6',
-    orientation: 'portrait',
+    headerHtml: "",
+    footerHtml: "",
+    paperSize: "4x6",
+    orientation: "portrait",
     marginMm: 5,
-  }
+  };
 }
 
 export function starterTemplate(meta: PdfRecordTypeMeta, accent?: string | null): StarterTemplate {
-  const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : '#0f766e'
-  if (meta.key === 'journal_entry') return journalStarter(meta, color)
-  if (meta.key === 'pay_stub') return payStubStarter()
-  if (meta.key === 'payroll_cheque') return chequeStarter(meta, color)
-  if (meta.key === 'field_ticket') return fieldTicketStarter(meta, color)
-  if (meta.key === 'shipment_carton_label') return cartonLabelStarter(color)
-  if (meta.key === 'shipment_shipping_label') return shippingLabelStarter(color)
-  if (meta.key === 'shipment') return packingSlipStarter(meta, color)
-  return documentStarter(meta, color)
+  const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : "#0f766e";
+  if (meta.key === "journal_entry") return journalStarter(meta, color);
+  if (meta.key === "pay_stub") return payStubStarter();
+  if (meta.key === "payroll_cheque") return chequeStarter(meta, color);
+  if (meta.key === "field_ticket") return fieldTicketStarter(meta, color);
+  if (meta.key === "shipment_carton_label") return cartonLabelStarter(color);
+  if (meta.key === "shipment_shipping_label") return shippingLabelStarter(color);
+  if (meta.key === "shipment") return packingSlipStarter(meta, color);
+  return documentStarter(meta, color);
 }

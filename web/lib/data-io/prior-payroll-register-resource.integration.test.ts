@@ -4,17 +4,13 @@ import test from "node:test";
 
 // The resource imports the `server-only` marker, which the shared test
 // preset stubs. Same dynamic-import pattern as the other data-io suites.
-const { priorPayrollRegisterResource } = (await import(
-  "./prior-payroll-register-resource.ts"
-)) as typeof import("./prior-payroll-register-resource.ts");
+const { priorPayrollRegisterResource } =
+  (await import("./prior-payroll-register-resource.ts")) as typeof import("./prior-payroll-register-resource.ts");
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 test("prior register imports refuse when the caller scope is missing", async () => {
   const resource = priorPayrollRegisterResource("scope-required-org");
@@ -70,23 +66,35 @@ async function seedEmployee(orgId: string, actorId: string, name: string): Promi
   });
 }
 
-async function tableCount(orgId: string, table: "payroll_prior_registers" | "payroll_prior_stubs"): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from ${sql.raw(`public.${table}`)} where org_id = ${orgId}`, "objects"));
+async function tableCount(
+  orgId: string,
+  table: "payroll_prior_registers" | "payroll_prior_stubs",
+): Promise<number> {
+  const rows = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from ${sql.raw(`public.${table}`)} where org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
 async function stubCountFor(orgId: string, label: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from payroll_prior_stubs
-     where org_id = ${orgId} and employee_label = ${label}`, "objects"));
+     where org_id = ${orgId} and employee_label = ${label}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
 async function priorAuditCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name in ('payroll_prior_registers', 'payroll_prior_stubs')`, "objects"));
+     where org_id = ${orgId} and table_name in ('payroll_prior_registers', 'payroll_prior_stubs')`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -234,35 +242,31 @@ test(
   },
 );
 
-test(
-  "prior register control row previews and commits cleanly",
-  { skip: !DB },
-  async () => {
-    const f = await fixture();
-    try {
-      const preview = await f.resource.write(
-        [row("Prior provider — 2026-07", "Robin Field")],
-        "insert",
-        f.ctxFor(true),
-      );
-      assert.deepEqual(preview.errors, []);
-      assert.equal(preview.created, 1);
-      assert.equal(await tableCount(f.org.orgId, "payroll_prior_registers"), 0);
+test("prior register control row previews and commits cleanly", { skip: !DB }, async () => {
+  const f = await fixture();
+  try {
+    const preview = await f.resource.write(
+      [row("Prior provider — 2026-07", "Robin Field")],
+      "insert",
+      f.ctxFor(true),
+    );
+    assert.deepEqual(preview.errors, []);
+    assert.equal(preview.created, 1);
+    assert.equal(await tableCount(f.org.orgId, "payroll_prior_registers"), 0);
 
-      const committed = await f.resource.write(
-        [row("Prior provider — 2026-07", "Robin Field")],
-        "insert",
-        f.ctxFor(false),
-      );
-      assert.deepEqual(committed.errors, []);
-      assert.equal(committed.created, 1);
-      assert.equal(await tableCount(f.org.orgId, "payroll_prior_registers"), 1);
-      assert.equal(await stubCountFor(f.org.orgId, "Robin Field"), 1);
-    } finally {
-      await dropScratchOrgReporting(f.org.orgId);
-    }
-  },
-);
+    const committed = await f.resource.write(
+      [row("Prior provider — 2026-07", "Robin Field")],
+      "insert",
+      f.ctxFor(false),
+    );
+    assert.deepEqual(committed.errors, []);
+    assert.equal(committed.created, 1);
+    assert.equal(await tableCount(f.org.orgId, "payroll_prior_registers"), 1);
+    assert.equal(await stubCountFor(f.org.orgId, "Robin Field"), 1);
+  } finally {
+    await dropScratchOrgReporting(f.org.orgId);
+  }
+});
 
 test(
   "prior register mixed file keeps honest counts: good row lands, bad row leaves no trace",

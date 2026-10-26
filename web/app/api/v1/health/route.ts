@@ -28,7 +28,10 @@ async function within<T>(operation: Promise<T>, milliseconds = 4_000): Promise<T
 }
 
 async function dependencyReadiness(): Promise<{
-  dependencies: Record<"database" | "redis" | "objectStorage" | "pdfRenderer", "ok" | "unavailable" | "disabled">;
+  dependencies: Record<
+    "database" | "redis" | "objectStorage" | "pdfRenderer",
+    "ok" | "unavailable" | "disabled"
+  >;
   renderer: PdfRendererStatus;
 }> {
   const requireS3 = process.env.OPENBOOKS_REQUIRE_S3_HEALTH === "1";
@@ -79,7 +82,12 @@ export async function GET(req: Request) {
     requireSessionSecret(process.env);
   } catch {
     return NextResponse.json(
-      { status: "error", service: "openbooks-api", version, error: "invalid authentication configuration" },
+      {
+        status: "error",
+        service: "openbooks-api",
+        version,
+        error: "invalid authentication configuration",
+      },
       { status: 503 },
     );
   }
@@ -95,7 +103,7 @@ export async function GET(req: Request) {
     // drain the pool. This route is unauthenticated, so it carries only the
     // ok/unavailable flag, never the executable path or remedy detail;
     // those reach signed-in users through the PDF routes' named 503.
-    const ready = (['database', 'redis', 'objectStorage'] as const).every(
+    const ready = (["database", "redis", "objectStorage"] as const).every(
       (key) => dependencies[key] === "ok" || dependencies[key] === "disabled",
     );
     return NextResponse.json(
@@ -104,7 +112,10 @@ export async function GET(req: Request) {
     );
   }
   if (include !== "worker") {
-    return NextResponse.json({ status: "error", error: "unsupported health detail" }, { status: 400 });
+    return NextResponse.json(
+      { status: "error", error: "unsupported health detail" },
+      { status: 400 },
+    );
   }
   try {
     const heartbeat = await getWorkerHeartbeat();
@@ -116,29 +127,39 @@ export async function GET(req: Request) {
     const scheduler = await readSchedulerTickHealth();
     const schedulerDegraded = scheduler !== null && isSchedulerTickHealthDegraded(scheduler);
     const ready = workerReady && !schedulerDegraded;
-    return NextResponse.json({
-      status: ready ? "ok" : "degraded",
-      service: "openbooks-api",
-      version,
-      worker: { status: workerReady ? "ok" : "stale", heartbeat, ageMs: Number.isFinite(ageMs) ? ageMs : null },
-      scheduler: scheduler
-        ? {
-            status: schedulerDegraded ? "degraded" : "ok",
-            overlapSkips: scheduler.overlapSkips,
-            consecutiveSkips: scheduler.consecutiveSkips,
-            lastTickAt: scheduler.lastTickAt,
-            lastTickOk: scheduler.lastTickOk,
-            dutyFailures: scheduler.lastDutyFailures,
-            sectionFailures: scheduler.lastSectionFailures,
-          }
-        : null,
-    }, { status: ready ? 200 : 503 });
+    return NextResponse.json(
+      {
+        status: ready ? "ok" : "degraded",
+        service: "openbooks-api",
+        version,
+        worker: {
+          status: workerReady ? "ok" : "stale",
+          heartbeat,
+          ageMs: Number.isFinite(ageMs) ? ageMs : null,
+        },
+        scheduler: scheduler
+          ? {
+              status: schedulerDegraded ? "degraded" : "ok",
+              overlapSkips: scheduler.overlapSkips,
+              consecutiveSkips: scheduler.consecutiveSkips,
+              lastTickAt: scheduler.lastTickAt,
+              lastTickOk: scheduler.lastTickOk,
+              dutyFailures: scheduler.lastDutyFailures,
+              sectionFailures: scheduler.lastSectionFailures,
+            }
+          : null,
+      },
+      { status: ready ? 200 : 503 },
+    );
   } catch {
-    return NextResponse.json({
-      status: "degraded",
-      service: "openbooks-api",
-      version,
-      worker: { status: "unavailable", heartbeat: null, ageMs: null },
-    }, { status: 503 });
+    return NextResponse.json(
+      {
+        status: "degraded",
+        service: "openbooks-api",
+        version,
+        worker: { status: "unavailable", heartbeat: null, ageMs: null },
+      },
+      { status: 503 },
+    );
   }
 }

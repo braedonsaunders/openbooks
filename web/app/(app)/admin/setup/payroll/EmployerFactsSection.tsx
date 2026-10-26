@@ -1,200 +1,418 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { Alert, Button, Input, Label, Select } from '@openbooks/ui'
-import { useBusinessToday } from '../../../../../components/business-date-provider'
-import { useAppAction } from '../../../../../lib/use-app-action'
-import { DateField } from '../../../../../components/date-field'
+import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { Alert, Button, Input, Label, Select } from "@openbooks/ui";
+import { useBusinessToday } from "../../../../../components/business-date-provider";
+import { useAppAction } from "../../../../../lib/use-app-action";
+import { DateField } from "../../../../../components/date-field";
 
 interface Fact {
-  key: string
-  kind: 'choice' | 'integer' | 'decimal' | 'boolean'
-  label: string
-  legalBasis: string
-  refusalReason: string
-  required: boolean
-  scope?: 'legal_employer' | 'filing_account'
-  filingProgramType?: string
-  effectivePeriod?: 'date' | 'calendar_year'
-  effectiveThroughRequiredFor?: string[]
-  scale?: number
-  min?: string
-  max?: string
-  choices?: { value: string; label: string }[]
+  key: string;
+  kind: "choice" | "integer" | "decimal" | "boolean";
+  label: string;
+  legalBasis: string;
+  refusalReason: string;
+  required: boolean;
+  scope?: "legal_employer" | "filing_account";
+  filingProgramType?: string;
+  effectivePeriod?: "date" | "calendar_year";
+  effectiveThroughRequiredFor?: string[];
+  scale?: number;
+  min?: string;
+  max?: string;
+  choices?: { value: string; label: string }[];
 }
-interface Pack { country: string; facts: Fact[] }
-interface Employer { id: string; name: string; country: string | null }
-interface FilingAccount { id: string; country: string; programType: string; accountNumber: string; name: string; subsidiaryId: string | null; stateCode: string | null }
+interface Pack {
+  country: string;
+  facts: Fact[];
+}
+interface Employer {
+  id: string;
+  name: string;
+  country: string | null;
+}
+interface FilingAccount {
+  id: string;
+  country: string;
+  programType: string;
+  accountNumber: string;
+  name: string;
+  subsidiaryId: string | null;
+  stateCode: string | null;
+}
 interface Row {
-  id: string
-  subsidiaryId: string | null
-  filingAccountId: string | null
-  country: string
-  factKey: string
-  effectiveFrom: string
-  effectiveThrough: string | null
-  factValue: string
-  changeReason: string
+  id: string;
+  subsidiaryId: string | null;
+  filingAccountId: string | null;
+  country: string;
+  factKey: string;
+  effectiveFrom: string;
+  effectiveThrough: string | null;
+  factValue: string;
+  changeReason: string;
 }
-interface Payload { packs: Pack[]; rows: Row[]; subsidiaries: Employer[]; filingAccounts: FilingAccount[] }
+interface Payload {
+  packs: Pack[];
+  rows: Row[];
+  subsidiaries: Employer[];
+  filingAccounts: FilingAccount[];
+}
 
 /** Pack-declared employer facts, audited and effective-dated in Payroll Setup. */
 export function EmployerFactsSection() {
-  const t = useTranslations('payroll.settingsPage.employerFacts')
-  const tc = useTranslations('common')
-  const today = useBusinessToday()
-  const [data, setData] = useState<Payload | null>(null)
-  const [country, setCountry] = useState('')
-  const [subsidiaryId, setSubsidiaryId] = useState('')
-  const [filingAccountId, setFilingAccountId] = useState('')
-  const [factKey, setFactKey] = useState('')
-  const [effectiveFrom, setEffectiveFrom] = useState(today)
-  const [effectiveThrough, setEffectiveThrough] = useState('')
-  const [value, setValue] = useState('')
-  const [reason, setReason] = useState('')
-  const [failure, setFailure] = useState<string | null>(null)
-  const { execute: executeLoad, busy: loading } = useAppAction()
-  const saveAction = useAppAction()
+  const t = useTranslations("payroll.settingsPage.employerFacts");
+  const tc = useTranslations("common");
+  const today = useBusinessToday();
+  const [data, setData] = useState<Payload | null>(null);
+  const [country, setCountry] = useState("");
+  const [subsidiaryId, setSubsidiaryId] = useState("");
+  const [filingAccountId, setFilingAccountId] = useState("");
+  const [factKey, setFactKey] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState(today);
+  const [effectiveThrough, setEffectiveThrough] = useState("");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
+  const [failure, setFailure] = useState<string | null>(null);
+  const { execute: executeLoad, busy: loading } = useAppAction();
+  const saveAction = useAppAction();
 
   const load = useCallback(async () => {
-    await executeLoad(() => fetchAction<Payload>('/api/payroll/settings/employer-facts'), {
-      fallbackMessage: t('loadFailed'),
-      onRefused: (error) => setFailure(error.displayMessage(t('loadFailed'))),
+    await executeLoad(() => fetchAction<Payload>("/api/payroll/settings/employer-facts"), {
+      fallbackMessage: t("loadFailed"),
+      onRefused: (error) => setFailure(error.displayMessage(t("loadFailed"))),
       onOk: (payload) => {
-        setData(payload)
-        setFailure(null)
+        setData(payload);
+        setFailure(null);
       },
-    })
-  }, [executeLoad, t])
+    });
+  }, [executeLoad, t]);
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const selectedCountry = country || data?.packs[0]?.country || ''
-  const selectedSubsidiaryId = subsidiaryId || data?.subsidiaries[0]?.id || ''
-  const pack = data?.packs.find((candidate) => candidate.country === selectedCountry)
-  const fact = pack?.facts.find((candidate) => candidate.key === factKey) ?? pack?.facts[0]
-  const entity = data?.subsidiaries.find((candidate) => candidate.id === selectedSubsidiaryId)
-  const accountChoices = data?.filingAccounts.filter((account) =>
-    account.country === selectedCountry && account.programType === fact?.filingProgramType,
-  ) ?? []
-  const selectedFilingAccountId = accountChoices.some((candidate) => candidate.id === filingAccountId)
-    ? filingAccountId : accountChoices[0]?.id || ''
-  const account = accountChoices.find((candidate) => candidate.id === selectedFilingAccountId)
+  const selectedCountry = country || data?.packs[0]?.country || "";
+  const selectedSubsidiaryId = subsidiaryId || data?.subsidiaries[0]?.id || "";
+  const pack = data?.packs.find((candidate) => candidate.country === selectedCountry);
+  const fact = pack?.facts.find((candidate) => candidate.key === factKey) ?? pack?.facts[0];
+  const entity = data?.subsidiaries.find((candidate) => candidate.id === selectedSubsidiaryId);
+  const accountChoices =
+    data?.filingAccounts.filter(
+      (account) =>
+        account.country === selectedCountry && account.programType === fact?.filingProgramType,
+    ) ?? [];
+  const selectedFilingAccountId = accountChoices.some(
+    (candidate) => candidate.id === filingAccountId,
+  )
+    ? filingAccountId
+    : accountChoices[0]?.id || "";
+  const account = accountChoices.find((candidate) => candidate.id === selectedFilingAccountId);
   // Filtered inline (not memoized): the account-scoped row test reads the
   // selected fact and filing account, both derived per render, which the
   // compiler cannot preserve as manual-memoization dependencies.
-  const visibleRows = data?.rows.filter((row) =>
-    row.country === selectedCountry && (fact?.scope === 'filing_account'
-      ? row.filingAccountId === selectedFilingAccountId
-      : row.subsidiaryId === selectedSubsidiaryId),
-  ) ?? []
+  const visibleRows =
+    data?.rows.filter(
+      (row) =>
+        row.country === selectedCountry &&
+        (fact?.scope === "filing_account"
+          ? row.filingAccountId === selectedFilingAccountId
+          : row.subsidiaryId === selectedSubsidiaryId),
+    ) ?? [];
 
   const save = async () => {
-    if (!fact) return
-    await saveAction.execute(() => fetchAction('/api/payroll/settings/employer-facts', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ country: selectedCountry, factKey: fact.key,
-          ...(fact.scope === 'filing_account'
-            ? { filingAccountId: selectedFilingAccountId }
-            : { subsidiaryId: selectedSubsidiaryId }),
-          effectiveFrom: fact.effectivePeriod === 'calendar_year' ? `${effectiveFrom.slice(0, 4)}-01-01` : effectiveFrom,
-          ...(fact.effectiveThroughRequiredFor?.includes(value) && effectiveThrough ? { effectiveThrough } : {}),
-          value, changeReason: reason }),
-
-      }), {
-        fallbackMessage: t('saveFailed'),
-        onRefused: (error) => setFailure(error.displayMessage(t('saveFailed'))),
+    if (!fact) return;
+    await saveAction.execute(
+      () =>
+        fetchAction("/api/payroll/settings/employer-facts", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            country: selectedCountry,
+            factKey: fact.key,
+            ...(fact.scope === "filing_account"
+              ? { filingAccountId: selectedFilingAccountId }
+              : { subsidiaryId: selectedSubsidiaryId }),
+            effectiveFrom:
+              fact.effectivePeriod === "calendar_year"
+                ? `${effectiveFrom.slice(0, 4)}-01-01`
+                : effectiveFrom,
+            ...(fact.effectiveThroughRequiredFor?.includes(value) && effectiveThrough
+              ? { effectiveThrough }
+              : {}),
+            value,
+            changeReason: reason,
+          }),
+        }),
+      {
+        fallbackMessage: t("saveFailed"),
+        onRefused: (error) => setFailure(error.displayMessage(t("saveFailed"))),
         onOk: () => {
-          setFailure(null)
-          toast.success(t('saved'))
-          setValue('')
-          setEffectiveThrough('')
-          setReason('')
-          void load()
+          setFailure(null);
+          toast.success(t("saved"));
+          setValue("");
+          setEffectiveThrough("");
+          setReason("");
+          void load();
         },
-      })
-  }
+      },
+    );
+  };
 
-  if (!data && !failure && loading) return <p role="status">{t('loading')}</p>
+  if (!data && !failure && loading) return <p role="status">{t("loading")}</p>;
 
-  const entityName = entity?.name ?? t('legalEmployer')
+  const entityName = entity?.name ?? t("legalEmployer");
   return (
     <section className="space-y-5" aria-labelledby="employer-facts-heading">
       <div>
-        <h2 id="employer-facts-heading" className="text-lg font-semibold">{t('heading')}</h2>
-        <p className="text-sm text-muted-foreground">{t('description')}</p>
+        <h2 id="employer-facts-heading" className="text-lg font-semibold">
+          {t("heading")}
+        </h2>
+        <p className="text-sm text-muted-foreground">{t("description")}</p>
       </div>
-      {failure && <Alert variant="destructive">{failure} <Button variant="outline" onClick={() => void load()} disabled={loading}>{tc('actions.retry')}</Button></Alert>}
-      {data && data.packs.length === 0 && <Alert>{t('noPacks')}</Alert>}
+      {failure && (
+        <Alert variant="destructive">
+          {failure}{" "}
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+            {tc("actions.retry")}
+          </Button>
+        </Alert>
+      )}
+      {data && data.packs.length === 0 && <Alert>{t("noPacks")}</Alert>}
       {data && data.packs.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-4">
             <div className="space-y-1">
-              <Label htmlFor="employer-fact-country">{t('country')}</Label>
-              <Select id="employer-fact-country" value={selectedCountry} onChange={(event) => { setCountry(event.target.value); setFactKey(''); setFilingAccountId(''); setValue(''); setEffectiveThrough('') }}>
-                {data.packs.map((entry) => <option key={entry.country} value={entry.country}>{entry.country}</option>)}
+              <Label htmlFor="employer-fact-country">{t("country")}</Label>
+              <Select
+                id="employer-fact-country"
+                value={selectedCountry}
+                onChange={(event) => {
+                  setCountry(event.target.value);
+                  setFactKey("");
+                  setFilingAccountId("");
+                  setValue("");
+                  setEffectiveThrough("");
+                }}
+              >
+                {data.packs.map((entry) => (
+                  <option key={entry.country} value={entry.country}>
+                    {entry.country}
+                  </option>
+                ))}
               </Select>
             </div>
-            {fact?.scope === 'filing_account' ? (
+            {fact?.scope === "filing_account" ? (
               <div className="space-y-1">
                 <Label htmlFor="employer-fact-filing-account">Filing account</Label>
-                <Select id="employer-fact-filing-account" value={selectedFilingAccountId} onChange={(event) => setFilingAccountId(event.target.value)}>
-                  {accountChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.accountNumber}{entry.stateCode ? ` · ${entry.stateCode}` : ''}</option>)}
+                <Select
+                  id="employer-fact-filing-account"
+                  value={selectedFilingAccountId}
+                  onChange={(event) => setFilingAccountId(event.target.value)}
+                >
+                  {accountChoices.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name} · {entry.accountNumber}
+                      {entry.stateCode ? ` · ${entry.stateCode}` : ""}
+                    </option>
+                  ))}
                 </Select>
-                {accountChoices.length === 0 && <p role="status" className="text-sm text-muted-foreground">Add an active {fact.filingProgramType} account before recording this fact.</p>}
+                {accountChoices.length === 0 && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    Add an active {fact.filingProgramType} account before recording this fact.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-1">
-                <Label htmlFor="employer-fact-subsidiary">{t('subsidiary')}</Label>
-                <Select id="employer-fact-subsidiary" value={selectedSubsidiaryId} onChange={(event) => { setSubsidiaryId(event.target.value); setEffectiveThrough('') }}>
-                  {data.subsidiaries.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{entry.country ? ` · ${entry.country}` : ''}</option>)}
+                <Label htmlFor="employer-fact-subsidiary">{t("subsidiary")}</Label>
+                <Select
+                  id="employer-fact-subsidiary"
+                  value={selectedSubsidiaryId}
+                  onChange={(event) => {
+                    setSubsidiaryId(event.target.value);
+                    setEffectiveThrough("");
+                  }}
+                >
+                  {data.subsidiaries.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                      {entry.country ? ` · ${entry.country}` : ""}
+                    </option>
+                  ))}
                 </Select>
               </div>
             )}
             <div className="space-y-1">
-              <Label htmlFor="employer-fact-name">{t('fact')}</Label>
-              <Select id="employer-fact-name" value={fact?.key ?? ''} onChange={(event) => { setFactKey(event.target.value); setFilingAccountId(''); setValue(''); setEffectiveThrough('') }}>
-                {pack?.facts.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
+              <Label htmlFor="employer-fact-name">{t("fact")}</Label>
+              <Select
+                id="employer-fact-name"
+                value={fact?.key ?? ""}
+                onChange={(event) => {
+                  setFactKey(event.target.value);
+                  setFilingAccountId("");
+                  setValue("");
+                  setEffectiveThrough("");
+                }}
+              >
+                {pack?.facts.map((entry) => (
+                  <option key={entry.key} value={entry.key}>
+                    {entry.label}
+                  </option>
+                ))}
               </Select>
             </div>
-            {fact && <div className="rounded-md border p-3 text-sm"><p>{fact.legalBasis}</p><p className="mt-1 text-muted-foreground">{fact.refusalReason}</p></div>}
+            {fact && (
+              <div className="rounded-md border p-3 text-sm">
+                <p>{fact.legalBasis}</p>
+                <p className="mt-1 text-muted-foreground">{fact.refusalReason}</p>
+              </div>
+            )}
             <div className="space-y-1">
-              <Label htmlFor="employer-fact-effective">{t('effectiveFrom')}</Label>
-              {fact?.effectivePeriod === 'calendar_year'
-                ? <Input id="employer-fact-effective" type="number" min="2000" max="2100" value={effectiveFrom.slice(0, 4)} onChange={(event) => setEffectiveFrom(`${event.target.value}-01-01`)} />
-                : <DateField id="employer-fact-effective" value={effectiveFrom} onChange={(next) => setEffectiveFrom(next)} />}
+              <Label htmlFor="employer-fact-effective">{t("effectiveFrom")}</Label>
+              {fact?.effectivePeriod === "calendar_year" ? (
+                <Input
+                  id="employer-fact-effective"
+                  type="number"
+                  min="2000"
+                  max="2100"
+                  value={effectiveFrom.slice(0, 4)}
+                  onChange={(event) => setEffectiveFrom(`${event.target.value}-01-01`)}
+                />
+              ) : (
+                <DateField
+                  id="employer-fact-effective"
+                  value={effectiveFrom}
+                  onChange={(next) => setEffectiveFrom(next)}
+                />
+              )}
             </div>
             {fact?.effectiveThroughRequiredFor?.includes(value) && (
               <div className="space-y-1">
                 <Label htmlFor="employer-fact-through">Effective through (inclusive)</Label>
-                <DateField id="employer-fact-through" min={effectiveFrom} value={effectiveThrough} onChange={(value) => setEffectiveThrough(value)} required />
+                <DateField
+                  id="employer-fact-through"
+                  min={effectiveFrom}
+                  value={effectiveThrough}
+                  onChange={(value) => setEffectiveThrough(value)}
+                  required
+                />
               </div>
             )}
-            {fact?.kind === 'choice' ? (
-              <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact.label}</Label><Select id="employer-fact-value" value={value} onChange={(event) => { setValue(event.target.value); setEffectiveThrough('') }}><option value="">{t('selectPlaceholder')}</option>{fact.choices?.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</Select></div>
-            ) : fact?.kind === 'boolean' ? (
-              <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact.label}</Label><Select id="employer-fact-value" value={value} onChange={(event) => setValue(event.target.value)}><option value="">{t('selectPlaceholder')}</option><option value="true">{t('yes')}</option><option value="false">{t('no')}</option></Select></div>
+            {fact?.kind === "choice" ? (
+              <div className="space-y-1">
+                <Label htmlFor="employer-fact-value">{fact.label}</Label>
+                <Select
+                  id="employer-fact-value"
+                  value={value}
+                  onChange={(event) => {
+                    setValue(event.target.value);
+                    setEffectiveThrough("");
+                  }}
+                >
+                  <option value="">{t("selectPlaceholder")}</option>
+                  {fact.choices?.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : fact?.kind === "boolean" ? (
+              <div className="space-y-1">
+                <Label htmlFor="employer-fact-value">{fact.label}</Label>
+                <Select
+                  id="employer-fact-value"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                >
+                  <option value="">{t("selectPlaceholder")}</option>
+                  <option value="true">{t("yes")}</option>
+                  <option value="false">{t("no")}</option>
+                </Select>
+              </div>
             ) : (
-              <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact?.label}</Label><Input id="employer-fact-value" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} placeholder={fact?.kind === 'decimal' ? t('decimalPlaces', { scale: fact.scale ?? 0 }) : t('wholeNumber')} /></div>
+              <div className="space-y-1">
+                <Label htmlFor="employer-fact-value">{fact?.label}</Label>
+                <Input
+                  id="employer-fact-value"
+                  inputMode="decimal"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  placeholder={
+                    fact?.kind === "decimal"
+                      ? t("decimalPlaces", { scale: fact.scale ?? 0 })
+                      : t("wholeNumber")
+                  }
+                />
+              </div>
             )}
-            <div className="space-y-1"><Label htmlFor="employer-fact-reason">{t('reason')}</Label><Input id="employer-fact-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required /></div>
-            <Button onClick={() => void save()} disabled={saveAction.busy || !fact || !value || !reason.trim()
-              || (fact.scope === 'filing_account' ? !selectedFilingAccountId : !selectedSubsidiaryId)
-              || (fact.effectiveThroughRequiredFor?.includes(value) === true && (!effectiveThrough || effectiveThrough < effectiveFrom))}>{saveAction.busy ? t('saving') : t('save')}</Button>
+            <div className="space-y-1">
+              <Label htmlFor="employer-fact-reason">{t("reason")}</Label>
+              <Input
+                id="employer-fact-reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                maxLength={500}
+                required
+              />
+            </div>
+            <Button
+              onClick={() => void save()}
+              disabled={
+                saveAction.busy ||
+                !fact ||
+                !value ||
+                !reason.trim() ||
+                (fact.scope === "filing_account"
+                  ? !selectedFilingAccountId
+                  : !selectedSubsidiaryId) ||
+                (fact.effectiveThroughRequiredFor?.includes(value) === true &&
+                  (!effectiveThrough || effectiveThrough < effectiveFrom))
+              }
+            >
+              {saveAction.busy ? t("saving") : t("save")}
+            </Button>
           </div>
-          <div className="space-y-3" aria-label={t('currentFacts', { name: fact?.scope === 'filing_account' ? account?.name ?? 'Filing account' : entity?.name ?? t('employerFallback') })}>
-            <h3 className="font-medium">{t('currentValues', { name: fact?.scope === 'filing_account' ? account?.name ?? 'filing account' : entityName })}</h3>
-            {visibleRows.length === 0 ? <p className="text-sm text-muted-foreground">{t('noRows')}</p> : visibleRows.map((row) => {
-              const declaration = pack?.facts.find((entry) => entry.key === row.factKey)
-              return <article key={row.id} className="rounded-md border p-3"><h4 className="font-medium">{declaration?.label ?? row.factKey}</h4><p>{row.factValue} · {t('effectiveOn', { date: row.effectiveFrom })}{row.effectiveThrough ? ` – ${row.effectiveThrough}` : ''}</p><p className="text-sm text-muted-foreground">{row.changeReason}</p></article>
+          <div
+            className="space-y-3"
+            aria-label={t("currentFacts", {
+              name:
+                fact?.scope === "filing_account"
+                  ? (account?.name ?? "Filing account")
+                  : (entity?.name ?? t("employerFallback")),
             })}
+          >
+            <h3 className="font-medium">
+              {t("currentValues", {
+                name:
+                  fact?.scope === "filing_account"
+                    ? (account?.name ?? "filing account")
+                    : entityName,
+              })}
+            </h3>
+            {visibleRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("noRows")}</p>
+            ) : (
+              visibleRows.map((row) => {
+                const declaration = pack?.facts.find((entry) => entry.key === row.factKey);
+                return (
+                  <article key={row.id} className="rounded-md border p-3">
+                    <h4 className="font-medium">{declaration?.label ?? row.factKey}</h4>
+                    <p>
+                      {row.factValue} · {t("effectiveOn", { date: row.effectiveFrom })}
+                      {row.effectiveThrough ? ` – ${row.effectiveThrough}` : ""}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{row.changeReason}</p>
+                  </article>
+                );
+              })
+            )}
           </div>
         </div>
       )}
     </section>
-  )
+  );
 }

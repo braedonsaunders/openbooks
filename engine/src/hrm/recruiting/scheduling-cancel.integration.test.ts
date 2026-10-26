@@ -3,25 +3,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { db } from "../../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  type ScratchOrg
-} from "../../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, type ScratchOrg } from "../../testing/fixtures.ts";
 import {
   enableFeatures,
   grant,
   linkPerson,
   mkEmployment,
-  recruitingError, withHarness
+  recruitingError,
+  withHarness,
 } from "../../testing/hrm-harness.ts";
 import { createApplication } from "./applications.ts";
 import { createCandidate } from "./candidates.ts";
 import { cancelInterview, scheduleInterview } from "./interviews.ts";
-import {
-  createRequisition,
-  openRequisition,
-} from "./requisitions.ts";
+import { createRequisition, openRequisition } from "./requisitions.ts";
 import { bookSlot, proposeSlots, readBookingLink } from "./scheduling.ts";
 import { hashRecruitingToken } from "./tokens.ts";
 
@@ -41,15 +35,25 @@ type Harness = {
 async function setupSchedulingHarness(): Promise<Harness> {
   const org = await createScratchOrg();
   await enableFeatures(org.orgId, ["hrm", "hrmRecruiting"]);
-  const recruiterId = await createScratchUser(org.orgId, "Scheduling Recruiter", "scheduling_recruiter");
-  const interviewerId = await createScratchUser(org.orgId, "Scheduling Interviewer", "scheduling_interviewer");
+  const recruiterId = await createScratchUser(
+    org.orgId,
+    "Scheduling Recruiter",
+    "scheduling_recruiter",
+  );
+  const interviewerId = await createScratchUser(
+    org.orgId,
+    "Scheduling Interviewer",
+    "scheduling_interviewer",
+  );
   await grant(org.orgId, recruiterId, ["hrm.recruiting.read", "hrm.recruiting.manage"]);
   const interviewerPartyId = await linkPerson(org.orgId, interviewerId, "Scheduling Interviewer");
   await mkEmployment(org.orgId, interviewerPartyId, org.subsidiaryId);
   return { org, recruiterId, interviewerPartyId };
 }
 
-async function seedProposed(h: Harness): Promise<{ interviewId: string; token: string; slotId: string }> {
+async function seedProposed(
+  h: Harness,
+): Promise<{ interviewId: string; token: string; slotId: string }> {
   const orgId = h.org.orgId;
   const requisition = await createRequisition({
     orgId,
@@ -58,7 +62,11 @@ async function seedProposed(h: Harness): Promise<{ interviewId: string; token: s
     employerSubsidiaryId: h.org.subsidiaryId,
     headcount: 1,
   });
-  const opened = await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+  const opened = await openRequisition({
+    orgId,
+    actorId: h.recruiterId,
+    requisitionId: requisition.id,
+  });
   const { candidate } = await createCandidate({
     orgId,
     actorId: h.recruiterId,
@@ -84,149 +92,208 @@ async function seedProposed(h: Harness): Promise<{ interviewId: string; token: s
     orgId,
     actorId: h.recruiterId,
     interviewId: interview.id,
-    windows: [{ startsAt: "2027-10-01T09:00:00Z", endsAt: "2027-10-01T09:30:00Z", timezone: "America/Toronto" }],
+    windows: [
+      {
+        startsAt: "2027-10-01T09:00:00Z",
+        endsAt: "2027-10-01T09:30:00Z",
+        timezone: "America/Toronto",
+      },
+    ],
   });
   return { interviewId: interview.id, token: proposed.bookingToken, slotId: proposed.slots[0]!.id };
 }
 
 test("cancelling an interview kills the outstanding booking link", async () => {
-  await withHarness(() => setupSchedulingHarness(), async (h) => {
-    const { interviewId, token, slotId } = await seedProposed(h);
-    const orgId = h.org.orgId;
-    await cancelInterview({ orgId, actorId: h.recruiterId, interviewId });
-    // Proposed slots die with the interview, proved from storage.
-    const slots = await db.execute<{ kind: string; tokenHash: string | null }>(sql`
+  await withHarness(
+    () => setupSchedulingHarness(),
+    async (h) => {
+      const { interviewId, token, slotId } = await seedProposed(h);
+      const orgId = h.org.orgId;
+      await cancelInterview({ orgId, actorId: h.recruiterId, interviewId });
+      // Proposed slots die with the interview, proved from storage.
+      const slots = await db.execute<{ kind: string; tokenHash: string | null }>(
+        sql`
       select kind, candidate_token_hash as "tokenHash" from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId}
-    `, "objects");
-    assert.ok(slots.length > 0);
-    for (const slot of slots) {
-      assert.equal(slot.kind, "declined");
-      assert.equal(slot.tokenHash, null);
-    }
-    // The candidate's link is dead: booking and reading both refuse.
-    const bookError = recruitingError(await bookSlot({
-      bookingToken: token,
-      slotId,
-      candidateName: "Slot Candidate",
-      enqueueEmail: async () => { },
-    }).then(
-      () => null,
-      (e: unknown) => e,
-    ));
-    assert.equal(bookError.code, "REFUSED");
-    assert.match(bookError.message, /no longer live/);
-    const readError = recruitingError(await readBookingLink(token).then(
-      () => null,
-      (e: unknown) => e,
-    ));
-    assert.equal(readError.code, "REFUSED");
-    assert.match(readError.message, /no open slots/);
-  });
+    `,
+        "objects",
+      );
+      assert.ok(slots.length > 0);
+      for (const slot of slots) {
+        assert.equal(slot.kind, "declined");
+        assert.equal(slot.tokenHash, null);
+      }
+      // The candidate's link is dead: booking and reading both refuse.
+      const bookError = recruitingError(
+        await bookSlot({
+          bookingToken: token,
+          slotId,
+          candidateName: "Slot Candidate",
+          enqueueEmail: async () => {},
+        }).then(
+          () => null,
+          (e: unknown) => e,
+        ),
+      );
+      assert.equal(bookError.code, "REFUSED");
+      assert.match(bookError.message, /no longer live/);
+      const readError = recruitingError(
+        await readBookingLink(token).then(
+          () => null,
+          (e: unknown) => e,
+        ),
+      );
+      assert.equal(readError.code, "REFUSED");
+      assert.match(readError.message, /no open slots/);
+    },
+  );
 });
 
 test("booking a cancelled interview is refused by name even when the link resolves", async () => {
-  await withHarness(() => setupSchedulingHarness(), async (h) => {
-    const { interviewId, token, slotId } = await seedProposed(h);
-    const orgId = h.org.orgId;
-    await cancelInterview({ orgId, actorId: h.recruiterId, interviewId });
-    // Simulate the interleaving the status gate exists for: the link lookup
-    // resolved, then the cancel committed. Restore the hash alone (the slot
-    // stays declined) so the link resolves against a cancelled interview.
-    await db.execute(sql`
+  await withHarness(
+    () => setupSchedulingHarness(),
+    async (h) => {
+      const { interviewId, token, slotId } = await seedProposed(h);
+      const orgId = h.org.orgId;
+      await cancelInterview({ orgId, actorId: h.recruiterId, interviewId });
+      // Simulate the interleaving the status gate exists for: the link lookup
+      // resolved, then the cancel committed. Restore the hash alone (the slot
+      // stays declined) so the link resolves against a cancelled interview.
+      await db.execute(sql`
       update hrm_interview_slots
          set candidate_token_hash = ${hashRecruitingToken(token)}
        where org_id = ${orgId} and interview_id = ${interviewId} and id = ${slotId}
     `);
-    const error = recruitingError(await bookSlot({
-      bookingToken: token,
-      slotId,
-      candidateName: "Slot Candidate",
-      enqueueEmail: async () => { },
-    }).then(
-      () => null,
-      (e: unknown) => e,
-    ));
-    assert.equal(error.code, "REFUSED");
-    assert.match(error.message, /was cancelled/);
-    // And nothing was booked.
-    const booked = (await db.execute<{ n: string }>(sql`
+      const error = recruitingError(
+        await bookSlot({
+          bookingToken: token,
+          slotId,
+          candidateName: "Slot Candidate",
+          enqueueEmail: async () => {},
+        }).then(
+          () => null,
+          (e: unknown) => e,
+        ),
+      );
+      assert.equal(error.code, "REFUSED");
+      assert.match(error.message, /was cancelled/);
+      // And nothing was booked.
+      const booked = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
-    `, "objects"))[0]!.n;
-    assert.equal(booked, "0");
-  });
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(booked, "0");
+    },
+  );
 });
 test("public booking tokens refuse after Recruiting is disabled", async () => {
-  await withHarness(() => setupSchedulingHarness(), async (h) => {
-    const { token, slotId } = await seedProposed(h);
-    await db.execute(sql`
+  await withHarness(
+    () => setupSchedulingHarness(),
+    async (h) => {
+      const { token, slotId } = await seedProposed(h);
+      await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmRecruiting}', 'false'::jsonb, true)
        where id = ${h.org.orgId}
     `);
-    for (const result of [
-      await readBookingLink(token).then(() => null, (error: unknown) => error),
-      await bookSlot({
-        bookingToken: token,
-        slotId,
-        candidateName: "Slot Candidate",
-        enqueueEmail: async () => { },
-      }).then(() => null, (error: unknown) => error),
-    ]) {
-      const error = recruitingError(result);
-      assert.equal(error.code, "REFUSED");
-      assert.match(error.message, /Recruiting is off/);
-    }
-  });
+      for (const result of [
+        await readBookingLink(token).then(
+          () => null,
+          (error: unknown) => error,
+        ),
+        await bookSlot({
+          bookingToken: token,
+          slotId,
+          candidateName: "Slot Candidate",
+          enqueueEmail: async () => {},
+        }).then(
+          () => null,
+          (error: unknown) => error,
+        ),
+      ]) {
+        const error = recruitingError(result);
+        assert.equal(error.code, "REFUSED");
+        assert.match(error.message, /Recruiting is off/);
+      }
+    },
+  );
 });
 
 test("concurrent bookings across different slots still book only one sitting", async () => {
-  await withHarness(() => setupSchedulingHarness(), async (h) => {
-    const { interviewId } = await seedProposed(h);
-    const proposed = await proposeSlots({
-      orgId: h.org.orgId,
-      actorId: h.recruiterId,
-      interviewId,
-      windows: [
-        { startsAt: "2027-10-02T09:00:00Z", endsAt: "2027-10-02T09:30:00Z", timezone: "UTC" },
-        { startsAt: "2027-10-03T09:00:00Z", endsAt: "2027-10-03T09:30:00Z", timezone: "UTC" },
-      ],
-    });
-    const results = await Promise.allSettled(proposed.slots.map((slot) => bookSlot({
-      bookingToken: proposed.bookingToken,
-      slotId: slot.id,
-      candidateName: "Slot Candidate",
-      enqueueEmail: async () => { },
-    })));
-    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
-    const booked = (await db.execute<{ count: string }>(sql`
+  await withHarness(
+    () => setupSchedulingHarness(),
+    async (h) => {
+      const { interviewId } = await seedProposed(h);
+      const proposed = await proposeSlots({
+        orgId: h.org.orgId,
+        actorId: h.recruiterId,
+        interviewId,
+        windows: [
+          { startsAt: "2027-10-02T09:00:00Z", endsAt: "2027-10-02T09:30:00Z", timezone: "UTC" },
+          { startsAt: "2027-10-03T09:00:00Z", endsAt: "2027-10-03T09:30:00Z", timezone: "UTC" },
+        ],
+      });
+      const results = await Promise.allSettled(
+        proposed.slots.map((slot) =>
+          bookSlot({
+            bookingToken: proposed.bookingToken,
+            slotId: slot.id,
+            candidateName: "Slot Candidate",
+            enqueueEmail: async () => {},
+          }),
+        ),
+      );
+      assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+      const booked = (
+        await db.execute<{ count: string }>(
+          sql`
       select count(*)::text as count from hrm_interview_slots
        where org_id = ${h.org.orgId} and interview_id = ${interviewId} and kind = 'booked'
-    `, "objects"))[0]!.count;
-    assert.equal(booked, "1");
-  });
+    `,
+          "objects",
+        )
+      )[0]!.count;
+      assert.equal(booked, "1");
+    },
+  );
 });
 
 test("concurrent proposals leave only the final booking link live", async () => {
-  await withHarness(() => setupSchedulingHarness(), async (h) => {
-    const { interviewId } = await seedProposed(h);
-    const batches = await Promise.all([0, 1].map((day) => proposeSlots({
-      orgId: h.org.orgId,
-      actorId: h.recruiterId,
-      interviewId,
-      windows: [{
-        startsAt: `2027-11-0${day + 1}T09:00:00Z`,
-        endsAt: `2027-11-0${day + 1}T09:30:00Z`,
-        timezone: "UTC",
-      }],
-    })));
-    const live = await db.execute<{ tokenHash: string | null }>(sql`
+  await withHarness(
+    () => setupSchedulingHarness(),
+    async (h) => {
+      const { interviewId } = await seedProposed(h);
+      const batches = await Promise.all(
+        [0, 1].map((day) =>
+          proposeSlots({
+            orgId: h.org.orgId,
+            actorId: h.recruiterId,
+            interviewId,
+            windows: [
+              {
+                startsAt: `2027-11-0${day + 1}T09:00:00Z`,
+                endsAt: `2027-11-0${day + 1}T09:30:00Z`,
+                timezone: "UTC",
+              },
+            ],
+          }),
+        ),
+      );
+      const live = await db.execute<{ tokenHash: string | null }>(
+        sql`
       select distinct candidate_token_hash as "tokenHash" from hrm_interview_slots
        where org_id = ${h.org.orgId} and interview_id = ${interviewId} and kind = 'proposed'
-    `, "objects");
-    assert.equal(live.length, 1, "one serialized proposal batch owns the live link");
-    const hashes = new Set(batches.map((batch) => hashRecruitingToken(batch.bookingToken)));
-    assert.ok(hashes.has(live[0]!.tokenHash!));
-  });
+    `,
+        "objects",
+      );
+      assert.equal(live.length, 1, "one serialized proposal batch owns the live link");
+      const hashes = new Set(batches.map((batch) => hashRecruitingToken(batch.bookingToken)));
+      assert.ok(hashes.has(live[0]!.tokenHash!));
+    },
+  );
 });

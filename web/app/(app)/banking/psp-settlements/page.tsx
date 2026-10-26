@@ -1,5 +1,5 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadPspSettlements, pspSettlementsSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadPspSettlements, pspSettlementsSpec } from "./view";
 
 /**
  * Minimal PSP settlement import UI — paste Stripe/Recurly/Chargebee JSON
@@ -12,9 +12,9 @@ import { loadPspSettlements, pspSettlementsSpec } from './view'
 export default async function PspSettlementsPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | undefined>>
+  searchParams?: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = (await searchParams) ?? {}
-  const data = await loadPspSettlements()
-  return <ModuleView spec={pspSettlementsSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = (await searchParams) ?? {};
+  const data = await loadPspSettlements();
+  return <ModuleView spec={pspSettlementsSpec(data)} data={data} searchParams={sp} trusted />;
 }

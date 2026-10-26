@@ -2,71 +2,83 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
-import {
-  ensureCrmDefaults,
-  promoteCrmAccount,
-  transitionCrmAccountStage,
-} from "./crm.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { ensureCrmDefaults, promoteCrmAccount, transitionCrmAccountStage } from "./crm.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function setCrmFeature(orgId: string, enabled: boolean): Promise<void> {
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ features: { crm: enabled } })}::jsonb where id = ${orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || ${JSON.stringify({ features: { crm: enabled } })}::jsonb where id = ${orgId}`,
+    ),
   );
 }
 
-test("new organizations require a loss reason only for the default Closed lost stage", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await setCrmFeature(org.orgId, true);
-    await withBypassContext(() => ensureCrmDefaults(org.orgId));
+test(
+  "new organizations require a loss reason only for the default Closed lost stage",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await setCrmFeature(org.orgId, true);
+      await withBypassContext(() => ensureCrmDefaults(org.orgId));
 
-    const rows = await withBypassContext(() =>
-      db.execute<{ key: string; requiresWinLossReason: boolean }>(sql`
+      const rows = await withBypassContext(() =>
+        db.execute<{ key: string; requiresWinLossReason: boolean }>(
+          sql`
         select key, requires_win_loss_reason as "requiresWinLossReason"
           from crm_opportunity_statuses
-         where org_id = ${org.orgId}`, "objects"),
-    );
-    const policy = new Map(rows.map((row) => [row.key, row.requiresWinLossReason]));
+         where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      );
+      const policy = new Map(rows.map((row) => [row.key, row.requiresWinLossReason]));
 
-    assert.equal(policy.get("closed_lost"), true);
-    assert.equal(policy.get("proposal"), false);
-    assert.equal(policy.get("closed_won"), false);
-    assert.equal([...policy.values()].filter(Boolean).length, 1);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+      assert.equal(policy.get("closed_lost"), true);
+      assert.equal(policy.get("proposal"), false);
+      assert.equal(policy.get("closed_won"), false);
+      assert.equal([...policy.values()].filter(Boolean).length, 1);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 async function seedParty(orgId: string, name: string): Promise<string> {
-  return (await withBypassContext(() =>
-      db.execute<{ id: string }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
         insert into parties (org_id, kind, display_name, is_active)
-        values (${orgId}, 'company', ${name}, true) returning id`, "objects"),
-    ))[0]!.id;
+        values (${orgId}, 'company', ${name}, true) returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
 }
 
 async function activeRole(orgId: string, partyId: string): Promise<boolean> {
   const rows = await withBypassContext(() =>
-      db.execute(sql`
+    db.execute(
+      sql`
         select 1 from customer_roles
-         where org_id = ${orgId} and party_id = ${partyId} and is_active`, "objects"),
-    );
+         where org_id = ${orgId} and party_id = ${partyId} and is_active`,
+      "objects",
+    ),
+  );
   return rows.length > 0;
 }
 
 async function profileStage(orgId: string, partyId: string): Promise<string | null> {
   const rows = await withBypassContext(() =>
-      db.execute<{ lifecycle_stage: string }>(sql`
+    db.execute<{ lifecycle_stage: string }>(
+      sql`
         select lifecycle_stage from crm_account_profiles
-         where org_id = ${orgId} and party_id = ${partyId}`, "objects"),
-    );
+         where org_id = ${orgId} and party_id = ${partyId}`,
+      "objects",
+    ),
+  );
   return rows[0]?.lifecycle_stage ?? null;
 }
 
@@ -74,7 +86,9 @@ test("becoming a customer writes the AR role with the CRM feature off", { skip: 
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await setCrmFeature(org.orgId, false);
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "CRM Off Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "CRM Off Admin", "admin"),
+    );
     const partyId = await seedParty(org.orgId, "Off-Feature Customer");
 
     const result = await withBypassContext(() =>
@@ -96,39 +110,48 @@ test("becoming a customer writes the AR role with the CRM feature off", { skip: 
   }
 });
 
-test("promotion still writes profile, role and stage event with CRM on", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await setCrmFeature(org.orgId, true);
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "CRM On Admin", "admin"));
-    const partyId = await seedParty(org.orgId, "On-Feature Customer");
+test(
+  "promotion still writes profile, role and stage event with CRM on",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await setCrmFeature(org.orgId, true);
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "CRM On Admin", "admin"),
+      );
+      const partyId = await seedParty(org.orgId, "On-Feature Customer");
 
-    const result = await withBypassContext(() =>
-      promoteCrmAccount(db, {
-        orgId: org.orgId,
-        partyId,
-        actorId,
-        toStage: "customer",
-        sourceKind: "sales_order",
-      }),
-    );
+      const result = await withBypassContext(() =>
+        promoteCrmAccount(db, {
+          orgId: org.orgId,
+          partyId,
+          actorId,
+          toStage: "customer",
+          sourceKind: "sales_order",
+        }),
+      );
 
-    assert.equal(result.customerRoleActive, true);
-    assert.equal(result.lifecycleApplied, true);
-    assert.equal(result.transitioned, true);
-    assert.equal(await activeRole(org.orgId, partyId), true);
-    assert.equal(await profileStage(org.orgId, partyId), "customer");
-    const events = await withBypassContext(() =>
-        db.execute(sql`
+      assert.equal(result.customerRoleActive, true);
+      assert.equal(result.lifecycleApplied, true);
+      assert.equal(result.transitioned, true);
+      assert.equal(await activeRole(org.orgId, partyId), true);
+      assert.equal(await profileStage(org.orgId, partyId), "customer");
+      const events = await withBypassContext(() =>
+        db.execute(
+          sql`
           select 1 from crm_account_stage_events e
             join crm_account_profiles p on p.id = e.account_profile_id
-           where e.org_id = ${org.orgId} and p.party_id = ${partyId}`, "objects"),
+           where e.org_id = ${org.orgId} and p.party_id = ${partyId}`,
+          "objects",
+        ),
       );
-    assert.ok(events.length > 0, "promotion writes a stage event");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+      assert.ok(events.length > 0, "promotion writes a stage event");
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("reactivating a customer role touches only its own tenant row", { skip: !DB }, async () => {
   // ensureActiveCustomerRole keys on party_id and pins the tenant on the
@@ -139,8 +162,12 @@ test("reactivating a customer role touches only its own tenant row", { skip: !DB
   const orgA = await withBypassContext(() => createScratchOrg());
   const orgB = await withBypassContext(() => createScratchOrg());
   try {
-    const actorA = await withBypassContext(() => createScratchUser(orgA.orgId, "CRM Admin A", "admin"));
-    const actorB = await withBypassContext(() => createScratchUser(orgB.orgId, "CRM Admin B", "admin"));
+    const actorA = await withBypassContext(() =>
+      createScratchUser(orgA.orgId, "CRM Admin A", "admin"),
+    );
+    const actorB = await withBypassContext(() =>
+      createScratchUser(orgB.orgId, "CRM Admin B", "admin"),
+    );
     const partyA = await seedParty(orgA.orgId, "Tenant A Customer");
     const partyB = await seedParty(orgB.orgId, "Tenant B Customer");
     for (const [org, actor, party] of [
@@ -149,30 +176,41 @@ test("reactivating a customer role touches only its own tenant row", { skip: !DB
     ] as const) {
       await withBypassContext(() =>
         transitionCrmAccountStage(db, {
-          orgId: org.orgId, partyId: party, actorId: actor,
-          toStage: "customer", sourceKind: "sales_order",
+          orgId: org.orgId,
+          partyId: party,
+          actorId: actor,
+          toStage: "customer",
+          sourceKind: "sales_order",
         }),
       );
     }
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update customer_roles set is_active = false
-       where org_id = ${orgA.orgId} and party_id = ${partyA}`));
+       where org_id = ${orgA.orgId} and party_id = ${partyA}`),
+    );
     assert.equal(await activeRole(orgA.orgId, partyA), false);
 
     await withBypassContext(() =>
       transitionCrmAccountStage(db, {
-        orgId: orgA.orgId, partyId: partyA, actorId: actorA,
-        toStage: "customer", sourceKind: "sales_order",
+        orgId: orgA.orgId,
+        partyId: partyA,
+        actorId: actorA,
+        toStage: "customer",
+        sourceKind: "sales_order",
       }),
     );
 
     assert.equal(await activeRole(orgA.orgId, partyA), true);
     assert.equal(await activeRole(orgB.orgId, partyB), true);
     const counts = await withBypassContext(() =>
-      db.execute<{ orgId: string; n: number }>(sql`
+      db.execute<{ orgId: string; n: number }>(
+        sql`
         select org_id as "orgId", count(*)::int as n from customer_roles
          where (org_id, party_id) in ((${orgA.orgId}, ${partyA}), (${orgB.orgId}, ${partyB}))
-         group by org_id`, "objects"),
+         group by org_id`,
+        "objects",
+      ),
     );
     assert.deepEqual(
       counts.sort((a, b) => a.orgId.localeCompare(b.orgId)),

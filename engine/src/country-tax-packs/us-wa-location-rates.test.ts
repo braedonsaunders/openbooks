@@ -27,8 +27,14 @@ const WORKBOOK_CSV = [
 ].join("\n");
 
 test("quarter ids stamp calendar-quarter windows", () => {
-  assert.deepEqual(waLocationQuarterWindow("2026-Q4"), { effectiveFrom: "2026-10-01", effectiveTo: "2026-12-31" });
-  assert.deepEqual(waLocationQuarterWindow("2026-Q2"), { effectiveFrom: "2026-04-01", effectiveTo: "2026-06-30" });
+  assert.deepEqual(waLocationQuarterWindow("2026-Q4"), {
+    effectiveFrom: "2026-10-01",
+    effectiveTo: "2026-12-31",
+  });
+  assert.deepEqual(waLocationQuarterWindow("2026-Q2"), {
+    effectiveFrom: "2026-04-01",
+    effectiveTo: "2026-06-30",
+  });
   assert.throws(() => waLocationQuarterWindow("2026-Q5"), /yyyy-Qn/);
   assert.throws(() => waLocationQuarterWindow("Q4-2026"), /yyyy-Qn/);
 });
@@ -47,9 +53,15 @@ test("the CSV reader takes the workbook export with float artifacts and footnote
 });
 
 test("the CSV reader refuses a missing header and an empty sheet", () => {
-  assert.throws(() => parseWaLocationRateCsv("Pierce,Tacoma,2717,0.04,0.065,0.105\n"), /no department header row/);
   assert.throws(
-    () => parseWaLocationRateCsv("County,Location name,Location code,Local rate,State rate,Combined sales tax\n"),
+    () => parseWaLocationRateCsv("Pierce,Tacoma,2717,0.04,0.065,0.105\n"),
+    /no department header row/,
+  );
+  assert.throws(
+    () =>
+      parseWaLocationRateCsv(
+        "County,Location name,Location code,Local rate,State rate,Combined sales tax\n",
+      ),
     /no location rows/,
   );
 });

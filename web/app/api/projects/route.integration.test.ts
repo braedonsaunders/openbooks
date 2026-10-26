@@ -56,8 +56,8 @@ const postRouteUrl = "./route.ts?projects-create-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
-
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/projects", {
@@ -92,98 +92,126 @@ async function enableProjects(orgId: string): Promise<void> {
   await setProjectsFeature(orgId, true);
 }
 
-async function auditInserts(orgId: string, rowId: string): Promise<{ request_id: string | null; actor_id: string | null }[]> {
-  return await db.execute<{ request_id: string | null; actor_id: string | null }>(sql`
+async function auditInserts(
+  orgId: string,
+  rowId: string,
+): Promise<{ request_id: string | null; actor_id: string | null }[]> {
+  return await db.execute<{ request_id: string | null; actor_id: string | null }>(
+    sql`
       select request_id, actor_id from audit_log
        where org_id = ${orgId} and table_name = 'projects' and row_id = ${rowId} and action = 'insert'
        order by at asc
-    `, "objects");
+    `,
+    "objects",
+  );
 }
 
-test.after(() => hooks.deregister())
-test(
-  "projects POST creates one active project and one audit row under the feature gate",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const { adminId } = await seedFlowActors(org.orgId);
-      await enableProjects(org.orgId);
-      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+test.after(() => hooks.deregister());
+test("projects POST creates one active project and one audit row under the feature gate", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { adminId } = await seedFlowActors(org.orgId);
+    await enableProjects(org.orgId);
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
 
-      const key = randomUUID();
-      const created = await POST(postRequest(key, { name: "Harbourview Tower" }));
-      assert.equal(created.status, 201);
-      const payload = (await created.json()) as { project: { id: string; name: string; is_active: boolean } };
-      assert.equal(payload.project.id, key);
-      assert.equal(payload.project.name, "Harbourview Tower");
-      assert.equal(payload.project.is_active, true);
+    const key = randomUUID();
+    const created = await POST(postRequest(key, { name: "Harbourview Tower" }));
+    assert.equal(created.status, 201);
+    const payload = (await created.json()) as {
+      project: { id: string; name: string; is_active: boolean };
+    };
+    assert.equal(payload.project.id, key);
+    assert.equal(payload.project.name, "Harbourview Tower");
+    assert.equal(payload.project.is_active, true);
 
-      const audits = await auditInserts(org.orgId, key);
-      assert.equal(audits.length, 1, "exactly one insert audit row");
-      assert.equal(audits[0]?.request_id, key, "the audit row carries the idempotency key");
-      assert.equal(audits[0]?.actor_id, adminId, "the audit row carries the actor");
+    const audits = await auditInserts(org.orgId, key);
+    assert.equal(audits.length, 1, "exactly one insert audit row");
+    assert.equal(audits[0]?.request_id, key, "the audit row carries the idempotency key");
+    assert.equal(audits[0]?.actor_id, adminId, "the audit row carries the actor");
 
-      const replay = await POST(postRequest(key, { name: "Harbourview Tower" }));
-      assert.equal(replay.status, 200);
-      assert.equal((await auditInserts(org.orgId, key)).length, 1, "a replay writes no second audit row");
+    const replay = await POST(postRequest(key, { name: "Harbourview Tower" }));
+    assert.equal(replay.status, 200);
+    assert.equal(
+      (await auditInserts(org.orgId, key)).length,
+      1,
+      "a replay writes no second audit row",
+    );
 
-      const changed = await POST(postRequest(key, { name: "Harbourview Renamed" }));
-      assert.equal(changed.status, 409);
-      // The route raises ProjectCreateConflict, which the factory renders
-      // with its machine-readable code and remedy — the bare invalid-key
-      // shape predates that refusal and no longer exists on this route.
-      assert.deepEqual(await changed.json(), {
-        error: "idempotency_key_conflict",
-        code: "idempotency_key_conflict",
-        remedy: "Close and reopen the project form to retry with a fresh idempotency key.",
-      });
+    const changed = await POST(postRequest(key, { name: "Harbourview Renamed" }));
+    assert.equal(changed.status, 409);
+    // The route raises ProjectCreateConflict, which the factory renders
+    // with its machine-readable code and remedy — the bare invalid-key
+    // shape predates that refusal and no longer exists on this route.
+    assert.deepEqual(await changed.json(), {
+      error: "idempotency_key_conflict",
+      code: "idempotency_key_conflict",
+      remedy: "Close and reopen the project form to retry with a fresh idempotency key.",
+    });
 
-      const placeholders = (await db.execute<{ n: number }>(sql`
+    const placeholders = (
+      await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from projects
            where org_id = ${org.orgId} and name = 'New project'
-        `, "objects"))[0]?.n;
-      assert.equal(placeholders, 0, "no inactive placeholder survives the create path");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+        `,
+        "objects",
+      )
+    )[0]?.n;
+    assert.equal(placeholders, 0, "no inactive placeholder survives the create path");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "projects POST refuses while the feature is off and claims nothing across orgs",
-  async () => {
-    const org = await createScratchOrg();
-    const other = await createScratchOrg();
-    try {
-      const { adminId } = await seedFlowActors(org.orgId);
-      const { adminId: otherAdmin } = await seedFlowActors(other.orgId);
-      await enableProjects(org.orgId);
+test("projects POST refuses while the feature is off and claims nothing across orgs", async () => {
+  const org = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    const { adminId } = await seedFlowActors(org.orgId);
+    const { adminId: otherAdmin } = await seedFlowActors(other.orgId);
+    await enableProjects(org.orgId);
 
-      // Feature off in `other`: the entry guard refuses before any write.
-      // Turned off explicitly — the registry default is ON.
-      await setProjectsFeature(other.orgId, false);
-      routeState.authz = { user: { roles: [], orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
-      const refused = await POST(postRequest(randomUUID(), { name: "Harbourview Tower" }));
-      assert.equal(refused.status, 404);
+    // Feature off in `other`: the entry guard refuses before any write.
+    // Turned off explicitly — the registry default is ON.
+    await setProjectsFeature(other.orgId, false);
+    routeState.authz = {
+      user: { roles: [], orgId: other.orgId, id: otherAdmin },
+      allowedSubsidiaryIds: null,
+    };
+    const refused = await POST(postRequest(randomUUID(), { name: "Harbourview Tower" }));
+    assert.equal(refused.status, 404);
 
-      // A key minted in `org` cannot be claimed from `other`: enable the
-      // feature there so the refusal comes from the tenant check, not the
-      // feature gate.
-      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
-      const key = randomUUID();
-      assert.equal((await POST(postRequest(key, { name: "Harbourview Tower" }))).status, 201);
+    // A key minted in `org` cannot be claimed from `other`: enable the
+    // feature there so the refusal comes from the tenant check, not the
+    // feature gate.
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
+    const key = randomUUID();
+    assert.equal((await POST(postRequest(key, { name: "Harbourview Tower" }))).status, 201);
 
-      await enableProjects(other.orgId);
-      routeState.authz = { user: { roles: [], orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
-      const claimed = await POST(postRequest(key, { name: "Harbourview Tower" }));
-      assert.equal(claimed.status, 404);
-      const leaked = (await db.execute<{ n: number }>(sql`
+    await enableProjects(other.orgId);
+    routeState.authz = {
+      user: { roles: [], orgId: other.orgId, id: otherAdmin },
+      allowedSubsidiaryIds: null,
+    };
+    const claimed = await POST(postRequest(key, { name: "Harbourview Tower" }));
+    assert.equal(claimed.status, 404);
+    const leaked = (
+      await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from projects where id = ${key} and org_id = ${other.orgId}
-        `, "objects"))[0]?.n;
-      assert.equal(leaked, 0, "the other org gains no row from the foreign key");
-    } finally {
-      await dropScratchOrg(org.orgId);
-      await dropScratchOrg(other.orgId);
-    }
-  },
-);
+        `,
+        "objects",
+      )
+    )[0]?.n;
+    assert.equal(leaked, 0, "the other org gains no row from the foreign key");
+  } finally {
+    await dropScratchOrg(org.orgId);
+    await dropScratchOrg(other.orgId);
+  }
+});

@@ -3,7 +3,9 @@ import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-currencies-route-test");
-interface RouteState { called: boolean }
+interface RouteState {
+  called: boolean;
+}
 const routeState: RouteState = { called: false };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 

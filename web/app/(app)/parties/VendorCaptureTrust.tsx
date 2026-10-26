@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { Badge } from '@openbooks/ui'
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Badge } from "@openbooks/ui";
 
 interface TrustSummary {
-  trusted: boolean
-  cleanStreak: number
-  threshold: number
-  policyEnabled: boolean
+  trusted: boolean;
+  cleanStreak: number;
+  threshold: number;
+  policyEnabled: boolean;
 }
 
 /**
@@ -18,24 +18,32 @@ interface TrustSummary {
  * vendor with no captures, sees nothing.
  */
 export function VendorCaptureTrust({ partyId }: { partyId: string }) {
-  const t = useTranslations('apInbox.trust')
-  const [summary, setSummary] = useState<TrustSummary | null>(null)
+  const t = useTranslations("apInbox.trust");
+  const [summary, setSummary] = useState<TrustSummary | null>(null);
   useEffect(() => {
-    let live = true
-    fetch(`/api/ap-capture/vendor-trust/${encodeURIComponent(partyId)}`, { headers: { accept: 'application/json' } })
+    let live = true;
+    fetch(`/api/ap-capture/vendor-trust/${encodeURIComponent(partyId)}`, {
+      headers: { accept: "application/json" },
+    })
       .then(async (response) => (response.ok ? response.json() : null))
-      .then((body: TrustSummary | null) => { if (live) setSummary(body) })
-      .catch(() => { if (live) setSummary(null) })
-    return () => { live = false }
-  }, [partyId])
-  if (!summary || !summary.policyEnabled) return null
+      .then((body: TrustSummary | null) => {
+        if (live) setSummary(body);
+      })
+      .catch(() => {
+        if (live) setSummary(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [partyId]);
+  if (!summary || !summary.policyEnabled) return null;
   return (
     <div className="flex items-center gap-2 text-sm">
-      <Badge variant={summary.trusted ? 'success' : 'secondary'}>
+      <Badge variant={summary.trusted ? "success" : "secondary"}>
         {summary.trusted
-          ? t('trusted', { count: summary.cleanStreak })
-          : t('building', { count: summary.cleanStreak, threshold: summary.threshold })}
+          ? t("trusted", { count: summary.cleanStreak })
+          : t("building", { count: summary.cleanStreak, threshold: summary.threshold })}
       </Badge>
     </div>
-  )
+  );
 }

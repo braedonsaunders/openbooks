@@ -4,10 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import {
-  buildRecognitionSchedule,
-  reconcileLegacyObligationProvenance,
-} from "./recognition.ts";
+import { buildRecognitionSchedule, reconcileLegacyObligationProvenance } from "./recognition.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -44,9 +41,16 @@ async function scopedFixture() {
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
-  const calId = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"))[0]!.id;
-  for (const [num, name, start, end] of MONTHS_2026.map(([name, start, end], i) => [i + 1, name, start, end] as const)) {
+  const calId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`,
+      "objects",
+    )
+  )[0]!.id;
+  for (const [num, name, start, end] of MONTHS_2026.map(
+    ([name, start, end], i) => [i + 1, name, start, end] as const,
+  )) {
     if (num === 7) continue;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -100,34 +104,59 @@ async function scopedFixture() {
 }
 
 async function reconciledAt(orgId: string, obligationId: string): Promise<string | null> {
-  return ((await db.execute<{ at: string | null }>(sql`
+  return (
+    (
+      await db.execute<{ at: string | null }>(
+        sql`
     select legacy_reconciled_at::text as at from performance_obligations
-     where id = ${obligationId} and org_id = ${orgId}`, "objects"))[0]?.at ?? null);
+     where id = ${obligationId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.at ?? null
+  );
 }
 
 function isUniformNotFound(error: unknown): boolean {
   return error instanceof ScopeNotFoundError && error.message === "not found";
 }
 
-test("an entity-A attester cannot lift the legacy refusal on entity B's obligation", { skip: !DB }, async () => {
-  const { org, actorId, subA, obligationIds } = await scopedFixture();
-  try {
-    await assert.rejects(
-      reconcileLegacyObligationProvenance(db, org.orgId, obligationIds.foreign, actorId, REASON, new Set([subA])),
-      isUniformNotFound,
-      "out-of-scope must refuse exactly like a missing obligation",
-    );
-    assert.equal(await reconciledAt(org.orgId, obligationIds.foreign), null);
-  } finally {
-    await db.execute(sql`delete from upgrade_legacy_provenance where org_id = ${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an entity-A attester cannot lift the legacy refusal on entity B's obligation",
+  { skip: !DB },
+  async () => {
+    const { org, actorId, subA, obligationIds } = await scopedFixture();
+    try {
+      await assert.rejects(
+        reconcileLegacyObligationProvenance(
+          db,
+          org.orgId,
+          obligationIds.foreign,
+          actorId,
+          REASON,
+          new Set([subA]),
+        ),
+        isUniformNotFound,
+        "out-of-scope must refuse exactly like a missing obligation",
+      );
+      assert.equal(await reconciledAt(org.orgId, obligationIds.foreign), null);
+    } finally {
+      await db.execute(sql`delete from upgrade_legacy_provenance where org_id = ${org.orgId}`);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("the same attester reconciles their own entity's obligation", { skip: !DB }, async () => {
   const { org, actorId, subA, obligationIds } = await scopedFixture();
   try {
-    await reconcileLegacyObligationProvenance(db, org.orgId, obligationIds.own, actorId, REASON, new Set([subA]));
+    await reconcileLegacyObligationProvenance(
+      db,
+      org.orgId,
+      obligationIds.own,
+      actorId,
+      REASON,
+      new Set([subA]),
+    );
     assert.ok(await reconciledAt(org.orgId, obligationIds.own));
   } finally {
     await db.execute(sql`delete from upgrade_legacy_provenance where org_id = ${org.orgId}`);
@@ -138,7 +167,14 @@ test("the same attester reconciles their own entity's obligation", { skip: !DB }
 test("an unrestricted attester reconciles any entity's obligation", { skip: !DB }, async () => {
   const { org, actorId, obligationIds } = await scopedFixture();
   try {
-    await reconcileLegacyObligationProvenance(db, org.orgId, obligationIds.foreignOpen, actorId, REASON, null);
+    await reconcileLegacyObligationProvenance(
+      db,
+      org.orgId,
+      obligationIds.foreignOpen,
+      actorId,
+      REASON,
+      null,
+    );
     assert.ok(await reconciledAt(org.orgId, obligationIds.foreignOpen));
   } finally {
     await db.execute(sql`delete from upgrade_legacy_provenance where org_id = ${org.orgId}`);
@@ -150,7 +186,14 @@ test("a missing obligation answers exactly like an out-of-scope one", { skip: !D
   const { org, actorId, subA } = await scopedFixture();
   try {
     await assert.rejects(
-      reconcileLegacyObligationProvenance(db, org.orgId, randomUUID(), actorId, REASON, new Set([subA])),
+      reconcileLegacyObligationProvenance(
+        db,
+        org.orgId,
+        randomUUID(),
+        actorId,
+        REASON,
+        new Set([subA]),
+      ),
       isUniformNotFound,
       "missing must refuse with the same not-found shape, never a bare error",
     );

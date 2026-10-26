@@ -37,7 +37,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.payroll-subsidiary-scope-test')]
@@ -74,17 +74,31 @@ const stubsPdfUrl = "./[id]/stubs-pdf/route.ts?payroll-scope";
 const chequesPdfUrl = "./[id]/cheques-pdf/route.ts?payroll-scope";
 const bankFileUrl = "./[id]/bank-file/route.ts?payroll-scope";
 const bankFileReleaseUrl = "./[id]/bank-file/[fileId]/route.ts?payroll-scope";
-const { GET: getRuns, POST: postRuns } = (await import(collectionUrl)) as typeof import("./route.ts");
+const { GET: getRuns, POST: postRuns } = (await import(
+  collectionUrl
+)) as typeof import("./route.ts");
 const { GET: getRun, POST: postRun } = (await import(runUrl)) as typeof import("./[id]/route.ts");
-const { GET: getStubsPdf } = (await import(stubsPdfUrl)) as typeof import("./[id]/stubs-pdf/route.ts");
-const { POST: postChequesPdf } = (await import(chequesPdfUrl)) as typeof import("./[id]/cheques-pdf/route.ts");
-const { GET: getBankFilePanel, POST: postBankFileGenerate } = (await import(bankFileUrl)) as typeof import("./[id]/bank-file/route.ts");
-const { POST: postBankFileRelease } = (await import(bankFileReleaseUrl)) as typeof import("./[id]/bank-file/[fileId]/route.ts");
+const { GET: getStubsPdf } = (await import(
+  stubsPdfUrl
+)) as typeof import("./[id]/stubs-pdf/route.ts");
+const { POST: postChequesPdf } = (await import(
+  chequesPdfUrl
+)) as typeof import("./[id]/cheques-pdf/route.ts");
+const { GET: getBankFilePanel, POST: postBankFileGenerate } = (await import(
+  bankFileUrl
+)) as typeof import("./[id]/bank-file/route.ts");
+const { POST: postBankFileRelease } = (await import(
+  bankFileReleaseUrl
+)) as typeof import("./[id]/bank-file/[fileId]/route.ts");
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment, grantScratchPermissions } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
+} = await import("@openbooks/engine/testing/fixtures");
 
 const NOT_FOUND = JSON.stringify({ error: "not_found" });
 
@@ -102,85 +116,118 @@ function get(): Promise<Response> {
   return scoped(() => getRuns(new Request("http://openbooks.test/api/payroll/runs")));
 }
 function runGet(id: string, url = `/api/payroll/runs/${id}`): Promise<Response> {
-  return scoped(() => getRun(new Request(`http://openbooks.test${url}`), { params: Promise.resolve({ id }) }));
+  return scoped(() =>
+    getRun(new Request(`http://openbooks.test${url}`), { params: Promise.resolve({ id }) }),
+  );
 }
 function runPost(id: string, body: Record<string, unknown>): Promise<Response> {
-  return scoped(() => postRun(
-    new Request(`http://openbooks.test/api/payroll/runs/${id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-    { params: Promise.resolve({ id }) },
-  ));
+  return scoped(() =>
+    postRun(
+      new Request(`http://openbooks.test/api/payroll/runs/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ id }) },
+    ),
+  );
 }
 function createRun(body: Record<string, unknown>): Promise<Response> {
-  return scoped(() => postRuns(
-    new Request("http://openbooks.test/api/payroll/runs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  ));
+  return scoped(() =>
+    postRuns(
+      new Request("http://openbooks.test/api/payroll/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
+  );
 }
 function stubsPdf(id: string): Promise<Response> {
-  return scoped(() => getStubsPdf(new Request(`http://openbooks.test/api/payroll/runs/${id}/stubs-pdf`), {
-    params: Promise.resolve({ id }),
-  }));
+  return scoped(() =>
+    getStubsPdf(new Request(`http://openbooks.test/api/payroll/runs/${id}/stubs-pdf`), {
+      params: Promise.resolve({ id }),
+    }),
+  );
 }
 function chequesPdf(id: string): Promise<Response> {
-  return scoped(() => postChequesPdf(new Request(`http://openbooks.test/api/payroll/runs/${id}/cheques-pdf`, { method: "POST" }), {
-    params: Promise.resolve({ id }),
-  }));
+  return scoped(() =>
+    postChequesPdf(
+      new Request(`http://openbooks.test/api/payroll/runs/${id}/cheques-pdf`, { method: "POST" }),
+      {
+        params: Promise.resolve({ id }),
+      },
+    ),
+  );
 }
 function bankPanel(id: string): Promise<Response> {
-  return scoped(() => getBankFilePanel(new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file`), {
-    params: Promise.resolve({ id }),
-  }));
+  return scoped(() =>
+    getBankFilePanel(new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file`), {
+      params: Promise.resolve({ id }),
+    }),
+  );
 }
 function bankGenerate(id: string, profileId: string): Promise<Response> {
-  return scoped(() => postBankFileGenerate(
-    new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ paymentBankProfileId: profileId }),
-    }),
-    { params: Promise.resolve({ id }) },
-  ));
+  return scoped(() =>
+    postBankFileGenerate(
+      new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ paymentBankProfileId: profileId }),
+      }),
+      { params: Promise.resolve({ id }) },
+    ),
+  );
 }
 function bankRelease(id: string, fileId: string): Promise<Response> {
-  return scoped(() => postBankFileRelease(
-    new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file/${fileId}`, { method: "POST" }),
-    { params: Promise.resolve({ id, fileId }) },
-  ));
+  return scoped(() =>
+    postBankFileRelease(
+      new Request(`http://openbooks.test/api/payroll/runs/${id}/bank-file/${fileId}`, {
+        method: "POST",
+      }),
+      { params: Promise.resolve({ id, fileId }) },
+    ),
+  );
 }
 
 /** Every org-scoped table a payroll write could touch. */
 const WRITE_SURFACES = [
-  "documents", "pay_runs", "pay_run_adjustments", "pay_stubs", "pay_stub_lines",
-  "pay_components", "pay_run_bank_files", "number_sequences",
-  "folders", "files", "file_versions", "file_blobs", "audit_log",
+  "documents",
+  "pay_runs",
+  "pay_run_adjustments",
+  "pay_stubs",
+  "pay_stub_lines",
+  "pay_components",
+  "pay_run_bank_files",
+  "number_sequences",
+  "folders",
+  "files",
+  "file_versions",
+  "file_blobs",
+  "audit_log",
 ] as const;
 
 async function writeSnapshot(orgId: string): Promise<Record<string, number>> {
   return withOrgContext(orgId, async () => {
-  const out: Record<string, number> = {};
-  for (const table of WRITE_SURFACES) {
-    // file_versions and file_blobs carry no org_id — they hang off the org's
-    // files, so they are counted through it.
-    const where = table === "file_versions"
-      ? sql`where file_id in (select id from files where org_id = ${orgId})`
-      : table === "file_blobs"
-        ? sql`where version_id in (
+    const out: Record<string, number> = {};
+    for (const table of WRITE_SURFACES) {
+      // file_versions and file_blobs carry no org_id — they hang off the org's
+      // files, so they are counted through it.
+      const where =
+        table === "file_versions"
+          ? sql`where file_id in (select id from files where org_id = ${orgId})`
+          : table === "file_blobs"
+            ? sql`where version_id in (
                 select v.id from file_versions v
                 join files f on f.id = v.file_id where f.org_id = ${orgId})`
-        : sql`where org_id = ${orgId}`;
-    const r = await db.execute<{ n: string }>(
-      sql`select count(*)::text as n from ${sql.identifier(table)} ${where}`, "objects",
-    );
-    out[table] = Number(r[0]!.n);
-  }
-  return out;
+            : sql`where org_id = ${orgId}`;
+      const r = await db.execute<{ n: string }>(
+        sql`select count(*)::text as n from ${sql.identifier(table)} ${where}`,
+        "objects",
+      );
+      out[table] = Number(r[0]!.n);
+    }
+    return out;
   });
 }
 
@@ -196,8 +243,8 @@ test(
       const adminId = actors.adminId; // unrestricted caller
       const actorAId = actors.submitterId; // subsidiary-A-restricted caller
       await withBypass(async () => {
-        await grantScratchPermissions(orgId, adminId, ['payroll.read', 'payroll.run']);
-        await grantScratchPermissions(orgId, actorAId, ['payroll.read', 'payroll.run']);
+        await grantScratchPermissions(orgId, adminId, ["payroll.read", "payroll.run"]);
+        await grantScratchPermissions(orgId, actorAId, ["payroll.read", "payroll.run"]);
       });
 
       // Fixture seeds — including the engine-assisted run/file setup — run
@@ -218,7 +265,10 @@ test(
         // One schedule per entity: A on the root, B on Entity B.
         const scheduleA = randomUUID();
         const scheduleB = randomUUID();
-        for (const [id, name, subId] of [[scheduleA, "A Biweekly", rootId], [scheduleB, "B Biweekly", subBId]] as const) {
+        for (const [id, name, subId] of [
+          [scheduleA, "A Biweekly", rootId],
+          [scheduleB, "B Biweekly", subBId],
+        ] as const) {
           await db.execute(sql`
             insert into pay_schedules (org_id, id, name, frequency, periods_per_year,
                                        anchor_period_end, pay_date_offset_days, subsidiary_id)
@@ -247,18 +297,21 @@ test(
 
         // Runs created through the engine: run A inside A's scope, run B outside it.
         // Runs created through the engine: run A inside A's scope, run B outside it.
-// Runs created through the engine: run A inside A's scope, run B outside it.
-// Runs created through the engine: run A inside A's scope, run B outside it.
-// Runs created through the engine: run A inside A's scope, run B outside it.
-// Runs created through the engine: run A inside A's scope, run B outside it.
-// Runs created through the engine: run A inside A's scope, run B outside it.
-// Runs created through the engine: run A inside A's scope, run B outside it.
-const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+        const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
         const runA = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleA });
         const runB = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleB });
 
         // Wage PII on each run, so a pre-fix 200 would disclose real stub rows.
-        for (const [run, emp, employment, province] of [[runA, empA, employmentA, "ON"], [runB, empB, employmentB, "ON"]] as const) {
+        for (const [run, emp, employment, province] of [
+          [runA, empA, employmentA, "ON"],
+          [runB, empB, employmentB, "ON"],
+        ] as const) {
           await db.execute(sql`
             insert into pay_stubs (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                    periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
@@ -310,7 +363,8 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
                   1, 100.00, 'CAD')`);
         return { scheduleA, scheduleB, empA, empB, componentId, runA, runB, profileId, artifactB };
       });
-      const { scheduleA, scheduleB, empA, empB, componentId, runA, runB, profileId, artifactB } = seeded;
+      const { scheduleA, scheduleB, empA, empB, componentId, runA, runB, profileId, artifactB } =
+        seeded;
 
       const asA = (allowed: Set<string> | null, actorId: string) => {
         routeState.authz = {
@@ -358,10 +412,17 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
           amount: "100.00",
         });
         assert.equal(adjusted.status, 200, await adjusted.text());
-        const adjCount = (await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
+        const adjCount = (
+          await withOrgContext(orgId, () =>
+            db.execute<{ n: string }>(
+              sql`
           select count(*)::text as n from pay_run_adjustments
            where org_id = ${orgId} and pay_run_document_id = ${runA.documentId}
-             and adjustment_type = 'line'`, "objects")))[0]!.n;
+             and adjustment_type = 'line'`,
+              "objects",
+            ),
+          )
+        )[0]!.n;
         assert.equal(adjCount, "1");
 
         // The PDF and bank-file surfaces reach their REAL logic (their own
@@ -371,7 +432,11 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
         assert.equal(stubs.status, 404);
         assert.equal(await stubs.text(), JSON.stringify({ error: "no stubs to print" }));
         const cheques = await chequesPdf(runA.documentId);
-        assert.equal(cheques.status, 409, "cheque printing reaches its lifecycle refusal after scope authorization");
+        assert.equal(
+          cheques.status,
+          409,
+          "cheque printing reaches its lifecycle refusal after scope authorization",
+        );
         assert.equal(
           await cheques.text(),
           JSON.stringify({ error: "commit the pay run before printing its cheques" }),
@@ -462,7 +527,12 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
         // Re-run every denied surface.
         await runGet(runB.documentId);
         await runPost(runB.documentId, { action: "commit" });
-        await runPost(runB.documentId, { action: "add-adjustment", employeePartyId: empB, componentId, amount: "100.00" });
+        await runPost(runB.documentId, {
+          action: "add-adjustment",
+          employeePartyId: empB,
+          componentId,
+          amount: "100.00",
+        });
         await stubsPdf(runB.documentId);
         await chequesPdf(runB.documentId);
         await bankPanel(runB.documentId);
@@ -474,9 +544,16 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
 
         // And B's stub — the wage PII the actor tried to reach — still
         // belongs to exactly the run it always did, untouched.
-        const stubCount = (await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
+        const stubCount = (
+          await withOrgContext(orgId, () =>
+            db.execute<{ n: string }>(
+              sql`
           select count(*)::text as n from pay_stubs
-           where org_id = ${orgId} and pay_run_document_id = ${runB.documentId}`, "objects")))[0]!.n;
+           where org_id = ${orgId} and pay_run_document_id = ${runB.documentId}`,
+              "objects",
+            ),
+          )
+        )[0]!.n;
         assert.equal(stubCount, "1");
       }
 

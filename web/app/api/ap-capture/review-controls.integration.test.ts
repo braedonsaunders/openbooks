@@ -1,116 +1,237 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { registerHooks } from 'node:module'
-import { randomUUID } from 'node:crypto'
-import type { SessionUser } from '../../../lib/auth'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
+import { randomUUID } from "node:crypto";
+import type { SessionUser } from "../../../lib/auth";
 
-const session: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __captureReviewControls: session })
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__captureReviewControls.user}' }
-  return next(specifier, context)
-}})
-const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PATCH } = await import('./[id]/route')
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __captureReviewControls: session });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "next-intl/server")
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}",
+      };
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__captureReviewControls.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("./[id]/route");
 
 async function fixture() {
-  const org = await withBypassContext(() => createScratchOrg())
-  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Capture auditor', 'reviewer'))
-  await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`))
-  session.user = { id: actor, orgId: org.orgId, name: 'Auditor', email: 'auditor@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-  const folder = randomUUID(), file = randomUUID(), capture = randomUUID()
+  const org = await withBypassContext(() => createScratchOrg());
+  const actor = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Capture auditor", "reviewer"),
+  );
+  await withBypassContext(() =>
+    db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+    ),
+  );
+  session.user = {
+    id: actor,
+    orgId: org.orgId,
+    name: "Auditor",
+    email: "auditor@example.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: org.orgId,
+    homeOrgId: org.orgId,
+    homeUserId: actor,
+  };
+  const folder = randomUUID(),
+    file = randomUUID(),
+    capture = randomUUID();
   const normalized = {
-    vendorName: 'Review vendor', vendorTaxId: null, invoiceNumber: 'REVIEW-1', invoiceDate: org.date, dueDate: null,
-    purchaseOrderNumber: null, currency: 'CAD', subtotal: '100.0000', taxTotal: '0.0000', total: '100.0000', memo: null,
-    lines: [{ description: 'Expense', productCode: null, quantity: '1.0000', unit: null, unitPrice: '100.0000', amount: '100.0000', taxAmount: '0.0000', accountId: org.accounts.cogs, itemId: null, purchaseOrderLineId: null, confidence: null }],
-  }
-  await withBypassContext(() => db.execute(sql`insert into folders(id,org_id,name) values (${folder},${org.orgId},'Capture evidence')`))
-  await withBypassContext(() => db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes) values (${file},${org.orgId},${folder},'review.pdf','application/pdf',0)`))
-  await withBypassContext(() => db.execute(sql`insert into ap_capture_items(id,org_id,file_id,status,original_filename,content_hash,document_kind,normalized,vendor_candidate_id,created_by,updated_by)
-    values (${capture},${org.orgId},${file},'needs_review','review.pdf',${randomUUID()},'vendor_credit',${JSON.stringify(normalized)}::jsonb,${org.vendorId},${actor},${actor})`))
-  const run = randomUUID()
-  await withBypassContext(() => db.execute(sql`insert into ap_capture_runs(id,org_id,capture_item_id,attempt,provider,model,status,finished_at)
-    values (${run},${org.orgId},${capture},1,'fixture','fixture','succeeded',now())`))
-  await withBypassContext(() => db.execute(sql`insert into ap_capture_fields(org_id,run_id,field_key,raw_value)
-    values (${org.orgId},${run},'total','100.00')`))
-  const revision = async () => (await withOrgContext(org.orgId, () => db.execute<{ updatedAt: string }>(sql`
+    vendorName: "Review vendor",
+    vendorTaxId: null,
+    invoiceNumber: "REVIEW-1",
+    invoiceDate: org.date,
+    dueDate: null,
+    purchaseOrderNumber: null,
+    currency: "CAD",
+    subtotal: "100.0000",
+    taxTotal: "0.0000",
+    total: "100.0000",
+    memo: null,
+    lines: [
+      {
+        description: "Expense",
+        productCode: null,
+        quantity: "1.0000",
+        unit: null,
+        unitPrice: "100.0000",
+        amount: "100.0000",
+        taxAmount: "0.0000",
+        accountId: org.accounts.cogs,
+        itemId: null,
+        purchaseOrderLineId: null,
+        confidence: null,
+      },
+    ],
+  };
+  await withBypassContext(() =>
+    db.execute(
+      sql`insert into folders(id,org_id,name) values (${folder},${org.orgId},'Capture evidence')`,
+    ),
+  );
+  await withBypassContext(() =>
+    db.execute(
+      sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes) values (${file},${org.orgId},${folder},'review.pdf','application/pdf',0)`,
+    ),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into ap_capture_items(id,org_id,file_id,status,original_filename,content_hash,document_kind,normalized,vendor_candidate_id,created_by,updated_by)
+    values (${capture},${org.orgId},${file},'needs_review','review.pdf',${randomUUID()},'vendor_credit',${JSON.stringify(normalized)}::jsonb,${org.vendorId},${actor},${actor})`),
+  );
+  const run = randomUUID();
+  await withBypassContext(() =>
+    db.execute(sql`insert into ap_capture_runs(id,org_id,capture_item_id,attempt,provider,model,status,finished_at)
+    values (${run},${org.orgId},${capture},1,'fixture','fixture','succeeded',now())`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into ap_capture_fields(org_id,run_id,field_key,raw_value)
+    values (${org.orgId},${run},'total','100.00')`),
+  );
+  const revision = async () =>
+    (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ updatedAt: string }>(
+          sql`
     select (revision_seq)::text as "updatedAt"
-      from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`, 'objects')))[0]!.updatedAt
+      from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`,
+          "objects",
+        ),
+      )
+    )[0]!.updatedAt;
   const patch = async (body: object) => {
-    const expectedUpdatedAt = await revision()
-    return withOrgContext(org.orgId, () => PATCH(new Request('http://audit.local/api/ap-capture/'+capture, {
-      method: 'PATCH', body: JSON.stringify({ normalized, vendorId: org.vendorId, expectedUpdatedAt, ...body }),
-    }), { params: Promise.resolve({ id: capture }) }))
-  }
-  const snapshot = async () => await withOrgContext(org.orgId, () => db.execute(sql`select to_jsonb(ci) as item,
+    const expectedUpdatedAt = await revision();
+    return withOrgContext(org.orgId, () =>
+      PATCH(
+        new Request("http://audit.local/api/ap-capture/" + capture, {
+          method: "PATCH",
+          body: JSON.stringify({ normalized, vendorId: org.vendorId, expectedUpdatedAt, ...body }),
+        }),
+        { params: Promise.resolve({ id: capture }) },
+      ),
+    );
+  };
+  const snapshot = async () =>
+    await withOrgContext(org.orgId, () =>
+      db.execute(
+        sql`select to_jsonb(ci) as item,
     (select count(*) from ap_capture_corrections where org_id=${org.orgId}) as corrections,
     (select count(*) from ap_capture_events where org_id=${org.orgId}) as events
-    from ap_capture_items ci where ci.org_id=${org.orgId} and ci.id=${capture}`, 'objects'))
+    from ap_capture_items ci where ci.org_id=${org.orgId} and ci.id=${capture}`,
+        "objects",
+      ),
+    );
   const close = async () => {
-    session.user = null
-    await dropScratchOrg(org.orgId)
+    session.user = null;
+    await dropScratchOrg(org.orgId);
     // CI releases and resets pooled tenants; standalone runs delete them.
     // In either mode every capture and its immutable evidence must be gone.
-    const remaining = await db.execute<{ count: string }>(sql`select (
+    const remaining = await db.execute<{ count: string }>(
+      sql`select (
       (select count(*) from ap_capture_items where org_id=${org.orgId}) +
       (select count(*) from ap_capture_runs where org_id=${org.orgId}) +
       (select count(*) from ap_capture_fields where org_id=${org.orgId}) +
       (select count(*) from ap_capture_corrections where org_id=${org.orgId}) +
       (select count(*) from ap_capture_events where org_id=${org.orgId})
-    )::text as count`, 'objects')
-    assert.equal(remaining[0]!.count, '0')
-    if (process.env.OPENBOOKS_TEST_FIXTURE_POOL !== '1' && !process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT) {
-      assert.equal((await db.execute(sql`select id from orgs where id=${org.orgId}`, 'objects')).length, 0)
+    )::text as count`,
+      "objects",
+    );
+    assert.equal(remaining[0]!.count, "0");
+    if (
+      process.env.OPENBOOKS_TEST_FIXTURE_POOL !== "1" &&
+      !process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT
+    ) {
+      assert.equal(
+        (await db.execute(sql`select id from orgs where id=${org.orgId}`, "objects")).length,
+        0,
+      );
     }
-    const guards = await db.execute<{ tgenabled: string }>(sql`select tgenabled from pg_trigger
+    const guards = await db.execute<{ tgenabled: string }>(
+      sql`select tgenabled from pg_trigger
       where tgrelid in ('public.ap_capture_fields'::regclass, 'public.ap_capture_runs'::regclass,
         'public.ap_capture_corrections'::regclass, 'public.ap_capture_events'::regclass)
       and tgname in ('ap_capture_fields_append_only','ap_capture_runs_immutable',
-        'ap_capture_corrections_append_only','ap_capture_events_append_only')`, 'objects')
-    assert.equal(guards.length, 4)
-    assert.ok(guards.every(row => row.tgenabled === 'O'), 'all capture retention guards remain enabled')
-  }
-  return { org, capture, normalized, patch, snapshot, close }
+        'ap_capture_corrections_append_only','ap_capture_events_append_only')`,
+      "objects",
+    );
+    assert.equal(guards.length, 4);
+    assert.ok(
+      guards.every((row) => row.tgenabled === "O"),
+      "all capture retention guards remain enabled",
+    );
+  };
+  return { org, capture, normalized, patch, snapshot, close };
 }
 
-test('capture review preserves an omitted document kind and validates supplied kinds', async () => {
-  const f = await fixture()
+test("capture review preserves an omitted document kind and validates supplied kinds", async () => {
+  const f = await fixture();
   try {
-    const result = await f.patch({})
-    assert.equal(result.status, 200, await result.clone().text())
-    assert.equal(((await f.snapshot())[0]!.item as Record<string, unknown>).document_kind, 'vendor_credit')
-    const before = await f.snapshot()
-    const invalidKind = await f.patch({ documentKind: 'customer_invoice' })
-    assert.equal(invalidKind.status, 422)
-    const kindRefusal = await invalidKind.json()
-    assert.ok(kindRefusal.issues.some((issue: { path: string; message: string }) =>
-      issue.path === 'documentKind' && /vendor_bill.*vendor_credit/.test(issue.message)))
-    assert.deepEqual(await f.snapshot(), before)
-    assert.equal((await f.patch({ documentKind: 'vendor_bill' })).status, 200)
-    assert.equal(((await f.snapshot())[0]!.item as Record<string, unknown>).document_kind, 'vendor_bill')
-  } finally { await f.close() }
-})
+    const result = await f.patch({});
+    assert.equal(result.status, 200, await result.clone().text());
+    assert.equal(
+      ((await f.snapshot())[0]!.item as Record<string, unknown>).document_kind,
+      "vendor_credit",
+    );
+    const before = await f.snapshot();
+    const invalidKind = await f.patch({ documentKind: "customer_invoice" });
+    assert.equal(invalidKind.status, 422);
+    const kindRefusal = await invalidKind.json();
+    assert.ok(
+      kindRefusal.issues.some(
+        (issue: { path: string; message: string }) =>
+          issue.path === "documentKind" && /vendor_bill.*vendor_credit/.test(issue.message),
+      ),
+    );
+    assert.deepEqual(await f.snapshot(), before);
+    assert.equal((await f.patch({ documentKind: "vendor_bill" })).status, 200);
+    assert.equal(
+      ((await f.snapshot())[0]!.item as Record<string, unknown>).document_kind,
+      "vendor_bill",
+    );
+  } finally {
+    await f.close();
+  }
+});
 
-test('manual capture corrections refuse malformed financial values without changing evidence', async () => {
-  const f = await fixture()
+test("manual capture corrections refuse malformed financial values without changing evidence", async () => {
+  const f = await fixture();
   try {
-    const before = await f.snapshot()
+    const before = await f.snapshot();
     for (const normalized of [
-      { ...f.normalized, lines: [{ ...f.normalized.lines[0], amount: 'not-money' }] },
-      { ...f.normalized, total: '100USD' },
+      { ...f.normalized, lines: [{ ...f.normalized.lines[0], amount: "not-money" }] },
+      { ...f.normalized, total: "100USD" },
       { ...f.normalized, lines: {} },
-      { ...f.normalized, lines: [{ ...f.normalized.lines[0], accountId: 'malformed' }] },
+      { ...f.normalized, lines: [{ ...f.normalized.lines[0], accountId: "malformed" }] },
     ]) {
-      const result = await f.patch({ normalized })
-      assert.equal(result.status, 422)
-      const refusal = await result.json()
-      assert.ok(refusal.issues.some((issue: { path: string; message: string }) =>
-        issue.path.startsWith('normalized.') && issue.message.trim()), 'the refusal identifies the unreadable capture field')
-      assert.deepEqual(await f.snapshot(), before)
+      const result = await f.patch({ normalized });
+      assert.equal(result.status, 422);
+      const refusal = await result.json();
+      assert.ok(
+        refusal.issues.some(
+          (issue: { path: string; message: string }) =>
+            issue.path.startsWith("normalized.") && issue.message.trim(),
+        ),
+        "the refusal identifies the unreadable capture field",
+      );
+      assert.deepEqual(await f.snapshot(), before);
     }
-    assert.equal((await f.patch({})).status, 200, 'valid exact decimal edits remain usable')
-  } finally { await f.close() }
-})
+    assert.equal((await f.patch({})).status, 200, "valid exact decimal edits remain usable");
+  } finally {
+    await f.close();
+  }
+});

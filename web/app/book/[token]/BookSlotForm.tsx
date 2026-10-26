@@ -1,42 +1,48 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useState } from "react";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * Candidate self-booking form (HR-18): the proposed slots as radio options
  * with one Book action. Posts to the sessionless booking API; a taken slot
  * surfaces the server's remedy (pick another slot), never a silent failure.
  */
-export function BookSlotForm({ token, slots }: { token: string; slots: { id: string; startsAt: string; endsAt: string; timezone: string }[] }) {
-  const [slotId, setSlotId] = useState(slots[0]?.id ?? '')
-  const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+export function BookSlotForm({
+  token,
+  slots,
+}: {
+  token: string;
+  slots: { id: string; startsAt: string; endsAt: string; timezone: string }[];
+}) {
+  const [slotId, setSlotId] = useState(slots[0]?.id ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function book() {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
       const res = await fetch(`/api/recruiting/book/${encodeURIComponent(token)}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ slotId }),
-      })
+      });
       // Error bodies are checked before they are parsed: a refusal is a
       // message naming the remedy, never a parse error.
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, 'Booking failed. Please try another slot.'))
-        return
+        setError(await readApiErrorMessage(res, "Booking failed. Please try another slot."));
+        return;
       }
-      const body = (await res.json()) as { slot: { startsAt: string; timezone: string } }
-      setDone(`${body.slot.startsAt} (${body.slot.timezone})`)
+      const body = (await res.json()) as { slot: { startsAt: string; timezone: string } };
+      setDone(`${body.slot.startsAt} (${body.slot.timezone})`);
     } catch {
-      setError('Booking failed. Check your connection and try again.')
+      setError("Booking failed. Check your connection and try again.");
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -45,7 +51,7 @@ export function BookSlotForm({ token, slots }: { token: string; slots: { id: str
       <p role="status" className="rounded-md bg-green-50 p-4 text-sm text-green-800">
         Booked: {done}
       </p>
-    )
+    );
   }
 
   return (
@@ -81,8 +87,8 @@ export function BookSlotForm({ token, slots }: { token: string; slots: { id: str
         disabled={busy || !slotId}
         className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
-        {busy ? 'Booking…' : 'Book this time'}
+        {busy ? "Booking…" : "Book this time"}
       </button>
     </div>
-  )
+  );
 }

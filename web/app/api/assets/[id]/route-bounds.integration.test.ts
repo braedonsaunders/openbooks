@@ -14,10 +14,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __assetPatchBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
         export async function guardFeaturePermission() {
@@ -30,7 +36,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH } = await import("./route.ts");
 
 async function fixture(): Promise<{ orgId: string; assetId: string; token: string }> {
@@ -39,26 +46,39 @@ async function fixture(): Promise<{ orgId: string; assetId: string; token: strin
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fixedAssets}', 'true'::jsonb, true) where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = jsonb_set(settings, '{features,fixedAssets}', 'true'::jsonb, true) where id = ${org.orgId}`,
+    ),
   );
   const categoryId = randomUUID();
   const assetId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into asset_categories
       (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
        depreciation_expense_account_id, default_method, default_life_months, default_convention,
        tax_attributes, is_active)
     values (${categoryId}, ${org.orgId}, 'Equipment', ${org.accounts.invAsset}, ${org.accounts.clearing},
-            ${org.accounts.adjustment}, 'manual', null, 'full_month', '{}'::jsonb, true)`));
-  await withBypassContext(() => db.execute(sql`
+            ${org.accounts.adjustment}, 'manual', null, 'full_month', '{}'::jsonb, true)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into fixed_assets
       (id, org_id, subsidiary_id, category_id, asset_number, name, status,
        acquired_on, acquisition_cost, salvage_value, depreciation_method, custom)
     values (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, 'A-1',
-            'Press', 'draft', ${org.date}, '12000.0000', '2000.0000', 'manual', '{}'::jsonb)`));
-  const token = (await withBypassContext(() => db.execute<{ updated_at: string }>(sql`
+            'Press', 'draft', ${org.date}, '12000.0000', '2000.0000', 'manual', '{}'::jsonb)`),
+  );
+  const token = (
+    await withBypassContext(() =>
+      db.execute<{ updated_at: string }>(
+        sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
-      from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`, "objects")))[0]!.updated_at;
+      from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!.updated_at;
   return { orgId: org.orgId, assetId, token };
 }
 
@@ -77,8 +97,10 @@ const patch = (assetId: string, body: unknown) =>
 async function assetOf(orgId: string, assetId: string) {
   const rows = await withBypassContext(() =>
     db.execute<{ acquired_on: string; acquisition_cost: string }>(
-      sql`select acquired_on::text as acquired_on, acquisition_cost::text as acquisition_cost from fixed_assets where org_id = ${orgId} and id = ${assetId}`, "objects",
-    ));
+      sql`select acquired_on::text as acquired_on, acquisition_cost::text as acquisition_cost from fixed_assets where org_id = ${orgId} and id = ${assetId}`,
+      "objects",
+    ),
+  );
   return rows[0]!;
 }
 
@@ -87,7 +109,11 @@ test("asset update refuses a non-calendar acquired date without writing", async 
   const before = await assetOf(orgId, assetId);
   const response = await patch(assetId, { expectedUpdatedAt: token, acquiredOn: "2026-09-31" });
   const json = (await response.json().catch(() => null)) as { error?: string } | null;
-  assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+  assert.equal(
+    response.status,
+    422,
+    `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+  );
   assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
   assert.deepEqual(await assetOf(orgId, assetId), before);
   await dropScratchOrg(orgId);
@@ -96,9 +122,16 @@ test("asset update refuses a non-calendar acquired date without writing", async 
 test("asset update refuses a cost wider than numeric(19,4) without writing", async () => {
   const { orgId, assetId, token } = await fixture();
   const before = await assetOf(orgId, assetId);
-  const response = await patch(assetId, { expectedUpdatedAt: token, acquisitionCost: "99999999999999999999.99" });
+  const response = await patch(assetId, {
+    expectedUpdatedAt: token,
+    acquisitionCost: "99999999999999999999.99",
+  });
   const json = (await response.json().catch(() => null)) as { error?: string } | null;
-  assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+  assert.equal(
+    response.status,
+    422,
+    `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+  );
   assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
   assert.deepEqual(await assetOf(orgId, assetId), before);
   await dropScratchOrg(orgId);
@@ -107,7 +140,10 @@ test("asset update refuses a cost wider than numeric(19,4) without writing", asy
 test("asset update still saves an ordinary edit", async () => {
   const { orgId, assetId, token } = await fixture();
   try {
-    const response = await patch(assetId, { expectedUpdatedAt: token, acquisitionCost: "13000.00" });
+    const response = await patch(assetId, {
+      expectedUpdatedAt: token,
+      acquisitionCost: "13000.00",
+    });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(Number((await assetOf(orgId, assetId)).acquisition_cost), 13000);
   } finally {

@@ -82,29 +82,44 @@ async function receiveStock(org: ScratchOrg): Promise<string> {
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  return (await db.execute<{ balance: string }>(sql`
+  return (
+    await db.execute<{ balance: string }>(
+      sql`
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `, "objects"))[0]!.balance;
+  `,
+      "objects",
+    )
+  )[0]!.balance;
 }
 
 async function layerValue(orgId: string, itemId: string): Promise<string> {
-  return (await db.execute<{ value: string }>(sql`
+  return (
+    await db.execute<{ value: string }>(
+      sql`
     select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as value
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
-  `, "objects"))[0]!.value;
+  `,
+      "objects",
+    )
+  )[0]!.value;
 }
 
 async function returnMovements(orgId: string, documentId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+  return (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n
       from inventory_movements movement
       join document_lines line on line.id = movement.document_line_id
      where movement.org_id = ${orgId}
        and line.document_id = ${documentId}
-       and movement.kind = 'return'`, "objects"))[0]!.n;
+       and movement.kind = 'return'`,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 test(
@@ -163,148 +178,136 @@ test(
   },
 );
 
-test(
-  "a stocked vendor-credit line with no choice refuses on save",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      await withOrgContext(org.orgId, async () => {
-        const actor = await createScratchUser(org.orgId, "AP clerk", "admin");
-        await receiveStock(org);
-        await assert.rejects(
-          () =>
-            createDocument({
-              orgId: org.orgId,
-              userId: actor,
-              kind: "vendor_credit",
-              key: randomUUID(),
-              body: {
-                partyId: org.vendorId,
-                documentDate: org.date,
-                lines: [
-                  {
-                    accountId: org.accounts.adjustment,
-                    itemId: org.items.fifo,
-                    quantity: "4",
-                    unitPrice: "2.5",
-                    amount: "10",
-                    stockLocationId: org.stockLocationId,
-                  },
-                ],
-              },
-              subsidiaryId: org.subsidiaryId,
-              requestBody: { kind: "vendor_credit" },
-            }),
-          (error: unknown) =>
-            error instanceof DocumentEditError &&
-            error.status === 422 &&
-            /Line 1 \(FIFO Widget\) is a stocked item: choose the receipt the goods are returned from, or post the credit as an allowance/.test(
-              error.message,
-            ),
-        );
-      });
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("a stocked vendor-credit line with no choice refuses on save", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const actor = await createScratchUser(org.orgId, "AP clerk", "admin");
+      await receiveStock(org);
+      await assert.rejects(
+        () =>
+          createDocument({
+            orgId: org.orgId,
+            userId: actor,
+            kind: "vendor_credit",
+            key: randomUUID(),
+            body: {
+              partyId: org.vendorId,
+              documentDate: org.date,
+              lines: [
+                {
+                  accountId: org.accounts.adjustment,
+                  itemId: org.items.fifo,
+                  quantity: "4",
+                  unitPrice: "2.5",
+                  amount: "10",
+                  stockLocationId: org.stockLocationId,
+                },
+              ],
+            },
+            subsidiaryId: org.subsidiaryId,
+            requestBody: { kind: "vendor_credit" },
+          }),
+        (error: unknown) =>
+          error instanceof DocumentEditError &&
+          error.status === 422 &&
+          /Line 1 \(FIFO Widget\) is a stocked item: choose the receipt the goods are returned from, or post the credit as an allowance/.test(
+            error.message,
+          ),
+      );
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "a return source plus an allowance on one line refuses on save",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      await withOrgContext(org.orgId, async () => {
-        const actor = await createScratchUser(org.orgId, "AP clerk", "admin");
-        const receiptId = await receiveStock(org);
-        await assert.rejects(
-          () =>
-            createDocument({
-              orgId: org.orgId,
-              userId: actor,
-              kind: "vendor_credit",
-              key: randomUUID(),
-              body: {
-                partyId: org.vendorId,
-                documentDate: org.date,
-                lines: [
-                  {
-                    accountId: org.accounts.adjustment,
-                    itemId: org.items.fifo,
-                    quantity: "4",
-                    unitPrice: "2.5",
-                    amount: "10",
-                    stockLocationId: org.stockLocationId,
-                    inventoryReturnSource: { movementId: receiptId },
-                    inventoryAllowance: true,
-                  },
-                ],
-              },
-              subsidiaryId: org.subsidiaryId,
-              requestBody: { kind: "vendor_credit" },
-            }),
-          /cannot be both/,
-        );
-      });
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("a return source plus an allowance on one line refuses on save", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const actor = await createScratchUser(org.orgId, "AP clerk", "admin");
+      const receiptId = await receiveStock(org);
+      await assert.rejects(
+        () =>
+          createDocument({
+            orgId: org.orgId,
+            userId: actor,
+            kind: "vendor_credit",
+            key: randomUUID(),
+            body: {
+              partyId: org.vendorId,
+              documentDate: org.date,
+              lines: [
+                {
+                  accountId: org.accounts.adjustment,
+                  itemId: org.items.fifo,
+                  quantity: "4",
+                  unitPrice: "2.5",
+                  amount: "10",
+                  stockLocationId: org.stockLocationId,
+                  inventoryReturnSource: { movementId: receiptId },
+                  inventoryAllowance: true,
+                },
+              ],
+            },
+            subsidiaryId: org.subsidiaryId,
+            requestBody: { kind: "vendor_credit" },
+          }),
+        /cannot be both/,
+      );
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "an allowance without a variance account refuses with the remedy",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      await withOrgContext(org.orgId, async () => {
-        const actor = await createScratchUser(org.orgId, "AP clerk", "admin");
-        await receiveStock(org);
-        await db.execute(sql`
+test("an allowance without a variance account refuses with the remedy", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const actor = await createScratchUser(org.orgId, "AP clerk", "admin");
+      await receiveStock(org);
+      await db.execute(sql`
           update item_inventory_profiles
              set variance_account_id = null, adjustment_account_id = null
            where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
-        const created = await createDocument({
-          orgId: org.orgId,
-          userId: actor,
-          kind: "vendor_credit",
-          key: randomUUID(),
-          body: {
-            partyId: org.vendorId,
-            documentDate: org.date,
-            lines: [
-              {
-                accountId: org.accounts.adjustment,
-                itemId: org.items.fifo,
-                quantity: "4",
-                unitPrice: "2.5",
-                amount: "10",
-                stockLocationId: org.stockLocationId,
-                inventoryAllowance: true,
-              },
-            ],
-          },
-          subsidiaryId: org.subsidiaryId,
-          requestBody: { kind: "vendor_credit" },
-        });
-        await db.execute(sql`
+      const created = await createDocument({
+        orgId: org.orgId,
+        userId: actor,
+        kind: "vendor_credit",
+        key: randomUUID(),
+        body: {
+          partyId: org.vendorId,
+          documentDate: org.date,
+          lines: [
+            {
+              accountId: org.accounts.adjustment,
+              itemId: org.items.fifo,
+              quantity: "4",
+              unitPrice: "2.5",
+              amount: "10",
+              stockLocationId: org.stockLocationId,
+              inventoryAllowance: true,
+            },
+          ],
+        },
+        subsidiaryId: org.subsidiaryId,
+        requestBody: { kind: "vendor_credit" },
+      });
+      await db.execute(sql`
           update documents set status = 'approved'
            where id = ${created.id} and org_id = ${org.orgId}`);
-        await assert.rejects(
-          () => postDocument(created.id, depsFor(org)),
-          (error: unknown) =>
-            error instanceof InventoryError &&
-            /no purchase price variance account/.test(error.message),
-        );
-      });
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      await assert.rejects(
+        () => postDocument(created.id, depsFor(org)),
+        (error: unknown) =>
+          error instanceof InventoryError &&
+          /no purchase price variance account/.test(error.message),
+      );
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "a credit with returned goods posts through the write path and relieves the chosen receipt",
@@ -414,13 +417,19 @@ test(
           requestBody: { kind: "vendor_credit" },
         });
         assert.equal(created.status, "created");
-        const stored = await db.execute<{ stockLocationId: string | null; custom: unknown }>(sql`
+        const stored = await db.execute<{ stockLocationId: string | null; custom: unknown }>(
+          sql`
           select stock_location_id as "stockLocationId", custom
             from document_lines
-           where org_id = ${org.orgId} and document_id = ${created.id}`, "objects");
+           where org_id = ${org.orgId} and document_id = ${created.id}`,
+          "objects",
+        );
         assert.equal(stored.length, 1);
         assert.equal(stored[0]!.stockLocationId, org.stockLocationId);
-        assert.equal((stored[0]!.custom as { inventoryAllowance?: unknown }).inventoryAllowance, true);
+        assert.equal(
+          (stored[0]!.custom as { inventoryAllowance?: unknown }).inventoryAllowance,
+          true,
+        );
         await db.execute(sql`
           update documents set status = 'approved'
            where id = ${created.id} and org_id = ${org.orgId}`);

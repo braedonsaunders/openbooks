@@ -5,21 +5,14 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg, withOrgContext } from "../platform/db.ts";
 import { saveOrgEmailConfig } from "../delivery/email-config.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import {
   createStatementBatchRun,
   getStatementBatchRun,
   listStatementBatchItems,
   retryStatementBatchRun,
 } from "../receivables/statement-batches.ts";
-import {
-  processStatementBatchJob,
-  transmitStatementBatchEmail,
-} from "./statement-batch-worker.ts";
+import { processStatementBatchJob, transmitStatementBatchEmail } from "./statement-batch-worker.ts";
 
 /**
  * One batch job renders one customer's statement and sends it through the
@@ -28,7 +21,12 @@ import {
  * run for Retry, and a missing transport refuses the customer with the
  * setup remedy before any render work.
  */
-function jobFor(orgId: string, runId: string, partyId: string, senderId: string): StatementBatchJobData {
+function jobFor(
+  orgId: string,
+  runId: string,
+  partyId: string,
+  senderId: string,
+): StatementBatchJobData {
   return { orgId, runId, partyId, senderId };
 }
 
@@ -37,7 +35,9 @@ test("a customer with no configured transport is refused before any render", asy
   const enqueued: StatementBatchJobData[] = [];
   try {
     const senderId = await createScratchUser(org.orgId, "Batch Sender", "reviewer");
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+    await db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+    );
     const created = await withOrg(org.orgId, () =>
       createStatementBatchRun({
         orgId: org.orgId,
@@ -46,7 +46,13 @@ test("a customer with no configured transport is refused before any render", asy
         periodTo: org.date,
         filters: {},
         recipients: [
-          { partyId: org.customerId, balance: "100.0000", overdue: "100.0000", currency: "CAD", toEmail: "office@acme.test" },
+          {
+            partyId: org.customerId,
+            balance: "100.0000",
+            overdue: "100.0000",
+            currency: "CAD",
+            toEmail: "office@acme.test",
+          },
         ],
         excluded: [],
         allowedSubsidiaryIds: null,
@@ -60,7 +66,12 @@ test("a customer with no configured transport is refused before any render", asy
     const outcome = await processStatementBatchJob(enqueued[0]!, {
       renderPdf: async () => {
         renders += 1;
-        return { pdf: Buffer.from("%PDF-1.4"), attachmentName: "s.pdf", orgName: "Acme", reference: "as of x" };
+        return {
+          pdf: Buffer.from("%PDF-1.4"),
+          attachmentName: "s.pdf",
+          orgName: "Acme",
+          reference: "as of x",
+        };
       },
       transmit: async () => ({ emailLogId: randomUUID(), alreadySent: false }),
     });
@@ -79,11 +90,21 @@ test("a sent customer never transmits again", async () => {
   const enqueued: StatementBatchJobData[] = [];
   try {
     const senderId = await createScratchUser(org.orgId, "Batch Sender", "reviewer");
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+    await db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+    );
     await withOrg(org.orgId, () =>
       saveOrgEmailConfig(
         org.orgId,
-        { enabled: true, provider: "smtp", fromName: "Acme", fromEmail: "statements@acme.test", smtpHost: "127.0.0.1", smtpPort: 1, smtpSecure: false },
+        {
+          enabled: true,
+          provider: "smtp",
+          fromName: "Acme",
+          fromEmail: "statements@acme.test",
+          smtpHost: "127.0.0.1",
+          smtpPort: 1,
+          smtpSecure: false,
+        },
         { kind: "user", userId: senderId },
       ),
     );
@@ -95,7 +116,13 @@ test("a sent customer never transmits again", async () => {
         periodTo: org.date,
         filters: {},
         recipients: [
-          { partyId: org.customerId, balance: "100.0000", overdue: "0.0000", currency: "CAD", toEmail: "office@acme.test" },
+          {
+            partyId: org.customerId,
+            balance: "100.0000",
+            overdue: "0.0000",
+            currency: "CAD",
+            toEmail: "office@acme.test",
+          },
         ],
         excluded: [],
         allowedSubsidiaryIds: null,
@@ -110,7 +137,12 @@ test("a sent customer never transmits again", async () => {
     const deps = {
       renderPdf: async () => {
         renders += 1;
-        return { pdf: Buffer.from("%PDF-1.4"), attachmentName: "s.pdf", orgName: "Acme", reference: "as of x" };
+        return {
+          pdf: Buffer.from("%PDF-1.4"),
+          attachmentName: "s.pdf",
+          orgName: "Acme",
+          reference: "as of x",
+        };
       },
       transmit: async () => {
         transmits += 1;
@@ -144,11 +176,21 @@ test("a failed send keeps its error on the run and Retry delivers it", async () 
   const enqueued: StatementBatchJobData[] = [];
   try {
     const senderId = await createScratchUser(org.orgId, "Batch Sender", "reviewer");
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+    await db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+    );
     await withOrg(org.orgId, () =>
       saveOrgEmailConfig(
         org.orgId,
-        { enabled: true, provider: "smtp", fromName: "Acme", fromEmail: "statements@acme.test", smtpHost: "127.0.0.1", smtpPort: 1, smtpSecure: false },
+        {
+          enabled: true,
+          provider: "smtp",
+          fromName: "Acme",
+          fromEmail: "statements@acme.test",
+          smtpHost: "127.0.0.1",
+          smtpPort: 1,
+          smtpSecure: false,
+        },
         { kind: "user", userId: senderId },
       ),
     );
@@ -160,7 +202,13 @@ test("a failed send keeps its error on the run and Retry delivers it", async () 
         periodTo: org.date,
         filters: {},
         recipients: [
-          { partyId: org.customerId, balance: "100.0000", overdue: "0.0000", currency: "CAD", toEmail: "office@acme.test" },
+          {
+            partyId: org.customerId,
+            balance: "100.0000",
+            overdue: "0.0000",
+            currency: "CAD",
+            toEmail: "office@acme.test",
+          },
         ],
         excluded: [],
         allowedSubsidiaryIds: null,
@@ -169,7 +217,12 @@ test("a failed send keeps its error on the run and Retry delivers it", async () 
         },
       }),
     );
-    const render = async () => ({ pdf: Buffer.from("%PDF-1.4"), attachmentName: "s.pdf", orgName: "Acme", reference: "as of x" });
+    const render = async () => ({
+      pdf: Buffer.from("%PDF-1.4"),
+      attachmentName: "s.pdf",
+      orgName: "Acme",
+      reference: "as of x",
+    });
     let attempts = 0;
     await assert.rejects(
       processStatementBatchJob(enqueued[0]!, {
@@ -181,7 +234,9 @@ test("a failed send keeps its error on the run and Retry delivers it", async () 
       }),
       /provider unavailable/,
     );
-    const failed = await withOrg(org.orgId, () => listStatementBatchItems(org.orgId, created.runId));
+    const failed = await withOrg(org.orgId, () =>
+      listStatementBatchItems(org.orgId, created.runId),
+    );
     assert.equal(failed[0]!.status, "failed");
     assert.match(failed[0]!.error ?? "", /provider unavailable/);
 
@@ -208,11 +263,21 @@ test("a definite provider failure is recorded on the delivery log", async () => 
   const org = await createScratchOrg();
   try {
     const senderId = await createScratchUser(org.orgId, "Batch Sender", "reviewer");
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+    await db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+    );
     const transport = await withOrg(org.orgId, async () => {
       await saveOrgEmailConfig(
         org.orgId,
-        { enabled: true, provider: "smtp", fromName: "Acme", fromEmail: "statements@acme.test", smtpHost: "127.0.0.1", smtpPort: 1, smtpSecure: false },
+        {
+          enabled: true,
+          provider: "smtp",
+          fromName: "Acme",
+          fromEmail: "statements@acme.test",
+          smtpHost: "127.0.0.1",
+          smtpPort: 1,
+          smtpSecure: false,
+        },
         { kind: "user", userId: senderId },
       );
       const { resolveOrgEmailTransport } = await import("../delivery/email-config.ts");
@@ -231,7 +296,11 @@ test("a definite provider failure is recorded on the delivery log", async () => 
           subject: "Statement as of x — Acme",
           html: "<p>hi</p>",
           text: "hi",
-          attachment: { filename: "s.pdf", content: Buffer.from("%PDF-1.4").toString("base64"), contentType: "application/pdf" },
+          attachment: {
+            filename: "s.pdf",
+            content: Buffer.from("%PDF-1.4").toString("base64"),
+            contentType: "application/pdf",
+          },
           deliveryKey: "obem_ffffffffffffffffffffffffffffffffffffffff",
           senderId,
           partyId: org.customerId,
@@ -239,9 +308,14 @@ test("a definite provider failure is recorded on the delivery log", async () => 
         }),
       ),
     );
-    const rows = await withOrgContext(org.orgId, () => db.execute<{ status: string; attempts: unknown }>(sql`
+    const rows = await withOrgContext(org.orgId, () =>
+      db.execute<{ status: string; attempts: unknown }>(
+        sql`
       select status, meta -> 'attempts' as attempts from email_log
-       where org_id = ${org.orgId} and delivery_key = 'obem_ffffffffffffffffffffffffffffffffffffffff'`, "objects"));
+       where org_id = ${org.orgId} and delivery_key = 'obem_ffffffffffffffffffffffffffffffffffffffff'`,
+        "objects",
+      ),
+    );
     assert.equal(rows[0]!.status, "failed");
     assert.ok(JSON.stringify(rows[0]!.attempts).includes("notSent"));
   } finally {

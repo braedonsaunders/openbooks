@@ -1,21 +1,16 @@
-import { resolveWidgetProps } from './widget-props'
-import { Fragment, type ComponentProps, type ReactNode } from 'react'
-import { PageHeader, cn } from '@openbooks/ui'
-import type {
-  Block,
-  PaperBlock,
-  TableBlock,
-  Tone,
-} from '@braedonsaunders/appkit-viewspec'
+import { resolveWidgetProps } from "./widget-props";
+import { Fragment, type ComponentProps, type ReactNode } from "react";
+import { PageHeader, cn } from "@openbooks/ui";
+import type { Block, PaperBlock, TableBlock, Tone } from "@braedonsaunders/appkit-viewspec";
 import {
   resolveNumber,
   resolveRows,
   resolveText,
   resolveValue,
-} from '@braedonsaunders/appkit-viewspec'
-import { Pagination } from '../pagination'
-import { SortTh } from '../sortable-th'
-import { HomePanel, HomeStatTile } from '../module-home/client'
+} from "@braedonsaunders/appkit-viewspec";
+import { Pagination } from "../pagination";
+import { SortTh } from "../sortable-th";
+import { HomePanel, HomeStatTile } from "../module-home/client";
 import {
   Table as ReportTableRoot,
   TableBody as ReportTableBody,
@@ -23,7 +18,7 @@ import {
   TableHead as ReportTableHead,
   TableHeader as ReportTableHeader,
   TableRow as ReportTableRow,
-} from '../../app/(app)/reports/ReportTable'
+} from "../../app/(app)/reports/ReportTable";
 import {
   Table as AppTableRoot,
   TableBody as AppTableBody,
@@ -34,21 +29,27 @@ import {
   EmptyState,
   TabContent,
   Card,
-} from '@openbooks/ui'
-import { ReportPaper } from '../../app/(app)/reports/ReportPaper'
-import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
-import { PageContainer } from '../page-layout'
-import { ForecastSection } from '../../app/(app)/crm/forecasts/sections'
-import { AnalyticsHeader } from '../../app/(app)/analytics/_ui/AnalyticsHeader'
-import { CellView } from './cells'
-import { WidgetSlot, WidgetBlockView } from './widget-slot'
-import { toneClass } from './tone'
-import { pickScope, rowsRenderInBrowser, sectionScopeSpecs, sectionsRenderInBrowser, WINDOWED_ROWS_FROM } from './windowed-rows'
-import { WindowedGroups } from './windowed-groups'
-import { SpanRow, TableView } from './table-view'
-import { nestedScope } from './list-scope'
-import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
+} from "@openbooks/ui";
+import { ReportPaper } from "../../app/(app)/reports/ReportPaper";
+import { ReportFilterBar } from "../../app/(app)/reports/ReportFilterBar";
+import { PageContainer } from "../page-layout";
+import { ForecastSection } from "../../app/(app)/crm/forecasts/sections";
+import { AnalyticsHeader } from "../../app/(app)/analytics/_ui/AnalyticsHeader";
+import { CellView } from "./cells";
+import { WidgetSlot, WidgetBlockView } from "./widget-slot";
+import { toneClass } from "./tone";
+import {
+  pickScope,
+  rowsRenderInBrowser,
+  sectionScopeSpecs,
+  sectionsRenderInBrowser,
+  WINDOWED_ROWS_FROM,
+} from "./windowed-rows";
+import { WindowedGroups } from "./windowed-groups";
+import { SpanRow, TableView } from "./table-view";
+import { nestedScope } from "./list-scope";
+import Link from "next/link";
+import { Badge } from "@openbooks/ui";
 
 /**
  * Block renderers — the closed registry.
@@ -75,21 +76,13 @@ import { Badge } from '@openbooks/ui'
  * children. Keeping them apart means a spec cannot smuggle children into a
  * component that never expected them.
  */
-type FrameComponent = (
-  props: Record<string, unknown> & { children: ReactNode },
-) => ReactNode
+type FrameComponent = (props: Record<string, unknown> & { children: ReactNode }) => ReactNode;
 
 export const FRAME_REGISTRY: Record<string, FrameComponent> = {
-  'tab-content': TabContent as unknown as FrameComponent,
+  "tab-content": TabContent as unknown as FrameComponent,
   /** The plain full-height page shell, for pages that sit under it natively. */
-  'page-container': ((
-    props: Record<string, unknown> & { children: ReactNode },
-  ) => (
-    <PageContainer
-      className={
-        typeof props.className === 'string' ? props.className : undefined
-      }
-    >
+  "page-container": ((props: Record<string, unknown> & { children: ReactNode }) => (
+    <PageContainer className={typeof props.className === "string" ? props.className : undefined}>
       {props.children}
     </PageContainer>
   )) as FrameComponent,
@@ -103,17 +96,11 @@ export const FRAME_REGISTRY: Record<string, FrameComponent> = {
    *  shared period filter bar, cashflow places its horizon control) — and a
    *  widget that took a control NAME would be a component reference
    *  smuggled through a spec. */
-  'analytics-header': ((
-    props: Record<string, unknown> & { children: ReactNode },
-  ) => (
+  "analytics-header": ((props: Record<string, unknown> & { children: ReactNode }) => (
     <AnalyticsHeader
-      title={String(props.title ?? '')}
-      periodLabel={
-        typeof props.periodLabel === 'string' ? props.periodLabel : undefined
-      }
-      backLabel={
-        typeof props.backLabel === 'string' ? props.backLabel : undefined
-      }
+      title={String(props.title ?? "")}
+      periodLabel={typeof props.periodLabel === "string" ? props.periodLabel : undefined}
+      backLabel={typeof props.backLabel === "string" ? props.backLabel : undefined}
     >
       {props.children}
     </AnalyticsHeader>
@@ -123,23 +110,17 @@ export const FRAME_REGISTRY: Record<string, FrameComponent> = {
    *  `page-container` would add a max-width and a mount animation the page
    *  never had. */
   padded: ((props: Record<string, unknown> & { children: ReactNode }) => (
-    <div
-      className={typeof props.className === 'string' ? props.className : 'p-4'}
-    >
+    <div className={typeof props.className === "string" ? props.className : "p-4"}>
       {props.children}
     </div>
   )) as FrameComponent,
-  'forecast-section': ((
-    props: Record<string, unknown> & { children: ReactNode },
-  ) => (
-    <ForecastSection labelledBy={String(props.labelledBy ?? '')}>
-      {props.children}
-    </ForecastSection>
+  "forecast-section": ((props: Record<string, unknown> & { children: ReactNode }) => (
+    <ForecastSection labelledBy={String(props.labelledBy ?? "")}>{props.children}</ForecastSection>
   )) as FrameComponent,
-}
+};
 
 export class UnknownFrameError extends Error {
-  readonly name = 'UnknownFrameError'
+  readonly name = "UnknownFrameError";
 }
 
 /** A spanning summary row rendered with the full (server) cell renderer. */
@@ -148,11 +129,11 @@ export function SpanRowView({
   scope,
   primitives,
 }: {
-  row: NonNullable<TableBlock['leading']>[number]
-  scope: unknown
-  primitives: ReturnType<typeof tablePrimitives>
+  row: NonNullable<TableBlock["leading"]>[number];
+  scope: unknown;
+  primitives: ReturnType<typeof tablePrimitives>;
 }) {
-  return <SpanRow row={row} scope={scope} primitives={primitives} Cell={CellView} />
+  return <SpanRow row={row} scope={scope} primitives={primitives} Cell={CellView} />;
 }
 
 /**
@@ -163,8 +144,8 @@ export function SpanRowView({
  * difference, so the variant selects the whole primitive set rather than
  * toggling classes on one.
  */
-export function tablePrimitives(variant: TableBlock['variant']) {
-  return variant === 'app'
+export function tablePrimitives(variant: TableBlock["variant"]) {
+  return variant === "app"
     ? {
         Table: AppTableRoot,
         TableHeader: AppTableHeader,
@@ -180,7 +161,7 @@ export function tablePrimitives(variant: TableBlock['variant']) {
         TableRow: ReportTableRow,
         TableHead: ReportTableHead,
         TableCell: ReportTableCell,
-      }
+      };
 }
 
 function TableBlockView({
@@ -188,31 +169,26 @@ function TableBlockView({
   scope: rawScope,
   searchParams,
 }: {
-  spec: TableBlock
-  scope: unknown
-  searchParams: Record<string, string | string[] | undefined>
+  spec: TableBlock;
+  scope: unknown;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
   // Seed `$root` when absent so a page-level table resolves `$root.x` the same
   // way a nested one does. Without this, moving a table into or out of a
   // `repeat` would silently change what its headers resolve to.
-  const scope = nestedScope(rawScope, rawScope)
-  const primitives = tablePrimitives(spec.variant)
-  const rows = resolveRows(spec.rows, scope)
+  const scope = nestedScope(rawScope, rawScope);
+  const primitives = tablePrimitives(spec.variant);
+  const rows = resolveRows(spec.rows, scope);
   // Long report tables render their rows in the browser, a window at a time:
   // thousands of server-rendered rows cost tens of megabytes of markup and a
   // hydration pass over every drill link. Totals, header and export are
   // unaffected; tables with cells only the server can render stay here.
-  const windowed = spec.variant === 'report' && rows.length > WINDOWED_ROWS_FROM && rowsRenderInBrowser(spec)
-  if (
-    rows.length === 0 &&
-    spec.empty &&
-    !spec.emptyRow &&
-    !spec.leading &&
-    !spec.trailing
-  ) {
+  const windowed =
+    spec.variant === "report" && rows.length > WINDOWED_ROWS_FROM && rowsRenderInBrowser(spec);
+  if (rows.length === 0 && spec.empty && !spec.emptyRow && !spec.leading && !spec.trailing) {
     // App list pages use the shared EmptyState; report papers use the plain
     // centred paragraph they already render.
-    return spec.variant === 'app' ? (
+    return spec.variant === "app" ? (
       <EmptyState
         title={resolveText(spec.empty.title, scope)}
         description={resolveText(spec.empty.description, scope) || undefined}
@@ -228,7 +204,7 @@ function TableBlockView({
           </p>
         ) : null}
       </div>
-    )
+    );
   }
   return (
     <TableView
@@ -249,11 +225,8 @@ function TableBlockView({
             currentParams={searchParams}
             column={column.sort}
             sort={resolveText(spec.sorting.sort, scope)}
-            dir={
-              (resolveText(spec.sorting.dir, scope) as 'asc' | 'desc') ||
-              'asc'
-            }
-            align={column.align === 'right' ? 'right' : 'left'}
+            dir={(resolveText(spec.sorting.dir, scope) as "asc" | "desc") || "asc"}
+            align={column.align === "right" ? "right" : "left"}
             className={column.headerClassName}
             sortParamKey={spec.sorting.sortParamKey}
             dirParamKey={spec.sorting.dirParamKey}
@@ -264,7 +237,7 @@ function TableBlockView({
         ) : undefined
       }
     />
-  )
+  );
 }
 
 function PaperBlockView({
@@ -272,9 +245,9 @@ function PaperBlockView({
   scope,
   searchParams,
 }: {
-  spec: PaperBlock
-  scope: unknown
-  searchParams: Record<string, string | string[] | undefined>
+  spec: PaperBlock;
+  scope: unknown;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
   return (
     <ReportPaper
@@ -286,7 +259,7 @@ function PaperBlockView({
     >
       <BlockList blocks={spec.blocks} scope={scope} searchParams={searchParams} />
     </ReportPaper>
-  )
+  );
 }
 
 export function BlockView({
@@ -294,20 +267,15 @@ export function BlockView({
   scope,
   searchParams,
 }: {
-  block: Block
-  scope: unknown
-  searchParams: Record<string, string | string[] | undefined>
+  block: Block;
+  scope: unknown;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
   // Uniform presence check: any block may be omitted by a loader-resolved flag.
-  if (
-    'when' in block &&
-    block.when &&
-    !resolveValue(block.when as never, scope)
-  )
-    return null
+  if ("when" in block && block.when && !resolveValue(block.when as never, scope)) return null;
   switch (block.kind) {
-    case 'page-header': {
-      const actions = block.actions
+    case "page-header": {
+      const actions = block.actions;
       return (
         <PageHeader
           title={resolveText(block.title, scope)}
@@ -332,60 +300,48 @@ export function BlockView({
             ) : undefined
           }
         />
-      )
+      );
     }
 
-    case 'filter-bar': {
+    case "filter-bar": {
       // Each loader-resolved input goes to exactly one known prop. Deliberately
       // not a spread: a spread would let a spec set arbitrary props on this
       // component.
       const bind = <T,>(f: typeof block.dimensions): T | undefined =>
-        f ? (resolveValue(f as never, scope) as T | undefined) : undefined
+        f ? (resolveValue(f as never, scope) as T | undefined) : undefined;
       return (
         <ReportFilterBar
           controls={block.controls}
-          dimensions={bind<
-            ComponentProps<typeof ReportFilterBar>['dimensions']
-          >(block.dimensions)}
-          subsidiaries={bind<
-            ComponentProps<typeof ReportFilterBar>['subsidiaries']
-          >(block.subsidiaries)}
-          customers={bind<ComponentProps<typeof ReportFilterBar>['customers']>(
-            block.customers,
+          dimensions={bind<ComponentProps<typeof ReportFilterBar>["dimensions"]>(block.dimensions)}
+          subsidiaries={bind<ComponentProps<typeof ReportFilterBar>["subsidiaries"]>(
+            block.subsidiaries,
           )}
-          dateRange={bind<ComponentProps<typeof ReportFilterBar>['dateRange']>(
-            block.dateRange,
+          customers={bind<ComponentProps<typeof ReportFilterBar>["customers"]>(block.customers)}
+          dateRange={bind<ComponentProps<typeof ReportFilterBar>["dateRange"]>(block.dateRange)}
+          primaryFilter={bind<ComponentProps<typeof ReportFilterBar>["primaryFilter"]>(
+            block.primaryFilter,
           )}
-          primaryFilter={bind<
-            ComponentProps<typeof ReportFilterBar>['primaryFilter']
-          >(block.primaryFilter)}
-          periodPresets={bind<
-            ComponentProps<typeof ReportFilterBar>['periodPresets']
-          >(block.periodPresets)}
-          extraPeriods={bind<
-            ComponentProps<typeof ReportFilterBar>['extraPeriods']
-          >(block.extraPeriods)}
-          extraPeriodsLabel={
-            resolveText(block.extraPeriodsLabel, scope) || undefined
-          }
+          periodPresets={bind<ComponentProps<typeof ReportFilterBar>["periodPresets"]>(
+            block.periodPresets,
+          )}
+          extraPeriods={bind<ComponentProps<typeof ReportFilterBar>["extraPeriods"]>(
+            block.extraPeriods,
+          )}
+          extraPeriodsLabel={resolveText(block.extraPeriodsLabel, scope) || undefined}
           defaultPeriod={resolveText(block.defaultPeriod, scope) || undefined}
-          searchPlaceholder={
-            resolveText(block.searchPlaceholder, scope) || undefined
-          }
+          searchPlaceholder={resolveText(block.searchPlaceholder, scope) || undefined}
           leading={
             block.leading ? (
               <>
                 {block.leading.links.map((entry, index) => {
-                  const active = Boolean(
-                    resolveValue(entry.activeWhen as never, scope),
-                  )
+                  const active = Boolean(resolveValue(entry.activeWhen as never, scope));
                   return (
                     <Link key={index} href={resolveText(entry.href, scope)}>
-                      <Badge variant={active ? 'default' : 'outline'}>
+                      <Badge variant={active ? "default" : "outline"}>
                         {resolveText(entry.label, scope)}
                       </Badge>
                     </Link>
-                  )
+                  );
                 })}
                 {block.leading.divider ? (
                   <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
@@ -393,44 +349,28 @@ export function BlockView({
               </>
             ) : undefined
           }
-          actions={
-            block.actions ? (
-              <WidgetSlot widgets={block.actions} scope={scope} />
-            ) : undefined
-          }
+          actions={block.actions ? <WidgetSlot widgets={block.actions} scope={scope} /> : undefined}
         />
-      )
+      );
     }
 
-    case 'summary-line':
+    case "summary-line":
       return (
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {resolveText(block.label, scope)}:{' '}
+          {resolveText(block.label, scope)}:{" "}
           <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">
             <CellView spec={block.value} scope={scope} />
           </span>
         </p>
-      )
+      );
 
-    case 'paper':
-      return (
-        <PaperBlockView
-          spec={block}
-          scope={scope}
-          searchParams={searchParams}
-        />
-      )
+    case "paper":
+      return <PaperBlockView spec={block} scope={scope} searchParams={searchParams} />;
 
-    case 'table':
-      return (
-        <TableBlockView
-          spec={block}
-          scope={scope}
-          searchParams={searchParams}
-        />
-      )
+    case "table":
+      return <TableBlockView spec={block} scope={scope} searchParams={searchParams} />;
 
-    case 'pagination': {
+    case "pagination": {
       const pager = (
         <Pagination
           basePath={resolveText(block.basePath, scope)}
@@ -440,32 +380,26 @@ export function BlockView({
           perPage={resolveNumber(block.perPage, scope)}
           pageParamKey={block.pageParamKey}
         />
-      )
-      return block.bare ? pager : <div className="mt-3">{pager}</div>
+      );
+      return block.bare ? pager : <div className="mt-3">{pager}</div>;
     }
 
-    case 'text': {
-      if (block.when && !resolveValue(block.when as never, scope)) return null
-      const tone = toneClass(
-        resolveValue(block.tone as never, scope) as Tone | undefined,
-      )
+    case "text": {
+      if (block.when && !resolveValue(block.when as never, scope)) return null;
+      const tone = toneClass(resolveValue(block.tone as never, scope) as Tone | undefined);
       return (
         <p
           className={
-            cn(
-              block.size === 'sm' ? 'text-sm' : 'text-xs',
-              tone,
-              block.className,
-            ) || undefined
+            cn(block.size === "sm" ? "text-sm" : "text-xs", tone, block.className) || undefined
           }
         >
           {resolveText(block.content, scope)}
         </p>
-      )
+      );
     }
 
-    case 'widget': {
-      if (block.when && !resolveValue(block.when as never, scope)) return null
+    case "widget": {
+      if (block.when && !resolveValue(block.when as never, scope)) return null;
       return (
         <WidgetBlockView
           name={block.widget}
@@ -473,17 +407,15 @@ export function BlockView({
           scope={scope}
           searchParams={searchParams}
         />
-      )
+      );
     }
 
-    case 'repeat': {
-      const items = resolveRows(block.items, scope)
+    case "repeat": {
+      const items = resolveRows(block.items, scope);
       if (items.length === 0) {
         return block.empty ? (
-          <p className={block.empty.className}>
-            {resolveText(block.empty.text, scope)}
-          </p>
-        ) : null
+          <p className={block.empty.className}>{resolveText(block.empty.text, scope)}</p>
+        ) : null;
       }
       // Long grouped reports (a section per account or party) render their
       // sections in the browser, a window at a time, when every section is
@@ -491,87 +423,81 @@ export function BlockView({
       // only the slice of its scope its headings and span rows read.
       if (!block.unwrapped && sectionsRenderInBrowser(block.blocks)) {
         const groups = items.map((item, index) => {
-          const itemScope = nestedScope(item, scope)
+          const itemScope = nestedScope(item, scope);
           return {
             key: String(resolveText(block.itemKey, itemScope) || `item-${index}`),
             scope: pickScope(sectionScopeSpecs(block.blocks), itemScope),
-            rows: block.blocks.map((inner) => (inner.kind === 'table' ? resolveRows(inner.rows, itemScope) : [])),
-          }
-        })
-        const rowTotal = groups.reduce((total, group) => total + group.rows.reduce((sum, rows) => sum + rows.length, 0), 0)
+            rows: block.blocks.map((inner) =>
+              inner.kind === "table" ? resolveRows(inner.rows, itemScope) : [],
+            ),
+          };
+        });
+        const rowTotal = groups.reduce(
+          (total, group) => total + group.rows.reduce((sum, rows) => sum + rows.length, 0),
+          0,
+        );
         if (rowTotal > WINDOWED_ROWS_FROM) {
-          return <WindowedGroups blocks={block.blocks} groups={groups} className={block.className} itemClassName={block.itemClassName} />
+          return (
+            <WindowedGroups
+              blocks={block.blocks}
+              groups={groups}
+              className={block.className}
+              itemClassName={block.itemClassName}
+            />
+          );
         }
       }
       const list = items.map((item, index) => {
         // Same scoping contract as a table row: the item is the scope, the page
         // stays reachable at `$root`.
-        const itemScope = nestedScope(item, scope)
-        const key = String(
-          resolveText(block.itemKey, itemScope) || `item-${index}`,
-        )
+        const itemScope = nestedScope(item, scope);
+        const key = String(resolveText(block.itemKey, itemScope) || `item-${index}`);
         const body = (
-          <BlockList
-            blocks={block.blocks}
-            scope={itemScope}
-            searchParams={searchParams}
-          />
-        )
-        if (block.unwrapped) return <Fragment key={key}>{body}</Fragment>
+          <BlockList blocks={block.blocks} scope={itemScope} searchParams={searchParams} />
+        );
+        if (block.unwrapped) return <Fragment key={key}>{body}</Fragment>;
         return block.itemClassName !== undefined ? (
           <div key={key} className={block.itemClassName}>
             {body}
           </div>
         ) : (
           <div key={key}>{body}</div>
-        )
-      })
-      return block.className ? (
-        <div className={block.className}>{list}</div>
-      ) : (
-        <>{list}</>
-      )
+        );
+      });
+      return block.className ? <div className={block.className}>{list}</div> : <>{list}</>;
     }
 
-    case 'frame': {
-      const Frame = FRAME_REGISTRY[block.frame]
-      if (!Frame) throw new UnknownFrameError(`unknown frame "${block.frame}"`)
+    case "frame": {
+      const Frame = FRAME_REGISTRY[block.frame];
+      if (!Frame) throw new UnknownFrameError(`unknown frame "${block.frame}"`);
       return (
         <Frame {...resolveWidgetProps(block.props ?? {}, scope)}>
-          <BlockList
-            blocks={block.blocks}
-            scope={scope}
-            searchParams={searchParams}
-          />
+          <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
         </Frame>
-      )
+      );
     }
 
-    case 'grid': {
+    case "grid": {
       const children = (
-        <BlockList
-          blocks={block.blocks}
-          scope={scope}
-          searchParams={searchParams}
-        />
-      )
-      return block.as === 'section' ? (
+        <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
+      );
+      return block.as === "section" ? (
         <section className={block.className}>{children}</section>
       ) : (
         <div className={block.className}>{children}</div>
-      )
+      );
     }
 
-    case 'heading': {
-      const content = resolveText(block.content, scope)
+    case "heading": {
+      const content = resolveText(block.content, scope);
       return block.level === 3 ? (
         <h3 className={block.className}>{content}</h3>
       ) : (
         <h2 className={block.className}>{content}</h2>
-      )
+      );
     }
 
-    case 'panel':
+    case "panel":
       return (
         <HomePanel
           title={resolveText(block.title, scope)}
@@ -580,34 +506,24 @@ export function BlockView({
           className={block.className}
           bodyClassName={block.bodyClassName}
         >
-          <BlockList
-            blocks={block.blocks}
-            scope={scope}
-            searchParams={searchParams}
-          />
+          <BlockList blocks={block.blocks} scope={scope} searchParams={searchParams} />
         </HomePanel>
-      )
+      );
 
-    case 'stat-tile': {
-      if (block.when && !resolveValue(block.when as never, scope)) return null
+    case "stat-tile": {
+      if (block.when && !resolveValue(block.when as never, scope)) return null;
       return (
         <HomeStatTile
           icon={resolveText(block.iconKey, scope)}
-          accent={
-            resolveText(block.accent, scope) as ComponentProps<
-              typeof HomeStatTile
-            >['accent']
-          }
+          accent={resolveText(block.accent, scope) as ComponentProps<typeof HomeStatTile>["accent"]}
           label={resolveText(block.label, scope)}
           value={resolveText(block.value, scope)}
           sub={resolveText(block.sub, scope) || undefined}
           tone={
-            resolveValue(block.tone as never, scope) as ComponentProps<
-              typeof HomeStatTile
-            >['tone']
+            resolveValue(block.tone as never, scope) as ComponentProps<typeof HomeStatTile>["tone"]
           }
         />
-      )
+      );
     }
 
     default: {
@@ -616,20 +532,18 @@ export function BlockView({
       // without a case fails typecheck on this line. At runtime an unknown
       // kind still lands here (a spec that bypassed schema validation) and
       // renders a visible refusal instead of a silent hole.
-      const _exhaustive: never = block
-      void _exhaustive
-      const kind = (block as { kind?: unknown }).kind
-      const label =
-        typeof kind === 'string' && kind.length > 0 ? kind : 'unknown'
+      const _exhaustive: never = block;
+      void _exhaustive;
+      const kind = (block as { kind?: unknown }).kind;
+      const label = typeof kind === "string" && kind.length > 0 ? kind : "unknown";
       return (
         <p
           role="alert"
           className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
         >
-          Unsupported block &ldquo;{label}&rdquo; — update the renderer to
-          handle this kind.
+          Unsupported block &ldquo;{label}&rdquo; — update the renderer to handle this kind.
         </p>
-      )
+      );
     }
   }
 }
@@ -639,9 +553,9 @@ export function BlockList({
   scope,
   searchParams,
 }: {
-  blocks: Block[]
-  scope: unknown
-  searchParams: Record<string, string | string[] | undefined>
+  blocks: Block[];
+  scope: unknown;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
   return (
     <>
@@ -649,5 +563,5 @@ export function BlockList({
         <BlockView key={index} block={block} scope={scope} searchParams={searchParams} />
       ))}
     </>
-  )
+  );
 }

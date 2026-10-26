@@ -24,10 +24,6 @@ export const receiptExemptItemKindsSql = sql.join(
   sql`, `,
 );
 
-export function lineRequiresReceipt(
-  itemKind: string | null | undefined,
-): boolean {
-  return (
-    typeof itemKind !== "string" || !RECEIPT_EXEMPT_ITEM_KINDS.has(itemKind)
-  );
+export function lineRequiresReceipt(itemKind: string | null | undefined): boolean {
+  return typeof itemKind !== "string" || !RECEIPT_EXEMPT_ITEM_KINDS.has(itemKind);
 }

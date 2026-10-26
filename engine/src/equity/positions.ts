@@ -50,15 +50,26 @@ interface PositionKey {
   planId: string | null;
 }
 
-const keyOf = (key: PositionKey): string => (key.planId ? `p:${key.planId}` : `s:${key.securityId}`);
+const keyOf = (key: PositionKey): string =>
+  key.planId ? `p:${key.planId}` : `s:${key.securityId}`;
 
 /** A share certificate's or award's position on a date: outstanding shares and their common equivalent. */
-export function securityPosition(book: EquityBook, security: SecurityRecord, on: string): PositionValue {
-  if (security.quantity === null || !security.shareClassId || on < security.issueDate) return { shares: 0n, asConverted: 0n };
+export function securityPosition(
+  book: EquityBook,
+  security: SecurityRecord,
+  on: string,
+): PositionValue {
+  if (security.quantity === null || !security.shareClassId || on < security.issueDate)
+    return { shares: 0n, asConverted: 0n };
   const shares = holdingState(book, security, on).outstanding;
   if (shares === 0n) return { shares: 0n, asConverted: 0n };
   const shareClass = book.classes.find((row) => row.id === security.shareClassId)!;
-  return { shares, asConverted: floorShares(multiplyRational(rational(shares), conversionRatio(book, shareClass, on))) };
+  return {
+    shares,
+    asConverted: floorShares(
+      multiplyRational(rational(shares), conversionRatio(book, shareClass, on)),
+    ),
+  };
 }
 
 /** A plan pool's position on a date: its unallocated shares (never below zero) and their common equivalent. */
@@ -68,7 +79,12 @@ export function poolPosition(book: EquityBook, plan: PlanRecord, on: string): Po
   const shares = available > 0n ? available : 0n;
   if (shares === 0n) return { shares: 0n, asConverted: 0n };
   const shareClass = book.classes.find((row) => row.id === plan.shareClassId)!;
-  return { shares, asConverted: floorShares(multiplyRational(rational(shares), conversionRatio(book, shareClass, on))) };
+  return {
+    shares,
+    asConverted: floorShares(
+      multiplyRational(rational(shares), conversionRatio(book, shareClass, on)),
+    ),
+  };
 }
 
 /**
@@ -77,7 +93,11 @@ export function poolPosition(book: EquityBook, plan: PlanRecord, on: string): Po
  * produced, and every split and class amendment (which restate shares and
  * conversion ratios).
  */
-function securityDates(book: EquityBook, security: SecurityRecord, classDates: readonly string[]): string[] {
+function securityDates(
+  book: EquityBook,
+  security: SecurityRecord,
+  classDates: readonly string[],
+): string[] {
   const dates = new Set<string>([security.issueDate, ...classDates]);
   const own = new Set<string>();
   const produced = new Set<string>();
@@ -88,7 +108,8 @@ function securityDates(book: EquityBook, security: SecurityRecord, classDates: r
     if (event.resultingSecurityId) produced.add(event.resultingSecurityId);
   }
   for (const event of book.events) {
-    if (event.kind === "reverse" && event.reversesEventId && own.has(event.reversesEventId)) dates.add(event.effectiveOn);
+    if (event.kind === "reverse" && event.reversesEventId && own.has(event.reversesEventId))
+      dates.add(event.effectiveOn);
     if (event.kind === "void" && produced.has(event.securityId)) dates.add(event.effectiveOn);
   }
   return [...dates].filter((date) => date >= security.issueDate).sort();
@@ -112,9 +133,17 @@ function bookDates(book: EquityBook): string[] {
  * recorded movements are sums per position and date; the result is what to
  * append, dated on each position's change dates.
  */
-export function reconcilePositions(book: EquityBook, recorded: readonly PositionMovement[]): PositionMovement[] {
+export function reconcilePositions(
+  book: EquityBook,
+  recorded: readonly PositionMovement[],
+): PositionMovement[] {
   const dates = bookDates(book);
-  const classDates = [...new Set([...book.splits.map((row) => row.effectiveOn), ...book.amendments.map((row) => row.effectiveOn)])];
+  const classDates = [
+    ...new Set([
+      ...book.splits.map((row) => row.effectiveOn),
+      ...book.amendments.map((row) => row.effectiveOn),
+    ]),
+  ];
   const recordedByKey = new Map<string, PositionMovement[]>();
   for (const row of recorded) {
     const key = keyOf(row);
@@ -126,7 +155,11 @@ export function reconcilePositions(book: EquityBook, recorded: readonly Position
     ...book.securities
       .filter((security) => security.quantity !== null && security.shareClassId)
       .map((security) => ({
-        key: { kind: (security.kind === "share" ? "share" : "award") as PositionKind, securityId: security.id, planId: null },
+        key: {
+          kind: (security.kind === "share" ? "share" : "award") as PositionKind,
+          securityId: security.id,
+          planId: null,
+        },
         dates: securityDates(book, security, classDates),
         value: (on: string) => securityPosition(book, security, on),
       })),
@@ -139,7 +172,9 @@ export function reconcilePositions(book: EquityBook, recorded: readonly Position
   const out: PositionMovement[] = [];
   for (const { key, dates: changeDates, value } of keys) {
     const existing = recordedByKey.get(keyOf(key)) ?? [];
-    const checkDates = [...new Set([...changeDates, ...existing.map((row) => row.effectiveOn)])].sort();
+    const checkDates = [
+      ...new Set([...changeDates, ...existing.map((row) => row.effectiveOn)]),
+    ].sort();
     const recordedAt = new Map<string, { shares: bigint; asConverted: bigint }>();
     for (const row of existing) {
       const at = recordedAt.get(row.effectiveOn) ?? { shares: 0n, asConverted: 0n };
@@ -169,16 +204,34 @@ export function reconcilePositions(book: EquityBook, recorded: readonly Position
 }
 
 /** Recorded movements of a legal entity, summed per position and date. */
-async function recordedMovements(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<PositionMovement[]> {
-  const rows = await runner.execute<{ position_kind: PositionKind; security_id: string | null; plan_id: string | null; effective_on: string; shares: string; as_converted: string }>(sql`
+async function recordedMovements(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+): Promise<PositionMovement[]> {
+  const rows = await runner.execute<{
+    position_kind: PositionKind;
+    security_id: string | null;
+    plan_id: string | null;
+    effective_on: string;
+    shares: string;
+    as_converted: string;
+  }>(
+    sql`
     select position_kind, security_id, plan_id, effective_on::text as effective_on,
            sum(shares_delta)::text as shares, sum(as_converted_delta)::text as as_converted
       from equity_position_movements
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
-     group by position_kind, security_id, plan_id, effective_on`, "objects");
+     group by position_kind, security_id, plan_id, effective_on`,
+    "objects",
+  );
   return rows.map((row) => ({
-    kind: row.position_kind, securityId: row.security_id, planId: row.plan_id, effectiveOn: row.effective_on,
-    sharesDelta: BigInt(row.shares), asConvertedDelta: BigInt(row.as_converted),
+    kind: row.position_kind,
+    securityId: row.security_id,
+    planId: row.plan_id,
+    effectiveOn: row.effective_on,
+    sharesDelta: BigInt(row.shares),
+    asConvertedDelta: BigInt(row.as_converted),
   }));
 }
 
@@ -187,18 +240,29 @@ async function recordedMovements(runner: SqlExecutor, orgId: string, subsidiaryI
  * inside the caller's transaction (which holds the entity's equity lock).
  * Returns the number of movements appended.
  */
-export async function syncPositionLedger(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<number> {
+export async function syncPositionLedger(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+): Promise<number> {
   const book = await loadEquityBook(runner, orgId, subsidiaryId);
   const append = reconcilePositions(book, await recordedMovements(runner, orgId, subsidiaryId));
   if (append.length === 0) return 0;
   for (let start = 0; start < append.length; start += 500) {
     const batch = append.slice(start, start + 500);
-    const values = batch.map((row) => sql`(${orgId}, ${subsidiaryId}, ${row.kind}, ${row.securityId}, ${row.planId}, ${row.effectiveOn}::date,
-      ${row.sharesDelta.toString()}::bigint, ${row.asConvertedDelta.toString()}::bigint)`);
-    const written = await runner.execute<{ id: string }>(sql`
+    const values = batch.map(
+      (
+        row,
+      ) => sql`(${orgId}, ${subsidiaryId}, ${row.kind}, ${row.securityId}, ${row.planId}, ${row.effectiveOn}::date,
+      ${row.sharesDelta.toString()}::bigint, ${row.asConvertedDelta.toString()}::bigint)`,
+    );
+    const written = await runner.execute<{ id: string }>(
+      sql`
       insert into equity_position_movements (org_id, subsidiary_id, position_kind, security_id, plan_id, effective_on, shares_delta, as_converted_delta)
       values ${sql.join(values, sql`, `)}
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (written.length !== batch.length) {
       throw equityError("positionsStale");
     }
@@ -207,11 +271,29 @@ export async function syncPositionLedger(runner: SqlExecutor, orgId: string, sub
 }
 
 /** The cap table a SQL sum of the ledger gives on a date, per position (for verification). */
-export async function ledgerPositions(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string): Promise<Map<string, PositionValue>> {
-  const rows = await runner.execute<{ security_id: string | null; plan_id: string | null; shares: string; as_converted: string }>(sql`
+export async function ledgerPositions(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+  on: string,
+): Promise<Map<string, PositionValue>> {
+  const rows = await runner.execute<{
+    security_id: string | null;
+    plan_id: string | null;
+    shares: string;
+    as_converted: string;
+  }>(
+    sql`
     select security_id, plan_id, sum(shares_delta)::text as shares, sum(as_converted_delta)::text as as_converted
       from equity_position_movements
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and effective_on <= ${on}::date
-     group by security_id, plan_id`, "objects");
-  return new Map(rows.map((row) => [row.plan_id ? `p:${row.plan_id}` : `s:${row.security_id}`, { shares: BigInt(row.shares), asConverted: BigInt(row.as_converted) }]));
+     group by security_id, plan_id`,
+    "objects",
+  );
+  return new Map(
+    rows.map((row) => [
+      row.plan_id ? `p:${row.plan_id}` : `s:${row.security_id}`,
+      { shares: BigInt(row.shares), asConverted: BigInt(row.as_converted) },
+    ]),
+  );
 }

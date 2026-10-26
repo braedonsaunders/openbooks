@@ -13,10 +13,7 @@ type Metadata = {
   boundaryID: string;
   simplifiedGeometryGeoJSON: string;
 };
-const cache = new Map<
-  string,
-  { expires: number; value: BoundarySelection[] }
->();
+const cache = new Map<string, { expires: number; value: BoundarySelection[] }>();
 /** Only the publisher's fixed public endpoints are fetched. Customer addresses
  * and employee information never leave the application. */
 async function publisherJson(url: string, hops = 0): Promise<unknown> {
@@ -30,17 +27,12 @@ async function publisherJson(url: string, hops = 0): Promise<unknown> {
     parsed.protocol === "https:" &&
     ((parsed.hostname === "www.geoboundaries.org" &&
       parsed.pathname.startsWith("/api/current/gbOpen/")) ||
-      ([
-        "github.com",
-        "raw.githubusercontent.com",
-        "media.githubusercontent.com",
-      ].includes(parsed.hostname) &&
+      (["github.com", "raw.githubusercontent.com", "media.githubusercontent.com"].includes(
+        parsed.hostname,
+      ) &&
         /^\/(?:media\/)?wmgeolab\/geoBoundaries\//.test(parsed.pathname)));
   if (!allowed)
-    throw new SalesError(
-      "The boundary publisher returned an unsupported download location.",
-      502,
-    );
+    throw new SalesError("The boundary publisher returned an unsupported download location.", 502);
   const res = await fetch(url, {
     redirect: "manual",
     signal: AbortSignal.timeout(20000),
@@ -49,10 +41,7 @@ async function publisherJson(url: string, hops = 0): Promise<unknown> {
   if ([301, 302, 303, 307, 308].includes(res.status)) {
     const location = res.headers.get("location");
     if (!location)
-      throw new SalesError(
-        "The boundary download did not provide a destination.",
-        502,
-      );
+      throw new SalesError("The boundary download did not provide a destination.", 502);
     return publisherJson(new URL(location, url).href, hops + 1);
   }
   if (!res.ok)
@@ -61,11 +50,7 @@ async function publisherJson(url: string, hops = 0): Promise<unknown> {
       422,
     );
   const reader = res.body?.getReader();
-  if (!reader)
-    throw new SalesError(
-      "The boundary publisher returned an empty download.",
-      502,
-    );
+  if (!reader) throw new SalesError("The boundary publisher returned an empty download.", 502);
   let bytes = 0;
   const chunks: Uint8Array[] = [];
   try {
@@ -93,9 +78,7 @@ async function publisherJson(url: string, hops = 0): Promise<unknown> {
     );
   }
 }
-export async function salesCountries(): Promise<
-  { id: string; name: string }[]
-> {
+export async function salesCountries(): Promise<{ id: string; name: string }[]> {
   const data = (await publisherJson(
     "https://www.geoboundaries.org/api/current/gbOpen/ALL/ADM0/",
   )) as Metadata[];
@@ -133,22 +116,13 @@ export async function salesBoundaries(
     }[];
   };
   if (data.type !== "FeatureCollection" || !Array.isArray(data.features))
-    throw new SalesError(
-      "The boundary publisher returned an invalid map.",
-      502,
-    );
+    throw new SalesError("The boundary publisher returned an invalid map.", 502);
   const version =
     metadata.boundaryID +
     ":" +
-    createHash("sha256")
-      .update(JSON.stringify(data))
-      .digest("hex")
-      .slice(0, 16);
+    createHash("sha256").update(JSON.stringify(data)).digest("hex").slice(0, 16);
   const value = data.features
-    .filter(
-      (f) =>
-        f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon",
-    )
+    .filter((f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon")
     .map((f) => ({
       country,
       level,
@@ -171,9 +145,9 @@ export async function canonicalizeSalesGeography(
       const key = selected.country + selected.level + selected.id;
       if (seen.has(key)) throw new SalesError("Select each boundary once.");
       seen.add(key);
-      const boundary = (
-        await salesBoundaries(selected.country, selected.level)
-      ).find((b) => b.id === selected.id);
+      const boundary = (await salesBoundaries(selected.country, selected.level)).find(
+        (b) => b.id === selected.id,
+      );
       if (!boundary || boundary.version !== selected.version)
         throw new SalesError(
           "The published boundary changed. Reload the map and select the area again.",

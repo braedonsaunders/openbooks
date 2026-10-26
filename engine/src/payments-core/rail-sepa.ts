@@ -12,10 +12,17 @@ export interface SepaSettings {
   originatorBic: string;
 }
 
-export function validateSepaSettings(raw: Partial<SepaSettings> | null): { ok: true; settings: SepaSettings } | { ok: false; missing: string[] } {
+export function validateSepaSettings(
+  raw: Partial<SepaSettings> | null,
+): { ok: true; settings: SepaSettings } | { ok: false; missing: string[] } {
   const s = raw ?? {};
-  const missing = (["originatorName", "originatorIban", "originatorBic"] as (keyof SepaSettings)[]).filter(
-    (k) => typeof s[k] !== "string" || (s[k] as string).trim() === "" || (s[k] as string).includes("FILL-ME"),
+  const missing = (
+    ["originatorName", "originatorIban", "originatorBic"] as (keyof SepaSettings)[]
+  ).filter(
+    (k) =>
+      typeof s[k] !== "string" ||
+      (s[k] as string).trim() === "" ||
+      (s[k] as string).includes("FILL-ME"),
   );
   if (typeof s.originatorIban === "string" && !isValidIban(s.originatorIban)) {
     missing.push("originatorIban");
@@ -35,22 +42,36 @@ export function validateSepaSettings(raw: Partial<SepaSettings> | null): { ok: t
 }
 
 export async function loadSepaSettings(orgId: string, runId?: string) {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+  const r = await db.execute<{ originator_secrets_encrypted: string | null }>(
+    sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
       left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active
-       and f.rail in (${sql.join(paymentFormatRails("sepa").map((rail) => sql`${rail}`), sql`, `)})
+       and f.rail in (${sql.join(
+         paymentFormatRails("sepa").map((rail) => sql`${rail}`),
+         sql`, `,
+       )})
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sealed = r[0]?.originator_secrets_encrypted;
-  return validateSepaSettings(sealed == null ? null : unsealJson<Partial<SepaSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" }));
+  return validateSepaSettings(
+    sealed == null
+      ? null
+      : unsealJson<Partial<SepaSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" }),
+  );
 }
 
-const xmlEsc = (v: string) => v.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
+const xmlEsc = (v: string) =>
+  v.replace(
+    /[<>&'"]/g,
+    (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]!,
+  );
 
 /** Build a SEPA pain.001.001.03 Customer Credit Transfer Initiation (EUR). */
 export function buildSepaFile(opts: {
@@ -58,7 +79,14 @@ export function buildSepaFile(opts: {
   messageId: string;
   creationDateTime: string; // ISO
   executionDate: string; // YYYY-MM-DD
-  payments: { endToEndId: string; amount: string; creditorName: string; creditorIban: string; creditorBic?: string | null; remittance: string | null }[];
+  payments: {
+    endToEndId: string;
+    amount: string;
+    creditorName: string;
+    creditorIban: string;
+    creditorBic?: string | null;
+    remittance: string | null;
+  }[];
 }): string {
   const settings = validateSepaSettings(opts.settings);
   if (!settings.ok) {
@@ -86,17 +114,19 @@ export function buildSepaFile(opts: {
   }
   const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
   const nb = opts.payments.length;
-  const tx = opts.payments.map((p) => {
-    const bic = (p.creditorBic ?? "").trim().toUpperCase();
-    const iban = p.creditorIban.replace(/\s/g, "").toUpperCase();
-    return `      <CdtTrfTxInf>
+  const tx = opts.payments
+    .map((p) => {
+      const bic = (p.creditorBic ?? "").trim().toUpperCase();
+      const iban = p.creditorIban.replace(/\s/g, "").toUpperCase();
+      return `      <CdtTrfTxInf>
         <PmtId><EndToEndId>${xmlEsc(p.endToEndId.slice(0, 35))}</EndToEndId></PmtId>
         <Amt><InstdAmt Ccy="EUR">${formatMoney(p.amount, 2)}</InstdAmt></Amt>
 ${bic ? `        <CdtrAgt><FinInstnId><BIC>${xmlEsc(bic)}</BIC></FinInstnId></CdtrAgt>\n` : ""}        <Cdtr><Nm>${xmlEsc(p.creditorName.slice(0, 70))}</Nm></Cdtr>
         <CdtrAcct><Id><IBAN>${xmlEsc(iban)}</IBAN></Id></CdtrAcct>
         <RmtInf><Ustrd>${xmlEsc((p.remittance ?? p.endToEndId).slice(0, 140))}</Ustrd></RmtInf>
       </CdtTrfTxInf>`;
-  }).join("\n");
+    })
+    .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
   <CstmrCdtTrfInitn>

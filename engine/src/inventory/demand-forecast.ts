@@ -1,12 +1,4 @@
-import {
-  add,
-  cmp,
-  div,
-  mul,
-  neg,
-  roundDiv,
-  sum,
-} from "../money/money.ts";
+import { add, cmp, div, mul, neg, roundDiv, sum } from "../money/money.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 
 /**
@@ -48,10 +40,7 @@ export interface PromotionWindow {
 }
 
 export type ForecastMethod =
-  | "seasonal_additive"
-  | "seasonal_multiplicative"
-  | "croston_sba"
-  | "moving_average";
+  "seasonal_additive" | "seasonal_multiplicative" | "croston_sba" | "moving_average";
 
 export type ForecastMethodPreference = "auto" | "seasonal" | "intermittent" | "average";
 
@@ -158,7 +147,10 @@ export function decimalStd(values: readonly string[]): string {
  * from dragging the fill). A series with no clean week has no signal and
  * forecasts zero with that fact in the explanation.
  */
-export function imputeStockouts(weeks: readonly DemandWeek[]): { corrected: string[]; imputed: string[] } {
+export function imputeStockouts(weeks: readonly DemandWeek[]): {
+  corrected: string[];
+  imputed: string[];
+} {
   const corrected = weeks.map((week) => week.quantity);
   const imputed: string[] = [];
   const clean = (index: number): boolean => !weeks[index]!.stockout;
@@ -241,7 +233,11 @@ export function measurePromotionLift(
   const promo = quantities.filter((_, index) => overlapped.has(weekStarts[index]!));
   const base = quantities.filter((_, index) => !overlapped.has(weekStarts[index]!));
   if (promo.length < 2 || base.length < 2) {
-    return { code: null, factor: null, ignoredReason: "fewer than two promoted or unpromoted weeks" };
+    return {
+      code: null,
+      factor: null,
+      ignoredReason: "fewer than two promoted or unpromoted weeks",
+    };
   }
   const baseMean = mean(base);
   if (cmp(baseMean, ZERO) <= 0) {
@@ -290,9 +286,7 @@ function fitSeasonal(
   const level0 = mean(first);
   const trend0 = div(sub(mean(second), level0), String(seasonLength));
   const seasonal = first.map((quantity) =>
-    multiplicative
-      ? cmp(level0, ZERO) > 0 ? div(quantity, level0) : ONE
-      : sub(quantity, level0),
+    multiplicative ? (cmp(level0, ZERO) > 0 ? div(quantity, level0) : ONE) : sub(quantity, level0),
   );
   let level = level0;
   let trend = trend0;
@@ -302,7 +296,9 @@ function fitSeasonal(
     const seasonalIndex = position % seasonLength;
     const previous = season[seasonalIndex]!;
     const deseasonalized = multiplicative
-      ? cmp(previous, ZERO) > 0 ? div(train[position]!, previous) : train[position]!
+      ? cmp(previous, ZERO) > 0
+        ? div(train[position]!, previous)
+        : train[position]!
       : sub(train[position]!, previous);
     const nextLevel = add(mul(ALPHA, deseasonalized), mul(sub(ONE, ALPHA), add(level, trend)));
     const nextTrend = add(mul(BETA, sub(nextLevel, level)), mul(sub(ONE, BETA), trend));
@@ -311,7 +307,9 @@ function fitSeasonal(
         ? add(mul(GAMMA, div(train[position]!, nextLevel)), mul(sub(ONE, GAMMA), previous))
         : previous
       : add(mul(GAMMA, sub(train[position]!, nextLevel)), mul(sub(ONE, GAMMA), previous));
-    fitted.push(multiplicative ? mul(add(level, trend), previous) : add(add(level, trend), previous));
+    fitted.push(
+      multiplicative ? mul(add(level, trend), previous) : add(add(level, trend), previous),
+    );
     level = nextLevel;
     trend = nextTrend;
     season[seasonalIndex] = nextSeasonal;
@@ -323,7 +321,9 @@ function fitSeasonal(
       Array.from({ length: steps }, (_, step) => {
         const anchor = add(level, mul(trend, String(step + 1)));
         const seasonalIndex = (train.length + step) % seasonLength;
-        return multiplicative ? mul(anchor, season[seasonalIndex]!) : add(anchor, season[seasonalIndex]!);
+        return multiplicative
+          ? mul(anchor, season[seasonalIndex]!)
+          : add(anchor, season[seasonalIndex]!);
       }),
   };
 }
@@ -337,7 +337,11 @@ function fitSeasonal(
 function fitCrostonSba(train: readonly string[]): Fit {
   const nonzero = train.filter((quantity) => cmp(quantity, ZERO) > 0);
   if (nonzero.length === 0) {
-    return { method: "croston_sba", fitted: train.map(() => ZERO), forecast: (steps) => Array.from({ length: steps }, () => ZERO) };
+    return {
+      method: "croston_sba",
+      fitted: train.map(() => ZERO),
+      forecast: (steps) => Array.from({ length: steps }, () => ZERO),
+    };
   }
   let size = nonzero[0]!;
   let interval = div(String(train.length), String(nonzero.length));
@@ -349,10 +353,7 @@ function fitCrostonSba(train: readonly string[]): Fit {
     fitted.push(mul(rate(), sub(ONE, div(CROSTON_ALPHA, "2"))));
     if (cmp(quantity, ZERO) > 0) {
       size = add(mul(CROSTON_ALPHA, quantity), mul(sub(ONE, CROSTON_ALPHA), size));
-      interval = add(
-        mul(CROSTON_ALPHA, String(since)),
-        mul(sub(ONE, CROSTON_ALPHA), interval),
-      );
+      interval = add(mul(CROSTON_ALPHA, String(since)), mul(sub(ONE, CROSTON_ALPHA), interval));
       since = 0;
     }
   }
@@ -445,7 +446,10 @@ export function zForServiceLevel(serviceLevel: string): string {
  * peak in Nov" line. Computed from history means, not from fitted indices,
  * so it stays truthful even when the winning method is not seasonal.
  */
-function peakDemandMonth(weekStarts: readonly string[], quantities: readonly string[]): number | null {
+function peakDemandMonth(
+  weekStarts: readonly string[],
+  quantities: readonly string[],
+): number | null {
   if (weekStarts.length === 0) return null;
   const byMonth = new Map<string, string[]>();
   for (let index = 0; index < weekStarts.length; index++) {
@@ -473,7 +477,11 @@ export function forecastDemand(
   weeks: readonly DemandWeek[],
   options: ForecastOptions,
 ): ForecastResult {
-  if (!Number.isInteger(options.horizonWeeks) || options.horizonWeeks < 1 || options.horizonWeeks > 52) {
+  if (
+    !Number.isInteger(options.horizonWeeks) ||
+    options.horizonWeeks < 1 ||
+    options.horizonWeeks > 52
+  ) {
     throw new Error("forecast horizon must be from 1 to 52 weeks");
   }
   if (weeks.length === 0) {
@@ -484,31 +492,42 @@ export function forecastDemand(
   const { corrected, imputed } = imputeStockouts(weeks);
   const windows = options.promotionWindows ?? [];
   const lift = measurePromotionLift(weekStarts, corrected, windows);
-  const dePromoted = lift.factor && cmp(lift.factor, ZERO) > 0
-    ? corrected.map((quantity, index) =>
-        promotionWeeksOf([weekStarts[index]!], windows).size > 0 ? div(quantity, lift.factor!) : quantity,
-      )
-    : [...corrected];
+  const dePromoted =
+    lift.factor && cmp(lift.factor, ZERO) > 0
+      ? corrected.map((quantity, index) =>
+          promotionWeeksOf([weekStarts[index]!], windows).size > 0
+            ? div(quantity, lift.factor!)
+            : quantity,
+        )
+      : [...corrected];
   const historyWeeks = dePromoted.length;
-  const holdoutWeeks = historyWeeks >= 8 ? Math.min(13, Math.max(4, Math.floor(historyWeeks / 4))) : 0;
+  const holdoutWeeks =
+    historyWeeks >= 8 ? Math.min(13, Math.max(4, Math.floor(historyWeeks / 4))) : 0;
   const candidates = candidateFits(dePromoted, preference);
   const scored = candidates
     .map((fit) => {
       const probe = fit(dePromoted);
       if (!probe) return null;
-      const score = holdoutWeeks > 0 ? holdoutMae(dePromoted, holdoutWeeks, fit) : mae(dePromoted, probe.fitted);
+      const score =
+        holdoutWeeks > 0
+          ? holdoutMae(dePromoted, holdoutWeeks, fit)
+          : mae(dePromoted, probe.fitted);
       return { fit: probe, score: score ?? mae(dePromoted, probe.fitted) };
     })
     .filter((entry): entry is { fit: Fit; score: string } => entry !== null);
   if (scored.length === 0) throw new Error("no forecast method fits this demand history");
-  scored.sort((a, b) => (cmp(a.score, b.score) === 0 ? a.fit.method.localeCompare(b.fit.method) : cmp(a.score, b.score)));
+  scored.sort((a, b) =>
+    cmp(a.score, b.score) === 0 ? a.fit.method.localeCompare(b.fit.method) : cmp(a.score, b.score),
+  );
   const croston = scored.find((entry) => entry.fit.method === "croston_sba");
-  const winner = preference === "auto" && croston && isIntermittentDemand(dePromoted)
-    ? croston
-    : scored[0]!;
-  const seasonalPeriod = winner.fit.method.startsWith("seasonal") && historyWeeks >= 78 ? 52
-    : winner.fit.method.startsWith("seasonal") ? 13
-    : null;
+  const winner =
+    preference === "auto" && croston && isIntermittentDemand(dePromoted) ? croston : scored[0]!;
+  const seasonalPeriod =
+    winner.fit.method.startsWith("seasonal") && historyWeeks >= 78
+      ? 52
+      : winner.fit.method.startsWith("seasonal")
+        ? 13
+        : null;
   const sigma = decimalStd(
     dePromoted.map((quantity, index) => sub(quantity, winner.fit.fitted[index] ?? quantity)),
   );
@@ -517,11 +536,14 @@ export function forecastDemand(
   const lastWeek = weekStarts[weekStarts.length - 1];
   const horizonStarts: string[] = [];
   for (let step = 1; step <= options.horizonWeeks; step++) {
-    horizonStarts.push(lastWeek ? addCalendarDays(lastWeek, step * 7) : addCalendarDays(weekStarts[0]!, step * 7));
+    horizonStarts.push(
+      lastWeek ? addCalendarDays(lastWeek, step * 7) : addCalendarDays(weekStarts[0]!, step * 7),
+    );
   }
   const raw = winner.fit.forecast(options.horizonWeeks);
   const periods = raw.map((quantity, step) => {
-    const lifted = lift.factor && uplift.has(horizonStarts[step]!) ? mul(quantity, lift.factor) : quantity;
+    const lifted =
+      lift.factor && uplift.has(horizonStarts[step]!) ? mul(quantity, lift.factor) : quantity;
     const floored = cmp(lifted, ZERO) < 0 ? ZERO : lifted;
     const band = mul(bandZ, sigma);
     return {
@@ -538,7 +560,9 @@ export function forecastDemand(
       method: winner.fit.method,
       historyWeeks,
       holdoutWeeks,
-      holdoutMaeByMethod: Object.fromEntries(scored.map((entry) => [entry.fit.method, entry.score])),
+      holdoutMaeByMethod: Object.fromEntries(
+        scored.map((entry) => [entry.fit.method, entry.score]),
+      ),
       stockoutWeeksImputed: imputed,
       seasonalPeakMonth: peakDemandMonth(weekStarts, corrected),
       seasonalPeriodWeeks: seasonalPeriod,

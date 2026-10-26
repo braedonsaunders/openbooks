@@ -1,11 +1,11 @@
-import 'server-only'
+import "server-only";
 
-import { getMoneyFormatter } from '@/lib/money-server'
-import { notFound, redirect } from 'next/navigation'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { registeredListTable } from '../../../lib/list/prepared-spec'
+import { getMoneyFormatter } from "@/lib/money-server";
+import { notFound, redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { registeredListTable } from "../../../lib/list/prepared-spec";
 import {
   badge,
   column,
@@ -23,18 +23,18 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
-import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { isUuid, mergeHref, parseListParams, pickString } from "../../../lib/list-params";
+import { readableContinuousCloseAgents } from "../../../lib/continuous-close";
 import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   type ContinuousCloseAgentKey,
-} from '@openbooks/engine/agents/continuous-close-config'
-import { loadWorkItemDetail } from '../../../lib/agents/work-item'
-import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
-import { findingSummaryLine } from '../../../lib/agents/summary'
-import type { ContinuousCloseWorkItem } from './WorkItemDrawer'
+} from "@openbooks/engine/agents/continuous-close-config";
+import { loadWorkItemDetail } from "../../../lib/agents/work-item";
+import { findingProposalCommand, type FindingProposalCommand } from "../../../lib/agents/proposals";
+import { findingSummaryLine } from "../../../lib/agents/summary";
+import type { ContinuousCloseWorkItem } from "./WorkItemDrawer";
 
 /**
  * Continuous close, split into a loader and a spec.
@@ -61,200 +61,211 @@ const SORT_COLUMNS = {
   severity: sql`case w.severity when 'critical' then 3 when 'warning' then 2 else 1 end`,
   materiality: sql`w.materiality`,
   status: sql`w.status`,
-} as const
+} as const;
 
-const SEVERITY_VARIANT = { info: 'secondary', warning: 'warning', critical: 'destructive' } as const
+const SEVERITY_VARIANT = {
+  info: "secondary",
+  warning: "warning",
+  critical: "destructive",
+} as const;
 const STATUS_VARIANT = {
-  open: 'warning',
-  in_review: 'secondary',
-  resolved: 'success',
-  dismissed: 'outline',
-} as const
+  open: "warning",
+  in_review: "secondary",
+  resolved: "success",
+  dismissed: "outline",
+} as const;
 
 type WorkItemRow = {
-  id: string
-  agent_key: ContinuousCloseAgentKey
-  finding_type: string
-  severity: 'info' | 'warning' | 'critical'
-  status: 'open' | 'in_review' | 'resolved' | 'dismissed'
-  confidence: string
-  materiality: string
-  summary: Record<string, unknown>
-  first_detected_at: string | Date
-  last_detected_at: string | Date
-}
-type CountRow = { agent_key: string; status: string; severity: string; n: string | number }
+  id: string;
+  agent_key: ContinuousCloseAgentKey;
+  finding_type: string;
+  severity: "info" | "warning" | "critical";
+  status: "open" | "in_review" | "resolved" | "dismissed";
+  confidence: string;
+  materiality: string;
+  summary: Record<string, unknown>;
+  first_detected_at: string | Date;
+  last_detected_at: string | Date;
+};
+type CountRow = { agent_key: string; status: string; severity: string; n: string | number };
 type ReportRow = {
-  id: string
-  agent_key: string
-  narrative: Record<string, unknown>
-  finished_at: string | Date
-}
+  id: string;
+  agent_key: string;
+  narrative: Record<string, unknown>;
+  finished_at: string | Date;
+};
 export interface FindingRow {
-  id: string
-  title: string
-  href: string
-  summary: string
-  agentLabel: string
-  severityLabel: string
-  severityVariant: (typeof SEVERITY_VARIANT)[keyof typeof SEVERITY_VARIANT]
-  materiality: string
-  statusLabel: string
-  statusVariant: (typeof STATUS_VARIANT)[keyof typeof STATUS_VARIANT]
-  detected: string
+  id: string;
+  title: string;
+  href: string;
+  summary: string;
+  agentLabel: string;
+  severityLabel: string;
+  severityVariant: (typeof SEVERITY_VARIANT)[keyof typeof SEVERITY_VARIANT];
+  materiality: string;
+  statusLabel: string;
+  statusVariant: (typeof STATUS_VARIANT)[keyof typeof STATUS_VARIANT];
+  detected: string;
 }
 
 export interface NarrativeRow {
-  id: string
-  href: string
-  narrative: Record<string, unknown>
-  labels: { agent: string; fallbackTitle: string; generated: string; open: string }
+  id: string;
+  href: string;
+  narrative: Record<string, unknown>;
+  labels: { agent: string; fallbackTitle: string; generated: string; open: string };
 }
 
 export interface ContinuousCloseData {
-  title: string
-  description: string
-  settingsLabel: string
-  canManage: boolean
-  tabsAriaLabel: string
-  tabs: { key: string; href: string; label: string; active: boolean }[]
-  onFindings: boolean
-  onReports: boolean
-  locale: string
-  metrics: { key: string; label: string; value: number; tone?: string }[]
-  searchPlaceholder: string
-  currentParams: Record<string, string | string[] | undefined>
-  agentLabel: string
-  statusLabel: string
-  severityLabel: string
-  agentOptions: { value: string; label: string; count: number }[]
-  statusOptions: { value: string; label: string; count: number }[]
-  severityOptions: { value: string; label: string; count: number }[]
-  reportSearchPlaceholder: string
-  reportAgentOptions: { value: string; label: string; count: number }[]
-  reportsTitle: string
-  reportsDescription: string
-  reportsEmpty: string
-  reportRows: NarrativeRow[]
-  reportTotal: number
-  reportPage: number
-  reportPerPage: number
-  findingsEmpty: boolean
-  findingsPresent: boolean
-  emptyTitle: string
-  emptyDescription: string
-  emptyAction: string
-  emptyActionHref: string
-  columnFinding: string
-  columnAgent: string
-  columnSeverity: string
-  columnMateriality: string
-  columnStatus: string
-  columnDetected: string
-  rows: FindingRow[]
-  total: number
-  currentPage: number
-  perPage: number
-  sort: string
-  dir: string
-  itemDrawerOpen: boolean
+  title: string;
+  description: string;
+  settingsLabel: string;
+  canManage: boolean;
+  tabsAriaLabel: string;
+  tabs: { key: string; href: string; label: string; active: boolean }[];
+  onFindings: boolean;
+  onReports: boolean;
+  locale: string;
+  metrics: { key: string; label: string; value: number; tone?: string }[];
+  searchPlaceholder: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  agentLabel: string;
+  statusLabel: string;
+  severityLabel: string;
+  agentOptions: { value: string; label: string; count: number }[];
+  statusOptions: { value: string; label: string; count: number }[];
+  severityOptions: { value: string; label: string; count: number }[];
+  reportSearchPlaceholder: string;
+  reportAgentOptions: { value: string; label: string; count: number }[];
+  reportsTitle: string;
+  reportsDescription: string;
+  reportsEmpty: string;
+  reportRows: NarrativeRow[];
+  reportTotal: number;
+  reportPage: number;
+  reportPerPage: number;
+  findingsEmpty: boolean;
+  findingsPresent: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyAction: string;
+  emptyActionHref: string;
+  columnFinding: string;
+  columnAgent: string;
+  columnSeverity: string;
+  columnMateriality: string;
+  columnStatus: string;
+  columnDetected: string;
+  rows: FindingRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
+  sort: string;
+  dir: string;
+  itemDrawerOpen: boolean;
   itemDrawer: {
-    item: ContinuousCloseWorkItem
-    closeHref: string
-    canWrite: boolean
-    proposal: FindingProposalCommand | null
-  } | null
-  narrativeDrawerOpen: boolean
-  narrativeDrawer: Record<string, unknown> | null
+    item: ContinuousCloseWorkItem;
+    closeHref: string;
+    canWrite: boolean;
+    proposal: FindingProposalCommand | null;
+  } | null;
+  narrativeDrawerOpen: boolean;
+  narrativeDrawer: Record<string, unknown> | null;
 }
 
 export async function loadContinuousClose(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ContinuousCloseData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const authz = await requirePermission('assistant.use')
+  const { money: formatMoney } = await getMoneyFormatter();
+  const authz = await requirePermission("assistant.use");
   // Work-item summaries, facets, and generated narratives are stored at the
   // organization level. Their source population spans subsidiaries, and
   // report prose cannot be safely split after it has been generated.
-  if (authz.allowedSubsidiaryIds !== null) notFound()
-  const readable = readableContinuousCloseAgents(authz)
-  if (readable.length === 0) redirect('/assistant')
-  const t = await getTranslations('continuousClose')
-  const tc = await getTranslations('common')
-  const locale = await getLocale()
-  const tab = pickString(sp.tab) === 'reports' ? 'reports' : 'findings'
+  if (authz.allowedSubsidiaryIds !== null) notFound();
+  const readable = readableContinuousCloseAgents(authz);
+  if (readable.length === 0) redirect("/assistant");
+  const t = await getTranslations("continuousClose");
+  const tc = await getTranslations("common");
+  const locale = await getLocale();
+  const tab = pickString(sp.tab) === "reports" ? "reports" : "findings";
   const params = parseListParams(sp, {
-    sort: 'detected',
-    dir: 'desc',
+    sort: "detected",
+    dir: "desc",
     perPage: 25,
-    allowedSorts: ['detected', 'severity', 'materiality', 'status'] as const,
-  })
-  const requestedAgent = pickString(sp.agent)
+    allowedSorts: ["detected", "severity", "materiality", "status"] as const,
+  });
+  const requestedAgent = pickString(sp.agent);
   const agent =
     requestedAgent &&
     (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(requestedAgent) &&
     readable.includes(requestedAgent as ContinuousCloseAgentKey)
       ? (requestedAgent as ContinuousCloseAgentKey)
-      : undefined
-  const requestedStatus = pickString(sp.status)
-  const status = ['open', 'in_review', 'resolved', 'dismissed'].includes(requestedStatus ?? '')
+      : undefined;
+  const requestedStatus = pickString(sp.status);
+  const status = ["open", "in_review", "resolved", "dismissed"].includes(requestedStatus ?? "")
     ? requestedStatus
-    : undefined
-  const requestedSeverity = pickString(sp.severity)
-  const severity = ['info', 'warning', 'critical'].includes(requestedSeverity ?? '')
+    : undefined;
+  const requestedSeverity = pickString(sp.severity);
+  const severity = ["info", "warning", "critical"].includes(requestedSeverity ?? "")
     ? requestedSeverity
-    : undefined
-  const reportQ = pickString(sp.reportQ)?.trim().slice(0, 200)
-  const requestedReportAgent = pickString(sp.reportAgent)
+    : undefined;
+  const reportQ = pickString(sp.reportQ)?.trim().slice(0, 200);
+  const requestedReportAgent = pickString(sp.reportAgent);
   const reportAgent =
     requestedReportAgent &&
     (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(requestedReportAgent) &&
     readable.includes(requestedReportAgent as ContinuousCloseAgentKey)
       ? (requestedReportAgent as ContinuousCloseAgentKey)
-      : undefined
+      : undefined;
   const reportPage = Math.min(
     1_000_000,
-    Math.max(1, Number.parseInt(pickString(sp.reportPage) ?? '1', 10) || 1),
-  )
-  const reportPerPage = 5
+    Math.max(1, Number.parseInt(pickString(sp.reportPage) ?? "1", 10) || 1),
+  );
+  const reportPerPage = 5;
   // Agent keys travel as bound parameters, never interpolated into sql.raw:
   // the readable set is authz-derived, but only bound values are immune to a
   // quote by construction rather than by provenance.
   const readableSql = sql`(${sql.join(
     readable.map((key) => sql`${key}`),
     sql`, `,
-  )})`
-  const base = sql`w.org_id = ${authz.user.orgId} and w.agent_key in ${readableSql}`
+  )})`;
+  const base = sql`w.org_id = ${authz.user.orgId} and w.agent_key in ${readableSql}`;
   const where = sql`${base}
     ${agent ? sql`and w.agent_key = ${agent}` : sql``}
     ${status ? sql`and w.status = ${status}` : sql``}
     ${severity ? sql`and w.severity = ${severity}` : sql``}
-    ${params.q ? sql`and (w.finding_type ilike ${`%${params.q}%`} or w.summary::text ilike ${`%${params.q}%`})` : sql``}`
+    ${params.q ? sql`and (w.finding_type ilike ${`%${params.q}%`} or w.summary::text ilike ${`%${params.q}%`})` : sql``}`;
 
   const [rows, totalResult, counts, statusCounts, severityCounts] = await Promise.all([
-    db.execute<WorkItemRow>(sql`
+    db.execute<WorkItemRow>(
+      sql`
       select w.id, w.agent_key, w.finding_type, w.severity, w.status, w.confidence::text,
              w.materiality::text, w.summary, w.first_detected_at, w.last_detected_at
         from ai_work_items w where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`}, w.id
+       order by ${SORT_COLUMNS[params.sort]} ${params.dir === "asc" ? sql`asc` : sql`desc`}, w.id
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     db.execute<Record<string, unknown>>(
-      sql`select count(*) as n from ai_work_items w where ${where}`, 'objects',
+      sql`select count(*) as n from ai_work_items w where ${where}`,
+      "objects",
     ),
     db.execute<CountRow>(
-      sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`, 'objects',
+      sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`,
+      "objects",
     ),
     db.execute<CountRow>(
-      sql`select status, count(*) as n from ai_work_items w where ${base} group by status`, 'objects',
+      sql`select status, count(*) as n from ai_work_items w where ${base} group by status`,
+      "objects",
     ),
     db.execute<CountRow>(
-      sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`, 'objects',
+      sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`,
+      "objects",
     ),
-  ])
-  const total = Number(totalResult[0]?.n ?? 0)
+  ]);
+  const total = Number(totalResult[0]?.n ?? 0);
   const reportBase = sql`r.org_id = ${authz.user.orgId} and r.agent_key in ${readableSql}
-    and r.status = 'completed' and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'`
+    and r.status = 'completed' and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'`;
   const reportWhere = sql`${reportBase}
     ${reportAgent ? sql`and r.agent_key = ${reportAgent}` : sql``}
     ${
@@ -265,85 +276,96 @@ export async function loadContinuousClose(
       or r.stats->'enrichment'->'narrative'->>'periodLabel' ilike ${`%${reportQ}%`}
     )`
         : sql``
-    }`
+    }`;
   const [reportRows, reportTotalResult, reportAgentCounts] = await Promise.all([
-    db.execute<ReportRow>(sql`
+    db.execute<ReportRow>(
+      sql`
       select r.id, r.agent_key, r.stats->'enrichment'->'narrative' as narrative, r.finished_at
         from ai_agent_runs r where ${reportWhere}
        order by r.finished_at desc, r.id desc
        limit ${reportPerPage} offset ${(reportPage - 1) * reportPerPage}
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     db.execute<Record<string, unknown>>(
-      sql`select count(*) as n from ai_agent_runs r where ${reportWhere}`, 'objects',
+      sql`select count(*) as n from ai_agent_runs r where ${reportWhere}`,
+      "objects",
     ),
     db.execute<CountRow>(
-      sql`select r.agent_key, count(*) as n from ai_agent_runs r where ${reportBase} group by r.agent_key`, 'objects',
+      sql`select r.agent_key, count(*) as n from ai_agent_runs r where ${reportBase} group by r.agent_key`,
+      "objects",
     ),
-  ])
-  const reportTotal = Number(reportTotalResult[0]?.n ?? 0)
-  const itemId = pickString(sp.item)
-  let selected: ContinuousCloseWorkItem | null = null
+  ]);
+  const reportTotal = Number(reportTotalResult[0]?.n ?? 0);
+  const itemId = pickString(sp.item);
+  let selected: ContinuousCloseWorkItem | null = null;
   if (itemId && isUuid(itemId)) {
-    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable, authz.allowedSubsidiaryIds)
+    selected = await loadWorkItemDetail(
+      authz.user.orgId,
+      authz.user.id,
+      itemId,
+      readable,
+      authz.allowedSubsidiaryIds,
+    );
   }
 
-  const reportId = pickString(sp.report)
-  let selectedNarrative: ReportRow | null = null
+  const reportId = pickString(sp.report);
+  let selectedNarrative: ReportRow | null = null;
   if (reportId && isUuid(reportId)) {
-    const detail = await db.execute<ReportRow>(sql`
+    const detail = await db.execute<ReportRow>(
+      sql`
       select id, agent_key, stats->'enrichment'->'narrative' as narrative, finished_at
         from ai_agent_runs
        where id = ${reportId} and org_id = ${authz.user.orgId} and agent_key in ${readableSql}
          and status = 'completed' and jsonb_typeof(stats->'enrichment'->'narrative') = 'object'
-    `, 'objects')
-    selectedNarrative = detail[0] ?? null
+    `,
+      "objects",
+    );
+    selectedNarrative = detail[0] ?? null;
   }
 
-  const closeHref = mergeHref('/continuous-close', sp, { item: undefined })
-  const reportCloseHref = mergeHref('/continuous-close', sp, { report: undefined })
-  const canManage = can(authz, 'admin.ai.manage')
-  const canWrite = can(authz, 'assistant.write')
+  const closeHref = mergeHref("/continuous-close", sp, { item: undefined });
+  const reportCloseHref = mergeHref("/continuous-close", sp, { report: undefined });
+  const canManage = can(authz, "admin.ai.manage");
+  const canWrite = can(authz, "assistant.write");
   const activeCount = statusCounts
-    .filter((row) => row.status === 'open' || row.status === 'in_review')
-    .reduce((sum, row) => sum + Number(row.n), 0)
-  const criticalCount = Number(severityCounts.find((row) => row.severity === 'critical')?.n ?? 0)
-  const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
-  const dateTime = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' })
+    .filter((row) => row.status === "open" || row.status === "in_review")
+    .reduce((sum, row) => sum + Number(row.n), 0);
+  const criticalCount = Number(severityCounts.find((row) => row.severity === "critical")?.n ?? 0);
+  const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
+  const dateTime = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" });
 
   /** The one-line description under a finding's title (shared with /agents). */
   function summaryLabel(summary: Record<string, unknown>): string {
-    return findingSummaryLine(
-      (key, values) => t(key, values as never),
-      summary,
-    )
+    return findingSummaryLine((key, values) => t(key, values as never), summary);
   }
 
   return {
-    title: t('title'),
-    description: t('description'),
-    settingsLabel: t('actions.settings'),
+    title: t("title"),
+    description: t("description"),
+    settingsLabel: t("actions.settings"),
     canManage,
-    tabsAriaLabel: t('tabs.ariaLabel'),
-    tabs: (['findings', 'reports'] as const).map((key) => ({
+    tabsAriaLabel: t("tabs.ariaLabel"),
+    tabs: (["findings", "reports"] as const).map((key) => ({
       key,
-      href: mergeHref('/continuous-close', sp, {
-        tab: key === 'findings' ? undefined : key,
+      href: mergeHref("/continuous-close", sp, {
+        tab: key === "findings" ? undefined : key,
         item: undefined,
         report: undefined,
       }),
       label: t(`tabs.${key}`),
       active: tab === key,
     })),
-    onFindings: tab === 'findings',
-    onReports: tab === 'reports',
+    onFindings: tab === "findings",
+    onReports: tab === "reports",
     locale,
     metrics: [
-      { key: 'active', label: t('metrics.active'), value: activeCount },
+      { key: "active", label: t("metrics.active"), value: activeCount },
       {
-        key: 'critical',
-        label: t('metrics.critical'),
+        key: "critical",
+        label: t("metrics.critical"),
         value: criticalCount,
-        ...(criticalCount > 0 ? { tone: 'text-red-600 dark:text-red-400' } : {}),
+        ...(criticalCount > 0 ? { tone: "text-red-600 dark:text-red-400" } : {}),
       },
       ...readable.map((key) => ({
         key,
@@ -351,11 +373,11 @@ export async function loadContinuousClose(
         value: Number(counts.find((row) => row.agent_key === key)?.n ?? 0),
       })),
     ],
-    searchPlaceholder: t('search'),
+    searchPlaceholder: t("search"),
     currentParams: sp,
-    agentLabel: t('filters.agent'),
-    statusLabel: tc('labels.status'),
-    severityLabel: t('filters.severity'),
+    agentLabel: t("filters.agent"),
+    statusLabel: tc("labels.status"),
+    severityLabel: t("filters.severity"),
     agentOptions: counts.map((row) => ({
       value: row.agent_key,
       label: t(`agents.${row.agent_key}`),
@@ -371,45 +393,47 @@ export async function loadContinuousClose(
       label: t(`severity.${row.severity}`),
       count: Number(row.n),
     })),
-    reportSearchPlaceholder: t('reports.search'),
+    reportSearchPlaceholder: t("reports.search"),
     reportAgentOptions: reportAgentCounts.map((row) => ({
       value: row.agent_key,
       label: t(`agents.${row.agent_key}`),
       count: Number(row.n),
     })),
-    reportsTitle: t('reports.title'),
-    reportsDescription: t('reports.description'),
-    reportsEmpty: t('reports.empty'),
+    reportsTitle: t("reports.title"),
+    reportsDescription: t("reports.description"),
+    reportsEmpty: t("reports.empty"),
     reportRows: reportRows.map((report) => ({
       id: String(report.id),
-      href: mergeHref('/continuous-close', sp, { tab: 'reports', report: report.id }),
+      href: mergeHref("/continuous-close", sp, { tab: "reports", report: report.id }),
       narrative: report.narrative,
       labels: {
-        agent: t('narrative.agent', { agent: t(`agents.${report.agent_key}`) }),
-        fallbackTitle: t('narrative.title'),
-        generated: t('narrative.generated', { date: dateTime.format(new Date(report.finished_at)) }),
-        open: t('narrative.open'),
+        agent: t("narrative.agent", { agent: t(`agents.${report.agent_key}`) }),
+        fallbackTitle: t("narrative.title"),
+        generated: t("narrative.generated", {
+          date: dateTime.format(new Date(report.finished_at)),
+        }),
+        open: t("narrative.open"),
       },
     })),
     reportTotal,
     reportPage,
     reportPerPage,
-    findingsEmpty: tab === 'findings' && total === 0,
-    findingsPresent: tab === 'findings' && total > 0,
-    emptyTitle: t('empty.title'),
-    emptyDescription: t('empty.description'),
-    emptyAction: t('empty.action'),
-    emptyActionHref: '/admin/ai',
-    columnFinding: t('table.finding'),
-    columnAgent: t('table.agent'),
-    columnSeverity: t('table.severity'),
-    columnMateriality: t('table.materiality'),
-    columnStatus: tc('labels.status'),
-    columnDetected: t('table.detected'),
+    findingsEmpty: tab === "findings" && total === 0,
+    findingsPresent: tab === "findings" && total > 0,
+    emptyTitle: t("empty.title"),
+    emptyDescription: t("empty.description"),
+    emptyAction: t("empty.action"),
+    emptyActionHref: "/admin/ai",
+    columnFinding: t("table.finding"),
+    columnAgent: t("table.agent"),
+    columnSeverity: t("table.severity"),
+    columnMateriality: t("table.materiality"),
+    columnStatus: tc("labels.status"),
+    columnDetected: t("table.detected"),
     rows: rows.map((row) => ({
       id: String(row.id),
       title: t(`findings.${row.finding_type}.title`),
-      href: mergeHref('/continuous-close', sp, { item: row.id }),
+      href: mergeHref("/continuous-close", sp, { item: row.id }),
       summary: summaryLabel(row.summary),
       agentLabel: t(`agents.${row.agent_key}`),
       severityLabel: t(`severity.${row.severity}`),
@@ -438,54 +462,59 @@ export async function loadContinuousClose(
       ? {
           runId: selectedNarrative.id,
           title:
-            typeof selectedNarrative.narrative.title === 'string'
+            typeof selectedNarrative.narrative.title === "string"
               ? selectedNarrative.narrative.title
-              : t('narrative.title'),
+              : t("narrative.title"),
           narrative: selectedNarrative.narrative,
           closeHref: reportCloseHref,
           labels: {
-            agent: t('narrative.agent', { agent: t(`agents.${selectedNarrative.agent_key}`) }),
-            generated: t('narrative.generated', {
+            agent: t("narrative.agent", { agent: t(`agents.${selectedNarrative.agent_key}`) }),
+            generated: t("narrative.generated", {
               date: dateTime.format(new Date(selectedNarrative.finished_at)),
             }),
-            executiveSummary: t('narrative.executiveSummary'),
-            highlights: t('narrative.highlights'),
-            risks: t('narrative.risks'),
-            recommendations: t('narrative.recommendations'),
-            downloadPdf: t('narrative.downloadPdf'),
-            sources: t('narrative.sources'),
+            executiveSummary: t("narrative.executiveSummary"),
+            highlights: t("narrative.highlights"),
+            risks: t("narrative.risks"),
+            recommendations: t("narrative.recommendations"),
+            downloadPdf: t("narrative.downloadPdf"),
+            sources: t("narrative.sources"),
           },
         }
       : null,
-  }
+  };
 }
 
-const f = ref<ContinuousCloseData>()
-const item = field
-const rootF = rootRef<ContinuousCloseData>()
+const f = ref<ContinuousCloseData>();
+const item = field;
+const rootF = rootRef<ContinuousCloseData>();
 
 export function continuousCloseSpec(data: ContinuousCloseData): PageSpec {
   return page({
-    route: '/continuous-close',
-    layout: 'list',
+    route: "/continuous-close",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
           widget(
-            'link-button',
-            { href: '/admin/ai', label: data.settingsLabel, variant: 'outline', iconKey: 'settings' },
-            f('canManage'),
+            "link-button",
+            {
+              href: "/admin/ai",
+              label: data.settingsLabel,
+              variant: "outline",
+              iconKey: "settings",
+            },
+            f("canManage"),
           ),
         ],
       }),
-      widgetBlock('tab-nav', { ariaLabel: data.tabsAriaLabel, tabs: data.tabs }),
+      widgetBlock("tab-nav", { ariaLabel: data.tabsAriaLabel, tabs: data.tabs }),
       {
         ...grid(
-          'grid grid-cols-2 gap-2 sm:grid-cols-4',
+          "grid grid-cols-2 gap-2 sm:grid-cols-4",
           data.metrics.map((metric) =>
-            widgetBlock('metric-tile', {
+            widgetBlock("metric-tile", {
               label: metric.label,
               value: metric.value,
               locale: data.locale,
@@ -493,159 +522,166 @@ export function continuousCloseSpec(data: ContinuousCloseData): PageSpec {
             }),
           ),
         ),
-        when: f('onFindings'),
+        when: f("onFindings"),
       },
       {
-        ...grid('flex flex-wrap items-center gap-2', [
-          widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-          widgetBlock('filter-chips', {
-            basePath: '/continuous-close',
+        ...grid("flex flex-wrap items-center gap-2", [
+          widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+          widgetBlock("filter-chips", {
+            basePath: "/continuous-close",
             currentParams: data.currentParams,
-            paramKey: 'agent',
+            paramKey: "agent",
             label: data.agentLabel,
             options: data.agentOptions,
           }),
-          widgetBlock('filter-chips', {
-            basePath: '/continuous-close',
+          widgetBlock("filter-chips", {
+            basePath: "/continuous-close",
             currentParams: data.currentParams,
-            paramKey: 'status',
+            paramKey: "status",
             label: data.statusLabel,
             options: data.statusOptions,
           }),
-          widgetBlock('filter-chips', {
-            basePath: '/continuous-close',
+          widgetBlock("filter-chips", {
+            basePath: "/continuous-close",
             currentParams: data.currentParams,
-            paramKey: 'severity',
+            paramKey: "severity",
             label: data.severityLabel,
             options: data.severityOptions,
           }),
         ]),
-        when: f('onFindings'),
+        when: f("onFindings"),
       },
       {
-        ...grid('flex flex-wrap items-center gap-2', [
-          widgetBlock('search-input', {
+        ...grid("flex flex-wrap items-center gap-2", [
+          widgetBlock("search-input", {
             placeholder: data.reportSearchPlaceholder,
-            paramKey: 'reportQ',
-            pageParamKey: 'reportPage',
+            paramKey: "reportQ",
+            pageParamKey: "reportPage",
           }),
-          widgetBlock('filter-chips', {
-            basePath: '/continuous-close',
+          widgetBlock("filter-chips", {
+            basePath: "/continuous-close",
             currentParams: data.currentParams,
-            paramKey: 'reportAgent',
-            pageParamKey: 'reportPage',
+            paramKey: "reportAgent",
+            pageParamKey: "reportPage",
             label: data.agentLabel,
             options: data.reportAgentOptions,
           }),
         ]),
-        when: f('onReports'),
+        when: f("onReports"),
       },
     ],
     body: [
       {
         ...grid(
-          'overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
+          "overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
           [
-            widgetBlock('reports-card-heading', {
+            widgetBlock("reports-card-heading", {
               title: data.reportsTitle,
               description: data.reportsDescription,
             }),
             repeat({
-              items: f('reportRows'),
-              itemKey: item('id'),
-              className: 'divide-y divide-slate-200 px-3 dark:divide-slate-800',
+              items: f("reportRows"),
+              itemKey: item("id"),
+              className: "divide-y divide-slate-200 px-3 dark:divide-slate-800",
               unwrapped: true,
               blocks: [
-                widgetBlock('narrative-entry', {
-                  narrative: item('narrative'),
-                  href: item('href'),
-                  labels: item('labels'),
+                widgetBlock("narrative-entry", {
+                  narrative: item("narrative"),
+                  href: item("href"),
+                  labels: item("labels"),
                 }),
               ],
               empty: {
-                text: rootF('reportsEmpty'),
-                className: 'px-4 py-6 text-center text-sm text-slate-500',
+                text: rootF("reportsEmpty"),
+                className: "px-4 py-6 text-center text-sm text-slate-500",
               },
             }),
             pagination({
-              basePath: '/continuous-close',
-              total: f('reportTotal'),
-              page: f('reportPage'),
-              perPage: f('reportPerPage'),
-              pageParamKey: 'reportPage',
+              basePath: "/continuous-close",
+              total: f("reportTotal"),
+              page: f("reportPage"),
+              perPage: f("reportPerPage"),
+              pageParamKey: "reportPage",
               bare: true,
             }),
           ],
-          { as: 'section' },
+          { as: "section" },
         ),
-        when: f('onReports'),
+        when: f("onReports"),
       },
       {
-        ...widgetBlock('empty-state', {
-          icon: 'activity',
+        ...widgetBlock("empty-state", {
+          icon: "activity",
           title: data.emptyTitle,
           description: data.emptyDescription,
           ...(data.canManage
             ? {
-                action: 'link-button',
+                action: "link-button",
                 actionProps: { href: data.emptyActionHref, label: data.emptyAction },
               }
             : {}),
         }),
-        when: f('findingsEmpty'),
+        when: f("findingsEmpty"),
       },
       {
-        ...registeredListTable('continuous_close_findings', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          sorting: { basePath: '/continuous-close', sort: f('sort'), dir: f('dir') },
+        ...registeredListTable("continuous_close_findings", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          sorting: { basePath: "/continuous-close", sort: f("sort"), dir: f("dir") },
           columns: [
             column(
-              rootF('columnFinding'),
-              widgetCell('finding-cell', {
-                title: item('title'),
-                href: item('href'),
-                summary: item('summary'),
+              rootF("columnFinding"),
+              widgetCell("finding-cell", {
+                title: item("title"),
+                href: item("href"),
+                summary: item("summary"),
               }),
             ),
-            column(rootF('columnAgent'), badge(item('agentLabel'), { variant: 'outline' })),
+            column(rootF("columnAgent"), badge(item("agentLabel"), { variant: "outline" })),
             column(
-              rootF('columnSeverity'),
-              badge(item('severityLabel'), { variant: item('severityVariant') }),
-              { sort: 'severity' },
+              rootF("columnSeverity"),
+              badge(item("severityLabel"), { variant: item("severityVariant") }),
+              { sort: "severity" },
             ),
-            column(rootF('columnMateriality'), money(item('materiality')), {
-              sort: 'materiality',
-              align: 'right',
-              className: 'font-medium',
+            column(rootF("columnMateriality"), money(item("materiality")), {
+              sort: "materiality",
+              align: "right",
+              className: "font-medium",
             }),
-            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') }), {
-              sort: 'status',
-            }),
-            column(rootF('columnDetected'), text(item('detected')), {
-              sort: 'detected',
-              className: 'text-sm text-slate-500',
+            column(
+              rootF("columnStatus"),
+              badge(item("statusLabel"), { variant: item("statusVariant") }),
+              {
+                sort: "status",
+              },
+            ),
+            column(rootF("columnDetected"), text(item("detected")), {
+              sort: "detected",
+              className: "text-sm text-slate-500",
             }),
           ],
         }),
-        when: f('findingsPresent'),
+        when: f("findingsPresent"),
       },
       {
         ...pagination({
-          basePath: '/continuous-close',
-          total: f('total'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          basePath: "/continuous-close",
+          total: f("total"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
           bare: true,
         }),
-        when: f('findingsPresent'),
+        when: f("findingsPresent"),
       },
-      { ...widgetBlock('work-item-drawer', { drawer: data.itemDrawer }), when: f('itemDrawerOpen') },
       {
-        ...widgetBlock('narrative-drawer', { drawer: data.narrativeDrawer }),
-        when: f('narrativeDrawerOpen'),
+        ...widgetBlock("work-item-drawer", { drawer: data.itemDrawer }),
+        when: f("itemDrawerOpen"),
+      },
+      {
+        ...widgetBlock("narrative-drawer", { drawer: data.narrativeDrawer }),
+        when: f("narrativeDrawerOpen"),
       },
     ],
-  })
+  });
 }

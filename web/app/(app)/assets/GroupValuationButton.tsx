@@ -1,18 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Button,
-  Drawer,
-  Input,
-  Label,
-  SearchSelect,
-  Textarea,
-} from "@openbooks/ui";
+import { Button, Drawer, Input, Label, SearchSelect, Textarea } from "@openbooks/ui";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { useDirtyClose } from "@/lib/use-dirty-close";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 type Event = {
   id: string;
   date: string;
@@ -39,7 +32,10 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
     [key, setKey] = useState(() => crypto.randomUUID());
   const event = events.find((e) => e.id === eventId);
   const [dirty, setDirty] = useState(false);
-  const changed = () => { setDirty(true); setKey(crypto.randomUUID()); };
+  const changed = () => {
+    setDirty(true);
+    setKey(crypto.randomUUID());
+  };
   const closeDrawer = () => {
     setOpen(false);
     setEventId("");
@@ -52,8 +48,11 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
     setKey(crypto.randomUUID());
   };
   const closeGuard = useDirtyClose({
-    dirty, busy, onClose: closeDrawer,
-    message: tCommon("feedback.unsavedChanges"), confirmLabel: tCommon("confirm.discardChanges"),
+    dirty,
+    busy,
+    onClose: closeDrawer,
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
   });
   async function show() {
     setBusy(true);
@@ -67,9 +66,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
       setEvents(body.events);
       setOpen(true);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("loadFailed"),
-      );
+      toast.error(error instanceof Error ? error.message : t("loadFailed"));
     } finally {
       setBusy(false);
     }
@@ -98,13 +95,9 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
       }
       const body = await response.json();
       setOpen(false);
-      router.push(
-        `/accounting/changes?change=${encodeURIComponent(body.changeId)}`,
-      );
+      router.push(`/accounting/changes?change=${encodeURIComponent(body.changeId)}`);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("submitFailed"),
-      );
+      toast.error(error instanceof Error ? error.message : t("submitFailed"));
     } finally {
       setBusy(false);
     }
@@ -114,13 +107,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
       <Button variant="outline" onClick={show} disabled={busy}>
         {t("actionName")}
       </Button>
-      <Drawer
-        open={open}
-        onClose={closeGuard.close}
-        title={t("title")}
-        size="lg"
-        stacked
-      >
+      <Drawer open={open} onClose={closeGuard.close} title={t("title")} size="lg" stacked>
         <fieldset disabled={busy} className="min-w-0 space-y-4 p-4">
           <p>{t("description")}</p>
           <Label id="group-valuation-event-label">{t("postedValuation")}</Label>
@@ -188,9 +175,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
                   value={line.date}
                   onChange={(value) => {
                     setPlan((rows) =>
-                      rows.map((r, i) =>
-                        i === index ? { ...r, date: value } : r,
-                      ),
+                      rows.map((r, i) => (i === index ? { ...r, date: value } : r)),
                     );
                     changed();
                   }}
@@ -200,9 +185,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
                   value={line.amount}
                   onChange={(e) => {
                     setPlan((rows) =>
-                      rows.map((r, i) =>
-                        i === index ? { ...r, amount: e.target.value } : r,
-                      ),
+                      rows.map((r, i) => (i === index ? { ...r, amount: e.target.value } : r)),
                     );
                     changed();
                   }}

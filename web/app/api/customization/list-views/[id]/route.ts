@@ -29,13 +29,11 @@ import {
 } from "../../../../../lib/customization/list-view-default";
 import { notFound } from "@/lib/api/responses";
 
-
 export const runtime = "nodejs";
 
-const configBody = z.json().refine(
-  (value) => parseListView(value).success,
-  "config must match the saved list view schema",
-);
+const configBody = z
+  .json()
+  .refine((value) => parseListView(value).success, "config must match the saved list view schema");
 
 async function loadOwn(orgId: string, userId: string, id: string) {
   if (!isUuid(id)) return null;
@@ -48,11 +46,14 @@ async function loadOwn(orgId: string, userId: string, id: string) {
     isDefault: boolean;
     isActive: boolean;
     config: unknown;
-  }>(sql`
+  }>(
+    sql`
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
       from list_views where org_id = ${orgId} and id = ${id}
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = r[0] ?? null;
   if (!row) return null;
   // org-scope rows are visible org-wide; user-scope only to the owner.
@@ -65,17 +66,12 @@ export const GET = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz, params }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
     const row = await loadOwn(authz.user.orgId, authz.user.id, id);
     if (!row) return notFound("record");
-    const refused = await refuseDisabledRecordType(
-      authz.user.orgId,
-      row.recordType,
-    );
+    const refused = await refuseDisabledRecordType(authz.user.orgId, row.recordType);
     if (refused) return refused;
     return NextResponse.json(row);
   },
@@ -89,24 +85,18 @@ export const PATCH = defineRoute({
     .strictObject({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
       config: configBody.optional(),
-    isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
-    isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
+      isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
+      isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, "provide at least one view field to update"),
   handler: async ({ request: _req, authz, params, body: routeBody }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
     const existing = await loadOwn(user.orgId, user.id, id);
-    if (!existing)
-      return notFound("record");
-    const refused = await refuseDisabledRecordType(
-      user.orgId,
-      existing.recordType,
-    );
+    if (!existing) return notFound("record");
+    const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
     if (refused) return refused;
     const adminGated = can(authz, "admin.customization.manage");
     if (existing.scope === "org" && !adminGated)
@@ -127,20 +117,14 @@ export const PATCH = defineRoute({
     const sets: ReturnType<typeof sql>[] = [];
     const changes: Record<string, unknown> = {};
     if (body.name !== undefined && typeof body.name !== "string") {
-      return NextResponse.json(
-        { error: "name must be a string" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "name must be a string" }, { status: 400 });
     }
     // A supplied name is an explicit write. Collection POST already refuses
     // !body.name?.trim(); dropping whitespace here would report
     // {ok:true, changed:false} (or apply sibling fields) as if the operator
     // asked for a no-op. Refuse by name instead.
     if (body.name !== undefined && !body.name.trim()) {
-      return NextResponse.json(
-        { error: "name cannot be empty" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
     }
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -173,20 +157,14 @@ export const PATCH = defineRoute({
       // unhandled storage error surfaced as a 500. Collection POST and PATCH
       // both refuse a value outside the boolean domain.
       if (typeof body.isDefault !== "boolean") {
-        return NextResponse.json(
-          { error: "isDefault must be a boolean" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
       }
       sets.push(sql`is_default = ${body.isDefault}`);
       changes.isDefault = body.isDefault;
     }
     if (body.isActive !== undefined) {
       if (typeof body.isActive !== "boolean") {
-        return NextResponse.json(
-          { error: "isActive must be a boolean" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
       }
       sets.push(sql`is_active = ${body.isActive}`);
       changes.isActive = body.isActive;
@@ -204,23 +182,18 @@ export const PATCH = defineRoute({
       ...requestFlags,
     });
     if (!requestRefusal.ok)
-      return NextResponse.json(
-        { error: requestRefusal.error },
-        { status: 400 },
-      );
-    if (sets.length === 0)
-      return NextResponse.json({ ok: true, changed: false });
+      return NextResponse.json({ error: requestRefusal.error }, { status: 400 });
+    if (sets.length === 0) return NextResponse.json({ ok: true, changed: false });
 
-    const nextDefaultSql =
-      body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
-    const nextActiveSql =
-      body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
+    const nextDefaultSql = body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
+    const nextActiveSql = body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
 
     try {
       // db.execute goes through the pool (each statement may land on a different
       // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
       const updated = await db.transaction(async (tx) => {
-        const locked = (await tx.execute<{
+        const locked = (
+          await tx.execute<{
             id: string;
             recordType: string;
             scope: string;
@@ -228,12 +201,16 @@ export const PATCH = defineRoute({
             isDefault: boolean;
             isActive: boolean;
             config: unknown;
-          }>(sql`
+          }>(
+            sql`
         select id, record_type as "recordType", scope, owner_id as "ownerId",
                is_default as "isDefault", is_active as "isActive", config
           from list_views
          where id = ${id} and org_id = ${user.orgId}
-         for update`, "objects"))[0];
+         for update`,
+            "objects",
+          )
+        )[0];
         if (!locked) return { kind: "not_found" as const };
         if (proposedConfig) {
           const currentConfig = parseListView(locked.config);
@@ -266,15 +243,19 @@ export const PATCH = defineRoute({
         // Lock only — sibling clears wait until THIS update returns a row.
         // Otherwise a concurrent delete can demote the live default, write
         // audit, and still report {ok:true} for a view that is gone.
-        if (body.isDefault === true)
-          await lockListViewDefaultScope(tx, defaultScope);
+        if (body.isDefault === true) await lockListViewDefaultScope(tx, defaultScope);
         // Next-state default+inactive must match zero rows even if the JS
         // refusal is skipped — refuse by name, never {ok:true}.
-        const written = (await tx.execute<{ id: string }>(sql`
+        const written = (
+          await tx.execute<{ id: string }>(
+            sql`
         update list_views set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
            and not (${nextDefaultSql} and not ${nextActiveSql})
-         returning id`, "objects"))[0];
+         returning id`,
+            "objects",
+          )
+        )[0];
         if (!written) {
           if (nextFlags.isDefault && !nextFlags.isActive) {
             return {
@@ -293,8 +274,7 @@ export const PATCH = defineRoute({
         values (${user.orgId}, 'list_views', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
         return { kind: "ok" as const };
       });
-      if (updated.kind === "not_found")
-        return notFound("record");
+      if (updated.kind === "not_found") return notFound("record");
       if (updated.kind === "locked_entries")
         return NextResponse.json(
           { error: "locked built-in columns cannot be changed" },
@@ -311,8 +291,7 @@ export const PATCH = defineRoute({
       return dbWriteErrorResponse(e, {
         route: "customization:list-views",
         uniqueConflicts: {
-          list_views_org_scope_type_name:
-            "A view with that name already exists",
+          list_views_org_scope_type_name: "A view with that name already exists",
         },
       });
     }
@@ -324,19 +303,13 @@ export const DELETE = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz, params }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
     const existing = await loadOwn(user.orgId, user.id, id);
-    if (!existing)
-      return notFound("record");
-    const refused = await refuseDisabledRecordType(
-      user.orgId,
-      existing.recordType,
-    );
+    if (!existing) return notFound("record");
+    const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
     if (refused) return refused;
     const adminGated = can(authz, "admin.customization.manage");
     if (existing.scope === "org" && !adminGated)
@@ -349,10 +322,13 @@ export const DELETE = defineRoute({
     // Delete + audit in one transaction so a failed audit insert rolls back the
     // deletion instead of leaving an untraceable configuration change behind.
     const deleted = await db.transaction(async (tx) => {
-      const result = await tx.execute<{ name: string; scope: string }>(sql`
+      const result = await tx.execute<{ name: string; scope: string }>(
+        sql`
       delete from list_views
        where id = ${id} and org_id = ${user.orgId}
-       returning name, scope`, "objects");
+       returning name, scope`,
+        "objects",
+      );
       const row = result[0];
       if (!row) return null;
       await tx.execute(sql`
@@ -360,8 +336,7 @@ export const DELETE = defineRoute({
       values (${user.orgId}, 'list_views', ${id}, 'delete', ${JSON.stringify({ name: row.name, scope: row.scope })}, ${user.id})`);
       return row;
     });
-    if (!deleted)
-      return notFound("record");
+    if (!deleted) return notFound("record");
     return NextResponse.json({ ok: true });
   },
 });

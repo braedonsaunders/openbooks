@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import { useViewerFormat } from '@/lib/viewer-format'
+import { useViewerFormat } from "@/lib/viewer-format";
 
 export function ViewerDateTime({
   value,
   options,
 }: {
-  value: Date | string
-  options?: Intl.DateTimeFormatOptions
+  value: Date | string;
+  options?: Intl.DateTimeFormatOptions;
 }) {
-  const { dateTime } = useViewerFormat()
-  return <>{dateTime(value instanceof Date ? value : new Date(value), options)}</>
+  const { dateTime } = useViewerFormat();
+  return <>{dateTime(value instanceof Date ? value : new Date(value), options)}</>;
 }

@@ -6,7 +6,8 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __projectCreateToasts: { kind: string; message: string }[] | undefined;
-  var __projectCreateRouter: { pushes: string[]; replaces: string[]; refreshes: number } | undefined;
+  var __projectCreateRouter:
+    { pushes: string[]; replaces: string[]; refreshes: number } | undefined;
   var __projectCreateFetches: { url: string; init?: RequestInit }[] | undefined;
 }
 
@@ -83,9 +84,14 @@ function resetHarness() {
   globalThis.__projectCreateFetches = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     globalThis.__projectCreateFetches!.push({ url, init });
-    return Response.json({ project: { id: "44444444-4444-4444-8444-444444444444" } }, { status: 201 });
+    return Response.json(
+      { project: { id: "44444444-4444-4444-8444-444444444444" } },
+      { status: 201 },
+    );
   }) as typeof fetch;
   return () => {
     globalThis.fetch = prior;
@@ -148,9 +154,8 @@ async function click(button: HTMLButtonElement) {
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set as
-    | ((this: HTMLInputElement, value: string) => void)
-    | undefined;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
+    ?.set as ((this: HTMLInputElement, value: string) => void) | undefined;
   setter?.call(input, value);
   input.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
@@ -229,7 +234,9 @@ test("a refused create toasts and stays editable without navigating", async (t) 
   t.after(restoreFetch);
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     globalThis.__projectCreateFetches!.push({ url, init });
     return Response.json({ error: "Contract value must be a number" }, { status: 422 });
   }) as typeof fetch;
@@ -252,11 +259,17 @@ test("a refused create toasts and stays editable without navigating", async (t) 
   await tick();
   const toasts = globalThis.__projectCreateToasts ?? [];
   assert.ok(
-    toasts.some((toast) => toast.kind === "error" && /Contract value must be a number/.test(toast.message)),
+    toasts.some(
+      (toast) => toast.kind === "error" && /Contract value must be a number/.test(toast.message),
+    ),
     "the refusal must surface the server's typed reason",
   );
   assert.ok(buttonsNamed("Save").length > 0, "a refused create stays editable");
-  assert.deepEqual(globalThis.__projectCreateRouter!.replaces, [], "a refused create navigates nowhere");
+  assert.deepEqual(
+    globalThis.__projectCreateRouter!.replaces,
+    [],
+    "a refused create navigates nowhere",
+  );
 });
 
 test("checking Internal posts an internal project with no customer", async (t) => {
@@ -318,7 +331,11 @@ test("the New button opens the unsaved drawer with zero writes", async (t) => {
   assert.ok(button, "the New button must render");
   await click(button);
   assert.deepEqual(globalThis.__projectCreateRouter!.pushes, ["/projects?projectNew=1"]);
-  assert.equal(globalThis.__projectCreateFetches!.length, 0, "the button writes nothing — no draft POST");
+  assert.equal(
+    globalThis.__projectCreateFetches!.length,
+    0,
+    "the button writes nothing — no draft POST",
+  );
 });
 
 test("the ?project=new deep link swaps to the unsaved drawer with zero writes", async (t) => {
@@ -339,5 +356,9 @@ test("the ?project=new deep link swaps to the unsaved drawer with zero writes", 
   });
   await tick();
   assert.deepEqual(globalThis.__projectCreateRouter!.replaces, ["/projects?projectNew=1"]);
-  assert.equal(globalThis.__projectCreateFetches!.length, 0, "the redirect writes nothing — no draft POST");
+  assert.equal(
+    globalThis.__projectCreateFetches!.length,
+    0,
+    "the redirect writes nothing — no draft POST",
+  );
 });

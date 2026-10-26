@@ -59,9 +59,17 @@ export function EnvironmentPicker({
                 </div>
               )}
               <Row
-                icon={isPreview ? <Sparkles size={15} className="text-teal-500" /> : <Layers size={15} />}
+                icon={
+                  isPreview ? (
+                    <Sparkles size={15} className="text-teal-500" />
+                  ) : (
+                    <Layers size={15} />
+                  )
+                }
                 label={multi && !isPreview ? tPicker("production") : t.productionOrgName}
-                hint={isPreview ? tPicker("sampleCompany") : multi ? undefined : tPicker("production")}
+                hint={
+                  isPreview ? tPicker("sampleCompany") : multi ? undefined : tPicker("production")
+                }
                 active={topLevelActive}
                 disabled={pending}
                 onClick={() => go(t.productionOrgId)}
@@ -135,7 +143,9 @@ function Row({
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate">{label}</span>
-        {hint && <span className="truncate text-[11px] text-slate-400 dark:text-slate-500">{hint}</span>}
+        {hint && (
+          <span className="truncate text-[11px] text-slate-400 dark:text-slate-500">{hint}</span>
+        )}
       </span>
       {tier && (
         <Badge variant="outline" className="shrink-0 text-[10px]">

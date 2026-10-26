@@ -1,7 +1,7 @@
-import { expect, test, type BrowserContext } from '@playwright/test'
-import { readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
-import { authedContext, dismissSetupWizard } from './auth'
+import { expect, test, type BrowserContext } from "@playwright/test";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { authedContext, dismissSetupWizard } from "./auth";
 
 /**
  * Every page renders.
@@ -29,12 +29,12 @@ import { authedContext, dismissSetupWizard } from './auth'
  * they depend on; `web/lib/close-run-branch.integration.test.ts` is the model.
  */
 
-const APP_DIR = join(process.cwd(), 'web', 'app', '(app)')
+const APP_DIR = join(process.cwd(), "web", "app", "(app)");
 
 /** Concrete ids for the dynamic segments, so `[id]` routes are reachable. */
 const DYNAMIC_SAMPLES: Record<string, string> = {
-  '/apps/[key]': '/apps/viewspec-demo',
-}
+  "/apps/[key]": "/apps/viewspec-demo",
+};
 
 /**
  * Routes this suite cannot visit blind, with the reason.
@@ -47,51 +47,54 @@ const SKIP: Record<string, string> = {
   // Gate explanation pages need their redirect context: a bare visit names
   // no feature or permission, so it honestly 404s. Covered with context by
   // web/lib/gate-explanations.test.ts and web/app/(app)/gate-pages.test.ts.
-  '/feature-required': 'needs ?feature=<key> from a gate redirect',
-  '/access-denied': 'needs ?permission=<key> or ?scope=platform from a gate redirect',
-}
+  "/feature-required": "needs ?feature=<key> from a gate redirect",
+  "/access-denied": "needs ?permission=<key> or ?scope=platform from a gate redirect",
+};
 
-function discoverRoutes(dir: string, prefix = ''): string[] {
-  const routes: string[] = []
+function discoverRoutes(dir: string, prefix = ""): string[] {
+  const routes: string[] = [];
   for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (!statSync(full).isDirectory()) continue
+    const full = join(dir, entry);
+    if (!statSync(full).isDirectory()) continue;
     // Route groups `(x)` and private folders `_x` do not contribute a segment.
-    const segment = entry.startsWith('(') || entry.startsWith('_') ? '' : `/${entry}`
-    const child = prefix + segment
-    if (readdirSync(full).includes('page.tsx')) routes.push(child || '/')
-    routes.push(...discoverRoutes(full, child))
+    const segment = entry.startsWith("(") || entry.startsWith("_") ? "" : `/${entry}`;
+    const child = prefix + segment;
+    if (readdirSync(full).includes("page.tsx")) routes.push(child || "/");
+    routes.push(...discoverRoutes(full, child));
   }
-  return routes
+  return routes;
 }
 
 const routes = [...new Set(discoverRoutes(APP_DIR))]
   .map((route) => DYNAMIC_SAMPLES[route] ?? route)
   // A dynamic route with no sample cannot be visited without inventing an id.
-  .filter((route) => !route.includes('['))
+  .filter((route) => !route.includes("["))
   .filter((route) => !SKIP[route])
-  .sort()
+  .sort();
 
 // Each route has its own browser context. Let the existing CI partitions split
 // this file instead of assigning every route to one indivisible test group.
-test.describe.configure({ mode: 'parallel' })
+test.describe.configure({ mode: "parallel" });
 
-test('the route list was actually discovered', () => {
+test("the route list was actually discovered", () => {
   // Guards the discovery itself. If the walk breaks, every route test below
   // would pass vacuously by testing nothing.
-  expect(routes.length).toBeGreaterThan(120)
-  expect(routes).toContain('/banking')
-  expect(routes).toContain('/reports/pnl')
-})
+  expect(routes.length).toBeGreaterThan(120);
+  expect(routes).toContain("/banking");
+  expect(routes).toContain("/reports/pnl");
+});
 
 // Authenticate once per worker; every route still gets a fresh browser context.
 // The login form and credential policy retain their separate browser coverage.
-let routeStorageState: Awaited<ReturnType<BrowserContext['storageState']>>
+let routeStorageState: Awaited<ReturnType<BrowserContext["storageState"]>>;
 test.beforeAll(async ({ browser, baseURL }) => {
-  const { context } = await authedContext(browser, baseURL)
-  try { routeStorageState = await context.storageState() }
-  finally { await context.close() }
-})
+  const { context } = await authedContext(browser, baseURL);
+  try {
+    routeStorageState = await context.storageState();
+  } finally {
+    await context.close();
+  }
+});
 
 // Each discovered route owns its timeout and trace. A single aggregate test
 // exhausted its budget after only 30 cold Next compiles, leaving most routes
@@ -101,44 +104,53 @@ for (const route of routes) {
     const context = await browser.newContext({
       baseURL,
       storageState: routeStorageState,
-      ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === '1',
-    })
-    const page = await context.newPage()
-    const errors: string[] = []
-    let restorePayrollDisabled = false
-    page.on('pageerror', (error: Error) => errors.push(String(error)))
+      ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1",
+    });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    let restorePayrollDisabled = false;
+    page.on("pageerror", (error: Error) => errors.push(String(error)));
     try {
       // Payroll deliberately defaults off. Adopt it through the authoritative
       // switchboard for this one render case, then restore the prior gate.
-      if (route === '/admin/setup/payroll') {
-        await page.goto('/admin/setup/features?tab=people')
-        await dismissSetupWizard(page)
-        await page.goto('/admin/setup/features?tab=people')
-        const payroll = page.getByRole('switch', { name: 'Payroll', exact: true })
-        if ((await payroll.getAttribute('aria-checked')) === 'false') {
-          restorePayrollDisabled = true
-          const saved = page.waitForResponse((response) => response.url().endsWith('/api/admin/setup/features') && response.request().method() === 'PUT')
-          await payroll.click()
-          expect((await saved).status()).toBe(200)
-          await expect(payroll).toHaveAttribute('aria-checked', 'true')
+      if (route === "/admin/setup/payroll") {
+        await page.goto("/admin/setup/features?tab=people");
+        await dismissSetupWizard(page);
+        await page.goto("/admin/setup/features?tab=people");
+        const payroll = page.getByRole("switch", { name: "Payroll", exact: true });
+        if ((await payroll.getAttribute("aria-checked")) === "false") {
+          restorePayrollDisabled = true;
+          const saved = page.waitForResponse(
+            (response) =>
+              response.url().endsWith("/api/admin/setup/features") &&
+              response.request().method() === "PUT",
+          );
+          await payroll.click();
+          expect((await saved).status()).toBe(200);
+          await expect(payroll).toHaveAttribute("aria-checked", "true");
         }
       }
-      const response = await page.goto(route, { waitUntil: 'domcontentloaded' })
-      await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
-      expect(response?.status(), `${route}: HTTP response`).toBeLessThan(400)
-      await expect(page.locator('main').first(), `${route}: rendered content`).toContainText(/\S/)
-      await expect(page.locator('[data-route-state="error"]'), `${route}: error boundary`).toHaveCount(0)
-      expect(errors, `${route}: browser errors`).toEqual([])
+      const response = await page.goto(route, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+      expect(response?.status(), `${route}: HTTP response`).toBeLessThan(400);
+      await expect(page.locator("main").first(), `${route}: rendered content`).toContainText(/\S/);
+      await expect(
+        page.locator('[data-route-state="error"]'),
+        `${route}: error boundary`,
+      ).toHaveCount(0);
+      expect(errors, `${route}: browser errors`).toEqual([]);
     } finally {
       try {
         if (restorePayrollDisabled) {
-          const restored = await context.request.put('/api/admin/setup/features', {
+          const restored = await context.request.put("/api/admin/setup/features", {
             headers: { Origin: new URL(baseURL!).origin },
             data: { features: { payroll: false } },
-          })
-          expect(restored.status(), await restored.text()).toBe(200)
+          });
+          expect(restored.status(), await restored.text()).toBe(200);
         }
-      } finally { await context.close() }
+      } finally {
+        await context.close();
+      }
     }
-  })
+  });
 }

@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Plus } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
-import { UnsavedCreateButton } from '@/components/unsaved-create-button'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@openbooks/ui";
+import { UnsavedCreateButton } from "@/components/unsaved-create-button";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * Order creation entry point, two modes:
@@ -32,51 +32,53 @@ export function NewOrderButton({
   label,
   createFailedMessage,
 }: {
-  apiPath?: string
-  base: string
-  param: string
-  createParam?: string
-  label: string
-  createFailedMessage?: string
+  apiPath?: string;
+  base: string;
+  param: string;
+  createParam?: string;
+  label: string;
+  createFailedMessage?: string;
 }) {
-  const tCommon = useTranslations('common')
-  const [busy, setBusy] = useState(false)
-  const router = useRouter()
+  const tCommon = useTranslations("common");
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
 
   async function createDraft() {
-    setBusy(true)
+    setBusy(true);
     // finally releases busy on every path; the catch turns a transport
     // throw into the same operator-visible refusal as a server refusal.
     try {
       const res = await fetch(apiPath!, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback; the success body parses
       // after the ok check.
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, createFailedMessage ?? tCommon('feedback.createFailed')))
-        return
+        toast.error(
+          await readApiErrorMessage(res, createFailedMessage ?? tCommon("feedback.createFailed")),
+        );
+        return;
       }
-      const data = await res.json()
-      router.push(`${base}?${param}=${data.id}&mode=edit`)
-      router.refresh()
+      const data = await res.json();
+      router.push(`${base}?${param}=${data.id}&mode=edit`);
+      router.refresh();
     } catch {
-      toast.error(createFailedMessage ?? tCommon('feedback.createFailed'))
+      toast.error(createFailedMessage ?? tCommon("feedback.createFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   if (createParam) {
-    return <UnsavedCreateButton base={base} param={createParam} clear={[param]} label={label} />
+    return <UnsavedCreateButton base={base} param={createParam} clear={[param]} label={label} />;
   }
 
   return (
     <Button onClick={createDraft} disabled={busy}>
-      <Plus size={15} /> {busy ? tCommon('actions.creating') : label}
+      <Plus size={15} /> {busy ? tCommon("actions.creating") : label}
     </Button>
-  )
+  );
 }

@@ -60,11 +60,16 @@ export interface CompensationSettings {
 }
 
 /** The org's compensation settings document as stored for the settings API. */
-export async function compensationSettingsDocument(orgId: string): Promise<Record<string, unknown>> {
+export async function compensationSettingsDocument(
+  orgId: string,
+): Promise<Record<string, unknown>> {
   const companyId = requireOrgId(orgId);
-  const row = (await db.execute<{ compensation: Record<string, unknown> | null }>(
-    sql`select settings->'compensation' as compensation from orgs where id = ${companyId}`, "objects",
-  ))[0];
+  const row = (
+    await db.execute<{ compensation: Record<string, unknown> | null }>(
+      sql`select settings->'compensation' as compensation from orgs where id = ${companyId}`,
+      "objects",
+    )
+  )[0];
   return row?.compensation ?? {};
 }
 
@@ -91,8 +96,7 @@ export async function compensationSettings(orgId: string): Promise<CompensationS
     comparisonAttributeKey:
       typeof comparison === "string" && comparison.trim().length > 0 ? comparison.trim() : null,
     gapThresholdPct,
-    responseDays:
-      typeof days === "number" && Number.isInteger(days) && days > 0 ? days : null,
+    responseDays: typeof days === "number" && Number.isInteger(days) && days > 0 ? days : null,
     fteRounding:
       rounding === "nearest_tenth" || rounding === "nearest_hundredth" ? rounding : "up_to_whole",
     burdenRate: typeof burden === "string" && burden.trim().length > 0 ? burden.trim() : null,
@@ -124,24 +128,43 @@ export async function updateCompensationSettings(
         "Compensation settings are unavailable while the feature is off — enable Compensation under Company Settings → Features; existing settings are preserved.",
       );
     }
-    const current = (await db.execute<{ compensation: Record<string, unknown> | null }>(sql`
+    const current = (
+      await db.execute<{ compensation: Record<string, unknown> | null }>(
+        sql`
       select settings->'compensation' as compensation from orgs where id = ${orgId} for update
-    `, "objects"))[0];
-    if (!current) throw new CompensationError("NOT_FOUND", "the organization was not found — refresh and try again");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!current)
+      throw new CompensationError(
+        "NOT_FOUND",
+        "the organization was not found — refresh and try again",
+      );
     const next = { ...(current.compensation ?? {}) };
-    if (query.comparisonAttributeKey !== undefined) next.comparisonAttributeKey = query.comparisonAttributeKey;
+    if (query.comparisonAttributeKey !== undefined)
+      next.comparisonAttributeKey = query.comparisonAttributeKey;
     if (query.gapThresholdPct !== undefined) next.gapThresholdPct = query.gapThresholdPct;
     if (query.responseDays !== undefined) next.responseDays = query.responseDays;
     if (query.fteRounding !== undefined) next.fteRounding = query.fteRounding;
     if (query.burdenRate !== undefined) next.burdenRate = query.burdenRate;
-    const saved = (await db.execute<{ id: string }>(sql`
+    const saved = (
+      await db.execute<{ id: string }>(
+        sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{compensation}', ${JSON.stringify(next)}::jsonb, true),
              updated_at = now(), updated_by = ${actorId}
        where id = ${orgId}
        returning id
-    `, "objects"))[0];
-    if (!saved) throw new CompensationError("NOT_FOUND", "the compensation settings were not saved — the organization is no longer available; refresh and try again");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!saved)
+      throw new CompensationError(
+        "NOT_FOUND",
+        "the compensation settings were not saved — the organization is no longer available; refresh and try again",
+      );
     return next;
   });
 }
@@ -159,7 +182,10 @@ function pgCode(error: unknown): string | null {
 
 function requireFamilyCode(code: unknown): string {
   if (typeof code !== "string" || code.trim().length === 0) {
-    throw new CompensationError("INVALID_INPUT", "a job family code is required — codes are the stable handle bands and levels cite");
+    throw new CompensationError(
+      "INVALID_INPUT",
+      "a job family code is required — codes are the stable handle bands and levels cite",
+    );
   }
   return code.trim().slice(0, 40);
 }
@@ -181,7 +207,11 @@ function requireCriteria(input: unknown): EqualValueCriterion[] {
       );
     }
     const weight = e.weight;
-    if (typeof weight !== "string" || canonicalDecimal(weight, Infinity) === null || compareDecimal(canonicalDecimal(weight, Infinity)!, "0") <= 0) {
+    if (
+      typeof weight !== "string" ||
+      canonicalDecimal(weight, Infinity) === null ||
+      compareDecimal(canonicalDecimal(weight, Infinity)!, "0") <= 0
+    ) {
       throw new CompensationError(
         "INVALID_INPUT",
         `criterion ${i + 1} needs a positive weight — weightless criteria cannot order equal value`,
@@ -200,7 +230,13 @@ type FamilyRow = {
 };
 
 function toFamilyDTO(row: FamilyRow): JobFamilyDTO {
-  return { id: row.id, code: row.code, name: row.name, description: row.description, isActive: row.is_active };
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    description: row.description,
+    isActive: row.is_active,
+  };
 }
 
 type LevelRow = {
@@ -243,12 +279,21 @@ export async function createJobFamily(query: CreateJobFamilyQuery): Promise<JobF
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     try {
-      const row = (await db.execute<FamilyRow>(sql`
+      const row = (
+        await db.execute<FamilyRow>(
+          sql`
         insert into hrm_job_families (org_id, code, name, description, created_by, updated_by)
         values (${orgId}, ${code}, ${query.name.trim().slice(0, 160)},
                 ${query.description?.trim().slice(0, 2000) ?? null}, ${actorId}, ${actorId})
-        returning id, code, name, description, is_active`, "objects"))[0];
-      if (!row) throw new CompensationError("REFUSED", "the family insert matched no row — the save is refused, never a silent success");
+        returning id, code, name, description, is_active`,
+          "objects",
+        )
+      )[0];
+      if (!row)
+        throw new CompensationError(
+          "REFUSED",
+          "the family insert matched no row — the save is refused, never a silent success",
+        );
       return toFamilyDTO(row);
     } catch (e) {
       if (e instanceof CompensationError) throw e;
@@ -281,14 +326,19 @@ export async function updateJobFamily(query: UpdateJobFamilyQuery): Promise<JobF
   void reason;
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
-    const row = (await db.execute<FamilyRow>(sql`
+    const row = (
+      await db.execute<FamilyRow>(
+        sql`
       update hrm_job_families
          set name = coalesce(${query.name?.trim().slice(0, 160) ?? null}, name),
              description = coalesce(${query.description?.trim().slice(0, 2000) ?? null}, description),
              is_active = coalesce(${query.isActive ?? null}, is_active),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${familyId}
-       returning id, code, name, description, is_active`, "objects"))[0];
+       returning id, code, name, description, is_active`,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new CompensationError("NOT_FOUND", "job family is not visible in this organization");
     }
@@ -296,15 +346,22 @@ export async function updateJobFamily(query: UpdateJobFamilyQuery): Promise<JobF
   });
 }
 
-export async function listJobFamilies(query: { orgId: string; actorId: string; includeInactive?: boolean }): Promise<readonly JobFamilyDTO[]> {
+export async function listJobFamilies(query: {
+  orgId: string;
+  actorId: string;
+  includeInactive?: boolean;
+}): Promise<readonly JobFamilyDTO[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   await requireHrmCompensationRead(db, orgId, actorId);
-  const rows = await db.execute<FamilyRow>(sql`
+  const rows = await db.execute<FamilyRow>(
+    sql`
     select id, code, name, description, is_active
       from hrm_job_families
      where org_id = ${orgId} and (${query.includeInactive === true} or is_active)
-     order by code`, "objects");
+     order by code`,
+    "objects",
+  );
   return rows.map(toFamilyDTO);
 }
 
@@ -326,15 +383,23 @@ export async function createJobLevel(query: CreateJobLevelQuery): Promise<JobLev
     throw new CompensationError("INVALID_INPUT", "a job level name is required");
   }
   if (!Number.isInteger(query.rank) || query.rank < 1) {
-    throw new CompensationError("INVALID_INPUT", "a job level rank is a positive integer ordering the ladder — rank 1 is entry");
+    throw new CompensationError(
+      "INVALID_INPUT",
+      "a job level rank is a positive integer ordering the ladder — rank 1 is entry",
+    );
   }
   const criteria = requireCriteria(query.equalValueCriteria);
   const familyId = query.familyId ?? null;
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     if (familyId !== null) {
-      const family = (await db.execute<{ id: string }>(sql`
-        select id from hrm_job_families where org_id = ${orgId} and id = ${familyId}`, "objects"))[0];
+      const family = (
+        await db.execute<{ id: string }>(
+          sql`
+        select id from hrm_job_families where org_id = ${orgId} and id = ${familyId}`,
+          "objects",
+        )
+      )[0];
       if (!family) {
         throw new CompensationError(
           "NOT_FOUND",
@@ -343,12 +408,21 @@ export async function createJobLevel(query: CreateJobLevelQuery): Promise<JobLev
       }
     }
     try {
-      const row = (await db.execute<LevelRow>(sql`
+      const row = (
+        await db.execute<LevelRow>(
+          sql`
         insert into hrm_job_levels (org_id, family_id, code, name, rank, equal_value_criteria, created_by, updated_by)
         values (${orgId}, ${familyId}, ${code}, ${query.name.trim().slice(0, 160)},
                 ${query.rank}, ${JSON.stringify(criteria)}::jsonb, ${actorId}, ${actorId})
-        returning id, family_id, code, name, rank, equal_value_criteria, is_active`, "objects"))[0];
-      if (!row) throw new CompensationError("REFUSED", "the level insert matched no row — the save is refused, never a silent success");
+        returning id, family_id, code, name, rank, equal_value_criteria, is_active`,
+          "objects",
+        )
+      )[0];
+      if (!row)
+        throw new CompensationError(
+          "REFUSED",
+          "the level insert matched no row — the save is refused, never a silent success",
+        );
       return toLevelDTO(row as LevelRow);
     } catch (e) {
       if (e instanceof CompensationError) throw e;
@@ -386,14 +460,24 @@ export async function updateJobLevel(query: UpdateJobLevelQuery): Promise<JobLev
   const levelId = requireId(query.levelId, "levelId");
   const reason = requireReason(query.reason);
   void reason;
-  const criteria = query.equalValueCriteria === undefined ? null : requireCriteria(query.equalValueCriteria);
-  if (query.rank !== undefined && query.rank !== null && (!Number.isInteger(query.rank) || query.rank < 1)) {
-    throw new CompensationError("INVALID_INPUT", "a job level rank is a positive integer ordering the ladder — rank 1 is entry");
+  const criteria =
+    query.equalValueCriteria === undefined ? null : requireCriteria(query.equalValueCriteria);
+  if (
+    query.rank !== undefined &&
+    query.rank !== null &&
+    (!Number.isInteger(query.rank) || query.rank < 1)
+  ) {
+    throw new CompensationError(
+      "INVALID_INPUT",
+      "a job level rank is a positive integer ordering the ladder — rank 1 is entry",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     try {
-      const row = (await db.execute<LevelRow>(sql`
+      const row = (
+        await db.execute<LevelRow>(
+          sql`
         update hrm_job_levels
            set name = coalesce(${query.name?.trim().slice(0, 160) ?? null}, name),
                rank = coalesce(${query.rank ?? null}, rank),
@@ -401,7 +485,10 @@ export async function updateJobLevel(query: UpdateJobLevelQuery): Promise<JobLev
                is_active = coalesce(${query.isActive ?? null}, is_active),
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${levelId}
-         returning id, family_id, code, name, rank, equal_value_criteria, is_active`, "objects"))[0];
+         returning id, family_id, code, name, rank, equal_value_criteria, is_active`,
+          "objects",
+        )
+      )[0];
       if (!row) {
         throw new CompensationError("NOT_FOUND", "job level is not visible in this organization");
       }
@@ -428,13 +515,16 @@ export async function listJobLevels(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   await requireHrmCompensationRead(db, orgId, actorId);
-  const rows = await db.execute<LevelRow>(sql`
+  const rows = await db.execute<LevelRow>(
+    sql`
     select l.id, l.family_id, l.code, l.name, l.rank, l.equal_value_criteria, l.is_active
       from hrm_job_levels l
      where l.org_id = ${orgId}
        and (${query.familyId === undefined} or l.family_id is not distinct from ${query.familyId ?? null})
        and (${query.includeInactive === true} or l.is_active)
-     order by l.family_id nulls first, l.rank`, "objects");
+     order by l.family_id nulls first, l.rank`,
+    "objects",
+  );
   return rows.map((row) => toLevelDTO(row as LevelRow));
 }
 

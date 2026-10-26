@@ -1,4 +1,7 @@
-import { apportionWithholdingMaterialsCost, collapseWithholdingLineMetadata } from "./withholding-cost.ts";
+import {
+  apportionWithholdingMaterialsCost,
+  collapseWithholdingLineMetadata,
+} from "./withholding-cost.ts";
 import { randomUUID } from "node:crypto";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
@@ -41,11 +44,7 @@ export type { EntryLineInput, EntryPlan, PlannedEntryLine, PlannedEntryLineage }
  */
 
 export type EntryAllocationErrorCode =
-  | "unknown_key"
-  | "misconfigured_rule"
-  | "unsupported_basis"
-  | "no_driver_weight"
-  | "invalid_line";
+  "unknown_key" | "misconfigured_rule" | "unsupported_basis" | "no_driver_weight" | "invalid_line";
 
 export class EntryAllocationError extends Error {
   code: EntryAllocationErrorCode;
@@ -131,9 +130,14 @@ export async function loadEntryRuleByKey(
   key: string,
   asOf?: string,
 ): Promise<KeyedEntryRuleLookup> {
-  const head = (await db.execute<{ mode: string }>(sql`
+  const head = (
+    await db.execute<{ mode: string }>(
+      sql`
       select mode from allocation_rules where org_id = ${orgId} and key = ${key} limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!head) return { status: "not_found" };
   if (head.mode !== "entry") return { status: "wrong_mode", mode: head.mode as AllocationMode };
   const rules = await listEntryRulesInEffect({ orgId, mode: "entry", asOf });
@@ -149,7 +153,10 @@ function parseWeight(value: string, what: string): bigint {
   try {
     normalized = normalizeDecimal(value, 10);
   } catch {
-    throw new EntryAllocationError("misconfigured_rule", `${what} "${value}" is not an exact decimal`);
+    throw new EntryAllocationError(
+      "misconfigured_rule",
+      `${what} "${value}" is not an exact decimal`,
+    );
   }
   // The sign is stripped before BigInt parsing, so the magnitude alone can
   // never be negative — the negativity check must read the sign itself.
@@ -157,7 +164,8 @@ function parseWeight(value: string, what: string): bigint {
   const digits = normalized.replace("-", "").replace(".", "");
   const units = BigInt(digits);
   const signed = negative ? -units : units;
-  if (signed < 0n) throw new EntryAllocationError("misconfigured_rule", `${what} "${value}" must not be negative`);
+  if (signed < 0n)
+    throw new EntryAllocationError("misconfigured_rule", `${what} "${value}" must not be negative`);
   return signed;
 }
 
@@ -181,7 +189,10 @@ function apportionExactUnits(
 ): bigint[] {
   const weightTotal = weights.reduce((acc, w) => acc + w, 0n);
   if (weightTotal <= 0n) {
-    throw new EntryAllocationError("no_driver_weight", "allocation weights sum to zero — nothing to apportion to");
+    throw new EntryAllocationError(
+      "no_driver_weight",
+      "allocation weights sum to zero — nothing to apportion to",
+    );
   }
   const amounts = weights.map((w) => roundDiv(totalUnits * w, weightTotal));
   const placed = amounts.reduce((acc, a) => acc + a, 0n);
@@ -197,7 +208,12 @@ function apportionMoney(
   ruleKey: string,
 ): ApportionResult {
   try {
-    return apportionTargets(total, weights, version.residualPolicy, version.residualTargetId ?? null);
+    return apportionTargets(
+      total,
+      weights,
+      version.residualPolicy,
+      version.residualTargetId ?? null,
+    );
   } catch (error) {
     if (error instanceof AllocationApportionError) {
       if (error.code === "total_invalid") {
@@ -219,19 +235,31 @@ function moneyUnits(amount: string): bigint {
   try {
     return toUnits(amount);
   } catch {
-    throw new EntryAllocationError("invalid_line", `line amount "${amount}" is not exact ledger money`);
+    throw new EntryAllocationError(
+      "invalid_line",
+      `line amount "${amount}" is not exact ledger money`,
+    );
   }
 }
 
 function parseQuantity(value: string): bigint {
   try {
-    return BigInt(normalizeDecimal(value, 8).replace("-", "").replace(".", "")) * (value.trim().startsWith("-") ? -1n : 1n);
+    return (
+      BigInt(normalizeDecimal(value, 8).replace("-", "").replace(".", "")) *
+      (value.trim().startsWith("-") ? -1n : 1n)
+    );
   } catch {
-    throw new EntryAllocationError("invalid_line", `line quantity "${value}" is not an exact decimal`);
+    throw new EntryAllocationError(
+      "invalid_line",
+      `line quantity "${value}" is not an exact decimal`,
+    );
   }
 }
 
-function targetValueInDimension(target: AllocationRuleTarget, dimension: string): string | null | undefined {
+function targetValueInDimension(
+  target: AllocationRuleTarget,
+  dimension: string,
+): string | null | undefined {
   switch (dimension) {
     case "department":
       return target.departmentId;
@@ -302,7 +330,8 @@ export function renderAllocationTemplate(
     const parts = String(path).split(".");
     let current: unknown = vars;
     for (const part of parts) {
-      if (current === null || current === undefined || typeof current !== "object") return placeholder;
+      if (current === null || current === undefined || typeof current !== "object")
+        return placeholder;
       current = (current as Record<string, unknown>)[part];
     }
     return current === null || current === undefined ? placeholder : String(current);
@@ -336,7 +365,9 @@ export function explodeDocumentLine(
         `rule "${ruleInEffect.rule.key}" has dynamic targets but no resolver was provided`,
       );
     }
-    targets = [...opts.resolveDynamicTargets(version, line)].sort((a, b) => a.sequence - b.sequence);
+    targets = [...opts.resolveDynamicTargets(version, line)].sort(
+      (a, b) => a.sequence - b.sequence,
+    );
     if (targets.length === 0) {
       throw new EntryAllocationError(
         "no_driver_weight",
@@ -485,7 +516,11 @@ function keptMember(line: EntryLineInput, stored: StoredEntryGroup): PlannedEntr
   // grid's unlock affordance), an absent flag preserves the stored group
   // value. Locking is group-level (any locked child locks the group).
   planned.distributionLocked =
-    line.distributionLocked === true ? true : line.distributionLocked === false ? false : stored.locked;
+    line.distributionLocked === true
+      ? true
+      : line.distributionLocked === false
+        ? false
+        : stored.locked;
   return planned;
 }
 
@@ -553,7 +588,12 @@ export function planEntryDistributions(
 
   const memberIndicesByGroup = new Map<string, number[]>();
   lines.forEach((line, index) => {
-    if (line.distributionKey !== null && line.distributionKey !== undefined && line.distributionKey !== "") return;
+    if (
+      line.distributionKey !== null &&
+      line.distributionKey !== undefined &&
+      line.distributionKey !== ""
+    )
+      return;
     const groupId = line.distributionGroupId;
     if (groupId !== null && groupId !== undefined && groupId !== "" && !unsplit.has(groupId)) {
       const list = memberIndicesByGroup.get(groupId) ?? [];
@@ -573,7 +613,10 @@ export function planEntryDistributions(
     if (key !== null && key !== undefined && key !== "") {
       const rule = explicitRules.get(key) ?? rulesInEffect.find((r) => r.rule.key === key) ?? null;
       if (rule === null) {
-        throw new EntryAllocationError("unknown_key", `distributionKey "${key}" does not match a rule in effect`);
+        throw new EntryAllocationError(
+          "unknown_key",
+          `distributionKey "${key}" does not match a rule in effect`,
+        );
       }
       const result = explodeDocumentLine(line, rule, {
         driverVector: opts.driverVectors?.get(rule.rule.id),
@@ -598,7 +641,8 @@ export function planEntryDistributions(
   lines.forEach((line, index) => {
     if (handled[index] === true) return;
     const groupId = line.distributionGroupId;
-    if (groupId === null || groupId === undefined || groupId === "" || !unsplit.has(groupId)) return;
+    if (groupId === null || groupId === undefined || groupId === "" || !unsplit.has(groupId))
+      return;
     if (collapsedGroups.has(groupId)) {
       handled[index] = true;
       return;
@@ -606,17 +650,28 @@ export function planEntryDistributions(
     collapsedGroups.add(groupId);
     const members = lines
       .map((candidate, i) => ({ candidate: candidate!, i }))
-      .filter(({ candidate }) => candidate.distributionGroupId === groupId && !candidate.distributionKey);
+      .filter(
+        ({ candidate }) => candidate.distributionGroupId === groupId && !candidate.distributionKey,
+      );
     const first = members[0]!.candidate;
     const total = sumMoney(members.map(({ candidate }) => candidate.amount));
     let quantity: string | null = null;
-    if (members.every(({ candidate }) => candidate.quantity !== null && candidate.quantity !== undefined)) {
+    if (
+      members.every(
+        ({ candidate }) => candidate.quantity !== null && candidate.quantity !== undefined,
+      )
+    ) {
       let qtyTotal = 0n;
       for (const { candidate } of members) qtyTotal += parseQuantity(candidate.quantity!);
       quantity = formatScaled(qtyTotal, 8);
     }
     const collapsed: PlannedEntryLine = {
-      ...plainLine({ ...first, ...collapseWithholdingLineMetadata(members.map(m => m.candidate)), amount: total, quantity }),
+      ...plainLine({
+        ...first,
+        ...collapseWithholdingLineMetadata(members.map((m) => m.candidate)),
+        amount: total,
+        quantity,
+      }),
       amount: total,
       quantity,
     };
@@ -629,18 +684,26 @@ export function planEntryDistributions(
   for (const [groupId, indices] of memberIndicesByGroup) {
     const stored = existingGroups.get(groupId);
     if (stored === undefined) {
-      const members = indices.map(i => lines[i]!);
-      if (members.every(member => member.distributionLocked === true)) {
+      const members = indices.map((i) => lines[i]!);
+      if (members.every((member) => member.distributionLocked === true)) {
         // Explicit manual splits are already allocated; preserve their exact inputs.
         members.forEach((member, k) => {
-          output.push({ ...plainLine(member), distributionGroupId: groupId, distributionLocked: true });
+          output.push({
+            ...plainLine(member),
+            distributionGroupId: groupId,
+            distributionLocked: true,
+          });
           handled[indices[k]!] = true;
         });
         continue;
       }
       // Unknown group: strip the stamps and match each member fresh below.
       for (const i of indices) {
-        const stripped: EntryLineInput = { ...lines[i]!, distributionGroupId: null, distributionLocked: null };
+        const stripped: EntryLineInput = {
+          ...lines[i]!,
+          distributionGroupId: null,
+          distributionLocked: null,
+        };
         lines[i] = stripped;
       }
       continue;
@@ -676,12 +739,16 @@ export function planEntryDistributions(
       for (const m of members) qtyTotal += parseQuantity(m.quantity!);
       quantity = formatScaled(qtyTotal, 8);
     }
-    const result = explodeDocumentLine({ ...first, ...collapseWithholdingLineMetadata(members), amount: submittedTotal, quantity }, rule, {
-      driverVector: opts.driverVectors?.get(rule.rule.id),
-      driverDimension: opts.driverDimensions?.get(rule.rule.id),
-      resolveDynamicTargets: opts.resolveDynamicTargets,
-      groupId,
-    });
+    const result = explodeDocumentLine(
+      { ...first, ...collapseWithholdingLineMetadata(members), amount: submittedTotal, quantity },
+      rule,
+      {
+        driverVector: opts.driverVectors?.get(rule.rule.id),
+        driverDimension: opts.driverDimensions?.get(rule.rule.id),
+        resolveDynamicTargets: opts.resolveDynamicTargets,
+        groupId,
+      },
+    );
     const base = output.length;
     output.push(...result.children);
     lineage.push(...toLineage(rule, result, base, stored.memberIds[0] ?? null));

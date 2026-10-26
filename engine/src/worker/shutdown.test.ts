@@ -17,12 +17,16 @@ test("connections close only after every worker has drained", async () => {
       events.push("fast-drained");
     },
   };
-  await shutdownWorkerProcess([slowWorker, fastWorker], async () => {
-    connectionsOpen = false;
-    events.push("connections-closed");
-  }, async () => {
-    events.push("telemetry-stopped");
-  });
+  await shutdownWorkerProcess(
+    [slowWorker, fastWorker],
+    async () => {
+      connectionsOpen = false;
+      events.push("connections-closed");
+    },
+    async () => {
+      events.push("telemetry-stopped");
+    },
+  );
   assert.deepEqual(events, [
     "fast-drained",
     "slow-drained(connections-open=true)",
@@ -39,11 +43,23 @@ test("one worker's close failure still drains the rest and closes connections", 
   try {
     await shutdownWorkerProcess(
       [
-        { close: async () => { events.push("good-drained"); } },
-        { close: async () => { throw new Error("drain blew up"); } },
+        {
+          close: async () => {
+            events.push("good-drained");
+          },
+        },
+        {
+          close: async () => {
+            throw new Error("drain blew up");
+          },
+        },
       ],
-      async () => { events.push("connections-closed"); },
-      async () => { events.push("telemetry-stopped"); },
+      async () => {
+        events.push("connections-closed");
+      },
+      async () => {
+        events.push("telemetry-stopped");
+      },
     );
   } finally {
     console.error = originalConsoleError;
@@ -55,17 +71,40 @@ test("one worker's close failure still drains the rest and closes connections", 
 test("telemetry stopping is last and its failure is contained", async () => {
   const events: string[] = [];
   await shutdownWorkerProcess(
-    [{ close: async () => { events.push("drained"); } }],
-    async () => { events.push("connections-closed"); },
-    async () => { throw new Error("telemetry down"); },
+    [
+      {
+        close: async () => {
+          events.push("drained");
+        },
+      },
+    ],
+    async () => {
+      events.push("connections-closed");
+    },
+    async () => {
+      throw new Error("telemetry down");
+    },
   );
   assert.deepEqual(events, ["drained", "connections-closed"]);
 });
 
 test("registered process workers release checkpoints before shared connections close", async (t) => {
   const events: string[] = [];
-  const unregister = registerProcessWorker({ close: async () => { await Promise.resolve(); events.push('checkpoint-released'); } });
+  const unregister = registerProcessWorker({
+    close: async () => {
+      await Promise.resolve();
+      events.push("checkpoint-released");
+    },
+  });
   t.after(unregister);
-  await shutdownWorkerProcess([], async () => { events.push('connections-closed'); }, async () => { events.push('telemetry-stopped'); });
-  assert.deepEqual(events, ['checkpoint-released', 'connections-closed', 'telemetry-stopped']);
+  await shutdownWorkerProcess(
+    [],
+    async () => {
+      events.push("connections-closed");
+    },
+    async () => {
+      events.push("telemetry-stopped");
+    },
+  );
+  assert.deepEqual(events, ["checkpoint-released", "connections-closed", "telemetry-stopped"]);
 });

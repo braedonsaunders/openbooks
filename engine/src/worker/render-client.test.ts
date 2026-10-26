@@ -4,8 +4,7 @@ import { authorizeReportRun } from "./render-client.ts";
 
 function stubFetch(status: number, body: string | null) {
   const before = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(body, { status })) as typeof fetch;
+  globalThis.fetch = (async () => new Response(body, { status })) as typeof fetch;
   return () => {
     globalThis.fetch = before;
   };

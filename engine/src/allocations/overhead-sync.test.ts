@@ -26,8 +26,22 @@ function publishedCtx() {
 
 test("overhead derivation publishes from the rate card, dated from the earliest row", () => {
   const derived = deriveOverheadSystemVersion(POLICY, [
-    { departmentId: "dept-b", category: "Facilities", method: "standard", ratePercent: "20.0000", effectiveFrom: "2026-03-01", effectiveTo: null },
-    { departmentId: "dept-a", category: "Facilities", method: "standard", ratePercent: "12.5000", effectiveFrom: "2026-01-01", effectiveTo: "2026-02-28" },
+    {
+      departmentId: "dept-b",
+      category: "Facilities",
+      method: "standard",
+      ratePercent: "20.0000",
+      effectiveFrom: "2026-03-01",
+      effectiveTo: null,
+    },
+    {
+      departmentId: "dept-a",
+      category: "Facilities",
+      method: "standard",
+      ratePercent: "12.5000",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-02-28",
+    },
   ]);
   assert.equal(derived.action, "publish");
   assert.equal(derived.effectiveFrom, "2026-01-01");
@@ -37,8 +51,22 @@ test("overhead derivation publishes from the rate card, dated from the earliest 
 
 test("overhead derivation is order-stable and rate-sensitive", () => {
   const rowsA = [
-    { departmentId: "dept-a", category: null, method: "standard", ratePercent: "12.5000", effectiveFrom: "2026-01-01", effectiveTo: null },
-    { departmentId: null, category: null, method: "standard", ratePercent: "10.0000", effectiveFrom: "2026-01-01", effectiveTo: null },
+    {
+      departmentId: "dept-a",
+      category: null,
+      method: "standard",
+      ratePercent: "12.5000",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    },
+    {
+      departmentId: null,
+      category: null,
+      method: "standard",
+      ratePercent: "10.0000",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    },
   ];
   const rowsB = [...rowsA].reverse();
   const a = deriveOverheadSystemVersion(POLICY, rowsA);
@@ -46,7 +74,10 @@ test("overhead derivation is order-stable and rate-sensitive", () => {
   assert.equal(a.action, "publish");
   assert.equal(b.action, "publish");
   assert.equal(a.rateHash, b.rateHash);
-  const changed = deriveOverheadSystemVersion(POLICY, rowsA.map((r) => ({ ...r, ratePercent: "12.6000" })));
+  const changed = deriveOverheadSystemVersion(
+    POLICY,
+    rowsA.map((r) => ({ ...r, ratePercent: "12.6000" })),
+  );
   assert.equal(changed.action, "publish");
   assert.notEqual(changed.rateHash, a.rateHash);
 });
@@ -58,7 +89,14 @@ test("overhead derivation retires when the policy is not a net-zero pair", () =>
     { mode: "net_zero_pair", accountId: null },
   ]) {
     const derived = deriveOverheadSystemVersion(policy, [
-      { departmentId: null, category: null, method: "standard", ratePercent: "10.0000", effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        departmentId: null,
+        category: null,
+        method: "standard",
+        ratePercent: "10.0000",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ]);
     assert.equal(derived.action, "retire");
   }
@@ -70,7 +108,14 @@ test("overhead derivation retires when the card holds no hourly rows", () => {
 
 test("the derived definition is a post-mode net-zero pair no document matcher can select", () => {
   const derived = deriveOverheadSystemVersion(POLICY, [
-    { departmentId: null, category: null, method: "standard", ratePercent: "10.0000", effectiveFrom: "2026-01-01", effectiveTo: null },
+    {
+      departmentId: null,
+      category: null,
+      method: "standard",
+      ratePercent: "10.0000",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    },
   ]);
   assert.equal(derived.action, "publish");
   assert.equal(derived.definition.impact, "net_zero_pair");
@@ -80,12 +125,22 @@ test("the derived definition is a post-mode net-zero pair no document matcher ca
   // The event pseudo-kind never appears on a real document, so the post
   // seam and the entry matcher can never select the system rule.
   assert.deepEqual(derived.definition.documentKinds, [OVERHEAD_EVENT_DOCUMENT_KIND]);
-  assert.deepEqual(derived.definition.accountScope, { kind: "accounts", accountIds: [POLICY.accountId] });
+  assert.deepEqual(derived.definition.accountScope, {
+    kind: "accounts",
+    accountIds: [POLICY.accountId],
+  });
 });
 
 test("the derived definition passes publish validation against its system driver", () => {
   const derived = deriveOverheadSystemVersion(POLICY, [
-    { departmentId: null, category: null, method: "standard", ratePercent: "10.0000", effectiveFrom: "2026-01-01", effectiveTo: null },
+    {
+      departmentId: null,
+      category: null,
+      method: "standard",
+      ratePercent: "10.0000",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    },
   ]);
   assert.equal(derived.action, "publish");
   const problems = validateRuleVersion(

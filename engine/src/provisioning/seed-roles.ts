@@ -24,15 +24,15 @@ export type SeedRolesForOrgResult = {
 /** Thin per-org entry: built-in roles plus dashboard defaults for one org. */
 export async function seedRolesForOrg(orgId: string): Promise<SeedRolesForOrgResult> {
   await upsertBuiltInRolesForOrg(db, orgId, BUILT_IN_ROLES);
-  const dashboardDefaults = await seedDashboardDefaultsForOrg(
-    orgId,
-    Object.keys(BUILT_IN_ROLES),
-  );
+  const dashboardDefaults = await seedDashboardDefaultsForOrg(orgId, Object.keys(BUILT_IN_ROLES));
   return { roles: Object.keys(BUILT_IN_ROLES).length, dashboardDefaults };
 }
 
 async function main(): Promise<void> {
-  const orgs = (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`, "objects"));
+  const orgs = await db.execute<{ id: string; name: string }>(
+    sql`select id, name from orgs order by created_at`,
+    "objects",
+  );
   if (orgs.length === 0) {
     console.error("no orgs found — seed an org before seeding roles");
     process.exit(1);
@@ -57,8 +57,10 @@ export function isSeedRolesCli(entrypoint: string | undefined): boolean {
 }
 
 if (isSeedRolesCli(process.argv[1])) {
-  void main().then(() => process.exit(0)).catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
-  });
+  void main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : error);
+      process.exit(1);
+    });
 }

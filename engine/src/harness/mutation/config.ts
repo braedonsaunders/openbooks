@@ -69,14 +69,21 @@ export function parseMutationConfig(raw: string): MutationConfig {
       }
       lineRanges = entry.lineRanges;
     }
-    if (entry.needsDb === true && (typeof entry.needsDbReason !== "string" || !entry.needsDbReason.trim())) {
-      throw new Error(`mutation target ${entry.path} needs a non-empty needsDbReason grounded in its selected code`);
+    if (
+      entry.needsDb === true &&
+      (typeof entry.needsDbReason !== "string" || !entry.needsDbReason.trim())
+    ) {
+      throw new Error(
+        `mutation target ${entry.path} needs a non-empty needsDbReason grounded in its selected code`,
+      );
     }
     targets.push({
       path: entry.path,
       tests: [...entry.tests].sort(),
       ...(lineRanges ? { lineRanges } : {}),
-      ...(entry.needsDb === true ? { needsDb: true as const, needsDbReason: entry.needsDbReason as string } : {}),
+      ...(entry.needsDb === true
+        ? { needsDb: true as const, needsDbReason: entry.needsDbReason as string }
+        : {}),
     });
   }
   return { version: 1, targets };
@@ -102,9 +109,12 @@ export function resolveTargetTests(
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((name) => /\.test\.[cm]?[jt]sx?$/.test(name))
-    .filter((name) => !name.startsWith("mutation-") && !name.startsWith("operators.") && !name.startsWith("harness-selfcheck."))
+    .filter(
+      (name) =>
+        !name.startsWith("mutation-") &&
+        !name.startsWith("operators.") &&
+        !name.startsWith("harness-selfcheck."),
+    )
     .map((name) => join(dirname(targetPath), name).replace(/\\/g, "/"))
     .sort();
 }
-
-

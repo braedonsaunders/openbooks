@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+} from "../../testing/fixtures.ts";
 import { committedFrRgduYearToDate } from "./rgdu-2026.ts";
 
 test("RGDU history reads only earlier committed French stubs for the same employee and legal employer", async () => {
@@ -41,7 +45,13 @@ test("RGDU history reads only earlier committed French stubs for the same employ
     }
 
     const committed = async (input: {
-      date: string; subsidiaryId: string; gross: string; smic: string; reduction: string; country?: string; contractId?: string;
+      date: string;
+      subsidiaryId: string;
+      gross: string;
+      smic: string;
+      reduction: string;
+      country?: string;
+      contractId?: string;
     }) => {
       const documentId = randomUUID();
       const periodStart = `${input.date.slice(0, 7)}-01`;
@@ -67,22 +77,57 @@ test("RGDU history reads only earlier committed French stubs for the same employ
                 ${actorId}, ${actorId})
       `);
     };
-    await committed({ date: "2026-05-31", subsidiaryId: org.subsidiaryId, gross: "1000", smic: "900", reduction: "300" });
-    await committed({ date: "2026-07-31", subsidiaryId: org.subsidiaryId, gross: "5000", smic: "1700", reduction: "900" });
-    await committed({ date: "2026-05-30", subsidiaryId: otherEmployerId, gross: "700", smic: "600", reduction: "180" });
-    await committed({ date: "2026-05-28", subsidiaryId: org.subsidiaryId, gross: "600", smic: "500", reduction: "150", contractId: otherEmploymentId });
-    await committed({ date: "2026-05-29", subsidiaryId: org.subsidiaryId, gross: "800", smic: "700", reduction: "210", country: "CA" });
-
-    assert.deepEqual(await committedFrRgduYearToDate({
-      tx: db,
-      orgId: org.orgId,
+    await committed({
+      date: "2026-05-31",
       subsidiaryId: org.subsidiaryId,
-      employeePartyId: employeeId,
-      employmentId,
-      taxYear: 2026,
-      payDate: "2026-06-30",
-      excludeDocumentId: randomUUID(),
-    }), { remuneration: "1000.0000", smic: "900.0000", reduction: "300.0000" });
+      gross: "1000",
+      smic: "900",
+      reduction: "300",
+    });
+    await committed({
+      date: "2026-07-31",
+      subsidiaryId: org.subsidiaryId,
+      gross: "5000",
+      smic: "1700",
+      reduction: "900",
+    });
+    await committed({
+      date: "2026-05-30",
+      subsidiaryId: otherEmployerId,
+      gross: "700",
+      smic: "600",
+      reduction: "180",
+    });
+    await committed({
+      date: "2026-05-28",
+      subsidiaryId: org.subsidiaryId,
+      gross: "600",
+      smic: "500",
+      reduction: "150",
+      contractId: otherEmploymentId,
+    });
+    await committed({
+      date: "2026-05-29",
+      subsidiaryId: org.subsidiaryId,
+      gross: "800",
+      smic: "700",
+      reduction: "210",
+      country: "CA",
+    });
+
+    assert.deepEqual(
+      await committedFrRgduYearToDate({
+        tx: db,
+        orgId: org.orgId,
+        subsidiaryId: org.subsidiaryId,
+        employeePartyId: employeeId,
+        employmentId,
+        taxYear: 2026,
+        payDate: "2026-06-30",
+        excludeDocumentId: randomUUID(),
+      }),
+      { remuneration: "1000.0000", smic: "900.0000", reduction: "300.0000" },
+    );
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }

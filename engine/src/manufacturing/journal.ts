@@ -59,8 +59,7 @@ export interface ManufacturingPeriodPoolEvidence {
 }
 
 export type ManufacturingEvidence =
-  | ManufacturingWorkOrderEvidence
-  | ManufacturingPeriodPoolEvidence;
+  ManufacturingWorkOrderEvidence | ManufacturingPeriodPoolEvidence;
 
 /** Stored scope marker for period-pool settlement postings. */
 const PERIOD_POOL_SCOPE_KEY = "settlement_scope";
@@ -149,20 +148,38 @@ export async function manufacturingControlAccount(
   const accountId = mappings[role];
   if (!accountId) {
     throw new ManufacturingError(`The Manufacturing control account role ${role} is not mapped.`, {
-      code: meta.missingCode, remedy,
+      code: meta.missingCode,
+      remedy,
     });
   }
 
-  const account = (await tx.execute<{
-    id: string; type: string; is_active: boolean; is_summary: boolean;
-  }>(sql`
+  const account = (
+    await tx.execute<{
+      id: string;
+      type: string;
+      is_active: boolean;
+      is_summary: boolean;
+    }>(
+      sql`
     select id, type, is_active, is_summary from accounts
-     where org_id=${orgId} and id=${accountId} for share`, "objects"))[0];
+     where org_id=${orgId} and id=${accountId} for share`,
+      "objects",
+    )
+  )[0];
   const allowedTypes: readonly string[] = CONTROL_ACCOUNT_TYPE_POLICY[role];
-  if (!account || !account.is_active || account.is_summary || !allowedTypes.includes(account.type)) {
-    throw new ManufacturingError(`The Manufacturing control account role ${role} is not mapped to an active posting account.`, {
-      code: meta.invalidCode, remedy,
-    });
+  if (
+    !account ||
+    !account.is_active ||
+    account.is_summary ||
+    !allowedTypes.includes(account.type)
+  ) {
+    throw new ManufacturingError(
+      `The Manufacturing control account role ${role} is not mapped to an active posting account.`,
+      {
+        code: meta.invalidCode,
+        remedy,
+      },
+    );
   }
   await assertInventoryAccountsPostable(tx as Runner, orgId, [account.id]);
   return account.id;
@@ -203,7 +220,13 @@ export async function postManufacturingEntry(
       );
     }
   }
-  const { workOrderNumber, bomRevision, routingVersion, scope: _declaredScope, ...otherEvidence } = inputEvidence;
+  const {
+    workOrderNumber,
+    bomRevision,
+    routingVersion,
+    scope: _declaredScope,
+    ...otherEvidence
+  } = inputEvidence;
   void _declaredScope;
   return postInventoryEntry(tx, {
     ...p,

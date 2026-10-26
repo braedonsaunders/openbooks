@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../../testing/stub-modules";
+import test from "node:test";
 
 /**
  * GET year-end/amendments/artifact?id= — the submission id is a UUID column.
@@ -9,16 +9,18 @@ import test from 'node:test'
  * accepted (36 hex digits, 36 dashes). Shape refusals stay 422 and never
  * reach the database — the same class as the year-end year window.
  */
-const stateKey = Symbol.for('openbooks.payroll-year-end-artifact-test')
-interface RouteState { dbCalls: number }
-const state: RouteState = { dbCalls: 0 }
-;(globalThis as Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.payroll-year-end-artifact-test");
+interface RouteState {
+  dbCalls: number;
+}
+const state: RouteState = { dbCalls: 0 };
+(globalThis as Record<symbol, unknown>)[stateKey] = state;
 
 const featureGateSource = `
   export async function guardFeaturePermission() {
     return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
   }
-`
+`;
 
 stubModules({
   navigation: false,
@@ -31,7 +33,7 @@ stubModules({
       export async function guardPayrollFilingData() { return null }
     `,
     "@openbooks/engine/platform/db": `
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
+      export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
       const state = globalThis[Symbol.for('openbooks.payroll-year-end-artifact-test')]
       export const db = {
         execute() {
@@ -52,44 +54,44 @@ stubModules({
       export async function orgYearEndFilings() { return [] }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?payroll-year-end-artifact-test'
-const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?payroll-year-end-artifact-test";
+const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function get(query: string): Promise<Response> {
-  return GET(new Request(`http://openbooks.test/api/payroll/year-end/amendments/artifact${query}`))
+  return GET(new Request(`http://openbooks.test/api/payroll/year-end/amendments/artifact${query}`));
 }
 
-test('a 36-character hex blob is refused as a malformed id before PostgreSQL', async () => {
+test("a 36-character hex blob is refused as a malformed id before PostgreSQL", async () => {
   // 36 hex digits — length-and-charset match the old guard, not a UUID.
-  const id = '0123456789abcdef0123456789abcdef0123'
-  assert.equal(id.length, 36)
-  state.dbCalls = 0
-  const response = await get(`?id=${id}`)
-  assert.equal(response.status, 422, await response.clone().text())
-  const error = (await response.json() as { error: string }).error
-  assert.match(error, /UUID/)
-  assert.match(error, /0123456789abcdef0123456789abcdef0123/)
-  assert.equal(state.dbCalls, 0, 'a shape refusal must not bind the id as uuid')
-})
+  const id = "0123456789abcdef0123456789abcdef0123";
+  assert.equal(id.length, 36);
+  state.dbCalls = 0;
+  const response = await get(`?id=${id}`);
+  assert.equal(response.status, 422, await response.clone().text());
+  const error = ((await response.json()) as { error: string }).error;
+  assert.match(error, /UUID/);
+  assert.match(error, /0123456789abcdef0123456789abcdef0123/);
+  assert.equal(state.dbCalls, 0, "a shape refusal must not bind the id as uuid");
+});
 
-test('36 dashes are refused as a malformed id, not as a missing id', async () => {
-  const id = '-'.repeat(36)
-  state.dbCalls = 0
-  const response = await get(`?id=${encodeURIComponent(id)}`)
-  assert.equal(response.status, 422, await response.clone().text())
-  const error = (await response.json() as { error: string }).error
-  assert.match(error, /UUID/)
-  assert.match(error, /------------------------------------/)
-  assert.doesNotMatch(error, /required/)
-  assert.equal(state.dbCalls, 0)
-})
+test("36 dashes are refused as a malformed id, not as a missing id", async () => {
+  const id = "-".repeat(36);
+  state.dbCalls = 0;
+  const response = await get(`?id=${encodeURIComponent(id)}`);
+  assert.equal(response.status, 422, await response.clone().text());
+  const error = ((await response.json()) as { error: string }).error;
+  assert.match(error, /UUID/);
+  assert.match(error, /------------------------------------/);
+  assert.doesNotMatch(error, /required/);
+  assert.equal(state.dbCalls, 0);
+});
 
-test('an absent id names that it is required, and never reaches the database', async () => {
-  state.dbCalls = 0
-  const response = await get('')
-  assert.equal(response.status, 422)
-  assert.match((await response.json() as { error: string }).error, /required/)
-  assert.equal(state.dbCalls, 0)
-})
+test("an absent id names that it is required, and never reaches the database", async () => {
+  state.dbCalls = 0;
+  const response = await get("");
+  assert.equal(response.status, 422);
+  assert.match(((await response.json()) as { error: string }).error, /required/);
+  assert.equal(state.dbCalls, 0);
+});

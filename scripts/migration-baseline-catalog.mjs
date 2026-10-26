@@ -14,9 +14,15 @@ export const BASELINE_REGISTRIES = Object.freeze({
 
 /** Installation migration evidence. It records how one database reached its
  * schema and is never application schema, dump content or catalog evidence. */
-export const MIGRATION_LEDGER_TABLES = Object.freeze(["_applied_migrations", "_applied_migration_baselines", "_migration_execution_corrections"]);
+export const MIGRATION_LEDGER_TABLES = Object.freeze([
+  "_applied_migrations",
+  "_applied_migration_baselines",
+  "_migration_execution_corrections",
+]);
 const ledgerNames = MIGRATION_LEDGER_TABLES.map((name) => `'${name}'`).join(",");
-const ledgerOids = MIGRATION_LEDGER_TABLES.map((name) => `coalesce(to_regclass('public.${name}'),0::oid)`).join(",");
+const ledgerOids = MIGRATION_LEDGER_TABLES.map(
+  (name) => `coalesce(to_regclass('public.${name}'),0::oid)`,
+).join(",");
 
 export const baselineDigest = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -120,41 +126,74 @@ export async function baselineCatalog(client) {
   const catalog = {};
   await client.query("set search_path = public, pg_catalog");
   await client.query("set timezone = 'UTC'");
-  for (const [section, query] of Object.entries(queries)) catalog[section] = (await client.query(query)).rows;
+  for (const [section, query] of Object.entries(queries))
+    catalog[section] = (await client.query(query)).rows;
   for (const [table, columns] of Object.entries(BASELINE_REGISTRIES)) {
-    catalog[table] = (await client.query(`select ${columns.join(",")} from public.${table} order by ${columns[0]}`)).rows;
+    catalog[table] = (
+      await client.query(`select ${columns.join(",")} from public.${table} order by ${columns[0]}`)
+    ).rows;
   }
   return catalog;
 }
 
 export function assertBaselineCatalogsEqual(expected, actual) {
   const sections = new Set([...Object.keys(expected), ...Object.keys(actual)]);
-  const optionalUnavailable = expected.extensions?.some((row) => row.name === "pg_trgm")
-    && !actual.extensions?.some((row) => row.name === "pg_trgm");
-  const cryptoUuidEquivalent = expected.extensions?.some((row) => row.name === "pgcrypto")
-    && actual.extensions?.some((row) => row.name === "pgcrypto");
+  const optionalUnavailable =
+    expected.extensions?.some((row) => row.name === "pg_trgm") &&
+    !actual.extensions?.some((row) => row.name === "pg_trgm");
+  const cryptoUuidEquivalent =
+    expected.extensions?.some((row) => row.name === "pgcrypto") &&
+    actual.extensions?.some((row) => row.name === "pgcrypto");
   for (const section of sections) {
-    const comparable = (rows) => section === "relations"
-      ? rows?.map((row) => normalizeGeneratedQueryView(row, expected.openbooks_query_catalog_relations ?? []))
-      : section === "columns" && cryptoUuidEquivalent
-        // PostgreSQL's built-in and pgcrypto UUID generators both produce v4
-        // UUIDs. Their qualification differs with the creating search path.
-        ? rows?.map((row) => row.type === "uuid" && /^(?:pg_catalog\.)?gen_random_uuid\(\)$/.test(row.default ?? "")
-          ? { ...row, default: "gen_random_uuid()" } : row)
-      : section === "schema_acl"
-        ? rows?.filter((row) => !(row.grantee === "openbooks_read" && row.privilege_type === "USAGE" && !row.is_grantable
-          && rows.some((grant) => grant.schema === row.schema && grant.grantee === "PUBLIC" && grant.privilege_type === "USAGE")))
-      : section === "extensions" && optionalUnavailable
-      ? rows?.filter((row) => row.name !== "pg_trgm")
-      : section === "indexes" && optionalUnavailable
-        ? rows?.filter((row) => !/\b(?:gin|gist)_trgm_ops\b/.test(row.definition)) : rows;
-    const ordered = (rows) => ["schema_acl", "function_acl", "acl"].includes(section)
-      ? rows?.toSorted((left, right) => {
-        const a = JSON.stringify(left), b = JSON.stringify(right);
-        return a < b ? -1 : a > b ? 1 : 0;
-      }) : rows;
-    if (JSON.stringify(ordered(comparable(expected[section]))) !== JSON.stringify(ordered(comparable(actual[section])))) {
-      throw new Error(`baseline catalog differs in ${section}; inspect the replay and fresh catalog evidence before cutting the release`);
+    const comparable = (rows) =>
+      section === "relations"
+        ? rows?.map((row) =>
+            normalizeGeneratedQueryView(row, expected.openbooks_query_catalog_relations ?? []),
+          )
+        : section === "columns" && cryptoUuidEquivalent
+          ? // PostgreSQL's built-in and pgcrypto UUID generators both produce v4
+            // UUIDs. Their qualification differs with the creating search path.
+            rows?.map((row) =>
+              row.type === "uuid" &&
+              /^(?:pg_catalog\.)?gen_random_uuid\(\)$/.test(row.default ?? "")
+                ? { ...row, default: "gen_random_uuid()" }
+                : row,
+            )
+          : section === "schema_acl"
+            ? rows?.filter(
+                (row) =>
+                  !(
+                    row.grantee === "openbooks_read" &&
+                    row.privilege_type === "USAGE" &&
+                    !row.is_grantable &&
+                    rows.some(
+                      (grant) =>
+                        grant.schema === row.schema &&
+                        grant.grantee === "PUBLIC" &&
+                        grant.privilege_type === "USAGE",
+                    )
+                  ),
+              )
+            : section === "extensions" && optionalUnavailable
+              ? rows?.filter((row) => row.name !== "pg_trgm")
+              : section === "indexes" && optionalUnavailable
+                ? rows?.filter((row) => !/\b(?:gin|gist)_trgm_ops\b/.test(row.definition))
+                : rows;
+    const ordered = (rows) =>
+      ["schema_acl", "function_acl", "acl"].includes(section)
+        ? rows?.toSorted((left, right) => {
+            const a = JSON.stringify(left),
+              b = JSON.stringify(right);
+            return a < b ? -1 : a > b ? 1 : 0;
+          })
+        : rows;
+    if (
+      JSON.stringify(ordered(comparable(expected[section]))) !==
+      JSON.stringify(ordered(comparable(actual[section])))
+    ) {
+      throw new Error(
+        `baseline catalog differs in ${section}; inspect the replay and fresh catalog evidence before cutting the release`,
+      );
     }
   }
 }
@@ -166,7 +205,8 @@ export function assertBaselineCatalogsEqual(expected, actual) {
  * read role are release schema.
  */
 export async function catalogPrivilegeSql(client) {
-  const rows = (await client.query(`with current_acl as (
+  const rows = (
+    await client.query(`with current_acl as (
       select p.oid, a.grantee, a.privilege_type from pg_proc p join pg_namespace n on n.oid=p.pronamespace
       cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
       where n.nspname='pg_catalog' and a.grantee <> p.proowner),
@@ -180,33 +220,62 @@ export async function catalogPrivilegeSql(client) {
       union all select 'GRANT', * from (select * from current_acl except select * from initial_acl) granted)
     select c.action, c.privilege_type, format('pg_catalog.%I(%s)', p.proname, pg_get_function_identity_arguments(p.oid)) as function,
       case when c.grantee=0 then 'PUBLIC' else pg_get_userbyid(c.grantee) end as grantee
-    from changes c join pg_proc p on p.oid=c.oid order by 3,1,4,2`)).rows;
-  return rows.map((row) => {
-    if (row.grantee !== "PUBLIC" && row.grantee !== "openbooks_read") throw new Error(`system function privilege for installation login ${row.grantee} cannot enter a release baseline: ${row.function}`);
-    return row.action === "REVOKE"
-      ? `REVOKE ${row.privilege_type} ON FUNCTION ${row.function} FROM ${row.grantee};`
-      : `GRANT ${row.privilege_type} ON FUNCTION ${row.function} TO ${row.grantee};`;
-  }).join("\n");
+    from changes c join pg_proc p on p.oid=c.oid order by 3,1,4,2`)
+  ).rows;
+  return rows
+    .map((row) => {
+      if (row.grantee !== "PUBLIC" && row.grantee !== "openbooks_read")
+        throw new Error(
+          `system function privilege for installation login ${row.grantee} cannot enter a release baseline: ${row.function}`,
+        );
+      return row.action === "REVOKE"
+        ? `REVOKE ${row.privilege_type} ON FUNCTION ${row.function} FROM ${row.grantee};`
+        : `GRANT ${row.privilege_type} ON FUNCTION ${row.function} TO ${row.grantee};`;
+    })
+    .join("\n");
 }
 
 export function baselineRegistrySql(catalog) {
   const quote = (text) => `'${text.replaceAll("'", "''")}'`;
   const literal = (value) => {
     if (value === null || value === undefined) return "NULL";
-    if (Array.isArray(value)) return quote(`{${value.map((item) => `"${String(item).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`).join(",")}}`);
+    if (Array.isArray(value))
+      return quote(
+        `{${value.map((item) => `"${String(item).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`).join(",")}}`,
+      );
     return quote(String(value));
   };
-  return Object.entries(BASELINE_REGISTRIES).map(([table, columns]) => {
-    if (!catalog[table]?.length) throw new Error(`baseline system registry is empty: ${table}`);
-    return `INSERT INTO public.${table} (${columns.join(", ")}) VALUES\n`
-      + catalog[table].map((row) => `  (${columns.map((column) => literal(row[column])).join(", ")})`).join(",\n") + ";\n";
-  }).join("\n");
+  return Object.entries(BASELINE_REGISTRIES)
+    .map(([table, columns]) => {
+      if (!catalog[table]?.length) throw new Error(`baseline system registry is empty: ${table}`);
+      return (
+        `INSERT INTO public.${table} (${columns.join(", ")}) VALUES\n` +
+        catalog[table]
+          .map((row) => `  (${columns.map((column) => literal(row[column])).join(", ")})`)
+          .join(",\n") +
+        ";\n"
+      );
+    })
+    .join("\n");
 }
 
 /** Generic query projections depend on physical column order, not financial meaning. */
 export function normalizeGeneratedQueryView(row, registry) {
-  if (row.schema !== "openbooks_query" || row.kind !== "v" || !registry.some((entry) => entry.relation === row.name)) return row;
-  const match = /^ SELECT ([a-z_][a-z0-9_]*(?:,\n    [a-z_][a-z0-9_]*)*)\n(   FROM [\s\S]+)$/.exec(row.view ?? "");
+  if (
+    row.schema !== "openbooks_query" ||
+    row.kind !== "v" ||
+    !registry.some((entry) => entry.relation === row.name)
+  )
+    return row;
+  const match = /^ SELECT ([a-z_][a-z0-9_]*(?:,\n    [a-z_][a-z0-9_]*)*)\n(   FROM [\s\S]+)$/.exec(
+    row.view ?? "",
+  );
   if (!match) return row;
-  return { ...row, view: ` SELECT ${match[1].split(/,\n    /).sort().join(",\n    ")}\n${match[2]}` };
+  return {
+    ...row,
+    view: ` SELECT ${match[1]
+      .split(/,\n    /)
+      .sort()
+      .join(",\n    ")}\n${match[2]}`,
+  };
 }

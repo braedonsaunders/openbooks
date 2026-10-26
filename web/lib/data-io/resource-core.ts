@@ -5,14 +5,13 @@
  * shared export row cap.
  */
 
-
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { featureEnabled, resolvedFeatureState } from '../features'
-import { loadNumberSequenceKindOptions } from '../setup/number-sequence-kinds'
-import { SETUP_ENTITY_BY_KEY, toSnake } from '../setup/registry'
-import { coerceBoolean, idColumn } from '../setup/coerce'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { featureEnabled, resolvedFeatureState } from "../features";
+import { loadNumberSequenceKindOptions } from "../setup/number-sequence-kinds";
+import { SETUP_ENTITY_BY_KEY, toSnake } from "../setup/registry";
+import { coerceBoolean, idColumn } from "../setup/coerce";
 import {
   type CellValue,
   type ImportMode,
@@ -20,21 +19,21 @@ import {
   type ResourceField,
   type ResourceRefTarget,
   type WriteOutcome,
-} from './types'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
-import type { CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
+} from "./types";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import type { CustomFieldViewer } from "@openbooks/engine/records/custom-fields";
 
 /**
  * Shared export cap, error, and gate live in the dependency-free
  * ./export-cap so unit doubles can re-export the real implementation
  * instead of copying it. Re-exported here to preserve existing imports.
  */
-export { enforceExportRowLimit, ExportRowLimitError, MAX_EXPORT_ROWS } from './export-cap'
+export { enforceExportRowLimit, ExportRowLimitError, MAX_EXPORT_ROWS } from "./export-cap";
 export interface ReadResult {
-  fields: ResourceField[]
+  fields: ResourceField[];
   /** Ordered export columns (may include keys not in `fields`, e.g. record_number). */
-  columns: { key: string; label: string }[]
-  rows: Record<string, CellValue>[]
+  columns: { key: string; label: string }[];
+  rows: Record<string, CellValue>[];
 }
 
 /**
@@ -45,39 +44,41 @@ export interface ReadResult {
  */
 export interface ReadCtx {
   /** Worker-only bounded read; the cursor is advanced before visibility post-filters. */
-  page?: import('./export-page').ExportPage
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  page?: import("./export-page").ExportPage;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /**
    * Acting user, threaded by the export route. Existing resources ignore it;
    * new actor-bound reads require it and fail closed when it is absent.
    */
-  actorId?: string
+  actorId?: string;
   /** Audience for role-restricted custom fields; omitted callers fail closed. */
-  customFieldViewer?: CustomFieldViewer
+  customFieldViewer?: CustomFieldViewer;
 }
 
 export interface WriteCtx {
   /** Collect resolved uniqueness keys for whole-file duplicate validation. */
-  recordKeys?: (keys: readonly (string | null)[]) => Promise<void>
+  recordKeys?: (keys: readonly (string | null)[]) => Promise<void>;
   /** One value per grouping key must agree across every source batch. */
-  recordConstraints?: (values: readonly ({ key: string; value: string; label: string } | null)[]) => Promise<void>
-  orgId: string
-  actorId: string
+  recordConstraints?: (
+    values: readonly ({ key: string; value: string; label: string } | null)[],
+  ) => Promise<void>;
+  orgId: string;
+  actorId: string;
   /** The caller's effective grants, used by resources with entity-specific write permissions. */
-  permissions?: ReadonlySet<string>
+  permissions?: ReadonlySet<string>;
   /** Audience for role-restricted custom fields; omitted callers fail closed. */
-  customFieldViewer?: CustomFieldViewer
+  customFieldViewer?: CustomFieldViewer;
   /** Dry-run: validate + classify insert/update, but write nothing. */
-  dryRun: boolean
+  dryRun: boolean;
   /** Transactions only: post to the ledger after creating the draft. */
-  post?: boolean
+  post?: boolean;
   /**
    * The caller's role-derived subsidiary fence; null = organization-wide.
    * The import route always supplies it. Only resources whose descriptor
    * declares `scopedWrite` are reachable by a restricted caller, and they
    * must refuse every row outside this set.
    */
-  allowedSubsidiaryIds?: ReadonlySet<string> | null
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 /**
@@ -87,30 +88,33 @@ export interface WriteCtx {
  * evidence without an explicit upsert decision.
  */
 export function duplicateImportRowIndexes(keys: readonly (string | null)[]): Set<number> {
-  const rowsByKey = new Map<string, number[]>()
+  const rowsByKey = new Map<string, number[]>();
   keys.forEach((key, index) => {
-    if (key === null) return
-    const indexes = rowsByKey.get(key) ?? []
-    indexes.push(index)
-    rowsByKey.set(key, indexes)
-  })
-  return new Set([...rowsByKey.values()].filter((indexes) => indexes.length > 1).flat())
+    if (key === null) return;
+    const indexes = rowsByKey.get(key) ?? [];
+    indexes.push(index);
+    rowsByKey.set(key, indexes);
+  });
+  return new Set([...rowsByKey.values()].filter((indexes) => indexes.length > 1).flat());
 }
 
 /** One consistent preview/write decision for the resource contract's modes. */
-export function importRowAction(mode: ImportMode, exists: boolean): 'create' | 'update' | 'conflict' {
-  if (!exists) return 'create'
-  return mode === 'insert' ? 'conflict' : 'update'
+export function importRowAction(
+  mode: ImportMode,
+  exists: boolean,
+): "create" | "update" | "conflict" {
+  if (!exists) return "create";
+  return mode === "insert" ? "conflict" : "update";
 }
 
 export interface DataResource {
-  descriptor: ResourceDescriptor
+  descriptor: ResourceDescriptor;
   /** Import target fields (what a file column can map onto). */
-  fields(): Promise<ResourceField[]>
+  fields(): Promise<ResourceField[]>;
   /** Ordered export columns (cheap — no data query). */
-  columns(): Promise<{ key: string; label: string }[]>
-  read(ctx?: ReadCtx): Promise<ReadResult>
-  write(rows: Record<string, unknown>[], mode: ImportMode, ctx: WriteCtx): Promise<WriteOutcome>
+  columns(): Promise<{ key: string; label: string }[]>;
+  read(ctx?: ReadCtx): Promise<ReadResult>;
+  write(rows: Record<string, unknown>[], mode: ImportMode, ctx: WriteCtx): Promise<WriteOutcome>;
 }
 
 /**
@@ -118,7 +122,7 @@ export interface DataResource {
  * so unit-test doubles re-export the real implementation). Re-exported here
  * so every existing `from './resource-core'` import keeps working.
  */
-export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from './subsidiary-scope'
+export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from "./subsidiary-scope";
 
 // --- Reference resolution -----------------------------------------------------
 
@@ -134,89 +138,149 @@ export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from './subs
  * active role — never to a bare party id from another tenant.
  */
 const PARTY_ROLE_TABLE = new Map<string, string>([
-  ['customers', 'customer_roles'],
-  ['vendors', 'vendor_roles'],
-  ['employees', 'employee_roles'],
-])
+  ["customers", "customer_roles"],
+  ["vendors", "vendor_roles"],
+  ["employees", "employee_roles"],
+]);
 
 export class RefResolver {
-  private toId = new Map<string, string | null>()
-  private toLabel = new Map<string, string | null>()
-  private sequenceKinds: Promise<Set<string>> | null = null
+  private toId = new Map<string, string | null>();
+  private toLabel = new Map<string, string | null>();
+  private sequenceKinds: Promise<Set<string>> | null = null;
   constructor(private orgId: string) {}
 
-  private spec(target: ResourceRefTarget):
-    | { table: string; keyCol: string; idCol: string; orgScoped: boolean; labelExpr: string }
-    | null {
+  private spec(
+    target: ResourceRefTarget,
+  ): {
+    table: string;
+    keyCol: string;
+    idCol: string;
+    orgScoped: boolean;
+    labelExpr: string;
+  } | null {
     // Scoped currency pickers still store the shared ISO code. Resolve its
     // existence here; the setup writer enforces the employer's currency policy.
-    if (target.resource === 'benefit-currencies' || target.resource === 'compensation-currencies') {
-      return { table: 'currencies', keyCol: 'code', idCol: 'code', orgScoped: false, labelExpr: 'code' }
-    }
-    if (target.resource === 'accounts') {
-      return { table: 'accounts', keyCol: 'number', idCol: 'id', orgScoped: true, labelExpr: 'number' }
-    }
-    if (target.resource === 'parties') {
+    if (target.resource === "benefit-currencies" || target.resource === "compensation-currencies") {
       return {
-        table: 'parties',
-        keyCol: 'short_code',
-        idCol: 'id',
+        table: "currencies",
+        keyCol: "code",
+        idCol: "code",
+        orgScoped: false,
+        labelExpr: "code",
+      };
+    }
+    if (target.resource === "accounts") {
+      return {
+        table: "accounts",
+        keyCol: "number",
+        idCol: "id",
         orgScoped: true,
-        labelExpr: 'coalesce(short_code, display_name)',
-      }
+        labelExpr: "number",
+      };
+    }
+    if (target.resource === "parties") {
+      return {
+        table: "parties",
+        keyCol: "short_code",
+        idCol: "id",
+        orgScoped: true,
+        labelExpr: "coalesce(short_code, display_name)",
+      };
     }
     // Real tables without a setup-registry entry that setup `ref` fields
     // point at (assemblies reference items, billing references projects and
     // customers, entitlement scopes reference employees and trades). Without
     // these, natural keys are unresolvable and UUIDs pass through unchecked.
-    if (target.resource === 'items') {
+    if (target.resource === "items") {
       // Item codes are optional while names are required: code-then-name,
       // mirroring parties/locations, so codeless items export a portable
       // name instead of a UUID no other org can resolve.
-      return { table: 'items', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'coalesce(code, name)' }
+      return {
+        table: "items",
+        keyCol: "code",
+        idCol: "id",
+        orgScoped: true,
+        labelExpr: "coalesce(code, name)",
+      };
     }
-    if (target.resource === 'projects') {
-      return { table: 'projects', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'code' }
+    if (target.resource === "projects") {
+      return { table: "projects", keyCol: "code", idCol: "id", orgScoped: true, labelExpr: "code" };
     }
-    if (target.resource === 'worker-employments') {
+    if (target.resource === "worker-employments") {
       // A worker can have several employment episodes. Keep the explicit
       // episode identity; an employee name or number cannot select one.
-      return { table: 'worker_employments', keyCol: 'id', idCol: 'id', orgScoped: true, labelExpr: 'id' }
+      return {
+        table: "worker_employments",
+        keyCol: "id",
+        idCol: "id",
+        orgScoped: true,
+        labelExpr: "id",
+      };
     }
-    if (target.resource === 'trades') {
-      return { table: 'trades', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
+    if (target.resource === "trades") {
+      return { table: "trades", keyCol: "name", idCol: "id", orgScoped: true, labelExpr: "name" };
     }
-    if (target.resource === 'accounting-periods') {
-      return { table: 'accounting_periods', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
+    if (target.resource === "accounting-periods") {
+      return {
+        table: "accounting_periods",
+        keyCol: "name",
+        idCol: "id",
+        orgScoped: true,
+        labelExpr: "name",
+      };
     }
-    if (target.resource === 'subsidiaries') {
+    if (target.resource === "subsidiaries") {
       // Subsidiary names are unique per org (subsidiaries_org_name), so the
       // name is a deterministic natural key for transaction and setup
       // imports. UUID resolution is unaffected (it keys on idCol).
-      return { table: 'subsidiaries', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
+      return {
+        table: "subsidiaries",
+        keyCol: "name",
+        idCol: "id",
+        orgScoped: true,
+        labelExpr: "name",
+      };
     }
-    if (target.resource === 'sales-channels') {
+    if (target.resource === "sales-channels") {
       // Storefront connections are module records, not setup entities, but
       // channel-owned setup rows (account maps, locations) point at them —
       // so the channel name is the import vocabulary and a UUID resolves
       // only inside its owning tenant, like every arm above. Duplicate
       // names resolve to one row, as with parties.
-      return { table: 'sales_channels', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
+      return {
+        table: "sales_channels",
+        keyCol: "name",
+        idCol: "id",
+        orgScoped: true,
+        labelExpr: "name",
+      };
     }
-    if (target.resource === 'locations') {
+    if (target.resource === "locations") {
       // Location codes are optional while names are required, so the import
       // vocabulary is code-then-name (mirroring parties): exports render
       // coalesce(code, name) and resolution falls back to name below. A
       // codeless location would otherwise export a UUID no other org can
       // resolve, breaking fresh-org migration of every row pointing at it.
-      return { table: 'locations', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'coalesce(code, name)' }
+      return {
+        table: "locations",
+        keyCol: "code",
+        idCol: "id",
+        orgScoped: true,
+        labelExpr: "coalesce(code, name)",
+      };
     }
-    const entity = SETUP_ENTITY_BY_KEY.get(target.resource)
+    const entity = SETUP_ENTITY_BY_KEY.get(target.resource);
     if (entity) {
-      const keyCol = entity.naturalKey ? toSnake(entity.naturalKey) : idColumn(entity)
-      return { table: entity.table, keyCol, idCol: idColumn(entity), orgScoped: entity.orgScoped, labelExpr: keyCol }
+      const keyCol = entity.naturalKey ? toSnake(entity.naturalKey) : idColumn(entity);
+      return {
+        table: entity.table,
+        keyCol,
+        idCol: idColumn(entity),
+        orgScoped: entity.orgScoped,
+        labelExpr: keyCol,
+      };
     }
-    return null
+    return null;
   }
 
   /**
@@ -228,51 +292,57 @@ export class RefResolver {
   private loadSequenceKinds(): Promise<Set<string>> {
     this.sequenceKinds ??= loadNumberSequenceKindOptions(this.orgId).then(
       (options) => new Set(options.map((o) => o.value)),
-    )
-    return this.sequenceKinds
+    );
+    return this.sequenceKinds;
   }
 
   /** Natural key (or UUID) → the party carrying the matching active role. */
   private async resolveRolePartyId(roleTable: string, value: string): Promise<string | null> {
     if (isUuid(value)) {
-      const owned = await db.execute<{ id: string }>(sql`
+      const owned = await db.execute<{ id: string }>(
+        sql`
         select p.id from parties p
           join ${sql.raw(roleTable)} r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
-         where p.id = ${value} and p.org_id = ${this.orgId} limit 1`, 'objects')
-      return owned[0]?.id ?? null
+         where p.id = ${value} and p.org_id = ${this.orgId} limit 1`,
+        "objects",
+      );
+      return owned[0]?.id ?? null;
     }
     // Employees also answer to their payroll number; everyone answers to the
     // party code or display name.
     const employeeNumber =
-      roleTable === 'employee_roles' ? sql` or er.employee_number = ${value}` : sql``
-    const r = await db.execute<{ id: string }>(sql`
+      roleTable === "employee_roles" ? sql` or er.employee_number = ${value}` : sql``;
+    const r = await db.execute<{ id: string }>(
+      sql`
       select p.id from parties p
         join ${sql.raw(roleTable)} r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
         left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
        where p.org_id = ${this.orgId}
          and (p.short_code = ${value} or p.display_name = ${value}${employeeNumber})
-       limit 1`, 'objects')
-    return r[0]?.id ?? null
+       limit 1`,
+      "objects",
+    );
+    return r[0]?.id ?? null;
   }
 
   /** Natural key (or UUID) → the row's UUID. Returns null if not found. */
   async resolveId(target: ResourceRefTarget, human: unknown): Promise<string | null> {
-    const value = String(human ?? '').trim()
-    if (!value) return null
-    if (target.resource === 'worker-employments' && !isUuid(value)) return null
-    if (target.resource === 'number-sequence-kinds') {
-      if (isUuid(value)) return null
-      return (await this.loadSequenceKinds()).has(value) ? value : null
+    const value = String(human ?? "").trim();
+    if (!value) return null;
+    if (target.resource === "worker-employments" && !isUuid(value)) return null;
+    if (target.resource === "number-sequence-kinds") {
+      if (isUuid(value)) return null;
+      return (await this.loadSequenceKinds()).has(value) ? value : null;
     }
-    const roleTable = PARTY_ROLE_TABLE.get(target.resource)
+    const roleTable = PARTY_ROLE_TABLE.get(target.resource);
     if (roleTable) {
-      const cacheKey = `${target.resource}\0${value}`
-      if (this.toId.has(cacheKey)) return this.toId.get(cacheKey)!
-      const id = await this.resolveRolePartyId(roleTable, value)
-      this.toId.set(cacheKey, id)
-      return id
+      const cacheKey = `${target.resource}\0${value}`;
+      if (this.toId.has(cacheKey)) return this.toId.get(cacheKey)!;
+      const id = await this.resolveRolePartyId(roleTable, value);
+      this.toId.set(cacheKey, id);
+      return id;
     }
-    const spec = this.spec(target)
+    const spec = this.spec(target);
     if (isUuid(value)) {
       // A UUID is only meaningful inside its owning tenant: an org-scoped
       // target must exist in THIS org, otherwise a file carrying another
@@ -281,87 +351,102 @@ export class RefResolver {
       // unresolvable reference must fail closed, never persist blind. Global
       // targets (e.g. currencies) are shared, but the id must still exist:
       // the org predicate is omitted, never the lookup.
-      if (!spec) return null
-      const uuidCacheKey = `${target.resource}\0${value}`
-      if (this.toId.has(uuidCacheKey)) return this.toId.get(uuidCacheKey)!
-      const tenantFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``
-      const owned = await db.execute<{ id: string }>(sql`
+      if (!spec) return null;
+      const uuidCacheKey = `${target.resource}\0${value}`;
+      if (this.toId.has(uuidCacheKey)) return this.toId.get(uuidCacheKey)!;
+      const tenantFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``;
+      const owned = await db.execute<{ id: string }>(
+        sql`
         select ${sql.raw(spec.idCol)} as id from ${sql.raw(spec.table)}
-         where ${sql.raw(spec.idCol)} = ${value}${tenantFilter} limit 1`, 'objects')
-      const ownedId = owned[0]?.id ?? null
-      this.toId.set(uuidCacheKey, ownedId)
-      return ownedId
+         where ${sql.raw(spec.idCol)} = ${value}${tenantFilter} limit 1`,
+        "objects",
+      );
+      const ownedId = owned[0]?.id ?? null;
+      this.toId.set(uuidCacheKey, ownedId);
+      return ownedId;
     }
-    if (!spec) return null
-    const cacheKey = `${target.resource}\0${value}`
-    if (this.toId.has(cacheKey)) return this.toId.get(cacheKey)!
-    const orgFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``
+    if (!spec) return null;
+    const cacheKey = `${target.resource}\0${value}`;
+    if (this.toId.has(cacheKey)) return this.toId.get(cacheKey)!;
+    const orgFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``;
     let r = (await db.execute<{ id: string }>(sql`
       select ${sql.raw(spec.idCol)} as id from ${sql.raw(spec.table)}
-       where ${sql.raw(spec.keyCol)} = ${value}${orgFilter} limit 1`)) as { rows: { id: string }[] }
-    if (r.rows.length === 0 && target.resource === 'parties') {
+       where ${sql.raw(spec.keyCol)} = ${value}${orgFilter} limit 1`)) as {
+      rows: { id: string }[];
+    };
+    if (r.rows.length === 0 && target.resource === "parties") {
       r = (await db.execute(sql`
         select id from parties where display_name = ${value} and org_id = ${this.orgId} limit 1`)) as {
-        rows: { id: string }[]
-      }
+        rows: { id: string }[];
+      };
     }
     // Code-then-name, mirroring the coalesce(code, name) exports above: names
     // are only a fallback (duplicate names resolve to one row, as with
     // parties), never the primary identity.
-    if (r.rows.length === 0 && (target.resource === 'locations' || target.resource === 'items')) {
-      const fallbackTable = target.resource === 'locations' ? 'locations' : 'items'
+    if (r.rows.length === 0 && (target.resource === "locations" || target.resource === "items")) {
+      const fallbackTable = target.resource === "locations" ? "locations" : "items";
       r = (await db.execute(sql`
         select id from ${sql.raw(fallbackTable)} where name = ${value} and org_id = ${this.orgId} limit 1`)) as {
-        rows: { id: string }[]
-      }
+        rows: { id: string }[];
+      };
     }
-    const id = r.rows[0]?.id ?? null
-    this.toId.set(cacheKey, id)
-    return id
+    const id = r.rows[0]?.id ?? null;
+    this.toId.set(cacheKey, id);
+    return id;
   }
 
   /** UUID → the human natural key (for export). Falls back to the UUID. */
   async resolveLabel(target: ResourceRefTarget, id: unknown): Promise<string> {
-    const uuid = String(id ?? '').trim()
-    if (!uuid) return ''
+    const uuid = String(id ?? "").trim();
+    if (!uuid) return "";
     // A sequence-kind token is already its own label.
-    if (target.resource === 'number-sequence-kinds') return uuid
+    if (target.resource === "number-sequence-kinds") return uuid;
     // Role-filtered views label like the underlying party; ownership (not
     // role liveness) is the export boundary so historical rows keep names.
     const labelTarget = PARTY_ROLE_TABLE.has(target.resource)
-      ? { resource: 'parties', by: 'short_code' }
-      : target
-    const spec = this.spec(labelTarget)
-    if (!spec) return uuid
-    const cacheKey = `${target.resource}\0${uuid}`
-    if (this.toLabel.has(cacheKey)) return this.toLabel.get(cacheKey) ?? uuid
+      ? { resource: "parties", by: "short_code" }
+      : target;
+    const spec = this.spec(labelTarget);
+    if (!spec) return uuid;
+    const cacheKey = `${target.resource}\0${uuid}`;
+    if (this.toLabel.has(cacheKey)) return this.toLabel.get(cacheKey) ?? uuid;
     // Labels are tenant data too: never render another org's natural key into
     // this org's export. A foreign or deleted id falls back to the UUID.
-    const labelOrgFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``
-    const r = await db.execute<{ label: string | null }>(sql`
+    const labelOrgFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``;
+    const r = await db.execute<{ label: string | null }>(
+      sql`
       select ${sql.raw(spec.labelExpr)} as label from ${sql.raw(spec.table)}
-       where ${sql.raw(spec.idCol)} = ${uuid}${labelOrgFilter} limit 1`, 'objects')
-    const label = r[0]?.label ?? null
-    this.toLabel.set(cacheKey, label)
-    return label ?? uuid
+       where ${sql.raw(spec.idCol)} = ${uuid}${labelOrgFilter} limit 1`,
+      "objects",
+    );
+    const label = r[0]?.label ?? null;
+    this.toLabel.set(cacheKey, label);
+    return label ?? uuid;
   }
 }
 
 /** Format one stored value for export, resolving references to natural keys. */
-export async function exportCell(field: ResourceField, v: unknown, resolver: RefResolver): Promise<CellValue> {
-  if (v === null || v === undefined) return null
-  if (field.kind === 'currency') {
-    if (typeof v !== 'string') throw new Error(`${field.label}: stored currency is not an exact decimal string and cannot be exported without changing its value`)
-    return v
+export async function exportCell(
+  field: ResourceField,
+  v: unknown,
+  resolver: RefResolver,
+): Promise<CellValue> {
+  if (v === null || v === undefined) return null;
+  if (field.kind === "currency") {
+    if (typeof v !== "string")
+      throw new Error(
+        `${field.label}: stored currency is not an exact decimal string and cannot be exported without changing its value`,
+      );
+    return v;
   }
-  if (field.kind === 'reference' && field.ref) return resolver.resolveLabel(field.ref, v)
-  if (field.kind === 'boolean') return coerceBoolean(v)
-  if (field.kind === 'multiselect') return Array.isArray(v) ? v.join(', ') : String(v)
-  if (typeof v === 'object') return JSON.stringify(v)
-  if (typeof v === 'number' || typeof v === 'boolean') return v
-  return String(v)
+  if (field.kind === "reference" && field.ref) return resolver.resolveLabel(field.ref, v);
+  if (field.kind === "boolean") return coerceBoolean(v);
+  if (field.kind === "multiselect") return Array.isArray(v) ? v.join(", ") : String(v);
+  if (typeof v === "object") return JSON.stringify(v);
+  if (typeof v === "number" || typeof v === "boolean") return v;
+  return String(v);
 }
 /** One org-level feature gate, read from the Company Settings switchboard. */
 export async function orgFeatureEnabled(orgId: string, featureKey: string): Promise<boolean> {
-  return featureEnabled(await resolvedFeatureState(orgId), featureKey)
+  return featureEnabled(await resolvedFeatureState(orgId), featureKey);
 }

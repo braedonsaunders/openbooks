@@ -1,22 +1,15 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { ApprovalActions } from '@/components/approval-actions'
-import { useRouter } from 'next/navigation'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import {
-  Button,
-  Input,
-  Label,
-  Select,
-  SearchSelect,
-  Textarea,
-} from '@openbooks/ui'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
-import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
-import { useAppAction } from '@/lib/use-app-action'
-import { useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
-import { DateField } from '@/components/date-field'
+import { useState } from "react";
+import { ApprovalActions } from "@/components/approval-actions";
+import { useRouter } from "next/navigation";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { Button, Input, Label, Select, SearchSelect, Textarea } from "@openbooks/ui";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { decimalNullRefusal } from "../../../../lib/payroll-decimal-refusal";
+import { useAppAction } from "@/lib/use-app-action";
+import { useDirtyUrlDrawer } from "@/components/dirty-url-drawer";
+import { DateField } from "@/components/date-field";
 
 /**
  * Compensation client islands — one drawer/dialog per mutation, each
@@ -28,9 +21,9 @@ import { DateField } from '@/components/date-field'
  */
 
 export interface CompLabels {
-  failed: string
-  submit: string
-  cancel: string
+  failed: string;
+  submit: string;
+  cancel: string;
 }
 
 export function CycleCreateForm({
@@ -51,109 +44,95 @@ export function CycleCreateForm({
   effectiveLabel,
   currencyLabel,
 }: {
-  labels: CompLabels
-  defaultCurrency: string
-  currencyOptions: { value: string; label: string; scopeValue: string | null }[]
-  employerOptions: { value: string; label: string }[]
-  defaultEmployer: string
-  canSelectOrgWide: boolean
-  orgWideLabel: string
-  employerLabel: string
-  currencyUnavailable: string
-  guidelineLabel: string
-  guidelineHelp: string
-  kinds: { value: string; label: string }[]
-  kindLabel: string
-  nameLabel: string
-  effectiveLabel: string
-  currencyLabel: string
+  labels: CompLabels;
+  defaultCurrency: string;
+  currencyOptions: { value: string; label: string; scopeValue: string | null }[];
+  employerOptions: { value: string; label: string }[];
+  defaultEmployer: string;
+  canSelectOrgWide: boolean;
+  orgWideLabel: string;
+  employerLabel: string;
+  currencyUnavailable: string;
+  guidelineLabel: string;
+  guidelineHelp: string;
+  kinds: { value: string; label: string }[];
+  kindLabel: string;
+  nameLabel: string;
+  effectiveLabel: string;
+  currencyLabel: string;
 }) {
-  const router = useRouter()
-  const [name, setName] = useState('')
-  const [kind, setKind] = useState(kinds[0]?.value ?? 'merit')
-  const [effectiveOn, setEffectiveOn] = useState('')
-  const [employer, setEmployer] = useState(defaultEmployer)
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState(kinds[0]?.value ?? "merit");
+  const [effectiveOn, setEffectiveOn] = useState("");
+  const [employer, setEmployer] = useState(defaultEmployer);
   const availableCurrencies = (entity: string) =>
-    currencyOptions.filter(
-      (option) => option.scopeValue === null || option.scopeValue === entity,
-    )
-  const initialOptions = availableCurrencies(defaultEmployer)
-  const initialCurrency = initialOptions.some(
-    (option) => option.value === defaultCurrency,
-  )
+    currencyOptions.filter((option) => option.scopeValue === null || option.scopeValue === entity);
+  const initialOptions = availableCurrencies(defaultEmployer);
+  const initialCurrency = initialOptions.some((option) => option.value === defaultCurrency)
     ? defaultCurrency
     : initialOptions.length === 1
       ? initialOptions[0]!.value
-      : ''
-  const [currency, setCurrency] = useState(initialCurrency)
-  const [guidelinePercentage, setGuidelinePercentage] = useState('')
-  const enabledCurrencies = availableCurrencies(employer)
-  const [error, setError] = useState<string | null>(null)
+      : "";
+  const [currency, setCurrency] = useState(initialCurrency);
+  const [guidelinePercentage, setGuidelinePercentage] = useState("");
+  const enabledCurrencies = availableCurrencies(employer);
+  const [error, setError] = useState<string | null>(null);
   // Shared action path: the refusal pins and toasts through the hook, and
   // busy always releases — a dead network can never wedge the button.
-  const { busy, execute } = useAppAction()
+  const { busy, execute } = useAppAction();
   const close = useDirtyUrlDrawer(
-    name !== '' ||
-      kind !== (kinds[0]?.value ?? 'merit') ||
-      effectiveOn !== '' ||
+    name !== "" ||
+      kind !== (kinds[0]?.value ?? "merit") ||
+      effectiveOn !== "" ||
       currency !== initialCurrency ||
       employer !== defaultEmployer ||
-      guidelinePercentage !== '',
+      guidelinePercentage !== "",
     busy,
-  )
+  );
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
+    event.preventDefault();
+    setError(null);
     if (
       (!employer && !canSelectOrgWide) ||
       !enabledCurrencies.some((option) => option.value === currency)
     ) {
-      setError(currencyUnavailable)
-      return
+      setError(currencyUnavailable);
+      return;
     }
-    const percentage = canonicalDecimal(guidelinePercentage, 6)
+    const percentage = canonicalDecimal(guidelinePercentage, 6);
     if (percentage === null) {
-      setError(
-        decimalNullRefusal(
-          'guidelinePercentage',
-          guidelineLabel,
-          guidelinePercentage,
-          6,
-        ),
-      )
-      return
+      setError(decimalNullRefusal("guidelinePercentage", guidelineLabel, guidelinePercentage, 6));
+      return;
     }
     await execute(
       () =>
-        fetchAction<{ cycle?: { id?: unknown } }>('/api/hrm/comp-cycles', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+        fetchAction<{ cycle?: { id?: unknown } }>("/api/hrm/comp-cycles", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             name: name.trim(),
             kind,
             effectiveOn: effectiveOn || null,
             currency,
             scope: { employerSubsidiaryId: employer || null },
-            guidelineKind: 'formula',
+            guidelineKind: "formula",
             guideline: { expr: percentage },
           }),
         }),
       {
         fallbackMessage: labels.failed,
         onOk: (data) => {
-          const id = data.cycle?.id
+          const id = data.cycle?.id;
           router.push(
-            typeof id === 'string'
-              ? `/hrm/compensation/cycles/${id}`
-              : '/hrm/compensation',
-          )
-          router.refresh()
+            typeof id === "string" ? `/hrm/compensation/cycles/${id}` : "/hrm/compensation",
+          );
+          router.refresh();
         },
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
@@ -170,11 +149,7 @@ export function CycleCreateForm({
       </div>
       <div>
         <Label htmlFor="comp-cycle-kind">{kindLabel}</Label>
-        <Select
-          id="comp-cycle-kind"
-          value={kind}
-          onChange={(e) => setKind(e.target.value)}
-        >
+        <Select id="comp-cycle-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
           {kinds.map((k) => (
             <option key={k.value} value={k.value}>
               {k.label}
@@ -198,14 +173,14 @@ export function CycleCreateForm({
           value={employer}
           options={
             canSelectOrgWide
-              ? [{ value: '', label: orgWideLabel }, ...employerOptions]
+              ? [{ value: "", label: orgWideLabel }, ...employerOptions]
               : employerOptions
           }
           onChange={(value) => {
-            setEmployer(value)
-            const next = availableCurrencies(value)
+            setEmployer(value);
+            const next = availableCurrencies(value);
             if (!next.some((option) => option.value === currency))
-              setCurrency(next.length === 1 ? next[0]!.value : '')
+              setCurrency(next.length === 1 ? next[0]!.value : "");
           }}
           disabled={busy}
         />
@@ -220,9 +195,7 @@ export function CycleCreateForm({
           disabled={busy || enabledCurrencies.length === 0}
         />
         {enabledCurrencies.length === 0 ? (
-          <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
-            {currencyUnavailable}
-          </p>
+          <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">{currencyUnavailable}</p>
         ) : null}
       </div>
       <div>
@@ -247,12 +220,7 @@ export function CycleCreateForm({
       <div className="flex gap-2">
         <Button
           type="submit"
-          disabled={
-            busy ||
-            !currency ||
-            !guidelinePercentage ||
-            (!employer && !canSelectOrgWide)
-          }
+          disabled={busy || !currency || !guidelinePercentage || (!employer && !canSelectOrgWide)}
         >
           {labels.submit}
         </Button>
@@ -261,7 +229,7 @@ export function CycleCreateForm({
         </Button>
       </div>
     </form>
-  )
+  );
 }
 
 export function LineProposeForm({
@@ -274,70 +242,66 @@ export function LineProposeForm({
   pctInvalidLabel,
   closeHref,
 }: {
-  cycleId: string
-  lineId: string
-  labels: CompLabels
-  pctLabel: string
-  rateLabel: string
-  reasonLabel: string
+  cycleId: string;
+  lineId: string;
+  labels: CompLabels;
+  pctLabel: string;
+  rateLabel: string;
+  reasonLabel: string;
   /** Named refusal when the typed percent is not an exact decimal. */
-  pctInvalidLabel: string
-  closeHref: string
+  pctInvalidLabel: string;
+  closeHref: string;
 }) {
-  const router = useRouter()
-  const [mode, setMode] = useState<'pct' | 'rate'>('pct')
-  const [pct, setPct] = useState('')
-  const [rate, setRate] = useState('')
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
+  const router = useRouter();
+  const [mode, setMode] = useState<"pct" | "rate">("pct");
+  const [pct, setPct] = useState("");
+  const [rate, setRate] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
   const close = useDirtyUrlDrawer(
-    mode !== 'pct' || pct !== '' || rate !== '' || reason !== '',
+    mode !== "pct" || pct !== "" || rate !== "" || reason !== "",
     busy,
-  )
+  );
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
+    event.preventDefault();
+    setError(null);
     // The percent rides the exact decimal parser — Number('abc')
     // is NaN, which JSON serializes as null, so an unvalidated typo
     // arrives as an empty proposal. Refuse it here by name and send the
     // canonical decimal string; the route refuses the rest.
     const proposedPct =
-      mode === 'pct' && pct.trim() !== ''
+      mode === "pct" && pct.trim() !== ""
         ? (() => {
-            const canon = canonicalDecimal(pct.trim(), 6)
-            return canon === null || canon.startsWith('-') ? null : canon
+            const canon = canonicalDecimal(pct.trim(), 6);
+            return canon === null || canon.startsWith("-") ? null : canon;
           })()
-        : null
-    if (mode === 'pct' && pct.trim() !== '' && proposedPct === null) {
-      setError(pctInvalidLabel)
-      return
+        : null;
+    if (mode === "pct" && pct.trim() !== "" && proposedPct === null) {
+      setError(pctInvalidLabel);
+      return;
     }
     await execute(
       () =>
-        fetchAction(
-          `/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=propose`,
-          {
-            method: 'PATCH',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              proposedPct,
-              proposedRate: mode === 'rate' && rate !== '' ? rate.trim() : null,
-              reason: reason.trim() || null,
-            }),
-          },
-        ),
+        fetchAction(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=propose`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            proposedPct,
+            proposedRate: mode === "rate" && rate !== "" ? rate.trim() : null,
+            reason: reason.trim() || null,
+          }),
+        }),
       {
         fallbackMessage: labels.failed,
         onOk: () => {
-          router.push(closeHref)
-          router.refresh()
+          router.push(closeHref);
+          router.refresh();
         },
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
@@ -349,13 +313,13 @@ export function LineProposeForm({
         <Select
           id="comp-line-mode"
           value={mode}
-          onChange={(e) => setMode(e.target.value as 'pct' | 'rate')}
+          onChange={(e) => setMode(e.target.value as "pct" | "rate")}
         >
           <option value="pct">{pctLabel}</option>
           <option value="rate">{rateLabel}</option>
         </Select>
       </div>
-      {mode === 'pct' ? (
+      {mode === "pct" ? (
         <div>
           <Label htmlFor="comp-line-pct">{pctLabel}</Label>
           <Input
@@ -397,7 +361,7 @@ export function LineProposeForm({
         </Button>
       </div>
     </form>
-  )
+  );
 }
 
 export function LineDecideButtons({
@@ -407,36 +371,32 @@ export function LineDecideButtons({
   reasonLabel,
   reopenLabel,
 }: {
-  cycleId: string
-  lineId: string
-  labels: CompLabels
-  reasonLabel: string
-  reopenLabel: string
+  cycleId: string;
+  lineId: string;
+  labels: CompLabels;
+  reasonLabel: string;
+  reopenLabel: string;
 }) {
-  const router = useRouter()
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
+  const router = useRouter();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
 
-  async function act(action: 'reopen') {
-    setError(null)
+  async function act(action: "reopen") {
+    setError(null);
     await execute(
       () =>
-        fetchAction(
-          `/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=${action}`,
-          {
-            method: 'PATCH',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ reason: reason.trim() || null }),
-          },
-        ),
+        fetchAction(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=${action}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() || null }),
+        }),
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
@@ -455,22 +415,17 @@ export function LineDecideButtons({
         <ApprovalActions
           subjectKind="compensation_cycle_line"
           subjectId={lineId}
-          submissionStatuses={['proposed']}
+          submissionStatuses={["proposed"]}
           submitApprovalHref={`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=approve`}
           submitApprovalMethod="PATCH"
           submitApprovalBody={{ reason: reason.trim() || null }}
         />
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => act('reopen')}
-        >
+        <Button type="button" variant="outline" disabled={busy} onClick={() => act("reopen")}>
           {reopenLabel}
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 export function CycleMoveButtons({
@@ -484,46 +439,45 @@ export function CycleMoveButtons({
   cancelReasonLabel,
   cancelReasonRequired,
 }: {
-  cycleId: string
-  labels: CompLabels
-  openLabel: string
-  submitLabel: string
-  pushLabel: string
-  closeLabel: string
-  cancelLabel: string
-  cancelReasonLabel: string
-  cancelReasonRequired: string
+  cycleId: string;
+  labels: CompLabels;
+  openLabel: string;
+  submitLabel: string;
+  pushLabel: string;
+  closeLabel: string;
+  cancelLabel: string;
+  cancelReasonLabel: string;
+  cancelReasonRequired: string;
 }) {
-  const router = useRouter()
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
+  const router = useRouter();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
 
-  async function act(action: 'open' | 'submit' | 'push' | 'close' | 'cancel') {
-    setError(null)
+  async function act(action: "open" | "submit" | "push" | "close" | "cancel") {
+    setError(null);
     // Cancelling records the operator's own words as the audit reason —
     // never a hard-coded string, and never an empty one.
-    if (action === 'cancel' && reason.trim() === '') {
-      setError(cancelReasonRequired)
-      return
+    if (action === "cancel" && reason.trim() === "") {
+      setError(cancelReasonRequired);
+      return;
     }
     await execute(
       () =>
         fetchAction(`/api/hrm/comp-cycles/${cycleId}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action,
-            reason: action === 'cancel' ? reason.trim() : undefined,
+            reason: action === "cancel" ? reason.trim() : undefined,
           }),
         }),
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
@@ -539,44 +493,24 @@ export function CycleMoveButtons({
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => act('open')}
-        >
+        <Button type="button" variant="outline" disabled={busy} onClick={() => act("open")}>
           {openLabel}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => act('submit')}
-        >
+        <Button type="button" variant="outline" disabled={busy} onClick={() => act("submit")}>
           {submitLabel}
         </Button>
-        <Button type="button" disabled={busy} onClick={() => act('push')}>
+        <Button type="button" disabled={busy} onClick={() => act("push")}>
           {pushLabel}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => act('close')}
-        >
+        <Button type="button" variant="outline" disabled={busy} onClick={() => act("close")}>
           {closeLabel}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => act('cancel')}
-        >
+        <Button type="button" variant="outline" disabled={busy} onClick={() => act("cancel")}>
           {cancelLabel}
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 export function PlanCreateForm({
@@ -585,27 +519,27 @@ export function PlanCreateForm({
   fromLabel,
   toLabel,
 }: {
-  labels: CompLabels
-  nameLabel: string
-  fromLabel: string
-  toLabel: string
+  labels: CompLabels;
+  nameLabel: string;
+  fromLabel: string;
+  toLabel: string;
 }) {
-  const router = useRouter()
-  const [name, setName] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
-  const close = useDirtyUrlDrawer(name !== '' || from !== '' || to !== '', busy)
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
+  const close = useDirtyUrlDrawer(name !== "" || from !== "" || to !== "", busy);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
+    event.preventDefault();
+    setError(null);
     await execute(
       () =>
-        fetchAction<{ plan?: { id?: unknown } }>('/api/hrm/headcount-plans', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+        fetchAction<{ plan?: { id?: unknown } }>("/api/hrm/headcount-plans", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             name: name.trim(),
             fiscalPeriodFrom: from || null,
@@ -615,18 +549,15 @@ export function PlanCreateForm({
       {
         fallbackMessage: labels.failed,
         onOk: (data) => {
-          const id = data.plan?.id
+          const id = data.plan?.id;
           router.push(
-            typeof id === 'string'
-              ? `/hrm/compensation/plans/${id}`
-              : '/hrm/compensation',
-          )
-          router.refresh()
+            typeof id === "string" ? `/hrm/compensation/plans/${id}` : "/hrm/compensation",
+          );
+          router.refresh();
         },
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
@@ -643,21 +574,11 @@ export function PlanCreateForm({
       </div>
       <div>
         <Label htmlFor="comp-plan-from">{fromLabel}</Label>
-        <DateField
-          id="comp-plan-from"
-          value={from}
-          onChange={(value) => setFrom(value)}
-          required
-        />
+        <DateField id="comp-plan-from" value={from} onChange={(value) => setFrom(value)} required />
       </div>
       <div>
         <Label htmlFor="comp-plan-to">{toLabel}</Label>
-        <DateField
-          id="comp-plan-to"
-          value={to}
-          onChange={(value) => setTo(value)}
-          required
-        />
+        <DateField id="comp-plan-to" value={to} onChange={(value) => setTo(value)} required />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
@@ -669,7 +590,7 @@ export function PlanCreateForm({
         </Button>
       </div>
     </form>
-  )
+  );
 }
 
 export function PlanLineApproveButton({
@@ -677,20 +598,20 @@ export function PlanLineApproveButton({
   lineId,
   lineStatus,
 }: {
-  planId: string
-  lineId: string
-  lineStatus: string
+  planId: string;
+  lineId: string;
+  lineStatus: string;
 }) {
-  if (lineStatus !== 'proposed') return null
+  if (lineStatus !== "proposed") return null;
   return (
     <ApprovalActions
       subjectKind="headcount_plan_line"
       subjectId={lineId}
-      submissionStatuses={['proposed']}
+      submissionStatuses={["proposed"]}
       submitApprovalHref={`/api/hrm/headcount-plans/${planId}/lines/${lineId}`}
-      submitApprovalBody={{ action: 'approve' }}
+      submitApprovalBody={{ action: "approve" }}
     />
-  )
+  );
 }
 
 export function EquityGenerateForm({
@@ -700,31 +621,28 @@ export function EquityGenerateForm({
   groupBLabel,
   groupOptions,
 }: {
-  labels: CompLabels
-  asOfLabel: string
-  groupALabel: string
-  groupBLabel: string
-  groupOptions: { value: string; label: string }[]
+  labels: CompLabels;
+  asOfLabel: string;
+  groupALabel: string;
+  groupBLabel: string;
+  groupOptions: { value: string; label: string }[];
 }) {
-  const router = useRouter()
-  const [asOf, setAsOf] = useState('')
-  const [groupA, setGroupA] = useState('')
-  const [groupB, setGroupB] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
-  const close = useDirtyUrlDrawer(
-    asOf !== '' || groupA !== '' || groupB !== '',
-    busy,
-  )
+  const router = useRouter();
+  const [asOf, setAsOf] = useState("");
+  const [groupA, setGroupA] = useState("");
+  const [groupB, setGroupB] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
+  const close = useDirtyUrlDrawer(asOf !== "" || groupA !== "" || groupB !== "", busy);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
+    event.preventDefault();
+    setError(null);
     await execute(
       () =>
-        fetchAction('/api/hrm/pay-gap-snapshots', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+        fetchAction("/api/hrm/pay-gap-snapshots", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             asOf: asOf || null,
             groupA: groupA.trim(),
@@ -734,25 +652,19 @@ export function EquityGenerateForm({
       {
         fallbackMessage: labels.failed,
         onOk: () => {
-          router.push('/hrm/compensation/equity')
-          router.refresh()
+          router.push("/hrm/compensation/equity");
+          router.refresh();
         },
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="comp-gap-asof">{asOfLabel}</Label>
-        <DateField
-          id="comp-gap-asof"
-          value={asOf}
-          onChange={(value) => setAsOf(value)}
-          required
-        />
+        <DateField id="comp-gap-asof" value={asOf} onChange={(value) => setAsOf(value)} required />
       </div>
       <div>
         <Label htmlFor="comp-gap-a">{groupALabel}</Label>
@@ -776,10 +688,7 @@ export function EquityGenerateForm({
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
-        <Button
-          type="submit"
-          disabled={busy || !groupA || !groupB || groupA === groupB}
-        >
+        <Button type="submit" disabled={busy || !groupA || !groupB || groupA === groupB}>
           {labels.submit}
         </Button>
         <Button type="button" variant="outline" onClick={() => void close()}>
@@ -787,7 +696,7 @@ export function EquityGenerateForm({
         </Button>
       </div>
     </form>
-  )
+  );
 }
 
 export function PayInfoRequestButton({
@@ -795,30 +704,29 @@ export function PayInfoRequestButton({
   labels,
   requestLabel,
 }: {
-  employmentId: string
-  labels: CompLabels
-  requestLabel: string
+  employmentId: string;
+  labels: CompLabels;
+  requestLabel: string;
 }) {
-  const router = useRouter()
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
 
   async function request() {
-    setError(null)
+    setError(null);
     await execute(
       () =>
-        fetchAction('/api/hrm/pay-information-requests', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+        fetchAction("/api/hrm/pay-information-requests", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ employmentId }),
         }),
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
@@ -828,7 +736,7 @@ export function PayInfoRequestButton({
       </Button>
       {error ? <span className="text-sm text-red-600">{error}</span> : null}
     </div>
-  )
+  );
 }
 
 export function CompensationSettingsForm({
@@ -842,48 +750,43 @@ export function CompensationSettingsForm({
   roundingOptions,
   burdenLabel,
 }: {
-  labels: CompLabels
+  labels: CompLabels;
   initial: {
-    comparisonAttributeKey: string
-    gapThresholdPct: string
-    responseDays: string
-    fteRounding: string
-    burdenRate: string
-  }
-  attributeLabel: string
-  attributeOptions?: { value: string; label: string }[]
-  thresholdLabel: string
-  roundingOptions: { value: string; label: string }[]
-  responseDaysLabel: string
-  roundingLabel: string
-  burdenLabel: string
+    comparisonAttributeKey: string;
+    gapThresholdPct: string;
+    responseDays: string;
+    fteRounding: string;
+    burdenRate: string;
+  };
+  attributeLabel: string;
+  attributeOptions?: { value: string; label: string }[];
+  thresholdLabel: string;
+  roundingOptions: { value: string; label: string }[];
+  responseDaysLabel: string;
+  roundingLabel: string;
+  burdenLabel: string;
 }) {
-  const router = useRouter()
-  const [attributeKey, setAttributeKey] = useState(
-    initial.comparisonAttributeKey,
-  )
-  const [threshold, setThreshold] = useState(initial.gapThresholdPct)
-  const [responseDays, setResponseDays] = useState(initial.responseDays)
-  const [rounding, setRounding] = useState(initial.fteRounding)
-  const [burden, setBurden] = useState(initial.burdenRate)
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
+  const router = useRouter();
+  const [attributeKey, setAttributeKey] = useState(initial.comparisonAttributeKey);
+  const [threshold, setThreshold] = useState(initial.gapThresholdPct);
+  const [responseDays, setResponseDays] = useState(initial.responseDays);
+  const [rounding, setRounding] = useState(initial.fteRounding);
+  const [burden, setBurden] = useState(initial.burdenRate);
+  const [error, setError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
+    event.preventDefault();
+    setError(null);
     await execute(
       () =>
-        fetchAction('/api/hrm/compensation-settings', {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
+        fetchAction("/api/hrm/compensation-settings", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             comparisonAttributeKey: attributeKey.trim() || null,
-            gapThresholdPct: threshold.trim() === '' ? null : threshold.trim(),
-            responseDays:
-              responseDays.trim() === ''
-                ? null
-                : Number.parseInt(responseDays, 10),
+            gapThresholdPct: threshold.trim() === "" ? null : threshold.trim(),
+            responseDays: responseDays.trim() === "" ? null : Number.parseInt(responseDays, 10),
             fteRounding: rounding,
             burdenRate: burden.trim() || null,
           }),
@@ -891,10 +794,9 @@ export function CompensationSettingsForm({
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) =>
-          setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
       },
-    )
+    );
   }
 
   return (
@@ -958,5 +860,5 @@ export function CompensationSettingsForm({
         </Button>
       </div>
     </form>
-  )
+  );
 }

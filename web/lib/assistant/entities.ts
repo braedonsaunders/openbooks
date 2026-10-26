@@ -62,9 +62,7 @@ function documentEntity(value: unknown): AssistantDocumentEntity | null {
   if (!id || !kind || !KIND.test(kind) || !documentNumber) return null;
 
   const total =
-    typeof item.total === "number" || typeof item.total === "string"
-      ? item.total
-      : undefined;
+    typeof item.total === "number" || typeof item.total === "string" ? item.total : undefined;
   return {
     id,
     kind,
@@ -123,9 +121,7 @@ export function assistantEntitiesFromToolOutput(
     const items = Array.isArray(data.items) ? data.items : [];
     return {
       documents: [],
-      parties: items
-        .map(partyEntity)
-        .filter((item): item is AssistantPartyEntity => !!item),
+      parties: items.map(partyEntity).filter((item): item is AssistantPartyEntity => !!item),
     };
   }
   return { documents: [], parties: [] };

@@ -37,10 +37,7 @@ export const ambientBypassWithoutTransaction = () => false;`;
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (
-      specifier === "@openbooks/engine/platform/db" ||
-      specifier === "../platform/db.ts"
-    ) {
+    if (specifier === "@openbooks/engine/platform/db" || specifier === "../platform/db.ts") {
       return { shortCircuit: true, format: "module", url: "mock:platform-db" };
     }
     if (specifier === "../../../lib/authz") {
@@ -73,13 +70,12 @@ registerHooks({
   },
 });
 
-const { DecisionFailedError, GateError, ReleaseError, causeKindOf } = await import(
-  "@openbooks/engine/flows/module"
-);
+const { DecisionFailedError, GateError, ReleaseError, causeKindOf } =
+  await import("@openbooks/engine/flows/module");
 const { gateErrorResponse } = await import("./_lib.ts");
 
-async function bodyText(response: Response): Promise<Record<string,unknown>> {
-  return (await response.json()) as Record<string,unknown>;
+async function bodyText(response: Response): Promise<Record<string, unknown>> {
+  return (await response.json()) as Record<string, unknown>;
 }
 
 // An approver with no linked person is refused by name during release;
@@ -94,7 +90,7 @@ function releaseRefusal() {
 }
 
 test("a retryable decision refusal answers 422 with the remedy intact", async () => {
-  const response = (await gateErrorResponse(releaseRefusal()));
+  const response = await gateErrorResponse(releaseRefusal());
   assert.equal(response.status, 422);
   const body = await bodyText(response);
   assert.match(String(body.error), /no linked person/);
@@ -104,19 +100,19 @@ test("a retryable decision refusal answers 422 with the remedy intact", async ()
 });
 
 test("every DecisionFailedError sibling maps by retryability, never blanket 500", async () => {
-  const retryable = (await gateErrorResponse(
+  const retryable = await gateErrorResponse(
     new DecisionFailedError({ decision: "rejected", stage: "branch", cause: "gate branch failed" }),
-  ));
+  );
   assert.equal(retryable.status, 422);
   // A programming defect in the decide path stays a 500.
-  const defect = (await gateErrorResponse(
+  const defect = await gateErrorResponse(
     new DecisionFailedError({
       decision: "approved",
       stage: "release",
       cause: "cannot read property of undefined",
       retryable: false,
     }),
-  ));
+  );
   assert.equal(defect.status, 500);
   assert.match(String((await bodyText(defect)).error), /cannot read property/);
 });
@@ -126,7 +122,11 @@ test("the cause kind is classified, never regexed from the message", () => {
   // SQLSTATEs, serialization failures and deadlocks, and connection
   // errors with no SQLSTATE — including Drizzle-wrapped, one level down.
   for (const code of ["08006", "53100", "57P01", "40001", "40P01", "ECONNREFUSED"]) {
-    assert.equal(causeKindOf({ code, message: "whatever the driver says" }), "infrastructure", code);
+    assert.equal(
+      causeKindOf({ code, message: "whatever the driver says" }),
+      "infrastructure",
+      code,
+    );
   }
   assert.equal(
     causeKindOf(new Error("outer", { cause: { code: "40001" } })),
@@ -135,7 +135,10 @@ test("the cause kind is classified, never regexed from the message", () => {
   );
   // Domain: typed adapter refusals, programming defects, plain errors —
   // none of which name the storage.
-  assert.equal(causeKindOf({ code: "REFUSED", message: "the approver has no linked person" }), "domain");
+  assert.equal(
+    causeKindOf({ code: "REFUSED", message: "the approver has no linked person" }),
+    "domain",
+  );
   assert.equal(causeKindOf(new TypeError("cannot read property of undefined")), "domain");
   assert.equal(causeKindOf(new Error("boom")), "domain");
   assert.equal(causeKindOf(null), "domain");
@@ -150,7 +153,7 @@ test("a storage error during release answers 503 without storage internals", asy
     causeKindOf(pgDown),
   );
   assert.equal(failure.causeKind, "infrastructure");
-  const response = (await gateErrorResponse(failure));
+  const response = await gateErrorResponse(failure);
   assert.equal(response.status, 503);
   const body = await bodyText(response);
   assert.match(String(body.error), /temporarily unavailable, try again/);
@@ -158,45 +161,66 @@ test("a storage error during release answers 503 without storage internals", asy
 });
 
 test("a serialization failure during release answers 503", async () => {
-  const serialization = { code: "40001", message: "could not serialize access due to concurrent update" };
+  const serialization = {
+    code: "40001",
+    message: "could not serialize access due to concurrent update",
+  };
   const failure = new DecisionFailedError({
     decision: "approved",
     stage: "release",
     cause: "could not serialize access due to concurrent update",
     causeKind: causeKindOf(serialization),
   });
-  const response = (await gateErrorResponse(failure));
+  const response = await gateErrorResponse(failure);
   assert.equal(response.status, 503);
   assert.match(String((await bodyText(response)).error), /temporarily unavailable, try again/);
 });
 
 test("a stale-state decision failure answers 409", async () => {
-  const response = (await gateErrorResponse(
+  const response = await gateErrorResponse(
     new DecisionFailedError({
       decision: "approved",
       stage: "release",
       cause: "this approval was already resolved by a concurrent decision",
     }),
-  ));
+  );
   assert.equal(response.status, 409);
 });
 
 test("plain gate refusals keep their existing mapping", async () => {
   assert.equal((await gateErrorResponse(new GateError("approval not found"))).status, 404);
-  assert.equal((await gateErrorResponse(new GateError("this approval was already resolved"))).status, 409);
-  assert.equal((await gateErrorResponse(new GateError("not an approver for this gate"))).status, 403);
+  assert.equal(
+    (await gateErrorResponse(new GateError("this approval was already resolved"))).status,
+    409,
+  );
+  assert.equal(
+    (await gateErrorResponse(new GateError("not an approver for this gate"))).status,
+    403,
+  );
   assert.equal((await gateErrorResponse(new GateError("the gate is not submittable"))).status, 422);
-  const unknown = (await gateErrorResponse(new Error("boom")));
+  const unknown = await gateErrorResponse(new Error("boom"));
   assert.equal(unknown.status, 500);
   assert.deepEqual(await bodyText(unknown), { error: "internal error" });
 });
 
-
-test('native release refusals retain the original status, code, remedy and evidence',async()=>{
- const {TimeApprovalRefusal}=await import('../../../lib/time-approval-refusal');
- const cause=new TimeApprovalRefusal('No covering wage rate','no_covering_wage_rate',422,'Configure the dated wage rate',{uncovered:[{employeeName:'Crew member',workedOn:'2026-07-14'}]});
- const response=await gateErrorResponse(new ReleaseError('approved',cause.message,true,'domain',cause));
- assert.equal(response.status,422);const body=await bodyText(response);
- assert.equal(body.code,'no_covering_wage_rate');assert.equal(body.remedy,'Configure the dated wage rate');assert.equal(body.decisionRecorded,false);
- assert.deepEqual(body.details,{uncovered:[{employeeName:'Crew member',workedOn:'2026-07-14'}]});
+test("native release refusals retain the original status, code, remedy and evidence", async () => {
+  const { TimeApprovalRefusal } = await import("../../../lib/time-approval-refusal");
+  const cause = new TimeApprovalRefusal(
+    "No covering wage rate",
+    "no_covering_wage_rate",
+    422,
+    "Configure the dated wage rate",
+    { uncovered: [{ employeeName: "Crew member", workedOn: "2026-07-14" }] },
+  );
+  const response = await gateErrorResponse(
+    new ReleaseError("approved", cause.message, true, "domain", cause),
+  );
+  assert.equal(response.status, 422);
+  const body = await bodyText(response);
+  assert.equal(body.code, "no_covering_wage_rate");
+  assert.equal(body.remedy, "Configure the dated wage rate");
+  assert.equal(body.decisionRecorded, false);
+  assert.deepEqual(body.details, {
+    uncovered: [{ employeeName: "Crew member", workedOn: "2026-07-14" }],
+  });
 });

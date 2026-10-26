@@ -1,20 +1,25 @@
-import assert from 'node:assert/strict'
+import assert from "node:assert/strict";
 
-import test from 'node:test'
-import { assetWorkspaceTabs } from './tabs'
-import type { AssetsData } from './view'
-import type { EquipmentData } from './equipment/view'
+import test from "node:test";
+import { assetWorkspaceTabs } from "./tabs";
+import type { AssetsData } from "./view";
+import type { EquipmentData } from "./equipment/view";
 
-const { assetsSpec } = await import('./view')
-const { equipmentSpec } = await import('./equipment/view')
+const { assetsSpec } = await import("./view");
+const { equipmentSpec } = await import("./equipment/view");
 
-test('asset workspace tabs expose enabled routes and mark the active route', () => {
+test("asset workspace tabs expose enabled routes and mark the active route", () => {
   const tabs = assetWorkspaceTabs({
-    active: 'insurance',
+    active: "insurance",
     labels: {
-      register: 'Register', taxDepreciation: 'Tax depreciation', equipment: 'Equipment',
-      proposals: 'Proposals', construction: 'Construction', leases: 'Leases',
-      maintenance: 'Maintenance', insurance: 'Insurance',
+      register: "Register",
+      taxDepreciation: "Tax depreciation",
+      equipment: "Equipment",
+      proposals: "Proposals",
+      construction: "Construction",
+      leases: "Leases",
+      maintenance: "Maintenance",
+      insurance: "Insurance",
     },
     showFixedAssets: true,
     showEquipment: true,
@@ -23,28 +28,39 @@ test('asset workspace tabs expose enabled routes and mark the active route', () 
     showLeases: true,
     showMaintenance: true,
     showInsurance: true,
-  })
+  });
 
-  assert.deepEqual(tabs.map(({ href }) => href), [
-    '/assets',
-    '/assets?tab=tax-depreciation',
-    '/assets/equipment',
-    '/assets/proposals',
-    '/assets/construction',
-    '/assets/leases',
-    '/assets/maintenance',
-    '/assets/insurance',
-  ])
-  assert.deepEqual(tabs.map(({ active }) => active), [false, false, false, false, false, false, false, true])
-})
+  assert.deepEqual(
+    tabs.map(({ href }) => href),
+    [
+      "/assets",
+      "/assets?tab=tax-depreciation",
+      "/assets/equipment",
+      "/assets/proposals",
+      "/assets/construction",
+      "/assets/leases",
+      "/assets/maintenance",
+      "/assets/insurance",
+    ],
+  );
+  assert.deepEqual(
+    tabs.map(({ active }) => active),
+    [false, false, false, false, false, false, false, true],
+  );
+});
 
-test('asset tabs omit disabled routes, and leases follow the fixed-assets gate', () => {
+test("asset tabs omit disabled routes, and leases follow the fixed-assets gate", () => {
   const tabs = assetWorkspaceTabs({
-    active: 'leases',
+    active: "leases",
     labels: {
-      register: 'Register', taxDepreciation: 'Tax depreciation', equipment: 'Equipment',
-      proposals: 'Proposals', construction: 'Construction', leases: 'Leases',
-      maintenance: 'Maintenance', insurance: 'Insurance',
+      register: "Register",
+      taxDepreciation: "Tax depreciation",
+      equipment: "Equipment",
+      proposals: "Proposals",
+      construction: "Construction",
+      leases: "Leases",
+      maintenance: "Maintenance",
+      insurance: "Insurance",
     },
     showFixedAssets: false,
     showEquipment: true,
@@ -53,59 +69,86 @@ test('asset tabs omit disabled routes, and leases follow the fixed-assets gate',
     showLeases: false,
     showMaintenance: false,
     showInsurance: true,
-  })
+  });
 
-  assert.deepEqual(tabs.map(({ href }) => href), [
-    '/assets/equipment',
-    '/assets/construction',
-    '/assets/insurance',
-  ])
-  assert.ok(tabs.every(({ active }) => !active), 'a disabled route is never marked active')
-})
+  assert.deepEqual(
+    tabs.map(({ href }) => href),
+    ["/assets/equipment", "/assets/construction", "/assets/insurance"],
+  );
+  assert.ok(
+    tabs.every(({ active }) => !active),
+    "a disabled route is never marked active",
+  );
+});
 
 function widgetsNamed(node: unknown, name: string): Record<string, unknown>[] {
-  if (Array.isArray(node)) return node.flatMap((item) => widgetsNamed(item, name))
-  if (typeof node !== 'object' || node === null) return []
-  const object = node as Record<string, unknown>
-  const own = object.widget === name ? [object] : []
-  return [...own, ...Object.values(object).flatMap((child) => widgetsNamed(child, name))]
+  if (Array.isArray(node)) return node.flatMap((item) => widgetsNamed(item, name));
+  if (typeof node !== "object" || node === null) return [];
+  const object = node as Record<string, unknown>;
+  const own = object.widget === name ? [object] : [];
+  return [...own, ...Object.values(object).flatMap((child) => widgetsNamed(child, name))];
 }
 
-function assetsFixture(tabs: AssetsData['tabs']): AssetsData {
+function assetsFixture(tabs: AssetsData["tabs"]): AssetsData {
   return {
-    title: 'Fixed Assets', description: 'The fixed asset register', tabs,
-    onRegister: true, onTax: false, docLabel: 'Documentation', showActions: false,
-    books: [], candidates: [], periods: [], equipmentLabel: 'Equipment', currentParams: {},
-    canManage: false, canRun: false, canConfigure: false, regimes: [], defaultTaxYear: 0,
+    title: "Fixed Assets",
+    description: "The fixed asset register",
+    tabs,
+    onRegister: true,
+    onTax: false,
+    docLabel: "Documentation",
+    showActions: false,
+    books: [],
+    candidates: [],
+    periods: [],
+    equipmentLabel: "Equipment",
+    currentParams: {},
+    canManage: false,
+    canRun: false,
+    canConfigure: false,
+    regimes: [],
+    defaultTaxYear: 0,
     drawer: null,
-  }
+  };
 }
 
-function equipmentFixture(tabs: EquipmentData['tabs']): EquipmentData {
+function equipmentFixture(tabs: EquipmentData["tabs"]): EquipmentData {
   return {
-    title: 'Equipment', description: 'The equipment register', currentParams: {},
-    canManage: false, kpis: [], tabs, fixedAssetsLabel: 'Fixed assets',
-    taxDepreciationLabel: 'Tax depreciation', documentationLabel: 'Documentation',
-    showFixedAssetsLinks: true, drawer: null,
-  }
+    title: "Equipment",
+    description: "The equipment register",
+    currentParams: {},
+    canManage: false,
+    kpis: [],
+    tabs,
+    fixedAssetsLabel: "Fixed assets",
+    taxDepreciationLabel: "Tax depreciation",
+    documentationLabel: "Documentation",
+    showFixedAssetsLinks: true,
+    drawer: null,
+  };
 }
 
-test('asset register and equipment specs expose the same shared route switcher', () => {
+test("asset register and equipment specs expose the same shared route switcher", () => {
   const tabs = [
-    { key: 'register', href: '/assets', label: 'Register', active: true },
-    { key: 'tax-depreciation', href: '/assets?tab=tax-depreciation', label: 'Tax depreciation', active: false },
-    { key: 'equipment', href: '/assets/equipment', label: 'Equipment', active: false },
-  ]
-  const assets = assetsSpec(assetsFixture(tabs))
-  const equipment = equipmentSpec(equipmentFixture(tabs))
-  const assetSwitcher = widgetsNamed(assets, 'module-home-tabs')
-  const equipmentSwitcher = widgetsNamed(equipment, 'module-home-tabs')
+    { key: "register", href: "/assets", label: "Register", active: true },
+    {
+      key: "tax-depreciation",
+      href: "/assets?tab=tax-depreciation",
+      label: "Tax depreciation",
+      active: false,
+    },
+    { key: "equipment", href: "/assets/equipment", label: "Equipment", active: false },
+  ];
+  const assets = assetsSpec(assetsFixture(tabs));
+  const equipment = equipmentSpec(equipmentFixture(tabs));
+  const assetSwitcher = widgetsNamed(assets, "module-home-tabs");
+  const equipmentSwitcher = widgetsNamed(equipment, "module-home-tabs");
 
-  assert.equal(assetSwitcher.length, 1, 'fixed assets has one shared route switcher')
-  assert.equal(equipmentSwitcher.length, 1, 'equipment has one shared route switcher')
-  assert.deepEqual((assetSwitcher[0]?.props as { tabs?: unknown })?.tabs, tabs)
-  assert.deepEqual((equipmentSwitcher[0]?.props as { tabs?: unknown })?.tabs, tabs)
-  assert.equal(widgetsNamed(assets, 'assets-tabs').length, 0)
-  assert.equal(widgetsNamed(assets, 'assets-equipment-link').length, 0)
-  assert.equal(widgetsNamed(equipment, 'equipment-header-links').length, 0)
-})
+  assert.equal(assetSwitcher.length, 1, "fixed assets has one shared route switcher");
+  assert.equal(equipmentSwitcher.length, 1, "equipment has one shared route switcher");
+  assert.deepEqual((assetSwitcher[0]?.props as { tabs?: unknown })?.tabs, tabs);
+  assert.deepEqual((equipmentSwitcher[0]?.props as { tabs?: unknown })?.tabs, tabs);
+  assert.equal(widgetsNamed(assets, "assets-tabs").length, 0);
+  assert.equal(widgetsNamed(assets, "assets-equipment-link").length, 0);
+  assert.equal(widgetsNamed(equipment, "equipment-header-links").length, 0);
+});

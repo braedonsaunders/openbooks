@@ -7,7 +7,12 @@ import { roundCurrencyMoney } from "../fx/currencies.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
-import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions, type SubsidiaryContext } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  validateSubsidiaryRestrictions,
+  type SubsidiaryContext,
+} from "../organization/subsidiaries.ts";
 import {
   assertPeriodModulesOpen,
   canonicalPeriodLabel,
@@ -15,7 +20,10 @@ import {
   periodClosedDetailsOf,
   type PeriodDisplayInput,
 } from "../periods/period-policy.ts";
-import { loadControlAccounts, ControlAccountsIncompleteError } from "../records/control-accounts.ts";
+import {
+  loadControlAccounts,
+  ControlAccountsIncompleteError,
+} from "../records/control-accounts.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { eligibleWipSourcesSql } from "./wip-sources.ts";
 
@@ -98,8 +106,19 @@ export interface UnbilledAccrualLine {
 export interface UnbilledAccrualPreview {
   /** `name` is the period's locale-free label (`P07 FY2026`); `periodRef`
    *  lets presenters label it in the viewer's locale. */
-  period: { id: string; name: string; startsOn: string; endsOn: string; periodRef: PeriodDisplayInput };
-  reversal: { periodId: string | null; periodName: string | null; periodRef: PeriodDisplayInput | null; date: string | null };
+  period: {
+    id: string;
+    name: string;
+    startsOn: string;
+    endsOn: string;
+    periodRef: PeriodDisplayInput;
+  };
+  reversal: {
+    periodId: string | null;
+    periodName: string | null;
+    periodRef: PeriodDisplayInput | null;
+    date: string | null;
+  };
   /** Per currency: unbilled at period end, accrued so far, still to post. */
   totals: { currency: string; unbilled: string; accrued: string; delta: string }[];
   /** Projects with unbilled work or an accrual to correct. */
@@ -113,7 +132,13 @@ export interface UnbilledAccrualPreview {
 export interface UnbilledAccrualRunResult {
   runId: string | null;
   periodId: string;
-  posted: { subsidiaryId: string; currency: string; accrualEntryId: string; reversalEntryId: string; amount: string }[];
+  posted: {
+    subsidiaryId: string;
+    currency: string;
+    accrualEntryId: string;
+    reversalEntryId: string;
+    amount: string;
+  }[];
   lines: UnbilledAccrualLine[];
 }
 
@@ -165,7 +190,12 @@ export interface AccruedKey {
   amount: string;
 }
 
-export function accrualKey(k: { projectId: string; subsidiaryId: string; revenueAccountId: string; currency: string }): string {
+export function accrualKey(k: {
+  projectId: string;
+  subsidiaryId: string;
+  revenueAccountId: string;
+  currency: string;
+}): string {
   return `${k.projectId}|${k.subsidiaryId}|${k.revenueAccountId}|${k.currency}`;
 }
 
@@ -194,7 +224,10 @@ export function planUnbilledAccrual(input: {
     reported.add(id);
     problems.push(problem);
   };
-  const exact = new Map<string, { line: Omit<UnbilledAccrualLine, "unbilled" | "accrued" | "delta">; amount: string }>();
+  const exact = new Map<
+    string,
+    { line: Omit<UnbilledAccrualLine, "unbilled" | "accrued" | "delta">; amount: string }
+  >();
   const names = new Map(input.projectNames ?? []);
   for (const group of input.groups) {
     names.set(group.projectId, { code: group.projectCode, name: group.projectName });
@@ -218,18 +251,24 @@ export function planUnbilledAccrual(input: {
     }
     const revenueAccountId = group.usesProjectRevenue
       ? input.projectRevenueAccountId
-      : group.incomeAccountId ?? input.projectRevenueAccountId;
+      : (group.incomeAccountId ?? input.projectRevenueAccountId);
     if (!revenueAccountId) {
       report({
         code: "revenue_account_unmapped",
         projectId: group.projectId,
-        message: group.usesProjectRevenue || !group.itemName
-          ? `Project ${group.projectName} has unbilled work with no revenue account. Map Project revenue under Setup → Company & Accounting → Control accounts.`
-          : `Item ${group.itemName} on project ${group.projectName} has no income account. Set the item's income account, or map Project revenue under Setup → Company & Accounting → Control accounts.`,
+        message:
+          group.usesProjectRevenue || !group.itemName
+            ? `Project ${group.projectName} has unbilled work with no revenue account. Map Project revenue under Setup → Company & Accounting → Control accounts.`
+            : `Item ${group.itemName} on project ${group.projectName} has no income account. Set the item's income account, or map Project revenue under Setup → Company & Accounting → Control accounts.`,
       });
       continue;
     }
-    const key = accrualKey({ projectId: group.projectId, subsidiaryId, revenueAccountId, currency });
+    const key = accrualKey({
+      projectId: group.projectId,
+      subsidiaryId,
+      revenueAccountId,
+      currency,
+    });
     const prior = exact.get(key);
     if (prior) {
       prior.amount = add(prior.amount, group.amount);
@@ -254,7 +293,12 @@ export function planUnbilledAccrual(input: {
   for (const row of input.accrued) {
     const key = accrualKey(row);
     const prior = accruedByKey.get(key);
-    accruedByKey.set(key, prior ? { ...prior, amount: add(prior.amount, row.amount) } : { ...row, amount: normalizeMoney(row.amount) });
+    accruedByKey.set(
+      key,
+      prior
+        ? { ...prior, amount: add(prior.amount, row.amount) }
+        : { ...row, amount: normalizeMoney(row.amount) },
+    );
   }
 
   const lines: UnbilledAccrualLine[] = [];
@@ -290,31 +334,52 @@ export function planUnbilledAccrual(input: {
       delta: neg(row.amount),
     });
   }
-  lines.sort((a, b) =>
-    a.projectName.localeCompare(b.projectName) || a.projectId.localeCompare(b.projectId)
-    || a.revenueAccountId.localeCompare(b.revenueAccountId) || a.currency.localeCompare(b.currency));
-  return { lines: lines.filter((line) => !(isZero(line.unbilled) && isZero(line.accrued))), problems };
+  lines.sort(
+    (a, b) =>
+      a.projectName.localeCompare(b.projectName) ||
+      a.projectId.localeCompare(b.projectId) ||
+      a.revenueAccountId.localeCompare(b.revenueAccountId) ||
+      a.currency.localeCompare(b.currency),
+  );
+  return {
+    lines: lines.filter((line) => !(isZero(line.unbilled) && isZero(line.accrued))),
+    problems,
+  };
 }
 
 function periodRefIsValid(ref: UnbilledAccrualPeriodRef): void {
   if (!ref.periodId && !ref.periodEnd) {
-    throw new UnbilledAccrualError("Choose the accounting period to accrue.", "period_not_found", 400);
+    throw new UnbilledAccrualError(
+      "Choose the accounting period to accrue.",
+      "period_not_found",
+      400,
+    );
   }
   if (ref.periodEnd && !isIsoCalendarDate(ref.periodEnd)) {
-    throw new UnbilledAccrualError("The period end must be a YYYY-MM-DD date.", "period_not_found", 400);
+    throw new UnbilledAccrualError(
+      "The period end must be a YYYY-MM-DD date.",
+      "period_not_found",
+      400,
+    );
   }
 }
 
 /** The regular period (by id, or the posting calendar's period ending on the
  *  date) plus the following regular period its reversal lands in. */
-async function loadAccrualPeriod(executor: SqlExecutor, orgId: string, ref: UnbilledAccrualPeriodRef): Promise<AccrualPeriod> {
+async function loadAccrualPeriod(
+  executor: SqlExecutor,
+  orgId: string,
+  ref: UnbilledAccrualPeriodRef,
+): Promise<AccrualPeriod> {
   periodRefIsValid(ref);
   const match = ref.periodId
     ? sql`p.id = ${ref.periodId}`
     : sql`p.ends_on = ${ref.periodEnd}::date and not p.is_adjustment
           and exists (select 1 from fiscal_calendars fc where fc.org_id = p.org_id and fc.id = p.fiscal_calendar_id
                        and fc.is_default and fc.is_active)`;
-  const row = (await executor.execute<AccrualPeriodRow>(sql`
+  const row = (
+    await executor.execute<AccrualPeriodRow>(
+      sql`
     select p.id, p.name, p.fiscal_year, p.period_number, p.starts_on::text as starts_on, p.ends_on::text as ends_on, p.is_adjustment,
            next.id as next_period_id, next.starts_on::text as next_starts_on, next.ends_on::text as next_ends_on,
            next.fiscal_year as next_fiscal_year, next.period_number as next_period_number
@@ -327,7 +392,10 @@ async function loadAccrualPeriod(executor: SqlExecutor, orgId: string, ref: Unbi
       ) next on true
      where p.org_id = ${orgId} and ${match}
      order by p.starts_on, p.id
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new UnbilledAccrualError(
       ref.periodId
@@ -357,7 +425,11 @@ function accrualPeriod(row: AccrualPeriodRow): AccrualPeriod {
   };
   // The following period is always a regular period (the lookup excludes adjustment periods).
   const nextRef: PeriodDisplayInput | null =
-    row.next_period_id && row.next_starts_on && row.next_ends_on && row.next_fiscal_year != null && row.next_period_number != null
+    row.next_period_id &&
+    row.next_starts_on &&
+    row.next_ends_on &&
+    row.next_fiscal_year != null &&
+    row.next_period_number != null
       ? {
           fiscalYear: Number(row.next_fiscal_year),
           periodNumber: Number(row.next_period_number),
@@ -376,18 +448,35 @@ function accrualPeriod(row: AccrualPeriodRow): AccrualPeriod {
 }
 
 async function primaryBookId(executor: SqlExecutor, orgId: string): Promise<string | null> {
-  const row = (await executor.execute<{ id: string }>(sql`
+  const row = (
+    await executor.execute<{ id: string }>(
+      sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   return row?.id ?? null;
 }
 
-async function loadSourceGroups(executor: SqlExecutor, orgId: string, periodEnd: string): Promise<UnbilledSourceGroup[]> {
+async function loadSourceGroups(
+  executor: SqlExecutor,
+  orgId: string,
+  periodEnd: string,
+): Promise<UnbilledSourceGroup[]> {
   const rows = await executor.execute<{
-    project_id: string; project_code: string | null; project_name: string; project_subsidiary_id: string | null;
-    source_currency: string | null; item_name: string | null; income_account_id: string | null;
-    uses_project_revenue: boolean; amount: string; source_count: number;
-  }>(sql`
+    project_id: string;
+    project_code: string | null;
+    project_name: string;
+    project_subsidiary_id: string | null;
+    source_currency: string | null;
+    item_name: string | null;
+    income_account_id: string | null;
+    uses_project_revenue: boolean;
+    amount: string;
+    source_count: number;
+  }>(
+    sql`
     ${eligibleWipSourcesSql(orgId, null, { kind: "as_of", periodEnd })}
     select source.project_id, project.code as project_code, project.name as project_name,
            source.project_subsidiary_id, source.source_currency, source.item_name,
@@ -399,7 +488,9 @@ async function loadSourceGroups(executor: SqlExecutor, orgId: string, periodEnd:
      where source.capped_available_value <> 0
      group by source.project_id, project.code, project.name, source.project_subsidiary_id, source.source_currency,
               source.item_name, source.income_account_id, source.invoicing_revenue_account
-     order by project.name, source.project_id`, "objects");
+     order by project.name, source.project_id`,
+    "objects",
+  );
   return rows.map((row) => ({
     projectId: row.project_id,
     projectCode: row.project_code,
@@ -414,18 +505,30 @@ async function loadSourceGroups(executor: SqlExecutor, orgId: string, periodEnd:
   }));
 }
 
-async function loadAccrued(executor: SqlExecutor, orgId: string, periodId: string): Promise<{ accrued: AccruedKey[]; names: Map<string, { code: string | null; name: string }> }> {
+async function loadAccrued(
+  executor: SqlExecutor,
+  orgId: string,
+  periodId: string,
+): Promise<{ accrued: AccruedKey[]; names: Map<string, { code: string | null; name: string }> }> {
   const rows = await executor.execute<{
-    project_id: string; subsidiary_id: string; revenue_account_id: string; currency_code: string; amount: string;
-    project_code: string | null; project_name: string;
-  }>(sql`
+    project_id: string;
+    subsidiary_id: string;
+    revenue_account_id: string;
+    currency_code: string;
+    amount: string;
+    project_code: string | null;
+    project_name: string;
+  }>(
+    sql`
     select accrual.project_id, accrual.subsidiary_id, accrual.revenue_account_id, accrual.currency_code,
            sum(accrual.amount)::text as amount, project.code as project_code, project.name as project_name
       from project_revenue_accruals accrual
       join projects project on project.org_id = accrual.org_id and project.id = accrual.project_id
      where accrual.org_id = ${orgId} and accrual.period_id = ${periodId}
      group by accrual.project_id, accrual.subsidiary_id, accrual.revenue_account_id, accrual.currency_code,
-              project.code, project.name`, "objects");
+              project.code, project.name`,
+    "objects",
+  );
   return {
     accrued: rows.map((row) => ({
       projectId: row.project_id,
@@ -434,13 +537,18 @@ async function loadAccrued(executor: SqlExecutor, orgId: string, periodId: strin
       currency: row.currency_code,
       amount: row.amount,
     })),
-    names: new Map(rows.map((row) => [row.project_id, { code: row.project_code, name: row.project_name }])),
+    names: new Map(
+      rows.map((row) => [row.project_id, { code: row.project_code, name: row.project_name }]),
+    ),
   };
 }
 
 async function loadMinorUnits(executor: SqlExecutor): Promise<Map<string, number>> {
-  const rows = await executor.execute<{ code: string; minor_units: number }>(sql`
-    select code, minor_units from currencies`, "objects");
+  const rows = await executor.execute<{ code: string; minor_units: number }>(
+    sql`
+    select code, minor_units from currencies`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.code, Number(row.minor_units)]));
 }
 
@@ -452,7 +560,11 @@ interface AccrualComputation {
   problems: UnbilledAccrualProblem[];
 }
 
-async function computeAccrual(executor: SqlExecutor, orgId: string, ref: UnbilledAccrualPeriodRef): Promise<AccrualComputation> {
+async function computeAccrual(
+  executor: SqlExecutor,
+  orgId: string,
+  ref: UnbilledAccrualPeriodRef,
+): Promise<AccrualComputation> {
   const period = await loadAccrualPeriod(executor, orgId, ref);
   const ctx = await loadSubsidiaryContext(executor, orgId);
   const problems: UnbilledAccrualProblem[] = [];
@@ -484,7 +596,11 @@ async function computeAccrual(executor: SqlExecutor, orgId: string, ref: Unbille
   });
   problems.push(...plan.problems);
   const needsPosting = plan.lines.some((line) => !isZero(line.delta));
-  if (needsPosting && !unbilledAccountId && !problems.some((p) => p.code === "control_accounts_invalid")) {
+  if (
+    needsPosting &&
+    !unbilledAccountId &&
+    !problems.some((p) => p.code === "control_accounts_invalid")
+  ) {
     problems.push({
       code: "unbilled_account_unmapped",
       message: "Map Unbilled receivable under Setup → Company & Accounting → Control accounts.",
@@ -510,14 +626,27 @@ function summarize(computation: AccrualComputation): UnbilledAccrualPreview {
     byCurrency.set(line.currency, bucket);
   }
   return {
-    period: { id: period.id, name: period.label, startsOn: period.starts_on, endsOn: period.ends_on, periodRef: period.ref },
-    reversal: { periodId: period.next_period_id, periodName: period.next_label, periodRef: period.next_ref, date: period.next_starts_on },
-    totals: [...byCurrency].sort(([a], [b]) => a.localeCompare(b)).map(([currency, bucket]) => ({
-      currency,
-      unbilled: sum(bucket.unbilled),
-      accrued: sum(bucket.accrued),
-      delta: sum(bucket.delta),
-    })),
+    period: {
+      id: period.id,
+      name: period.label,
+      startsOn: period.starts_on,
+      endsOn: period.ends_on,
+      periodRef: period.ref,
+    },
+    reversal: {
+      periodId: period.next_period_id,
+      periodName: period.next_label,
+      periodRef: period.next_ref,
+      date: period.next_starts_on,
+    },
+    totals: [...byCurrency]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([currency, bucket]) => ({
+        currency,
+        unbilled: sum(bucket.unbilled),
+        accrued: sum(bucket.accrued),
+        delta: sum(bucket.delta),
+      })),
     projectCount: new Set(lines.map((line) => line.projectId)).size,
     lines,
     upToDate: problems.length === 0 && lines.every((line) => isZero(line.delta)),
@@ -527,13 +656,24 @@ function summarize(computation: AccrualComputation): UnbilledAccrualPreview {
 
 /** Projects and the accrual feature, both required. Writers take the row
  *  lock that orders them with a concurrent disable; readers read plainly. */
-async function featureEnabledFor(executor: SqlExecutor, orgId: string, lock: boolean): Promise<boolean> {
+async function featureEnabledFor(
+  executor: SqlExecutor,
+  orgId: string,
+  lock: boolean,
+): Promise<boolean> {
   if (lock) {
-    return (await lockAndCheckOrgFeature(executor, orgId, "projects"))
-      && (await lockAndCheckOrgFeature(executor, orgId, "unbilledRevenueAccrual"));
+    return (
+      (await lockAndCheckOrgFeature(executor, orgId, "projects")) &&
+      (await lockAndCheckOrgFeature(executor, orgId, "unbilledRevenueAccrual"))
+    );
   }
-  const row = (await executor.execute<{ features: FeatureState | null }>(sql`
-    select settings->'features' as features from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await executor.execute<{ features: FeatureState | null }>(
+      sql`
+    select settings->'features' as features from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return !!row && featureEnabled(row.features ?? {}, "unbilledRevenueAccrual");
 }
 
@@ -574,7 +714,12 @@ export async function runUnbilledRevenueAccrual(
   actorId: string,
   ref: UnbilledAccrualPeriodRef,
 ): Promise<UnbilledAccrualRunResult> {
-  if (!actorId) throw new UnbilledAccrualError("An attributable actor is required to post an accrual.", "actor_required", 400);
+  if (!actorId)
+    throw new UnbilledAccrualError(
+      "An attributable actor is required to post an accrual.",
+      "actor_required",
+      400,
+    );
   return withOrgTransaction(orgId, async () => {
     await lockLedgerSetupFence(db, orgId, "shared");
     if (!(await featureEnabledFor(db, orgId, true))) throw featureDisabled();
@@ -586,9 +731,13 @@ export async function runUnbilledRevenueAccrual(
       );
     }
     const target = await loadAccrualPeriod(db, orgId, ref);
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${unbilledAccrualLockKey(orgId, bookId, target.id)}, 0))`);
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${unbilledAccrualLockKey(orgId, bookId, target.id)}, 0))`,
+    );
     // Freeze account policy and legal entities for the computation and post.
-    await db.execute(sql`select id from subsidiaries where org_id = ${orgId} order by id for share`);
+    await db.execute(
+      sql`select id from subsidiaries where org_id = ${orgId} order by id for share`,
+    );
     await db.execute(sql`select id from accounts where org_id = ${orgId} order by id for share`);
     const computation = await computeAccrual(db, orgId, { periodId: target.id });
     const { period, ctx, unbilledAccountId } = computation;
@@ -599,7 +748,10 @@ export async function runUnbilledRevenueAccrual(
     const blocking = computation.problems[0];
     if (blocking) throw new UnbilledAccrualError(blocking.message, blocking.code);
     if (!unbilledAccountId || !period.next_period_id || !period.next_starts_on) {
-      throw new UnbilledAccrualError("Map Unbilled receivable under Setup → Company & Accounting → Control accounts.", "unbilled_account_unmapped");
+      throw new UnbilledAccrualError(
+        "Map Unbilled receivable under Setup → Company & Accounting → Control accounts.",
+        "unbilled_account_unmapped",
+      );
     }
     const nextPeriodId = period.next_period_id;
     const reversalDate = period.next_starts_on;
@@ -617,7 +769,13 @@ export async function runUnbilledRevenueAccrual(
         [nextPeriodId, period.next_label ?? reversalDate, "reversal"],
       ] as const) {
         try {
-          await assertPeriodModulesOpen(db, { orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: ["gl"] });
+          await assertPeriodModulesOpen(db, {
+            orgId,
+            periodId,
+            bookId,
+            subsidiaryIds: [subsidiaryId],
+            modules: ["gl"],
+          });
         } catch (error) {
           if (error instanceof CloseError) {
             throw new UnbilledAccrualError(
@@ -638,16 +796,36 @@ export async function runUnbilledRevenueAccrual(
     const posted: UnbilledAccrualRunResult["posted"] = [];
     for (const [subsidiaryId, lines] of [...bySubsidiary].sort(([a], [b]) => a.localeCompare(b))) {
       const subsidiary = ctx.byId.get(subsidiaryId);
-      if (!subsidiary) throw new UnbilledAccrualError(`Subsidiary ${subsidiaryId} does not exist.`, "subsidiary_invalid");
+      if (!subsidiary)
+        throw new UnbilledAccrualError(
+          `Subsidiary ${subsidiaryId} does not exist.`,
+          "subsidiary_invalid",
+        );
       const currency = subsidiary.baseCurrency;
       const entryLines = lines.flatMap((line) => [
-        { accountId: unbilledAccountId, amount: line.delta, projectId: line.projectId, subsidiaryId },
-        { accountId: line.revenueAccountId, amount: neg(line.delta), projectId: line.projectId, subsidiaryId },
+        {
+          accountId: unbilledAccountId,
+          amount: line.delta,
+          projectId: line.projectId,
+          subsidiaryId,
+        },
+        {
+          accountId: line.revenueAccountId,
+          amount: neg(line.delta),
+          projectId: line.projectId,
+          subsidiaryId,
+        },
       ]);
       try {
-        await validateSubsidiaryRestrictions(db, { orgId, ctx, docSubsidiaryId: subsidiaryId, lines: entryLines });
+        await validateSubsidiaryRestrictions(db, {
+          orgId,
+          ctx,
+          docSubsidiaryId: subsidiaryId,
+          lines: entryLines,
+        });
       } catch (error) {
-        if (error instanceof SubsidiaryError) throw new UnbilledAccrualError(error.message, "subsidiary_invalid");
+        if (error instanceof SubsidiaryError)
+          throw new UnbilledAccrualError(error.message, "subsidiary_invalid");
         throw error;
       }
       const amount = sum(lines.map((line) => line.delta));
@@ -668,7 +846,13 @@ export async function runUnbilledRevenueAccrual(
         closeModules: ["gl"],
         auditAction: "insert",
         requestId: "unbilled_revenue_accrual",
-        auditChanges: { mode: "unbilled_revenue_accrual", runId, periodId: period.id, reversalEntryId, amount },
+        auditChanges: {
+          mode: "unbilled_revenue_accrual",
+          runId,
+          periodId: period.id,
+          reversalEntryId,
+          amount,
+        },
         lines: entryLines.map((line) => ({ ...line, memo })),
       });
       const reversalMemo = `Unbilled revenue accrual reversal — ${period.label}`;
@@ -688,14 +872,28 @@ export async function runUnbilledRevenueAccrual(
         closeModules: ["gl"],
         auditAction: "insert",
         requestId: "unbilled_revenue_accrual",
-        auditChanges: { mode: "unbilled_revenue_accrual_reversal", runId, periodId: nextPeriodId, reversedEntryId: accrual.entryId },
-        lines: entryLines.map((line) => ({ ...line, amount: neg(line.amount), memo: reversalMemo })),
+        auditChanges: {
+          mode: "unbilled_revenue_accrual_reversal",
+          runId,
+          periodId: nextPeriodId,
+          reversedEntryId: accrual.entryId,
+        },
+        lines: entryLines.map((line) => ({
+          ...line,
+          amount: neg(line.amount),
+          memo: reversalMemo,
+        })),
       });
       if (reversal.entryId !== reversalEntryId) {
-        throw new UnbilledAccrualError("The accrual reversal was not posted under its evidenced id.", "posting_incomplete");
+        throw new UnbilledAccrualError(
+          "The accrual reversal was not posted under its evidenced id.",
+          "posting_incomplete",
+        );
       }
       for (const line of lines) {
-        const inserted = (await db.execute<{ id: string }>(sql`
+        const inserted = (
+          await db.execute<{ id: string }>(
+            sql`
           insert into project_revenue_accruals (
             org_id, run_id, project_id, subsidiary_id, period_id, accrual_date, reversal_date, amount,
             currency_code, unbilled_account_id, revenue_account_id, accrual_entry_id, reversal_entry_id,
@@ -711,10 +909,23 @@ export async function runUnbilledRevenueAccrual(
               sourceCount: line.sourceCount,
             })}::jsonb,
             ${actorId}
-          ) returning id`, "objects"))[0];
-        if (!inserted) throw new UnbilledAccrualError("The accrual evidence was not recorded.", "posting_incomplete");
+          ) returning id`,
+            "objects",
+          )
+        )[0];
+        if (!inserted)
+          throw new UnbilledAccrualError(
+            "The accrual evidence was not recorded.",
+            "posting_incomplete",
+          );
       }
-      posted.push({ subsidiaryId, currency, accrualEntryId: accrual.entryId, reversalEntryId, amount });
+      posted.push({
+        subsidiaryId,
+        currency,
+        accrualEntryId: accrual.entryId,
+        reversalEntryId,
+        amount,
+      });
     }
 
     await db.execute(sql`
@@ -725,8 +936,18 @@ export async function runUnbilledRevenueAccrual(
         periodName: period.label,
         accrualDate: period.ends_on,
         reversalDate,
-        before: { accrued: summarize({ ...computation, lines: changed }).totals.map((t) => ({ currency: t.currency, amount: t.accrued })) },
-        after: { accrued: summarize({ ...computation, lines: changed }).totals.map((t) => ({ currency: t.currency, amount: t.unbilled })) },
+        before: {
+          accrued: summarize({ ...computation, lines: changed }).totals.map((t) => ({
+            currency: t.currency,
+            amount: t.accrued,
+          })),
+        },
+        after: {
+          accrued: summarize({ ...computation, lines: changed }).totals.map((t) => ({
+            currency: t.currency,
+            amount: t.unbilled,
+          })),
+        },
         keys: changed.length,
         entries: posted,
       })}::jsonb, ${actorId}, 'unbilled_revenue_accrual')`);
@@ -746,19 +967,28 @@ export async function unbilledAccrualReadiness(
   periodId: string,
   subsidiaryIds?: readonly string[],
 ): Promise<{ applies: boolean; pendingKeys: number; problem: string | null }> {
-  if (!(await featureEnabledFor(db, orgId, false))) return { applies: false, pendingKeys: 0, problem: null };
+  if (!(await featureEnabledFor(db, orgId, false)))
+    return { applies: false, pendingKeys: 0, problem: null };
   let computation: AccrualComputation;
   try {
     computation = await computeAccrual(db, orgId, { periodId });
   } catch (error) {
     if (error instanceof UnbilledAccrualError) {
-      if (error.code === "adjustment_period") return { applies: false, pendingKeys: 0, problem: null };
+      if (error.code === "adjustment_period")
+        return { applies: false, pendingKeys: 0, problem: null };
       return { applies: true, pendingKeys: 1, problem: error.message };
     }
     throw error;
   }
-  const inScope = (subsidiaryId: string) => !subsidiaryIds?.length || subsidiaryIds.includes(subsidiaryId);
-  const pendingKeys = computation.lines.filter((line) => inScope(line.subsidiaryId) && !isZero(line.delta)).length;
+  const inScope = (subsidiaryId: string) =>
+    !subsidiaryIds?.length || subsidiaryIds.includes(subsidiaryId);
+  const pendingKeys = computation.lines.filter(
+    (line) => inScope(line.subsidiaryId) && !isZero(line.delta),
+  ).length;
   const problem = computation.problems[0]?.message ?? null;
-  return { applies: true, pendingKeys: pendingKeys + (problem && pendingKeys === 0 ? 1 : 0), problem };
+  return {
+    applies: true,
+    pendingKeys: pendingKeys + (problem && pendingKeys === 0 ? 1 : 0),
+    problem,
+  };
 }

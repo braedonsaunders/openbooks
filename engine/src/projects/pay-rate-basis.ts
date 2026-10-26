@@ -56,7 +56,9 @@ export function isTimePayRateBasis(basis: PayRateBasis): basis is TimePayRateBas
 
 function requirePositiveHours(annualHours: string): string {
   if (cmp(annualHours, "0") <= 0) {
-    throw new Error("annual hours must be greater than zero to convert a pay rate between hourly and time-based terms");
+    throw new Error(
+      "annual hours must be greater than zero to convert a pay rate between hourly and time-based terms",
+    );
   }
   return annualHours;
 }
@@ -86,7 +88,10 @@ export function payRateIn(
 ): string {
   if (basis === target) return rate;
   if (target === "hour") return hourlyPayRate(rate, basis, annualHours);
-  return div(annualPayRate(rate, basis, annualHours), String(PAY_RATE_BASIS_PERIODS_PER_YEAR[target]));
+  return div(
+    annualPayRate(rate, basis, annualHours),
+    String(PAY_RATE_BASIS_PERIODS_PER_YEAR[target]),
+  );
 }
 
 /**

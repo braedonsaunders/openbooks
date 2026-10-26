@@ -1,15 +1,15 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { refreshApprovalState } from '@/components/approval-actions'
-import { Badge, Button, DisclosureSection, SearchSelect } from '@openbooks/ui'
-import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
-import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { useMoney } from '@/components/money-provider'
-import { confirmDialog } from '../../../lib/confirm'
-import { refusalMessageFromBody } from '../../../lib/api-error'
+import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { refreshApprovalState } from "@/components/approval-actions";
+import { Badge, Button, DisclosureSection, SearchSelect } from "@openbooks/ui";
+import { DrawerTabStrip } from "../../../components/drawer-tab-strip";
+import { LineGrid, type LineGridColumn } from "../../../components/line-grid";
+import { useMoney } from "@/components/money-provider";
+import { confirmDialog } from "../../../lib/confirm";
+import { refusalMessageFromBody } from "../../../lib/api-error";
 
 /**
  * The Subscription tab on a quote drawer (quote-to-cash). Everyday: the
@@ -25,87 +25,82 @@ import { refusalMessageFromBody } from '../../../lib/api-error'
  */
 
 interface RampRow extends Record<string, unknown> {
-  startsAfterMonths: string
-  unitPrice: string
-  quantity: string
-  escalatorPercent: string
+  startsAfterMonths: string;
+  unitPrice: string;
+  quantity: string;
+  escalatorPercent: string;
 }
 
 interface PreviewTerm {
   term: {
-    id: string
-    quoteLineId: string
-    planId: string
-    planName: string
-    termMonths: number
-    startRule: string
-    billingTiming: string
+    id: string;
+    quoteLineId: string;
+    planId: string;
+    planName: string;
+    termMonths: number;
+    startRule: string;
+    billingTiming: string;
     steps: Array<{
-      periodIndex: number
-      startsAfterMonths: number
-      unitPrice: string
-      quantity: string
-      escalatorPercent: string | null
-    }>
-  }
+      periodIndex: number;
+      startsAfterMonths: number;
+      unitPrice: string;
+      quantity: string;
+      escalatorPercent: string | null;
+    }>;
+  };
   schedule: {
     periods: Array<{
-      periodIndex: number
-      unitPrice: string
-      quantity: string
-      periodAmount: string
-      arr: string
-    }>
-    tcv: string
-  }
-  listTcv: string
-  floorBreaches: number[]
+      periodIndex: number;
+      unitPrice: string;
+      quantity: string;
+      periodAmount: string;
+      arr: string;
+    }>;
+    tcv: string;
+  };
+  listTcv: string;
+  floorBreaches: number[];
 }
 
 interface Preview {
   quote: {
-    id: string
-    documentNumber: string
-    status: string
-    currency: string
-  }
-  terms: PreviewTerm[]
-  tcv: string
-  listTcv: string
-  discountPct: string
-  floorBreached: boolean
+    id: string;
+    documentNumber: string;
+    status: string;
+    currency: string;
+  };
+  terms: PreviewTerm[];
+  tcv: string;
+  listTcv: string;
+  discountPct: string;
+  floorBreached: boolean;
   signature: {
-    id: string
-    status: string
-    signerName: string
-    signerEmail: string
-    expiresAt: string
-  } | null
-  settings: { autoActivateOnSign: boolean }
-  advancedSubscriptions: boolean
-  revenueContracts: boolean
+    id: string;
+    status: string;
+    signerName: string;
+    signerEmail: string;
+    expiresAt: string;
+  } | null;
+  settings: { autoActivateOnSign: boolean };
+  advancedSubscriptions: boolean;
+  revenueContracts: boolean;
 }
 
 interface Plan {
-  id: string
-  name: string
-  amount: string
-  currency: string | null
-  interval: string
-  interval_count: number
+  id: string;
+  name: string;
+  amount: string;
+  currency: string | null;
+  interval: string;
+  interval_count: number;
 }
 
-async function readJson(
-  res: Response,
-): Promise<{ ok: boolean; body: Record<string, unknown> }> {
+async function readJson(res: Response): Promise<{ ok: boolean; body: Record<string, unknown> }> {
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as Record<
-      string,
-      unknown
-    > | null
-    return { ok: false, body: body ?? {} }
+    const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    return { ok: false, body: body ?? {} };
   }
-  return { ok: true, body: (await res.json()) as Record<string, unknown> }
+  return { ok: true, body: (await res.json()) as Record<string, unknown> };
 }
 
 /**
@@ -113,335 +108,299 @@ async function readJson(
  * nested error, remedy, code) instead of only the error field. Callers pass
  * the already-parsed body; the shared helper never invents locale copy.
  */
-function errorMessage(
-  body: Record<string, unknown>,
-  fallback = 'This action failed.',
-): string {
-  return refusalMessageFromBody(body, { fallback }) ?? fallback
+function errorMessage(body: Record<string, unknown>, fallback = "This action failed."): string {
+  return refusalMessageFromBody(body, { fallback }) ?? fallback;
 }
 
-const STATUS_KEYS = [
-  'sent',
-  'viewed',
-  'signed',
-  'declined',
-  'expired',
-  'voided',
-] as const
+const STATUS_KEYS = ["sent", "viewed", "signed", "declined", "expired", "voided"] as const;
 
 function statusKey(status: string): string {
-  const key = (STATUS_KEYS as readonly string[]).includes(status)
-    ? status
-    : 'sent'
-  return `quoteCash.status.${key}`
+  const key = (STATUS_KEYS as readonly string[]).includes(status) ? status : "sent";
+  return `quoteCash.status.${key}`;
 }
 
 export function QuoteCashSection(props: {
-  quoteId: string
-  currency: string
-  canManage: boolean
-  docStatus: string
-  lines: Array<{ id: string; description: string | null }>
+  quoteId: string;
+  currency: string;
+  canManage: boolean;
+  docStatus: string;
+  lines: Array<{ id: string; description: string | null }>;
 }) {
-  const t = useTranslations('estimates')
-  const tCommon = useTranslations('common')
-  const { money } = useMoney(props.currency)
-  const [preview, setPreview] = useState<Preview | null>(null)
-  const [hidden, setHidden] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [plans, setPlans] = useState<Plan[]>([])
+  const t = useTranslations("estimates");
+  const tCommon = useTranslations("common");
+  const { money } = useMoney(props.currency);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [editing, setEditing] = useState<null | {
-    termId: string | null
-    quoteLineId: string
-    planId: string
-    termMonths: string
-    startRule: string
-    billingTiming: string
-    steps: RampRow[]
-  }>(null)
-  const [sending, setSending] = useState(false)
-  const [signerName, setSignerName] = useState('')
-  const [signerEmail, setSignerEmail] = useState('')
-  const [activated, setActivated] = useState<string[] | null>(null)
+    termId: string | null;
+    quoteLineId: string;
+    planId: string;
+    termMonths: string;
+    startRule: string;
+    billingTiming: string;
+    steps: RampRow[];
+  }>(null);
+  const [sending, setSending] = useState(false);
+  const [signerName, setSignerName] = useState("");
+  const [signerEmail, setSignerEmail] = useState("");
+  const [activated, setActivated] = useState<string[] | null>(null);
   // Multi-term quotes focus one term at a time behind the shared strip, so
   // sibling schedules never stack. The editing draft lives outside the
   // selection and survives switching.
-  const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
+  const [selectedTermId, setSelectedTermId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
+    setLoading(true);
+    setLoadError(null);
     try {
-      const res = await fetch(
-        `/api/estimates/${encodeURIComponent(props.quoteId)}/terms`,
-      )
+      const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/terms`);
       if (res.status === 404) {
-        setHidden(true)
-        setLoading(false)
-        return
+        setHidden(true);
+        setLoading(false);
+        return;
       }
-      const { ok, body } = await readJson(res)
+      const { ok, body } = await readJson(res);
       if (!ok) {
-        const message = errorMessage(body, tCommon('feedback.loadFailed'))
-        setLoadError(message)
-        toast.error(message)
-        return
+        const message = errorMessage(body, tCommon("feedback.loadFailed"));
+        setLoadError(message);
+        toast.error(message);
+        return;
       }
-      setPreview(body as unknown as Preview)
+      setPreview(body as unknown as Preview);
     } catch {
-      setLoadError(tCommon('feedback.loadFailed'))
+      setLoadError(tCommon("feedback.loadFailed"));
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [props.quoteId, tCommon])
+  }, [props.quoteId, tCommon]);
 
   useEffect(() => {
     queueMicrotask(() => {
-      void load()
-    })
-  }, [load])
+      void load();
+    });
+  }, [load]);
 
   useEffect(() => {
-    if (hidden || !editing) return
+    if (hidden || !editing) return;
     void (async () => {
-      const res = await fetch('/api/quote-to-cash/plans')
-      const { ok, body } = await readJson(res)
-      if (ok) setPlans((body.plans as Plan[]) ?? [])
-    })()
-  }, [hidden, editing])
+      const res = await fetch("/api/quote-to-cash/plans");
+      const { ok, body } = await readJson(res);
+      if (ok) setPlans((body.plans as Plan[]) ?? []);
+    })();
+  }, [hidden, editing]);
 
-  if (hidden) return null
+  if (hidden) return null;
   if (loading) {
-    return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        {t('quoteCash.loading')}
-      </p>
-    )
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t("quoteCash.loading")}</p>;
   }
   if (loadError || !preview) {
     return (
       <div className="space-y-2 text-sm">
         <p role="alert" className="text-destructive">
-          {loadError ?? tCommon('feedback.loadFailed')}
+          {loadError ?? tCommon("feedback.loadFailed")}
         </p>
         <Button variant="outline" onClick={() => void load()}>
-          {tCommon('actions.retry')}
+          {tCommon("actions.retry")}
         </Button>
       </div>
-    )
+    );
   }
 
-  const draft = preview.quote.status === 'draft'
-  const canEdit = props.canManage && draft && !busy
+  const draft = preview.quote.status === "draft";
+  const canEdit = props.canManage && draft && !busy;
   const openSignature =
     preview.signature &&
-    (preview.signature.status === 'sent' ||
-      preview.signature.status === 'viewed')
-  const signed = preview.signature?.status === 'signed'
+    (preview.signature.status === "sent" || preview.signature.status === "viewed");
+  const signed = preview.signature?.status === "signed";
   const stepColumns: LineGridColumn<RampRow>[] = [
     {
-      key: 'startsAfterMonths',
-      label: t('quoteCash.colStartMonth'),
-      width: '90px',
-      type: 'decimal',
+      key: "startsAfterMonths",
+      label: t("quoteCash.colStartMonth"),
+      width: "90px",
+      type: "decimal",
       decimalScale: 0,
-      align: 'right',
+      align: "right",
     },
     {
-      key: 'unitPrice',
-      label: t('quoteCash.colUnitPrice'),
-      width: '130px',
-      type: 'amount',
-      align: 'right',
+      key: "unitPrice",
+      label: t("quoteCash.colUnitPrice"),
+      width: "130px",
+      type: "amount",
+      align: "right",
     },
     {
-      key: 'quantity',
-      label: t('quoteCash.colQuantity'),
-      width: '100px',
-      type: 'decimal',
+      key: "quantity",
+      label: t("quoteCash.colQuantity"),
+      width: "100px",
+      type: "decimal",
       decimalScale: 4,
-      align: 'right',
+      align: "right",
     },
     {
-      key: 'escalatorPercent',
-      label: t('quoteCash.colEscalator'),
-      width: '110px',
-      type: 'decimal',
+      key: "escalatorPercent",
+      label: t("quoteCash.colEscalator"),
+      width: "110px",
+      type: "decimal",
       decimalScale: 4,
-      align: 'right',
+      align: "right",
       secondary: true,
     },
-  ]
+  ];
 
   async function saveTerm() {
-    if (!editing) return
+    if (!editing) return;
     if (!editing.quoteLineId || !editing.planId) {
-      toast.error(t('quoteCash.termNeedsLineAndPlan'))
-      return
+      toast.error(t("quoteCash.termNeedsLineAndPlan"));
+      return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch(
-        `/api/estimates/${encodeURIComponent(props.quoteId)}/terms`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            termId: editing.termId,
-            quoteLineId: editing.quoteLineId,
-            planId: editing.planId,
-            termMonths: Number(editing.termMonths),
-            startRule: editing.startRule,
-            billingTiming: editing.billingTiming,
-            steps: editing.steps.map((s) => ({
-              startsAfterMonths: Number(s.startsAfterMonths),
-              unitPrice: s.unitPrice,
-              quantity: s.quantity,
-              escalatorPercent: s.escalatorPercent || null,
-            })),
-          }),
-        },
-      )
-      const { ok, body } = await readJson(res)
+      const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/terms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          termId: editing.termId,
+          quoteLineId: editing.quoteLineId,
+          planId: editing.planId,
+          termMonths: Number(editing.termMonths),
+          startRule: editing.startRule,
+          billingTiming: editing.billingTiming,
+          steps: editing.steps.map((s) => ({
+            startsAfterMonths: Number(s.startsAfterMonths),
+            unitPrice: s.unitPrice,
+            quantity: s.quantity,
+            escalatorPercent: s.escalatorPercent || null,
+          })),
+        }),
+      });
+      const { ok, body } = await readJson(res);
       if (!ok) {
-        toast.error(errorMessage(body))
-        return
+        toast.error(errorMessage(body));
+        return;
       }
-      setEditing(null)
-      await load()
-      if ((body as { voided?: number }).voided)
-        toast.success(t('quoteCash.termsSavedVoided'))
-      else toast.success(t('quoteCash.termsSaved'))
+      setEditing(null);
+      await load();
+      if ((body as { voided?: number }).voided) toast.success(t("quoteCash.termsSavedVoided"));
+      else toast.success(t("quoteCash.termsSaved"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function deleteTerm(termId: string) {
-    if (!(await confirmDialog(t('quoteCash.deleteTermConfirm')))) return
-    setBusy(true)
+    if (!(await confirmDialog(t("quoteCash.deleteTermConfirm")))) return;
+    setBusy(true);
     try {
       const res = await fetch(
         `/api/estimates/${encodeURIComponent(props.quoteId)}/terms?termId=${encodeURIComponent(termId)}`,
-        { method: 'DELETE' },
-      )
-      const { ok, body } = await readJson(res)
+        { method: "DELETE" },
+      );
+      const { ok, body } = await readJson(res);
       if (!ok) {
-        toast.error(errorMessage(body))
-        return
+        toast.error(errorMessage(body));
+        return;
       }
-      await load()
-      toast.success(t('quoteCash.termDeleted'))
+      await load();
+      toast.success(t("quoteCash.termDeleted"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function sendForSignature() {
     if (!signerName.trim() || !signerEmail.trim()) {
-      toast.error(t('quoteCash.signerRequired'))
-      return
+      toast.error(t("quoteCash.signerRequired"));
+      return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch(
-        `/api/estimates/${encodeURIComponent(props.quoteId)}/signature`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            signerName: signerName.trim(),
-            signerEmail: signerEmail.trim(),
-          }),
-        },
-      )
-      const { ok, body } = await readJson(res)
+      const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/signature`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signerName: signerName.trim(),
+          signerEmail: signerEmail.trim(),
+        }),
+      });
+      const { ok, body } = await readJson(res);
       if (!ok) {
-        toast.error(errorMessage(body))
-        return
+        toast.error(errorMessage(body));
+        return;
       }
       const record = body as {
-        status?: string
-        signUrl?: string
-        emailed?: boolean
-        emailSkippedReason?: string | null
-      }
-      setSending(false)
-      await load()
-      refreshApprovalState()
-      if (record.status === 'pending_approval')
-        toast.info(t('quoteCash.approvalHint'))
-      else if (record.emailed) toast.success(t('quoteCash.sentEmailed'))
-      else
-        toast.success(
-          t('quoteCash.sentLink', { reason: record.emailSkippedReason ?? '' }),
-        )
+        status?: string;
+        signUrl?: string;
+        emailed?: boolean;
+        emailSkippedReason?: string | null;
+      };
+      setSending(false);
+      await load();
+      refreshApprovalState();
+      if (record.status === "pending_approval") toast.info(t("quoteCash.approvalHint"));
+      else if (record.emailed) toast.success(t("quoteCash.sentEmailed"));
+      else toast.success(t("quoteCash.sentLink", { reason: record.emailSkippedReason ?? "" }));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function voidSignature() {
-    if (!(await confirmDialog(t('quoteCash.voidConfirm')))) return
-    setBusy(true)
+    if (!(await confirmDialog(t("quoteCash.voidConfirm")))) return;
+    setBusy(true);
     try {
-      const res = await fetch(
-        `/api/estimates/${encodeURIComponent(props.quoteId)}/signature`,
-        { method: 'DELETE' },
-      )
-      const { ok, body } = await readJson(res)
+      const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/signature`, {
+        method: "DELETE",
+      });
+      const { ok, body } = await readJson(res);
       if (!ok) {
-        toast.error(errorMessage(body))
-        return
+        toast.error(errorMessage(body));
+        return;
       }
-      await load()
-      toast.success(t('quoteCash.voided'))
+      await load();
+      toast.success(t("quoteCash.voided"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function activate() {
     const lines = preview!.terms.map(
       (term) => `${term.term.planName}: ${term.term.termMonths} months`,
-    )
-    const consequence = t('quoteCash.activateConfirm', {
+    );
+    const consequence = t("quoteCash.activateConfirm", {
       count: preview!.terms.length,
-      lines: lines.join('; '),
+      lines: lines.join("; "),
       contract: preview!.revenueContracts
-        ? t('quoteCash.activateContractYes')
-        : t('quoteCash.activateContractNo'),
-    })
-    if (!(await confirmDialog(consequence))) return
-    setBusy(true)
+        ? t("quoteCash.activateContractYes")
+        : t("quoteCash.activateContractNo"),
+    });
+    if (!(await confirmDialog(consequence))) return;
+    setBusy(true);
     try {
-      const res = await fetch(
-        `/api/estimates/${encodeURIComponent(props.quoteId)}/activation`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        },
-      )
-      const { ok, body } = await readJson(res)
+      const res = await fetch(`/api/estimates/${encodeURIComponent(props.quoteId)}/activation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const { ok, body } = await readJson(res);
       if (!ok) {
-        toast.error(errorMessage(body))
-        return
+        toast.error(errorMessage(body));
+        return;
       }
-      const record = body as { subscriptionIds?: string[] }
-      setActivated(record.subscriptionIds ?? [])
-      toast.success(t('quoteCash.activated'))
+      const record = body as { subscriptionIds?: string[] };
+      setActivated(record.subscriptionIds ?? []);
+      toast.success(t("quoteCash.activated"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   const focusedTerm =
-    preview.terms.find((term) => term.term.id === selectedTermId) ??
-    preview.terms[0] ??
-    null
+    preview.terms.find((term) => term.term.id === selectedTermId) ?? preview.terms[0] ?? null;
 
   function termCard(term: PreviewTerm, currency: string) {
     return (
@@ -449,11 +408,9 @@ export function QuoteCashSection(props: {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{term.term.planName}</span>
           <span className="text-slate-500 dark:text-slate-400">
-            {t('quoteCash.termMonths', { count: term.term.termMonths })}
+            {t("quoteCash.termMonths", { count: term.term.termMonths })}
           </span>
-          <strong className="tabular-nums">
-            {money(term.schedule.tcv, { currency })}
-          </strong>
+          <strong className="tabular-nums">{money(term.schedule.tcv, { currency })}</strong>
           <span className="flex-1" />
           {canEdit ? (
             <>
@@ -463,7 +420,7 @@ export function QuoteCashSection(props: {
                 disabled={busy}
                 onClick={() => startEditing(term)}
               >
-                {t('quoteCash.editTerm')}
+                {t("quoteCash.editTerm")}
               </Button>
               <Button
                 variant="ghost"
@@ -471,7 +428,7 @@ export function QuoteCashSection(props: {
                 disabled={busy}
                 onClick={() => void deleteTerm(term.term.id)}
               >
-                {t('quoteCash.deleteTerm')}
+                {t("quoteCash.deleteTerm")}
               </Button>
             </>
           ) : null}
@@ -479,7 +436,7 @@ export function QuoteCashSection(props: {
         <div className="mt-2 text-xs tabular-nums text-slate-500 dark:text-slate-400">
           {term.schedule.periods.map((p) => (
             <span key={p.periodIndex} className="mr-3">
-              {t('quoteCash.periodLine', {
+              {t("quoteCash.periodLine", {
                 price: money(p.unitPrice, { currency }),
                 qty: p.quantity,
                 amount: money(p.periodAmount, { currency }),
@@ -488,98 +445,84 @@ export function QuoteCashSection(props: {
           ))}
         </div>
       </li>
-    )
+    );
   }
 
   // A new-term draft scopes to its own selector tab, never floating beside
   // an unrelated focused term.
-  const NEW_TERM_SCOPE = 'new-term'
-  const showNewTab = editing !== null && editing.termId === null
-  const showStrip = preview.terms.length > 1 || showNewTab
+  const NEW_TERM_SCOPE = "new-term";
+  const showNewTab = editing !== null && editing.termId === null;
+  const showStrip = preview.terms.length > 1 || showNewTab;
   const visibleScope =
-    showNewTab && selectedTermId === NEW_TERM_SCOPE
-      ? NEW_TERM_SCOPE
-      : (focusedTerm?.term.id ?? '')
+    showNewTab && selectedTermId === NEW_TERM_SCOPE ? NEW_TERM_SCOPE : (focusedTerm?.term.id ?? "");
   // The editor replaces its own term's schedule card, and stays mounted but
   // hidden while another scope is selected — the draft survives the switch
   // and returns with its values when its term refocuses.
-  const editorScope = editing ? (editing.termId ?? NEW_TERM_SCOPE) : null
-  const editorVisible = editorScope !== null && editorScope === visibleScope
+  const editorScope = editing ? (editing.termId ?? NEW_TERM_SCOPE) : null;
+  const editorVisible = editorScope !== null && editorScope === visibleScope;
   const cardFor = (term: PreviewTerm) =>
     editorVisible && editing?.termId === term.term.id
       ? null
-      : termCard(term, preview.quote.currency)
+      : termCard(term, preview.quote.currency);
 
   function startEditing(term?: PreviewTerm) {
-    setActivated(null)
-    setSelectedTermId(term?.term.id ?? NEW_TERM_SCOPE)
+    setActivated(null);
+    setSelectedTermId(term?.term.id ?? NEW_TERM_SCOPE);
     setEditing({
       termId: term?.term.id ?? null,
-      quoteLineId: term?.term.quoteLineId ?? props.lines[0]?.id ?? '',
-      planId: term?.term.planId ?? '',
+      quoteLineId: term?.term.quoteLineId ?? props.lines[0]?.id ?? "",
+      planId: term?.term.planId ?? "",
       termMonths: String(term?.term.termMonths ?? 12),
-      startRule: term?.term.startRule ?? 'quote_date',
-      billingTiming: term?.term.billingTiming ?? 'advance',
+      startRule: term?.term.startRule ?? "quote_date",
+      billingTiming: term?.term.billingTiming ?? "advance",
       steps: term
         ? term.term.steps.map((s) => ({
             startsAfterMonths: String(s.startsAfterMonths),
             unitPrice: s.unitPrice,
             quantity: s.quantity,
-            escalatorPercent: s.escalatorPercent ?? '',
+            escalatorPercent: s.escalatorPercent ?? "",
           }))
         : [
             {
-              startsAfterMonths: '0',
-              unitPrice: '',
-              quantity: '1',
-              escalatorPercent: '',
+              startsAfterMonths: "0",
+              unitPrice: "",
+              quantity: "1",
+              escalatorPercent: "",
             },
           ],
-    })
+    });
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">
-          {t('quoteCash.totalContractValue')}
-        </span>
+        <span className="text-sm font-medium">{t("quoteCash.totalContractValue")}</span>
         <strong className="text-base tabular-nums">
           {money(preview.tcv, { currency: preview.quote.currency })}
         </strong>
-        {!preview.discountPct.startsWith('-') &&
-        preview.discountPct !== '0.00' ? (
-          <Badge variant={preview.floorBreached ? 'warning' : 'secondary'}>
-            {t('quoteCash.discount', { pct: preview.discountPct })}
+        {!preview.discountPct.startsWith("-") && preview.discountPct !== "0.00" ? (
+          <Badge variant={preview.floorBreached ? "warning" : "secondary"}>
+            {t("quoteCash.discount", { pct: preview.discountPct })}
           </Badge>
         ) : null}
         {preview.floorBreached ? (
-          <Badge variant="warning">{t('quoteCash.belowFloor')}</Badge>
+          <Badge variant="warning">{t("quoteCash.belowFloor")}</Badge>
         ) : null}
-        {signed ? (
-          <Badge variant="success">{t('quoteCash.signed')}</Badge>
-        ) : null}
+        {signed ? <Badge variant="success">{t("quoteCash.signed")}</Badge> : null}
         {openSignature ? (
-          <Badge variant="secondary">
-            {t(statusKey(preview.signature!.status))}
-          </Badge>
+          <Badge variant="secondary">{t(statusKey(preview.signature!.status))}</Badge>
         ) : null}
       </div>
 
       {preview.terms.length === 0 && !showNewTab ? (
         <div className="rounded-lg border border-dashed p-4 text-sm">
-          <p className="font-medium">{t('quoteCash.emptyTitle')}</p>
+          <p className="font-medium">{t("quoteCash.emptyTitle")}</p>
           <p className="mt-1 text-slate-500 dark:text-slate-400">
-            {t('quoteCash.emptyDescription')}
+            {t("quoteCash.emptyDescription")}
           </p>
           {canEdit ? (
-            <Button
-              className="mt-3"
-              size="sm"
-              disabled={busy}
-              onClick={() => startEditing()}
-            >
-              {t('quoteCash.addTerm')}
+            <Button className="mt-3" size="sm" disabled={busy} onClick={() => startEditing()}>
+              {t("quoteCash.addTerm")}
             </Button>
           ) : null}
         </div>
@@ -593,53 +536,38 @@ export function QuoteCashSection(props: {
                   label: term.term.planName,
                   count: term.schedule.periods.length,
                 })),
-                ...(showNewTab
-                  ? [{ key: NEW_TERM_SCOPE, label: t('quoteCash.addTerm') }]
-                  : []),
+                ...(showNewTab ? [{ key: NEW_TERM_SCOPE, label: t("quoteCash.addTerm") }] : []),
               ]}
               activeKey={visibleScope}
               onSelect={(key) => setSelectedTermId(key)}
-              ariaLabel={t('quoteCash.termsLabel')}
+              ariaLabel={t("quoteCash.termsLabel")}
             />
           ) : null}
           {visibleScope === NEW_TERM_SCOPE ? null : showStrip ? (
-            <ul className="space-y-2">
-              {focusedTerm ? cardFor(focusedTerm) : null}
-            </ul>
+            <ul className="space-y-2">{focusedTerm ? cardFor(focusedTerm) : null}</ul>
           ) : (
-            <ul className="space-y-2">
-              {preview.terms.map((term) => cardFor(term))}
-            </ul>
+            <ul className="space-y-2">{preview.terms.map((term) => cardFor(term))}</ul>
           )}
         </>
       )}
 
       {editing ? (
-        <div
-          hidden={!editorVisible}
-          className="space-y-3 rounded-lg border p-3"
-        >
+        <div hidden={!editorVisible} className="space-y-3 rounded-lg border p-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              <span className="mb-1 block font-medium">
-                {t('quoteCash.quoteLine')}
-              </span>
+              <span className="mb-1 block font-medium">{t("quoteCash.quoteLine")}</span>
               <SearchSelect
                 options={props.lines.map((l) => ({
                   value: l.id,
                   label: l.description ?? l.id,
                 }))}
                 value={editing.quoteLineId}
-                onChange={(value) =>
-                  setEditing({ ...editing, quoteLineId: value })
-                }
-                placeholder={t('quoteCash.quoteLine')}
+                onChange={(value) => setEditing({ ...editing, quoteLineId: value })}
+                placeholder={t("quoteCash.quoteLine")}
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium">
-                {t('quoteCash.plan')}
-              </span>
+              <span className="mb-1 block font-medium">{t("quoteCash.plan")}</span>
               <SearchSelect
                 options={plans.map((p) => ({
                   value: p.id,
@@ -647,20 +575,16 @@ export function QuoteCashSection(props: {
                 }))}
                 value={editing.planId}
                 onChange={(value) => setEditing({ ...editing, planId: value })}
-                placeholder={t('quoteCash.plan')}
+                placeholder={t("quoteCash.plan")}
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium">
-                {t('quoteCash.termMonthsLabel')}
-              </span>
+              <span className="mb-1 block font-medium">{t("quoteCash.termMonthsLabel")}</span>
               <input
                 className="w-full rounded-md border px-2 py-1.5"
                 inputMode="numeric"
                 value={editing.termMonths}
-                onChange={(e) =>
-                  setEditing({ ...editing, termMonths: e.target.value })
-                }
+                onChange={(e) => setEditing({ ...editing, termMonths: e.target.value })}
               />
             </label>
           </div>
@@ -669,89 +593,66 @@ export function QuoteCashSection(props: {
             rows={editing.steps}
             onRowsChange={(steps) => setEditing({ ...editing, steps })}
             emptyRow={() => ({
-              startsAfterMonths: '0',
-              unitPrice: '',
-              quantity: '1',
-              escalatorPercent: '',
+              startsAfterMonths: "0",
+              unitPrice: "",
+              quantity: "1",
+              escalatorPercent: "",
             })}
-            addLabel={t('quoteCash.addTerm')}
+            addLabel={t("quoteCash.addTerm")}
           />
           <DisclosureSection
-            title={t('quoteCash.advanced')}
-            summary={t('quoteCash.advancedSummary', {
+            title={t("quoteCash.advanced")}
+            summary={t("quoteCash.advancedSummary", {
               start: editing.startRule,
               timing: editing.billingTiming,
             })}
           >
             <div className="grid gap-3 pt-2 sm:grid-cols-2">
               <label className="text-sm">
-                <span className="mb-1 block font-medium">
-                  {t('quoteCash.startRule')}
-                </span>
+                <span className="mb-1 block font-medium">{t("quoteCash.startRule")}</span>
                 <select
                   className="w-full rounded-md border px-2 py-1.5"
                   value={editing.startRule}
-                  onChange={(e) =>
-                    setEditing({ ...editing, startRule: e.target.value })
-                  }
+                  onChange={(e) => setEditing({ ...editing, startRule: e.target.value })}
                 >
-                  <option value="quote_date">
-                    {t('quoteCash.startQuoteDate')}
-                  </option>
-                  <option value="first_of_next_month">
-                    {t('quoteCash.startNextMonth')}
-                  </option>
-                  <option value="custom">{t('quoteCash.startCustom')}</option>
+                  <option value="quote_date">{t("quoteCash.startQuoteDate")}</option>
+                  <option value="first_of_next_month">{t("quoteCash.startNextMonth")}</option>
+                  <option value="custom">{t("quoteCash.startCustom")}</option>
                 </select>
               </label>
               <label className="text-sm">
-                <span className="mb-1 block font-medium">
-                  {t('quoteCash.billingTiming')}
-                </span>
+                <span className="mb-1 block font-medium">{t("quoteCash.billingTiming")}</span>
                 <select
                   className="w-full rounded-md border px-2 py-1.5"
                   value={editing.billingTiming}
-                  onChange={(e) =>
-                    setEditing({ ...editing, billingTiming: e.target.value })
-                  }
+                  onChange={(e) => setEditing({ ...editing, billingTiming: e.target.value })}
                 >
-                  <option value="advance">
-                    {t('quoteCash.timingAdvance')}
-                  </option>
-                  <option value="arrears">
-                    {t('quoteCash.timingArrears')}
-                  </option>
+                  <option value="advance">{t("quoteCash.timingAdvance")}</option>
+                  <option value="arrears">{t("quoteCash.timingArrears")}</option>
                 </select>
               </label>
             </div>
           </DisclosureSection>
           {!preview.advancedSubscriptions && preview.terms.length > 0 ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('quoteCash.singlePeriodNote')}
+              {t("quoteCash.singlePeriodNote")}
             </p>
           ) : null}
           <div className="flex gap-2">
             <Button size="sm" disabled={busy} onClick={() => void saveTerm()}>
-              {t('quoteCash.saveTerm')}
+              {t("quoteCash.saveTerm")}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => setEditing(null)}
-            >
-              {t('quoteCash.cancel')}
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => setEditing(null)}>
+              {t("quoteCash.cancel")}
             </Button>
           </div>
         </div>
       ) : null}
 
       {preview.terms.length > 0 &&
-      (preview.discountPct !== '0.00' || preview.floorBreached) &&
+      (preview.discountPct !== "0.00" || preview.floorBreached) &&
       !signed ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t('quoteCash.approvalHint')}
-        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t("quoteCash.approvalHint")}</p>
       ) : null}
 
       {canEdit && !openSignature && !signed ? (
@@ -762,14 +663,12 @@ export function QuoteCashSection(props: {
               disabled={busy || preview.terms.length === 0}
               onClick={() => setSending(true)}
             >
-              {t('quoteCash.sendForSignature')}
+              {t("quoteCash.sendForSignature")}
             </Button>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="text-sm">
-                <span className="mb-1 block font-medium">
-                  {t('quoteCash.signerName')}
-                </span>
+                <span className="mb-1 block font-medium">{t("quoteCash.signerName")}</span>
                 <input
                   className="w-full rounded-md border px-2 py-1.5"
                   value={signerName}
@@ -777,9 +676,7 @@ export function QuoteCashSection(props: {
                 />
               </label>
               <label className="text-sm">
-                <span className="mb-1 block font-medium">
-                  {t('quoteCash.signerEmail')}
-                </span>
+                <span className="mb-1 block font-medium">{t("quoteCash.signerEmail")}</span>
                 <input
                   className="w-full rounded-md border px-2 py-1.5"
                   inputMode="email"
@@ -788,12 +685,8 @@ export function QuoteCashSection(props: {
                 />
               </label>
               <div className="flex gap-2 sm:col-span-2">
-                <Button
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void sendForSignature()}
-                >
-                  {t('quoteCash.sendLink')}
+                <Button size="sm" disabled={busy} onClick={() => void sendForSignature()}>
+                  {t("quoteCash.sendLink")}
                 </Button>
                 <Button
                   variant="outline"
@@ -801,7 +694,7 @@ export function QuoteCashSection(props: {
                   disabled={busy}
                   onClick={() => setSending(false)}
                 >
-                  {t('quoteCash.cancel')}
+                  {t("quoteCash.cancel")}
                 </Button>
               </div>
             </div>
@@ -812,16 +705,14 @@ export function QuoteCashSection(props: {
       {openSignature && preview.signature ? (
         <div className="space-y-1 rounded-lg border p-3 text-sm">
           <div>
-            <Badge variant="secondary">
-              {t(statusKey(preview.signature.status))}
-            </Badge>{' '}
-            {t('quoteCash.sentTo', {
+            <Badge variant="secondary">{t(statusKey(preview.signature.status))}</Badge>{" "}
+            {t("quoteCash.sentTo", {
               name: preview.signature.signerName,
               email: preview.signature.signerEmail,
             })}
           </div>
           <p className="text-slate-500 dark:text-slate-400">
-            {t('quoteCash.expiresOn', {
+            {t("quoteCash.expiresOn", {
               date: preview.signature.expiresAt.slice(0, 10),
             })}
           </p>
@@ -832,7 +723,7 @@ export function QuoteCashSection(props: {
               disabled={busy}
               onClick={() => void voidSignature()}
             >
-              {t('quoteCash.voidRequest')}
+              {t("quoteCash.voidRequest")}
             </Button>
           ) : null}
         </div>
@@ -841,8 +732,7 @@ export function QuoteCashSection(props: {
       {signed && !activated ? (
         <div className="space-y-2 rounded-lg border p-3 text-sm">
           <div>
-            <Badge variant="success">{t('quoteCash.signed')}</Badge>{' '}
-            {t('quoteCash.signedHint')}
+            <Badge variant="success">{t("quoteCash.signed")}</Badge> {t("quoteCash.signedHint")}
           </div>
           {canEdit ? (
             <Button
@@ -850,7 +740,7 @@ export function QuoteCashSection(props: {
               disabled={busy || preview.terms.length === 0}
               onClick={() => void activate()}
             >
-              {t('quoteCash.activate')}
+              {t("quoteCash.activate")}
             </Button>
           ) : null}
         </div>
@@ -859,10 +749,10 @@ export function QuoteCashSection(props: {
       {activated ? (
         <div className="text-sm">
           <Badge variant="success">
-            {t('quoteCash.activatedCount', { count: activated.length })}
+            {t("quoteCash.activatedCount", { count: activated.length })}
           </Badge>
         </div>
       ) : null}
     </div>
-  )
+  );
 }

@@ -18,7 +18,10 @@ export type CrmLifecycleStage = "lead" | "prospect" | "customer";
 
 const LIFECYCLE_RANK: Record<CrmLifecycleStage, number> = { lead: 0, prospect: 1, customer: 2 };
 
-export function shouldPromoteLifecycle(current: CrmLifecycleStage, requested: CrmLifecycleStage): boolean {
+export function shouldPromoteLifecycle(
+  current: CrmLifecycleStage,
+  requested: CrmLifecycleStage,
+): boolean {
   return LIFECYCLE_RANK[requested] > LIFECYCLE_RANK[current];
 }
 
@@ -97,7 +100,8 @@ export interface OpportunityLineMathInput {
 export function computeOpportunityTotals(lines: OpportunityLineMathInput[], probability: number) {
   const calculated = lines.map((line) => {
     const amount = multiplyDecimal(line.quantity, line.unitPrice);
-    if (cmp(amount, "0") < 0) throw new OpportunityMathError("opportunity line amount cannot be negative");
+    if (cmp(amount, "0") < 0)
+      throw new OpportunityMathError("opportunity line amount cannot be negative");
     const lineProbability = line.probability ?? probability;
     // Cost is optional and, when present, extends exactly as price does, so a
     // reader reconciling the stored cost_amount reproduces the writer's
@@ -109,7 +113,8 @@ export function computeOpportunityTotals(lines: OpportunityLineMathInput[], prob
     const costAmount = unitCost === null ? null : multiplyDecimal(line.quantity, unitCost);
     // Deliberately NOT clamped at zero: a line sold below cost reports a
     // negative gross profit, which is the fact the margin report exists for.
-    const grossProfit = costAmount === null ? null : fromUnits(toUnits(amount) - toUnits(costAmount));
+    const grossProfit =
+      costAmount === null ? null : fromUnits(toUnits(amount) - toUnits(costAmount));
     return {
       ...line,
       amount,
@@ -129,7 +134,8 @@ export function computeOpportunityTotals(lines: OpportunityLineMathInput[], prob
   const costedLines = calculated.filter((line) => line.costAmount !== null);
   const isFullyCosted = calculated.length > 0 && costedLines.length === calculated.length;
   const totalCost = isFullyCosted ? sum(costedLines.map((line) => line.costAmount!)) : null;
-  const grossProfit = totalCost === null ? null : fromUnits(toUnits(projectedAmount) - toUnits(totalCost));
+  const grossProfit =
+    totalCost === null ? null : fromUnits(toUnits(projectedAmount) - toUnits(totalCost));
   return {
     lines: calculated,
     projectedAmount,
@@ -143,9 +149,10 @@ export function computeOpportunityTotals(lines: OpportunityLineMathInput[], prob
     // Weighted profit follows the same line-by-line rule as weighted revenue,
     // so a deal whose lines close at different probabilities cannot report a
     // profit its own lines do not add up to.
-    weightedGrossProfit: totalCost === null
-      ? null
-      : sum(calculated.map((line) => weightSignedAmount(line.grossProfit!, line.probability))),
+    weightedGrossProfit:
+      totalCost === null
+        ? null
+        : sum(calculated.map((line) => weightSignedAmount(line.grossProfit!, line.probability))),
     lineCount: calculated.length,
     costedLineCount: costedLines.length,
     isFullyCosted,
@@ -206,24 +213,35 @@ export function validateOpportunityStageTransition(
   policy: OpportunityStagePolicy,
 ): OpportunityStageRefusal | null {
   if (policy.requiresLines && subject.lineCount < 1) return "lines_required";
-  if (policy.requiresPrimaryContact && !subject.hasPrimaryContact) return "primary_contact_required";
+  if (policy.requiresPrimaryContact && !subject.hasPrimaryContact)
+    return "primary_contact_required";
   // Strictly positive. The schema already refuses a negative projected amount,
   // so the question this gate answers is "is it priced", not "is it sane".
   if (policy.requiresPositiveAmount && cmp(subject.projectedAmount, "0") <= 0) {
     return "positive_amount_required";
   }
-  if (policy.requiresWinLossReason && !subject.winLossReason?.trim()) return "win_loss_reason_required";
+  if (policy.requiresWinLossReason && !subject.winLossReason?.trim())
+    return "win_loss_reason_required";
   return null;
 }
 
 export function validateContributionTotal(contributions: string[]): void {
   if (contributions.length === 0) return;
-  if (sum(contributions) !== "100.0000") throw new OpportunityMathError("sales-team contribution must total exactly 100%");
-  if (contributions.some((value) => cmp(value, "0") <= 0)) throw new OpportunityMathError("sales-team contribution must be positive");
+  if (sum(contributions) !== "100.0000")
+    throw new OpportunityMathError("sales-team contribution must total exactly 100%");
+  if (contributions.some((value) => cmp(value, "0") <= 0))
+    throw new OpportunityMathError("sales-team contribution must be positive");
 }
 
 export type TerritoryRule = {
-  field: "country" | "region" | "industry" | "lifecycleStage" | "leadSourceId" | "annualRevenue" | "employeeCount";
+  field:
+    | "country"
+    | "region"
+    | "industry"
+    | "lifecycleStage"
+    | "leadSourceId"
+    | "annualRevenue"
+    | "employeeCount";
   operator: "equals" | "in" | "contains" | "gte" | "lte";
   value: string | string[] | number;
 };
@@ -242,10 +260,17 @@ function matchRule(subject: TerritorySubject, rule: TerritoryRule): boolean {
   const raw = subject[rule.field];
   if (raw === null || raw === undefined) return false;
   if (rule.operator === "in") {
-    return Array.isArray(rule.value) && rule.value.map((value) => String(value).toLocaleLowerCase()).includes(String(raw).toLocaleLowerCase());
+    return (
+      Array.isArray(rule.value) &&
+      rule.value
+        .map((value) => String(value).toLocaleLowerCase())
+        .includes(String(raw).toLocaleLowerCase())
+    );
   }
-  if (rule.operator === "contains") return String(raw).toLocaleLowerCase().includes(String(rule.value).toLocaleLowerCase());
-  if (rule.operator === "equals") return String(raw).toLocaleLowerCase() === String(rule.value).toLocaleLowerCase();
+  if (rule.operator === "contains")
+    return String(raw).toLocaleLowerCase().includes(String(rule.value).toLocaleLowerCase());
+  if (rule.operator === "equals")
+    return String(raw).toLocaleLowerCase() === String(rule.value).toLocaleLowerCase();
   if (rule.field === "annualRevenue") {
     const compared = cmp(String(raw), String(rule.value));
     return rule.operator === "gte" ? compared >= 0 : compared <= 0;
@@ -256,7 +281,13 @@ function matchRule(subject: TerritorySubject, rule: TerritoryRule): boolean {
   return rule.operator === "gte" ? numeric >= target : numeric <= target;
 }
 
-export function matchesTerritory(subject: TerritorySubject, rules: TerritoryRule[], mode: "all" | "any"): boolean {
+export function matchesTerritory(
+  subject: TerritorySubject,
+  rules: TerritoryRule[],
+  mode: "all" | "any",
+): boolean {
   if (rules.length === 0) return false;
-  return mode === "all" ? rules.every((rule) => matchRule(subject, rule)) : rules.some((rule) => matchRule(subject, rule));
+  return mode === "all"
+    ? rules.every((rule) => matchRule(subject, rule))
+    : rules.some((rule) => matchRule(subject, rule));
 }

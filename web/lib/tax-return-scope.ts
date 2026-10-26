@@ -47,10 +47,8 @@ function translationFromParts(parts: {
   }
   const currency =
     typeof parts.presentationCurrency === "string" ? parts.presentationCurrency.trim() : "";
-  const type =
-    typeof parts.rateType === "string" ? parts.rateType.trim() || undefined : undefined;
-  const date =
-    typeof parts.rateDate === "string" ? parts.rateDate.trim() || undefined : undefined;
+  const type = typeof parts.rateType === "string" ? parts.rateType.trim() || undefined : undefined;
+  const date = typeof parts.rateDate === "string" ? parts.rateDate.trim() || undefined : undefined;
   return {
     translation: {
       presentationCurrency: currency,

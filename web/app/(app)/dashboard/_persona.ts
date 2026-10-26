@@ -1,27 +1,30 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { celebrationDetail, teamNudgeTexts } from './_persona-copy'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { listInbox, type InboxItem } from '@openbooks/engine/inbox/runtime'
-import { qualificationSourceAvailable } from '@openbooks/engine/inbox/adapters/hrm-qualification-alert'
-import { nextPeriodAfter } from '@openbooks/engine/payroll/run-calendar'
-import { addCalendarDays } from '@openbooks/engine/platform/civil-date'
-import { findEmploymentsByParty } from '@openbooks/engine/hrm/employment-read'
-import { loadApprovalPerson, loadTeamEmploymentIdsForManager } from '@openbooks/engine/hrm/authorization'
-import { listMyReviews } from '@openbooks/engine/hrm/performance/performance-read'
-import { listLeaveTypes, timeBalanceAsOf } from '@openbooks/engine/hrm/leave-read'
-import { MissingExchangeRateError } from '@/lib/fx-presentation'
-import { liveHomeAnnouncements } from '@/lib/setup/home-announcements'
-import { inboxContext, inboxCounts, INBOX_TASK_KINDS } from '@/lib/inbox-context'
-import { can, type Authz } from '@/lib/authz'
-import { isFeatureEnabled } from '@/lib/features'
-import { hasAdminPersona } from './_widget-access'
-import { widgetFeatureOn } from './widget-features'
-import { permissionSetCovers } from '@/lib/permissions'
-import type { Persona } from './_persona-layout'
+import { sql } from "drizzle-orm";
+import { getLocale, getTranslations } from "next-intl/server";
+import { celebrationDetail, teamNudgeTexts } from "./_persona-copy";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { listInbox, type InboxItem } from "@openbooks/engine/inbox/runtime";
+import { qualificationSourceAvailable } from "@openbooks/engine/inbox/adapters/hrm-qualification-alert";
+import { nextPeriodAfter } from "@openbooks/engine/payroll/run-calendar";
+import { addCalendarDays } from "@openbooks/engine/platform/civil-date";
+import { findEmploymentsByParty } from "@openbooks/engine/hrm/employment-read";
+import {
+  loadApprovalPerson,
+  loadTeamEmploymentIdsForManager,
+} from "@openbooks/engine/hrm/authorization";
+import { listMyReviews } from "@openbooks/engine/hrm/performance/performance-read";
+import { listLeaveTypes, timeBalanceAsOf } from "@openbooks/engine/hrm/leave-read";
+import { MissingExchangeRateError } from "@/lib/fx-presentation";
+import { liveHomeAnnouncements } from "@/lib/setup/home-announcements";
+import { inboxContext, inboxCounts, INBOX_TASK_KINDS } from "@/lib/inbox-context";
+import { can, type Authz } from "@/lib/authz";
+import { isFeatureEnabled } from "@/lib/features";
+import { hasAdminPersona } from "./_widget-access";
+import { widgetFeatureOn } from "./widget-features";
+import { permissionSetCovers } from "@/lib/permissions";
+import type { Persona } from "./_persona-layout";
 
 /**
  * HR-15 persona homes as dashboard defaults: employee (everyone), manager
@@ -30,54 +33,63 @@ import type { Persona } from './_persona-layout'
  * payroll.manage). Chosen by what the actor HOLDS, never by role name.
  */
 
-export type { Persona } from './_persona-layout'
+export type { Persona } from "./_persona-layout";
 
 function heldPermissions(authz: Authz): ReadonlySet<string> {
-  return authz.permissions
+  return authz.permissions;
 }
 
 export function hasApprovalGrant(authz: Authz): boolean {
-  const permissions = heldPermissions(authz)
-  if (permissionSetCovers(permissions, 'flows.manage')) return true
+  const permissions = heldPermissions(authz);
+  if (permissionSetCovers(permissions, "flows.manage")) return true;
   for (const permission of permissions) {
-    if (permission === '*' || permission.endsWith('.*')) {
-      if (permissionSetCovers(new Set([permission]), 'flows.approve')) return true
-      continue
+    if (permission === "*" || permission.endsWith(".*")) {
+      if (permissionSetCovers(new Set([permission]), "flows.approve")) return true;
+      continue;
     }
-    if (permission.includes('.approve')) return true
+    if (permission.includes(".approve")) return true;
   }
-  return false
+  return false;
 }
 
 export async function teamEmploymentIds(authz: Authz, today: string): Promise<string[]> {
-  let partyId: string | null = null
+  let partyId: string | null = null;
   try {
-    partyId = (await loadApprovalPerson(db, authz.user.orgId, authz.user.id)).partyId
+    partyId = (await loadApprovalPerson(db, authz.user.orgId, authz.user.id)).partyId;
   } catch {
-    return []
+    return [];
   }
-  if (!partyId) return []
-  const mine = await findEmploymentsByParty({ orgId: authz.user.orgId, actorId: authz.user.id, workerPartyId: partyId }).catch(() => [] as readonly string[])
-  return loadTeamEmploymentIdsForManager(db, authz.user.orgId, [...mine], today).catch(() => [])
+  if (!partyId) return [];
+  const mine = await findEmploymentsByParty({
+    orgId: authz.user.orgId,
+    actorId: authz.user.id,
+    workerPartyId: partyId,
+  }).catch(() => [] as readonly string[]);
+  return loadTeamEmploymentIdsForManager(db, authz.user.orgId, [...mine], today).catch(() => []);
 }
 
 export async function resolvePersona(authz: Authz): Promise<Persona> {
-  if (hasAdminPersona(authz)) return 'admin'
-  if (hasApprovalGrant(authz)) return 'manager'
-  const today = await businessToday(authz.user.orgId)
-  if ((await teamEmploymentIds(authz, today)).length > 0) return 'manager'
-  return 'employee'
+  if (hasAdminPersona(authz)) return "admin";
+  if (hasApprovalGrant(authz)) return "manager";
+  const today = await businessToday(authz.user.orgId);
+  if ((await teamEmploymentIds(authz, today)).length > 0) return "manager";
+  return "employee";
 }
 
 export interface PersonaInboxItem {
-  id: string
-  kind: string
-  title: string
-  subtitle: string | null
-  dueAt: string | null
-  href: string
-  priority: string
-  actions: { key: string; label: string; style: 'primary' | 'secondary' | 'danger'; needsReason: boolean }[]
+  id: string;
+  kind: string;
+  title: string;
+  subtitle: string | null;
+  dueAt: string | null;
+  href: string;
+  priority: string;
+  actions: {
+    key: string;
+    label: string;
+    style: "primary" | "secondary" | "danger";
+    needsReason: boolean;
+  }[];
 }
 
 export function toPersonaItem(item: InboxItem): PersonaInboxItem {
@@ -90,26 +102,32 @@ export function toPersonaItem(item: InboxItem): PersonaInboxItem {
     href: item.subjectHref,
     priority: item.priority,
     actions: item.actions.map((action) => ({ ...action })),
-  }
+  };
 }
 
 export interface PersonaMetrics {
-  inboxTasksTop: PersonaInboxItem[] | null
-  inboxApprovalsTop: PersonaInboxItem[] | null
-  inboxCount: number | null
-  payTile: { nextPayDate: string | null; lastPayDate: string | null; slipHref: string | null } | null
-  balances: { code: string; hours: string }[] | null
-  whosOut: { name: string; range: string }[] | null
-  upcoming: { label: string; date: string; href: string }[] | null
-  celebrations: { name: string; detail: string }[] | null
-  announcements: { title: string; body: string | null }[] | null
-  teamSteps: { title: string; owner: string; due: string }[] | null
-  teamNudges: { text: string; href: string }[] | null
-  teamHeadcount: number | null
-  teamQuals: { name: string; detail: string }[] | null
-  adminAttention: { label: string; count: number; href: string; unavailable?: true; reason?: string | null }[] | null
-  workflowErrors: { count: number; href: string; unavailable?: true } | null
-  adminCalendar: { label: string; date: string }[] | null
+  inboxTasksTop: PersonaInboxItem[] | null;
+  inboxApprovalsTop: PersonaInboxItem[] | null;
+  inboxCount: number | null;
+  payTile: {
+    nextPayDate: string | null;
+    lastPayDate: string | null;
+    slipHref: string | null;
+  } | null;
+  balances: { code: string; hours: string }[] | null;
+  whosOut: { name: string; range: string }[] | null;
+  upcoming: { label: string; date: string; href: string }[] | null;
+  celebrations: { name: string; detail: string }[] | null;
+  announcements: { title: string; body: string | null }[] | null;
+  teamSteps: { title: string; owner: string; due: string }[] | null;
+  teamNudges: { text: string; href: string }[] | null;
+  teamHeadcount: number | null;
+  teamQuals: { name: string; detail: string }[] | null;
+  adminAttention:
+    | { label: string; count: number; href: string; unavailable?: true; reason?: string | null }[]
+    | null;
+  workflowErrors: { count: number; href: string; unavailable?: true } | null;
+  adminCalendar: { label: string; date: string }[] | null;
 }
 
 const EMPTY_PERSONA: PersonaMetrics = {
@@ -129,74 +147,92 @@ const EMPTY_PERSONA: PersonaMetrics = {
   adminAttention: null,
   workflowErrors: null,
   adminCalendar: null,
-}
+};
 
 /** Monday–Sunday window containing today (civil dates). */
 function weekWindow(today: string): { start: string; end: string } {
-  const noon = new Date(`${today}T12:00:00Z`).getTime()
-  const dow = new Date(noon).getUTCDay()
-  const monday = new Date(noon - ((dow + 6) % 7) * 86_400_000).toISOString().slice(0, 10)
-  const sunday = new Date(noon + ((7 - dow) % 7) * 86_400_000).toISOString().slice(0, 10)
-  return { start: monday, end: sunday }
+  const noon = new Date(`${today}T12:00:00Z`).getTime();
+  const dow = new Date(noon).getUTCDay();
+  const monday = new Date(noon - ((dow + 6) % 7) * 86_400_000).toISOString().slice(0, 10);
+  const sunday = new Date(noon + ((7 - dow) % 7) * 86_400_000).toISOString().slice(0, 10);
+  return { start: monday, end: sunday };
 }
 
 export async function loadPersonaMetrics(
   authz: Authz,
   fields: ReadonlySet<keyof PersonaMetrics>,
 ): Promise<PersonaMetrics> {
-  const out: PersonaMetrics = { ...EMPTY_PERSONA }
-  if (fields.size === 0) return out
-  const orgId = authz.user.orgId
-  const userId = authz.user.id
-  const tp = await getTranslations('dashboard.persona')
-  const locale = await getLocale()
-  const need = (...names: (keyof PersonaMetrics)[]): boolean => names.some((name) => fields.has(name))
-  const ctx = need('inboxTasksTop', 'inboxApprovalsTop', 'inboxCount') ? await inboxContext(authz) : null
-  const today = await businessToday(orgId)
-  const cache = new Map<string, InboxItem[]>()
+  const out: PersonaMetrics = { ...EMPTY_PERSONA };
+  if (fields.size === 0) return out;
+  const orgId = authz.user.orgId;
+  const userId = authz.user.id;
+  const tp = await getTranslations("dashboard.persona");
+  const locale = await getLocale();
+  const need = (...names: (keyof PersonaMetrics)[]): boolean =>
+    names.some((name) => fields.has(name));
+  const ctx = need("inboxTasksTop", "inboxApprovalsTop", "inboxCount")
+    ? await inboxContext(authz)
+    : null;
+  const today = await businessToday(orgId);
+  const cache = new Map<string, InboxItem[]>();
 
-  if (ctx && need('inboxTasksTop', 'inboxApprovalsTop', 'inboxCount')) {
+  if (ctx && need("inboxTasksTop", "inboxApprovalsTop", "inboxCount")) {
     const [tasks, approvals] = await Promise.all([
-      need('inboxTasksTop', 'inboxCount')
+      need("inboxTasksTop", "inboxCount")
         ? listInbox(ctx, {
             kinds: INBOX_TASK_KINDS,
             cache,
           })
         : Promise.resolve([] as InboxItem[]),
-      need('inboxApprovalsTop', 'inboxCount')
-        ? listInbox(ctx, { kinds: ['flows_approval', 'expense_report'], cache })
+      need("inboxApprovalsTop", "inboxCount")
+        ? listInbox(ctx, { kinds: ["flows_approval", "expense_report"], cache })
         : Promise.resolve([] as InboxItem[]),
-    ])
-    if (need('inboxTasksTop')) out.inboxTasksTop = tasks.slice(0, 5).map(toPersonaItem)
-    if (need('inboxApprovalsTop')) out.inboxApprovalsTop = approvals.slice(0, 5).map(toPersonaItem)
-    if (need('inboxCount')) {
-      out.inboxCount = (await inboxCounts(authz, ctx)).count
+    ]);
+    if (need("inboxTasksTop")) out.inboxTasksTop = tasks.slice(0, 5).map(toPersonaItem);
+    if (need("inboxApprovalsTop")) out.inboxApprovalsTop = approvals.slice(0, 5).map(toPersonaItem);
+    if (need("inboxCount")) {
+      out.inboxCount = (await inboxCounts(authz, ctx)).count;
     }
   }
 
-  const partyId = need('payTile', 'balances', 'whosOut', 'teamSteps', 'teamHeadcount', 'celebrations')
-    ? await loadApprovalPerson(db, orgId, userId).then((person) => person.partyId).catch(() => null)
-    : null
+  const partyId = need(
+    "payTile",
+    "balances",
+    "whosOut",
+    "teamSteps",
+    "teamHeadcount",
+    "celebrations",
+  )
+    ? await loadApprovalPerson(db, orgId, userId)
+        .then((person) => person.partyId)
+        .catch(() => null)
+    : null;
 
-  if (need('payTile') && (await widgetFeatureOn(orgId, 'pay-tile')) && partyId) {
+  if (need("payTile") && (await widgetFeatureOn(orgId, "pay-tile")) && partyId) {
     const [stub, schedule] = await Promise.all([
-      db.execute<{ pay_date: string }>(sql`
+      db.execute<{ pay_date: string }>(
+        sql`
         select pay_date::text as pay_date from pay_stubs
          where org_id = ${orgId} and employee_party_id = ${partyId}
-         order by pay_date desc limit 1`, 'objects'),
+         order by pay_date desc limit 1`,
+        "objects",
+      ),
       // The EMPLOYEE's own schedule from their active payroll profile — the
       // org default is wrong wherever colleagues pay on different
       // frequencies. First active profile wins; the tile names one date.
-      db.execute<{ anchor: string; frequency: string; offset: number }>(sql`
+      db.execute<{ anchor: string; frequency: string; offset: number }>(
+        sql`
         select s.anchor_period_end::text as anchor, s.frequency, s.pay_date_offset_days as offset
           from employee_payroll_profiles pr
           join pay_schedules s on s.id = pr.pay_schedule_id and s.org_id = pr.org_id
          where pr.org_id = ${orgId} and pr.employee_party_id = ${partyId} and pr.is_active and s.is_active
-         order by pr.created_at limit 1`, 'objects'),
-    ])
-    const lastPayDate = stub[0]?.pay_date ?? null
-    let nextPayDate: string | null = null
-    const row = schedule[0]
+         order by pr.created_at limit 1`,
+        "objects",
+      ),
+    ]);
+    const lastPayDate = stub[0]?.pay_date ?? null;
+    let nextPayDate: string | null = null;
+    const row = schedule[0];
     if (row) {
       try {
         // Every frequency through the payroll calendar — the same call the
@@ -213,61 +249,83 @@ export async function loadPersonaMetrics(
         // upcoming — the next period would skip it). Probing the calendar
         // from today − offset − 1 lands exactly that period, and the offset
         // advances by civil days, never setUTCDate.
-        const offset = row.offset ?? 0
+        const offset = row.offset ?? 0;
         const next = nextPeriodAfter(
           { frequency: row.frequency, anchor_period_end: row.anchor },
           addCalendarDays(today, -offset - 1),
-        )
-        nextPayDate = addCalendarDays(next.periodEnd, offset)
+        );
+        nextPayDate = addCalendarDays(next.periodEnd, offset);
       } catch {
         // Anchor validity is enforced at schedule setup.
       }
     }
-    out.payTile = lastPayDate === null && nextPayDate === null ? null : { nextPayDate, lastPayDate, slipHref: '/payroll' }
+    out.payTile =
+      lastPayDate === null && nextPayDate === null
+        ? null
+        : { nextPayDate, lastPayDate, slipHref: "/payroll" };
   }
 
-  if (need('balances') && partyId && (await widgetFeatureOn(orgId, 'balance-tile'))) {
-    const employmentIds = await findEmploymentsByParty({ orgId, actorId: userId, workerPartyId: partyId }).catch(() => [] as readonly string[])
+  if (need("balances") && partyId && (await widgetFeatureOn(orgId, "balance-tile"))) {
+    const employmentIds = await findEmploymentsByParty({
+      orgId,
+      actorId: userId,
+      workerPartyId: partyId,
+    }).catch(() => [] as readonly string[]);
     // Null policy (no coverage) reads as a null balance — uncovered types
     // are skipped, and a tile with no computable balance stays absent
     // rather than rendering a zero as a fact.
-    const types = employmentIds.length > 0 ? await listLeaveTypes(db, orgId).catch(() => []) : []
-    const balances: { code: string; hours: string }[] = []
+    const types = employmentIds.length > 0 ? await listLeaveTypes(db, orgId).catch(() => []) : [];
+    const balances: { code: string; hours: string }[] = [];
     for (const employmentId of employmentIds.slice(0, 3)) {
       for (const type of types.filter((candidate) => candidate.isActive).slice(0, 6)) {
-        const balance = await timeBalanceAsOf(db, orgId, employmentId, type.id, today).catch(() => null)
-        if (!balance) continue
-        if (balance.unlimited) balances.push({ code: type.code, hours: tp('unlimited') })
-        else if (balance.balance !== null) balances.push({ code: type.code, hours: balance.balance })
+        const balance = await timeBalanceAsOf(db, orgId, employmentId, type.id, today).catch(
+          () => null,
+        );
+        if (!balance) continue;
+        if (balance.unlimited) balances.push({ code: type.code, hours: tp("unlimited") });
+        else if (balance.balance !== null)
+          balances.push({ code: type.code, hours: balance.balance });
       }
     }
-    out.balances = balances.length > 0 ? balances.slice(0, 3) : null
+    out.balances = balances.length > 0 ? balances.slice(0, 3) : null;
   }
 
-  const teamIds = need('whosOut', 'teamSteps', 'teamNudges', 'teamHeadcount', 'celebrations')
+  const teamIds = need("whosOut", "teamSteps", "teamNudges", "teamHeadcount", "celebrations")
     ? await teamEmploymentIds(authz, today)
-    : []
-  const isManager = teamIds.length > 0
+    : [];
+  const isManager = teamIds.length > 0;
 
-  if (need('whosOut')) {
+  if (need("whosOut")) {
     // My team: my reports when I hold them, else my peers (my manager's
     // reports, me included) — the people whose absence affects my week.
-    let scopeIds = teamIds
+    let scopeIds = teamIds;
     if (scopeIds.length === 0 && partyId) {
-      const mine = await findEmploymentsByParty({ orgId, actorId: userId, workerPartyId: partyId }).catch(() => [] as readonly string[])
+      const mine = await findEmploymentsByParty({
+        orgId,
+        actorId: userId,
+        workerPartyId: partyId,
+      }).catch(() => [] as readonly string[]);
       if (mine.length > 0) {
-        const managers = (await db.execute<{ id: string }>(sql`
+        const managers = (
+          await db.execute<{ id: string }>(
+            sql`
           select distinct manager_employment_id::text as id from reporting_relationships
            where org_id = ${orgId} and employment_id in (select jsonb_array_elements_text(${JSON.stringify([...mine])}::jsonb)::uuid)
              and kind = 'line' and recorded_until is null
              and effective_from <= ${today}::date and (effective_to is null or effective_to > ${today}::date)
-        `, 'objects')).map((row) => row.id)
-        scopeIds = await loadTeamEmploymentIdsForManager(db, orgId, managers, today).catch(() => [])
+        `,
+            "objects",
+          )
+        ).map((row) => row.id);
+        scopeIds = await loadTeamEmploymentIdsForManager(db, orgId, managers, today).catch(
+          () => [],
+        );
       }
     }
     if (scopeIds.length > 0) {
-      const { start, end } = weekWindow(today)
-      const rows = await db.execute<{ name: string; starts_on: string; ends_on: string }>(sql`
+      const { start, end } = weekWindow(today);
+      const rows = await db.execute<{ name: string; starts_on: string; ends_on: string }>(
+        sql`
         select p.display_name as name, r.starts_on::text as starts_on, r.ends_on::text as ends_on
           from hrm_leave_requests r
           join worker_employments e on e.org_id = r.org_id and e.id = r.employment_id
@@ -275,67 +333,109 @@ export async function loadPersonaMetrics(
          where r.org_id = ${orgId} and r.status = 'approved'
            and r.starts_on <= ${end}::date and r.ends_on >= ${start}::date
            and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify(scopeIds)}::jsonb)::uuid)
-         order by r.starts_on, p.display_name limit 10`, 'objects')
+         order by r.starts_on, p.display_name limit 10`,
+        "objects",
+      );
       // Viewer dates, never raw ISO: the range renders in the request
       // locale, noon-anchored so a bare civil date cannot render a day early
       // west of Greenwich.
-      const fmtRangeDay = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' })
+      const fmtRangeDay = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
       out.whosOut = rows.map((row) => ({
         name: row.name,
-        range: tp('reviewRange', {
+        range: tp("reviewRange", {
           from: fmtRangeDay.format(new Date(`${row.starts_on}T12:00:00Z`)),
           to: fmtRangeDay.format(new Date(`${row.ends_on}T12:00:00Z`)),
         }),
-      }))
+      }));
     } else {
-      out.whosOut = []
+      out.whosOut = [];
     }
   }
 
-  if (need('upcoming')) {
-    const upcoming: { label: string; date: string; href: string }[] = []
-    if (can(authz, 'payroll.manage') && await isFeatureEnabled(orgId, 'payroll')) {
-      const holidays = (await db.execute<{ name: string; on: string }>(sql`
+  if (need("upcoming")) {
+    const upcoming: { label: string; date: string; href: string }[] = [];
+    if (can(authz, "payroll.manage") && (await isFeatureEnabled(orgId, "payroll"))) {
+      const holidays = (
+        await db
+          .execute<{ name: string; on: string }>(
+            sql`
         select coalesce(nullif(name, ''), jurisdiction) as name, observed_on::text as on from payroll_holidays
          where org_id = ${orgId} and observed_on >= ${today}::date and observed_on <= ${today}::date + 30
-         order by observed_on limit 5`).catch(() => ({ rows: [] as { name: string; on: string }[] }))).rows
-      for (const holiday of holidays) upcoming.push({ label: holiday.name, date: holiday.on, href: '/payroll' })
+         order by observed_on limit 5`,
+          )
+          .catch(() => ({ rows: [] as { name: string; on: string }[] }))
+      ).rows;
+      for (const holiday of holidays)
+        upcoming.push({ label: holiday.name, date: holiday.on, href: "/payroll" });
     }
-    if (await isFeatureEnabled(orgId, 'hrm')) {
-      const mine = await listMyReviews({ orgId, actorId: userId }).catch(() => null)
+    if (await isFeatureEnabled(orgId, "hrm")) {
+      const mine = await listMyReviews({ orgId, actorId: userId }).catch(() => null);
       if (mine) {
-        const pending = mine.asReviewer.filter((r) => r.status === 'pending')
-        const shared = mine.asSubject.filter((r) => r.status === 'shared')
+        const pending = mine.asReviewer.filter((r) => r.status === "pending");
+        const shared = mine.asSubject.filter((r) => r.status === "shared");
         // The tile shows each review's real due date, never today: answers
         // I owe fall due on the cycle manager date (self reviews on the
         // self date), shared rows on the self date — the cycle period end
         // bounds both when a role date is unset.
-        const dueByCycle = new Map<string, { selfDueOn: string | null; managerDueOn: string | null; periodEndOn: string }>()
-        const cycleIds = [...new Set([...pending, ...shared].map((r) => r.cycleId))]
+        const dueByCycle = new Map<
+          string,
+          { selfDueOn: string | null; managerDueOn: string | null; periodEndOn: string }
+        >();
+        const cycleIds = [...new Set([...pending, ...shared].map((r) => r.cycleId))];
         if (cycleIds.length > 0) {
-          const cycles = (await db.execute<{ id: string; selfDueOn: string | null; managerDueOn: string | null; periodEndOn: string }>(sql`
+          const cycles = (
+            await db
+              .execute<{
+                id: string;
+                selfDueOn: string | null;
+                managerDueOn: string | null;
+                periodEndOn: string;
+              }>(
+                sql`
             select id::text as id, self_due_on::text as "selfDueOn", manager_due_on::text as "managerDueOn", period_end_on::text as "periodEndOn"
               from hrm_review_cycles
              where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(cycleIds)}::jsonb)::uuid)
-          `).catch(() => ({ rows: [] as { id: string; selfDueOn: string | null; managerDueOn: string | null; periodEndOn: string }[] }))).rows
+          `,
+              )
+              .catch(() => ({
+                rows: [] as {
+                  id: string;
+                  selfDueOn: string | null;
+                  managerDueOn: string | null;
+                  periodEndOn: string;
+                }[],
+              }))
+          ).rows;
           for (const cycle of cycles) {
-            dueByCycle.set(cycle.id, { selfDueOn: cycle.selfDueOn, managerDueOn: cycle.managerDueOn, periodEndOn: cycle.periodEndOn })
+            dueByCycle.set(cycle.id, {
+              selfDueOn: cycle.selfDueOn,
+              managerDueOn: cycle.managerDueOn,
+              periodEndOn: cycle.periodEndOn,
+            });
           }
         }
-        for (const { review, own } of [...pending.map((review) => ({ review, own: false })), ...shared.map((review) => ({ review, own: true }))].slice(0, 3)) {
-          const due = dueByCycle.get(review.cycleId)
-          const selfReview = review.reviewerPartyId === review.subjectPartyId
-          const roleDue = selfReview || own ? due?.selfDueOn : due?.managerDueOn
-          upcoming.push({ label: tp('reviewDue'), date: roleDue ?? due?.periodEndOn ?? today, href: `/hrm/performance?review=${review.id}` })
+        for (const { review, own } of [
+          ...pending.map((review) => ({ review, own: false })),
+          ...shared.map((review) => ({ review, own: true })),
+        ].slice(0, 3)) {
+          const due = dueByCycle.get(review.cycleId);
+          const selfReview = review.reviewerPartyId === review.subjectPartyId;
+          const roleDue = selfReview || own ? due?.selfDueOn : due?.managerDueOn;
+          upcoming.push({
+            label: tp("reviewDue"),
+            date: roleDue ?? due?.periodEndOn ?? today,
+            href: `/hrm/performance?review=${review.id}`,
+          });
         }
       }
     }
-    out.upcoming = upcoming.slice(0, 5)
+    out.upcoming = upcoming.slice(0, 5);
   }
 
-  if (need('celebrations') && (await widgetFeatureOn(orgId, 'celebrations-list'))) {
-    const teamScope = isManager ? teamIds : null
-    const rows = await db.execute<{ name: string; service_start: string }>(sql`
+  if (need("celebrations") && (await widgetFeatureOn(orgId, "celebrations-list"))) {
+    const teamScope = isManager ? teamIds : null;
+    const rows = await db.execute<{ name: string; service_start: string }>(
+      sql`
       select p.display_name as name, min(v.effective_from)::text as service_start
         from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
@@ -346,22 +446,28 @@ export async function loadPersonaMetrics(
        having min(v.effective_from) >= ${today}::date - 30
            or to_char(min(v.effective_from)::date, 'MM-DD') in (
              select to_char(d::date, 'MM-DD') from generate_series(${today}::date - 3, ${today}::date + 3, '1 day') d)
-       order by min(v.effective_from) desc limit 8`, 'objects')
+       order by min(v.effective_from) desc limit 8`,
+      "objects",
+    );
     // Server-side copy uses ICU plurals and locale dates — never English
     // string-concat (`2 years`, `1 step(s)`); see `_persona-copy`.
     out.celebrations = rows.map((row) => ({
       name: row.name,
       detail: celebrationDetail(row.service_start, today, locale, (key, params) => tp(key, params)),
-    }))
+    }));
   }
 
-  if (need('announcements') && (await widgetFeatureOn(orgId, 'announcements-card'))) {
-    const persona = isManager ? 'manager' : hasAdminPersona(authz) ? 'admin' : 'employee'
-    out.announcements = (await liveHomeAnnouncements(orgId, persona, today)).map((row) => ({ title: row.title, body: row.body }))
+  if (need("announcements") && (await widgetFeatureOn(orgId, "announcements-card"))) {
+    const persona = isManager ? "manager" : hasAdminPersona(authz) ? "admin" : "employee";
+    out.announcements = (await liveHomeAnnouncements(orgId, persona, today)).map((row) => ({
+      title: row.title,
+      body: row.body,
+    }));
   }
 
-  if (need('teamSteps') && isManager) {
-    const rows = await db.execute<{ title: string; owner: string; due_on: string }>(sql`
+  if (need("teamSteps") && isManager) {
+    const rows = await db.execute<{ title: string; owner: string; due_on: string }>(
+      sql`
       select s.title, wp.display_name as owner, s.due_on::text as due_on
         from hrm_process_steps s
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
@@ -369,124 +475,213 @@ export async function loadPersonaMetrics(
         join parties wp on wp.org_id = s.org_id and wp.id = e.worker_party_id
        where s.org_id = ${orgId} and p.status = 'open' and s.status = 'pending' and s.due_on < ${today}::date
          and p.employment_id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)
-       order by s.due_on limit 8`, 'objects')
-    out.teamSteps = rows.map((row) => ({ title: row.title, owner: row.owner, due: row.due_on }))
+       order by s.due_on limit 8`,
+      "objects",
+    );
+    out.teamSteps = rows.map((row) => ({ title: row.title, owner: row.owner, due: row.due_on }));
   }
 
-  if (need('teamNudges') && isManager && (await widgetFeatureOn(orgId, 'team-nudges'))) {
-    const overdue = (await db.execute<{ n: number }>(sql`
+  if (need("teamNudges") && isManager && (await widgetFeatureOn(orgId, "team-nudges"))) {
+    const overdue =
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from hrm_process_steps s
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
        where s.org_id = ${orgId} and p.status = 'open' and s.status = 'pending' and s.due_on < ${today}::date
-         and p.employment_id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`, 'objects'))[0]?.n ?? 0
-    const joiners = (await db.execute<{ n: number }>(sql`
+         and p.employment_id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`,
+          "objects",
+        )
+      )[0]?.n ?? 0;
+    const joiners =
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(distinct e.id)::int as n from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
        where e.org_id = ${orgId} and v.effective_from >= ${today}::date - 30
-         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`, 'objects'))[0]?.n ?? 0
-    out.teamNudges = teamNudgeTexts(overdue, joiners, (key, params) => tp(key, params))
+         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`,
+          "objects",
+        )
+      )[0]?.n ?? 0;
+    out.teamNudges = teamNudgeTexts(overdue, joiners, (key, params) => tp(key, params));
   }
 
-  if (need('teamHeadcount') && isManager && (await widgetFeatureOn(orgId, 'team-headcount'))) {
-    const rows = await db.execute<{ n: number }>(sql`
+  if (need("teamHeadcount") && isManager && (await widgetFeatureOn(orgId, "team-headcount"))) {
+    const rows = await db.execute<{ n: number }>(
+      sql`
       select count(distinct e.id)::int as n from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
        where e.org_id = ${orgId} and v.status = 'active'
          and v.effective_from <= ${today}::date and (v.effective_to is null or v.effective_to > ${today}::date)
-         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`, 'objects')
-    out.teamHeadcount = rows[0]?.n ?? 0
+         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`,
+      "objects",
+    );
+    out.teamHeadcount = rows[0]?.n ?? 0;
   }
 
-  if (need('teamQuals')) {
+  if (need("teamQuals")) {
     // HR-14 has not landed: the source probe finds no table and the tile
     // stays absent (the persona layout excludes it until then).
-    out.teamQuals = (await qualificationSourceAvailable()) ? [] : null
+    out.teamQuals = (await qualificationSourceAvailable()) ? [] : null;
   }
 
-  if (need('adminAttention') && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
-    const attention: { label: string; count: number; href: string; unavailable?: true; reason?: string | null }[] = []
-    if (can(authz, 'hrm.employment.read')) {
-      const pending = await listInbox(ctx ?? await inboxContext(authz), {
-        kinds: ['hrm_leave_request', 'hrm_change_request', 'hrm_process_step'],
+  if (need("adminAttention") && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
+    const attention: {
+      label: string;
+      count: number;
+      href: string;
+      unavailable?: true;
+      reason?: string | null;
+    }[] = [];
+    if (can(authz, "hrm.employment.read")) {
+      const pending = await listInbox(ctx ?? (await inboxContext(authz)), {
+        kinds: ["hrm_leave_request", "hrm_change_request", "hrm_process_step"],
         cache,
-      }).catch(() => [] as InboxItem[])
-      if (pending.length > 0) attention.push({ label: tp('attentionHrmItems'), count: pending.length, href: '/inbox?filter=my_tasks' })
+      }).catch(() => [] as InboxItem[]);
+      if (pending.length > 0)
+        attention.push({
+          label: tp("attentionHrmItems"),
+          count: pending.length,
+          href: "/inbox?filter=my_tasks",
+        });
     }
-    if (await isFeatureEnabled(orgId, 'payroll')) {
-      const { payrollHome } = await import('@/lib/module-home/payroll')
+    if (await isFeatureEnabled(orgId, "payroll")) {
+      const { payrollHome } = await import("@/lib/module-home/payroll");
       // Only the declared FX refusal reads as unavailable — carrying its
       // reason to the chip by name — never a verified zero that would hide
       // the setup item. Anything else is a real defect and still rejects
       // the dashboard instead of hiding behind "unavailable".
-      let missing: number | null
-      let payrollReason: string | null = null
+      let missing: number | null;
+      let payrollReason: string | null = null;
       try {
-        missing = (await payrollHome(orgId, authz.allowedSubsidiaryIds ?? undefined)).missingSettings.length
+        missing = (await payrollHome(orgId, authz.allowedSubsidiaryIds ?? undefined))
+          .missingSettings.length;
       } catch (e: unknown) {
-        if (!(e instanceof MissingExchangeRateError)) throw e
-        missing = null
-        payrollReason = e.message
+        if (!(e instanceof MissingExchangeRateError)) throw e;
+        missing = null;
+        payrollReason = e.message;
       }
       if (missing === null) {
-        attention.push({ label: tp('attentionPayrollSetup'), count: 0, href: '/payroll', unavailable: true, reason: payrollReason })
-      } else if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
+        attention.push({
+          label: tp("attentionPayrollSetup"),
+          count: 0,
+          href: "/payroll",
+          unavailable: true,
+          reason: payrollReason,
+        });
+      } else if (missing > 0)
+        attention.push({ label: tp("attentionPayrollSetup"), count: missing, href: "/payroll" });
     }
     // A failed operator-control count reads as unavailable, never as a
     // verified zero that would hide a real backlog. A probe the caller may
     // not run stays silent (as zero); only a failed query is unavailable.
-    let unmatched: number | null
+    let unmatched: number | null;
     try {
-      unmatched = can(authz, 'banking.read') ? (await db.execute<{ n: number }>(sql`
+      unmatched = can(authz, "banking.read")
+        ? ((
+            await db.execute<{ n: number }>(
+              sql`
         select count(*)::int as n from bank_statement_lines
-         where org_id = ${orgId} and match_status = 'unmatched'`, 'objects'))[0]?.n ?? 0 : 0
+         where org_id = ${orgId} and match_status = 'unmatched'`,
+              "objects",
+            )
+          )[0]?.n ?? 0)
+        : 0;
     } catch {
-      unmatched = null
+      unmatched = null;
     }
-    if (unmatched === null) attention.push({ label: tp('attentionBankLines'), count: 0, href: '/banking/match', unavailable: true })
-    else if (unmatched > 0) attention.push({ label: tp('attentionBankLines'), count: unmatched, href: '/banking/match' })
-    let openClose: number | null
+    if (unmatched === null)
+      attention.push({
+        label: tp("attentionBankLines"),
+        count: 0,
+        href: "/banking/match",
+        unavailable: true,
+      });
+    else if (unmatched > 0)
+      attention.push({ label: tp("attentionBankLines"), count: unmatched, href: "/banking/match" });
+    let openClose: number | null;
     try {
-      openClose = can(authz, 'close.run') ? (await db.execute<{ n: number }>(sql`
+      openClose = can(authz, "close.run")
+        ? ((
+            await db.execute<{ n: number }>(
+              sql`
         select count(*)::int as n from close_runs
-         where org_id = ${orgId} and status not in ('closed', 'cancelled')`, 'objects'))[0]?.n ?? 0 : 0
+         where org_id = ${orgId} and status not in ('closed', 'cancelled')`,
+              "objects",
+            )
+          )[0]?.n ?? 0)
+        : 0;
     } catch {
-      openClose = null
+      openClose = null;
     }
-    if (openClose === null) attention.push({ label: tp('attentionCloseRuns'), count: 0, href: '/close', unavailable: true })
-    else if (openClose > 0) attention.push({ label: tp('attentionCloseRuns'), count: openClose, href: '/close' })
-    out.adminAttention = attention
+    if (openClose === null)
+      attention.push({
+        label: tp("attentionCloseRuns"),
+        count: 0,
+        href: "/close",
+        unavailable: true,
+      });
+    else if (openClose > 0)
+      attention.push({ label: tp("attentionCloseRuns"), count: openClose, href: "/close" });
+    out.adminAttention = attention;
   }
 
-  if (need('workflowErrors') && can(authz, 'flows.manage') && authz.allowedSubsidiaryIds === null) {
-    let failed: number | null
+  if (need("workflowErrors") && can(authz, "flows.manage") && authz.allowedSubsidiaryIds === null) {
+    let failed: number | null;
     try {
-      failed = (await db.execute<{ n: number }>(sql`
+      failed =
+        (
+          await db.execute<{ n: number }>(
+            sql`
         select count(*)::int as n from flow_runs
-         where org_id = ${orgId} and status = 'failed'`, 'objects'))[0]?.n ?? 0
+         where org_id = ${orgId} and status = 'failed'`,
+            "objects",
+          )
+        )[0]?.n ?? 0;
     } catch {
-      failed = null
+      failed = null;
     }
-    out.workflowErrors = failed === null
-      ? { count: 0, href: '/admin/flows', unavailable: true }
-      : { count: failed, href: '/admin/flows' }
+    out.workflowErrors =
+      failed === null
+        ? { count: 0, href: "/admin/flows", unavailable: true }
+        : { count: failed, href: "/admin/flows" };
   }
 
-  if (need('adminCalendar') && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
-    const calendar: { label: string; date: string }[] = []
-    const schedules = can(authz, 'reports.read') ? (await db.execute<{ name: string; at: string }>(sql`
+  if (need("adminCalendar") && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
+    const calendar: { label: string; date: string }[] = [];
+    const schedules = can(authz, "reports.read")
+      ? (
+          await db
+            .execute<{ name: string; at: string }>(
+              sql`
       select d.name as name, s.next_run_at::text as at from report_schedules s
         join report_definitions d on d.org_id = s.org_id and d.id = s.definition_id
        where s.org_id = ${orgId} and s.next_run_at <= now() + interval '30 days'
          and d.archived_at is null
-       order by s.next_run_at limit 5`).catch(() => ({ rows: [] as { name: string; at: string }[] }))).rows : []
-    for (const schedule of schedules) calendar.push({ label: schedule.name, date: schedule.at.slice(0, 10) })
-    const remittances = can(authz, 'payroll.manage') ? (await db.execute<{ at: string }>(sql`
+       order by s.next_run_at limit 5`,
+            )
+            .catch(() => ({ rows: [] as { name: string; at: string }[] }))
+        ).rows
+      : [];
+    for (const schedule of schedules)
+      calendar.push({ label: schedule.name, date: schedule.at.slice(0, 10) });
+    const remittances = can(authz, "payroll.manage")
+      ? (
+          await db
+            .execute<{ at: string }>(
+              sql`
       select created_at::text as at from payment_remittances
        where org_id = ${orgId} and status = 'pending'
-       order by created_at limit 5`).catch(() => ({ rows: [] as { at: string }[] }))).rows : []
-    for (const remittance of remittances) calendar.push({ label: tp('calendarPayrollRemittance'), date: remittance.at.slice(0, 10) })
-    out.adminCalendar = calendar.slice(0, 6)
+       order by created_at limit 5`,
+            )
+            .catch(() => ({ rows: [] as { at: string }[] }))
+        ).rows
+      : [];
+    for (const remittance of remittances)
+      calendar.push({ label: tp("calendarPayrollRemittance"), date: remittance.at.slice(0, 10) });
+    out.adminCalendar = calendar.slice(0, 6);
   }
 
-  return out
+  return out;
 }

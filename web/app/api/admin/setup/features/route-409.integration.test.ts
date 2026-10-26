@@ -3,7 +3,11 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/platform/db";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 
 // Disabling REST API while MCP access depends on it answers 409
 // with no user-visible feedback. Capture the REAL refusal body first so the
@@ -35,9 +39,9 @@ registerHooks({
       export async function guardPermission() { return state.authz; }
     `;
     if (
-      (specifier === "../../../../../lib/authz"
-        && parent.includes("/api/admin/setup/features/route.ts"))
-      || specifier === "@/lib/authz"
+      (specifier === "../../../../../lib/authz" &&
+        parent.includes("/api/admin/setup/features/route.ts")) ||
+      specifier === "@/lib/authz"
     ) {
       return virtual(featuresAuthz);
     }
@@ -72,8 +76,16 @@ const put = (body: object) =>
   );
 
 async function flags(orgId: string): Promise<Record<string, boolean>> {
-  return withBypassContext(async () => (await db.execute<{ features: Record<string, boolean> }>(sql`
-      select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgId}`, "objects"))[0]!.features ?? {});
+  return withBypassContext(
+    async () =>
+      (
+        await db.execute<{ features: Record<string, boolean> }>(
+          sql`
+      select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.features ?? {},
+  );
 }
 
 test("disabling REST API with MCP access on is refused with the typed dependents body", async () => {

@@ -56,7 +56,8 @@ export async function resolveCoveringPeriodsInWindow(
     name: string;
     starts_on: string;
     ends_on: string;
-  }>(sql`
+  }>(
+    sql`
     select p.id, p.fiscal_calendar_id, p.fiscal_year, p.period_number, p.name,
            p.starts_on::text as starts_on, p.ends_on::text as ends_on
       from accounting_periods p
@@ -66,7 +67,9 @@ export async function resolveCoveringPeriodsInWindow(
        and fc.id = public.subsidiary_posting_calendar(${orgId}::uuid, ${subsidiaryId ?? null}::uuid, greatest(p.starts_on,${from}::date))
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on <= ${to} and p.ends_on >= ${from}
-     order by p.starts_on, p.ends_on, p.id`, "objects");
+     order by p.starts_on, p.ends_on, p.id`,
+    "objects",
+  );
   return r;
 }
 
@@ -84,7 +87,8 @@ export async function resolveCoveringPeriod(
     name: string;
     starts_on: string;
     ends_on: string;
-  }>(sql`
+  }>(
+    sql`
     select p.id, p.fiscal_calendar_id, p.fiscal_year, p.period_number, p.name,
            p.starts_on::text as starts_on, p.ends_on::text as ends_on
       from accounting_periods p
@@ -95,6 +99,8 @@ export async function resolveCoveringPeriod(
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on <= ${date} and p.ends_on >= ${date}
      order by p.starts_on, p.ends_on, p.id
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   return r[0] ?? null;
 }

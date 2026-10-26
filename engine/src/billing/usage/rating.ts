@@ -28,12 +28,7 @@ import { UsageBillingError } from "./errors.ts";
 export type UsageAggregation = "sum" | "count" | "max" | "last" | "unique_count";
 
 export type RatingBandKind =
-  | "graduated"
-  | "volume"
-  | "package"
-  | "overage"
-  | "commit_shortfall"
-  | "prepaid_drawdown";
+  "graduated" | "volume" | "package" | "overage" | "commit_shortfall" | "prepaid_drawdown";
 
 export type PackageRounding = "up" | "down";
 
@@ -262,7 +257,9 @@ function ratePackage(total: bigint, placed: readonly PlacedBand[]): RateLine[] {
   const landed = findLandedBand(total, placed);
   const band = landed.band;
   if (band.packageSize === null) {
-    throw new Error(`rating band ${band.seq} is a package band without a packageSize — set the block size`);
+    throw new Error(
+      `rating band ${band.seq} is a package band without a packageSize — set the block size`,
+    );
   }
   if (band.packageRounding !== "up" && band.packageRounding !== "down") {
     throw new Error(
@@ -321,7 +318,9 @@ export function rateUsage(input: { quantity: Quantity; bands: readonly RatingBan
   }
   const first = input.bands[0];
   if (first === undefined) {
-    throw new Error("rateUsage requires at least one rating band — a quantity with no price list has no rate");
+    throw new Error(
+      "rateUsage requires at least one rating band — a quantity with no price list has no rate",
+    );
   }
   if (total === 0n) return [];
   const kinds = new Set(input.bands.map((band) => band.kind));
@@ -336,7 +335,8 @@ export function rateUsage(input: { quantity: Quantity; bands: readonly RatingBan
   }
   const placed: PlacedBand[] = ordered.map((band) => ({
     band,
-    top: band.upToQty === null ? null : quantityUnits(band.upToQty, `rating band ${band.seq} upToQty`),
+    top:
+      band.upToQty === null ? null : quantityUnits(band.upToQty, `rating band ${band.seq} upToQty`),
   }));
   const last = placed[placed.length - 1];
   const openEnded = placed.filter((entry) => entry.top === null);
@@ -365,9 +365,13 @@ export function rateUsage(input: { quantity: Quantity; bands: readonly RatingBan
     case "overage":
       return rateOverage(total, placed);
     case "commit_shortfall":
-      throw new Error("commit_shortfall bands are not invoice lines — bill the shortfall with commitShortfall instead");
+      throw new Error(
+        "commit_shortfall bands are not invoice lines — bill the shortfall with commitShortfall instead",
+      );
     case "prepaid_drawdown":
-      throw new Error("prepaid_drawdown bands are not invoice lines — split the rated amount with applyPrepaid instead");
+      throw new Error(
+        "prepaid_drawdown bands are not invoice lines — split the rated amount with applyPrepaid instead",
+      );
     default: {
       const exhaustive: never = kind;
       throw new Error(`unknown rating band kind: ${suppliedValue(exhaustive)}`);
@@ -402,7 +406,11 @@ export interface PrepaidSplit {
  * remainder is positive and the link disallows overage, the kernel's one
  * refusal names all three remedies.
  */
-export function applyPrepaid(input: { rated: Money; balance: Money; allowOverage: boolean }): PrepaidSplit {
+export function applyPrepaid(input: {
+  rated: Money;
+  balance: Money;
+  allowOverage: boolean;
+}): PrepaidSplit {
   const rated = moneyUnits(input.rated, "rated");
   if (rated < 0n) {
     throw new Error(`rated cannot be negative — got ${suppliedValue(input.rated)}`);

@@ -39,15 +39,10 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { GET, POST } = await import("./route.ts");
-
 
 const CIRCLE = {
   kind: "circle",
@@ -63,19 +58,25 @@ async function fixture() {
   const branchId = randomUUID();
   const projectA = randomUUID();
   const projectB = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Division B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Division B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
     values (${projectA}, ${org.orgId}, ${org.subsidiaryId}, 'GEO-A', 'Geo project A', ${org.customerId}, 'active', true, '{}'::jsonb),
-           (${projectB}, ${org.orgId}, ${branchId}, 'GEO-B', 'Geo project B', ${org.customerId}, 'active', true, '{}'::jsonb)`));
+           (${projectB}, ${org.orgId}, ${branchId}, 'GEO-B', 'Geo project B', ${org.customerId}, 'active', true, '{}'::jsonb)`),
+  );
   const fenceA = randomUUID();
   const fenceB = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into project_geofences (id, org_id, project_id, kind, center, radius_m, is_active, created_by, updated_by)
     values (${fenceA}, ${org.orgId}, ${projectA}, 'circle', '{"lat":43.65,"lng":-79.38}'::jsonb, 500, true, ${actorId}, ${actorId}),
-           (${fenceB}, ${org.orgId}, ${projectB}, 'circle', '{"lat":45.5,"lng":-73.57}'::jsonb, 500, true, ${actorId}, ${actorId})`));
+           (${fenceB}, ${org.orgId}, ${projectB}, 'circle', '{"lat":45.5,"lng":-73.57}'::jsonb, 500, true, ${actorId}, ${actorId})`),
+  );
   return { org, branchId, projectA, projectB, fenceA, fenceB };
 }
 
@@ -97,17 +98,21 @@ const post = (body: unknown) =>
 
 async function fenceCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from project_geofences where org_id = ${orgId}`, "objects"),
-    );
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from project_geofences where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
 async function fenceProject(orgId: string, id: string): Promise<string | null> {
   const rows = await withBypassContext(() =>
-      db.execute<{ project_id: string }>(
-        sql`select project_id from project_geofences where org_id = ${orgId} and id = ${id}`, "objects",
-      ),
-    );
+    db.execute<{ project_id: string }>(
+      sql`select project_id from project_geofences where org_id = ${orgId} and id = ${id}`,
+      "objects",
+    ),
+  );
   return rows[0]?.project_id ?? null;
 }
 
@@ -170,7 +175,11 @@ test("delete cannot retire another subsidiary's fence", async () => {
     const response = await post({ action: "delete", id: fenceB });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "not_found" });
-    assert.notEqual(await fenceProject(org.orgId, fenceB), null, "a refused delete removes nothing");
+    assert.notEqual(
+      await fenceProject(org.orgId, fenceB),
+      null,
+      "a refused delete removes nothing",
+    );
   } finally {
     state.allowedSubsidiaryIds = null;
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -183,7 +192,18 @@ test("an unrestricted caller keeps the full surface", async () => {
     state.allowedSubsidiaryIds = null;
     const listed = (await (await get()).json()) as { geofences: unknown[] };
     assert.equal(listed.geofences.length, 2);
-    const created = await post({ ...CIRCLE, projectId: projectA, kind: "polygon", center: null, radiusM: null, polygon: [{ lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 }] });
+    const created = await post({
+      ...CIRCLE,
+      projectId: projectA,
+      kind: "polygon",
+      center: null,
+      radiusM: null,
+      polygon: [
+        { lat: 0, lng: 0 },
+        { lat: 1, lng: 0 },
+        { lat: 0, lng: 1 },
+      ],
+    });
     assert.equal(created.status, 200, JSON.stringify(await created.json().catch(() => null)));
     const edited = await post({ id: fenceA, ...CIRCLE, projectId: projectA, radiusM: 750 });
     assert.equal(edited.status, 200);

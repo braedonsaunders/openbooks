@@ -22,7 +22,10 @@ async function pageIds(
 ): Promise<string[][]> {
   const out: string[][] = [];
   for (let page = 1; page <= pages; page++) {
-    const rows = await db.execute<{ id: string }>(sql`select ${sql.raw(base.select)} ${sql.raw(base.from)} where ${base.where} order by ${order} limit ${perPage} offset ${(page - 1) * perPage}`, "objects");
+    const rows = await db.execute<{ id: string }>(
+      sql`select ${sql.raw(base.select)} ${sql.raw(base.from)} where ${base.where} order by ${order} limit ${perPage} offset ${(page - 1) * perPage}`,
+      "objects",
+    );
     out.push(rows.map((r) => r.id));
   }
   return out;
@@ -35,8 +38,10 @@ test("tied document rows page out exactly once in a repeatable order", { skip: !
     for (let i = 0; i < 5; i++) {
       const id = randomUUID();
       ids.push(id);
-      await withBypassContext(() => db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
-        values (${id}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-T${i}`}, ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`));
+      await withBypassContext(() =>
+        db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+        values (${id}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-T${i}`}, ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`),
+      );
     }
     const base = {
       select: "d.id",
@@ -45,7 +50,11 @@ test("tied document rows page out exactly once in a repeatable order", { skip: !
     };
     const first = await pageIds(base, listOrderClause(sql`d.document_date`, "desc"), 2, 3);
     const flat = first.flat();
-    assert.deepEqual([...flat].sort(), [...ids].sort(), "every tied row appears exactly once across pages");
+    assert.deepEqual(
+      [...flat].sort(),
+      [...ids].sort(),
+      "every tied row appears exactly once across pages",
+    );
     assert.equal(new Set(flat).size, 5, "no row duplicates across pages");
     const second = await pageIds(base, listOrderClause(sql`d.document_date`, "desc"), 2, 3);
     assert.deepEqual(second, first, "repeat visits return the identical page layout");
@@ -63,8 +72,10 @@ test("tied entity rows page out exactly once in a repeatable order", { skip: !DB
     for (let i = 0; i < 4; i++) {
       const id = randomUUID();
       ids.push(id);
-      await withBypassContext(() => db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active)
-        values (${id}, ${org.orgId}, 'vendor', 'Tied Vendor', true)`));
+      await withBypassContext(() =>
+        db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active)
+        values (${id}, ${org.orgId}, 'vendor', 'Tied Vendor', true)`),
+      );
     }
     const base = {
       select: "p.id",
@@ -73,7 +84,11 @@ test("tied entity rows page out exactly once in a repeatable order", { skip: !DB
     };
     const first = await pageIds(base, entityOrderClause(vendor, sql`p.display_name`, "asc"), 3, 2);
     const flat = first.flat();
-    assert.deepEqual([...flat].sort(), [...ids].sort(), "every tied row appears exactly once across pages");
+    assert.deepEqual(
+      [...flat].sort(),
+      [...ids].sort(),
+      "every tied row appears exactly once across pages",
+    );
     assert.equal(new Set(flat).size, 4, "no row duplicates across pages");
     const second = await pageIds(base, entityOrderClause(vendor, sql`p.display_name`, "asc"), 3, 2);
     assert.deepEqual(second, first, "repeat visits return the identical page layout");

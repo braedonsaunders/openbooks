@@ -21,4 +21,4 @@ export {
   estimateConversionPermission,
   type PermissionKey,
   type CataloguePermission,
-} from '@openbooks/engine/organization/permissions'
+} from "@openbooks/engine/organization/permissions";

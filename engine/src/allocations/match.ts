@@ -121,7 +121,11 @@ export function matchLine(
 
   const kinds = version.documentKinds;
   if (kinds !== null && kinds !== undefined && kinds.length > 0) {
-    if (line.documentKind === null || line.documentKind === undefined || !kinds.includes(line.documentKind)) {
+    if (
+      line.documentKind === null ||
+      line.documentKind === undefined ||
+      !kinds.includes(line.documentKind)
+    ) {
       return { matched: false, specificity: 0 };
     }
     specificity += 1;
@@ -134,7 +138,8 @@ export function matchLine(
 
   const filters: DimensionFilters = version.dimensionFilters ?? {};
   if (filters.payrollExpensesOnly === true) {
-    if (line.documentKind !== "pay_run" || line.payrollExpense !== true) return { matched: false, specificity: 0 };
+    if (line.documentKind !== "pay_run" || line.payrollExpense !== true)
+      return { matched: false, specificity: 0 };
     specificity += 1;
   }
   for (const key of DIMENSION_ID_KEYS) {
@@ -221,9 +226,15 @@ export interface RulesInEffectRequest {
  * version, with an optional apply-policy filter. Entry (and post) consumers
  * match against these; the canonical cross-mode listing stays in rules.ts.
  */
-export async function listEntryRulesInEffect(request: RulesInEffectRequest): Promise<RuleInEffect[]> {
+export async function listEntryRulesInEffect(
+  request: RulesInEffectRequest,
+): Promise<RuleInEffect[]> {
   const modes =
-    request.mode === undefined ? (["entry"] as AllocationMode[]) : Array.isArray(request.mode) ? request.mode : [request.mode];
+    request.mode === undefined
+      ? (["entry"] as AllocationMode[])
+      : Array.isArray(request.mode)
+        ? request.mode
+        : [request.mode];
   if (modes.length === 0) return [];
   // Rules in effect are read as of the org's business day, never the UTC day
   // (which is tomorrow in the evening for the Americas).

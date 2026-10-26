@@ -54,8 +54,8 @@ const postRouteUrl = "./route.ts?parties-create-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
-
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/parties", {
@@ -65,190 +65,283 @@ function postRequest(key: string, body: unknown): Request {
   });
 }
 
-async function auditInserts(orgId: string, rowId: string): Promise<{ request_id: string | null; actor_id: string | null }[]> {
-  return await db.execute<{ request_id: string | null; actor_id: string | null }>(sql`
+async function auditInserts(
+  orgId: string,
+  rowId: string,
+): Promise<{ request_id: string | null; actor_id: string | null }[]> {
+  return await db.execute<{ request_id: string | null; actor_id: string | null }>(
+    sql`
       select request_id, actor_id from audit_log
        where org_id = ${orgId} and table_name = 'parties' and row_id = ${rowId} and action = 'insert'
        order by at asc
-    `, "objects");
+    `,
+    "objects",
+  );
 }
 
-test(
-  "parties POST creates one active party with its role and one audit row",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const { adminId } = await seedFlowActors(org.orgId);
-      routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
+test("parties POST creates one active party with its role and one audit row", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { adminId } = await seedFlowActors(org.orgId);
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [] },
+      permissions: new Set(["parties.manage"]),
+      allowedSubsidiaryIds: null,
+    };
 
-      const key = randomUUID();
-      const subsidiaryId = randomUUID().replace(/^(.{14})./, "$1f");
-      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,country)
+    const key = randomUUID();
+    const subsidiaryId = randomUUID().replace(/^(.{14})./, "$1f");
+    await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,country)
         values (${subsidiaryId},${org.orgId},'Rebased employer',${org.subsidiaryId},'CAD','CA')`);
-      const body = { displayName: "Acme Corp", kind: "company", subsidiaryId, roles: { customer: { enabled: true } } };
-      const created = await POST(postRequest(key, body));
-      assert.equal(created.status, 201);
-      const payload = (await created.json()) as { party: { id: string; display_name: string; is_active: boolean; subsidiary_id: string } };
-      assert.equal(payload.party.id, key);
-      assert.equal(payload.party.display_name, "Acme Corp");
-      assert.equal(payload.party.is_active, true);
-      assert.equal(payload.party.subsidiary_id, subsidiaryId, "a rebased PostgreSQL UUID remains an owned reference");
+    const body = {
+      displayName: "Acme Corp",
+      kind: "company",
+      subsidiaryId,
+      roles: { customer: { enabled: true } },
+    };
+    const created = await POST(postRequest(key, body));
+    assert.equal(created.status, 201);
+    const payload = (await created.json()) as {
+      party: { id: string; display_name: string; is_active: boolean; subsidiary_id: string };
+    };
+    assert.equal(payload.party.id, key);
+    assert.equal(payload.party.display_name, "Acme Corp");
+    assert.equal(payload.party.is_active, true);
+    assert.equal(
+      payload.party.subsidiary_id,
+      subsidiaryId,
+      "a rebased PostgreSQL UUID remains an owned reference",
+    );
 
-      const role = await db.execute<{ party_id: string }>(sql`
+    const role = await db.execute<{ party_id: string }>(
+      sql`
           select party_id from customer_roles where party_id = ${key} and org_id = ${org.orgId} and is_active
-        `, "objects");
-      assert.equal(role.length, 1, "the customer role is created active with the party");
+        `,
+      "objects",
+    );
+    assert.equal(role.length, 1, "the customer role is created active with the party");
 
-      const audits = await auditInserts(org.orgId, key);
-      assert.equal(audits.length, 1, "exactly one insert audit row");
-      assert.equal(audits[0]?.request_id, key, "the audit row carries the idempotency key");
-      assert.equal(audits[0]?.actor_id, adminId, "the audit row carries the actor");
+    const audits = await auditInserts(org.orgId, key);
+    assert.equal(audits.length, 1, "exactly one insert audit row");
+    assert.equal(audits[0]?.request_id, key, "the audit row carries the idempotency key");
+    assert.equal(audits[0]?.actor_id, adminId, "the audit row carries the actor");
 
-      // Same request replays to the same party without a second audit event.
-      const replay = await POST(postRequest(key, body));
-      assert.equal(replay.status, 200);
-      assert.equal((await auditInserts(org.orgId, key)).length, 1, "a replay writes no second audit row");
+    // Same request replays to the same party without a second audit event.
+    const replay = await POST(postRequest(key, body));
+    assert.equal(replay.status, 200);
+    assert.equal(
+      (await auditInserts(org.orgId, key)).length,
+      1,
+      "a replay writes no second audit row",
+    );
 
-      // A changed payload on the same key is a conflict, never the old party.
-      const changed = await POST(
-        postRequest(key, { displayName: "Acme Renamed", kind: "company" }),
-      );
-      assert.equal(changed.status, 409);
-      assert.deepEqual(await changed.json(), {
-        error: "This idempotency key was already used for a different party create request. Close and reopen the drawer to try again with a fresh request.",
-        code: "idempotency_key_conflict",
-        remedy: "Close and reopen the drawer to try again with a fresh request.",
-      });
+    // A changed payload on the same key is a conflict, never the old party.
+    const changed = await POST(postRequest(key, { displayName: "Acme Renamed", kind: "company" }));
+    assert.equal(changed.status, 409);
+    assert.deepEqual(await changed.json(), {
+      error:
+        "This idempotency key was already used for a different party create request. Close and reopen the drawer to try again with a fresh request.",
+      code: "idempotency_key_conflict",
+      remedy: "Close and reopen the drawer to try again with a fresh request.",
+    });
 
-      // The create path never mints placeholder rows.
-      const placeholders = (await db.execute<{ n: number }>(sql`
+    // The create path never mints placeholder rows.
+    const placeholders = (
+      await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from parties
            where org_id = ${org.orgId} and display_name in ('New party', 'New lead')
-        `, "objects"))[0]?.n;
-      assert.equal(placeholders, 0, "no inactive placeholder survives the create path");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+        `,
+        "objects",
+      )
+    )[0]?.n;
+    assert.equal(placeholders, 0, "no inactive placeholder survives the create path");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "parties POST refuses a key minted in another org",
-  async () => {
-    const orgA = await createScratchOrg();
-    const orgB = await createScratchOrg();
-    try {
-      const { adminId: adminA } = await seedFlowActors(orgA.orgId);
-      const { adminId: adminB } = await seedFlowActors(orgB.orgId);
+test("parties POST refuses a key minted in another org", async () => {
+  const orgA = await createScratchOrg();
+  const orgB = await createScratchOrg();
+  try {
+    const { adminId: adminA } = await seedFlowActors(orgA.orgId);
+    const { adminId: adminB } = await seedFlowActors(orgB.orgId);
 
-      routeState.authz = { user: { orgId: orgA.orgId, id: adminA, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
-      const key = randomUUID();
-      const created = await POST(postRequest(key, { displayName: "Acme Corp" }));
-      assert.equal(created.status, 201);
+    routeState.authz = {
+      user: { orgId: orgA.orgId, id: adminA, roles: [] },
+      permissions: new Set(["parties.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const key = randomUUID();
+    const created = await POST(postRequest(key, { displayName: "Acme Corp" }));
+    assert.equal(created.status, 201);
 
-      // Org B replays org A's key with the same body: no same-org row sits
-      // behind it there, so the key reads as foreign, not as a replay.
-      routeState.authz = { user: { orgId: orgB.orgId, id: adminB, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
-      const claimed = await POST(postRequest(key, { displayName: "Acme Corp" }));
-      assert.equal(claimed.status, 409);
-      assert.deepEqual(await claimed.json(), {
-        error: "This idempotency key was already used for a different party create request. Close and reopen the drawer to try again with a fresh request.",
-        code: "idempotency_key_conflict",
-        remedy: "Close and reopen the drawer to try again with a fresh request.",
-      });
+    // Org B replays org A's key with the same body: no same-org row sits
+    // behind it there, so the key reads as foreign, not as a replay.
+    routeState.authz = {
+      user: { orgId: orgB.orgId, id: adminB, roles: [] },
+      permissions: new Set(["parties.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const claimed = await POST(postRequest(key, { displayName: "Acme Corp" }));
+    assert.equal(claimed.status, 409);
+    assert.deepEqual(await claimed.json(), {
+      error:
+        "This idempotency key was already used for a different party create request. Close and reopen the drawer to try again with a fresh request.",
+      code: "idempotency_key_conflict",
+      remedy: "Close and reopen the drawer to try again with a fresh request.",
+    });
 
-      const leaked = (await db.execute<{ n: number }>(sql`
+    const leaked = (
+      await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from parties where id = ${key} and org_id = ${orgB.orgId}
-        `, "objects"))[0]?.n;
-      assert.equal(leaked, 0, "org B gains no row from org A's key");
-    } finally {
-      await dropScratchOrg(orgA.orgId);
-      await dropScratchOrg(orgB.orgId);
+        `,
+        "objects",
+      )
+    )[0]?.n;
+    assert.equal(leaked, 0, "org B gains no row from org A's key");
+  } finally {
+    await dropScratchOrg(orgA.orgId);
+    await dropScratchOrg(orgB.orgId);
+  }
+});
+
+test("parties POST creates a role-less person and company without stamping a role", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { adminId } = await seedFlowActors(org.orgId);
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [] },
+      permissions: new Set(["parties.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    // A non-commercial person (owner/partner) and company register with a
+    // base kind and no roles — the New person / New company path.
+    for (const [key, body] of [
+      [randomUUID(), { displayName: "Pat Partner", kind: "person" }],
+      [randomUUID(), { displayName: "HoldCo Ltd", kind: "company" }],
+    ] as const) {
+      const created = await POST(postRequest(key, body));
+      assert.equal(
+        created.status,
+        201,
+        JSON.stringify(
+          await created
+            .clone()
+            .json()
+            .catch(() => null),
+        ),
+      );
     }
-  },
-);
 
-test(
-  "parties POST creates a role-less person and company without stamping a role",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const { adminId } = await seedFlowActors(org.orgId);
-      routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
-
-      // A non-commercial person (owner/partner) and company register with a
-      // base kind and no roles — the New person / New company path.
-      for (const [key, body] of [
-        [randomUUID(), { displayName: "Pat Partner", kind: "person" }],
-        [randomUUID(), { displayName: "HoldCo Ltd", kind: "company" }],
-      ] as const) {
-        const created = await POST(postRequest(key, body));
-        assert.equal(created.status, 201, JSON.stringify(await created.clone().json().catch(() => null)));
-      }
-
-      const stored = await db.execute<{ display_name: string; kind: string }>(sql`
+    const stored = await db.execute<{ display_name: string; kind: string }>(
+      sql`
           select display_name, kind from parties
            where org_id = ${org.orgId} and display_name in ('Pat Partner', 'HoldCo Ltd')
            order by display_name
-        `, "objects");
-      assert.deepEqual(
-        stored.map((r) => [r.display_name, r.kind]),
-        [["HoldCo Ltd", "company"], ["Pat Partner", "person"]],
-      );
+        `,
+      "objects",
+    );
+    assert.deepEqual(
+      stored.map((r) => [r.display_name, r.kind]),
+      [
+        ["HoldCo Ltd", "company"],
+        ["Pat Partner", "person"],
+      ],
+    );
 
-      const roles = (await db.execute<{ n: number }>(sql`
+    const roles = (
+      await db.execute<{ n: number }>(
+        sql`
           select count(*)::int as n from (
             select party_id from customer_roles where org_id = ${org.orgId}
             union all select party_id from vendor_roles where org_id = ${org.orgId}
             union all select party_id from employee_roles where org_id = ${org.orgId}
           ) r join parties p on p.id = r.party_id and p.org_id = ${org.orgId}
          where p.display_name in ('Pat Partner', 'HoldCo Ltd')
-        `, "objects"))[0]?.n;
-      assert.equal(roles, 0, "no commercial role is stamped on a non-commercial party");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+        `,
+        "objects",
+      )
+    )[0]?.n;
+    assert.equal(roles, 0, "no commercial role is stamped on a non-commercial party");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "a new customer without terms starts on the company default; explicit terms win",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const { adminId } = await seedFlowActors(org.orgId);
-      routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
-      const net30 = randomUUID();
-      const net15 = randomUUID();
-      await db.execute(sql`
+test("a new customer without terms starts on the company default; explicit terms win", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { adminId } = await seedFlowActors(org.orgId);
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [] },
+      permissions: new Set(["parties.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const net30 = randomUUID();
+    const net15 = randomUUID();
+    await db.execute(sql`
         insert into payment_terms (id, org_id, name, net_days)
         values (${net30}, ${org.orgId}, 'Net 30', 30), (${net15}, ${org.orgId}, 'Net 15', 15)`);
-      await db.execute(sql`
+    await db.execute(sql`
         update orgs set settings = coalesce(settings, '{}'::jsonb)
           || jsonb_build_object('billing', jsonb_build_object('defaultPaymentTermsId', ${net30}::text))
          where id = ${org.orgId}`);
-      const termsOf = async (key: string) => (await db.execute<{ payment_terms_id: string | null }>(sql`
-        select payment_terms_id from customer_roles where party_id = ${key} and org_id = ${org.orgId}`, "objects"))[0]?.payment_terms_id ?? null;
+    const termsOf = async (key: string) =>
+      (
+        await db.execute<{ payment_terms_id: string | null }>(
+          sql`
+        select payment_terms_id from customer_roles where party_id = ${key} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]?.payment_terms_id ?? null;
 
-      const defaultedKey = randomUUID();
-      const defaulted = await POST(postRequest(defaultedKey, {
-        displayName: "Default Terms Co", kind: "company", roles: { customer: { enabled: true } },
-      }));
-      assert.equal(defaulted.status, 201, JSON.stringify(await defaulted.clone().json().catch(() => null)));
-      assert.equal(await termsOf(defaultedKey), net30, "no explicit terms take the company default");
+    const defaultedKey = randomUUID();
+    const defaulted = await POST(
+      postRequest(defaultedKey, {
+        displayName: "Default Terms Co",
+        kind: "company",
+        roles: { customer: { enabled: true } },
+      }),
+    );
+    assert.equal(
+      defaulted.status,
+      201,
+      JSON.stringify(
+        await defaulted
+          .clone()
+          .json()
+          .catch(() => null),
+      ),
+    );
+    assert.equal(await termsOf(defaultedKey), net30, "no explicit terms take the company default");
 
-      const explicitKey = randomUUID();
-      const explicit = await POST(postRequest(explicitKey, {
-        displayName: "Explicit Terms Co", kind: "company",
+    const explicitKey = randomUUID();
+    const explicit = await POST(
+      postRequest(explicitKey, {
+        displayName: "Explicit Terms Co",
+        kind: "company",
         roles: { customer: { enabled: true, paymentTermsId: net15 } },
-      }));
-      assert.equal(explicit.status, 201, JSON.stringify(await explicit.clone().json().catch(() => null)));
-      assert.equal(await termsOf(explicitKey), net15, "explicit terms win over the company default");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      }),
+    );
+    assert.equal(
+      explicit.status,
+      201,
+      JSON.stringify(
+        await explicit
+          .clone()
+          .json()
+          .catch(() => null),
+      ),
+    );
+    assert.equal(await termsOf(explicitKey), net15, "explicit terms win over the company default");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook

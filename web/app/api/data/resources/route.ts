@@ -1,11 +1,11 @@
 import { notFound } from "@/lib/api/responses";
-import { NextResponse } from 'next/server'
-import { defineRoute } from '../../../../lib/api/route'
-import { can } from '../../../../lib/authz'
-import { getResource, listResources } from '../../../../lib/data-io/resources'
-import { customFieldViewerFor } from '../../../../lib/custom-fields'
+import { NextResponse } from "next/server";
+import { defineRoute } from "../../../../lib/api/route";
+import { can } from "../../../../lib/authz";
+import { getResource, listResources } from "../../../../lib/data-io/resources";
+import { customFieldViewerFor } from "../../../../lib/custom-fields";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * GET /api/data/resources          → resources this user can export/import.
@@ -15,31 +15,38 @@ export const runtime = 'nodejs'
  * permission, so an import-only role can still reach the import wizard.
  */
 export const GET = defineRoute({
-  public: 'session',
+  public: "session",
   handler: async ({ request: req, authz }) => {
-  const admitsExport = can(authz, 'data.export')
-  const admitsImport = can(authz, 'data.import')
-  if (!admitsExport && !admitsImport) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
-  const orgId = authz.user.orgId
-  const key = new URL(req.url).searchParams.get('key')
-
-  if (key) {
-    const resource = await getResource(orgId, key, authz.allowedSubsidiaryIds, customFieldViewerFor(authz))
-    if (!resource) return notFound("record")
-    if (!can(authz, resource.descriptor.readPermission) &&
-        !(admitsImport && can(authz, resource.descriptor.writePermission))) {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    const admitsExport = can(authz, "data.export");
+    const admitsImport = can(authz, "data.import");
+    if (!admitsExport && !admitsImport) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
-    const [fields, columns] = await Promise.all([resource.fields(), resource.columns()])
-    return NextResponse.json({ descriptor: resource.descriptor, fields, columns })
-  }
+    const orgId = authz.user.orgId;
+    const key = new URL(req.url).searchParams.get("key");
 
-  const all = await listResources(orgId)
-  const visible = admitsExport
-    ? all.filter((d) => can(authz, d.readPermission))
-    : all.filter((d) => d.supportsImport && can(authz, d.writePermission))
-  return NextResponse.json({ resources: visible })
+    if (key) {
+      const resource = await getResource(
+        orgId,
+        key,
+        authz.allowedSubsidiaryIds,
+        customFieldViewerFor(authz),
+      );
+      if (!resource) return notFound("record");
+      if (
+        !can(authz, resource.descriptor.readPermission) &&
+        !(admitsImport && can(authz, resource.descriptor.writePermission))
+      ) {
+        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      }
+      const [fields, columns] = await Promise.all([resource.fields(), resource.columns()]);
+      return NextResponse.json({ descriptor: resource.descriptor, fields, columns });
+    }
+
+    const all = await listResources(orgId);
+    const visible = admitsExport
+      ? all.filter((d) => can(authz, d.readPermission))
+      : all.filter((d) => d.supportsImport && can(authz, d.writePermission));
+    return NextResponse.json({ resources: visible });
   },
-})
+});

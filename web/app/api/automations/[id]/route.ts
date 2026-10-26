@@ -6,7 +6,6 @@ import { isUuid } from "../../../../lib/list-params";
 import { patchAutomationBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
 
-
 export const runtime = "nodejs";
 
 /** Single automation: GET reads, PATCH edits (bumps version). */
@@ -19,20 +18,12 @@ export const GET = defineRoute({
 
     const { id } = await ctx.params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "automation id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "automation id must be a uuid" }, { status: 400 });
     try {
-      const { listAutomations } =
-        await import("@openbooks/engine/automations/services");
+      const { listAutomations } = await import("@openbooks/engine/automations/services");
       const automations = await listAutomations(gate.user.orgId, gate.user.id);
       const automation = automations.find((a) => a.id === id);
-      if (!automation)
-        return NextResponse.json(
-          { error: "automation not found" },
-          { status: 404 },
-        );
+      if (!automation) return NextResponse.json({ error: "automation not found" }, { status: 404 });
       return NextResponse.json({ automation });
     } catch (e) {
       return automationErrorResponse(e);
@@ -50,10 +41,7 @@ export const PATCH = defineRoute({
 
     const { id } = await ctx.params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "automation id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "automation id must be a uuid" }, { status: 400 });
 
     const body = routeBody;
     try {
@@ -62,19 +50,13 @@ export const PATCH = defineRoute({
         actorId: gate.user.id,
         automationId: id,
         ...(body.name !== undefined ? { name: body.name } : {}),
-        ...(body.description !== undefined
-          ? { description: body.description }
-          : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.trigger !== undefined ? { trigger: body.trigger } : {}),
         ...(body.rules !== undefined ? { rules: body.rules } : {}),
-        ...(body.conditions !== undefined
-          ? { conditions: body.conditions }
-          : {}),
+        ...(body.conditions !== undefined ? { conditions: body.conditions } : {}),
         ...(body.actions !== undefined ? { actions: body.actions } : {}),
         ...(body.priority !== undefined ? { priority: body.priority } : {}),
-        ...(body.expectedVersion !== undefined
-          ? { expectedVersion: body.expectedVersion }
-          : {}),
+        ...(body.expectedVersion !== undefined ? { expectedVersion: body.expectedVersion } : {}),
       });
       return NextResponse.json({ automation });
     } catch (e) {

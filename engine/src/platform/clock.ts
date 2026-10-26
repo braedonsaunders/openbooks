@@ -44,9 +44,11 @@ export function now(): Date {
  * string (a bare `YYYY-MM-DD` is interpreted at UTC midnight).
  */
 export function withSimClock<T>(at: Date | string, fn: () => Promise<T>): Promise<T> {
-  const date = typeof at === "string"
-    ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(at) ? `${at}T00:00:00.000Z` : at)
-    : at;
-  if (Number.isNaN(date.getTime())) throw new Error(`withSimClock: invalid instant "${String(at)}"`);
+  const date =
+    typeof at === "string"
+      ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(at) ? `${at}T00:00:00.000Z` : at)
+      : at;
+  if (Number.isNaN(date.getTime()))
+    throw new Error(`withSimClock: invalid instant "${String(at)}"`);
   return clockContext.run({ at: date }, fn);
 }

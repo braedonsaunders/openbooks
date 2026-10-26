@@ -3,10 +3,7 @@ import assert from "node:assert/strict";
 
 import { statementEvidence } from "./benefit-statement.ts";
 
-import {
-  canonicalSnapshotJson,
-  snapshotsMatch,
-} from "./settlement.ts";
+import { canonicalSnapshotJson, snapshotsMatch } from "./settlement.ts";
 
 // Pure unit coverage for the settlement digest comparison. These tests run
 // without a database: they prove the idempotent-retry identity check
@@ -74,10 +71,7 @@ describe("canonicalSnapshotJson", () => {
   });
 
   test("array order stays significant", () => {
-    assert.notEqual(
-      canonicalSnapshotJson(["a", "b"]),
-      canonicalSnapshotJson(["b", "a"]),
-    );
+    assert.notEqual(canonicalSnapshotJson(["a", "b"]), canonicalSnapshotJson(["b", "a"]));
   });
 });
 
@@ -88,33 +82,30 @@ describe("snapshotsMatch", () => {
   });
 
   test("refuses a changed digest", () => {
-    assert.equal(
-      snapshotsMatch({ ...FRESH, digest: "deadbeef" }, FRESH),
-      false,
-    );
+    assert.equal(snapshotsMatch({ ...FRESH, digest: "deadbeef" }, FRESH), false);
   });
 
   test("refuses changed membership facts", () => {
-    assert.equal(
-      snapshotsMatch(
-        { ...FRESH, memberships: [] },
-        FRESH,
-      ),
-      false,
-    );
+    assert.equal(snapshotsMatch({ ...FRESH, memberships: [] }, FRESH), false);
   });
 
   test("refuses changed measured value with the same digest", () => {
-    assert.equal(
-      snapshotsMatch({ ...FRESH, measuredValue: "9999.0000" }, FRESH),
-      false,
-    );
+    assert.equal(snapshotsMatch({ ...FRESH, measuredValue: "9999.0000" }, FRESH), false);
   });
 });
 
-
 describe("frozen financial source identity", () => {
-  for (const field of ["bookId", "fiscalCalendarId", "periodBasis", "postingFacts", "approvedHoursFacts", "memberships", "hoursAttribution", "sourceAccounts", "recipients"]) {
+  for (const field of [
+    "bookId",
+    "fiscalCalendarId",
+    "periodBasis",
+    "postingFacts",
+    "approvedHoursFacts",
+    "memberships",
+    "hoursAttribution",
+    "sourceAccounts",
+    "recipients",
+  ]) {
     test(`refuses changed ${field} even when the award value stays the same`, () => {
       assert.equal(snapshotsMatch(FRESH, { ...FRESH, [field]: "changed" }), false);
     });
@@ -122,16 +113,27 @@ describe("frozen financial source identity", () => {
 });
 
 test("statement evidence cannot disclose financial sources or allocation fractions", () => {
-  assert.deepEqual(statementEvidence({
-    kind: "incentive-settlement", programRevision: 3, payableAfter: "2026-08-01",
-    measuredValue: "1000000.0000", poolValue: "100000.0000",
-    computation: { share: "1/10", explanation: "1/10 of 100000", value: "10000.0000" },
-    sourceSnapshot: { revenueTotal: "1000000.0000" },
-  }), { kind: "incentive-settlement", programRevision: 3, payableAfter: "2026-08-01" });
+  assert.deepEqual(
+    statementEvidence({
+      kind: "incentive-settlement",
+      programRevision: 3,
+      payableAfter: "2026-08-01",
+      measuredValue: "1000000.0000",
+      poolValue: "100000.0000",
+      computation: { share: "1/10", explanation: "1/10 of 100000", value: "10000.0000" },
+      sourceSnapshot: { revenueTotal: "1000000.0000" },
+    }),
+    { kind: "incentive-settlement", programRevision: 3, payableAfter: "2026-08-01" },
+  );
 });
 
-
 test("statement payable metadata validates real calendar dates", () => {
-  assert.equal(statementEvidence({kind: "recognition", payableAfter: "2026-02-30"})?.payableAfter, undefined);
-  assert.equal(statementEvidence({kind: "recognition", payableAfter: "2026-02-28"})?.payableAfter, "2026-02-28");
+  assert.equal(
+    statementEvidence({ kind: "recognition", payableAfter: "2026-02-30" })?.payableAfter,
+    undefined,
+  );
+  assert.equal(
+    statementEvidence({ kind: "recognition", payableAfter: "2026-02-28" })?.payableAfter,
+    "2026-02-28",
+  );
 });

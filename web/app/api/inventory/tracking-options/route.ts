@@ -10,24 +10,21 @@ const query = z
     itemId: uuidId,
     q: z.string().max(200).optional(),
     lotId: uuidId.optional(),
-    selectedLotId:uuidId.optional(),
-    selectedSerialId:uuidId.optional(),
+    selectedLotId: uuidId.optional(),
+    selectedSerialId: uuidId.optional(),
   })
   .strict();
 export const GET = defineRoute({
   permission: "items.read",
   feature: "inventory",
   handler: async ({ request, authz }) => {
-    const parsed = query.safeParse(
-      Object.fromEntries(new URL(request.url).searchParams),
-    );
+    const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!parsed.success)
-      return NextResponse.json(
-        { error: "Choose a valid inventory item" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "Choose a valid inventory item" }, { status: 422 });
     try {
-      return NextResponse.json(await inventoryTrackingOptions(authz.user.orgId, authz.user.id, parsed.data));
+      return NextResponse.json(
+        await inventoryTrackingOptions(authz.user.orgId, authz.user.id, parsed.data),
+      );
     } catch (error) {
       return apiErrorResponse(error, { safeStatus: inventoryErrorStatus(error) });
     }

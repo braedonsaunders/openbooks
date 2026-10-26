@@ -14,25 +14,28 @@
 
 import { PayrollError } from "../error.ts";
 import type {
-  PayrollEditionScaffold, PayrollTaxYearEdition, PayrollTaxYearSupport,
+  PayrollEditionScaffold,
+  PayrollTaxYearEdition,
+  PayrollTaxYearSupport,
 } from "../tax-years.ts";
-import type {
-  PayrollPackRates, PayrollStatutoryRateSlot,
-} from "../statutory-rates.ts";
+import type { PayrollPackRates, PayrollStatutoryRateSlot } from "../statutory-rates.ts";
 import { CA_EXTRA_EDITIONS } from "./editions.ts";
 import { RATES_2025_JUL } from "./rates-2025.ts";
 import { QC_EDITIONS } from "./quebec/rates.ts";
 
 export type Province =
-  | "AB" | "BC" | "MB" | "NB" | "NL" | "NS" | "NT" | "NU" | "ON" | "PE" | "QC" | "SK" | "YT"
-  | "ZZ"; // outside Canada / in Canada beyond any province
+  "AB" | "BC" | "MB" | "NB" | "NL" | "NS" | "NT" | "NU" | "ON" | "PE" | "QC" | "SK" | "YT" | "ZZ"; // outside Canada / in Canada beyond any province
 
 /** Bracket: annual income up to `upTo` (null = top) taxed at `rate` with constant `k`. */
-export interface TaxBracket { upTo: string | null; rate: string; k: string }
+export interface TaxBracket {
+  upTo: string | null;
+  rate: string;
+  k: string;
+}
 
 export interface BpaPhaseOut {
-  max: string;        // BPA below phaseStart
-  min: string;        // BPA at/above phaseEnd
+  max: string; // BPA below phaseStart
+  min: string; // BPA at/above phaseEnd
   phaseStart: string;
   phaseEnd: string;
   // slope = (max - min) / (phaseEnd - phaseStart), kept as an exact fraction
@@ -44,24 +47,24 @@ export interface FederalRates {
   brackets: TaxBracket[];
   lowestRate: string;
   bpaf: BpaPhaseOut;
-  cea: string;                     // Canada Employment Amount (K4)
+  cea: string; // Canada Employment Amount (K4)
   lcf: { cap: string; rate: string };
-  abatementQc: string;             // Quebec abatement on T3
-  outsideCanadaSurtax: string;     // 48% federal surtax (province ZZ)
-  claimCodes: string[];            // TC for claim codes 1..10 (code 0 = 0)
+  abatementQc: string; // Quebec abatement on T3
+  outsideCanadaSurtax: string; // 48% federal surtax (province ZZ)
+  claimCodes: string[]; // TC for claim codes 1..10 (code 0 = 0)
 }
 
 export interface PensionPlanRates {
   ympe: string;
   yampe: string;
   basicExemption: string;
-  totalRate: string;   // base + first additional (C excludes C2)
+  totalRate: string; // base + first additional (C excludes C2)
   maxTotal: string;
-  baseRate: string;    // credit share (K2)
+  baseRate: string; // credit share (K2)
   maxBase: string;
-  addlRate: string;    // first additional (F5 share of C)
+  addlRate: string; // first additional (F5 share of C)
   maxAddl: string;
-  cpp2Rate: string;    // second additional, YMPE→YAMPE band
+  cpp2Rate: string; // second additional, YMPE→YAMPE band
   maxCpp2: string;
 }
 
@@ -114,7 +117,7 @@ export interface ProvincialRates {
   bcReduction?: { basic: string; phaseStart: string; phaseEnd: string; phaseRate: string };
   /** Alberta K5P = ((K1P + K2P) − threshold) × rate, floor 0. */
   k5p?: { threshold: string } & (
-    { rate: string; ratio?: never }
+    | { rate: string; ratio?: never }
     | { ratio: { numerator: string; denominator: string }; rate?: never }
   );
   /** Yukon K4P (Canada employment amount at the provincial lowest rate). */
@@ -123,8 +126,8 @@ export interface ProvincialRates {
 
 export interface EditionRates {
   year: number;
-  edition: number;          // 122 | 123
-  effectiveFrom: string;    // ISO date
+  edition: number; // 122 | 123
+  effectiveFrom: string; // ISO date
   /**
    * `draft` = scaffolded by scripts/payroll-new-tax-year.ts with placeholder
    * figures. Required, so a new edition must say which it is; `ratesForPayDate`
@@ -149,52 +152,87 @@ const FEDERAL_2026: FederalRates = {
   ],
   lowestRate: "0.14",
   bpaf: {
-    max: "16452", min: "14829",
-    phaseStart: "181440", phaseEnd: "258482",
-    slopeNum: "1623", slopeDen: "77042",
+    max: "16452",
+    min: "14829",
+    phaseStart: "181440",
+    phaseEnd: "258482",
+    slopeNum: "1623",
+    slopeDen: "77042",
   },
   cea: "1501",
   lcf: { cap: "750", rate: "0.15" },
   abatementQc: "0.165",
   outsideCanadaSurtax: "0.48",
   claimCodes: [
-    "16452.00", "17868.50", "20701.50", "23534.50", "26367.50",
-    "29200.50", "32033.50", "34866.50", "37699.50", "40532.50",
+    "16452.00",
+    "17868.50",
+    "20701.50",
+    "23534.50",
+    "26367.50",
+    "29200.50",
+    "32033.50",
+    "34866.50",
+    "37699.50",
+    "40532.50",
   ],
 };
 
 const CPP_2026: PensionPlanRates = {
-  ympe: "74600", yampe: "85000", basicExemption: "3500",
-  totalRate: "0.0595", maxTotal: "4230.45",
-  baseRate: "0.0495", maxBase: "3519.45",
-  addlRate: "0.0100", maxAddl: "711.00",
-  cpp2Rate: "0.04", maxCpp2: "416.00",
+  ympe: "74600",
+  yampe: "85000",
+  basicExemption: "3500",
+  totalRate: "0.0595",
+  maxTotal: "4230.45",
+  baseRate: "0.0495",
+  maxBase: "3519.45",
+  addlRate: "0.0100",
+  maxAddl: "711.00",
+  cpp2Rate: "0.04",
+  maxCpp2: "416.00",
 };
 
 const QPP_2026: PensionPlanRates = {
-  ympe: "74600", yampe: "85000", basicExemption: "3500",
-  totalRate: "0.0630", maxTotal: "4479.30",
-  baseRate: "0.0530", maxBase: "3768.30",
-  addlRate: "0.0100", maxAddl: "711.00",
-  cpp2Rate: "0.04", maxCpp2: "416.00",
+  ympe: "74600",
+  yampe: "85000",
+  basicExemption: "3500",
+  totalRate: "0.0630",
+  maxTotal: "4479.30",
+  baseRate: "0.0530",
+  maxBase: "3768.30",
+  addlRate: "0.0100",
+  maxAddl: "711.00",
+  cpp2Rate: "0.04",
+  maxCpp2: "416.00",
 };
 
 const EI_2026: EiRates = {
   mie: "68900",
-  employeeRate: "0.0163", maxEmployee: "1123.07",
-  qcEmployeeRate: "0.0130", qcMaxEmployee: "895.70",
+  employeeRate: "0.0163",
+  maxEmployee: "1123.07",
+  qcEmployeeRate: "0.0130",
+  qcMaxEmployee: "895.70",
   employerMultiple: "1.4",
 };
 
 const QPIP_2026: QpipRates = {
   mie: "103000",
-  employeeRate: "0.0043", maxEmployee: "442.90",
-  employerRate: "0.00602", maxEmployer: "620.06",
+  employeeRate: "0.0043",
+  maxEmployee: "442.90",
+  employerRate: "0.00602",
+  maxEmployer: "620.06",
 };
 
 const BC_CLAIM_CODES = [
-  "13216.00", "14703.00", "17677.00", "20651.00", "23625.00",
-  "26599.00", "29573.00", "32547.00", "35521.00", "38495.00",
+  "13216.00",
+  "14703.00",
+  "17677.00",
+  "20651.00",
+  "23625.00",
+  "26599.00",
+  "29573.00",
+  "32547.00",
+  "35521.00",
+  "38495.00",
 ];
 
 const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
@@ -210,8 +248,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.08",
     tcpDefault: "22769",
     claimCodes: [
-      "22769.00", "24397.50", "27654.50", "30911.50", "34168.50",
-      "37425.50", "40682.50", "43939.50", "47196.50", "50453.50",
+      "22769.00",
+      "24397.50",
+      "27654.50",
+      "30911.50",
+      "34168.50",
+      "37425.50",
+      "40682.50",
+      "43939.50",
+      "47196.50",
+      "50453.50",
     ],
     k5p: { threshold: "4896", rate: "0.25" },
   },
@@ -239,8 +285,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.108",
     tcpDefault: "BPAMB",
     claimCodes: [
-      "15780.00", "16626.50", "18319.50", "20012.50", "21705.50",
-      "23398.50", "25091.50", "26784.50", "28477.50", "30170.50",
+      "15780.00",
+      "16626.50",
+      "18319.50",
+      "20012.50",
+      "21705.50",
+      "23398.50",
+      "25091.50",
+      "26784.50",
+      "28477.50",
+      "30170.50",
     ],
     lcp: { cap: "1800", rate: "0.15" },
   },
@@ -254,8 +308,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.094",
     tcpDefault: "13664",
     claimCodes: [
-      "13664.00", "15062.50", "17859.50", "20656.50", "23453.50",
-      "26250.50", "29047.50", "31844.50", "34641.50", "37438.50",
+      "13664.00",
+      "15062.50",
+      "17859.50",
+      "20656.50",
+      "23453.50",
+      "26250.50",
+      "29047.50",
+      "31844.50",
+      "34641.50",
+      "37438.50",
     ],
     lcp: { cap: "2000", rate: "0.20" },
   },
@@ -273,8 +335,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.087",
     tcpDefault: "11188",
     claimCodes: [
-      "11188.00", "12396.00", "14812.00", "17228.00", "19644.00",
-      "22060.00", "24476.00", "26892.00", "29308.00", "31724.00",
+      "11188.00",
+      "12396.00",
+      "14812.00",
+      "17228.00",
+      "19644.00",
+      "22060.00",
+      "24476.00",
+      "26892.00",
+      "29308.00",
+      "31724.00",
     ],
   },
   NS: {
@@ -288,8 +358,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.0879",
     tcpDefault: "11932",
     claimCodes: [
-      "11932.00", "12770.00", "14446.00", "16122.00", "17798.00",
-      "19474.00", "21150.00", "22826.00", "24502.00", "26178.00",
+      "11932.00",
+      "12770.00",
+      "14446.00",
+      "16122.00",
+      "17798.00",
+      "19474.00",
+      "21150.00",
+      "22826.00",
+      "24502.00",
+      "26178.00",
     ],
     lcp: { cap: "2000", rate: "0.20" },
   },
@@ -303,8 +381,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.059",
     tcpDefault: "18198",
     claimCodes: [
-      "18198.00", "19762.50", "22891.50", "26020.50", "29149.50",
-      "32278.50", "35407.50", "38536.50", "41665.50", "44794.50",
+      "18198.00",
+      "19762.50",
+      "22891.50",
+      "26020.50",
+      "29149.50",
+      "32278.50",
+      "35407.50",
+      "38536.50",
+      "41665.50",
+      "44794.50",
     ],
   },
   NU: {
@@ -317,8 +403,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.04",
     tcpDefault: "19659",
     claimCodes: [
-      "19659.00", "21248.50", "24427.50", "27606.50", "30785.50",
-      "33964.50", "37143.50", "40322.50", "43501.50", "46680.50",
+      "19659.00",
+      "21248.50",
+      "24427.50",
+      "27606.50",
+      "30785.50",
+      "33964.50",
+      "37143.50",
+      "40322.50",
+      "43501.50",
+      "46680.50",
     ],
   },
   ON: {
@@ -332,8 +426,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.0505",
     tcpDefault: "12989",
     claimCodes: [
-      "12989.00", "14388.00", "17186.00", "19984.00", "22782.00",
-      "25580.00", "28378.00", "31176.00", "33974.00", "36772.00",
+      "12989.00",
+      "14388.00",
+      "17186.00",
+      "19984.00",
+      "22782.00",
+      "25580.00",
+      "28378.00",
+      "31176.00",
+      "33974.00",
+      "36772.00",
     ],
     surtax: { thresholds: ["5818", "7446"], rates: ["0.20", "0.36"] },
     healthPremium: true,
@@ -350,8 +452,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.095",
     tcpDefault: "15000",
     claimCodes: [
-      "15000.00", "15800.00", "17400.00", "19000.00", "20600.00",
-      "22200.00", "23800.00", "25400.00", "27000.00", "28600.00",
+      "15000.00",
+      "15800.00",
+      "17400.00",
+      "19000.00",
+      "20600.00",
+      "22200.00",
+      "23800.00",
+      "25400.00",
+      "27000.00",
+      "28600.00",
     ],
   },
   SK: {
@@ -363,8 +473,16 @@ const PROVINCES_2026_JAN: Partial<Record<Province, ProvincialRates>> = {
     lowestRate: "0.105",
     tcpDefault: "20381",
     claimCodes: [
-      "20381.00", "21627.50", "24120.50", "26613.50", "29106.50",
-      "31599.50", "34092.50", "36585.50", "39078.50", "41571.50",
+      "20381.00",
+      "21627.50",
+      "24120.50",
+      "26613.50",
+      "29106.50",
+      "31599.50",
+      "34092.50",
+      "36585.50",
+      "39078.50",
+      "41571.50",
     ],
     lcp: { cap: "875", rate: "0.175" },
   },
@@ -436,8 +554,16 @@ export const RATES_2026_JUL: EditionRates = {
       ...PROVINCES_2026_JAN.NL!,
       tcpDefault: "15000",
       claimCodes: [
-        "15000.00", "16208.00", "18624.00", "21040.00", "23456.00",
-        "25872.00", "28288.00", "30704.00", "33120.00", "35536.00",
+        "15000.00",
+        "16208.00",
+        "18624.00",
+        "21040.00",
+        "23456.00",
+        "25872.00",
+        "28288.00",
+        "30704.00",
+        "33120.00",
+        "35536.00",
       ],
     },
     PE: {
@@ -460,8 +586,13 @@ export const RATES_2026_JUL: EditionRates = {
  * scripts/payroll-new-tax-year.ts). Newest first.
  */
 export const CA_EDITIONS: readonly EditionRates[] = [
-  ...CA_EXTRA_EDITIONS, RATES_2026_JUL, RATES_2026_JAN, RATES_2025_JUL,
-].slice().sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  ...CA_EXTRA_EDITIONS,
+  RATES_2026_JUL,
+  RATES_2026_JAN,
+  RATES_2025_JUL,
+]
+  .slice()
+  .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
 
 /**
  * Resolve the T4127 edition in force on a pay date.
@@ -478,14 +609,14 @@ export function ratesForPayDate(payDate: string): EditionRates {
   const edition = forYear.find((candidate) => payDate >= candidate.effectiveFrom);
   if (!edition) {
     throw new PayrollError(
-      `no T4127 constants for pay date ${payDate} — rates for ${year} aren't `
-      + "available in this pack version; update the pack",
+      `no T4127 constants for pay date ${payDate} — rates for ${year} aren't ` +
+        "available in this pack version; update the pack",
     );
   }
   if (edition.status !== "published") {
     throw new PayrollError(
-      `the ${year} T4127 constants are not available in this pack version — a pay date in `
-      + `${year} cannot be calculated; update the pack`,
+      `the ${year} T4127 constants are not available in this pack version — a pay date in ` +
+        `${year} cannot be calculated; update the pack`,
     );
   }
   return edition;
@@ -496,9 +627,20 @@ export function ratesForPayDate(payDate: string): EditionRates {
  * values for the standard frequencies; truncation for anything else.
  */
 export const CPP_EXEMPTION_BY_P: Record<number, string> = {
-  1: "3500.00", 2: "1750.00", 4: "875.00", 10: "350.00", 12: "291.66",
-  13: "269.23", 22: "159.09", 24: "145.83", 26: "134.61", 27: "129.62",
-  52: "67.30", 53: "66.03", 240: "14.58", 2000: "1.75",
+  1: "3500.00",
+  2: "1750.00",
+  4: "875.00",
+  10: "350.00",
+  12: "291.66",
+  13: "269.23",
+  22: "159.09",
+  24: "145.83",
+  26: "134.61",
+  27: "129.62",
+  52: "67.30",
+  53: "66.03",
+  240: "14.58",
+  2000: "1.75",
 };
 
 /** TD1 claim code → total claim amount (code 0 = no claim; code 1 = the BPA). */
@@ -521,7 +663,7 @@ function scaffoldProvinceBlock(province: Province): string {
   return [
     `  ${province}: {`,
     "    brackets: [",
-    "      { upTo: UNFILLED, rate: UNFILLED, k: \"0\" },",
+    '      { upTo: UNFILLED, rate: UNFILLED, k: "0" },',
     "      { upTo: null, rate: UNFILLED, k: UNFILLED },",
     "    ],",
     "    lowestRate: UNFILLED,",
@@ -802,18 +944,18 @@ export const QC_EXTRA_EDITIONS: readonly QcEditionRates[] = [{entries}];
     },
   ],
   steps: [
-    "Fetch T4127 for the year from canada.ca (the January edition, plus the CRA's "
-    + "machine-readable CSVs) and TP-1015.F-V from revenuquebec.ca.",
-    "Replace every UNFILLED in rates-{year}.ts and quebec/rates-{year}.ts, and "
-    + "record the CRA's edition number.",
-    "Cross-verify: claim-code columns against the published K1/K1P values, each "
-    + "province's constant K against the cumulative bracket arithmetic, and the "
-    + "CPP/QPP maxima against their rates.",
+    "Fetch T4127 for the year from canada.ca (the January edition, plus the CRA's " +
+      "machine-readable CSVs) and TP-1015.F-V from revenuquebec.ca.",
+    "Replace every UNFILLED in rates-{year}.ts and quebec/rates-{year}.ts, and " +
+      "record the CRA's edition number.",
+    "Cross-verify: claim-code columns against the published K1/K1P values, each " +
+      "province's constant K against the cumulative bracket arithmetic, and the " +
+      "CPP/QPP maxima against their rates.",
     "Paste the published goldens into both stub tests.",
-    "Flip both editions to \"published\", then run the payroll suite: the {year} "
-    + "stubs must pass and the 2026 T4127/TP-1015 goldens must not move.",
-    "If the CRA issues a mid-year delta edition, run the scaffold again and give "
-    + "the second module a July effectiveFrom.",
+    'Flip both editions to "published", then run the payroll suite: the {year} ' +
+      "stubs must pass and the 2026 T4127/TP-1015 goldens must not move.",
+    "If the CRA issues a mid-year delta edition, run the scaffold again and give " +
+      "the second module a July effectiveFrom.",
   ],
 };
 
@@ -883,26 +1025,38 @@ const CA_EHT_SLOT: PayrollStatutoryRateSlot = {
   // so absence is unknown liability, not a zero levy.
   whenUnconfigured: "refuse",
   citation:
-    "ON: Employer Health Tax Act, RSO 1990 c E.11 · BC: Employer Health Tax Act, SBC 2018 c 42 · "
-    + "MB: Health and Post Secondary Education Tax Levy Act, CCSM c H24 · "
-    + "NL: Health and Post Secondary Education Tax Act, RSNL 1990 c H-1",
+    "ON: Employer Health Tax Act, RSO 1990 c E.11 · BC: Employer Health Tax Act, SBC 2018 c 42 · " +
+    "MB: Health and Post Secondary Education Tax Levy Act, CCSM c H24 · " +
+    "NL: Health and Post Secondary Education Tax Act, RSNL 1990 c H-1",
   variesBecause:
-    "Each province levies its own employer health tax at its own rate above its own exemption, and "
-    + "the rate depends on the employer's total remuneration in that province — a figure no "
-    + "published table can supply.",
+    "Each province levies its own employer health tax at its own rate above its own exemption, and " +
+    "the rate depends on the employer's total remuneration in that province — a figure no " +
+    "published table can supply.",
   fields: [
     {
-      key: "rate", label: "Rate (%)", kind: "percent", decimals: 4,
-      min: "0", max: "10", required: true,
-      help: "As a percent, as the province states it: 1.95 is 1.95%. Your rate depends on total "
-        + "remuneration in that province — check the province's own rate table.",
+      key: "rate",
+      label: "Rate (%)",
+      kind: "percent",
+      decimals: 4,
+      min: "0",
+      max: "10",
+      required: true,
+      help:
+        "As a percent, as the province states it: 1.95 is 1.95%. Your rate depends on total " +
+        "remuneration in that province — check the province's own rate table.",
     },
     {
-      key: "annualExemption", label: "Annual exemption available to allocate", kind: "amount", decimals: 2,
-      min: "0", max: "100000000", required: false,
-      help: "Total exemption amount available to allocate among any associated employers for this province. "
-        + "Record each legal employer's annual share in Payroll Setup → Employer facts; the payroll engine "
-        + "refuses to apply an unallocated exemption.",
+      key: "annualExemption",
+      label: "Annual exemption available to allocate",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      max: "100000000",
+      required: false,
+      help:
+        "Total exemption amount available to allocate among any associated employers for this province. " +
+        "Record each legal employer's annual share in Payroll Setup → Employer facts; the payroll engine " +
+        "refuses to apply an unallocated exemption.",
     },
   ],
 };
@@ -937,44 +1091,74 @@ const CA_HSF_SLOT: PayrollStatutoryRateSlot = {
   // accruing 0.00 in silence. Outside QC the slot never evaluates at all.
   whenUnconfigured: "refuse",
   citation:
-    "Revenu Québec, TP-1015.F-V s. 5 · \"Total Payroll Threshold and Health "
-    + "Services Fund Contribution Rate\" (2026 table) · \"Remuneration Subject "
-    + "to the Contribution to the Health Services Fund\"",
+    'Revenu Québec, TP-1015.F-V s. 5 · "Total Payroll Threshold and Health ' +
+    'Services Fund Contribution Rate" (2026 table) · "Remuneration Subject ' +
+    'to the Contribution to the Health Services Fund"',
   variesBecause:
-    "The health services fund rate depends on the employer's total payroll for "
-    + "the year and its sector class — figures no published table can supply "
-    + "for this employer.",
+    "The health services fund rate depends on the employer's total payroll for " +
+    "the year and its sector class — figures no published table can supply " +
+    "for this employer.",
   fields: [
     {
-      key: "rate", label: "Rate (%)", kind: "percent", decimals: 4,
-      min: "0", max: "10", required: false,
-      help: "Retained for reference only and never priced: the engine computes the statutory HSF rate "
-        + "from the sector class below and year-to-date payroll. Leave blank on new rows.",
+      key: "rate",
+      label: "Rate (%)",
+      kind: "percent",
+      decimals: 4,
+      min: "0",
+      max: "10",
+      required: false,
+      help:
+        "Retained for reference only and never priced: the engine computes the statutory HSF rate " +
+        "from the sector class below and year-to-date payroll. Leave blank on new rows.",
     },
     {
-      key: "sectorOther", label: "Ordinary-sector employer", kind: "flag", required: false,
-      decimals: 0, min: "false", max: "true",
-      help: "Ordinary employer: 1.65% floor rising by the year's formula to 4.26%. Set exactly one "
-        + "sector flag — the engine refuses an unclassified employer rather than guessing.",
+      key: "sectorOther",
+      label: "Ordinary-sector employer",
+      kind: "flag",
+      required: false,
+      decimals: 0,
+      min: "false",
+      max: "true",
+      help:
+        "Ordinary employer: 1.65% floor rising by the year's formula to 4.26%. Set exactly one " +
+        "sector flag — the engine refuses an unclassified employer rather than guessing.",
     },
     {
-      key: "sectorPublic", label: "Public-sector employer", kind: "flag", required: false,
-      decimals: 0, min: "false", max: "true",
-      help: "Public-sector employer taxed at the flat 4.26% HSF rate. Set at most one sector flag — "
-        + "the engine refuses an ambiguous classification.",
+      key: "sectorPublic",
+      label: "Public-sector employer",
+      kind: "flag",
+      required: false,
+      decimals: 0,
+      min: "false",
+      max: "true",
+      help:
+        "Public-sector employer taxed at the flat 4.26% HSF rate. Set at most one sector flag — " +
+        "the engine refuses an ambiguous classification.",
     },
     {
-      key: "sectorPrimaryManufacturing", label: "Primary or manufacturing sector", kind: "flag", required: false,
-      decimals: 0, min: "false", max: "true",
-      help: "Primary-and-manufacturing employer: 1.25% floor rising by the year's formula to 4.26%. "
-        + "Set at most one sector flag.",
+      key: "sectorPrimaryManufacturing",
+      label: "Primary or manufacturing sector",
+      kind: "flag",
+      required: false,
+      decimals: 0,
+      min: "false",
+      max: "true",
+      help:
+        "Primary-and-manufacturing employer: 1.25% floor rising by the year's formula to 4.26%. " +
+        "Set at most one sector flag.",
     },
     {
-      key: "sectorExempt2026", label: "2026 agriculture/forestry/fishing exemption", kind: "flag", required: false,
-      decimals: 0, min: "false", max: "true",
-      help: "Agriculture, forestry or fishing employer covered by the separately authorized 2026 "
-        + "temporary HSF exemption: no contribution prices while set (2026 only). Set at most one "
-        + "sector flag.",
+      key: "sectorExempt2026",
+      label: "2026 agriculture/forestry/fishing exemption",
+      kind: "flag",
+      required: false,
+      decimals: 0,
+      min: "false",
+      max: "true",
+      help:
+        "Agriculture, forestry or fishing employer covered by the separately authorized 2026 " +
+        "temporary HSF exemption: no contribution prices while set (2026 only). Set at most one " +
+        "sector flag.",
     },
   ],
 };

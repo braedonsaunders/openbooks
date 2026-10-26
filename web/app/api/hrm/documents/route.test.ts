@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-
-
 const mockSources = new Map<string, string>([
   [
     "mock:authz",
@@ -45,7 +43,8 @@ const mockSources = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/authz" || specifier === "./authz") return { url: "mock:authz", shortCircuit: true };
+    if (specifier === "@/lib/authz" || specifier === "./authz")
+      return { url: "mock:authz", shortCircuit: true };
     if (specifier === "./features") return { url: "mock:features", shortCircuit: true };
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
@@ -106,11 +105,17 @@ test("a letter over the upload ceiling gets the named 413", async () => {
 });
 
 test("an unknown mode is refused before falling through to document generation", async () => {
-  const res = await POST(new Request("http://openbooks.test/api/hrm/documents?mode=replace", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ templateId: "template-1", partyId: PARTY_ID, title: "Unexpected mode" }),
-  }));
+  const res = await POST(
+    new Request("http://openbooks.test/api/hrm/documents?mode=replace", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        templateId: "template-1",
+        partyId: PARTY_ID,
+        title: "Unexpected mode",
+      }),
+    }),
+  );
   assert.equal(res.status, 400);
   assert.deepEqual(await res.json(), { error: "mode must be preview, upload, or generate" });
 });

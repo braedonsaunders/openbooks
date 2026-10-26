@@ -6,9 +6,8 @@ test("project detector parameter validation still refuses a zero unbilled window
   assert.throws(
     () =>
       normalizeContinuousCloseDetectors("projects", {
-        project_stale_unbilled: { parameters: { unbilledDays: 0 } }
+        project_stale_unbilled: { parameters: { unbilledDays: 0 } },
       }),
     /invalid detector parameter/,
   );
 });
-

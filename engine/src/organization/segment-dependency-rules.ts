@@ -69,7 +69,10 @@ const STORAGE_FIELDS: Record<string, keyof DimensionAssignment> = {
 };
 
 /** The value a line carries for one segment, or null. */
-export function assignedValue(segment: Pick<SegmentSideDefinition, "sourceKind" | "storageColumn" | "key">, line: DimensionAssignment): string | null {
+export function assignedValue(
+  segment: Pick<SegmentSideDefinition, "sourceKind" | "storageColumn" | "key">,
+  line: DimensionAssignment,
+): string | null {
   if (segment.sourceKind === "builtin") {
     const field = segment.storageColumn ? STORAGE_FIELDS[segment.storageColumn] : undefined;
     const value = field ? line[field] : null;
@@ -80,9 +83,14 @@ export function assignedValue(segment: Pick<SegmentSideDefinition, "sourceKind" 
 }
 
 /** Whether a pairing applies on a date (inclusive window; null bounds are open). */
-export function ruleEffectiveOn(rule: Pick<SegmentDependencyRule, "effectiveFrom" | "effectiveTo">, onDate: string): boolean {
-  return (rule.effectiveFrom === null || rule.effectiveFrom <= onDate)
-    && (rule.effectiveTo === null || rule.effectiveTo >= onDate);
+export function ruleEffectiveOn(
+  rule: Pick<SegmentDependencyRule, "effectiveFrom" | "effectiveTo">,
+  onDate: string,
+): boolean {
+  return (
+    (rule.effectiveFrom === null || rule.effectiveFrom <= onDate) &&
+    (rule.effectiveTo === null || rule.effectiveTo >= onDate)
+  );
 }
 
 interface AllowedSet {
@@ -114,7 +122,11 @@ export function segmentDependencyViolations(
   onDate: string,
 ): SegmentDependencyViolation[] {
   const violations: SegmentDependencyViolation[] = [];
-  for (const set of allowedSets(rules, onDate, (rule) => assignedValue(rule.segment, line) === rule.valueId)) {
+  for (const set of allowedSets(
+    rules,
+    onDate,
+    (rule) => assignedValue(rule.segment, line) === rule.valueId,
+  )) {
     const controllingValue = assignedValue(set.first.controlling, line);
     if (controllingValue !== null && set.allowed.has(controllingValue)) continue;
     violations.push({
@@ -130,9 +142,15 @@ export function segmentDependencyViolations(
 }
 
 /** Operator-facing refusal for one violation, naming the line and the remedy. */
-export function describeViolation(violation: SegmentDependencyViolation, lineLabel: string): string {
+export function describeViolation(
+  violation: SegmentDependencyViolation,
+  lineLabel: string,
+): string {
   const allowed = violation.allowedLabels.join(" or ");
-  const found = violation.controllingValueId === null ? `no ${violation.controllingName.toLowerCase()}` : `another ${violation.controllingName.toLowerCase()}`;
+  const found =
+    violation.controllingValueId === null
+      ? `no ${violation.controllingName.toLowerCase()}`
+      : `another ${violation.controllingName.toLowerCase()}`;
   return `${lineLabel}: ${violation.segmentName} "${violation.valueLabel}" is allowed only with ${violation.controllingName} ${allowed}, but the line has ${found}. Choose ${violation.controllingName} ${allowed} on the line, choose a different ${violation.segmentName.toLowerCase()}, or change the dependency rule under Setup → Segments.`;
 }
 
@@ -149,7 +167,11 @@ export function valueAllowed(
   line: DimensionAssignment,
   onDate: string,
 ): boolean {
-  for (const set of allowedSets(rules, onDate, (rule) => rule.segment.id === segmentId && rule.valueId === valueId)) {
+  for (const set of allowedSets(
+    rules,
+    onDate,
+    (rule) => rule.segment.id === segmentId && rule.valueId === valueId,
+  )) {
     const controllingValue = assignedValue(set.first.controlling, line);
     if (controllingValue === null || !set.allowed.has(controllingValue)) return false;
   }

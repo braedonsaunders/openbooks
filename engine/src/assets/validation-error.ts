@@ -6,6 +6,6 @@
  * 500. Internal invariants stay plain Error and remain 500.
  */
 export class AssetValidationError extends Error {
-  readonly name = 'AssetValidationError'
-  readonly status = 422
+  readonly name = "AssetValidationError";
+  readonly status = 422;
 }

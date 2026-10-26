@@ -6,10 +6,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
-import {
-  claimIdempotentCreate,
-  resolveIdempotentReplay,
-} from "../../../../lib/api/idempotency";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "../../../../lib/api/idempotency";
 import { auditSetupChange } from "../../../../lib/setup/audit";
 import {
   isVizType,
@@ -23,15 +20,25 @@ import {
 export const runtime = "nodejs";
 
 const insightQueryBody = z.json().refine((value) => {
-  try { validateInsightQuery(value); return true; } catch { return false; }
+  try {
+    validateInsightQuery(value);
+    return true;
+  } catch {
+    return false;
+  }
 }, "query must follow the insight query schema");
 const createCardBodySchema = z.strictObject({
   name: z.string().trim().max(200).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   query: insightQueryBody.optional(),
-  vizType: z.enum(INSIGHT_VIZ_TYPES, { error: "vizType must be a supported visualization type" }).optional(),
+  vizType: z
+    .enum(INSIGHT_VIZ_TYPES, { error: "vizType must be a supported visualization type" })
+    .optional(),
   vizSettings: z.record(z.string().min(1), z.json()).optional(),
-  allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys")).nullable().optional(),
+  allowedRoles: z
+    .array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys"))
+    .nullable()
+    .optional(),
 });
 
 function bad(error: string) {
@@ -63,10 +70,7 @@ export const POST = defineRoute({
 
     const requestId = req.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!isUuid(requestId)) {
-      return NextResponse.json(
-        { error: "invalid_idempotency_key" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
     }
 
     const body = routeBody;
@@ -133,7 +137,8 @@ export const POST = defineRoute({
           match,
         });
       }
-      const inserted = await tx.execute<{ id: string }>(sql`
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
       insert into insight_cards
         (id, org_id, name, description, query, viz_type, viz_settings,
          status, allowed_roles, created_by, updated_by)
@@ -145,7 +150,9 @@ export const POST = defineRoute({
       -- A retry resolves the existing audited payload below; conflicting input is refused.
       on conflict (id) do nothing
       returning id
-    `, "objects");
+    `,
+        "objects",
+      );
       if (!inserted[0]) {
         return resolveIdempotentReplay(tx, {
           orgId: user.orgId,
@@ -169,14 +176,8 @@ export const POST = defineRoute({
       return "fresh" as const;
     });
     if (outcome === "conflict") {
-      return NextResponse.json(
-        { error: "invalid_idempotency_key" },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
     }
-    return NextResponse.json(
-      { id: requestId },
-      { status: outcome === "fresh" ? 201 : 200 },
-    );
+    return NextResponse.json({ id: requestId }, { status: outcome === "fresh" ? 201 : 200 });
   },
 });

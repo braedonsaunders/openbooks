@@ -10,11 +10,17 @@ import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fi
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
 async function projectFixture(org: ScratchOrg, subsidiaryId: string | null = org.subsidiaryId) {
-  const projectId = randomUUID(), typeId = randomUUID();
-  await db.execute(sql`update orgs set settings=settings || ${JSON.stringify({
-    features: { projects: true, revenueRecognition: true },
-    controlAccounts: { unbilledReceivable: org.accounts.ar, projectRevenue: org.accounts.revenue },
-  })}::jsonb where id=${org.orgId}`);
+  const projectId = randomUUID(),
+    typeId = randomUUID();
+  await db.execute(
+    sql`update orgs set settings=settings || ${JSON.stringify({
+      features: { projects: true, revenueRecognition: true },
+      controlAccounts: {
+        unbilledReceivable: org.accounts.ar,
+        projectRevenue: org.accounts.revenue,
+      },
+    })}::jsonb where id=${org.orgId}`,
+  );
   await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
     values(${typeId},${org.orgId},'cost-poc','Cost POC','fixed_price',
       '{"recognition":"percent_complete_cost","billingProcedure":"standard"}'::jsonb,'{}'::jsonb)`);
@@ -25,108 +31,181 @@ async function projectFixture(org: ScratchOrg, subsidiaryId: string | null = org
   return projectId;
 }
 
-async function cost(org: ScratchOrg, projectId: string, amount: string, options: {
-  bookId?: string; subsidiaryId?: string; date?: string; txnAmount?: string; fxRate?: string; currency?: string;
-  status?: "posted" | "reversed" | "draft";
-} = {}) {
+async function cost(
+  org: ScratchOrg,
+  projectId: string,
+  amount: string,
+  options: {
+    bookId?: string;
+    subsidiaryId?: string;
+    date?: string;
+    txnAmount?: string;
+    fxRate?: string;
+    currency?: string;
+    status?: "posted" | "reversed" | "draft";
+  } = {},
+) {
   const id = randomUUID();
   const subsidiaryId = options.subsidiaryId ?? org.subsidiaryId;
-  await db.transaction(async tx => {
+  await db.transaction(async (tx) => {
     await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status)
       values(${id},${org.orgId},${options.bookId ?? org.bookId},${subsidiaryId},${id},${options.date ?? org.date},${org.periodId},'draft')`);
     await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,project_id,amount,currency,txn_amount,fx_rate)
-      values(${org.orgId},${id},1,${org.accounts.cogs},${subsidiaryId},${projectId},${amount},${options.currency ?? 'CAD'},${options.txnAmount ?? amount},${options.fxRate ?? '1'}),
-        (${org.orgId},${id},2,${org.accounts.bank},${subsidiaryId},${projectId},-${amount}::numeric,${options.currency ?? 'CAD'},-${options.txnAmount ?? amount}::numeric,${options.fxRate ?? '1'})`);
-    await tx.execute(sql`update journal_entries set status=${options.status ?? 'posted'} where org_id=${org.orgId} and id=${id}`);
+      values(${org.orgId},${id},1,${org.accounts.cogs},${subsidiaryId},${projectId},${amount},${options.currency ?? "CAD"},${options.txnAmount ?? amount},${options.fxRate ?? "1"}),
+        (${org.orgId},${id},2,${org.accounts.bank},${subsidiaryId},${projectId},-${amount}::numeric,${options.currency ?? "CAD"},-${options.txnAmount ?? amount}::numeric,${options.fxRate ?? "1"})`);
+    await tx.execute(
+      sql`update journal_entries set status=${options.status ?? "posted"} where org_id=${org.orgId} and id=${id}`,
+    );
   });
 }
 
 async function snapshot(orgId: string) {
-  return (await db.execute<{ evidence: unknown }>(sql`select jsonb_build_object(
+  return (
+    await db.execute<{ evidence: unknown }>(
+      sql`select jsonb_build_object(
     'rules',(select jsonb_agg(to_jsonb(r) order by r.id) from recognition_rules r where org_id=${orgId}),
     'contracts',(select jsonb_agg(to_jsonb(c) order by c.id) from revenue_contracts c where org_id=${orgId}),
     'obligations',(select jsonb_agg(to_jsonb(o) order by o.id) from performance_obligations o where org_id=${orgId}),
     'schedules',(select jsonb_agg(to_jsonb(s) order by s.id) from recognition_schedules s where org_id=${orgId}),
     'lines',(select jsonb_agg(to_jsonb(s) order by s.id) from recognition_schedule_lines s where org_id=${orgId})
-  ) as evidence`, "objects"))[0]!.evidence;
+  ) as evidence`,
+      "objects",
+    )
+  )[0]!.evidence;
 }
 
-test("project cost progress counts primary functional costs once and shares 25% across posting books", enabled, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await projectFixture(org), taxBook = randomUUID();
-    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+test(
+  "project cost progress counts primary functional costs once and shares 25% across posting books",
+  enabled,
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await projectFixture(org),
+        taxBook = randomUUID();
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
       values(${taxBook},${org.orgId},'TAX','Tax',false,true,true)`);
-    await cost(org, projectId, "250", { txnAmount: "200", fxRate: "1.25", currency: "USD" });
-    await cost(org, projectId, "250", { bookId: taxBook });
-    const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.deepEqual(result.problems, []);
-    assert.equal(result.synced[0]?.percentComplete, "25.0000");
-    const planned = await db.execute<{ book_id: string; amount: string }>(sql`
+      await cost(org, projectId, "250", { txnAmount: "200", fxRate: "1.25", currency: "USD" });
+      await cost(org, projectId, "250", { bookId: taxBook });
+      const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.deepEqual(result.problems, []);
+      assert.equal(result.synced[0]?.percentComplete, "25.0000");
+      const planned = await db.execute<{ book_id: string; amount: string }>(
+        sql`
       select s.book_id,sum(l.planned_amount)::text as amount from recognition_schedule_lines l
        join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-       where l.org_id=${org.orgId} group by s.book_id order by s.book_id`, "objects");
-    assert.deepEqual(planned, [org.bookId, taxBook].sort().map(book_id => ({ book_id, amount: "250.0000" })));
-  } finally { await dropScratchOrg(org.orgId); }
-});
+       where l.org_id=${org.orgId} group by s.book_id order by s.book_id`,
+        "objects",
+      );
+      assert.deepEqual(
+        planned,
+        [org.bookId, taxBook].sort().map((book_id) => ({ book_id, amount: "250.0000" })),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("project cost progress excludes other legal entities, drafts and future costs and nets reversals", enabled, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await projectFixture(org), other = randomUUID();
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+test(
+  "project cost progress excludes other legal entities, drafts and future costs and nets reversals",
+  enabled,
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await projectFixture(org),
+        other = randomUUID();
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
       values(${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`);
-    await cost(org, projectId, "300", { status: "reversed" });
-    await cost(org, projectId, "-50");
-    await cost(org, projectId, "700", { subsidiaryId: other });
-    await cost(org, projectId, "600", { date: "2026-07-20" });
-    await cost(org, projectId, "500", { status: "draft" });
-    const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.deepEqual(result.problems, []);
-    assert.equal(result.synced[0]?.percentComplete, "25.0000");
-    const later = await syncProjectRevenueContracts(org.orgId, null, "2026-07-20", projectId);
-    assert.equal(later.synced[0]?.percentComplete, "85.0000");
-  } finally { await dropScratchOrg(org.orgId); }
-});
+      await cost(org, projectId, "300", { status: "reversed" });
+      await cost(org, projectId, "-50");
+      await cost(org, projectId, "700", { subsidiaryId: other });
+      await cost(org, projectId, "600", { date: "2026-07-20" });
+      await cost(org, projectId, "500", { status: "draft" });
+      const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.deepEqual(result.problems, []);
+      assert.equal(result.synced[0]?.percentComplete, "25.0000");
+      const later = await syncProjectRevenueContracts(org.orgId, null, "2026-07-20", projectId);
+      assert.equal(later.synced[0]?.percentComplete, "85.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("project cost progress includes its entity's intercompany cost when the journal originates elsewhere", enabled, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await projectFixture(org), origin = randomUUID(), entry = randomUUID();
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+test(
+  "project cost progress includes its entity's intercompany cost when the journal originates elsewhere",
+  enabled,
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await projectFixture(org),
+        origin = randomUUID(),
+        entry = randomUUID();
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
       values(${origin},${org.orgId},${org.subsidiaryId},'Paying entity','CAD','CA')`);
-    await db.transaction(async tx => {
-      await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status)
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status)
         values(${entry},${org.orgId},${org.bookId},${origin},${entry},${org.date},${org.periodId},'draft')`);
-      // The paying entity records cash and a due-from; the project entity
-      // records its expense and due-to. Each entity balances independently.
-      await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,project_id,amount,currency,txn_amount)
+        // The paying entity records cash and a due-from; the project entity
+        // records its expense and due-to. Each entity balances independently.
+        await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,project_id,amount,currency,txn_amount)
         values(${org.orgId},${entry},1,${org.accounts.bank},${origin},null,-250,'CAD',-250),
           (${org.orgId},${entry},2,${org.accounts.ar},${origin},null,250,'CAD',250),
           (${org.orgId},${entry},3,${org.accounts.cogs},${org.subsidiaryId},${projectId},250,'CAD',250),
           (${org.orgId},${entry},4,${org.accounts.ap},${org.subsidiaryId},null,-250,'CAD',-250)`);
-      await tx.execute(sql`update journal_entries set status='posted' where org_id=${org.orgId} and id=${entry}`);
-    });
-    const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.deepEqual(result.problems, []);
-    assert.equal(result.synced[0]?.percentComplete, "25.0000");
-  } finally { await dropScratchOrg(org.orgId); }
-});
+        await tx.execute(
+          sql`update journal_entries set status='posted' where org_id=${org.orgId} and id=${entry}`,
+        );
+      });
+      const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.deepEqual(result.problems, []);
+      assert.equal(result.synced[0]?.percentComplete, "25.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-for (const invalid of ["missing-primary", "inactive-primary", "nonposting-primary", "ambiguous-primary", "inactive-owner", "elimination-owner", "missing-root"] as const) {
+for (const invalid of [
+  "missing-primary",
+  "inactive-primary",
+  "nonposting-primary",
+  "ambiguous-primary",
+  "inactive-owner",
+  "elimination-owner",
+  "missing-root",
+] as const) {
   test(`project cost progress refuses ${invalid} without recognition writes`, enabled, async () => {
     const org = await createScratchOrg();
     try {
-      const projectId = await projectFixture(org, invalid.endsWith("root") ? null : org.subsidiaryId);
-      if (invalid === "missing-primary") await db.execute(sql`update accounting_books set is_primary=false where id=${org.bookId}`);
-      if (invalid === "inactive-primary") await db.execute(sql`update accounting_books set is_active=false where id=${org.bookId}`);
-      if (invalid === "nonposting-primary") await db.execute(sql`update accounting_books set posts_gl=false where id=${org.bookId}`);
+      const projectId = await projectFixture(
+        org,
+        invalid.endsWith("root") ? null : org.subsidiaryId,
+      );
+      if (invalid === "missing-primary")
+        await db.execute(sql`update accounting_books set is_primary=false where id=${org.bookId}`);
+      if (invalid === "inactive-primary")
+        await db.execute(sql`update accounting_books set is_active=false where id=${org.bookId}`);
+      if (invalid === "nonposting-primary")
+        await db.execute(sql`update accounting_books set posts_gl=false where id=${org.bookId}`);
       if (invalid === "ambiguous-primary") {
         // 0345 made a second primary unrepresentable: pin the write-boundary
         // refusal and the single survivor instead of building ambiguous data.
-        await assert.rejects(db.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'OTHER','Other',true)`),
-          (error: unknown) => errorChainMatches(error, /accounting_books_one_primary_per_org/));
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from accounting_books where org_id=${org.orgId} and is_primary`, "objects"))[0]?.n, 1);
+        await assert.rejects(
+          db.execute(
+            sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'OTHER','Other',true)`,
+          ),
+          (error: unknown) => errorChainMatches(error, /accounting_books_one_primary_per_org/),
+        );
+        assert.equal(
+          (
+            await db.execute<{ n: number }>(
+              sql`select count(*)::int as n from accounting_books where org_id=${org.orgId} and is_primary`,
+              "objects",
+            )
+          )[0]?.n,
+          1,
+        );
         return;
       }
       if (invalid === "inactive-owner") {
@@ -135,90 +214,123 @@ for (const invalid of ["missing-primary", "inactive-primary", "nonposting-primar
           values(${inactive},${org.orgId},${org.subsidiaryId},'Inactive entity','CAD','CA',false)`);
         await db.execute(sql`update projects set subsidiary_id=${inactive} where id=${projectId}`);
       }
-      if (invalid === "elimination-owner" || invalid === "missing-root") await db.execute(sql`update subsidiaries set is_elimination=true where id=${org.subsidiaryId}`);
+      if (invalid === "elimination-owner" || invalid === "missing-root")
+        await db.execute(
+          sql`update subsidiaries set is_elimination=true where id=${org.subsidiaryId}`,
+        );
       const before = await snapshot(org.orgId);
       const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
       assert.equal(result.synced.length, 0);
       assert.equal(result.problems.length, 1);
       assert.match(result.problems[0]!, /authoritative|primary accounting book/);
       assert.deepEqual(await snapshot(org.orgId), before);
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   });
 }
 
-test("project cost progress counts labor posted to an asset-type WIP account", enabled, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await projectFixture(org);
-    // Labor WIP is legitimately an asset (project WIP is the natural
-    // mapping and the control-account policy allows asset_current_other /
-    // asset_other). Labor posts DR WIP [project] / CR clearing exactly as
-    // postProjectLaborCost stamps it.
-    const wipId = randomUUID(), clearingId = randomUUID();
-    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, custom)
+test(
+  "project cost progress counts labor posted to an asset-type WIP account",
+  enabled,
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await projectFixture(org);
+      // Labor WIP is legitimately an asset (project WIP is the natural
+      // mapping and the control-account policy allows asset_current_other /
+      // asset_other). Labor posts DR WIP [project] / CR clearing exactly as
+      // postProjectLaborCost stamps it.
+      const wipId = randomUUID(),
+        clearingId = randomUUID();
+      await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, custom)
       values (${wipId}, ${org.orgId}, '1450', 'Labor WIP', 'asset_current_other', false, true, '{}'::jsonb),
              (${clearingId}, ${org.orgId}, '2160', 'Labor clearing', 'liability_current_other', false, true, '{}'::jsonb)`);
-    await db.execute(sql`update orgs
+      await db.execute(sql`update orgs
        set settings = jsonb_set(settings, '{controlAccounts,laborWip}', to_jsonb(${wipId}::text))
      where id = ${org.orgId}`);
-    const entry = randomUUID();
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      const entry = randomUUID();
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
         values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entry}, ${org.date}, ${org.periodId}, 'draft', 'labor_burden')`);
-      await tx.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, project_id, amount, currency, txn_amount, fx_rate)
+        await tx.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, project_id, amount, currency, txn_amount, fx_rate)
         values (${org.orgId}, ${entry}, 1, ${wipId}, ${org.subsidiaryId}, ${projectId}, '250', 'CAD', '250', '1'),
                (${org.orgId}, ${entry}, 2, ${clearingId}, ${org.subsidiaryId}, null, '-250', 'CAD', '-250', '1')`);
-      await tx.execute(sql`update journal_entries set status = 'posted' where org_id = ${org.orgId} and id = ${entry}`);
-    });
-    const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.deepEqual(result.problems, []);
-    // Before the fix the asset-typed WIP debit was invisible to cost-to-date
-    // and progress read 0.0000, understating earned revenue.
-    assert.equal(result.synced[0]?.percentComplete, "25.0000");
-  } finally { await dropScratchOrg(org.orgId); }
-});
+        await tx.execute(
+          sql`update journal_entries set status = 'posted' where org_id = ${org.orgId} and id = ${entry}`,
+        );
+      });
+      const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.deepEqual(result.problems, []);
+      // Before the fix the asset-typed WIP debit was invisible to cost-to-date
+      // and progress read 0.0000, understating earned revenue.
+      assert.equal(result.synced[0]?.percentComplete, "25.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("legacy owner resolves the unique root; authorized scope and manual progress remain intact", enabled, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await projectFixture(org, null);
-    await cost(org, projectId, "250");
-    const legacy = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.deepEqual(legacy.problems, []);
-    assert.equal(legacy.synced[0]?.percentComplete, "25.0000");
-    const before = await snapshot(org.orgId);
-    assert.deepEqual(await syncProjectRevenueContracts(org.orgId, null, org.date, projectId, []), { synced: [], problems: [], skipped: null });
-    assert.deepEqual(await snapshot(org.orgId), before);
-    await db.execute(sql`update projects set custom='{"percentCompleteOverride":"40"}'::jsonb where id=${projectId}`);
-    const manual = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.equal(manual.synced[0]?.percentComplete, "40.0000");
-    assert.equal(manual.synced[0]?.overridden, true);
-  } finally { await dropScratchOrg(org.orgId); }
-});
+test(
+  "legacy owner resolves the unique root; authorized scope and manual progress remain intact",
+  enabled,
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await projectFixture(org, null);
+      await cost(org, projectId, "250");
+      const legacy = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.deepEqual(legacy.problems, []);
+      assert.equal(legacy.synced[0]?.percentComplete, "25.0000");
+      const before = await snapshot(org.orgId);
+      assert.deepEqual(
+        await syncProjectRevenueContracts(org.orgId, null, org.date, projectId, []),
+        { synced: [], problems: [], skipped: null },
+      );
+      assert.deepEqual(await snapshot(org.orgId), before);
+      await db.execute(
+        sql`update projects set custom='{"percentCompleteOverride":"40"}'::jsonb where id=${projectId}`,
+      );
+      const manual = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.equal(manual.synced[0]?.percentComplete, "40.0000");
+      assert.equal(manual.synced[0]?.overridden, true);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("missing estimates or contract value refuse by name and leave a 50% schedule untouched", enabled, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await projectFixture(org);
-    await cost(org, projectId, "500");
-    const measured = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.equal(measured.synced[0]?.percentComplete, "50.0000");
-    const before = await snapshot(org.orgId);
+test(
+  "missing estimates or contract value refuse by name and leave a 50% schedule untouched",
+  enabled,
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await projectFixture(org);
+      await cost(org, projectId, "500");
+      const measured = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.equal(measured.synced[0]?.percentComplete, "50.0000");
+      const before = await snapshot(org.orgId);
 
-    await db.execute(sql`update project_tasks set estimated_cost=null where project_id=${projectId}`);
-    const unestimated = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.deepEqual(unestimated.synced, []);
-    assert.deepEqual(unestimated.problems, [
-      "COST-POC (Cost POC project): cost-to-cost progress cannot be measured because the project's tasks carry no cost estimates — enter estimated costs on the project's Work breakdown tasks, or set a percent-complete override on the project's Financials & budget tab",
-    ]);
-    assert.deepEqual(await snapshot(org.orgId), before);
+      await db.execute(
+        sql`update project_tasks set estimated_cost=null where project_id=${projectId}`,
+      );
+      const unestimated = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.deepEqual(unestimated.synced, []);
+      assert.deepEqual(unestimated.problems, [
+        "COST-POC (Cost POC project): cost-to-cost progress cannot be measured because the project's tasks carry no cost estimates — enter estimated costs on the project's Work breakdown tasks, or set a percent-complete override on the project's Financials & budget tab",
+      ]);
+      assert.deepEqual(await snapshot(org.orgId), before);
 
-    await db.execute(sql`update projects set contract_value=null where id=${projectId}`);
-    const unpriced = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
-    assert.deepEqual(unpriced.synced, []);
-    assert.deepEqual(unpriced.problems, [
-      "COST-POC (Cost POC project): project revenue cannot be recognized without a contract value — set the Contract value on the project",
-    ]);
-    assert.deepEqual(await snapshot(org.orgId), before);
-  } finally { await dropScratchOrg(org.orgId); }
-});
+      await db.execute(sql`update projects set contract_value=null where id=${projectId}`);
+      const unpriced = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+      assert.deepEqual(unpriced.synced, []);
+      assert.deepEqual(unpriced.problems, [
+        "COST-POC (Cost POC project): project revenue cannot be recognized without a contract value — set the Contract value on the project",
+      ]);
+      assert.deepEqual(await snapshot(org.orgId), before);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

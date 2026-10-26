@@ -9,7 +9,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
@@ -24,8 +24,12 @@ export const managedProperties = pgTable(
     fixedAssetId: uuid("fixed_asset_id"),
     code: text("code").notNull(),
     name: text("name").notNull(),
-    propertyType: text("property_type", { enum: ["residential", "commercial", "mixed_use", "industrial", "other"] }).notNull(),
-    status: text("status", { enum: ["active", "inactive", "sold"] }).notNull().default("active"),
+    propertyType: text("property_type", {
+      enum: ["residential", "commercial", "mixed_use", "industrial", "other"],
+    }).notNull(),
+    status: text("status", { enum: ["active", "inactive", "sold"] })
+      .notNull()
+      .default("active"),
     currency: currencyCode("currency").notNull(),
     address: jsonb("address").$type<Record<string, string>>().notNull().default({}),
     custom: jsonb("custom").$type<Record<string, unknown>>().notNull().default({}),
@@ -48,7 +52,16 @@ export const securityDepositTransactions = pgTable(
     id: id(),
     orgId: orgRef(),
     leaseId: uuid("lease_id").notNull(),
-    kind: text("kind", { enum: ["received", "interest", "applied", "refunded", "adjustment_increase", "adjustment_decrease"] }).notNull(),
+    kind: text("kind", {
+      enum: [
+        "received",
+        "interest",
+        "applied",
+        "refunded",
+        "adjustment_increase",
+        "adjustment_decrease",
+      ],
+    }).notNull(),
     occurredOn: date("occurred_on").notNull(),
     amount: money("amount").notNull(),
     bankAccountId: uuid("bank_account_id"),
@@ -92,13 +105,19 @@ export const camPools = pgTable(
     fiscalYear: integer("fiscal_year").notNull(),
     periodStartsOn: date("period_starts_on").notNull(),
     periodEndsOn: date("period_ends_on").notNull(),
-    allocationBasis: text("allocation_basis", { enum: ["rentable_area", "equal", "custom"] }).notNull().default("rentable_area"),
+    allocationBasis: text("allocation_basis", { enum: ["rentable_area", "equal", "custom"] })
+      .notNull()
+      .default("rentable_area"),
     /** Rentable-area pools: whether occupied leases share vacant area or the landlord absorbs it. */
-    vacancyTreatment: text("vacancy_treatment", { enum: ["occupied_area", "total_rentable_area"] }).notNull().default("occupied_area"),
+    vacancyTreatment: text("vacancy_treatment", { enum: ["occupied_area", "total_rentable_area"] })
+      .notNull()
+      .default("occupied_area"),
     budgetAmount: money("budget_amount").notNull().default("0"),
     actualAmount: money("actual_amount"),
     expenseAccountIds: jsonb("expense_account_ids").$type<string[]>().notNull().default([]),
-    status: text("status", { enum: ["draft", "open", "finalized", "invoiced", "cancelled"] }).notNull().default("draft"),
+    status: text("status", { enum: ["draft", "open", "finalized", "invoiced", "cancelled"] })
+      .notNull()
+      .default("draft"),
     finalizedAt: timestamp("finalized_at", { withTimezone: true }),
     finalizedBy: uuid("finalized_by"),
     ...auditColumns,
@@ -108,7 +127,10 @@ export const camPools = pgTable(
     check("cam_pools_window", sql`${t.periodEndsOn} >= ${t.periodStartsOn}`),
     check("cam_pools_budget_nonnegative", sql`${t.budgetAmount} >= 0`),
     check("cam_pools_expense_accounts_array", sql`jsonb_typeof(${t.expenseAccountIds}) = 'array'`),
-    check("cam_pools_vacancy_treatment_check", sql`${t.vacancyTreatment} in ('occupied_area', 'total_rentable_area')`),
+    check(
+      "cam_pools_vacancy_treatment_check",
+      sql`${t.vacancyTreatment} in ('occupied_area', 'total_rentable_area')`,
+    ),
   ],
 );
 

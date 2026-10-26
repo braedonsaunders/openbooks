@@ -139,12 +139,18 @@ function isMoneyMetric(metric: BenefitMetric): boolean {
 
 function describeMetric(metric: BenefitMetric): string {
   switch (metric) {
-    case "revenue": return "revenue";
-    case "gross_profit": return "gross profit";
-    case "net_profit": return "net profit";
-    case "approved_hours": return "approved hours";
-    case "transactions": return "commercial transactions";
-    case "project_margin": return "project margin";
+    case "revenue":
+      return "revenue";
+    case "gross_profit":
+      return "gross profit";
+    case "net_profit":
+      return "net profit";
+    case "approved_hours":
+      return "approved hours";
+    case "transactions":
+      return "commercial transactions";
+    case "project_margin":
+      return "project margin";
   }
 }
 
@@ -182,7 +188,11 @@ export function apportionExactUnits(
   }
   let parts: bigint[];
   try {
-    parts = apportion(totalUnits, ordered.map((w) => w.units), { residual: "largest_remainder" });
+    parts = apportion(
+      totalUnits,
+      ordered.map((w) => w.units),
+      { residual: "largest_remainder" },
+    );
   } catch (error) {
     throw new BenefitsError(
       "REFUSED",
@@ -205,11 +215,11 @@ export function apportionExactUnits(
 export type IncentivePeriodBasis =
   | { readonly kind: "calendar" }
   | {
-    readonly kind: "fiscal";
-    readonly calendarName: string;
-    readonly yearStartMonth: number;
-    readonly cadence: string;
-  };
+      readonly kind: "fiscal";
+      readonly calendarName: string;
+      readonly yearStartMonth: number;
+      readonly cadence: string;
+    };
 
 export function describePeriodBasis(basis: IncentivePeriodBasis): string {
   return basis.kind === "calendar" ? "calendar" : `fiscal calendar "${basis.calendarName}"`;
@@ -243,7 +253,8 @@ export function requirePeriodShape(
   const basisLabel = describePeriodBasis(basis);
   const yearStartMonth = basis.kind === "calendar" ? 1 : basis.yearStartMonth;
   if (
-    basis.kind === "fiscal" && basis.cadence !== "monthly" &&
+    basis.kind === "fiscal" &&
+    basis.cadence !== "monthly" &&
     (frequency === "monthly" || frequency === "quarterly" || frequency === "annual")
   ) {
     throw new BenefitsError(
@@ -268,7 +279,7 @@ export function requirePeriodShape(
       const startIdx = yearStartMonth - 1;
       const fromIdx = fm! - 1;
       const startYear = fromIdx >= startIdx ? fy! : fy! - 1;
-      const quarter = Math.floor((((fromIdx - startIdx + 12) % 12) / 3));
+      const quarter = Math.floor(((fromIdx - startIdx + 12) % 12) / 3);
       const qStart = (startIdx + quarter * 3) % 12;
       const qStartYear = startYear + (startIdx + quarter * 3 >= 12 ? 1 : 0);
       const qEnd = (qStart + 2) % 12;
@@ -284,7 +295,7 @@ export function requirePeriodShape(
       return;
     }
     case "annual": {
-      const startYear = (fm! - 1) >= (yearStartMonth - 1) ? fy! : fy! - 1;
+      const startYear = fm! - 1 >= yearStartMonth - 1 ? fy! : fy! - 1;
       const endIdx = (yearStartMonth - 1 + 11) % 12;
       const endYear = startYear + (yearStartMonth - 1 + 11 >= 12 ? 1 : 0);
       const expectFrom = day(startYear, yearStartMonth, 1);
@@ -298,8 +309,8 @@ export function requirePeriodShape(
       return;
     }
     case "project_complete":
-      // Source measurement separately requires the selected native projects
-      // to be closed; the pure date validator only validates the chosen span.
+    // Source measurement separately requires the selected native projects
+    // to be closed; the pure date validator only validates the chosen span.
     case "manual":
       return;
   }
@@ -312,8 +323,8 @@ export function eligibleMembers(
   periodTo: string,
 ): BenefitProgramMember[] {
   for (const m of members) validateMembershipSpan(m);
-  return members.filter((m) =>
-    m.effectiveFrom <= periodTo && (m.effectiveTo === null || m.effectiveTo >= periodFrom),
+  return members.filter(
+    (m) => m.effectiveFrom <= periodTo && (m.effectiveTo === null || m.effectiveTo >= periodFrom),
   );
 }
 
@@ -395,7 +406,11 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
   const toMinor = (units4dp: bigint): bigint => roundDiv(units4dp, quantum);
   const fromMinor = (minor: bigint): string => fromUnits(minor * quantum);
   if (periodBasis.kind === "fiscal") {
-    if (!Number.isInteger(periodBasis.yearStartMonth) || periodBasis.yearStartMonth < 1 || periodBasis.yearStartMonth > 12) {
+    if (
+      !Number.isInteger(periodBasis.yearStartMonth) ||
+      periodBasis.yearStartMonth < 1 ||
+      periodBasis.yearStartMonth > 12
+    ) {
       throw new BenefitsError(
         "INVALID_INPUT",
         `fiscal year-start month ${periodBasis.yearStartMonth} is not 1..12 — resolve it from the organization's fiscal calendar row; the basis is never hand-typed`,
@@ -403,14 +418,23 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
     }
   }
   const valuation: BenefitValuation = program.valuation;
-  if (valuation !== "fixed" && valuation !== "percent" && valuation !== "pool" && valuation !== "per_unit") {
+  if (
+    valuation !== "fixed" &&
+    valuation !== "percent" &&
+    valuation !== "pool" &&
+    valuation !== "per_unit"
+  ) {
     throw new BenefitsError(
       "INVALID_INPUT",
       `valuation ${JSON.stringify(valuation)} is unknown — configure fixed, percent, pool, or per-unit valuation with no silent default`,
     );
   }
-  if (measured.metric !== "revenue" && measured.metric !== "gross_profit" &&
-      measured.metric !== "net_profit" && measured.metric !== "approved_hours") {
+  if (
+    measured.metric !== "revenue" &&
+    measured.metric !== "gross_profit" &&
+    measured.metric !== "net_profit" &&
+    measured.metric !== "approved_hours"
+  ) {
     throw new BenefitsError(
       "INVALID_INPUT",
       `metric ${JSON.stringify(measured.metric)} is unknown — configure revenue, gross_profit, net_profit, or approved_hours`,
@@ -429,13 +453,35 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
   const measuredUnits = toUnits(measuredValue);
   let hourlyRate: bigint | null = null;
   if (valuation === "per_unit") {
-    if (program.metric !== "approved_hours" || measured.metric !== "approved_hours" || program.allocation !== "hours" || program.family !== "incentive" || program.deliveryMethod !== "payroll" || program.percentRate !== null) {
-      throw new BenefitsError("INVALID_INPUT", "Per-hour awards require approved hours, hours allocation and payroll delivery without an overlapping percentage; correct the program rules before settling.");
+    if (
+      program.metric !== "approved_hours" ||
+      measured.metric !== "approved_hours" ||
+      program.allocation !== "hours" ||
+      program.family !== "incentive" ||
+      program.deliveryMethod !== "payroll" ||
+      program.percentRate !== null
+    ) {
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "Per-hour awards require approved hours, hours allocation and payroll delivery without an overlapping percentage; correct the program rules before settling.",
+      );
     }
-    if (program.fixedAmount === null) throw new BenefitsError("REFUSED", `program ${program.code} names no amount per approved hour — configure its hourly incentive rate before settling`);
+    if (program.fixedAmount === null)
+      throw new BenefitsError(
+        "REFUSED",
+        `program ${program.code} names no amount per approved hour — configure its hourly incentive rate before settling`,
+      );
     hourlyRate = toUnits(requireCanonicalDecimal(program.fixedAmount, "amount per approved hour"));
-    if (hourlyRate <= 0n) throw new BenefitsError("INVALID_INPUT", "The amount per approved hour must be positive; configure a positive rate before settling.");
-    if (measuredUnits < 0n) throw new BenefitsError("REFUSED", "Approved hours cannot be negative; correct the approved time before settling an hourly incentive.");
+    if (hourlyRate <= 0n)
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        "The amount per approved hour must be positive; configure a positive rate before settling.",
+      );
+    if (measuredUnits < 0n)
+      throw new BenefitsError(
+        "REFUSED",
+        "Approved hours cannot be negative; correct the approved time before settling an hourly incentive.",
+      );
   }
   const moneyMetric = isMoneyMetric(measured.metric);
   if (moneyMetric && measured.currency === null) {
@@ -458,9 +504,15 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
   ];
 
   const noAwards = (lines: string[]): IncentiveComputation => ({
-    measuredValue, poolValue: "0.0000", thresholdMet: false, recipients: [],
-    excludedZero: [], totalAwarded: "0.0000", undistributed: "0.0000",
-    currency, summaryLines: lines,
+    measuredValue,
+    poolValue: "0.0000",
+    thresholdMet: false,
+    recipients: [],
+    excludedZero: [],
+    totalAwarded: "0.0000",
+    undistributed: "0.0000",
+    currency,
+    summaryLines: lines,
   });
   if (program.thresholdAmount !== null) {
     const threshold = requireCanonicalDecimal(program.thresholdAmount, "threshold amount");
@@ -473,7 +525,10 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
     summary.push(`threshold ${threshold} met by measured ${measuredValue}`);
   }
 
-  const capUnits4dp = program.capAmount !== null ? toUnits(requireCanonicalDecimal(program.capAmount, "cap amount")) : null;
+  const capUnits4dp =
+    program.capAmount !== null
+      ? toUnits(requireCanonicalDecimal(program.capAmount, "cap amount"))
+      : null;
   if (capUnits4dp !== null && capUnits4dp <= 0n) {
     throw new BenefitsError(
       "INVALID_INPUT",
@@ -498,34 +553,75 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
   }
 
   if (valuation === "per_unit") {
-    if (shareById.size !== shares.length) throw new BenefitsError("REFUSED", "An employment appears more than once in the hourly award evidence; preview separate dated membership spans before settling.");
+    if (shareById.size !== shares.length)
+      throw new BenefitsError(
+        "REFUSED",
+        "An employment appears more than once in the hourly award evidence; preview separate dated membership spans before settling.",
+      );
     const recipients: IncentiveRecipientResult[] = [];
     const excludedZero: string[] = [];
     let attributedHours = 0n;
-    for (const share of [...shares].sort((a, b) => a.employmentId < b.employmentId ? -1 : a.employmentId > b.employmentId ? 1 : 0)) {
-      if (share.hours === null) throw new BenefitsError("REFUSED", `${share.employmentId} has no approved-hour evidence — record and approve the member's time before settling`);
-      const hours = toUnits(requireCanonicalDecimal(share.hours, `approved hours for ${share.employmentId}`));
-      if (hours < 0n) throw new BenefitsError("REFUSED", `${share.employmentId} has negative approved hours — correct the approved time before settling`);
+    for (const share of [...shares].sort((a, b) =>
+      a.employmentId < b.employmentId ? -1 : a.employmentId > b.employmentId ? 1 : 0,
+    )) {
+      if (share.hours === null)
+        throw new BenefitsError(
+          "REFUSED",
+          `${share.employmentId} has no approved-hour evidence — record and approve the member's time before settling`,
+        );
+      const hours = toUnits(
+        requireCanonicalDecimal(share.hours, `approved hours for ${share.employmentId}`),
+      );
+      if (hours < 0n)
+        throw new BenefitsError(
+          "REFUSED",
+          `${share.employmentId} has negative approved hours — correct the approved time before settling`,
+        );
       attributedHours += hours;
       // Hours and unit price both have four decimal places. Round their
       // product directly to payable units once, after summing member hours.
       const gross = roundDiv(hours * hourlyRate!, 10000n * quantum);
       if (gross === 0n) {
-        excludedZero.push(`${share.employmentId}: ${share.hours} approved hours rounds to zero at payable precision — excluded, never zero-awarded`);
+        excludedZero.push(
+          `${share.employmentId}: ${share.hours} approved hours rounds to zero at payable precision — excluded, never zero-awarded`,
+        );
         continue;
       }
       const capped = capMinor !== null && gross > capMinor;
       const value = capped ? capMinor! : gross;
-      recipients.push({ employmentId: share.employmentId, share: `${fromUnits(hours)} hours`,
-        grossValue: fromMinor(gross), value: fromMinor(value), capped,
-        explanation: `${share.employmentId}${describeShareSpan(share)}: ${fromUnits(hours)} approved hours × ${program.fixedAmount} ${currency}/hour = ${fromMinor(gross)}${capped ? ` capped to ${fromMinor(value)}` : ""}` });
+      recipients.push({
+        employmentId: share.employmentId,
+        share: `${fromUnits(hours)} hours`,
+        grossValue: fromMinor(gross),
+        value: fromMinor(value),
+        capped,
+        explanation: `${share.employmentId}${describeShareSpan(share)}: ${fromUnits(hours)} approved hours × ${program.fixedAmount} ${currency}/hour = ${fromMinor(gross)}${capped ? ` capped to ${fromMinor(value)}` : ""}`,
+      });
     }
-    if (attributedHours > measuredUnits) throw new BenefitsError("REFUSED", "Attributed member hours exceed the measured approved hours; remeasure the native time evidence before settling.");
-    const total = fromMinor(recipients.reduce((sum, recipient) => sum + toMinor(toUnits(recipient.value)), 0n));
+    if (attributedHours > measuredUnits)
+      throw new BenefitsError(
+        "REFUSED",
+        "Attributed member hours exceed the measured approved hours; remeasure the native time evidence before settling.",
+      );
+    const total = fromMinor(
+      recipients.reduce((sum, recipient) => sum + toMinor(toUnits(recipient.value)), 0n),
+    );
     assertBudget(program, total, summary);
-    return { measuredValue, poolValue: "0.0000", thresholdMet: true, recipients, excludedZero,
-      totalAwarded: total, undistributed: "0.0000", currency,
-      summaryLines: [...summary, `${recipients.length} hourly award(s) at ${program.fixedAmount} ${currency}/hour totalling ${total}`, ...excludedZero] };
+    return {
+      measuredValue,
+      poolValue: "0.0000",
+      thresholdMet: true,
+      recipients,
+      excludedZero,
+      totalAwarded: total,
+      undistributed: "0.0000",
+      currency,
+      summaryLines: [
+        ...summary,
+        `${recipients.length} hourly award(s) at ${program.fixedAmount} ${currency}/hour totalling ${total}`,
+        ...excludedZero,
+      ],
+    };
   }
 
   // Fixed awards: one amount per eligible member (hours allocation additionally
@@ -555,7 +651,11 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
     for (const employmentId of [...eligible].sort()) {
       if (program.allocation === "hours") {
         const hours = shareById.get(employmentId)?.hours;
-        if (hours === null || hours === undefined || toUnits(requireCanonicalDecimal(hours, "member hours")) <= 0n) {
+        if (
+          hours === null ||
+          hours === undefined ||
+          toUnits(requireCanonicalDecimal(hours, "member hours")) <= 0n
+        ) {
           continue;
         }
       }
@@ -582,9 +682,18 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
     const total = fromMinor(totalMinor);
     assertBudget(program, total, summary);
     return {
-      measuredValue, poolValue: "0.0000", thresholdMet: true, recipients,
-      excludedZero: [], totalAwarded: total, undistributed: "0.0000", currency,
-      summaryLines: [...summary, `${recipients.length} fixed award(s) of ${fromMinor(fixedMinor)} totalling ${total}${capMinor !== null ? ` (cap ${fromMinor(capMinor)} each)` : ""}`],
+      measuredValue,
+      poolValue: "0.0000",
+      thresholdMet: true,
+      recipients,
+      excludedZero: [],
+      totalAwarded: total,
+      undistributed: "0.0000",
+      currency,
+      summaryLines: [
+        ...summary,
+        `${recipients.length} fixed award(s) of ${fromMinor(fixedMinor)} totalling ${total}${capMinor !== null ? ` (cap ${fromMinor(capMinor)} each)` : ""}`,
+      ],
     };
   }
 
@@ -600,7 +709,9 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
     }
     const rate = requirePlainPercent(program.percentRate);
     poolUnits4dp = (measuredUnits * rate.units) / (100n * rate.scale);
-    summary.push(`pool is ${program.percentRate}% of measured ${measuredValue} = ${fromUnits(poolUnits4dp)}`);
+    summary.push(
+      `pool is ${program.percentRate}% of measured ${measuredValue} = ${fromUnits(poolUnits4dp)}`,
+    );
   } else {
     if (program.fixedAmount === null && program.budgetAmount === null) {
       throw new BenefitsError(
@@ -608,9 +719,9 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
         `program ${program.code} shares a pool but neither a fixed pool amount nor a budget sizes it — size the pool before settling`,
       );
     }
-    poolUnits4dp = toUnits(requireCanonicalDecimal(
-      (program.fixedAmount ?? program.budgetAmount)!, "pool amount",
-    ));
+    poolUnits4dp = toUnits(
+      requireCanonicalDecimal((program.fixedAmount ?? program.budgetAmount)!, "pool amount"),
+    );
     summary.push(`pool is fixed at ${fromUnits(poolUnits4dp)}`);
   }
   if (poolUnits4dp < 0n) {
@@ -651,7 +762,10 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
   const recipients = computed.filter((r) => toMinor(toUnits(r.value)) > 0n);
   const excludedZero = computed
     .filter((r) => toMinor(toUnits(r.value)) <= 0n)
-    .map((r) => `${r.employmentId}: share ${r.share} rounds to zero at payable precision — excluded, never zero-awarded`);
+    .map(
+      (r) =>
+        `${r.employmentId}: share ${r.share} rounds to zero at payable precision — excluded, never zero-awarded`,
+    );
   const totalMinor = recipients.reduce((acc, r) => acc + toMinor(toUnits(r.value)), 0n);
   const total = fromMinor(totalMinor);
   assertBudget(program, total, summary);
@@ -668,8 +782,12 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
     summaryLines: [
       ...summary,
       `${recipients.length} award(s) totalling ${total}` +
-        (excludedZero.length > 0 ? `, ${excludedZero.length} share(s) rounded to zero and excluded by name` : "") +
-        (toMinor(toUnits(undistributed)) > 0n ? `, ${undistributed} undistributed by caps (kept, never re-apportioned)` : ", fully apportioned to the payable unit"),
+        (excludedZero.length > 0
+          ? `, ${excludedZero.length} share(s) rounded to zero and excluded by name`
+          : "") +
+        (toMinor(toUnits(undistributed)) > 0n
+          ? `, ${undistributed} undistributed by caps (kept, never re-apportioned)`
+          : ", fully apportioned to the payable unit"),
     ],
   };
 }
@@ -678,8 +796,10 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
 function describeShareSpan(share: IncentiveMemberShare | undefined): string {
   if (!share) return "";
   const span = ` member ${share.effectiveFrom}..${share.effectiveTo ?? "open"}`;
-  const hours = share.hours !== null && share.hours !== undefined ? `, ${share.hours} approved hours` : "";
-  const role = share.weight !== null && share.weight !== undefined ? `, weight ${share.weight}` : "";
+  const hours =
+    share.hours !== null && share.hours !== undefined ? `, ${share.hours} approved hours` : "";
+  const role =
+    share.weight !== null && share.weight !== undefined ? `, weight ${share.weight}` : "";
   return `${span}${hours}${role}`;
 }
 
@@ -711,7 +831,10 @@ function requirePlainPercent(rate: string): { units: bigint; scale: bigint } {
 function allocationWeightUnits(allocation: BenefitAllocation, share: IncentiveMemberShare): bigint {
   switch (allocation) {
     case "responsibility":
-      throw new BenefitsError("REFUSED", "Dated responsibility allocation needs native transaction evidence — use the program transaction settlement action instead of membership-only valuation.");
+      throw new BenefitsError(
+        "REFUSED",
+        "Dated responsibility allocation needs native transaction evidence — use the program transaction settlement action instead of membership-only valuation.",
+      );
     case "equal":
       return 1n;
     case "hours": {
@@ -737,7 +860,10 @@ function allocationWeightUnits(allocation: BenefitAllocation, share: IncentiveMe
           `employment ${share.employmentId} has no recorded membership weight for the period — record the role weight effective for the period; roles are never inferred from current job titles`,
         );
       }
-      const units = toUnitsSafe(share.weight, `membership weight for employment ${share.employmentId}`);
+      const units = toUnitsSafe(
+        share.weight,
+        `membership weight for employment ${share.employmentId}`,
+      );
       if (units <= 0n) {
         throw new BenefitsError(
           "REFUSED",

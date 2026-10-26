@@ -1,16 +1,29 @@
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
 
-test('feature questions share render facts while later renders and live executors observe changes', () => {
-  const result = spawnSync(process.execPath, [
-    '--no-concurrent-sparkplug', '--no-concurrent-recompilation',
-    '--conditions=react-server', '--import=tsx', '--import=../scripts/test-hooks.mjs', '--input-type=module',
-  ], {
-    cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8', timeout: 30_000,
-    env: { ...process.env, OPENBOOKS_DB_URL: '', TSX_TSCONFIG_PATH: fileURLToPath(new URL('../tsconfig.json', import.meta.url)) },
-    input: `
+test("feature questions share render facts while later renders and live executors observe changes", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--no-concurrent-sparkplug",
+      "--no-concurrent-recompilation",
+      "--conditions=react-server",
+      "--import=tsx",
+      "--import=../scripts/test-hooks.mjs",
+      "--input-type=module",
+    ],
+    {
+      cwd: fileURLToPath(new URL("../", import.meta.url)),
+      encoding: "utf8",
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        OPENBOOKS_DB_URL: "",
+        TSX_TSCONFIG_PATH: fileURLToPath(new URL("../tsconfig.json", import.meta.url)),
+      },
+      input: `
       import assert from 'node:assert/strict';
       import {createRequire} from 'node:module';
       import {PassThrough} from 'node:stream';
@@ -106,7 +119,8 @@ test('feature questions share render facts while later renders and live executor
       await render(async()=>assert.equal(await isFeatureEnabled('company-a','projects'),true));
       assert.equal(count('company-a',"settings->'features'"),before+8,'a new render retries failed reads');
     `,
-  })
-  assert.equal(result.error, undefined)
-  assert.equal(result.status, 0, result.stderr || result.stdout)
-})
+    },
+  );
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

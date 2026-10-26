@@ -1,8 +1,4 @@
-import {
-  canonicalPeriodLabelSql,
-  CloseError,
-  type CloseModule,
-} from "../periods/period-policy.ts";
+import { canonicalPeriodLabelSql, CloseError, type CloseModule } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
@@ -42,10 +38,15 @@ export async function controlledReopenHours(
   tx: SqlExecutor,
   orgId: string,
 ): Promise<{ defaultHours: number; maxHours: number }> {
-  const row = (await tx.execute<{
+  const row = (
+    await tx.execute<{
       rules: { defaultHours?: number; maxHours?: number };
-    }>(sql`
-    select rules from close_policies where org_id = ${orgId} and code = 'controlled-reopen' and is_active limit 1`, "objects"))[0];
+    }>(
+      sql`
+    select rules from close_policies where org_id = ${orgId} and code = 'controlled-reopen' and is_active limit 1`,
+      "objects",
+    )
+  )[0];
   const defaultHours = Number(row?.rules?.defaultHours ?? 24);
   const maxHours = Number(row?.rules?.maxHours ?? 168);
   if (
@@ -68,16 +69,20 @@ export async function lockReopenRequestScope(
   orgId: string,
   requestId: string,
 ): Promise<void> {
-  const row = (await tx.execute<{ period_id: string; book_id: string }>(sql`
-    select period_id, book_id from close_reopen_requests where id = ${requestId} and org_id = ${orgId}`, "objects"))[0];
+  const row = (
+    await tx.execute<{ period_id: string; book_id: string }>(
+      sql`
+    select period_id, book_id from close_reopen_requests where id = ${requestId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new CloseError("reopen request not found");
   await periodScopeAdvisoryLock(tx, orgId, row.period_id, row.book_id);
 }
 
 /** One conflict class between a reopen approver and the records the window would unlock. */
 export interface ReopenApprovalConflict {
-  kind:
-    "authored_documents" | "manual_entries" | "party_records" | "equity_lines";
+  kind: "authored_documents" | "manual_entries" | "party_records" | "equity_lines";
   count: number;
   /** Document/entry numbers or account names — operator-meaningful, never raw ids. */
   examples: string[];
@@ -98,8 +103,13 @@ export async function reopenApprovalConflicts(
   actorId: string,
 ): Promise<ReopenApprovalConflict[]> {
   const party =
-    (await executor.execute<{ party_id: string | null }>(sql`
-    select party_id from users where id = ${actorId} and org_id = ${orgId}`, "objects"))[0]?.party_id ?? null;
+    (
+      await executor.execute<{ party_id: string | null }>(
+        sql`
+    select party_id from users where id = ${actorId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.party_id ?? null;
   const subsidiaryScope =
     request.subsidiary_id == null
       ? sql`true`
@@ -112,7 +122,8 @@ export async function reopenApprovalConflicts(
   const authored = await executor.execute<{
     n: string;
     examples: string[];
-  }>(sql`
+  }>(
+    sql`
     with hits as (
       select d.document_number
         from documents d
@@ -125,7 +136,9 @@ export async function reopenApprovalConflicts(
        order by d.document_number
     )
     select (select count(*)::text from hits) as n,
-           coalesce((select array_agg(document_number) from (select document_number from hits limit 3) s), '{}') as examples`, "objects");
+           coalesce((select array_agg(document_number) from (select document_number from hits limit 3) s), '{}') as examples`,
+    "objects",
+  );
   if (Number(authored[0]?.n ?? 0) > 0) {
     conflicts.push({
       kind: "authored_documents",
@@ -137,7 +150,8 @@ export async function reopenApprovalConflicts(
   // revaluation, allocations) carry the duty actor, not a personal stake, so
   // origin narrows the scan to hand-booked entries — a closer approving a
   // reopen after performing the close must not trip on their duty postings.
-  const posted = await executor.execute<{ n: string; examples: string[] }>(sql`
+  const posted = await executor.execute<{ n: string; examples: string[] }>(
+    sql`
     with hits as (
       select e.entry_number
         from journal_entries e
@@ -147,7 +161,9 @@ export async function reopenApprovalConflicts(
        order by e.entry_number
     )
     select (select count(*)::text from hits) as n,
-           coalesce((select array_agg(entry_number) from (select entry_number from hits limit 3) s), '{}') as examples`, "objects");
+           coalesce((select array_agg(entry_number) from (select entry_number from hits limit 3) s), '{}') as examples`,
+    "objects",
+  );
   if (Number(posted[0]?.n ?? 0) > 0) {
     conflicts.push({
       kind: "manual_entries",
@@ -159,7 +175,8 @@ export async function reopenApprovalConflicts(
     const partyHits = await executor.execute<{
       n: string;
       examples: string[];
-    }>(sql`
+    }>(
+      sql`
       with hits as (
         select d.document_number as ref from documents d
          where d.org_id = ${orgId} and d.posting_period_id = ${request.period_id}
@@ -173,7 +190,9 @@ export async function reopenApprovalConflicts(
            and e.status in ('posted', 'reversed') and ${entryScope} and l.party_id = ${party}
       )
       select (select count(*)::text from hits) as n,
-             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`, "objects");
+             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`,
+      "objects",
+    );
     if (Number(partyHits[0]?.n ?? 0) > 0) {
       conflicts.push({
         kind: "party_records",
@@ -184,7 +203,8 @@ export async function reopenApprovalConflicts(
     const equity = await executor.execute<{
       n: string;
       examples: string[];
-    }>(sql`
+    }>(
+      sql`
       with hits as (
         select distinct a.name as ref from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -194,7 +214,9 @@ export async function reopenApprovalConflicts(
            and l.party_id = ${party} and a.type = 'equity'
       )
       select (select count(*)::text from hits) as n,
-             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`, "objects");
+             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`,
+      "objects",
+    );
     if (Number(equity[0]?.n ?? 0) > 0) {
       conflicts.push({
         kind: "equity_lines",
@@ -216,13 +238,18 @@ export async function loadRequestedReopen(
   subsidiary_id: string | null;
 } | null> {
   return (
-    (await executor.execute<{
+    (
+      await executor.execute<{
         period_id: string;
         book_id: string;
         subsidiary_id: string | null;
-      }>(sql`
+      }>(
+        sql`
     select period_id, book_id, subsidiary_id from close_reopen_requests
-     where id = ${requestId} and org_id = ${orgId} and status = 'requested'`, "objects"))[0] ?? null
+     where id = ${requestId} and org_id = ${orgId} and status = 'requested'`,
+        "objects",
+      )
+    )[0] ?? null
   );
 }
 
@@ -248,12 +275,15 @@ export async function governingLockState(
     module: CloseModule;
   },
 ): Promise<string | null> {
-  const governing = await tx.execute<{ state: string }>(sql`
+  const governing = await tx.execute<{ state: string }>(
+    sql`
     select state from period_locks
      where org_id = ${args.orgId} and period_id = ${args.periodId}
        and book_id = ${args.bookId} and module = ${args.module}
        and (subsidiary_id is not distinct from ${args.subsidiaryId}::uuid or subsidiary_id is null)
-     order by (subsidiary_id is not null) desc limit 1`, "objects");
+     order by (subsidiary_id is not null) desc limit 1`,
+    "objects",
+  );
   return governing[0]?.state ?? null;
 }
 
@@ -281,7 +311,8 @@ export async function endFullyClosedReopenRequests(
     id: string;
     modules: CloseModule[];
     subsidiary_id: string | null;
-  }>(sql`
+  }>(
+    sql`
     select id, modules, subsidiary_id
       from close_reopen_requests
      where org_id = ${args.orgId}
@@ -292,7 +323,9 @@ export async function endFullyClosedReopenRequests(
        and status = 'approved'
        and expires_at > now()
        ${args.candidateIds?.length ? sql`and id = any(${`{${args.candidateIds.join(",")}}`}::uuid[])` : sql``}
-     for update`, "objects");
+     for update`,
+    "objects",
+  );
   const consumed: string[] = [];
   for (const candidate of candidates) {
     const states = [];
@@ -313,11 +346,14 @@ export async function endFullyClosedReopenRequests(
     ) {
       continue;
     }
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute(
+      sql`
       update close_reopen_requests
          set status = 'reclosed', reclosed_at = now(), updated_at = now(), updated_by = ${args.actorId}
        where id = ${candidate.id} and org_id = ${args.orgId} and status = 'approved'
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (updated.length !== 1)
       throw new CloseError("approved reopen request changed during re-close");
     await tx.execute(sql`
@@ -345,20 +381,25 @@ export async function describeActiveReopenOverlap(
   orgId: string,
   requestId: string,
 ): Promise<string> {
-  const row = (await tx.execute<{
+  const row = (
+    await tx.execute<{
       modules: CloseModule[];
       approved_at: string | null;
       expires_at: string | null;
       period_label: string | null;
       approver_name: string | null;
-    }>(sql`
+    }>(
+      sql`
     select r.modules, r.approved_at::text as approved_at, r.expires_at::text as expires_at,
            ${canonicalPeriodLabelSql()} as period_label, u.name as approver_name
       from close_reopen_requests r
       left join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       left join users u on u.id = r.approved_by and u.org_id = r.org_id
      where r.id = ${requestId} and r.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const stamp = (value: string | null) =>
     value == null ? "(time unknown)" : value.slice(0, 16).replace("T", " ");
   const what = row
@@ -402,9 +443,7 @@ export async function consumeReopenRequestsForClosedModules(args: {
   return { consumed };
 }
 
-export function describeReopenConflicts(
-  conflicts: ReopenApprovalConflict[],
-): string {
+export function describeReopenConflicts(conflicts: ReopenApprovalConflict[]): string {
   return conflicts
     .map((conflict) => {
       const more = conflict.count - conflict.examples.length;

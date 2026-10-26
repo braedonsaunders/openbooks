@@ -26,8 +26,7 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid plan" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid plan" }, { status: 400 });
     const q = { orgId: gate.user.orgId, actorId: gate.user.id, planId: id };
     try {
       switch (body.action) {

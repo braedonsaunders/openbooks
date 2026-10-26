@@ -46,7 +46,9 @@ async function seedUsdOrgWithCaCustomer(org: ScratchOrg): Promise<void> {
     values ('USD', 'US Dollar', 2), ('EUR', 'Euro', 2)
     on conflict (code) do nothing`);
   await db.execute(sql`update orgs set base_currency = 'USD' where id = ${org.orgId}`);
-  await db.execute(sql`update subsidiaries set base_currency = 'USD' where id = ${org.subsidiaryId}`);
+  await db.execute(
+    sql`update subsidiaries set base_currency = 'USD' where id = ${org.subsidiaryId}`,
+  );
   await db.execute(sql`
     insert into fx_rates (org_id, from_currency, to_currency, rate_type, rate, as_of)
     values (${org.orgId}, 'EUR', 'USD', 'spot', '1.1000000000', '2026-07-01')`);
@@ -60,42 +62,50 @@ async function seedUsdOrgWithCaCustomer(org: ScratchOrg): Promise<void> {
 // reads back as '1.0000000000', so an UNSTAMPED (default-rate) foreign-currency
 // sale converted at 1.0 instead of falling through to the spot-rate lookup.
 // A EUR 100k sale at a 1.10 spot evaluated as $100k toward nexus, not $110k.
-test("unstamped foreign-currency sales convert at the spot rate, not 1.0", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await seedUsdOrgWithCaCustomer(org);
-    await seedPostedLegacyDocument(org, "NEXUS-FX-1", {
-      currency: "EUR",
-      fxRate: "1.0000000000",
-    });
+test(
+  "unstamped foreign-currency sales convert at the spot rate, not 1.0",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedUsdOrgWithCaCustomer(org);
+      await seedPostedLegacyDocument(org, "NEXUS-FX-1", {
+        currency: "EUR",
+        fxRate: "1.0000000000",
+      });
 
-    const result = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(result.states[0]?.state, "CA");
-    // 100000 EUR x 1.10 spot = 110000 USD toward the threshold.
-    assert.equal(result.states[0]?.salesUsd, "110000.0000");
-    assert.equal(result.states[0]?.txnCount, 1);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
+      assert.equal(result.states[0]?.state, "CA");
+      // 100000 EUR x 1.10 spot = 110000 USD toward the threshold.
+      assert.equal(result.states[0]?.salesUsd, "110000.0000");
+      assert.equal(result.states[0]?.txnCount, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("stamped foreign-currency sales keep converting at the posted header rate", { skip: !DB }, async () => {
-  // The spot fallback must not displace the rate the kernel actually posted
-  // at: a stamped 1.35 header rate wins over a 1.10 spot row.
-  const org = await createScratchOrg();
-  try {
-    await seedUsdOrgWithCaCustomer(org);
-    await seedPostedLegacyDocument(org, "NEXUS-FX-2", {
-      currency: "EUR",
-      fxRate: "1.3500000000",
-    });
+test(
+  "stamped foreign-currency sales keep converting at the posted header rate",
+  { skip: !DB },
+  async () => {
+    // The spot fallback must not displace the rate the kernel actually posted
+    // at: a stamped 1.35 header rate wins over a 1.10 spot row.
+    const org = await createScratchOrg();
+    try {
+      await seedUsdOrgWithCaCustomer(org);
+      await seedPostedLegacyDocument(org, "NEXUS-FX-2", {
+        currency: "EUR",
+        fxRate: "1.3500000000",
+      });
 
-    const result = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(result.states[0]?.salesUsd, "135000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
+      assert.equal(result.states[0]?.salesUsd, "135000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /** Post one manual-rate USD invoice through the real posting kernel. */
 async function postKernelInvoice(org: ScratchOrg, number: string, amount: string): Promise<string> {
@@ -131,71 +141,88 @@ function stateOf(result: Awaited<ReturnType<typeof computeUsNexusStatus>>, state
 // posted sales: the ledger attributes each sale to the destination frozen at
 // posting, never the live address book. Deleting the address afterwards must
 // not move them either — the stamp survives the address.
-test("changing or deleting the ship-to after posting does not move prior sales", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await seedUsdOrgWithCaCustomer(org);
-    const documentId = await postKernelInvoice(org, "NEXUS-STAMP-1", "100000.0000");
+test(
+  "changing or deleting the ship-to after posting does not move prior sales",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedUsdOrgWithCaCustomer(org);
+      const documentId = await postKernelInvoice(org, "NEXUS-STAMP-1", "100000.0000");
 
-    const stamp = (await db.execute<{ ship_to_country: string | null; ship_to_region: string | null }>(sql`
-      select ship_to_country, ship_to_region from documents where id = ${documentId}`, "objects"))[0]!;
-    assert.deepEqual(
-      { country: stamp.ship_to_country, region: stamp.ship_to_region },
-      { country: "US", region: "CA" },
-      "posting freezes the ship-to jurisdiction on the document",
-    );
+      const stamp = (
+        await db.execute<{ ship_to_country: string | null; ship_to_region: string | null }>(
+          sql`
+      select ship_to_country, ship_to_region from documents where id = ${documentId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(
+        { country: stamp.ship_to_country, region: stamp.ship_to_region },
+        { country: "US", region: "CA" },
+        "posting freezes the ship-to jurisdiction on the document",
+      );
 
-    const before = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(stateOf(before, "CA")?.salesUsd, "100000.0000");
+      const before = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
+      assert.equal(stateOf(before, "CA")?.salesUsd, "100000.0000");
 
-    // The customer moves to New York after the sale posted.
-    await db.execute(sql`
+      // The customer moves to New York after the sale posted.
+      await db.execute(sql`
       update addresses set country = 'US', region = 'NY'
        where org_id = ${org.orgId} and party_id = ${org.customerId}`);
-    const moved = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(stateOf(moved, "CA")?.salesUsd, "100000.0000");
-    assert.equal(stateOf(moved, "CA")?.txnCount, 1);
-    assert.equal(stateOf(moved, "NY"), undefined, "an address edit must not re-home posted sales");
+      const moved = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
+      assert.equal(stateOf(moved, "CA")?.salesUsd, "100000.0000");
+      assert.equal(stateOf(moved, "CA")?.txnCount, 1);
+      assert.equal(
+        stateOf(moved, "NY"),
+        undefined,
+        "an address edit must not re-home posted sales",
+      );
 
-    // The address is deleted outright: the frozen sale still attributes.
-    await db.execute(sql`
+      // The address is deleted outright: the frozen sale still attributes.
+      await db.execute(sql`
       delete from addresses where org_id = ${org.orgId} and party_id = ${org.customerId}`);
-    const orphaned = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(stateOf(orphaned, "CA")?.salesUsd, "100000.0000");
-    assert.equal(orphaned.unattributed.txnCount, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const orphaned = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
+      assert.equal(stateOf(orphaned, "CA")?.salesUsd, "100000.0000");
+      assert.equal(orphaned.unattributed.txnCount, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // A sale posted with no capturable destination is unattributed — and stays
 // that way when an address appears later. Re-homing it to the new address
 // would repeat the retroactive-attribution defect in the other direction.
-test("sales with no captured destination stay unattributed when an address appears later", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await seedUsdOrgWithCaCustomer(org);
-    await db.execute(sql`
+test(
+  "sales with no captured destination stay unattributed when an address appears later",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedUsdOrgWithCaCustomer(org);
+      await db.execute(sql`
       delete from addresses where org_id = ${org.orgId} and party_id = ${org.customerId}`);
-    await postKernelInvoice(org, "NEXUS-STAMP-2", "50000.0000");
+      await postKernelInvoice(org, "NEXUS-STAMP-2", "50000.0000");
 
-    const bare = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(bare.states.length, 0);
-    assert.equal(bare.unattributed.salesUsd, "50000.0000");
-    assert.equal(bare.unattributed.txnCount, 1);
+      const bare = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
+      assert.equal(bare.states.length, 0);
+      assert.equal(bare.unattributed.salesUsd, "50000.0000");
+      assert.equal(bare.unattributed.txnCount, 1);
 
-    // A CA ship-to is filed only after the sale posted: the old sale must
-    // not be attracted to it.
-    await db.execute(sql`
+      // A CA ship-to is filed only after the sale posted: the old sale must
+      // not be attracted to it.
+      await db.execute(sql`
       insert into addresses (id, org_id, party_id, is_default_shipping, country, region)
       values (${randomUUID()}, ${org.orgId}, ${org.customerId}, true, 'US', 'CA')`);
-    const after = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(after.states.length, 0, "a later address must not re-home posted sales");
-    assert.equal(after.unattributed.salesUsd, "50000.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const after = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
+      assert.equal(after.states.length, 0, "a later address must not re-home posted sales");
+      assert.equal(after.unattributed.salesUsd, "50000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // Rows whose captured destination is blank attribute through the surviving
 // provider-quote evidence: the destination the line's tax was computed for.

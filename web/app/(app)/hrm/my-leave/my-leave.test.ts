@@ -22,11 +22,12 @@ const hrmCatalog = JSON.parse(
 
 // Absolute file URL of the real authorization module, so the stub below
 // can re-export its error class instead of splitting the identity.
-const engineAuthorizationUrl = pathToFileURL(`${process.cwd()}/engine/src/hrm/authorization.ts`).href;
+const engineAuthorizationUrl = pathToFileURL(
+  `${process.cwd()}/engine/src/hrm/authorization.ts`,
+).href;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     const parent = context.parentURL ?? "";
     const owned =
       parent.endsWith("/web/lib/hrm/leave.ts") ||
@@ -195,26 +196,58 @@ test("the inbox lists the caller's own requests through the shared primitives", 
   stubInbox([leaveRow("lr-mine", "submitted")]);
   const data = await loadMyLeave(authzWith(), {});
   const args = (gap.__myLeaveArgs as Array<Record<string, unknown>>) ?? [];
-  assert.deepEqual(args, [{ orgId: "org-mine", actorId: "actor-mine" }], "the read scopes to the login, never the org");
+  assert.deepEqual(
+    args,
+    [{ orgId: "org-mine", actorId: "actor-mine" }],
+    "the read scopes to the login, never the org",
+  );
   assert.equal(data.refusal, null, "a readable inbox carries no refusal");
   assert.equal(data.hasContent, true, "the inbox renders");
   assert.equal(data.requests.length, 1, "only the caller's requests list");
   const row = data.requests[0]!;
-  assert.equal(row.rangeLabel, "2026-10-20 → 2026-10-21", "the range renders verbatim, never through Date");
+  assert.equal(
+    row.rangeLabel,
+    "2026-10-20 → 2026-10-21",
+    "the range renders verbatim, never through Date",
+  );
   assert.equal(row.statusVariant, "warning", "the loader resolves the badge variant");
   assert.ok(row.requestHref.includes("request=lr-mine"), "each row opens its own request");
-  assert.equal(row.employeeLabel, "Not available", "unlabelled rows name the fallback, never an id");
+  assert.equal(
+    row.employeeLabel,
+    "Not available",
+    "unlabelled rows name the fallback, never an id",
+  );
 });
 
 test("my leave resolves time balances for each employment and value banks once at person level", async () => {
   stubInbox([]);
   gap.__myLeaveEmployments = ["employment-a", "employment-b"];
   gap.__myLeaveEmploymentRows = [
-    { employmentId: "employment-a", employmentNumber: "A-17", employerName: "North Entity", partyId: "party-mine" },
-    { employmentId: "employment-b", employmentNumber: "B-24", employerName: "South Entity", partyId: "party-mine" },
+    {
+      employmentId: "employment-a",
+      employmentNumber: "A-17",
+      employerName: "North Entity",
+      partyId: "party-mine",
+    },
+    {
+      employmentId: "employment-b",
+      employmentNumber: "B-24",
+      employerName: "South Entity",
+      partyId: "party-mine",
+    },
   ];
   gap.__myLeaveBalanceRows = [
-    { leaveTypeId: "type-vac", code: "VAC", name: "Vacation", entitlement: "120", taken: "8", pending: "16", remaining: "96", balance: "112", unlimited: false },
+    {
+      leaveTypeId: "type-vac",
+      code: "VAC",
+      name: "Vacation",
+      entitlement: "120",
+      taken: "8",
+      pending: "16",
+      remaining: "96",
+      balance: "112",
+      unlimited: false,
+    },
   ];
   gap.__myLeaveBanks = [{ planCode: "BANK", balance: "12.50" }];
   gap.__myLeaveBalanceCalls = [];
@@ -222,9 +255,19 @@ test("my leave resolves time balances for each employment and value banks once a
 
   const data = await loadMyLeave(authzWith(), {});
 
-  assert.deepEqual((gap.__myLeaveBalanceCalls as Array<unknown[]>).map((call) => call[1]), ["employment-a", "employment-b"]);
-  assert.equal(data.balances.length, 3, "each employment has a time balance and the party bank appears once");
-  assert.deepEqual(data.balances.map((row) => row.employmentId), ["employment-a", "employment-b", null]);
+  assert.deepEqual(
+    (gap.__myLeaveBalanceCalls as Array<unknown[]>).map((call) => call[1]),
+    ["employment-a", "employment-b"],
+  );
+  assert.equal(
+    data.balances.length,
+    3,
+    "each employment has a time balance and the party bank appears once",
+  );
+  assert.deepEqual(
+    data.balances.map((row) => row.employmentId),
+    ["employment-a", "employment-b", null],
+  );
   assert.match(data.balances[0]!.scopeLabel, /North Entity.*A-17/);
   assert.match(data.balances[1]!.scopeLabel, /South Entity.*B-24/);
   assert.match(data.balances[2]!.scopeLabel, /Person/);
@@ -234,7 +277,11 @@ test("my leave resolves time balances for each employment and value banks once a
   assert.equal(vac.taken, "8");
   assert.equal(vac.pending, "16");
   assert.equal(vac.remaining, "96");
-  assert.equal((gap.__myLeaveBankCalls as unknown[]).length, 1, "party-level banks are not repeated per employment");
+  assert.equal(
+    (gap.__myLeaveBankCalls as unknown[]).length,
+    1,
+    "party-level banks are not repeated per employment",
+  );
 });
 
 test("a leave-domain refusal converts to data, never a thrown page", async () => {
@@ -263,6 +310,10 @@ test("filing opens through the file param and a request opens its dialog", async
 
   const viewing = await loadMyLeave(authzWith(), { request: "lr-mine" });
   assert.equal(viewing.dialogOpen, true, "request=<id> opens the request dialog");
-  assert.equal(viewing.dialogRequestId, "lr-mine", "the dialog resolves the request it was asked for");
+  assert.equal(
+    viewing.dialogRequestId,
+    "lr-mine",
+    "the dialog resolves the request it was asked for",
+  );
   assert.equal(viewing.dialogCloseHref, "/hrm/my-leave", "the dialog closes back onto the inbox");
 });

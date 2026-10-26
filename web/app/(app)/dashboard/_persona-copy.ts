@@ -1,4 +1,4 @@
-import { formatCivilDate } from '@/lib/format'
+import { formatCivilDate } from "@/lib/format";
 
 /**
  * Pure server-side copy for the persona surface (F4T2-7). The celebrations
@@ -9,7 +9,7 @@ import { formatCivilDate } from '@/lib/format'
  * (like `_persona-layout`) and free of `server-only` so the branch-to-key
  * mapping is unit-testable without a database.
  */
-export type PersonaTranslator = (key: string, params?: Record<string, string | number>) => string
+export type PersonaTranslator = (key: string, params?: Record<string, string | number>) => string;
 
 /**
  * One celebration row's detail line: a future start joins on a locale date,
@@ -23,11 +23,11 @@ export function celebrationDetail(
   locale: string,
   tp: PersonaTranslator,
 ): string {
-  const years = Number(today.slice(0, 4)) - Number(serviceStart.slice(0, 4))
-  const startLabel = formatCivilDate(serviceStart, locale)
-  if (serviceStart > today) return tp('joinsOn', { date: startLabel })
-  if (years > 0) return tp('serviceYears', { years })
-  return tp('joinedSince', { date: startLabel })
+  const years = Number(today.slice(0, 4)) - Number(serviceStart.slice(0, 4));
+  const startLabel = formatCivilDate(serviceStart, locale);
+  if (serviceStart > today) return tp("joinsOn", { date: startLabel });
+  if (years > 0) return tp("serviceYears", { years });
+  return tp("joinedSince", { date: startLabel });
 }
 
 /** Manager nudges: counts ride inside ICU plurals, never string concat. */
@@ -36,8 +36,8 @@ export function teamNudgeTexts(
   joiners: number,
   tp: PersonaTranslator,
 ): { text: string; href: string }[] {
-  const nudges: { text: string; href: string }[] = []
-  if (overdue > 0) nudges.push({ text: tp('overdueSteps', { overdue }), href: '/hrm/processes' })
-  if (joiners > 0) nudges.push({ text: tp('newJoiners', { joiners }), href: '/hrm' })
-  return nudges
+  const nudges: { text: string; href: string }[] = [];
+  if (overdue > 0) nudges.push({ text: tp("overdueSteps", { overdue }), href: "/hrm/processes" });
+  if (joiners > 0) nudges.push({ text: tp("newJoiners", { joiners }), href: "/hrm" });
+  return nudges;
 }

@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Banknote,
@@ -12,11 +12,21 @@ import {
   Lock,
   RefreshCw,
   ShieldCheck,
-} from 'lucide-react'
-import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
-import { promptDialog } from '../../../../../lib/prompt'
-import { dateTime } from '../../../../../lib/format'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from "@openbooks/ui";
+import { promptDialog } from "../../../../../lib/prompt";
+import { dateTime } from "../../../../../lib/format";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
 
 /**
  * Direct deposit — the operator's view of a control, not a download button.
@@ -32,70 +42,70 @@ import { readApiErrorMessage } from '../../../../../lib/api-error'
  */
 
 interface Exclusion {
-  employeePartyId: string
-  employeeName: string
-  amount: string
-  reason: 'profile' | 'party' | 'default' | 'eftFallback'
+  employeePartyId: string;
+  employeeName: string;
+  amount: string;
+  reason: "profile" | "party" | "default" | "eftFallback";
 }
 
 interface Artifact {
-  id: string
-  format: 'rbc_std152' | 'cpa005' | 'nacha' | 'sepa' | 'cemtex' | 'bacs' | 'cnab240' | 'zengin'
-  sequenceNumber: number
-  fileNumber: string
-  fileCreationNumber: number | null
-  fileIdModifier: string | null
-  filename: string
-  contentHash: string
-  sizeBytes: number
-  entryCount: number
-  controlTotal: string
-  currency: string
-  excludedCheque: Exclusion[]
-  excludedTotal: string
-  status: 'generated' | 'released' | 'superseded'
-  generatedAt: string
-  firstReleasedAt: string | null
-  lastReleasedAt: string | null
-  releaseCount: number
-  supersedeReason: string | null
+  id: string;
+  format: "rbc_std152" | "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs" | "cnab240" | "zengin";
+  sequenceNumber: number;
+  fileNumber: string;
+  fileCreationNumber: number | null;
+  fileIdModifier: string | null;
+  filename: string;
+  contentHash: string;
+  sizeBytes: number;
+  entryCount: number;
+  controlTotal: string;
+  currency: string;
+  excludedCheque: Exclusion[];
+  excludedTotal: string;
+  status: "generated" | "released" | "superseded";
+  generatedAt: string;
+  firstReleasedAt: string | null;
+  lastReleasedAt: string | null;
+  releaseCount: number;
+  supersedeReason: string | null;
 }
 
 interface Profile {
-  id: string
-  name: string
-  format: 'rbc_std152' | 'cpa005' | 'nacha' | 'sepa' | 'cemtex' | 'bacs' | 'cnab240' | 'zengin'
-  currency: string | null
-  configured: boolean
+  id: string;
+  name: string;
+  format: "rbc_std152" | "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs" | "cnab240" | "zengin";
+  currency: string | null;
+  configured: boolean;
 }
 
 interface AuditEntry {
-  id: string
-  event: string
-  artifactId: string
-  actorName: string | null
-  at: string
-  changes: Record<string, unknown>
+  id: string;
+  event: string;
+  artifactId: string;
+  actorName: string | null;
+  at: string;
+  changes: Record<string, unknown>;
 }
 
 interface PanelState {
   entitlement: {
-    entitled: boolean
-    refusal: { code: string; reason: string } | null
-    runStatus: string
-    currency: string
-    payDate: string
-  }
+    entitled: boolean;
+    refusal: { code: string; reason: string } | null;
+    runStatus: string;
+    currency: string;
+    payDate: string;
+  };
   population: {
-    entries: { employeePartyId: string; employeeName: string; amount: string }[]
-    total: string
-    excludedCheque: Exclusion[]
-    excludedTotal: string
-  } | null
-  profiles: Profile[]
-  artifacts: Artifact[]
-  audit: AuditEntry[]
-  formats: Record<string, { enabled: boolean; currency: string; disabledReason: string | null }>
+    entries: { employeePartyId: string; employeeName: string; amount: string }[];
+    total: string;
+    excludedCheque: Exclusion[];
+    excludedTotal: string;
+  } | null;
+  profiles: Profile[];
+  artifacts: Artifact[];
+  audit: AuditEntry[];
+  formats: Record<string, { enabled: boolean; currency: string; disabledReason: string | null }>;
 }
 
 export function BankFilePanel({
@@ -103,199 +113,219 @@ export function BankFilePanel({
   canRun,
   fmt,
 }: {
-  documentId: string
-  canRun: boolean
-  fmt: (v: string | number | null | undefined) => string
+  documentId: string;
+  canRun: boolean;
+  fmt: (v: string | number | null | undefined) => string;
 }) {
-  const t = useTranslations('payroll')
+  const t = useTranslations("payroll");
   // The message catalogue is owned elsewhere; until these keys land the panel
   // renders its English source text rather than raw key paths.
   // A catalogue string with a placeholder must be formatted with its values:
   // formatting it bare throws instead of rendering.
   const tx = useCallback(
-    (key: string, fallback: string, values?: Record<string, string | number>) => (t.has(key as never)
-      ? (t(key as never, values as never) as string)
-      : Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), fallback)),
+    (key: string, fallback: string, values?: Record<string, string | number>) =>
+      t.has(key as never)
+        ? (t(key as never, values as never) as string)
+        : Object.entries(values ?? {}).reduce(
+            (text, [name, value]) => text.replace(`{${name}}`, String(value)),
+            fallback,
+          ),
     [t],
-  )
+  );
 
   // Loaded state carries its run id: navigating A → B with B's fetch still
   // pending renders loading, never A's artifacts under B's route
   // The error below was already keyed the same way.
-  const [state, setState] = useState<{ documentId: string; data: PanelState } | null>(null)
-  const [loadError, setLoadError] = useState<{ documentId: string; message: string } | null>(null)
-  const [profileId, setProfileId] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [state, setState] = useState<{ documentId: string; data: PanelState } | null>(null);
+  const [loadError, setLoadError] = useState<{ documentId: string; message: string } | null>(null);
+  const [profileId, setProfileId] = useState("");
+  const [busy, setBusy] = useState(false);
   // The run id the latest fetch was sent for. A superseded run's late
   // response applies nothing — otherwise A's arrival after B's would blank
   // B's loaded panel back to loading.
-  const activeRequest = useRef(documentId)
+  const activeRequest = useRef(documentId);
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body. Loading, error and
   // loaded are three distinct states: a failed fetch used to leave `state`
   // null, which rendered exactly like loading — forever. The error carries
   // its document id so a stale failure never shadows a newer document.
-  const load = useCallback((signal?: AbortSignal) => {
-    const requestId = documentId
-    return fetch(`/api/payroll/runs/${documentId}/bank-file`, signal ? { signal } : undefined)
-      .then(async (res) => {
-        if (activeRequest.current !== requestId) return
-        // The status is checked before the body is parsed: a non-JSON error
-        // body must surface the failure, never a SyntaxError from res.json().
-        // The refusal reads through the shared helper so message, remedy and
-        // code render instead of a bare status string.
-        if (!res.ok) {
-          setLoadError({ documentId, message: await readApiErrorMessage(res, `request failed (${res.status})`) })
-          return
-        }
-        return (res.json() as Promise<PanelState>).then((data) => {
-          if (activeRequest.current !== requestId) return
-          setState({ documentId, data })
-          setProfileId((current) => current || (data.profiles.find((p) => p.configured)?.id ?? ''))
+  const load = useCallback(
+    (signal?: AbortSignal) => {
+      const requestId = documentId;
+      return fetch(`/api/payroll/runs/${documentId}/bank-file`, signal ? { signal } : undefined)
+        .then(async (res) => {
+          if (activeRequest.current !== requestId) return;
+          // The status is checked before the body is parsed: a non-JSON error
+          // body must surface the failure, never a SyntaxError from res.json().
+          // The refusal reads through the shared helper so message, remedy and
+          // code render instead of a bare status string.
+          if (!res.ok) {
+            setLoadError({
+              documentId,
+              message: await readApiErrorMessage(res, `request failed (${res.status})`),
+            });
+            return;
+          }
+          return (res.json() as Promise<PanelState>).then((data) => {
+            if (activeRequest.current !== requestId) return;
+            setState({ documentId, data });
+            setProfileId(
+              (current) => current || (data.profiles.find((p) => p.configured)?.id ?? ""),
+            );
+          });
         })
-      })
-      .catch((error: unknown) => {
-        // A superseded run's abort is silence, not a failure to display.
-        if (signal?.aborted || activeRequest.current !== requestId) return
-        setLoadError({ documentId, message: error instanceof Error ? error.message : 'request failed' })
-      })
-  }, [documentId])
+        .catch((error: unknown) => {
+          // A superseded run's abort is silence, not a failure to display.
+          if (signal?.aborted || activeRequest.current !== requestId) return;
+          setLoadError({
+            documentId,
+            message: error instanceof Error ? error.message : "request failed",
+          });
+        });
+    },
+    [documentId],
+  );
 
   useEffect(() => {
-    activeRequest.current = documentId
-    const controller = new AbortController()
-    void load(controller.signal)
-    return () => controller.abort()
-  }, [load, documentId])
+    activeRequest.current = documentId;
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load, documentId]);
 
-  const visibleError = loadError !== null && loadError.documentId === documentId ? loadError.message : null
+  const visibleError =
+    loadError !== null && loadError.documentId === documentId ? loadError.message : null;
   if (visibleError !== null) {
     return (
       <section
-        aria-label={tx('wizard.bankFile.title', 'Direct deposit')}
+        aria-label={tx("wizard.bankFile.title", "Direct deposit")}
         className="rounded-xl border border-red-200 bg-white px-4 py-3 dark:border-red-900/60 dark:bg-slate-900"
       >
         <p className="flex items-start gap-2 text-sm text-red-800 dark:text-red-300">
           <AlertTriangle size={15} aria-hidden className="mt-0.5 shrink-0" />
-          {tx('wizard.bankFile.loadFailed', 'Could not load the direct-deposit file status')}: {visibleError}
+          {tx("wizard.bankFile.loadFailed", "Could not load the direct-deposit file status")}:{" "}
+          {visibleError}
         </p>
         <Button
           variant="outline"
           size="sm"
           className="mt-2"
           onClick={() => {
-            setLoadError(null)
-            void load()
+            setLoadError(null);
+            void load();
           }}
         >
-          {tx('wizard.bankFile.retry', 'Retry')}
+          {tx("wizard.bankFile.retry", "Retry")}
         </Button>
       </section>
-    )
+    );
   }
 
   // Only this run's data renders: a superseded run's state reads as loading
   // until the current run's fetch lands.
-  const visible = state !== null && state.documentId === documentId ? state.data : null
+  const visible = state !== null && state.documentId === documentId ? state.data : null;
   if (!visible) {
     return (
       <section
-        aria-label={tx('wizard.bankFile.title', 'Direct deposit')}
+        aria-label={tx("wizard.bankFile.title", "Direct deposit")}
         className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
       >
         <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Loader2 size={15} aria-hidden className="animate-spin" />
-          {tx('wizard.bankFile.loading', 'Loading direct-deposit file status…')}
+          {tx("wizard.bankFile.loading", "Loading direct-deposit file status…")}
         </p>
       </section>
-    )
+    );
   }
 
-  const { entitlement, population, profiles, artifacts, formats } = visible
-  const live = artifacts.filter((a) => a.status !== 'superseded')
-  const usable = profiles.filter((p) => formats[p.format]?.enabled)
-  const disabledFormats = Object.entries(formats).filter(([, spec]) => !spec.enabled)
+  const { entitlement, population, profiles, artifacts, formats } = visible;
+  const live = artifacts.filter((a) => a.status !== "superseded");
+  const usable = profiles.filter((p) => formats[p.format]?.enabled);
+  const disabledFormats = Object.entries(formats).filter(([, spec]) => !spec.enabled);
 
   async function generate() {
-    if (!profileId) return
-    let supersedeReason: string | null = null
+    if (!profileId) return;
+    let supersedeReason: string | null = null;
     if (live.length > 0) {
       supersedeReason = await promptDialog({
-        title: tx(
-          'wizard.bankFile.regenerateTitle',
-          'Replace the existing direct-deposit file?',
-        ),
+        title: tx("wizard.bankFile.regenerateTitle", "Replace the existing direct-deposit file?"),
         label: tx(
-          'wizard.bankFile.regenerateLabel',
-          'Why is a replacement needed? The existing file stays on record and is marked superseded. If it has already gone to the bank, do not send both.',
+          "wizard.bankFile.regenerateLabel",
+          "Why is a replacement needed? The existing file stays on record and is marked superseded. If it has already gone to the bank, do not send both.",
         ),
-        placeholder: tx('wizard.bankFile.regeneratePlaceholder', 'e.g. bank rejected the first transmission'),
-        confirmLabel: tx('wizard.bankFile.regenerateConfirm', 'Generate replacement'),
-      })
-      if (!supersedeReason) return
+        placeholder: tx(
+          "wizard.bankFile.regeneratePlaceholder",
+          "e.g. bank rejected the first transmission",
+        ),
+        confirmLabel: tx("wizard.bankFile.regenerateConfirm", "Generate replacement"),
+      });
+      if (!supersedeReason) return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${documentId}/bank-file`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paymentBankProfileId: profileId, supersedeReason }),
-      })
+      });
       // The body parses from a clone so the refusal can read through the
       // shared helper while the success toast keeps the file number.
-      const body = await res.clone().json().catch(() => ({})) as { artifact: { fileNumber: string } }
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      const body = (await res
+        .clone()
+        .json()
+        .catch(() => ({}))) as { artifact: { fileNumber: string } };
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
       toast.success(
-        tx('wizard.bankFile.generated', 'Direct-deposit file generated') +
+        tx("wizard.bankFile.generated", "Direct-deposit file generated") +
           ` — ${body.artifact.fileNumber}`,
-      )
-      await load()
+      );
+      await load();
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error((error as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function download(artifact: Artifact) {
-    setBusy(true)
+    setBusy(true);
     try {
       // POST, not a link: every release is counted and audited, and a browser
       // prefetch must not be able to fire one.
       const res = await fetch(`/api/payroll/runs/${documentId}/bank-file/${artifact.id}`, {
-        method: 'POST',
-      })
+        method: "POST",
+      });
       // The refusal reads through the shared helper so the server's reason
       // renders instead of a bare string.
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, 'failed'))
+        throw new Error(await readApiErrorMessage(res, "failed"));
       }
-      const url = URL.createObjectURL(await res.blob())
-      const link = document.createElement('a')
-      link.href = url
-      link.download = artifact.filename
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      await load()
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = artifact.filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      await load();
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error((error as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  const exclusionReason = (reason: Exclusion['reason']) =>
+  const exclusionReason = (reason: Exclusion["reason"]) =>
     tx(
       `wizard.bankFile.exclusion.${reason}`,
-      reason === 'profile'
-        ? 'Paid by cheque (payroll override)'
-        : reason === 'party'
-          ? 'Paid by cheque (employee preference)'
-          : reason === 'eftFallback'
-            ? 'Set to EFT but has no approved bank details — paid by cheque'
-            : 'No bank details on file — paid by cheque',
-    )
+      reason === "profile"
+        ? "Paid by cheque (payroll override)"
+        : reason === "party"
+          ? "Paid by cheque (employee preference)"
+          : reason === "eftFallback"
+            ? "Set to EFT but has no approved bank details — paid by cheque"
+            : "No bank details on file — paid by cheque",
+    );
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -304,12 +334,12 @@ export function BankFilePanel({
           <Banknote className="mt-0.5 h-5 w-5 text-teal-600 dark:text-teal-400" aria-hidden />
           <div>
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {tx('wizard.bankFile.title', 'Direct deposit')}
+              {tx("wizard.bankFile.title", "Direct deposit")}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {tx(
-                'wizard.bankFile.hint',
-                'The file instructs the bank to credit each EFT employee. Once generated it is frozen, hashed and numbered; every download is recorded.',
+                "wizard.bankFile.hint",
+                "The file instructs the bank to credit each EFT employee. Once generated it is frozen, hashed and numbered; every download is recorded.",
               )}
             </p>
           </div>
@@ -317,7 +347,7 @@ export function BankFilePanel({
         {canRun && entitlement.entitled && usable.length > 0 && (
           <div className="flex items-center gap-2">
             <select
-              aria-label={tx('wizard.bankFile.profile', 'Originating bank profile')}
+              aria-label={tx("wizard.bankFile.profile", "Originating bank profile")}
               value={profileId}
               onChange={(e) => setProfileId(e.target.value)}
               className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
@@ -325,7 +355,9 @@ export function BankFilePanel({
               {usable.map((profile) => (
                 <option key={profile.id} value={profile.id} disabled={!profile.configured}>
                   {profile.name}
-                  {profile.configured ? '' : ` — ${tx('wizard.bankFile.notConfigured', 'not configured')}`}
+                  {profile.configured
+                    ? ""
+                    : ` — ${tx("wizard.bankFile.notConfigured", "not configured")}`}
                 </option>
               ))}
             </select>
@@ -338,8 +370,8 @@ export function BankFilePanel({
                 <FileDown size={14} aria-hidden />
               )}
               {live.length > 0
-                ? tx('wizard.bankFile.regenerate', 'Generate replacement')
-                : tx('wizard.bankFile.generate', 'Generate file')}
+                ? tx("wizard.bankFile.regenerate", "Generate replacement")
+                : tx("wizard.bankFile.generate", "Generate file")}
             </Button>
           </div>
         )}
@@ -359,8 +391,8 @@ export function BankFilePanel({
           <p className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             {tx(
-              'wizard.bankFile.multipleLive',
-              'This pay run has more than one file that has not been superseded. Send exactly ONE to the bank — releasing both pays every employee twice.',
+              "wizard.bankFile.multipleLive",
+              "This pay run has more than one file that has not been superseded. Send exactly ONE to the bank — releasing both pays every employee twice.",
             )}
           </p>
         )}
@@ -368,8 +400,8 @@ export function BankFilePanel({
         {usable.length === 0 && entitlement.entitled && (
           <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
             {tx(
-              'wizard.bankFile.noProfile',
-              'No originating bank profile is set up for payroll. Add one in Setup → Payment operations: the originator id, routing and company identification are assigned by your bank and are never defaulted.',
+              "wizard.bankFile.noProfile",
+              "No originating bank profile is set up for payroll. Add one in Setup → Payment operations: the originator id, routing and company identification are assigned by your bank and are never defaulted.",
             )}
           </p>
         )}
@@ -386,15 +418,17 @@ export function BankFilePanel({
         {/* Who is on the file, and who is deliberately not. */}
         {population && (
           <div className="grid gap-3 sm:grid-cols-3">
-            <Fact label={tx('wizard.bankFile.onFile', 'On the file (EFT)')}>
-              {tx('wizard.bankFile.employees', '{n} employees', { n: population.entries.length })}
+            <Fact label={tx("wizard.bankFile.onFile", "On the file (EFT)")}>
+              {tx("wizard.bankFile.employees", "{n} employees", { n: population.entries.length })}
             </Fact>
-            <Fact label={tx('wizard.bankFile.controlTotal', 'Control total')}>
+            <Fact label={tx("wizard.bankFile.controlTotal", "Control total")}>
               {fmt(population.total)}
             </Fact>
-            <Fact label={tx('wizard.bankFile.onPaper', 'Paid by cheque instead')}>
-              {tx('wizard.bankFile.employees', '{n} employees', { n: population.excludedCheque.length })}
-              {' · '}
+            <Fact label={tx("wizard.bankFile.onPaper", "Paid by cheque instead")}>
+              {tx("wizard.bankFile.employees", "{n} employees", {
+                n: population.excludedCheque.length,
+              })}
+              {" · "}
               {fmt(population.excludedTotal)}
             </Fact>
           </div>
@@ -403,7 +437,10 @@ export function BankFilePanel({
         {population && population.excludedCheque.length > 0 && (
           <details className="rounded-lg border border-slate-200 dark:border-slate-800">
             <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-              {tx('wizard.bankFile.excludedTitle', 'Not on the file — reconcile these against the payday')}
+              {tx(
+                "wizard.bankFile.excludedTitle",
+                "Not on the file — reconcile these against the payday",
+              )}
             </summary>
             <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
               <ul className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
@@ -427,10 +464,12 @@ export function BankFilePanel({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{tx('wizard.bankFile.file', 'File')}</TableHead>
-                  <TableHead className="text-right">{tx('wizard.bankFile.amount', 'Control total')}</TableHead>
-                  <TableHead>{tx('wizard.bankFile.status', 'Status')}</TableHead>
-                  <TableHead>{tx('wizard.bankFile.released', 'Released')}</TableHead>
+                  <TableHead>{tx("wizard.bankFile.file", "File")}</TableHead>
+                  <TableHead className="text-right">
+                    {tx("wizard.bankFile.amount", "Control total")}
+                  </TableHead>
+                  <TableHead>{tx("wizard.bankFile.status", "Status")}</TableHead>
+                  <TableHead>{tx("wizard.bankFile.released", "Released")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -438,7 +477,7 @@ export function BankFilePanel({
                 {artifacts.map((artifact) => (
                   <TableRow
                     key={artifact.id}
-                    className={cn(artifact.status === 'superseded' && 'opacity-60')}
+                    className={cn(artifact.status === "superseded" && "opacity-60")}
                   >
                     <TableCell>
                       <div className="font-medium text-slate-800 dark:text-slate-100">
@@ -453,10 +492,10 @@ export function BankFilePanel({
                         <button
                           type="button"
                           className="rounded p-0.5 hover:bg-slate-100 dark:hover:bg-slate-800"
-                          aria-label={tx('wizard.bankFile.copyHash', 'Copy sha256')}
+                          aria-label={tx("wizard.bankFile.copyHash", "Copy sha256")}
                           onClick={() => {
-                            void navigator.clipboard.writeText(artifact.contentHash)
-                            toast.success(tx('wizard.bankFile.hashCopied', 'sha256 copied'))
+                            void navigator.clipboard.writeText(artifact.contentHash);
+                            toast.success(tx("wizard.bankFile.hashCopied", "sha256 copied"));
                           }}
                         >
                           <Copy size={11} aria-hidden />
@@ -466,19 +505,19 @@ export function BankFilePanel({
                     <TableCell className="text-right">
                       <div className="tabular-nums">{fmt(artifact.controlTotal)}</div>
                       <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {tx('wizard.bankFile.credits', '{n} credits', { n: artifact.entryCount })}
-                        {artifact.fileIdModifier ? ` · id ${artifact.fileIdModifier}` : ''}
-                        {artifact.fileCreationNumber ? ` · no. ${artifact.fileCreationNumber}` : ''}
+                        {tx("wizard.bankFile.credits", "{n} credits", { n: artifact.entryCount })}
+                        {artifact.fileIdModifier ? ` · id ${artifact.fileIdModifier}` : ""}
+                        {artifact.fileCreationNumber ? ` · no. ${artifact.fileCreationNumber}` : ""}
                       </div>
                     </TableCell>
                     <TableCell>
                       <Badge
                         variant={
-                          artifact.status === 'superseded'
-                            ? 'secondary'
-                            : artifact.status === 'released'
-                              ? 'success'
-                              : 'default'
+                          artifact.status === "superseded"
+                            ? "secondary"
+                            : artifact.status === "released"
+                              ? "success"
+                              : "default"
                         }
                       >
                         {tx(`wizard.bankFile.state.${artifact.status}`, artifact.status)}
@@ -491,19 +530,19 @@ export function BankFilePanel({
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 dark:text-slate-400">
                       {artifact.releaseCount === 0
-                        ? tx('wizard.bankFile.neverReleased', 'Never downloaded')
+                        ? tx("wizard.bankFile.neverReleased", "Never downloaded")
                         : `${artifact.releaseCount}× · ${dateTime(artifact.lastReleasedAt)}`}
                     </TableCell>
                     <TableCell className="text-right">
                       {canRun && (
                         <Button
                           size="sm"
-                          variant={artifact.status === 'superseded' ? 'ghost' : 'outline'}
+                          variant={artifact.status === "superseded" ? "ghost" : "outline"}
                           disabled={busy}
                           onClick={() => void download(artifact)}
                         >
                           <FileDown size={14} aria-hidden />
-                          {tx('wizard.bankFile.download', 'Download')}
+                          {tx("wizard.bankFile.download", "Download")}
                         </Button>
                       )}
                     </TableCell>
@@ -517,18 +556,18 @@ export function BankFilePanel({
         {visible.audit.length > 0 && (
           <details className="rounded-lg border border-slate-200 dark:border-slate-800">
             <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-              {tx('wizard.bankFile.auditTitle', 'Activity — who generated and who downloaded')}
+              {tx("wizard.bankFile.auditTitle", "Activity — who generated and who downloaded")}
             </summary>
             <ul className="space-y-1 border-t border-slate-100 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
               {visible.audit.map((entry) => (
                 <li key={entry.id} className="flex flex-wrap justify-between gap-2">
                   <span>
                     {tx(`wizard.bankFile.event.${entry.event}`, entry.event)}
-                    {' · '}
-                    {String(entry.changes.fileNumber ?? '')}
+                    {" · "}
+                    {String(entry.changes.fileNumber ?? "")}
                   </span>
                   <span className="text-slate-500 dark:text-slate-400">
-                    {entry.actorName ?? '—'} · {dateTime(entry.at)}
+                    {entry.actorName ?? "—"} · {dateTime(entry.at)}
                   </span>
                 </li>
               ))}
@@ -537,7 +576,7 @@ export function BankFilePanel({
         )}
       </div>
     </section>
-  )
+  );
 }
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -548,5 +587,5 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
       </div>
       <div className="font-medium text-slate-800 tabular-nums dark:text-slate-100">{children}</div>
     </div>
-  )
+  );
 }

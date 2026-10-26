@@ -11,137 +11,157 @@
 
 export type StandardStatementDefinition = {
   /** Stable per-org slug (also the deep-link + idempotent-seed key). */
-  slug: string
-  name: string
-  description: string
+  slug: string;
+  name: string;
+  description: string;
   /** Matches web REPORT_KINDS; routes to the statement/matrix engine. */
-  statementKind: string
+  statementKind: string;
   /** Fixed args merged into the resolve request (side, kind, …). */
-  params?: Record<string, string>
-}
+  params?: Record<string, string>;
+};
 
 export const STANDARD_STATEMENT_DEFINITIONS: StandardStatementDefinition[] = [
-  { slug: 'statistical-journal', name: 'Statistical Journal', description: 'Exact non-monetary quantities by account, unit and legal entity, including governed corrections.', statementKind: 'statistical-journal' },
-  { slug: 'gl-audit-numbers', name: 'GL Audit Numbers', description: 'Retained gapless audit numbers for posted physical entries by book, entity and closed accounting period.', statementKind: 'gl-audit-numbers' },
   {
-    slug: 'payroll-support',
-    name: 'Payroll country capabilities',
-    description: 'Declared calculation editions, regional coverage, original and correction artifacts, remittance schedules, submission transport and agency receipt verification.',
-    statementKind: 'payroll-support',
-  },
-  {
-    slug: 'profit-and-loss',
-    name: 'Profit & Loss',
-    description: 'Income statement — revenue, COGS, gross profit, expenses and net income, with comparatives and dimension breakouts.',
-    statementKind: 'pnl',
-  },
-  {
-    slug: 'balance-sheet',
-    name: 'Balance Sheet',
-    description: 'Assets, liabilities and equity as of a date, with comparatives and dimension breakouts.',
-    statementKind: 'balance-sheet',
-  },
-  {
-    slug: 'cash-flow',
-    name: 'Cash Flow Statement',
-    description: 'Operating, investing and financing cash movement for a period, proven against bank balances.',
-    statementKind: 'cash-flow',
-  },
-  {
-    slug: 'cash-flow-indirect',
-    name: 'Cash Flow Statement (Indirect)',
+    slug: "statistical-journal",
+    name: "Statistical Journal",
     description:
-      'GAAP indirect-method cash flow: net income reconciled to operating cash via non-cash add-backs and per-account working-capital detail, plus investing and financing sections.',
-    statementKind: 'cash-flow-indirect',
+      "Exact non-monetary quantities by account, unit and legal entity, including governed corrections.",
+    statementKind: "statistical-journal",
   },
   {
-    slug: 'trial-balance',
-    name: 'Trial Balance',
-    description: 'Debit and credit balances for every account, as of a date.',
-    statementKind: 'trial-balance',
+    slug: "gl-audit-numbers",
+    name: "GL Audit Numbers",
+    description:
+      "Retained gapless audit numbers for posted physical entries by book, entity and closed accounting period.",
+    statementKind: "gl-audit-numbers",
   },
   {
-    slug: 'book-differences',
-    name: 'Book Differences',
-    description: 'Each account\'s balance in the primary book and a secondary accounting book as of a date, with the difference.',
-    statementKind: 'book-differences',
+    slug: "payroll-support",
+    name: "Payroll country capabilities",
+    description:
+      "Declared calculation editions, regional coverage, original and correction artifacts, remittance schedules, submission transport and agency receipt verification.",
+    statementKind: "payroll-support",
   },
   {
-    slug: 'general-ledger',
-    name: 'General Ledger',
-    description: 'Per-account posted activity with opening/closing balances and a running balance.',
-    statementKind: 'general-ledger',
+    slug: "profit-and-loss",
+    name: "Profit & Loss",
+    description:
+      "Income statement — revenue, COGS, gross profit, expenses and net income, with comparatives and dimension breakouts.",
+    statementKind: "pnl",
   },
   {
-    slug: 'journal',
-    name: 'Journal',
-    description: 'Posted journal entries with their debit/credit lines, newest first.',
-    statementKind: 'journal',
+    slug: "balance-sheet",
+    name: "Balance Sheet",
+    description:
+      "Assets, liabilities and equity as of a date, with comparatives and dimension breakouts.",
+    statementKind: "balance-sheet",
   },
   {
-    slug: 'ar-aging',
-    name: 'A/R Aging',
-    description: 'Open receivables per customer bucketed by age (current / 30 / 60 / 90+).',
-    statementKind: 'aging',
-    params: { side: 'ar' },
+    slug: "cash-flow",
+    name: "Cash Flow Statement",
+    description:
+      "Operating, investing and financing cash movement for a period, proven against bank balances.",
+    statementKind: "cash-flow",
   },
   {
-    slug: 'ap-aging',
-    name: 'A/P Aging',
-    description: 'Open payables per vendor bucketed by age (current / 30 / 60 / 90+).',
-    statementKind: 'aging',
-    params: { side: 'ap' },
+    slug: "cash-flow-indirect",
+    name: "Cash Flow Statement (Indirect)",
+    description:
+      "GAAP indirect-method cash flow: net income reconciled to operating cash via non-cash add-backs and per-account working-capital detail, plus investing and financing sections.",
+    statementKind: "cash-flow-indirect",
   },
   {
-    slug: 'ar-register',
-    name: 'A/R Register',
-    description: 'Per-customer register on the receivable control account with a running balance.',
-    statementKind: 'registers',
-    params: { side: 'ar' },
+    slug: "trial-balance",
+    name: "Trial Balance",
+    description: "Debit and credit balances for every account, as of a date.",
+    statementKind: "trial-balance",
   },
   {
-    slug: 'ap-register',
-    name: 'A/P Register',
-    description: 'Per-vendor register on the payable control account with a running balance.',
-    statementKind: 'registers',
-    params: { side: 'ap' },
+    slug: "book-differences",
+    name: "Book Differences",
+    description:
+      "Each account's balance in the primary book and a secondary accounting book as of a date, with the difference.",
+    statementKind: "book-differences",
   },
   {
-    slug: 'receivables',
-    name: 'Receivables',
-    description: 'Outstanding balance owed by each customer (point-in-time snapshot).',
-    statementKind: 'partners',
-    params: { kind: 'receivable' },
+    slug: "general-ledger",
+    name: "General Ledger",
+    description: "Per-account posted activity with opening/closing balances and a running balance.",
+    statementKind: "general-ledger",
   },
   {
-    slug: 'payables',
-    name: 'Payables',
-    description: 'Outstanding balance owed to each vendor (point-in-time snapshot).',
-    statementKind: 'partners',
-    params: { kind: 'payable' },
+    slug: "journal",
+    name: "Journal",
+    description: "Posted journal entries with their debit/credit lines, newest first.",
+    statementKind: "journal",
   },
   {
-    slug: 'true-cost',
-    name: 'True Cost',
-    description: 'Overhead allocation, department rates and period trends from the configured cost model.',
-    statementKind: 'true-cost',
+    slug: "ar-aging",
+    name: "A/R Aging",
+    description: "Open receivables per customer bucketed by age (current / 30 / 60 / 90+).",
+    statementKind: "aging",
+    params: { side: "ar" },
   },
   {
-    slug: 'project-profitability',
-    name: 'Project Profitability',
-    description: 'Per-project revenue, cost and margin with approved job hours; ties to the P&L.',
-    statementKind: 'project-profitability',
+    slug: "ap-aging",
+    name: "A/P Aging",
+    description: "Open payables per vendor bucketed by age (current / 30 / 60 / 90+).",
+    statementKind: "aging",
+    params: { side: "ap" },
   },
   {
-    slug: 'project-budget-vs-actual',
-    name: 'Project Budget vs Actual',
-    description: 'Per-task original (sold) budget, current budget and actual hours and cost for one project, with variances, as of a date.',
-    statementKind: 'project-budget-vs-actual',
+    slug: "ar-register",
+    name: "A/R Register",
+    description: "Per-customer register on the receivable control account with a running balance.",
+    statementKind: "registers",
+    params: { side: "ar" },
   },
   {
-    slug: 'earned-value',
-    name: 'Earned Value',
-    description: 'Per-project and per-task budget, percent complete, earned value, actual cost, CPI and estimates at completion as of a date.',
-    statementKind: 'earned-value',
+    slug: "ap-register",
+    name: "A/P Register",
+    description: "Per-vendor register on the payable control account with a running balance.",
+    statementKind: "registers",
+    params: { side: "ap" },
   },
-]
+  {
+    slug: "receivables",
+    name: "Receivables",
+    description: "Outstanding balance owed by each customer (point-in-time snapshot).",
+    statementKind: "partners",
+    params: { kind: "receivable" },
+  },
+  {
+    slug: "payables",
+    name: "Payables",
+    description: "Outstanding balance owed to each vendor (point-in-time snapshot).",
+    statementKind: "partners",
+    params: { kind: "payable" },
+  },
+  {
+    slug: "true-cost",
+    name: "True Cost",
+    description:
+      "Overhead allocation, department rates and period trends from the configured cost model.",
+    statementKind: "true-cost",
+  },
+  {
+    slug: "project-profitability",
+    name: "Project Profitability",
+    description: "Per-project revenue, cost and margin with approved job hours; ties to the P&L.",
+    statementKind: "project-profitability",
+  },
+  {
+    slug: "project-budget-vs-actual",
+    name: "Project Budget vs Actual",
+    description:
+      "Per-task original (sold) budget, current budget and actual hours and cost for one project, with variances, as of a date.",
+    statementKind: "project-budget-vs-actual",
+  },
+  {
+    slug: "earned-value",
+    name: "Earned Value",
+    description:
+      "Per-project and per-task budget, percent complete, earned value, actual cost, CPI and estimates at completion as of a date.",
+    statementKind: "earned-value",
+  },
+];

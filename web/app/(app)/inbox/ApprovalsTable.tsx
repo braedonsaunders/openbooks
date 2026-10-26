@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // Approval worklist table for flow gates. Owns the bulk-selection state
 // (select-all + per-row checkboxes) and the Approve/Reject-selected actions,
@@ -13,89 +13,80 @@
 // remounts this component, which clears the selection rather than acting on
 // rows the user can no longer see.
 
-import { PagedTable } from '../../../components/paged-table'
-import { useMemo, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
-import { Badge, Button } from '@openbooks/ui'
-import { promptDialog } from '../../../lib/prompt'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { useViewerFormat } from '../../../lib/viewer-format'
-import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
-import { GateActions, type DelegateOption } from './GateActions'
+import { PagedTable } from "../../../components/paged-table";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { Badge, Button } from "@openbooks/ui";
+import { promptDialog } from "../../../lib/prompt";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import { useViewerFormat } from "../../../lib/viewer-format";
+import { APPROVALS_BULK_BATCH_MAX } from "../../../lib/approvals-limits";
+import { GateActions, type DelegateOption } from "./GateActions";
 
 export interface ApprovalRow {
   /** Stable selection key: `gate:${id}` / `doc:${id}` / `payrun:${id}`. */
-  key: string
+  key: string;
   /**
    * Flow-gate id for bulk/decide/delegate actions. Document and pay-run rows
    * carry null: they link to their record (whose drawer decides) and never
    * enter the gate-scoped bulk payload.
    */
-  gateId: string | null
-  documentNumber: string
-  kind: string
-  kindLabel: string
+  gateId: string | null;
+  documentNumber: string;
+  kind: string;
+  kindLabel: string;
   /** Native module drawer deep-link (null → plain text). */
-  href: string | null
-  party: string | null
+  href: string | null;
+  party: string | null;
   /** Pre-formatted amount (server renders the org's symbol). */
-  amount: string | null
+  amount: string | null;
   /** Gate title (null for document/pay-run rows, which lead with the record). */
-  approvalTitle: string | null
+  approvalTitle: string | null;
   /** Flow name. */
-  engineName: string
+  engineName: string;
   /** ISO timestamp the approval was requested — drives the aging chip. */
-  requestedAt: string
-  assignee: string | null
+  requestedAt: string;
+  assignee: string | null;
   /**
    * The viewer may decide this row through its native decide path. Rows on
    * the organization view that are assigned to someone else carry false and
    * render no Approve/Reject (Delegate still follows canDelegate).
    */
-  canDecide: boolean
-  canDelegate: boolean
-  quorumAll: boolean
+  canDecide: boolean;
+  canDelegate: boolean;
+  quorumAll: boolean;
   /** Gate demands a typed e-signature to approve (blocks bulk approve). */
-  signatureRequired?: boolean
+  signatureRequired?: boolean;
   /** Past its escalation date (drives the overdue filter). */
-  overdue?: boolean
+  overdue?: boolean;
   /**
    * The gate reaches this viewer but separation of duties blocks them as
    * submitter/maker: the row renders "Awaiting another approver" with no
    * decision actions and stays out of bulk selection.
    */
-  awaitingAnotherApprover?: boolean
+  awaitingAnotherApprover?: boolean;
 }
 
-const DAY_MS = 86_400_000
+const DAY_MS = 86_400_000;
 
 /** Whole days an approval has been pending (module scope, like `daysSince` in AccountsRoster). */
 function daysPending(requestedAt: string): number {
-  return Math.max(
-    0,
-    Math.floor((Date.now() - new Date(requestedAt).getTime()) / DAY_MS),
-  )
+  return Math.max(0, Math.floor((Date.now() - new Date(requestedAt).getTime()) / DAY_MS));
 }
 
 /** Days pending — amber past 2, red past 5, otherwise muted. */
-function Aging({
-  requestedAt,
-  label,
-}: {
-  requestedAt: string
-  label: (days: number) => string
-}) {
-  const days = daysPending(requestedAt)
+function Aging({ requestedAt, label }: { requestedAt: string; label: (days: number) => string }) {
+  const days = daysPending(requestedAt);
   const tone =
     days > 5
-      ? 'text-red-600 dark:text-red-400'
+      ? "text-red-600 dark:text-red-400"
       : days > 2
-        ? 'text-amber-600 dark:text-amber-400'
-        : 'text-slate-400 dark:text-slate-500'
-  return <span className={`text-xs tabular-nums ${tone}`}>{label(days)}</span>
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-slate-400 dark:text-slate-500";
+  return <span className={`text-xs tabular-nums ${tone}`}>{label(days)}</span>;
 }
 
 export function ApprovalsTable({
@@ -106,27 +97,27 @@ export function ApprovalsTable({
   actionsEnabled,
   awaitingOthers,
 }: {
-  rows: ApprovalRow[]
-  users: DelegateOption[]
+  rows: ApprovalRow[];
+  users: DelegateOption[];
   /** Show checkboxes + the Approve/Reject-selected toolbar. */
-  bulk: boolean
+  bulk: boolean;
   /** Extra assignee column ("All approvals" tab). */
-  showAssignee: boolean
+  showAssignee: boolean;
   /** Render per-row Approve/Reject/Delegate (off for read-only monitoring). */
-  actionsEnabled: boolean
+  actionsEnabled: boolean;
   /**
    * Org-wide count of worklist gates awaiting ANOTHER approver for this
    * viewer (separation-of-duties blocked), rendered as its own summary
    * line above the rows — never folded into the actionable figures.
    */
-  awaitingOthers?: number
+  awaitingOthers?: number;
 }) {
-  const t = useTranslations('approvals')
-  const tc = useTranslations('common')
-  const { date } = useViewerFormat()
-  const router = useRouter()
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("approvals");
+  const tc = useTranslations("common");
+  const { date } = useViewerFormat();
+  const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
 
   // Selection survives filters upstream; drop keys for rows no longer shown.
   // Only actionable flow-gate rows are selectable: bulk decide/delegate post
@@ -134,160 +125,132 @@ export function ApprovalsTable({
   // selection — and neither do gates awaiting another approver or gates the
   // viewer cannot decide, whose decision would refuse per row.
   const selectableRows = useMemo(
-    () =>
-      rows.filter(
-        (r) => r.gateId != null && r.canDecide && !r.awaitingAnotherApprover,
-      ),
+    () => rows.filter((r) => r.gateId != null && r.canDecide && !r.awaitingAnotherApprover),
     [rows],
-  )
+  );
   const visibleSelected = useMemo(
-    () =>
-      new Set(
-        selectableRows.filter((r) => selected.has(r.key)).map((r) => r.key),
-      ),
+    () => new Set(selectableRows.filter((r) => selected.has(r.key)).map((r) => r.key)),
     [selectableRows, selected],
-  )
-  const allSelected =
-    selectableRows.length > 0 && visibleSelected.size === selectableRows.length
-  const someSelected = visibleSelected.size > 0 && !allSelected
+  );
+  const allSelected = selectableRows.length > 0 && visibleSelected.size === selectableRows.length;
+  const someSelected = visibleSelected.size > 0 && !allSelected;
 
   function toggleAll() {
-    setSelected(
-      allSelected ? new Set() : new Set(selectableRows.map((r) => r.key)),
-    )
+    setSelected(allSelected ? new Set() : new Set(selectableRows.map((r) => r.key)));
   }
   function toggle(key: string) {
     setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
-  async function runBulk(decision: 'approved' | 'rejected') {
+  async function runBulk(decision: "approved" | "rejected") {
     const chosen = rows.filter(
-      (r): r is ApprovalRow & { gateId: string } =>
-        visibleSelected.has(r.key) && r.gateId != null,
-    )
-    if (chosen.length === 0) return
+      (r): r is ApprovalRow & { gateId: string } => visibleSelected.has(r.key) && r.gateId != null,
+    );
+    if (chosen.length === 0) return;
     // Unreachable while the loader caps the page at the batch ceiling, but
     // a whole-batch 400 must never silently become "nothing happened".
     if (chosen.length > APPROVALS_BULK_BATCH_MAX) {
-      toast.error(t('bulk.tooMany', { count: APPROVALS_BULK_BATCH_MAX }))
-      return
+      toast.error(t("bulk.tooMany", { count: APPROVALS_BULK_BATCH_MAX }));
+      return;
     }
     // A signature-required gate must be approved individually (each needs its
     // own typed attestation) — bulk approve can't collect one.
-    if (decision === 'approved' && chosen.some((r) => r.signatureRequired)) {
-      toast.error(t('bulk.signatureBlocked'))
-      return
+    if (decision === "approved" && chosen.some((r) => r.signatureRequired)) {
+      toast.error(t("bulk.signatureBlocked"));
+      return;
     }
-    let comment: string | undefined
-    if (decision === 'rejected') {
+    let comment: string | undefined;
+    if (decision === "rejected") {
       const reason = await promptDialog({
-        title: t('bulk.rejectTitle', { count: chosen.length }),
-        label: t('bulk.reasonLabel'),
-        confirmLabel: tc('actions.reject'),
-      })
-      if (!reason) return
-      comment = reason
+        title: t("bulk.rejectTitle", { count: chosen.length }),
+        label: t("bulk.reasonLabel"),
+        confirmLabel: tc("actions.reject"),
+      });
+      if (!reason) return;
+      comment = reason;
     }
-    setBusy(true)
-    const items = chosen.map((r) => ({ gateId: r.gateId }))
+    setBusy(true);
+    const items = chosen.map((r) => ({ gateId: r.gateId }));
     try {
-      const res = await fetch('/api/flows/gates/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/flows/gates/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items, decision, comment }),
-      })
-      if (!res.ok)
-        throw new Error(
-          await readApiErrorMessage(res, t('decide.decisionFailed')),
-        )
+      });
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("decide.decisionFailed")));
       const data = (await res.json().catch(() => {
-        throw new Error(t('decide.decisionFailed'))
-      })) as { results?: { ok: boolean; error?: string }[] }
-      const results = data?.results
+        throw new Error(t("decide.decisionFailed"));
+      })) as { results?: { ok: boolean; error?: string }[] };
+      const results = data?.results;
       if (
         !Array.isArray(results) ||
         results.length !== chosen.length ||
-        results.some((result) => !result || typeof result.ok !== 'boolean')
+        results.some((result) => !result || typeof result.ok !== "boolean")
       ) {
-        throw new Error(t('decide.decisionFailed'))
+        throw new Error(t("decide.decisionFailed"));
       }
-      const ok = results.filter((result) => result.ok).length
-      const failed = results.length - ok
+      const ok = results.filter((result) => result.ok).length;
+      const failed = results.length - ok;
       const okMsg =
-        decision === 'approved'
-          ? t('bulk.approvedCount', { count: ok })
-          : t('bulk.rejectedCount', { count: ok })
+        decision === "approved"
+          ? t("bulk.approvedCount", { count: ok })
+          : t("bulk.rejectedCount", { count: ok });
       if (failed > 0) {
         const errors = results
           .flatMap((result, index) =>
             result.ok
               ? []
-              : [
-                  `${chosen[index]!.documentNumber}: ${result.error ?? t('decide.decisionFailed')}`,
-                ],
+              : [`${chosen[index]!.documentNumber}: ${result.error ?? t("decide.decisionFailed")}`],
           )
-          .join('; ')
-        toast.warning(
-          `${okMsg}, ${t('bulk.failedCount', { count: failed, error: errors })}`,
-        )
+          .join("; ");
+        toast.warning(`${okMsg}, ${t("bulk.failedCount", { count: failed, error: errors })}`);
       } else {
-        toast.success(okMsg)
+        toast.success(okMsg);
       }
       // The API returns one verdict per requested gate, in request order.
       // Refused rows retain their selection so the operator can inspect them.
       setSelected((current) => {
-        const next = new Set(current)
+        const next = new Set(current);
         results.forEach((result, index) => {
-          if (result.ok) next.delete(chosen[index]!.key)
-        })
-        return next
-      })
-      router.refresh()
+          if (result.ok) next.delete(chosen[index]!.key);
+        });
+        return next;
+      });
+      router.refresh();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('decide.decisionFailed'),
-      )
-      router.refresh()
+      toast.error(error instanceof Error ? error.message : t("decide.decisionFailed"));
+      router.refresh();
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   // Gates awaiting another approver for this viewer (SoD-blocked), counted
   // separately from the actionable rows below — never folded into them.
-  const awaitingCount = awaitingOthers ?? 0
+  const awaitingCount = awaitingOthers ?? 0;
   return (
     <div className="space-y-3">
       {awaitingCount > 0 ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t('awaitingOthersSummary', { count: awaitingCount })}
+          {t("awaitingOthersSummary", { count: awaitingCount })}
         </p>
       ) : null}
       {bulk && visibleSelected.size > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-900/50 dark:bg-teal-950/40">
           <span className="text-sm font-medium text-teal-800 dark:text-teal-300">
-            {t('bulk.selectedOnPage', { count: visibleSelected.size })}
+            {t("bulk.selectedOnPage", { count: visibleSelected.size })}
           </span>
           <span className="ml-auto flex items-center gap-2">
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => runBulk('approved')}
-            >
-              {t('bulk.approveSelected')}
+            <Button size="sm" disabled={busy} onClick={() => runBulk("approved")}>
+              {t("bulk.approveSelected")}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => runBulk('rejected')}
-            >
-              {t('bulk.rejectSelected')}
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => runBulk("rejected")}>
+              {t("bulk.rejectSelected")}
             </Button>
             <Button
               size="sm"
@@ -295,7 +258,7 @@ export function ApprovalsTable({
               disabled={busy}
               onClick={() => setSelected(new Set())}
             >
-              {tc('actions.clear')}
+              {tc("actions.clear")}
             </Button>
           </span>
         </div>
@@ -310,33 +273,31 @@ export function ApprovalsTable({
           ...(bulk
             ? [
                 {
-                  key: 'column_0',
+                  key: "column_0",
                   header: (
                     <>
                       <input
                         ref={(el) => {
-                          if (el) el.indeterminate = someSelected
+                          if (el) el.indeterminate = someSelected;
                         }}
                         type="checkbox"
                         className="h-4 w-4 accent-teal-600"
                         checked={allSelected}
                         onChange={toggleAll}
-                        aria-label={t('bulk.selectAllOnPage')}
+                        aria-label={t("bulk.selectAllOnPage")}
                       />
                     </>
                   ),
-                  headerClassName: 'w-10',
+                  headerClassName: "w-10",
                   cell: (r: ApprovalRow) => (
                     <>
-                      {r.gateId != null &&
-                      r.canDecide &&
-                      !r.awaitingAnotherApprover ? (
+                      {r.gateId != null && r.canDecide && !r.awaitingAnotherApprover ? (
                         <input
                           type="checkbox"
                           className="h-4 w-4 accent-teal-600"
                           checked={visibleSelected.has(r.key)}
                           onChange={() => toggle(r.key)}
-                          aria-label={t('bulk.selectRow', {
+                          aria-label={t("bulk.selectRow", {
                             document: r.documentNumber,
                           })}
                         />
@@ -345,26 +306,19 @@ export function ApprovalsTable({
                   ),
                   search: (r: ApprovalRow) =>
                     Object.values(r)
-                      .filter(
-                        (value) =>
-                          typeof value === 'string' ||
-                          typeof value === 'number',
-                      )
-                      .join(' '),
+                      .filter((value) => typeof value === "string" || typeof value === "number")
+                      .join(" "),
                 },
               ]
             : []),
           {
-            key: 'column_1',
-            header: <>{t('table.document')}</>,
-            className: 'font-mono text-[13px] font-semibold',
+            key: "column_1",
+            header: <>{t("table.document")}</>,
+            className: "font-mono text-[13px] font-semibold",
             cell: (r: ApprovalRow) => (
               <>
                 {r.href ? (
-                  <Link
-                    href={r.href}
-                    className="text-teal-700 hover:underline dark:text-teal-300"
-                  >
+                  <Link href={r.href} className="text-teal-700 hover:underline dark:text-teal-300">
                     {r.documentNumber}
                   </Link>
                 ) : (
@@ -374,15 +328,12 @@ export function ApprovalsTable({
             ),
             search: (r: ApprovalRow) =>
               Object.values(r)
-                .filter(
-                  (value) =>
-                    typeof value === 'string' || typeof value === 'number',
-                )
-                .join(' '),
+                .filter((value) => typeof value === "string" || typeof value === "number")
+                .join(" "),
           },
           {
-            key: 'column_2',
-            header: <>{t('table.kind')}</>,
+            key: "column_2",
+            header: <>{t("table.kind")}</>,
             cell: (r: ApprovalRow) => (
               <>
                 <Badge variant="secondary">{r.kindLabel}</Badge>
@@ -390,41 +341,32 @@ export function ApprovalsTable({
             ),
             search: (r: ApprovalRow) =>
               Object.values(r)
-                .filter(
-                  (value) =>
-                    typeof value === 'string' || typeof value === 'number',
-                )
-                .join(' '),
+                .filter((value) => typeof value === "string" || typeof value === "number")
+                .join(" "),
           },
           {
-            key: 'column_3',
-            header: <>{tc('labels.party')}</>,
+            key: "column_3",
+            header: <>{tc("labels.party")}</>,
             cell: (r: ApprovalRow) => <>{r.party}</>,
             search: (r: ApprovalRow) =>
               Object.values(r)
-                .filter(
-                  (value) =>
-                    typeof value === 'string' || typeof value === 'number',
-                )
-                .join(' '),
+                .filter((value) => typeof value === "string" || typeof value === "number")
+                .join(" "),
           },
           {
-            key: 'column_4',
-            header: <>{tc('labels.amount')}</>,
-            headerClassName: 'text-right',
-            className: 'text-right tabular-nums',
+            key: "column_4",
+            header: <>{tc("labels.amount")}</>,
+            headerClassName: "text-right",
+            className: "text-right tabular-nums",
             cell: (r: ApprovalRow) => <>{r.amount}</>,
             search: (r: ApprovalRow) =>
               Object.values(r)
-                .filter(
-                  (value) =>
-                    typeof value === 'string' || typeof value === 'number',
-                )
-                .join(' '),
+                .filter((value) => typeof value === "string" || typeof value === "number")
+                .join(" "),
           },
           {
-            key: 'column_5',
-            header: <>{t('table.approval')}</>,
+            key: "column_5",
+            header: <>{t("table.approval")}</>,
             cell: (r: ApprovalRow) => (
               <>
                 <span className="flex flex-col">
@@ -432,83 +374,68 @@ export function ApprovalsTable({
                     {r.approvalTitle}
                     {r.quorumAll ? (
                       <Badge variant="outline" className="ml-2 align-middle">
-                        {t('gates.badges.quorumAll')}
+                        {t("gates.badges.quorumAll")}
                       </Badge>
                     ) : null}
                     {r.signatureRequired ? (
                       <Badge variant="outline" className="ml-2 align-middle">
-                        {t('gates.badges.signature')}
+                        {t("gates.badges.signature")}
                       </Badge>
                     ) : null}
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {r.engineName}
-                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{r.engineName}</span>
                 </span>
               </>
             ),
             search: (r: ApprovalRow) =>
               Object.values(r)
-                .filter(
-                  (value) =>
-                    typeof value === 'string' || typeof value === 'number',
-                )
-                .join(' '),
+                .filter((value) => typeof value === "string" || typeof value === "number")
+                .join(" "),
           },
           {
-            key: 'column_6',
-            header: <>{t('table.requested')}</>,
-            className: 'whitespace-nowrap text-slate-500 dark:text-slate-400',
+            key: "column_6",
+            header: <>{t("table.requested")}</>,
+            className: "whitespace-nowrap text-slate-500 dark:text-slate-400",
             cell: (r: ApprovalRow) => (
               <>
                 <span className="inline-flex items-baseline gap-2">
                   {date(r.requestedAt)}
-                  <Aging
-                    requestedAt={r.requestedAt}
-                    label={(days) => t('aging.days', { days })}
-                  />
+                  <Aging requestedAt={r.requestedAt} label={(days) => t("aging.days", { days })} />
                 </span>
               </>
             ),
             search: (r: ApprovalRow) =>
               Object.values(r)
-                .filter(
-                  (value) =>
-                    typeof value === 'string' || typeof value === 'number',
-                )
-                .join(' '),
+                .filter((value) => typeof value === "string" || typeof value === "number")
+                .join(" "),
           },
           ...(showAssignee
             ? [
                 {
-                  key: 'column_7',
-                  header: <>{t('table.assignee')}</>,
-                  className: 'text-slate-500 dark:text-slate-400',
+                  key: "column_7",
+                  header: <>{t("table.assignee")}</>,
+                  className: "text-slate-500 dark:text-slate-400",
                   cell: (r: ApprovalRow) => <>{r.assignee}</>,
                   search: (r: ApprovalRow) =>
                     Object.values(r)
-                      .filter(
-                        (value) =>
-                          typeof value === 'string' ||
-                          typeof value === 'number',
-                      )
-                      .join(' '),
+                      .filter((value) => typeof value === "string" || typeof value === "number")
+                      .join(" "),
                 },
               ]
             : []),
           ...(actionsEnabled
             ? [
                 {
-                  key: 'column_8',
-                  header: <>{t('table.decision')}</>,
+                  key: "column_8",
+                  header: <>{t("table.decision")}</>,
                   cell: (r: ApprovalRow) => (
                     <>
                       {r.awaitingAnotherApprover ? (
                         <span
                           className="inline-flex max-w-64 items-center gap-1.5 truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                          title={tc('approvalFlow.awaitingAnother')}
+                          title={tc("approvalFlow.awaitingAnother")}
                         >
-                          {tc('approvalFlow.awaitingAnother')}
+                          {tc("approvalFlow.awaitingAnother")}
                         </span>
                       ) : r.gateId != null && (r.canDecide || r.canDelegate) ? (
                         <GateActions
@@ -523,17 +450,13 @@ export function ApprovalsTable({
                   ),
                   search: (r: ApprovalRow) =>
                     Object.values(r)
-                      .filter(
-                        (value) =>
-                          typeof value === 'string' ||
-                          typeof value === 'number',
-                      )
-                      .join(' '),
+                      .filter((value) => typeof value === "string" || typeof value === "number")
+                      .join(" "),
                 },
               ]
             : []),
         ]}
       />
     </div>
-  )
+  );
 }

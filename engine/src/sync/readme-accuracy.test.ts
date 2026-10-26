@@ -7,9 +7,9 @@ import { TAX_RETURN_PACKS } from "../tax/seed-tax-forms.ts";
 const readme = readFileSync("README.md", "utf8");
 
 test("README screenshots and animated repository cards resolve to tracked assets", () => {
-  const sources = [
-    ...readme.matchAll(/(?:src|srcset)="([^"#?]+)"/g),
-  ].map((match) => match[1]!).filter((source) => !source.startsWith("http"));
+  const sources = [...readme.matchAll(/(?:src|srcset)="([^"#?]+)"/g)]
+    .map((match) => match[1]!)
+    .filter((source) => !source.startsWith("http"));
   assert.ok(sources.includes(".github/codeflow-card.svg"));
   for (const source of sources) {
     assert.ok(existsSync(source), `README asset does not exist: ${source}`);
@@ -43,7 +43,8 @@ test("README connector, locale, and container claims match shipped files", () =>
 
   const compose = readFileSync("compose.yaml", "utf8");
   const installer = readFileSync("scripts/compose-up.sh", "utf8");
-  const packageVersion = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
+  const packageVersion = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string })
+    .version;
   assert.match(
     compose,
     /image: \$\{OPENBOOKS_IMAGE:\?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest\}/,
@@ -54,7 +55,9 @@ test("README connector, locale, and container claims match shipped files", () =>
   assert.match(readme, /resolves the official release to an\s+immutable\s+image digest/);
   assert.match(
     installer,
-    new RegExp(`official_openbooks_image=ghcr\\.io/braedonsaunders/openbooks:${packageVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+    new RegExp(
+      `official_openbooks_image=ghcr\\.io/braedonsaunders/openbooks:${packageVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+    ),
   );
   assert.match(installer, /docker pull "\$official_openbooks_image"/);
   assert.match(installer, /docker image inspect "\$official_openbooks_image"/);

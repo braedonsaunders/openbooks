@@ -57,7 +57,8 @@ export interface EnduranceDayResult {
 /** Play one endurance day: dayStart → autopilot → adversarial probes → dayEnd. */
 export async function enduranceDay(runDir: string): Promise<EnduranceDayResult> {
   const start = await dayStart(runDir);
-  if (start.halted) return { simDate: start.simDate, done: false, halted: start.halted, probesRun: [] };
+  if (start.halted)
+    return { simDate: start.simDate, done: false, halted: start.halted, probesRun: [] };
   if (start.done) return { simDate: start.simDate, done: true, probesRun: [] };
 
   const { manifest, world } = loadRun(runDir);
@@ -90,8 +91,14 @@ export async function enduranceDay(runDir: string): Promise<EnduranceDayResult> 
  * run is reproducible from (profile, seed) alone. Failures write a defect
  * bundle and flag the manifest halted.
  */
-async function runAdversarialProbes(runDir: string, manifest: RunManifest, world: SimOrg): Promise<string[]> {
-  const rng = Rng.fromSeed(`adversarial:${manifest.profileId}:${manifest.seed}:${manifest.simDate}`);
+async function runAdversarialProbes(
+  runDir: string,
+  manifest: RunManifest,
+  world: SimOrg,
+): Promise<string[]> {
+  const rng = Rng.fromSeed(
+    `adversarial:${manifest.profileId}:${manifest.seed}:${manifest.simDate}`,
+  );
   const ran: string[] = [];
 
   const probes: { name: string; chance: number; run: () => Promise<InvariantResult> }[] = [
@@ -108,9 +115,21 @@ async function runAdversarialProbes(runDir: string, manifest: RunManifest, world
       },
     },
     { name: "adversarial_posted_edit", chance: 0.1, run: () => postedEditProbe(world) },
-    { name: "adversarial_over_application", chance: 0.08, run: () => overApplicationProbe(world, manifest.simDate) },
-    { name: "adversarial_reversal_symmetry", chance: 0.06, run: () => reversalSymmetryProbe(world, manifest.simDate) },
-    { name: "adversarial_void_recreate", chance: 0.05, run: () => voidRecreateProbe(world, manifest.simDate) },
+    {
+      name: "adversarial_over_application",
+      chance: 0.08,
+      run: () => overApplicationProbe(world, manifest.simDate),
+    },
+    {
+      name: "adversarial_reversal_symmetry",
+      chance: 0.06,
+      run: () => reversalSymmetryProbe(world, manifest.simDate),
+    },
+    {
+      name: "adversarial_void_recreate",
+      chance: 0.05,
+      run: () => voidRecreateProbe(world, manifest.simDate),
+    },
   ];
 
   for (const probe of probes) {
@@ -138,7 +157,8 @@ async function runAdversarialProbes(runDir: string, manifest: RunManifest, world
       phase: `adversarial (${probe.name})`,
       failures: result.failures,
     });
-    for (const f of result.failures) manifest.defects.push({ simDate: manifest.simDate, invariant: f.invariant, dir });
+    for (const f of result.failures)
+      manifest.defects.push({ simDate: manifest.simDate, invariant: f.invariant, dir });
     manifest.status = "halted";
     writeManifest(runDir, manifest);
     return ran;
@@ -164,13 +184,16 @@ export interface RegenSweepResult {
 
 /** Trial-balance fingerprint: total debits|credits|account count. */
 async function tbFingerprint(orgId: string): Promise<string> {
-  const r = (await db.execute<{ debits: string; credits: string; accounts: string }>(sql`
+  const r = await db.execute<{ debits: string; credits: string; accounts: string }>(
+    sql`
     select coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0)::text as debits,
            coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0)::text as credits,
            count(distinct l.account_id)::text as accounts
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${orgId}`, "objects"));
+     where l.org_id = ${orgId}`,
+    "objects",
+  );
   const row = r[0]!;
   return `${row.debits}|${row.credits}|${row.accounts}`;
 }
@@ -182,11 +205,14 @@ async function tbFingerprint(orgId: string): Promise<string> {
  */
 export async function regenSweep(orgId: string): Promise<RegenSweepResult> {
   const deps: PostingDeps = { ...(await paymentControlDeps(orgId)), migration: true };
-  const docs = (await db.execute<{ id: string; kind: string; entry_status: string }>(sql`
+  const docs = await db.execute<{ id: string; kind: string; entry_status: string }>(
+    sql`
     select d.id, d.kind, e.status as entry_status from documents d
       join journal_entries e on e.id = d.posted_entry_id
      where d.org_id = ${orgId} and d.status = 'posted'
-     order by d.created_at`, "objects"));
+     order by d.created_at`,
+    "objects",
+  );
 
   const before = await tbFingerprint(orgId);
   const changed: RegenSweepResult["changed"] = [];
@@ -240,14 +266,26 @@ export async function enduranceFinale(runDir: string): Promise<EnduranceReport> 
   const sweep = await withOrgContext(manifest.orgId, () => regenSweep(manifest.orgId));
 
   const leap: string[] = [];
-  for (let y = Number(manifest.startDate.slice(0, 4)); y <= Number(manifest.endDate.slice(0, 4)); y++) {
+  for (
+    let y = Number(manifest.startDate.slice(0, 4));
+    y <= Number(manifest.endDate.slice(0, 4));
+    y++
+  ) {
     const feb29 = `${y}-02-29`;
-    if (new Date(`${feb29}T00:00:00Z`).getUTCDate() === 29 && feb29 >= manifest.startDate && feb29 <= manifest.simDate) {
+    if (
+      new Date(`${feb29}T00:00:00Z`).getUTCDate() === 29 &&
+      feb29 >= manifest.startDate &&
+      feb29 <= manifest.simDate
+    ) {
       leap.push(feb29);
     }
   }
   const yearEnds = new Set<string>();
-  for (let y = Number(manifest.startDate.slice(0, 4)); y <= Number(manifest.endDate.slice(0, 4)); y++) {
+  for (
+    let y = Number(manifest.startDate.slice(0, 4));
+    y <= Number(manifest.endDate.slice(0, 4));
+    y++
+  ) {
     const eoy = `${y}-12-31`;
     if (eoy >= manifest.startDate && eoy <= manifest.simDate) yearEnds.add(eoy);
   }
@@ -258,7 +296,9 @@ export async function enduranceFinale(runDir: string): Promise<EnduranceReport> 
   }
 
   const days =
-    (Date.parse(`${manifest.simDate}T00:00:00Z`) - Date.parse(`${manifest.startDate}T00:00:00Z`)) / 86_400_000 + 1;
+    (Date.parse(`${manifest.simDate}T00:00:00Z`) - Date.parse(`${manifest.startDate}T00:00:00Z`)) /
+      86_400_000 +
+    1;
 
   const report: EnduranceReport = {
     runId: manifest.runId,

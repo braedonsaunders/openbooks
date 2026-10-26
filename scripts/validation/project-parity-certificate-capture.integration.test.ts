@@ -6,17 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const CERTIFICATE =
   process.env.G37_CERTIFICATE_UNDER_TEST ??
-  fileURLToPath(
-    new URL("./project-parity-certificate.ts", import.meta.url),
-  );
+  fileURLToPath(new URL("./project-parity-certificate.ts", import.meta.url));
 
 const sha256 = (path: string): string =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -158,9 +153,7 @@ function runCertificate(
   });
 }
 
-const projects = [
-  { id: "1", entityid: "P1", companyname: "Project One", isinactive: "F" },
-];
+const projects = [{ id: "1", entityid: "P1", companyname: "Project One", isinactive: "F" }];
 
 const freshFinancials = () => [
   {
@@ -179,10 +172,7 @@ test("an unmodified capture still certifies coherence", { skip: !DB }, async () 
     const { code, certificate } = await runCertificate(org.orgId, files);
     assert.equal(code, 0);
     assert.equal(gate(certificate, "sourceSnapshotCoherence").status, "exact");
-    assert.match(
-      gate(certificate, "sourceSnapshotCoherence").detail ?? "",
-      /hash-bound/,
-    );
+    assert.match(gate(certificate, "sourceSnapshotCoherence").detail ?? "", /hash-bound/);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -193,9 +183,9 @@ test("a tampered financial amount fails provenance, not exact", { skip: !DB }, a
   try {
     const { files } = writeCapture({ projects, financials: freshFinancials() });
     // Edit the amount after capture, keeping job IDs and fetchedAt intact.
-    const rows = JSON.parse(
-      readFileSync(files.sourceProjectFinancials!, "utf8"),
-    ) as Array<Record<string, unknown>>;
+    const rows = JSON.parse(readFileSync(files.sourceProjectFinancials!, "utf8")) as Array<
+      Record<string, unknown>
+    >;
     rows[0]!.cost = "9999.0000";
     writeFileSync(files.sourceProjectFinancials!, JSON.stringify(rows));
     const { code, certificate } = await runCertificate(org.orgId, files);
@@ -206,10 +196,7 @@ test("a tampered financial amount fails provenance, not exact", { skip: !DB }, a
       coherence.detail ?? "",
       /sourceProjectFinancials hash changed after source capture/,
     );
-    assert.notEqual(
-      gate(certificate, "sourceProjectFinancialMeasures").status,
-      "exact",
-    );
+    assert.notEqual(gate(certificate, "sourceProjectFinancialMeasures").status, "exact");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -228,10 +215,7 @@ test("an artifact with no capture hash refuses by name", { skip: !DB }, async ()
     assert.equal(code, 0);
     const coherence = gate(certificate, "sourceSnapshotCoherence");
     assert.equal(coherence.status, "unproven");
-    assert.match(
-      coherence.detail ?? "",
-      /sourceProjectFinancials \(.*\) has no capture hash/,
-    );
+    assert.match(coherence.detail ?? "", /sourceProjectFinancials \(.*\) has no capture hash/);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -250,18 +234,15 @@ test("a field-ticket TSV edited after capture fails the same way", { skip: !DB }
     });
     writeFileSync(
       files.fieldTicketHeaders!,
-      [
-        "1\tFT-1-EDITED\t1\tE1\tC1\t01/06/2024\t01/12/2024\tNo\tNo\tYes\tF1\tNULL\tWeek one",
-      ].join("\n"),
+      ["1\tFT-1-EDITED\t1\tE1\tC1\t01/06/2024\t01/12/2024\tNo\tNo\tYes\tF1\tNULL\tWeek one"].join(
+        "\n",
+      ),
     );
     const { code, certificate } = await runCertificate(org.orgId, files);
     assert.equal(code, 0);
     const coherence = gate(certificate, "sourceSnapshotCoherence");
     assert.equal(coherence.status, "unproven");
-    assert.match(
-      coherence.detail ?? "",
-      /fieldTicketHeaders hash changed after source capture/,
-    );
+    assert.match(coherence.detail ?? "", /fieldTicketHeaders hash changed after source capture/);
   } finally {
     await dropScratchOrg(org.orgId);
   }

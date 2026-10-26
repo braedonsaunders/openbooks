@@ -8,7 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 

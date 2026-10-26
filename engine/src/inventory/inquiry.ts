@@ -5,8 +5,7 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { InventoryError } from "./contracts.ts";
 import { inspectionHoldReason } from "./inspection-holds.ts";
 
-export type InventoryInquiry =
-  "holds" | "consignment" | "cycle_due" | "layers" | "consumptions";
+export type InventoryInquiry = "holds" | "consignment" | "cycle_due" | "layers" | "consumptions";
 /** Scoped operational inquiry; cost evidence stays linked to native receipts and journals. */
 export async function inventoryInquiry(
   orgId: string,
@@ -26,29 +25,20 @@ export async function inventoryInquiry(
   if (!Number.isInteger(page) || page < 0 || page > 100000)
     throw new InventoryError("Invalid inquiry page");
   return withOrgTransaction(orgId, async () => {
-    const allowed = await lockActorCommandAuthority(
-      db,
-      orgId,
-      actorId,
-      null,
-      "items.read",
-    );
+    const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, "items.read");
     const scope =
       allowed === null
         ? sql``
         : sql`and subject.subsidiary_id=any(${`{${[...allowed].join(",")}}`}::uuid[])`;
     if (!(await orgFeatureEnabled(orgId, "inventory", db)))
       throw new InventoryError("Inventory is disabled");
-    if (
-      query.view === "consignment" &&
-      !(await orgFeatureEnabled(orgId, "consignment", db))
-    )
+    if (query.view === "consignment" && !(await orgFeatureEnabled(orgId, "consignment", db)))
       throw new InventoryError("Consignment is disabled");
     let source: ReturnType<typeof sql>;
     if (query.view === "holds") {
       source = sql`select distinct subject.subsidiary_id,h.id as subject_id,h.kind||':'||h.id::text||':'||coalesce(subject.subsidiary_id::text,'') as id,h.kind,h.identifier,h.item_id,item.name as item,h.hold_reason as reason,h.expires_on::text as expiry
-        from (select org_id,id,item_id,'lot' as kind,lot_number as identifier,coalesce(hold_reason,${inspectionHoldReason(sql`lots.org_id`,sql`lots.id`,sql`null::uuid`)}) as hold_reason,expires_on from lots
-          union all select org_id,id,item_id,'serial',serial_number,coalesce(hold_reason,${inspectionHoldReason(sql`serials.org_id`,sql`serials.lot_id`,sql`serials.id`)}),null::date from serials) h
+        from (select org_id,id,item_id,'lot' as kind,lot_number as identifier,coalesce(hold_reason,${inspectionHoldReason(sql`lots.org_id`, sql`lots.id`, sql`null::uuid`)}) as hold_reason,expires_on from lots
+          union all select org_id,id,item_id,'serial',serial_number,coalesce(hold_reason,${inspectionHoldReason(sql`serials.org_id`, sql`serials.lot_id`, sql`serials.id`)}),null::date from serials) h
         join items item on item.org_id=h.org_id and item.id=h.item_id
         left join (select org_id,item_id,lot_id,serial_id,subsidiary_id from inventory_movements
           union all select org_id,item_id,lot_id,serial_id,subsidiary_id from consignment_stock) subject on subject.org_id=h.org_id and subject.item_id=h.item_id
@@ -84,8 +74,7 @@ export async function inventoryInquiry(
       // Legal entity identity is projected once; the generic scope above is for stock subject rows.
       source = sql`select * from (${source}) cycle`;
     } else if (query.view === "layers") {
-      if (!query.itemId)
-        throw new InventoryError("Choose an item for layer inquiry");
+      if (!query.itemId) throw new InventoryError("Choose an item for layer inquiry");
       source = sql`select subject.id,subject.item_id,subject.subsidiary_id,sl.code as location,subject.received_at::date::text as date,
         subject.original_quantity::text as received,subject.remaining_quantity::text as remaining,subject.unit_cost::text as unit_cost,
         round(subject.remaining_quantity*subject.unit_cost,4)::text as value,source.kind as source_kind,source.id as source_movement_id,
@@ -113,12 +102,16 @@ export async function inventoryInquiry(
         where subject.org_id=${orgId} and subject.id=${query.layerId} ${scope}`;
     }
     const filtered = sql`select inquiry.*,(select name from subsidiaries entity where entity.org_id=${orgId} and entity.id=inquiry.subsidiary_id) as entity from (${source}) inquiry ${query.search ? sql`where inquiry::text ilike ${`%${query.search}%`}` : sql``}`;
-    const count = (await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from (${filtered}) counted`, "objects",
-      ))[0]!.n;
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from (${filtered}) counted`,
+        "objects",
+      )
+    )[0]!.n;
     const rows = await db.execute<Record<string, unknown>>(
-        sql`${filtered} order by id limit 50 offset ${page * 50}`, "objects",
-      );
+      sql`${filtered} order by id limit 50 offset ${page * 50}`,
+      "objects",
+    );
     return {
       rows,
       totalCount: count,

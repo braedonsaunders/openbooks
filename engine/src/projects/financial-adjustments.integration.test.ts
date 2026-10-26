@@ -8,11 +8,7 @@ import {
   reverseProjectFinancialAdjustment,
 } from "./financial-adjustments.ts";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -36,13 +32,15 @@ test(
         createScratchUser(org.orgId, "Financial Adjustment Operator", "admin"),
       );
       const projectId = randomUUID();
-      await withBypass(() => db.execute(sql`
+      await withBypass(() =>
+        db.execute(sql`
         insert into projects
           (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values
           (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-ADJ',
            'Adjustment evidence job', ${org.customerId}, 'active', true, '{}'::jsonb)
-      `));
+      `),
+      );
 
       const input = {
         orgId: org.orgId,
@@ -56,12 +54,17 @@ test(
         evidence: { ticket: "FIN-2048", approvedBy: actorId },
         actorId,
       };
-      const concurrentOriginals = await withOrgContext(org.orgId, () => Promise.all([
-        recordProjectFinancialAdjustment(input),
-        recordProjectFinancialAdjustment(input),
-      ]));
-      assert.equal(new Set(concurrentOriginals.map((entry) => entry.id)).size, 1,
-        "concurrent first writes with one source identity resolve to one adjustment");
+      const concurrentOriginals = await withOrgContext(org.orgId, () =>
+        Promise.all([
+          recordProjectFinancialAdjustment(input),
+          recordProjectFinancialAdjustment(input),
+        ]),
+      );
+      assert.equal(
+        new Set(concurrentOriginals.map((entry) => entry.id)).size,
+        1,
+        "concurrent first writes with one source identity resolve to one adjustment",
+      );
       assert.deepEqual(concurrentOriginals.map((entry) => entry.existing).sort(), [false, true]);
       const original = concurrentOriginals.find((entry) => !entry.existing)!;
       assert.deepEqual(original, {
@@ -77,55 +80,63 @@ test(
       assert.equal(costs.profileErrors.size, 0);
       assert.equal(costs.costs.get(projectId), "75.1200");
 
-      const replay = await withOrgContext(org.orgId, () =>
-        recordProjectFinancialAdjustment(input),
-      );
+      const replay = await withOrgContext(org.orgId, () => recordProjectFinancialAdjustment(input));
       assert.deepEqual(replay, { ...original, existing: true });
       await assert.rejects(
-        withOrgContext(org.orgId, () => recordProjectFinancialAdjustment({
-          ...input,
-          amount: "76.12",
-        })),
+        withOrgContext(org.orgId, () =>
+          recordProjectFinancialAdjustment({
+            ...input,
+            amount: "76.12",
+          }),
+        ),
         /source identity legacy-import\/cost-correction-2048 already has different evidence/,
       );
 
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.execute(sql`
+        withOrgContext(org.orgId, () =>
+          db.execute(sql`
           update project_financial_adjustments set amount = '76.1200'
            where id = ${original.id} and org_id = ${org.orgId}
-        `)),
-        (error: unknown) => causedByMessage(
-          error,
-          "project financial adjustments are append-only; post a reversing adjustment",
+        `),
         ),
+        (error: unknown) =>
+          causedByMessage(
+            error,
+            "project financial adjustments are append-only; post a reversing adjustment",
+          ),
       );
       const afterRejectedMutation = await withOrgContext(org.orgId, () =>
         resolveProjectActualCosts(org.orgId, [projectId]),
       );
       assert.equal(afterRejectedMutation.costs.get(projectId), "75.1200");
 
-      const concurrentReversals = await withOrgContext(org.orgId, () => Promise.all([
-        reverseProjectFinancialAdjustment({
-          orgId: org.orgId,
-          adjustmentId: original.id,
-          adjustmentDate: org.date,
-          reason: "reverse approved correction",
-          actorId,
-          sourceSystem: "legacy-import",
-          sourceRef: "cost-correction-2048-reversal",
-        }),
-        reverseProjectFinancialAdjustment({
-          orgId: org.orgId,
-          adjustmentId: original.id,
-          adjustmentDate: org.date,
-          reason: "reverse approved correction",
-          actorId,
-          sourceSystem: "legacy-import",
-          sourceRef: "cost-correction-2048-reversal",
-        }),
-      ]));
-      assert.equal(new Set(concurrentReversals.map((entry) => entry.id)).size, 1,
-        "concurrent reversal requests resolve to one append-only reversal");
+      const concurrentReversals = await withOrgContext(org.orgId, () =>
+        Promise.all([
+          reverseProjectFinancialAdjustment({
+            orgId: org.orgId,
+            adjustmentId: original.id,
+            adjustmentDate: org.date,
+            reason: "reverse approved correction",
+            actorId,
+            sourceSystem: "legacy-import",
+            sourceRef: "cost-correction-2048-reversal",
+          }),
+          reverseProjectFinancialAdjustment({
+            orgId: org.orgId,
+            adjustmentId: original.id,
+            adjustmentDate: org.date,
+            reason: "reverse approved correction",
+            actorId,
+            sourceSystem: "legacy-import",
+            sourceRef: "cost-correction-2048-reversal",
+          }),
+        ]),
+      );
+      assert.equal(
+        new Set(concurrentReversals.map((entry) => entry.id)).size,
+        1,
+        "concurrent reversal requests resolve to one append-only reversal",
+      );
       assert.deepEqual(concurrentReversals.map((entry) => entry.existing).sort(), [false, true]);
       const reversal = concurrentReversals.find((entry) => !entry.existing)!;
       assert.equal(reversal.measure, "actual_cost");
@@ -140,7 +151,8 @@ test(
           action: string;
           amount: string;
           reverses_adjustment_id: string | null;
-        }>(sql`
+        }>(
+          sql`
           select a.row_id, a.actor_id, a.action,
                  a.changes #>> '{after,amount}' as amount,
                  pfa.reverses_adjustment_id
@@ -151,7 +163,9 @@ test(
              and a.table_name = 'project_financial_adjustments'
              and pfa.project_id = ${projectId}
            order by pfa.reverses_adjustment_id nulls first
-        `, "objects");
+        `,
+          "objects",
+        );
         assert.deepEqual(audit, [
           {
             row_id: original.id,

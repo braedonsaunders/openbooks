@@ -79,7 +79,8 @@ export function sourcePeriodWindowReader(
         )
         .then((rows) => {
           const row = rows[0];
-          if (!row) throw new Error(`accounting period ${periodId} does not exist in this organization`);
+          if (!row)
+            throw new Error(`accounting period ${periodId} does not exist in this organization`);
           return { periodId, start: row.window_start, end: row.window_end };
         });
       windows.set(periodId, window);

@@ -9,7 +9,11 @@ import test from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/sandboxes/change-sets?changeSet=cs1", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/sandboxes/change-sets?changeSet=cs1",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -144,7 +148,10 @@ test("an actionable change set renders French drawer copy", async (t) => {
     assert.ok(text.includes(expected), `the French drawer must render ${JSON.stringify(expected)}`);
   }
   for (const leaked of ENGLISH) {
-    assert.ok(!text.includes(leaked), `no English literal may leak into the French drawer: ${leaked}`);
+    assert.ok(
+      !text.includes(leaked),
+      `no English literal may leak into the French drawer: ${leaked}`,
+    );
   }
 
   // Drill into the row: the capture sections translate too.
@@ -161,7 +168,10 @@ test("an actionable change set renders French drawer copy", async (t) => {
     "Instantané de production indisponible",
     "Configuration proposée",
   ]) {
-    assert.ok(detail.includes(expected), `the French drill-down must render ${JSON.stringify(expected)}`);
+    assert.ok(
+      detail.includes(expected),
+      `the French drill-down must render ${JSON.stringify(expected)}`,
+    );
   }
   assert.ok(
     !/Back to captured changes/.test(detail),

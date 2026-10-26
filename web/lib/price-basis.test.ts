@@ -31,11 +31,46 @@ test("a null basis means hand-priced", () => {
 test("lineage the kind cannot resolve from is refused", () => {
   for (const raw of [
     { kind: "gold", ...IDS, unitPrice: "100", resolvedAt: "2026-09-24T10:00:00.000Z" },
-    { kind: "customer_level", scheduleId: IDS.scheduleId, levelId: null, assignmentId: IDS.assignmentId, unitPrice: "100", resolvedAt: "2026-09-24T10:00:00.000Z" },
-    { kind: "customer_level", scheduleId: IDS.scheduleId, levelId: IDS.levelId, assignmentId: "not-a-uuid", unitPrice: "100", resolvedAt: "2026-09-24T10:00:00.000Z" },
-    { kind: "base_level", scheduleId: null, levelId: IDS.levelId, assignmentId: null, unitPrice: "80", resolvedAt: "2026-09-24T10:00:00.000Z" },
-    { kind: "base_level", scheduleId: IDS.scheduleId, levelId: IDS.levelId, assignmentId: null, unitPrice: "not-a-number", resolvedAt: "2026-09-24T10:00:00.000Z" },
-    { kind: "simple", scheduleId: null, levelId: null, assignmentId: null, unitPrice: "50", resolvedAt: "yesterday" },
+    {
+      kind: "customer_level",
+      scheduleId: IDS.scheduleId,
+      levelId: null,
+      assignmentId: IDS.assignmentId,
+      unitPrice: "100",
+      resolvedAt: "2026-09-24T10:00:00.000Z",
+    },
+    {
+      kind: "customer_level",
+      scheduleId: IDS.scheduleId,
+      levelId: IDS.levelId,
+      assignmentId: "not-a-uuid",
+      unitPrice: "100",
+      resolvedAt: "2026-09-24T10:00:00.000Z",
+    },
+    {
+      kind: "base_level",
+      scheduleId: null,
+      levelId: IDS.levelId,
+      assignmentId: null,
+      unitPrice: "80",
+      resolvedAt: "2026-09-24T10:00:00.000Z",
+    },
+    {
+      kind: "base_level",
+      scheduleId: IDS.scheduleId,
+      levelId: IDS.levelId,
+      assignmentId: null,
+      unitPrice: "not-a-number",
+      resolvedAt: "2026-09-24T10:00:00.000Z",
+    },
+    {
+      kind: "simple",
+      scheduleId: null,
+      levelId: null,
+      assignmentId: null,
+      unitPrice: "50",
+      resolvedAt: "yesterday",
+    },
     "customer_level",
     ["customer_level"],
   ]) {
@@ -46,8 +81,12 @@ test("lineage the kind cannot resolve from is refused", () => {
 
 test("the drawer echoes a basis only for the price it resolved", () => {
   const basis = {
-    kind: "customer_level" as const, scheduleId: IDS.scheduleId, levelId: IDS.levelId,
-    assignmentId: IDS.assignmentId, unitPrice: "100", resolvedAt: "2026-09-24T10:00:00.000Z",
+    kind: "customer_level" as const,
+    scheduleId: IDS.scheduleId,
+    levelId: IDS.levelId,
+    assignmentId: IDS.assignmentId,
+    unitPrice: "100",
+    resolvedAt: "2026-09-24T10:00:00.000Z",
   };
   const row = { itemId: "item-1", unitPrice: "100" };
   assert.equal(
@@ -56,7 +95,10 @@ test("the drawer echoes a basis only for the price it resolved", () => {
   );
   assert.equal(basisForResolvedRow({ row, resolved: undefined }), null);
   assert.equal(
-    basisForResolvedRow({ row: { ...row, unitPrice: "90" }, resolved: { itemId: "item-1", unitPrice: "100", basis } }),
+    basisForResolvedRow({
+      row: { ...row, unitPrice: "90" },
+      resolved: { itemId: "item-1", unitPrice: "100", basis },
+    }),
     null,
     "a hand-edited price loses its lineage",
   );

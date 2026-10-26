@@ -87,297 +87,405 @@ async function seedStoredValueOrg(): Promise<StoredValueFixture> {
       insert into items (id, org_id, kind, code, name, income_account_id, created_by, updated_by)
       values (${giftItem}, ${org.orgId}, 'gift_card', 'GIFTCARD', 'Gift card', ${org.accounts.revenue}, ${actorId}, ${actorId})`);
   });
-  return { org, actorId, liability, breakageIncome, giftProgram: giftProgram.id, creditProgram: creditProgram.id, giftItem };
+  return {
+    org,
+    actorId,
+    liability,
+    breakageIncome,
+    giftProgram: giftProgram.id,
+    creditProgram: creditProgram.id,
+    giftItem,
+  };
 }
 
 async function entryBalanced(orgId: string, entryId: string): Promise<boolean> {
-  const rows = await withBypass(() => db.execute<{ balanced: boolean }>(sql`
+  const rows = await withBypass(() =>
+    db.execute<{ balanced: boolean }>(
+      sql`
     select coalesce(sum(amount), 0) = 0 as balanced from journal_lines
-     where org_id = ${orgId} and entry_id = ${entryId}`, "objects"));
+     where org_id = ${orgId} and entry_id = ${entryId}`,
+      "objects",
+    ),
+  );
   return rows[0]?.balanced ?? false;
 }
 
 async function accountState(orgId: string, accountId: string) {
-  return (await withBypass(() => db.execute<{
-    balance: string; issued: string; recognized: string; status: string; entries: number; journalId: string | null;
-  }>(sql`
+  return (
+    await withBypass(() =>
+      db.execute<{
+        balance: string;
+        issued: string;
+        recognized: string;
+        status: string;
+        entries: number;
+        journalId: string | null;
+      }>(
+        sql`
     select a.balance_minor::text as balance, a.issued_minor::text as issued,
            a.breakage_recognized_minor::text as recognized, a.status,
            (select count(*)::int from stored_value_entries where org_id = ${orgId} and account_id = ${accountId}) as entries,
            (select journal_entry_id from stored_value_entries where org_id = ${orgId} and account_id = ${accountId} and kind = 'issue') as "journalId"
-      from stored_value_accounts a where a.org_id = ${orgId} and a.id = ${accountId}`, "objects")))[0]!;
+      from stored_value_accounts a where a.org_id = ${orgId} and a.id = ${accountId}`,
+        "objects",
+      ),
+    )
+  )[0]!;
 }
 
-test("a gift card sale posts the liability, never revenue, and mints a redeemable account", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  try {
-    const invoiceId = randomUUID();
-    await withBypass(async () => {
-      await db.execute(sql`
+test(
+  "a gift card sale posts the liability, never revenue, and mints a redeemable account",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    try {
+      const invoiceId = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
            document_date, currency, fx_rate, status, subtotal, tax_total, total,
            created_by, updated_by)
         values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'INV-SV-1', ${org.customerId},
           ${org.subsidiaryId}, ${org.date}, 'CAD', '1', 'draft', '50', '0', '50', ${actorId}, ${actorId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount,
            tax_input_amount, tax_amount, custom, created_by, updated_by)
         values (${org.orgId}, ${invoiceId}, 1, ${fx.giftItem}, ${org.accounts.revenue}, '1', '50', '50',
           '50', '0', ${JSON.stringify({ storedValueProgramId: fx.giftProgram })}::jsonb, ${actorId}, ${actorId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
-    });
-    const entryId = await withBypass(() =>
-      postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }),
-    );
-    const legs = await withBypass(() => db.execute<{ account: string; amount: string }>(sql`
-      select account_id as account, amount::text as amount from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${entryId} order by account_id`, "objects"));
-    const byAccount = new Map(legs.map((leg) => [leg.account, leg.amount]));
-    assert.equal(byAccount.get(fx.liability), "-50.0000");
-    assert.ok(!byAccount.has(org.accounts.revenue), "gift card sale must not touch revenue");
-    assert.equal(await entryBalanced(org.orgId, entryId), true);
-    const accounts = await withBypass(() => db.execute<{ id: string }>(sql`
-      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${invoiceId}`, "objects"));
-    assert.equal(accounts.length, 1);
-    const state = await accountState(org.orgId, accounts[0]!.id);
-    assert.equal(state.balance, "500000");
-    assert.equal(state.issued, "500000");
-    assert.equal(state.status, "active");
-    assert.equal(state.entries, 1);
-    assert.equal(state.journalId, entryId);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("two concurrent redemptions cannot overdraw: one wins, the other is refused with the balance", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  try {
-    const issued = await withBypass(() =>
-      issueStoredValue({
-        orgId: org.orgId, allowedSubsidiaryIds: null,
-        programId: fx.giftProgram,
-        amountMinor: toUnits("100"),
-        currency: "CAD",
-        debitAccountId: org.accounts.bank,
-        postingDate: org.date,
-        idempotencyKey: `race-${randomUUID()}`,
-        actorId,
-      }),
-    );
-    const attempt = (key: string) =>
-      withOrgTransaction(org.orgId, () =>
-        redeemStoredValue({
-          orgId: org.orgId, allowedSubsidiaryIds: null,
-          accountId: issued.accountId,
-          amountMinor: toUnits("60"),
-          idempotencyKey: key,
-          actorId,
+      });
+      const entryId = await withBypass(() =>
+        postDocument(invoiceId, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
         }),
       );
-    const [first, second] = await Promise.allSettled([attempt(`race-a-${randomUUID()}`), attempt(`race-b-${randomUUID()}`)]);
-    const fulfilled = [first, second].filter((r) => r.status === "fulfilled");
-    const rejected = [first, second].filter((r) => r.status === "rejected");
-    assert.equal(fulfilled.length, 1);
-    assert.equal(rejected.length, 1);
-    const reason = String((rejected[0] as PromiseRejectedResult).reason?.message ?? (rejected[0] as PromiseRejectedResult).reason);
-    assert.match(reason, /holds 40\.0000/);
-    const state = await accountState(org.orgId, issued.accountId);
-    assert.equal(state.balance, "400000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("proportional breakage recognizes redemptions times r/(1-r) in minor units", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  try {
-    const issued = await withBypass(() =>
-      issueStoredValue({
-        orgId: org.orgId, allowedSubsidiaryIds: null,
-        programId: fx.giftProgram,
-        amountMinor: toUnits("100"),
-        currency: "CAD",
-        debitAccountId: org.accounts.bank,
-        postingDate: org.date,
-        idempotencyKey: `brk-${randomUUID()}`,
-        actorId,
-      }),
-    );
-    await withBypass(() =>
-      redeemStoredValue({
-        orgId: org.orgId, allowedSubsidiaryIds: null,
-        accountId: issued.accountId,
-        amountMinor: toUnits("90"),
-        idempotencyKey: `brk-redeem-${randomUUID()}`,
-        actorId,
-      }),
-    );
-    const result = await runStoredValueBreakage();
-    assert.deepEqual(result.orgErrors, []);
-    assert.equal(result.recognizedAccounts, 1);
-    const state = await accountState(org.orgId, issued.accountId);
-    assert.equal(state.balance, "0");
-    assert.equal(state.recognized, "100000");
-    const entry = await withBypass(() => db.execute<{ kind: string; amount: string; journal: string }>(sql`
-      select kind, amount_minor::text as amount, journal_entry_id as journal
-        from stored_value_entries
-       where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage'`, "objects"));
-    assert.equal(entry.length, 1);
-    assert.equal(entry[0]!.amount, "-100000");
-    const legs = await withBypass(() => db.execute<{ account: string; amount: string }>(sql`
+      const legs = await withBypass(() =>
+        db.execute<{ account: string; amount: string }>(
+          sql`
       select account_id as account, amount::text as amount from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${entry[0]!.journal}`, "objects"));
-    const byAccount = new Map(legs.map((leg) => [leg.account, leg.amount]));
-    assert.equal(byAccount.get(fx.liability), "10.0000");
-    assert.equal(byAccount.get(fx.breakageIncome), "-10.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+       where org_id = ${org.orgId} and entry_id = ${entryId} order by account_id`,
+          "objects",
+        ),
+      );
+      const byAccount = new Map(legs.map((leg) => [leg.account, leg.amount]));
+      assert.equal(byAccount.get(fx.liability), "-50.0000");
+      assert.ok(!byAccount.has(org.accounts.revenue), "gift card sale must not touch revenue");
+      assert.equal(await entryBalanced(org.orgId, entryId), true);
+      const accounts = await withBypass(() =>
+        db.execute<{ id: string }>(
+          sql`
+      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${invoiceId}`,
+          "objects",
+        ),
+      );
+      assert.equal(accounts.length, 1);
+      const state = await accountState(org.orgId, accounts[0]!.id);
+      assert.equal(state.balance, "500000");
+      assert.equal(state.issued, "500000");
+      assert.equal(state.status, "active");
+      assert.equal(state.entries, 1);
+      assert.equal(state.journalId, entryId);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a second scan in one period and a replayed redemption each move the balance at most once", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  try {
-    await withSimClock("2026-10-15T12:00:00Z", async () => {
+test(
+  "two concurrent redemptions cannot overdraw: one wins, the other is refused with the balance",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    try {
       const issued = await withBypass(() =>
         issueStoredValue({
-          orgId: org.orgId, allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
           programId: fx.giftProgram,
           amountMinor: toUnits("100"),
           currency: "CAD",
           debitAccountId: org.accounts.bank,
           postingDate: org.date,
-          idempotencyKey: `twice-${randomUUID()}`,
+          idempotencyKey: `race-${randomUUID()}`,
           actorId,
         }),
       );
-      const redeem = (amount: string, key: string) =>
-        withBypass(() =>
-          redeemStoredValue({ orgId: org.orgId, allowedSubsidiaryIds: null, accountId: issued.accountId, amountMinor: toUnits(amount), idempotencyKey: key, actorId }),
+      const attempt = (key: string) =>
+        withOrgTransaction(org.orgId, () =>
+          redeemStoredValue({
+            orgId: org.orgId,
+            allowedSubsidiaryIds: null,
+            accountId: issued.accountId,
+            amountMinor: toUnits("60"),
+            idempotencyKey: key,
+            actorId,
+          }),
         );
-      const scan = async () =>
-        (await runStoredValueBreakage()).orgErrors.filter((failure) => failure.orgId === org.orgId);
-      await redeem("45", `twice-a-${randomUUID()}`);
-      assert.deepEqual(await scan(), []);
-      const first = await accountState(org.orgId, issued.accountId);
-      assert.equal(first.balance, "500000");
-      assert.equal(first.recognized, "50000");
-      // A retried redemption returns the first result and moves nothing.
-      const key = `twice-b-${randomUUID()}`;
-      await redeem("18", key);
-      assert.equal((await redeem("18", key)).balanceMinor, toUnits("32"));
-      // The new redemption makes breakage due again, but this period's
-      // recognition is already recorded: the second scan moves nothing.
-      assert.deepEqual(await scan(), []);
-      const after = await accountState(org.orgId, issued.accountId);
-      assert.equal(after.balance, "320000");
-      assert.equal(after.recognized, "50000");
-      const counts = (await withBypass(() => db.execute<{ journals: number; breakage: number }>(sql`
+      const [first, second] = await Promise.allSettled([
+        attempt(`race-a-${randomUUID()}`),
+        attempt(`race-b-${randomUUID()}`),
+      ]);
+      const fulfilled = [first, second].filter((r) => r.status === "fulfilled");
+      const rejected = [first, second].filter((r) => r.status === "rejected");
+      assert.equal(fulfilled.length, 1);
+      assert.equal(rejected.length, 1);
+      const reason = String(
+        (rejected[0] as PromiseRejectedResult).reason?.message ??
+          (rejected[0] as PromiseRejectedResult).reason,
+      );
+      assert.match(reason, /holds 40\.0000/);
+      const state = await accountState(org.orgId, issued.accountId);
+      assert.equal(state.balance, "400000");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "proportional breakage recognizes redemptions times r/(1-r) in minor units",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    try {
+      const issued = await withBypass(() =>
+        issueStoredValue({
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          programId: fx.giftProgram,
+          amountMinor: toUnits("100"),
+          currency: "CAD",
+          debitAccountId: org.accounts.bank,
+          postingDate: org.date,
+          idempotencyKey: `brk-${randomUUID()}`,
+          actorId,
+        }),
+      );
+      await withBypass(() =>
+        redeemStoredValue({
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          accountId: issued.accountId,
+          amountMinor: toUnits("90"),
+          idempotencyKey: `brk-redeem-${randomUUID()}`,
+          actorId,
+        }),
+      );
+      const result = await runStoredValueBreakage();
+      assert.deepEqual(result.orgErrors, []);
+      assert.equal(result.recognizedAccounts, 1);
+      const state = await accountState(org.orgId, issued.accountId);
+      assert.equal(state.balance, "0");
+      assert.equal(state.recognized, "100000");
+      const entry = await withBypass(() =>
+        db.execute<{ kind: string; amount: string; journal: string }>(
+          sql`
+      select kind, amount_minor::text as amount, journal_entry_id as journal
+        from stored_value_entries
+       where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage'`,
+          "objects",
+        ),
+      );
+      assert.equal(entry.length, 1);
+      assert.equal(entry[0]!.amount, "-100000");
+      const legs = await withBypass(() =>
+        db.execute<{ account: string; amount: string }>(
+          sql`
+      select account_id as account, amount::text as amount from journal_lines
+       where org_id = ${org.orgId} and entry_id = ${entry[0]!.journal}`,
+          "objects",
+        ),
+      );
+      const byAccount = new Map(legs.map((leg) => [leg.account, leg.amount]));
+      assert.equal(byAccount.get(fx.liability), "10.0000");
+      assert.equal(byAccount.get(fx.breakageIncome), "-10.0000");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a second scan in one period and a replayed redemption each move the balance at most once",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    try {
+      await withSimClock("2026-10-15T12:00:00Z", async () => {
+        const issued = await withBypass(() =>
+          issueStoredValue({
+            orgId: org.orgId,
+            allowedSubsidiaryIds: null,
+            programId: fx.giftProgram,
+            amountMinor: toUnits("100"),
+            currency: "CAD",
+            debitAccountId: org.accounts.bank,
+            postingDate: org.date,
+            idempotencyKey: `twice-${randomUUID()}`,
+            actorId,
+          }),
+        );
+        const redeem = (amount: string, key: string) =>
+          withBypass(() =>
+            redeemStoredValue({
+              orgId: org.orgId,
+              allowedSubsidiaryIds: null,
+              accountId: issued.accountId,
+              amountMinor: toUnits(amount),
+              idempotencyKey: key,
+              actorId,
+            }),
+          );
+        const scan = async () =>
+          (await runStoredValueBreakage()).orgErrors.filter(
+            (failure) => failure.orgId === org.orgId,
+          );
+        await redeem("45", `twice-a-${randomUUID()}`);
+        assert.deepEqual(await scan(), []);
+        const first = await accountState(org.orgId, issued.accountId);
+        assert.equal(first.balance, "500000");
+        assert.equal(first.recognized, "50000");
+        // A retried redemption returns the first result and moves nothing.
+        const key = `twice-b-${randomUUID()}`;
+        await redeem("18", key);
+        assert.equal((await redeem("18", key)).balanceMinor, toUnits("32"));
+        // The new redemption makes breakage due again, but this period's
+        // recognition is already recorded: the second scan moves nothing.
+        assert.deepEqual(await scan(), []);
+        const after = await accountState(org.orgId, issued.accountId);
+        assert.equal(after.balance, "320000");
+        assert.equal(after.recognized, "50000");
+        const counts = (
+          await withBypass(() =>
+            db.execute<{ journals: number; breakage: number }>(
+              sql`
         select (select count(*)::int from journal_entries
                  where org_id = ${org.orgId} and custom->>'idempotencyKey' like ${`stored-value:breakage:${issued.accountId}:%`}) as journals,
                (select count(*)::int from stored_value_entries
-                 where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage') as breakage`, "objects")))[0]!;
-      assert.deepEqual(counts, { journals: 1, breakage: 1 });
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+                 where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage') as breakage`,
+              "objects",
+            ),
+          )
+        )[0]!;
+        assert.deepEqual(counts, { journals: 1, breakage: 1 });
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a card redeems through its expiry date and the scan sweeps it the day after", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  try {
-    const issued = await withBypass(() =>
-      issueStoredValue({
-        orgId: org.orgId, allowedSubsidiaryIds: null,
-        programId: fx.giftProgram,
-        amountMinor: toUnits("30"),
-        currency: "CAD",
-        expiresOn: "2026-10-15",
-        debitAccountId: org.accounts.bank,
-        postingDate: org.date,
-        idempotencyKey: `lastday-${randomUUID()}`,
-        actorId,
-      }),
-    );
-    const redeem = () =>
-      withBypass(() =>
-        redeemStoredValue({ orgId: org.orgId, allowedSubsidiaryIds: null, accountId: issued.accountId, amountMinor: toUnits("10"), idempotencyKey: `lastday-${randomUUID()}`, actorId }),
+test(
+  "a card redeems through its expiry date and the scan sweeps it the day after",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    try {
+      const issued = await withBypass(() =>
+        issueStoredValue({
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          programId: fx.giftProgram,
+          amountMinor: toUnits("30"),
+          currency: "CAD",
+          expiresOn: "2026-10-15",
+          debitAccountId: org.accounts.bank,
+          postingDate: org.date,
+          idempotencyKey: `lastday-${randomUUID()}`,
+          actorId,
+        }),
       );
-    await withSimClock("2026-10-15T12:00:00Z", async () => {
-      await runStoredValueBreakage();
-      assert.equal((await accountState(org.orgId, issued.accountId)).status, "active");
-      assert.equal((await redeem()).balanceMinor, toUnits("20"));
-    });
-    await withSimClock("2026-10-16T12:00:00Z", async () => {
-      await runStoredValueBreakage();
-      const swept = await accountState(org.orgId, issued.accountId);
-      assert.equal(swept.status, "expired");
-      assert.equal(swept.balance, "0");
-      await assert.rejects(redeem(), /expired/);
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      const redeem = () =>
+        withBypass(() =>
+          redeemStoredValue({
+            orgId: org.orgId,
+            allowedSubsidiaryIds: null,
+            accountId: issued.accountId,
+            amountMinor: toUnits("10"),
+            idempotencyKey: `lastday-${randomUUID()}`,
+            actorId,
+          }),
+        );
+      await withSimClock("2026-10-15T12:00:00Z", async () => {
+        await runStoredValueBreakage();
+        assert.equal((await accountState(org.orgId, issued.accountId)).status, "active");
+        assert.equal((await redeem()).balanceMinor, toUnits("20"));
+      });
+      await withSimClock("2026-10-16T12:00:00Z", async () => {
+        await runStoredValueBreakage();
+        const swept = await accountState(org.orgId, issued.accountId);
+        assert.equal(swept.status, "expired");
+        assert.equal(swept.balance, "0");
+        await assert.rejects(redeem(), /expired/);
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("the scan expires lapsed cards and releases dormant remote balances", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  try {
-    const expiring = await withBypass(() =>
-      issueStoredValue({
-        orgId: org.orgId, allowedSubsidiaryIds: null,
-        programId: fx.giftProgram,
-        amountMinor: toUnits("30"),
-        currency: "CAD",
-        expiresOn: "2026-01-01",
-        debitAccountId: org.accounts.bank,
-        postingDate: org.date,
-        idempotencyKey: `exp-${randomUUID()}`,
-        actorId,
-      }),
-    );
-    const dormant = await withBypass(() =>
-      issueStoredValue({
-        orgId: org.orgId, allowedSubsidiaryIds: null,
-        programId: fx.creditProgram,
-        amountMinor: toUnits("25"),
-        currency: "CAD",
-        customerPartyId: org.customerId,
-        debitAccountId: org.accounts.bank,
-        postingDate: org.date,
-        idempotencyKey: `dor-${randomUUID()}`,
-        actorId,
-      }),
-    );
-    await withBypass(async () => {
-      await db.execute(sql`
+test(
+  "the scan expires lapsed cards and releases dormant remote balances",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    try {
+      const expiring = await withBypass(() =>
+        issueStoredValue({
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          programId: fx.giftProgram,
+          amountMinor: toUnits("30"),
+          currency: "CAD",
+          expiresOn: "2026-01-01",
+          debitAccountId: org.accounts.bank,
+          postingDate: org.date,
+          idempotencyKey: `exp-${randomUUID()}`,
+          actorId,
+        }),
+      );
+      const dormant = await withBypass(() =>
+        issueStoredValue({
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          programId: fx.creditProgram,
+          amountMinor: toUnits("25"),
+          currency: "CAD",
+          customerPartyId: org.customerId,
+          debitAccountId: org.accounts.bank,
+          postingDate: org.date,
+          idempotencyKey: `dor-${randomUUID()}`,
+          actorId,
+        }),
+      );
+      await withBypass(async () => {
+        await db.execute(sql`
         update stored_value_accounts set last_activity_on = '2026-01-01'
          where org_id = ${org.orgId} and id = ${dormant.accountId}`);
-    });
-    const result = await runStoredValueBreakage();
-    assert.deepEqual(result.orgErrors, []);
-    assert.equal(result.recognizedAccounts, 2);
-    const expiredState = await accountState(org.orgId, expiring.accountId);
-    assert.equal(expiredState.status, "expired");
-    assert.equal(expiredState.balance, "0");
-    const dormantState = await accountState(org.orgId, dormant.accountId);
-    assert.equal(dormantState.status, "closed");
-    assert.equal(dormantState.balance, "0");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      });
+      const result = await runStoredValueBreakage();
+      assert.deepEqual(result.orgErrors, []);
+      assert.equal(result.recognizedAccounts, 2);
+      const expiredState = await accountState(org.orgId, expiring.accountId);
+      assert.equal(expiredState.status, "expired");
+      assert.equal(expiredState.balance, "0");
+      const dormantState = await accountState(org.orgId, dormant.accountId);
+      assert.equal(dormantState.status, "closed");
+      assert.equal(dormantState.balance, "0");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("stored-value entries are immutable", { skip: !DB }, async () => {
   const fx = await seedStoredValueOrg();
@@ -385,7 +493,8 @@ test("stored-value entries are immutable", { skip: !DB }, async () => {
   try {
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: org.orgId, allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        allowedSubsidiaryIds: null,
         programId: fx.giftProgram,
         amountMinor: toUnits("10"),
         currency: "CAD",
@@ -400,15 +509,19 @@ test("stored-value entries are immutable", { skip: !DB }, async () => {
       return /immutable/.test(message);
     };
     await assert.rejects(
-      withBypass(() => db.execute(sql`
+      withBypass(() =>
+        db.execute(sql`
         update stored_value_entries set reason = 'rewritten'
-         where org_id = ${org.orgId} and account_id = ${issued.accountId}`)),
+         where org_id = ${org.orgId} and account_id = ${issued.accountId}`),
+      ),
       immutable,
     );
     await assert.rejects(
-      withBypass(() => db.execute(sql`
+      withBypass(() =>
+        db.execute(sql`
         delete from stored_value_entries
-         where org_id = ${org.orgId} and account_id = ${issued.accountId}`)),
+         where org_id = ${org.orgId} and account_id = ${issued.accountId}`),
+      ),
       immutable,
     );
   } finally {
@@ -422,7 +535,8 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
   try {
     const issued = await withBypass(() =>
       issueStoredValue({
-        orgId: first.org.orgId, allowedSubsidiaryIds: null,
+        orgId: first.org.orgId,
+        allowedSubsidiaryIds: null,
         programId: first.giftProgram,
         amountMinor: toUnits("10"),
         currency: "CAD",
@@ -433,8 +547,11 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
       }),
     );
     const visible = await withOrgTransaction(second.org.orgId, async () => {
-      const rows = await db.execute<{ id: string }>(sql`
-        select id from stored_value_accounts where org_id = ${first.org.orgId}`, "objects");
+      const rows = await db.execute<{ id: string }>(
+        sql`
+        select id from stored_value_accounts where org_id = ${first.org.orgId}`,
+        "objects",
+      );
       return rows;
     });
     assert.deepEqual(visible, []);
@@ -443,7 +560,8 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
     await assert.rejects(
       withOrgTransaction(second.org.orgId, () =>
         redeemStoredValue({
-          orgId: first.org.orgId, allowedSubsidiaryIds: null,
+          orgId: first.org.orgId,
+          allowedSubsidiaryIds: null,
           accountId: issued.accountId,
           amountMinor: toUnits("1"),
           idempotencyKey: `rls-redeem-${randomUUID()}`,
@@ -458,7 +576,8 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
     await assert.rejects(
       withBypass(() =>
         redeemStoredValue({
-          orgId: first.org.orgId, allowedSubsidiaryIds: null,
+          orgId: first.org.orgId,
+          allowedSubsidiaryIds: null,
           accountId: randomUUID(),
           amountMinor: toUnits("1"),
           idempotencyKey: `rls-missing-${randomUUID()}`,
@@ -473,139 +592,220 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
   }
 });
 
-test("voids reverse card effects: a receipt returns its tender, a sale takes back an unspent card", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  const control = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
-  const postInvoice = async (number: string, amount: string, giftCard: boolean) => {
-    const invoiceId = randomUUID();
-    await withBypass(async () => {
-      await db.execute(sql`
+test(
+  "voids reverse card effects: a receipt returns its tender, a sale takes back an unspent card",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    const control = {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    };
+    const postInvoice = async (number: string, amount: string, giftCard: boolean) => {
+      const invoiceId = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency, fx_rate,
            status, subtotal, tax_total, total, created_by, updated_by)
         values (${invoiceId}, ${org.orgId}, 'customer_invoice', ${number}, ${org.customerId}, ${org.subsidiaryId},
           ${org.date}, 'CAD', '1', 'draft', ${amount}, '0', ${amount}, ${actorId}, ${actorId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount,
            tax_input_amount, tax_amount, custom, created_by, updated_by)
         values (${org.orgId}, ${invoiceId}, 1, ${giftCard ? fx.giftItem : null}, ${org.accounts.revenue}, '1', ${amount},
           ${amount}, ${amount}, '0', ${JSON.stringify(giftCard ? { storedValueProgramId: fx.giftProgram } : {})}::jsonb,
           ${actorId}, ${actorId})`);
-      await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
-    });
-    await withBypass(() => postDocument(invoiceId, control));
-    return invoiceId;
-  };
-  const voidDocument = (documentId: string, reason: string) => withBypass(() => requestDocumentVoid({
-    documentId, orgId: org.orgId, actorId, reason, reversalDate: org.date, source: "api",
-  }));
-  try {
-    const saleId = await postInvoice("INV-SV-VOID-1", "50", true);
-    const cardId = (await withBypass(() => db.execute<{ id: string }>(sql`
-      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${saleId}`, "objects")))[0]!.id;
-    const invoiceId = await postInvoice("INV-SV-VOID-2", "30", false);
-    const invoiceLine = (await withBypass(() => db.execute<{ id: string }>(sql`
-      select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where je.source_document_id = ${invoiceId} and je.status = 'posted' and jl.is_open_item`, "objects")))[0]!.id;
-    const receiptId = await withBypass(async () => {
-      const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
-        orgId: org.orgId, kind: "customer_payment", createdBy: actorId, partyId: org.customerId,
-        bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: "CAD", fxRate: "1",
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`,
+        );
       });
-      await updateDraftPayment(receipt.id, {
-        partyId: org.customerId, bankAccountId: org.accounts.bank,
-        allocations: [sameCurrencyAllocation(invoiceLine, "30")],
-        storedValueTenders: [{ accountId: cardId, amount: "20" }],
-      }, actorId, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
-      await db.execute(sql`update documents set status = 'approved' where id = ${receipt.id} and org_id = ${org.orgId}`);
-      await postPaymentWithApplications(receipt.id, undefined, actorId);
-      return receipt.id;
-    });
-    assert.equal((await accountState(org.orgId, cardId)).balance, "300000");
+      await withBypass(() => postDocument(invoiceId, control));
+      return invoiceId;
+    };
+    const voidDocument = (documentId: string, reason: string) =>
+      withBypass(() =>
+        requestDocumentVoid({
+          documentId,
+          orgId: org.orgId,
+          actorId,
+          reason,
+          reversalDate: org.date,
+          source: "api",
+        }),
+      );
+    try {
+      const saleId = await postInvoice("INV-SV-VOID-1", "50", true);
+      const cardId = (
+        await withBypass(() =>
+          db.execute<{ id: string }>(
+            sql`
+      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${saleId}`,
+            "objects",
+          ),
+        )
+      )[0]!.id;
+      const invoiceId = await postInvoice("INV-SV-VOID-2", "30", false);
+      const invoiceLine = (
+        await withBypass(() =>
+          db.execute<{ id: string }>(
+            sql`
+      select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where je.source_document_id = ${invoiceId} and je.status = 'posted' and jl.is_open_item`,
+            "objects",
+          ),
+        )
+      )[0]!.id;
+      const receiptId = await withBypass(async () => {
+        const receipt = await createPaymentDocument({
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          kind: "customer_payment",
+          createdBy: actorId,
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          documentDate: org.date,
+          currency: "CAD",
+          fxRate: "1",
+        });
+        await updateDraftPayment(
+          receipt.id,
+          {
+            partyId: org.customerId,
+            bankAccountId: org.accounts.bank,
+            allocations: [sameCurrencyAllocation(invoiceLine, "30")],
+            storedValueTenders: [{ accountId: cardId, amount: "20" }],
+          },
+          actorId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        );
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${receipt.id} and org_id = ${org.orgId}`,
+        );
+        await postPaymentWithApplications(receipt.id, undefined, actorId);
+        return receipt.id;
+      });
+      assert.equal((await accountState(org.orgId, cardId)).balance, "300000");
 
-    // The card's value is partly spent, so the sale cannot take it back.
-    await assert.rejects(voidDocument(saleId, "Gift card sold in error"), (error: unknown) => {
-      assert.equal((error as { code?: string }).code, "stored_value_void_value_spent");
-      assert.match((error as Error).message, /holds 30\.0000, less than the 50\.0000 INV-SV-VOID-1 put on it/);
-      return true;
-    });
-    assert.equal((await accountState(org.orgId, cardId)).balance, "300000");
+      // The card's value is partly spent, so the sale cannot take it back.
+      await assert.rejects(voidDocument(saleId, "Gift card sold in error"), (error: unknown) => {
+        assert.equal((error as { code?: string }).code, "stored_value_void_value_spent");
+        assert.match(
+          (error as Error).message,
+          /holds 30\.0000, less than the 50\.0000 INV-SV-VOID-1 put on it/,
+        );
+        return true;
+      });
+      assert.equal((await accountState(org.orgId, cardId)).balance, "300000");
 
-    // Voiding the receipt returns the tender to the card with a reversal entry.
-    await voidDocument(receiptId, "Receipt keyed against the wrong invoice");
-    const restored = await accountState(org.orgId, cardId);
-    assert.deepEqual([restored.balance, restored.status], ["500000", "active"]);
-    const breakage = await runStoredValueBreakage();
-    assert.deepEqual(breakage.orgErrors, []);
-    assert.equal(breakage.recognizedAccounts, 0);
-    const afterBreakageScan = await accountState(org.orgId, cardId);
-    assert.deepEqual([afterBreakageScan.balance, afterBreakageScan.recognized], ["500000", "0"]);
-    // Now unspent, the sale voids and takes the card back out of circulation.
-    await voidDocument(saleId, "Gift card sold in error");
-    const ended = await accountState(org.orgId, cardId);
-    assert.deepEqual([ended.balance, ended.issued, ended.status], ["0", "0", "closed"]);
-    const reversals = await withBypass(() => db.execute<{ amount: string; document_id: string }>(sql`
+      // Voiding the receipt returns the tender to the card with a reversal entry.
+      await voidDocument(receiptId, "Receipt keyed against the wrong invoice");
+      const restored = await accountState(org.orgId, cardId);
+      assert.deepEqual([restored.balance, restored.status], ["500000", "active"]);
+      const breakage = await runStoredValueBreakage();
+      assert.deepEqual(breakage.orgErrors, []);
+      assert.equal(breakage.recognizedAccounts, 0);
+      const afterBreakageScan = await accountState(org.orgId, cardId);
+      assert.deepEqual([afterBreakageScan.balance, afterBreakageScan.recognized], ["500000", "0"]);
+      // Now unspent, the sale voids and takes the card back out of circulation.
+      await voidDocument(saleId, "Gift card sold in error");
+      const ended = await accountState(org.orgId, cardId);
+      assert.deepEqual([ended.balance, ended.issued, ended.status], ["0", "0", "closed"]);
+      const reversals = await withBypass(() =>
+        db.execute<{ amount: string; document_id: string }>(
+          sql`
       select amount_minor::text as amount, document_id from stored_value_entries
-       where org_id = ${org.orgId} and account_id = ${cardId} and kind = 'reversal' order by created_at, id`, "objects"));
-    assert.deepEqual(reversals, [
-      { amount: "200000", document_id: receiptId },
-      { amount: "-500000", document_id: saleId },
-    ]);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+       where org_id = ${org.orgId} and account_id = ${cardId} and kind = 'reversal' order by created_at, id`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(reversals, [
+        { amount: "200000", document_id: receiptId },
+        { amount: "-500000", document_id: saleId },
+      ]);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("receipt drafts total stored-value tenders by account and recheck store-credit ownership after a party change", { skip: !DB }, async () => {
-  const fx = await seedStoredValueOrg();
-  const { org, actorId } = fx;
-  try {
-    const credit = await withBypass(() => issueStoredValue({
-      orgId: org.orgId,
-      allowedSubsidiaryIds: null,
-      programId: fx.creditProgram,
-      amountMinor: toUnits("50"),
-      currency: "CAD",
-      customerPartyId: org.customerId,
-      debitAccountId: org.accounts.bank,
-      postingDate: org.date,
-      idempotencyKey: `receipt-credit-${randomUUID()}`,
-      actorId,
-    }));
-    const payment = await withBypass(() => createPaymentDocument({
-      allowedSubsidiaryIds: null,
-      orgId: org.orgId,
-      kind: "customer_payment",
-      createdBy: actorId,
-      partyId: org.customerId,
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      documentDate: org.date,
-      currency: "CAD",
-    }));
-    await assert.rejects(
-      withBypass(() => updateDraftPayment(payment.id, {
-        onAccountAmount: "100",
-        storedValueTenders: [
-          { accountId: credit.accountId, amount: "50" },
-          { accountId: credit.accountId, amount: "50" },
-        ],
-      }, actorId, org.orgId, { allowedSubsidiaryIds: null })),
-      /combined tenders must not exceed/,
-    );
-    await withBypass(() => updateDraftPayment(payment.id, {
-      onAccountAmount: "50",
-      storedValueTenders: [{ accountId: credit.accountId, amount: "50" }],
-    }, actorId, org.orgId, { allowedSubsidiaryIds: null }));
-    await assert.rejects(
-      withBypass(() => updateDraftPayment(payment.id, { partyId: null }, actorId, org.orgId, { allowedSubsidiaryIds: null })),
-      /store credit belongs to its customer/,
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "receipt drafts total stored-value tenders by account and recheck store-credit ownership after a party change",
+  { skip: !DB },
+  async () => {
+    const fx = await seedStoredValueOrg();
+    const { org, actorId } = fx;
+    try {
+      const credit = await withBypass(() =>
+        issueStoredValue({
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          programId: fx.creditProgram,
+          amountMinor: toUnits("50"),
+          currency: "CAD",
+          customerPartyId: org.customerId,
+          debitAccountId: org.accounts.bank,
+          postingDate: org.date,
+          idempotencyKey: `receipt-credit-${randomUUID()}`,
+          actorId,
+        }),
+      );
+      const payment = await withBypass(() =>
+        createPaymentDocument({
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          kind: "customer_payment",
+          createdBy: actorId,
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          documentDate: org.date,
+          currency: "CAD",
+        }),
+      );
+      await assert.rejects(
+        withBypass(() =>
+          updateDraftPayment(
+            payment.id,
+            {
+              onAccountAmount: "100",
+              storedValueTenders: [
+                { accountId: credit.accountId, amount: "50" },
+                { accountId: credit.accountId, amount: "50" },
+              ],
+            },
+            actorId,
+            org.orgId,
+            { allowedSubsidiaryIds: null },
+          ),
+        ),
+        /combined tenders must not exceed/,
+      );
+      await withBypass(() =>
+        updateDraftPayment(
+          payment.id,
+          {
+            onAccountAmount: "50",
+            storedValueTenders: [{ accountId: credit.accountId, amount: "50" }],
+          },
+          actorId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        ),
+      );
+      await assert.rejects(
+        withBypass(() =>
+          updateDraftPayment(payment.id, { partyId: null }, actorId, org.orgId, {
+            allowedSubsidiaryIds: null,
+          }),
+        ),
+        /store credit belongs to its customer/,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

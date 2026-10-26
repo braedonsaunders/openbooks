@@ -71,16 +71,21 @@ function processStepItem(row: StepRow, ctx: InboxListContext): InboxItem {
 async function readSteps(ctx: InboxListContext, page?: InboxPage, sourceId?: string) {
   const source = await processStepSource(ctx);
   if (!source) return [];
-  return (await db.execute<StepRow>(sql`
+  return (
+    await db.execute<StepRow>(
+      sql`
     select s.id, s.process_id::text as process_id, s.title,
            s.due_on::text as due_on, s.required, s.evidence_kind,
            wp.display_name as worker_name, p.kind as process_kind
       ${source}
       ${sourceId === undefined ? sql`` : sql`and s.id = ${sourceId}`}
      order by s.due_on, s.id
-     limit ${sourceId === undefined ? page?.limit ?? 100 : 1}
-     offset ${sourceId === undefined ? page?.offset ?? 0 : 0}
-  `, "objects")).map(row => processStepItem(row, ctx));
+     limit ${sourceId === undefined ? (page?.limit ?? 100) : 1}
+     offset ${sourceId === undefined ? (page?.offset ?? 0) : 0}
+  `,
+      "objects",
+    )
+  ).map((row) => processStepItem(row, ctx));
 }
 
 export const hrmProcessStepAdapter: InboxAdapter = {
@@ -93,12 +98,17 @@ export const hrmProcessStepAdapter: InboxAdapter = {
   async count(ctx) {
     const source = await processStepSource(ctx);
     if (!source) return 0;
-    const result = await db.execute<{ n: number }>(sql`select count(*)::int as n ${source}`, "objects");
+    const result = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n ${source}`,
+      "objects",
+    );
     return result[0]?.n ?? 0;
   },
   async act(ctx, sourceId, actionKey, reason): Promise<void> {
     if (actionKey !== "complete") {
-      throw new Error(`action ${JSON.stringify(actionKey)} is not available on this checklist step`);
+      throw new Error(
+        `action ${JSON.stringify(actionKey)} is not available on this checklist step`,
+      );
     }
     void reason;
     await completeProcessStep({ orgId: ctx.orgId, actorId: ctx.actorId, stepId: sourceId });

@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { Download, FileText, Pencil } from 'lucide-react'
-import { Badge, Button, DetailHeader } from '@openbooks/ui'
+import Link from "next/link";
+import { Download, FileText, Pencil } from "lucide-react";
+import { Badge, Button, DetailHeader } from "@openbooks/ui";
 
 /**
  * Header and meta strip for a saved view's run page.
@@ -20,20 +20,20 @@ export function SavedViewHeader({
   canEdit,
   labels,
 }: {
-  viewId: string
-  name: string
-  scope: string
-  scopeLabel: string
-  subtitle: string
-  backHref: string
-  backLabel: string
-  canEdit: boolean
-  labels: { exportPdf: string; exportXlsx: string; exportCsv: string; edit: string }
+  viewId: string;
+  name: string;
+  scope: string;
+  scopeLabel: string;
+  subtitle: string;
+  backHref: string;
+  backLabel: string;
+  canEdit: boolean;
+  labels: { exportPdf: string; exportXlsx: string; exportCsv: string; edit: string };
 }) {
   return (
     <DetailHeader
       title={name}
-      badge={<Badge variant={scope === 'shared' ? 'secondary' : 'outline'}>{scopeLabel}</Badge>}
+      badge={<Badge variant={scope === "shared" ? "secondary" : "outline"}>{scopeLabel}</Badge>}
       subtitle={subtitle}
       back={{ href: backHref, label: backLabel }}
       actions={
@@ -63,7 +63,7 @@ export function SavedViewHeader({
         </div>
       }
     />
-  )
+  );
 }
 
 /** The type / last-updated / row-range strip, whose last span is optional. */
@@ -72,9 +72,9 @@ export function SavedViewMeta({
   lastUpdated,
   rowsRange,
 }: {
-  typeLabel: string
-  lastUpdated: string
-  rowsRange: string | null
+  typeLabel: string;
+  lastUpdated: string;
+  rowsRange: string | null;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
@@ -82,5 +82,5 @@ export function SavedViewMeta({
       <span>{lastUpdated}</span>
       {rowsRange ? <span>{rowsRange}</span> : null}
     </div>
-  )
+  );
 }

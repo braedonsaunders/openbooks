@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useState } from "react";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * Public application form (HR-18): name + contact, future-roles opt-in,
@@ -10,22 +10,22 @@ import { readApiErrorMessage } from '@/lib/api-error'
  * enforced server-side.
  */
 export function CareersApplyForm({ postingId }: { postingId: string }) {
-  const [displayName, setDisplayName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [futureRoles, setFutureRoles] = useState(false)
-  const [website, setWebsite] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [futureRoles, setFutureRoles] = useState(false);
+  const [website, setWebsite] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   async function apply() {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch('/api/recruiting/apply', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const res = await fetch("/api/recruiting/apply", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           postingId,
           displayName,
@@ -34,19 +34,21 @@ export function CareersApplyForm({ postingId }: { postingId: string }) {
           consentFutureRoles: futureRoles,
           website: website || undefined,
         }),
-      })
+      });
       // Error bodies are checked before they are parsed.
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, 'Your application was not received. Please try again.'))
-        return
+        setError(
+          await readApiErrorMessage(res, "Your application was not received. Please try again."),
+        );
+        return;
       }
-      setDone(true)
+      setDone(true);
     } catch {
-      setError('Your application was not received. Check your connection and try again.')
+      setError("Your application was not received. Check your connection and try again.");
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -55,7 +57,7 @@ export function CareersApplyForm({ postingId }: { postingId: string }) {
       <p role="status" className="rounded-md bg-green-50 p-4 text-sm text-green-800">
         Received. Thank you — the hiring team will review your application.
       </p>
-    )
+    );
   }
 
   return (
@@ -123,8 +125,8 @@ export function CareersApplyForm({ postingId }: { postingId: string }) {
         disabled={busy || displayName.trim().length === 0}
         className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
-        {busy ? 'Sending…' : 'Submit application'}
+        {busy ? "Sending…" : "Submit application"}
       </button>
     </div>
-  )
+  );
 }

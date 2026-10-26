@@ -1,14 +1,14 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.saved-reports-route-test')
+const stateKey = Symbol.for("openbooks.saved-reports-route-test");
 interface RouteState {
-  granted: Set<string>
-  permissionCalls: string[]
-  queries: unknown[]
-  deleteRows: Array<{ id: string }>
-  userId: string
+  granted: Set<string>;
+  permissionCalls: string[];
+  queries: unknown[];
+  deleteRows: Array<{ id: string }>;
+  userId: string;
 }
 
 const state: RouteState = {
@@ -16,28 +16,30 @@ const state: RouteState = {
   permissionCalls: [],
   queries: [],
   deleteRows: [],
-  userId: 'user-1',
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+  userId: "user-1",
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : "";
     })
-    .join('')
+    .join("");
 }
 
-;(globalThis as typeof globalThis & { openbooksSavedReportsSqlText?: typeof sqlText }).openbooksSavedReportsSqlText = sqlText
+(
+  globalThis as typeof globalThis & { openbooksSavedReportsSqlText?: typeof sqlText }
+).openbooksSavedReportsSqlText = sqlText;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.saved-reports-route-test')]
@@ -58,7 +60,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       export const ambientTenantOrgId = () => null
       export const currentRequestOrgResolver = () => null
@@ -78,115 +80,123 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
-const SELF_URL = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
+const SELF_URL = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', mockUrl('db')],
-  ['@/lib/authz', mockUrl('authz')],
-  ['../../../lib/authz', mockUrl('authz')],
-])
+  ["@openbooks/engine/platform/db", mockUrl("db")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["../../../lib/authz", mockUrl("authz")],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    const mockName = parsed.searchParams.get('mock')
-    const source = mockSources.get(mockName ? `mock:${mockName}` : url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const parsed = new URL(url);
+    const mockName = parsed.searchParams.get("mock");
+    const source = mockSources.get(mockName ? `mock:${mockName}` : url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?saved-reports-route-test'
-const { DELETE, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-test.after(() => hooks.deregister())
+const routeUrl = "./route.ts?saved-reports-route-test";
+const { DELETE, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 function reset(): void {
-  state.granted = new Set()
-  state.permissionCalls.length = 0
-  state.queries.length = 0
-  state.deleteRows = []
-  state.userId = 'user-1'
+  state.granted = new Set();
+  state.permissionCalls.length = 0;
+  state.queries.length = 0;
+  state.deleteRows = [];
+  state.userId = "user-1";
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/saved-reports', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/saved-reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
 // Body ids must be uuid-shaped: the route fails closed (400) on malformed ids
 // before ownership is consulted, so these tests use a real uuid.
-const REPORT_ID = '00000000-0000-4000-8000-0000000000a1'
+const REPORT_ID = "00000000-0000-4000-8000-0000000000a1";
 
 function remove(id = REPORT_ID): Promise<Response> {
   return DELETE(
-    new Request('http://openbooks.test/api/saved-reports', {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/saved-reports", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ id }),
     }),
-  )
+  );
 }
 
-test('read-only reporters cannot create or delete organization-wide saved reports', async () => {
-  reset()
-  state.granted = new Set(['reports.read'])
+test("read-only reporters cannot create or delete organization-wide saved reports", async () => {
+  reset();
+  state.granted = new Set(["reports.read"]);
 
-  const created = await post({ name: 'Read-only bookmark', path: '/reports/pnl' })
-  const deleted = await remove()
+  const created = await post({ name: "Read-only bookmark", path: "/reports/pnl" });
+  const deleted = await remove();
 
-  assert.equal(created.status, 403)
-  assert.equal(deleted.status, 403)
-  assert.deepEqual(state.permissionCalls, ['reports.create', 'reports.create'])
-  assert.equal(state.queries.length, 0, 'authorization denies both mutations before database access')
-})
+  assert.equal(created.status, 403);
+  assert.equal(deleted.status, 403);
+  assert.deepEqual(state.permissionCalls, ["reports.create", "reports.create"]);
+  assert.equal(
+    state.queries.length,
+    0,
+    "authorization denies both mutations before database access",
+  );
+});
 
-test('reports.create can create a saved report and records its owner', async () => {
-  reset()
-  state.granted = new Set(['reports.create'])
+test("reports.create can create a saved report and records its owner", async () => {
+  reset();
+  state.granted = new Set(["reports.create"]);
 
-  const response = await post({ name: 'Monthly P&L', path: '/reports/pnl', params: { period: 'month' } })
+  const response = await post({
+    name: "Monthly P&L",
+    path: "/reports/pnl",
+    params: { period: "month" },
+  });
 
-  assert.equal(response.status, 200)
-  assert.equal(state.queries.length, 1, 'authorized creation reaches the database exactly once')
-  assert.match(sqlText(state.queries[0]), /insert into saved_reports/)
-  assert.match(sqlText(state.queries[0]), /created_by_user_id/)
-})
+  assert.equal(response.status, 200);
+  assert.equal(state.queries.length, 1, "authorized creation reaches the database exactly once");
+  assert.match(sqlText(state.queries[0]), /insert into saved_reports/);
+  assert.match(sqlText(state.queries[0]), /created_by_user_id/);
+});
 
-test('only the saved-report owner or an administrator can delete it', async () => {
-  reset()
-  state.granted = new Set(['reports.create'])
+test("only the saved-report owner or an administrator can delete it", async () => {
+  reset();
+  state.granted = new Set(["reports.create"]);
 
-  const denied = await remove()
+  const denied = await remove();
 
-  assert.equal(denied.status, 403)
-  assert.equal(state.queries.length, 1, 'the owner check is enforced by the delete statement')
-  assert.match(sqlText(state.queries[0]), /created_by_user_id =/)
+  assert.equal(denied.status, 403);
+  assert.equal(state.queries.length, 1, "the owner check is enforced by the delete statement");
+  assert.match(sqlText(state.queries[0]), /created_by_user_id =/);
 
-  reset()
-  state.granted = new Set(['reports.create'])
-  state.deleteRows = [{ id: REPORT_ID }]
+  reset();
+  state.granted = new Set(["reports.create"]);
+  state.deleteRows = [{ id: REPORT_ID }];
 
-  const ownerDeleted = await remove()
+  const ownerDeleted = await remove();
 
-  assert.equal(ownerDeleted.status, 200)
+  assert.equal(ownerDeleted.status, 200);
 
-  reset()
-  state.granted = new Set(['*'])
-  state.deleteRows = [{ id: REPORT_ID }]
+  reset();
+  state.granted = new Set(["*"]);
+  state.deleteRows = [{ id: REPORT_ID }];
 
-  const adminDeleted = await remove()
+  const adminDeleted = await remove();
 
-  assert.equal(adminDeleted.status, 200)
-})
+  assert.equal(adminDeleted.status, 200);
+});

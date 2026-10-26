@@ -20,21 +20,47 @@ const rankProjectsTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["projects.read", "reports.read"] },
   feature: "projects",
   inputSchema: z.object({
-    statuses: z.array(z.string().max(40)).max(10).optional()
-      .describe("Project statuses to include (active, awarded, substantially_complete, closed, cancelled); default ['active']. Pass several for a wider portfolio."),
-    billingMethod: z.string().max(40).optional()
-      .describe("Filter by the project type's billing method key (e.g. fixed_price, time_and_materials, cost_plus)."),
+    statuses: z
+      .array(z.string().max(40))
+      .max(10)
+      .optional()
+      .describe(
+        "Project statuses to include (active, awarded, substantially_complete, closed, cancelled); default ['active']. Pass several for a wider portfolio.",
+      ),
+    billingMethod: z
+      .string()
+      .max(40)
+      .optional()
+      .describe(
+        "Filter by the project type's billing method key (e.g. fixed_price, time_and_materials, cost_plus).",
+      ),
     query: z.string().max(100).optional().describe("Match project name or code"),
     customerQuery: z.string().max(100).optional().describe("Match customer name"),
-    negativeMarginOnly: z.boolean().optional().describe("Only projects whose posted revenue < posted cost"),
-    overBudgetOnly: z.boolean().optional().describe("Only projects with a cost budget where cost + committed exceeds it"),
-    withActivityOnly: z.boolean().optional().describe("Default true: drop projects with no posted cost or revenue"),
+    negativeMarginOnly: z
+      .boolean()
+      .optional()
+      .describe("Only projects whose posted revenue < posted cost"),
+    overBudgetOnly: z
+      .boolean()
+      .optional()
+      .describe("Only projects with a cost budget where cost + committed exceeds it"),
+    withActivityOnly: z
+      .boolean()
+      .optional()
+      .describe("Default true: drop projects with no posted cost or revenue"),
     sort: z.enum(PROJECT_RANK_SORTS).optional().describe("Default margin_asc (worst margin first)"),
     limit: z.number().int().min(1).max(100).optional().describe("Default 25"),
-    offset: z.number().int().min(0).max(5000).optional().describe("Rows to skip for paging (default 0)"),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .max(5000)
+      .optional()
+      .describe("Rows to skip for paging (default 0)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) return { ok: false, error: "projects_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "projects")))
+      return { ok: false, error: "projects_feature_disabled" };
     const a = raw as {
       statuses?: string[];
       billingMethod?: string;

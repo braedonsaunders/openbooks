@@ -8,7 +8,10 @@ import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { authorizeConnectorReplay } from "../journal/replay-authorization.ts";
-import { assertSettlementObservation, type SettlementObservation } from "./settlement-observation.ts";
+import {
+  assertSettlementObservation,
+  type SettlementObservation,
+} from "./settlement-observation.ts";
 import type { SourceApplicationLink } from "./source.ts";
 
 export interface ApplicationReconciliationContext {
@@ -37,8 +40,13 @@ export interface SourceApplicationEvidence {
 }
 
 const sourceKeys: Record<string, string> = {
-  netsuite: "nsId", qbo: "qboId", qbd: "qbdId", xero: "xeroId",
-  odoo: "odooId", erpnext: "erpId", dynamics: "bcId",
+  netsuite: "nsId",
+  qbo: "qboId",
+  qbd: "qbdId",
+  xero: "xeroId",
+  odoo: "odooId",
+  erpnext: "erpId",
+  dynamics: "bcId",
 };
 const dialect = new PgDialect();
 
@@ -53,22 +61,32 @@ export async function admitSettlementObservation(
   if (sourceKeys[context.source] !== refKey) {
     throw new Error("application snapshot source identity does not match its reference namespace");
   }
-  const connection = (await client.query<{ config: { account?: string; accountingBookId?: string } }>(
-    "select config from connections where org_id=$1 and id=$2 and source=$3 for share",
-    [orgId, context.connectionId, context.source],
-  )).rows[0];
-  if (!connection) throw new Error("application snapshot connection is not available in this organization");
+  const connection = (
+    await client.query<{ config: { account?: string; accountingBookId?: string } }>(
+      "select config from connections where org_id=$1 and id=$2 and source=$3 for share",
+      [orgId, context.connectionId, context.source],
+    )
+  ).rows[0];
+  if (!connection)
+    throw new Error("application snapshot connection is not available in this organization");
   const observation = context.observation;
   if (!observation) return;
   assertSettlementObservation(observation, context.source, links, context.complete);
-  if (String(connection.config.account ?? "") !== observation.sourceAccount
-      || (connection.config.accountingBookId && String(connection.config.accountingBookId) !== observation.bookRef)) {
-    throw new Error("source settlement observation does not match the connection's source account or accounting book");
+  if (
+    String(connection.config.account ?? "") !== observation.sourceAccount ||
+    (connection.config.accountingBookId &&
+      String(connection.config.accountingBookId) !== observation.bookRef)
+  ) {
+    throw new Error(
+      "source settlement observation does not match the connection's source account or accounting book",
+    );
   }
   if (observation.nonpostingRefs.length) {
     // Document locks serialize admission against a concurrent posting. A source
     // workflow exclusion must never erase an already admitted financial fact.
-    const admitted = (await client.query<{ ref: string; has_history: boolean }>(`
+    const admitted = (
+      await client.query<{ ref: string; has_history: boolean }>(
+        `
       select d.custom->>$2 as ref,
              (d.status<>'voided' and exists(select 1 from journal_entries e where e.org_id=d.org_id
                     and e.source_document_id=d.id and e.status in ('posted','reversed'))) as has_history
@@ -76,22 +94,32 @@ export async function admitSettlementObservation(
        where d.org_id=$1 and d.custom->>$2=any($3::text[])
          and ${sourceConnectionDocumentPredicate("d", "$4", "$5")}
        order by d.id for update of d`,
-      [orgId, refKey, observation.nonpostingRefs, context.connectionId, context.source],
-    )).rows.find(row => row.has_history);
+        [orgId, refKey, observation.nonpostingRefs, context.connectionId, context.source],
+      )
+    ).rows.find((row) => row.has_history);
     if (admitted) {
-      throw new Error(`source transaction ${admitted.ref} is nonposting but has admitted posted history; restore the source posting state or resolve its governed reversal before retrying the sync; settlements were preserved`);
+      throw new Error(
+        `source transaction ${admitted.ref} is nonposting but has admitted posted history; restore the source posting state or resolve its governed reversal before retrying the sync; settlements were preserved`,
+      );
     }
   }
   if (context.syncRunId) {
-    const saved = await client.query(`update sync_runs
+    const saved = await client.query(
+      `update sync_runs
       set stats=jsonb_set(stats,'{settlementObservation}',$1::jsonb)
       where org_id=$2 and id=$3 and connection_id=$4 and source=$5 and status='running' returning id`,
-    [JSON.stringify(observation), orgId, context.syncRunId, context.connectionId, context.source]);
-    if (saved.rows.length !== 1) throw new Error("source settlement observation could not be recorded on its running sync");
+      [JSON.stringify(observation), orgId, context.syncRunId, context.connectionId, context.source],
+    );
+    if (saved.rows.length !== 1)
+      throw new Error("source settlement observation could not be recorded on its running sync");
   }
 }
 
-export function sourceConnectionDocumentPredicate(alias: string, connection: string, source: string): string {
+export function sourceConnectionDocumentPredicate(
+  alias: string,
+  connection: string,
+  source: string,
+): string {
   return `(
     ${alias}.custom->>'connectionId'=${connection}
     or (
@@ -109,7 +137,8 @@ export function applicationTransaction(client: PoolClient): SqlExecutor {
     execute: (async (statement: SQL, mode?: "arrays" | "objects" | "raw") => {
       const query = dialect.sqlToQuery(statement);
       if (mode === "arrays") {
-        return (await client.query({ text: query.sql, values: query.params, rowMode: "array" })).rows;
+        return (await client.query({ text: query.sql, values: query.params, rowMode: "array" }))
+          .rows;
       }
       const { rows } = await client.query(query.sql, query.params);
       return mode === "objects" ? rows : { rows };
@@ -123,15 +152,20 @@ export async function postSourceSettlementEntry(
   client: PoolClient,
   input: Parameters<typeof postEntry>[1],
 ): Promise<Awaited<ReturnType<typeof postEntry>>> {
-  const replay = (await client.query<{ allowed: boolean; migration: string | null }>(
-    "select connector_historical_replay_authorized($1) as allowed,current_setting('openbooks.migration',true) as migration",
-    [input.orgId],
-  )).rows[0];
+  const replay = (
+    await client.query<{ allowed: boolean; migration: string | null }>(
+      "select connector_historical_replay_authorized($1) as allowed,current_setting('openbooks.migration',true) as migration",
+      [input.orgId],
+    )
+  ).rows[0];
   if (replay?.allowed) await client.query("select set_config('openbooks.migration','on',true)");
   // A posting refusal aborts the surrounding transaction; do not replace its
   // original cause with an attempted command on that aborted transaction.
   const posted = await postEntry(applicationTransaction(client), input);
-  if (replay?.allowed) await client.query("select set_config('openbooks.migration',$1,true)", [replay.migration ?? 'off']);
+  if (replay?.allowed)
+    await client.query("select set_config('openbooks.migration',$1,true)", [
+      replay.migration ?? "off",
+    ]);
   return posted;
 }
 
@@ -152,8 +186,11 @@ export async function sourceApplicationEvidence(
     "select id from connections where org_id=$1 and id=$2 and source=$3",
     [orgId, snapshot.connectionId, snapshot.source],
   );
-  if (connection.rows.length !== 1) throw new Error("application snapshot connection is not available in this organization");
-  return (await client.query<SourceApplicationEvidence>(`
+  if (connection.rows.length !== 1)
+    throw new Error("application snapshot connection is not available in this organization");
+  return (
+    await client.query<SourceApplicationEvidence>(
+      `
     select a.id, df.custom->>$2 as payment_ref, dt.custom->>$2 as applied_ref,
            a.from_line_id, a.to_line_id, a.source_amount::text,
            a.applied_on::text, ef.book_id, lf.subsidiary_id,
@@ -181,8 +218,9 @@ export async function sourceApplicationEvidence(
             and r.source_ref in (df.custom->>$2,dt.custom->>$2)
        )
      order by a.id`,
-    [orgId, refKey, snapshot.connectionId, snapshot.source, `source application ${refKey}`],
-  )).rows;
+      [orgId, refKey, snapshot.connectionId, snapshot.source, `source application ${refKey}`],
+    )
+  ).rows;
 }
 
 /** Release a changed payer's old allocations, retaining every row and its
@@ -202,19 +240,30 @@ export async function releaseSourceApplications(
   const periodsChecked = new Set<string>();
   const replayGrants = new Map<string, { authorizationId: string; actorId: string }>();
   let replayActor: string | null = null;
-  const admitPeriod = async (periodId: string, bookId: string, subsidiaryId: string, module: "ap" | "ar") => {
+  const admitPeriod = async (
+    periodId: string,
+    bookId: string,
+    subsidiaryId: string,
+    module: "ap" | "ar",
+  ) => {
     // Share the native close fence through commit. A simultaneous close cannot
     // invalidate the authorization between allocation discovery and release.
     await runner.execute(sql`select period_posting_fence(${orgId}, ${periodId}, ${bookId})`);
     try {
       await assertPeriodModulesOpen(runner, {
-        orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: [module],
+        orgId,
+        periodId,
+        bookId,
+        subsidiaryIds: [subsidiaryId],
+        modules: [module],
       });
       return;
     } catch (error) {
       if (!(error instanceof CloseError) || !snapshot.syncRunId) throw error;
       if (!replayActor) {
-        const policy = (await client.query<{ actor_id: string }>(`
+        const policy = (
+          await client.query<{ actor_id: string }>(
+            `
           select connection.posted_change_authorized_by as actor_id
             from connections connection
             join sync_runs run on run.connection_id=connection.id and run.org_id=connection.org_id
@@ -228,15 +277,22 @@ export async function releaseSourceApplications(
              and connection.posted_change_authorized_at is not null
              and run.started_at>=connection.posted_change_authorized_at
            for share of connection, run, controller`,
-          [orgId, snapshot.connectionId, snapshot.source, snapshot.syncRunId],
-        )).rows[0];
+            [orgId, snapshot.connectionId, snapshot.source, snapshot.syncRunId],
+          )
+        ).rows[0];
         if (!policy) throw error;
-        await client.query(`select set_config('openbooks.connector_replay','on',true),
+        await client.query(
+          `select set_config('openbooks.connector_replay','on',true),
           set_config('openbooks.connector_replay_request',$1,true),
-          set_config('openbooks.connector_replay_actor',$2,true)`, [snapshot.syncRunId, policy.actor_id]);
-        const allowed = (await client.query<{ allowed: boolean }>(
-          'select connector_historical_replay_authorized($1) as allowed', [orgId],
-        )).rows[0]?.allowed;
+          set_config('openbooks.connector_replay_actor',$2,true)`,
+          [snapshot.syncRunId, policy.actor_id],
+        );
+        const allowed = (
+          await client.query<{ allowed: boolean }>(
+            "select connector_historical_replay_authorized($1) as allowed",
+            [orgId],
+          )
+        ).rows[0]?.allowed;
         if (allowed !== true) throw error;
         replayActor = policy.actor_id;
       }
@@ -245,8 +301,11 @@ export async function releaseSourceApplications(
         // The attributable connection policy authorizes this bounded window;
         // the period locks and every original allocation remain in place.
         const grant = await authorizeConnectorReplay(runner, {
-          orgId, connectionId: snapshot.connectionId, authorizedBy: replayActor,
-          periodFromId: periodId, periodToId: periodId,
+          orgId,
+          connectionId: snapshot.connectionId,
+          authorizedBy: replayActor,
+          periodFromId: periodId,
+          periodToId: periodId,
           expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
           reason: `Controller-authorized ${snapshot.source} source settlement reconciliation for sync run ${snapshot.syncRunId}`,
           actorId: replayActor,
@@ -264,7 +323,11 @@ export async function releaseSourceApplications(
     await admitPeriod(period.id, row.book_id, row.subsidiary_id, module);
     periodsChecked.add(key);
   }
-  const fxIds = [...new Set(rows.flatMap((row) => row.fx_gain_loss_entry_id ? [row.fx_gain_loss_entry_id] : []))];
+  const fxIds = [
+    ...new Set(
+      rows.flatMap((row) => (row.fx_gain_loss_entry_id ? [row.fx_gain_loss_entry_id] : [])),
+    ),
+  ];
   if (fxIds.length) {
     const foreignEvidence = await client.query(
       `select id from applications where org_id=$1 and unapplied_at is null
@@ -272,7 +335,9 @@ export async function releaseSourceApplications(
       [orgId, fxIds, ids],
     );
     if (foreignEvidence.rows.length) {
-      throw new Error("source settlement FX evidence is shared with another allocation; its ownership must be reconciled before release");
+      throw new Error(
+        "source settlement FX evidence is shared with another allocation; its ownership must be reconciled before release",
+      );
     }
   }
   const released = await client.query<{ id: string }>(
@@ -280,33 +345,60 @@ export async function releaseSourceApplications(
       where org_id=$1 and id=any($2::uuid[]) and unapplied_at is null returning id`,
     [orgId, ids],
   );
-  if (released.rows.length !== rows.length) throw new Error("source settlement changed during reconciliation; retry the mirror");
+  if (released.rows.length !== rows.length)
+    throw new Error("source settlement changed during reconciliation; retry the mirror");
 
   for (const entryId of fxIds) {
-    const entry = (await client.query<{
-      id: string; status: string; origin: string; book_id: string; subsidiary_id: string;
-      entry_number: string; posting_date: string; period_id: string; source_document_id: string;
-    }>(`select *,posting_date::text as posting_date from journal_entries where org_id=$1 and id=$2`, [orgId, entryId])).rows[0];
+    const entry = (
+      await client.query<{
+        id: string;
+        status: string;
+        origin: string;
+        book_id: string;
+        subsidiary_id: string;
+        entry_number: string;
+        posting_date: string;
+        period_id: string;
+        source_document_id: string;
+      }>(
+        `select *,posting_date::text as posting_date from journal_entries where org_id=$1 and id=$2`,
+        [orgId, entryId],
+      )
+    ).rows[0];
     if (!entry || entry.status !== "posted" || entry.origin !== "fx_settlement") {
       throw new Error("source settlement FX journal is missing or no longer posted");
     }
     const ownedRow = rows.find((row) => row.fx_gain_loss_entry_id === entryId)!;
-    await admitPeriod(entry.period_id, entry.book_id, entry.subsidiary_id,
-      ownedRow.account_type === "liability_payable" ? "ap" : "ar");
+    await admitPeriod(
+      entry.period_id,
+      entry.book_id,
+      entry.subsidiary_id,
+      ownedRow.account_type === "liability_payable" ? "ap" : "ar",
+    );
     const columns = Object.entries(getTableColumns(schema.journalLines))
-      .map(([key, column]) => `${column.name} as "${key}"`).join(",");
-    const lines = (await client.query<typeof schema.journalLines.$inferSelect>(
-      `select ${columns} from journal_lines where org_id=$1 and entry_id=$2 order by line_number`, [orgId, entryId],
-    )).rows;
+      .map(([key, column]) => `${column.name} as "${key}"`)
+      .join(",");
+    const lines = (
+      await client.query<typeof schema.journalLines.$inferSelect>(
+        `select ${columns} from journal_lines where org_id=$1 and entry_id=$2 order by line_number`,
+        [orgId, entryId],
+      )
+    ).rows;
     if (!lines.length) throw new Error("source settlement FX journal has no lines");
     await postSourceSettlementEntry(client, {
-      orgId, bookId: entry.book_id, subsidiaryId: entry.subsidiary_id,
+      orgId,
+      bookId: entry.book_id,
+      subsidiaryId: entry.subsidiary_id,
       entryNumber: await nextEntryNumber(`${entry.entry_number}-RELEASE`),
-      postingDate: entry.posting_date, periodId: entry.period_id,
-      memo: "Source settlement allocation changed", origin: "fx_settlement",
-      sourceDocumentId: entry.source_document_id, reversesEntryId: entry.id,
-      actorId: replayActor, allowInactiveAccounts: true,
-      lines: reversalJournalLines(lines, { orgId, entryId: "" }).map(line => ({
+      postingDate: entry.posting_date,
+      periodId: entry.period_id,
+      memo: "Source settlement allocation changed",
+      origin: "fx_settlement",
+      sourceDocumentId: entry.source_document_id,
+      reversesEntryId: entry.id,
+      actorId: replayActor,
+      allowInactiveAccounts: true,
+      lines: reversalJournalLines(lines, { orgId, entryId: "" }).map((line) => ({
         ...line,
         custom: line.custom as PostEntryLineInput["custom"],
         extraDims: line.extraDims as PostEntryLineInput["extraDims"],
@@ -318,19 +410,40 @@ export async function releaseSourceApplications(
     const audited = await client.query(
       `insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,request_id)
        values($1,'applications',$2,'update',$3::jsonb,$5,$4) returning id`,
-      [orgId, row.id, JSON.stringify({
-        source: "mirror", reason: "source_settlement_allocation_changed",
-        connectionId: snapshot.connectionId, syncRunId: snapshot.syncRunId ?? null,
-        paymentRef: row.payment_ref, appliedRef: row.applied_ref,
-        before: row.evidence, after: { unapplied: true },
-        ...(replayGrants.size ? { historicalReplay: {
-          mode: "authenticated_connector_historical_replay",
-          authorizations: [...replayGrants].map(([periodId, grant]) => ({ periodId, ...grant })),
-          periodLocksPreserved: true,
-        } } : {}),
-      }), "sync.applications", replayActor],
+      [
+        orgId,
+        row.id,
+        JSON.stringify({
+          source: "mirror",
+          reason: "source_settlement_allocation_changed",
+          connectionId: snapshot.connectionId,
+          syncRunId: snapshot.syncRunId ?? null,
+          paymentRef: row.payment_ref,
+          appliedRef: row.applied_ref,
+          before: row.evidence,
+          after: { unapplied: true },
+          ...(replayGrants.size
+            ? {
+                historicalReplay: {
+                  mode: "authenticated_connector_historical_replay",
+                  authorizations: [...replayGrants].map(([periodId, grant]) => ({
+                    periodId,
+                    ...grant,
+                  })),
+                  periodLocksPreserved: true,
+                },
+              }
+            : {}),
+        }),
+        "sync.applications",
+        replayActor,
+      ],
     );
-    if (audited.rows.length !== 1) throw new Error("source settlement release audit was not recorded");
+    if (audited.rows.length !== 1)
+      throw new Error("source settlement release audit was not recorded");
   }
-  return { count: rows.length, amount: fromUnits(rows.reduce((total, row) => total + toUnits(row.source_amount), 0n)) };
+  return {
+    count: rows.length,
+    amount: fromUnits(rows.reduce((total, row) => total + toUnits(row.source_amount), 0n)),
+  };
 }

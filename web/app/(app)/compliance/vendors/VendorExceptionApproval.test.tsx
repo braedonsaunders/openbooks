@@ -7,14 +7,17 @@ import test from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/compliance/vendors", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/compliance/vendors",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({ navigation: { pathname: "/compliance/vendors" } });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -96,18 +99,25 @@ function approvalState(canDecide: boolean) {
   return {
     approvalState: {
       status: "pending_approval",
-      pendingWith: [{ name: "Assigned reviewer", gateId: GATE_ID, since: "2026-07-01T12:00:00.000Z" }],
+      pendingWith: [
+        { name: "Assigned reviewer", gateId: GATE_ID, since: "2026-07-01T12:00:00.000Z" },
+      ],
       myActions: canDecide ? { gateId: GATE_ID, signatureRequired: false } : null,
     },
-    history: [], failedRun: null, neverSubmitted: false,
-    canRetry: false, submittedByViewer: false,
+    history: [],
+    failedRun: null,
+    neverSubmitted: false,
+    canRetry: false,
+    submittedByViewer: false,
   };
 }
 
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -138,7 +148,7 @@ async function mountExceptions() {
   });
   await tick();
   await tick();
-  const exceptionsTab = [...document.querySelectorAll('button[aria-pressed]')].find((b) =>
+  const exceptionsTab = [...document.querySelectorAll("button[aria-pressed]")].find((b) =>
     b.textContent?.startsWith("Exceptions"),
   ) as HTMLButtonElement | undefined;
   assert.ok(exceptionsTab, "the exceptions tab renders");
@@ -174,22 +184,28 @@ async function click(button: HTMLButtonElement) {
 }
 
 test("a waiver permission alone cannot approve an exception without an assigned Flow gate", async () => {
-  const restoreFetch = scriptFetch((url) => url.startsWith('/api/flows/record-state?') ? Response.json(approvalState(false)) : null);
+  const restoreFetch = scriptFetch((url) =>
+    url.startsWith("/api/flows/record-state?") ? Response.json(approvalState(false)) : null,
+  );
   try {
     const view = await mountExceptions();
     try {
       assert.ok(document.body.textContent?.includes("Pending approval"));
       assert.deepEqual(buttonsNamed("Approve"), []);
       assert.ok(document.body.textContent?.includes("Assigned reviewer"));
-    } finally { await view.unmount(); }
-  } finally { restoreFetch(); }
+    } finally {
+      await view.unmount();
+    }
+  } finally {
+    restoreFetch();
+  }
 });
 
 test("an assigned exception reviewer decides the exact Flow gate", async () => {
   decisionCalls.length = 0;
   const restoreFetch = scriptFetch((url, init) => {
-    if (url.startsWith('/api/flows/record-state?')) return Response.json(approvalState(true));
-    if (init?.method && init.method !== 'GET') {
+    if (url.startsWith("/api/flows/record-state?")) return Response.json(approvalState(true));
+    if (init?.method && init.method !== "GET") {
       decisionCalls.push({ url, body: JSON.parse(String(init.body)) });
       return Response.json({ resumed: null });
     }
@@ -200,19 +216,28 @@ test("an assigned exception reviewer decides the exact Flow gate", async () => {
     try {
       assert.equal(buttonsNamed("Approve").length, 1);
       await click(buttonsNamed("Approve")[0]!);
-      assert.deepEqual(decisionCalls, [{
-        url: '/api/flows/gates/decide',
-        body: { gateId: GATE_ID, decision: 'approved' },
-      }]);
-    } finally { await view.unmount(); }
-  } finally { restoreFetch(); }
+      assert.deepEqual(decisionCalls, [
+        {
+          url: "/api/flows/gates/decide",
+          body: { gateId: GATE_ID, decision: "approved" },
+        },
+      ]);
+    } finally {
+      await view.unmount();
+    }
+  } finally {
+    restoreFetch();
+  }
 });
 
 test("a refused Flow decision keeps its actionable message beside the exception", async () => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url.startsWith('/api/flows/record-state?')) return Response.json(approvalState(true));
-    if (url === '/api/flows/gates/decide' && init?.method === 'POST') {
-      return Response.json({ error: 'This gate was already decided; refresh the exception.' }, { status: 409 });
+    if (url.startsWith("/api/flows/record-state?")) return Response.json(approvalState(true));
+    if (url === "/api/flows/gates/decide" && init?.method === "POST") {
+      return Response.json(
+        { error: "This gate was already decided; refresh the exception." },
+        { status: 409 },
+      );
     }
     return null;
   });
@@ -220,9 +245,17 @@ test("a refused Flow decision keeps its actionable message beside the exception"
     const view = await mountExceptions();
     try {
       await click(buttonsNamed("Approve")[0]!);
-      assert.ok(document.querySelector('[role=dialog]')?.textContent?.includes('This gate was already decided; refresh the exception.'));
-    } finally { await view.unmount(); }
-  } finally { restoreFetch(); }
+      assert.ok(
+        document
+          .querySelector("[role=dialog]")
+          ?.textContent?.includes("This gate was already decided; refresh the exception."),
+      );
+    } finally {
+      await view.unmount();
+    }
+  } finally {
+    restoreFetch();
+  }
 });
 
 test("an unsubmitted pending exception uses the native Flow submission control", async () => {
@@ -231,10 +264,10 @@ test("an unsubmitted pending exception uses the native Flow submission control",
   state.approvalState.pendingWith = [];
   state.neverSubmitted = true;
   const restoreFetch = scriptFetch((url, init) => {
-    if (url.startsWith('/api/flows/record-state?')) return Response.json(state);
-    if (init?.method && init.method !== 'GET') {
+    if (url.startsWith("/api/flows/record-state?")) return Response.json(state);
+    if (init?.method && init.method !== "GET") {
       decisionCalls.push({ url, body: JSON.parse(String(init.body)) });
-      return Response.json({ id: EXCEPTION_ID, status: 'approved' });
+      return Response.json({ id: EXCEPTION_ID, status: "approved" });
     }
     return null;
   });
@@ -243,12 +276,18 @@ test("an unsubmitted pending exception uses the native Flow submission control",
     try {
       assert.equal(buttonsNamed("Approve").length, 0);
       const submit = buttonsNamed(messages.common.approvalFlow.submitRun)[0];
-      assert.ok(submit, 'the shared native submission action is available');
+      assert.ok(submit, "the shared native submission action is available");
       await click(submit);
-      assert.deepEqual(decisionCalls, [{
-        url: `/api/compliance/waivers/${EXCEPTION_ID}`,
-        body: { action: 'approve' },
-      }]);
-    } finally { await view.unmount(); }
-  } finally { restoreFetch(); }
+      assert.deepEqual(decisionCalls, [
+        {
+          url: `/api/compliance/waivers/${EXCEPTION_ID}`,
+          body: { action: "approve" },
+        },
+      ]);
+    } finally {
+      await view.unmount();
+    }
+  } finally {
+    restoreFetch();
+  }
 });

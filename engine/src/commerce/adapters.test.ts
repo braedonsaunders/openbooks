@@ -47,7 +47,9 @@ test("an uninstalled connector refuses verification but contributes no tabs", ()
 
 test("a registered adapter contributes its workspace tabs", () => {
   registerChannelAdapter(testAdapter);
-  assert.deepEqual(workspaceTabsFor("test-shop"), [{ key: "orders", labelKey: "test.tabs.orders" }]);
+  assert.deepEqual(workspaceTabsFor("test-shop"), [
+    { key: "orders", labelKey: "test.tabs.orders" },
+  ]);
   assert.ok(registeredChannelKinds().includes("test-shop"));
   assert.equal(channelAdapter("test-shop").kind, "test-shop");
 });

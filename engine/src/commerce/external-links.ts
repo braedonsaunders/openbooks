@@ -40,7 +40,13 @@ export interface ExternalLinkRow {
   lastSyncedAt: string | null;
 }
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
@@ -115,49 +121,88 @@ interface NativeTargetRow extends Record<string, unknown> {
   org_wide_null: boolean;
 }
 
-async function findNativeTarget(orgId: string, nativeTable: string, nativeId: string): Promise<NativeTargetRow | undefined> {
+async function findNativeTarget(
+  orgId: string,
+  nativeTable: string,
+  nativeId: string,
+): Promise<NativeTargetRow | undefined> {
   if (nativeTable === "parties") {
-    return (await db.execute<NativeTargetRow>(sql`
+    return (
+      await db.execute<NativeTargetRow>(
+        sql`
       select p.id, p.subsidiary_id, true as org_wide_null from parties p
-       where p.org_id = ${orgId} and p.id = ${nativeId} for share`, "objects"))[0];
+       where p.org_id = ${orgId} and p.id = ${nativeId} for share`,
+        "objects",
+      )
+    )[0];
   }
   if (nativeTable === "documents") {
-    return (await db.execute<NativeTargetRow>(sql`
+    return (
+      await db.execute<NativeTargetRow>(
+        sql`
       select d.id, d.subsidiary_id, false as org_wide_null from documents d
-       where d.org_id = ${orgId} and d.id = ${nativeId} for share`, "objects"))[0];
+       where d.org_id = ${orgId} and d.id = ${nativeId} for share`,
+        "objects",
+      )
+    )[0];
   }
   if (nativeTable === "stock_locations") {
-    return (await db.execute<NativeTargetRow>(sql`
+    return (
+      await db.execute<NativeTargetRow>(
+        sql`
       select sl.id, l.subsidiary_id, true as org_wide_null
         from stock_locations sl
         join locations l on l.org_id = sl.org_id and l.id = sl.location_id
        where sl.org_id = ${orgId} and sl.id = ${nativeId}
-       for share of sl, l`, "objects"))[0];
+       for share of sl, l`,
+        "objects",
+      )
+    )[0];
   }
   if (nativeTable === "stored_value_accounts") {
-    return (await db.execute<NativeTargetRow>(sql`
+    return (
+      await db.execute<NativeTargetRow>(
+        sql`
       select a.id, a.subsidiary_id, false as org_wide_null from stored_value_accounts a
-       where a.org_id = ${orgId} and a.id = ${nativeId} for share`, "objects"))[0];
+       where a.org_id = ${orgId} and a.id = ${nativeId} for share`,
+        "objects",
+      )
+    )[0];
   }
   if (nativeTable === "subscriptions") {
-    return (await db.execute<NativeTargetRow>(sql`
+    return (
+      await db.execute<NativeTargetRow>(
+        sql`
       select s.id, p.subsidiary_id, true as org_wide_null
         from subscriptions s
         join parties p on p.org_id = s.org_id and p.id = s.customer_id
        where s.org_id = ${orgId} and s.id = ${nativeId}
-       for share of s, p`, "objects"))[0];
+       for share of s, p`,
+        "objects",
+      )
+    )[0];
   }
   if (nativeTable === "subscription_usage_links") {
-    return (await db.execute<NativeTargetRow>(sql`
+    return (
+      await db.execute<NativeTargetRow>(
+        sql`
       select l.id, p.subsidiary_id, true as org_wide_null
         from subscription_usage_links l
         join parties p on p.org_id = l.org_id and p.id = l.customer_id
        where l.org_id = ${orgId} and l.id = ${nativeId}
-       for share of l, p`, "objects"))[0];
+       for share of l, p`,
+        "objects",
+      )
+    )[0];
   }
-  return (await db.execute<NativeTargetRow>(sql`
+  return (
+    await db.execute<NativeTargetRow>(
+      sql`
     select id, null::uuid as subsidiary_id, true as org_wide_null
-      from ${sql.raw(`"${nativeTable}"`)} where org_id = ${orgId} and id = ${nativeId}`, "objects"))[0];
+      from ${sql.raw(`"${nativeTable}"`)} where org_id = ${orgId} and id = ${nativeId}`,
+      "objects",
+    )
+  )[0];
 }
 
 /**
@@ -174,14 +219,32 @@ export async function linkExternal(
   const provider = cleanText(input.provider) ?? "";
   checkEnum(provider, EXTERNAL_LINK_PROVIDERS, "provider", "provider");
   const externalAccount = cleanText(input.externalAccount);
-  if (!externalAccount) refuse("external_link_account_missing", "An external link needs its provider account.", "Enter the shop domain or provider account that owns the external object.", "externalAccount");
+  if (!externalAccount)
+    refuse(
+      "external_link_account_missing",
+      "An external link needs its provider account.",
+      "Enter the shop domain or provider account that owns the external object.",
+      "externalAccount",
+    );
   const objectType = cleanText(input.objectType) ?? "";
   checkEnum(objectType, EXTERNAL_LINK_OBJECT_TYPES, "object type", "objectType");
   const externalId = cleanText(input.externalId);
-  if (!externalId) refuse("external_link_id_missing", "An external link needs its external id.", "Enter the provider's id for the object.", "externalId");
+  if (!externalId)
+    refuse(
+      "external_link_id_missing",
+      "An external link needs its external id.",
+      "Enter the provider's id for the object.",
+      "externalId",
+    );
   const nativeTable = cleanText(input.nativeTable) ?? "";
   checkEnum(nativeTable, EXTERNAL_LINK_NATIVE_TABLES, "native table", "nativeTable");
-  if (!cleanText(input.nativeId)) refuse("external_link_native_missing", "An external link needs its native record.", "Choose the OpenBooks record the external object maps to.", "nativeId");
+  if (!cleanText(input.nativeId))
+    refuse(
+      "external_link_native_missing",
+      "An external link needs its native record.",
+      "Choose the OpenBooks record the external object maps to.",
+      "nativeId",
+    );
   const nativeId = input.nativeId.trim();
 
   return withOrg(orgId, async () => {
@@ -205,8 +268,13 @@ export async function linkExternal(
     }
     let channelSubsidiaryId: string | null = null;
     if (input.channelId) {
-      const channel = (await db.execute<{ id: string; kind: string; subsidiary_id: string | null }>(sql`
-        select id, kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${input.channelId} for share`, "objects"))[0];
+      const channel = (
+        await db.execute<{ id: string; kind: string; subsidiary_id: string | null }>(
+          sql`
+        select id, kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${input.channelId} for share`,
+          "objects",
+        )
+      )[0];
       if (!channel) {
         refuse(
           "channel_not_found",
@@ -224,8 +292,10 @@ export async function linkExternal(
           "provider",
         );
       }
-      if (input.allowedSubsidiaryIds !== undefined
-          && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, channel.subsidiary_id)) {
+      if (
+        input.allowedSubsidiaryIds !== undefined &&
+        !subsidiaryScopeAllows(input.allowedSubsidiaryIds, channel.subsidiary_id)
+      ) {
         refuse(
           "channel_not_found",
           "The sales channel does not belong to a subsidiary available to this role.",
@@ -248,10 +318,14 @@ export async function linkExternal(
       );
     }
     if (input.channelId) {
-      const sameChannelEntity = target.subsidiary_id === channelSubsidiaryId
-        || (target.org_wide_null && target.subsidiary_id === null);
-      const inCallerScope = input.allowedSubsidiaryIds === undefined
-        || subsidiaryScopeAllows(input.allowedSubsidiaryIds, target.subsidiary_id, { orgWideNull: target.org_wide_null });
+      const sameChannelEntity =
+        target.subsidiary_id === channelSubsidiaryId ||
+        (target.org_wide_null && target.subsidiary_id === null);
+      const inCallerScope =
+        input.allowedSubsidiaryIds === undefined ||
+        subsidiaryScopeAllows(input.allowedSubsidiaryIds, target.subsidiary_id, {
+          orgWideNull: target.org_wide_null,
+        });
       if (!sameChannelEntity || !inCallerScope) {
         refuse(
           "external_link_target_out_of_scope",
@@ -261,11 +335,16 @@ export async function linkExternal(
         );
       }
     }
-    const existing = (await db.execute<LinkDbRow>(sql`
+    const existing = (
+      await db.execute<LinkDbRow>(
+        sql`
       select ${LINK_COLUMNS} from external_links
        where org_id = ${orgId} and provider = ${provider}
          and external_account = ${externalAccount} and object_type = ${objectType}
-         and external_id = ${externalId}`, "objects"))[0];
+         and external_id = ${externalId}`,
+        "objects",
+      )
+    )[0];
     if (existing) {
       if (existing.native_id !== nativeId || existing.native_table !== nativeTable) {
         refuse(
@@ -281,11 +360,16 @@ export async function linkExternal(
     // Name the record already holding the target before inserting: the
     // operator decides which mapping is correct instead of guessing from
     // "another". The insert below still arbitrates the concurrent race.
-    const holder = (await db.execute<{ external_id: string }>(sql`
+    const holder = (
+      await db.execute<{ external_id: string }>(
+        sql`
       select external_id from external_links
        where org_id = ${orgId} and provider = ${provider}
          and external_account = ${externalAccount} and object_type = ${objectType}
-         and native_table = ${nativeTable} and native_id = ${nativeId}`, "objects"))[0];
+         and native_table = ${nativeTable} and native_id = ${nativeId}`,
+        "objects",
+      )
+    )[0];
     if (holder && holder.external_id !== externalId) {
       refuse(
         "external_link_target_in_use",
@@ -298,7 +382,8 @@ export async function linkExternal(
     let id: string;
     try {
       // A retry for the same external object is an expected unique-key collision; re-read below to verify its target.
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into external_links
           (org_id, channel_id, provider, external_account, object_type, external_id,
            external_parent_id, native_table, native_id, last_synced_at, created_by, updated_by)
@@ -307,7 +392,9 @@ export async function linkExternal(
           ${nativeTable}, ${nativeId}, now(), ${actor}, ${actor})
         -- A concurrent link is selected below and its native target must match the requested mapping.
         on conflict (org_id, provider, external_account, object_type, external_id) do nothing
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (inserted.length === 1) {
         id = inserted[0]!.id;
       } else if (inserted.length === 0) {
@@ -318,7 +405,8 @@ export async function linkExternal(
     } catch (error) {
       if (error instanceof CommerceError) throw error;
       const candidate = pgCause(error);
-      if (candidate.code !== "23505" || candidate.constraint !== "external_links_native_unique") throw error;
+      if (candidate.code !== "23505" || candidate.constraint !== "external_links_native_unique")
+        throw error;
       // A concurrent writer won the race after the pre-check above; the
       // transaction is aborted, so no further read is possible here — the
       // pre-check names the holder on the retry the operator runs next.
@@ -331,11 +419,16 @@ export async function linkExternal(
       );
     }
     if (!id) {
-      const raced = (await db.execute<LinkDbRow>(sql`
+      const raced = (
+        await db.execute<LinkDbRow>(
+          sql`
         select ${LINK_COLUMNS} from external_links
          where org_id = ${orgId} and provider = ${provider}
            and external_account = ${externalAccount} and object_type = ${objectType}
-           and external_id = ${externalId}`, "objects"))[0];
+           and external_id = ${externalId}`,
+          "objects",
+        )
+      )[0];
       if (!raced || raced.native_id !== nativeId || raced.native_table !== nativeTable) {
         refuse(
           "external_link_conflict",
@@ -349,8 +442,13 @@ export async function linkExternal(
       }
       return toRow(raced);
     }
-    const row = (await db.execute<LinkDbRow>(sql`
-      select ${LINK_COLUMNS} from external_links where org_id = ${orgId} and id = ${id}`, "objects"))[0]!;
+    const row = (
+      await db.execute<LinkDbRow>(
+        sql`
+      select ${LINK_COLUMNS} from external_links where org_id = ${orgId} and id = ${id}`,
+        "objects",
+      )
+    )[0]!;
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'external_links', ${id}, 'insert',
@@ -364,11 +462,16 @@ export async function findNative(
   orgId: string,
   key: { provider: string; externalAccount: string; objectType: string; externalId: string },
 ): Promise<{ nativeTable: string; nativeId: string } | null> {
-  const row = (await db.execute<{ native_table: string; native_id: string }>(sql`
+  const row = (
+    await db.execute<{ native_table: string; native_id: string }>(
+      sql`
     select native_table, native_id from external_links
      where org_id = ${orgId} and provider = ${key.provider}
        and external_account = ${key.externalAccount} and object_type = ${key.objectType}
-       and external_id = ${key.externalId}`, "objects"))[0];
+       and external_id = ${key.externalId}`,
+      "objects",
+    )
+  )[0];
   return row ? { nativeTable: row.native_table, nativeId: row.native_id } : null;
 }
 
@@ -383,23 +486,37 @@ export async function listLinksByNative(
   nativeTable: string,
   nativeId: string,
 ): Promise<ExternalLinkRow[]> {
-  const rows = await db.execute<LinkDbRow>(sql`
+  const rows = await db.execute<LinkDbRow>(
+    sql`
     select ${LINK_COLUMNS} from external_links
      where org_id = ${orgId} and native_table = ${nativeTable} and native_id = ${nativeId}
-     order by last_synced_at desc nulls last, external_id`, "objects");
+     order by last_synced_at desc nulls last, external_id`,
+    "objects",
+  );
   return rows.map(toRow);
 }
 
 /** Resolve a native record to its external identity, or null when unlinked. */
 export async function findExternal(
   orgId: string,
-  key: { provider: string; externalAccount: string; objectType: string; nativeTable: string; nativeId: string },
+  key: {
+    provider: string;
+    externalAccount: string;
+    objectType: string;
+    nativeTable: string;
+    nativeId: string;
+  },
 ): Promise<ExternalLinkRow | null> {
-  const row = (await db.execute<LinkDbRow>(sql`
+  const row = (
+    await db.execute<LinkDbRow>(
+      sql`
     select ${LINK_COLUMNS} from external_links
      where org_id = ${orgId} and provider = ${key.provider}
        and external_account = ${key.externalAccount} and object_type = ${key.objectType}
-       and native_table = ${key.nativeTable} and native_id = ${key.nativeId}`, "objects"))[0];
+       and native_table = ${key.nativeTable} and native_id = ${key.nativeId}`,
+      "objects",
+    )
+  )[0];
   return row ? toRow(row) : null;
 }
 
@@ -408,12 +525,19 @@ export async function listExternalLinks(
   orgId: string,
   key: { provider: string; externalAccount: string; objectType: string },
 ): Promise<Array<{ externalId: string; nativeTable: string; nativeId: string }>> {
-  const rows = await db.execute<{ external_id: string; native_table: string; native_id: string }>(sql`
+  const rows = await db.execute<{ external_id: string; native_table: string; native_id: string }>(
+    sql`
     select external_id, native_table, native_id from external_links
      where org_id = ${orgId} and provider = ${key.provider}
        and external_account = ${key.externalAccount} and object_type = ${key.objectType}
-     order by external_id`, "objects");
-  return rows.map((row) => ({ externalId: row.external_id, nativeTable: row.native_table, nativeId: row.native_id }));
+     order by external_id`,
+    "objects",
+  );
+  return rows.map((row) => ({
+    externalId: row.external_id,
+    nativeTable: row.native_table,
+    nativeId: row.native_id,
+  }));
 }
 
 /** Bulk-resolve external ids to native records in one query. */
@@ -426,12 +550,19 @@ export async function bulkFindNative(
 ): Promise<Map<string, { nativeTable: string; nativeId: string }>> {
   const out = new Map<string, { nativeTable: string; nativeId: string }>();
   if (externalIds.length === 0) return out;
-  const rows = await db.execute<{ external_id: string; native_table: string; native_id: string }>(sql`
+  const rows = await db.execute<{ external_id: string; native_table: string; native_id: string }>(
+    sql`
     select external_id, native_table, native_id from external_links
      where org_id = ${orgId} and provider = ${provider}
        and external_account = ${externalAccount} and object_type = ${objectType}
-       and external_id in (${sql.join(externalIds.map((id) => sql`${id}`), sql`, `)})`, "objects");
-  for (const row of rows) out.set(row.external_id, { nativeTable: row.native_table, nativeId: row.native_id });
+       and external_id in (${sql.join(
+         externalIds.map((id) => sql`${id}`),
+         sql`, `,
+       )})`,
+    "objects",
+  );
+  for (const row of rows)
+    out.set(row.external_id, { nativeTable: row.native_table, nativeId: row.native_id });
   return out;
 }
 

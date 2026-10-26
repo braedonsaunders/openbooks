@@ -19,7 +19,9 @@ test("template merge fields must come from the document merge resolver", () => {
 
   assert.throws(
     () => validateTemplateInput({ ...base, mergeFields: ["employee_name", "employee_tax_id"] }),
-    (error: unknown) => error instanceof HrmDocumentsError &&
-      error.code === "VALIDATION" && /employee_tax_id/.test(error.message),
+    (error: unknown) =>
+      error instanceof HrmDocumentsError &&
+      error.code === "VALIDATION" &&
+      /employee_tax_id/.test(error.message),
   );
 });

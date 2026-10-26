@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env.ts'
+import { stubModules } from "../../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env.ts";
 
 declare global {
   var __mfgRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -17,9 +17,20 @@ declare global {
 
 // jsdom first: the form reads browser globals at render.
 const { registerHooks } = await import("node:module");
-await bootJsdomEnvironment({ url: "http://localhost:4800/manufacturing/work-orders", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/manufacturing/work-orders",
+  matchMediaMatches: false,
+});
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__mfgRouter}export function usePathname(){return \'/manufacturing/work-orders\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__mfgRouter}export function usePathname(){return '/manufacturing/work-orders'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -52,7 +63,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 function scriptFetch(handler: (url: string, init?: RequestInit) => void | Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -99,8 +112,12 @@ test("a refused release pins message and remedy and keeps the form open", async 
             path: `/api/manufacturing/work-orders/${orderId}/release`,
             fields: [{ key: "reason", type: "reason", required: false, nullable: true }],
           }}
-          onSaved={async () => { saved += 1; }}
-          onCancel={() => { cancelled = true; }}
+          onSaved={async () => {
+            saved += 1;
+          }}
+          onCancel={() => {
+            cancelled = true;
+          }}
           onReview={() => {}}
         />
       </NextIntlClientProvider>,
@@ -125,8 +142,16 @@ test("a refused release pins message and remedy and keeps the form open", async 
 
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the release refusal must pin as an alert, not vanish");
-  assert.match(alert.textContent ?? "", /ROAST-01.*has no department/, "the alert must carry the server message");
-  assert.match(alert.textContent ?? "", /Manufacturing → Work centers/, "the alert must carry the remedy");
+  assert.match(
+    alert.textContent ?? "",
+    /ROAST-01.*has no department/,
+    "the alert must carry the server message",
+  );
+  assert.match(
+    alert.textContent ?? "",
+    /Manufacturing → Work centers/,
+    "the alert must carry the remedy",
+  );
   const toasts = globalThis.__mfgToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /ROAST-01/.test(toast.message)),

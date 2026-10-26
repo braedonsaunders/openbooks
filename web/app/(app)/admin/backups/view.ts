@@ -1,14 +1,20 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { s3Enabled } from '@openbooks/engine/platform/file-storage'
-import { getWorkerHeartbeat } from '@openbooks/jobs'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { forbidden } from 'next/navigation'
-import { guardUnrestrictedScope, requirePermission } from '../../../../lib/authz'
-import type { BackupManagerProps } from './BackupManager'
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { s3Enabled } from "@openbooks/engine/platform/file-storage";
+import { getWorkerHeartbeat } from "@openbooks/jobs";
+import {
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { forbidden } from "next/navigation";
+import { guardUnrestrictedScope, requirePermission } from "../../../../lib/authz";
+import type { BackupManagerProps } from "./BackupManager";
 
 /**
  * Stored + scheduled backups, split into a loader and a spec.
@@ -29,47 +35,50 @@ import type { BackupManagerProps } from './BackupManager'
  */
 
 function isoTimestamp(value: Date | string | null): string | null {
-  if (value === null) return null
-  const date = value instanceof Date ? value : new Date(value)
+  if (value === null) return null;
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
-    throw new Error(`invalid backup timestamp: ${String(value)}`)
+    throw new Error(`invalid backup timestamp: ${String(value)}`);
   }
-  return date.toISOString()
+  return date.toISOString();
 }
 
 export interface AdminBackupsData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  manager: BackupManagerProps
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  manager: BackupManagerProps;
 }
 
 export async function loadAdminBackups(): Promise<AdminBackupsData> {
-  const authz = await requirePermission('admin.backups.manage')
-  if (guardUnrestrictedScope(authz)) forbidden()
-  const t = await getTranslations('admin')
-  const tHub = await getTranslations('admin.hub')
-  const { orgId } = authz.user
+  const authz = await requirePermission("admin.backups.manage");
+  if (guardUnrestrictedScope(authz)) forbidden();
+  const t = await getTranslations("admin");
+  const tHub = await getTranslations("admin.hub");
+  const { orgId } = authz.user;
 
   const policyRes = await db.execute<{
-    enabled: boolean
-    frequency: string
-    hour_utc: number
-    day_of_week: number
-    day_of_month: number
-    max_keep: number
-    last_run_at: Date | string | null
-    next_run_at: Date | string | null
-  }>(sql`
+    enabled: boolean;
+    frequency: string;
+    hour_utc: number;
+    day_of_week: number;
+    day_of_month: number;
+    max_keep: number;
+    last_run_at: Date | string | null;
+    next_run_at: Date | string | null;
+  }>(
+    sql`
     select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep,
            last_run_at, next_run_at
-      from backup_policies where org_id = ${orgId}`, 'objects')
-  const p = policyRes[0]
-  const policy: BackupManagerProps['policy'] = p
+      from backup_policies where org_id = ${orgId}`,
+    "objects",
+  );
+  const p = policyRes[0];
+  const policy: BackupManagerProps["policy"] = p
     ? {
         enabled: p.enabled,
-        frequency: p.frequency as NonNullable<BackupManagerProps['policy']>['frequency'],
+        frequency: p.frequency as NonNullable<BackupManagerProps["policy"]>["frequency"],
         hourUtc: p.hour_utc,
         dayOfWeek: p.day_of_week,
         dayOfMonth: p.day_of_month,
@@ -77,35 +86,38 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
         lastRunAt: isoTimestamp(p.last_run_at),
         nextRunAt: isoTimestamp(p.next_run_at),
       }
-    : null
+    : null;
 
   const runsRes = await db.execute<{
-    id: string
-    kind: string
-    status: string
-    file_name: string | null
-    byte_size: number | null
-    table_count: number | null
-    row_count: number | null
-    sha256: string | null
-    error: string | null
-    purged_at: Date | string | null
-    purge_reason: string | null
-    created_at: Date | string
-    completed_at: Date | string | null
-    total_count: number
-  }>(sql`
+    id: string;
+    kind: string;
+    status: string;
+    file_name: string | null;
+    byte_size: number | null;
+    table_count: number | null;
+    row_count: number | null;
+    sha256: string | null;
+    error: string | null;
+    purged_at: Date | string | null;
+    purge_reason: string | null;
+    created_at: Date | string;
+    completed_at: Date | string | null;
+    total_count: number;
+  }>(
+    sql`
     select id, kind, status, file_name, byte_size, table_count, row_count, sha256,
            error, purged_at, purge_reason, created_at, completed_at,
            count(*) over()::int as total_count
       from backup_runs
      where org_id = ${orgId}
      order by (status = 'completed' and purged_at is null) desc, created_at desc
-     limit 100`, 'objects')
-  const runs: BackupManagerProps['runs'] = runsRes.map((r) => ({
+     limit 100`,
+    "objects",
+  );
+  const runs: BackupManagerProps["runs"] = runsRes.map((r) => ({
     id: r.id,
-    kind: r.kind as BackupManagerProps['runs'][number]['kind'],
-    status: r.status as BackupManagerProps['runs'][number]['status'],
+    kind: r.kind as BackupManagerProps["runs"][number]["kind"],
+    status: r.status as BackupManagerProps["runs"][number]["status"],
     fileName: r.file_name,
     // bigint/numeric columns arrive from the pg driver as strings.
     byteSize: r.byte_size === null ? null : Number(r.byte_size),
@@ -114,40 +126,40 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
     sha256: r.sha256,
     error: r.error,
     purgedAt: isoTimestamp(r.purged_at),
-    purgeReason: r.purge_reason as BackupManagerProps['runs'][number]['purgeReason'],
+    purgeReason: r.purge_reason as BackupManagerProps["runs"][number]["purgeReason"],
     createdAt: isoTimestamp(r.created_at)!,
     completedAt: isoTimestamp(r.completed_at),
-  }))
+  }));
 
   // Scheduled backups run on the background worker — surface when it's down.
-  let workerOnline = false
+  let workerOnline = false;
   try {
-    const heartbeat = await getWorkerHeartbeat()
-    workerOnline = heartbeat !== null && Date.now() - Date.parse(heartbeat) < 90_000
+    const heartbeat = await getWorkerHeartbeat();
+    workerOnline = heartbeat !== null && Date.now() - Date.parse(heartbeat) < 90_000;
   } catch {
-    workerOnline = false
+    workerOnline = false;
   }
 
   return {
-    title: t('backupsManager.pageTitle'),
-    description: t('backupsManager.pageDescription'),
-    backHref: '/admin',
-    backLabel: tHub('title'),
+    title: t("backupsManager.pageTitle"),
+    description: t("backupsManager.pageDescription"),
+    backHref: "/admin",
+    backLabel: tHub("title"),
     manager: { policy, runs, totalRuns: runsRes[0]?.total_count ?? 0, s3Enabled, workerOnline },
-  }
+  };
 }
 
-const f = ref<AdminBackupsData>()
+const f = ref<AdminBackupsData>();
 
 export function adminBackupsSpec(data: AdminBackupsData): PageSpec {
   return page({
-    route: '/admin/backups',
-    layout: 'list',
+    route: "/admin/backups",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: f('backHref'), label: f('backLabel') },
-        title: f('title'),
-        description: f('description'),
+        back: { href: f("backHref"), label: f("backLabel") },
+        title: f("title"),
+        description: f("description"),
       }),
     ],
     body: [
@@ -156,7 +168,7 @@ export function adminBackupsSpec(data: AdminBackupsData): PageSpec {
       // server inputs as flat data. `s3Enabled` is deployment config the
       // page already reads, not a capability; the worker-online flag is a
       // loader-derived boolean, and Authz never crosses the boundary.
-      widgetBlock('backup-manager', {
+      widgetBlock("backup-manager", {
         policy: data.manager.policy,
         runs: data.manager.runs,
         totalRuns: data.manager.totalRuns,
@@ -164,5 +176,5 @@ export function adminBackupsSpec(data: AdminBackupsData): PageSpec {
         workerOnline: data.manager.workerOnline,
       }),
     ],
-  })
+  });
 }

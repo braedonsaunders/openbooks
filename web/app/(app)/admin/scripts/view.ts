@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
 import {
   pagination,
   badge,
@@ -19,21 +19,17 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import {
-  buildListDrawerHref,
-  parseListParams,
-  pickString,
-} from '../../../../lib/list-params'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { scriptDrawerQueryId, scriptTriggerMessageKey } from '../../../../lib/script-drawer-query'
-import { dateTime } from '../../../../lib/format'
+} from "@braedonsaunders/appkit-viewspec";
+import { buildListDrawerHref, parseListParams, pickString } from "../../../../lib/list-params";
+import { requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { scriptDrawerQueryId, scriptTriggerMessageKey } from "../../../../lib/script-drawer-query";
+import { dateTime } from "../../../../lib/format";
 import {
   BUILT_IN_SCRIPT_KINDS,
   customRecordTypeKey,
   isCustomRecordKind,
-} from '../../../../lib/script-kinds'
+} from "../../../../lib/script-kinds";
 
 /**
  * User scripts, split into a loader and a spec.
@@ -46,170 +42,177 @@ import {
 
 // Enum value → message key under admin.scripts. Unknown values render verbatim.
 export interface ScriptRow {
-  id: string
-  name: string
-  href: string
-  trigger: string
-  kind: string
-  runCount: string
-  lastRun: string
-  statusLabel: string
-  statusVariant: 'success' | 'outline'
+  id: string;
+  name: string;
+  href: string;
+  trigger: string;
+  kind: string;
+  runCount: string;
+  lastRun: string;
+  statusLabel: string;
+  statusVariant: "success" | "outline";
 }
 
 /** One `user_scripts` row for the drawer editor (`select *`). Integer
  *  columns arrive as numbers. */
 export interface ScriptDetailRow extends Record<string, unknown> {
-  id: string
-  name: string
-  trigger_point: string
-  document_kind: string | null
-  endpoint_slug: string | null
-  source: string
-  cron: string | null
-  timeout_ms: number
-  sort_order: number
-  is_active: boolean
+  id: string;
+  name: string;
+  trigger_point: string;
+  document_kind: string | null;
+  endpoint_slug: string | null;
+  source: string;
+  cron: string | null;
+  timeout_ms: number;
+  sort_order: number;
+  is_active: boolean;
 }
 
 /** One `script_runs` row for the drawer log. `duration_ms` is an integer
  *  (number); `logs` is a JSONB array surfaced through runtime checks. */
 export interface ScriptRunRow extends Record<string, unknown> {
-  status: string
-  error_message: string | null
-  logs: unknown
-  duration_ms: number | null
-  at: string
-  target_kind: string | null
+  status: string;
+  error_message: string | null;
+  logs: unknown;
+  duration_ms: number | null;
+  at: string;
+  target_kind: string | null;
 }
 
 export interface ScriptsData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  searchPlaceholder: string
-  triggerFilterLabel: string
-  triggerOptions: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
-  emptyLabel: string
-  columnScript: string
-  columnTrigger: string
-  columnKind: string
-  columnRuns: string
-  columnLastRun: string
-  columnStatus: string
-  rows: ScriptRow[]
-  total: number
-  currentPage: number
-  perPage: number
-  drawerOpen: boolean
-  drawerScript: Record<string, unknown> | null
-  drawerRuns: Record<string, unknown>[]
-  customTypes: { key: string; name: string }[]
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  searchPlaceholder: string;
+  triggerFilterLabel: string;
+  triggerOptions: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  emptyLabel: string;
+  columnScript: string;
+  columnTrigger: string;
+  columnKind: string;
+  columnRuns: string;
+  columnLastRun: string;
+  columnStatus: string;
+  rows: ScriptRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
+  drawerOpen: boolean;
+  drawerScript: Record<string, unknown> | null;
+  drawerRuns: Record<string, unknown>[];
+  customTypes: { key: string; name: string }[];
 }
 
 export async function loadScripts(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ScriptsData> {
-  const authz = await requirePermission('scripts.manage')
-  await requireFeatureEnabled(authz.user.orgId, 'scripts')
-  const orgId = authz.user.orgId
-  const t = await getTranslations('admin.scripts')
-  const tHub = await getTranslations('admin.hub')
+  const authz = await requirePermission("scripts.manage");
+  await requireFeatureEnabled(authz.user.orgId, "scripts");
+  const orgId = authz.user.orgId;
+  const t = await getTranslations("admin.scripts");
+  const tHub = await getTranslations("admin.hub");
   const params = parseListParams(sp, {
-    sort: 'name',
-    allowedSorts: ['name'] as const,
+    sort: "name",
+    allowedSorts: ["name"] as const,
     perPage: 50,
-  })
-  const trigger = pickString(sp.trigger)
-  const scriptId = pickString(sp.script)
-  const drawerScriptId = scriptDrawerQueryId(scriptId)
+  });
+  const trigger = pickString(sp.trigger);
+  const scriptId = pickString(sp.script);
+  const drawerScriptId = scriptDrawerQueryId(scriptId);
 
   const where = sql`org_id = ${orgId}
     ${trigger ? sql` and trigger_point = ${trigger}` : sql``}
-    ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}`
+    ${params.q ? sql` and name ilike ${"%" + params.q + "%"}` : sql``}`;
 
-  const [scripts, triggers, totalRow, open, runs, customTypes] =
-    await Promise.all([
-      db.execute(sql`
+  const [scripts, triggers, totalRow, open, runs, customTypes] = await Promise.all([
+    db.execute(
+      sql`
       select s.*, (select count(*) from script_runs r where r.script_id = s.id) as run_count,
              (select max(r.at) from script_runs r where r.script_id = s.id) as last_run
         from user_scripts s where ${where}
        order by s.trigger_point, s.sort_order, s.name
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
-      db.execute<{ trigger_point: string; n: string }>(sql`
-      select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`, 'objects'),
-      db.execute<{ n: string }>(
-        sql`select count(*) as n from user_scripts where ${where}`, 'objects',
-      ),
-      drawerScriptId
-        ? db.execute<ScriptDetailRow>(
-            sql`select * from user_scripts where id = ${drawerScriptId} and org_id = ${orgId}`, 'objects',
-          )
-        : null,
-      drawerScriptId
-        ? db.execute<ScriptRunRow>(sql`
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`,
+      "objects",
+    ),
+    db.execute<{ trigger_point: string; n: string }>(
+      sql`
+      select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`,
+      "objects",
+    ),
+    db.execute<{ n: string }>(
+      sql`select count(*) as n from user_scripts where ${where}`,
+      "objects",
+    ),
+    drawerScriptId
+      ? db.execute<ScriptDetailRow>(
+          sql`select * from user_scripts where id = ${drawerScriptId} and org_id = ${orgId}`,
+          "objects",
+        )
+      : null,
+    drawerScriptId
+      ? db.execute<ScriptRunRow>(
+          sql`
           select status, error_message, logs, duration_ms, at, target_kind
-            from script_runs where script_id = ${drawerScriptId} and org_id = ${orgId} order by at desc limit 20`, 'objects')
-        : null,
-      db.execute<{ key: string; name: string }>(sql`
+            from script_runs where script_id = ${drawerScriptId} and org_id = ${orgId} order by at desc limit 20`,
+          "objects",
+        )
+      : null,
+    db.execute<{ key: string; name: string }>(
+      sql`
       select key, name from custom_record_types
-       where org_id = ${orgId} and status = 'published' order by name`, 'objects'),
-    ])
+       where org_id = ${orgId} and status = 'published' order by name`,
+      "objects",
+    ),
+  ]);
 
   const customTypeName = new Map<string, string>(
     customTypes.map((r) => [String(r.key), String(r.name)]),
-  )
-  const builtInKindKey = new Map(
-    BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]),
-  )
+  );
+  const builtInKindKey = new Map(BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]));
 
   const triggerLabel = (v: string) => {
-    const key = scriptTriggerMessageKey(v)
-    return key ? t(`triggers.${key}`) : v.replace('_', ' ')
-  }
+    const key = scriptTriggerMessageKey(v);
+    return key ? t(`triggers.${key}`) : v.replace("_", " ");
+  };
   const kindLabel = (v: string) => {
     if (isCustomRecordKind(v))
-      return (
-        customTypeName.get(customRecordTypeKey(v)) ?? customRecordTypeKey(v)
-      )
-    const labelKey = builtInKindKey.get(v)
-    return labelKey ? t(labelKey) : v
-  }
+      return customTypeName.get(customRecordTypeKey(v)) ?? customRecordTypeKey(v);
+    const labelKey = builtInKindKey.get(v);
+    return labelKey ? t(labelKey) : v;
+  };
 
   return {
-    title: t('title'),
-    description: t('description'),
-    backHref: '/admin',
-    backLabel: tHub('title'),
-    searchPlaceholder: t('searchPlaceholder'),
-    triggerFilterLabel: t('triggerFilter'),
+    title: t("title"),
+    description: t("description"),
+    backHref: "/admin",
+    backLabel: tHub("title"),
+    searchPlaceholder: t("searchPlaceholder"),
+    triggerFilterLabel: t("triggerFilter"),
     triggerOptions: triggers.map((r) => ({
       value: String(r.trigger_point),
       label: triggerLabel(String(r.trigger_point)),
       count: Number(r.n),
     })),
     currentParams: sp,
-    emptyLabel: t('empty'),
-    columnScript: t('table.script'),
-    columnTrigger: t('table.trigger'),
-    columnKind: t('table.kind'),
-    columnRuns: t('table.runs'),
-    columnLastRun: t('table.lastRun'),
-    columnStatus: t('table.status'),
+    emptyLabel: t("empty"),
+    columnScript: t("table.script"),
+    columnTrigger: t("table.trigger"),
+    columnKind: t("table.kind"),
+    columnRuns: t("table.runs"),
+    columnLastRun: t("table.lastRun"),
+    columnStatus: t("table.status"),
     rows: scripts.map((s) => ({
       id: String(s.id),
       name: String(s.name),
-      href: buildListDrawerHref('/admin/scripts', sp, 'script', String(s.id)),
+      href: buildListDrawerHref("/admin/scripts", sp, "script", String(s.id)),
       trigger: triggerLabel(String(s.trigger_point)),
-      kind: s.document_kind
-        ? kindLabel(String(s.document_kind))
-        : t('allKinds'),
+      kind: s.document_kind ? kindLabel(String(s.document_kind)) : t("allKinds"),
       runCount: String(s.run_count),
-      lastRun: s.last_run ? dateTime(String(s.last_run)) : '',
-      statusLabel: s.is_active ? t('statusActive') : t('statusDisabled'),
-      statusVariant: s.is_active ? 'success' : 'outline',
+      lastRun: s.last_run ? dateTime(String(s.last_run)) : "",
+      statusLabel: s.is_active ? t("statusActive") : t("statusDisabled"),
+      statusVariant: s.is_active ? "success" : "outline",
     })),
     total: Number(totalRow[0]?.n ?? 0),
     currentPage: params.page,
@@ -221,79 +224,76 @@ export async function loadScripts(
       key: String(r.key),
       name: String(r.name),
     })),
-  }
+  };
 }
 
-const f = ref<ScriptsData>()
-const item = field
-const rootF = rootRef<ScriptsData>()
+const f = ref<ScriptsData>();
+const item = field;
+const rootF = rootRef<ScriptsData>();
 
-const MUTED = 'text-slate-500 dark:text-slate-400'
-const LINK = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
+const MUTED = "text-slate-500 dark:text-slate-400";
+const LINK = "font-medium text-teal-700 hover:underline dark:text-teal-300";
 
 export function scriptsSpec(data: ScriptsData): PageSpec {
   return page({
-    route: '/admin/scripts',
-    layout: 'list',
+    route: "/admin/scripts",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
-        actions: [widget('new-script')],
+        title: f("title"),
+        description: f("description"),
+        back: { href: f("backHref"), label: f("backLabel") },
+        actions: [widget("new-script")],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
-          basePath: '/admin/scripts',
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+        widgetBlock("filter-chips", {
+          basePath: "/admin/scripts",
           currentParams: data.currentParams,
-          paramKey: 'trigger',
+          paramKey: "trigger",
           label: data.triggerFilterLabel,
           options: data.triggerOptions,
         }),
       ]),
     ],
     body: [
-      registeredListTable('admin_scripts', {
-        variant: 'app',
-        rows: f('rows'),
-        rowKey: item('id'),
-        emptyRow: { text: f('emptyLabel'), colSpan: 6, className: MUTED },
+      registeredListTable("admin_scripts", {
+        variant: "app",
+        rows: f("rows"),
+        rowKey: item("id"),
+        emptyRow: { text: f("emptyLabel"), colSpan: 6, className: MUTED },
         columns: [
-          column(rootF('columnScript'), link(item('name'), item('href'), LINK)),
-          column(
-            rootF('columnTrigger'),
-            badge(item('trigger'), { variant: 'secondary' }),
-          ),
-          column(rootF('columnKind'), text(item('kind')), { className: MUTED }),
-          column(rootF('columnRuns'), text(item('runCount')), {
-            align: 'right',
-            className: 'tabular-nums',
+          column(rootF("columnScript"), link(item("name"), item("href"), LINK)),
+          column(rootF("columnTrigger"), badge(item("trigger"), { variant: "secondary" })),
+          column(rootF("columnKind"), text(item("kind")), { className: MUTED }),
+          column(rootF("columnRuns"), text(item("runCount")), {
+            align: "right",
+            className: "tabular-nums",
           }),
-          column(rootF('columnLastRun'), text(item('lastRun')), {
+          column(rootF("columnLastRun"), text(item("lastRun")), {
             className: MUTED,
           }),
           column(
-            rootF('columnStatus'),
-            badge(item('statusLabel'), { variant: item('statusVariant') }),
+            rootF("columnStatus"),
+            badge(item("statusLabel"), { variant: item("statusVariant") }),
           ),
         ],
       }),
       pagination({
-        basePath: '/admin/scripts',
-        total: f('total'),
-        page: f('currentPage'),
-        perPage: f('perPage'),
+        basePath: "/admin/scripts",
+        total: f("total"),
+        page: f("currentPage"),
+        perPage: f("perPage"),
       }),
       widgetBlock(
-        'script-drawer',
+        "script-drawer",
         {
           script: data.drawerScript,
           runs: data.drawerRuns,
           customTypes: data.customTypes,
         },
-        f('drawerOpen'),
+        f("drawerOpen"),
       ),
     ],
-  })
+  });
 }
